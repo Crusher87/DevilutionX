@@ -274,6 +274,10 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return value > 1 ? std::string(_("Much faster Attacks")) : std::string(_("Faster Attacks"));
 	case PassiveStat::CastSpeed:
 		return value > 1 ? std::string(_("Much faster Casting")) : std::string(_("Faster Casting"));
+	case PassiveStat::EvasionPercent:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased Evasion"), value);
+	case PassiveStat::EnergyShieldPercent:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Energy Shield"), value);
 	default:
 		return {};
 	}

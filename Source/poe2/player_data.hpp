@@ -146,6 +146,15 @@ struct Poe2PlayerData {
 	/** @brief Fractions of a raw life and mana point carried to the next tick (not saved). */
 	int lifeRegenRemainder = 0;
 	int manaRegenRemainder = 0;
+	/** @brief Evasion rating from gear (not saved; from CalcPlrItemVals). */
+	int evasion = 0;
+	/** @brief Maximum energy shield from gear (not saved; from CalcPlrItemVals). */
+	int maxEnergyShield = 0;
+	/** @brief Current energy shield as a raw Fixed26_6 value (not saved; refills when loaded). */
+	int32_t energyShield = 0;
+	/** @brief Game ticks since the last hit, up to the recharge delay (not saved). */
+	int energyShieldRechargeTicks = 0;
+	int energyShieldRemainder = 0;
 
 	void clear()
 	{
@@ -170,6 +179,11 @@ struct Poe2PlayerData {
 		manaRegenBonus = 0;
 		lifeRegenRemainder = 0;
 		manaRegenRemainder = 0;
+		evasion = 0;
+		maxEnergyShield = 0;
+		energyShield = 0;
+		energyShieldRechargeTicks = 0;
+		energyShieldRemainder = 0;
 	}
 
 	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }

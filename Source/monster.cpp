@@ -77,6 +77,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
@@ -1189,7 +1190,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	if (DebugGodMode)
 		hper = 1000;
 #endif
-	int ac = player.GetArmor();
+	// POE2 Mashup: evasion decides whether a hit lands; armour reduces it below.
+	int ac = HitDefense(player);
 	if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::ACAgainstDemons) && monster.data().monsterClass == MonsterClass::Demon)
 		ac += 40;
 	if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::ACAgainstUndead) && monster.data().monsterClass == MonsterClass::Undead)
@@ -1223,12 +1225,13 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	// New method fixes a bug which caused the maximum possible damage value to be 63/64ths too low.
 	Fixed26_6 dam = Fixed26_6::fromRaw(RandomIntBetween(minDam << 6, maxDam << 6));
 	dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
+	dam = ApplyArmour(player, dam);
 	if (&player == MyPlayer) {
 		if (player.wReflections > 0) {
 			const Fixed26_6 reflectedDamage = CheckReflect(monster, player, dam);
 			dam = std::max(dam - reflectedDamage, Fixed26_6::fromInt(0));
 		}
-		ApplyPlrDamage(DamageType::Physical, player, dam);
+		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, dam));
 	}
 
 	// Reflect can also kill a monster, so make sure the monster is still alive

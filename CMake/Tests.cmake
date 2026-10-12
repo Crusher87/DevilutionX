@@ -32,6 +32,7 @@ set(tests
   pack_test
   poe2_admin_tools_test
   poe2_currency_test
+  poe2_defenses_test
   poe2_flasks_test
   poe2_item_spawner_test
   poe2_passive_tree_test

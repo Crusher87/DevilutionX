@@ -187,6 +187,8 @@ void DrawManaFlaskLower(const Surface &out, bool drawFilledPortion);
  * Controls drawing of current / max values (health, mana) within the control panel.
  */
 void DrawFlaskValues(const Surface &out, Point pos, int currValue, int maxValue);
+/** @brief POE2 Mashup: a blue energy shield bar over the life orb, when the hero has any. */
+void DrawEnergyShieldBar(const Surface &out, Point center);
 
 /**
  * @brief calls on the active player object to update HP/Mana percentage variables

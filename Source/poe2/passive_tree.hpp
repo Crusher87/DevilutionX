@@ -47,6 +47,10 @@ enum class PassiveStat : uint8_t {
 	AttackSpeed,
 	/** Animation frames skipped by spell casts. */
 	CastSpeed,
+	/** Increased evasion in percent. */
+	EvasionPercent,
+	/** Increased maximum energy shield in percent. */
+	EnergyShieldPercent,
 	Count,
 };
 

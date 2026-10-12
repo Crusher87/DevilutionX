@@ -1,0 +1,116 @@
+#include "poe2/defenses.hpp"
+
+#include <algorithm>
+#include <string_view>
+
+#include "engine/backbuffer_state.hpp"
+#include "game_mode.hpp"
+#include "items.h"
+#include "player.h"
+#include "utils/is_of.hpp"
+
+namespace devilution {
+
+namespace {
+
+constexpr int TicksPerSecond = 20;
+
+} // namespace
+
+DefenseType ItemDefenseType(const Item &item)
+{
+	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
+		return DefenseType::Armour;
+	const std::string_view base = AllItemsList[static_cast<size_t>(item.IDidx)].iName;
+	if (IsAnyOf(base, "Rags", "Cape", "Cloak", "Robe", "Cap", "Crown"))
+		return DefenseType::EnergyShield;
+	if (IsAnyOf(base, "Quilted Armor", "Leather Armor", "Hard Leather Armor", "Studded Leather Armor", "Skull Cap", "Buckler"))
+		return DefenseType::Evasion;
+	if (IsAnyOf(base, "Ring Mail", "Chain Mail", "Scale Mail", "Helm", "Small Shield"))
+		return DefenseType::ArmourEvasion;
+	return DefenseType::Armour;
+}
+
+int ArmourRating(const Player &player)
+{
+	return std::max(player._pIAC + player._pIBonusAC, 0);
+}
+
+int EvasionRating(const Player &player)
+{
+	return std::max(player.poe2.evasion + player._pDexterity / 5, 0);
+}
+
+int HitDefense(const Player &player)
+{
+	return gbIsPoe2 ? EvasionRating(player) : player.GetArmor();
+}
+
+int ArmourReductionPercent(int armour, Fixed26_6 damage)
+{
+	if (armour <= 0 || damage <= 0)
+		return 0;
+	const int64_t hit = std::max<int64_t>(damage.raw(), 1);
+	// armour and damage in the same units: armour * 64 against the raw hit.
+	const int64_t scaledArmour = static_cast<int64_t>(armour) * 64;
+	const int percent = static_cast<int>(scaledArmour * 100 / (scaledArmour + 10 * hit));
+	return std::min(percent, MaxArmourReductionPercent);
+}
+
+Fixed26_6 ApplyArmour(const Player &player, Fixed26_6 damage)
+{
+	if (!gbIsPoe2)
+		return damage;
+	const int percent = ArmourReductionPercent(ArmourRating(player), damage);
+	return Fixed26_6::fromRaw(damage.raw() - damage.raw() * percent / 100);
+}
+
+Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
+{
+	if (!gbIsPoe2 || damage <= 0)
+		return damage;
+	Poe2PlayerData &data = player.poe2;
+	data.energyShieldRechargeTicks = 0;
+	data.energyShieldRemainder = 0;
+	const int32_t absorbed = std::min(data.energyShield, damage.raw());
+	if (absorbed <= 0)
+		return damage;
+	data.energyShield -= absorbed;
+	if (&player == MyPlayer)
+		RedrawComponent(PanelDrawComponent::Health);
+	return Fixed26_6::fromRaw(damage.raw() - absorbed);
+}
+
+void RechargeEnergyShield(Player &player)
+{
+	Poe2PlayerData &data = player.poe2;
+	if (!gbIsPoe2 || player.hasNoLife() || data.maxEnergyShield <= 0)
+		return;
+	const int32_t maxRaw = data.maxEnergyShield * 64;
+	if (data.energyShield >= maxRaw) {
+		data.energyShield = maxRaw;
+		data.energyShieldRemainder = 0;
+		return;
+	}
+	if (data.energyShieldRechargeTicks < EnergyShieldRechargeDelayTicks) {
+		data.energyShieldRechargeTicks++;
+		return;
+	}
+	constexpr int64_t Divisor = 1000 * TicksPerSecond;
+	const int64_t total = static_cast<int64_t>(maxRaw) * EnergyShieldRechargePerMille + data.energyShieldRemainder;
+	data.energyShieldRemainder = static_cast<int>(total % Divisor);
+	data.energyShield = std::min(data.energyShield + static_cast<int32_t>(total / Divisor), maxRaw);
+	if (&player == MyPlayer)
+		RedrawComponent(PanelDrawComponent::Health);
+}
+
+void SetMaxEnergyShield(Player &player, int maxEnergyShield)
+{
+	Poe2PlayerData &data = player.poe2;
+	maxEnergyShield = std::max(maxEnergyShield, 0);
+	const int32_t missing = std::max(data.maxEnergyShield * 64 - data.energyShield, 0);
+	data.maxEnergyShield = maxEnergyShield;
+	data.energyShield = std::clamp(maxEnergyShield * 64 - missing, 0, maxEnergyShield * 64);
+}
+
+} // namespace devilution
