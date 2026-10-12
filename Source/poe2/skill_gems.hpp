@@ -38,6 +38,8 @@ enum class SkillUsability : uint8_t {
 	/** A spell that can't be cast in town. */
 	Town,
 	Empty,
+	/** A Spirit gem without enough Spirit left to reserve. */
+	Spirit,
 };
 
 SkillUsability GetSkillUsability(const Player &player, SkillSlot skill);

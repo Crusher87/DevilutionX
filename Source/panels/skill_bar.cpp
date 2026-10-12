@@ -21,6 +21,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -102,6 +103,22 @@ SpellIcon AttackIcon(WeaponSkill skill)
 		return SpellIcon::BloodStar;
 	case WeaponSkill::Spark:
 		return SpellIcon::LightningWall;
+	default:
+		return SpellIcon::Empty;
+	}
+}
+
+SpellIcon PersistentIcon(PersistentSkill skill)
+{
+	switch (skill) {
+	case PersistentSkill::HeraldOfAsh:
+		return SpellIcon::FlameWave;
+	case PersistentSkill::HeraldOfThunder:
+		return SpellIcon::ChainLightning;
+	case PersistentSkill::PurityOfElements:
+		return SpellIcon::Pentagram;
+	case PersistentSkill::SummonGolem:
+		return SpellIcon::Golem;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -217,6 +234,8 @@ void DrawSkillBar(const Surface &out)
 			                                                                           : SpellType::Skill);
 			if (skill.kind == SkillKind::Spell)
 				DrawSmallSpellIcon(out, bottomLeft, skill.spell());
+			else if (skill.kind == SkillKind::Persistent)
+				DrawSmallSpellIcon(out, bottomLeft, PersistentIcon(skill.persistent()));
 			else
 				DrawSmallSpellIcon(out, bottomLeft, AttackIcon(skill.attack()));
 		}
@@ -254,6 +273,9 @@ void SetSkillBarInfo()
 			if (gem != SupportGem::None)
 				AddInfoBoxString(FormatRuntime(_("Support: {:s}"), SupportGemName(gem)));
 		}
+	} else if (skill.kind == SkillKind::Persistent) {
+		AddInfoBoxString(PersistentSkillDescription(skill.persistent()));
+		AddInfoBoxString(FormatRuntime(_("Reserves {:d} Spirit ({:d}/{:d} reserved)"), SpiritReservation(skill.persistent()), ReservedSpirit(player), MaxSpirit(player)));
 	} else {
 		AddInfoBoxString(WeaponSkillDescription(skill.attack()));
 		if (WeaponSkillNeedsWeapon(skill.attack()))
@@ -269,6 +291,10 @@ void SetSkillBarInfo()
 		break;
 	case SkillUsability::Weapon:
 		InfoColor = UiFlags::ColorRed;
+		break;
+	case SkillUsability::Spirit:
+		InfoColor = UiFlags::ColorRed;
+		AddInfoBoxString(_("Not enough Spirit: inactive"));
 		break;
 	default:
 		if (invflag)
@@ -326,6 +352,13 @@ void UseSkillSlot(size_t slot)
 		break;
 	}
 
+	if (skill.kind == SkillKind::Persistent) {
+		if (GetSkillUsability(player, skill) == SkillUsability::Spirit)
+			EventPlrMsg(FormatRuntime(_("{:s} needs {:d} Spirit; you have {:d} left."), SkillName(skill), SpiritReservation(skill.persistent()), MaxSpirit(player) - ReservedSpirit(player)), UiFlags::ColorRed);
+		else
+			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
+		return;
+	}
 	if (skill.kind == SkillKind::Attack) {
 		TryUseWeaponSkill(player, skill.attack());
 		return;

@@ -65,6 +65,20 @@ enum class SupportGem : uint8_t {
 	Count,
 };
 
+/** @brief Spirit gems: persistent buffs and minions that reserve Spirit while socketed. */
+enum class PersistentSkill : uint8_t {
+	None,
+	/** Monsters you kill explode in flames, burning those around them. */
+	HeraldOfAsh,
+	/** Monsters you kill release lightning that strikes enemies nearby. */
+	HeraldOfThunder,
+	/** An aura granting resistance to fire, lightning and magic. */
+	PurityOfElements,
+	/** A golem that fights at your side and comes back when it dies. */
+	SummonGolem,
+	Last = SummonGolem,
+};
+
 /** @brief What a socketed skill gem grants. */
 enum class SkillKind : uint8_t {
 	None,
@@ -72,6 +86,8 @@ enum class SkillKind : uint8_t {
 	Spell,
 	/** A weapon attack; the id is a WeaponSkill. */
 	Attack,
+	/** A Spirit gem that is active while socketed; the id is a PersistentSkill. */
+	Persistent,
 };
 
 /** @brief A skill bar slot: the skill of the gem socketed in it. */
@@ -82,9 +98,11 @@ struct SkillSlot {
 	[[nodiscard]] bool isEmpty() const { return kind == SkillKind::None; }
 	[[nodiscard]] SpellID spell() const { return kind == SkillKind::Spell ? static_cast<SpellID>(id) : SpellID::Invalid; }
 	[[nodiscard]] WeaponSkill attack() const { return kind == SkillKind::Attack ? static_cast<WeaponSkill>(id) : WeaponSkill::None; }
+	[[nodiscard]] PersistentSkill persistent() const { return kind == SkillKind::Persistent ? static_cast<PersistentSkill>(id) : PersistentSkill::None; }
 
 	static SkillSlot ForSpell(SpellID spell) { return { SkillKind::Spell, static_cast<uint8_t>(spell) }; }
 	static SkillSlot ForAttack(WeaponSkill skill) { return { SkillKind::Attack, static_cast<uint8_t>(skill) }; }
+	static SkillSlot ForPersistent(PersistentSkill skill) { return { SkillKind::Persistent, static_cast<uint8_t>(skill) }; }
 
 	bool operator==(const SkillSlot &other) const = default;
 };
@@ -155,6 +173,8 @@ struct Poe2PlayerData {
 	/** @brief Game ticks since the last hit, up to the recharge delay (not saved). */
 	int energyShieldRechargeTicks = 0;
 	int energyShieldRemainder = 0;
+	/** @brief Game ticks before Summon Golem brings the golem back (not saved). */
+	uint8_t golemCooldown = 0;
 
 	void clear()
 	{
@@ -184,6 +204,7 @@ struct Poe2PlayerData {
 		energyShield = 0;
 		energyShieldRechargeTicks = 0;
 		energyShieldRemainder = 0;
+		golemCooldown = 0;
 	}
 
 	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }

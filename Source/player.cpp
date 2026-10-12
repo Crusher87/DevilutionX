@@ -51,6 +51,7 @@
 #include "poe2/dodge_roll.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/regen.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
@@ -3157,6 +3158,7 @@ void ProcessPlayers()
 				RefillFlasks(player);
 			ApplyRegen(player);
 			RechargeEnergyShield(player);
+			ProcessPersistentSkills(player);
 
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {

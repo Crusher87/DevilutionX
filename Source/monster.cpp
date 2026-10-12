@@ -80,6 +80,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/spirit.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
 #include "storm/storm_net.hpp"
@@ -3429,6 +3430,7 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 
 void InitLevelMonsters()
 {
+	ClearHeralds();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -4018,8 +4020,10 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 {
 	if (!monster.isPlayerMinion())
 		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100, monster.whoHit);
-	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0)
+	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0) {
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
+		QueueHeraldTriggers(*MyPlayer, monster);
+	}
 
 	MonsterKillCounts[monster.type().type]++;
 	monster.hitPoints = Fixed26_6::fromInt(0);
@@ -4287,6 +4291,7 @@ void RemoveEnemyReferences(const Player &player)
 void ProcessMonsters()
 {
 	DeleteMonsterList();
+	ProcessHeralds();
 
 	assert(ActiveMonsterCount <= MaxMonsters);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
