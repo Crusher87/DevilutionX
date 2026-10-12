@@ -1070,6 +1070,11 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		return false;
 	}
 
+	// POE2 Mashup: dodge rolls avoid missiles.
+	if (player.poe2.isDodging()) {
+		return false;
+	}
+
 	const MissileData &missileData = GetMissileData(mtype);
 
 	if (HasAnyOf(player._pSpellFlags, SpellFlag::Etherealize) && missileData.isArrow()) {

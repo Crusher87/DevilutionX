@@ -90,6 +90,7 @@
 #include "panels/spell_list.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/dodge_roll.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -2043,6 +2044,12 @@ void InitKeymapActions()
 	    N_("Hide all info screens."),
 	    SDLK_SPACE,
 	    [] {
+		    // POE2 Mashup: with nothing to hide, Space dodge rolls instead.
+		    const bool anythingShown = AutomapActive || IsLeftPanelOpen() || IsRightPanelOpen() || HelpFlag || ChatLogFlag
+		        || SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
+		    if (!anythingShown && TryDodgeRoll(*MyPlayer))
+			    return;
+
 		    if (CanAutomapBeToggledOff())
 			    AutomapActive = false;
 
