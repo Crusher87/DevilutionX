@@ -1916,6 +1916,11 @@ void printItemMiscGamepad(const Item &item, bool isOil, bool isCastOnTarget)
 
 void PrintItemMisc(const Item &item)
 {
+	if (const SupportGem gem = SupportGemForItem(item); gem != SupportGem::None) {
+		AddItemInfoBoxString(SupportGemDescription(gem));
+		AddItemInfoBoxString(_("Use to link to your readied spell"));
+		return;
+	}
 	if (item._iMiscId == IMISC_EAR) {
 		AddItemInfoBoxString(FormatRuntime(pgettext("player", "Level: {:d}"), item._ivalue));
 		return;

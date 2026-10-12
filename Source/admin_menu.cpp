@@ -148,7 +148,8 @@ void CollectItemBases()
 		const ItemData &data = AllItemsList[i];
 		if (!IsItemAvailable(static_cast<int>(i)))
 			continue;
-		if (IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT, ILOC_INVALID))
+		const bool isSupportGem = SupportGemForMiscId(data.iMiscId) != SupportGem::None;
+		if (!isSupportGem && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT, ILOC_INVALID))
 			continue;
 		if (data.iMiscId == IMISC_UNIQUE)
 			continue;
@@ -384,6 +385,14 @@ void AdminRevealMap(bool /*bActivate*/)
 
 bool AdminGenerateItem(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed)
 {
+	if (SupportGemForMiscId(AllItemsList[baseIndex].iMiscId) != SupportGem::None) {
+		// Gems have no quality or level.
+		InitializeItem(item, baseIndex);
+		item._iSeed = static_cast<int32_t>(firstSeed >> 1);
+		SetupItem(item);
+		return true;
+	}
+
 	// Rolling items reseeds the game's random number generator, so put it back afterwards.
 	const uint32_t rngState = GetLCGEngineState();
 

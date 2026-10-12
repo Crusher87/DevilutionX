@@ -538,6 +538,7 @@ void pfile_write_hero(SaveWriter &saveWriter, bool writeGameData)
 	if (!gbVanilla) {
 		SaveHotkeys(saveWriter, myPlayer);
 		SaveHeroItems(saveWriter, myPlayer);
+		SavePoe2HeroData(saveWriter, myPlayer);
 	}
 }
 
@@ -767,6 +768,7 @@ bool pfile_ui_save_create(_uiheroinfo *heroinfo)
 	if (!gbVanilla) {
 		SaveHotkeys(saveWriter, player);
 		SaveHeroItems(saveWriter, player);
+		SavePoe2HeroData(saveWriter, player);
 	}
 
 	return true;

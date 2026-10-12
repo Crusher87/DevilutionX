@@ -5,6 +5,7 @@
  */
 #include "loadsave.h"
 
+#include <algorithm>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
@@ -12,6 +13,7 @@
 #include <expected>
 #include <numeric>
 #include <string>
+#include <vector>
 
 #include <ankerl/unordered_dense.h>
 
@@ -2391,6 +2393,52 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
 	// Write the selected spell last
 	file.WriteLE<int32_t>(static_cast<int8_t>(player._pRSpell));
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(player._pRSplType));
+}
+
+constexpr uint8_t Poe2HeroDataVersion = 1;
+
+void LoadPoe2HeroData(Player &player)
+{
+	player.poe2.clear();
+
+	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2hero");
+	if (!file.IsValid(2 * sizeof(uint8_t)))
+		return;
+
+	const uint8_t version = file.NextLE<uint8_t>();
+	if (version != Poe2HeroDataVersion)
+		return;
+
+	const uint8_t spellCount = file.NextLE<uint8_t>();
+	for (uint8_t i = 0; i < spellCount; i++) {
+		if (!file.IsValid(1 + MaxSupportsPerSpell))
+			break;
+		const auto spell = static_cast<size_t>(file.NextLE<uint8_t>());
+		for (size_t slot = 0; slot < MaxSupportsPerSpell; slot++) {
+			const uint8_t gem = file.NextLE<uint8_t>();
+			if (spell < MaxPoe2Spells && gem < static_cast<uint8_t>(SupportGem::Count))
+				player.poe2.spellSupports[spell][slot] = static_cast<SupportGem>(gem);
+		}
+	}
+}
+
+void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
+{
+	std::vector<size_t> linkedSpells;
+	for (size_t spell = 0; spell < MaxPoe2Spells; spell++) {
+		const auto &supports = player.poe2.spellSupports[spell];
+		if (std::any_of(supports.begin(), supports.end(), [](SupportGem gem) { return gem != SupportGem::None; }))
+			linkedSpells.push_back(spell);
+	}
+
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + (linkedSpells.size() * (1 + MaxSupportsPerSpell)));
+	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
+	file.WriteLE<uint8_t>(static_cast<uint8_t>(linkedSpells.size()));
+	for (const size_t spell : linkedSpells) {
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(spell));
+		for (const SupportGem gem : player.poe2.spellSupports[spell])
+			file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
+	}
 }
 
 void LoadHeroItems(Player &player)

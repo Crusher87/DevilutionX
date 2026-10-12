@@ -37,6 +37,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/support_gems.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -2089,6 +2090,48 @@ Item &GetInventoryItem(Player &player, int location)
 	return player.SpdList[location - INVITEM_BELT_FIRST];
 }
 
+namespace {
+
+/** @brief POE2 Mashup: links a support gem to the readied spell, swapping out the oldest support if needed. */
+void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
+{
+	const SpellID spell = player._pRSplType == SpellType::Spell ? player._pRSpell : SpellID::Invalid;
+	const std::string_view gemName = SupportGemName(gem);
+	SupportGem replaced;
+	switch (LinkSupportGem(player.poe2, spell, gem, replaced)) {
+	case SupportLinkResult::NoReadiedSpell:
+		EventPlrMsg(_("Ready a spell from your spellbook first. The gem links to the readied spell."), UiFlags::ColorRed);
+		return;
+	case SupportLinkResult::NotApplicable:
+		EventPlrMsg(FormatRuntime(_("{:s} can't support {:s}."), gemName, pgettext("spell", GetSpellData(spell).sNameText)), UiFlags::ColorRed);
+		return;
+	case SupportLinkResult::AlreadyLinked:
+		EventPlrMsg(FormatRuntime(_("{:s} is already linked to {:s}."), gemName, pgettext("spell", GetSpellData(spell).sNameText)), UiFlags::ColorRed);
+		return;
+	case SupportLinkResult::Linked:
+	case SupportLinkResult::Replaced:
+		break;
+	}
+
+	const Item &gemItem = speedlist ? player.SpdList[c] : player.InvList[c];
+	PlaySFX(ItemInvSnds[ItemCAnimTbl[gemItem._iCurs]]);
+	if (speedlist)
+		player.RemoveSpdBarItem(c);
+	else
+		player.RemoveInvItem(c);
+
+	std::string message = FormatRuntime(_("{:s} linked to {:s}."), gemName, pgettext("spell", GetSpellData(spell).sNameText));
+	Item returned;
+	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced)) {
+		if (!AutoPlaceItemInInventory(player, returned, true))
+			PlaceItemInWorld(std::move(returned), GetSuperItemLoc(player.position.tile));
+		StrAppend(message, " ", FormatRuntime(_("{:s} was swapped out."), SupportGemName(replaced)));
+	}
+	EventPlrMsg(message);
+}
+
+} // namespace
+
 bool UseInvItem(int cii)
 {
 	if (IsInspectingPlayer())
@@ -2195,6 +2238,11 @@ bool UseInvItem(int cii)
 
 	if (item->_iMiscId == IMISC_ARENAPOT && !player.isOnArenaLevel()) {
 		player.Say(HeroSpeech::ThatWontWorkHere);
+		return true;
+	}
+
+	if (const SupportGem gem = SupportGemForItem(*item); gem != SupportGem::None) {
+		UseSupportGem(player, gem, speedlist, c);
 		return true;
 	}
 
