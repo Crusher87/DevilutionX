@@ -15,6 +15,7 @@
 
 #include "tables/objdat.h"
 #include "tables/spelldat.h"
+#include "utils/attributes.h"
 
 namespace devilution {
 
@@ -685,7 +686,7 @@ struct UniqueItem {
 extern DVL_API_FOR_TEST std::vector<ItemData> AllItemsList;
 extern ankerl::unordered_dense::map<int32_t, int16_t> ItemMappingIdsToIndices;
 extern std::vector<PLStruct> ItemPrefixes;
-extern std::vector<PLStruct> ItemSuffixes;
+extern DVL_API_FOR_TEST std::vector<PLStruct> ItemSuffixes;
 extern DVL_API_FOR_TEST std::vector<UniqueItem> UniqueItems;
 extern ankerl::unordered_dense::map<int32_t, int32_t> UniqueItemMappingIdsToIndices;
 
