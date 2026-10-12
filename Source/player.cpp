@@ -585,6 +585,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 	dam += player._pIBonusDamMod;
 	int dam2 = dam << 6;
 	dam += player._pDamageMod;
+	// POE2 Mashup: Battle Cry empowers melee hits.
+	if (player.poe2.warcryTicks > 0)
+		dam += dam / 2;
 
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike)) {
@@ -791,12 +794,18 @@ bool PlrHitObj(const Player &player, Object &targetObject)
 	return false;
 }
 
-/** @brief POE2 Mashup Leap Slam: hits everything around the landing spot and knocks it back. */
-void LeapSlamLanding(Player &player)
+/**
+ * @brief POE2 Mashup dash skills: Leap Slam hits everything around the landing spot,
+ * Shield Charge everything in front; both knock it back.
+ */
+void DashSkillLanding(Player &player, WeaponSkill skill)
 {
-	PlaySfxLoc(SfxID::Swing, player.position.tile);
+	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
 	for (int i = 0; i < 8; i++) {
-		const Point position = player.position.tile + static_cast<Direction>(i);
+		const auto dir = static_cast<Direction>(i);
+		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
+			continue;
+		const Point position = player.position.tile + dir;
 		Monster *monster = FindMonsterAtPosition(position);
 		if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
 			continue;
@@ -921,6 +930,7 @@ bool DoRangeAttack(Player &player)
 	const bool rain = player.poe2.activeSkill == WeaponSkill::RainOfArrows && arrows == 1;
 	if (rain)
 		arrows = 9;
+	const bool lightningArrow = player.poe2.activeSkill == WeaponSkill::LightningArrow && arrows == 1;
 
 	for (int arrow = 0; arrow < arrows; arrow++) {
 		int xoff = 0;
@@ -948,7 +958,7 @@ bool DoRangeAttack(Player &player)
 				xoff = y < 0 ? -angle : angle;
 		}
 
-		int dmg = 4;
+		int dmg = ElementalArrowBaseDamage;
 		MissileID mistype = MissileID::Arrow;
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireArrows)) {
 			mistype = MissileID::FireArrow;
@@ -960,6 +970,11 @@ bool DoRangeAttack(Player &player)
 			// Fixed off by 1 error from Hellfire
 			dmg = RandomIntBetween(player._pIFMinDam, player._pIFMaxDam);
 			mistype = MissileID::SpectralArrow;
+		}
+		if (lightningArrow) {
+			// The arrow carries the skill's lightning damage on top of the base value.
+			dmg = ElementalArrowBaseDamage + LightningArrowDamage(player);
+			mistype = MissileID::LightningArrow;
 		}
 
 		AddMissile(
@@ -3090,13 +3105,13 @@ void ProcessPlayers()
 			}
 
 			player.poe2.tick();
-			// A Leap Slam lands once the dash is over.
-			if (player.poe2.leapSlamTicks > 0) {
+			// A Leap Slam or Shield Charge lands once the dash is over.
+			if (player.poe2.dashSkillTicks > 0) {
 				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {
-					player.poe2.leapSlamTicks = 0;
-					LeapSlamLanding(player);
-				} else {
-					player.poe2.leapSlamTicks--;
+					player.poe2.dashSkillTicks = 0;
+					DashSkillLanding(player, player.poe2.dashSkill);
+				} else if (--player.poe2.dashSkillTicks == 0) {
+					player.poe2.dashSkill = WeaponSkill::None;
 				}
 			}
 			// Flasks refill in town, like in POE2.

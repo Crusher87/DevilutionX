@@ -90,6 +90,18 @@ SpellIcon AttackIcon(WeaponSkill skill)
 		return SpellIcon::RedSkull;
 	case WeaponSkill::RainOfArrows:
 		return SpellIcon::FireCloud;
+	case WeaponSkill::ShieldCharge:
+		return SpellIcon::Reflect;
+	case WeaponSkill::BattleCry:
+		return SpellIcon::LongHorn;
+	case WeaponSkill::LightningArrow:
+		return SpellIcon::Elemental;
+	case WeaponSkill::EscapeShot:
+		return SpellIcon::Phasing;
+	case WeaponSkill::EmberFusillade:
+		return SpellIcon::BloodStar;
+	case WeaponSkill::Spark:
+		return SpellIcon::LightningWall;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -244,7 +256,10 @@ void SetSkillBarInfo()
 		}
 	} else {
 		AddInfoBoxString(WeaponSkillDescription(skill.attack()));
-		AddInfoBoxString(FormatRuntime(_("{:d} mana, needs a {:s}"), SkillManaCost(player, skill), WeaponSkillWeapons(skill.attack())));
+		if (WeaponSkillNeedsWeapon(skill.attack()))
+			AddInfoBoxString(FormatRuntime(_("{:d} mana, needs a {:s}"), SkillManaCost(player, skill), WeaponSkillWeapons(skill.attack())));
+		else
+			AddInfoBoxString(FormatRuntime(_("{:d} mana"), SkillManaCost(player, skill)));
 	}
 
 	switch (GetSkillUsability(player, skill)) {

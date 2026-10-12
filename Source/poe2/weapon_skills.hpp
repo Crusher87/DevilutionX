@@ -24,9 +24,12 @@ int WeaponSkillManaCost(WeaponSkill skill);
 /** @brief Whether the skill is fired with a ranged attack. */
 bool IsRangedWeaponSkill(WeaponSkill skill);
 
+/** @brief Whether the skill needs a certain weapon (or a shield); Battle Cry and the fire and lightning skills don't. */
+bool WeaponSkillNeedsWeapon(WeaponSkill skill);
+
 /** @brief Whether the weapon can be used for the skill, e.g. a mace for Ground Slam. */
 bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill);
-/** @brief Whether either equipped weapon can be used for the skill. */
+/** @brief Whether either equipped weapon (or shield) can be used for the skill, or it needs none. */
 bool WeaponAllowsSkill(const Player &player, WeaponSkill skill);
 /** @brief The weapons a skill needs, e.g. "sword or axe". */
 std::string_view WeaponSkillWeapons(WeaponSkill skill);
@@ -44,5 +47,8 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack);
 
 /** @brief Extra animation frames skipped by the active skill's attack. */
 int8_t WeaponSkillSkippedFrames(const Player &player);
+
+/** @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile. */
+int LightningArrowDamage(const Player &player);
 
 } // namespace devilution

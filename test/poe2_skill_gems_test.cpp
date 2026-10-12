@@ -68,7 +68,7 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 			EXPECT_EQ(AllItemsList[i].iMinMag, GetSpellData(skill.spell()).minInt) << AllItemsList[i].iName;
 		}
 	}
-	EXPECT_EQ(gems, 28);
+	EXPECT_EQ(gems, 34);
 }
 
 TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)
@@ -127,6 +127,39 @@ TEST_F(Poe2SkillGemsTest, WeaponsAllowMatchingSkills)
 	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::LeapSlam));
 	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::RainOfArrows));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Buckler"), WeaponSkill::Cleave));
+}
+
+TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
+{
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Buckler"), WeaponSkill::ShieldCharge));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Battle Axe"), WeaponSkill::ShieldCharge));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::LightningArrow));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::EscapeShot));
+	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::LightningArrow));
+	EXPECT_FALSE(IsRangedWeaponSkill(WeaponSkill::EscapeShot));
+
+	// Battle Cry and the fire and lightning skills work with any gear, even bare hands.
+	Player &player = *MyPlayer;
+	for (const WeaponSkill skill : { WeaponSkill::BattleCry, WeaponSkill::EmberFusillade, WeaponSkill::Spark }) {
+		EXPECT_FALSE(WeaponSkillNeedsWeapon(skill)) << WeaponSkillName(skill);
+		EXPECT_TRUE(WeaponAllowsSkill(player, skill)) << WeaponSkillName(skill);
+		EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), skill)) << WeaponSkillName(skill);
+	}
+	EXPECT_FALSE(WeaponAllowsSkill(player, WeaponSkill::ShieldCharge));
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Buckler");
+	EXPECT_TRUE(WeaponAllowsSkill(player, WeaponSkill::ShieldCharge));
+
+	// Every skill has a name, a description and a gem with a stat requirement.
+	for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Last); i++) {
+		const auto skill = static_cast<WeaponSkill>(i);
+		EXPECT_FALSE(WeaponSkillName(skill).empty());
+		EXPECT_FALSE(WeaponSkillDescription(skill).empty()) << WeaponSkillName(skill);
+		EXPECT_GT(WeaponSkillManaCost(skill), 0) << WeaponSkillName(skill);
+		const std::optional<size_t> gem = SkillGemItemIndex(SkillSlot::ForAttack(skill));
+		ASSERT_TRUE(gem.has_value()) << WeaponSkillName(skill);
+		const ItemData &data = AllItemsList[*gem];
+		EXPECT_GT(data.iMinStr + data.iMinMag + data.iMinDex, 0) << WeaponSkillName(skill);
+	}
 }
 
 TEST_F(Poe2SkillGemsTest, SlotsAndStarterSkills)
