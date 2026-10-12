@@ -1207,8 +1207,107 @@ void GetItemPowerPrefixAndSuffix(
 	}
 }
 
+/** POE2 Mashup: 1 in this many magic items rolls as rare instead. */
+constexpr int RareItemChance = 5;
+constexpr int MaxRareAffixesPerSide = 3;
+
+/**
+ * @brief Bit set of the stats an affix changes, for affixes whose tooltip line shows that stat's combined total.
+ *
+ * Two affixes on one rare that share a stat would print confusing totals (e.g. "+50% damage" twice), so they can't both roll.
+ */
+uint8_t RareAffixStatGroups(item_effect_type power)
+{
+	constexpr uint8_t ToHit = 1 << 0;
+	constexpr uint8_t Damage = 1 << 1;
+	constexpr uint8_t Resists = 1 << 2;
+	constexpr uint8_t Attributes = 1 << 3;
+	switch (power) {
+	case IPL_TOHIT: return ToHit;
+	case IPL_DAMP:
+	case IPL_CRYSTALLINE: return Damage;
+	case IPL_TOHIT_DAMP:
+	case IPL_DOPPELGANGER: return ToHit | Damage;
+	case IPL_ALLRES: return Resists;
+	case IPL_ATTRIBS: return Attributes;
+	default: return 0;
+	}
+}
+
+bool RareAffixesOverlap(item_effect_type a, item_effect_type b)
+{
+	if (a == b)
+		return true;
+	if ((RareAffixStatGroups(a) & RareAffixStatGroups(b)) != 0)
+		return true;
+	// "All resistances" and "all attributes" print the same totals as their single-stat versions.
+	const auto coveredBy = [](item_effect_type single, item_effect_type all) {
+		return (all == IPL_ALLRES && IsAnyOf(single, IPL_FIRERES, IPL_LIGHTRES, IPL_MAGICRES))
+		    || (all == IPL_ATTRIBS && IsAnyOf(single, IPL_STR, IPL_MAG, IPL_DEX, IPL_VIT));
+	};
+	return coveredBy(a, b) || coveredBy(b, a);
+}
+
+/**
+ * @brief Rolls a POE2-style rare item: 3 to 6 distinct affixes, at most 3 prefixes and 3 suffixes, never cursed.
+ */
+void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
+{
+	const int wantedAffixes = 3 + GenerateRnd(4);
+	int prefixes = 0;
+	int suffixes = 0;
+	size_t numPowers = 0;
+	int valueAdd = 0;
+	int valueMult = 0;
+
+	for (int attempt = 0; attempt < wantedAffixes * 3 && static_cast<int>(numPowers) < wantedAffixes; attempt++) {
+		bool rollPrefix = (attempt % 2) == 0;
+		if (rollPrefix && prefixes >= MaxRareAffixesPerSide)
+			rollPrefix = false;
+		else if (!rollPrefix && suffixes >= MaxRareAffixesPerSide)
+			rollPrefix = true;
+
+		const std::optional<const PLStruct *> affix = SelectAffix(rollPrefix ? ItemPrefixes : ItemSuffixes, flgs, minlvl, maxlvl, /*onlygood=*/true, GOE_ANY, true);
+		if (!affix.has_value())
+			continue;
+		const PLStruct &chosen = **affix;
+		const auto powersEnd = item._iRarePowers.begin() + numPowers;
+		if (std::any_of(item._iRarePowers.begin(), powersEnd, [&chosen](item_effect_type power) { return RareAffixesOverlap(power, chosen.power.type); }))
+			continue;
+
+		ItemPower power = chosen.power;
+		const int value = SaveItemPower(player, item, power);
+		valueAdd += PLVal(value, power.param1, power.param2, chosen.minVal, chosen.maxVal);
+		valueMult += chosen.multVal;
+		item._iRarePowers[numPowers++] = chosen.power.type;
+		if (rollPrefix) {
+			if (prefixes++ == 0)
+				item._iPrePower = chosen.power.type;
+		} else {
+			if (suffixes++ == 0)
+				item._iSufPower = chosen.power.type;
+		}
+	}
+
+	if (numPowers == 0)
+		return;
+
+	item._iMagical = ITEM_QUALITY_RARE;
+	item._iVAdd1 = valueAdd;
+	item._iVMult1 = valueMult;
+	item._iVAdd2 = 0;
+	item._iVMult2 = 0;
+	CopyUtf8(item._iIName, GetRareItemName(item), ItemNameLength);
+	CalcItemValue(item);
+}
+
 void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs, bool onlygood)
 {
+	if ((item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0) {
+		GetItemPowerRare(player, item, minlvl, maxlvl, flgs);
+		return;
+	}
+
 	const PLStruct *pPrefix = nullptr;
 	const PLStruct *pSufix = nullptr;
 	GetItemPowerPrefixAndSuffix(
@@ -2334,6 +2433,8 @@ std::string GetTranslatedItemNameMagical(const Item &item, bool hellfireItem, bo
 	}
 
 	if (affixItemType != AffixItemType::None) {
+		if ((item.dwBuff & CF_POE2) != 0)
+			DiscardRandomValues(1); // Rare roll in GetItemPower
 		const PLStruct *pPrefix = nullptr;
 		const PLStruct *pSufix = nullptr;
 		GetItemPowerPrefixAndSuffix(
@@ -2369,6 +2470,65 @@ std::string GetTranslatedItemNameMagical(const Item &item, bool hellfireItem, bo
 }
 
 } // namespace
+
+std::string GetRareItemName(const Item &item)
+{
+	// clang-format off
+	static constexpr std::array<std::string_view, 48> FirstWords = {
+		"Agony", "Apocalypse", "Armageddon", "Beast", "Behemoth", "Blight", "Blood", "Bramble",
+		"Brimstone", "Brood", "Carrion", "Cataclysm", "Corpse", "Damnation", "Death", "Demon",
+		"Dire", "Doom", "Dread", "Eagle", "Empyrean", "Fate", "Foe", "Gale",
+		"Ghoul", "Gloom", "Golem", "Grim", "Hate", "Havoc", "Horror", "Kraken",
+		"Maelstrom", "Morbid", "Oblivion", "Onslaught", "Pain", "Phoenix", "Plague", "Rage",
+		"Rune", "Skull", "Sorrow", "Storm", "Tempest", "Torment", "Vengeance", "Wrath",
+	};
+	// clang-format on
+	static constexpr std::array<std::string_view, 12> WeaponWords = { "Bane", "Bite", "Edge", "Fang", "Gnash", "Hunger", "Razor", "Scratch", "Sever", "Slayer", "Thirst", "Wound" };
+	static constexpr std::array<std::string_view, 12> BowWords = { "Arch", "Branch", "Fletch", "Mark", "Nock", "Rain", "Reach", "Siege", "Stinger", "Strike", "Volley", "Wing" };
+	static constexpr std::array<std::string_view, 12> StaffWords = { "Beam", "Bough", "Call", "Chant", "Cry", "Gnarl", "Mast", "Pillar", "Pole", "Spire", "Weaver", "Branch" };
+	static constexpr std::array<std::string_view, 12> ArmorWords = { "Carapace", "Cloak", "Coat", "Hide", "Jack", "Keep", "Pelt", "Shell", "Shelter", "Suit", "Veil", "Ward" };
+	static constexpr std::array<std::string_view, 12> ShieldWords = { "Aegis", "Badge", "Barrier", "Bastion", "Bulwark", "Duty", "Emblem", "Fend", "Guard", "Rock", "Wall", "Watch" };
+	static constexpr std::array<std::string_view, 12> HelmWords = { "Brow", "Corona", "Cowl", "Crest", "Crown", "Dome", "Glance", "Halo", "Horn", "Peak", "Salvation", "Visor" };
+	static constexpr std::array<std::string_view, 12> RingWords = { "Band", "Circle", "Coil", "Eye", "Finger", "Grasp", "Grip", "Gyre", "Hold", "Knot", "Loop", "Turn" };
+	static constexpr std::array<std::string_view, 12> AmuletWords = { "Beads", "Charm", "Gorget", "Heart", "Locket", "Medallion", "Noose", "Pendant", "Rosary", "Scarab", "Talisman", "Torc" };
+
+	const std::array<std::string_view, 12> *secondWords;
+	switch (item._itype) {
+	case ItemType::Bow: secondWords = &BowWords; break;
+	case ItemType::Staff: secondWords = &StaffWords; break;
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor: secondWords = &ArmorWords; break;
+	case ItemType::Shield: secondWords = &ShieldWords; break;
+	case ItemType::Helm: secondWords = &HelmWords; break;
+	case ItemType::Ring: secondWords = &RingWords; break;
+	case ItemType::Amulet: secondWords = &AmuletWords; break;
+	default: secondWords = &WeaponWords; break;
+	}
+
+	// Mix the seed so that items with nearby seeds get unrelated names.
+	uint32_t hash = item._iSeed;
+	hash ^= hash >> 16;
+	hash *= 0x7FEB352DU;
+	hash ^= hash >> 15;
+	hash *= 0x846CA68BU;
+	hash ^= hash >> 16;
+
+	const std::string_view first = FirstWords[hash % FirstWords.size()];
+	const std::string_view second = (*secondWords)[(hash / FirstWords.size()) % secondWords->size()];
+	return StrCat(first, " ", second);
+}
+
+void RestoreRareItemPowers(Item &item)
+{
+	if (item._iMagical != ITEM_QUALITY_RARE || Players.empty())
+		return;
+	const uint32_t currentSeed = GetLCGEngineState();
+	Item regenerated;
+	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
+	item._iRarePowers = regenerated._iRarePowers;
+	SetRndSeed(currentSeed);
+}
 
 bool IsItemAvailable(int i)
 {
@@ -2408,7 +2568,7 @@ uint8_t GetOutlineColor(const Item &item, bool checkReq)
 		return ICOL_YELLOW;
 	if (item._iMagical == ITEM_QUALITY_MAGIC)
 		return ICOL_BLUE;
-	if (item._iMagical == ITEM_QUALITY_UNIQUE)
+	if (item._iMagical == ITEM_QUALITY_UNIQUE || item._iMagical == ITEM_QUALITY_RARE)
 		return ICOL_YELLOW;
 
 	return ICOL_WHITE;
@@ -2962,9 +3122,12 @@ void InitializeItem(Item &item, _item_indexes itemData)
 	item._iPrePower = IPL_INVALID;
 	item._iSufPower = IPL_INVALID;
 	item._iMagical = ITEM_QUALITY_NORMAL;
+	item._iRarePowers.fill(IPL_INVALID);
 	item.IDidx = itemData;
 	if (gbIsHellfire)
 		item.dwBuff |= CF_HELLFIRE;
+	if (gbIsPoe2)
+		item.dwBuff |= CF_POE2;
 }
 
 void GenerateNewSeed(Item &item)
@@ -3154,8 +3317,11 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 	item.IDidx = itemData;
 	if (gbIsHellfire)
 		item.dwBuff |= CF_HELLFIRE;
+	if (gbIsPoe2)
+		item.dwBuff |= CF_POE2;
 	item._iPrePower = IPL_INVALID;
 	item._iSufPower = IPL_INVALID;
+	item._iRarePowers.fill(IPL_INVALID);
 
 	if (item._iMiscId == IMISC_BOOK)
 		GetBookSpell(item, lvl);
@@ -3517,6 +3683,13 @@ void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc,
 
 void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
 {
+	// Generate with the mod state the item was created with, like gbIsHellfire below.
+	struct Poe2StateGuard {
+		bool saved = gbIsPoe2;
+		~Poe2StateGuard() { gbIsPoe2 = saved; }
+	} poe2StateGuard;
+	gbIsPoe2 = (dwBuff & CF_POE2) != 0;
+
 	const bool tmpIsHellfire = gbIsHellfire;
 	item.dwBuff = dwBuff;
 	gbIsHellfire = (item.dwBuff & CF_HELLFIRE) != 0;
@@ -4027,14 +4200,15 @@ bool DoOil(Player &player, int cii)
 	case IPL_TARGAC:
 		return _("penetrates target's armor");
 	case IPL_FASTATTACK:
-		if (HasAnyOf(item._iFlags, ItemSpecialEffect::QuickAttack))
-			return _("quick attack");
-		if (HasAnyOf(item._iFlags, ItemSpecialEffect::FastAttack))
-			return _("fast attack");
-		if (HasAnyOf(item._iFlags, ItemSpecialEffect::FasterAttack))
-			return _("faster attack");
+		// Fastest first: an item can carry a base-type speed and an affix speed, and the fastest one applies.
 		if (HasAnyOf(item._iFlags, ItemSpecialEffect::FastestAttack))
 			return _("fastest attack");
+		if (HasAnyOf(item._iFlags, ItemSpecialEffect::FasterAttack))
+			return _("faster attack");
+		if (HasAnyOf(item._iFlags, ItemSpecialEffect::FastAttack))
+			return _("fast attack");
+		if (HasAnyOf(item._iFlags, ItemSpecialEffect::QuickAttack))
+			return _("quick attack");
 		return _("Another ability (NW)");
 	case IPL_FASTRECOVER:
 		if (HasAnyOf(item._iFlags, ItemSpecialEffect::FastHitRecovery))
@@ -4123,11 +4297,30 @@ void DrawUniqueInfo(const Surface &out)
 	}
 }
 
+/**
+ * @brief POE2 Mashup: shows effects that come with the base item type itself (like quick attack on daggers).
+ */
+void PrintItemImplicits(const Item &item)
+{
+	const ItemSpecialEffect baseFlags = AllItemsList[item.IDidx].iFlags;
+	if (baseFlags == ItemSpecialEffect::None)
+		return;
+
+	Item implicitView = item;
+	implicitView._iFlags = baseFlags;
+	if (HasAnyOf(baseFlags, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack | ItemSpecialEffect::FasterAttack | ItemSpecialEffect::FastestAttack))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_FASTATTACK, implicitView).str()));
+	if (HasAnyOf(baseFlags, ItemSpecialEffect::Knockback))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_KNOCKBACK, implicitView).str()));
+}
+
 void PrintItemDetails(const Item &item)
 {
 	if (HeadlessMode)
 		return;
 
+	if (item._iMagical == ITEM_QUALITY_RARE)
+		AddItemInfoBoxString(std::string_view(item._iName));
 	if (item._iClass == ICLASS_WEAPON) {
 		if (item._iMinDam == item._iMaxDam) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
@@ -4141,6 +4334,7 @@ void PrintItemDetails(const Item &item)
 				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iMaxDam, item._iDurability, item._iMaxDur));
 		}
 	}
+	PrintItemImplicits(item);
 	if (item._iClass == ICLASS_ARMOR) {
 		if (item._iMaxDur == DUR_INDESTRUCTIBLE)
 			AddItemInfoBoxString(FormatRuntime(_("armor: {:d}  Indestructible"), item._iAC));
@@ -4150,11 +4344,18 @@ void PrintItemDetails(const Item &item)
 	if (item._iMiscId == IMISC_STAFF && item._iMaxCharges != 0) {
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
-	if (item._iPrePower != -1) {
-		AddItemInfoBoxString(PrintItemPower(item._iPrePower, item));
-	}
-	if (item._iSufPower != -1) {
-		AddItemInfoBoxString(PrintItemPower(item._iSufPower, item));
+	if (item._iMagical == ITEM_QUALITY_RARE) {
+		for (const item_effect_type power : item._iRarePowers) {
+			if (power != IPL_INVALID)
+				AddItemInfoBoxString(PrintItemPower(power, item));
+		}
+	} else {
+		if (item._iPrePower != -1) {
+			AddItemInfoBoxString(PrintItemPower(item._iPrePower, item));
+		}
+		if (item._iSufPower != -1) {
+			AddItemInfoBoxString(PrintItemPower(item._iSufPower, item));
+		}
 	}
 	if (item._iMagical == ITEM_QUALITY_UNIQUE) {
 		AddItemInfoBoxString(_("unique item"));
@@ -4187,6 +4388,7 @@ void PrintItemDur(const Item &item)
 		if (item._iMagical != ITEM_QUALITY_NORMAL)
 			AddItemInfoBoxString(_("Not Identified"));
 	}
+	PrintItemImplicits(item);
 	if (item._iClass == ICLASS_ARMOR) {
 		if (item._iMaxDur == DUR_INDESTRUCTIBLE)
 			AddItemInfoBoxString(FormatRuntime(_("armor: {:d}  Indestructible"), item._iAC));
@@ -4852,6 +5054,9 @@ StringOrView Item::getName() const
 	}
 	if (_iMagical == ITEM_QUALITY_UNIQUE) {
 		return _(UniqueItems[_iUid].UIName);
+	}
+	if (_iMagical == ITEM_QUALITY_RARE) {
+		return GetRareItemName(*this);
 	}
 	return GetTranslatedItemNameMagical(*this, dwBuff & CF_HELLFIRE, true, std::nullopt);
 }

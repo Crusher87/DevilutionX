@@ -95,6 +95,7 @@ set(libdevilutionx_SRCS
   lua/lua_global.cpp
   lua/modules/audio.cpp
   lua/modules/hellfire.cpp
+  lua/modules/poe2.cpp
   lua/modules/dev.cpp
   lua/modules/dev/display.cpp
   lua/modules/dev/items.cpp

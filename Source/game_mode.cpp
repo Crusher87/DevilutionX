@@ -18,6 +18,7 @@ bool gbRunGame;
 bool gbIsMultiplayer;
 bool gbIsSpawn;
 bool gbIsHellfire;
+bool gbIsPoe2;
 bool gbVanilla;
 bool forceHellfire;
 

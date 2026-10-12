@@ -5,6 +5,8 @@
  */
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -39,10 +41,15 @@ constexpr int MaxVendorValueHf = 200000;
 constexpr int MaxBoyValue = 90000;
 constexpr int MaxBoyValueHf = 200000;
 
+/** Maximum number of affixes on a rare item (up to 3 prefixes and 3 suffixes). */
+constexpr size_t MaxRareAffixes = 6;
+
 enum item_quality : uint8_t {
 	ITEM_QUALITY_NORMAL,
 	ITEM_QUALITY_MAGIC,
 	ITEM_QUALITY_UNIQUE,
+	/** POE2 Mashup: several prefixes and suffixes and a random name. */
+	ITEM_QUALITY_RARE,
 };
 
 enum _unique_items : int32_t {
@@ -178,6 +185,8 @@ enum icreateinfo_flag2 {
 	// clang-format off
 	CF_HELLFIRE = 1 << 0,
 	CF_UIDOFFSET = ((1 << 4) - 1) << 1,
+	/** Item was generated with the POE2 Mashup mod active (can roll as rare). */
+	CF_POE2 = 1 << 5,
 	// clang-format on
 };
 
@@ -247,6 +256,8 @@ struct Item {
 	int16_t _iPLEnAc = 0;
 	enum item_effect_type _iPrePower = IPL_INVALID;
 	enum item_effect_type _iSufPower = IPL_INVALID;
+	/** Affix powers of a rare item, in the order they were rolled. Not saved; restored from the item seed. */
+	std::array<item_effect_type, MaxRareAffixes> _iRarePowers = { IPL_INVALID, IPL_INVALID, IPL_INVALID, IPL_INVALID, IPL_INVALID, IPL_INVALID };
 	int _iVAdd1 = 0;
 	int _iVMult1 = 0;
 	int _iVAdd2 = 0;
@@ -437,6 +448,8 @@ struct Item {
 			return UiFlags::ColorBlue;
 		case ITEM_QUALITY_UNIQUE:
 			return UiFlags::ColorWhitegold;
+		case ITEM_QUALITY_RARE:
+			return UiFlags::ColorYellow;
 		default:
 			return UiFlags::ColorWhite;
 		}
@@ -586,6 +599,16 @@ bool ApplyOilToItem(Item &item, Player &player);
  * @brief Checks if the item is generated in vanilla hellfire. If yes it updates dwBuff to include CF_HELLFIRE.
  */
 void UpdateHellfireFlag(Item &item, const char *identifiedItemName);
+
+/**
+ * @brief POE2 Mashup: the two-word name of a rare item, picked from its seed and item type.
+ */
+std::string GetRareItemName(const Item &item);
+
+/**
+ * @brief POE2 Mashup: refills Item::_iRarePowers (which is not saved) by regenerating the item from its seed.
+ */
+void RestoreRareItemPowers(Item &item);
 
 /* data */
 

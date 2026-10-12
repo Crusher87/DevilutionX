@@ -34,6 +34,7 @@
 #include "lua/modules/log.hpp"
 #include "lua/modules/monsters.hpp"
 #include "lua/modules/player.hpp"
+#include "lua/modules/poe2.hpp"
 #include "lua/modules/render.hpp"
 #include "lua/modules/system.hpp"
 #include "lua/modules/towners.hpp"
@@ -246,6 +247,7 @@ void LuaReloadActiveMods()
 	ClearTownerDialogOptions();
 
 	gbIsHellfire = false;
+	gbIsPoe2 = false;
 	UnloadModArchives();
 
 	std::vector<std::string_view> modnames = GetOptions().Mods.GetActiveModList();
@@ -313,6 +315,7 @@ void LuaInitialize()
 	    "devilutionx.render", LuaRenderModule(lua),
 	    "devilutionx.towners", LuaTownersModule(lua),
 	    "devilutionx.hellfire", LuaHellfireModule(lua),
+	    "devilutionx.poe2", LuaPoe2Module(lua),
 	    "devilutionx.system", LuaSystemModule(lua),
 	    "devilutionx.floatingnumbers", LuaFloatingNumbersModule(lua),
 	    "devilutionx.message", [](std::string_view text) { EventPlrMsg(text, UiFlags::ColorRed); },
