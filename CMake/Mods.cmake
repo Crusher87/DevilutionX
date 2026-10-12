@@ -79,7 +79,7 @@ endif()
 set(poe2_mod
   manifest.ini
   lua/mods/poe2/init.lua
-  txtdata/classes/warrior/starting_loadout.tsv)
+  txtdata/items/itemdat.tsv)
 
 if(APPLE)
   foreach(asset_file ${poe2_mod})

@@ -376,6 +376,7 @@ struct LevelConversionData {
 	else
 		item._iDamAcFlags = ItemSpecialEffectHf::None;
 	UpdateHellfireFlag(item, item._iIName);
+	RestoreRareItemPowers(item);
 
 	return true;
 }

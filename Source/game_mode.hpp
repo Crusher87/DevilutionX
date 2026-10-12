@@ -43,6 +43,8 @@ extern DVL_API_FOR_TEST bool gbIsMultiplayer;
 extern DVL_API_FOR_TEST bool gbIsSpawn;
 /** Indicate if we have loaded the Hellfire expansion data */
 extern DVL_API_FOR_TEST bool gbIsHellfire;
+/** Indicate if the POE2 Mashup mod is active */
+extern DVL_API_FOR_TEST bool gbIsPoe2;
 /** Indicate if we want vanilla savefiles */
 extern DVL_API_FOR_TEST bool gbVanilla;
 /** Whether the Hellfire mode is required (forced). */
