@@ -954,9 +954,7 @@ void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, Animation
 void SetPlrAnims(Player &player);
 void CreatePlayer(Player &player, HeroClass c);
 int CalcStatDiff(Player &player);
-#ifdef _DEBUG
 void NextPlrLevel(Player &player);
-#endif
 void AddPlrMonstExper(int lvl, unsigned int exp, char pmask);
 void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int minHP = 0, DeathReason deathReason = DeathReason::MonsterOrTrap);
 void InitPlayer(Player &player, bool FirstTime);

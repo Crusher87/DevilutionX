@@ -3,6 +3,7 @@ include(functions/devilutionx_library)
 include(functions/genex)
 
 set(libdevilutionx_SRCS
+  admin_menu.cpp
   appfat.cpp
   automap.cpp
   capture.cpp
@@ -455,6 +456,15 @@ target_link_dependencies(libdevilutionx_init PUBLIC
   libdevilutionx_options
   PRIVATE
   libdevilutionx_sdl2_to_1_2_backports
+  libdevilutionx_wasd_movement
+)
+
+add_devilutionx_object_library(libdevilutionx_wasd_movement
+  controls/wasd_movement.cpp
+)
+target_link_dependencies(libdevilutionx_wasd_movement PUBLIC
+  DevilutionX::SDL
+  libdevilutionx_options
 )
 
 add_devilutionx_object_library(libdevilutionx_load_cel
@@ -1079,6 +1089,7 @@ target_link_dependencies(libdevilutionx PUBLIC
   libdevilutionx_headless_mode
   libdevilutionx_ini
   libdevilutionx_init
+  libdevilutionx_wasd_movement
   libdevilutionx_items
   libdevilutionx_level_objects
   libdevilutionx_light_render

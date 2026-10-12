@@ -30,6 +30,7 @@ set(tests
   missiles_test
   multi_logging_test
   pack_test
+  poe2_admin_tools_test
   poe2_rare_items_test
   player_test
   quests_test

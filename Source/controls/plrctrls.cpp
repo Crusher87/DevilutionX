@@ -28,6 +28,7 @@
 #include "controls/touch/gamepad.h"
 #include "cursor.h"
 #include "cursor_defs.hpp"
+#include "diablo.h"
 #include "doom.h"
 #include "engine/point.hpp"
 #include "engine/points_in_rectangle_range.hpp"
@@ -1742,10 +1743,22 @@ bool IsPathBlocked(Point position, Direction dir)
 
 void WalkInDir(Player &player, AxisDirection dir)
 {
+	// Set while WASD keys drive the player, so letting go of them stops the walk
+	// without cancelling paths started by clicking.
+	static bool walkingWithKeyboard = false;
+
 	if (dir.x == AxisDirectionX_NONE && dir.y == AxisDirectionY_NONE) {
-		if (ControlMode != ControlTypes::KeyboardAndMouse && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE)
+		if ((ControlMode != ControlTypes::KeyboardAndMouse || walkingWithKeyboard) && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE)
 			NetSendCmdLoc(player.getId(), true, CMD_WALKXY, player.position.future); // Stop walking
+		walkingWithKeyboard = false;
 		return;
+	}
+
+	if (ControlMode == ControlTypes::KeyboardAndMouse) {
+		walkingWithKeyboard = true;
+		// Let mouse attacks and spells happen first; walking resumes once they've started.
+		if (sgbMouseDown != CLICK_NONE || player.destAction != ACTION_NONE)
+			return;
 	}
 
 	const Direction pdir = FaceDir[static_cast<std::size_t>(dir.x)][static_cast<std::size_t>(dir.y)];
@@ -1850,6 +1863,12 @@ void Movement(Player &player)
 		return;
 
 	if (GetLeftStickOrDPadGameUIHandler() == nullptr) {
+		WalkInDir(player, GetMoveDirection());
+		return;
+	}
+
+	// Keyboard movement keeps working with the inventory or other panels open, like in POE2.
+	if (ControlMode == ControlTypes::KeyboardAndMouse && !SpellSelectFlag) {
 		WalkInDir(player, GetMoveDirection());
 	}
 }
