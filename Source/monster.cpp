@@ -1177,6 +1177,9 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 {
 	if (player.hasNoLife() || player._pInvincible || HasAnyOf(player._pSpellFlags, SpellFlag::Etherealize))
 		return;
+	// POE2 Mashup: dodge rolls avoid melee hits.
+	if (player.poe2.isDodging())
+		return;
 	if (monster.position.tile.WalkingDistance(player.position.tile) >= 2)
 		return;
 
@@ -3716,6 +3719,9 @@ std::expected<void, std::string> InitMonsters()
 		}
 		size_t numplacemonsters = na / 30;
 		if (gbIsMultiplayer)
+			numplacemonsters += numplacemonsters / 2;
+		// POE2 Mashup: denser levels for faster, busier fights.
+		if (gbIsPoe2)
 			numplacemonsters += numplacemonsters / 2;
 		if (ActiveMonsterCount + numplacemonsters > MaxMonsters - 10)
 			numplacemonsters = MaxMonsters - 10 - ActiveMonsterCount;

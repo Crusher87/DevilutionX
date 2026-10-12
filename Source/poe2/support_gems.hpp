@@ -37,11 +37,28 @@ static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
  */
 struct Poe2PlayerData {
 	std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> spellSupports {};
+	/** @brief Game ticks left in the current dodge roll (not saved). */
+	uint8_t dodgeTicks = 0;
+	/** @brief Game ticks until the next dodge roll is allowed (not saved). */
+	uint8_t dodgeCooldown = 0;
 
 	void clear()
 	{
 		for (auto &supports : spellSupports)
 			supports.fill(SupportGem::None);
+		dodgeTicks = 0;
+		dodgeCooldown = 0;
+	}
+
+	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }
+
+	/** @brief Advances the dodge roll timers by one game tick. */
+	void tick()
+	{
+		if (dodgeTicks > 0)
+			dodgeTicks--;
+		if (dodgeCooldown > 0)
+			dodgeCooldown--;
 	}
 
 	[[nodiscard]] const std::array<SupportGem, MaxSupportsPerSpell> &supportsFor(SpellID spell) const;

@@ -1754,6 +1754,10 @@ void WalkInDir(Player &player, AxisDirection dir)
 		return;
 	}
 
+	// Let a dodge roll finish its dash before walking on.
+	if (player.poe2.isDodging())
+		return;
+
 	if (ControlMode == ControlTypes::KeyboardAndMouse) {
 		walkingWithKeyboard = true;
 		// Let mouse attacks and spells happen first; walking resumes once they've started.

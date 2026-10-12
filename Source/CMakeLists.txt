@@ -28,6 +28,7 @@ set(libdevilutionx_SRCS
   nthread.cpp
   pfile.cpp
   plrmsg.cpp
+  poe2/dodge_roll.cpp
   portal.cpp
   restrict.cpp
   sync.cpp

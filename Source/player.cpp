@@ -47,6 +47,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/dodge_roll.hpp"
 #include "qol/autopickup.h"
 #include "qol/stash.h"
 #include "spells.h"
@@ -145,6 +146,9 @@ void StartWalkAnimation(Player &player, Direction dir, bool pmWillBeCalled)
 	int8_t skippedFrames = -2;
 	if (leveltype == DTYPE_TOWN && sgGameInitInfo.bRunInTown != 0)
 		skippedFrames = 2;
+	// POE2 Mashup: always run, in the dungeon as well as in town, and dash while dodge rolling.
+	if (gbIsPoe2)
+		skippedFrames = player.poe2.isDodging() ? DodgeRollSkippedWalkFrames : 2;
 	if (pmWillBeCalled)
 		skippedFrames += 1;
 	NewPlrAnim(player, player_graphic::Walk, dir, AnimationDistributionFlags::ProcessAnimationPending, skippedFrames);
@@ -3021,6 +3025,8 @@ void ProcessPlayers()
 			if (!PlrDeathModeOK(player) && player.hasNoLife()) {
 				SyncPlrKill(player, DeathReason::Unknown);
 			}
+
+			player.poe2.tick();
 
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {
