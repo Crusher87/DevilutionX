@@ -69,6 +69,7 @@
 #include "player.h"
 #include "poe2/currency.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
@@ -1469,7 +1470,11 @@ _item_indexes GetItemIndexForDroppableItem(bool considerDropRate, tl::function_r
 			continue;
 		if (!isItemOkay(item))
 			continue;
-		cumulativeWeight += considerDropRate ? item.dropRate : 1;
+		unsigned weight = considerDropRate ? item.dropRate : 1;
+		// There are many skill gems, so every other item counts four times as much to keep gems a treat.
+		if (gbIsPoe2)
+			weight *= SkillForGemData(item).isEmpty() ? 4 : 1;
+		cumulativeWeight += weight;
 		ril.push_back({ static_cast<_item_indexes>(i), cumulativeWeight });
 	}
 	const auto targetWeight = static_cast<unsigned>(RandomIntLessThan(static_cast<int>(cumulativeWeight)));
@@ -1923,6 +1928,16 @@ void PrintItemMisc(const Item &item)
 	if (const SupportGem gem = SupportGemForItem(item); gem != SupportGem::None) {
 		AddItemInfoBoxString(SupportGemDescription(gem));
 		AddItemInfoBoxString(_("Use to link to your readied spell"));
+		return;
+	}
+	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {
+		if (skill.kind == SkillKind::Spell) {
+			AddItemInfoBoxString(FormatRuntime(_("Grants the {:s} spell"), SkillName(skill)));
+		} else {
+			AddItemInfoBoxString(WeaponSkillDescription(skill.attack()));
+			AddItemInfoBoxString(FormatRuntime(_("Attack skill, needs a {:s}"), WeaponSkillWeapons(skill.attack())));
+		}
+		AddItemInfoBoxString(_("Use to socket in the skill bar"));
 		return;
 	}
 	if (const CurrencyOrb orb = CurrencyOrbForMiscId(item._iMiscId); orb != CurrencyOrb::None) {
@@ -4319,11 +4334,14 @@ void DrawUniqueInfo(const Surface &out)
 void PrintItemImplicits(const Item &item)
 {
 	if (gbIsPoe2) {
-		if (const WeaponSkill skill = WeaponSkillForItem(item); skill != WeaponSkill::None) {
-			const std::string_view key = GetOptions().Keymapper.KeyNameForAction("WeaponSkill");
-			AddItemInfoBoxString(FormatRuntime(_("skill [{:s}]: {:s}, {:d} mana"), key, WeaponSkillName(skill), WeaponSkillManaCost(skill)));
-			AddItemInfoBoxString(WeaponSkillDescription(skill));
+		std::string skills;
+		for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Flurry); i++) {
+			const auto skill = static_cast<WeaponSkill>(i);
+			if (ItemAllowsWeaponSkill(item, skill))
+				StrAppend(skills, skills.empty() ? "" : ", ", WeaponSkillName(skill));
 		}
+		if (!skills.empty())
+			AddItemInfoBoxString(FormatRuntime(_("skill gems: {:s}"), skills));
 	}
 
 	const ItemSpecialEffect baseFlags = AllItemsList[item.IDidx].iFlags;

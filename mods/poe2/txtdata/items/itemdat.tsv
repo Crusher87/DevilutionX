@@ -175,3 +175,29 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Orb of Alchemy	Orb	6	0	0	0	0	0	0	0	0		ORB_ALCHEMY	Null	true	1000
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Chaos Orb	Orb	10	0	0	0	0	0	0	0	0		ORB_CHAOS	Null	true	1500
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Orb of Scouring	Orb	4	0	0	0	0	0	0	0	0		ORB_SCOURING	Null	true	500
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Cleave Gem	Gem	1	0	0	0	0	0	20	0	0		SKILLGEM_CLEAVE	Null	true	500
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Ground Slam Gem	Gem	1	0	0	0	0	0	30	0	0		SKILLGEM_GROUNDSLAM	Null	true	500
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Whirling Staff Gem	Gem	1	0	0	0	0	0	20	0	20		SKILLGEM_WHIRL	Null	true	500
+	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Flurry Gem	Gem	1	0	0	0	0	0	0	0	20		SKILLGEM_FLURRY	Null	true	500
+	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Barrage Gem	Gem	1	0	0	0	0	0	0	0	25		SKILLGEM_BARRAGE	Null	true	500
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Firebolt Gem	Gem	2	0	0	0	0	0	0	15	0		SKILLGEM_SPELL	Firebolt	true	450
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Charged Bolt Gem	Gem	2	0	0	0	0	0	0	25	0		SKILLGEM_SPELL	ChargedBolt	true	450
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Holy Bolt Gem	Gem	2	0	0	0	0	0	0	20	0		SKILLGEM_SPELL	HolyBolt	true	450
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Healing Gem	Gem	2	0	0	0	0	0	0	17	0		SKILLGEM_SPELL	Healing	true	450
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Inferno Gem	Gem	6	0	0	0	0	0	0	20	0		SKILLGEM_SPELL	Inferno	true	750
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Fire Wall Gem	Gem	6	0	0	0	0	0	0	27	0		SKILLGEM_SPELL	FireWall	true	750
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Lightning Gem	Gem	8	0	0	0	0	0	0	20	0		SKILLGEM_SPELL	Lightning	true	900
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Flash Gem	Gem	10	0	0	0	0	0	0	33	0		SKILLGEM_SPELL	Flash	true	1050
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Mana Shield Gem	Gem	12	0	0	0	0	0	0	25	0		SKILLGEM_SPELL	ManaShield	true	1200
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Stone Curse Gem	Gem	12	0	0	0	0	0	0	51	0		SKILLGEM_SPELL	StoneCurse	true	1200
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Phasing Gem	Gem	14	0	0	0	0	0	0	39	0		SKILLGEM_SPELL	Phasing	true	1350
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Fireball Gem	Gem	16	0	0	0	0	0	0	48	0		SKILLGEM_SPELL	Fireball	true	1500
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Chain Lightning Gem	Gem	16	0	0	0	0	0	0	54	0		SKILLGEM_SPELL	ChainLightning	true	1500
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Elemental Gem	Gem	16	0	0	0	0	0	0	68	0		SKILLGEM_SPELL	Elemental	true	1500
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Flame Wave Gem	Gem	18	0	0	0	0	0	0	54	0		SKILLGEM_SPELL	FlameWave	true	1650
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Guardian Gem	Gem	18	0	0	0	0	0	0	61	0		SKILLGEM_SPELL	Guardian	true	1650
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Bone Spirit Gem	Gem	18	0	0	0	0	0	0	34	0		SKILLGEM_SPELL	BoneSpirit	true	1650
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Golem Gem	Gem	22	0	0	0	0	0	0	81	0		SKILLGEM_SPELL	Golem	true	1950
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Blood Star Gem	Gem	28	0	0	0	0	0	0	70	0		SKILLGEM_SPELL	BloodStar	true	2400
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Nova Gem	Gem	28	0	0	0	0	0	0	87	0		SKILLGEM_SPELL	Nova	true	2400
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Teleport Gem	Gem	28	0	0	0	0	0	0	105	0		SKILLGEM_SPELL	Teleport	true	2400

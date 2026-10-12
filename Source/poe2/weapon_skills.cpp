@@ -10,6 +10,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 
 namespace devilution {
@@ -110,17 +111,53 @@ bool IsRangedWeaponSkill(WeaponSkill skill)
 	return skill == WeaponSkill::Barrage;
 }
 
-bool TryUseWeaponSkill(Player &player)
+bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
+{
+	if (item.isEmpty() || item._iClass != ICLASS_WEAPON)
+		return false;
+	switch (skill) {
+	case WeaponSkill::Cleave:
+		return IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe);
+	case WeaponSkill::Flurry:
+		return item._itype == ItemType::Sword;
+	default:
+		return skill != WeaponSkill::None && WeaponSkillForItem(item) == skill;
+	}
+}
+
+bool WeaponAllowsSkill(const Player &player, WeaponSkill skill)
+{
+	return ItemAllowsWeaponSkill(player.InvBody[INVLOC_HAND_LEFT], skill) || ItemAllowsWeaponSkill(player.InvBody[INVLOC_HAND_RIGHT], skill);
+}
+
+std::string_view WeaponSkillWeapons(WeaponSkill skill)
+{
+	switch (skill) {
+	case WeaponSkill::Cleave:
+		return _("sword or axe");
+	case WeaponSkill::GroundSlam:
+		return _("mace");
+	case WeaponSkill::Barrage:
+		return _("bow");
+	case WeaponSkill::WhirlingStaff:
+		return _("staff");
+	case WeaponSkill::Flurry:
+		return _("sword or dagger");
+	default:
+		return {};
+	}
+}
+
+bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 {
 	// Weapon skills aren't sent over the network yet, so they're single player only.
-	if (!gbIsPoe2 || gbIsMultiplayer)
+	if (!gbIsPoe2 || gbIsMultiplayer || skill == WeaponSkill::None)
 		return false;
 	if (player.hasNoLife() || player._pInvincible)
 		return false;
 
-	const WeaponSkill skill = WeaponSkillFor(player);
-	if (skill == WeaponSkill::None) {
-		EventPlrMsg(_("Equip a weapon to use its skill."), UiFlags::ColorRed);
+	if (!WeaponAllowsSkill(player, skill)) {
+		EventPlrMsg(FormatRuntime(_("{:s} needs a {:s}."), WeaponSkillName(skill), WeaponSkillWeapons(skill)), UiFlags::ColorRed);
 		return false;
 	}
 	if (player._pMana < Fixed26_6::fromInt(WeaponSkillManaCost(skill))) {

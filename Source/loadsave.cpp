@@ -37,6 +37,7 @@
 #include "mpq/mpq_common.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/skill_gems.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/playerdat.hpp"
@@ -2395,20 +2396,21 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(player._pRSplType));
 }
 
-/** Version 1 holds support gem links; version 2 adds flask charges. */
-constexpr uint8_t Poe2HeroDataVersion = 2;
+/** Version 1 holds support gem links, version 2 adds flask charges and version 3 the skill bar. */
+constexpr uint8_t Poe2HeroDataVersion = 3;
 
-void LoadPoe2HeroData(Player &player)
+namespace {
+
+/** @return The version of the data that was read, or 0 if there was none. */
+uint8_t ReadPoe2HeroData(Player &player)
 {
-	player.poe2.clear();
-
 	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2hero");
 	if (!file.IsValid(2 * sizeof(uint8_t)))
-		return;
+		return 0;
 
 	const uint8_t version = file.NextLE<uint8_t>();
 	if (version == 0 || version > Poe2HeroDataVersion)
-		return;
+		return 0;
 
 	const uint8_t spellCount = file.NextLE<uint8_t>();
 	for (uint8_t i = 0; i < spellCount; i++) {
@@ -2423,9 +2425,29 @@ void LoadPoe2HeroData(Player &player)
 	}
 
 	if (version < 2 || !file.IsValid(NumFlasks))
-		return;
+		return version;
 	for (uint8_t &charges : player.poe2.flaskCharges)
 		charges = std::min(file.NextLE<uint8_t>(), MaxFlaskCharges);
+
+	if (version < 3 || !file.IsValid(NumSkillSlots * 2))
+		return version;
+	for (SkillSlot &slot : player.poe2.skillSlots) {
+		const SkillSlot skill { static_cast<SkillKind>(file.NextLE<uint8_t>()), file.NextLE<uint8_t>() };
+		// Drop skills whose gem no longer exists, e.g. from a newer build.
+		if (SkillGemItemIndex(skill))
+			slot = skill;
+	}
+	return version;
+}
+
+} // namespace
+
+void LoadPoe2HeroData(Player &player)
+{
+	player.poe2.clear();
+	// Heroes from before the skill bar start with the skill for their class's weapon.
+	if (ReadPoe2HeroData(player) < 3 && gbIsPoe2)
+		GrantStarterSkill(player);
 }
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
@@ -2437,7 +2459,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			linkedSpells.push_back(spell);
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + (linkedSpells.size() * (1 + MaxSupportsPerSpell)) + NumFlasks);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + (linkedSpells.size() * (1 + MaxSupportsPerSpell)) + NumFlasks + (NumSkillSlots * 2));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(linkedSpells.size()));
 	for (const size_t spell : linkedSpells) {
@@ -2447,6 +2469,10 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	}
 	for (const uint8_t charges : player.poe2.flaskCharges)
 		file.WriteLE<uint8_t>(charges);
+	for (const SkillSlot &slot : player.poe2.skillSlots) {
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(slot.kind));
+		file.WriteLE<uint8_t>(slot.id);
+	}
 }
 
 void LoadHeroItems(Player &player)
