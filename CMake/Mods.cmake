@@ -74,3 +74,48 @@ else()
     add_dependencies(libdevilutionx hellfire_copied_assets)
   endif()
 endif()
+
+# POE2 Mashup mod (requires Hellfire).
+set(poe2_mod
+  manifest.ini
+  lua/mods/poe2/init.lua
+  txtdata/classes/warrior/starting_loadout.tsv)
+
+if(APPLE)
+  foreach(asset_file ${poe2_mod})
+    set(src "${CMAKE_CURRENT_SOURCE_DIR}/mods/poe2/${asset_file}")
+    get_filename_component(_asset_dir "${asset_file}" DIRECTORY)
+    set_source_files_properties("${src}" PROPERTIES
+      MACOSX_PACKAGE_LOCATION "Resources/mods/poe2/${_asset_dir}"
+      XCODE_EXPLICIT_FILE_TYPE compiled)
+    target_sources(${BIN_TARGET} PRIVATE "${src}")
+  endforeach()
+else()
+  copy_files(
+    FILES ${poe2_mod}
+    SRC_PREFIX "mods/poe2/"
+    OUTPUT_DIR "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2"
+    OUTPUT_VARIABLE POE2_OUTPUT_FILES)
+  add_trim_target(poe2_trim_assets
+    ROOT_FOLDER "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2"
+    CURRENT_FILES ${poe2_mod})
+
+  if(BUILD_ASSETS_MPQ)
+    set(POE2_MPQ "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2.mpq")
+    add_custom_command(
+      COMMENT "Building poe2.mpq"
+      OUTPUT "${POE2_MPQ}"
+      COMMAND ${CMAKE_COMMAND} -E remove -f "${POE2_MPQ}"
+      COMMAND ${SMPQ} -A -M 1 -C BZIP2 -c "${POE2_MPQ}" ${poe2_mod}
+      WORKING_DIRECTORY "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2"
+      DEPENDS ${TRIM_COMMAND_BYPRODUCT} ${POE2_OUTPUT_FILES}
+      VERBATIM)
+    add_custom_target(poe2_mpq DEPENDS "${POE2_MPQ}")
+    add_dependencies(poe2_mpq poe2_trim_assets)
+    add_dependencies(libdevilutionx poe2_mpq)
+  else()
+    add_custom_target(poe2_copied_assets DEPENDS ${POE2_OUTPUT_FILES})
+    add_dependencies(poe2_copied_assets poe2_trim_assets)
+    add_dependencies(libdevilutionx poe2_copied_assets)
+  endif()
+endif()
