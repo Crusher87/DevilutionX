@@ -171,3 +171,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Empower Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_EMPOWER	Null	true	800
 	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Faster Casting Support	Gem	2	0	0	0	0	0	0	0	0		SUPPORT_FASTCAST	Null	true	800
 	1	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Efficiency Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_EFFICIENCY	Null	true	800
+	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Orb of Transmutation	Orb	1	0	0	0	0	0	0	0	0		ORB_TRANSMUTE	Null	true	200
+	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Orb of Alchemy	Orb	6	0	0	0	0	0	0	0	0		ORB_ALCHEMY	Null	true	1000
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Chaos Orb	Orb	10	0	0	0	0	0	0	0	0		ORB_CHAOS	Null	true	1500
+	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Orb of Scouring	Orb	4	0	0	0	0	0	0	0	0		ORB_SCOURING	Null	true	500

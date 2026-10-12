@@ -460,6 +460,10 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SUPPORT_EMPOWER") return IMISC_SUPPORT_EMPOWER;
 	if (value == "SUPPORT_FASTCAST") return IMISC_SUPPORT_FASTCAST;
 	if (value == "SUPPORT_EFFICIENCY") return IMISC_SUPPORT_EFFICIENCY;
+	if (value == "ORB_TRANSMUTE") return IMISC_ORB_TRANSMUTE;
+	if (value == "ORB_ALCHEMY") return IMISC_ORB_ALCHEMY;
+	if (value == "ORB_CHAOS") return IMISC_ORB_CHAOS;
+	if (value == "ORB_SCOURING") return IMISC_ORB_SCOURING;
 	return std::unexpected("Unknown enum value");
 }
 
