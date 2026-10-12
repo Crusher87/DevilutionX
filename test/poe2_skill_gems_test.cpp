@@ -64,8 +64,9 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 		Item gem;
 		ASSERT_TRUE(CreateSkillGemItem(gem, skill)) << AllItemsList[i].iName;
 		EXPECT_EQ(SkillForGem(gem), skill) << AllItemsList[i].iName;
-		if (skill.kind == SkillKind::Spell)
+		if (skill.kind == SkillKind::Spell) {
 			EXPECT_EQ(AllItemsList[i].iMinMag, GetSpellData(skill.spell()).minInt) << AllItemsList[i].iName;
+		}
 	}
 	EXPECT_EQ(gems, 28);
 }
