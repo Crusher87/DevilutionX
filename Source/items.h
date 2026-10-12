@@ -187,6 +187,14 @@ enum icreateinfo_flag2 {
 	CF_UIDOFFSET = ((1 << 4) - 1) << 1,
 	/** Item was generated with the POE2 Mashup mod active (can roll as rare). */
 	CF_POE2 = 1 << 5,
+	/** Extra affixes added to a rare by Exalted Orbs. */
+	CF_POE2_EXALTS = ((1 << 3) - 1) << 6,
+	/** Times a Divine Orb rerolled a rare's affix values (wraps around). */
+	CF_POE2_DIVINE = ((1 << 4) - 1) << 9,
+	/** Corrupted by a Vaal Orb: no more crafting. */
+	CF_POE2_CORRUPTED = 1 << 13,
+	/** The implicit a Vaal Orb added; 0 for none. */
+	CF_POE2_CORRUPT_IMPLICIT = ((1 << 2) - 1) << 14,
 	// clang-format on
 };
 

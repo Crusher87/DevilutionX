@@ -1261,19 +1261,38 @@ bool RareAffixesOverlap(item_effect_type a, item_effect_type b)
 	return coveredBy(a, b) || coveredBy(b, a);
 }
 
-/**
- * @brief Rolls a POE2-style rare item: 3 to 6 distinct affixes, at most 3 prefixes and 3 suffixes, never cursed.
- */
-void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
+/** @brief POE2 Mashup: the implicit a Vaal Orb added to the item, if any. */
+void ApplyCorruptionImplicit(const Player &player, Item &item)
 {
-	const int wantedAffixes = 3 + GenerateRnd(4);
+	const int kind = static_cast<int>((item.dwBuff & CF_POE2_CORRUPT_IMPLICIT) >> 14);
+	if (kind == 0)
+		return;
+	ItemPower power = CorruptionImplicitPower(kind);
+	SaveItemPower(player, item, power);
+}
+
+struct RareAffixRoll {
+	const PLStruct *affix;
+	bool prefix;
+	int value;
+};
+
+/**
+ * @brief Picks a rare's affixes and saves their powers to the item.
+ *
+ * Exalted Orbs raise the count after the base roll, so the first affixes stay the same.
+ */
+std::vector<RareAffixRoll> RollRareAffixes(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
+{
+	const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
+	const int wantedAffixes = std::min<int>(3 + GenerateRnd(4) + exalts, static_cast<int>(MaxRareAffixes));
 	int prefixes = 0;
 	int suffixes = 0;
-	size_t numPowers = 0;
-	int valueAdd = 0;
-	int valueMult = 0;
+	std::vector<RareAffixRoll> rolls;
+	std::array<item_effect_type, MaxRareAffixes> powers;
+	powers.fill(IPL_INVALID);
 
-	for (int attempt = 0; attempt < wantedAffixes * 3 && static_cast<int>(numPowers) < wantedAffixes; attempt++) {
+	for (int attempt = 0; attempt < wantedAffixes * 3 && static_cast<int>(rolls.size()) < wantedAffixes; attempt++) {
 		bool rollPrefix = (attempt % 2) == 0;
 		if (rollPrefix && prefixes >= MaxRareAffixesPerSide)
 			rollPrefix = false;
@@ -1284,26 +1303,63 @@ void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, 
 		if (!affix.has_value())
 			continue;
 		const PLStruct &chosen = **affix;
-		const auto powersEnd = item._iRarePowers.begin() + numPowers;
-		if (std::any_of(item._iRarePowers.begin(), powersEnd, [&chosen](item_effect_type power) { return RareAffixesOverlap(power, chosen.power.type); }))
+		const auto powersEnd = powers.begin() + rolls.size();
+		if (std::any_of(powers.begin(), powersEnd, [&chosen](item_effect_type power) { return RareAffixesOverlap(power, chosen.power.type); }))
 			continue;
 
 		ItemPower power = chosen.power;
 		const int value = SaveItemPower(player, item, power);
-		valueAdd += PLVal(value, power.param1, power.param2, chosen.minVal, chosen.maxVal);
-		valueMult += chosen.multVal;
-		item._iRarePowers[numPowers++] = chosen.power.type;
-		if (rollPrefix) {
-			if (prefixes++ == 0)
-				item._iPrePower = chosen.power.type;
-		} else {
-			if (suffixes++ == 0)
-				item._iSufPower = chosen.power.type;
+		powers[rolls.size()] = chosen.power.type;
+		rolls.emplace_back(RareAffixRoll { &chosen, rollPrefix, value });
+		if (rollPrefix)
+			prefixes++;
+		else
+			suffixes++;
+	}
+	return rolls;
+}
+
+/**
+ * @brief Rolls a POE2-style rare item: 3 to 6 distinct affixes, at most 3 prefixes and 3 suffixes, never cursed.
+ */
+void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
+{
+	const uint32_t divine = (item.dwBuff & CF_POE2_DIVINE) >> 9;
+	std::vector<RareAffixRoll> rolls;
+	if (divine == 0) {
+		rolls = RollRareAffixes(player, item, minlvl, maxlvl, flgs);
+	} else {
+		// A Divine Orb keeps the affixes and rolls their values again from a seed of its own.
+		Item scratch = item;
+		rolls = RollRareAffixes(player, scratch, minlvl, maxlvl, flgs);
+		SetRndSeed(static_cast<uint32_t>(item._iSeed) ^ (divine * 0x9E3779B9U));
+		for (RareAffixRoll &roll : rolls) {
+			ItemPower power = roll.affix->power;
+			roll.value = SaveItemPower(player, item, power);
 		}
 	}
 
-	if (numPowers == 0)
+	if (rolls.empty())
 		return;
+
+	size_t numPowers = 0;
+	int valueAdd = 0;
+	int valueMult = 0;
+	bool hasPrefix = false;
+	bool hasSuffix = false;
+	for (const RareAffixRoll &roll : rolls) {
+		const PLStruct &chosen = *roll.affix;
+		valueAdd += PLVal(roll.value, chosen.power.param1, chosen.power.param2, chosen.minVal, chosen.maxVal);
+		valueMult += chosen.multVal;
+		item._iRarePowers[numPowers++] = chosen.power.type;
+		if (roll.prefix && !hasPrefix) {
+			item._iPrePower = chosen.power.type;
+			hasPrefix = true;
+		} else if (!roll.prefix && !hasSuffix) {
+			item._iSufPower = chosen.power.type;
+			hasSuffix = true;
+		}
+	}
 
 	item._iMagical = ITEM_QUALITY_RARE;
 	item._iVAdd1 = valueAdd;
@@ -3582,6 +3638,7 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 		}
 		if (item._iMagical != ITEM_QUALITY_UNIQUE)
 			ItemRndDur(item);
+		ApplyCorruptionImplicit(player, item);
 	} else {
 		if (item._iLoc != ILOC_UNEQUIPABLE) {
 			if (iseed > 109 || AllItemsList[static_cast<size_t>(idx)].iItemId != UniqueItems[iseed].UIItemId) {
@@ -4442,6 +4499,29 @@ void PrintPoe2ItemDefense(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "Dur: {:d}/{:d}"), item._iDurability, item._iMaxDur));
 }
 
+/** @brief POE2 Mashup: Vaal Orb corruption and the implicit it added. */
+void PrintItemCorruption(const Item &item)
+{
+	if ((item.dwBuff & CF_POE2_CORRUPTED) == 0)
+		return;
+	const int kind = static_cast<int>((item.dwBuff & CF_POE2_CORRUPT_IMPLICIT) >> 14);
+	const ItemPower power = CorruptionImplicitPower(kind);
+	switch (power.type) {
+	case IPL_ALLRES:
+		AddItemInfoBoxString(FormatRuntime(_("corrupted: {:+d}% all resistances"), power.param1));
+		break;
+	case IPL_LIFE:
+		AddItemInfoBoxString(FormatRuntime(_("corrupted: {:+d} hit points"), power.param1));
+		break;
+	case IPL_ATTRIBS:
+		AddItemInfoBoxString(FormatRuntime(_("corrupted: {:+d} to all attributes"), power.param1));
+		break;
+	default:
+		break;
+	}
+	AddItemInfoBoxString(_("Corrupted"));
+}
+
 /**
  * @brief POE2 Mashup: shows effects that come with the base item type itself (like quick attack on daggers).
  */
@@ -4491,6 +4571,7 @@ void PrintItemDetails(const Item &item)
 		}
 	}
 	PrintItemImplicits(item);
+	PrintItemCorruption(item);
 	if (item._iClass == ICLASS_ARMOR && gbIsPoe2) {
 		PrintPoe2ItemDefense(item);
 	} else if (item._iClass == ICLASS_ARMOR) {
@@ -4547,6 +4628,7 @@ void PrintItemDur(const Item &item)
 			AddItemInfoBoxString(_("Not Identified"));
 	}
 	PrintItemImplicits(item);
+	PrintItemCorruption(item);
 	if (item._iClass == ICLASS_ARMOR) {
 		if (gbIsPoe2)
 			PrintPoe2ItemDefense(item);
@@ -4689,6 +4771,11 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 	case IMISC_ORB_ALCHEMY:
 	case IMISC_ORB_CHAOS:
 	case IMISC_ORB_SCOURING:
+	case IMISC_ORB_AUGMENT:
+	case IMISC_ORB_REGAL:
+	case IMISC_ORB_EXALTED:
+	case IMISC_ORB_DIVINE:
+	case IMISC_ORB_VAAL:
 		player._pOilType = mid;
 		if (&player != MyPlayer) {
 			return;
