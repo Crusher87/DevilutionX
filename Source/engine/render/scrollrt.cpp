@@ -55,6 +55,7 @@
 #include "options.h"
 #include "panels/charpanel.hpp"
 #include "panels/console.hpp"
+#include "panels/item_spawner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skill_bar.hpp"
@@ -1904,6 +1905,7 @@ void DrawAndBlit()
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)
 		DrawPartyMemberInfoPanel(out);
 
+	DrawItemSpawner(out);
 	DrawCursor(out);
 
 	DrawFPS(out);

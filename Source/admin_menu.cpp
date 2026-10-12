@@ -25,6 +25,7 @@
 #include "inv.h"
 #include "levels/gendung.h"
 #include "msg.h"
+#include "panels/item_spawner.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
@@ -42,18 +43,12 @@ namespace devilution {
 
 namespace {
 
-constexpr int MinItemLevel = 1;
-constexpr int MaxItemLevel = 60;
 constexpr int GoldPerClick = 10000;
 
 void AdminMain(bool bActivate);
 void AdminItemsOpen(bool bActivate);
 void AdminCharacterOpen(bool bActivate);
 void AdminWorldOpen(bool bActivate);
-void AdminItemBase(bool bActivate);
-void AdminItemQuality(bool bActivate);
-void AdminItemLevel(bool bActivate);
-void AdminItemSpawn(bool bActivate);
 void AdminLevelUp(bool bActivate);
 void AdminGold(bool bActivate);
 void AdminMaxStats(bool bActivate);
@@ -72,18 +67,6 @@ TMenuItem AdminMainMenu[] = {
 	{ GMENU_ENABLED, N_("World"),            &AdminWorldOpen      },
 	{ GMENU_ENABLED, N_("Previous Menu"),    &AdminBackToGameMenu },
 	{ GMENU_ENABLED, nullptr,                nullptr              },
-	// clang-format on
-};
-
-TMenuItem AdminItemsMenu[] = {
-	// clang-format off
-	// dwFlags,                     pszStr,              fnMenu
-	{ GMENU_ENABLED | GMENU_SLIDER, N_("Base"),          &AdminItemBase    },
-	{ GMENU_ENABLED | GMENU_SLIDER, nullptr,             &AdminItemQuality },
-	{ GMENU_ENABLED | GMENU_SLIDER, nullptr,             &AdminItemLevel   },
-	{ GMENU_ENABLED,                nullptr,             &AdminItemSpawn   },
-	{ GMENU_ENABLED,                N_("Previous Menu"), &AdminMain        },
-	{ GMENU_ENABLED,                nullptr,             nullptr           },
 	// clang-format on
 };
 
@@ -111,84 +94,14 @@ TMenuItem AdminWorldMenu[] = {
 	// clang-format on
 };
 
-const std::array<const char *, 4> QualityNames = {
-	N_("Normal"),
-	N_("Magic"),
-	N_("Rare"),
-	N_("Unique"),
-};
-const std::array<item_quality, 4> QualityOrder = {
-	ITEM_QUALITY_NORMAL,
-	ITEM_QUALITY_MAGIC,
-	ITEM_QUALITY_RARE,
-	ITEM_QUALITY_UNIQUE,
-};
-
-std::vector<_item_indexes> ItemBases;
-size_t SelectedBase = 0;
-size_t SelectedQuality = 2; // Rare
-int SelectedItemLevel = 30;
 int WarpTarget = 1;
 
-std::string QualityLabel;
-std::string LevelLabel;
-std::string SpawnLabel;
 std::string GodModeLabel;
 std::string WarpLabel;
 
 int MaxDungeonLevel()
 {
 	return gbIsHellfire ? 24 : 16;
-}
-
-void CollectItemBases()
-{
-	ItemBases.clear();
-	std::vector<std::string_view> seenNames;
-	for (size_t i = 0; i < AllItemsList.size(); i++) {
-		const ItemData &data = AllItemsList[i];
-		if (!IsItemAvailable(static_cast<int>(i)))
-			continue;
-		const bool isPoe2Misc = SupportGemForMiscId(data.iMiscId) != SupportGem::None || CurrencyOrbForMiscId(data.iMiscId) != CurrencyOrb::None || !SkillForGemData(data).isEmpty();
-		if (!isPoe2Misc && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT, ILOC_INVALID))
-			continue;
-		if (data.iMiscId == IMISC_UNIQUE)
-			continue;
-		// Skip copies like the class starting weapons that share a name with a regular base.
-		if (std::find(seenNames.begin(), seenNames.end(), data.iName) != seenNames.end())
-			continue;
-		seenNames.emplace_back(data.iName);
-		ItemBases.push_back(static_cast<_item_indexes>(i));
-	}
-	SelectedBase = std::min(SelectedBase, ItemBases.empty() ? 0 : ItemBases.size() - 1);
-}
-
-void UpdateItemsMenu()
-{
-	TMenuItem &baseItem = AdminItemsMenu[0];
-	gmenu_slider_steps(&baseItem, std::max<int>(static_cast<int>(ItemBases.size()) - 1, 2));
-	gmenu_slider_set(&baseItem, 0, std::max<int>(static_cast<int>(ItemBases.size()) - 1, 1), static_cast<int>(SelectedBase));
-
-	TMenuItem &qualityItem = AdminItemsMenu[1];
-	QualityLabel = std::string(_(QualityNames[SelectedQuality]));
-	qualityItem.pszStr = QualityLabel.c_str();
-	gmenu_slider_steps(&qualityItem, static_cast<int>(QualityNames.size()) - 1);
-	gmenu_slider_set(&qualityItem, 0, static_cast<int>(QualityNames.size()) - 1, static_cast<int>(SelectedQuality));
-
-	TMenuItem &levelItem = AdminItemsMenu[2];
-	LevelLabel = StrCat(_("Level"), " ", SelectedItemLevel);
-	levelItem.pszStr = LevelLabel.c_str();
-	gmenu_slider_steps(&levelItem, MaxItemLevel - MinItemLevel);
-	gmenu_slider_set(&levelItem, MinItemLevel, MaxItemLevel, SelectedItemLevel);
-
-	if (ItemBases.empty()) {
-		SpawnLabel = _("No items available");
-		AdminItemsMenu[3].setEnabled(false);
-	} else {
-		SpawnLabel = StrCat(_("Spawn"), " ", AllItemsList[ItemBases[SelectedBase]].iName);
-		AdminItemsMenu[3].setEnabled(true);
-	}
-	AdminItemsMenu[3].pszStr = SpawnLabel.c_str();
 }
 
 void UpdateCharacterMenu()
@@ -227,9 +140,8 @@ void AdminBackToGameMenu(bool /*bActivate*/)
 
 void AdminItemsOpen(bool /*bActivate*/)
 {
-	CollectItemBases();
-	UpdateItemsMenu();
-	gmenu_set_items(AdminItemsMenu, nullptr);
+	gamemenu_off();
+	OpenItemSpawner();
 }
 
 void AdminCharacterOpen(bool /*bActivate*/)
@@ -242,64 +154,6 @@ void AdminWorldOpen(bool /*bActivate*/)
 {
 	UpdateWorldMenu();
 	gmenu_set_items(AdminWorldMenu, nullptr);
-}
-
-void AdminItemBase(bool bActivate)
-{
-	if (ItemBases.empty())
-		return;
-	const int last = static_cast<int>(ItemBases.size()) - 1;
-	if (bActivate)
-		SelectedBase = (SelectedBase + 1) % ItemBases.size();
-	else
-		SelectedBase = static_cast<size_t>(std::clamp(gmenu_slider_get(&AdminItemsMenu[0], 0, last), 0, last));
-	UpdateItemsMenu();
-}
-
-void AdminItemQuality(bool bActivate)
-{
-	const int last = static_cast<int>(QualityNames.size()) - 1;
-	if (bActivate)
-		SelectedQuality = (SelectedQuality + 1) % QualityNames.size();
-	else
-		SelectedQuality = static_cast<size_t>(std::clamp(gmenu_slider_get(&AdminItemsMenu[1], 0, last), 0, last));
-	UpdateItemsMenu();
-}
-
-void AdminItemLevel(bool bActivate)
-{
-	if (bActivate)
-		SelectedItemLevel = SelectedItemLevel >= MaxItemLevel ? MinItemLevel : SelectedItemLevel + 10;
-	else
-		SelectedItemLevel = gmenu_slider_get(&AdminItemsMenu[2], MinItemLevel, MaxItemLevel);
-	SelectedItemLevel = std::clamp(SelectedItemLevel, MinItemLevel, MaxItemLevel);
-	UpdateItemsMenu();
-}
-
-void AdminItemSpawn(bool /*bActivate*/)
-{
-	if (ItemBases.empty())
-		return;
-
-	if (ActiveItemCount >= MAXITEMS) {
-		EventPlrMsg(_("Too many items on the ground. Pick some up first."), UiFlags::ColorRed);
-		return;
-	}
-
-	const _item_indexes baseIndex = ItemBases[SelectedBase];
-	const item_quality quality = QualityOrder[SelectedQuality];
-	Item item;
-	if (!AdminGenerateItem(*MyPlayer, item, baseIndex, quality, SelectedItemLevel, SDL_GetTicks())) {
-		EventPlrMsg(StrCat(_("Couldn't roll that item. Try another level or quality.")), UiFlags::ColorRed);
-		return;
-	}
-
-	const int ii = AllocateItem();
-	Items[ii] = std::move(item);
-	Items[ii]._iIdentified = true;
-	GetSuperItemSpace(MyPlayer->position.tile, ii);
-	NetSendCmdPItem(false, CMD_SPAWNITEM, Items[ii].position, Items[ii]);
-	EventPlrMsg(StrCat(_("Spawned"), " ", Items[ii].getName()));
 }
 
 void AdminLevelUp(bool /*bActivate*/)

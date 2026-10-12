@@ -132,6 +132,7 @@ set(libdevilutionx_SRCS
   panels/mainpanel.cpp
   panels/partypanel.cpp
   panels/quest_log.cpp
+  panels/item_spawner.cpp
   panels/skill_bar.cpp
   panels/spell_book.cpp
   panels/spell_icons.cpp
