@@ -84,6 +84,7 @@
 #include "options.h"
 #include "panels/console.hpp"
 #include "panels/info_box.hpp"
+#include "panels/item_spawner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skill_bar.hpp"
@@ -230,7 +231,7 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && gmenu_is_active()) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen())) {
 		RedrawViewport();
 		return false;
 	}
@@ -253,6 +254,9 @@ void LeftMouseCmd(bool bShift)
 
 	assert(!GetMainPanel().contains(MousePosition));
 
+	// POE2 Mashup: with WASD movement, clicking the ground doesn't walk and attacks don't chase.
+	const bool wasdMovement = IsWasdMovementEnabled();
+
 	if (leveltype == DTYPE_TOWN) {
 		CloseGoldWithdraw();
 		CloseStash();
@@ -261,7 +265,7 @@ void LeftMouseCmd(bool bShift)
 			NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
 		if (pcursmonst != -1)
 			NetSendCmdLocParam1(true, CMD_TALKXY, cursPosition, pcursmonst);
-		if (pcursitem == -1 && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
+		if (!wasdMovement && pcursitem == -1 && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
 			LastPlayerAction = PlayerActionType::Walk;
 			NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
 		}
@@ -291,7 +295,7 @@ void LeftMouseCmd(bool bShift)
 			NetSendCmdParam1(true, CMD_RATTACKPID, PlayerUnderCursor->getId());
 		}
 	} else {
-		if (bShift) {
+		if (bShift || (wasdMovement && pcursmonst != -1 && !CanTalkToMonst(Monsters[pcursmonst]))) {
 			if (pcursmonst != -1) {
 				if (CanTalkToMonst(Monsters[pcursmonst])) {
 					NetSendCmdParam1(true, CMD_ATTACKID, pcursmonst);
@@ -311,7 +315,7 @@ void LeftMouseCmd(bool bShift)
 			NetSendCmdParam1(true, CMD_ATTACKPID, PlayerUnderCursor->getId());
 		}
 	}
-	if (!bShift && pcursitem == -1 && ObjectUnderCursor == nullptr && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
+	if (!bShift && !wasdMovement && pcursitem == -1 && ObjectUnderCursor == nullptr && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
 		LastPlayerAction = PlayerActionType::Walk;
 		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
 	}
@@ -769,6 +773,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		}
 	}
 	if (ctrlEvents.size() > 0 && ctrlEvents[0].button != ControllerButton_NONE) {
+		return;
+	}
+
+	if (ItemSpawnerHandleEvent(event)) {
 		return;
 	}
 
@@ -2172,6 +2180,14 @@ void InitKeymapActions()
 		    DebugToggle = !DebugToggle;
 	    });
 #endif
+	options.Keymapper.AddAction(
+	    "ItemSpawner",
+	    N_("Item Spawner"),
+	    N_("Opens the searchable item spawner for testing (POE2 Mashup, single player)."),
+	    SDLK_INSERT,
+	    ToggleItemSpawner,
+	    nullptr,
+	    [] { return !gbIsMultiplayer && !gmenu_is_active(); });
 	// POE2 Mashup skill bar. Added last so its keys win over older saved bindings.
 	constexpr std::array<uint32_t, NumSkillSlots> SkillSlotKeys { 'E', 'R', 'T', 'F', 'G', 'V' };
 	for (uint32_t i = 0; i < NumSkillSlots; ++i) {
