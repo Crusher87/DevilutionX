@@ -68,6 +68,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/currency.hpp"
+#include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -3084,7 +3085,6 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	vitality += passive(PassiveStat::Vitality);
 	dam += passive(PassiveStat::Damage);
 	toHit += passive(PassiveStat::ToHit);
-	ac += ac * passive(PassiveStat::ArmorPercent) / 100;
 	fireRes += passive(PassiveStat::FireResist) + passive(PassiveStat::AllResist);
 	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
 	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
@@ -3093,6 +3093,46 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
 	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::min(passive(PassiveStat::AttackSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
 	player.poe2.passiveCastFrames = static_cast<int8_t>(std::min(passive(PassiveStat::CastSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
+
+	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
+	int evasion = 0;
+	int energyShield = 0;
+	if (gbIsPoe2) {
+		for (const Item &item : player.InvBody) {
+			if (item.isEmpty() || !item._iStatFlag || item._iAC == 0)
+				continue;
+			const int baseDefense = item._iAC;
+			const int bonusDefense = (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified) ? GetBonusAC(item) : 0;
+			int movedBase = 0;
+			int movedBonus = 0;
+			switch (ItemDefenseType(item)) {
+			case DefenseType::EnergyShield:
+				movedBase = baseDefense;
+				movedBonus = bonusDefense;
+				energyShield += (baseDefense + bonusDefense) * EnergyShieldPerDefense;
+				break;
+			case DefenseType::Evasion:
+				movedBase = baseDefense;
+				movedBonus = bonusDefense;
+				evasion += baseDefense + bonusDefense;
+				break;
+			case DefenseType::ArmourEvasion:
+				movedBase = baseDefense / 2;
+				movedBonus = bonusDefense / 2;
+				evasion += movedBase + movedBonus;
+				break;
+			case DefenseType::Armour:
+				break;
+			}
+			ac -= movedBase;
+			bonusAc -= movedBonus;
+		}
+		evasion += evasion * passive(PassiveStat::EvasionPercent) / 100;
+		energyShield += energyShield * passive(PassiveStat::EnergyShieldPercent) / 100;
+	}
+	ac += ac * passive(PassiveStat::ArmorPercent) / 100;
+	player.poe2.evasion = evasion;
+	SetMaxEnergyShield(player, energyShield);
 
 	CalcPlrDamage(player, minDamage, maxDamage);
 	CalcPlrPrimaryStats(player, strength, magic, dexterity, vitality);
@@ -4377,6 +4417,31 @@ void DrawUniqueInfo(const Surface &out)
 	}
 }
 
+/** @brief POE2 Mashup: armor pieces show the defense their base grants. */
+void PrintPoe2ItemDefense(const Item &item)
+{
+	std::string defense;
+	switch (ItemDefenseType(item)) {
+	case DefenseType::EnergyShield:
+		defense = FormatRuntime(_("energy shield: {:d}"), item._iAC * EnergyShieldPerDefense);
+		break;
+	case DefenseType::Evasion:
+		defense = FormatRuntime(_("evasion: {:d}"), item._iAC);
+		break;
+	case DefenseType::ArmourEvasion:
+		defense = FormatRuntime(_("armour: {:d}  evasion: {:d}"), item._iAC - (item._iAC / 2), item._iAC / 2);
+		break;
+	case DefenseType::Armour:
+		defense = FormatRuntime(_("armour: {:d}"), item._iAC);
+		break;
+	}
+	AddItemInfoBoxString(defense);
+	if (item._iMaxDur == DUR_INDESTRUCTIBLE)
+		AddItemInfoBoxString(_("Indestructible"));
+	else
+		AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "Dur: {:d}/{:d}"), item._iDurability, item._iMaxDur));
+}
+
 /**
  * @brief POE2 Mashup: shows effects that come with the base item type itself (like quick attack on daggers).
  */
@@ -4426,7 +4491,9 @@ void PrintItemDetails(const Item &item)
 		}
 	}
 	PrintItemImplicits(item);
-	if (item._iClass == ICLASS_ARMOR) {
+	if (item._iClass == ICLASS_ARMOR && gbIsPoe2) {
+		PrintPoe2ItemDefense(item);
+	} else if (item._iClass == ICLASS_ARMOR) {
 		if (item._iMaxDur == DUR_INDESTRUCTIBLE)
 			AddItemInfoBoxString(FormatRuntime(_("armor: {:d}  Indestructible"), item._iAC));
 		else
@@ -4481,7 +4548,9 @@ void PrintItemDur(const Item &item)
 	}
 	PrintItemImplicits(item);
 	if (item._iClass == ICLASS_ARMOR) {
-		if (item._iMaxDur == DUR_INDESTRUCTIBLE)
+		if (gbIsPoe2)
+			PrintPoe2ItemDefense(item);
+		else if (item._iMaxDur == DUR_INDESTRUCTIBLE)
 			AddItemInfoBoxString(FormatRuntime(_("armor: {:d}  Indestructible"), item._iAC));
 		else
 			AddItemInfoBoxString(FormatRuntime(_("armor: {:d}  Dur: {:d}/{:d}"), item._iAC, item._iDurability, item._iMaxDur));

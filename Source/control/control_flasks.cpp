@@ -1,7 +1,11 @@
 #include "control_flasks.hpp"
 #include "control.hpp"
 
+#include "engine/palette.h"
+#include "engine/render/primitive_render.hpp"
+#include "engine/render/text_render.hpp"
 #include "engine/surface.hpp"
+#include "player.h"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -138,6 +142,25 @@ void DrawFlaskValues(const Surface &out, Point pos, int currValue, int maxValue)
 	drawStringWithShadow(currText, pos - Displacement { GetLineWidth(currText, GameFont12) + 1, 0 });
 	drawStringWithShadow("/", pos);
 	drawStringWithShadow(StrCat(maxValue), pos + Displacement { GetLineWidth("/", GameFont12) + 1, 0 });
+}
+
+void DrawEnergyShieldBar(const Surface &out, Point center)
+{
+	const Poe2PlayerData &data = MyPlayer->poe2;
+	if (data.maxEnergyShield <= 0)
+		return;
+	constexpr int Width = 60;
+	constexpr int Height = 4;
+	const int current = data.energyShield / 64;
+	const int filled = std::clamp(Width * current / data.maxEnergyShield, 0, Width);
+	const Point topLeft = center - Displacement { Width / 2, 0 };
+	FillRect(out, topLeft.x - 1, topLeft.y - 1, Width + 2, Height + 2, PAL16_GRAY + 15);
+	if (filled > 0)
+		FillRect(out, topLeft.x, topLeft.y, filled, Height, PAL16_BLUE + 4);
+	const std::string text = StrCat("ES ", current, "/", data.maxEnergyShield);
+	const Point textPosition = topLeft + Displacement { 0, Height + 2 };
+	DrawString(out, text, { textPosition + Displacement { 1, 1 }, { Width, 12 } }, { .flags = UiFlags::ColorBlack | UiFlags::AlignCenter | UiFlags::KerningFitSpacing, .spacing = 0 });
+	DrawString(out, text, { textPosition, { Width, 12 } }, { .flags = UiFlags::ColorBlue | UiFlags::AlignCenter | UiFlags::KerningFitSpacing, .spacing = 0 });
 }
 
 void UpdateLifeManaPercent()

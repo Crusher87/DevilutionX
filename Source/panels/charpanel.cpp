@@ -12,8 +12,10 @@
 #include "engine/load_clx.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "game_mode.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/display.h"
@@ -171,7 +173,12 @@ PanelEntry panelEntries[] = {
 	    []() { return StyledText { UiFlags::ColorWhite, FormatInteger(InspectPlayer->_pGold) }; } },
 
 	{ N_("Armor class"), { RightColumnLabelX, 163 }, 57, RightColumnLabelWidth,
-	    []() { return StyledText { GetValueColor(InspectPlayer->_pIBonusAC), StrCat(InspectPlayer->GetArmor() + (InspectPlayer->getCharacterLevel() * 2)) }; } },
+	    []() {
+	        // POE2 Mashup: armour and evasion are separate defenses.
+	        if (gbIsPoe2)
+		        return StyledText { GetValueColor(InspectPlayer->_pIBonusAC), StrCat(ArmourRating(*InspectPlayer), "/", EvasionRating(*InspectPlayer)) };
+	        return StyledText { GetValueColor(InspectPlayer->_pIBonusAC), StrCat(InspectPlayer->GetArmor() + (InspectPlayer->getCharacterLevel() * 2)) };
+	    } },
 	{ N_("Chance To Hit"), { RightColumnLabelX, 191 }, 57, RightColumnLabelWidth,
 	    []() { return StyledText { GetValueColor(InspectPlayer->_pIBonusToHit), StrCat(InspectPlayer->InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow ? InspectPlayer->GetRangedToHit() : InspectPlayer->GetMeleeToHit(), "%") }; } },
 	{ N_("Damage"), { RightColumnLabelX, 219 }, 57, RightColumnLabelWidth,
@@ -221,7 +228,8 @@ void DrawShadowString(const Surface &out, const PanelEntry &entry)
 		return;
 
 	constexpr int Spacing = 0;
-	const std::string_view textStr = LanguageTranslate(entry.label);
+	// POE2 Mashup: the armor class box shows armour and evasion.
+	const std::string_view textStr = (gbIsPoe2 && entry.label == "Armor class") ? std::string_view(_("Armour / Evasion")) : LanguageTranslate(entry.label);
 	std::string_view text;
 	std::string wrapped;
 	if (entry.labelLength > 0) {

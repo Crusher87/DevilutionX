@@ -44,6 +44,7 @@
 #include "multi.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "poe2/support_gems.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
@@ -1096,7 +1097,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 #endif
 	int hper = 40;
 	if (missileData.isArrow()) {
-		const int tac = player.GetArmor();
+		const int tac = HitDefense(player);
 		if (monster != nullptr) {
 			hper = monster->toHit(sgGameInitInfo.nDifficulty)
 			    + ((monster->level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel()) * 2)
@@ -1176,6 +1177,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		dam = std::max(dam, 64);
 	}
 	Fixed26_6 damage = Fixed26_6::fromRaw(dam);
+	if (damageType == DamageType::Physical && mtype != MissileID::BoneSpirit)
+		damage = ApplyArmour(player, damage);
 
 	if ((resper <= 0 || gbIsHellfire) && blk < blkper) {
 		Direction dir = player._pdir;
@@ -1194,7 +1197,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (resper > 0) {
 		damage -= damage * resper / 100;
 		if (&player == MyPlayer) {
-			ApplyPlrDamage(damageType, player, damage, 0, deathReason);
+			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, damage), 0, deathReason);
 		}
 
 		if (!player.hasNoLife()) {
@@ -1204,7 +1207,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 
 	if (&player == MyPlayer) {
-		ApplyPlrDamage(damageType, player, damage, 0, deathReason);
+		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, damage), 0, deathReason);
 	}
 
 	if (!player.hasNoLife()) {

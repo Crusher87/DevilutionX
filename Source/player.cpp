@@ -47,6 +47,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/support_gems.hpp"
@@ -3152,6 +3153,7 @@ void ProcessPlayers()
 			if (gbIsPoe2 && player.isOnLevel(0))
 				RefillFlasks(player);
 			ApplyRegen(player);
+			RechargeEnergyShield(player);
 
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {
