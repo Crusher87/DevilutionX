@@ -99,7 +99,7 @@ void RechargeEnergyShield(Player &player)
 	constexpr int64_t Divisor = 1000 * TicksPerSecond;
 	const int64_t total = static_cast<int64_t>(maxRaw) * EnergyShieldRechargePerMille + data.energyShieldRemainder;
 	data.energyShieldRemainder = static_cast<int>(total % Divisor);
-	data.energyShield = std::min(data.energyShield + static_cast<int32_t>(total / Divisor), maxRaw);
+	data.energyShield = std::min<int32_t>(data.energyShield + static_cast<int32_t>(total / Divisor), maxRaw);
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Health);
 }
@@ -108,9 +108,9 @@ void SetMaxEnergyShield(Player &player, int maxEnergyShield)
 {
 	Poe2PlayerData &data = player.poe2;
 	maxEnergyShield = std::max(maxEnergyShield, 0);
-	const int32_t missing = std::max(data.maxEnergyShield * 64 - data.energyShield, 0);
+	const int32_t missing = std::max<int32_t>(data.maxEnergyShield * 64 - data.energyShield, 0);
 	data.maxEnergyShield = maxEnergyShield;
-	data.energyShield = std::clamp(maxEnergyShield * 64 - missing, 0, maxEnergyShield * 64);
+	data.energyShield = std::clamp<int32_t>(maxEnergyShield * 64 - missing, 0, maxEnergyShield * 64);
 }
 
 } // namespace devilution
