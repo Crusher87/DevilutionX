@@ -5,6 +5,8 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "missiles.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/support_gems.hpp"
 #include "spells.h"
@@ -106,6 +108,66 @@ TEST_F(Poe2SupportGemsTest, SupportsChangeTheSpell)
 	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Healing), 72);
 	EXPECT_EQ(SupportCastSkippedFrames(player, SpellID::Healing), 3);
 	EXPECT_EQ(SupportExtraProjectiles(player, SpellID::Healing), 0);
+}
+
+TEST_F(Poe2SupportGemsTest, ProjectileSupportsOnlyFitBolts)
+{
+	for (const SupportGem gem : { SupportGem::Pierce, SupportGem::Fork, SupportGem::Chain, SupportGem::ConcentratedEffect, SupportGem::FasterProjectiles }) {
+		EXPECT_TRUE(SupportGemCanSupport(gem, SpellID::Firebolt)) << SupportGemName(gem);
+		EXPECT_TRUE(SupportGemCanSupport(gem, SpellID::Fireball)) << SupportGemName(gem);
+		EXPECT_FALSE(SupportGemCanSupport(gem, SpellID::Healing)) << SupportGemName(gem);
+		EXPECT_FALSE(SupportGemCanSupport(gem, SpellID::Lightning)) << SupportGemName(gem);
+	}
+}
+
+TEST_F(Poe2SupportGemsTest, SupportsShapeTheProjectile)
+{
+	Player &player = *MyPlayer;
+	player = {};
+	SupportGem replaced;
+	LinkSupportGem(player.poe2, SpellID::Firebolt, SupportGem::Pierce, replaced);
+	LinkSupportGem(player.poe2, SpellID::Firebolt, SupportGem::FasterProjectiles, replaced);
+
+	Missile missile {};
+	missile.position.velocity = { 100, -50 };
+	ApplySupportsToMissile(missile, player, SpellID::Firebolt);
+	EXPECT_EQ(missile.poe2.spell, SpellID::Firebolt);
+	EXPECT_EQ(missile.poe2.piercesLeft, PierceCount);
+	EXPECT_EQ(missile.poe2.chainsLeft, 0);
+	EXPECT_EQ(missile.position.velocity, (Displacement { 160, -80 }));
+
+	// Spells without supports leave their missiles alone.
+	Missile plain {};
+	plain.position.velocity = { 100, -50 };
+	ApplySupportsToMissile(plain, player, SpellID::Fireball);
+	EXPECT_EQ(plain.poe2.spell, SpellID::Invalid);
+	EXPECT_EQ(plain.position.velocity, (Displacement { 100, -50 }));
+}
+
+TEST_F(Poe2SupportGemsTest, PiercingSkipsTheMonsterItHit)
+{
+	Player &player = *MyPlayer;
+	player = {};
+	SupportGem replaced;
+	LinkSupportGem(player.poe2, SpellID::Firebolt, SupportGem::Pierce, replaced);
+	LinkSupportGem(player.poe2, SpellID::Firebolt, SupportGem::ConcentratedEffect, replaced);
+
+	Missile missile {};
+	ApplySupportsToMissile(missile, player, SpellID::Firebolt);
+	int minDamage = 10;
+	int maxDamage = 20;
+	ScaleSupportedMissileDamage(missile, minDamage, maxDamage);
+	EXPECT_EQ(minDamage, 14);
+	EXPECT_EQ(maxDamage, 28);
+
+	const Monster &first = Monsters[3];
+	const Monster &second = Monsters[4];
+	EXPECT_FALSE(SupportedMissileIgnoresMonster(missile, 3));
+	EXPECT_TRUE(OnSupportedMissileHit(missile, first));
+	EXPECT_TRUE(SupportedMissileIgnoresMonster(missile, 3));
+	EXPECT_TRUE(OnSupportedMissileHit(missile, second));
+	// Out of pierces, the third hit stops the projectile.
+	EXPECT_FALSE(OnSupportedMissileHit(missile, first));
 }
 
 } // namespace

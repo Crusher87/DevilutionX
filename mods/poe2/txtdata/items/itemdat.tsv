@@ -209,3 +209,8 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Escape Shot Gem	Gem	8	0	0	0	0	0	0	0	40		SKILLGEM_ESCAPESHOT	Null	true	1500
 	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Ember Fusillade Gem	Gem	6	0	0	0	0	0	0	40	0		SKILLGEM_EMBERFUSILLADE	Null	true	1200
 	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Spark Gem	Gem	3	0	0	0	0	0	0	25	0		SKILLGEM_SPARK	Null	true	800
+	1	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Pierce Support	Gem	2	0	0	0	0	0	0	0	0		SUPPORT_PIERCE	Null	true	800
+	1	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Fork Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_FORK	Null	true	800
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Chain Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_CHAIN	Null	true	800
+	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Concentrated Effect Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_CONCENTRATED	Null	true	800
+	1	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Faster Projectiles Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_FASTERPROJ	Null	true	800

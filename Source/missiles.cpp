@@ -44,6 +44,7 @@
 #include "multi.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/support_gems.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
 #include "tables/misdat.h"
@@ -483,6 +484,7 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 		return;
 
 	bool isMonsterHit = false;
+	bool keepFlying = false;
 	int mid = dMonster[position.x][position.y];
 	if (mid != 0) {
 		Monster &monster = Monsters[std::abs(mid) - 1];
@@ -495,13 +497,19 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 			            ))) {
 				// then the missile can potentially hit this target
 				isMonsterHit = MonsterTrapHit(monster, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted);
-			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS)) {
-				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, minDamage, maxDamage, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
+			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && !SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
+				int supportedMin = minDamage;
+				int supportedMax = maxDamage;
+				ScaleSupportedMissileDamage(missile, supportedMin, supportedMax);
+				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, supportedMin, supportedMax, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
+				// POE2 Mashup: only a projectile's direct hit pierces, forks or chains, not its explosion.
+				if (isMonsterHit && !dontDeleteOnCollision)
+					keepFlying = OnSupportedMissileHit(missile, monster);
 			}
 		}
 	}
 
-	if (isMonsterHit) {
+	if (isMonsterHit && !keepFlying) {
 		if (!dontDeleteOnCollision)
 			missile.duration = 0;
 		missile._miHitFlag = true;
