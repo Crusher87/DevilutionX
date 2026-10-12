@@ -1285,7 +1285,7 @@ struct RareAffixRoll {
 std::vector<RareAffixRoll> RollRareAffixes(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
 {
 	const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
-	const int wantedAffixes = std::min(3 + GenerateRnd(4) + exalts, static_cast<int>(MaxRareAffixes));
+	const int wantedAffixes = std::min<int>(3 + GenerateRnd(4) + exalts, static_cast<int>(MaxRareAffixes));
 	int prefixes = 0;
 	int suffixes = 0;
 	std::vector<RareAffixRoll> rolls;
