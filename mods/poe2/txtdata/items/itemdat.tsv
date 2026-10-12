@@ -214,3 +214,8 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Chain Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_CHAIN	Null	true	800
 	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Concentrated Effect Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_CONCENTRATED	Null	true	800
 	1	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Faster Projectiles Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_FASTERPROJ	Null	true	800
+	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Orb of Augmentation	Orb	3	0	0	0	0	0	0	0	0		ORB_AUGMENT	Null	true	300
+	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Regal Orb	Orb	8	0	0	0	0	0	0	0	0		ORB_REGAL	Null	true	1500
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Exalted Orb	Orb	14	0	0	0	0	0	0	0	0		ORB_EXALTED	Null	true	5000
+	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Divine Orb	Orb	16	0	0	0	0	0	0	0	0		ORB_DIVINE	Null	true	6000
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Vaal Orb	Orb	10	0	0	0	0	0	0	0	0		ORB_VAAL	Null	true	2500

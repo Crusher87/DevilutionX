@@ -469,6 +469,11 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "ORB_ALCHEMY") return IMISC_ORB_ALCHEMY;
 	if (value == "ORB_CHAOS") return IMISC_ORB_CHAOS;
 	if (value == "ORB_SCOURING") return IMISC_ORB_SCOURING;
+	if (value == "ORB_AUGMENT") return IMISC_ORB_AUGMENT;
+	if (value == "ORB_REGAL") return IMISC_ORB_REGAL;
+	if (value == "ORB_EXALTED") return IMISC_ORB_EXALTED;
+	if (value == "ORB_DIVINE") return IMISC_ORB_DIVINE;
+	if (value == "ORB_VAAL") return IMISC_ORB_VAAL;
 	if (value == "SKILLGEM_SPELL") return IMISC_SKILLGEM_SPELL;
 	if (value == "SKILLGEM_CLEAVE") return IMISC_SKILLGEM_CLEAVE;
 	if (value == "SKILLGEM_GROUNDSLAM") return IMISC_SKILLGEM_GROUNDSLAM;

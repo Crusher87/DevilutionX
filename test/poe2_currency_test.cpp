@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -56,6 +58,17 @@ public:
 		return item;
 	}
 
+	static Item MakeWhere(std::string_view baseName, item_quality quality, const std::function<bool(const Item &)> &wanted)
+	{
+		for (int seed = 1; seed < 2000; seed++) {
+			Item item;
+			if (AdminGenerateItem(*MyPlayer, item, FindBase(baseName), quality, 30, seed) && wanted(item))
+				return item;
+		}
+		ADD_FAILURE() << "no " << baseName << " matched";
+		return {};
+	}
+
 	static void ExpectRecreates(const Item &item)
 	{
 		Item recreated;
@@ -68,7 +81,7 @@ public:
 
 TEST_F(Poe2CurrencyTest, EveryOrbHasAnItem)
 {
-	for (const std::string_view name : { "Orb of Transmutation", "Orb of Alchemy", "Chaos Orb", "Orb of Scouring" }) {
+	for (const std::string_view name : { "Orb of Transmutation", "Orb of Alchemy", "Chaos Orb", "Orb of Scouring", "Orb of Augmentation", "Regal Orb", "Exalted Orb", "Divine Orb", "Vaal Orb" }) {
 		const _item_indexes base = FindBase(name);
 		ASSERT_NE(base, IDI_GOLD) << name;
 		EXPECT_NE(CurrencyOrbForMiscId(AllItemsList[base].iMiscId), CurrencyOrb::None) << name;
@@ -128,6 +141,79 @@ TEST_F(Poe2CurrencyTest, KeepsTheGameRngState)
 	Item item = Make("Long Sword", ITEM_QUALITY_NORMAL);
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Alchemy, *MyPlayer, item));
 	EXPECT_EQ(GetLCGEngineState(), before);
+}
+
+TEST_F(Poe2CurrencyTest, AugmentationAddsTheMissingAffix)
+{
+	Item item = MakeWhere("Long Sword", ITEM_QUALITY_MAGIC, [](const Item &candidate) {
+		return candidate._iMagical == ITEM_QUALITY_MAGIC && (candidate._iPrePower == IPL_INVALID) != (candidate._iSufPower == IPL_INVALID);
+	});
+	const item_effect_type kept = item._iPrePower != IPL_INVALID ? item._iPrePower : item._iSufPower;
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Augmentation, *MyPlayer, item));
+	EXPECT_EQ(item._iMagical, ITEM_QUALITY_MAGIC);
+	EXPECT_NE(item._iPrePower, IPL_INVALID);
+	EXPECT_NE(item._iSufPower, IPL_INVALID);
+	EXPECT_TRUE(item._iPrePower == kept || item._iSufPower == kept);
+	ExpectRecreates(item);
+	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Augmentation, *MyPlayer, item));
+}
+
+TEST_F(Poe2CurrencyTest, RegalKeepsTheMagicAffixes)
+{
+	Item item = MakeWhere("Helm", ITEM_QUALITY_MAGIC, [](const Item &candidate) { return candidate._iMagical == ITEM_QUALITY_MAGIC; });
+	const item_effect_type prefix = item._iPrePower;
+	const item_effect_type suffix = item._iSufPower;
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Regal, *MyPlayer, item));
+	EXPECT_EQ(item._iMagical, ITEM_QUALITY_RARE);
+	const auto has = [&item](item_effect_type power) {
+		return power == IPL_INVALID || std::find(item._iRarePowers.begin(), item._iRarePowers.end(), power) != item._iRarePowers.end();
+	};
+	EXPECT_TRUE(has(prefix));
+	EXPECT_TRUE(has(suffix));
+	ExpectRecreates(item);
+}
+
+TEST_F(Poe2CurrencyTest, ExaltedAddsAnAffixAndKeepsTheRest)
+{
+	Item item = MakeWhere("Short Bow", ITEM_QUALITY_RARE, [](const Item &candidate) {
+		return candidate._iMagical == ITEM_QUALITY_RARE && RareAffixCount(candidate) == 3;
+	});
+	const auto before = item._iRarePowers;
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Exalted, *MyPlayer, item));
+	EXPECT_EQ(RareAffixCount(item), 4);
+	for (size_t i = 0; i < 3; i++)
+		EXPECT_EQ(item._iRarePowers[i], before[i]);
+	ExpectRecreates(item);
+
+	while (RareAffixCount(item) < MaxExaltedAffixes) {
+		if (!ApplyCurrencyOrb(CurrencyOrb::Exalted, *MyPlayer, item))
+			break;
+	}
+	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Exalted, *MyPlayer, item));
+}
+
+TEST_F(Poe2CurrencyTest, DivineKeepsTheAffixes)
+{
+	Item item = Make("Short Bow", ITEM_QUALITY_RARE);
+	const auto powers = item._iRarePowers;
+	const int seed = item._iSeed;
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Divine, *MyPlayer, item));
+	EXPECT_EQ(item._iRarePowers, powers);
+	EXPECT_EQ(item._iSeed, seed);
+	ExpectRecreates(item);
+}
+
+TEST_F(Poe2CurrencyTest, VaalCorruptsForGood)
+{
+	for (int seed = 1; seed <= 12; seed++) {
+		Item item;
+		ASSERT_TRUE(AdminGenerateItem(*MyPlayer, item, FindBase("Helm"), ITEM_QUALITY_RARE, 30, seed));
+		ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Vaal, *MyPlayer, item));
+		EXPECT_NE(item.dwBuff & CF_POE2_CORRUPTED, 0U);
+		ExpectRecreates(item);
+		EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Chaos, *MyPlayer, item));
+		EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Vaal, *MyPlayer, item));
+	}
 }
 
 } // namespace
