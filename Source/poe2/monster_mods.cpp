@@ -157,6 +157,23 @@ void ProcessMonsterAilments(Monster &monster)
 
 	if (state.shockTicks > 0)
 		state.shockTicks--;
+	if (state.chillTicks > 0 && --state.chillTicks == 0) {
+		state.chillPercent = 0;
+		state.chillCarry = 0;
+	}
+	if (state.freezeTicks > 0)
+		state.freezeTicks--;
+	if (state.heavyStunTicks > 0)
+		state.heavyStunTicks--;
+	const auto decay = [&](int32_t &buildup, int thresholdPercent) {
+		if (buildup <= 0)
+			return;
+		const int64_t threshold = static_cast<int64_t>(monster.maxHitPoints.raw()) * thresholdPercent / 100;
+		const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(threshold * BuildupDecayPercentPerSecond / 100 / TicksPerSecond), 1);
+		buildup = std::max<int32_t>(buildup - perTick, 0);
+	};
+	decay(state.freezeBuildup, FreezeThresholdPercent);
+	decay(state.stunBuildup, HeavyStunThresholdPercent);
 
 	if (state.igniteTicks > 0) {
 		state.igniteTicks--;
@@ -186,10 +203,92 @@ int AilmentChancePercent(const Monster &monster, Fixed26_6 damage)
 	return static_cast<int>(std::clamp<int64_t>(percent, 5, 100));
 }
 
+bool IsMonsterImmobilized(const Monster &monster)
+{
+	return gbIsPoe2 && (monster.poe2.freezeTicks > 0 || monster.poe2.heavyStunTicks > 0);
+}
+
+bool MonsterSkipsTick(Monster &monster)
+{
+	if (!gbIsPoe2 || monster.hasNoLife())
+		return false;
+	if (IsMonsterImmobilized(monster))
+		return true;
+	Poe2MonsterState &state = monster.poe2;
+	if (state.chillTicks == 0)
+		return false;
+	state.chillCarry = static_cast<uint8_t>(state.chillCarry + state.chillPercent);
+	if (state.chillCarry < 100)
+		return false;
+	state.chillCarry = static_cast<uint8_t>(state.chillCarry - 100);
+	return true;
+}
+
+int MonsterBuildupPercent(const Monster &monster)
+{
+	if (monster.isUnique())
+		return UniqueBuildupPercent;
+	if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
+		return RareBuildupPercent;
+	return 100;
+}
+
+namespace {
+
+/** @brief Adds a hit to a buildup; true when it reaches the threshold, which empties it. */
+bool BuildUp(const Monster &monster, int32_t &buildup, Fixed26_6 damage, int thresholdPercent)
+{
+	const int64_t threshold = static_cast<int64_t>(monster.maxHitPoints.raw()) * thresholdPercent / 100;
+	if (threshold <= 0)
+		return false;
+	const int64_t added = static_cast<int64_t>(damage.raw()) * MonsterBuildupPercent(monster) / 100;
+	const int64_t total = std::min<int64_t>(buildup + added, threshold);
+	if (total >= threshold) {
+		buildup = 0;
+		return true;
+	}
+	buildup = static_cast<int32_t>(total);
+	return false;
+}
+
+void InflictCold(Monster &monster, Fixed26_6 damage)
+{
+	Poe2MonsterState &state = monster.poe2;
+	// A bigger share of the monster's life makes a stronger chill; a stronger chill replaces a weaker one.
+	const int64_t share = static_cast<int64_t>(damage.raw()) * 100 / std::max<int32_t>(monster.maxHitPoints.raw(), 1);
+	const int percent = static_cast<int>(std::clamp<int64_t>(share * 2, MinChillPercent, MaxChillPercent));
+	if (state.chillTicks == 0 || percent >= state.chillPercent)
+		state.chillPercent = static_cast<uint8_t>(percent);
+	state.chillTicks = ChillTicks;
+	if (BuildUp(monster, state.freezeBuildup, damage, FreezeThresholdPercent)) {
+		state.freezeTicks = FreezeTicks;
+		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter);
+	}
+}
+
+void InflictPhysical(Monster &monster, Fixed26_6 damage)
+{
+	Poe2MonsterState &state = monster.poe2;
+	if (BuildUp(monster, state.stunBuildup, damage, HeavyStunThresholdPercent)) {
+		state.heavyStunTicks = HeavyStunTicks;
+		AddVisualEffect(monster.position.tile, MissileGraphicID::BigExplosion);
+	}
+}
+
+} // namespace
+
 void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || monster.hasNoLife() || damage <= 0)
 		return;
+	if (damageType == DamageType::Magic) {
+		InflictCold(monster, damage);
+		return;
+	}
+	if (damageType == DamageType::Physical) {
+		InflictPhysical(monster, damage);
+		return;
+	}
 	if (damageType != DamageType::Fire && damageType != DamageType::Lightning)
 		return;
 	if (GenerateRnd(100) >= AilmentChancePercent(monster, damage))

@@ -4305,6 +4305,9 @@ void ProcessMonsters()
 			monster.hitPoints = std::min(monster.hitPoints, monster.maxHitPoints); // prevent going over max HP with part of a single regen tick
 		}
 		ProcessMonsterAilments(monster);
+		// POE2 Mashup: frozen and heavy stunned monsters stand still, and chilled ones lose some ticks.
+		if (MonsterSkipsTick(monster))
+			continue;
 
 		const bool isMonsterVisible = IsTileVisible(monster.position.tile);
 		if (isMonsterVisible && monster.activeForTicks == 0) {

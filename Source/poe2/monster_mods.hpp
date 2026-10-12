@@ -51,6 +51,22 @@ constexpr int IgnitePercentPerSecond = 20;
 constexpr int ShockTicks = 4 * 20;
 constexpr int ShockDamagePercent = 20;
 
+/** @brief POE2: cold hits always chill, slowing by up to 50% for 2 seconds. */
+constexpr int ChillTicks = 2 * 20;
+constexpr int MinChillPercent = 10;
+constexpr int MaxChillPercent = 50;
+/** @brief Cold damage adding up to half the monster's life freezes it for 2 seconds. */
+constexpr int FreezeTicks = 2 * 20;
+constexpr int FreezeThresholdPercent = 50;
+/** @brief Physical damage adding up to the monster's life heavy stuns it for 2 seconds. */
+constexpr int HeavyStunTicks = 2 * 20;
+constexpr int HeavyStunThresholdPercent = 100;
+/** @brief Freeze and stun buildup fades by this share of the threshold per second. */
+constexpr int BuildupDecayPercentPerSecond = 20;
+/** @brief Rares and uniques build up freeze and stun slower, in percent of the damage. */
+constexpr int RareBuildupPercent = 60;
+constexpr int UniqueBuildupPercent = 40;
+
 /** @brief Rarity and modifiers of a monster; plain for uniques, minions and outside POE2 mode. */
 struct MonsterAffixes {
 	MonsterRarity rarity = MonsterRarity::Normal;
@@ -78,7 +94,17 @@ void ProcessMonsterAilments(Monster &monster);
 
 /** @brief Damage after the shock bonus. */
 Fixed26_6 ApplyShock(const Monster &monster, Fixed26_6 damage);
-/** @brief Fire hits may ignite and lightning hits may shock, more likely the bigger the hit. */
+/** @brief Whether the monster loses this tick to a freeze, a heavy stun or a chill; advances the chill's slow. */
+bool MonsterSkipsTick(Monster &monster);
+/** @brief Whether the monster is frozen or heavy stunned. */
+bool IsMonsterImmobilized(const Monster &monster);
+/** @brief How much of a cold or physical hit counts towards a freeze or heavy stun, in percent. */
+int MonsterBuildupPercent(const Monster &monster);
+
+/**
+ * @brief Inflicts ailments for a hit: fire may ignite and lightning may shock, more likely the bigger the hit;
+ * magic (cold) hits chill and build up freeze; physical hits build up heavy stun.
+ */
 void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage);
 /** @brief Chance in percent that a hit inflicts an ailment: twice the share of the monster's life it took. */
 int AilmentChancePercent(const Monster &monster, Fixed26_6 damage);

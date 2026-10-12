@@ -152,5 +152,61 @@ TEST_F(Poe2MonsterModsTest, BigElementalHitsIgniteAndShock)
 	EXPECT_EQ(physical.poe2.shockTicks, 0);
 }
 
+TEST_F(Poe2MonsterModsTest, ColdHitsChillAndFreeze)
+{
+	uint32_t seed = 1;
+	while (GetMonsterAffixes(MakeMonster(seed)).rarity != MonsterRarity::Normal)
+		seed++;
+	Monster monster = MakeMonster(seed);
+	Players.resize(1);
+
+	// 10 of 100 life chills by 20% and builds a fifth of the way to a freeze.
+	TryInflictAilment(monster, Players[0], DamageType::Magic, Fixed26_6::fromInt(10));
+	EXPECT_EQ(monster.poe2.chillTicks, ChillTicks);
+	EXPECT_EQ(monster.poe2.chillPercent, 20);
+	EXPECT_EQ(monster.poe2.freezeTicks, 0);
+	int skipped = 0;
+	for (int i = 0; i < 10; i++)
+		skipped += MonsterSkipsTick(monster) ? 1 : 0;
+	EXPECT_EQ(skipped, 2);
+
+	TryInflictAilment(monster, Players[0], DamageType::Magic, Fixed26_6::fromInt(40));
+	EXPECT_EQ(monster.poe2.chillPercent, MaxChillPercent);
+	EXPECT_EQ(monster.poe2.freezeTicks, FreezeTicks);
+	EXPECT_EQ(monster.poe2.freezeBuildup, 0);
+	EXPECT_TRUE(IsMonsterImmobilized(monster));
+	EXPECT_TRUE(MonsterSkipsTick(monster));
+
+	for (int i = 0; i < FreezeTicks; i++)
+		ProcessMonsterAilments(monster);
+	EXPECT_FALSE(IsMonsterImmobilized(monster));
+}
+
+TEST_F(Poe2MonsterModsTest, PhysicalHitsBuildUpHeavyStun)
+{
+	uint32_t seed = 1;
+	while (GetMonsterAffixes(MakeMonster(seed)).rarity != MonsterRarity::Normal)
+		seed++;
+	Monster monster = MakeMonster(seed);
+	Players.resize(1);
+
+	TryInflictAilment(monster, Players[0], DamageType::Physical, Fixed26_6::fromInt(60));
+	EXPECT_EQ(monster.poe2.heavyStunTicks, 0);
+	EXPECT_EQ(monster.poe2.stunBuildup, Fixed26_6::fromInt(60).raw());
+
+	// Buildup fades by a fifth of the threshold per second.
+	for (int i = 0; i < 20; i++)
+		ProcessMonsterAilments(monster);
+	EXPECT_EQ(monster.poe2.stunBuildup, Fixed26_6::fromInt(40).raw());
+
+	TryInflictAilment(monster, Players[0], DamageType::Physical, Fixed26_6::fromInt(60));
+	EXPECT_EQ(monster.poe2.heavyStunTicks, HeavyStunTicks);
+	EXPECT_TRUE(IsMonsterImmobilized(monster));
+
+	Monster unique = MakeMonster(seed);
+	unique.uniqueType = UniqueMonsterType::Garbud;
+	EXPECT_EQ(MonsterBuildupPercent(unique), UniqueBuildupPercent);
+}
+
 } // namespace
 } // namespace devilution

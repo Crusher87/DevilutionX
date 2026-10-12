@@ -439,6 +439,12 @@ void DrawInfoBox(const Surface &out)
 					AddInfoBoxString(_("Ignited"));
 				if (monster.poe2.shockTicks > 0)
 					AddInfoBoxString(_("Shocked"));
+				if (monster.poe2.freezeTicks > 0)
+					AddInfoBoxString(_("Frozen"));
+				else if (monster.poe2.chillTicks > 0)
+					AddInfoBoxString(_("Chilled"));
+				if (monster.poe2.heavyStunTicks > 0)
+					AddInfoBoxString(_("Heavy Stunned"));
 				if (monster.isUnique()) {
 					InfoColor = UiFlags::ColorWhitegold;
 					PrintUniqueHistory();
