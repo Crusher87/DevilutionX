@@ -164,6 +164,10 @@ void DrawSpellList(const Surface &out)
 				AddInfoBoxString(_("Spell Level 0 - Unusable"));
 			else
 				AddInfoBoxString(FormatRuntime(_("Spell Level {:d}"), spellLevel));
+			for (const SupportGem gem : myPlayer.poe2.supportsFor(spellId)) {
+				if (gem != SupportGem::None)
+					AddInfoBoxString(FormatRuntime(_("Support: {:s}"), SupportGemName(gem)));
+			}
 			break;
 		case SpellType::Scroll: {
 			if (!myPlayer.isOnLevel(0)) {

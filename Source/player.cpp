@@ -274,7 +274,9 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_SPELL)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, 0, player._pSFNum);
+	const bool isLearnedSpell = player.queuedSpell.spellType == SpellType::Spell;
+	const int8_t skippedFrames = isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0;
+	NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
 
 	PlaySfxLoc(GetSpellData(player.queuedSpell.spellId).sSFX, player.position.tile);
 
@@ -285,6 +287,8 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 
 	player.position.temp = WorldTilePosition { cx, cy };
 	player.queuedSpell.spellLevel = player.GetSpellLevel(player.queuedSpell.spellId);
+	if (isLearnedSpell)
+		player.queuedSpell.spellLevel += SupportSpellLevelBonus(player, player.queuedSpell.spellId);
 	player.executedSpell = player.queuedSpell;
 }
 
@@ -2478,8 +2482,10 @@ void InitPlayer(Player &player, bool firstTime)
 	if (firstTime) {
 		player._pRSplType = SpellType::Invalid;
 		player._pRSpell = SpellID::Invalid;
-		if (&player == MyPlayer)
+		if (&player == MyPlayer) {
 			LoadHotkeys();
+			LoadPoe2HeroData(player);
+		}
 		player._pSBkSpell = SpellID::Invalid;
 		player.queuedSpell.spellId = player._pRSpell;
 		player.queuedSpell.spellType = player._pRSplType;

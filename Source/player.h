@@ -27,6 +27,7 @@
 #include "levels/dun_tile.hpp"
 #include "levels/gendung.h"
 #include "multi.h"
+#include "poe2/support_gems.hpp"
 #include "tables/playerdat.hpp"
 #include "tables/spelldat.h"
 #include "utils/attributes.h"
@@ -336,6 +337,8 @@ public:
 	SpellFlag _pSpellFlags;
 	SpellID _pSplHotKey[NumHotkeys];
 	SpellType _pSplTHotKey[NumHotkeys];
+	/** @brief POE2 Mashup state (support gems, ...), saved separately from the hero file. */
+	Poe2PlayerData poe2;
 	bool _pBlockFlag;
 	bool _pInvincible;
 	int8_t _pLightRad;

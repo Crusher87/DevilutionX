@@ -456,6 +456,10 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "AURIC") return IMISC_AURIC;
 	if (value == "NOTE") return IMISC_NOTE;
 	if (value == "ARENAPOT") return IMISC_ARENAPOT;
+	if (value == "SUPPORT_MULTIPROJ") return IMISC_SUPPORT_MULTIPROJ;
+	if (value == "SUPPORT_EMPOWER") return IMISC_SUPPORT_EMPOWER;
+	if (value == "SUPPORT_FASTCAST") return IMISC_SUPPORT_FASTCAST;
+	if (value == "SUPPORT_EFFICIENCY") return IMISC_SUPPORT_EFFICIENCY;
 	return std::unexpected("Unknown enum value");
 }
 
