@@ -641,6 +641,9 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
     install(FILES "${HELLFIRE_MPQ}"
       DESTINATION "mods"
     )
+    install(FILES "${POE2_MPQ}"
+      DESTINATION "mods"
+    )
 
     foreach(_SDL2_WIN32_DLL_PATH ${SDL2_WIN32_ALL_DLLS} ${WIN32_INSTALL_DLLS})
       install(FILES "${_SDL2_WIN32_DLL_PATH}"
@@ -703,6 +706,9 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
       DESTINATION "share/diasurgical/${project_name}"
     )
     install(FILES "${HELLFIRE_MPQ}"
+      DESTINATION "share/diasurgical/${project_name}/mods"
+    )
+    install(FILES "${POE2_MPQ}"
       DESTINATION "share/diasurgical/${project_name}/mods"
     )
     install(FILES "${PROJECT_SOURCE_DIR}/Packaging/resources/icon_flat.png"

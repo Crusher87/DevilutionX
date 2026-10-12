@@ -76,6 +76,7 @@ void DiscoverMods()
 
 	if (HaveHellfire()) {
 		modNames.insert("hf");
+		modNames.insert("poe2");
 	}
 
 	// Check if the mods directory exists.
