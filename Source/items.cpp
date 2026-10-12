@@ -67,6 +67,7 @@
 #include "panels/info_box.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/currency.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
@@ -1921,6 +1922,11 @@ void PrintItemMisc(const Item &item)
 	if (const SupportGem gem = SupportGemForItem(item); gem != SupportGem::None) {
 		AddItemInfoBoxString(SupportGemDescription(gem));
 		AddItemInfoBoxString(_("Use to link to your readied spell"));
+		return;
+	}
+	if (const CurrencyOrb orb = CurrencyOrbForMiscId(item._iMiscId); orb != CurrencyOrb::None) {
+		AddItemInfoBoxString(CurrencyOrbDescription(orb));
+		AddItemInfoBoxString(_("Use, then click the item to craft"));
 		return;
 	}
 	if (item._iMiscId == IMISC_EAR) {
@@ -4540,6 +4546,10 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 	case IMISC_OILPERM:
 	case IMISC_OILHARD:
 	case IMISC_OILIMP:
+	case IMISC_ORB_TRANSMUTE:
+	case IMISC_ORB_ALCHEMY:
+	case IMISC_ORB_CHAOS:
+	case IMISC_ORB_SCOURING:
 		player._pOilType = mid;
 		if (&player != MyPlayer) {
 			return;
@@ -5152,6 +5162,9 @@ void RechargeItem(Item &item, Player &player)
 bool ApplyOilToItem(Item &item, Player &player)
 {
 	int r;
+
+	if (const CurrencyOrb orb = CurrencyOrbForMiscId(player._pOilType); orb != CurrencyOrb::None)
+		return ApplyCurrencyOrb(orb, player, item);
 
 	if (item._iClass == ICLASS_MISC) {
 		return false;

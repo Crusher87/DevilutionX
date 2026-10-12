@@ -27,6 +27,7 @@
 #include "msg.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/currency.hpp"
 #include "poe2/support_gems.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -43,8 +44,6 @@ namespace {
 constexpr int MinItemLevel = 1;
 constexpr int MaxItemLevel = 60;
 constexpr int GoldPerClick = 10000;
-/** How many seeds to try before giving up on rolling the wanted quality. */
-constexpr int MaxItemRolls = 20000;
 
 void AdminMain(bool bActivate);
 void AdminItemsOpen(bool bActivate);
@@ -149,8 +148,8 @@ void CollectItemBases()
 		const ItemData &data = AllItemsList[i];
 		if (!IsItemAvailable(static_cast<int>(i)))
 			continue;
-		const bool isSupportGem = SupportGemForMiscId(data.iMiscId) != SupportGem::None;
-		if (!isSupportGem && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT, ILOC_INVALID))
+		const bool isPoe2Misc = SupportGemForMiscId(data.iMiscId) != SupportGem::None || CurrencyOrbForMiscId(data.iMiscId) != CurrencyOrb::None;
+		if (!isPoe2Misc && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT, ILOC_INVALID))
 			continue;
 		if (data.iMiscId == IMISC_UNIQUE)
 			continue;
@@ -386,35 +385,16 @@ void AdminRevealMap(bool /*bActivate*/)
 
 bool AdminGenerateItem(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed)
 {
-	if (SupportGemForMiscId(AllItemsList[baseIndex].iMiscId) != SupportGem::None) {
-		// Gems have no quality or level.
+	const int miscId = AllItemsList[baseIndex].iMiscId;
+	if (SupportGemForMiscId(miscId) != SupportGem::None || CurrencyOrbForMiscId(miscId) != CurrencyOrb::None) {
+		// Gems and orbs have no quality or level.
 		InitializeItem(item, baseIndex);
 		item._iSeed = static_cast<int32_t>(firstSeed >> 1);
 		SetupItem(item);
 		return true;
 	}
 
-	// Rolling items reseeds the game's random number generator, so put it back afterwards.
-	const uint32_t rngState = GetLCGEngineState();
-
-	const bool onlyGood = quality != ITEM_QUALITY_NORMAL;
-	const int uper = quality == ITEM_QUALITY_UNIQUE ? 15 : 1;
-	bool found = false;
-	uint32_t seed = firstSeed;
-	for (int i = 0; i < MaxItemRolls && !found; i++) {
-		// A simple LCG step gives a fresh seed each try without touching the game's generator.
-		seed = seed * 1103515245U + 12345U;
-		Item candidate {};
-		SetupAllItems(player, candidate, baseIndex, seed >> 1, level, uper, onlyGood, false, 0, quality != ITEM_QUALITY_UNIQUE);
-		if (candidate.isEmpty() || candidate._iMagical != quality)
-			continue;
-		SetupItem(candidate);
-		item = std::move(candidate);
-		found = true;
-	}
-
-	SetRndSeed(rngState);
-	return found;
+	return RollItemOfQuality(player, item, baseIndex, quality, level, firstSeed);
 }
 
 int AdminGiveGold(Player &player, int amount)
