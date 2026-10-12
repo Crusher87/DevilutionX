@@ -31,35 +31,6 @@ namespace {
 constexpr int MultipleProjectilesSpreadDegrees = 15;
 
 /**
- * @brief Rotates a spell's target around the caster, in steps of 15 degrees.
- *
- * Uses integer math so every machine in a multiplayer game computes the same tiles.
- */
-WorldTilePosition RotateSpellTarget(WorldTilePosition src, WorldTilePosition dst, int degrees)
-{
-	// cos and sin of 0, 15, 30 and 45 degrees, scaled by 1024.
-	constexpr int Cos[] = { 1024, 989, 887, 724 };
-	constexpr int Sin[] = { 0, 265, 512, 724 };
-	const int steps = std::min(std::abs(degrees) / 15, 3);
-	const int sign = degrees < 0 ? -1 : 1;
-
-	int dx = dst.x - src.x;
-	int dy = dst.y - src.y;
-	if (dx == 0 && dy == 0)
-		return dst;
-	// Aim far enough away that rounding to whole tiles keeps the spread visible.
-	int scale = 1;
-	while (((dx * scale) * (dx * scale)) + ((dy * scale) * (dy * scale)) < 100)
-		scale++;
-	dx *= scale;
-	dy *= scale;
-
-	const int rx = ((dx * Cos[steps]) - (sign * dy * Sin[steps])) / 1024;
-	const int ry = ((sign * dx * Sin[steps]) + (dy * Cos[steps])) / 1024;
-	return { static_cast<WorldTileCoord>(std::clamp(src.x + rx, 0, MAXDUNX - 1)), static_cast<WorldTileCoord>(std::clamp(src.y + ry, 0, MAXDUNY - 1)) };
-}
-
-/**
  * @brief Gets a value indicating whether the player's current readied spell is a valid spell. Readied spells can be
  * invalidaded in a few scenarios where the spell comes from items, for example (like dropping the only scroll that
  * provided the spell).
@@ -250,23 +221,28 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 	}
 
 	const SpellData &spellData = GetSpellData(spl);
+	const bool supported = player.executedSpell.spellType == SpellType::Spell;
 	const auto spawnMissiles = [&](WorldTilePosition target) {
 		bool fizzled = false;
 		for (size_t i = 0; i < sizeof(spellData.sMissiles) / sizeof(spellData.sMissiles[0]) && spellData.sMissiles[i] != MissileID::Null; i++) {
 			Missile *missile = AddMissile(src, target, dir, spellData.sMissiles[i], TARGET_MONSTERS, player, 0, spllvl);
 			fizzled |= (missile == nullptr);
+			if (missile != nullptr && supported)
+				ApplySupportsToMissile(*missile, player, spl);
 		}
 		if (spl == SpellID::ChargedBolt) {
 			for (int i = (spllvl / 2) + 3; i > 0; i--) {
 				Missile *missile = AddMissile(src, target, dir, MissileID::ChargedBolt, TARGET_MONSTERS, player, 0, spllvl);
 				fizzled |= (missile == nullptr);
+				if (missile != nullptr && supported)
+					ApplySupportsToMissile(*missile, player, spl);
 			}
 		}
 		return fizzled;
 	};
 
 	const bool fizzled = spawnMissiles(dst);
-	if (!fizzled && player.executedSpell.spellType == SpellType::Spell) {
+	if (!fizzled && supported) {
 		// POE2 Mashup: Multiple Projectiles support fans extra projectiles out around the target.
 		const int extra = SupportExtraProjectiles(player, spl);
 		for (int i = 1; i <= extra; i++) {

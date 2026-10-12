@@ -57,6 +57,11 @@ enum class SupportGem : uint8_t {
 	Empower,
 	FasterCasting,
 	Efficiency,
+	Pierce,
+	Fork,
+	Chain,
+	ConcentratedEffect,
+	FasterProjectiles,
 	Count,
 };
 

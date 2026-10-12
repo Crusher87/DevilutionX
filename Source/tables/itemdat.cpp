@@ -460,6 +460,11 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SUPPORT_EMPOWER") return IMISC_SUPPORT_EMPOWER;
 	if (value == "SUPPORT_FASTCAST") return IMISC_SUPPORT_FASTCAST;
 	if (value == "SUPPORT_EFFICIENCY") return IMISC_SUPPORT_EFFICIENCY;
+	if (value == "SUPPORT_PIERCE") return IMISC_SUPPORT_PIERCE;
+	if (value == "SUPPORT_FORK") return IMISC_SUPPORT_FORK;
+	if (value == "SUPPORT_CHAIN") return IMISC_SUPPORT_CHAIN;
+	if (value == "SUPPORT_CONCENTRATED") return IMISC_SUPPORT_CONCENTRATED;
+	if (value == "SUPPORT_FASTERPROJ") return IMISC_SUPPORT_FASTERPROJ;
 	if (value == "ORB_TRANSMUTE") return IMISC_ORB_TRANSMUTE;
 	if (value == "ORB_ALCHEMY") return IMISC_ORB_ALCHEMY;
 	if (value == "ORB_CHAOS") return IMISC_ORB_CHAOS;

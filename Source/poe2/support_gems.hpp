@@ -10,13 +10,27 @@
 #include <cstdint>
 #include <string_view>
 
+#include "engine/world_tile.hpp"
 #include "poe2/player_data.hpp"
 #include "tables/spelldat.h"
 
 namespace devilution {
 
 struct Item;
+struct Missile;
+struct Monster;
 struct Player;
+
+/** @brief Extra monsters a Pierce-supported projectile passes through. */
+constexpr int8_t PierceCount = 2;
+/** @brief Times a Chain-supported projectile jumps to a new monster. */
+constexpr int8_t ChainCount = 2;
+/** @brief Furthest a chain looks for its next target, in tiles. */
+constexpr int ChainRange = 7;
+/** @brief Angle of each fork either side of the projectile's path. */
+constexpr int ForkDegrees = 30;
+constexpr int ConcentratedEffectDamagePercent = 140;
+constexpr int FasterProjectilesSpeedPercent = 160;
 
 enum class SupportLinkResult : uint8_t {
 	Linked,
@@ -53,5 +67,24 @@ int SupportManaCostPercent(const Player &player, SpellID spell);
 int8_t SupportCastSkippedFrames(const Player &player, SpellID spell);
 /** @brief Additional projectiles fired with the spell. */
 int SupportExtraProjectiles(const Player &player, SpellID spell);
+
+/**
+ * @brief Rotates a target around a source, in steps of 15 degrees up to 45.
+ *
+ * Uses integer math so every machine in a multiplayer game computes the same tiles.
+ */
+WorldTilePosition RotateSpellTarget(WorldTilePosition src, WorldTilePosition dst, int degrees);
+
+/** @brief Gives a freshly cast projectile the pierce, fork, chain, damage and speed of the spell's supports. */
+void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spell);
+/** @brief Scales a hit's damage by the missile's supports. */
+void ScaleSupportedMissileDamage(const Missile &missile, int &minDamage, int &maxDamage);
+/** @brief Whether the missile already hit this monster and must pass through it instead. */
+bool SupportedMissileIgnoresMonster(const Missile &missile, int monsterId);
+/**
+ * @brief Pierces, forks or chains after a projectile hits a monster directly.
+ * @return true if the projectile keeps flying through the monster.
+ */
+bool OnSupportedMissileHit(Missile &missile, const Monster &monster);
 
 } // namespace devilution
