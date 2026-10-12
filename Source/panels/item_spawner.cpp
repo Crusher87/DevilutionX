@@ -694,11 +694,19 @@ bool ItemSpawnerHandleEvent(const SDL_Event &event)
 		}
 		return true;
 	case SDL_EVENT_KEY_UP:
+#ifndef USE_SDL1
 	case SDL_EVENT_TEXT_INPUT:
+#endif
 		return true;
 	case SDL_EVENT_MOUSE_BUTTON_DOWN:
 		if (event.button.button == SDL_BUTTON_LEFT)
 			return HandleClick(MousePosition, shift);
+#ifdef USE_SDL1
+		if (event.button.button == SDL_BUTTON_WHEELUP)
+			Scroll(-3);
+		else if (event.button.button == SDL_BUTTON_WHEELDOWN)
+			Scroll(3);
+#endif
 		return true;
 	case SDL_EVENT_MOUSE_BUTTON_UP:
 		return true;
