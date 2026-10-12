@@ -36,6 +36,7 @@
 #include "controls/keymapper.hpp"
 #include "controls/plrctrls.h"
 #include "controls/remap_keyboard.h"
+#include "controls/wasd_movement.hpp"
 #include "diablo.h"
 #include "diablo_msg.hpp"
 #include "discord/discord.h"
@@ -484,6 +485,8 @@ void ReleaseKey(SDL_Keycode vkey)
 	remap_keyboard_key(&vkey);
 	if (sgnTimeoutCurs != CURSOR_NONE)
 		return;
+	if (WasdMovementKeyReleased(vkey))
+		return;
 	KeymapperRelease(vkey);
 }
 
@@ -561,6 +564,10 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	}
 
 	if (sgnTimeoutCurs != CURSOR_NONE) {
+		return;
+	}
+
+	if (!ChatFlag && WasdMovementKeyPressed(vkey)) {
 		return;
 	}
 

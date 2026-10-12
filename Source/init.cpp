@@ -19,6 +19,7 @@
 #include <config.h>
 
 #include "DiabloUI/diabloui.h"
+#include "controls/wasd_movement.hpp"
 #include "engine/assets.hpp"
 #include "engine/backbuffer_state.hpp"
 #include "engine/dx.h"
@@ -196,6 +197,7 @@ void MainWndProc(const SDL_Event &event)
 #else
 	case SDL_WINDOWEVENT_FOCUS_LOST:
 #endif
+		ClearWasdMovementKeys();
 		if (*GetOptions().Gameplay.pauseOnFocusLoss)
 			diablo_focus_pause();
 		break;

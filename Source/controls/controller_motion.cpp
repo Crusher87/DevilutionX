@@ -20,6 +20,7 @@
 #include "controls/padmapper.hpp"
 #include "controls/plrctrls.h"
 #include "controls/touch/gamepad.h"
+#include "controls/wasd_movement.hpp"
 #include "engine/demomode.h"
 #include "options.h"
 #include "utils/is_of.hpp"
@@ -255,6 +256,12 @@ AxisDirection GetLeftStickOrDpadDirection(bool usePadmapper)
 		isDownPressed |= PadmapperIsActionActive("MoveDown");
 		isLeftPressed |= PadmapperIsActionActive("MoveLeft");
 		isRightPressed |= PadmapperIsActionActive("MoveRight");
+
+		const AxisDirection wasd = GetWasdMovementDirection();
+		isUpPressed |= wasd.y == AxisDirectionY_UP;
+		isDownPressed |= wasd.y == AxisDirectionY_DOWN;
+		isLeftPressed |= wasd.x == AxisDirectionX_LEFT;
+		isRightPressed |= wasd.x == AxisDirectionX_RIGHT;
 	} else if (!SimulatingMouseWithPadmapper) {
 		isUpPressed |= IsPressedForMovement(ControllerButton_BUTTON_DPAD_UP);
 		isDownPressed |= IsPressedForMovement(ControllerButton_BUTTON_DPAD_DOWN);

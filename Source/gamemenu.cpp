@@ -9,6 +9,8 @@
 #include <SDL3/SDL_timer.h>
 #endif
 
+#include "admin_menu.hpp"
+#include "controls/wasd_movement.hpp"
 #include "cursor.h"
 #include "diablo_msg.hpp"
 #include "engine/backbuffer_state.hpp"
@@ -44,6 +46,7 @@ void GamemenuMusicVolume(bool bActivate);
 void GamemenuSoundVolume(bool bActivate);
 void GamemenuBrightness(bool bActivate);
 void GamemenuSpeed(bool bActivate);
+void GamemenuMovement(bool bActivate);
 
 /** Contains the game menu items of the single player menu. */
 TMenuItem sgSingleMenu[] = {
@@ -54,6 +57,7 @@ TMenuItem sgSingleMenu[] = {
 	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
 	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
 	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
+	{ GMENU_ENABLED, N_("Admin Tools"),       &AdminMenuOpen      },
 	{ GMENU_ENABLED, nullptr,                 nullptr             },
 	// clang-format on
 };
@@ -74,6 +78,7 @@ TMenuItem sgOptionsMenu[] = {
 	{ GMENU_ENABLED | GMENU_SLIDER, nullptr,             &GamemenuSoundVolume  },
 	{ GMENU_ENABLED | GMENU_SLIDER, N_("Gamma"),         &GamemenuBrightness   },
 	{ GMENU_ENABLED | GMENU_SLIDER, N_("Speed"),         &GamemenuSpeed        },
+	{ GMENU_ENABLED               , nullptr,             &GamemenuMovement     },
 	{ GMENU_ENABLED               , N_("Previous Menu"), &GamemenuPrevious     },
 	{ GMENU_ENABLED               , nullptr,             nullptr               },
 	// clang-format on
@@ -96,6 +101,7 @@ void GamemenuUpdateSingle()
 	const bool enable = MyPlayer->_pmode != PM_DEATH && !MyPlayerIsDead;
 
 	sgSingleMenu[0].setEnabled(enable);
+	sgSingleMenu[5].setEnabled(enable);
 }
 
 void GamemenuPrevious(bool /*bActivate*/)
@@ -177,6 +183,11 @@ void GamemenuGetSpeed()
 	gmenu_slider_set(&sgOptionsMenu[3], 20, 50, sgGameInitInfo.nTickRate);
 }
 
+void GamemenuGetMovement()
+{
+	sgOptionsMenu[4].pszStr = IsWasdMovementEnabled() ? N_("Movement: WASD") : N_("Movement: Click");
+}
+
 int GamemenuSliderBrightness()
 {
 	return gmenu_slider_get(&sgOptionsMenu[2], 0, 100);
@@ -188,6 +199,7 @@ void GamemenuOptions(bool /*bActivate*/)
 	GamemenuGetSound();
 	GamemenuGetBrightness();
 	GamemenuGetSpeed();
+	GamemenuGetMovement();
 	gmenu_set_items(sgOptionsMenu, nullptr);
 }
 
@@ -275,6 +287,12 @@ void GamemenuSpeed(bool bActivate)
 
 	GetOptions().Gameplay.tickRate.SetValue(sgGameInitInfo.nTickRate);
 	gnTickDelay = 1000 / sgGameInitInfo.nTickRate;
+}
+
+void GamemenuMovement(bool /*bActivate*/)
+{
+	SetWasdMovementEnabled(!IsWasdMovementEnabled());
+	GamemenuGetMovement();
 }
 
 } // namespace
