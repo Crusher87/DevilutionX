@@ -425,6 +425,13 @@ void AddTelekinesis(Missile &missile, AddMissileParameter &parameter);
 void AddBoneSpirit(Missile &missile, AddMissileParameter &parameter);
 void AddRedPortal(Missile &missile, AddMissileParameter &parameter);
 void AddDiabloApocalypse(Missile &missile, AddMissileParameter &parameter);
+/**
+ * @brief Damage value a player's fire or lightning arrow is created with.
+ *
+ * POE2 Mashup: a Lightning Arrow adds its bonus lightning damage on top of it.
+ */
+constexpr int ElementalArrowBaseDamage = 4;
+
 Missile *AddMissile(WorldTilePosition src, WorldTilePosition dst, Direction midir, MissileID mitype,
     mienemy_type micaster, int id, int midam, int spllvl,
     Missile *parent = nullptr, std::optional<SfxID> lSFX = std::nullopt);

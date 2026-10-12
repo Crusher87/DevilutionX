@@ -203,3 +203,9 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Teleport Gem	Gem	28	0	0	0	0	0	0	105	0		SKILLGEM_SPELL	Teleport	true	2400
 	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Leap Slam Gem	Gem	6	0	0	0	0	0	35	0	0		SKILLGEM_LEAPSLAM	Null	true	1200
 	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Rain of Arrows Gem	Gem	6	0	0	0	0	0	0	0	45		SKILLGEM_RAINOFARROWS	Null	true	1200
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Shield Charge Gem	Gem	8	0	0	0	0	0	40	0	0		SKILLGEM_SHIELDCHARGE	Null	true	1500
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Battle Cry Gem	Gem	3	0	0	0	0	0	25	0	0		SKILLGEM_BATTLECRY	Null	true	800
+	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Lightning Arrow Gem	Gem	4	0	0	0	0	0	0	0	30		SKILLGEM_LIGHTNINGARROW	Null	true	900
+	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Escape Shot Gem	Gem	8	0	0	0	0	0	0	0	40		SKILLGEM_ESCAPESHOT	Null	true	1500
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Ember Fusillade Gem	Gem	6	0	0	0	0	0	0	40	0		SKILLGEM_EMBERFUSILLADE	Null	true	1200
+	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Spark Gem	Gem	3	0	0	0	0	0	0	25	0		SKILLGEM_SPARK	Null	true	800

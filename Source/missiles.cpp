@@ -2918,8 +2918,16 @@ void ProcessElementalArrow(Missile &missile)
 				app_fatal(StrCat("wrong missile ID ", static_cast<int>(missile._mitype)));
 				break;
 			}
+			// POE2 Mashup: a Lightning Arrow skill adds lightning damage that also hits all around.
+			const int skillDamage = gbIsPoe2 && !missile.IsTrap() && missile._micaster == TARGET_MONSTERS ? std::max(missile._midam - ElementalArrowBaseDamage, 0) : 0;
+			eMind += skillDamage / 2;
+			eMaxd += skillDamage;
 			missile.setAnimation(eAnim);
 			CheckMissileCol(missile, damageType, eMind, eMaxd, false, missile.position.tile, true);
+			if (skillDamage > 0) {
+				for (int i = 0; i < 8; i++)
+					CheckMissileCol(missile, damageType, eMind, eMaxd, false, missile.position.tile + static_cast<Direction>(i), true);
+			}
 		} else {
 			if (missile.position.tile != Point { missile.var1, missile.var2 }) {
 				missile.var1 = missile.position.tile.x;

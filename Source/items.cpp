@@ -1935,7 +1935,10 @@ void PrintItemMisc(const Item &item)
 			AddItemInfoBoxString(FormatRuntime(_("Grants the {:s} spell"), SkillName(skill)));
 		} else {
 			AddItemInfoBoxString(WeaponSkillDescription(skill.attack()));
-			AddItemInfoBoxString(FormatRuntime(_("Attack skill, needs a {:s}"), WeaponSkillWeapons(skill.attack())));
+			if (WeaponSkillNeedsWeapon(skill.attack()))
+				AddItemInfoBoxString(FormatRuntime(_("Attack skill, needs a {:s}"), WeaponSkillWeapons(skill.attack())));
+			else
+				AddItemInfoBoxString(FormatRuntime(_("Skill, {:d} mana"), WeaponSkillManaCost(skill.attack())));
 		}
 		AddItemInfoBoxString(_("Use to socket in the skill bar"));
 		return;

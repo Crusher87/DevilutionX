@@ -28,6 +28,18 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForAttack(WeaponSkill::LeapSlam);
 	case IMISC_SKILLGEM_RAINOFARROWS:
 		return SkillSlot::ForAttack(WeaponSkill::RainOfArrows);
+	case IMISC_SKILLGEM_SHIELDCHARGE:
+		return SkillSlot::ForAttack(WeaponSkill::ShieldCharge);
+	case IMISC_SKILLGEM_BATTLECRY:
+		return SkillSlot::ForAttack(WeaponSkill::BattleCry);
+	case IMISC_SKILLGEM_LIGHTNINGARROW:
+		return SkillSlot::ForAttack(WeaponSkill::LightningArrow);
+	case IMISC_SKILLGEM_ESCAPESHOT:
+		return SkillSlot::ForAttack(WeaponSkill::EscapeShot);
+	case IMISC_SKILLGEM_EMBERFUSILLADE:
+		return SkillSlot::ForAttack(WeaponSkill::EmberFusillade);
+	case IMISC_SKILLGEM_SPARK:
+		return SkillSlot::ForAttack(WeaponSkill::Spark);
 	default:
 		return {};
 	}

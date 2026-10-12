@@ -107,5 +107,19 @@ TEST_F(Poe2WeaponSkillsTest, QueuedSkillExpires)
 	EXPECT_EQ(data.pendingSkill, WeaponSkill::None);
 }
 
+TEST_F(Poe2WeaponSkillsTest, BattleCryWearsOff)
+{
+	Poe2PlayerData data;
+	data.warcryTicks = 2;
+	data.tick();
+	EXPECT_EQ(data.warcryTicks, 1);
+	data.tick();
+	data.tick();
+	EXPECT_EQ(data.warcryTicks, 0);
+	data.warcryTicks = 5;
+	data.clear();
+	EXPECT_EQ(data.warcryTicks, 0);
+}
+
 } // namespace
 } // namespace devilution

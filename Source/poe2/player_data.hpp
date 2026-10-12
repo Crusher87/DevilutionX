@@ -15,7 +15,7 @@
 
 namespace devilution {
 
-/** @brief Skills granted by the equipped weapon type, used with the weapon skill key. */
+/** @brief Skills granted by skill gems that aren't spells; most need a certain weapon type. */
 enum class WeaponSkill : uint8_t {
 	None,
 	/** Swords and axes: hits the target and both sides. */
@@ -32,7 +32,19 @@ enum class WeaponSkill : uint8_t {
 	LeapSlam,
 	/** Bows: a volley of arrows over an area. */
 	RainOfArrows,
-	Last = RainOfArrows,
+	/** Shields: charges at the target and bashes everything in front, knocking it back. */
+	ShieldCharge,
+	/** Any weapon: a war cry that knocks back adjacent enemies and empowers melee hits. */
+	BattleCry,
+	/** Bows: an arrow that bursts into lightning, hitting everything around the target. */
+	LightningArrow,
+	/** Bows: fires three arrows and leaps back from the target. */
+	EscapeShot,
+	/** No weapon needed: a fan of five firebolts. */
+	EmberFusillade,
+	/** No weapon needed: a spray of erratic lightning sparks. */
+	Spark,
+	Last = Spark,
 };
 
 enum class SupportGem : uint8_t {
@@ -102,8 +114,12 @@ struct Poe2PlayerData {
 	uint8_t pendingSkillTicks = 0;
 	/** @brief Weapon skill used by the attack in progress (not saved). */
 	WeaponSkill activeSkill = WeaponSkill::None;
-	/** @brief Game ticks a Leap Slam may take to land before it's dropped; 0 if not leaping (not saved). */
-	uint8_t leapSlamTicks = 0;
+	/** @brief Skill that hits when the current dash lands, e.g. Leap Slam (not saved). */
+	WeaponSkill dashSkill = WeaponSkill::None;
+	/** @brief Game ticks the dash skill may take to land before it's dropped; 0 if not dashing (not saved). */
+	uint8_t dashSkillTicks = 0;
+	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
+	uint8_t warcryTicks = 0;
 
 	void clear()
 	{
@@ -116,7 +132,9 @@ struct Poe2PlayerData {
 		pendingSkill = WeaponSkill::None;
 		pendingSkillTicks = 0;
 		activeSkill = WeaponSkill::None;
-		leapSlamTicks = 0;
+		dashSkill = WeaponSkill::None;
+		dashSkillTicks = 0;
+		warcryTicks = 0;
 	}
 
 	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }
@@ -130,6 +148,8 @@ struct Poe2PlayerData {
 			dodgeCooldown--;
 		if (pendingSkillTicks > 0 && --pendingSkillTicks == 0)
 			pendingSkill = WeaponSkill::None;
+		if (warcryTicks > 0)
+			warcryTicks--;
 	}
 
 	[[nodiscard]] const std::array<SupportGem, MaxSupportsPerSpell> &supportsFor(SpellID spell) const;
