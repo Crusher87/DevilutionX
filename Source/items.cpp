@@ -67,6 +67,8 @@
 #include "panels/info_box.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/support_gems.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
 #include "quests.h"
 #include "sound_effect_enums.h"
@@ -4307,6 +4309,14 @@ void DrawUniqueInfo(const Surface &out)
  */
 void PrintItemImplicits(const Item &item)
 {
+	if (gbIsPoe2) {
+		if (const WeaponSkill skill = WeaponSkillForItem(item); skill != WeaponSkill::None) {
+			const std::string_view key = GetOptions().Keymapper.KeyNameForAction("WeaponSkill");
+			AddItemInfoBoxString(FormatRuntime(_("skill [{:s}]: {:s}, {:d} mana"), key, WeaponSkillName(skill), WeaponSkillManaCost(skill)));
+			AddItemInfoBoxString(WeaponSkillDescription(skill));
+		}
+	}
+
 	const ItemSpecialEffect baseFlags = AllItemsList[item.IDidx].iFlags;
 	if (baseFlags == ItemSpecialEffect::None)
 		return;

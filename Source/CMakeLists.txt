@@ -747,6 +747,7 @@ endif()
 add_devilutionx_object_library(libdevilutionx_player
   player.cpp
   poe2/support_gems.cpp
+  poe2/weapon_skills.cpp
   tables/playerdat.cpp
 )
 target_link_dependencies(libdevilutionx_player

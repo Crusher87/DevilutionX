@@ -27,6 +27,7 @@
 #include "msg.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/support_gems.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"

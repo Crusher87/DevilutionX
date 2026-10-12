@@ -13,6 +13,7 @@
 #include "options.h"
 #include "panels/spell_icons.hpp"
 #include "player.h"
+#include "poe2/support_gems.hpp"
 #include "spells.h"
 #include "utils/algorithm/container.hpp"
 #include "utils/format.hpp"
