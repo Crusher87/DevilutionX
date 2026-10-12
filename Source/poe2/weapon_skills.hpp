@@ -24,11 +24,18 @@ int WeaponSkillManaCost(WeaponSkill skill);
 /** @brief Whether the skill is fired with a ranged attack. */
 bool IsRangedWeaponSkill(WeaponSkill skill);
 
+/** @brief Whether the weapon can be used for the skill, e.g. a mace for Ground Slam. */
+bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill);
+/** @brief Whether either equipped weapon can be used for the skill. */
+bool WeaponAllowsSkill(const Player &player, WeaponSkill skill);
+/** @brief The weapons a skill needs, e.g. "sword or axe". */
+std::string_view WeaponSkillWeapons(WeaponSkill skill);
+
 /**
- * @brief Queues the equipped weapon's skill and attacks towards the cursor.
+ * @brief Queues a weapon skill and attacks towards the cursor.
  * @return true if the skill was queued.
  */
-bool TryUseWeaponSkill(Player &player);
+bool TryUseWeaponSkill(Player &player, WeaponSkill skill);
 
 /**
  * @brief Called when an attack starts: turns a queued skill into the active one and pays its mana.

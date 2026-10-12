@@ -31,6 +31,7 @@
 #include "mods/mod_identity.h"
 #include "mpq/mpq_common.hpp"
 #include "pack.h"
+#include "poe2/skill_gems.hpp"
 #include "qol/stash.h"
 #include "tables/playerdat.hpp"
 #include "utils/endian_read.hpp"
@@ -762,6 +763,9 @@ bool pfile_ui_save_create(_uiheroinfo *heroinfo)
 	Player &player = Players[0];
 	CreatePlayer(player, heroinfo->heroclass);
 	CopyUtf8(player._pName, heroinfo->name, PlayerNameLength);
+	player.poe2.clear();
+	if (gbIsPoe2)
+		GrantStarterSkill(player);
 	PackPlayer(pkplr, player);
 	EncodeHero(saveWriter, &pkplr);
 	Game2UiPlayer(player, heroinfo, false);

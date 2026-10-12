@@ -35,10 +35,12 @@
 #include "levels/town.h"
 #include "minitext.h"
 #include "options.h"
+#include "panels/skill_bar.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/flasks.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -2119,12 +2121,21 @@ namespace {
 /** @brief POE2 Mashup: links a support gem to the readied spell, swapping out the oldest support if needed. */
 void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
 {
-	const SpellID spell = player._pRSplType == SpellType::Spell ? player._pRSpell : SpellID::Invalid;
+	// Link to the readied spell, or else to the first spell in the skill bar.
+	SpellID spell = player._pRSplType == SpellType::Spell ? player._pRSpell : SpellID::Invalid;
+	if (spell == SpellID::Invalid) {
+		for (const SkillSlot &slot : player.poe2.skillSlots) {
+			if (slot.kind == SkillKind::Spell) {
+				spell = slot.spell();
+				break;
+			}
+		}
+	}
 	const std::string_view gemName = SupportGemName(gem);
 	SupportGem replaced;
 	switch (LinkSupportGem(player.poe2, spell, gem, replaced)) {
 	case SupportLinkResult::NoReadiedSpell:
-		EventPlrMsg(_("Ready a spell from your spellbook first. The gem links to the readied spell."), UiFlags::ColorRed);
+		EventPlrMsg(_("Ready a spell first, or drop the gem onto a spell in the skill bar."), UiFlags::ColorRed);
 		return;
 	case SupportLinkResult::NotApplicable:
 		EventPlrMsg(FormatRuntime(_("{:s} can't support {:s}."), gemName, pgettext("spell", GetSpellData(spell).sNameText)), UiFlags::ColorRed);
@@ -2273,6 +2284,11 @@ bool UseInvItem(int cii)
 
 	if (const SupportGem gem = SupportGemForItem(*item); gem != SupportGem::None) {
 		UseSupportGem(player, gem, speedlist, c);
+		return true;
+	}
+
+	if (IsSkillGem(*item)) {
+		SocketSkillGemFromInventory(player, speedlist, c);
 		return true;
 	}
 

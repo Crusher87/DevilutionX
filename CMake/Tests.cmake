@@ -34,6 +34,7 @@ set(tests
   poe2_currency_test
   poe2_flasks_test
   poe2_rare_items_test
+  poe2_skill_gems_test
   poe2_support_gems_test
   poe2_weapon_skills_test
   player_test

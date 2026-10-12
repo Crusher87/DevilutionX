@@ -57,6 +57,7 @@
 #include "panels/console.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/skill_bar.hpp"
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
 #include "qol/chatlog.h"
@@ -1445,6 +1446,7 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 
 	DrawControllerModifierHints(out);
+	DrawSkillBar(out);
 	DrawPlrMsg(out);
 	gmenu_draw(out);
 	doom_draw(out);

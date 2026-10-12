@@ -86,12 +86,12 @@
 #include "panels/info_box.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/skill_bar.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_list.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/dodge_roll.hpp"
-#include "poe2/weapon_skills.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -372,6 +372,9 @@ void LeftMouseDown(uint16_t modState)
 
 	const bool isShiftHeld = (modState & SDL_KMOD_SHIFT) != 0;
 	const bool isCtrlHeld = (modState & SDL_KMOD_CTRL) != 0;
+
+	if (!gmenu_is_active() && HandleSkillBarClick(MousePosition))
+		return;
 
 	if (!GetMainPanel().contains(MousePosition)) {
 		if (!gmenu_is_active() && !TryIconCurs()) {
@@ -2070,14 +2073,6 @@ void InitKeymapActions()
 	    nullptr,
 	    IsGameRunning);
 	options.Keymapper.AddAction(
-	    "WeaponSkill",
-	    N_("Weapon Skill"),
-	    N_("Use the skill of the equipped weapon (POE2 Mashup)."),
-	    'E',
-	    [] { TryUseWeaponSkill(*MyPlayer); },
-	    nullptr,
-	    CanPlayerTakeAction);
-	options.Keymapper.AddAction(
 	    "Zoom",
 	    N_("Zoom"),
 	    N_("Zoom Game Screen."),
@@ -2104,7 +2099,7 @@ void InitKeymapActions()
 	    "DecreaseBrightness",
 	    N_("Decrease Brightness"),
 	    N_("Reduce screen brightness."),
-	    'F',
+	    SDLK_UNKNOWN,
 	    DecreaseBrightness,
 	    nullptr,
 	    CanPlayerTakeAction);
@@ -2112,7 +2107,7 @@ void InitKeymapActions()
 	    "IncreaseBrightness",
 	    N_("Increase Brightness"),
 	    N_("Increase screen brightness."),
-	    'G',
+	    SDLK_UNKNOWN,
 	    IncreaseBrightness,
 	    nullptr,
 	    CanPlayerTakeAction);
@@ -2135,7 +2130,7 @@ void InitKeymapActions()
 	    "GameInfo",
 	    N_("Game info"),
 	    N_("Displays game infos."),
-	    'V',
+	    SDLK_UNKNOWN,
 	    [] {
 		    EventPlrMsg(FormatRuntime(
 		                    _(/* TRANSLATORS: {:s} means: Project Name, Game Version. */ "{:s} {:s}"),
@@ -2157,7 +2152,7 @@ void InitKeymapActions()
 	    "SortInv",
 	    N_("Sort Inventory"),
 	    N_("Sorts the inventory."),
-	    'R',
+	    SDLK_UNKNOWN,
 	    [] {
 		    ReorganizeInventory(*MyPlayer);
 	    });
@@ -2177,6 +2172,19 @@ void InitKeymapActions()
 		    DebugToggle = !DebugToggle;
 	    });
 #endif
+	// POE2 Mashup skill bar. Added last so its keys win over older saved bindings.
+	constexpr std::array<uint32_t, NumSkillSlots> SkillSlotKeys { 'E', 'R', 'T', 'F', 'G', 'V' };
+	for (uint32_t i = 0; i < NumSkillSlots; ++i) {
+		options.Keymapper.AddAction(
+		    "SkillSlot{}",
+		    N_("Skill {}"),
+		    N_("Use the skill gem in this skill bar slot (POE2 Mashup)."),
+		    SkillSlotKeys[i],
+		    [i] { UseSkillSlot(i); },
+		    nullptr,
+		    CanPlayerTakeAction,
+		    i + 1);
+	}
 	options.Keymapper.CommitActions();
 }
 

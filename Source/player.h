@@ -647,7 +647,10 @@ public:
 			return 0;
 		}
 
-		return std::max<int>(_pISplLvlAdd + _pSplLvl[static_cast<std::size_t>(spell)], 0);
+		int level = _pSplLvl[static_cast<std::size_t>(spell)];
+		if (poe2.hasSpellGem(spell))
+			level = std::max(level, GemSpellLevel(getCharacterLevel()));
+		return std::max<int>(_pISplLvlAdd + level, 0);
 	}
 
 	/**

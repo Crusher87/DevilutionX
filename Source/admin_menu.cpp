@@ -28,6 +28,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -148,7 +149,7 @@ void CollectItemBases()
 		const ItemData &data = AllItemsList[i];
 		if (!IsItemAvailable(static_cast<int>(i)))
 			continue;
-		const bool isPoe2Misc = SupportGemForMiscId(data.iMiscId) != SupportGem::None || CurrencyOrbForMiscId(data.iMiscId) != CurrencyOrb::None;
+		const bool isPoe2Misc = SupportGemForMiscId(data.iMiscId) != SupportGem::None || CurrencyOrbForMiscId(data.iMiscId) != CurrencyOrb::None || !SkillForGemData(data).isEmpty();
 		if (!isPoe2Misc && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT, ILOC_INVALID))
 			continue;
 		if (data.iMiscId == IMISC_UNIQUE)
@@ -386,7 +387,7 @@ void AdminRevealMap(bool /*bActivate*/)
 bool AdminGenerateItem(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed)
 {
 	const int miscId = AllItemsList[baseIndex].iMiscId;
-	if (SupportGemForMiscId(miscId) != SupportGem::None || CurrencyOrbForMiscId(miscId) != CurrencyOrb::None) {
+	if (SupportGemForMiscId(miscId) != SupportGem::None || CurrencyOrbForMiscId(miscId) != CurrencyOrb::None || !SkillForGemData(AllItemsList[baseIndex]).isEmpty()) {
 		// Gems and orbs have no quality or level.
 		InitializeItem(item, baseIndex);
 		item._iSeed = static_cast<int32_t>(firstSeed >> 1);

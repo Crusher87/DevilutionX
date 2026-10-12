@@ -6,6 +6,7 @@
 #include "levels/trigs.h"
 #include "options.h"
 #include "panels/partypanel.hpp"
+#include "panels/skill_bar.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "qol/xpbar.h"
@@ -392,7 +393,8 @@ void CheckPanelInfo()
 void DrawInfoBox(const Surface &out)
 {
 	DrawPanelBox(out, MakeSdlRect(InfoBoxRect.position.x, InfoBoxRect.position.y + PanelPaddingHeight, InfoBoxRect.size.width, InfoBoxRect.size.height), GetMainPanel().position + Displacement { InfoBoxRect.position.x, InfoBoxRect.position.y });
-	if (!MainPanelFlag && !trigflag && pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursstoreitem == -1 && pcursstorebtn == -1 && !SpellSelectFlag && pcurs != CURSOR_HOURGLASS) {
+	const bool skillBarHovered = IsSkillBarHovered();
+	if (!skillBarHovered && !MainPanelFlag && !trigflag && pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursstoreitem == -1 && pcursstorebtn == -1 && !SpellSelectFlag && pcurs != CURSOR_HOURGLASS) {
 		InfoString = StringOrView {};
 		InfoColor = UiFlags::ColorWhite;
 	}
@@ -443,6 +445,8 @@ void DrawInfoBox(const Surface &out)
 			AddInfoBoxString(_("Right click to inspect"));
 		}
 	}
+	if (skillBarHovered && myPlayer.HoldItem.isEmpty())
+		SetSkillBarInfo();
 	if (!InfoString.empty())
 		PrintInfo(out);
 }
