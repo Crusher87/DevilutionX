@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "sound_effect_enums.h"
+#include "utils/attributes.h"
 #include "utils/enum_traits.h"
 
 namespace devilution {
@@ -264,7 +265,7 @@ struct SpellData {
 	}
 };
 
-extern std::vector<SpellData> SpellsData;
+extern DVL_API_FOR_TEST std::vector<SpellData> SpellsData;
 
 inline const SpellData &GetSpellData(SpellID spellId)
 {
