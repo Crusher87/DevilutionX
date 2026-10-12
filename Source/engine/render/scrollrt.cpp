@@ -57,6 +57,7 @@
 #include "panels/console.hpp"
 #include "panels/item_spawner.hpp"
 #include "panels/partypanel.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/spell_list.hpp"
@@ -1905,6 +1906,7 @@ void DrawAndBlit()
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)
 		DrawPartyMemberInfoPanel(out);
 
+	DrawPassiveTree(out);
 	DrawItemSpawner(out);
 	DrawCursor(out);
 

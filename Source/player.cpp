@@ -202,7 +202,7 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 	}
 
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
-	skippedAnimationFrames += WeaponSkillSkippedFrames(player);
+	skippedAnimationFrames += WeaponSkillSkippedFrames(player) + player.poe2.passiveAttackFrames;
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
@@ -233,6 +233,7 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 	}
 
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
+	skippedAnimationFrames += player.poe2.passiveAttackFrames;
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
@@ -287,7 +288,7 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	if (player._pmode == PM_SPELL)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
 	const bool isLearnedSpell = player.queuedSpell.spellType == SpellType::Spell;
-	const int8_t skippedFrames = isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0;
+	const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames;
 	NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
 
 	PlaySfxLoc(GetSpellData(player.queuedSpell.spellId).sSFX, player.position.tile);

@@ -69,6 +69,7 @@
 #include "player.h"
 #include "poe2/currency.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -3074,6 +3075,25 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		}
 	}
 
+	// POE2 Mashup: the passive tree adds to what the gear gives.
+	const PassiveTotals passives = GetPassiveTotals(player);
+	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
+	strength += passive(PassiveStat::Strength);
+	magic += passive(PassiveStat::Magic);
+	dexterity += passive(PassiveStat::Dexterity);
+	vitality += passive(PassiveStat::Vitality);
+	dam += passive(PassiveStat::Damage);
+	toHit += passive(PassiveStat::ToHit);
+	ac += ac * passive(PassiveStat::ArmorPercent) / 100;
+	fireRes += passive(PassiveStat::FireResist) + passive(PassiveStat::AllResist);
+	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
+	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
+	lifeRegen += passive(PassiveStat::LifeRegen);
+	manaRegen += passive(PassiveStat::ManaRegen);
+	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
+	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::min(passive(PassiveStat::AttackSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
+	player.poe2.passiveCastFrames = static_cast<int8_t>(std::min(passive(PassiveStat::CastSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
+
 	CalcPlrDamage(player, minDamage, maxDamage);
 	CalcPlrPrimaryStats(player, strength, magic, dexterity, vitality);
 	player._pIAC = ac;
@@ -3093,6 +3113,14 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pISplLvlAdd = splLvlAdd;
 	player._pIEnAc = targetAc;
 	CalcPlrResistances(player, flags, fireRes, lightRes, magicRes);
+	if (passive(PassiveStat::LifePercent) != 0 || passive(PassiveStat::ManaPercent) != 0) {
+		// Percent increases apply to everything else that adds life and mana.
+		const ClassAttributes &classAttributes = player.getClassAttributes();
+		const Fixed26_6 baseLife = life + player._pMaxHPBase + Fixed26_6::fromInt((classAttributes.itmLife * vitality).whole());
+		const Fixed26_6 baseMana = mana + player._pMaxManaBase + Fixed26_6::fromInt((classAttributes.itmMana * magic).whole());
+		life += Fixed26_6::fromRaw(baseLife.raw() * passive(PassiveStat::LifePercent) / 100);
+		mana += Fixed26_6::fromRaw(baseMana.raw() * passive(PassiveStat::ManaPercent) / 100);
+	}
 	CalcPlrLifeMana(player, vitality, magic, life, mana);
 	player._pIFMinDam = minFireDam;
 	player._pIFMaxDam = maxFireDam;

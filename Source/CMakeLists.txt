@@ -133,6 +133,7 @@ set(libdevilutionx_SRCS
   panels/partypanel.cpp
   panels/quest_log.cpp
   panels/item_spawner.cpp
+  panels/passive_tree_panel.cpp
   panels/skill_bar.cpp
   panels/spell_book.cpp
   panels/spell_icons.cpp
@@ -750,6 +751,7 @@ endif()
 add_devilutionx_object_library(libdevilutionx_player
   player.cpp
   poe2/flasks.cpp
+  poe2/passive_tree.cpp
   poe2/regen.cpp
   poe2/skill_gems.cpp
   poe2/support_gems.cpp
