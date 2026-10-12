@@ -49,6 +49,7 @@
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/monster_mods.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -662,6 +663,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 			dam = monster.hitPoints.raw(); /* ensure monster is killed with one hit */
 		}
 #endif
+		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
 		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(dam));
 	}
 

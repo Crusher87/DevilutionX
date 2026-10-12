@@ -79,6 +79,7 @@
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/monster_mods.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
 #include "storm/storm_net.hpp"
@@ -279,6 +280,9 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 		monster.armorClass += HellAcBonus;
 		monster.resistance = monster.data().resistanceHell;
 	}
+
+	// POE2 Mashup: some monsters spawn magic or rare, with modifiers.
+	ApplyMonsterRarity(monster);
 }
 
 bool CanPlaceMonster(Point position)
@@ -4013,7 +4017,7 @@ void M_StartHit(Monster &monster, const Player &player, int dam)
 void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 {
 	if (!monster.isPlayerMinion())
-		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), monster.exp(sgGameInitInfo.nDifficulty), monster.whoHit);
+		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100, monster.whoHit);
 	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0)
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
 
@@ -4025,6 +4029,11 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	SetRndSeed(monster.rndItemSeed);
 
 	SpawnLoot(monster, sendmsg);
+	// POE2 Mashup: magic and rare monsters drop more.
+	if (!monster.isPlayerMinion()) {
+		for (int i = MonsterExtraDrops(monster); i > 0; i--)
+			SpawnItem(monster, monster.position.tile, sendmsg);
+	}
 
 	if (monster.type().type == MT_DIABLO)
 		DiabloDeath(monster, true);
@@ -4295,6 +4304,7 @@ void ProcessMonsters()
 			}
 			monster.hitPoints = std::min(monster.hitPoints, monster.maxHitPoints); // prevent going over max HP with part of a single regen tick
 		}
+		ProcessMonsterAilments(monster);
 
 		const bool isMonsterVisible = IsTileVisible(monster.position.tile);
 		if (isMonsterVisible && monster.activeForTicks == 0) {

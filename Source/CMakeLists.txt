@@ -752,6 +752,7 @@ add_devilutionx_object_library(libdevilutionx_player
   player.cpp
   poe2/defenses.cpp
   poe2/flasks.cpp
+  poe2/monster_mods.cpp
   poe2/passive_tree.cpp
   poe2/regen.cpp
   poe2/skill_gems.cpp
