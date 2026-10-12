@@ -207,8 +207,11 @@ enum class MissileID : int8_t {
 	BlueExplosion,
 	BlueExplosion2,
 	OrangeExplosion,
+	LastHellfire = OrangeExplosion,
+	/** POE2 Mashup: a missile graphic played once as a skill's visual effect. */
+	VisualEffect,
 
-	LAST = OrangeExplosion,
+	LAST = VisualEffect,
 	Null = -1,
 	// clang-format on
 };

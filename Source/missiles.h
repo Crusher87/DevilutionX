@@ -235,7 +235,7 @@ public:
 	}
 };
 
-extern std::list<Missile> Missiles;
+extern DVL_API_FOR_TEST std::list<Missile> Missiles;
 extern bool MissilePreFlag;
 
 struct DamageRange {
@@ -332,6 +332,7 @@ void AddFireball(Missile &missile, AddMissileParameter &parameter);
 void AddLightningControl(Missile &missile, AddMissileParameter &parameter);
 void AddLightning(Missile &missile, AddMissileParameter &parameter);
 void AddMissileExplosion(Missile &missile, AddMissileParameter &parameter);
+void AddVisualEffect(Missile &missile, AddMissileParameter &parameter);
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter);
 
 /**
@@ -447,6 +448,13 @@ inline Missile *AddMissile(WorldTilePosition src, WorldTilePosition dst, Directi
 {
 	return AddMissile(src, dst, midir, mitype, micaster, static_cast<int>(monster.getId()), midam, spllvl, parent, lSFX);
 }
+
+/**
+ * @brief POE2 Mashup: plays a missile graphic once at a tile as a skill's visual effect.
+ * @param delay Game ticks before the effect shows up.
+ * @param light Radius of the flash of light it gives off, 0 for none.
+ */
+void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay = 0, int light = 0, Direction dir = Direction::South);
 void ProcessElementalArrow(Missile &missile);
 void ProcessArrow(Missile &missile);
 void ProcessGenericProjectile(Missile &missile);
@@ -473,6 +481,7 @@ void ProcessGuardian(Missile &missile);
 void ProcessChainLightning(Missile &missile);
 void ProcessWeaponExplosion(Missile &missile);
 void ProcessMissileExplosion(Missile &missile);
+void ProcessVisualEffect(Missile &missile);
 void ProcessAcidSplate(Missile &missile);
 void ProcessTeleport(Missile &missile);
 void ProcessStoneCurse(Missile &missile);

@@ -293,6 +293,7 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	PlaySfxLoc(GetSpellData(player.queuedSpell.spellId).sSFX, player.position.tile);
 
 	player._pmode = PM_SPELL;
+	player.poe2.castSkill = WeaponSkill::None;
 
 	FixPlayerLocation(player, d);
 	SetPlayerOld(player);
@@ -802,6 +803,7 @@ bool PlrHitObj(const Player &player, Object &targetObject)
 void DashSkillLanding(Player &player, WeaponSkill skill)
 {
 	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
+	PlaySkillEffects(player, skill, player.position.tile + player._pdir);
 	for (int i = 0; i < 8; i++) {
 		const auto dir = static_cast<Direction>(i);
 		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
@@ -897,6 +899,9 @@ bool DoAttack(Player &player)
 			}
 		}
 
+		if (skill != WeaponSkill::None)
+			PlaySkillEffects(player, skill, player.position.tile + player._pdir);
+
 		if (didhit && DamageWeapon(player, 30)) {
 			StartStand(player, player._pdir);
 			ClearStateVariables(player);
@@ -932,14 +937,15 @@ bool DoRangeAttack(Player &player)
 	if (rain)
 		arrows = 9;
 	const bool lightningArrow = player.poe2.activeSkill == WeaponSkill::LightningArrow && arrows == 1;
+	if (barrage || rain || lightningArrow)
+		PlaySkillEffects(player, player.poe2.activeSkill, player.position.temp);
 
 	for (int arrow = 0; arrow < arrows; arrow++) {
 		int xoff = 0;
 		int yoff = 0;
 		if (rain) {
-			constexpr Displacement Volley[] = { { 0, 0 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 2 }, { -2, -2 }, { 2, -2 }, { -2, 2 } };
-			xoff = Volley[arrow].deltaX;
-			yoff = Volley[arrow].deltaY;
+			xoff = RainOfArrowsVolley[arrow].deltaX;
+			yoff = RainOfArrowsVolley[arrow].deltaY;
 		} else if (barrage) {
 			constexpr int Spread[] = { 0, -1, 1, -2, 2 };
 			const int angle = Spread[arrow];
@@ -1092,8 +1098,31 @@ void DamageArmor(Player &player)
 	CalcPlrInv(player, true);
 }
 
+/** @brief POE2 Mashup: a skill's own animation, which plays as PM_SPELL (see BeginSkillAnimation). */
+bool DoSkillCast(Player &player)
+{
+	const WeaponSkill skill = player.poe2.castSkill;
+	if (player.AnimInfo.currentFrame == player.poe2.castFrame) {
+		if (IsAnyOf(skill, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge))
+			DashSkillLanding(player, skill);
+		else if (ExecuteSkillCast(player, skill, player.position.temp))
+			return true;
+	}
+
+	if (player.AnimInfo.isLastFrame()) {
+		player.poe2.castSkill = WeaponSkill::None;
+		StartStand(player, player._pdir);
+		ClearStateVariables(player);
+		return true;
+	}
+	return false;
+}
+
 bool DoSpell(Player &player)
 {
+	if (player.poe2.castSkill != WeaponSkill::None)
+		return DoSkillCast(player);
+
 	if (player.AnimInfo.currentFrame == player._pSFNum) {
 		CastSpell(
 		    player,
@@ -1454,7 +1483,7 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		}
 	}
 
-	if (player._pmode == PM_SPELL && player.AnimInfo.currentFrame >= player._pSFNum) {
+	if (player._pmode == PM_SPELL && player.AnimInfo.currentFrame >= player._pSFNum && player.poe2.castSkill == WeaponSkill::None) {
 		if (player.destAction == ACTION_SPELL) {
 			d = GetDirection(player.position.tile, { player.destParam1, player.destParam2 });
 			StartSpell(player, d, player.destParam1, player.destParam2);
@@ -1869,6 +1898,8 @@ player_graphic Player::getGraphic() const
 	case PM_BLOCK:
 		return player_graphic::Block;
 	case PM_SPELL:
+		if (poe2.castSkill != WeaponSkill::None)
+			return static_cast<player_graphic>(poe2.castGraphic);
 		return GetPlayerGraphicForSpell(executedSpell.spellId);
 	case PM_GOTHIT:
 		return player_graphic::Hit;
@@ -3110,7 +3141,8 @@ void ProcessPlayers()
 			if (player.poe2.dashSkillTicks > 0) {
 				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {
 					player.poe2.dashSkillTicks = 0;
-					DashSkillLanding(player, player.poe2.dashSkill);
+					// Land with a swing; the skill hits on the swing's hit frame.
+					BeginSkillAnimation(player, player.poe2.dashSkill, player_graphic::Attack, player.position.tile + player._pdir);
 				} else if (--player.poe2.dashSkillTicks == 0) {
 					player.poe2.dashSkill = WeaponSkill::None;
 				}

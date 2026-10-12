@@ -35,6 +35,7 @@ set(tests
   poe2_flasks_test
   poe2_item_spawner_test
   poe2_rare_items_test
+  poe2_skill_effects_test
   poe2_regen_test
   poe2_skill_gems_test
   poe2_support_gems_test
