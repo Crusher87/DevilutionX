@@ -2396,8 +2396,8 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(player._pRSplType));
 }
 
-/** Version 1 holds support gem links, version 2 adds flask charges and version 3 the skill bar. */
-constexpr uint8_t Poe2HeroDataVersion = 3;
+/** Version 1 holds support gem links, version 2 adds flask charges, version 3 the skill bar and version 4 the passive tree. */
+constexpr uint8_t Poe2HeroDataVersion = 4;
 
 namespace {
 
@@ -2437,6 +2437,15 @@ uint8_t ReadPoe2HeroData(Player &player)
 		if (SkillGemItemIndex(skill))
 			slot = skill;
 	}
+
+	if (version < 4 || !file.IsValid(1))
+		return version;
+	const uint8_t passiveCount = file.NextLE<uint8_t>();
+	for (uint8_t i = 0; i < passiveCount && file.IsValid(1); i++) {
+		const uint8_t node = file.NextLE<uint8_t>();
+		if (node < MaxPassiveNodes)
+			player.poe2.passives.set(node);
+	}
 	return version;
 }
 
@@ -2459,7 +2468,13 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			linkedSpells.push_back(spell);
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + (linkedSpells.size() * (1 + MaxSupportsPerSpell)) + NumFlasks + (NumSkillSlots * 2));
+	std::vector<uint8_t> passives;
+	for (size_t node = 0; node < MaxPassiveNodes; node++) {
+		if (player.poe2.passives.test(node))
+			passives.push_back(static_cast<uint8_t>(node));
+	}
+
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + (linkedSpells.size() * (1 + MaxSupportsPerSpell)) + NumFlasks + (NumSkillSlots * 2) + 1 + passives.size());
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(linkedSpells.size()));
 	for (const size_t spell : linkedSpells) {
@@ -2473,6 +2488,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		file.WriteLE<uint8_t>(static_cast<uint8_t>(slot.kind));
 		file.WriteLE<uint8_t>(slot.id);
 	}
+	file.WriteLE<uint8_t>(static_cast<uint8_t>(passives.size()));
+	for (const uint8_t node : passives)
+		file.WriteLE<uint8_t>(node);
 }
 
 void LoadHeroItems(Player &player)

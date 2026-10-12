@@ -81,7 +81,8 @@ set(poe2_mod
   lua/mods/poe2/init.lua
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
-  txtdata/missiles/misdat.tsv)
+  txtdata/missiles/misdat.tsv
+  txtdata/poe2/passive_tree.tsv)
 
 if(APPLE)
   foreach(asset_file ${poe2_mod})

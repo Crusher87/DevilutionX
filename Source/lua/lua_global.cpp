@@ -40,6 +40,7 @@
 #include "lua/modules/towners.hpp"
 #include "options.h"
 #include "plrmsg.h"
+#include "poe2/passive_tree.hpp"
 #include "stores.h"
 #include "utils/console.h"
 #include "utils/log.hpp"
@@ -276,6 +277,7 @@ void LuaReloadActiveMods()
 	LoadMissileData();
 	LoadMonsterData();
 	LoadItemData();
+	LoadPassiveTreeData();
 	LoadObjectData();
 	LoadQuestData();
 

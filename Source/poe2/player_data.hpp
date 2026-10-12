@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 
@@ -14,6 +15,9 @@
 #include "tables/spelldat.h"
 
 namespace devilution {
+
+/** @brief Most nodes a passive tree may have; node ids are saved as one byte. */
+constexpr size_t MaxPassiveNodes = 255;
 
 /** @brief Skills granted by skill gems that aren't spells; most need a certain weapon type. */
 enum class WeaponSkill : uint8_t {
@@ -125,6 +129,11 @@ struct Poe2PlayerData {
 	int8_t castFrame = 0;
 	/** @brief The player_graphic of the cast skill's animation (not saved). */
 	uint8_t castGraphic = 0;
+	/** @brief Allocated passive tree nodes, by node id; the class start node isn't stored. */
+	std::bitset<MaxPassiveNodes> passives;
+	/** @brief Animation frames skipped by attacks and casts thanks to passives (not saved; from CalcPlrItemVals). */
+	int8_t passiveAttackFrames = 0;
+	int8_t passiveCastFrames = 0;
 	/** @brief Life regenerated per second from gear (not saved; from CalcPlrItemVals). */
 	int lifeRegen = 0;
 	/** @brief Increased mana regeneration in percent from gear (not saved; from CalcPlrItemVals). */
@@ -149,6 +158,9 @@ struct Poe2PlayerData {
 		warcryTicks = 0;
 		castSkill = WeaponSkill::None;
 		castFrame = 0;
+		passives.reset();
+		passiveAttackFrames = 0;
+		passiveCastFrames = 0;
 		lifeRegen = 0;
 		manaRegenBonus = 0;
 		lifeRegenRemainder = 0;

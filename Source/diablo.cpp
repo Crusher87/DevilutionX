@@ -86,6 +86,7 @@
 #include "panels/info_box.hpp"
 #include "panels/item_spawner.hpp"
 #include "panels/partypanel.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/spell_book.hpp"
@@ -93,6 +94,7 @@
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/passive_tree.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -231,7 +233,7 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen())) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen())) {
 		RedrawViewport();
 		return false;
 	}
@@ -777,6 +779,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 	}
 
 	if (ItemSpawnerHandleEvent(event)) {
+		return;
+	}
+
+	if (PassiveTreeHandleEvent(event)) {
 		return;
 	}
 
@@ -2188,6 +2194,20 @@ void InitKeymapActions()
 	    ToggleItemSpawner,
 	    nullptr,
 	    [] { return !gbIsMultiplayer && !gmenu_is_active(); });
+	// POE2 opens the passive tree with P. Outside the mod (or in multiplayer) P still pauses.
+	options.Keymapper.AddAction(
+	    "PassiveTree",
+	    N_("Passive Tree"),
+	    N_("Opens the passive skill tree (POE2 Mashup, single player). Pauses the game otherwise."),
+	    'P',
+	    [] {
+		    if (gbIsPoe2 && !gbIsMultiplayer)
+			    TogglePassiveTree();
+		    else
+			    diablo_pause_game();
+	    },
+	    nullptr,
+	    [] { return !gmenu_is_active(); });
 	// POE2 Mashup skill bar. Added last so its keys win over older saved bindings.
 	constexpr std::array<uint32_t, NumSkillSlots> SkillSlotKeys { 'E', 'R', 'T', 'F', 'G', 'V' };
 	for (uint32_t i = 0; i < NumSkillSlots; ++i) {
@@ -2843,6 +2863,7 @@ int DiabloMain(int argc, char **argv)
 	LoadMissileData();
 	LoadMonsterData();
 	LoadItemData();
+	LoadPassiveTreeData();
 	LoadObjectData();
 	LoadQuestData();
 
