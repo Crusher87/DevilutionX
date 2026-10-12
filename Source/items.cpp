@@ -1500,7 +1500,10 @@ void GetItemBonus(const Player &player, Item &item, int minlvl, int maxlvl, bool
 		GetItemPower(player, item, minlvl, maxlvl, AffixItemType::Armor, onlygood);
 		break;
 	case ItemType::Staff:
-		if (allowspells)
+		// POE2 Mashup: quarterstaffs are martial weapons and roll weapon affixes, not spells.
+		if (gbIsPoe2 && item._iMiscId != IMISC_STAFF)
+			GetItemPower(player, item, minlvl, maxlvl, AffixItemType::Weapon, onlygood);
+		else if (allowspells)
 			GetStaffSpell(player, item, maxlvl, onlygood);
 		else
 			GetItemPower(player, item, minlvl, maxlvl, AffixItemType::Staff, onlygood);

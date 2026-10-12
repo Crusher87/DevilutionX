@@ -22,7 +22,7 @@ DefenseType ItemDefenseType(const Item &item)
 	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
 		return DefenseType::Armour;
 	const std::string_view base = AllItemsList[static_cast<size_t>(item.IDidx)].iName;
-	if (IsAnyOf(base, "Rags", "Cape", "Cloak", "Robe", "Cap", "Crown"))
+	if (IsAnyOf(base, "Rags", "Cape", "Cloak", "Robe", "Cap", "Crown", "Twig Focus", "Woven Focus", "Crystal Focus"))
 		return DefenseType::EnergyShield;
 	if (IsAnyOf(base, "Quilted Armor", "Leather Armor", "Hard Leather Armor", "Studded Leather Armor", "Skull Cap", "Buckler"))
 		return DefenseType::Evasion;
