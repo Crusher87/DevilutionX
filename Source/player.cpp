@@ -665,6 +665,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 #endif
 		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
 		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(dam));
+		TryInflictAilment(monster, player, DamageType::Physical, Fixed26_6::fromRaw(dam));
 	}
 
 	int skdam = 0;
