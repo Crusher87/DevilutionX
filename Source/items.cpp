@@ -72,6 +72,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
@@ -2003,6 +2004,9 @@ void PrintItemMisc(const Item &item)
 	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {
 		if (skill.kind == SkillKind::Spell) {
 			AddItemInfoBoxString(FormatRuntime(_("Grants the {:s} spell"), SkillName(skill)));
+		} else if (skill.kind == SkillKind::Persistent) {
+			AddItemInfoBoxString(PersistentSkillDescription(skill.persistent()));
+			AddItemInfoBoxString(FormatRuntime(_("Spirit gem, reserves {:d} Spirit"), SpiritReservation(skill.persistent())));
 		} else {
 			AddItemInfoBoxString(WeaponSkillDescription(skill.attack()));
 			if (WeaponSkillNeedsWeapon(skill.attack()))
@@ -3153,6 +3157,11 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	fireRes += passive(PassiveStat::FireResist) + passive(PassiveStat::AllResist);
 	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
 	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
+	if (IsPersistentSkillActive(player, PersistentSkill::PurityOfElements)) {
+		fireRes += PurityResistance;
+		lightRes += PurityResistance;
+		magicRes += PurityResistance;
+	}
 	lifeRegen += passive(PassiveStat::LifeRegen);
 	manaRegen += passive(PassiveStat::ManaRegen);
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
@@ -4570,6 +4579,8 @@ void PrintItemCorruption(const Item &item)
  */
 void PrintItemImplicits(const Item &item)
 {
+	if (gbIsPoe2 && ItemGrantsSpirit(item))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
 	if (gbIsPoe2) {
 		std::string skills;
 		for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Last); i++) {

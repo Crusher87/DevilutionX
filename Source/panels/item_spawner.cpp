@@ -523,7 +523,8 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		const SkillSlot skill = SkillForGemData(data);
 		if (!skill.isEmpty()) {
 			entry.category = SpawnerCategory::Gems;
-			const std::string_view kind = skill.kind == SkillKind::Spell ? _("Spell gem") : _("Skill gem");
+			const std::string_view kind = skill.kind == SkillKind::Spell ? _("Spell gem") : skill.kind == SkillKind::Persistent ? _("Spirit gem")
+			                                                                                                                    : _("Skill gem");
 			std::string weapon;
 			if (skill.kind == SkillKind::Attack && WeaponSkillNeedsWeapon(skill.attack()))
 				weapon = std::string(WeaponSkillWeapons(skill.attack()));

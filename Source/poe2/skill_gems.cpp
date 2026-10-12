@@ -3,6 +3,7 @@
 #include "items.h"
 #include "levels/gendung.h"
 #include "player.h"
+#include "poe2/spirit.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "utils/language.h"
@@ -40,6 +41,14 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForAttack(WeaponSkill::EmberFusillade);
 	case IMISC_SKILLGEM_SPARK:
 		return SkillSlot::ForAttack(WeaponSkill::Spark);
+	case IMISC_SPIRITGEM_HERALDASH:
+		return SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh);
+	case IMISC_SPIRITGEM_HERALDTHUNDER:
+		return SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder);
+	case IMISC_SPIRITGEM_PURITY:
+		return SkillSlot::ForPersistent(PersistentSkill::PurityOfElements);
+	case IMISC_SPIRITGEM_GOLEM:
+		return SkillSlot::ForPersistent(PersistentSkill::SummonGolem);
 	default:
 		return {};
 	}
@@ -86,6 +95,8 @@ std::string_view SkillName(SkillSlot skill)
 		return pgettext("spell", GetSpellData(skill.spell()).sNameText);
 	case SkillKind::Attack:
 		return WeaponSkillName(skill.attack());
+	case SkillKind::Persistent:
+		return PersistentSkillName(skill.persistent());
 	default:
 		return {};
 	}
@@ -112,6 +123,8 @@ SkillUsability GetSkillUsability(const Player &player, SkillSlot skill)
 	const ItemData &gem = AllItemsList[*gemIndex];
 	if (player._pStrength < gem.iMinStr || player._pMagic < gem.iMinMag || player._pDexterity < gem.iMinDex)
 		return SkillUsability::Requirements;
+	if (skill.kind == SkillKind::Persistent)
+		return IsPersistentSkillActive(player, skill.persistent()) ? SkillUsability::Ready : SkillUsability::Spirit;
 	if (skill.kind == SkillKind::Attack && !WeaponAllowsSkill(player, skill.attack()))
 		return SkillUsability::Weapon;
 	if (skill.kind == SkillKind::Spell && leveltype == DTYPE_TOWN && !GetSpellData(skill.spell()).isAllowedInTown())
@@ -139,6 +152,9 @@ SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill)
 {
 	const SkillSlot previous = player.poe2.skillSlots[slot];
 	player.poe2.skillSlots[slot] = skill;
+	// Spirit gems can change stats, like Purity of Elements' resistances.
+	if (previous.kind == SkillKind::Persistent || skill.kind == SkillKind::Persistent)
+		CalcPlrInv(player, false);
 	return previous;
 }
 
