@@ -626,6 +626,10 @@ enum item_effect_type : int8_t {
 	IPL_ACUNDEAD,
 	IPL_MANATOLIFE,
 	IPL_LIFETOMANA,
+	/** POE2 Mashup: regenerates life per second. */
+	IPL_LIFEREGEN,
+	/** POE2 Mashup: increased mana regeneration rate in percent. */
+	IPL_MANAREGEN,
 	IPL_INVALID = -1,
 };
 

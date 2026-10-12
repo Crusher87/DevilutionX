@@ -120,6 +120,13 @@ struct Poe2PlayerData {
 	uint8_t dashSkillTicks = 0;
 	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
 	uint8_t warcryTicks = 0;
+	/** @brief Life regenerated per second from gear (not saved; from CalcPlrItemVals). */
+	int lifeRegen = 0;
+	/** @brief Increased mana regeneration in percent from gear (not saved; from CalcPlrItemVals). */
+	int manaRegenBonus = 0;
+	/** @brief Fractions of a raw life and mana point carried to the next tick (not saved). */
+	int lifeRegenRemainder = 0;
+	int manaRegenRemainder = 0;
 
 	void clear()
 	{
@@ -135,6 +142,10 @@ struct Poe2PlayerData {
 		dashSkill = WeaponSkill::None;
 		dashSkillTicks = 0;
 		warcryTicks = 0;
+		lifeRegen = 0;
+		manaRegenBonus = 0;
+		lifeRegenRemainder = 0;
+		manaRegenRemainder = 0;
 	}
 
 	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }

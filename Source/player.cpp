@@ -48,6 +48,7 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/regen.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
@@ -3117,6 +3118,7 @@ void ProcessPlayers()
 			// Flasks refill in town, like in POE2.
 			if (gbIsPoe2 && player.isOnLevel(0))
 				RefillFlasks(player);
+			ApplyRegen(player);
 
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {

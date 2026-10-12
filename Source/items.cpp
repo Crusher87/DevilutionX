@@ -1029,6 +1029,12 @@ int SaveItemPower(const Player &player, Item &item, ItemPower &power)
 		item._iPLHP -= portion;
 		item._iPLMana += portion;
 	} break;
+	case IPL_LIFEREGEN:
+		item._iPLLifeRegen += r;
+		break;
+	case IPL_MANAREGEN:
+		item._iPLManaRegen += r;
+		break;
 	default:
 		break;
 	}
@@ -2555,12 +2561,14 @@ std::string GetRareItemName(const Item &item)
 
 void RestoreRareItemPowers(Item &item)
 {
-	if (item._iMagical != ITEM_QUALITY_RARE || Players.empty())
+	if (item._iMagical == ITEM_QUALITY_NORMAL || Players.empty())
 		return;
 	const uint32_t currentSeed = GetLCGEngineState();
 	Item regenerated;
 	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
 	item._iRarePowers = regenerated._iRarePowers;
+	item._iPLLifeRegen = regenerated._iPLLifeRegen;
+	item._iPLManaRegen = regenerated._iPLManaRegen;
 	SetRndSeed(currentSeed);
 }
 
@@ -3022,6 +3030,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	int maxFireDam = 0;
 	int minLightDam = 0;
 	int maxLightDam = 0;
+	int lifeRegen = 0;
+	int manaRegen = 0;
 
 	for (const Item &item : player.InvBody) {
 		if (!item.isEmpty() && item._iStatFlag) {
@@ -3058,6 +3068,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 				maxFireDam += item._iFMaxDam;
 				minLightDam += item._iLMinDam;
 				maxLightDam += item._iLMaxDam;
+				lifeRegen += item._iPLLifeRegen;
+				manaRegen += item._iPLManaRegen;
 			}
 		}
 	}
@@ -3072,6 +3084,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player.pDamAcFlags = damAcFlags;
 	player._pIBonusDamMod = damMod;
 	player._pIGetHit = getHit;
+	player.poe2.lifeRegen = lifeRegen;
+	player.poe2.manaRegenBonus = manaRegen;
 	CalcPlrLightRadius(player, lightRadius);
 	CalcPlrDamageMod(player);
 	player._pISpells = spells;
@@ -4297,6 +4311,10 @@ bool DoOil(Player &player, int cii)
 		return _("50% Mana moved to Health");
 	case IPL_LIFETOMANA:
 		return _("40% Health moved to Mana");
+	case IPL_LIFEREGEN:
+		return FormatRuntime(_("regenerate {:d} life per second"), item._iPLLifeRegen);
+	case IPL_MANAREGEN:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased mana regeneration"), item._iPLManaRegen);
 	default:
 		return _("Another ability (NW)");
 	}
