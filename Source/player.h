@@ -772,7 +772,7 @@ public:
 			return true;
 		if (_pmode == PM_RATTACK && AnimInfo.currentFrame >= _pAFNum)
 			return true;
-		if (_pmode == PM_SPELL && AnimInfo.currentFrame >= _pSFNum)
+		if (_pmode == PM_SPELL && AnimInfo.currentFrame >= (poe2.castSkill != WeaponSkill::None ? poe2.castFrame + 1 : _pSFNum))
 			return true;
 		if (isWalking() && AnimInfo.isLastFrame())
 			return true;

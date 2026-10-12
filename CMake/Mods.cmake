@@ -80,7 +80,8 @@ set(poe2_mod
   manifest.ini
   lua/mods/poe2/init.lua
   txtdata/items/itemdat.tsv
-  txtdata/items/item_suffixes.tsv)
+  txtdata/items/item_suffixes.tsv
+  txtdata/missiles/misdat.tsv)
 
 if(APPLE)
   foreach(asset_file ${poe2_mod})

@@ -5,14 +5,22 @@
  */
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <string_view>
 
+#include "engine/displacement.hpp"
+#include "engine/point.hpp"
 #include "poe2/player_data.hpp"
 
 namespace devilution {
 
 struct Item;
 struct Player;
+enum class player_graphic : uint8_t;
+
+/** @brief Where the arrows of Rain of Arrows come down, around the target. */
+constexpr std::array<Displacement, 9> RainOfArrowsVolley = { { { 0, 0 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 2 }, { -2, -2 }, { 2, -2 }, { -2, 2 } } };
 
 /** @brief The skill the given weapon grants, or WeaponSkill::None. */
 WeaponSkill WeaponSkillForItem(const Item &item);
@@ -50,5 +58,20 @@ int8_t WeaponSkillSkippedFrames(const Player &player);
 
 /** @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile. */
 int LightningArrowDamage(const Player &player);
+
+/**
+ * @brief Plays a skill's own animation (as PM_SPELL); the skill goes off on its action frame.
+ * @param graphic Attack for weapon skills, else one of the spell casting animations.
+ */
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target);
+
+/**
+ * @brief Makes a cast skill go off, on the action frame of its animation.
+ * @return true if the skill ended the animation early.
+ */
+bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target);
+
+/** @brief Plays the visual effects and sounds of a skill hitting or going off. */
+void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target);
 
 } // namespace devilution

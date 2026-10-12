@@ -120,6 +120,11 @@ struct Poe2PlayerData {
 	uint8_t dashSkillTicks = 0;
 	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
 	uint8_t warcryTicks = 0;
+	/** @brief Skill whose cast animation is playing; it goes off on castFrame (not saved). */
+	WeaponSkill castSkill = WeaponSkill::None;
+	int8_t castFrame = 0;
+	/** @brief The player_graphic of the cast skill's animation (not saved). */
+	uint8_t castGraphic = 0;
 	/** @brief Life regenerated per second from gear (not saved; from CalcPlrItemVals). */
 	int lifeRegen = 0;
 	/** @brief Increased mana regeneration in percent from gear (not saved; from CalcPlrItemVals). */
@@ -142,6 +147,8 @@ struct Poe2PlayerData {
 		dashSkill = WeaponSkill::None;
 		dashSkillTicks = 0;
 		warcryTicks = 0;
+		castSkill = WeaponSkill::None;
+		castFrame = 0;
 		lifeRegen = 0;
 		manaRegenBonus = 0;
 		lifeRegenRemainder = 0;

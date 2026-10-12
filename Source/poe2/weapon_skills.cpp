@@ -1,5 +1,8 @@
 #include "poe2/weapon_skills.hpp"
 
+#include <algorithm>
+#include <cstdlib>
+
 #include "cursor.h"
 #include "engine/backbuffer_state.hpp"
 #include "game_mode.hpp"
@@ -55,21 +58,25 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	if (!DashTowards(player, SkillTarget(player), tiles))
 		return false;
 	PaySkillMana(player, skill);
+	// Debris kicked up at take-off.
+	AddVisualEffect(player.position.tile, skill == WeaponSkill::LeapSlam ? MissileGraphicID::StoneCurseShatter : MissileGraphicID::BoneHit);
 	player.poe2.dashSkill = skill;
 	player.poe2.dashSkillTicks = DashSkillTimeoutTicks;
 	return true;
 }
 
-bool UseBattleCry(Player &player)
+bool CanStartSkill(const Player &player)
 {
-	PaySkillMana(player, WeaponSkill::BattleCry);
-	player.poe2.warcryTicks = BattleCryTicks;
-	player.Say(HeroSpeech::TimeToDie);
-	for (int i = 0; i < 8; i++) {
-		Monster *monster = FindMonsterAtPosition(player.position.tile + static_cast<Direction>(i));
-		if (monster != nullptr && !CanTalkToMonst(*monster) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
-			M_GetKnockback(*monster, player.position.tile);
-	}
+	return IsAnyOf(player._pmode, PM_STAND, PM_WALK_NORTHWARDS, PM_WALK_SOUTHWARDS, PM_WALK_SIDEWAYS) && !player.poe2.isDodging();
+}
+
+/** @brief Pays for the skill and plays its cast animation; it goes off on the action frame (see ExecuteSkillCast). */
+bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
+{
+	if (!CanStartSkill(player))
+		return false;
+	PaySkillMana(player, skill);
+	BeginSkillAnimation(player, skill, graphic, SkillTarget(player));
 	return true;
 }
 
@@ -85,32 +92,15 @@ void FireFan(const Player &player, Point target, MissileID missile, int count, i
 	}
 }
 
-bool UseEscapeShot(Player &player)
+/** @brief Plays an effect on every tile at the given distance around a tile. */
+void EffectRing(Point center, int radius, MissileGraphicID graphic, int delay)
 {
-	if (IsNoneOf(player._pmode, PM_STAND, PM_WALK_NORTHWARDS, PM_WALK_SOUTHWARDS, PM_WALK_SIDEWAYS))
-		return false;
-	const Point target = SkillTarget(player);
-	const Direction dir = GetDirection(player.position.tile, target);
-	const Point away = player.position.tile + Displacement { Opposite(dir) } * EscapeShotTiles;
-	if (!DashTowards(player, away, EscapeShotTiles))
-		return false;
-	PaySkillMana(player, WeaponSkill::EscapeShot);
-	// Arrows take their damage from the bow when they hit, like normal arrows.
-	FireFan(player, target, MissileID::Arrow, 3, 4, 0);
-	PlaySfxLoc(SfxID::ShootBow2, player.position.tile);
-	return true;
-}
-
-bool CastSkillFan(Player &player, WeaponSkill skill, MissileID missile, int count)
-{
-	if (IsNoneOf(player._pmode, PM_STAND, PM_WALK_NORTHWARDS, PM_WALK_SOUTHWARDS, PM_WALK_SIDEWAYS))
-		return false;
-	const Point target = SkillTarget(player);
-	PaySkillMana(player, skill);
-	player._pdir = GetDirection(player.position.tile, target);
-	// The missiles take their damage from Magic and the gem level, like the spells.
-	FireFan(player, target, missile, count, 0, GemSpellLevel(player.getCharacterLevel()));
-	return true;
+	for (int y = -radius; y <= radius; y++) {
+		for (int x = -radius; x <= radius; x++) {
+			if (std::max(std::abs(x), std::abs(y)) == radius)
+				AddVisualEffect(center + Displacement { x, y }, graphic, delay);
+		}
+	}
 }
 
 } // namespace
@@ -341,13 +331,13 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 	case WeaponSkill::ShieldCharge:
 		return StartDashSkill(player, skill, ShieldChargeTiles);
 	case WeaponSkill::BattleCry:
-		return UseBattleCry(player);
+		return StartSkillCast(player, skill, player_graphic::Magic);
 	case WeaponSkill::EscapeShot:
-		return UseEscapeShot(player);
+		return StartSkillCast(player, skill, player_graphic::Attack);
 	case WeaponSkill::EmberFusillade:
-		return CastSkillFan(player, skill, MissileID::Firebolt, 5);
+		return StartSkillCast(player, skill, player_graphic::Fire);
 	case WeaponSkill::Spark:
-		return CastSkillFan(player, skill, MissileID::ChargedBolt, 6);
+		return StartSkillCast(player, skill, player_graphic::Lightning);
 	default:
 		break;
 	}
@@ -386,6 +376,135 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
 	player.poe2.activeSkill = skill;
+}
+
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target)
+{
+	const Direction dir = target == player.position.tile ? player._pdir : GetDirection(player.position.tile, target);
+	const bool attack = graphic == player_graphic::Attack;
+	const int8_t actionFrame = attack ? player._pAFNum - 1 : player._pSFNum;
+	NewPlrAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, 0, attack ? player._pAFNum : player._pSFNum);
+	player._pmode = PM_SPELL;
+	FixPlayerLocation(player, dir);
+	FixPlrWalkTags(player);
+	player.occupyTile(player.position.tile, false);
+	SetPlayerOld(player);
+	player.position.temp = target;
+	player.poe2.castSkill = skill;
+	player.poe2.castFrame = actionFrame;
+	player.poe2.castGraphic = static_cast<uint8_t>(graphic);
+}
+
+bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
+{
+	PlaySkillEffects(player, skill, target);
+	switch (skill) {
+	case WeaponSkill::BattleCry:
+		player.poe2.warcryTicks = BattleCryTicks;
+		player.Say(HeroSpeech::TimeToDie);
+		for (int i = 0; i < 8; i++) {
+			Monster *monster = FindMonsterAtPosition(player.position.tile + static_cast<Direction>(i));
+			if (monster != nullptr && !CanTalkToMonst(*monster) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+				M_GetKnockback(*monster, player.position.tile);
+		}
+		return false;
+	case WeaponSkill::EmberFusillade:
+		// The missiles take their damage from Magic and the gem level, like the spells.
+		FireFan(player, target, MissileID::Firebolt, 5, 0, GemSpellLevel(player.getCharacterLevel()));
+		return false;
+	case WeaponSkill::Spark:
+		FireFan(player, target, MissileID::ChargedBolt, 6, 0, GemSpellLevel(player.getCharacterLevel()));
+		return false;
+	case WeaponSkill::EscapeShot: {
+		// Arrows take their damage from the bow when they hit, like normal arrows.
+		FireFan(player, target, MissileID::Arrow, 3, 4, 0);
+		PlaySfxLoc(SfxID::ShootBow2, player.position.tile);
+		// Leap back as soon as the arrows are loosed.
+		const Direction dir = GetDirection(player.position.tile, target);
+		StartStand(player, player._pdir);
+		player.poe2.castSkill = WeaponSkill::None;
+		DashTowards(player, player.position.tile + Displacement { Opposite(dir) } * EscapeShotTiles, EscapeShotTiles);
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
+void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
+{
+	const Point tile = player.position.tile;
+	const Direction dir = player._pdir;
+	switch (skill) {
+	case WeaponSkill::Cleave:
+		// A spray of sparks sweeping across the arc.
+		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 0, 3);
+		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 1, 5);
+		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 2, 3);
+		AddVisualEffect(tile + dir, MissileGraphicID::BloodHit, 2);
+		break;
+	case WeaponSkill::GroundSlam:
+		// The ground bursts in front and a shockwave of rubble rolls outwards.
+		AddVisualEffect(tile + dir, MissileGraphicID::ApocalypseBoom, 0, 8);
+		EffectRing(tile, 1, MissileGraphicID::StoneCurseShatter, 1);
+		EffectRing(tile, 2, MissileGraphicID::StoneCurseShatter, 4);
+		PlaySfxLoc(SfxID::SpellStoneCurse, tile);
+		break;
+	case WeaponSkill::WhirlingStaff:
+		// A ring of arcane light spins out around the player.
+		AddVisualEffect(tile, MissileGraphicID::FlashBottom, 0, 7);
+		AddVisualEffect(tile, MissileGraphicID::FlashTop);
+		PlaySfxLoc(SfxID::SpellNova, tile);
+		break;
+	case WeaponSkill::Flurry:
+		// One burst per strike.
+		AddVisualEffect(target, MissileGraphicID::MetalHit, 0, 4);
+		AddVisualEffect(target, MissileGraphicID::MetalHit, 3, 4);
+		AddVisualEffect(target, MissileGraphicID::BloodHit, 3);
+		break;
+	case WeaponSkill::LeapSlam:
+		// A fiery crater where the player lands.
+		AddVisualEffect(tile, MissileGraphicID::BigExplosion, 0, 10);
+		EffectRing(tile, 1, MissileGraphicID::StoneCurseShatter, 2);
+		EffectRing(tile, 2, MissileGraphicID::StoneCurseShatter, 5);
+		PlaySfxLoc(SfxID::BigExplosion, tile);
+		break;
+	case WeaponSkill::ShieldCharge:
+		// A blinding flash where the shield hits.
+		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 0, 8);
+		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 1);
+		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 1);
+		PlaySfxLoc(SfxID::SpellHolyBolt, tile);
+		break;
+	case WeaponSkill::BattleCry:
+		// A blood-red shockwave rolling out from the player.
+		AddVisualEffect(tile, MissileGraphicID::BloodStarExplosion, 0, 8);
+		EffectRing(tile, 1, MissileGraphicID::BloodStarExplosion, 2);
+		EffectRing(tile, 2, MissileGraphicID::BloodStarExplosion, 5);
+		PlaySfxLoc(SfxID::SpellBloodStar, tile);
+		break;
+	case WeaponSkill::Barrage:
+		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 4);
+		break;
+	case WeaponSkill::RainOfArrows:
+		// Arrowheads spark as the volley comes down.
+		for (size_t i = 0; i < RainOfArrowsVolley.size(); i++)
+			AddVisualEffect(target + RainOfArrowsVolley[i], MissileGraphicID::MetalHit, 6 + static_cast<int>(i), i == 0 ? 4 : 0);
+		break;
+	case WeaponSkill::EscapeShot:
+		AddVisualEffect(tile, MissileGraphicID::BoneHit, 0, 3);
+		break;
+	case WeaponSkill::EmberFusillade:
+		// Flames burst from the caster's hands.
+		AddVisualEffect(tile + dir, MissileGraphicID::MagmaBallExplosion, 0, 8);
+		break;
+	case WeaponSkill::Spark:
+		AddVisualEffect(tile + dir, MissileGraphicID::Lightning, 0, 8);
+		AddVisualEffect(tile, MissileGraphicID::Lightning, 2);
+		break;
+	default:
+		break;
+	}
 }
 
 int8_t WeaponSkillSkippedFrames(const Player &player)

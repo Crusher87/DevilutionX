@@ -2052,6 +2052,33 @@ void AddMissileExplosion(Missile &missile, AddMissileParameter &parameter)
 	missile.duration = missile._miAnimLen;
 }
 
+void AddVisualEffect(Missile &missile, AddMissileParameter &parameter)
+{
+	missile.position.tile = parameter.dst;
+	missile.position.start = parameter.dst;
+	// The graphic and the delay are packed into the spell level, the light radius is the damage.
+	const auto graphic = static_cast<MissileGraphicID>(missile._mispllvl & 0xFF);
+	if (graphic < MissileGraphicID::None)
+		missile.setAnimation(graphic);
+	missile.var1 = missile._mispllvl >> 8;
+	missile.var2 = missile._midam;
+	missile._midam = 0;
+	missile.var3 = 0;
+	missile._miDrawFlag = missile.var1 == 0;
+	missile.duration = std::max(missile._miAnimLen, 1) * std::max(missile._miAnimDelay, 1);
+}
+
+void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay, int light, Direction dir)
+{
+	// The effect missile only exists in the POE2 Mashup missile data.
+	if (!gbIsPoe2 || !InDungeonBounds(tile))
+		return;
+	// Monster-owned graphics are only loaded with their monster.
+	if (GetMissileSpriteData(graphic).flags == MissileGraphicsFlags::MonsterOwned)
+		return;
+	AddMissile(tile, tile, dir, MissileID::VisualEffect, TARGET_MONSTERS, -1, light, static_cast<int>(graphic) | (delay << 8));
+}
+
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter)
 {
 	bool isFireExplosion = parameter.dst.x == 1;
@@ -2925,8 +2952,11 @@ void ProcessElementalArrow(Missile &missile)
 			missile.setAnimation(eAnim);
 			CheckMissileCol(missile, damageType, eMind, eMaxd, false, missile.position.tile, true);
 			if (skillDamage > 0) {
-				for (int i = 0; i < 8; i++)
+				for (int i = 0; i < 8; i++) {
 					CheckMissileCol(missile, damageType, eMind, eMaxd, false, missile.position.tile + static_cast<Direction>(i), true);
+					// Forks of lightning crackle out to every side.
+					AddVisualEffect(missile.position.tile + static_cast<Direction>(i), MissileGraphicID::Lightning, i % 3, i == 0 ? 6 : 0);
+				}
 			}
 		} else {
 			if (missile.position.tile != Point { missile.var1, missile.var2 }) {
@@ -3640,6 +3670,34 @@ void ProcessMissileExplosion(Missile &missile)
 		missile.var1++;
 		PutMissile(missile);
 	}
+}
+
+void ProcessVisualEffect(Missile &missile)
+{
+	if (missile.var1 > 0) {
+		missile.var1--;
+		missile._miDrawFlag = false;
+		missile._miAnimFrame = 1;
+		missile._miAnimCnt = -1;
+		return;
+	}
+	missile._miDrawFlag = true;
+
+	missile.duration--;
+	if (missile.duration <= 0) {
+		missile._miDelFlag = true;
+		AddUnLight(missile._mlid);
+		return;
+	}
+	if (missile.var2 > 0) {
+		const int radius = std::max(missile.var2 - missile.var3 / 2, 0);
+		if (missile.var3 == 0)
+			missile._mlid = AddLight(missile.position.tile, radius);
+		else
+			ChangeLight(missile._mlid, missile.position.tile, radius);
+		missile.var3++;
+	}
+	PutMissile(missile);
 }
 
 void ProcessAcidSplate(Missile &missile)

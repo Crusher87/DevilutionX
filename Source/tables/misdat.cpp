@@ -216,6 +216,7 @@ std::expected<MissileData::AddFn, std::string> ParseMissileAddFn(std::string_vie
 	if (value == "AddLightningControl") return AddLightningControl;
 	if (value == "AddLightning") return AddLightning;
 	if (value == "AddMissileExplosion") return AddMissileExplosion;
+	if (value == "AddVisualEffect") return AddVisualEffect;
 	if (value == "AddWeaponExplosion") return AddWeaponExplosion;
 	if (value == "AddTownPortal") return AddTownPortal;
 	if (value == "AddFlashBottom") return AddFlashBottom;
@@ -287,6 +288,7 @@ std::expected<MissileData::ProcessFn, std::string> ParseMissileProcessFn(std::st
 	if (value == "ProcessChainLightning") return ProcessChainLightning;
 	if (value == "ProcessWeaponExplosion") return ProcessWeaponExplosion;
 	if (value == "ProcessMissileExplosion") return ProcessMissileExplosion;
+	if (value == "ProcessVisualEffect") return ProcessVisualEffect;
 	if (value == "ProcessAcidSplate") return ProcessAcidSplate;
 	if (value == "ProcessTeleport") return ProcessTeleport;
 	if (value == "ProcessStoneCurse") return ProcessStoneCurse;
@@ -390,7 +392,7 @@ void LoadMisdat()
 	}
 
 	// Sanity check because we do not actually parse the IDs yet.
-	assert(static_cast<size_t>(MissileID::LastDiablo) + 1 == MissilesData.size() || static_cast<size_t>(MissileID::LAST) + 1 == MissilesData.size());
+	assert(static_cast<size_t>(MissileID::LastDiablo) + 1 == MissilesData.size() || static_cast<size_t>(MissileID::LastHellfire) + 1 == MissilesData.size() || static_cast<size_t>(MissileID::LAST) + 1 == MissilesData.size());
 
 	MissilesData.shrink_to_fit();
 }
