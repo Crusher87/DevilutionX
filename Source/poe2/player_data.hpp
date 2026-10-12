@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "poe2/flasks.hpp"
 #include "tables/spelldat.h"
 
 namespace devilution {
@@ -48,6 +49,8 @@ static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
  */
 struct Poe2PlayerData {
 	std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> spellSupports {};
+	/** @brief Charges of the flasks in belt slots 1 to 4. */
+	std::array<uint8_t, NumFlasks> flaskCharges {};
 	/** @brief Game ticks left in the current dodge roll (not saved). */
 	uint8_t dodgeTicks = 0;
 	/** @brief Game ticks until the next dodge roll is allowed (not saved). */
@@ -63,6 +66,7 @@ struct Poe2PlayerData {
 	{
 		for (auto &supports : spellSupports)
 			supports.fill(SupportGem::None);
+		flaskCharges.fill(MaxFlaskCharges);
 		dodgeTicks = 0;
 		dodgeCooldown = 0;
 		pendingSkill = WeaponSkill::None;

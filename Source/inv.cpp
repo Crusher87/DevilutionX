@@ -26,6 +26,7 @@
 #include "engine/load_cel.hpp"
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
+#include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/size.hpp"
 #include "hwcursor.hpp"
@@ -37,6 +38,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/flasks.hpp"
 #include "poe2/support_gems.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -141,6 +143,25 @@ const Rectangle InvRect[] = {
 namespace {
 
 OptionalOwnedClxSpriteList pInvCels;
+
+/**
+ * @brief Draws a flask's charges as one pip per use along the bottom of its belt slot.
+ * @param position Bottom left corner of the slot.
+ */
+void DrawFlaskCharges(const Surface &out, Point position, uint8_t charges)
+{
+	constexpr int Uses = MaxFlaskCharges / FlaskChargesPerUse;
+	constexpr int PipWidth = 8;
+	constexpr int PipHeight = 3;
+	const int y = position.y - PipHeight - 1;
+	for (int use = 0; use < Uses; use++) {
+		const int x = position.x + 1 + (use * (PipWidth + 1));
+		FillRect(out, x, y, PipWidth, PipHeight, PAL16_GRAY + 14);
+		const int filled = std::clamp(charges - (use * FlaskChargesPerUse), 0, static_cast<int>(FlaskChargesPerUse));
+		if (filled > 0)
+			FillRect(out, x, y, (PipWidth * filled) / FlaskChargesPerUse, PipHeight, filled == FlaskChargesPerUse ? PAL16_YELLOW + 2 : PAL16_GRAY + 6);
+	}
+}
 
 /**
  * @brief Adds an item to a player's InvGrid array
@@ -1302,6 +1323,9 @@ void DrawInvBelt(const Surface &out)
 
 		DrawItem(myPlayer.SpdList[i], out, position, sprite);
 
+		if (IsFlaskSlot(myPlayer, static_cast<size_t>(i)))
+			DrawFlaskCharges(out, position, myPlayer.poe2.flaskCharges[i]);
+
 		if (myPlayer.SpdList[i].isUsable()
 		    && myPlayer.SpdList[i]._itype != ItemType::Gold) {
 			auto beltKey = StrCat("BeltItem", i + 1);
@@ -2161,6 +2185,12 @@ bool UseInvItem(int cii)
 
 		item = &player.SpdList[c];
 		speedlist = true;
+
+		// Flasks are drunk without using up the potion.
+		if (IsFlaskSlot(player, static_cast<size_t>(c))) {
+			UseFlask(player, static_cast<size_t>(c));
+			return true;
+		}
 
 		// If selected speedlist item exists in InvList, use the InvList item.
 		for (int i = 0; i < player._pNumInv && *GetOptions().Gameplay.autoRefillBelt; i++) {

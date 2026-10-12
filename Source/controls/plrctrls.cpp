@@ -47,6 +47,7 @@
 #include "panels/spell_icons.hpp"
 #include "panels/spell_list.hpp"
 #include "panels/ui_panels.hpp"
+#include "poe2/flasks.hpp"
 #include "qol/chatlog.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -2321,6 +2322,10 @@ void UseBeltItem(BeltItemType type)
 	for (int i = 0; i < MaxBeltItems; i++) {
 		const Item &item = MyPlayer->SpdList[i];
 		if (item.isEmpty()) {
+			continue;
+		}
+		// Skip flasks without enough charges so a potion further along the belt gets used.
+		if (IsFlaskSlot(*MyPlayer, static_cast<size_t>(i)) && !CanUseFlask(*MyPlayer, static_cast<size_t>(i))) {
 			continue;
 		}
 
