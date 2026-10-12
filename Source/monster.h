@@ -24,6 +24,7 @@
 #include "engine/world_tile.hpp"
 #include "game_mode.hpp"
 #include "levels/dun_tile.hpp"
+#include "poe2/monster_state.hpp"
 #include "tables/misdat.h"
 #include "tables/monstdat.h"
 #include "tables/spelldat.h"
@@ -210,7 +211,7 @@ struct CMonster {
 	}
 };
 
-extern CMonster LevelMonsterTypes[MaxLvlMTypes];
+extern DVL_API_FOR_TEST CMonster LevelMonsterTypes[MaxLvlMTypes];
 
 struct Monster { // note: missing field _mAFNum
 	std::unique_ptr<uint8_t[]> uniqueMonsterTRN;
@@ -276,6 +277,8 @@ struct Monster { // note: missing field _mAFNum
 	uint8_t uniqTrans;
 	int8_t corpseId;
 	int8_t whoHit;
+	/** @brief POE2 Mashup ailments and regeneration (not saved). */
+	Poe2MonsterState poe2;
 	uint8_t minDamage;
 	uint8_t maxDamage;
 	uint8_t minDamageSpecial;

@@ -796,6 +796,8 @@ void LoadMonsters(LoadHelper &file, ankerl::unordered_dense::set<unsigned> &remo
 		if (levelConversionData != nullptr)
 			monsterConversionData = &levelConversionData->monsterConversionData[ActiveMonsters[i]];
 		const bool valid = LoadMonster(&file, monster, monsterConversionData);
+		// Ailments don't carry over from whatever used this slot before.
+		monster.poe2 = {};
 		if (!valid) {
 			Monsters[ActiveMonsters[i]] = {};
 			removedMonsterIds.insert(ActiveMonsters[i]);

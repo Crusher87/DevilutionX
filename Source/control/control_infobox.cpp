@@ -7,6 +7,7 @@
 #include "options.h"
 #include "panels/partypanel.hpp"
 #include "panels/skill_bar.hpp"
+#include "poe2/monster_mods.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "qol/xpbar.h"
@@ -421,6 +422,23 @@ void DrawInfoBox(const Surface &out)
 				const Monster &monster = Monsters[pcursmonst];
 				InfoColor = UiFlags::ColorWhite;
 				InfoString = monster.name();
+				// POE2 Mashup: magic monsters show in blue and rares in yellow with their modifiers.
+				const MonsterAffixes affixes = GetMonsterAffixes(monster);
+				if (affixes.rarity == MonsterRarity::Rare) {
+					InfoColor = UiFlags::ColorYellow;
+					InfoString = RareMonsterName(monster);
+					AddInfoBoxString(monster.name());
+				} else if (affixes.rarity == MonsterRarity::Magic) {
+					InfoColor = UiFlags::ColorBlue;
+				}
+				for (uint8_t mod = 0; mod < static_cast<uint8_t>(MonsterMod::Count); mod++) {
+					if (affixes.has(static_cast<MonsterMod>(mod)))
+						AddInfoBoxString(MonsterModName(static_cast<MonsterMod>(mod)));
+				}
+				if (monster.poe2.igniteTicks > 0)
+					AddInfoBoxString(_("Ignited"));
+				if (monster.poe2.shockTicks > 0)
+					AddInfoBoxString(_("Shocked"));
 				if (monster.isUnique()) {
 					InfoColor = UiFlags::ColorWhitegold;
 					PrintUniqueHistory();

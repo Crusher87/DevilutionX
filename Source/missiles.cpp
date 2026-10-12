@@ -45,6 +45,7 @@
 #include "objects.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
@@ -322,9 +323,12 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		dam <<= 6;
 	if (resist)
 		dam >>= 2;
+	dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
 
-	if (&player == MyPlayer)
+	if (&player == MyPlayer) {
 		ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
+		TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam));
+	}
 
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
