@@ -270,6 +270,10 @@ struct Item {
 	enum item_effect_type _iSufPower = IPL_INVALID;
 	/** Affix powers of a rare item, in the order they were rolled. Not saved; restored from the item seed. */
 	std::array<item_effect_type, MaxRareAffixes> _iRarePowers = { IPL_INVALID, IPL_INVALID, IPL_INVALID, IPL_INVALID, IPL_INVALID, IPL_INVALID };
+	/** POE2 Mashup: affix tiers, 1 being the best; 0 when unknown. Not saved; restored from the item seed. */
+	uint8_t _iPreTier = 0;
+	uint8_t _iSufTier = 0;
+	std::array<uint8_t, MaxRareAffixes> _iRareTiers {};
 	int _iVAdd1 = 0;
 	int _iVMult1 = 0;
 	int _iVAdd2 = 0;
@@ -579,6 +583,11 @@ bool DoOil(Player &player, int cii);
 [[nodiscard]] StringOrView PrintItemPower(char plidx, const Item &item);
 void DrawUniqueInfo(const Surface &out);
 void PrintItemDetails(const Item &item);
+/**
+ * @brief POE2-style affix tier: 1 for the best affix of its kind, counting up for each lower level
+ * of affix with the same power that can roll on the same items.
+ */
+uint8_t AffixTier(const std::vector<PLStruct> &affixes, const PLStruct &affix);
 void PrintItemDur(const Item &item);
 void UseItem(Player &player, item_misc_id Mid, SpellID spellID, int spellFrom);
 bool UseItemOpensHive(const Item &item, Point position);

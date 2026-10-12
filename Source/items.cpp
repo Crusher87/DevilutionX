@@ -1351,6 +1351,7 @@ void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, 
 		const PLStruct &chosen = *roll.affix;
 		valueAdd += PLVal(roll.value, chosen.power.param1, chosen.power.param2, chosen.minVal, chosen.maxVal);
 		valueMult += chosen.multVal;
+		item._iRareTiers[numPowers] = AffixTier(roll.prefix ? ItemPrefixes : ItemSuffixes, chosen);
 		item._iRarePowers[numPowers++] = chosen.power.type;
 		if (roll.prefix && !hasPrefix) {
 			item._iPrePower = chosen.power.type;
@@ -1385,12 +1386,14 @@ void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, Affi
 		    item._iMagical = ITEM_QUALITY_MAGIC;
 		    SaveItemAffix(player, item, prefix);
 		    item._iPrePower = prefix.power.type;
+		    item._iPreTier = AffixTier(ItemPrefixes, prefix);
 		    pPrefix = &prefix;
 	    },
 	    [&item, &player, &pSufix](const PLStruct &suffix) {
 		    item._iMagical = ITEM_QUALITY_MAGIC;
 		    SaveItemAffix(player, item, suffix);
 		    item._iSufPower = suffix.power.type;
+		    item._iSufTier = AffixTier(ItemSuffixes, suffix);
 		    pSufix = &suffix;
 	    });
 
@@ -2625,6 +2628,9 @@ void RestoreRareItemPowers(Item &item)
 	Item regenerated;
 	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
 	item._iRarePowers = regenerated._iRarePowers;
+	item._iRareTiers = regenerated._iRareTiers;
+	item._iPreTier = regenerated._iPreTier;
+	item._iSufTier = regenerated._iSufTier;
 	item._iPLLifeRegen = regenerated._iPLLifeRegen;
 	item._iPLManaRegen = regenerated._iPLManaRegen;
 	SetRndSeed(currentSeed);
@@ -3293,6 +3299,9 @@ void InitializeItem(Item &item, _item_indexes itemData)
 	item._iIvalue = pAllItem.iValue;
 	item._iPrePower = IPL_INVALID;
 	item._iSufPower = IPL_INVALID;
+	item._iPreTier = 0;
+	item._iSufTier = 0;
+	item._iRareTiers.fill(0);
 	item._iMagical = ITEM_QUALITY_NORMAL;
 	item._iRarePowers.fill(IPL_INVALID);
 	item.IDidx = itemData;
@@ -3493,6 +3502,9 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 		item.dwBuff |= CF_POE2;
 	item._iPrePower = IPL_INVALID;
 	item._iSufPower = IPL_INVALID;
+	item._iPreTier = 0;
+	item._iSufTier = 0;
+	item._iRareTiers.fill(0);
 	item._iRarePowers.fill(IPL_INVALID);
 
 	if (item._iMiscId == IMISC_BOOK)
@@ -4500,6 +4512,34 @@ void PrintPoe2ItemDefense(const Item &item)
 }
 
 /** @brief POE2 Mashup: Vaal Orb corruption and the implicit it added. */
+uint8_t AffixTier(const std::vector<PLStruct> &affixes, const PLStruct &affix)
+{
+	// Count the distinct higher levels, so two affixes of the same level share a tier.
+	std::vector<int8_t> betterLevels;
+	for (const PLStruct &other : affixes) {
+		if (other.power.type != affix.power.type || other.PLMinLvl <= affix.PLMinLvl)
+			continue;
+		if ((other.PLIType & affix.PLIType) == AffixItemType::None || (other.PLGOE == GOE_EVIL) != (affix.PLGOE == GOE_EVIL))
+			continue;
+		if (std::find(betterLevels.begin(), betterLevels.end(), other.PLMinLvl) == betterLevels.end())
+			betterLevels.push_back(other.PLMinLvl);
+	}
+	return static_cast<uint8_t>(std::min<size_t>(betterLevels.size() + 1, UINT8_MAX));
+}
+
+namespace {
+
+/** @brief The affix text, with its POE2-style tier at the end. */
+std::string PrintItemPowerWithTier(item_effect_type power, const Item &item, uint8_t tier)
+{
+	std::string text { PrintItemPower(power, item).str() };
+	if (gbIsPoe2 && tier > 0)
+		text.append(FormatRuntime(" (T{:d})", tier));
+	return text;
+}
+
+} // namespace
+
 void PrintItemCorruption(const Item &item)
 {
 	if ((item.dwBuff & CF_POE2_CORRUPTED) == 0)
@@ -4584,16 +4624,16 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
 	if (item._iMagical == ITEM_QUALITY_RARE) {
-		for (const item_effect_type power : item._iRarePowers) {
-			if (power != IPL_INVALID)
-				AddItemInfoBoxString(PrintItemPower(power, item));
+		for (size_t i = 0; i < item._iRarePowers.size(); i++) {
+			if (item._iRarePowers[i] != IPL_INVALID)
+				AddItemInfoBoxString(PrintItemPowerWithTier(item._iRarePowers[i], item, item._iRareTiers[i]));
 		}
 	} else {
 		if (item._iPrePower != -1) {
-			AddItemInfoBoxString(PrintItemPower(item._iPrePower, item));
+			AddItemInfoBoxString(PrintItemPowerWithTier(item._iPrePower, item, item._iPreTier));
 		}
 		if (item._iSufPower != -1) {
-			AddItemInfoBoxString(PrintItemPower(item._iSufPower, item));
+			AddItemInfoBoxString(PrintItemPowerWithTier(item._iSufPower, item, item._iSufTier));
 		}
 	}
 	if (item._iMagical == ITEM_QUALITY_UNIQUE) {

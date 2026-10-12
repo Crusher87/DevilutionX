@@ -102,11 +102,34 @@ TEST_F(Poe2RareItemsTest, RaresRollWithDistinctAffixesAndRecreateIdentically)
 			// Saved levels don't store the affix list, so it's restored from the seed on load.
 			Item loaded = item;
 			loaded._iRarePowers.fill(IPL_INVALID);
+			loaded._iRareTiers.fill(0);
 			RestoreRareItemPowers(loaded);
 			EXPECT_EQ(loaded._iRarePowers, item._iRarePowers);
+			EXPECT_EQ(loaded._iRareTiers, item._iRareTiers);
+			for (size_t i = 0; i < MaxRareAffixes; i++)
+				EXPECT_EQ(item._iRarePowers[i] == IPL_INVALID, item._iRareTiers[i] == 0);
 		}
 	}
 	EXPECT_GT(rares, 100);
+}
+
+TEST_F(Poe2RareItemsTest, AffixTiersRankByLevel)
+{
+	// Of the strength suffixes that roll on the same items, the highest level one is tier 1.
+	const PLStruct *best = nullptr;
+	const PLStruct *worst = nullptr;
+	for (const PLStruct &affix : ItemSuffixes) {
+		if (affix.power.type != IPL_STR || affix.PLGOE == GOE_EVIL)
+			continue;
+		if (best == nullptr || affix.PLMinLvl > best->PLMinLvl)
+			best = &affix;
+		if (worst == nullptr || affix.PLMinLvl < worst->PLMinLvl)
+			worst = &affix;
+	}
+	ASSERT_NE(best, nullptr);
+	ASSERT_NE(best, worst);
+	EXPECT_EQ(AffixTier(ItemSuffixes, *best), 1);
+	EXPECT_GT(AffixTier(ItemSuffixes, *worst), 1);
 }
 
 TEST_F(Poe2RareItemsTest, MagicItemNamesStillTranslate)
