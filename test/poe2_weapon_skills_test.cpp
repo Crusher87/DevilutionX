@@ -1,0 +1,111 @@
+#include <string>
+
+#include <gtest/gtest.h>
+
+#include "engine/assets.hpp"
+#include "game_mode.hpp"
+#include "items.h"
+#include "player.h"
+#include "poe2/weapon_skills.hpp"
+#include "spells.h"
+
+namespace devilution {
+namespace {
+
+class Poe2WeaponSkillsTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		Players.resize(1);
+		MyPlayer = &Players[0];
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsPoe2 = true;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadSpellData();
+	}
+
+	void TearDown() override
+	{
+		gbIsPoe2 = false;
+		UnloadModArchives();
+	}
+
+	static Item MakeBase(std::string_view name)
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iName == name && AllItemsList[i].dropRate > 0) {
+				Item item;
+				InitializeItem(item, static_cast<_item_indexes>(i));
+				return item;
+			}
+		}
+		return {};
+	}
+};
+
+TEST_F(Poe2WeaponSkillsTest, WeaponTypesGrantSkills)
+{
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Dagger")), WeaponSkill::Flurry);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Long Sword")), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Battle Axe")), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Maul")), WeaponSkill::GroundSlam);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Long Bow")), WeaponSkill::Barrage);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Long Staff")), WeaponSkill::WhirlingStaff);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Buckler")), WeaponSkill::None);
+	EXPECT_EQ(WeaponSkillForItem(Item {}), WeaponSkill::None);
+
+	Player &player = *MyPlayer;
+	player = {};
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Long Bow");
+	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::Barrage);
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Maul");
+	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::GroundSlam);
+}
+
+TEST_F(Poe2WeaponSkillsTest, QueuedSkillPaysManaWhenTheAttackStarts)
+{
+	Player &player = *MyPlayer;
+	player = {};
+	player._pMana = Fixed26_6::fromInt(20);
+	player._pManaBase = Fixed26_6::fromInt(20);
+
+	// A melee skill isn't spent on a ranged attack.
+	player.poe2.pendingSkill = WeaponSkill::Cleave;
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::None);
+	EXPECT_EQ(player.poe2.pendingSkill, WeaponSkill::Cleave);
+
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::Cleave);
+	EXPECT_EQ(player.poe2.pendingSkill, WeaponSkill::None);
+	EXPECT_EQ(player._pMana.whole(), 20 - WeaponSkillManaCost(WeaponSkill::Cleave));
+
+	// The next plain attack is normal again.
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::None);
+
+	// Without enough mana the attack happens without the skill.
+	player._pMana = Fixed26_6::fromInt(1);
+	player.poe2.pendingSkill = WeaponSkill::GroundSlam;
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::None);
+	EXPECT_EQ(player._pMana.whole(), 1);
+}
+
+TEST_F(Poe2WeaponSkillsTest, QueuedSkillExpires)
+{
+	Poe2PlayerData data;
+	data.pendingSkill = WeaponSkill::Flurry;
+	data.pendingSkillTicks = 2;
+	data.tick();
+	EXPECT_EQ(data.pendingSkill, WeaponSkill::Flurry);
+	data.tick();
+	EXPECT_EQ(data.pendingSkill, WeaponSkill::None);
+}
+
+} // namespace
+} // namespace devilution

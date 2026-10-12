@@ -10,60 +10,13 @@
 #include <cstdint>
 #include <string_view>
 
+#include "poe2/player_data.hpp"
 #include "tables/spelldat.h"
 
 namespace devilution {
 
 struct Item;
 struct Player;
-
-enum class SupportGem : uint8_t {
-	None,
-	MultipleProjectiles,
-	Empower,
-	FasterCasting,
-	Efficiency,
-	Count,
-};
-
-constexpr size_t MaxSupportsPerSpell = 2;
-constexpr size_t MaxPoe2Spells = 64;
-static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
-
-/**
- * @brief All POE2 Mashup character state that isn't part of the original hero file.
- *
- * Saved in its own "poe2hero" entry of the hero save, so heroes stay loadable by other builds.
- */
-struct Poe2PlayerData {
-	std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> spellSupports {};
-	/** @brief Game ticks left in the current dodge roll (not saved). */
-	uint8_t dodgeTicks = 0;
-	/** @brief Game ticks until the next dodge roll is allowed (not saved). */
-	uint8_t dodgeCooldown = 0;
-
-	void clear()
-	{
-		for (auto &supports : spellSupports)
-			supports.fill(SupportGem::None);
-		dodgeTicks = 0;
-		dodgeCooldown = 0;
-	}
-
-	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }
-
-	/** @brief Advances the dodge roll timers by one game tick. */
-	void tick()
-	{
-		if (dodgeTicks > 0)
-			dodgeTicks--;
-		if (dodgeCooldown > 0)
-			dodgeCooldown--;
-	}
-
-	[[nodiscard]] const std::array<SupportGem, MaxSupportsPerSpell> &supportsFor(SpellID spell) const;
-	[[nodiscard]] bool hasSupport(SpellID spell, SupportGem gem) const;
-};
 
 enum class SupportLinkResult : uint8_t {
 	Linked,

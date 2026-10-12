@@ -33,6 +33,7 @@ set(tests
   poe2_admin_tools_test
   poe2_rare_items_test
   poe2_support_gems_test
+  poe2_weapon_skills_test
   player_test
   quests_test
   reencode_dun_cels_test

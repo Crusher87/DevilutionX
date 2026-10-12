@@ -48,6 +48,8 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
 #include "qol/stash.h"
 #include "spells.h"
@@ -198,6 +200,9 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 		skippedAnimationFrames = includesFirstFrame ? 1 : 0;
 	}
 
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	skippedAnimationFrames += WeaponSkillSkippedFrames(player);
+
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
@@ -225,6 +230,8 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 			skippedAnimationFrames += 1;
 		}
 	}
+
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
@@ -805,6 +812,9 @@ bool DoAttack(Player &player)
 
 		if (monster != nullptr) {
 			didhit = PlrHitMonst(player, *monster);
+			// POE2 Mashup: Flurry strikes twice.
+			if (player.poe2.activeSkill == WeaponSkill::Flurry && !monster->hasNoLife() && PlrHitMonst(player, *monster))
+				didhit = true;
 		} else if (PlayerAtPosition(position) != nullptr && !player.friendlyMode) {
 			didhit = PlrHitPlr(player, *PlayerAtPosition(position));
 		} else {
@@ -825,13 +835,15 @@ bool DoAttack(Player &player)
 			}
 		}
 
-		if (player.CanCleave()) {
-			// playing as a class/weapon with cleave
+		const WeaponSkill skill = player.poe2.activeSkill;
+		if (player.CanCleave() || skill == WeaponSkill::Cleave) {
+			// playing as a class/weapon with cleave; the Cleave skill hits the sides at full damage
+			const bool adjacentDamage = skill != WeaponSkill::Cleave;
 			position = player.position.tile + Right(player._pdir);
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
-					if (PlrHitMonst(player, *monster, true))
+					if (PlrHitMonst(player, *monster, adjacentDamage))
 						didhit = true;
 				}
 			}
@@ -839,9 +851,24 @@ bool DoAttack(Player &player)
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
-					if (PlrHitMonst(player, *monster, true))
+					if (PlrHitMonst(player, *monster, adjacentDamage))
 						didhit = true;
 				}
+			}
+		}
+
+		if (IsAnyOf(skill, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff)) {
+			// POE2 Mashup: hit everything around the player.
+			for (int i = 0; i < 8; i++) {
+				const auto dir = static_cast<Direction>(i);
+				position = player.position.tile + dir;
+				monster = FindMonsterAtPosition(position);
+				if (monster == nullptr || CanTalkToMonst(*monster))
+					continue;
+				if (dir != player._pdir && monster->position.old == position && PlrHitMonst(player, *monster))
+					didhit = true;
+				if (skill == WeaponSkill::GroundSlam && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+					M_GetKnockback(*monster, player.position.tile);
 			}
 		}
 
@@ -872,10 +899,24 @@ bool DoRangeAttack(Player &player)
 		arrows = 2;
 	}
 
+	// POE2 Mashup: Barrage fires a fan of five arrows.
+	const bool barrage = player.poe2.activeSkill == WeaponSkill::Barrage && arrows == 1;
+	if (barrage)
+		arrows = 5;
+
 	for (int arrow = 0; arrow < arrows; arrow++) {
 		int xoff = 0;
 		int yoff = 0;
-		if (arrows != 1) {
+		if (barrage) {
+			constexpr int Spread[] = { 0, -1, 1, -2, 2 };
+			const int angle = Spread[arrow];
+			const int x = player.position.temp.x - player.position.tile.x;
+			if (x != 0)
+				yoff = x < 0 ? angle : -angle;
+			const int y = player.position.temp.y - player.position.tile.y;
+			if (y != 0)
+				xoff = y < 0 ? -angle : angle;
+		} else if (arrows != 1) {
 			const int angle = arrow == 0 ? -1 : 1;
 			const int x = player.position.temp.x - player.position.tile.x;
 			if (x != 0)

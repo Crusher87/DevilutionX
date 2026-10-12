@@ -91,6 +91,7 @@
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -2068,6 +2069,14 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    IsGameRunning);
+	options.Keymapper.AddAction(
+	    "WeaponSkill",
+	    N_("Weapon Skill"),
+	    N_("Use the skill of the equipped weapon (POE2 Mashup)."),
+	    'E',
+	    [] { TryUseWeaponSkill(*MyPlayer); },
+	    nullptr,
+	    CanPlayerTakeAction);
 	options.Keymapper.AddAction(
 	    "Zoom",
 	    N_("Zoom"),

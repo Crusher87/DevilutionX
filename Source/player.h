@@ -27,7 +27,7 @@
 #include "levels/dun_tile.hpp"
 #include "levels/gendung.h"
 #include "multi.h"
-#include "poe2/support_gems.hpp"
+#include "poe2/player_data.hpp"
 #include "tables/playerdat.hpp"
 #include "tables/spelldat.h"
 #include "utils/attributes.h"
