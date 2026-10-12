@@ -86,6 +86,10 @@ SpellIcon AttackIcon(WeaponSkill skill)
 		return SpellIcon::Immolation;
 	case WeaponSkill::Flurry:
 		return SpellIcon::Jester;
+	case WeaponSkill::LeapSlam:
+		return SpellIcon::RedSkull;
+	case WeaponSkill::RainOfArrows:
+		return SpellIcon::FireCloud;
 	default:
 		return SpellIcon::Empty;
 	}

@@ -85,4 +85,23 @@ bool TryDodgeRoll(Player &player)
 	return true;
 }
 
+std::optional<Point> DashTowards(Player &player, Point target, int maxTiles)
+{
+	if (IsNoneOf(player._pmode, PM_STAND, PM_WALK_NORTHWARDS, PM_WALK_SOUTHWARDS, PM_WALK_SIDEWAYS))
+		return std::nullopt;
+
+	Point end = player.position.future;
+	int tiles = 0;
+	while (tiles < maxTiles && end != target && CanStepTo(player, end, GetDirection(end, target))) {
+		end += GetDirection(end, target);
+		tiles++;
+	}
+	if (tiles == 0)
+		return std::nullopt;
+
+	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
+	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, end);
+	return end;
+}
+
 } // namespace devilution

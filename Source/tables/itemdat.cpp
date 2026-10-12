@@ -470,6 +470,8 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SKILLGEM_BARRAGE") return IMISC_SKILLGEM_BARRAGE;
 	if (value == "SKILLGEM_WHIRL") return IMISC_SKILLGEM_WHIRL;
 	if (value == "SKILLGEM_FLURRY") return IMISC_SKILLGEM_FLURRY;
+	if (value == "SKILLGEM_LEAPSLAM") return IMISC_SKILLGEM_LEAPSLAM;
+	if (value == "SKILLGEM_RAINOFARROWS") return IMISC_SKILLGEM_RAINOFARROWS;
 	return std::unexpected("Unknown enum value");
 }
 

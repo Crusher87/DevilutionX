@@ -67,7 +67,7 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 		if (skill.kind == SkillKind::Spell)
 			EXPECT_EQ(AllItemsList[i].iMinMag, GetSpellData(skill.spell()).minInt) << AllItemsList[i].iName;
 	}
-	EXPECT_EQ(gems, 26);
+	EXPECT_EQ(gems, 28);
 }
 
 TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)
@@ -120,6 +120,11 @@ TEST_F(Poe2SkillGemsTest, WeaponsAllowMatchingSkills)
 	EXPECT_FALSE(ItemAllowsWeaponSkill(axe, WeaponSkill::Flurry));
 
 	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::Barrage));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::RainOfArrows));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Maul"), WeaponSkill::LeapSlam));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(axe, WeaponSkill::LeapSlam));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::LeapSlam));
+	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::RainOfArrows));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Buckler"), WeaponSkill::Cleave));
 }
 

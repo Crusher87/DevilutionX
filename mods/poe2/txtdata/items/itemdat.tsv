@@ -201,3 +201,5 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Blood Star Gem	Gem	28	0	0	0	0	0	0	70	0		SKILLGEM_SPELL	BloodStar	true	2400
 	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Nova Gem	Gem	28	0	0	0	0	0	0	87	0		SKILLGEM_SPELL	Nova	true	2400
 	1	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Teleport Gem	Gem	28	0	0	0	0	0	0	105	0		SKILLGEM_SPELL	Teleport	true	2400
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Leap Slam Gem	Gem	6	0	0	0	0	0	35	0	0		SKILLGEM_LEAPSLAM	Null	true	1200
+	1	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Rain of Arrows Gem	Gem	6	0	0	0	0	0	0	0	45		SKILLGEM_RAINOFARROWS	Null	true	1200
