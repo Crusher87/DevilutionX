@@ -79,7 +79,8 @@ endif()
 set(poe2_mod
   manifest.ini
   lua/mods/poe2/init.lua
-  txtdata/items/itemdat.tsv)
+  txtdata/items/itemdat.tsv
+  txtdata/items/item_suffixes.tsv)
 
 if(APPLE)
   foreach(asset_file ${poe2_mod})

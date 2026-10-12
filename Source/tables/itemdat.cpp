@@ -554,6 +554,8 @@ std::expected<item_effect_type, std::string> ParseItemEffectType(std::string_vie
 	if (value == "LIGHTRES_CURSE") return IPL_LIGHTRES_CURSE;
 	if (value == "MAGICRES_CURSE") return IPL_MAGICRES_CURSE;
 	if (value == "DEVASTATION") return IPL_DEVASTATION;
+	if (value == "LIFEREGEN") return IPL_LIFEREGEN;
+	if (value == "MANAREGEN") return IPL_MANAREGEN;
 	if (value == "DECAY") return IPL_DECAY;
 	if (value == "PERIL") return IPL_PERIL;
 	if (value == "JESTERS") return IPL_JESTERS;

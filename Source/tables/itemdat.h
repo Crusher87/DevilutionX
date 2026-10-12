@@ -15,6 +15,7 @@
 
 #include "tables/objdat.h"
 #include "tables/spelldat.h"
+#include "utils/attributes.h"
 
 namespace devilution {
 
@@ -626,6 +627,10 @@ enum item_effect_type : int8_t {
 	IPL_ACUNDEAD,
 	IPL_MANATOLIFE,
 	IPL_LIFETOMANA,
+	/** POE2 Mashup: regenerates life per second. */
+	IPL_LIFEREGEN,
+	/** POE2 Mashup: increased mana regeneration rate in percent. */
+	IPL_MANAREGEN,
 	IPL_INVALID = -1,
 };
 
@@ -681,7 +686,7 @@ struct UniqueItem {
 extern DVL_API_FOR_TEST std::vector<ItemData> AllItemsList;
 extern ankerl::unordered_dense::map<int32_t, int16_t> ItemMappingIdsToIndices;
 extern std::vector<PLStruct> ItemPrefixes;
-extern std::vector<PLStruct> ItemSuffixes;
+extern DVL_API_FOR_TEST std::vector<PLStruct> ItemSuffixes;
 extern DVL_API_FOR_TEST std::vector<UniqueItem> UniqueItems;
 extern ankerl::unordered_dense::map<int32_t, int32_t> UniqueItemMappingIdsToIndices;
 

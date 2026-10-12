@@ -254,6 +254,10 @@ struct Item {
 	int16_t _iLMinDam = 0;
 	int16_t _iLMaxDam = 0;
 	int16_t _iPLEnAc = 0;
+	/** POE2 Mashup: life regenerated per second. Not saved; restored from the item seed. */
+	int16_t _iPLLifeRegen = 0;
+	/** POE2 Mashup: increased mana regeneration in percent. Not saved; restored from the item seed. */
+	int16_t _iPLManaRegen = 0;
 	enum item_effect_type _iPrePower = IPL_INVALID;
 	enum item_effect_type _iSufPower = IPL_INVALID;
 	/** Affix powers of a rare item, in the order they were rolled. Not saved; restored from the item seed. */
@@ -606,7 +610,7 @@ void UpdateHellfireFlag(Item &item, const char *identifiedItemName);
 std::string GetRareItemName(const Item &item);
 
 /**
- * @brief POE2 Mashup: refills Item::_iRarePowers (which is not saved) by regenerating the item from its seed.
+ * @brief POE2 Mashup: refills the affix data that isn't saved (rare powers, regeneration) by regenerating the item from its seed.
  */
 void RestoreRareItemPowers(Item &item);
 
