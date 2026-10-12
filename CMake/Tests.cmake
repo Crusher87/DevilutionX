@@ -32,6 +32,7 @@ set(tests
   pack_test
   poe2_admin_tools_test
   poe2_currency_test
+  poe2_flasks_test
   poe2_rare_items_test
   poe2_support_gems_test
   poe2_weapon_skills_test

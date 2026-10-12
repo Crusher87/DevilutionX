@@ -68,6 +68,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/currency.hpp"
+#include "poe2/flasks.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
@@ -1929,6 +1930,8 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(_("Use, then click the item to craft"));
 		return;
 	}
+	if (gbIsPoe2 && IsFlaskPotion(item))
+		AddItemInfoBoxString(_("Flask in belt slots 1-4, refills from kills"));
 	if (item._iMiscId == IMISC_EAR) {
 		AddItemInfoBoxString(FormatRuntime(pgettext("player", "Level: {:d}"), item._ivalue));
 		return;

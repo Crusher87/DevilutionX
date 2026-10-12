@@ -3068,6 +3068,9 @@ void ProcessPlayers()
 			}
 
 			player.poe2.tick();
+			// Flasks refill in town, like in POE2.
+			if (gbIsPoe2 && player.isOnLevel(0))
+				RefillFlasks(player);
 
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {
