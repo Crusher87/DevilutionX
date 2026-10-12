@@ -791,6 +791,21 @@ bool PlrHitObj(const Player &player, Object &targetObject)
 	return false;
 }
 
+/** @brief POE2 Mashup Leap Slam: hits everything around the landing spot and knocks it back. */
+void LeapSlamLanding(Player &player)
+{
+	PlaySfxLoc(SfxID::Swing, player.position.tile);
+	for (int i = 0; i < 8; i++) {
+		const Point position = player.position.tile + static_cast<Direction>(i);
+		Monster *monster = FindMonsterAtPosition(position);
+		if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
+			continue;
+		PlrHitMonst(player, *monster);
+		if (!monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+			M_GetKnockback(*monster, player.position.tile);
+	}
+}
+
 bool DoAttack(Player &player)
 {
 	if (player.AnimInfo.currentFrame == player._pAFNum - 2) {
@@ -899,15 +914,22 @@ bool DoRangeAttack(Player &player)
 		arrows = 2;
 	}
 
-	// POE2 Mashup: Barrage fires a fan of five arrows.
+	// POE2 Mashup: Barrage fires a fan of five arrows, Rain of Arrows a volley over the target's area.
 	const bool barrage = player.poe2.activeSkill == WeaponSkill::Barrage && arrows == 1;
 	if (barrage)
 		arrows = 5;
+	const bool rain = player.poe2.activeSkill == WeaponSkill::RainOfArrows && arrows == 1;
+	if (rain)
+		arrows = 9;
 
 	for (int arrow = 0; arrow < arrows; arrow++) {
 		int xoff = 0;
 		int yoff = 0;
-		if (barrage) {
+		if (rain) {
+			constexpr Displacement Volley[] = { { 0, 0 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 2 }, { -2, -2 }, { 2, -2 }, { -2, 2 } };
+			xoff = Volley[arrow].deltaX;
+			yoff = Volley[arrow].deltaY;
+		} else if (barrage) {
 			constexpr int Spread[] = { 0, -1, 1, -2, 2 };
 			const int angle = Spread[arrow];
 			const int x = player.position.temp.x - player.position.tile.x;
@@ -3068,6 +3090,15 @@ void ProcessPlayers()
 			}
 
 			player.poe2.tick();
+			// A Leap Slam lands once the dash is over.
+			if (player.poe2.leapSlamTicks > 0) {
+				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {
+					player.poe2.leapSlamTicks = 0;
+					LeapSlamLanding(player);
+				} else {
+					player.poe2.leapSlamTicks--;
+				}
+			}
 			// Flasks refill in town, like in POE2.
 			if (gbIsPoe2 && player.isOnLevel(0))
 				RefillFlasks(player);

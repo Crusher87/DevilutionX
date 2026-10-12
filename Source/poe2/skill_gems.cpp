@@ -24,6 +24,10 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForAttack(WeaponSkill::WhirlingStaff);
 	case IMISC_SKILLGEM_FLURRY:
 		return SkillSlot::ForAttack(WeaponSkill::Flurry);
+	case IMISC_SKILLGEM_LEAPSLAM:
+		return SkillSlot::ForAttack(WeaponSkill::LeapSlam);
+	case IMISC_SKILLGEM_RAINOFARROWS:
+		return SkillSlot::ForAttack(WeaponSkill::RainOfArrows);
 	default:
 		return {};
 	}

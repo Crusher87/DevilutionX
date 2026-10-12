@@ -5,6 +5,10 @@
  */
 #pragma once
 
+#include <optional>
+
+#include "engine/point.hpp"
+
 namespace devilution {
 
 struct Player;
@@ -17,6 +21,12 @@ constexpr int DodgeRollTiles = 3;
  * @return true if the roll started.
  */
 bool TryDodgeRoll(Player &player);
+
+/**
+ * @brief Dashes in a straight line towards a tile, untouchable like a dodge roll, e.g. for Leap Slam.
+ * @return Where the dash ends, or nothing if the way is blocked.
+ */
+std::optional<Point> DashTowards(Player &player, Point target, int maxTiles);
 
 /** @brief Animation frames skipped per tile while rolling, so the roll moves quickly. */
 constexpr int DodgeRollSkippedWalkFrames = 4;

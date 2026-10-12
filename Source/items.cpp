@@ -4335,7 +4335,7 @@ void PrintItemImplicits(const Item &item)
 {
 	if (gbIsPoe2) {
 		std::string skills;
-		for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Flurry); i++) {
+		for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Last); i++) {
 			const auto skill = static_cast<WeaponSkill>(i);
 			if (ItemAllowsWeaponSkill(item, skill))
 				StrAppend(skills, skills.empty() ? "" : ", ", WeaponSkillName(skill));

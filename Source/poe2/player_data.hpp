@@ -28,6 +28,11 @@ enum class WeaponSkill : uint8_t {
 	WhirlingStaff,
 	/** Daggers: a very fast double strike. */
 	Flurry,
+	/** Maces, axes, swords and staves: leaps to the target and slams the ground there. */
+	LeapSlam,
+	/** Bows: a volley of arrows over an area. */
+	RainOfArrows,
+	Last = RainOfArrows,
 };
 
 enum class SupportGem : uint8_t {
@@ -97,6 +102,8 @@ struct Poe2PlayerData {
 	uint8_t pendingSkillTicks = 0;
 	/** @brief Weapon skill used by the attack in progress (not saved). */
 	WeaponSkill activeSkill = WeaponSkill::None;
+	/** @brief Game ticks a Leap Slam may take to land before it's dropped; 0 if not leaping (not saved). */
+	uint8_t leapSlamTicks = 0;
 
 	void clear()
 	{
@@ -109,6 +116,7 @@ struct Poe2PlayerData {
 		pendingSkill = WeaponSkill::None;
 		pendingSkillTicks = 0;
 		activeSkill = WeaponSkill::None;
+		leapSlamTicks = 0;
 	}
 
 	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }

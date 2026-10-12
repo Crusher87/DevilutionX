@@ -5,10 +5,12 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "levels/dun_tile_data.hpp"
+#include "monster.h"
 #include "msg.h"
 #include "multi.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/dodge_roll.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -19,6 +21,25 @@ namespace {
 
 /** A queued skill is dropped if no attack starts within this many game ticks. */
 constexpr uint8_t PendingSkillTicks = 40;
+constexpr int LeapSlamTiles = 5;
+/** Game ticks a Leap Slam may take to land before it's dropped. */
+constexpr uint8_t LeapSlamTimeoutTicks = 40;
+
+bool StartLeapSlam(Player &player)
+{
+	Point target = pcursmonst != -1 ? static_cast<Point>(Monsters[pcursmonst].position.tile) : cursPosition;
+	if (!InDungeonBounds(target))
+		target = player.position.tile + player._pdir;
+	if (!DashTowards(player, target, LeapSlamTiles))
+		return false;
+
+	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(WeaponSkill::LeapSlam));
+	player._pMana -= cost;
+	player._pManaBase -= cost;
+	RedrawComponent(PanelDrawComponent::Mana);
+	player.poe2.leapSlamTicks = LeapSlamTimeoutTicks;
+	return true;
+}
 
 } // namespace
 
@@ -65,6 +86,10 @@ std::string_view WeaponSkillName(WeaponSkill skill)
 		return _("Whirling Staff");
 	case WeaponSkill::Flurry:
 		return _("Flurry");
+	case WeaponSkill::LeapSlam:
+		return _("Leap Slam");
+	case WeaponSkill::RainOfArrows:
+		return _("Rain of Arrows");
 	default:
 		return {};
 	}
@@ -83,6 +108,10 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 		return _("Hits everything around you");
 	case WeaponSkill::Flurry:
 		return _("Very fast double strike");
+	case WeaponSkill::LeapSlam:
+		return _("Leap to the target, slam all around");
+	case WeaponSkill::RainOfArrows:
+		return _("A volley of arrows over an area");
 	default:
 		return {};
 	}
@@ -101,6 +130,10 @@ int WeaponSkillManaCost(WeaponSkill skill)
 		return 6;
 	case WeaponSkill::Flurry:
 		return 4;
+	case WeaponSkill::LeapSlam:
+		return 10;
+	case WeaponSkill::RainOfArrows:
+		return 12;
 	default:
 		return 0;
 	}
@@ -108,7 +141,7 @@ int WeaponSkillManaCost(WeaponSkill skill)
 
 bool IsRangedWeaponSkill(WeaponSkill skill)
 {
-	return skill == WeaponSkill::Barrage;
+	return IsAnyOf(skill, WeaponSkill::Barrage, WeaponSkill::RainOfArrows);
 }
 
 bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
@@ -120,6 +153,10 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 		return IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe);
 	case WeaponSkill::Flurry:
 		return item._itype == ItemType::Sword;
+	case WeaponSkill::LeapSlam:
+		return IsAnyOf(item._itype, ItemType::Mace, ItemType::Axe, ItemType::Sword, ItemType::Staff);
+	case WeaponSkill::RainOfArrows:
+		return item._itype == ItemType::Bow;
 	default:
 		return skill != WeaponSkill::None && WeaponSkillForItem(item) == skill;
 	}
@@ -143,6 +180,10 @@ std::string_view WeaponSkillWeapons(WeaponSkill skill)
 		return _("staff");
 	case WeaponSkill::Flurry:
 		return _("sword or dagger");
+	case WeaponSkill::LeapSlam:
+		return _("melee weapon");
+	case WeaponSkill::RainOfArrows:
+		return _("bow");
 	default:
 		return {};
 	}
@@ -164,6 +205,9 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		EventPlrMsg(FormatRuntime(_("Not enough mana for {:s}."), WeaponSkillName(skill)), UiFlags::ColorRed);
 		return false;
 	}
+
+	if (skill == WeaponSkill::LeapSlam)
+		return StartLeapSlam(player);
 
 	player.poe2.pendingSkill = skill;
 	player.poe2.pendingSkillTicks = PendingSkillTicks;
