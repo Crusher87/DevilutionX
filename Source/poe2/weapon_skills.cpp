@@ -17,6 +17,7 @@
 #include "plrmsg.h"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -51,6 +52,7 @@ void PaySkillMana(Player &player, WeaponSkill skill)
 	player._pManaBase -= cost;
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
+	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole());
 }
 
 /** @brief Dashes at the target; the skill hits when the dash lands (see ProcessPlayers). */
@@ -327,6 +329,7 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		return false;
 	}
 	if (player._pMana < Fixed26_6::fromInt(WeaponSkillManaCost(player, skill))) {
+		TelemetrySkillFailed(player, WeaponSkillName(skill), "not enough mana");
 		EventPlrMsg(FormatRuntime(_("Not enough mana for {:s}."), WeaponSkillName(skill)), UiFlags::ColorRed);
 		return false;
 	}
@@ -375,12 +378,15 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player.poe2.pendingSkillTicks = 0;
 
 	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
-	if (player._pMana < cost)
+	if (player._pMana < cost) {
+		TelemetrySkillFailed(player, WeaponSkillName(skill), "not enough mana when the attack landed");
 		return;
+	}
 	player._pMana -= cost;
 	player._pManaBase -= cost;
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
+	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole());
 	player.poe2.activeSkill = skill;
 }
 

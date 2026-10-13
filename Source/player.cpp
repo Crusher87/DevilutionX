@@ -54,6 +54,7 @@
 #include "poe2/regen.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
 #include "qol/stash.h"
@@ -2551,6 +2552,7 @@ void NextPlrLevel(Player &player)
 	CalcPlrInv(player, true);
 	PlaySFX(SfxID::ItemArmor);
 	PlaySFX(SfxID::ItemSign);
+	TelemetryLevelUp(player);
 }
 
 void Player::_addExperience(uint32_t experience, int levelDelta)
@@ -2821,6 +2823,7 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 	}
 
 	if (&player == MyPlayer) {
+		TelemetryPlayerDied(player);
 		NetSendCmdParam1(true, CMD_PLRDEAD, static_cast<uint16_t>(deathReason));
 		gamemenu_off();
 	}
@@ -2985,8 +2988,10 @@ void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int mi
 		}
 	}
 
-	if (totalDamage == 0)
+	if (totalDamage == 0) {
+		TelemetryPlayerDamaged(player, damageType, totalDamage);
 		return;
+	}
 
 	RedrawComponent(PanelDrawComponent::Health);
 	player._pHitPoints -= totalDamage;
@@ -2999,6 +3004,7 @@ void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int mi
 	if (player._pHitPoints < minHitPoints) {
 		SetPlayerHitPoints(player, minHitPoints);
 	}
+	TelemetryPlayerDamaged(player, damageType, totalDamage);
 	if (player.hasNoLife()) {
 		SyncPlrKill(player, deathReason);
 	}
@@ -3355,6 +3361,7 @@ void CheckPlrSpell(bool isShiftHeld, SpellID spellID, SpellType spellType)
 		if (spellType == SpellType::Spell) {
 			switch (spellcheck) {
 			case SpellCheckResult::Fail_NoMana:
+				TelemetrySkillFailed(myPlayer, GetSpellData(spellID).sNameText, "not enough mana");
 				myPlayer.Say(HeroSpeech::NotEnoughMana);
 				break;
 			case SpellCheckResult::Fail_Level0:

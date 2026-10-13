@@ -48,6 +48,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
 #include "tables/misdat.h"
@@ -1206,6 +1207,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (monster != nullptr) {
 		MonsterReducePlayerAttribute(*monster, player);
 	}
+	if (&player == MyPlayer)
+		TelemetryNoteAttacker(monster != nullptr ? monster->name() : "a trap");
 
 	if (resper > 0 || (gbIsPoe2 && resper < 0)) { // POE2 Mashup: negative resistance adds damage
 		damage -= damage * resper / 100;

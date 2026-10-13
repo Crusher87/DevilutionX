@@ -46,6 +46,7 @@
 #include "poe2/hud_globes.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -1716,6 +1717,7 @@ void InvGetItem(Player &player, int ii)
 	item._iCreateInfo &= ~CF_PREGEN;
 	CheckQuestItem(player, item);
 	item.updateRequiredStatsCacheForPlayer(player);
+	TelemetryItemPickedUp(player, item);
 
 	if (item._itype == ItemType::Gold && GoldAutoPlace(player, item)) {
 		if (MyPlayer == &player) {
@@ -1815,6 +1817,7 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 			PlaySFX(SfxID::GrabItem);
 		}
 
+		TelemetryItemPickedUp(player, item);
 		CleanupItems(ii);
 		return;
 	}

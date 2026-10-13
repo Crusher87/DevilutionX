@@ -12,6 +12,7 @@
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -318,6 +319,10 @@ bool UseFlask(Player &player, size_t beltSlot)
 	const bool canGainMana = !HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana);
 	const bool life = IsRejuvenation(flask) || RecoversLife(flask);
 	const bool mana = IsRejuvenation(flask) || !RecoversLife(flask);
+	if (&player == MyPlayer) {
+		const auto percent = [](Fixed26_6 value, Fixed26_6 max) { return max > 0 ? static_cast<int>(static_cast<int64_t>(value.raw()) * 100 / max.raw()) : 100; };
+		TelemetryFlaskUsed(player, flask, player.poe2.flaskCharges[beltSlot], life, mana, percent(player._pHitPoints, player._pMaxHP), percent(player._pMana, player._pMaxMana));
+	}
 	int recoveryTicks = 0;
 	if (life) {
 		const int32_t raw = Fixed26_6::fromInt(effect.life).raw();

@@ -59,8 +59,12 @@ void FreeDlg()
 
 } // namespace
 
+void (*FatalErrorHook)(std::string_view message) = nullptr;
+
 void DisplayFatalErrorAndExit(std::string_view title, std::string_view body)
 {
+	if (FatalErrorHook != nullptr)
+		FatalErrorHook(StrCat(title, ": ", body));
 	FreeDlg();
 	UiErrorOkDialog(title, body);
 	diablo_quit(1);

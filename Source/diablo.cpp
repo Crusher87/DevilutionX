@@ -98,6 +98,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
@@ -956,6 +957,7 @@ void RunGameLoop(interface_mode uMsg)
 
 	nthread_ignore_mutex(true);
 	StartGame(uMsg);
+	TelemetryGameStarted(*MyPlayer, uMsg == WM_DIABLOADGAME);
 	assert(HeadlessMode || ghMainWnd);
 	EventHandler previousHandler = SetEventHandler(GameEventHandler);
 	run_delta_info();
@@ -1052,6 +1054,7 @@ void RunGameLoop(interface_mode uMsg)
 	scrollrt_draw_game_screen();
 	previousHandler = SetEventHandler(previousHandler);
 	assert(HeadlessMode || previousHandler == GameEventHandler);
+	TelemetryGameEnded();
 	FreeGame();
 
 	if (cineflag) {
@@ -1615,6 +1618,7 @@ void GameLogic()
 		gGameLogicStep = GameLogicStep::ProcessPlayers;
 		ProcessPlayers();
 	}
+	TelemetryTick();
 	if (leveltype != DTYPE_TOWN) {
 		gGameLogicStep = GameLogicStep::ProcessMonsters;
 #ifdef _DEBUG
@@ -2918,6 +2922,7 @@ int DiabloMain(int argc, char **argv)
 	// Read settings including translation next. This will use the presence of fonts.mpq and look for assets in devilutionx.mpq
 	LoadOptions();
 	if (demo::IsRunning()) demo::OverrideOptions();
+	if (!demo::IsRunning()) TelemetryInit();
 
 	// Then look for a voice pack file based on the selected translation
 	LoadLanguageArchive();
@@ -3657,6 +3662,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	LoadGameLevelCalculateCursor();
 	UpdateResistancePenalty(*MyPlayer);
 	UpdateActiveMap(*MyPlayer);
+	TelemetryLevelEntered();
 	return {};
 }
 
