@@ -82,7 +82,9 @@ enum class PersistentSkill : uint8_t {
 	PurityOfElements,
 	/** A golem that fights at your side and comes back when it dies. */
 	SummonGolem,
-	Last = SummonGolem,
+	/** Skeletal warriors that fight at your side and rise again when they fall. */
+	SkeletalWarriors,
+	Last = SkeletalWarriors,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -187,6 +189,8 @@ struct Poe2PlayerData {
 	int energyShieldRemainder = 0;
 	/** @brief Game ticks before Summon Golem brings the golem back (not saved). */
 	uint8_t golemCooldown = 0;
+	/** @brief Game ticks before Skeletal Warriors raises the next skeleton (not saved). */
+	uint8_t skeletonCooldown = 0;
 	/** @brief Resistance penalty the resistances were last calculated with; -1 before the first level loads (not saved). */
 	int resistancePenalty = -1;
 
@@ -219,6 +223,7 @@ struct Poe2PlayerData {
 		energyShieldRechargeTicks = 0;
 		energyShieldRemainder = 0;
 		golemCooldown = 0;
+		skeletonCooldown = 0;
 		resistancePenalty = -1;
 	}
 

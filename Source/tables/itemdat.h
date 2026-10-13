@@ -533,6 +533,7 @@ enum item_misc_id : int8_t {
 	IMISC_SPIRITGEM_HERALDTHUNDER,
 	IMISC_SPIRITGEM_PURITY,
 	IMISC_SPIRITGEM_GOLEM,
+	IMISC_SPIRITGEM_SKELETONS,
 	IMISC_SKILLGEMLAST,
 	/** Cut into a skill gem of up to the item's level at the gemcutting panel. */
 	IMISC_UNCUT_SKILL,

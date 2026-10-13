@@ -242,3 +242,4 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Knockback Support	Gem	2	0	0	0	0	0	0	0	0		SUPPORT_KNOCKBACK	Null	true	800
 	3	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Uncut Skill Gem	Uncut Gem	1	0	0	0	0	0	0	0	0		UNCUT_SKILL	Null	true	400
 	2	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Uncut Support Gem	Uncut Gem	1	0	0	0	0	0	0	0	0		UNCUT_SUPPORT	Null	true	400
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Warriors Gem	Gem	3	0	0	0	0	0	0	25	0		SPIRITGEM_SKELETONS	Null	true	1000

@@ -553,6 +553,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 
 	if (!monster.isPossibleToHit())
 		return false;
+	// POE2 Mashup: your attacks pass through minions.
+	if (gbIsPoe2 && monster.isPlayerMinion())
+		return false;
 
 	if (adjacentDamage) {
 		if (player.getCharacterLevel() > 20)
@@ -3004,6 +3007,7 @@ void RemovePlrMissiles(const Player &player)
 		while ((golem = FindGolemForPlayer(player)) != nullptr) {
 			KillGolem(*golem);
 		}
+		KillSkeletonMinions(player);
 	}
 
 	for (auto &missile : Missiles) {

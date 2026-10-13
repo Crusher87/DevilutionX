@@ -587,6 +587,12 @@ void ActivateSkeleton(Monster &monster, Point position);
 Monster *PreSpawnSkeleton();
 void TalktoMonster(Player &player, Monster &monster);
 void SpawnGolem(const Player &player, Point position, uint8_t spellLevel);
+/** @brief POE2 Mashup: the monster raised by the Skeletal Warriors gem. */
+constexpr _monster_id SkeletonMinionType = MT_WSKELAX;
+size_t CountSkeletonMinions(const Player &player);
+void KillSkeletonMinions(const Player &player);
+/** @brief Raises a Skeletal Warrior for the player; false if the level has no room for it. */
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

@@ -59,12 +59,22 @@ public:
 
 TEST_F(Poe2SpiritTest, SpiritGemsAreSkillGems)
 {
-	for (const PersistentSkill skill : { PersistentSkill::HeraldOfAsh, PersistentSkill::HeraldOfThunder, PersistentSkill::PurityOfElements, PersistentSkill::SummonGolem }) {
+	for (const PersistentSkill skill : { PersistentSkill::HeraldOfAsh, PersistentSkill::HeraldOfThunder, PersistentSkill::PurityOfElements, PersistentSkill::SummonGolem, PersistentSkill::SkeletalWarriors }) {
 		Item gem;
 		ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForPersistent(skill))) << PersistentSkillName(skill);
 		EXPECT_EQ(SkillForGem(gem).persistent(), skill);
 		EXPECT_GT(SpiritReservation(skill), 0);
 	}
+}
+
+TEST_F(Poe2SpiritTest, SkeletalWarriorsGrowWithLevel)
+{
+	EXPECT_EQ(SkeletalWarriorCount(1), 2);
+	EXPECT_EQ(SkeletalWarriorCount(10), 3);
+	EXPECT_EQ(SkeletalWarriorCount(25), 4);
+	EXPECT_EQ(SkeletalWarriorCount(50), 4);
+	// Fits in the Spirit every character has, unlike the golem.
+	EXPECT_LE(SpiritReservation(PersistentSkill::SkeletalWarriors), BaseSpirit);
 }
 
 TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)

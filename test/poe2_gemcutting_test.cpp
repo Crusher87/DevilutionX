@@ -81,7 +81,7 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	EXPECT_EQ(skills, 38U);
+	EXPECT_EQ(skills, 39U);
 	EXPECT_EQ(supports, static_cast<size_t>(SupportGem::Count) - 1);
 }
 

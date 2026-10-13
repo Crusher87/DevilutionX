@@ -31,6 +31,11 @@ constexpr int HeraldOfThunderPercent = 25;
 constexpr int HeraldOfThunderRadius = 6;
 /** @brief A fallen golem comes back after 4 seconds. */
 constexpr int GolemReviveTicks = 4 * 20;
+/** @brief A fallen Skeletal Warrior rises again after 3 seconds. */
+constexpr int SkeletonReviveTicks = 3 * 20;
+
+/** @brief Skeletal Warriors raises 2 skeletons, one more at character level 10 and 20. */
+int SkeletalWarriorCount(int characterLevel);
 
 std::string_view PersistentSkillName(PersistentSkill skill);
 std::string_view PersistentSkillDescription(PersistentSkill skill);
@@ -53,7 +58,7 @@ void QueueHeraldTriggers(const Player &player, const Monster &monster);
 void ProcessHeralds();
 void ClearHeralds();
 
-/** @brief Keeps the Summon Golem minion alive while its gem is active; once per game tick for the local player. */
+/** @brief Keeps the Summon Golem and Skeletal Warriors minions alive while its gem is active; once per game tick for the local player. */
 void ProcessPersistentSkills(Player &player);
 
 } // namespace devilution
