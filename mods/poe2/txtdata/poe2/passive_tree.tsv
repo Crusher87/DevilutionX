@@ -59,3 +59,87 @@ id	name	kind	class	x	y	stats	links
 57	Precision	Notable		90	0	ToHit=20,Dexterity=10	56
 58		Small		33	-57	MagicResist=8	3,38,59
 59	Grounded	Notable		45	-78	LightningResist=20,ArmorPercent=10	58
+60	Titan	Ascendancy	Warrior	-55	60	Strength=10	61
+61	Stone Skin	AscendancyNotable	Warrior	-55	30	ArmorPercent=30	60,62,63
+62	Mountain	AscendancyNotable	Warrior	-80	0	LifePercent=10,Strength=10	61,64
+63	Earthbreaker	AscendancyNotable	Warrior	-30	0	Damage=25	61,65
+64	Crushing Impacts	AscendancyNotable	Warrior	-80	-35	Damage=20,ToHit=10	62,66
+65	Colossus	AscendancyNotable	Warrior	-30	-35	LifePercent=15,ArmorPercent=20	63,66
+66	Hulking Form	AscendancyNotable	Warrior	-55	-65	Vitality=20,LifeRegen=5	64,65
+67	Warbringer	Ascendancy	Warrior	55	60	Vitality=10	68
+68	Warcaller	AscendancyNotable	Warrior	55	30	Damage=20	67,69,70
+69	Battle Rhythm	AscendancyNotable	Warrior	30	0	AttackSpeed=1	68,71
+70	Unbreakable	AscendancyNotable	Warrior	80	0	AllResist=10	68,72
+71	Blood Fury	AscendancyNotable	Warrior	30	-35	LifeRegen=8	69,73
+72	Anvil	AscendancyNotable	Warrior	80	-35	ArmorPercent=40	70,73
+73	Imploding Impacts	AscendancyNotable	Warrior	55	-65	Damage=30,ToHit=15	71,72
+74	Deadeye	Ascendancy	Rogue	-55	60	Dexterity=10	75
+75	Far Shot	AscendancyNotable	Rogue	-55	30	Damage=20	74,76,77
+76	Eagle Eye	AscendancyNotable	Rogue	-80	0	ToHit=20	75,78
+77	Gathering Winds	AscendancyNotable	Rogue	-30	0	AttackSpeed=1	75,79
+78	Point Blank	AscendancyNotable	Rogue	-80	-35	Damage=25	76,80
+79	Avidity	AscendancyNotable	Rogue	-30	-35	Dexterity=15,EvasionPercent=20	77,80
+80	Endless Munitions	AscendancyNotable	Rogue	-55	-65	Damage=30	78,79
+81	Pathfinder	Ascendancy	Rogue	55	60	Vitality=10	82
+82	Running Assault	AscendancyNotable	Rogue	55	30	EvasionPercent=30	81,83,84
+83	Herbalist	AscendancyNotable	Rogue	30	0	LifeRegen=6	82,85
+84	Wild Wanderer	AscendancyNotable	Rogue	80	0	AllResist=12	82,86
+85	Contaminate	AscendancyNotable	Rogue	30	-35	Damage=20,LightningResist=10	83,87
+86	Overwhelming Toxicity	AscendancyNotable	Rogue	80	-35	Damage=30	84,87
+87	Traveller's Wisdom	AscendancyNotable	Rogue	55	-65	LifePercent=12,ManaPercent=12	85,86
+88	Stormweaver	Ascendancy	Sorcerer	-55	60	Magic=10	89
+89	Constant Gale	AscendancyNotable	Sorcerer	-55	30	CastSpeed=1	88,90,91
+90	Strike Twice	AscendancyNotable	Sorcerer	-80	0	SpellLevels=1	89,92
+91	Shaper of Storms	AscendancyNotable	Sorcerer	-30	0	LightningResist=20,ManaPercent=15	89,93
+92	Force of Will	AscendancyNotable	Sorcerer	-80	-35	EnergyShieldPercent=30	90,94
+93	Heavy Snows	AscendancyNotable	Sorcerer	-30	-35	Damage=25	91,94
+94	Tempest Caller	AscendancyNotable	Sorcerer	-55	-65	SpellLevels=1,ManaRegen=30	92,93
+95	Infernalist	Ascendancy	Sorcerer	55	60	Vitality=10	96
+96	Pyromantic Pact	AscendancyNotable	Sorcerer	55	30	FireResist=20,LifePercent=10	95,97,98
+97	Beidat's Will	AscendancyNotable	Sorcerer	30	0	Spirit=30	96,99
+98	Bringer of Flame	AscendancyNotable	Sorcerer	80	0	MinionDamage=40	96,100
+99	Seething Body	AscendancyNotable	Sorcerer	30	-35	Damage=20	97,101
+100	Altered Flesh	AscendancyNotable	Sorcerer	80	-35	LifeRegen=6,EnergyShieldPercent=20	98,101
+101	Loyal Hellhound	AscendancyNotable	Sorcerer	55	-65	MinionDamage=60,Spirit=20	99,100
+102	Invoker	Ascendancy	Monk	-55	60	Dexterity=10	103
+103	Lead me through Grace	AscendancyNotable	Monk	-55	30	EvasionPercent=25,EnergyShieldPercent=25	102,104,105
+104	Faithful Guardian	AscendancyNotable	Monk	-80	0	AllResist=10	103,106
+105	Sunder my Enemies	AscendancyNotable	Monk	-30	0	Damage=25	103,107
+106	Unbound Avatar	AscendancyNotable	Monk	-80	-35	AttackSpeed=1	104,108
+107	Instruments of Zeal	AscendancyNotable	Monk	-30	-35	Damage=20,ToHit=15	105,108
+108	...and I Shall Rage	AscendancyNotable	Monk	-55	-65	Damage=30	106,107
+109	Acolyte of Chayula	Ascendancy	Monk	55	60	Magic=10	110
+110	Embrace the Darkness	AscendancyNotable	Monk	55	30	MagicResist=20	109,111,112
+111	Lucid Dreaming	AscendancyNotable	Monk	30	0	ManaRegen=40	110,113
+112	Ravenous Doubts	AscendancyNotable	Monk	80	0	Damage=20	110,114
+113	Inner Turmoil	AscendancyNotable	Monk	30	-35	ManaPercent=20	111,115
+114	Grasp of the Void	AscendancyNotable	Monk	80	-35	EnergyShieldPercent=30	112,115
+115	Darkness Within	AscendancyNotable	Monk	55	-65	Damage=30,CastSpeed=1	113,114
+116	Gemling Legionnaire	Ascendancy	Bard	-55	60	Strength=5,Dexterity=5,Magic=5	117
+117	Integrated Efficiency	AscendancyNotable	Bard	-55	30	Spirit=30	116,118,119
+118	Advanced Thaumaturgy	AscendancyNotable	Bard	-80	0	Strength=10,Dexterity=10,Magic=10	117,120
+119	Crystalline Potential	AscendancyNotable	Bard	-30	0	SpellLevels=1	117,121
+120	Implanted Gems	AscendancyNotable	Bard	-80	-35	Damage=20	118,122
+121	Enhanced Effectiveness	AscendancyNotable	Bard	-30	-35	AllResist=10	119,122
+122	Gem Studded	AscendancyNotable	Bard	-55	-65	Spirit=30,Damage=10	120,121
+123	Witchhunter	Ascendancy	Bard	55	60	Vitality=10	124
+124	Pitiless Killer	AscendancyNotable	Bard	55	30	Damage=25	123,125,126
+125	No Mercy	AscendancyNotable	Bard	30	0	ToHit=20	124,127
+126	Witchbane	AscendancyNotable	Bard	80	0	MagicResist=20,AllResist=5	124,128
+127	Zealous Inquisition	AscendancyNotable	Bard	30	-35	Damage=20	125,129
+128	Obsessive Rituals	AscendancyNotable	Bard	80	-35	ArmorPercent=25,EvasionPercent=25	126,129
+129	Ceremonial Ablution	AscendancyNotable	Bard	55	-65	LifePercent=15	127,128
+130	Chieftain	Ascendancy	Barbarian	-55	60	Strength=10	131
+131	Ancestral Artifice	AscendancyNotable	Barbarian	-55	30	FireResist=20	130,132,133
+132	Hinekora, Death's Fury	AscendancyNotable	Barbarian	-80	0	Damage=25	131,134
+133	Valako, Stormrider	AscendancyNotable	Barbarian	-30	0	LightningResist=20,Damage=10	131,135
+134	Tawhoa, Forest's Strength	AscendancyNotable	Barbarian	-80	-35	LifePercent=12	132,136
+135	Ngamahu, Flame's Advance	AscendancyNotable	Barbarian	-30	-35	Damage=20,FireResist=10	133,136
+136	Arohongui, Moon's Presence	AscendancyNotable	Barbarian	-55	-65	AttackSpeed=1	134,135
+137	Smith of Kitava	Ascendancy	Barbarian	55	60	Vitality=10	138
+138	Molten Form	AscendancyNotable	Barbarian	55	30	FireResist=25	137,139,140
+139	Forged in Flame	AscendancyNotable	Barbarian	30	0	ArmorPercent=35	138,141
+140	Smith's Masterwork	AscendancyNotable	Barbarian	80	0	AllResist=10	138,142
+141	Rite of Kitava	AscendancyNotable	Barbarian	30	-35	LifePercent=15	139,143
+142	Coal Stoker	AscendancyNotable	Barbarian	80	-35	LifeRegen=8	140,143
+143	Living Weapon	AscendancyNotable	Barbarian	55	-65	Damage=30	141,142

@@ -132,6 +132,48 @@ TEST_F(Poe2PassiveTreeTest, AllocatedStatsApplyToTheCharacter)
 	EXPECT_EQ(totals[static_cast<size_t>(PassiveStat::ArmorPercent)], 33);
 }
 
+TEST_F(Poe2PassiveTreeTest, EveryClassHasTwoAscendancies)
+{
+	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Rogue, HeroClass::Sorcerer, HeroClass::Monk, HeroClass::Bard, HeroClass::Barbarian }) {
+		int roots = 0;
+		for (const PassiveNode &node : PassiveTree()) {
+			if (node.kind == PassiveKind::Ascendancy && node.startClass == heroClass)
+				roots++;
+		}
+		EXPECT_EQ(roots, 2) << static_cast<int>(heroClass);
+	}
+}
+
+TEST_F(Poe2PassiveTreeTest, AscendancyUnlocksAtLevel15)
+{
+	Player &player = *MyPlayer;
+	const uint8_t titan = FindNode("Titan");
+	const uint8_t warbringer = FindNode("Warbringer");
+	EXPECT_EQ(AscendancyPointsTotal(player), 0);
+	EXPECT_FALSE(CanAllocatePassive(player, titan));
+
+	player.setCharacterLevel(15);
+	EXPECT_EQ(AscendancyPointsTotal(player), 2);
+	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Deadeye"))); // another class's
+	ASSERT_TRUE(AllocatePassive(player, titan));
+	EXPECT_EQ(ChosenAscendancy(player), titan);
+	EXPECT_FALSE(CanAllocatePassive(player, warbringer)); // only one ascendancy
+	EXPECT_EQ(PassivePointsSpent(player), 0);             // choosing is free
+
+	const uint8_t first = PassiveTree()[titan].links[0];
+	ASSERT_TRUE(AllocatePassive(player, first));
+	const uint8_t second = PassiveTree()[first].links[1];
+	ASSERT_TRUE(AllocatePassive(player, second));
+	EXPECT_EQ(AscendancyPointsLeft(player), 0);
+	EXPECT_EQ(PassivePointsLeft(player), 14);
+	EXPECT_FALSE(CanRefundPassive(player, titan));
+	EXPECT_FALSE(CanRefundPassive(player, first));
+	EXPECT_TRUE(RefundPassive(player, second));
+
+	player.setCharacterLevel(45);
+	EXPECT_EQ(AscendancyPointsTotal(player), MaxAscendancyPoints);
+}
+
 TEST_F(Poe2PassiveTreeTest, MultiplayerIgnoresPassives)
 {
 	Player &player = *MyPlayer;

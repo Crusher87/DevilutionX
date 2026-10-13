@@ -73,6 +73,12 @@ bool AllConnected(const Player &player, std::optional<uint8_t> without)
 	std::bitset<MaxPassiveNodes> reached;
 	std::vector<uint8_t> open { *start };
 	reached.set(*start);
+	// The ascendancy is its own small tree, rooted at the ascendancy node.
+	const std::optional<uint8_t> ascendancy = ChosenAscendancy(player);
+	if (ascendancy && *ascendancy != without) {
+		open.push_back(*ascendancy);
+		reached.set(*ascendancy);
+	}
 	while (!open.empty()) {
 		const uint8_t node = open.back();
 		open.pop_back();
@@ -164,12 +170,54 @@ int PassivePointsTotal(const Player &player)
 
 int PassivePointsSpent(const Player &player)
 {
-	return static_cast<int>(player.poe2.passives.count());
+	int spent = 0;
+	for (const PassiveNode &node : Tree) {
+		if (!IsAscendancyNode(node) && player.poe2.passives.test(node.id))
+			spent++;
+	}
+	return spent;
 }
 
 int PassivePointsLeft(const Player &player)
 {
 	return PassivePointsTotal(player) - PassivePointsSpent(player);
+}
+
+bool IsAscendancyNode(const PassiveNode &node)
+{
+	return node.kind == PassiveKind::Ascendancy || node.kind == PassiveKind::AscendancyNotable;
+}
+
+int AscendancyPointsTotal(const Player &player)
+{
+	const int level = player.getCharacterLevel();
+	if (level < AscendancyLevel)
+		return 0;
+	return std::min(2 + (2 * ((level - AscendancyLevel) / 10)), MaxAscendancyPoints);
+}
+
+int AscendancyPointsSpent(const Player &player)
+{
+	int spent = 0;
+	for (const PassiveNode &node : Tree) {
+		if (node.kind == PassiveKind::AscendancyNotable && player.poe2.passives.test(node.id))
+			spent++;
+	}
+	return spent;
+}
+
+int AscendancyPointsLeft(const Player &player)
+{
+	return AscendancyPointsTotal(player) - AscendancyPointsSpent(player);
+}
+
+std::optional<uint8_t> ChosenAscendancy(const Player &player)
+{
+	for (const PassiveNode &node : Tree) {
+		if (node.kind == PassiveKind::Ascendancy && player.poe2.passives.test(node.id))
+			return node.id;
+	}
+	return std::nullopt;
 }
 
 bool IsPassiveAllocated(const Player &player, uint8_t node)
@@ -185,8 +233,17 @@ bool CanAllocatePassive(const Player &player, uint8_t node)
 {
 	if (!CanUsePassives() || node >= Tree.size() || IsPassiveAllocated(player, node))
 		return false;
-	if (Tree[node].kind == PassiveKind::Start || PassivePointsLeft(player) <= 0)
+	const PassiveNode &passive = Tree[node];
+	if (passive.kind == PassiveKind::Start)
 		return false;
+	if (passive.kind == PassiveKind::Ascendancy)
+		return passive.startClass == player._pClass && player.getCharacterLevel() >= AscendancyLevel && !ChosenAscendancy(player);
+	if (passive.kind == PassiveKind::AscendancyNotable) {
+		if (passive.startClass != player._pClass || AscendancyPointsLeft(player) <= 0)
+			return false;
+	} else if (PassivePointsLeft(player) <= 0) {
+		return false;
+	}
 	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](uint8_t link) { return IsPassiveAllocated(player, link); });
 }
 
@@ -278,6 +335,10 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased Evasion"), value);
 	case PassiveStat::EnergyShieldPercent:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Energy Shield"), value);
+	case PassiveStat::Spirit:
+		return FormatRuntime(_("{:+d} to maximum Spirit"), value);
+	case PassiveStat::MinionDamage:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Minions deal {:d}% increased Damage"), value);
 	default:
 		return {};
 	}

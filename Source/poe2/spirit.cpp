@@ -13,6 +13,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "utils/language.h"
 
@@ -150,9 +151,14 @@ bool ItemGrantsSpirit(const Item &item)
 	return name.ends_with("Sceptre");
 }
 
+int MinionDamagePercent(const Player &player)
+{
+	return 100 + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::MinionDamage)];
+}
+
 int MaxSpirit(const Player &player)
 {
-	int spirit = BaseSpirit;
+	int spirit = BaseSpirit + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Spirit)];
 	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 		const Item &item = player.InvBody[hand];
 		if (ItemGrantsSpirit(item) && item._iStatFlag)
@@ -270,6 +276,10 @@ void KeepGolemAlive(Player &player)
 	if (!position)
 		return;
 	SpawnGolem(player, *position, static_cast<uint8_t>(GemSpellLevel(player.getCharacterLevel())));
+	if (Monster *golem = FindGolemForPlayer(player); golem != nullptr) {
+		golem->minDamage = static_cast<uint8_t>(std::min(golem->minDamage * MinionDamagePercent(player) / 100, 255));
+		golem->maxDamage = static_cast<uint8_t>(std::min(golem->maxDamage * MinionDamagePercent(player) / 100, 255));
+	}
 	AddVisualEffect(*position, MissileGraphicID::Resurrect);
 	player.poe2.golemCooldown = GolemReviveTicks;
 }
