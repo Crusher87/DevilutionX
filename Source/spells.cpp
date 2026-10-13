@@ -23,6 +23,7 @@
 #include "levels/gendung.h"
 #include "missiles.h"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry.hpp"
 
 namespace devilution {
 
@@ -151,6 +152,7 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn)
 
 void ConsumeSpell(Player &player, SpellID sn)
 {
+	int manaCost = 0;
 	switch (player.executedSpell.spellType) {
 	case SpellType::Skill:
 	case SpellType::Invalid:
@@ -169,13 +171,17 @@ void ConsumeSpell(Player &player, SpellID sn)
 		Fixed26_6 ma = GetManaAmount(player, sn);
 		player._pMana -= ma;
 		player._pManaBase -= ma;
+		manaCost = ma.whole();
 		RedrawComponent(PanelDrawComponent::Mana);
 		break;
 	}
+	TelemetrySkillUsed(player, GetSpellData(sn).sNameText, manaCost);
 	if (sn == SpellID::BloodStar) {
+		TelemetryNoteAttacker("own Blood Star");
 		ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromInt(5));
 	}
 	if (sn == SpellID::BoneSpirit) {
+		TelemetryNoteAttacker("own Bone Spirit");
 		ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromInt(6));
 	}
 }

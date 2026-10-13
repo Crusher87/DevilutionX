@@ -82,6 +82,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/telemetry.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
 #include "storm/storm_net.hpp"
@@ -1131,6 +1132,7 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 		return;
 
 	const int dam = RandomIntBetween(mind, maxd) << 6;
+	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
 	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
 
 	if (attacker.isPlayerMinion()) {
@@ -1158,6 +1160,7 @@ Fixed26_6 CheckReflect(Monster &monster, Player &player, Fixed26_6 dam)
 		NetSendCmdParam1(true, CMD_SETREFLECT, 0);
 	// reflects 20-30% damage
 	const Fixed26_6 mdam = dam * RandomIntBetween(20, 30, true) / 100;
+	TelemetryNoteDamageSource("reflect");
 	ApplyMonsterDamage(DamageType::Physical, monster, mdam);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);
@@ -1237,12 +1240,14 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 			const Fixed26_6 reflectedDamage = CheckReflect(monster, player, dam);
 			dam = std::max(dam - reflectedDamage, Fixed26_6::fromInt(0));
 		}
+		TelemetryNoteAttacker(monster.name());
 		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, dam));
 	}
 
 	// Reflect can also kill a monster, so make sure the monster is still alive
 	if (HasAnyOf(player._pIFlags, ItemSpecialEffect::Thorns) && monster.mode != MonsterMode::Death) {
 		const int mdam = (GenerateRnd(3) + 1) << 6;
+		TelemetryNoteDamageSource("thorns");
 		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(mdam));
 		if (monster.hasNoLife())
 			M_StartKill(monster, player);
@@ -3926,7 +3931,9 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 {
 	lua::OnMonsterTakeDamage(&monster, damage.raw(), static_cast<int>(damageType));
 
+	const Fixed26_6 lifeBefore = monster.hitPoints;
 	monster.hitPoints -= damage;
+	TelemetryMonsterDamaged(monster, damage, lifeBefore);
 
 	if (monster.hasNoLife()) {
 		// A monster without life no longer blocks the tile it stands on.
@@ -4063,6 +4070,7 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		QueueHeraldTriggers(*MyPlayer, monster);
 	}
 
+	TelemetryMonsterKilled(monster);
 	MonsterKillCounts[monster.type().type]++;
 	monster.hitPoints = Fixed26_6::fromInt(0);
 	// A monster without life no longer blocks the tile it stands on.

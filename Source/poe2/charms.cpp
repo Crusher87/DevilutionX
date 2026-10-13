@@ -9,6 +9,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/telemetry.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
 
@@ -29,6 +30,7 @@ bool UseCharm(Player &player, CharmEffect effect, bool startCooldown = true)
 		item._iCharges -= cost;
 		if (startCooldown)
 			player.poe2.charmCooldown = CharmCooldownTicks;
+		TelemetryCharmUsed(player, item._iIName);
 		return true;
 	}
 	return false;

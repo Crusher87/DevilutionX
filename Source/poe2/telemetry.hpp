@@ -1,0 +1,88 @@
+/**
+ * @file poe2/telemetry.hpp
+ *
+ * POE2 Mashup play log: writes what happens in a game (levels, kills, hits, skills, flasks, drops and
+ * crashes) to a text file in the poe2_logs folder, one line per event, so crashes can be traced and
+ * the balance tuned from real play.
+ */
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <string_view>
+
+#include "utils/fixed_point.hpp"
+
+namespace devilution {
+
+struct Item;
+struct Monster;
+struct Player;
+enum class DamageType : uint8_t;
+
+/** @brief Sessions kept in the poe2_logs folder; older ones are deleted when a new one starts. */
+constexpr size_t MaxTelemetrySessions = 20;
+/** @brief A hit on the player is logged on its own when it takes at least this percent of their life. */
+constexpr int TelemetryBigHitPercent = 10;
+/** @brief A hit that leaves the player below this percent of their life is logged as a close call. */
+constexpr int TelemetryCloseCallPercent = 20;
+/** @brief Mana below this percent of the maximum counts as running low. */
+constexpr int TelemetryLowManaPercent = 20;
+/** @brief A life or mana flask drunk at or above this percent of the maximum is counted as wasted. */
+constexpr int TelemetryWastedFlaskPercent = 90;
+/** @brief Real-time milliseconds between stats lines. */
+constexpr uint32_t TelemetryStatsIntervalMs = 60 * 1000;
+/** @brief A gap between game ticks this long is logged as a stall. */
+constexpr uint32_t TelemetryStallMs = 250;
+/** @brief Damage dealt within this long of using a skill is credited to that skill. */
+constexpr uint32_t TelemetrySkillCreditMs = 3000;
+/** @brief Detailed events kept in memory and written out when the game crashes. */
+constexpr size_t TelemetryRecentEvents = 30;
+
+/** @brief Opens this session's log file and starts catching crashes. Safe to call more than once. */
+void TelemetryInit();
+/** @brief Whether a log file is open. */
+bool TelemetryEnabled();
+/** @brief Writes one line: time, level and the event. */
+void TelemetryLog(std::string_view category, std::string_view text);
+
+void TelemetryGameStarted(const Player &player, bool loaded);
+void TelemetryGameEnded();
+void TelemetryLevelEntered();
+/** @brief Names what is about to hit the player (a monster or a trap) for the hit that follows. */
+void TelemetryNoteAttacker(std::string_view attacker);
+/** @brief Names what is about to damage a monster (minions, ignite, a herald); otherwise the last skill gets the credit. */
+void TelemetryNoteDamageSource(std::string_view source);
+void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);
+void TelemetryMonsterKilled(const Monster &monster);
+void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);
+void TelemetryPlayerDied(const Player &player);
+void TelemetryLevelUp(const Player &player);
+void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost);
+/** @brief A skill or spell that couldn't be used, and why. */
+void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason);
+/**
+ * @brief A flask was drunk.
+ * @param lifePercent, manaPercent Life and mana before drinking, in percent of the maximum.
+ */
+void TelemetryFlaskUsed(const Player &player, const Item &flask, int chargesLeft, bool life, bool mana, int lifePercent, int manaPercent);
+void TelemetryCharmUsed(const Player &player, std::string_view charm);
+void TelemetryItemDropped(const Item &item, std::string_view source);
+void TelemetryItemPickedUp(const Player &player, const Item &item);
+/** @brief Orb or oil use on an item. */
+void TelemetryCrafted(const Player &player, std::string_view currency, const Item &item);
+/** @brief A line typed with mark() in the console, to find a moment in the log later. */
+void TelemetryMark(std::string_view text);
+/** @brief Once per game tick: tracks mana, stalls and build changes, and writes the stats line when it's due. */
+void TelemetryTick();
+/** @brief Writes the error that is about to close the game, then the latest detailed events. */
+void TelemetryFatal(std::string_view message);
+
+/** @brief This session's totals and current rates, for the console's stats() command. */
+std::string TelemetryStatsText();
+/** @brief Damage dealt by each skill this game, most first. */
+std::string TelemetrySkillDamageText();
+/** @brief One line describing the character's gear, skills, supports, passives and belt. */
+std::string TelemetryBuildText(const Player &player);
+
+} // namespace devilution

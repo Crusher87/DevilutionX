@@ -15,6 +15,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/language.h"
 
 namespace devilution {
@@ -48,6 +49,7 @@ bool CanHeraldHit(const Monster &monster)
 void HeraldHit(Monster &monster, DamageType damageType, Fixed26_6 damage)
 {
 	Player &player = *MyPlayer;
+	TelemetryNoteDamageSource(damageType == DamageType::Fire ? "Herald of Ash" : "Herald of Thunder");
 	ApplyMonsterDamage(damageType, monster, damage);
 	monster.tag(player);
 	TryInflictAilment(monster, player, damageType, damage);

@@ -9,6 +9,7 @@
 #include "monster.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
@@ -196,6 +197,7 @@ void ProcessMonsterAilments(Monster &monster)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::FireArrowExplosion);
 		// Only the player who lit the fire applies its damage, which the game then syncs.
 		if (state.igniteSource >= 0 && state.igniteSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
+			TelemetryNoteDamageSource("ignite");
 			ApplyMonsterDamage(DamageType::Fire, monster, Fixed26_6::fromRaw(state.igniteDamagePerTick));
 			if (monster.hasNoLife())
 				M_StartKill(monster, *MyPlayer);

@@ -77,6 +77,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
@@ -3841,6 +3842,8 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 
 	if (dropsSpecialTreasure && !UseMultiplayerQuests()) {
 		Item *uniqueItem = SpawnUnique(static_cast<_unique_items>(monster.data().treasure & T_MASK), position, std::nullopt, false);
+		if (uniqueItem != nullptr)
+			TelemetryItemDropped(*uniqueItem, monster.name());
 		if (uniqueItem != nullptr && sendmsg)
 			NetSendCmdPItem(false, CMD_DROPITEM, uniqueItem->position, *uniqueItem);
 		return;
@@ -3885,6 +3888,7 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 	SetupAllItems(*MyPlayer, item, idx, AdvanceRndSeed(), mLevel, uper, onlygood, false);
 	TryRandomUniqueItem(item, idx, mLevel, uper, onlygood, false);
 	SetupItem(item);
+	TelemetryItemDropped(item, monster.name());
 
 	if (sendmsg)
 		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
@@ -4320,6 +4324,12 @@ bool DoOil(Player &player, int cii)
 	}
 	if (!ApplyOilToItem(*pi, player))
 		return false;
+	for (const ItemData &data : AllItemsList) {
+		if (data.iMiscId == player._pOilType) {
+			TelemetryCrafted(player, data.iName, *pi);
+			break;
+		}
+	}
 	CalcPlrInv(player, true);
 	return true;
 }

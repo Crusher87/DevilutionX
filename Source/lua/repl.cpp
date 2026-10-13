@@ -12,6 +12,8 @@
 
 #include "lua/lua_global.hpp"
 #include "panels/console.hpp"
+#include "player.h"
+#include "poe2/telemetry.hpp"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -50,6 +52,14 @@ void CreateReplEnvironment()
 {
 	sol::environment env = CreateLuaSandbox();
 	env["print"] = LuaPrintToConsole;
+	// POE2 Mashup play log: stats() shows this game's numbers, mark("text") notes a moment in the log.
+	env["stats"] = []() {
+		return StrCat(TelemetryStatsText(), "\n", TelemetrySkillDamageText(), "\n", MyPlayer != nullptr ? TelemetryBuildText(*MyPlayer) : std::string());
+	};
+	env["mark"] = [](std::string_view text) {
+		TelemetryMark(text);
+		return TelemetryEnabled() ? "Marked in the play log." : "The play log isn't open.";
+	};
 	lua_setwarnf(env.lua_state(), LuaConsoleWarn, /*ud=*/nullptr);
 	replEnv.emplace(env);
 }
