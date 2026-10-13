@@ -71,6 +71,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -2031,6 +2032,10 @@ void PrintItemMisc(const Item &item)
 	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {
 		const int gemLevel = SkillGemItemLevel(item);
 		AddItemInfoBoxString(FormatRuntime(_("Gem level {:d}, needs character level {:d}"), gemLevel, CharacterLevelForGemLevel(gemLevel)));
+		// POE2 Mashup: what the gem does at this level and the next, so the curve is easy to follow.
+		AddItemInfoBoxString(FormatRuntime(_("Now {:s}"), GemLevelText(skill, gemLevel)));
+		if (gemLevel < MaxGemLevel)
+			AddItemInfoBoxString(FormatRuntime(_("Next {:s}"), GemLevelText(skill, gemLevel + 1)));
 		if (skill.kind == SkillKind::Spell) {
 			AddItemInfoBoxString(FormatRuntime(_("Grants the {:s} spell"), SkillName(skill)));
 		} else if (skill.kind == SkillKind::Persistent) {

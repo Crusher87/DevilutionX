@@ -211,18 +211,6 @@ constexpr int MaxGemLevelForCharacter(int characterLevel)
 	return level;
 }
 
-/** @brief Attack skills deal this percent of their damage at a gem level: +7% a level, like POE2's attack gems (about 2.3x at 20). */
-constexpr int GemAttackDamagePercent(int gemLevel)
-{
-	return 100 + (7 * (std::clamp(gemLevel, 1, MaxGemLevel) - 1));
-}
-
-/** @brief Attack skills cost this percent of their mana at a gem level: +5% a level. */
-constexpr int GemManaCostPercent(int gemLevel)
-{
-	return 100 + (5 * (std::clamp(gemLevel, 1, MaxGemLevel) - 1));
-}
-
 /** @brief Support gems a spell could have before supports moved into the skill bar (old saves). */
 constexpr size_t MaxSupportsPerSpell = 2;
 constexpr size_t MaxPoe2Spells = 64;

@@ -13,6 +13,7 @@
 #include "lua/lua_global.hpp"
 #include "panels/console.hpp"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/telemetry.hpp"
 #include "utils/str_cat.hpp"
 
@@ -55,6 +56,13 @@ void CreateReplEnvironment()
 	// POE2 Mashup play log: stats() shows this game's numbers, mark("text") notes a moment in the log.
 	env["stats"] = []() {
 		return StrCat(TelemetryStatsText(), "\n", TelemetrySkillDamageText(), "\n", MyPlayer != nullptr ? TelemetryBuildText(*MyPlayer) : std::string());
+	};
+	// gems() shows each socketed gem's numbers now and at its next level; gemcurve("Cleave") shows levels 1 to 20.
+	env["gems"] = []() {
+		return MyPlayer != nullptr ? SocketedGemsText(*MyPlayer) : std::string("No hero loaded.");
+	};
+	env["gemcurve"] = [](std::string_view name) {
+		return GemCurveTextByName(name);
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

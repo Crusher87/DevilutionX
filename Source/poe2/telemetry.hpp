@@ -58,7 +58,8 @@ void TelemetryMonsterKilled(const Monster &monster);
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);
 void TelemetryPlayerDied(const Player &player);
 void TelemetryLevelUp(const Player &player);
-void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost);
+/** @brief A skill was used; gemLevel (when the skill comes from a socketed gem) keeps each gem level's stats apart. */
+void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost, int gemLevel = 0);
 /** @brief A skill or spell that couldn't be used, and why. */
 void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason);
 /**

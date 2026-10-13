@@ -6,6 +6,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -102,9 +103,43 @@ TEST_F(Poe2SkillGemsTest, GemLevelsFollowPoe2)
 	EXPECT_EQ(MaxGemLevelForCharacter(19), 9);
 	EXPECT_EQ(MaxGemLevelForCharacter(50), 20);
 
-	EXPECT_EQ(GemAttackDamagePercent(1), 100);
-	EXPECT_EQ(GemAttackDamagePercent(20), 233);
-	EXPECT_EQ(GemManaCostPercent(20), 195);
+	// Cleave follows Boneshatter: 100%, 142%, 191%, 244%, 312% at levels 1, 5, 10, 15, 20.
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	EXPECT_EQ(GemDamagePercent(cleave, 1), 100);
+	EXPECT_EQ(GemDamagePercent(cleave, 5), 142);
+	EXPECT_EQ(GemDamagePercent(cleave, 10), 191);
+	EXPECT_EQ(GemDamagePercent(cleave, 15), 244);
+	EXPECT_EQ(GemDamagePercent(cleave, 20), 312);
+	EXPECT_EQ(GemManaPercent(cleave, 20), 500);
+}
+
+TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
+{
+	const SkillSlot leapSlam = SkillSlot::ForAttack(WeaponSkill::LeapSlam);
+	const SkillSlot barrage = SkillSlot::ForAttack(WeaponSkill::Barrage);
+	EXPECT_EQ(GemDamagePercent(leapSlam, 20), 408);
+	EXPECT_EQ(GemDamagePercent(barrage, 20), 280);
+	// Early levels give the biggest steps in percent, like POE2's gems.
+	EXPECT_GT(GemDamagePercent(leapSlam, 2) * 100 / GemDamagePercent(leapSlam, 1), GemDamagePercent(leapSlam, 20) * 100 / GemDamagePercent(leapSlam, 19));
+	for (int level = 2; level <= MaxGemLevel; level++)
+		EXPECT_GT(GemDamagePercent(leapSlam, level), GemDamagePercent(leapSlam, level - 1)) << level;
+
+	// Spark adds a projectile every 5 levels; Fireball relies on Diablo's own spell level growth.
+	const SkillSlot spark = SkillSlot::ForAttack(WeaponSkill::Spark);
+	EXPECT_EQ(GemExtraProjectiles(spark, 4), 0);
+	EXPECT_EQ(GemExtraProjectiles(spark, 20), 4);
+	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 100);
+	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
+	EXPECT_EQ(BattleCryDamagePercent(1), 50);
+	EXPECT_EQ(BattleCryDamagePercent(20), 100);
+}
+
+TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)
+{
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 6 mana");
+	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 20 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
+	EXPECT_EQ(GemCurveTextByName("nothing"), "No skill gem is called nothing.");
 }
 
 TEST_F(Poe2SkillGemsTest, GemItemsKeepTheirLevel)
@@ -128,7 +163,7 @@ TEST_F(Poe2SkillGemsTest, AttackGemLevelRaisesManaCost)
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 1);
 	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam));
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 20);
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 195 / 100);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 5);
 }
 
 TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)

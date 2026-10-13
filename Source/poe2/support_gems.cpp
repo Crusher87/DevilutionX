@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
 
@@ -496,7 +497,9 @@ int SupportCastRecoveryTicks(const Player &player, SpellID spell, int castFrames
 
 int SupportSpellDamagePercent(const Player &player, SpellID spell)
 {
-	int percent = 100;
+	// A socketed spell gem hits harder as it levels up, on top of what Diablo's spell level adds.
+	const int gemLevel = player.poe2.skillLevel(spell);
+	int percent = gemLevel > 0 ? GemDamagePercent(SkillSlot::ForSpell(spell), gemLevel) : 100;
 	if (IsProjectileSpell(spell) && player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles))
 		percent = percent * MultipleProjectilesDamagePercent / 100;
 	if (IsDirectProjectileSpell(spell)) {
@@ -526,7 +529,7 @@ int SupportMeleeDamagePercent(const Player &player)
 	if (skill == WeaponSkill::None)
 		return 100;
 	const int brutality = player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality) ? BrutalityDamagePercent : 100;
-	return GemAttackDamagePercent(player.poe2.skillLevel(skill)) * brutality / 100;
+	return GemDamagePercent(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill)) * brutality / 100;
 }
 
 bool SupportMeleeKnocksBack(const Player &player)

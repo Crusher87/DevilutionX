@@ -16,6 +16,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/gem_levels.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
@@ -52,7 +53,7 @@ void PaySkillMana(Player &player, WeaponSkill skill)
 	player._pManaBase -= cost;
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
-	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole());
+	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));
 }
 
 /** @brief Dashes at the target; the skill hits when the dash lands (see ProcessPlayers). */
@@ -83,15 +84,24 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 	return true;
 }
 
-/** @brief Fires missiles in a fan towards a target, one tile apart at the target. */
-void FireFan(const Player &player, Point target, MissileID missile, int count, int damage, int spellLevel)
+/**
+ * @brief Fires a skill's missiles in a fan towards a target, one tile apart at the target.
+ * The gem level adds projectiles and damage along the skill's curve.
+ */
+void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID missile, int count, int damage, int spellLevel)
 {
+	const SkillSlot slot = SkillSlot::ForAttack(skill);
+	const int gemLevel = player.poe2.skillLevel(skill);
+	count += GemExtraProjectiles(slot, gemLevel);
+	const int damagePercent = GemDamagePercent(slot, gemLevel);
 	const Direction dir = GetDirection(player.position.tile, target);
 	const Displacement side { Left(Left(dir)) };
 	for (int i = 0; i < count; i++) {
 		// 0, -1, 1, -2, 2, ...
 		const int offset = (i + 1) / 2 * (i % 2 == 0 ? 1 : -1);
-		AddMissile(player.position.tile, target + side * offset, dir, missile, TARGET_MONSTERS, player, damage, spellLevel);
+		Missile *fired = AddMissile(player.position.tile, target + side * offset, dir, missile, TARGET_MONSTERS, player, damage, spellLevel);
+		if (fired != nullptr)
+			fired->poe2.damagePercent = static_cast<int16_t>(damagePercent);
 	}
 }
 
@@ -242,7 +252,7 @@ int WeaponSkillManaCost(WeaponSkill skill)
 
 int WeaponSkillManaCost(const Player &player, WeaponSkill skill)
 {
-	const int cost = WeaponSkillManaCost(skill) * GemManaCostPercent(player.poe2.skillLevel(skill)) / 100;
+	const int cost = GemBaseManaCost(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill));
 	return cost * SupportManaCostPercent(player, SkillSlot::ForAttack(skill)) / 100;
 }
 
@@ -387,7 +397,7 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player._pManaBase -= cost;
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
-	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole());
+	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));
 	player.poe2.activeSkill = skill;
 }
 
@@ -423,14 +433,14 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		return false;
 	case WeaponSkill::EmberFusillade:
 		// The missiles take their damage from Magic and the gem level, like the spells.
-		FireFan(player, target, MissileID::Firebolt, 5, 0, std::max(player.poe2.skillLevel(skill), 1));
+		FireFan(player, skill, target, MissileID::Firebolt, 5, 0, std::max(player.poe2.skillLevel(skill), 1));
 		return false;
 	case WeaponSkill::Spark:
-		FireFan(player, target, MissileID::ChargedBolt, 6, 0, std::max(player.poe2.skillLevel(skill), 1));
+		FireFan(player, skill, target, MissileID::ChargedBolt, 6, 0, std::max(player.poe2.skillLevel(skill), 1));
 		return false;
 	case WeaponSkill::EscapeShot: {
 		// Arrows take their damage from the bow when they hit, like normal arrows.
-		FireFan(player, target, MissileID::Arrow, 3, 4, 0);
+		FireFan(player, skill, target, MissileID::Arrow, 3, 4, 0);
 		PlaySfxLoc(SfxID::ShootBow2, player.position.tile);
 		// Leap back as soon as the arrows are loosed.
 		const Direction dir = GetDirection(player.position.tile, target);

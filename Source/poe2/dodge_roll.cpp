@@ -9,6 +9,7 @@
 #include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/tile_properties.hpp"
+#include "monster.h"
 #include "msg.h"
 #include "multi.h"
 #include "player.h"
@@ -48,6 +49,23 @@ bool CanStepTo(const Player &player, Point from, Direction dir)
 	return true;
 }
 
+/**
+ * @brief Shoves a monster in the roll's way to one side, like POE2's roll pushing small monsters aside.
+ * Unique monsters stand their ground, and a monster with no room to move blocks the roll, so a crowd can still trap the hero.
+ */
+bool ShoveAside(Point tile, Direction dir)
+{
+	Monster *monster = FindMonsterAtPosition(tile, true);
+	if (monster == nullptr || monster->isUnique() || monster->hasNoLife() || monster->mode == MonsterMode::Petrified)
+		return false;
+	for (const Direction side : { Left(Left(dir)), Right(Right(dir)), Left(dir), Right(dir) }) {
+		M_GetKnockback(*monster, tile - Displacement { side });
+		if (monster->position.old != tile)
+			return true;
+	}
+	return false;
+}
+
 } // namespace
 
 bool TryDodgeRoll(Player &player)
@@ -72,7 +90,7 @@ bool TryDodgeRoll(Player &player)
 
 	Point target = player.position.future;
 	int tiles = 0;
-	while (tiles < DodgeRollTiles && CanStepTo(player, target, dir)) {
+	while (tiles < DodgeRollTiles && (CanStepTo(player, target, dir) || (ShoveAside(target + dir, dir) && CanStepTo(player, target, dir)))) {
 		target += dir;
 		tiles++;
 	}

@@ -22,6 +22,7 @@
 #include "inv.h"
 #include "levels/gendung.h"
 #include "missiles.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 
@@ -128,8 +129,13 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn)
 		adj = sl * (GetSpellData(SpellID::Resurrect).sManaCost / 8);
 	}
 
+	// POE2 Mashup: a socketed spell gem costs more as it levels up, like POE2's gems, instead of less.
+	const int gemLevel = gbIsPoe2 ? player.poe2.skillLevel(sn) : 0;
+
 	if (sn == SpellID::Healing || sn == SpellID::HealOther) {
 		ma = (GetSpellData(SpellID::Healing).sManaCost + 2 * player.getCharacterLevel() - adj);
+	} else if (gemLevel > 0 && GetSpellData(sn).sManaCost != 255) {
+		ma = GemBaseManaCost(SkillSlot::ForSpell(sn), gemLevel);
 	} else if (GetSpellData(sn).sManaCost == 255) {
 		ma = player._pMaxManaBase.whole() - adj;
 	} else {
@@ -175,7 +181,7 @@ void ConsumeSpell(Player &player, SpellID sn)
 		RedrawComponent(PanelDrawComponent::Mana);
 		break;
 	}
-	TelemetrySkillUsed(player, GetSpellData(sn).sNameText, manaCost);
+	TelemetrySkillUsed(player, GetSpellData(sn).sNameText, manaCost, player.poe2.skillLevel(sn));
 	if (sn == SpellID::BloodStar) {
 		TelemetryNoteAttacker("own Blood Star");
 		ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromInt(5));

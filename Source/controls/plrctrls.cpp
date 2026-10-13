@@ -1751,21 +1751,30 @@ bool CanStep(const Player &player, Direction dir)
 }
 
 /**
- * @brief POE2 Mashup: the step to take when walking with the keyboard. A wall or monster in the way turns the step
- * up to 45 degrees, so the hero slides along walls and around monsters instead of stopping dead.
+ * @brief POE2 Mashup: the step to take when walking with the keyboard.
+ *
+ * A little leeway, not a slide: when the hero just clips the corner of a wall or object, they step 45 degrees
+ * around it, but only if the way they want to go is clear right after. A long wall still stops them, and
+ * monsters always block, so a surrounded hero is stuck until they dodge roll out.
  */
 std::optional<Direction> KeyboardStep(const Player &player, Direction wanted)
 {
-	// Keep sliding the same way while the obstacle lasts, so the hero doesn't zigzag.
-	static Direction lastSlide = Direction::South;
 	if (CanStep(player, wanted))
 		return wanted;
+	const Point ahead = player.position.future + wanted;
+	if (InDungeonBounds(ahead) && (dMonster[ahead.x][ahead.y] != 0 || dPlayer[ahead.x][ahead.y] != 0))
+		return std::nullopt;
+	// Prefer the side that went around the last corner, so the hero doesn't zigzag between two.
+	static Direction lastSlide = Direction::South;
 	Direction first = Left(wanted);
 	Direction second = Right(wanted);
 	if (lastSlide == second)
 		std::swap(first, second);
 	for (const Direction slide : { first, second }) {
-		if (CanStep(player, slide)) {
+		if (!CanStep(player, slide))
+			continue;
+		const Point side = player.position.future + slide;
+		if (PosOkPlayer(player, side + wanted) && !IsPathBlocked(side, wanted)) {
 			lastSlide = slide;
 			return slide;
 		}

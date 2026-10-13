@@ -27,6 +27,7 @@
 #include "monster.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
@@ -82,6 +83,13 @@ struct SkillDamage {
 	int64_t raw = 0;
 	int hits = 0;
 	int kills = 0;
+	/** Time from the first hit to the kill, summed over the kills. */
+	uint32_t killMs = 0;
+	int uses = 0;
+	int mana = 0;
+	/** When the skill was first and last used, for its damage per second while in use. */
+	uint32_t firstUseMs = 0;
+	uint32_t lastUseMs = 0;
 };
 
 /** @brief A monster the player is fighting: when it was first hit, and by what. */
@@ -454,8 +462,13 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	LastExperience = player._pExperience;
 	LastGold = player._pGold;
 	TelemetryLog("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo")));
-	if (LogFile != nullptr)
+	if (LogFile != nullptr) {
 		WriteSettings();
+		// What each socketed gem does now and at its next level, to compare against the damage lines later.
+		std::string gems = SocketedGemsText(player);
+		std::replace(gems.begin(), gems.end(), '\n', '|');
+		TelemetryLog("gems", gems);
+	}
 }
 
 void TelemetryGameEnded()
@@ -532,7 +545,9 @@ void TelemetryMonsterKilled(const Monster &monster)
 	const auto it = Engagements.find(monster.getId());
 	if (it != Engagements.end()) {
 		const Engagement &engagement = it->second;
-		DamageFor(engagement.lastSource).kills++;
+		SkillDamage &killer = DamageFor(engagement.lastSource);
+		killer.kills++;
+		killer.killMs += now - engagement.firstHitMs;
 		fight = std::format(", killed by {:s} {:.1f} s after the first hit, {:d} overkill", engagement.lastSource, (now - engagement.firstHitMs) / 1000.0, engagement.overkill);
 		Engagements.erase(it);
 	} else {
@@ -586,17 +601,26 @@ void TelemetryLevelUp(const Player &player)
 	TelemetryLog("levelup", std::format("character level {:d}, life {:d}, mana {:d}, {:.1f} min into the game", player.getCharacterLevel(), player._pMaxHP.whole(), player._pMaxMana.whole(), (Now() - GameStartMs) / 60000.0));
 }
 
-void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost)
+void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost, int gemLevel)
 {
 	if (&player != MyPlayer)
 		return;
-	LastSkill = skill;
+	// Each gem level is tracked on its own, so the stats show what a level is worth.
+	LastSkill = gemLevel > 0 ? std::format("{:s} gem {:d}", skill, gemLevel) : std::string(skill);
 	LastSkillMs = Now();
 	Count([&](TelemetryCounts &counts) {
 		counts.skillUses++;
 		counts.manaSpent += manaCost;
 	});
-	TelemetryLog("skill", std::format("{:s}, {:d} mana, {:d}/{:d} left", skill, manaCost, player._pMana.whole(), player._pMaxMana.whole()));
+	if (LogFile != nullptr) {
+		SkillDamage &stats = DamageFor(LastSkill);
+		stats.uses++;
+		stats.mana += manaCost;
+		if (stats.firstUseMs == 0)
+			stats.firstUseMs = LastSkillMs;
+		stats.lastUseMs = LastSkillMs;
+	}
+	TelemetryLog("skill", std::format("{:s}, {:d} mana, {:d}/{:d} left", LastSkill, manaCost, player._pMana.whole(), player._pMaxMana.whole()));
 }
 
 void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason)
@@ -704,7 +728,16 @@ std::string TelemetrySkillDamageText()
 		StrAppend(text, " none yet");
 	for (const auto &[name, damage] : sorted) {
 		const int average = damage.hits > 0 ? Whole(damage.raw) / damage.hits : 0;
-		StrAppend(text, std::format(" {:s} {:d} ({:d} hits, {:d} average, {:d} kills);", name, Whole(damage.raw), damage.hits, average, damage.kills));
+		StrAppend(text, std::format(" {:s} {:d} ({:d} hits, {:d} average, {:d} kills", name, Whole(damage.raw), damage.hits, average, damage.kills));
+		if (damage.kills > 0)
+			StrAppend(text, std::format(", {:.1f} s to kill", damage.killMs / 1000.0 / damage.kills));
+		if (damage.uses > 0)
+			StrAppend(text, std::format(", {:d} uses", damage.uses));
+		if (damage.mana > 0)
+			StrAppend(text, std::format(", {:d} mana, {:.1f} damage per mana", damage.mana, static_cast<double>(Whole(damage.raw)) / damage.mana));
+		if (damage.lastUseMs > damage.firstUseMs)
+			StrAppend(text, std::format(", {:.0f} damage per second in use", Whole(damage.raw) * 1000.0 / (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs)));
+		StrAppend(text, ");");
 	}
 	return text;
 }
@@ -722,7 +755,7 @@ std::string TelemetryBuildText(const Player &player)
 		const SkillSlot slot = player.poe2.skillSlots[i];
 		if (slot.isEmpty())
 			continue;
-		StrAppend(text, " ", SkillName(slot));
+		StrAppend(text, " ", SkillName(slot), " gem ", player.poe2.gemLevel(i));
 		for (const SupportGem support : player.poe2.slotSupports[i]) {
 			if (support != SupportGem::None)
 				StrAppend(text, " +", SupportGemName(support));

@@ -30,6 +30,7 @@
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -321,12 +322,16 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 	} else if (CanCutGem(*uncut, gem)) {
 		const int level = GemLevelFromUncut(*uncut, player.getCharacterLevel());
 		if (const std::optional<size_t> socket = SocketToLevel(player, gem); socket) {
-			if (level > player.poe2.gemLevel(*socket))
+			if (level > player.poe2.gemLevel(*socket)) {
 				lines.emplace_back(FormatRuntime(_("Click to raise your gem from level {:d} to {:d}"), player.poe2.gemLevel(*socket), level), UiFlags::ColorWhitegold);
-			else
+				lines.emplace_back(FormatRuntime(_("Now {:s}"), GemLevelText(gem.skill, player.poe2.gemLevel(*socket))), UiFlags::ColorWhite);
+				lines.emplace_back(FormatRuntime(_("Then {:s}"), GemLevelText(gem.skill, level)), UiFlags::ColorWhite);
+			} else {
 				lines.emplace_back(FormatRuntime(_("Your gem is already level {:d}"), player.poe2.gemLevel(*socket)), UiFlags::ColorRed);
+			}
 		} else if (gem.support == SupportGem::None) {
 			lines.emplace_back(FormatRuntime(_("Click to cut a level {:d} gem"), level), UiFlags::ColorWhitegold);
+			lines.emplace_back(GemLevelText(gem.skill, level), UiFlags::ColorWhite);
 		} else {
 			lines.emplace_back(_("Click to cut this gem"), UiFlags::ColorWhitegold);
 		}
@@ -370,7 +375,7 @@ void CutGem(const GemEntry &gem)
 		player.poe2.slotLevels[*socket] = static_cast<uint8_t>(level);
 		PlaySFX(sound);
 		EventPlrMsg(FormatRuntime(_("{:s} is now level {:d}."), GemName(gem), level));
-		TelemetryLog("gem", FormatRuntime("{:s} raised from level {:d} to {:d}", GemName(gem), current, level));
+		TelemetryLog("gem", FormatRuntime("{:s} raised from {:s} to {:s}", GemName(gem), GemLevelText(gem.skill, current), GemLevelText(gem.skill, level)));
 		CloseGemcutting();
 		return;
 	}

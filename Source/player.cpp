@@ -50,6 +50,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/spirit.hpp"
@@ -598,7 +599,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	dam += player._pDamageMod;
 	// POE2 Mashup: Battle Cry empowers melee hits, and so does a Brutality support on the skill.
 	if (player.poe2.warcryTicks > 0)
-		dam += dam / 2;
+		dam += dam * BattleCryDamagePercent(player.poe2.skillLevel(WeaponSkill::BattleCry)) / 100;
 	dam = dam * SupportMeleeDamagePercent(player) / 100;
 	// POE2 Mashup: area skills deal less to the tiles beside the target.
 	dam = dam * damagePercent / 100;
@@ -1010,7 +1011,7 @@ bool DoRangeAttack(Player &player)
 		    0);
 		// POE2 Mashup: a bow skill's arrows hit harder as its gem levels up.
 		if (missile != nullptr && (barrage || rain || lightningArrow))
-			missile->poe2.damagePercent = static_cast<int16_t>(GemAttackDamagePercent(player.poe2.skillLevel(player.poe2.activeSkill)));
+			missile->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(SkillSlot::ForAttack(player.poe2.activeSkill), player.poe2.skillLevel(player.poe2.activeSkill)));
 
 		if (arrow == 0 && mistype != MissileID::SpectralArrow) {
 			PlaySfxLoc(arrows != 1 ? SfxID::ShootBow2 : SfxID::ShootBow, player.position.tile);
