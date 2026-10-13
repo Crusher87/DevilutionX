@@ -47,6 +47,7 @@ set(tests
   poe2_regen_test
   poe2_skill_gems_test
   poe2_support_gems_test
+  poe2_waystones_test
   poe2_weapon_skills_test
   player_test
   quests_test

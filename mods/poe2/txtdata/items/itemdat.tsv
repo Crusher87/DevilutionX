@@ -246,3 +246,4 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	4	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Ruby Charm	Charm	1	0	0	0	0	0	0	0	0		CHARM_LIFE	Null	true	300
 	4	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Sapphire Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_MANA	Null	true	300
 	3	Misc	Unequippable	GIANTS_KNUCKLE	Misc	NONE	Stone Charm	Charm	6	0	0	0	0	0	0	0	0		CHARM_GUARD	Null	true	500
+	2	Misc	Unequippable	MAP_OF_THE_STARS	Misc	NONE	Waystone	Waystone	20	0	0	0	0	0	0	0	0		WAYSTONE	Null	true	1500

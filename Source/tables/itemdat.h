@@ -543,6 +543,8 @@ enum item_misc_id : int8_t {
 	IMISC_CHARM_LIFE,
 	IMISC_CHARM_MANA,
 	IMISC_CHARM_GUARD,
+	/** Opens a map (POE2 Mashup endgame) when used in town. */
+	IMISC_WAYSTONE,
 	IMISC_INVALID = -1,
 };
 

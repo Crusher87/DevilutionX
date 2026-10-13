@@ -38,6 +38,7 @@
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/skill_gems.hpp"
+#include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/playerdat.hpp"
@@ -2400,9 +2401,9 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
 
 /**
  * Version 1 holds support gem links per spell, version 2 adds flask charges, version 3 the skill bar,
- * version 4 the passive tree and version 5 the supports socketed in each skill bar slot.
+ * version 4 the passive tree, version 5 the supports socketed in each skill bar slot and version 6 the open map.
  */
-constexpr uint8_t Poe2HeroDataVersion = 5;
+constexpr uint8_t Poe2HeroDataVersion = 6;
 
 namespace {
 
@@ -2477,6 +2478,15 @@ uint8_t ReadPoe2HeroData(Player &player)
 				support = static_cast<SupportGem>(gem);
 		}
 	}
+
+	if (version < 6 || !file.IsValid(2))
+		return version;
+	const uint8_t mapLevel = file.NextLE<uint8_t>();
+	const uint8_t mapTier = file.NextLE<uint8_t>();
+	if (mapLevel < NUMLEVELS && mapTier <= MaxWaystoneTier) {
+		player.poe2.mapLevel = mapLevel;
+		player.poe2.mapTier = mapTier;
+	}
 	return version;
 }
 
@@ -2498,7 +2508,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			passives.push_back(static_cast<uint8_t>(node));
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 2) + 1 + passives.size() + (NumSkillSlots * MaxSupportSockets));
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 2) + 1 + passives.size() + (NumSkillSlots * MaxSupportSockets) + 2);
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2515,6 +2525,8 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		for (const SupportGem gem : supports)
 			file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
 	}
+	file.WriteLE<uint8_t>(player.poe2.mapLevel);
+	file.WriteLE<uint8_t>(player.poe2.mapTier);
 }
 
 void LoadHeroItems(Player &player)

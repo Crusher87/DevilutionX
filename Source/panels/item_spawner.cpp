@@ -32,6 +32,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/display.h"
 #include "utils/format.hpp"
@@ -603,7 +604,7 @@ bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_qua
 	InitializeItem(item, entry.baseIndex);
 	item._iSeed = static_cast<int32_t>(seed >> 1);
 	SetupItem(item);
-	if (IsUncutGem(item))
+	if (IsUncutGem(item) || IsWaystone(item))
 		item._iCreateInfo = static_cast<uint16_t>((item._iCreateInfo & ~CF_LEVEL) | std::clamp(level, MinLevel, static_cast<int>(CF_LEVEL)));
 	return !item.isEmpty();
 }
