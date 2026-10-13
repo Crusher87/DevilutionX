@@ -30,6 +30,7 @@ set(libdevilutionx_SRCS
   plrmsg.cpp
   poe2/currency.cpp
   poe2/dodge_roll.cpp
+  poe2/hud_globes.cpp
   poe2/loot_filter.cpp
   portal.cpp
   restrict.cpp
