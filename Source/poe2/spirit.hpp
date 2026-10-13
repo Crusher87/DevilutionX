@@ -44,6 +44,8 @@ int SpiritReservation(PersistentSkill skill);
 /** @brief Whether the item grants Spirit as an implicit (sceptres). */
 bool ItemGrantsSpirit(const Item &item);
 int MaxSpirit(const Player &player);
+/** @brief Minion damage in percent of normal, from the passive tree and ascendancy. */
+int MinionDamagePercent(const Player &player);
 /** @brief Spirit reserved by the active Spirit gems. */
 int ReservedSpirit(const Player &player);
 /**

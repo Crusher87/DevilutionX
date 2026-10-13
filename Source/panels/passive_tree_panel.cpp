@@ -47,6 +47,8 @@ constexpr uint8_t HoverColor = PAL16_BEIGE;
 constexpr uint8_t TooltipColor = PAL16_GRAY + 14;
 
 bool IsOpen;
+/** @brief Whether the panel shows the class's ascendancies instead of the passive tree. */
+bool AscendancyView;
 
 struct Layout {
 	Rectangle panel;
@@ -72,6 +74,19 @@ Layout CurrentLayout()
 	return ComputeLayout(GlobalBackBuffer());
 }
 
+Rectangle ViewButton(const Layout &layout)
+{
+	constexpr int Width = 150;
+	return { { layout.panel.position.x + ((layout.panel.size.width - Width) / 2), layout.panel.position.y + 8 }, { Width, 22 } };
+}
+
+bool IsNodeShown(const Player &player, const PassiveNode &node)
+{
+	if (AscendancyView)
+		return IsAscendancyNode(node) && node.startClass == player._pClass;
+	return !IsAscendancyNode(node);
+}
+
 Point NodePosition(const Layout &layout, const PassiveNode &node)
 {
 	const Point center = layout.tree.Center();
@@ -84,8 +99,10 @@ int NodeRadius(const Layout &layout, const PassiveNode &node)
 	const int base = std::max(layout.tree.size.width / 90, 3);
 	switch (node.kind) {
 	case PassiveKind::Start:
+	case PassiveKind::Ascendancy:
 		return base + 4;
 	case PassiveKind::Notable:
+	case PassiveKind::AscendancyNotable:
 		return base + 3;
 	default:
 		return base;
@@ -95,6 +112,8 @@ int NodeRadius(const Layout &layout, const PassiveNode &node)
 std::optional<uint8_t> NodeAt(const Layout &layout, Point position)
 {
 	for (const PassiveNode &node : PassiveTree()) {
+		if (!IsNodeShown(*MyPlayer, node))
+			continue;
 		const Point center = NodePosition(layout, node);
 		const int radius = NodeRadius(layout, node) + 2;
 		const int dx = position.x - center.x;
@@ -163,12 +182,16 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 	std::string hint;
 	if (node.kind == PassiveKind::Start)
 		hint = node.startClass == player._pClass ? _("Your starting point") : _("Another class's starting point");
+	else if (node.kind == PassiveKind::Ascendancy && !IsPassiveAllocated(player, node.id) && !CanAllocatePassive(player, node.id))
+		hint = ChosenAscendancy(player) ? _("You already chose an ascendancy") : FormatRuntime(_("Reach level {:d} to ascend"), AscendancyLevel);
+	else if (node.kind == PassiveKind::Ascendancy && !IsPassiveAllocated(player, node.id))
+		hint = _("Click to ascend (free; refund to change)");
 	else if (IsPassiveAllocated(player, node.id))
 		hint = CanRefundPassive(player, node.id) ? _("Right-click to refund") : _("Other nodes depend on this one");
 	else if (CanAllocatePassive(player, node.id))
 		hint = _("Click to allocate");
 	else
-		hint = PassivePointsLeft(player) <= 0 ? _("No points left") : _("Not linked to your tree yet");
+		hint = (node.kind == PassiveKind::AscendancyNotable ? AscendancyPointsLeft(player) : PassivePointsLeft(player)) <= 0 ? _("No points left") : _("Not linked to your tree yet");
 
 	constexpr int LineHeight = 16;
 	const int width = 240;
@@ -178,7 +201,7 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 	position.y = std::min(position.y, layout.panel.position.y + layout.panel.size.height - height - 4);
 	const Rectangle box { position, { width, height } };
 	FillRectangle(out, box, TooltipColor);
-	DrawFrame(out, box, node.kind == PassiveKind::Notable ? NotableRimColor : BorderColor);
+	DrawFrame(out, box, node.kind == PassiveKind::Small ? BorderColor : NotableRimColor);
 
 	Rectangle line { position + Displacement { 8, 6 }, { width - 16, 20 } };
 	DrawString(out, PassiveNodeName(node), line, { .flags = (node.kind == PassiveKind::Small ? UiFlags::ColorWhite : UiFlags::ColorUiGold) | UiFlags::VerticalCenter });
@@ -240,6 +263,9 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 		case SDLK_P:
 			ClosePassiveTree();
 			break;
+		case SDLK_TAB:
+			AscendancyView = !AscendancyView;
+			break;
 		default:
 			break;
 		}
@@ -247,6 +273,10 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 	case SDL_EVENT_KEY_UP:
 		return true;
 	case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+		if (event.button.button == SDL_BUTTON_LEFT && ViewButton(CurrentLayout()).contains(MousePosition)) {
+			AscendancyView = !AscendancyView;
+			return true;
+		}
 		const std::optional<uint8_t> node = NodeAt(CurrentLayout(), MousePosition);
 		if (node && event.button.button == SDL_BUTTON_LEFT)
 			AllocatePassive(player, *node);
@@ -272,15 +302,28 @@ void DrawPassiveTree(const Surface &out)
 	DrawFrame(out, layout.panel, BorderColor);
 
 	const Rectangle title { layout.panel.position + Displacement { Padding, 6 }, { layout.panel.size.width - (2 * Padding), 26 } };
-	DrawString(out, _("Passive Tree"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::VerticalCenter });
-	DrawString(out, FormatRuntime(_("{:d} points left  ({:d} of {:d} spent)"), PassivePointsLeft(player), PassivePointsSpent(player), PassivePointsTotal(player)), title,
-	    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (PassivePointsLeft(player) > 0 ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+	DrawString(out, AscendancyView ? _("Ascendancy") : _("Passive Tree"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::VerticalCenter });
+	const int left = AscendancyView ? AscendancyPointsLeft(player) : PassivePointsLeft(player);
+	const int spent = AscendancyView ? AscendancyPointsSpent(player) : PassivePointsSpent(player);
+	const int total = AscendancyView ? AscendancyPointsTotal(player) : PassivePointsTotal(player);
+	DrawString(out, FormatRuntime(_("{:d} points left  ({:d} of {:d} spent)"), left, spent, total), title,
+	    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (left > 0 ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+
+	const Rectangle button = ViewButton(layout);
+	const bool buttonHovered = button.contains(MousePosition);
+	FillRectangle(out, button, buttonHovered ? NodeColor : TooltipColor);
+	DrawFrame(out, button, BorderColor);
+	const bool canAscend = AscendancyView || AscendancyPointsLeft(player) > 0 || (player.getCharacterLevel() >= AscendancyLevel && !ChosenAscendancy(player));
+	DrawString(out, AscendancyView ? _("Passive Tree (Tab)") : _("Ascendancy (Tab)"), button,
+	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (canAscend ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
 
 	const std::vector<PassiveNode> &tree = PassiveTree();
 	const int thickness = std::max(layout.tree.size.width / 250, 1);
 	for (const PassiveNode &node : tree) {
+		if (!IsNodeShown(player, node))
+			continue;
 		for (const uint8_t link : node.links) {
-			if (link < node.id)
+			if (link < node.id || !IsNodeShown(player, tree[link]))
 				continue; // Each link is drawn once.
 			const bool from = IsPassiveAllocated(player, node.id);
 			const bool to = IsPassiveAllocated(player, link);
@@ -291,6 +334,8 @@ void DrawPassiveTree(const Surface &out)
 
 	const std::optional<uint8_t> hovered = NodeAt(layout, MousePosition);
 	for (const PassiveNode &node : tree) {
+		if (!IsNodeShown(player, node))
+			continue;
 		const Point center = NodePosition(layout, node);
 		const int radius = NodeRadius(layout, node);
 		uint8_t color = NodeColor;
@@ -303,12 +348,17 @@ void DrawPassiveTree(const Surface &out)
 
 		if (hovered == node.id)
 			FillCircle(out, center, radius + 2, HoverColor);
-		else if (node.kind == PassiveKind::Notable)
+		else if (node.kind != PassiveKind::Small && node.kind != PassiveKind::Start)
 			FillCircle(out, center, radius + 1, NotableRimColor);
 		FillCircle(out, center, radius, color);
+		if (node.kind == PassiveKind::Ascendancy) {
+			const Rectangle label { center + Displacement { -80, radius + 4 }, { 160, 18 } };
+			DrawString(out, node.name, label, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorUiGold });
+		}
 	}
 
-	DrawString(out, _("Click a linked node to allocate it, right-click to refund. Each level gives a point. P or Esc closes."), layout.footer,
+	DrawString(out, AscendancyView ? FormatRuntime(_("Pick one ascendancy at level {:d}. You get 2 points then, and 2 more every 10 levels. P or Esc closes."), AscendancyLevel) : std::string(_("Click a linked node to allocate it, right-click to refund. Each level gives a point. P or Esc closes.")),
+	    layout.footer,
 	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
 
 	if (hovered)

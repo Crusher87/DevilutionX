@@ -3303,8 +3303,9 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
 	monster.golemToHit = 40 + (2 * level) + (2 * gemLevel);
-	monster.minDamage = 2 + (level / 3) + gemLevel;
-	monster.maxDamage = 5 + (level / 2) + (2 * gemLevel);
+	const int damagePercent = MinionDamagePercent(player);
+	monster.minDamage = static_cast<uint8_t>(std::min((2 + (level / 3) + gemLevel) * damagePercent / 100, 255));
+	monster.maxDamage = static_cast<uint8_t>(std::min((5 + (level / 2) + (2 * gemLevel)) * damagePercent / 100, 255));
 	UpdateEnemy(monster);
 }
 
