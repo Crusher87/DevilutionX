@@ -64,6 +64,7 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
+#include "poe2/hud_globes.hpp"
 #include "poe2/loot_filter.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
@@ -1859,7 +1860,8 @@ void DrawAndBlit()
 
 	const Rectangle &mainPanel = GetMainPanel();
 
-	if (gnScreenWidth > mainPanel.size.width || IsRedrawEverything()) {
+	// POE2 Mashup: the globes are animated, so the whole screen is drawn every frame.
+	if (gnScreenWidth > mainPanel.size.width || IsRedrawEverything() || gbIsPoe2) {
 		drawHealth = true;
 		drawMana = true;
 		drawControlButtons = true;
@@ -1902,7 +1904,7 @@ void DrawAndBlit()
 	}
 	DrawXPBar(out);
 	if (gbIsPoe2)
-		DrawEnergyShieldBar(out, { mainPanel.position.x + 134, mainPanel.position.y + 44 });
+		DrawPoe2GlobeValues(out);
 	if (*GetOptions().Gameplay.showHealthValues)
 		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
 	if (*GetOptions().Gameplay.showManaValues)
