@@ -44,6 +44,7 @@
 #include "multi.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
@@ -1199,6 +1200,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		StartPlrBlock(player, dir);
 		return true;
 	}
+	// POE2 Mashup: a Ruby, Topaz or Amethyst charm answers the hit landing.
+	resper = static_cast<int8_t>(ResistanceAgainstHit(player, damageType, resper));
 
 	if (monster != nullptr) {
 		MonsterReducePlayerAttribute(*monster, player);

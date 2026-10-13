@@ -265,10 +265,14 @@ struct Poe2PlayerData {
 	uint8_t lifeFlaskTicks = 0;
 	int32_t manaFlaskRaw = 0;
 	uint8_t manaFlaskTicks = 0;
-	/** @brief Game ticks left of Guard from a Stone Charm (not saved). */
+	/** @brief Game ticks left of Guard from an Iron Charm (not saved). */
 	uint8_t guardTicks = 0;
 	/** @brief Game ticks before another charm can go off (not saved). */
 	uint8_t charmCooldown = 0;
+	/** @brief Game ticks left of the fire, lightning and magic resistance from Ruby, Topaz and Amethyst charms (not saved). */
+	std::array<uint8_t, 3> resistCharmTicks {};
+	/** @brief Game ticks left of stun immunity from a Stone Charm (not saved). */
+	uint8_t stunImmuneTicks = 0;
 	/** @brief Resistance penalty the resistances were last calculated with; -1 before the first level loads (not saved). */
 	int resistancePenalty = -1;
 
@@ -313,6 +317,8 @@ struct Poe2PlayerData {
 		mapLevel = 0;
 		mapTier = 0;
 		charmCooldown = 0;
+		resistCharmTicks = {};
+		stunImmuneTicks = 0;
 		resistancePenalty = -1;
 	}
 

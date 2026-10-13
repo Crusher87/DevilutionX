@@ -77,6 +77,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/monster_mods.hpp"
@@ -4055,7 +4056,9 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 {
 	if (!monster.isPlayerMinion())
 		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100, monster.whoHit);
+	int goldenDrops = 0;
 	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0) {
+		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
 		QueueHeraldTriggers(*MyPlayer, monster);
 	}
@@ -4070,7 +4073,7 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	SpawnLoot(monster, sendmsg);
 	// POE2 Mashup: magic and rare monsters drop more.
 	if (!monster.isPlayerMinion()) {
-		for (int i = MonsterExtraDrops(monster); i > 0; i--)
+		for (int i = MonsterExtraDrops(monster) + goldenDrops; i > 0; i--)
 			SpawnItem(monster, monster.position.tile, sendmsg);
 	}
 

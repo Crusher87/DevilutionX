@@ -545,6 +545,12 @@ enum item_misc_id : int8_t {
 	IMISC_CHARM_GUARD,
 	/** Opens a map (POE2 Mashup endgame) when used in town. */
 	IMISC_WAYSTONE,
+	/** Charms that go off when a fire, lightning or magic hit lands, when you're stunned, or when you kill a rare. */
+	IMISC_CHARM_FIRE,
+	IMISC_CHARM_LIGHTNING,
+	IMISC_CHARM_MAGIC,
+	IMISC_CHARM_STUN,
+	IMISC_CHARM_GOLDEN,
 	IMISC_INVALID = -1,
 };
 

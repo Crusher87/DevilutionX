@@ -1334,7 +1334,7 @@ void DrawInvBelt(const Surface &out)
 			DrawFlaskLiquidLevel(out, position, sprite, myPlayer.poe2.flaskCharges[i], MaxFlaskCharges);
 			DrawFlaskCharges(out, position, myPlayer.poe2.flaskCharges[i]);
 		} else if (gbIsPoe2 && IsCharm(myPlayer.SpdList[i])) {
-			DrawFlaskCharges(out, position, static_cast<uint8_t>(myPlayer.SpdList[i]._iCharges), CharmChargesPerUse, MaxCharmCharges);
+			DrawFlaskCharges(out, position, static_cast<uint8_t>(myPlayer.SpdList[i]._iCharges), CharmChargesPerUseFor(GetCharmEffect(myPlayer.SpdList[i])), MaxCharmCharges);
 		}
 
 		if (myPlayer.SpdList[i].isUsable()

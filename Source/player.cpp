@@ -2784,6 +2784,9 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 	} else if (dam.whole() < player.getCharacterLevel() && !forcehit) {
 		return;
 	}
+	// POE2 Mashup: a Stone Charm breaks the stun.
+	if (CharmPreventsStun(player))
+		return;
 
 	const Direction pd = player._pdir;
 
