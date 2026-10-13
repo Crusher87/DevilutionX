@@ -152,7 +152,8 @@ GemCurve GetGemCurve(SkillSlot skill)
 int GemCurvePercent(int endAt20, int gemLevel)
 {
 	const int shape = GemCurveShape[std::clamp(gemLevel, 1, MaxGemLevel) - 1];
-	return static_cast<int>(std::lround(100.0 * std::pow(endAt20 / 100.0, shape / 1000.0)));
+	// Rounded by hand: some toolchains (Amiga) have no std::lround.
+	return static_cast<int>((100.0 * std::pow(endAt20 / 100.0, shape / 1000.0)) + 0.5);
 }
 
 int GemDamagePercent(SkillSlot skill, int gemLevel)
