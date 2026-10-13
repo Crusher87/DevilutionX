@@ -100,6 +100,8 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Purity of Elements");
 	case PersistentSkill::SummonGolem:
 		return _("Summon Golem");
+	case PersistentSkill::SkeletalWarriors:
+		return _("Skeletal Warriors");
 	default:
 		return {};
 	}
@@ -116,6 +118,8 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Aura: +25% to fire, lightning and magic resistance");
 	case PersistentSkill::SummonGolem:
 		return _("A golem fights for you and returns when it falls");
+	case PersistentSkill::SkeletalWarriors:
+		return _("Skeletons fight for you and rise again when they fall");
 	default:
 		return {};
 	}
@@ -131,6 +135,8 @@ int SpiritReservation(PersistentSkill skill)
 		return 60;
 	case PersistentSkill::SummonGolem:
 		return 40;
+	case PersistentSkill::SkeletalWarriors:
+		return 30;
 	default:
 		return 0;
 	}
@@ -226,16 +232,33 @@ void ClearHeralds()
 	PendingHeralds.clear();
 }
 
-void ProcessPersistentSkills(Player &player)
+int SkeletalWarriorCount(int characterLevel)
 {
-	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
-		return;
+	return std::min(2 + (characterLevel / 10), 4);
+}
+
+namespace {
+
+std::optional<Point> FindMinionSpawnPosition(const Player &player)
+{
+	return FindClosestValidPosition(
+	    [&player](Point target) { return !IsTileOccupied(target) && LineClearMissile(player.position.tile, target); },
+	    player.position.tile, 1, 5);
+}
+
+bool CanRaiseMinions(const Player &player)
+{
+	return leveltype != DTYPE_TOWN && player.isLevelOwnedByLocalClient();
+}
+
+void KeepGolemAlive(Player &player)
+{
 	Monster *golem = FindGolemForPlayer(player);
 	if (!IsPersistentSkillActive(player, PersistentSkill::SummonGolem)) {
 		player.poe2.golemCooldown = 0;
 		return;
 	}
-	if (golem != nullptr || leveltype == DTYPE_TOWN || !player.isLevelOwnedByLocalClient()) {
+	if (golem != nullptr || !CanRaiseMinions(player)) {
 		player.poe2.golemCooldown = GolemReviveTicks / 4;
 		return;
 	}
@@ -243,14 +266,47 @@ void ProcessPersistentSkills(Player &player)
 		player.poe2.golemCooldown--;
 		return;
 	}
-	const std::optional<Point> position = FindClosestValidPosition(
-	    [&player](Point target) { return !IsTileOccupied(target) && LineClearMissile(player.position.tile, target); },
-	    player.position.tile, 1, 5);
+	const std::optional<Point> position = FindMinionSpawnPosition(player);
 	if (!position)
 		return;
 	SpawnGolem(player, *position, static_cast<uint8_t>(GemSpellLevel(player.getCharacterLevel())));
 	AddVisualEffect(*position, MissileGraphicID::Resurrect);
 	player.poe2.golemCooldown = GolemReviveTicks;
+}
+
+void KeepSkeletonsAlive(Player &player)
+{
+	if (!IsPersistentSkillActive(player, PersistentSkill::SkeletalWarriors)) {
+		player.poe2.skeletonCooldown = 0;
+		if (CountSkeletonMinions(player) > 0)
+			KillSkeletonMinions(player);
+		return;
+	}
+	const size_t wanted = static_cast<size_t>(SkeletalWarriorCount(player.getCharacterLevel()));
+	if (!CanRaiseMinions(player) || CountSkeletonMinions(player) >= wanted) {
+		player.poe2.skeletonCooldown = SkeletonReviveTicks / 4;
+		return;
+	}
+	if (player.poe2.skeletonCooldown > 0) {
+		player.poe2.skeletonCooldown--;
+		return;
+	}
+	const std::optional<Point> position = FindMinionSpawnPosition(player);
+	if (!position)
+		return;
+	if (SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(GemSpellLevel(player.getCharacterLevel()))))
+		AddVisualEffect(*position, MissileGraphicID::Resurrect);
+	player.poe2.skeletonCooldown = SkeletonReviveTicks;
+}
+
+} // namespace
+
+void ProcessPersistentSkills(Player &player)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
+		return;
+	KeepGolemAlive(player);
+	KeepSkeletonsAlive(player);
 }
 
 } // namespace devilution

@@ -1875,7 +1875,7 @@ bool RoundWalk(Monster &monster, Direction direction, int8_t *dir)
 
 bool AiPlanPath(Monster &monster)
 {
-	if (monster.type().type != MT_GOLEM) {
+	if (!monster.isPlayerMinion()) {
 		if (monster.activeForTicks == 0)
 			return false;
 		if (monster.mode != MonsterMode::Stand)
@@ -1900,7 +1900,7 @@ bool AiPlanPath(Monster &monster)
 			return true;
 	}
 
-	if (monster.type().type != MT_GOLEM)
+	if (!monster.isPlayerMinion())
 		monster.pathCount = 0;
 
 	return false;
@@ -3290,6 +3290,30 @@ void InitGolem(devilution::Monster &monster, uint8_t golemOwnerPlayerId, int16_t
 	UpdateEnemy(monster);
 }
 
+/** @brief POE2 Mashup: turns a freshly spawned skeleton into a Skeletal Warrior that fights for its owner. */
+void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLevel)
+{
+	monster.poe2 = {};
+	monster.flags |= MFLAG_GOLEM;
+	monster.ai = MonsterAIID::Golem;
+	monster.goalVar3 = static_cast<int8_t>(ownerPlayerId);
+	const Player &player = Players[ownerPlayerId];
+	const int level = player.getCharacterLevel();
+	monster.maxHitPoints = Fixed26_6::fromInt(30 + (8 * level) + (4 * gemLevel));
+	monster.hitPoints = monster.maxHitPoints;
+	monster.armorClass = 10 + level;
+	monster.golemToHit = 40 + (2 * level) + (2 * gemLevel);
+	monster.minDamage = 2 + (level / 3) + gemLevel;
+	monster.maxDamage = 5 + (level / 2) + (2 * gemLevel);
+	UpdateEnemy(monster);
+}
+
+/** @brief Whether a spawn message carries a Skeletal Warrior: a minion owner and level on a monster that isn't a golem. */
+bool IsSkeletonMinionSpawn(const Monster &monster, int16_t golemSpellLevel)
+{
+	return gbIsPoe2 && golemSpellLevel > 0 && monster.type().type == SkeletonMinionType;
+}
+
 bool PosOkMissile(Point position)
 {
 	return !TileHasAny(position, TileProperties::BlockMissile);
@@ -3449,6 +3473,9 @@ void InitLevelMonsters()
 std::expected<void, std::string> GetLevelMTypes()
 {
 	RETURN_IF_ERROR(AddMonsterType(MT_GOLEM, PLACE_SPECIAL));
+	// POE2 Mashup: Skeletal Warriors can be raised on every level.
+	if (gbIsPoe2)
+		RETURN_IF_ERROR(AddMonsterType(SkeletonMinionType, PLACE_SPECIAL));
 	if (currlevel == 16) {
 		RETURN_IF_ERROR(AddMonsterType(MT_ADVOCATE, PLACE_SCATTER));
 		RETURN_IF_ERROR(AddMonsterType(MT_RBLACK, PLACE_SCATTER));
@@ -3770,6 +3797,8 @@ std::expected<void, std::string> InitMonsters()
 std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point startPosition)
 {
 	RETURN_IF_ERROR(AddMonsterType(MT_GOLEM, PLACE_SPECIAL));
+	if (gbIsPoe2)
+		RETURN_IF_ERROR(AddMonsterType(SkeletonMinionType, PLACE_SPECIAL));
 	if (setlevel)
 		for (int i = 0; i < ReservedMonsterSlotsForGolems; i++)
 			AddMonster(GolemHoldingCell, Direction::South, 0, false);
@@ -3835,6 +3864,8 @@ void LoadDeltaSpawnedMonster(size_t typeIndex, size_t monsterId, uint32_t seed, 
 	InitMonster(monster, Direction::South, typeIndex, position);
 	if (monster.type().type == MT_GOLEM) {
 		InitGolem(monster, golemOwnerPlayerId, golemSpellLevel);
+	} else if (IsSkeletonMinionSpawn(monster, golemSpellLevel)) {
+		InitSkeletonMinion(monster, golemOwnerPlayerId, golemSpellLevel);
 	}
 }
 
@@ -3863,6 +3894,9 @@ void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, s
 
 	if (monster.type().type == MT_GOLEM) {
 		InitGolem(monster, golemOwnerPlayerId, golemSpellLevel);
+		StartSpecialStand(monster, dir);
+	} else if (IsSkeletonMinionSpawn(monster, golemSpellLevel)) {
+		InitSkeletonMinion(monster, golemOwnerPlayerId, golemSpellLevel);
 		StartSpecialStand(monster, dir);
 	} else if (IsSkel(monster.type().type)) {
 		StartSpecialStand(monster, dir);
@@ -4881,6 +4915,41 @@ void SpawnGolem(const Player &player, Point position, uint8_t spellLevel)
 	// Update local state immediately to increase ActiveMonsterCount instantly (this allows multiple monsters to be spawned in one game tick)
 	InitializeSpawnedMonster(position, Direction::South, 0, monsterIndex, seed, player.getId(), spellLevel);
 	NetSendCmdSpawnMonster(position, Direction::South, 0, static_cast<uint16_t>(monsterIndex), seed, player.getId(), spellLevel);
+}
+
+size_t CountSkeletonMinions(const Player &player)
+{
+	size_t count = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.type().type == SkeletonMinionType && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+			count++;
+	}
+	return count;
+}
+
+void KillSkeletonMinions(const Player &player)
+{
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.type().type == SkeletonMinionType && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+			KillGolem(monster);
+	}
+}
+
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel)
+{
+	if (gemLevel == 0 || ActiveMonsterCount >= MaxMonsters)
+		return false;
+	const size_t typeIndex = GetMonsterTypeIndex(SkeletonMinionType);
+	if (typeIndex >= LevelMonsterTypeCount)
+		return false;
+	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];
+	ActiveMonsterCount += 1;
+	const uint32_t seed = GetLCGEngineState();
+	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, seed, player.getId(), gemLevel);
+	NetSendCmdSpawnMonster(position, Direction::South, static_cast<uint16_t>(typeIndex), static_cast<uint16_t>(monsterIndex), seed, player.getId(), gemLevel);
+	return true;
 }
 
 bool CanTalkToMonst(const Monster &monster)

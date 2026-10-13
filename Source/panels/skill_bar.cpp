@@ -123,6 +123,8 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::Pentagram;
 	case PersistentSkill::SummonGolem:
 		return SpellIcon::Golem;
+	case PersistentSkill::SkeletalWarriors:
+		return SpellIcon::BoneSpirit;
 	default:
 		return SpellIcon::Empty;
 	}

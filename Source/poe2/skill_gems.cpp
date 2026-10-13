@@ -49,6 +49,8 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForPersistent(PersistentSkill::PurityOfElements);
 	case IMISC_SPIRITGEM_GOLEM:
 		return SkillSlot::ForPersistent(PersistentSkill::SummonGolem);
+	case IMISC_SPIRITGEM_SKELETONS:
+		return SkillSlot::ForPersistent(PersistentSkill::SkeletalWarriors);
 	default:
 		return {};
 	}

@@ -275,6 +275,9 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 {
 	if (!monster.isPossibleToHit() || monster.isImmune(t, damageType))
 		return false;
+	// POE2 Mashup: your spells pass through minions.
+	if (gbIsPoe2 && monster.isPlayerMinion())
+		return false;
 
 	int hit = RandomIntLessThan(100);
 	int hper = 0;

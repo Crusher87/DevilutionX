@@ -495,6 +495,7 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SPIRITGEM_HERALDTHUNDER") return IMISC_SPIRITGEM_HERALDTHUNDER;
 	if (value == "SPIRITGEM_PURITY") return IMISC_SPIRITGEM_PURITY;
 	if (value == "SPIRITGEM_GOLEM") return IMISC_SPIRITGEM_GOLEM;
+	if (value == "SPIRITGEM_SKELETONS") return IMISC_SPIRITGEM_SKELETONS;
 	if (value == "UNCUT_SKILL") return IMISC_UNCUT_SKILL;
 	if (value == "UNCUT_SUPPORT") return IMISC_UNCUT_SUPPORT;
 	return std::unexpected("Unknown enum value");
