@@ -65,24 +65,24 @@ bool CanUsePassives()
 }
 
 /** @brief Whether every allocated node is linked to the start without going through `without`. */
-bool AllConnected(const Player &player, std::optional<uint8_t> without)
+bool AllConnected(const Player &player, std::optional<PassiveNodeId> without)
 {
-	const std::optional<uint8_t> start = PassiveStartNode(player._pClass);
+	const std::optional<PassiveNodeId> start = PassiveStartNode(player._pClass);
 	if (!start)
 		return player.poe2.passives.none();
 	std::bitset<MaxPassiveNodes> reached;
-	std::vector<uint8_t> open { *start };
+	std::vector<PassiveNodeId> open { *start };
 	reached.set(*start);
 	// The ascendancy is its own small tree, rooted at the ascendancy node.
-	const std::optional<uint8_t> ascendancy = ChosenAscendancy(player);
+	const std::optional<PassiveNodeId> ascendancy = ChosenAscendancy(player);
 	if (ascendancy && *ascendancy != without) {
 		open.push_back(*ascendancy);
 		reached.set(*ascendancy);
 	}
 	while (!open.empty()) {
-		const uint8_t node = open.back();
+		const PassiveNodeId node = open.back();
 		open.pop_back();
-		for (const uint8_t next : Tree[node].links) {
+		for (const PassiveNodeId next : Tree[node].links) {
 			if (reached.test(next) || next == without || !player.poe2.passives.test(next))
 				continue;
 			reached.set(next);
@@ -122,7 +122,7 @@ void LoadPassiveTreeData()
 			Tree.clear();
 			return;
 		}
-		node.id = static_cast<uint8_t>(*id);
+		node.id = static_cast<PassiveNodeId>(*id);
 		reader.readString("name", node.name);
 		reader.readString("kind", text);
 		node.kind = magic_enum::enum_cast<PassiveKind>(text).value_or(PassiveKind::Small);
@@ -139,13 +139,19 @@ void LoadPassiveTreeData()
 		for (const std::string_view link : SplitByChar(text, ',')) {
 			const std::optional<int> target = ParseInt(link);
 			if (target && *target >= 0 && *target < static_cast<int>(MaxPassiveNodes))
-				node.links.push_back(static_cast<uint8_t>(*target));
+				node.links.push_back(static_cast<PassiveNodeId>(*target));
 		}
 		Tree.push_back(std::move(node));
 	}
-	// Drop links to nodes that don't exist.
+	// Drop links to nodes that don't exist, and make every link go both ways.
 	for (PassiveNode &node : Tree) {
-		std::erase_if(node.links, [](uint8_t link) { return link >= Tree.size(); });
+		std::erase_if(node.links, [&node](PassiveNodeId link) { return link >= Tree.size() || link == node.id; });
+		for (const PassiveNodeId link : node.links)
+			Tree[link].links.push_back(node.id);
+	}
+	for (PassiveNode &node : Tree) {
+		std::sort(node.links.begin(), node.links.end());
+		node.links.erase(std::unique(node.links.begin(), node.links.end()), node.links.end());
 	}
 }
 
@@ -154,7 +160,7 @@ const std::vector<PassiveNode> &PassiveTree()
 	return Tree;
 }
 
-std::optional<uint8_t> PassiveStartNode(HeroClass heroClass)
+std::optional<PassiveNodeId> PassiveStartNode(HeroClass heroClass)
 {
 	for (const PassiveNode &node : Tree) {
 		if (node.kind == PassiveKind::Start && node.startClass == heroClass)
@@ -211,7 +217,7 @@ int AscendancyPointsLeft(const Player &player)
 	return AscendancyPointsTotal(player) - AscendancyPointsSpent(player);
 }
 
-std::optional<uint8_t> ChosenAscendancy(const Player &player)
+std::optional<PassiveNodeId> ChosenAscendancy(const Player &player)
 {
 	for (const PassiveNode &node : Tree) {
 		if (node.kind == PassiveKind::Ascendancy && player.poe2.passives.test(node.id))
@@ -220,7 +226,7 @@ std::optional<uint8_t> ChosenAscendancy(const Player &player)
 	return std::nullopt;
 }
 
-bool IsPassiveAllocated(const Player &player, uint8_t node)
+bool IsPassiveAllocated(const Player &player, PassiveNodeId node)
 {
 	if (node >= Tree.size())
 		return false;
@@ -229,7 +235,7 @@ bool IsPassiveAllocated(const Player &player, uint8_t node)
 	return player.poe2.passives.test(node);
 }
 
-bool CanAllocatePassive(const Player &player, uint8_t node)
+bool CanAllocatePassive(const Player &player, PassiveNodeId node)
 {
 	if (!CanUsePassives() || node >= Tree.size() || IsPassiveAllocated(player, node))
 		return false;
@@ -244,10 +250,10 @@ bool CanAllocatePassive(const Player &player, uint8_t node)
 	} else if (PassivePointsLeft(player) <= 0) {
 		return false;
 	}
-	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](uint8_t link) { return IsPassiveAllocated(player, link); });
+	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](PassiveNodeId link) { return IsPassiveAllocated(player, link); });
 }
 
-bool AllocatePassive(Player &player, uint8_t node)
+bool AllocatePassive(Player &player, PassiveNodeId node)
 {
 	if (!CanAllocatePassive(player, node))
 		return false;
@@ -256,14 +262,14 @@ bool AllocatePassive(Player &player, uint8_t node)
 	return true;
 }
 
-bool CanRefundPassive(const Player &player, uint8_t node)
+bool CanRefundPassive(const Player &player, PassiveNodeId node)
 {
 	if (!CanUsePassives() || node >= Tree.size() || Tree[node].kind == PassiveKind::Start || !player.poe2.passives.test(node))
 		return false;
 	return AllConnected(player, node);
 }
 
-bool RefundPassive(Player &player, uint8_t node)
+bool RefundPassive(Player &player, PassiveNodeId node)
 {
 	if (!CanRefundPassive(player, node))
 		return false;
@@ -294,6 +300,10 @@ PassiveTotals GetPassiveTotals(const Player &player)
 
 std::string PassiveStatText(PassiveStat stat, int value)
 {
+	// Shrines take as well as give: their negative percentages read as "reduced".
+	const auto percent = [value](std::string_view increased, std::string_view reduced) {
+		return value >= 0 ? FormatRuntime(increased, value) : FormatRuntime(reduced, -value);
+	};
 	switch (stat) {
 	case PassiveStat::Strength:
 		return FormatRuntime(_("{:+d} to Strength"), value);
@@ -304,15 +314,15 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::Vitality:
 		return FormatRuntime(_("{:+d} to Vitality"), value);
 	case PassiveStat::LifePercent:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Life"), value);
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Life"), _(/*xgettext:no-c-format*/ "{:d}% reduced maximum Life"));
 	case PassiveStat::ManaPercent:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Mana"), value);
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Mana"), _(/*xgettext:no-c-format*/ "{:d}% reduced maximum Mana"));
 	case PassiveStat::Damage:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased Damage"), value);
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Damage"));
 	case PassiveStat::ToHit:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to hit"), value);
 	case PassiveStat::ArmorPercent:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased Armor"), value);
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Armor"), _(/*xgettext:no-c-format*/ "{:d}% reduced Armor"));
 	case PassiveStat::FireResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Fire Resistance"), value);
 	case PassiveStat::LightningResist:
@@ -324,7 +334,7 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::LifeRegen:
 		return FormatRuntime(_("Regenerate {:d} Life per second"), value);
 	case PassiveStat::ManaRegen:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased Mana Regeneration"), value);
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Mana Regeneration"), _(/*xgettext:no-c-format*/ "{:d}% reduced Mana Regeneration"));
 	case PassiveStat::SpellLevels:
 		return FormatRuntime(_("{:+d} to all Spell Levels"), value);
 	case PassiveStat::AttackSpeed:
@@ -332,13 +342,13 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::CastSpeed:
 		return value > 1 ? std::string(_("Much faster Casting")) : std::string(_("Faster Casting"));
 	case PassiveStat::EvasionPercent:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased Evasion"), value);
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Evasion"), _(/*xgettext:no-c-format*/ "{:d}% reduced Evasion"));
 	case PassiveStat::EnergyShieldPercent:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Energy Shield"), value);
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased maximum Energy Shield"), _(/*xgettext:no-c-format*/ "{:d}% reduced maximum Energy Shield"));
 	case PassiveStat::Spirit:
 		return FormatRuntime(_("{:+d} to maximum Spirit"), value);
 	case PassiveStat::MinionDamage:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "Minions deal {:d}% increased Damage"), value);
+		return percent(_(/*xgettext:no-c-format*/ "Minions deal {:d}% increased Damage"), _(/*xgettext:no-c-format*/ "Minions deal {:d}% reduced Damage"));
 	default:
 		return {};
 	}

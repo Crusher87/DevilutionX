@@ -16,8 +16,8 @@
 
 namespace devilution {
 
-/** @brief Most nodes a passive tree may have; node ids are saved as one byte. */
-constexpr size_t MaxPassiveNodes = 255;
+/** @brief Most nodes a passive tree may have. */
+constexpr size_t MaxPassiveNodes = 1024;
 
 /** @brief Skills granted by skill gems that aren't spells; most need a certain weapon type. */
 enum class WeaponSkill : uint8_t {
