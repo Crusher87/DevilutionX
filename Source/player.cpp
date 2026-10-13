@@ -548,7 +548,7 @@ bool DamageWeapon(Player &player, unsigned damageFrequency)
 	return false;
 }
 
-bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
+bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, int damagePercent = 100)
 {
 	int hper = 0;
 
@@ -599,6 +599,8 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 	if (player.poe2.warcryTicks > 0)
 		dam += dam / 2;
 	dam = dam * SupportMeleeDamagePercent(player) / 100;
+	// POE2 Mashup: area skills deal less to the tiles beside the target.
+	dam = dam * damagePercent / 100;
 
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike)) {
@@ -904,7 +906,7 @@ bool DoAttack(Player &player)
 				monster = FindMonsterAtPosition(position);
 				if (monster == nullptr || CanTalkToMonst(*monster))
 					continue;
-				if (dir != player._pdir && monster->position.old == position && PlrHitMonst(player, *monster))
+				if (dir != player._pdir && monster->position.old == position && PlrHitMonst(player, *monster, false, AreaSkillSideDamagePercent))
 					didhit = true;
 				if (skill == WeaponSkill::GroundSlam && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
 					M_GetKnockback(*monster, player.position.tile);

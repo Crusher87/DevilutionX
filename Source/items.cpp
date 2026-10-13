@@ -73,6 +73,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -3259,6 +3260,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pISplLvlAdd = splLvlAdd;
 	player._pIEnAc = targetAc;
 	CalcPlrResistances(player, flags, fireRes, lightRes, magicRes);
+	if (gbIsPoe2)
+		mana += Fixed26_6::fromInt(Poe2BonusMana(player.getCharacterLevel()));
 	if (passive(PassiveStat::LifePercent) != 0 || passive(PassiveStat::ManaPercent) != 0) {
 		// Percent increases apply to everything else that adds life and mana.
 		const ClassAttributes &classAttributes = player.getClassAttributes();
