@@ -69,7 +69,7 @@ bool IsOpen;
 struct UncutLocation {
 	bool fromBelt;
 	int index;
-	int32_t seed;
+	uint32_t seed;
 };
 std::optional<UncutLocation> Uncut;
 GemCategory Category = GemCategory::All;
