@@ -112,7 +112,9 @@ foreach(test_target ${tests} ${standalone_tests} ${benchmarks})
 endforeach()
 
 foreach(test_target ${tests} ${standalone_tests})
-  gtest_discover_tests(${test_target})
+  # PRE_TEST lists the tests when ctest runs instead of right after linking, so parallel links
+  # on Windows do not race with tests that are still holding the copied DLLs open.
+  gtest_discover_tests(${test_target} DISCOVERY_MODE PRE_TEST)
 endforeach()
 
 foreach(test_target ${tests})
