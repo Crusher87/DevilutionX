@@ -2404,7 +2404,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 4 the passive tree, version 5 the supports socketed in each skill bar slot, version 6 the open map,
  * version 7 the rebuilt passive tree with two-byte node ids and version 8 the 12-socket Skills panel and the skill tray.
  */
-constexpr uint8_t Poe2HeroDataVersion = 8;
+constexpr uint8_t Poe2HeroDataVersion = 9;
 
 namespace {
 
@@ -2466,10 +2466,10 @@ uint8_t ReadPoe2HeroData(Player &player)
 		}
 	}
 
-	if (version < 2 || !file.IsValid(NumFlasks))
+	if (version < 2 || !file.IsValid(OldNumFlasks))
 		return version;
-	for (uint8_t &charges : player.poe2.flaskCharges)
-		charges = std::min(file.NextLE<uint8_t>(), MaxFlaskCharges);
+	for (size_t flask = 0; flask < OldNumFlasks; flask++)
+		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskCharges);
 
 	// The first 6 Skills panel sockets sit where the old skill bar's slots were; the rest follow the map.
 	if (version < 3 || !file.IsValid(OldNumSkillSlots * 2))
@@ -2531,6 +2531,12 @@ uint8_t ReadPoe2HeroData(Player &player)
 			continue;
 		player.poe2.tray[slot] = binding;
 	}
+
+	// The fifth flask slot came in version 9; older heroes start it full.
+	if (version < 9 || !file.IsValid(NumFlasks - OldNumFlasks))
+		return version;
+	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
+		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskCharges);
 	return version;
 }
 
@@ -2556,8 +2562,8 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
-	for (const uint8_t charges : player.poe2.flaskCharges)
-		file.WriteLE<uint8_t>(charges);
+	for (size_t flask = 0; flask < OldNumFlasks; flask++)
+		file.WriteLE<uint8_t>(player.poe2.flaskCharges[flask]);
 	const auto writeSockets = [&](size_t first, size_t end) {
 		for (size_t slot = first; slot < end; slot++) {
 			file.WriteLE<uint8_t>(static_cast<uint8_t>(player.poe2.skillSlots[slot].kind));
@@ -2584,6 +2590,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		file.WriteLE<uint8_t>(static_cast<uint8_t>(binding.action));
 		file.WriteLE<uint8_t>(binding.socket);
 	}
+	// Version 9: the fifth flask slot.
+	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
+		file.WriteLE<uint8_t>(player.poe2.flaskCharges[flask]);
 }
 
 void LoadHeroItems(Player &player)

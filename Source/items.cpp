@@ -73,6 +73,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -2046,8 +2047,10 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(_("Use, then click the item to craft"));
 		return;
 	}
-	if (gbIsPoe2 && IsFlaskPotion(item))
-		AddItemInfoBoxString(_("Flask in belt slots 1-4, refills from kills"));
+	if (gbIsPoe2 && IsFlaskPotion(item)) {
+		AddItemInfoBoxString(FlaskDescription(item));
+		AddItemInfoBoxString(_("Flask in belt slots 1-5, refills from kills"));
+	}
 	if (item._iMiscId == IMISC_EAR) {
 		AddItemInfoBoxString(FormatRuntime(pgettext("player", "Level: {:d}"), item._ivalue));
 		return;
@@ -3259,6 +3262,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pISplLvlAdd = splLvlAdd;
 	player._pIEnAc = targetAc;
 	CalcPlrResistances(player, flags, fireRes, lightRes, magicRes);
+	if (gbIsPoe2)
+		mana += Fixed26_6::fromInt(Poe2BonusMana(player.getCharacterLevel()));
 	if (passive(PassiveStat::LifePercent) != 0 || passive(PassiveStat::ManaPercent) != 0) {
 		// Percent increases apply to everything else that adds life and mana.
 		const ClassAttributes &classAttributes = player.getClassAttributes();

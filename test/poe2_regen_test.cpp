@@ -59,6 +59,25 @@ TEST_F(Poe2RegenTest, ManaRegeneratesFourPercentPerSecond)
 	EXPECT_EQ(player._pMana, player._pMaxMana);
 }
 
+TEST_F(Poe2RegenTest, EveryClassGetsExtraManaThatGrowsWithLevel)
+{
+	EXPECT_EQ(Poe2BonusMana(1), 22);
+	EXPECT_EQ(Poe2BonusMana(20), 60);
+
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(1);
+	player._pMaxManaBase = Fixed26_6::fromInt(10);
+	player._pManaBase = Fixed26_6::fromInt(10);
+	CalcPlrInv(player, false);
+	const int poe2Mana = player._pMaxMana.whole();
+	gbIsPoe2 = false;
+	CalcPlrInv(player, false);
+	const int diabloMana = player._pMaxMana.whole();
+	gbIsPoe2 = true;
+	EXPECT_EQ(poe2Mana, diabloMana + Poe2BonusMana(1));
+}
+
 TEST_F(Poe2RegenTest, IncreasedManaRegenScalesTheRate)
 {
 	Player &player = *MyPlayer;

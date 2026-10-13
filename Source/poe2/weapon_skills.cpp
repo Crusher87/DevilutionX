@@ -208,13 +208,13 @@ int WeaponSkillManaCost(WeaponSkill skill)
 {
 	switch (skill) {
 	case WeaponSkill::Cleave:
-		return 5;
+		return 4;
 	case WeaponSkill::GroundSlam:
 		return 8;
 	case WeaponSkill::Barrage:
 		return 7;
 	case WeaponSkill::WhirlingStaff:
-		return 6;
+		return 7;
 	case WeaponSkill::Flurry:
 		return 4;
 	case WeaponSkill::LeapSlam:

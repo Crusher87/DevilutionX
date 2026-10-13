@@ -203,7 +203,7 @@ using SupportSockets = std::array<SupportGem, MaxSupportSockets>;
 struct Poe2PlayerData {
 	/** @brief Support gems socketed in each Skills panel socket's skill. */
 	std::array<SupportSockets, NumSkillSlots> slotSupports {};
-	/** @brief Charges of the flasks in belt slots 1 to 4. */
+	/** @brief Charges of the flasks in belt slots 1 to 5. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
 	/** @brief Skill gems socketed in the Skills panel. */
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
@@ -260,6 +260,11 @@ struct Poe2PlayerData {
 	/** @brief The map (POE2 endgame) the player opened: its dungeon level and tier; tier 0 when there's none. */
 	uint8_t mapLevel = 0;
 	uint8_t mapTier = 0;
+	/** @brief Raw life and mana still to recover from the flasks being drunk, and the game ticks left (not saved). */
+	int32_t lifeFlaskRaw = 0;
+	uint8_t lifeFlaskTicks = 0;
+	int32_t manaFlaskRaw = 0;
+	uint8_t manaFlaskTicks = 0;
 	/** @brief Game ticks left of Guard from a Stone Charm (not saved). */
 	uint8_t guardTicks = 0;
 	/** @brief Game ticks before another charm can go off (not saved). */
@@ -272,6 +277,10 @@ struct Poe2PlayerData {
 		for (SupportSockets &supports : slotSupports)
 			supports.fill(SupportGem::None);
 		flaskCharges.fill(MaxFlaskCharges);
+		lifeFlaskRaw = 0;
+		lifeFlaskTicks = 0;
+		manaFlaskRaw = 0;
+		manaFlaskTicks = 0;
 		skillSlots.fill({});
 		for (size_t slot = 0; slot < NumTraySlots; slot++)
 			tray[slot] = DefaultTrayBinding(static_cast<TraySlot>(slot));
