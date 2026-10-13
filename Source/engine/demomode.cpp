@@ -645,6 +645,7 @@ void OverrideOptions()
 	options.Gameplay.runInTown.SetValue(DemoSettings.runInTown);
 	// Demos were recorded before WASD movement existed, so their key presses mean the original shortcuts.
 	options.Gameplay.wasdMovement.SetValue(false);
+	options.Gameplay.lootFilter.SetValue(LootFilter::Off);
 	options.Gameplay.theoQuest.SetValue(DemoSettings.theoQuest);
 	options.Gameplay.cowQuest.SetValue(DemoSettings.cowQuest);
 	options.Gameplay.autoGoldPickup.SetValue(DemoSettings.autoGoldPickup);

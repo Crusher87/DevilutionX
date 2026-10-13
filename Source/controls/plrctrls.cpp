@@ -48,6 +48,7 @@
 #include "panels/spell_list.hpp"
 #include "panels/ui_panels.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/loot_filter.hpp"
 #include "qol/chatlog.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -183,7 +184,7 @@ void FindItemOrObject()
 			continue;
 		}
 		const Item &item = Items[itemId];
-		if (item.isEmpty() || item.selectionRegion == SelectionRegion::None) {
+		if (item.isEmpty() || item.selectionRegion == SelectionRegion::None || IsItemHiddenByLootFilter(item)) {
 			continue;
 		}
 

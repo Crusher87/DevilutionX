@@ -64,6 +64,7 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
+#include "poe2/loot_filter.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -719,6 +720,8 @@ void DrawFloorTile(const Surface &out, const Lightmap &lightmap, Point tilePosit
 void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, int lightTableIndex)
 {
 	const Item &item = Items[itemIndex];
+	if (IsItemHiddenByLootFilter(item))
+		return;
 	const ClxSprite sprite = item.AnimInfo.currentSprite();
 	const Point position = targetBufferPosition + item.getRenderingOffset(sprite);
 	if (!IsPlayerInStore() && (itemIndex == pcursitem || AutoMapShowItems)) {

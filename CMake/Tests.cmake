@@ -37,6 +37,7 @@ set(tests
   poe2_gemcutting_test
   poe2_item_bases_test
   poe2_item_spawner_test
+  poe2_loot_filter_test
   poe2_monster_mods_test
   poe2_passive_tree_test
   poe2_rare_items_test

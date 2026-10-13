@@ -54,6 +54,20 @@ Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage);
 /** @brief Advances energy shield recharge by one game tick. */
 void RechargeEnergyShield(Player &player);
 
+/** @brief Resistances drop by this much for each dungeon area reached past the Cathedral, like POE2's act penalties. */
+constexpr int ResistancePenaltyPerArea = 10;
+/** @brief And by this much more on Nightmare and again on Hell. */
+constexpr int ResistancePenaltyPerDifficulty = 15;
+/** @brief The lowest a resistance can go with the penalty, so monsters deal at most 60% more. */
+constexpr int MinPoe2Resistance = -60;
+
+/** @brief The deepest dungeon level the character has reached (0 in town before ever leaving it). */
+int DeepestDungeonLevel(const Player &player);
+/** @brief How much the character's resistances are reduced, from depth and difficulty. */
+int ResistancePenalty(const Player &player);
+/** @brief Applies the penalty and the POE2 bounds to a resistance. */
+int Poe2Resistance(int resistance, int penalty, int maxResistance);
+
 /** @brief Sets the new maximum, keeping the missing amount the same, like life does. */
 void SetMaxEnergyShield(Player &player, int maxEnergyShield);
 

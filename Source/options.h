@@ -99,6 +99,15 @@ enum class StoreUi : uint8_t {
 	VisualGrid = 2,
 };
 
+enum class LootFilter : uint8_t {
+	/** @brief Show every item. */
+	Off = 0,
+	/** @brief Hide normal weapons, armor and jewelry. */
+	HideNormal = 1,
+	/** @brief Hide normal and magic weapons, armor and jewelry. */
+	HideNormalAndMagic = 2,
+};
+
 enum class PartyPortraits : uint8_t {
 	/** @brief No party portraits. */
 	Disabled = 0,
@@ -644,6 +653,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean quickCast;
 	/** @brief Walk by holding W, A, S and D (POE2 Mashup). */
 	OptionEntryBoolean wasdMovement;
+	/** @brief Hides low quality gear on the ground (POE2 Mashup). */
+	OptionEntryEnum<LootFilter> lootFilter;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */

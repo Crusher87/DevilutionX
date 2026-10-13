@@ -141,6 +141,42 @@ TEST_F(Poe2DefensesTest, EnergyShieldSoaksDamageThenRecharges)
 	EXPECT_EQ(player.poe2.energyShield, 40 * 64);
 }
 
+TEST_F(Poe2DefensesTest, ResistancesDropInDeeperAreas)
+{
+	Player &player = *MyPlayer;
+	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+	EXPECT_EQ(ResistancePenalty(player), 0);
+	player._pLvlVisited[4] = true;
+	EXPECT_EQ(ResistancePenalty(player), 0);
+	player._pLvlVisited[5] = true;
+	EXPECT_EQ(ResistancePenalty(player), ResistancePenaltyPerArea);
+	player._pLvlVisited[13] = true;
+	EXPECT_EQ(ResistancePenalty(player), 3 * ResistancePenaltyPerArea);
+	player._pLvlVisited[24] = true;
+	EXPECT_EQ(ResistancePenalty(player), 3 * ResistancePenaltyPerArea);
+
+	sgGameInitInfo.nDifficulty = DIFF_HELL;
+	EXPECT_EQ(ResistancePenalty(player), (3 * ResistancePenaltyPerArea) + (2 * ResistancePenaltyPerDifficulty));
+	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+}
+
+TEST_F(Poe2DefensesTest, ResistancesCanGoNegative)
+{
+	Player &player = *MyPlayer;
+	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+	player._pLvlVisited[13] = true;
+	Recalculate(player);
+	EXPECT_EQ(player._pFireResist, -30);
+	EXPECT_EQ(player._pLghtResist, -30);
+	EXPECT_EQ(player._pMagResist, -30);
+	EXPECT_EQ(Poe2Resistance(200, 30, MaxResistance), MaxResistance);
+	EXPECT_EQ(Poe2Resistance(-100, 30, MaxResistance), MinPoe2Resistance);
+
+	gbIsPoe2 = false;
+	Recalculate(player);
+	EXPECT_EQ(player._pFireResist, 0);
+}
+
 TEST_F(Poe2DefensesTest, VanillaModeKeepsArmorClass)
 {
 	gbIsPoe2 = false;
