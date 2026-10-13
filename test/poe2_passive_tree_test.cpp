@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <array>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -53,7 +55,7 @@ public:
 		UnloadModArchives();
 	}
 
-	static uint8_t FindNode(std::string_view name)
+	static PassiveNodeId FindNode(std::string_view name)
 	{
 		for (const PassiveNode &node : PassiveTree()) {
 			if (node.name == name)
@@ -62,19 +64,52 @@ public:
 		ADD_FAILURE() << name;
 		return 0;
 	}
+
+	/** @brief The Warrior's road north: Strength, Strength, then Lachdanan's Oath. */
+	static std::array<PassiveNodeId, 3> WarriorPath()
+	{
+		const PassiveNodeId oath = FindNode("Lachdanan's Oath");
+		const PassiveNodeId before = PassiveTree()[oath].links[1];
+		const PassiveNodeId first = PassiveTree()[before].links[0];
+		return { first, before, oath };
+	}
 };
 
 TEST_F(Poe2PassiveTreeTest, TreeLoadsWithAStartForEveryClass)
 {
-	ASSERT_GE(PassiveTree().size(), 50U);
+	ASSERT_GE(PassiveTree().size(), 400U);
+	ASSERT_LE(PassiveTree().size(), MaxPassiveNodes);
 	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Rogue, HeroClass::Sorcerer, HeroClass::Monk, HeroClass::Bard, HeroClass::Barbarian }) {
 		EXPECT_TRUE(PassiveStartNode(heroClass).has_value()) << static_cast<int>(heroClass);
 	}
 	for (const PassiveNode &node : PassiveTree()) {
-		for (const uint8_t link : node.links) {
+		for (const PassiveNodeId link : node.links) {
 			ASSERT_LT(link, PassiveTree().size());
 			const auto &back = PassiveTree()[link].links;
-			EXPECT_NE(std::find(back.begin(), back.end(), node.id), back.end()) << "link " << int(node.id) << "-" << int(link) << " is one way";
+			EXPECT_NE(std::find(back.begin(), back.end(), node.id), back.end()) << "link " << node.id << "-" << link << " is one way";
+		}
+	}
+}
+
+TEST_F(Poe2PassiveTreeTest, EveryStartReachesTheWholeTree)
+{
+	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Rogue, HeroClass::Sorcerer, HeroClass::Monk, HeroClass::Bard, HeroClass::Barbarian }) {
+		std::vector<bool> seen(PassiveTree().size());
+		std::vector<PassiveNodeId> open { *PassiveStartNode(heroClass) };
+		seen[open.back()] = true;
+		while (!open.empty()) {
+			const PassiveNodeId id = open.back();
+			open.pop_back();
+			for (const PassiveNodeId link : PassiveTree()[id].links) {
+				if (!seen[link]) {
+					seen[link] = true;
+					open.push_back(link);
+				}
+			}
+		}
+		for (const PassiveNode &node : PassiveTree()) {
+			if (!IsAscendancyNode(node))
+				EXPECT_TRUE(seen[node.id]) << static_cast<int>(heroClass) << " can't reach " << node.id;
 		}
 	}
 }
@@ -88,28 +123,28 @@ TEST_F(Poe2PassiveTreeTest, OnePointPerLevelAfterTheFirst)
 TEST_F(Poe2PassiveTreeTest, NodesMustLinkToTheTree)
 {
 	Player &player = *MyPlayer;
-	const uint8_t start = *PassiveStartNode(HeroClass::Warrior);
+	const PassiveNodeId start = *PassiveStartNode(HeroClass::Warrior);
 	EXPECT_TRUE(IsPassiveAllocated(player, start));
 
-	const uint8_t juggernaut = FindNode("Juggernaut");
-	EXPECT_FALSE(CanAllocatePassive(player, juggernaut));
+	const auto path = WarriorPath();
+	EXPECT_FALSE(CanAllocatePassive(player, path[2]));
+	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Arkaine's Valor")));
 
-	const uint8_t first = PassiveTree()[start].links[0];
-	ASSERT_TRUE(AllocatePassive(player, first));
+	ASSERT_TRUE(AllocatePassive(player, path[0]));
 	EXPECT_EQ(PassivePointsLeft(player), 8);
-	EXPECT_FALSE(CanAllocatePassive(player, first));
+	EXPECT_FALSE(CanAllocatePassive(player, path[0]));
 }
 
 TEST_F(Poe2PassiveTreeTest, RefundsKeepTheTreeConnected)
 {
 	Player &player = *MyPlayer;
-	// Warrior path: 8 -> 9 -> 10 -> Juggernaut.
-	for (const uint8_t node : { 8, 9, 10, 11 })
-		ASSERT_TRUE(AllocatePassive(player, node)) << int(node);
-	EXPECT_FALSE(CanRefundPassive(player, 9));
-	EXPECT_TRUE(RefundPassive(player, 11));
-	EXPECT_TRUE(RefundPassive(player, 10));
-	EXPECT_EQ(PassivePointsSpent(player), 2);
+	const auto path = WarriorPath();
+	for (const PassiveNodeId node : path)
+		ASSERT_TRUE(AllocatePassive(player, node)) << node;
+	EXPECT_FALSE(CanRefundPassive(player, path[1]));
+	EXPECT_TRUE(RefundPassive(player, path[2]));
+	EXPECT_TRUE(RefundPassive(player, path[1]));
+	EXPECT_EQ(PassivePointsSpent(player), 1);
 	ResetPassives(player);
 	EXPECT_EQ(PassivePointsSpent(player), 0);
 }
@@ -121,15 +156,29 @@ TEST_F(Poe2PassiveTreeTest, AllocatedStatsApplyToTheCharacter)
 	const int strength = player._pStrength;
 	const int maxLife = player._pMaxHP.whole();
 
-	// 8: +8 Strength, 9: 4% life, 10: 8% armor, 11 Juggernaut: 12% life and 25% armor.
-	for (const uint8_t node : { 8, 9, 10, 11 })
+	// +5 Strength, +5 Strength, then Lachdanan's Oath: 10% life and 15% armor.
+	for (const PassiveNodeId node : WarriorPath())
 		ASSERT_TRUE(AllocatePassive(player, node));
 
-	EXPECT_EQ(player._pStrength, strength + 8);
+	EXPECT_EQ(player._pStrength, strength + 10);
 	EXPECT_GT(player._pMaxHP.whole(), maxLife);
 	const PassiveTotals totals = GetPassiveTotals(player);
-	EXPECT_EQ(totals[static_cast<size_t>(PassiveStat::LifePercent)], 16);
-	EXPECT_EQ(totals[static_cast<size_t>(PassiveStat::ArmorPercent)], 33);
+	EXPECT_EQ(totals[static_cast<size_t>(PassiveStat::LifePercent)], 10);
+	EXPECT_EQ(totals[static_cast<size_t>(PassiveStat::ArmorPercent)], 15);
+}
+
+TEST_F(Poe2PassiveTreeTest, ShrinesGiveAndTake)
+{
+	const PassiveNode &shrine = PassiveTree()[FindNode("Gloomy Shrine")];
+	EXPECT_EQ(shrine.kind, PassiveKind::Shrine);
+	bool hasDrawback = false;
+	for (const auto &[stat, value] : shrine.stats) {
+		if (value < 0)
+			hasDrawback = true;
+	}
+	EXPECT_TRUE(hasDrawback);
+	EXPECT_EQ(PassiveStatText(PassiveStat::Damage, -10), "10% reduced Damage");
+	EXPECT_EQ(PassiveStatText(PassiveStat::Damage, 25), "25% increased Damage");
 }
 
 TEST_F(Poe2PassiveTreeTest, EveryClassHasTwoAscendancies)
@@ -147,26 +196,26 @@ TEST_F(Poe2PassiveTreeTest, EveryClassHasTwoAscendancies)
 TEST_F(Poe2PassiveTreeTest, AscendancyUnlocksAtLevel15)
 {
 	Player &player = *MyPlayer;
-	const uint8_t titan = FindNode("Titan");
-	const uint8_t warbringer = FindNode("Warbringer");
+	const PassiveNodeId knight = FindNode("Knight of Westmarch");
+	const PassiveNodeId warlord = FindNode("Blood Warlord");
 	EXPECT_EQ(AscendancyPointsTotal(player), 0);
-	EXPECT_FALSE(CanAllocatePassive(player, titan));
+	EXPECT_FALSE(CanAllocatePassive(player, knight));
 
 	player.setCharacterLevel(15);
 	EXPECT_EQ(AscendancyPointsTotal(player), 2);
-	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Deadeye"))); // another class's
-	ASSERT_TRUE(AllocatePassive(player, titan));
-	EXPECT_EQ(ChosenAscendancy(player), titan);
-	EXPECT_FALSE(CanAllocatePassive(player, warbringer)); // only one ascendancy
-	EXPECT_EQ(PassivePointsSpent(player), 0);             // choosing is free
+	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Sister of the Sightless Eye"))); // another class's
+	ASSERT_TRUE(AllocatePassive(player, knight));
+	EXPECT_EQ(ChosenAscendancy(player), knight);
+	EXPECT_FALSE(CanAllocatePassive(player, warlord)); // only one ascendancy
+	EXPECT_EQ(PassivePointsSpent(player), 0);          // choosing is free
 
-	const uint8_t first = PassiveTree()[titan].links[0];
+	const PassiveNodeId first = PassiveTree()[knight].links[0];
 	ASSERT_TRUE(AllocatePassive(player, first));
-	const uint8_t second = PassiveTree()[first].links[1];
+	const PassiveNodeId second = PassiveTree()[first].links[1];
 	ASSERT_TRUE(AllocatePassive(player, second));
 	EXPECT_EQ(AscendancyPointsLeft(player), 0);
 	EXPECT_EQ(PassivePointsLeft(player), 14);
-	EXPECT_FALSE(CanRefundPassive(player, titan));
+	EXPECT_FALSE(CanRefundPassive(player, knight));
 	EXPECT_FALSE(CanRefundPassive(player, first));
 	EXPECT_TRUE(RefundPassive(player, second));
 
@@ -177,10 +226,11 @@ TEST_F(Poe2PassiveTreeTest, AscendancyUnlocksAtLevel15)
 TEST_F(Poe2PassiveTreeTest, MultiplayerIgnoresPassives)
 {
 	Player &player = *MyPlayer;
-	ASSERT_TRUE(AllocatePassive(player, 8));
+	const auto path = WarriorPath();
+	ASSERT_TRUE(AllocatePassive(player, path[0]));
 	gbIsMultiplayer = true;
 	EXPECT_EQ(GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Strength)], 0);
-	EXPECT_FALSE(CanAllocatePassive(player, 9));
+	EXPECT_FALSE(CanAllocatePassive(player, path[1]));
 }
 
 } // namespace

@@ -1,145 +1,451 @@
 id	name	kind	class	x	y	stats	links
-0	Barbarian	Start	Barbarian	0	-16		1,42,47
-1		Small		0	-30	Damage=6	0,2
-2		Small		0	-44	Vitality=5	1,3,5
-3		Small		0	-58	LifeRegen=2	2,4,48,58
-4	Bloodlust	Notable		0	-76	LifeRegen=6,Damage=15	3
-5		Small		-10	-51	Strength=8	2,6
-6	Unstoppable	Notable		-18	-66	LifePercent=8,AllResist=8	5
-7	Warrior	Start	Warrior	-14	-8		8,42,43
-8		Small		-26	-15	Strength=8	7,9
-9		Small		-38	-22	LifePercent=4	8,10,12
-10		Small		-50	-29	ArmorPercent=8	9,11,48,50
-11	Juggernaut	Notable		-66	-38	LifePercent=12,ArmorPercent=25	10
-12		Small		-49	-17	Damage=8	9,13
-13	Heavy Blows	Notable		-66	-18	Damage=25,Strength=10	12
-14	Sorcerer	Start	Sorcerer	-14	8		15,43,44
-15		Small		-26	15	Magic=8	14,16
-16		Small		-38	22	ManaPercent=5	15,17,19
-17		Small		-50	29	ManaRegen=15	16,18,50,52
-18	Arcane Mastery	Notable		-66	38	SpellLevels=1,EnergyShieldPercent=20	17
-19		Small		-39	34	Magic=8	16,20
-20	Wellspring	Notable		-48	48	ManaRegen=40,ManaPercent=8	19
-21	Bard	Start	Bard	0	16		22,44,45
-22		Small		0	30	Dexterity=6	21,23
-23		Small		0	44	Magic=6	22,24,26
-24		Small		0	58	ManaRegen=10	23,25,52,54
-25	Virtuoso	Notable		0	76	CastSpeed=1,AttackSpeed=1	24
-26		Small		10	51	ManaPercent=4	23,27
-27	Harmony	Notable		18	66	LifePercent=6,ManaPercent=10	26
-28	Rogue	Start	Rogue	14	8		29,45,46
-29		Small		26	15	Dexterity=8	28,30
-30		Small		38	22	ToHit=10	29,31,33
-31		Small		50	29	Damage=8	30,32,54,56
-32	Deadeye	Notable		66	38	ToHit=25,Damage=20	31
-33		Small		49	17	Dexterity=8	30,34
-34	Swift Hands	Notable		66	18	AttackSpeed=1,EvasionPercent=25	33
-35	Monk	Start	Monk	14	-8		36,46,47
-36		Small		26	-15	AllResist=4	35,37
-37		Small		38	-22	Dexterity=6	36,38,40
-38		Small		50	-29	Strength=6	37,39,56,58
-39	Iron Body	Notable		66	-38	AllResist=12,ArmorPercent=15	38
-40		Small		39	-34	Dexterity=8	37,41
-41	Flowing Strikes	Notable		48	-48	AttackSpeed=1,EvasionPercent=15	40
-42		Small		-12	-21	Strength=5,Vitality=5	0,7
-43		Small		-24	0	Strength=5,Magic=5	7,14
-44		Small		-12	21	Magic=5,Dexterity=5	14,21
-45		Small		12	21	Dexterity=5,Magic=5	21,28
-46		Small		24	0	Dexterity=5,Strength=5	28,35
-47		Small		12	-21	Strength=5,Dexterity=5	0,35
-48		Small		-33	-57	FireResist=8	3,10,49
-49	Endurance	Notable		-45	-78	Vitality=15,LifeRegen=3	48
-50		Small		-66	0	LightningResist=8	10,17,51
-51	Flame Ward	Notable		-90	0	FireResist=20,LifePercent=5	50
-52		Small		-33	57	MagicResist=8	17,24,53
-53	Clarity of Purpose	Notable		-45	78	ManaRegen=25,Magic=10	52
-54		Small		33	57	FireResist=8	24,31,55
-55	Spell Ward	Notable		45	78	MagicResist=15,EnergyShieldPercent=30	54
-56		Small		66	0	LightningResist=8	31,38,57
-57	Precision	Notable		90	0	ToHit=20,Dexterity=10	56
-58		Small		33	-57	MagicResist=8	3,38,59
-59	Grounded	Notable		45	-78	LightningResist=20,ArmorPercent=10	58
-60	Titan	Ascendancy	Warrior	-55	60	Strength=10	61
-61	Stone Skin	AscendancyNotable	Warrior	-55	30	ArmorPercent=30	60,62,63
-62	Mountain	AscendancyNotable	Warrior	-80	0	LifePercent=10,Strength=10	61,64
-63	Earthbreaker	AscendancyNotable	Warrior	-30	0	Damage=25	61,65
-64	Crushing Impacts	AscendancyNotable	Warrior	-80	-35	Damage=20,ToHit=10	62,66
-65	Colossus	AscendancyNotable	Warrior	-30	-35	LifePercent=15,ArmorPercent=20	63,66
-66	Hulking Form	AscendancyNotable	Warrior	-55	-65	Vitality=20,LifeRegen=5	64,65
-67	Warbringer	Ascendancy	Warrior	55	60	Vitality=10	68
-68	Warcaller	AscendancyNotable	Warrior	55	30	Damage=20	67,69,70
-69	Battle Rhythm	AscendancyNotable	Warrior	30	0	AttackSpeed=1	68,71
-70	Unbreakable	AscendancyNotable	Warrior	80	0	AllResist=10	68,72
-71	Blood Fury	AscendancyNotable	Warrior	30	-35	LifeRegen=8	69,73
-72	Anvil	AscendancyNotable	Warrior	80	-35	ArmorPercent=40	70,73
-73	Imploding Impacts	AscendancyNotable	Warrior	55	-65	Damage=30,ToHit=15	71,72
-74	Deadeye	Ascendancy	Rogue	-55	60	Dexterity=10	75
-75	Far Shot	AscendancyNotable	Rogue	-55	30	Damage=20	74,76,77
-76	Eagle Eye	AscendancyNotable	Rogue	-80	0	ToHit=20	75,78
-77	Gathering Winds	AscendancyNotable	Rogue	-30	0	AttackSpeed=1	75,79
-78	Point Blank	AscendancyNotable	Rogue	-80	-35	Damage=25	76,80
-79	Avidity	AscendancyNotable	Rogue	-30	-35	Dexterity=15,EvasionPercent=20	77,80
-80	Endless Munitions	AscendancyNotable	Rogue	-55	-65	Damage=30	78,79
-81	Pathfinder	Ascendancy	Rogue	55	60	Vitality=10	82
-82	Running Assault	AscendancyNotable	Rogue	55	30	EvasionPercent=30	81,83,84
-83	Herbalist	AscendancyNotable	Rogue	30	0	LifeRegen=6	82,85
-84	Wild Wanderer	AscendancyNotable	Rogue	80	0	AllResist=12	82,86
-85	Contaminate	AscendancyNotable	Rogue	30	-35	Damage=20,LightningResist=10	83,87
-86	Overwhelming Toxicity	AscendancyNotable	Rogue	80	-35	Damage=30	84,87
-87	Traveller's Wisdom	AscendancyNotable	Rogue	55	-65	LifePercent=12,ManaPercent=12	85,86
-88	Stormweaver	Ascendancy	Sorcerer	-55	60	Magic=10	89
-89	Constant Gale	AscendancyNotable	Sorcerer	-55	30	CastSpeed=1	88,90,91
-90	Strike Twice	AscendancyNotable	Sorcerer	-80	0	SpellLevels=1	89,92
-91	Shaper of Storms	AscendancyNotable	Sorcerer	-30	0	LightningResist=20,ManaPercent=15	89,93
-92	Force of Will	AscendancyNotable	Sorcerer	-80	-35	EnergyShieldPercent=30	90,94
-93	Heavy Snows	AscendancyNotable	Sorcerer	-30	-35	Damage=25	91,94
-94	Tempest Caller	AscendancyNotable	Sorcerer	-55	-65	SpellLevels=1,ManaRegen=30	92,93
-95	Infernalist	Ascendancy	Sorcerer	55	60	Vitality=10	96
-96	Pyromantic Pact	AscendancyNotable	Sorcerer	55	30	FireResist=20,LifePercent=10	95,97,98
-97	Beidat's Will	AscendancyNotable	Sorcerer	30	0	Spirit=30	96,99
-98	Bringer of Flame	AscendancyNotable	Sorcerer	80	0	MinionDamage=40	96,100
-99	Seething Body	AscendancyNotable	Sorcerer	30	-35	Damage=20	97,101
-100	Altered Flesh	AscendancyNotable	Sorcerer	80	-35	LifeRegen=6,EnergyShieldPercent=20	98,101
-101	Loyal Hellhound	AscendancyNotable	Sorcerer	55	-65	MinionDamage=60,Spirit=20	99,100
-102	Invoker	Ascendancy	Monk	-55	60	Dexterity=10	103
-103	Lead me through Grace	AscendancyNotable	Monk	-55	30	EvasionPercent=25,EnergyShieldPercent=25	102,104,105
-104	Faithful Guardian	AscendancyNotable	Monk	-80	0	AllResist=10	103,106
-105	Sunder my Enemies	AscendancyNotable	Monk	-30	0	Damage=25	103,107
-106	Unbound Avatar	AscendancyNotable	Monk	-80	-35	AttackSpeed=1	104,108
-107	Instruments of Zeal	AscendancyNotable	Monk	-30	-35	Damage=20,ToHit=15	105,108
-108	...and I Shall Rage	AscendancyNotable	Monk	-55	-65	Damage=30	106,107
-109	Acolyte of Chayula	Ascendancy	Monk	55	60	Magic=10	110
-110	Embrace the Darkness	AscendancyNotable	Monk	55	30	MagicResist=20	109,111,112
-111	Lucid Dreaming	AscendancyNotable	Monk	30	0	ManaRegen=40	110,113
-112	Ravenous Doubts	AscendancyNotable	Monk	80	0	Damage=20	110,114
-113	Inner Turmoil	AscendancyNotable	Monk	30	-35	ManaPercent=20	111,115
-114	Grasp of the Void	AscendancyNotable	Monk	80	-35	EnergyShieldPercent=30	112,115
-115	Darkness Within	AscendancyNotable	Monk	55	-65	Damage=30,CastSpeed=1	113,114
-116	Gemling Legionnaire	Ascendancy	Bard	-55	60	Strength=5,Dexterity=5,Magic=5	117
-117	Integrated Efficiency	AscendancyNotable	Bard	-55	30	Spirit=30	116,118,119
-118	Advanced Thaumaturgy	AscendancyNotable	Bard	-80	0	Strength=10,Dexterity=10,Magic=10	117,120
-119	Crystalline Potential	AscendancyNotable	Bard	-30	0	SpellLevels=1	117,121
-120	Implanted Gems	AscendancyNotable	Bard	-80	-35	Damage=20	118,122
-121	Enhanced Effectiveness	AscendancyNotable	Bard	-30	-35	AllResist=10	119,122
-122	Gem Studded	AscendancyNotable	Bard	-55	-65	Spirit=30,Damage=10	120,121
-123	Witchhunter	Ascendancy	Bard	55	60	Vitality=10	124
-124	Pitiless Killer	AscendancyNotable	Bard	55	30	Damage=25	123,125,126
-125	No Mercy	AscendancyNotable	Bard	30	0	ToHit=20	124,127
-126	Witchbane	AscendancyNotable	Bard	80	0	MagicResist=20,AllResist=5	124,128
-127	Zealous Inquisition	AscendancyNotable	Bard	30	-35	Damage=20	125,129
-128	Obsessive Rituals	AscendancyNotable	Bard	80	-35	ArmorPercent=25,EvasionPercent=25	126,129
-129	Ceremonial Ablution	AscendancyNotable	Bard	55	-65	LifePercent=15	127,128
-130	Chieftain	Ascendancy	Barbarian	-55	60	Strength=10	131
-131	Ancestral Artifice	AscendancyNotable	Barbarian	-55	30	FireResist=20	130,132,133
-132	Hinekora, Death's Fury	AscendancyNotable	Barbarian	-80	0	Damage=25	131,134
-133	Valako, Stormrider	AscendancyNotable	Barbarian	-30	0	LightningResist=20,Damage=10	131,135
-134	Tawhoa, Forest's Strength	AscendancyNotable	Barbarian	-80	-35	LifePercent=12	132,136
-135	Ngamahu, Flame's Advance	AscendancyNotable	Barbarian	-30	-35	Damage=20,FireResist=10	133,136
-136	Arohongui, Moon's Presence	AscendancyNotable	Barbarian	-55	-65	AttackSpeed=1	134,135
-137	Smith of Kitava	Ascendancy	Barbarian	55	60	Vitality=10	138
-138	Molten Form	AscendancyNotable	Barbarian	55	30	FireResist=25	137,139,140
-139	Forged in Flame	AscendancyNotable	Barbarian	30	0	ArmorPercent=35	138,141
-140	Smith's Masterwork	AscendancyNotable	Barbarian	80	0	AllResist=10	138,142
-141	Rite of Kitava	AscendancyNotable	Barbarian	30	-35	LifePercent=15	139,143
-142	Coal Stoker	AscendancyNotable	Barbarian	80	-35	LifeRegen=8	140,143
-143	Living Weapon	AscendancyNotable	Barbarian	55	-65	Damage=30	141,142
+0	Warrior	Start	Warrior	0	-100		6,7,41
+1	Monk	Start	Monk	87	-50		11,12,13
+2	Rogue	Start	Rogue	87	50		17,18,19
+3	Bard	Start	Bard	0	100		23,24,25
+4	Sorcerer	Start	Sorcerer	-87	50		29,30,31
+5	Barbarian	Start	Barbarian	-87	-50		35,36,37
+6		Small		0	-130	Strength=5	0,7,41,114
+7		Small		23	-128	Strength=5	0,6,8,186
+8		Small		44	-122	Strength=5	7,9,118
+9		Small		65	-113	Strength=4,Dexterity=2	8,10,190
+10		Small		84	-100	Strength=3,Dexterity=3	9,11,122
+11		Small		100	-84	Strength=3,Dexterity=3	1,10,12,194
+12		Small		113	-65	Strength=3,Dexterity=3	1,11,13,126
+13		Small		122	-44	Strength=3,Dexterity=3	1,12,14,198
+14		Small		128	-23	Strength=3,Dexterity=3	13,15,130
+15		Small		130	0	Dexterity=4,Strength=2	14,16,202
+16		Small		128	23	Dexterity=5	15,17,134
+17		Small		122	44	Dexterity=5	2,16,18,206
+18		Small		113	65	Dexterity=5	2,17,19,138
+19		Small		100	84	Dexterity=5	2,18,20,210
+20		Small		84	100	Dexterity=5	19,21,142
+21		Small		65	113	Dexterity=4,Magic=2	20,22,214
+22		Small		44	122	Dexterity=3,Magic=3	21,23,146
+23		Small		23	128	Dexterity=3,Magic=3	3,22,24,218
+24		Small		0	130	Dexterity=3,Magic=3	3,23,25,150
+25		Small		-23	128	Dexterity=3,Magic=3	3,24,26,222
+26		Small		-44	122	Dexterity=3,Magic=3	25,27,154
+27		Small		-65	113	Magic=4,Dexterity=2	26,28,226
+28		Small		-84	100	Magic=5	27,29,158
+29		Small		-100	84	Magic=5	4,28,30,230
+30		Small		-113	65	Magic=5	4,29,31,162
+31		Small		-122	44	Magic=5	4,30,32,234
+32		Small		-128	23	Magic=5	31,33,166
+33		Small		-130	0	Magic=3,Vitality=3	32,34,238
+34		Small		-128	-23	Vitality=5	33,35,170
+35		Small		-122	-44	Vitality=5	5,34,36,242
+36		Small		-113	-65	Vitality=5	5,35,37,174
+37		Small		-100	-84	Vitality=5	5,36,38,246
+38		Small		-84	-100	Vitality=5	37,39,178
+39		Small		-65	-113	Vitality=3,Strength=3	38,40,250
+40		Small		-44	-122	Strength=5	39,41,182
+41		Small		-23	-128	Strength=5	0,6,40,254
+42		Small		0	-205	Strength=5	43,77,115,116
+43		Small		36	-202	Damage=5	42,44,258
+44		Small		70	-193	Strength=5	43,45,119,120
+45		Small		103	-178	Damage=5	44,46,262
+46		Small		132	-157	Strength=3,Dexterity=3	45,47,123,124
+47		Small		157	-132	EvasionPercent=8	46,48,266
+48		Small		178	-102	Strength=3,Dexterity=3	47,49,127,128
+49		Small		193	-70	Damage=4	48,50,270
+50		Small		202	-36	Strength=3,Dexterity=3	49,51,131,132
+51		Small		205	0	EvasionPercent=8	50,52,274
+52		Small		202	36	Dexterity=5	51,53,135,136
+53		Small		193	70	ToHit=5	52,54,278
+54		Small		178	102	Dexterity=5	53,55,139,140
+55		Small		157	132	EvasionPercent=8	54,56,282
+56		Small		132	157	Dexterity=5	55,57,143,144
+57		Small		103	178	ToHit=5	56,58,286
+58		Small		70	193	Dexterity=3,Magic=3	57,59,147,148
+59		Small		36	202	ManaPercent=4	58,60,290
+60		Small		0	205	Dexterity=3,Magic=3	59,61,151,152
+61		Small		-36	202	ToHit=4	60,62,294
+62		Small		-70	193	Dexterity=3,Magic=3	61,63,155,156
+63		Small		-102	178	ManaPercent=4	62,64,298
+64		Small		-132	157	Magic=5	63,65,159,160
+65		Small		-157	132	ManaPercent=5	64,66,302
+66		Small		-178	102	Magic=5	65,67,163,164
+67		Small		-193	70	EnergyShieldPercent=8	66,68,306
+68		Small		-202	36	Magic=5	67,69,167,168
+69		Small		-205	0	ManaPercent=5	68,70,310
+70		Small		-202	-36	Vitality=5	69,71,171,172
+71		Small		-193	-70	LifePercent=5	70,72,314
+72		Small		-178	-103	Vitality=5	71,73,175,176
+73		Small		-157	-132	LifeRegen=1	72,74,318
+74		Small		-132	-157	Vitality=5	73,75,179,180
+75		Small		-103	-178	LifePercent=5	74,76,322
+76		Small		-70	-193	Strength=5	75,77,183,184
+77		Small		-36	-202	ArmorPercent=8	42,76,326
+78		Small		0	-290	Strength=5	79,113,117,330
+79		Small		50	-286	LifePercent=4	78,80
+80		Small		99	-273	ToHit=4	79,81,121,334
+81		Small		145	-251	Strength=4,Dexterity=2	80,82
+82		Small		186	-222	ToHit=4	81,83,125,338
+83		Small		222	-186	LifeRegen=1	82,84
+84		Small		251	-145	Strength=3,Dexterity=3	83,85,129,336
+85		Small		273	-99	EvasionPercent=8	84,86
+86		Small		286	-50	Damage=4	85,87,133,340
+87		Small		290	0	Dexterity=4,Strength=2	86,88
+88		Small		286	50	Damage=4	87,89,137,344
+89		Small		273	99	LightningResist=6	88,90
+90		Small		251	145	Dexterity=5	89,91,141,342
+91		Small		222	186	ToHit=5	90,92
+92		Small		186	222	EvasionPercent=8	91,93,145,346
+93		Small		145	251	Dexterity=4,Magic=2	92,94
+94		Small		99	273	EvasionPercent=6	93,95,149,350
+95		Small		50	286	MagicResist=6	94,96
+96		Small		0	290	Dexterity=3,Magic=3	95,97,153,348
+97		Small		-50	286	ManaPercent=4	96,98
+98		Small		-99	273	ToHit=4	97,99,157,352
+99		Small		-145	251	Magic=4,Dexterity=2	98,100
+100		Small		-186	222	ManaRegen=10	99,101,161,356
+101		Small		-222	186	MagicResist=6	100,102
+102		Small		-251	145	Magic=5	101,103,165,354
+103		Small		-273	99	ManaPercent=5	102,104
+104		Small		-286	50	EnergyShieldPercent=8	103,105,169,358
+105		Small		-290	0	Magic=3,Vitality=3	104,106
+106		Small		-286	-50	ArmorPercent=6	105,107,173,362
+107		Small		-273	-99	FireResist=6	106,108
+108		Small		-251	-145	Vitality=5	107,109,177,360
+109		Small		-222	-186	LifePercent=5	108,110
+110		Small		-186	-222	LifeRegen=1	109,111,181,364
+111		Small		-145	-251	Vitality=3,Strength=3	110,112
+112		Small		-99	-273	Damage=5	111,113,185,332
+113		Small		-50	-286	ArmorPercent=8	78,112
+114		Small		0	-155	Strength=5	6,115
+115	Lachdanan's Oath	Notable		0	-180	LifePercent=10,ArmorPercent=15	42,114
+116		Small		0	-233	LifePercent=4	42,117
+117		Small		0	-262	ToHit=4	78,116
+118		Small		53	-146	Strength=5	8,119
+119		Small		62	-169	Damage=5	44,118
+120		Small		80	-219	ArmorPercent=8	44,121
+121		Small		90	-246	LifePercent=4	80,120
+122		Small		100	-119	Strength=3,Dexterity=3	10,123
+123		Small		116	-138	ToHit=4	46,122
+124		Small		150	-178	LifeRegen=1	46,125
+125		Small		168	-201	EvasionPercent=8	82,124
+126		Small		134	-77	Strength=3,Dexterity=3	12,127
+127	Ivgorod Discipline	Notable		156	-90	Dexterity=10,Strength=10	48,126
+128		Small		202	-116	Damage=4	48,129
+129		Small		227	-131	ToHit=4	84,128
+130		Small		153	-27	Strength=3,Dexterity=3	14,131
+131		Small		177	-31	LifeRegen=1	50,130
+132		Small		229	-40	EvasionPercent=8	50,133
+133		Small		258	-45	Damage=4	86,132
+134		Small		153	27	Dexterity=5	16,135
+135		Small		177	31	Damage=4	52,134
+136		Small		229	40	LightningResist=6	52,137
+137		Small		258	45	ToHit=5	88,136
+138		Small		134	77	Dexterity=5	18,139
+139	Sightless Eye	Notable		156	90	ToHit=12,Damage=8	54,138
+140		Small		202	116	EvasionPercent=8	54,141
+141		Small		227	131	Damage=4	90,140
+142		Small		100	119	Dexterity=5	20,143
+143		Small		116	138	LightningResist=6	56,142
+144		Small		150	178	ToHit=5	56,145
+145		Small		168	201	EvasionPercent=8	92,144
+146		Small		53	146	Dexterity=3,Magic=3	22,147
+147		Small		62	169	EvasionPercent=6	58,146
+148		Small		80	219	MagicResist=6	58,149
+149		Small		90	246	ManaPercent=4	94,148
+150		Small		0	155	Dexterity=3,Magic=3	24,151
+151	Siren's Song	Notable		0	180	ManaPercent=10,Magic=8	60,150
+152		Small		0	233	ToHit=4	60,153
+153		Small		0	262	EvasionPercent=6	96,152
+154		Small		-53	146	Dexterity=3,Magic=3	26,155
+155		Small		-62	169	MagicResist=6	62,154
+156		Small		-80	219	ManaPercent=4	62,157
+157		Small		-90	246	ToHit=4	98,156
+158		Small		-100	119	Magic=5	28,159
+159		Small		-116	138	ManaRegen=10	64,158
+160		Small		-150	178	MagicResist=6	64,161
+161		Small		-168	201	ManaPercent=5	100,160
+162		Small		-134	77	Magic=5	30,163
+163	Vizjerei Lore	Notable		-156	90	Magic=15,ManaPercent=8	66,162
+164		Small		-202	116	EnergyShieldPercent=8	66,165
+165		Small		-227	131	ManaRegen=10	102,164
+166		Small		-153	27	Magic=5	32,167
+167		Small		-177	31	MagicResist=6	68,166
+168		Small		-229	40	ManaPercent=5	68,169
+169		Small		-258	45	EnergyShieldPercent=8	104,168
+170		Small		-153	-27	Vitality=5	34,171
+171		Small		-177	-31	ArmorPercent=6	70,170
+172		Small		-229	-40	FireResist=6	70,173
+173		Small		-258	-45	LifePercent=5	106,172
+174		Small		-134	-78	Vitality=5	36,175
+175	Mount Arreat	Notable		-156	-90	LifePercent=12,Vitality=8	72,174
+176		Small		-202	-117	LifeRegen=1	72,177
+177		Small		-227	-131	ArmorPercent=6	108,176
+178		Small		-100	-119	Vitality=5	38,179
+179		Small		-116	-138	FireResist=6	74,178
+180		Small		-150	-178	LifePercent=5	74,181
+181		Small		-168	-201	LifeRegen=1	110,180
+182		Small		-53	-146	Strength=5	40,183
+183		Small		-62	-169	ToHit=4	76,182
+184		Small		-80	-219	Damage=5	76,185
+185		Small		-90	-246	ArmorPercent=8	112,184
+186		Small		26	-148	LifePercent=4	7,187,188
+187		Small		15	-167	ToHit=4	186,189
+188		Small		43	-162	Damage=5	186,189
+189	Arkaine's Valor	Notable		32	-182	ArmorPercent=25,AllResist=5	187,188
+190		Small		75	-130	EvasionPercent=8	9,191,192
+191		Small		71	-152	ArmorPercent=8	190,193
+192		Small		96	-138	Damage=4	190,193
+193	Swordsmanship	Notable		93	-160	Strength=6,Dexterity=6	191,192
+194		Small		115	-96	ToHit=4	11,195,196
+195		Small		119	-119	LifeRegen=1	194,197
+196		Small		138	-96	EvasionPercent=8	194,197
+197	Sky Tower Kata	Notable		142	-119	AttackSpeed=1,Damage=8	195,196
+198		Small		141	-51	Damage=4	13,199,200
+199		Small		152	-71	ToHit=4	198,201
+200		Small		162	-43	LifeRegen=1	198,201
+201	Iron Body	Notable		174	-63	ArmorPercent=15,EvasionPercent=15	199,200
+202		Small		150	0	ToHit=5	15,203,204
+203		Small		167	-15	Damage=4	202,205
+204		Small		167	15	EvasionPercent=8	202,205
+205	Light Feet	Notable		185	0	EvasionPercent=15,Dexterity=6	203,204
+206		Small		141	51	Damage=4	17,207,208
+207		Small		162	43	LightningResist=6	206,209
+208		Small		152	71	ToHit=5	206,209
+209	Blackoak Fletching	Notable		174	63	Damage=15,Dexterity=6	207,208
+210		Small		115	96	EvasionPercent=8	19,211,212
+211		Small		138	96	Damage=4	210,213
+212		Small		119	119	LightningResist=6	210,213
+213	Windforce Draw	Notable		142	119	AttackSpeed=1,ToHit=5	211,212
+214		Small		75	130	ManaPercent=4	21,215,216
+215		Small		96	138	EvasionPercent=8	214,217
+216		Small		71	152	ToHit=4	214,217
+217	Shadowcraft	Notable		93	160	Dexterity=5,Magic=5,EvasionPercent=8	215,216
+218		Small		26	148	EvasionPercent=6	23,219,220
+219		Small		43	162	MagicResist=6	218,221
+220		Small		15	167	ManaPercent=4	218,221
+221	Kehjistan Ballad	Notable		32	182	MagicResist=15,ManaRegen=20	219,220
+222		Small		-26	148	ToHit=4	25,223,224
+223		Small		-15	167	EvasionPercent=6	222,225
+224		Small		-43	162	MagicResist=6	222,225
+225	Twin Blades	Notable		-32	182	Damage=12,ToHit=8	223,224
+226		Small		-75	130	ManaPercent=5	27,227,228
+227		Small		-71	152	ToHit=4	226,229
+228		Small		-96	138	EnergyShieldPercent=8	226,229
+229	Scholar of Lut Gholein	Notable		-92	160	Magic=8,ManaRegen=15	227,228
+230		Small		-115	96	ManaRegen=10	29,231,232
+231		Small		-119	119	MagicResist=6	230,233
+232		Small		-138	96	ManaPercent=5	230,233
+233	Horazon's Study	Notable		-142	119	SpellLevels=1	231,232
+234		Small		-141	51	EnergyShieldPercent=8	31,235,236
+235		Small		-152	71	ManaRegen=10	234,237
+236		Small		-162	43	MagicResist=6	234,237
+237	Mana Shield Ward	Notable		-174	63	EnergyShieldPercent=25,ManaPercent=6	235,236
+238		Small		-150	0	LifePercent=5	33,239,240
+239		Small		-167	15	EnergyShieldPercent=8	238,241
+240		Small		-167	-15	LifeRegen=1	238,241
+241	Blood Magic Rites	Notable		-185	0	LifePercent=6,ManaPercent=6	239,240
+242		Small		-141	-51	ArmorPercent=6	35,243,244
+243		Small		-162	-43	FireResist=6	242,245
+244		Small		-152	-71	LifePercent=5	242,245
+245	Harrogath Blood	Notable		-174	-63	LifeRegen=5,LifePercent=6	243,244
+246		Small		-115	-96	LifeRegen=1	37,247,248
+247		Small		-138	-96	ArmorPercent=6	246,249
+248		Small		-119	-119	FireResist=6	246,249
+249	Thunder of Bul-Kathos	Notable		-142	-119	Damage=18,Strength=8	247,248
+250		Small		-75	-130	Damage=5	39,251,252
+251		Small		-96	-138	LifeRegen=1	250,253
+252		Small		-71	-152	ArmorPercent=8	250,253
+253	Iron Constitution	Notable		-93	-160	Vitality=8,Strength=6	251,252
+254		Small		-26	-148	ArmorPercent=8	41,255,256
+255		Small		-43	-162	LifePercent=4	254,257
+256		Small		-15	-167	ToHit=4	254,257
+257	Griswold's Edge	Notable		-32	-182	Damage=15,ToHit=8	255,256
+258		Small		40	-225	Damage=5	43,259,260
+259		Small		28	-246	ArmorPercent=8	258,261
+260		Small		58	-241	LifePercent=4	258,261
+261	Warlord's Fury	Notable		47	-264	Damage=20,AttackSpeed=1	259,260
+262		Small		114	-197	LifePercent=4	45,263,264
+263		Small		111	-222	ToHit=4	262,265
+264		Small		137	-207	ToHit=4	262,265
+265	Blade Dance	Notable		134	-232	Damage=10,EvasionPercent=10	263,264
+266		Small		175	-147	EvasionPercent=8	47,267,268
+267		Small		180	-171	Damage=4	266,269
+268		Small		199	-148	ToHit=4	266,269
+269	Patriarch's Calm	Notable		205	-172	LifeRegen=4,AllResist=6	267,268
+270		Small		214	-78	LifeRegen=1	49,271,272
+271		Small		227	-99	EvasionPercent=8	270,273
+272		Small		238	-70	Damage=4	270,273
+273	Fists of Zakarum	Notable		252	-92	Damage=18,ToHit=6	271,272
+274		Small		228	0	ToHit=4	51,275,276
+275		Small		248	-15	Damage=4	274,277
+276		Small		248	15	LifeRegen=1	274,277
+277	Deadly Precision	Notable		268	0	ToHit=10,Damage=8	275,276
+278		Small		214	78	ToHit=5	53,279,280
+279		Small		238	70	EvasionPercent=8	278,281
+280		Small		227	99	Damage=4	278,281
+281	Rogue Encampment	Notable		252	92	EvasionPercent=25,LifePercent=4	279,280
+282		Small		175	147	LightningResist=6	55,283,284
+283		Small		199	148	ToHit=5	282,285
+284		Small		180	171	EvasionPercent=8	282,285
+285	Gnat Sting	Notable		205	172	Damage=12,LightningResist=12	283,284
+286		Small		114	197	Damage=4	57,287,288
+287		Small		137	207	EvasionPercent=6	286,289
+288		Small		111	222	LightningResist=6	286,289
+289	Enchanted Arrows	Notable		134	232	Damage=10,ManaPercent=6	287,288
+290		Small		40	225	ManaPercent=4	59,291,292
+291		Small		58	241	ToHit=4	290,293
+292		Small		28	246	EvasionPercent=6	290,293
+293	Lute of Westmarch	Notable		47	264	CastSpeed=1,Magic=6	291,292
+294		Small		-40	225	MagicResist=6	61,295,296
+295		Small		-28	246	ManaPercent=4	294,297
+296		Small		-58	241	ToHit=4	294,297
+297	Charming Voice	Notable		-47	264	MinionDamage=20,Spirit=10	295,296
+298		Small		-114	197	EvasionPercent=6	63,299,300
+299		Small		-111	222	ManaRegen=10	298,301
+300		Small		-137	207	MagicResist=6	298,301
+301	Arcane Resonance	Notable		-134	232	ManaPercent=10,MagicResist=10	299,300
+302		Small		-175	147	ManaPercent=5	65,303,304
+303		Small		-180	171	EnergyShieldPercent=8	302,305
+304		Small		-199	148	ManaRegen=10	302,305
+305	Arcane Star	Notable		-205	172	ManaRegen=30,Magic=6	303,304
+306		Small		-214	78	MagicResist=6	67,307,308
+307		Small		-227	99	ManaPercent=5	306,309
+308		Small		-238	70	EnergyShieldPercent=8	306,309
+309	Storm Spire	Notable		-252	92	LightningResist=15,CastSpeed=1	307,308
+310		Small		-228	0	ManaRegen=10	69,311,312
+311		Small		-248	15	ArmorPercent=6	310,313
+312		Small		-248	-15	MagicResist=6	310,313
+313	Ancient Wards	Notable		-268	0	EnergyShieldPercent=12,LifeRegen=3	311,312
+314		Small		-214	-78	LifePercent=5	71,315,316
+315		Small		-238	-70	LifeRegen=1	314,317
+316		Small		-227	-99	ArmorPercent=6	314,317
+317	Ancients' Pact	Notable		-252	-92	AllResist=8,ArmorPercent=12	315,316
+318		Small		-175	-147	FireResist=6	73,319,320
+319		Small		-199	-148	LifePercent=5	318,321
+320		Small		-180	-171	LifeRegen=1	318,321
+321	Rage of the North	Notable		-205	-172	Damage=12,AttackSpeed=1	319,320
+322		Small		-114	-197	ArmorPercent=6	75,323,324
+323		Small		-137	-207	LifePercent=4	322,325
+324		Small		-111	-222	FireResist=6	322,325
+325	Battle Hardened	Notable		-134	-232	ArmorPercent=15,LifePercent=6	323,324
+326		Small		-40	-225	ToHit=4	77,327,328
+327		Small		-58	-241	Damage=5	326,329
+328		Small		-28	-246	ArmorPercent=8	326,329
+329	King Leoric's Might	Notable		-47	-264	Strength=15,LifePercent=6	327,328
+330		Small		0	-318	LifePercent=4	78,331
+331	Defender of Tristram	Notable		0	-345	ArmorPercent=15,LifeRegen=3	330
+332		Small		-109	-299	ToHit=4	112,333
+333	Gloomy Shrine	Shrine		-119	-327	ArmorPercent=40,Damage=-10	332
+334		Small		109	-299	Damage=5	80,335
+335	Weird Shrine	Shrine		119	-327	Damage=25,ToHit=-5	334
+336		Small		275	-159	ToHit=4	84,337
+337	Spirit Strike	Notable		299	-172	Spirit=10,Damage=8	336
+338		Small		204	-244	LifeRegen=1	82,339
+339	Murphy's Shrine	Shrine		224	-267	AttackSpeed=1,ArmorPercent=-15	338
+340		Small		313	-55	EvasionPercent=8	86,341
+341	Divine Shrine	Shrine		343	-60	LifePercent=12,ManaPercent=-10	340
+342		Small		275	159	Damage=4	90,343
+343	Eaglehorn Focus	Notable		299	172	ToHit=10,EvasionPercent=10	342
+344		Small		313	55	LightningResist=6	88,345
+345	Abandoned Shrine	Shrine		343	60	Dexterity=20,Strength=-10	344
+346		Small		204	244	ToHit=5	92,347
+347	Glowing Shrine	Shrine		224	267	AllResist=15,Magic=-10	346
+348		Small		0	318	EvasionPercent=6	96,349
+349	Song of Tristram	Notable		0	345	LifePercent=6,ManaPercent=6	348
+350		Small		109	299	MagicResist=6	94,351
+351	Ornate Shrine	Shrine		119	327	CastSpeed=1,ManaPercent=-8	350
+352		Small		-109	299	ManaPercent=4	98,353
+353	Shimmering Shrine	Shrine		-119	327	ManaPercent=20,ArmorPercent=-10	352
+354		Small		-275	159	ManaRegen=10	102,355
+355	Staff of Shadows	Notable		-299	172	EnergyShieldPercent=15,MagicResist=12	354
+356		Small		-204	244	MagicResist=6	100,357
+357	Fascinating Shrine	Shrine		-224	267	SpellLevels=1,ManaPercent=-10	356
+358		Small		-313	55	ManaPercent=5	104,359
+359	Stone Shrine	Shrine		-343	60	EnergyShieldPercent=40,ManaRegen=-25	358
+360		Small		-275	-159	ArmorPercent=6	108,361
+361	Two-Handed Fury	Notable		-299	-173	Damage=20,ToHit=5	360
+362		Small		-313	-55	FireResist=6	106,363
+363	Mysterious Shrine	Shrine		-343	-60	Vitality=20,Strength=-3,Magic=-3,Dexterity=-3	362
+364		Small		-204	-244	LifePercent=5	110,365
+365	Creepy Shrine	Shrine		-224	-267	Strength=25,Magic=-10	364
+366	Knight of Westmarch	Ascendancy	Warrior	-40	30	Strength=10	367
+367	Shield Wall	AscendancyNotable	Warrior	-40	10	ArmorPercent=30	366,368,369
+368	Westmarch Steel	AscendancyNotable	Warrior	-58	-5	LifePercent=10,Strength=10	367,370
+369	Crusader's Blow	AscendancyNotable	Warrior	-22	-5	Damage=25	367,371
+370	Holy Vigil	AscendancyNotable	Warrior	-58	-28	Damage=20,ToHit=10	368,372
+371	Bulwark of Light	AscendancyNotable	Warrior	-22	-28	LifePercent=15,ArmorPercent=20	369,372
+372	Unyielding	AscendancyNotable	Warrior	-40	-45	Vitality=20,LifeRegen=5	370,371
+373	Blood Warlord	Ascendancy	Warrior	40	30	Vitality=10	374
+374	War Cry	AscendancyNotable	Warrior	40	10	Damage=20	373,375,376
+375	Battle Frenzy	AscendancyNotable	Warrior	22	-5	AttackSpeed=1	374,377
+376	Scarred Veteran	AscendancyNotable	Warrior	58	-5	AllResist=10	374,378
+377	Bloodlust	AscendancyNotable	Warrior	22	-28	LifeRegen=8	375,379
+378	Iron Hide	AscendancyNotable	Warrior	58	-28	ArmorPercent=40	376,379
+379	Butcher's Cleaver	AscendancyNotable	Warrior	40	-45	Damage=30,ToHit=15	377,378
+380	Sky Tower Ascetic	Ascendancy	Monk	-40	30	Dexterity=10	381
+381	Flowing Water	AscendancyNotable	Monk	-40	10	EvasionPercent=25,EnergyShieldPercent=25	380,382,383
+382	Inner Peace	AscendancyNotable	Monk	-58	-5	AllResist=10	381,384
+383	Thousand Fists	AscendancyNotable	Monk	-22	-5	Damage=25	381,385
+384	Whirlwind Kata	AscendancyNotable	Monk	-58	-28	AttackSpeed=1	382,386
+385	Blessed Staff	AscendancyNotable	Monk	-22	-28	Damage=20,ToHit=15	383,386
+386	Perfect Form	AscendancyNotable	Monk	-40	-45	Damage=30	384,385
+387	Ivgorod Patriarch	Ascendancy	Monk	40	30	Magic=10	388
+388	Faith Ward	AscendancyNotable	Monk	40	10	MagicResist=20	387,389,390
+389	Meditation	AscendancyNotable	Monk	22	-5	ManaRegen=40	388,391
+390	Smite	AscendancyNotable	Monk	58	-5	Damage=20	388,392
+391	Spirit of Ivgorod	AscendancyNotable	Monk	22	-28	ManaPercent=20	389,393
+392	Iron Skin	AscendancyNotable	Monk	58	-28	EnergyShieldPercent=30	390,393
+393	Divine Wrath	AscendancyNotable	Monk	40	-45	Damage=30,CastSpeed=1	391,392
+394	Sister of the Sightless Eye	Ascendancy	Rogue	-40	30	Dexterity=10	395
+395	Far Sight	AscendancyNotable	Rogue	-40	10	Damage=20	394,396,397
+396	Eye of the Sightless	AscendancyNotable	Rogue	-58	-5	ToHit=20	395,398
+397	Rapid Volley	AscendancyNotable	Rogue	-22	-5	AttackSpeed=1	395,399
+398	Piercing Shot	AscendancyNotable	Rogue	-58	-28	Damage=25	396,400
+399	Blessed Aim	AscendancyNotable	Rogue	-22	-28	Dexterity=15,EvasionPercent=20	397,400
+400	Hail of Arrows	AscendancyNotable	Rogue	-40	-45	Damage=30	398,399
+401	Viz-Jaq'taar	Ascendancy	Rogue	40	30	Vitality=10	402
+402	Shadow Step	AscendancyNotable	Rogue	40	10	EvasionPercent=30	401,403,404
+403	Venom Lore	AscendancyNotable	Rogue	22	-5	LifeRegen=6	402,405
+404	Mage Slayer	AscendancyNotable	Rogue	58	-5	AllResist=12	402,406
+405	Poisoned Blades	AscendancyNotable	Rogue	22	-28	Damage=20,LightningResist=10	403,407
+406	Death Mark	AscendancyNotable	Rogue	58	-28	Damage=30	404,407
+407	Cloak of Shadows	AscendancyNotable	Rogue	40	-45	LifePercent=12,ManaPercent=12	405,406
+408	Blade Dancer	Ascendancy	Bard	-40	30	Strength=5,Dexterity=5,Magic=5	409
+409	Graceful Steps	AscendancyNotable	Bard	-40	10	Spirit=30	408,410,411
+410	Dancer's Poise	AscendancyNotable	Bard	-58	-5	Strength=10,Dexterity=10,Magic=10	409,412
+411	Rhythm of Steel	AscendancyNotable	Bard	-22	-5	SpellLevels=1	409,413
+412	Whirling Blades	AscendancyNotable	Bard	-58	-28	Damage=20	410,414
+413	Swift Parry	AscendancyNotable	Bard	-22	-28	AllResist=10	411,414
+414	Finale	AscendancyNotable	Bard	-40	-45	Spirit=30,Damage=10	412,413
+415	Kehjistan Siren	Ascendancy	Bard	40	30	Vitality=10	416
+416	Haunting Melody	AscendancyNotable	Bard	40	10	Damage=25	415,417,418
+417	Piercing Note	AscendancyNotable	Bard	22	-5	ToHit=20	416,419
+418	Ward Song	AscendancyNotable	Bard	58	-5	MagicResist=20,AllResist=5	416,420
+419	Discord	AscendancyNotable	Bard	22	-28	Damage=20	417,421
+420	Lullaby of Steel	AscendancyNotable	Bard	58	-28	ArmorPercent=25,EvasionPercent=25	418,421
+421	Song of Renewal	AscendancyNotable	Bard	40	-45	LifePercent=15	419,420
+422	Taan Elementalist	Ascendancy	Sorcerer	-40	30	Magic=10	423
+423	Storm Channel	AscendancyNotable	Sorcerer	-40	10	CastSpeed=1	422,424,425
+424	Chain Lightning Mastery	AscendancyNotable	Sorcerer	-58	-5	SpellLevels=1	423,426
+425	Tempest Ward	AscendancyNotable	Sorcerer	-22	-5	LightningResist=20,ManaPercent=15	423,427
+426	Mana Shield	AscendancyNotable	Sorcerer	-58	-28	EnergyShieldPercent=30	424,428
+427	Inferno	AscendancyNotable	Sorcerer	-22	-28	Damage=25	425,428
+428	Elemental Dominion	AscendancyNotable	Sorcerer	-40	-45	SpellLevels=1,ManaRegen=30	426,427
+429	Vizjerei Summoner	Ascendancy	Sorcerer	40	30	Vitality=10	430
+430	Pact of Fire	AscendancyNotable	Sorcerer	40	10	FireResist=20,LifePercent=10	429,431,432
+431	Binding Rites	AscendancyNotable	Sorcerer	22	-5	Spirit=30	430,433
+432	Golem Mastery	AscendancyNotable	Sorcerer	58	-5	MinionDamage=40	430,434
+433	Demonic Pact	AscendancyNotable	Sorcerer	22	-28	Damage=20	431,435
+434	Blood Ward	AscendancyNotable	Sorcerer	58	-28	LifeRegen=6,EnergyShieldPercent=20	432,435
+435	Lord of the Bound	AscendancyNotable	Sorcerer	40	-45	MinionDamage=60,Spirit=20	433,434
+436	Arreat Ravager	Ascendancy	Barbarian	-40	30	Strength=10	437
+437	Fire of the Ancients	AscendancyNotable	Barbarian	-40	10	FireResist=20	436,438,439
+438	Frenzy	AscendancyNotable	Barbarian	-58	-5	Damage=25	437,440
+439	Storm of Arreat	AscendancyNotable	Barbarian	-22	-5	LightningResist=20,Damage=10	437,441
+440	Mountain Strength	AscendancyNotable	Barbarian	-58	-28	LifePercent=12	438,442
+441	Bul-Kathos' Fury	AscendancyNotable	Barbarian	-22	-28	Damage=20,FireResist=10	439,442
+442	Whirlwind	AscendancyNotable	Barbarian	-40	-45	AttackSpeed=1	440,441
+443	Ancients' Chosen	Ascendancy	Barbarian	40	30	Vitality=10	444
+444	Forge of Harrogath	AscendancyNotable	Barbarian	40	10	FireResist=25	443,445,446
+445	Talic's Hide	AscendancyNotable	Barbarian	22	-5	ArmorPercent=35	444,447
+446	Madawc's Ward	AscendancyNotable	Barbarian	58	-5	AllResist=10	444,448
+447	Korlic's Vigor	AscendancyNotable	Barbarian	22	-28	LifePercent=15	445,449
+448	Blood of Arreat	AscendancyNotable	Barbarian	58	-28	LifeRegen=8	446,449
+449	Living Legend	AscendancyNotable	Barbarian	40	-45	Damage=30	447,448
