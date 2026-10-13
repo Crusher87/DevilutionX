@@ -45,6 +45,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -2276,6 +2277,16 @@ bool UseInvItem(int cii)
 
 	if (IsUncutGem(*item)) {
 		OpenGemcutting(speedlist, c);
+		return true;
+	}
+
+	if (IsWaystone(*item)) {
+		if (UseWaystone(player, *item)) {
+			if (speedlist)
+				player.RemoveSpdBarItem(c);
+			else
+				player.RemoveInvItem(c);
+		}
 		return true;
 	}
 

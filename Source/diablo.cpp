@@ -98,6 +98,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/waystones.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -3592,6 +3593,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	MarkWalkabilityChanged();
 	LoadGameLevelCalculateCursor();
 	UpdateResistancePenalty(*MyPlayer);
+	UpdateActiveMap(*MyPlayer);
 	return {};
 }
 

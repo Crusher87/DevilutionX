@@ -152,7 +152,7 @@ extern int8_t dSpecial[MAXDUNX][MAXDUNY];
 extern int themeCount;
 extern THEME_LOC themeLoc[MAXTHEMES];
 
-extern uint32_t DungeonSeeds[NUMLEVELS];
+extern DVL_API_FOR_TEST uint32_t DungeonSeeds[NUMLEVELS];
 extern DVL_API_FOR_TEST std::optional<uint32_t> LevelSeeds[NUMLEVELS];
 
 DVL_ALWAYS_INLINE constexpr bool InDungeonBounds(Point position)

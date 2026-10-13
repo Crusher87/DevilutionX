@@ -9,6 +9,7 @@
 #include "monster.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -60,10 +61,13 @@ MonsterAffixes GetMonsterAffixes(const Monster &monster)
 		return affixes;
 	const uint32_t hash = Mix(monster.rndItemSeed ^ 0x6D6F6E73U);
 	const int roll = static_cast<int>(hash % 1000);
-	if (roll < RareMonsterPerMille) {
+	const int mapTier = ActiveMapTier();
+	const int rarePerMille = RareMonsterPerMille + (mapTier * MapRarePerMillePerTier);
+	const int magicPerMille = MagicMonsterPerMille + (mapTier * MapMagicPerMillePerTier);
+	if (roll < rarePerMille) {
 		affixes.rarity = MonsterRarity::Rare;
 		affixes.mods = ChooseMods(hash, RareMonsterModCount);
-	} else if (roll < RareMonsterPerMille + MagicMonsterPerMille) {
+	} else if (roll < rarePerMille + magicPerMille) {
 		affixes.rarity = MonsterRarity::Magic;
 		affixes.mods = ChooseMods(hash, 1);
 	}
@@ -73,6 +77,17 @@ MonsterAffixes GetMonsterAffixes(const Monster &monster)
 void ApplyMonsterRarity(Monster &monster)
 {
 	monster.poe2 = {};
+	if (const int mapTier = ActiveMapTier(); mapTier > 0 && CanHaveRarity(monster)) {
+		const int lifePercent = 100 + (mapTier * MapLifePercentPerTier);
+		monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100));
+		monster.hitPoints = monster.maxHitPoints;
+		const int damagePercent = 100 + (mapTier * MapDamagePercentPerTier);
+		const auto scale = [damagePercent](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * damagePercent / 100, 255)); };
+		scale(monster.minDamage);
+		scale(monster.maxDamage);
+		scale(monster.minDamageSpecial);
+		scale(monster.maxDamageSpecial);
+	}
 	const MonsterAffixes affixes = GetMonsterAffixes(monster);
 	if (affixes.rarity == MonsterRarity::Normal)
 		return;

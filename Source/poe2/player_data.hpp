@@ -191,6 +191,9 @@ struct Poe2PlayerData {
 	uint8_t golemCooldown = 0;
 	/** @brief Game ticks before Skeletal Warriors raises the next skeleton (not saved). */
 	uint8_t skeletonCooldown = 0;
+	/** @brief The map (POE2 endgame) the player opened: its dungeon level and tier; tier 0 when there's none. */
+	uint8_t mapLevel = 0;
+	uint8_t mapTier = 0;
 	/** @brief Game ticks left of Guard from a Stone Charm (not saved). */
 	uint8_t guardTicks = 0;
 	/** @brief Game ticks before another charm can go off (not saved). */
@@ -229,6 +232,8 @@ struct Poe2PlayerData {
 		golemCooldown = 0;
 		skeletonCooldown = 0;
 		guardTicks = 0;
+		mapLevel = 0;
+		mapTier = 0;
 		charmCooldown = 0;
 		resistancePenalty = -1;
 	}

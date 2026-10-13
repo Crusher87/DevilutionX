@@ -76,6 +76,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
 #include "quests.h"
@@ -2002,6 +2003,14 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(SupportGemDescription(gem));
 		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
+		return;
+	}
+	if (IsWaystone(item)) {
+		const int tier = WaystoneTier(item);
+		AddItemInfoBoxString(StrCat(_("Map tier "), tier));
+		AddItemInfoBoxString(FormatRuntime(_("Monsters: {:d}% more life, {:d}% more damage"), tier * MapLifePercentPerTier, tier * MapDamagePercentPerTier));
+		AddItemInfoBoxString(_("More magic and rare monsters"));
+		AddItemInfoBoxString(_("Use in town to open the map"));
 		return;
 	}
 	if (const CharmEffect charm = GetCharmEffect(item); charm != CharmEffect::None) {
