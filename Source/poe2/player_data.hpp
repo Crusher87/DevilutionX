@@ -191,6 +191,10 @@ struct Poe2PlayerData {
 	uint8_t golemCooldown = 0;
 	/** @brief Game ticks before Skeletal Warriors raises the next skeleton (not saved). */
 	uint8_t skeletonCooldown = 0;
+	/** @brief Game ticks left of Guard from a Stone Charm (not saved). */
+	uint8_t guardTicks = 0;
+	/** @brief Game ticks before another charm can go off (not saved). */
+	uint8_t charmCooldown = 0;
 	/** @brief Resistance penalty the resistances were last calculated with; -1 before the first level loads (not saved). */
 	int resistancePenalty = -1;
 
@@ -224,6 +228,8 @@ struct Poe2PlayerData {
 		energyShieldRemainder = 0;
 		golemCooldown = 0;
 		skeletonCooldown = 0;
+		guardTicks = 0;
+		charmCooldown = 0;
 		resistancePenalty = -1;
 	}
 

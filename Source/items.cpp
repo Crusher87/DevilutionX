@@ -67,6 +67,7 @@
 #include "panels/info_box.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/charms.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
@@ -2003,6 +2004,12 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
 		return;
 	}
+	if (const CharmEffect charm = GetCharmEffect(item); charm != CharmEffect::None) {
+		AddItemInfoBoxString(CharmDescription(charm));
+		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUse));
+		AddItemInfoBoxString(_("Works on its own from the belt; refills from kills and in town"));
+		return;
+	}
 	if (IsUncutGem(item)) {
 		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
 		AddItemInfoBoxString(IsUncutSupportGem(item) ? _("Cut into a support gem of this level or lower") : _("Cut into a skill gem of this level or lower"));
@@ -3316,6 +3323,8 @@ void InitializeItem(Item &item, _item_indexes itemData)
 	if (pAllItem.iMiscId == IMISC_STAFF) {
 		item._iCharges = gbIsHellfire ? 18 : 40;
 	}
+	if (IsCharm(item))
+		item._iCharges = MaxCharmCharges;
 
 	item._iMaxCharges = item._iCharges;
 	item._iDurability = pAllItem.iDurability;
@@ -3540,6 +3549,11 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 
 	if (gbIsHellfire && item._iMiscId == IMISC_OILOF)
 		GetOilType(item, lvl);
+
+	if (IsCharm(item)) {
+		item._iMaxCharges = MaxCharmCharges;
+		item._iCharges = MaxCharmCharges;
+	}
 
 	if (item._itype != ItemType::Gold)
 		return;

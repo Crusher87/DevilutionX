@@ -243,3 +243,6 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	3	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Uncut Skill Gem	Uncut Gem	1	0	0	0	0	0	0	0	0		UNCUT_SKILL	Null	true	400
 	2	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Uncut Support Gem	Uncut Gem	1	0	0	0	0	0	0	0	0		UNCUT_SUPPORT	Null	true	400
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Warriors Gem	Gem	3	0	0	0	0	0	0	25	0		SPIRITGEM_SKELETONS	Null	true	1000
+	4	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Ruby Charm	Charm	1	0	0	0	0	0	0	0	0		CHARM_LIFE	Null	true	300
+	4	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Sapphire Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_MANA	Null	true	300
+	3	Misc	Unequippable	GIANTS_KNUCKLE	Misc	NONE	Stone Charm	Charm	6	0	0	0	0	0	0	0	0		CHARM_GUARD	Null	true	500

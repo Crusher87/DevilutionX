@@ -9,6 +9,7 @@
 #include "levels/gendung.h"
 #include "levels/gendung_defs.hpp"
 #include "player.h"
+#include "poe2/charms.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -71,6 +72,7 @@ Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || damage <= 0)
 		return damage;
+	damage = ApplyGuard(player, damage);
 	Poe2PlayerData &data = player.poe2;
 	data.energyShieldRechargeTicks = 0;
 	data.energyShieldRemainder = 0;

@@ -754,6 +754,7 @@ endif()
 add_devilutionx_object_library(libdevilutionx_player
   player.cpp
   poe2/defenses.cpp
+  poe2/charms.cpp
   poe2/flasks.cpp
   poe2/gemcutting.cpp
   poe2/monster_mods.cpp

@@ -40,6 +40,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
@@ -152,18 +153,18 @@ OptionalOwnedClxSpriteList pInvCels;
  * @brief Draws a flask's charges as one pip per use along the bottom of its belt slot.
  * @param position Bottom left corner of the slot.
  */
-void DrawFlaskCharges(const Surface &out, Point position, uint8_t charges)
+void DrawFlaskCharges(const Surface &out, Point position, uint8_t charges, int chargesPerUse = FlaskChargesPerUse, int maxCharges = MaxFlaskCharges)
 {
-	constexpr int Uses = MaxFlaskCharges / FlaskChargesPerUse;
+	const int uses = maxCharges / chargesPerUse;
 	constexpr int PipWidth = 8;
 	constexpr int PipHeight = 3;
 	const int y = position.y - PipHeight - 1;
-	for (int use = 0; use < Uses; use++) {
+	for (int use = 0; use < uses; use++) {
 		const int x = position.x + 1 + (use * (PipWidth + 1));
 		FillRect(out, x, y, PipWidth, PipHeight, PAL16_GRAY + 14);
-		const int filled = std::clamp(charges - (use * FlaskChargesPerUse), 0, static_cast<int>(FlaskChargesPerUse));
+		const int filled = std::clamp(charges - (use * chargesPerUse), 0, chargesPerUse);
 		if (filled > 0)
-			FillRect(out, x, y, (PipWidth * filled) / FlaskChargesPerUse, PipHeight, filled == FlaskChargesPerUse ? PAL16_YELLOW + 2 : PAL16_GRAY + 6);
+			FillRect(out, x, y, (PipWidth * filled) / chargesPerUse, PipHeight, filled == chargesPerUse ? PAL16_YELLOW + 2 : PAL16_GRAY + 6);
 	}
 }
 
@@ -1329,6 +1330,8 @@ void DrawInvBelt(const Surface &out)
 
 		if (IsFlaskSlot(myPlayer, static_cast<size_t>(i)))
 			DrawFlaskCharges(out, position, myPlayer.poe2.flaskCharges[i]);
+		else if (gbIsPoe2 && IsCharm(myPlayer.SpdList[i]))
+			DrawFlaskCharges(out, position, static_cast<uint8_t>(myPlayer.SpdList[i]._iCharges), CharmChargesPerUse, MaxCharmCharges);
 
 		if (myPlayer.SpdList[i].isUsable()
 		    && myPlayer.SpdList[i]._itype != ItemType::Gold) {
@@ -2273,6 +2276,12 @@ bool UseInvItem(int cii)
 
 	if (IsUncutGem(*item)) {
 		OpenGemcutting(speedlist, c);
+		return true;
+	}
+
+	if (IsCharm(*item)) {
+		if (&player == MyPlayer)
+			EventPlrMsg(_("Charms go off on their own while they're in your belt."), UiFlags::ColorWhite);
 		return true;
 	}
 

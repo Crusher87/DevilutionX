@@ -539,6 +539,10 @@ enum item_misc_id : int8_t {
 	IMISC_UNCUT_SKILL,
 	/** Cut into a support gem of up to the item's level at the gemcutting panel. */
 	IMISC_UNCUT_SUPPORT,
+	/** Charms go off on their own from the belt. */
+	IMISC_CHARM_LIFE,
+	IMISC_CHARM_MANA,
+	IMISC_CHARM_GUARD,
 	IMISC_INVALID = -1,
 };
 
