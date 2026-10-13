@@ -95,6 +95,7 @@
 #include "panels/spell_list.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/passive_tree.hpp"
 #include "qol/chatlog.h"
@@ -3479,6 +3480,21 @@ void LoadGameLevelCrypt()
 	}
 }
 
+/** @brief Recalculates resistances when the player reaches a deeper area, and tells them about the new penalty. */
+void UpdateResistancePenalty(Player &player)
+{
+	if (!gbIsPoe2)
+		return;
+	const int penalty = ResistancePenalty(player);
+	const int previous = player.poe2.resistancePenalty;
+	if (penalty == previous)
+		return;
+	player.poe2.resistancePenalty = penalty;
+	CalcPlrInv(player, true);
+	if (previous >= 0 && penalty > previous && &player == MyPlayer)
+		EventPlrMsg(StrCat("Your resistances are now reduced by ", penalty, "%"), UiFlags::ColorRed);
+}
+
 void LoadGameLevelCalculateCursor()
 {
 	// Recalculate mouse selection of entities after level change/load
@@ -3575,6 +3591,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	MarkWalkabilityChanged();
 	LoadGameLevelCalculateCursor();
+	UpdateResistancePenalty(*MyPlayer);
 	return {};
 }
 

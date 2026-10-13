@@ -433,7 +433,7 @@ bool Plr2PlrMHit(const Player &player, Player &target, int mindam, int maxdam, i
 	Fixed26_6 damage = Fixed26_6::fromRaw(dam);
 	if (!missileData.isArrow())
 		damage /= 2;
-	if (resper > 0) {
+	if (resper > 0 || (gbIsPoe2 && resper < 0)) { // POE2 Mashup: negative resistance adds damage
 		damage -= (damage * resper) / 100;
 		if (&player == MyPlayer)
 			NetSendCmdDamage(true, target, damage.raw(), damageType);
@@ -1198,7 +1198,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		MonsterReducePlayerAttribute(*monster, player);
 	}
 
-	if (resper > 0) {
+	if (resper > 0 || (gbIsPoe2 && resper < 0)) { // POE2 Mashup: negative resistance adds damage
 		damage -= damage * resper / 100;
 		if (&player == MyPlayer) {
 			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, damage), 0, deathReason);

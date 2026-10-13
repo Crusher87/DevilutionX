@@ -6,6 +6,8 @@
 #include "engine/backbuffer_state.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "levels/gendung.h"
+#include "levels/gendung_defs.hpp"
 #include "player.h"
 #include "utils/is_of.hpp"
 
@@ -111,6 +113,29 @@ void SetMaxEnergyShield(Player &player, int maxEnergyShield)
 	const int32_t missing = std::max<int32_t>(data.maxEnergyShield * 64 - data.energyShield, 0);
 	data.maxEnergyShield = maxEnergyShield;
 	data.energyShield = std::clamp<int32_t>(maxEnergyShield * 64 - missing, 0, maxEnergyShield * 64);
+}
+
+int DeepestDungeonLevel(const Player &player)
+{
+	int deepest = player.plrIsOnSetLevel ? 0 : player.plrlevel;
+	for (int level = 0; level < NUMLEVELS; level++) {
+		if (player._pLvlVisited[level])
+			deepest = std::max(deepest, level);
+	}
+	return deepest;
+}
+
+int ResistancePenalty(const Player &player)
+{
+	// Cathedral 1-4, Catacombs 5-8, Caves 9-12, then Hell, the Hive and the Crypt.
+	const int area = std::min(DeepestDungeonLevel(player) > 0 ? (DeepestDungeonLevel(player) - 1) / 4 : 0, 3);
+	const int difficulty = std::clamp(static_cast<int>(sgGameInitInfo.nDifficulty), 0, 2);
+	return (area * ResistancePenaltyPerArea) + (difficulty * ResistancePenaltyPerDifficulty);
+}
+
+int Poe2Resistance(int resistance, int penalty, int maxResistance)
+{
+	return std::clamp(resistance - penalty, MinPoe2Resistance, maxResistance);
 }
 
 } // namespace devilution

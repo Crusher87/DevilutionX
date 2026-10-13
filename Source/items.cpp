@@ -2908,6 +2908,14 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 		lightning = 0;
 	}
 
+	if (gbIsPoe2) {
+		// POE2 Mashup: resistances drop as you go deeper and can go negative.
+		const int penalty = ResistancePenalty(player);
+		player._pMagResist = Poe2Resistance(magic, penalty, MaxResistance);
+		player._pFireResist = Poe2Resistance(fire, penalty, MaxResistance);
+		player._pLghtResist = Poe2Resistance(lightning, penalty, MaxResistance);
+		return;
+	}
 	player._pMagResist = std::clamp(magic, 0, MaxResistance);
 	player._pFireResist = std::clamp(fire, 0, MaxResistance);
 	player._pLghtResist = std::clamp(lightning, 0, MaxResistance);

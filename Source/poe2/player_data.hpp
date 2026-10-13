@@ -187,6 +187,8 @@ struct Poe2PlayerData {
 	int energyShieldRemainder = 0;
 	/** @brief Game ticks before Summon Golem brings the golem back (not saved). */
 	uint8_t golemCooldown = 0;
+	/** @brief Resistance penalty the resistances were last calculated with; -1 before the first level loads (not saved). */
+	int resistancePenalty = -1;
 
 	void clear()
 	{
@@ -217,6 +219,7 @@ struct Poe2PlayerData {
 		energyShieldRechargeTicks = 0;
 		energyShieldRemainder = 0;
 		golemCooldown = 0;
+		resistancePenalty = -1;
 	}
 
 	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }
