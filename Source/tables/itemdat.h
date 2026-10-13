@@ -499,6 +499,9 @@ enum item_misc_id : int8_t {
 	IMISC_SUPPORT_CHAIN,
 	IMISC_SUPPORT_CONCENTRATED,
 	IMISC_SUPPORT_FASTERPROJ,
+	IMISC_SUPPORT_BRUTALITY,
+	IMISC_SUPPORT_MARTIALTEMPO,
+	IMISC_SUPPORT_KNOCKBACK,
 	IMISC_SUPPORTLAST,
 	// POE2 Mashup currency orbs
 	IMISC_ORB_TRANSMUTE,
@@ -531,6 +534,10 @@ enum item_misc_id : int8_t {
 	IMISC_SPIRITGEM_PURITY,
 	IMISC_SPIRITGEM_GOLEM,
 	IMISC_SKILLGEMLAST,
+	/** Cut into a skill gem of up to the item's level at the gemcutting panel. */
+	IMISC_UNCUT_SKILL,
+	/** Cut into a support gem of up to the item's level at the gemcutting panel. */
+	IMISC_UNCUT_SUPPORT,
 	IMISC_INVALID = -1,
 };
 

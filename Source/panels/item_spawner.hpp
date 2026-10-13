@@ -62,6 +62,9 @@ std::vector<size_t> FilterItemSpawnerCatalog(const std::vector<SpawnerEntry> &ca
  */
 bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_quality quality, int level, uint32_t seed, Item &item);
 
+/** @brief Puts the item in the inventory, or on the ground at the player's feet when it doesn't fit. */
+void GiveItemToPlayer(Player &player, Item &item);
+
 bool IsItemSpawnerOpen();
 void OpenItemSpawner();
 void CloseItemSpawner();

@@ -29,6 +29,7 @@
 #include "options.h"
 #include "panels/info_box.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/skills_panel.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "tables/townerdat.hpp"
@@ -2310,6 +2311,7 @@ void StartStore(TalkID s)
 	SpellbookFlag = false;
 	CloseInventory();
 	CloseCharPanel();
+	CloseSkillsPanel();
 	RenderGold = false;
 	QuestLogIsOpen = false;
 	CloseGoldDrop();

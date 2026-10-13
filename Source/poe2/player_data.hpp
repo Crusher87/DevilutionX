@@ -62,6 +62,12 @@ enum class SupportGem : uint8_t {
 	Chain,
 	ConcentratedEffect,
 	FasterProjectiles,
+	/** Melee attack skills deal more damage. */
+	Brutality,
+	/** Attack skills attack faster. */
+	MartialTempo,
+	/** Melee attack skills knock enemies back. */
+	Knockback,
 	Count,
 };
 
@@ -116,9 +122,14 @@ constexpr int GemSpellLevel(int characterLevel)
 	return std::min(level, 15);
 }
 
+/** @brief Support gems a spell could have before supports moved into the skill bar (old saves). */
 constexpr size_t MaxSupportsPerSpell = 2;
 constexpr size_t MaxPoe2Spells = 64;
 static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
+
+/** @brief Most support sockets a skill can have; how many are open depends on the character level. */
+constexpr size_t MaxSupportSockets = 5;
+using SupportSockets = std::array<SupportGem, MaxSupportSockets>;
 
 /**
  * @brief All POE2 Mashup character state that isn't part of the original hero file.
@@ -126,7 +137,8 @@ static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
  * Saved in its own "poe2hero" entry of the hero save, so heroes stay loadable by other builds.
  */
 struct Poe2PlayerData {
-	std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> spellSupports {};
+	/** @brief Support gems socketed in each skill bar slot's skill. */
+	std::array<SupportSockets, NumSkillSlots> slotSupports {};
 	/** @brief Charges of the flasks in belt slots 1 to 4. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
 	/** @brief Skill gems socketed in the skill bar. */
@@ -178,7 +190,7 @@ struct Poe2PlayerData {
 
 	void clear()
 	{
-		for (auto &supports : spellSupports)
+		for (SupportSockets &supports : slotSupports)
 			supports.fill(SupportGem::None);
 		flaskCharges.fill(MaxFlaskCharges);
 		skillSlots.fill({});
@@ -222,8 +234,11 @@ struct Poe2PlayerData {
 			warcryTicks--;
 	}
 
-	[[nodiscard]] const std::array<SupportGem, MaxSupportsPerSpell> &supportsFor(SpellID spell) const;
-	[[nodiscard]] bool hasSupport(SpellID spell, SupportGem gem) const;
+	/** @brief The supports of the skill bar slot holding the skill; none if it isn't socketed. */
+	[[nodiscard]] const SupportSockets &supportsFor(SkillSlot skill) const;
+	[[nodiscard]] const SupportSockets &supportsFor(SpellID spell) const { return supportsFor(SkillSlot::ForSpell(spell)); }
+	[[nodiscard]] bool hasSupport(SkillSlot skill, SupportGem gem) const;
+	[[nodiscard]] bool hasSupport(SpellID spell, SupportGem gem) const { return hasSupport(SkillSlot::ForSpell(spell), gem); }
 
 	/** @brief Whether a gem for the spell is socketed in the skill bar. */
 	[[nodiscard]] bool hasSpellGem(SpellID spell) const

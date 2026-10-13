@@ -83,12 +83,14 @@
 #include "objects.h"
 #include "options.h"
 #include "panels/console.hpp"
+#include "panels/gemcutting_panel.hpp"
 #include "panels/info_box.hpp"
 #include "panels/item_spawner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skill_bar.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_list.hpp"
 #include "pfile.h"
@@ -233,7 +235,7 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen())) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen())) {
 		RedrawViewport();
 		return false;
 	}
@@ -405,6 +407,8 @@ void LeftMouseDown(uint16_t modState)
 					CheckVisualStoreItem(MousePosition, isCtrlHeld, isShiftHeld);
 				}
 				CheckVisualStoreButtonPress(MousePosition);
+			} else if (IsSkillsPanelOpen() && GetLeftPanel().contains(MousePosition)) {
+				HandleSkillsPanelClick(MousePosition);
 			} else if (SpellbookFlag && GetRightPanel().contains(MousePosition)) {
 				CheckSBook();
 			} else if (!MyPlayer->HoldItem.isEmpty()) {
@@ -512,6 +516,7 @@ void ClosePanels()
 	}
 	CloseInventory();
 	CloseCharPanel();
+	CloseSkillsPanel();
 	SpellbookFlag = false;
 	QuestLogIsOpen = false;
 }
@@ -783,6 +788,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 	}
 
 	if (PassiveTreeHandleEvent(event)) {
+		return;
+	}
+
+	if (GemcuttingHandleEvent(event)) {
 		return;
 	}
 
@@ -1733,6 +1742,7 @@ void QuestLogKeyPressed()
 		}
 	}
 	CloseCharPanel();
+	CloseSkillsPanel();
 	CloseGoldWithdraw();
 	CloseStash();
 	CloseVisualStore();
@@ -2194,6 +2204,18 @@ void InitKeymapActions()
 	    ToggleItemSpawner,
 	    nullptr,
 	    [] { return !gbIsMultiplayer && !gmenu_is_active(); });
+	options.Keymapper.AddAction(
+	    "SkillsPanel",
+	    N_("Skills"),
+	    N_("Opens the skills panel: your skill gems and their support sockets (POE2 Mashup)."),
+	    'K',
+	    [] {
+		    if (!gbIsPoe2 || IsPlayerInStore())
+			    return;
+		    ToggleSkillsPanel();
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && !gmenu_is_active(); });
 	// POE2 opens the passive tree with P. Outside the mod (or in multiplayer) P still pauses.
 	options.Keymapper.AddAction(
 	    "PassiveTree",

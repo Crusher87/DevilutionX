@@ -70,6 +70,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/gemcutting.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -1998,7 +1999,14 @@ void PrintItemMisc(const Item &item)
 {
 	if (const SupportGem gem = SupportGemForItem(item); gem != SupportGem::None) {
 		AddItemInfoBoxString(SupportGemDescription(gem));
-		AddItemInfoBoxString(_("Use to link to your readied spell"));
+		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
+		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
+		return;
+	}
+	if (IsUncutGem(item)) {
+		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
+		AddItemInfoBoxString(IsUncutSupportGem(item) ? _("Cut into a support gem of this level or lower") : _("Cut into a skill gem of this level or lower"));
+		AddItemInfoBoxString(_("Use to open gemcutting"));
 		return;
 	}
 	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {

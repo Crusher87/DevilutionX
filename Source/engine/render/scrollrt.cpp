@@ -55,11 +55,13 @@
 #include "options.h"
 #include "panels/charpanel.hpp"
 #include "panels/console.hpp"
+#include "panels/gemcutting_panel.hpp"
 #include "panels/item_spawner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skill_bar.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
 #include "qol/chatlog.h"
@@ -1416,6 +1418,8 @@ void DrawView(const Surface &out, Point startPosition)
 		DrawStash(out);
 	} else if (IsVisualStoreOpen) {
 		DrawVisualStore(out);
+	} else if (IsSkillsPanelOpen()) {
+		DrawSkillsPanel(out);
 	}
 
 	if (ShowUniqueItemInfoBox) {
@@ -1909,6 +1913,7 @@ void DrawAndBlit()
 		DrawPartyMemberInfoPanel(out);
 
 	DrawPassiveTree(out);
+	DrawGemcutting(out);
 	DrawItemSpawner(out);
 	DrawCursor(out);
 

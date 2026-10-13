@@ -29,6 +29,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
+#include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -192,7 +193,9 @@ std::optional<_item_indexes> UniqueBase(const UniqueItem &unique)
 
 bool IsSpawnableMisc(const ItemData &data)
 {
-	return data.dropRate > 0 && data.iClass == ICLASS_MISC && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT) && data.iMiscId != IMISC_UNIQUE;
+	// Skill and support gems don't drop (uncut gems do), but they're handy for testing.
+	const bool isGem = !SkillForGemData(data).isEmpty() || SupportGemForMiscId(data.iMiscId) != SupportGem::None;
+	return (data.dropRate > 0 || isGem) && data.iClass == ICLASS_MISC && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT) && data.iMiscId != IMISC_UNIQUE;
 }
 
 /** @brief Rolls the given unique the way a drop of its base would, so it survives saving and loading. */
@@ -326,22 +329,6 @@ void CycleCategory(int delta)
 	RefreshResults();
 }
 
-/** @brief Puts the item in the inventory, or on the ground at the player's feet when it doesn't fit. */
-void GiveItem(Player &player, Item &item)
-{
-	item._iIdentified = true;
-	if (AutoPlaceItemInInventory(player, item, true)) {
-		CalcPlrInv(player, true);
-		return;
-	}
-	if (ActiveItemCount >= MAXITEMS)
-		return;
-	const int ii = AllocateItem();
-	Items[ii] = item;
-	GetSuperItemSpace(player.position.tile, ii);
-	NetSendCmdPItem(false, CMD_SPAWNITEM, Items[ii].position, Items[ii]);
-}
-
 void SpawnSelected(int count)
 {
 	if (Selected >= Results.size())
@@ -354,7 +341,7 @@ void SpawnSelected(int count)
 		Item item;
 		if (!CreateSpawnerItem(player, entry, quality, Level, SDL_GetTicks() + (i * 7919), item))
 			break;
-		GiveItem(player, item);
+		GiveItemToPlayer(player, item);
 		spawned++;
 	}
 	if (spawned == 0) {
@@ -612,11 +599,29 @@ bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_qua
 	if (entry.rollsQuality)
 		return RollItemOfQuality(player, item, entry.baseIndex, quality, std::clamp(level, MinLevel, MaxLevel), seed);
 
-	// Gems, orbs and potions have no quality or level.
+	// Gems, orbs and potions have no quality; only uncut gems use the level.
 	InitializeItem(item, entry.baseIndex);
 	item._iSeed = static_cast<int32_t>(seed >> 1);
 	SetupItem(item);
+	if (IsUncutGem(item))
+		item._iCreateInfo = static_cast<uint16_t>((item._iCreateInfo & ~CF_LEVEL) | std::clamp(level, MinLevel, static_cast<int>(CF_LEVEL)));
 	return !item.isEmpty();
+}
+
+/** @brief Puts the item in the inventory, or on the ground at the player's feet when it doesn't fit. */
+void GiveItemToPlayer(Player &player, Item &item)
+{
+	item._iIdentified = true;
+	if (AutoPlaceItemInInventory(player, item, true)) {
+		CalcPlrInv(player, true);
+		return;
+	}
+	if (ActiveItemCount >= MAXITEMS)
+		return;
+	const int ii = AllocateItem();
+	Items[ii] = item;
+	GetSuperItemSpace(player.position.tile, ii);
+	NetSendCmdPItem(false, CMD_SPAWNITEM, Items[ii].position, Items[ii]);
 }
 
 bool IsItemSpawnerOpen()

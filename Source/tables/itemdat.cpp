@@ -465,6 +465,9 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SUPPORT_CHAIN") return IMISC_SUPPORT_CHAIN;
 	if (value == "SUPPORT_CONCENTRATED") return IMISC_SUPPORT_CONCENTRATED;
 	if (value == "SUPPORT_FASTERPROJ") return IMISC_SUPPORT_FASTERPROJ;
+	if (value == "SUPPORT_BRUTALITY") return IMISC_SUPPORT_BRUTALITY;
+	if (value == "SUPPORT_MARTIALTEMPO") return IMISC_SUPPORT_MARTIALTEMPO;
+	if (value == "SUPPORT_KNOCKBACK") return IMISC_SUPPORT_KNOCKBACK;
 	if (value == "ORB_TRANSMUTE") return IMISC_ORB_TRANSMUTE;
 	if (value == "ORB_ALCHEMY") return IMISC_ORB_ALCHEMY;
 	if (value == "ORB_CHAOS") return IMISC_ORB_CHAOS;
@@ -492,6 +495,8 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SPIRITGEM_HERALDTHUNDER") return IMISC_SPIRITGEM_HERALDTHUNDER;
 	if (value == "SPIRITGEM_PURITY") return IMISC_SPIRITGEM_PURITY;
 	if (value == "SPIRITGEM_GOLEM") return IMISC_SPIRITGEM_GOLEM;
+	if (value == "UNCUT_SKILL") return IMISC_UNCUT_SKILL;
+	if (value == "UNCUT_SUPPORT") return IMISC_UNCUT_SUPPORT;
 	return std::unexpected("Unknown enum value");
 }
 

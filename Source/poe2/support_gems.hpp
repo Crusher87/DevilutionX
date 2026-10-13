@@ -8,7 +8,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string_view>
+#include <vector>
 
 #include "engine/world_tile.hpp"
 #include "poe2/player_data.hpp"
@@ -32,13 +34,30 @@ constexpr int ForkDegrees = 30;
 constexpr int ConcentratedEffectDamagePercent = 140;
 constexpr int FasterProjectilesSpeedPercent = 160;
 
-enum class SupportLinkResult : uint8_t {
-	Linked,
-	/** Linked, and the oldest support was pushed out to make room. */
+constexpr int BrutalityDamagePercent = 135;
+constexpr int8_t MartialTempoFrames = 2;
+
+/** @brief The attribute a support gem draws on, like POE2's red, green and blue gems. */
+enum class GemColor : uint8_t {
+	Strength,
+	Dexterity,
+	Magic,
+};
+
+enum class SupportSocketResult : uint8_t {
+	Socketed,
+	/** Socketed in place of another support, which comes back out. */
 	Replaced,
-	NoReadiedSpell,
+	/** There's no skill gem in the slot. */
+	NoSkill,
 	NotApplicable,
-	AlreadyLinked,
+	AlreadySocketed,
+	/** The socket isn't open yet at the character's level. */
+	Locked,
+	/** Every open socket of the skill is taken. */
+	NoFreeSocket,
+	/** The character's attribute can't carry another support of this color. */
+	NoCapacity,
 };
 
 /** @brief The support gem an item represents, or SupportGem::None. */
@@ -50,23 +69,54 @@ std::string_view SupportGemDescription(SupportGem gem);
 /** @brief Makes a fresh support gem item, e.g. when a linked gem is swapped back out. */
 bool CreateSupportGemItem(Item &item, SupportGem gem);
 
-/** @brief Whether the gem does anything for the given spell. */
-bool SupportGemCanSupport(SupportGem gem, SpellID spell);
+GemColor SupportGemColor(SupportGem gem);
+std::string_view GemColorName(GemColor color);
+
+/** @brief Whether the gem does anything for the given skill. */
+bool SupportGemCanSupport(SupportGem gem, SkillSlot skill);
+inline bool SupportGemCanSupport(SupportGem gem, SpellID spell) { return SupportGemCanSupport(gem, SkillSlot::ForSpell(spell)); }
+/** @brief Whether the skill takes support gems at all (Spirit gems don't). */
+bool SkillTakesSupports(SkillSlot skill);
+
+/** @brief Support sockets open on every skill: 2, plus one at levels 10, 20 and 30. */
+size_t SupportSocketCount(int characterLevel);
+size_t SupportSocketCount(const Player &player);
+
+/** @brief How many supports of a color the character can socket: 1, plus 1 per 15 points of the attribute. */
+int SupportCapacity(const Player &player, GemColor color);
+int SupportsUsed(const Poe2PlayerData &data, GemColor color);
 
 /**
- * @brief Links a support gem to a spell.
- * @param replaced Set to the support that was pushed out when both slots were full.
+ * @brief Sockets a support gem into a skill in the skill bar.
+ * @param socket The socket to fill; the first free open socket if empty.
+ * @param replaced Set to the support that was in the socket, if any.
  */
-SupportLinkResult LinkSupportGem(Poe2PlayerData &data, SpellID spell, SupportGem gem, SupportGem &replaced);
+SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced);
+/** @brief The first skill bar slot whose skill has a free socket the gem can go in. */
+std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem);
+/** @brief Takes a support out of a socket. */
+SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket);
+/** @brief Takes every support out of a slot, e.g. when its skill gem is taken out. */
+std::vector<SupportGem> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
 
 /** @brief Extra spell levels the spell's supports add. */
 int SupportSpellLevelBonus(const Player &player, SpellID spell);
-/** @brief Mana cost multiplier in percent from the spell's supports. */
-int SupportManaCostPercent(const Player &player, SpellID spell);
+/** @brief Mana cost multiplier in percent from the skill's supports. */
+int SupportManaCostPercent(const Player &player, SkillSlot skill);
+inline int SupportManaCostPercent(const Player &player, SpellID spell) { return SupportManaCostPercent(player, SkillSlot::ForSpell(spell)); }
 /** @brief Animation frames skipped when casting the spell. */
 int8_t SupportCastSkippedFrames(const Player &player, SpellID spell);
 /** @brief Additional projectiles fired with the spell. */
 int SupportExtraProjectiles(const Player &player, SpellID spell);
+
+/** @brief The weapon skill whose attack or animation is in progress. */
+WeaponSkill CurrentWeaponSkill(const Player &player);
+/** @brief Damage multiplier in percent for a melee hit, from the current skill's supports. */
+int SupportMeleeDamagePercent(const Player &player);
+/** @brief Whether a melee hit of the current skill knocks the monster back. */
+bool SupportMeleeKnocksBack(const Player &player);
+/** @brief Animation frames skipped by the attack of the given weapon skill. */
+int8_t SupportAttackSkippedFrames(const Player &player, WeaponSkill skill);
 
 /**
  * @brief Rotates a target around a source, in steps of 15 degrees up to 45.

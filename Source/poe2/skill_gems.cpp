@@ -108,7 +108,7 @@ int SkillManaCost(const Player &player, SkillSlot skill)
 	case SkillKind::Spell:
 		return GetManaAmount(player, skill.spell()).whole();
 	case SkillKind::Attack:
-		return WeaponSkillManaCost(skill.attack());
+		return WeaponSkillManaCost(player, skill.attack());
 	default:
 		return 0;
 	}

@@ -2,6 +2,8 @@
 
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "control/control.hpp"
 #include "controls/control_mode.hpp"
@@ -17,6 +19,7 @@
 #include "inv.h"
 #include "items.h"
 #include "options.h"
+#include "panels/item_spawner.hpp"
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
@@ -26,6 +29,7 @@
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -153,6 +157,76 @@ void HoldItem(Player &player, Item &&item)
 	NewCursor(player.HoldItem);
 }
 
+} // namespace
+
+void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems)
+{
+	for (const SupportGem gem : gems) {
+		Item item;
+		if (CreateSupportGemItem(item, gem))
+			GiveItemToPlayer(player, item);
+	}
+}
+
+SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill)
+{
+	// Supports stay socketed if the new skill can use them, like moving them over in POE2; the rest come back out.
+	std::vector<SupportGem> returned;
+	for (SupportGem &gem : player.poe2.slotSupports[slot]) {
+		if (gem != SupportGem::None && !SupportGemCanSupport(gem, skill))
+			returned.push_back(std::exchange(gem, SupportGem::None));
+	}
+	const SkillSlot previous = SocketSkill(player, slot, skill);
+	GiveSupportGems(player, returned);
+	return previous;
+}
+
+std::string SupportSocketMessage(SupportSocketResult result, const Player &player, size_t slot, SupportGem gem)
+{
+	const SkillSlot skill = player.poe2.skillSlots[slot];
+	switch (result) {
+	case SupportSocketResult::NoSkill:
+		return std::string(_("Socket a skill gem in this slot first."));
+	case SupportSocketResult::NotApplicable:
+		return FormatRuntime(_("{:s} can't support {:s}."), SupportGemName(gem), SkillName(skill));
+	case SupportSocketResult::AlreadySocketed:
+		return FormatRuntime(_("{:s} already supports {:s}."), SupportGemName(gem), SkillName(skill));
+	case SupportSocketResult::Locked:
+		return std::string(_("That socket opens at a higher level."));
+	case SupportSocketResult::NoFreeSocket:
+		return FormatRuntime(_("{:s} has no free support socket."), SkillName(skill));
+	case SupportSocketResult::NoCapacity: {
+		const GemColor color = SupportGemColor(gem);
+		return FormatRuntime(_("Not enough {:s} for another {:s} support ({:d}/{:d})."), GemColorName(color), GemColorName(color), SupportsUsed(player.poe2, color), SupportCapacity(player, color));
+	}
+	default:
+		return FormatRuntime(_("{:s} now supports {:s}."), SupportGemName(gem), SkillName(skill));
+	}
+}
+
+bool SocketHeldSupportGem(Player &player, size_t slot, std::optional<size_t> socket)
+{
+	const SupportGem gem = SupportGemForItem(player.HoldItem);
+	SupportGem replaced = SupportGem::None;
+	const SupportSocketResult result = SocketSupportGem(player, slot, socket, gem, replaced);
+	if (!IsAnyOf(result, SupportSocketResult::Socketed, SupportSocketResult::Replaced)) {
+		EventPlrMsg(SupportSocketMessage(result, player, slot, gem), UiFlags::ColorRed);
+		return false;
+	}
+
+	PlayGemSound(player.HoldItem);
+	player.HoldItem.clear();
+	EventPlrMsg(SupportSocketMessage(result, player, slot, gem));
+	Item returned;
+	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced))
+		HoldItem(player, std::move(returned));
+	else
+		NewCursor(CURSOR_HAND);
+	return true;
+}
+
+namespace {
+
 void SocketHeldSkillGem(Player &player, size_t slot)
 {
 	const SkillSlot skill = SkillForGem(player.HoldItem);
@@ -162,41 +236,10 @@ void SocketHeldSkillGem(Player &player, size_t slot)
 	}
 
 	PlayGemSound(player.HoldItem);
-	const SkillSlot previous = SocketSkill(player, slot, skill);
+	const SkillSlot previous = ChangeSlotSkill(player, slot, skill);
 	player.HoldItem.clear();
 	Item returned;
 	if (!previous.isEmpty() && CreateSkillGemItem(returned, previous))
-		HoldItem(player, std::move(returned));
-	else
-		NewCursor(CURSOR_HAND);
-}
-
-void LinkHeldSupportGem(Player &player, size_t slot)
-{
-	const SupportGem gem = SupportGemForItem(player.HoldItem);
-	const SkillSlot skill = player.poe2.skillSlots[slot];
-	const SpellID spell = skill.spell();
-	SupportGem replaced = SupportGem::None;
-	switch (LinkSupportGem(player.poe2, spell, gem, replaced)) {
-	case SupportLinkResult::NoReadiedSpell:
-	case SupportLinkResult::NotApplicable:
-		EventPlrMsg(skill.isEmpty() ? std::string(_("Socket a skill gem in this slot first."))
-		                            : FormatRuntime(_("{:s} can't support {:s}."), SupportGemName(gem), SkillName(skill)),
-		    UiFlags::ColorRed);
-		return;
-	case SupportLinkResult::AlreadyLinked:
-		EventPlrMsg(FormatRuntime(_("{:s} is already linked to {:s}."), SupportGemName(gem), SkillName(skill)), UiFlags::ColorRed);
-		return;
-	case SupportLinkResult::Linked:
-	case SupportLinkResult::Replaced:
-		break;
-	}
-
-	PlayGemSound(player.HoldItem);
-	player.HoldItem.clear();
-	EventPlrMsg(FormatRuntime(_("{:s} linked to {:s}."), SupportGemName(gem), SkillName(skill)));
-	Item returned;
-	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced))
 		HoldItem(player, std::move(returned));
 	else
 		NewCursor(CURSOR_HAND);
@@ -210,14 +253,20 @@ bool IsSkillBarShown()
 	return gbIsPoe2 && MyPlayer != nullptr && !SpellSelectFlag;
 }
 
+/** @brief Whether the bar is drawn: it hides when both side panels cover its spots. */
+bool IsSkillBarVisible()
+{
+	return IsSkillBarShown() && !(IsLeftPanelOpen() && Overlaps(SkillBarRect(), GetLeftPanel()));
+}
+
 bool IsSkillBarHovered()
 {
-	return IsSkillBarShown() && ControlMode == ControlTypes::KeyboardAndMouse && SkillBarRect().contains(MousePosition);
+	return IsSkillBarVisible() && ControlMode == ControlTypes::KeyboardAndMouse && SkillBarRect().contains(MousePosition);
 }
 
 void DrawSkillBar(const Surface &out)
 {
-	if (!IsSkillBarShown())
+	if (!IsSkillBarVisible())
 		return;
 
 	const Player &player = *MyPlayer;
@@ -228,17 +277,7 @@ void DrawSkillBar(const Surface &out)
 		const SkillSlot skill = player.poe2.skillSlots[slot];
 
 		DrawHalfTransparentRectTo(out, rect.position.x, rect.position.y, rect.size.width, rect.size.height);
-		if (!skill.isEmpty()) {
-			const bool ready = GetSkillUsability(player, skill) == SkillUsability::Ready;
-			SetSpellTrans(!ready ? SpellType::Invalid : skill.kind == SkillKind::Spell ? SpellType::Spell
-			                                                                           : SpellType::Skill);
-			if (skill.kind == SkillKind::Spell)
-				DrawSmallSpellIcon(out, bottomLeft, skill.spell());
-			else if (skill.kind == SkillKind::Persistent)
-				DrawSmallSpellIcon(out, bottomLeft, PersistentIcon(skill.persistent()));
-			else
-				DrawSmallSpellIcon(out, bottomLeft, AttackIcon(skill.attack()));
-		}
+		DrawSkillIcon(out, bottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready);
 		if (hovered == slot)
 			DrawSmallSpellIconBorder(out, bottomLeft);
 
@@ -269,10 +308,6 @@ void SetSkillBarInfo()
 	InfoString = FormatRuntime(_("{:s} [{:s}]"), SkillName(skill), key);
 	if (skill.kind == SkillKind::Spell) {
 		AddInfoBoxString(FormatRuntime(_("Spell level {:d}, {:d} mana"), player.GetSpellLevel(skill.spell()), SkillManaCost(player, skill)));
-		for (const SupportGem gem : player.poe2.supportsFor(skill.spell())) {
-			if (gem != SupportGem::None)
-				AddInfoBoxString(FormatRuntime(_("Support: {:s}"), SupportGemName(gem)));
-		}
 	} else if (skill.kind == SkillKind::Persistent) {
 		AddInfoBoxString(PersistentSkillDescription(skill.persistent()));
 		AddInfoBoxString(FormatRuntime(_("Reserves {:d} Spirit ({:d}/{:d} reserved)"), SpiritReservation(skill.persistent()), ReservedSpirit(player), MaxSpirit(player)));
@@ -282,6 +317,10 @@ void SetSkillBarInfo()
 			AddInfoBoxString(FormatRuntime(_("{:d} mana, needs a {:s}"), SkillManaCost(player, skill), WeaponSkillWeapons(skill.attack())));
 		else
 			AddInfoBoxString(FormatRuntime(_("{:d} mana"), SkillManaCost(player, skill)));
+	}
+	for (const SupportGem gem : player.poe2.slotSupports[*slot]) {
+		if (gem != SupportGem::None)
+			AddInfoBoxString(FormatRuntime(_("Support: {:s}"), SupportGemName(gem)));
 	}
 
 	switch (GetSkillUsability(player, skill)) {
@@ -305,33 +344,61 @@ void SetSkillBarInfo()
 
 bool HandleSkillBarClick(Point mousePosition)
 {
-	if (!IsSkillBarShown() || !SkillBarRect().contains(mousePosition))
+	if (!IsSkillBarVisible() || !SkillBarRect().contains(mousePosition))
 		return false;
 	const std::optional<size_t> slot = SlotAt(mousePosition);
 	if (!slot)
 		return true;
 
-	Player &player = *MyPlayer;
+	ClickSkillSlot(*MyPlayer, *slot, invflag);
+	return true;
+}
+
+void ClickSkillSlot(Player &player, size_t slot, bool canTakeOut)
+{
 	if (!player.HoldItem.isEmpty()) {
 		if (IsSkillGem(player.HoldItem))
-			SocketHeldSkillGem(player, *slot);
+			SocketHeldSkillGem(player, slot);
 		else if (SupportGemForItem(player.HoldItem) != SupportGem::None)
-			LinkHeldSupportGem(player, *slot);
+			SocketHeldSupportGem(player, slot, std::nullopt);
 		else
 			EventPlrMsg(_("Only skill gems and support gems go in the skill bar."), UiFlags::ColorRed);
-		return true;
+		return;
 	}
 
-	const SkillSlot skill = player.poe2.skillSlots[*slot];
-	if (invflag && !skill.isEmpty()) {
+	const SkillSlot skill = player.poe2.skillSlots[slot];
+	if (canTakeOut && !skill.isEmpty()) {
 		Item gem;
 		if (CreateSkillGemItem(gem, skill)) {
-			SocketSkill(player, *slot, {});
+			ChangeSlotSkill(player, slot, {});
 			PlayGemSound(gem);
 			HoldItem(player, std::move(gem));
 		}
 	}
-	return true;
+}
+
+void DrawSkillIcon(const Surface &out, Point bottomLeft, SkillSlot skill, bool ready)
+{
+	if (skill.isEmpty())
+		return;
+	SetSpellTrans(!ready ? SpellType::Invalid : skill.kind == SkillKind::Spell ? SpellType::Spell
+	                                                                           : SpellType::Skill);
+	if (skill.kind == SkillKind::Spell)
+		DrawSmallSpellIcon(out, bottomLeft, skill.spell());
+	else if (skill.kind == SkillKind::Persistent)
+		DrawSmallSpellIcon(out, bottomLeft, PersistentIcon(skill.persistent()));
+	else
+		DrawSmallSpellIcon(out, bottomLeft, AttackIcon(skill.attack()));
+}
+
+std::string SkillSlotKeyName(size_t slot)
+{
+	return SlotKeyName(slot);
+}
+
+std::string MissingSkillRequirements(const Player &player, SkillSlot skill)
+{
+	return MissingRequirements(player, skill);
 }
 
 void UseSkillSlot(size_t slot)
@@ -387,7 +454,7 @@ bool SocketSkillGemFromInventory(Player &player, bool fromBelt, int index)
 	}
 
 	PlayGemSound(gem);
-	SocketSkill(player, *slot, skill);
+	ChangeSlotSkill(player, *slot, skill);
 	EventPlrMsg(FormatRuntime(_("{:s} socketed. Use it with {:s}."), SkillName(skill), SlotKeyName(*slot)));
 	if (fromBelt)
 		player.RemoveSpdBarItem(index);

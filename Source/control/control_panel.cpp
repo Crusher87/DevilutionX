@@ -19,6 +19,7 @@
 #include "panels/mainpanel.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_icons.hpp"
 #include "panels/spell_list.hpp"
@@ -62,7 +63,7 @@ const Rectangle &GetRightPanel()
 }
 bool IsLeftPanelOpen()
 {
-	return CharFlag || QuestLogIsOpen || IsStashOpen || IsVisualStoreOpen;
+	return CharFlag || QuestLogIsOpen || IsStashOpen || IsVisualStoreOpen || IsSkillsPanelOpen();
 }
 bool IsRightPanelOpen()
 {
@@ -301,6 +302,7 @@ void FocusOnCharInfo()
 void OpenCharPanel()
 {
 	QuestLogIsOpen = false;
+	CloseSkillsPanel();
 	CloseGoldWithdraw();
 	CloseStash();
 	CloseVisualStore();
