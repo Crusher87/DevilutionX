@@ -35,11 +35,13 @@
 #include "levels/town.h"
 #include "minitext.h"
 #include "options.h"
+#include "panels/gemcutting_panel.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/flasks.hpp"
+#include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "qol/stash.h"
@@ -2118,34 +2120,19 @@ Item &GetInventoryItem(Player &player, int location)
 
 namespace {
 
-/** @brief POE2 Mashup: links a support gem to the readied spell, swapping out the oldest support if needed. */
+/** @brief POE2 Mashup: sockets a support gem into the first skill in the skill bar with a free socket it fits. */
 void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
 {
-	// Link to the readied spell, or else to the first spell in the skill bar.
-	SpellID spell = player._pRSplType == SpellType::Spell ? player._pRSpell : SpellID::Invalid;
-	if (spell == SpellID::Invalid) {
-		for (const SkillSlot &slot : player.poe2.skillSlots) {
-			if (slot.kind == SkillKind::Spell) {
-				spell = slot.spell();
-				break;
-			}
-		}
+	const std::optional<size_t> slot = FindSlotForSupport(player, gem);
+	if (!slot) {
+		EventPlrMsg(FormatRuntime(_("No skill in the skill bar has a free socket for {:s}. Open the skills panel (K) to swap supports."), SupportGemName(gem)), UiFlags::ColorRed);
+		return;
 	}
-	const std::string_view gemName = SupportGemName(gem);
 	SupportGem replaced;
-	switch (LinkSupportGem(player.poe2, spell, gem, replaced)) {
-	case SupportLinkResult::NoReadiedSpell:
-		EventPlrMsg(_("Ready a spell first, or drop the gem onto a spell in the skill bar."), UiFlags::ColorRed);
+	const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem, replaced);
+	if (result != SupportSocketResult::Socketed) {
+		EventPlrMsg(SupportSocketMessage(result, player, *slot, gem), UiFlags::ColorRed);
 		return;
-	case SupportLinkResult::NotApplicable:
-		EventPlrMsg(FormatRuntime(_("{:s} can't support {:s}."), gemName, pgettext("spell", GetSpellData(spell).sNameText)), UiFlags::ColorRed);
-		return;
-	case SupportLinkResult::AlreadyLinked:
-		EventPlrMsg(FormatRuntime(_("{:s} is already linked to {:s}."), gemName, pgettext("spell", GetSpellData(spell).sNameText)), UiFlags::ColorRed);
-		return;
-	case SupportLinkResult::Linked:
-	case SupportLinkResult::Replaced:
-		break;
 	}
 
 	const Item &gemItem = speedlist ? player.SpdList[c] : player.InvList[c];
@@ -2154,15 +2141,7 @@ void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
 		player.RemoveSpdBarItem(c);
 	else
 		player.RemoveInvItem(c);
-
-	std::string message = FormatRuntime(_("{:s} linked to {:s}."), gemName, pgettext("spell", GetSpellData(spell).sNameText));
-	Item returned;
-	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced)) {
-		if (!AutoPlaceItemInInventory(player, returned, true))
-			PlaceItemInWorld(std::move(returned), GetSuperItemLoc(player.position.tile));
-		StrAppend(message, " ", FormatRuntime(_("{:s} was swapped out."), SupportGemName(replaced)));
-	}
-	EventPlrMsg(message);
+	EventPlrMsg(SupportSocketMessage(result, player, *slot, gem));
 }
 
 } // namespace
@@ -2289,6 +2268,11 @@ bool UseInvItem(int cii)
 
 	if (IsSkillGem(*item)) {
 		SocketSkillGemFromInventory(player, speedlist, c);
+		return true;
+	}
+
+	if (IsUncutGem(*item)) {
+		OpenGemcutting(speedlist, c);
 		return true;
 	}
 

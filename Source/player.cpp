@@ -591,9 +591,10 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 	dam += player._pIBonusDamMod;
 	int dam2 = dam << 6;
 	dam += player._pDamageMod;
-	// POE2 Mashup: Battle Cry empowers melee hits.
+	// POE2 Mashup: Battle Cry empowers melee hits, and so does a Brutality support on the skill.
 	if (player.poe2.warcryTicks > 0)
 		dam += dam / 2;
+	dam = dam * SupportMeleeDamagePercent(player) / 100;
 
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike)) {
@@ -719,7 +720,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
 	} else {
-		if (monster.mode != MonsterMode::Petrified && HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback))
+		if (monster.mode != MonsterMode::Petrified && (HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback) || SupportMeleeKnocksBack(player)))
 			M_GetKnockback(monster, player.position.tile);
 		M_StartHit(monster, player, dam);
 	}

@@ -16,6 +16,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/support_gems.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -45,7 +46,7 @@ Point SkillTarget(const Player &player)
 
 void PaySkillMana(Player &player, WeaponSkill skill)
 {
-	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(skill));
+	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
 	player._pMana -= cost;
 	player._pManaBase -= cost;
 	if (&player == MyPlayer)
@@ -237,6 +238,11 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	}
 }
 
+int WeaponSkillManaCost(const Player &player, WeaponSkill skill)
+{
+	return WeaponSkillManaCost(skill) * SupportManaCostPercent(player, SkillSlot::ForAttack(skill)) / 100;
+}
+
 bool IsRangedWeaponSkill(WeaponSkill skill)
 {
 	return IsAnyOf(skill, WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow);
@@ -320,7 +326,7 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		EventPlrMsg(FormatRuntime(_("{:s} needs a {:s}."), WeaponSkillName(skill), WeaponSkillWeapons(skill)), UiFlags::ColorRed);
 		return false;
 	}
-	if (player._pMana < Fixed26_6::fromInt(WeaponSkillManaCost(skill))) {
+	if (player._pMana < Fixed26_6::fromInt(WeaponSkillManaCost(player, skill))) {
 		EventPlrMsg(FormatRuntime(_("Not enough mana for {:s}."), WeaponSkillName(skill)), UiFlags::ColorRed);
 		return false;
 	}
@@ -368,7 +374,7 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player.poe2.pendingSkill = WeaponSkill::None;
 	player.poe2.pendingSkillTicks = 0;
 
-	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(skill));
+	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
 	if (player._pMana < cost)
 		return;
 	player._pMana -= cost;
@@ -509,7 +515,8 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 
 int8_t WeaponSkillSkippedFrames(const Player &player)
 {
-	return player.poe2.activeSkill == WeaponSkill::Flurry ? 3 : 0;
+	const int8_t flurry = player.poe2.activeSkill == WeaponSkill::Flurry ? 3 : 0;
+	return flurry + SupportAttackSkippedFrames(player, player.poe2.activeSkill);
 }
 
 int LightningArrowDamage(const Player &player)

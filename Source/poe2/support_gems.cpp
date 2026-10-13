@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <optional>
+#include <utility>
 
 #include "engine/displacement.hpp"
 #include "items.h"
@@ -30,6 +31,18 @@ bool IsProjectileSpell(SpellID spell)
 bool IsDirectProjectileSpell(SpellID spell)
 {
 	return spell != SpellID::Lightning && IsProjectileSpell(spell);
+}
+
+bool IsMeleeAttackSkill(WeaponSkill skill)
+{
+	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge);
+}
+
+/** @brief Attack skills that use the normal attack animation, so they can attack faster. */
+bool IsQuickenableAttackSkill(WeaponSkill skill)
+{
+	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry,
+	    WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow);
 }
 
 bool IsProjectileSupport(SupportGem gem)
@@ -98,6 +111,12 @@ int ManaCostPercent(SupportGem gem)
 		return 140;
 	case SupportGem::FasterProjectiles:
 		return 110;
+	case SupportGem::Brutality:
+		return 130;
+	case SupportGem::MartialTempo:
+		return 120;
+	case SupportGem::Knockback:
+		return 110;
 	default:
 		return 100;
 	}
@@ -105,18 +124,23 @@ int ManaCostPercent(SupportGem gem)
 
 } // namespace
 
-const std::array<SupportGem, MaxSupportsPerSpell> &Poe2PlayerData::supportsFor(SpellID spell) const
+const SupportSockets &Poe2PlayerData::supportsFor(SkillSlot skill) const
 {
-	static const std::array<SupportGem, MaxSupportsPerSpell> None {};
-	const auto index = static_cast<size_t>(static_cast<int8_t>(spell));
-	if (spell == SpellID::Invalid || index >= MaxPoe2Spells)
+	static const SupportSockets None {};
+	if (skill.isEmpty())
 		return None;
-	return spellSupports[index];
+	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		if (skillSlots[slot] == skill)
+			return slotSupports[slot];
+	}
+	return None;
 }
 
-bool Poe2PlayerData::hasSupport(SpellID spell, SupportGem gem) const
+bool Poe2PlayerData::hasSupport(SkillSlot skill, SupportGem gem) const
 {
-	const auto &supports = supportsFor(spell);
+	if (gem == SupportGem::None)
+		return false;
+	const SupportSockets &supports = supportsFor(skill);
 	return std::find(supports.begin(), supports.end(), gem) != supports.end();
 }
 
@@ -141,6 +165,12 @@ SupportGem SupportGemForMiscId(int miscId)
 		return SupportGem::ConcentratedEffect;
 	case IMISC_SUPPORT_FASTERPROJ:
 		return SupportGem::FasterProjectiles;
+	case IMISC_SUPPORT_BRUTALITY:
+		return SupportGem::Brutality;
+	case IMISC_SUPPORT_MARTIALTEMPO:
+		return SupportGem::MartialTempo;
+	case IMISC_SUPPORT_KNOCKBACK:
+		return SupportGem::Knockback;
 	default:
 		return SupportGem::None;
 	}
@@ -174,6 +204,12 @@ std::string_view SupportGemName(SupportGem gem)
 		return _("Concentrated Effect");
 	case SupportGem::FasterProjectiles:
 		return _("Faster Projectiles");
+	case SupportGem::Brutality:
+		return _("Brutality");
+	case SupportGem::MartialTempo:
+		return _("Martial Tempo");
+	case SupportGem::Knockback:
+		return _("Knockback");
 	default:
 		return {};
 	}
@@ -200,6 +236,12 @@ std::string_view SupportGemDescription(SupportGem gem)
 		return _("Bolts deal 40% more damage.\nMana +40%");
 	case SupportGem::FasterProjectiles:
 		return _("Bolts fly 60% faster. Mana +10%");
+	case SupportGem::Brutality:
+		return _("Melee attack skills deal 35% more\ndamage. Mana +30%");
+	case SupportGem::MartialTempo:
+		return _("Attack skills attack faster.\nMana +20%");
+	case SupportGem::Knockback:
+		return _("Melee attack skills knock enemies\nback. Mana +10%");
 	default:
 		return {};
 	}
@@ -218,41 +260,187 @@ bool CreateSupportGemItem(Item &item, SupportGem gem)
 	return false;
 }
 
-bool SupportGemCanSupport(SupportGem gem, SpellID spell)
+GemColor SupportGemColor(SupportGem gem)
 {
-	if (gem == SupportGem::None || spell == SpellID::Invalid)
-		return false;
-	if (gem == SupportGem::MultipleProjectiles)
-		return IsProjectileSpell(spell);
-	if (IsProjectileSupport(gem))
-		return IsDirectProjectileSpell(spell);
-	return true;
+	switch (gem) {
+	case SupportGem::ConcentratedEffect:
+	case SupportGem::Brutality:
+	case SupportGem::Knockback:
+		return GemColor::Strength;
+	case SupportGem::MultipleProjectiles:
+	case SupportGem::Pierce:
+	case SupportGem::Fork:
+	case SupportGem::FasterProjectiles:
+	case SupportGem::MartialTempo:
+		return GemColor::Dexterity;
+	default:
+		return GemColor::Magic;
+	}
 }
 
-SupportLinkResult LinkSupportGem(Poe2PlayerData &data, SpellID spell, SupportGem gem, SupportGem &replaced)
+std::string_view GemColorName(GemColor color)
 {
-	replaced = SupportGem::None;
-	const auto index = static_cast<size_t>(static_cast<int8_t>(spell));
-	if (spell == SpellID::Invalid || index >= MaxPoe2Spells)
-		return SupportLinkResult::NoReadiedSpell;
-	if (!SupportGemCanSupport(gem, spell))
-		return SupportLinkResult::NotApplicable;
-	if (data.hasSupport(spell, gem))
-		return SupportLinkResult::AlreadyLinked;
+	switch (color) {
+	case GemColor::Strength:
+		return _("Str");
+	case GemColor::Dexterity:
+		return _("Dex");
+	default:
+		return _("Mag");
+	}
+}
 
-	auto &supports = data.spellSupports[index];
-	for (SupportGem &slot : supports) {
-		if (slot == SupportGem::None) {
-			slot = gem;
-			return SupportLinkResult::Linked;
+bool SkillTakesSupports(SkillSlot skill)
+{
+	return skill.kind == SkillKind::Spell || skill.kind == SkillKind::Attack;
+}
+
+bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
+{
+	if (gem == SupportGem::None || !SkillTakesSupports(skill))
+		return false;
+	if (gem == SupportGem::Efficiency)
+		return true;
+	if (skill.kind == SkillKind::Attack) {
+		const WeaponSkill attack = skill.attack();
+		switch (gem) {
+		case SupportGem::Brutality:
+		case SupportGem::Knockback:
+			return IsMeleeAttackSkill(attack);
+		case SupportGem::MartialTempo:
+			return IsQuickenableAttackSkill(attack);
+		default:
+			return false;
 		}
 	}
 
-	// Both slots are full: the oldest support makes room, like swapping a gem out in POE2.
-	replaced = supports[0];
-	std::rotate(supports.begin(), supports.begin() + 1, supports.end());
-	supports.back() = gem;
-	return SupportLinkResult::Replaced;
+	const SpellID spell = skill.spell();
+	if (spell == SpellID::Invalid)
+		return false;
+	switch (gem) {
+	case SupportGem::Brutality:
+	case SupportGem::Knockback:
+	case SupportGem::MartialTempo:
+		return false;
+	case SupportGem::MultipleProjectiles:
+		return IsProjectileSpell(spell);
+	default:
+		return !IsProjectileSupport(gem) || IsDirectProjectileSpell(spell);
+	}
+}
+
+size_t SupportSocketCount(int characterLevel)
+{
+	return std::min<size_t>(2 + static_cast<size_t>(std::max(characterLevel, 0) / 10), MaxSupportSockets);
+}
+
+size_t SupportSocketCount(const Player &player)
+{
+	return SupportSocketCount(player.getCharacterLevel());
+}
+
+int SupportCapacity(const Player &player, GemColor color)
+{
+	int attribute;
+	switch (color) {
+	case GemColor::Strength:
+		attribute = player._pStrength;
+		break;
+	case GemColor::Dexterity:
+		attribute = player._pDexterity;
+		break;
+	default:
+		attribute = player._pMagic;
+		break;
+	}
+	return 1 + (std::max(attribute, 0) / 15);
+}
+
+int SupportsUsed(const Poe2PlayerData &data, GemColor color)
+{
+	int used = 0;
+	for (const SupportSockets &supports : data.slotSupports) {
+		for (const SupportGem gem : supports) {
+			if (gem != SupportGem::None && SupportGemColor(gem) == color)
+				used++;
+		}
+	}
+	return used;
+}
+
+SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced)
+{
+	replaced = SupportGem::None;
+	if (slot >= NumSkillSlots || player.poe2.skillSlots[slot].isEmpty())
+		return SupportSocketResult::NoSkill;
+	const SkillSlot skill = player.poe2.skillSlots[slot];
+	if (!SupportGemCanSupport(gem, skill))
+		return SupportSocketResult::NotApplicable;
+
+	SupportSockets &supports = player.poe2.slotSupports[slot];
+	const size_t open = SupportSocketCount(player);
+	if (socket) {
+		if (*socket >= open)
+			return SupportSocketResult::Locked;
+	} else {
+		for (size_t i = 0; i < open; i++) {
+			if (supports[i] == SupportGem::None) {
+				socket = i;
+				break;
+			}
+		}
+		if (!socket)
+			return SupportSocketResult::NoFreeSocket;
+	}
+
+	const SupportGem current = supports[*socket];
+	if (current == gem)
+		return SupportSocketResult::AlreadySocketed;
+	for (size_t i = 0; i < MaxSupportSockets; i++) {
+		if (i != *socket && supports[i] == gem)
+			return SupportSocketResult::AlreadySocketed;
+	}
+	const GemColor color = SupportGemColor(gem);
+	const int freed = current != SupportGem::None && SupportGemColor(current) == color ? 1 : 0;
+	if (SupportsUsed(player.poe2, color) - freed >= SupportCapacity(player, color))
+		return SupportSocketResult::NoCapacity;
+
+	supports[*socket] = gem;
+	replaced = current;
+	return current == SupportGem::None ? SupportSocketResult::Socketed : SupportSocketResult::Replaced;
+}
+
+std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem)
+{
+	const size_t open = SupportSocketCount(player);
+	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		const SkillSlot skill = player.poe2.skillSlots[slot];
+		const SupportSockets &supports = player.poe2.slotSupports[slot];
+		if (!SupportGemCanSupport(gem, skill) || std::find(supports.begin(), supports.end(), gem) != supports.end())
+			continue;
+		if (std::find(supports.begin(), supports.begin() + static_cast<std::ptrdiff_t>(open), SupportGem::None) != supports.begin() + static_cast<std::ptrdiff_t>(open))
+			return slot;
+	}
+	return std::nullopt;
+}
+
+SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket)
+{
+	if (slot >= NumSkillSlots || socket >= MaxSupportSockets)
+		return SupportGem::None;
+	return std::exchange(data.slotSupports[slot][socket], SupportGem::None);
+}
+
+std::vector<SupportGem> TakeSlotSupports(Poe2PlayerData &data, size_t slot)
+{
+	std::vector<SupportGem> taken;
+	if (slot >= NumSkillSlots)
+		return taken;
+	for (SupportGem &gem : data.slotSupports[slot]) {
+		if (gem != SupportGem::None)
+			taken.push_back(std::exchange(gem, SupportGem::None));
+	}
+	return taken;
 }
 
 int SupportSpellLevelBonus(const Player &player, SpellID spell)
@@ -260,10 +448,10 @@ int SupportSpellLevelBonus(const Player &player, SpellID spell)
 	return player.poe2.hasSupport(spell, SupportGem::Empower) ? EmpowerLevels : 0;
 }
 
-int SupportManaCostPercent(const Player &player, SpellID spell)
+int SupportManaCostPercent(const Player &player, SkillSlot skill)
 {
 	int percent = 100;
-	for (const SupportGem gem : player.poe2.supportsFor(spell))
+	for (const SupportGem gem : player.poe2.supportsFor(skill))
 		percent = percent * ManaCostPercent(gem) / 100;
 	return percent;
 }
@@ -278,6 +466,32 @@ int SupportExtraProjectiles(const Player &player, SpellID spell)
 	if (!IsProjectileSpell(spell))
 		return 0;
 	return player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles) ? MultipleProjectilesExtra : 0;
+}
+
+WeaponSkill CurrentWeaponSkill(const Player &player)
+{
+	return player.poe2.castSkill != WeaponSkill::None ? player.poe2.castSkill : player.poe2.activeSkill;
+}
+
+int SupportMeleeDamagePercent(const Player &player)
+{
+	const WeaponSkill skill = CurrentWeaponSkill(player);
+	if (skill == WeaponSkill::None)
+		return 100;
+	return player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality) ? BrutalityDamagePercent : 100;
+}
+
+bool SupportMeleeKnocksBack(const Player &player)
+{
+	const WeaponSkill skill = CurrentWeaponSkill(player);
+	return skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Knockback);
+}
+
+int8_t SupportAttackSkippedFrames(const Player &player, WeaponSkill skill)
+{
+	if (skill == WeaponSkill::None)
+		return 0;
+	return player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::MartialTempo) ? MartialTempoFrames : 0;
 }
 
 WorldTilePosition RotateSpellTarget(WorldTilePosition src, WorldTilePosition dst, int degrees)
