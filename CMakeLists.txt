@@ -521,6 +521,9 @@ if(VITA)
   set(VITA_VERSION  "01.00")
   set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1")
   set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
+  # Leaves room after the code segment for the SCE module data that vita-elf-create appends;
+  # without it the data segment can start too close and the conversion fails.
+  target_link_options(${BIN_TARGET} PRIVATE "LINKER:--defsym=__sce_headroom=0x4000")
   vita_create_self(devilutionx.self devilutionx UNSAFE)
   if(BUILD_ASSETS_MPQ OR SRC_DIST)
     vita_create_vpk(devilutionx.vpk ${VITA_TITLEID} devilutionx.self
