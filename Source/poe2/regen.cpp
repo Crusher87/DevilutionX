@@ -7,6 +7,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/flasks.hpp"
 
 namespace devilution {
 
@@ -52,6 +53,8 @@ void ApplyRegen(Player &player)
 	} else {
 		player.poe2.manaRegenRemainder = 0;
 	}
+
+	ProcessFlaskRecovery(player);
 }
 
 } // namespace devilution

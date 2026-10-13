@@ -2047,8 +2047,10 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(_("Use, then click the item to craft"));
 		return;
 	}
-	if (gbIsPoe2 && IsFlaskPotion(item))
-		AddItemInfoBoxString(_("Flask in belt slots 1-4, refills from kills"));
+	if (gbIsPoe2 && IsFlaskPotion(item)) {
+		AddItemInfoBoxString(FlaskDescription(item));
+		AddItemInfoBoxString(_("Flask in belt slots 1-5, refills from kills"));
+	}
 	if (item._iMiscId == IMISC_EAR) {
 		AddItemInfoBoxString(FormatRuntime(pgettext("player", "Level: {:d}"), item._ivalue));
 		return;
