@@ -2016,7 +2016,7 @@ void PrintItemMisc(const Item &item)
 	}
 	if (const CharmEffect charm = GetCharmEffect(item); charm != CharmEffect::None) {
 		AddItemInfoBoxString(CharmDescription(charm));
-		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUse));
+		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUseFor(charm)));
 		AddItemInfoBoxString(_("Works on its own from the belt; refills from kills and in town"));
 		return;
 	}

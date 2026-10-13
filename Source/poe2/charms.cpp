@@ -6,24 +6,47 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "missiles.h"
+#include "monster.h"
 #include "player.h"
+#include "poe2/monster_mods.hpp"
+#include "tables/misdat.h"
 #include "utils/language.h"
 
 namespace devilution {
 
 namespace {
 
-/** @brief Spends a use of the first charged charm with this effect in the belt. */
-bool UseCharm(Player &player, CharmEffect effect)
+/**
+ * @brief Spends a use of the first charged charm with this effect in the belt.
+ * @param startCooldown Whether the life, mana and Guard charms wait a second afterwards; the charms that answer a hit don't hold them up.
+ */
+bool UseCharm(Player &player, CharmEffect effect, bool startCooldown = true)
 {
+	const int cost = CharmChargesPerUseFor(effect);
 	for (Item &item : player.SpdList) {
-		if (GetCharmEffect(item) != effect || item._iCharges < CharmChargesPerUse)
+		if (GetCharmEffect(item) != effect || item._iCharges < cost)
 			continue;
-		item._iCharges -= CharmChargesPerUse;
-		player.poe2.charmCooldown = CharmCooldownTicks;
+		item._iCharges -= cost;
+		if (startCooldown)
+			player.poe2.charmCooldown = CharmCooldownTicks;
 		return true;
 	}
 	return false;
+}
+
+int ResistCharmIndex(DamageType damageType)
+{
+	switch (damageType) {
+	case DamageType::Fire:
+		return 0;
+	case DamageType::Lightning:
+		return 1;
+	case DamageType::Magic:
+	case DamageType::Acid:
+		return 2;
+	default:
+		return -1;
+	}
 }
 
 int PercentOf(Fixed26_6 value, int percent)
@@ -44,6 +67,16 @@ CharmEffect GetCharmEffect(const Item &item)
 		return CharmEffect::Mana;
 	case IMISC_CHARM_GUARD:
 		return CharmEffect::Guard;
+	case IMISC_CHARM_FIRE:
+		return CharmEffect::Fire;
+	case IMISC_CHARM_LIGHTNING:
+		return CharmEffect::Lightning;
+	case IMISC_CHARM_MAGIC:
+		return CharmEffect::Magic;
+	case IMISC_CHARM_STUN:
+		return CharmEffect::Stun;
+	case IMISC_CHARM_GOLDEN:
+		return CharmEffect::Golden;
 	default:
 		return CharmEffect::None;
 	}
@@ -63,9 +96,24 @@ std::string_view CharmDescription(CharmEffect effect)
 		return _("Below 20% mana: recover 40% of your mana");
 	case CharmEffect::Guard:
 		return _("Hit for 15% of your life: take 40% less damage for 4 seconds");
+	case CharmEffect::Fire:
+		return _("A fire hit lands: +25% fire resistance for 4 seconds");
+	case CharmEffect::Lightning:
+		return _("A lightning hit lands: +25% lightning resistance for 4 seconds");
+	case CharmEffect::Magic:
+		return _("A magic hit lands: +25% magic resistance for 4 seconds");
+	case CharmEffect::Stun:
+		return _("You're stunned: break free and can't be stunned for 3 seconds");
+	case CharmEffect::Golden:
+		return _("You kill a rare or unique monster: it drops an extra item");
 	default:
 		return {};
 	}
+}
+
+int CharmChargesPerUseFor(CharmEffect effect)
+{
+	return effect == CharmEffect::Golden ? MaxCharmCharges : CharmChargesPerUse;
 }
 
 void GainCharmCharges(Player &player, int charges)
@@ -88,6 +136,12 @@ void ProcessCharms(Player &player)
 	Poe2PlayerData &data = player.poe2;
 	if (data.guardTicks > 0)
 		data.guardTicks--;
+	if (data.stunImmuneTicks > 0)
+		data.stunImmuneTicks--;
+	for (uint8_t &ticks : data.resistCharmTicks) {
+		if (ticks > 0)
+			ticks--;
+	}
 	if (data.charmCooldown > 0) {
 		data.charmCooldown--;
 		return;
@@ -124,6 +178,45 @@ Fixed26_6 ApplyGuard(Player &player, Fixed26_6 damage)
 		AddVisualEffect(player.position.tile, MissileGraphicID::ManaShield);
 	}
 	return damage;
+}
+
+int ResistanceAgainstHit(Player &player, DamageType damageType, int resistance)
+{
+	const int index = ResistCharmIndex(damageType);
+	if (!gbIsPoe2 || index < 0)
+		return resistance;
+	uint8_t &ticks = player.poe2.resistCharmTicks[index];
+	static constexpr CharmEffect Effects[] = { CharmEffect::Fire, CharmEffect::Lightning, CharmEffect::Magic };
+	static constexpr MissileGraphicID Visuals[] = { MissileGraphicID::OrangeFlareExplosion, MissileGraphicID::YellowFlareExplosion, MissileGraphicID::BlueFlareExplosion };
+	if (ticks == 0 && &player == MyPlayer && UseCharm(player, Effects[index], false)) {
+		ticks = ResistCharmTicks;
+		AddVisualEffect(player.position.tile, Visuals[index]);
+	}
+	if (ticks == 0)
+		return resistance;
+	return std::min(resistance + ResistCharmBonus, MaxResistance);
+}
+
+bool CharmPreventsStun(Player &player)
+{
+	if (!gbIsPoe2)
+		return false;
+	if (player.poe2.stunImmuneTicks > 0)
+		return true;
+	if (&player != MyPlayer || !UseCharm(player, CharmEffect::Stun, false))
+		return false;
+	player.poe2.stunImmuneTicks = StunImmuneTicks;
+	AddVisualEffect(player.position.tile, MissileGraphicID::StoneCurseShatter);
+	return true;
+}
+
+int GoldenCharmExtraDrops(Player &player, const Monster &monster)
+{
+	if (!gbIsPoe2)
+		return 0;
+	if (!monster.isUnique() && GetMonsterAffixes(monster).rarity != MonsterRarity::Rare)
+		return 0;
+	return UseCharm(player, CharmEffect::Golden, false) ? 1 : 0;
 }
 
 } // namespace devilution

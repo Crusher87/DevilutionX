@@ -502,6 +502,11 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "CHARM_MANA") return IMISC_CHARM_MANA;
 	if (value == "CHARM_GUARD") return IMISC_CHARM_GUARD;
 	if (value == "WAYSTONE") return IMISC_WAYSTONE;
+	if (value == "CHARM_FIRE") return IMISC_CHARM_FIRE;
+	if (value == "CHARM_LIGHTNING") return IMISC_CHARM_LIGHTNING;
+	if (value == "CHARM_MAGIC") return IMISC_CHARM_MAGIC;
+	if (value == "CHARM_STUN") return IMISC_CHARM_STUN;
+	if (value == "CHARM_GOLDEN") return IMISC_CHARM_GOLDEN;
 	return std::unexpected("Unknown enum value");
 }
 
