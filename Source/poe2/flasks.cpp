@@ -9,6 +9,7 @@
 #include "monster.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/charms.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
 
@@ -56,11 +57,13 @@ void GainFlaskCharges(Player &player, uint8_t charges)
 {
 	for (uint8_t &flaskCharges : player.poe2.flaskCharges)
 		flaskCharges = static_cast<uint8_t>(std::min<int>(MaxFlaskCharges, flaskCharges + charges));
+	GainCharmCharges(player, charges);
 }
 
 void RefillFlasks(Player &player)
 {
 	player.poe2.flaskCharges.fill(MaxFlaskCharges);
+	RefillCharms(player);
 }
 
 } // namespace devilution

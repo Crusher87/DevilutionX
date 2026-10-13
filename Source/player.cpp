@@ -47,6 +47,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/monster_mods.hpp"
@@ -3164,6 +3165,7 @@ void ProcessPlayers()
 			ApplyRegen(player);
 			RechargeEnergyShield(player);
 			ProcessPersistentSkills(player);
+			ProcessCharms(player);
 
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {

@@ -498,6 +498,9 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SPIRITGEM_SKELETONS") return IMISC_SPIRITGEM_SKELETONS;
 	if (value == "UNCUT_SKILL") return IMISC_UNCUT_SKILL;
 	if (value == "UNCUT_SUPPORT") return IMISC_UNCUT_SUPPORT;
+	if (value == "CHARM_LIFE") return IMISC_CHARM_LIFE;
+	if (value == "CHARM_MANA") return IMISC_CHARM_MANA;
+	if (value == "CHARM_GUARD") return IMISC_CHARM_GUARD;
 	return std::unexpected("Unknown enum value");
 }
 
