@@ -10,6 +10,7 @@
 #include "levels/gendung_defs.hpp"
 #include "player.h"
 #include "poe2/charms.hpp"
+#include "poe2/flasks.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -36,7 +37,8 @@ DefenseType ItemDefenseType(const Item &item)
 
 int ArmourRating(const Player &player)
 {
-	return std::max(player._pIAC + player._pIBonusAC, 0);
+	const int armour = std::max(player._pIAC + player._pIBonusAC, 0);
+	return armour * (100 + FlaskArmourPercent(player)) / 100;
 }
 
 int EvasionRating(const Player &player)

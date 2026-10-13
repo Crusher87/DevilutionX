@@ -35,6 +35,8 @@ enum class CurrencyOrb : uint8_t {
 	Divine,
 	/** Corrupts an item: nothing, an implicit or a reroll; it can't be crafted afterwards. */
 	Vaal,
+	/** Glassblower's Bauble: adds 1% quality to a flask. */
+	Bauble,
 };
 
 /** @brief Most affixes an Exalted Orb can bring a rare item to. */

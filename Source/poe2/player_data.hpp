@@ -273,6 +273,10 @@ struct Poe2PlayerData {
 	std::array<uint8_t, 3> resistCharmTicks {};
 	/** @brief Game ticks left of stun immunity from a Stone Charm (not saved). */
 	uint8_t stunImmuneTicks = 0;
+	/** @brief Game ticks left of a Flask of the Ox's armour (not saved). */
+	uint8_t oxFlaskTicks = 0;
+	/** @brief Game ticks towards the next charge for Flasks of the Springs (not saved). */
+	uint8_t springsFlaskTicks = 0;
 	/** @brief Resistance penalty the resistances were last calculated with; -1 before the first level loads (not saved). */
 	int resistancePenalty = -1;
 
@@ -319,6 +323,8 @@ struct Poe2PlayerData {
 		charmCooldown = 0;
 		resistCharmTicks = {};
 		stunImmuneTicks = 0;
+		oxFlaskTicks = 0;
+		springsFlaskTicks = 0;
 		resistancePenalty = -1;
 	}
 

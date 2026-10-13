@@ -5,6 +5,7 @@
 #include "engine/random.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/flasks.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -62,6 +63,70 @@ int ItemLevel(const Player &player, const Item &item)
 	return level != 0 ? level : std::max<int>(1, player.getCharacterLevel());
 }
 
+FlaskPrefix RandomFlaskPrefix(uint32_t roll)
+{
+	return static_cast<FlaskPrefix>(1 + (roll % (static_cast<uint32_t>(FlaskPrefix::Count) - 1)));
+}
+
+FlaskSuffix RandomFlaskSuffix(uint32_t roll)
+{
+	return static_cast<FlaskSuffix>(1 + (roll % (static_cast<uint32_t>(FlaskSuffix::Count) - 1)));
+}
+
+/** @brief Orbs on flasks, which can only be normal or magic, as in POE2. */
+bool ApplyCurrencyToFlask(CurrencyOrb orb, Item &item)
+{
+	FlaskPrefix prefix = GetFlaskPrefix(item);
+	FlaskSuffix suffix = GetFlaskSuffix(item);
+	int quality = GetFlaskQuality(item);
+	const bool magic = prefix != FlaskPrefix::None || suffix != FlaskSuffix::None;
+	// Mixing in the current mods gives a different roll each time an orb is used.
+	const uint32_t roll = Mix(static_cast<uint32_t>(item._iSeed) ^ item.dwBuff ^ (static_cast<uint32_t>(orb) * 0x9E3779B9U));
+	switch (orb) {
+	case CurrencyOrb::Transmutation:
+		if (magic) {
+			EventPlrMsg(_("Orb of Transmutation needs a normal flask."), UiFlags::ColorRed);
+			return false;
+		}
+		if (roll % 2 == 0)
+			prefix = RandomFlaskPrefix(roll / 2);
+		else
+			suffix = RandomFlaskSuffix(roll / 2);
+		break;
+	case CurrencyOrb::Augmentation:
+		if (!magic || (prefix != FlaskPrefix::None && suffix != FlaskSuffix::None)) {
+			EventPlrMsg(_("Orb of Augmentation needs a magic flask with one mod."), UiFlags::ColorRed);
+			return false;
+		}
+		if (prefix == FlaskPrefix::None)
+			prefix = RandomFlaskPrefix(roll);
+		else
+			suffix = RandomFlaskSuffix(roll);
+		break;
+	case CurrencyOrb::Scouring:
+		if (!magic) {
+			EventPlrMsg(_("This flask has no mods to remove."), UiFlags::ColorRed);
+			return false;
+		}
+		prefix = FlaskPrefix::None;
+		suffix = FlaskSuffix::None;
+		break;
+	case CurrencyOrb::Bauble:
+		if (quality >= MaxFlaskQuality) {
+			EventPlrMsg(_("This flask is already at 20% quality."), UiFlags::ColorRed);
+			return false;
+		}
+		quality++;
+		break;
+	default:
+		EventPlrMsg(_("Flasks only take Transmutation, Augmentation, Scouring and Glassblower's Baubles."), UiFlags::ColorRed);
+		return false;
+	}
+	SetFlaskMods(item, prefix, suffix, quality);
+	EventPlrMsg(FormatRuntime(_("Crafted: {:s}"), item.getName().str()));
+	return true;
+}
+
 } // namespace
 
 CurrencyOrb CurrencyOrbForMiscId(int miscId)
@@ -85,6 +150,8 @@ CurrencyOrb CurrencyOrbForMiscId(int miscId)
 		return CurrencyOrb::Divine;
 	case IMISC_ORB_VAAL:
 		return CurrencyOrb::Vaal;
+	case IMISC_ORB_BAUBLE:
+		return CurrencyOrb::Bauble;
 	default:
 		return CurrencyOrb::None;
 	}
@@ -111,6 +178,8 @@ std::string_view CurrencyOrbDescription(CurrencyOrb orb)
 		return _("Rerolls the values of a rare item's affixes");
 	case CurrencyOrb::Vaal:
 		return _("Corrupts an item, with unpredictable results");
+	case CurrencyOrb::Bauble:
+		return _("Adds 1% quality to a flask, up to 20%");
 	default:
 		return {};
 	}
@@ -165,6 +234,12 @@ bool RollItemOfQuality(const Player &player, Item &item, _item_indexes baseIndex
 
 bool ApplyCurrencyOrb(CurrencyOrb orb, const Player &player, Item &item)
 {
+	if (IsFlaskPotion(item) && (item.dwBuff & CF_POE2) != 0)
+		return ApplyCurrencyToFlask(orb, item);
+	if (orb == CurrencyOrb::Bauble) {
+		EventPlrMsg(_("Glassblower's Baubles only work on flasks."), UiFlags::ColorRed);
+		return false;
+	}
 	if (!CanTakeCurrency(item)) {
 		EventPlrMsg(_("Orbs work on weapons, armor and jewelry, but not uniques."), UiFlags::ColorRed);
 		return false;

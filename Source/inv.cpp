@@ -157,16 +157,17 @@ OptionalOwnedClxSpriteList pInvCels;
  */
 void DrawFlaskCharges(const Surface &out, Point position, uint8_t charges, int chargesPerUse = FlaskChargesPerUse, int maxCharges = MaxFlaskCharges)
 {
-	const int uses = maxCharges / chargesPerUse;
-	constexpr int PipWidth = 8;
+	const int uses = std::max(maxCharges / chargesPerUse, 1);
+	// Pips shrink so up to 10 uses still fit inside the slot.
+	const int pipWidth = std::clamp(((InventorySlotSizeInPixels.width - 1) / uses) - 1, 1, 8);
 	constexpr int PipHeight = 3;
 	const int y = position.y - PipHeight - 1;
 	for (int use = 0; use < uses; use++) {
-		const int x = position.x + 1 + (use * (PipWidth + 1));
-		FillRect(out, x, y, PipWidth, PipHeight, PAL16_GRAY + 14);
+		const int x = position.x + 1 + (use * (pipWidth + 1));
+		FillRect(out, x, y, pipWidth, PipHeight, PAL16_GRAY + 14);
 		const int filled = std::clamp(charges - (use * chargesPerUse), 0, chargesPerUse);
 		if (filled > 0)
-			FillRect(out, x, y, (PipWidth * filled) / chargesPerUse, PipHeight, filled == chargesPerUse ? PAL16_YELLOW + 2 : PAL16_GRAY + 6);
+			FillRect(out, x, y, (pipWidth * filled) / chargesPerUse, PipHeight, filled == chargesPerUse ? PAL16_YELLOW + 2 : PAL16_GRAY + 6);
 	}
 }
 
@@ -1331,8 +1332,9 @@ void DrawInvBelt(const Surface &out)
 		DrawItem(myPlayer.SpdList[i], out, position, sprite);
 
 		if (IsFlaskSlot(myPlayer, static_cast<size_t>(i))) {
-			DrawFlaskLiquidLevel(out, position, sprite, myPlayer.poe2.flaskCharges[i], MaxFlaskCharges);
-			DrawFlaskCharges(out, position, myPlayer.poe2.flaskCharges[i]);
+			const Item &flask = myPlayer.SpdList[i];
+			DrawFlaskLiquidLevel(out, position, sprite, myPlayer.poe2.flaskCharges[i], MaxFlaskChargesFor(flask));
+			DrawFlaskCharges(out, position, myPlayer.poe2.flaskCharges[i], FlaskChargesPerUseFor(flask), MaxFlaskChargesFor(flask));
 		} else if (gbIsPoe2 && IsCharm(myPlayer.SpdList[i])) {
 			DrawFlaskCharges(out, position, static_cast<uint8_t>(myPlayer.SpdList[i]._iCharges), CharmChargesPerUseFor(GetCharmEffect(myPlayer.SpdList[i])), MaxCharmCharges);
 		}

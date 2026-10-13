@@ -195,6 +195,14 @@ enum icreateinfo_flag2 {
 	CF_POE2_CORRUPTED = 1 << 13,
 	/** The implicit a Vaal Orb added; 0 for none. */
 	CF_POE2_CORRUPT_IMPLICIT = ((1 << 2) - 1) << 14,
+	/** A flask's prefix (FlaskPrefix); 0 for none. */
+	CF_POE2_FLASK_PREFIX = ((1 << 3) - 1) << 16,
+	/** A flask's suffix (FlaskSuffix); 0 for none. */
+	CF_POE2_FLASK_SUFFIX = ((1 << 3) - 1) << 19,
+	/** A flask's quality from Glassblower's Baubles, 0 to 20. */
+	CF_POE2_FLASK_QUALITY = ((1 << 5) - 1) << 22,
+	/** The flask's mods have been rolled, so rebuilding it keeps them. */
+	CF_POE2_FLASK_ROLLED = 1 << 27,
 	// clang-format on
 };
 
