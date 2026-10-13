@@ -169,7 +169,7 @@ int MaxSpirit(const Player &player)
 
 namespace {
 
-/** @brief Walks the skill bar in order, reserving Spirit for each usable Spirit gem that fits. */
+/** @brief Walks the Skills panel in order, reserving Spirit for each usable Spirit gem that fits. */
 template <typename F>
 int ReserveSpirit(const Player &player, F &&onActive)
 {

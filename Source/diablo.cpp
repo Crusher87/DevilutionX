@@ -327,6 +327,52 @@ void LeftMouseCmd(bool bShift)
 	}
 }
 
+/** @brief POE2 Mashup: walks to the cursor, picks up and opens things, but never attacks. */
+void InteractCmd()
+{
+	if (pcursitem != -1 && pcurs == CURSOR_HAND) {
+		NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
+	} else if (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled()) {
+		LastPlayerAction = PlayerActionType::OperateObject;
+		NetSendCmdLoc(MyPlayerId, true, pcurs == CURSOR_DISARM ? CMD_DISARMXY : CMD_OPOBJXY, cursPosition);
+	} else if (!IsWasdMovementEnabled()) {
+		LastPlayerAction = PlayerActionType::Walk;
+		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
+	}
+}
+
+/**
+ * @brief POE2 Mashup: uses what the skill tray puts on a mouse button in the dungeon.
+ * @return false if the button does its usual job instead.
+ */
+bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
+{
+	if (!IsSkillBarShown() || leveltype == DTYPE_TOWN)
+		return false;
+	const TrayBinding binding = MyPlayer->poe2.tray[static_cast<size_t>(slot)];
+	if (binding == DefaultTrayBinding(slot))
+		return false;
+	// The left button still picks up items and opens chests and doors under the cursor.
+	if (slot == TraySlot::LeftMouse && (pcursitem != -1 || (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled())))
+		return false;
+	switch (binding.action) {
+	case TrayAction::MoveAndAttack:
+		LeftMouseCmd(isShiftHeld);
+		return true;
+	case TrayAction::Interact:
+		InteractCmd();
+		return true;
+	case TrayAction::ReadiedSpell:
+		CheckPlrSpell(isShiftHeld);
+		return true;
+	case TrayAction::Gem:
+		UseTraySlot(slot);
+		return true;
+	default:
+		return false;
+	}
+}
+
 bool TryOpenDungeonWithMouse()
 {
 	if (leveltype != DTYPE_TOWN)
@@ -424,7 +470,7 @@ void LeftMouseDown(uint16_t modState)
 				}
 			} else {
 				CheckLevelButton();
-				if (!LevelButtonDown)
+				if (!LevelButtonDown && !UseTrayMouseButton(TraySlot::LeftMouse, isShiftHeld))
 					LeftMouseCmd(isShiftHeld);
 			}
 		}
@@ -482,6 +528,8 @@ void RightMouseDown(bool isShiftHeld)
 	}
 	if (SpellbookFlag && GetRightPanel().contains(MousePosition))
 		return;
+	if (HandleSkillBarRightClick(MousePosition))
+		return;
 	if (TryIconCurs())
 		return;
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
@@ -491,7 +539,8 @@ void RightMouseDown(bool isShiftHeld)
 	if (DidRightClickPartyPortrait())
 		return;
 	if (pcurs == CURSOR_HAND) {
-		CheckPlrSpell(isShiftHeld);
+		if (!UseTrayMouseButton(TraySlot::RightMouse, isShiftHeld))
+			CheckPlrSpell(isShiftHeld);
 	} else if (pcurs > CURSOR_HAND && pcurs < CURSOR_FIRSTITEM) {
 		NewCursor(CURSOR_HAND);
 	}
@@ -2045,7 +2094,8 @@ void InitKeymapActions()
 	    "QuestLog",
 	    N_("Quest log"),
 	    N_("Open Quest log."),
-	    'Q',
+	    // POE2 Mashup: Q is the first skill tray key.
+	    'L',
 	    QuestLogKeyPressed,
 	    nullptr,
 	    CanPlayerTakeAction);
@@ -2170,7 +2220,7 @@ void InitKeymapActions()
 	    "ChatLog",
 	    N_("Chat Log"),
 	    N_("Displays chat log."),
-	    'L',
+	    SDLK_UNKNOWN,
 	    [] {
 		    ToggleChatLog();
 	    });
@@ -2232,19 +2282,27 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return !gmenu_is_active(); });
-	// POE2 Mashup skill bar. Added last so its keys win over older saved bindings.
-	constexpr std::array<uint32_t, NumSkillSlots> SkillSlotKeys { 'E', 'R', 'T', 'F', 'G', 'V' };
-	for (uint32_t i = 0; i < NumSkillSlots; ++i) {
+	// POE2 Mashup skill tray. Added last so its keys win over older saved bindings.
+	constexpr std::array<uint32_t, NumTrayKeys> TrayKeys { 'Q', 'E', 'R', 'T', 'F', 'G' };
+	for (uint32_t i = 0; i < NumTrayKeys; ++i) {
 		options.Keymapper.AddAction(
-		    "SkillSlot{}",
-		    N_("Skill {}"),
-		    N_("Use the skill gem in this skill bar slot (POE2 Mashup)."),
-		    SkillSlotKeys[i],
-		    [i] { UseSkillSlot(i); },
+		    "TraySlot{}",
+		    N_("Skill tray key {}"),
+		    N_("Use the skill on this skill tray slot (POE2 Mashup)."),
+		    TrayKeys[i],
+		    [i] { UseTraySlot(TrayKeySlot(i)); },
 		    nullptr,
 		    CanPlayerTakeAction,
 		    i + 1);
 	}
+	options.Keymapper.AddAction(
+	    "TraySlotMiddle",
+	    N_("Skill tray middle button"),
+	    N_("Use the skill on the middle mouse button's skill tray slot (POE2 Mashup)."),
+	    SDL_BUTTON_MIDDLE | KeymapperMouseButtonMask,
+	    [] { UseTraySlot(TraySlot::MiddleMouse); },
+	    nullptr,
+	    CanPlayerTakeAction);
 	options.Keymapper.CommitActions();
 }
 
@@ -3126,6 +3184,11 @@ bool PressEscKey()
 	if (SpellSelectFlag) {
 		SpellSelectFlag = false;
 		rv = true;
+	}
+
+	if (IsSkillTrayPopupOpen()) {
+		CloseSkillTrayPopup();
+		return true;
 	}
 
 	if (IsLeftPanelOpen() || IsRightPanelOpen()) {

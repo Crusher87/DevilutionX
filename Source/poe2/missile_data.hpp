@@ -18,6 +18,8 @@ struct Poe2MissileData {
 	int16_t lastHitMonster = -1;
 	/** @brief Damage multiplier in percent. */
 	int16_t damagePercent = 100;
+	/** @brief Speed multiplier in percent, kept by forks and chains. */
+	int16_t speedPercent = 100;
 	int8_t piercesLeft = 0;
 	int8_t chainsLeft = 0;
 	bool canFork = false;

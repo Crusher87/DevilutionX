@@ -842,7 +842,7 @@ void SpawnLightning(Missile &missile, int dam)
 			    && IsAnyOf(missile.sourceMonster()->type().type, MT_STORM, MT_RSTORM, MT_STORML, MT_MAEL)) {
 				type = MissileID::ThinLightning;
 			}
-			AddMissile(
+			Missile *segment = AddMissile(
 			    position,
 			    missile.position.start,
 			    Direction::South,
@@ -852,6 +852,9 @@ void SpawnLightning(Missile &missile, int dam)
 			    dam,
 			    missile._mispllvl,
 			    &missile);
+			// POE2 Mashup: the bolt's supports scale the damage of every segment.
+			if (segment != nullptr)
+				segment->poe2.damagePercent = missile.poe2.damagePercent;
 			missile.var1 = position.x;
 			missile.var2 = position.y;
 		}
