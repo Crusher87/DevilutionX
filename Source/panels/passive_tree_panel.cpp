@@ -538,13 +538,22 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 		return true;
 	case SDL_EVENT_KEY_UP:
 		return true;
+#ifndef USE_SDL1
 	case SDL_EVENT_MOUSE_WHEEL: {
 		const int steps = SDLC_EventWheelIntY(event);
 		if (steps != 0)
 			ZoomAt(layout, steps > 0 ? ZoomStep : 1 / ZoomStep, layout.view.contains(MousePosition) ? MousePosition : layout.view.Center());
 		return true;
 	}
+#endif
 	case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+#ifdef USE_SDL1
+		// SDL1 reports the wheel as buttons.
+		if (event.button.button == SDL_BUTTON_WHEELUP || event.button.button == SDL_BUTTON_WHEELDOWN) {
+			ZoomAt(layout, event.button.button == SDL_BUTTON_WHEELUP ? ZoomStep : 1 / ZoomStep, layout.view.contains(MousePosition) ? MousePosition : layout.view.Center());
+			return true;
+		}
+#endif
 		const std::optional<PassiveNodeId> node = NodeAt(layout, MousePosition);
 		if (event.button.button == SDL_BUTTON_LEFT) {
 			if (node) {
