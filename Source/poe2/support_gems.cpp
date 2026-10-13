@@ -63,13 +63,9 @@ Missile *SpawnFollowUp(const Missile &missile, const Monster &monster, WorldTile
 		return nullptr;
 	followUp->poe2 = data;
 	followUp->poe2.lastHitMonster = static_cast<int16_t>(monster.getId());
-	if (data.spell != SpellID::Invalid && missile.position.velocity != Displacement { 0, 0 } && followUp->position.velocity != Displacement { 0, 0 }) {
-		// Keep Faster Projectiles' speed on the new projectile.
-		const int64_t oldSpeed = static_cast<int64_t>(missile.position.velocity.deltaX) * missile.position.velocity.deltaX + static_cast<int64_t>(missile.position.velocity.deltaY) * missile.position.velocity.deltaY;
-		const int64_t newSpeed = static_cast<int64_t>(followUp->position.velocity.deltaX) * followUp->position.velocity.deltaX + static_cast<int64_t>(followUp->position.velocity.deltaY) * followUp->position.velocity.deltaY;
-		if (oldSpeed > newSpeed * 3 / 2)
-			followUp->position.velocity = followUp->position.velocity * FasterProjectilesSpeedPercent / 100;
-	}
+	// Keep the supports' speed on the new projectile.
+	if (data.speedPercent != 100)
+		followUp->position.velocity = followUp->position.velocity * data.speedPercent / 100;
 	return followUp;
 }
 
@@ -94,25 +90,25 @@ int ManaCostPercent(SupportGem gem)
 {
 	switch (gem) {
 	case SupportGem::MultipleProjectiles:
-		return 150;
-	case SupportGem::Empower:
 		return 130;
+	case SupportGem::Empower:
+		return 140;
 	case SupportGem::FasterCasting:
 		return 120;
 	case SupportGem::Efficiency:
-		return 60;
+		return 70;
 	case SupportGem::Pierce:
-		return 120;
-	case SupportGem::Fork:
-		return 130;
-	case SupportGem::Chain:
-		return 150;
-	case SupportGem::ConcentratedEffect:
-		return 140;
-	case SupportGem::FasterProjectiles:
 		return 110;
-	case SupportGem::Brutality:
+	case SupportGem::Fork:
+		return 110;
+	case SupportGem::Chain:
 		return 130;
+	case SupportGem::ConcentratedEffect:
+		return 130;
+	case SupportGem::FasterProjectiles:
+		return 120;
+	case SupportGem::Brutality:
+		return 120;
 	case SupportGem::MartialTempo:
 		return 120;
 	case SupportGem::Knockback:
@@ -219,25 +215,25 @@ std::string_view SupportGemDescription(SupportGem gem)
 {
 	switch (gem) {
 	case SupportGem::MultipleProjectiles:
-		return _("Bolts and balls fire 2 extra\nprojectiles in a spread. Mana +50%");
+		return _("Fires 2 extra projectiles. 35% less\ndamage, 20% slower casts. Mana +30%");
 	case SupportGem::Empower:
-		return _("+2 spell level. Mana +30%");
+		return _("+2 spell level. 10% slower casts.\nMana +40%");
 	case SupportGem::FasterCasting:
 		return _("Casts much faster. Mana +20%");
 	case SupportGem::Efficiency:
-		return _("Mana cost -40%");
+		return _("30% less mana cost");
 	case SupportGem::Pierce:
-		return _("Bolts pass through 2 monsters.\nMana +20%");
+		return _("Bolts pass through 2 monsters,\nthen deal 20% less damage. Mana +10%");
 	case SupportGem::Fork:
-		return _("Bolts split in two on hit.\nMana +30%");
+		return _("Bolts split in two on hit; forks\ndeal 30% less damage. Mana +10%");
 	case SupportGem::Chain:
-		return _("Bolts jump to 2 more monsters.\nMana +50%");
+		return _("Bolts jump to 2 more monsters.\n30% less damage. Mana +30%");
 	case SupportGem::ConcentratedEffect:
-		return _("Bolts deal 40% more damage.\nMana +40%");
+		return _("Bolts deal 30% more damage but fly\n30% slower. Mana +30%");
 	case SupportGem::FasterProjectiles:
-		return _("Bolts fly 60% faster. Mana +10%");
+		return _("Bolts fly 60% faster. Mana +20%");
 	case SupportGem::Brutality:
-		return _("Melee attack skills deal 35% more\ndamage. Mana +30%");
+		return _("25% more melee damage, but no fire\nor lightning from the weapon. Mana +20%");
 	case SupportGem::MartialTempo:
 		return _("Attack skills attack faster.\nMana +20%");
 	case SupportGem::Knockback:
@@ -293,6 +289,30 @@ std::string_view GemColorName(GemColor color)
 bool SkillTakesSupports(SkillSlot skill)
 {
 	return skill.kind == SkillKind::Spell || skill.kind == SkillKind::Attack;
+}
+
+std::string_view SupportGemNeeds(SupportGem gem)
+{
+	switch (gem) {
+	case SupportGem::Brutality:
+	case SupportGem::Knockback:
+		return _("Needs a melee attack");
+	case SupportGem::MartialTempo:
+		return _("Needs an attack");
+	case SupportGem::MultipleProjectiles:
+		return _("Needs a bolt or ball spell");
+	case SupportGem::Pierce:
+	case SupportGem::Fork:
+	case SupportGem::Chain:
+	case SupportGem::FasterProjectiles:
+	case SupportGem::ConcentratedEffect:
+		return _("Needs a bolt spell");
+	case SupportGem::Empower:
+	case SupportGem::FasterCasting:
+		return _("Needs a spell");
+	default:
+		return {};
+	}
 }
 
 bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
@@ -461,6 +481,33 @@ int8_t SupportCastSkippedFrames(const Player &player, SpellID spell)
 	return player.poe2.hasSupport(spell, SupportGem::FasterCasting) ? FasterCastingFrames : 0;
 }
 
+int SupportCastRecoveryTicks(const Player &player, SpellID spell, int castFrames)
+{
+	int speed = 100;
+	if (IsProjectileSpell(spell) && player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles))
+		speed = speed * (100 - MultipleProjectilesSlowPercent) / 100;
+	if (player.poe2.hasSupport(spell, SupportGem::Empower))
+		speed = speed * (100 - EmpowerSlowPercent) / 100;
+	if (speed >= 100 || castFrames <= 0)
+		return 0;
+	// At speed% of the normal speed the cast takes 100/speed as long.
+	return castFrames * (100 - speed) / speed;
+}
+
+int SupportSpellDamagePercent(const Player &player, SpellID spell)
+{
+	int percent = 100;
+	if (IsProjectileSpell(spell) && player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles))
+		percent = percent * MultipleProjectilesDamagePercent / 100;
+	if (IsDirectProjectileSpell(spell)) {
+		if (player.poe2.hasSupport(spell, SupportGem::Chain))
+			percent = percent * ChainDamagePercent / 100;
+		if (player.poe2.hasSupport(spell, SupportGem::ConcentratedEffect))
+			percent = percent * ConcentratedEffectDamagePercent / 100;
+	}
+	return percent;
+}
+
 int SupportExtraProjectiles(const Player &player, SpellID spell)
 {
 	if (!IsProjectileSpell(spell))
@@ -485,6 +532,12 @@ bool SupportMeleeKnocksBack(const Player &player)
 {
 	const WeaponSkill skill = CurrentWeaponSkill(player);
 	return skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Knockback);
+}
+
+bool SupportMeleeIsPhysicalOnly(const Player &player)
+{
+	const WeaponSkill skill = CurrentWeaponSkill(player);
+	return skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality);
 }
 
 int8_t SupportAttackSkippedFrames(const Player &player, WeaponSkill skill)
@@ -520,6 +573,7 @@ WorldTilePosition RotateSpellTarget(WorldTilePosition src, WorldTilePosition dst
 
 void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spell)
 {
+	missile.poe2.damagePercent = static_cast<int16_t>(SupportSpellDamagePercent(player, spell));
 	if (!IsDirectProjectileSpell(spell))
 		return;
 	const Poe2PlayerData &data = player.poe2;
@@ -532,10 +586,14 @@ void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spel
 	if (data.hasSupport(spell, SupportGem::Chain))
 		missile.poe2.chainsLeft = ChainCount;
 	missile.poe2.canFork = data.hasSupport(spell, SupportGem::Fork);
+	int speed = 100;
 	if (data.hasSupport(spell, SupportGem::ConcentratedEffect))
-		missile.poe2.damagePercent = ConcentratedEffectDamagePercent;
+		speed = speed * ConcentratedEffectSpeedPercent / 100;
 	if (data.hasSupport(spell, SupportGem::FasterProjectiles))
-		missile.position.velocity = missile.position.velocity * FasterProjectilesSpeedPercent / 100;
+		speed = speed * FasterProjectilesSpeedPercent / 100;
+	missile.poe2.speedPercent = static_cast<int16_t>(speed);
+	if (speed != 100)
+		missile.position.velocity = missile.position.velocity * speed / 100;
 }
 
 void ScaleSupportedMissileDamage(const Missile &missile, int &minDamage, int &maxDamage)
@@ -559,6 +617,9 @@ bool OnSupportedMissileHit(Missile &missile, const Monster &monster)
 
 	// Like POE2: a projectile pierces first, then forks, then chains.
 	if (missile.poe2.piercesLeft > 0) {
+		// Once it has pierced, it hits for less.
+		if (missile.poe2.piercesLeft == PierceCount)
+			missile.poe2.damagePercent = static_cast<int16_t>(missile.poe2.damagePercent * PierceDamagePercent / 100);
 		missile.poe2.piercesLeft--;
 		return true;
 	}
@@ -568,8 +629,10 @@ bool OnSupportedMissileHit(Missile &missile, const Monster &monster)
 		const WorldTilePosition hit = monster.position.tile;
 		const WorldTilePosition ahead = hit + (hit - missile.position.start);
 		for (const int degrees : { -ForkDegrees, ForkDegrees }) {
-			if (Missile *fork = SpawnFollowUp(missile, monster, RotateSpellTarget(hit, ahead, degrees)); fork != nullptr)
+			if (Missile *fork = SpawnFollowUp(missile, monster, RotateSpellTarget(hit, ahead, degrees)); fork != nullptr) {
 				fork->poe2.canFork = false;
+				fork->poe2.damagePercent = static_cast<int16_t>(fork->poe2.damagePercent * ForkDamagePercent / 100);
+			}
 		}
 		return false;
 	}

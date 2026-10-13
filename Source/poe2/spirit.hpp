@@ -1,7 +1,7 @@
 /**
  * @file poe2/spirit.hpp
  *
- * POE2 Mashup Spirit: Spirit gems socketed in the skill bar reserve Spirit and stay active,
+ * POE2 Mashup Spirit: Spirit gems socketed in the Skills panel reserve Spirit and stay active,
  * like POE2's persistent buffs (heralds and auras) and minions.
  */
 #pragma once

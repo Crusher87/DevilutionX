@@ -98,7 +98,7 @@ enum class SkillKind : uint8_t {
 	Persistent,
 };
 
-/** @brief A skill bar slot: the skill of the gem socketed in it. */
+/** @brief A Skills panel socket: the skill of the gem socketed in it. */
 struct SkillSlot {
 	SkillKind kind = SkillKind::None;
 	uint8_t id = 0;
@@ -115,7 +115,69 @@ struct SkillSlot {
 	bool operator==(const SkillSlot &other) const = default;
 };
 
-constexpr size_t NumSkillSlots = 6;
+/** @brief Skill gem sockets in the Skills panel (K). The first 6 were the old skill bar's slots. */
+constexpr size_t NumSkillSlots = 12;
+/** @brief Sockets heroes had before the Skills panel grew to 12 (hero data before version 8). */
+constexpr size_t OldNumSkillSlots = 6;
+
+/** @brief Slots of the skill tray: the three mouse buttons, then six keys (Q, E, R, T, F and G by default). */
+enum class TraySlot : uint8_t {
+	LeftMouse,
+	MiddleMouse,
+	RightMouse,
+	Key1,
+	Key2,
+	Key3,
+	Key4,
+	Key5,
+	Key6,
+	Count,
+};
+constexpr size_t NumTraySlots = static_cast<size_t>(TraySlot::Count);
+constexpr size_t NumTrayKeys = 6;
+
+constexpr TraySlot TrayKeySlot(size_t key)
+{
+	return static_cast<TraySlot>(static_cast<size_t>(TraySlot::Key1) + key);
+}
+
+/** @brief What a skill tray slot does. */
+enum class TrayAction : uint8_t {
+	None,
+	/** Diablo's left click: walks, attacks and picks things up. */
+	MoveAndAttack,
+	/** Walks, picks things up, opens and talks, but never attacks. */
+	Interact,
+	/** Diablo's right click: casts the readied spell. */
+	ReadiedSpell,
+	/** Uses the skill gem in a Skills panel socket. */
+	Gem,
+	Last = Gem,
+};
+
+/** @brief A skill tray slot's action, and for gems the Skills panel socket it uses. */
+struct TrayBinding {
+	TrayAction action = TrayAction::None;
+	uint8_t socket = 0;
+
+	[[nodiscard]] bool isGem() const { return action == TrayAction::Gem; }
+	static TrayBinding ForGem(size_t socket) { return { TrayAction::Gem, static_cast<uint8_t>(socket) }; }
+
+	bool operator==(const TrayBinding &other) const = default;
+};
+
+/** @brief What a tray slot does on a new hero, and once its gem is taken out. */
+constexpr TrayBinding DefaultTrayBinding(TraySlot slot)
+{
+	switch (slot) {
+	case TraySlot::LeftMouse:
+		return { TrayAction::MoveAndAttack, 0 };
+	case TraySlot::RightMouse:
+		return { TrayAction::ReadiedSpell, 0 };
+	default:
+		return {};
+	}
+}
 
 /** @brief Spell level granted by a socketed spell gem: it grows with the character. */
 constexpr int GemSpellLevel(int characterLevel)
@@ -139,12 +201,14 @@ using SupportSockets = std::array<SupportGem, MaxSupportSockets>;
  * Saved in its own "poe2hero" entry of the hero save, so heroes stay loadable by other builds.
  */
 struct Poe2PlayerData {
-	/** @brief Support gems socketed in each skill bar slot's skill. */
+	/** @brief Support gems socketed in each Skills panel socket's skill. */
 	std::array<SupportSockets, NumSkillSlots> slotSupports {};
 	/** @brief Charges of the flasks in belt slots 1 to 4. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
-	/** @brief Skill gems socketed in the skill bar. */
+	/** @brief Skill gems socketed in the Skills panel. */
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
+	/** @brief What each skill tray slot does. */
+	std::array<TrayBinding, NumTraySlots> tray {};
 	/** @brief Game ticks left in the current dodge roll (not saved). */
 	uint8_t dodgeTicks = 0;
 	/** @brief Game ticks until the next dodge roll is allowed (not saved). */
@@ -161,6 +225,8 @@ struct Poe2PlayerData {
 	uint8_t dashSkillTicks = 0;
 	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
 	uint8_t warcryTicks = 0;
+	/** @brief Game ticks the character stands still after a skill slowed by its supports (not saved). */
+	uint8_t recoveryTicks = 0;
 	/** @brief Skill whose cast animation is playing; it goes off on castFrame (not saved). */
 	WeaponSkill castSkill = WeaponSkill::None;
 	int8_t castFrame = 0;
@@ -207,6 +273,8 @@ struct Poe2PlayerData {
 			supports.fill(SupportGem::None);
 		flaskCharges.fill(MaxFlaskCharges);
 		skillSlots.fill({});
+		for (size_t slot = 0; slot < NumTraySlots; slot++)
+			tray[slot] = DefaultTrayBinding(static_cast<TraySlot>(slot));
 		dodgeTicks = 0;
 		dodgeCooldown = 0;
 		pendingSkill = WeaponSkill::None;
@@ -215,6 +283,7 @@ struct Poe2PlayerData {
 		dashSkill = WeaponSkill::None;
 		dashSkillTicks = 0;
 		warcryTicks = 0;
+		recoveryTicks = 0;
 		castSkill = WeaponSkill::None;
 		castFrame = 0;
 		passives.reset();
@@ -251,15 +320,17 @@ struct Poe2PlayerData {
 			pendingSkill = WeaponSkill::None;
 		if (warcryTicks > 0)
 			warcryTicks--;
+		if (recoveryTicks > 0)
+			recoveryTicks--;
 	}
 
-	/** @brief The supports of the skill bar slot holding the skill; none if it isn't socketed. */
+	/** @brief The supports of the Skills panel socket holding the skill; none if it isn't socketed. */
 	[[nodiscard]] const SupportSockets &supportsFor(SkillSlot skill) const;
 	[[nodiscard]] const SupportSockets &supportsFor(SpellID spell) const { return supportsFor(SkillSlot::ForSpell(spell)); }
 	[[nodiscard]] bool hasSupport(SkillSlot skill, SupportGem gem) const;
 	[[nodiscard]] bool hasSupport(SpellID spell, SupportGem gem) const { return hasSupport(SkillSlot::ForSpell(spell), gem); }
 
-	/** @brief Whether a gem for the spell is socketed in the skill bar. */
+	/** @brief Whether a gem for the spell is socketed in the Skills panel. */
 	[[nodiscard]] bool hasSpellGem(SpellID spell) const
 	{
 		for (const SkillSlot &slot : skillSlots) {

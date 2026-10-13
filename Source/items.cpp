@@ -2038,7 +2038,7 @@ void PrintItemMisc(const Item &item)
 			else
 				AddItemInfoBoxString(FormatRuntime(_("Skill, {:d} mana"), WeaponSkillManaCost(skill.attack())));
 		}
-		AddItemInfoBoxString(_("Use to socket in the skill bar"));
+		AddItemInfoBoxString(_("Use to socket in the Skills panel"));
 		return;
 	}
 	if (const CurrencyOrb orb = CurrencyOrbForMiscId(item._iMiscId); orb != CurrencyOrb::None) {

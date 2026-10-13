@@ -177,7 +177,7 @@ TEST_F(Poe2SupportGemsTest, AttackSupports)
 	EXPECT_EQ(SupportMeleeDamagePercent(player), BrutalityDamagePercent);
 	EXPECT_EQ(SupportAttackSkippedFrames(player, WeaponSkill::Cleave), MartialTempoFrames);
 	EXPECT_FALSE(SupportMeleeKnocksBack(player));
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), WeaponSkillManaCost(WeaponSkill::Cleave) * 156 / 100);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), WeaponSkillManaCost(WeaponSkill::Cleave) * 144 / 100);
 }
 
 TEST_F(Poe2SupportGemsTest, TakingSupportsOut)
@@ -209,15 +209,15 @@ TEST_F(Poe2SupportGemsTest, SupportsChangeTheSpell)
 	Socket(player, SpellID::Firebolt, SupportGem::Empower);
 	EXPECT_EQ(SupportExtraProjectiles(player, SpellID::Firebolt), 2);
 	EXPECT_EQ(SupportSpellLevelBonus(player, SpellID::Firebolt), 2);
-	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Firebolt), 195);
-	EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt).raw(), baseMana.raw() * 195 / 100);
+	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Firebolt), 182);
+	EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt).raw(), baseMana.raw() * 182 / 100);
 
 	// Supports belong to one spell only.
 	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Healing), 100);
 
 	Socket(player, SpellID::Healing, SupportGem::Efficiency);
 	Socket(player, SpellID::Healing, SupportGem::FasterCasting);
-	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Healing), 72);
+	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Healing), 84);
 	EXPECT_EQ(SupportCastSkippedFrames(player, SpellID::Healing), 3);
 	EXPECT_EQ(SupportExtraProjectiles(player, SpellID::Healing), 0);
 }
@@ -265,17 +265,62 @@ TEST_F(Poe2SupportGemsTest, PiercingSkipsTheMonsterItHit)
 	int minDamage = 10;
 	int maxDamage = 20;
 	ScaleSupportedMissileDamage(missile, minDamage, maxDamage);
-	EXPECT_EQ(minDamage, 14);
-	EXPECT_EQ(maxDamage, 28);
+	EXPECT_EQ(minDamage, 13);
+	EXPECT_EQ(maxDamage, 26);
 
 	const Monster &first = Monsters[3];
 	const Monster &second = Monsters[4];
 	EXPECT_FALSE(SupportedMissileIgnoresMonster(missile, 3));
 	EXPECT_TRUE(OnSupportedMissileHit(missile, first));
 	EXPECT_TRUE(SupportedMissileIgnoresMonster(missile, 3));
+	// Once it has pierced, it hits for 20% less, just once.
+	EXPECT_EQ(missile.poe2.damagePercent, ConcentratedEffectDamagePercent * PierceDamagePercent / 100);
 	EXPECT_TRUE(OnSupportedMissileHit(missile, second));
+	EXPECT_EQ(missile.poe2.damagePercent, ConcentratedEffectDamagePercent * PierceDamagePercent / 100);
 	// Out of pierces, the third hit stops the projectile.
 	EXPECT_FALSE(OnSupportedMissileHit(missile, first));
+}
+
+TEST_F(Poe2SupportGemsTest, SupportsHaveTradeOffs)
+{
+	Player &player = FreshPlayer();
+	EXPECT_EQ(SupportSpellDamagePercent(player, SpellID::Firebolt), 100);
+	EXPECT_EQ(SupportCastRecoveryTicks(player, SpellID::Firebolt, 20), 0);
+
+	// Multiple Projectiles: 35% less damage and 20% slower casts.
+	Socket(player, SpellID::Firebolt, SupportGem::MultipleProjectiles);
+	EXPECT_EQ(SupportSpellDamagePercent(player, SpellID::Firebolt), MultipleProjectilesDamagePercent);
+	EXPECT_EQ(SupportCastRecoveryTicks(player, SpellID::Firebolt, 20), 5);
+	// Empower slows the cast a little more.
+	Socket(player, SpellID::Firebolt, SupportGem::Empower);
+	EXPECT_EQ(SupportCastRecoveryTicks(player, SpellID::Firebolt, 20), 7);
+	// Chain hits for 30% less on top.
+	Socket(player, SpellID::ChargedBolt, SupportGem::MultipleProjectiles);
+	Socket(player, SpellID::ChargedBolt, SupportGem::Chain);
+	EXPECT_EQ(SupportSpellDamagePercent(player, SpellID::ChargedBolt), MultipleProjectilesDamagePercent * ChainDamagePercent / 100);
+
+	// Lightning's bolt isn't a projectile that pierces, but Multiple Projectiles still costs it damage.
+	Socket(player, SpellID::Lightning, SupportGem::MultipleProjectiles);
+	Missile lightning {};
+	ApplySupportsToMissile(lightning, player, SpellID::Lightning);
+	EXPECT_EQ(lightning.poe2.spell, SpellID::Invalid);
+	EXPECT_EQ(lightning.poe2.damagePercent, MultipleProjectilesDamagePercent);
+
+	// Concentrated Effect: more damage, slower projectiles.
+	Socket(player, SpellID::Fireball, SupportGem::ConcentratedEffect);
+	Missile fireball {};
+	fireball.position.velocity = { 100, -50 };
+	ApplySupportsToMissile(fireball, player, SpellID::Fireball);
+	EXPECT_EQ(fireball.poe2.damagePercent, ConcentratedEffectDamagePercent);
+	EXPECT_EQ(fireball.poe2.speedPercent, ConcentratedEffectSpeedPercent);
+	EXPECT_EQ(fireball.position.velocity, (Displacement { 70, -35 }));
+
+	// Brutality: more melee damage, but none of the weapon's fire or lightning.
+	EXPECT_EQ(Socket(player, SkillSlot::ForAttack(WeaponSkill::Cleave), SupportGem::Brutality), SupportSocketResult::Socketed);
+	EXPECT_FALSE(SupportMeleeIsPhysicalOnly(player));
+	player.poe2.activeSkill = WeaponSkill::Cleave;
+	EXPECT_TRUE(SupportMeleeIsPhysicalOnly(player));
+	EXPECT_EQ(SupportMeleeDamagePercent(player), BrutalityDamagePercent);
 }
 
 } // namespace

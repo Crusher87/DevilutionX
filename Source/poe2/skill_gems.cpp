@@ -1,5 +1,7 @@
 #include "poe2/skill_gems.hpp"
 
+#include <array>
+
 #include "items.h"
 #include "levels/gendung.h"
 #include "player.h"
@@ -154,6 +156,12 @@ SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill)
 {
 	const SkillSlot previous = player.poe2.skillSlots[slot];
 	player.poe2.skillSlots[slot] = skill;
+	if (skill.isEmpty() || skill.kind == SkillKind::Persistent) {
+		for (size_t traySlot = 0; traySlot < NumTraySlots; traySlot++) {
+			if (player.poe2.tray[traySlot] == TrayBinding::ForGem(slot))
+				ClearTraySlot(player, static_cast<TraySlot>(traySlot));
+		}
+	}
 	// Spirit gems can change stats, like Purity of Elements' resistances.
 	if (previous.kind == SkillKind::Persistent || skill.kind == SkillKind::Persistent)
 		CalcPlrInv(player, false);
@@ -187,8 +195,86 @@ void GrantStarterSkill(Player &player)
 	}
 	if (FindSkillSlot(player, skill))
 		return;
-	if (const std::optional<size_t> slot = FirstFreeSkillSlot(player))
+	if (const std::optional<size_t> slot = FirstFreeSkillSlot(player)) {
 		SocketSkill(player, *slot, skill);
+		AutoBindSocket(player, *slot);
+	}
+}
+
+bool TraySlotTakesActions(TraySlot slot)
+{
+	return slot == TraySlot::LeftMouse || slot == TraySlot::RightMouse;
+}
+
+std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket)
+{
+	for (size_t slot = 0; slot < NumTraySlots; slot++) {
+		if (player.poe2.tray[slot] == TrayBinding::ForGem(socket))
+			return static_cast<TraySlot>(slot);
+	}
+	return std::nullopt;
+}
+
+SkillSlot TraySkill(const Player &player, TraySlot slot)
+{
+	const TrayBinding binding = player.poe2.tray[static_cast<size_t>(slot)];
+	if (!binding.isGem() || binding.socket >= NumSkillSlots)
+		return {};
+	return player.poe2.skillSlots[binding.socket];
+}
+
+void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding)
+{
+	if (binding.action == TrayAction::None) {
+		ClearTraySlot(player, slot);
+		return;
+	}
+	if (!binding.isGem() && !TraySlotTakesActions(slot))
+		return;
+	TrayBinding &target = player.poe2.tray[static_cast<size_t>(slot)];
+	if (binding.isGem()) {
+		if (const std::optional<TraySlot> other = TraySlotForSocket(player, binding.socket); other && *other != slot) {
+			TrayBinding &otherBinding = player.poe2.tray[static_cast<size_t>(*other)];
+			otherBinding = target;
+			// An empty slot, or an action a key can't take, leaves the other slot at its default.
+			if (otherBinding.action == TrayAction::None || (!otherBinding.isGem() && !TraySlotTakesActions(*other)))
+				otherBinding = DefaultTrayBinding(*other);
+		}
+	}
+	target = binding;
+}
+
+void ClearTraySlot(Player &player, TraySlot slot)
+{
+	player.poe2.tray[static_cast<size_t>(slot)] = DefaultTrayBinding(slot);
+}
+
+std::optional<TraySlot> AutoBindSocket(Player &player, size_t socket)
+{
+	const SkillSlot skill = player.poe2.skillSlots[socket];
+	if (skill.isEmpty() || skill.kind == SkillKind::Persistent)
+		return std::nullopt;
+	if (const std::optional<TraySlot> bound = TraySlotForSocket(player, socket))
+		return bound;
+	for (size_t key = 0; key <= NumTrayKeys; key++) {
+		const TraySlot slot = key < NumTrayKeys ? TrayKeySlot(key) : TraySlot::MiddleMouse;
+		if (player.poe2.tray[static_cast<size_t>(slot)].action == TrayAction::None) {
+			player.poe2.tray[static_cast<size_t>(slot)] = TrayBinding::ForGem(socket);
+			return slot;
+		}
+	}
+	return std::nullopt;
+}
+
+void MigrateOldSkillBar(Player &player)
+{
+	// The old bar's keys were E, R, T, F, G and V; the tray's are Q, E, R, T, F and G.
+	constexpr std::array<TraySlot, OldNumSkillSlots> NewSlots { TraySlot::Key2, TraySlot::Key3, TraySlot::Key4, TraySlot::Key5, TraySlot::Key6, TraySlot::Key1 };
+	for (size_t socket = 0; socket < OldNumSkillSlots; socket++) {
+		const SkillSlot skill = player.poe2.skillSlots[socket];
+		if (!skill.isEmpty() && skill.kind != SkillKind::Persistent)
+			player.poe2.tray[static_cast<size_t>(NewSlots[socket])] = TrayBinding::ForGem(socket);
+	}
 }
 
 } // namespace devilution

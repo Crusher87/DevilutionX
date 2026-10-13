@@ -2401,14 +2401,14 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
 
 /**
  * Version 1 holds support gem links per spell, version 2 adds flask charges, version 3 the skill bar,
- * version 4 the passive tree, version 5 the supports socketed in each skill bar slot, version 6 the open map
- * and version 7 the rebuilt passive tree with two-byte node ids.
+ * version 4 the passive tree, version 5 the supports socketed in each skill bar slot, version 6 the open map,
+ * version 7 the rebuilt passive tree with two-byte node ids and version 8 the 12-socket Skills panel and the skill tray.
  */
-constexpr uint8_t Poe2HeroDataVersion = 7;
+constexpr uint8_t Poe2HeroDataVersion = 8;
 
 namespace {
 
-/** @brief Moves supports linked to spells (before version 5) into the sockets of the skill bar slot holding the spell. */
+/** @brief Moves supports linked to spells (before version 5) into the sockets of the Skills panel socket holding the spell. */
 void MigrateSpellSupports(Player &player, const std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> &spellSupports)
 {
 	for (size_t spell = 0; spell < MaxPoe2Spells; spell++) {
@@ -2417,6 +2417,27 @@ void MigrateSpellSupports(Player &player, const std::array<std::array<SupportGem
 			continue;
 		for (size_t i = 0; i < MaxSupportsPerSpell; i++)
 			player.poe2.slotSupports[*slot][i] = spellSupports[spell][i];
+	}
+}
+
+void ReadSkillSockets(LoadHelper &file, Player &player, size_t first, size_t end)
+{
+	for (size_t slot = first; slot < end; slot++) {
+		const SkillSlot skill { static_cast<SkillKind>(file.NextLE<uint8_t>()), file.NextLE<uint8_t>() };
+		// Drop skills whose gem no longer exists, e.g. from a newer build.
+		if (SkillGemItemIndex(skill))
+			player.poe2.skillSlots[slot] = skill;
+	}
+}
+
+void ReadSocketSupports(LoadHelper &file, Player &player, size_t first, size_t end)
+{
+	for (size_t slot = first; slot < end; slot++) {
+		for (SupportGem &support : player.poe2.slotSupports[slot]) {
+			const uint8_t gem = file.NextLE<uint8_t>();
+			if (gem < static_cast<uint8_t>(SupportGem::Count) && !player.poe2.skillSlots[slot].isEmpty())
+				support = static_cast<SupportGem>(gem);
+		}
 	}
 }
 
@@ -2450,16 +2471,14 @@ uint8_t ReadPoe2HeroData(Player &player)
 	for (uint8_t &charges : player.poe2.flaskCharges)
 		charges = std::min(file.NextLE<uint8_t>(), MaxFlaskCharges);
 
-	if (version < 3 || !file.IsValid(NumSkillSlots * 2))
+	// The first 6 Skills panel sockets sit where the old skill bar's slots were; the rest follow the map.
+	if (version < 3 || !file.IsValid(OldNumSkillSlots * 2))
 		return version;
-	for (SkillSlot &slot : player.poe2.skillSlots) {
-		const SkillSlot skill { static_cast<SkillKind>(file.NextLE<uint8_t>()), file.NextLE<uint8_t>() };
-		// Drop skills whose gem no longer exists, e.g. from a newer build.
-		if (SkillGemItemIndex(skill))
-			slot = skill;
-	}
+	ReadSkillSockets(file, player, 0, OldNumSkillSlots);
 	if (version < 5)
 		MigrateSpellSupports(player, spellSupports);
+	if (version < 8)
+		MigrateOldSkillBar(player);
 
 	if (version < 4)
 		return version;
@@ -2481,15 +2500,9 @@ uint8_t ReadPoe2HeroData(Player &player)
 		}
 	}
 
-	if (version < 5 || !file.IsValid(NumSkillSlots * MaxSupportSockets))
+	if (version < 5 || !file.IsValid(OldNumSkillSlots * MaxSupportSockets))
 		return version;
-	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
-		for (SupportGem &support : player.poe2.slotSupports[slot]) {
-			const uint8_t gem = file.NextLE<uint8_t>();
-			if (gem < static_cast<uint8_t>(SupportGem::Count) && !player.poe2.skillSlots[slot].isEmpty())
-				support = static_cast<SupportGem>(gem);
-		}
-	}
+	ReadSocketSupports(file, player, 0, OldNumSkillSlots);
 
 	if (version < 6 || !file.IsValid(2))
 		return version;
@@ -2498,6 +2511,25 @@ uint8_t ReadPoe2HeroData(Player &player)
 	if (mapLevel < NUMLEVELS && mapTier <= MaxWaystoneTier) {
 		player.poe2.mapLevel = mapLevel;
 		player.poe2.mapTier = mapTier;
+	}
+
+	constexpr size_t NewSockets = NumSkillSlots - OldNumSkillSlots;
+	if (version < 8 || !file.IsValid((NewSockets * (2 + MaxSupportSockets)) + (NumTraySlots * 2)))
+		return version;
+	ReadSkillSockets(file, player, OldNumSkillSlots, NumSkillSlots);
+	ReadSocketSupports(file, player, OldNumSkillSlots, NumSkillSlots);
+	for (size_t slot = 0; slot < NumTraySlots; slot++) {
+		const auto action = file.NextLE<uint8_t>();
+		const uint8_t socket = file.NextLE<uint8_t>();
+		if (action > static_cast<uint8_t>(TrayAction::Last))
+			continue;
+		const TrayBinding binding { static_cast<TrayAction>(action), socket };
+		const SkillSlot skill = socket < NumSkillSlots ? player.poe2.skillSlots[socket] : SkillSlot {};
+		if (binding.isGem() && (skill.isEmpty() || skill.kind == SkillKind::Persistent))
+			continue;
+		if (!binding.isGem() && binding.action != TrayAction::None && !TraySlotTakesActions(static_cast<TraySlot>(slot)))
+			continue;
+		player.poe2.tray[slot] = binding;
 	}
 	return version;
 }
@@ -2520,25 +2552,38 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			passives.push_back(static_cast<uint16_t>(node));
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 2) + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 2) + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
 	for (const uint8_t charges : player.poe2.flaskCharges)
 		file.WriteLE<uint8_t>(charges);
-	for (const SkillSlot &slot : player.poe2.skillSlots) {
-		file.WriteLE<uint8_t>(static_cast<uint8_t>(slot.kind));
-		file.WriteLE<uint8_t>(slot.id);
-	}
+	const auto writeSockets = [&](size_t first, size_t end) {
+		for (size_t slot = first; slot < end; slot++) {
+			file.WriteLE<uint8_t>(static_cast<uint8_t>(player.poe2.skillSlots[slot].kind));
+			file.WriteLE<uint8_t>(player.poe2.skillSlots[slot].id);
+		}
+	};
+	const auto writeSupports = [&](size_t first, size_t end) {
+		for (size_t slot = first; slot < end; slot++) {
+			for (const SupportGem gem : player.poe2.slotSupports[slot])
+				file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
+		}
+	};
+	writeSockets(0, OldNumSkillSlots);
 	file.WriteLE<uint16_t>(static_cast<uint16_t>(passives.size()));
 	for (const uint16_t node : passives)
 		file.WriteLE<uint16_t>(node);
-	for (const SupportSockets &supports : player.poe2.slotSupports) {
-		for (const SupportGem gem : supports)
-			file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
-	}
+	writeSupports(0, OldNumSkillSlots);
 	file.WriteLE<uint8_t>(player.poe2.mapLevel);
 	file.WriteLE<uint8_t>(player.poe2.mapTier);
+	// Version 8: the Skills panel's other 6 sockets and the skill tray.
+	writeSockets(OldNumSkillSlots, NumSkillSlots);
+	writeSupports(OldNumSkillSlots, NumSkillSlots);
+	for (const TrayBinding &binding : player.poe2.tray) {
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(binding.action));
+		file.WriteLE<uint8_t>(binding.socket);
+	}
 }
 
 void LoadHeroItems(Player &player)

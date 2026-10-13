@@ -583,7 +583,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 			return false;
 	}
 
-	if (gbIsHellfire && HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage)) {
+	if (gbIsHellfire && HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage) && !SupportMeleeIsPhysicalOnly(player)) {
 		// Fixed off by 1 error from Hellfire
 		const int midam = RandomIntBetween(player._pIFMinDam, player._pIFMaxDam);
 		AddMissile(player.position.tile, player.position.temp, player._pdir, MissileID::SpectralArrow, TARGET_MONSTERS, player, midam, 0);
@@ -862,7 +862,8 @@ bool DoAttack(Player &player)
 			}
 		}
 
-		if (!gbIsHellfire || !HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage)) {
+		// POE2 Mashup: Brutality's price is the weapon's fire and lightning damage.
+		if (!SupportMeleeIsPhysicalOnly(player) && (!gbIsHellfire || !HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage))) {
 			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage)) {
 				int elementalDamage = didhit ? RandomIntBetween(player._pIFMinDam, player._pIFMaxDam) : 0;
 				AddMissile(position, { 1, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
@@ -1148,6 +1149,9 @@ bool DoSpell(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
+		// POE2 Mashup: supports that slow the cast hold the character still a little longer.
+		if (player.executedSpell.spellType == SpellType::Spell)
+			player.poe2.recoveryTicks = static_cast<uint8_t>(std::min(SupportCastRecoveryTicks(player, player.executedSpell.spellId, player._pSFrames), 255));
 		StartStand(player, player._pdir);
 		ClearStateVariables(player);
 		return true;
@@ -3208,7 +3212,9 @@ void ProcessPlayers()
 					tplayer = DoDeath(player);
 					break;
 				}
-				CheckNewPath(player, tplayer);
+				// POE2 Mashup: a slowed skill holds the character still before the next action.
+				if (player._pmode != PM_STAND || player.poe2.recoveryTicks == 0)
+					CheckNewPath(player, tplayer);
 			} while (tplayer);
 
 			player.previewCelSprite = std::nullopt;

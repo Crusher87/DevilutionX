@@ -182,7 +182,105 @@ TEST_F(Poe2SkillGemsTest, SlotsAndStarterSkills)
 		EXPECT_EQ(player.poe2.skillSlots[1], SkillSlot {}) << "granted twice";
 		EXPECT_EQ(FirstFreeSkillSlot(player), 1U);
 		EXPECT_EQ(FindSkillSlot(player, skill), 0U);
+		// The starter skill goes on the first tray key.
+		EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::Key1)], TrayBinding::ForGem(0));
 	}
+}
+
+TrayBinding TrayOf(const Player &player, TraySlot slot)
+{
+	return player.poe2.tray[static_cast<size_t>(slot)];
+}
+
+TEST_F(Poe2SkillGemsTest, TrayStartsWithDiabloMouseButtons)
+{
+	const Player &player = *MyPlayer;
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
+	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::ReadiedSpell);
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::None);
+	for (size_t key = 0; key < NumTrayKeys; key++)
+		EXPECT_EQ(TrayOf(player, TrayKeySlot(key)).action, TrayAction::None);
+}
+
+TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeysThenTheMiddleButton)
+{
+	Player &player = *MyPlayer;
+	for (size_t socket = 0; socket < 7; socket++)
+		SocketSkill(player, socket, SkillSlot::ForSpell(static_cast<SpellID>(static_cast<int>(SpellID::Firebolt) + static_cast<int>(socket))));
+	SocketSkill(player, 7, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh));
+	for (size_t socket = 0; socket < 8; socket++)
+		AutoBindSocket(player, socket);
+
+	for (size_t key = 0; key < NumTrayKeys; key++)
+		EXPECT_EQ(TrayOf(player, TrayKeySlot(key)), TrayBinding::ForGem(key));
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse), TrayBinding::ForGem(6));
+	// Spirit gems are active while socketed and need no slot.
+	EXPECT_EQ(TraySlotForSocket(player, 7), std::nullopt);
+	// The mouse buttons keep their actions.
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
+	EXPECT_EQ(AutoBindSocket(player, 0), TraySlot::Key1);
+}
+
+TEST_F(Poe2SkillGemsTest, BindingAGemOnAnotherSlotSwapsThem)
+{
+	Player &player = *MyPlayer;
+	SocketSkill(player, 0, SkillSlot::ForSpell(SpellID::Firebolt));
+	SocketSkill(player, 1, SkillSlot::ForSpell(SpellID::Fireball));
+	BindTraySlot(player, TraySlot::Key1, TrayBinding::ForGem(0));
+	BindTraySlot(player, TraySlot::Key2, TrayBinding::ForGem(1));
+
+	// Like POE2, picking a skill that's on another slot swaps the two.
+	BindTraySlot(player, TraySlot::Key1, TrayBinding::ForGem(1));
+	EXPECT_EQ(TrayOf(player, TraySlot::Key1), TrayBinding::ForGem(1));
+	EXPECT_EQ(TrayOf(player, TraySlot::Key2), TrayBinding::ForGem(0));
+	EXPECT_EQ(TraySkill(player, TraySlot::Key2), SkillSlot::ForSpell(SpellID::Firebolt));
+
+	// A key can't take a mouse action, so swapping with the left button leaves the key empty.
+	BindTraySlot(player, TraySlot::LeftMouse, TrayBinding::ForGem(0));
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse), TrayBinding::ForGem(0));
+	EXPECT_EQ(TrayOf(player, TraySlot::Key2).action, TrayAction::None);
+	BindTraySlot(player, TraySlot::Key3, { TrayAction::Interact, 0 });
+	EXPECT_EQ(TrayOf(player, TraySlot::Key3).action, TrayAction::None);
+
+	// The right button can take an action; clearing puts a slot back to its default.
+	BindTraySlot(player, TraySlot::RightMouse, { TrayAction::Interact, 0 });
+	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::Interact);
+	ClearTraySlot(player, TraySlot::RightMouse);
+	ClearTraySlot(player, TraySlot::LeftMouse);
+	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::ReadiedSpell);
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
+}
+
+TEST_F(Poe2SkillGemsTest, TakingAGemOutClearsItsTraySlot)
+{
+	Player &player = *MyPlayer;
+	SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::Firebolt));
+	BindTraySlot(player, TraySlot::LeftMouse, TrayBinding::ForGem(2));
+	BindTraySlot(player, TraySlot::Key4, TrayBinding::ForGem(2));
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
+
+	SocketSkill(player, 2, {});
+	EXPECT_EQ(TrayOf(player, TraySlot::Key4).action, TrayAction::None);
+	EXPECT_EQ(TraySkill(player, TraySlot::Key4), SkillSlot {});
+}
+
+TEST_F(Poe2SkillGemsTest, OldSkillBarMovesToTheTrayKeys)
+{
+	Player &player = *MyPlayer;
+	SocketSkill(player, 0, SkillSlot::ForSpell(SpellID::Firebolt));
+	SocketSkill(player, 4, SkillSlot::ForAttack(WeaponSkill::Cleave));
+	SocketSkill(player, 5, SkillSlot::ForSpell(SpellID::Fireball));
+	SocketSkill(player, 3, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh));
+	player.poe2.tray = {};
+	for (size_t slot = 0; slot < NumTraySlots; slot++)
+		player.poe2.tray[slot] = DefaultTrayBinding(static_cast<TraySlot>(slot));
+
+	MigrateOldSkillBar(player);
+	// E stays E, G stays G, and V's skill moves to Q.
+	EXPECT_EQ(TrayOf(player, TraySlot::Key2), TrayBinding::ForGem(0));
+	EXPECT_EQ(TrayOf(player, TraySlot::Key6), TrayBinding::ForGem(4));
+	EXPECT_EQ(TrayOf(player, TraySlot::Key1), TrayBinding::ForGem(5));
+	EXPECT_EQ(TrayOf(player, TraySlot::Key5).action, TrayAction::None);
 }
 
 } // namespace

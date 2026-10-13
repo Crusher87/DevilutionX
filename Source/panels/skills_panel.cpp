@@ -39,11 +39,15 @@ using namespace poe2ui;
 constexpr int HeaderHeight = 52;
 constexpr int RowHeight = 48;
 constexpr int RowGap = 2;
+/** @brief The 12 sockets show 6 to a page. */
+constexpr size_t RowsPerPage = 6;
+constexpr size_t PageCount = NumSkillSlots / RowsPerPage;
 constexpr Size IconSize { 37, 38 };
 constexpr int SocketSize = 28;
 constexpr int SocketGap = 4;
 
 bool IsOpen;
+size_t Page;
 
 struct Hit {
 	enum class Kind : uint8_t {
@@ -51,6 +55,7 @@ struct Hit {
 		Skill,
 		Socket,
 		GemcuttingButton,
+		PageTab,
 	} kind
 	    = Kind::None;
 	size_t slot = 0;
@@ -68,10 +73,17 @@ Rectangle GemcuttingButtonRect()
 	return { panel.position + Displacement { panel.size.width - 104, 8 }, { 96, 20 } };
 }
 
+Rectangle PageTabRect(size_t page)
+{
+	const Rectangle panel = PanelRect();
+	return { panel.position + Displacement { 84 + (static_cast<int>(page) * 58), 8 }, { 54, 20 } };
+}
+
 Rectangle RowRect(size_t slot)
 {
 	const Rectangle panel = PanelRect();
-	return { panel.position + Displacement { 6, HeaderHeight + (static_cast<int>(slot) * (RowHeight + RowGap)) }, { panel.size.width - 12, RowHeight } };
+	const int row = static_cast<int>(slot % RowsPerPage);
+	return { panel.position + Displacement { 6, HeaderHeight + (row * (RowHeight + RowGap)) }, { panel.size.width - 12, RowHeight } };
 }
 
 Rectangle IconRect(size_t slot)
@@ -90,7 +102,11 @@ Hit HitAt(Point position)
 {
 	if (GemcuttingButtonRect().contains(position))
 		return { Hit::Kind::GemcuttingButton };
-	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+	for (size_t page = 0; page < PageCount; page++) {
+		if (PageTabRect(page).contains(position))
+			return { Hit::Kind::PageTab, page };
+	}
+	for (size_t slot = Page * RowsPerPage; slot < (Page + 1) * RowsPerPage; slot++) {
 		if (!RowRect(slot).contains(position))
 			continue;
 		if (IconRect(slot).contains(position))
@@ -102,30 +118,6 @@ Hit HitAt(Point position)
 		return {};
 	}
 	return {};
-}
-
-uint8_t GemPaletteColor(GemColor color)
-{
-	switch (color) {
-	case GemColor::Strength:
-		return PAL16_RED + 5;
-	case GemColor::Dexterity:
-		return PAL16_YELLOW + 4;
-	default:
-		return PAL16_BLUE + 5;
-	}
-}
-
-UiFlags GemTextColor(GemColor color)
-{
-	switch (color) {
-	case GemColor::Strength:
-		return UiFlags::ColorRed;
-	case GemColor::Dexterity:
-		return UiFlags::ColorYellow;
-	default:
-		return UiFlags::ColorBlue;
-	}
 }
 
 const Item &SupportGemItem(SupportGem gem)
@@ -141,17 +133,6 @@ const Item &SupportGemItem(SupportGem gem)
 		itemCounts[index] = AllItemsList.size();
 	}
 	return items[index];
-}
-
-void DrawSupportGem(const Surface &out, const Rectangle &socket, SupportGem gem)
-{
-	const Item &item = SupportGemItem(gem);
-	if (item.isEmpty())
-		return;
-	const int cursId = item._iCurs + CURSOR_FIRSTITEM;
-	const Size size = GetInvItemSize(cursId);
-	const Point bottomLeft { socket.position.x + ((socket.size.width - size.width) / 2), socket.position.y + ((socket.size.height + size.height) / 2) - 1 };
-	DrawItem(item, out, bottomLeft, GetInvItemSprite(cursId));
 }
 
 std::string SkillLevelText(const Player &player, SkillSlot skill)
@@ -171,7 +152,16 @@ std::string SkillCostText(const Player &player, SkillSlot skill)
 void DrawHeader(const Surface &out, const Player &player, const Hit &hover)
 {
 	const Rectangle panel = PanelRect();
-	DrawString(out, _("Skills"), { panel.position + Displacement { 10, 8 }, { 150, 20 } }, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::VerticalCenter });
+	DrawString(out, _("Skills"), { panel.position + Displacement { 10, 8 }, { 70, 20 } }, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::VerticalCenter });
+	for (size_t page = 0; page < PageCount; page++) {
+		const Rectangle tab = PageTabRect(page);
+		const bool current = page == Page;
+		FillRectangle(out, tab, current || (hover.kind == Hit::Kind::PageTab && hover.slot == page) ? RowHoverColor : RowColor);
+		DrawFrame(out, tab, current ? BorderColor : InnerBorderColor);
+		const int first = static_cast<int>(page * RowsPerPage) + 1;
+		DrawString(out, FormatRuntime("{:d}-{:d}", first, first + static_cast<int>(RowsPerPage) - 1), tab,
+		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (current ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+	}
 
 	const Rectangle button = GemcuttingButtonRect();
 	FillRectangle(out, button, hover.kind == Hit::Kind::GemcuttingButton ? RowHoverColor : RowColor);
@@ -205,7 +195,7 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 	if (hover.kind == Hit::Kind::Skill && hover.slot == slot)
 		DrawSmallSpellIconBorder(out, iconBottomLeft);
 	const std::string key = SkillSlotKeyName(slot);
-	if (key.length() <= 3)
+	if (!key.empty() && key.length() <= 3)
 		DrawString(out, key, { icon.position + Displacement { 2, 1 }, { icon.size.width - 4, 12 } }, { .flags = UiFlags::ColorWhite | UiFlags::Outlined });
 
 	const Rectangle title { row.position + Displacement { 48, 2 }, { row.size.width - 52, 14 } };
@@ -245,7 +235,7 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		FillCircle(out, center, SocketSize / 2, hovered ? HoverColor : rim);
 		FillCircle(out, center, SocketSize / 2 - 2, SocketColor);
 		if (gem != SupportGem::None)
-			DrawSupportGem(out, rect, gem);
+			DrawSupportGemIcon(out, rect, gem);
 	}
 }
 
@@ -258,11 +248,14 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 		DrawTooltip(out, bounds, MousePosition, std::string(_("Gemcutting")), UiFlags::ColorUiGold, lines);
 		return;
 	}
+	if (hover.kind == Hit::Kind::PageTab)
+		return;
 	const SkillSlot skill = player.poe2.skillSlots[hover.slot];
+	const std::string key = SkillSlotKeyName(hover.slot);
 	if (hover.kind == Hit::Kind::Skill) {
 		if (skill.isEmpty()) {
 			lines.emplace_back(_("Click with a skill gem to socket it."), UiFlags::ColorWhite);
-			DrawTooltip(out, bounds, MousePosition, FormatRuntime(_("Empty skill slot [{:s}]"), SkillSlotKeyName(hover.slot)), UiFlags::ColorWhite, lines);
+			DrawTooltip(out, bounds, MousePosition, FormatRuntime(_("Empty skill socket {:d}"), static_cast<int>(hover.slot) + 1), UiFlags::ColorWhite, lines);
 			return;
 		}
 		if (skill.kind == SkillKind::Attack)
@@ -276,8 +269,10 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 			    WeaponAllowsSkill(player, skill.attack()) ? UiFlags::ColorWhite : UiFlags::ColorRed);
 		if (GetSkillUsability(player, skill) == SkillUsability::Requirements)
 			lines.emplace_back(MissingSkillRequirements(player, skill), UiFlags::ColorRed);
+		if (skill.kind != SkillKind::Persistent && key.empty())
+			lines.emplace_back(_("Not on the skill tray: click a tray slot to put it there"), UiFlags::ColorWhite);
 		lines.emplace_back(_("Click to take the gem out"), UiFlags::ColorButtonpushed);
-		DrawTooltip(out, bounds, MousePosition, FormatRuntime("{:s} [{:s}]", SkillName(skill), SkillSlotKeyName(hover.slot)), UiFlags::ColorWhitegold, lines);
+		DrawTooltip(out, bounds, MousePosition, key.empty() ? std::string(SkillName(skill)) : FormatRuntime("{:s} [{:s}]", SkillName(skill), key), UiFlags::ColorWhitegold, lines);
 		return;
 	}
 
@@ -372,7 +367,7 @@ void DrawSkillsPanel(const Surface &out)
 	const Hit hover = PanelRect().contains(MousePosition) ? HitAt(MousePosition) : Hit {};
 	DrawPanel(out, PanelRect());
 	DrawHeader(out, player, hover);
-	for (size_t slot = 0; slot < NumSkillSlots; slot++)
+	for (size_t slot = Page * RowsPerPage; slot < (Page + 1) * RowsPerPage; slot++)
 		DrawRow(out, player, slot, hover);
 	if (hover.kind != Hit::Kind::None)
 		DrawHoverTooltip(out, player, hover);
@@ -386,6 +381,9 @@ void HandleSkillsPanelClick(Point mousePosition)
 	case Hit::Kind::GemcuttingButton:
 		OpenGemcuttingBrowser();
 		break;
+	case Hit::Kind::PageTab:
+		Page = hit.slot;
+		break;
 	case Hit::Kind::Skill:
 		ClickSkillSlot(player, hit.slot, /*canTakeOut=*/true);
 		break;
@@ -396,6 +394,41 @@ void HandleSkillsPanelClick(Point mousePosition)
 	default:
 		break;
 	}
+}
+
+uint8_t GemPaletteColor(GemColor color)
+{
+	switch (color) {
+	case GemColor::Strength:
+		return PAL16_RED + 5;
+	case GemColor::Dexterity:
+		return PAL16_YELLOW + 4;
+	default:
+		return PAL16_BLUE + 5;
+	}
+}
+
+UiFlags GemTextColor(GemColor color)
+{
+	switch (color) {
+	case GemColor::Strength:
+		return UiFlags::ColorRed;
+	case GemColor::Dexterity:
+		return UiFlags::ColorYellow;
+	default:
+		return UiFlags::ColorBlue;
+	}
+}
+
+void DrawSupportGemIcon(const Surface &out, const Rectangle &socket, SupportGem gem)
+{
+	const Item &item = SupportGemItem(gem);
+	if (item.isEmpty())
+		return;
+	const int cursId = item._iCurs + CURSOR_FIRSTITEM;
+	const Size size = GetInvItemSize(cursId);
+	const Point bottomLeft { socket.position.x + ((socket.size.width - size.width) / 2), socket.position.y + ((socket.size.height + size.height) / 2) - 1 };
+	DrawItem(item, out, bottomLeft, GetInvItemSprite(cursId));
 }
 
 } // namespace devilution
