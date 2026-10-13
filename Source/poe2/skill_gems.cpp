@@ -1,6 +1,8 @@
 #include "poe2/skill_gems.hpp"
 
+#include <algorithm>
 #include <array>
+#include <bit>
 
 #include "items.h"
 #include "levels/gendung.h"
@@ -81,7 +83,7 @@ std::optional<size_t> SkillGemItemIndex(SkillSlot skill)
 	return std::nullopt;
 }
 
-bool CreateSkillGemItem(Item &item, SkillSlot skill)
+bool CreateSkillGemItem(Item &item, SkillSlot skill, int level)
 {
 	const std::optional<size_t> index = SkillGemItemIndex(skill);
 	if (!index)
@@ -89,7 +91,20 @@ bool CreateSkillGemItem(Item &item, SkillSlot skill)
 	InitializeItem(item, static_cast<_item_indexes>(*index));
 	GenerateNewSeed(item);
 	item._iIdentified = true;
+	SetSkillGemItemLevel(item, level);
 	return true;
+}
+
+int SkillGemItemLevel(const Item &item)
+{
+	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+	return std::clamp(static_cast<int>((item.dwBuff & CF_POE2_GEM_LEVEL) >> Shift), 1, MaxGemLevel);
+}
+
+void SetSkillGemItemLevel(Item &item, int level)
+{
+	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+	item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (static_cast<uint32_t>(std::clamp(level, 1, MaxGemLevel)) << Shift);
 }
 
 std::string_view SkillName(SkillSlot skill)
@@ -152,10 +167,11 @@ std::optional<size_t> FindSkillSlot(const Player &player, SkillSlot skill)
 	return std::nullopt;
 }
 
-SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill)
+SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill, int level)
 {
 	const SkillSlot previous = player.poe2.skillSlots[slot];
 	player.poe2.skillSlots[slot] = skill;
+	player.poe2.slotLevels[slot] = static_cast<uint8_t>(std::clamp(level, 1, MaxGemLevel));
 	if (skill.isEmpty() || skill.kind == SkillKind::Persistent) {
 		for (size_t traySlot = 0; traySlot < NumTraySlots; traySlot++) {
 			if (player.poe2.tray[traySlot] == TrayBinding::ForGem(slot))

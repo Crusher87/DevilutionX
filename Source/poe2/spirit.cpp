@@ -277,7 +277,7 @@ void KeepGolemAlive(Player &player)
 	const std::optional<Point> position = FindMinionSpawnPosition(player);
 	if (!position)
 		return;
-	SpawnGolem(player, *position, static_cast<uint8_t>(GemSpellLevel(player.getCharacterLevel())));
+	SpawnGolem(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(PersistentSkill::SummonGolem), 1)));
 	if (Monster *golem = FindGolemForPlayer(player); golem != nullptr) {
 		golem->minDamage = static_cast<uint8_t>(std::min(golem->minDamage * MinionDamagePercent(player) / 100, 255));
 		golem->maxDamage = static_cast<uint8_t>(std::min(golem->maxDamage * MinionDamagePercent(player) / 100, 255));
@@ -306,7 +306,7 @@ void KeepSkeletonsAlive(Player &player)
 	const std::optional<Point> position = FindMinionSpawnPosition(player);
 	if (!position)
 		return;
-	if (SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(GemSpellLevel(player.getCharacterLevel()))))
+	if (SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(PersistentSkill::SkeletalWarriors), 1))))
 		AddVisualEffect(*position, MissileGraphicID::Resurrect);
 	player.poe2.skeletonCooldown = SkeletonReviveTicks;
 }

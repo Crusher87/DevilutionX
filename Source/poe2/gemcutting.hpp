@@ -65,6 +65,9 @@ int UncutGemLevel(const Item &item);
 /** @brief Whether the uncut gem can be cut into the gem. */
 bool CanCutGem(const Item &uncut, const GemEntry &gem);
 /** @brief Makes a fresh gem item. */
-bool CreateGemItem(Item &item, const GemEntry &gem);
+bool CreateGemItem(Item &item, const GemEntry &gem, int level = 1);
+
+/** @brief The skill gem level an uncut gem gives a character: its own level, up to what the character can use. */
+int GemLevelFromUncut(const Item &uncut, int characterLevel);
 
 } // namespace devilution

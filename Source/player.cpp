@@ -999,7 +999,7 @@ bool DoRangeAttack(Player &player)
 			mistype = MissileID::LightningArrow;
 		}
 
-		AddMissile(
+		Missile *missile = AddMissile(
 		    player.position.tile,
 		    player.position.temp + Displacement { xoff, yoff },
 		    player._pdir,
@@ -1008,6 +1008,9 @@ bool DoRangeAttack(Player &player)
 		    player,
 		    dmg,
 		    0);
+		// POE2 Mashup: a bow skill's arrows hit harder as its gem levels up.
+		if (missile != nullptr && (barrage || rain || lightningArrow))
+			missile->poe2.damagePercent = static_cast<int16_t>(GemAttackDamagePercent(player.poe2.skillLevel(player.poe2.activeSkill)));
 
 		if (arrow == 0 && mistype != MissileID::SpectralArrow) {
 			PlaySfxLoc(arrows != 1 ? SfxID::ShootBow2 : SfxID::ShootBow, player.position.tile);
@@ -2779,7 +2782,11 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 	player.Say(HeroSpeech::ArghClang);
 
 	RedrawComponent(PanelDrawComponent::Health);
-	if (player._pClass == HeroClass::Barbarian) {
+	if (gbIsPoe2) {
+		// POE2 Mashup: only a heavy hit stuns, like POE2, so walking through a pack doesn't lock the hero in place.
+		if (!forcehit && static_cast<int64_t>(dam.raw()) * 100 < static_cast<int64_t>(player._pMaxHP.raw()) * PlayerStunPercent)
+			return;
+	} else if (player._pClass == HeroClass::Barbarian) {
 		if (dam.whole() < player.getCharacterLevel() + player.getCharacterLevel() / 4 && !forcehit) {
 			return;
 		}
@@ -2789,6 +2796,8 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 	// POE2 Mashup: a Stone Charm breaks the stun.
 	if (CharmPreventsStun(player))
 		return;
+	if (&player == MyPlayer)
+		TelemetryLog("stunned", std::format("by a {:d} damage hit, life {:d}/{:d}", dam.whole(), player._pHitPoints.whole(), player._pMaxHP.whole()));
 
 	const Direction pd = player._pdir;
 

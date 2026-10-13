@@ -648,8 +648,8 @@ public:
 		}
 
 		int level = _pSplLvl[static_cast<std::size_t>(spell)];
-		if (poe2.hasSpellGem(spell))
-			level = std::max(level, GemSpellLevel(getCharacterLevel()));
+		// POE2 Mashup: a socketed spell gem casts at the gem's level.
+		level = std::max(level, poe2.skillLevel(spell));
 		return std::max<int>(_pISplLvlAdd + level, 0);
 	}
 

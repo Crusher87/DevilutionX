@@ -686,12 +686,13 @@ void DropOnTraySlot(Player &player, TraySlot traySlot)
 			return;
 		}
 		PlayGemSound(player.HoldItem);
-		const SkillSlot previous = ChangeSlotSkill(player, *socket, skill);
+		const int previousLevel = player.poe2.gemLevel(*socket);
+		const SkillSlot previous = ChangeSlotSkill(player, *socket, skill, SkillGemItemLevel(player.HoldItem));
 		player.HoldItem.clear();
 		if (skill.kind != SkillKind::Persistent)
 			BindTraySlot(player, traySlot, TrayBinding::ForGem(*socket));
 		Item returned;
-		if (!previous.isEmpty() && CreateSkillGemItem(returned, previous))
+		if (!previous.isEmpty() && CreateSkillGemItem(returned, previous, previousLevel))
 			HoldItem(player, std::move(returned));
 		else
 			NewCursor(CURSOR_HAND);
@@ -717,11 +718,12 @@ void SocketHeldSkillGem(Player &player, size_t slot)
 	}
 
 	PlayGemSound(player.HoldItem);
-	const SkillSlot previous = ChangeSlotSkill(player, slot, skill);
+	const int previousLevel = player.poe2.gemLevel(slot);
+	const SkillSlot previous = ChangeSlotSkill(player, slot, skill, SkillGemItemLevel(player.HoldItem));
 	player.HoldItem.clear();
 	AutoBindSocket(player, slot);
 	Item returned;
-	if (!previous.isEmpty() && CreateSkillGemItem(returned, previous))
+	if (!previous.isEmpty() && CreateSkillGemItem(returned, previous, previousLevel))
 		HoldItem(player, std::move(returned));
 	else
 		NewCursor(CURSOR_HAND);
@@ -746,7 +748,7 @@ void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems)
 	}
 }
 
-SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill)
+SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int level)
 {
 	// Supports stay socketed if the new skill can use them, like moving them over in POE2; the rest come back out.
 	std::vector<SupportGem> returned;
@@ -754,7 +756,7 @@ SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill)
 		if (gem != SupportGem::None && !SupportGemCanSupport(gem, skill))
 			returned.push_back(std::exchange(gem, SupportGem::None));
 	}
-	const SkillSlot previous = SocketSkill(player, slot, skill);
+	const SkillSlot previous = SocketSkill(player, slot, skill, level);
 	GiveSupportGems(player, returned);
 	return previous;
 }
@@ -1041,7 +1043,7 @@ void ClickSkillSlot(Player &player, size_t slot, bool canTakeOut)
 	const SkillSlot skill = player.poe2.skillSlots[slot];
 	if (canTakeOut && !skill.isEmpty()) {
 		Item gem;
-		if (CreateSkillGemItem(gem, skill)) {
+		if (CreateSkillGemItem(gem, skill, player.poe2.gemLevel(slot))) {
 			ChangeSlotSkill(player, slot, {});
 			PlayGemSound(gem);
 			HoldItem(player, std::move(gem));
@@ -1177,7 +1179,7 @@ bool SocketSkillGemFromInventory(Player &player, bool fromBelt, int index)
 	}
 
 	PlayGemSound(gem);
-	ChangeSlotSkill(player, *slot, skill);
+	ChangeSlotSkill(player, *slot, skill, SkillGemItemLevel(gem));
 	if (skill.kind == SkillKind::Persistent)
 		EventPlrMsg(FormatRuntime(_("{:s} socketed. It's active while socketed."), SkillName(skill)));
 	else if (const std::optional<TraySlot> traySlot = AutoBindSocket(player, *slot); traySlot)

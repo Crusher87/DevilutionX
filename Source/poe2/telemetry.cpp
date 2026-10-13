@@ -344,7 +344,7 @@ void WriteSettings()
 {
 	const Options &options = GetOptions();
 	const Size resolution = *options.Graphics.resolution;
-	TelemetryLog("settings", std::format("resolution {:d}x{:d}, {:s}, upscale {:s}, zoom {:s}, game speed {:d} ticks/s, difficulty {:d}", resolution.width, resolution.height, *options.Graphics.fullscreen ? "fullscreen" : "windowed", *options.Graphics.upscale ? "on" : "off", *options.Graphics.zoom ? "on" : "off", *options.Gameplay.tickRate, static_cast<int>(sgGameInitInfo.nDifficulty)));
+	TelemetryLog("settings", std::format("resolution {:d}x{:d}, {:s}, zoom {:s}, game speed {:d} ticks/s, difficulty {:d}", resolution.width, resolution.height, *options.Graphics.fullscreen ? "fullscreen" : "windowed", *options.Graphics.zoom ? "on" : "off", *options.Gameplay.tickRate, static_cast<int>(sgGameInitInfo.nDifficulty)));
 }
 
 void TrackBuild(const Player &player, uint32_t now)

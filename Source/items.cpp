@@ -2024,11 +2024,13 @@ void PrintItemMisc(const Item &item)
 	}
 	if (IsUncutGem(item)) {
 		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
-		AddItemInfoBoxString(IsUncutSupportGem(item) ? _("Cut into a support gem of this level or lower") : _("Cut into a skill gem of this level or lower"));
+		AddItemInfoBoxString(IsUncutSupportGem(item) ? _("Cut into a support gem of this level or lower") : _("Cut a new skill gem, or raise a socketed one, to this level"));
 		AddItemInfoBoxString(_("Use to open gemcutting"));
 		return;
 	}
 	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {
+		const int gemLevel = SkillGemItemLevel(item);
+		AddItemInfoBoxString(FormatRuntime(_("Gem level {:d}, needs character level {:d}"), gemLevel, CharacterLevelForGemLevel(gemLevel)));
 		if (skill.kind == SkillKind::Spell) {
 			AddItemInfoBoxString(FormatRuntime(_("Grants the {:s} spell"), SkillName(skill)));
 		} else if (skill.kind == SkillKind::Persistent) {
@@ -4006,6 +4008,9 @@ void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t 
 		item.dwBuff = (item.dwBuff & ~FlaskBits) | (dwBuff & FlaskBits);
 	}
 	FinishFlask(item);
+	// POE2 Mashup: and a skill gem keeps its level.
+	if (IsSkillGem(item))
+		item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (dwBuff & CF_POE2_GEM_LEVEL);
 }
 
 void RecreateEar(Item &item, uint16_t ic, uint32_t iseed, uint8_t bCursval, std::string_view heroName)

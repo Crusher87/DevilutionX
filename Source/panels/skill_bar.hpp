@@ -78,7 +78,7 @@ void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems);
  * @brief Changes the skill in a socket; supports the new skill can't use come back out as items.
  * @return The skill that was in the socket.
  */
-SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill);
+SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int level = 1);
 
 /** @brief What happened when a support gem was socketed, for the player. */
 std::string SupportSocketMessage(SupportSocketResult result, const Player &player, size_t slot, SupportGem gem);

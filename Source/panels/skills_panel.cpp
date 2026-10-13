@@ -139,7 +139,7 @@ std::string SkillLevelText(const Player &player, SkillSlot skill)
 {
 	if (skill.kind == SkillKind::Spell)
 		return FormatRuntime(_("Level {:d}"), player.GetSpellLevel(skill.spell()));
-	return FormatRuntime(_("Level {:d}"), GemSpellLevel(player.getCharacterLevel()));
+	return FormatRuntime(_("Level {:d}"), player.poe2.skillLevel(skill));
 }
 
 std::string SkillCostText(const Player &player, SkillSlot skill)

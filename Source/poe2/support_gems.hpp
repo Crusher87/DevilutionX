@@ -136,7 +136,7 @@ int SupportExtraProjectiles(const Player &player, SpellID spell);
 
 /** @brief The weapon skill whose attack or animation is in progress. */
 WeaponSkill CurrentWeaponSkill(const Player &player);
-/** @brief Damage multiplier in percent for a melee hit, from the current skill's supports. */
+/** @brief Damage multiplier in percent for a melee hit, from the current skill's gem level and supports. */
 int SupportMeleeDamagePercent(const Player &player);
 /** @brief Whether a melee hit of the current skill knocks the monster back. */
 bool SupportMeleeKnocksBack(const Player &player);

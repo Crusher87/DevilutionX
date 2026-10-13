@@ -242,7 +242,8 @@ int WeaponSkillManaCost(WeaponSkill skill)
 
 int WeaponSkillManaCost(const Player &player, WeaponSkill skill)
 {
-	return WeaponSkillManaCost(skill) * SupportManaCostPercent(player, SkillSlot::ForAttack(skill)) / 100;
+	const int cost = WeaponSkillManaCost(skill) * GemManaCostPercent(player.poe2.skillLevel(skill)) / 100;
+	return cost * SupportManaCostPercent(player, SkillSlot::ForAttack(skill)) / 100;
 }
 
 bool IsRangedWeaponSkill(WeaponSkill skill)
@@ -422,10 +423,10 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		return false;
 	case WeaponSkill::EmberFusillade:
 		// The missiles take their damage from Magic and the gem level, like the spells.
-		FireFan(player, target, MissileID::Firebolt, 5, 0, GemSpellLevel(player.getCharacterLevel()));
+		FireFan(player, target, MissileID::Firebolt, 5, 0, std::max(player.poe2.skillLevel(skill), 1));
 		return false;
 	case WeaponSkill::Spark:
-		FireFan(player, target, MissileID::ChargedBolt, 6, 0, GemSpellLevel(player.getCharacterLevel()));
+		FireFan(player, target, MissileID::ChargedBolt, 6, 0, std::max(player.poe2.skillLevel(skill), 1));
 		return false;
 	case WeaponSkill::EscapeShot: {
 		// Arrows take their damage from the bow when they hit, like normal arrows.

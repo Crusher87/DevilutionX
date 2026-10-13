@@ -203,6 +203,8 @@ enum icreateinfo_flag2 {
 	CF_POE2_FLASK_QUALITY = ((1 << 5) - 1) << 22,
 	/** The flask's mods have been rolled, so rebuilding it keeps them. */
 	CF_POE2_FLASK_ROLLED = 1 << 27,
+	/** A skill gem's level, 1 to 20; 0 on gems from before gem levels (level 1). Shares the flask bits, which only flasks use. */
+	CF_POE2_GEM_LEVEL = ((1 << 5) - 1) << 16,
 	// clang-format on
 };
 

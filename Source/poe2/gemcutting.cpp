@@ -168,11 +168,16 @@ bool CanCutGem(const Item &uncut, const GemEntry &gem)
 	return gem.level <= UncutGemLevel(uncut);
 }
 
-bool CreateGemItem(Item &item, const GemEntry &gem)
+bool CreateGemItem(Item &item, const GemEntry &gem, int level)
 {
 	if (gem.support != SupportGem::None)
 		return CreateSupportGemItem(item, gem.support);
-	return CreateSkillGemItem(item, gem.skill);
+	return CreateSkillGemItem(item, gem.skill, level);
+}
+
+int GemLevelFromUncut(const Item &uncut, int characterLevel)
+{
+	return std::min({ UncutGemLevel(uncut), MaxGemLevel, MaxGemLevelForCharacter(characterLevel) });
 }
 
 } // namespace devilution

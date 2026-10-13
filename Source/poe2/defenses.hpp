@@ -24,6 +24,8 @@ enum class DefenseType : uint8_t {
 
 /** @brief Energy shield granted per point of defense on cloth bases. */
 constexpr int EnergyShieldPerDefense = 4;
+/** @brief A hit stuns the player (hit recovery) only when it takes at least this percent of their maximum life. */
+constexpr int PlayerStunPercent = 15;
 /** @brief POE2: energy shield starts recharging 4 seconds after the last hit. */
 constexpr int EnergyShieldRechargeDelayTicks = 4 * 20;
 /** @brief POE2: a recharging energy shield refills 12.5% of its maximum per second. */

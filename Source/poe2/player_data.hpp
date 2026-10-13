@@ -179,11 +179,48 @@ constexpr TrayBinding DefaultTrayBinding(TraySlot slot)
 	}
 }
 
-/** @brief Spell level granted by a socketed spell gem: it grows with the character. */
+/**
+ * @brief Spell level socketed spell gems had before gems had their own levels: it grew with the character.
+ * Heroes from then keep it as their gems' level.
+ */
 constexpr int GemSpellLevel(int characterLevel)
 {
 	const int level = ((std::max(characterLevel, 1) - 1) / 4) + 1;
 	return std::min(level, 15);
+}
+
+/** @brief Highest skill gem level, like POE2's uncorrupted gems. */
+constexpr int MaxGemLevel = 20;
+
+/**
+ * @brief Character level each gem level needs: POE2's table (0 to 90 for levels 1 to 20) scaled to Diablo's level 50 cap.
+ */
+constexpr std::array<uint8_t, MaxGemLevel> GemLevelCharacterLevels { 1, 2, 3, 6, 8, 10, 12, 14, 17, 20, 23, 26, 29, 32, 36, 37, 40, 43, 47, 50 };
+
+constexpr int CharacterLevelForGemLevel(int gemLevel)
+{
+	return GemLevelCharacterLevels[std::clamp(gemLevel, 1, MaxGemLevel) - 1];
+}
+
+/** @brief The highest gem level a character of this level can use. */
+constexpr int MaxGemLevelForCharacter(int characterLevel)
+{
+	int level = 1;
+	while (level < MaxGemLevel && CharacterLevelForGemLevel(level + 1) <= characterLevel)
+		level++;
+	return level;
+}
+
+/** @brief Attack skills deal this percent of their damage at a gem level: +7% a level, like POE2's attack gems (about 2.3x at 20). */
+constexpr int GemAttackDamagePercent(int gemLevel)
+{
+	return 100 + (7 * (std::clamp(gemLevel, 1, MaxGemLevel) - 1));
+}
+
+/** @brief Attack skills cost this percent of their mana at a gem level: +5% a level. */
+constexpr int GemManaCostPercent(int gemLevel)
+{
+	return 100 + (5 * (std::clamp(gemLevel, 1, MaxGemLevel) - 1));
 }
 
 /** @brief Support gems a spell could have before supports moved into the skill bar (old saves). */
@@ -207,6 +244,8 @@ struct Poe2PlayerData {
 	std::array<uint8_t, NumFlasks> flaskCharges {};
 	/** @brief Skill gems socketed in the Skills panel. */
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
+	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
+	std::array<uint8_t, NumSkillSlots> slotLevels {};
 	/** @brief What each skill tray slot does. */
 	std::array<TrayBinding, NumTraySlots> tray {};
 	/** @brief Game ticks left in the current dodge roll (not saved). */
@@ -290,6 +329,7 @@ struct Poe2PlayerData {
 		manaFlaskRaw = 0;
 		manaFlaskTicks = 0;
 		skillSlots.fill({});
+		slotLevels.fill(1);
 		for (size_t slot = 0; slot < NumTraySlots; slot++)
 			tray[slot] = DefaultTrayBinding(static_cast<TraySlot>(slot));
 		dodgeTicks = 0;
@@ -360,6 +400,25 @@ struct Poe2PlayerData {
 		}
 		return false;
 	}
+
+	/** @brief Level of the gem in a Skills panel socket. */
+	[[nodiscard]] int gemLevel(size_t socket) const
+	{
+		return std::clamp<int>(slotLevels[socket], 1, MaxGemLevel);
+	}
+
+	/** @brief Level of the socketed gem for the skill; 0 if it isn't socketed. */
+	[[nodiscard]] int skillLevel(SkillSlot skill) const
+	{
+		for (size_t socket = 0; socket < skillSlots.size(); socket++) {
+			if (!skill.isEmpty() && skillSlots[socket] == skill)
+				return gemLevel(socket);
+		}
+		return 0;
+	}
+	[[nodiscard]] int skillLevel(SpellID spell) const { return skillLevel(SkillSlot::ForSpell(spell)); }
+	[[nodiscard]] int skillLevel(WeaponSkill skill) const { return skillLevel(SkillSlot::ForAttack(skill)); }
+	[[nodiscard]] int skillLevel(PersistentSkill skill) const { return skillLevel(SkillSlot::ForPersistent(skill)); }
 };
 
 } // namespace devilution

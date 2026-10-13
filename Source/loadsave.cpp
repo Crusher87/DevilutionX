@@ -2404,9 +2404,10 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
 /**
  * Version 1 holds support gem links per spell, version 2 adds flask charges, version 3 the skill bar,
  * version 4 the passive tree, version 5 the supports socketed in each skill bar slot, version 6 the open map,
- * version 7 the rebuilt passive tree with two-byte node ids and version 8 the 12-socket Skills panel and the skill tray.
+ * version 7 the rebuilt passive tree with two-byte node ids, version 8 the 12-socket Skills panel and the skill tray,
+ * version 9 the fifth flask and version 10 each socketed gem's level.
  */
-constexpr uint8_t Poe2HeroDataVersion = 9;
+constexpr uint8_t Poe2HeroDataVersion = 10;
 
 namespace {
 
@@ -2539,6 +2540,11 @@ uint8_t ReadPoe2HeroData(Player &player)
 		return version;
 	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
 		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskChargesCap);
+
+	if (version < 10 || !file.IsValid(NumSkillSlots))
+		return version;
+	for (uint8_t &level : player.poe2.slotLevels)
+		level = static_cast<uint8_t>(std::clamp<int>(file.NextLE<uint8_t>(), 1, MaxGemLevel));
 	return version;
 }
 
@@ -2547,9 +2553,13 @@ uint8_t ReadPoe2HeroData(Player &player)
 void LoadPoe2HeroData(Player &player)
 {
 	player.poe2.clear();
+	const uint8_t version = ReadPoe2HeroData(player);
 	// Heroes from before the skill bar start with the skill for their class's weapon.
-	if (ReadPoe2HeroData(player) < 3 && gbIsPoe2)
+	if (version < 3 && gbIsPoe2)
 		GrantStarterSkill(player);
+	// Before gems had levels they grew with the character, so socketed gems keep the level they had.
+	if (version < 10)
+		player.poe2.slotLevels.fill(static_cast<uint8_t>(GemSpellLevel(player.getCharacterLevel())));
 }
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
@@ -2560,7 +2570,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			passives.push_back(static_cast<uint16_t>(node));
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 2) + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2));
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2595,6 +2605,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	// Version 9: the fifth flask slot.
 	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
 		file.WriteLE<uint8_t>(player.poe2.flaskCharges[flask]);
+	// Version 10: each socketed gem's level.
+	for (size_t socket = 0; socket < NumSkillSlots; socket++)
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(player.poe2.gemLevel(socket)));
 }
 
 void LoadHeroItems(Player &player)

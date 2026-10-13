@@ -525,7 +525,8 @@ int SupportMeleeDamagePercent(const Player &player)
 	const WeaponSkill skill = CurrentWeaponSkill(player);
 	if (skill == WeaponSkill::None)
 		return 100;
-	return player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality) ? BrutalityDamagePercent : 100;
+	const int brutality = player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality) ? BrutalityDamagePercent : 100;
+	return GemAttackDamagePercent(player.poe2.skillLevel(skill)) * brutality / 100;
 }
 
 bool SupportMeleeKnocksBack(const Player &player)

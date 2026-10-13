@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdint>
 #include <list>
+#include <optional>
+#include <utility>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_events.h>
@@ -1743,6 +1745,34 @@ bool IsPathBlocked(Point position, Direction dir)
 	return !PosOkPlayer(myPlayer, leftStep) && !PosOkPlayer(myPlayer, rightStep);
 }
 
+bool CanStep(const Player &player, Direction dir)
+{
+	return PosOkPlayer(player, player.position.future + dir) && !IsPathBlocked(player.position.future, dir);
+}
+
+/**
+ * @brief POE2 Mashup: the step to take when walking with the keyboard. A wall or monster in the way turns the step
+ * up to 45 degrees, so the hero slides along walls and around monsters instead of stopping dead.
+ */
+std::optional<Direction> KeyboardStep(const Player &player, Direction wanted)
+{
+	// Keep sliding the same way while the obstacle lasts, so the hero doesn't zigzag.
+	static Direction lastSlide = Direction::South;
+	if (CanStep(player, wanted))
+		return wanted;
+	Direction first = Left(wanted);
+	Direction second = Right(wanted);
+	if (lastSlide == second)
+		std::swap(first, second);
+	for (const Direction slide : { first, second }) {
+		if (CanStep(player, slide)) {
+			lastSlide = slide;
+			return slide;
+		}
+	}
+	return std::nullopt;
+}
+
 void WalkInDir(Player &player, AxisDirection dir)
 {
 	// Set while WASD keys drive the player, so letting go of them stops the walk
@@ -1776,6 +1806,17 @@ void WalkInDir(Player &player, AxisDirection dir)
 	if (IsStandingGround()) {
 		if (player._pmode == PM_STAND)
 			StartStand(player, pdir);
+		return;
+	}
+
+	if (walkingWithKeyboard) {
+		const std::optional<Direction> step = KeyboardStep(player, pdir);
+		if (!step) {
+			if (player._pmode == PM_STAND)
+				StartStand(player, pdir);
+			return;
+		}
+		NetSendCmdLoc(player.getId(), true, CMD_WALKXY, player.position.future + *step);
 		return;
 	}
 

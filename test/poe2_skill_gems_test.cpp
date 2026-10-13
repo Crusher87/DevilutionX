@@ -78,9 +78,10 @@ TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)
 	player.setCharacterLevel(9);
 	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), 0);
 
-	SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::Fireball));
-	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), GemSpellLevel(9));
-	EXPECT_EQ(GemSpellLevel(9), 3);
+	// The spell is cast at the gem's level.
+	SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::Fireball), 3);
+	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), 3);
+	EXPECT_EQ(player.poe2.skillLevel(SpellID::Fireball), 3);
 
 	// A higher level learned from books wins.
 	player._pSplLvl[static_cast<size_t>(SpellID::Fireball)] = 7;
@@ -89,6 +90,45 @@ TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)
 	EXPECT_EQ(SocketSkill(player, 2, {}), SkillSlot::ForSpell(SpellID::Fireball));
 	player._pSplLvl[static_cast<size_t>(SpellID::Fireball)] = 0;
 	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), 0);
+}
+
+TEST_F(Poe2SkillGemsTest, GemLevelsFollowPoe2)
+{
+	// POE2's character level table scaled to Diablo's level 50 cap.
+	EXPECT_EQ(CharacterLevelForGemLevel(1), 1);
+	EXPECT_EQ(CharacterLevelForGemLevel(10), 20);
+	EXPECT_EQ(CharacterLevelForGemLevel(20), 50);
+	EXPECT_EQ(MaxGemLevelForCharacter(1), 1);
+	EXPECT_EQ(MaxGemLevelForCharacter(19), 9);
+	EXPECT_EQ(MaxGemLevelForCharacter(50), 20);
+
+	EXPECT_EQ(GemAttackDamagePercent(1), 100);
+	EXPECT_EQ(GemAttackDamagePercent(20), 233);
+	EXPECT_EQ(GemManaCostPercent(20), 195);
+}
+
+TEST_F(Poe2SkillGemsTest, GemItemsKeepTheirLevel)
+{
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForAttack(WeaponSkill::Cleave), 7));
+	EXPECT_EQ(SkillGemItemLevel(gem), 7);
+
+	Item rebuilt;
+	RecreateItem(*MyPlayer, rebuilt, static_cast<_item_indexes>(gem.IDidx), gem._iCreateInfo, gem._iSeed, gem._ivalue, gem.dwBuff);
+	EXPECT_EQ(SkillGemItemLevel(rebuilt), 7);
+
+	// Gems from before gem levels are level 1.
+	gem.dwBuff &= ~CF_POE2_GEM_LEVEL;
+	EXPECT_EQ(SkillGemItemLevel(gem), 1);
+}
+
+TEST_F(Poe2SkillGemsTest, AttackGemLevelRaisesManaCost)
+{
+	Player &player = *MyPlayer;
+	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 1);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam));
+	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 20);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 195 / 100);
 }
 
 TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
