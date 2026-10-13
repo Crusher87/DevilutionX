@@ -253,3 +253,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	3	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Stone Charm	Charm	4	0	0	0	0	0	0	0	0		CHARM_STUN	Null	true	400
 	2	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Golden Charm	Charm	8	0	0	0	0	0	0	0	0		CHARM_GOLDEN	Null	true	800
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Glassblower's Bauble	Orb	2	0	0	0	0	0	0	0	0		ORB_BAUBLE	Null	true	400
+	2	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Uncut Spirit Gem	Uncut Gem	3	0	0	0	0	0	0	0	0		UNCUT_SPIRIT	Null	true	600
+	0	Misc	Unequippable	BRAIN	Misc	NONE	Crypt King's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
+	0	Misc	Unequippable	BRAIN	Misc	NONE	Cavern Lord's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
+	0	Misc	Unequippable	BRAIN	Misc	NONE	Skull of the Archbishop	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000

@@ -123,7 +123,10 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 {
 	const Item skillUncut = MakeUncut(IMISC_UNCUT_SKILL, 6);
 	const Item supportUncut = MakeUncut(IMISC_UNCUT_SUPPORT, 3);
+	const Item spiritUncut = MakeUncut(IMISC_UNCUT_SPIRIT, 20);
 	ASSERT_TRUE(IsUncutGem(skillUncut));
+	ASSERT_TRUE(IsUncutGem(spiritUncut));
+	EXPECT_EQ(UncutGemKind(spiritUncut), UncutKind::Spirit);
 	EXPECT_FALSE(IsUncutSupportGem(skillUncut));
 	EXPECT_TRUE(IsUncutSupportGem(supportUncut));
 	EXPECT_EQ(UncutGemLevel(skillUncut), 6);
@@ -131,8 +134,11 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 	int cuttable = 0;
 	for (const GemEntry &gem : GemCatalog()) {
 		const bool isSupport = gem.support != SupportGem::None;
-		EXPECT_EQ(CanCutGem(skillUncut, gem), !isSupport && gem.level <= 6) << GemName(gem);
+		// POE2: Spirit gems need uncut Spirit gems, not uncut skill gems.
+		const bool isSpirit = gem.skill.kind == SkillKind::Persistent;
+		EXPECT_EQ(CanCutGem(skillUncut, gem), !isSupport && !isSpirit && gem.level <= 6) << GemName(gem);
 		EXPECT_EQ(CanCutGem(supportUncut, gem), isSupport && gem.level <= 3) << GemName(gem);
+		EXPECT_EQ(CanCutGem(spiritUncut, gem), isSpirit) << GemName(gem);
 		cuttable += CanCutGem(skillUncut, gem) ? 1 : 0;
 	}
 	EXPECT_GT(cuttable, 5);

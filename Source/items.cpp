@@ -2023,9 +2023,20 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(_("Works on its own from the belt; refills from kills and in town"));
 		return;
 	}
+	if (const int skull = SpiritSkullIndex(item); skull >= 0) {
+		AddItemInfoBoxString(FormatRuntime(_("Grants +{:d} to Maximum Spirit"), SpiritSkullSpirit[skull]));
+		AddItemInfoBoxString(_("Torn from a fallen lord of Hell's servants..."));
+		AddItemInfoBoxString(_("Use to break the skull and release the energies within"));
+		if (MyPlayer != nullptr && (MyPlayer->poe2.spiritSkulls & (1 << skull)) != 0)
+			AddItemInfoBoxString(_("You have already broken this skull"));
+		return;
+	}
 	if (IsUncutGem(item)) {
 		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
-		AddItemInfoBoxString(IsUncutSupportGem(item) ? _("Cut into a support gem of this level or lower") : _("Cut a new skill gem, or raise a socketed one, to this level"));
+		if (UncutGemKind(item) == UncutKind::Support)
+			AddItemInfoBoxString(_("Cut into a support gem of this level or lower"));
+		else
+			AddItemInfoBoxString(FormatRuntime(_("Cut a new {:s} gem, or raise a socketed one below this level to it"), UncutKindName(UncutGemKind(item))));
 		AddItemInfoBoxString(_("Use to open gemcutting"));
 		return;
 	}
@@ -3936,6 +3947,11 @@ void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc,
 		idx = IDI_GOLD;
 
 	SetupBaseItem(position, idx, onlygood, sendmsg, delta, spawn);
+}
+
+void SpawnBaseItem(Point position, _item_indexes idx, bool sendmsg)
+{
+	SetupBaseItem(position, idx, false, sendmsg, false);
 }
 
 namespace {

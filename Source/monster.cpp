@@ -951,6 +951,8 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 	} else if (!monster.isPlayerMinion()) {
 		SpawnItem(monster, monster.position.tile, sendmsg);
 	}
+	// POE2 Mashup: some bosses guard a skull that grants Spirit, like POE2's Spirit quests.
+	DropSpiritSkull(monster, sendmsg);
 }
 
 std::optional<Point> GetTeleportTile(const Monster &monster)

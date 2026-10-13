@@ -6,16 +6,19 @@
 
 #include "engine/path.h"
 #include "engine/point.hpp"
+#include "game_mode.hpp"
 #include "items.h"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "plrmsg.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "utils/format.hpp"
 #include "utils/language.h"
 
 namespace devilution {
@@ -158,9 +161,96 @@ int MinionDamagePercent(const Player &player)
 	return 100 + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::MinionDamage)];
 }
 
+int SkullSpirit(const Player &player)
+{
+	int spirit = 0;
+	for (size_t skull = 0; skull < NumSpiritSkulls; skull++) {
+		if ((player.poe2.spiritSkulls & (1 << skull)) != 0)
+			spirit += SpiritSkullSpirit[skull];
+	}
+	return spirit;
+}
+
+int SpiritSkullIndex(const Item &item)
+{
+	if (item.isEmpty() || item._iMiscId != IMISC_SPIRIT_SKULL)
+		return -1;
+	// The skulls are listed in order in the item table.
+	int skull = 0;
+	for (int i = 0; i < item.IDidx && i < static_cast<int>(AllItemsList.size()); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_SPIRIT_SKULL)
+			skull++;
+	}
+	return skull < static_cast<int>(NumSpiritSkulls) ? skull : -1;
+}
+
+bool UseSpiritSkull(Player &player, const Item &item)
+{
+	const int skull = SpiritSkullIndex(item);
+	if (skull < 0)
+		return false;
+	if ((player.poe2.spiritSkulls & (1 << skull)) != 0) {
+		EventPlrMsg(_("You have already released this skull's energies."), UiFlags::ColorRed);
+		return false;
+	}
+	player.poe2.spiritSkulls |= static_cast<uint8_t>(1 << skull);
+	EventPlrMsg(FormatRuntime(_("+{:d} to Maximum Spirit"), SpiritSkullSpirit[skull]), UiFlags::ColorWhitegold);
+	TelemetryLog("spirit", FormatRuntime("broke {:s} for +{:d} Spirit, now {:d}", item._iIName, SpiritSkullSpirit[skull], MaxSpirit(player)));
+	return true;
+}
+
+namespace {
+
+/** @brief The skull a boss guards, like POE2's Spirit quest bosses; -1 for none. */
+int SkullForMonster(const Monster &monster)
+{
+	switch (monster.uniqueType) {
+	// The first comes from the early quest bosses; at least one of them is in every game.
+	case UniqueMonsterType::SkeletonKing:
+	case UniqueMonsterType::Butcher:
+	case UniqueMonsterType::Garbud:
+	case UniqueMonsterType::SnotSpill:
+		return 0;
+	case UniqueMonsterType::Lazarus:
+		return 2;
+	default:
+		break;
+	}
+	// The second comes from the first unique monster beaten in the caves or deeper.
+	if (monster.isUnique() && currlevel >= 9)
+		return 1;
+	return -1;
+}
+
+std::optional<size_t> SpiritSkullItemIndex(int skull)
+{
+	int found = 0;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId != IMISC_SPIRIT_SKULL)
+			continue;
+		if (found == skull)
+			return i;
+		found++;
+	}
+	return std::nullopt;
+}
+
+} // namespace
+
+void DropSpiritSkull(const Monster &monster, bool sendmsg)
+{
+	if (!gbIsPoe2 || MyPlayer == nullptr || monster.isPlayerMinion())
+		return;
+	const int skull = SkullForMonster(monster);
+	if (skull < 0 || (MyPlayer->poe2.spiritSkulls & (1 << skull)) != 0)
+		return;
+	if (const std::optional<size_t> index = SpiritSkullItemIndex(skull); index)
+		SpawnBaseItem(monster.position.tile, static_cast<_item_indexes>(*index), sendmsg);
+}
+
 int MaxSpirit(const Player &player)
 {
-	int spirit = BaseSpirit + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Spirit)];
+	int spirit = BaseSpirit + SkullSpirit(player) + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Spirit)];
 	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 		const Item &item = player.InvBody[hand];
 		if (ItemGrantsSpirit(item) && item._iStatFlag)

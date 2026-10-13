@@ -146,7 +146,38 @@ std::string_view GemTierNumeral(int tier)
 
 bool IsUncutGem(const Item &item)
 {
-	return !item.isEmpty() && IsAnyOf(item._iMiscId, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT);
+	return !item.isEmpty() && IsAnyOf(item._iMiscId, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT);
+}
+
+UncutKind UncutGemKind(const Item &item)
+{
+	switch (item._iMiscId) {
+	case IMISC_UNCUT_SUPPORT:
+		return UncutKind::Support;
+	case IMISC_UNCUT_SPIRIT:
+		return UncutKind::Spirit;
+	default:
+		return UncutKind::Skill;
+	}
+}
+
+UncutKind GemUncutKind(const GemEntry &gem)
+{
+	if (gem.support != SupportGem::None)
+		return UncutKind::Support;
+	return gem.skill.kind == SkillKind::Persistent ? UncutKind::Spirit : UncutKind::Skill;
+}
+
+std::string_view UncutKindName(UncutKind kind)
+{
+	switch (kind) {
+	case UncutKind::Support:
+		return _("support");
+	case UncutKind::Spirit:
+		return _("Spirit");
+	default:
+		return _("skill");
+	}
 }
 
 bool IsUncutSupportGem(const Item &item)
@@ -163,7 +194,8 @@ bool CanCutGem(const Item &uncut, const GemEntry &gem)
 {
 	if (!IsUncutGem(uncut))
 		return false;
-	if (IsUncutSupportGem(uncut) != (gem.support != SupportGem::None))
+	// POE2: uncut skill, Spirit and support gems each cut only their own kind of gem.
+	if (UncutGemKind(uncut) != GemUncutKind(gem))
 		return false;
 	return gem.level <= UncutGemLevel(uncut);
 }

@@ -45,6 +45,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
@@ -2285,6 +2286,16 @@ bool UseInvItem(int cii)
 
 	if (IsUncutGem(*item)) {
 		OpenGemcutting(speedlist, c);
+		return true;
+	}
+
+	if (SpiritSkullIndex(*item) >= 0) {
+		if (UseSpiritSkull(player, *item)) {
+			if (speedlist)
+				player.RemoveSpdBarItem(c);
+			else
+				player.RemoveInvItem(c);
+		}
 		return true;
 	}
 

@@ -73,14 +73,16 @@ TEST_F(Poe2SpiritTest, SkeletalWarriorsGrowWithLevel)
 	EXPECT_EQ(SkeletalWarriorCount(10), 3);
 	EXPECT_EQ(SkeletalWarriorCount(25), 4);
 	EXPECT_EQ(SkeletalWarriorCount(50), 4);
-	// Fits in the Spirit every character has, unlike the golem.
-	EXPECT_LE(SpiritReservation(PersistentSkill::SkeletalWarriors), BaseSpirit);
+	// Fits in the Spirit from the first skull, unlike the golem.
+	EXPECT_LE(SpiritReservation(PersistentSkill::SkeletalWarriors), SpiritSkullSpirit[0]);
 }
 
 TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 {
 	Player &player = *MyPlayer;
-	EXPECT_EQ(MaxSpirit(player), BaseSpirit);
+	EXPECT_EQ(MaxSpirit(player), 0);
+	player.poe2.spiritSkulls = 1;
+	EXPECT_EQ(MaxSpirit(player), 30);
 
 	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh));
 	SocketSkill(player, 1, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder));
@@ -93,9 +95,24 @@ TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 	InitializeItem(player.InvBody[INVLOC_HAND_LEFT], FindBase("Rattling Sceptre"));
 	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
 	EXPECT_TRUE(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_LEFT]));
-	EXPECT_EQ(MaxSpirit(player), BaseSpirit + SceptreSpirit);
+	EXPECT_EQ(MaxSpirit(player), 30 + SceptreSpirit);
 	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder));
 	EXPECT_EQ(ReservedSpirit(player), 60);
+}
+
+TEST_F(Poe2SpiritTest, SkullsGrantSpiritOnce)
+{
+	Player &player = *MyPlayer;
+	Item skull;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_SPIRIT_SKULL && AllItemsList[i].iName == "Skull of the Archbishop")
+			InitializeItem(skull, static_cast<_item_indexes>(i));
+	}
+	ASSERT_EQ(SpiritSkullIndex(skull), 2);
+	EXPECT_TRUE(UseSpiritSkull(player, skull));
+	EXPECT_EQ(MaxSpirit(player), 40);
+	EXPECT_FALSE(UseSpiritSkull(player, skull));
+	EXPECT_EQ(MaxSpirit(player), 40);
 }
 
 TEST_F(Poe2SpiritTest, PurityGrantsResistances)

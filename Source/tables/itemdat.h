@@ -553,6 +553,10 @@ enum item_misc_id : int8_t {
 	IMISC_CHARM_GOLDEN,
 	/** Glassblower's Bauble: adds quality to a flask. */
 	IMISC_ORB_BAUBLE,
+	/** Cut into a Spirit gem of up to the item's level at the gemcutting panel. */
+	IMISC_UNCUT_SPIRIT,
+	/** Broken for a permanent boost to maximum Spirit, like POE2's Gemrot Skull. */
+	IMISC_SPIRIT_SKULL,
 	IMISC_INVALID = -1,
 };
 

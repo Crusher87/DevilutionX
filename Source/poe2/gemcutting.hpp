@@ -58,6 +58,17 @@ int GemTier(int level);
 std::string_view GemTierNumeral(int tier);
 
 bool IsUncutGem(const Item &item);
+/** @brief The kinds of uncut gem, like POE2's Uncut Skill, Spirit and Support Gems. */
+enum class UncutKind : uint8_t {
+	Skill,
+	Spirit,
+	Support,
+};
+UncutKind UncutGemKind(const Item &item);
+/** @brief The kind of uncut gem that cuts or levels the gem. */
+UncutKind GemUncutKind(const GemEntry &gem);
+/** @brief "skill", "Spirit" or "support". */
+std::string_view UncutKindName(UncutKind kind);
 /** @brief Whether the uncut gem is cut into support gems rather than skill gems. */
 bool IsUncutSupportGem(const Item &item);
 /** @brief The highest gem level the uncut gem can be cut into: its item level. */

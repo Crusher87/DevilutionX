@@ -318,7 +318,7 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 
 	const Item *uncut = UncutItem();
 	if (uncut == nullptr) {
-		lines.emplace_back(gem.support != SupportGem::None ? _("Use an uncut support gem to cut this") : _("Use an uncut skill gem to cut this"), UiFlags::ColorButtonpushed);
+		lines.emplace_back(FormatRuntime(_("Use an uncut {:s} gem to cut or level this"), UncutKindName(GemUncutKind(gem))), UiFlags::ColorButtonpushed);
 	} else if (CanCutGem(*uncut, gem)) {
 		const int level = GemLevelFromUncut(*uncut, player.getCharacterLevel());
 		if (const std::optional<size_t> socket = SocketToLevel(player, gem); socket) {
@@ -337,10 +337,10 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 		}
 		if (gem.support == SupportGem::None && level < std::min(UncutGemLevel(*uncut), MaxGemLevel))
 			lines.emplace_back(FormatRuntime(_("Gem level {:d} needs character level {:d}"), level + 1, CharacterLevelForGemLevel(level + 1)), UiFlags::ColorButtonpushed);
-	} else if (IsUncutSupportGem(*uncut) != (gem.support != SupportGem::None)) {
-		lines.emplace_back(IsUncutSupportGem(*uncut) ? _("Your uncut gem makes support gems") : _("Your uncut gem makes skill gems"), UiFlags::ColorRed);
+	} else if (UncutGemKind(*uncut) != GemUncutKind(gem)) {
+		lines.emplace_back(FormatRuntime(_("Your uncut gem makes {:s} gems; this needs an uncut {:s} gem"), UncutKindName(UncutGemKind(*uncut)), UncutKindName(GemUncutKind(gem))), UiFlags::ColorRed);
 	} else {
-		lines.emplace_back(FormatRuntime(_("Needs an uncut gem of level {:d}"), gem.level), UiFlags::ColorRed);
+		lines.emplace_back(FormatRuntime(_("Needs an uncut {:s} gem of level {:d}"), UncutKindName(GemUncutKind(gem)), gem.level), UiFlags::ColorRed);
 	}
 
 	const Rectangle bounds { { 0, 0 }, { out.w(), out.h() } };
@@ -439,7 +439,17 @@ void OpenGemcutting(bool fromBelt, int index)
 	if (!IsUncutGem(item))
 		return;
 	Uncut = UncutLocation { fromBelt, index, item._iSeed };
-	Category = IsUncutSupportGem(item) ? GemCategory::Support : GemCategory::All;
+	switch (UncutGemKind(item)) {
+	case UncutKind::Support:
+		Category = GemCategory::Support;
+		break;
+	case UncutKind::Spirit:
+		Category = GemCategory::Spirit;
+		break;
+	default:
+		Category = GemCategory::All;
+		break;
+	}
 	Open();
 }
 
@@ -521,7 +531,7 @@ void DrawGemcutting(const Surface &out)
 	const Rectangle title { layout.panel.position + Displacement { Padding, 8 }, { layout.panel.size.width - (2 * Padding), 26 } };
 	DrawString(out, _("Gemcutting"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::AlignCenter | UiFlags::VerticalCenter });
 	const Item *uncut = UncutItem();
-	const std::string mode = uncut != nullptr ? FormatRuntime(_("Cutting a level {:d} uncut {:s} gem"), UncutGemLevel(*uncut), IsUncutSupportGem(*uncut) ? _("support") : _("skill"))
+	const std::string mode = uncut != nullptr ? FormatRuntime(_("Cutting a level {:d} uncut {:s} gem"), UncutGemLevel(*uncut), UncutKindName(UncutGemKind(*uncut)))
 	                                          : std::string(_("Browsing all gems"));
 	DrawString(out, mode, title, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
 	DrawString(out, _("Esc to close"), title, { .flags = UiFlags::AlignRight | UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });

@@ -36,6 +36,17 @@ constexpr uint32_t TelemetryStatsIntervalMs = 60 * 1000;
 constexpr uint32_t TelemetryStallMs = 250;
 /** @brief Damage dealt within this long of using a skill is credited to that skill. */
 constexpr uint32_t TelemetrySkillCreditMs = 3000;
+/** @brief Monster density: monsters this close (in tiles) count as near the player... */
+constexpr int TelemetryNearTiles = 5;
+/** @brief ...and awake monsters this close count as aware of them. */
+constexpr int TelemetryAwareTiles = 10;
+/** @brief This many monsters next to the player counts as surrounded. */
+constexpr int TelemetrySurroundedCount = 4;
+/** @brief This many monsters near the player at once is logged as a swarm. */
+constexpr int TelemetrySwarmCount = 8;
+/** @brief Game ticks per second, and the quiet stretch (10 s) logged as a lull. */
+constexpr int TelemetryTicksPerSecond = 20;
+constexpr int TelemetryLullTicks = 10 * TelemetryTicksPerSecond;
 /** @brief Detailed events kept in memory and written out when the game crashes. */
 constexpr size_t TelemetryRecentEvents = 30;
 

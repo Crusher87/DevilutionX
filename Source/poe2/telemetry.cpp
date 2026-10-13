@@ -76,6 +76,14 @@ struct TelemetryCounts {
 	int levelsEntered = 0;
 	int64_t experience = 0;
 	int gold = 0;
+	/** Monster density, sampled every game tick: hostile monsters near the player, aware ones, and how often none or a crowd. */
+	int densityTicks = 0;
+	int64_t nearSum = 0;
+	int64_t awareSum = 0;
+	int peakNear = 0;
+	int quietTicks = 0;
+	int surroundedTicks = 0;
+	int swarms = 0;
 };
 
 /** @brief Damage a skill dealt this game. */
@@ -121,8 +129,14 @@ struct LevelVisit {
 	int kills = 0;
 	int drops = 0;
 	int64_t damageTakenRaw = 0;
+	int monstersAtEntry = 0;
 };
 LevelVisit CurrentLevel;
+
+/** @brief Ticks since an enemy was last near, and whether a swarm is in progress, for the lull and swarm events. */
+int QuietStreakTicks = 0;
+bool InSwarm = false;
+uint32_t LastSwarmLogMs = 0;
 
 std::string LastBuild;
 uint32_t LastBuildCheckMs = 0;
@@ -294,10 +308,89 @@ int Sum(const std::array<int, NumRarities> &counts)
 	return sum;
 }
 
+std::string DensityText(const TelemetryCounts &counts)
+{
+	if (counts.densityTicks == 0)
+		return "density: no dungeon time";
+	const double ticks = counts.densityTicks;
+	return std::format("density: {:.1f} monsters within {:d} tiles on average (peak {:d}), {:.1f} aware within {:d}, "
+	                   "no enemy near {:.0f}% of the time, surrounded {:.0f}%, {:d} swarms",
+	    counts.nearSum / ticks, TelemetryNearTiles, counts.peakNear, counts.awareSum / ticks, TelemetryAwareTiles,
+	    counts.quietTicks * 100 / ticks, counts.surroundedTicks * 100 / ticks, counts.swarms);
+}
+
+/** @brief Monsters that fight the player: alive, not minions, not towners. */
+bool IsHostile(const Monster &monster)
+{
+	return !monster.isPlayerMinion() && !monster.hasNoLife() && monster.talkMsg == TEXT_NONE;
+}
+
+int HostileMonsterCount()
+{
+	int count = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		if (IsHostile(Monsters[ActiveMonsters[i]]))
+			count++;
+	}
+	return count;
+}
+
+/** @brief Samples how many monsters are around the player this tick. */
+void TrackDensity(const Player &player, uint32_t now)
+{
+	int near = 0;
+	int aware = 0;
+	int adjacent = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (!IsHostile(monster))
+			continue;
+		const int distance = player.position.tile.WalkingDistance(monster.position.tile);
+		if (distance <= 1)
+			adjacent++;
+		if (distance <= TelemetryNearTiles)
+			near++;
+		if (distance <= TelemetryAwareTiles && monster.activeForTicks > 0)
+			aware++;
+	}
+	const bool quiet = aware == 0 && near == 0;
+	const bool surrounded = adjacent >= TelemetrySurroundedCount;
+	Count([&](TelemetryCounts &counts) {
+		counts.densityTicks++;
+		counts.nearSum += near;
+		counts.awareSum += aware;
+		counts.peakNear = std::max(counts.peakNear, near);
+		if (quiet)
+			counts.quietTicks++;
+		if (surrounded)
+			counts.surroundedTicks++;
+	});
+
+	// A long stretch with nothing to fight is logged when it ends, so slow pacing shows up.
+	if (quiet) {
+		QuietStreakTicks++;
+	} else {
+		if (QuietStreakTicks >= TelemetryLullTicks)
+			TelemetryLog("lull", std::format("{:.1f} s with no enemy near, ended by {:d} monsters", QuietStreakTicks / static_cast<double>(TelemetryTicksPerSecond), std::max(near, aware)));
+		QuietStreakTicks = 0;
+	}
+
+	if (near >= TelemetrySwarmCount && !InSwarm) {
+		InSwarm = true;
+		Count([](TelemetryCounts &counts) { counts.swarms++; });
+		if (now - LastSwarmLogMs >= 10000) {
+			LastSwarmLogMs = now;
+			TelemetryLog("swarm", std::format("{:d} monsters within {:d} tiles, {:d} next to the player, life {:d}%", near, TelemetryNearTiles, adjacent, Percent(player._pHitPoints, player._pMaxHP)));
+		}
+	} else if (near < TelemetrySwarmCount / 2) {
+		InSwarm = false;
+	}
+}
+
 std::string RatesText(const TelemetryCounts &counts, double minutes)
 {
 	const int lowManaPercent = counts.ticks > 0 ? counts.lowManaTicks * 100 / counts.ticks : 0;
-	return std::format("kills {:d} ({:.1f}/min, {:d} rare, {:d} unique), damage dealt {:d} ({:.0f}/min), "
+	return StrCat(DensityText(counts), "; ", std::format("kills {:d} ({:.1f}/min, {:d} rare, {:d} unique), damage dealt {:d} ({:.0f}/min), "
 	                   "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage), "
 	                   "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
 	                   "flasks {:d} ({:d} wasted), charms {:d}, "
@@ -308,7 +401,7 @@ std::string RatesText(const TelemetryCounts &counts, double minutes)
 	    counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent,
 	    counts.flaskUses, counts.wastedFlasks, counts.charmUses,
 	    counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes,
-	    CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls);
+	    CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls));
 }
 
 void WriteStatsLine(uint32_t now)
@@ -324,7 +417,8 @@ void EndLevelVisit()
 	if (CurrentLevel.startMs == 0)
 		return;
 	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", CurrentLevel.label, " [level] left after ",
-	    std::format("{:.1f} s: {:d} kills, {:d} drops, {:d} damage taken", (Now() - CurrentLevel.startMs) / 1000.0, CurrentLevel.kills,
+	    std::format("{:.1f} s: {:d} kills of {:d} monsters ({:d}% cleared), {:d} drops, {:d} damage taken", (Now() - CurrentLevel.startMs) / 1000.0, CurrentLevel.kills,
+	        CurrentLevel.monstersAtEntry, CurrentLevel.monstersAtEntry > 0 ? CurrentLevel.kills * 100 / CurrentLevel.monstersAtEntry : 0,
 	        CurrentLevel.drops, Whole(CurrentLevel.damageTakenRaw))));
 	CurrentLevel = {};
 }
@@ -488,7 +582,10 @@ void TelemetryLevelEntered()
 	CurrentLevel.label = LevelLabel();
 	CurrentLevel.startMs = Now();
 	Count([](TelemetryCounts &counts) { counts.levelsEntered++; });
-	TelemetryLog("level", std::format("entered, {:d} monsters", static_cast<int>(ActiveMonsterCount)));
+	CurrentLevel.monstersAtEntry = HostileMonsterCount();
+	QuietStreakTicks = 0;
+	InSwarm = false;
+	TelemetryLog("level", std::format("entered, {:d} monsters", CurrentLevel.monstersAtEntry));
 }
 
 void TelemetryNoteAttacker(std::string_view attacker)
@@ -700,6 +797,8 @@ void TelemetryTick()
 	});
 	TrackGains(player);
 	TrackStalls(now);
+	if (leveltype != DTYPE_TOWN)
+		TrackDensity(player, now);
 	TrackBuild(player, now);
 	if (now - WindowStartMs >= TelemetryStatsIntervalMs)
 		WriteStatsLine(now);

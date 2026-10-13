@@ -17,8 +17,8 @@ struct Item;
 struct Monster;
 struct Player;
 
-/** @brief Every character has some Spirit, like the Spirit POE2 grants early in the campaign. */
-constexpr int BaseSpirit = 30;
+/** @brief Characters start with no Spirit, as in POE2; it comes from Spirit skulls (see SpiritSkullSpirit) and gear. */
+constexpr int BaseSpirit = 0;
 /** @brief Sceptres grant Spirit, as in POE2. */
 constexpr int SceptreSpirit = 100;
 constexpr int PurityResistance = 25;
@@ -44,6 +44,14 @@ int SpiritReservation(PersistentSkill skill);
 /** @brief Whether the item grants Spirit as an implicit (sceptres). */
 bool ItemGrantsSpirit(const Item &item);
 int MaxSpirit(const Player &player);
+/** @brief Spirit from the skulls the character has broken. */
+int SkullSpirit(const Player &player);
+/** @brief Which skull (0 to 2) the item is; -1 if it isn't a Spirit skull. */
+int SpiritSkullIndex(const Item &item);
+/** @brief Breaks a Spirit skull for its Spirit. @return true if the skull was used up. */
+bool UseSpiritSkull(Player &player, const Item &item);
+/** @brief Drops a Spirit skull when a boss that guards one dies and the player hasn't broken it yet. */
+void DropSpiritSkull(const Monster &monster, bool sendmsg);
 /** @brief Minion damage in percent of normal, from the passive tree and ascendancy. */
 int MinionDamagePercent(const Player &player);
 /** @brief Spirit reserved by the active Spirit gems. */

@@ -211,6 +211,11 @@ constexpr int MaxGemLevelForCharacter(int characterLevel)
 	return level;
 }
 
+/** @brief Spirit skulls, like POE2's campaign Spirit rewards (30, 30 and 40). */
+constexpr size_t NumSpiritSkulls = 3;
+constexpr uint8_t AllSpiritSkulls = (1 << NumSpiritSkulls) - 1;
+constexpr std::array<int, NumSpiritSkulls> SpiritSkullSpirit { 30, 30, 40 };
+
 /** @brief Support gems a spell could have before supports moved into the skill bar (old saves). */
 constexpr size_t MaxSupportsPerSpell = 2;
 constexpr size_t MaxPoe2Spells = 64;
@@ -234,6 +239,8 @@ struct Poe2PlayerData {
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
 	std::array<uint8_t, NumSkillSlots> slotLevels {};
+	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
+	uint8_t spiritSkulls = 0;
 	/** @brief What each skill tray slot does. */
 	std::array<TrayBinding, NumTraySlots> tray {};
 	/** @brief Game ticks left in the current dodge roll (not saved). */
@@ -318,6 +325,7 @@ struct Poe2PlayerData {
 		manaFlaskTicks = 0;
 		skillSlots.fill({});
 		slotLevels.fill(1);
+		spiritSkulls = 0;
 		for (size_t slot = 0; slot < NumTraySlots; slot++)
 			tray[slot] = DefaultTrayBinding(static_cast<TraySlot>(slot));
 		dodgeTicks = 0;
