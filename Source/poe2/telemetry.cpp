@@ -391,17 +391,12 @@ std::string RatesText(const TelemetryCounts &counts, double minutes)
 {
 	const int lowManaPercent = counts.ticks > 0 ? counts.lowManaTicks * 100 / counts.ticks : 0;
 	return StrCat(DensityText(counts), "; ", std::format("kills {:d} ({:.1f}/min, {:d} rare, {:d} unique), damage dealt {:d} ({:.0f}/min), "
-	                   "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage), "
-	                   "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
-	                   "flasks {:d} ({:d} wasted), charms {:d}, "
-	                   "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
-	                   "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}",
-	    counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes,
-	    counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw),
-	    counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent,
-	    counts.flaskUses, counts.wastedFlasks, counts.charmUses,
-	    counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes,
-	    CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls));
+	                                                     "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage), "
+	                                                     "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
+	                                                     "flasks {:d} ({:d} wasted), charms {:d}, "
+	                                                     "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
+	                                                     "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}",
+	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls));
 }
 
 void WriteStatsLine(uint32_t now)
