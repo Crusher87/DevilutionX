@@ -551,6 +551,8 @@ enum item_misc_id : int8_t {
 	IMISC_CHARM_MAGIC,
 	IMISC_CHARM_STUN,
 	IMISC_CHARM_GOLDEN,
+	/** Glassblower's Bauble: adds quality to a flask. */
+	IMISC_ORB_BAUBLE,
 	IMISC_INVALID = -1,
 };
 

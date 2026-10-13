@@ -37,6 +37,7 @@
 #include "mpq/mpq_common.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/flasks.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/waystones.hpp"
 #include "qol/stash.h"
@@ -381,6 +382,7 @@ struct LevelConversionData {
 		item._iDamAcFlags = ItemSpecialEffectHf::None;
 	UpdateHellfireFlag(item, item._iIName);
 	RestoreRareItemPowers(item);
+	FinishFlask(item);
 
 	return true;
 }
@@ -2469,7 +2471,7 @@ uint8_t ReadPoe2HeroData(Player &player)
 	if (version < 2 || !file.IsValid(OldNumFlasks))
 		return version;
 	for (size_t flask = 0; flask < OldNumFlasks; flask++)
-		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskCharges);
+		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskChargesCap);
 
 	// The first 6 Skills panel sockets sit where the old skill bar's slots were; the rest follow the map.
 	if (version < 3 || !file.IsValid(OldNumSkillSlots * 2))
@@ -2536,7 +2538,7 @@ uint8_t ReadPoe2HeroData(Player &player)
 	if (version < 9 || !file.IsValid(NumFlasks - OldNumFlasks))
 		return version;
 	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
-		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskCharges);
+		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskChargesCap);
 	return version;
 }
 

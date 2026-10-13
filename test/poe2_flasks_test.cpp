@@ -174,5 +174,104 @@ TEST_F(Poe2FlasksTest, RejuvenationIsInstant)
 	EXPECT_EQ(player.poe2.flaskCharges[0], MaxFlaskCharges - RejuvenationChargesPerUse);
 }
 
+TEST_F(Poe2FlasksTest, FlasksAreNamedByTierAndMods)
+{
+	Item flask;
+	InitializeItem(flask, IDI_HEAL);
+	flask._iCreateInfo = 18;
+	NameFlask(flask);
+	EXPECT_STREQ(flask._iIName, "Greater Healing Flask");
+	EXPECT_EQ(flask._iMagical, ITEM_QUALITY_NORMAL);
+
+	SetFlaskMods(flask, FlaskPrefix::Concentrated, FlaskSuffix::Ox, 0);
+	EXPECT_STREQ(flask._iIName, "Concentrated Greater Healing Flask of the Ox");
+	EXPECT_EQ(flask._iMagical, ITEM_QUALITY_MAGIC);
+	EXPECT_EQ(GetFlaskPrefix(flask), FlaskPrefix::Concentrated);
+	EXPECT_EQ(GetFlaskSuffix(flask), FlaskSuffix::Ox);
+}
+
+TEST_F(Poe2FlasksTest, RebuildingAFlaskKeepsItsMods)
+{
+	Item flask;
+	SetupAllItems(*MyPlayer, flask, IDI_HEAL, 1234, 10, 1, false, false);
+	SetFlaskMods(flask, FlaskPrefix::Seething, FlaskSuffix::Plenty, 7);
+
+	Item rebuilt;
+	RecreateItem(*MyPlayer, rebuilt, flask.IDidx, flask._iCreateInfo, flask._iSeed, flask._ivalue, flask.dwBuff);
+	EXPECT_EQ(GetFlaskPrefix(rebuilt), FlaskPrefix::Seething);
+	EXPECT_EQ(GetFlaskSuffix(rebuilt), FlaskSuffix::Plenty);
+	EXPECT_EQ(GetFlaskQuality(rebuilt), 7);
+	EXPECT_STREQ(rebuilt._iIName, flask._iIName);
+
+	// A scoured flask stays normal when it's rebuilt.
+	SetFlaskMods(flask, FlaskPrefix::None, FlaskSuffix::None, 0);
+	RecreateItem(*MyPlayer, rebuilt, flask.IDidx, flask._iCreateInfo, flask._iSeed, flask._ivalue, flask.dwBuff);
+	EXPECT_EQ(rebuilt._iMagical, ITEM_QUALITY_NORMAL);
+}
+
+TEST_F(Poe2FlasksTest, SomeDroppedFlasksAreMagic)
+{
+	int magic = 0;
+	for (uint32_t seed = 1; seed <= 400; seed++) {
+		Item flask;
+		SetupAllItems(*MyPlayer, flask, IDI_HEAL, seed, 10, 1, false, false);
+		if (flask._iMagical == ITEM_QUALITY_MAGIC)
+			magic++;
+	}
+	EXPECT_GT(magic, 100);
+	EXPECT_LT(magic, 180);
+}
+
+TEST_F(Poe2FlasksTest, SeethingRecoversAtOnceAndConcentratedMore)
+{
+	Player &player = *MyPlayer;
+	player._pMaxHP = player._pMaxHPBase = Fixed26_6::fromInt(500);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+	InitializeItem(player.SpdList[0], IDI_HEAL);
+	player.SpdList[0]._iCreateInfo = 1;
+	SetFlaskMods(player.SpdList[0], FlaskPrefix::Seething, FlaskSuffix::None, 0);
+	ASSERT_TRUE(UseFlask(player, 0));
+	EXPECT_EQ(player._pHitPoints.whole(), 100 + (FlaskTiers[0].life * 60 / 100));
+	EXPECT_EQ(player.poe2.lifeFlaskTicks, 0);
+
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+	SetFlaskMods(player.SpdList[0], FlaskPrefix::Concentrated, FlaskSuffix::None, 10);
+	ASSERT_TRUE(UseFlask(player, 0));
+	for (int tick = 0; tick < 200; tick++)
+		ProcessFlaskRecovery(player);
+	EXPECT_EQ(player._pHitPoints.whole(), 100 + (FlaskTiers[0].life * 150 / 100));
+}
+
+TEST_F(Poe2FlasksTest, AmpleHoldsMoreAndPlentyUsesLess)
+{
+	Player &player = *MyPlayer;
+	InitializeItem(player.SpdList[0], IDI_HEAL);
+	SetFlaskMods(player.SpdList[0], FlaskPrefix::Ample, FlaskSuffix::Plenty, 0);
+	EXPECT_EQ(MaxFlaskChargesFor(player.SpdList[0]), MaxFlaskCharges + AmpleFlaskCharges);
+	EXPECT_EQ(FlaskChargesPerUseFor(player.SpdList[0]), 8);
+	RefillFlasks(player);
+	EXPECT_EQ(player.poe2.flaskCharges[0], MaxFlaskCharges + AmpleFlaskCharges);
+}
+
+TEST_F(Poe2FlasksTest, OxGivesArmourAndSpringsRefills)
+{
+	Player &player = *MyPlayer;
+	player._pMaxHP = player._pMaxHPBase = Fixed26_6::fromInt(500);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+	InitializeItem(player.SpdList[0], IDI_HEAL);
+	SetFlaskMods(player.SpdList[0], FlaskPrefix::None, FlaskSuffix::Ox, 0);
+	EXPECT_EQ(FlaskArmourPercent(player), 0);
+	ASSERT_TRUE(UseFlask(player, 0));
+	EXPECT_EQ(FlaskArmourPercent(player), OxArmourPercent);
+
+	InitializeItem(player.SpdList[1], IDI_HEAL);
+	SetFlaskMods(player.SpdList[1], FlaskPrefix::None, FlaskSuffix::Springs, 0);
+	player.poe2.flaskCharges[1] = 0;
+	player.poe2.springsFlaskTicks = 0;
+	for (int tick = 0; tick < SpringsChargeTicks * 2; tick++)
+		ProcessFlaskRecovery(player);
+	EXPECT_EQ(player.poe2.flaskCharges[1], 2);
+}
+
 } // namespace
 } // namespace devilution

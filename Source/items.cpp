@@ -1737,6 +1737,7 @@ void SetupAllUseful(Item &item, int iseed, int lvl)
 
 	GetItemAttrs(item, idx, lvl);
 	item._iCreateInfo = lvl | CF_USEFUL;
+	FinishFlask(item);
 	SetupItem(item);
 }
 
@@ -2049,6 +2050,8 @@ void PrintItemMisc(const Item &item)
 	}
 	if (gbIsPoe2 && IsFlaskPotion(item)) {
 		AddItemInfoBoxString(FlaskDescription(item));
+		for (const std::string &line : FlaskModLines(item))
+			AddItemInfoBoxString(line);
 		AddItemInfoBoxString(_("Flask in belt slots 1-5, refills from kills"));
 	}
 	if (item._iMiscId == IMISC_EAR) {
@@ -3568,6 +3571,7 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 		item._iMaxCharges = MaxCharmCharges;
 		item._iCharges = MaxCharmCharges;
 	}
+	NameFlask(item);
 
 	if (item._itype != ItemType::Gold)
 		return;
@@ -3717,6 +3721,7 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 			GetUniqueItem(player, item, (_unique_items)iseed); // uid is stored in iseed for uniques
 		}
 	}
+	FinishFlask(item);
 }
 
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen)
@@ -3922,7 +3927,9 @@ void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc,
 	SetupBaseItem(position, idx, onlygood, sendmsg, delta, spawn);
 }
 
-void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
+namespace {
+
+void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
 {
 	// Generate with the mod state the item was created with, like gbIsHellfire below.
 	struct Poe2StateGuard {
@@ -3982,6 +3989,19 @@ void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t 
 	SetupAllItems(player, item, idx, iseed, level, uper, onlygood, pregen, uidOffset, forceNotUnique);
 	SetupItem(item);
 	gbIsHellfire = tmpIsHellfire;
+}
+
+} // namespace
+
+void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
+{
+	RecreateItemBase(player, item, idx, icreateinfo, iseed, ivalue, dwBuff);
+	// POE2 Mashup: a flask keeps the mods and quality it was given.
+	if ((dwBuff & CF_POE2_FLASK_ROLLED) != 0) {
+		constexpr uint32_t FlaskBits = CF_POE2_FLASK_PREFIX | CF_POE2_FLASK_SUFFIX | CF_POE2_FLASK_QUALITY | CF_POE2_FLASK_ROLLED;
+		item.dwBuff = (item.dwBuff & ~FlaskBits) | (dwBuff & FlaskBits);
+	}
+	FinishFlask(item);
 }
 
 void RecreateEar(Item &item, uint16_t ic, uint32_t iseed, uint8_t bCursval, std::string_view heroName)
@@ -4290,7 +4310,10 @@ void DoRecharge(Player &player, int cii)
 bool DoOil(Player &player, int cii)
 {
 	Item *pi;
-	if (cii >= NUM_INVLOC) {
+	if (cii >= INVITEM_BELT_FIRST) {
+		// POE2 Mashup: orbs and baubles can be used on flasks in the belt.
+		pi = &player.SpdList[cii - INVITEM_BELT_FIRST];
+	} else if (cii >= NUM_INVLOC) {
 		pi = &player.InvList[cii - NUM_INVLOC];
 	} else {
 		pi = &player.InvBody[cii];
@@ -4874,6 +4897,7 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 	case IMISC_ORB_EXALTED:
 	case IMISC_ORB_DIVINE:
 	case IMISC_ORB_VAAL:
+	case IMISC_ORB_BAUBLE:
 		player._pOilType = mid;
 		if (&player != MyPlayer) {
 			return;
