@@ -30,6 +30,12 @@ namespace devilution {
 
 namespace {
 
+/** @brief Rounds to the nearest whole number; the Amiga toolchain has no std::lround. */
+int RoundToInt(float value)
+{
+	return static_cast<int>(value < 0 ? value - 0.5F : value + 0.5F);
+}
+
 constexpr int Padding = 12;
 constexpr int HeaderHeight = 36;
 constexpr int FooterHeight = 34;
@@ -115,8 +121,8 @@ float Scale(const Layout &layout)
 Point ViewPoint(const Layout &layout, float x, float y)
 {
 	const float scale = Scale(layout);
-	return { static_cast<int>(std::lround((layout.view.size.width / 2.0F) + ((x - ViewX) * scale))),
-		static_cast<int>(std::lround((layout.view.size.height / 2.0F) + ((y - ViewY) * scale))) };
+	return { RoundToInt((layout.view.size.width / 2.0F) + ((x - ViewX) * scale)),
+		RoundToInt((layout.view.size.height / 2.0F) + ((y - ViewY) * scale)) };
 }
 
 Point NodeViewPoint(const Layout &layout, const PassiveNode &node)
@@ -193,7 +199,7 @@ float NodeSize(const PassiveNode &node)
 
 int NodeRadius(const Layout &layout, const PassiveNode &node)
 {
-	return std::max(static_cast<int>(std::lround(NodeSize(node) * Scale(layout))), 2);
+	return std::max(RoundToInt(NodeSize(node) * Scale(layout)), 2);
 }
 
 std::optional<PassiveNodeId> NodeAt(const Layout &layout, Point position)
@@ -310,14 +316,14 @@ Point SealPoint(const Layout &layout, float radius, float degrees)
 void DrawSeal(const Surface &out, const Layout &layout)
 {
 	const float scale = Scale(layout);
-	const int thickness = std::max(static_cast<int>(std::lround(scale * 2)), 1);
+	const int thickness = std::max(RoundToInt(scale * 2), 1);
 	DrawRing(out, layout, SealRadius, SealColor, thickness);
 	for (const std::array<float, 3> &triangle : { std::array<float, 3> { -90, 30, 150 }, std::array<float, 3> { -30, 90, 210 } }) {
 		for (size_t i = 0; i < triangle.size(); i++) {
 			DrawLine(out, SealPoint(layout, HexagramRadius, triangle[i]), SealPoint(layout, HexagramRadius, triangle[(i + 1) % triangle.size()]), HexagramColor, thickness);
 		}
 	}
-	FillCircle(out, ViewPoint(layout, 0, 0), static_cast<int>(std::lround(SanctumRadius * scale)), SanctumColor);
+	FillCircle(out, ViewPoint(layout, 0, 0), RoundToInt(SanctumRadius * scale), SanctumColor);
 	DrawRing(out, layout, SanctumRadius, SanctumRimColor, thickness);
 }
 
@@ -326,7 +332,7 @@ void DrawClassNames(const Surface &out, const Layout &layout, const Player &play
 	for (const PassiveNode &node : PassiveTree()) {
 		if (node.kind != PassiveKind::Start || !node.startClass)
 			continue;
-		const float length = std::hypot(static_cast<float>(node.x), static_cast<float>(node.y));
+		const float length = std::sqrt((static_cast<float>(node.x) * static_cast<float>(node.x)) + (static_cast<float>(node.y) * static_cast<float>(node.y)));
 		if (length <= 0)
 			continue;
 		const Point center = ViewPoint(layout, node.x * ClassNameRadius / length, node.y * ClassNameRadius / length);
@@ -352,7 +358,7 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 {
 	const std::vector<PassiveNode> &tree = PassiveTree();
 	const float scale = Scale(layout);
-	const int thickness = std::max(static_cast<int>(std::lround(scale * 1.5F)), 1);
+	const int thickness = std::max(RoundToInt(scale * 1.5F), 1);
 	for (const PassiveNode &node : tree) {
 		if (!IsNodeShown(player, node))
 			continue;
