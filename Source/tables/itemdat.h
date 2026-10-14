@@ -595,6 +595,8 @@ enum item_misc_id : int16_t {
 	IMISC_SPIRITGEM_HERALDFROST,
 	IMISC_SPIRITGEM_SKELETALMAGES,
 	IMISC_SUPPORT_BATTLERAGE,
+	/** The skills described by the skill table (poe2/table_skills.hpp), told apart by the item name. */
+	IMISC_SKILLGEM_TABLE,
 	IMISC_INVALID = -1,
 };
 

@@ -731,3 +731,58 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Herald of Frost Gem	Gem	8	0	0	0	0	0	0	30	0		SPIRITGEM_HERALDFROST	Null	true	1500
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Mages Gem	Gem	8	0	0	0	0	0	0	35	0		SPIRITGEM_SKELETALMAGES	Null	true	1500
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Battle Rage Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_BATTLERAGE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Whirlwind Gem	Gem	5	0	0	0	0	0	33	0	0		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Sacrifice Gem	Gem	7	0	0	0	0	0	39	0	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Zeal Gem	Gem	9	0	0	0	0	0	45	0	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Vengeance Gem	Gem	11	0	0	0	0	0	51	0	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Arkaine's Wrath Gem	Gem	13	0	0	0	0	0	57	0	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Fan of Blades Gem	Gem	5	0	0	0	0	0	0	0	33		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Viper Strike Gem	Gem	7	0	0	0	0	0	0	0	39		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blade Sentinel Gem	Gem	9	0	0	0	0	0	0	0	45		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Death Mark Gem	Gem	11	0	0	0	0	0	0	0	51		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blade Fury Gem	Gem	13	0	0	0	0	0	0	0	57		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Double Throw Gem	Gem	7	0	0	0	0	0	39	0	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Rend Gem	Gem	9	0	0	0	0	0	45	0	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	War Cry Gem	Gem	11	0	0	0	0	0	51	0	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Call of the Ancients Gem	Gem	13	0	0	0	0	0	57	0	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Fissure Gem	Gem	7	0	0	0	0	0	39	0	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blessed Hammer Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Shockwave Gem	Gem	11	0	0	0	0	0	51	0	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Fist of the Heavens Gem	Gem	13	0	0	0	0	0	0	57	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Dashing Strike Gem	Gem	5	0	0	0	0	0	0	0	33		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Lashing Tail Kick Gem	Gem	7	0	0	0	0	0	0	0	39		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Wave of Light Gem	Gem	9	0	0	0	0	0	0	0	45		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Cyclone Strike Gem	Gem	11	0	0	0	0	0	0	0	51		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Seven-Sided Strike Gem	Gem	13	0	0	0	0	0	0	0	57		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Multishot Gem	Gem	9	0	0	0	0	0	0	0	45		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Guided Arrow Gem	Gem	11	0	0	0	0	0	0	0	51		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Freezing Arrow Gem	Gem	13	0	0	0	0	0	0	0	57		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Impale Gem	Gem	3	0	0	0	0	0	0	0	27		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Cluster Bolt Gem	Gem	5	0	0	0	0	0	0	0	33		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Spike Trap Gem	Gem	7	0	0	0	0	0	0	0	39		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Sentry Gem	Gem	9	0	0	0	0	0	0	0	45		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Explosive Bolt Gem	Gem	11	0	0	0	0	0	0	0	51		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Siege Volley Gem	Gem	13	0	0	0	0	0	0	0	57		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Holy Shield Gem	Gem	5	0	0	0	0	0	33	0	0		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Blessed Shield Gem	Gem	7	0	0	0	0	0	39	0	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Condemn Gem	Gem	9	0	0	0	0	0	45	0	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Shield Wall Gem	Gem	11	0	0	0	0	0	51	0	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Falling Sword Gem	Gem	13	0	0	0	0	0	57	0	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Meteor Gem	Gem	13	0	0	0	0	0	0	57	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Thunderstorm Gem	Gem	13	0	0	0	0	0	0	57	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Glacial Spike Gem	Gem	5	0	0	0	0	0	0	33	0		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Frozen Armor Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blizzard Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Ice Barrage Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Frozen Orb Gem	Gem	13	0	0	0	0	0	0	57	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Haunt Gem	Gem	3	0	0	0	0	0	0	27	0		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Locust Swarm Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Corpse Explosion Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Soul Harvest Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Prison Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Weaken Gem	Gem	3	0	0	0	0	0	0	27	0		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Iron Maiden Gem	Gem	5	0	0	0	0	0	0	33	0		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Decrepify Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Lower Resist Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Confuse Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Attract Gem	Gem	13	0	0	0	0	0	0	57	0		SKILLGEM_TABLE	Null	true	2140

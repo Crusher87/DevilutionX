@@ -8,6 +8,7 @@
 #include "player.h"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/is_of.hpp"
 #include "utils/str_case.hpp"
@@ -46,6 +47,26 @@ constexpr int16_t ManaAt20 = 500;
 constexpr int16_t UtilitySpellManaAt20 = 300;
 /** @brief Battle Cry's empowered melee hits deal this much extra damage at gem level 1. */
 constexpr int BattleCryDamagePercentAt1 = 50;
+
+const Poe2GemTable *TableCurveGem(TableCurve curve)
+{
+	switch (curve) {
+	case TableCurve::LeapSlam:
+		return &LeapSlam;
+	case TableCurve::LightningArrow:
+		return &LightningArrow;
+	case TableCurve::Earthquake:
+		return &Earthquake;
+	case TableCurve::RainOfArrows:
+		return &RainOfArrows;
+	case TableCurve::Fireball:
+		return &Fireball;
+	case TableCurve::Spark:
+		return &Spark;
+	default:
+		return &Boneshatter;
+	}
+}
 
 GemCurve AttackCurve(WeaponSkill skill)
 {
@@ -97,6 +118,10 @@ GemCurve AttackCurve(WeaponSkill skill)
 	case WeaponSkill::AmplifyDamage:
 		return { &Boneshatter, 100, UtilitySpellManaAt20, false, "curses: +1% physical damage taken a level" };
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr) {
+			const bool utility = IsAnyOf(table->shape, TableShape::Curse, TableShape::Buff);
+			return { TableCurveGem(table->curve), table->curveEnd, utility ? UtilitySpellManaAt20 : ManaAt20, false, "from the skill table: a POE2 gem's steps" };
+		}
 		return { &Boneshatter, 100, 100, false, {} };
 	}
 }
@@ -164,6 +189,15 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 			return std::format("{:d}% spell damage", percent);
 		if (skill.attack() == WeaponSkill::AmplifyDamage)
 			return std::format("+{:d}% physical damage taken", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (gemLevel - 1)));
+		if (const TableSkillData *table = FindTableSkill(skill.attack()); table != nullptr) {
+			if (table->shape == TableShape::Buff)
+				return std::format("buff, {:d}s", table->duration / 20);
+			if (table->shape == TableShape::Curse && table->curse != TableCurse::Haunt && table->curse != TableCurse::Locust)
+				return std::format("curse, {:d}s", table->duration / 20);
+			if ((table->flags & TF_Spell) != 0)
+				return std::format("{:d}% spell damage", percent * table->damagePercent / 100);
+			return std::format("{:d}% weapon damage", percent * table->damagePercent / 100);
+		}
 		return std::format("{:d}% weapon damage", percent);
 	case SkillKind::Spell: {
 		if (MyPlayer == nullptr)

@@ -7,6 +7,7 @@
 #include "player.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 
@@ -14,7 +15,7 @@ namespace devilution {
 
 int ResourceAttackDamagePercent(const Player &player)
 {
-	return 100 + player.poe2.rage + (player.poe2.frenzyCharges * FrenzyChargeDamagePercent);
+	return 100 + player.poe2.rage + (player.poe2.frenzyCharges * FrenzyChargeDamagePercent) + SoulHarvestDamagePercent(player);
 }
 
 void GainFrenzyCharge(Player &player)

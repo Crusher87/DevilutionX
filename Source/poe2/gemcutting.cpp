@@ -5,6 +5,7 @@
 #include "items.h"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "spells.h"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -15,6 +16,8 @@ namespace {
 
 bool AttackInCategory(WeaponSkill skill, GemCategory category)
 {
+	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+		return category < GemCategory::Spirit && (table->tabs & (1 << static_cast<int>(category))) != 0;
 	switch (category) {
 	case GemCategory::Mace:
 		return IsAnyOf(skill, WeaponSkill::GroundSlam, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Smite);

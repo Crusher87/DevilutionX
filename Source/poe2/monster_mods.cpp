@@ -10,6 +10,7 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/map_play.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/waystones.hpp"
@@ -211,6 +212,7 @@ void ProcessMonsterAilments(Monster &monster)
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
 	if (state.armourBreakTicks > 0)
 		state.armourBreakTicks--;
+	ProcessTableCurses(monster);
 	const auto decay = [&](int32_t &buildup, int thresholdPercent) {
 		if (buildup <= 0)
 			return;

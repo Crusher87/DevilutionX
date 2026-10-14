@@ -45,6 +45,19 @@ struct Poe2MonsterState {
 	uint8_t amplifyPercent = 0;
 	/** @brief Armour broken by Smite: takes more physical damage. */
 	uint8_t armourBreakTicks = 0;
+	/** @brief Curses from the skill table, in game ticks left: Weaken and Decrepify make it hit softer, Iron Maiden turns its
+	 * melee hits back on it, Lower Resist and Death Mark make it take more damage, Confuse sets it on other monsters. */
+	uint8_t weakenTicks = 0;
+	uint8_t decrepifyTicks = 0;
+	uint8_t ironMaidenTicks = 0;
+	uint8_t lowerResistTicks = 0;
+	uint8_t deathMarkTicks = 0;
+	uint8_t confuseTicks = 0;
+	/** @brief Confuse made the monster turn on its kind, so its flags go back when the curse ends. */
+	bool confusedByCurse = false;
+	/** @brief Haunt and Locust Swarm drain the monster and move on to another when it dies. */
+	uint8_t hauntTicks = 0;
+	uint8_t locustTicks = 0;
 };
 
 } // namespace devilution

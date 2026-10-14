@@ -8,6 +8,7 @@
 #include "levels/gendung.h"
 #include "player.h"
 #include "poe2/spirit.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "utils/language.h"
@@ -65,6 +66,10 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForAttack(WeaponSkill::ShieldBash);
 	case IMISC_SKILLGEM_AMPLIFYDAMAGE:
 		return SkillSlot::ForAttack(WeaponSkill::AmplifyDamage);
+	case IMISC_SKILLGEM_TABLE:
+		if (const TableSkillData *table = FindTableSkillGem(data); table != nullptr)
+			return SkillSlot::ForAttack(table->skill);
+		return {};
 	case IMISC_SPIRITGEM_HERALDFROST:
 		return SkillSlot::ForPersistent(PersistentSkill::HeraldOfFrost);
 	case IMISC_SPIRITGEM_SKELETALMAGES:

@@ -61,6 +61,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/waystones.hpp"
@@ -3258,6 +3259,8 @@ void ProcessPlayers()
 			player.poe2.tick();
 			ProcessUniqueRules(player);
 			ProcessSkillVolley(player);
+			if (&player == MyPlayer)
+				ProcessSkillZones(player);
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
 				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {

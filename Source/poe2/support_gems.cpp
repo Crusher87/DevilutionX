@@ -11,6 +11,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -37,6 +38,8 @@ bool IsDirectProjectileSpell(SpellID spell)
 
 bool IsMeleeAttackSkill(WeaponSkill skill)
 {
+	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+		return IsTableMeleeSkill(*table);
 	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge,
 	    WeaponSkill::Riposte, WeaponSkill::ShadowStep, WeaponSkill::Frenzy, WeaponSkill::Smite, WeaponSkill::FistsOfThunder, WeaponSkill::ShieldBash);
 }

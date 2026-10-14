@@ -16,6 +16,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "spells.h"
 #include "utils/is_of.hpp"
@@ -695,6 +696,8 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		if (monster.poe2.armourBreakTicks > 0)
 			percent += ArmourBreakDamagePercent;
 	}
+	// Death Mark, Lower Resist and Decrepify.
+	percent += TableCurseDamageTakenPercent(monster, type);
 	// Waystones can give map monsters more elemental resistance.
 	if (IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic) && !monster.isPlayerMinion())
 		percent -= MapMonsterResistance();

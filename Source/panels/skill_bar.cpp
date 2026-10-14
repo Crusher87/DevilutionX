@@ -33,6 +33,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "stores.h"
@@ -238,6 +239,8 @@ SpellIcon AttackIcon(WeaponSkill skill)
 	case WeaponSkill::AmplifyDamage:
 		return SpellIcon::Mana;
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return static_cast<SpellIcon>(table->icon);
 		return SpellIcon::Empty;
 	}
 }

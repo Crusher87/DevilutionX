@@ -85,6 +85,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/waystones.hpp"
@@ -1250,6 +1251,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	dam = ApplyArmour(player, dam);
 	if (&player == MyPlayer)
 		dam = ApplyMapMonsterHit(player, dam);
+	if (gbIsPoe2 && &player == MyPlayer)
+		dam = ApplyTableSkillDefences(monster, player, dam);
 	if (&player == MyPlayer) {
 		if (player.wReflections > 0) {
 			const Fixed26_6 reflectedDamage = CheckReflect(monster, player, dam);
@@ -3484,6 +3487,7 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 void InitLevelMonsters()
 {
 	ClearHeralds();
+	ClearSkillZones();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -4103,6 +4107,7 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
 		QueueHeraldTriggers(*MyPlayer, monster);
+		OnTableCursedMonsterKilled(monster);
 		OnMonsterKilled(*MyPlayer, monster);
 	}
 	// POE2 Mashup: a minion's death can frenzy its owner's other minions.

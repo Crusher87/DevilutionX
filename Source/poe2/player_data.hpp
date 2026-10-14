@@ -73,7 +73,63 @@ enum class WeaponSkill : uint8_t {
 	ShieldBash,
 	/** No weapon needed: a curse that makes monsters take more physical damage. */
 	AmplifyDamage,
-	Last = AmplifyDamage,
+	/** The rest of the roster: skills described by a data table (see poe2/table_skills.cpp). */
+	Whirlwind,
+	Sacrifice,
+	Zeal,
+	Vengeance,
+	ArkainesWrath,
+	FanOfBlades,
+	ViperStrike,
+	BladeSentinel,
+	DeathMark,
+	BladeFury,
+	DoubleThrow,
+	Rend,
+	WarCry,
+	CallOfTheAncients,
+	Fissure,
+	BlessedHammer,
+	Shockwave,
+	FistOfTheHeavens,
+	DashingStrike,
+	LashingTailKick,
+	WaveOfLight,
+	CycloneStrike,
+	SevenSidedStrike,
+	Multishot,
+	GuidedArrow,
+	FreezingArrow,
+	Impale,
+	ClusterBolt,
+	SpikeTrap,
+	Sentry,
+	ExplosiveBolt,
+	SiegeVolley,
+	HolyShield,
+	BlessedShield,
+	Condemn,
+	ShieldWall,
+	FallingSword,
+	Meteor,
+	Thunderstorm,
+	GlacialSpike,
+	FrozenArmor,
+	Blizzard,
+	IceBarrage,
+	FrozenOrb,
+	Haunt,
+	LocustSwarm,
+	CorpseExplosion,
+	SoulHarvest,
+	BonePrison,
+	Weaken,
+	IronMaiden,
+	Decrepify,
+	LowerResist,
+	Confuse,
+	Attract,
+	Last = Attract,
 };
 
 enum class SupportGem : uint8_t {
@@ -315,6 +371,13 @@ struct Poe2PlayerData {
 	uint8_t rageTicks = 0;
 	/** @brief Skeletal Mages' revive timer (not saved). */
 	uint8_t mageCooldown = 0;
+	/** @brief Defensive skill buffs (not saved): Frozen Armor, Holy Shield and Shield Wall, in game ticks left. */
+	uint16_t frozenArmorTicks = 0;
+	uint16_t holyShieldTicks = 0;
+	uint16_t shieldWallTicks = 0;
+	/** @brief Soul Harvest: souls taken from corpses, each adding damage until the timer runs out (not saved). */
+	uint8_t soulStacks = 0;
+	uint16_t soulTicks = 0;
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -457,6 +520,11 @@ struct Poe2PlayerData {
 		golemCooldown = 0;
 		skeletonCooldown = 0;
 		mageCooldown = 0;
+		frozenArmorTicks = 0;
+		holyShieldTicks = 0;
+		shieldWallTicks = 0;
+		soulStacks = 0;
+		soulTicks = 0;
 		riposteTicks = 0;
 		frenzyCharges = 0;
 		frenzyTicks = 0;
@@ -501,6 +569,14 @@ struct Poe2PlayerData {
 			warcryTicks--;
 		if (riposteTicks > 0)
 			riposteTicks--;
+		if (frozenArmorTicks > 0)
+			frozenArmorTicks--;
+		if (holyShieldTicks > 0)
+			holyShieldTicks--;
+		if (shieldWallTicks > 0)
+			shieldWallTicks--;
+		if (soulTicks > 0 && --soulTicks == 0)
+			soulStacks = 0;
 		if (frenzyTicks > 0 && --frenzyTicks == 0)
 			frenzyCharges = 0;
 		if (comboTicks > 0 && --comboTicks == 0)

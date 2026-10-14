@@ -70,7 +70,7 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 		}
 	}
 	// 57 skill gems plus 7 Spirit gems.
-	EXPECT_EQ(gems, 64);
+	EXPECT_EQ(gems, 119);
 }
 
 TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)

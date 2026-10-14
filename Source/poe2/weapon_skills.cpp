@@ -22,6 +22,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
@@ -254,7 +255,67 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 		break;
 	}
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			FireTableShot(player, *table, target, index);
 		break;
+	}
+}
+
+bool TableWeaponAllows(const Item &item, TableWeapon weapon)
+{
+	if (weapon == TableWeapon::Shield)
+		return item._itype == ItemType::Shield;
+	if (item._iClass != ICLASS_WEAPON)
+		return false;
+	switch (weapon) {
+	case TableWeapon::Sword:
+		return item._itype == ItemType::Sword && !IsDagger(item);
+	case TableWeapon::Dagger:
+		return IsDagger(item);
+	case TableWeapon::Axe:
+		return item._itype == ItemType::Axe;
+	case TableWeapon::AxeOrSword:
+		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword);
+	case TableWeapon::Mace:
+		return item._itype == ItemType::Mace;
+	case TableWeapon::Staff:
+		return item._itype == ItemType::Staff;
+	case TableWeapon::Bow:
+		return item._itype == ItemType::Bow && !IsCrossbow(item);
+	case TableWeapon::Crossbow:
+		return IsCrossbow(item);
+	case TableWeapon::Melee:
+		return IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Staff);
+	default:
+		return false;
+	}
+}
+
+std::string_view TableWeaponName(TableWeapon weapon)
+{
+	switch (weapon) {
+	case TableWeapon::Sword:
+		return _("sword");
+	case TableWeapon::Dagger:
+		return _("dagger");
+	case TableWeapon::Axe:
+		return _("axe");
+	case TableWeapon::AxeOrSword:
+		return _("axe or sword");
+	case TableWeapon::Mace:
+		return _("mace");
+	case TableWeapon::Staff:
+		return _("staff");
+	case TableWeapon::Bow:
+		return _("bow");
+	case TableWeapon::Crossbow:
+		return _("crossbow");
+	case TableWeapon::Shield:
+		return _("shield");
+	case TableWeapon::Melee:
+		return _("melee weapon");
+	default:
+		return {};
 	}
 }
 
@@ -351,6 +412,8 @@ std::string_view WeaponSkillName(WeaponSkill skill)
 	case WeaponSkill::AmplifyDamage:
 		return _("Amplify Damage");
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return _(table->name.data());
 		return {};
 	}
 }
@@ -405,6 +468,8 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::AmplifyDamage:
 		return _("Curse: foes take more physical damage");
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return _(table->description.data());
 		return {};
 	}
 }
@@ -459,6 +524,8 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::AmplifyDamage:
 		return 8;
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return table->mana;
 		return 0;
 	}
 }
@@ -476,6 +543,8 @@ bool IsRangedWeaponSkill(WeaponSkill skill)
 
 bool WeaponSkillNeedsWeapon(WeaponSkill skill)
 {
+	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+		return table->weapon != TableWeapon::None;
 	return IsNoneOf(skill, WeaponSkill::None, WeaponSkill::BattleCry, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt, WeaponSkill::FrostNova,
 	    WeaponSkill::AmplifyDamage);
 }
@@ -484,6 +553,8 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 {
 	if (item.isEmpty())
 		return false;
+	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+		return TableWeaponAllows(item, table->weapon);
 	if (IsAnyOf(skill, WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash))
 		return item._itype == ItemType::Shield;
 	if (item._iClass != ICLASS_WEAPON)
@@ -558,6 +629,8 @@ std::string_view WeaponSkillWeapons(WeaponSkill skill)
 	case WeaponSkill::RapidFire:
 		return _("crossbow");
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return TableWeaponName(table->weapon);
 		return {};
 	}
 }
@@ -619,6 +692,14 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 	case WeaponSkill::ShieldBash:
 		return StartSkillCast(player, skill, player_graphic::Attack);
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr) {
+			if (!CanStartSkill(player) || !StartTableSkill(player, *table))
+				return false;
+			if (table->shape == TableShape::Dash)
+				return StartDashSkill(player, skill, table->count);
+			constexpr player_graphic Graphics[] = { player_graphic::Attack, player_graphic::Magic, player_graphic::Fire, player_graphic::Lightning };
+			return StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]);
+		}
 		break;
 	}
 
@@ -759,6 +840,8 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		return true;
 	}
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			ExecuteTableSkill(player, *table, target);
 		return false;
 	}
 }
@@ -837,6 +920,8 @@ void ProcessSkillVolley(Player &player)
 		ticks = BarrageShotTicks;
 	else if (data.volleySkill == WeaponSkill::RapidFire)
 		ticks = RapidFireShotTicks;
+	else if (const TableSkillData *table = FindTableSkill(data.volleySkill); table != nullptr)
+		ticks = std::max<int>(table->interval, 1);
 	data.volleyTicks = static_cast<uint8_t>(ticks - 1);
 }
 
@@ -1005,6 +1090,8 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		AddVisualEffect(tile, MissileGraphicID::Lightning, 2);
 		break;
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			PlayTableSkillEffects(player, *table, target);
 		break;
 	}
 }
