@@ -504,9 +504,9 @@ void FinishHit()
 	if (Has(player, skill, SG::LifeLeech) && player._pHitPoints > 0) {
 		const Fixed26_6 heal = Fixed26_6::fromRaw(Percent(total, Value(player, skill, SG::LifeLeech, 0)));
 		// Life Leech III: what full life can't take is kept for a moment.
-		const int32_t room = std::max(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
+		const int32_t room = std::max<int32_t>(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
 		if (Value(player, skill, SG::LifeLeech, 1) > 0 && heal.raw() > room) {
-			state.leechPool = std::min(state.leechPool + heal.raw() - room, player._pMaxHP.raw());
+			state.leechPool = std::min<int32_t>(state.leechPool + heal.raw() - room, player._pMaxHP.raw());
 			state.leechPoolTicks = LeechPoolTicks;
 		}
 		player._pHitPoints = std::min(player._pHitPoints + heal, player._pMaxHP);
@@ -1497,8 +1497,8 @@ void ProcessSupportEffects(Player &player)
 	}
 	// Life Leech III: the kept leech heals once there's room.
 	if (state.leechPoolTicks > 0) {
-		const int32_t room = std::max(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
-		const Fixed26_6 heal = Fixed26_6::fromRaw(std::min(state.leechPool, room));
+		const int32_t room = std::max<int32_t>(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
+		const Fixed26_6 heal = Fixed26_6::fromRaw(std::min<int32_t>(state.leechPool, room));
 		if (heal > 0 && player._pHitPoints > 0) {
 			player._pHitPoints += heal;
 			player._pHPBase += heal;
