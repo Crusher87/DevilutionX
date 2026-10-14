@@ -6,6 +6,7 @@
 #include <optional>
 #include <vector>
 
+#include "diablo.h"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
@@ -25,6 +26,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -302,6 +304,11 @@ Monster *MonsterInFrontOf(const Player &player)
 	return monster;
 }
 
+vfx::Element LookOf(const TableSkillData &data)
+{
+	return vfx::ElementOf(data.type, (data.flags & TF_Spell) != 0);
+}
+
 void AddZone(const Player &player, const TableSkillData &data, Point center, int delay)
 {
 	SkillZone zone;
@@ -319,6 +326,9 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 			Zones.erase(std::find_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }));
 	}
 	Zones.push_back(zone);
+	// A delayed blast draws its rune circle on the ground while it charges.
+	if (data.zone == TableZone::Delayed)
+		vfx::Sigil(center, std::max<int>(data.radius, 1), delay * gnTickDelay, LookOf(data));
 }
 
 /** @brief A burst of a zone or a landing: hits everything within the radius. */
@@ -615,16 +625,20 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	case Line: {
 		const Direction dir = GetDirection(tile, target);
 		std::vector<Monster *> hit;
+		Point end = tile;
 		for (int step = 1; step <= data.count; step++) {
 			const Point at = tile + Displacement { dir } * step;
 			if (!InDungeonBounds(at) || IsTileSolid(at))
 				break;
+			end = at;
 			AddVisualEffect(at, data.effect, step * 2, step == 1 ? 4 : 0);
 			ForEachMonsterNear(at, data.radius, [&](Monster &monster) {
 				if (std::find(hit.begin(), hit.end(), &monster) == hit.end())
 					hit.push_back(&monster);
 			});
 		}
+		if (end != tile)
+			vfx::Fissure(tile, end, LookOf(data));
 		for (Monster *monster : hit)
 			WeaponHit(player, *monster, data, data.damagePercent, result);
 		break;
@@ -756,9 +770,11 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	case Strike:
 	case Flurry:
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
+		vfx::Swing(tile, tile + dir, LookOf(data), false);
 		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
 	case Arc:
+		vfx::Swing(tile, tile + dir, LookOf(data), true);
 		AddVisualEffect(tile + Left(dir), data.effect, 0);
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
 		AddVisualEffect(tile + Right(dir), data.effect, 2);
@@ -770,6 +786,10 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		EffectRingAround(tile, 1, data.effect, 0);
 		if (data.radius > 1)
 			EffectRingAround(tile, data.radius, data.effect, 3);
+		if ((data.flags & TF_Spell) != 0)
+			vfx::Impact(tile, LookOf(data), 1.2F);
+		else
+			vfx::Slam(tile, std::max<int>(data.radius, 1), LookOf(data));
 		PlaySfxLoc(SfxID::Swing, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 4);
@@ -778,6 +798,10 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		AddVisualEffect(target, data.effect, 0, 6);
 		if (data.radius > 0)
 			EffectRingAround(target, data.radius, data.effect, 2);
+		if ((data.flags & TF_Spell) == 0)
+			vfx::Slam(target, std::max<int>(data.radius, 1), LookOf(data));
+		else if (data.type == DamageType::Lightning)
+			vfx::SkyStrike(target, LookOf(data));
 		if (mine)
 			ShakeCamera(ShakeStrength::Medium, 5);
 		break;

@@ -39,6 +39,7 @@ set(libdevilutionx_SRCS
   poe2/stacking.cpp
   poe2/dodge_roll.cpp
   poe2/hud_globes.cpp
+  poe2/vfx.cpp
   poe2/loot_filter.cpp
   poe2/stash_tabs.cpp
   portal.cpp

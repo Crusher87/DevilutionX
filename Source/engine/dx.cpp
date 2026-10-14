@@ -32,6 +32,7 @@
 #include "headless_mode.hpp"
 #include "init.hpp"
 #include "options.h"
+#include "poe2/vfx.hpp"
 #include "utils/display.h"
 #include "utils/log.hpp"
 #include "utils/sdl_wrap.h"
@@ -72,6 +73,81 @@ std::vector<uint8_t> UiBase;
 std::vector<uint16_t> UiColumnOf;
 std::vector<uint16_t> UiRowOf;
 bool HaveScaledWorld = false;
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+/** POE2 Mashup: a frame waiting to be presented in layers: the world, the effects, then the UI over them. */
+bool LayeredFramePending = false;
+/** The UI with the world left out (transparent), at the UI's size. */
+SDL_Texture *UiOverlay = nullptr;
+SDL_Renderer *UiOverlayRenderer = nullptr;
+int UiOverlayWidth = 0;
+int UiOverlayHeight = 0;
+
+bool WantsLayeredFrame()
+{
+	return WorldSurface != nullptr && HaveScaledWorld && renderer != nullptr && vfx::Enabled();
+}
+
+/** @brief Fills the UI overlay: the UI's own pixels opaque, the ones still showing the world transparent. */
+bool UpdateUiOverlay()
+{
+	if (UiOverlay == nullptr || UiOverlayRenderer != renderer || UiOverlayWidth != gnScreenWidth || UiOverlayHeight != gnScreenHeight) {
+		if (UiOverlay != nullptr && UiOverlayRenderer == renderer)
+			SDL_DestroyTexture(UiOverlay);
+		UiOverlay = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, gnScreenWidth, gnScreenHeight);
+		UiOverlayRenderer = renderer;
+		UiOverlayWidth = gnScreenWidth;
+		UiOverlayHeight = gnScreenHeight;
+		if (UiOverlay == nullptr)
+			return false;
+		SDL_SetTextureBlendMode(UiOverlay, SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		SDL_SetTextureScaleMode(UiOverlay, SDL_ScaleModeNearest);
+#endif
+	}
+	void *pixels;
+	int pitch;
+	if (SDL_LockTexture(UiOverlay, nullptr, &pixels, &pitch) != 0)
+		return false;
+	const SDL_Color *colors = Palette->colors;
+	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
+	for (int y = 0; y < gnScreenHeight; y++) {
+		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * PalSurface->pitch;
+		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(y) * gnScreenWidth;
+		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
+		if (std::memcmp(uiLine, baseLine, gnScreenWidth) == 0) {
+			std::memset(out, 0, static_cast<size_t>(gnScreenWidth) * 4);
+			continue;
+		}
+		for (int x = 0; x < gnScreenWidth; x++, out += 4) {
+			if (uiLine[x] == baseLine[x]) {
+				out[3] = 0;
+				continue;
+			}
+			const SDL_Color &color = colors[uiLine[x]];
+			out[0] = color.r;
+			out[1] = color.g;
+			out[2] = color.b;
+			out[3] = 255;
+		}
+	}
+	SDL_UnlockTexture(UiOverlay);
+	return true;
+}
+
+/** @brief Presents the world, the effects over it, and the UI over both. */
+void PresentLayeredFrame(SDL_Surface *surface)
+{
+	LayeredFramePending = false;
+	Blit(WorldSurface.get(), nullptr, nullptr);
+	if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
+	if (SDL_RenderClear(renderer) <= -1) ErrSdl();
+	if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+	if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+	vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
+	if (UpdateUiOverlay())
+		SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
+}
+#endif
 
 void CreateWorldSurface()
 {
@@ -283,6 +359,12 @@ void CreateBackBuffer()
 void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 {
 	if (WorldSurface != nullptr && !HeadlessMode) {
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+		// With the effects layer, the world and the UI go up separately when the frame is presented.
+		LayeredFramePending = WantsLayeredFrame();
+		if (LayeredFramePending)
+			return;
+#endif
 		// The UI is scaled up over the full-size world, always the whole frame.
 		ComposeScaledFrame();
 		Blit(WorldSurface.get(), nullptr, nullptr);
@@ -417,10 +499,20 @@ void RenderPresent()
 		if (!SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch)) ErrSdl();
 		if (!SDL_RenderTexture(renderer, texture.get(), nullptr, nullptr)) ErrSdl();
 #else
-		if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
-		if (SDL_RenderClear(renderer) <= -1) ErrSdl();
-		if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
-		if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+		if (LayeredFramePending && WantsLayeredFrame()) {
+			PresentLayeredFrame(surface);
+		} else {
+			if (LayeredFramePending) {
+				// The effects were turned off since the frame was drawn: compose it the usual way.
+				LayeredFramePending = false;
+				ComposeScaledFrame();
+				Blit(WorldSurface.get(), nullptr, nullptr);
+			}
+			if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
+			if (SDL_RenderClear(renderer) <= -1) ErrSdl();
+			if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+			if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+		}
 #endif
 
 		if (ControlMode == ControlTypes::VirtualGamepad) {

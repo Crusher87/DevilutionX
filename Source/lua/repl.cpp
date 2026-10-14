@@ -15,6 +15,7 @@
 #include "player.h"
 #include "poe2/gem_levels.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/vfx.hpp"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -63,6 +64,13 @@ void CreateReplEnvironment()
 	};
 	env["gemcurve"] = [](std::string_view name) {
 		return GemCurveTextByName(name);
+	};
+	// vfx() plays one of each modern effect around the hero.
+	env["vfx"] = []() {
+		if (MyPlayer == nullptr || !vfx::Enabled())
+			return "Modern Effects are off (Settings > Graphics, needs Upscale).";
+		vfx::Showcase(MyPlayer->position.tile);
+		return "Playing every effect around you.";
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

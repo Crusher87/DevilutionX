@@ -549,6 +549,10 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryResolution resolution;
 	/** @brief POE2 Mashup: draws the UI bigger, in percent, while the world keeps the full resolution. */
 	OptionEntryInt<int> uiScale;
+	/** @brief POE2 Mashup: skill effects drawn by code in full colour, with glow and bloom. */
+	OptionEntryBoolean modernEffects;
+	/** @brief POE2 Mashup: how many particles and how much glow the modern effects use, in percent. */
+	OptionEntryInt<int> effectIntensity;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)

@@ -72,6 +72,7 @@
 #include "poe2/camera_shake.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/vfx.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -1436,6 +1437,9 @@ void DrawView(const Surface &out, Point startPosition)
 	else
 		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
+	// POE2 Mashup: the effects layer lines up with this frame's view.
+	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
+	vfx::ScanMissiles();
 
 	if (IsPlayerInStore() && !qtextflag)
 		DrawSText(out);
