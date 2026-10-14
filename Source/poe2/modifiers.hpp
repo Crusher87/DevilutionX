@@ -146,12 +146,23 @@ std::optional<ModSlot> ItemModSlot(const Item &item);
 /** @brief The defence tags of an armour base; 0 for other items. */
 uint8_t ItemModBaseTags(const Item &item);
 
+/** @brief Unidentified quality tiers: ground drops can roll a hidden tier 2 to 5 that culls weak modifiers, unlocked at these item levels. */
+constexpr std::array<int, 5> UnidentifiedTierItemLevels = { 1, 20, 34, 52, 65 };
+/** @brief Percent of each family's low tiers a magic item of that unidentified tier can't roll. */
+constexpr std::array<int, 5> UnidentifiedMagicCullPercent = { 0, 50, 67, 80, 90 };
+/** @brief Item level a rare's modifiers need at least at that unidentified tier. */
+constexpr std::array<int, 5> UnidentifiedRareMinModLevel = { 0, 11, 23, 35, 48 };
+
+/** @brief The hidden quality tier, 1 to 5, a ground drop rolls from its seed; higher tiers need a higher item level and are rarer. */
+int UnidentifiedTier(uint32_t seed, int itemLevel);
+
 /**
  * @brief Rolls an item's modifiers from its seed, without touching the game's random number generator.
  * @param count How many to roll; fewer if the pool runs dry.
  * @param valueSeed Seeds the value rolls apart from the picks, so a Divine Orb can reroll values only.
+ * @param unidentifiedTier 1 for the full pool; higher tiers cull weak modifiers (see UnidentifiedTier).
  */
-std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed);
+std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier = 1);
 
 /** @brief The number of modifiers a natural rare rolls: 4, 5 or 6, weighted 8:3:1. */
 int RareModCount(uint32_t seed);

@@ -1411,7 +1411,10 @@ void GetItemPowerPoe2Mods(Item &item, bool rare)
 		count = MagicModCount(seed);
 		perSide = MaxMagicModsPerSide;
 	}
-	std::vector<Poe2ItemMod> mods = RollItemMods(*ItemModSlot(item), ItemModBaseTags(item), GetPoe2ItemLevel(item), count, perSide, seed, valueSeed);
+	// Ground drops can roll a hidden quality tier that culls weak modifiers; crafting and shops always use the full pool.
+	const int itemLevel = GetPoe2ItemLevel(item);
+	const int unidentifiedTier = GetLootRarity(item) ? UnidentifiedTier(seed, itemLevel) : 1;
+	std::vector<Poe2ItemMod> mods = RollItemMods(*ItemModSlot(item), ItemModBaseTags(item), itemLevel, count, perSide, seed, valueSeed, unidentifiedTier);
 	if (mods.empty())
 		return;
 	// Like POE2, prefixes are listed before suffixes.

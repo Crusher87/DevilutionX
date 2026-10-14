@@ -345,7 +345,20 @@ uint8_t ItemModBaseTags(const Item &item)
 	return 0;
 }
 
-std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed)
+int UnidentifiedTier(uint32_t seed, int itemLevel)
+{
+	// Chances of tier 5, 4, 3 and 2, each once its item level is reached.
+	constexpr std::array<uint32_t, 5> Chances = { 0, 20, 10, 5, 2 };
+	ModRandom random { seed ^ 0x1F83D9ABU };
+	const uint32_t roll = random.below(100);
+	for (int tier = 5; tier >= 2; tier--) {
+		if (itemLevel >= UnidentifiedTierItemLevels[tier - 1] && roll < Chances[tier - 1])
+			return tier;
+	}
+	return 1;
+}
+
+std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier)
 {
 	std::vector<Poe2ItemMod> rolled;
 	ModRandom picks { seed };
@@ -353,6 +366,10 @@ std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLe
 	int prefixes = 0;
 	int suffixes = 0;
 	const uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
+	const size_t unidIndex = static_cast<size_t>(std::clamp(unidentifiedTier, 1, 5) - 1);
+	const bool isMagic = perSide <= MaxMagicModsPerSide;
+	const int magicCull = UnidentifiedMagicCullPercent[unidIndex];
+	const int rareMinLevel = UnidentifiedRareMinModLevel[unidIndex];
 
 	struct Candidate {
 		uint8_t family;
@@ -374,7 +391,24 @@ std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLe
 				continue;
 			if (Conflicts(static_cast<uint8_t>(f), rolled))
 				continue;
-			for (size_t t = 0; t < family.tiers.size(); t++) {
+			// Tiers run from T1 (index 0) down to T8, so the eligible ones are the tail of the list.
+			size_t best = 0;
+			while (best < family.tiers.size() && (family.tiers[best].itemLevel > itemLevel || family.tiers[best].weight == 0))
+				best++;
+			if (best == family.tiers.size())
+				continue;
+			size_t end = family.tiers.size();
+			if (isMagic) {
+				// A high unidentified tier culls a share of the low tiers, keeping at least the best one.
+				const size_t eligible = end - best;
+				const size_t culled = eligible * static_cast<size_t>(magicCull) / 100;
+				end = std::max(best + 1, end - culled);
+			} else {
+				// A high unidentified tier drops low-level modifiers; a family keeps its best tier if that would remove it.
+				while (end > best + 1 && family.tiers[end - 1].itemLevel < rareMinLevel)
+					end--;
+			}
+			for (size_t t = best; t < end; t++) {
 				const ModTier &tier = family.tiers[t];
 				if (tier.itemLevel > itemLevel || tier.weight == 0)
 					continue;

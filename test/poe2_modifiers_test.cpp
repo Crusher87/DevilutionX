@@ -269,6 +269,33 @@ TEST_F(Poe2ModifiersTest, DivineOrbRerollsValuesButKeepsTheModifiers)
 	EXPECT_TRUE(changed);
 }
 
+TEST_F(Poe2ModifiersTest, HighUnidentifiedTiersCullWeakModifiers)
+{
+	std::array<int, 6> tiers {};
+	for (uint32_t seed = 1; seed <= 5000; seed++)
+		tiers[UnidentifiedTier(seed, 82)]++;
+	EXPECT_GT(tiers[1], tiers[2]);
+	EXPECT_GT(tiers[2], tiers[5]);
+	EXPECT_GT(tiers[5], 0);
+	for (uint32_t seed = 1; seed <= 500; seed++)
+		EXPECT_EQ(UnidentifiedTier(seed, 19), 1);
+
+	// A tier 5 rare only rolls modifiers needing item level 48 or more, unless that would remove the whole family.
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::Ring, 0, 82, 6, MaxRareModsPerSide, seed, seed, 5)) {
+			const ModFamily &family = Family(mod);
+			const ModTier &tier = family.tiers[mod.tier - 1];
+			if (tier.itemLevel < 48)
+				EXPECT_EQ(mod.tier, std::count_if(family.tiers.begin(), family.tiers.end(), [](const ModTier &t) { return t.itemLevel >= 48; }) + 1) << family.id;
+		}
+	}
+	// A tier 5 magic item keeps only the best tenth of each family's tiers (at least one).
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::Ring, 0, 82, 2, MaxMagicModsPerSide, seed, seed, 5))
+			EXPECT_EQ(mod.tier, 1) << Family(mod).id;
+	}
+}
+
 TEST_F(Poe2ModifiersTest, OlderItemsKeepDiablosAffixes)
 {
 	const _item_indexes base = FindBase("Long Sword");
