@@ -49,6 +49,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "qol/floatingnumbers.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -1583,6 +1584,18 @@ int AddGoldToInventory(Player &player, int value)
 	return value;
 }
 
+namespace {
+
+/** @brief POE2 Mashup: a small "+N gold" rising from the hero when gold is picked up. */
+void ShowGoldPickedUp(const Player &player, int amount)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || amount <= 0)
+		return;
+	AddFloatingNumber(player.position.tile, { 0, -50 }, FormatRuntime(_("+{:d} gold"), amount), UiFlags::ColorGold);
+}
+
+} // namespace
+
 bool GoldAutoPlace(Player &player, Item &goldStack)
 {
 	goldStack._ivalue = AddGoldToInventory(player, goldStack._ivalue);
@@ -1722,7 +1735,9 @@ void InvGetItem(Player &player, int ii)
 	item.updateRequiredStatsCacheForPlayer(player);
 	TelemetryItemPickedUp(player, item);
 
+	const int goldBefore = item._itype == ItemType::Gold ? item._ivalue : 0;
 	if (item._itype == ItemType::Gold && GoldAutoPlace(player, item)) {
+		ShowGoldPickedUp(player, goldBefore);
 		if (MyPlayer == &player) {
 			// Non-gold items (or gold when you have a full inventory) go to the hand then provide audible feedback on
 			//  paste. To give the same feedback for auto-placed gold we play the sound effect now.
@@ -1797,7 +1812,9 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	bool autoEquipped = false;
 
 	if (item._itype == ItemType::Gold) {
+		const int goldBefore = item._ivalue;
 		done = GoldAutoPlace(player, item);
+		ShowGoldPickedUp(player, goldBefore - item._ivalue);
 		if (!done) {
 			SetPlrHandGoldCurs(item);
 		}

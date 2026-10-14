@@ -266,6 +266,13 @@ void LeftMouseCmd(bool bShift)
 	// POE2 Mashup: with WASD movement, clicking the ground doesn't walk and attacks don't chase.
 	const bool wasdMovement = IsWasdMovementEnabled();
 
+	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
+	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
+		LastPlayerAction = PlayerActionType::Walk;
+		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
+		return;
+	}
+
 	if (leveltype == DTYPE_TOWN) {
 		CloseGoldWithdraw();
 		CloseStash();

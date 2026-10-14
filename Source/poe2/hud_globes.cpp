@@ -276,6 +276,16 @@ void DrawPoe2ManaGlobe(const Surface &out, bool dome)
 	    LitArcSegments(ReservedSpirit(player), maxSpirit, SpiritArc.segments), maxSpirit > 0);
 }
 
+bool IsHoveringLifeGlobe()
+{
+	return IsHoveringGlobe(LifeGlobeX);
+}
+
+bool IsHoveringManaGlobe()
+{
+	return IsHoveringGlobe(ManaGlobeX);
+}
+
 void DrawPoe2GlobeValues(const Surface &out)
 {
 	const Player &player = *MyPlayer;

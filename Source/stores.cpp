@@ -30,6 +30,7 @@
 #include "panels/info_box.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skills_panel.hpp"
+#include "plrmsg.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "tables/townerdat.hpp"
@@ -1095,9 +1096,31 @@ void StartStoryteller()
 	AddSText(0, 2, _("The Town Elder"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 9, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 12, _("Talk to Cain"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	AddSText(0, 14, _("Identify an item"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	// POE2 Mashup: like POE2's Una, Cain identifies everything for free.
+	AddSText(0, 14, gbIsPoe2 ? _("Identify all items (free)") : _("Identify an item"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSText(0, 18, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSLine(5);
+}
+
+/** @brief POE2 Mashup: identifies everything the hero wears and carries; returns how many items it was. */
+int IdentifyAllForFree(Player &player)
+{
+	int count = 0;
+	const auto identify = [&count](Item &item) {
+		if (!item.isEmpty() && !item._iIdentified) {
+			item._iIdentified = true;
+			count++;
+		}
+	};
+	for (Item &item : player.InvBody)
+		identify(item);
+	for (int i = 0; i < player._pNumInv; i++)
+		identify(player.InvList[i]);
+	for (Item &item : player.SpdList)
+		identify(item);
+	if (count > 0)
+		CalcPlrInv(player, true);
+	return count;
 }
 
 bool IdItemOk(Item *i)
@@ -1953,6 +1976,12 @@ void StorytellerEnter()
 		StartStore(TalkID::Gossip);
 		break;
 	case 14:
+		if (gbIsPoe2) {
+			const int count = IdentifyAllForFree(*MyPlayer);
+			ActiveStore = TalkID::None;
+			EventPlrMsg(count > 0 ? FormatRuntime(ngettext("Cain identified {:d} item.", "Cain identified {:d} items.", count), count) : _("You have nothing to identify."));
+			break;
+		}
 		StartStore(TalkID::StorytellerIdentify);
 		break;
 	case 18:

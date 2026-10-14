@@ -2032,12 +2032,12 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (IsUncutGem(item)) {
+		// Short lines: the info box doesn't wrap, so long ones ran into each other.
 		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
-		if (UncutGemKind(item) == UncutKind::Support)
-			AddItemInfoBoxString(_("Cut into a support gem of this level or lower"));
-		else
-			AddItemInfoBoxString(FormatRuntime(_("Cut a new {:s} gem, or raise a socketed one below this level to it"), UncutKindName(UncutGemKind(item))));
-		AddItemInfoBoxString(_("Use to open gemcutting"));
+		AddItemInfoBoxString(FormatRuntime(_("Cuts a {:s} gem of its tier"), UncutKindName(UncutGemKind(item))));
+		if (UncutGemKind(item) != UncutKind::Support)
+			AddItemInfoBoxString(_("or levels up a socketed gem"));
+		AddItemInfoBoxString(_("Right-click to cut"));
 		return;
 	}
 	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {
@@ -4684,16 +4684,8 @@ void PrintItemImplicits(const Item &item)
 {
 	if (gbIsPoe2 && ItemGrantsSpirit(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
-	if (gbIsPoe2) {
-		std::string skills;
-		for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Last); i++) {
-			const auto skill = static_cast<WeaponSkill>(i);
-			if (ItemAllowsWeaponSkill(item, skill))
-				StrAppend(skills, skills.empty() ? "" : ", ", WeaponSkillName(skill));
-		}
-		if (!skills.empty())
-			AddItemInfoBoxString(FormatRuntime(_("skill gems: {:s}"), skills));
-	}
+	// The list of skill gems a weapon can use was dropped: it read like the weapon granted them all.
+	// Each skill gem's own text says which weapons it needs.
 
 	const ItemSpecialEffect baseFlags = AllItemsList[item.IDidx].iFlags;
 	if (baseFlags == ItemSpecialEffect::None)

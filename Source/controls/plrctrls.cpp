@@ -1802,7 +1802,10 @@ void WalkInDir(Player &player, AxisDirection dir)
 	if (ControlMode == ControlTypes::KeyboardAndMouse) {
 		walkingWithKeyboard = true;
 		// Let mouse attacks and spells happen first; walking resumes once they've started.
-		if (sgbMouseDown != CLICK_NONE || player.destAction != ACTION_NONE)
+		// POE2 Mashup: once a held ranged attack or spell has fired, the hero can step before the next one.
+		const bool shotFired = gbIsPoe2 && IsAnyOf(player._pmode, PM_RATTACK, PM_SPELL) && player.poe2.castSkill == WeaponSkill::None
+		    && player.destAction == ACTION_NONE && player.CanChangeAction();
+		if ((sgbMouseDown != CLICK_NONE || player.destAction != ACTION_NONE) && !shotFired)
 			return;
 	}
 

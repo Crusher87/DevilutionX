@@ -1928,9 +1928,9 @@ void DrawAndBlit()
 	DrawXPBar(out);
 	if (gbIsPoe2)
 		DrawPoe2GlobeValues(out);
-	if (*GetOptions().Gameplay.showHealthValues)
+	if (*GetOptions().Gameplay.showHealthValues || (gbIsPoe2 && IsHoveringLifeGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
-	if (*GetOptions().Gameplay.showManaValues)
+	if (*GetOptions().Gameplay.showManaValues || (gbIsPoe2 && IsHoveringManaGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
 		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());

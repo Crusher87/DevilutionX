@@ -182,8 +182,10 @@ void SuggestionsFromTable(const sol::table &table, std::string_view prefix,
 			std::string completionText = keyStr.substr(prefix.size());
 			LuaAutocompleteSuggestion suggestion { std::move(keyStr), std::move(completionText) };
 			if (info.callable) {
-				suggestion.completionText.append("()");
-				suggestion.cursorAdjust = -1;
+				// POE2 Mashup: mark() takes a note, so it completes with its quotes and the cursor between them.
+				const bool takesNote = suggestion.displayText == "mark";
+				suggestion.completionText.append(takesNote ? "(\"\")" : "()");
+				suggestion.cursorAdjust = takesNote ? -2 : -1;
 			}
 			if (!info.signature.empty()) {
 				if (memberType.has_value() && memberType != LuaUserdataMemberType::MemberFunction) {

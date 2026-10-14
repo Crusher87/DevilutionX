@@ -3214,6 +3214,12 @@ void ProcessPlayers()
 				}
 			}
 
+			// POE2 Mashup: once a ranged attack or spell has fired, walking cuts its follow-through short, so the
+			// hero keeps moving between shots. Skills with their own animation still play out.
+			if (gbIsPoe2 && IsAnyOf(player._pmode, PM_RATTACK, PM_SPELL) && player.poe2.castSkill == WeaponSkill::None
+			    && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE && player.CanChangeAction())
+				StartStand(player, player._pdir);
+
 			bool tplayer = false;
 			do {
 				switch (player._pmode) {
