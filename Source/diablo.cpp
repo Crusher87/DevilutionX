@@ -2140,11 +2140,15 @@ void InitKeymapActions()
 	    N_("Hide all info screens."),
 	    SDLK_SPACE,
 	    [] {
-		    // POE2 Mashup: with nothing to hide, Space dodge rolls instead.
-		    const bool anythingShown = AutomapActive || IsLeftPanelOpen() || IsRightPanelOpen() || HelpFlag || ChatLogFlag
-		        || SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
-		    if (!anythingShown && TryDodgeRoll(*MyPlayer))
-			    return;
+		    // POE2 Mashup: Space dodge rolls, as in POE2, and leaves the map and panels open; it only dismisses
+		    // menus and messages that stop play.
+		    if (gbIsPoe2) {
+			    const bool modalShown = SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
+			    if (!modalShown) {
+				    TryDodgeRoll(*MyPlayer);
+				    return;
+			    }
+		    }
 
 		    if (CanAutomapBeToggledOff())
 			    AutomapActive = false;

@@ -247,6 +247,8 @@ struct Poe2PlayerData {
 	uint8_t dodgeTicks = 0;
 	/** @brief Game ticks until the next dodge roll is allowed (not saved). */
 	uint8_t dodgeCooldown = 0;
+	/** @brief Game ticks left that hits and missiles pass through the hero, from the start of a roll (not saved). */
+	uint8_t untouchableTicks = 0;
 	/** @brief Weapon skill queued for the next attack (not saved). */
 	WeaponSkill pendingSkill = WeaponSkill::None;
 	/** @brief Game ticks before a queued weapon skill is dropped (not saved). */
@@ -337,6 +339,7 @@ struct Poe2PlayerData {
 			tray[slot] = DefaultTrayBinding(static_cast<TraySlot>(slot));
 		dodgeTicks = 0;
 		dodgeCooldown = 0;
+		untouchableTicks = 0;
 		pendingSkill = WeaponSkill::None;
 		pendingSkillTicks = 0;
 		activeSkill = WeaponSkill::None;
@@ -376,6 +379,7 @@ struct Poe2PlayerData {
 	}
 
 	[[nodiscard]] bool isDodging() const { return dodgeTicks > 0; }
+	[[nodiscard]] bool isUntouchable() const { return untouchableTicks > 0; }
 
 	/** @brief Advances the dodge roll and weapon skill timers by one game tick. */
 	void tick()
@@ -384,6 +388,8 @@ struct Poe2PlayerData {
 			dodgeTicks--;
 		if (dodgeCooldown > 0)
 			dodgeCooldown--;
+		if (untouchableTicks > 0)
+			untouchableTicks--;
 		if (pendingSkillTicks > 0 && --pendingSkillTicks == 0)
 			pendingSkill = WeaponSkill::None;
 		if (warcryTicks > 0)

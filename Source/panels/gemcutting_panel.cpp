@@ -19,6 +19,7 @@
 #include "control/control.hpp"
 #include "controls/wasd_movement.hpp"
 #include "cursor.h"
+#include "diablo.h"
 #include "effects.h"
 #include "engine/dx.h"
 #include "game_mode.hpp"
@@ -168,13 +169,15 @@ Layout ComputeLayout(const Surface &out)
 	// Tier rows of gems, scrolled within the grid.
 	const int perLine = std::max((layout.grid.size.width - TierLabelWidth - 6) / CellSize.width, 1);
 	const std::vector<GemEntry> &catalog = GemCatalog();
+	const Item *uncut = UncutItem();
 	int y = layout.grid.position.y - Scroll;
 	size_t i = 0;
 	while (i < catalog.size()) {
 		const int tier = GemTier(catalog[i].level);
 		std::vector<size_t> gems;
 		for (; i < catalog.size() && GemTier(catalog[i].level) == tier; i++) {
-			if (GemInCategory(catalog[i], Category) && MatchesQuery(catalog[i]))
+			// Cutting lists only the uncut gem's own kind: skill, Spirit or support.
+			if (GemInCategory(catalog[i], Category) && MatchesQuery(catalog[i]) && (uncut == nullptr || UncutGemKind(*uncut) == GemUncutKind(catalog[i])))
 				gems.push_back(i);
 		}
 		if (gems.empty())
@@ -421,6 +424,11 @@ void Open()
 	IsOpen = true;
 	Scroll = 0;
 	QueryInput.clear();
+	// The panel takes the mouse button's release, so forget the click that opened it; otherwise the game
+	// waits for a release that never comes and ignores clicks until the next right-click.
+	sgbMouseDown = CLICK_NONE;
+	LastPlayerAction = PlayerActionType::None;
+	ReleaseAllTraySlots();
 	ClearWasdMovementKeys();
 	SDLC_StartTextInput(ghMainWnd);
 }

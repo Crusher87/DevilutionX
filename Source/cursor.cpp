@@ -30,16 +30,20 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "engine/trn.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "hwcursor.hpp"
 #include "inv.h"
 #include "levels/trigs.h"
 #include "missiles.h"
 #include "options.h"
+#include "panels/skills_panel.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/skill_gems.hpp"
 #include "qol/itemlabels.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
+#include "stores.h"
 #include "towners.h"
 #include "track.h"
 #include "utils/attributes.h"
@@ -571,6 +575,10 @@ void NewCursor(const Item &item)
 		NewCursor(CURSOR_HAND);
 	} else {
 		NewCursor(item._iCurs + CURSOR_FIRSTITEM);
+		// POE2 Mashup: picking up a skill gem opens the Skills panel so it can go straight into a socket.
+		if (gbIsPoe2 && !HeadlessMode && MyPlayer != nullptr && &item == &MyPlayer->HoldItem && IsSkillGem(item)
+		    && !IsSkillsPanelOpen() && !IsStashOpen && !IsPlayerInStore())
+			OpenSkillsPanel();
 	}
 }
 

@@ -1190,8 +1190,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 {
 	if (player.hasNoLife() || player._pInvincible || HasAnyOf(player._pSpellFlags, SpellFlag::Etherealize))
 		return;
-	// POE2 Mashup: dodge rolls avoid melee hits.
-	if (player.poe2.isDodging())
+	// POE2 Mashup: the start of a dodge roll avoids melee hits.
+	if (player.poe2.isUntouchable())
 		return;
 	if (monster.position.tile.WalkingDistance(player.position.tile) >= 2)
 		return;

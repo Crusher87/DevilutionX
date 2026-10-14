@@ -553,6 +553,13 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 		missile._miHitFlag = true;
 	}
 
+	// POE2 Mashup: the hero's skills and spells smash barrels, urns and pods they pass through.
+	if (gbIsPoe2 && missile.sourceType() == MissileSource::Player) {
+		Object *object = FindObjectAtPosition(position);
+		if (object != nullptr && object->IsBarrel() && !object->IsBroken())
+			BreakObject(*missile.sourcePlayer(), *object);
+	}
+
 	if (IsMissileBlockedByTile(position)) {
 		Object *object = FindObjectAtPosition(position);
 		if (object != nullptr && object->IsBreakable()) {
@@ -1092,8 +1099,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		return false;
 	}
 
-	// POE2 Mashup: dodge rolls avoid missiles.
-	if (player.poe2.isDodging()) {
+	// POE2 Mashup: the start of a dodge roll avoids missiles.
+	if (player.poe2.isUntouchable()) {
 		return false;
 	}
 

@@ -24,6 +24,8 @@ constexpr int DodgeTicksPerTile = 4;
 constexpr int DodgeGraceTicks = 2;
 /** Game ticks between rolls, so the invulnerability can't be chained forever. */
 constexpr int DodgeCooldownTicks = 20;
+/** Game ticks at the start of a roll that hits and missiles pass through, like POE2's brief i-frames. */
+constexpr int DodgeUntouchableTicks = 6;
 
 Direction WasdDirection(AxisDirection dir)
 {
@@ -99,6 +101,7 @@ bool TryDodgeRoll(Player &player)
 
 	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
 	player.poe2.dodgeCooldown = DodgeCooldownTicks;
+	player.poe2.untouchableTicks = DodgeUntouchableTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, target);
 	return true;
 }
@@ -118,6 +121,7 @@ std::optional<Point> DashTowards(Player &player, Point target, int maxTiles)
 		return std::nullopt;
 
 	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
+	player.poe2.untouchableTicks = player.poe2.dodgeTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, end);
 	return end;
 }

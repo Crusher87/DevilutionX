@@ -197,7 +197,8 @@ bool CanCutGem(const Item &uncut, const GemEntry &gem)
 	// POE2: uncut skill, Spirit and support gems each cut only their own kind of gem.
 	if (UncutGemKind(uncut) != GemUncutKind(gem))
 		return false;
-	return gem.level <= UncutGemLevel(uncut);
+	// Any gem in the uncut gem's tier or below: a level 1 uncut gem cuts every tier I gem.
+	return GemTier(gem.level) <= GemTier(UncutGemLevel(uncut));
 }
 
 bool CreateGemItem(Item &item, const GemEntry &gem, int level)

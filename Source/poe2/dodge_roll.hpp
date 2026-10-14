@@ -1,7 +1,7 @@
 /**
  * @file poe2/dodge_roll.hpp
  *
- * POE2 Mashup dodge roll: a quick dash a few tiles away that monsters and missiles can't hit.
+ * POE2 Mashup dodge roll: a quick dash a few tiles away; hits and missiles pass through for its first moments.
  */
 #pragma once
 

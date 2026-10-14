@@ -30,6 +30,7 @@
 #include "engine/backbuffer_state.hpp"
 #include "engine/displacement.hpp"
 #include "engine/dx.h"
+#include "engine/light_tables.hpp"
 #include "engine/point.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/dun_render.hpp"
@@ -467,6 +468,24 @@ uint8_t GetPlayerOutlineColor(int id)
 }
 
 /**
+ * @brief POE2 Mashup: fading afterimages trailing a dodge roll or dash, darker the further back they are.
+ */
+void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sprite, Point spriteBufferPosition)
+{
+	if (!player.poe2.isDodging() || !player.isWalking())
+		return;
+	// One tile's step on screen in the direction of travel.
+	const Displacement step { player._pdir };
+	const Displacement screenStep { (step.deltaX - step.deltaY) * 32, (step.deltaX + step.deltaY) * 16 };
+	constexpr int Ghosts = 3;
+	for (int ghost = Ghosts; ghost >= 1; ghost--) {
+		const Point position = spriteBufferPosition - Displacement { screenStep.deltaX * ghost / 3, screenStep.deltaY * ghost / 3 };
+		const size_t light = std::min<size_t>(LightTables.size() - 1, static_cast<size_t>(3 + (ghost * 3)));
+		ClxDrawBlendedTRN(out, position, sprite, LightTables[light].data());
+	}
+}
+
+/**
  * @brief Render a player sprite
  * @param out Output buffer
  * @param player Player reference
@@ -481,6 +500,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 
 	const ClxSprite sprite = player.currentSprite();
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
+	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
 
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
