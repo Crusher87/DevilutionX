@@ -87,7 +87,8 @@ set(poe2_mod
   txtdata/poe2/base_meta.tsv
   txtdata/poe2/modifier_families.tsv
   txtdata/poe2/modifier_tiers.tsv
-  txtdata/poe2/passive_tree.tsv)
+  txtdata/poe2/passive_tree.tsv
+  txtdata/poe2/uniques.tsv)
 
 if(APPLE)
   foreach(asset_file ${poe2_mod})

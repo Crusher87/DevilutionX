@@ -151,7 +151,7 @@ constexpr int MaxRareModsPerSide = 3;
 /** @brief A rare jewel has at most two prefixes and two suffixes. */
 constexpr int MaxRareJewelModsPerSide = 2;
 
-/** @brief Loads the modifier tables and the item bases (poe2/bases.hpp) from the POE2 Mashup mod, or clears them outside POE2 mode. */
+/** @brief Loads the modifier tables and the item bases (poe2/bases.hpp) and uniques (poe2/uniques.hpp) from the POE2 Mashup mod, or clears them outside POE2 mode. */
 void LoadModifierData();
 const std::vector<ModFamily> &ModifierFamilies();
 std::optional<uint8_t> FindModifierFamily(std::string_view id);

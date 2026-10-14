@@ -677,6 +677,12 @@ std::string GetRareItemName(const Item &item);
  */
 void RestoreRareItemPowers(Item &item);
 
+/**
+ * @brief POE2 Mashup: makes one of the bundle's uniques (poe2/uniques.hpp) on its base, the way a drop of it is made.
+ * @return false if the uid isn't a bundle unique.
+ */
+bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed);
+
 /* data */
 
 extern int MaxGold;

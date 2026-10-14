@@ -32,6 +32,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/display.h"
@@ -544,7 +545,9 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 
 	for (size_t uid = 0; uid < UniqueItems.size(); uid++) {
 		const UniqueItem &unique = UniqueItems[uid];
-		const std::optional<_item_indexes> base = UniqueBase(unique);
+		// The bundle's uniques have a base of their own rather than a Diablo base type.
+		const Poe2Unique *poe2Unique = Poe2UniqueFor(static_cast<int>(uid));
+		const std::optional<_item_indexes> base = poe2Unique != nullptr ? std::optional(static_cast<_item_indexes>(poe2Unique->baseItem)) : UniqueBase(unique);
 		if (unique.UIName.empty() || !base || AllItemsList[*base].iMiscId == IMISC_UNIQUE)
 			continue;
 		const ItemData &data = AllItemsList[*base];
@@ -595,6 +598,12 @@ std::vector<size_t> FilterItemSpawnerCatalog(const std::vector<SpawnerEntry> &ca
 
 bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_quality quality, int level, uint32_t seed, Item &item)
 {
+	if (entry.uniqueId >= 0 && Poe2UniqueFor(entry.uniqueId) != nullptr) {
+		if (!CreatePoe2Unique(player, item, entry.uniqueId, seed >> 1))
+			return false;
+		SetupItem(item);
+		return true;
+	}
 	if (entry.uniqueId >= 0)
 		return RollUnique(player, item, entry.uniqueId, seed);
 	if (entry.rollsQuality)

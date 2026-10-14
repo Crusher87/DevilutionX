@@ -85,6 +85,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
@@ -1751,6 +1752,7 @@ void GetUniqueItem(const Player &player, Item &item, _unique_items uid)
 	item._iUid = uid;
 	item._iMagical = ITEM_QUALITY_UNIQUE;
 	item._iCreateInfo |= CF_UNIQUE;
+	ApplyPoe2UniqueEffects(item);
 }
 
 void ItemRndDur(Item &item)
@@ -2830,6 +2832,21 @@ void RestoreRareItemPowers(Item &item)
 	SetRndSeed(currentSeed);
 }
 
+bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed)
+{
+	const Poe2Unique *unique = Poe2UniqueFor(uid);
+	if (unique == nullptr || !IsItemAvailable(unique->baseItem))
+		return false;
+	const std::vector<int> onBase = Poe2UniquesOnBase(unique->baseItem);
+	const int offset = static_cast<int>(std::find(onBase.begin(), onBase.end(), uid) - onBase.begin());
+	item = {};
+	SetLootRarity(item, ITEM_QUALITY_UNIQUE);
+	SetPoe2ItemLevel(item, unique->dropLevel);
+	item.dwBuff |= ((static_cast<uint32_t>(offset) << 1) & CF_UIDOFFSET) | CF_POE2_BUNDLE_UNIQUE;
+	SetupAllItems(player, item, static_cast<_item_indexes>(unique->baseItem), seed, std::max<int>(UniqueItems[uid].UIMinLvl, 1), 1, true, false, offset);
+	return item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid == uid;
+}
+
 bool IsItemAvailable(int i)
 {
 	if (i < 0 || i >= static_cast<int>(AllItemsList.size()))
@@ -3090,9 +3107,28 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 	if (gbIsPoe2) {
 		// POE2 Mashup: resistances drop as you go deeper and can go negative.
 		const int penalty = ResistancePenalty(player);
-		player._pMagResist = Poe2Resistance(magic, penalty, MaxResistance);
-		player._pFireResist = Poe2Resistance(fire, penalty, MaxResistance);
-		player._pLghtResist = Poe2Resistance(lightning, penalty, MaxResistance);
+		Poe2PlayerData &data = player.poe2;
+		const int maxElemental = MaxResistance + data.rule(UniqueRule::MaxElementalResistance);
+		data.maxResistances = { static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental + data.rule(UniqueRule::MaxMagicResistance)) };
+		std::array<int, 3> uncapped { fire - penalty, lightning - penalty, magic - penalty };
+		if (const int share = data.rule(UniqueRule::ResistanceShare); share > 0) {
+			// The highest resistance that isn't over its cap also counts towards the lowest.
+			std::optional<size_t> highest;
+			size_t lowest = 0;
+			for (size_t i = 0; i < uncapped.size(); i++) {
+				if (uncapped[i] <= data.maxResistances[i] && (!highest || uncapped[i] > uncapped[*highest]))
+					highest = i;
+				if (uncapped[i] < uncapped[lowest])
+					lowest = i;
+			}
+			if (highest && *highest != lowest)
+				uncapped[lowest] += std::max(uncapped[*highest], 0) * share / 100;
+		}
+		for (size_t i = 0; i < uncapped.size(); i++)
+			data.uncappedResistances[i] = static_cast<int16_t>(std::clamp(uncapped[i], -1000, 1000));
+		player._pFireResist = Poe2Resistance(uncapped[0], 0, data.maxResistances[0]);
+		player._pLghtResist = Poe2Resistance(uncapped[1], 0, data.maxResistances[1]);
+		player._pMagResist = Poe2Resistance(uncapped[2], 0, data.maxResistances[2]);
 		return;
 	}
 	player._pMagResist = std::clamp(magic, 0, MaxResistance);
@@ -3100,11 +3136,14 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 	player._pLghtResist = std::clamp(lightning, 0, MaxResistance);
 }
 
-void CalcPlrLifeMana(Player &player, int vitality, int magic, Fixed26_6 life, Fixed26_6 mana)
+void CalcPlrLifeMana(Player &player, int vitality, int magic, Fixed26_6 life, Fixed26_6 mana, int lessLifePercent = 0)
 {
 	const ClassAttributes &playerClassAttributes = player.getClassAttributes();
 	vitality = (playerClassAttributes.itmLife * vitality).whole();
 	life += Fixed26_6::fromInt(vitality);
+	// POE2 Mashup: "less maximum life" takes from the bonus, so current life drops by the same amount.
+	if (lessLifePercent > 0)
+		life -= Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>((life + player._pMaxHPBase).raw()) * std::min(lessLifePercent, 90) / 100));
 
 	magic = (playerClassAttributes.itmMana * magic).whole();
 	mana += Fixed26_6::fromInt(magic);
@@ -3299,6 +3338,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	int lifeRegen = 0;
 	int manaRegen = 0;
 	std::array<int, static_cast<size_t>(Poe2ItemStat::Count)> poe2Stats {};
+	UniqueRuleTotals uniqueRules {};
 
 	// POE2 Mashup: jewels in allocated passive tree sockets count like worn gear.
 	std::vector<const Item *> worn;
@@ -3347,9 +3387,17 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 				manaRegen += item._iPLManaRegen;
 				for (size_t stat = 0; stat < poe2Stats.size(); stat++)
 					poe2Stats[stat] += item._iPoe2Stats[stat];
+				AddUniqueRules(item, uniqueRules);
 			}
 		}
 	}
+	player.poe2.uniqueRules = uniqueRules;
+	const auto uniqueRule = [&uniqueRules](UniqueRule rule) { return static_cast<int>(uniqueRules[static_cast<size_t>(rule)]); };
+	// POE2 Mashup: unique rules that work like gear stats.
+	poe2Stats[static_cast<size_t>(Poe2ItemStat::AttackSpeed)] += uniqueRule(UniqueRule::ActionSpeed);
+	poe2Stats[static_cast<size_t>(Poe2ItemStat::CastSpeed)] += uniqueRule(UniqueRule::ActionSpeed);
+	for (const Poe2ItemStat stat : { Poe2ItemStat::MeleeSkillLevels, Poe2ItemStat::ProjectileSkillLevels, Poe2ItemStat::SpellSkillLevels })
+		poe2Stats[static_cast<size_t>(stat)] += uniqueRule(UniqueRule::AllSkillLevels);
 	for (size_t stat = 0; stat < poe2Stats.size(); stat++)
 		player.poe2.itemStats[stat] = static_cast<int16_t>(std::clamp(poe2Stats[stat], static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
 	const auto gearStat = [&poe2Stats](Poe2ItemStat stat) { return poe2Stats[static_cast<size_t>(stat)]; };
@@ -3424,8 +3472,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		energyShield += energyShield * passive(PassiveStat::EnergyShieldPercent) / 100;
 	}
 	ac += ac * passive(PassiveStat::ArmorPercent) / 100;
+	ac -= ac * std::min(uniqueRule(UniqueRule::LessArmour), 100) / 100;
+	if (uniqueRule(UniqueRule::NoEvasion) > 0)
+		evasion = 0;
 	player.poe2.evasion = evasion;
-	SetMaxEnergyShield(player, energyShield);
 
 	CalcPlrDamage(player, minDamage, maxDamage);
 	CalcPlrPrimaryStats(player, strength, magic, dexterity, vitality);
@@ -3456,7 +3506,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		life += Fixed26_6::fromRaw(baseLife.raw() * passive(PassiveStat::LifePercent) / 100);
 		mana += Fixed26_6::fromRaw(baseMana.raw() * passive(PassiveStat::ManaPercent) / 100);
 	}
-	CalcPlrLifeMana(player, vitality, magic, life, mana);
+	CalcPlrLifeMana(player, vitality, magic, life, mana, uniqueRule(UniqueRule::LessMaxLife));
+	// A share of maximum mana can count as energy shield too.
+	energyShield += player._pMaxMana.whole() * uniqueRule(UniqueRule::ManaToEnergyShield) / 100;
+	SetMaxEnergyShield(player, energyShield);
 	player._pIFMinDam = minFireDam;
 	player._pIFMaxDam = maxFireDam;
 	player._pILMinDam = minLightDam;
@@ -3888,7 +3941,12 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 	if (const std::optional<item_quality> lootRarity = GetLootRarity(item); lootRarity && item._iMiscId != IMISC_UNIQUE) {
 		// POE2 Mashup: the loot roll picked the rarity; a unique keeps the pick stored in its unique offset.
 		std::optional<_unique_items> uid;
-		if (*lootRarity == ITEM_QUALITY_UNIQUE) {
+		if (*lootRarity == ITEM_QUALITY_UNIQUE && (item.dwBuff & CF_POE2_BUNDLE_UNIQUE) != 0) {
+			// One of the bundle's uniques: the offset is its place among its base's.
+			const std::vector<int> bundleUniques = Poe2UniquesOnBase(item.IDidx);
+			if (static_cast<size_t>(uidOffset) < bundleUniques.size())
+				uid = static_cast<_unique_items>(bundleUniques[uidOffset]);
+		} else if (*lootRarity == ITEM_QUALITY_UNIQUE) {
 			const std::vector<uint8_t> validUniques = GetValidUniques(lvl, AllItemsList[item.IDidx].iItemId);
 			if (static_cast<size_t>(uidOffset) < validUniques.size())
 				uid = static_cast<_unique_items>(validUniques[validUniques.size() - 1 - uidOffset]);
@@ -4176,15 +4234,33 @@ std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLev
 	}
 }
 
+/** @brief A unique a loot roll picked: its base and its offset there, among Diablo's or the bundle's uniques. */
+struct Poe2UniquePick {
+	_item_indexes base;
+	int offset;
+	bool bundle;
+};
+
 /**
- * @brief Turns a unique roll into a unique the hero hasn't found yet, with the base it belongs on. The tier is
- * rolled first, as in POE2, and a tier with nothing left falls back to the next lower one.
- * @return The base and the unique's offset in its base's list, or nothing if every unique at this level has dropped.
+ * @brief Turns a unique roll into a unique with the base it belongs on: one of the bundle's, or one of Diablo's the hero
+ * hasn't found yet. The tier is rolled first, as in POE2, and a tier with nothing left falls back to the next lower one.
+ * @return Nothing if no unique can drop at this level.
  */
-std::optional<std::pair<_item_indexes, int>> PickPoe2Unique(int itemLevel, LootSource source)
+std::optional<Poe2UniquePick> PickPoe2Unique(int itemLevel, int poe2ItemLevel, LootSource source)
 {
-	std::array<std::vector<std::pair<_item_indexes, int>>, static_cast<size_t>(UniqueTier::Count)> candidates;
-	for (size_t uid = 0; uid < UniqueItems.size(); uid++) {
+	std::array<std::vector<Poe2UniquePick>, static_cast<size_t>(UniqueTier::Count)> candidates;
+	for (const Poe2Unique &unique : Poe2Uniques()) {
+		// Boss uniques only drop from their boss's table.
+		if (!unique.isGlobal() || unique.dropLevel > poe2ItemLevel || !IsItemAvailable(unique.baseItem))
+			continue;
+		const std::vector<int> onBase = Poe2UniquesOnBase(unique.baseItem);
+		const auto found = std::find(onBase.begin(), onBase.end(), unique.uid);
+		const int offset = static_cast<int>(found - onBase.begin());
+		if (offset > static_cast<int>(CF_UIDOFFSET >> 1))
+			continue;
+		candidates[static_cast<size_t>(unique.tier)].push_back({ static_cast<_item_indexes>(unique.baseItem), offset, true });
+	}
+	for (size_t uid = 0; uid < UniqueItems.size() && uid < std::size(UniqueItemFlags); uid++) {
 		const UniqueItem &unique = UniqueItems[uid];
 		if (unique.UIMinLvl > itemLevel || (UniqueItemFlags[uid] && !gbIsMultiplayer))
 			continue;
@@ -4202,13 +4278,13 @@ std::optional<std::pair<_item_indexes, int>> PickPoe2Unique(int itemLevel, LootS
 		const int offset = static_cast<int>(valid.end() - found) - 1;
 		if (offset > static_cast<int>(CF_UIDOFFSET >> 1))
 			continue;
-		candidates[static_cast<size_t>(LegacyUniqueTier(unique.UIMinLvl))].emplace_back(*base, offset);
+		candidates[static_cast<size_t>(LegacyUniqueTier(unique.UIMinLvl))].push_back({ *base, offset, false });
 	}
 	const int rolled = static_cast<int>(RollUniqueTier(source));
 	for (int i = 0; i < static_cast<int>(candidates.size()); i++) {
 		// The rolled tier, then lower tiers, then higher ones if only those are left.
 		const int tier = i <= rolled ? rolled - i : i;
-		const std::vector<std::pair<_item_indexes, int>> &pool = candidates[tier];
+		const std::vector<Poe2UniquePick> &pool = candidates[tier];
 		if (!pool.empty())
 			return pool[LootRandom(static_cast<int>(pool.size()))];
 	}
@@ -4281,13 +4357,15 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 
 	std::optional<_item_indexes> idx = PickPoe2LootItem(category, origin.baseLevel);
 	int uidOffset = 0;
+	bool bundleUnique = false;
 	if (category == LootCategory::Equipment) {
 		if (!rarity)
 			rarity = RollEquipmentRarity(origin.source);
 		if (*rarity == ITEM_QUALITY_UNIQUE) {
-			if (const std::optional<std::pair<_item_indexes, int>> unique = PickPoe2Unique(itemLevel, origin.source); unique) {
-				idx = unique->first;
-				uidOffset = unique->second;
+			if (const std::optional<Poe2UniquePick> unique = PickPoe2Unique(itemLevel, origin.poe2ItemLevel, origin.source); unique) {
+				idx = unique->base;
+				uidOffset = unique->offset;
+				bundleUnique = unique->bundle;
 			} else {
 				rarity = ITEM_QUALITY_RARE;
 			}
@@ -4308,11 +4386,14 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		SetLootRarity(item, *rarity);
 		SetPoe2ItemLevel(item, origin.poe2ItemLevel);
 		item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
+		if (bundleUnique)
+			item.dwBuff |= CF_POE2_BUNDLE_UNIQUE;
 	}
 	if (category == LootCategory::Equipment && *rarity != ITEM_QUALITY_UNIQUE)
 		SetItemQuality(item, RollDropQuality(*idx, *rarity, origin.poe2ItemLevel));
 	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
-	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer)
+	// Diablo's uniques drop once per game; the bundle's, like POE2's, can drop again.
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
 		UniqueItemFlags[item._iUid] = true;
 	if (*idx == IDI_GOLD) {
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
@@ -5335,6 +5416,8 @@ void PrintItemDetails(const Item &item)
 	}
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && gbIsPoe2) {
 		// POE2 Mashup: a unique's powers are listed in its tooltip, not in a separate window.
+		for (const std::string &line : Poe2UniqueText(item))
+			AddItemInfoBoxString(line);
 		for (const auto &power : UniqueItems[item._iUid].powers) {
 			if (power.type == IPL_INVALID)
 				break;

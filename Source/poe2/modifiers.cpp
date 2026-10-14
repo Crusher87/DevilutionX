@@ -12,6 +12,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/uniques.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "tables/spelldat.h"
 #include "utils/format.hpp"
@@ -245,6 +246,7 @@ void LoadModifierData()
 {
 	Families.clear();
 	LoadBaseData();
+	LoadPoe2Uniques();
 	if (!gbIsPoe2)
 		return;
 

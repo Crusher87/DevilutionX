@@ -13,6 +13,7 @@
 
 #include "poe2/flasks.hpp"
 #include "poe2/item_stats.hpp"
+#include "poe2/unique_rules.hpp"
 #include "tables/spelldat.h"
 
 namespace devilution {
@@ -306,6 +307,11 @@ struct Poe2PlayerData {
 	int evasion = 0;
 	/** @brief POE2 stats the gear's modifiers add up to (not saved; from CalcPlrItemVals). */
 	std::array<int16_t, static_cast<size_t>(Poe2ItemStat::Count)> itemStats {};
+	/** @brief Rules of the worn bundle uniques, added up (not saved; from CalcPlrItemVals). */
+	UniqueRuleTotals uniqueRules {};
+	/** @brief Fire, lightning and magic resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
+	std::array<int16_t, 3> uncappedResistances {};
+	std::array<int16_t, 3> maxResistances {};
 	/** @brief Maximum energy shield from gear (not saved; from CalcPlrItemVals). */
 	int maxEnergyShield = 0;
 	/** @brief Current energy shield as a raw Fixed26_6 value (not saved; refills when loaded). */
@@ -380,6 +386,9 @@ struct Poe2PlayerData {
 		manaRegenRemainder = 0;
 		evasion = 0;
 		itemStats.fill(0);
+		uniqueRules.fill(0);
+		uncappedResistances.fill(0);
+		maxResistances.fill(0);
 		maxEnergyShield = 0;
 		energyShield = 0;
 		energyShieldRechargeTicks = 0;
@@ -416,6 +425,9 @@ struct Poe2PlayerData {
 		if (recoveryTicks > 0)
 			recoveryTicks--;
 	}
+
+	/** @brief The total of a rule of the worn bundle uniques. */
+	[[nodiscard]] int rule(UniqueRule rule) const { return uniqueRules[static_cast<size_t>(rule)]; }
 
 	/** @brief The supports of the Skills panel socket holding the skill; none if it isn't socketed. */
 	[[nodiscard]] const SupportSockets &supportsFor(SkillSlot skill) const;
