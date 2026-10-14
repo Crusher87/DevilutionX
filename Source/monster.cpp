@@ -80,10 +80,12 @@
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/waystones.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
 #include "storm/storm_net.hpp"
@@ -1244,6 +1246,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	Fixed26_6 dam = Fixed26_6::fromRaw(RandomIntBetween(minDam << 6, maxDam << 6));
 	dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
 	dam = ApplyArmour(player, dam);
+	if (&player == MyPlayer)
+		dam = ApplyMapMonsterHit(player, dam);
 	if (&player == MyPlayer) {
 		if (player.wReflections > 0) {
 			const Fixed26_6 reflectedDamage = CheckReflect(monster, player, dam);
@@ -3776,6 +3780,12 @@ std::expected<void, std::string> InitMonsters()
 		// POE2 Mashup: denser levels for faster, busier fights.
 		if (gbIsPoe2)
 			numplacemonsters += numplacemonsters / 2;
+		// And a map's pack size and "more packs" add more.
+		if (ActiveMapTier() > 0) {
+			const MapEffects &map = ActiveMapEffects();
+			numplacemonsters = numplacemonsters * static_cast<size_t>(map[MapAxis::PackSize]) / 100;
+			numplacemonsters = numplacemonsters * static_cast<size_t>(100 + map[MapDanger::MorePacks]) / 100;
+		}
 		if (ActiveMonsterCount + numplacemonsters > MaxMonsters - 10)
 			numplacemonsters = MaxMonsters - 10 - ActiveMonsterCount;
 		totalmonsters = ActiveMonsterCount + numplacemonsters;
@@ -3799,6 +3809,8 @@ std::expected<void, std::string> InitMonsters()
 				PlaceGroup(typeIndex, na);
 			}
 		}
+		// POE2 Mashup: a map's toughest monster becomes its boss.
+		ChooseMapBoss();
 	}
 	for (int i = 0; i < nt; i++) {
 		for (int s = -2; s < 2; s++) {
@@ -4092,6 +4104,9 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	SetRndSeed(monster.rndItemSeed);
 
 	SpawnLoot(monster, sendmsg);
+	// POE2 Mashup: in maps, magic and rare monsters may explode, and the map boss completes the map.
+	OnMapMonsterDeath(monster);
+	OnMapBossKilled(monster, sendmsg);
 	// POE2 Mashup: magic and rare monsters drop more.
 	if (!monster.isPlayerMinion()) {
 		if (gbIsPoe2)
@@ -4419,18 +4434,23 @@ void ProcessMonsters()
 			}
 		}
 
-		while (true) {
-			if ((monster.flags & MFLAG_SEARCH) == 0 || !AiPlanPath(monster)) {
-				AiProc[static_cast<int8_t>(monster.ai)](monster);
+		// POE2 Mashup: hasted map monsters now and then take a second turn in a tick.
+		for (int turn = 0; turn < 2; turn++) {
+			while (true) {
+				if ((monster.flags & MFLAG_SEARCH) == 0 || !AiPlanPath(monster)) {
+					AiProc[static_cast<int8_t>(monster.ai)](monster);
+				}
+
+				if (!UpdateModeStance(monster))
+					break;
+
+				GroupUnity(monster);
 			}
-
-			if (!UpdateModeStance(monster))
+			if (monster.mode != MonsterMode::Petrified && (monster.flags & MFLAG_ALLOW_SPECIAL) == 0) {
+				monster.animInfo.processAnimation((monster.flags & MFLAG_LOCK_ANIMATION) != 0);
+			}
+			if (turn > 0 || monster.hasNoLife() || !MapMonsterExtraTick(monster))
 				break;
-
-			GroupUnity(monster);
-		}
-		if (monster.mode != MonsterMode::Petrified && (monster.flags & MFLAG_ALLOW_SPECIAL) == 0) {
-			monster.animInfo.processAnimation((monster.flags & MFLAG_LOCK_ANIMATION) != 0);
 		}
 	}
 

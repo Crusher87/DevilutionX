@@ -13,6 +13,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/waystones.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -901,6 +902,8 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 	DesecrationRevealItem = false;
 	if (IsFlaskPotion(item) && (item.dwBuff & CF_POE2) != 0)
 		return ApplyCurrencyToFlask(orb, item);
+	if (IsWaystone(item))
+		return CraftWaystone(orb, player, item);
 	if (orb == CurrencyOrb::Bauble) {
 		EventPlrMsg(_("Glassblower's Baubles only work on flasks."), UiFlags::ColorRed);
 		return false;

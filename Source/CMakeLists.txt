@@ -31,6 +31,8 @@ set(libdevilutionx_SRCS
   poe2/craft_state.cpp
   poe2/crafting_items.cpp
   poe2/desecration.cpp
+  poe2/map_mods.cpp
+  poe2/map_play.cpp
   poe2/currency.cpp
   poe2/dodge_roll.cpp
   poe2/hud_globes.cpp

@@ -46,6 +46,7 @@
 #include "player.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
@@ -1233,6 +1234,11 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 	// POE2 Mashup: a Ruby, Topaz or Amethyst charm answers the hit landing.
 	resper = static_cast<int8_t>(ResistanceAgainstHit(player, damageType, resper));
+	// Map monsters' hits can penetrate resistances, and poison or make the hero bleed.
+	if (monster != nullptr && damageType != DamageType::Physical)
+		resper = static_cast<int8_t>(resper - MapPenetration());
+	if (monster != nullptr && &player == MyPlayer)
+		OnMapMonsterSpellHit(player, damage);
 
 	if (monster != nullptr) {
 		MonsterReducePlayerAttribute(*monster, player);

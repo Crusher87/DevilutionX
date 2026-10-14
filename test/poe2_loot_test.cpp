@@ -118,6 +118,21 @@ TEST_F(Poe2LootTest, RarityTablesMatchTheSource)
 	EXPECT_EQ(LootItemLevelBonus(LootSource::Boss), 2);
 }
 
+TEST_F(Poe2LootTest, MapBonusesRaiseRarityAndWaystones)
+{
+	LootBonus bonus;
+	bonus.rarity = 200;
+	bonus.waystones = 300;
+	const std::array<int, 4> weights = EquipmentRarityWeights(LootSource::Normal, bonus);
+	EXPECT_EQ(weights[1], 7000);
+	EXPECT_EQ(weights[2], 1550);
+	EXPECT_EQ(weights[3], 50);
+	EXPECT_EQ(weights[0], 10000 - 7000 - 1550 - 50);
+	EXPECT_EQ(EquipmentRarityWeights(LootSource::Normal), EquipmentRarityWeights(LootSource::Normal, {}));
+	const auto categories = LootCategoryWeights(LootSource::Normal, bonus);
+	EXPECT_EQ(categories[static_cast<size_t>(LootCategory::Endgame)], 3 * LootCategoryWeights(LootSource::Normal)[static_cast<size_t>(LootCategory::Endgame)]);
+}
+
 TEST_F(Poe2LootTest, UniqueRollsPickATierFirst)
 {
 	constexpr int Trials = 40000;

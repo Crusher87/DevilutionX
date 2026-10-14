@@ -57,18 +57,25 @@ int LootRandom(int bound);
 
 LootSource GetLootSource(const Monster &monster);
 
+/** @brief A map's loot bonuses in percent, 100 being none: item rarity, item quantity and waystone drops. */
+struct LootBonus {
+	int rarity = 100;
+	int quantity = 100;
+	int waystones = 100;
+};
+
 /** @brief Average loot rolls per kill, in thousandths: 0.18 for a normal monster up to 6 for a boss. */
 int ExpectedLootRollsPerMille(LootSource source);
 /** @brief The whole rolls, plus one more with the chance of the fraction. */
-int RollLootCount(LootSource source);
+int RollLootCount(LootSource source, const LootBonus &bonus = {});
 
 /** @brief The category weights out of 100; bosses favour equipment and give less gold. */
-std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source);
-LootCategory RollLootCategory(LootSource source);
+std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source, const LootBonus &bonus = {});
+LootCategory RollLootCategory(LootSource source, const LootBonus &bonus = {});
 
 /** @brief Chance in hundredths of a percent (out of 10000) of each rarity for an equipment roll. */
-std::array<int, 4> EquipmentRarityWeights(LootSource source);
-item_quality RollEquipmentRarity(LootSource source);
+std::array<int, 4> EquipmentRarityWeights(LootSource source, const LootBonus &bonus = {});
+item_quality RollEquipmentRarity(LootSource source, const LootBonus &bonus = {});
 
 /** @brief How sought-after a unique is; a unique roll picks the tier first, then a unique of that tier. */
 enum class UniqueTier : uint8_t {

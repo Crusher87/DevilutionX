@@ -2427,7 +2427,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
  * version 14 their crafting state.
  */
-constexpr uint8_t Poe2HeroDataVersion = 14;
+constexpr uint8_t Poe2HeroDataVersion = 15;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2611,6 +2611,17 @@ uint8_t ReadPoe2HeroData(Player &player)
 		jewel._iStatFlag = true;
 	}
 	SetRndSeed(rngState);
+
+	// Version 15: the open map's waystone, revives and boss, and the maps completed.
+	if (version < 15 || !file.IsValid(CraftStateSaveSize + 6))
+		return version;
+	std::array<uint8_t, CraftStateSaveSize> waystoneBytes {};
+	file.NextBytes(waystoneBytes.data(), waystoneBytes.size());
+	player.poe2.mapWaystone = UnpackCraftState(waystoneBytes);
+	player.poe2.mapRevives = std::min<uint8_t>(file.NextLE<uint8_t>(), MaxMapRevives);
+	player.poe2.mapBoss = file.NextLE<int16_t>();
+	player.poe2.mapBossKilled = file.NextLE<uint8_t>() != 0;
+	player.poe2.mapsCompleted = file.NextLE<uint16_t>();
 	return version;
 }
 
@@ -2651,7 +2662,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			jewelCount++;
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)));
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6);
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2713,6 +2724,13 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(jewel._iPoe2Craft);
 		file.WriteBytes(craftBytes.data(), craftBytes.size());
 	}
+	// Version 15: the open map's waystone, revives and boss, and the maps completed.
+	const std::array<uint8_t, CraftStateSaveSize> waystoneBytes = PackCraftState(player.poe2.mapWaystone);
+	file.WriteBytes(waystoneBytes.data(), waystoneBytes.size());
+	file.WriteLE<uint8_t>(player.poe2.mapRevives);
+	file.WriteLE<int16_t>(player.poe2.mapBoss);
+	file.WriteLE<uint8_t>(player.poe2.mapBossKilled ? 1 : 0);
+	file.WriteLE<uint16_t>(player.poe2.mapsCompleted);
 }
 
 void LoadHeroItems(Player &player)

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "poe2/craft_types.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/unique_rules.hpp"
@@ -328,6 +329,15 @@ struct Poe2PlayerData {
 	/** @brief The map (POE2 endgame) the player opened: its dungeon level and tier; tier 0 when there's none. */
 	uint8_t mapLevel = 0;
 	uint8_t mapTier = 0;
+	/** @brief The open map's waystone: its tier, rarity and modifiers. */
+	Poe2Craft mapWaystone {};
+	/** @brief Revives left in the open map. */
+	uint8_t mapRevives = 0;
+	/** @brief The open map's boss (a monster id), -1 before the level is made, and whether it died. */
+	int16_t mapBoss = -1;
+	bool mapBossKilled = false;
+	/** @brief Maps the hero completed, for the Atlas. */
+	uint16_t mapsCompleted = 0;
 	/** @brief Raw life and mana still to recover from the flasks being drunk, and the game ticks left (not saved). */
 	int32_t lifeFlaskRaw = 0;
 	uint8_t lifeFlaskTicks = 0;
@@ -404,6 +414,11 @@ struct Poe2PlayerData {
 		guardTicks = 0;
 		mapLevel = 0;
 		mapTier = 0;
+		mapWaystone = {};
+		mapRevives = 0;
+		mapBoss = -1;
+		mapBossKilled = false;
+		mapsCompleted = 0;
 		charmCooldown = 0;
 		resistCharmTicks = {};
 		stunImmuneTicks = 0;

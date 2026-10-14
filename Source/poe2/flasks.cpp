@@ -13,6 +13,7 @@
 #include "plrmsg.h"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -487,6 +488,9 @@ uint8_t FlaskChargesForKill(const Monster &monster)
 
 void GainFlaskCharges(Player &player, uint8_t charges)
 {
+	// Some waystones give fewer flask charges.
+	if (const int percent = MapFlaskChargePercent(); percent < 100 && charges > 0)
+		charges = static_cast<uint8_t>(std::max(charges * percent / 100, 1));
 	for (size_t slot = 0; slot < NumFlasks; slot++) {
 		// Moonwater: no charges for life flasks while it works.
 		if (player.poe2.uniqueState.moonwaterTicks > 0 && IsFlaskPotion(player.SpdList[slot]) && RecoversLife(player.SpdList[slot]))

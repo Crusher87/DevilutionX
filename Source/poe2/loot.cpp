@@ -74,9 +74,9 @@ int ExpectedLootRollsPerMille(LootSource source)
 	}
 }
 
-int RollLootCount(LootSource source)
+int RollLootCount(LootSource source, const LootBonus &bonus)
 {
-	const int expected = ExpectedLootRollsPerMille(source);
+	const int expected = ExpectedLootRollsPerMille(source) * bonus.quantity / 100;
 	int count = expected / 1000;
 	const int fraction = expected % 1000;
 	if (fraction > 0 && LootRandom(1000) < fraction)
@@ -84,7 +84,7 @@ int RollLootCount(LootSource source)
 	return count;
 }
 
-std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source)
+std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source, const LootBonus &bonus)
 {
 	// Equipment, gold, currency, flask or charm, gem, endgame, misc, jewel. Augments (4) aren't in the game yet, so
 	// their weight goes to jewels for now.
@@ -95,15 +95,18 @@ std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(Lo
 		weights[static_cast<size_t>(LootCategory::Gold)] /= 2;
 		weights[static_cast<size_t>(LootCategory::Misc)] = 0;
 	}
+	weights[static_cast<size_t>(LootCategory::Endgame)] = weights[static_cast<size_t>(LootCategory::Endgame)] * bonus.waystones / 100;
 	return weights;
 }
 
-LootCategory RollLootCategory(LootSource source)
+LootCategory RollLootCategory(LootSource source, const LootBonus &bonus)
 {
-	return static_cast<LootCategory>(RollWeighted(LootCategoryWeights(source)));
+	return static_cast<LootCategory>(RollWeighted(LootCategoryWeights(source, bonus)));
 }
 
-std::array<int, 4> EquipmentRarityWeights(LootSource source)
+namespace {
+
+std::array<int, 4> BaseRarityWeights(LootSource source)
 {
 	// Normal, magic, rare, unique, in hundredths of a percent.
 	switch (source) {
@@ -119,10 +122,25 @@ std::array<int, 4> EquipmentRarityWeights(LootSource source)
 	}
 }
 
-item_quality RollEquipmentRarity(LootSource source)
+} // namespace
+
+std::array<int, 4> EquipmentRarityWeights(LootSource source, const LootBonus &bonus)
+{
+	std::array<int, 4> weights = BaseRarityWeights(source);
+	// Item rarity makes magic, rare and unique items more likely; normal ones take what's left.
+	int total = 0;
+	for (size_t i = 1; i < weights.size(); i++) {
+		weights[i] = weights[i] * bonus.rarity / 100;
+		total += weights[i];
+	}
+	weights[0] = std::max(10000 - total, 0);
+	return weights;
+}
+
+item_quality RollEquipmentRarity(LootSource source, const LootBonus &bonus)
 {
 	constexpr std::array<item_quality, 4> Rarities { ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE };
-	return Rarities[RollWeighted(EquipmentRarityWeights(source))];
+	return Rarities[RollWeighted(EquipmentRarityWeights(source, bonus))];
 }
 
 std::array<int, static_cast<size_t>(UniqueTier::Count)> UniqueTierWeights(LootSource source)

@@ -21,6 +21,8 @@ struct Poe2MonsterState {
 	uint8_t chillPercent = 0;
 	/** @brief Slowed ticks owed by the chill, in percent of a tick. */
 	uint8_t chillCarry = 0;
+	/** @brief Map hastes collect here; at 100 the monster takes an extra turn. */
+	uint8_t hasteCarry = 0;
 	uint8_t freezeTicks = 0;
 	/** @brief Cold damage built up towards a freeze, as a raw Fixed26_6 value. */
 	int32_t freezeBuildup = 0;

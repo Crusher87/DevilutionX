@@ -15,6 +15,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -64,7 +65,7 @@ void HeraldHit(Monster &monster, DamageType damageType, Fixed26_6 damage)
 void ExplodeAsh(const HeraldTrigger &trigger)
 {
 	AddVisualEffect(trigger.position, MissileGraphicID::BigExplosion);
-	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfAshPercent / 100));
+	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfAshPercent * MapAuraPercent() / 10000));
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= HeraldOfAshRadius)
@@ -87,7 +88,7 @@ void ReleaseThunder(const HeraldTrigger &trigger)
 		targets.resize(HeraldOfThunderBolts);
 
 	AddVisualEffect(trigger.position, MissileGraphicID::BlueFlareExplosion2);
-	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfThunderPercent / 100));
+	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfThunderPercent * MapAuraPercent() / 10000));
 	for (Monster *monster : targets) {
 		AddVisualEffect(monster->position.tile, MissileGraphicID::LightningArrow);
 		HeraldHit(*monster, DamageType::Lightning, damage);

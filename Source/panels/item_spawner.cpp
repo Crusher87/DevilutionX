@@ -680,6 +680,11 @@ bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_qua
 	SetupItem(item);
 	if (IsUncutGem(item) || IsWaystone(item))
 		item._iCreateInfo = static_cast<uint16_t>((item._iCreateInfo & ~CF_LEVEL) | std::clamp(level, MinLevel, static_cast<int>(CF_LEVEL)));
+	// A waystone's tier follows the level: tier 16 at level 90.
+	if (IsWaystone(item)) {
+		item._iPoe2Craft = {};
+		FinishWaystone(item);
+	}
 	return !item.isEmpty();
 }
 

@@ -12,6 +12,7 @@
 #include "player.h"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/telemetry.hpp"
@@ -101,7 +102,7 @@ int GeneralDamagePercent(const Player &player)
 	percent = percent * (100 + ResourceSpentBonus(player)) / 100;
 	if (state.witchglassTicks > 0)
 		percent = percent * (100 + WitchglassDamagePercent) / 100;
-	return percent;
+	return percent * MapPlayerDamagePercent() / 100;
 }
 
 /** @brief Deals one packet of a hit to the monster, after its resistance, shock and the rules. */
@@ -327,7 +328,7 @@ int CritDamagePercent(const Player &player)
 	// Lucky crits: the bonus rolls twice between half and all of it, and the better roll counts.
 	if (Rule(player, UniqueRule::LuckyCrits) > 0)
 		bonus = bonus / 2 + std::max(GenerateRnd(bonus / 2 + 1), GenerateRnd(bonus / 2 + 1));
-	return 100 + bonus;
+	return 100 + (bonus * MapCritBonusPercent() / 100);
 }
 
 bool AttacksCannotBeEvaded(const Player &player)
@@ -504,7 +505,7 @@ bool TakeFreeSkill(const Player &player)
 
 int UniqueManaCostPercent(const Player &player)
 {
-	return std::max(100 + Rule(player, UniqueRule::ManaCost), 0);
+	return std::max((100 + Rule(player, UniqueRule::ManaCost)) * MapSkillCostPercent() / 100, 0);
 }
 
 Fixed26_6 SpendableEnergyShield(const Player &player)
@@ -553,6 +554,7 @@ int UniqueMovementSlowPercent(const Player &player)
 	int slow = Rule(player, UniqueRule::GuardStackSlow) * State(player).guardStacks;
 	if (const int heavy = Rule(player, UniqueRule::HeavyArmourSlow); heavy > 0 && Poe2Armour(player) > HeavyArmour)
 		slow += heavy;
+	slow += MapPlayerSlowPercent(player);
 	return std::clamp(slow, 0, 90);
 }
 
@@ -684,7 +686,10 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		return 100;
 	int percent = 100;
 	if (monster.poe2.exposureTicks > 0 && static_cast<uint8_t>(type) == monster.poe2.exposureElement)
-		percent += ExposurePercent;
+		percent += ExposurePercent * MapExposurePercent() / 100;
+	// Waystones can give map monsters more elemental resistance.
+	if (IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic) && !monster.isPlayerMinion())
+		percent -= MapMonsterResistance();
 	if (type == DamageType::Lightning && IsMonsterElectrocuted(monster) && MyPlayer != nullptr)
 		percent += Rule(*MyPlayer, UniqueRule::ElectrocutedLightning);
 	// Talismans and desecrated modifiers that favour hunting rare and unique monsters.
@@ -730,7 +735,7 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 	if (!gbIsPoe2 || damage <= 0)
 		return damage;
 	UniqueRuleState &state = State(player);
-	int64_t raw = damage.raw();
+	int64_t raw = damage.raw() * MapDamageTakenPercent(player) / 100;
 	if (const int more = Rule(player, UniqueRule::MovingVulnerability); more > 0 && state.sinceMovedTicks < TicksPerSecond)
 		raw = raw * (100 + more) / 100;
 	if (const int cap = Rule(player, UniqueRule::OvercapResistGuard); cap > 0) {
@@ -776,7 +781,7 @@ int LifeRecoveryPercent(const Player &player, bool fromFlask)
 {
 	if (IsRecoveryLocked(player))
 		return 0;
-	int percent = 100 - Rule(player, UniqueRule::LessLifeRecovery);
+	int percent = (100 - Rule(player, UniqueRule::LessLifeRecovery)) * MapRecoveryPercent() / 100;
 	if (fromFlask)
 		percent = percent * (100 - Rule(player, UniqueRule::LessLifeFlaskRecovery)) / 100;
 	return std::max(percent, 0);

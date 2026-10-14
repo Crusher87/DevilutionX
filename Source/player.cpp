@@ -54,6 +54,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -61,6 +62,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
 #include "qol/stash.h"
@@ -691,7 +693,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 
 	int skdam = 0;
 	if (HasAnyOf(player._pIFlags, ItemSpecialEffect::RandomStealLife)) {
-		skdam = GenerateRnd(dam / 8);
+		skdam = GenerateRnd(dam / 8) * MapLeechPercent() / 100;
 		player._pHitPoints += Fixed26_6::fromRaw(skdam);
 		if (player._pHitPoints > player._pMaxHP) {
 			player._pHitPoints = player._pMaxHP;
@@ -709,6 +711,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::StealMana5)) {
 			skdam = 5 * dam / 100;
 		}
+		skdam = skdam * MapLeechPercent() / 100;
 		player._pMana += Fixed26_6::fromRaw(skdam);
 		if (player._pMana > player._pMaxMana) {
 			player._pMana = player._pMaxMana;
@@ -726,6 +729,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::StealLife5)) {
 			skdam = 5 * dam / 100;
 		}
+		skdam = skdam * MapLeechPercent() / 100;
 		player._pHitPoints += Fixed26_6::fromRaw(skdam);
 		if (player._pHitPoints > player._pMaxHP) {
 			player._pHitPoints = player._pMaxHP;
@@ -3050,6 +3054,12 @@ void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int mi
 		AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);
 		RedrawComponent(PanelDrawComponent::Health);
 	}
+	// And a map's revives bring the hero back at the map's start.
+	if (player.hasNoLife() && &player == MyPlayer && TryMapRevive(player)) {
+		AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);
+		RedrawComponent(PanelDrawComponent::Health);
+		RedrawComponent(PanelDrawComponent::Mana);
+	}
 	if (player.hasNoLife()) {
 		SyncPlrKill(player, deathReason);
 	}
@@ -3226,6 +3236,7 @@ void ProcessPlayers()
 			if (gbIsPoe2 && player.isOnLevel(0))
 				RefillFlasks(player);
 			ApplyRegen(player);
+			ProcessMapPlayer(player);
 			RechargeEnergyShield(player);
 			ProcessPersistentSkills(player);
 			ProcessCharms(player);

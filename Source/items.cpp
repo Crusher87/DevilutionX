@@ -84,6 +84,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/jewels.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -1434,6 +1435,9 @@ std::vector<Poe2ItemMod> RollNaturalPoe2Mods(const Item &item, bool rare)
 /** @brief The rarity the item is made with: the one crafting gave it, or the one the loot roll picked. */
 std::optional<item_quality> RarityToRoll(const Item &item)
 {
+	// A waystone's rarity and modifiers are its own (poe2/waystones.cpp).
+	if (item._iMiscId == IMISC_WAYSTONE)
+		return std::nullopt;
 	if (item._iPoe2Craft.explicitMods)
 		return static_cast<item_quality>(item._iPoe2Craft.rarity);
 	return GetLootRarity(item);
@@ -2172,11 +2176,8 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (IsWaystone(item)) {
-		const int tier = WaystoneTier(item);
-		AddItemInfoBoxString(StrCat(_("Map tier "), tier));
-		AddItemInfoBoxString(FormatRuntime(_("Monsters: {:d}% more life, {:d}% more damage"), tier * MapLifePercentPerTier, tier * MapDamagePercentPerTier));
-		AddItemInfoBoxString(_("More magic and rare monsters"));
-		AddItemInfoBoxString(_("Use in town to open the map"));
+		for (const std::string &line : WaystoneText(item))
+			AddItemInfoBoxString(line);
 		return;
 	}
 	if (const CharmEffect charm = GetCharmEffect(item); charm != CharmEffect::None) {
@@ -3562,9 +3563,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
 	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
 	if (IsPersistentSkillActive(player, PersistentSkill::PurityOfElements)) {
-		fireRes += PurityResistance;
-		lightRes += PurityResistance;
-		magicRes += PurityResistance;
+		const int purity = PurityResistance * MapAuraPercent() / 100;
+		fireRes += purity;
+		lightRes += purity;
+		magicRes += purity;
 	}
 	lifeRegen += passive(PassiveStat::LifeRegen);
 	manaRegen += passive(PassiveStat::ManaRegen);
@@ -4132,6 +4134,7 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 	}
 	FinishFlask(item);
 	FinishCraftingItem(item);
+	FinishWaystone(item);
 }
 
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen)
@@ -4454,6 +4457,34 @@ struct Poe2LootOrigin {
 	bool pregen = false;
 };
 
+/** @brief The open map's item rarity, quantity (from monster effectiveness) and waystone drops; none outside maps. */
+LootBonus MapLootBonus()
+{
+	LootBonus bonus;
+	if (ActiveMapTier() == 0)
+		return bonus;
+	const MapEffects &map = ActiveMapEffects();
+	bonus.rarity = map[MapAxis::ItemRarity];
+	// "Loot quality varies": each roll's rarity swings up or down.
+	if (const int variance = map[MapDanger::LootVariance]; variance > 0)
+		bonus.rarity = std::max(bonus.rarity + LootRandom((2 * variance) + 1) - variance, 0);
+	bonus.quantity = 100 + ((map[MapAxis::Effectiveness] - 100) * 55 / 100);
+	bonus.waystones = map[MapAxis::WaystoneFind];
+	return bonus;
+}
+
+/** @brief The tier of a waystone dropping here: around the map's own tier inside a map. */
+int DropWaystoneTier(int poe2ItemLevel)
+{
+	const int mapTier = ActiveMapTier();
+	if (mapTier == 0)
+		return WaystoneTierForItemLevel(poe2ItemLevel);
+	const int roll = LootRandom(100);
+	return std::clamp(roll < 15 ? mapTier + 1 : roll < 25 ? mapTier - 1
+	                                                      : mapTier,
+	    1, MaxWaystoneTier);
+}
+
 Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 {
 	const LootSource source = GetLootSource(monster);
@@ -4526,7 +4557,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	BeltUniqueId beltUnique = BeltUniqueId::None;
 	if (category == LootCategory::Equipment) {
 		if (!rarity)
-			rarity = RollEquipmentRarity(origin.source);
+			rarity = RollEquipmentRarity(origin.source, MapLootBonus());
 		if (*rarity == ITEM_QUALITY_UNIQUE) {
 			if (const std::optional<Poe2UniquePick> unique = PickPoe2Unique(itemLevel, origin.poe2ItemLevel, origin.source); unique) {
 				idx = unique->base;
@@ -4540,7 +4571,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	}
 	if (category == LootCategory::Jewel) {
 		// Jewels are always magic or rare: a normal roll makes a magic jewel and a unique roll a rare one.
-		const item_quality roll = rarity.value_or(RollEquipmentRarity(origin.source));
+		const item_quality roll = rarity.value_or(RollEquipmentRarity(origin.source, MapLootBonus()));
 		rarity = IsAnyOf(roll, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE) ? ITEM_QUALITY_RARE : ITEM_QUALITY_MAGIC;
 	}
 	if (!idx)
@@ -4571,6 +4602,8 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
+	if (IsWaystone(item))
+		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
 	SetupItem(item);
 	TelemetryItemDropped(item, origin.name);
 	if (sendmsg)
@@ -4584,7 +4617,7 @@ void DropPoe2ContainerItem(Point position, bool onlygood, bool sendmsg, bool del
 {
 	const Poe2LootOrigin origin = ContainerLootOrigin(delta);
 	if (!onlygood) {
-		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source));
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, MapLootBonus()));
 		return;
 	}
 	// Special chests always hold something good: the rare monster table, with normal results made magic.
@@ -4619,13 +4652,13 @@ void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int roll
 {
 	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
 	for (int i = 0; i < rolls; i++)
-		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source));
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, MapLootBonus()));
 }
 
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 {
 	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
-	SpawnPoe2LootRolls(monster, position, sendmsg, RollLootCount(origin.source));
+	SpawnPoe2LootRolls(monster, position, sendmsg, RollLootCount(origin.source, MapLootBonus()));
 	if (origin.source != LootSource::Boss)
 		return;
 	// Bosses always drop a rare, often some currency and now and then a unique on top of their rolls.
@@ -4634,6 +4667,29 @@ void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
 	if (LootRandom(100) < BossBonusUniquePercent)
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
+}
+
+void DropWaystone(Point position, int tier, bool sendmsg)
+{
+	if (ActiveItemCount >= MAXITEMS)
+		return;
+	std::optional<_item_indexes> base;
+	for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+		if (AllItemsList[i].iMiscId == IMISC_WAYSTONE && IsItemAvailable(static_cast<int>(i)))
+			base = static_cast<_item_indexes>(i);
+	}
+	if (!base)
+		return;
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	GetSuperItemSpace(position, ii);
+	item.dwBuff |= CF_POE2;
+	SetupAllItems(*MyPlayer, item, *base, AdvanceRndSeed(), std::min<int>(2 * ItemsGetCurrlevel(), CF_LEVEL), 1, /*onlygood=*/false, /*pregen=*/false);
+	RollWaystone(item, tier);
+	SetupItem(item);
+	TelemetryItemDropped(item, "map boss");
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
 }
 
 void DropBossUnique(Monster &monster, bool sendmsg)
@@ -4900,6 +4956,11 @@ void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t 
 	// POE2 Mashup: and a skill gem keeps its level.
 	if (IsSkillGem(item))
 		item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (dwBuff & CF_POE2_GEM_LEVEL);
+	// And a waystone keeps its tier and modifiers.
+	if (IsWaystone(item)) {
+		item._iPoe2Craft = craft;
+		FinishWaystone(item);
+	}
 }
 
 void RecreateEar(Item &item, uint16_t ic, uint32_t iseed, uint8_t bCursval, std::string_view heroName)
