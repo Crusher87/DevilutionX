@@ -786,3 +786,79 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Lower Resist Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Confuse Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Attract Gem	Gem	13	0	0	0	0	0	0	57	0		SKILLGEM_TABLE	Null	true	2140
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Increased Area Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Increased Duration Support	Gem	2	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Volley Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Spell Echo Support	Gem	8	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Multistrike Support	Gem	7	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Aftershock Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Close Combat Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Infused Flames Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Infused Storm Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Infused Frost Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Holy Infusion Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Burning Ground Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Overcharge Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Deep Freeze Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Withering Touch Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Cast on Kill Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Cast when Hit Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Cast on Dodge Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Cast while Channelling Support	Gem	9	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Blink Strike Support	Gem	7	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Echoing Shout Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Rallying Cry Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Bone Army Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Feeding Frenzy Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Grave Pact Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Curse on Hit Support	Gem	7	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Curse Mastery Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Rune Mastery Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Cluster Runes Support	Gem	8	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Sanctify Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Shatter Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Life Leech Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Mana Leech Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blood Price Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Elemental Focus Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Hellfire Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Fuel the Pyre Support	Gem	7	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Frostbite Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Conductor Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Serrated Edge Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Envenom Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Bloodlust Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Sunder Armour Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Pestilence Support	Gem	8	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Horadric Seals Support	Gem	9	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Stored Volley Support	Gem	7	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Cascade Support	Gem	8	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Nova Projectiles Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Ricochet Support	Gem	4	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Momentum Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Crushing Blow Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Deliberate Casting Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Brimming Mana Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Coup de Grace Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Wrathforged Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Combo Finisher Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Horadric Totem Support	Gem	9	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Decoy Support	Gem	8	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Legion Support	Gem	7	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Mixed Host Support	Gem	7	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	The Butcher's Hook Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Rathma's Covenant Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Lazarus' Deceit Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Diablo's Red Lightning Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Zhar's Madness Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Warlord's Blood Pact Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Gharbad's Greed Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Na-Krul's Prison Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Tal Rasha's Prism Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Bartuc's Bloodletting Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Trag'Oul's Balance Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Immortal King's Stride Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Kashya's Volley Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Andariel's Anguish Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Baal's Echo Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Wirt's Leg Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500

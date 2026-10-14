@@ -538,6 +538,7 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SKILLGEM_SHIELDBASH") return IMISC_SKILLGEM_SHIELDBASH;
 	if (value == "SKILLGEM_AMPLIFYDAMAGE") return IMISC_SKILLGEM_AMPLIFYDAMAGE;
 	if (value == "SKILLGEM_TABLE") return IMISC_SKILLGEM_TABLE;
+	if (value == "SUPPORT_TABLE") return IMISC_SUPPORT_TABLE;
 	if (value == "SPIRITGEM_HERALDFROST") return IMISC_SPIRITGEM_HERALDFROST;
 	if (value == "SPIRITGEM_SKELETALMAGES") return IMISC_SPIRITGEM_SKELETALMAGES;
 	if (value == "SUPPORT_BATTLERAGE") return IMISC_SUPPORT_BATTLERAGE;

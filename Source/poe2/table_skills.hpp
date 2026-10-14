@@ -210,6 +210,8 @@ bool StartTableSkill(Player &player, const TableSkillData &data);
 void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target);
 /** @brief Fires one shot of a Stream skill. */
 void FireTableShot(Player &player, const TableSkillData &data, Point target, int index);
+/** @brief Puts a table curse skill's curse on a monster, for the given part of its duration. */
+void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, int durationPercent);
 /** @brief The cast effects of a table skill. */
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target);
 

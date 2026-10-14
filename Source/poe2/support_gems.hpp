@@ -19,6 +19,7 @@
 namespace devilution {
 
 struct Item;
+struct ItemData;
 struct Missile;
 struct Monster;
 struct Player;
@@ -76,6 +77,10 @@ enum class SupportSocketResult : uint8_t {
 	NoCapacity,
 	/** The skill already has a Power support, and a skill takes only one. */
 	PowerTaken,
+	/** The skill has a support that rules this one out. */
+	Conflict,
+	/** A lineage support can be in use on only one skill. */
+	LineageInUse,
 };
 
 /** @brief The support gem an item represents, or SupportGem::None. */
@@ -85,6 +90,8 @@ bool IsPowerSupport(SupportGem gem);
 /** @brief The Power support already in a skill's sockets other than the given one, if any. */
 SupportGem OtherPowerSupport(const SupportSockets &supports, std::optional<size_t> exceptSocket);
 SupportGem SupportGemForMiscId(int miscId);
+/** @brief The support gem an item base is, including the table supports, or SupportGem::None. */
+SupportGem SupportGemForItemData(const ItemData &data);
 std::string_view SupportGemName(SupportGem gem);
 std::string_view SupportGemDescription(SupportGem gem);
 
@@ -129,8 +136,9 @@ std::vector<SupportGem> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
 /** @brief Extra spell levels the spell's supports add. */
 int SupportSpellLevelBonus(const Player &player, SpellID spell);
 /** @brief Mana cost multiplier in percent from the skill's supports. */
-int SupportManaCostPercent(const Player &player, SkillSlot skill);
-inline int SupportManaCostPercent(const Player &player, SpellID spell) { return SupportManaCostPercent(player, SkillSlot::ForSpell(spell)); }
+/** @param lifeShare false for the full cost, before Blood Price and the like move part of it to life. */
+int SupportManaCostPercent(const Player &player, SkillSlot skill, bool lifeShare = true);
+inline int SupportManaCostPercent(const Player &player, SpellID spell, bool lifeShare = true) { return SupportManaCostPercent(player, SkillSlot::ForSpell(spell), lifeShare); }
 /** @brief Animation frames skipped when casting the spell. */
 int8_t SupportCastSkippedFrames(const Player &player, SpellID spell);
 /**

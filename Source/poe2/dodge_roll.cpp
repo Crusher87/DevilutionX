@@ -13,6 +13,7 @@
 #include "msg.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/support_table.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -103,6 +104,7 @@ bool TryDodgeRoll(Player &player)
 	player.poe2.dodgeCooldown = DodgeCooldownTicks;
 	player.poe2.untouchableTicks = DodgeUntouchableTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, target);
+	OnSupportedDodge(player);
 	return true;
 }
 

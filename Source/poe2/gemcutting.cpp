@@ -5,6 +5,7 @@
 #include "items.h"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "spells.h"
 #include "utils/is_of.hpp"
@@ -83,8 +84,11 @@ const std::vector<GemEntry> &GemCatalog()
 	catalogItemCount = AllItemsList.size();
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
-		GemEntry entry { i, SkillForGemData(data), SupportGemForMiscId(data.iMiscId), std::max<int>(data.iMinMLvl, 1) };
+		GemEntry entry { i, SkillForGemData(data), SupportGemForItemData(data), std::max<int>(data.iMinMLvl, 1) };
 		if (entry.skill.isEmpty() && entry.support == SupportGem::None)
+			continue;
+		// Lineage supports are found, never cut.
+		if (IsLineageSupport(entry.support))
 			continue;
 		catalog.push_back(entry);
 	}

@@ -85,6 +85,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -1144,8 +1145,15 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 
 	int dam = RandomIntBetween(mind, maxd) << 6;
 	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
-	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size())
-		dam = dam * UniqueMinionDamagePercent(Players[static_cast<size_t>(attacker.goalVar3)], attacker.hitPoints.raw() * 2 < attacker.maxHitPoints.raw()) / 100;
+	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
+		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
+		dam = dam * UniqueMinionDamagePercent(owner, attacker.hitPoints.raw() * 2 < attacker.maxHitPoints.raw()) / 100;
+		// Their skill's supports too.
+		if (gbIsPoe2)
+			dam = dam * SupportMinionDamagePercent(owner, attacker) / 100;
+	}
+	if (gbIsPoe2 && target.isPlayerMinion() && static_cast<size_t>(target.goalVar3) < Players.size())
+		dam = dam * SupportMinionDamageTakenPercent(Players[static_cast<size_t>(target.goalVar3)], target) / 100;
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
 	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
 
@@ -1275,6 +1283,9 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 
 	if ((monster.flags & MFLAG_NOLIFESTEAL) == 0 && monster.type().type == MT_SKING && gbIsMultiplayer)
 		monster.hitPoints += dam;
+	// POE2 Mashup: Cast when Hit and the like.
+	if (gbIsPoe2 && &player == MyPlayer && !player.hasNoLife())
+		OnPlayerHitBySupportedMonster(player, monster);
 	if (player.hasNoLife()) {
 		if (gbIsHellfire)
 			M_StartStand(monster, monster.direction);
@@ -3488,6 +3499,7 @@ void InitLevelMonsters()
 {
 	ClearHeralds();
 	ClearSkillZones();
+	ClearSupportEffects();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -3973,6 +3985,7 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 	const Fixed26_6 lifeBefore = monster.hitPoints;
 	monster.hitPoints -= damage;
 	TelemetryMonsterDamaged(monster, damage, lifeBefore);
+	NoteSupportedDamage(monster, damageType, damage);
 
 	if (monster.hasNoLife()) {
 		// A monster without life no longer blocks the tile it stands on.
@@ -4109,10 +4122,14 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		QueueHeraldTriggers(*MyPlayer, monster);
 		OnTableCursedMonsterKilled(monster);
 		OnMonsterKilled(*MyPlayer, monster);
+		OnSupportedKill(monster);
+		TryDropLineageSupport(monster, sendmsg);
 	}
 	// POE2 Mashup: a minion's death can frenzy its owner's other minions.
-	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size())
+	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
 		OnMinionDied(Players[static_cast<size_t>(monster.goalVar3)]);
+		OnSupportedMinionDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
+	}
 
 	TelemetryMonsterKilled(monster);
 	MonsterKillCounts[monster.type().type]++;
@@ -5027,6 +5044,15 @@ bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel,
 	const uint32_t seed = GetLCGEngineState();
 	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, seed, player.getId(), gemLevel);
 	NetSendCmdSpawnMonster(position, Direction::South, static_cast<uint16_t>(typeIndex), static_cast<uint16_t>(monsterIndex), seed, player.getId(), gemLevel);
+	// POE2 Mashup: supports of the minion skill change the minions' life.
+	if (gbIsPoe2) {
+		Monster &minion = Monsters[monsterIndex];
+		const int percent = SupportMinionLifePercent(player, type == SkeletonMageMinionType ? PersistentSkill::SkeletalMages : PersistentSkill::SkeletalWarriors);
+		if (percent != 100) {
+			minion.maxHitPoints = Fixed26_6::fromRaw(std::max<int32_t>(minion.maxHitPoints.raw() * percent / 100, 64));
+			minion.hitPoints = minion.maxHitPoints;
+		}
+	}
 	return true;
 }
 

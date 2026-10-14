@@ -49,6 +49,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -533,6 +534,7 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 				int supportedMin = minDamage;
 				int supportedMax = maxDamage;
 				ScaleSupportedMissileDamage(missile, supportedMin, supportedMax);
+				const SupportHitScope supportScope(*missile.sourcePlayer(), MissileSkill(missile));
 				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, supportedMin, supportedMax, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
 				// POE2 Mashup: only a projectile's direct hit pierces, forks or chains, not its explosion.
 				if (isMonsterHit && !dontDeleteOnCollision)
@@ -582,6 +584,9 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 	}
 
 	if (IsMissileBlockedByTile(position)) {
+		// POE2 Mashup: Ricochet sends a new projectile off the wall at the nearest enemy.
+		if (!isMonsterHit && missile.poe2.ricochet)
+			OnSupportedMissileHitWall(missile, position);
 		Object *object = FindObjectAtPosition(position);
 		if (object != nullptr && object->IsBreakable()) {
 			BreakObjectMissile(*object);

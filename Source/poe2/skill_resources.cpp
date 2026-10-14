@@ -7,6 +7,7 @@
 #include "player.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -86,6 +87,8 @@ void SkillBurst(const Player &player, Point center, int radius, DamageType type,
 	AddVisualEffect(center, effect);
 	if (&player != MyPlayer || damage <= 0)
 		return;
+	const WeaponSkill skill = CurrentWeaponSkill(player);
+	const SupportHitScope scope(player, skill != WeaponSkill::None ? SkillSlot::ForAttack(skill) : SkillSlot {});
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (monster.hasNoLife() || monster.isPlayerMinion() || !monster.isPossibleToHit() || monster.mode == MonsterMode::Death)

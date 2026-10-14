@@ -58,6 +58,17 @@ struct Poe2MonsterState {
 	/** @brief Haunt and Locust Swarm drain the monster and move on to another when it dies. */
 	uint8_t hauntTicks = 0;
 	uint8_t locustTicks = 0;
+	/** @brief The skill that last hit the monster (a SkillSlot's kind and id) and the player who used it, for kill supports. */
+	uint8_t lastHitSkillKind = 0;
+	uint8_t lastHitSkillId = 0;
+	int8_t lastHitPlayer = -1;
+	/** @brief Withered by Withering Touch: takes more damage per stack. */
+	uint8_t witherStacks = 0;
+	uint8_t witherTicks = 0;
+	/** @brief Poison from Envenom and Andariel's Anguish: stacks add up, as a raw Fixed26_6 value per tick. */
+	uint8_t poisonTicks = 0;
+	int8_t poisonSource = -1;
+	int32_t poisonDamagePerTick = 0;
 };
 
 } // namespace devilution

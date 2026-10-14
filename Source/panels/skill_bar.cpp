@@ -829,6 +829,10 @@ std::string SupportSocketMessage(SupportSocketResult result, const Player &playe
 	}
 	case SupportSocketResult::PowerTaken:
 		return FormatRuntime(_("{:s} already has a Power support ({:s}); a skill takes only one."), SkillName(skill), SupportGemName(OtherPowerSupport(player.poe2.slotSupports[slot], std::nullopt)));
+	case SupportSocketResult::Conflict:
+		return FormatRuntime(_("{:s} clashes with a support {:s} already has."), SupportGemName(gem), SkillName(skill));
+	case SupportSocketResult::LineageInUse:
+		return FormatRuntime(_("{:s} is a lineage support and already in use on another skill."), SupportGemName(gem));
 	default:
 		return FormatRuntime(_("{:s} now supports {:s}."), SupportGemName(gem), SkillName(skill));
 	}

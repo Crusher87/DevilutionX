@@ -151,6 +151,85 @@ enum class SupportGem : uint8_t {
 	Knockback,
 	/** Melee hits with the skill build Rage. */
 	BattleRage,
+	/** Planned supports from the skills design document (poe2/support_table.hpp describes them). */
+	IncreasedArea,
+	IncreasedDuration,
+	Volley,
+	SpellEcho,
+	Multistrike,
+	Aftershock,
+	CloseCombat,
+	InfusedFlames,
+	InfusedStorm,
+	InfusedFrost,
+	HolyInfusion,
+	BurningGround,
+	Overcharge,
+	DeepFreeze,
+	WitheringTouch,
+	CastOnKill,
+	CastWhenHit,
+	CastOnDodge,
+	CastWhileChannelling,
+	BlinkStrike,
+	EchoingShout,
+	RallyingCry,
+	BoneArmy,
+	FeedingFrenzy,
+	GravePact,
+	CurseOnHit,
+	CurseMastery,
+	RuneMastery,
+	ClusterRunes,
+	Sanctify,
+	Shatter,
+	LifeLeech,
+	ManaLeech,
+	BloodPrice,
+	/** Supports from the build research. */
+	ElementalFocus,
+	Hellfire,
+	FuelThePyre,
+	Frostbite,
+	Conductor,
+	SerratedEdge,
+	Envenom,
+	Bloodlust,
+	SunderArmour,
+	Pestilence,
+	HoradricSeals,
+	StoredVolley,
+	Cascade,
+	NovaProjectiles,
+	Ricochet,
+	Momentum,
+	CrushingBlow,
+	DeliberateCasting,
+	BrimmingMana,
+	CoupDeGrace,
+	Wrathforged,
+	ComboFinisher,
+	HoradricTotem,
+	Decoy,
+	Legion,
+	MixedHost,
+	/** Lineage supports: unique, found rather than cut. */
+	ButchersHook,
+	RathmasCovenant,
+	LazarusDeceit,
+	DiablosRedLightning,
+	ZharsMadness,
+	WarlordsBloodPact,
+	GharbadsGreed,
+	NaKrulsPrison,
+	TalRashasPrism,
+	BartucsBloodletting,
+	TragOulsBalance,
+	ImmortalKingsStride,
+	KashyasVolley,
+	AndarielsAnguish,
+	BaalsEcho,
+	WirtsLeg,
 	Count,
 };
 
@@ -319,6 +398,36 @@ using SupportSockets = std::array<SupportGem, MaxSupportSockets>;
 /** @brief Most jewel sockets the passive tree can have. */
 constexpr size_t MaxJewelSockets = 8;
 
+/** @brief Timers and counters of the support gems, per character (not saved; see poe2/support_table.cpp). */
+struct SupportRuntime {
+	/** Game ticks before a trigger support in each Skills panel socket can go off again. */
+	std::array<uint8_t, NumSkillSlots> triggerCooldown {};
+	/** Seals stored by Horadric Seals and Stored Volley, and the ticks towards the next one. */
+	std::array<uint8_t, NumSkillSlots> seals {};
+	std::array<uint8_t, NumSkillSlots> sealTicks {};
+	/** Warlord's Blood Pact: attack speed stacks from kills. */
+	uint8_t warlordStacks = 0;
+	/** Frostbite: hits gain extra cold damage after a freeze. */
+	uint8_t frostbiteTicks = 0;
+	/** Tal Rasha's Prism: the next element, the elements cast in a row (bits) and whether the next cast is empowered. */
+	uint8_t prismElement = 0;
+	uint8_t prismElements = 0;
+	bool prismReady = false;
+	/** Momentum: tiles walked in the last moments and the tile the character was on. */
+	uint8_t movedTiles = 0;
+	uint8_t moveDecayTicks = 0;
+	int16_t lastX = -1;
+	int16_t lastY = -1;
+	/** Bartuc's Bloodletting: extra physical damage from the life paid, as a raw Fixed26_6 value, and the ticks it lasts. */
+	int32_t bartucDamage = 0;
+	uint8_t bartucTicks = 0;
+	/** Wrathforged and Combo Finisher: more damage for the cast that spent Rage or Combo, in percent, and the ticks it lasts. */
+	uint8_t spentBonusPercent = 0;
+	uint8_t spentBonusTicks = 0;
+	/** Burning Ground: ticks before another patch can be left. */
+	uint8_t burningGroundCooldown = 0;
+};
+
 struct Poe2PlayerData;
 
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */
@@ -428,6 +537,8 @@ struct Poe2PlayerData {
 	uint8_t golemCooldown = 0;
 	/** @brief Game ticks before Skeletal Warriors raises the next skeleton (not saved). */
 	uint8_t skeletonCooldown = 0;
+	/** @brief Support gem timers and counters; mutable so hits can count (not saved). */
+	mutable SupportRuntime supportState {};
 	/** @brief The map (POE2 endgame) the player opened: its dungeon level and tier; tier 0 when there's none. */
 	uint8_t mapLevel = 0;
 	uint8_t mapTier = 0;
@@ -520,6 +631,7 @@ struct Poe2PlayerData {
 		golemCooldown = 0;
 		skeletonCooldown = 0;
 		mageCooldown = 0;
+		supportState = {};
 		frozenArmorTicks = 0;
 		holyShieldTicks = 0;
 		shieldWallTicks = 0;

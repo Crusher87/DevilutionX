@@ -16,6 +16,8 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "spells.h"
@@ -496,6 +498,22 @@ bool IsCastingRepeat(const Player &player)
 	return State(player).castingRepeat;
 }
 
+void CastFreeSpell(Player &player, SpellID spell, Point source, Point target, int percent)
+{
+	UniqueRuleState &state = State(player);
+	if (state.castingRepeat)
+		return;
+	const SpellType type = player.executedSpell.spellType;
+	state.castingRepeat = true;
+	state.castDamagePercent = static_cast<int16_t>(std::clamp(percent, 0, 1000));
+	player.executedSpell.spellType = SpellType::Spell;
+	const int level = player.GetSpellLevel(spell) + SupportSpellLevelBonus(player, spell);
+	CastSpell(player, spell, WorldTilePosition(static_cast<WorldTileCoord>(source.x), static_cast<WorldTileCoord>(source.y)), WorldTilePosition(static_cast<WorldTileCoord>(target.x), static_cast<WorldTileCoord>(target.y)), std::max(level, 1));
+	player.executedSpell.spellType = type;
+	state.castingRepeat = false;
+	state.castDamagePercent = 100;
+}
+
 bool TakeFreeSkill(const Player &player)
 {
 	UniqueRuleState &state = State(player);
@@ -710,6 +728,8 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		else
 			percent -= Rule(*MyPlayer, UniqueRule::LessDamageVsNormal);
 	}
+	// The supports of the hit in progress, and wither.
+	percent = percent * SupportHitDamagePercent(monster, type) / 100;
 	return std::max(percent, 0);
 }
 

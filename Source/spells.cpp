@@ -24,6 +24,7 @@
 #include "missiles.h"
 #include "poe2/gem_levels.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -111,7 +112,7 @@ bool TargetsMonster(SpellID id)
 	    || id == SpellID::FlameWave;
 }
 
-Fixed26_6 GetManaAmount(const Player &player, SpellID sn)
+Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 {
 	int ma; // whole mana amount
 
@@ -153,7 +154,7 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn)
 		manaAmount = Fixed26_6::fromInt(GetSpellData(sn).sMinMana);
 	}
 
-	manaAmount = Fixed26_6::fromRaw(manaAmount.raw() * SupportManaCostPercent(player, sn) / 100);
+	manaAmount = Fixed26_6::fromRaw(manaAmount.raw() * SupportManaCostPercent(player, sn, lifeShare) / 100);
 
 	return manaAmount;
 }
@@ -185,6 +186,8 @@ void ConsumeSpell(Player &player, SpellID sn)
 		player._pManaBase -= ma;
 		manaCost = cost.whole();
 		RedrawComponent(PanelDrawComponent::Mana);
+		// POE2 Mashup: Blood Price and Bartuc's Bloodletting move part of the cost to life.
+		PaySupportLifeCost(player, SkillSlot::ForSpell(sn), GetManaAmount(player, sn, false).whole());
 		break;
 	}
 	TelemetrySkillUsed(player, GetSpellData(sn).sNameText, manaCost, player.poe2.skillLevel(sn));
@@ -240,6 +243,11 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 
 	const SpellData &spellData = GetSpellData(spl);
 	const bool supported = player.executedSpell.spellType == SpellType::Spell;
+	// POE2 Mashup: Horadric Totem places the spell as a totem, which casts it for the player.
+	if (supported && TryPlaceSpellTotem(player, spl, dst)) {
+		ConsumeSpell(player, spl);
+		return;
+	}
 	const auto spawnMissiles = [&](WorldTilePosition target) {
 		bool fizzled = false;
 		for (size_t i = 0; i < sizeof(spellData.sMissiles) / sizeof(spellData.sMissiles[0]) && spellData.sMissiles[i] != MissileID::Null; i++) {
@@ -270,11 +278,23 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 			const int angle = (i % 2 == 0 ? -1 : 1) * step * MultipleProjectilesSpreadDegrees;
 			spawnMissiles(RotateSpellTarget(src, dst, angle));
 		}
+		// Nova Projectiles: the projectiles also go out in every other direction.
+		if (SupportFiresNova(player, SkillSlot::ForSpell(spl)) && (SkillTags(SkillSlot::ForSpell(spl)) & ST_Projectile) != 0) {
+			const Direction aim = GetDirection(src, dst);
+			for (int i = 1; i < 8; i++) {
+				const Direction around = static_cast<Direction>((static_cast<int>(aim) + i) % 8);
+				const Point far = Point(src) + Displacement { around } * 6;
+				if (InDungeonBounds(far))
+					spawnMissiles(WorldTilePosition(static_cast<WorldTileCoord>(far.x), static_cast<WorldTileCoord>(far.y)));
+			}
+		}
 	}
 	if (!fizzled) {
 		// POE2 Mashup: uniques count spells cast and queue their repeats.
-		if (supported)
+		if (supported) {
 			OnSpellCast(player, spl, dst, spllvl);
+			OnSkillUsed(player, SkillSlot::ForSpell(spl), Point(dst));
+		}
 		ConsumeSpell(player, spl);
 	}
 }

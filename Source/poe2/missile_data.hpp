@@ -23,6 +23,11 @@ struct Poe2MissileData {
 	int8_t piercesLeft = 0;
 	int8_t chainsLeft = 0;
 	bool canFork = false;
+	/** @brief The skill that fired the missile (a SkillSlot's kind and id), so its hits get that skill's supports. */
+	uint8_t skillKind = 0;
+	uint8_t skillId = 0;
+	/** @brief Ricochet: bounces off the next wall towards a monster. */
+	bool ricochet = false;
 };
 
 } // namespace devilution

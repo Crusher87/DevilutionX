@@ -21,6 +21,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -133,6 +134,8 @@ constexpr int WeakenPercent = 30;
 constexpr int DecrepifyPercent = 25;
 constexpr int FrozenArmorPercent = 20;
 constexpr int HolyShieldPercent = 15;
+/** Traps and sentries out at once, per skill. */
+constexpr int MaxPlacedZones = 3;
 constexpr int ShieldWallPercent = 40;
 constexpr int LowerResistPercent = 30;
 constexpr int DeathMarkPercent = 25;
@@ -151,6 +154,8 @@ struct SkillZone {
 	int16_t delay;
 	int16_t counter;
 	Fixed26_6 damage;
+	/** The skill's radius with its supports' area changes. */
+	int8_t radius;
 };
 
 std::vector<SkillZone> Zones;
@@ -305,6 +310,13 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 	zone.delay = static_cast<int16_t>(delay);
 	zone.counter = 0;
 	zone.damage = FixedDamage(player, data);
+	zone.radius = static_cast<int8_t>(std::min<int>(data.radius, INT8_MAX));
+	// Traps and sentries: only a few of each can be out at once; the oldest goes.
+	if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret)) {
+		const int limit = SupportZoneLimit(player, SkillSlot::ForAttack(data.skill), MaxPlacedZones);
+		while (std::count_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }) >= limit)
+			Zones.erase(std::find_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }));
+	}
 	Zones.push_back(zone);
 }
 
@@ -329,6 +341,7 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	Missile *missile = AddMissile(from, target, GetDirection(from, target), type, TARGET_MONSTERS, player, damage, spell ? gemLevel : 0);
 	if (missile == nullptr)
 		return nullptr;
+	SetMissileSkill(*missile, player, SkillSlot::ForAttack(data.skill));
 	// Souls add to weapon projectiles through the weapon hit (see ResourceAttackDamagePercent).
 	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
 	missile->poe2.damagePercent = static_cast<int16_t>(std::min(CurvePercent(player, data.skill) * data.damagePercent / 100 * (100 + souls) / 100, INT16_MAX));
@@ -337,7 +350,7 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	if ((data.flags & TF_LandingBurst) != 0) {
 		// The burst goes off about when the projectile gets there.
 		const int ticks = std::clamp(from.WalkingDistance(target) * 2, 2, 30);
-		SkillZone zone { data.skill, target, 1, static_cast<int16_t>(ticks), 0, Fixed26_6::fromRaw(FixedDamage(player, data).raw() * 2 / 3) };
+		SkillZone zone { data.skill, target, 1, static_cast<int16_t>(ticks), 0, Fixed26_6::fromRaw(FixedDamage(player, data).raw() * 2 / 3), static_cast<int8_t>(std::min<int>(data.radius, INT8_MAX)) };
 		Zones.push_back(zone);
 	}
 	return missile;
@@ -352,6 +365,8 @@ Point Along(Point from, Point target, int tiles)
 void FireFanOf(Player &player, const TableSkillData &data, Point target, int count)
 {
 	const Point tile = player.position.tile;
+	if (SupportFiresNova(player, SkillSlot::ForAttack(data.skill)))
+		count = std::max(count, 8);
 	if (count >= 8) {
 		for (int i = 0; i < count; i++) {
 			const Direction dir = static_cast<Direction>(i % 8);
@@ -456,6 +471,16 @@ std::span<const TableSkillData> TableSkills()
 	return Table;
 }
 
+void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, int durationPercent)
+{
+	const TableSkillData *data = FindTableSkill(skill);
+	if (data == nullptr || data->curse == TableCurse::None)
+		return;
+	TableSkillData scaled = *data;
+	scaled.duration = static_cast<uint16_t>(std::max(data->duration * durationPercent / 100, 1));
+	ApplyCurse(player, monster, scaled);
+}
+
 const TableSkillData *FindTableSkill(WeaponSkill skill)
 {
 	for (const TableSkillData &data : Table) {
@@ -514,8 +539,15 @@ bool StartTableSkill(Player &player, const TableSkillData &data)
 	return true;
 }
 
-void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target)
+void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point target)
 {
+	// The supports change the skill's area and duration, and its hits are the skill's hits.
+	const SkillSlot slot = SkillSlot::ForAttack(unsupported.skill);
+	TableSkillData data = unsupported;
+	data.radius = static_cast<uint8_t>(std::clamp(SupportAreaRadius(player, slot, unsupported.radius), 0, 12));
+	if (unsupported.duration > 0)
+		data.duration = static_cast<uint16_t>(std::clamp(SupportDurationTicks(player, slot, unsupported.duration), 1, static_cast<int>(UINT16_MAX)));
+	const SupportHitScope scope(player, slot);
 	// The cast effects were played by PlaySkillEffects just before.
 	CastResult result;
 	const Point tile = player.position.tile;
@@ -548,14 +580,14 @@ void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target)
 		}
 		break;
 	case Projectiles: {
-		int count = data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill));
+		int count = data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill)) + SupportExtraProjectileCount(player, slot);
 		if ((data.flags & TF_Frenzy) != 0)
 			count += player.poe2.frenzyCharges;
 		FireFanOf(player, data, target, count);
 		break;
 	}
 	case Stream:
-		StartSkillVolley(player, data.skill, target, data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill)));
+		StartSkillVolley(player, data.skill, target, data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill)) + SupportExtraProjectileCount(player, slot));
 		break;
 	case Burst:
 		if ((data.flags & TF_Spell) != 0) {
@@ -771,6 +803,8 @@ void ProcessSkillZones(Player &player)
 		SkillZone &zone = Zones[i];
 		const TableSkillData *data = FindTableSkill(zone.skill);
 		bool done = data == nullptr;
+		const SupportHitScope scope(player, SkillSlot::ForAttack(zone.skill));
+		const int radius = zone.radius;
 		if (!done && (data->flags & TF_FollowPlayer) != 0)
 			zone.center = player.position.tile;
 		if (!done && zone.delay > 0) {
@@ -778,7 +812,7 @@ void ProcessSkillZones(Player &player)
 		} else if (!done) {
 			// Landing bursts of projectiles, and Delayed zones, go off once.
 			if ((data->flags & TF_LandingBurst) != 0 || data->zone == TableZone::Delayed) {
-				ZoneBurst(player, *data, zone.center, std::max<int>(data->radius, 1), zone.damage);
+				ZoneBurst(player, *data, zone.center, std::max(radius, 1), zone.damage);
 				if (data->zone == TableZone::Delayed) {
 					PlaySfxLoc(SfxID::BigExplosion, zone.center);
 					ShakeCamera(ShakeStrength::Medium, 6);
@@ -795,7 +829,7 @@ void ProcessSkillZones(Player &player)
 			} else if (data->zone == TableZone::Trap) {
 				Monster *victim = TargetMonsterNear(zone.center, 1);
 				if (victim != nullptr) {
-					ZoneBurst(player, *data, zone.center, data->radius, zone.damage);
+					ZoneBurst(player, *data, zone.center, radius, zone.damage);
 					EffectRingAround(zone.center, 1, data->effect, 1);
 					done = true;
 				} else if (zone.counter % 20 == 0) {
@@ -804,16 +838,16 @@ void ProcessSkillZones(Player &player)
 			} else if (zone.counter % std::max<int>(data->interval, 1) == 0) {
 				switch (data->zone) {
 				case TableZone::Pulse:
-					ZoneBurst(player, *data, zone.center, data->radius, zone.damage);
+					ZoneBurst(player, *data, zone.center, radius, zone.damage);
 					break;
 				case TableZone::RandomStrikes: {
-					const Point at = zone.center + Displacement { GenerateRnd(2 * data->radius + 1) - data->radius, GenerateRnd(2 * data->radius + 1) - data->radius };
+					const Point at = zone.center + Displacement { GenerateRnd(2 * radius + 1) - radius, GenerateRnd(2 * radius + 1) - radius };
 					if (InDungeonBounds(at))
 						ZoneBurst(player, *data, at, 1, zone.damage);
 					break;
 				}
 				case TableZone::NearestStrike:
-					if (Monster *monster = TargetMonsterNear(zone.center, data->radius); monster != nullptr) {
+					if (Monster *monster = TargetMonsterNear(zone.center, radius); monster != nullptr) {
 						AddVisualEffect(monster->position.tile, MissileGraphicID::ThinLightning, 0, 6);
 						AddVisualEffect(monster->position.tile, data->effect);
 						SpellHitMonster(player, *monster, data->type, zone.damage);
@@ -821,7 +855,7 @@ void ProcessSkillZones(Player &player)
 					}
 					break;
 				case TableZone::Turret:
-					if (Monster *monster = TargetMonsterNear(zone.center, data->radius); monster != nullptr) {
+					if (Monster *monster = TargetMonsterNear(zone.center, radius); monster != nullptr) {
 						FireTableMissile(player, *data, zone.center, monster->position.tile);
 						AddVisualEffect(zone.center, MissileGraphicID::MetalHit);
 						PlaySfxLoc(SfxID::ShootBow, zone.center);

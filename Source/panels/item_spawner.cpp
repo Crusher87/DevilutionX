@@ -199,7 +199,7 @@ std::optional<_item_indexes> UniqueBase(const UniqueItem &unique)
 bool IsSpawnableMisc(const ItemData &data)
 {
 	// Skill and support gems don't drop (uncut gems do), but they're handy for testing.
-	const bool isGem = !SkillForGemData(data).isEmpty() || SupportGemForMiscId(data.iMiscId) != SupportGem::None;
+	const bool isGem = !SkillForGemData(data).isEmpty() || SupportGemForItemData(data) != SupportGem::None;
 	return (data.dropRate > 0 || isGem) && data.iClass == ICLASS_MISC && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT) && data.iMiscId != IMISC_UNIQUE;
 }
 
@@ -565,7 +565,7 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 			if (skill.kind == SkillKind::Attack && WeaponSkillNeedsWeapon(skill.attack()))
 				weapon = std::string(WeaponSkillWeapons(skill.attack()));
 			entry.detail = JoinDetail(JoinDetail(kind, weapon), Requirements(data));
-		} else if (const SupportGem gem = SupportGemForMiscId(data.iMiscId); gem != SupportGem::None) {
+		} else if (const SupportGem gem = SupportGemForItemData(data); gem != SupportGem::None) {
 			entry.category = SpawnerCategory::Gems;
 			entry.detail = std::string(_("Support gem"));
 		} else if (CurrencyOrbForMiscId(data.iMiscId) != CurrencyOrb::None) {

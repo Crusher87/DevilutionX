@@ -241,7 +241,7 @@ void AdminRevealMap(bool /*bActivate*/)
 bool AdminGenerateItem(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed)
 {
 	const int miscId = AllItemsList[baseIndex].iMiscId;
-	if (SupportGemForMiscId(miscId) != SupportGem::None || CurrencyOrbForMiscId(miscId) != CurrencyOrb::None || !SkillForGemData(AllItemsList[baseIndex]).isEmpty()) {
+	if (SupportGemForItemData(AllItemsList[baseIndex]) != SupportGem::None || CurrencyOrbForMiscId(miscId) != CurrencyOrb::None || !SkillForGemData(AllItemsList[baseIndex]).isEmpty()) {
 		// Gems and orbs have no quality or level.
 		InitializeItem(item, baseIndex);
 		item._iSeed = static_cast<int32_t>(firstSeed >> 1);

@@ -10,6 +10,7 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/map_play.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -213,6 +214,7 @@ void ProcessMonsterAilments(Monster &monster)
 	if (state.armourBreakTicks > 0)
 		state.armourBreakTicks--;
 	ProcessTableCurses(monster);
+	ProcessSupportMonsterEffects(monster);
 	const auto decay = [&](int32_t &buildup, int thresholdPercent) {
 		if (buildup <= 0)
 			return;
@@ -339,8 +341,14 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	if (!gbIsPoe2 || monster.hasNoLife() || damage <= 0)
 		return;
 	if (damageType == DamageType::Magic) {
-		if (InflictCold(monster, damage))
+		// POE2 Mashup: supports make cold build up harder (Deep Freeze) or not at all (Elemental Focus).
+		const int effect = SupportAilmentEffectPercent(damageType) * SupportAilmentChancePercent(damageType) / 100;
+		if (effect <= 0)
+			return;
+		if (InflictCold(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * effect / 100)))) {
 			OnMonsterFrozen(player);
+			OnSupportedFreeze(player);
+		}
 		OnAilmentInflicted(player, monster, damageType, false);
 		return;
 	}
@@ -354,6 +362,7 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	int chance = AilmentChancePercent(monster, damage);
 	if (damageType == DamageType::Fire)
 		chance = chance * UniqueIgniteChancePercent(player) / 100;
+	chance = chance * SupportAilmentChancePercent(damageType) / 100;
 	if (GenerateRnd(100) >= chance)
 		return;
 
@@ -361,7 +370,7 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	const bool wasShocked = state.shockTicks > 0;
 	OnAilmentInflicted(player, monster, damageType, wasShocked);
 	if (damageType == DamageType::Fire) {
-		const int32_t perTick = std::max<int32_t>(damage.raw() * IgnitePercentPerSecond / 100 / TicksPerSecond, 1);
+		const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * IgnitePercentPerSecond / 100 * SupportAilmentEffectPercent(damageType) / 100 / TicksPerSecond), 1);
 		// A new ignite only replaces a weaker one, like POE2.
 		if (state.igniteTicks == 0 || perTick >= state.igniteDamagePerTick) {
 			state.igniteDamagePerTick = perTick;

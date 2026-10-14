@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include "engine/point.hpp"
 #include "engine/world_tile.hpp"
 #include "tables/spelldat.h"
 #include "utils/fixed_point.hpp"
@@ -66,6 +67,8 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 void OnSpellCast(const Player &player, SpellID spell, WorldTilePosition target, int spellLevel);
 [[nodiscard]] bool IsCastingRepeat(const Player &player);
 /** @brief Deep Well: whether this skill is free, using up the free skill. */
+/** @brief Casts a spell for free from a point, as a repeat at the given damage percent: it sets off no repeats of its own. */
+void CastFreeSpell(Player &player, SpellID spell, Point source, Point target, int percent);
 bool TakeFreeSkill(const Player &player);
 /** @brief The rules' multiplier on mana costs, in percent. */
 [[nodiscard]] int UniqueManaCostPercent(const Player &player);

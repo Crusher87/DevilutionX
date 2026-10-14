@@ -61,6 +61,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -575,6 +576,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	// POE2 Mashup: your attacks pass through minions.
 	if (gbIsPoe2 && monster.isPlayerMinion())
 		return false;
+	// POE2 Mashup: the hit is the current skill's, for its supports.
+	const WeaponSkill hitSkill = CurrentWeaponSkill(player);
+	const SupportHitScope supportScope(player, hitSkill != WeaponSkill::None ? SkillSlot::ForAttack(hitSkill) : SkillSlot {});
 
 	if (adjacentDamage) {
 		if (player.getCharacterLevel() > 20)
@@ -849,6 +853,7 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 {
 	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
 	PlaySkillEffects(player, skill, player.position.tile + player._pdir);
+	OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
 	for (int i = 0; i < 8; i++) {
 		const auto dir = static_cast<Direction>(i);
 		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
@@ -979,8 +984,10 @@ bool DoAttack(Player &player)
 				M_GetKnockback(*monster, origin);
 		}
 
-		if (skill != WeaponSkill::None)
+		if (skill != WeaponSkill::None) {
 			PlaySkillEffects(player, skill, player.position.tile + player._pdir);
+			OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
+		}
 
 		if (didhit && DamageWeapon(player, 30)) {
 			StartStand(player, player._pdir);
@@ -1013,6 +1020,7 @@ bool DoRangeAttack(Player &player)
 	const bool barrage = player.poe2.activeSkill == WeaponSkill::Barrage && arrows == 1;
 	if (barrage) {
 		PlaySkillEffects(player, WeaponSkill::Barrage, player.position.temp);
+		OnSkillUsed(player, SkillSlot::ForAttack(WeaponSkill::Barrage), player.position.temp);
 		StartSkillVolley(player, WeaponSkill::Barrage, player.position.temp, BarrageArrows);
 		arrows = 0;
 	}
@@ -1026,8 +1034,10 @@ bool DoRangeAttack(Player &player)
 		arrows = 0;
 	}
 	const bool lightningArrow = player.poe2.activeSkill == WeaponSkill::LightningArrow && arrows == 1;
-	if (rain || lightningArrow)
+	if (rain || lightningArrow) {
 		PlaySkillEffects(player, player.poe2.activeSkill, player.position.temp);
+		OnSkillUsed(player, SkillSlot::ForAttack(player.poe2.activeSkill), player.position.temp);
+	}
 
 	for (int arrow = 0; arrow < arrows; arrow++) {
 		int xoff = 0;
@@ -3259,8 +3269,10 @@ void ProcessPlayers()
 			player.poe2.tick();
 			ProcessUniqueRules(player);
 			ProcessSkillVolley(player);
-			if (&player == MyPlayer)
+			if (&player == MyPlayer) {
 				ProcessSkillZones(player);
+				ProcessSupportEffects(player);
+			}
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
 				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {

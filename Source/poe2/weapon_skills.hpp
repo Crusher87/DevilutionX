@@ -61,7 +61,7 @@ std::string_view WeaponSkillName(WeaponSkill skill);
 std::string_view WeaponSkillDescription(WeaponSkill skill);
 int WeaponSkillManaCost(WeaponSkill skill);
 /** @brief The mana cost with the skill's supports. */
-int WeaponSkillManaCost(const Player &player, WeaponSkill skill);
+int WeaponSkillManaCost(const Player &player, WeaponSkill skill, bool lifeShare = true);
 /** @brief Whether the skill is fired with a ranged attack. */
 bool IsRangedWeaponSkill(WeaponSkill skill);
 

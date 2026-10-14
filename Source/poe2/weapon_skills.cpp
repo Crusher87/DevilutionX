@@ -22,6 +22,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -75,8 +76,10 @@ Missile *FireIceShard(const Player &player, WeaponSkill skill, Point from, Point
 {
 	const int gemLevel = std::max(player.poe2.skillLevel(skill), 1);
 	Missile *shard = AddMissile(from, target, GetDirection(from, target), MissileID::BlueFlare, TARGET_MONSTERS, player, IceBoltDamage(player, gemLevel), gemLevel);
-	if (shard != nullptr)
+	if (shard != nullptr) {
 		shard->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(SkillSlot::ForAttack(skill), gemLevel) * damagePercent / 100);
+		SetMissileSkill(*shard, player, SkillSlot::ForAttack(skill));
+	}
 	return shard;
 }
 
@@ -128,10 +131,13 @@ Point SkillTarget(const Player &player)
 void PaySkillMana(Player &player, WeaponSkill skill)
 {
 	// POE2 Mashup: Deep Well makes the next skill free.
-	const Fixed26_6 cost = TakeFreeSkill(player) ? Fixed26_6::fromInt(0) : Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
+	const bool free = TakeFreeSkill(player);
+	const Fixed26_6 cost = free ? Fixed26_6::fromInt(0) : Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
 	player._pMana -= cost;
 	player._pManaBase -= cost;
 	NoteResourceSpent(player, cost);
+	if (!free)
+		PaySupportLifeCost(player, SkillSlot::ForAttack(skill), WeaponSkillManaCost(player, skill, false));
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
 	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));
@@ -173,7 +179,7 @@ void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID mi
 {
 	const SkillSlot slot = SkillSlot::ForAttack(skill);
 	const int gemLevel = player.poe2.skillLevel(skill);
-	count += GemExtraProjectiles(slot, gemLevel);
+	count += GemExtraProjectiles(slot, gemLevel) + SupportExtraProjectileCount(player, slot);
 	const int damagePercent = GemDamagePercent(slot, gemLevel);
 	const Direction dir = GetDirection(player.position.tile, target);
 	const Displacement side { Left(Left(dir)) };
@@ -183,6 +189,7 @@ void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID mi
 		Missile *fired = AddMissile(player.position.tile, target + side * offset, dir, missile, TARGET_MONSTERS, player, damage, spellLevel);
 		if (fired == nullptr)
 			continue;
+		SetMissileSkill(*fired, player, slot);
 		fired->poe2.damagePercent = static_cast<int16_t>(damagePercent);
 		// Spark's sparks crawl on through a crowd: each pierces a couple of enemies.
 		if (skill == WeaponSkill::Spark) {
@@ -222,8 +229,10 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 		constexpr int Wobble[] = { 0, 1, -1, 0, 1, -1, 0 };
 		const Point aim = target + Displacement { Left(Left(dir)) } * Wobble[index % 7];
 		Missile *arrow = AddMissile(tile, aim, dir, type, TARGET_MONSTERS, player, damage, 0);
-		if (arrow != nullptr)
+		if (arrow != nullptr) {
 			arrow->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+			SetMissileSkill(*arrow, player, slot);
+		}
 		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, index == 0 ? 3 : 0);
 		break;
@@ -231,8 +240,10 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 	case WeaponSkill::RapidFire: {
 		// Bolts fly dead straight, one after another, harder than Barrage's arrows but fewer.
 		Missile *bolt = AddMissile(tile, target, dir, MissileID::Arrow, TARGET_MONSTERS, player, ElementalArrowBaseDamage, 0);
-		if (bolt != nullptr)
+		if (bolt != nullptr) {
 			bolt->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+			SetMissileSkill(*bolt, player, slot);
+		}
 		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 2);
 		break;
@@ -246,6 +257,7 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 		Missile *ember = AddMissile(origin, target, dir, MissileID::Firebolt, TARGET_MONSTERS, player, 0, std::max(gemLevel, 1));
 		if (ember != nullptr) {
 			ember->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+			SetMissileSkill(*ember, player, slot);
 			// Molten embers, not firebolts.
 			if (GetMissileSpriteData(MissileGraphicID::MagmaBall).sprites)
 				ember->setAnimation(MissileGraphicID::MagmaBall);
@@ -530,10 +542,10 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	}
 }
 
-int WeaponSkillManaCost(const Player &player, WeaponSkill skill)
+int WeaponSkillManaCost(const Player &player, WeaponSkill skill, bool lifeShare)
 {
 	const int cost = GemBaseManaCost(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill));
-	return cost * SupportManaCostPercent(player, SkillSlot::ForAttack(skill)) / 100;
+	return cost * SupportManaCostPercent(player, SkillSlot::ForAttack(skill), lifeShare) / 100;
 }
 
 bool IsRangedWeaponSkill(WeaponSkill skill)
@@ -730,13 +742,16 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player.poe2.pendingSkillTicks = 0;
 
 	// POE2 Mashup: Deep Well makes the next skill free.
-	const Fixed26_6 cost = TakeFreeSkill(player) ? Fixed26_6::fromInt(0) : Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
+	const bool free = TakeFreeSkill(player);
+	const Fixed26_6 cost = free ? Fixed26_6::fromInt(0) : Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
 	if (player._pMana < cost) {
 		TelemetrySkillFailed(player, WeaponSkillName(skill), "not enough mana when the attack landed");
 		return;
 	}
 	player._pMana -= cost;
 	player._pManaBase -= cost;
+	if (!free)
+		PaySupportLifeCost(player, SkillSlot::ForAttack(skill), WeaponSkillManaCost(player, skill, false));
 	NoteResourceSpent(player, cost);
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
@@ -764,6 +779,7 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 {
 	PlaySkillEffects(player, skill, target);
+	OnSkillUsed(player, SkillSlot::ForAttack(skill), target);
 	switch (skill) {
 	case WeaponSkill::BattleCry:
 		player.poe2.warcryTicks = BattleCryTicks;

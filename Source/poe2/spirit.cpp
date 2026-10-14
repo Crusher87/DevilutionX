@@ -19,6 +19,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -409,6 +410,11 @@ void KeepGolemAlive(Player &player)
 	if (Monster *golem = FindGolemForPlayer(player); golem != nullptr) {
 		golem->minDamage = static_cast<uint8_t>(std::min(golem->minDamage * MinionDamagePercent(player) / 100, 255));
 		golem->maxDamage = static_cast<uint8_t>(std::min(golem->maxDamage * MinionDamagePercent(player) / 100, 255));
+		// The golem skill's supports change its life.
+		if (const int percent = SupportMinionLifePercent(player, PersistentSkill::SummonGolem); percent != 100) {
+			golem->maxHitPoints = Fixed26_6::fromRaw(std::max<int32_t>(golem->maxHitPoints.raw() * percent / 100, 64));
+			golem->hitPoints = golem->maxHitPoints;
+		}
 	}
 	AddVisualEffect(*position, MissileGraphicID::Resurrect);
 	player.poe2.golemCooldown = GolemReviveTicks;
@@ -423,7 +429,8 @@ void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type,
 			KillSkeletonMinions(player, type);
 		return;
 	}
-	if (!CanRaiseMinions(player) || CountSkeletonMinions(player, type) >= static_cast<size_t>(count)) {
+	count += SupportExtraMinions(player, skill);
+	if (!CanRaiseMinions(player) || CountSkeletonMinions(player, type) >= static_cast<size_t>(std::max(count, 0))) {
 		cooldown = SkeletonReviveTicks / 4;
 		return;
 	}
