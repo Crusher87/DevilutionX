@@ -345,7 +345,7 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	SetMissileSkill(*missile, player, SkillSlot::ForAttack(data.skill));
 	// Souls add to weapon projectiles through the weapon hit (see ResourceAttackDamagePercent).
 	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
-	missile->poe2.damagePercent = static_cast<int16_t>(std::min(CurvePercent(player, data.skill) * data.damagePercent / 100 * (100 + souls) / 100, INT16_MAX));
+	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * (100 + souls) / 100, INT16_MAX));
 	if ((data.flags & TF_Pierce) != 0)
 		missile->poe2.piercesLeft = 3;
 	if ((data.flags & TF_LandingBurst) != 0) {
