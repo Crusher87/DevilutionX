@@ -2101,8 +2101,28 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	// The effect missile only exists in the POE2 Mashup missile data.
 	if (!gbIsPoe2 || !InDungeonBounds(tile))
 		return;
-	// Monster-owned graphics are only loaded with their monster, unless POE2 mode loads them for skills.
-	if (GetMissileSpriteData(graphic).flags == MissileGraphicsFlags::MonsterOwned && !GetMissileSpriteData(graphic).sprites)
+	// Some graphic ids have no sprite file of their own (Diablo drew hits from monster art), so they borrow a look-alike.
+	switch (graphic) {
+	case MissileGraphicID::MetalHit:
+		graphic = MissileGraphicID::ChargedBolt;
+		break;
+	case MissileGraphicID::BloodHit:
+		graphic = MissileGraphicID::BloodStarRedExplosion;
+		break;
+	case MissileGraphicID::BoneHit:
+		graphic = MissileGraphicID::StoneCurseShatter;
+		break;
+	case MissileGraphicID::FireArrowExplosion:
+		graphic = MissileGraphicID::MagmaBallExplosion;
+		break;
+	default:
+		break;
+	}
+	// Graphics that aren't loaded (monster-owned ones without their monster, or ones with no file) can't be drawn.
+	if (graphic >= MissileGraphicID::None)
+		return;
+	const MissileFileData &spriteData = GetMissileSpriteData(graphic);
+	if (spriteData.name[0] == '\0' || (spriteData.flags == MissileGraphicsFlags::MonsterOwned && !spriteData.sprites))
 		return;
 	AddMissile(tile, tile, dir, MissileID::VisualEffect, TARGET_MONSTERS, -1, light, static_cast<int>(graphic) | (delay << 8));
 }

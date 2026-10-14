@@ -51,7 +51,8 @@ TEST_F(Poe2SkillEffectsTest, EffectsPlayOnceAfterTheirDelay)
 	ASSERT_EQ(Missiles.size(), 1U);
 	Missile &missile = Missiles.front();
 	EXPECT_EQ(missile._mitype, MissileID::VisualEffect);
-	EXPECT_EQ(missile._miAnimType, MissileGraphicID::MetalHit);
+	// MetalHit has no sprite file of its own, so it borrows Charged Bolt's crackle.
+	EXPECT_EQ(missile._miAnimType, MissileGraphicID::ChargedBolt);
 	EXPECT_EQ(missile.position.tile, Point(40, 40));
 	EXPECT_FALSE(missile._miDrawFlag);
 

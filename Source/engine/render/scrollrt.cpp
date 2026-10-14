@@ -346,7 +346,7 @@ void DrawCursor(const Surface &out)
  */
 void DrawMissilePrivate(const Surface &out, const Missile &missile, Point targetBufferPosition, bool pre, int lightTableIndex)
 {
-	if (missile._miPreFlag != pre || !missile._miDrawFlag)
+	if (missile._miPreFlag != pre || !missile._miDrawFlag || !missile._miAnimData)
 		return;
 
 	const Point missileRenderPosition { targetBufferPosition + missile.position.offsetForRendering - Displacement { missile._miAnimWidth2, 0 } };
