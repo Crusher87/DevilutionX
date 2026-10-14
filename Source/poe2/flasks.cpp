@@ -403,7 +403,7 @@ bool UseFlask(Player &player, size_t beltSlot)
 			raw *= 2;
 		const int32_t missing = std::max<int32_t>(player._pMaxMana.raw() - player._pMana.raw(), 0);
 		if (IsBeltUnique(flask, BeltUniqueId::ScholarsReserve) && raw > missing) {
-			uniqueState.scholarPercent = static_cast<uint8_t>(std::min((raw - missing) / 64 / ScholarsReserveManaPerPercent, ScholarsReserveMaxPercent));
+			uniqueState.scholarPercent = static_cast<uint8_t>(std::min<int32_t>((raw - missing) / 64 / ScholarsReserveManaPerPercent, ScholarsReserveMaxPercent));
 			uniqueState.scholarTicks = ScholarsReserveTicks;
 		}
 		if (IsBeltUnique(flask, BeltUniqueId::DeepWell))
@@ -464,7 +464,7 @@ void ProcessFlaskRecovery(Player &player)
 			RecoverTick(player.poe2.manaFlaskRaw, player.poe2.manaFlaskTicks, player._pMana, player._pManaBase, player._pMaxMana);
 			// Moonwater: mana recovery also recovers energy shield at half value.
 			if (player.poe2.uniqueState.moonwaterTicks > 0 && player.poe2.maxEnergyShield > 0)
-				player.poe2.energyShield = std::min(player.poe2.energyShield + (player._pMana - before).raw() / 2, player.poe2.maxEnergyShield * 64);
+				player.poe2.energyShield = std::min<int32_t>(player.poe2.energyShield + (player._pMana - before).raw() / 2, player.poe2.maxEnergyShield * 64);
 		}
 		if (&player == MyPlayer)
 			RedrawComponent(PanelDrawComponent::Mana);

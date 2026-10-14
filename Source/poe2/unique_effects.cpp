@@ -84,7 +84,7 @@ int ResourceSpentBonus(const Player &player)
 	if (cap <= 0)
 		return 0;
 	// 2% more per 100 resources spent recently.
-	return std::min(State(player).resourcesSpent / 64 / 100 * 2, cap);
+	return std::min<int32_t>(State(player).resourcesSpent / 64 / 100 * 2, cap);
 }
 
 /** @brief The rules' "more damage" for every hit, attack or spell, in percent. */
@@ -263,8 +263,8 @@ void ProcessUniqueRules(Player &player)
 		state.minionFrenzy = 0;
 	if (state.stolenTicks > 0 && --state.stolenTicks == 0)
 		state.stolenMod = 0;
-	state.resourcesSpent = std::max(state.resourcesSpent - std::max(state.resourcesSpent / RecentTicks, 1), 0);
-	state.shieldSpent = std::max(state.shieldSpent - std::max(state.shieldSpent / RecentTicks, 1), 0);
+	state.resourcesSpent = std::max<int32_t>(state.resourcesSpent - std::max<int32_t>(state.resourcesSpent / RecentTicks, 1), 0);
+	state.shieldSpent = std::max<int32_t>(state.shieldSpent - std::max<int32_t>(state.shieldSpent / RecentTicks, 1), 0);
 
 	// Life lost in the last 2 seconds, kept in eight buckets of 5 ticks.
 	if (++state.lifeLostTick >= 5) {
@@ -440,7 +440,7 @@ int UniqueSpellDamagePercent(const Player &player, SpellID spell)
 	const UniqueRuleState &state = State(player);
 	int increased = 100 + Rule(player, UniqueRule::SpellDamage) + state.scholarPercent;
 	if (const int share = Rule(player, UniqueRule::ManaSpellDamage); share > 0)
-		increased += std::max(player._pMaxMana.whole(), 0) * share / 100;
+		increased += std::max<int32_t>(player._pMaxMana.whole(), 0) * share / 100;
 	int percent = increased * state.castDamagePercent / 100;
 	if (state.castingRepeat)
 		percent = percent * (100 - Rule(player, UniqueRule::RepeatedSpellLess)) / 100;
@@ -513,7 +513,7 @@ Fixed26_6 SpendableEnergyShield(const Player &player)
 {
 	if (Rule(player, UniqueRule::SpellsSpendEnergyShield) <= 0)
 		return Fixed26_6::fromInt(0);
-	return Fixed26_6::fromRaw(std::max(player.poe2.energyShield, 0));
+	return Fixed26_6::fromRaw(std::max<int32_t>(player.poe2.energyShield, 0));
 }
 
 Fixed26_6 PaySpellCostWithEnergyShield(Player &player, Fixed26_6 cost)
@@ -535,7 +535,7 @@ void NoteResourceSpent(const Player &player, Fixed26_6 amount)
 		return;
 	const int before = ResourceSpentBonus(player);
 	UniqueRuleState &state = State(player);
-	state.resourcesSpent = std::min(state.resourcesSpent + amount.raw(), 1000000 * 64);
+	state.resourcesSpent = std::min<int32_t>(state.resourcesSpent + amount.raw(), 1000000 * 64);
 	const int cap = Rule(player, UniqueRule::ResourceSpentDamage);
 	if (before < cap && ResourceSpentBonus(player) >= cap && Rule(player, UniqueRule::ResourceLock) > 0)
 		state.recoveryLockTicks = static_cast<uint8_t>(Rule(player, UniqueRule::ResourceLock) * TicksPerSecond);
@@ -770,7 +770,7 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 		raw = raw * (100 - std::min(less, 50)) / 100;
 	// Black Reservoir: part of the hit is paid from mana while there is mana.
 	if (const int share = std::clamp(Rule(player, UniqueRule::HitDamageFromMana), 0, 100); share > 0 && raw > 0) {
-		const int64_t fromMana = std::min<int64_t>(raw * share / 100, std::max(player._pMana.raw(), 0));
+		const int64_t fromMana = std::min<int64_t>(raw * share / 100, std::max<int32_t>(player._pMana.raw(), 0));
 		player._pMana -= Fixed26_6::fromRaw(static_cast<int32_t>(fromMana));
 		player._pManaBase -= Fixed26_6::fromRaw(static_cast<int32_t>(fromMana));
 		raw -= fromMana;
@@ -800,7 +800,7 @@ void OnLifeRecovered(Player &player, int32_t raw)
 	const int share = Rule(player, UniqueRule::LifeRecoveryToShield);
 	if (share <= 0 || raw <= 0 || player.poe2.maxEnergyShield <= 0)
 		return;
-	player.poe2.energyShield = std::min(player.poe2.energyShield + Percent(raw, share), player.poe2.maxEnergyShield * 64);
+	player.poe2.energyShield = std::min<int32_t>(player.poe2.energyShield + Percent(raw, share), player.poe2.maxEnergyShield * 64);
 }
 
 int ManaRecoveryPercent(const Player &player)

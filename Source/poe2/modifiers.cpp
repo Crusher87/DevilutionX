@@ -55,7 +55,7 @@ uint32_t ParseSlots(std::string_view text)
 {
 	uint32_t slots = 0;
 	for (const std::string_view name : SplitByChar(text, ',')) {
-		const auto *it = std::find(SlotNames.begin(), SlotNames.end(), name);
+		const auto it = std::find(SlotNames.begin(), SlotNames.end(), name);
 		if (it != SlotNames.end())
 			slots |= 1U << static_cast<uint32_t>(it - SlotNames.begin());
 	}
@@ -156,7 +156,7 @@ bool LoadTiers()
 		};
 		tier.tier = static_cast<uint8_t>(std::clamp(readInt("tier"), 1, 8));
 		tier.itemLevel = static_cast<uint8_t>(std::clamp(readInt("itemLevel"), 1, 100));
-		tier.weight = static_cast<uint16_t>(std::clamp(readInt("weight"), 0, UINT16_MAX));
+		tier.weight = static_cast<uint16_t>(std::clamp(readInt("weight"), 0, static_cast<int>(UINT16_MAX)));
 		tier.min[0] = static_cast<int16_t>(readInt("min1"));
 		tier.max[0] = static_cast<int16_t>(readInt("max1"));
 		tier.min[1] = static_cast<int16_t>(readInt("min2"));
