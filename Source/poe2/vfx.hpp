@@ -23,6 +23,10 @@
 #endif
 #endif
 
+namespace devilution {
+struct Surface;
+} // namespace devilution
+
 namespace devilution::vfx {
 
 /** @brief The look of an effect: its colours and the particles it throws. */
@@ -69,6 +73,11 @@ void Showcase(Point tile);
 void SetCamera(Point viewTile, Displacement offset, bool zoom);
 /** @brief Follows the frame's missiles: trails and glows on projectiles, bursts where explosions appear. */
 void ScanMissiles();
+/**
+ * @brief Finds what the dungeon itself gives off this frame: the flames of torches, candles, fires and fire traps, and
+ * the lava and water on screen (the palette-animated colours of the frame just drawn).
+ */
+void ScanWorld(const Surface &world);
 /** @brief Moves every effect on by the given time. */
 void Advance(float ms);
 
@@ -76,6 +85,8 @@ void Advance(float ms);
 size_t ParticleCount();
 /** @brief How many rings, sigils, bolts, cracks and glows are alive (tests). */
 size_t ShapeCount();
+/** @brief How many flames, lava and water patches the last ScanWorld found (tests). */
+size_t AmbientCount();
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /**

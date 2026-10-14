@@ -10,15 +10,25 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include "diablo.h"
+#include "engine/palette.h"
+#include "engine/render/clx_render.hpp"
+#include "engine/render/scrollrt.h"
 #include "engine/size.hpp"
+#include "engine/surface.hpp"
 #include "headless_mode.hpp"
 #include "levels/dun_tile_data.hpp"
+#include "levels/gendung.h"
 #include "missiles.h"
+#include "monster.h"
+#include "objects.h"
 #include "options.h"
+#include "poe2/camera_shake.hpp"
+#include "poe2/monster_mods.hpp"
 #include "utils/is_of.hpp"
 
 #ifndef USE_SDL1
@@ -194,6 +204,19 @@ struct Crack {
 	Rgb glow;
 };
 
+/** @brief How a projectile's trail looks beyond its element, so each monster's spell reads differently. */
+enum class TrailStyle : uint8_t {
+	Plain,
+	/** @brief Two wisps spiralling around its path (Succubi's blood stars). */
+	Ribbon,
+	/** @brief Drops falling off it (acid spit). */
+	Drip,
+	/** @brief Heavy molten blobs: drips, embers and smoke (magma balls). */
+	Magma,
+	/** @brief A throbbing orb shedding motes (the Hellfire liches' and orbs' flares). */
+	Orb,
+};
+
 struct Trail {
 	std::array<Vec, 10> points;
 	int count = 0;
@@ -202,6 +225,9 @@ struct Trail {
 	float emit = 0;
 	/** @brief An arrow or bolt: a pale streak behind it and sparks where it stops. */
 	bool arrow = false;
+	TrailStyle style = TrailStyle::Plain;
+	/** @brief Monsters' spells are a little smaller than the hero's, bosses' bigger. */
+	float scale = 1;
 };
 
 constexpr size_t MaxParticles = 4000;
@@ -217,6 +243,75 @@ std::vector<Ring> FrameGlows;
 std::unordered_map<const Missile *, Trail> Trails;
 std::unordered_map<const Missile *, uint32_t> SeenBursts;
 uint32_t ScanFrame = 0;
+
+/** @brief What a patch of the dungeon gives off while it's on screen. */
+enum class Ambient : uint8_t {
+	/** @brief A torch, candle or fire's flame: embers and a wisp of smoke. */
+	Flame,
+	/** @brief Molten rock: embers, bubbles popping and smoke. */
+	Lava,
+	/** @brief A pool: glints and ripples. */
+	Water,
+	/** @brief A charging monster's feet: dust and speed streaks. */
+	Charge,
+	/** @brief A burning monster: flames licking up its body. */
+	Ignite,
+	/** @brief A shocked monster: sparks crackling over it. */
+	Shock,
+	/** @brief A chilled monster: frost drifting down off it. */
+	Chill,
+	/** @brief Motes of the emitter's colour rising off a monster (rarity, regeneration, extra life). */
+	Motes,
+	/** @brief Sparks flying off a hard-hitting monster. */
+	Embers,
+};
+
+/** @brief A flame or a patch of lava or water on screen, found anew each frame. */
+struct Emitter {
+	Vec pos;
+	/** @brief Flames: the square root of the flame's pixels. Lava and water: the share of the patch that is fluid. */
+	float size;
+	Ambient kind;
+	Rgb colour;
+	/** @brief Lava and water: half the patch's width, in world pixels. */
+	float spread = 0;
+};
+
+std::vector<Emitter> Emitters;
+/** @brief Real time the ambient effects have run, for their flicker and pulse. */
+float AmbientTime = 0;
+
+/** @brief A flame in an object's sprite, from the sprite's bottom left corner. */
+struct HotSpot {
+	Vec offset;
+	float size;
+};
+
+/** @brief The flames found in each sprite frame, by its pixel data; sprites are reloaded with each level. */
+std::unordered_map<const uint8_t *, std::vector<HotSpot>> HotSpots;
+
+/** @brief How much a monster stands out: magic and rare monsters, uniques, and the quest bosses and Diablo. */
+enum class Rank : uint8_t {
+	Normal,
+	Magic,
+	Rare,
+	Unique,
+	Boss,
+};
+
+/** @brief The mark under a monster of rank: a ring for magic, a turning gold ring for rares, a rune circle for uniques. */
+struct Halo {
+	Vec pos;
+	float radius;
+	Rank rank;
+	/** @brief Resistant rares shimmer through the colours. */
+	bool prismatic;
+	uint32_t seed;
+};
+
+std::vector<Halo> Halos;
+/** @brief Each monster's mode last frame, to catch it starting to cast, fade, charge or die. */
+std::unordered_map<const Monster *, MonsterMode> LastModes;
 
 Vec CameraOrigin;
 float CameraScale = 1;
@@ -521,6 +616,80 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 		}
 		return;
 	}
+	if (trail.style != TrailStyle::Plain && trail.count >= 1) {
+		const Vec back = trail.count >= 2 ? trail.points[0] - trail.points[1] : Vec { 1, 0 };
+		const float length = std::max(Length(back), 0.01F);
+		const Vec side { -back.y / length, back.x / length };
+		trail.emit += 40 * Intensity() * ms / 1000.F;
+		while (trail.emit >= 1) {
+			trail.emit -= 1;
+			Particle p;
+			p.c0 = c.core;
+			p.c1 = c.edge;
+			p.alpha = 0.9F;
+			switch (trail.style) {
+			case TrailStyle::Ribbon: {
+				// Two wisps winding around the path; left behind, they draw a twisted ribbon.
+				const float turn = AmbientTime * 0.025F;
+				const float sign = NextRandom() % 2 == 0 ? 1.F : -1.F;
+				p.pos = head + side * (sign * 9 * std::sin(turn)) + Vec { 0, sign * 4 * std::cos(turn) };
+				p.life = Random(260, 420);
+				p.size0 = 2.4F;
+				p.size1 = 0.6F;
+				p.c0 = c.mid;
+				break;
+			}
+			case TrailStyle::Drip:
+				p.pos = head + Vec { Random(-4, 4), Random(-2, 2) };
+				p.vel = { Random(-8, 8), Random(70, 130) };
+				p.life = Random(220, 380);
+				p.size0 = 2.2F;
+				p.size1 = 1.2F;
+				p.c0 = { 210, 255, 90 };
+				p.c1 = { 70, 140, 20 };
+				break;
+			case TrailStyle::Magma:
+				if (NextRandom() % 3 == 0) {
+					p.pos = head + Vec { Random(-4, 4), 0 };
+					p.vz = Random(8, 20);
+					p.life = Random(900, 1500);
+					p.size0 = 5;
+					p.size1 = 16;
+					p.c0 = { 45, 32, 28 };
+					p.c1 = { 22, 18, 16 };
+					p.alpha = 0.3F;
+					p.shape = Shape::Puff;
+				} else {
+					p.pos = head + Vec { Random(-5, 5), Random(-3, 3) };
+					p.vel = { Random(-20, 20), Random(40, 110) };
+					p.life = Random(250, 500);
+					p.size0 = 3;
+					p.size1 = 0.6F;
+					p.c0 = { 255, 200, 90 };
+					p.c1 = { 180, 40, 10 };
+				}
+				break;
+			case TrailStyle::Orb: {
+				const float angle = Random(0, 2 * Pi);
+				p.pos = head + Vec { std::cos(angle) * 10, std::sin(angle) * 10 };
+				p.vel = Vec { std::cos(angle), std::sin(angle) } * 25;
+				p.life = Random(300, 500);
+				p.size0 = 1.8F;
+				p.size1 = 0.3F;
+				p.c0 = c.core;
+				p.c1 = c.mid;
+				break;
+			}
+			case TrailStyle::Plain:
+				break;
+			}
+			p.size0 *= trail.scale;
+			p.size1 *= trail.scale;
+			AddParticle(p);
+		}
+		if (trail.style != TrailStyle::Magma)
+			return;
+	}
 	float rate = 0;
 	switch (trail.element) {
 	case Element::Fire: rate = 45; break;
@@ -603,6 +772,708 @@ void Age(std::vector<T> &items, float ms)
 	std::erase_if(items, [](const T &item) { return item.age >= item.life; });
 }
 
+float Luminance(const SDL_Color &c)
+{
+	return 0.3F * c.r + 0.59F * c.g + 0.11F * c.b;
+}
+
+/** @brief Flame colours: bright and warm, or white hot. */
+bool IsFlameColour(const SDL_Color &c)
+{
+	const float lum = Luminance(c);
+	if (c.r > 225 && c.g > 225 && c.b > 200)
+		return true;
+	return lum >= 135 && c.r >= 170 && c.r >= c.b + 60;
+}
+
+/**
+ * @brief Finds the flames in a sprite frame: its bright warm pixels, grouped into blobs.
+ * Works on any torch, candle or fire without knowing where its art puts the flame.
+ */
+const std::vector<HotSpot> &FlameSpots(ClxSprite sprite)
+{
+	auto [it, added] = HotSpots.try_emplace(sprite.pixelData());
+	std::vector<HotSpot> &spots = it->second;
+	if (!added)
+		return spots;
+	const int width = sprite.width();
+	const int height = sprite.height();
+	if (width <= 0 || height <= 0)
+		return spots;
+	OwnedSurface canvas(width, height);
+	ClxDraw(canvas, { 0, height - 1 }, sprite);
+
+	constexpr int Cell = 6;
+	const int columns = (width + Cell - 1) / Cell;
+	const int rows = (height + Cell - 1) / Cell;
+	struct Bin {
+		int count = 0;
+		float x = 0;
+		float y = 0;
+		int group = -1;
+	};
+	std::vector<Bin> bins(static_cast<size_t>(columns * rows));
+	for (int y = 0; y < height; y++) {
+		const uint8_t *line = canvas.at(0, y);
+		for (int x = 0; x < width; x++) {
+			if (line[x] == 0 || !IsFlameColour(logical_palette[line[x]]))
+				continue;
+			Bin &bin = bins[static_cast<size_t>((y / Cell) * columns + x / Cell)];
+			bin.count++;
+			bin.x += static_cast<float>(x);
+			bin.y += static_cast<float>(y);
+		}
+	}
+	// Neighbouring cells with flame in them make one flame.
+	for (int start = 0; start < columns * rows; start++) {
+		if (bins[start].count < 2 || bins[start].group != -1)
+			continue;
+		int count = 0;
+		float sumX = 0;
+		float sumY = 0;
+		std::vector<int> open { start };
+		bins[start].group = start;
+		while (!open.empty()) {
+			const int at = open.back();
+			open.pop_back();
+			count += bins[at].count;
+			sumX += bins[at].x;
+			sumY += bins[at].y;
+			const int cx = at % columns;
+			const int cy = at / columns;
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					const int nx = cx + dx;
+					const int ny = cy + dy;
+					if (nx < 0 || ny < 0 || nx >= columns || ny >= rows)
+						continue;
+					Bin &next = bins[static_cast<size_t>(ny * columns + nx)];
+					if (next.count < 2 || next.group != -1)
+						continue;
+					next.group = start;
+					open.push_back(ny * columns + nx);
+				}
+			}
+		}
+		if (count < 3)
+			continue;
+		spots.push_back({ { sumX / count, sumY / count - static_cast<float>(height - 1) }, std::sqrt(static_cast<float>(count)) });
+	}
+	std::sort(spots.begin(), spots.end(), [](const HotSpot &a, const HotSpot &b) { return a.size > b.size; });
+	if (spots.size() > 8)
+		spots.resize(8);
+	return spots;
+}
+
+/** @brief A flame's brightness right now: an uneven flicker, different for each flame. */
+float Flicker(Vec pos, float speed = 1)
+{
+	const float phase = std::fmod(pos.x * 0.137F + pos.y * 0.071F, 2 * Pi);
+	const float t = AmbientTime * speed;
+	return 0.84F + 0.09F * std::sin(t * 0.011F + phase) + 0.07F * std::sin(t * 0.029F + phase * 1.7F);
+}
+
+Rank RankOf(const Monster &monster)
+{
+	if (monster.type().type == MT_DIABLO || (monster.isUnique() && monster.uniqueType <= UniqueMonsterType::NaKrul))
+		return Rank::Boss;
+	if (monster.isUnique())
+		return Rank::Unique;
+	switch (GetMonsterAffixes(monster).rarity) {
+	case MonsterRarity::Magic: return Rank::Magic;
+	case MonsterRarity::Rare: return Rank::Rare;
+	default: return Rank::Normal;
+	}
+}
+
+/** @brief The monster that cast a missile, if a monster did. */
+const Monster *CasterOf(const Missile &missile)
+{
+	if (missile._micaster != TARGET_PLAYERS || missile._misource < 0 || static_cast<size_t>(missile._misource) >= MaxMonsters)
+		return nullptr;
+	return &Monsters[missile._misource];
+}
+
+/** @brief How big a missile's effects are: the hero's full size, monsters' and traps' a little smaller, bosses' bigger. */
+float CasterScale(const Missile &missile)
+{
+	if (missile._micaster != TARGET_PLAYERS)
+		return 1;
+	const Monster *caster = CasterOf(missile);
+	if (caster == nullptr)
+		return 0.8F;
+	return RankOf(*caster) >= Rank::Unique ? 1.3F : 0.8F;
+}
+
+TrailStyle StyleOf(MissileID id)
+{
+	switch (id) {
+	case MissileID::BloodStar: return TrailStyle::Ribbon;
+	case MissileID::Acid: return TrailStyle::Drip;
+	case MissileID::MagmaBall: return TrailStyle::Magma;
+	case MissileID::OrangeFlare:
+	case MissileID::YellowFlare:
+	case MissileID::BlueFlare:
+	case MissileID::BlueFlare2:
+	case MissileID::RedFlare: return TrailStyle::Orb;
+	default: return TrailStyle::Plain;
+	}
+}
+
+bool IsFlameObject(const Object &object)
+{
+	switch (object._otype) {
+	case OBJ_L1LIGHT:
+	case OBJ_SKFIRE:
+	case OBJ_CANDLE1:
+	case OBJ_CANDLE2:
+	case OBJ_BOOKCANDLE:
+	case OBJ_STORYCANDLE:
+	case OBJ_L5CANDLE:
+	case OBJ_BCROSS:
+	case OBJ_TBCROSS:
+	case OBJ_TORCHL:
+	case OBJ_TORCHR:
+	case OBJ_TORCHL2:
+	case OBJ_TORCHR2:
+		// Their light is on while they're near enough to see (or always, for lights placed with the map).
+		return object._oVar1 != 0;
+	case OBJ_FLAMEHOLE:
+		// The grate only shows flames while it fires.
+		return true;
+	default:
+		return false;
+	}
+}
+
+/** @brief The world's corners of the frame just drawn, with a margin. */
+struct View {
+	Vec min, max;
+
+	[[nodiscard]] bool contains(Vec pos, float margin) const
+	{
+		return pos.x >= min.x - margin && pos.y >= min.y - margin && pos.x <= max.x + margin && pos.y <= max.y + margin;
+	}
+};
+
+void ScanFlames(const View &view)
+{
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const Object &object = Objects[ActiveObjects[i]];
+		if (!IsFlameObject(object) || !object._oAnimData || object._oAnimFrame == 0)
+			continue;
+		const ClxSprite sprite = object.currentSprite();
+		const Displacement offset = object.getRenderingOffset(sprite, object.position);
+		const Vec corner = TileCentre(object.position) + Vec { static_cast<float>(offset.deltaX - 32), static_cast<float>(offset.deltaY + 16) };
+		if (!view.contains(corner, 200))
+			continue;
+		for (const HotSpot &spot : FlameSpots(sprite)) {
+			const Vec pos = corner + spot.offset;
+			const float flicker = Flicker(pos);
+			const float s = spot.size;
+			Ring glow;
+			glow.pos = pos;
+			glow.life = 1;
+			glow.width = 0;
+			glow.disc = true;
+			glow.ground = false;
+			// A wide warm halo, then a hot core.
+			glow.r0 = glow.r1 = (8 + 3.F * s) * (0.95F + 0.05F * flicker);
+			glow.colour = { 255, 130, 45 };
+			glow.alpha = std::min(0.34F, 0.1F + 0.025F * s) * flicker;
+			FrameGlows.push_back(glow);
+			glow.r0 = glow.r1 = 2 + 0.9F * s;
+			glow.colour = { 255, 210, 140 };
+			glow.alpha = 0.4F * flicker;
+			FrameGlows.push_back(glow);
+			Emitters.push_back({ pos, s, Ambient::Flame, { 255, 150, 50 } });
+		}
+	}
+}
+
+/** @brief The element a monster's spells look like, or nullopt for monsters that don't cast. */
+std::optional<Element> CastingElement(const Monster &monster)
+{
+	switch (monster.ai) {
+	case MonsterAIID::Counselor:
+	case MonsterAIID::Lich:
+	case MonsterAIID::ArchLich:
+	case MonsterAIID::Psychorb:
+		return Element::Arcane;
+	case MonsterAIID::Succubus:
+	case MonsterAIID::LazarusSuccubus:
+	case MonsterAIID::Necromorb:
+		return Element::Blood;
+	case MonsterAIID::Storm:
+		return Element::Lightning;
+	case MonsterAIID::Magma:
+	case MonsterAIID::Mega:
+	case MonsterAIID::FireBat:
+	case MonsterAIID::Torchant:
+	case MonsterAIID::Diablo:
+		return Element::Fire;
+	case MonsterAIID::Acid:
+	case MonsterAIID::AcidUnique:
+	case MonsterAIID::BoneDemon:
+		return Element::Chaos;
+	case MonsterAIID::Lazarus:
+		return Element::Holy;
+	default:
+		return std::nullopt;
+	}
+}
+
+/** @brief The moment a monster changes what it's doing: casting, fading, charging, healing or dying. */
+void OnModeChange(const Monster &monster, MonsterMode from, MonsterMode to, Vec feet, Rank rank)
+{
+	const float big = rank >= Rank::Unique ? 1.5F : 1.F;
+	switch (to) {
+	case MonsterMode::RangedAttack:
+	case MonsterMode::SpecialRangedAttack:
+		if (const std::optional<Element> element = CastingElement(monster)) {
+			SigilFx sigil;
+			sigil.pos = feet;
+			sigil.radius = TileRadius * 0.7F * big;
+			sigil.life = 650;
+			sigil.colours = ColoursOf(*element);
+			sigil.seed = NextRandom() | 1;
+			sigil.glyphs = 6;
+			sigil.star = 5;
+			Sigils.push_back(sigil);
+		}
+		break;
+	case MonsterMode::FadeIn:
+	case MonsterMode::FadeOut: {
+		// Shadows boiling off as it slips in or out of sight.
+		Spray(feet + Vec { 0, -24 }, Scaled(10 * big), 20, 70, 500, 900, Shape::Puff, { 30, 20, 40 }, { 10, 8, 14 }, 8, 22, 10, 40, 0, 0.8F, 0.45F);
+		Spray(feet + Vec { 0, -24 }, Scaled(10 * big), 30, 110, 300, 600, Shape::Dot, { 190, 150, 255 }, { 60, 30, 120 }, 2, 0.4F, 20, 90, 0, 1.5F, 0.8F);
+		break;
+	}
+	case MonsterMode::Heal:
+		HolyImpact(feet, 0.6F * big, { { 220, 255, 220 }, { 90, 230, 110 }, { 30, 120, 50 } });
+		break;
+	case MonsterMode::Death:
+		switch (rank) {
+		case Rank::Normal:
+			break;
+		case Rank::Magic:
+			HolyImpact(feet, 0.6F, ColoursOf(Element::Arcane));
+			break;
+		case Rank::Rare:
+			HolyImpact(feet, 1.1F, { { 255, 245, 210 }, { 255, 200, 80 }, { 190, 120, 20 } });
+			AddRing(feet, 0, TileRadius * 2, 450, 3, { 255, 200, 80 }, 0.8F, false, true);
+			break;
+		case Rank::Unique:
+		case Rank::Boss: {
+			// The soul tears loose: a pillar of light, a shockwave and the floor cracking.
+			const Colours c { { 255, 240, 220 }, { 255, 120, 40 }, { 150, 20, 10 } };
+			AddBolt(feet + Vec { 0, -340 }, feet, 400, 7, c);
+			ImpactAt(feet, Element::Fire, rank == Rank::Boss ? 2.2F : 1.5F);
+			AddRing(feet, 0, TileRadius * (rank == Rank::Boss ? 5.F : 3.F), 700, 5, c.mid, 1.F, false, true);
+			AddCracks(feet, TileRadius * (rank == Rank::Boss ? 2.5F : 1.6F), 7, c.mid, 4000);
+			ShakeCamera(rank == Rank::Boss ? ShakeStrength::Heavy : ShakeStrength::Medium, rank == Rank::Boss ? 12 : 6);
+			break;
+		}
+		}
+		break;
+	default:
+		break;
+	}
+	if (from == MonsterMode::Charge && to != MonsterMode::Death) {
+		// Slamming to a stop.
+		AddRing(feet, 0, TileRadius * 1.2F * big, 300, 10, { 110, 95, 75 }, 0.45F, false, true, true);
+		Spray(feet, Scaled(12 * big), 30, 110, 600, 1100, Shape::Puff, { 115, 100, 80 }, { 70, 60, 50 }, 8, 24, 10, 40, 0, 0.8F, 0.35F);
+		AddCracks(feet, TileRadius * 0.8F * big, 4, { 255, 140, 50 }, 2000);
+	}
+}
+
+void ScanMonsters(const View &view)
+{
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		const MonsterMode mode = monster.mode;
+		auto [last, added] = LastModes.try_emplace(&monster, mode);
+		const MonsterMode was = last->second;
+		last->second = mode;
+		if (monster.isPlayerMinion() || (monster.flags & MFLAG_HIDDEN) != 0 || !monster.animInfo.sprites)
+			continue;
+		const Point tile = monster.position.tile;
+		if (!InDungeonBounds(tile) || !IsTileLit(tile))
+			continue;
+		Vec feet = TileCentre(tile);
+		if (monster.isWalking()) {
+			const Displacement walk = GetOffsetForWalking(monster.animInfo, monster.direction);
+			feet = feet + Vec { static_cast<float>(walk.deltaX), static_cast<float>(walk.deltaY) };
+		}
+		if (!view.contains(feet, 150))
+			continue;
+		const Rank rank = RankOf(monster);
+		if (!added && was != mode)
+			OnModeChange(monster, was, mode, feet, rank);
+		if (mode == MonsterMode::Death)
+			continue;
+		const float height = std::min(static_cast<float>(monster.animInfo.currentSprite().height()), 128.F);
+		const Vec body = feet - Vec { 0, height * 0.35F };
+		const float width = static_cast<float>(monster.animInfo.currentSprite().width());
+
+		if (mode == MonsterMode::Charge)
+			Emitters.push_back({ feet, 1, Ambient::Charge, { 115, 100, 80 } });
+
+		if (rank != Rank::Normal) {
+			const MonsterAffixes affixes = GetMonsterAffixes(monster);
+			const float radius = rank >= Rank::Unique ? std::max(TileRadius * 0.85F, width * 0.42F) : TileRadius * 0.6F;
+			Halos.push_back({ feet, radius, rank, affixes.has(MonsterMod::Resistant), static_cast<uint32_t>(ActiveMonsters[i]) * 2654435761U | 1 });
+			switch (rank) {
+			case Rank::Magic:
+				Emitters.push_back({ feet, 1.5F, Ambient::Motes, { 130, 160, 255 }, radius });
+				break;
+			case Rank::Rare:
+				Emitters.push_back({ feet, 3, Ambient::Motes, { 255, 205, 90 }, radius });
+				if (affixes.has(MonsterMod::Regenerating))
+					Emitters.push_back({ body, 5, Ambient::Motes, { 90, 235, 110 }, 14 });
+				if (affixes.has(MonsterMod::ExtraLife))
+					Emitters.push_back({ body, 4, Ambient::Motes, { 235, 40, 50 }, 14 });
+				if (affixes.has(MonsterMod::HardHitting))
+					Emitters.push_back({ body, 1, Ambient::Embers, { 255, 160, 60 } });
+				break;
+			default:
+				Emitters.push_back({ feet, rank == Rank::Boss ? 16.F : 9.F, Ambient::Motes, { 255, 120, 40 }, radius });
+				break;
+			}
+		}
+
+		// What the hero did to it.
+		const Poe2MonsterState &state = monster.poe2;
+		Ring glow;
+		glow.pos = body;
+		glow.life = 1;
+		glow.width = 0;
+		glow.disc = true;
+		glow.ground = false;
+		if (state.igniteTicks > 0) {
+			Emitters.push_back({ body, height, Ambient::Ignite, { 255, 140, 40 } });
+			glow.r0 = glow.r1 = 26 + height * 0.15F;
+			glow.colour = { 255, 120, 30 };
+			glow.alpha = 0.28F * Flicker(body, 2);
+			FrameGlows.push_back(glow);
+		}
+		if (state.shockTicks > 0 || state.electrocuteTicks > 0) {
+			Emitters.push_back({ body, height, Ambient::Shock, { 170, 200, 255 } });
+			glow.r0 = glow.r1 = 24;
+			glow.colour = { 140, 170, 255 };
+			glow.alpha = 0.18F + 0.1F * std::sin(AmbientTime * 0.05F);
+			FrameGlows.push_back(glow);
+		}
+		if (state.freezeTicks > 0) {
+			// Locked in ice.
+			glow.r0 = glow.r1 = 18 + height * 0.25F;
+			glow.colour = { 160, 225, 255 };
+			glow.alpha = 0.4F;
+			FrameGlows.push_back(glow);
+			glow.r0 = glow.r1 = 8 + height * 0.1F;
+			glow.colour = { 235, 250, 255 };
+			glow.alpha = 0.35F;
+			FrameGlows.push_back(glow);
+		} else if (state.chillTicks > 0) {
+			Emitters.push_back({ body, height, Ambient::Chill, { 180, 225, 255 } });
+		}
+		if (state.heavyStunTicks > 0) {
+			// Stars circling its head.
+			for (int star = 0; star < 3; star++) {
+				const float angle = AmbientTime * 0.006F + star * 2 * Pi / 3;
+				glow.pos = feet - Vec { 0, height * 0.85F } + Vec { std::cos(angle) * 16, std::sin(angle) * 8 };
+				glow.r0 = glow.r1 = 4;
+				glow.colour = { 255, 235, 140 };
+				glow.alpha = 0.9F;
+				FrameGlows.push_back(glow);
+			}
+		}
+	}
+}
+
+/** @brief Lava (1) or water (2) for each palette-animated colour; 0 for neither. */
+std::array<uint8_t, 32> FluidColours(int last)
+{
+	std::array<uint8_t, 32> kinds {};
+	for (int i = 1; i <= last; i++) {
+		const SDL_Color &c = logical_palette[i];
+		if (c.r >= c.b + 40 && c.r >= c.g)
+			kinds[i] = 1;
+		else if (c.b > c.r || c.g > c.r)
+			kinds[i] = 2;
+	}
+	return kinds;
+}
+
+void ScanFluids(const Surface &world, const View &view)
+{
+	int last;
+	switch (leveltype) {
+	case DTYPE_CAVES:
+	case DTYPE_CRYPT:
+		last = 31;
+		break;
+	case DTYPE_NEST:
+		last = 15;
+		break;
+	default:
+		// Elsewhere the low colours don't move: they're walls and floors, not lava or water.
+		return;
+	}
+	const std::array<uint8_t, 32> kinds = FluidColours(last);
+	constexpr int Step = 8;
+	constexpr int Cell = 32;
+	constexpr int SamplesPerCell = (Cell / Step) * (Cell / Step);
+	const int width = world.w();
+	const int height = world.h();
+	const int columns = (width + Cell - 1) / Cell;
+	const int rows = (height + Cell - 1) / Cell;
+	struct Patch {
+		int lava = 0;
+		int water = 0;
+		float light = 0;
+		float r = 0, g = 0, b = 0;
+	};
+	std::vector<Patch> patches(static_cast<size_t>(columns * rows));
+	for (int y = Step / 2; y < height; y += Step) {
+		const uint8_t *line = world.at(0, y);
+		for (int x = Step / 2; x < width; x += Step) {
+			const uint8_t index = line[x];
+			if (index == 0 || index > last || kinds[index] == 0)
+				continue;
+			Patch &patch = patches[static_cast<size_t>((y / Cell) * columns + x / Cell)];
+			const SDL_Color &c = logical_palette[index];
+			(kinds[index] == 1 ? patch.lava : patch.water)++;
+			patch.light += Luminance(c) / 255.F;
+			patch.r += c.r;
+			patch.g += c.g;
+			patch.b += c.b;
+		}
+	}
+	const float spread = Cell / 2.F / CameraScale;
+	const float pulseTime = AmbientTime * 0.0016F;
+	for (int row = 0; row < rows; row++) {
+		for (int column = 0; column < columns; column++) {
+			const Patch &patch = patches[static_cast<size_t>(row * columns + column)];
+			const int total = patch.lava + patch.water;
+			if (total == 0)
+				continue;
+			const Vec pos = Vec { (column + 0.5F) * Cell, (row + 0.5F) * Cell } * (1 / CameraScale) + CameraOrigin;
+			if (!view.contains(pos, 0))
+				continue;
+			const float share = static_cast<float>(total) / SamplesPerCell;
+			const float light = patch.light / total;
+			const Rgb average { static_cast<uint8_t>(patch.r / total), static_cast<uint8_t>(patch.g / total), static_cast<uint8_t>(patch.b / total) };
+			if (patch.lava >= patch.water) {
+				// Molten glow that slowly breathes, spilling a little past the lava's edge.
+				const float pulse = 0.85F + 0.15F * std::sin(pulseTime + column * 0.9F + row * 1.3F);
+				Ring glow;
+				glow.pos = pos;
+				glow.life = 1;
+				glow.width = 0;
+				glow.disc = true;
+				glow.ground = false;
+				glow.r0 = glow.r1 = spread * 2.1F;
+				glow.colour = { 255, 90, 20 };
+				glow.alpha = 0.16F * share * (0.35F + light) * pulse;
+				FrameGlows.push_back(glow);
+				Emitters.push_back({ pos, share, Ambient::Lava, average, spread });
+			} else {
+				Emitters.push_back({ pos, share, Ambient::Water, Mix(average, { 235, 245, 255 }, 0.55F), spread });
+			}
+		}
+	}
+}
+
+/** @brief Somewhere random in a lava or water patch. */
+Vec InPatch(const Emitter &emitter)
+{
+	return emitter.pos + Vec { Random(-emitter.spread, emitter.spread), Random(-emitter.spread, emitter.spread) };
+}
+
+/** @brief Turns a rate per second into how many to make this time (randomly rounded). */
+int Occurrences(float perSecond, float ms)
+{
+	const float expected = perSecond * Intensity() * ms / 1000.F;
+	int count = static_cast<int>(expected);
+	if (Random(0, 1) < expected - static_cast<float>(count))
+		count++;
+	return count;
+}
+
+void EmitAmbient(float ms)
+{
+	for (const Emitter &emitter : Emitters) {
+		switch (emitter.kind) {
+		case Ambient::Flame: {
+			const float s = emitter.size;
+			for (int i = Occurrences(0.06F * s * s, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-0.4F, 0.4F) * s, Random(-0.2F, 0.2F) * s };
+				p.vel = { Random(-14, 14), Random(-4, 4) };
+				p.vz = Random(25, 60);
+				p.gravity = -18;
+				p.drag = 0.6F;
+				p.life = Random(700, 1500);
+				p.size0 = Random(1.2F, 1.9F);
+				p.size1 = 0.3F;
+				p.c0 = { 255, 210, 120 };
+				p.c1 = { 200, 60, 10 };
+				p.alpha = 0.9F;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(0.008F * s * s, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-2, 2), -0.5F * s };
+				p.vel = { Random(-6, 6), 0 };
+				p.vz = Random(16, 28);
+				p.life = Random(1600, 2600);
+				p.size0 = 3;
+				p.size1 = 3 + 0.9F * s;
+				p.c0 = { 38, 32, 30 };
+				p.c1 = { 22, 20, 19 };
+				p.alpha = 0.13F;
+				p.shape = Shape::Puff;
+				AddParticle(p);
+			}
+			break;
+		}
+		case Ambient::Lava: {
+			const float share = emitter.size;
+			for (int i = Occurrences(0.45F * share, ms); i > 0; i--) {
+				Particle p;
+				p.pos = InPatch(emitter);
+				p.vel = { Random(-10, 10), Random(-5, 5) };
+				p.vz = Random(30, 80);
+				p.gravity = -10;
+				p.drag = 0.4F;
+				p.life = Random(900, 1900);
+				p.size0 = Random(1.3F, 2.2F);
+				p.size1 = 0.3F;
+				p.c0 = { 255, 200, 90 };
+				p.c1 = { 190, 40, 10 };
+				AddParticle(p);
+			}
+			for (int i = Occurrences(0.07F * share, ms); i > 0; i--) {
+				// A bubble bursting: a bright ring on the surface and a few spatters.
+				const Vec at = InPatch(emitter);
+				AddRing(at, 1, 10, 420, 1.5F, { 255, 170, 60 }, 0.6F, false, true);
+				Spray(at, 3, 15, 50, 250, 500, Shape::Streak, { 255, 225, 150 }, { 220, 60, 10 }, 1.3F, 0.4F, 70, 150, 320, 1.F, 1);
+			}
+			for (int i = Occurrences(0.05F * share, ms); i > 0; i--) {
+				Particle p;
+				p.pos = InPatch(emitter);
+				p.vz = Random(12, 24);
+				p.life = Random(2000, 3200);
+				p.size0 = 6;
+				p.size1 = 22;
+				p.c0 = { 45, 30, 26 };
+				p.c1 = { 25, 20, 18 };
+				p.alpha = 0.1F;
+				p.shape = Shape::Puff;
+				AddParticle(p);
+			}
+			break;
+		}
+		case Ambient::Water: {
+			const float share = emitter.size;
+			for (int i = Occurrences(0.6F * share, ms); i > 0; i--) {
+				// Light glinting off the surface.
+				Particle p;
+				p.pos = InPatch(emitter);
+				p.life = Random(180, 420);
+				p.size0 = Random(1.F, 1.6F);
+				p.size1 = 0.3F;
+				p.c0 = { 235, 250, 255 };
+				p.c1 = emitter.colour;
+				p.alpha = 0.75F;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(0.06F * share, ms); i > 0; i--)
+				AddRing(InPatch(emitter), 2, 16, 1200, 1.2F, emitter.colour, 0.2F, false, true);
+			break;
+		}
+		case Ambient::Charge:
+			for (int i = Occurrences(30, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-14, 14), Random(-6, 6) };
+				p.vz = Random(5, 20);
+				p.life = Random(500, 900);
+				p.size0 = 5;
+				p.size1 = 16;
+				p.c0 = { 120, 105, 85 };
+				p.c1 = { 70, 60, 50 };
+				p.alpha = 0.3F;
+				p.shape = Shape::Puff;
+				AddParticle(p);
+			}
+			break;
+		case Ambient::Ignite:
+			for (int i = Occurrences(22, ms); i > 0; i--) {
+				const float h = emitter.size;
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-0.18F, 0.18F) * h, Random(-0.25F, 0.3F) * h };
+				p.vel = { Random(-8, 8), 0 };
+				p.vz = Random(40, 90);
+				p.gravity = -40;
+				p.drag = 1;
+				p.life = Random(250, 500);
+				p.size0 = Random(2.5F, 4);
+				p.size1 = 0.5F;
+				p.c0 = { 255, 210, 110 };
+				p.c1 = { 200, 50, 10 };
+				AddParticle(p);
+			}
+			break;
+		case Ambient::Shock:
+			for (int i = Occurrences(7, ms); i > 0; i--) {
+				const float h = emitter.size;
+				const Vec a = emitter.pos + Vec { Random(-0.25F, 0.25F) * h, Random(-0.35F, 0.35F) * h };
+				const Vec b = a + Vec { Random(-14, 14), Random(-14, 14) };
+				AddBolt(a, b, Random(60, 120), 1.4F, ColoursOf(Element::Lightning));
+			}
+			break;
+		case Ambient::Chill:
+			for (int i = Occurrences(10, ms); i > 0; i--) {
+				const float h = emitter.size;
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-0.25F, 0.25F) * h, Random(-0.4F, 0.1F) * h };
+				p.vel = { Random(-6, 6), Random(20, 45) };
+				p.life = Random(400, 800);
+				p.size0 = 2.2F;
+				p.size1 = 0.5F;
+				p.c0 = { 235, 248, 255 };
+				p.c1 = { 120, 190, 255 };
+				p.alpha = 0.8F;
+				p.shape = Shape::Shard;
+				AddParticle(p);
+			}
+			break;
+		case Ambient::Motes:
+			for (int i = Occurrences(emitter.size, ms); i > 0; i--) {
+				Particle p;
+				const float angle = Random(0, 2 * Pi);
+				const float r = Random(0.3F, 1.F) * emitter.spread;
+				p.pos = emitter.pos + Vec { std::cos(angle) * r, std::sin(angle) * r * 0.5F };
+				p.vz = Random(25, 55);
+				p.gravity = -10;
+				p.life = Random(700, 1300);
+				p.size0 = 1.8F;
+				p.size1 = 0.3F;
+				p.c0 = Mix(emitter.colour, { 255, 255, 255 }, 0.4F);
+				p.c1 = emitter.colour;
+				p.alpha = 0.85F;
+				AddParticle(p);
+			}
+			break;
+		case Ambient::Embers:
+			for (int i = Occurrences(3, ms); i > 0; i--)
+				Spray(emitter.pos + Vec { Random(-10, 10), Random(-10, 10) }, 2, 40, 110, 150, 300, Shape::Streak, { 255, 230, 160 }, { 220, 90, 20 }, 1.3F, 0.4F, 20, 90, 300, 1.5F, 1);
+			break;
+		}
+	}
+}
+
 } // namespace
 
 Element ElementOf(DamageType type, bool spell)
@@ -637,6 +1508,10 @@ void Clear()
 	FrameGlows.clear();
 	Trails.clear();
 	SeenBursts.clear();
+	Emitters.clear();
+	HotSpots.clear();
+	Halos.clear();
+	LastModes.clear();
 }
 
 void Sigil(Point tile, int radiusTiles, int durationMs, Element element)
@@ -793,13 +1668,14 @@ void ScanMissiles()
 				SparksAt(TileCentre(missile.position.tile), look.element == Element::Lightning && missile._miAnimType == MissileGraphicID::ChargedBolt ? Element::Physical : look.element, 0.8F);
 			continue;
 		}
+		const float scale = CasterScale(missile);
 		if (look.burst > 0) {
 			if (!missile._miDrawFlag)
 				continue;
 			auto [it, added] = SeenBursts.try_emplace(&missile, ScanFrame);
 			it->second = ScanFrame;
 			if (added)
-				ImpactAt(TileCentre(missile.position.tile), look.element, look.burst);
+				ImpactAt(TileCentre(missile.position.tile), look.element, look.burst * scale);
 			continue;
 		}
 		if (!look.projectile || !missile._miDrawFlag)
@@ -809,6 +1685,8 @@ void ScanMissiles()
 		if (trail.frame == 0) {
 			trail.element = look.element;
 			trail.arrow = IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
+			trail.style = StyleOf(missile._mitype);
+			trail.scale = scale;
 		}
 		trail.frame = ScanFrame;
 		if (trail.count == 0 || Length(head - trail.points[0]) > 1.5F) {
@@ -820,16 +1698,22 @@ void ScanMissiles()
 		const bool arrow = missile._miAnimType == MissileGraphicID::Arrow;
 		Ring glow;
 		glow.pos = head;
-		glow.r0 = glow.r1 = arrow ? 6.F : 20.F;
+		glow.r0 = glow.r1 = (arrow ? 6.F : 20.F) * scale;
 		glow.life = 1;
 		glow.width = 0;
 		glow.colour = c.mid;
-		glow.alpha = arrow ? 0.45F : 0.7F;
+		glow.alpha = (arrow ? 0.45F : 0.7F) * std::min(scale, 1.F);
 		glow.disc = true;
 		glow.ground = false;
 		FrameGlows.push_back(glow);
+		if (trail.style == TrailStyle::Orb) {
+			// The orb throbs.
+			glow.r0 = glow.r1 = 30 * scale * (1 + 0.3F * std::sin(AmbientTime * 0.018F + head.x * 0.05F));
+			glow.alpha = 0.3F;
+			FrameGlows.push_back(glow);
+		}
 		if (!arrow) {
-			glow.r0 = glow.r1 = 7;
+			glow.r0 = glow.r1 = 7 * scale;
 			glow.colour = c.core;
 			glow.alpha = 1;
 			FrameGlows.push_back(glow);
@@ -851,10 +1735,24 @@ void ScanMissiles()
 	std::erase_if(Trails, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 }
 
+void ScanWorld(const Surface &world)
+{
+	Emitters.clear();
+	Halos.clear();
+	if (!Enabled() || world.w() <= 0 || world.h() <= 0)
+		return;
+	const View view { CameraOrigin, CameraOrigin + Vec { static_cast<float>(world.w()), static_cast<float>(world.h()) } * (1 / CameraScale) };
+	ScanFlames(view);
+	ScanFluids(world, view);
+	ScanMonsters(view);
+}
+
 void Advance(float ms)
 {
 	if (ms <= 0)
 		return;
+	AmbientTime += ms;
+	EmitAmbient(ms);
 	for (auto &[missile, trail] : Trails) {
 		if (trail.count > 0)
 			EmitTrail(trail, trail.points[0], ms);
@@ -882,6 +1780,11 @@ size_t ParticleCount()
 size_t ShapeCount()
 {
 	return Rings.size() + Sigils.size() + Bolts.size() + Cracks.size() + Sweeps.size();
+}
+
+size_t AmbientCount()
+{
+	return Emitters.size();
 }
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
@@ -1265,6 +2168,70 @@ void DrawSigils()
 	}
 }
 
+/** @brief A fully saturated colour around the colour wheel (0 to 1). */
+Rgb Hue(float h)
+{
+	h = (h - std::floor(h)) * 6;
+	const float x = 1 - std::abs(std::fmod(h, 2.F) - 1);
+	const auto c = [](float v) { return static_cast<uint8_t>(v * 255); };
+	switch (static_cast<int>(h)) {
+	case 0: return { 255, c(x), 0 };
+	case 1: return { c(x), 255, 0 };
+	case 2: return { 0, 255, c(x) };
+	case 3: return { 0, c(x), 255 };
+	case 4: return { c(x), 0, 255 };
+	default: return { 255, 0, c(x) };
+	}
+}
+
+void DrawHalos()
+{
+	const float t = AmbientTime;
+	for (const Halo &halo : Halos) {
+		const Vec pos = halo.pos;
+		const float r = halo.radius;
+		const float phase = static_cast<float>(halo.seed % 97);
+		switch (halo.rank) {
+		case Rank::Normal:
+			break;
+		case Rank::Magic: {
+			const float pulse = 0.75F + 0.25F * std::sin(t * 0.004F + phase);
+			SoftDisc(Glowing, pos, r * 1.1F, { 60, 80, 200 }, 0.1F * pulse, true);
+			SoftRing(Glowing, pos, r, 2, { 120, 150, 255 }, 0.45F * pulse, 0, 1);
+			break;
+		}
+		case Rank::Rare: {
+			const Rgb gold = halo.prismatic ? Hue(t * 0.0005F + phase * 0.1F) : Rgb { 255, 200, 80 };
+			const float spin = t * 0.0012F + phase;
+			SoftDisc(Glowing, pos, r * 1.15F, { 200, 130, 30 }, 0.14F, true);
+			SoftRing(Glowing, pos, r, 3, gold, 0.8F, 0, 1, 6, spin);
+			SoftRing(Glowing, pos, r * 0.78F, 1.5F, gold, 0.45F, 0, 1, 0, -spin);
+			break;
+		}
+		case Rank::Unique:
+		case Rank::Boss: {
+			const bool boss = halo.rank == Rank::Boss;
+			const Colours c = boss ? Colours { { 255, 230, 210 }, { 255, 60, 35 }, { 140, 10, 10 } } : Colours { { 255, 235, 200 }, { 255, 130, 40 }, { 170, 50, 10 } };
+			const float spin = t * 0.0008F + phase;
+			const float pulse = 0.85F + 0.15F * std::sin(t * 0.005F + phase);
+			SoftDisc(Dark, pos, r, { 10, 4, 4 }, 0.3F, true);
+			SoftDisc(Glowing, pos, r * 1.25F, c.edge, 0.25F * pulse, true);
+			SoftRing(Glowing, pos, r, 3, c.mid, 0.9F * pulse, 0, 1);
+			SoftRing(Glowing, pos, r, 12, c.mid, 0.25F * pulse, 0, 1);
+			SoftRing(Glowing, pos, r * 0.62F, 1.5F, c.core, 0.6F, 0, 1, 8, -spin * 1.5F);
+			const int glyphs = boss ? 10 : 8;
+			for (int i = 0; i < glyphs; i++) {
+				const float a = spin + 2 * Pi * i / glyphs;
+				DrawGlyph(OnGround(pos, r * 0.81F, a), r * 0.085F, a + Pi / 2, (halo.seed + static_cast<uint32_t>(i) * 2654435761U) | 1, c.core, 0.85F * pulse);
+			}
+			if (boss)
+				SoftLine(Glowing, pos, pos - Vec { 0, 170 }, r * 1.1F, c.mid, c.edge, 0.12F * pulse, 0);
+			break;
+		}
+		}
+	}
+}
+
 /** @brief Render targets for the glowing layer and its blurred copies; remade when the size or renderer changes. */
 struct Targets {
 	SDL_Renderer *renderer = nullptr;
@@ -1343,11 +2310,12 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		Advance(elapsed);
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty())
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty())
 		return;
 
 	Glowing.clear();
 	Dark.clear();
+	DrawHalos();
 	DrawCracks();
 	DrawSigils();
 	DrawRings();

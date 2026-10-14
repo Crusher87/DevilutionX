@@ -1440,6 +1440,8 @@ void DrawView(const Surface &out, Point startPosition)
 	// POE2 Mashup: the effects layer lines up with this frame's view.
 	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
 	vfx::ScanMissiles();
+	if (IsUiScaled())
+		vfx::ScanWorld(WorldBackBuffer());
 
 	if (IsPlayerInStore() && !qtextflag)
 		DrawSText(out);
