@@ -16,9 +16,11 @@
 
 #include "ui_test.hpp"
 
+#include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
 #include "player.h"
+#include "poe2/stash_tabs.hpp"
 #include "qol/stash.h"
 
 namespace devilution {
@@ -692,6 +694,111 @@ TEST_F(StashTest, GoldStorageIndependentOfItems)
 
 	EXPECT_EQ(Stash.gold, 5000) << "Gold should be tracked separately";
 	EXPECT_EQ(Stash.stashList.size(), 1u) << "Only the non-gold item should be in stashList";
+}
+
+// ---------------------------------------------------------------------------
+// POE2 stash tabs
+// ---------------------------------------------------------------------------
+
+class Poe2StashTabsTest : public StashTest {
+protected:
+	void SetUp() override
+	{
+		StashTest::SetUp();
+		gbIsPoe2 = true;
+		StashTabs.reset();
+	}
+
+	void TearDown() override
+	{
+		gbIsPoe2 = false;
+		StashTabs.reset();
+		StashTest::TearDown();
+	}
+
+	static Item MakeOrb()
+	{
+		Item item = MakeSmallItem();
+		item._iMiscId = IMISC_ORB_CHAOS;
+		return item;
+	}
+};
+
+TEST_F(Poe2StashTabsTest, ItemsHaveAffinities)
+{
+	EXPECT_EQ(GetStashAffinity(MakeSmallItem()), StashAffinity::Flasks);
+	EXPECT_EQ(GetStashAffinity(MakeOrb()), StashAffinity::Currency);
+	Item sword = MakeSword();
+	EXPECT_EQ(GetStashAffinity(sword), StashAffinity::None);
+	sword._iMagical = ITEM_QUALITY_UNIQUE;
+	EXPECT_EQ(GetStashAffinity(sword), StashAffinity::Uniques);
+	Item waystone = MakeSmallItem();
+	waystone._iMiscId = IMISC_WAYSTONE;
+	EXPECT_EQ(GetStashAffinity(waystone), StashAffinity::Waystones);
+}
+
+TEST_F(Poe2StashTabsTest, AnAffinityBelongsToOneTab)
+{
+	StashTabs.setAffinity(1, StashAffinity::Currency, true);
+	StashTabs.setAffinity(3, StashAffinity::Currency, true);
+	EXPECT_FALSE(StashTabs.hasAffinity(1, StashAffinity::Currency));
+	EXPECT_TRUE(StashTabs.hasAffinity(3, StashAffinity::Currency));
+	EXPECT_EQ(StashTabs.affinityTabFor(MakeOrb()), 3u);
+	EXPECT_EQ(StashTabs.affinityText(3), "Currency");
+	StashTabs.setAffinity(3, StashAffinity::Currency, false);
+	EXPECT_FALSE(StashTabs.affinityTabFor(MakeOrb()).has_value());
+}
+
+TEST_F(Poe2StashTabsTest, CtrlClickSendsItemsToTheirAffinityTab)
+{
+	StashTabs.setAffinity(4, StashAffinity::Currency, true);
+	Stash.SetPage(0);
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeOrb(), true));
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeSword(), true));
+	EXPECT_EQ(CountOccupiedCells(Stash.stashGrids[4]), 1) << "The orb goes to the currency tab";
+	EXPECT_GT(CountOccupiedCells(Stash.stashGrids[0]), 0) << "The sword stays on the open tab";
+	EXPECT_EQ(Stash.GetPage(), 0u);
+}
+
+TEST_F(Poe2StashTabsTest, FullAffinityTabFallsBackToTheOpenTab)
+{
+	StashTabs.setAffinity(2, StashAffinity::Flasks, true);
+	FillStashPage(2);
+	Stash.SetPage(0);
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeSmallItem(), true));
+	EXPECT_EQ(CountOccupiedCells(Stash.stashGrids[0]), 1);
+}
+
+TEST_F(Poe2StashTabsTest, PagesStopAtTheLastTab)
+{
+	Stash.SetPage(50);
+	EXPECT_EQ(Stash.GetPage(), DefaultStashTabs - 1);
+	ASSERT_TRUE(StashTabs.addTab());
+	Stash.NextPage();
+	EXPECT_EQ(Stash.GetPage(), DefaultStashTabs);
+}
+
+TEST_F(Poe2StashTabsTest, TabsSurviveSaving)
+{
+	StashTabs.addTab();
+	StashTabs.rename(0, "Currency dump that is far too long");
+	StashTabs.setColor(0, 7);
+	StashTabs.setAffinity(6, StashAffinity::Gems, true);
+	const std::vector<uint8_t> data = SerializeStashTabs(StashTabs);
+
+	StashTabSet loaded;
+	ASSERT_TRUE(DeserializeStashTabs(data, loaded));
+	ASSERT_EQ(loaded.count(), DefaultStashTabs + 1);
+	EXPECT_EQ(loaded.tabs[0].name, "Currency dump th");
+	EXPECT_EQ(loaded.tabs[0].color, 7);
+	EXPECT_TRUE(loaded.hasAffinity(6, StashAffinity::Gems));
+	EXPECT_EQ(loaded.displayName(1), "2");
+
+	std::vector<uint8_t> broken = data;
+	broken.pop_back();
+	StashTabSet untouched;
+	EXPECT_FALSE(DeserializeStashTabs(broken, untouched));
+	EXPECT_EQ(untouched.count(), DefaultStashTabs);
 }
 
 } // namespace

@@ -39,6 +39,7 @@
 #include "plrmsg.h"
 #include "poe2/flasks.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/stash_tabs.hpp"
 #include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "stores.h"
@@ -2636,6 +2637,24 @@ void LoadHeroItems(Player &player)
 
 constexpr uint8_t StashVersion = 0;
 
+namespace {
+
+void LoadTabs(const char *filename)
+{
+	LoadHelper file(OpenStashArchive(), filename);
+	if (!file.IsValid(sizeof(uint32_t)))
+		return;
+	const uint32_t size = file.NextLE<uint32_t>();
+	if (size > 4096 || !file.IsValid(size))
+		return;
+	std::vector<uint8_t> data(size);
+	for (uint8_t &byte : data)
+		byte = file.NextLE<uint8_t>();
+	DeserializeStashTabs(data, StashTabs);
+}
+
+} // namespace
+
 void LoadStash()
 {
 	const char *filename;
@@ -2645,6 +2664,7 @@ void LoadStash()
 		filename = "mpstashitems";
 
 	Stash = {};
+	StashTabs.reset();
 
 	LoadHelper file(OpenStashArchive(), filename);
 	if (!file.IsValid())
@@ -2677,6 +2697,17 @@ void LoadStash()
 	Stash.stashList.resize(itemCount);
 	for (unsigned i = 0; i < itemCount; i++) {
 		LoadAndValidateItemData(file, Stash.stashList[i]);
+	}
+
+	// POE2 tab names, colours and affinities; every page with items gets a tab.
+	if (gbIsPoe2) {
+		LoadTabs(gbIsMultiplayer ? "mpstashtabs" : "spstashtabs");
+		unsigned usedPages = 0;
+		for (const auto &[page, grid] : Stash.stashGrids) {
+			if (c_any_of(grid, [](const auto &row) { return c_any_of(row, [](StashStruct::StashCell cell) { return cell > 0; }); }))
+				usedPages = std::max(usedPages, page + 1);
+		}
+		StashTabs.ensureCount(usedPages);
 	}
 
 	Stash.SetPage(file.NextLE<uint32_t>());
@@ -2933,6 +2964,14 @@ void SaveHeroItems(SaveWriter &saveWriter, Player &player)
 
 void SaveStash(SaveWriter &stashWriter)
 {
+	if (gbIsPoe2) {
+		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs);
+		SaveHelper tabsFile(stashWriter, gbIsMultiplayer ? "mpstashtabs" : "spstashtabs", sizeof(uint32_t) + tabs.size());
+		tabsFile.WriteLE<uint32_t>(static_cast<uint32_t>(tabs.size()));
+		for (const uint8_t byte : tabs)
+			tabsFile.WriteLE<uint8_t>(byte);
+	}
+
 	const char *filename;
 	if (!gbIsMultiplayer)
 		filename = "spstashitems";

@@ -20,10 +20,13 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/size.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "hwcursor.hpp"
 #include "inv.h"
 #include "minitext.h"
+#include "panels/stash_tabs_panel.hpp"
+#include "poe2/stash_tabs.hpp"
 #include "stores.h"
 #include "utils/display.h"
 #include "utils/format_int.hpp"
@@ -42,6 +45,17 @@ namespace {
 
 constexpr unsigned CountStashPages = 100;
 constexpr unsigned LastStashPage = CountStashPages - 1;
+
+/** @brief Pages the player can reach: the POE2 stash only has the tabs added so far. */
+unsigned UsableStashPages()
+{
+	return gbIsPoe2 ? std::clamp(StashTabs.count(), 1U, CountStashPages) : CountStashPages;
+}
+
+unsigned LastUsableStashPage()
+{
+	return UsableStashPages() - 1;
+}
 
 char GoldWithdrawText[21];
 TextInputCursorState GoldWithdrawCursor;
@@ -402,10 +416,14 @@ void DrawStash(const Surface &out)
 	const UiFlags style = UiFlags::VerticalCenter | UiFlags::ColorWhite;
 	const int textboxHeight = 13;
 
-	DrawString(out, StrCat(Stash.GetPage() + 1), { position + Displacement { 132, 0 }, { 57, textboxHeight } },
-	    { .flags = UiFlags::AlignCenter | style });
+	if (!gbIsPoe2) {
+		DrawString(out, StrCat(Stash.GetPage() + 1), { position + Displacement { 132, 0 }, { 57, textboxHeight } },
+		    { .flags = UiFlags::AlignCenter | style });
+	}
 	DrawString(out, FormatInteger(Stash.gold), { position + Displacement { 122, 19 }, { 107, textboxHeight } },
 	    { .flags = UiFlags::AlignRight | style });
+	if (gbIsPoe2)
+		DrawStashTabUi(out);
 }
 
 void CheckStashItem(Point mousePosition, bool isShiftHeld, bool isCtrlHeld)
@@ -421,6 +439,8 @@ void CheckStashItem(Point mousePosition, bool isShiftHeld, bool isCtrlHeld)
 
 uint16_t CheckStashHLight(Point mousePosition)
 {
+	if (IsStashTabPopupOpen())
+		return -1;
 	Point slot = InvalidStashPoint;
 	for (auto point : StashGridRange) {
 		const Rectangle cell {
@@ -556,26 +576,28 @@ void StashStruct::RemoveStashItem(StashStruct::StashCell iv)
 
 void StashStruct::SetPage(unsigned newPage)
 {
-	page = std::min(newPage, LastStashPage);
+	page = std::min(newPage, LastUsableStashPage());
 	dirty = true;
 }
 
 void StashStruct::NextPage(unsigned offset)
 {
-	if (page <= LastStashPage) {
-		page += std::min(offset, LastStashPage - page);
+	const unsigned lastPage = LastUsableStashPage();
+	if (page <= lastPage) {
+		page += std::min(offset, lastPage - page);
 	} else {
-		page = LastStashPage;
+		page = lastPage;
 	}
 	dirty = true;
 }
 
 void StashStruct::PreviousPage(unsigned offset)
 {
-	if (page <= LastStashPage) {
+	const unsigned lastPage = LastUsableStashPage();
+	if (page <= lastPage) {
 		page -= std::min(offset, page);
 	} else {
-		page = LastStashPage;
+		page = lastPage;
 	}
 	dirty = true;
 }
@@ -700,13 +722,20 @@ bool AutoPlaceItemInStash(const Item &item, bool persistItem)
 	}
 
 	const Size itemSize = GetInventorySize(item);
+	const unsigned pageCount = UsableStashPages();
 
-	// Try to add the item to the current active page and if it's not possible move forward
-	for (unsigned pageCounter = 0; pageCounter < CountStashPages; pageCounter++) {
-		unsigned pageIndex = Stash.GetPage() + pageCounter;
-		// Wrap around if needed
-		if (pageIndex >= CountStashPages)
-			pageIndex -= CountStashPages;
+	// A POE2 tab with the item's affinity goes first, then the current page and onward
+	std::optional<unsigned> affinityPage;
+	if (gbIsPoe2)
+		affinityPage = StashTabs.affinityTabFor(item);
+	for (unsigned pageCounter = affinityPage ? 0 : 1; pageCounter <= pageCount; pageCounter++) {
+		unsigned pageIndex;
+		if (pageCounter == 0) {
+			pageIndex = *affinityPage;
+		} else {
+			// Wrap around if needed
+			pageIndex = ((Stash.GetPage() % pageCount) + pageCounter - 1) % pageCount;
+		}
 		// Search all possible position in stash grid
 		for (auto stashPosition : PointsInRectangle(Rectangle { { 0, 0 }, Size { 10 - (itemSize.width - 1), 10 - (itemSize.height - 1) } })) {
 			// Check that all needed slots are free

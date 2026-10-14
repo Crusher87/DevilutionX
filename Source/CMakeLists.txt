@@ -32,6 +32,7 @@ set(libdevilutionx_SRCS
   poe2/dodge_roll.cpp
   poe2/hud_globes.cpp
   poe2/loot_filter.cpp
+  poe2/stash_tabs.cpp
   portal.cpp
   restrict.cpp
   sync.cpp
@@ -139,6 +140,7 @@ set(libdevilutionx_SRCS
   panels/passive_tree_panel.cpp
   panels/skill_bar.cpp
   panels/skills_panel.cpp
+  panels/stash_tabs_panel.cpp
   panels/spell_book.cpp
   panels/spell_icons.cpp
   panels/spell_list.cpp

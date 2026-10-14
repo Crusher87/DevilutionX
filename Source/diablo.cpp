@@ -93,6 +93,7 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
@@ -836,6 +837,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 	}
 
 	if (ItemSpawnerHandleEvent(event)) {
+		return;
+	}
+
+	if (StashTabsHandleEvent(event)) {
 		return;
 	}
 
