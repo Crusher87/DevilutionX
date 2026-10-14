@@ -19,6 +19,7 @@
 #include "levels/dun_tile_data.hpp"
 #include "missiles.h"
 #include "options.h"
+#include "utils/is_of.hpp"
 
 #ifndef USE_SDL1
 #include "utils/display.h"
@@ -199,6 +200,8 @@ struct Trail {
 	Element element = Element::Fire;
 	uint32_t frame = 0;
 	float emit = 0;
+	/** @brief An arrow or bolt: a pale streak behind it and sparks where it stops. */
+	bool arrow = false;
 };
 
 constexpr size_t MaxParticles = 4000;
@@ -484,10 +487,40 @@ void ImpactAt(Vec pos, Element element, float size)
 	}
 }
 
+void SparksAt(Vec pos, Element element, float size)
+{
+	const Colours c = ColoursOf(element);
+	const Rgb core = element == Element::Physical ? Rgb { 255, 240, 200 } : c.core;
+	const Rgb mid = element == Element::Physical ? Rgb { 255, 180, 90 } : c.mid;
+	AddRing(pos + Vec { 0, -16 }, 0, 14 * size, 80, 0, core, 0.9F, true, false);
+	AddRing(pos + Vec { 0, -16 }, 4, 20 * size, 140, 2, mid, 0.6F, false, false);
+	Spray(pos + Vec { 0, -16 }, Scaled(14 * size), 120, 320 * size, 100, 260, Shape::Streak, core, mid, 1.5F, 0.5F, 30, 140, 500, 1.5F, 1);
+}
+
 /** @brief The trail particles a projectile leaves behind it each frame. */
 void EmitTrail(Trail &trail, Vec head, float ms)
 {
 	const Colours c = ColoursOf(trail.element);
+	if (trail.arrow && trail.element == Element::Physical) {
+		// A thin pale streak of air torn open behind the arrow.
+		trail.emit += 40 * Intensity() * ms / 1000.F;
+		while (trail.emit >= 1) {
+			trail.emit -= 1;
+			Particle p;
+			p.pos = head + Vec { Random(-2, 2), Random(-1, 1) };
+			p.vel = { Random(-10, 10), Random(-5, 5) };
+			p.life = Random(120, 240);
+			p.shape = Shape::Streak;
+			p.c0 = { 255, 245, 220 };
+			p.c1 = { 150, 130, 100 };
+			p.size0 = 1.5F;
+			p.size1 = 0.5F;
+			p.drag = 3.F;
+			p.alpha = 0.7F;
+			AddParticle(p);
+		}
+		return;
+	}
 	float rate = 0;
 	switch (trail.element) {
 	case Element::Fire: rate = 45; break;
@@ -675,6 +708,13 @@ void Impact(Point tile, Element element, float size)
 	ImpactAt(TileCentre(tile), element, size);
 }
 
+void Sparks(Point tile, Element element, float size)
+{
+	if (!Enabled())
+		return;
+	SparksAt(TileCentre(tile), element, size);
+}
+
 void Arc(Point from, Point to, Element element)
 {
 	if (!Enabled())
@@ -743,6 +783,16 @@ void ScanMissiles()
 	FrameGlows.clear();
 	for (const Missile &missile : Missiles) {
 		const GraphicLook look = LookOf(missile._miAnimType);
+		if (missile._mitype == MissileID::VisualEffect && look.projectile) {
+			// A projectile's graphic standing still is a hit flash (steel on steel): sparks, not a flying glow.
+			if (!missile._miDrawFlag)
+				continue;
+			auto [it, added] = SeenBursts.try_emplace(&missile, ScanFrame);
+			it->second = ScanFrame;
+			if (added)
+				SparksAt(TileCentre(missile.position.tile), look.element == Element::Lightning && missile._miAnimType == MissileGraphicID::ChargedBolt ? Element::Physical : look.element, 0.8F);
+			continue;
+		}
 		if (look.burst > 0) {
 			if (!missile._miDrawFlag)
 				continue;
@@ -756,8 +806,10 @@ void ScanMissiles()
 			continue;
 		const Vec head = MissileCentre(missile);
 		Trail &trail = Trails[&missile];
-		if (trail.frame == 0)
+		if (trail.frame == 0) {
 			trail.element = look.element;
+			trail.arrow = IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
+		}
 		trail.frame = ScanFrame;
 		if (trail.count == 0 || Length(head - trail.points[0]) > 1.5F) {
 			std::move_backward(trail.points.begin(), trail.points.end() - 1, trail.points.end());
@@ -772,7 +824,7 @@ void ScanMissiles()
 		glow.life = 1;
 		glow.width = 0;
 		glow.colour = c.mid;
-		glow.alpha = arrow ? 0.3F : 0.7F;
+		glow.alpha = arrow ? 0.45F : 0.7F;
 		glow.disc = true;
 		glow.ground = false;
 		FrameGlows.push_back(glow);
@@ -791,6 +843,11 @@ void ScanMissiles()
 		}
 	}
 	std::erase_if(SeenBursts, [](const auto &entry) { return entry.second != ScanFrame; });
+	// An arrow that vanished hit something (or the wall): sparks where it stopped.
+	for (const auto &[missile, trail] : Trails) {
+		if (trail.frame != ScanFrame && trail.arrow && trail.count > 0)
+			SparksAt(trail.points[0] + Vec { 0, 16 }, trail.element, 0.6F);
+	}
 	std::erase_if(Trails, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 }
 

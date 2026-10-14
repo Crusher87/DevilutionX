@@ -54,6 +54,8 @@ void Slam(Point tile, int radiusTiles, Element element);
 void Fissure(Point from, Point to, Element element);
 /** @brief An explosion of the element's particles; size 1 is a normal hit. */
 void Impact(Point tile, Element element, float size);
+/** @brief A small shower of bright sparks and a flash, like steel striking: a weapon hit or an arrow landing. */
+void Sparks(Point tile, Element element, float size);
 /** @brief Lightning arcing between two tiles. */
 void Arc(Point from, Point to, Element element);
 /** @brief Lightning striking down from the sky onto a tile. */

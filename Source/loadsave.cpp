@@ -42,6 +42,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "stores.h"
@@ -2425,9 +2426,9 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 7 the rebuilt passive tree with two-byte node ids, version 8 the 12-socket Skills panel and the skill tray,
  * version 9 the fifth flask, version 10 each socketed gem's level, version 11 the Spirit skulls and version 12 the
  * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
- * version 14 their crafting state.
+ * version 14 their crafting state. Version 17 adds currency shards and version 18 the tier of each socketed support.
  */
-constexpr uint8_t Poe2HeroDataVersion = 17;
+constexpr uint8_t Poe2HeroDataVersion = 18;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2657,6 +2658,16 @@ uint8_t ReadPoe2HeroData(Player &player)
 	for (uint8_t &shards : player.poe2.economy.shards)
 		shards = std::min<uint8_t>(file.NextLE<uint8_t>(), ShardsPerOrb - 1);
 	player.poe2.economy.gambleCharges = std::min(file.NextLE<uint8_t>(), MaxGambleCharges);
+
+	// Version 18: the tier of each socketed support; older supports are all tier I.
+	if (version < 18 || !file.IsValid(NumSkillSlots * MaxSupportSockets))
+		return version;
+	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			const int tier = file.NextLE<uint8_t>();
+			player.poe2.slotSupportTiers[slot][socket] = static_cast<uint8_t>(std::clamp(tier, 1, SupportTierCount(player.poe2.slotSupports[slot][socket])));
+		}
+	}
 	return version;
 }
 
@@ -2697,7 +2708,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			jewelCount++;
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2795,6 +2806,11 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	for (const uint8_t shards : player.poe2.economy.shards)
 		file.WriteLE<uint8_t>(shards);
 	file.WriteLE<uint8_t>(player.poe2.economy.gambleCharges);
+	// Version 18.
+	for (const SupportTiers &tiers : player.poe2.slotSupportTiers) {
+		for (const uint8_t tier : tiers)
+			file.WriteLE<uint8_t>(tier);
+	}
 }
 
 void LoadHeroItems(Player &player)

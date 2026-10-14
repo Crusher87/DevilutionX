@@ -295,6 +295,14 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 				if (InDungeonBounds(far))
 					spawnMissiles(WorldTilePosition(static_cast<WorldTileCoord>(far.x), static_cast<WorldTileCoord>(far.y)));
 			}
+			// Nova Projectiles II: more, between the others.
+			const int novaExtra = SupportNovaExtraProjectiles(player, SkillSlot::ForSpell(spl));
+			for (int i = 0; i < novaExtra; i++) {
+				const Direction around = static_cast<Direction>((static_cast<int>(aim) + i + 1) % 8);
+				const Point far = Point(src) + Displacement { around } * 6;
+				if (InDungeonBounds(far))
+					spawnMissiles(RotateSpellTarget(src, WorldTilePosition(static_cast<WorldTileCoord>(far.x), static_cast<WorldTileCoord>(far.y)), 30));
+			}
 		}
 	}
 	if (!fizzled && infusion != 0) {

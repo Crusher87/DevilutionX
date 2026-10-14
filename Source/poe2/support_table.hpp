@@ -154,8 +154,14 @@ int SupportAreaRadius(const Player &player, SkillSlot skill, int radius);
 int SupportDurationTicks(const Player &player, SkillSlot skill, int ticks);
 /** @brief Extra projectiles from Volley, Stored Volley's seals and Kashya's Volley. */
 int SupportExtraProjectileCount(const Player &player, SkillSlot skill);
-/** @brief Projectiles go out in a circle (Nova Projectiles). */
+/** @brief Projectiles go out in a circle (Nova Projectiles); call once per use, as Nova Projectiles II waits between novas. */
 bool SupportFiresNova(const Player &player, SkillSlot skill);
+/** @brief Projectiles a nova fires besides one in each direction (Nova Projectiles II). */
+int SupportNovaExtraProjectiles(const Player &player, SkillSlot skill);
+/** @brief A spell was cast, for Faster Casting III. */
+void NoteRecentSpell(SupportRuntime &state, uint8_t spell);
+/** @brief How many different spells were cast lately (Faster Casting III). */
+int RecentSpellCount(const SupportRuntime &state);
 /** @brief How many zones of a skill can be out at once. */
 int SupportZoneLimit(const Player &player, SkillSlot skill, int limit);
 /** @brief Cast speed the skill's supports take away, in percent. */

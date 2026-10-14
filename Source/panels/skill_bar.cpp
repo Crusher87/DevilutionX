@@ -84,6 +84,7 @@ TrayPopup Popup;
 /** @brief A kind of support gem the character carries, and where the first one is. */
 struct OwnedSupport {
 	SupportGem gem;
+	int tier;
 	int count;
 	bool inBelt;
 	int index;
@@ -322,19 +323,20 @@ std::vector<OwnedSupport> OwnedSupports(const Player &player)
 		const SupportGem gem = SupportGemForItem(item);
 		if (gem == SupportGem::None)
 			return;
+		const int tier = SupportGemItemTier(item);
 		for (OwnedSupport &entry : owned) {
-			if (entry.gem == gem) {
+			if (entry.gem == gem && entry.tier == tier) {
 				entry.count++;
 				return;
 			}
 		}
-		owned.push_back({ gem, 1, inBelt, index });
+		owned.push_back({ gem, tier, 1, inBelt, index });
 	};
 	for (int i = 0; i < player._pNumInv; i++)
 		add(player.InvList[i], false, i);
 	for (int i = 0; i < MaxBeltItems; i++)
 		add(player.SpdList[i], true, i);
-	std::sort(owned.begin(), owned.end(), [](const OwnedSupport &a, const OwnedSupport &b) { return a.gem < b.gem; });
+	std::sort(owned.begin(), owned.end(), [](const OwnedSupport &a, const OwnedSupport &b) { return a.gem != b.gem ? a.gem < b.gem : a.tier > b.tier; });
 	return owned;
 }
 
@@ -348,7 +350,7 @@ std::optional<size_t> PopupSupportsSocket(const Player &player)
 }
 
 /** @brief Why a support gem can't go in a support socket of a skill, or empty if it can. */
-std::string SupportBlocker(const Player &player, size_t slot, size_t socket, SupportGem gem)
+std::string SupportBlocker(const Player &player, size_t slot, size_t socket, SupportGem gem, int tier)
 {
 	const SkillSlot skill = player.poe2.skillSlots[slot];
 	if (!SupportGemCanSupport(gem, skill)) {
@@ -356,7 +358,8 @@ std::string SupportBlocker(const Player &player, size_t slot, size_t socket, Sup
 		return needs.empty() ? FormatRuntime(_("Can't support {:s}"), SkillName(skill)) : std::string(needs);
 	}
 	const SupportGem current = player.poe2.slotSupports[slot][socket];
-	if (current == gem || player.poe2.hasSupport(skill, gem))
+	// Another tier of the support in its own socket swaps in.
+	if (current == gem ? player.poe2.socketTier(slot, socket) == tier : player.poe2.hasSupport(skill, gem))
 		return std::string(_("Already socketed"));
 	const GemColor color = SupportGemColor(gem);
 	const int freed = current != SupportGem::None && SupportGemColor(current) == color ? 1 : 0;
@@ -515,9 +518,9 @@ void DrawPicker(const Surface &out, const Player &player, const PopupLayout &lay
 		const Rectangle rect = PickerRowRect(layout, row);
 		if (hover.kind == PopupHit::Kind::Picker && hover.index == row)
 			FillRectangle(out, rect, RowHoverColor);
-		const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem);
+		const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem, entry.tier);
 		const Rectangle text { rect.position + Displacement { 4, 0 }, { rect.size.width - 8, rect.size.height } };
-		const std::string name = entry.count > 1 ? FormatRuntime("{:s} x{:d}", SupportGemName(entry.gem), entry.count) : std::string(SupportGemName(entry.gem));
+		const std::string name = entry.count > 1 ? FormatRuntime("{:s} x{:d}", SupportGemTierName(entry.gem, entry.tier), entry.count) : SupportGemTierName(entry.gem, entry.tier);
 		DrawString(out, name, text, { .flags = (blocker.empty() ? GemTextColor(SupportGemColor(entry.gem)) : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
 		if (!blocker.empty())
 			DrawString(out, blocker, text, { .flags = UiFlags::AlignRight | UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
@@ -555,19 +558,21 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 			DrawTooltip(out, bounds, MousePosition, std::string(_("Empty support socket")), UiFlags::ColorWhite, lines);
 			return;
 		}
-		lines.emplace_back(std::string(SupportGemDescription(gem)), UiFlags::ColorWhite);
+		const int tier = player.poe2.socketTier(*slot, hover.index);
+		lines.emplace_back(std::string(SupportGemDescription(gem, tier)), UiFlags::ColorWhite);
 		lines.emplace_back(_("Click to swap it, right-click to take it out"), UiFlags::ColorButtonpushed);
-		DrawTooltip(out, bounds, MousePosition, std::string(SupportGemName(gem)), GemTextColor(SupportGemColor(gem)), lines);
+		DrawTooltip(out, bounds, MousePosition, SupportGemTierName(gem, tier), GemTextColor(SupportGemColor(gem)), lines);
 		return;
 	}
 	case PopupHit::Kind::Picker: {
 		if (!slot || hover.index >= owned.size())
 			return;
 		const SupportGem gem = owned[hover.index].gem;
-		lines.emplace_back(std::string(SupportGemDescription(gem)), UiFlags::ColorWhite);
-		const std::string blocker = SupportBlocker(player, *slot, Popup.pickerSocket, gem);
+		const int tier = owned[hover.index].tier;
+		lines.emplace_back(std::string(SupportGemDescription(gem, tier)), UiFlags::ColorWhite);
+		const std::string blocker = SupportBlocker(player, *slot, Popup.pickerSocket, gem, tier);
 		lines.emplace_back(blocker.empty() ? std::string(_("Click to socket it")) : blocker, blocker.empty() ? UiFlags::ColorButtonpushed : UiFlags::ColorRed);
-		DrawTooltip(out, bounds, MousePosition, std::string(SupportGemName(gem)), GemTextColor(SupportGemColor(gem)), lines);
+		DrawTooltip(out, bounds, MousePosition, SupportGemTierName(gem, tier), GemTextColor(SupportGemColor(gem)), lines);
 		return;
 	}
 	default:
@@ -640,22 +645,24 @@ void DrawPopup(const Surface &out, const Player &player)
 /** @brief Takes a support out of the popup skill's socket and puts it in the inventory. */
 void TakeOutSupport(Player &player, size_t slot, size_t socket)
 {
-	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket);
+	int tier = 1;
+	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket, &tier);
 	if (gem == SupportGem::None)
 		return;
-	GiveSupportGems(player, { gem });
-	EventPlrMsg(FormatRuntime(_("{:s} is back in your inventory."), SupportGemName(gem)));
+	GiveSupportGems(player, { { gem, tier } });
+	EventPlrMsg(FormatRuntime(_("{:s} is back in your inventory."), SupportGemTierName(gem, tier)));
 }
 
 void SocketOwnedSupport(Player &player, size_t slot, const OwnedSupport &entry)
 {
-	const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem);
+	const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem, entry.tier);
 	if (!blocker.empty()) {
 		EventPlrMsg(blocker, UiFlags::ColorRed);
 		return;
 	}
 	SupportGem replaced = SupportGem::None;
-	const SupportSocketResult result = SocketSupportGem(player, slot, Popup.pickerSocket, entry.gem, replaced);
+	int replacedTier = 1;
+	const SupportSocketResult result = SocketSupportGem(player, slot, Popup.pickerSocket, entry.gem, replaced, entry.tier, &replacedTier);
 	if (!IsAnyOf(result, SupportSocketResult::Socketed, SupportSocketResult::Replaced)) {
 		EventPlrMsg(SupportSocketMessage(result, player, slot, entry.gem), UiFlags::ColorRed);
 		return;
@@ -668,7 +675,7 @@ void SocketOwnedSupport(Player &player, size_t slot, const OwnedSupport &entry)
 		player.RemoveInvItem(entry.index);
 	}
 	if (replaced != SupportGem::None)
-		GiveSupportGems(player, { replaced });
+		GiveSupportGems(player, { { replaced, replacedTier } });
 	EventPlrMsg(SupportSocketMessage(result, player, slot, entry.gem));
 	Popup.pickerOpen = false;
 }
@@ -805,11 +812,11 @@ bool IsOverPanel(Point position)
 
 } // namespace
 
-void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems)
+void GiveSupportGems(Player &player, const std::vector<TieredSupport> &gems)
 {
-	for (const SupportGem gem : gems) {
+	for (const TieredSupport &gem : gems) {
 		Item item;
-		if (CreateSupportGemItem(item, gem))
+		if (CreateSupportGemItem(item, gem.gem, gem.tier))
 			GiveItemToPlayer(player, item);
 	}
 }
@@ -817,10 +824,14 @@ void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems)
 SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int level)
 {
 	// Supports stay socketed if the new skill can use them, like moving them over in POE2; the rest come back out.
-	std::vector<SupportGem> returned;
-	for (SupportGem &gem : player.poe2.slotSupports[slot]) {
-		if (gem != SupportGem::None && !SupportGemCanSupport(gem, skill))
-			returned.push_back(std::exchange(gem, SupportGem::None));
+	std::vector<TieredSupport> returned;
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		const SupportGem gem = player.poe2.slotSupports[slot][socket];
+		if (gem == SupportGem::None || SupportGemCanSupport(gem, skill))
+			continue;
+		int tier = 1;
+		UnsocketSupportGem(player.poe2, slot, socket, &tier);
+		returned.push_back({ gem, tier });
 	}
 	const SkillSlot previous = SocketSkill(player, slot, skill, level);
 	GiveSupportGems(player, returned);
@@ -860,7 +871,8 @@ bool SocketHeldSupportGem(Player &player, size_t slot, std::optional<size_t> soc
 {
 	const SupportGem gem = SupportGemForItem(player.HoldItem);
 	SupportGem replaced = SupportGem::None;
-	const SupportSocketResult result = SocketSupportGem(player, slot, socket, gem, replaced);
+	int replacedTier = 1;
+	const SupportSocketResult result = SocketSupportGem(player, slot, socket, gem, replaced, SupportGemItemTier(player.HoldItem), &replacedTier);
 	if (!IsAnyOf(result, SupportSocketResult::Socketed, SupportSocketResult::Replaced)) {
 		EventPlrMsg(SupportSocketMessage(result, player, slot, gem), UiFlags::ColorRed);
 		return false;
@@ -870,7 +882,7 @@ bool SocketHeldSupportGem(Player &player, size_t slot, std::optional<size_t> soc
 	player.HoldItem.clear();
 	EventPlrMsg(SupportSocketMessage(result, player, slot, gem));
 	Item returned;
-	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced))
+	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced, replacedTier))
 		HoldItem(player, std::move(returned));
 	else
 		NewCursor(CURSOR_HAND);
@@ -1011,9 +1023,10 @@ void SetSkillBarInfo()
 			AddInfoBoxString(FormatRuntime(_("{:d} mana"), SkillManaCost(player, skill)));
 	}
 	std::string supports;
-	for (const SupportGem gem : player.poe2.slotSupports[binding.socket]) {
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		const SupportGem gem = player.poe2.slotSupports[binding.socket][socket];
 		if (gem != SupportGem::None)
-			StrAppend(supports, supports.empty() ? "" : ", ", SupportGemName(gem));
+			StrAppend(supports, supports.empty() ? "" : ", ", SupportGemTierName(gem, player.poe2.socketTier(binding.socket, socket)));
 	}
 	if (!supports.empty())
 		AddInfoBoxString(FormatRuntime(_("Supports: {:s}"), supports));

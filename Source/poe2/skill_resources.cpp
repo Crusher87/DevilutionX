@@ -9,6 +9,7 @@
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -49,7 +50,7 @@ void OnSkillMeleeHit(Player &player)
 {
 	const WeaponSkill skill = CurrentWeaponSkill(player);
 	if (skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::BattleRage))
-		AddRage(player, 1);
+		AddRage(player, SupportValue(player.poe2, SkillSlot::ForAttack(skill), SupportGem::BattleRage, 0));
 	OnSpiritMeleeHit(player);
 }
 

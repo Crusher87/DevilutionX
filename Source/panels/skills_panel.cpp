@@ -286,17 +286,19 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 	}
 	if (gem != SupportGem::None) {
 		const GemColor color = SupportGemColor(gem);
-		lines.emplace_back(std::string(SupportGemDescription(gem)), UiFlags::ColorWhite);
+		const int tier = player.poe2.socketTier(hover.slot, hover.socket);
+		lines.emplace_back(std::string(SupportGemDescription(gem, tier)), UiFlags::ColorWhite);
 		lines.emplace_back(FormatRuntime(_("{:s} support"), GemColorName(color)), GemTextColor(color));
 		lines.emplace_back(held != SupportGem::None ? _("Click to swap in the held gem") : _("Click to take it out"), UiFlags::ColorButtonpushed);
-		DrawTooltip(out, bounds, MousePosition, std::string(SupportGemName(gem)), GemTextColor(color), lines);
+		DrawTooltip(out, bounds, MousePosition, SupportGemTierName(gem, tier), GemTextColor(color), lines);
 		return;
 	}
 	if (skill.isEmpty() || !SkillTakesSupports(skill))
 		return;
 	if (held != SupportGem::None) {
 		const bool fits = SupportGemCanSupport(held, skill);
-		lines.emplace_back(fits ? FormatRuntime(_("Click to socket {:s}"), SupportGemName(held)) : FormatRuntime(_("{:s} can't support {:s}"), SupportGemName(held), SkillName(skill)),
+		const std::string heldName = SupportGemTierName(held, SupportGemItemTier(player.HoldItem));
+		lines.emplace_back(fits ? FormatRuntime(_("Click to socket {:s}"), heldName) : FormatRuntime(_("{:s} can't support {:s}"), heldName, SkillName(skill)),
 		    fits ? UiFlags::ColorWhite : UiFlags::ColorRed);
 	} else {
 		lines.emplace_back(_("Click with a support gem to socket it.\nSupports change how the skill works."), UiFlags::ColorWhite);
@@ -321,9 +323,10 @@ void ClickSocket(Player &player, size_t slot, size_t socket)
 		SocketHeldSupportGem(player, slot, socket);
 		return;
 	}
-	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket);
+	int tier = 1;
+	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket, &tier);
 	Item item;
-	if (gem != SupportGem::None && CreateSupportGemItem(item, gem))
+	if (gem != SupportGem::None && CreateSupportGemItem(item, gem, tier))
 		HoldGem(player, std::move(item));
 }
 

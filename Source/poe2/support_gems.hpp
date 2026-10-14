@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -94,9 +95,27 @@ SupportGem SupportGemForMiscId(int miscId);
 SupportGem SupportGemForItemData(const ItemData &data);
 std::string_view SupportGemName(SupportGem gem);
 std::string_view SupportGemDescription(SupportGem gem);
+/** @brief What a tier of the support does. */
+std::string_view SupportGemDescription(SupportGem gem, int tier);
 
-/** @brief Makes a fresh support gem item, e.g. when a linked gem is swapped back out. */
-bool CreateSupportGemItem(Item &item, SupportGem gem);
+/** @brief Makes a fresh support gem item of a tier (1 to 3), e.g. when a linked gem is swapped back out. */
+bool CreateSupportGemItem(Item &item, SupportGem gem, int tier = 1);
+/** @brief The tier of a support gem item, 1 to 3. */
+int SupportGemItemTier(const Item &item);
+/** @brief Gives the support gem item its tier and the name that goes with it ("Brutality II Support"). */
+void SetSupportGemItemTier(Item &item, int tier);
+/** @brief Lineage supports have no tiers. */
+bool SupportGemHasTiers(SupportGem gem);
+/** @brief "I", "II" or "III". */
+std::string_view SupportTierNumeral(int tier);
+/** @brief "Brutality II"; just the name at tier I. */
+std::string SupportGemTierName(SupportGem gem, int tier);
+
+/** @brief A support gem and its tier. */
+struct TieredSupport {
+	SupportGem gem = SupportGem::None;
+	int tier = 1;
+};
 
 GemColor SupportGemColor(SupportGem gem);
 std::string_view GemColorName(GemColor color);
@@ -124,14 +143,16 @@ int SupportsUsed(const Poe2PlayerData &data, GemColor color);
  * @brief Sockets a support gem into a skill in the Skills panel.
  * @param socket The socket to fill; the first free open socket if empty.
  * @param replaced Set to the support that was in the socket, if any.
+ * @param tier The tier of the gem being socketed.
+ * @param replacedTier If given, set to the tier of the support that was in the socket.
  */
-SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced);
+SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced, int tier = 1, int *replacedTier = nullptr);
 /** @brief The first Skills panel socket whose skill has a free socket the gem can go in. */
 std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem);
-/** @brief Takes a support out of a socket. */
-SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket);
+/** @brief Takes a support out of a socket. @param tier If given, set to the support's tier. */
+SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket, int *tier = nullptr);
 /** @brief Takes every support out of a slot, e.g. when its skill gem is taken out. */
-std::vector<SupportGem> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
+std::vector<TieredSupport> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
 
 /** @brief Extra spell levels the spell's supports add. */
 int SupportSpellLevelBonus(const Player &player, SpellID spell);

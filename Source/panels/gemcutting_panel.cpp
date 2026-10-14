@@ -147,18 +147,12 @@ std::vector<SkillSlot> SupportableSkills(const Player &player)
 }
 
 /** @brief Whether the selected skill already has this support linked. */
-bool IsLinkedToSupportedSkill(const Player &player, SupportGem support)
+/** @brief Whether the selected skill already has the support at this tier or higher. */
+bool IsLinkedToSupportedSkill(const Player &player, SupportGem support, int tier)
 {
 	if (!SupportedSkill)
 		return false;
-	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
-		if (player.poe2.skillSlots[slot] != *SupportedSkill)
-			continue;
-		const auto &supports = player.poe2.slotSupports[slot];
-		if (std::find(supports.begin(), supports.end(), support) != supports.end())
-			return true;
-	}
-	return false;
+	return player.poe2.supportTier(*SupportedSkill, support) >= std::max(tier, 1);
 }
 
 bool MatchesSupportedSkill(const GemEntry &gem)
@@ -178,7 +172,7 @@ bool MatchesQuery(const GemEntry &gem)
 			StrAppend(haystack, " ", AsciiStrToLower(GemCategoryName(category)));
 	}
 	if (gem.support != SupportGem::None)
-		StrAppend(haystack, " support ", AsciiStrToLower(SupportGemDescription(gem.support)));
+		StrAppend(haystack, " support ", AsciiStrToLower(SupportGemDescription(gem.support, gem.tier)));
 	else if (gem.skill.kind == SkillKind::Attack)
 		StrAppend(haystack, " attack ", AsciiStrToLower(WeaponSkillDescription(gem.skill.attack())));
 	else if (gem.skill.kind == SkillKind::Persistent)
@@ -320,7 +314,7 @@ void DrawGemIcon(const Surface &out, const Rectangle &box, const GemEntry &gem, 
 		return;
 	}
 	Item item;
-	if (!CreateSupportGemItem(item, gem.support))
+	if (!CreateSupportGemItem(item, gem.support, gem.tier))
 		return;
 	item._iStatFlag = ready;
 	const int cursId = item._iCurs + CURSOR_FIRSTITEM;
@@ -355,7 +349,7 @@ void DrawCell(const Surface &out, const Player &player, const Cell &cell, bool h
 	std::string detail;
 	if (socket)
 		detail = FormatRuntime(_("Socketed, gem level {:d}"), player.poe2.gemLevel(*socket));
-	else if (gem.support != SupportGem::None && IsLinkedToSupportedSkill(player, gem.support))
+	else if (gem.support != SupportGem::None && IsLinkedToSupportedSkill(player, gem.support, gem.tier))
 		detail = _("Already linked");
 	else
 		detail = FormatRuntime(_("Tier level {:d}"), gem.level);
@@ -367,7 +361,7 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 {
 	std::vector<std::pair<std::string, UiFlags>> lines;
 	if (gem.support != SupportGem::None) {
-		lines.emplace_back(std::string(SupportGemDescription(gem.support)), UiFlags::ColorWhite);
+		lines.emplace_back(std::string(SupportGemDescription(gem.support, gem.tier)), UiFlags::ColorWhite);
 		lines.emplace_back(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem.support))), UiFlags::ColorWhitegold);
 		if (SupportedSkill)
 			lines.emplace_back(FormatRuntime(_("Works with {:s}"), SkillName(*SupportedSkill)), UiFlags::ColorWhite);

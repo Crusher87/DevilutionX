@@ -23,6 +23,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/waystones.hpp"
@@ -146,8 +147,14 @@ constexpr int MaxHoradricSeals = 2;
 constexpr int HoradricSealTicks = 30;
 constexpr int StoredVolleySealTicks = 20;
 constexpr int MultistrikePercent = 75;
+/** Immortal King's Stride's aftershocks hit for 40% less. */
 constexpr int AftershockPercent = 60;
 constexpr int WitherPercentPerStack = 5;
+constexpr int TicksPerSecond = 20;
+/** Life Leech III keeps leech for 2 seconds at full life. */
+constexpr int LeechPoolTicks = 2 * TicksPerSecond;
+/** Faster Casting III counts the spells cast in the last 8 seconds. */
+constexpr int RecentSpellTicks = 8 * TicksPerSecond;
 constexpr int MaxWitherStacks = 10;
 constexpr int WitherTicks = 4 * 20;
 constexpr int TriggerCooldownKill = 10;
@@ -224,6 +231,19 @@ bool HitHas(SupportGem gem)
 {
 	return Hit.player != nullptr && Has(*Hit.player, Hit.skill, gem);
 }
+
+/** @brief A number of the support at the tier it has on the skill (see poe2/support_tiers.hpp); 0 if the skill doesn't have it. */
+int Value(const Player &player, SkillSlot skill, SupportGem gem, size_t index)
+{
+	return skill.isEmpty() ? 0 : SupportValue(player.poe2, skill, gem, index);
+}
+
+int HitValue(SupportGem gem, size_t index)
+{
+	return Hit.player != nullptr ? Value(*Hit.player, Hit.skill, gem, index) : 0;
+}
+
+int MinionValue(const Player &owner, PersistentSkill skill, SupportGem gem, size_t index);
 
 int Percent(int64_t value, int percent)
 {
@@ -359,6 +379,13 @@ void FireTriggers(Player &player, SupportGem gem, Point target, int cooldown)
 	}
 }
 
+PersistentSkill MinionSkillOf(const Monster &minion);
+
+int MinionValue(const Player &owner, PersistentSkill skill, SupportGem gem, size_t index)
+{
+	return Value(owner, SkillSlot::ForPersistent(skill), gem, index);
+}
+
 PersistentSkill MinionSkillOf(const Monster &minion)
 {
 	if (minion.poe2.revived)
@@ -443,6 +470,19 @@ DamageType PrismElement(uint8_t element)
 }
 
 /** @brief The supports' on-hit effects on the monster the hit landed on. */
+/** @brief Fan the Flames II: a burning monster's ignite spreads to the 2 nearest. */
+void SpreadIgnite(const Player &player, const Monster &monster)
+{
+	const Poe2MonsterState &state = monster.poe2;
+	for (Monster *other : NearestMonsters(monster.position.tile, 3, 2, &monster)) {
+		Poe2MonsterState &target = other->poe2;
+		target.igniteTicks = std::max(target.igniteTicks, state.igniteTicks);
+		target.igniteDamagePerTick = std::max(target.igniteDamagePerTick, state.igniteDamagePerTick);
+		target.igniteSource = static_cast<int8_t>(player.getId());
+		other->tag(player);
+	}
+}
+
 void FinishHit()
 {
 	Monster *target = Hit.monster;
@@ -462,7 +502,13 @@ void FinishHit()
 
 	// Leech first, so it counts the whole hit.
 	if (Has(player, skill, SG::LifeLeech) && player._pHitPoints > 0) {
-		const Fixed26_6 heal = Fixed26_6::fromRaw(total * 3 / 100);
+		const Fixed26_6 heal = Fixed26_6::fromRaw(Percent(total, Value(player, skill, SG::LifeLeech, 0)));
+		// Life Leech III: what full life can't take is kept for a moment.
+		const int32_t room = std::max(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
+		if (Value(player, skill, SG::LifeLeech, 1) > 0 && heal.raw() > room) {
+			state.leechPool = std::min(state.leechPool + heal.raw() - room, player._pMaxHP.raw());
+			state.leechPoolTicks = LeechPoolTicks;
+		}
 		player._pHitPoints = std::min(player._pHitPoints + heal, player._pMaxHP);
 		player._pHPBase = std::min(player._pHPBase + heal, player._pMaxHPBase);
 		RedrawComponent(PanelDrawComponent::Health);
@@ -480,14 +526,16 @@ void FinishHit()
 			monster.poe2.witherStacks = static_cast<uint8_t>(std::min<int>(monster.poe2.witherStacks + 1, MaxWitherStacks));
 			monster.poe2.witherTicks = WitherTicks;
 		}
-		if (Has(player, skill, SG::SerratedEdge) && physical > 0 && GenerateRnd(100) < 25)
+		if (Has(player, skill, SG::SerratedEdge) && physical > 0 && GenerateRnd(100) < Value(player, skill, SG::SerratedEdge, 0))
 			InflictSupportBleed(player, monster, physical);
-		if (Has(player, skill, SG::Envenom) && physical > 0)
+		if (Has(player, skill, SG::Envenom) && physical > 0 && GenerateRnd(100) < Value(player, skill, SG::Envenom, 0))
 			InflictPoison(player, monster, physical * 30 / 100, 40, 20);
 		if (Has(player, skill, SG::AndarielsAnguish))
 			InflictPoison(player, monster, total * 10 / 100 * 4, 80, 5);
-		if (Has(player, skill, SG::SunderArmour) && physical > 0)
+		if (Has(player, skill, SG::SunderArmour) && physical > 0) {
 			BreakMonsterArmour(monster);
+			monster.poe2.armourBreakTicks = static_cast<uint8_t>(std::max<int>(monster.poe2.armourBreakTicks, Value(player, skill, SG::SunderArmour, 0) * TicksPerSecond));
+		}
 		if (Has(player, skill, SG::CurseOnHit)) {
 			if (const SkillSlot curse = SocketedCurse(player); !curse.isEmpty())
 				ApplyTableCurse(player, monster, curse.attack(), 75);
@@ -517,8 +565,12 @@ void FinishHit()
 		}
 		if (Has(player, skill, SG::HolyInfusion))
 			DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(total / 5));
-		if (Has(player, skill, SG::FuelThePyre) && monster.poe2.igniteTicks > 0)
-			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(total * 3 / 10));
+		if (Has(player, skill, SG::FuelThePyre) && monster.poe2.igniteTicks > 0) {
+			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(Percent(total, Value(player, skill, SG::FuelThePyre, 0))));
+			// Fan the Flames II: the burn spreads.
+			if (Value(player, skill, SG::FuelThePyre, 1) > 0)
+				SpreadIgnite(player, monster);
+		}
 		if (Has(player, skill, SG::Frostbite) && state.frostbiteTicks > 0)
 			DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(total / 4));
 		if (Has(player, skill, SG::TalRashasPrism))
@@ -548,7 +600,7 @@ void FinishHit()
 	}
 	if (Has(player, skill, SG::BurningGround) && state.burningGroundCooldown == 0) {
 		state.burningGroundCooldown = 20;
-		AddBurst(monster.position.tile, 1, 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max<int32_t>(total / 10, 64)), 4, 10);
+		AddBurst(monster.position.tile, Value(player, skill, SG::BurningGround, 1), 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max<int32_t>(total / 10, 64)), Value(player, skill, SG::BurningGround, 0), 10);
 	}
 	// Multistrike: the hit strikes twice more.
 	if (!Repeating && Has(player, skill, SG::Multistrike) && alive) {
@@ -1037,7 +1089,7 @@ void SetMissileSkill(Missile &missile, const Player &player, SkillSlot skill)
 {
 	missile.poe2.skillKind = static_cast<uint8_t>(skill.kind);
 	missile.poe2.skillId = skill.id;
-	if (Has(player, skill, SG::Ricochet))
+	if (Has(player, skill, SG::Ricochet) && GenerateRnd(100) < Value(player, skill, SG::Ricochet, 0))
 		missile.poe2.ricochet = true;
 }
 
@@ -1079,10 +1131,19 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 			more(-25);
 			break;
 		case SG::CloseCombat: {
-			const int distance = player.position.tile.WalkingDistance(monster.position.tile);
-			more(std::max(0, 25 * (4 - std::max(distance - 1, 0)) / 3));
+			// The most next to the monster, none 4 tiles away.
+			const int distance = std::max(player.position.tile.WalkingDistance(monster.position.tile), 1);
+			more(std::max(0, Value(player, skill, gem, 0) * (4 - distance) / 3));
 			break;
 		}
+		case SG::MartialTempo:
+			more(-Value(player, skill, gem, 1));
+			break;
+		case SG::Brutality:
+			// Brutality III: some hits ignore armour, as if it were broken.
+			if (type == DamageType::Physical && monster.poe2.armourBreakTicks == 0 && GenerateRnd(100) < Value(player, skill, gem, 1))
+				more(ArmourBreakDamagePercent);
+			break;
 		case SG::InfusedFlames:
 		case SG::InfusedStorm:
 		case SG::InfusedFrost:
@@ -1118,7 +1179,7 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 			more(-30);
 			break;
 		case SG::NovaProjectiles:
-			more(-20);
+			more(-Value(player, skill, gem, 1));
 			break;
 		case SG::Momentum:
 			if (state.movedTiles >= 2)
@@ -1133,11 +1194,11 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 			break;
 		case SG::BrimmingMana:
 			if (player._pMaxMana > 0 && player._pMana.raw() * 10 >= player._pMaxMana.raw() * 9)
-				more(30);
+				more(Value(player, skill, gem, 0));
 			break;
 		case SG::CoupDeGrace:
-			if (monster.hitPoints.raw() * 100 < monster.maxHitPoints.raw() * 35)
-				more(40);
+			if (monster.hitPoints.raw() * 100 < monster.maxHitPoints.raw() * Value(player, skill, gem, 1))
+				more(Value(player, skill, gem, 0));
 			break;
 		case SG::Shatter:
 			if (monster.poe2.freezeTicks == 0 && monster.mode != MonsterMode::Petrified)
@@ -1184,7 +1245,7 @@ int SupportAilmentEffectPercent(DamageType type)
 	if (Hit.depth == 0 || Hit.player == nullptr)
 		return 100;
 	if (type == DamageType::Fire && HitHas(SG::Hellfire))
-		return 175;
+		return 100 + HitValue(SG::Hellfire, 0);
 	if (type == DamageType::Magic && HitHas(SG::DeepFreeze))
 		return 175;
 	if (type == DamageType::Magic && HitHas(SG::ElementalFocus))
@@ -1212,6 +1273,8 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 	const std::optional<size_t> slot = SlotOf(player, skill);
 	const Point tile = player.position.tile;
 	state.spentBonusTicks = 0;
+	if (skill.kind == SkillKind::Spell)
+		NoteRecentSpell(state, skill.id);
 
 	for (const SupportGem gem : player.poe2.supportsFor(skill)) {
 		switch (gem) {
@@ -1254,7 +1317,8 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			}
 			break;
 		case SG::Aftershock:
-			AddBurst(target, 2, 12, DamageType::Physical, MissileGraphicID::StoneCurseShatter, SkillBaseDamage(player, skill, AftershockPercent));
+			if (GenerateRnd(100) < Value(player, skill, gem, 0))
+				AddBurst(target, 2, 12, DamageType::Physical, MissileGraphicID::StoneCurseShatter, SkillBaseDamage(player, skill, 100));
 			break;
 		case SG::ImmortalKingsStride:
 			for (int i = 0; i < 2; i++) {
@@ -1273,14 +1337,16 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			break;
 		case SG::Wrathforged:
 			if (player.poe2.rage >= 10) {
-				player.poe2.rage -= 10;
-				state.spentBonusPercent = 35;
+				// Rageforged II: sometimes the Rage isn't spent.
+				if (GenerateRnd(100) >= Value(player, skill, gem, 1))
+					player.poe2.rage -= 10;
+				state.spentBonusPercent = static_cast<uint8_t>(Value(player, skill, gem, 0));
 				state.spentBonusTicks = SpentBonusTicks;
 			}
 			break;
 		case SG::ComboFinisher:
-			if (player.poe2.combo > 0) {
-				state.spentBonusPercent = static_cast<uint8_t>(std::min(player.poe2.combo * 3, 255));
+			if (player.poe2.combo >= Value(player, skill, gem, 1)) {
+				state.spentBonusPercent = static_cast<uint8_t>(Value(player, skill, gem, 0));
 				state.spentBonusTicks = SpentBonusTicks;
 				player.poe2.combo = 0;
 			}
@@ -1421,6 +1487,29 @@ void ProcessSupportEffects(Player &player)
 		state.spentBonusTicks--;
 	if (state.burningGroundCooldown > 0)
 		state.burningGroundCooldown--;
+	for (uint8_t &wait : state.novaCooldown) {
+		if (wait > 0)
+			wait--;
+	}
+	for (size_t i = 0; i < state.recentSpells.size(); i++) {
+		if (state.recentSpellTicks[i] > 0 && --state.recentSpellTicks[i] == 0)
+			state.recentSpells[i] = 0;
+	}
+	// Life Leech III: the kept leech heals once there's room.
+	if (state.leechPoolTicks > 0) {
+		const int32_t room = std::max(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
+		const Fixed26_6 heal = Fixed26_6::fromRaw(std::min(state.leechPool, room));
+		if (heal > 0 && player._pHitPoints > 0) {
+			player._pHitPoints += heal;
+			player._pHPBase += heal;
+			state.leechPool -= heal.raw();
+			RedrawComponent(PanelDrawComponent::Health);
+		}
+		if (--state.leechPoolTicks == 0 || state.leechPool <= 0) {
+			state.leechPool = 0;
+			state.leechPoolTicks = 0;
+		}
+	}
 	// Momentum: count the tiles walked lately.
 	const Point tile = player.position.tile;
 	if (state.lastX != tile.x || state.lastY != tile.y) {
@@ -1476,7 +1565,7 @@ int SupportAreaRadius(const Player &player, SkillSlot skill, int radius)
 		return radius;
 	int percent = 100;
 	if (Has(player, skill, SG::IncreasedArea))
-		percent += 30;
+		percent += Value(player, skill, SG::IncreasedArea, 0);
 	if (Has(player, skill, SG::Cascade))
 		percent -= 20;
 	if (Has(player, skill, SG::ImmortalKingsStride))
@@ -1495,7 +1584,7 @@ int SupportDurationTicks(const Player &player, SkillSlot skill, int ticks)
 {
 	int percent = 100;
 	if (Has(player, skill, SG::IncreasedDuration))
-		percent += 50;
+		percent += Value(player, skill, SG::IncreasedDuration, 0);
 	if (Has(player, skill, SG::CurseMastery))
 		percent += 50;
 	if (Has(player, skill, SG::Legion))
@@ -1522,7 +1611,46 @@ int SupportExtraProjectileCount(const Player &player, SkillSlot skill)
 
 bool SupportFiresNova(const Player &player, SkillSlot skill)
 {
-	return Has(player, skill, SG::NovaProjectiles);
+	if (!Has(player, skill, SG::NovaProjectiles))
+		return false;
+	// Nova Projectiles II: at most one nova every few seconds; the skill fires normally in between.
+	if (const int seconds = Value(player, skill, SG::NovaProjectiles, 2); seconds > 0) {
+		const std::optional<size_t> slot = SlotOf(player, skill);
+		if (!slot)
+			return false;
+		uint8_t &wait = player.poe2.supportState.novaCooldown[*slot];
+		if (wait > 0)
+			return false;
+		wait = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
+	}
+	return true;
+}
+
+int SupportNovaExtraProjectiles(const Player &player, SkillSlot skill)
+{
+	return Value(player, skill, SG::NovaProjectiles, 0);
+}
+
+void NoteRecentSpell(SupportRuntime &state, uint8_t spell)
+{
+	// Spell ids are kept one up, so 0 is an empty entry.
+	const uint8_t id = static_cast<uint8_t>(spell + 1);
+	size_t entry = 0;
+	for (size_t i = 0; i < state.recentSpells.size(); i++) {
+		if (state.recentSpells[i] == id) {
+			entry = i;
+			break;
+		}
+		if (state.recentSpellTicks[i] < state.recentSpellTicks[entry])
+			entry = i;
+	}
+	state.recentSpells[entry] = id;
+	state.recentSpellTicks[entry] = RecentSpellTicks;
+}
+
+int RecentSpellCount(const SupportRuntime &state)
+{
+	return static_cast<int>(std::count_if(state.recentSpells.begin(), state.recentSpells.end(), [](uint8_t id) { return id != 0; }));
 }
 
 int SupportZoneLimit(const Player &player, SkillSlot skill, int limit)
@@ -1611,7 +1739,7 @@ int SupportMinionDamagePercent(const Player &owner, const Monster &minion)
 	if (MinionHas(owner, minion, SG::BoneArmy))
 		percent = percent * 70 / 100;
 	if (MinionHas(owner, minion, SG::FeedingFrenzy))
-		percent = percent * 130 / 100;
+		percent = percent * (100 + MinionValue(owner, MinionSkillOf(minion), SG::FeedingFrenzy, 0)) / 100;
 	if (MinionHas(owner, minion, SG::MixedHost))
 		percent = percent * (100 + 7 * CountMinions(owner).second) / 100;
 	return percent;
@@ -1621,7 +1749,7 @@ int SupportMinionDamageTakenPercent(const Player &owner, const Monster &minion)
 {
 	if (MinionHas(owner, minion, SG::TragOulsBalance))
 		return 0;
-	return MinionHas(owner, minion, SG::FeedingFrenzy) ? 120 : 100;
+	return 100 + MinionValue(owner, MinionSkillOf(minion), SG::FeedingFrenzy, 1);
 }
 
 int SupportMinionLifePercent(const Player &owner, PersistentSkill skill)
@@ -1646,7 +1774,7 @@ void OnSupportedMinionDied(Player &owner, Monster &minion)
 	const Fixed26_6 life = Fixed26_6::fromRaw(std::max<int32_t>(minion.maxHitPoints.raw() / 4, 64));
 	if (MinionHas(owner, minion, SG::GravePact)) {
 		AddVisualEffect(minion.position.tile, MissileGraphicID::BloodStarExplosion, 0, 6);
-		AddBurst(minion.position.tile, 2, 0, DamageType::Physical, MissileGraphicID::BloodHit, life);
+		AddBurst(minion.position.tile, 2, 0, DamageType::Physical, MissileGraphicID::BloodHit, Fixed26_6::fromRaw(Percent(life.raw(), MinionValue(owner, MinionSkillOf(minion), SG::GravePact, 0))));
 	}
 	if (MinionHas(owner, minion, SG::RathmasCovenant)) {
 		const std::vector<Monster *> nearest = NearestMonsters(minion.position.tile, 7, 1, nullptr);
@@ -1673,7 +1801,6 @@ bool OnSupportedMissileHitWall(Missile &missile, Point wall)
 		return false;
 	bounce->poe2 = missile.poe2;
 	bounce->poe2.ricochet = false;
-	bounce->poe2.damagePercent = static_cast<int16_t>(missile.poe2.damagePercent * 80 / 100);
 	AddVisualEffect(from, MissileGraphicID::MetalHit);
 	return true;
 }

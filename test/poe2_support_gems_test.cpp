@@ -12,6 +12,7 @@
 #include "player.h"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
@@ -87,6 +88,77 @@ TEST_F(Poe2SupportGemsTest, EveryGemHasAnItem)
 		EXPECT_EQ(SupportGemForItem(recreated), gem);
 		EXPECT_EQ(std::string(recreated._iName), std::string(item._iName));
 	}
+}
+
+TEST_F(Poe2SupportGemsTest, TiersFollowPoe2)
+{
+	// Every tier is listed once, in order, and cut from a higher uncut gem than the one before.
+	for (const SupportTierData &data : SupportTierTable()) {
+		EXPECT_EQ(FindSupportTier(data.gem, data.tier), &data) << SupportGemName(data.gem);
+		EXPECT_FALSE(data.description.empty());
+		EXPECT_LE(data.tier, SupportTierCount(data.gem));
+		if (data.tier > 1)
+			EXPECT_GE(data.uncut, FindSupportTier(data.gem, data.tier - 1)->uncut) << SupportGemName(data.gem);
+	}
+	EXPECT_EQ(SupportTierCount(SupportGem::Chain), 3);
+	EXPECT_EQ(SupportTierCount(SupportGem::Empower), 1);
+	// Chain III: cut from a level 5 uncut support gem, our gemcutting row IX.
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::Chain, 3, 1), 15);
+	EXPECT_EQ(UncutSupportLevelForGemLevel(14), 4);
+	EXPECT_EQ(UncutSupportLevelForGemLevel(15), 5);
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::Empower, 1, 5), 5);
+}
+
+TEST_F(Poe2SupportGemsTest, HigherTiersChangeTheNumbers)
+{
+	Player &player = FreshPlayer();
+	Socket(player, SpellID::Firebolt, SupportGem::Chain);
+	const size_t slot = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Firebolt));
+	Missile missile {};
+	ApplySupportsToMissile(missile, player, SpellID::Firebolt);
+	EXPECT_EQ(missile.poe2.chainsLeft, 1);
+	EXPECT_EQ(SupportSpellDamagePercent(player, SpellID::Firebolt), 70);
+
+	// Chain II in its place: 2 chains, 50% less damage.
+	SupportGem replaced;
+	int replacedTier = 0;
+	EXPECT_EQ(SocketSupportGem(player, slot, 0, SupportGem::Chain, replaced, 2, &replacedTier), SupportSocketResult::Replaced);
+	EXPECT_EQ(replaced, SupportGem::Chain);
+	EXPECT_EQ(replacedTier, 1);
+	EXPECT_EQ(player.poe2.supportTier(SkillSlot::ForSpell(SpellID::Firebolt), SupportGem::Chain), 2);
+	Missile chained {};
+	ApplySupportsToMissile(chained, player, SpellID::Firebolt);
+	EXPECT_EQ(chained.poe2.chainsLeft, 2);
+	EXPECT_EQ(SupportSpellDamagePercent(player, SpellID::Firebolt), 50);
+	EXPECT_EQ(SocketSupportGem(player, slot, 0, SupportGem::Chain, replaced, 2), SupportSocketResult::AlreadySocketed);
+
+	// A support without tiers stays tier I.
+	EXPECT_EQ(SocketSupportGem(player, slot, 1, SupportGem::Empower, replaced, 3), SupportSocketResult::Socketed);
+	EXPECT_EQ(player.poe2.supportTier(SkillSlot::ForSpell(SpellID::Firebolt), SupportGem::Empower), 1);
+
+	int tier = 0;
+	EXPECT_EQ(UnsocketSupportGem(player.poe2, slot, 0, &tier), SupportGem::Chain);
+	EXPECT_EQ(tier, 2);
+}
+
+TEST_F(Poe2SupportGemsTest, TierItemsKeepTheirTier)
+{
+	Item item;
+	ASSERT_TRUE(CreateSupportGemItem(item, SupportGem::Brutality, 3));
+	EXPECT_EQ(SupportGemItemTier(item), 3);
+	EXPECT_EQ(std::string(item._iName), "Brutality III Support");
+	EXPECT_EQ(SupportGemDescription(SupportGem::Brutality, 3), FindSupportTier(SupportGem::Brutality, 3)->description);
+
+	// Saved by index, seed and buffs, it comes back as the same tier.
+	Item recreated;
+	RecreateItem(*MyPlayer, recreated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
+	EXPECT_EQ(SupportGemItemTier(recreated), 3);
+	EXPECT_EQ(std::string(recreated._iName), "Brutality III Support");
+
+	// Tiers above a support's highest don't exist.
+	ASSERT_TRUE(CreateSupportGemItem(item, SupportGem::Empower, 3));
+	EXPECT_EQ(SupportGemItemTier(item), 1);
+	EXPECT_EQ(std::string(item._iName), "Empower Support");
 }
 
 TEST_F(Poe2SupportGemsTest, SocketingRules)
@@ -199,7 +271,7 @@ TEST_F(Poe2SupportGemsTest, AttackSupports)
 	EXPECT_EQ(SupportMeleeDamagePercent(player), BrutalityDamagePercent);
 	EXPECT_EQ(SupportAttackSkippedFrames(player, WeaponSkill::Cleave), MartialTempoFrames);
 	EXPECT_FALSE(SupportMeleeKnocksBack(player));
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), WeaponSkillManaCost(WeaponSkill::Cleave) * 144 / 100);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), WeaponSkillManaCost(WeaponSkill::Cleave) * 120 / 100);
 }
 
 TEST_F(Poe2SupportGemsTest, TakingSupportsOut)
@@ -209,8 +281,10 @@ TEST_F(Poe2SupportGemsTest, TakingSupportsOut)
 	Socket(player, SpellID::Firebolt, SupportGem::Empower);
 	const size_t slot = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Firebolt));
 	EXPECT_EQ(FindSlotForSupport(player, SupportGem::Fork), std::nullopt);
-	const std::vector<SupportGem> taken = TakeSlotSupports(player.poe2, slot);
-	EXPECT_EQ(taken, (std::vector<SupportGem> { SupportGem::Pierce, SupportGem::Empower }));
+	const std::vector<TieredSupport> taken = TakeSlotSupports(player.poe2, slot);
+	ASSERT_EQ(taken.size(), 2U);
+	EXPECT_EQ(taken[0].gem, SupportGem::Pierce);
+	EXPECT_EQ(taken[1].gem, SupportGem::Empower);
 	EXPECT_EQ(FindSlotForSupport(player, SupportGem::Fork), slot);
 	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Firebolt), 100);
 }
@@ -231,16 +305,16 @@ TEST_F(Poe2SupportGemsTest, SupportsChangeTheSpell)
 	Socket(player, SpellID::Firebolt, SupportGem::Empower);
 	EXPECT_EQ(SupportExtraProjectiles(player, SpellID::Firebolt), 2);
 	EXPECT_EQ(SupportSpellLevelBonus(player, SpellID::Firebolt), 2);
-	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Firebolt), 182);
-	EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt).raw(), baseMana.raw() * 182 / 100);
+	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Firebolt), 140);
+	EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt).raw(), baseMana.raw() * 140 / 100);
 
 	// Supports belong to one spell only.
 	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Healing), 100);
 
 	Socket(player, SpellID::Healing, SupportGem::Efficiency);
 	Socket(player, SpellID::Healing, SupportGem::FasterCasting);
-	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Healing), 84);
-	EXPECT_EQ(SupportCastSkippedFrames(player, SpellID::Healing), 3);
+	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Healing), 70);
+	EXPECT_EQ(SupportCastSkippedFrames(player, SpellID::Healing), 2);
 	EXPECT_EQ(SupportExtraProjectiles(player, SpellID::Healing), 0);
 }
 
@@ -264,9 +338,10 @@ TEST_F(Poe2SupportGemsTest, SupportsShapeTheProjectile)
 	missile.position.velocity = { 100, -50 };
 	ApplySupportsToMissile(missile, player, SpellID::Firebolt);
 	EXPECT_EQ(missile.poe2.spell, SpellID::Firebolt);
-	EXPECT_EQ(missile.poe2.piercesLeft, PierceCount);
+	// Pierce I passes through one monster; Projectile Acceleration I flies 40% faster.
+	EXPECT_EQ(missile.poe2.piercesLeft, 1);
 	EXPECT_EQ(missile.poe2.chainsLeft, 0);
-	EXPECT_EQ(missile.position.velocity, (Displacement { 160, -80 }));
+	EXPECT_EQ(missile.position.velocity, (Displacement { 140, -70 }));
 
 	// Spells without supports leave their missiles alone.
 	Missile plain {};
@@ -297,10 +372,8 @@ TEST_F(Poe2SupportGemsTest, PiercingSkipsTheMonsterItHit)
 	EXPECT_TRUE(SupportedMissileIgnoresMonster(missile, 3));
 	// Once it has pierced, it hits for 20% less, just once.
 	EXPECT_EQ(missile.poe2.damagePercent, ConcentratedEffectDamagePercent * PierceDamagePercent / 100);
-	EXPECT_TRUE(OnSupportedMissileHit(missile, second));
-	EXPECT_EQ(missile.poe2.damagePercent, ConcentratedEffectDamagePercent * PierceDamagePercent / 100);
-	// Out of pierces, the third hit stops the projectile.
-	EXPECT_FALSE(OnSupportedMissileHit(missile, first));
+	// Out of pierces, the next hit stops the projectile.
+	EXPECT_FALSE(OnSupportedMissileHit(missile, second));
 }
 
 TEST_F(Poe2SupportGemsTest, SupportsHaveTradeOffs)

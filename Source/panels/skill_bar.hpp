@@ -78,7 +78,7 @@ void UseFreeTownPortal();
 bool SocketSkillGemFromInventory(Player &player, bool fromBelt, int index);
 
 /** @brief Puts support gems in the inventory, or at the player's feet if it's full. */
-void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems);
+void GiveSupportGems(Player &player, const std::vector<TieredSupport> &gems);
 
 /**
  * @brief Changes the skill in a socket; supports the new skill can't use come back out as items.

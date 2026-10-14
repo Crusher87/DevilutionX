@@ -412,6 +412,11 @@ static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
 /** @brief Most support sockets a skill can have; how many are open depends on the character level. */
 constexpr size_t MaxSupportSockets = 5;
 using SupportSockets = std::array<SupportGem, MaxSupportSockets>;
+/** @brief The tier (1 to 3) of the support in each socket of a skill. */
+using SupportTiers = std::array<uint8_t, MaxSupportSockets>;
+
+/** @brief Support gems come in tiers I to III, like POE2's; a higher tier is cut from a higher uncut support gem (see poe2/support_tiers.hpp). */
+constexpr int MaxSupportTier = 3;
 
 /** @brief Most jewel sockets the passive tree can have. */
 constexpr size_t MaxJewelSockets = 8;
@@ -444,6 +449,14 @@ struct SupportRuntime {
 	uint8_t spentBonusTicks = 0;
 	/** Burning Ground: ticks before another patch can be left. */
 	uint8_t burningGroundCooldown = 0;
+	/** Faster Casting III: the spells cast lately and the ticks each stays counted. */
+	std::array<uint8_t, 4> recentSpells {};
+	std::array<uint8_t, 4> recentSpellTicks {};
+	/** Life Leech III: life leeched at full life, as a raw Fixed26_6 value, and the ticks it is kept. */
+	int32_t leechPool = 0;
+	uint8_t leechPoolTicks = 0;
+	/** Nova Projectiles II: ticks before each Skills panel socket's skill can fire another nova. */
+	std::array<uint8_t, NumSkillSlots> novaCooldown {};
 };
 
 /** @brief Timers of the Spirit skills and the element infusions, per character (not saved; see poe2/spirit_skills.cpp). */
@@ -469,6 +482,8 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
 struct Poe2PlayerData {
 	/** @brief Support gems socketed in each Skills panel socket's skill. */
 	std::array<SupportSockets, NumSkillSlots> slotSupports {};
+	/** @brief The tier of each socketed support. */
+	std::array<SupportTiers, NumSkillSlots> slotSupportTiers {};
 	/** @brief Charges of the flasks in belt slots 1 to 5. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
 	/** @brief Skill gems socketed in the Skills panel. */
@@ -613,6 +628,8 @@ struct Poe2PlayerData {
 	{
 		for (SupportSockets &supports : slotSupports)
 			supports.fill(SupportGem::None);
+		for (SupportTiers &tiers : slotSupportTiers)
+			tiers.fill(1);
 		flaskCharges.fill(MaxFlaskCharges);
 		lifeFlaskRaw = 0;
 		lifeFlaskTicks = 0;
@@ -742,6 +759,13 @@ struct Poe2PlayerData {
 	[[nodiscard]] const SupportSockets &supportsFor(SkillSlot skill) const;
 	[[nodiscard]] const SupportSockets &supportsFor(SpellID spell) const { return supportsFor(SkillSlot::ForSpell(spell)); }
 	[[nodiscard]] bool hasSupport(SkillSlot skill, SupportGem gem) const;
+	/** @brief The tier of the support on the skill, 1 to 3; 0 if the skill doesn't have it. */
+	[[nodiscard]] int supportTier(SkillSlot skill, SupportGem gem) const;
+	/** @brief The tier of the support in a socket, 1 to 3. */
+	[[nodiscard]] int socketTier(size_t slot, size_t socket) const
+	{
+		return std::clamp<int>(slotSupportTiers[slot][socket], 1, MaxSupportTier);
+	}
 	[[nodiscard]] bool hasSupport(SpellID spell, SupportGem gem) const { return hasSupport(SkillSlot::ForSpell(spell), gem); }
 
 	/** @brief Whether a gem for the spell is socketed in the Skills panel. */

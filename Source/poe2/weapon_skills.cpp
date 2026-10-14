@@ -26,6 +26,7 @@
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "tables/misdat.h"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -195,6 +196,7 @@ void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID mi
 		if (skill == WeaponSkill::Spark) {
 			fired->poe2.spell = SpellID::ChargedBolt;
 			fired->poe2.piercesLeft = PierceCount;
+			fired->poe2.pierceLessPercent = static_cast<int8_t>(100 - PierceDamagePercent);
 		}
 	}
 }
@@ -948,6 +950,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 	const bool mine = &player == MyPlayer;
 	switch (skill) {
 	case WeaponSkill::Cleave:
+		vfx::Swing(tile, tile + dir, vfx::Element::Physical, true);
 		// A spray of sparks sweeping across the arc, right to left.
 		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 0, 3);
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 1, 5);
@@ -955,6 +958,8 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		AddVisualEffect(tile + dir, MissileGraphicID::BloodHit, 2);
 		break;
 	case WeaponSkill::GroundSlam:
+		vfx::Slam(tile + dir, 2, vfx::Element::Physical);
+		vfx::Fissure(tile + dir, tile + Displacement { dir } * GroundSlamReach, vfx::Element::Fire);
 		// The ground bursts at the weapon and a wave of rubble rolls out through the cone, tile by tile.
 		AddVisualEffect(tile + dir, MissileGraphicID::ApocalypseBoom, 0, 8);
 		for (int dy = -GroundSlamReach; dy <= GroundSlamReach; dy++) {
@@ -974,6 +979,9 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Heavy, 10);
 		break;
 	case WeaponSkill::WhirlingStaff:
+		vfx::Swing(tile, tile + dir, vfx::Element::Holy, true);
+		vfx::Swing(tile, tile + Opposite(dir), vfx::Element::Holy, true);
+		vfx::Impact(tile, vfx::Element::Holy, 1.1F);
 		// Arcane light whips around the player twice, once per ring.
 		AddVisualEffect(tile, MissileGraphicID::FlashBottom, 0, 7);
 		AddVisualEffect(tile, MissileGraphicID::FlashTop);
@@ -987,12 +995,15 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Light, 6);
 		break;
 	case WeaponSkill::Flurry:
+		vfx::Swing(tile, target, vfx::Element::Physical, false);
+		vfx::Sparks(target, vfx::Element::Physical, 1.2F);
 		// One burst per strike.
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 3, 4);
 		AddVisualEffect(target, MissileGraphicID::BloodHit, 3);
 		break;
 	case WeaponSkill::LeapSlam:
+		vfx::Slam(tile, 2, vfx::Element::Fire);
 		// A fiery crater where the player lands, and the shockwave rolling out of it.
 		AddVisualEffect(tile, MissileGraphicID::BigExplosion, 0, 10);
 		EffectRing(tile, 1, MissileGraphicID::StoneCurseShatter, 2);
@@ -1002,6 +1013,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Heavy, 8);
 		break;
 	case WeaponSkill::ShieldCharge:
+		vfx::Impact(tile + dir, vfx::Element::Holy, 1.F);
 		// A blinding flash where the shield hits.
 		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 0, 8);
 		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 1);
@@ -1011,6 +1023,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Medium, 6);
 		break;
 	case WeaponSkill::BattleCry:
+		vfx::Impact(tile, vfx::Element::Blood, 1.4F);
 		// A blood-red shockwave rolling out from the player.
 		AddVisualEffect(tile, MissileGraphicID::BloodStarExplosion, 0, 8);
 		EffectRing(tile, 1, MissileGraphicID::BloodStarExplosion, 2);
@@ -1020,10 +1033,12 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Medium, 8);
 		break;
 	case WeaponSkill::Barrage:
+		vfx::Sparks(tile + dir, vfx::Element::Physical, 0.6F);
 		// The bow strains as the stream begins.
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 4);
 		break;
 	case WeaponSkill::RainOfArrows:
+		vfx::Sigil(target, 1, 400, vfx::Element::Physical);
 		// Arrowheads spark as the volley comes down.
 		for (size_t i = 0; i < RainOfArrowsVolley.size(); i++)
 			AddVisualEffect(target + RainOfArrowsVolley[i], MissileGraphicID::MetalHit, 6 + static_cast<int>(i), i == 0 ? 4 : 0);
@@ -1031,22 +1046,27 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Light, 4);
 		break;
 	case WeaponSkill::LightningArrow:
+		vfx::Sparks(tile + dir, vfx::Element::Lightning, 0.8F);
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 3);
 		break;
 	case WeaponSkill::EscapeShot:
+		vfx::Impact(tile, vfx::Element::Cold, 0.8F);
 		AddVisualEffect(tile, MissileGraphicID::BoneHit, 0, 3);
 		break;
 	case WeaponSkill::EmberFusillade:
+		vfx::Impact(tile, vfx::Element::Fire, 0.7F);
 		// Heat gathers around the caster before the embers fly.
 		AddVisualEffect(tile, MissileGraphicID::Inferno, 0, 8);
 		break;
 	case WeaponSkill::IceBolt:
+		vfx::Impact(tile + dir, vfx::Element::Cold, 0.5F);
 		// Frost gathers in the caster's hand.
 		AddVisualEffect(tile + dir, MissileGraphicID::StoneCurseShatter, 0, 4);
 		PlaySfxLoc(SfxID::SpellStoneCurse, tile);
 		break;
 	case WeaponSkill::FrostNova:
+		vfx::Impact(tile, vfx::Element::Cold, 1.6F);
 		// A ring of frost cracks the floor all around.
 		EffectRing(tile, 1, MissileGraphicID::StoneCurseShatter, 0);
 		EffectRing(tile, 2, MissileGraphicID::StoneCurseShatter, 3);
@@ -1055,12 +1075,14 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Light, 5);
 		break;
 	case WeaponSkill::AmplifyDamage:
+		vfx::Sigil(target, 1, 600, vfx::Element::Blood);
 		// A blood-red curse settles over the spot.
 		AddVisualEffect(target, MissileGraphicID::HolyBoltExplosion, 0, 6);
 		EffectRing(target, 1, MissileGraphicID::BloodHit, 1);
 		PlaySfxLoc(SfxID::SpellBloodStar, target);
 		break;
 	case WeaponSkill::Riposte:
+		vfx::Swing(tile, tile + dir, vfx::Element::Holy, true);
 		// A flash of steel sweeping back across the arc.
 		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 0, 4);
 		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 1, 6);
@@ -1070,14 +1092,20 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Light, 4);
 		break;
 	case WeaponSkill::ShadowStep:
+		vfx::Impact(target, vfx::Element::Chaos, 0.7F);
+		vfx::Swing(tile, target, vfx::Element::Chaos, false);
 		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 1, 4);
 		break;
 	case WeaponSkill::Frenzy:
+		vfx::Swing(tile, target, vfx::Element::Blood, false);
+		vfx::Sparks(target, vfx::Element::Blood, 0.9F);
 		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 2, 3);
 		break;
 	case WeaponSkill::Smite:
+		vfx::SkyStrike(target, vfx::Element::Holy);
+		vfx::Slam(target, 1, vfx::Element::Holy);
 		// The blow lands like a falling hammer.
 		AddVisualEffect(target, MissileGraphicID::StoneCurseShatter, 0, 6);
 		AddVisualEffect(target, MissileGraphicID::HolyBoltExplosion, 1, 6);
@@ -1086,13 +1114,18 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Medium, 6);
 		break;
 	case WeaponSkill::FistsOfThunder:
+		vfx::Swing(tile, target, vfx::Element::Lightning, false);
+		vfx::Arc(tile, target, vfx::Element::Lightning);
 		AddVisualEffect(target, MissileGraphicID::ThinLightning, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::Lightning, 1);
 		break;
 	case WeaponSkill::RapidFire:
+		vfx::Sparks(tile + dir, vfx::Element::Physical, 0.5F);
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 4);
 		break;
 	case WeaponSkill::ShieldBash:
+		vfx::Swing(tile, tile + dir, vfx::Element::Physical, false);
+		vfx::Impact(tile + dir, vfx::Element::Physical, 0.9F);
 		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 0, 6);
 		AddVisualEffect(tile + dir, MissileGraphicID::BoneHit, 1);
 		PlaySfxLoc(SfxID::ItemShield, tile);
@@ -1100,6 +1133,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Medium, 5);
 		break;
 	case WeaponSkill::Spark:
+		vfx::Arc(tile, tile + Displacement { dir } * 2, vfx::Element::Lightning);
 		// Lightning crackles from the caster's hands.
 		AddVisualEffect(tile + dir, MissileGraphicID::ThinLightning, 0, 8);
 		AddVisualEffect(tile + dir, MissileGraphicID::Lightning, 0, 8);

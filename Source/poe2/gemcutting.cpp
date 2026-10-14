@@ -6,6 +6,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/table_skills.hpp"
 #include "spells.h"
 #include "utils/is_of.hpp"
@@ -90,6 +91,16 @@ const std::vector<GemEntry> &GemCatalog()
 		// Lineage supports are found, never cut.
 		if (IsLineageSupport(entry.support))
 			continue;
+		if (entry.support != SupportGem::None) {
+			// One entry per tier, each cut from its own uncut support gem level.
+			const int baseLevel = entry.level;
+			for (int tier = 1; tier <= SupportTierCount(entry.support); tier++) {
+				entry.tier = tier;
+				entry.level = SupportTierGemLevel(entry.support, tier, baseLevel);
+				catalog.push_back(entry);
+			}
+			continue;
+		}
 		catalog.push_back(entry);
 	}
 	std::stable_sort(catalog.begin(), catalog.end(), [](const GemEntry &a, const GemEntry &b) { return a.level < b.level; });
@@ -116,11 +127,11 @@ bool GemInCategory(const GemEntry &gem, GemCategory category)
 	}
 }
 
-std::string_view GemName(const GemEntry &gem)
+std::string GemName(const GemEntry &gem)
 {
 	if (gem.support != SupportGem::None)
-		return SupportGemName(gem.support);
-	return SkillName(gem.skill);
+		return SupportGemTierName(gem.support, gem.tier);
+	return std::string(SkillName(gem.skill));
 }
 
 int GemTier(int level)
@@ -215,7 +226,7 @@ bool CanCutGem(const Item &uncut, const GemEntry &gem)
 bool CreateGemItem(Item &item, const GemEntry &gem, int level)
 {
 	if (gem.support != SupportGem::None)
-		return CreateSupportGemItem(item, gem.support);
+		return CreateSupportGemItem(item, gem.support, gem.tier);
 	return CreateSkillGemItem(item, gem.skill, level);
 }
 

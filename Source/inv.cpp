@@ -2196,13 +2196,14 @@ namespace {
 /** @brief POE2 Mashup: sockets a support gem into the first skill in the Skills panel with a free socket it fits. */
 void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
 {
+	const int tier = SupportGemItemTier(speedlist ? player.SpdList[c] : player.InvList[c]);
 	const std::optional<size_t> slot = FindSlotForSupport(player, gem);
 	if (!slot) {
-		EventPlrMsg(FormatRuntime(_("No skill in the Skills panel has a free socket for {:s}. Open it (K) to swap supports."), SupportGemName(gem)), UiFlags::ColorRed);
+		EventPlrMsg(FormatRuntime(_("No skill in the Skills panel has a free socket for {:s}. Open it (K) to swap supports."), SupportGemTierName(gem, tier)), UiFlags::ColorRed);
 		return;
 	}
 	SupportGem replaced;
-	const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem, replaced);
+	const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem, replaced, tier);
 	if (result != SupportSocketResult::Socketed) {
 		EventPlrMsg(SupportSocketMessage(result, player, *slot, gem), UiFlags::ColorRed);
 		return;

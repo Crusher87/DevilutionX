@@ -21,6 +21,9 @@ struct Poe2MissileData {
 	/** @brief Speed multiplier in percent, kept by forks and chains. */
 	int16_t speedPercent = 100;
 	int8_t piercesLeft = 0;
+	/** @brief Less damage in percent once it has pierced (Pierce I), and for each monster it pierces (Pierce III). */
+	int8_t pierceLessPercent = 0;
+	int8_t pierceEachLessPercent = 0;
 	int8_t chainsLeft = 0;
 	bool canFork = false;
 	/** @brief The skill that fired the missile (a SkillSlot's kind and id), so its hits get that skill's supports. */

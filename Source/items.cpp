@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cassert>
 #include <climits>
 #include <cstddef>
@@ -2160,7 +2161,7 @@ void printItemMiscGamepad(const Item &item, bool isOil, bool isCastOnTarget)
 void PrintItemMisc(const Item &item)
 {
 	if (const SupportGem gem = SupportGemForItem(item); gem != SupportGem::None) {
-		AddItemInfoBoxString(SupportGemDescription(gem));
+		AddItemInfoBoxString(SupportGemDescription(gem, SupportGemItemTier(item)));
 		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
 		return;
@@ -5166,9 +5167,13 @@ void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t 
 		item.dwBuff = (item.dwBuff & ~CF_POE2_VARIANT) | (dwBuff & CF_POE2_VARIANT);
 		FinishCraftingItem(item);
 	}
-	// POE2 Mashup: and a skill gem keeps its level.
+	// POE2 Mashup: and a skill gem keeps its level, and a support gem its tier.
 	if (IsSkillGem(item))
 		item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (dwBuff & CF_POE2_GEM_LEVEL);
+	if (SupportGemForItem(item) != SupportGem::None && (dwBuff & CF_POE2_GEM_LEVEL) != 0) {
+		constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+		SetSupportGemItemTier(item, static_cast<int>((dwBuff & CF_POE2_GEM_LEVEL) >> Shift));
+	}
 	// And a tablet, fragment or key stays the one it was.
 	if (IsEndgameItem(item)) {
 		item.dwBuff = (item.dwBuff & ~CF_POE2_VARIANT) | (dwBuff & CF_POE2_VARIANT);

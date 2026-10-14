@@ -376,12 +376,20 @@ Point Along(Point from, Point target, int tiles)
 void FireFanOf(Player &player, const TableSkillData &data, Point target, int count)
 {
 	const Point tile = player.position.tile;
-	if (SupportFiresNova(player, SkillSlot::ForAttack(data.skill)))
+	int novaExtra = 0;
+	if (SupportFiresNova(player, SkillSlot::ForAttack(data.skill))) {
 		count = std::max(count, 8);
+		novaExtra = SupportNovaExtraProjectiles(player, SkillSlot::ForAttack(data.skill));
+	}
 	if (count >= 8) {
 		for (int i = 0; i < count; i++) {
 			const Direction dir = static_cast<Direction>(i % 8);
 			FireTableMissile(player, data, tile, tile + Displacement { dir } * 8);
+		}
+		// Nova Projectiles II: more, between the others.
+		for (int i = 0; i < novaExtra; i++) {
+			const Direction dir = static_cast<Direction>(i % 8);
+			FireTableMissile(player, data, tile, tile + Displacement { dir } * 8 + Displacement { Right(Right(dir)) } * 3);
 		}
 		return;
 	}

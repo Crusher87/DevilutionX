@@ -10,6 +10,8 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -82,8 +84,14 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
 	EXPECT_EQ(skills, 128U);
-	// Lineage supports are found, never cut.
-	EXPECT_EQ(supports, static_cast<size_t>(SupportGem::Count) - 1 - 16);
+	// Lineage supports are found, never cut; the rest have an entry for each tier.
+	size_t tiers = 0;
+	for (size_t i = 1; i < static_cast<size_t>(SupportGem::Count); i++) {
+		if (!IsLineageSupport(static_cast<SupportGem>(i)))
+			tiers += static_cast<size_t>(SupportTierCount(static_cast<SupportGem>(i)));
+	}
+	EXPECT_EQ(supports, tiers);
+	EXPECT_GT(tiers, static_cast<size_t>(SupportGem::Count) - 1 - 16);
 }
 
 TEST_F(Poe2GemcuttingTest, CategoriesFollowWeapons)

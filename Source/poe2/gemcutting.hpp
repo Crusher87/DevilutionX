@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -44,6 +45,8 @@ struct GemEntry {
 	SupportGem support = SupportGem::None;
 	/** The level an uncut gem needs to be cut into this gem. */
 	int level;
+	/** The support's tier (I to III). */
+	int tier = 1;
 };
 
 std::string_view GemCategoryName(GemCategory category);
@@ -51,7 +54,7 @@ std::string_view GemCategoryName(GemCategory category);
 /** @brief Every skill, Spirit and support gem, by level. */
 const std::vector<GemEntry> &GemCatalog();
 bool GemInCategory(const GemEntry &gem, GemCategory category);
-std::string_view GemName(const GemEntry &gem);
+std::string GemName(const GemEntry &gem);
 
 /** @brief The tier row a gem is listed in: 1, 3, 5, 7, 9, 11 or 13, like POE2's gem tiers. */
 int GemTier(int level);

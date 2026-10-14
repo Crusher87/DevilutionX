@@ -65,6 +65,7 @@
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
@@ -917,6 +918,18 @@ bool DoAttack(Player &player)
 			if (object != nullptr) {
 				didhit = PlrHitObj(player, *object);
 			}
+		}
+
+		// POE2 Mashup: the weapon's swing, in the colour of its strongest element, and sparks where it lands.
+		{
+			vfx::Element look = vfx::Element::Physical;
+			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage))
+				look = vfx::Element::Fire;
+			else if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage))
+				look = vfx::Element::Lightning;
+			vfx::Swing(player.position.tile, player.position.tile + player._pdir, look, player.CanCleave());
+			if (didhit)
+				vfx::Sparks(player.position.tile + player._pdir, look, 1.F);
 		}
 
 		// POE2 Mashup: Brutality's price is the weapon's fire and lightning damage.
