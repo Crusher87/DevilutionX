@@ -80,9 +80,9 @@ CurrencyOrb CurrencyOrbForMiscId(int miscId);
 std::string_view CurrencyOrbDescription(CurrencyOrb orb);
 
 /** @brief Set when an orb destroyed the item it was used on (a failed Orb of Chance); whoever used it removes the item. */
-extern bool CurrencyDestroyedItem;
+extern DVL_API_FOR_TEST bool CurrencyDestroyedItem;
 /** @brief Set when the item an Ancient Bone was used on has an unrevealed modifier to choose; whoever used it opens the choice. */
-extern bool DesecrationRevealItem;
+extern DVL_API_FOR_TEST bool DesecrationRevealItem;
 
 /**
  * @brief Rolls an item of the given base and quality, the way a monster of the given level would drop it.

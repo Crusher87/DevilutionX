@@ -83,7 +83,8 @@ bool GambleFamilyHas(GambleFamily family, ItemType type)
 int GamblePrice(GambleFamily family, int poe2ItemLevel)
 {
 	const int classBase = GambleFamilies[static_cast<size_t>(family)].classBase;
-	return static_cast<int>(std::lround(classBase * std::pow(1.0 + (0.045 * std::max(poe2ItemLevel, 1)), 1.22)));
+	// Rounded by hand: the Amiga toolchain has no std::lround.
+	return static_cast<int>((classBase * std::pow(1.0 + (0.045 * std::max(poe2ItemLevel, 1)), 1.22)) + 0.5);
 }
 
 item_quality RollGambleRarity()
