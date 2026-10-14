@@ -774,6 +774,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/spirit.cpp
   poe2/support_gems.cpp
   poe2/telemetry.cpp
+  poe2/unique_effects.cpp
   poe2/uniques.cpp
   poe2/waystones.cpp
   poe2/default_attack.cpp

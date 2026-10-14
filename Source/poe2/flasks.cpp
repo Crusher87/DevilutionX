@@ -13,6 +13,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -334,9 +335,11 @@ bool UseFlask(Player &player, size_t beltSlot)
 	}
 	int recoveryTicks = 0;
 	if (life) {
-		const int32_t raw = Fixed26_6::fromInt(effect.life).raw();
+		// POE2 Mashup: uniques can lessen what a life flask recovers.
+		const auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(effect.life).raw()) * LifeRecoveryPercent(player, true) / 100);
 		const auto instant = static_cast<int32_t>(static_cast<int64_t>(raw) * effect.instantPercent / 100);
 		Restore(player._pHitPoints, player._pHPBase, player._pMaxHP, instant);
+		OnLifeRecovered(player, raw);
 		// Drinking again restarts the recovery with the new flask, like POE2.
 		if (raw > instant) {
 			player.poe2.lifeFlaskRaw = raw - instant;
@@ -386,12 +389,12 @@ void ProcessFlaskRecovery(Player &player)
 				player.poe2.flaskCharges[slot] = static_cast<uint8_t>(std::min<int>(MaxFlaskChargesFor(flask), player.poe2.flaskCharges[slot] + 1));
 		}
 	}
-	if (player.poe2.lifeFlaskTicks > 0) {
+	if (player.poe2.lifeFlaskTicks > 0 && !IsRecoveryLocked(player)) {
 		RecoverTick(player.poe2.lifeFlaskRaw, player.poe2.lifeFlaskTicks, player._pHitPoints, player._pHPBase, player._pMaxHP);
 		if (&player == MyPlayer)
 			RedrawComponent(PanelDrawComponent::Health);
 	}
-	if (player.poe2.manaFlaskTicks > 0) {
+	if (player.poe2.manaFlaskTicks > 0 && !IsRecoveryLocked(player)) {
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
 			player.poe2.manaFlaskRaw = 0;
 			player.poe2.manaFlaskTicks = 0;

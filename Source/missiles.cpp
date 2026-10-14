@@ -49,6 +49,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
@@ -294,6 +295,10 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 	}
 
 	hper = std::clamp(hper, 5, 95);
+	// POE2 Mashup: some uniques make attacks unevadable.
+	const bool isAttack = missileData.isArrow() && damageType == DamageType::Physical;
+	if (isAttack && AttacksCannotBeEvaded(player))
+		hper = 100;
 
 	if (monster.mode == MonsterMode::Petrified)
 		hit = 0;
@@ -315,7 +320,9 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		dam = RandomIntBetween(mindam, maxdam);
 	}
 
-	if (missileData.isArrow() && damageType == DamageType::Physical) {
+	// POE2 Mashup: arrows can crit like other attacks.
+	const bool crit = isAttack && gbIsPoe2 && RollAttackCrit(player);
+	if (isAttack) {
 		dam = player._pIBonusDamMod + dam * player._pIBonusDam / 100 + dam;
 		if (player._pClass == HeroClass::Rogue)
 			dam += player._pDamageMod;
@@ -323,17 +330,30 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 			dam += player._pDamageMod / 2;
 		if (monster.data().monsterClass == MonsterClass::Demon && HasAnyOf(player._pIFlags, ItemSpecialEffect::TripleDemonDamage))
 			dam *= 3;
+		if (crit)
+			dam = dam * CritDamagePercent(player) / 100;
 	}
 	const bool resist = monster.isResistant(t, damageType);
 	if (!shift)
 		dam <<= 6;
 	if (resist)
 		dam >>= 2;
-	dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
 
-	if (&player == MyPlayer) {
-		ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
-		TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam));
+	if (isAttack && gbIsPoe2) {
+		// POE2 Mashup: an arrow hits like an attack, with the uniques' conversions and ailments.
+		if (&player == MyPlayer)
+			dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit).raw();
+	} else {
+		if (gbIsPoe2 && !missileData.isArrow())
+			dam = dam * UniqueSpellHitPercent(player, monster, damageType) / 100;
+		if (gbIsPoe2)
+			dam = dam * MonsterDamageTakenPercent(monster, damageType) / 100;
+		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
+
+		if (&player == MyPlayer) {
+			ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
+			TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam));
+		}
 	}
 
 	if (monster.hasNoLife()) {
@@ -1128,6 +1148,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		}
 	} else if (monster != nullptr) {
 		hper += (monster->level(sgGameInitInfo.nDifficulty) * 2) - (player.getCharacterLevel() * 2) - (dist * 2);
+		// POE2 Mashup: some uniques let evasion avoid spells too.
+		hper -= SpellEvasion(player);
 	}
 
 	int minhit = 10;
@@ -1221,7 +1243,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (resper > 0 || (gbIsPoe2 && resper < 0)) { // POE2 Mashup: negative resistance adds damage
 		damage -= damage * resper / 100;
 		if (&player == MyPlayer) {
-			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, damage), 0, deathReason);
+			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType)), 0, deathReason);
 		}
 
 		if (!player.hasNoLife()) {
@@ -1231,7 +1253,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 
 	if (&player == MyPlayer) {
-		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, damage), 0, deathReason);
+		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType)), 0, deathReason);
 	}
 
 	if (!player.hasNoLife()) {

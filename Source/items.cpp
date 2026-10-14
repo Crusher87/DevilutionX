@@ -3346,6 +3346,22 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		worn.push_back(&item);
 	for (const Item *jewel : ActiveJewels(player))
 		worn.push_back(jewel);
+	// A unique ring can double the other ring's implicit: a copy of just the implicit counts as one more worn item.
+	Item mirroredImplicit;
+	for (const auto &[ring, other] : { std::pair { INVLOC_RING_LEFT, INVLOC_RING_RIGHT }, std::pair { INVLOC_RING_RIGHT, INVLOC_RING_LEFT } }) {
+		UniqueRuleTotals ringRules {};
+		AddUniqueRules(player.InvBody[ring], ringRules);
+		const Item &otherRing = player.InvBody[other];
+		if (ringRules[static_cast<size_t>(UniqueRule::MirrorRing)] <= 0 || otherRing.isEmpty() || !otherRing._iStatFlag)
+			continue;
+		mirroredImplicit._itype = otherRing._itype;
+		mirroredImplicit._iStatFlag = true;
+		mirroredImplicit._iMagical = ITEM_QUALITY_NORMAL;
+		for (const ItemImplicit &implicit : ItemImplicits(otherRing))
+			ApplyModEffect(mirroredImplicit, implicit.implicit->effect, implicit.values[0], implicit.values[1]);
+		worn.push_back(&mirroredImplicit);
+		break;
+	}
 
 	for (const Item *wornItem : worn) {
 		const Item &item = *wornItem;

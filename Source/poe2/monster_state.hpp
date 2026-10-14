@@ -24,6 +24,17 @@ struct Poe2MonsterState {
 	uint8_t freezeTicks = 0;
 	/** @brief Cold damage built up towards a freeze, as a raw Fixed26_6 value. */
 	int32_t freezeBuildup = 0;
+	/** @brief Bleeding from a unique's critical hits: physical damage per tick as a raw Fixed26_6 value. */
+	uint8_t bleedTicks = 0;
+	int8_t bleedSource = -1;
+	int32_t bleedDamagePerTick = 0;
+	/** @brief Exposure: takes more damage of one element (a DamageType). */
+	uint8_t exposureTicks = 0;
+	uint8_t exposureElement = 0;
+	/** @brief Electrocuted: can't act and takes more lightning damage. */
+	uint8_t electrocuteTicks = 0;
+	/** @brief The ignite already spread to monsters around (Warden of Embers uniques). */
+	bool igniteSpread = false;
 	uint8_t heavyStunTicks = 0;
 	/** @brief Physical damage built up towards a heavy stun, as a raw Fixed26_6 value. */
 	int32_t stunBuildup = 0;

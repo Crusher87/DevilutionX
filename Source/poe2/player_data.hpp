@@ -309,6 +309,8 @@ struct Poe2PlayerData {
 	std::array<int16_t, static_cast<size_t>(Poe2ItemStat::Count)> itemStats {};
 	/** @brief Rules of the worn bundle uniques, added up (not saved; from CalcPlrItemVals). */
 	UniqueRuleTotals uniqueRules {};
+	/** @brief Counters and timers of the unique rules; mutable so hits on monsters can count (not saved). */
+	mutable UniqueRuleState uniqueState {};
 	/** @brief Fire, lightning and magic resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
 	std::array<int16_t, 3> uncappedResistances {};
 	std::array<int16_t, 3> maxResistances {};
@@ -387,6 +389,7 @@ struct Poe2PlayerData {
 		evasion = 0;
 		itemStats.fill(0);
 		uniqueRules.fill(0);
+		uniqueState = {};
 		uncappedResistances.fill(0);
 		maxResistances.fill(0);
 		maxEnergyShield = 0;

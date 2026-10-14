@@ -11,6 +11,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
+#include "poe2/unique_effects.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
 
@@ -471,7 +472,7 @@ int SupportSpellLevelBonus(const Player &player, SpellID spell)
 
 int SupportManaCostPercent(const Player &player, SkillSlot skill)
 {
-	int percent = 100;
+	int percent = UniqueManaCostPercent(player);
 	for (const SupportGem gem : player.poe2.supportsFor(skill))
 		percent = percent * ManaCostPercent(gem) / 100;
 	return percent;
@@ -489,6 +490,7 @@ int SupportCastRecoveryTicks(const Player &player, SpellID spell, int castFrames
 		speed = speed * (100 - MultipleProjectilesSlowPercent) / 100;
 	if (player.poe2.hasSupport(spell, SupportGem::Empower))
 		speed = speed * (100 - EmpowerSlowPercent) / 100;
+	speed = speed * (100 - UniqueCastSlowPercent(player)) / 100;
 	if (speed >= 100 || castFrames <= 0)
 		return 0;
 	// At speed% of the normal speed the cast takes 100/speed as long.
@@ -500,6 +502,7 @@ int SupportSpellDamagePercent(const Player &player, SpellID spell)
 	// A socketed spell gem hits harder as it levels up, on top of what Diablo's spell level adds.
 	const int gemLevel = player.poe2.skillLevel(spell);
 	int percent = gemLevel > 0 ? GemDamagePercent(SkillSlot::ForSpell(spell), gemLevel) : 100;
+	percent = percent * UniqueSpellDamagePercent(player, spell) / 100;
 	if (IsProjectileSpell(spell) && player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles))
 		percent = percent * MultipleProjectilesDamagePercent / 100;
 	if (IsDirectProjectileSpell(spell)) {

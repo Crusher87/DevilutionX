@@ -9,12 +9,17 @@
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "missiles.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/uniques.hpp"
 #include "spells.h"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 
 namespace devilution {
@@ -39,6 +44,10 @@ public:
 		LoadPlayerDataFiles();
 		LoadPassiveTreeData();
 		LoadModifierData();
+		LoadMonsterData();
+		LoadMissileData();
+		Missiles.clear();
+		LevelMonsterTypes[0].type = MT_NZOMBIE;
 
 		Player &player = *MyPlayer;
 		player._pClass = HeroClass::Warrior;
@@ -55,6 +64,7 @@ public:
 
 	void TearDown() override
 	{
+		Missiles.clear();
 		gbIsPoe2 = false;
 		LoadPassiveTreeData();
 		LoadModifierData();
@@ -72,6 +82,31 @@ public:
 		EXPECT_TRUE(CreatePoe2Unique(*MyPlayer, item, unique->uid, seed)) << name;
 		item._iIdentified = true;
 		return item;
+	}
+
+	static Item MakeBase(std::string_view name)
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iName != name)
+				continue;
+			Item item {};
+			SetLootRarity(item, ITEM_QUALITY_NORMAL);
+			SetRndSeed(5);
+			SetupAllItems(*MyPlayer, item, static_cast<_item_indexes>(i), AdvanceRndSeed(), 30, 1, /*onlygood=*/false, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+			return item;
+		}
+		ADD_FAILURE() << name;
+		return {};
+	}
+
+	static Monster MakeMonster()
+	{
+		Monster monster {};
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.rndItemSeed = 1;
+		monster.maxHitPoints = Fixed26_6::fromInt(100);
+		monster.hitPoints = monster.maxHitPoints;
+		return monster;
 	}
 
 	static int Wear(Item item, inv_body_loc slot)
@@ -172,6 +207,126 @@ TEST_F(Poe2UniquesTest, ResistanceRulesMoveTheCaps)
 	Wear(Make("Circle of Ash"), INVLOC_RING_LEFT);
 	EXPECT_EQ(player.poe2.maxResistances[2], MaxResistance - 5);
 	EXPECT_EQ(player.poe2.maxResistances[0], MaxResistance);
+}
+
+TEST_F(Poe2UniquesTest, CritsAndSpellRules)
+{
+	Player &player = *MyPlayer;
+	EXPECT_EQ(CritDamagePercent(player), 100 + BaseCritBonusPercent);
+	Wear(Make("Wolfsplitter"), INVLOC_HAND_LEFT);
+	const int bonus = player.poe2.rule(UniqueRule::CritDamageBonus);
+	EXPECT_GE(bonus, 17);
+	EXPECT_EQ(CritDamagePercent(player), 100 + BaseCritBonusPercent + bonus);
+	Wear({}, INVLOC_HAND_LEFT);
+
+	Wear(Make("Astral Debt"), INVLOC_AMULET);
+	EXPECT_EQ(UniqueManaCostPercent(player), 135);
+	Wear(Make("Glass Thought"), INVLOC_AMULET);
+	// Increased spell damage plus 20% of maximum mana.
+	const int spell = UniqueSpellDamagePercent(player, SpellID::Firebolt);
+	EXPECT_EQ(spell, 100 + player.poe2.rule(UniqueRule::SpellDamage) + player._pMaxMana.whole() * 20 / 100);
+}
+
+TEST_F(Poe2UniquesTest, EverySixthSpellRepeatsThreeTimes)
+{
+	Player &player = *MyPlayer;
+	Wear(Make("Oracle's Lens"), INVLOC_HAND_RIGHT);
+	for (int i = 0; i < 5; i++)
+		OnSpellCast(player, SpellID::Firebolt, { 10, 12 }, 3);
+	EXPECT_EQ(player.poe2.uniqueState.repeatsLeft, 0);
+	OnSpellCast(player, SpellID::Firebolt, { 10, 12 }, 3);
+	EXPECT_EQ(player.poe2.uniqueState.repeatsLeft, 3);
+	EXPECT_EQ(player.poe2.uniqueState.repeatPercent, 45);
+	EXPECT_EQ(player.poe2.uniqueState.repeatSpell, SpellID::Firebolt);
+	EXPECT_TRUE(player.poe2.uniqueState.repeatManaDrain);
+	// A repeat being cast doesn't count as a new spell.
+	player.poe2.uniqueState.castingRepeat = true;
+	OnSpellCast(player, SpellID::Firebolt, { 10, 12 }, 3);
+	EXPECT_EQ(player.poe2.uniqueState.spells, 6);
+	player.poe2.uniqueState.castingRepeat = false;
+}
+
+TEST_F(Poe2UniquesTest, HitsTakenAndRecovery)
+{
+	Player &player = *MyPlayer;
+	const Fixed26_6 hit = Fixed26_6::fromInt(100);
+	EXPECT_EQ(ApplyUniqueHitTaken(player, hit, DamageType::Physical), hit);
+
+	Wear(Make("Thoughtcage"), INVLOC_HEAD);
+	player.poe2.uniqueState.sinceMovedTicks = 0;
+	EXPECT_EQ(ApplyUniqueHitTaken(player, hit, DamageType::Physical), Fixed26_6::fromInt(110));
+	player.poe2.uniqueState.sinceMovedTicks = 100;
+	EXPECT_EQ(ApplyUniqueHitTaken(player, hit, DamageType::Physical), hit);
+	player.poe2.uniqueState.stillTicks = 10;
+	EXPECT_EQ(UniqueDefencePercent(player), 125);
+
+	Wear(Make("Mask of Returning"), INVLOC_HEAD);
+	EXPECT_EQ(LifeRecoveryPercent(player, false), 100);
+	EXPECT_EQ(LifeRecoveryPercent(player, true), 75);
+
+	Wear(Make("Red Harvest"), INVLOC_HAND_LEFT);
+	EXPECT_EQ(LifeRecoveryPercent(player, true), 75 * 75 / 100);
+	player._pHitPoints = player._pMaxHP / 2;
+	EXPECT_EQ(UniqueAttackSpeedPercent(player), 12);
+	player._pHitPoints = player._pMaxHP / 10;
+	EXPECT_EQ(UniqueAttackSpeedPercent(player), 20);
+	player.poe2.uniqueState.lifeLost.fill(0);
+	ProcessUniqueRules(player);
+	EXPECT_TRUE(AttacksCannotBeEvaded(player));
+
+	// Losing 30% of maximum life within 2 seconds: the mask recovers 15%.
+	const Fixed26_6 before = player._pHitPoints;
+	player.poe2.uniqueState.lifeLost[1] = player._pMaxHP.raw() * 3 / 10;
+	ProcessUniqueRules(player);
+	EXPECT_EQ(player._pHitPoints.raw(), before.raw() + player._pMaxHP.raw() * 15 / 100);
+	EXPECT_EQ(player.poe2.uniqueState.bigHitCooldown, 40);
+}
+
+TEST_F(Poe2UniquesTest, SpellsCanSpendEnergyShield)
+{
+	Player &player = *MyPlayer;
+	Wear(Make("Cold Logic"), INVLOC_HAND_RIGHT);
+	player.poe2.maxEnergyShield = 50;
+	player.poe2.energyShield = Fixed26_6::fromInt(20).raw();
+	EXPECT_EQ(SpendableEnergyShield(player), Fixed26_6::fromInt(20));
+	EXPECT_EQ(PaySpellCostWithEnergyShield(player, Fixed26_6::fromInt(30)), Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.energyShield, 0);
+	EXPECT_EQ(player.poe2.uniqueState.shieldSpent, Fixed26_6::fromInt(20).raw());
+}
+
+TEST_F(Poe2UniquesTest, MirrorRingDoublesTheOtherImplicit)
+{
+	Player &player = *MyPlayer;
+	Wear(MakeBase("Coral Ring"), INVLOC_RING_LEFT);
+	const int withRing = player._pMaxHP.whole();
+	const int implicitLife = withRing - Wear({}, INVLOC_RING_LEFT);
+	ASSERT_GE(implicitLife, 20);
+
+	Wear(Make("Nothing Ends"), INVLOC_RING_RIGHT);
+	const int withMirror = Wear({}, INVLOC_RING_LEFT);
+	EXPECT_EQ(Wear(MakeBase("Coral Ring"), INVLOC_RING_LEFT) - withMirror, 2 * implicitLife);
+}
+
+TEST_F(Poe2UniquesTest, AilmentRules)
+{
+	Player &player = *MyPlayer;
+	Monster monster = MakeMonster();
+	Wear(Make("Tyrant's Spark"), INVLOC_HAND_LEFT);
+	TryInflictAilment(monster, player, DamageType::Lightning, Fixed26_6::fromInt(60));
+	EXPECT_EQ(monster.poe2.electrocuteTicks, 0);
+	TryInflictAilment(monster, player, DamageType::Lightning, Fixed26_6::fromInt(60));
+	EXPECT_EQ(monster.poe2.electrocuteTicks, ElectrocuteTicks);
+	EXPECT_TRUE(IsMonsterImmobilized(monster));
+	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Lightning), 115);
+	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Fire), 100);
+
+	Wear(Make("Winterstring"), INVLOC_HAND_LEFT);
+	Monster cold = MakeMonster();
+	TryInflictAilment(cold, player, DamageType::Fire, Fixed26_6::fromInt(60));
+	EXPECT_EQ(cold.poe2.igniteTicks, 0);
+	TryInflictAilment(cold, player, DamageType::Magic, Fixed26_6::fromInt(60));
+	EXPECT_GT(cold.poe2.freezeTicks, 0);
+	EXPECT_EQ(player.poe2.uniqueState.storedChill, 30);
 }
 
 } // namespace

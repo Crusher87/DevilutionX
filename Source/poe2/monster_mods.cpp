@@ -10,6 +10,7 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
@@ -203,6 +204,7 @@ void ProcessMonsterAilments(Monster &monster)
 				M_StartKill(monster, *MyPlayer);
 		}
 	}
+	ProcessUniqueMonsterAilments(monster);
 }
 
 Fixed26_6 ApplyShock(const Monster &monster, Fixed26_6 damage)
@@ -222,7 +224,7 @@ int AilmentChancePercent(const Monster &monster, Fixed26_6 damage)
 
 bool IsMonsterImmobilized(const Monster &monster)
 {
-	return gbIsPoe2 && (monster.poe2.freezeTicks > 0 || monster.poe2.heavyStunTicks > 0);
+	return gbIsPoe2 && (monster.poe2.freezeTicks > 0 || monster.poe2.heavyStunTicks > 0 || IsMonsterElectrocuted(monster));
 }
 
 bool MonsterSkipsTick(Monster &monster)
@@ -232,9 +234,11 @@ bool MonsterSkipsTick(Monster &monster)
 	if (IsMonsterImmobilized(monster))
 		return true;
 	Poe2MonsterState &state = monster.poe2;
-	if (state.chillTicks == 0)
+	// Bleeding from some uniques hinders, slowing like a chill; the stronger slow counts.
+	const int slow = std::max<int>(state.chillTicks > 0 ? state.chillPercent : 0, MonsterHinderPercent(monster));
+	if (slow == 0)
 		return false;
-	state.chillCarry = static_cast<uint8_t>(state.chillCarry + state.chillPercent);
+	state.chillCarry = static_cast<uint8_t>(state.chillCarry + slow);
 	if (state.chillCarry < 100)
 		return false;
 	state.chillCarry = static_cast<uint8_t>(state.chillCarry - 100);
@@ -268,7 +272,8 @@ bool BuildUp(const Monster &monster, int32_t &buildup, Fixed26_6 damage, int thr
 	return false;
 }
 
-void InflictCold(Monster &monster, Fixed26_6 damage)
+/** @return Whether the hit froze the monster. */
+bool InflictCold(Monster &monster, Fixed26_6 damage)
 {
 	Poe2MonsterState &state = monster.poe2;
 	// A bigger share of the monster's life makes a stronger chill; a stronger chill replaces a weaker one.
@@ -280,7 +285,9 @@ void InflictCold(Monster &monster, Fixed26_6 damage)
 	if (BuildUp(monster, state.freezeBuildup, damage, FreezeThresholdPercent)) {
 		state.freezeTicks = FreezeTicks;
 		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter);
+		return true;
 	}
+	return false;
 }
 
 void InflictPhysical(Monster &monster, Fixed26_6 damage)
@@ -299,19 +306,27 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	if (!gbIsPoe2 || monster.hasNoLife() || damage <= 0)
 		return;
 	if (damageType == DamageType::Magic) {
-		InflictCold(monster, damage);
+		if (InflictCold(monster, damage))
+			OnMonsterFrozen(player);
+		OnAilmentInflicted(player, monster, damageType, false);
 		return;
 	}
 	if (damageType == DamageType::Physical) {
-		InflictPhysical(monster, damage);
+		// Some uniques add stun buildup.
+		InflictPhysical(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * UniqueStunBuildupPercent(player) / 100)));
 		return;
 	}
 	if (damageType != DamageType::Fire && damageType != DamageType::Lightning)
 		return;
-	if (GenerateRnd(100) >= AilmentChancePercent(monster, damage))
+	int chance = AilmentChancePercent(monster, damage);
+	if (damageType == DamageType::Fire)
+		chance = chance * UniqueIgniteChancePercent(player) / 100;
+	if (GenerateRnd(100) >= chance)
 		return;
 
 	Poe2MonsterState &state = monster.poe2;
+	const bool wasShocked = state.shockTicks > 0;
+	OnAilmentInflicted(player, monster, damageType, wasShocked);
 	if (damageType == DamageType::Fire) {
 		const int32_t perTick = std::max<int32_t>(damage.raw() * IgnitePercentPerSecond / 100 / TicksPerSecond, 1);
 		// A new ignite only replaces a weaker one, like POE2.

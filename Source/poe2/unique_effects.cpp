@@ -1,0 +1,761 @@
+#include "poe2/unique_effects.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+
+#include "engine/backbuffer_state.hpp"
+#include "engine/random.hpp"
+#include "game_mode.hpp"
+#include "missiles.h"
+#include "monster.h"
+#include "player.h"
+#include "poe2/defenses.hpp"
+#include "poe2/monster_mods.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/telemetry.hpp"
+#include "spells.h"
+#include "utils/is_of.hpp"
+
+namespace devilution {
+
+namespace {
+
+constexpr int TicksPerSecond = 20;
+/** @brief Ticks between the casts of a repeated spell. */
+constexpr int RepeatDelayTicks = 6;
+/** @brief Resources and energy shield spent count as "recently" for about 4 seconds. */
+constexpr int RecentTicks = 4 * TicksPerSecond;
+/** @brief Losing this share of maximum life within 2 seconds is a big hit. */
+constexpr int BigHitPercent = 30;
+/** @brief A hit taking this share of the monster's life is a heavy hit, like a crit. */
+constexpr int HeavyHitPercent = 10;
+/** @brief POE2 armour above which Colossus Hide slows the hero. */
+constexpr int HeavyArmour = 10000;
+
+int Rule(const Player &player, UniqueRule rule)
+{
+	return gbIsPoe2 ? player.poe2.rule(rule) : 0;
+}
+
+UniqueRuleState &State(const Player &player)
+{
+	return player.poe2.uniqueState;
+}
+
+int32_t Percent(int32_t raw, int percent)
+{
+	return static_cast<int32_t>(static_cast<int64_t>(raw) * percent / 100);
+}
+
+/** @brief The element (a DamageType) of fire, cold and lightning, in the order spells cycle them. */
+DamageType CycleElement(int index)
+{
+	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Magic, DamageType::Lightning };
+	return Elements[static_cast<size_t>(index % 3)];
+}
+
+bool IsElemental(DamageType type)
+{
+	return IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic);
+}
+
+/** @brief Armour as POE2 counts it, from the game's armour. */
+int Poe2Armour(const Player &player)
+{
+	return ArmourRating(player) * 100 / GameArmourPer100;
+}
+
+/** @brief The share of the hero's maximum life missing, in percent. */
+int MissingLifePercent(const Player &player)
+{
+	if (player._pMaxHP <= 0)
+		return 0;
+	const int64_t missing = std::max<int64_t>(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
+	return static_cast<int>(missing * 100 / player._pMaxHP.raw());
+}
+
+int ResourceSpentBonus(const Player &player)
+{
+	const int cap = Rule(player, UniqueRule::ResourceSpentDamage);
+	if (cap <= 0)
+		return 0;
+	// 2% more per 100 resources spent recently.
+	return std::min(State(player).resourcesSpent / 64 / 100 * 2, cap);
+}
+
+/** @brief The rules' "more damage" for every hit, attack or spell, in percent. */
+int GeneralDamagePercent(const Player &player)
+{
+	const UniqueRuleState &state = State(player);
+	int percent = 100;
+	if (const int cap = Rule(player, UniqueRule::HighestAttributeDamage); cap > 0) {
+		const int highest = std::max({ player._pStrength, player._pMagic, player._pDexterity });
+		percent += std::min(highest / 50, cap);
+	}
+	if (const int perTen = Rule(player, UniqueRule::SpiritDamage); perTen > 0)
+		percent += std::max(MaxSpirit(player) - ReservedSpirit(player), 0) / 10 * perTen;
+	if (const int more = Rule(player, UniqueRule::DistanceRule); more > 0 && state.nearestEnemy > FarRangeTiles)
+		percent = percent * (100 + more) / 100;
+	percent = percent * (100 + ResourceSpentBonus(player)) / 100;
+	return percent;
+}
+
+/** @brief Deals one packet of a hit to the monster, after its resistance, shock and the rules. */
+Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, int32_t raw)
+{
+	if (raw <= 0 || monster.hasNoLife() || monster.isImmune(MissileID::Arrow, type))
+		return Fixed26_6::fromInt(0);
+	if (type != DamageType::Physical && monster.isResistant(MissileID::Arrow, type))
+		raw >>= 2;
+	raw = Percent(raw, MonsterDamageTakenPercent(monster, type));
+	const Fixed26_6 damage = ApplyShock(monster, Fixed26_6::fromRaw(raw));
+	ApplyMonsterDamage(type, monster, damage);
+	TryInflictAilment(monster, player, type, damage);
+	return damage;
+}
+
+void InflictBleed(const Player &player, Monster &monster, int32_t physical)
+{
+	Poe2MonsterState &state = monster.poe2;
+	const int32_t perTick = std::max<int32_t>(Percent(physical, BleedPercentPerSecond) / TicksPerSecond, 1);
+	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
+		state.bleedDamagePerTick = perTick;
+		state.bleedSource = static_cast<int8_t>(player.getId());
+	}
+	state.bleedTicks = BleedTicks;
+}
+
+void CastRepeat(Player &player)
+{
+	UniqueRuleState &state = State(player);
+	const SpellType type = player.executedSpell.spellType;
+	state.castingRepeat = true;
+	state.castDamagePercent = state.repeatPercent;
+	// Repeats take the cast's supports, which only spells cast from mana get.
+	player.executedSpell.spellType = SpellType::Spell;
+	CastSpell(player, state.repeatSpell, player.position.tile, WorldTilePosition(static_cast<WorldTileCoord>(state.repeatX), static_cast<WorldTileCoord>(state.repeatY)), state.repeatLevel);
+	player.executedSpell.spellType = type;
+	state.castingRepeat = false;
+	state.castDamagePercent = 100;
+	if (state.repeatManaDrain && player._pMaxMana > 0) {
+		const Fixed26_6 drain = Fixed26_6::fromRaw(Percent(player._pMaxMana.raw(), Rule(player, UniqueRule::RepeatManaDrain)));
+		player._pMana = std::max(player._pMana - drain, Fixed26_6::fromInt(0));
+		player._pManaBase -= drain;
+		if (&player == MyPlayer)
+			RedrawComponent(PanelDrawComponent::Mana);
+	}
+}
+
+void QueueRepeat(const Player &player, SpellID spell, WorldTilePosition target, int level, int count, int percent)
+{
+	UniqueRuleState &state = State(player);
+	// A bigger repeat replaces a smaller one still waiting.
+	if (state.repeatsLeft >= count)
+		return;
+	state.repeatSpell = spell;
+	state.repeatsLeft = static_cast<uint8_t>(count);
+	state.repeatTicks = RepeatDelayTicks;
+	state.repeatLevel = static_cast<uint8_t>(std::clamp(level, 0, 255));
+	state.repeatPercent = static_cast<int16_t>(percent);
+	state.repeatX = static_cast<int16_t>(target.x);
+	state.repeatY = static_cast<int16_t>(target.y);
+	state.repeatManaDrain = Rule(player, UniqueRule::RepeatManaDrain) > 0;
+}
+
+uint8_t NearestEnemyDistance(const Player &player)
+{
+	int nearest = 255;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.hasNoLife() || monster.isPlayerMinion())
+			continue;
+		const int dx = std::abs(monster.position.tile.x - player.position.tile.x);
+		const int dy = std::abs(monster.position.tile.y - player.position.tile.y);
+		nearest = std::min(nearest, std::max(dx, dy));
+	}
+	return static_cast<uint8_t>(nearest);
+}
+
+void SpreadIgnite(Monster &source)
+{
+	Poe2MonsterState &burning = source.poe2;
+	burning.igniteSpread = true;
+	if (burning.igniteSource < 0 || static_cast<size_t>(burning.igniteSource) >= Players.size())
+		return;
+	Player &player = Players[static_cast<size_t>(burning.igniteSource)];
+	const int metres = Rule(player, UniqueRule::IgniteSpread);
+	if (metres <= 0)
+		return;
+	const int range = metres <= 2 ? CloseRangeTiles : FarRangeTiles;
+	bool spread = false;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (&monster == &source || monster.hasNoLife() || monster.isPlayerMinion() || monster.poe2.igniteTicks > 0)
+			continue;
+		if (std::max(std::abs(monster.position.tile.x - source.position.tile.x), std::abs(monster.position.tile.y - source.position.tile.y)) > range)
+			continue;
+		monster.poe2.igniteTicks = IgniteTicks;
+		monster.poe2.igniteDamagePerTick = burning.igniteDamagePerTick;
+		monster.poe2.igniteSource = burning.igniteSource;
+		// A spread ignite doesn't spread again.
+		monster.poe2.igniteSpread = true;
+		spread = true;
+	}
+	if (!spread)
+		return;
+	AddVisualEffect(source.position.tile, MissileGraphicID::BigExplosion);
+	if (const int selfDamage = Rule(player, UniqueRule::IgniteSpreadSelfDamage); selfDamage > 0 && &player == MyPlayer && !player.hasNoLife()) {
+		TelemetryNoteAttacker("own spreading Ignite");
+		ApplyPlrDamage(DamageType::Fire, player, Fixed26_6::fromRaw(Percent(player._pMaxHP.raw(), selfDamage)));
+	}
+}
+
+} // namespace
+
+bool IsOnLowLife(const Player &player)
+{
+	return player._pMaxHP > 0 && static_cast<int64_t>(player._pHitPoints.raw()) * 100 <= static_cast<int64_t>(player._pMaxHP.raw()) * LowLifePercent;
+}
+
+void ProcessUniqueRules(Player &player)
+{
+	if (!gbIsPoe2 || player.hasNoLife())
+		return;
+	UniqueRuleState &state = State(player);
+	state.lowLife = IsOnLowLife(player);
+
+	if (player.isWalking()) {
+		state.stillTicks = 0;
+		state.sinceMovedTicks = 0;
+	} else {
+		state.stillTicks = static_cast<uint16_t>(std::min(state.stillTicks + 1, 1000));
+		state.sinceMovedTicks = static_cast<uint16_t>(std::min(state.sinceMovedTicks + 1, 1000));
+	}
+
+	const auto countDown = [](uint8_t &ticks) {
+		if (ticks > 0)
+			ticks--;
+	};
+	if (state.guardTicks > 0 && --state.guardTicks == 0)
+		state.guardStacks = 0;
+	countDown(state.memoryTicks);
+	countDown(state.bossEchoTicks);
+	countDown(state.bigHitCooldown);
+	countDown(state.critSpeedTicks);
+	countDown(state.recoveryLockTicks);
+	if (state.minionFrenzyTicks > 0 && --state.minionFrenzyTicks == 0)
+		state.minionFrenzy = 0;
+	if (state.stolenTicks > 0 && --state.stolenTicks == 0)
+		state.stolenMod = 0;
+	state.resourcesSpent = std::max(state.resourcesSpent - std::max(state.resourcesSpent / RecentTicks, 1), 0);
+	state.shieldSpent = std::max(state.shieldSpent - std::max(state.shieldSpent / RecentTicks, 1), 0);
+
+	// Life lost in the last 2 seconds, kept in eight buckets of 5 ticks.
+	if (++state.lifeLostTick >= 5) {
+		state.lifeLostTick = 0;
+		std::rotate(state.lifeLost.rbegin(), state.lifeLost.rbegin() + 1, state.lifeLost.rend());
+		state.lifeLost[0] = 0;
+		if (Rule(player, UniqueRule::DistanceRule) > 0)
+			state.nearestEnemy = NearestEnemyDistance(player);
+	}
+	if (const int recover = Rule(player, UniqueRule::BigHitRecovery); recover > 0 && state.bigHitCooldown == 0 && player._pMaxHP > 0) {
+		int64_t lost = 0;
+		for (const int32_t raw : state.lifeLost)
+			lost += raw;
+		if (lost * 100 >= static_cast<int64_t>(player._pMaxHP.raw()) * BigHitPercent) {
+			state.lifeLost.fill(0);
+			state.bigHitCooldown = 2 * TicksPerSecond;
+			const Fixed26_6 heal = Fixed26_6::fromRaw(Percent(player._pMaxHP.raw(), recover));
+			player._pHitPoints = std::min(player._pHitPoints + heal, player._pMaxHP);
+			player._pHPBase = std::min(player._pHPBase + heal, player._pMaxHPBase);
+			AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);
+			if (&player == MyPlayer)
+				RedrawComponent(PanelDrawComponent::Health);
+		}
+	}
+
+	if (const int stolen = state.stolenMod; stolen == static_cast<int>(MonsterMod::Regenerating) + 1 && player._pHitPoints < player._pMaxHP) {
+		const Fixed26_6 heal = Fixed26_6::fromRaw(std::max<int32_t>(Percent(player._pMaxHP.raw(), StolenRegenPerMille(player)) / 10 / TicksPerSecond, 1));
+		player._pHitPoints = std::min(player._pHitPoints + heal, player._pMaxHP);
+		player._pHPBase = std::min(player._pHPBase + heal, player._pMaxHPBase);
+	}
+
+	if (state.repeatsLeft > 0 && (state.repeatTicks == 0 || --state.repeatTicks == 0)) {
+		state.repeatsLeft--;
+		state.repeatTicks = RepeatDelayTicks;
+		if (leveltype != DTYPE_TOWN)
+			CastRepeat(player);
+	}
+}
+
+bool RollAttackCrit(const Player &player)
+{
+	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
+	int chance = HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike) ? player.getCharacterLevel() : 0;
+	if (gbIsPoe2)
+		chance += BaseAttackCritPercent;
+	if (chance <= 0 || GenerateRnd(100) >= chance)
+		return false;
+	if (gbIsPoe2 && Rule(player, UniqueRule::CritActionSpeed) > 0)
+		State(player).critSpeedTicks = 2 * TicksPerSecond;
+	return true;
+}
+
+int CritDamagePercent(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 200;
+	int bonus = BaseCritBonusPercent + Rule(player, UniqueRule::CritDamageBonus);
+	// Lucky crits: the bonus rolls twice between half and all of it, and the better roll counts.
+	if (Rule(player, UniqueRule::LuckyCrits) > 0)
+		bonus = bonus / 2 + std::max(GenerateRnd(bonus / 2 + 1), GenerateRnd(bonus / 2 + 1));
+	return 100 + bonus;
+}
+
+bool AttacksCannotBeEvaded(const Player &player)
+{
+	return Rule(player, UniqueRule::LowLifeUnevadable) > 0 && State(player).lowLife;
+}
+
+int UniqueAttackSpeedPercent(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 0;
+	int percent = 0;
+	if (const int cap = Rule(player, UniqueRule::MissingLifeAttackSpeed); cap > 0)
+		percent += std::min(MissingLifePercent(player) / 4, cap);
+	if (State(player).critSpeedTicks > 0)
+		percent += Rule(player, UniqueRule::CritActionSpeed);
+	return percent;
+}
+
+Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed26_6 damage, bool crit)
+{
+	if (!gbIsPoe2) {
+		const Fixed26_6 dealt = ApplyShock(monster, damage);
+		ApplyMonsterDamage(DamageType::Physical, monster, dealt);
+		TryInflictAilment(monster, player, DamageType::Physical, dealt);
+		return dealt;
+	}
+	UniqueRuleState &state = State(player);
+	state.lastHitBySpell = false;
+	state.attacks++;
+
+	int64_t raw = Percent(damage.raw(), GeneralDamagePercent(player));
+	if (!crit)
+		raw = raw * (100 - Rule(player, UniqueRule::NonCritLess)) / 100;
+	raw = raw * (100 + Rule(player, UniqueRule::GuardStackDamage) * state.guardStacks) / 100;
+	if (const int per = Rule(player, UniqueRule::FireOvercapDamage); per > 0) {
+		const int overcap = player.poe2.uncappedResistances[0] - player.poe2.maxResistances[0];
+		if (overcap > 0)
+			raw = raw * (100 + overcap / per) / 100;
+	}
+	if (const int more = Rule(player, UniqueRule::BleedHinder); more > 0 && monster.poe2.bleedTicks > 0)
+		raw = raw * (100 + more) / 100;
+	if (state.storedChill > 0) {
+		raw = raw * (100 + state.storedChill) / 100;
+		state.storedChill = 0;
+	}
+
+	// Split the hit into physical and elemental packets.
+	std::array<int64_t, 4> packets {}; // physical, fire, lightning, cold
+	packets[0] = raw;
+	const int third = Rule(player, UniqueRule::ThirdAttackElemental);
+	if (third > 0 && state.attacks % 3 == 0) {
+		const bool noCold = Rule(player, UniqueRule::NoColdDamage) > 0;
+		const int element = 1 + GenerateRnd(noCold ? 2 : 3);
+		packets[static_cast<size_t>(element)] = packets[0] * (100 + third) / 100;
+		packets[0] = 0;
+		if (Rule(player, UniqueRule::ThirdAttackExposure) > 0) {
+			constexpr std::array<DamageType, 4> Types { DamageType::Physical, DamageType::Fire, DamageType::Lightning, DamageType::Magic };
+			monster.poe2.exposureTicks = ExposureTicks;
+			monster.poe2.exposureElement = static_cast<uint8_t>(Types[static_cast<size_t>(element)]);
+		}
+	} else if (third > 0) {
+		packets[0] = packets[0] * (100 - Rule(player, UniqueRule::OtherAttacksLessPhysical)) / 100;
+	}
+	if (const int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100); toFire > 0) {
+		const int64_t converted = packets[0] * toFire / 100;
+		packets[0] -= converted;
+		packets[1] += converted;
+	}
+	if (Rule(player, UniqueRule::NoColdDamage) > 0)
+		packets[3] = 0;
+
+	const int32_t physical = static_cast<int32_t>(packets[0]);
+	Fixed26_6 dealt = DealPacket(player, monster, DamageType::Physical, physical);
+	dealt += DealPacket(player, monster, DamageType::Fire, static_cast<int32_t>(packets[1]));
+	dealt += DealPacket(player, monster, DamageType::Lightning, static_cast<int32_t>(packets[2]));
+	dealt += DealPacket(player, monster, DamageType::Magic, static_cast<int32_t>(packets[3]));
+
+	if (crit && !monster.hasNoLife()) {
+		if (const int bleed = Rule(player, UniqueRule::CritBleed); bleed > 0 && physical > 0)
+			InflictBleed(player, monster, Percent(physical, 100 + bleed));
+	}
+	const int stacks = Rule(player, UniqueRule::GuardOnHeavyHit);
+	if (stacks > 0 && (crit || static_cast<int64_t>(dealt.raw()) * 100 >= static_cast<int64_t>(monster.maxHitPoints.raw()) * HeavyHitPercent)) {
+		state.guardStacks = static_cast<uint8_t>(std::min(state.guardStacks + 1, stacks));
+		state.guardTicks = GuardStackTicks;
+	}
+
+	// Every 5th attack repeats once, at less damage and without counting as another attack.
+	static bool repeating = false;
+	if (const int repeat = Rule(player, UniqueRule::FifthAttackRepeat); repeat > 0 && !repeating && state.attacks % 5 == 0 && !monster.hasNoLife()) {
+		repeating = true;
+		state.attacks--;
+		dealt += ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(Percent(damage.raw(), repeat)), false);
+		repeating = false;
+	}
+	return dealt;
+}
+
+int UniqueSpellDamagePercent(const Player &player, SpellID spell)
+{
+	if (!gbIsPoe2)
+		return 100;
+	const UniqueRuleState &state = State(player);
+	int increased = 100 + Rule(player, UniqueRule::SpellDamage);
+	if (const int share = Rule(player, UniqueRule::ManaSpellDamage); share > 0)
+		increased += std::max(player._pMaxMana.whole(), 0) * share / 100;
+	int percent = increased * state.castDamagePercent / 100;
+	if (state.castingRepeat)
+		percent = percent * (100 - Rule(player, UniqueRule::RepeatedSpellLess)) / 100;
+	(void)spell;
+	return std::max(percent, 0);
+}
+
+int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageType type)
+{
+	if (!gbIsPoe2)
+		return 100;
+	UniqueRuleState &state = State(player);
+	state.lastHitBySpell = true;
+	int percent = GeneralDamagePercent(player);
+	if (const int more = Rule(player, UniqueRule::SpellElementCycle); more > 0 && IsElemental(type)) {
+		if (type == CycleElement(state.cycleElement))
+			percent = percent * (100 + more) / 100;
+		else
+			percent = percent * (100 - Rule(player, UniqueRule::OffElementLess)) / 100;
+	}
+	if (const int penetration = Rule(player, UniqueRule::MemoryPenetration); penetration > 0 && state.memoryTicks > 0 && static_cast<uint8_t>(type) == state.memoryElement)
+		percent = percent * (100 + penetration) / 100;
+	if (const int cap = Rule(player, UniqueRule::SpellsSpendEnergyShield); cap > 0 && player.poe2.maxEnergyShield > 0)
+		percent = percent * (100 + std::min<int>(static_cast<int>(static_cast<int64_t>(state.shieldSpent) * 100 / (player.poe2.maxEnergyShield * 64)), cap)) / 100;
+	if (const int seconds = Rule(player, UniqueRule::BossEchoes); seconds > 0 && state.bossEchoTicks == 0
+	    && (monster.isUnique() || GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)) {
+		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
+		state.bossEchoTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
+	}
+	return percent;
+}
+
+void OnSpellCast(const Player &player, SpellID spell, WorldTilePosition target, int spellLevel)
+{
+	if (!gbIsPoe2 || IsCastingRepeat(player))
+		return;
+	UniqueRuleState &state = State(player);
+	state.spells++;
+	state.cycleElement = static_cast<uint8_t>((state.spells - 1) % 3);
+	if (const int echoes = Rule(player, UniqueRule::SpellEchoes); echoes > 0 && state.echoes >= echoes) {
+		state.echoes = 0;
+		QueueRepeat(player, spell, target, spellLevel, 2, 100);
+	}
+	if (const int percent = Rule(player, UniqueRule::SixthSpellRepeat); percent > 0 && state.spells % 6 == 0)
+		QueueRepeat(player, spell, target, spellLevel, 3, percent);
+	if (const int every = Rule(player, UniqueRule::StillSpellRepeat); every > 0 && state.stillTicks >= TicksPerSecond && state.spells % every == 0)
+		QueueRepeat(player, spell, target, spellLevel, 1, 100);
+}
+
+bool IsCastingRepeat(const Player &player)
+{
+	return State(player).castingRepeat;
+}
+
+int UniqueManaCostPercent(const Player &player)
+{
+	return std::max(100 + Rule(player, UniqueRule::ManaCost), 0);
+}
+
+Fixed26_6 SpendableEnergyShield(const Player &player)
+{
+	if (Rule(player, UniqueRule::SpellsSpendEnergyShield) <= 0)
+		return Fixed26_6::fromInt(0);
+	return Fixed26_6::fromRaw(std::max(player.poe2.energyShield, 0));
+}
+
+Fixed26_6 PaySpellCostWithEnergyShield(Player &player, Fixed26_6 cost)
+{
+	NoteResourceSpent(player, cost);
+	const int32_t paid = std::min(SpendableEnergyShield(player).raw(), cost.raw());
+	if (paid <= 0)
+		return cost;
+	player.poe2.energyShield -= paid;
+	State(player).shieldSpent += paid;
+	if (&player == MyPlayer)
+		RedrawComponent(PanelDrawComponent::Health);
+	return Fixed26_6::fromRaw(cost.raw() - paid);
+}
+
+void NoteResourceSpent(const Player &player, Fixed26_6 amount)
+{
+	if (Rule(player, UniqueRule::ResourceSpentDamage) <= 0 || amount <= 0)
+		return;
+	const int before = ResourceSpentBonus(player);
+	UniqueRuleState &state = State(player);
+	state.resourcesSpent = std::min(state.resourcesSpent + amount.raw(), 1000000 * 64);
+	const int cap = Rule(player, UniqueRule::ResourceSpentDamage);
+	if (before < cap && ResourceSpentBonus(player) >= cap && Rule(player, UniqueRule::ResourceLock) > 0)
+		state.recoveryLockTicks = static_cast<uint8_t>(Rule(player, UniqueRule::ResourceLock) * TicksPerSecond);
+}
+
+int UniqueCastSlowPercent(const Player &player)
+{
+	if (State(player).sinceMovedTicks >= TicksPerSecond)
+		return 0;
+	return std::clamp(Rule(player, UniqueRule::MovingCastSlow), 0, 90);
+}
+
+int UniqueMovementSlowPercent(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 0;
+	int slow = Rule(player, UniqueRule::GuardStackSlow) * State(player).guardStacks;
+	if (const int heavy = Rule(player, UniqueRule::HeavyArmourSlow); heavy > 0 && Poe2Armour(player) > HeavyArmour)
+		slow += heavy;
+	return std::clamp(slow, 0, 90);
+}
+
+bool UniqueSlowSkipsWalkTick(Player &player)
+{
+	const int slow = UniqueMovementSlowPercent(player);
+	if (slow <= 0)
+		return false;
+	UniqueRuleState &state = State(player);
+	state.walkCarry = static_cast<uint8_t>(state.walkCarry + slow);
+	if (state.walkCarry < 100)
+		return false;
+	state.walkCarry = static_cast<uint8_t>(state.walkCarry - 100);
+	return true;
+}
+
+void OnMonsterKilled(const Player &player, const Monster &monster)
+{
+	if (!gbIsPoe2)
+		return;
+	UniqueRuleState &state = State(player);
+	if (Rule(player, UniqueRule::SpellEchoes) > 0 && state.lastHitBySpell)
+		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
+	if (const int seconds = Rule(player, UniqueRule::StealRareMod); seconds > 0 && GetMonsterAffixes(monster).rarity == MonsterRarity::Rare) {
+		const MonsterAffixes affixes = GetMonsterAffixes(monster);
+		for (const MonsterMod mod : { MonsterMod::Regenerating, MonsterMod::Resistant, MonsterMod::ExtraLife }) {
+			if (!affixes.has(mod))
+				continue;
+			state.stolenMod = static_cast<uint8_t>(static_cast<int>(mod) + 1);
+			state.stolenTicks = static_cast<uint16_t>(seconds * TicksPerSecond);
+			break;
+		}
+	}
+}
+
+void OnMinionDied(Player &owner)
+{
+	if (!gbIsPoe2 || Rule(owner, UniqueRule::MinionFrenzy) <= 0)
+		return;
+	UniqueRuleState &state = State(owner);
+	constexpr uint8_t MaxStacks = 5;
+	if (const int seconds = Rule(owner, UniqueRule::MinionResummon); seconds > 0 && state.minionFrenzy >= MaxStacks) {
+		const auto quick = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
+		owner.poe2.golemCooldown = std::min(owner.poe2.golemCooldown, quick);
+		owner.poe2.skeletonCooldown = std::min(owner.poe2.skeletonCooldown, quick);
+	}
+	state.minionFrenzy = static_cast<uint8_t>(std::min<int>(state.minionFrenzy + 1, MaxStacks));
+	state.minionFrenzyTicks = 4 * TicksPerSecond;
+}
+
+int UniqueMinionDamagePercent(const Player &owner)
+{
+	return 100 + Rule(owner, UniqueRule::MinionFrenzy) * State(owner).minionFrenzy;
+}
+
+int UniqueMinionLifePercent(const Player &owner)
+{
+	return std::max(100 - Rule(owner, UniqueRule::LessMinionLife), 10);
+}
+
+int UniqueIgniteChancePercent(const Player &player)
+{
+	if (Rule(player, UniqueRule::CannotIgnite) > 0)
+		return 0;
+	return 100 + Rule(player, UniqueRule::IgniteBuildup);
+}
+
+int UniqueStunBuildupPercent(const Player &player)
+{
+	const int per = Rule(player, UniqueRule::ArmourStunBuildup);
+	if (per <= 0)
+		return 100;
+	return 100 + Poe2Armour(player) / per;
+}
+
+void OnAilmentInflicted(const Player &player, Monster &monster, DamageType type, bool wasShocked)
+{
+	if (!gbIsPoe2)
+		return;
+	UniqueRuleState &state = State(player);
+	if (const int seconds = Rule(player, UniqueRule::AilmentMemory); seconds > 0) {
+		state.memoryElement = static_cast<uint8_t>(type);
+		state.memoryTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
+	}
+	if (type == DamageType::Fire)
+		monster.poe2.igniteSpread = false;
+	if (type == DamageType::Lightning && wasShocked && Rule(player, UniqueRule::Electrocute) > 0) {
+		if (monster.poe2.electrocuteTicks == 0)
+			AddVisualEffect(monster.position.tile, MissileGraphicID::BlueFlareExplosion);
+		monster.poe2.electrocuteTicks = ElectrocuteTicks;
+	}
+}
+
+void OnMonsterFrozen(const Player &player)
+{
+	if (const int chill = Rule(player, UniqueRule::FreezeStoresChill); chill > 0)
+		State(player).storedChill = static_cast<uint8_t>(std::clamp(chill, 0, 255));
+}
+
+void ProcessUniqueMonsterAilments(Monster &monster)
+{
+	if (!gbIsPoe2 || monster.hasNoLife())
+		return;
+	Poe2MonsterState &state = monster.poe2;
+	if (state.exposureTicks > 0)
+		state.exposureTicks--;
+	if (state.electrocuteTicks > 0)
+		state.electrocuteTicks--;
+	if (state.igniteTicks == IgniteTicks / 2 && !state.igniteSpread)
+		SpreadIgnite(monster);
+	if (state.bleedTicks > 0) {
+		state.bleedTicks--;
+		if (state.bleedTicks % 10 == 0)
+			AddVisualEffect(monster.position.tile, MissileGraphicID::RedFlareExplosion);
+		// Only the player who caused the bleeding applies its damage, which the game then syncs.
+		if (state.bleedSource >= 0 && state.bleedSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
+			TelemetryNoteDamageSource("bleeding");
+			ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(state.bleedDamagePerTick));
+			if (monster.hasNoLife())
+				M_StartKill(monster, *MyPlayer);
+		}
+	}
+}
+
+int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
+{
+	if (!gbIsPoe2)
+		return 100;
+	int percent = 100;
+	if (monster.poe2.exposureTicks > 0 && static_cast<uint8_t>(type) == monster.poe2.exposureElement)
+		percent += ExposurePercent;
+	if (type == DamageType::Lightning && IsMonsterElectrocuted(monster) && MyPlayer != nullptr)
+		percent += Rule(*MyPlayer, UniqueRule::ElectrocutedLightning);
+	return percent;
+}
+
+bool IsMonsterElectrocuted(const Monster &monster)
+{
+	return gbIsPoe2 && monster.poe2.electrocuteTicks > 0;
+}
+
+int MonsterHinderPercent(const Monster &monster)
+{
+	const Poe2MonsterState &state = monster.poe2;
+	if (!gbIsPoe2 || state.bleedTicks == 0 || state.bleedSource < 0 || static_cast<size_t>(state.bleedSource) >= Players.size())
+		return 0;
+	return Rule(Players[static_cast<size_t>(state.bleedSource)], UniqueRule::BleedHinder) > 0 ? HinderPercent : 0;
+}
+
+int UniqueDefencePercent(const Player &player)
+{
+	if (const int more = Rule(player, UniqueRule::StationaryDefences); more > 0 && State(player).stillTicks > 0)
+		return 100 + more;
+	return 100;
+}
+
+int SpellEvasion(const Player &player)
+{
+	const int share = Rule(player, UniqueRule::EvasionVsSpells);
+	if (share <= 0)
+		return 0;
+	return EvasionRating(player) * share / 100;
+}
+
+Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
+{
+	if (!gbIsPoe2 || damage <= 0)
+		return damage;
+	UniqueRuleState &state = State(player);
+	int64_t raw = damage.raw();
+	if (const int more = Rule(player, UniqueRule::MovingVulnerability); more > 0 && state.sinceMovedTicks < TicksPerSecond)
+		raw = raw * (100 + more) / 100;
+	if (const int cap = Rule(player, UniqueRule::OvercapResistGuard); cap > 0) {
+		int overcap = 0;
+		for (size_t i = 0; i < player.poe2.maxResistances.size(); i++)
+			overcap += std::max(player.poe2.uncappedResistances[i] - player.poe2.maxResistances[i], 0);
+		raw = raw * (100 - std::min(overcap / 10, cap)) / 100;
+	}
+	if (IsElemental(type)) {
+		if (const int share = Rule(player, UniqueRule::ArmourVsElements); share > 0)
+			raw -= raw * ArmourReductionPercent(ArmourRating(player) * share / 100, Fixed26_6::fromRaw(static_cast<int32_t>(raw))) / 100;
+		if (state.stolenMod == static_cast<int>(MonsterMod::Resistant) + 1)
+			raw = raw * 80 / 100;
+	}
+	if (type == DamageType::Physical) {
+		if (const int cap = Rule(player, UniqueRule::ArmourPhysicalReduction); cap > 0)
+			raw = raw * (100 - std::min(Poe2Armour(player) / 5000, cap)) / 100;
+	}
+	if (state.stolenMod == static_cast<int>(MonsterMod::ExtraLife) + 1)
+		raw = raw * 90 / 100;
+	raw = std::max<int64_t>(raw, 0);
+	state.lifeLost[0] = static_cast<int32_t>(std::min<int64_t>(state.lifeLost[0] + raw, INT32_MAX / 2));
+	return Fixed26_6::fromRaw(static_cast<int32_t>(raw));
+}
+
+int UniqueStunThresholdPercent(const Player &player)
+{
+	return 100 + Rule(player, UniqueRule::StunThreshold);
+}
+
+int LifeRecoveryPercent(const Player &player, bool fromFlask)
+{
+	if (IsRecoveryLocked(player))
+		return 0;
+	int percent = 100 - Rule(player, UniqueRule::LessLifeRecovery);
+	if (fromFlask)
+		percent = percent * (100 - Rule(player, UniqueRule::LessLifeFlaskRecovery)) / 100;
+	return std::max(percent, 0);
+}
+
+void OnLifeRecovered(Player &player, int32_t raw)
+{
+	const int share = Rule(player, UniqueRule::LifeRecoveryToShield);
+	if (share <= 0 || raw <= 0 || player.poe2.maxEnergyShield <= 0)
+		return;
+	player.poe2.energyShield = std::min(player.poe2.energyShield + Percent(raw, share), player.poe2.maxEnergyShield * 64);
+}
+
+bool IsRecoveryLocked(const Player &player)
+{
+	return gbIsPoe2 && State(player).recoveryLockTicks > 0;
+}
+
+int EnergyShieldRechargePercent(const Player &player)
+{
+	if (Rule(player, UniqueRule::NoEnergyShieldRecharge) > 0)
+		return 0;
+	return std::max(100 - Rule(player, UniqueRule::LessEnergyShieldRecharge), 0);
+}
+
+int StolenRegenPerMille(const Player &player)
+{
+	return State(player).stolenMod == static_cast<int>(MonsterMod::Regenerating) + 1 ? RegenPerMillePerSecond : 0;
+}
+
+} // namespace devilution

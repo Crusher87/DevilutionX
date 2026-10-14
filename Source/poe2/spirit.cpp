@@ -275,7 +275,8 @@ int ReserveSpirit(const Player &player, F &&onActive)
 		const PersistentSkill skill = slot.persistent();
 		if (skill == PersistentSkill::None || !MeetsGemRequirements(player, skill))
 			continue;
-		const int cost = SpiritReservation(skill);
+		// POE2 Mashup: some uniques raise every reservation.
+		const int cost = SpiritReservation(skill) * (100 + player.poe2.rule(UniqueRule::MoreSpiritReservation)) / 100;
 		if (reserved + cost > max)
 			continue;
 		reserved += cost;

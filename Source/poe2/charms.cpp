@@ -10,6 +10,7 @@
 #include "player.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
 
@@ -152,7 +153,7 @@ void ProcessCharms(Player &player)
 		return;
 
 	if (player._pMaxHP > 0 && player._pHitPoints.raw() < PercentOf(player._pMaxHP, CharmLifeThreshold) && UseCharm(player, CharmEffect::Life)) {
-		const Fixed26_6 heal = Fixed26_6::fromRaw(PercentOf(player._pMaxHP, CharmLifeRecovery));
+		const Fixed26_6 heal = Fixed26_6::fromRaw(PercentOf(player._pMaxHP, CharmLifeRecovery) * LifeRecoveryPercent(player, false) / 100);
 		player._pHitPoints = std::min(player._pHitPoints + heal, player._pMaxHP);
 		player._pHPBase = std::min(player._pHPBase + heal, player._pMaxHPBase);
 		AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);

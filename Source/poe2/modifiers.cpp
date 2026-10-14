@@ -657,9 +657,11 @@ std::vector<std::string> ItemModText(const Poe2ItemMod &mod)
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 {
 	const auto stat = [&data](Poe2ItemStat which) { return static_cast<int>(data.itemStats[static_cast<size_t>(which)]); };
+	// Some uniques add levels to every skill while on Low Life.
+	const int lowLife = skill.kind != SkillKind::None && data.uniqueState.lowLife ? data.rule(UniqueRule::LowLifeSkillLevels) : 0;
 	switch (skill.kind) {
 	case SkillKind::Attack:
-		return stat(IsRangedWeaponSkill(skill.attack()) ? Poe2ItemStat::ProjectileSkillLevels : Poe2ItemStat::MeleeSkillLevels);
+		return lowLife + stat(IsRangedWeaponSkill(skill.attack()) ? Poe2ItemStat::ProjectileSkillLevels : Poe2ItemStat::MeleeSkillLevels);
 	case SkillKind::Spell: {
 		int bonus = stat(Poe2ItemStat::SpellSkillLevels);
 		const SpellID spell = skill.spell();
@@ -670,10 +672,10 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 			else if (type == MagicType::Lightning)
 				bonus += stat(Poe2ItemStat::LightningSkillLevels);
 		}
-		return bonus;
+		return lowLife + bonus;
 	}
 	default:
-		return 0;
+		return lowLife;
 	}
 }
 

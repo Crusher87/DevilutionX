@@ -83,6 +83,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
 #include "storm/storm_net.hpp"
@@ -1133,7 +1134,10 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 	if (hit >= hper)
 		return;
 
-	const int dam = RandomIntBetween(mind, maxd) << 6;
+	int dam = RandomIntBetween(mind, maxd) << 6;
+	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
+	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size())
+		dam = dam * UniqueMinionDamagePercent(Players[static_cast<size_t>(attacker.goalVar3)]) / 100;
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
 	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
 
@@ -1243,7 +1247,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 			dam = std::max(dam - reflectedDamage, Fixed26_6::fromInt(0));
 		}
 		TelemetryNoteAttacker(monster.name());
-		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, dam));
+		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, dam, DamageType::Physical)));
 	}
 
 	// Reflect can also kill a monster, so make sure the monster is still alive
@@ -3289,7 +3293,7 @@ void InitGolem(devilution::Monster &monster, uint8_t golemOwnerPlayerId, int16_t
 	monster.flags |= MFLAG_GOLEM;
 	monster.goalVar3 = static_cast<int8_t>(golemOwnerPlayerId);
 	const Player &player = Players[golemOwnerPlayerId];
-	monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3));
+	monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3) * UniqueMinionLifePercent(player) / 100);
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 25;
 	monster.golemToHit = 5 * (golemSpellLevel + 8) + 2 * player.getCharacterLevel();
@@ -3307,7 +3311,7 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	monster.goalVar3 = static_cast<int8_t>(ownerPlayerId);
 	const Player &player = Players[ownerPlayerId];
 	const int level = player.getCharacterLevel();
-	monster.maxHitPoints = Fixed26_6::fromInt(30 + (8 * level) + (4 * gemLevel));
+	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100);
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
 	monster.golemToHit = 40 + (2 * level) + (2 * gemLevel);
@@ -4070,7 +4074,11 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
 		QueueHeraldTriggers(*MyPlayer, monster);
+		OnMonsterKilled(*MyPlayer, monster);
 	}
+	// POE2 Mashup: a minion's death can frenzy its owner's other minions.
+	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size())
+		OnMinionDied(Players[static_cast<size_t>(monster.goalVar3)]);
 
 	TelemetryMonsterKilled(monster);
 	MonsterKillCounts[monster.type().type]++;

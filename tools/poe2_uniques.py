@@ -153,10 +153,15 @@ EFFECTS = {
 RANGE = re.compile(r'(\d+)–(\d+)')
 
 
+# Modifiers that change keystones.
+KEYSTONE_MODS = {mod for mod, (effect, _) in EFFECTS.items() if effect in ('FirstKeystone', 'OtherKeystones')}
+
+
 def effect_text(display):
 	"""The tooltip text with {0} for a rolled range, in the game's words for resistances."""
 	text = RANGE.sub('{0}', display, count=1)
-	return text.replace('Cold Resistance', 'Magic Resistance').replace('–', '-')
+	# The effects column separates effects with semicolons, so a text keeps them as commas.
+	return text.replace('Cold Resistance', 'Magic Resistance').replace('–', '-').replace(';', ',')
 
 
 def main():
@@ -178,6 +183,9 @@ def main():
 		cls = REMAP.get(u['item_class'], u['item_class'])
 		source = u['acquisition'].get('source_id', 'global') if u['unique_tier'] == 'restricted' else 'global'
 		if (cls not in CLASSES and cls != 'body_armour') or source in SKIPPED_SOURCES or (source != 'global' and source not in bosses):
+			continue
+		# The passive tree has no keystones for these to change.
+		if any(m['id'] in KEYSTONE_MODS for m in u['fixed_modifiers']):
 			continue
 		level = u['minimum_drop_level']
 		if cls == 'body_armour':

@@ -22,6 +22,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -55,6 +56,7 @@ void PaySkillMana(Player &player, WeaponSkill skill)
 	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
 	player._pMana -= cost;
 	player._pManaBase -= cost;
+	NoteResourceSpent(player, cost);
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
 	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));
@@ -463,6 +465,7 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	}
 	player._pMana -= cost;
 	player._pManaBase -= cost;
+	NoteResourceSpent(player, cost);
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
 	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));

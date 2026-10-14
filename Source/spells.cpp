@@ -25,6 +25,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 
 namespace devilution {
@@ -175,10 +176,14 @@ void ConsumeSpell(Player &player, SpellID sn)
 		if (DebugGodMode)
 			break;
 #endif
-		Fixed26_6 ma = GetManaAmount(player, sn);
+		// POE2 Mashup: a unique's repeat of a spell costs nothing, and some uniques pay with energy shield first.
+		if (IsCastingRepeat(player))
+			break;
+		const Fixed26_6 cost = GetManaAmount(player, sn);
+		const Fixed26_6 ma = PaySpellCostWithEnergyShield(player, cost);
 		player._pMana -= ma;
 		player._pManaBase -= ma;
-		manaCost = ma.whole();
+		manaCost = cost.whole();
 		RedrawComponent(PanelDrawComponent::Mana);
 		break;
 	}
@@ -219,7 +224,7 @@ SpellCheckResult CheckSpell(const Player &player, SpellID sn, SpellType st, bool
 		return SpellCheckResult::Fail_Level0;
 	}
 
-	if (player._pMana < GetManaAmount(player, sn) || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
+	if (player._pMana + SpendableEnergyShield(player) < GetManaAmount(player, sn) || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
 		return SpellCheckResult::Fail_NoMana;
 	}
 
@@ -267,6 +272,9 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 		}
 	}
 	if (!fizzled) {
+		// POE2 Mashup: uniques count spells cast and queue their repeats.
+		if (supported)
+			OnSpellCast(player, spl, dst, spllvl);
 		ConsumeSpell(player, spl);
 	}
 }

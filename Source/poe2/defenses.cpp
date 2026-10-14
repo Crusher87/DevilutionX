@@ -12,6 +12,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/unique_effects.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -110,12 +111,12 @@ void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int 
 int ArmourRating(const Player &player)
 {
 	const int armour = std::max(player._pIAC + player._pIBonusAC, 0);
-	return armour * (100 + FlaskArmourPercent(player)) / 100;
+	return armour * (100 + FlaskArmourPercent(player)) / 100 * UniqueDefencePercent(player) / 100;
 }
 
 int EvasionRating(const Player &player)
 {
-	return std::max(player.poe2.evasion + player._pDexterity / 5, 0);
+	return std::max(player.poe2.evasion + player._pDexterity / 5, 0) * UniqueDefencePercent(player) / 100;
 }
 
 int HitDefense(const Player &player)
@@ -174,8 +175,12 @@ void RechargeEnergyShield(Player &player)
 		data.energyShieldRechargeTicks++;
 		return;
 	}
-	constexpr int64_t Divisor = 1000 * TicksPerSecond;
-	const int64_t total = static_cast<int64_t>(maxRaw) * EnergyShieldRechargePerMille + data.energyShieldRemainder;
+	// POE2 Mashup: some uniques slow or stop the recharge.
+	const int rechargePercent = EnergyShieldRechargePercent(player);
+	if (rechargePercent <= 0)
+		return;
+	constexpr int64_t Divisor = 100 * 1000 * TicksPerSecond;
+	const int64_t total = static_cast<int64_t>(maxRaw) * EnergyShieldRechargePerMille * rechargePercent + data.energyShieldRemainder;
 	data.energyShieldRemainder = static_cast<int>(total % Divisor);
 	data.energyShield = std::min<int32_t>(data.energyShield + static_cast<int32_t>(total / Divisor), maxRaw);
 	if (&player == MyPlayer)

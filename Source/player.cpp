@@ -54,10 +54,12 @@
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
 #include "qol/stash.h"
@@ -80,6 +82,13 @@ Player *InspectPlayer;
 bool MyPlayerIsDead;
 
 namespace {
+
+/** @brief POE2 Mashup: attack animation frames skipped for the passive tree's attack speed and the uniques' changing attack speed. */
+int8_t AttackSpeedFrames(const Player &player)
+{
+	const int frames = player.poe2.passiveAttackFrames + UniqueAttackSpeedPercent(player) / 10;
+	return static_cast<int8_t>(std::clamp(frames, 0, MaxPassiveSpeedFrames + 1));
+}
 
 struct DirectionSettings {
 	Direction dir;
@@ -210,7 +219,7 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 	}
 
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
-	skippedAnimationFrames += WeaponSkillSkippedFrames(player) + player.poe2.passiveAttackFrames;
+	skippedAnimationFrames += WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
@@ -241,7 +250,7 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 	}
 
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
-	skippedAnimationFrames += player.poe2.passiveAttackFrames;
+	skippedAnimationFrames += AttackSpeedFrames(player);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
@@ -576,6 +585,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 
 	hper += player.GetMeleePiercingToHit() - player.CalculateArmorPierce(monster.armorClass, true);
 	hper = std::clamp(hper, 5, 95);
+	// POE2 Mashup: some uniques make attacks unevadable.
+	if (AttacksCannotBeEvaded(player))
+		hper = 100;
 
 	if (monster.tryLiftGargoyle())
 		return true;
@@ -606,12 +618,10 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	// POE2 Mashup: area skills deal less to the tiles beside the target.
 	dam = dam * damagePercent / 100;
 
-	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
-	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike)) {
-		if (GenerateRnd(100) < player.getCharacterLevel()) {
-			dam *= 2;
-		}
-	}
+	// POE2 Mashup: every attack can crit in POE2 mode, not just the Warrior's.
+	const bool crit = RollAttackCrit(player);
+	if (crit)
+		dam = dam * CritDamagePercent(player) / 100;
 
 	ItemType phanditype = ItemType::None;
 	if (player.InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Sword || player.InvBody[INVLOC_HAND_RIGHT]._itype == ItemType::Sword) {
@@ -675,9 +685,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 			dam = monster.hitPoints.raw(); /* ensure monster is killed with one hit */
 		}
 #endif
-		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
-		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(dam));
-		TryInflictAilment(monster, player, DamageType::Physical, Fixed26_6::fromRaw(dam));
+		dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit).raw();
 	}
 
 	int skdam = 0;
@@ -1174,7 +1182,7 @@ bool DoSpell(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
-		// POE2 Mashup: supports that slow the cast hold the character still a little longer.
+		// POE2 Mashup: supports and uniques that slow the cast hold the character still a little longer.
 		if (player.executedSpell.spellType == SpellType::Spell)
 			player.poe2.recoveryTicks = static_cast<uint8_t>(std::min(SupportCastRecoveryTicks(player, player.executedSpell.spellId, player._pSFrames), 255));
 		StartStand(player, player._pdir);
@@ -2806,7 +2814,7 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 	RedrawComponent(PanelDrawComponent::Health);
 	if (gbIsPoe2) {
 		// POE2 Mashup: only a heavy hit stuns, like POE2, so walking through a pack doesn't lock the hero in place.
-		if (!forcehit && static_cast<int64_t>(dam.raw()) * 100 < static_cast<int64_t>(player._pMaxHP.raw()) * PlayerStunPercent)
+		if (!forcehit && static_cast<int64_t>(dam.raw()) * 100 < static_cast<int64_t>(player._pMaxHP.raw()) * PlayerStunPercent * UniqueStunThresholdPercent(player) / 100)
 			return;
 	} else if (player._pClass == HeroClass::Barbarian) {
 		if (dam.whole() < player.getCharacterLevel() + player.getCharacterLevel() / 4 && !forcehit) {
@@ -3196,6 +3204,7 @@ void ProcessPlayers()
 			}
 
 			player.poe2.tick();
+			ProcessUniqueRules(player);
 			ProcessSkillVolley(player);
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
@@ -3241,7 +3250,8 @@ void ProcessPlayers()
 				case PM_WALK_NORTHWARDS:
 				case PM_WALK_SOUTHWARDS:
 				case PM_WALK_SIDEWAYS:
-					tplayer = DoWalk(player);
+					// POE2 Mashup: uniques that slow movement skip some walking ticks.
+					tplayer = UniqueSlowSkipsWalkTick(player) ? false : DoWalk(player);
 					break;
 				case PM_ATTACK:
 					tplayer = DoAttack(player);
