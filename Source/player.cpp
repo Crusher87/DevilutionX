@@ -2538,10 +2538,13 @@ void NextPlrLevel(Player &player)
 
 	CalcPlrInv(player, true);
 
-	if (CalcStatDiff(player) < 5) {
-		player._pStatPts = CalcStatDiff(player);
-	} else {
-		player._pStatPts += 5;
+	// POE2 Mashup: attributes come from the passive tree and items, not from points each level.
+	if (!gbIsPoe2 || gbIsMultiplayer) {
+		if (CalcStatDiff(player) < 5) {
+			player._pStatPts = CalcStatDiff(player);
+		} else {
+			player._pStatPts += 5;
+		}
 	}
 	const Fixed26_6 hp { player.getClassAttributes().lvlLife };
 

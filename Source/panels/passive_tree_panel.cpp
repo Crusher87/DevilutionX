@@ -41,11 +41,10 @@ constexpr int HeaderHeight = 36;
 constexpr int FooterHeight = 34;
 
 /** Tree units from the centre to the edge of the view at zoom 1: the seal and the class names around it. */
-constexpr float TreeExtent = 410;
-constexpr float SealRadius = 372;
-constexpr float HexagramRadius = 360;
-constexpr float SanctumRadius = 82;
-constexpr float ClassNameRadius = 392;
+constexpr float TreeExtent = 462;
+constexpr float SealRadius = 436;
+constexpr float SanctumRadius = 84;
+constexpr float ClassNameRadius = 450;
 
 constexpr float MinZoom = 1.0F;
 constexpr float MaxZoom = 4.0F;
@@ -60,7 +59,6 @@ constexpr uint8_t PanelColor = PAL16_GRAY + 15;
 constexpr uint8_t BorderColor = PAL16_YELLOW + 8;
 constexpr uint8_t ViewColor = PAL16_RED + 15;
 constexpr uint8_t SealColor = PAL16_RED + 11;
-constexpr uint8_t HexagramColor = PAL16_RED + 12;
 constexpr uint8_t SanctumColor = PAL16_GRAY + 14;
 constexpr uint8_t SanctumRimColor = PAL16_YELLOW + 6;
 constexpr uint8_t LinkColor = PAL16_GRAY + 11;
@@ -70,13 +68,21 @@ constexpr uint8_t NodeColor = PAL16_GRAY + 9;
 constexpr uint8_t NodeReachableColor = PAL16_GRAY + 2;
 constexpr uint8_t NodeAllocatedColor = PAL16_YELLOW + 2;
 constexpr uint8_t NotableRimColor = PAL16_ORANGE + 4;
+constexpr uint8_t NotableInnerRimColor = PAL16_GRAY + 15;
 constexpr uint8_t ShrineRimColor = PAL16_BLUE + 4;
+constexpr uint8_t AttributeRimColor = PAL16_BEIGE + 6;
+constexpr uint8_t SocketRimColor = PAL16_GRAY + 4;
+constexpr uint8_t SocketHoleColor = PAL16_GRAY + 15;
+constexpr uint8_t SocketGemColor = PAL16_BLUE + 6;
+constexpr uint8_t TitleBarColor = PAL16_GRAY + 13;
 constexpr uint8_t StartColor = PAL16_RED + 6;
 constexpr uint8_t OtherStartColor = PAL16_RED + 11;
 constexpr uint8_t HoverColor = PAL16_BEIGE;
 constexpr uint8_t TooltipColor = PAL16_GRAY + 14;
 
 bool IsOpen;
+/** @brief An "any Attribute" node waiting for the player to pick its attribute. */
+std::optional<PassiveNodeId> PendingAttributeNode;
 /** @brief How far the view is zoomed in, and the tree point at its centre. */
 float Zoom = OpenZoom;
 float ViewX;
@@ -174,8 +180,7 @@ void ZoomAt(const Layout &layout, float factor, Point anchor)
 
 bool IsNodeShown(const Player &player, const PassiveNode &node)
 {
-	// The sanctum only holds the ascendancies of the player's own class.
-	return !IsAscendancyNode(node) || node.startClass == player._pClass;
+	return IsPassiveNodeVisible(player, node);
 }
 
 /** @brief Node radius in tree units. */
@@ -187,13 +192,15 @@ float NodeSize(const PassiveNode &node)
 	case PassiveKind::Shrine:
 		return 11;
 	case PassiveKind::Ascendancy:
-		return 10;
+		return 11;
 	case PassiveKind::Notable:
+		return 10;
+	case PassiveKind::JewelSocket:
 		return 9;
 	case PassiveKind::AscendancyNotable:
 		return 8;
 	default:
-		return 6;
+		return 5;
 	}
 }
 
@@ -306,25 +313,20 @@ void DrawRing(const Surface &out, const Layout &layout, float radius, uint8_t co
 	}
 }
 
-Point SealPoint(const Layout &layout, float radius, float degrees)
-{
-	const float angle = degrees * 3.14159265F / 180.0F;
-	return ViewPoint(layout, radius * std::cos(angle), radius * std::sin(angle));
-}
-
-/** @brief The Horadric seal behind the tree: its ring, a hexagram joining the class starts, and the sanctum. */
-void DrawSeal(const Surface &out, const Layout &layout)
+/** @brief The seal behind the tree: its ring and the sanctum in the middle, which says when the ascendancy unlocks. */
+void DrawSeal(const Surface &out, const Layout &layout, const Player &player)
 {
 	const float scale = Scale(layout);
 	const int thickness = std::max(RoundToInt(scale * 2), 1);
 	DrawRing(out, layout, SealRadius, SealColor, thickness);
-	for (const std::array<float, 3> &triangle : { std::array<float, 3> { -90, 30, 150 }, std::array<float, 3> { -30, 90, 210 } }) {
-		for (size_t i = 0; i < triangle.size(); i++) {
-			DrawLine(out, SealPoint(layout, HexagramRadius, triangle[i]), SealPoint(layout, HexagramRadius, triangle[(i + 1) % triangle.size()]), HexagramColor, thickness);
-		}
-	}
 	FillCircle(out, ViewPoint(layout, 0, 0), RoundToInt(SanctumRadius * scale), SanctumColor);
 	DrawRing(out, layout, SanctumRadius, SanctumRimColor, thickness);
+	if (player.getCharacterLevel() < AscendancyLevel && scale >= 0.9F) {
+		const Point center = ViewPoint(layout, 0, 0);
+		const Rectangle label { center + Displacement { -RoundToInt(SanctumRadius * scale), -20 }, { 2 * RoundToInt(SanctumRadius * scale), 40 } };
+		const std::string text = WordWrapString(FormatRuntime(_("Ascendancy unlocks at level {:d}"), AscendancyLevel), label.size.width - 8);
+		DrawString(out, text, label, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorUiSilverDark, .lineHeight = 14 });
+	}
 }
 
 void DrawClassNames(const Surface &out, const Layout &layout, const Player &player)
@@ -337,7 +339,7 @@ void DrawClassNames(const Surface &out, const Layout &layout, const Player &play
 			continue;
 		const Point center = ViewPoint(layout, node.x * ClassNameRadius / length, node.y * ClassNameRadius / length);
 		const Rectangle label { center + Displacement { -80, -9 }, { 160, 18 } };
-		const bool mine = *node.startClass == player._pClass;
+		const bool mine = *node.startClass == PassiveTreeClass(player._pClass);
 		DrawString(out, GetPlayerDataForClass(*node.startClass).className, label,
 		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (mine ? UiFlags::ColorUiGold : UiFlags::ColorUiSilverDark) });
 	}
@@ -346,7 +348,7 @@ void DrawClassNames(const Surface &out, const Layout &layout, const Player &play
 uint8_t NodeFillColor(const Player &player, const PassiveNode &node)
 {
 	if (node.kind == PassiveKind::Start)
-		return node.startClass == player._pClass ? StartColor : OtherStartColor;
+		return node.startClass == PassiveTreeClass(player._pClass) ? StartColor : OtherStartColor;
 	if (IsPassiveAllocated(player, node.id))
 		return NodeAllocatedColor;
 	if (CanAllocatePassive(player, node.id))
@@ -387,13 +389,36 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 			else
 				FillCircle(out, center, size, fillColor);
 		};
+		const int rim = std::max(RoundToInt(scale * 1.5F), 1);
 		if (hovered == node.id)
-			fill(radius + 2, HoverColor);
-		else if (node.kind == PassiveKind::Shrine)
-			fill(radius + 1, ShrineRimColor);
-		else if (node.kind != PassiveKind::Small && node.kind != PassiveKind::Start)
-			fill(radius + 1, NotableRimColor);
-		fill(radius, color);
+			fill(radius + rim + 1, HoverColor);
+		switch (node.kind) {
+		case PassiveKind::Shrine:
+			fill(radius + rim, ShrineRimColor);
+			fill(radius, color);
+			break;
+		case PassiveKind::Notable:
+		case PassiveKind::Ascendancy:
+		case PassiveKind::AscendancyNotable:
+			// Notables wear a gold frame round a dark band, so they stand out from the small nodes.
+			fill(radius + rim, NotableRimColor);
+			fill(radius, NotableInnerRimColor);
+			fill(std::max(radius - rim, 1), color);
+			break;
+		case PassiveKind::JewelSocket:
+			// An empty socket: a rim round a dark hole, with a gem glinting in it once allocated.
+			fill(radius + rim, color);
+			fill(radius, SocketRimColor);
+			fill(std::max(radius - (2 * rim), 1), IsPassiveAllocated(player, node.id) ? SocketGemColor : SocketHoleColor);
+			break;
+		case PassiveKind::Attribute:
+			fill(radius + rim, AttributeRimColor);
+			fill(radius, color);
+			break;
+		default:
+			fill(radius, color);
+			break;
+		}
 		// Ascendancy names, once the sanctum is big enough to hold them.
 		if (node.kind == PassiveKind::Ascendancy && scale >= 1.2F) {
 			const Rectangle label { center + Displacement { -80, radius + 2 }, { 160, 18 } };
@@ -402,49 +427,142 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 	}
 }
 
+std::string_view NodeKindText(const PassiveNode &node)
+{
+	switch (node.kind) {
+	case PassiveKind::Notable:
+		return _("Notable Passive");
+	case PassiveKind::Shrine:
+		return _("Shrine: a boon with a price");
+	case PassiveKind::Ascendancy:
+		return _("Ascendancy");
+	case PassiveKind::AscendancyNotable:
+		return _("Ascendancy Passive");
+	case PassiveKind::Attribute:
+		return _("Pick the attribute when you allocate it");
+	case PassiveKind::JewelSocket:
+		return _("Place a jewel here once you have one");
+	case PassiveKind::Start:
+		return _("Class start");
+	default:
+		return _("Passive");
+	}
+}
+
+uint8_t NodeFrameColor(const PassiveNode &node)
+{
+	switch (node.kind) {
+	case PassiveKind::Small:
+		return BorderColor;
+	case PassiveKind::Attribute:
+		return AttributeRimColor;
+	case PassiveKind::Shrine:
+		return ShrineRimColor;
+	case PassiveKind::JewelSocket:
+		return SocketGemColor;
+	default:
+		return NotableRimColor;
+	}
+}
+
+std::string NodeHint(const Player &player, const PassiveNode &node)
+{
+	if (node.kind == PassiveKind::Start)
+		return node.startClass == PassiveTreeClass(player._pClass) ? std::string(_("Your starting point")) : std::string(_("Another class's starting point"));
+	if (node.kind == PassiveKind::Ascendancy && !IsPassiveAllocated(player, node.id) && !CanAllocatePassive(player, node.id))
+		return ChosenAscendancy(player) ? std::string(_("You already chose an ascendancy")) : FormatRuntime(_("Reach level {:d} to ascend"), AscendancyLevel);
+	if (node.kind == PassiveKind::Ascendancy && !IsPassiveAllocated(player, node.id))
+		return std::string(_("Click to ascend (free; refund to change)"));
+	if (IsPassiveAllocated(player, node.id))
+		return CanRefundPassive(player, node.id) ? std::string(_("Right-click to refund")) : std::string(_("Other nodes depend on this one"));
+	if (CanAllocatePassive(player, node.id))
+		return node.kind == PassiveKind::Attribute ? std::string(_("Click to pick an attribute")) : std::string(_("Click to allocate"));
+	return (node.kind == PassiveKind::AscendancyNotable ? AscendancyPointsLeft(player) : PassivePointsLeft(player)) <= 0 ? std::string(_("No points left")) : std::string(_("Not linked to your tree yet"));
+}
+
+/** @brief A big POE2-style popup: a framed title bar with the node's name, its kind, then its stats in large type. */
 void DrawTooltip(const Surface &out, const Layout &layout, const Player &player, const PassiveNode &node)
 {
-	std::vector<std::string> lines;
-	for (const auto &[stat, value] : node.stats)
-		lines.push_back(PassiveStatText(stat, value));
-	std::string hint;
-	if (node.kind == PassiveKind::Start)
-		hint = node.startClass == player._pClass ? _("Your starting point") : _("Another class's starting point");
-	else if (node.kind == PassiveKind::Ascendancy && !IsPassiveAllocated(player, node.id) && !CanAllocatePassive(player, node.id))
-		hint = ChosenAscendancy(player) ? _("You already chose an ascendancy") : FormatRuntime(_("Reach level {:d} to ascend"), AscendancyLevel);
-	else if (node.kind == PassiveKind::Ascendancy && !IsPassiveAllocated(player, node.id))
-		hint = _("Click to ascend (free; refund to change)");
-	else if (IsPassiveAllocated(player, node.id))
-		hint = CanRefundPassive(player, node.id) ? _("Right-click to refund") : _("Other nodes depend on this one");
-	else if (CanAllocatePassive(player, node.id))
-		hint = _("Click to allocate");
-	else
-		hint = (node.kind == PassiveKind::AscendancyNotable ? AscendancyPointsLeft(player) : PassivePointsLeft(player)) <= 0 ? _("No points left") : _("Not linked to your tree yet");
+	struct Line {
+		std::string text;
+		UiFlags color;
+	};
+	std::vector<Line> lines;
+	for (const auto &[stat, value] : PassiveNodeStats(player, node))
+		lines.push_back({ PassiveStatText(stat, value), value < 0 ? UiFlags::ColorRed : UiFlags::ColorBlue });
+	if (node.kind == PassiveKind::JewelSocket)
+		lines.push_back({ std::string(_("Jewels are on their way")), UiFlags::ColorWhite });
+	const std::string title = PassiveNodeName(node);
+	const std::string_view kind = NodeKindText(node);
+	const std::string hint = NodeHint(player, node);
 
-	constexpr int LineHeight = 16;
-	const int width = 250;
-	const bool hasKindLine = node.kind == PassiveKind::Shrine || IsAscendancyNode(node);
-	const int height = 30 + (static_cast<int>(lines.size() + (hasKindLine ? 1 : 0)) * LineHeight) + LineHeight;
-	Point position = MousePosition + Displacement { 16, 8 };
-	position.x = std::min(position.x, layout.panel.position.x + layout.panel.size.width - width - 4);
-	position.y = std::min(position.y, layout.panel.position.y + layout.panel.size.height - height - 4);
+	constexpr int Pad = 12;
+	constexpr int TitleHeight = 34;
+	constexpr int KindHeight = 18;
+	constexpr int StatHeight = 28;
+	constexpr int HintHeight = 22;
+	int width = std::max({ GetLineWidth(title, GameFont24) + (2 * Pad), GetLineWidth(kind) + (2 * Pad), GetLineWidth(hint) + (2 * Pad), 300 });
+	for (const Line &line : lines)
+		width = std::max(width, GetLineWidth(line.text, GameFont24) + (2 * Pad));
+	width = std::min(width, layout.panel.size.width - 8);
+	const int height = TitleHeight + KindHeight + 6 + (static_cast<int>(lines.size()) * StatHeight) + HintHeight + Pad;
+
+	Point position = MousePosition + Displacement { 18, 12 };
+	position.x = std::clamp(position.x, layout.panel.position.x + 4, layout.panel.position.x + layout.panel.size.width - width - 4);
+	position.y = std::clamp(position.y, layout.panel.position.y + 4, layout.panel.position.y + layout.panel.size.height - height - 4);
 	const Rectangle box { position, { width, height } };
+	const uint8_t frame = NodeFrameColor(node);
 	FillRectangle(out, box, TooltipColor);
-	DrawFrame(out, box, node.kind == PassiveKind::Small ? BorderColor : (node.kind == PassiveKind::Shrine ? ShrineRimColor : NotableRimColor));
+	const Rectangle titleBar { position, { width, TitleHeight } };
+	FillRectangle(out, titleBar, TitleBarColor);
+	DrawFrame(out, titleBar, frame);
+	DrawFrame(out, box, frame);
+	DrawFrame(out, { position + Displacement { 1, 1 }, { width - 2, height - 2 } }, frame);
+	const bool gold = node.kind != PassiveKind::Small && node.kind != PassiveKind::Attribute;
+	DrawString(out, title, titleBar, { .flags = UiFlags::FontSize24 | UiFlags::AlignCenter | UiFlags::VerticalCenter | (gold ? UiFlags::ColorUiGold : UiFlags::ColorUiSilver) });
 
-	Rectangle line { position + Displacement { 8, 6 }, { width - 16, 20 } };
-	DrawString(out, PassiveNodeName(node), line, { .flags = (node.kind == PassiveKind::Small ? UiFlags::ColorWhite : UiFlags::ColorUiGold) | UiFlags::VerticalCenter });
-	line.position.y += 22;
-	line.size.height = LineHeight;
-	if (hasKindLine) {
-		DrawString(out, node.kind == PassiveKind::Shrine ? _("Shrine: a boon with a price") : _("Ascendancy"), line, { .flags = UiFlags::ColorWhitegold | UiFlags::VerticalCenter });
-		line.position.y += LineHeight;
+	Rectangle line { position + Displacement { Pad, TitleHeight + 4 }, { width - (2 * Pad), KindHeight } };
+	DrawString(out, kind, line, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+	line.position.y += KindHeight + 6;
+	line.size.height = StatHeight;
+	for (const Line &stat : lines) {
+		DrawString(out, stat.text, line, { .flags = UiFlags::FontSize24 | UiFlags::AlignCenter | UiFlags::VerticalCenter | stat.color });
+		line.position.y += StatHeight;
 	}
-	for (const auto &[stat, value] : node.stats) {
-		DrawString(out, PassiveStatText(stat, value), line, { .flags = (value < 0 ? UiFlags::ColorRed : UiFlags::ColorBlue) | UiFlags::VerticalCenter });
-		line.position.y += LineHeight;
+	line.size.height = HintHeight;
+	DrawString(out, hint, line, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
+}
+
+/** @brief Where the attribute picker's buttons are, next to the node waiting for a pick. */
+std::array<Rectangle, static_cast<size_t>(PassiveAttribute::Count)> AttributeButtons(const Layout &layout, const PassiveNode &node)
+{
+	constexpr Size ButtonSize { 120, 30 };
+	constexpr int Gap = 4;
+	const Point center = NodeViewPoint(layout, node) + Displacement { layout.view.position.x, layout.view.position.y };
+	const int width = ButtonSize.width;
+	const int height = (static_cast<int>(PassiveAttribute::Count) * (ButtonSize.height + Gap)) - Gap;
+	Point origin { center.x + 20, center.y - (height / 2) };
+	origin.x = std::clamp(origin.x, layout.view.position.x + 4, layout.view.position.x + layout.view.size.width - width - 4);
+	origin.y = std::clamp(origin.y, layout.view.position.y + 4, layout.view.position.y + layout.view.size.height - height - 4);
+	std::array<Rectangle, static_cast<size_t>(PassiveAttribute::Count)> buttons;
+	for (size_t i = 0; i < buttons.size(); i++)
+		buttons[i] = { origin + Displacement { 0, static_cast<int>(i) * (ButtonSize.height + Gap) }, ButtonSize };
+	return buttons;
+}
+
+void DrawAttributePicker(const Surface &out, const Layout &layout, const PassiveNode &node)
+{
+	const auto buttons = AttributeButtons(layout, node);
+	const Rectangle frame { buttons.front().position - Displacement { 4, 4 }, { buttons.front().size.width + 8, buttons.back().position.y + buttons.back().size.height - buttons.front().position.y + 8 } };
+	FillRectangle(out, frame, TooltipColor);
+	DrawFrame(out, frame, AttributeRimColor);
+	for (size_t i = 0; i < buttons.size(); i++) {
+		const bool hovered = buttons[i].contains(MousePosition);
+		FillRectangle(out, buttons[i], hovered ? TitleBarColor : PanelColor);
+		DrawFrame(out, buttons[i], hovered ? HoverColor : AttributeRimColor);
+		DrawString(out, FormatRuntime(_("+5 {:s}"), PassiveAttributeName(static_cast<PassiveAttribute>(i))), buttons[i],
+		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (hovered ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
 	}
-	DrawString(out, hint, line, { .flags = UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
 }
 
 std::string PointsText(const Player &player)
@@ -475,6 +593,7 @@ void OpenPassiveTree()
 		return;
 	}
 	IsOpen = true;
+	PendingAttributeNode = std::nullopt;
 	Pressed = false;
 	Dragging = false;
 	CenterOnStart();
@@ -484,6 +603,7 @@ void OpenPassiveTree()
 void ClosePassiveTree()
 {
 	IsOpen = false;
+	PendingAttributeNode = std::nullopt;
 	Pressed = false;
 	Dragging = false;
 }
@@ -508,7 +628,10 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 		switch (SDLC_EventKey(event)) {
 		case SDLK_ESCAPE:
 		case SDLK_P:
-			ClosePassiveTree();
+			if (PendingAttributeNode && SDLC_EventKey(event) == SDLK_ESCAPE)
+				PendingAttributeNode = std::nullopt;
+			else
+				ClosePassiveTree();
 			break;
 		case SDLK_LEFT:
 		case SDLK_A:
@@ -560,9 +683,23 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 			return true;
 		}
 #endif
+		if (PendingAttributeNode) {
+			// The attribute picker takes the click: a button allocates the node with that attribute, anything else cancels.
+			const auto buttons = AttributeButtons(layout, PassiveTree()[*PendingAttributeNode]);
+			if (event.button.button == SDL_BUTTON_LEFT) {
+				for (size_t i = 0; i < buttons.size(); i++) {
+					if (buttons[i].contains(MousePosition))
+						AllocatePassive(player, *PendingAttributeNode, static_cast<PassiveAttribute>(i));
+				}
+			}
+			PendingAttributeNode = std::nullopt;
+			return true;
+		}
 		const std::optional<PassiveNodeId> node = NodeAt(layout, MousePosition);
 		if (event.button.button == SDL_BUTTON_LEFT) {
-			if (node) {
+			if (node && PassiveNeedsAttributeChoice(*node) && CanAllocatePassive(player, *node)) {
+				PendingAttributeNode = node;
+			} else if (node) {
 				AllocatePassive(player, *node);
 			} else if (layout.view.contains(MousePosition)) {
 				Pressed = true;
@@ -617,16 +754,18 @@ void DrawPassiveTree(const Surface &out)
 
 	const Surface view = out.subregion(layout.view.position.x, layout.view.position.y, layout.view.size.width, layout.view.size.height);
 	FillRect(view, 0, 0, view.w(), view.h(), ViewColor);
-	DrawSeal(view, layout);
+	DrawSeal(view, layout, player);
 	DrawClassNames(view, layout, player);
-	const std::optional<PassiveNodeId> hovered = Dragging ? std::nullopt : NodeAt(layout, MousePosition);
+	const std::optional<PassiveNodeId> hovered = Dragging || PendingAttributeNode ? std::nullopt : NodeAt(layout, MousePosition);
 	DrawNodes(view, layout, player, hovered);
 	DrawFrame(out, layout.view, BorderColor);
 
 	const std::string help = WordWrapString(_("Click a linked node to allocate it, right-click to refund. Drag or use the arrow keys to move, the wheel or +/- to zoom, Home to recenter. P or Esc closes."), layout.footer.size.width);
 	DrawString(out, help, layout.footer, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed, .lineHeight = 14 });
 
-	if (hovered)
+	if (PendingAttributeNode)
+		DrawAttributePicker(out, layout, PassiveTree()[*PendingAttributeNode]);
+	else if (hovered)
 		DrawTooltip(out, layout, player, PassiveTree()[*hovered]);
 }
 

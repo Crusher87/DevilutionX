@@ -65,19 +65,43 @@ public:
 		return 0;
 	}
 
-	/** @brief The Warrior's road north: Strength, Strength, then Lachdanan's Oath. */
-	static std::array<PassiveNodeId, 3> WarriorPath()
+	/** @brief The shortest road from the Warrior's start to a node, not counting the start. */
+	static std::vector<PassiveNodeId> WarriorPathTo(std::string_view name)
 	{
-		const PassiveNodeId oath = FindNode("Lachdanan's Oath");
-		const PassiveNodeId before = PassiveTree()[oath].links[1];
-		const PassiveNodeId first = PassiveTree()[before].links[0];
-		return { first, before, oath };
+		const PassiveNodeId start = *PassiveStartNode(HeroClass::Warrior);
+		const PassiveNodeId goal = FindNode(name);
+		std::vector<int> previous(PassiveTree().size(), -1);
+		std::vector<PassiveNodeId> open { start };
+		previous[start] = start;
+		for (size_t i = 0; i < open.size(); i++) {
+			for (const PassiveNodeId link : PassiveTree()[open[i]].links) {
+				if (previous[link] == -1 && !IsAscendancyNode(PassiveTree()[link])) {
+					previous[link] = open[i];
+					open.push_back(link);
+				}
+			}
+		}
+		std::vector<PassiveNodeId> path;
+		for (PassiveNodeId node = goal; node != start; node = static_cast<PassiveNodeId>(previous[node]))
+			path.insert(path.begin(), node);
+		return path;
+	}
+
+	/** @brief The Warrior's sword pommel: two "+5 to any Attribute" nodes, a damage node, then King Leoric's Might. */
+	static std::vector<PassiveNodeId> WarriorPath()
+	{
+		return WarriorPathTo("King Leoric's Might");
+	}
+
+	static int Total(const Player &player, PassiveStat stat)
+	{
+		return GetPassiveTotals(player)[static_cast<size_t>(stat)];
 	}
 };
 
 TEST_F(Poe2PassiveTreeTest, TreeLoadsWithAStartForEveryClass)
 {
-	ASSERT_GE(PassiveTree().size(), 400U);
+	ASSERT_GE(PassiveTree().size(), 300U);
 	ASSERT_LE(PassiveTree().size(), MaxPassiveNodes);
 	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Rogue, HeroClass::Sorcerer, HeroClass::Monk, HeroClass::Bard, HeroClass::Barbarian }) {
 		EXPECT_TRUE(PassiveStartNode(heroClass).has_value()) << static_cast<int>(heroClass);
@@ -128,7 +152,7 @@ TEST_F(Poe2PassiveTreeTest, NodesMustLinkToTheTree)
 
 	const auto path = WarriorPath();
 	EXPECT_FALSE(CanAllocatePassive(player, path[2]));
-	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Arkaine's Valor")));
+	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Gloomy Shrine")));
 
 	ASSERT_TRUE(AllocatePassive(player, path[0]));
 	EXPECT_EQ(PassivePointsLeft(player), 8);
@@ -142,6 +166,7 @@ TEST_F(Poe2PassiveTreeTest, RefundsKeepTheTreeConnected)
 	for (const PassiveNodeId node : path)
 		ASSERT_TRUE(AllocatePassive(player, node)) << node;
 	EXPECT_FALSE(CanRefundPassive(player, path[1]));
+	EXPECT_TRUE(RefundPassive(player, path[3]));
 	EXPECT_TRUE(RefundPassive(player, path[2]));
 	EXPECT_TRUE(RefundPassive(player, path[1]));
 	EXPECT_EQ(PassivePointsSpent(player), 1);
@@ -154,17 +179,70 @@ TEST_F(Poe2PassiveTreeTest, AllocatedStatsApplyToTheCharacter)
 	Player &player = *MyPlayer;
 	CalcPlrInv(player, false);
 	const int strength = player._pStrength;
-	const int maxLife = player._pMaxHP.whole();
 
-	// +5 Strength, +5 Strength, then Lachdanan's Oath: 10% life and 15% armor.
-	for (const PassiveNodeId node : WarriorPath())
-		ASSERT_TRUE(AllocatePassive(player, node));
+	// Two "+5 to any Attribute" nodes put into Strength, 5% damage, then King Leoric's Might: +20 Strength.
+	const auto path = WarriorPath();
+	ASSERT_EQ(path.size(), 4U);
+	for (const PassiveNodeId node : path)
+		ASSERT_TRUE(AllocatePassive(player, node, PassiveAttribute::Strength));
 
-	EXPECT_EQ(player._pStrength, strength + 10);
-	EXPECT_GT(player._pMaxHP.whole(), maxLife);
-	const PassiveTotals totals = GetPassiveTotals(player);
-	EXPECT_EQ(totals[static_cast<size_t>(PassiveStat::LifePercent)], 10);
-	EXPECT_EQ(totals[static_cast<size_t>(PassiveStat::ArmorPercent)], 15);
+	EXPECT_EQ(player._pStrength, strength + 30);
+	EXPECT_EQ(Total(player, PassiveStat::Strength), 30);
+	EXPECT_EQ(Total(player, PassiveStat::Damage), 5);
+	EXPECT_EQ(Total(player, PassiveStat::AnyAttribute), 0);
+}
+
+TEST_F(Poe2PassiveTreeTest, AttributeNodesGiveTheAttributePicked)
+{
+	Player &player = *MyPlayer;
+	const auto path = WarriorPath();
+	ASSERT_TRUE(PassiveNeedsAttributeChoice(path[0]));
+	EXPECT_FALSE(PassiveNeedsAttributeChoice(path.back()));
+
+	ASSERT_TRUE(AllocatePassive(player, path[0], PassiveAttribute::Dexterity));
+	ASSERT_TRUE(AllocatePassive(player, path[1], PassiveAttribute::Vitality));
+	EXPECT_EQ(ChosenPassiveAttribute(player, path[0]), PassiveAttribute::Dexterity);
+	EXPECT_EQ(Total(player, PassiveStat::Dexterity), 5);
+	EXPECT_EQ(Total(player, PassiveStat::Vitality), 5);
+	EXPECT_EQ(Total(player, PassiveStat::Strength), 0);
+
+	const auto stats = PassiveNodeStats(player, PassiveTree()[path[0]]);
+	ASSERT_EQ(stats.size(), 1U);
+	EXPECT_EQ(stats[0].first, PassiveStat::Dexterity);
+	EXPECT_EQ(stats[0].second, 5);
+	for (const PassiveNode &node : PassiveTree()) {
+		if (node.kind == PassiveKind::Attribute && !IsPassiveAllocated(player, node.id)) {
+			EXPECT_EQ(PassiveNodeStats(player, node)[0].first, PassiveStat::AnyAttribute);
+			break;
+		}
+	}
+
+	// Refunding forgets the pick, so taking it again can choose anew.
+	ASSERT_TRUE(RefundPassive(player, path[1]));
+	ASSERT_TRUE(AllocatePassive(player, path[1], PassiveAttribute::Magic));
+	EXPECT_EQ(Total(player, PassiveStat::Magic), 5);
+	EXPECT_EQ(Total(player, PassiveStat::Vitality), 0);
+}
+
+TEST_F(Poe2PassiveTreeTest, TheTreeHasFourClassesAndJewelSockets)
+{
+	int starts = 0;
+	int sockets = 0;
+	int attributes = 0;
+	for (const PassiveNode &node : PassiveTree()) {
+		if (node.kind == PassiveKind::Start)
+			starts++;
+		if (node.kind == PassiveKind::JewelSocket)
+			sockets++;
+		if (node.kind == PassiveKind::Attribute)
+			attributes++;
+	}
+	EXPECT_EQ(starts, 4);
+	EXPECT_GE(sockets, 4);
+	EXPECT_GE(attributes, 40);
+	EXPECT_EQ(PassiveStartNode(HeroClass::Bard), PassiveStartNode(HeroClass::Rogue));
+	EXPECT_EQ(PassiveStartNode(HeroClass::Barbarian), PassiveStartNode(HeroClass::Warrior));
+	EXPECT_EQ(PassiveNodeName(PassiveTree()[FindNode("Gloomy Shrine")]), "Gloomy Shrine");
 }
 
 TEST_F(Poe2PassiveTreeTest, ShrinesGiveAndTake)
@@ -186,7 +264,7 @@ TEST_F(Poe2PassiveTreeTest, EveryClassHasTwoAscendancies)
 	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Rogue, HeroClass::Sorcerer, HeroClass::Monk, HeroClass::Bard, HeroClass::Barbarian }) {
 		int roots = 0;
 		for (const PassiveNode &node : PassiveTree()) {
-			if (node.kind == PassiveKind::Ascendancy && node.startClass == heroClass)
+			if (node.kind == PassiveKind::Ascendancy && node.startClass == PassiveTreeClass(heroClass))
 				roots++;
 		}
 		EXPECT_EQ(roots, 2) << static_cast<int>(heroClass);
@@ -200,13 +278,19 @@ TEST_F(Poe2PassiveTreeTest, AscendancyUnlocksAtLevel15)
 	const PassiveNodeId warlord = FindNode("Blood Warlord");
 	EXPECT_EQ(AscendancyPointsTotal(player), 0);
 	EXPECT_FALSE(CanAllocatePassive(player, knight));
+	EXPECT_FALSE(IsPassiveNodeVisible(player, PassiveTree()[knight]));
 
 	player.setCharacterLevel(15);
+	EXPECT_TRUE(IsPassiveNodeVisible(player, PassiveTree()[knight]));
+	EXPECT_TRUE(IsPassiveNodeVisible(player, PassiveTree()[warlord]));
+	EXPECT_FALSE(IsPassiveNodeVisible(player, PassiveTree()[FindNode("Sister of the Sightless Eye")]));
 	EXPECT_EQ(AscendancyPointsTotal(player), 2);
 	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Sister of the Sightless Eye"))); // another class's
 	ASSERT_TRUE(AllocatePassive(player, knight));
 	EXPECT_EQ(ChosenAscendancy(player), knight);
 	EXPECT_FALSE(CanAllocatePassive(player, warlord)); // only one ascendancy
+	EXPECT_FALSE(IsPassiveNodeVisible(player, PassiveTree()[warlord]));
+	EXPECT_TRUE(IsPassiveNodeVisible(player, PassiveTree()[PassiveTree()[knight].links[0]]));
 	EXPECT_EQ(PassivePointsSpent(player), 0);          // choosing is free
 
 	const PassiveNodeId first = PassiveTree()[knight].links[0];

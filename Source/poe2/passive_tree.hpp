@@ -55,6 +55,17 @@ enum class PassiveStat : uint8_t {
 	Spirit,
 	/** Increased damage of your minions in percent. */
 	MinionDamage,
+	/** Added to the attribute the player picks when allocating the node. */
+	AnyAttribute,
+	Count,
+};
+
+/** @brief The attributes an "any Attribute" node can give. */
+enum class PassiveAttribute : uint8_t {
+	Strength,
+	Dexterity,
+	Magic,
+	Vitality,
 	Count,
 };
 
@@ -68,6 +79,10 @@ enum class PassiveKind : uint8_t {
 	Ascendancy,
 	/** A node inside an ascendancy, paid for with ascendancy points. */
 	AscendancyNotable,
+	/** "+5 to any Attribute": the player picks which when allocating it. */
+	Attribute,
+	/** Holds a jewel. */
+	JewelSocket,
 };
 
 using PassiveNodeId = uint16_t;
@@ -79,11 +94,13 @@ struct PassiveNode {
 	PassiveKind kind;
 	/** @brief The class that starts here, for start nodes, or that may take this ascendancy node. */
 	std::optional<HeroClass> startClass;
-	/** @brief Position in the tree; the tree is a circle with a radius of about 360, the ascendancies in its middle. */
+	/** @brief Position in the tree; the tree is a circle with a radius of about 420, the ascendancies in its middle. */
 	int x;
 	int y;
 	std::vector<std::pair<PassiveStat, int>> stats;
 	std::vector<PassiveNodeId> links;
+	/** @brief For ascendancy nodes, the root node of the ascendancy they belong to. */
+	std::optional<PassiveNodeId> ascendancyRoot;
 };
 
 using PassiveTotals = std::array<int, static_cast<size_t>(PassiveStat::Count)>;
@@ -98,6 +115,8 @@ constexpr int MaxAscendancyPoints = 8;
 void LoadPassiveTreeData();
 const std::vector<PassiveNode> &PassiveTree();
 
+/** @brief The class whose start and ascendancies a hero uses: the tree has the four main classes, so the Bard uses the Rogue's and the Barbarian the Warrior's. */
+HeroClass PassiveTreeClass(HeroClass heroClass);
 std::optional<PassiveNodeId> PassiveStartNode(HeroClass heroClass);
 
 int PassivePointsTotal(const Player &player);
@@ -112,9 +131,18 @@ int AscendancyPointsLeft(const Player &player);
 /** @brief The root node of the ascendancy the player picked, if any. */
 std::optional<PassiveNodeId> ChosenAscendancy(const Player &player);
 
+/** @brief Ascendancies stay hidden until the hero can ascend; once one is chosen, the other is hidden again. */
+bool IsPassiveNodeVisible(const Player &player, const PassiveNode &node);
 bool IsPassiveAllocated(const Player &player, PassiveNodeId node);
 bool CanAllocatePassive(const Player &player, PassiveNodeId node);
-bool AllocatePassive(Player &player, PassiveNodeId node);
+/** @brief Whether allocating the node needs the player to pick an attribute. */
+bool PassiveNeedsAttributeChoice(PassiveNodeId node);
+/** @param attribute The attribute picked for an "any Attribute" node; ignored for other nodes. */
+bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attribute = PassiveAttribute::Strength);
+/** @brief The attribute picked on an allocated "any Attribute" node. */
+PassiveAttribute ChosenPassiveAttribute(const Player &player, PassiveNodeId node);
+PassiveStat PassiveAttributeStat(PassiveAttribute attribute);
+std::string_view PassiveAttributeName(PassiveAttribute attribute);
 /** @brief A node can be refunded if everything else allocated stays linked to the start. */
 bool CanRefundPassive(const Player &player, PassiveNodeId node);
 bool RefundPassive(Player &player, PassiveNodeId node);
@@ -125,5 +153,7 @@ PassiveTotals GetPassiveTotals(const Player &player);
 
 std::string PassiveStatText(PassiveStat stat, int value);
 std::string PassiveNodeName(const PassiveNode &node);
+/** @brief The node's stat lines as the player has them: an allocated "any Attribute" node names the attribute picked. */
+std::vector<std::pair<PassiveStat, int>> PassiveNodeStats(const Player &player, const PassiveNode &node);
 
 } // namespace devilution

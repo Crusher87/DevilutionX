@@ -153,6 +153,23 @@ void LoadPassiveTreeData()
 		std::sort(node.links.begin(), node.links.end());
 		node.links.erase(std::unique(node.links.begin(), node.links.end()), node.links.end());
 	}
+	// Each ascendancy is the root and the ascendancy nodes linked to it.
+	for (const PassiveNode &root : Tree) {
+		if (root.kind != PassiveKind::Ascendancy)
+			continue;
+		std::vector<PassiveNodeId> open { root.id };
+		Tree[root.id].ascendancyRoot = root.id;
+		while (!open.empty()) {
+			const PassiveNodeId node = open.back();
+			open.pop_back();
+			for (const PassiveNodeId next : Tree[node].links) {
+				if (Tree[next].kind == PassiveKind::AscendancyNotable && !Tree[next].ascendancyRoot) {
+					Tree[next].ascendancyRoot = root.id;
+					open.push_back(next);
+				}
+			}
+		}
+	}
 }
 
 const std::vector<PassiveNode> &PassiveTree()
@@ -160,10 +177,23 @@ const std::vector<PassiveNode> &PassiveTree()
 	return Tree;
 }
 
+HeroClass PassiveTreeClass(HeroClass heroClass)
+{
+	switch (heroClass) {
+	case HeroClass::Bard:
+		return HeroClass::Rogue;
+	case HeroClass::Barbarian:
+		return HeroClass::Warrior;
+	default:
+		return heroClass;
+	}
+}
+
 std::optional<PassiveNodeId> PassiveStartNode(HeroClass heroClass)
 {
+	const HeroClass treeClass = PassiveTreeClass(heroClass);
 	for (const PassiveNode &node : Tree) {
-		if (node.kind == PassiveKind::Start && node.startClass == heroClass)
+		if (node.kind == PassiveKind::Start && node.startClass == treeClass)
 			return node.id;
 	}
 	return std::nullopt;
@@ -226,12 +256,22 @@ std::optional<PassiveNodeId> ChosenAscendancy(const Player &player)
 	return std::nullopt;
 }
 
+bool IsPassiveNodeVisible(const Player &player, const PassiveNode &node)
+{
+	if (!IsAscendancyNode(node))
+		return true;
+	if (node.startClass != PassiveTreeClass(player._pClass) || player.getCharacterLevel() < AscendancyLevel)
+		return false;
+	const std::optional<PassiveNodeId> chosen = ChosenAscendancy(player);
+	return !chosen || node.ascendancyRoot == chosen;
+}
+
 bool IsPassiveAllocated(const Player &player, PassiveNodeId node)
 {
 	if (node >= Tree.size())
 		return false;
 	if (Tree[node].kind == PassiveKind::Start)
-		return Tree[node].startClass == player._pClass;
+		return Tree[node].startClass == PassiveTreeClass(player._pClass);
 	return player.poe2.passives.test(node);
 }
 
@@ -243,9 +283,9 @@ bool CanAllocatePassive(const Player &player, PassiveNodeId node)
 	if (passive.kind == PassiveKind::Start)
 		return false;
 	if (passive.kind == PassiveKind::Ascendancy)
-		return passive.startClass == player._pClass && player.getCharacterLevel() >= AscendancyLevel && !ChosenAscendancy(player);
+		return passive.startClass == PassiveTreeClass(player._pClass) && player.getCharacterLevel() >= AscendancyLevel && !ChosenAscendancy(player);
 	if (passive.kind == PassiveKind::AscendancyNotable) {
-		if (passive.startClass != player._pClass || AscendancyPointsLeft(player) <= 0)
+		if (!IsPassiveNodeVisible(player, passive) || AscendancyPointsLeft(player) <= 0)
 			return false;
 	} else if (PassivePointsLeft(player) <= 0) {
 		return false;
@@ -253,13 +293,54 @@ bool CanAllocatePassive(const Player &player, PassiveNodeId node)
 	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](PassiveNodeId link) { return IsPassiveAllocated(player, link); });
 }
 
-bool AllocatePassive(Player &player, PassiveNodeId node)
+bool PassiveNeedsAttributeChoice(PassiveNodeId node)
 {
-	if (!CanAllocatePassive(player, node))
+	return node < Tree.size() && Tree[node].kind == PassiveKind::Attribute;
+}
+
+bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attribute)
+{
+	if (!CanAllocatePassive(player, node) || attribute >= PassiveAttribute::Count)
 		return false;
 	player.poe2.passives.set(node);
+	player.poe2.passiveAttributes[node] = PassiveNeedsAttributeChoice(node) ? static_cast<uint8_t>(attribute) : 0;
 	CalcPlrInv(player, true);
 	return true;
+}
+
+PassiveAttribute ChosenPassiveAttribute(const Player &player, PassiveNodeId node)
+{
+	if (node >= MaxPassiveNodes || player.poe2.passiveAttributes[node] >= static_cast<uint8_t>(PassiveAttribute::Count))
+		return PassiveAttribute::Strength;
+	return static_cast<PassiveAttribute>(player.poe2.passiveAttributes[node]);
+}
+
+PassiveStat PassiveAttributeStat(PassiveAttribute attribute)
+{
+	switch (attribute) {
+	case PassiveAttribute::Dexterity:
+		return PassiveStat::Dexterity;
+	case PassiveAttribute::Magic:
+		return PassiveStat::Magic;
+	case PassiveAttribute::Vitality:
+		return PassiveStat::Vitality;
+	default:
+		return PassiveStat::Strength;
+	}
+}
+
+std::string_view PassiveAttributeName(PassiveAttribute attribute)
+{
+	switch (attribute) {
+	case PassiveAttribute::Dexterity:
+		return _("Dexterity");
+	case PassiveAttribute::Magic:
+		return _("Magic");
+	case PassiveAttribute::Vitality:
+		return _("Vitality");
+	default:
+		return _("Strength");
+	}
 }
 
 bool CanRefundPassive(const Player &player, PassiveNodeId node)
@@ -274,6 +355,7 @@ bool RefundPassive(Player &player, PassiveNodeId node)
 	if (!CanRefundPassive(player, node))
 		return false;
 	player.poe2.passives.reset(node);
+	player.poe2.passiveAttributes[node] = 0;
 	CalcPlrInv(player, true);
 	return true;
 }
@@ -281,6 +363,7 @@ bool RefundPassive(Player &player, PassiveNodeId node)
 void ResetPassives(Player &player)
 {
 	player.poe2.passives.reset();
+	player.poe2.passiveAttributes.fill(0);
 	CalcPlrInv(player, true);
 }
 
@@ -292,7 +375,7 @@ PassiveTotals GetPassiveTotals(const Player &player)
 	for (const PassiveNode &node : Tree) {
 		if (!IsPassiveAllocated(player, node.id))
 			continue;
-		for (const auto &[stat, value] : node.stats)
+		for (const auto &[stat, value] : PassiveNodeStats(player, node))
 			totals[static_cast<size_t>(stat)] += value;
 	}
 	return totals;
@@ -349,13 +432,32 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return FormatRuntime(_("{:+d} to maximum Spirit"), value);
 	case PassiveStat::MinionDamage:
 		return percent(_(/*xgettext:no-c-format*/ "Minions deal {:d}% increased Damage"), _(/*xgettext:no-c-format*/ "Minions deal {:d}% reduced Damage"));
+	case PassiveStat::AnyAttribute:
+		return FormatRuntime(_("{:+d} to any Attribute"), value);
 	default:
 		return {};
 	}
 }
 
+std::vector<std::pair<PassiveStat, int>> PassiveNodeStats(const Player &player, const PassiveNode &node)
+{
+	std::vector<std::pair<PassiveStat, int>> stats = node.stats;
+	if (node.kind == PassiveKind::Attribute && IsPassiveAllocated(player, node.id)) {
+		const PassiveStat chosen = PassiveAttributeStat(ChosenPassiveAttribute(player, node.id));
+		for (auto &[stat, value] : stats) {
+			if (stat == PassiveStat::AnyAttribute)
+				stat = chosen;
+		}
+	}
+	return stats;
+}
+
 std::string PassiveNodeName(const PassiveNode &node)
 {
+	if (node.kind == PassiveKind::Attribute)
+		return std::string(_("Attribute"));
+	if (node.kind == PassiveKind::JewelSocket)
+		return std::string(_("Jewel Socket"));
 	if (!node.name.empty())
 		return node.kind == PassiveKind::Start ? StrCat(node.name, " ", _("Start")) : node.name;
 	if (node.stats.empty())

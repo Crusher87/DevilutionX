@@ -38,6 +38,7 @@
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/flasks.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stash_tabs.hpp"
 #include "poe2/waystones.hpp"
@@ -2406,9 +2407,10 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * Version 1 holds support gem links per spell, version 2 adds flask charges, version 3 the skill bar,
  * version 4 the passive tree, version 5 the supports socketed in each skill bar slot, version 6 the open map,
  * version 7 the rebuilt passive tree with two-byte node ids, version 8 the 12-socket Skills panel and the skill tray,
- * version 9 the fifth flask and version 10 each socketed gem's level.
+ * version 9 the fifth flask, version 10 each socketed gem's level, version 11 the Spirit skulls and version 12 the
+ * reworked passive tree with the attribute picked on each "any Attribute" node.
  */
-constexpr uint8_t Poe2HeroDataVersion = 11;
+constexpr uint8_t Poe2HeroDataVersion = 12;
 
 namespace {
 
@@ -2499,7 +2501,8 @@ uint8_t ReadPoe2HeroData(Player &player)
 		const uint16_t passiveCount = file.NextLE<uint16_t>();
 		for (uint16_t i = 0; i < passiveCount && file.IsValid(2); i++) {
 			const uint16_t node = file.NextLE<uint16_t>();
-			if (node < MaxPassiveNodes)
+			// The tree was reworked again in version 12, so older allocations are refunded.
+			if (node < MaxPassiveNodes && version >= 12)
 				player.poe2.passives.set(node);
 		}
 	}
@@ -2554,6 +2557,16 @@ uint8_t ReadPoe2HeroData(Player &player)
 	if (version < 11 || !file.IsValid(1))
 		return version;
 	player.poe2.spiritSkulls = static_cast<uint8_t>(file.NextLE<uint8_t>() & AllSpiritSkulls);
+
+	if (version < 12 || !file.IsValid(2))
+		return version;
+	const uint16_t attributeCount = file.NextLE<uint16_t>();
+	for (uint16_t i = 0; i < attributeCount && file.IsValid(3); i++) {
+		const uint16_t node = file.NextLE<uint16_t>();
+		const uint8_t attribute = file.NextLE<uint8_t>();
+		if (node < MaxPassiveNodes && attribute < static_cast<uint8_t>(PassiveAttribute::Count))
+			player.poe2.passiveAttributes[node] = attribute;
+	}
 	return version;
 }
 
@@ -2577,12 +2590,16 @@ void LoadPoe2HeroData(Player &player)
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 {
 	std::vector<uint16_t> passives;
+	std::vector<uint16_t> attributes;
 	for (size_t node = 0; node < MaxPassiveNodes; node++) {
-		if (player.poe2.passives.test(node))
-			passives.push_back(static_cast<uint16_t>(node));
+		if (!player.poe2.passives.test(node))
+			continue;
+		passives.push_back(static_cast<uint16_t>(node));
+		if (PassiveNeedsAttributeChoice(static_cast<PassiveNodeId>(node)))
+			attributes.push_back(static_cast<uint16_t>(node));
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2));
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2622,6 +2639,12 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		file.WriteLE<uint8_t>(static_cast<uint8_t>(player.poe2.gemLevel(socket)));
 	// Version 11: the Spirit skulls the hero has broken.
 	file.WriteLE<uint8_t>(player.poe2.spiritSkulls);
+	// Version 12: the attribute picked on each allocated "any Attribute" node.
+	file.WriteLE<uint16_t>(static_cast<uint16_t>(attributes.size()));
+	for (const uint16_t node : attributes) {
+		file.WriteLE<uint16_t>(node);
+		file.WriteLE<uint8_t>(player.poe2.passiveAttributes[node]);
+	}
 }
 
 void LoadHeroItems(Player &player)

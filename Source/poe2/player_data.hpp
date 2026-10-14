@@ -281,6 +281,8 @@ struct Poe2PlayerData {
 	uint8_t castGraphic = 0;
 	/** @brief Allocated passive tree nodes, by node id; the class start node isn't stored. */
 	std::bitset<MaxPassiveNodes> passives;
+	/** @brief The attribute picked on each allocated "+5 to any Attribute" node, as a PassiveAttribute. */
+	std::array<uint8_t, MaxPassiveNodes> passiveAttributes {};
 	/** @brief Animation frames skipped by attacks and casts thanks to passives (not saved; from CalcPlrItemVals). */
 	int8_t passiveAttackFrames = 0;
 	int8_t passiveCastFrames = 0;
@@ -358,6 +360,7 @@ struct Poe2PlayerData {
 		castSkill = WeaponSkill::None;
 		castFrame = 0;
 		passives.reset();
+		passiveAttributes.fill(0);
 		passiveAttackFrames = 0;
 		passiveCastFrames = 0;
 		lifeRegen = 0;
