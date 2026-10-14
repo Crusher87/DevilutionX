@@ -544,6 +544,17 @@ void RightMouseDown(bool isShiftHeld)
 		return;
 	if (TryIconCurs())
 		return;
+	// POE2 Mashup: at a vendor, right-clicking a ware buys it and Ctrl+right-clicking an inventory item sells it.
+	if (gbIsPoe2 && IsVisualStoreOpen && MyPlayer->HoldItem.isEmpty()) {
+		if (pcursstoreitem != -1) {
+			CheckVisualStoreItem(MousePosition, false, false);
+			return;
+		}
+		if ((SDL_GetModState() & SDL_KMOD_CTRL) != 0 && pcursinvitem >= INVITEM_INV_FIRST && pcursinvitem <= INVITEM_INV_LAST) {
+			SellItemToVisualStore(pcursinvitem - INVITEM_INV_FIRST);
+			return;
+		}
+	}
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
 		return;
 	if (pcursstashitem != StashStruct::EmptyCell && UseStashItem(pcursstashitem))

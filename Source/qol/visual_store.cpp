@@ -41,8 +41,145 @@ bool IsVisualStoreOpen;
 VisualStoreState VisualStore;
 int16_t pcursstoreitem = -1;
 int16_t pcursstorebtn = -1;
+std::vector<BuybackEntry> SmithBuyback;
+std::vector<BuybackEntry> WitchBuyback;
+Poe2ShopTab ActivePoe2ShopTab = Poe2ShopTab::Weapons;
+
+bool UseVisualStoreUi()
+{
+	return gbIsPoe2 || *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid;
+}
 
 namespace {
+
+/** POE2 Mashup: where an item on the shop's current tab really lives, so buying it takes it from there. */
+enum class ShopSource : uint8_t {
+	Smith,
+	Premium,
+	Witch,
+	Healer,
+	Boy,
+	Buyback,
+};
+
+struct ShopOrigin {
+	ShopSource source;
+	size_t index;
+};
+
+/** POE2 Mashup: the items on the current tab, copied from the vendor's lists, and where each came from. */
+std::vector<Item> ShopView;
+std::vector<ShopOrigin> ShopOrigins;
+
+/** Buttons for POE2 tabs start at this id, after the four classic buttons. */
+constexpr int Poe2TabButtonFirst = 10;
+constexpr int Poe2TabWidth = 72;
+constexpr int Poe2TabGap = 1;
+
+std::vector<BuybackEntry> *VendorBuyback()
+{
+	switch (VisualStore.vendor) {
+	case VisualStoreVendor::Smith:
+		return &SmithBuyback;
+	case VisualStoreVendor::Witch:
+		return &WitchBuyback;
+	default:
+		return nullptr;
+	}
+}
+
+bool ItemOnShopTab(const Item &item, Poe2ShopTab tab)
+{
+	switch (tab) {
+	case Poe2ShopTab::Weapons:
+		return item._iClass == ICLASS_WEAPON;
+	case Poe2ShopTab::Armour:
+		return item._iClass == ICLASS_ARMOR;
+	case Poe2ShopTab::Other:
+		return item._iClass != ICLASS_WEAPON && item._iClass != ICLASS_ARMOR;
+	default:
+		return true;
+	}
+}
+
+void AddToShopView(std::span<Item> items, ShopSource source)
+{
+	for (size_t i = 0; i < items.size(); i++) {
+		if (!items[i].isEmpty() && ItemOnShopTab(items[i], ActivePoe2ShopTab)) {
+			ShopView.push_back(items[i]);
+			ShopOrigins.push_back({ source, i });
+		}
+	}
+}
+
+void RebuildShopView()
+{
+	ShopView.clear();
+	ShopOrigins.clear();
+	if (ActivePoe2ShopTab == Poe2ShopTab::Buyback) {
+		if (std::vector<BuybackEntry> *buyback = VendorBuyback(); buyback != nullptr) {
+			// Newest sale first.
+			for (size_t i = buyback->size(); i-- > 0;) {
+				ShopView.push_back((*buyback)[i].item);
+				ShopOrigins.push_back({ ShopSource::Buyback, i });
+			}
+		}
+	} else {
+		switch (VisualStore.vendor) {
+		case VisualStoreVendor::Smith:
+			// One list of everything Griswold sells, basic and premium, split into tabs by kind of item.
+			AddToShopView({ PremiumItems.data(), PremiumItems.size() }, ShopSource::Premium);
+			AddToShopView({ SmithItems.data(), SmithItems.size() }, ShopSource::Smith);
+			break;
+		case VisualStoreVendor::Witch:
+			AddToShopView({ WitchItems.data(), WitchItems.size() }, ShopSource::Witch);
+			break;
+		case VisualStoreVendor::Healer:
+			AddToShopView({ HealerItems.data(), HealerItems.size() }, ShopSource::Healer);
+			break;
+		case VisualStoreVendor::Boy:
+			if (!BoyItem.isEmpty()) {
+				ShopView.push_back(BoyItem);
+				ShopOrigins.push_back({ ShopSource::Boy, 0 });
+			}
+			break;
+		}
+	}
+	for (Item &item : ShopView)
+		item._iStatFlag = MyPlayer->CanUseItem(item);
+}
+
+std::string_view Poe2ShopTabName(Poe2ShopTab tab)
+{
+	switch (tab) {
+	case Poe2ShopTab::Weapons:
+		return _("Weapons");
+	case Poe2ShopTab::Armour:
+		return _("Armour");
+	case Poe2ShopTab::Other:
+		return _("Other");
+	case Poe2ShopTab::Items:
+		return _("Items");
+	default:
+		return _("Buyback");
+	}
+}
+
+Rectangle Poe2TabRect(size_t i)
+{
+	return { GetPanelPosition(UiPanels::Stash, { 14 + (static_cast<int>(i) * (Poe2TabWidth + Poe2TabGap)), 21 }), { Poe2TabWidth, 22 } };
+}
+
+/** @brief Remembers a sold item so it can be bought back. */
+void AddToBuyback(const Item &item, int price)
+{
+	std::vector<BuybackEntry> *buyback = VendorBuyback();
+	if (!gbIsPoe2 || buyback == nullptr)
+		return;
+	if (buyback->size() >= MaxBuybackItems)
+		buyback->erase(buyback->begin());
+	buyback->push_back({ item, price });
+}
 
 OptionalOwnedClxSpriteList VisualStorePanelArt;
 OptionalOwnedClxSpriteList VisualStoreNavButtonArt;
@@ -127,6 +264,8 @@ int GetSellPrice(const Item &item)
 /** @brief Rebuild the grid layout for the current vendor/tab. */
 void RefreshVisualStoreLayout()
 {
+	if (gbIsPoe2)
+		RebuildShopView();
 	VisualStore.pages.clear();
 	std::span<Item> items = GetVisualStoreItems();
 
@@ -224,6 +363,38 @@ void FreeVisualStoreGFX()
 	VisualStoreRepairButtonArt = std::nullopt;
 }
 
+std::vector<Poe2ShopTab> Poe2ShopTabs()
+{
+	switch (VisualStore.vendor) {
+	case VisualStoreVendor::Smith:
+		return { Poe2ShopTab::Weapons, Poe2ShopTab::Armour, Poe2ShopTab::Other, Poe2ShopTab::Buyback };
+	case VisualStoreVendor::Witch:
+		return { Poe2ShopTab::Items, Poe2ShopTab::Buyback };
+	default:
+		return { Poe2ShopTab::Items };
+	}
+}
+
+void SetPoe2ShopTab(Poe2ShopTab tab)
+{
+	ActivePoe2ShopTab = tab;
+	VisualStore.currentPage = 0;
+	pcursstoreitem = -1;
+	pcursstorebtn = -1;
+	RefreshVisualStoreLayout();
+}
+
+int VisualStoreItemPrice(int index)
+{
+	if (gbIsPoe2 && index >= 0 && static_cast<size_t>(index) < ShopOrigins.size() && ShopOrigins[index].source == ShopSource::Buyback) {
+		const std::vector<BuybackEntry> *buyback = VendorBuyback();
+		if (buyback != nullptr && ShopOrigins[index].index < buyback->size())
+			return (*buyback)[ShopOrigins[index].index].price;
+	}
+	const std::span<Item> items = GetVisualStoreItems();
+	return index >= 0 && static_cast<size_t>(index) < items.size() ? items[index]._iIvalue : 0;
+}
+
 void OpenVisualStore(VisualStoreVendor vendor)
 {
 	IsVisualStoreOpen = true;
@@ -232,6 +403,10 @@ void OpenVisualStore(VisualStoreVendor vendor)
 	VisualStore.vendor = vendor;
 	VisualStore.activeTab = VisualStoreTab::Basic;
 	VisualStore.currentPage = 0;
+	if (gbIsPoe2) {
+		ActivePoe2ShopTab = Poe2ShopTabs().front();
+		RebuildShopView();
+	}
 
 	pcursstoreitem = -1;
 	pcursstorebtn = -1;
@@ -396,6 +571,8 @@ Point GetVisualStoreSlotCoord(Point slot)
 
 Rectangle GetVisualBtnCoord(int btnId)
 {
+	if (btnId >= Poe2TabButtonFirst)
+		return Poe2TabRect(static_cast<size_t>(btnId - Poe2TabButtonFirst));
 	return { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[btnId].position), VisualStoreButtonRect[btnId].size };
 }
 
@@ -412,6 +589,8 @@ int GetVisualStoreItemCount()
 
 std::span<Item> GetVisualStoreItems()
 {
+	if (gbIsPoe2)
+		return { ShopView.data(), ShopView.size() };
 	return GetVendorItems(VisualStore.vendor, VisualStore.activeTab);
 }
 
@@ -435,29 +614,43 @@ void DrawVisualStore(const Surface &out)
 	// Draw tab buttons
 	UiFlags basicStyle = VisualStore.activeTab == VisualStoreTab::Basic ? styleWhite : styleTabPushed;
 	UiFlags premiumStyle = VisualStore.activeTab == VisualStoreTab::Premium ? styleWhite : styleTabPushed;
-	switch (VisualStore.vendor) {
-	case VisualStoreVendor::Smith: {
-		const Rectangle regBtnPos = { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[TabButtonBasic].position), VisualStoreButtonRect[TabButtonBasic].size };
-		RenderClxSprite(out, (*VisualStoreNavButtonArt)[VisualStore.activeTab != VisualStoreTab::Basic], regBtnPos.position);
-		DrawString(out, _("Basic"), regBtnPos, { .flags = UiFlags::AlignCenter | basicStyle });
+	if (gbIsPoe2) {
+		// POE2 Mashup: one tab per kind of item, plus buyback.
+		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
+		for (size_t i = 0; i < tabs.size(); i++) {
+			const Rectangle tabRect = Poe2TabRect(i);
+			const bool active = tabs[i] == ActivePoe2ShopTab;
+			RenderClxSprite(out, (*VisualStoreNavButtonArt)[active ? 0 : 1], tabRect.position);
+			DrawString(out, Poe2ShopTabName(tabs[i]), tabRect, { .flags = UiFlags::AlignCenter | (active ? styleWhite : styleTabPushed) });
+		}
+		if (ShopView.empty()) {
+			DrawString(out, ActivePoe2ShopTab == Poe2ShopTab::Buyback ? _("Items you sell here can be bought back.") : _("Nothing for sale here."),
+			    { panelPos + Displacement { 20, 150 }, { 280, TextHeight } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorButtonpushed });
+		}
+	} else
+		switch (VisualStore.vendor) {
+		case VisualStoreVendor::Smith: {
+			const Rectangle regBtnPos = { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[TabButtonBasic].position), VisualStoreButtonRect[TabButtonBasic].size };
+			RenderClxSprite(out, (*VisualStoreNavButtonArt)[VisualStore.activeTab != VisualStoreTab::Basic], regBtnPos.position);
+			DrawString(out, _("Basic"), regBtnPos, { .flags = UiFlags::AlignCenter | basicStyle });
 
-		const Rectangle premBtnPos = { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[TabButtonPremium].position), VisualStoreButtonRect[TabButtonPremium].size };
-		RenderClxSprite(out, (*VisualStoreNavButtonArt)[VisualStore.activeTab != VisualStoreTab::Premium], premBtnPos.position);
-		DrawString(out, _("Premium"), premBtnPos, { .flags = UiFlags::AlignCenter | premiumStyle });
-		break;
-	}
-	case VisualStoreVendor::Witch:
-	case VisualStoreVendor::Boy:
-	case VisualStoreVendor::Healer: {
-		const Rectangle miscBtnPos = { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[TabButtonBasic].position), VisualStoreButtonRect[TabButtonBasic].size };
-		RenderClxSprite(out, (*VisualStoreNavButtonArt)[VisualStoreButtonPressed == TabButtonBasic], miscBtnPos.position);
-		DrawString(out, _("Misc"), miscBtnPos, { .flags = UiFlags::AlignCenter | basicStyle });
-		break;
-	}
-	default: {
-		break;
-	}
-	}
+			const Rectangle premBtnPos = { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[TabButtonPremium].position), VisualStoreButtonRect[TabButtonPremium].size };
+			RenderClxSprite(out, (*VisualStoreNavButtonArt)[VisualStore.activeTab != VisualStoreTab::Premium], premBtnPos.position);
+			DrawString(out, _("Premium"), premBtnPos, { .flags = UiFlags::AlignCenter | premiumStyle });
+			break;
+		}
+		case VisualStoreVendor::Witch:
+		case VisualStoreVendor::Boy:
+		case VisualStoreVendor::Healer: {
+			const Rectangle miscBtnPos = { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[TabButtonBasic].position), VisualStoreButtonRect[TabButtonBasic].size };
+			RenderClxSprite(out, (*VisualStoreNavButtonArt)[VisualStoreButtonPressed == TabButtonBasic], miscBtnPos.position);
+			DrawString(out, _("Misc"), miscBtnPos, { .flags = UiFlags::AlignCenter | basicStyle });
+			break;
+		}
+		default: {
+			break;
+		}
+		}
 
 	if (VisualStore.currentPage >= VisualStore.pages.size())
 		return;
@@ -516,8 +709,23 @@ void DrawVisualStore(const Surface &out)
 int16_t CheckVisualStoreHLight(Point mousePosition)
 {
 	// Check buttons first
+	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty()) {
+		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
+		for (size_t i = 0; i < tabs.size(); i++) {
+			if (Poe2TabRect(i).contains(mousePosition)) {
+				InfoString = Poe2ShopTabName(tabs[i]);
+				FloatingInfoString = Poe2ShopTabName(tabs[i]);
+				InfoColor = UiFlags::ColorWhite;
+				pcursstorebtn = static_cast<int16_t>(Poe2TabButtonFirst + i);
+				return -1;
+			}
+		}
+	}
 	if (MyPlayer->HoldItem.isEmpty()) {
 		for (int i = 0; i < 4; i++) {
+			// POE2 Mashup: the tabs above replace the basic, premium and misc tabs.
+			if (gbIsPoe2 && i < RepairAllBtn)
+				continue;
 			// Skip tab buttons if vendor doesn't have tabs
 			if (!VendorHasTabs() && i != TabButtonBasic)
 				continue;
@@ -603,7 +811,7 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 			};
 
 			if (cell.contains(mousePosition)) {
-				const int price = item._iIvalue;
+				const int price = VisualStoreItemPrice(itemIndex);
 				const bool canAfford = PlayerCanAfford(price);
 
 				InfoString = item.getName();
@@ -616,7 +824,15 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 					PrintItemDur(item);
 				}
 
-				AddInfoBoxString(StrCat(FormatInteger(price), " Gold"));
+				if (gbIsPoe2) {
+					CurrentInfoLineStyle = InfoLineStyle::Note;
+					AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
+					CurrentInfoLineStyle = InfoLineStyle::Requirement;
+					AddInfoBoxString(_("Click or Ctrl+right-click to buy"), true);
+					CurrentInfoLineStyle = InfoLineStyle::Default;
+				} else {
+					AddInfoBoxString(StrCat(FormatInteger(price), " Gold"));
+				}
 
 				return static_cast<int16_t>(itemIndex);
 			}
@@ -642,7 +858,7 @@ void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld
 		return;
 
 	// Check if player can afford the item
-	int price = item._iIvalue;
+	int price = VisualStoreItemPrice(itemIndex);
 	uint32_t totalGold = MyPlayer->_pGold + Stash.gold;
 	if (totalGold < static_cast<uint32_t>(price)) {
 		// InitDiabloMsg(EMSG_NOT_ENOUGH_GOLD);
@@ -659,6 +875,39 @@ void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld
 	TakePlrsMoney(price);
 	StoreAutoPlace(item, true);
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+
+	if (gbIsPoe2) {
+		// POE2 Mashup: take the item from the list it came from.
+		const ShopOrigin origin = ShopOrigins[itemIndex];
+		switch (origin.source) {
+		case ShopSource::Premium:
+			PremiumItems[origin.index].clear();
+			SpawnPremium(*MyPlayer);
+			break;
+		case ShopSource::Smith:
+			SmithItems.erase(SmithItems.begin() + static_cast<ptrdiff_t>(origin.index));
+			break;
+		case ShopSource::Witch:
+			// The first 3 items are always in stock.
+			if (origin.index >= 3)
+				WitchItems.erase(WitchItems.begin() + static_cast<ptrdiff_t>(origin.index));
+			break;
+		case ShopSource::Healer:
+			if (origin.index >= (gbIsMultiplayer ? 3U : 2U))
+				HealerItems.erase(HealerItems.begin() + static_cast<ptrdiff_t>(origin.index));
+			break;
+		case ShopSource::Boy:
+			BoyItem.clear();
+			break;
+		case ShopSource::Buyback:
+			if (std::vector<BuybackEntry> *buyback = VendorBuyback(); buyback != nullptr && origin.index < buyback->size())
+				buyback->erase(buyback->begin() + static_cast<ptrdiff_t>(origin.index));
+			break;
+		}
+		pcursstoreitem = -1;
+		RefreshVisualStoreLayout();
+		return;
+	}
 
 	// Remove item from store (vendor-specific handling)
 	switch (VisualStore.vendor) {
@@ -718,10 +967,13 @@ void CheckVisualStorePaste(Point mousePosition)
 	// Add gold to player
 	AddGoldToInventory(player, sellPrice);
 	PlaySFX(SfxID::ItemGold);
+	AddToBuyback(player.HoldItem, sellPrice);
 
 	// Clear the held item
 	player.HoldItem.clear();
 	NewCursor(CURSOR_HAND);
+	if (gbIsPoe2)
+		RefreshVisualStoreLayout();
 }
 
 bool CanSellToCurrentVendor(const Item &item)
@@ -763,9 +1015,12 @@ void SellItemToVisualStore(int invIndex)
 	// Add gold to player
 	AddGoldToInventory(player, sellPrice);
 	PlaySFX(SfxID::ItemGold);
+	AddToBuyback(item, sellPrice);
 
 	// Remove item from inventory
 	player.RemoveInvItem(invIndex);
+	if (gbIsPoe2)
+		RefreshVisualStoreLayout();
 }
 
 void CheckVisualStoreButtonPress(Point mousePosition)
@@ -773,7 +1028,19 @@ void CheckVisualStoreButtonPress(Point mousePosition)
 	if (!MyPlayer->HoldItem.isEmpty())
 		return;
 
+	if (gbIsPoe2) {
+		const size_t tabCount = Poe2ShopTabs().size();
+		for (size_t i = 0; i < tabCount; i++) {
+			if (Poe2TabRect(i).contains(mousePosition)) {
+				VisualStoreButtonPressed = static_cast<int>(Poe2TabButtonFirst + i);
+				return;
+			}
+		}
+	}
+
 	for (int i = 0; i < 4; i++) {
+		if (gbIsPoe2 && i < RepairAllBtn)
+			continue;
 		// Skip tab buttons if vendor doesn't have tabs
 		if (!VendorHasTabs() && i != TabButtonBasic)
 			continue;
@@ -794,6 +1061,15 @@ void CheckVisualStoreButtonRelease(Point mousePosition)
 {
 	if (VisualStoreButtonPressed == -1)
 		return;
+
+	if (VisualStoreButtonPressed >= Poe2TabButtonFirst) {
+		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
+		const size_t tab = static_cast<size_t>(VisualStoreButtonPressed - Poe2TabButtonFirst);
+		if (tab < tabs.size() && Poe2TabRect(tab).contains(mousePosition))
+			SetPoe2ShopTab(tabs[tab]);
+		VisualStoreButtonPressed = -1;
+		return;
+	}
 
 	Rectangle button = VisualStoreButtonRect[VisualStoreButtonPressed];
 	button.position = GetPanelPosition(UiPanels::Stash, button.position);

@@ -457,7 +457,7 @@ void StartSmith()
 	AddSText(0, 3, _("Blacksmith's shop"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 7, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 10, _("Talk to Griswold"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		AddSText(0, 12, _("Trade / Repair"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 		AddSText(0, 14, _("Leave the shop"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	} else {
@@ -714,7 +714,7 @@ void StartWitch()
 	AddSText(0, 2, _("Witch's shack"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 9, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 12, _("Talk to Adria"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		AddSText(0, 14, _("Buy / Sell"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 		AddSText(0, 16, _("Recharge staves"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 		AddSText(0, 18, _("Leave the shack"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
@@ -1326,7 +1326,7 @@ void StartDrunk()
 
 void SmithEnter()
 {
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		switch (CurrentTextLine) {
 		case 10:
 			TownerId = TOWN_SMITH;
@@ -1572,7 +1572,7 @@ void SmithRepairEnter()
 
 void WitchEnter()
 {
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		switch (CurrentTextLine) {
 		case 12:
 			OldTextLine = 12;
@@ -1714,7 +1714,7 @@ void WitchRechargeEnter()
 {
 	if (CurrentTextLine == BackButtonLine()) {
 		StartStore(TalkID::Witch);
-		CurrentTextLine = *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid ? 16 : 18;
+		CurrentTextLine = UseVisualStoreUi() ? 16 : 18;
 		return;
 	}
 
@@ -1743,7 +1743,7 @@ void BoyEnter()
 			StartStore(TalkID::NoMoney);
 		} else {
 			TakePlrsMoney(50);
-			if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+			if (UseVisualStoreUi()) {
 				ActiveStore = TalkID::None;
 				OpenVisualStore(VisualStoreVendor::Boy);
 			} else {
@@ -1925,7 +1925,7 @@ void HealerEnter()
 		StartStore(TalkID::Gossip);
 		break;
 	case 14:
-		if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+		if (UseVisualStoreUi()) {
 			ActiveStore = TalkID::None;
 			OpenVisualStore(VisualStoreVendor::Healer);
 		} else {
@@ -2193,6 +2193,8 @@ void InitStores()
 {
 	ClearSText(0, NumStoreLines);
 	ActiveStore = TalkID::None;
+	SmithBuyback.clear();
+	WitchBuyback.clear();
 	IsTextFullSize = false;
 	HasScrollbar = false;
 	PremiumItemCount = 0;
@@ -2578,7 +2580,7 @@ void StoreESC()
 		break;
 	case TalkID::WitchRecharge:
 		StartStore(TalkID::Witch);
-		CurrentTextLine = *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid ? 16 : 18;
+		CurrentTextLine = UseVisualStoreUi() ? 16 : 18;
 		break;
 	case TalkID::HealerBuy:
 		StartStore(TalkID::Healer);
