@@ -57,18 +57,18 @@ IDI_GREYSUIT	0	Quest	Unequippable	GREY_SUIT	Misc	NONE	Grey Suit		0	0	0	0	0	0	0	0
 	1	Armor	Armor	RAGS	LightArmor	RAGS	Rags	Rags	1	6	0	0	2	6	0	0	0		NONE	Null	false	5
 	1	Armor	Armor	CLOAK	LightArmor	CLOAK	Cloak	Cloak	2	18	0	0	3	7	0	0	0		NONE	Null	false	40
 	1	Armor	Armor	ROBE	LightArmor	ROBE	Robe	Robe	3	24	0	0	4	7	0	0	0		NONE	Null	false	75
-	1	Armor	Armor	QUILTED_ARMOR	LightArmor	NONE	Quilted Armor	Armor	4	30	0	0	7	10	0	0	0		NONE	Null	false	200
+	0	Armor	Armor	QUILTED_ARMOR	LightArmor	NONE	Quilted Armor	Armor	4	30	0	0	7	10	0	0	0		NONE	Null	false	200
 	1	Armor	Armor	LEATHER_ARMOR	LightArmor	LEATHARMOR	Leather Armor	Armor	6	35	0	0	10	13	0	0	0		NONE	Null	false	300
-	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Hard Leather Armor	Armor	7	40	0	0	11	14	0	0	0		NONE	Null	false	450
+	0	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Hard Leather Armor	Armor	7	40	0	0	11	14	0	0	0		NONE	Null	false	450
 	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	STUDARMOR	Studded Leather Armor	Armor	9	45	0	0	15	17	20	0	0		NONE	Null	false	700
-	1	Armor	Armor	RING_MAIL	MediumArmor	NONE	Ring Mail	Mail	11	50	0	0	17	20	25	0	0		NONE	Null	false	900
+	0	Armor	Armor	RING_MAIL	MediumArmor	NONE	Ring Mail	Mail	11	50	0	0	17	20	25	0	0		NONE	Null	false	900
 	1	Armor	Armor	CHAIN_MAIL	MediumArmor	CHAINMAIL	Chain Mail	Mail	13	55	0	0	18	22	30	0	0		NONE	Null	false	1250
-	1	Armor	Armor	SCALE_MAIL	MediumArmor	NONE	Scale Mail	Mail	15	60	0	0	23	28	35	0	0		NONE	Null	false	2300
+	0	Armor	Armor	SCALE_MAIL	MediumArmor	NONE	Scale Mail	Mail	15	60	0	0	23	28	35	0	0		NONE	Null	false	2300
 	1	Armor	Armor	BREAST_PLATE	HeavyArmor	BREASTPLATE	Breast Plate	Plate	16	80	0	0	20	24	40	0	0		NONE	Null	false	2800
-	1	Armor	Armor	SPLINT_MAIL	MediumArmor	NONE	Splint Mail	Mail	17	65	0	0	30	35	40	0	0		NONE	Null	false	3250
+	0	Armor	Armor	SPLINT_MAIL	MediumArmor	NONE	Splint Mail	Mail	17	65	0	0	30	35	40	0	0		NONE	Null	false	3250
 	1	Armor	Armor	FIELD_PLATE	HeavyArmor	PLATEMAIL	Plate Mail	Plate	19	75	0	0	42	50	60	0	0		NONE	Null	false	4600
-	1	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Field Plate	Plate	21	80	0	0	40	45	65	0	0		NONE	Null	false	5800
-	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Gothic Plate	Plate	23	100	0	0	50	60	80	0	0		NONE	Null	false	8000
+	0	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Field Plate	Plate	21	80	0	0	40	45	65	0	0		NONE	Null	false	5800
+	0	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Gothic Plate	Plate	23	100	0	0	50	60	80	0	0		NONE	Null	false	8000
 	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	FULLPLATE	Full Plate Mail	Plate	25	90	0	0	60	75	90	0	0		NONE	Null	false	6500
 	1	Armor	One-handed	BUCKLER	Shield	BUCKLER	Buckler	Shield	1	16	0	0	1	5	0	0	0		NONE	Null	false	30
 	1	Armor	One-handed	SMALL_SHIELD	Shield	SMALLSHIELD	Small Shield	Shield	5	24	0	0	3	8	25	0	0		NONE	Null	false	90
@@ -257,3 +257,46 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Crypt King's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Cavern Lord's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Skull of the Archbishop	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
+	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Rusted Cuirass	Plate	1	60	0	0	6	7	0	0	0		NONE	Null	false	690
+	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Iron Cuirass	Plate	4	70	0	0	14	17	12	0	0		NONE	Null	false	1770
+	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Maraketh Cuirass	Plate	8	75	0	0	22	25	22	0	0		NONE	Null	false	2730
+	1	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Full Plate	Plate	13	80	0	0	32	38	37	0	0		NONE	Null	false	4200
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Juggernaut Plate	Plate	18	90	0	0	42	49	50	0	0		NONE	Null	false	5490
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Champion Cuirass	Plate	23	95	0	0	53	62	65	0	0		NONE	Null	false	6960
+	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Conqueror Plate	Plate	27	100	0	0	58	68	73	0	0	FastHitRecovery	NONE	Null	false	7740
+	1	Armor	Armor	QUILTED_ARMOR	LightArmor	NONE	Leather Vest	Armor	1	30	0	0	6	7	0	0	0		NONE	Null	false	690
+	1	Armor	Armor	LEATHER_ARMOR	LightArmor	NONE	Pathfinder Coat	Armor	4	35	0	0	14	17	0	0	12		NONE	Null	false	1770
+	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Rhoahide Coat	Armor	9	40	0	0	23	27	0	0	25		NONE	Null	false	2970
+	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Scout's Vest	Armor	13	45	0	0	32	38	0	0	37		NONE	Null	false	4200
+	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Corsair Vest	Armor	18	50	0	0	42	49	0	0	50		NONE	Null	false	5490
+	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Hardleather Coat	Armor	22	55	0	0	51	60	0	0	63		NONE	Null	false	6720
+	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Armoured Vest	Armor	29	60	0	0	58	68	0	0	73		NONE	Null	false	7860
+	1	Armor	Armor	RAGS	LightArmor	NONE	Tattered Robe	Armor	1	12	0	0	6	7	0	0	0		NONE	Null	false	690
+	1	Armor	Armor	ROBE	LightArmor	NONE	Hexer's Robe	Armor	4	18	0	0	14	17	0	12	0		NONE	Null	false	1770
+	1	Armor	Armor	CAPE	LightArmor	NONE	Silk Robe	Armor	9	22	0	0	23	27	0	25	0		NONE	Null	false	2970
+	1	Armor	Armor	ROBE	LightArmor	NONE	Votive Raiment	Armor	13	26	0	0	32	38	0	37	0		NONE	Null	false	4200
+	1	Armor	Armor	ROBE	LightArmor	NONE	Elementalist Robe	Armor	18	30	0	0	42	49	0	50	0		NONE	Null	false	5490
+	1	Armor	Armor	ROBE	LightArmor	NONE	Plated Raiment	Armor	23	34	0	0	53	62	0	65	0		NONE	Null	false	6960
+	1	Armor	Armor	ROBE	LightArmor	NONE	Enlightened Robe	Armor	27	38	0	0	58	68	0	73	0		NONE	Null	false	7740
+	1	Armor	Armor	RING_MAIL	MediumArmor	NONE	Chain Mail Vest	Mail	1	45	0	0	7	8	0	0	0		NONE	Null	false	780
+	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Rogue Armour	Mail	4	50	0	0	16	18	7	0	7		NONE	Null	false	1860
+	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Cloaked Mail	Mail	10	55	0	0	29	34	16	0	16		NONE	Null	false	3660
+	1	Armor	Armor	SCALE_MAIL	HeavyArmor	NONE	Scale Armour	Plate	15	60	0	0	39	46	23	0	23		NONE	Null	false	5040
+	1	Armor	Armor	SCALE_MAIL	HeavyArmor	NONE	Knight Armour	Plate	18	65	0	0	46	54	28	0	28		NONE	Null	false	5940
+	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Gladiator Armour	Plate	23	70	0	0	58	68	37	0	37		NONE	Null	false	7500
+	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Heroic Armour	Plate	26	75	0	0	64	75	41	0	41		NONE	Null	false	8310
+	1	Armor	Armor	CAPE	LightArmor	NONE	Pilgrim Vestments	Armor	1	30	0	0	7	8	0	0	0		NONE	Null	false	780
+	1	Armor	Armor	RING_MAIL	MediumArmor	NONE	Pelt Mantle	Mail	4	40	0	0	15	17	6	6	0		NONE	Null	false	1770
+	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Mail Vestments	Mail	6	45	0	0	20	24	10	10	0		NONE	Null	false	2520
+	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Shaman Mantle	Plate	11	50	0	0	31	36	18	18	0		NONE	Null	false	3900
+	1	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Cleric Vestments	Plate	18	60	0	0	46	54	28	28	0		NONE	Null	false	5940
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Revered Vestments	Plate	26	70	0	0	64	75	41	41	0		NONE	Null	false	8310
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Corvus Mantle	Plate	27	70	0	0	64	75	41	41	0		NONE	Null	false	8370
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Hermit Garb	Armor	1	25	0	0	7	8	0	0	0		NONE	Null	false	780
+	1	Armor	Armor	LEATHER_ARMOR	LightArmor	NONE	Waxed Jacket	Armor	4	30	0	0	16	18	0	7	7		NONE	Null	false	1860
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Marabout Garb	Armor	6	32	0	0	20	24	0	10	10		NONE	Null	false	2520
+	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Wayfarer Jacket	Armor	11	38	0	0	31	36	0	18	18		NONE	Null	false	3900
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Scalper's Jacket	Armor	16	42	0	0	41	48	0	25	25		NONE	Null	false	5280
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Monastic Garb	Armor	22	48	0	0	56	66	0	35	35		NONE	Null	false	7260
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Devout Garb	Armor	27	50	0	0	64	75	0	41	41		NONE	Null	false	8370
+	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Grand Regalia	Plate	26	80	0	0	70	82	29	29	29		NONE	Null	false	8940

@@ -32,7 +32,76 @@ DefenseType ItemDefenseType(const Item &item)
 		return DefenseType::Evasion;
 	if (IsAnyOf(base, "Ring Mail", "Chain Mail", "Scale Mail", "Helm", "Small Shield"))
 		return DefenseType::ArmourEvasion;
+	// POE2 body armour bases, one line per defense mix.
+	if (IsAnyOf(base, "Leather Vest", "Pathfinder Coat", "Rhoahide Coat", "Scout's Vest", "Corsair Vest", "Hardleather Coat", "Armoured Vest"))
+		return DefenseType::Evasion;
+	if (IsAnyOf(base, "Tattered Robe", "Hexer's Robe", "Silk Robe", "Votive Raiment", "Elementalist Robe", "Plated Raiment", "Enlightened Robe"))
+		return DefenseType::EnergyShield;
+	if (IsAnyOf(base, "Chain Mail Vest", "Rogue Armour", "Cloaked Mail", "Scale Armour", "Knight Armour", "Gladiator Armour", "Heroic Armour"))
+		return DefenseType::ArmourEvasion;
+	if (IsAnyOf(base, "Pilgrim Vestments", "Pelt Mantle", "Mail Vestments", "Shaman Mantle", "Cleric Vestments", "Revered Vestments", "Corvus Mantle"))
+		return DefenseType::ArmourEnergyShield;
+	if (IsAnyOf(base, "Hermit Garb", "Waxed Jacket", "Marabout Garb", "Wayfarer Jacket", "Scalper's Jacket", "Monastic Garb", "Devout Garb"))
+		return DefenseType::EvasionEnergyShield;
+	if (base == "Grand Regalia")
+		return DefenseType::All;
 	return DefenseType::Armour;
+}
+
+BodyArmourImplicit GetBodyArmourImplicit(const Item &item)
+{
+	BodyArmourImplicit implicit;
+	if (!gbIsPoe2 || item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
+		return implicit;
+	const std::string_view base = AllItemsList[static_cast<size_t>(item.IDidx)].iName;
+	if (base == "Heroic Armour")
+		implicit.life = 20;
+	else if (base == "Corvus Mantle")
+		implicit.spirit = 20;
+	else if (base == "Revered Vestments")
+		implicit.allResistances = 10;
+	else if (base == "Devout Garb")
+		implicit.magicResistance = 20;
+	else if (base == "Enlightened Robe")
+		implicit.manaRegenPercent = 30;
+	else if (base == "Armoured Vest")
+		implicit.evasionPercent = 15;
+	return implicit;
+}
+
+void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield)
+{
+	armour = 0;
+	evasion = 0;
+	energyShield = 0;
+	switch (type) {
+	case DefenseType::Armour:
+		armour = defense;
+		break;
+	case DefenseType::Evasion:
+		evasion = defense;
+		break;
+	case DefenseType::EnergyShield:
+		energyShield = defense;
+		break;
+	case DefenseType::ArmourEvasion:
+		evasion = defense / 2;
+		armour = defense - evasion;
+		break;
+	case DefenseType::ArmourEnergyShield:
+		energyShield = defense / 2;
+		armour = defense - energyShield;
+		break;
+	case DefenseType::EvasionEnergyShield:
+		energyShield = defense / 2;
+		evasion = defense - energyShield;
+		break;
+	case DefenseType::All:
+		evasion = defense / 3;
+		energyShield = defense / 3;
+		armour = defense - evasion - energyShield;
+		break;
+	}
 }
 
 int ArmourRating(const Player &player)

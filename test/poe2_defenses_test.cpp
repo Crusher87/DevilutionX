@@ -188,5 +188,47 @@ TEST_F(Poe2DefensesTest, VanillaModeKeepsArmorClass)
 	EXPECT_EQ(AbsorbWithEnergyShield(player, Fixed26_6::fromInt(5)), Fixed26_6::fromInt(5));
 }
 
+TEST_F(Poe2DefensesTest, HybridBodyArmoursSplitTheirDefense)
+{
+	Player &player = *MyPlayer;
+	Wear(player, INVLOC_CHEST, "Cleric Vestments", 50);
+	Recalculate(player);
+	EXPECT_EQ(ArmourRating(player), 25);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 25 * EnergyShieldPerDefense);
+
+	Wear(player, INVLOC_CHEST, "Monastic Garb", 61);
+	Recalculate(player);
+	EXPECT_EQ(ArmourRating(player), 0);
+	EXPECT_EQ(player.poe2.evasion, 31) << "evasion takes the odd point";
+	EXPECT_EQ(player.poe2.maxEnergyShield, 30 * EnergyShieldPerDefense);
+
+	Wear(player, INVLOC_CHEST, "Grand Regalia", 76);
+	Recalculate(player);
+	EXPECT_EQ(ArmourRating(player), 26);
+	EXPECT_EQ(player.poe2.evasion, 25);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 25 * EnergyShieldPerDefense);
+}
+
+TEST_F(Poe2DefensesTest, TopBodyArmourBasesCarryImplicits)
+{
+	Player &player = *MyPlayer;
+	Wear(player, INVLOC_CHEST, "Rusted Cuirass", 6);
+	Recalculate(player);
+	const int baseLife = player._pMaxHP.raw() / 64;
+	const int baseMagicRes = player._pMagResist;
+
+	Wear(player, INVLOC_CHEST, "Heroic Armour", 70);
+	Recalculate(player);
+	EXPECT_EQ(player._pMaxHP.raw() / 64, baseLife + 20);
+
+	Wear(player, INVLOC_CHEST, "Devout Garb", 70);
+	Recalculate(player);
+	EXPECT_EQ(player._pMagResist, baseMagicRes + 20);
+
+	Wear(player, INVLOC_CHEST, "Armoured Vest", 60);
+	Recalculate(player);
+	EXPECT_EQ(player.poe2.evasion, 60 + 60 * 15 / 100);
+}
+
 } // namespace
 } // namespace devilution

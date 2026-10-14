@@ -3230,37 +3230,39 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
 	int evasion = 0;
 	int energyShield = 0;
+	int evasionPercent = 0;
 	if (gbIsPoe2) {
 		for (const Item &item : player.InvBody) {
 			if (item.isEmpty() || !item._iStatFlag || item._iAC == 0)
 				continue;
 			const int baseDefense = item._iAC;
 			const int bonusDefense = (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified) ? GetBonusAC(item) : 0;
-			int movedBase = 0;
-			int movedBonus = 0;
-			switch (ItemDefenseType(item)) {
-			case DefenseType::EnergyShield:
-				movedBase = baseDefense;
-				movedBonus = bonusDefense;
-				energyShield += (baseDefense + bonusDefense) * EnergyShieldPerDefense;
-				break;
-			case DefenseType::Evasion:
-				movedBase = baseDefense;
-				movedBonus = bonusDefense;
-				evasion += baseDefense + bonusDefense;
-				break;
-			case DefenseType::ArmourEvasion:
-				movedBase = baseDefense / 2;
-				movedBonus = bonusDefense / 2;
-				evasion += movedBase + movedBonus;
-				break;
-			case DefenseType::Armour:
-				break;
-			}
-			ac -= movedBase;
-			bonusAc -= movedBonus;
+			const DefenseType type = ItemDefenseType(item);
+			int baseArmour;
+			int baseEvasion;
+			int baseShield;
+			SplitDefense(type, baseDefense, baseArmour, baseEvasion, baseShield);
+			int bonusArmour;
+			int bonusEvasion;
+			int bonusShield;
+			SplitDefense(type, bonusDefense, bonusArmour, bonusEvasion, bonusShield);
+			evasion += baseEvasion + bonusEvasion;
+			energyShield += (baseShield + bonusShield) * EnergyShieldPerDefense;
+			ac -= baseDefense - baseArmour;
+			bonusAc -= bonusDefense - bonusArmour;
 		}
-		evasion += evasion * passive(PassiveStat::EvasionPercent) / 100;
+		for (const Item &item : player.InvBody) {
+			if (item.isEmpty() || !item._iStatFlag)
+				continue;
+			const BodyArmourImplicit implicit = GetBodyArmourImplicit(item);
+			life += Fixed26_6::fromInt(implicit.life);
+			fireRes += implicit.allResistances;
+			lightRes += implicit.allResistances;
+			magicRes += implicit.allResistances + implicit.magicResistance;
+			manaRegen += implicit.manaRegenPercent;
+			evasionPercent += implicit.evasionPercent;
+		}
+		evasion += evasion * (passive(PassiveStat::EvasionPercent) + evasionPercent) / 100;
 		energyShield += energyShield * passive(PassiveStat::EnergyShieldPercent) / 100;
 	}
 	ac += ac * passive(PassiveStat::ArmorPercent) / 100;
@@ -4607,20 +4609,18 @@ void DrawUniqueInfo(const Surface &out)
 void PrintPoe2ItemDefense(const Item &item)
 {
 	std::string defense;
-	switch (ItemDefenseType(item)) {
-	case DefenseType::EnergyShield:
-		defense = FormatRuntime(_("energy shield: {:d}"), item._iAC * EnergyShieldPerDefense);
-		break;
-	case DefenseType::Evasion:
-		defense = FormatRuntime(_("evasion: {:d}"), item._iAC);
-		break;
-	case DefenseType::ArmourEvasion:
-		defense = FormatRuntime(_("armour: {:d}  evasion: {:d}"), item._iAC - (item._iAC / 2), item._iAC / 2);
-		break;
-	case DefenseType::Armour:
+	int armour;
+	int evasion;
+	int energyShield;
+	SplitDefense(ItemDefenseType(item), item._iAC, armour, evasion, energyShield);
+	if (armour > 0)
+		StrAppend(defense, FormatRuntime(_("armour: {:d}"), armour));
+	if (evasion > 0)
+		StrAppend(defense, defense.empty() ? "" : "  ", FormatRuntime(_("evasion: {:d}"), evasion));
+	if (energyShield > 0)
+		StrAppend(defense, defense.empty() ? "" : "  ", FormatRuntime(_("energy shield: {:d}"), energyShield * EnergyShieldPerDefense));
+	if (defense.empty())
 		defense = FormatRuntime(_("armour: {:d}"), item._iAC);
-		break;
-	}
 	AddItemInfoBoxString(defense);
 	if (item._iMaxDur == DUR_INDESTRUCTIBLE)
 		AddItemInfoBoxString(_("Indestructible"));
@@ -4686,6 +4686,19 @@ void PrintItemImplicits(const Item &item)
 {
 	if (gbIsPoe2 && ItemGrantsSpirit(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
+	const BodyArmourImplicit armourImplicit = GetBodyArmourImplicit(item);
+	if (armourImplicit.life > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to life"), armourImplicit.life));
+	if (armourImplicit.spirit > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), armourImplicit.spirit));
+	if (armourImplicit.allResistances > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to all resistances"), armourImplicit.allResistances));
+	if (armourImplicit.magicResistance > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to magic resistance"), armourImplicit.magicResistance));
+	if (armourImplicit.manaRegenPercent > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:d}% increased mana regeneration"), armourImplicit.manaRegenPercent));
+	if (armourImplicit.evasionPercent > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:d}% increased evasion"), armourImplicit.evasionPercent));
 	// The list of skill gems a weapon can use was dropped: it read like the weapon granted them all.
 	// Each skill gem's own text says which weapons it needs.
 
@@ -4699,6 +4712,8 @@ void PrintItemImplicits(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_FASTATTACK, implicitView).str()));
 	if (HasAnyOf(baseFlags, ItemSpecialEffect::Knockback))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_KNOCKBACK, implicitView).str()));
+	if (HasAnyOf(baseFlags, ItemSpecialEffect::FastHitRecovery | ItemSpecialEffect::FasterHitRecovery | ItemSpecialEffect::FastestHitRecovery))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_FASTRECOVER, implicitView).str()));
 }
 
 void PrintItemDetails(const Item &item)

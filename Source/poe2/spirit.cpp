@@ -14,6 +14,7 @@
 #include "monster.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/defenses.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -256,6 +257,9 @@ int MaxSpirit(const Player &player)
 		if (ItemGrantsSpirit(item) && item._iStatFlag)
 			spirit += SceptreSpirit;
 	}
+	const Item &chest = player.InvBody[INVLOC_CHEST];
+	if (chest._iStatFlag)
+		spirit += GetBodyArmourImplicit(chest).spirit;
 	return spirit;
 }
 
