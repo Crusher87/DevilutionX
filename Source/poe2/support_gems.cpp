@@ -122,6 +122,20 @@ int ManaCostPercent(SupportGem gem)
 
 } // namespace
 
+bool IsPowerSupport(SupportGem gem)
+{
+	return IsAnyOf(gem, SupportGem::Empower, SupportGem::ConcentratedEffect, SupportGem::Brutality);
+}
+
+SupportGem OtherPowerSupport(const SupportSockets &supports, std::optional<size_t> exceptSocket)
+{
+	for (size_t i = 0; i < supports.size(); i++) {
+		if (exceptSocket != i && IsPowerSupport(supports[i]))
+			return supports[i];
+	}
+	return SupportGem::None;
+}
+
 const SupportSockets &Poe2PlayerData::supportsFor(SkillSlot skill) const
 {
 	static const SupportSockets None {};
@@ -219,7 +233,7 @@ std::string_view SupportGemDescription(SupportGem gem)
 	case SupportGem::MultipleProjectiles:
 		return _("Fires 2 extra projectiles. 35% less\ndamage, 20% slower casts. Mana +30%");
 	case SupportGem::Empower:
-		return _("+2 spell level. 10% slower casts.\nMana +40%");
+		return _("Power: +2 spell level. 10% slower\ncasts. Mana +40%");
 	case SupportGem::FasterCasting:
 		return _("Casts much faster. Mana +20%");
 	case SupportGem::Efficiency:
@@ -231,11 +245,11 @@ std::string_view SupportGemDescription(SupportGem gem)
 	case SupportGem::Chain:
 		return _("Bolts jump to 2 more monsters.\n30% less damage. Mana +30%");
 	case SupportGem::ConcentratedEffect:
-		return _("Bolts deal 30% more damage but fly\n30% slower. Mana +30%");
+		return _("Power: bolts deal 30% more damage\nbut fly 30% slower. Mana +30%");
 	case SupportGem::FasterProjectiles:
 		return _("Bolts fly 60% faster. Mana +20%");
 	case SupportGem::Brutality:
-		return _("25% more melee damage, but no fire\nor lightning from the weapon. Mana +20%");
+		return _("Power: 25% more melee damage, but no\nfire or lightning from the weapon. Mana +20%");
 	case SupportGem::MartialTempo:
 		return _("Attack skills attack faster.\nMana +20%");
 	case SupportGem::Knockback:
@@ -422,6 +436,8 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 		if (i != *socket && supports[i] == gem)
 			return SupportSocketResult::AlreadySocketed;
 	}
+	if (IsPowerSupport(gem) && OtherPowerSupport(supports, socket) != SupportGem::None)
+		return SupportSocketResult::PowerTaken;
 	const GemColor color = SupportGemColor(gem);
 	const int freed = current != SupportGem::None && SupportGemColor(current) == color ? 1 : 0;
 	if (SupportsUsed(player.poe2, color) - freed >= SupportCapacity(player, color))
@@ -439,6 +455,8 @@ std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem)
 		const SkillSlot skill = player.poe2.skillSlots[slot];
 		const SupportSockets &supports = player.poe2.slotSupports[slot];
 		if (!SupportGemCanSupport(gem, skill) || std::find(supports.begin(), supports.end(), gem) != supports.end())
+			continue;
+		if (IsPowerSupport(gem) && OtherPowerSupport(supports, std::nullopt) != SupportGem::None)
 			continue;
 		if (std::find(supports.begin(), supports.begin() + static_cast<std::ptrdiff_t>(open), SupportGem::None) != supports.begin() + static_cast<std::ptrdiff_t>(open))
 			return slot;

@@ -800,6 +800,8 @@ std::string SupportSocketMessage(SupportSocketResult result, const Player &playe
 		const GemColor color = SupportGemColor(gem);
 		return FormatRuntime(_("Not enough {:s} for another {:s} support ({:d}/{:d})."), GemColorName(color), GemColorName(color), SupportsUsed(player.poe2, color), SupportCapacity(player, color));
 	}
+	case SupportSocketResult::PowerTaken:
+		return FormatRuntime(_("{:s} already has a Power support ({:s}); a skill takes only one."), SkillName(skill), SupportGemName(OtherPowerSupport(player.poe2.slotSupports[slot], std::nullopt)));
 	default:
 		return FormatRuntime(_("{:s} now supports {:s}."), SupportGemName(gem), SkillName(skill));
 	}

@@ -74,10 +74,16 @@ enum class SupportSocketResult : uint8_t {
 	NoFreeSocket,
 	/** The character's attribute can't carry another support of this color. */
 	NoCapacity,
+	/** The skill already has a Power support, and a skill takes only one. */
+	PowerTaken,
 };
 
 /** @brief The support gem an item represents, or SupportGem::None. */
 SupportGem SupportGemForItem(const Item &item);
+/** @brief Flat-damage supports are the Power family; a skill takes only one of them. */
+bool IsPowerSupport(SupportGem gem);
+/** @brief The Power support already in a skill's sockets other than the given one, if any. */
+SupportGem OtherPowerSupport(const SupportSockets &supports, std::optional<size_t> exceptSocket);
 SupportGem SupportGemForMiscId(int miscId);
 std::string_view SupportGemName(SupportGem gem);
 std::string_view SupportGemDescription(SupportGem gem);

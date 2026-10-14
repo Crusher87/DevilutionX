@@ -201,6 +201,19 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Blood Star Gem	Gem	28	0	0	0	0	0	0	70	0		SKILLGEM_SPELL	BloodStar	true	2400
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Nova Gem	Gem	28	0	0	0	0	0	0	87	0		SKILLGEM_SPELL	Nova	true	2400
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Teleport Gem	Gem	28	0	0	0	0	0	0	105	0		SKILLGEM_SPELL	Teleport	true	2400
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Ring of Fire Gem	Gem	12	0	0	0	0	0	0	27	0		SKILLGEM_SPELL	RingOfFire	true	1320
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Lightning Wall Gem	Gem	12	0	0	0	0	0	0	27	0		SKILLGEM_SPELL	LightningWall	true	1320
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Immolation Gem	Gem	20	0	0	0	0	0	0	87	0		SKILLGEM_SPELL	Immolation	true	1800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Warp Gem	Gem	6	0	0	0	0	0	0	25	0		SKILLGEM_SPELL	Warp	true	960
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Etherealize Gem	Gem	18	0	0	0	0	0	0	93	0		SKILLGEM_SPELL	Etherealize	true	1680
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Apocalypse Gem	Gem	28	0	0	0	0	0	0	149	0		SKILLGEM_SPELL	Apocalypse	true	2280
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Berserk Gem	Gem	22	0	0	0	0	0	0	35	0		SKILLGEM_SPELL	Berserk	true	1920
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Reflect Gem	Gem	26	0	0	0	0	0	0	25	0		SKILLGEM_SPELL	Reflect	true	2160
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Rune of Fire Gem	Gem	2	0	0	0	0	0	0	48	0		SKILLGEM_SPELL	RuneOfFire	true	720
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Rune of Light Gem	Gem	4	0	0	0	0	0	0	48	0		SKILLGEM_SPELL	RuneOfLight	true	840
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Rune of Stone Gem	Gem	8	0	0	0	0	0	0	48	0		SKILLGEM_SPELL	RuneOfStone	true	1080
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Rune of Nova Gem	Gem	12	0	0	0	0	0	0	48	0		SKILLGEM_SPELL	RuneOfNova	true	1320
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Rune of Immolation Gem	Gem	16	0	0	0	0	0	0	48	0		SKILLGEM_SPELL	RuneOfImmolation	true	1560
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Leap Slam Gem	Gem	6	0	0	0	0	0	35	0	0		SKILLGEM_LEAPSLAM	Null	true	1200
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Rain of Arrows Gem	Gem	6	0	0	0	0	0	0	0	45		SKILLGEM_RAINOFARROWS	Null	true	1200
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Shield Charge Gem	Gem	8	0	0	0	0	0	40	0	0		SKILLGEM_SHIELDCHARGE	Null	true	1500

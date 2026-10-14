@@ -118,6 +118,27 @@ TEST_F(Poe2SupportGemsTest, SocketingRules)
 	EXPECT_FALSE(player.poe2.hasSupport(SpellID::Firebolt, SupportGem::FasterCasting));
 }
 
+TEST_F(Poe2SupportGemsTest, OnePowerSupportPerSkill)
+{
+	Player &player = FreshPlayer();
+	player.setCharacterLevel(30);
+	EXPECT_TRUE(IsPowerSupport(SupportGem::Empower));
+	EXPECT_TRUE(IsPowerSupport(SupportGem::ConcentratedEffect));
+	EXPECT_TRUE(IsPowerSupport(SupportGem::Brutality));
+	EXPECT_FALSE(IsPowerSupport(SupportGem::Pierce));
+
+	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::Empower), SupportSocketResult::Socketed);
+	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::ConcentratedEffect), SupportSocketResult::PowerTaken);
+	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::Pierce), SupportSocketResult::Socketed);
+	// Another skill can still take one.
+	EXPECT_EQ(Socket(player, SpellID::Fireball, SupportGem::ConcentratedEffect), SupportSocketResult::Socketed);
+	// Swapping the Power support for another in its own socket is fine.
+	const size_t slot = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Firebolt));
+	SupportGem replaced;
+	EXPECT_EQ(SocketSupportGem(player, slot, 0, SupportGem::ConcentratedEffect, replaced), SupportSocketResult::Replaced);
+	EXPECT_EQ(replaced, SupportGem::Empower);
+}
+
 TEST_F(Poe2SupportGemsTest, SocketsOpenWithLevel)
 {
 	EXPECT_EQ(SupportSocketCount(1), 2U);
