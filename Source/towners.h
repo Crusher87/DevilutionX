@@ -37,6 +37,8 @@ enum _talker_id : uint8_t {
 	TOWN_FARMER,
 	TOWN_GIRL,
 	TOWN_COWFARM,
+	/** POE2 Mashup: the shared stash, a chest by the town portals. */
+	TOWN_STASH,
 	// Note: Enum values are parsed from TSV using magic_enum
 	// The actual count is determined dynamically from TSV data
 };

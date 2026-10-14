@@ -76,6 +76,8 @@ struct UncutLocation {
 };
 std::optional<UncutLocation> Uncut;
 GemCategory Category = GemCategory::All;
+/** While cutting a support gem: the socketed skill whose supports are listed, like POE2's skill list; empty for all supports. */
+std::optional<SkillSlot> SupportedSkill;
 int Scroll = 0;
 
 char QueryBuffer[48];
@@ -98,9 +100,17 @@ struct TierBlock {
 	Rectangle label;
 };
 
+struct SkillTab {
+	/** Empty for the "All gems" tab. */
+	std::optional<SkillSlot> skill;
+	Rectangle rect;
+};
+
 struct Layout {
 	Rectangle panel;
 	std::vector<Rectangle> tabs;
+	/** Shown in place of the category tabs while cutting a support gem. */
+	std::vector<SkillTab> skillTabs;
 	Rectangle grid;
 	Rectangle search;
 	std::vector<TierBlock> tiers;
@@ -117,6 +127,43 @@ const Item *UncutItem()
 	if (!IsUncutGem(item) || item._iSeed != Uncut->seed)
 		return nullptr;
 	return &item;
+}
+
+bool IsCuttingSupport()
+{
+	const Item *uncut = UncutItem();
+	return uncut != nullptr && UncutGemKind(*uncut) == UncutKind::Support;
+}
+
+/** @brief The socketed skills that take supports, each once, in Skills panel order. */
+std::vector<SkillSlot> SupportableSkills(const Player &player)
+{
+	std::vector<SkillSlot> skills;
+	for (const SkillSlot &skill : player.poe2.skillSlots) {
+		if (!skill.isEmpty() && SkillTakesSupports(skill) && std::find(skills.begin(), skills.end(), skill) == skills.end())
+			skills.push_back(skill);
+	}
+	return skills;
+}
+
+/** @brief Whether the selected skill already has this support linked. */
+bool IsLinkedToSupportedSkill(const Player &player, SupportGem support)
+{
+	if (!SupportedSkill)
+		return false;
+	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		if (player.poe2.skillSlots[slot] != *SupportedSkill)
+			continue;
+		const auto &supports = player.poe2.slotSupports[slot];
+		if (std::find(supports.begin(), supports.end(), support) != supports.end())
+			return true;
+	}
+	return false;
+}
+
+bool MatchesSupportedSkill(const GemEntry &gem)
+{
+	return !SupportedSkill || gem.support == SupportGem::None || SupportGemCanSupport(gem.support, *SupportedSkill);
 }
 
 bool MatchesQuery(const GemEntry &gem)
@@ -159,8 +206,18 @@ Layout ComputeLayout(const Surface &out)
 	layout.panel = { { (out.w() - width) / 2, std::max((availableHeight - height) / 2, 4) }, { width, height } };
 	const Point origin = layout.panel.position;
 
-	for (size_t i = 0; i < static_cast<size_t>(GemCategory::Count); i++)
-		layout.tabs.push_back({ origin + Displacement { Padding, HeaderHeight + static_cast<int>(i) * (TabHeight + TabGap) }, { TabWidth, TabHeight } });
+	if (IsCuttingSupport() && MyPlayer != nullptr) {
+		// Like POE2: pick one of your skills to see only the supports that work with it.
+		int y = origin.y + HeaderHeight;
+		for (const SkillSlot &skill : SupportableSkills(*MyPlayer)) {
+			layout.skillTabs.push_back({ skill, { { origin.x + Padding, y }, { TabWidth, TabHeight } } });
+			y += TabHeight + TabGap;
+		}
+		layout.skillTabs.push_back({ std::nullopt, { { origin.x + Padding, origin.y + height - FooterHeight - TabHeight }, { TabWidth, TabHeight } } });
+	} else {
+		for (size_t i = 0; i < static_cast<size_t>(GemCategory::Count); i++)
+			layout.tabs.push_back({ origin + Displacement { Padding, HeaderHeight + static_cast<int>(i) * (TabHeight + TabGap) }, { TabWidth, TabHeight } });
+	}
 
 	const int gridX = origin.x + Padding + TabWidth + 10;
 	layout.grid = { { gridX, origin.y + HeaderHeight }, { origin.x + width - Padding - gridX, height - HeaderHeight - FooterHeight } };
@@ -177,7 +234,7 @@ Layout ComputeLayout(const Surface &out)
 		std::vector<size_t> gems;
 		for (; i < catalog.size() && GemTier(catalog[i].level) == tier; i++) {
 			// Cutting lists only the uncut gem's own kind: skill, Spirit or support.
-			if (GemInCategory(catalog[i], Category) && MatchesQuery(catalog[i]) && (uncut == nullptr || UncutGemKind(*uncut) == GemUncutKind(catalog[i])))
+			if (GemInCategory(catalog[i], Category) && MatchesQuery(catalog[i]) && MatchesSupportedSkill(catalog[i]) && (uncut == nullptr || UncutGemKind(*uncut) == GemUncutKind(catalog[i])))
 				gems.push_back(i);
 		}
 		if (gems.empty())
@@ -295,7 +352,14 @@ void DrawCell(const Surface &out, const Player &player, const Cell &cell, bool h
 		nameColor = UiFlags::ColorButtonpushed;
 	DrawString(out, GemName(gem), { rect.position + Displacement { 0, 40 }, { rect.size.width, 12 } }, { .flags = nameColor | UiFlags::AlignCenter | UiFlags::VerticalCenter });
 	const std::optional<size_t> socket = SocketToLevel(player, gem);
-	DrawString(out, socket ? FormatRuntime(_("Socketed, gem level {:d}"), player.poe2.gemLevel(*socket)) : FormatRuntime(_("Tier level {:d}"), gem.level), { rect.position + Displacement { 0, 51 }, { rect.size.width, 10 } },
+	std::string detail;
+	if (socket)
+		detail = FormatRuntime(_("Socketed, gem level {:d}"), player.poe2.gemLevel(*socket));
+	else if (gem.support != SupportGem::None && IsLinkedToSupportedSkill(player, gem.support))
+		detail = _("Already linked");
+	else
+		detail = FormatRuntime(_("Tier level {:d}"), gem.level);
+	DrawString(out, detail, { rect.position + Displacement { 0, 51 }, { rect.size.width, 10 } },
 	    { .flags = UiFlags::FontSize12 | UiFlags::AlignCenter | UiFlags::VerticalCenter | (dimmed ? UiFlags::ColorButtonpushed : UiFlags::ColorWhite) });
 }
 
@@ -305,6 +369,10 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 	if (gem.support != SupportGem::None) {
 		lines.emplace_back(std::string(SupportGemDescription(gem.support)), UiFlags::ColorWhite);
 		lines.emplace_back(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem.support))), UiFlags::ColorWhitegold);
+		if (SupportedSkill)
+			lines.emplace_back(FormatRuntime(_("Works with {:s}"), SkillName(*SupportedSkill)), UiFlags::ColorWhite);
+		else if (const std::string_view needs = SupportGemNeeds(gem.support); !needs.empty())
+			lines.emplace_back(std::string(needs), UiFlags::ColorWhite);
 	} else if (gem.skill.kind == SkillKind::Attack) {
 		lines.emplace_back(std::string(WeaponSkillDescription(gem.skill.attack())), UiFlags::ColorWhite);
 		if (WeaponSkillNeedsWeapon(gem.skill.attack()))
@@ -412,6 +480,13 @@ bool HandleClick(Point position)
 			return true;
 		}
 	}
+	for (const SkillTab &tab : layout.skillTabs) {
+		if (tab.rect.contains(position)) {
+			SupportedSkill = tab.skill;
+			Scroll = 0;
+			return true;
+		}
+	}
 	if (const std::optional<size_t> gem = CellAt(layout, position); gem)
 		CutGem(GemCatalog()[*gem]);
 	return true;
@@ -447,10 +522,16 @@ void OpenGemcutting(bool fromBelt, int index)
 	if (!IsUncutGem(item))
 		return;
 	Uncut = UncutLocation { fromBelt, index, item._iSeed };
+	SupportedSkill = std::nullopt;
 	switch (UncutGemKind(item)) {
-	case UncutKind::Support:
+	case UncutKind::Support: {
 		Category = GemCategory::Support;
+		// Start on the first socketed skill, so a support can't be wasted on one that does nothing for it.
+		const std::vector<SkillSlot> skills = SupportableSkills(player);
+		if (!skills.empty())
+			SupportedSkill = skills.front();
 		break;
+	}
 	case UncutKind::Spirit:
 		Category = GemCategory::Spirit;
 		break;
@@ -464,6 +545,7 @@ void OpenGemcutting(bool fromBelt, int index)
 void OpenGemcuttingBrowser()
 {
 	Uncut = std::nullopt;
+	SupportedSkill = std::nullopt;
 	Open();
 }
 
@@ -552,6 +634,19 @@ void DrawGemcutting(const Surface &out)
 		DrawString(out, GemCategoryName(static_cast<GemCategory>(i)), { tab.position + Displacement { 8, 0 }, { tab.size.width - 12, tab.size.height } },
 		    { .flags = (active ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) | UiFlags::VerticalCenter });
 	}
+	for (const SkillTab &tab : layout.skillTabs) {
+		const bool active = SupportedSkill == tab.skill;
+		FillRectangle(out, tab.rect, active ? TabActiveColor : (tab.rect.contains(MousePosition) ? RowHoverColor : TabColor));
+		DrawFrame(out, tab.rect, active ? BorderColor : InnerBorderColor);
+		const std::string_view name = tab.skill ? SkillName(*tab.skill) : _("All gems");
+		UiFlags color = active ? UiFlags::ColorWhitegold : UiFlags::ColorWhite;
+		if (!active && tab.skill && tab.skill->kind == SkillKind::Spell)
+			color = UiFlags::ColorBlue;
+		DrawString(out, name, { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } }, { .flags = color | UiFlags::VerticalCenter });
+	}
+	if (layout.skillTabs.size() == 1)
+		DrawString(out, _("Socket a skill gem in the Skills panel (K) to see the supports that work with it."), { layout.panel.position + Displacement { Padding, HeaderHeight }, { TabWidth, 120 } },
+		    { .flags = UiFlags::FontSize12 | UiFlags::ColorButtonpushed });
 
 	FillRectangle(out, layout.grid, PanelColor);
 	DrawFrame(out, layout.grid, InnerBorderColor);
@@ -570,7 +665,9 @@ void DrawGemcutting(const Surface &out)
 			continue;
 		DrawCell(grid, player, { cell.gem, { cell.rect.position + toGrid, cell.rect.size } }, hovered == cell.gem);
 	}
-	if (layout.cells.empty())
+	if (layout.cells.empty() && SupportedSkill)
+		DrawString(grid, FormatRuntime(_("No supports for {:s} match."), SkillName(*SupportedSkill)), { { 0, 0 }, { layout.grid.size.width, 40 } }, { .flags = UiFlags::ColorButtonpushed | UiFlags::AlignCenter | UiFlags::VerticalCenter });
+	else if (layout.cells.empty())
 		DrawString(grid, _("No gems match."), { { 0, 0 }, { layout.grid.size.width, 40 } }, { .flags = UiFlags::ColorButtonpushed | UiFlags::AlignCenter | UiFlags::VerticalCenter });
 
 	FillRectangle(out, layout.search, FieldColor);

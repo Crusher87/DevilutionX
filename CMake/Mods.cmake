@@ -19,6 +19,7 @@ set(hellfire_mod
   txtdata/items/item_suffixes.tsv
   txtdata/items/unique_itemdat.tsv
   txtdata/missiles/misdat.tsv
+  txtdata/towners/towners.tsv
   txtdata/missiles/missile_sprites.tsv
   txtdata/monsters/monstdat.tsv
   txtdata/sound/effects.tsv
@@ -82,6 +83,7 @@ set(poe2_mod
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
   txtdata/missiles/misdat.tsv
+  txtdata/towners/towners.tsv
   txtdata/poe2/passive_tree.tsv)
 
 if(APPLE)

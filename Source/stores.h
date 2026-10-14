@@ -171,6 +171,8 @@ void DrawSLine(const Surface &out, int sy);
 void DrawSTextHelp();
 void ClearSText(int s, int e);
 void StartStore(TalkID s);
+/** @brief Opens the shared stash beside the inventory. */
+void OpenStashPanel();
 void DrawSText(const Surface &out);
 void StoreESC();
 void StoreUp();

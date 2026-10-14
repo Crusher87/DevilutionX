@@ -2067,6 +2067,22 @@ void TavernEnter()
 	}
 }
 
+} // namespace
+
+void OpenStashPanel()
+{
+	IsStashOpen = true;
+	Stash.RefreshItemStatFlags();
+	invflag = true;
+	if (ControlMode != ControlTypes::KeyboardAndMouse) {
+		if (pcurs == CURSOR_DISARM)
+			NewCursor(CURSOR_HAND);
+		FocusOnInventory();
+	}
+}
+
+namespace {
+
 void BarmaidEnter()
 {
 	switch (CurrentTextLine) {
@@ -2078,14 +2094,7 @@ void BarmaidEnter()
 		break;
 	case 14:
 		ActiveStore = TalkID::None;
-		IsStashOpen = true;
-		Stash.RefreshItemStatFlags();
-		invflag = true;
-		if (ControlMode != ControlTypes::KeyboardAndMouse) {
-			if (pcurs == CURSOR_DISARM)
-				NewCursor(CURSOR_HAND);
-			FocusOnInventory();
-		}
+		OpenStashPanel();
 		break;
 	case 18:
 		ActiveStore = TalkID::None;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <unordered_map>
 
 #include "cursor.h"
@@ -12,6 +13,8 @@
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
+#include "levels/gendung.h"
+#include "levels/tile_properties.hpp"
 #include "minitext.h"
 #include "stores.h"
 #include "tables/textdat.h"
@@ -576,6 +579,39 @@ void TalkToFarmer(Player &player, Towner &farmer)
 	}
 }
 
+/** @brief Puts the stash on the nearest open tile to its spot, so it never stands in a wall or on another towner. */
+void InitStash(Towner &towner, const TownerDataEntry &entry)
+{
+	InitTownerFromData(towner, entry);
+	const int8_t id = dMonster[entry.position.x][entry.position.y];
+	const auto isFree = [](Point tile) {
+		return InDungeonBounds(tile) && IsTileWalkable(tile) && dMonster[tile.x][tile.y] == 0;
+	};
+	if (id == 0 || IsTileWalkable(entry.position))
+		return;
+	dMonster[entry.position.x][entry.position.y] = 0;
+	for (int radius = 1; radius <= 6; radius++) {
+		for (int dy = -radius; dy <= radius; dy++) {
+			for (int dx = -radius; dx <= radius; dx++) {
+				const Point tile = entry.position + Displacement { dx, dy };
+				if (std::max(std::abs(dx), std::abs(dy)) != radius || !isFree(tile))
+					continue;
+				towner.position = tile;
+				dMonster[tile.x][tile.y] = id;
+				return;
+			}
+		}
+	}
+	dMonster[entry.position.x][entry.position.y] = id;
+}
+
+void TalkToStash(Player &player, Towner & /*stash*/)
+{
+	if (&player != MyPlayer)
+		return;
+	OpenStashPanel();
+}
+
 void TalkToCowFarmer(Player &player, Towner &cowFarmer)
 {
 	if (RemoveInventoryItemById(player, IDI_GREYSUIT)) {
@@ -697,6 +733,7 @@ const TownerData TownersData[] = {
 	{ TOWN_COWFARM, InitCowFarmer, TalkToCowFarmer   },
 	{ TOWN_FARMER,  nullptr,       TalkToFarmer      },
 	{ TOWN_GIRL,    nullptr,       TalkToGirl        },
+	{ TOWN_STASH,   InitStash,     TalkToStash       },
 	// clang-format on
 };
 
@@ -720,6 +757,7 @@ const std::unordered_map<_talker_id, const char *> TownerShortNames = {
 	{ TOWN_FARMER, "lester" },
 	{ TOWN_GIRL, "celia" },
 	{ TOWN_COWFARM, "nut" },
+	{ TOWN_STASH, "stash" },
 };
 
 size_t GetNumTownerTypes()
@@ -741,6 +779,8 @@ bool IsTownerPresent(_talker_id npc)
 		return gbIsHellfire && sgGameInitInfo.bCowQuest == 0 && Quests[Q_FARMER]._qactive != QUEST_HIVE_DONE;
 	case TOWN_COWFARM:
 		return gbIsHellfire && sgGameInitInfo.bCowQuest != 0;
+	case TOWN_STASH:
+		return gbIsPoe2;
 	case TOWN_GIRL:
 		return gbIsHellfire && sgGameInitInfo.bTheoQuest != 0 && MyPlayer->_pLvlVisited[17] && Quests[Q_GIRL]._qactive != QUEST_DONE;
 	default:
