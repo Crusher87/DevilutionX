@@ -251,6 +251,7 @@ bool ProcessInput()
 		CheckCursMove();
 		plrctrls_after_check_curs_move();
 		RepeatPlayerAction();
+		RepeatHeldTraySlot();
 	}
 
 	return true;
@@ -354,8 +355,10 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 	const TrayBinding binding = MyPlayer->poe2.tray[static_cast<size_t>(slot)];
 	if (binding == DefaultTrayBinding(slot))
 		return false;
-	// The left button still picks up items and opens chests and doors under the cursor.
-	if (slot == TraySlot::LeftMouse && (pcursitem != -1 || (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled())))
+	// The left button still picks up items, opens chests and doors, takes stairs and portals, and talks.
+	if (slot == TraySlot::LeftMouse
+	    && (pcursitem != -1 || trigflag || (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled())
+	        || (pcursmonst != -1 && CanTalkToMonst(Monsters[pcursmonst]))))
 		return false;
 	switch (binding.action) {
 	case TrayAction::MoveAndAttack:
@@ -368,7 +371,7 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 		CheckPlrSpell(isShiftHeld);
 		return true;
 	case TrayAction::Gem:
-		UseTraySlot(slot);
+		PressTraySlot(slot);
 		return true;
 	default:
 		return false;
@@ -781,6 +784,10 @@ void HandleMouseButtonDown(Uint8 button, uint16_t modState)
 
 void HandleMouseButtonUp(Uint8 button, uint16_t modState)
 {
+	if (button == SDL_BUTTON_LEFT)
+		ReleaseTraySlot(TraySlot::LeftMouse);
+	else if (button == SDL_BUTTON_RIGHT)
+		ReleaseTraySlot(TraySlot::RightMouse);
 	if (sgbMouseDown == CLICK_LEFT && button == SDL_BUTTON_LEFT) {
 		LastPlayerAction = PlayerActionType::None;
 		sgbMouseDown = CLICK_NONE;
@@ -2299,8 +2306,8 @@ void InitKeymapActions()
 		    N_("Skill tray key {}"),
 		    N_("Use the skill on this skill tray slot (POE2 Mashup)."),
 		    TrayKeys[i],
-		    [i] { UseTraySlot(TrayKeySlot(i)); },
-		    nullptr,
+		    [i] { PressTraySlot(TrayKeySlot(i)); },
+		    [i] { ReleaseTraySlot(TrayKeySlot(i)); },
 		    CanPlayerTakeAction,
 		    i + 1);
 	}
@@ -2309,8 +2316,8 @@ void InitKeymapActions()
 	    N_("Skill tray middle button"),
 	    N_("Use the skill on the middle mouse button's skill tray slot (POE2 Mashup)."),
 	    SDL_BUTTON_MIDDLE | KeymapperMouseButtonMask,
-	    [] { UseTraySlot(TraySlot::MiddleMouse); },
-	    nullptr,
+	    [] { PressTraySlot(TraySlot::MiddleMouse); },
+	    [] { ReleaseTraySlot(TraySlot::MiddleMouse); },
 	    CanPlayerTakeAction);
 	options.Keymapper.CommitActions();
 }
@@ -3111,6 +3118,7 @@ bool diablo_is_focused()
 
 void diablo_focus_pause()
 {
+	ReleaseAllTraySlots();
 	if (!movie_playing && (gbIsMultiplayer || MinimizePaused)) {
 		return;
 	}

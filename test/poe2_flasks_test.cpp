@@ -67,14 +67,29 @@ TEST_F(Poe2FlasksTest, DrinkingUsesChargesNotThePotion)
 {
 	Player &player = *MyPlayer;
 	InitializeItem(player.SpdList[0], IDI_MANA);
+	player._pMaxMana = Fixed26_6::fromInt(100);
 	ASSERT_EQ(player.poe2.flaskCharges[0], MaxFlaskCharges);
 
-	for (int use = 0; use < MaxFlaskCharges / FlaskChargesPerUse; use++)
+	for (int use = 0; use < MaxFlaskCharges / FlaskChargesPerUse; use++) {
+		player._pMana = {};
 		ASSERT_TRUE(UseFlask(player, 0)) << "use " << use;
+	}
 	EXPECT_EQ(player.poe2.flaskCharges[0], 0);
 	EXPECT_FALSE(player.SpdList[0].isEmpty());
 	EXPECT_FALSE(CanUseFlask(player, 0));
 	EXPECT_FALSE(UseFlask(player, 0));
+}
+
+TEST_F(Poe2FlasksTest, FlasksDontDrinkWhenFull)
+{
+	Player &player = *MyPlayer;
+	InitializeItem(player.SpdList[0], IDI_HEAL);
+	player._pMaxHP = Fixed26_6::fromInt(100);
+	player._pHitPoints = player._pMaxHP;
+	EXPECT_FALSE(UseFlask(player, 0));
+	EXPECT_EQ(player.poe2.flaskCharges[0], MaxFlaskCharges) << "no charges spent at full life";
+	player._pHitPoints = Fixed26_6::fromInt(1);
+	EXPECT_TRUE(UseFlask(player, 0));
 }
 
 TEST_F(Poe2FlasksTest, KillsRefillCharges)

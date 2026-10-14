@@ -311,6 +311,15 @@ bool UseFlask(Player &player, size_t beltSlot)
 	}
 
 	const Item &flask = player.SpdList[beltSlot];
+	// Like POE2, a flask won't drink when there's nothing to recover.
+	const bool lifeFull = player._pHitPoints >= player._pMaxHP;
+	const bool manaFull = player._pMana >= player._pMaxMana || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana);
+	const bool full = IsRejuvenation(flask) ? (lifeFull && manaFull) : (RecoversLife(flask) ? lifeFull : manaFull);
+	if (full) {
+		if (&player == MyPlayer)
+			EventPlrMsg(RecoversLife(flask) && !IsRejuvenation(flask) ? _("Your life is already full.") : (IsRejuvenation(flask) ? _("Your life and mana are already full.") : _("Your mana is already full.")), UiFlags::ColorWhite);
+		return false;
+	}
 	player.poe2.flaskCharges[beltSlot] -= FlaskChargesPerUseFor(flask);
 	if (&player == MyPlayer)
 		PlaySFX(ItemInvSnds[ItemCAnimTbl[flask._iCurs]]);

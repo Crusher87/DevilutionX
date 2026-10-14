@@ -34,6 +34,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
+#include "stores.h"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -1148,6 +1149,52 @@ void UseTraySlot(TraySlot slot)
 		// Moving, interacting and the readied spell happen through the mouse click itself.
 		return;
 	}
+}
+
+namespace {
+
+/** The tray slot whose key or button is held down, most recent press first. */
+std::optional<TraySlot> HeldTraySlot;
+
+} // namespace
+
+void PressTraySlot(TraySlot slot)
+{
+	UseTraySlot(slot);
+	if (IsSkillBarShown() && Binding(*MyPlayer, slot).action == TrayAction::Gem)
+		HeldTraySlot = slot;
+}
+
+void ReleaseTraySlot(TraySlot slot)
+{
+	if (HeldTraySlot == slot)
+		HeldTraySlot = std::nullopt;
+}
+
+void ReleaseAllTraySlots()
+{
+	HeldTraySlot = std::nullopt;
+}
+
+void RepeatHeldTraySlot()
+{
+	if (!HeldTraySlot || MyPlayer == nullptr)
+		return;
+	if (!IsSkillBarShown() || pcurs != CURSOR_HAND || IsPlayerInStore() || leveltype == DTYPE_TOWN) {
+		HeldTraySlot = std::nullopt;
+		return;
+	}
+	Player &player = *MyPlayer;
+	if (player.destAction != ACTION_NONE || player._pInvincible || !player.CanChangeAction())
+		return;
+	const TrayBinding &binding = Binding(player, *HeldTraySlot);
+	if (binding.action != TrayAction::Gem || binding.socket >= NumSkillSlots)
+		return;
+	const SkillSlot skill = player.poe2.skillSlots[binding.socket];
+	// Out of mana or missing a weapon: wait quietly rather than repeating the warning every tick.
+	if (skill.kind == SkillKind::Persistent || GetSkillUsability(player, skill) != SkillUsability::Ready)
+		return;
+	UseSkillSlot(binding.socket);
 }
 
 void UseFreeTownPortal()

@@ -1193,6 +1193,8 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 
 bool CanBePlacedOnBelt(const Player &player, const Item &item)
 {
+	if (gbIsPoe2 && !IsFlaskPotion(item) && !IsCharm(item))
+		return false; // The POE2 belt holds flasks and charms only.
 	return FitsInBeltSlot(item)
 	    && item._itype != ItemType::Gold
 	    && player.CanUseItem(item)

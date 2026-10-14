@@ -62,6 +62,12 @@ std::string MissingSkillRequirements(const Player &player, SkillSlot skill);
 void UseSkillSlot(size_t slot);
 /** @brief Uses what a tray slot holds; mouse actions like move and attack are handled by the click itself. */
 void UseTraySlot(TraySlot slot);
+/** @brief Uses a tray slot and keeps using it each time the character is free while the key or button is held. */
+void PressTraySlot(TraySlot slot);
+void ReleaseTraySlot(TraySlot slot);
+void ReleaseAllTraySlots();
+/** @brief Called every game tick: uses the held tray slot's skill again once the character can act. */
+void RepeatHeldTraySlot();
 /** @brief Opens a town portal for free, like POE2's portal button. */
 void UseFreeTownPortal();
 
