@@ -16,6 +16,7 @@
 namespace devilution {
 
 struct Item;
+struct Missile;
 struct Player;
 enum class player_graphic : uint8_t;
 
@@ -24,6 +25,33 @@ constexpr std::array<Displacement, 9> RainOfArrowsVolley = { { { 0, 0 }, { 2, 0 
 
 /** @brief Ground Slam and Whirling Staff deal full damage to the target and this much to the other tiles around you. */
 constexpr int AreaSkillSideDamagePercent = 75;
+/** @brief Ground Slam's shockwave runs this many tiles out in a cone in front of the player. */
+constexpr int GroundSlamReach = 3;
+/** @brief Whirling Staff hits two rings around the player; the outer ring for this percent. */
+constexpr int WhirlingStaffReach = 2;
+constexpr int WhirlingStaffOuterDamagePercent = 50;
+/** @brief Ticks between Barrage's arrows and between Ember Fusillade's embers. */
+constexpr int BarrageShotTicks = 3;
+constexpr int EmberShotTicks = 2;
+/** @brief Barrage fires its arrows one after another at one target. */
+constexpr int BarrageArrows = 5;
+/** @brief Ember Fusillade's embers before its gem level adds more. */
+constexpr int EmberFusilladeEmbers = 5;
+
+/** @brief Fireball travels at this percent of Diablo's speed and Firebolt at this percent, so the heavy orb and the quick bolt feel apart. */
+constexpr int FireballSpeedPercent = 75;
+constexpr int FireboltSpeedPercent = 140;
+
+/** @brief Sets a player spell's missile speed: Fireball slower, Firebolt faster; other spells keep theirs. */
+void SetSpellMissileSpeed(Missile &missile, SpellID spell);
+/** @brief A player's Fireball exploded: throws back the enemies around it, with a ring of flame and a jolt. */
+void OnFireballDetonated(Missile &missile, Point position);
+/** @brief Whether a tile offset from the player is in Ground Slam's cone (about 70 degrees wide) facing the direction. */
+bool InGroundSlamCone(Direction facing, Displacement offset);
+/** @brief Starts a stream of shots, one every few ticks; the first fires now. */
+void StartSkillVolley(Player &player, WeaponSkill skill, Point target, int shots);
+/** @brief Fires the next shot of a stream when it's due; once per game tick. */
+void ProcessSkillVolley(Player &player);
 
 /** @brief The skill the given weapon grants, or WeaponSkill::None. */
 WeaponSkill WeaponSkillForItem(const Item &item);

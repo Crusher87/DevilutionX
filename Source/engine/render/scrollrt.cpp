@@ -64,6 +64,7 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
+#include "poe2/camera_shake.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/loot_filter.hpp"
 #include "qol/chatlog.h"
@@ -1326,6 +1327,8 @@ void DrawView(const Surface &out, Point startPosition)
 #endif
 	Displacement offset = {};
 	CalcFirstTilePosition(startPosition, offset);
+	// POE2 Mashup: heavy hits jolt the view.
+	offset += CameraShakeOffset();
 	DrawGame(out, startPosition, offset);
 	if (AutomapActive) {
 		DrawAutomap(out.subregionY(0, gnViewportHeight));

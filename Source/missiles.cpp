@@ -49,6 +49,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
 #include "tables/misdat.h"
@@ -2100,8 +2101,8 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	// The effect missile only exists in the POE2 Mashup missile data.
 	if (!gbIsPoe2 || !InDungeonBounds(tile))
 		return;
-	// Monster-owned graphics are only loaded with their monster.
-	if (GetMissileSpriteData(graphic).flags == MissileGraphicsFlags::MonsterOwned)
+	// Monster-owned graphics are only loaded with their monster, unless POE2 mode loads them for skills.
+	if (GetMissileSpriteData(graphic).flags == MissileGraphicsFlags::MonsterOwned && !GetMissileSpriteData(graphic).sprites)
 		return;
 	AddMissile(tile, tile, dir, MissileID::VisualEffect, TARGET_MONSTERS, -1, light, static_cast<int>(graphic) | (delay << 8));
 }
@@ -3213,6 +3214,9 @@ void ProcessFireball(Missile &missile)
 			missile.setAnimation(MissileGraphicID::BigExplosion);
 			missile.duration = missile._miAnimLen - 1;
 			missile.position.velocity = {};
+			// POE2 Mashup: a player's Fireball detonates with a shockwave that throws enemies back.
+			if (missile._mitype == MissileID::Fireball && missile.sourceType() == MissileSource::Player)
+				OnFireballDetonated(missile, missilePosition);
 		} else if (missile.position.tile != Point { missile.var1, missile.var2 }) {
 			missile.var1 = missile.position.tile.x;
 			missile.var2 = missile.position.tile.y;

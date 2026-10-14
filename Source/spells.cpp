@@ -25,6 +25,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/weapon_skills.hpp"
 
 namespace devilution {
 
@@ -239,6 +240,8 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 		for (size_t i = 0; i < sizeof(spellData.sMissiles) / sizeof(spellData.sMissiles[0]) && spellData.sMissiles[i] != MissileID::Null; i++) {
 			Missile *missile = AddMissile(src, target, dir, spellData.sMissiles[i], TARGET_MONSTERS, player, 0, spllvl);
 			fizzled |= (missile == nullptr);
+			if (missile != nullptr && gbIsPoe2)
+				SetSpellMissileSpeed(*missile, spl);
 			if (missile != nullptr && supported)
 				ApplySupportsToMissile(*missile, player, spl);
 		}

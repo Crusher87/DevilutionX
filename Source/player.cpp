@@ -47,6 +47,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
@@ -900,19 +901,35 @@ bool DoAttack(Player &player)
 			}
 		}
 
+		// POE2 Mashup: Ground Slam sends a shockwave out in a cone in front; Whirling Staff spins, hitting two rings around the player.
 		if (IsAnyOf(skill, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff)) {
-			// POE2 Mashup: hit everything around the player.
-			for (int i = 0; i < 8; i++) {
-				const auto dir = static_cast<Direction>(i);
-				position = player.position.tile + dir;
-				monster = FindMonsterAtPosition(position);
-				if (monster == nullptr || CanTalkToMonst(*monster))
-					continue;
-				if (dir != player._pdir && monster->position.old == position && PlrHitMonst(player, *monster, false, AreaSkillSideDamagePercent))
-					didhit = true;
-				if (skill == WeaponSkill::GroundSlam && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
-					M_GetKnockback(*monster, player.position.tile);
+			const Point origin = player.position.tile;
+			const Point primary = origin + player._pdir;
+			const int reach = skill == WeaponSkill::GroundSlam ? GroundSlamReach : WhirlingStaffReach;
+			for (int dy = -reach; dy <= reach; dy++) {
+				for (int dx = -reach; dx <= reach; dx++) {
+					position = origin + Displacement { dx, dy };
+					if (position == origin || position == primary || !InDungeonBounds(position))
+						continue;
+					const int distance = std::max(std::abs(dx), std::abs(dy));
+					if (skill == WeaponSkill::GroundSlam && !InGroundSlamCone(player._pdir, { dx, dy }))
+						continue;
+					monster = FindMonsterAtPosition(position);
+					if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
+						continue;
+					if (distance > 1 && !LineClearMissile(origin, position))
+						continue;
+					const int damagePercent = distance > 1 && skill == WeaponSkill::WhirlingStaff ? WhirlingStaffOuterDamagePercent : AreaSkillSideDamagePercent;
+					if (PlrHitMonst(player, *monster, false, damagePercent))
+						didhit = true;
+					if (skill == WeaponSkill::GroundSlam && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+						M_GetKnockback(*monster, origin);
+				}
 			}
+			// The main target is knocked back by the slam too.
+			monster = FindMonsterAtPosition(primary);
+			if (skill == WeaponSkill::GroundSlam && monster != nullptr && !CanTalkToMonst(*monster) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+				M_GetKnockback(*monster, origin);
 		}
 
 		if (skill != WeaponSkill::None)
@@ -945,15 +962,18 @@ bool DoRangeAttack(Player &player)
 		arrows = 2;
 	}
 
-	// POE2 Mashup: Barrage fires a fan of five arrows, Rain of Arrows a volley over the target's area.
+	// POE2 Mashup: Barrage looses a rapid stream of arrows at one target, Rain of Arrows a volley over the target's area.
 	const bool barrage = player.poe2.activeSkill == WeaponSkill::Barrage && arrows == 1;
-	if (barrage)
-		arrows = 5;
+	if (barrage) {
+		PlaySkillEffects(player, WeaponSkill::Barrage, player.position.temp);
+		StartSkillVolley(player, WeaponSkill::Barrage, player.position.temp, BarrageArrows);
+		arrows = 0;
+	}
 	const bool rain = player.poe2.activeSkill == WeaponSkill::RainOfArrows && arrows == 1;
 	if (rain)
 		arrows = 9;
 	const bool lightningArrow = player.poe2.activeSkill == WeaponSkill::LightningArrow && arrows == 1;
-	if (barrage || rain || lightningArrow)
+	if (rain || lightningArrow)
 		PlaySkillEffects(player, player.poe2.activeSkill, player.position.temp);
 
 	for (int arrow = 0; arrow < arrows; arrow++) {
@@ -962,15 +982,6 @@ bool DoRangeAttack(Player &player)
 		if (rain) {
 			xoff = RainOfArrowsVolley[arrow].deltaX;
 			yoff = RainOfArrowsVolley[arrow].deltaY;
-		} else if (barrage) {
-			constexpr int Spread[] = { 0, -1, 1, -2, 2 };
-			const int angle = Spread[arrow];
-			const int x = player.position.temp.x - player.position.tile.x;
-			if (x != 0)
-				yoff = x < 0 ? angle : -angle;
-			const int y = player.position.temp.y - player.position.tile.y;
-			if (y != 0)
-				xoff = y < 0 ? -angle : angle;
 		} else if (arrows != 1) {
 			const int angle = arrow == 0 ? -1 : 1;
 			const int x = player.position.temp.x - player.position.tile.x;
@@ -1010,7 +1021,7 @@ bool DoRangeAttack(Player &player)
 		    dmg,
 		    0);
 		// POE2 Mashup: a bow skill's arrows hit harder as its gem levels up.
-		if (missile != nullptr && (barrage || rain || lightningArrow))
+		if (missile != nullptr && (rain || lightningArrow))
 			missile->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(SkillSlot::ForAttack(player.poe2.activeSkill), player.poe2.skillLevel(player.poe2.activeSkill)));
 
 		if (arrow == 0 && mistype != MissileID::SpectralArrow) {
@@ -3137,6 +3148,7 @@ void ProcessPlayers()
 {
 	assert(MyPlayer != nullptr);
 	Player &myPlayer = *MyPlayer;
+	TickCameraShake();
 
 	if (myPlayer.pLvlLoad > 0) {
 		myPlayer.pLvlLoad--;
@@ -3174,6 +3186,7 @@ void ProcessPlayers()
 			}
 
 			player.poe2.tick();
+			ProcessSkillVolley(player);
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
 				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {

@@ -121,5 +121,24 @@ TEST_F(Poe2WeaponSkillsTest, BattleCryWearsOff)
 	EXPECT_EQ(data.warcryTicks, 0);
 }
 
+TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)
+{
+	// Facing south (down the screen), the cone covers the tiles ahead and not the ones behind or beside.
+	EXPECT_TRUE(InGroundSlamCone(Direction::South, Displacement { 1, 1 }));
+	EXPECT_TRUE(InGroundSlamCone(Direction::South, Displacement { 3, 3 }));
+	EXPECT_TRUE(InGroundSlamCone(Direction::South, Displacement { 3, 2 }));
+	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { -1, -1 }));
+	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { 1, -1 }));
+	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { 3, 0 }));
+}
+
+TEST(Poe2WeaponSkills, FireballIsSlowAndFireboltIsFast)
+{
+	EXPECT_LT(FireballSpeedPercent, 100);
+	EXPECT_GT(FireboltSpeedPercent, 100);
+	EXPECT_GE(BarrageArrows, 5);
+	EXPECT_GE(EmberFusilladeEmbers, 5);
+}
+
 } // namespace
 } // namespace devilution
