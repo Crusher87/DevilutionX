@@ -51,20 +51,20 @@ public:
 
 TEST_F(Poe2WeaponSkillsTest, WeaponTypesGrantSkills)
 {
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Dagger")), WeaponSkill::Flurry);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Long Sword")), WeaponSkill::Cleave);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Battle Axe")), WeaponSkill::Cleave);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Maul")), WeaponSkill::GroundSlam);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Long Bow")), WeaponSkill::Barrage);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Long Staff")), WeaponSkill::WhirlingStaff);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Buckler")), WeaponSkill::None);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Shiv")), WeaponSkill::Flurry);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Shortsword")), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Woodsman's Axe")), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Sledge")), WeaponSkill::GroundSlam);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Yew Bow")), WeaponSkill::Barrage);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Quick Pilgrim Staff")), WeaponSkill::WhirlingStaff);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Hide Buckler")), WeaponSkill::None);
 	EXPECT_EQ(WeaponSkillForItem(Item {}), WeaponSkill::None);
 
 	Player &player = *MyPlayer;
 	player = {};
-	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Long Bow");
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Yew Bow");
 	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::Barrage);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Maul");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
 	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::GroundSlam);
 }
 
@@ -74,24 +74,24 @@ TEST_F(Poe2WeaponSkillsTest, EveryWeaponHasAFreeDefaultAttack)
 	player = {};
 	player._pClass = HeroClass::Rogue;
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::Punch);
-	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Buckler");
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Hide Buckler");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::ShieldBash);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Long Sword");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Shortsword");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::SwordStrike);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Dagger");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Shiv");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::DaggerStab);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Battle Axe");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Woodsman's Axe");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::AxeChop);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Maul");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::MaceSmash);
 	player.InvBody[INVLOC_HAND_RIGHT] = {};
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Long Bow");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Yew Bow");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::BowShot);
 	EXPECT_TRUE(IsRangedDefaultAttack(DefaultAttack::BowShot));
 	EXPECT_FALSE(FiresStaffBolt(player));
 
 	// A staff channels a bolt, except for a Monk, who fights with it.
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Long Staff");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Quick Pilgrim Staff");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffBolt);
 	EXPECT_TRUE(FiresStaffBolt(player));
 	player._pClass = HeroClass::Monk;

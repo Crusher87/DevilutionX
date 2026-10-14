@@ -192,7 +192,7 @@ WeaponSkill WeaponSkillForItem(const Item &item)
 		return WeaponSkill::None;
 	switch (item._itype) {
 	case ItemType::Sword:
-		if (AllItemsList[item.IDidx].iItemId == UITYPE_DAGGER)
+		if (AllItemsList[item.IDidx].iItemId == UITYPE_DAGGER || AllItemsList[item.IDidx].iSName == "Dagger")
 			return WeaponSkill::Flurry;
 		return WeaponSkill::Cleave;
 	case ItemType::Axe:

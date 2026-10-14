@@ -69,6 +69,7 @@
 #include "panels/info_box.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
@@ -2812,7 +2813,8 @@ std::string GetRareItemName(const Item &item)
 
 void RestoreRareItemPowers(Item &item)
 {
-	if (item._iMagical == ITEM_QUALITY_NORMAL || Players.empty())
+	// Normal items too when their base has implicits: their POE2 stats aren't saved either.
+	if ((item._iMagical == ITEM_QUALITY_NORMAL && ItemBaseMeta(item) == nullptr) || Players.empty())
 		return;
 	const uint32_t currentSeed = GetLCGEngineState();
 	Item regenerated;
@@ -3379,8 +3381,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	manaRegen += passive(PassiveStat::ManaRegen);
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
 	// Every 10% increased attack or cast speed from gear skips one more animation frame.
-	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::min(passive(PassiveStat::AttackSpeed) + (gearStat(Poe2ItemStat::AttackSpeed) / 10), static_cast<int>(MaxPassiveSpeedFrames)));
-	player.poe2.passiveCastFrames = static_cast<int8_t>(std::min(passive(PassiveStat::CastSpeed) + (gearStat(Poe2ItemStat::CastSpeed) / 10), static_cast<int>(MaxPassiveSpeedFrames)));
+	// Heavy and focused bases slow attacks and casts, but only by cancelling speed from elsewhere.
+	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp(passive(PassiveStat::AttackSpeed) + (gearStat(Poe2ItemStat::AttackSpeed) / 10), 0, static_cast<int>(MaxPassiveSpeedFrames)));
+	player.poe2.passiveCastFrames = static_cast<int8_t>(std::clamp(passive(PassiveStat::CastSpeed) + (gearStat(Poe2ItemStat::CastSpeed) / 10), 0, static_cast<int>(MaxPassiveSpeedFrames)));
 
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
 	int evasion = 0;
@@ -3543,6 +3546,7 @@ void InitializeItem(Item &item, _item_indexes itemData)
 		item.dwBuff |= CF_HELLFIRE;
 	if (gbIsPoe2)
 		item.dwBuff |= CF_POE2;
+	ApplyBaseProperties(item);
 }
 
 void GenerateNewSeed(Item &item)
@@ -3742,6 +3746,7 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 	item._iRarePowers.fill(IPL_INVALID);
 	item._iPoe2Mods = {};
 	item._iPoe2Stats = {};
+	ApplyBaseProperties(item);
 
 	if (item._iMiscId == IMISC_BOOK)
 		GetBookSpell(item, lvl);
@@ -4245,6 +4250,22 @@ Poe2LootOrigin ContainerLootOrigin(bool pregen)
 	};
 }
 
+/**
+ * @brief The quality an equipment drop comes with: some normal and magic items have a little, and at item
+ * level 78 and up a rare few are Exceptional bases with 21-30%.
+ */
+int RollDropQuality(_item_indexes idx, item_quality rarity, int poe2ItemLevel)
+{
+	const BaseMeta *base = BaseMetaFor(idx);
+	if (base == nullptr || base->quality == QualityKind::None)
+		return 0;
+	if (poe2ItemLevel >= ExceptionalItemLevel && LootRandom(10000) < ExceptionalChancePer10000)
+		return MaxItemQuality + 1 + LootRandom(MaxExceptionalQuality - MaxItemQuality);
+	if (IsAnyOf(rarity, ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC) && LootRandom(100) < QualityDropPercent)
+		return 1 + LootRandom(MaxDropQuality);
+	return 0;
+}
+
 void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt)
 {
 	if (ActiveItemCount >= MAXITEMS)
@@ -4281,6 +4302,8 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		SetPoe2ItemLevel(item, origin.poe2ItemLevel);
 		item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
 	}
+	if (category == LootCategory::Equipment && *rarity != ITEM_QUALITY_UNIQUE)
+		SetItemQuality(item, RollDropQuality(*idx, *rarity, origin.poe2ItemLevel));
 	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer)
 		UniqueItemFlags[item._iUid] = true;
@@ -5212,6 +5235,10 @@ void PrintItemImplicits(const Item &item)
 {
 	if (gbIsPoe2 && ItemGrantsSpirit(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
+	for (const std::string &line : ItemImplicitText(item))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), line));
+	if (const int quality = ItemQuality(item); quality > 0 && HasQuality(item))
+		AddItemInfoBoxString(FormatRuntime(IsExceptional(item) ? _("Exceptional, quality: +{:d}%") : _("Quality: +{:d}%"), quality));
 	const BodyArmourImplicit armourImplicit = GetBodyArmourImplicit(item);
 	if (armourImplicit.life > 0)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to life"), armourImplicit.life));

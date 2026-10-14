@@ -1,0 +1,205 @@
+#include "poe2/bases.hpp"
+
+#include <algorithm>
+#include <string_view>
+#include <unordered_map>
+
+#include <magic_enum/magic_enum.hpp>
+
+#include "data/file.hpp"
+#include "data/record_reader.hpp"
+#include "game_mode.hpp"
+#include "items.h"
+#include "tables/itemdat.h"
+#include "utils/format.hpp"
+#include "utils/log.hpp"
+#include "utils/parse_int.hpp"
+#include "utils/str_split.hpp"
+
+namespace devilution {
+
+namespace {
+
+std::vector<BaseMeta> Bases;
+/** Base metadata index + 1 for each row of the item data; 0 for none. */
+std::vector<uint16_t> BaseOfItem;
+
+std::optional<DefenseType> ParseDefense(std::string_view text)
+{
+	if (text.empty())
+		return std::nullopt;
+	return magic_enum::enum_cast<DefenseType>(text);
+}
+
+QualityKind ParseQuality(std::string_view text)
+{
+	if (text == "weapon")
+		return QualityKind::Weapon;
+	if (text == "defence")
+		return QualityKind::Defence;
+	if (text == "caster")
+		return QualityKind::Caster;
+	return QualityKind::None;
+}
+
+std::vector<BaseImplicit> ParseImplicits(std::string_view text)
+{
+	std::vector<BaseImplicit> implicits;
+	for (const std::string_view entry : SplitByChar(text, ';')) {
+		if (entry.empty())
+			continue;
+		std::array<std::string_view, 4> parts {};
+		size_t count = 0;
+		for (const std::string_view part : SplitByChar(entry, '|')) {
+			if (count < parts.size())
+				parts[count] = part;
+			count++;
+		}
+		const std::optional<ModEffect> effect = magic_enum::enum_cast<ModEffect>(parts[0]);
+		if (count != parts.size() || !effect) {
+			LogError("Bad base implicit: {}", entry);
+			continue;
+		}
+		implicits.push_back({ *effect, static_cast<int16_t>(ParseInt<int>(parts[1]).value_or(0)), static_cast<int16_t>(ParseInt<int>(parts[2]).value_or(0)), std::string(parts[3]) });
+	}
+	return implicits;
+}
+
+/** A value from the item's seed, apart from the game's random number generator. */
+uint32_t ImplicitHash(uint32_t seed, size_t index)
+{
+	uint32_t hash = (seed ^ 0x85EBCA6BU) + (static_cast<uint32_t>(index) * 0x9E3779B9U);
+	hash ^= hash >> 16;
+	hash *= 0x7FEB352DU;
+	hash ^= hash >> 15;
+	hash *= 0x846CA68BU;
+	hash ^= hash >> 16;
+	return hash;
+}
+
+} // namespace
+
+void LoadBaseData()
+{
+	Bases.clear();
+	BaseOfItem.clear();
+	if (!gbIsPoe2)
+		return;
+
+	constexpr std::string_view Filename = "txtdata\\poe2\\base_meta.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the item bases: {}", Filename);
+		return;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	std::unordered_map<std::string, uint16_t> byName;
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		BaseMeta base {};
+		std::string text;
+		reader.readString("name", base.name);
+		reader.readString("class", base.itemClass);
+		reader.readString("identity", base.identity);
+		reader.readString("defense", text);
+		base.defense = ParseDefense(text);
+		reader.readString("quality", text);
+		base.quality = ParseQuality(text);
+		reader.readString("implicits", text);
+		base.implicits = ParseImplicits(text);
+		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
+		Bases.push_back(std::move(base));
+	}
+	BaseOfItem.assign(AllItemsList.size(), 0);
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (const auto it = byName.find(AllItemsList[i].iName); it != byName.end())
+			BaseOfItem[i] = it->second;
+	}
+}
+
+const BaseMeta *BaseMetaFor(int itemIndex)
+{
+	if (itemIndex < 0 || static_cast<size_t>(itemIndex) >= BaseOfItem.size())
+		return nullptr;
+	const uint16_t index = BaseOfItem[static_cast<size_t>(itemIndex)];
+	return index == 0 ? nullptr : &Bases[index - 1];
+}
+
+const BaseMeta *ItemBaseMeta(const Item &item)
+{
+	return item.isEmpty() ? nullptr : BaseMetaFor(item.IDidx);
+}
+
+std::vector<ItemImplicit> ItemImplicits(const Item &item)
+{
+	std::vector<ItemImplicit> implicits;
+	const BaseMeta *base = ItemBaseMeta(item);
+	if (base == nullptr)
+		return implicits;
+	const int quality = ItemQuality(item);
+	for (size_t i = 0; i < base->implicits.size(); i++) {
+		const BaseImplicit &implicit = base->implicits[i];
+		ItemImplicit rolled { &implicit, { implicit.min, implicit.max } };
+		// Added damage keeps its range; everything else rolls one value in it.
+		if (implicit.effect != ModEffect::AddedPhysicalToAttacks) {
+			const int span = implicit.max - implicit.min + 1;
+			rolled.values[0] = implicit.min + (span > 1 ? static_cast<int>(ImplicitHash(static_cast<uint32_t>(item._iSeed), i) % static_cast<uint32_t>(span)) : 0);
+			rolled.values[1] = 0;
+		}
+		// Quality on staves and sceptres raises their spell power.
+		if (base->quality == QualityKind::Caster && implicit.effect == ModEffect::Intelligence)
+			rolled.values[0] += rolled.values[0] * quality / 100;
+		implicits.push_back(rolled);
+	}
+	return implicits;
+}
+
+void ApplyBaseProperties(Item &item)
+{
+	if (!gbIsPoe2)
+		return;
+	for (const ItemImplicit &implicit : ItemImplicits(item))
+		ApplyModEffect(item, implicit.implicit->effect, implicit.values[0], implicit.values[1]);
+	const BaseMeta *base = ItemBaseMeta(item);
+	const int quality = ItemQuality(item);
+	if (base == nullptr || quality == 0)
+		return;
+	if (base->quality == QualityKind::Weapon)
+		item._iPLDam = static_cast<int16_t>(item._iPLDam + quality);
+	else if (base->quality == QualityKind::Defence)
+		item._iPLAC = static_cast<int16_t>(item._iPLAC + quality);
+}
+
+std::vector<std::string> ItemImplicitText(const Item &item)
+{
+	std::vector<std::string> lines;
+	for (const ItemImplicit &implicit : ItemImplicits(item))
+		lines.push_back(FormatRuntime(implicit.implicit->text, implicit.values[0], implicit.values[1]));
+	return lines;
+}
+
+int ItemQuality(const Item &item)
+{
+	if (ItemBaseMeta(item) == nullptr)
+		return 0;
+	return static_cast<int>((item.dwBuff & CF_POE2_QUALITY) >> 23);
+}
+
+void SetItemQuality(Item &item, int quality)
+{
+	quality = std::clamp(quality, 0, MaxExceptionalQuality);
+	item.dwBuff = (item.dwBuff & ~static_cast<uint32_t>(CF_POE2_QUALITY)) | (static_cast<uint32_t>(quality) << 23);
+}
+
+bool IsExceptional(const Item &item)
+{
+	return ItemQuality(item) > MaxItemQuality;
+}
+
+bool HasQuality(const Item &item)
+{
+	const BaseMeta *base = ItemBaseMeta(item);
+	return base != nullptr && base->quality != QualityKind::None;
+}
+
+} // namespace devilution

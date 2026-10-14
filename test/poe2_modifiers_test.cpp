@@ -118,7 +118,7 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 TEST_F(Poe2ModifiersTest, RaresRollFourToSixLegalModsAndRecreateIdentically)
 {
 	std::array<int, 7> counts {};
-	for (const std::string_view baseName : { "Long Sword", "Short Bow", "Full Plate Mail", "Ring", "Amulet", "Tower Shield", "Helm", "Leather Armor" }) {
+	for (const std::string_view baseName : { "Shortsword", "Fine Short Bow", "Full Plate Mail", "Ruby Ring", "Amber Amulet", "Wooden Tower Shield", "Iron Cap", "Leather Armor" }) {
 		const _item_indexes base = FindBase(baseName);
 		ASSERT_NE(base, IDI_GOLD) << baseName;
 		for (uint32_t seed = 1; seed <= 300; seed++) {
@@ -168,7 +168,7 @@ TEST_F(Poe2ModifiersTest, RaresRollFourToSixLegalModsAndRecreateIdentically)
 
 TEST_F(Poe2ModifiersTest, MagicItemsHaveAPrefixOrSuffixAndAName)
 {
-	const _item_indexes base = FindBase("Ring");
+	const _item_indexes base = FindBase("Ruby Ring");
 	ASSERT_NE(base, IDI_GOLD);
 	int two = 0;
 	for (uint32_t seed = 1; seed <= 200; seed++) {
@@ -298,7 +298,7 @@ TEST_F(Poe2ModifiersTest, HighUnidentifiedTiersCullWeakModifiers)
 
 TEST_F(Poe2ModifiersTest, OlderItemsKeepDiablosAffixes)
 {
-	const _item_indexes base = FindBase("Long Sword");
+	const _item_indexes base = FindBase("Shortsword");
 	ASSERT_NE(base, IDI_GOLD);
 	Item item = MakeItem(base, 5, ITEM_QUALITY_RARE, 30);
 	// An item level without the modifier flag is from before the modifier tables.

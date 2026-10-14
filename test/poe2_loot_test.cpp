@@ -145,7 +145,7 @@ TEST_F(Poe2LootTest, OrbsSitInValueBands)
 
 TEST_F(Poe2LootTest, DropsTakeTheRolledRarityAndRecreateTheSame)
 {
-	const _item_indexes base = FindBase("Long Sword");
+	const _item_indexes base = FindBase("Shortsword");
 	ASSERT_NE(base, IDI_GOLD);
 	for (uint32_t seed = 1; seed <= 60; seed++) {
 		const Item normal = MakeDrop(base, ITEM_QUALITY_NORMAL, seed);
@@ -221,7 +221,7 @@ TEST_F(Poe2LootTest, ItemLevelsRunToEightyTwo)
 
 TEST_F(Poe2LootTest, DropsKeepTheirItemLevel)
 {
-	const _item_indexes base = FindBase("Long Sword");
+	const _item_indexes base = FindBase("Shortsword");
 	ASSERT_NE(base, IDI_GOLD);
 	Item item = {};
 	SetLootRarity(item, ITEM_QUALITY_RARE);

@@ -151,7 +151,7 @@ constexpr int MaxRareModsPerSide = 3;
 /** @brief A rare jewel has at most two prefixes and two suffixes. */
 constexpr int MaxRareJewelModsPerSide = 2;
 
-/** @brief Loads the modifier tables from the POE2 Mashup mod, or clears them outside POE2 mode. */
+/** @brief Loads the modifier tables and the item bases (poe2/bases.hpp) from the POE2 Mashup mod, or clears them outside POE2 mode. */
 void LoadModifierData();
 const std::vector<ModFamily> &ModifierFamilies();
 std::optional<uint8_t> FindModifierFamily(std::string_view id);
@@ -189,6 +189,8 @@ int MagicModCount(uint32_t seed);
 
 /** @brief Changes the item by the modifier: base values, its own stats, or the POE2 stats the player adds up. */
 void ApplyItemMod(Item &item, const Poe2ItemMod &mod);
+/** @brief Changes the item by an effect with its values, for modifiers and base implicits alike. */
+void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1);
 
 /** @brief The modifier's tooltip lines, with its tier at the end. */
 std::vector<std::string> ItemModText(const Poe2ItemMod &mod);

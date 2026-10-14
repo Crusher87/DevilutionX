@@ -75,7 +75,7 @@ Item RebuildWithBuff(const Player &player, const Item &item, uint32_t dwBuff)
 /** @brief A rerolled item keeps the POE2 item level it dropped with. */
 uint32_t KeptItemLevelBits(const Item &item)
 {
-	return GetPoe2ItemLevel(item) > 0 ? item.dwBuff & (CF_POE2_ILVL | CF_POE2_MODS) : 0;
+	return GetPoe2ItemLevel(item) > 0 ? item.dwBuff & (CF_POE2_ILVL | CF_POE2_MODS | CF_POE2_QUALITY) : 0;
 }
 
 int ItemLevel(const Player &player, const Item &item)

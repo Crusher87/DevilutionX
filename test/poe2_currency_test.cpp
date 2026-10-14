@@ -93,7 +93,7 @@ TEST_F(Poe2CurrencyTest, EveryOrbHasAnItem)
 
 TEST_F(Poe2CurrencyTest, TransmutationMakesMagic)
 {
-	Item item = Make("Long Sword", ITEM_QUALITY_NORMAL);
+	Item item = Make("Shortsword", ITEM_QUALITY_NORMAL);
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Transmutation, *MyPlayer, item));
 	EXPECT_EQ(item._iMagical, ITEM_QUALITY_MAGIC);
 	EXPECT_TRUE(item._iIdentified);
@@ -103,7 +103,7 @@ TEST_F(Poe2CurrencyTest, TransmutationMakesMagic)
 
 TEST_F(Poe2CurrencyTest, AlchemyAndChaosMakeRares)
 {
-	Item item = Make("Helm", ITEM_QUALITY_MAGIC);
+	Item item = Make("Iron Cap", ITEM_QUALITY_MAGIC);
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Alchemy, *MyPlayer, item));
 	EXPECT_EQ(item._iMagical, ITEM_QUALITY_RARE);
 	ExpectRecreates(item);
@@ -117,7 +117,7 @@ TEST_F(Poe2CurrencyTest, AlchemyAndChaosMakeRares)
 
 TEST_F(Poe2CurrencyTest, ScouringMakesNormal)
 {
-	Item item = Make("Short Bow", ITEM_QUALITY_RARE);
+	Item item = Make("Fine Short Bow", ITEM_QUALITY_RARE);
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Scouring, *MyPlayer, item));
 	EXPECT_EQ(item._iMagical, ITEM_QUALITY_NORMAL);
 	ExpectRecreates(item);
@@ -125,12 +125,12 @@ TEST_F(Poe2CurrencyTest, ScouringMakesNormal)
 
 TEST_F(Poe2CurrencyTest, RejectsWrongItems)
 {
-	Item normal = Make("Long Sword", ITEM_QUALITY_NORMAL);
+	Item normal = Make("Shortsword", ITEM_QUALITY_NORMAL);
 	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Chaos, *MyPlayer, normal));
 	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Scouring, *MyPlayer, normal));
 
 	Item unique;
-	ASSERT_TRUE(AdminGenerateItem(*MyPlayer, unique, FindBase("Short Bow"), ITEM_QUALITY_UNIQUE, 30, 99));
+	ASSERT_TRUE(AdminGenerateItem(*MyPlayer, unique, FindBase("Fine Short Bow"), ITEM_QUALITY_UNIQUE, 30, 99));
 	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Alchemy, *MyPlayer, unique));
 }
 
@@ -138,14 +138,14 @@ TEST_F(Poe2CurrencyTest, KeepsTheGameRngState)
 {
 	SetRndSeed(4242);
 	const uint32_t before = GetLCGEngineState();
-	Item item = Make("Long Sword", ITEM_QUALITY_NORMAL);
+	Item item = Make("Shortsword", ITEM_QUALITY_NORMAL);
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Alchemy, *MyPlayer, item));
 	EXPECT_EQ(GetLCGEngineState(), before);
 }
 
 TEST_F(Poe2CurrencyTest, AugmentationAddsTheMissingAffix)
 {
-	Item item = MakeWhere("Long Sword", ITEM_QUALITY_MAGIC, [](const Item &candidate) {
+	Item item = MakeWhere("Shortsword", ITEM_QUALITY_MAGIC, [](const Item &candidate) {
 		return candidate._iMagical == ITEM_QUALITY_MAGIC && (candidate._iPrePower == IPL_INVALID) != (candidate._iSufPower == IPL_INVALID);
 	});
 	const item_effect_type kept = item._iPrePower != IPL_INVALID ? item._iPrePower : item._iSufPower;
@@ -160,7 +160,7 @@ TEST_F(Poe2CurrencyTest, AugmentationAddsTheMissingAffix)
 
 TEST_F(Poe2CurrencyTest, RegalKeepsTheMagicAffixes)
 {
-	Item item = MakeWhere("Helm", ITEM_QUALITY_MAGIC, [](const Item &candidate) { return candidate._iMagical == ITEM_QUALITY_MAGIC; });
+	Item item = MakeWhere("Iron Cap", ITEM_QUALITY_MAGIC, [](const Item &candidate) { return candidate._iMagical == ITEM_QUALITY_MAGIC; });
 	const item_effect_type prefix = item._iPrePower;
 	const item_effect_type suffix = item._iSufPower;
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Regal, *MyPlayer, item));
@@ -175,7 +175,7 @@ TEST_F(Poe2CurrencyTest, RegalKeepsTheMagicAffixes)
 
 TEST_F(Poe2CurrencyTest, ExaltedAddsAnAffixAndKeepsTheRest)
 {
-	Item item = MakeWhere("Short Bow", ITEM_QUALITY_RARE, [](const Item &candidate) {
+	Item item = MakeWhere("Fine Short Bow", ITEM_QUALITY_RARE, [](const Item &candidate) {
 		return candidate._iMagical == ITEM_QUALITY_RARE && RareAffixCount(candidate) == 3;
 	});
 	const auto before = item._iRarePowers;
@@ -194,7 +194,7 @@ TEST_F(Poe2CurrencyTest, ExaltedAddsAnAffixAndKeepsTheRest)
 
 TEST_F(Poe2CurrencyTest, DivineKeepsTheAffixes)
 {
-	Item item = Make("Short Bow", ITEM_QUALITY_RARE);
+	Item item = Make("Fine Short Bow", ITEM_QUALITY_RARE);
 	const auto powers = item._iRarePowers;
 	const int seed = item._iSeed;
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Divine, *MyPlayer, item));
@@ -207,7 +207,7 @@ TEST_F(Poe2CurrencyTest, VaalCorruptsForGood)
 {
 	for (int seed = 1; seed <= 12; seed++) {
 		Item item;
-		ASSERT_TRUE(AdminGenerateItem(*MyPlayer, item, FindBase("Helm"), ITEM_QUALITY_RARE, 30, seed));
+		ASSERT_TRUE(AdminGenerateItem(*MyPlayer, item, FindBase("Iron Cap"), ITEM_QUALITY_RARE, 30, seed));
 		ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Vaal, *MyPlayer, item));
 		EXPECT_NE(item.dwBuff & CF_POE2_CORRUPTED, 0U);
 		ExpectRecreates(item);

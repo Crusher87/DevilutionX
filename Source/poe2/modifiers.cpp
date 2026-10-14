@@ -9,6 +9,7 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/bases.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/player_data.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -243,6 +244,7 @@ uint8_t AddToByte(uint8_t base, int value)
 void LoadModifierData()
 {
 	Families.clear();
+	LoadBaseData();
 	if (!gbIsPoe2)
 		return;
 
@@ -488,9 +490,12 @@ void ApplyItemMod(Item &item, const Poe2ItemMod &mod)
 	const ModFamily *family = ItemModFamily(mod);
 	if (family == nullptr)
 		return;
-	const int v0 = mod.values[0];
-	const int v1 = mod.values[1];
-	switch (family->effect) {
+	ApplyModEffect(item, family->effect, mod.values[0], mod.values[1]);
+}
+
+void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
+{
+	switch (effect) {
 	case ModEffect::None:
 		break;
 	case ModEffect::Life:

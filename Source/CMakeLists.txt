@@ -758,6 +758,7 @@ endif()
 add_devilutionx_object_library(libdevilutionx_player
   player.cpp
   poe2/defenses.cpp
+  poe2/bases.cpp
   poe2/camera_shake.cpp
   poe2/charms.cpp
   poe2/flasks.cpp

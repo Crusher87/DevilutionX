@@ -9,6 +9,7 @@
 #include "levels/gendung.h"
 #include "levels/gendung_defs.hpp"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "utils/is_of.hpp"
@@ -25,6 +26,8 @@ DefenseType ItemDefenseType(const Item &item)
 {
 	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
 		return DefenseType::Armour;
+	if (const BaseMeta *meta = ItemBaseMeta(item); meta != nullptr && meta->defense)
+		return *meta->defense;
 	const std::string_view base = AllItemsList[static_cast<size_t>(item.IDidx)].iName;
 	if (IsAnyOf(base, "Rags", "Cape", "Cloak", "Robe", "Cap", "Crown", "Twig Focus", "Woven Focus", "Crystal Focus"))
 		return DefenseType::EnergyShield;

@@ -183,7 +183,7 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 	player._pStrength = 60;
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Weapon);
 
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Maul");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Ready);
 
 	player._pMana = Fixed26_6::fromInt(1);
@@ -193,30 +193,30 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 
 TEST_F(Poe2SkillGemsTest, WeaponsAllowMatchingSkills)
 {
-	const Item dagger = MakeBase("Dagger");
+	const Item dagger = MakeBase("Shiv");
 	EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Flurry));
 	EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Cleave));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Barrage));
 
-	const Item axe = MakeBase("Battle Axe");
+	const Item axe = MakeBase("Woodsman's Axe");
 	EXPECT_TRUE(ItemAllowsWeaponSkill(axe, WeaponSkill::Cleave));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(axe, WeaponSkill::Flurry));
 
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::Barrage));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::RainOfArrows));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Maul"), WeaponSkill::LeapSlam));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::Barrage));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::RainOfArrows));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Sledge"), WeaponSkill::LeapSlam));
 	EXPECT_TRUE(ItemAllowsWeaponSkill(axe, WeaponSkill::LeapSlam));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::LeapSlam));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::LeapSlam));
 	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::RainOfArrows));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Buckler"), WeaponSkill::Cleave));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Hide Buckler"), WeaponSkill::Cleave));
 }
 
 TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
 {
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Buckler"), WeaponSkill::ShieldCharge));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Battle Axe"), WeaponSkill::ShieldCharge));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::LightningArrow));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::EscapeShot));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Hide Buckler"), WeaponSkill::ShieldCharge));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Woodsman's Axe"), WeaponSkill::ShieldCharge));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::LightningArrow));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::EscapeShot));
 	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::LightningArrow));
 	EXPECT_FALSE(IsRangedWeaponSkill(WeaponSkill::EscapeShot));
 
@@ -225,10 +225,10 @@ TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
 	for (const WeaponSkill skill : { WeaponSkill::BattleCry, WeaponSkill::EmberFusillade, WeaponSkill::Spark }) {
 		EXPECT_FALSE(WeaponSkillNeedsWeapon(skill)) << WeaponSkillName(skill);
 		EXPECT_TRUE(WeaponAllowsSkill(player, skill)) << WeaponSkillName(skill);
-		EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), skill)) << WeaponSkillName(skill);
+		EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), skill)) << WeaponSkillName(skill);
 	}
 	EXPECT_FALSE(WeaponAllowsSkill(player, WeaponSkill::ShieldCharge));
-	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Buckler");
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Hide Buckler");
 	EXPECT_TRUE(WeaponAllowsSkill(player, WeaponSkill::ShieldCharge));
 
 	// Every skill has a name, a description and a gem with a stat requirement.
