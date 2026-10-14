@@ -88,6 +88,7 @@ set(libdevilutionx_SRCS
   engine/animationinfo.cpp
   engine/backbuffer_state.cpp
   engine/dx.cpp
+  engine/ui_scale.cpp
   engine/events.cpp
   engine/palette.cpp
   engine/sound_position.cpp

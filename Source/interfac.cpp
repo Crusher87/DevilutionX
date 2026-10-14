@@ -263,6 +263,7 @@ struct {
 void InitRendering()
 {
 	// Blit the background once and then free it.
+	ClearScaledWorld();
 	DrawCutsceneBackground();
 	if (RenderDirectlyToOutputSurface && PalSurface != nullptr) {
 		// Render into all the backbuffers if there are multiple.

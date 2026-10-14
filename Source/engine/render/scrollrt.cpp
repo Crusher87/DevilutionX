@@ -37,6 +37,7 @@
 #include "engine/render/light_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
+#include "engine/ui_scale.hpp"
 #include "engine/world_tile.hpp"
 #include "game_mode.hpp"
 #include "gmenu.h"
@@ -1349,10 +1350,15 @@ void DrawView(const Surface &out, Point startPosition)
 	DebugCoordsMap.clear();
 #endif
 	Displacement offset = {};
-	CalcFirstTilePosition(startPosition, offset);
-	// POE2 Mashup: heavy hits jolt the view.
-	offset += CameraShakeOffset();
-	DrawGame(out, startPosition, offset);
+	{
+		// POE2 Mashup: with the UI scaled, the world is drawn at the full size and the UI over a shrunk copy of it.
+		const WorldSpaceScope worldSpace;
+		CalcFirstTilePosition(startPosition, offset);
+		// POE2 Mashup: heavy hits jolt the view.
+		offset += CameraShakeOffset();
+		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
+	}
+	PrepareScaledUi();
 	if (AutomapActive) {
 		DrawAutomap(out.subregionY(0, gnViewportHeight));
 	}
@@ -1715,10 +1721,12 @@ void TilesInView(int *rcolumns, int *rrows)
 
 void CalcViewportGeometry()
 {
+	// POE2 Mashup: the world's geometry, at the full size when the UI is scaled.
+	const WorldSpaceScope worldSpace;
 	const int zoomFactor = *GetOptions().Graphics.zoom ? 2 : 1;
 	const int screenWidth = GetScreenWidth() / zoomFactor;
 	const int screenHeight = GetScreenHeight() / zoomFactor;
-	const int panelHeight = GetMainPanel().size.height / zoomFactor;
+	const int panelHeight = UiToWorldHeight(GetMainPanel().size.height) / zoomFactor;
 	const int pixelsToPanel = screenHeight - panelHeight;
 	Point playerPosition { screenWidth / 2, pixelsToPanel / 2 };
 

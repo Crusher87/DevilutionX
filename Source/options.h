@@ -547,6 +547,8 @@ struct GraphicsOptions : OptionCategoryBase {
 	std::vector<OptionEntryBase *> GetEntries() override;
 
 	OptionEntryResolution resolution;
+	/** @brief POE2 Mashup: draws the UI bigger, in percent, while the world keeps the full resolution. */
+	OptionEntryInt<int> uiScale;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)

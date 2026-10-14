@@ -794,6 +794,7 @@ GraphicsOptions::GraphicsOptions()
 #endif
               { FrameRateControl::CPUSleep, N_("Limit FPS") },
           })
+    , uiScale("UI Scale", OptionEntryFlags::CantChangeInGame | OptionEntryFlags::RecreateUI, N_("UI Scale"), N_("Draws the panels, text and menus bigger, in percent, while the world keeps the full resolution and view area. Needs Upscale."), 100, { 100, 125, 150, 175, 200 })
     , brightness("Brightness Correction", OptionEntryFlags::Invisible, "Brightness Correction", "Brightness correction level.", 0)
     , zoom("Zoom", OptionEntryFlags::None, N_("Zoom"), N_("Zoom on when enabled."), false)
     , perPixelLighting("Per-pixel Lighting", OptionEntryFlags::None, N_("Per-pixel Lighting"), N_("Subtile lighting for smoother light gradients."), DEFAULT_PER_PIXEL_LIGHTING)
@@ -812,6 +813,9 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 	// clang-format off
 	return {
 		&resolution,
+#ifndef USE_SDL1
+		&uiScale,
+#endif
 #ifndef __vita__
 		&fullscreen,
 #endif

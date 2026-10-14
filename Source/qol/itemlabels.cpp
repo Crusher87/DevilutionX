@@ -12,6 +12,7 @@
 #include "engine/point.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
+#include "engine/ui_scale.hpp"
 #include "gmenu.h"
 #include "inv.h"
 #include "options.h"
@@ -130,6 +131,8 @@ void AddItemToLabelQueue(int id, Point position)
 	if (*GetOptions().Graphics.zoom) {
 		position *= 2;
 	}
+	// POE2 Mashup: the labels are UI, drawn over the full-size world.
+	position = WorldToUi(position);
 	position.x -= nameWidth / 2;
 	position.y -= LabelHeight();
 	labelQueue.push_back(ItemLabel { id, nameWidth, position, std::move(textOnGround) });

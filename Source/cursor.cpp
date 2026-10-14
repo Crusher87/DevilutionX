@@ -31,6 +31,7 @@
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
+#include "engine/ui_scale.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "hwcursor.hpp"
@@ -927,27 +928,36 @@ void CheckCursMove()
 	if (IsItemLabelHighlighted())
 		return;
 
-	Point screenPosition = MousePosition;
 	const Rectangle &mainPanel = GetMainPanel();
-
-	AlterMousePositionViaPanels(screenPosition);
-	AlterMousePositionViaScrolling(screenPosition, mainPanel);
-	AlterMousePositionViaZoom(screenPosition);
-
 	const Player &myPlayer = *MyPlayer;
-
-	AlterMousePositionViaPlayer(screenPosition, myPlayer);
+	const bool scrollingOverPanel = mainPanel.contains(MousePosition) && track_isscrolling();
 
 	bool flipflag = false;
-	Point currentTile = ConvertToTileGrid(screenPosition);
+	Point currentTile;
+	{
+		// POE2 Mashup: the tile under the mouse, in the full-size world when the UI is scaled.
+		const WorldSpaceScope worldSpace;
+		Point screenPosition = MousePosition;
 
-	ShiftToDiamondGridAlignment(screenPosition, currentTile, flipflag);
+		AlterMousePositionViaPanels(screenPosition);
+		if (scrollingOverPanel)
+			screenPosition.y = UiToWorld(mainPanel.position).y - 1;
+		AlterMousePositionViaZoom(screenPosition);
+		AlterMousePositionViaPlayer(screenPosition, myPlayer);
+
+		currentTile = ConvertToTileGrid(screenPosition);
+		ShiftToDiamondGridAlignment(screenPosition, currentTile, flipflag);
+	}
 
 	if (CheckMouseHold(currentTile)) return;
 
 	ResetCursorInfo();
 
-	if (CheckPlayerState(currentTile, myPlayer) || CheckPanelsAndFlags(mainPanel) || CheckCursorActions(currentTile, flipflag)) return;
+	if (CheckPlayerState(currentTile, myPlayer) || CheckPanelsAndFlags(mainPanel)) return;
+	{
+		const WorldSpaceScope worldSpace;
+		if (CheckCursorActions(currentTile, flipflag)) return;
+	}
 
 	// update cursor position
 	cursPosition = currentTile;
