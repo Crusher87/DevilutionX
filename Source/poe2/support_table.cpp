@@ -21,6 +21,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
@@ -137,6 +138,8 @@ static_assert(std::size(Table) == static_cast<size_t>(SupportGem::Count) - First
 
 // Effect numbers.
 constexpr int VolleyExtra = 2;
+/** Shadow Warrior repeats a skill this many game ticks after it. */
+constexpr int ShadowWarriorDelay = 8;
 constexpr int KashyaExtra = 3;
 constexpr int MaxStoredVolleySeals = 6;
 constexpr int MaxHoradricSeals = 2;
@@ -358,11 +361,17 @@ void FireTriggers(Player &player, SupportGem gem, Point target, int cooldown)
 
 PersistentSkill MinionSkillOf(const Monster &minion)
 {
+	if (minion.poe2.revived)
+		return PersistentSkill::Revive;
 	const _monster_id type = minion.type().type;
 	if (type == SkeletonMinionType)
 		return PersistentSkill::SkeletalWarriors;
 	if (type == SkeletonMageMinionType)
 		return PersistentSkill::SkeletalMages;
+	if (static_cast<size_t>(minion.goalVar3) < Players.size()) {
+		if (const PersistentSkill golem = ActiveGolemSkill(Players[static_cast<size_t>(minion.goalVar3)]); golem != PersistentSkill::None)
+			return golem;
+	}
 	return PersistentSkill::SummonGolem;
 }
 
@@ -375,20 +384,20 @@ bool MinionHas(const Player &owner, const Monster &minion, SupportGem gem)
 std::pair<int, int> CountMinions(const Player &owner)
 {
 	int alive = 0;
-	std::array<bool, 3> kinds {};
+	std::array<bool, static_cast<size_t>(PersistentSkill::Last) + 1> kinds {};
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (!monster.isPlayerMinion() || monster.hasNoLife() || static_cast<size_t>(monster.goalVar3) != owner.getId() || monster.position.tile == GolemHoldingCell)
 			continue;
 		alive++;
-		kinds[static_cast<size_t>(MinionSkillOf(monster)) % 3] = true;
+		kinds[static_cast<size_t>(MinionSkillOf(monster)) % kinds.size()] = true;
 	}
 	return { alive, static_cast<int>(std::count(kinds.begin(), kinds.end(), true)) };
 }
 
 bool AnyMinionSkillHas(const Player &player, SupportGem gem)
 {
-	for (const PersistentSkill skill : { PersistentSkill::SummonGolem, PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages }) {
+	for (const PersistentSkill skill : { PersistentSkill::SummonGolem, PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages, PersistentSkill::BloodGolem, PersistentSkill::FireGolem, PersistentSkill::Revive }) {
 		if (Has(player, SkillSlot::ForPersistent(skill), gem))
 			return true;
 	}
@@ -711,7 +720,18 @@ uint32_t SkillTags(SkillSlot skill)
 	constexpr uint32_t Hit = ST_Damage;
 	switch (skill.kind) {
 	case SkillKind::Persistent:
-		return IsAnyOf(skill.persistent(), PersistentSkill::SummonGolem, PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages) ? ST_Minion : 0;
+		switch (skill.persistent()) {
+		case PersistentSkill::SummonGolem:
+		case PersistentSkill::SkeletalWarriors:
+		case PersistentSkill::SkeletalMages:
+		case PersistentSkill::BloodGolem:
+		case PersistentSkill::Revive:
+			return ST_Minion;
+		case PersistentSkill::FireGolem:
+			return ST_Minion | ST_Fire;
+		default:
+			return 0;
+		}
 	case SkillKind::Spell:
 		switch (skill.spell()) {
 		case SpellID::Firebolt:
@@ -1182,6 +1202,11 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || skill.isEmpty() || Repeating || IsCastingRepeat(player))
 		return;
+	// Shadow Warrior: a shadow beside you repeats the skill.
+	if (ShadowWarriorActive(player)) {
+		QueueUse(skill, target, ShadowWarriorDelay, ShadowWarriorPercent);
+		AddVisualEffect(player.position.tile + Left(Left(player._pdir)), MissileGraphicID::Etherealize, 0, 2);
+	}
 	SupportRuntime &state = player.poe2.supportState;
 	const uint32_t tags = SkillTags(skill);
 	const std::optional<size_t> slot = SlotOf(player, skill);

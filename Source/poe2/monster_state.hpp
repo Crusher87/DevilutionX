@@ -69,6 +69,8 @@ struct Poe2MonsterState {
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;
+	/** @brief Raised by Revive: a minion that keeps the strength it had. */
+	bool revived = false;
 };
 
 } // namespace devilution

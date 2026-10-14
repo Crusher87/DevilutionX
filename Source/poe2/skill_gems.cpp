@@ -84,6 +84,17 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForPersistent(PersistentSkill::SummonGolem);
 	case IMISC_SPIRITGEM_SKELETONS:
 		return SkillSlot::ForPersistent(PersistentSkill::SkeletalWarriors);
+	case IMISC_SPIRITGEM_TABLE: {
+		// The later Spirit gems are told apart by name ("Blood Golem Gem").
+		const std::string_view name = data.iName;
+		for (int i = static_cast<int>(PersistentSkill::BloodGolem); i <= static_cast<int>(PersistentSkill::Last); i++) {
+			const auto skill = static_cast<PersistentSkill>(i);
+			const std::string_view skillName = PersistentSkillName(skill);
+			if (name.size() == skillName.size() + 4 && name.starts_with(skillName) && name.ends_with(" Gem"))
+				return SkillSlot::ForPersistent(skill);
+		}
+		return {};
+	}
 	default:
 		return {};
 	}

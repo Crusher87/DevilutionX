@@ -81,7 +81,7 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	EXPECT_EQ(skills, 119U);
+	EXPECT_EQ(skills, 128U);
 	// Lineage supports are found, never cut.
 	EXPECT_EQ(supports, static_cast<size_t>(SupportGem::Count) - 1 - 16);
 }

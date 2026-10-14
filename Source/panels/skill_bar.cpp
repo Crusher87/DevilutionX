@@ -262,6 +262,24 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::Infravision;
 	case PersistentSkill::SkeletalMages:
 		return SpellIcon::Resurrect;
+	case PersistentSkill::BloodGolem:
+		return SpellIcon::BloodStar;
+	case PersistentSkill::FireGolem:
+		return SpellIcon::Immolation;
+	case PersistentSkill::Guardian:
+		return SpellIcon::Sentinel;
+	case PersistentSkill::ShadowWarrior:
+		return SpellIcon::Etherealize;
+	case PersistentSkill::Revive:
+		return SpellIcon::Resurrect;
+	case PersistentSkill::ManaShield:
+		return SpellIcon::ManaShield;
+	case PersistentSkill::VizjereiFocus:
+		return SpellIcon::Lightning;
+	case PersistentSkill::Berserk:
+		return SpellIcon::Berserk;
+	case PersistentSkill::Reflect:
+		return SpellIcon::Reflect;
 	default:
 		return SpellIcon::Empty;
 	}

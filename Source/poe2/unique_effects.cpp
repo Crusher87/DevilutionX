@@ -16,6 +16,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -799,6 +800,8 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 		raw -= fromMana;
 	}
 	raw = std::max<int64_t>(raw, 0);
+	// Berserk and Mana Shield.
+	raw = ApplySpiritHitTaken(player, Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(raw, INT32_MAX / 2)))).raw();
 	state.lifeLost[0] = static_cast<int32_t>(std::min<int64_t>(state.lifeLost[0] + raw, INT32_MAX / 2));
 	return Fixed26_6::fromRaw(static_cast<int32_t>(raw));
 }

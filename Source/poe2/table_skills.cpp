@@ -21,6 +21,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -548,6 +549,11 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	if (unsupported.duration > 0)
 		data.duration = static_cast<uint16_t>(std::clamp(SupportDurationTicks(player, slot, unsupported.duration), 1, static_cast<int>(UINT16_MAX)));
 	const SupportHitScope scope(player, slot);
+	// Meteor, Thunderstorm and Frozen Orb eat an element infusion for a much bigger cast that adds its element.
+	if (const uint8_t infusion = TakeInfusion(player, slot); infusion != 0) {
+		data.damagePercent = static_cast<int16_t>(std::min(data.damagePercent * (100 + InfusionDamagePercent) / 100, static_cast<int>(INT16_MAX)));
+		SkillBurst(player, target, std::max<int>(data.radius, 2), InfusionDamageType(infusion), Fixed26_6::fromRaw(FixedDamage(player, data).raw() / 2), MissileGraphicID::ApocalypseBoom);
+	}
 	// The cast effects were played by PlaySkillEffects just before.
 	CastResult result;
 	const Point tile = player.position.tile;

@@ -862,3 +862,12 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Andariel's Anguish Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Baal's Echo Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Wirt's Leg Support	Gem	0	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	2500
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blood Golem Gem	Gem	10	0	0	0	0	0	20	30	0		SPIRITGEM_TABLE	Null	true	2200
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Fire Golem Gem	Gem	10	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2200
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Guardian Gem	Gem	8	0	0	0	0	0	0	35	0		SPIRITGEM_TABLE	Null	true	1800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Shadow Warrior Gem	Gem	14	0	0	0	0	0	0	20	40		SPIRITGEM_TABLE	Null	true	3000
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Revive Gem	Gem	12	0	0	0	0	0	0	45	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Mana Shield Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Vizjerei Focus Gem	Gem	12	0	0	0	0	0	0	50	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Berserk Gem	Gem	8	0	0	0	0	0	40	0	0		SPIRITGEM_TABLE	Null	true	1800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Reflect Gem	Gem	8	0	0	0	0	0	35	0	0		SPIRITGEM_TABLE	Null	true	1800

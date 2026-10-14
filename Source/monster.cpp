@@ -85,6 +85,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
@@ -1156,6 +1157,9 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 		dam = dam * SupportMinionDamageTakenPercent(Players[static_cast<size_t>(target.goalVar3)], target) / 100;
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
 	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
+	// POE2 Mashup: Blood Golem heals its owner and Fire Golem's blows burn.
+	if (gbIsPoe2 && attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size())
+		OnMinionHitMonster(Players[static_cast<size_t>(attacker.goalVar3)], attacker, target, Fixed26_6::fromRaw(dam));
 
 	if (attacker.isPlayerMinion()) {
 		const auto playerId = static_cast<size_t>(attacker.goalVar3);
@@ -1268,6 +1272,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		}
 		TelemetryNoteAttacker(monster.name());
 		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, dam, DamageType::Physical)));
+		ReflectMeleeHit(player, monster, dam);
 	}
 
 	// Reflect can also kill a monster, so make sure the monster is still alive
@@ -3500,6 +3505,7 @@ void InitLevelMonsters()
 	ClearHeralds();
 	ClearSkillZones();
 	ClearSupportEffects();
+	ClearSpiritSkills();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -4124,6 +4130,8 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		OnMonsterKilled(*MyPlayer, monster);
 		OnSupportedKill(monster);
 		TryDropLineageSupport(monster, sendmsg);
+		OnReviveCandidateKilled(*MyPlayer, monster);
+		TryDropInfusion(monster);
 	}
 	// POE2 Mashup: a minion's death can frenzy its owner's other minions.
 	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
@@ -5017,7 +5025,7 @@ size_t CountSkeletonMinions(const Player &player, _monster_id type)
 	size_t count = 0;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived)
 			count++;
 	}
 	return count;
@@ -5027,9 +5035,59 @@ void KillSkeletonMinions(const Player &player, _monster_id type)
 {
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived)
 			KillGolem(monster);
 	}
+}
+
+size_t CountRevivedMinions(const Player &player)
+{
+	size_t count = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.poe2.revived && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+			count++;
+	}
+	return count;
+}
+
+void KillRevivedMinions(const Player &player)
+{
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.poe2.revived && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+			KillGolem(monster);
+	}
+}
+
+Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats)
+{
+	if (ActiveMonsterCount >= MaxMonsters || type == MT_GOLEM)
+		return nullptr;
+	const size_t typeIndex = GetMonsterTypeIndex(type);
+	if (typeIndex >= LevelMonsterTypeCount)
+		return nullptr;
+	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];
+	ActiveMonsterCount += 1;
+	// Single player only for now: the revive isn't sent to other players.
+	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, GetLCGEngineState(), player.getId(), 0);
+	Monster &monster = Monsters[monsterIndex];
+	monster.poe2 = {};
+	monster.poe2.revived = true;
+	monster.flags |= MFLAG_GOLEM;
+	monster.flags &= ~MFLAG_BERSERK;
+	monster.ai = MonsterAIID::Golem;
+	monster.goalVar3 = static_cast<int8_t>(player.getId());
+	monster.maxHitPoints = std::max(stats.life, Fixed26_6::fromInt(1));
+	monster.hitPoints = monster.maxHitPoints;
+	monster.armorClass = stats.armorClass;
+	monster.resistance = stats.resistance;
+	monster.golemToHit = 40 + (2 * player.getCharacterLevel());
+	const int damagePercent = MinionDamagePercent(player);
+	monster.minDamage = static_cast<uint8_t>(std::min(stats.minDamage * damagePercent / 100, 255));
+	monster.maxDamage = static_cast<uint8_t>(std::min(std::max(stats.maxDamage, stats.minDamage) * damagePercent / 100, 255));
+	UpdateEnemy(monster);
+	return &monster;
 }
 
 bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type)

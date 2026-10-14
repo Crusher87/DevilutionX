@@ -56,6 +56,7 @@ set(tests
   poe2_skill_resources_test
   poe2_table_skills_test
   poe2_support_table_test
+  poe2_spirit_skills_test
   poe2_support_gems_test
   poe2_telemetry_test
   poe2_uniques_test

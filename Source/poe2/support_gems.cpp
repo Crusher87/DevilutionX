@@ -11,6 +11,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
@@ -575,6 +576,7 @@ int SupportSpellDamagePercent(const Player &player, SpellID spell)
 	const int gemLevel = player.poe2.skillLevel(spell);
 	int percent = gemLevel > 0 ? GemDamagePercent(SkillSlot::ForSpell(spell), gemLevel) : 100;
 	percent = percent * UniqueSpellDamagePercent(player, spell) / 100;
+	percent = percent * SpiritSpellDamagePercent(player) / 100;
 	if (IsProjectileSpell(spell) && player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles))
 		percent = percent * MultipleProjectilesDamagePercent / 100;
 	if (IsDirectProjectileSpell(spell)) {

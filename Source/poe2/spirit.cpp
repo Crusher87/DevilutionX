@@ -19,6 +19,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
@@ -128,6 +129,24 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Herald of Frost");
 	case PersistentSkill::SkeletalMages:
 		return _("Skeletal Mages");
+	case PersistentSkill::BloodGolem:
+		return _("Blood Golem");
+	case PersistentSkill::FireGolem:
+		return _("Fire Golem");
+	case PersistentSkill::Guardian:
+		return _("Guardian");
+	case PersistentSkill::ShadowWarrior:
+		return _("Shadow Warrior");
+	case PersistentSkill::Revive:
+		return _("Revive");
+	case PersistentSkill::ManaShield:
+		return _("Mana Shield");
+	case PersistentSkill::VizjereiFocus:
+		return _("Vizjerei Focus");
+	case PersistentSkill::Berserk:
+		return _("Berserk");
+	case PersistentSkill::Reflect:
+		return _("Reflect");
 	default:
 		return {};
 	}
@@ -150,6 +169,24 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Chilled or frozen enemies you kill shatter, freezing those nearby");
 	case PersistentSkill::SkeletalMages:
 		return _("Skeletal mages hurl fire from range and rise again when they fall");
+	case PersistentSkill::BloodGolem:
+		return _("A tough golem of blood whose blows heal you for 20% of the damage. One golem at a time");
+	case PersistentSkill::FireGolem:
+		return _("A golem of fire: its blows burn, and so does standing next to it. One golem at a time");
+	case PersistentSkill::Guardian:
+		return _("Every 8 seconds a fire-breathing guardian rises near you when enemies come close");
+	case PersistentSkill::ShadowWarrior:
+		return _("Your shadow repeats every skill you use at 40% damage");
+	case PersistentSkill::Revive:
+		return _("The strongest monster you kill rises to fight for you, keeping its strength");
+	case PersistentSkill::ManaShield:
+		return _("30% of the damage you take comes from mana while you have mana");
+	case PersistentSkill::VizjereiFocus:
+		return _("Spells deal 4% more damage per 100 maximum mana, but cost 6% of maximum mana more");
+	case PersistentSkill::Berserk:
+		return _("Melee hits build Rage and you deal 20% more attack damage, but take 15% more damage");
+	case PersistentSkill::Reflect:
+		return _("Enemies that hit you in melee take 30% of the damage back");
 	default:
 		return {};
 	}
@@ -170,6 +207,23 @@ int SpiritReservation(PersistentSkill skill)
 		return 30;
 	case PersistentSkill::SkeletalMages:
 		return 40;
+	case PersistentSkill::BloodGolem:
+	case PersistentSkill::FireGolem:
+		return 50;
+	case PersistentSkill::Guardian:
+		return 35;
+	case PersistentSkill::ShadowWarrior:
+		return 60;
+	case PersistentSkill::Revive:
+		return 50;
+	case PersistentSkill::ManaShield:
+		return 30;
+	case PersistentSkill::VizjereiFocus:
+		return 40;
+	case PersistentSkill::Berserk:
+		return 30;
+	case PersistentSkill::Reflect:
+		return 30;
 	default:
 		return 0;
 	}
@@ -391,7 +445,8 @@ bool CanRaiseMinions(const Player &player)
 void KeepGolemAlive(Player &player)
 {
 	Monster *golem = FindGolemForPlayer(player);
-	if (!IsPersistentSkillActive(player, PersistentSkill::SummonGolem)) {
+	const PersistentSkill golemSkill = ActiveGolemSkill(player);
+	if (golemSkill == PersistentSkill::None) {
 		player.poe2.golemCooldown = 0;
 		return;
 	}
@@ -406,12 +461,12 @@ void KeepGolemAlive(Player &player)
 	const std::optional<Point> position = FindMinionSpawnPosition(player);
 	if (!position)
 		return;
-	SpawnGolem(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(PersistentSkill::SummonGolem), 1)));
+	SpawnGolem(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(golemSkill), 1)));
 	if (Monster *golem = FindGolemForPlayer(player); golem != nullptr) {
 		golem->minDamage = static_cast<uint8_t>(std::min(golem->minDamage * MinionDamagePercent(player) / 100, 255));
 		golem->maxDamage = static_cast<uint8_t>(std::min(golem->maxDamage * MinionDamagePercent(player) / 100, 255));
 		// The golem skill's supports change its life.
-		if (const int percent = SupportMinionLifePercent(player, PersistentSkill::SummonGolem); percent != 100) {
+		if (const int percent = GolemLifePercent(player); percent != 100) {
 			golem->maxHitPoints = Fixed26_6::fromRaw(std::max<int32_t>(golem->maxHitPoints.raw() * percent / 100, 64));
 			golem->hitPoints = golem->maxHitPoints;
 		}
@@ -455,6 +510,7 @@ void ProcessPersistentSkills(Player &player)
 	KeepGolemAlive(player);
 	KeepSkeletonsAlive(player, PersistentSkill::SkeletalWarriors, SkeletonMinionType, SkeletalWarriorCount(player.getCharacterLevel()), player.poe2.skeletonCooldown);
 	KeepSkeletonsAlive(player, PersistentSkill::SkeletalMages, SkeletonMageMinionType, SkeletalMageCount(player.getCharacterLevel()), player.poe2.mageCooldown);
+	ProcessSpiritSkills(player);
 }
 
 } // namespace devilution

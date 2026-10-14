@@ -23,6 +23,8 @@
 #include "levels/gendung.h"
 #include "missiles.h"
 #include "poe2/gem_levels.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -155,6 +157,8 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 	}
 
 	manaAmount = Fixed26_6::fromRaw(manaAmount.raw() * SupportManaCostPercent(player, sn, lifeShare) / 100);
+	// POE2 Mashup: Vizjerei Focus makes spells cost a share of maximum mana more.
+	manaAmount += Fixed26_6::fromRaw(SpiritSpellExtraManaRaw(player));
 
 	return manaAmount;
 }
@@ -248,6 +252,8 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 		ConsumeSpell(player, spl);
 		return;
 	}
+	// POE2 Mashup: Apocalypse eats an element infusion for a much bigger cast.
+	const uint8_t infusion = supported ? TakeInfusion(player, SkillSlot::ForSpell(spl)) : 0;
 	const auto spawnMissiles = [&](WorldTilePosition target) {
 		bool fizzled = false;
 		for (size_t i = 0; i < sizeof(spellData.sMissiles) / sizeof(spellData.sMissiles[0]) && spellData.sMissiles[i] != MissileID::Null; i++) {
@@ -257,6 +263,8 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 				SetSpellMissileSpeed(*missile, spl);
 			if (missile != nullptr && supported)
 				ApplySupportsToMissile(*missile, player, spl);
+			if (missile != nullptr && infusion != 0)
+				missile->poe2.damagePercent = static_cast<int16_t>(std::min(missile->poe2.damagePercent * (100 + InfusionDamagePercent) / 100, static_cast<int>(INT16_MAX)));
 		}
 		if (spl == SpellID::ChargedBolt) {
 			for (int i = (spllvl / 2) + 3; i > 0; i--) {
@@ -288,6 +296,10 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 					spawnMissiles(WorldTilePosition(static_cast<WorldTileCoord>(far.x), static_cast<WorldTileCoord>(far.y)));
 			}
 		}
+	}
+	if (!fizzled && infusion != 0) {
+		const Fixed26_6 burst = Fixed26_6::fromInt((10 + (4 * spllvl) + player.getCharacterLevel()) * SupportSpellDamagePercent(player, spl) / 100);
+		SkillBurst(player, Point(dst), 3, InfusionDamageType(infusion), burst, MissileGraphicID::ApocalypseBoom);
 	}
 	if (!fizzled) {
 		// POE2 Mashup: uniques count spells cast and queue their repeats.

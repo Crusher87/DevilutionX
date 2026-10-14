@@ -6,6 +6,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -16,7 +17,7 @@ namespace devilution {
 
 int ResourceAttackDamagePercent(const Player &player)
 {
-	return 100 + player.poe2.rage + (player.poe2.frenzyCharges * FrenzyChargeDamagePercent) + SoulHarvestDamagePercent(player);
+	return (100 + player.poe2.rage + (player.poe2.frenzyCharges * FrenzyChargeDamagePercent) + SoulHarvestDamagePercent(player)) * SpiritAttackDamagePercent(player) / 100;
 }
 
 void GainFrenzyCharge(Player &player)
@@ -49,6 +50,7 @@ void OnSkillMeleeHit(Player &player)
 	const WeaponSkill skill = CurrentWeaponSkill(player);
 	if (skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::BattleRage))
 		AddRage(player, 1);
+	OnSpiritMeleeHit(player);
 }
 
 void CastAmplifyDamage(const Player &player, Point target, int gemLevel)

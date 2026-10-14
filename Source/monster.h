@@ -595,6 +595,18 @@ size_t CountSkeletonMinions(const Player &player, _monster_id type = SkeletonMin
 void KillSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
 /** @brief Raises a Skeletal Warrior (or Mage) for the player; false if the level has no room for it. */
 bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type = SkeletonMinionType);
+/** @brief POE2 Mashup Revive: what a raised monster keeps from its life before. */
+struct RevivedStats {
+	Fixed26_6 life;
+	uint8_t minDamage;
+	uint8_t maxDamage;
+	uint8_t armorClass;
+	uint16_t resistance;
+};
+size_t CountRevivedMinions(const Player &player);
+void KillRevivedMinions(const Player &player);
+/** @brief Raises a monster of the type to fight for the player, with the stats it had. */
+Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

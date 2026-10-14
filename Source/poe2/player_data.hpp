@@ -250,7 +250,25 @@ enum class PersistentSkill : uint8_t {
 	HeraldOfFrost,
 	/** Skeletal mages that hurl firebolts from behind your lines. */
 	SkeletalMages,
-	Last = SkeletalMages,
+	/** A golem of blood whose blows heal you. */
+	BloodGolem,
+	/** A golem of fire that burns what stands near it. */
+	FireGolem,
+	/** A fire-breathing guardian rises near you when enemies come close. */
+	Guardian,
+	/** A shadow of you repeats your skills at less damage. */
+	ShadowWarrior,
+	/** Monsters you kill rise to fight for you, keeping their strength. */
+	Revive,
+	/** Part of the damage you take comes from mana. */
+	ManaShield,
+	/** Spells deal more damage the more mana you have, and cost more. */
+	VizjereiFocus,
+	/** Melee hits build Rage and hit harder, but you take more damage. */
+	Berserk,
+	/** Melee hits on you are partly turned back on the attacker. */
+	Reflect,
+	Last = Reflect,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -428,6 +446,16 @@ struct SupportRuntime {
 	uint8_t burningGroundCooldown = 0;
 };
 
+/** @brief Timers of the Spirit skills and the element infusions, per character (not saved; see poe2/spirit_skills.cpp). */
+struct SpiritRuntime {
+	uint8_t guardianCooldown = 0;
+	uint8_t reviveCooldown = 0;
+	uint8_t auraTicks = 0;
+	uint8_t glowTicks = 0;
+	/** Element infusions carried: bit 0 fire, bit 1 lightning, bit 2 cold. */
+	uint8_t infusions = 0;
+};
+
 struct Poe2PlayerData;
 
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */
@@ -539,6 +567,8 @@ struct Poe2PlayerData {
 	uint8_t skeletonCooldown = 0;
 	/** @brief Support gem timers and counters; mutable so hits can count (not saved). */
 	mutable SupportRuntime supportState {};
+	/** @brief Spirit skill timers and the element infusions carried (not saved). */
+	mutable SpiritRuntime spiritState {};
 	/** @brief The map (POE2 endgame) the player opened: its dungeon level and tier; tier 0 when there's none. */
 	uint8_t mapLevel = 0;
 	uint8_t mapTier = 0;
@@ -632,6 +662,7 @@ struct Poe2PlayerData {
 		skeletonCooldown = 0;
 		mageCooldown = 0;
 		supportState = {};
+		spiritState = {};
 		frozenArmorTicks = 0;
 		holyShieldTicks = 0;
 		shieldWallTicks = 0;
