@@ -79,6 +79,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/desecration.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
@@ -2180,6 +2181,11 @@ void PrintItemMisc(const Item &item)
 			AddItemInfoBoxString(line);
 		return;
 	}
+	if (IsEndgameItem(item)) {
+		for (const std::string &line : EndgameItemText(item))
+			AddItemInfoBoxString(line);
+		return;
+	}
 	if (const CharmEffect charm = GetCharmEffect(item); charm != CharmEffect::None) {
 		AddItemInfoBoxString(CharmDescription(charm));
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUseFor(item)));
@@ -4135,6 +4141,7 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 	FinishFlask(item);
 	FinishCraftingItem(item);
 	FinishWaystone(item);
+	FinishEndgameItem(item);
 }
 
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen)
@@ -4266,7 +4273,7 @@ bool IsPoe2UncutGem(item_misc_id miscId)
 bool IsPoe2MiscLoot(const ItemData &data)
 {
 	return data.itype == ItemType::Misc && data.iMiscId != IMISC_BOOK && !IsPoe2FlaskOrCharm(data.iMiscId) && !IsPoe2Orb(data.iMiscId)
-	    && !IsPoe2UncutGem(data.iMiscId) && data.iMiscId != IMISC_WAYSTONE && SkillForGemData(data).isEmpty();
+	    && !IsPoe2UncutGem(data.iMiscId) && !IsAnyOf(data.iMiscId, IMISC_WAYSTONE, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY) && SkillForGemData(data).isEmpty();
 }
 
 bool IsPoe2Equipment(const ItemData &data)
@@ -4470,6 +4477,8 @@ LootBonus MapLootBonus()
 		bonus.rarity = std::max(bonus.rarity + LootRandom((2 * variance) + 1) - variance, 0);
 	bonus.quantity = 100 + ((map[MapAxis::Effectiveness] - 100) * 55 / 100);
 	bonus.waystones = map[MapAxis::WaystoneFind];
+	bonus.equipment = AtlasEquipmentPercent(*MyPlayer);
+	bonus.unique = AtlasUniquePercent(*MyPlayer, false);
 	return bonus;
 }
 
@@ -4545,13 +4554,26 @@ void DropPoe2BeltUnique(const Poe2LootOrigin &origin, Point position, bool sendm
 		DeltaAddItem(ii);
 }
 
-void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt)
+/** @brief The endgame drop: mostly waystones, some tablets, and in maps now and then a pinnacle fragment. */
+std::optional<_item_indexes> PickPoe2EndgameItem(const Poe2LootOrigin &origin)
+{
+	int fragmentWeight = origin.poe2ItemLevel >= MapAreaLevelBase + 1 ? 10 : 0;
+	if (MyPlayer != nullptr)
+		fragmentWeight = fragmentWeight * AtlasFragmentPercent(*MyPlayer) / 100;
+	const int roll = LootRandom(70 + 20 + fragmentWeight);
+	const item_misc_id miscId = roll < 70 ? IMISC_WAYSTONE : roll < 90 ? IMISC_TABLET
+	                                                                   : IMISC_MAP_FRAGMENT;
+	return PickPoe2Weighted(origin.baseLevel, [miscId](const ItemData &data) { return data.iMiscId == miscId; });
+}
+
+void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt, std::optional<_item_indexes> forcedIdx = std::nullopt)
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return;
 	const int itemLevel = origin.itemLevel;
 
-	std::optional<_item_indexes> idx = PickPoe2LootItem(category, origin.baseLevel);
+	std::optional<_item_indexes> idx = forcedIdx ? forcedIdx : category == LootCategory::Endgame ? PickPoe2EndgameItem(origin)
+	                                                                                             : PickPoe2LootItem(category, origin.baseLevel);
 	int uidOffset = 0;
 	bool bundleUnique = false;
 	BeltUniqueId beltUnique = BeltUniqueId::None;
@@ -4604,6 +4626,8 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	}
 	if (IsWaystone(item))
 		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
+	if (IsMapFragment(item))
+		RollFragmentSet(item, origin.poe2ItemLevel);
 	SetupItem(item);
 	TelemetryItemDropped(item, origin.name);
 	if (sendmsg)
@@ -4690,6 +4714,118 @@ void DropWaystone(Point position, int tier, bool sendmsg)
 	TelemetryItemDropped(item, "map boss");
 	if (sendmsg)
 		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+}
+
+namespace {
+
+/** @brief Where map rewards drop from: the map's area level, as a rare monster would. */
+Poe2LootOrigin MapRewardOrigin()
+{
+	Poe2LootOrigin origin = ContainerLootOrigin(false);
+	origin.source = LootSource::Rare;
+	if (const int tier = ActiveMapTier(); tier > 0)
+		origin.poe2ItemLevel = MapAreaLevelBase + tier;
+	origin.name = "map reward";
+	return origin;
+}
+
+std::optional<_item_indexes> PickMiscReward(int level, std::initializer_list<item_misc_id> miscIds)
+{
+	return PickPoe2Weighted(level, [&miscIds](const ItemData &data) { return std::find(miscIds.begin(), miscIds.end(), data.iMiscId) != miscIds.end(); });
+}
+
+/** @brief Equipment of one class: picks bases until one fits. */
+std::optional<_item_indexes> PickEquipmentOfClass(int level, item_class itemClass)
+{
+	for (int tries = 0; tries < 20; tries++) {
+		const std::optional<_item_indexes> idx = PickPoe2EquipmentBase(level);
+		if (idx && AllItemsList[*idx].iClass == itemClass)
+			return idx;
+	}
+	return std::nullopt;
+}
+
+} // namespace
+
+void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBonus)
+{
+	const Poe2LootOrigin origin = MapRewardOrigin();
+	const int level = origin.baseLevel;
+	LootBonus bonus = MapLootBonus();
+	bonus.rarity = bonus.rarity * (100 + rarityBonus) / 100;
+	const auto equipment = [&](std::optional<item_quality> rarity, std::optional<_item_indexes> idx = std::nullopt) {
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, rarity ? rarity : std::optional<item_quality>(RollEquipmentRarity(origin.source, bonus)), idx);
+	};
+	const auto misc = [&](std::initializer_list<item_misc_id> miscIds) {
+		if (const std::optional<_item_indexes> idx = PickMiscReward(level, miscIds); idx)
+			DropPoe2LootItem(origin, position, sendmsg, LootCategory::Misc, std::nullopt, idx);
+		else
+			DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
+	};
+	switch (reward) {
+	case MapReward::Equipment:
+		equipment(std::nullopt);
+		break;
+	case MapReward::RareEquipment:
+		equipment(ITEM_QUALITY_RARE);
+		break;
+	case MapReward::Unique:
+		equipment(ITEM_QUALITY_UNIQUE);
+		break;
+	case MapReward::Armour:
+	case MapReward::RareArmour:
+		equipment(reward == MapReward::RareArmour ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(level, ICLASS_ARMOR));
+		break;
+	case MapReward::Weapon:
+	case MapReward::RareWeapon:
+		equipment(reward == MapReward::RareWeapon ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(level, ICLASS_WEAPON));
+		break;
+	case MapReward::Currency:
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
+		break;
+	case MapReward::PremiumCurrency:
+		misc({ IMISC_ORB_DIVINE, IMISC_ORB_EXALTED, IMISC_ORB_GREATER_EXALTED, IMISC_ORB_PERFECT_EXALTED, IMISC_ORB_GREATER_CHAOS, IMISC_ORB_PERFECT_CHAOS });
+		break;
+	case MapReward::Gold:
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Gold);
+		break;
+	case MapReward::Gem:
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Gem);
+		break;
+	case MapReward::Essence:
+		misc({ IMISC_ESSENCE });
+		break;
+	case MapReward::Omen:
+		misc({ IMISC_OMEN });
+		break;
+	case MapReward::Augment:
+		misc({ IMISC_AUGMENT });
+		break;
+	case MapReward::Catalyst:
+		misc({ IMISC_ORB_CATALYST });
+		break;
+	case MapReward::QualityCurrency:
+		misc({ IMISC_ORB_WHETSTONE, IMISC_ORB_ETCHER, IMISC_ORB_SCRAP, IMISC_ORB_BAUBLE });
+		break;
+	case MapReward::Corruption:
+		misc({ IMISC_ORB_VAAL });
+		break;
+	case MapReward::Desecration:
+		misc({ IMISC_ORB_DESECRATE });
+		break;
+	case MapReward::Waystone:
+		DropWaystone(position, DropWaystoneTier(origin.poe2ItemLevel), sendmsg);
+		break;
+	case MapReward::Tablet:
+		misc({ IMISC_TABLET });
+		break;
+	case MapReward::Fragment:
+		misc({ IMISC_MAP_FRAGMENT });
+		break;
+	default:
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, bonus));
+		break;
+	}
 }
 
 void DropBossUnique(Monster &monster, bool sendmsg)
@@ -4956,6 +5092,12 @@ void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t 
 	// POE2 Mashup: and a skill gem keeps its level.
 	if (IsSkillGem(item))
 		item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (dwBuff & CF_POE2_GEM_LEVEL);
+	// And a tablet, fragment or key stays the one it was.
+	if (IsEndgameItem(item)) {
+		item.dwBuff = (item.dwBuff & ~CF_POE2_VARIANT) | (dwBuff & CF_POE2_VARIANT);
+		item._iPoe2Craft = craft;
+		FinishEndgameItem(item);
+	}
 	// And a waystone keeps its tier and modifiers.
 	if (IsWaystone(item)) {
 		item._iPoe2Craft = craft;
@@ -5601,6 +5743,9 @@ std::string PrintItemPowerWithTier(item_effect_type power, const Item &item, uin
 /** @brief POE2 Mashup: crafting state shown under the modifiers: an unrevealed modifier, catalyst quality and augment sockets. */
 void PrintItemCraftState(const Item &item)
 {
+	// Waystones and tablets keep their tier and uses where jewellery keeps its catalyst.
+	if (IsWaystone(item) || IsEndgameItem(item))
+		return;
 	const Poe2Craft &craft = item._iPoe2Craft;
 	for (const Poe2CraftMod &mod : craft.mods) {
 		if (mod.family == UnrevealedModFamily)

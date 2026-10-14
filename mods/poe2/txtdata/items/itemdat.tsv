@@ -702,3 +702,6 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Essence	Essence	15	0	0	0	0	0	0	0	0		ESSENCE	Null	true	1200
 	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Omen	Omen	31	0	0	0	0	0	0	0	0		OMEN	Null	true	5000
 	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Rune	Augment	8	0	0	0	0	0	0	0	0		AUGMENT	Null	true	1000
+	2	Misc	Unequippable	RECONSTRUCTED_NOTE	Misc	NONE	Tablet	Tablet	20	0	0	0	0	0	0	0	0		TABLET	Null	false	1500
+	1	Misc	Unequippable	TORN_NOTE_1	Misc	NONE	Fragment	Fragment	25	0	0	0	0	0	0	0	0		MAP_FRAGMENT	Null	true	2500
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Gate Key	Key	25	0	0	0	0	0	0	0	0		MAP_KEY	Null	true	10000

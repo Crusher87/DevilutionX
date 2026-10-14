@@ -38,6 +38,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "options.h"
+#include "poe2/endgame.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/objdat.h"
@@ -2028,7 +2029,9 @@ void OperateChest(const Player &player, Object &chest, bool sendLootMsg)
 	chest.selectionRegion = SelectionRegion::None;
 	chest._oAnimFrame += 2;
 	SetRndSeed(chest._oRndSeed);
-	if (setlevel) {
+	// POE2 Mashup: a map's strongbox or vault drops its reward profile instead.
+	if (OpenMapRewardChest(chest.position, sendLootMsg)) {
+	} else if (setlevel) {
 		for (int j = 0; j < chest._oVar1; j++) {
 			CreateRndItem(chest.position, true, sendLootMsg, false);
 		}

@@ -83,6 +83,8 @@ int PrepareMap(Player &player, int tier, uint32_t seed);
 
 /** @brief Opens the map of the waystone the player used, if they're in town; the caller then removes the waystone. */
 bool UseWaystone(Player &player, Item &waystone);
+/** @brief Travels to the map's level once it is prepared. */
+void EnterMap(Player &player, int level);
 
 /** @brief Forgets the map once the player goes to another dungeon level; call after a level loads. */
 void UpdateActiveMap(Player &player);

@@ -82,6 +82,7 @@
 #include "nthread.h"
 #include "objects.h"
 #include "options.h"
+#include "panels/atlas_panel.hpp"
 #include "panels/console.hpp"
 #include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
@@ -242,7 +243,7 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen())) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen() || IsAtlasOpen())) {
 		RedrawViewport();
 		return false;
 	}
@@ -873,6 +874,9 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 	}
 
 	if (DesecrationRevealHandleEvent(event)) {
+		return;
+	}
+	if (AtlasHandleEvent(event)) {
 		return;
 	}
 	if (GemcuttingHandleEvent(event)) {
@@ -2315,6 +2319,18 @@ void InitKeymapActions()
 		    if (!gbIsPoe2 || IsPlayerInStore())
 			    return;
 		    ToggleSkillsPanel();
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && !gmenu_is_active(); });
+	options.Keymapper.AddAction(
+	    "AtlasPassives",
+	    N_("Atlas"),
+	    N_("Opens the Atlas passives, where completed maps give points (POE2 Mashup)."),
+	    'U',
+	    [] {
+		    if (!gbIsPoe2 || IsPlayerInStore())
+			    return;
+		    ToggleAtlas();
 	    },
 	    nullptr,
 	    [] { return gbIsPoe2 && !gmenu_is_active(); });

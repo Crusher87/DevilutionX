@@ -42,6 +42,7 @@
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
 #include "poe2/crafting_items.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/hud_globes.hpp"
@@ -2365,6 +2366,23 @@ bool UseInvItem(int cii)
 
 	if (IsWaystone(*item)) {
 		if (UseWaystone(player, *item)) {
+			if (speedlist)
+				player.RemoveSpdBarItem(c);
+			else
+				player.RemoveInvItem(c);
+			// The map's tablets are used up once the waystone is gone, so the inventory places hold.
+			SpendMapTablets(player);
+		}
+		return true;
+	}
+	// POE2 Mashup: fragments assemble into keys, and keys open pinnacle arenas.
+	if (IsMapFragment(*item)) {
+		if (!speedlist)
+			AssembleMapKey(player, c);
+		return true;
+	}
+	if (IsMapKey(*item)) {
+		if (UseMapKey(player, *item)) {
 			if (speedlist)
 				player.RemoveSpdBarItem(c);
 			else

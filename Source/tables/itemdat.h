@@ -577,6 +577,10 @@ enum item_misc_id : int16_t {
 	IMISC_ESSENCE,
 	IMISC_OMEN,
 	IMISC_AUGMENT,
+	/** Endgame: tablets add to maps, fragments assemble into keys for pinnacle bosses (poe2/endgame.hpp). */
+	IMISC_TABLET,
+	IMISC_MAP_FRAGMENT,
+	IMISC_MAP_KEY,
 	IMISC_INVALID = -1,
 };
 

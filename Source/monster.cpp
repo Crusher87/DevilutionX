@@ -79,6 +79,7 @@
 #include "player.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
@@ -3809,8 +3810,9 @@ std::expected<void, std::string> InitMonsters()
 				PlaceGroup(typeIndex, na);
 			}
 		}
-		// POE2 Mashup: a map's toughest monster becomes its boss.
+		// POE2 Mashup: a map's toughest monster becomes its boss, and its encounters take their places.
 		ChooseMapBoss();
+		PlaceMapEncounters();
 	}
 	for (int i = 0; i < nt; i++) {
 		for (int s = -2; s < 2; s++) {
@@ -4106,6 +4108,7 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	SpawnLoot(monster, sendmsg);
 	// POE2 Mashup: in maps, magic and rare monsters may explode, and the map boss completes the map.
 	OnMapMonsterDeath(monster);
+	OnEndgameMonsterKilled(monster, sendmsg);
 	OnMapBossKilled(monster, sendmsg);
 	// POE2 Mashup: magic and rare monsters drop more.
 	if (!monster.isPlayerMinion()) {

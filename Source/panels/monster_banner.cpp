@@ -13,6 +13,7 @@
 #include "levels/gendung.h"
 #include "monster.h"
 #include "panels/poe2_widgets.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/monster_mods.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -178,6 +179,12 @@ void DrawMonsterBanner(const Surface &out)
 		subtitle = monster.name();
 	} else if (affixes.rarity == MonsterRarity::Magic) {
 		nameColor = UiFlags::ColorBlue;
+	}
+	// The map boss and encounter leaders say what they are.
+	if (const std::optional<std::string> title = MapMonsterTitle(monster); title) {
+		subtitle = subtitle.empty() ? *title : StrCat(*title, " - ", subtitle);
+		if (!monster.isUnique())
+			nameColor = UiFlags::ColorOrange;
 	}
 
 	std::string mods;

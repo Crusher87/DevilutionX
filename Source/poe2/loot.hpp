@@ -62,6 +62,9 @@ struct LootBonus {
 	int rarity = 100;
 	int quantity = 100;
 	int waystones = 100;
+	/** @brief How often equipment drops, and uniques among it (the Atlas keystones). */
+	int equipment = 100;
+	int unique = 100;
 };
 
 /** @brief Average loot rolls per kill, in thousandths: 0.18 for a normal monster up to 6 for a boss. */

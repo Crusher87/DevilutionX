@@ -15,6 +15,7 @@
 #include "plrmsg.h"
 #include "poe2/craft_state.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
@@ -328,15 +329,19 @@ void RefreshMapEffects(const Player &player)
 	const Poe2Craft &waystone = player.poe2.mapWaystone;
 	// Rewards on the waystone add up, then multiply with the other sources.
 	std::array<int, static_cast<size_t>(MapAxis::Count)> rewards {};
+	// Deadlier Bargain makes both sides of every modifier stronger.
+	const int strength = WaystoneModStrengthPercent(player);
 	for (const Poe2CraftMod &mod : waystone.mods) {
 		if (mod.family == 0 || mod.family > WaystoneModIds)
 			continue;
 		const WaystoneMod &data = GetWaystoneMod(mod.family);
-		CurrentEffects.danger[static_cast<size_t>(data.danger)] += WaystoneModValue(mod);
-		rewards[static_cast<size_t>(data.axis)] += WaystoneModReward(mod);
+		CurrentEffects.danger[static_cast<size_t>(data.danger)] += WaystoneModValue(mod) * strength / 100;
+		rewards[static_cast<size_t>(data.axis)] += WaystoneModReward(mod) * strength / 100;
 	}
 	for (size_t axis = 0; axis < rewards.size(); axis++)
 		CurrentEffects.multiply(static_cast<MapAxis>(axis), rewards[axis]);
+	// Tablets, the Atlas and a pinnacle boss's theme.
+	AddEndgameMapEffects(player, CurrentEffects);
 }
 
 int PrepareMap(Player &player, int tier, uint32_t seed)
@@ -350,8 +355,15 @@ int PrepareMap(Player &player, int tier, uint32_t seed)
 	player.poe2.mapTier = static_cast<uint8_t>(tier);
 	player.poe2.mapBoss = -1;
 	player.poe2.mapBossKilled = false;
+	player.poe2.mapRun = {};
 	MapEntrance = std::nullopt;
 	return level;
+}
+
+void EnterMap(Player &player, int level)
+{
+	// Level 21 is the Hellfire crypt, which is entered from town.
+	StartNewLvl(player, level != 21 ? WM_DIABNEXTLVL : WM_DIABTOWNWARP, level);
 }
 
 bool UseWaystone(Player &player, Item &waystone)
@@ -369,11 +381,11 @@ bool UseWaystone(Player &player, Item &waystone)
 	const int tier = WaystoneTier(waystone);
 	const int level = PrepareMap(player, tier, waystone._iSeed);
 	player.poe2.mapWaystone = waystone._iPoe2Craft;
-	player.poe2.mapRevives = static_cast<uint8_t>(WaystoneRevives(waystone));
+	player.poe2.mapRevives = static_cast<uint8_t>(MapRevivesFor(player, WaystoneRevives(waystone)));
+	PrepareMapEndgame(player, waystone);
 	RefreshMapEffects(player);
 	EventPlrMsg(FormatRuntime(_("Map tier {:d}: {:d} revives. Defeat the map boss to complete it."), tier, player.poe2.mapRevives), UiFlags::ColorWhitegold);
-	// Level 21 is the Hellfire crypt, which is entered from town.
-	StartNewLvl(player, level != 21 ? WM_DIABNEXTLVL : WM_DIABTOWNWARP, level);
+	EnterMap(player, level);
 	return true;
 }
 
@@ -385,6 +397,7 @@ void UpdateActiveMap(Player &player)
 		player.poe2.mapTier = 0;
 		player.poe2.mapLevel = 0;
 		player.poe2.mapWaystone = {};
+		player.poe2.mapRun = {};
 		RefreshMapEffects(player);
 		ClearMapPlay();
 		return;
@@ -420,10 +433,13 @@ void ChooseMapBoss()
 		return;
 	Monster &boss = Monsters[*best];
 	MyPlayer->poe2.mapBoss = static_cast<int16_t>(*best);
-	const int lifePercent = 100 + MapBossLifePercent + (ActiveMapTier() * MapBossLifePercentPerTier);
+	// A powerful boss or a pinnacle boss is tougher still.
+	const int64_t bonus = MapBossLifePercentBonus();
+	const int64_t lifePercent = (100 + MapBossLifePercent + (ActiveMapTier() * MapBossLifePercentPerTier)) * bonus / 100;
 	boss.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(boss.maxHitPoints.raw()) * lifePercent / 100, INT32_MAX / 2)));
 	boss.hitPoints = boss.maxHitPoints;
-	const auto scale = [](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * (100 + MapBossDamagePercent) / 100, 255)); };
+	const int damagePercent = (100 + MapBossDamagePercent) * static_cast<int>(std::min<int64_t>(bonus, 200)) / 100;
+	const auto scale = [damagePercent](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * damagePercent / 100, 255)); };
 	scale(boss.minDamage);
 	scale(boss.maxDamage);
 	scale(boss.minDamageSpecial);
@@ -448,11 +464,12 @@ void OnMapBossKilled(const Monster &monster, bool sendmsg)
 	const int tier = ActiveMapTier();
 	EventPlrMsg(FormatRuntime(_("Map complete (tier {:d})."), tier), UiFlags::ColorWhitegold);
 	// Waystone sustain: the boss usually drops one of this tier, and now and then one tier higher.
-	const int find = ActiveMapEffects()[MapAxis::WaystoneFind];
+	const int find = ActiveMapEffects()[MapAxis::WaystoneFind] * AtlasBossWaystonePercent(player) / 100;
 	if (LootRandom(100) < MapBossWaystonePercent * find / 100)
 		DropWaystone(monster.position.tile, tier, sendmsg);
 	if (LootRandom(100) < MapBossUpgradePercent * find / 100)
 		DropWaystone(monster.position.tile, std::min(tier + 1, MaxWaystoneTier), sendmsg);
+	OnEndgameBossKilled(monster, sendmsg);
 }
 
 bool TryMapRevive(Player &player)

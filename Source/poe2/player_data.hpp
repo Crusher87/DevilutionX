@@ -14,6 +14,7 @@
 #include "poe2/craft_types.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/item_stats.hpp"
+#include "poe2/map_state.hpp"
 #include "poe2/unique_rules.hpp"
 #include "tables/spelldat.h"
 
@@ -338,6 +339,10 @@ struct Poe2PlayerData {
 	bool mapBossKilled = false;
 	/** @brief Maps the hero completed, for the Atlas. */
 	uint16_t mapsCompleted = 0;
+	/** @brief The open map's tablets, encounters, reward chests and pinnacle boss. */
+	MapRunState mapRun {};
+	/** @brief The Atlas passives; each completed map gives a point. */
+	AtlasState atlas {};
 	/** @brief Raw life and mana still to recover from the flasks being drunk, and the game ticks left (not saved). */
 	int32_t lifeFlaskRaw = 0;
 	uint8_t lifeFlaskTicks = 0;
@@ -419,6 +424,8 @@ struct Poe2PlayerData {
 		mapBoss = -1;
 		mapBossKilled = false;
 		mapsCompleted = 0;
+		mapRun = {};
+		atlas = {};
 		charmCooldown = 0;
 		resistCharmTicks = {};
 		stunImmuneTicks = 0;

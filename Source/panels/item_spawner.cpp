@@ -31,6 +31,7 @@
 #include "poe2/belt_uniques.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
@@ -510,6 +511,19 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		if (std::find(seenNames.begin(), seenNames.end(), data.iName) != seenNames.end())
 			continue;
 
+		// Tablets, fragments and keys are listed one kind at a time too.
+		if (IsAnyOf(data.iMiscId, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY)) {
+			Item probe;
+			InitializeItem(probe, static_cast<_item_indexes>(i));
+			const uint8_t count = data.iMiscId == IMISC_TABLET ? static_cast<uint8_t>(TabletKind::Count) : static_cast<uint8_t>(FragmentSet::Count);
+			for (uint8_t variant = 1; variant < count; variant++) {
+				SetCraftingItemVariant(probe, variant);
+				probe._iPoe2Craft = {};
+				FinishEndgameItem(probe);
+				catalog.push_back(SpawnerEntry { .name = std::string(probe._iIName), .detail = std::string(_("Endgame")), .category = SpawnerCategory::Misc, .baseIndex = static_cast<_item_indexes>(i), .cursor = data.iCurs, .variant = variant });
+			}
+			continue;
+		}
 		// Essences, omens, augments and catalysts are listed one kind at a time below.
 		if (IsAnyOf(data.iMiscId, IMISC_ESSENCE, IMISC_OMEN, IMISC_AUGMENT, IMISC_ORB_CATALYST)) {
 			Item probe;
@@ -652,6 +666,7 @@ bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_qua
 		item.dwBuff |= CF_POE2;
 		SetCraftingItemVariant(item, entry.variant);
 		FinishCraftingItem(item);
+		FinishEndgameItem(item);
 		SetupItem(item);
 		return !item.isEmpty();
 	}

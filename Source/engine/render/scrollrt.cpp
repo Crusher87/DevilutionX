@@ -54,6 +54,7 @@
 #include "missiles.h"
 #include "nthread.h"
 #include "options.h"
+#include "panels/atlas_panel.hpp"
 #include "panels/charpanel.hpp"
 #include "panels/console.hpp"
 #include "panels/desecration_panel.hpp"
@@ -1948,6 +1949,7 @@ void DrawAndBlit()
 	DrawPassiveTree(out);
 	DrawGemcutting(out);
 	DrawDesecrationReveal(out);
+	DrawAtlas(out);
 	DrawItemSpawner(out);
 	DrawCursor(out);
 

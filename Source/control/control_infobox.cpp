@@ -11,6 +11,7 @@
 #include "panels/partypanel.hpp"
 #include "panels/poe2_widgets.hpp"
 #include "panels/skill_bar.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/monster_mods.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -635,6 +636,8 @@ void DrawInfoBox(const Surface &out)
 				} else if (affixes.rarity == MonsterRarity::Magic) {
 					InfoColor = UiFlags::ColorBlue;
 				}
+				if (const std::optional<std::string> title = MapMonsterTitle(monster); title)
+					AddInfoBoxString(*title);
 				for (uint8_t mod = 0; mod < static_cast<uint8_t>(MonsterMod::Count); mod++) {
 					if (affixes.has(static_cast<MonsterMod>(mod)))
 						AddInfoBoxString(MonsterModName(static_cast<MonsterMod>(mod)));

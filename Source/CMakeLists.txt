@@ -31,6 +31,7 @@ set(libdevilutionx_SRCS
   poe2/craft_state.cpp
   poe2/crafting_items.cpp
   poe2/desecration.cpp
+  poe2/endgame.cpp
   poe2/map_mods.cpp
   poe2/map_play.cpp
   poe2/currency.cpp
@@ -141,6 +142,7 @@ set(libdevilutionx_SRCS
   panels/partypanel.cpp
   panels/quest_log.cpp
   panels/item_spawner.cpp
+  panels/atlas_panel.cpp
   panels/desecration_panel.cpp
   panels/gemcutting_panel.cpp
   panels/passive_tree_panel.cpp

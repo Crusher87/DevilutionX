@@ -9,6 +9,7 @@
 #include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/desecration.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
@@ -904,6 +905,8 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 		return ApplyCurrencyToFlask(orb, item);
 	if (IsWaystone(item))
 		return CraftWaystone(orb, player, item);
+	if (IsTablet(item))
+		return CraftTablet(orb, player, item);
 	if (orb == CurrencyOrb::Bauble) {
 		EventPlrMsg(_("Glassblower's Baubles only work on flasks."), UiFlags::ColorRed);
 		return false;

@@ -524,6 +524,9 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "ORB_DESECRATE") return IMISC_ORB_DESECRATE;
 	if (value == "ORB_CATALYST") return IMISC_ORB_CATALYST;
 	if (value == "ESSENCE") return IMISC_ESSENCE;
+	if (value == "TABLET") return IMISC_TABLET;
+	if (value == "MAP_FRAGMENT") return IMISC_MAP_FRAGMENT;
+	if (value == "MAP_KEY") return IMISC_MAP_KEY;
 	if (value == "OMEN") return IMISC_OMEN;
 	if (value == "AUGMENT") return IMISC_AUGMENT;
 	return std::unexpected("Unknown enum value");

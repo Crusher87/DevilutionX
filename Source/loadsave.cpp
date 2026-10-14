@@ -2427,7 +2427,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
  * version 14 their crafting state.
  */
-constexpr uint8_t Poe2HeroDataVersion = 15;
+constexpr uint8_t Poe2HeroDataVersion = 16;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2622,6 +2622,34 @@ uint8_t ReadPoe2HeroData(Player &player)
 	player.poe2.mapBoss = file.NextLE<int16_t>();
 	player.poe2.mapBossKilled = file.NextLE<uint8_t>() != 0;
 	player.poe2.mapsCompleted = file.NextLE<uint16_t>();
+
+	// Version 16: the open map's tablets, encounters, chests and pinnacle, and the Atlas.
+	if (version < 16 || !file.IsValid(MapRunSaveSize + AtlasNodeCount + 2))
+		return version;
+	MapRunState &run = player.poe2.mapRun;
+	for (MapTablet &tablet : run.tablets) {
+		tablet.kind = file.NextLE<uint8_t>();
+		tablet.rarity = std::min<uint8_t>(file.NextLE<uint8_t>(), ITEM_QUALITY_RARE);
+		for (Poe2CraftMod &mod : tablet.mods) {
+			mod.family = file.NextLE<uint8_t>();
+			mod.tier = file.NextLE<uint8_t>();
+			mod.salt = file.NextLE<uint8_t>();
+		}
+	}
+	run.encounters = file.NextLE<uint16_t>();
+	run.encountersDone = file.NextLE<uint16_t>();
+	for (int16_t &leader : run.leaders)
+		leader = file.NextLE<int16_t>();
+	for (MapChest &chest : run.chests) {
+		chest.x = file.NextLE<uint8_t>();
+		chest.y = file.NextLE<uint8_t>();
+		chest.profile = file.NextLE<uint8_t>();
+	}
+	run.pinnacle = file.NextLE<uint8_t>();
+	run.placed = file.NextLE<uint8_t>() != 0;
+	for (uint8_t &rank : player.poe2.atlas.ranks)
+		rank = file.NextLE<uint8_t>();
+	player.poe2.atlas.pinnaclesDefeated = file.NextLE<uint16_t>();
 	return version;
 }
 
@@ -2662,7 +2690,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			jewelCount++;
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2);
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2731,6 +2759,31 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	file.WriteLE<int16_t>(player.poe2.mapBoss);
 	file.WriteLE<uint8_t>(player.poe2.mapBossKilled ? 1 : 0);
 	file.WriteLE<uint16_t>(player.poe2.mapsCompleted);
+	// Version 16: the open map's tablets, encounters, chests and pinnacle, and the Atlas.
+	const MapRunState &run = player.poe2.mapRun;
+	for (const MapTablet &tablet : run.tablets) {
+		file.WriteLE<uint8_t>(tablet.kind);
+		file.WriteLE<uint8_t>(tablet.rarity);
+		for (const Poe2CraftMod &mod : tablet.mods) {
+			file.WriteLE<uint8_t>(mod.family);
+			file.WriteLE<uint8_t>(mod.tier);
+			file.WriteLE<uint8_t>(mod.salt);
+		}
+	}
+	file.WriteLE<uint16_t>(run.encounters);
+	file.WriteLE<uint16_t>(run.encountersDone);
+	for (const int16_t leader : run.leaders)
+		file.WriteLE<int16_t>(leader);
+	for (const MapChest &chest : run.chests) {
+		file.WriteLE<uint8_t>(chest.x);
+		file.WriteLE<uint8_t>(chest.y);
+		file.WriteLE<uint8_t>(chest.profile);
+	}
+	file.WriteLE<uint8_t>(run.pinnacle);
+	file.WriteLE<uint8_t>(run.placed ? 1 : 0);
+	for (const uint8_t rank : player.poe2.atlas.ranks)
+		file.WriteLE<uint8_t>(rank);
+	file.WriteLE<uint16_t>(player.poe2.atlas.pinnaclesDefeated);
 }
 
 void LoadHeroItems(Player &player)

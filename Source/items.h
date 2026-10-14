@@ -28,6 +28,8 @@
 
 namespace devilution {
 
+enum class MapReward : uint8_t;
+
 #define MAXITEMS 127
 #define ITEMTYPES 43
 
@@ -602,6 +604,8 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn = fals
 /** @brief POE2 Mashup: a boss rolls a unique from its own table (poe2/boss_loot.hpp). */
 /** @brief POE2 Mashup: drops a waystone of the tier, like a map boss does. */
 void DropWaystone(Point position, int tier, bool sendmsg);
+/** @brief POE2 Mashup: drops one roll of a map encounter's or reward chest's loot; `rarityBonus` raises its item rarity, in percent. */
+void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBonus = 0);
 void DropBossUnique(Monster &monster, bool sendmsg);
 /** @brief POE2 Mashup: drops a kill's loot by the POE2 rules: a number of rolls by how tough the monster was, and a boss's extras. */
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);

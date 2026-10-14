@@ -96,6 +96,7 @@ std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(Lo
 		weights[static_cast<size_t>(LootCategory::Misc)] = 0;
 	}
 	weights[static_cast<size_t>(LootCategory::Endgame)] = weights[static_cast<size_t>(LootCategory::Endgame)] * bonus.waystones / 100;
+	weights[static_cast<size_t>(LootCategory::Equipment)] = weights[static_cast<size_t>(LootCategory::Equipment)] * bonus.equipment / 100;
 	return weights;
 }
 
@@ -129,6 +130,7 @@ std::array<int, 4> EquipmentRarityWeights(LootSource source, const LootBonus &bo
 	std::array<int, 4> weights = BaseRarityWeights(source);
 	// Item rarity makes magic, rare and unique items more likely; normal ones take what's left.
 	int total = 0;
+	weights[3] = weights[3] * bonus.unique / 100;
 	for (size_t i = 1; i < weights.size(); i++) {
 		weights[i] = weights[i] * bonus.rarity / 100;
 		total += weights[i];
