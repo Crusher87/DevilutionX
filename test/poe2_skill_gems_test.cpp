@@ -119,15 +119,21 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 	const SkillSlot barrage = SkillSlot::ForAttack(WeaponSkill::Barrage);
 	EXPECT_EQ(GemDamagePercent(leapSlam, 20), 408);
 	EXPECT_EQ(GemDamagePercent(barrage, 20), 280);
-	// Early levels give the biggest steps in percent, like POE2's gems.
-	EXPECT_GT(GemDamagePercent(leapSlam, 2) * 100 / GemDamagePercent(leapSlam, 1), GemDamagePercent(leapSlam, 20) * 100 / GemDamagePercent(leapSlam, 19));
+	// Steps are uneven like POE2's: Boneshatter's level 9 adds little, level 16 a lot.
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	EXPECT_EQ(GemDamagePercent(cleave, 8), 174);
+	EXPECT_EQ(GemDamagePercent(cleave, 9), 182);
+	EXPECT_EQ(GemDamagePercent(cleave, 16), 257);
+	EXPECT_EQ(GemStepText(cleave, 15, 16), "[+5% damage, +8% mana]");
 	for (int level = 2; level <= MaxGemLevel; level++)
 		EXPECT_GT(GemDamagePercent(leapSlam, level), GemDamagePercent(leapSlam, level - 1)) << level;
 
-	// Spark adds a projectile every 5 levels; Fireball relies on Diablo's own spell level growth.
+	// Spark gains projectiles at POE2 Spark's levels; Fireball relies on Diablo's own spell level growth.
 	const SkillSlot spark = SkillSlot::ForAttack(WeaponSkill::Spark);
-	EXPECT_EQ(GemExtraProjectiles(spark, 4), 0);
-	EXPECT_EQ(GemExtraProjectiles(spark, 20), 4);
+	EXPECT_EQ(GemExtraProjectiles(spark, 1), 0);
+	EXPECT_EQ(GemExtraProjectiles(spark, 2), 1);
+	EXPECT_EQ(GemExtraProjectiles(spark, 20), 5);
+	EXPECT_NE(GemStepText(spark, 6, 7).find("+1 projectile, big step"), std::string::npos) << GemStepText(spark, 6, 7);
 	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 100);
 	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
 	EXPECT_EQ(BattleCryDamagePercent(1), 50);

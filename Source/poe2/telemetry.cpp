@@ -43,6 +43,8 @@ namespace devilution {
 namespace {
 
 FILE *LogFile = nullptr;
+/** @brief The gem log: one file kept across sessions, so a gem's levels and results can be followed over time. */
+FILE *GemLogFile = nullptr;
 bool Initialized = false;
 uint32_t SessionStartMs = 0;
 
@@ -418,6 +420,50 @@ void EndLevelVisit()
 	CurrentLevel = {};
 }
 
+std::string SkillDamageLine(std::string_view name, const SkillDamage &damage)
+{
+	const int average = damage.hits > 0 ? Whole(damage.raw) / damage.hits : 0;
+	std::string text = std::format("{:s} {:d} ({:d} hits, {:d} average, {:d} kills", name, Whole(damage.raw), damage.hits, average, damage.kills);
+	if (damage.kills > 0)
+		StrAppend(text, std::format(", {:.1f} s to kill", damage.killMs / 1000.0 / damage.kills));
+	if (damage.uses > 0)
+		StrAppend(text, std::format(", {:d} uses", damage.uses));
+	if (damage.mana > 0)
+		StrAppend(text, std::format(", {:d} mana, {:.1f} damage per mana", damage.mana, static_cast<double>(Whole(damage.raw)) / damage.mana));
+	if (damage.lastUseMs > damage.firstUseMs)
+		StrAppend(text, std::format(", {:.0f} damage per second in use", Whole(damage.raw) * 1000.0 / (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs)));
+	text += ')';
+	return text;
+}
+
+/** @brief Writes a line to the gem log, with the date and time, and to the session log. */
+void GemLog(std::string_view text)
+{
+	TelemetryLog("gem", text);
+	if (GemLogFile == nullptr)
+		return;
+	const std::time_t now = std::time(nullptr);
+	std::tm local {};
+#ifdef _WIN32
+	localtime_s(&local, &now);
+#else
+	localtime_r(&now, &local);
+#endif
+	char stamp[32];
+	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &local);
+	std::fprintf(GemLogFile, "%s %.*s\n", stamp, static_cast<int>(text.size()), text.data());
+	std::fflush(GemLogFile);
+}
+
+/** @brief Each gem level's results this game, to the gem log. */
+void WriteGemResults()
+{
+	for (const auto &[name, damage] : DamageBySkill) {
+		if (name.find(" gem ") != std::string::npos)
+			GemLog(StrCat("results: ", SkillDamageLine(name, damage)));
+	}
+}
+
 SkillDamage &DamageFor(std::string_view source)
 {
 	for (auto &[name, damage] : DamageBySkill) {
@@ -509,6 +555,7 @@ void TelemetryInit()
 	LogFile = OpenFile(StrCat(folder, "session_", stamp, ".log").c_str(), "wb");
 	if (LogFile == nullptr)
 		return;
+	GemLogFile = OpenFile(StrCat(folder, "gem_levels.log").c_str(), "ab");
 
 	char started[32];
 	std::strftime(started, sizeof(started), "%Y-%m-%d %H:%M:%S", &local);
@@ -553,10 +600,15 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	TelemetryLog("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo")));
 	if (LogFile != nullptr) {
 		WriteSettings();
-		// What each socketed gem does now and at its next level, to compare against the damage lines later.
+		// What each socketed gem does now and at its next level, to compare against the results later.
+		GemLog(std::format("--- {:s}, level {:d} {:s}, {:s} ---", player._pName, player.getCharacterLevel(), player.getClassName(), loaded ? "loaded" : "new game"));
 		std::string gems = SocketedGemsText(player);
-		std::replace(gems.begin(), gems.end(), '\n', '|');
-		TelemetryLog("gems", gems);
+		size_t start = 0;
+		while (start < gems.size()) {
+			const size_t end = std::min(gems.find('\n', start), gems.size());
+			GemLog(std::string_view(gems).substr(start, end - start));
+			start = end + 1;
+		}
 	}
 }
 
@@ -567,6 +619,7 @@ void TelemetryGameEnded()
 	EndLevelVisit();
 	TelemetryLog("game", StrCat("ended. ", TelemetryStatsText()));
 	TelemetryLog("damage", TelemetrySkillDamageText());
+	WriteGemResults();
 	GameStartMs = 0;
 }
 
@@ -691,6 +744,31 @@ void TelemetryLevelUp(const Player &player)
 	if (&player != MyPlayer)
 		return;
 	TelemetryLog("levelup", std::format("character level {:d}, life {:d}, mana {:d}, {:.1f} min into the game", player.getCharacterLevel(), player._pMaxHP.whole(), player._pMaxMana.whole(), (Now() - GameStartMs) / 60000.0));
+	// A new gem level unlocks: say what it would add to each socketed gem.
+	const int unlocked = MaxGemLevelForCharacter(player.getCharacterLevel());
+	if (unlocked == MaxGemLevelForCharacter(player.getCharacterLevel() - 1))
+		return;
+	for (size_t socket = 0; socket < player.poe2.skillSlots.size(); socket++) {
+		const SkillSlot skill = player.poe2.skillSlots[socket];
+		const int level = player.poe2.gemLevel(socket);
+		if (skill.isEmpty() || level >= unlocked)
+			continue;
+		GemLog(std::format("{:s} can now go to gem level {:d} with a level {:d} uncut gem: {:s} {:s}", SkillName(skill), unlocked, unlocked, GemLevelText(skill, unlocked), GemStepText(skill, level, unlocked)));
+	}
+}
+
+void TelemetryGemLevelChanged(const Player &player, SkillSlot skill, int fromLevel, int toLevel)
+{
+	if (&player != MyPlayer)
+		return;
+	GemLog(std::format("{:s} raised from gem level {:d} to {:d} at character level {:d}", SkillName(skill), fromLevel, toLevel, player.getCharacterLevel()));
+	GemLog(StrCat("  before: ", GemLevelText(skill, fromLevel)));
+	for (int level = fromLevel + 1; level <= toLevel; level++)
+		GemLog(StrCat("  ", GemLevelText(skill, level), " ", GemStepText(skill, level - 1, level)));
+	// The results so far at the old level, to compare with the new one.
+	const auto it = std::find_if(DamageBySkill.begin(), DamageBySkill.end(), [&](const auto &entry) { return entry.first == std::format("{:s} gem {:d}", SkillName(skill), fromLevel); });
+	if (it != DamageBySkill.end())
+		GemLog(StrCat("  results at the old level: ", SkillDamageLine(it->first, it->second)));
 }
 
 void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost, int gemLevel)
@@ -820,19 +898,8 @@ std::string TelemetrySkillDamageText()
 	std::string text = "damage by skill:";
 	if (sorted.empty())
 		StrAppend(text, " none yet");
-	for (const auto &[name, damage] : sorted) {
-		const int average = damage.hits > 0 ? Whole(damage.raw) / damage.hits : 0;
-		StrAppend(text, std::format(" {:s} {:d} ({:d} hits, {:d} average, {:d} kills", name, Whole(damage.raw), damage.hits, average, damage.kills));
-		if (damage.kills > 0)
-			StrAppend(text, std::format(", {:.1f} s to kill", damage.killMs / 1000.0 / damage.kills));
-		if (damage.uses > 0)
-			StrAppend(text, std::format(", {:d} uses", damage.uses));
-		if (damage.mana > 0)
-			StrAppend(text, std::format(", {:d} mana, {:.1f} damage per mana", damage.mana, static_cast<double>(Whole(damage.raw)) / damage.mana));
-		if (damage.lastUseMs > damage.firstUseMs)
-			StrAppend(text, std::format(", {:.0f} damage per second in use", Whole(damage.raw) * 1000.0 / (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs)));
-		StrAppend(text, ");");
-	}
+	for (const auto &[name, damage] : sorted)
+		StrAppend(text, " ", SkillDamageLine(name, damage), ";");
 	return text;
 }
 

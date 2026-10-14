@@ -104,6 +104,17 @@ TEST_F(Poe2TelemetryTest, CloseCallNamesTheAttacker)
 	EXPECT_NE(TelemetryStatsText().find("1 close calls"), std::string::npos);
 }
 
+TEST_F(Poe2TelemetryTest, GemLevelsGoToTheGemLog)
+{
+	TelemetryGemLevelChanged(*MyPlayer, SkillSlot::ForAttack(WeaponSkill::Cleave), 8, 9);
+	std::ifstream stream(LogFolder() + "gem_levels.log");
+	std::stringstream contents;
+	contents << stream.rdbuf();
+	const std::string log = contents.str();
+	EXPECT_NE(log.find("Cleave raised from gem level 8 to 9"), std::string::npos) << log;
+	EXPECT_NE(log.find("level 9: 182% weapon damage"), std::string::npos) << log;
+}
+
 TEST_F(Poe2TelemetryTest, SkillDamageStartsEmpty)
 {
 	EXPECT_EQ(TelemetrySkillDamageText(), "damage by skill: none yet");

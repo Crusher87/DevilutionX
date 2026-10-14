@@ -3,9 +3,10 @@
  *
  * POE2 Mashup gem level curves: how much stronger and costlier each skill gem gets from level 1 to 20.
  *
- * Every gem follows the shape of POE2's gems: big steps early, smaller ones later (Boneshatter goes
- * 100%, 142%, 191%, 244%, 312% at levels 1, 5, 10, 15, 20). Each gem has its own total growth, taken
- * from a similar POE2 gem, so a level is worth more on some skills than on others.
+ * Each gem follows a POE2 gem level by level, so some levels pay off more than others, as in POE2: Boneshatter
+ * steps +10% a level early, dips to +4% at level 9 and climbs to +5% a level by 20, and Leap Slam holds about +7% a
+ * level, then speeds up again near 20. Attack gems copy their POE2 gem's total; spells take the shape of
+ * POE2's spells on top of what Diablo's spell level already adds.
  */
 #pragma once
 
@@ -20,27 +21,36 @@ namespace devilution {
 struct Player;
 
 /**
- * @brief How far along its curve a gem is at each level, in thousandths: 0 at level 1, 1000 at level 20.
- * From Boneshatter's damage (100% to 312%), filled in between POE2's published levels.
+ * @brief A POE2 gem's numbers at levels 1 to 20, copied from poe2db.tw. Damage is the gem's damage % (or, for
+ * spells, its minimum plus maximum damage); mana is its cost. Only the ratios between levels are used.
  */
-constexpr std::array<int16_t, MaxGemLevel> GemCurveShape { 0, 77, 154, 231, 308, 360, 412, 465, 517, 569, 612, 655, 698, 741, 784, 827, 870, 914, 957, 1000 };
+struct Poe2GemTable {
+	std::string_view name;
+	std::array<int16_t, MaxGemLevel> damage;
+	std::array<int16_t, MaxGemLevel> mana;
+};
 
-/** @brief A gem's growth from level 1 to level 20, in percent of its level 1 value. */
+/** @brief Levels at which POE2's Spark gains a projectile (4 at level 1, 9 at level 20). */
+constexpr std::array<uint8_t, 5> SparkProjectileLevels { 2, 7, 11, 15, 19 };
+
+/** @brief How a gem grows from level 1 to 20, following a POE2 gem level by level. */
 struct GemCurve {
-	/** Damage at level 20 (100 means it doesn't grow with the gem level, because the spell grows on its own). */
+	/** The POE2 gem whose level steps it follows, big and small steps alike. */
+	const Poe2GemTable *table;
+	/** Damage at level 20 in percent of level 1; 0 copies the POE2 gem's own growth, 100 means no growth from the gem. */
 	int16_t damageAt20;
-	/** Mana cost at level 20. */
+	/** Mana cost at level 20 in percent of level 1, along the POE2 gem's mana steps. */
 	int16_t manaAt20;
-	/** Extra projectiles: one more every this many levels (0 for none). */
-	uint8_t projectileEvery;
-	/** The POE2 gem its growth was taken from. */
-	std::string_view poe2Gem;
+	/** Gains a projectile at the levels POE2's Spark does. */
+	bool sparkProjectiles;
+	/** Why it follows that gem. */
+	std::string_view note;
 };
 
 /** @brief The curve of the gem that grants the skill. */
 GemCurve GetGemCurve(SkillSlot skill);
-/** @brief Value at a gem level for a curve that is 100 at level 1 and endAt20 at level 20. */
-int GemCurvePercent(int endAt20, int gemLevel);
+/** @brief Value at a gem level, in percent of level 1, following the POE2 gem's steps to reach endAt20 (0: the POE2 gem's own total). */
+int GemCurvePercent(const std::array<int16_t, MaxGemLevel> &steps, int endAt20, int gemLevel);
 
 /** @brief Damage at a gem level, in percent of the damage at level 1. */
 int GemDamagePercent(SkillSlot skill, int gemLevel);
@@ -59,6 +69,8 @@ std::string GemLevelText(SkillSlot skill, int gemLevel);
 std::string GemCurveText(SkillSlot skill);
 /** @brief The curve of the gem with this name (any case), for the console's gemcurve("name"). */
 std::string GemCurveTextByName(std::string_view name);
+/** @brief How much a level up adds, in percent, e.g. "+11% damage, +10% mana"; marks the bigger steps. */
+std::string GemStepText(SkillSlot skill, int fromLevel, int toLevel);
 /** @brief Every socketed gem: its level, its numbers now and at the next level, and what the next level needs. */
 std::string SocketedGemsText(const Player &player);
 

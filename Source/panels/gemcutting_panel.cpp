@@ -375,7 +375,7 @@ void CutGem(const GemEntry &gem)
 		player.poe2.slotLevels[*socket] = static_cast<uint8_t>(level);
 		PlaySFX(sound);
 		EventPlrMsg(FormatRuntime(_("{:s} is now level {:d}."), GemName(gem), level));
-		TelemetryLog("gem", FormatRuntime("{:s} raised from {:s} to {:s}", GemName(gem), GemLevelText(gem.skill, current), GemLevelText(gem.skill, level)));
+		TelemetryGemLevelChanged(player, gem.skill, current, level);
 		CloseGemcutting();
 		return;
 	}

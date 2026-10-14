@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include "poe2/player_data.hpp"
 #include "utils/fixed_point.hpp"
 
 namespace devilution {
@@ -69,6 +70,8 @@ void TelemetryMonsterKilled(const Monster &monster);
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);
 void TelemetryPlayerDied(const Player &player);
 void TelemetryLevelUp(const Player &player);
+/** @brief A socketed gem was raised with an uncut gem: written to the gem log with every step's numbers. */
+void TelemetryGemLevelChanged(const Player &player, SkillSlot skill, int fromLevel, int toLevel);
 /** @brief A skill was used; gemLevel (when the skill comes from a socketed gem) keeps each gem level's stats apart. */
 void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost, int gemLevel = 0);
 /** @brief A skill or spell that couldn't be used, and why. */
