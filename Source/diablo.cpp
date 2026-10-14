@@ -980,14 +980,15 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 			if (gbIsMultiplayer)
 				pfile_write_hero();
 			nthread_ignore_mutex(true);
-			PaletteFadeOut(8);
+			// POE2 Mashup: quick fades between levels, and no loading screen when the level loads quickly.
+			PaletteFadeOut(LevelChangeFadeSpeed());
 			sound_stop();
 			ShowProgress(GetCustomEvent(event));
 
 			PrepareForFadeIn();
 			LoadPWaterPalette();
 			if (gbRunGame)
-				PaletteFadeIn(8);
+				PaletteFadeIn(LevelChangeFadeSpeed());
 			nthread_ignore_mutex(false);
 			gbGameLoopStartup = true;
 			return;

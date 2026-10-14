@@ -75,4 +75,7 @@ void IncProgress(uint32_t steps = 1);
 void CompleteProgress();
 void ShowProgress(interface_mode uMsg);
 
+/** @brief POE2 Mashup: how fast the screen fades out and in when changing level (the original is 8). */
+int LevelChangeFadeSpeed();
+
 } // namespace devilution

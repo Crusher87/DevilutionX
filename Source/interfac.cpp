@@ -282,13 +282,16 @@ void InitRendering()
 
 	// The loading thread sets `logical_palette`, so we make sure to use
 	// our own palette for the fade-in.
-	PaletteFadeIn(8, ProgressEventHandlerState.palette);
+	PaletteFadeIn(LevelChangeFadeSpeed(), ProgressEventHandlerState.palette);
 }
 
 void CheckShouldSkipRendering()
 {
 	if (!ProgressEventHandlerState.skipRendering) return;
-	const bool shouldSkip = ProgressEventHandlerState.loadStartedAt + *GetOptions().Gameplay.skipLoadingScreenThresholdMs > SDL_GetTicks();
+	// POE2 Mashup: a level that loads within this long shows no loading screen, just a quick fade.
+	constexpr uint32_t Poe2SkipLoadingScreenMs = 2000;
+	const uint32_t threshold = gbIsPoe2 ? std::max<uint32_t>(*GetOptions().Gameplay.skipLoadingScreenThresholdMs, Poe2SkipLoadingScreenMs) : *GetOptions().Gameplay.skipLoadingScreenThresholdMs;
+	const bool shouldSkip = ProgressEventHandlerState.loadStartedAt + threshold > SDL_GetTicks();
 	if (shouldSkip) return;
 	ProgressEventHandlerState.skipRendering = false;
 	if (!HeadlessMode) InitRendering();
@@ -531,7 +534,7 @@ void ProgressEventHandler(const SDL_Event &event, uint16_t modState)
 
 				// The loading thread sets `logical_palette`, so we make sure to use
 				// our own palette for the fade-out.
-				PaletteFadeOut(8, ProgressEventHandlerState.palette);
+				PaletteFadeOut(LevelChangeFadeSpeed(), ProgressEventHandlerState.palette);
 
 				// Once the fade-out is done, restore the system palette.
 				UpdateSystemPalette(logical_palette);
@@ -640,6 +643,11 @@ void CompleteProgress()
 	if (sgdwProgress < MaxProgress) {
 		IncProgress((MaxProgress - sgdwProgress) / ProgressStepSize);
 	}
+}
+
+int LevelChangeFadeSpeed()
+{
+	return gbIsPoe2 ? 32 : 8;
 }
 
 void ShowProgress(interface_mode uMsg)
