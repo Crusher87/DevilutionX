@@ -63,6 +63,8 @@ bool IsCharm(const Item &item);
 std::string_view CharmDescription(CharmEffect effect);
 /** @brief Charges a charm spends each time it goes off; a Golden Charm spends all of them. */
 int CharmChargesPerUseFor(CharmEffect effect);
+/** @brief Charges the charm uses per activation, after its unique's cost. */
+int CharmChargesPerUseFor(const Item &item);
 
 void GainCharmCharges(Player &player, int charges);
 void RefillCharms(Player &player);

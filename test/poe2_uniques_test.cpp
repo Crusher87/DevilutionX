@@ -12,6 +12,9 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/belt_uniques.hpp"
+#include "poe2/charms.hpp"
+#include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
@@ -107,6 +110,21 @@ public:
 		monster.maxHitPoints = Fixed26_6::fromInt(100);
 		monster.hitPoints = monster.maxHitPoints;
 		return monster;
+	}
+
+	static Item MakeBelt(BeltUniqueId id)
+	{
+		const BeltUnique *unique = GetBeltUnique(id);
+		Item item {};
+		if (unique == nullptr || !BeltUniqueBase(*unique)) {
+			ADD_FAILURE();
+			return item;
+		}
+		InitializeItem(item, static_cast<_item_indexes>(*BeltUniqueBase(*unique)));
+		item._iSeed = 4321;
+		item.dwBuff |= CF_POE2;
+		MakeBeltUnique(item, id);
+		return item;
 	}
 
 	static int Wear(Item item, inv_body_loc slot)
@@ -327,6 +345,87 @@ TEST_F(Poe2UniquesTest, AilmentRules)
 	TryInflictAilment(cold, player, DamageType::Magic, Fixed26_6::fromInt(60));
 	EXPECT_GT(cold.poe2.freezeTicks, 0);
 	EXPECT_EQ(player.poe2.uniqueState.storedChill, 30);
+}
+
+TEST_F(Poe2UniquesTest, EveryBeltUniqueBuildsAndRebuildsTheSame)
+{
+	ASSERT_EQ(BeltUniques().size(), static_cast<size_t>(BeltUniqueId::Count) - 1);
+	for (const BeltUnique &unique : BeltUniques()) {
+		const Item item = MakeBelt(unique.id);
+		ASSERT_EQ(GetBeltUnique(item), &unique) << unique.name;
+		EXPECT_EQ(std::string_view(item._iIName), unique.name);
+		EXPECT_EQ(item._iMagical, ITEM_QUALITY_UNIQUE);
+		EXPECT_EQ(unique.kind == BeltUniqueKind::Charm, IsCharm(item)) << unique.name;
+		EXPECT_FALSE(BeltUniqueText(item).empty());
+		if (unique.effectMax > 0) {
+			EXPECT_GE(BeltUniqueEffect(item), unique.effectMin);
+			EXPECT_LE(BeltUniqueEffect(item), unique.effectMax);
+		}
+
+		Item rebuilt;
+		RecreateItem(*MyPlayer, rebuilt, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
+		EXPECT_EQ(GetBeltUnique(rebuilt), &unique) << unique.name;
+		EXPECT_EQ(std::string_view(rebuilt._iIName), unique.name);
+	}
+}
+
+TEST_F(Poe2UniquesTest, UniqueFlasks)
+{
+	Player &player = *MyPlayer;
+	const Item deepWell = MakeBelt(BeltUniqueId::DeepWell);
+	EXPECT_EQ(FlaskChargesPerUseFor(deepWell), FlaskChargesPerUse * 3 / 2);
+	EXPECT_EQ(GetFlaskTier(MakeBelt(BeltUniqueId::Heartglass)), NumFlaskTiers - 1);
+	EXPECT_EQ(GetFlaskTier(MakeBelt(BeltUniqueId::RedMercy)), 0U);
+
+	// Heartglass saves the hero once while it's at least 80% full.
+	player.SpdList[0] = MakeBelt(BeltUniqueId::Heartglass);
+	player.poe2.flaskCharges[0] = MaxFlaskCharges;
+	player._pHitPoints = Fixed26_6::fromInt(0);
+	EXPECT_TRUE(TryHeartglassSave(player));
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(1));
+	EXPECT_EQ(player.poe2.flaskCharges[0], 0);
+	player.poe2.flaskCharges[0] = MaxFlaskCharges;
+	EXPECT_FALSE(TryHeartglassSave(player));
+
+	// Deep Well makes the next skill free.
+	Wear({}, INVLOC_AMULET);
+	player.SpdList[0] = deepWell;
+	player.poe2.flaskCharges[0] = MaxFlaskCharges;
+	player._pMana = player._pMaxMana / 2;
+	ASSERT_TRUE(UseFlask(player, 0));
+	EXPECT_TRUE(TakeFreeSkill(player));
+	EXPECT_FALSE(TakeFreeSkill(player));
+	player.SpdList[0] = {};
+}
+
+TEST_F(Poe2UniquesTest, UniqueCharms)
+{
+	Player &player = *MyPlayer;
+	player.SpdList[0] = MakeBelt(BeltUniqueId::SecondBell);
+	const int cost = CharmChargesPerUseFor(player.SpdList[0]);
+	player.SpdList[0]._iCharges = MaxCharmCharges;
+	int spent = 0;
+	for (int i = 0; i < 3; i++) {
+		const int before = player.SpdList[0]._iCharges;
+		player.poe2.resistCharmTicks.fill(0);
+		EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Lightning, 0), ResistCharmBonus);
+		spent += before - player.SpdList[0]._iCharges;
+		player.SpdList[0]._iCharges = MaxCharmCharges;
+	}
+	// Every third activation is free.
+	EXPECT_EQ(spent, 2 * cost);
+	EXPECT_GT(player.poe2.resistCharmTicks[1], ResistCharmTicks);
+
+	// Boss charms work from the belt.
+	player.SpdList[0] = MakeBelt(BeltUniqueId::FrozenStep);
+	const int resist = BeltUniqueResistance(player.SpdList[0]);
+	EXPECT_GE(resist, 8);
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.rule(UniqueRule::FreezeStoresChill), 30);
+	EXPECT_EQ(player.poe2.rule(UniqueRule::CannotIgnite), 1);
+	player.SpdList[0] = {};
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.rule(UniqueRule::CannotIgnite), 0);
 }
 
 } // namespace

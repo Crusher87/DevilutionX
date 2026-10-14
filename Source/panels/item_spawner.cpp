@@ -28,6 +28,7 @@
 #include "multi.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/belt_uniques.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
@@ -561,6 +562,21 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		});
 	}
 
+	for (const BeltUnique &unique : BeltUniques()) {
+		const std::optional<int> base = BeltUniqueBase(unique);
+		if (!base)
+			continue;
+		const ItemData &data = AllItemsList[*base];
+		catalog.push_back(SpawnerEntry {
+		    .name = std::string(unique.name),
+		    .detail = JoinDetail(unique.kind == BeltUniqueKind::Charm ? data.iName : (unique.kind == BeltUniqueKind::LifeFlask ? _("Life Flask") : _("Mana Flask")), StrCat(_("Level"), " ", unique.dropLevel)),
+		    .category = SpawnerCategory::Uniques,
+		    .baseIndex = static_cast<_item_indexes>(*base),
+		    .cursor = data.iCurs,
+		    .beltUnique = static_cast<uint8_t>(unique.id),
+		});
+	}
+
 	std::stable_sort(catalog.begin(), catalog.end(), [](const SpawnerEntry &a, const SpawnerEntry &b) {
 		if (a.category != b.category)
 			return a.category < b.category;
@@ -598,6 +614,14 @@ std::vector<size_t> FilterItemSpawnerCatalog(const std::vector<SpawnerEntry> &ca
 
 bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_quality quality, int level, uint32_t seed, Item &item)
 {
+	if (entry.beltUnique != 0) {
+		InitializeItem(item, entry.baseIndex);
+		item._iSeed = static_cast<int32_t>(seed >> 1);
+		item.dwBuff |= CF_POE2;
+		MakeBeltUnique(item, static_cast<BeltUniqueId>(entry.beltUnique));
+		SetupItem(item);
+		return !item.isEmpty();
+	}
 	if (entry.uniqueId >= 0 && Poe2UniqueFor(entry.uniqueId) != nullptr) {
 		if (!CreatePoe2Unique(player, item, entry.uniqueId, seed >> 1))
 			return false;

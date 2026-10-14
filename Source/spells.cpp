@@ -177,7 +177,7 @@ void ConsumeSpell(Player &player, SpellID sn)
 			break;
 #endif
 		// POE2 Mashup: a unique's repeat of a spell costs nothing, and some uniques pay with energy shield first.
-		if (IsCastingRepeat(player))
+		if (IsCastingRepeat(player) || TakeFreeSkill(player))
 			break;
 		const Fixed26_6 cost = GetManaAmount(player, sn);
 		const Fixed26_6 ma = PaySpellCostWithEnergyShield(player, cost);

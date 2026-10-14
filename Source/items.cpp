@@ -70,6 +70,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/bases.hpp"
+#include "poe2/belt_uniques.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
@@ -2126,8 +2127,10 @@ void PrintItemMisc(const Item &item)
 	}
 	if (const CharmEffect charm = GetCharmEffect(item); charm != CharmEffect::None) {
 		AddItemInfoBoxString(CharmDescription(charm));
-		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUseFor(charm)));
+		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUseFor(item)));
 		AddItemInfoBoxString(_("Works on its own from the belt; refills from kills and in town"));
+		for (const std::string &line : BeltUniqueText(item))
+			AddItemInfoBoxString(line);
 		return;
 	}
 	if (const int skull = SpiritSkullIndex(item); skull >= 0) {
@@ -3407,6 +3410,14 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			}
 		}
 	}
+	// POE2 Mashup: boss unique flasks and charms work from the belt.
+	for (const Item &beltItem : player.SpdList) {
+		AddBeltUniqueRules(beltItem, uniqueRules);
+		const int beltResistance = BeltUniqueResistance(beltItem);
+		fireRes += beltResistance;
+		lightRes += beltResistance;
+		magicRes += beltResistance;
+	}
 	player.poe2.uniqueRules = uniqueRules;
 	const auto uniqueRule = [&uniqueRules](UniqueRule rule) { return static_cast<int>(uniqueRules[static_cast<size_t>(rule)]); };
 	// POE2 Mashup: unique rules that work like gear stats.
@@ -4255,6 +4266,8 @@ struct Poe2UniquePick {
 	_item_indexes base;
 	int offset;
 	bool bundle;
+	/** A unique flask or charm instead. */
+	BeltUniqueId belt = BeltUniqueId::None;
 };
 
 /**
@@ -4275,6 +4288,12 @@ std::optional<Poe2UniquePick> PickPoe2Unique(int itemLevel, int poe2ItemLevel, L
 		if (offset > static_cast<int>(CF_UIDOFFSET >> 1))
 			continue;
 		candidates[static_cast<size_t>(unique.tier)].push_back({ static_cast<_item_indexes>(unique.baseItem), offset, true });
+	}
+	for (const BeltUnique &unique : BeltUniques()) {
+		const std::optional<int> base = BeltUniqueBase(unique);
+		if (!unique.isGlobal() || unique.dropLevel > poe2ItemLevel || !base)
+			continue;
+		candidates[static_cast<size_t>(unique.tier)].push_back({ static_cast<_item_indexes>(*base), 0, false, unique.id });
 	}
 	for (size_t uid = 0; uid < UniqueItems.size() && uid < std::size(UniqueItemFlags); uid++) {
 		const UniqueItem &unique = UniqueItems[uid];
@@ -4365,6 +4384,22 @@ int RollDropQuality(_item_indexes idx, item_quality rarity, int poe2ItemLevel)
 	return 0;
 }
 
+void DropPoe2BeltUnique(const Poe2LootOrigin &origin, Point position, bool sendmsg, _item_indexes idx, BeltUniqueId id)
+{
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	GetSuperItemSpace(position, ii);
+	item.dwBuff |= CF_POE2;
+	SetupAllItems(*MyPlayer, item, idx, AdvanceRndSeed(), origin.itemLevel, 1, /*onlygood=*/false, origin.pregen, 0, /*forceNotUnique=*/true);
+	MakeBeltUnique(item, id);
+	SetupItem(item);
+	TelemetryItemDropped(item, origin.name);
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+	if (origin.pregen)
+		DeltaAddItem(ii);
+}
+
 void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt)
 {
 	if (ActiveItemCount >= MAXITEMS)
@@ -4374,6 +4409,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	std::optional<_item_indexes> idx = PickPoe2LootItem(category, origin.baseLevel);
 	int uidOffset = 0;
 	bool bundleUnique = false;
+	BeltUniqueId beltUnique = BeltUniqueId::None;
 	if (category == LootCategory::Equipment) {
 		if (!rarity)
 			rarity = RollEquipmentRarity(origin.source);
@@ -4382,6 +4418,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 				idx = unique->base;
 				uidOffset = unique->offset;
 				bundleUnique = unique->bundle;
+				beltUnique = unique->belt;
 			} else {
 				rarity = ITEM_QUALITY_RARE;
 			}
@@ -4394,6 +4431,11 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	}
 	if (!idx)
 		return;
+	if (beltUnique != BeltUniqueId::None) {
+		// A unique flask or charm is made on a plain base, then marked.
+		DropPoe2BeltUnique(origin, position, sendmsg, *idx, beltUnique);
+		return;
+	}
 
 	const int ii = AllocateItem();
 	Item &item = Items[ii];
@@ -4685,6 +4727,9 @@ void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t 
 		constexpr uint32_t FlaskBits = CF_POE2_FLASK_PREFIX | CF_POE2_FLASK_SUFFIX | CF_POE2_FLASK_QUALITY | CF_POE2_FLASK_ROLLED;
 		item.dwBuff = (item.dwBuff & ~FlaskBits) | (dwBuff & FlaskBits);
 	}
+	// And a unique flask or charm stays that unique.
+	if (IsFlaskPotion(item) || IsCharm(item))
+		item.dwBuff = (item.dwBuff & ~CF_POE2_BELT_UNIQUE) | (dwBuff & CF_POE2_BELT_UNIQUE);
 	FinishFlask(item);
 	// POE2 Mashup: and a skill gem keeps its level.
 	if (IsSkillGem(item))

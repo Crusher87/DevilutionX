@@ -53,7 +53,8 @@ Point SkillTarget(const Player &player)
 
 void PaySkillMana(Player &player, WeaponSkill skill)
 {
-	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
+	// POE2 Mashup: Deep Well makes the next skill free.
+	const Fixed26_6 cost = TakeFreeSkill(player) ? Fixed26_6::fromInt(0) : Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
 	player._pMana -= cost;
 	player._pManaBase -= cost;
 	NoteResourceSpent(player, cost);
@@ -458,7 +459,8 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player.poe2.pendingSkill = WeaponSkill::None;
 	player.poe2.pendingSkillTicks = 0;
 
-	const Fixed26_6 cost = Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
+	// POE2 Mashup: Deep Well makes the next skill free.
+	const Fixed26_6 cost = TakeFreeSkill(player) ? Fixed26_6::fromInt(0) : Fixed26_6::fromInt(WeaponSkillManaCost(player, skill));
 	if (player._pMana < cost) {
 		TelemetrySkillFailed(player, WeaponSkillName(skill), "not enough mana when the attack landed");
 		return;

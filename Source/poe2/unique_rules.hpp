@@ -180,6 +180,21 @@ struct UniqueRuleState {
 	bool castingRepeat = false;
 	/** @brief On low life (35% or less), updated every game tick. */
 	bool lowLife = false;
+
+	// Unique flasks and charms (poe2/belt_uniques.hpp).
+	uint16_t heartglassCooldown = 0;
+	uint16_t saintsTokenCooldown = 0;
+	uint8_t witchglassTicks = 0;
+	/** @brief Little Guardian's lingering resistance (fire, lightning, magic), and whether it gave the current charm effect. */
+	std::array<uint8_t, 3> guardianTicks {};
+	std::array<bool, 3> guardianArmed {};
+	uint8_t scholarPercent = 0;
+	uint8_t scholarTicks = 0;
+	/** @brief Deep Well: the next skill costs no mana. */
+	bool freeSkill = false;
+	uint8_t moonwaterTicks = 0;
+	/** @brief The Second Bell's activations, every third free. */
+	uint8_t bellActivations = 0;
 };
 
 } // namespace devilution

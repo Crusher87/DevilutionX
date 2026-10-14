@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/belt_uniques.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
@@ -98,6 +99,8 @@ int GeneralDamagePercent(const Player &player)
 	if (const int more = Rule(player, UniqueRule::DistanceRule); more > 0 && state.nearestEnemy > FarRangeTiles)
 		percent = percent * (100 + more) / 100;
 	percent = percent * (100 + ResourceSpentBonus(player)) / 100;
+	if (state.witchglassTicks > 0)
+		percent = percent * (100 + WitchglassDamagePercent) / 100;
 	return percent;
 }
 
@@ -244,6 +247,16 @@ void ProcessUniqueRules(Player &player)
 	countDown(state.bigHitCooldown);
 	countDown(state.critSpeedTicks);
 	countDown(state.recoveryLockTicks);
+	countDown(state.witchglassTicks);
+	countDown(state.moonwaterTicks);
+	for (uint8_t &ticks : state.guardianTicks)
+		countDown(ticks);
+	if (state.scholarTicks > 0 && --state.scholarTicks == 0)
+		state.scholarPercent = 0;
+	if (state.heartglassCooldown > 0)
+		state.heartglassCooldown--;
+	if (state.saintsTokenCooldown > 0)
+		state.saintsTokenCooldown--;
 	if (state.minionFrenzyTicks > 0 && --state.minionFrenzyTicks == 0)
 		state.minionFrenzy = 0;
 	if (state.stolenTicks > 0 && --state.stolenTicks == 0)
@@ -415,7 +428,7 @@ int UniqueSpellDamagePercent(const Player &player, SpellID spell)
 	if (!gbIsPoe2)
 		return 100;
 	const UniqueRuleState &state = State(player);
-	int increased = 100 + Rule(player, UniqueRule::SpellDamage);
+	int increased = 100 + Rule(player, UniqueRule::SpellDamage) + state.scholarPercent;
 	if (const int share = Rule(player, UniqueRule::ManaSpellDamage); share > 0)
 		increased += std::max(player._pMaxMana.whole(), 0) * share / 100;
 	int percent = increased * state.castDamagePercent / 100;
@@ -470,6 +483,15 @@ void OnSpellCast(const Player &player, SpellID spell, WorldTilePosition target, 
 bool IsCastingRepeat(const Player &player)
 {
 	return State(player).castingRepeat;
+}
+
+bool TakeFreeSkill(const Player &player)
+{
+	UniqueRuleState &state = State(player);
+	if (!gbIsPoe2 || !state.freeSkill)
+		return false;
+	state.freeSkill = false;
+	return true;
 }
 
 int UniqueManaCostPercent(const Player &player)

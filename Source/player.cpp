@@ -47,6 +47,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/belt_uniques.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/default_attack.hpp"
@@ -3044,6 +3045,11 @@ void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int mi
 		SetPlayerHitPoints(player, minHitPoints);
 	}
 	TelemetryPlayerDamaged(player, damageType, totalDamage);
+	// POE2 Mashup: a full Heartglass flask saves the hero from a lethal hit.
+	if (player.hasNoLife() && &player == MyPlayer && TryHeartglassSave(player)) {
+		AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);
+		RedrawComponent(PanelDrawComponent::Health);
+	}
 	if (player.hasNoLife()) {
 		SyncPlrKill(player, deathReason);
 	}

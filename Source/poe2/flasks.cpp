@@ -1,6 +1,7 @@
 #include "poe2/flasks.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include "effects.h"
 #include "engine/backbuffer_state.hpp"
@@ -10,6 +11,7 @@
 #include "monster.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/belt_uniques.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
@@ -68,6 +70,21 @@ void RecoverTick(int32_t &raw, uint8_t &ticks, Fixed26_6 &current, Fixed26_6 &ba
 	Restore(current, base, max, gain);
 	raw -= gain;
 	ticks--;
+}
+
+/** @brief The Long Recovery: heals the owner's minions within a few tiles. */
+void HealNearbyMinions(const Player &player, int32_t raw)
+{
+	if (raw <= 0)
+		return;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &minion = Monsters[ActiveMonsters[i]];
+		if (!minion.isPlayerMinion() || minion.hasNoLife() || static_cast<size_t>(minion.goalVar3) != player.getId())
+			continue;
+		if (std::max(std::abs(minion.position.tile.x - player.position.tile.x), std::abs(minion.position.tile.y - player.position.tile.y)) > FarRangeTiles)
+			continue;
+		minion.hitPoints = std::min(minion.hitPoints + Fixed26_6::fromRaw(raw), minion.maxHitPoints);
+	}
 }
 
 uint32_t Mix(uint32_t value)
@@ -140,7 +157,20 @@ FlaskEffect GetFlaskEffect(const Item &item)
 	default:
 		break;
 	}
-	FlaskEffect effect { tier.life * percent / 100, tier.lifeTicks * ticksPercent / 100, tier.mana * percent / 100, tier.manaTicks * ticksPercent / 100, instantPercent };
+	// POE2 Mashup: unique flasks.
+	percent += BeltUniqueEffect(item);
+	int lifePercent = percent;
+	if (IsBeltUnique(item, BeltUniqueId::SaintsBlood))
+		lifePercent += 20;
+	if (IsBeltUnique(item, BeltUniqueId::Heartglass))
+		lifePercent /= 2;
+	if (IsBeltUnique(item, BeltUniqueId::RedMercy)) {
+		instantPercent = 50;
+		ticksPercent = 6 * 20 * 100 / std::max(tier.lifeTicks, 1);
+	}
+	if (IsBeltUnique(item, BeltUniqueId::BlueSilence))
+		instantPercent = 40;
+	FlaskEffect effect { tier.life * lifePercent / 100, tier.lifeTicks * ticksPercent / 100, tier.mana * percent / 100, tier.manaTicks * ticksPercent / 100, instantPercent };
 	if (IsRejuvenation(item)) {
 		// Rejuvenation is the emergency button: half the tier's life and mana, all at once.
 		effect.life /= 2;
@@ -179,7 +209,7 @@ void SetFlaskMods(Item &item, FlaskPrefix prefix, FlaskSuffix suffix, int qualit
 
 void NameFlask(Item &item)
 {
-	if (!IsFlaskPotion(item) || (item.dwBuff & CF_POE2) == 0)
+	if (!IsFlaskPotion(item) || (item.dwBuff & CF_POE2) == 0 || FinishBeltUnique(item))
 		return;
 	const FlaskPrefix prefix = GetFlaskPrefix(item);
 	const FlaskSuffix suffix = GetFlaskSuffix(item);
@@ -206,6 +236,8 @@ void NameFlask(Item &item)
 
 void FinishFlask(Item &item)
 {
+	if (FinishBeltUnique(item))
+		return;
 	if (!IsFlaskPotion(item) || (item.dwBuff & CF_POE2) == 0)
 		return;
 	if ((item.dwBuff & CF_POE2_FLASK_ROLLED) != 0) {
@@ -235,6 +267,8 @@ size_t GetFlaskTier(const Item &item)
 		if (itemLevel >= FlaskTiers[i].level)
 			tier = i;
 	}
+	if (const BeltUnique *unique = GetBeltUnique(item); unique != nullptr)
+		return unique->flaskTier;
 	if (IsAnyOf(item._iMiscId, IMISC_FULLHEAL, IMISC_FULLMANA, IMISC_FULLREJUV))
 		tier += FullFlaskTierBonus;
 	return std::min(tier, NumFlaskTiers - 1);
@@ -245,7 +279,7 @@ uint8_t FlaskChargesPerUseFor(const Item &item)
 	const uint8_t charges = IsRejuvenation(item) ? RejuvenationChargesPerUse : FlaskChargesPerUse;
 	if (GetFlaskSuffix(item) == FlaskSuffix::Plenty)
 		return static_cast<uint8_t>((charges * 3 + 3) / 4);
-	return charges;
+	return static_cast<uint8_t>(charges * BeltUniqueChargePercent(item) / 100);
 }
 
 uint8_t MaxFlaskChargesFor(const Item &item)
@@ -288,6 +322,8 @@ std::vector<std::string> FlaskModLines(const Item &item)
 	}
 	if (const int quality = GetFlaskQuality(item); quality > 0)
 		lines.emplace_back(FormatRuntime(_("Quality: +{:d}% (more recovered)"), quality));
+	for (std::string &line : BeltUniqueText(item))
+		lines.push_back(std::move(line));
 	return lines;
 }
 
@@ -321,6 +357,11 @@ bool UseFlask(Player &player, size_t beltSlot)
 			EventPlrMsg(RecoversLife(flask) && !IsRejuvenation(flask) ? _("Your life is already full.") : (IsRejuvenation(flask) ? _("Your life and mana are already full.") : _("Your mana is already full.")), UiFlags::ColorWhite);
 		return false;
 	}
+	if (IsBeltUnique(flask, BeltUniqueId::BorrowedBreath) && static_cast<int64_t>(player._pHitPoints.raw()) * 100 > static_cast<int64_t>(player._pMaxHP.raw()) * 70) {
+		if (&player == MyPlayer)
+			EventPlrMsg(_("Borrowed Breath can't be drunk above 70% life."), UiFlags::ColorWhite);
+		return false;
+	}
 	player.poe2.flaskCharges[beltSlot] -= FlaskChargesPerUseFor(flask);
 	if (&player == MyPlayer)
 		PlaySFX(ItemInvSnds[ItemCAnimTbl[flask._iCurs]]);
@@ -334,9 +375,17 @@ bool UseFlask(Player &player, size_t beltSlot)
 		TelemetryFlaskUsed(player, flask, player.poe2.flaskCharges[beltSlot], life, mana, percent(player._pHitPoints, player._pMaxHP), percent(player._pMana, player._pMaxMana));
 	}
 	int recoveryTicks = 0;
+	UniqueRuleState &uniqueState = player.poe2.uniqueState;
 	if (life) {
 		// POE2 Mashup: uniques can lessen what a life flask recovers.
-		const auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(effect.life).raw()) * LifeRecoveryPercent(player, true) / 100);
+		auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(effect.life).raw()) * LifeRecoveryPercent(player, true) / 100);
+		if (IsBeltUnique(flask, BeltUniqueId::BorrowedBreath) && IsOnLowLife(player))
+			raw *= 2;
+		const int32_t missing = std::max<int32_t>(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
+		if (IsBeltUnique(flask, BeltUniqueId::LastDraught) && raw > missing)
+			player.poe2.guardTicks = static_cast<uint8_t>(std::max<int>(player.poe2.guardTicks, GuardTicks));
+		if (IsBeltUnique(flask, BeltUniqueId::LongRecovery))
+			HealNearbyMinions(player, raw * 40 / 100);
 		const auto instant = static_cast<int32_t>(static_cast<int64_t>(raw) * effect.instantPercent / 100);
 		Restore(player._pHitPoints, player._pHPBase, player._pMaxHP, instant);
 		OnLifeRecovered(player, raw);
@@ -348,7 +397,18 @@ bool UseFlask(Player &player, size_t beltSlot)
 		}
 	}
 	if (mana && canGainMana) {
-		const int32_t raw = Fixed26_6::fromInt(effect.mana).raw();
+		auto raw = Fixed26_6::fromInt(effect.mana).raw();
+		if (IsBeltUnique(flask, BeltUniqueId::BorrowedThought) && static_cast<int64_t>(player._pMana.raw()) * 100 < static_cast<int64_t>(player._pMaxMana.raw()) * 30)
+			raw *= 2;
+		const int32_t missing = std::max<int32_t>(player._pMaxMana.raw() - player._pMana.raw(), 0);
+		if (IsBeltUnique(flask, BeltUniqueId::ScholarsReserve) && raw > missing) {
+			uniqueState.scholarPercent = static_cast<uint8_t>(std::min((raw - missing) / 64 / ScholarsReserveManaPerPercent, ScholarsReserveMaxPercent));
+			uniqueState.scholarTicks = ScholarsReserveTicks;
+		}
+		if (IsBeltUnique(flask, BeltUniqueId::DeepWell))
+			uniqueState.freeSkill = true;
+		if (IsBeltUnique(flask, BeltUniqueId::Moonwater))
+			uniqueState.moonwaterTicks = static_cast<uint8_t>(std::max(effect.manaTicks, 20));
 		const auto instant = static_cast<int32_t>(static_cast<int64_t>(raw) * effect.instantPercent / 100);
 		Restore(player._pMana, player._pManaBase, player._pMaxMana, instant);
 		if (raw > instant) {
@@ -399,7 +459,11 @@ void ProcessFlaskRecovery(Player &player)
 			player.poe2.manaFlaskRaw = 0;
 			player.poe2.manaFlaskTicks = 0;
 		} else {
+			const Fixed26_6 before = player._pMana;
 			RecoverTick(player.poe2.manaFlaskRaw, player.poe2.manaFlaskTicks, player._pMana, player._pManaBase, player._pMaxMana);
+			// Moonwater: mana recovery also recovers energy shield at half value.
+			if (player.poe2.uniqueState.moonwaterTicks > 0 && player.poe2.maxEnergyShield > 0)
+				player.poe2.energyShield = std::min(player.poe2.energyShield + (player._pMana - before).raw() / 2, player.poe2.maxEnergyShield * 64);
 		}
 		if (&player == MyPlayer)
 			RedrawComponent(PanelDrawComponent::Mana);
@@ -424,6 +488,9 @@ uint8_t FlaskChargesForKill(const Monster &monster)
 void GainFlaskCharges(Player &player, uint8_t charges)
 {
 	for (size_t slot = 0; slot < NumFlasks; slot++) {
+		// Moonwater: no charges for life flasks while it works.
+		if (player.poe2.uniqueState.moonwaterTicks > 0 && IsFlaskPotion(player.SpdList[slot]) && RecoversLife(player.SpdList[slot]))
+			continue;
 		uint8_t &flaskCharges = player.poe2.flaskCharges[slot];
 		flaskCharges = static_cast<uint8_t>(std::min<int>(MaxFlaskChargesFor(player.SpdList[slot]), flaskCharges + charges));
 	}
