@@ -70,6 +70,21 @@ LootCategory RollLootCategory(LootSource source);
 std::array<int, 4> EquipmentRarityWeights(LootSource source);
 item_quality RollEquipmentRarity(LootSource source);
 
+/** @brief How sought-after a unique is; a unique roll picks the tier first, then a unique of that tier. */
+enum class UniqueTier : uint8_t {
+	Common,
+	Uncommon,
+	Rare,
+	Mythic,
+	Count,
+};
+
+/** @brief Chance of each unique tier out of 10000: 84/12/3.5/0.5%, or 65/23/10/2% from rare monsters and bosses. */
+std::array<int, static_cast<size_t>(UniqueTier::Count)> UniqueTierWeights(LootSource source);
+UniqueTier RollUniqueTier(LootSource source);
+/** @brief The tier of a Diablo unique by its level: 8 and below common, 9 to 19 uncommon, 20 and up rare. */
+UniqueTier LegacyUniqueTier(int minLevel);
+
 /** @brief Rare monsters drop items one level higher, uniques and bosses two. */
 int LootItemLevelBonus(LootSource source);
 

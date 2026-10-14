@@ -118,6 +118,25 @@ TEST_F(Poe2LootTest, RarityTablesMatchTheSource)
 	EXPECT_EQ(LootItemLevelBonus(LootSource::Boss), 2);
 }
 
+TEST_F(Poe2LootTest, UniqueRollsPickATierFirst)
+{
+	constexpr int Trials = 40000;
+	const auto normal = Count(Trials, [] { return static_cast<int>(RollUniqueTier(LootSource::Normal)); });
+	EXPECT_NEAR(normal[0] / static_cast<double>(Trials), 0.84, 0.01);
+	EXPECT_NEAR(normal[1] / static_cast<double>(Trials), 0.12, 0.01);
+	EXPECT_NEAR(normal[2] / static_cast<double>(Trials), 0.035, 0.005);
+
+	const auto boss = Count(Trials, [] { return static_cast<int>(RollUniqueTier(LootSource::Boss)); });
+	EXPECT_NEAR(boss[0] / static_cast<double>(Trials), 0.65, 0.01);
+	EXPECT_NEAR(boss[2] / static_cast<double>(Trials), 0.10, 0.01);
+	EXPECT_NEAR(boss[3] / static_cast<double>(Trials), 0.02, 0.005);
+
+	EXPECT_EQ(LegacyUniqueTier(1), UniqueTier::Common);
+	EXPECT_EQ(LegacyUniqueTier(8), UniqueTier::Common);
+	EXPECT_EQ(LegacyUniqueTier(9), UniqueTier::Uncommon);
+	EXPECT_EQ(LegacyUniqueTier(20), UniqueTier::Rare);
+}
+
 TEST_F(Poe2LootTest, NaturalRaresHaveFourToSixAffixes)
 {
 	constexpr int Trials = 24000;

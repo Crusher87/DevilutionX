@@ -125,6 +125,32 @@ item_quality RollEquipmentRarity(LootSource source)
 	return Rarities[RollWeighted(EquipmentRarityWeights(source))];
 }
 
+std::array<int, static_cast<size_t>(UniqueTier::Count)> UniqueTierWeights(LootSource source)
+{
+	switch (source) {
+	case LootSource::Rare:
+	case LootSource::Miniboss:
+	case LootSource::Boss:
+		return { 6500, 2300, 1000, 200 };
+	default:
+		return { 8400, 1200, 350, 50 };
+	}
+}
+
+UniqueTier RollUniqueTier(LootSource source)
+{
+	return static_cast<UniqueTier>(RollWeighted(UniqueTierWeights(source)));
+}
+
+UniqueTier LegacyUniqueTier(int minLevel)
+{
+	if (minLevel <= 8)
+		return UniqueTier::Common;
+	if (minLevel < 20)
+		return UniqueTier::Uncommon;
+	return UniqueTier::Rare;
+}
+
 int LootItemLevelBonus(LootSource source)
 {
 	switch (source) {

@@ -4177,12 +4177,13 @@ std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLev
 }
 
 /**
- * @brief Turns a unique roll into a unique the hero hasn't found yet, with the base it belongs on.
+ * @brief Turns a unique roll into a unique the hero hasn't found yet, with the base it belongs on. The tier is
+ * rolled first, as in POE2, and a tier with nothing left falls back to the next lower one.
  * @return The base and the unique's offset in its base's list, or nothing if every unique at this level has dropped.
  */
-std::optional<std::pair<_item_indexes, int>> PickPoe2Unique(int itemLevel)
+std::optional<std::pair<_item_indexes, int>> PickPoe2Unique(int itemLevel, LootSource source)
 {
-	std::vector<std::pair<_item_indexes, int>> candidates;
+	std::array<std::vector<std::pair<_item_indexes, int>>, static_cast<size_t>(UniqueTier::Count)> candidates;
 	for (size_t uid = 0; uid < UniqueItems.size(); uid++) {
 		const UniqueItem &unique = UniqueItems[uid];
 		if (unique.UIMinLvl > itemLevel || (UniqueItemFlags[uid] && !gbIsMultiplayer))
@@ -4201,11 +4202,17 @@ std::optional<std::pair<_item_indexes, int>> PickPoe2Unique(int itemLevel)
 		const int offset = static_cast<int>(valid.end() - found) - 1;
 		if (offset > static_cast<int>(CF_UIDOFFSET >> 1))
 			continue;
-		candidates.emplace_back(*base, offset);
+		candidates[static_cast<size_t>(LegacyUniqueTier(unique.UIMinLvl))].emplace_back(*base, offset);
 	}
-	if (candidates.empty())
-		return std::nullopt;
-	return candidates[LootRandom(static_cast<int>(candidates.size()))];
+	const int rolled = static_cast<int>(RollUniqueTier(source));
+	for (int i = 0; i < static_cast<int>(candidates.size()); i++) {
+		// The rolled tier, then lower tiers, then higher ones if only those are left.
+		const int tier = i <= rolled ? rolled - i : i;
+		const std::vector<std::pair<_item_indexes, int>> &pool = candidates[tier];
+		if (!pool.empty())
+			return pool[LootRandom(static_cast<int>(pool.size()))];
+	}
+	return std::nullopt;
 }
 
 /** @brief Where a loot roll comes from and the levels it drops at. */
@@ -4278,7 +4285,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		if (!rarity)
 			rarity = RollEquipmentRarity(origin.source);
 		if (*rarity == ITEM_QUALITY_UNIQUE) {
-			if (const std::optional<std::pair<_item_indexes, int>> unique = PickPoe2Unique(itemLevel); unique) {
+			if (const std::optional<std::pair<_item_indexes, int>> unique = PickPoe2Unique(itemLevel, origin.source); unique) {
 				idx = unique->first;
 				uidOffset = unique->second;
 			} else {
