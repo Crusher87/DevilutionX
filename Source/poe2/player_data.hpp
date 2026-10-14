@@ -230,6 +230,9 @@ static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
 constexpr size_t MaxSupportSockets = 5;
 using SupportSockets = std::array<SupportGem, MaxSupportSockets>;
 
+/** @brief Most jewel sockets the passive tree can have. */
+constexpr size_t MaxJewelSockets = 8;
+
 struct Poe2PlayerData;
 
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */

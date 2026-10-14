@@ -37,6 +37,8 @@ enum class LootCategory : uint8_t {
 	Endgame,
 	/** Diablo's scrolls, oils, elixirs and the like. */
 	Misc,
+	/** Jewels for the passive tree; they take the bible's augment weight until augments exist. */
+	Jewel,
 	Count,
 };
 

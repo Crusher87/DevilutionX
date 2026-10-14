@@ -87,7 +87,7 @@ public:
 TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
-	ASSERT_EQ(families.size(), 86U);
+	ASSERT_EQ(families.size(), 93U);
 	int enabled = 0;
 	for (size_t i = 0; i < families.size(); i++) {
 		const ModFamily &family = families[i];
@@ -106,7 +106,7 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	EXPECT_EQ(enabled, 42);
+	EXPECT_EQ(enabled, 54);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");

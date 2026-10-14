@@ -2410,7 +2410,9 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 9 the fifth flask, version 10 each socketed gem's level, version 11 the Spirit skulls and version 12 the
  * reworked passive tree with the attribute picked on each "any Attribute" node.
  */
-constexpr uint8_t Poe2HeroDataVersion = 12;
+constexpr uint8_t Poe2HeroDataVersion = 13;
+/** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
+constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
 namespace {
 
@@ -2567,6 +2569,27 @@ uint8_t ReadPoe2HeroData(Player &player)
 		if (node < MaxPassiveNodes && attribute < static_cast<uint8_t>(PassiveAttribute::Count))
 			player.poe2.passiveAttributes[node] = attribute;
 	}
+
+	if (version < 13 || !file.IsValid(1))
+		return version;
+	const uint8_t jewelCount = file.NextLE<uint8_t>();
+	// Rebuilding the jewels from their seeds mustn't change the game's random numbers.
+	const uint32_t rngState = GetLCGEngineState();
+	for (uint8_t i = 0; i < jewelCount && file.IsValid(SavedJewelSize); i++) {
+		const uint8_t socket = file.NextLE<uint8_t>();
+		const auto idx = static_cast<_item_indexes>(file.NextLE<int16_t>());
+		const uint16_t createInfo = file.NextLE<uint16_t>();
+		const uint32_t seed = file.NextLE<uint32_t>();
+		const uint32_t dwBuff = file.NextLE<uint32_t>();
+		const bool identified = file.NextLE<uint8_t>() != 0;
+		if (socket >= MaxJewelSockets || idx < 0 || static_cast<size_t>(idx) >= AllItemsList.size() || AllItemsList[idx].iMiscId != IMISC_JEWEL)
+			continue;
+		Item &jewel = player.jewels[socket];
+		RecreateItem(player, jewel, idx, createInfo, seed, 0, dwBuff);
+		jewel._iIdentified = identified;
+		jewel._iStatFlag = true;
+	}
+	SetRndSeed(rngState);
 	return version;
 }
 
@@ -2575,6 +2598,8 @@ uint8_t ReadPoe2HeroData(Player &player)
 void LoadPoe2HeroData(Player &player)
 {
 	player.poe2.clear();
+	for (Item &jewel : player.jewels)
+		jewel.clear();
 	const uint8_t version = ReadPoe2HeroData(player);
 	// Heroes from before the skill bar start with the skill for their class's weapon.
 	if (version < 3 && gbIsPoe2)
@@ -2599,7 +2624,13 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			attributes.push_back(static_cast<uint16_t>(node));
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3));
+	size_t jewelCount = 0;
+	for (const Item &jewel : player.jewels) {
+		if (!jewel.isEmpty())
+			jewelCount++;
+	}
+
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * SavedJewelSize));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2644,6 +2675,19 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	for (const uint16_t node : attributes) {
 		file.WriteLE<uint16_t>(node);
 		file.WriteLE<uint8_t>(player.poe2.passiveAttributes[node]);
+	}
+	// Version 13: the jewels in the passive tree's sockets.
+	file.WriteLE<uint8_t>(static_cast<uint8_t>(jewelCount));
+	for (size_t socket = 0; socket < player.jewels.size(); socket++) {
+		const Item &jewel = player.jewels[socket];
+		if (jewel.isEmpty())
+			continue;
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(socket));
+		file.WriteLE<int16_t>(static_cast<int16_t>(jewel.IDidx));
+		file.WriteLE<uint16_t>(jewel._iCreateInfo);
+		file.WriteLE<uint32_t>(jewel._iSeed);
+		file.WriteLE<uint32_t>(jewel.dwBuff);
+		file.WriteLE<uint8_t>(jewel._iIdentified ? 1 : 0);
 	}
 }
 

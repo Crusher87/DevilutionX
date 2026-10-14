@@ -27,7 +27,7 @@ std::vector<ModFamily> Families;
 constexpr std::array<std::string_view, static_cast<size_t>(ModSlot::Count)> SlotNames = {
 	"helmet", "body_armour", "gloves", "boots", "belt", "shield", "focus", "quiver", "ring", "amulet",
 	"one_hand_melee", "two_hand_melee", "bow", "crossbow", "spear", "quarterstaff", "flail", "claw", "dagger",
-	"wand", "staff", "sceptre", "jewel", "life_flask", "mana_flask", "charm"
+	"wand", "staff", "sceptre", "jewel", "life_flask", "mana_flask", "charm", "ruby", "emerald", "sapphire"
 };
 
 std::optional<int> ParseInt(std::string_view text)
@@ -283,11 +283,26 @@ std::optional<uint8_t> FindModifierFamily(std::string_view id)
 	return std::nullopt;
 }
 
+bool IsJewel(const Item &item)
+{
+	return !item.isEmpty() && item._iMiscId == IMISC_JEWEL;
+}
+
 std::optional<ModSlot> ItemModSlot(const Item &item)
 {
 	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
 		return std::nullopt;
 	const ItemData &base = AllItemsList[static_cast<size_t>(item.IDidx)];
+	if (IsJewel(item)) {
+		const std::string_view name = base.iName;
+		if (name.starts_with("Ruby"))
+			return ModSlot::Ruby;
+		if (name.starts_with("Emerald"))
+			return ModSlot::Emerald;
+		if (name.starts_with("Sapphire"))
+			return ModSlot::Sapphire;
+		return std::nullopt;
+	}
 	const std::string_view shortName = base.iSName;
 	const bool twoHanded = item._iLoc == ILOC_TWOHAND;
 	switch (item._itype) {
@@ -365,7 +380,9 @@ std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLe
 	ModRandom values { valueSeed };
 	int prefixes = 0;
 	int suffixes = 0;
-	const uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
+	uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
+	if (IsAnyOf(slot, ModSlot::Ruby, ModSlot::Emerald, ModSlot::Sapphire))
+		slotBit |= 1U << static_cast<uint32_t>(ModSlot::Jewel);
 	const size_t unidIndex = static_cast<size_t>(std::clamp(unidentifiedTier, 1, 5) - 1);
 	const bool isMagic = perSide <= MaxMagicModsPerSide;
 	const int magicCull = UnidentifiedMagicCullPercent[unidIndex];
@@ -589,6 +606,24 @@ void ApplyItemMod(Item &item, const Poe2ItemMod &mod)
 		break;
 	case ModEffect::LightningSkillLevels:
 		AddPoe2Stat(item, Poe2ItemStat::LightningSkillLevels, v0);
+		break;
+	case ModEffect::LifePercent:
+		AddPoe2Stat(item, Poe2ItemStat::LifePercent, v0);
+		break;
+	case ModEffect::ManaPercent:
+		AddPoe2Stat(item, Poe2ItemStat::ManaPercent, v0);
+		break;
+	case ModEffect::DamagePercent:
+		item._iPLDam = static_cast<int16_t>(item._iPLDam + v0);
+		break;
+	case ModEffect::ArmourPercent:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourPercent, v0);
+		break;
+	case ModEffect::EvasionPercent:
+		AddPoe2Stat(item, Poe2ItemStat::EvasionPercent, v0);
+		break;
+	case ModEffect::EnergyShieldPercent:
+		AddPoe2Stat(item, Poe2ItemStat::EnergyShieldPercent, v0);
 		break;
 	}
 }

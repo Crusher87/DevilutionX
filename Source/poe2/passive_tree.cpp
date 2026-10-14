@@ -10,6 +10,7 @@
 #include "items.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/jewels.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
@@ -346,6 +347,9 @@ std::string_view PassiveAttributeName(PassiveAttribute attribute)
 bool CanRefundPassive(const Player &player, PassiveNodeId node)
 {
 	if (!CanUsePassives() || node >= Tree.size() || Tree[node].kind == PassiveKind::Start || !player.poe2.passives.test(node))
+		return false;
+	// A socket holding a jewel stays until the jewel is taken out.
+	if (Tree[node].kind == PassiveKind::JewelSocket && SocketedJewel(player, node) != nullptr)
 		return false;
 	return AllConnected(player, node);
 }

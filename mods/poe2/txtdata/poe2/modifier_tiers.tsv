@@ -687,3 +687,10 @@ charm_effect	5	36	460	9	10	0	0
 charm_effect	6	24	560	7	8	0	0
 charm_effect	7	12	620	5	6	0	0
 charm_effect	8	1	650	3	4	0	0
+ruby_increased_armour	1	1	800	10	20	0	0
+ruby_physical_damage	1	1	800	5	15	0	0
+emerald_increased_evasion	1	1	800	10	20	0	0
+emerald_accuracy	1	1	800	5	10	0	0
+sapphire_energy_shield	1	1	800	10	20	0	0
+sapphire_minion_damage	1	1	800	5	15	0	0
+sapphire_mana_regeneration	1	1	800	5	15	0	0

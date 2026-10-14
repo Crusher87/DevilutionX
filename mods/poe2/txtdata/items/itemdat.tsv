@@ -300,3 +300,6 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Armor	Armor	CLOAK	LightArmor	NONE	Monastic Garb	Armor	22	48	0	0	56	66	0	35	35		NONE	Null	false	7260
 	1	Armor	Armor	CLOAK	LightArmor	NONE	Devout Garb	Armor	27	50	0	0	64	75	0	41	41		NONE	Null	false	8370
 	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Grand Regalia	Plate	26	80	0	0	70	82	29	29	29		NONE	Null	false	8940
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Ruby	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
+	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Emerald	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
+	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Sapphire	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000

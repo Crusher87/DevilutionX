@@ -72,11 +72,11 @@ minion_skill_levels	Minion Skill Levels		suffix	minion_skill_levels	minion,skill
 minion_attack_cast_speed	Minion Attack and Cast Speed		suffix	minion_speed	minion,speed	wand,staff,sceptre,focus,amulet,shield			Minions have {0}% increased Attack and Cast Speed		100	100	false
 minion_resistances	Minion Elemental Resistances		suffix	minion_resistance	minion,resistance,elemental	wand,staff,sceptre,focus,amulet,shield			Minions have +{0}% to all Elemental Resistances		100	100	false
 spirit_efficiency	Spirit Reservation Efficiency		suffix	spirit_efficiency	spirit,reservation	amulet,sceptre			{0}% increased Spirit Reservation Efficiency		100	100	false
-jewel_maximum_life_pct	Jewel Maximum Life		prefix	jewel_life	life,jewel	jewel			{0}% increased maximum Life		100	100	false
-jewel_maximum_mana_pct	Jewel Maximum Mana		prefix	jewel_mana	mana,jewel	jewel			{0}% increased maximum Mana		100	100	false
-jewel_damage_pct	Jewel Damage		prefix	jewel_damage	damage,jewel	jewel			{0}% increased Damage		100	100	false
-jewel_attack_speed	Jewel Attack Speed		suffix	jewel_attack_speed	attack,speed,jewel	jewel			{0}% increased Attack Speed		100	100	false
-jewel_cast_speed	Jewel Cast Speed		suffix	jewel_cast_speed	caster,speed,jewel	jewel			{0}% increased Cast Speed		100	100	false
+jewel_maximum_life_pct	Jewel Maximum Life	Healthy	prefix	jewel_life	life,jewel	jewel			{0}% increased maximum Life	LifePercent	100	100	true
+jewel_maximum_mana_pct	Jewel Maximum Mana	Wise	prefix	jewel_mana	mana,jewel	jewel			{0}% increased maximum Mana	ManaPercent	100	100	true
+jewel_damage_pct	Jewel Damage	Brutal	prefix	jewel_damage	damage,jewel	jewel			{0}% increased Damage	DamagePercent	100	100	true
+jewel_attack_speed	Jewel Attack Speed	of Alacrity	suffix	jewel_attack_speed	attack,speed,jewel	jewel			{0}% increased Attack Speed	AttackSpeed	100	100	true
+jewel_cast_speed	Jewel Cast Speed	of Enchanting	suffix	jewel_cast_speed	caster,speed,jewel	jewel			{0}% increased Cast Speed	CastSpeed	100	100	true
 jewel_critical_damage	Jewel Critical Damage		suffix	jewel_critical_damage	critical,damage,jewel	jewel			+{0}% to Critical Damage Bonus		100	100	false
 flask_recovery_amount	Flask Recovery Amount		prefix	flask_recovery_amount	flask,recovery	life_flask,mana_flask			{0}% increased Amount Recovered		100	100	false
 flask_recovery_rate	Flask Recovery Rate		suffix	flask_recovery_rate	flask,recovery,speed	life_flask,mana_flask			{0}% increased Recovery Rate		100	100	false
@@ -85,3 +85,10 @@ flask_duration	Flask Duration		suffix	flask_duration	flask,duration	life_flask,m
 charm_duration	Charm Duration		prefix	charm_duration	charm,duration	charm			{0}% increased Charm Duration		100	100	false
 charm_charges	Charm Charges		suffix	charm_charges	charm,charges	charm			{0}% increased Charm Charges gained		100	100	false
 charm_effect	Charm Effect		prefix	charm_effect	charm	charm			{0}% increased Effect of this Charm		100	100	false
+ruby_increased_armour	Armoured	Armoured	prefix	ruby_increased_armour	jewel	ruby			{0}% increased Armour	ArmourPercent	100	100	true
+ruby_physical_damage	Sharpened	Sharpened	prefix	ruby_physical_damage	jewel	ruby			{0}% increased Global Physical Damage	DamagePercent	100	100	true
+emerald_increased_evasion	Evasive	Evasive	prefix	emerald_increased_evasion	jewel	emerald			{0}% increased Evasion Rating	EvasionPercent	100	100	true
+emerald_accuracy	Accurate	Accurate	prefix	emerald_accuracy	jewel	emerald			+{0} to Accuracy Rating	Accuracy	100	100	true
+sapphire_energy_shield	Shimmering	Shimmering	prefix	sapphire_energy_shield	jewel	sapphire			{0}% increased maximum Energy Shield	EnergyShieldPercent	100	100	true
+sapphire_minion_damage	Authoritative	Authoritative	prefix	sapphire_minion_damage	jewel	sapphire			Minions deal {0}% increased Damage	MinionDamage	100	100	true
+sapphire_mana_regeneration	of Energy	of Energy	suffix	sapphire_mana_regeneration	jewel	sapphire			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true

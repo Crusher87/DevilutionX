@@ -763,6 +763,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/flasks.cpp
   poe2/gem_levels.cpp
   poe2/gemcutting.cpp
+  poe2/jewels.cpp
   poe2/loot.cpp
   poe2/modifiers.cpp
   poe2/monster_mods.cpp

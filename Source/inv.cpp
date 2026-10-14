@@ -44,6 +44,8 @@
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/hud_globes.hpp"
+#include "poe2/jewels.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -2199,6 +2201,20 @@ bool EquipInvItem(Player &player, int cii)
 	if (cii < INVITEM_INV_FIRST || cii > INVITEM_INV_LAST || IsInspectingPlayer())
 		return false;
 	const Item &item = player.InvList[cii - INVITEM_INV_FIRST];
+	if (!item.isEmpty() && IsJewel(item)) {
+		// POE2 Mashup: a jewel goes into the first allocated jewel socket on the passive tree that's free.
+		const std::optional<PassiveNodeId> socket = FreeJewelSocket(player);
+		if (!socket) {
+			EventPlrMsg(_("Allocate a free Jewel Socket on the passive tree (P) first."), UiFlags::ColorRed);
+			return true;
+		}
+		Item jewel = item;
+		if (SocketJewel(player, *socket, jewel)) {
+			PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+			player.RemoveInvItem(cii - INVITEM_INV_FIRST);
+		}
+		return true;
+	}
 	if (item.isEmpty() || !item.isEquipment())
 		return false;
 	// The same as Shift+click: equip it, and move what was worn into its place.

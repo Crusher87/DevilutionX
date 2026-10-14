@@ -63,7 +63,26 @@ FAMILIES = {
 	'spell_skill_levels': ('SpellSkillLevels', 100, 100, 'of the Magus'),
 	'fire_skill_levels': ('FireSkillLevels', 100, 100, 'of Flames'),
 	'lightning_skill_levels': ('LightningSkillLevels', 100, 100, 'of Thunder'),
+	'jewel_maximum_life_pct': ('LifePercent', 100, 100, 'Healthy'),
+	'jewel_maximum_mana_pct': ('ManaPercent', 100, 100, 'Wise'),
+	'jewel_damage_pct': ('DamagePercent', 100, 100, 'Brutal'),
+	'jewel_attack_speed': ('AttackSpeed', 100, 100, 'of Alacrity'),
+	'jewel_cast_speed': ('CastSpeed', 100, 100, 'of Enchanting'),
 }
+
+# Colour-specific jewel modifiers from POE2's jewel pools (poe2db, research/poe2-jewels.md): one tier each,
+# for every item level, on the jewel colours that roll them.
+JEWEL_FAMILIES = [
+	# id, name, word, side, slots, template, effect, min, max
+	('ruby_increased_armour', 'Armoured', 'Armoured', 'prefix', 'ruby', '{0}% increased Armour', 'ArmourPercent', 10, 20),
+	('ruby_physical_damage', 'Sharpened', 'Sharpened', 'prefix', 'ruby', '{0}% increased Global Physical Damage', 'DamagePercent', 5, 15),
+	('emerald_increased_evasion', 'Evasive', 'Evasive', 'prefix', 'emerald', '{0}% increased Evasion Rating', 'EvasionPercent', 10, 20),
+	('emerald_accuracy', 'Accurate', 'Accurate', 'prefix', 'emerald', '+{0} to Accuracy Rating', 'Accuracy', 5, 10),
+	('sapphire_energy_shield', 'Shimmering', 'Shimmering', 'prefix', 'sapphire', '{0}% increased maximum Energy Shield', 'EnergyShieldPercent', 10, 20),
+	('sapphire_minion_damage', 'Authoritative', 'Authoritative', 'prefix', 'sapphire', 'Minions deal {0}% increased Damage', 'MinionDamage', 5, 15),
+	('sapphire_mana_regeneration', 'of Energy', 'of Energy', 'suffix', 'sapphire', '{0}% increased Mana Regeneration Rate', 'ManaRegeneration', 5, 15),
+]
+JEWEL_WEIGHT = 800
 
 # The bundle's skill level tiers repeat (+1 four times, +2 twice, then +3 and +4), so they become +1, +2 and +3.
 SKILL_LEVEL_VALUES = [3, 3, 2, 2, 1, 1, 1, 1]
@@ -123,6 +142,10 @@ def main():
 			values = [str(v if isinstance(v, int) or float(v).is_integer() else round(v * 10)) for v in values]
 			values = [str(int(float(v))) for v in values]
 			tier_rows.append([fid, str(number), str(tier['required_item_level']), str(tier['spawn_weight'])] + values)
+
+	for fid, name, word, side, slots, template, effect, lo, hi in JEWEL_FAMILIES:
+		family_rows.append([fid, name, word, side, fid, 'jewel', slots, '', '', template, effect, '100', '100', 'true'])
+		tier_rows.append([fid, '1', '1', str(JEWEL_WEIGHT), str(lo), str(hi), '0', '0'])
 
 	write(os.path.join(OUT_DIR, 'modifier_families.tsv'),
 	      ['id', 'name', 'word', 'side', 'group', 'tags', 'slots', 'baseTags', 'conflicts', 'template', 'effect', 'scale1', 'scale2', 'enabled'],

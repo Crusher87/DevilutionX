@@ -7,6 +7,7 @@
 #include "plrmsg.h"
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -23,7 +24,7 @@ bool CanTakeCurrency(const Item &item)
 {
 	if (item.isEmpty() || item._iMagical == ITEM_QUALITY_UNIQUE)
 		return false;
-	return IsAnyOf(item._iClass, ICLASS_WEAPON, ICLASS_ARMOR) || IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet);
+	return IsAnyOf(item._iClass, ICLASS_WEAPON, ICLASS_ARMOR) || IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet) || IsJewel(item);
 }
 
 bool HasPower(const Item &item, item_effect_type power)

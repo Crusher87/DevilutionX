@@ -75,6 +75,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/jewels.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
@@ -1403,7 +1404,12 @@ void GetItemPowerPoe2Mods(Item &item, bool rare)
 	const uint32_t valueSeed = seed ^ 0x6A09E667U ^ (divine * 0x9E3779B9U);
 	int count;
 	int perSide;
-	if (rare) {
+	if (rare && IsJewel(item)) {
+		// Rare jewels have 3 or 4 modifiers, at most 2 of each kind.
+		const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
+		count = std::min(2 + MagicModCount(seed) + exalts, 2 * MaxRareJewelModsPerSide);
+		perSide = MaxRareJewelModsPerSide;
+	} else if (rare) {
 		const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
 		count = std::min(RareModCount(seed) + exalts, static_cast<int>(MaxRareAffixes));
 		perSide = MaxRareModsPerSide;
@@ -1441,6 +1447,21 @@ void GetItemPowerPoe2Mods(Item &item, bool rare)
 			CopyUtf8(item._iIName, MagicModItemName(item, AllItemsList[item.IDidx].iSName), ItemNameLength);
 	}
 	CalcItemValue(item);
+}
+
+/**
+ * @brief POE2 jewels are always magic or rare and roll from the jewel modifier pools.
+ *
+ * A jewel made without an item level (a shop or the item spawner) takes one from the level it was made at.
+ */
+void SetupJewel(Item &item, int lvl)
+{
+	if (GetPoe2ItemLevel(item) == 0)
+		SetPoe2ItemLevel(item, Poe2ItemLevel(lvl + (15 * sgGameInitInfo.nDifficulty)));
+	const std::optional<item_quality> lootRarity = GetLootRarity(item);
+	// Without a loot roll, one jewel in four is rare.
+	const bool rare = lootRarity ? *lootRarity == ITEM_QUALITY_RARE : (static_cast<uint32_t>(item._iSeed) * 0x9E3779B9U) >> 30 == 0;
+	GetItemPowerPoe2Mods(item, rare);
 }
 
 void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs, bool onlygood)
@@ -2084,6 +2105,12 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(SupportGemDescription(gem));
 		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
+		return;
+	}
+	if (IsJewel(item)) {
+		AddItemInfoBoxString(_("Place in an allocated Jewel Socket"));
+		AddItemInfoBoxString(_("on the Passive Tree (P)"));
+		AddItemInfoBoxString(_("Right-click to socket"));
 		return;
 	}
 	if (IsWaystone(item)) {
@@ -3271,7 +3298,15 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	int manaRegen = 0;
 	std::array<int, static_cast<size_t>(Poe2ItemStat::Count)> poe2Stats {};
 
-	for (const Item &item : player.InvBody) {
+	// POE2 Mashup: jewels in allocated passive tree sockets count like worn gear.
+	std::vector<const Item *> worn;
+	for (const Item &item : player.InvBody)
+		worn.push_back(&item);
+	for (const Item *jewel : ActiveJewels(player))
+		worn.push_back(jewel);
+
+	for (const Item *wornItem : worn) {
+		const Item &item = *wornItem;
 		if (!item.isEmpty() && item._iStatFlag) {
 
 			minDamage += item._iMinDam;
@@ -3318,7 +3353,13 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	const auto gearStat = [&poe2Stats](Poe2ItemStat stat) { return poe2Stats[static_cast<size_t>(stat)]; };
 
 	// POE2 Mashup: the passive tree adds to what the gear gives.
-	const PassiveTotals passives = GetPassiveTotals(player);
+	PassiveTotals passives = GetPassiveTotals(player);
+	// Jewels' percent increases work like the tree's.
+	passives[static_cast<size_t>(PassiveStat::LifePercent)] += gearStat(Poe2ItemStat::LifePercent);
+	passives[static_cast<size_t>(PassiveStat::ManaPercent)] += gearStat(Poe2ItemStat::ManaPercent);
+	passives[static_cast<size_t>(PassiveStat::ArmorPercent)] += gearStat(Poe2ItemStat::ArmourPercent);
+	passives[static_cast<size_t>(PassiveStat::EvasionPercent)] += gearStat(Poe2ItemStat::EvasionPercent);
+	passives[static_cast<size_t>(PassiveStat::EnergyShieldPercent)] += gearStat(Poe2ItemStat::EnergyShieldPercent);
 	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
 	strength += passive(PassiveStat::Strength);
 	magic += passive(PassiveStat::Magic);
@@ -3834,6 +3875,11 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 	else if (uper == 1)
 		item._iCreateInfo |= CF_UPER1;
 
+	if (gbIsPoe2 && item._iMiscId == IMISC_JEWEL) {
+		SetupJewel(item, lvl);
+		return;
+	}
+
 	if (const std::optional<item_quality> lootRarity = GetLootRarity(item); lootRarity && item._iMiscId != IMISC_UNIQUE) {
 		// POE2 Mashup: the loot roll picked the rarity; a unique keeps the pick stored in its unique offset.
 		std::optional<_unique_items> uid;
@@ -4118,6 +4164,8 @@ std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLev
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId); });
 	case LootCategory::Endgame:
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });
+	case LootCategory::Jewel:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_JEWEL; });
 	default:
 		return PickPoe2Weighted(itemLevel, IsPoe2MiscLoot);
 	}
@@ -4217,18 +4265,23 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 			}
 		}
 	}
+	if (category == LootCategory::Jewel) {
+		// Jewels are always magic or rare: a normal roll makes a magic jewel and a unique roll a rare one.
+		const item_quality roll = rarity.value_or(RollEquipmentRarity(origin.source));
+		rarity = IsAnyOf(roll, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE) ? ITEM_QUALITY_RARE : ITEM_QUALITY_MAGIC;
+	}
 	if (!idx)
 		return;
 
 	const int ii = AllocateItem();
 	Item &item = Items[ii];
 	GetSuperItemSpace(position, ii);
-	if (category == LootCategory::Equipment) {
+	if (IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel)) {
 		SetLootRarity(item, *rarity);
 		SetPoe2ItemLevel(item, origin.poe2ItemLevel);
 		item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
 	}
-	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, category == LootCategory::Equipment, origin.pregen, uidOffset);
+	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer)
 		UniqueItemFlags[item._iUid] = true;
 	if (*idx == IDI_GOLD) {

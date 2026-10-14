@@ -557,6 +557,8 @@ enum item_misc_id : int8_t {
 	IMISC_UNCUT_SPIRIT,
 	/** Broken for a permanent boost to maximum Spirit, like POE2's Gemrot Skull. */
 	IMISC_SPIRIT_SKULL,
+	/** Goes in an allocated jewel socket of the passive tree (POE2 Ruby, Emerald or Sapphire). */
+	IMISC_JEWEL,
 	IMISC_INVALID = -1,
 };
 

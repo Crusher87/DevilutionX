@@ -57,6 +57,15 @@ enum class ModEffect : uint8_t {
 	SpellSkillLevels,
 	FireSkillLevels,
 	LightningSkillLevels,
+	/** Increased maximum life in percent, from jewels. */
+	LifePercent,
+	ManaPercent,
+	/** Increased damage in percent, from jewels. */
+	DamagePercent,
+	/** Increased armour, evasion or energy shield from all gear, from jewels. */
+	ArmourPercent,
+	EvasionPercent,
+	EnergyShieldPercent,
 };
 
 /** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */
@@ -87,6 +96,10 @@ enum class ModSlot : uint8_t {
 	LifeFlask,
 	ManaFlask,
 	Charm,
+	/** Jewel colours; each also rolls the modifiers every jewel can have. */
+	Ruby,
+	Emerald,
+	Sapphire,
 	Count,
 };
 
@@ -135,11 +148,16 @@ struct ModFamily {
 /** @brief POE2: a magic item has at most one prefix and one suffix, a rare three of each. */
 constexpr int MaxMagicModsPerSide = 1;
 constexpr int MaxRareModsPerSide = 3;
+/** @brief A rare jewel has at most two prefixes and two suffixes. */
+constexpr int MaxRareJewelModsPerSide = 2;
 
 /** @brief Loads the modifier tables from the POE2 Mashup mod, or clears them outside POE2 mode. */
 void LoadModifierData();
 const std::vector<ModFamily> &ModifierFamilies();
 std::optional<uint8_t> FindModifierFamily(std::string_view id);
+
+/** @brief Whether the item is a POE2 jewel, for the passive tree's jewel sockets. */
+bool IsJewel(const Item &item);
 
 /** @brief The slot of the itemization tables an item fills, if it has one. */
 std::optional<ModSlot> ItemModSlot(const Item &item);

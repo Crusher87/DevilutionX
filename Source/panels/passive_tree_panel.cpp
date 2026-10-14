@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <optional>
@@ -10,6 +11,7 @@
 
 #include "control/control.hpp"
 #include "controls/wasd_movement.hpp"
+#include "cursor.h"
 #include "engine/dx.h"
 #include "engine/palette.h"
 #include "engine/point.hpp"
@@ -17,10 +19,15 @@
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
+#include "items.h"
 #include "multi.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/jewels.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
+#include "sound_effect_enums.h"
 #include "tables/playerdat.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -184,6 +191,38 @@ bool IsNodeShown(const Player &player, const PassiveNode &node)
 }
 
 /** @brief Node radius in tree units. */
+/** @brief The palette entry closest to the colour; Diablo's fixed ramps have no green, so Emeralds look it up. */
+uint8_t NearestPaletteColor(int red, int green, int blue)
+{
+	uint8_t best = 0;
+	int bestDistance = INT_MAX;
+	for (size_t i = 0; i < logical_palette.size(); i++) {
+		const SDL_Color &color = logical_palette[i];
+		const int dr = color.r - red;
+		const int dg = color.g - green;
+		const int db = color.b - blue;
+		const int distance = (dr * dr) + (dg * dg) + (db * db);
+		if (distance < bestDistance) {
+			bestDistance = distance;
+			best = static_cast<uint8_t>(i);
+		}
+	}
+	return best;
+}
+
+/** @brief The colour a socketed jewel glints with. */
+uint8_t JewelColor(const Item &jewel)
+{
+	switch (ItemModSlot(jewel).value_or(ModSlot::Jewel)) {
+	case ModSlot::Ruby:
+		return PAL16_RED + 4;
+	case ModSlot::Emerald:
+		return NearestPaletteColor(40, 170, 60);
+	default:
+		return PAL16_BLUE + 4;
+	}
+}
+
 float NodeSize(const PassiveNode &node)
 {
 	switch (node.kind) {
@@ -409,7 +448,10 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 			// An empty socket: a rim round a dark hole, with a gem glinting in it once allocated.
 			fill(radius + rim, color);
 			fill(radius, SocketRimColor);
-			fill(std::max(radius - (2 * rim), 1), IsPassiveAllocated(player, node.id) ? SocketGemColor : SocketHoleColor);
+			if (const Item *jewel = SocketedJewel(player, node.id); jewel != nullptr)
+				fill(std::max(radius - (2 * rim), 1), JewelColor(*jewel));
+			else
+				fill(std::max(radius - (2 * rim), 1), IsPassiveAllocated(player, node.id) ? SocketGemColor : SocketHoleColor);
 			break;
 		case PassiveKind::Attribute:
 			fill(radius + rim, AttributeRimColor);
@@ -427,6 +469,43 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 	}
 }
 
+/** @brief Puts the held jewel in the socket, picking up the jewel that was there. */
+void PlaceHeldJewel(Player &player, PassiveNodeId node)
+{
+	if (!IsPassiveAllocated(player, node)) {
+		EventPlrMsg(_("Allocate the Jewel Socket first."), UiFlags::ColorRed);
+		return;
+	}
+	const int cursor = player.HoldItem._iCurs;
+	if (!SocketJewel(player, node, player.HoldItem))
+		return;
+	PlaySFX(ItemInvSnds[ItemCAnimTbl[cursor]]);
+	if (player.HoldItem.isEmpty())
+		NewCursor(CURSOR_HAND);
+	else
+		NewCursor(player.HoldItem);
+}
+
+/** @brief Takes the jewel out of the socket into the inventory, or the hand when the inventory is full. */
+void TakeOutJewel(Player &player, PassiveNodeId node)
+{
+	const Item *socketed = SocketedJewel(player, node);
+	if (socketed == nullptr)
+		return;
+	if (!CanFitItemInInventory(player, *socketed) && !player.HoldItem.isEmpty()) {
+		EventPlrMsg(_("No room in your inventory for the jewel."), UiFlags::ColorRed);
+		return;
+	}
+	std::optional<Item> jewel = TakeJewel(player, node);
+	if (!jewel)
+		return;
+	PlaySFX(ItemInvSnds[ItemCAnimTbl[jewel->_iCurs]]);
+	if (AutoPlaceItemInInventory(player, *jewel))
+		return;
+	player.HoldItem = *jewel;
+	NewCursor(player.HoldItem);
+}
+
 std::string_view NodeKindText(const PassiveNode &node)
 {
 	switch (node.kind) {
@@ -441,7 +520,7 @@ std::string_view NodeKindText(const PassiveNode &node)
 	case PassiveKind::Attribute:
 		return _("Pick the attribute when you allocate it");
 	case PassiveKind::JewelSocket:
-		return _("Place a jewel here once you have one");
+		return _("Jewel Socket");
 	case PassiveKind::Start:
 		return _("Class start");
 	default:
@@ -473,6 +552,14 @@ std::string NodeHint(const Player &player, const PassiveNode &node)
 		return ChosenAscendancy(player) ? std::string(_("You already chose an ascendancy")) : FormatRuntime(_("Reach level {:d} to ascend"), AscendancyLevel);
 	if (node.kind == PassiveKind::Ascendancy && !IsPassiveAllocated(player, node.id))
 		return std::string(_("Click to ascend (free; refund to change)"));
+	if (node.kind == PassiveKind::JewelSocket && IsPassiveAllocated(player, node.id)) {
+		if (SocketedJewel(player, node.id) != nullptr)
+			return std::string(_("Right-click to take the jewel out"));
+		if (IsJewel(player.HoldItem))
+			return std::string(_("Click to socket the jewel"));
+		if (CanRefundPassive(player, node.id))
+			return std::string(_("Click with a jewel to socket it; right-click to refund"));
+	}
 	if (IsPassiveAllocated(player, node.id))
 		return CanRefundPassive(player, node.id) ? std::string(_("Right-click to refund")) : std::string(_("Other nodes depend on this one"));
 	if (CanAllocatePassive(player, node.id))
@@ -490,8 +577,17 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 	std::vector<Line> lines;
 	for (const auto &[stat, value] : PassiveNodeStats(player, node))
 		lines.push_back({ PassiveStatText(stat, value), value < 0 ? UiFlags::ColorRed : UiFlags::ColorBlue });
-	if (node.kind == PassiveKind::JewelSocket)
-		lines.push_back({ std::string(_("Jewels are on their way")), UiFlags::ColorWhite });
+	if (node.kind == PassiveKind::JewelSocket) {
+		if (const Item *jewel = SocketedJewel(player, node.id); jewel != nullptr) {
+			lines.push_back({ std::string(jewel->_iIName), jewel->_iMagical == ITEM_QUALITY_RARE ? UiFlags::ColorYellow : UiFlags::ColorBlue });
+			for (const Poe2ItemMod &mod : jewel->_iPoe2Mods) {
+				for (const std::string &text : ItemModText(mod))
+					lines.push_back({ text, UiFlags::ColorBlue });
+			}
+		} else {
+			lines.push_back({ std::string(_("Holds a Ruby, Emerald or Sapphire")), UiFlags::ColorWhite });
+		}
+	}
 	const std::string title = PassiveNodeName(node);
 	const std::string_view kind = NodeKindText(node);
 	const std::string hint = NodeHint(player, node);
@@ -699,6 +795,8 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 		if (event.button.button == SDL_BUTTON_LEFT) {
 			if (node && PassiveNeedsAttributeChoice(*node) && CanAllocatePassive(player, *node)) {
 				PendingAttributeNode = node;
+			} else if (node && PassiveTree()[*node].kind == PassiveKind::JewelSocket && IsJewel(player.HoldItem)) {
+				PlaceHeldJewel(player, *node);
 			} else if (node) {
 				AllocatePassive(player, *node);
 			} else if (layout.view.contains(MousePosition)) {
@@ -709,7 +807,10 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 				DragViewY = ViewY;
 			}
 		} else if (node && event.button.button == SDL_BUTTON_RIGHT) {
-			RefundPassive(player, *node);
+			if (SocketedJewel(player, *node) != nullptr)
+				TakeOutJewel(player, *node);
+			else
+				RefundPassive(player, *node);
 		}
 		return true;
 	}

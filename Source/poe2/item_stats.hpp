@@ -23,6 +23,13 @@ enum class Poe2ItemStat : uint8_t {
 	SpellSkillLevels,
 	FireSkillLevels,
 	LightningSkillLevels,
+	/** Increased maximum life and mana in percent (jewels). */
+	LifePercent,
+	ManaPercent,
+	/** Increased armour, evasion and energy shield from all gear in percent (jewels). */
+	ArmourPercent,
+	EvasionPercent,
+	EnergyShieldPercent,
 	Count,
 };
 

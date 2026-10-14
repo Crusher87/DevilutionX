@@ -86,9 +86,9 @@ int RollLootCount(LootSource source)
 
 std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source)
 {
-	// Equipment, gold, currency, flask or charm, gem, endgame, misc. Augments (4) aren't in the game yet, so their
-	// weight goes to currency for now.
-	std::array<int, static_cast<size_t>(LootCategory::Count)> weights { 48, 22, 19, 4, 3, 3, 1 };
+	// Equipment, gold, currency, flask or charm, gem, endgame, misc, jewel. Augments (4) aren't in the game yet, so
+	// their weight goes to jewels for now.
+	std::array<int, static_cast<size_t>(LootCategory::Count)> weights { 48, 22, 15, 4, 3, 3, 1, 4 };
 	if (IsAnyOf(source, LootSource::Miniboss, LootSource::Boss)) {
 		// Bosses favour equipment and give less of the low-value categories.
 		weights[static_cast<size_t>(LootCategory::Equipment)] *= 2;
@@ -221,7 +221,7 @@ int Poe2ItemLevel(const Monster &monster, int difficulty)
 
 int GetPoe2ItemLevel(const Item &item)
 {
-	if (EquipmentClassWeight(item._itype) == 0)
+	if (EquipmentClassWeight(item._itype) == 0 && item._iMiscId != IMISC_JEWEL)
 		return 0;
 	return static_cast<int>((item.dwBuff & CF_POE2_ILVL) >> 16);
 }

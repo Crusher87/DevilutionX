@@ -339,6 +339,8 @@ public:
 	SpellType _pSplTHotKey[NumHotkeys];
 	/** @brief POE2 Mashup state (support gems, ...), saved separately from the hero file. */
 	Poe2PlayerData poe2;
+	/** @brief POE2 Mashup: jewels in the passive tree's jewel sockets, in the order of the sockets' node ids; saved with poe2. */
+	std::array<Item, MaxJewelSockets> jewels;
 	bool _pBlockFlag;
 	bool _pInvincible;
 	int8_t _pLightRad;
