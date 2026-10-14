@@ -15,6 +15,8 @@
 #include <string_view>
 #include <vector>
 
+#include "utils/attributes.h"
+
 namespace devilution {
 
 struct Item;
@@ -78,7 +80,7 @@ struct StashTabSet {
 	[[nodiscard]] std::string affinityText(unsigned page) const;
 };
 
-extern StashTabSet StashTabs;
+extern DVL_API_FOR_TEST StashTabSet StashTabs;
 
 /** @brief The affinity that would take this item, or None. */
 StashAffinity GetStashAffinity(const Item &item);
