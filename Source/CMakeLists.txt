@@ -772,6 +772,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/support_gems.cpp
   poe2/telemetry.cpp
   poe2/waystones.cpp
+  poe2/default_attack.cpp
   poe2/weapon_skills.cpp
   tables/playerdat.cpp
 )

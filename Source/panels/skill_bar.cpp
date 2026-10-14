@@ -29,6 +29,7 @@
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -92,6 +93,7 @@ struct PopupLayout {
 	Rectangle title;
 	bool hasActions = false;
 	std::array<Rectangle, MouseActions.size()> actions;
+	Rectangle weaponAttack;
 	Rectangle gemsLabel;
 	std::array<Rectangle, NumSkillSlots> gems;
 	Rectangle supportsLabel;
@@ -104,6 +106,7 @@ struct PopupHit {
 		None,
 		Box,
 		Action,
+		WeaponAttack,
 		Gem,
 		Socket,
 		Picker,
@@ -330,6 +333,8 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 			layout.actions[i] = { { PopupPad + (static_cast<int>(i) * (ActionButtonSize.width + ActionButtonGap)), y }, ActionButtonSize };
 		y += ActionButtonSize.height + 6;
 	}
+	layout.weaponAttack = { { PopupPad, y }, { innerWidth, ActionButtonSize.height } };
+	y += ActionButtonSize.height + 6;
 	layout.gemsLabel = { { PopupPad, y }, { innerWidth, 14 } };
 	y += 16;
 	const int gridWidth = (GemColumns * (SlotSize.width + SlotGap)) - SlotGap;
@@ -363,6 +368,7 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 	place(layout.title);
 	for (Rectangle &rect : layout.actions)
 		place(rect);
+	place(layout.weaponAttack);
 	place(layout.gemsLabel);
 	for (Rectangle &rect : layout.gems)
 		place(rect);
@@ -388,6 +394,8 @@ PopupHit PopupHitAt(const Player &player, const PopupLayout &layout, const std::
 				return { PopupHit::Kind::Action, i };
 		}
 	}
+	if (layout.weaponAttack.contains(position))
+		return { PopupHit::Kind::WeaponAttack };
 	for (size_t i = 0; i < NumSkillSlots; i++) {
 		if (layout.gems[i].contains(position))
 			return { PopupHit::Kind::Gem, i };
@@ -542,6 +550,14 @@ void DrawPopup(const Surface &out, const Player &player)
 		}
 	}
 
+	{
+		const bool current = binding.action == TrayAction::WeaponAttack;
+		FillRectangle(out, layout.weaponAttack, current || hover.kind == PopupHit::Kind::WeaponAttack ? RowHoverColor : RowColor);
+		DrawFrame(out, layout.weaponAttack, current ? BorderColor : InnerBorderColor);
+		DrawString(out, FormatRuntime(_("{:s} (no mana)"), DefaultAttackName(DefaultAttackFor(player))), layout.weaponAttack,
+		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (current ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+	}
+
 	DrawString(out, _("Skill gems"), layout.gemsLabel, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
 	for (size_t socket = 0; socket < NumSkillSlots; socket++) {
 		const Rectangle &cell = layout.gems[socket];
@@ -618,6 +634,10 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 	switch (hit.kind) {
 	case PopupHit::Kind::Action:
 		BindTraySlot(player, Popup.slot, { MouseActions[hit.index], 0 });
+		CloseSkillTrayPopup();
+		return;
+	case PopupHit::Kind::WeaponAttack:
+		BindTraySlot(player, Popup.slot, { TrayAction::WeaponAttack, 0 });
 		CloseSkillTrayPopup();
 		return;
 	case PopupHit::Kind::Gem: {
@@ -875,6 +895,9 @@ void DrawSkillBar(const Surface &out)
 		case TrayAction::Interact:
 			DrawString(out, _("Use"), rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
 			break;
+		case TrayAction::WeaponAttack:
+			DrawString(out, DefaultAttackLabel(DefaultAttackFor(player)), rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+			break;
 		default:
 			break;
 		}
@@ -911,12 +934,16 @@ void SetSkillBarInfo()
 	const std::string key = TraySlotKeyName(*slot);
 	if (!binding.isGem()) {
 		InfoColor = UiFlags::ColorWhite;
-		if (binding.action == TrayAction::None)
+		if (binding.action == TrayAction::None) {
 			InfoString = FormatRuntime(_("Empty tray slot [{:s}]"), key);
-		else if (binding.action == TrayAction::ReadiedSpell && IsValidSpell(player._pRSpell))
+		} else if (binding.action == TrayAction::ReadiedSpell && IsValidSpell(player._pRSpell)) {
 			InfoString = FormatRuntime("{:s} [{:s}]", pgettext("spell", GetSpellData(player._pRSpell).sNameText), key);
-		else
+		} else if (binding.action == TrayAction::WeaponAttack) {
+			InfoString = FormatRuntime("{:s} [{:s}]", DefaultAttackName(DefaultAttackFor(player)), key);
+			AddInfoBoxString(_("Your weapon's attack, no mana cost"));
+		} else {
 			InfoString = FormatRuntime("{:s} [{:s}]", ActionName(binding.action), key);
+		}
 		AddInfoBoxString(_("Click to pick a skill"));
 		return;
 	}
@@ -1142,6 +1169,9 @@ void UseTraySlot(TraySlot slot)
 	case TrayAction::Gem:
 		UseSkillSlot(binding.socket);
 		return;
+	case TrayAction::WeaponAttack:
+		UseDefaultAttack(*MyPlayer);
+		return;
 	case TrayAction::None:
 		EventPlrMsg(FormatRuntime(_("Nothing on {:s}. Click its tray slot to pick a skill."), TraySlotKeyName(slot)), UiFlags::ColorRed);
 		return;
@@ -1161,7 +1191,7 @@ std::optional<TraySlot> HeldTraySlot;
 void PressTraySlot(TraySlot slot)
 {
 	UseTraySlot(slot);
-	if (IsSkillBarShown() && Binding(*MyPlayer, slot).action == TrayAction::Gem)
+	if (IsSkillBarShown() && IsAnyOf(Binding(*MyPlayer, slot).action, TrayAction::Gem, TrayAction::WeaponAttack))
 		HeldTraySlot = slot;
 }
 
@@ -1188,6 +1218,10 @@ void RepeatHeldTraySlot()
 	if (player.destAction != ACTION_NONE || player._pInvincible || !player.CanChangeAction())
 		return;
 	const TrayBinding &binding = Binding(player, *HeldTraySlot);
+	if (binding.action == TrayAction::WeaponAttack) {
+		UseDefaultAttack(player);
+		return;
+	}
 	if (binding.action != TrayAction::Gem || binding.socket >= NumSkillSlots)
 		return;
 	const SkillSlot skill = player.poe2.skillSlots[binding.socket];

@@ -2531,10 +2531,14 @@ uint8_t ReadPoe2HeroData(Player &player)
 		const SkillSlot skill = socket < NumSkillSlots ? player.poe2.skillSlots[socket] : SkillSlot {};
 		if (binding.isGem() && (skill.isEmpty() || skill.kind == SkillKind::Persistent))
 			continue;
-		if (!binding.isGem() && binding.action != TrayAction::None && !TraySlotTakesActions(static_cast<TraySlot>(slot)))
+		if (!TrayBindingFits(binding, static_cast<TraySlot>(slot)))
 			continue;
 		player.poe2.tray[slot] = binding;
 	}
+	// Heroes from before default attacks get theirs on the middle mouse button if it was free.
+	TrayBinding &middle = player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)];
+	if (middle.action == TrayAction::None)
+		middle = DefaultTrayBinding(TraySlot::MiddleMouse);
 
 	// The fifth flask slot came in version 9; older heroes start it full.
 	if (version < 9 || !file.IsValid(NumFlasks - OldNumFlasks))

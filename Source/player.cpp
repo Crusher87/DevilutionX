@@ -49,6 +49,7 @@
 #include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
@@ -972,6 +973,12 @@ bool DoRangeAttack(Player &player)
 	const bool rain = player.poe2.activeSkill == WeaponSkill::RainOfArrows && arrows == 1;
 	if (rain)
 		arrows = 9;
+	// POE2 Mashup: a staff's ranged attack is its free Staff Bolt, a fire bolt rolled from the staff's damage.
+	if (FiresStaffBolt(player)) {
+		if (arrows == 1)
+			AddMissile(player.position.tile, player.position.temp, player._pdir, MissileID::Firebolt, TARGET_MONSTERS, player, RollStaffBoltDamage(player), 0);
+		arrows = 0;
+	}
 	const bool lightningArrow = player.poe2.activeSkill == WeaponSkill::LightningArrow && arrows == 1;
 	if (rain || lightningArrow)
 		PlaySkillEffects(player, player.poe2.activeSkill, player.position.temp);

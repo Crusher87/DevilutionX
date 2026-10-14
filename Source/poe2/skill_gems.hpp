@@ -64,6 +64,8 @@ SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill, int level = 
 
 /** @brief Only the left and right mouse buttons can move, interact or cast the readied spell. */
 bool TraySlotTakesActions(TraySlot slot);
+/** @brief Whether a slot can take the binding: gems and the weapon attack go anywhere, the other actions only on those two buttons. */
+bool TrayBindingFits(TrayBinding binding, TraySlot slot);
 /** @brief The first tray slot that uses the gem in a Skills panel socket, if any. */
 std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket);
 /** @brief The skill a tray slot uses; empty unless it's bound to a socketed gem. */

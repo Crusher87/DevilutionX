@@ -278,12 +278,12 @@ TEST_F(Poe2SkillGemsTest, TrayStartsWithDiabloMouseButtons)
 	const Player &player = *MyPlayer;
 	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
 	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::ReadiedSpell);
-	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::None);
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::WeaponAttack) << "the free weapon attack";
 	for (size_t key = 0; key < NumTrayKeys; key++)
 		EXPECT_EQ(TrayOf(player, TrayKeySlot(key)).action, TrayAction::None);
 }
 
-TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeysThenTheMiddleButton)
+TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeys)
 {
 	Player &player = *MyPlayer;
 	for (size_t socket = 0; socket < 7; socket++)
@@ -294,7 +294,9 @@ TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeysThenTheMiddleButton)
 
 	for (size_t key = 0; key < NumTrayKeys; key++)
 		EXPECT_EQ(TrayOf(player, TrayKeySlot(key)), TrayBinding::ForGem(key));
-	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse), TrayBinding::ForGem(6));
+	// The middle button keeps the free weapon attack; a seventh skill is bound by hand.
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::WeaponAttack);
+	EXPECT_EQ(TraySlotForSocket(player, 6), std::nullopt);
 	// Spirit gems are active while socketed and need no slot.
 	EXPECT_EQ(TraySlotForSocket(player, 7), std::nullopt);
 	// The mouse buttons keep their actions.
@@ -322,6 +324,9 @@ TEST_F(Poe2SkillGemsTest, BindingAGemOnAnotherSlotSwapsThem)
 	EXPECT_EQ(TrayOf(player, TraySlot::Key2).action, TrayAction::None);
 	BindTraySlot(player, TraySlot::Key3, { TrayAction::Interact, 0 });
 	EXPECT_EQ(TrayOf(player, TraySlot::Key3).action, TrayAction::None);
+	// The weapon attack fits any slot.
+	BindTraySlot(player, TraySlot::Key3, { TrayAction::WeaponAttack, 0 });
+	EXPECT_EQ(TrayOf(player, TraySlot::Key3).action, TrayAction::WeaponAttack);
 
 	// The right button can take an action; clearing puts a slot back to its default.
 	BindTraySlot(player, TraySlot::RightMouse, { TrayAction::Interact, 0 });

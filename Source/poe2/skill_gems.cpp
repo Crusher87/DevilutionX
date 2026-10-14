@@ -222,6 +222,11 @@ bool TraySlotTakesActions(TraySlot slot)
 	return slot == TraySlot::LeftMouse || slot == TraySlot::RightMouse;
 }
 
+bool TrayBindingFits(TrayBinding binding, TraySlot slot)
+{
+	return binding.isGem() || binding.action == TrayAction::None || binding.action == TrayAction::WeaponAttack || TraySlotTakesActions(slot);
+}
+
 std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket)
 {
 	for (size_t slot = 0; slot < NumTraySlots; slot++) {
@@ -245,7 +250,7 @@ void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding)
 		ClearTraySlot(player, slot);
 		return;
 	}
-	if (!binding.isGem() && !TraySlotTakesActions(slot))
+	if (!TrayBindingFits(binding, slot))
 		return;
 	TrayBinding &target = player.poe2.tray[static_cast<size_t>(slot)];
 	if (binding.isGem()) {
@@ -253,7 +258,7 @@ void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding)
 			TrayBinding &otherBinding = player.poe2.tray[static_cast<size_t>(*other)];
 			otherBinding = target;
 			// An empty slot, or an action a key can't take, leaves the other slot at its default.
-			if (otherBinding.action == TrayAction::None || (!otherBinding.isGem() && !TraySlotTakesActions(*other)))
+			if (otherBinding.action == TrayAction::None || !TrayBindingFits(otherBinding, *other))
 				otherBinding = DefaultTrayBinding(*other);
 		}
 	}

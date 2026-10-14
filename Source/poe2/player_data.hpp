@@ -152,7 +152,9 @@ enum class TrayAction : uint8_t {
 	ReadiedSpell,
 	/** Uses the skill gem in a Skills panel socket. */
 	Gem,
-	Last = Gem,
+	/** The weapon's default attack, which costs no mana. Any slot can take it. */
+	WeaponAttack,
+	Last = WeaponAttack,
 };
 
 /** @brief A skill tray slot's action, and for gems the Skills panel socket it uses. */
@@ -174,6 +176,8 @@ constexpr TrayBinding DefaultTrayBinding(TraySlot slot)
 		return { TrayAction::MoveAndAttack, 0 };
 	case TraySlot::RightMouse:
 		return { TrayAction::ReadiedSpell, 0 };
+	case TraySlot::MiddleMouse:
+		return { TrayAction::WeaponAttack, 0 };
 	default:
 		return {};
 	}

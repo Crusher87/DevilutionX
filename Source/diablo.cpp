@@ -360,7 +360,7 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 	if (!IsSkillBarShown() || leveltype == DTYPE_TOWN)
 		return false;
 	const TrayBinding binding = MyPlayer->poe2.tray[static_cast<size_t>(slot)];
-	if (binding == DefaultTrayBinding(slot))
+	if (binding == DefaultTrayBinding(slot) && binding.action != TrayAction::WeaponAttack)
 		return false;
 	// The left button still picks up items, opens chests and doors, takes stairs and portals, and talks.
 	if (slot == TraySlot::LeftMouse
@@ -378,6 +378,7 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 		CheckPlrSpell(isShiftHeld);
 		return true;
 	case TrayAction::Gem:
+	case TrayAction::WeaponAttack:
 		PressTraySlot(slot);
 		return true;
 	default:
