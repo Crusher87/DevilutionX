@@ -12,12 +12,13 @@
 
 #include "engine/point.hpp"
 #include "engine/size.hpp"
+#include "utils/attributes.h"
 
 namespace devilution {
 
 /** @brief The size the world is drawn at and the frame is shown at; the same as the screen size when the UI isn't scaled. */
-extern uint16_t gnRenderWidth;
-extern uint16_t gnRenderHeight;
+extern DVL_API_FOR_TEST uint16_t gnRenderWidth;
+extern DVL_API_FOR_TEST uint16_t gnRenderHeight;
 
 /** @brief The UI scale in effect, in percent; 100 when the UI isn't scaled. */
 int ActiveUiScale();
