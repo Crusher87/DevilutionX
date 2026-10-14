@@ -61,6 +61,10 @@ enum class InfoLineStyle : uint8_t {
 	Corrupted,
 	Requirement,
 	Note,
+	/** A stat the item would raise over what's equipped. */
+	Better,
+	/** A stat the item would lower. */
+	Worse,
 };
 /** @brief The style given to the next floating info lines; reset to Default after each item. */
 extern InfoLineStyle CurrentInfoLineStyle;

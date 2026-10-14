@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -84,7 +85,7 @@ constexpr std::array<int, 6> LineHeights = { 12, 26, 38, 42, 50, 22 };
 constexpr int SmallFontTallLineHeight = 16;
 std::array<int, 6> BaseLineOffset = { -3, -2, -3, -6, -7, 3 };
 
-std::array<const char *, 19> ColorTranslations = {
+std::array<const char *, 20> ColorTranslations = {
 	"fonts\\goldui.trn",
 	"fonts\\grayui.trn",
 	"fonts\\golduis.trn",
@@ -108,12 +109,67 @@ std::array<const char *, 19> ColorTranslations = {
 	"fonts\\gamedialogwhite.trn",
 	"fonts\\gamedialogyellow.trn",
 	"fonts\\gamedialogred.trn",
+	nullptr, // ColorGreen
 };
 
-std::array<std::optional<std::array<uint8_t, 256>>, 19> ColorTranslationsData;
+std::array<std::optional<std::array<uint8_t, 256>>, 20> ColorTranslationsData;
+
+/** The game's palette, for making green text; set by the palette code, which this library can't link to. */
+const std::array<SDL_Color, 256> *TextPalette = nullptr;
+
+/** @brief Sum of the palette's colours, to notice when a new level loads another palette. */
+uint32_t PaletteChecksum()
+{
+	uint32_t sum = 0;
+	for (const SDL_Color &color : *TextPalette)
+		sum = (sum * 31) + color.r + (color.g << 8) + (color.b << 16);
+	return sum;
+}
+
+/** @brief Green text: each shade of the white font is swapped for the palette colour closest to a green of its brightness. */
+void UpdateGreenTranslation()
+{
+	static uint32_t builtFor = 0;
+	if (TextPalette == nullptr)
+		return;
+	const std::array<SDL_Color, 256> &logical_palette = *TextPalette;
+	const uint32_t checksum = PaletteChecksum();
+	if (ColorTranslationsData[ColorGreen] && builtFor == checksum)
+		return;
+	if (!ColorTranslationsData[ColorWhite]) {
+		ColorTranslationsData[ColorWhite].emplace();
+		LoadFileInMem(ColorTranslations[ColorWhite], *ColorTranslationsData[ColorWhite]);
+	}
+	std::array<uint8_t, 256> &green = ColorTranslationsData[ColorGreen].emplace();
+	const std::array<uint8_t, 256> &white = *ColorTranslationsData[ColorWhite];
+	for (size_t i = 0; i < green.size(); i++) {
+		const SDL_Color &shade = logical_palette[white[i]];
+		const int light = (shade.r + shade.g + shade.b) / 3;
+		const int targetR = light * 2 / 5;
+		const int targetG = std::min(255, light * 6 / 5);
+		const int targetB = light * 2 / 5;
+		int best = white[i];
+		int bestDistance = INT_MAX;
+		for (int c = 1; c < 256; c++) {
+			const SDL_Color &candidate = logical_palette[c];
+			const int dr = candidate.r - targetR;
+			const int dg = candidate.g - targetG;
+			const int db = candidate.b - targetB;
+			const int distance = (dr * dr) + (2 * dg * dg) + (db * db);
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				best = c;
+			}
+		}
+		green[i] = static_cast<uint8_t>(best);
+	}
+	builtFor = checksum;
+}
 
 text_color GetColorFromFlags(UiFlags flags)
 {
+	if (HasAllOf(flags, UiFlagsColorGreen))
+		return ColorGreen;
 	if (HasAnyOf(flags, UiFlags::ColorWhite))
 		return ColorWhite;
 	if (HasAnyOf(flags, UiFlags::ColorBlue))
@@ -149,6 +205,15 @@ text_color GetColorFromFlags(UiFlags flags)
 
 	return ColorWhitegold;
 }
+
+} // namespace
+
+void SetTextRenderPalette(const std::array<SDL_Color, 256> *palette)
+{
+	TextPalette = palette;
+}
+
+namespace {
 
 uint16_t GetUnicodeRow(char32_t codePoint)
 {
@@ -187,6 +252,8 @@ uint32_t GetFontId(GameFontTables size, uint16_t row)
 
 FontStack LoadFont(GameFontTables size, text_color color, uint16_t row)
 {
+	if (color == ColorGreen)
+		UpdateGreenTranslation();
 	if (ColorTranslations[color] != nullptr && !ColorTranslationsData[color]) {
 		ColorTranslationsData[color].emplace();
 		LoadFileInMem(ColorTranslations[color], *ColorTranslationsData[color]);

@@ -1757,9 +1757,24 @@ bool CanStep(const Player &player, Direction dir)
  * around it, but only if the way they want to go is clear right after. A long wall still stops them, and
  * monsters always block, so a surrounded hero is stuck until they dodge roll out.
  */
+/** @brief POE2 Mashup: stairs and level entrances take a click; walking with the keyboard stops short of them. */
+bool IsLevelTrigger(Point tile)
+{
+	for (int i = 0; i < numtrigs; i++) {
+		if (trigs[i].position == tile)
+			return true;
+	}
+	return false;
+}
+
+bool CanKeyboardStep(const Player &player, Direction dir)
+{
+	return CanStep(player, dir) && !(gbIsPoe2 && IsLevelTrigger(player.position.future + dir));
+}
+
 std::optional<Direction> KeyboardStep(const Player &player, Direction wanted)
 {
-	if (CanStep(player, wanted))
+	if (CanKeyboardStep(player, wanted))
 		return wanted;
 	const Point ahead = player.position.future + wanted;
 	if (InDungeonBounds(ahead) && (dMonster[ahead.x][ahead.y] != 0 || dPlayer[ahead.x][ahead.y] != 0))
@@ -1771,7 +1786,7 @@ std::optional<Direction> KeyboardStep(const Player &player, Direction wanted)
 	if (lastSlide == second)
 		std::swap(first, second);
 	for (const Direction slide : { first, second }) {
-		if (!CanStep(player, slide))
+		if (!CanKeyboardStep(player, slide))
 			continue;
 		const Point side = player.position.future + slide;
 		if (PosOkPlayer(player, side + wanted) && !IsPathBlocked(side, wanted)) {

@@ -2071,8 +2071,17 @@ void InitKeymapActions()
 	    N_("Item highlighting"),
 	    N_("Show/hide items on ground."),
 	    SDLK_LALT,
-	    [] { HighlightKeyPressed(true); },
-	    [] { HighlightKeyPressed(false); });
+	    // POE2 Mashup: Alt toggles the labels, which stay up until it's pressed again; the loot filter decides which show.
+	    [] {
+		    if (gbIsPoe2)
+			    ToggleItemLabelHighlight();
+		    else
+			    HighlightKeyPressed(true);
+	    },
+	    [] {
+		    if (!gbIsPoe2)
+			    HighlightKeyPressed(false);
+	    });
 	options.Keymapper.AddAction(
 	    "ToggleItemHighlighting",
 	    N_("Toggle item highlighting"),

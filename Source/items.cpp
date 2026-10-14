@@ -21,6 +21,7 @@
 #include <vector>
 
 #ifdef USE_SDL3
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_timer.h>
 #else
 #include <SDL.h>
@@ -101,6 +102,7 @@
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/math.h"
+#include "utils/sdl_compat.h"
 #include "utils/sdl_geometry.h"
 #include "utils/static_vector.hpp"
 #include "utils/str_cat.hpp"
@@ -5176,6 +5178,107 @@ void PrintItemDetails(const Item &item)
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Note;
 	PrintItemInfo(item);
+	CurrentInfoLineStyle = InfoLineStyle::Default;
+}
+
+namespace {
+
+/** @brief The worn item the given item would replace; nullptr if it isn't equipment. */
+const Item *EquippedCounterpart(const Player &player, const Item &item)
+{
+	const auto hand = [&player](item_class itemClass, inv_body_loc fallback) {
+		for (const inv_body_loc slot : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+			if (!player.InvBody[slot].isEmpty() && player.InvBody[slot]._iClass == itemClass)
+				return &player.InvBody[slot];
+		}
+		return &player.InvBody[fallback];
+	};
+	switch (player.GetItemLocation(item)) {
+	case ILOC_ARMOR:
+		return &player.InvBody[INVLOC_CHEST];
+	case ILOC_HELM:
+		return &player.InvBody[INVLOC_HEAD];
+	case ILOC_AMULET:
+		return &player.InvBody[INVLOC_AMULET];
+	case ILOC_RING:
+		return &player.InvBody[INVLOC_RING_LEFT];
+	case ILOC_ONEHAND:
+		if (item._iClass == ICLASS_ARMOR)
+			return hand(ICLASS_ARMOR, INVLOC_HAND_RIGHT);
+		return hand(ICLASS_WEAPON, INVLOC_HAND_LEFT);
+	case ILOC_TWOHAND:
+		return hand(ICLASS_WEAPON, INVLOC_HAND_LEFT);
+	default:
+		return nullptr;
+	}
+}
+
+} // namespace
+
+void PrintItemComparison(const Item &item)
+{
+	if (!gbIsPoe2 || MyPlayer == nullptr || (SDL_GetModState() & SDL_KMOD_SHIFT) == 0 || !item.isEquipment())
+		return;
+	const Player &player = *MyPlayer;
+	const Item *worn = EquippedCounterpart(player, item);
+	if (worn == nullptr || worn == &item)
+		return;
+	static const Item Nothing {};
+	const Item &other = worn->isEmpty() ? Nothing : *worn;
+
+	CurrentInfoLineStyle = InfoLineStyle::Note;
+	AddInfoBoxString(other.isEmpty() ? std::string(_("Compared with nothing equipped:")) : FormatRuntime(_("Compared with your {:s}:"), other.getName().str()), true);
+	int shown = 0;
+	const auto compare = [&shown](int mine, int theirs, std::string_view label, std::string_view suffix = {}) {
+		if (mine == theirs)
+			return;
+		const int difference = mine - theirs;
+		CurrentInfoLineStyle = difference > 0 ? InfoLineStyle::Better : InfoLineStyle::Worse;
+		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
+		shown++;
+	};
+	// Unidentified items only show their base: damage and defence.
+	compare(item._iMinDam, other._iMinDam, _("to minimum Damage"));
+	compare(item._iMaxDam, other._iMaxDam, _("to maximum Damage"));
+	int armour = 0;
+	int evasion = 0;
+	int energyShield = 0;
+	SplitDefense(ItemDefenseType(item), item._iAC, armour, evasion, energyShield);
+	int otherArmour = 0;
+	int otherEvasion = 0;
+	int otherEnergyShield = 0;
+	SplitDefense(ItemDefenseType(other), other._iAC, otherArmour, otherEvasion, otherEnergyShield);
+	compare(armour, otherArmour, _("Armour"));
+	compare(evasion, otherEvasion, _("Evasion"));
+	compare(energyShield * EnergyShieldPerDefense, otherEnergyShield * EnergyShieldPerDefense, _("Energy Shield"));
+	const auto identified = [](const Item &it) { return it.isEmpty() || it._iIdentified; };
+	if (identified(item) && identified(other)) {
+		compare(item._iPLDam, other._iPLDam, _("increased Damage"), "%");
+		compare(item._iPLToHit, other._iPLToHit, _("Accuracy"), "%");
+		compare(item._iPLAC, other._iPLAC, _("increased Defence"), "%");
+		compare((item._iFMinDam + item._iFMaxDam) / 2, (other._iFMinDam + other._iFMaxDam) / 2, _("average Fire Damage"));
+		compare((item._iLMinDam + item._iLMaxDam) / 2, (other._iLMinDam + other._iLMaxDam) / 2, _("average Lightning Damage"));
+		compare(item._iPLStr, other._iPLStr, _("Strength"));
+		compare(item._iPLDex, other._iPLDex, _("Dexterity"));
+		compare(item._iPLMag, other._iPLMag, _("Intelligence"));
+		compare(item._iPLVit, other._iPLVit, _("Vitality"));
+		compare(item._iPLHP.whole(), other._iPLHP.whole(), _("maximum Life"));
+		compare(item._iPLMana.whole(), other._iPLMana.whole(), _("maximum Mana"));
+		compare(item._iPLFR, other._iPLFR, _("Fire Resistance"), "%");
+		compare(item._iPLLR, other._iPLLR, _("Lightning Resistance"), "%");
+		compare(item._iPLMR, other._iPLMR, _("Magic Resistance"), "%");
+		compare(item._iPLLifeRegen, other._iPLLifeRegen, _("Life regenerated per second"));
+		compare(item._iPLManaRegen, other._iPLManaRegen, _("increased Mana Regeneration"), "%");
+		compare(item._iSplLvlAdd, other._iSplLvlAdd, _("to Level of all Spells"));
+		compare(-item._iPLGetHit, -other._iPLGetHit, _("less damage taken from hits"));
+	} else {
+		CurrentInfoLineStyle = InfoLineStyle::Requirement;
+		AddInfoBoxString(_("Identify both to compare modifiers"), true);
+	}
+	if (shown == 0) {
+		CurrentInfoLineStyle = InfoLineStyle::Requirement;
+		AddInfoBoxString(_("No differences"), true);
+	}
 	CurrentInfoLineStyle = InfoLineStyle::Default;
 }
 

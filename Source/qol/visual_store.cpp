@@ -830,6 +830,7 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 				}
 
 				if (gbIsPoe2) {
+					PrintItemComparison(item);
 					CurrentInfoLineStyle = InfoLineStyle::Note;
 					AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
 					CurrentInfoLineStyle = InfoLineStyle::Requirement;

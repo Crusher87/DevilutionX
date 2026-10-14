@@ -15,6 +15,7 @@
 #include "gmenu.h"
 #include "inv.h"
 #include "options.h"
+#include "poe2/loot_filter.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "utils/algorithm/container.hpp"
@@ -106,6 +107,8 @@ void AddItemToLabelQueue(int id, Point position)
 	if (!IsHighlightingLabelsEnabled())
 		return;
 	Item &item = Items[id];
+	if (IsItemHiddenByLootFilter(item))
+		return;
 
 	StringOrView textOnGround;
 	if (item._itype == ItemType::Gold) {

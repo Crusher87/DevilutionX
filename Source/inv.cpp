@@ -2079,6 +2079,8 @@ int8_t CheckInvHLight()
 		} else {
 			PrintItemDur(*pi);
 		}
+		if (rv >= INVITEM_INV_FIRST)
+			PrintItemComparison(*pi);
 		// POE2 Mashup: at a vendor, your own items show what they sell for.
 		if (gbIsPoe2 && rv >= INVITEM_INV_FIRST) {
 			if (const std::optional<int> price = VisualStoreSellPrice(*pi); price) {

@@ -613,6 +613,8 @@ void PrintItemDetails(const Item &item);
  */
 uint8_t AffixTier(const std::vector<PLStruct> &affixes, const PLStruct &affix);
 void PrintItemDur(const Item &item);
+/** @brief POE2 Mashup: while Shift is held, lists how the item's stats differ from the equipped one in green and red. */
+void PrintItemComparison(const Item &item);
 void UseItem(Player &player, item_misc_id Mid, SpellID spellID, int spellFrom);
 bool UseItemOpensHive(const Item &item, Point position);
 bool UseItemOpensGrave(const Item &item, Point position);

@@ -1,6 +1,7 @@
 #include "control.hpp"
 #include "control_panel.hpp"
 #include "controls/control_mode.hpp"
+#include "cursor.h"
 #include "engine/render/primitive_render.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
@@ -318,6 +319,10 @@ UiFlags TooltipLineColor(InfoLineStyle style)
 		return UiFlags::ColorButtonpushed;
 	case InfoLineStyle::Note:
 		return UiFlags::ColorWhitegold;
+	case InfoLineStyle::Better:
+		return UiFlagsColorGreen;
+	case InfoLineStyle::Worse:
+		return UiFlags::ColorRed;
 	default:
 		return UiFlags::ColorWhite;
 	}
@@ -335,6 +340,9 @@ int TooltipGroup(InfoLineStyle style)
 	case InfoLineStyle::Mod:
 	case InfoLineStyle::Corrupted:
 		return 2;
+	case InfoLineStyle::Better:
+	case InfoLineStyle::Worse:
+		return 4;
 	default:
 		return 3;
 	}
@@ -398,13 +406,27 @@ void PrintPoe2ItemTooltip(const Surface &out)
 	const int headerHeight = 8 + (static_cast<int>(titles.size()) * TitleHeight);
 	const int height = headerHeight + (bodyHeight > 0 ? bodyHeight + 12 : 0);
 
+	// A ground item shows its picture in a small box on top of the tooltip.
+	const Item *pictured = pcursitem != -1 && MyPlayer != nullptr && MyPlayer->HoldItem.isEmpty() ? &Items[pcursitem] : nullptr;
+	const int pictureCursor = pictured != nullptr ? pictured->_iCurs + CURSOR_FIRSTITEM : 0;
+	const Size pictureSize = pictured != nullptr ? GetInvItemSize(pictureCursor) : Size { 0, 0 };
+	const int pictureHeight = pictured != nullptr ? pictureSize.height + 12 : 0;
+
 	// Beside the cursor, on whichever side has more room, and inside the screen.
 	const int gap = 24;
 	int x = MousePosition.x > out.w() / 2 ? MousePosition.x - gap - width : MousePosition.x + gap;
 	x = std::clamp(x, 4, std::max(out.w() - width - 4, 4));
-	int y = std::clamp(MousePosition.y - (height / 3), 4, std::max(out.h() - height - 4, 4));
+	int y = std::clamp(MousePosition.y - ((height + pictureHeight) / 3), 4, std::max(out.h() - height - pictureHeight - 4, 4)) + pictureHeight;
 
 	const uint8_t frame = TooltipFrameColor(InfoColor);
+	if (pictured != nullptr) {
+		const int boxWidth = pictureSize.width + 16;
+		const Rectangle box { { x + ((width - boxWidth) / 2), y - pictureHeight + 1 }, { boxWidth, pictureHeight } };
+		for (int i = 0; i < 3; i++)
+			DrawHalfTransparentRectTo(out, box.position.x, box.position.y, box.size.width, box.size.height);
+		poe2ui::DrawFrame(out, box, frame);
+		DrawItem(*pictured, out, { box.position.x + 8, box.position.y + 6 + pictureSize.height - 1 }, GetInvItemSprite(pictureCursor));
+	}
 	// Dark body, a little see-through like POE2's, with a frame in the rarity's colour.
 	for (int i = 0; i < 3; i++)
 		DrawHalfTransparentRectTo(out, x, y, width, height);
@@ -590,6 +612,7 @@ void DrawInfoBox(const Surface &out)
 					PrintItemDetails(Items[pcursitem]);
 				else
 					PrintItemDur(Items[pcursitem]);
+				PrintItemComparison(Items[pcursitem]);
 			} else if (gbIsPoe2) {
 				FloatingInfoString = std::string(InfoString.str());
 				FloatingInfoStyles.clear();
