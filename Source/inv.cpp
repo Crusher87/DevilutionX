@@ -49,7 +49,6 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
-#include "qol/floatingnumbers.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -1602,18 +1601,6 @@ int AddGoldToInventory(Player &player, int value)
 	return value;
 }
 
-namespace {
-
-/** @brief POE2 Mashup: a small "+N gold" rising from the hero when gold is picked up. */
-void ShowGoldPickedUp(const Player &player, int amount)
-{
-	if (!gbIsPoe2 || &player != MyPlayer || amount <= 0)
-		return;
-	AddFloatingNumber(player.position.tile, { 0, -50 }, FormatRuntime(_("+{:d} gold"), amount), UiFlags::ColorGold);
-}
-
-} // namespace
-
 bool GoldAutoPlace(Player &player, Item &goldStack)
 {
 	goldStack._ivalue = AddGoldToInventory(player, goldStack._ivalue);
@@ -1753,9 +1740,7 @@ void InvGetItem(Player &player, int ii)
 	item.updateRequiredStatsCacheForPlayer(player);
 	TelemetryItemPickedUp(player, item);
 
-	const int goldBefore = item._itype == ItemType::Gold ? item._ivalue : 0;
 	if (item._itype == ItemType::Gold && GoldAutoPlace(player, item)) {
-		ShowGoldPickedUp(player, goldBefore);
 		if (MyPlayer == &player) {
 			// Non-gold items (or gold when you have a full inventory) go to the hand then provide audible feedback on
 			//  paste. To give the same feedback for auto-placed gold we play the sound effect now.
@@ -1830,9 +1815,7 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	bool autoEquipped = false;
 
 	if (item._itype == ItemType::Gold) {
-		const int goldBefore = item._ivalue;
 		done = GoldAutoPlace(player, item);
-		ShowGoldPickedUp(player, goldBefore - item._ivalue);
 		if (!done) {
 			SetPlrHandGoldCurs(item);
 		}
@@ -1851,7 +1834,10 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	}
 
 	if (done) {
-		if (!autoEquipped && *GetOptions().Audio.itemPickupSound && &player == MyPlayer) {
+		if (gbIsPoe2 && item._itype == ItemType::Gold && &player == MyPlayer) {
+			// POE2 Mashup: gold picked up by walking near it just clinks.
+			PlaySFX(SfxID::ItemGold);
+		} else if (!autoEquipped && *GetOptions().Audio.itemPickupSound && &player == MyPlayer) {
 			PlaySFX(SfxID::GrabItem);
 		}
 
@@ -2093,6 +2079,16 @@ int8_t CheckInvHLight()
 		} else {
 			PrintItemDur(*pi);
 		}
+		// POE2 Mashup: at a vendor, your own items show what they sell for.
+		if (gbIsPoe2 && rv >= INVITEM_INV_FIRST) {
+			if (const std::optional<int> price = VisualStoreSellPrice(*pi); price) {
+				CurrentInfoLineStyle = InfoLineStyle::Note;
+				AddInfoBoxString(FormatRuntime(_("Sells for {:s} gold"), FormatInteger(*price)), true);
+				CurrentInfoLineStyle = InfoLineStyle::Requirement;
+				AddInfoBoxString(_("Drop it on the vendor to sell; Ctrl+click sells at once"), true);
+				CurrentInfoLineStyle = InfoLineStyle::Default;
+			}
+		}
 	}
 
 	return rv;
@@ -2195,6 +2191,18 @@ void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
 }
 
 } // namespace
+
+bool EquipInvItem(Player &player, int cii)
+{
+	if (cii < INVITEM_INV_FIRST || cii > INVITEM_INV_LAST || IsInspectingPlayer())
+		return false;
+	const Item &item = player.InvList[cii - INVITEM_INV_FIRST];
+	if (item.isEmpty() || !item.isEquipment())
+		return false;
+	// The same as Shift+click: equip it, and move what was worn into its place.
+	CheckInvCut(player, MousePosition, true, false);
+	return true;
+}
 
 bool UseInvItem(int cii)
 {

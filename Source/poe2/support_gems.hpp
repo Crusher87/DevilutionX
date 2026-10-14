@@ -100,7 +100,10 @@ bool SkillTakesSupports(SkillSlot skill);
 size_t SupportSocketCount(int characterLevel);
 size_t SupportSocketCount(const Player &player);
 
-/** @brief How many supports of a color the character can socket: 1, plus 1 per 15 points of the attribute. */
+/** @brief Points of an attribute that allow one more support of its color: each +5 attribute pick on the tree. */
+constexpr int SupportAttributeStep = 5;
+
+/** @brief How many supports of a color the character can socket: 1, plus 1 per 5 points of the attribute. */
 int SupportCapacity(const Player &player, GemColor color);
 int SupportsUsed(const Poe2PlayerData &data, GemColor color);
 

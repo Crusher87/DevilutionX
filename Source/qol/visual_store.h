@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -136,6 +137,13 @@ void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld
  */
 void CheckVisualStorePaste(Point mousePosition);
 
+/** @brief Whether a ware picked up at a POE2 Mashup vendor is on the cursor, not paid for yet. */
+bool HasPendingPurchase();
+/** @brief Puts a picked-up ware back on the vendor's shelf. */
+void CancelPendingPurchase();
+/** @brief Pays for a picked-up ware once it has left the cursor for the inventory. */
+void SettlePendingPurchase();
+
 /**
  * @brief Check for item highlight under the cursor.
  * @param mousePosition The mouse position.
@@ -167,6 +175,9 @@ bool CanSellToCurrentVendor(const Item &item);
  * @param invIndex The inventory index of the item.
  */
 void SellItemToVisualStore(int invIndex);
+
+/** @brief What the open vendor pays for the item, if they'd buy it. */
+std::optional<int> VisualStoreSellPrice(const Item &item);
 
 /**
  * @brief Get the number of items for the current vendor/tab.

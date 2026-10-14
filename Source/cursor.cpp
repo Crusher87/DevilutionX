@@ -224,32 +224,38 @@ bool TrySelectObject(bool flipflag, Point tile)
 	return true;
 }
 
+/** @brief Whether hovering the item highlights it; POE2 Mashup picks gold up by walking near it, so gold isn't. */
+bool CanHoverItem(const Item &item)
+{
+	return !IsItemHiddenByLootFilter(item) && !(gbIsPoe2 && item._itype == ItemType::Gold);
+}
+
 bool TrySelectItem(bool flipflag, Point tile)
 {
 	if (!flipflag && tile.x + 1 < MAXDUNX && dItem[tile.x + 1][tile.y] > 0) {
 		const uint8_t itemId = dItem[tile.x + 1][tile.y] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile + Displacement { 1, 0 };
 			pcursitem = static_cast<int8_t>(itemId);
 		}
 	}
 	if (flipflag && tile.y + 1 < MAXDUNY && dItem[tile.x][tile.y + 1] > 0) {
 		const uint8_t itemId = dItem[tile.x][tile.y + 1] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile + Displacement { 0, 1 };
 			pcursitem = static_cast<int8_t>(itemId);
 		}
 	}
 	if (dItem[tile.x][tile.y] > 0) {
 		const uint8_t itemId = dItem[tile.x][tile.y] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Bottom) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Bottom) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile;
 			pcursitem = static_cast<int8_t>(itemId);
 		}
 	}
 	if (tile.x + 1 < MAXDUNX && tile.y + 1 < MAXDUNY && dItem[tile.x + 1][tile.y + 1] > 0) {
 		const uint8_t itemId = dItem[tile.x + 1][tile.y + 1] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile + Displacement { 1, 1 };
 			pcursitem = static_cast<int8_t>(itemId);
 		}
@@ -377,7 +383,7 @@ bool TrySelectPixelBased(Point tile)
 			const Item &item = Items[itemId];
 			const ClxSprite sprite = item.AnimInfo.currentSprite();
 			const Displacement renderingOffset = item.getRenderingOffset(sprite);
-			if (!IsItemHiddenByLootFilter(item) && checkSprite(adjacentTile, sprite, renderingOffset)) {
+			if (CanHoverItem(item) && checkSprite(adjacentTile, sprite, renderingOffset)) {
 				cursPosition = adjacentTile;
 				pcursitem = static_cast<int8_t>(itemId);
 				return true;

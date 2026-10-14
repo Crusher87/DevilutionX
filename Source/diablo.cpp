@@ -472,6 +472,9 @@ void LeftMouseDown(uint16_t modState)
 				HandleSkillsPanelClick(MousePosition);
 			} else if (SpellbookFlag && GetRightPanel().contains(MousePosition)) {
 				CheckSBook();
+			} else if (HasPendingPurchase()) {
+				// A ware that isn't paid for can't be dropped on the ground.
+				CancelPendingPurchase();
 			} else if (!MyPlayer->HoldItem.isEmpty()) {
 				if (!TryOpenDungeonWithMouse()) {
 					const Point currentPosition = MyPlayer->position.tile;
@@ -545,17 +548,9 @@ void RightMouseDown(bool isShiftHeld)
 		return;
 	if (TryIconCurs())
 		return;
-	// POE2 Mashup: at a vendor, right-clicking a ware buys it and Ctrl+right-clicking an inventory item sells it.
-	if (gbIsPoe2 && IsVisualStoreOpen && MyPlayer->HoldItem.isEmpty()) {
-		if (pcursstoreitem != -1) {
-			CheckVisualStoreItem(MousePosition, false, false);
-			return;
-		}
-		if ((SDL_GetModState() & SDL_KMOD_CTRL) != 0 && pcursinvitem >= INVITEM_INV_FIRST && pcursinvitem <= INVITEM_INV_LAST) {
-			SellItemToVisualStore(pcursinvitem - INVITEM_INV_FIRST);
-			return;
-		}
-	}
+	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
+	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
+		return;
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
 		return;
 	if (pcursstashitem != StashStruct::EmptyCell && UseStashItem(pcursstashitem))
@@ -1650,6 +1645,7 @@ void GameLogic()
 		ProcessPlayers();
 	}
 	TelemetryTick();
+	SettlePendingPurchase();
 	if (leveltype != DTYPE_TOWN) {
 		gGameLogicStep = GameLogicStep::ProcessMonsters;
 #ifdef _DEBUG

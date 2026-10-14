@@ -374,7 +374,7 @@ int SupportCapacity(const Player &player, GemColor color)
 		attribute = player._pMagic;
 		break;
 	}
-	return 1 + (std::max(attribute, 0) / 15);
+	return 1 + (std::max(attribute, 0) / SupportAttributeStep);
 }
 
 int SupportsUsed(const Poe2PlayerData &data, GemColor color)

@@ -7,9 +7,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <span>
 
 #include "control/control.hpp"
+#include "controls/control_mode.hpp"
 #include "controls/plrctrls.h"
 #include "cursor.h"
 #include "engine/clx_sprite.hpp"
@@ -420,12 +422,14 @@ void OpenVisualStore(VisualStoreVendor vendor)
 
 	RefreshVisualStoreLayout();
 
-	// Initialize controller focus to the visual store grid
-	FocusOnVisualStore();
+	// Initialize controller focus to the visual store grid; with a mouse, leave the cursor where it is.
+	if (ControlMode != ControlTypes::KeyboardAndMouse)
+		FocusOnVisualStore();
 }
 
 void CloseVisualStore()
 {
+	CancelPendingPurchase();
 	if (IsVisualStoreOpen) {
 		IsVisualStoreOpen = false;
 		invflag = false;
@@ -829,7 +833,7 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 					CurrentInfoLineStyle = InfoLineStyle::Note;
 					AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
 					CurrentInfoLineStyle = InfoLineStyle::Requirement;
-					AddInfoBoxString(_("Click or Ctrl+right-click to buy"), true);
+					AddInfoBoxString(_("Click to pick up, then place it in your inventory to buy; Ctrl+click buys at once"), true);
 					CurrentInfoLineStyle = InfoLineStyle::Default;
 				} else {
 					AddInfoBoxString(StrCat(FormatInteger(price), " Gold"));
@@ -843,40 +847,19 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 	return -1;
 }
 
-void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld)
+namespace {
+
+/** @brief A ware picked up at a POE2 Mashup vendor, paid for once it's put in the inventory. */
+struct PendingWare {
+	int16_t itemIndex;
+	uint32_t seed;
+	int price;
+};
+std::optional<PendingWare> PendingPurchase;
+
+/** @brief Takes a bought ware off the vendor's lists. */
+void RemoveBoughtWare(int16_t itemIndex)
 {
-	// Check if clicking on an item to buy
-	int16_t itemIndex = CheckVisualStoreHLight(mousePosition);
-	if (itemIndex < 0)
-		return;
-
-	std::span<Item> items = GetVisualStoreItems();
-	if (itemIndex >= static_cast<int16_t>(items.size()))
-		return;
-
-	Item &item = items[itemIndex];
-	if (item.isEmpty())
-		return;
-
-	// Check if player can afford the item
-	int price = VisualStoreItemPrice(itemIndex);
-	uint32_t totalGold = MyPlayer->_pGold + Stash.gold;
-	if (totalGold < static_cast<uint32_t>(price)) {
-		// InitDiabloMsg(EMSG_NOT_ENOUGH_GOLD);
-		return;
-	}
-
-	// Check if player has room for the item
-	if (!StoreAutoPlace(item, false)) {
-		// InitDiabloMsg(EMSG_INVENTORY_FULL);
-		return;
-	}
-
-	// Execute the purchase
-	TakePlrsMoney(price);
-	StoreAutoPlace(item, true);
-	PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
-
 	if (gbIsPoe2) {
 		// POE2 Mashup: take the item from the list it came from.
 		const ShopOrigin origin = ShopOrigins[itemIndex];
@@ -947,8 +930,106 @@ void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld
 	RefreshVisualStoreLayout();
 }
 
+} // namespace
+
+std::optional<int> VisualStoreSellPrice(const Item &item)
+{
+	if (!IsVisualStoreOpen || !VendorAcceptsSale() || !CanSellToCurrentVendor(item))
+		return std::nullopt;
+	return GetSellPrice(item);
+}
+
+bool HasPendingPurchase()
+{
+	return PendingPurchase.has_value();
+}
+
+void CancelPendingPurchase()
+{
+	if (!PendingPurchase)
+		return;
+	Player &player = *MyPlayer;
+	if (!player.HoldItem.isEmpty() && player.HoldItem._iSeed == PendingPurchase->seed) {
+		player.HoldItem.clear();
+		NewCursor(CURSOR_HAND);
+	}
+	PendingPurchase = std::nullopt;
+}
+
+void SettlePendingPurchase()
+{
+	if (!PendingPurchase)
+		return;
+	const Player &player = *MyPlayer;
+	if (!player.HoldItem.isEmpty() && player.HoldItem._iSeed == PendingPurchase->seed)
+		return; // still on the cursor
+	// The ware left the cursor for the inventory, belt or an equipment slot: pay for it.
+	const PendingWare ware = *PendingPurchase;
+	PendingPurchase = std::nullopt;
+	const std::span<Item> wares = GetVisualStoreItems();
+	if (ware.itemIndex >= static_cast<int16_t>(wares.size()) || wares[ware.itemIndex]._iSeed != ware.seed)
+		return;
+	const uint32_t totalGold = player._pGold + Stash.gold;
+	TakePlrsMoney(std::min<int>(ware.price, static_cast<int>(totalGold)));
+	PlaySFX(SfxID::ItemGold);
+	RemoveBoughtWare(ware.itemIndex);
+}
+
+void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld)
+{
+	// Check if clicking on an item to buy
+	int16_t itemIndex = CheckVisualStoreHLight(mousePosition);
+	if (itemIndex < 0)
+		return;
+
+	std::span<Item> items = GetVisualStoreItems();
+	if (itemIndex >= static_cast<int16_t>(items.size()))
+		return;
+
+	Item &item = items[itemIndex];
+	if (item.isEmpty())
+		return;
+
+	// Check if player can afford the item
+	int price = VisualStoreItemPrice(itemIndex);
+	uint32_t totalGold = MyPlayer->_pGold + Stash.gold;
+	if (totalGold < static_cast<uint32_t>(price)) {
+		// InitDiabloMsg(EMSG_NOT_ENOUGH_GOLD);
+		return;
+	}
+
+	if (gbIsPoe2 && !isCtrlHeld) {
+		// POE2 Mashup: a click picks the ware up and it's bought once it's put in the inventory; Ctrl+click buys it at once.
+		Player &player = *MyPlayer;
+		player.HoldItem = item;
+		player.HoldItem._iStatFlag = player.CanUseItem(player.HoldItem);
+		NewCursor(player.HoldItem);
+		PendingPurchase = PendingWare { itemIndex, item._iSeed, price };
+		PlaySFX(SfxID::GrabItem);
+		return;
+	}
+
+	// Check if player has room for the item
+	if (!StoreAutoPlace(item, false)) {
+		// InitDiabloMsg(EMSG_INVENTORY_FULL);
+		return;
+	}
+
+	// Execute the purchase
+	TakePlrsMoney(price);
+	StoreAutoPlace(item, true);
+	PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+
+	RemoveBoughtWare(itemIndex);
+}
+
 void CheckVisualStorePaste(Point mousePosition)
 {
+	if (HasPendingPurchase()) {
+		// Putting a picked-up ware back on the shelf.
+		CancelPendingPurchase();
+		return;
+	}
 	if (!VendorAcceptsSale())
 		return;
 

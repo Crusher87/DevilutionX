@@ -131,11 +131,12 @@ TEST_F(Poe2SupportGemsTest, SocketsOpenWithLevel)
 TEST_F(Poe2SupportGemsTest, AttributesLimitSupports)
 {
 	Player &player = FreshPlayer();
-	player._pDexterity = 20;
+	player._pDexterity = 9;
+	player._pMagic = 35;
 	player.setCharacterLevel(30);
-	// One Dexterity support plus one per 15 points.
+	// One Dexterity support plus one per 5 points.
 	EXPECT_EQ(SupportCapacity(player, GemColor::Dexterity), 2);
-	EXPECT_EQ(SupportCapacity(player, GemColor::Magic), 7);
+	EXPECT_EQ(SupportCapacity(player, GemColor::Magic), 8);
 
 	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::Pierce), SupportSocketResult::Socketed);
 	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::Fork), SupportSocketResult::Socketed);

@@ -1098,7 +1098,7 @@ void StartStoryteller()
 	AddSText(0, 9, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 12, _("Talk to Cain"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
 	// POE2 Mashup: like POE2's Una, Cain identifies everything for free.
-	AddSText(0, 14, gbIsPoe2 ? _("Identify all items (free)") : _("Identify an item"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	AddSText(0, 14, gbIsPoe2 ? _("Identify all items") : _("Identify an item"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSText(0, 18, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSLine(5);
 }
@@ -1108,7 +1108,8 @@ int IdentifyAllForFree(Player &player)
 {
 	int count = 0;
 	const auto identify = [&count](Item &item) {
-		if (!item.isEmpty() && !item._iIdentified) {
+		// Only magic, rare and unique items can be unidentified; normal items just carry the flag.
+		if (!item.isEmpty() && !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL) {
 			item._iIdentified = true;
 			count++;
 		}
