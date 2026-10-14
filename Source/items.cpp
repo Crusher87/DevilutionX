@@ -71,6 +71,7 @@
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
+#include "poe2/boss_loot.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
@@ -4520,6 +4521,46 @@ void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
 	if (LootRandom(100) < BossBonusUniquePercent)
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
+}
+
+void DropBossUnique(Monster &monster, bool sendmsg)
+{
+	const BossLootTable *table = gbIsPoe2 ? BossLootTableFor(monster) : nullptr;
+	if (table == nullptr || ActiveItemCount >= MAXITEMS || LootRandom(100) >= table->chancePercent)
+		return;
+	int total = 0;
+	for (const BossUniqueEntry &entry : table->pool)
+		total += entry.weight;
+	if (total <= 0)
+		return;
+	int roll = LootRandom(total);
+	std::string_view name;
+	for (const BossUniqueEntry &entry : table->pool) {
+		if (roll < entry.weight) {
+			name = entry.unique;
+			break;
+		}
+		roll -= entry.weight;
+	}
+	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
+	const Point position = monster.position.tile;
+	if (const BeltUnique *belt = FindBeltUnique(name); belt != nullptr) {
+		if (const std::optional<int> base = BeltUniqueBase(*belt); base)
+			DropPoe2BeltUnique(origin, position, sendmsg, static_cast<_item_indexes>(*base), belt->id);
+		return;
+	}
+	const Poe2Unique *unique = FindPoe2Unique(name);
+	Item created;
+	if (unique == nullptr || !CreatePoe2Unique(*MyPlayer, created, unique->uid, AdvanceRndSeed()))
+		return;
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	item = std::move(created);
+	GetSuperItemSpace(position, ii);
+	SetupItem(item);
+	TelemetryItemDropped(item, origin.name);
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
 }
 
 void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= false*/)

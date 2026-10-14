@@ -954,6 +954,9 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 	}
 	// POE2 Mashup: some bosses guard a skull that grants Spirit, like POE2's Spirit quests.
 	DropSpiritSkull(monster, sendmsg);
+	// And the bundle's bosses roll a unique from their own tables.
+	if (!monster.isPlayerMinion())
+		DropBossUnique(monster, sendmsg);
 }
 
 std::optional<Point> GetTeleportTile(const Monster &monster)

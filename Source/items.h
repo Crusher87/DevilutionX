@@ -596,6 +596,8 @@ _item_indexes RndItemForMonsterLevel(int8_t monsterLevel);
 void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t iseed, int lvl, int uper, bool onlygood, bool pregen, int uidOffset = 0, bool forceNotUnique = false);
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen);
 void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn = false);
+/** @brief POE2 Mashup: a boss rolls a unique from its own table (poe2/boss_loot.hpp). */
+void DropBossUnique(Monster &monster, bool sendmsg);
 /** @brief POE2 Mashup: drops a kill's loot by the POE2 rules: a number of rolls by how tough the monster was, and a boss's extras. */
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);
 /** @brief POE2 Mashup: drops this many extra loot rolls, e.g. from a Golden Charm. */

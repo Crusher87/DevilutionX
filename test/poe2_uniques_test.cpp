@@ -13,6 +13,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/belt_uniques.hpp"
+#include "poe2/boss_loot.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
@@ -426,6 +427,34 @@ TEST_F(Poe2UniquesTest, UniqueCharms)
 	player.SpdList[0] = {};
 	CalcPlrInv(player, false);
 	EXPECT_EQ(player.poe2.rule(UniqueRule::CannotIgnite), 0);
+}
+
+TEST_F(Poe2UniquesTest, BossTablesPointAtRealBossesAndUniques)
+{
+	ASSERT_EQ(BossLootTables().size(), 11U);
+	for (const BossLootTable &table : BossLootTables()) {
+		EXPECT_TRUE(table.chancePercent == 18 || table.chancePercent == 100) << table.id;
+		EXPECT_FALSE(table.pool.empty()) << table.id;
+		for (const BossUniqueEntry &entry : table.pool) {
+			const Poe2Unique *unique = FindPoe2Unique(entry.unique);
+			const BeltUnique *belt = FindBeltUnique(entry.unique);
+			ASSERT_TRUE(unique != nullptr || belt != nullptr) << entry.unique;
+			// Boss uniques only drop from their own boss.
+			EXPECT_EQ(unique != nullptr ? unique->pool : belt->pool, table.id) << entry.unique;
+		}
+		for (const std::string_view monster : table.monsters) {
+			const bool found = std::any_of(UniqueMonstersData.begin(), UniqueMonstersData.end(), [&](const UniqueMonsterData &data) { return data.mName == monster; });
+			EXPECT_TRUE(found) << monster;
+		}
+	}
+	Monster butcher = MakeMonster();
+	for (size_t i = 0; i < UniqueMonstersData.size(); i++) {
+		if (UniqueMonstersData[i].mName == "The Butcher")
+			butcher.uniqueType = static_cast<UniqueMonsterType>(i);
+	}
+	ASSERT_NE(BossLootTableFor(butcher), nullptr);
+	EXPECT_EQ(BossLootTableFor(butcher)->id, "saint_of_iron");
+	EXPECT_EQ(BossLootTableFor(MakeMonster()), nullptr);
 }
 
 } // namespace
