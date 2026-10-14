@@ -29,6 +29,7 @@
 namespace devilution {
 
 enum class MapReward : uint8_t;
+enum class GambleFamily : uint8_t;
 
 #define MAXITEMS 127
 #define ITEMTYPES 43
@@ -606,6 +607,10 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn = fals
 void DropWaystone(Point position, int tier, bool sendmsg);
 /** @brief POE2 Mashup: drops one roll of a map encounter's or reward chest's loot; `rarityBonus` raises its item rarity, in percent. */
 void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBonus = 0);
+/** @brief POE2 Mashup: makes the gambler's item of the family, its rarity rolled as the gambler's. */
+bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int areaLevel);
+/** @brief POE2 Mashup: puts a currency item in the hero's inventory, or at their feet if it's full. */
+void GiveCurrencyItem(Player &player, item_misc_id miscId);
 void DropBossUnique(Monster &monster, bool sendmsg);
 /** @brief POE2 Mashup: drops a kill's loot by the POE2 rules: a number of rolls by how tough the monster was, and a boss's extras. */
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);

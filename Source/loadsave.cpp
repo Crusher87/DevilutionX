@@ -2427,7 +2427,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
  * version 14 their crafting state.
  */
-constexpr uint8_t Poe2HeroDataVersion = 16;
+constexpr uint8_t Poe2HeroDataVersion = 17;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2650,6 +2650,13 @@ uint8_t ReadPoe2HeroData(Player &player)
 	for (uint8_t &rank : player.poe2.atlas.ranks)
 		rank = file.NextLE<uint8_t>();
 	player.poe2.atlas.pinnaclesDefeated = file.NextLE<uint16_t>();
+
+	// Version 17: currency shards and the gambler's charges.
+	if (version < 17 || !file.IsValid(EconomySaveSize))
+		return version;
+	for (uint8_t &shards : player.poe2.economy.shards)
+		shards = std::min<uint8_t>(file.NextLE<uint8_t>(), ShardsPerOrb - 1);
+	player.poe2.economy.gambleCharges = std::min(file.NextLE<uint8_t>(), MaxGambleCharges);
 	return version;
 }
 
@@ -2690,7 +2697,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			jewelCount++;
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize);
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2784,6 +2791,10 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	for (const uint8_t rank : player.poe2.atlas.ranks)
 		file.WriteLE<uint8_t>(rank);
 	file.WriteLE<uint16_t>(player.poe2.atlas.pinnaclesDefeated);
+	// Version 17: currency shards and the gambler's charges.
+	for (const uint8_t shards : player.poe2.economy.shards)
+		file.WriteLE<uint8_t>(shards);
+	file.WriteLE<uint8_t>(player.poe2.economy.gambleCharges);
 }
 
 void LoadHeroItems(Player &player)

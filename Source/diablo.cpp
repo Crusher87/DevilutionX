@@ -101,6 +101,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/economy.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
@@ -552,6 +553,15 @@ void RightMouseDown(bool isShiftHeld)
 		return;
 	if (TryIconCurs())
 		return;
+	// POE2 Mashup: Shift+right-click at Griswold salvages an item, and at Adria disenchants it.
+	if (gbIsPoe2 && isShiftHeld && IsVisualStoreOpen && MyPlayer->HoldItem.isEmpty() && pcursinvitem >= INVITEM_INV_FIRST && pcursinvitem <= INVITEM_INV_LAST
+	    && IsAnyOf(VisualStore.vendor, VisualStoreVendor::Smith, VisualStoreVendor::Witch)) {
+		const int invIndex = pcursinvitem - INVITEM_INV_FIRST;
+		const bool done = VisualStore.vendor == VisualStoreVendor::Smith ? SalvageInvItem(*MyPlayer, invIndex) : DisenchantInvItem(*MyPlayer, invIndex);
+		if (done)
+			PlaySFX(SfxID::ItemGold);
+		return;
+	}
 	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
 	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
 		return;

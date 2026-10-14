@@ -31,6 +31,7 @@ set(libdevilutionx_SRCS
   poe2/craft_state.cpp
   poe2/crafting_items.cpp
   poe2/desecration.cpp
+  poe2/economy.cpp
   poe2/endgame.cpp
   poe2/map_mods.cpp
   poe2/map_play.cpp

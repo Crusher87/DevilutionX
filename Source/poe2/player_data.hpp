@@ -12,6 +12,7 @@
 #include <cstdint>
 
 #include "poe2/craft_types.hpp"
+#include "poe2/economy_state.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/map_state.hpp"
@@ -343,6 +344,8 @@ struct Poe2PlayerData {
 	MapRunState mapRun {};
 	/** @brief The Atlas passives; each completed map gives a point. */
 	AtlasState atlas {};
+	/** @brief Currency shards and the gambler's charges. */
+	EconomyState economy {};
 	/** @brief Raw life and mana still to recover from the flasks being drunk, and the game ticks left (not saved). */
 	int32_t lifeFlaskRaw = 0;
 	uint8_t lifeFlaskTicks = 0;
@@ -426,6 +429,7 @@ struct Poe2PlayerData {
 		mapsCompleted = 0;
 		mapRun = {};
 		atlas = {};
+		economy = {};
 		charmCooldown = 0;
 		resistCharmTicks = {};
 		stunImmuneTicks = 0;

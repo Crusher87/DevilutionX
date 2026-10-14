@@ -79,6 +79,7 @@
 #include "player.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/economy.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/map_play.hpp"
@@ -4110,6 +4111,9 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	OnMapMonsterDeath(monster);
 	OnEndgameMonsterKilled(monster, sendmsg);
 	OnMapBossKilled(monster, sendmsg);
+	// POE2 Mashup: each unique monster slain gives the gambler another purchase.
+	if (gbIsPoe2 && monster.isUnique() && !monster.isPlayerMinion() && MyPlayer != nullptr)
+		OnUniqueMonsterKilledForGamble(*MyPlayer);
 	// POE2 Mashup: magic and rare monsters drop more.
 	if (!monster.isPlayerMinion()) {
 		if (gbIsPoe2)

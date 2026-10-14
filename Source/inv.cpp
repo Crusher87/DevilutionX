@@ -42,6 +42,7 @@
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
 #include "poe2/crafting_items.hpp"
+#include "poe2/economy.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
@@ -2092,6 +2093,10 @@ int8_t CheckInvHLight()
 				AddInfoBoxString(FormatRuntime(_("Sells for {:s} gold"), FormatInteger(*price)), true);
 				CurrentInfoLineStyle = InfoLineStyle::Requirement;
 				AddInfoBoxString(_("Drop it on the vendor to sell; Ctrl+click sells at once"), true);
+				if (VisualStore.vendor == VisualStoreVendor::Smith && GetSalvageYield(*pi))
+					AddInfoBoxString(_("Shift+right-click salvages it for quality currency"), true);
+				if (VisualStore.vendor == VisualStoreVendor::Witch && GetDisenchantYield(*pi))
+					AddInfoBoxString(_("Shift+right-click disenchants it for shards"), true);
 				CurrentInfoLineStyle = InfoLineStyle::Default;
 			}
 		}

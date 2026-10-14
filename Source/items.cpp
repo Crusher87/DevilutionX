@@ -79,6 +79,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/desecration.hpp"
+#include "poe2/economy.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gem_levels.hpp"
@@ -4826,6 +4827,73 @@ void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBon
 		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, bonus));
 		break;
 	}
+}
+
+bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int areaLevel)
+{
+	const int itemLevel = std::clamp(areaLevel, 1, static_cast<int>(CF_LEVEL));
+	const int poe2ItemLevel = Poe2ItemLevel(areaLevel);
+	item_quality rarity = RollGambleRarity();
+	std::optional<_item_indexes> idx;
+	int uidOffset = 0;
+	bool bundleUnique = false;
+	if (rarity == ITEM_QUALITY_UNIQUE) {
+		for (int tries = 0; tries < 40 && !idx; tries++) {
+			const std::optional<Poe2UniquePick> unique = PickPoe2Unique(itemLevel, poe2ItemLevel, LootSource::Rare);
+			if (!unique)
+				break;
+			if (unique->belt != BeltUniqueId::None || !GambleFamilyHas(family, AllItemsList[unique->base].itype))
+				continue;
+			idx = unique->base;
+			uidOffset = unique->offset;
+			bundleUnique = unique->bundle;
+		}
+		if (!idx)
+			rarity = ITEM_QUALITY_RARE;
+	}
+	if (!idx)
+		idx = PickPoe2Weighted(areaLevel, [family](const ItemData &data) { return IsPoe2Equipment(data) && GambleFamilyHas(family, data.itype); });
+	if (!idx)
+		return false;
+	item = {};
+	SetLootRarity(item, rarity);
+	SetPoe2ItemLevel(item, poe2ItemLevel);
+	item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
+	if (bundleUnique)
+		item.dwBuff |= CF_POE2_BUNDLE_UNIQUE;
+	if (rarity != ITEM_QUALITY_UNIQUE)
+		SetItemQuality(item, RollDropQuality(*idx, rarity, poe2ItemLevel));
+	SetupAllItems(player, item, *idx, AdvanceRndSeed(), itemLevel, 1, /*onlygood=*/true, /*pregen=*/false, uidOffset);
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
+		UniqueItemFlags[item._iUid] = true;
+	// The gambler hides what it is until it's bought.
+	item._iIdentified = true;
+	TelemetryItemDropped(item, "gambler");
+	return true;
+}
+
+void GiveCurrencyItem(Player &player, item_misc_id miscId)
+{
+	std::optional<_item_indexes> idx;
+	for (size_t i = 0; i < AllItemsList.size() && !idx; i++) {
+		if (AllItemsList[i].iMiscId == miscId && IsItemAvailable(static_cast<int>(i)))
+			idx = static_cast<_item_indexes>(i);
+	}
+	if (!idx)
+		return;
+	Item item {};
+	SetupAllItems(player, item, *idx, AdvanceRndSeed(), 1, 1, /*onlygood=*/false, /*pregen=*/false);
+	item._iIdentified = true;
+	TelemetryItemDropped(item, "salvage");
+	if (AutoPlaceItemInInventory(player, item))
+		return;
+	// No room: it lands at the hero's feet.
+	if (ActiveItemCount >= MAXITEMS)
+		return;
+	const int ii = AllocateItem();
+	Items[ii] = item;
+	GetSuperItemSpace(player.position.tile, ii);
+	SetupItem(Items[ii]);
 }
 
 void DropBossUnique(Monster &monster, bool sendmsg)

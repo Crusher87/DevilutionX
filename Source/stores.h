@@ -66,6 +66,8 @@ enum class TalkID : uint8_t {
 	Tavern,
 	Drunk,
 	Barmaid,
+	/** POE2 Mashup: Wirt's gambling. */
+	Gamble,
 };
 
 /** Currently active store */
