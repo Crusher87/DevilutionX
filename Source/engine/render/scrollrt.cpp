@@ -56,6 +56,7 @@
 #include "options.h"
 #include "panels/charpanel.hpp"
 #include "panels/console.hpp"
+#include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/item_spawner.hpp"
 #include "panels/monster_banner.hpp"
@@ -1946,6 +1947,7 @@ void DrawAndBlit()
 
 	DrawPassiveTree(out);
 	DrawGemcutting(out);
+	DrawDesecrationReveal(out);
 	DrawItemSpawner(out);
 	DrawCursor(out);
 

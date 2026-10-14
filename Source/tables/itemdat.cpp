@@ -511,6 +511,21 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "CHARM_STUN") return IMISC_CHARM_STUN;
 	if (value == "CHARM_GOLDEN") return IMISC_CHARM_GOLDEN;
 	if (value == "ORB_BAUBLE") return IMISC_ORB_BAUBLE;
+	if (value == "ORB_CHANCE") return IMISC_ORB_CHANCE;
+	if (value == "ORB_ANNUL") return IMISC_ORB_ANNUL;
+	if (value == "ORB_WHETSTONE") return IMISC_ORB_WHETSTONE;
+	if (value == "ORB_ETCHER") return IMISC_ORB_ETCHER;
+	if (value == "ORB_SCRAP") return IMISC_ORB_SCRAP;
+	if (value == "ORB_GREATER_EXALTED") return IMISC_ORB_GREATER_EXALTED;
+	if (value == "ORB_PERFECT_EXALTED") return IMISC_ORB_PERFECT_EXALTED;
+	if (value == "ORB_GREATER_CHAOS") return IMISC_ORB_GREATER_CHAOS;
+	if (value == "ORB_PERFECT_CHAOS") return IMISC_ORB_PERFECT_CHAOS;
+	if (value == "ORB_ARTIFICER") return IMISC_ORB_ARTIFICER;
+	if (value == "ORB_DESECRATE") return IMISC_ORB_DESECRATE;
+	if (value == "ORB_CATALYST") return IMISC_ORB_CATALYST;
+	if (value == "ESSENCE") return IMISC_ESSENCE;
+	if (value == "OMEN") return IMISC_OMEN;
+	if (value == "AUGMENT") return IMISC_AUGMENT;
 	return std::unexpected("Unknown enum value");
 }
 

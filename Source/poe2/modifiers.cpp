@@ -377,92 +377,250 @@ int UnidentifiedTier(uint32_t seed, int itemLevel)
 	return 1;
 }
 
+namespace {
+
+struct ModCandidate {
+	uint8_t family;
+	uint8_t tierIndex;
+	uint16_t weight;
+};
+
+uint32_t ModSlotBit(ModSlot slot)
+{
+	uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
+	if (IsAnyOf(slot, ModSlot::Ruby, ModSlot::Emerald, ModSlot::Sapphire))
+		slotBit |= 1U << static_cast<uint32_t>(ModSlot::Jewel);
+	return slotBit;
+}
+
+/** @brief Broad kinds of modifiers, for the omens that want a shared kind or a different one. */
+uint8_t ModEffectTags(ModEffect effect)
+{
+	constexpr uint8_t Life = 1 << 0;
+	constexpr uint8_t Mana = 1 << 1;
+	constexpr uint8_t Defence = 1 << 2;
+	constexpr uint8_t Damage = 1 << 3;
+	constexpr uint8_t Attribute = 1 << 4;
+	constexpr uint8_t Resistance = 1 << 5;
+	constexpr uint8_t Speed = 1 << 6;
+	constexpr uint8_t Skill = 1 << 7;
+	switch (effect) {
+	case ModEffect::Life:
+	case ModEffect::LifeRegeneration:
+	case ModEffect::LifePercent:
+		return Life;
+	case ModEffect::Mana:
+	case ModEffect::ManaRegeneration:
+	case ModEffect::ManaPercent:
+	case ModEffect::Spirit:
+		return Mana;
+	case ModEffect::FlatDefense:
+	case ModEffect::DefensePercent:
+	case ModEffect::ArmourPercent:
+	case ModEffect::EvasionPercent:
+	case ModEffect::EnergyShieldPercent:
+		return Defence;
+	case ModEffect::LifeAndDefensePercent:
+		return Life | Defence;
+	case ModEffect::ManaAndDefensePercent:
+		return Mana | Defence;
+	case ModEffect::AddedPhysical:
+	case ModEffect::PhysicalPercent:
+	case ModEffect::PhysicalPercentAndAccuracy:
+	case ModEffect::AddedFire:
+	case ModEffect::AddedLightning:
+	case ModEffect::MinionDamage:
+	case ModEffect::AddedPhysicalToAttacks:
+	case ModEffect::Accuracy:
+	case ModEffect::DamagePercent:
+		return Damage;
+	case ModEffect::Strength:
+	case ModEffect::Dexterity:
+	case ModEffect::Intelligence:
+	case ModEffect::AllAttributes:
+	case ModEffect::ReducedRequirements:
+		return Attribute;
+	case ModEffect::FireResistance:
+	case ModEffect::MagicResistance:
+	case ModEffect::LightningResistance:
+	case ModEffect::AllResistances:
+		return Resistance;
+	case ModEffect::AttackSpeed:
+	case ModEffect::CastSpeed:
+		return Speed;
+	case ModEffect::MeleeSkillLevels:
+	case ModEffect::ProjectileSkillLevels:
+	case ModEffect::SpellSkillLevels:
+	case ModEffect::FireSkillLevels:
+	case ModEffect::LightningSkillLevels:
+		return Skill;
+	default:
+		return 0;
+	}
+}
+
+uint8_t ModsTags(const std::vector<Poe2ItemMod> &mods)
+{
+	uint8_t tags = 0;
+	for (const Poe2ItemMod &mod : mods) {
+		if (const ModFamily *family = ItemModFamily(mod); family != nullptr)
+			tags |= ModEffectTags(family->effect);
+	}
+	return tags;
+}
+
+/** @brief Every legal tier of every legal family the next modifier can take, by weight. */
+uint32_t CollectModCandidates(std::vector<ModCandidate> &candidates, uint32_t slotBit, uint8_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &rolled, int perSide,
+    int magicCull, int rareMinLevel, const ModRollFilter *filter)
+{
+	candidates.clear();
+	int prefixes = 0;
+	int suffixes = 0;
+	for (const Poe2ItemMod &mod : rolled) {
+		if (const ModFamily *family = ItemModFamily(mod); family != nullptr)
+			(family->prefix ? prefixes : suffixes)++;
+	}
+	const bool isMagic = perSide <= MaxMagicModsPerSide;
+	const uint8_t rolledTags = filter != nullptr && filter->tags != ModTagRule::Any ? ModsTags(rolled) : 0;
+	uint32_t totalWeight = 0;
+	for (size_t f = 0; f < Families.size(); f++) {
+		const ModFamily &family = Families[f];
+		if (!family.enabled || (family.slots & slotBit) == 0)
+			continue;
+		if (family.baseTags != 0 && (family.baseTags & baseTags) == 0)
+			continue;
+		if ((family.prefix ? prefixes : suffixes) >= perSide)
+			continue;
+		if (Conflicts(static_cast<uint8_t>(f), rolled))
+			continue;
+		if (filter != nullptr) {
+			if (filter->side != ModSide::Any && family.prefix != (filter->side == ModSide::Prefix))
+				continue;
+			if (filter->family != 0 && filter->family != f + 1)
+				continue;
+			const uint8_t tags = ModEffectTags(family.effect);
+			if (filter->tags == ModTagRule::Shared && (tags & rolledTags) == 0)
+				continue;
+			if (filter->tags == ModTagRule::NotShared && (tags & rolledTags) != 0)
+				continue;
+		}
+		// Tiers run from T1 (index 0) down to T8, so the eligible ones are the tail of the list.
+		size_t best = 0;
+		while (best < family.tiers.size() && (family.tiers[best].itemLevel > itemLevel || family.tiers[best].weight == 0))
+			best++;
+		if (best == family.tiers.size())
+			continue;
+		size_t end = family.tiers.size();
+		if (isMagic) {
+			// A high unidentified tier culls a share of the low tiers, keeping at least the best one.
+			const size_t eligible = end - best;
+			const size_t culled = eligible * static_cast<size_t>(magicCull) / 100;
+			end = std::max(best + 1, end - culled);
+		} else {
+			// A high unidentified tier drops low-level modifiers; a family keeps its best tier if that would remove it.
+			while (end > best + 1 && family.tiers[end - 1].itemLevel < rareMinLevel)
+				end--;
+		}
+		for (size_t t = best; t < end; t++) {
+			const ModTier &tier = family.tiers[t];
+			if (tier.itemLevel > itemLevel || tier.weight == 0)
+				continue;
+			// Greater and Perfect orbs only add modifiers of a high enough level.
+			if (filter != nullptr && tier.itemLevel < filter->minModLevel)
+				continue;
+			candidates.push_back({ static_cast<uint8_t>(f), static_cast<uint8_t>(t), tier.weight });
+			totalWeight += tier.weight;
+		}
+	}
+	return totalWeight;
+}
+
+const ModCandidate &PickModCandidate(const std::vector<ModCandidate> &candidates, uint32_t pick)
+{
+	for (const ModCandidate &candidate : candidates) {
+		if (pick < candidate.weight)
+			return candidate;
+		pick -= candidate.weight;
+	}
+	return candidates.back();
+}
+
+std::array<int16_t, 2> RollTierValues(const ModFamily &family, const ModTier &tier, ModRandom &values)
+{
+	std::array<int16_t, 2> rolled {};
+	for (size_t stat = 0; stat < 2; stat++)
+		rolled[stat] = ScaleValue(values.between(tier.min[stat], tier.max[stat]), family.scale[stat]);
+	// Added damage rolls its low and high end apart; keep them in order.
+	if (IsAnyOf(family.effect, ModEffect::AddedPhysical, ModEffect::AddedFire, ModEffect::AddedLightning, ModEffect::AddedPhysicalToAttacks) && rolled[1] < rolled[0])
+		rolled[1] = rolled[0];
+	return rolled;
+}
+
+} // namespace
+
 std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier)
 {
 	std::vector<Poe2ItemMod> rolled;
 	ModRandom picks { seed };
 	ModRandom values { valueSeed };
-	int prefixes = 0;
-	int suffixes = 0;
-	uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
-	if (IsAnyOf(slot, ModSlot::Ruby, ModSlot::Emerald, ModSlot::Sapphire))
-		slotBit |= 1U << static_cast<uint32_t>(ModSlot::Jewel);
+	const uint32_t slotBit = ModSlotBit(slot);
 	const size_t unidIndex = static_cast<size_t>(std::clamp(unidentifiedTier, 1, 5) - 1);
-	const bool isMagic = perSide <= MaxMagicModsPerSide;
 	const int magicCull = UnidentifiedMagicCullPercent[unidIndex];
 	const int rareMinLevel = UnidentifiedRareMinModLevel[unidIndex];
 
-	struct Candidate {
-		uint8_t family;
-		uint8_t tierIndex;
-		uint16_t weight;
-	};
-	std::vector<Candidate> candidates;
+	std::vector<ModCandidate> candidates;
 	while (static_cast<int>(rolled.size()) < count) {
 		// POE2 picks among every legal tier of every legal family at once, by weight.
-		candidates.clear();
-		uint32_t totalWeight = 0;
-		for (size_t f = 0; f < Families.size(); f++) {
-			const ModFamily &family = Families[f];
-			if (!family.enabled || (family.slots & slotBit) == 0)
-				continue;
-			if (family.baseTags != 0 && (family.baseTags & baseTags) == 0)
-				continue;
-			if ((family.prefix ? prefixes : suffixes) >= perSide)
-				continue;
-			if (Conflicts(static_cast<uint8_t>(f), rolled))
-				continue;
-			// Tiers run from T1 (index 0) down to T8, so the eligible ones are the tail of the list.
-			size_t best = 0;
-			while (best < family.tiers.size() && (family.tiers[best].itemLevel > itemLevel || family.tiers[best].weight == 0))
-				best++;
-			if (best == family.tiers.size())
-				continue;
-			size_t end = family.tiers.size();
-			if (isMagic) {
-				// A high unidentified tier culls a share of the low tiers, keeping at least the best one.
-				const size_t eligible = end - best;
-				const size_t culled = eligible * static_cast<size_t>(magicCull) / 100;
-				end = std::max(best + 1, end - culled);
-			} else {
-				// A high unidentified tier drops low-level modifiers; a family keeps its best tier if that would remove it.
-				while (end > best + 1 && family.tiers[end - 1].itemLevel < rareMinLevel)
-					end--;
-			}
-			for (size_t t = best; t < end; t++) {
-				const ModTier &tier = family.tiers[t];
-				if (tier.itemLevel > itemLevel || tier.weight == 0)
-					continue;
-				candidates.push_back({ static_cast<uint8_t>(f), static_cast<uint8_t>(t), tier.weight });
-				totalWeight += tier.weight;
-			}
-		}
+		const uint32_t totalWeight = CollectModCandidates(candidates, slotBit, baseTags, itemLevel, rolled, perSide, magicCull, rareMinLevel, nullptr);
 		if (totalWeight == 0)
 			break;
-		uint32_t pick = picks.below(totalWeight);
-		const Candidate *chosen = &candidates.back();
-		for (const Candidate &candidate : candidates) {
-			if (pick < candidate.weight) {
-				chosen = &candidate;
-				break;
-			}
-			pick -= candidate.weight;
-		}
-		const ModFamily &family = Families[chosen->family];
-		const ModTier &tier = family.tiers[chosen->tierIndex];
-		Poe2ItemMod mod { static_cast<uint8_t>(chosen->family + 1), tier.tier, {} };
-		for (size_t stat = 0; stat < 2; stat++)
-			mod.values[stat] = ScaleValue(values.between(tier.min[stat], tier.max[stat]), family.scale[stat]);
-		// Added damage rolls its low and high end apart; keep them in order.
-		if (IsAnyOf(family.effect, ModEffect::AddedPhysical, ModEffect::AddedFire, ModEffect::AddedLightning, ModEffect::AddedPhysicalToAttacks) && mod.values[1] < mod.values[0])
-			mod.values[1] = mod.values[0];
-		rolled.push_back(mod);
-		if (family.prefix)
-			prefixes++;
-		else
-			suffixes++;
+		const ModCandidate &chosen = PickModCandidate(candidates, picks.below(totalWeight));
+		const ModFamily &family = Families[chosen.family];
+		const ModTier &tier = family.tiers[chosen.tierIndex];
+		rolled.push_back({ static_cast<uint8_t>(chosen.family + 1), tier.tier, RollTierValues(family, tier, values) });
 	}
 	return rolled;
+}
+
+std::optional<Poe2ItemMod> RollAddedMod(ModSlot slot, uint8_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &existing, int perSide, uint32_t seed, const ModRollFilter &filter)
+{
+	std::vector<ModCandidate> candidates;
+	const uint32_t totalWeight = CollectModCandidates(candidates, ModSlotBit(slot), baseTags, itemLevel, existing, perSide, 0, 0, &filter);
+	if (totalWeight == 0)
+		return std::nullopt;
+	ModRandom picks { seed };
+	const ModCandidate &chosen = PickModCandidate(candidates, picks.below(totalWeight));
+	const ModFamily &family = Families[chosen.family];
+	const ModTier &tier = family.tiers[chosen.tierIndex];
+	return Poe2ItemMod { static_cast<uint8_t>(chosen.family + 1), tier.tier, {} };
+}
+
+std::array<int16_t, 2> RollModValues(uint8_t family, uint8_t tier, uint32_t valueSeed)
+{
+	if (family == 0 || family > Families.size())
+		return {};
+	const ModFamily &modFamily = Families[family - 1];
+	const auto it = std::find_if(modFamily.tiers.begin(), modFamily.tiers.end(), [tier](const ModTier &modTier) { return modTier.tier == tier; });
+	if (it == modFamily.tiers.end())
+		return {};
+	ModRandom values { valueSeed };
+	return RollTierValues(modFamily, *it, values);
+}
+
+int ModTierItemLevel(uint8_t family, uint8_t tier)
+{
+	if (family == 0 || family > Families.size())
+		return 0;
+	const ModFamily &modFamily = Families[family - 1];
+	const auto it = std::find_if(modFamily.tiers.begin(), modFamily.tiers.end(), [tier](const ModTier &modTier) { return modTier.tier == tier; });
+	return it != modFamily.tiers.end() ? it->itemLevel : 0;
+}
+
+bool ModsShareTag(const Poe2ItemMod &a, const Poe2ItemMod &b)
+{
+	const ModFamily *familyA = ItemModFamily(a);
+	const ModFamily *familyB = ItemModFamily(b);
+	return familyA != nullptr && familyB != nullptr && (ModEffectTags(familyA->effect) & ModEffectTags(familyB->effect)) != 0;
 }
 
 int MagicModCount(uint32_t seed)

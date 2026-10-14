@@ -1140,7 +1140,7 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 	int dam = RandomIntBetween(mind, maxd) << 6;
 	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
 	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size())
-		dam = dam * UniqueMinionDamagePercent(Players[static_cast<size_t>(attacker.goalVar3)]) / 100;
+		dam = dam * UniqueMinionDamagePercent(Players[static_cast<size_t>(attacker.goalVar3)], attacker.hitPoints.raw() * 2 < attacker.maxHitPoints.raw()) / 100;
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
 	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
 

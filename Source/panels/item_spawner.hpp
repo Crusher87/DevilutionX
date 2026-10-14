@@ -48,6 +48,8 @@ struct SpawnerEntry {
 	bool rollsQuality = false;
 	/** @brief A unique flask or charm (BeltUniqueId), or 0. */
 	uint8_t beltUnique = 0;
+	/** @brief Which essence, omen, augment or catalyst (poe2/crafting_items.hpp), or 0. */
+	uint8_t variant = 0;
 };
 
 std::string_view SpawnerCategoryName(SpawnerCategory category);

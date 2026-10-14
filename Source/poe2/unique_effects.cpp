@@ -306,8 +306,12 @@ bool RollAttackCrit(const Player &player)
 {
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 	int chance = HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike) ? player.getCharacterLevel() : 0;
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		chance += BaseAttackCritPercent;
+		// Third Eye: the next attack's place in the count of three.
+		if (const int more = Rule(player, UniqueRule::ThirdHitCritChance); more > 0)
+			chance += (State(player).attacks + 1) % 3 == 0 ? more : -Rule(player, UniqueRule::OtherHitsLessCrit);
+	}
 	if (chance <= 0 || GenerateRnd(100) >= chance)
 		return false;
 	if (gbIsPoe2 && Rule(player, UniqueRule::CritActionSpeed) > 0)
@@ -366,6 +370,10 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	}
 	if (const int more = Rule(player, UniqueRule::BleedHinder); more > 0 && monster.poe2.bleedTicks > 0)
 		raw = raw * (100 + more) / 100;
+	if (const int more = Rule(player, UniqueRule::BleedMovingDamage); more > 0 && monster.poe2.bleedTicks > 0)
+		raw = raw * (state.stillTicks > 0 ? 100 - Rule(player, UniqueRule::BleedStationaryLess) : 100 + more) / 100;
+	if (const int per = Rule(player, UniqueRule::MissingLifeDamage); per > 0)
+		raw = raw * (100 + MissingLifePercent(player) / per) / 100;
 	if (state.storedChill > 0) {
 		raw = raw * (100 + state.storedChill) / 100;
 		state.storedChill = 0;
@@ -595,9 +603,10 @@ void OnMinionDied(Player &owner)
 	state.minionFrenzyTicks = 4 * TicksPerSecond;
 }
 
-int UniqueMinionDamagePercent(const Player &owner)
+int UniqueMinionDamagePercent(const Player &owner, bool minionLowLife)
 {
-	return 100 + Rule(owner, UniqueRule::MinionFrenzy) * State(owner).minionFrenzy;
+	const int lowLife = minionLowLife ? Rule(owner, UniqueRule::MinionLowLifeDamage) : 0;
+	return (100 + Rule(owner, UniqueRule::MinionFrenzy) * State(owner).minionFrenzy) * (100 + lowLife) / 100;
 }
 
 int UniqueMinionLifePercent(const Player &owner)
@@ -678,7 +687,14 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		percent += ExposurePercent;
 	if (type == DamageType::Lightning && IsMonsterElectrocuted(monster) && MyPlayer != nullptr)
 		percent += Rule(*MyPlayer, UniqueRule::ElectrocutedLightning);
-	return percent;
+	// Talismans and desecrated modifiers that favour hunting rare and unique monsters.
+	if (MyPlayer != nullptr) {
+		if (monster.isUnique() || GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
+			percent += Rule(*MyPlayer, UniqueRule::DamageVsRareUnique);
+		else
+			percent -= Rule(*MyPlayer, UniqueRule::LessDamageVsNormal);
+	}
+	return std::max(percent, 0);
 }
 
 bool IsMonsterElectrocuted(const Monster &monster)
@@ -735,6 +751,17 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 	}
 	if (state.stolenMod == static_cast<int>(MonsterMod::ExtraLife) + 1)
 		raw = raw * 90 / 100;
+	if (const int less = Rule(player, UniqueRule::LessHitDamage); less > 0)
+		raw = raw * (100 - std::min(less, 50)) / 100;
+	if (const int less = Rule(player, UniqueRule::FullLifeLessHitDamage); less > 0 && player._pHitPoints >= player._pMaxHP)
+		raw = raw * (100 - std::min(less, 50)) / 100;
+	// Black Reservoir: part of the hit is paid from mana while there is mana.
+	if (const int share = std::clamp(Rule(player, UniqueRule::HitDamageFromMana), 0, 100); share > 0 && raw > 0) {
+		const int64_t fromMana = std::min<int64_t>(raw * share / 100, std::max(player._pMana.raw(), 0));
+		player._pMana -= Fixed26_6::fromRaw(static_cast<int32_t>(fromMana));
+		player._pManaBase -= Fixed26_6::fromRaw(static_cast<int32_t>(fromMana));
+		raw -= fromMana;
+	}
 	raw = std::max<int64_t>(raw, 0);
 	state.lifeLost[0] = static_cast<int32_t>(std::min<int64_t>(state.lifeLost[0] + raw, INT32_MAX / 2));
 	return Fixed26_6::fromRaw(static_cast<int32_t>(raw));
@@ -761,6 +788,11 @@ void OnLifeRecovered(Player &player, int32_t raw)
 	if (share <= 0 || raw <= 0 || player.poe2.maxEnergyShield <= 0)
 		return;
 	player.poe2.energyShield = std::min(player.poe2.energyShield + Percent(raw, share), player.poe2.maxEnergyShield * 64);
+}
+
+int ManaRecoveryPercent(const Player &player)
+{
+	return std::max(100 - Rule(player, UniqueRule::LessManaRecovery), 0);
 }
 
 bool IsRecoveryLocked(const Player &player)

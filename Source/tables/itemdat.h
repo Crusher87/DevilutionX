@@ -431,7 +431,7 @@ enum class ItemSpecialEffectHf : uint8_t {
 };
 use_enum_as_flags(ItemSpecialEffectHf);
 
-enum item_misc_id : int8_t {
+enum item_misc_id : int16_t {
 	IMISC_NONE,
 	IMISC_USEFIRST,
 	IMISC_FULLHEAL,
@@ -559,6 +559,24 @@ enum item_misc_id : int8_t {
 	IMISC_SPIRIT_SKULL,
 	/** Goes in an allocated jewel socket of the passive tree (POE2 Ruby, Emerald or Sapphire). */
 	IMISC_JEWEL,
+	/** POE2 Mashup crafting currency. */
+	IMISC_ORB_CHANCE,
+	IMISC_ORB_ANNUL,
+	IMISC_ORB_WHETSTONE,
+	IMISC_ORB_ETCHER,
+	IMISC_ORB_SCRAP,
+	IMISC_ORB_GREATER_EXALTED,
+	IMISC_ORB_PERFECT_EXALTED,
+	IMISC_ORB_GREATER_CHAOS,
+	IMISC_ORB_PERFECT_CHAOS,
+	IMISC_ORB_ARTIFICER,
+	IMISC_ORB_DESECRATE,
+	/** Adds quality to jewellery; which catalyst it is is in the create flags (poe2/crafting_items.hpp). */
+	IMISC_ORB_CATALYST,
+	/** Essences, omens and augments come in kinds kept in the create flags. */
+	IMISC_ESSENCE,
+	IMISC_OMEN,
+	IMISC_AUGMENT,
 	IMISC_INVALID = -1,
 };
 

@@ -83,6 +83,7 @@
 #include "objects.h"
 #include "options.h"
 #include "panels/console.hpp"
+#include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/info_box.hpp"
 #include "panels/item_spawner.hpp"
@@ -96,6 +97,7 @@
 #include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/modifiers.hpp"
@@ -240,7 +242,7 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen())) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen())) {
 		RedrawViewport();
 		return false;
 	}
@@ -870,6 +872,9 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		return;
 	}
 
+	if (DesecrationRevealHandleEvent(event)) {
+		return;
+	}
 	if (GemcuttingHandleEvent(event)) {
 		return;
 	}
@@ -3084,6 +3089,13 @@ bool TryIconCurs()
 		else if (pcursstashitem != StashStruct::EmptyCell) {
 			Item &item = Stash.stashList[pcursstashitem];
 			changeCursor = ApplyOilToItem(item, myPlayer);
+			if (CurrencyDestroyedItem) {
+				CurrencyDestroyedItem = false;
+				Stash.RemoveStashItem(pcursstashitem);
+			} else if (DesecrationRevealItem) {
+				OpenDesecrationReveal(item);
+			}
+			ConsumeCraftOmens(myPlayer);
 			Stash.dirty = true;
 		}
 		if (changeCursor)

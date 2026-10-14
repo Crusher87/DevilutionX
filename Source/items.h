@@ -56,6 +56,43 @@ struct Poe2ItemMod {
 	std::array<int16_t, 2> values {};
 };
 
+/** POE2 Mashup: a crafted modifier, rebuilt from its family, tier and a salt for its values. */
+struct Poe2CraftMod {
+	/** Index of the modifier family plus 1; 0 for none. */
+	uint8_t family = 0;
+	uint8_t tier = 0;
+	/** 0 keeps the values the item's seed rolled for this modifier; others roll them anew. */
+	uint8_t salt = 0;
+
+	bool operator==(const Poe2CraftMod &other) const = default;
+};
+
+/** POE2 Mashup: crafting state an item's seed can't rebuild. Saved in the spare bytes of the item save (poe2/craft_state.hpp). */
+struct Poe2Craft {
+	/** Set once crafting chose the item's modifiers; they then replace the ones its seed rolls. */
+	bool explicitMods = false;
+	/** With explicit modifiers: the item's rarity (normal, magic or rare). */
+	uint8_t rarity = 0;
+	/** Whether the seed rolled the item magic rather than rare, so a modifier with salt 0 finds its rolled values. */
+	bool rolledMagic = false;
+	std::array<Poe2CraftMod, MaxRareAffixes> mods {};
+	/** Augment sockets (0 to 3) and what is in each (an Augment id; 0 for empty). */
+	uint8_t sockets = 0;
+	std::array<uint8_t, 3> augments {};
+	/** Jewellery: the catalyst its quality boosts (a Catalyst id; 0 for none). */
+	uint8_t catalyst = 0;
+	/** A corruption enchantment (a CorruptionEnchant id) and its roll, 0 to 7. */
+	uint8_t enchant = 0;
+	uint8_t enchantRoll = 0;
+	/** Corruption's change to the item's explicit modifiers, in percent. */
+	int8_t magnitude = 0;
+	/** The item was desecrated, which only happens once. */
+	bool desecrated = false;
+
+	[[nodiscard]] bool isEmpty() const { return *this == Poe2Craft {}; }
+	bool operator==(const Poe2Craft &other) const = default;
+};
+
 enum item_quality : uint8_t {
 	ITEM_QUALITY_NORMAL,
 	ITEM_QUALITY_MAGIC,
@@ -309,6 +346,8 @@ struct Item {
 	std::array<uint8_t, MaxRareAffixes> _iRareTiers {};
 	/** POE2 Mashup: modifiers of an item with CF_POE2_MODS, in the order they were rolled. Not saved; restored from the item seed. */
 	std::array<Poe2ItemMod, MaxRareAffixes> _iPoe2Mods {};
+	/** POE2 Mashup: crafting state the seed can't rebuild. */
+	Poe2Craft _iPoe2Craft {};
 	/** POE2 Mashup: stats from those modifiers. Not saved; restored from the item seed. */
 	std::array<int16_t, static_cast<size_t>(Poe2ItemStat::Count)> _iPoe2Stats {};
 	int _iVAdd1 = 0;
@@ -607,7 +646,8 @@ void CreateRndUseful(Point position, bool sendmsg);
 void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc, bool sendmsg, bool delta, bool spawn = false);
 /** @brief Drops a fresh item of the given base near a tile, e.g. a boss's Spirit skull. */
 void SpawnBaseItem(Point position, _item_indexes idx, bool sendmsg);
-void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff);
+/** @param craft POE2 Mashup: crafting state the item had, which its seed can't rebuild. */
+void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff, const Poe2Craft &craft = {});
 void RecreateEar(Item &item, uint16_t ic, uint32_t iseed, uint8_t bCursval, std::string_view heroName);
 void CornerstoneSave();
 void CornerstoneLoad(Point position);
@@ -684,6 +724,20 @@ void RestoreRareItemPowers(Item &item);
  * @return false if the uid isn't a bundle unique.
  */
 bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed);
+
+enum class ChanceResult : uint8_t {
+	/** No unique is made on the base. */
+	NoUniques,
+	/** The rolled tier has no unique on the base: the item is destroyed. */
+	Failed,
+	Made,
+};
+
+/**
+ * @brief POE2 Mashup: an Orb of Chance on a normal item rolls a unique tier, then a unique of that tier on the item's base.
+ * @param unique Receives the unique when one is made.
+ */
+ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &unique, uint32_t roll);
 
 /* data */
 

@@ -66,6 +66,7 @@
 #include "objects.h"
 #include "options.h"
 #include "pack.h"
+#include "panels/desecration_panel.hpp"
 #include "panels/info_box.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
@@ -73,8 +74,11 @@
 #include "poe2/belt_uniques.hpp"
 #include "poe2/boss_loot.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/craft_state.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/desecration.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
@@ -1401,7 +1405,7 @@ bool HasPoe2ModTables(const Item &item)
  *
  * The picks come from the item seed, and the values from a seed a Divine Orb changes, so a Divine Orb rerolls values only.
  */
-void GetItemPowerPoe2Mods(Item &item, bool rare)
+std::vector<Poe2ItemMod> RollNaturalPoe2Mods(const Item &item, bool rare)
 {
 	const uint32_t seed = static_cast<uint32_t>(item._iSeed);
 	const uint32_t divine = (item.dwBuff & CF_POE2_DIVINE) >> 9;
@@ -1424,9 +1428,44 @@ void GetItemPowerPoe2Mods(Item &item, bool rare)
 	// Ground drops can roll a hidden quality tier that culls weak modifiers; crafting and shops always use the full pool.
 	const int itemLevel = GetPoe2ItemLevel(item);
 	const int unidentifiedTier = GetLootRarity(item) ? UnidentifiedTier(seed, itemLevel) : 1;
-	std::vector<Poe2ItemMod> mods = RollItemMods(*ItemModSlot(item), ItemModBaseTags(item), itemLevel, count, perSide, seed, valueSeed, unidentifiedTier);
-	if (mods.empty())
-		return;
+	return RollItemMods(*ItemModSlot(item), ItemModBaseTags(item), itemLevel, count, perSide, seed, valueSeed, unidentifiedTier);
+}
+
+/** @brief The rarity the item is made with: the one crafting gave it, or the one the loot roll picked. */
+std::optional<item_quality> RarityToRoll(const Item &item)
+{
+	if (item._iPoe2Craft.explicitMods)
+		return static_cast<item_quality>(item._iPoe2Craft.rarity);
+	return GetLootRarity(item);
+}
+
+/**
+ * @brief Gives a magic or rare item its modifiers from the POE2 itemization tables.
+ *
+ * Crafted items have theirs written out; others roll them from their seed.
+ */
+void GetItemPowerPoe2Mods(Item &item, bool rare)
+{
+	std::vector<Poe2ItemMod> mods;
+	if (item._iPoe2Craft.explicitMods) {
+		rare = item._iPoe2Craft.rarity == ITEM_QUALITY_RARE;
+		mods = ResolveCraftMods(item, RollNaturalPoe2Mods(item, !item._iPoe2Craft.rolledMagic));
+	} else {
+		mods = RollNaturalPoe2Mods(item, rare);
+		if (mods.empty())
+			return;
+	}
+	// POE2 Mashup: a catalyst's quality on jewellery boosts its kind of modifiers.
+	if (const auto catalyst = static_cast<Catalyst>(item._iPoe2Craft.catalyst); catalyst != Catalyst::None) {
+		const int quality = ItemQuality(item);
+		for (Poe2ItemMod &mod : mods) {
+			const ModFamily *family = ItemModFamily(mod);
+			if (family == nullptr || !CatalystBoosts(catalyst, family->effect))
+				continue;
+			for (int16_t &value : mod.values)
+				value = static_cast<int16_t>(value + (value * quality / 100));
+		}
+	}
 	// Like POE2, prefixes are listed before suffixes.
 	std::stable_partition(mods.begin(), mods.end(), [](const Poe2ItemMod &mod) { return ItemModFamily(mod)->prefix; });
 
@@ -1462,7 +1501,7 @@ void SetupJewel(Item &item, int lvl)
 {
 	if (GetPoe2ItemLevel(item) == 0)
 		SetPoe2ItemLevel(item, Poe2ItemLevel(lvl + (15 * sgGameInitInfo.nDifficulty)));
-	const std::optional<item_quality> lootRarity = GetLootRarity(item);
+	const std::optional<item_quality> lootRarity = RarityToRoll(item);
 	// Without a loot roll, one jewel in four is rare.
 	const bool rare = lootRarity ? *lootRarity == ITEM_QUALITY_RARE : (static_cast<uint32_t>(item._iSeed) * 0x9E3779B9U) >> 30 == 0;
 	GetItemPowerPoe2Mods(item, rare);
@@ -1471,7 +1510,7 @@ void SetupJewel(Item &item, int lvl)
 void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs, bool onlygood)
 {
 	// POE2 loot drops already know their rarity; older items roll 1 in 5 magic items as rare.
-	const std::optional<item_quality> lootRarity = GetLootRarity(item);
+	const std::optional<item_quality> lootRarity = RarityToRoll(item);
 	const bool rare = lootRarity == ITEM_QUALITY_RARE || (!lootRarity && (item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0);
 	if (HasPoe2ModTables(item)) {
 		GetItemPowerPoe2Mods(item, rare);
@@ -1737,11 +1776,18 @@ void GetUniqueItem(const Player &player, Item &item, _unique_items uid)
 {
 	const auto &uniqueItemData = UniqueItems[uid];
 
+	// POE2 Mashup: a Divine Orb rolls the values again from a seed of their own.
+	const uint32_t divine = (item.dwBuff & CF_POE2) != 0 ? (item.dwBuff & CF_POE2_DIVINE) >> 9 : 0;
+	const uint32_t rngState = GetLCGEngineState();
+	if (divine != 0)
+		SetRndSeed(static_cast<uint32_t>(item._iSeed) ^ (divine * 0x9E3779B9U));
 	for (auto power : uniqueItemData.powers) {
 		if (power.type == IPL_INVALID)
 			break;
 		SaveItemPower(player, item, power);
 	}
+	if (divine != 0)
+		SetRndSeed(rngState);
 
 	CopyUtf8(item._iIName, uniqueItemData.UIName, ItemNameLength);
 	if (uniqueItemData.UICurs != ICURS_DEFAULT)
@@ -2112,6 +2158,13 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
 		return;
 	}
+	if (IsCraftingVariantItem(item)) {
+		for (const std::string &line : CraftingItemText(item))
+			AddItemInfoBoxString(line);
+		if (item._iMiscId != IMISC_OMEN)
+			AddItemInfoBoxString(_("Right-click to use, then click an item"));
+		return;
+	}
 	if (IsJewel(item)) {
 		AddItemInfoBoxString(_("Place in an allocated Jewel Socket"));
 		AddItemInfoBoxString(_("on the Passive Tree (P)"));
@@ -2395,8 +2448,7 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
  */
 bool Poe2VendorWithholds(item_misc_id miscId)
 {
-	if (IsAnyOf(miscId, IMISC_ORB_TRANSMUTE, IMISC_ORB_ALCHEMY, IMISC_ORB_CHAOS, IMISC_ORB_SCOURING, IMISC_ORB_AUGMENT, IMISC_ORB_REGAL,
-	        IMISC_ORB_EXALTED, IMISC_ORB_DIVINE, IMISC_ORB_VAAL, IMISC_ORB_BAUBLE))
+	if (IsCurrencyMiscId(miscId))
 		return OrbCurrencyBand(miscId) != CurrencyBand::Common;
 	return IsAnyOf(miscId, IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_SPIRIT_SKULL, IMISC_CHARM_LIFE,
 	    IMISC_CHARM_MANA, IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
@@ -2824,7 +2876,7 @@ void RestoreRareItemPowers(Item &item)
 		return;
 	const uint32_t currentSeed = GetLCGEngineState();
 	Item regenerated;
-	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
+	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
 	item._iRarePowers = regenerated._iRarePowers;
 	item._iRareTiers = regenerated._iRareTiers;
 	item._iPreTier = regenerated._iPreTier;
@@ -2849,6 +2901,66 @@ bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed)
 	item.dwBuff |= ((static_cast<uint32_t>(offset) << 1) & CF_UIDOFFSET) | CF_POE2_BUNDLE_UNIQUE;
 	SetupAllItems(player, item, static_cast<_item_indexes>(unique->baseItem), seed, std::max<int>(UniqueItems[uid].UIMinLvl, 1), 1, true, false, offset);
 	return item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid == uid;
+}
+
+ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &unique, uint32_t roll)
+{
+	struct Candidate {
+		int uid;
+		int offset;
+		bool bundle;
+	};
+	std::array<std::vector<Candidate>, static_cast<size_t>(UniqueTier::Count)> byTier;
+	const int base = item.IDidx;
+	const std::vector<int> bundleUniques = Poe2UniquesOnBase(base);
+	for (size_t i = 0; i < bundleUniques.size(); i++) {
+		const Poe2Unique *poe2Unique = Poe2UniqueFor(bundleUniques[i]);
+		if (poe2Unique != nullptr && poe2Unique->isGlobal() && i <= (CF_UIDOFFSET >> 1))
+			byTier[static_cast<size_t>(poe2Unique->tier)].push_back({ bundleUniques[i], static_cast<int>(i), true });
+	}
+	// Diablo's uniques of the base, up to the higher of the item's and the hero's level.
+	const int level = std::clamp(std::max<int>(item._iCreateInfo & CF_LEVEL, player.getCharacterLevel()), 1, static_cast<int>(CF_LEVEL));
+	const std::vector<uint8_t> valid = GetValidUniques(level, AllItemsList[base].iItemId);
+	for (size_t i = 0; i < valid.size(); i++) {
+		const int offset = static_cast<int>(valid.size() - 1 - i);
+		if (offset <= static_cast<int>(CF_UIDOFFSET >> 1) && Poe2UniqueFor(valid[i]) == nullptr)
+			byTier[static_cast<size_t>(LegacyUniqueTier(UniqueItems[valid[i]].UIMinLvl))].push_back({ valid[i], offset, false });
+	}
+	if (std::all_of(byTier.begin(), byTier.end(), [](const std::vector<Candidate> &pool) { return pool.empty(); }))
+		return ChanceResult::NoUniques;
+
+	const std::array<int, static_cast<size_t>(UniqueTier::Count)> weights = UniqueTierWeights(LootSource::Normal);
+	int total = 0;
+	for (const int weight : weights)
+		total += weight;
+	int pick = static_cast<int>(roll % static_cast<uint32_t>(total));
+	size_t tier = 0;
+	while (tier + 1 < weights.size() && pick >= weights[tier]) {
+		pick -= weights[tier];
+		tier++;
+	}
+	const std::vector<Candidate> &pool = byTier[tier];
+	if (pool.empty())
+		return ChanceResult::Failed;
+	const Candidate &chosen = pool[(roll >> 16) % pool.size()];
+	const uint32_t seed = (roll * 1103515245U + 12345U) >> 1;
+	const uint32_t rngState = GetLCGEngineState();
+	bool made;
+	if (chosen.bundle) {
+		made = CreatePoe2Unique(player, unique, chosen.uid, seed);
+	} else {
+		unique = {};
+		SetLootRarity(unique, ITEM_QUALITY_UNIQUE);
+		SetPoe2ItemLevel(unique, GetPoe2ItemLevel(item));
+		unique.dwBuff |= (static_cast<uint32_t>(chosen.offset) << 1) & CF_UIDOFFSET;
+		SetupAllItems(player, unique, static_cast<_item_indexes>(base), seed, level, 1, true, false, chosen.offset);
+		made = unique._iMagical == ITEM_QUALITY_UNIQUE && unique._iUid == chosen.uid;
+	}
+	SetRndSeed(rngState);
+	if (!made)
+		return ChanceResult::Failed;
+	SetupItem(unique);
+	return ChanceResult::Made;
 }
 
 bool IsItemAvailable(int i)
@@ -3408,6 +3520,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 				for (size_t stat = 0; stat < poe2Stats.size(); stat++)
 					poe2Stats[stat] += item._iPoe2Stats[stat];
 				AddUniqueRules(item, uniqueRules);
+				AddCraftRules(item, uniqueRules);
 			}
 		}
 	}
@@ -3966,7 +4079,7 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 		return;
 	}
 
-	if (const std::optional<item_quality> lootRarity = GetLootRarity(item); lootRarity && item._iMiscId != IMISC_UNIQUE) {
+	if (const std::optional<item_quality> lootRarity = RarityToRoll(item); lootRarity && item._iMiscId != IMISC_UNIQUE) {
 		// POE2 Mashup: the loot roll picked the rarity; a unique keeps the pick stored in its unique offset.
 		std::optional<_unique_items> uid;
 		if (*lootRarity == ITEM_QUALITY_UNIQUE && (item.dwBuff & CF_POE2_BUNDLE_UNIQUE) != 0) {
@@ -4018,6 +4131,7 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 		}
 	}
 	FinishFlask(item);
+	FinishCraftingItem(item);
 }
 
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen)
@@ -4137,8 +4251,7 @@ bool IsPoe2FlaskOrCharm(item_misc_id miscId)
 
 bool IsPoe2Orb(item_misc_id miscId)
 {
-	return IsAnyOf(miscId, IMISC_ORB_TRANSMUTE, IMISC_ORB_ALCHEMY, IMISC_ORB_CHAOS, IMISC_ORB_SCOURING, IMISC_ORB_AUGMENT, IMISC_ORB_REGAL,
-	    IMISC_ORB_EXALTED, IMISC_ORB_DIVINE, IMISC_ORB_VAAL, IMISC_ORB_BAUBLE);
+	return IsCurrencyMiscId(miscId);
 }
 
 bool IsPoe2UncutGem(item_misc_id miscId)
@@ -4696,7 +4809,7 @@ void SpawnBaseItem(Point position, _item_indexes idx, bool sendmsg)
 
 namespace {
 
-void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
+void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff, const Poe2Craft &craft)
 {
 	// Generate with the mod state the item was created with, like gbIsHellfire below.
 	struct Poe2StateGuard {
@@ -4707,6 +4820,8 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 
 	const bool tmpIsHellfire = gbIsHellfire;
 	item.dwBuff = dwBuff;
+	// POE2 Mashup: crafting state, which generation reads like dwBuff.
+	item._iPoe2Craft = craft;
 	gbIsHellfire = (item.dwBuff & CF_HELLFIRE) != 0;
 
 	if (idx == IDI_GOLD) {
@@ -4754,15 +4869,20 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 	auto uidOffset = static_cast<int>((item.dwBuff & CF_UIDOFFSET) >> 1);
 
 	SetupAllItems(player, item, idx, iseed, level, uper, onlygood, pregen, uidOffset, forceNotUnique);
+	// POE2 Mashup: augments and corruption enchantments come on top of the item's roll.
+	if (!item._iPoe2Craft.isEmpty()) {
+		ApplyAugments(item);
+		ApplyCorruptionEnchant(item);
+	}
 	SetupItem(item);
 	gbIsHellfire = tmpIsHellfire;
 }
 
 } // namespace
 
-void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
+void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff, const Poe2Craft &craft)
 {
-	RecreateItemBase(player, item, idx, icreateinfo, iseed, ivalue, dwBuff);
+	RecreateItemBase(player, item, idx, icreateinfo, iseed, ivalue, dwBuff, craft);
 	// POE2 Mashup: a flask keeps the mods and quality it was given.
 	if ((dwBuff & CF_POE2_FLASK_ROLLED) != 0) {
 		constexpr uint32_t FlaskBits = CF_POE2_FLASK_PREFIX | CF_POE2_FLASK_SUFFIX | CF_POE2_FLASK_QUALITY | CF_POE2_FLASK_ROLLED;
@@ -4772,6 +4892,11 @@ void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t 
 	if (IsFlaskPotion(item) || IsCharm(item))
 		item.dwBuff = (item.dwBuff & ~CF_POE2_BELT_UNIQUE) | (dwBuff & CF_POE2_BELT_UNIQUE);
 	FinishFlask(item);
+	// And an essence, omen, augment or catalyst stays the one it was.
+	if (IsCraftingVariantItem(item)) {
+		item.dwBuff = (item.dwBuff & ~CF_POE2_VARIANT) | (dwBuff & CF_POE2_VARIANT);
+		FinishCraftingItem(item);
+	}
 	// POE2 Mashup: and a skill gem keeps its level.
 	if (IsSkillGem(item))
 		item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (dwBuff & CF_POE2_GEM_LEVEL);
@@ -5091,15 +5216,31 @@ bool DoOil(Player &player, int cii)
 	} else {
 		pi = &player.InvBody[cii];
 	}
-	if (!ApplyOilToItem(*pi, player))
+	if (!ApplyOilToItem(*pi, player)) {
+		if (DesecrationRevealItem && &player == MyPlayer)
+			OpenDesecrationReveal(*pi);
 		return false;
+	}
 	for (const ItemData &data : AllItemsList) {
 		if (data.iMiscId == player._pOilType) {
 			TelemetryCrafted(player, data.iName, *pi);
 			break;
 		}
 	}
+	// POE2 Mashup: a failed Orb of Chance destroys the item.
+	if (CurrencyDestroyedItem) {
+		CurrencyDestroyedItem = false;
+		if (cii >= INVITEM_BELT_FIRST)
+			player.RemoveSpdBarItem(cii - INVITEM_BELT_FIRST);
+		else if (cii >= NUM_INVLOC)
+			player.RemoveInvItem(cii - NUM_INVLOC);
+		else
+			RemoveEquipment(player, static_cast<inv_body_loc>(cii), false);
+	}
+	ConsumeCraftOmens(player);
 	CalcPlrInv(player, true);
+	if (DesecrationRevealItem && &player == MyPlayer)
+		OpenDesecrationReveal(*pi);
 	return true;
 }
 
@@ -5396,10 +5537,32 @@ std::string PrintItemPowerWithTier(item_effect_type power, const Item &item, uin
 
 } // namespace
 
+/** @brief POE2 Mashup: crafting state shown under the modifiers: an unrevealed modifier, catalyst quality and augment sockets. */
+void PrintItemCraftState(const Item &item)
+{
+	const Poe2Craft &craft = item._iPoe2Craft;
+	for (const Poe2CraftMod &mod : craft.mods) {
+		if (mod.family == UnrevealedModFamily)
+			AddItemInfoBoxString(IsCraftPrefix(mod) ? _("Unrevealed desecrated prefix") : _("Unrevealed desecrated suffix"));
+		if (const DesecratedMod *desecrated = GetDesecratedMod(mod.family); desecrated != nullptr) {
+			for (const std::string &line : DesecratedModText(item, mod))
+				AddItemInfoBoxString(StrCat(line, " (", desecrated->name, ")"));
+		}
+	}
+	if (const auto catalyst = static_cast<Catalyst>(craft.catalyst); catalyst != Catalyst::None)
+		AddItemInfoBoxString(FormatRuntime(_("Quality: +{:d}% ({:s} modifiers)"), ItemQuality(item), CatalystName(catalyst)));
+	if (craft.desecrated)
+		AddItemInfoBoxString(_("Desecrated"));
+	for (const std::string &line : AugmentSocketText(item))
+		AddItemInfoBoxString(line);
+}
+
 void PrintItemCorruption(const Item &item)
 {
 	if ((item.dwBuff & CF_POE2_CORRUPTED) == 0)
 		return;
+	if (const std::string enchant = CorruptionEnchantText(item); !enchant.empty())
+		AddItemInfoBoxString(FormatRuntime(_("enchant: {:s}"), enchant));
 	const int kind = static_cast<int>((item.dwBuff & CF_POE2_CORRUPT_IMPLICIT) >> 14);
 	const ItemPower power = CorruptionImplicitPower(kind);
 	switch (power.type) {
@@ -5498,7 +5661,7 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
-	if (item._iPoe2Mods[0].family != 0) {
+	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
 		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
 			for (const std::string &line : ItemModText(mod))
 				AddItemInfoBoxString(line);
@@ -5516,6 +5679,7 @@ void PrintItemDetails(const Item &item)
 			AddItemInfoBoxString(PrintItemPowerWithTier(item._iSufPower, item, item._iSufTier));
 		}
 	}
+	PrintItemCraftState(item);
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && gbIsPoe2) {
 		// POE2 Mashup: a unique's powers are listed in its tooltip, not in a separate window.
 		for (const std::string &line : Poe2UniqueText(item))
@@ -5812,6 +5976,20 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 	case IMISC_ORB_DIVINE:
 	case IMISC_ORB_VAAL:
 	case IMISC_ORB_BAUBLE:
+	case IMISC_ORB_CHANCE:
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_WHETSTONE:
+	case IMISC_ORB_ETCHER:
+	case IMISC_ORB_SCRAP:
+	case IMISC_ORB_GREATER_EXALTED:
+	case IMISC_ORB_PERFECT_EXALTED:
+	case IMISC_ORB_GREATER_CHAOS:
+	case IMISC_ORB_PERFECT_CHAOS:
+	case IMISC_ORB_ARTIFICER:
+	case IMISC_ORB_DESECRATE:
+	case IMISC_ORB_CATALYST:
+	case IMISC_ESSENCE:
+	case IMISC_AUGMENT:
 		player._pOilType = mid;
 		if (&player != MyPlayer) {
 			return;
@@ -6432,7 +6610,7 @@ bool ApplyOilToItem(Item &item, Player &player)
 	int r;
 
 	if (const CurrencyOrb orb = CurrencyOrbForMiscId(player._pOilType); orb != CurrencyOrb::None)
-		return ApplyCurrencyOrb(orb, player, item);
+		return ApplyCurrencyOrb(orb, player, item, player.poe2.currencyVariant);
 
 	if (item._iClass == ICLASS_MISC) {
 		return false;

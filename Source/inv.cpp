@@ -41,6 +41,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/hud_globes.hpp"
@@ -2377,6 +2378,14 @@ bool UseInvItem(int cii)
 			EventPlrMsg(_("Charms go off on their own while they're in your belt."), UiFlags::ColorWhite);
 		return true;
 	}
+
+	if (item->_iMiscId == IMISC_OMEN) {
+		if (&player == MyPlayer)
+			EventPlrMsg(_("Omens work from your inventory: the next matching craft uses it up."), UiFlags::ColorWhite);
+		return true;
+	}
+	// POE2 Mashup: remember which essence, augment or catalyst is going on the cursor.
+	player.poe2.currencyVariant = static_cast<uint8_t>((item->dwBuff & CF_POE2_VARIANT) >> 16);
 
 	const int idata = ItemCAnimTbl[item->_iCurs];
 	if (item->_iMiscId == IMISC_BOOK)

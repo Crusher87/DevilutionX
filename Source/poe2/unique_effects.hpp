@@ -85,7 +85,8 @@ bool UniqueSlowSkipsWalkTick(Player &player);
 void OnMonsterKilled(const Player &player, const Monster &monster);
 void OnMinionDied(Player &owner);
 /** @brief The owner's minions' damage, in percent. */
-[[nodiscard]] int UniqueMinionDamagePercent(const Player &owner);
+/** @param minionLowLife Whether the minion is below half life. */
+[[nodiscard]] int UniqueMinionDamagePercent(const Player &owner, bool minionLowLife = false);
 /** @brief The owner's minions' life, in percent. */
 [[nodiscard]] int UniqueMinionLifePercent(const Player &owner);
 
@@ -115,6 +116,8 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 
 /** @brief Life recovery after the rules, in percent. */
 [[nodiscard]] int LifeRecoveryPercent(const Player &player, bool fromFlask);
+/** @brief Percent of mana recovery left after uniques and desecrated modifiers lessen it. */
+[[nodiscard]] int ManaRecoveryPercent(const Player &player);
 /** @brief Life recovered also recovers some energy shield. */
 void OnLifeRecovered(Player &player, int32_t raw);
 [[nodiscard]] bool IsRecoveryLocked(const Player &player);

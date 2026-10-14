@@ -337,6 +337,8 @@ struct Poe2PlayerData {
 	uint8_t guardTicks = 0;
 	/** @brief Game ticks before another charm can go off (not saved). */
 	uint8_t charmCooldown = 0;
+	/** @brief Which essence, augment or catalyst is on the cursor waiting to be used (not saved). */
+	uint8_t currencyVariant = 0;
 	/** @brief Game ticks left of the fire, lightning and magic resistance from Ruby, Topaz and Amethyst charms (not saved). */
 	std::array<uint8_t, 3> resistCharmTicks {};
 	/** @brief Game ticks left of stun immunity from a Stone Charm (not saved). */
@@ -355,6 +357,7 @@ struct Poe2PlayerData {
 		flaskCharges.fill(MaxFlaskCharges);
 		lifeFlaskRaw = 0;
 		lifeFlaskTicks = 0;
+		currencyVariant = 0;
 		manaFlaskRaw = 0;
 		manaFlaskTicks = 0;
 		skillSlots.fill({});

@@ -29,6 +29,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/belt_uniques.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
@@ -509,6 +510,37 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		if (std::find(seenNames.begin(), seenNames.end(), data.iName) != seenNames.end())
 			continue;
 
+		// Essences, omens, augments and catalysts are listed one kind at a time below.
+		if (IsAnyOf(data.iMiscId, IMISC_ESSENCE, IMISC_OMEN, IMISC_AUGMENT, IMISC_ORB_CATALYST)) {
+			Item probe;
+			InitializeItem(probe, static_cast<_item_indexes>(i));
+			const auto addVariant = [&](uint8_t variant) {
+				SetCraftingItemVariant(probe, variant);
+				FinishCraftingItem(probe);
+				catalog.push_back(SpawnerEntry { .name = std::string(probe._iIName), .detail = std::string(_("Currency")), .category = SpawnerCategory::Orbs, .baseIndex = static_cast<_item_indexes>(i), .cursor = data.iCurs, .variant = variant });
+			};
+			switch (data.iMiscId) {
+			case IMISC_ESSENCE:
+				for (uint8_t kind = 1; kind < static_cast<uint8_t>(EssenceKind::Count); kind++) {
+					for (uint8_t tier = 0; tier < static_cast<uint8_t>(EssenceTier::Count); tier++)
+						addVariant(EssenceVariant(static_cast<EssenceKind>(kind), static_cast<EssenceTier>(tier)));
+				}
+				break;
+			case IMISC_OMEN:
+				for (uint8_t omen = 1; omen < static_cast<uint8_t>(OmenId::Count); omen++)
+					addVariant(omen);
+				break;
+			case IMISC_AUGMENT:
+				for (uint8_t augment = 1; augment < static_cast<uint8_t>(AugmentId::Count); augment++)
+					addVariant(augment);
+				break;
+			default:
+				for (uint8_t catalyst = 1; catalyst < static_cast<uint8_t>(Catalyst::Count); catalyst++)
+					addVariant(catalyst);
+				break;
+			}
+			continue;
+		}
 		SpawnerEntry entry { .name = std::string(data.iName), .detail = {}, .category = SpawnerCategory::Misc, .baseIndex = static_cast<_item_indexes>(i), .uniqueId = -1, .cursor = data.iCurs };
 		const SkillSlot skill = SkillForGemData(data);
 		if (!skill.isEmpty()) {
@@ -614,6 +646,15 @@ std::vector<size_t> FilterItemSpawnerCatalog(const std::vector<SpawnerEntry> &ca
 
 bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_quality quality, int level, uint32_t seed, Item &item)
 {
+	if (entry.variant != 0) {
+		InitializeItem(item, entry.baseIndex);
+		item._iSeed = static_cast<int32_t>(seed >> 1);
+		item.dwBuff |= CF_POE2;
+		SetCraftingItemVariant(item, entry.variant);
+		FinishCraftingItem(item);
+		SetupItem(item);
+		return !item.isEmpty();
+	}
 	if (entry.beltUnique != 0) {
 		InitializeItem(item, entry.baseIndex);
 		item._iSeed = static_cast<int32_t>(seed >> 1);

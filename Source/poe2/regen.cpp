@@ -46,7 +46,7 @@ void ApplyRegen(Player &player)
 		player.poe2.lifeRegenRemainder = 0;
 	}
 
-	const int manaMultiplier = std::max(100 + player.poe2.manaRegenBonus, 0);
+	const int manaMultiplier = std::max(100 + player.poe2.manaRegenBonus, 0) * ManaRecoveryPercent(player) / 100;
 	if (!HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana) && player._pMana < player._pMaxMana && player._pMaxMana.raw() > 0 && !IsRecoveryLocked(player)) {
 		constexpr int64_t Divisor = 100 * 100 * TicksPerSecond;
 		const int64_t total = static_cast<int64_t>(player._pMaxMana.raw()) * BaseManaRegenPercent * manaMultiplier + player.poe2.manaRegenRemainder;

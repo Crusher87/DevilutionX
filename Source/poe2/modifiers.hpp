@@ -182,6 +182,41 @@ int UnidentifiedTier(uint32_t seed, int itemLevel);
  */
 std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier = 1);
 
+enum class ModSide : uint8_t {
+	Any,
+	Prefix,
+	Suffix,
+};
+
+/** @brief How an added modifier's kind (life, defence, damage...) relates to the item's others, for omens. */
+enum class ModTagRule : uint8_t {
+	Any,
+	Shared,
+	NotShared,
+};
+
+/** @brief Limits on a modifier that crafting adds. */
+struct ModRollFilter {
+	ModSide side = ModSide::Any;
+	/** @brief The lowest item level the modifier's tier may need: the floor of Greater and Perfect orbs. */
+	int minModLevel = 0;
+	/** @brief Only this family (index plus 1), for essences; 0 for any. */
+	uint8_t family = 0;
+	ModTagRule tags = ModTagRule::Any;
+};
+
+/**
+ * @brief Picks one more modifier for an item that has these, like an Exalted Orb; its values are left at 0.
+ * @param seed Seeds the pick, without touching the game's random number generator.
+ */
+std::optional<Poe2ItemMod> RollAddedMod(ModSlot slot, uint8_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &existing, int perSide, uint32_t seed, const ModRollFilter &filter);
+/** @brief Rolls the values of a modifier's tier from a seed of its own. */
+std::array<int16_t, 2> RollModValues(uint8_t family, uint8_t tier, uint32_t valueSeed);
+/** @brief The item level a modifier's tier needs; 0 if there is no such tier. */
+int ModTierItemLevel(uint8_t family, uint8_t tier);
+/** @brief Whether two modifiers are of the same kind (life, defence, damage...). */
+bool ModsShareTag(const Poe2ItemMod &a, const Poe2ItemMod &b);
+
 /** @brief The number of modifiers a natural rare rolls: 4, 5 or 6, weighted 8:3:1. */
 int RareModCount(uint32_t seed);
 /** @brief The number of modifiers a magic item rolls: 1 or 2. */

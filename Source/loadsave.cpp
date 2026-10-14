@@ -37,6 +37,7 @@
 #include "mpq/mpq_common.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/craft_state.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -275,21 +276,28 @@ struct LevelConversionData {
 
 [[nodiscard]] bool LoadItemData(LoadHelper &file, Item &item)
 {
+	// POE2 Mashup: crafting state lives in the alignment bytes, which older saves leave at zero.
+	std::array<uint8_t, CraftStateSaveSize> craftBytes {};
+	size_t craftRead = 0;
+	const auto readCraft = [&](size_t size) {
+		file.NextBytes(&craftBytes[craftRead], size);
+		craftRead += size;
+	};
 	item._iSeed = file.NextLE<uint32_t>();
 	item._iCreateInfo = file.NextLE<uint16_t>();
-	file.Skip(2); // Alignment
+	readCraft(2); // Alignment
 	item._itype = static_cast<ItemType>(file.NextLE<uint32_t>());
 	item.position.x = file.NextLE<int32_t>();
 	item.position.y = file.NextLE<int32_t>();
 	item._iAnimFlag = file.NextBool32();
-	file.Skip(4); // Skip pointer _iAnimData
+	readCraft(4); // Skip pointer _iAnimData
 	item.AnimInfo = {};
 	item.AnimInfo.numberOfFrames = file.NextLENarrow<int32_t, int8_t>();
 	item.AnimInfo.currentFrame = file.NextLENarrow<int32_t, int8_t>(-1);
 	file.Skip(8); // Skip _iAnimWidth and _iAnimWidth2
-	file.Skip(4); // Unused since 1.02
+	readCraft(4); // Unused since 1.02
 	item.selectionRegion = static_cast<SelectionRegion>(file.NextLE<uint8_t>());
-	file.Skip(3); // Alignment
+	readCraft(3); // Alignment
 	item._iPostDraw = file.NextBool32();
 	item._iIdentified = file.NextBool32();
 	item._iMagical = static_cast<item_quality>(file.NextLE<int8_t>());
@@ -299,7 +307,7 @@ struct LevelConversionData {
 	TerminateUtf8(item._iIName, ItemNameLength);
 	item._iLoc = static_cast<item_equip_type>(file.NextLE<int8_t>());
 	item._iClass = static_cast<item_class>(file.NextLE<uint8_t>());
-	file.Skip(1); // Alignment
+	readCraft(1); // Alignment
 	item._iCurs = file.NextLE<int32_t>();
 	item._ivalue = file.NextLE<int32_t>();
 	item._iIvalue = file.NextLE<int32_t>();
@@ -330,7 +338,7 @@ struct LevelConversionData {
 	item._iPLLight = file.NextLE<int32_t>();
 	item._iSplLvlAdd = file.NextLE<int8_t>();
 	item._iRequest = file.NextBool8();
-	file.Skip(2); // Alignment
+	readCraft(2); // Alignment
 
 	const auto uniqueMappingId = file.NextLE<int32_t>();
 	if (item._iMagical == ITEM_QUALITY_UNIQUE) {
@@ -352,7 +360,7 @@ struct LevelConversionData {
 	item._iPLEnAc = file.NextLE<int32_t>();
 	item._iPrePower = static_cast<item_effect_type>(file.NextLE<int8_t>());
 	item._iSufPower = static_cast<item_effect_type>(file.NextLE<int8_t>());
-	file.Skip(2); // Alignment
+	readCraft(2); // Alignment
 	item._iVAdd1 = file.NextLE<int32_t>();
 	item._iVMult1 = file.NextLE<int32_t>();
 	item._iVAdd2 = file.NextLE<int32_t>();
@@ -360,7 +368,7 @@ struct LevelConversionData {
 	item._iMinStr = file.NextLE<int8_t>();
 	item._iMinMag = file.NextLE<uint8_t>();
 	item._iMinDex = file.NextLE<int8_t>();
-	file.Skip(1); // Alignment
+	readCraft(1); // Alignment
 	item._iStatFlag = file.NextBool32();
 
 	auto itemMappingId = file.NextLE<int32_t>();
@@ -383,6 +391,7 @@ struct LevelConversionData {
 	else
 		item._iDamAcFlags = ItemSpecialEffectHf::None;
 	UpdateHellfireFlag(item, item._iIName);
+	item._iPoe2Craft = (item.dwBuff & CF_POE2) != 0 ? UnpackCraftState(craftBytes) : Poe2Craft {};
 	RestoreRareItemPowers(item);
 	FinishFlask(item);
 
@@ -1110,7 +1119,7 @@ void LoadMatchingItems(LoadHelper &file, const Player &player, const int n, Item
 			// game's item generation logic before attempting to use it for validation
 			if ((heroItem.dwBuff & CF_HELLFIRE) != (unpackedItem.dwBuff & CF_HELLFIRE)) {
 				unpackedItem = {};
-				RecreateItem(player, unpackedItem, heroItem.IDidx, heroItem._iCreateInfo, heroItem._iSeed, heroItem._ivalue, heroItem.dwBuff);
+				RecreateItem(player, unpackedItem, heroItem.IDidx, heroItem._iCreateInfo, heroItem._iSeed, heroItem._ivalue, heroItem.dwBuff, heroItem._iPoe2Craft);
 				unpackedItem._iIdentified = heroItem._iIdentified;
 				unpackedItem._iMaxDur = heroItem._iMaxDur;
 				unpackedItem._iDurability = ClampDurability(unpackedItem, heroItem._iDurability);
@@ -1180,23 +1189,30 @@ void SaveItem(SaveHelper &file, const Item &item)
 		iType = ItemType::None;
 	}
 
+	// POE2 Mashup: crafting state goes in the alignment bytes.
+	const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(item._iPoe2Craft);
+	size_t craftWritten = 0;
+	const auto writeCraft = [&](size_t size) {
+		file.WriteBytes(&craftBytes[craftWritten], size);
+		craftWritten += size;
+	};
 	file.WriteLE<uint32_t>(item._iSeed);
 	file.WriteLE<int16_t>(item._iCreateInfo);
-	file.Skip(2); // Alignment
+	writeCraft(2); // Alignment
 	file.WriteLE<int32_t>(static_cast<int32_t>(iType));
 	file.WriteLE<int32_t>(item.position.x);
 	file.WriteLE<int32_t>(item.position.y);
 	file.WriteLE<uint32_t>(item._iAnimFlag ? 1 : 0);
-	file.Skip(4); // Skip pointer _iAnimData
+	writeCraft(4); // Skip pointer _iAnimData
 	file.WriteLE<int32_t>(item.AnimInfo.numberOfFrames);
 	file.WriteLE<int32_t>(item.AnimInfo.currentFrame + 1);
 	// write _iAnimWidth for vanilla compatibility
 	file.WriteLE<int32_t>(ItemAnimWidth);
 	// write _iAnimWidth2 for vanilla compatibility
 	file.WriteLE<int32_t>(CalculateSpriteTileCenterX(ItemAnimWidth));
-	file.Skip<uint32_t>(); // _delFlag, unused since 1.02
+	writeCraft(4); // _delFlag, unused since 1.02
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(item.selectionRegion));
-	file.Skip(3); // Alignment
+	writeCraft(3); // Alignment
 	file.WriteLE<uint32_t>(item._iPostDraw ? 1 : 0);
 	file.WriteLE<uint32_t>(item._iIdentified ? 1 : 0);
 	file.WriteLE<int8_t>(item._iMagical);
@@ -1204,7 +1220,7 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteBytes(item._iIName, ItemNameLength);
 	file.WriteLE<int8_t>(item._iLoc);
 	file.WriteLE<uint8_t>(item._iClass);
-	file.Skip(1); // Alignment
+	writeCraft(1); // Alignment
 	file.WriteLE<int32_t>(item._iCurs);
 	file.WriteLE<int32_t>(item._ivalue);
 	file.WriteLE<int32_t>(item._iIvalue);
@@ -1235,7 +1251,7 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteLE<int32_t>(item._iPLLight);
 	file.WriteLE<int8_t>(item._iSplLvlAdd);
 	file.WriteLE<int8_t>(item._iRequest ? 1 : 0);
-	file.Skip(2); // Alignment
+	writeCraft(2); // Alignment
 	file.WriteLE<int32_t>(UniqueItems[item._iUid].mappingId);
 	file.WriteLE<int32_t>(item._iFMinDam);
 	file.WriteLE<int32_t>(item._iFMaxDam);
@@ -1244,7 +1260,7 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteLE<int32_t>(item._iPLEnAc);
 	file.WriteLE<int8_t>(item._iPrePower);
 	file.WriteLE<int8_t>(item._iSufPower);
-	file.Skip(2); // Alignment
+	writeCraft(2); // Alignment
 	file.WriteLE<int32_t>(item._iVAdd1);
 	file.WriteLE<int32_t>(item._iVMult1);
 	file.WriteLE<int32_t>(item._iVAdd2);
@@ -1252,7 +1268,7 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteLE<int8_t>(item._iMinStr);
 	file.WriteLE<uint8_t>(item._iMinMag);
 	file.WriteLE<int8_t>(item._iMinDex);
-	file.Skip(1); // Alignment
+	writeCraft(1); // Alignment
 	file.WriteLE<uint32_t>(item._iStatFlag ? 1 : 0);
 	file.WriteLE<int32_t>(idx);
 	file.WriteLE<uint32_t>(item.dwBuff);
@@ -2408,9 +2424,10 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 4 the passive tree, version 5 the supports socketed in each skill bar slot, version 6 the open map,
  * version 7 the rebuilt passive tree with two-byte node ids, version 8 the 12-socket Skills panel and the skill tray,
  * version 9 the fifth flask, version 10 each socketed gem's level, version 11 the Spirit skulls and version 12 the
- * reworked passive tree with the attribute picked on each "any Attribute" node.
+ * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
+ * version 14 their crafting state.
  */
-constexpr uint8_t Poe2HeroDataVersion = 13;
+constexpr uint8_t Poe2HeroDataVersion = 14;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2575,17 +2592,21 @@ uint8_t ReadPoe2HeroData(Player &player)
 	const uint8_t jewelCount = file.NextLE<uint8_t>();
 	// Rebuilding the jewels from their seeds mustn't change the game's random numbers.
 	const uint32_t rngState = GetLCGEngineState();
-	for (uint8_t i = 0; i < jewelCount && file.IsValid(SavedJewelSize); i++) {
+	const size_t jewelSize = SavedJewelSize + (version >= 14 ? CraftStateSaveSize : 0);
+	for (uint8_t i = 0; i < jewelCount && file.IsValid(jewelSize); i++) {
 		const uint8_t socket = file.NextLE<uint8_t>();
 		const auto idx = static_cast<_item_indexes>(file.NextLE<int16_t>());
 		const uint16_t createInfo = file.NextLE<uint16_t>();
 		const uint32_t seed = file.NextLE<uint32_t>();
 		const uint32_t dwBuff = file.NextLE<uint32_t>();
 		const bool identified = file.NextLE<uint8_t>() != 0;
+		std::array<uint8_t, CraftStateSaveSize> craftBytes {};
+		if (version >= 14)
+			file.NextBytes(craftBytes.data(), craftBytes.size());
 		if (socket >= MaxJewelSockets || idx < 0 || static_cast<size_t>(idx) >= AllItemsList.size() || AllItemsList[idx].iMiscId != IMISC_JEWEL)
 			continue;
 		Item &jewel = player.jewels[socket];
-		RecreateItem(player, jewel, idx, createInfo, seed, 0, dwBuff);
+		RecreateItem(player, jewel, idx, createInfo, seed, 0, dwBuff, UnpackCraftState(craftBytes));
 		jewel._iIdentified = identified;
 		jewel._iStatFlag = true;
 	}
@@ -2630,7 +2651,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			jewelCount++;
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * SavedJewelSize));
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2688,6 +2709,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		file.WriteLE<uint32_t>(jewel._iSeed);
 		file.WriteLE<uint32_t>(jewel.dwBuff);
 		file.WriteLE<uint8_t>(jewel._iIdentified ? 1 : 0);
+		// Version 14: its crafting state.
+		const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(jewel._iPoe2Craft);
+		file.WriteBytes(craftBytes.data(), craftBytes.size());
 	}
 }
 

@@ -176,13 +176,27 @@ CurrencyBand OrbCurrencyBand(item_misc_id miscId)
 	switch (miscId) {
 	case IMISC_ORB_REGAL:
 	case IMISC_ORB_ALCHEMY:
+	case IMISC_ORB_ETCHER:
+	case IMISC_ORB_ARTIFICER:
+	case IMISC_ORB_CATALYST:
+	case IMISC_AUGMENT:
+	case IMISC_ESSENCE:
 		return CurrencyBand::Uncommon;
 	case IMISC_ORB_EXALTED:
 	case IMISC_ORB_CHAOS:
 	case IMISC_ORB_VAAL:
+	case IMISC_ORB_CHANCE:
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_DESECRATE:
+	case IMISC_OMEN:
 		return CurrencyBand::Rare;
 	case IMISC_ORB_DIVINE:
+	case IMISC_ORB_GREATER_EXALTED:
+	case IMISC_ORB_GREATER_CHAOS:
 		return CurrencyBand::Premium;
+	case IMISC_ORB_PERFECT_EXALTED:
+	case IMISC_ORB_PERFECT_CHAOS:
+		return CurrencyBand::Chase;
 	default:
 		return CurrencyBand::Common;
 	}

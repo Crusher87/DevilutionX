@@ -687,3 +687,18 @@ poe2:vital_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Vital Amulet	Amule
 poe2:spirit_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Spirit Amulet	Amulet	13	0	0	0	0	0	0	0	0		AMULET	Null	false	2800
 poe2:keen_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Keen Amulet	Amulet	18	0	0	0	0	0	0	0	0		AMULET	Null	false	3500
 poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	22	0	0	0	0	0	0	0	0		AMULET	Null	false	4000
+	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Chance	Orb	9	0	0	0	0	0	0	0	0		ORB_CHANCE	Null	true	1500
+	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Annulment	Orb	27	0	0	0	0	0	0	0	0		ORB_ANNUL	Null	true	4000
+	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Blacksmith's Whetstone	Whetstone	1	0	0	0	0	0	0	0	0		ORB_WHETSTONE	Null	true	200
+	1	Misc	Unequippable	OIL	Misc	NONE	Arcanist's Etcher	Etcher	8	0	0	0	0	0	0	0	0		ORB_ETCHER	Null	true	400
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Armourer's Scrap	Scrap	1	0	0	0	0	0	0	0	0		ORB_SCRAP	Null	true	200
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Greater Exalted Orb	Orb	55	0	0	0	0	0	0	0	0		ORB_GREATER_EXALTED	Null	true	12000
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Perfect Exalted Orb	Orb	58	0	0	0	0	0	0	0	0		ORB_PERFECT_EXALTED	Null	true	30000
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Greater Chaos Orb	Orb	55	0	0	0	0	0	0	0	0		ORB_GREATER_CHAOS	Null	true	9000
+	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Perfect Chaos Orb	Orb	58	0	0	0	0	0	0	0	0		ORB_PERFECT_CHAOS	Null	true	25000
+	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Artificer's Orb	Orb	12	0	0	0	0	0	0	0	0		ORB_ARTIFICER	Null	true	2000
+	1	Misc	Unequippable	BRAIN	Misc	NONE	Ancient Bone	Bone	19	0	0	0	0	0	0	0	0		ORB_DESECRATE	Null	true	3000
+	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Catalyst	Catalyst	27	0	0	0	0	0	0	0	0		ORB_CATALYST	Null	true	1500
+	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Essence	Essence	15	0	0	0	0	0	0	0	0		ESSENCE	Null	true	1200
+	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Omen	Omen	31	0	0	0	0	0	0	0	0		OMEN	Null	true	5000
+	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Rune	Augment	8	0	0	0	0	0	0	0	0		AUGMENT	Null	true	1000

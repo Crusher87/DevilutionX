@@ -28,6 +28,9 @@ set(libdevilutionx_SRCS
   nthread.cpp
   pfile.cpp
   plrmsg.cpp
+  poe2/craft_state.cpp
+  poe2/crafting_items.cpp
+  poe2/desecration.cpp
   poe2/currency.cpp
   poe2/dodge_roll.cpp
   poe2/hud_globes.cpp
@@ -136,6 +139,7 @@ set(libdevilutionx_SRCS
   panels/partypanel.cpp
   panels/quest_log.cpp
   panels/item_spawner.cpp
+  panels/desecration_panel.cpp
   panels/gemcutting_panel.cpp
   panels/passive_tree_panel.cpp
   panels/skill_bar.cpp

@@ -5,6 +5,7 @@
 #include "engine/palette.h"
 #include "items.h"
 #include "poe2/charms.hpp"
+#include "poe2/currency.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
@@ -32,7 +33,7 @@ bool IsSupportGem(const Item &item)
 
 bool IsCurrency(const Item &item)
 {
-	if (item._iMiscId >= IMISC_ORB_TRANSMUTE && item._iMiscId <= IMISC_ORB_VAAL)
+	if (IsCurrencyMiscId(item._iMiscId))
 		return true;
 	if (item._iMiscId > IMISC_OILFIRST && item._iMiscId < IMISC_OILLAST)
 		return true;

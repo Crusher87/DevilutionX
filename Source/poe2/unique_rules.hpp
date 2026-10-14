@@ -121,6 +121,26 @@ enum class UniqueRule : uint8_t {
 	HeavyArmourSlow,
 	ResourceSpentDamage,
 	ResourceLock,
+	/** More damage against rare and unique monsters (Hunter's Talisman, Predator's Mark). */
+	DamageVsRareUnique,
+	LessDamageVsNormal,
+	/** Less damage taken from hits (Guardian's Talisman). */
+	LessHitDamage,
+	// Desecrated modifiers (poe2/desecration.hpp).
+	/** 1% more damage per this much percent of life missing. */
+	MissingLifeDamage,
+	/** Percent of hit damage taken from mana before life. */
+	HitDamageFromMana,
+	LessManaRecovery,
+	/** More critical hit chance on every third attack, and less on the others. */
+	ThirdHitCritChance,
+	OtherHitsLessCrit,
+	/** More damage against bleeding monsters while moving, and less while standing still. */
+	BleedMovingDamage,
+	BleedStationaryLess,
+	/** Minions deal more damage while below half life. */
+	MinionLowLifeDamage,
+	FullLifeLessHitDamage,
 	Count,
 };
 
