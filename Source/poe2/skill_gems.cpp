@@ -45,6 +45,30 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForAttack(WeaponSkill::EmberFusillade);
 	case IMISC_SKILLGEM_SPARK:
 		return SkillSlot::ForAttack(WeaponSkill::Spark);
+	case IMISC_SKILLGEM_ICEBOLT:
+		return SkillSlot::ForAttack(WeaponSkill::IceBolt);
+	case IMISC_SKILLGEM_FROSTNOVA:
+		return SkillSlot::ForAttack(WeaponSkill::FrostNova);
+	case IMISC_SKILLGEM_RIPOSTE:
+		return SkillSlot::ForAttack(WeaponSkill::Riposte);
+	case IMISC_SKILLGEM_SHADOWSTEP:
+		return SkillSlot::ForAttack(WeaponSkill::ShadowStep);
+	case IMISC_SKILLGEM_FRENZY:
+		return SkillSlot::ForAttack(WeaponSkill::Frenzy);
+	case IMISC_SKILLGEM_SMITE:
+		return SkillSlot::ForAttack(WeaponSkill::Smite);
+	case IMISC_SKILLGEM_FISTSOFTHUNDER:
+		return SkillSlot::ForAttack(WeaponSkill::FistsOfThunder);
+	case IMISC_SKILLGEM_RAPIDFIRE:
+		return SkillSlot::ForAttack(WeaponSkill::RapidFire);
+	case IMISC_SKILLGEM_SHIELDBASH:
+		return SkillSlot::ForAttack(WeaponSkill::ShieldBash);
+	case IMISC_SKILLGEM_AMPLIFYDAMAGE:
+		return SkillSlot::ForAttack(WeaponSkill::AmplifyDamage);
+	case IMISC_SPIRITGEM_HERALDFROST:
+		return SkillSlot::ForPersistent(PersistentSkill::HeraldOfFrost);
+	case IMISC_SPIRITGEM_SKELETALMAGES:
+		return SkillSlot::ForPersistent(PersistentSkill::SkeletalMages);
 	case IMISC_SPIRITGEM_HERALDASH:
 		return SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh);
 	case IMISC_SPIRITGEM_HERALDTHUNDER:

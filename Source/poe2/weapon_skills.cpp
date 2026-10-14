@@ -20,6 +20,7 @@
 #include "poe2/camera_shake.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/skill_resources.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -41,6 +42,78 @@ constexpr int EscapeShotTiles = 3;
 constexpr uint8_t DashSkillTimeoutTicks = 40;
 /** Battle Cry empowers melee hits for 8 seconds. */
 constexpr uint8_t BattleCryTicks = 8 * 20;
+/** Bolts Rapid Fire looses before its gem level adds more. */
+constexpr int RapidFireBolts = 6;
+constexpr int RapidFireShotTicks = 3;
+/** Frost Nova's shards fly this many ticks, about 4 tiles. */
+constexpr int FrostNovaShardTicks = 9;
+constexpr int FrostNovaShards = 16;
+/** Riposte and Shield Bash hit this hard before the gem curve. */
+constexpr int RiposteDamagePercent = 180;
+constexpr int ShieldBashDamagePercent = 120;
+constexpr int ShadowStepDamagePercent = 150;
+
+bool IsDagger(const Item &item)
+{
+	return item._itype == ItemType::Sword && (AllItemsList[item.IDidx].iItemId == UITYPE_DAGGER || AllItemsList[item.IDidx].iSName == "Dagger");
+}
+
+bool IsCrossbow(const Item &item)
+{
+	return item._itype == ItemType::Bow && AllItemsList[item.IDidx].iSName == "Crossbow";
+}
+
+/** @brief Ice Bolt's damage before the gem curve: like Firebolt's, from Magic and the gem level. */
+int IceBoltDamage(const Player &player, int gemLevel)
+{
+	return GenerateRnd(10) + (player._pMagic / 8) + gemLevel + 2;
+}
+
+/** @brief Fires a skill's ice shard, which deals cold (Magic) damage and so chills and freezes. */
+Missile *FireIceShard(const Player &player, WeaponSkill skill, Point from, Point target, int damagePercent)
+{
+	const int gemLevel = std::max(player.poe2.skillLevel(skill), 1);
+	Missile *shard = AddMissile(from, target, GetDirection(from, target), MissileID::BlueFlare, TARGET_MONSTERS, player, IceBoltDamage(player, gemLevel), gemLevel);
+	if (shard != nullptr)
+		shard->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(SkillSlot::ForAttack(skill), gemLevel) * damagePercent / 100);
+	return shard;
+}
+
+/** @brief The monster standing in front of the player, if any can be hit. */
+Monster *MonsterInFront(const Player &player)
+{
+	const Point position = player.position.tile + player._pdir;
+	Monster *monster = FindMonsterAtPosition(position);
+	if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position || monster->hasNoLife())
+		return nullptr;
+	return monster;
+}
+
+/** @brief Steps through the shadows to the tile behind the targeted monster. */
+bool ShadowStepBehind(Player &player)
+{
+	if (pcursmonst == -1)
+		return false;
+	const Monster &monster = Monsters[pcursmonst];
+	if (monster.hasNoLife() || player.position.tile.WalkingDistance(monster.position.tile) > 8)
+		return false;
+	const Direction through = GetDirection(player.position.tile, monster.position.tile);
+	std::optional<Point> destination;
+	for (const Direction dir : { through, Left(through), Right(through), Left(Left(through)), Right(Right(through)) }) {
+		const Point tile = monster.position.tile + dir;
+		if (InDungeonBounds(tile) && PosOkPlayer(player, tile)) {
+			destination = tile;
+			break;
+		}
+	}
+	if (!destination)
+		return false;
+	AddVisualEffect(player.position.tile, MissileGraphicID::Etherealize);
+	MovePlayerTo(player, *destination);
+	player._pdir = GetDirection(player.position.tile, monster.position.tile);
+	AddVisualEffect(player.position.tile, MissileGraphicID::BoneHit);
+	return true;
+}
 
 /** @brief The targeted monster's tile, else the cursor tile, else the tile in front of the player. */
 Point SkillTarget(const Player &player)
@@ -154,6 +227,15 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, index == 0 ? 3 : 0);
 		break;
 	}
+	case WeaponSkill::RapidFire: {
+		// Bolts fly dead straight, one after another, harder than Barrage's arrows but fewer.
+		Missile *bolt = AddMissile(tile, target, dir, MissileID::Arrow, TARGET_MONSTERS, player, ElementalArrowBaseDamage, 0);
+		if (bolt != nullptr)
+			bolt->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);
+		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 2);
+		break;
+	}
 	case WeaponSkill::EmberFusillade: {
 		// Embers spring up on alternating sides of the caster and all converge on the target.
 		const Direction side = index % 2 == 0 ? Left(Left(dir)) : Right(Right(dir));
@@ -248,6 +330,26 @@ std::string_view WeaponSkillName(WeaponSkill skill)
 		return _("Ember Fusillade");
 	case WeaponSkill::Spark:
 		return _("Spark");
+	case WeaponSkill::IceBolt:
+		return _("Ice Bolt");
+	case WeaponSkill::FrostNova:
+		return _("Frost Nova");
+	case WeaponSkill::Riposte:
+		return _("Riposte");
+	case WeaponSkill::ShadowStep:
+		return _("Shadow Step");
+	case WeaponSkill::Frenzy:
+		return _("Frenzy");
+	case WeaponSkill::Smite:
+		return _("Smite");
+	case WeaponSkill::FistsOfThunder:
+		return _("Fists of Thunder");
+	case WeaponSkill::RapidFire:
+		return _("Rapid Fire");
+	case WeaponSkill::ShieldBash:
+		return _("Shield Bash");
+	case WeaponSkill::AmplifyDamage:
+		return _("Amplify Damage");
 	default:
 		return {};
 	}
@@ -282,6 +384,26 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 		return _("Hurls a fan of five firebolts");
 	case WeaponSkill::Spark:
 		return _("Sprays erratic lightning sparks");
+	case WeaponSkill::IceBolt:
+		return _("A shard of ice that chills and freezes");
+	case WeaponSkill::FrostNova:
+		return _("A ring of frost shards bursts out");
+	case WeaponSkill::Riposte:
+		return _("After a block: a crushing counter");
+	case WeaponSkill::ShadowStep:
+		return _("Step behind the target and stab");
+	case WeaponSkill::Frenzy:
+		return _("Fast strike, builds Frenzy charges");
+	case WeaponSkill::Smite:
+		return _("Crushing blow that breaks armour");
+	case WeaponSkill::FistsOfThunder:
+		return _("Fast strikes; every third: lightning");
+	case WeaponSkill::RapidFire:
+		return _("A rapid stream of crossbow bolts");
+	case WeaponSkill::ShieldBash:
+		return _("Bash, stun and knock back");
+	case WeaponSkill::AmplifyDamage:
+		return _("Curse: foes take more physical damage");
 	default:
 		return {};
 	}
@@ -316,6 +438,26 @@ int WeaponSkillManaCost(WeaponSkill skill)
 		return 16;
 	case WeaponSkill::Spark:
 		return 10;
+	case WeaponSkill::IceBolt:
+		return 7;
+	case WeaponSkill::FrostNova:
+		return 14;
+	case WeaponSkill::Riposte:
+		return 5;
+	case WeaponSkill::ShadowStep:
+		return 8;
+	case WeaponSkill::Frenzy:
+		return 5;
+	case WeaponSkill::Smite:
+		return 7;
+	case WeaponSkill::FistsOfThunder:
+		return 4;
+	case WeaponSkill::RapidFire:
+		return 8;
+	case WeaponSkill::ShieldBash:
+		return 6;
+	case WeaponSkill::AmplifyDamage:
+		return 8;
 	default:
 		return 0;
 	}
@@ -334,14 +476,15 @@ bool IsRangedWeaponSkill(WeaponSkill skill)
 
 bool WeaponSkillNeedsWeapon(WeaponSkill skill)
 {
-	return IsNoneOf(skill, WeaponSkill::None, WeaponSkill::BattleCry, WeaponSkill::EmberFusillade, WeaponSkill::Spark);
+	return IsNoneOf(skill, WeaponSkill::None, WeaponSkill::BattleCry, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt, WeaponSkill::FrostNova,
+	    WeaponSkill::AmplifyDamage);
 }
 
 bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 {
 	if (item.isEmpty())
 		return false;
-	if (skill == WeaponSkill::ShieldCharge)
+	if (IsAnyOf(skill, WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash))
 		return item._itype == ItemType::Shield;
 	if (item._iClass != ICLASS_WEAPON)
 		return false;
@@ -356,6 +499,18 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 	case WeaponSkill::LightningArrow:
 	case WeaponSkill::EscapeShot:
 		return item._itype == ItemType::Bow;
+	case WeaponSkill::Riposte:
+		return item._itype == ItemType::Sword && !IsDagger(item);
+	case WeaponSkill::ShadowStep:
+		return IsDagger(item);
+	case WeaponSkill::Frenzy:
+		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword);
+	case WeaponSkill::Smite:
+		return item._itype == ItemType::Mace;
+	case WeaponSkill::FistsOfThunder:
+		return item._itype == ItemType::Staff;
+	case WeaponSkill::RapidFire:
+		return IsCrossbow(item);
 	default:
 		return skill != WeaponSkill::None && WeaponSkillForItem(item) == skill;
 	}
@@ -388,7 +543,20 @@ std::string_view WeaponSkillWeapons(WeaponSkill skill)
 	case WeaponSkill::EscapeShot:
 		return _("bow");
 	case WeaponSkill::ShieldCharge:
+	case WeaponSkill::ShieldBash:
 		return _("shield");
+	case WeaponSkill::Riposte:
+		return _("sword");
+	case WeaponSkill::ShadowStep:
+		return _("dagger");
+	case WeaponSkill::Frenzy:
+		return _("axe or sword");
+	case WeaponSkill::Smite:
+		return _("mace");
+	case WeaponSkill::FistsOfThunder:
+		return _("staff");
+	case WeaponSkill::RapidFire:
+		return _("crossbow");
 	default:
 		return {};
 	}
@@ -429,6 +597,27 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		return StartSkillCast(player, skill, player_graphic::Fire);
 	case WeaponSkill::Spark:
 		return StartSkillCast(player, skill, player_graphic::Lightning);
+	case WeaponSkill::IceBolt:
+	case WeaponSkill::FrostNova:
+	case WeaponSkill::AmplifyDamage:
+		return StartSkillCast(player, skill, player_graphic::Magic);
+	case WeaponSkill::Riposte:
+		if (player.poe2.riposteTicks == 0) {
+			EventPlrMsg(_("Riposte is ready only just after you block."), UiFlags::ColorRed);
+			return false;
+		}
+		return StartSkillCast(player, skill, player_graphic::Attack);
+	case WeaponSkill::ShadowStep:
+		if (!CanStartSkill(player))
+			return false;
+		if (!ShadowStepBehind(player)) {
+			EventPlrMsg(_("Shadow Step needs a monster nearby to step behind."), UiFlags::ColorRed);
+			return false;
+		}
+		return StartSkillCast(player, skill, player_graphic::Attack);
+	case WeaponSkill::RapidFire:
+	case WeaponSkill::ShieldBash:
+		return StartSkillCast(player, skill, player_graphic::Attack);
 	default:
 		break;
 	}
@@ -511,6 +700,52 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 	case WeaponSkill::Spark:
 		// A tight cone of crawling sparks that pierce, unlike Charged Bolt's wide random spray.
 		FireFan(player, skill, FarAlong(player, target, 8), MissileID::ChargedBolt, 6, 0, std::max(player.poe2.skillLevel(skill), 1));
+		return false;
+	case WeaponSkill::IceBolt: {
+		const int extra = GemExtraProjectiles(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill));
+		const Direction dir = GetDirection(player.position.tile, target);
+		for (int i = 0; i <= extra; i++) {
+			const int offset = (i + 1) / 2 * (i % 2 == 0 ? 1 : -1);
+			FireIceShard(player, skill, player.position.tile, FarAlong(player, target, 8) + Displacement { Left(Left(dir)) } * offset, 100);
+		}
+		return false;
+	}
+	case WeaponSkill::FrostNova:
+		// Shards burst out all around and melt away after a few tiles.
+		for (int i = 0; i < FrostNovaShards; i++) {
+			constexpr int Ring[16][2] = { { 4, 0 }, { 4, 2 }, { 4, 4 }, { 2, 4 }, { 0, 4 }, { -2, 4 }, { -4, 4 }, { -4, 2 }, { -4, 0 }, { -4, -2 }, { -4, -4 }, { -2, -4 }, { 0, -4 }, { 2, -4 }, { 4, -4 }, { 4, -2 } };
+			Missile *shard = FireIceShard(player, skill, player.position.tile, player.position.tile + Displacement { Ring[i][0], Ring[i][1] }, 100);
+			if (shard != nullptr)
+				shard->duration = FrostNovaShardTicks;
+		}
+		return false;
+	case WeaponSkill::AmplifyDamage:
+		CastAmplifyDamage(player, target, player.poe2.skillLevel(skill));
+		return false;
+	case WeaponSkill::Riposte: {
+		player.poe2.riposteTicks = 0;
+		for (const Direction dir : { player._pdir, Left(player._pdir), Right(player._pdir) }) {
+			const Point tile = player.position.tile + dir;
+			Monster *monster = FindMonsterAtPosition(tile);
+			if (monster != nullptr && !CanTalkToMonst(*monster) && monster->position.old == tile && !monster->hasNoLife())
+				SkillHitMonster(player, *monster, dir == player._pdir ? RiposteDamagePercent : RiposteDamagePercent / 2);
+		}
+		return false;
+	}
+	case WeaponSkill::ShadowStep:
+		if (Monster *monster = MonsterInFront(player); monster != nullptr)
+			SkillHitMonster(player, *monster, ShadowStepDamagePercent);
+		return false;
+	case WeaponSkill::ShieldBash:
+		if (Monster *monster = MonsterInFront(player); monster != nullptr) {
+			if (SkillHitMonster(player, *monster, ShieldBashDamagePercent) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified) {
+				HeavyStunMonster(*monster);
+				M_GetKnockback(*monster, player.position.tile);
+			}
+		}
+		return false;
+	case WeaponSkill::RapidFire:
+		StartSkillVolley(player, skill, target, RapidFireBolts + GemExtraProjectiles(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill)));
 		return false;
 	case WeaponSkill::EscapeShot: {
 		// Arrows take their damage from the bow when they hit, like normal arrows.
@@ -597,7 +832,12 @@ void ProcessSkillVolley(Player &player)
 	FireVolleyShot(player, data.volleySkill, { data.volleyTargetX, data.volleyTargetY }, data.volleyShotsFired);
 	data.volleyShotsFired++;
 	data.volleyShotsLeft--;
-	data.volleyTicks = static_cast<uint8_t>((data.volleySkill == WeaponSkill::Barrage ? BarrageShotTicks : EmberShotTicks) - 1);
+	int ticks = EmberShotTicks;
+	if (data.volleySkill == WeaponSkill::Barrage)
+		ticks = BarrageShotTicks;
+	else if (data.volleySkill == WeaponSkill::RapidFire)
+		ticks = RapidFireShotTicks;
+	data.volleyTicks = static_cast<uint8_t>(ticks - 1);
 }
 
 void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
@@ -700,6 +940,64 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		// Heat gathers around the caster before the embers fly.
 		AddVisualEffect(tile, MissileGraphicID::Inferno, 0, 8);
 		break;
+	case WeaponSkill::IceBolt:
+		// Frost gathers in the caster's hand.
+		AddVisualEffect(tile + dir, MissileGraphicID::StoneCurseShatter, 0, 4);
+		PlaySfxLoc(SfxID::SpellStoneCurse, tile);
+		break;
+	case WeaponSkill::FrostNova:
+		// A ring of frost cracks the floor all around.
+		EffectRing(tile, 1, MissileGraphicID::StoneCurseShatter, 0);
+		EffectRing(tile, 2, MissileGraphicID::StoneCurseShatter, 3);
+		PlaySfxLoc(SfxID::SpellNova, tile);
+		if (mine)
+			ShakeCamera(ShakeStrength::Light, 5);
+		break;
+	case WeaponSkill::AmplifyDamage:
+		// A blood-red curse settles over the spot.
+		AddVisualEffect(target, MissileGraphicID::HolyBoltExplosion, 0, 6);
+		EffectRing(target, 1, MissileGraphicID::BloodHit, 1);
+		PlaySfxLoc(SfxID::SpellBloodStar, target);
+		break;
+	case WeaponSkill::Riposte:
+		// A flash of steel sweeping back across the arc.
+		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 0, 4);
+		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 1, 6);
+		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 2, 4);
+		PlaySfxLoc(SfxID::ItemSword, tile);
+		if (mine)
+			ShakeCamera(ShakeStrength::Light, 4);
+		break;
+	case WeaponSkill::ShadowStep:
+		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
+		AddVisualEffect(target, MissileGraphicID::MetalHit, 1, 4);
+		break;
+	case WeaponSkill::Frenzy:
+		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
+		AddVisualEffect(target, MissileGraphicID::MetalHit, 2, 3);
+		break;
+	case WeaponSkill::Smite:
+		// The blow lands like a falling hammer.
+		AddVisualEffect(target, MissileGraphicID::StoneCurseShatter, 0, 6);
+		AddVisualEffect(target, MissileGraphicID::HolyBoltExplosion, 1, 6);
+		PlaySfxLoc(SfxID::SpellStoneCurse, tile);
+		if (mine)
+			ShakeCamera(ShakeStrength::Medium, 6);
+		break;
+	case WeaponSkill::FistsOfThunder:
+		AddVisualEffect(target, MissileGraphicID::ThinLightning, 0, 4);
+		AddVisualEffect(target, MissileGraphicID::Lightning, 1);
+		break;
+	case WeaponSkill::RapidFire:
+		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 4);
+		break;
+	case WeaponSkill::ShieldBash:
+		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 0, 6);
+		AddVisualEffect(tile + dir, MissileGraphicID::BoneHit, 1);
+		PlaySfxLoc(SfxID::ItemShield, tile);
+		if (mine)
+			ShakeCamera(ShakeStrength::Medium, 5);
+		break;
 	case WeaponSkill::Spark:
 		// Lightning crackles from the caster's hands.
 		AddVisualEffect(tile + dir, MissileGraphicID::ThinLightning, 0, 8);
@@ -713,8 +1011,14 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 
 int8_t WeaponSkillSkippedFrames(const Player &player)
 {
-	const int8_t flurry = player.poe2.activeSkill == WeaponSkill::Flurry ? 3 : 0;
-	return flurry + SupportAttackSkippedFrames(player, player.poe2.activeSkill);
+	int8_t skillFrames = 0;
+	if (player.poe2.activeSkill == WeaponSkill::Flurry)
+		skillFrames = 3;
+	else if (IsAnyOf(player.poe2.activeSkill, WeaponSkill::Frenzy, WeaponSkill::FistsOfThunder))
+		skillFrames = 2;
+	// Each Frenzy charge makes every attack a little faster.
+	skillFrames = static_cast<int8_t>(skillFrames + player.poe2.frenzyCharges);
+	return static_cast<int8_t>(skillFrames + SupportAttackSkippedFrames(player, player.poe2.activeSkill));
 }
 
 int LightningArrowDamage(const Player &player)

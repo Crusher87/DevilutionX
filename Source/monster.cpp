@@ -1338,6 +1338,11 @@ bool MonsterRangedAttack(Monster &monster)
 			int multimissiles = 1;
 			if (missileType == MissileID::ChargedBolt)
 				multimissiles = 3;
+			// POE2 Mashup: a Skeletal Mage's fire is its owner's, so it flies past the other minions and only hits enemies.
+			if (monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
+				AddMissile(monster.position.tile, monster.enemyPosition, monster.direction, missileType, TARGET_MONSTERS, Players[monster.goalVar3], monster.var2, 0);
+				multimissiles = 0;
+			}
 			for (int mi = 0; mi < multimissiles; mi++) {
 				AddMissile(
 				    monster.position.tile,
@@ -3320,7 +3325,9 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	monster.goalVar3 = static_cast<int8_t>(ownerPlayerId);
 	const Player &player = Players[ownerPlayerId];
 	const int level = player.getCharacterLevel();
-	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100);
+	// Mages stay back and hurl fire, so they are frailer than the warriors.
+	const int lifePercent = monster.type().type == SkeletonMageMinionType ? 60 : 100;
+	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
 	monster.golemToHit = 40 + (2 * level) + (2 * gemLevel);
@@ -3333,7 +3340,7 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 /** @brief Whether a spawn message carries a Skeletal Warrior: a minion owner and level on a monster that isn't a golem. */
 bool IsSkeletonMinionSpawn(const Monster &monster, int16_t golemSpellLevel)
 {
-	return gbIsPoe2 && golemSpellLevel > 0 && monster.type().type == SkeletonMinionType;
+	return gbIsPoe2 && golemSpellLevel > 0 && IsAnyOf(monster.type().type, SkeletonMinionType, SkeletonMageMinionType);
 }
 
 bool PosOkMissile(Point position)
@@ -3495,9 +3502,11 @@ void InitLevelMonsters()
 std::expected<void, std::string> GetLevelMTypes()
 {
 	RETURN_IF_ERROR(AddMonsterType(MT_GOLEM, PLACE_SPECIAL));
-	// POE2 Mashup: Skeletal Warriors can be raised on every level.
-	if (gbIsPoe2)
+	// POE2 Mashup: Skeletal Warriors and Mages can be raised on every level.
+	if (gbIsPoe2) {
 		RETURN_IF_ERROR(AddMonsterType(SkeletonMinionType, PLACE_SPECIAL));
+		RETURN_IF_ERROR(AddMonsterType(SkeletonMageMinionType, PLACE_SPECIAL));
+	}
 	if (currlevel == 16) {
 		RETURN_IF_ERROR(AddMonsterType(MT_ADVOCATE, PLACE_SCATTER));
 		RETURN_IF_ERROR(AddMonsterType(MT_RBLACK, PLACE_SCATTER));
@@ -3828,8 +3837,10 @@ std::expected<void, std::string> InitMonsters()
 std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point startPosition)
 {
 	RETURN_IF_ERROR(AddMonsterType(MT_GOLEM, PLACE_SPECIAL));
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		RETURN_IF_ERROR(AddMonsterType(SkeletonMinionType, PLACE_SPECIAL));
+		RETURN_IF_ERROR(AddMonsterType(SkeletonMageMinionType, PLACE_SPECIAL));
+	}
 	if (setlevel)
 		for (int i = 0; i < ReservedMonsterSlotsForGolems; i++)
 			AddMonster(GolemHoldingCell, Direction::South, 0, false);
@@ -4285,7 +4296,7 @@ void GolumAi(Monster &golem)
 	if ((golem.flags & MFLAG_TARGETS_MONSTER) == 0)
 		UpdateEnemy(golem);
 
-	if (golem.mode == MonsterMode::MeleeAttack) {
+	if (IsAnyOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack)) {
 		return;
 	}
 
@@ -4294,6 +4305,13 @@ void GolumAi(Monster &golem)
 		const int mex = golem.position.tile.x - enemy.position.future.x;
 		const int mey = golem.position.tile.y - enemy.position.future.y;
 		golem.direction = GetDirection(golem.position.tile, enemy.position.tile);
+		// POE2 Mashup: Skeletal Mages keep their distance and hurl firebolts.
+		const int distance = std::max(std::abs(mex), std::abs(mey));
+		if (gbIsPoe2 && golem.type().type == SkeletonMageMinionType && distance >= 2 && distance <= 7 && LineClearMissile(golem.position.tile, enemy.position.tile)) {
+			golem.enemyPosition = enemy.position.tile;
+			StartRangedAttack(golem, MissileID::Firebolt, RandomIntBetween(golem.minDamage, golem.maxDamage) * 3 / 2);
+			return;
+		}
 		if (std::abs(mex) < 2 && std::abs(mey) < 2) {
 			golem.enemyPosition = enemy.position.tile;
 			if (enemy.activeForTicks == 0) {
@@ -4972,31 +4990,31 @@ void SpawnGolem(const Player &player, Point position, uint8_t spellLevel)
 	NetSendCmdSpawnMonster(position, Direction::South, 0, static_cast<uint16_t>(monsterIndex), seed, player.getId(), spellLevel);
 }
 
-size_t CountSkeletonMinions(const Player &player)
+size_t CountSkeletonMinions(const Player &player, _monster_id type)
 {
 	size_t count = 0;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == SkeletonMinionType && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
 			count++;
 	}
 	return count;
 }
 
-void KillSkeletonMinions(const Player &player)
+void KillSkeletonMinions(const Player &player, _monster_id type)
 {
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == SkeletonMinionType && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
 			KillGolem(monster);
 	}
 }
 
-bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel)
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type)
 {
 	if (gemLevel == 0 || ActiveMonsterCount >= MaxMonsters)
 		return false;
-	const size_t typeIndex = GetMonsterTypeIndex(SkeletonMinionType);
+	const size_t typeIndex = GetMonsterTypeIndex(type);
 	if (typeIndex >= LevelMonsterTypeCount)
 		return false;
 	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];

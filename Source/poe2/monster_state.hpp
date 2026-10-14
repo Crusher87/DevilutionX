@@ -40,6 +40,11 @@ struct Poe2MonsterState {
 	uint8_t heavyStunTicks = 0;
 	/** @brief Physical damage built up towards a heavy stun, as a raw Fixed26_6 value. */
 	int32_t stunBuildup = 0;
+	/** @brief Cursed with Amplify Damage: takes more physical damage; the curse's strength in percent. */
+	uint8_t amplifyTicks = 0;
+	uint8_t amplifyPercent = 0;
+	/** @brief Armour broken by Smite: takes more physical damage. */
+	uint8_t armourBreakTicks = 0;
 };
 
 } // namespace devilution

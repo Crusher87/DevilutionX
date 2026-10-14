@@ -217,6 +217,26 @@ SpellIcon AttackIcon(WeaponSkill skill)
 		return SpellIcon::BloodStar;
 	case WeaponSkill::Spark:
 		return SpellIcon::LightningWall;
+	case WeaponSkill::IceBolt:
+		return SpellIcon::StoneCurse;
+	case WeaponSkill::FrostNova:
+		return SpellIcon::Nova;
+	case WeaponSkill::Riposte:
+		return SpellIcon::ItemRepair;
+	case WeaponSkill::ShadowStep:
+		return SpellIcon::Invisibility;
+	case WeaponSkill::Frenzy:
+		return SpellIcon::BloodBoil;
+	case WeaponSkill::Smite:
+		return SpellIcon::HolyBolt;
+	case WeaponSkill::FistsOfThunder:
+		return SpellIcon::ChargedBolt;
+	case WeaponSkill::RapidFire:
+		return SpellIcon::Search;
+	case WeaponSkill::ShieldBash:
+		return SpellIcon::Telekinesis;
+	case WeaponSkill::AmplifyDamage:
+		return SpellIcon::Mana;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -235,6 +255,10 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::Golem;
 	case PersistentSkill::SkeletalWarriors:
 		return SpellIcon::BoneSpirit;
+	case PersistentSkill::HeraldOfFrost:
+		return SpellIcon::Infravision;
+	case PersistentSkill::SkeletalMages:
+		return SpellIcon::Resurrect;
 	default:
 		return SpellIcon::Empty;
 	}

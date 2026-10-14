@@ -53,6 +53,7 @@ set(tests
   poe2_spirit_test
   poe2_regen_test
   poe2_skill_gems_test
+  poe2_skill_resources_test
   poe2_support_gems_test
   poe2_telemetry_test
   poe2_uniques_test

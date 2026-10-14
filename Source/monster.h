@@ -589,10 +589,12 @@ void TalktoMonster(Player &player, Monster &monster);
 void SpawnGolem(const Player &player, Point position, uint8_t spellLevel);
 /** @brief POE2 Mashup: the monster raised by the Skeletal Warriors gem. */
 constexpr _monster_id SkeletonMinionType = MT_WSKELAX;
-size_t CountSkeletonMinions(const Player &player);
-void KillSkeletonMinions(const Player &player);
-/** @brief Raises a Skeletal Warrior for the player; false if the level has no room for it. */
-bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel);
+/** @brief POE2 Mashup: the monster raised by the Skeletal Mages gem; it hurls firebolts at range. */
+constexpr _monster_id SkeletonMageMinionType = MT_RSKELBW;
+size_t CountSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+void KillSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+/** @brief Raises a Skeletal Warrior (or Mage) for the player; false if the level has no room for it. */
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type = SkeletonMinionType);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

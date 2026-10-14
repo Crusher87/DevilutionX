@@ -14,6 +14,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/telemetry.hpp"
 #include "spells.h"
@@ -687,6 +688,13 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 	int percent = 100;
 	if (monster.poe2.exposureTicks > 0 && static_cast<uint8_t>(type) == monster.poe2.exposureElement)
 		percent += ExposurePercent * MapExposurePercent() / 100;
+	// Amplify Damage and Smite's armour break.
+	if (type == DamageType::Physical) {
+		if (monster.poe2.amplifyTicks > 0)
+			percent += monster.poe2.amplifyPercent;
+		if (monster.poe2.armourBreakTicks > 0)
+			percent += ArmourBreakDamagePercent;
+	}
 	// Waystones can give map monsters more elemental resistance.
 	if (IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic) && !monster.isPlayerMinion())
 		percent -= MapMonsterResistance();

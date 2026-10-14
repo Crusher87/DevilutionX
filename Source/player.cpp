@@ -58,6 +58,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
+#include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
@@ -618,6 +619,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	if (player.poe2.warcryTicks > 0)
 		dam += dam * BattleCryDamagePercent(player.poe2.skillLevel(WeaponSkill::BattleCry)) / 100;
 	dam = dam * SupportMeleeDamagePercent(player) / 100;
+	// POE2 Mashup: Rage and Frenzy charges.
+	if (gbIsPoe2)
+		dam = dam * ResourceAttackDamagePercent(player) / 100;
 	// POE2 Mashup: area skills deal less to the tiles beside the target.
 	dam = dam * damagePercent / 100;
 
@@ -740,6 +744,8 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		}
 		RedrawComponent(PanelDrawComponent::Health);
 	}
+	if (gbIsPoe2)
+		OnSkillMeleeHit(player);
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
 	} else {
@@ -748,6 +754,14 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		M_StartHit(monster, player, dam);
 	}
 	return true;
+}
+
+/** @brief POE2 Mashup: Fists of Thunder's lightning burst around the target, from the weapon's damage. */
+void FistsOfThunderBurst(Player &player, Point center)
+{
+	const int damage = (player._pIMinDam + player._pIMaxDam) / 2 * GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::FistsOfThunder), player.poe2.skillLevel(WeaponSkill::FistsOfThunder)) / 100;
+	SkillBurst(player, center, 1, DamageType::Lightning, Fixed26_6::fromInt(std::max(damage * 6 / 10, 1)), MissileGraphicID::BlueFlareExplosion2);
+	PlaySfxLoc(SfxID::SpellLightningHit, center);
 }
 
 bool PlrHitPlr(Player &attacker, Player &target)
@@ -872,6 +886,24 @@ bool DoAttack(Player &player)
 			// POE2 Mashup: Flurry strikes twice.
 			if (player.poe2.activeSkill == WeaponSkill::Flurry && !monster->hasNoLife() && PlrHitMonst(player, *monster))
 				didhit = true;
+			// POE2 Mashup: Frenzy builds charges, Smite breaks armour and Fists of Thunder builds Combo.
+			if (didhit) {
+				switch (player.poe2.activeSkill) {
+				case WeaponSkill::Frenzy:
+					GainFrenzyCharge(player);
+					break;
+				case WeaponSkill::Smite:
+					if (!monster->hasNoLife())
+						BreakMonsterArmour(*monster);
+					break;
+				case WeaponSkill::FistsOfThunder:
+					if (AddCombo(player) % FistsOfThunderBurstEvery == 0)
+						FistsOfThunderBurst(player, monster->position.tile);
+					break;
+				default:
+					break;
+				}
+			}
 		} else if (PlayerAtPosition(position) != nullptr && !player.friendlyMode) {
 			didhit = PlrHitPlr(player, *PlayerAtPosition(position));
 		} else {
@@ -2779,6 +2811,9 @@ void StartPlrBlock(Player &player, Direction dir)
 		return;
 	}
 
+	// POE2 Mashup: a block readies Riposte.
+	player.poe2.riposteTicks = RiposteTicks;
+
 	PlaySfxLoc(SfxID::ItemSword, player.position.tile);
 
 	int8_t skippedAnimationFrames = 0;
@@ -3079,6 +3114,7 @@ void RemovePlrMissiles(const Player &player)
 			KillGolem(*golem);
 		}
 		KillSkeletonMinions(player);
+		KillSkeletonMinions(player, SkeletonMageMinionType);
 	}
 
 	for (auto &missile : Missiles) {
@@ -3730,5 +3766,28 @@ bool TestPlayerDoGotHit(Player &player)
 	return DoGotHit(player);
 }
 #endif
+
+bool SkillHitMonster(Player &player, Monster &monster, int damagePercent)
+{
+	return PlrHitMonst(player, monster, false, damagePercent);
+}
+
+void MovePlayerTo(Player &player, Point destination)
+{
+	dPlayer[player.position.tile.x][player.position.tile.y] = 0;
+	MarkWalkabilityChanged();
+	PlrClrTrans(player.position.tile);
+	player.position.tile = destination;
+	player.position.future = destination;
+	player.position.old = destination;
+	PlrDoTrans(destination);
+	player.occupyTile(destination, false);
+	if (leveltype != DTYPE_TOWN) {
+		ChangeLightXY(player.lightId, destination);
+		ChangeVisionXY(player.getId(), destination);
+	}
+	if (&player == MyPlayer)
+		ViewPosition = destination;
+}
 
 } // namespace devilution

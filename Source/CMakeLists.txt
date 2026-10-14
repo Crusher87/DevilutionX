@@ -782,6 +782,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/passive_tree.cpp
   poe2/regen.cpp
   poe2/skill_gems.cpp
+  poe2/skill_resources.cpp
   poe2/spirit.cpp
   poe2/support_gems.cpp
   poe2/telemetry.cpp

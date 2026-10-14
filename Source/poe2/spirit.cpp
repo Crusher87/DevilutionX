@@ -32,6 +32,7 @@ struct HeraldTrigger {
 	int32_t lifeRaw;
 	bool ash;
 	bool thunder;
+	bool frost;
 };
 
 std::vector<HeraldTrigger> PendingHeralds;
@@ -54,7 +55,8 @@ bool CanHeraldHit(const Monster &monster)
 void HeraldHit(Monster &monster, DamageType damageType, Fixed26_6 damage)
 {
 	Player &player = *MyPlayer;
-	TelemetryNoteDamageSource(damageType == DamageType::Fire ? "Herald of Ash" : "Herald of Thunder");
+	TelemetryNoteDamageSource(damageType == DamageType::Fire ? "Herald of Ash" : damageType == DamageType::Lightning ? "Herald of Thunder"
+	                                                                                                                 : "Herald of Frost");
 	ApplyMonsterDamage(damageType, monster, damage);
 	monster.tag(player);
 	TryInflictAilment(monster, player, damageType, damage);
@@ -70,6 +72,17 @@ void ExplodeAsh(const HeraldTrigger &trigger)
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= HeraldOfAshRadius)
 			HeraldHit(monster, DamageType::Fire, damage);
+	}
+}
+
+void ShatterFrost(const HeraldTrigger &trigger)
+{
+	AddVisualEffect(trigger.position, MissileGraphicID::BlueFlareExplosion);
+	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfFrostPercent * MapAuraPercent() / 10000));
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= HeraldOfFrostRadius)
+			HeraldHit(monster, DamageType::Magic, damage);
 	}
 }
 
@@ -110,6 +123,10 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Summon Golem");
 	case PersistentSkill::SkeletalWarriors:
 		return _("Skeletal Warriors");
+	case PersistentSkill::HeraldOfFrost:
+		return _("Herald of Frost");
+	case PersistentSkill::SkeletalMages:
+		return _("Skeletal Mages");
 	default:
 		return {};
 	}
@@ -128,6 +145,10 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("A golem fights for you and returns when it falls");
 	case PersistentSkill::SkeletalWarriors:
 		return _("Skeletons fight for you and rise again when they fall");
+	case PersistentSkill::HeraldOfFrost:
+		return _("Chilled or frozen enemies you kill shatter, freezing those nearby");
+	case PersistentSkill::SkeletalMages:
+		return _("Skeletal mages hurl fire from range and rise again when they fall");
 	default:
 		return {};
 	}
@@ -138,6 +159,7 @@ int SpiritReservation(PersistentSkill skill)
 	switch (skill) {
 	case PersistentSkill::HeraldOfAsh:
 	case PersistentSkill::HeraldOfThunder:
+	case PersistentSkill::HeraldOfFrost:
 		return 30;
 	case PersistentSkill::PurityOfElements:
 		return 60;
@@ -145,6 +167,8 @@ int SpiritReservation(PersistentSkill skill)
 		return 40;
 	case PersistentSkill::SkeletalWarriors:
 		return 30;
+	case PersistentSkill::SkeletalMages:
+		return 40;
 	default:
 		return 0;
 	}
@@ -311,9 +335,10 @@ void QueueHeraldTriggers(const Player &player, const Monster &monster)
 		return;
 	const bool ash = IsPersistentSkillActive(player, PersistentSkill::HeraldOfAsh);
 	const bool thunder = IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder);
-	if (!ash && !thunder)
+	const bool frost = (monster.poe2.chillTicks > 0 || monster.poe2.freezeTicks > 0) && IsPersistentSkillActive(player, PersistentSkill::HeraldOfFrost);
+	if (!ash && !thunder && !frost)
 		return;
-	PendingHeralds.push_back({ monster.position.tile, monster.maxHitPoints.raw(), ash, thunder });
+	PendingHeralds.push_back({ monster.position.tile, monster.maxHitPoints.raw(), ash, thunder, frost });
 }
 
 void ProcessHeralds()
@@ -328,6 +353,8 @@ void ProcessHeralds()
 			ExplodeAsh(trigger);
 		if (trigger.thunder)
 			ReleaseThunder(trigger);
+		if (trigger.frost)
+			ShatterFrost(trigger);
 	}
 }
 
@@ -339,6 +366,11 @@ void ClearHeralds()
 int SkeletalWarriorCount(int characterLevel)
 {
 	return std::min(2 + (characterLevel / 10), 4);
+}
+
+int SkeletalMageCount(int characterLevel)
+{
+	return std::min(1 + (characterLevel / 20), 3);
 }
 
 namespace {
@@ -382,29 +414,29 @@ void KeepGolemAlive(Player &player)
 	player.poe2.golemCooldown = GolemReviveTicks;
 }
 
-void KeepSkeletonsAlive(Player &player)
+template <typename Cooldown>
+void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type, int count, Cooldown &cooldown)
 {
-	if (!IsPersistentSkillActive(player, PersistentSkill::SkeletalWarriors)) {
-		player.poe2.skeletonCooldown = 0;
-		if (CountSkeletonMinions(player) > 0)
-			KillSkeletonMinions(player);
+	if (!IsPersistentSkillActive(player, skill)) {
+		cooldown = 0;
+		if (CountSkeletonMinions(player, type) > 0)
+			KillSkeletonMinions(player, type);
 		return;
 	}
-	const size_t wanted = static_cast<size_t>(SkeletalWarriorCount(player.getCharacterLevel()));
-	if (!CanRaiseMinions(player) || CountSkeletonMinions(player) >= wanted) {
-		player.poe2.skeletonCooldown = SkeletonReviveTicks / 4;
+	if (!CanRaiseMinions(player) || CountSkeletonMinions(player, type) >= static_cast<size_t>(count)) {
+		cooldown = SkeletonReviveTicks / 4;
 		return;
 	}
-	if (player.poe2.skeletonCooldown > 0) {
-		player.poe2.skeletonCooldown--;
+	if (cooldown > 0) {
+		cooldown--;
 		return;
 	}
 	const std::optional<Point> position = FindMinionSpawnPosition(player);
 	if (!position)
 		return;
-	if (SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(PersistentSkill::SkeletalWarriors), 1))))
+	if (SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(skill), 1)), type))
 		AddVisualEffect(*position, MissileGraphicID::Resurrect);
-	player.poe2.skeletonCooldown = SkeletonReviveTicks;
+	cooldown = SkeletonReviveTicks;
 }
 
 } // namespace
@@ -414,7 +446,8 @@ void ProcessPersistentSkills(Player &player)
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
 		return;
 	KeepGolemAlive(player);
-	KeepSkeletonsAlive(player);
+	KeepSkeletonsAlive(player, PersistentSkill::SkeletalWarriors, SkeletonMinionType, SkeletalWarriorCount(player.getCharacterLevel()), player.poe2.skeletonCooldown);
+	KeepSkeletonsAlive(player, PersistentSkill::SkeletalMages, SkeletonMageMinionType, SkeletalMageCount(player.getCharacterLevel()), player.poe2.mageCooldown);
 }
 
 } // namespace devilution

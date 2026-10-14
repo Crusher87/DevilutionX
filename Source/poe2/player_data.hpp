@@ -53,7 +53,27 @@ enum class WeaponSkill : uint8_t {
 	EmberFusillade,
 	/** No weapon needed: a spray of erratic lightning sparks. */
 	Spark,
-	Last = Spark,
+	/** No weapon needed: a shard of ice that chills and freezes. */
+	IceBolt,
+	/** No weapon needed: a ring of frost bursting outward. */
+	FrostNova,
+	/** Swords: a counter-attack, only ready after you block. */
+	Riposte,
+	/** Daggers: steps through the shadows behind the target and stabs it. */
+	ShadowStep,
+	/** Axes and swords: a fast strike that builds Frenzy charges. */
+	Frenzy,
+	/** Maces: a crushing blow that breaks armour. */
+	Smite,
+	/** Staves: lightning-fast strikes that build Combo; every third bursts with lightning. */
+	FistsOfThunder,
+	/** Crossbows: a rapid stream of bolts. */
+	RapidFire,
+	/** Shields: a bash that stuns and knocks back. */
+	ShieldBash,
+	/** No weapon needed: a curse that makes monsters take more physical damage. */
+	AmplifyDamage,
+	Last = AmplifyDamage,
 };
 
 enum class SupportGem : uint8_t {
@@ -73,6 +93,8 @@ enum class SupportGem : uint8_t {
 	MartialTempo,
 	/** Melee attack skills knock enemies back. */
 	Knockback,
+	/** Melee hits with the skill build Rage. */
+	BattleRage,
 	Count,
 };
 
@@ -89,7 +111,11 @@ enum class PersistentSkill : uint8_t {
 	SummonGolem,
 	/** Skeletal warriors that fight at your side and rise again when they fall. */
 	SkeletalWarriors,
-	Last = SkeletalWarriors,
+	/** Monsters you kill while they're chilled or frozen shatter, chilling those around them. */
+	HeraldOfFrost,
+	/** Skeletal mages that hurl firebolts from behind your lines. */
+	SkeletalMages,
+	Last = SkeletalMages,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -278,6 +304,17 @@ struct Poe2PlayerData {
 	uint8_t dashSkillTicks = 0;
 	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
 	uint8_t warcryTicks = 0;
+	/** @brief Game ticks Riposte stays ready after a block (not saved). */
+	uint8_t riposteTicks = 0;
+	/** @brief Build resources (not saved): Frenzy charges and their timer, Combo and Rage and the ticks before they fade. */
+	uint8_t frenzyCharges = 0;
+	uint16_t frenzyTicks = 0;
+	uint8_t combo = 0;
+	uint8_t comboTicks = 0;
+	uint8_t rage = 0;
+	uint8_t rageTicks = 0;
+	/** @brief Skeletal Mages' revive timer (not saved). */
+	uint8_t mageCooldown = 0;
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -419,6 +456,14 @@ struct Poe2PlayerData {
 		energyShieldRemainder = 0;
 		golemCooldown = 0;
 		skeletonCooldown = 0;
+		mageCooldown = 0;
+		riposteTicks = 0;
+		frenzyCharges = 0;
+		frenzyTicks = 0;
+		combo = 0;
+		comboTicks = 0;
+		rage = 0;
+		rageTicks = 0;
 		guardTicks = 0;
 		mapLevel = 0;
 		mapTier = 0;
@@ -454,6 +499,19 @@ struct Poe2PlayerData {
 			pendingSkill = WeaponSkill::None;
 		if (warcryTicks > 0)
 			warcryTicks--;
+		if (riposteTicks > 0)
+			riposteTicks--;
+		if (frenzyTicks > 0 && --frenzyTicks == 0)
+			frenzyCharges = 0;
+		if (comboTicks > 0 && --comboTicks == 0)
+			combo = 0;
+		// Rage drains a point every 4 ticks once 2 seconds pass without a hit.
+		if (rageTicks > 0) {
+			rageTicks--;
+		} else if (rage > 0) {
+			rage--;
+			rageTicks = 3;
+		}
 		if (recoveryTicks > 0)
 			recoveryTicks--;
 	}

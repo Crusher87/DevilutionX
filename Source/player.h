@@ -37,6 +37,8 @@
 
 namespace devilution {
 
+struct Monster;
+
 constexpr int InventoryGridCells = 40;
 constexpr int MaxBeltItems = 8;
 constexpr int MaxResistance = 75;
@@ -988,6 +990,10 @@ void StartWarpLvl(Player &player, size_t pidx);
 void ProcessPlayers();
 void ClrPlrPath(Player &player);
 bool PosOkPlayer(const Player &player, Point position);
+/** @brief POE2 Mashup: a skill's melee hit on a monster, for the given share of its damage. */
+bool SkillHitMonster(Player &player, Monster &monster, int damagePercent);
+/** @brief POE2 Mashup: moves the player to a tile at once, as Teleport does. */
+void MovePlayerTo(Player &player, Point destination);
 /**
  * @brief Checks if the player is close enough to the object to operate it without walking.
  */

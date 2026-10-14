@@ -7,6 +7,7 @@
 #include "missiles.h"
 #include "player.h"
 #include "poe2/skill_gems.hpp"
+#include "poe2/skill_resources.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/is_of.hpp"
 #include "utils/str_case.hpp"
@@ -75,6 +76,26 @@ GemCurve AttackCurve(WeaponSkill skill)
 		return { &Fireball, 250, ManaAt20, true, "Fireball's steps and Spark's projectiles; Diablo's Firebolt barely grows on its own" };
 	case WeaponSkill::Spark:
 		return { &Spark, 200, ManaAt20, true, "Spark's steps and projectiles, on top of Diablo's Charged Bolt" };
+	case WeaponSkill::IceBolt:
+		return { &Fireball, 250, ManaAt20, false, "Fireball's steps; the shard barely grows on its own" };
+	case WeaponSkill::FrostNova:
+		return { &Fireball, 280, ManaAt20, false, "Fireball's steps, a little more for the whole ring" };
+	case WeaponSkill::Riposte:
+		return { &Boneshatter, 0, ManaAt20, false, "Boneshatter, level for level" };
+	case WeaponSkill::ShadowStep:
+		return { &LeapSlam, 320, ManaAt20, false, "Leap Slam's steps, a little less" };
+	case WeaponSkill::Frenzy:
+		return { &Boneshatter, 280, ManaAt20, false, "Boneshatter's steps, a little less for a fast strike that builds charges" };
+	case WeaponSkill::Smite:
+		return { &Boneshatter, 0, ManaAt20, false, "Boneshatter, level for level" };
+	case WeaponSkill::FistsOfThunder:
+		return { &Boneshatter, 290, ManaAt20, false, "Boneshatter's steps, a little less for fast strikes" };
+	case WeaponSkill::RapidFire:
+		return { &LightningArrow, 300, ManaAt20, true, "Lightning Arrow's steps, and more bolts like Spark's projectiles" };
+	case WeaponSkill::ShieldBash:
+		return { &LeapSlam, 340, ManaAt20, false, "Leap Slam's steps, a little less" };
+	case WeaponSkill::AmplifyDamage:
+		return { &Boneshatter, 100, UtilitySpellManaAt20, false, "curses: +1% physical damage taken a level" };
 	default:
 		return { &Boneshatter, 100, 100, false, {} };
 	}
@@ -139,8 +160,10 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 	case SkillKind::Attack:
 		if (skill.attack() == WeaponSkill::BattleCry)
 			return std::format("+{:d}% melee damage", BattleCryDamagePercent(gemLevel));
-		if (IsAnyOf(skill.attack(), WeaponSkill::EmberFusillade, WeaponSkill::Spark))
+		if (IsAnyOf(skill.attack(), WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt, WeaponSkill::FrostNova))
 			return std::format("{:d}% spell damage", percent);
+		if (skill.attack() == WeaponSkill::AmplifyDamage)
+			return std::format("+{:d}% physical damage taken", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (gemLevel - 1)));
 		return std::format("{:d}% weapon damage", percent);
 	case SkillKind::Spell: {
 		if (MyPlayer == nullptr)

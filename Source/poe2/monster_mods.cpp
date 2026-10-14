@@ -207,6 +207,10 @@ void ProcessMonsterAilments(Monster &monster)
 		state.freezeTicks--;
 	if (state.heavyStunTicks > 0)
 		state.heavyStunTicks--;
+	if (state.amplifyTicks > 0 && --state.amplifyTicks % 20 == 0)
+		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+	if (state.armourBreakTicks > 0)
+		state.armourBreakTicks--;
 	const auto decay = [&](int32_t &buildup, int thresholdPercent) {
 		if (buildup <= 0)
 			return;

@@ -37,14 +37,16 @@ bool IsDirectProjectileSpell(SpellID spell)
 
 bool IsMeleeAttackSkill(WeaponSkill skill)
 {
-	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge);
+	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge,
+	    WeaponSkill::Riposte, WeaponSkill::ShadowStep, WeaponSkill::Frenzy, WeaponSkill::Smite, WeaponSkill::FistsOfThunder, WeaponSkill::ShieldBash);
 }
 
 /** @brief Attack skills that use the normal attack animation, so they can attack faster. */
 bool IsQuickenableAttackSkill(WeaponSkill skill)
 {
 	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry,
-	    WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow);
+	    WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow, WeaponSkill::Frenzy, WeaponSkill::Smite,
+	    WeaponSkill::FistsOfThunder, WeaponSkill::ShieldBash);
 }
 
 bool IsProjectileSupport(SupportGem gem)
@@ -115,6 +117,8 @@ int ManaCostPercent(SupportGem gem)
 		return 120;
 	case SupportGem::Knockback:
 		return 110;
+	case SupportGem::BattleRage:
+		return 115;
 	default:
 		return 100;
 	}
@@ -183,6 +187,8 @@ SupportGem SupportGemForMiscId(int miscId)
 		return SupportGem::MartialTempo;
 	case IMISC_SUPPORT_KNOCKBACK:
 		return SupportGem::Knockback;
+	case IMISC_SUPPORT_BATTLERAGE:
+		return SupportGem::BattleRage;
 	default:
 		return SupportGem::None;
 	}
@@ -222,6 +228,8 @@ std::string_view SupportGemName(SupportGem gem)
 		return _("Martial Tempo");
 	case SupportGem::Knockback:
 		return _("Knockback");
+	case SupportGem::BattleRage:
+		return _("Battle Rage");
 	default:
 		return {};
 	}
@@ -254,6 +262,8 @@ std::string_view SupportGemDescription(SupportGem gem)
 		return _("Attack skills attack faster.\nMana +20%");
 	case SupportGem::Knockback:
 		return _("Melee attack skills knock enemies\nback. Mana +10%");
+	case SupportGem::BattleRage:
+		return _("Melee hits build Rage (up to 30):\n1% more attack damage each. Mana +15%");
 	default:
 		return {};
 	}
@@ -278,6 +288,7 @@ GemColor SupportGemColor(SupportGem gem)
 	case SupportGem::ConcentratedEffect:
 	case SupportGem::Brutality:
 	case SupportGem::Knockback:
+	case SupportGem::BattleRage:
 		return GemColor::Strength;
 	case SupportGem::MultipleProjectiles:
 	case SupportGem::Pierce:
@@ -312,6 +323,7 @@ std::string_view SupportGemNeeds(SupportGem gem)
 	switch (gem) {
 	case SupportGem::Brutality:
 	case SupportGem::Knockback:
+	case SupportGem::BattleRage:
 		return _("Needs a melee attack");
 	case SupportGem::MartialTempo:
 		return _("Needs an attack");
@@ -342,6 +354,7 @@ bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 		switch (gem) {
 		case SupportGem::Brutality:
 		case SupportGem::Knockback:
+		case SupportGem::BattleRage:
 			return IsMeleeAttackSkill(attack);
 		case SupportGem::MartialTempo:
 			return IsQuickenableAttackSkill(attack);
@@ -357,6 +370,7 @@ bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 	case SupportGem::Brutality:
 	case SupportGem::Knockback:
 	case SupportGem::MartialTempo:
+	case SupportGem::BattleRage:
 		return false;
 	case SupportGem::MultipleProjectiles:
 		return IsProjectileSpell(spell);

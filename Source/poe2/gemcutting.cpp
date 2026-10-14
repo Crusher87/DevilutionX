@@ -17,19 +17,23 @@ bool AttackInCategory(WeaponSkill skill, GemCategory category)
 {
 	switch (category) {
 	case GemCategory::Mace:
-		return IsAnyOf(skill, WeaponSkill::GroundSlam, WeaponSkill::LeapSlam, WeaponSkill::BattleCry);
+		return IsAnyOf(skill, WeaponSkill::GroundSlam, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Smite);
 	case GemCategory::Axe:
-		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::LeapSlam, WeaponSkill::BattleCry);
+		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Frenzy);
 	case GemCategory::Sword:
-		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::BattleCry);
+		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Riposte, WeaponSkill::ShadowStep,
+		    WeaponSkill::Frenzy);
 	case GemCategory::Bow:
-		return IsAnyOf(skill, WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow, WeaponSkill::EscapeShot);
+		return IsAnyOf(skill, WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow, WeaponSkill::EscapeShot, WeaponSkill::RapidFire);
 	case GemCategory::Staff:
-		return IsAnyOf(skill, WeaponSkill::WhirlingStaff, WeaponSkill::LeapSlam);
+		return IsAnyOf(skill, WeaponSkill::WhirlingStaff, WeaponSkill::LeapSlam, WeaponSkill::FistsOfThunder);
 	case GemCategory::Shield:
-		return skill == WeaponSkill::ShieldCharge;
+		return IsAnyOf(skill, WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash);
 	case GemCategory::Elemental:
-		return IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::LightningArrow);
+		return IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::LightningArrow, WeaponSkill::IceBolt, WeaponSkill::FrostNova,
+		    WeaponSkill::FistsOfThunder);
+	case GemCategory::Occult:
+		return skill == WeaponSkill::AmplifyDamage;
 	default:
 		return false;
 	}
