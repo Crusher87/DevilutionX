@@ -4100,7 +4100,7 @@ Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 	return {
 		source,
 		std::min<int>(monster.data().level + (gbIsMultiplayer ? 0 : bonus), CF_LEVEL),
-		monster.level(sgGameInitInfo.nDifficulty) + bonus,
+		static_cast<int>(monster.level(sgGameInitInfo.nDifficulty)) + bonus,
 		Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty),
 		monster.name(),
 	};
