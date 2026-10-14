@@ -1695,6 +1695,8 @@ void SetupBaseItem(Point position, _item_indexes idx, bool onlygood, bool sendms
 	GetSuperItemSpace(position, ii);
 	const int curlv = ItemsGetCurrlevel();
 
+	if (gbIsPoe2 && EquipmentClassWeight(AllItemsList[idx].itype) > 0)
+		SetPoe2ItemLevel(item, Poe2ItemLevel((2 * curlv) + (15 * sgGameInitInfo.nDifficulty)));
 	SetupAllItems(*MyPlayer, item, idx, AdvanceRndSeed(), 2 * curlv, 1, onlygood, delta);
 	TryRandomUniqueItem(item, idx, 2 * curlv, 1, onlygood, delta);
 	SetupItem(item);
@@ -2130,6 +2132,12 @@ void PrintItemInfo(const Item &item)
 			text.append(FormatRuntime(_(" {:d} Dex"), dex));
 		AddItemInfoBoxString(text);
 	}
+	if (gbIsPoe2) {
+		if (const int itemLevel = GetPoe2ItemLevel(item); itemLevel > 0) {
+			CurrentInfoLineStyle = InfoLineStyle::Note;
+			AddItemInfoBoxString(FormatRuntime(_("Item Level: {:d}"), itemLevel));
+		}
+	}
 }
 
 bool SmithItemOk(const Player & /*player*/, const ItemData &item)
@@ -2198,6 +2206,13 @@ bool PremiumItemOk(const Player & /*player*/, const ItemData &item)
 _item_indexes RndPremiumItem(const Player &player, int minlvl, int maxlvl)
 {
 	return RndVendorItem<PremiumItemOk>(player, minlvl, maxlvl);
+}
+
+/** @brief Shop equipment gets a POE2 item level from the level it was stocked at. */
+void SetVendorPoe2ItemLevel(Item &item, int level)
+{
+	if (gbIsPoe2 && EquipmentClassWeight(item._itype) > 0)
+		SetPoe2ItemLevel(item, Poe2ItemLevel(level));
 }
 
 void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
@@ -2269,13 +2284,29 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 		}
 	}
 	premiumItem._iCreateInfo = plvl | CF_SMITHPREMIUM;
+	SetVendorPoe2ItemLevel(premiumItem, plvl);
 	premiumItem._iIdentified = true;
 	premiumItem._iStatFlag = player.CanUseItem(premiumItem);
+}
+
+/**
+ * @brief POE2 vendors keep valuable currency, waystones, gems and charms out of their stock: those come from drops.
+ * Adria still sells the common orbs (Transmute, Augment, Scouring, Bauble) and her scrolls.
+ */
+bool Poe2VendorWithholds(item_misc_id miscId)
+{
+	if (IsAnyOf(miscId, IMISC_ORB_TRANSMUTE, IMISC_ORB_ALCHEMY, IMISC_ORB_CHAOS, IMISC_ORB_SCOURING, IMISC_ORB_AUGMENT, IMISC_ORB_REGAL,
+	        IMISC_ORB_EXALTED, IMISC_ORB_DIVINE, IMISC_ORB_VAAL, IMISC_ORB_BAUBLE))
+		return OrbCurrencyBand(miscId) != CurrencyBand::Common;
+	return IsAnyOf(miscId, IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_SPIRIT_SKULL, IMISC_CHARM_LIFE,
+	    IMISC_CHARM_MANA, IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
 }
 
 bool WitchItemOk(const Player & /*player*/, const ItemData &item)
 {
 	if (IsNoneOf(item.itype, ItemType::Misc, ItemType::Staff))
+		return false;
+	if (gbIsPoe2 && Poe2VendorWithholds(item.iMiscId))
 		return false;
 	if (item.iMiscId == IMISC_MANA)
 		return false;
@@ -4045,19 +4076,59 @@ std::optional<std::pair<_item_indexes, int>> PickPoe2Unique(int itemLevel)
 	return candidates[LootRandom(static_cast<int>(candidates.size()))];
 }
 
-void DropPoe2LootItem(Monster &monster, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt)
+/** @brief Where a loot roll comes from and the levels it drops at. */
+struct Poe2LootOrigin {
+	LootSource source;
+	/** Diablo's item level, which picks affixes and uniques and is checked in multiplayer. */
+	int itemLevel;
+	/** The level that decides which bases can drop. */
+	int baseLevel;
+	/** The POE2 item level stored on equipment. */
+	int poe2ItemLevel;
+	std::string_view name;
+	/** Generated with the level, so multiplayer rebuilds it the same. */
+	bool pregen = false;
+};
+
+Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
+{
+	const LootSource source = GetLootSource(monster);
+	const int bonus = LootItemLevelBonus(source);
+	// Multiplayer checks that a dropped item's level is one some monster has, so the bonus only applies in single player.
+	return {
+		source,
+		std::min<int>(monster.data().level + (gbIsMultiplayer ? 0 : bonus), CF_LEVEL),
+		monster.level(sgGameInitInfo.nDifficulty) + bonus,
+		Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty),
+		monster.name(),
+	};
+}
+
+Poe2LootOrigin ContainerLootOrigin(bool pregen)
+{
+	// Chests and barrels drop at twice the dungeon level, as in Diablo.
+	const int level = 2 * ItemsGetCurrlevel();
+	return {
+		LootSource::Normal,
+		std::min<int>(level, CF_LEVEL),
+		level + (15 * sgGameInitInfo.nDifficulty),
+		Poe2ItemLevel(level + (15 * sgGameInitInfo.nDifficulty)),
+		"container",
+		pregen,
+	};
+}
+
+void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt)
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return;
-	const LootSource source = GetLootSource(monster);
-	const int itemLevel = std::min<int>(monster.data().level + LootItemLevelBonus(source), CF_LEVEL);
-	const int baseLevel = monster.level(sgGameInitInfo.nDifficulty) + LootItemLevelBonus(source);
+	const int itemLevel = origin.itemLevel;
 
-	std::optional<_item_indexes> idx = PickPoe2LootItem(category, baseLevel);
+	std::optional<_item_indexes> idx = PickPoe2LootItem(category, origin.baseLevel);
 	int uidOffset = 0;
 	if (category == LootCategory::Equipment) {
 		if (!rarity)
-			rarity = RollEquipmentRarity(source);
+			rarity = RollEquipmentRarity(origin.source);
 		if (*rarity == ITEM_QUALITY_UNIQUE) {
 			if (const std::optional<std::pair<_item_indexes, int>> unique = PickPoe2Unique(itemLevel); unique) {
 				idx = unique->first;
@@ -4075,9 +4146,10 @@ void DropPoe2LootItem(Monster &monster, Point position, bool sendmsg, LootCatego
 	GetSuperItemSpace(position, ii);
 	if (category == LootCategory::Equipment) {
 		SetLootRarity(item, *rarity);
+		SetPoe2ItemLevel(item, origin.poe2ItemLevel);
 		item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
 	}
-	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, category == LootCategory::Equipment, false, uidOffset);
+	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, category == LootCategory::Equipment, origin.pregen, uidOffset);
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer)
 		UniqueItemFlags[item._iUid] = true;
 	if (*idx == IDI_GOLD) {
@@ -4085,32 +4157,68 @@ void DropPoe2LootItem(Monster &monster, Point position, bool sendmsg, LootCatego
 		SetPlrHandGoldCurs(item);
 	}
 	SetupItem(item);
-	TelemetryItemDropped(item, monster.name());
+	TelemetryItemDropped(item, origin.name);
 	if (sendmsg)
 		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+	if (origin.pregen)
+		DeltaAddItem(ii);
+}
+
+/** @brief A chest, barrel or sarcophagus item: one loot roll, or a guaranteed magic-or-better item when `onlygood`. */
+void DropPoe2ContainerItem(Point position, bool onlygood, bool sendmsg, bool delta)
+{
+	const Poe2LootOrigin origin = ContainerLootOrigin(delta);
+	if (!onlygood) {
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source));
+		return;
+	}
+	// Special chests always hold something good: the rare monster table, with normal results made magic.
+	item_quality rarity = RollEquipmentRarity(LootSource::Rare);
+	if (rarity == ITEM_QUALITY_NORMAL)
+		rarity = ITEM_QUALITY_MAGIC;
+	DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, rarity);
+}
+
+/** @brief Diablo's "useful" container drop (potions and scrolls) becomes gold, currency or a flask, in the bible's proportions. */
+void DropPoe2ContainerUseful(Point position, bool sendmsg)
+{
+	const auto weights = LootCategoryWeights(LootSource::Normal);
+	const std::array<LootCategory, 3> categories { LootCategory::Gold, LootCategory::Currency, LootCategory::FlaskOrCharm };
+	int total = 0;
+	for (const LootCategory category : categories)
+		total += weights[static_cast<size_t>(category)];
+	int roll = LootRandom(total);
+	for (const LootCategory category : categories) {
+		const int weight = weights[static_cast<size_t>(category)];
+		if (roll < weight) {
+			DropPoe2LootItem(ContainerLootOrigin(false), position, sendmsg, category);
+			return;
+		}
+		roll -= weight;
+	}
 }
 
 } // namespace
 
 void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int rolls)
 {
-	const LootSource source = GetLootSource(monster);
+	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
 	for (int i = 0; i < rolls; i++)
-		DropPoe2LootItem(monster, position, sendmsg, RollLootCategory(source));
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source));
 }
 
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 {
-	const LootSource source = GetLootSource(monster);
-	SpawnPoe2LootRolls(monster, position, sendmsg, RollLootCount(source));
-	if (source != LootSource::Boss)
+	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
+	SpawnPoe2LootRolls(monster, position, sendmsg, RollLootCount(origin.source));
+	if (origin.source != LootSource::Boss)
 		return;
 	// Bosses always drop a rare, often some currency and now and then a unique on top of their rolls.
-	DropPoe2LootItem(monster, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_RARE);
+	DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_RARE);
 	if (LootRandom(100) < BossBonusCurrencyPercent)
-		DropPoe2LootItem(monster, position, sendmsg, LootCategory::Currency);
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
 	if (LootRandom(100) < BossBonusUniquePercent)
-		DropPoe2LootItem(monster, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
 }
 
 void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= false*/)
@@ -4198,6 +4306,10 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 
 void CreateRndItem(Point position, bool onlygood, bool sendmsg, bool delta)
 {
+	if (gbIsPoe2 && !gbIsSpawn) {
+		DropPoe2ContainerItem(position, onlygood, sendmsg, delta);
+		return;
+	}
 	const _item_indexes idx = onlygood ? RndUItem(nullptr) : RndAllItems();
 
 	SetupBaseItem(position, idx, onlygood, sendmsg, delta);
@@ -4205,6 +4317,10 @@ void CreateRndItem(Point position, bool onlygood, bool sendmsg, bool delta)
 
 void CreateRndUseful(Point position, bool sendmsg)
 {
+	if (gbIsPoe2 && !gbIsSpawn) {
+		DropPoe2ContainerUseful(position, sendmsg);
+		return;
+	}
 	if (ActiveItemCount >= MAXITEMS)
 		return;
 
@@ -5334,6 +5450,7 @@ void SpawnSmith(int lvl)
 		} while (newItem._iIvalue > maxValue);
 
 		newItem._iCreateInfo = lvl | CF_SMITH;
+		SetVendorPoe2ItemLevel(newItem, lvl);
 		newItem._iIdentified = true;
 
 		SmithItems.push_back(newItem);
@@ -5438,6 +5555,7 @@ void SpawnWitch(int lvl)
 		} while (item._iIvalue > maxValue);
 
 		item._iCreateInfo = lvl | CF_WITCH;
+		SetVendorPoe2ItemLevel(item, lvl);
 		item._iIdentified = true;
 
 		WitchItems.push_back(item);
@@ -5558,6 +5676,7 @@ void SpawnBoy(int lvl)
 	            || BoyItem._iIvalue < ivalue)
 	        && count < 250));
 	BoyItem._iCreateInfo = lvl | CF_BOY;
+	SetVendorPoe2ItemLevel(BoyItem, lvl);
 	BoyItem._iIdentified = true;
 	BoyItemLevel = lvl / 2;
 }

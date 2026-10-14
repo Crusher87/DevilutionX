@@ -4,6 +4,7 @@
 #include <numeric>
 
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "monster.h"
 #include "poe2/monster_mods.hpp"
 #include "utils/is_of.hpp"
@@ -206,6 +207,35 @@ int EquipmentClassWeight(ItemType type)
 	default:
 		return 0;
 	}
+}
+
+int Poe2ItemLevel(int areaLevel, int bonus)
+{
+	return std::clamp(((areaLevel * 13) + 5) / 10 + bonus, 1, MaxPoe2ItemLevel);
+}
+
+int Poe2ItemLevel(const Monster &monster, int difficulty)
+{
+	return Poe2ItemLevel(monster.data().level + (15 * difficulty), LootItemLevelBonus(GetLootSource(monster)));
+}
+
+int GetPoe2ItemLevel(const Item &item)
+{
+	if (EquipmentClassWeight(item._itype) == 0)
+		return 0;
+	return static_cast<int>((item.dwBuff & CF_POE2_ILVL) >> 16);
+}
+
+void SetPoe2ItemLevel(Item &item, int level)
+{
+	item.dwBuff = (item.dwBuff & ~CF_POE2_ILVL) | ((static_cast<uint32_t>(std::clamp(level, 0, MaxPoe2ItemLevel)) << 16) & CF_POE2_ILVL);
+}
+
+int VendorSellValue(int value)
+{
+	if (gbIsPoe2)
+		return std::max(value * 18 / 100, 1);
+	return std::max(value / 4, 1);
 }
 
 std::optional<item_quality> GetLootRarity(const Item &item)

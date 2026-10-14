@@ -13,6 +13,8 @@
 #include "player.h"
 #include "poe2/loot.hpp"
 #include "spells.h"
+#include "stores.h"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 namespace {
@@ -205,6 +207,66 @@ TEST_F(Poe2LootTest, UniqueRollsBuildTheChosenUnique)
 		return;
 	}
 	FAIL() << "no droppable unique found";
+}
+
+TEST_F(Poe2LootTest, ItemLevelsRunToEightyTwo)
+{
+	EXPECT_EQ(Poe2ItemLevel(1), 1);
+	EXPECT_EQ(Poe2ItemLevel(30), 39) << "the end of Normal";
+	EXPECT_EQ(Poe2ItemLevel(30 + 15), 59) << "the end of Nightmare";
+	EXPECT_EQ(Poe2ItemLevel(30 + 30, 2), 80) << "a Hell boss";
+	EXPECT_EQ(Poe2ItemLevel(80, 2), MaxPoe2ItemLevel);
+	EXPECT_EQ(Poe2ItemLevel(0), 1);
+}
+
+TEST_F(Poe2LootTest, DropsKeepTheirItemLevel)
+{
+	const _item_indexes base = FindBase("Long Sword");
+	ASSERT_NE(base, IDI_GOLD);
+	Item item = {};
+	SetLootRarity(item, ITEM_QUALITY_RARE);
+	SetPoe2ItemLevel(item, 57);
+	SetupAllItems(*MyPlayer, item, base, 1234, 20, 1, true, false);
+	EXPECT_EQ(GetPoe2ItemLevel(item), 57);
+	EXPECT_EQ(GetLootRarity(item), ITEM_QUALITY_RARE);
+
+	Item recreated;
+	RecreateItem(*MyPlayer, recreated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
+	EXPECT_EQ(GetPoe2ItemLevel(recreated), 57);
+	EXPECT_EQ(recreated._iRarePowers, item._iRarePowers);
+
+	// Older items have none, and flasks and gems use those bits for something else.
+	Item old = {};
+	SetupAllItems(*MyPlayer, old, base, 1234, 20, 1, true, false);
+	EXPECT_EQ(GetPoe2ItemLevel(old), 0);
+	Item flask = {};
+	flask._itype = ItemType::Misc;
+	flask.dwBuff = CF_POE2_FLASK_PREFIX | CF_POE2_FLASK_SUFFIX;
+	EXPECT_EQ(GetPoe2ItemLevel(flask), 0);
+}
+
+TEST_F(Poe2LootTest, VendorsPayEighteenPercent)
+{
+	EXPECT_EQ(VendorSellValue(1000), 180);
+	EXPECT_EQ(VendorSellValue(3), 1);
+	gbIsPoe2 = false;
+	EXPECT_EQ(VendorSellValue(1000), 250);
+	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2LootTest, AdriaOnlySellsCommonCurrency)
+{
+	for (uint32_t seed = 1; seed <= 40; seed++) {
+		SetRndSeed(seed);
+		SpawnWitch(16);
+		for (const Item &item : WitchItems) {
+			EXPECT_FALSE(IsAnyOf(item._iMiscId, IMISC_ORB_ALCHEMY, IMISC_ORB_CHAOS, IMISC_ORB_REGAL, IMISC_ORB_EXALTED, IMISC_ORB_DIVINE, IMISC_ORB_VAAL,
+			    IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_CHARM_GOLDEN, IMISC_CHARM_FIRE))
+			    << item._iIName;
+			if (item._itype == ItemType::Staff)
+				EXPECT_EQ(GetPoe2ItemLevel(item), Poe2ItemLevel(16));
+		}
+	}
 }
 
 } // namespace

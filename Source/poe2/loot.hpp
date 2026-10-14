@@ -86,6 +86,25 @@ int BaseRecencyPercent(int itemLevel, int baseLevel);
 /** @brief How often each kind of equipment drops, before its bases are picked. */
 int EquipmentClassWeight(ItemType type);
 
+/** @brief The highest POE2 item level, where the top modifier tier unlocks. */
+constexpr int MaxPoe2ItemLevel = 82;
+
+/**
+ * @brief POE2-scale item level for loot from an area: 1.3 × the area level, plus the source's bonus, from 1 to 82.
+ * The area level is Diablo's monster level plus 15 per difficulty, so Normal runs 1-41, Nightmare 21-61 and Hell 40-80.
+ */
+int Poe2ItemLevel(int areaLevel, int bonus = 0);
+/** @brief The POE2 item level of a monster's drops. */
+int Poe2ItemLevel(const Monster &monster, int difficulty);
+
+/** @brief The item's POE2 item level, or 0 if it has none (older items, and anything that isn't equipment). */
+int GetPoe2ItemLevel(const Item &item);
+/** @brief Stores the POE2 item level; only for equipment, whose bits aren't used by flask mods or gem levels. */
+void SetPoe2ItemLevel(Item &item, int level);
+
+/** @brief What a vendor pays for an item worth `value`: 18% in POE2, a quarter in Diablo. Never less than 1. */
+int VendorSellValue(int value);
+
 /** @brief Gold piles are fewer in POE2, so each is worth more. */
 constexpr int GoldPileMultiplier = 4;
 

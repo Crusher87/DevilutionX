@@ -206,6 +206,8 @@ enum icreateinfo_flag2 {
 	CF_POE2_FLASK_ROLLED = 1 << 27,
 	/** A skill gem's level, 1 to 20; 0 on gems from before gem levels (level 1). Shares the flask bits, which only flasks use. */
 	CF_POE2_GEM_LEVEL = ((1 << 5) - 1) << 16,
+	/** POE2 item level, 1 to 82, on equipment only (the same bits hold flask mods and gem levels); 0 on older items. */
+	CF_POE2_ILVL = ((1 << 7) - 1) << 16,
 	/** The rarity a POE2 loot roll gave this item (item_quality: normal, magic, rare or unique). */
 	CF_POE2_LOOT_RARITY = ((1 << 2) - 1) << 28,
 	/** The item was dropped by the POE2 loot rules, so it's built with the rarity above. */

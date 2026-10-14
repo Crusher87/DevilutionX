@@ -28,6 +28,7 @@
 #include "panels/info_box.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/loot.hpp"
 #include "qol/stash.h"
 #include "spells.h"
 #include "stores.h"
@@ -252,13 +253,13 @@ bool VendorAcceptsSale()
 	return false;
 }
 
-/** @brief Calculate the sell price for an item (1/4 of value). */
+/** @brief Calculate the sell price for an item (1/4 of value, 18% in POE2). */
 int GetSellPrice(const Item &item)
 {
 	int value = item._ivalue;
 	if (item._iMagical != ITEM_QUALITY_NORMAL && item._iIdentified)
 		value = item._iIvalue;
-	return std::max(value / 4, 1);
+	return VendorSellValue(value);
 }
 
 /** @brief Rebuild the grid layout for the current vendor/tab. */

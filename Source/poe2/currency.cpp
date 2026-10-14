@@ -6,6 +6,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/flasks.hpp"
+#include "poe2/loot.hpp"
 #include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -55,6 +56,12 @@ Item RebuildWithBuff(const Player &player, const Item &item, uint32_t dwBuff)
 	rebuilt.position = item.position;
 	rebuilt._iDurability = std::min<int>(item._iDurability, rebuilt._iMaxDur);
 	return rebuilt;
+}
+
+/** @brief A rerolled item keeps the POE2 item level it dropped with. */
+uint32_t KeptItemLevelBits(const Item &item)
+{
+	return GetPoe2ItemLevel(item) > 0 ? item.dwBuff & CF_POE2_ILVL : 0;
 }
 
 int ItemLevel(const Player &player, const Item &item)
@@ -205,7 +212,7 @@ int RareAffixCount(const Item &item)
 	return static_cast<int>(std::count_if(item._iRarePowers.begin(), item._iRarePowers.end(), [](item_effect_type power) { return power != IPL_INVALID; }));
 }
 
-bool RollItemOfQuality(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed, uint32_t avoidSeed, const std::function<bool(const Item &)> &accept)
+bool RollItemOfQuality(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed, uint32_t avoidSeed, const std::function<bool(const Item &)> &accept, uint32_t keepBuff)
 {
 	// Rolling items reseeds the game's random number generator, so put it back afterwards.
 	const uint32_t rngState = GetLCGEngineState();
@@ -221,6 +228,7 @@ bool RollItemOfQuality(const Player &player, Item &item, _item_indexes baseIndex
 		if (avoidSeed != 0 && itemSeed == avoidSeed)
 			continue;
 		Item candidate {};
+		candidate.dwBuff = keepBuff;
 		SetupAllItems(player, candidate, baseIndex, itemSeed, level, uper, onlyGood, false, 0, quality != ITEM_QUALITY_UNIQUE);
 		if (candidate.isEmpty() || candidate._iMagical != quality || (accept && !accept(candidate)))
 			continue;
@@ -300,7 +308,7 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, const Player &player, Item &item)
 		default:
 			if (item._iMagical != ITEM_QUALITY_NORMAL) {
 				Item rerolled;
-				if (RollItemOfQuality(player, rerolled, item.IDidx, static_cast<item_quality>(item._iMagical), ItemLevel(player, item), roll, static_cast<uint32_t>(item._iSeed))) {
+				if (RollItemOfQuality(player, rerolled, item.IDidx, static_cast<item_quality>(item._iMagical), ItemLevel(player, item), roll, static_cast<uint32_t>(item._iSeed), {}, KeptItemLevelBits(item))) {
 					rerolled.dwBuff |= CF_POE2_CORRUPTED;
 					rerolled.position = item.position;
 					item = RebuildWithBuff(player, rerolled, rerolled.dwBuff);
@@ -381,7 +389,7 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, const Player &player, Item &item)
 
 	Item rolled;
 	const uint32_t firstSeed = (static_cast<uint32_t>(item._iSeed) * 31U) + static_cast<uint32_t>(orb);
-	if (!RollItemOfQuality(player, rolled, item.IDidx, wanted, level, firstSeed, static_cast<uint32_t>(item._iSeed), accept)) {
+	if (!RollItemOfQuality(player, rolled, item.IDidx, wanted, level, firstSeed, static_cast<uint32_t>(item._iSeed), accept, KeptItemLevelBits(item))) {
 		EventPlrMsg(_("The orb fizzles. This item can't roll that."), UiFlags::ColorRed);
 		return false;
 	}

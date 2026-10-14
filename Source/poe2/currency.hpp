@@ -57,7 +57,7 @@ std::string_view CurrencyOrbDescription(CurrencyOrb orb);
  * random number generator. Items made this way rebuild identically from their seed.
  * @param avoidSeed A seed the result must not use, e.g. the item's current one.
  */
-bool RollItemOfQuality(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed, uint32_t avoidSeed = 0, const std::function<bool(const Item &)> &accept = {});
+bool RollItemOfQuality(const Player &player, Item &item, _item_indexes baseIndex, item_quality quality, int level, uint32_t firstSeed, uint32_t avoidSeed = 0, const std::function<bool(const Item &)> &accept = {}, uint32_t keepBuff = 0);
 
 /**
  * @brief Uses an orb on an item.
