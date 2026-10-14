@@ -84,6 +84,8 @@ set(poe2_mod
   txtdata/items/item_suffixes.tsv
   txtdata/missiles/misdat.tsv
   txtdata/towners/towners.tsv
+  txtdata/poe2/modifier_families.tsv
+  txtdata/poe2/modifier_tiers.tsv
   txtdata/poe2/passive_tree.tsv)
 
 if(APPLE)

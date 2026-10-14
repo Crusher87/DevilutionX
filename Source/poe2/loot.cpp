@@ -228,7 +228,10 @@ int GetPoe2ItemLevel(const Item &item)
 
 void SetPoe2ItemLevel(Item &item, int level)
 {
-	item.dwBuff = (item.dwBuff & ~CF_POE2_ILVL) | ((static_cast<uint32_t>(std::clamp(level, 0, MaxPoe2ItemLevel)) << 16) & CF_POE2_ILVL);
+	item.dwBuff = (item.dwBuff & ~(CF_POE2_ILVL | CF_POE2_MODS)) | ((static_cast<uint32_t>(std::clamp(level, 0, MaxPoe2ItemLevel)) << 16) & CF_POE2_ILVL);
+	// Items made with an item level roll their affixes from the itemization tables.
+	if (level > 0)
+		item.dwBuff |= CF_POE2_MODS;
 }
 
 int VendorSellValue(int value)

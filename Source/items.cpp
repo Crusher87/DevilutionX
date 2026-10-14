@@ -76,6 +76,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
@@ -1384,11 +1385,71 @@ void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, 
 	CalcItemValue(item);
 }
 
+/** @brief Whether the item rolls its affixes from the POE2 itemization tables rather than Diablo's affix lists. */
+bool HasPoe2ModTables(const Item &item)
+{
+	return gbIsPoe2 && (item.dwBuff & CF_POE2_MODS) != 0 && GetPoe2ItemLevel(item) > 0 && !ModifierFamilies().empty() && ItemModSlot(item).has_value();
+}
+
+/**
+ * @brief Rolls a magic or rare item's modifiers from the POE2 itemization tables.
+ *
+ * The picks come from the item seed, and the values from a seed a Divine Orb changes, so a Divine Orb rerolls values only.
+ */
+void GetItemPowerPoe2Mods(Item &item, bool rare)
+{
+	const uint32_t seed = static_cast<uint32_t>(item._iSeed);
+	const uint32_t divine = (item.dwBuff & CF_POE2_DIVINE) >> 9;
+	const uint32_t valueSeed = seed ^ 0x6A09E667U ^ (divine * 0x9E3779B9U);
+	int count;
+	int perSide;
+	if (rare) {
+		const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
+		count = std::min(RareModCount(seed) + exalts, static_cast<int>(MaxRareAffixes));
+		perSide = MaxRareModsPerSide;
+	} else {
+		count = MagicModCount(seed);
+		perSide = MaxMagicModsPerSide;
+	}
+	std::vector<Poe2ItemMod> mods = RollItemMods(*ItemModSlot(item), ItemModBaseTags(item), GetPoe2ItemLevel(item), count, perSide, seed, valueSeed);
+	if (mods.empty())
+		return;
+	// Like POE2, prefixes are listed before suffixes.
+	std::stable_partition(mods.begin(), mods.end(), [](const Poe2ItemMod &mod) { return ItemModFamily(mod)->prefix; });
+
+	int valueAdd = 0;
+	for (size_t i = 0; i < mods.size(); i++) {
+		ApplyItemMod(item, mods[i]);
+		item._iPoe2Mods[i] = mods[i];
+		// Better tiers are worth much more gold.
+		const int strength = 9 - mods[i].tier;
+		valueAdd += strength * strength * 120;
+	}
+	item._iMagical = rare ? ITEM_QUALITY_RARE : ITEM_QUALITY_MAGIC;
+	item._iVAdd1 = valueAdd;
+	item._iVMult1 = static_cast<int>(mods.size());
+	item._iVAdd2 = 0;
+	item._iVMult2 = 0;
+	if (rare) {
+		CopyUtf8(item._iIName, GetRareItemName(item), ItemNameLength);
+	} else {
+		CopyUtf8(item._iIName, MagicModItemName(item, item._iName), ItemNameLength);
+		if (!StringInPanel(item._iIName))
+			CopyUtf8(item._iIName, MagicModItemName(item, AllItemsList[item.IDidx].iSName), ItemNameLength);
+	}
+	CalcItemValue(item);
+}
+
 void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs, bool onlygood)
 {
 	// POE2 loot drops already know their rarity; older items roll 1 in 5 magic items as rare.
 	const std::optional<item_quality> lootRarity = GetLootRarity(item);
-	if (lootRarity == ITEM_QUALITY_RARE || (!lootRarity && (item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0)) {
+	const bool rare = lootRarity == ITEM_QUALITY_RARE || (!lootRarity && (item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0);
+	if (HasPoe2ModTables(item)) {
+		GetItemPowerPoe2Mods(item, rare);
+		return;
+	}
+	if (rare) {
 		GetItemPowerRare(player, item, minlvl, maxlvl, flgs);
 		return;
 	}
@@ -2732,6 +2793,8 @@ void RestoreRareItemPowers(Item &item)
 	item._iSufTier = regenerated._iSufTier;
 	item._iPLLifeRegen = regenerated._iPLLifeRegen;
 	item._iPLManaRegen = regenerated._iPLManaRegen;
+	item._iPoe2Mods = regenerated._iPoe2Mods;
+	item._iPoe2Stats = regenerated._iPoe2Stats;
 	SetRndSeed(currentSeed);
 }
 
@@ -3203,6 +3266,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	int maxLightDam = 0;
 	int lifeRegen = 0;
 	int manaRegen = 0;
+	std::array<int, static_cast<size_t>(Poe2ItemStat::Count)> poe2Stats {};
 
 	for (const Item &item : player.InvBody) {
 		if (!item.isEmpty() && item._iStatFlag) {
@@ -3241,9 +3305,14 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 				maxLightDam += item._iLMaxDam;
 				lifeRegen += item._iPLLifeRegen;
 				manaRegen += item._iPLManaRegen;
+				for (size_t stat = 0; stat < poe2Stats.size(); stat++)
+					poe2Stats[stat] += item._iPoe2Stats[stat];
 			}
 		}
 	}
+	for (size_t stat = 0; stat < poe2Stats.size(); stat++)
+		player.poe2.itemStats[stat] = static_cast<int16_t>(std::clamp(poe2Stats[stat], static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
+	const auto gearStat = [&poe2Stats](Poe2ItemStat stat) { return poe2Stats[static_cast<size_t>(stat)]; };
 
 	// POE2 Mashup: the passive tree adds to what the gear gives.
 	const PassiveTotals passives = GetPassiveTotals(player);
@@ -3265,8 +3334,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	lifeRegen += passive(PassiveStat::LifeRegen);
 	manaRegen += passive(PassiveStat::ManaRegen);
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
-	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::min(passive(PassiveStat::AttackSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
-	player.poe2.passiveCastFrames = static_cast<int8_t>(std::min(passive(PassiveStat::CastSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
+	// Every 10% increased attack or cast speed from gear skips one more animation frame.
+	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::min(passive(PassiveStat::AttackSpeed) + (gearStat(Poe2ItemStat::AttackSpeed) / 10), static_cast<int>(MaxPassiveSpeedFrames)));
+	player.poe2.passiveCastFrames = static_cast<int8_t>(std::min(passive(PassiveStat::CastSpeed) + (gearStat(Poe2ItemStat::CastSpeed) / 10), static_cast<int>(MaxPassiveSpeedFrames)));
 
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
 	int evasion = 0;
@@ -3422,6 +3492,8 @@ void InitializeItem(Item &item, _item_indexes itemData)
 	item._iRareTiers.fill(0);
 	item._iMagical = ITEM_QUALITY_NORMAL;
 	item._iRarePowers.fill(IPL_INVALID);
+	item._iPoe2Mods = {};
+	item._iPoe2Stats = {};
 	item.IDidx = itemData;
 	if (gbIsHellfire)
 		item.dwBuff |= CF_HELLFIRE;
@@ -3624,6 +3696,8 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 	item._iSufTier = 0;
 	item._iRareTiers.fill(0);
 	item._iRarePowers.fill(IPL_INVALID);
+	item._iPoe2Mods = {};
+	item._iPoe2Stats = {};
 
 	if (item._iMiscId == IMISC_BOOK)
 		GetBookSpell(item, lvl);
@@ -5151,7 +5225,12 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
-	if (item._iMagical == ITEM_QUALITY_RARE) {
+	if (item._iPoe2Mods[0].family != 0) {
+		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+			for (const std::string &line : ItemModText(mod))
+				AddItemInfoBoxString(line);
+		}
+	} else if (item._iMagical == ITEM_QUALITY_RARE) {
 		for (size_t i = 0; i < item._iRarePowers.size(); i++) {
 			if (item._iRarePowers[i] != IPL_INVALID)
 				AddItemInfoBoxString(PrintItemPowerWithTier(item._iRarePowers[i], item, item._iRareTiers[i]));
@@ -5993,6 +6072,9 @@ StringOrView Item::getName() const
 	}
 	if (_iMagical == ITEM_QUALITY_RARE) {
 		return GetRareItemName(*this);
+	}
+	if (_iPoe2Mods[0].family != 0) {
+		return std::string_view(_iIName);
 	}
 	return GetTranslatedItemNameMagical(*this, dwBuff & CF_HELLFIRE, true, std::nullopt);
 }

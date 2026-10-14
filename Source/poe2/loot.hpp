@@ -99,7 +99,7 @@ int Poe2ItemLevel(const Monster &monster, int difficulty);
 
 /** @brief The item's POE2 item level, or 0 if it has none (older items, and anything that isn't equipment). */
 int GetPoe2ItemLevel(const Item &item);
-/** @brief Stores the POE2 item level; only for equipment, whose bits aren't used by flask mods or gem levels. */
+/** @brief Stores the POE2 item level, and marks the item to roll its affixes from the itemization tables; only for equipment, whose bits aren't used by flask mods or gem levels. */
 void SetPoe2ItemLevel(Item &item, int level);
 
 /** @brief What a vendor pays for an item worth `value`: 18% in POE2, a quarter in Diablo. Never less than 1. */

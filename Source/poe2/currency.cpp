@@ -35,6 +35,19 @@ bool HasPower(const Item &item, item_effect_type power)
 	return item._iPrePower == power || item._iSufPower == power;
 }
 
+int ModAffixCount(const Item &item)
+{
+	return static_cast<int>(std::count_if(item._iPoe2Mods.begin(), item._iPoe2Mods.end(), [](const Poe2ItemMod &mod) { return mod.family != 0; }));
+}
+
+/** @brief Whether the candidate has every modifier family, at the same tier, that the item had. */
+bool KeepsMods(const Item &candidate, const std::array<Poe2ItemMod, MaxRareAffixes> &mods)
+{
+	return std::all_of(mods.begin(), mods.end(), [&candidate](const Poe2ItemMod &mod) {
+		return mod.family == 0 || std::any_of(candidate._iPoe2Mods.begin(), candidate._iPoe2Mods.end(), [&mod](const Poe2ItemMod &other) { return other.family == mod.family && other.tier == mod.tier; });
+	});
+}
+
 uint32_t Mix(uint32_t value)
 {
 	value ^= value >> 16;
@@ -61,7 +74,7 @@ Item RebuildWithBuff(const Player &player, const Item &item, uint32_t dwBuff)
 /** @brief A rerolled item keeps the POE2 item level it dropped with. */
 uint32_t KeptItemLevelBits(const Item &item)
 {
-	return GetPoe2ItemLevel(item) > 0 ? item.dwBuff & CF_POE2_ILVL : 0;
+	return GetPoe2ItemLevel(item) > 0 ? item.dwBuff & (CF_POE2_ILVL | CF_POE2_MODS) : 0;
 }
 
 int ItemLevel(const Player &player, const Item &item)
@@ -209,6 +222,8 @@ ItemPower CorruptionImplicitPower(int kind)
 
 int RareAffixCount(const Item &item)
 {
+	if (item._iPoe2Mods[0].family != 0)
+		return ModAffixCount(item);
 	return static_cast<int>(std::count_if(item._iRarePowers.begin(), item._iRarePowers.end(), [](item_effect_type power) { return power != IPL_INVALID; }));
 }
 
@@ -358,6 +373,15 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, const Player &player, Item &item)
 		wanted = ITEM_QUALITY_NORMAL;
 		break;
 	case CurrencyOrb::Augmentation: {
+		if (item._iPoe2Mods[0].family != 0) {
+			if (item._iMagical != ITEM_QUALITY_MAGIC || ModAffixCount(item) != 1) {
+				EventPlrMsg(_("Orb of Augmentation needs a magic item with one affix."), UiFlags::ColorRed);
+				return false;
+			}
+			wanted = ITEM_QUALITY_MAGIC;
+			accept = [mods = item._iPoe2Mods](const Item &candidate) { return ModAffixCount(candidate) == 2 && KeepsMods(candidate, mods); };
+			break;
+		}
 		if (item._iMagical != ITEM_QUALITY_MAGIC || (item._iPrePower != IPL_INVALID && item._iSufPower != IPL_INVALID)) {
 			EventPlrMsg(_("Orb of Augmentation needs a magic item with one affix."), UiFlags::ColorRed);
 			return false;
@@ -376,6 +400,10 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, const Player &player, Item &item)
 			return false;
 		}
 		wanted = ITEM_QUALITY_RARE;
+		if (item._iPoe2Mods[0].family != 0) {
+			accept = [mods = item._iPoe2Mods](const Item &candidate) { return KeepsMods(candidate, mods); };
+			break;
+		}
 		const item_effect_type prefix = item._iPrePower;
 		const item_effect_type suffix = item._iSufPower;
 		accept = [prefix, suffix](const Item &candidate) { return HasPower(candidate, prefix) && HasPower(candidate, suffix); };

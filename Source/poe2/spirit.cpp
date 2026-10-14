@@ -159,7 +159,7 @@ bool ItemGrantsSpirit(const Item &item)
 
 int MinionDamagePercent(const Player &player)
 {
-	return 100 + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::MinionDamage)];
+	return 100 + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::MinionDamage)] + player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionDamage)];
 }
 
 int SkullSpirit(const Player &player)
@@ -251,7 +251,7 @@ void DropSpiritSkull(const Monster &monster, bool sendmsg)
 
 int MaxSpirit(const Player &player)
 {
-	int spirit = BaseSpirit + SkullSpirit(player) + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Spirit)];
+	int spirit = BaseSpirit + SkullSpirit(player) + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Spirit)] + player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::Spirit)];
 	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 		const Item &item = player.InvBody[hand];
 		if (ItemGrantsSpirit(item) && item._iStatFlag)

@@ -12,6 +12,7 @@
 #include <cstdint>
 
 #include "poe2/flasks.hpp"
+#include "poe2/item_stats.hpp"
 #include "tables/spelldat.h"
 
 namespace devilution {
@@ -229,6 +230,11 @@ static_assert(static_cast<size_t>(SpellID::LAST) < MaxPoe2Spells);
 constexpr size_t MaxSupportSockets = 5;
 using SupportSockets = std::array<SupportGem, MaxSupportSockets>;
 
+struct Poe2PlayerData;
+
+/** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */
+int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
+
 /**
  * @brief All POE2 Mashup character state that isn't part of the original hero file.
  *
@@ -295,6 +301,8 @@ struct Poe2PlayerData {
 	int manaRegenRemainder = 0;
 	/** @brief Evasion rating from gear (not saved; from CalcPlrItemVals). */
 	int evasion = 0;
+	/** @brief POE2 stats the gear's modifiers add up to (not saved; from CalcPlrItemVals). */
+	std::array<int16_t, static_cast<size_t>(Poe2ItemStat::Count)> itemStats {};
 	/** @brief Maximum energy shield from gear (not saved; from CalcPlrItemVals). */
 	int maxEnergyShield = 0;
 	/** @brief Current energy shield as a raw Fixed26_6 value (not saved; refills when loaded). */
@@ -368,6 +376,7 @@ struct Poe2PlayerData {
 		lifeRegenRemainder = 0;
 		manaRegenRemainder = 0;
 		evasion = 0;
+		itemStats.fill(0);
 		maxEnergyShield = 0;
 		energyShield = 0;
 		energyShieldRechargeTicks = 0;
@@ -427,12 +436,12 @@ struct Poe2PlayerData {
 		return std::clamp<int>(slotLevels[socket], 1, MaxGemLevel);
 	}
 
-	/** @brief Level of the socketed gem for the skill; 0 if it isn't socketed. */
+	/** @brief Level the skill is used at: its socketed gem's level plus what gear adds; 0 if it isn't socketed. */
 	[[nodiscard]] int skillLevel(SkillSlot skill) const
 	{
 		for (size_t socket = 0; socket < skillSlots.size(); socket++) {
 			if (!skill.isEmpty() && skillSlots[socket] == skill)
-				return gemLevel(socket);
+				return std::clamp(gemLevel(socket) + ItemSkillLevelBonus(*this, skill), 1, static_cast<int>(MaxGemLevel));
 		}
 		return 0;
 	}

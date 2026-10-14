@@ -1,0 +1,626 @@
+#include "poe2/modifiers.hpp"
+
+#include <algorithm>
+#include <string_view>
+
+#include <magic_enum/magic_enum.hpp>
+
+#include "data/file.hpp"
+#include "data/record_reader.hpp"
+#include "game_mode.hpp"
+#include "items.h"
+#include "poe2/defenses.hpp"
+#include "poe2/player_data.hpp"
+#include "poe2/weapon_skills.hpp"
+#include "tables/spelldat.h"
+#include "utils/format.hpp"
+#include "utils/log.hpp"
+#include "utils/str_cat.hpp"
+#include "utils/str_split.hpp"
+
+namespace devilution {
+
+namespace {
+
+std::vector<ModFamily> Families;
+
+constexpr std::array<std::string_view, static_cast<size_t>(ModSlot::Count)> SlotNames = {
+	"helmet", "body_armour", "gloves", "boots", "belt", "shield", "focus", "quiver", "ring", "amulet",
+	"one_hand_melee", "two_hand_melee", "bow", "crossbow", "spear", "quarterstaff", "flail", "claw", "dagger",
+	"wand", "staff", "sceptre", "jewel", "life_flask", "mana_flask", "charm"
+};
+
+std::optional<int> ParseInt(std::string_view text)
+{
+	int value = 0;
+	bool negative = false;
+	size_t i = 0;
+	if (!text.empty() && text[0] == '-') {
+		negative = true;
+		i = 1;
+	}
+	if (i == text.size())
+		return std::nullopt;
+	for (; i < text.size(); i++) {
+		if (text[i] < '0' || text[i] > '9')
+			return std::nullopt;
+		value = (value * 10) + (text[i] - '0');
+	}
+	return negative ? -value : value;
+}
+
+uint32_t ParseSlots(std::string_view text)
+{
+	uint32_t slots = 0;
+	for (const std::string_view name : SplitByChar(text, ',')) {
+		const auto *it = std::find(SlotNames.begin(), SlotNames.end(), name);
+		if (it != SlotNames.end())
+			slots |= 1U << static_cast<uint32_t>(it - SlotNames.begin());
+	}
+	return slots;
+}
+
+uint8_t ParseBaseTags(std::string_view text)
+{
+	uint8_t tags = 0;
+	for (const std::string_view name : SplitByChar(text, ',')) {
+		if (name == "armour_base")
+			tags |= ModBaseArmour;
+		else if (name == "evasion_base")
+			tags |= ModBaseEvasion;
+		else if (name == "energy_shield_base")
+			tags |= ModBaseEnergyShield;
+		else if (name == "armour_evasion_base")
+			tags |= ModBaseArmourEvasion;
+		else if (name == "armour_es_base")
+			tags |= ModBaseArmourEnergyShield;
+		else if (name == "evasion_es_base")
+			tags |= ModBaseEvasionEnergyShield;
+	}
+	return tags;
+}
+
+bool LoadFamilies(std::vector<std::vector<std::string>> &conflictIds)
+{
+	constexpr std::string_view Filename = "txtdata\\poe2\\modifier_families.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the modifier families: {}", Filename);
+		return false;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		ModFamily family {};
+		std::string text;
+		reader.readString("id", family.id);
+		reader.readString("name", family.name);
+		reader.readString("word", family.word);
+		reader.readString("side", text);
+		family.prefix = text == "prefix";
+		reader.readString("group", family.group);
+		reader.readString("tags", text);
+		reader.readString("slots", text);
+		family.slots = ParseSlots(text);
+		reader.readString("baseTags", text);
+		family.baseTags = ParseBaseTags(text);
+		reader.readString("conflicts", text);
+		std::vector<std::string> conflicts;
+		for (const std::string_view id : SplitByChar(text, ',')) {
+			if (!id.empty())
+				conflicts.emplace_back(id);
+		}
+		conflictIds.push_back(std::move(conflicts));
+		reader.readString("template", family.text);
+		reader.readString("effect", text);
+		family.effect = magic_enum::enum_cast<ModEffect>(text).value_or(ModEffect::None);
+		reader.readString("scale1", text);
+		family.scale[0] = static_cast<int16_t>(ParseInt(text).value_or(100));
+		reader.readString("scale2", text);
+		family.scale[1] = static_cast<int16_t>(ParseInt(text).value_or(100));
+		reader.readString("enabled", text);
+		family.enabled = text == "true" && family.effect != ModEffect::None;
+		Families.push_back(std::move(family));
+		if (Families.size() > UINT8_MAX) {
+			LogError("Too many modifier families in {}", Filename);
+			return false;
+		}
+	}
+	return true;
+}
+
+bool LoadTiers()
+{
+	constexpr std::string_view Filename = "txtdata\\poe2\\modifier_tiers.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the modifier tiers: {}", Filename);
+		return false;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		std::string text;
+		reader.readString("family", text);
+		const std::optional<uint8_t> family = FindModifierFamily(text);
+		if (!family) {
+			LogError("Modifier tier for unknown family \"{}\"", text);
+			continue;
+		}
+		ModTier tier {};
+		const auto readInt = [&reader, &text](std::string_view field) {
+			reader.readString(field, text);
+			return ParseInt(text).value_or(0);
+		};
+		tier.tier = static_cast<uint8_t>(std::clamp(readInt("tier"), 1, 8));
+		tier.itemLevel = static_cast<uint8_t>(std::clamp(readInt("itemLevel"), 1, 100));
+		tier.weight = static_cast<uint16_t>(std::clamp(readInt("weight"), 0, UINT16_MAX));
+		tier.min[0] = static_cast<int16_t>(readInt("min1"));
+		tier.max[0] = static_cast<int16_t>(readInt("max1"));
+		tier.min[1] = static_cast<int16_t>(readInt("min2"));
+		tier.max[1] = static_cast<int16_t>(readInt("max2"));
+		Families[*family].tiers.push_back(tier);
+	}
+	for (ModFamily &family : Families) {
+		std::sort(family.tiers.begin(), family.tiers.end(), [](const ModTier &a, const ModTier &b) { return a.tier < b.tier; });
+	}
+	return true;
+}
+
+/** @brief A small generator of its own, so rolling modifiers leaves the game's sequence alone. */
+class ModRandom {
+public:
+	explicit ModRandom(uint32_t seed)
+	    : state_(seed)
+	{
+	}
+
+	uint32_t next()
+	{
+		state_ += 0x9E3779B9U;
+		uint32_t value = state_;
+		value ^= value >> 16;
+		value *= 0x7FEB352DU;
+		value ^= value >> 15;
+		value *= 0x846CA68BU;
+		value ^= value >> 16;
+		return value;
+	}
+
+	/** @brief A number from 0 to range - 1. */
+	uint32_t below(uint32_t range)
+	{
+		return range == 0 ? 0 : next() % range;
+	}
+
+	int between(int min, int max)
+	{
+		if (max <= min)
+			return min;
+		return min + static_cast<int>(below(static_cast<uint32_t>(max - min + 1)));
+	}
+
+private:
+	uint32_t state_;
+};
+
+int16_t ScaleValue(int value, int scale)
+{
+	if (scale == 100 || value == 0)
+		return static_cast<int16_t>(value);
+	const int scaled = ((value * scale) + (value > 0 ? 50 : -50)) / 100;
+	if (scaled == 0)
+		return static_cast<int16_t>(value > 0 ? 1 : -1);
+	return static_cast<int16_t>(scaled);
+}
+
+bool Conflicts(uint8_t family, const std::vector<Poe2ItemMod> &rolled)
+{
+	const ModFamily &candidate = Families[family];
+	for (const Poe2ItemMod &mod : rolled) {
+		const uint8_t other = mod.family - 1;
+		if (other == family || Families[other].group == candidate.group)
+			return true;
+		if (std::find(candidate.conflicts.begin(), candidate.conflicts.end(), other) != candidate.conflicts.end())
+			return true;
+	}
+	return false;
+}
+
+void AddPoe2Stat(Item &item, Poe2ItemStat stat, int value)
+{
+	int16_t &total = item._iPoe2Stats[static_cast<size_t>(stat)];
+	total = static_cast<int16_t>(std::clamp(total + value, static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
+}
+
+uint8_t AddToByte(uint8_t base, int value)
+{
+	return static_cast<uint8_t>(std::clamp(base + value, 0, static_cast<int>(UINT8_MAX)));
+}
+
+} // namespace
+
+void LoadModifierData()
+{
+	Families.clear();
+	if (!gbIsPoe2)
+		return;
+
+	std::vector<std::vector<std::string>> conflictIds;
+	if (!LoadFamilies(conflictIds) || !LoadTiers()) {
+		Families.clear();
+		return;
+	}
+	// The tables list most conflicts one way only; an item can't have both whichever rolled first.
+	for (size_t i = 0; i < Families.size(); i++) {
+		for (const std::string &id : conflictIds[i]) {
+			const std::optional<uint8_t> other = FindModifierFamily(id);
+			if (!other || *other == i)
+				continue;
+			Families[i].conflicts.push_back(*other);
+			Families[*other].conflicts.push_back(static_cast<uint8_t>(i));
+		}
+	}
+	for (ModFamily &family : Families) {
+		std::sort(family.conflicts.begin(), family.conflicts.end());
+		family.conflicts.erase(std::unique(family.conflicts.begin(), family.conflicts.end()), family.conflicts.end());
+		if (family.tiers.empty())
+			family.enabled = false;
+	}
+}
+
+const std::vector<ModFamily> &ModifierFamilies()
+{
+	return Families;
+}
+
+std::optional<uint8_t> FindModifierFamily(std::string_view id)
+{
+	for (size_t i = 0; i < Families.size(); i++) {
+		if (Families[i].id == id)
+			return static_cast<uint8_t>(i);
+	}
+	return std::nullopt;
+}
+
+std::optional<ModSlot> ItemModSlot(const Item &item)
+{
+	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
+		return std::nullopt;
+	const ItemData &base = AllItemsList[static_cast<size_t>(item.IDidx)];
+	const std::string_view shortName = base.iSName;
+	const bool twoHanded = item._iLoc == ILOC_TWOHAND;
+	switch (item._itype) {
+	case ItemType::Helm:
+		return ModSlot::Helmet;
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor:
+		return ModSlot::BodyArmour;
+	case ItemType::Shield:
+		return shortName == "Focus" ? ModSlot::Focus : ModSlot::Shield;
+	case ItemType::Ring:
+		return ModSlot::Ring;
+	case ItemType::Amulet:
+		return ModSlot::Amulet;
+	case ItemType::Bow:
+		return shortName == "Crossbow" ? ModSlot::Crossbow : ModSlot::Bow;
+	case ItemType::Staff:
+		return shortName == "Quarterstaff" ? ModSlot::Quarterstaff : ModSlot::Staff;
+	case ItemType::Mace:
+		if (shortName == "Sceptre")
+			return ModSlot::Sceptre;
+		return twoHanded ? ModSlot::TwoHandMelee : ModSlot::OneHandMelee;
+	case ItemType::Sword:
+		if (shortName == "Dagger")
+			return ModSlot::Dagger;
+		return twoHanded ? ModSlot::TwoHandMelee : ModSlot::OneHandMelee;
+	case ItemType::Axe:
+		return twoHanded ? ModSlot::TwoHandMelee : ModSlot::OneHandMelee;
+	default:
+		return std::nullopt;
+	}
+}
+
+uint8_t ItemModBaseTags(const Item &item)
+{
+	if (item._iClass != ICLASS_ARMOR)
+		return 0;
+	switch (ItemDefenseType(item)) {
+	case DefenseType::Armour:
+		return ModBaseArmour;
+	case DefenseType::Evasion:
+		return ModBaseEvasion;
+	case DefenseType::EnergyShield:
+		return ModBaseEnergyShield;
+	case DefenseType::ArmourEvasion:
+		return ModBaseArmour | ModBaseEvasion | ModBaseArmourEvasion;
+	case DefenseType::ArmourEnergyShield:
+		return ModBaseArmour | ModBaseEnergyShield | ModBaseArmourEnergyShield;
+	case DefenseType::EvasionEnergyShield:
+		return ModBaseEvasion | ModBaseEnergyShield | ModBaseEvasionEnergyShield;
+	case DefenseType::All:
+		return ModBaseArmour | ModBaseEvasion | ModBaseEnergyShield | ModBaseArmourEvasion | ModBaseArmourEnergyShield | ModBaseEvasionEnergyShield;
+	}
+	return 0;
+}
+
+std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed)
+{
+	std::vector<Poe2ItemMod> rolled;
+	ModRandom picks { seed };
+	ModRandom values { valueSeed };
+	int prefixes = 0;
+	int suffixes = 0;
+	const uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
+
+	struct Candidate {
+		uint8_t family;
+		uint8_t tierIndex;
+		uint16_t weight;
+	};
+	std::vector<Candidate> candidates;
+	while (static_cast<int>(rolled.size()) < count) {
+		// POE2 picks among every legal tier of every legal family at once, by weight.
+		candidates.clear();
+		uint32_t totalWeight = 0;
+		for (size_t f = 0; f < Families.size(); f++) {
+			const ModFamily &family = Families[f];
+			if (!family.enabled || (family.slots & slotBit) == 0)
+				continue;
+			if (family.baseTags != 0 && (family.baseTags & baseTags) == 0)
+				continue;
+			if ((family.prefix ? prefixes : suffixes) >= perSide)
+				continue;
+			if (Conflicts(static_cast<uint8_t>(f), rolled))
+				continue;
+			for (size_t t = 0; t < family.tiers.size(); t++) {
+				const ModTier &tier = family.tiers[t];
+				if (tier.itemLevel > itemLevel || tier.weight == 0)
+					continue;
+				candidates.push_back({ static_cast<uint8_t>(f), static_cast<uint8_t>(t), tier.weight });
+				totalWeight += tier.weight;
+			}
+		}
+		if (totalWeight == 0)
+			break;
+		uint32_t pick = picks.below(totalWeight);
+		const Candidate *chosen = &candidates.back();
+		for (const Candidate &candidate : candidates) {
+			if (pick < candidate.weight) {
+				chosen = &candidate;
+				break;
+			}
+			pick -= candidate.weight;
+		}
+		const ModFamily &family = Families[chosen->family];
+		const ModTier &tier = family.tiers[chosen->tierIndex];
+		Poe2ItemMod mod { static_cast<uint8_t>(chosen->family + 1), tier.tier, {} };
+		for (size_t stat = 0; stat < 2; stat++)
+			mod.values[stat] = ScaleValue(values.between(tier.min[stat], tier.max[stat]), family.scale[stat]);
+		// Added damage rolls its low and high end apart; keep them in order.
+		if (IsAnyOf(family.effect, ModEffect::AddedPhysical, ModEffect::AddedFire, ModEffect::AddedLightning, ModEffect::AddedPhysicalToAttacks) && mod.values[1] < mod.values[0])
+			mod.values[1] = mod.values[0];
+		rolled.push_back(mod);
+		if (family.prefix)
+			prefixes++;
+		else
+			suffixes++;
+	}
+	return rolled;
+}
+
+int MagicModCount(uint32_t seed)
+{
+	ModRandom random { seed ^ 0x3C6EF372U };
+	return 1 + static_cast<int>(random.below(2));
+}
+
+int RareModCount(uint32_t seed)
+{
+	ModRandom random { seed ^ 0x52A4E5U };
+	const uint32_t roll = random.below(12);
+	if (roll < 8)
+		return 4;
+	return roll < 11 ? 5 : 6;
+}
+
+const ModFamily *ItemModFamily(const Poe2ItemMod &mod)
+{
+	if (mod.family == 0 || mod.family > Families.size())
+		return nullptr;
+	return &Families[mod.family - 1];
+}
+
+void ApplyItemMod(Item &item, const Poe2ItemMod &mod)
+{
+	const ModFamily *family = ItemModFamily(mod);
+	if (family == nullptr)
+		return;
+	const int v0 = mod.values[0];
+	const int v1 = mod.values[1];
+	switch (family->effect) {
+	case ModEffect::None:
+		break;
+	case ModEffect::Life:
+		item._iPLHP += Fixed10_6::fromInt(v0);
+		break;
+	case ModEffect::Mana:
+		item._iPLMana += Fixed10_6::fromInt(v0);
+		break;
+	case ModEffect::FlatDefense:
+		item._iAC = static_cast<int16_t>(item._iAC + v0);
+		break;
+	case ModEffect::DefensePercent:
+		item._iPLAC = static_cast<int16_t>(item._iPLAC + v0);
+		break;
+	case ModEffect::LifeAndDefensePercent:
+		item._iPLHP += Fixed10_6::fromInt(v0);
+		item._iPLAC = static_cast<int16_t>(item._iPLAC + v1);
+		break;
+	case ModEffect::ManaAndDefensePercent:
+		item._iPLMana += Fixed10_6::fromInt(v0);
+		item._iPLAC = static_cast<int16_t>(item._iPLAC + v1);
+		break;
+	case ModEffect::Spirit:
+		AddPoe2Stat(item, Poe2ItemStat::Spirit, v0);
+		break;
+	case ModEffect::AddedPhysical:
+		item._iMinDam = AddToByte(item._iMinDam, v0);
+		item._iMaxDam = AddToByte(item._iMaxDam, v1);
+		break;
+	case ModEffect::PhysicalPercent:
+		item._iPLDam = static_cast<int16_t>(item._iPLDam + v0);
+		break;
+	case ModEffect::PhysicalPercentAndAccuracy:
+		item._iPLDam = static_cast<int16_t>(item._iPLDam + v0);
+		item._iPLToHit = static_cast<int16_t>(item._iPLToHit + v1);
+		break;
+	case ModEffect::AddedFire:
+		item._iFlags |= ItemSpecialEffect::FireDamage;
+		item._iFMinDam = static_cast<int16_t>(item._iFMinDam + v0);
+		item._iFMaxDam = static_cast<int16_t>(item._iFMaxDam + v1);
+		break;
+	case ModEffect::AddedLightning:
+		item._iFlags |= ItemSpecialEffect::LightningDamage;
+		item._iLMinDam = static_cast<int16_t>(item._iLMinDam + v0);
+		item._iLMaxDam = static_cast<int16_t>(item._iLMaxDam + v1);
+		break;
+	case ModEffect::MinionDamage:
+		AddPoe2Stat(item, Poe2ItemStat::MinionDamage, v0);
+		break;
+	case ModEffect::AddedPhysicalToAttacks:
+		// Diablo adds one fixed amount to each hit, so the range becomes its middle.
+		item._iPLDamMod = static_cast<int16_t>(item._iPLDamMod + ((v0 + v1 + 1) / 2));
+		break;
+	case ModEffect::Strength:
+		item._iPLStr = static_cast<int16_t>(item._iPLStr + v0);
+		break;
+	case ModEffect::Dexterity:
+		item._iPLDex = static_cast<int16_t>(item._iPLDex + v0);
+		break;
+	case ModEffect::Intelligence:
+		item._iPLMag = static_cast<int16_t>(item._iPLMag + v0);
+		break;
+	case ModEffect::AllAttributes:
+		item._iPLStr = static_cast<int16_t>(item._iPLStr + v0);
+		item._iPLDex = static_cast<int16_t>(item._iPLDex + v0);
+		item._iPLMag = static_cast<int16_t>(item._iPLMag + v0);
+		break;
+	case ModEffect::FireResistance:
+		item._iPLFR = static_cast<int16_t>(item._iPLFR + v0);
+		break;
+	case ModEffect::MagicResistance:
+		item._iPLMR = static_cast<int16_t>(item._iPLMR + v0);
+		break;
+	case ModEffect::LightningResistance:
+		item._iPLLR = static_cast<int16_t>(item._iPLLR + v0);
+		break;
+	case ModEffect::AllResistances:
+		item._iPLFR = static_cast<int16_t>(item._iPLFR + v0);
+		item._iPLLR = static_cast<int16_t>(item._iPLLR + v0);
+		item._iPLMR = static_cast<int16_t>(item._iPLMR + v0);
+		break;
+	case ModEffect::AttackSpeed:
+		AddPoe2Stat(item, Poe2ItemStat::AttackSpeed, v0);
+		break;
+	case ModEffect::CastSpeed:
+		AddPoe2Stat(item, Poe2ItemStat::CastSpeed, v0);
+		break;
+	case ModEffect::Accuracy:
+		item._iPLToHit = static_cast<int16_t>(item._iPLToHit + v0);
+		break;
+	case ModEffect::ReducedRequirements:
+		item._iMinStr = static_cast<int8_t>(item._iMinStr - (item._iMinStr * v0 / 100));
+		item._iMinMag = static_cast<uint8_t>(item._iMinMag - (item._iMinMag * v0 / 100));
+		item._iMinDex = static_cast<int8_t>(item._iMinDex - (item._iMinDex * v0 / 100));
+		break;
+	case ModEffect::LifeRegeneration:
+		item._iPLLifeRegen = static_cast<int16_t>(item._iPLLifeRegen + v0);
+		break;
+	case ModEffect::ManaRegeneration:
+		item._iPLManaRegen = static_cast<int16_t>(item._iPLManaRegen + v0);
+		break;
+	case ModEffect::MeleeSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::MeleeSkillLevels, v0);
+		break;
+	case ModEffect::ProjectileSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::ProjectileSkillLevels, v0);
+		break;
+	case ModEffect::SpellSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::SpellSkillLevels, v0);
+		break;
+	case ModEffect::FireSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::FireSkillLevels, v0);
+		break;
+	case ModEffect::LightningSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::LightningSkillLevels, v0);
+		break;
+	}
+}
+
+std::vector<std::string> ItemModText(const Poe2ItemMod &mod)
+{
+	std::vector<std::string> lines;
+	const ModFamily *family = ItemModFamily(mod);
+	if (family == nullptr)
+		return lines;
+	const std::string text = FormatRuntime(family->text, mod.values[0], mod.values[1]);
+	// Hybrid modifiers show one line per stat, the tier on the last one.
+	for (const std::string_view line : SplitByChar(text, ';')) {
+		std::string_view trimmed = line;
+		while (!trimmed.empty() && trimmed.front() == ' ')
+			trimmed.remove_prefix(1);
+		lines.emplace_back(trimmed);
+	}
+	if (!lines.empty())
+		lines.back().append(StrCat(" (T", mod.tier, ")"));
+	return lines;
+}
+
+int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
+{
+	const auto stat = [&data](Poe2ItemStat which) { return static_cast<int>(data.itemStats[static_cast<size_t>(which)]); };
+	switch (skill.kind) {
+	case SkillKind::Attack:
+		return stat(IsRangedWeaponSkill(skill.attack()) ? Poe2ItemStat::ProjectileSkillLevels : Poe2ItemStat::MeleeSkillLevels);
+	case SkillKind::Spell: {
+		int bonus = stat(Poe2ItemStat::SpellSkillLevels);
+		const SpellID spell = skill.spell();
+		if (static_cast<size_t>(spell) < SpellsData.size()) {
+			const MagicType type = GetSpellData(spell).type();
+			if (type == MagicType::Fire)
+				bonus += stat(Poe2ItemStat::FireSkillLevels);
+			else if (type == MagicType::Lightning)
+				bonus += stat(Poe2ItemStat::LightningSkillLevels);
+		}
+		return bonus;
+	}
+	default:
+		return 0;
+	}
+}
+
+std::string MagicModItemName(const Item &item, std::string_view baseName)
+{
+	std::string_view prefix;
+	std::string_view suffix;
+	for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+		const ModFamily *family = ItemModFamily(mod);
+		if (family == nullptr)
+			continue;
+		if (family->prefix && prefix.empty())
+			prefix = family->word;
+		else if (!family->prefix && suffix.empty())
+			suffix = family->word;
+	}
+	std::string name;
+	if (!prefix.empty())
+		name = StrCat(prefix, " ");
+	name.append(baseName);
+	if (!suffix.empty())
+		name.append(StrCat(" ", suffix));
+	return name;
+}
+
+} // namespace devilution

@@ -19,6 +19,7 @@
 #include "game_mode.hpp"
 #include "levels/dun_tile.hpp"
 #include "monster.h"
+#include "poe2/item_stats.hpp"
 #include "tables/itemdat.h"
 #include "utils/fixed_point.hpp"
 #include "utils/is_of.hpp"
@@ -44,6 +45,16 @@ constexpr int MaxBoyValueHf = 200000;
 
 /** Maximum number of affixes on a rare item (up to 3 prefixes and 3 suffixes). */
 constexpr size_t MaxRareAffixes = 6;
+
+/** POE2 Mashup: a modifier rolled from the itemization tables (see poe2/modifiers.hpp). */
+struct Poe2ItemMod {
+	/** Index of the modifier family plus 1; 0 for none. */
+	uint8_t family = 0;
+	/** 1 is the strongest. */
+	uint8_t tier = 0;
+	/** The rolled values, already scaled to the game. */
+	std::array<int16_t, 2> values {};
+};
 
 enum item_quality : uint8_t {
 	ITEM_QUALITY_NORMAL,
@@ -215,6 +226,9 @@ enum icreateinfo_flag2 {
 	// clang-format on
 };
 
+/** POE2 Mashup: the item rolls its affixes from the itemization tables (poe2/modifiers.hpp); set with its POE2 item level. */
+constexpr uint32_t CF_POE2_MODS = 1U << 31;
+
 // All item animation frames have this width.
 constexpr int ItemAnimWidth = 96;
 
@@ -291,6 +305,10 @@ struct Item {
 	uint8_t _iPreTier = 0;
 	uint8_t _iSufTier = 0;
 	std::array<uint8_t, MaxRareAffixes> _iRareTiers {};
+	/** POE2 Mashup: modifiers of an item with CF_POE2_MODS, in the order they were rolled. Not saved; restored from the item seed. */
+	std::array<Poe2ItemMod, MaxRareAffixes> _iPoe2Mods {};
+	/** POE2 Mashup: stats from those modifiers. Not saved; restored from the item seed. */
+	std::array<int16_t, static_cast<size_t>(Poe2ItemStat::Count)> _iPoe2Stats {};
 	int _iVAdd1 = 0;
 	int _iVMult1 = 0;
 	int _iVAdd2 = 0;

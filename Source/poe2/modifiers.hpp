@@ -1,0 +1,173 @@
+/**
+ * @file poe2/modifiers.hpp
+ *
+ * POE2 Mashup modifier engine: magic and rare items roll their affixes from the itemization tables
+ * (modifier families with T8 to T1 tiers gated by item level), like POE2.
+ */
+#pragma once
+
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace devilution {
+
+struct Item;
+struct Player;
+struct Poe2ItemMod;
+
+/** @brief What a modifier family does to the item. */
+enum class ModEffect : uint8_t {
+	None,
+	Life,
+	Mana,
+	/** Added to the item's armour, evasion or energy shield. */
+	FlatDefense,
+	DefensePercent,
+	LifeAndDefensePercent,
+	ManaAndDefensePercent,
+	Spirit,
+	/** Added to the weapon's own damage. */
+	AddedPhysical,
+	PhysicalPercent,
+	PhysicalPercentAndAccuracy,
+	AddedFire,
+	AddedLightning,
+	MinionDamage,
+	/** Added to every attack, from jewelry. */
+	AddedPhysicalToAttacks,
+	Strength,
+	Dexterity,
+	Intelligence,
+	AllAttributes,
+	FireResistance,
+	MagicResistance,
+	LightningResistance,
+	AllResistances,
+	AttackSpeed,
+	CastSpeed,
+	Accuracy,
+	ReducedRequirements,
+	LifeRegeneration,
+	ManaRegeneration,
+	MeleeSkillLevels,
+	ProjectileSkillLevels,
+	SpellSkillLevels,
+	FireSkillLevels,
+	LightningSkillLevels,
+};
+
+/** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */
+enum class ModSlot : uint8_t {
+	Helmet,
+	BodyArmour,
+	Gloves,
+	Boots,
+	Belt,
+	Shield,
+	Focus,
+	Quiver,
+	Ring,
+	Amulet,
+	OneHandMelee,
+	TwoHandMelee,
+	Bow,
+	Crossbow,
+	Spear,
+	Quarterstaff,
+	Flail,
+	Claw,
+	Dagger,
+	Wand,
+	Staff,
+	Sceptre,
+	Jewel,
+	LifeFlask,
+	ManaFlask,
+	Charm,
+	Count,
+};
+
+/** @brief Defence tags of armour bases that some families need. */
+enum ModBaseTag : uint8_t {
+	ModBaseArmour = 1 << 0,
+	ModBaseEvasion = 1 << 1,
+	ModBaseEnergyShield = 1 << 2,
+	ModBaseArmourEvasion = 1 << 3,
+	ModBaseArmourEnergyShield = 1 << 4,
+	ModBaseEvasionEnergyShield = 1 << 5,
+};
+
+struct ModTier {
+	/** @brief 1 is the strongest, 8 the weakest. */
+	uint8_t tier;
+	uint8_t itemLevel;
+	uint16_t weight;
+	/** @brief Value ranges of the family's one or two stats, before scaling to the game. */
+	std::array<int16_t, 2> min;
+	std::array<int16_t, 2> max;
+};
+
+struct ModFamily {
+	std::string id;
+	std::string name;
+	/** @brief Word a magic item's name takes from it: "Virile" before the base, "of the Brute" after it. */
+	std::string word;
+	bool prefix;
+	std::string group;
+	uint32_t slots;
+	/** @brief The base needs one of these tags; 0 for any base. */
+	uint8_t baseTags;
+	/** @brief Families that can't be on the same item, both ways. */
+	std::vector<uint8_t> conflicts;
+	/** @brief Tooltip text, with {0} and {1} for the values. */
+	std::string text;
+	ModEffect effect;
+	/** @brief Percent of the table's value the game uses, per stat. */
+	std::array<int16_t, 2> scale;
+	bool enabled;
+	/** @brief Ordered T1 first. */
+	std::vector<ModTier> tiers;
+};
+
+/** @brief POE2: a magic item has at most one prefix and one suffix, a rare three of each. */
+constexpr int MaxMagicModsPerSide = 1;
+constexpr int MaxRareModsPerSide = 3;
+
+/** @brief Loads the modifier tables from the POE2 Mashup mod, or clears them outside POE2 mode. */
+void LoadModifierData();
+const std::vector<ModFamily> &ModifierFamilies();
+std::optional<uint8_t> FindModifierFamily(std::string_view id);
+
+/** @brief The slot of the itemization tables an item fills, if it has one. */
+std::optional<ModSlot> ItemModSlot(const Item &item);
+/** @brief The defence tags of an armour base; 0 for other items. */
+uint8_t ItemModBaseTags(const Item &item);
+
+/**
+ * @brief Rolls an item's modifiers from its seed, without touching the game's random number generator.
+ * @param count How many to roll; fewer if the pool runs dry.
+ * @param valueSeed Seeds the value rolls apart from the picks, so a Divine Orb can reroll values only.
+ */
+std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed);
+
+/** @brief The number of modifiers a natural rare rolls: 4, 5 or 6, weighted 8:3:1. */
+int RareModCount(uint32_t seed);
+/** @brief The number of modifiers a magic item rolls: 1 or 2. */
+int MagicModCount(uint32_t seed);
+
+/** @brief Changes the item by the modifier: base values, its own stats, or the POE2 stats the player adds up. */
+void ApplyItemMod(Item &item, const Poe2ItemMod &mod);
+
+/** @brief The modifier's tooltip lines, with its tier at the end. */
+std::vector<std::string> ItemModText(const Poe2ItemMod &mod);
+
+/** @brief The family of a rolled modifier, or nullptr for an empty one. */
+const ModFamily *ItemModFamily(const Poe2ItemMod &mod);
+
+/** @brief The item's name with the words of its prefix and suffix, for a magic item. */
+std::string MagicModItemName(const Item &item, std::string_view baseName);
+
+} // namespace devilution

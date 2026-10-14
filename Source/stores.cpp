@@ -32,6 +32,7 @@
 #include "panels/skills_panel.hpp"
 #include "plrmsg.h"
 #include "poe2/loot.hpp"
+#include "poe2/modifiers.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "tables/townerdat.hpp"
@@ -358,7 +359,26 @@ void PrintStoreItem(const Item &item, int l, UiFlags flags, bool cursIndent = fa
 {
 	std::string productLine;
 
-	if (item._iIdentified && item._iMagical == ITEM_QUALITY_RARE) {
+	if (item._iIdentified && item._iPoe2Mods[0].family != 0) {
+		// Show the first two modifiers and how many more there are.
+		int shown = 0;
+		int hidden = 0;
+		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+			const std::vector<std::string> lines = ItemModText(mod);
+			if (lines.empty())
+				continue;
+			if (shown == 2) {
+				hidden++;
+				continue;
+			}
+			if (!productLine.empty())
+				productLine.append(_(",  "));
+			productLine.append(lines.front());
+			shown++;
+		}
+		if (hidden > 0)
+			productLine.append(FormatRuntime(" (+{:d})", hidden));
+	} else if (item._iIdentified && item._iMagical == ITEM_QUALITY_RARE) {
 		// Rare items have up to six affixes; show the first two and how many more there are.
 		int shown = 0;
 		int hidden = 0;

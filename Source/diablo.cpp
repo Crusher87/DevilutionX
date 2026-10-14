@@ -98,6 +98,7 @@
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
@@ -2991,6 +2992,7 @@ int DiabloMain(int argc, char **argv)
 	LoadMonsterData();
 	LoadItemData();
 	LoadPassiveTreeData();
+	LoadModifierData();
 	LoadObjectData();
 	LoadQuestData();
 
