@@ -206,6 +206,10 @@ enum icreateinfo_flag2 {
 	CF_POE2_FLASK_ROLLED = 1 << 27,
 	/** A skill gem's level, 1 to 20; 0 on gems from before gem levels (level 1). Shares the flask bits, which only flasks use. */
 	CF_POE2_GEM_LEVEL = ((1 << 5) - 1) << 16,
+	/** The rarity a POE2 loot roll gave this item (item_quality: normal, magic, rare or unique). */
+	CF_POE2_LOOT_RARITY = ((1 << 2) - 1) << 28,
+	/** The item was dropped by the POE2 loot rules, so it's built with the rarity above. */
+	CF_POE2_LOOT_SET = 1 << 30,
 	// clang-format on
 };
 
@@ -570,6 +574,10 @@ _item_indexes RndItemForMonsterLevel(int8_t monsterLevel);
 void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t iseed, int lvl, int uper, bool onlygood, bool pregen, int uidOffset = 0, bool forceNotUnique = false);
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen);
 void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn = false);
+/** @brief POE2 Mashup: drops a kill's loot by the POE2 rules: a number of rolls by how tough the monster was, and a boss's extras. */
+void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);
+/** @brief POE2 Mashup: drops this many extra loot rolls, e.g. from a Golden Charm. */
+void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int rolls);
 void CreateRndItem(Point position, bool onlygood, bool sendmsg, bool delta);
 void CreateRndUseful(Point position, bool sendmsg);
 void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc, bool sendmsg, bool delta, bool spawn = false);

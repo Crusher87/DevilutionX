@@ -4083,8 +4083,11 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	SpawnLoot(monster, sendmsg);
 	// POE2 Mashup: magic and rare monsters drop more.
 	if (!monster.isPlayerMinion()) {
-		for (int i = MonsterExtraDrops(monster) + goldenDrops; i > 0; i--)
-			SpawnItem(monster, monster.position.tile, sendmsg);
+		if (gbIsPoe2)
+			SpawnPoe2LootRolls(monster, monster.position.tile, sendmsg, goldenDrops);
+		else
+			for (int i = MonsterExtraDrops(monster) + goldenDrops; i > 0; i--)
+				SpawnItem(monster, monster.position.tile, sendmsg);
 	}
 
 	if (monster.type().type == MT_DIABLO)

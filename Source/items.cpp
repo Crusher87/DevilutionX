@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -73,6 +74,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/loot.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
@@ -1292,7 +1294,9 @@ struct RareAffixRoll {
 std::vector<RareAffixRoll> RollRareAffixes(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
 {
 	const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
-	const int wantedAffixes = std::min<int>(3 + GenerateRnd(4) + exalts, static_cast<int>(MaxRareAffixes));
+	// Rares from the POE2 loot rules have 4 to 6 affixes, mostly 4; crafted ones 3 to 6.
+	const int baseAffixes = GetLootRarity(item) ? RollNaturalRareAffixCount() : 3 + GenerateRnd(4);
+	const int wantedAffixes = std::min<int>(baseAffixes + exalts, static_cast<int>(MaxRareAffixes));
 	int prefixes = 0;
 	int suffixes = 0;
 	std::vector<RareAffixRoll> rolls;
@@ -1380,10 +1384,14 @@ void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, 
 
 void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs, bool onlygood)
 {
-	if ((item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0) {
+	// POE2 loot drops already know their rarity; older items roll 1 in 5 magic items as rare.
+	const std::optional<item_quality> lootRarity = GetLootRarity(item);
+	if (lootRarity == ITEM_QUALITY_RARE || (!lootRarity && (item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0)) {
 		GetItemPowerRare(player, item, minlvl, maxlvl, flgs);
 		return;
 	}
+	if (lootRarity)
+		onlygood = true;
 
 	const PLStruct *pPrefix = nullptr;
 	const PLStruct *pSufix = nullptr;
@@ -3716,7 +3724,25 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 	else if (uper == 1)
 		item._iCreateInfo |= CF_UPER1;
 
-	if (item._iMiscId != IMISC_UNIQUE) {
+	if (const std::optional<item_quality> lootRarity = GetLootRarity(item); lootRarity && item._iMiscId != IMISC_UNIQUE) {
+		// POE2 Mashup: the loot roll picked the rarity; a unique keeps the pick stored in its unique offset.
+		std::optional<_unique_items> uid;
+		if (*lootRarity == ITEM_QUALITY_UNIQUE) {
+			const std::vector<uint8_t> validUniques = GetValidUniques(lvl, AllItemsList[item.IDidx].iItemId);
+			if (static_cast<size_t>(uidOffset) < validUniques.size())
+				uid = static_cast<_unique_items>(validUniques[validUniques.size() - 1 - uidOffset]);
+		}
+		if (uid) {
+			GetUniqueItem(player, item, *uid);
+		} else if (*lootRarity != ITEM_QUALITY_NORMAL) {
+			if (*lootRarity == ITEM_QUALITY_UNIQUE)
+				SetLootRarity(item, ITEM_QUALITY_RARE);
+			GetItemBonus(player, item, lvl / 2, lvl, true, true);
+		}
+		if (item._iMagical != ITEM_QUALITY_UNIQUE)
+			ItemRndDur(item);
+		ApplyCorruptionImplicit(player, item);
+	} else if (item._iMiscId != IMISC_UNIQUE) {
 		const int iblvl = GetItemBLevel(lvl, item._iMiscId, onlygood, uper == 15);
 		if (iblvl != -1) {
 			_unique_items uid = UITEM_INVALID;
@@ -3854,6 +3880,239 @@ void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper,
 	}
 }
 
+namespace {
+
+bool IsPoe2FlaskOrCharm(item_misc_id miscId)
+{
+	return IsAnyOf(miscId, IMISC_HEAL, IMISC_FULLHEAL, IMISC_MANA, IMISC_FULLMANA, IMISC_REJUV, IMISC_FULLREJUV, IMISC_CHARM_LIFE, IMISC_CHARM_MANA,
+	    IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
+}
+
+bool IsPoe2Orb(item_misc_id miscId)
+{
+	return IsAnyOf(miscId, IMISC_ORB_TRANSMUTE, IMISC_ORB_ALCHEMY, IMISC_ORB_CHAOS, IMISC_ORB_SCOURING, IMISC_ORB_AUGMENT, IMISC_ORB_REGAL,
+	    IMISC_ORB_EXALTED, IMISC_ORB_DIVINE, IMISC_ORB_VAAL, IMISC_ORB_BAUBLE);
+}
+
+bool IsPoe2UncutGem(item_misc_id miscId)
+{
+	return IsAnyOf(miscId, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT);
+}
+
+/** @brief Diablo's leftovers that still drop now and then: scrolls, oils, elixirs and runes, but no spell books. */
+bool IsPoe2MiscLoot(const ItemData &data)
+{
+	return data.itype == ItemType::Misc && data.iMiscId != IMISC_BOOK && !IsPoe2FlaskOrCharm(data.iMiscId) && !IsPoe2Orb(data.iMiscId)
+	    && !IsPoe2UncutGem(data.iMiscId) && data.iMiscId != IMISC_WAYSTONE && SkillForGemData(data).isEmpty();
+}
+
+bool IsPoe2Equipment(const ItemData &data)
+{
+	return EquipmentClassWeight(data.itype) > 0;
+}
+
+bool IsPoe2LootCandidate(size_t index, int itemLevel)
+{
+	if (!IsItemAvailable(static_cast<int>(index)))
+		return false;
+	const ItemData &data = AllItemsList[index];
+	if (data.dropRate == 0 || data.iMinMLvl > itemLevel)
+		return false;
+	return !IsAnyOf(data.iSpell, SpellID::Resurrect, SpellID::HealOther) || gbIsMultiplayer;
+}
+
+/** @brief Picks a kind of equipment by its class weight, then one of its bases, favouring bases near the item level. */
+std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel)
+{
+	std::array<int, static_cast<size_t>(ItemType::None) + 1> classWeights {};
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, itemLevel))
+			classWeights[static_cast<size_t>(data.itype)] = EquipmentClassWeight(data.itype);
+	}
+	const int classTotal = std::accumulate(classWeights.begin(), classWeights.end(), 0);
+	if (classTotal == 0)
+		return std::nullopt;
+	int roll = LootRandom(classTotal);
+	size_t type = 0;
+	while (roll >= classWeights[type]) {
+		roll -= classWeights[type];
+		type++;
+	}
+
+	std::vector<std::pair<_item_indexes, int>> bases;
+	int total = 0;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		if (static_cast<size_t>(data.itype) != type || !IsPoe2LootCandidate(i, itemLevel))
+			continue;
+		const int weight = data.dropRate * BaseRecencyPercent(itemLevel, data.iMinMLvl);
+		bases.emplace_back(static_cast<_item_indexes>(i), weight);
+		total += weight;
+	}
+	roll = LootRandom(total);
+	for (const auto &[index, weight] : bases) {
+		if (roll < weight)
+			return index;
+		roll -= weight;
+	}
+	return bases.back().first;
+}
+
+std::optional<_item_indexes> PickPoe2Weighted(int itemLevel, tl::function_ref<bool(const ItemData &)> isOkay)
+{
+	std::vector<std::pair<_item_indexes, int>> items;
+	int total = 0;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (!IsPoe2LootCandidate(i, itemLevel) || !isOkay(AllItemsList[i]))
+			continue;
+		items.emplace_back(static_cast<_item_indexes>(i), AllItemsList[i].dropRate);
+		total += AllItemsList[i].dropRate;
+	}
+	if (total == 0)
+		return std::nullopt;
+	int roll = LootRandom(total);
+	for (const auto &[index, weight] : items) {
+		if (roll < weight)
+			return index;
+		roll -= weight;
+	}
+	return items.back().first;
+}
+
+std::optional<_item_indexes> PickPoe2Currency(int itemLevel)
+{
+	// A band with nothing in it yet (chase) falls to the band below.
+	for (int band = static_cast<int>(RollCurrencyBand()); band >= 0; band--) {
+		const std::optional<_item_indexes> orb = PickPoe2Weighted(itemLevel, [band](const ItemData &data) {
+			return IsPoe2Orb(data.iMiscId) && static_cast<int>(OrbCurrencyBand(data.iMiscId)) == band;
+		});
+		if (orb)
+			return orb;
+	}
+	return std::nullopt;
+}
+
+std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel)
+{
+	switch (category) {
+	case LootCategory::Equipment:
+		return PickPoe2EquipmentBase(itemLevel);
+	case LootCategory::Gold:
+		return IDI_GOLD;
+	case LootCategory::Currency:
+		return PickPoe2Currency(itemLevel);
+	case LootCategory::FlaskOrCharm:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId); });
+	case LootCategory::Gem:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId); });
+	case LootCategory::Endgame:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });
+	default:
+		return PickPoe2Weighted(itemLevel, IsPoe2MiscLoot);
+	}
+}
+
+/**
+ * @brief Turns a unique roll into a unique the hero hasn't found yet, with the base it belongs on.
+ * @return The base and the unique's offset in its base's list, or nothing if every unique at this level has dropped.
+ */
+std::optional<std::pair<_item_indexes, int>> PickPoe2Unique(int itemLevel)
+{
+	std::vector<std::pair<_item_indexes, int>> candidates;
+	for (size_t uid = 0; uid < UniqueItems.size(); uid++) {
+		const UniqueItem &unique = UniqueItems[uid];
+		if (unique.UIMinLvl > itemLevel || (UniqueItemFlags[uid] && !gbIsMultiplayer))
+			continue;
+		std::optional<_item_indexes> base;
+		for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+			if (AllItemsList[i].iItemId == unique.UIItemId && IsItemAvailable(static_cast<int>(i)) && AllItemsList[i].iMiscId != IMISC_UNIQUE && IsPoe2Equipment(AllItemsList[i]))
+				base = static_cast<_item_indexes>(i);
+		}
+		if (!base)
+			continue;
+		const std::vector<uint8_t> valid = GetValidUniques(itemLevel, unique.UIItemId);
+		const auto found = std::find(valid.begin(), valid.end(), static_cast<uint8_t>(uid));
+		if (found == valid.end())
+			continue;
+		const int offset = static_cast<int>(valid.end() - found) - 1;
+		if (offset > static_cast<int>(CF_UIDOFFSET >> 1))
+			continue;
+		candidates.emplace_back(*base, offset);
+	}
+	if (candidates.empty())
+		return std::nullopt;
+	return candidates[LootRandom(static_cast<int>(candidates.size()))];
+}
+
+void DropPoe2LootItem(Monster &monster, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt)
+{
+	if (ActiveItemCount >= MAXITEMS)
+		return;
+	const LootSource source = GetLootSource(monster);
+	const int itemLevel = std::min<int>(monster.data().level + LootItemLevelBonus(source), CF_LEVEL);
+	const int baseLevel = monster.level(sgGameInitInfo.nDifficulty) + LootItemLevelBonus(source);
+
+	std::optional<_item_indexes> idx = PickPoe2LootItem(category, baseLevel);
+	int uidOffset = 0;
+	if (category == LootCategory::Equipment) {
+		if (!rarity)
+			rarity = RollEquipmentRarity(source);
+		if (*rarity == ITEM_QUALITY_UNIQUE) {
+			if (const std::optional<std::pair<_item_indexes, int>> unique = PickPoe2Unique(itemLevel); unique) {
+				idx = unique->first;
+				uidOffset = unique->second;
+			} else {
+				rarity = ITEM_QUALITY_RARE;
+			}
+		}
+	}
+	if (!idx)
+		return;
+
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	GetSuperItemSpace(position, ii);
+	if (category == LootCategory::Equipment) {
+		SetLootRarity(item, *rarity);
+		item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
+	}
+	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, category == LootCategory::Equipment, false, uidOffset);
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer)
+		UniqueItemFlags[item._iUid] = true;
+	if (*idx == IDI_GOLD) {
+		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
+		SetPlrHandGoldCurs(item);
+	}
+	SetupItem(item);
+	TelemetryItemDropped(item, monster.name());
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+}
+
+} // namespace
+
+void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int rolls)
+{
+	const LootSource source = GetLootSource(monster);
+	for (int i = 0; i < rolls; i++)
+		DropPoe2LootItem(monster, position, sendmsg, RollLootCategory(source));
+}
+
+void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
+{
+	const LootSource source = GetLootSource(monster);
+	SpawnPoe2LootRolls(monster, position, sendmsg, RollLootCount(source));
+	if (source != LootSource::Boss)
+		return;
+	// Bosses always drop a rare, often some currency and now and then a unique on top of their rolls.
+	DropPoe2LootItem(monster, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_RARE);
+	if (LootRandom(100) < BossBonusCurrencyPercent)
+		DropPoe2LootItem(monster, position, sendmsg, LootCategory::Currency);
+	if (LootRandom(100) < BossBonusUniquePercent)
+		DropPoe2LootItem(monster, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
+}
+
 void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= false*/)
 {
 	_item_indexes idx;
@@ -3861,6 +4120,25 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 
 	const bool dropsSpecialTreasure = (monster.data().treasure & T_UNIQ) != 0;
 	const bool dropBrain = Quests[Q_MUSHROOM]._qactive == QUEST_ACTIVE && Quests[Q_MUSHROOM]._qvar1 == QS_MUSHGIVEN;
+
+	// POE2 Mashup: loot rolls by monster toughness. Quest items still drop as before, on top of the rolls.
+	if (gbIsPoe2 && !spawn) {
+		if (dropsSpecialTreasure && !UseMultiplayerQuests()) {
+			Item *uniqueItem = SpawnUnique(static_cast<_unique_items>(monster.data().treasure & T_MASK), position, std::nullopt, false);
+			if (uniqueItem != nullptr)
+				TelemetryItemDropped(*uniqueItem, monster.name());
+			if (uniqueItem != nullptr && sendmsg)
+				NetSendCmdPItem(false, CMD_DROPITEM, uniqueItem->position, *uniqueItem);
+		} else if (dropBrain && !monster.isUnique()) {
+			Quests[Q_MUSHROOM]._qvar1 = QS_BRAINSPAWNED;
+			NetSendCmdQuest(true, Quests[Q_MUSHROOM]);
+			SpawnQuestItem(IDI_BRAIN, GetSuperItemLoc(position), 0, SelectionRegion::None, sendmsg);
+		}
+		if ((monster.data().treasure & T_NODROP) != 0 && !monster.isUnique())
+			return;
+		SpawnPoe2Loot(monster, position, sendmsg);
+		return;
+	}
 
 	if (dropsSpecialTreasure && !UseMultiplayerQuests()) {
 		Item *uniqueItem = SpawnUnique(static_cast<_unique_items>(monster.data().treasure & T_MASK), position, std::nullopt, false);
