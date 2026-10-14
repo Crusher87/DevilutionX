@@ -13,6 +13,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/stacking.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/format.hpp"
@@ -888,7 +889,8 @@ void ConsumeCraftOmens(Player &player)
 		for (int i = 0; i < player._pNumInv; i++) {
 			if (GetOmenId(player.InvList[i]) == omen) {
 				EventPlrMsg(FormatRuntime(_("{:s} is used up."), GetOmen(omen).name));
-				player.RemoveInvItem(i);
+				if (!TakeOneFromStack(player.InvList[i]))
+					player.RemoveInvItem(i);
 				break;
 			}
 		}

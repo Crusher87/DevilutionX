@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 #ifdef USE_SDL3
@@ -26,6 +27,7 @@
 #include "inv.h"
 #include "minitext.h"
 #include "panels/stash_tabs_panel.hpp"
+#include "poe2/stacking.hpp"
 #include "poe2/stash_tabs.hpp"
 #include "stores.h"
 #include "utils/display.h"
@@ -154,6 +156,18 @@ void CheckStashPaste(Point cursorPosition)
 		return;
 
 	const Point firstSlot = *targetSlot;
+
+	// POE2 Mashup: currency dropped on a matching stack joins it, and what doesn't fit stays on the cursor.
+	if (const StashStruct::StashCell iv = Stash.GetItemIdAtPosition(firstSlot); iv != StashStruct::EmptyCell && itemSize == Size { 1, 1 }) {
+		Item &stack = Stash.stashList[iv];
+		if (CanStackWith(stack, player.HoldItem) && StackRoom(stack) > 0) {
+			PlaySFX(ItemInvSnds[ItemCAnimTbl[player.HoldItem._iCurs]]);
+			MergeStack(stack, player.HoldItem);
+			Stash.dirty = true;
+			NewCursor(player.HoldItem);
+			return;
+		}
+	}
 
 	// Check that no more than 1 item is replaced by the move
 	StashStruct::StashCell stashIndex = StashStruct::EmptyCell;
@@ -724,6 +738,28 @@ bool AutoPlaceItemInStash(const Item &item, bool persistItem)
 	const Size itemSize = GetInventorySize(item);
 	const unsigned pageCount = UsableStashPages();
 
+	// POE2 Mashup: currency joins matching stacks in the stash when they have room for all of it.
+	if (IsStackable(item)) {
+		int room = 0;
+		for (const Item &stack : Stash.stashList) {
+			if (CanStackWith(stack, item))
+				room += StackRoom(stack);
+		}
+		if (room >= StackCount(item)) {
+			if (persistItem) {
+				Item rest = item;
+				for (Item &stack : Stash.stashList) {
+					if (rest.isEmpty())
+						break;
+					if (CanStackWith(stack, rest) && StackRoom(stack) > 0)
+						MergeStack(stack, rest);
+				}
+				Stash.dirty = true;
+			}
+			return true;
+		}
+	}
+
 	// A POE2 tab with the item's affinity goes first, then the current page and onward
 	std::optional<unsigned> affinityPage;
 	if (gbIsPoe2)
@@ -755,12 +791,87 @@ bool AutoPlaceItemInStash(const Item &item, bool persistItem)
 				Stash.stashList[stashIndex].position = stashPosition + Displacement { 0, itemSize.height - 1 };
 				AddItemToStashGrid(pageIndex, stashPosition, stashIndex, itemSize);
 				Stash.dirty = true;
+				if (gbIsPoe2 && IsSortedStashTab(pageIndex))
+					SortStashPage(pageIndex);
 			}
 			return true;
 		}
 	}
 
 	return false;
+}
+
+bool SortStashPage(unsigned page)
+{
+	if (!Stash.stashGrids.contains(page))
+		return true;
+	const std::vector<Item> listBefore = Stash.stashList;
+	const StashStruct::StashGrid gridBefore = Stash.stashGrids[page];
+	StashStruct::StashGrid &grid = Stash.stashGrids[page];
+
+	std::vector<uint16_t> onPage;
+	for (const auto &column : grid) {
+		for (const StashStruct::StashCell cell : column) {
+			if (cell != 0 && std::find(onPage.begin(), onPage.end(), static_cast<uint16_t>(cell - 1)) == onPage.end())
+				onPage.push_back(static_cast<uint16_t>(cell - 1));
+		}
+	}
+	std::sort(onPage.begin(), onPage.end(), [](uint16_t a, uint16_t b) {
+		return StashSortsBefore(Stash.stashList[a], Stash.stashList[b]);
+	});
+
+	// Fill the fullest stacks first, from the smaller ones after them.
+	for (size_t i = 0; i < onPage.size(); i++) {
+		for (size_t j = i + 1; j < onPage.size(); j++)
+			MergeStack(Stash.stashList[onPage[i]], Stash.stashList[onPage[j]]);
+	}
+
+	for (auto &column : grid)
+		column.fill(0);
+	std::vector<uint16_t> emptied;
+	bool fits = true;
+	for (const uint16_t index : onPage) {
+		Item &item = Stash.stashList[index];
+		if (item.isEmpty()) {
+			emptied.push_back(index);
+			continue;
+		}
+		const Size itemSize = GetInventorySize(item);
+		bool placed = false;
+		// Row by row, so a tab of currency reads left to right.
+		for (int y = 0; y + itemSize.height <= StashGridSize.height && !placed; y++) {
+			for (int x = 0; x + itemSize.width <= StashGridSize.width && !placed; x++) {
+				bool isSpaceFree = true;
+				for (const Point point : PointsInRectangle(Rectangle { { x, y }, itemSize })) {
+					if (grid[point.x][point.y] != 0) {
+						isSpaceFree = false;
+						break;
+					}
+				}
+				if (!isSpaceFree)
+					continue;
+				item.position = Point { x, y } + Displacement { 0, itemSize.height - 1 };
+				AddItemToStashGrid(page, { x, y }, index, itemSize);
+				placed = true;
+			}
+		}
+		if (!placed) {
+			fits = false;
+			break;
+		}
+	}
+	if (!fits) {
+		Stash.stashList = listBefore;
+		Stash.stashGrids[page] = gridBefore;
+		return false;
+	}
+
+	// The merged-away stacks are in no grid now; drop them, highest index first so the others keep theirs.
+	std::sort(emptied.begin(), emptied.end(), std::greater<>());
+	for (const uint16_t index : emptied)
+		Stash.RemoveStashItem(index);
+	Stash.dirty = true;
+	return true;
 }
 
 } // namespace devilution

@@ -51,6 +51,7 @@
 #include "poe2/modifiers.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
@@ -533,6 +534,13 @@ bool ChangeInvItem(Player &player, int slot, Size itemSize)
 			NetSendCmdChInvItem(false, ii);
 		}
 	} else {
+		// POE2 Mashup: currency dropped on a matching stack joins it, and what doesn't fit stays on the cursor.
+		if (prevItemId != 0 && CanStackWith(player.InvList[prevItemId - 1], player.HoldItem) && StackRoom(player.InvList[prevItemId - 1]) > 0) {
+			MergeStack(player.InvList[prevItemId - 1], player.HoldItem);
+			if (&player == MyPlayer)
+				NetSyncInvItem(player, prevItemId - 1);
+			return true;
+		}
 		if (prevItemId == 0) {
 			player.InvList[player._pNumInv] = player.HoldItem.pop();
 			player._pNumInv++;
@@ -832,7 +840,12 @@ void CheckInvCut(Player &player, Point cursorPosition, bool automaticMove, bool 
 		const unsigned ig = r - SLOTXY_INV_FIRST;
 		const int iv = std::abs(player.InvGrid[ig]) - 1;
 		if (iv >= 0) {
-			if (automaticMove) {
+			if (automaticMove && StackCount(player.InvList[iv]) > 1) {
+				// POE2 Mashup: shift-click takes half of a currency stack onto the cursor.
+				holdItem = *SplitStack(player.InvList[iv]);
+				if (&player == MyPlayer)
+					NetSyncInvItem(player, iv);
+			} else if (automaticMove) {
 				attemptedMove = true;
 				if (CanBePlacedOnBelt(player, player.InvList[iv])) {
 					automaticallyMoved = AutoPlaceItemInBelt(player, player.InvList[iv], true, &player == MyPlayer);
@@ -1460,11 +1473,14 @@ bool AutoEquipEnabled(const Player &player, const Item &item)
 
 bool CanFitItemInInventory(const Player &player, const Item &item)
 {
-	return static_cast<bool>(FindSlotForItem(player, GetInventorySize(item)));
+	return InventoryStacksHaveRoom(player, item) || static_cast<bool>(FindSlotForItem(player, GetInventorySize(item)));
 }
 
 bool AutoPlaceItemInInventory(Player &player, const Item &item, bool sendNetworkMessage)
 {
+	if (MergeIntoInventoryStacks(player, item, sendNetworkMessage))
+		return true;
+
 	const Size itemSize = GetInventorySize(item);
 	std::optional<int> targetSlot = FindSlotForItem(player, itemSize);
 
@@ -2433,6 +2449,12 @@ bool UseInvItem(int cii)
 	if (player.InvList[c]._iMiscId == IMISC_NOTE) {
 		InitQTextMsg(TEXT_BOOK9);
 		CloseInventory();
+		return true;
+	}
+	// POE2 Mashup: a currency stack loses one.
+	if (TakeOneFromStack(player.InvList[c])) {
+		if (&player == MyPlayer)
+			NetSyncInvItem(player, c);
 		return true;
 	}
 	if (!item->isScroll() && !item->isRune())

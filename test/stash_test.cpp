@@ -20,6 +20,7 @@
 #include "inv.h"
 #include "items.h"
 #include "player.h"
+#include "poe2/stacking.hpp"
 #include "poe2/stash_tabs.hpp"
 #include "qol/stash.h"
 
@@ -799,6 +800,36 @@ TEST_F(Poe2StashTabsTest, TabsSurviveSaving)
 	StashTabSet untouched;
 	EXPECT_FALSE(DeserializeStashTabs(broken, untouched));
 	EXPECT_EQ(untouched.count(), DefaultStashTabs);
+}
+
+TEST_F(Poe2StashTabsTest, CurrencyJoinsItsStackInTheStash)
+{
+	StashTabs.setAffinity(4, StashAffinity::Currency, true);
+	for (int i = 0; i < 5; i++)
+		ASSERT_TRUE(AutoPlaceItemInStash(MakeOrb(), true));
+	EXPECT_EQ(CountOccupiedCells(Stash.stashGrids[4]), 1);
+	ASSERT_EQ(Stash.stashList.size(), 1u);
+	EXPECT_EQ(StackCount(Stash.stashList[0]), 5);
+}
+
+TEST_F(Poe2StashTabsTest, SortingATabMergesStacksAndPacksItems)
+{
+	Stash.SetPage(1);
+	// Two part stacks and a sword with gaps between them.
+	Item orb = MakeOrb();
+	SetStackCount(orb, 4);
+	Stash.stashList.push_back(orb);
+	Stash.stashList.back().position = { 9, 9 };
+	Stash.stashGrids[1][9][9] = 1;
+	SetStackCount(orb, 3);
+	Stash.stashList.push_back(orb);
+	Stash.stashList.back().position = { 5, 5 };
+	Stash.stashGrids[1][5][5] = 2;
+	ASSERT_TRUE(SortStashPage(1));
+	ASSERT_EQ(Stash.stashList.size(), 1u);
+	EXPECT_EQ(StackCount(Stash.stashList[0]), 7);
+	EXPECT_EQ(Stash.stashGrids[1][0][0], 1);
+	EXPECT_EQ(CountOccupiedCells(Stash.stashGrids[1]), 1);
 }
 
 } // namespace

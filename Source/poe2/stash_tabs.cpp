@@ -1,14 +1,18 @@
 #include "poe2/stash_tabs.hpp"
 
 #include <algorithm>
+#include <iterator>
 
 #include "engine/palette.h"
+#include "inv.h"
 #include "items.h"
 #include "poe2/charms.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/stacking.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -124,6 +128,54 @@ std::string StashTabSet::affinityText(unsigned page) const
 		text += StashAffinityName(affinity);
 	}
 	return text;
+}
+
+bool IsSortedStashTab(unsigned page)
+{
+	return StashTabs.hasAffinity(page, StashAffinity::Currency) || StashTabs.hasAffinity(page, StashAffinity::Waystones)
+	    || StashTabs.hasAffinity(page, StashAffinity::Uniques);
+}
+
+namespace {
+
+int AffinityRank(const Item &item)
+{
+	const StashAffinity affinity = GetStashAffinity(item);
+	for (size_t i = 0; i < std::size(AllStashAffinities); i++) {
+		if (AllStashAffinities[i] == affinity)
+			return static_cast<int>(i);
+	}
+	return static_cast<int>(std::size(AllStashAffinities));
+}
+
+} // namespace
+
+bool StashSortsBefore(const Item &a, const Item &b)
+{
+	const int rankA = AffinityRank(a);
+	const int rankB = AffinityRank(b);
+	if (rankA != rankB)
+		return rankA < rankB;
+	const StashAffinity affinity = GetStashAffinity(a);
+	if (affinity == StashAffinity::Waystones && WaystoneTier(a) != WaystoneTier(b))
+		return WaystoneTier(a) < WaystoneTier(b);
+	if (affinity != StashAffinity::Currency && affinity != StashAffinity::Waystones) {
+		// Big items first so the tab packs tightly.
+		const Size sizeA = GetInventorySize(a);
+		const Size sizeB = GetInventorySize(b);
+		if (sizeA.height != sizeB.height)
+			return sizeA.height > sizeB.height;
+		if (sizeA.width != sizeB.width)
+			return sizeA.width > sizeB.width;
+	}
+	if (a.IDidx != b.IDidx)
+		return a.IDidx < b.IDidx;
+	if ((a.dwBuff & CF_POE2_VARIANT) != (b.dwBuff & CF_POE2_VARIANT))
+		return (a.dwBuff & CF_POE2_VARIANT) < (b.dwBuff & CF_POE2_VARIANT);
+	const int compared = std::string_view(a._iIName).compare(b._iIName);
+	if (compared != 0)
+		return compared < 0;
+	return StackCount(a) > StackCount(b);
 }
 
 StashAffinity GetStashAffinity(const Item &item)

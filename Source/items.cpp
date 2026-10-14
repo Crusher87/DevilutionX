@@ -92,6 +92,7 @@
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/uniques.hpp"
@@ -2169,6 +2170,8 @@ void PrintItemMisc(const Item &item)
 			AddItemInfoBoxString(line);
 		if (item._iMiscId != IMISC_OMEN)
 			AddItemInfoBoxString(_("Right-click to use, then click an item"));
+		if (IsStackable(item))
+			AddItemInfoBoxString(FormatRuntime(_("Stack Size: {:d}/{:d}, shift-click to split"), StackCount(item), CurrencyStackMax));
 		return;
 	}
 	if (IsJewel(item)) {
@@ -2237,6 +2240,8 @@ void PrintItemMisc(const Item &item)
 	if (const CurrencyOrb orb = CurrencyOrbForMiscId(item._iMiscId); orb != CurrencyOrb::None) {
 		AddItemInfoBoxString(CurrencyOrbDescription(orb));
 		AddItemInfoBoxString(_("Use, then click the item to craft"));
+		if (IsStackable(item))
+			AddItemInfoBoxString(FormatRuntime(_("Stack Size: {:d}/{:d}, shift-click to split"), StackCount(item), CurrencyStackMax));
 		return;
 	}
 	if (gbIsPoe2 && IsFlaskPotion(item)) {
@@ -3728,6 +3733,8 @@ void InitializeItem(Item &item, _item_indexes itemData)
 		item._iCharges = MaxCharmCharges;
 
 	item._iMaxCharges = item._iCharges;
+	if (IsStackable(item))
+		SetStackCount(item, 1);
 	item._iDurability = pAllItem.iDurability;
 	item._iMaxDur = pAllItem.iDurability;
 	item._iMinStr = pAllItem.iMinStr;
@@ -3961,6 +3968,8 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 		item._iMaxCharges = MaxCharmCharges;
 		item._iCharges = MaxCharmCharges;
 	}
+	if (IsStackable(item))
+		SetStackCount(item, 1);
 	NameFlask(item);
 
 	if (item._itype != ItemType::Gold)

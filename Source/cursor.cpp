@@ -29,6 +29,7 @@
 #include "engine/points_in_rectangle_range.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
+#include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
@@ -40,6 +41,7 @@
 #include "panels/skills_panel.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/stacking.hpp"
 #include "qol/itemlabels.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -52,6 +54,7 @@
 #include "utils/language.h"
 #include "utils/palette_blending.hpp"
 #include "utils/sdl_bilinear_scale.hpp"
+#include "utils/str_cat.hpp"
 #include "utils/surface_to_clx.hpp"
 #include "utils/utf8.hpp"
 
@@ -567,6 +570,11 @@ void DrawItem(const Item &item, const Surface &out, Point position, ClxSprite cl
 		ClxDraw(out, position, clx);
 	} else {
 		ClxDrawTRN(out, position, clx, GetInfravisionTRN());
+	}
+	// POE2 Mashup: a currency stack shows its count in the top left corner.
+	if (const int count = StackCount(item); count > 1) {
+		DrawString(out, StrCat(count), { position + Displacement { 2, 1 - static_cast<int>(clx.height()) }, { clx.width(), 12 } },
+		    { .flags = UiFlags::ColorWhite | UiFlags::FontSize12 | UiFlags::Outlined });
 	}
 }
 

@@ -31,6 +31,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/loot.hpp"
+#include "poe2/stacking.hpp"
 #include "qol/stash.h"
 #include "spells.h"
 #include "stores.h"
@@ -261,7 +262,7 @@ int GetSellPrice(const Item &item)
 	int value = item._ivalue;
 	if (item._iMagical != ITEM_QUALITY_NORMAL && item._iIdentified)
 		value = item._iIvalue;
-	return VendorSellValue(value);
+	return VendorSellValue(value) * StackCount(item);
 }
 
 /** @brief Rebuild the grid layout for the current vendor/tab. */

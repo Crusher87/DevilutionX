@@ -82,6 +82,11 @@ struct StashTabSet {
 
 extern DVL_API_FOR_TEST StashTabSet StashTabs;
 
+/** @brief Currency, waystone and unique tabs keep their items sorted, like POE2's special tabs. */
+bool IsSortedStashTab(unsigned page);
+/** @brief The stash sort order: by kind, then currency by type, waystones by tier, the rest by size and name. */
+bool StashSortsBefore(const Item &a, const Item &b);
+
 /** @brief The affinity that would take this item, or None. */
 StashAffinity GetStashAffinity(const Item &item);
 std::string_view StashAffinityName(StashAffinity affinity);

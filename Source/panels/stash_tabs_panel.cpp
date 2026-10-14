@@ -20,6 +20,7 @@
 #include "inv.h"
 #include "panels/poe2_widgets.hpp"
 #include "player.h"
+#include "plrmsg.h"
 #include "poe2/stash_tabs.hpp"
 #include "qol/stash.h"
 #include "utils/display.h"
@@ -64,6 +65,12 @@ constexpr Size ButtonSize { 90, 20 };
 Rectangle LabelRect()
 {
 	return { GetPanelPosition(UiPanels::Stash, { 126, 0 }), { 69, 14 } };
+}
+
+/** @brief Sorts the open tab. */
+Rectangle SortRect()
+{
+	return { GetPanelPosition(UiPanels::Stash, { 199, 0 }), { 40, 14 } };
 }
 
 Rectangle PopupRect()
@@ -421,6 +428,11 @@ void DrawStashTabUi(const Surface &out)
 	DrawFrame(out, label, label.contains(MousePosition) && OpenPopup == Popup::None ? HoverColor : BorderColor);
 	DrawString(out, FitText(StashTabs.displayName(page), label.size.width - 6), label,
 	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | TextColorOn(tab.color) });
+	const Rectangle sort = SortRect();
+	const bool sortHovered = sort.contains(MousePosition) && OpenPopup == Popup::None;
+	FillRectangle(out, sort, sortHovered ? RowHoverColor : RowColor);
+	DrawFrame(out, sort, sortHovered ? HoverColor : BorderColor);
+	DrawString(out, _("Sort"), sort, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhite });
 
 	if (OpenPopup == Popup::List)
 		DrawList(out);
@@ -443,6 +455,11 @@ bool StashTabsHandleEvent(const SDL_Event &event)
 	const bool rightClick = event.button.button == SDL_BUTTON_RIGHT;
 	if (event.button.button != SDL_BUTTON_LEFT && !rightClick)
 		return false;
+	if (!rightClick && SortRect().contains(MousePosition) && MyPlayer->HoldItem.isEmpty()) {
+		if (!SortStashPage(Stash.GetPage()))
+			EventPlrMsg(_("No room to sort this tab."), UiFlags::ColorWhite);
+		return true;
+	}
 	if (LabelRect().contains(MousePosition) && MyPlayer->HoldItem.isEmpty()) {
 		if (rightClick)
 			OpenSettings(Stash.GetPage());

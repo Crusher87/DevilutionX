@@ -107,4 +107,10 @@ bool HandleGoldWithdrawTextInputEvent(const SDL_Event &event);
  */
 bool AutoPlaceItemInStash(const Item &item, bool persistItem);
 
+/**
+ * @brief POE2 Mashup: sorts a stash page and merges its currency stacks.
+ * @return false if the sorted items would not fit, and the page is left as it was.
+ */
+bool SortStashPage(unsigned page);
+
 } // namespace devilution
