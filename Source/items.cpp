@@ -1815,13 +1815,14 @@ void ItemDoppel()
 
 void AddItemInfoBoxString(const std::string_view str)
 {
-	const bool floatingInfoBoxEnabled = *GetOptions().Gameplay.floatingInfoBox;
+	// POE2 Mashup: item details always go in the tooltip by the item, never the box at the bottom.
+	const bool floatingInfoBoxEnabled = gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox;
 	AddInfoBoxString(str, floatingInfoBoxEnabled);
 }
 
 void AddItemInfoBoxString(std::string &&str)
 {
-	const bool floatingInfoBoxEnabled = *GetOptions().Gameplay.floatingInfoBox;
+	const bool floatingInfoBoxEnabled = gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox;
 	AddInfoBoxString(std::move(str), floatingInfoBoxEnabled);
 }
 
@@ -2110,6 +2111,7 @@ void PrintItemInfo(const Item &item)
 	uint8_t str = item._iMinStr;
 	uint8_t dex = item._iMinDex;
 	uint8_t mag = item._iMinMag;
+	CurrentInfoLineStyle = InfoLineStyle::Requirement;
 	if (str != 0 || mag != 0 || dex != 0) {
 		std::string text = std::string(_("Required:"));
 		if (str != 0)
@@ -4704,8 +4706,10 @@ void PrintItemDetails(const Item &item)
 	if (HeadlessMode)
 		return;
 
+	CurrentInfoLineStyle = InfoLineStyle::Subtitle;
 	if (item._iMagical == ITEM_QUALITY_RARE)
 		AddItemInfoBoxString(std::string_view(item._iName));
+	CurrentInfoLineStyle = InfoLineStyle::Property;
 	if (item._iClass == ICLASS_WEAPON) {
 		if (item._iMinDam == item._iMaxDam) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
@@ -4719,8 +4723,11 @@ void PrintItemDetails(const Item &item)
 				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iMaxDam, item._iDurability, item._iMaxDur));
 		}
 	}
+	CurrentInfoLineStyle = InfoLineStyle::Implicit;
 	PrintItemImplicits(item);
+	CurrentInfoLineStyle = InfoLineStyle::Corrupted;
 	PrintItemCorruption(item);
+	CurrentInfoLineStyle = InfoLineStyle::Property;
 	if (item._iClass == ICLASS_ARMOR && gbIsPoe2) {
 		PrintPoe2ItemDefense(item);
 	} else if (item._iClass == ICLASS_ARMOR) {
@@ -4732,6 +4739,7 @@ void PrintItemDetails(const Item &item)
 	if (item._iMiscId == IMISC_STAFF && item._iMaxCharges != 0) {
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
+	CurrentInfoLineStyle = InfoLineStyle::Mod;
 	if (item._iMagical == ITEM_QUALITY_RARE) {
 		for (size_t i = 0; i < item._iRarePowers.size(); i++) {
 			if (item._iRarePowers[i] != IPL_INVALID)
@@ -4745,12 +4753,21 @@ void PrintItemDetails(const Item &item)
 			AddItemInfoBoxString(PrintItemPowerWithTier(item._iSufPower, item, item._iSufTier));
 		}
 	}
-	if (item._iMagical == ITEM_QUALITY_UNIQUE) {
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && gbIsPoe2) {
+		// POE2 Mashup: a unique's powers are listed in its tooltip, not in a separate window.
+		for (const auto &power : UniqueItems[item._iUid].powers) {
+			if (power.type == IPL_INVALID)
+				break;
+			AddItemInfoBoxString(PrintItemPower(power.type, item));
+		}
+	} else if (item._iMagical == ITEM_QUALITY_UNIQUE) {
 		AddItemInfoBoxString(_("unique item"));
 		ShowUniqueItemInfoBox = true;
 		curruitem = item;
 	}
+	CurrentInfoLineStyle = InfoLineStyle::Note;
 	PrintItemInfo(item);
+	CurrentInfoLineStyle = InfoLineStyle::Default;
 }
 
 void PrintItemDur(const Item &item)
@@ -4758,6 +4775,7 @@ void PrintItemDur(const Item &item)
 	if (HeadlessMode)
 		return;
 
+	CurrentInfoLineStyle = InfoLineStyle::Property;
 	if (item._iClass == ICLASS_WEAPON) {
 		if (item._iMinDam == item._iMaxDam) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
@@ -4793,7 +4811,9 @@ void PrintItemDur(const Item &item)
 	}
 	if (IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet))
 		AddItemInfoBoxString(_("Not Identified"));
+	CurrentInfoLineStyle = InfoLineStyle::Note;
 	PrintItemInfo(item);
+	CurrentInfoLineStyle = InfoLineStyle::Default;
 }
 
 void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)

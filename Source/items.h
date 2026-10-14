@@ -16,6 +16,7 @@
 #include "engine/animationinfo.h"
 #include "engine/point.hpp"
 #include "engine/surface.hpp"
+#include "game_mode.hpp"
 #include "levels/dun_tile.hpp"
 #include "monster.h"
 #include "tables/itemdat.h"
@@ -473,7 +474,8 @@ struct Item {
 		case ITEM_QUALITY_MAGIC:
 			return UiFlags::ColorBlue;
 		case ITEM_QUALITY_UNIQUE:
-			return UiFlags::ColorWhitegold;
+			// POE2 Mashup: uniques are orange, as in POE2.
+			return gbIsPoe2 ? UiFlags::ColorOrange : UiFlags::ColorWhitegold;
 		case ITEM_QUALITY_RARE:
 			return UiFlags::ColorYellow;
 		default:

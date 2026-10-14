@@ -2,10 +2,13 @@
 #include "control_panel.hpp"
 #include "controls/control_mode.hpp"
 #include "engine/render/primitive_render.hpp"
+#include "game_mode.hpp"
 #include "inv.h"
+#include "items.h"
 #include "levels/trigs.h"
 #include "options.h"
 #include "panels/partypanel.hpp"
+#include "panels/poe2_widgets.hpp"
 #include "panels/skill_bar.hpp"
 #include "poe2/monster_mods.hpp"
 #include "qol/stash.h"
@@ -24,12 +27,17 @@ namespace devilution {
 
 StringOrView InfoString;
 StringOrView FloatingInfoString;
+InfoLineStyle CurrentInfoLineStyle = InfoLineStyle::Default;
+std::vector<InfoLineStyle> FloatingInfoStyles;
 
 namespace {
 
 void PrintInfo(const Surface &out)
 {
 	if (ChatFlag)
+		return;
+	// POE2 Mashup: a hovered item's name and details are in its tooltip instead.
+	if (gbIsPoe2 && !FloatingInfoString.empty())
 		return;
 
 	const int space[] = { 18, 12, 6, 3, 0 };
@@ -285,11 +293,168 @@ void PrintFloatingInfo(const Surface &out)
 	    });
 }
 
+/** @brief POE2 Mashup: the frame colour of an item tooltip, from the item's text colour (its rarity). */
+uint8_t TooltipFrameColor(UiFlags color)
+{
+	if (HasAnyOf(color, UiFlags::ColorBlue))
+		return PAL16_BLUE + 5;
+	if (HasAnyOf(color, UiFlags::ColorYellow))
+		return PAL16_YELLOW + 3;
+	if (HasAnyOf(color, UiFlags::ColorWhitegold | UiFlags::ColorOrange))
+		return PAL16_ORANGE + 4;
+	if (HasAnyOf(color, UiFlags::ColorRed))
+		return PAL16_RED + 6;
+	return PAL16_GRAY + 6;
+}
+
+UiFlags TooltipLineColor(InfoLineStyle style)
+{
+	switch (style) {
+	case InfoLineStyle::Mod:
+		return UiFlags::ColorBlue;
+	case InfoLineStyle::Corrupted:
+		return UiFlags::ColorRed;
+	case InfoLineStyle::Requirement:
+		return UiFlags::ColorButtonpushed;
+	case InfoLineStyle::Note:
+		return UiFlags::ColorWhitegold;
+	default:
+		return UiFlags::ColorWhite;
+	}
+}
+
+/** @brief Groups of lines that get a separator between them. */
+int TooltipGroup(InfoLineStyle style)
+{
+	switch (style) {
+	case InfoLineStyle::Property:
+	case InfoLineStyle::Default:
+		return 0;
+	case InfoLineStyle::Implicit:
+		return 1;
+	case InfoLineStyle::Mod:
+	case InfoLineStyle::Corrupted:
+		return 2;
+	default:
+		return 3;
+	}
+}
+
+void DrawTooltipSeparator(const Surface &out, Point center, int width, uint8_t color)
+{
+	DrawHorizontalLine(out, center - Displacement { width / 2, 0 }, width, color);
+	// A small diamond in the middle, like POE2's item dividers.
+	for (int y = -2; y <= 2; y++) {
+		const int half = 2 - std::abs(y);
+		DrawHorizontalLine(out, center + Displacement { -half, y }, (2 * half) + 1, color);
+	}
+}
+
+/**
+ * @brief POE2 Mashup: an item tooltip by the cursor, like POE2's: a header band in the rarity's colour with
+ * the name, then the item's properties, implicits, modifiers and requirements split by dividers.
+ */
+void PrintPoe2ItemTooltip(const Surface &out)
+{
+	if (ChatFlag)
+		return;
+	const std::string text { FloatingInfoString.str() };
+	std::vector<std::string_view> lines;
+	for (const std::string_view line : SplitByChar(text, '\n'))
+		lines.push_back(line);
+	if (lines.empty())
+		return;
+
+	// Styles belong to the lines after the title, newest last.
+	std::vector<InfoLineStyle> styles(lines.size() - 1, InfoLineStyle::Default);
+	const size_t known = std::min(styles.size(), FloatingInfoStyles.size());
+	std::copy(FloatingInfoStyles.end() - static_cast<ptrdiff_t>(known), FloatingInfoStyles.end(), styles.end() - static_cast<ptrdiff_t>(known));
+
+	std::vector<std::string_view> titles { lines[0] };
+	size_t first = 1;
+	while (first < lines.size() && styles[first - 1] == InfoLineStyle::Subtitle) {
+		titles.push_back(lines[first]);
+		first++;
+	}
+
+	constexpr int LineHeight = 15;
+	constexpr int TitleHeight = 18;
+	constexpr int Padding = 12;
+	constexpr int SeparatorHeight = 9;
+	int width = 220;
+	for (const std::string_view title : titles)
+		width = std::max(width, GetLineWidth(title, GameFont12, 1) + (Padding * 2) + 24);
+	int bodyHeight = 0;
+	int previousGroup = -1;
+	for (size_t i = first; i < lines.size(); i++) {
+		width = std::max(width, GetLineWidth(lines[i], GameFont12, 1) + (Padding * 2));
+		const int group = TooltipGroup(styles[i - 1]);
+		if (previousGroup != -1 && group != previousGroup)
+			bodyHeight += SeparatorHeight;
+		previousGroup = group;
+		bodyHeight += LineHeight;
+	}
+	width = std::min(width, out.w() - 8);
+	const int headerHeight = 8 + (static_cast<int>(titles.size()) * TitleHeight);
+	const int height = headerHeight + (bodyHeight > 0 ? bodyHeight + 12 : 0);
+
+	// Beside the cursor, on whichever side has more room, and inside the screen.
+	const int gap = 24;
+	int x = MousePosition.x > out.w() / 2 ? MousePosition.x - gap - width : MousePosition.x + gap;
+	x = std::clamp(x, 4, std::max(out.w() - width - 4, 4));
+	int y = std::clamp(MousePosition.y - (height / 3), 4, std::max(out.h() - height - 4, 4));
+
+	const uint8_t frame = TooltipFrameColor(InfoColor);
+	// Dark body, a little see-through like POE2's, with a frame in the rarity's colour.
+	for (int i = 0; i < 3; i++)
+		DrawHalfTransparentRectTo(out, x, y, width, height);
+	poe2ui::DrawFrame(out, { { x, y }, { width, height } }, frame);
+
+	// The header band: tinted by the rarity, with gold-capped ends.
+	const Rectangle header { { x + 2, y + 2 }, { width - 4, headerHeight - 4 } };
+	for (int row = 0; row < header.size.height; row++) {
+		const uint8_t shade = static_cast<uint8_t>(std::min(15, 11 + (row * 4 / std::max(header.size.height, 1))));
+		DrawHorizontalLine(out, header.position + Displacement { 0, row }, header.size.width, static_cast<uint8_t>((frame & 0xF0) + shade));
+	}
+	DrawHorizontalLine(out, { x + 2, y + headerHeight - 2 }, width - 4, frame);
+	for (const int side : { x + 8, x + width - 9 }) {
+		const Point gem { side, y + (headerHeight / 2) };
+		for (int dy = -4; dy <= 4; dy++) {
+			const int half = 4 - std::abs(dy);
+			DrawHorizontalLine(out, gem + Displacement { -half, dy }, (2 * half) + 1, frame);
+		}
+	}
+	int lineY = y + 5;
+	for (size_t i = 0; i < titles.size(); i++) {
+		const UiFlags color = i == 0 ? InfoColor : UiFlags::ColorWhite;
+		DrawString(out, titles[i], { { x, lineY + 1 }, { width, TitleHeight } }, { .flags = UiFlags::ColorBlack | UiFlags::AlignCenter | UiFlags::VerticalCenter, .spacing = 1 });
+		DrawString(out, titles[i], { { x, lineY }, { width, TitleHeight } }, { .flags = color | UiFlags::AlignCenter | UiFlags::VerticalCenter, .spacing = 1 });
+		lineY += TitleHeight;
+	}
+	SpeakText(FloatingInfoString);
+
+	lineY = y + headerHeight + 6;
+	previousGroup = -1;
+	for (size_t i = first; i < lines.size(); i++) {
+		const InfoLineStyle style = styles[i - 1];
+		const int group = TooltipGroup(style);
+		if (previousGroup != -1 && group != previousGroup) {
+			DrawTooltipSeparator(out, { x + (width / 2), lineY + 3 }, width - 40, frame);
+			lineY += SeparatorHeight;
+		}
+		previousGroup = group;
+		DrawString(out, lines[i], { { x, lineY }, { width, LineHeight } }, { .flags = TooltipLineColor(style) | UiFlags::AlignCenter, .spacing = 1 });
+		lineY += LineHeight;
+	}
+}
+
 } // namespace
 
 void AddInfoBoxString(std::string_view str, bool floatingBox /*= false*/)
 {
 	StringOrView &infoString = floatingBox ? FloatingInfoString : InfoString;
+	if (floatingBox)
+		FloatingInfoStyles.push_back(CurrentInfoLineStyle);
 
 	if (infoString.empty())
 		infoString = str;
@@ -300,6 +465,8 @@ void AddInfoBoxString(std::string_view str, bool floatingBox /*= false*/)
 void AddInfoBoxString(std::string &&str, bool floatingBox /*= false*/)
 {
 	StringOrView &infoString = floatingBox ? FloatingInfoString : InfoString;
+	if (floatingBox)
+		FloatingInfoStyles.push_back(CurrentInfoLineStyle);
 
 	if (infoString.empty())
 		infoString = std::move(str);
@@ -413,12 +580,26 @@ void DrawInfoBox(const Surface &out)
 			InfoColor = myPlayer.HoldItem.getTextColor();
 		}
 	} else {
-		if (pcursitem != -1)
+		if (pcursitem != -1) {
 			GetItemStr(Items[pcursitem]);
-		else if (ObjectUnderCursor != nullptr)
+			// POE2 Mashup: items on the ground get the full tooltip too.
+			if (gbIsPoe2 && Items[pcursitem]._itype != ItemType::Gold) {
+				FloatingInfoString = Items[pcursitem].getName();
+				FloatingInfoStyles.clear();
+				if (Items[pcursitem]._iIdentified)
+					PrintItemDetails(Items[pcursitem]);
+				else
+					PrintItemDur(Items[pcursitem]);
+			} else if (gbIsPoe2) {
+				FloatingInfoString = std::string(InfoString.str());
+				FloatingInfoStyles.clear();
+			}
+		} else if (ObjectUnderCursor != nullptr)
 			GetObjectStr(*ObjectUnderCursor);
 		if (pcursmonst != -1) {
-			if (leveltype != DTYPE_TOWN) {
+			if (leveltype != DTYPE_TOWN && gbIsPoe2) {
+				// POE2 Mashup: the monster's name, life and modifiers are in the banner at the top of the screen.
+			} else if (leveltype != DTYPE_TOWN) {
 				const Monster &monster = Monsters[pcursmonst];
 				InfoColor = UiFlags::ColorWhite;
 				InfoString = monster.name();
@@ -477,13 +658,19 @@ void DrawInfoBox(const Surface &out)
 
 void DrawFloatingInfoBox(const Surface &out)
 {
-	if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursstoreitem == -1 && pcursstorebtn == -1) {
+	const bool groundItem = gbIsPoe2 && pcursitem != -1 && MyPlayer->HoldItem.isEmpty();
+	if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursstoreitem == -1 && pcursstorebtn == -1 && !groundItem) {
 		FloatingInfoString = StringOrView {};
 		InfoColor = UiFlags::ColorWhite;
 	}
 
-	if (!FloatingInfoString.empty())
-		PrintFloatingInfo(out);
+	if (!FloatingInfoString.empty()) {
+		if (gbIsPoe2 && pcursstorebtn == -1)
+			PrintPoe2ItemTooltip(out);
+		else
+			PrintFloatingInfo(out);
+	}
+	FloatingInfoStyles.clear();
 }
 
 } // namespace devilution

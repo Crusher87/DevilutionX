@@ -58,6 +58,7 @@
 #include "panels/console.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/item_spawner.hpp"
+#include "panels/monster_banner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
@@ -1422,7 +1423,10 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 #endif
 	DrawItemNameLabels(out);
-	DrawMonsterHealthBar(out);
+	if (gbIsPoe2)
+		DrawMonsterBanner(out);
+	else
+		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
 
 	if (IsPlayerInStore() && !qtextflag)
@@ -1934,7 +1938,7 @@ void DrawAndBlit()
 		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
 		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
-	if (*GetOptions().Gameplay.floatingInfoBox)
+	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
 
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)

@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_events.h>
@@ -48,6 +49,23 @@ extern UiFlags InfoColor;
 
 extern StringOrView InfoString;
 extern StringOrView FloatingInfoString;
+
+/** @brief POE2 Mashup: what kind of line an item tooltip line is, for its colour and the separators between groups. */
+enum class InfoLineStyle : uint8_t {
+	Default,
+	/** The second title line, like a rare item's base name. */
+	Subtitle,
+	Property,
+	Implicit,
+	Mod,
+	Corrupted,
+	Requirement,
+	Note,
+};
+/** @brief The style given to the next floating info lines; reset to Default after each item. */
+extern InfoLineStyle CurrentInfoLineStyle;
+/** @brief The style of each floating info line after the title, cleared after each drawn frame. */
+extern std::vector<InfoLineStyle> FloatingInfoStyles;
 
 extern Rectangle MainPanelButtonRect[8];
 extern DVL_API_FOR_TEST Rectangle CharPanelButtonRect[4];

@@ -1167,17 +1167,35 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 		return;
 
 	uint8_t colorShift;
-	switch (itemQuality) {
-	case ITEM_QUALITY_MAGIC:
-		colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BLUE : PAL16_ORANGE) - 1;
-		break;
-	case ITEM_QUALITY_UNIQUE:
-	case ITEM_QUALITY_RARE:
-		colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_YELLOW : PAL16_ORANGE) - 1;
-		break;
-	default:
-		colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BEIGE : PAL16_ORANGE) - 1;
-		break;
+	if (gbIsPoe2 && !IsInspectingPlayer()) {
+		// POE2 Mashup: the slot shows the item's rarity: plain grey for normal items, blue magic, yellow rare
+		// and orange unique.
+		switch (itemQuality) {
+		case ITEM_QUALITY_MAGIC:
+			colorShift = PAL16_GRAY - PAL16_BLUE - 1;
+			break;
+		case ITEM_QUALITY_RARE:
+			colorShift = PAL16_GRAY - PAL16_YELLOW - 1;
+			break;
+		case ITEM_QUALITY_UNIQUE:
+			colorShift = PAL16_GRAY - PAL16_ORANGE - 1;
+			break;
+		default:
+			return;
+		}
+	} else {
+		switch (itemQuality) {
+		case ITEM_QUALITY_MAGIC:
+			colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BLUE : PAL16_ORANGE) - 1;
+			break;
+		case ITEM_QUALITY_UNIQUE:
+		case ITEM_QUALITY_RARE:
+			colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_YELLOW : PAL16_ORANGE) - 1;
+			break;
+		default:
+			colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BEIGE : PAL16_ORANGE) - 1;
+			break;
+		}
 	}
 
 	uint8_t *dst = &out[targetPosition];

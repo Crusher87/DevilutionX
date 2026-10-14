@@ -140,6 +140,7 @@ set(libdevilutionx_SRCS
   panels/passive_tree_panel.cpp
   panels/skill_bar.cpp
   panels/skills_panel.cpp
+  panels/monster_banner.cpp
   panels/stash_tabs_panel.cpp
   panels/spell_book.cpp
   panels/spell_icons.cpp
