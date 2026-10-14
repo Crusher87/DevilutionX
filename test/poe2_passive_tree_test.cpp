@@ -291,7 +291,7 @@ TEST_F(Poe2PassiveTreeTest, AscendancyUnlocksAtLevel15)
 	EXPECT_FALSE(CanAllocatePassive(player, warlord)); // only one ascendancy
 	EXPECT_FALSE(IsPassiveNodeVisible(player, PassiveTree()[warlord]));
 	EXPECT_TRUE(IsPassiveNodeVisible(player, PassiveTree()[PassiveTree()[knight].links[0]]));
-	EXPECT_EQ(PassivePointsSpent(player), 0);          // choosing is free
+	EXPECT_EQ(PassivePointsSpent(player), 0); // choosing is free
 
 	const PassiveNodeId first = PassiveTree()[knight].links[0];
 	ASSERT_TRUE(AllocatePassive(player, first));
