@@ -80,6 +80,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/economy.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/map_play.hpp"
@@ -3668,6 +3669,14 @@ std::expected<void, std::string> InitMonsterGFX(CMonster &monsterType, MonsterSp
 
 	if (!monsterData.trnFile.empty()) {
 		InitMonsterTRN(monsterType);
+	}
+	for (size_t i = 0; i < numAnims; ++i) {
+		if (!monsterType.anims[i].sprites)
+			continue;
+		std::string name = StrCat("monsters\\", monsterData.spritePath(), std::string_view(&Animletter[i], 1));
+		if (!monsterData.trnFile.empty())
+			StrAppend(name, "@", monsterData.trnFile);
+		hd::RegisterSprites(name, *monsterType.anims[i].sprites);
 	}
 
 	if (IsAnyOf(mtype, MT_NMAGMA, MT_YMAGMA, MT_BMAGMA, MT_WMAGMA))

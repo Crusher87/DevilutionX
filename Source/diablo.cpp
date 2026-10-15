@@ -101,6 +101,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/economy.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
@@ -179,6 +180,9 @@ extern void plrctrls_every_frame();
 extern void plrctrls_after_game_logic();
 
 namespace {
+
+/** @brief Where `--hd-export` writes the dungeon frames for the HD pack maker. */
+std::string HdExportDir;
 
 char gszVersionNumber[64] = "internal version unknown";
 
@@ -1287,6 +1291,12 @@ void DiabloParseFlags(int argc, char **argv)
 			EnableFrameCount();
 		} else if (arg == "--spawn") {
 			forceSpawn = true;
+		} else if (arg == "--hd-export") {
+			if (i + 1 == argc) {
+				PrintFlagRequiresArgument("--hd-export");
+				diablo_quit(64);
+			}
+			HdExportDir = argv[++i];
 		} else if (arg == "--diablo") {
 			forceDiablo = true;
 		} else if (arg == "--hellfire") {
@@ -1555,6 +1565,44 @@ std::expected<void, std::string> LoadLvlGFX()
 	default:
 		return std::unexpected("LoadLvlGFX");
 	}
+}
+
+/** @brief Writes every dungeon type's frames for the HD pack maker (POE2 Mashup `--hd-export`). */
+void HdExportAll()
+{
+	struct LevelPalette {
+		dungeon_type type;
+		const char *palette;
+	};
+	constexpr LevelPalette Levels[] = {
+		{ DTYPE_TOWN, "levels\\towndata\\town.pal" },
+		{ DTYPE_CATHEDRAL, "levels\\l1data\\l1_1.pal" },
+		{ DTYPE_CATACOMBS, "levels\\l2data\\l2_1.pal" },
+		{ DTYPE_CAVES, "levels\\l3data\\l3_1.pal" },
+		{ DTYPE_HELL, "levels\\l4data\\l4_1.pal" },
+		{ DTYPE_NEST, "nlevels\\l6data\\l6base1.pal" },
+		{ DTYPE_CRYPT, "nlevels\\l5data\\l5base.pal" },
+	};
+	for (const LevelPalette &level : Levels) {
+		leveltype = level.type;
+		pDungeonCels = nullptr;
+		pMegaTiles = nullptr;
+		pSpecialCels = std::nullopt;
+		std::memset(DPieceMicros, 0, sizeof(DPieceMicros));
+		if (!LoadLevelSOLData().has_value() || !LoadLvlGFX().has_value()) {
+			LogInfo("HD export: skipping level type {}", static_cast<int>(level.type));
+			pDungeonCels = nullptr;
+			continue;
+		}
+		SetDungeonMicros(pDungeonCels, MicroTileLen);
+		MakeLightTable();
+		LoadPaletteAndInitBlending(level.palette);
+		hd::ExportLevelTiles(HdExportDir);
+		LogInfo("HD export: wrote level type {}", static_cast<int>(level.type));
+	}
+	pDungeonCels = nullptr;
+	pMegaTiles = nullptr;
+	pSpecialCels = std::nullopt;
 }
 
 std::expected<void, std::string> LoadAllGFX()
@@ -3029,6 +3077,10 @@ int DiabloMain(int argc, char **argv)
 	LoadQuestData();
 
 	DiabloInit();
+	if (!HdExportDir.empty()) {
+		HdExportAll();
+		diablo_quit(0);
+	}
 #ifdef __UWP__
 	onInitialized();
 #endif

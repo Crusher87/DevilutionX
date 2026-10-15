@@ -553,6 +553,8 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryBoolean modernEffects;
 	/** @brief POE2 Mashup: how many particles and how much glow the modern effects use, in percent. */
 	OptionEntryInt<int> effectIntensity;
+	/** @brief POE2 Mashup: draws the world with the upscaled HD art pack while zoomed in. */
+	OptionEntryBoolean hdGraphics;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)

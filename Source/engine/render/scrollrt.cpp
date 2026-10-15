@@ -70,6 +70,7 @@
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
 #include "poe2/camera_shake.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/vfx.hpp"
@@ -397,6 +398,7 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 	}
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
+	const hd::SubFrameScope subFrame(monster.animInfo.getFrameFraction());
 
 	if (!IsTileLit(tilePosition)) {
 		ClxDrawTRN(out, targetBufferPosition, sprite, GetInfravisionTRN());
@@ -504,6 +506,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	}
 
 	const ClxSprite sprite = player.currentSprite();
+	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
 
@@ -1313,9 +1316,24 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	    out.at(0, 0), out.pitch(), LightTables, FullyLitLightTable, FullyDarkLightTable,
 	    dLight, MicroTileLen);
 
+	// POE2 Mashup: the HD renderer replays these draws in full colour at twice the size.
+	if (*GetOptions().Graphics.zoom && hd::Active()) {
+		int viewportWidth = fullOut.w();
+		int viewportOffsetX = 0;
+		if (CanPanelsCoverView()) {
+			if (IsLeftPanelOpen()) {
+				viewportWidth -= SidePanelSize.width;
+				viewportOffsetX = SidePanelSize.width;
+			} else if (IsRightPanelOpen()) {
+				viewportWidth -= SidePanelSize.width;
+			}
+		}
+		hd::BeginWorld(out, Rectangle { Point { viewportOffsetX, 0 }, Size { viewportWidth, gnViewportHeight } });
+	}
 	DrawFloor(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawTileContent(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawOOB(out, lightmap, position, Point {} + offset, rows, columns);
+	hd::EndWorld();
 
 	if (*GetOptions().Graphics.zoom) {
 		Zoom(fullOut.subregionY(0, gnViewportHeight));

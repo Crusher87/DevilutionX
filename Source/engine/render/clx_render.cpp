@@ -12,6 +12,7 @@
 #include "engine/point.hpp"
 #include "engine/render/blit_impl.hpp"
 #include "engine/surface.hpp"
+#include "poe2/hd.hpp"
 #include "utils/attributes.h"
 #include "utils/clx_decode.hpp"
 #include "utils/static_vector.hpp"
@@ -586,41 +587,49 @@ std::string ClxDescribe(ClxSprite clx)
 
 void ClxDraw(const Surface &out, Point position, ClxSprite clx)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Normal);
 	DoRenderBackwards(out, position, clx.pixelData(), clx.pixelDataSize(), clx.width(), clx.height(), BlitDirect {});
 }
 
 void ClxDrawTRN(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, trn, hd::SpriteStyle::Normal);
 	DoRenderBackwards(out, position, clx.pixelData(), clx.pixelDataSize(), clx.width(), clx.height(), BlitWithMap { trn });
 }
 
 void ClxDrawWithLightmap(const Surface &out, Point position, ClxSprite clx, const Lightmap &lightmap)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Normal, 0, &lightmap);
 	DoRenderBackwards(out, position, clx.pixelData(), clx.pixelDataSize(), clx.width(), clx.height(), BlitWithLightmap { lightmap });
 }
 
 void ClxDrawBlended(const Surface &out, Point position, ClxSprite clx)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Blended);
 	DoRenderBackwards(out, position, clx.pixelData(), clx.pixelDataSize(), clx.width(), clx.height(), BlitBlended {});
 }
 
 void ClxDrawBlendedTRN(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, trn, hd::SpriteStyle::Blended);
 	DoRenderBackwards(out, position, clx.pixelData(), clx.pixelDataSize(), clx.width(), clx.height(), BlitBlendedWithMap { trn });
 }
 
 void ClxDrawBlendedWithLightmap(const Surface &out, Point position, ClxSprite clx, const Lightmap &lightmap)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Blended, 0, &lightmap);
 	DoRenderBackwards(out, position, clx.pixelData(), clx.pixelDataSize(), clx.width(), clx.height(), BlitBlendedWithLightmap { lightmap });
 }
 
 void ClxDrawOutline(const Surface &out, uint8_t col, Point position, ClxSprite clx)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Outline, col);
 	RenderClxOutline</*SkipColorIndexZero=*/false>(out, position, clx, col);
 }
 
 void ClxDrawOutlineSkipColorZero(const Surface &out, uint8_t col, Point position, ClxSprite clx)
 {
+	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Outline, col);
 	RenderClxOutline</*SkipColorIndexZero=*/true>(out, position, clx, col);
 }
 

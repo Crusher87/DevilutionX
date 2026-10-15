@@ -32,6 +32,7 @@
 #include "headless_mode.hpp"
 #include "init.hpp"
 #include "options.h"
+#include "poe2/hd.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/display.h"
 #include "utils/log.hpp"
@@ -84,7 +85,7 @@ int UiOverlayHeight = 0;
 
 bool WantsLayeredFrame()
 {
-	return WorldSurface != nullptr && HaveScaledWorld && renderer != nullptr && vfx::Enabled();
+	return WorldSurface != nullptr && HaveScaledWorld && renderer != nullptr && (vfx::Enabled() || hd::Active());
 }
 
 /** @brief Fills the UI overlay: the UI's own pixels opaque, the ones still showing the world transparent. */
@@ -143,6 +144,9 @@ void PresentLayeredFrame(SDL_Surface *surface)
 	if (SDL_RenderClear(renderer) <= -1) ErrSdl();
 	if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
 	if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+	// POE2 Mashup: the HD world goes over the game's own, which still shows outside the view.
+	if (hd::Active())
+		hd::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
 	vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
 	if (UpdateUiOverlay())
 		SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
