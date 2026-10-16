@@ -102,6 +102,10 @@ std::vector<uint8_t> LightArena;
 /** @brief The light level of each pixel of the 8-bit world, from the draw that covers it. */
 std::vector<uint8_t> LightBuffer;
 std::vector<uint32_t> LightPixels;
+/** @brief What each pixel of the 8-bit world shows, for contact shadows: see SurfaceKind. */
+std::vector<uint8_t> SurfaceBuffer;
+std::vector<float> ShadowScratch;
+std::vector<float> ShadowBuffer;
 SDL_Texture *LightTexture = nullptr;
 Size LightTextureSize;
 int ViewportOffsetX = 0;
@@ -131,7 +135,16 @@ struct RasterKeyHash {
 };
 std::unordered_map<RasterKey, Raster, RasterKeyHash> Rasters;
 
-std::array<std::array<float, 3>, NumLightingLevels> LightLevel;
+std::array<float, NumLightingLevels> LightLevel;
+
+// The HD look. Light falls off faster than the game's own (an exponent on its light levels), bright light
+// leans warm like torchlight and shadow leans cool, and floors darken where walls and props meet them.
+constexpr float LightFalloff = 1.15F;
+constexpr std::array<float, 3> WarmLight { 1.05F, 0.97F, 0.86F };
+constexpr std::array<float, 3> CoolShadow { 0.86F, 0.91F, 1.05F };
+constexpr int ContactShadowRadius = 5;
+constexpr int ContactShadowDrop = 4;
+constexpr float ContactShadowStrength = 0.6F;
 /** @brief The level's palette against the one the HD tiles were made in: Cathedral levels pick one of four. */
 std::array<float, 3> TileGain { 1.F, 1.F, 1.F };
 /** @brief Which of its palettes the level uses (1 is the one the pack was made in); the pack can hold tiles recoloured for each. */
@@ -155,31 +168,20 @@ float Luminance(const SDL_Color &color)
 	return 0.2126F * color.r + 0.7152F * color.g + 0.0722F * color.b;
 }
 
-/**
- * @brief How bright each of the 16 light levels leaves the palette, per colour channel.
- *
- * Measured per channel so the light keeps the hue the game's light tables give it (the Cathedral's
- * shadows lean green and purple), not just its brightness.
- */
+/** @brief How bright each of the 16 light levels leaves the palette, as a fraction. */
 void UpdateLightLevels()
 {
 	for (size_t level = 0; level < NumLightingLevels; level++) {
-		std::array<float, 3> lit {};
-		std::array<float, 3> base {};
+		float lit = 0;
+		float base = 0;
 		for (int color = 32; color < 256; color++) {
-			const SDL_Color &original = logical_palette[color];
-			if (Luminance(original) < 24)
+			const float original = Luminance(logical_palette[color]);
+			if (original < 24)
 				continue;
-			const SDL_Color &shaded = logical_palette[LightTables[level][color]];
-			base[0] += original.r;
-			base[1] += original.g;
-			base[2] += original.b;
-			lit[0] += shaded.r;
-			lit[1] += shaded.g;
-			lit[2] += shaded.b;
+			base += original;
+			lit += Luminance(logical_palette[LightTables[level][color]]);
 		}
-		for (int c = 0; c < 3; c++)
-			LightLevel[level][c] = base[c] > 0 ? std::clamp(lit[c] / base[c], 0.F, 1.F) : 1.F;
+		LightLevel[level] = base > 0 ? std::clamp(lit / base, 0.F, 1.F) : 1.F;
 	}
 }
 
@@ -564,15 +566,32 @@ uint32_t CaptureLight(const Surface &out, const Lightmap &lightmap, Point topLef
 	return offset;
 }
 
+enum SurfaceKind : uint8_t {
+	SurfaceOther,
+	SurfaceFloor,
+	/** @brief Walls, pillars and props: things that stand on the floor and shade it. */
+	SurfaceStanding,
+};
+
+SurfaceKind SurfaceOf(const Draw &draw)
+{
+	if (draw.kind == DrawKind::Tile)
+		return draw.tile == TileType::LeftTriangle || draw.tile == TileType::RightTriangle ? SurfaceFloor : SurfaceStanding;
+	const std::string *name = ArtName(draw);
+	return name != nullptr && name->starts_with("objects/") ? SurfaceStanding : SurfaceOther;
+}
+
 /** @brief Builds the light of every pixel from the draws, the way the game's own lighting left it. */
 void BuildLightBuffer(Size size)
 {
 	LightBuffer.assign(static_cast<size_t>(size.width) * size.height, 0);
+	SurfaceBuffer.assign(LightBuffer.size(), SurfaceOther);
 	for (const Draw &draw : Draws) {
 		if (draw.style != SpriteStyle::Normal)
 			continue;
 		const Raster &raster = FallbackRaster(draw, draw.light < 0);
 		const int uniform = std::max<int>(draw.light, 0);
+		const SurfaceKind surface = SurfaceOf(draw);
 		for (int row = 0; row < raster.height; row++) {
 			const int y = draw.y + row;
 			if (y < 0 || y >= size.height)
@@ -585,8 +604,45 @@ void BuildLightBuffer(Size size)
 				if (raster.alpha[i] != 255)
 					continue;
 				LightBuffer[static_cast<size_t>(y) * size.width + x] = draw.perPixel ? LightArena[draw.lightOffset + i] : static_cast<uint8_t>(uniform);
+				SurfaceBuffer[static_cast<size_t>(y) * size.width + x] = surface;
 			}
 		}
+	}
+}
+
+/** @brief Box-blurs one row or column of the shadow buffer in place, using ShadowScratch. */
+void BoxBlur(float *data, int count, int stride, int radius)
+{
+	ShadowScratch.resize(count);
+	float sum = 0;
+	for (int i = -radius; i <= radius; i++)
+		sum += data[static_cast<ptrdiff_t>(std::clamp(i, 0, count - 1)) * stride];
+	const float scale = 1.F / static_cast<float>(radius * 2 + 1);
+	for (int i = 0; i < count; i++) {
+		ShadowScratch[i] = sum * scale;
+		sum += data[static_cast<ptrdiff_t>(std::min(i + radius + 1, count - 1)) * stride];
+		sum -= data[static_cast<ptrdiff_t>(std::max(i - radius, 0)) * stride];
+	}
+	for (int i = 0; i < count; i++)
+		data[static_cast<ptrdiff_t>(i) * stride] = ShadowScratch[i];
+}
+
+/**
+ * @brief Contact shadows: how much each floor pixel is darkened by the walls and props standing next to it.
+ *
+ * A blur of where things stand, nudged down the screen so it pools at their feet, as soft ambient
+ * occlusion would.
+ */
+void BuildShadowBuffer(Size size)
+{
+	ShadowBuffer.assign(SurfaceBuffer.size(), 0.F);
+	for (size_t i = 0; i < SurfaceBuffer.size(); i++)
+		ShadowBuffer[i] = SurfaceBuffer[i] == SurfaceStanding ? 1.F : 0.F;
+	for (int pass = 0; pass < 2; pass++) {
+		for (int y = 0; y < size.height; y++)
+			BoxBlur(&ShadowBuffer[static_cast<size_t>(y) * size.width], size.width, 1, ContactShadowRadius);
+		for (int x = 0; x < size.width; x++)
+			BoxBlur(&ShadowBuffer[x], size.height, size.width, ContactShadowRadius);
 	}
 }
 
@@ -911,16 +967,31 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		}
 	}
 	if (LightTexture != nullptr) {
-		std::array<uint32_t, NumLightingLevels> shades;
+		std::array<std::array<float, 3>, NumLightingLevels> shades;
 		for (size_t level = 0; level < NumLightingLevels; level++) {
-			uint32_t pixel = 0xFF000000U;
-			for (int c = 0; c < 3; c++)
-				pixel |= static_cast<uint32_t>(std::clamp(255.F * LightLevel[level][c] * tint[c], 0.F, 255.F)) << (16 - c * 8);
-			shades[level] = pixel;
+			const float warmth = std::clamp(1.F - static_cast<float>(level) / 10.F, 0.F, 1.F);
+			for (int c = 0; c < 3; c++) {
+				const float grade = CoolShadow[c] + (WarmLight[c] - CoolShadow[c]) * warmth;
+				shades[level][c] = 255.F * std::pow(LightLevel[level], LightFalloff) * grade * tint[c];
+			}
 		}
+		BuildShadowBuffer(lightSize);
 		LightPixels.resize(LightBuffer.size());
-		for (size_t i = 0; i < LightBuffer.size(); i++)
-			LightPixels[i] = shades[std::min<size_t>(LightBuffer[i], NumLightingLevels - 1)];
+		for (int y = 0; y < lightSize.height; y++) {
+			for (int x = 0; x < lightSize.width; x++) {
+				const size_t i = static_cast<size_t>(y) * lightSize.width + x;
+				float shade = 1.F;
+				if (SurfaceBuffer[i] == SurfaceFloor) {
+					const float near = ShadowBuffer[static_cast<size_t>(std::max(y - ContactShadowDrop, 0)) * lightSize.width + x];
+					shade = 1.F - ContactShadowStrength * std::min(1.F, near * 1.6F);
+				}
+				const std::array<float, 3> &light = shades[std::min<size_t>(LightBuffer[i], NumLightingLevels - 1)];
+				uint32_t pixel = 0xFF000000U;
+				for (int c = 0; c < 3; c++)
+					pixel |= static_cast<uint32_t>(std::clamp(light[c] * shade, 0.F, 255.F)) << (16 - c * 8);
+				LightPixels[i] = pixel;
+			}
+		}
 		SDL_UpdateTexture(LightTexture, nullptr, LightPixels.data(), lightSize.width * 4);
 		const SDL_FRect dest {
 			ViewportOffsetX * toLogical,
