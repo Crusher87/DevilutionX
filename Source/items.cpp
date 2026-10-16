@@ -4314,7 +4314,8 @@ bool IsPoe2LootCandidate(size_t index, int itemLevel)
 /** @brief Picks a kind of equipment by its class weight, then one of its bases, favouring bases near the item level. */
 std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel)
 {
-	std::array<int, static_cast<size_t>(ItemType::None) + 1> classWeights {};
+	// ItemType::None is -1, so the last real type sets the size.
+	std::array<int, static_cast<size_t>(ItemType::Amulet) + 1> classWeights {};
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
 		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, itemLevel))

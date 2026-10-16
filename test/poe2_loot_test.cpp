@@ -303,5 +303,26 @@ TEST_F(Poe2LootTest, AdriaOnlySellsCommonCurrency)
 	}
 }
 
+/** Chests and theme rooms on the first floor once crashed: the equipment class table had no room. */
+TEST_F(Poe2LootTest, ContainerDropsOnTheFirstFloor)
+{
+	currlevel = 1;
+	leveltype = DTYPE_CATHEDRAL;
+	for (uint32_t seed = 1; seed < 300; seed++) {
+		SetRndSeed(seed);
+		ActiveItemCount = 0;
+		for (int i = 0; i < MAXITEMS; i++)
+			ActiveItems[i] = i;
+		CreateRndItem({ 40, 40 }, true, false, true);
+		CreateRndItem({ 40, 40 }, false, false, true);
+		CreateRndUseful({ 40, 40 }, false);
+		CreateTypeItem({ 40, 40 }, false, ItemType::Gold, IMISC_NONE, false, true);
+		for (int x = 0; x < MAXDUNX; x++)
+			for (int y = 0; y < MAXDUNY; y++)
+				dItem[x][y] = 0;
+	}
+}
+
 } // namespace
+
 } // namespace devilution
