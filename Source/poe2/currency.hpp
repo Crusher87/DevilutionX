@@ -75,6 +75,11 @@ ItemPower CorruptionImplicitPower(int kind);
 int RareAffixCount(const Item &item);
 
 CurrencyOrb CurrencyOrbForMiscId(int miscId);
+/**
+ * @brief Whether the currency looks like it can do something to the item, for outlining the items it fits while it
+ * is held. A quick check without rolling anything; using it may still fizzle (e.g. no more affixes fit).
+ */
+[[nodiscard]] bool CurrencyFitsItem(CurrencyOrb orb, const Item &item);
 /** @brief Whether the item kind is POE2 crafting currency: orbs, essences, augments and catalysts. */
 [[nodiscard]] bool IsCurrencyMiscId(int miscId);
 std::string_view CurrencyOrbDescription(CurrencyOrb orb);

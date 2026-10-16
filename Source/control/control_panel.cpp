@@ -18,6 +18,7 @@
 #include "panels/charpanel.hpp"
 #include "panels/mainpanel.hpp"
 #include "panels/partypanel.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
 #include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
@@ -25,6 +26,7 @@
 #include "panels/spell_list.hpp"
 #include "pfile.h"
 #include "poe2/hardcore.hpp"
+#include "poe2/passive_tree.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -220,11 +222,19 @@ int DrawDurIcon4Item(const Surface &out, Item &pItem, int x, int c)
 	return x - (*pDurIcons)[c].height() - 8; // Add in spacing for the next durability icon
 }
 
+/** @brief POE2 Mashup: the level-up button is for unspent passive points, and opens the passive tree. */
+bool LevelUpButtonIsForPassives()
+{
+	return gbIsPoe2 && MyPlayer != nullptr && MyPlayer->_pStatPts == 0 && PassivePointsLeft(*MyPlayer) > 0;
+}
+
 bool IsLevelUpButtonVisible()
 {
-	if (SpellSelectFlag || CharFlag || MyPlayer->_pStatPts == 0) {
+	if (SpellSelectFlag || CharFlag || (MyPlayer->_pStatPts == 0 && !LevelUpButtonIsForPassives())) {
 		return false;
 	}
+	if (LevelUpButtonIsForPassives() && IsPassiveTreeOpen())
+		return false;
 	if (ControlMode == ControlTypes::VirtualGamepad) {
 		return false;
 	}
@@ -672,7 +682,10 @@ void CheckLevelButtonUp()
 	SetPanelObjectPosition(UiPanels::Main, button);
 
 	if (button.contains(MousePosition)) {
-		OpenCharPanel();
+		if (LevelUpButtonIsForPassives())
+			OpenPassiveTree();
+		else
+			OpenCharPanel();
 	}
 	LevelButtonDown = false;
 }
@@ -681,7 +694,7 @@ void DrawLevelButton(const Surface &out)
 {
 	if (IsLevelUpButtonVisible()) {
 		const int nCel = LevelButtonDown ? 2 : 1;
-		DrawString(out, _("Level Up"), { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - 23 }, { 120, 0 } },
+		DrawString(out, LevelUpButtonIsForPassives() ? FormatRuntime(ngettext("{:d} Passive Point", "{:d} Passive Points", PassivePointsLeft(*MyPlayer)), PassivePointsLeft(*MyPlayer)) : std::string(_("Level Up")), { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - 23 }, { 120, 0 } },
 		    { .flags = UiFlags::ColorWhite | UiFlags::AlignCenter | UiFlags::KerningFitSpacing });
 		RenderClxSprite(out, (*pChrButtons)[nCel], GetMainPanel().position + Displacement { LevelButtonRect.position.x, LevelButtonRect.position.y });
 	}

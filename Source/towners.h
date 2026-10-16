@@ -108,6 +108,8 @@ void InitTowners();
 void FreeTownerGFX();
 void ProcessTowners();
 void TalkToTowner(Player &player, int t);
+/** @brief POE2 Mashup: the towner the hero was sent to with Ctrl+click, to open their shop straight away; -1 for none. */
+extern int QuickTradeTowner;
 
 void UpdateGirlAnimAfterQuestComplete();
 void UpdateCowFarmerAnimAfterQuestComplete();

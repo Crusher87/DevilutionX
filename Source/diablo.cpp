@@ -291,8 +291,10 @@ void LeftMouseCmd(bool bShift)
 		CloseVisualStore();
 		if (pcursitem != -1 && pcurs == CURSOR_HAND)
 			NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
-		if (pcursmonst != -1)
+		if (pcursmonst != -1) {
+			QuickTradeTowner = (SDL_GetModState() & SDL_KMOD_CTRL) != 0 ? pcursmonst : -1;
 			NetSendCmdLocParam1(true, CMD_TALKXY, cursPosition, pcursmonst);
+		}
 		if (!wasdMovement && pcursitem == -1 && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
 			LastPlayerAction = PlayerActionType::Walk;
 			NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);

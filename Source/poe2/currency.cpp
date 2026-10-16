@@ -777,6 +777,75 @@ CurrencyOrb CurrencyOrbForMiscId(int miscId)
 	}
 }
 
+bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
+{
+	if (orb == CurrencyOrb::None || item.isEmpty())
+		return false;
+	if (IsFlaskPotion(item) && (item.dwBuff & CF_POE2) != 0) {
+		switch (orb) {
+		case CurrencyOrb::Transmutation:
+			return item._iMagical == ITEM_QUALITY_NORMAL;
+		case CurrencyOrb::Augmentation:
+			return item._iMagical == ITEM_QUALITY_MAGIC;
+		case CurrencyOrb::Scouring:
+			return item._iMagical != ITEM_QUALITY_NORMAL;
+		case CurrencyOrb::Bauble:
+			return true;
+		default:
+			return false;
+		}
+	}
+	if (IsWaystone(item) || IsTablet(item))
+		return orb != CurrencyOrb::Bauble && IsNoneOf(orb, CurrencyOrb::Whetstone, CurrencyOrb::Etcher, CurrencyOrb::Scrap, CurrencyOrb::Catalyst, CurrencyOrb::Artificer, CurrencyOrb::Augment);
+	if (orb == CurrencyOrb::Bauble || !IsCraftableKind(item))
+		return false;
+	const bool corrupted = (item.dwBuff & CF_POE2_CORRUPTED) != 0;
+	if (orb == CurrencyOrb::Augment)
+		return item._iPoe2Craft.sockets > 0;
+	if (corrupted)
+		return false;
+	const int rarity = item._iMagical;
+	switch (orb) {
+	case CurrencyOrb::Whetstone:
+		return ItemQualityKind(item) == QualityKind::Weapon && ItemQuality(item) < CraftQualityLimit(item);
+	case CurrencyOrb::Etcher:
+		return ItemQualityKind(item) == QualityKind::Caster && ItemQuality(item) < CraftQualityLimit(item);
+	case CurrencyOrb::Scrap:
+		return ItemQualityKind(item) == QualityKind::Defence && ItemQuality(item) < CraftQualityLimit(item);
+	case CurrencyOrb::Catalyst:
+		return IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet);
+	case CurrencyOrb::Artificer:
+		return MaxAugmentSockets(item) > item._iPoe2Craft.sockets && !IsVendorItem(item);
+	case CurrencyOrb::Chance:
+	case CurrencyOrb::Transmutation:
+		return rarity == ITEM_QUALITY_NORMAL;
+	case CurrencyOrb::Alchemy:
+		return IsAnyOf(rarity, ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC);
+	case CurrencyOrb::Augmentation:
+	case CurrencyOrb::Regal:
+		return rarity == ITEM_QUALITY_MAGIC;
+	case CurrencyOrb::Chaos:
+	case CurrencyOrb::GreaterChaos:
+	case CurrencyOrb::PerfectChaos:
+	case CurrencyOrb::Exalted:
+	case CurrencyOrb::GreaterExalted:
+	case CurrencyOrb::PerfectExalted:
+	case CurrencyOrb::Desecrate:
+		return rarity == ITEM_QUALITY_RARE;
+	case CurrencyOrb::Scouring:
+	case CurrencyOrb::Annul:
+		return IsAnyOf(rarity, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE);
+	case CurrencyOrb::Divine:
+		return IsAnyOf(rarity, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE);
+	case CurrencyOrb::Vaal:
+		return true;
+	case CurrencyOrb::Essence:
+		return IsAnyOf(rarity, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE);
+	default:
+		return false;
+	}
+}
+
 bool IsCurrencyMiscId(int miscId)
 {
 	return CurrencyOrbForMiscId(miscId) != CurrencyOrb::None || miscId == IMISC_OMEN;

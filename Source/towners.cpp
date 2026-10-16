@@ -16,6 +16,8 @@
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
 #include "minitext.h"
+#include "player.h"
+#include "qol/visual_store.h"
 #include "stores.h"
 #include "tables/textdat.h"
 #include "tables/townerdat.hpp"
@@ -878,6 +880,8 @@ void ProcessTowners()
 	}
 }
 
+int QuickTradeTowner = -1;
+
 void TalkToTowner(Player &player, int t)
 {
 	auto &towner = Towners[t];
@@ -887,6 +891,24 @@ void TalkToTowner(Player &player, int t)
 
 	if (!player.HoldItem.isEmpty()) {
 		return;
+	}
+
+	// POE2 Mashup: Ctrl+click on a trader opens their shop without the talk menu.
+	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && UseVisualStoreUi()) {
+		QuickTradeTowner = -1;
+		switch (towner._ttype) {
+		case TOWN_SMITH:
+			OpenVisualStore(VisualStoreVendor::Smith);
+			return;
+		case TOWN_WITCH:
+			OpenVisualStore(VisualStoreVendor::Witch);
+			return;
+		case TOWN_HEALER:
+			OpenVisualStore(VisualStoreVendor::Healer);
+			return;
+		default:
+			break;
+		}
 	}
 
 	towner.talk(player, towner);

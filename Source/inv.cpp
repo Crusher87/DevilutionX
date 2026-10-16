@@ -160,6 +160,10 @@ const Rectangle InvRect[] = {
 
 namespace {
 
+/** @brief POE2 Mashup: the outline of items the currency held for use fits. */
+constexpr uint8_t CurrencyFitsOutline = PAL16_ORANGE + 2;
+
+
 OptionalOwnedClxSpriteList pInvCels;
 
 /**
@@ -1337,6 +1341,8 @@ void DrawInv(const Surface &out)
 
 			if (pcursinvitem == slot) {
 				ClxDrawOutline(out, GetOutlineColor(myPlayer.InvBody[slot], true), position, sprite);
+			} else if (HeldCurrencyFits(myPlayer.InvBody[slot])) {
+				ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
 			}
 
 			DrawItem(myPlayer.InvBody[slot], out, position, sprite);
@@ -1371,6 +1377,8 @@ void DrawInv(const Surface &out)
 			const Point position = GetPanelPosition(UiPanels::Inventory, InvRect[j + SLOTXY_INV_FIRST].position) + Displacement { 0, InventorySlotSizeInPixels.height };
 			if (pcursinvitem == ii + INVITEM_INV_FIRST) {
 				ClxDrawOutline(out, GetOutlineColor(myPlayer.InvList[ii], true), position, sprite);
+			} else if (HeldCurrencyFits(myPlayer.InvList[ii])) {
+				ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
 			}
 
 			DrawItem(myPlayer.InvList[ii], out, position, sprite);
@@ -1426,6 +1434,8 @@ void DrawInvBelt(const Surface &out)
 			if (ControlMode == ControlTypes::KeyboardAndMouse || invflag) {
 				ClxDrawOutline(out, GetOutlineColor(myPlayer.SpdList[i], true), position, sprite);
 			}
+		} else if (HeldCurrencyFits(myPlayer.SpdList[i])) {
+			ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
 		}
 
 		DrawItem(myPlayer.SpdList[i], out, position, sprite);

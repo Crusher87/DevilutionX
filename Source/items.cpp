@@ -5647,6 +5647,13 @@ void HoldCurrencyForUse(const Item &item)
 	HeldCurrencyVariant = item.dwBuff & CF_POE2_VARIANT;
 }
 
+bool HeldCurrencyFits(const Item &item)
+{
+	if (!gbIsPoe2 || HeldCurrencyMisc < 0 || pcurs != CURSOR_OIL)
+		return false;
+	return CurrencyFitsItem(CurrencyOrbForMiscId(HeldCurrencyMisc), item);
+}
+
 void SpendHeldCurrency(Player &player)
 {
 	if (HeldCurrencyMisc < 0)
