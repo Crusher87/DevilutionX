@@ -39,6 +39,7 @@
 #include "monster.h"
 #include "options.h"
 #include "poe2/endgame.hpp"
+#include "poe2/hd.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/objdat.h"
@@ -3708,6 +3709,7 @@ std::expected<void, std::string> LoadLevelObjects(uint16_t filesWidths[65])
 		char filestr[32];
 		*BufCopy(filestr, "objects\\", ObjMasterLoadList[i]) = '\0';
 		ASSIGN_OR_RETURN(pObjCels[numobjfiles], LoadCelWithStatus(filestr, filesWidths[i]));
+		hd::RegisterSprites(filestr, ClxSpriteListOrSheet { ClxSpriteList { *pObjCels[numobjfiles] }.data(), 0 });
 		numobjfiles++;
 	}
 	return {};
