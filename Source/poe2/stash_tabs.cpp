@@ -9,10 +9,13 @@
 #include "poe2/charms.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/stash_layouts.hpp"
+#include "poe2/support_gems.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -24,15 +27,13 @@ StashTabSet StashTabs;
 
 namespace {
 
-constexpr uint8_t StashTabsVersion = 1;
-
 constexpr uint8_t Hues[StashTabColumns] = { PAL16_RED, PAL16_ORANGE, PAL16_YELLOW, PAL16_BEIGE, PAL16_BLUE, PAL16_GRAY };
 /** Shades within a 16-shade hue: 0 is the lightest. */
 constexpr uint8_t Shades[3] = { 12, 8, 3 };
 
 bool IsSupportGem(const Item &item)
 {
-	return item._iMiscId > IMISC_SUPPORTFIRST && item._iMiscId < IMISC_SUPPORTLAST;
+	return SupportGemForItem(item) != SupportGem::None;
 }
 
 bool IsCurrency(const Item &item)
@@ -46,9 +47,17 @@ bool IsCurrency(const Item &item)
 
 } // namespace
 
+std::vector<StashTab> StashTabSet::DefaultTabs()
+{
+	std::vector<StashTab> result(DefaultBlankStashTabs);
+	for (const StashTabKind kind : PremadeStashTabKinds)
+		result.push_back({ .color = DefaultStashTabColorFor(kind), .kind = kind });
+	return result;
+}
+
 void StashTabSet::reset()
 {
-	tabs = std::vector<StashTab>(DefaultStashTabs);
+	tabs = DefaultTabs();
 }
 
 void StashTabSet::ensureCount(unsigned count)
@@ -58,18 +67,54 @@ void StashTabSet::ensureCount(unsigned count)
 		tabs.resize(count);
 }
 
-bool StashTabSet::addTab()
+bool StashTabSet::addTab(StashTabKind kind)
 {
 	if (tabs.size() >= MaxStashTabs)
 		return false;
-	tabs.emplace_back();
+	tabs.push_back({ .color = kind == StashTabKind::Blank ? DefaultStashTabColor : DefaultStashTabColorFor(kind), .kind = kind });
 	return true;
+}
+
+void StashTabSet::addMissingPremadeTabs()
+{
+	for (const StashTabKind kind : PremadeStashTabKinds) {
+		if (std::none_of(tabs.begin(), tabs.end(), [kind](const StashTab &tab) { return tab.kind == kind; }))
+			addTab(kind);
+	}
+}
+
+StashTabKind StashTabSet::kind(unsigned page) const
+{
+	return page < tabs.size() ? tabs[page].kind : StashTabKind::Blank;
+}
+
+void StashTabSet::setKind(unsigned page, StashTabKind kind)
+{
+	if (page >= tabs.size() || kind >= StashTabKind::Count)
+		return;
+	tabs[page].kind = kind;
+	if (kind != StashTabKind::Blank)
+		tabs[page].affinities = 0;
+}
+
+bool StashTabSet::accepts(unsigned page, const Item &item) const
+{
+	if (item.isEmpty() || page >= tabs.size())
+		return false;
+	const StashTab &tab = tabs[page];
+	if (tab.isPremade())
+		return PremadeTabTakes(tab.kind, item);
+	if (tab.affinities == 0)
+		return true;
+	return (tab.affinities & static_cast<uint8_t>(GetStashAffinity(item))) != 0;
 }
 
 std::string StashTabSet::displayName(unsigned page) const
 {
 	if (page < tabs.size() && !tabs[page].name.empty())
 		return tabs[page].name;
+	if (page < tabs.size() && tabs[page].isPremade())
+		return std::string(StashTabKindName(tabs[page].kind));
 	return StrCat(page + 1);
 }
 
@@ -93,7 +138,7 @@ bool StashTabSet::hasAffinity(unsigned page, StashAffinity affinity) const
 
 void StashTabSet::setAffinity(unsigned page, StashAffinity affinity, bool enabled)
 {
-	if (page >= tabs.size())
+	if (page >= tabs.size() || (enabled && tabs[page].isPremade()))
 		return;
 	const auto bit = static_cast<uint8_t>(affinity);
 	if (enabled) {
@@ -132,6 +177,8 @@ std::string StashTabSet::affinityText(unsigned page) const
 
 bool IsSortedStashTab(unsigned page)
 {
+	if (StashTabs.kind(page) != StashTabKind::Blank)
+		return false;
 	return StashTabs.hasAffinity(page, StashAffinity::Currency) || StashTabs.hasAffinity(page, StashAffinity::Waystones)
 	    || StashTabs.hasAffinity(page, StashAffinity::Uniques);
 }
@@ -182,7 +229,7 @@ StashAffinity GetStashAffinity(const Item &item)
 {
 	if (item.isEmpty())
 		return StashAffinity::None;
-	if (IsWaystone(item))
+	if (IsWaystone(item) || IsEndgameItem(item))
 		return StashAffinity::Waystones;
 	if (IsCurrency(item))
 		return StashAffinity::Currency;
@@ -217,6 +264,91 @@ std::string_view StashAffinityName(StashAffinity affinity)
 	}
 }
 
+std::string_view StashTabKindName(StashTabKind kind)
+{
+	switch (kind) {
+	case StashTabKind::Currency:
+		return _("Currency");
+	case StashTabKind::Gems:
+		return _("Gems");
+	case StashTabKind::Maps:
+		return _("Maps");
+	case StashTabKind::Uniques:
+		return _("Uniques");
+	default:
+		return _("Blank");
+	}
+}
+
+uint8_t DefaultStashTabColorFor(StashTabKind kind)
+{
+	// Hue + 6 * shade: 0-5 dark, 6-11 mid, 12-17 light (red, orange, yellow, beige, blue, grey).
+	switch (kind) {
+	case StashTabKind::Currency:
+		return 8;
+	case StashTabKind::Gems:
+		return 10;
+	case StashTabKind::Maps:
+		return 3;
+	case StashTabKind::Uniques:
+		return 7;
+	default:
+		return DefaultStashTabColor;
+	}
+}
+
+unsigned StashGridKey(unsigned page, unsigned grid)
+{
+	if (grid == 0)
+		return page;
+	return ExtraStashGridBase + (page * (MaxStashGridsPerTab - 1)) + (grid - 1);
+}
+
+bool IsExtraStashGridKey(unsigned key)
+{
+	return key >= ExtraStashGridBase;
+}
+
+unsigned StashGridPage(unsigned key)
+{
+	if (!IsExtraStashGridKey(key))
+		return key;
+	return (key - ExtraStashGridBase) / (MaxStashGridsPerTab - 1);
+}
+
+unsigned PremadeTabCapacity(StashTabKind kind)
+{
+	constexpr unsigned MaxSlots = MaxStashGridsPerTab * StashGridCells;
+	switch (kind) {
+	case StashTabKind::Currency:
+		return CurrencyTabSlots;
+	case StashTabKind::Gems:
+		return GemTabSlots;
+	case StashTabKind::Maps:
+		return MapTabSlots;
+	case StashTabKind::Uniques:
+		return std::min<unsigned>(static_cast<unsigned>(UniqueCollectionSlots()), MaxSlots);
+	default:
+		return 0;
+	}
+}
+
+bool PremadeTabTakes(StashTabKind kind, const Item &item)
+{
+	switch (kind) {
+	case StashTabKind::Currency:
+		return GetStashAffinity(item) == StashAffinity::Currency;
+	case StashTabKind::Gems:
+		return GetStashAffinity(item) == StashAffinity::Gems;
+	case StashTabKind::Maps:
+		return GetStashAffinity(item) == StashAffinity::Waystones;
+	case StashTabKind::Uniques:
+		return UniqueCollectionSlot(item).has_value();
+	default:
+		return false;
+	}
+}
+
 uint8_t StashTabPaletteColor(uint8_t color)
 {
 	color = std::min<uint8_t>(color, StashTabColorCount - 1);
@@ -240,13 +372,17 @@ std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs)
 		data.push_back(static_cast<uint8_t>(length));
 		data.insert(data.end(), tab.name.begin(), tab.name.begin() + static_cast<std::ptrdiff_t>(length));
 	}
+	// Version 2: the kinds, after the version 1 data.
+	for (const StashTab &tab : tabs.tabs)
+		data.push_back(static_cast<uint8_t>(tab.kind));
 	return data;
 }
 
-bool DeserializeStashTabs(std::span<const uint8_t> data, StashTabSet &tabs)
+bool DeserializeStashTabs(std::span<const uint8_t> data, StashTabSet &tabs, uint8_t *version)
 {
-	if (data.size() < 2 || data[0] != StashTabsVersion)
+	if (data.size() < 2 || data[0] == 0 || data[0] > StashTabsVersion)
 		return false;
+	const uint8_t dataVersion = data[0];
 	const unsigned count = data[1];
 	if (count == 0 || count > MaxStashTabs)
 		return false;
@@ -267,6 +403,16 @@ bool DeserializeStashTabs(std::span<const uint8_t> data, StashTabSet &tabs)
 		offset += length;
 		result.tabs.push_back(std::move(tab));
 	}
+	if (dataVersion >= 2) {
+		if (offset + count > data.size())
+			return false;
+		for (StashTab &tab : result.tabs) {
+			const uint8_t kind = data[offset++];
+			tab.kind = kind < static_cast<uint8_t>(StashTabKind::Count) ? static_cast<StashTabKind>(kind) : StashTabKind::Blank;
+			if (tab.isPremade())
+				tab.affinities = 0;
+		}
+	}
 	// An affinity belongs to one tab; the first tab that claims it keeps it.
 	uint8_t claimed = 0;
 	for (StashTab &tab : result.tabs) {
@@ -274,6 +420,8 @@ bool DeserializeStashTabs(std::span<const uint8_t> data, StashTabSet &tabs)
 		claimed |= tab.affinities;
 	}
 	tabs = std::move(result);
+	if (version != nullptr)
+		*version = dataVersion;
 	return true;
 }
 

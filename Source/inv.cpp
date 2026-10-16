@@ -1786,6 +1786,11 @@ void TransferItemToStash(Player &player, int location)
 	}
 
 	const Item &item = GetInventoryItem(player, location);
+	// POE2 Mashup: the open tab only takes what it's for; the player switches to a tab that takes it.
+	if (const std::string_view refusal = StashTabRefusal(Stash.GetPage(), item); !refusal.empty()) {
+		EventPlrMsg(refusal, UiFlags::ColorWhite);
+		return;
+	}
 	if (!AutoPlaceItemInStash(item, true)) {
 		player.SaySpecific(HeroSpeech::WhereWouldIPutThis);
 		return;
@@ -2590,7 +2595,8 @@ void CloseStash()
 		} else {
 			if (!AutoPlaceItemInBelt(myPlayer, myPlayer.HoldItem, true, true)
 			    && !AutoPlaceItemInInventory(myPlayer, myPlayer.HoldItem, true)
-			    && !AutoPlaceItemInStash(myPlayer.HoldItem, true)) {
+			    && !AutoPlaceItemInStash(myPlayer.HoldItem, true)
+			    && !(gbIsPoe2 && AutoPlaceItemInAnyStashTab(myPlayer.HoldItem))) {
 				// This can fail for max gold, arena potions and a stash that has been arranged
 				// to not have room for the item all 3 cases are extremely unlikely
 				app_fatal(_("No room for item"));

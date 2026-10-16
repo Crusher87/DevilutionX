@@ -1,9 +1,10 @@
 /**
  * @file panels/stash_tabs_panel.hpp
  *
- * POE2 Mashup stash tab controls: the tab's name and colour at the top of the stash, a list of every tab
- * (left-click the name) and each tab's settings (right-click the name or a tab in the list): name, colour and
- * affinities. Ctrl+right-click moves an item between inventory and stash, like Ctrl+left-click.
+ * POE2 Mashup stash, drawn in code: a strip of tabs across the top (arrows scroll it, "..." lists every tab),
+ * each tab's settings (right-click a tab): name, colour, kind and affinities, and the layouts of the premade
+ * Currency, Gems, Maps and Uniques tabs. Ctrl+right-click moves an item between inventory and stash, like
+ * Ctrl+left-click.
  */
 #pragma once
 
@@ -13,14 +14,27 @@
 #include <SDL.h>
 #endif
 
+#include "engine/point.hpp"
 #include "engine/surface.hpp"
+#include "qol/stash.h"
 
 namespace devilution {
 
 bool IsStashTabPopupOpen();
 void CloseStashTabPopups();
-/** @brief Draws the tab name over the stash and any open tab popup. */
+/** @brief Draws the POE2 stash's frame and tab strip (no gold box), and a blank tab's header. */
+void DrawPoe2StashFrame(const Surface &out);
+/** @brief Draws the empty cells of a blank tab's grid. */
+void DrawPoe2StashGridBack(const Surface &out);
+/** @brief Draws a premade tab's layout and any open tab popup. */
 void DrawStashTabUi(const Surface &out);
+/** @brief The stash item under the mouse on a premade tab, or EmptyCell. */
+StashStruct::StashCell PremadeTabItemUnderCursor(Point mousePosition);
+/**
+ * @brief A left click in the POE2 stash: the tab strip, the tab's buttons, and a premade tab's slots.
+ * @return false when it's for the blank tab's grid.
+ */
+bool HandlePoe2StashClick(Point mousePosition, bool isShiftHeld, bool isCtrlHeld);
 /** @brief Handles stash tab clicks and keys while the POE2 stash is open; true when the event was used. */
 bool StashTabsHandleEvent(const SDL_Event &event);
 

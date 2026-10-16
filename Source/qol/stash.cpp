@@ -27,12 +27,15 @@
 #include "inv.h"
 #include "minitext.h"
 #include "panels/stash_tabs_panel.hpp"
+#include "plrmsg.h"
 #include "poe2/stacking.hpp"
+#include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
 #include "stores.h"
 #include "utils/display.h"
 #include "utils/format_int.hpp"
 #include "utils/language.h"
+#include "utils/log.hpp"
 #include "utils/sdl_compat.h"
 #include "utils/str_cat.hpp"
 #include "utils/utf8.hpp"
@@ -147,6 +150,14 @@ void CheckStashPaste(Point cursorPosition)
 		Stash.dirty = true;
 		NewCursor(CURSOR_HAND);
 		return;
+	}
+
+	// POE2 Mashup: a tab only takes what it's for; the player switches to a tab that takes it.
+	if (gbIsPoe2) {
+		if (const std::string_view refusal = StashTabRefusal(Stash.GetPage(), player.HoldItem); !refusal.empty()) {
+			EventPlrMsg(refusal, UiFlags::ColorWhite);
+			return;
+		}
 	}
 
 	const Size itemSize = GetInventorySize(player.HoldItem);
@@ -324,6 +335,18 @@ void TransferItemToInventory(Player &player, uint16_t itemId)
 		return;
 	}
 
+	// POE2 Mashup: a big currency stack gives a full inventory stack.
+	if (gbIsPoe2) {
+		const Item taken = PeekStashTake(itemId);
+		if (!AutoPlaceItemInInventory(player, taken)) {
+			player.SaySpecific(HeroSpeech::IHaveNoRoom);
+			return;
+		}
+		PlaySFX(ItemInvSnds[ItemCAnimTbl[taken._iCurs]]);
+		TakeFromStash(itemId);
+		return;
+	}
+
 	if (!AutoPlaceItemInInventory(player, item)) {
 		player.SaySpecific(HeroSpeech::IHaveNoRoom);
 		return;
@@ -369,6 +392,11 @@ void CheckStashButtonRelease(Point mousePosition)
 
 void CheckStashButtonPress(Point mousePosition)
 {
+	// POE2 Mashup: the stash is drawn in code; its tab strip has the buttons.
+	if (gbIsPoe2) {
+		StashButtonPressed = -1;
+		return;
+	}
 	Rectangle stashButton;
 
 	for (int i = 0; i < 5; i++) {
@@ -385,7 +413,16 @@ void CheckStashButtonPress(Point mousePosition)
 
 void DrawStash(const Surface &out)
 {
-	RenderClxSprite(out, (*StashPanelArt)[0], GetPanelPosition(UiPanels::Stash));
+	// POE2 Mashup: no gold box or withdraw button; the frame, tab strip and premade tabs are drawn in code.
+	if (gbIsPoe2) {
+		DrawPoe2StashFrame(out);
+		if (StashTabs.kind(Stash.GetPage()) != StashTabKind::Blank) {
+			DrawStashTabUi(out);
+			return;
+		}
+	} else {
+		RenderClxSprite(out, (*StashPanelArt)[0], GetPanelPosition(UiPanels::Stash));
+	}
 
 	if (StashButtonPressed != -1) {
 		const Point stashButton = GetPanelPosition(UiPanels::Stash, StashButtonRect[StashButtonPressed].position);
@@ -393,6 +430,9 @@ void DrawStash(const Surface &out)
 	}
 
 	constexpr Displacement offset { 0, INV_SLOT_SIZE_PX - 1 };
+
+	if (gbIsPoe2)
+		DrawPoe2StashGridBack(out);
 
 	for (auto slot : StashGridRange) {
 		const StashStruct::StashCell itemId = Stash.GetItemIdAtPosition(slot);
@@ -446,6 +486,9 @@ void DrawStash(const Surface &out)
 
 void CheckStashItem(Point mousePosition, bool isShiftHeld, bool isCtrlHeld)
 {
+	// POE2 Mashup: the tab strip, and the premade tabs' own layouts.
+	if (gbIsPoe2 && HandlePoe2StashClick(mousePosition, isShiftHeld, isCtrlHeld))
+		return;
 	if (!MyPlayer->HoldItem.isEmpty()) {
 		CheckStashPaste(mousePosition);
 	} else if (isCtrlHeld) {
@@ -459,6 +502,20 @@ uint16_t CheckStashHLight(Point mousePosition)
 {
 	if (IsStashTabPopupOpen())
 		return -1;
+	if (gbIsPoe2 && StashTabs.kind(Stash.GetPage()) != StashTabKind::Blank) {
+		const StashStruct::StashCell itemId = PremadeTabItemUnderCursor(mousePosition);
+		if (itemId == StashStruct::EmptyCell || itemId >= Stash.stashList.size())
+			return -1;
+		const Item &item = Stash.stashList[itemId];
+		InfoColor = item.getTextColor();
+		InfoString = item.getName();
+		FloatingInfoString = item.getName();
+		if (item._iIdentified)
+			PrintItemDetails(item);
+		else
+			PrintItemDur(item);
+		return itemId;
+	}
 	Point slot = InvalidStashPoint;
 	for (auto point : StashGridRange) {
 		const Rectangle cell {
@@ -560,11 +617,14 @@ bool UseStashItem(uint16_t c)
 
 void StashStruct::RemoveStashItem(StashStruct::StashCell iv)
 {
-	// Iterate through stashGrid and remove every reference to item
-	for (auto &row : Stash.GetCurrentGrid()) {
-		for (StashStruct::StashCell &itemId : row) {
-			if (itemId - 1 == iv) {
-				itemId = 0;
+	// Iterate through the grids and remove every reference to item (an item is in one grid; a POE2 premade tab's
+	// items can be in its extra grids).
+	for (auto &[_, grid] : Stash.stashGrids) {
+		for (auto &row : grid) {
+			for (StashStruct::StashCell &itemId : row) {
+				if (itemId - 1 == iv) {
+					itemId = 0;
+				}
 			}
 		}
 	}
@@ -742,40 +802,50 @@ bool AutoPlaceItemInStash(const Item &item, bool persistItem)
 	const Size itemSize = GetInventorySize(item);
 	const unsigned pageCount = UsableStashPages();
 
-	// POE2 Mashup: currency joins matching stacks in the stash when they have room for all of it.
-	if (IsStackable(item)) {
-		int room = 0;
-		for (const Item &stack : Stash.stashList) {
-			if (CanStackWith(stack, item))
-				room += StackRoom(stack);
-		}
-		if (room >= StackCount(item)) {
+	// POE2 Mashup: items go to the open tab only, and only if it takes them; the player switches tabs for the rest.
+	if (gbIsPoe2) {
+		const unsigned page = Stash.GetPage();
+		if (!StashTabRefusal(page, item).empty())
+			return false;
+		if (StashTabs.kind(page) != StashTabKind::Blank) {
+			if (!PremadeTabHasRoom(page, item))
+				return false;
 			if (persistItem) {
 				Item rest = item;
-				for (Item &stack : Stash.stashList) {
-					if (rest.isEmpty())
-						break;
-					if (CanStackWith(stack, rest) && StackRoom(stack) > 0)
-						MergeStack(stack, rest);
-				}
-				Stash.dirty = true;
+				StoreInPremadeTab(page, rest);
 			}
 			return true;
 		}
+		// Currency joins matching stacks on the tab when they have room for all of it.
+		if (IsStackable(item)) {
+			const std::vector<uint16_t> onPage = StashTabItems(page);
+			int room = 0;
+			for (const uint16_t index : onPage) {
+				if (CanStackWith(Stash.stashList[index], item))
+					room += StackRoom(Stash.stashList[index]);
+			}
+			if (room >= StackCount(item)) {
+				if (persistItem) {
+					Item rest = item;
+					for (const uint16_t index : onPage) {
+						if (rest.isEmpty())
+							break;
+						Item &stack = Stash.stashList[index];
+						if (CanStackWith(stack, rest) && StackRoom(stack) > 0)
+							MergeStack(stack, rest);
+					}
+					Stash.dirty = true;
+				}
+				return true;
+			}
+		}
 	}
 
-	// A POE2 tab with the item's affinity goes first, then the current page and onward
-	std::optional<unsigned> affinityPage;
-	if (gbIsPoe2)
-		affinityPage = StashTabs.affinityTabFor(item);
-	for (unsigned pageCounter = affinityPage ? 0 : 1; pageCounter <= pageCount; pageCounter++) {
-		unsigned pageIndex;
-		if (pageCounter == 0) {
-			pageIndex = *affinityPage;
-		} else {
-			// Wrap around if needed
-			pageIndex = ((Stash.GetPage() % pageCount) + pageCounter - 1) % pageCount;
-		}
+	// The current page and onward; POE2 Mashup: the open tab only.
+	const unsigned lastPageCounter = gbIsPoe2 ? 1 : pageCount;
+	for (unsigned pageCounter = 1; pageCounter <= lastPageCounter; pageCounter++) {
+		// Wrap around if needed
+		const unsigned pageIndex = ((Stash.GetPage() % pageCount) + pageCounter - 1) % pageCount;
 		// Search all possible position in stash grid
 		for (auto stashPosition : PointsInRectangle(Rectangle { { 0, 0 }, Size { 10 - (itemSize.width - 1), 10 - (itemSize.height - 1) } })) {
 			// Check that all needed slots are free
@@ -876,6 +946,348 @@ bool SortStashPage(unsigned page)
 		Stash.RemoveStashItem(index);
 	Stash.dirty = true;
 	return true;
+}
+
+namespace {
+
+Point SlotCell(unsigned slot)
+{
+	const unsigned cell = slot % StashGridCells;
+	return { static_cast<int>(cell % 10), static_cast<int>(cell / 10) };
+}
+
+unsigned GridIndexOfKey(unsigned key)
+{
+	if (!IsExtraStashGridKey(key))
+		return 0;
+	return ((key - ExtraStashGridBase) % (MaxStashGridsPerTab - 1)) + 1;
+}
+
+void PutInSlot(unsigned page, unsigned slot, const Item &item)
+{
+	const Point cell = SlotCell(slot);
+	Stash.stashList.push_back(item);
+	Stash.stashList.back().position = cell;
+	const auto index = static_cast<uint16_t>(Stash.stashList.size() - 1);
+	Stash.stashGrids[StashGridKey(page, slot / StashGridCells)][cell.x][cell.y] = index + 1;
+	Stash.dirty = true;
+}
+
+std::optional<unsigned> FirstFreeSlot(unsigned page, unsigned first, unsigned count, unsigned capacity)
+{
+	for (unsigned slot = first; slot < first + count && slot < capacity; slot++) {
+		if (StashTabSlotItem(page, slot) == StashStruct::EmptyCell)
+			return slot;
+	}
+	return std::nullopt;
+}
+
+/** Room for more of the item on a currency stack of the Currency tab. */
+int StoredStackRoom(const Item &stack, const Item &item)
+{
+	if (!CanStackWith(stack, item))
+		return 0;
+	return CurrencyTabStackMax - StoredStackCount(stack);
+}
+
+/** Moves what fits of item onto a stack of the Currency tab; true when all of it went. */
+bool MergeStored(Item &stack, Item &item)
+{
+	const int moved = std::min(StoredStackRoom(stack, item), StoredStackCount(item));
+	if (moved <= 0)
+		return false;
+	SetStoredStackCount(stack, StoredStackCount(stack) + moved);
+	Stash.dirty = true;
+	const int left = StoredStackCount(item) - moved;
+	if (left <= 0) {
+		item.clear();
+		return true;
+	}
+	SetStoredStackCount(item, left);
+	return false;
+}
+
+/** Where a premade tab keeps the item: a fixed slot, or the first free one in a range. */
+struct PremadePlacement {
+	std::optional<unsigned> fixedSlot;
+	unsigned first = 0;
+	unsigned count = 0;
+	/** Stacks join matching ones in the range. */
+	bool stacks = false;
+};
+
+std::optional<PremadePlacement> GetPremadePlacement(StashTabKind kind, const Item &item)
+{
+	if (!PremadeTabTakes(kind, item))
+		return std::nullopt;
+	const unsigned capacity = PremadeTabCapacity(kind);
+	switch (kind) {
+	case StashTabKind::Currency: {
+		if (const std::optional<unsigned> slot = CurrencyFixedSlot(item))
+			return PremadePlacement { .fixedSlot = slot };
+		const CurrencySectionRange other = GetCurrencySection(CurrencySection::Other);
+		return PremadePlacement { .fixedSlot = std::nullopt, .first = other.first, .count = other.count, .stacks = IsStackable(item) };
+	}
+	case StashTabKind::Uniques: {
+		const std::optional<unsigned> slot = UniqueCollectionSlot(item);
+		if (!slot || *slot >= capacity)
+			return std::nullopt;
+		return PremadePlacement { .fixedSlot = slot };
+	}
+	default:
+		return PremadePlacement { .fixedSlot = std::nullopt, .first = 0, .count = capacity };
+	}
+}
+
+/** The premade tab would keep the item in this slot. */
+bool IsPremadeSlotRight(StashTabKind kind, unsigned slot, const Item &item)
+{
+	const std::optional<PremadePlacement> placement = GetPremadePlacement(kind, item);
+	if (!placement)
+		return false;
+	if (placement->fixedSlot)
+		return slot == *placement->fixedSlot;
+	return slot >= placement->first && slot < placement->first + placement->count;
+}
+
+/** Stores a repaired item: its own premade tab first, then any tab, splitting stacks too big for a blank tab. */
+void PlaceRepairedItem(Item item, unsigned page)
+{
+	if (StashTabs.kind(page) != StashTabKind::Blank && StoreInPremadeTab(page, item))
+		return;
+	for (unsigned other = 0; other < StashTabs.count() && !item.isEmpty(); other++) {
+		if (StashTabs.kind(other) == StashTabKind::Currency)
+			StoreInPremadeTab(other, item);
+	}
+	while (!item.isEmpty()) {
+		Item part = item;
+		if (IsStackable(item) && StoredStackCount(item) > CurrencyStackMax) {
+			SetStackCount(part, CurrencyStackMax);
+			SetStoredStackCount(item, StoredStackCount(item) - CurrencyStackMax);
+		} else {
+			if (IsStackable(part))
+				SetStackCount(part, StoredStackCount(part));
+			item.clear();
+		}
+		if (!AutoPlaceItemInAnyStashTab(part))
+			LogError("Stash: no room for {}, it was lost", part._iIName);
+	}
+}
+
+} // namespace
+
+std::vector<uint16_t> StashTabItems(unsigned page)
+{
+	std::vector<uint16_t> items;
+	const unsigned grids = StashTabs.kind(page) == StashTabKind::Blank ? 1 : MaxStashGridsPerTab;
+	for (unsigned grid = 0; grid < grids; grid++) {
+		const auto found = Stash.stashGrids.find(StashGridKey(page, grid));
+		if (found == Stash.stashGrids.end())
+			continue;
+		for (const auto &column : found->second) {
+			for (const StashStruct::StashCell cell : column) {
+				if (cell != 0 && cell - 1U < Stash.stashList.size() && std::find(items.begin(), items.end(), static_cast<uint16_t>(cell - 1)) == items.end())
+					items.push_back(static_cast<uint16_t>(cell - 1));
+			}
+		}
+	}
+	return items;
+}
+
+bool IsStashTabEmpty(unsigned page)
+{
+	for (unsigned grid = 0; grid < MaxStashGridsPerTab; grid++) {
+		const auto found = Stash.stashGrids.find(StashGridKey(page, grid));
+		if (found == Stash.stashGrids.end())
+			continue;
+		for (const auto &column : found->second) {
+			for (const StashStruct::StashCell cell : column) {
+				if (cell != 0)
+					return false;
+			}
+		}
+	}
+	return true;
+}
+
+StashStruct::StashCell StashTabSlotItem(unsigned page, unsigned slot)
+{
+	if (slot >= MaxStashGridsPerTab * StashGridCells)
+		return StashStruct::EmptyCell;
+	const auto found = Stash.stashGrids.find(StashGridKey(page, slot / StashGridCells));
+	if (found == Stash.stashGrids.end())
+		return StashStruct::EmptyCell;
+	const Point cell = SlotCell(slot);
+	return found->second[cell.x][cell.y] - 1;
+}
+
+std::string_view StashTabRefusal(unsigned page, const Item &item)
+{
+	if (!gbIsPoe2 || item.isEmpty())
+		return {};
+	if (!StashTabs.accepts(page, item))
+		return _("This tab doesn't take that item.");
+	if (StashTabs.kind(page) == StashTabKind::Uniques) {
+		const std::optional<unsigned> slot = UniqueCollectionSlot(item);
+		if (slot && StashTabSlotItem(page, *slot) != StashStruct::EmptyCell)
+			return _("That unique is already in the collection.");
+	}
+	return {};
+}
+
+bool PremadeTabHasRoom(unsigned page, const Item &item)
+{
+	const StashTabKind kind = StashTabs.kind(page);
+	const std::optional<PremadePlacement> placement = GetPremadePlacement(kind, item);
+	if (!placement)
+		return false;
+	if (placement->fixedSlot) {
+		const StashStruct::StashCell index = StashTabSlotItem(page, *placement->fixedSlot);
+		if (index == StashStruct::EmptyCell)
+			return true;
+		return IsStackable(item) && StoredStackRoom(Stash.stashList[index], item) >= StoredStackCount(item);
+	}
+	int room = 0;
+	for (unsigned slot = placement->first; slot < placement->first + placement->count && slot < PremadeTabCapacity(kind); slot++) {
+		const StashStruct::StashCell index = StashTabSlotItem(page, slot);
+		if (index == StashStruct::EmptyCell)
+			return true;
+		if (placement->stacks)
+			room += StoredStackRoom(Stash.stashList[index], item);
+	}
+	return placement->stacks && room >= StoredStackCount(item);
+}
+
+bool StoreInPremadeTab(unsigned page, Item &item)
+{
+	const StashTabKind kind = StashTabs.kind(page);
+	const std::optional<PremadePlacement> placement = GetPremadePlacement(kind, item);
+	if (!placement || item.isEmpty())
+		return false;
+	if (placement->fixedSlot) {
+		const StashStruct::StashCell index = StashTabSlotItem(page, *placement->fixedSlot);
+		if (index == StashStruct::EmptyCell) {
+			PutInSlot(page, *placement->fixedSlot, item);
+			item.clear();
+			return true;
+		}
+		return IsStackable(item) && MergeStored(Stash.stashList[index], item);
+	}
+	const unsigned capacity = PremadeTabCapacity(kind);
+	if (placement->stacks) {
+		for (unsigned slot = placement->first; slot < placement->first + placement->count && slot < capacity; slot++) {
+			const StashStruct::StashCell index = StashTabSlotItem(page, slot);
+			if (index != StashStruct::EmptyCell && MergeStored(Stash.stashList[index], item))
+				return true;
+		}
+	}
+	const std::optional<unsigned> slot = FirstFreeSlot(page, placement->first, placement->count, capacity);
+	if (!slot)
+		return false;
+	PutInSlot(page, *slot, item);
+	item.clear();
+	return true;
+}
+
+Item PeekStashTake(uint16_t index)
+{
+	if (index >= Stash.stashList.size())
+		return {};
+	Item taken = Stash.stashList[index];
+	if (IsStackable(taken))
+		SetStackCount(taken, std::min(StoredStackCount(taken), CurrencyStackMax));
+	return taken;
+}
+
+Item TakeFromStash(uint16_t index)
+{
+	if (index >= Stash.stashList.size())
+		return {};
+	Item taken = PeekStashTake(index);
+	Item &stored = Stash.stashList[index];
+	if (IsStackable(stored) && StoredStackCount(stored) > CurrencyStackMax) {
+		SetStoredStackCount(stored, StoredStackCount(stored) - CurrencyStackMax);
+		Stash.dirty = true;
+	} else {
+		Stash.RemoveStashItem(index);
+	}
+	return taken;
+}
+
+bool AutoPlaceItemInAnyStashTab(const Item &item)
+{
+	if (!gbIsPoe2)
+		return AutoPlaceItemInStash(item, true);
+	const unsigned current = Stash.GetPage();
+	bool placed = false;
+	for (unsigned page = 0; page < StashTabs.count() && !placed; page++) {
+		Stash.SetPage(page);
+		placed = AutoPlaceItemInStash(item, true);
+	}
+	while (!placed && StashTabs.addTab()) {
+		Stash.SetPage(StashTabs.count() - 1);
+		placed = AutoPlaceItemInStash(item, true);
+	}
+	Stash.SetPage(current);
+	return placed;
+}
+
+void RepairStashTabs()
+{
+	if (!gbIsPoe2)
+		return;
+	std::vector<unsigned> cellCount(Stash.stashList.size());
+	for (const auto &[key, grid] : Stash.stashGrids) {
+		for (const auto &column : grid) {
+			for (const StashStruct::StashCell cell : column) {
+				if (cell != 0 && cell - 1U < cellCount.size())
+					cellCount[cell - 1]++;
+			}
+		}
+	}
+	std::vector<std::pair<uint16_t, unsigned>> moving;
+	const auto isMoving = [&moving](unsigned index) {
+		return std::any_of(moving.begin(), moving.end(), [index](const auto &entry) { return entry.first == index; });
+	};
+	for (auto &[key, grid] : Stash.stashGrids) {
+		const unsigned page = StashGridPage(key);
+		const StashTabKind kind = StashTabs.kind(page);
+		const bool extraGrid = IsExtraStashGridKey(key);
+		if (kind == StashTabKind::Blank && !extraGrid)
+			continue;
+		const unsigned capacity = PremadeTabCapacity(kind);
+		for (int x = 0; x < 10; x++) {
+			for (int y = 0; y < 10; y++) {
+				const StashStruct::StashCell cell = grid[x][y];
+				if (cell == 0)
+					continue;
+				const unsigned index = cell - 1U;
+				if (index >= Stash.stashList.size()) {
+					grid[x][y] = 0;
+					continue;
+				}
+				const unsigned slot = (GridIndexOfKey(key) * StashGridCells) + static_cast<unsigned>((y * 10) + x);
+				const bool right = kind != StashTabKind::Blank && page < StashTabs.count() && cellCount[index] == 1
+				    && slot < capacity && IsPremadeSlotRight(kind, slot, Stash.stashList[index]);
+				if (right) {
+					Stash.stashList[index].position = { x, y };
+				} else if (!isMoving(index)) {
+					moving.emplace_back(static_cast<uint16_t>(index), page);
+				}
+			}
+		}
+	}
+	if (moving.empty())
+		return;
+	std::vector<std::pair<Item, unsigned>> items;
+	for (const auto &[index, page] : moving)
+		items.emplace_back(Stash.stashList[index], page);
+	std::sort(moving.begin(), moving.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+	for (const auto &[index, page] : moving)
+		Stash.RemoveStashItem(index);
+	for (auto &[item, page] : items)
+		PlaceRepairedItem(item, page < StashTabs.count() ? page : 0);
+	Stash.dirty = true;
 }
 
 } // namespace devilution

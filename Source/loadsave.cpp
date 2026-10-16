@@ -2937,18 +2937,22 @@ constexpr uint8_t StashVersion = 0;
 
 namespace {
 
-void LoadTabs(const char *filename)
+/** @return The version of the tabs read, or 0 if there were none. */
+uint8_t LoadTabs(const char *filename)
 {
 	LoadHelper file(OpenStashArchive(), filename);
 	if (!file.IsValid(sizeof(uint32_t)))
-		return;
+		return 0;
 	const uint32_t size = file.NextLE<uint32_t>();
 	if (size > 4096 || !file.IsValid(size))
-		return;
+		return 0;
 	std::vector<uint8_t> data(size);
 	for (uint8_t &byte : data)
 		byte = file.NextLE<uint8_t>();
-	DeserializeStashTabs(data, StashTabs);
+	uint8_t version = 0;
+	if (!DeserializeStashTabs(data, StashTabs, &version))
+		return 0;
+	return version;
 }
 
 } // namespace
@@ -2997,18 +3001,28 @@ void LoadStash()
 		LoadAndValidateItemData(file, Stash.stashList[i]);
 	}
 
-	// POE2 tab names, colours and affinities; every page with items gets a tab.
+	const uint32_t openPage = file.NextLE<uint32_t>();
+
+	// POE2 tab names, colours, affinities and kinds; every page with items gets a tab.
 	if (gbIsPoe2) {
-		LoadTabs(gbIsMultiplayer ? "mpstashtabs" : "spstashtabs");
+		const uint8_t tabsVersion = LoadTabs(gbIsMultiplayer ? "mpstashtabs" : "spstashtabs");
+		if (tabsVersion == 0) {
+			// A stash from before tabs: its pages are blank tabs.
+			StashTabs.tabs.assign(DefaultBlankStashTabs, StashTab {});
+		}
 		unsigned usedPages = 0;
-		for (const auto &[page, grid] : Stash.stashGrids) {
+		for (const auto &[key, grid] : Stash.stashGrids) {
 			if (c_any_of(grid, [](const auto &row) { return c_any_of(row, [](StashStruct::StashCell cell) { return cell > 0; }); }))
-				usedPages = std::max(usedPages, page + 1);
+				usedPages = std::max(usedPages, StashGridPage(key) + 1);
 		}
 		StashTabs.ensureCount(usedPages);
+		// Stashes from before premade tabs get one of each at the end.
+		if (tabsVersion < 2)
+			StashTabs.addMissingPremadeTabs();
+		RepairStashTabs();
 	}
 
-	Stash.SetPage(file.NextLE<uint32_t>());
+	Stash.SetPage(openPage);
 }
 
 void RemoveEmptyInventory(Player &player)
