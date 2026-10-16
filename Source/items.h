@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 
 #include "DiabloUI/ui_flags.hpp"
 #include "cursor.h"
@@ -674,6 +675,23 @@ void SpawnPremium(const Player &player);
 void SpawnWitch(int lvl);
 void SpawnBoy(int lvl);
 void SpawnHealer(int lvl);
+/** @brief POE2 Mashup: the kinds of wares vendors group onto their shop tabs. */
+enum class VendorCategory : uint8_t {
+	OneHanded,
+	TwoHanded,
+	Bows,
+	BodyArmour,
+	Helmets,
+	Shields,
+	Jewelry,
+	/** Potions, scrolls, elixirs and everything else that isn't equipment. */
+	Supplies,
+};
+constexpr size_t NumVendorCategories = 8;
+/** @brief Which kind of ware an item is on a POE2 Mashup vendor's shop tabs. */
+VendorCategory GetVendorCategory(const Item &item);
+/** @brief Sorts a vendor's stock, after the pinned wares, the way the vendor lists it. */
+void SortVendorStock(std::span<Item> stock, size_t pinnedCount);
 void MakeGoldStack(Item &goldItem, int value);
 int ItemNoFlippy();
 void CreateSpellBook(Point position, SpellID ispell, bool sendmsg, bool delta);

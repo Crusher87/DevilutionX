@@ -39,6 +39,10 @@ constexpr int NumWitchItems = 17;
 constexpr int NumWitchItemsHf = 24;
 constexpr int NumWitchPinnedItems = 3;
 
+/** POE2 Mashup: Griswold and Adria keep enough stock to fill a shop tab for each kind of item they sell. */
+constexpr int NumSmithBasicItemsPoe2 = 130;
+constexpr int NumWitchItemsPoe2 = 40;
+
 constexpr int NumStoreLines = 104;
 
 enum class TalkID : uint8_t {
@@ -81,7 +85,7 @@ extern int8_t PlayerItemIndexes[48];
 extern DVL_API_FOR_TEST Item PlayerItems[48];
 
 /** Items sold by Griswold */
-extern DVL_API_FOR_TEST StaticVector<Item, NumSmithBasicItemsHf> SmithItems;
+extern DVL_API_FOR_TEST StaticVector<Item, NumSmithBasicItemsPoe2> SmithItems;
 /** Number of premium items for sale by Griswold */
 extern DVL_API_FOR_TEST int PremiumItemCount;
 /** Base level of current premium items sold by Griswold */
@@ -93,7 +97,7 @@ extern DVL_API_FOR_TEST StaticVector<Item, NumSmithItemsHf> PremiumItems;
 extern DVL_API_FOR_TEST StaticVector<Item, NumHealerItemsHf> HealerItems;
 
 /** Items sold by Adria */
-extern DVL_API_FOR_TEST StaticVector<Item, NumWitchItemsHf> WitchItems;
+extern DVL_API_FOR_TEST StaticVector<Item, NumWitchItemsPoe2> WitchItems;
 
 /** Current level of the item sold by Wirt */
 extern DVL_API_FOR_TEST int BoyItemLevel;

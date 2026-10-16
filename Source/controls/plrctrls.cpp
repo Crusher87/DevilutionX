@@ -1064,8 +1064,11 @@ void VisualStoreMove(AxisDirection dir)
 
 	if (dir.x == AxisDirectionX_RIGHT) {
 		if (VisualStoreSlot.y == -1) { // Tabs
-			if (VisualStoreSlot.x == 0 && VisualStore.vendor == VisualStoreVendor::Smith) {
-				VisualStoreSlot.x = 1;
+			// POE2 Mashup: along the vendor's tabs, in order.
+			const bool hasNextTab = gbIsPoe2 ? static_cast<size_t>(VisualStoreSlot.x) + 1 < Poe2ShopTabs().size()
+			                                 : VisualStoreSlot.x == 0 && VisualStore.vendor == VisualStoreVendor::Smith;
+			if (hasNextTab) {
+				VisualStoreSlot.x++;
 			} else {
 				// Transition to inventory
 				VisualStoreSlot = { -1, -1 }; // Invalidate visual store slot
@@ -1173,6 +1176,8 @@ void VisualStoreMove(AxisDirection dir)
 		// 0: Basic, 1: Premium
 		// Map to button IDs: TabButtonBasic=0, TabButtonPremium=1
 		int btnId = VisualStoreSlot.x == 0 ? 0 : 1;
+		if (gbIsPoe2)
+			btnId = Poe2ShopTabButton(static_cast<size_t>(VisualStoreSlot.x));
 		mousePos = GetVisualBtnCoord(btnId).Center();
 	} else if (VisualStoreSlot.y == VisualStoreGridHeight) {
 		// Repair buttons

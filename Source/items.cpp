@@ -6587,6 +6587,146 @@ bool UseItemOpensGrave(const Item &item, Point position)
 	return false;
 }
 
+VendorCategory GetVendorCategory(const Item &item)
+{
+	switch (item._itype) {
+	case ItemType::Sword:
+	case ItemType::Axe:
+	case ItemType::Mace:
+		return item._iLoc == ILOC_TWOHAND ? VendorCategory::TwoHanded : VendorCategory::OneHanded;
+	case ItemType::Staff:
+		return VendorCategory::TwoHanded;
+	case ItemType::Bow:
+		return VendorCategory::Bows;
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor:
+		return VendorCategory::BodyArmour;
+	case ItemType::Helm:
+		return VendorCategory::Helmets;
+	case ItemType::Shield:
+		return VendorCategory::Shields;
+	case ItemType::Ring:
+	case ItemType::Amulet:
+		return VendorCategory::Jewelry;
+	default:
+		return VendorCategory::Supplies;
+	}
+}
+
+void SortVendorStock(std::span<Item> stock, size_t pinnedCount)
+{
+	SortVendor(stock, pinnedCount);
+}
+
+namespace {
+
+/** @brief POE2 Mashup: how many wares of one kind a vendor stocks. */
+struct VendorStockQuota {
+	VendorCategory category;
+	int min;
+	int max;
+};
+
+/** Griswold's stock: each kind of equipment fills most of its shop tab, the bigger kinds a page or two. */
+constexpr VendorStockQuota SmithStockQuotas[] = {
+	{ VendorCategory::OneHanded, 20, 26 },
+	{ VendorCategory::TwoHanded, 15, 20 },
+	{ VendorCategory::Bows, 15, 20 },
+	{ VendorCategory::BodyArmour, 15, 20 },
+	{ VendorCategory::Helmets, 18, 24 },
+	{ VendorCategory::Shields, 15, 20 },
+};
+
+/** Adria's stock besides her pinned wares: a tab of staves, and a few more scrolls and elixirs. */
+constexpr VendorStockQuota WitchStockQuotas[] = {
+	{ VendorCategory::TwoHanded, 15, 20 },
+	{ VendorCategory::Supplies, 3, 6 },
+};
+
+constexpr int MaxStockCount(std::span<const VendorStockQuota> quotas)
+{
+	int count = 0;
+	for (const VendorStockQuota &quota : quotas)
+		count += quota.max;
+	return count;
+}
+
+static_assert(MaxStockCount(SmithStockQuotas) <= NumSmithBasicItemsPoe2);
+static_assert(NumWitchPinnedItems + MaxStockCount(WitchStockQuotas) <= NumWitchItemsPoe2);
+
+/** A vendor gives up on a kind of ware it can't find at its level after this many rolls. */
+constexpr int MaxStockRolls = 4000;
+
+/**
+ * @brief POE2 Mashup: rolls wares until each kind has its share, so every shop tab fills up.
+ * Each ware is rolled the usual way from its own seed, so it is recreated the same from that seed; a ware of a kind
+ * the vendor already has enough of is passed over.
+ */
+template <typename Stock, typename Roll>
+void FillStockByCategory(Stock &stock, std::span<const VendorStockQuota> quotas, Roll roll)
+{
+	std::array<int, NumVendorCategories> wanted {};
+	int remaining = 0;
+	for (const VendorStockQuota &quota : quotas) {
+		const int count = RandomIntBetween(quota.min, quota.max);
+		wanted[static_cast<size_t>(quota.category)] += count;
+		remaining += count;
+	}
+	for (int rolls = 0; remaining > 0 && rolls < MaxStockRolls; rolls++) {
+		const Item item = roll();
+		int &want = wanted[static_cast<size_t>(GetVendorCategory(item))];
+		if (want == 0)
+			continue;
+		want--;
+		remaining--;
+		stock.push_back(item);
+	}
+}
+
+Item RollSmithItem(int lvl, int maxValue)
+{
+	Item newItem;
+	do {
+		newItem = {};
+		newItem._iSeed = AdvanceRndSeed();
+		SetRndSeed(newItem._iSeed);
+		const _item_indexes itemData = RndSmithItem(*MyPlayer, lvl);
+		GetItemAttrs(newItem, itemData, lvl);
+	} while (newItem._iIvalue > maxValue);
+
+	newItem._iCreateInfo = lvl | CF_SMITH;
+	SetVendorPoe2ItemLevel(newItem, lvl);
+	newItem._iIdentified = true;
+	return newItem;
+}
+
+Item RollWitchItem(int lvl, int maxValue)
+{
+	Item item;
+	do {
+		item = {};
+		item._iSeed = AdvanceRndSeed();
+		SetRndSeed(item._iSeed);
+		const _item_indexes itemData = RndWitchItem(*MyPlayer, lvl);
+		GetItemAttrs(item, itemData, lvl);
+		int maxlvl = -1;
+		if (GenerateRnd(100) <= 5)
+			maxlvl = 2 * lvl;
+		if (maxlvl == -1 && item._iMiscId == IMISC_STAFF)
+			maxlvl = 2 * lvl;
+		if (maxlvl != -1)
+			GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
+	} while (item._iIvalue > maxValue);
+
+	item._iCreateInfo = lvl | CF_WITCH;
+	SetVendorPoe2ItemLevel(item, lvl);
+	item._iIdentified = true;
+	return item;
+}
+
+} // namespace
+
 void SpawnSmith(int lvl)
 {
 	constexpr int PinnedItemCount = 0;
@@ -6598,25 +6738,19 @@ void SpawnSmith(int lvl)
 		maxItems = NumSmithBasicItemsHf;
 	}
 
+	if (gbIsPoe2) {
+		// POE2 Mashup: a shop tab's worth of each kind of equipment.
+		SmithItems.clear();
+		FillStockByCategory(SmithItems, SmithStockQuotas, [lvl, maxValue]() { return RollSmithItem(lvl, maxValue); });
+		SortVendor(SmithItems, PinnedItemCount);
+		return;
+	}
+
 	const size_t iCnt = RandomIntBetween(10, maxItems);
 	SmithItems.clear();
 
-	while (SmithItems.size() < iCnt) {
-		Item newItem;
-		do {
-			newItem = {};
-			newItem._iSeed = AdvanceRndSeed();
-			SetRndSeed(newItem._iSeed);
-			const _item_indexes itemData = RndSmithItem(*MyPlayer, lvl);
-			GetItemAttrs(newItem, itemData, lvl);
-		} while (newItem._iIvalue > maxValue);
-
-		newItem._iCreateInfo = lvl | CF_SMITH;
-		SetVendorPoe2ItemLevel(newItem, lvl);
-		newItem._iIdentified = true;
-
-		SmithItems.push_back(newItem);
-	}
+	while (SmithItems.size() < iCnt)
+		SmithItems.push_back(RollSmithItem(lvl, maxValue));
 
 	SortVendor(SmithItems, PinnedItemCount);
 }
@@ -6694,15 +6828,29 @@ void SpawnWitch(int lvl)
 	const int maxValue = gbIsHellfire ? MaxVendorValueHf : MaxVendorValue;
 	WitchItems.clear();
 
+	const auto addPinnedItem = [&](int i) {
+		Item item = {};
+		item._iSeed = AdvanceRndSeed();
+		GetItemAttrs(item, PinnedItemTypes[i], 1);
+		item._iCreateInfo = lvl;
+		item._iStatFlag = true;
+		WitchItems.push_back(item);
+	};
+
+	if (gbIsPoe2) {
+		// POE2 Mashup: her pinned wares, then a shop tab of staves and a few more scrolls and elixirs.
+		for (int i = 0; i < PinnedItemCount; i++)
+			addPinnedItem(i);
+		FillStockByCategory(WitchItems, WitchStockQuotas, [lvl, maxValue]() { return RollWitchItem(lvl, maxValue); });
+		SortVendor(WitchItems, PinnedItemCount);
+		return;
+	}
+
 	for (int i = 0; i < itemCount; i++) {
 		Item item = {};
 
 		if (i < PinnedItemCount) {
-			item._iSeed = AdvanceRndSeed();
-			GetItemAttrs(item, PinnedItemTypes[i], 1);
-			item._iCreateInfo = lvl;
-			item._iStatFlag = true;
-			WitchItems.push_back(item);
+			addPinnedItem(i);
 			continue;
 		}
 
@@ -6723,26 +6871,7 @@ void SpawnWitch(int lvl)
 			}
 		}
 
-		do {
-			item = {};
-			item._iSeed = AdvanceRndSeed();
-			SetRndSeed(item._iSeed);
-			const _item_indexes itemData = RndWitchItem(*MyPlayer, lvl);
-			GetItemAttrs(item, itemData, lvl);
-			int maxlvl = -1;
-			if (GenerateRnd(100) <= 5)
-				maxlvl = 2 * lvl;
-			if (maxlvl == -1 && item._iMiscId == IMISC_STAFF)
-				maxlvl = 2 * lvl;
-			if (maxlvl != -1)
-				GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
-		} while (item._iIvalue > maxValue);
-
-		item._iCreateInfo = lvl | CF_WITCH;
-		SetVendorPoe2ItemLevel(item, lvl);
-		item._iIdentified = true;
-
-		WitchItems.push_back(item);
+		WitchItems.push_back(RollWitchItem(lvl, maxValue));
 	}
 
 	SortVendor(WitchItems, PinnedItemCount);

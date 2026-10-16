@@ -14,6 +14,7 @@
 #include "controls/control_mode.hpp"
 #include "controls/plrctrls.h"
 #include "cursor.h"
+#include "diablo.h"
 #include "engine/clx_sprite.hpp"
 #include "engine/load_clx.hpp"
 #include "engine/points_in_rectangle_range.hpp"
@@ -28,6 +29,7 @@
 #include "minitext.h"
 #include "options.h"
 #include "panels/info_box.hpp"
+#include "panels/poe2_widgets.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/loot.hpp"
@@ -47,7 +49,7 @@ int16_t pcursstoreitem = -1;
 int16_t pcursstorebtn = -1;
 std::vector<BuybackEntry> SmithBuyback;
 std::vector<BuybackEntry> WitchBuyback;
-Poe2ShopTab ActivePoe2ShopTab = Poe2ShopTab::Weapons;
+Poe2ShopTab ActivePoe2ShopTab = Poe2ShopTab::OneHanded;
 
 bool UseVisualStoreUi()
 {
@@ -75,10 +77,25 @@ struct ShopOrigin {
 std::vector<Item> ShopView;
 std::vector<ShopOrigin> ShopOrigins;
 
-/** Buttons for POE2 tabs start at this id, after the four classic buttons. */
+/** Buttons for POE2 tabs start at this id, after the four classic buttons and the page buttons. */
 constexpr int Poe2TabButtonFirst = 10;
 constexpr int Poe2TabWidth = 72;
 constexpr int Poe2TabGap = 1;
+/** A vendor with more tabs than this shows them in two rows. */
+constexpr size_t Poe2TabsPerRow = 4;
+/** In two rows, the tabs are drawn from primitives, shorter than the tab art. */
+constexpr int Poe2TabRowTop = 11;
+constexpr int Poe2TabRowHeight = 15;
+/** POE2 Mashup: buttons to turn the pages of a tab with more wares than fit on one page. */
+constexpr int Poe2PrevPageBtn = 8;
+constexpr int Poe2NextPageBtn = 9;
+constexpr Rectangle Poe2PageButtonRect[] = {
+	{ { 136, 318 }, { 14, 18 } }, // Previous page
+	{ { 176, 318 }, { 14, 18 } }, // Next page
+};
+constexpr Rectangle Poe2PageLabelRect { { 150, 318 }, { 26, 18 } };
+constexpr uint8_t Poe2TabColor = PAL16_GRAY + 13;
+constexpr uint8_t Poe2TabActiveColor = PAL16_YELLOW + 11;
 
 std::vector<BuybackEntry> *VendorBuyback()
 {
@@ -92,24 +109,10 @@ std::vector<BuybackEntry> *VendorBuyback()
 	}
 }
 
-bool ItemOnShopTab(const Item &item, Poe2ShopTab tab)
-{
-	switch (tab) {
-	case Poe2ShopTab::Weapons:
-		return item._iClass == ICLASS_WEAPON;
-	case Poe2ShopTab::Armour:
-		return item._iClass == ICLASS_ARMOR;
-	case Poe2ShopTab::Other:
-		return item._iClass != ICLASS_WEAPON && item._iClass != ICLASS_ARMOR;
-	default:
-		return true;
-	}
-}
-
 void AddToShopView(std::span<Item> items, ShopSource source)
 {
 	for (size_t i = 0; i < items.size(); i++) {
-		if (!items[i].isEmpty() && ItemOnShopTab(items[i], ActivePoe2ShopTab)) {
+		if (!items[i].isEmpty() && ItemOnPoe2ShopTab(items[i], ActivePoe2ShopTab)) {
 			ShopView.push_back(items[i]);
 			ShopOrigins.push_back({ source, i });
 		}
@@ -156,12 +159,24 @@ void RebuildShopView()
 std::string_view Poe2ShopTabName(Poe2ShopTab tab)
 {
 	switch (tab) {
-	case Poe2ShopTab::Weapons:
-		return _("Weapons");
-	case Poe2ShopTab::Armour:
+	case Poe2ShopTab::OneHanded:
+		return _("1-Handed");
+	case Poe2ShopTab::TwoHanded:
+		return _("2-Handed");
+	case Poe2ShopTab::Bows:
+		return _("Bows");
+	case Poe2ShopTab::BodyArmour:
 		return _("Armour");
-	case Poe2ShopTab::Other:
-		return _("Other");
+	case Poe2ShopTab::Helmets:
+		return _("Helmets");
+	case Poe2ShopTab::Shields:
+		return _("Shields");
+	case Poe2ShopTab::Jewelry:
+		return _("Jewelry");
+	case Poe2ShopTab::Staves:
+		return _("Staves");
+	case Poe2ShopTab::Supplies:
+		return _("Supplies");
 	case Poe2ShopTab::Items:
 		return _("Items");
 	default:
@@ -169,9 +184,82 @@ std::string_view Poe2ShopTabName(Poe2ShopTab tab)
 	}
 }
 
+/** @brief Whether the vendor's tabs take two rows: then they are drawn shorter, from primitives. */
+bool Poe2TabsInTwoRows(size_t tabCount)
+{
+	return tabCount > Poe2TabsPerRow;
+}
+
+Rectangle Poe2TabRect(size_t i, size_t tabCount)
+{
+	const int column = static_cast<int>(i % Poe2TabsPerRow);
+	const int x = 14 + (column * (Poe2TabWidth + Poe2TabGap));
+	if (!Poe2TabsInTwoRows(tabCount))
+		return { GetPanelPosition(UiPanels::Stash, { x, 21 }), { Poe2TabWidth, 22 } };
+	const int row = static_cast<int>(i / Poe2TabsPerRow);
+	return { GetPanelPosition(UiPanels::Stash, { x, Poe2TabRowTop + (row * (Poe2TabRowHeight + 1)) }), { Poe2TabWidth, Poe2TabRowHeight } };
+}
+
 Rectangle Poe2TabRect(size_t i)
 {
-	return { GetPanelPosition(UiPanels::Stash, { 14 + (static_cast<int>(i) * (Poe2TabWidth + Poe2TabGap)), 21 }), { Poe2TabWidth, 22 } };
+	return Poe2TabRect(i, Poe2ShopTabs().size());
+}
+
+bool IsPoe2PageButton(int btnId)
+{
+	return btnId == Poe2PrevPageBtn || btnId == Poe2NextPageBtn;
+}
+
+Rectangle Poe2PageButtonCoord(int btnId)
+{
+	const Rectangle &rect = Poe2PageButtonRect[btnId == Poe2PrevPageBtn ? 0 : 1];
+	return { GetPanelPosition(UiPanels::Stash, rect.position), rect.size };
+}
+
+/** @brief The page buttons show when the open tab has more than one page of wares. */
+bool ShowsPoe2PageButtons()
+{
+	return gbIsPoe2 && VisualStore.pages.size() > 1;
+}
+
+void DrawPoe2PageArrow(const Surface &out, int btnId, bool enabled)
+{
+	const Rectangle rect = Poe2PageButtonCoord(btnId);
+	const bool hovered = enabled && rect.contains(MousePosition);
+	poe2ui::FillRectangle(out, rect, hovered ? poe2ui::RowHoverColor : poe2ui::RowColor);
+	poe2ui::DrawFrame(out, rect, hovered ? poe2ui::HoverColor : poe2ui::BorderColor);
+	const uint8_t color = enabled ? (hovered ? poe2ui::HoverColor : poe2ui::InnerBorderColor) : poe2ui::SocketRimColor;
+	const Point middle = rect.position + Displacement { rect.size.width / 2, rect.size.height / 2 };
+	const bool left = btnId == Poe2PrevPageBtn;
+	for (int i = 0; i < 5; i++) {
+		const int x = left ? middle.x - 2 + i : middle.x + 2 - i;
+		DrawVerticalLine(out, { x, middle.y - i }, (2 * i) + 1, color);
+	}
+}
+
+/** @brief Two rows of tabs, drawn from primitives: there isn't room for two rows of the tab art. */
+void DrawPoe2TabRows(const Surface &out, const std::vector<Poe2ShopTab> &tabs)
+{
+	for (size_t i = 0; i < tabs.size(); i++) {
+		const Rectangle rect = Poe2TabRect(i, tabs.size());
+		const bool active = tabs[i] == ActivePoe2ShopTab;
+		const bool hovered = !active && rect.contains(MousePosition);
+		poe2ui::FillRectangle(out, rect, active ? Poe2TabActiveColor : (hovered ? poe2ui::RowHoverColor : Poe2TabColor));
+		poe2ui::DrawFrame(out, rect, active ? poe2ui::BorderColor : (hovered ? poe2ui::HoverColor : poe2ui::InnerBorderColor));
+		DrawString(out, Poe2ShopTabName(tabs[i]), rect,
+		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (active ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+	}
+}
+
+void DrawPoe2PageButtons(const Surface &out)
+{
+	if (!ShowsPoe2PageButtons())
+		return;
+	DrawPoe2PageArrow(out, Poe2PrevPageBtn, VisualStore.currentPage > 0);
+	DrawPoe2PageArrow(out, Poe2NextPageBtn, VisualStore.currentPage + 1 < VisualStore.pages.size());
+	const Rectangle label { GetPanelPosition(UiPanels::Stash, Poe2PageLabelRect.position), Poe2PageLabelRect.size };
+	DrawString(out, StrCat(VisualStore.currentPage + 1, "/", VisualStore.pages.size()), label,
+	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhite });
 }
 
 /** @brief Remembers a sold item so it can be bought back. */
@@ -370,13 +458,54 @@ void FreeVisualStoreGFX()
 std::vector<Poe2ShopTab> Poe2ShopTabs()
 {
 	switch (VisualStore.vendor) {
-	case VisualStoreVendor::Smith:
-		return { Poe2ShopTab::Weapons, Poe2ShopTab::Armour, Poe2ShopTab::Other, Poe2ShopTab::Buyback };
+	case VisualStoreVendor::Smith: {
+		std::vector<Poe2ShopTab> tabs { Poe2ShopTab::OneHanded, Poe2ShopTab::TwoHanded, Poe2ShopTab::Bows, Poe2ShopTab::BodyArmour,
+			Poe2ShopTab::Helmets, Poe2ShopTab::Shields };
+		// Rings and amulets only come with his premium wares, which leave them out in multiplayer.
+		if (!gbIsMultiplayer)
+			tabs.push_back(Poe2ShopTab::Jewelry);
+		tabs.push_back(Poe2ShopTab::Buyback);
+		return tabs;
+	}
 	case VisualStoreVendor::Witch:
-		return { Poe2ShopTab::Items, Poe2ShopTab::Buyback };
+		return { Poe2ShopTab::Staves, Poe2ShopTab::Supplies, Poe2ShopTab::Buyback };
 	default:
 		return { Poe2ShopTab::Items };
 	}
+}
+
+bool ItemOnPoe2ShopTab(const Item &item, Poe2ShopTab tab)
+{
+	const VendorCategory category = GetVendorCategory(item);
+	switch (tab) {
+	case Poe2ShopTab::OneHanded:
+		return category == VendorCategory::OneHanded;
+	case Poe2ShopTab::TwoHanded:
+		return category == VendorCategory::TwoHanded;
+	case Poe2ShopTab::Bows:
+		return category == VendorCategory::Bows;
+	case Poe2ShopTab::BodyArmour:
+		return category == VendorCategory::BodyArmour;
+	case Poe2ShopTab::Helmets:
+		return category == VendorCategory::Helmets;
+	case Poe2ShopTab::Shields:
+		return category == VendorCategory::Shields;
+	case Poe2ShopTab::Jewelry:
+		// Also anything else Griswold has that no other tab of his takes.
+		return category == VendorCategory::Jewelry || category == VendorCategory::Supplies;
+	case Poe2ShopTab::Staves:
+		// All of Adria's equipment.
+		return category != VendorCategory::Supplies;
+	case Poe2ShopTab::Supplies:
+		return category == VendorCategory::Supplies;
+	default:
+		return true;
+	}
+}
+
+int Poe2ShopTabButton(size_t index)
+{
+	return Poe2TabButtonFirst + static_cast<int>(index);
 }
 
 void SetPoe2ShopTab(Poe2ShopTab tab)
@@ -580,6 +709,8 @@ Rectangle GetVisualBtnCoord(int btnId)
 {
 	if (btnId >= Poe2TabButtonFirst)
 		return Poe2TabRect(static_cast<size_t>(btnId - Poe2TabButtonFirst));
+	if (IsPoe2PageButton(btnId))
+		return Poe2PageButtonCoord(btnId);
 	return { GetPanelPosition(UiPanels::Stash, VisualStoreButtonRect[btnId].position), VisualStoreButtonRect[btnId].size };
 }
 
@@ -624,11 +755,15 @@ void DrawVisualStore(const Surface &out)
 	if (gbIsPoe2) {
 		// POE2 Mashup: one tab per kind of item, plus buyback.
 		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
-		for (size_t i = 0; i < tabs.size(); i++) {
-			const Rectangle tabRect = Poe2TabRect(i);
-			const bool active = tabs[i] == ActivePoe2ShopTab;
-			RenderClxSprite(out, (*VisualStoreNavButtonArt)[active ? 0 : 1], tabRect.position);
-			DrawString(out, Poe2ShopTabName(tabs[i]), tabRect, { .flags = UiFlags::AlignCenter | (active ? styleWhite : styleTabPushed) });
+		if (Poe2TabsInTwoRows(tabs.size())) {
+			DrawPoe2TabRows(out, tabs);
+		} else {
+			for (size_t i = 0; i < tabs.size(); i++) {
+				const Rectangle tabRect = Poe2TabRect(i, tabs.size());
+				const bool active = tabs[i] == ActivePoe2ShopTab;
+				RenderClxSprite(out, (*VisualStoreNavButtonArt)[active ? 0 : 1], tabRect.position);
+				DrawString(out, Poe2ShopTabName(tabs[i]), tabRect, { .flags = UiFlags::AlignCenter | (active ? styleWhite : styleTabPushed) });
+			}
 		}
 		if (ShopView.empty()) {
 			DrawString(out, ActivePoe2ShopTab == Poe2ShopTab::Buyback ? _("Items you sell here can be bought back.") : _("Nothing for sale here."),
@@ -702,6 +837,7 @@ void DrawVisualStore(const Surface &out)
 	DrawString(out, StrCat(_("Gold: "), FormatInteger(totalGold)),
 	    { panelPos + Displacement { 20, 320 }, { 280, TextHeight } },
 	    { .flags = styleWhite });
+	DrawPoe2PageButtons(out);
 
 	// Draw Repair All
 	if (VisualStore.vendor == VisualStoreVendor::Smith) {
@@ -719,12 +855,24 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty()) {
 		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
 		for (size_t i = 0; i < tabs.size(); i++) {
-			if (Poe2TabRect(i).contains(mousePosition)) {
+			if (Poe2TabRect(i, tabs.size()).contains(mousePosition)) {
 				InfoString = Poe2ShopTabName(tabs[i]);
 				FloatingInfoString = Poe2ShopTabName(tabs[i]);
 				InfoColor = UiFlags::ColorWhite;
 				pcursstorebtn = static_cast<int16_t>(Poe2TabButtonFirst + i);
 				return -1;
+			}
+		}
+		if (ShowsPoe2PageButtons()) {
+			for (const int btnId : { Poe2PrevPageBtn, Poe2NextPageBtn }) {
+				if (Poe2PageButtonCoord(btnId).contains(mousePosition)) {
+					const std::string_view name = btnId == Poe2PrevPageBtn ? _("Previous page") : _("Next page");
+					InfoString = name;
+					FloatingInfoString = name;
+					InfoColor = UiFlags::ColorWhite;
+					pcursstorebtn = static_cast<int16_t>(btnId);
+					return -1;
+				}
 			}
 		}
 	}
@@ -1116,9 +1264,17 @@ void CheckVisualStoreButtonPress(Point mousePosition)
 	if (gbIsPoe2) {
 		const size_t tabCount = Poe2ShopTabs().size();
 		for (size_t i = 0; i < tabCount; i++) {
-			if (Poe2TabRect(i).contains(mousePosition)) {
+			if (Poe2TabRect(i, tabCount).contains(mousePosition)) {
 				VisualStoreButtonPressed = static_cast<int>(Poe2TabButtonFirst + i);
 				return;
+			}
+		}
+		if (ShowsPoe2PageButtons()) {
+			for (const int btnId : { Poe2PrevPageBtn, Poe2NextPageBtn }) {
+				if (Poe2PageButtonCoord(btnId).contains(mousePosition)) {
+					VisualStoreButtonPressed = btnId;
+					return;
+				}
 			}
 		}
 	}
@@ -1150,8 +1306,18 @@ void CheckVisualStoreButtonRelease(Point mousePosition)
 	if (VisualStoreButtonPressed >= Poe2TabButtonFirst) {
 		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
 		const size_t tab = static_cast<size_t>(VisualStoreButtonPressed - Poe2TabButtonFirst);
-		if (tab < tabs.size() && Poe2TabRect(tab).contains(mousePosition))
+		if (tab < tabs.size() && Poe2TabRect(tab, tabs.size()).contains(mousePosition))
 			SetPoe2ShopTab(tabs[tab]);
+		VisualStoreButtonPressed = -1;
+		return;
+	}
+	if (IsPoe2PageButton(VisualStoreButtonPressed)) {
+		if (Poe2PageButtonCoord(VisualStoreButtonPressed).contains(mousePosition)) {
+			if (VisualStoreButtonPressed == Poe2PrevPageBtn)
+				VisualStorePreviousPage();
+			else
+				VisualStoreNextPage();
+		}
 		VisualStoreButtonPressed = -1;
 		return;
 	}

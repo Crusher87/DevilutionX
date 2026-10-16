@@ -53,11 +53,17 @@ struct VisualStoreState {
 /** @brief Whether stores use the grid UI: always in POE2 mode, otherwise when the option picks it. */
 bool UseVisualStoreUi();
 
-/** @brief POE2 Mashup: the vendor's tabs, like POE2's vendor screen. */
+/** @brief POE2 Mashup: the vendor's tabs, like POE2's vendor screen: one per kind of item, and buyback. */
 enum class Poe2ShopTab : uint8_t {
-	Weapons,
-	Armour,
-	Other,
+	OneHanded,
+	TwoHanded,
+	Bows,
+	BodyArmour,
+	Helmets,
+	Shields,
+	Jewelry,
+	Staves,
+	Supplies,
 	Items,
 	Buyback,
 };
@@ -74,6 +80,10 @@ extern DVL_API_FOR_TEST Poe2ShopTab ActivePoe2ShopTab;
 /** @brief The tabs the current vendor shows in POE2 mode. */
 std::vector<Poe2ShopTab> Poe2ShopTabs();
 void SetPoe2ShopTab(Poe2ShopTab tab);
+/** @brief Whether a ware is listed on a POE2 shop tab. */
+bool ItemOnPoe2ShopTab(const Item &item, Poe2ShopTab tab);
+/** @brief The button id of the POE2 shop tab at an index, for GetVisualBtnCoord. */
+int Poe2ShopTabButton(size_t index);
 /** @brief The price of a store item as shown: the buyback price on the buyback tab. */
 int VisualStoreItemPrice(int index);
 

@@ -54,14 +54,14 @@ int CurrentItemIndex;
 int8_t PlayerItemIndexes[48];
 Item PlayerItems[48];
 
-StaticVector<Item, NumSmithBasicItemsHf> SmithItems;
+StaticVector<Item, NumSmithBasicItemsPoe2> SmithItems;
 int PremiumItemCount;
 int PremiumItemLevel;
 StaticVector<Item, NumSmithItemsHf> PremiumItems;
 
 StaticVector<Item, NumHealerItemsHf> HealerItems;
 
-StaticVector<Item, NumWitchItemsHf> WitchItems;
+StaticVector<Item, NumWitchItemsPoe2> WitchItems;
 
 int BoyItemLevel;
 Item BoyItem;
@@ -520,22 +520,36 @@ bool PayForVendorReroll(TalkID store, int line)
 	return true;
 }
 
-/** @brief Keeps about half of a vendor's old stock in place of the fresh stock (not the pinned wares). */
+/**
+ * @brief Keeps about half of a vendor's old stock in place of the fresh stock (not the pinned wares).
+ * A kept ware takes the place of a fresh one of the same kind, so each shop tab keeps its size.
+ */
 template <typename Stock>
-void KeepHalfOfStock(Stock &fresh, const Stock &old, size_t pinned)
+void KeepHalfOfStock(Stock &fresh, const std::vector<Item> &old, size_t pinned)
 {
-	for (size_t i = pinned; i < fresh.size() && i < old.size(); i++) {
-		if (GenerateRnd(100) >= VendorRefreshPercent)
-			fresh[i] = old[i];
+	std::vector<bool> kept(old.size(), false);
+	for (size_t i = pinned; i < fresh.size(); i++) {
+		if (GenerateRnd(100) < VendorRefreshPercent)
+			continue;
+		const VendorCategory category = GetVendorCategory(fresh[i]);
+		for (size_t j = pinned; j < old.size(); j++) {
+			if (!kept[j] && GetVendorCategory(old[j]) == category) {
+				fresh[i] = old[j];
+				kept[j] = true;
+				break;
+			}
+		}
 	}
+	SortVendorStock({ fresh.data(), fresh.size() }, pinned);
 }
 
 /** @brief The hero gained a level: about half of each vendor's stock is replaced. */
 void RefreshVendorStock(int level)
 {
-	const auto oldSmith = SmithItems;
-	const auto oldWitch = WitchItems;
-	const auto oldHealer = HealerItems;
+	// Copies on the heap: Griswold's stock is too big for a small stack.
+	const std::vector<Item> oldSmith(SmithItems.begin(), SmithItems.end());
+	const std::vector<Item> oldWitch(WitchItems.begin(), WitchItems.end());
+	const std::vector<Item> oldHealer(HealerItems.begin(), HealerItems.end());
 	SpawnSmith(level);
 	SpawnWitch(level);
 	SpawnHealer(level);

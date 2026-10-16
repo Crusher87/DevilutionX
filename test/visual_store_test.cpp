@@ -19,12 +19,17 @@
  */
 
 #include <algorithm>
+#include <array>
+#include <span>
+#include <vector>
 
 #include <gtest/gtest.h>
 
 #include "ui_test.hpp"
 
+#include "engine/assets.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
 #include "options.h"
@@ -993,6 +998,281 @@ TEST_F(VisualStoreTest, Reopen_ResetsState)
 	    << "Tab should reset to Basic on re-open";
 	EXPECT_EQ(VisualStore.currentPage, 0u)
 	    << "Page should reset to 0 on re-open";
+}
+
+// ===========================================================================
+// POE2 Mashup: vendor stock grouped onto shop tabs by kind of item
+// ===========================================================================
+
+class Poe2ShopTabsTest : public VisualStoreTest {
+protected:
+	void SetUp() override
+	{
+		VisualStoreTest::SetUp();
+		if (IsSkipped())
+			return;
+		// The POE2 Mashup runs on Hellfire.
+		gbIsHellfire = true;
+		gbIsPoe2 = true;
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		InitStores();
+	}
+
+	void TearDown() override
+	{
+		if (!IsSkipped()) {
+			if (IsVisualStoreOpen)
+				CloseVisualStore();
+			gbIsPoe2 = false;
+			gbIsHellfire = false;
+			gbIsMultiplayer = false;
+			UnloadModArchives();
+			LoadItemData();
+			InitStores();
+		}
+		VisualStoreTest::TearDown();
+	}
+
+	using CategoryCounts = std::array<int, NumVendorCategories>;
+
+	template <typename Stock>
+	static CategoryCounts CountCategories(const Stock &stock, size_t first = 0)
+	{
+		CategoryCounts counts {};
+		for (size_t i = first; i < stock.size(); i++)
+			counts[static_cast<size_t>(GetVendorCategory(stock[i]))]++;
+		return counts;
+	}
+
+	static int Count(const CategoryCounts &counts, VendorCategory category)
+	{
+		return counts[static_cast<size_t>(category)];
+	}
+
+	static void ExpectSmithShares(const CategoryCounts &counts)
+	{
+		EXPECT_GE(Count(counts, VendorCategory::OneHanded), 20);
+		EXPECT_LE(Count(counts, VendorCategory::OneHanded), 26);
+		for (const VendorCategory category : { VendorCategory::TwoHanded, VendorCategory::Bows, VendorCategory::BodyArmour, VendorCategory::Shields }) {
+			EXPECT_GE(Count(counts, category), 15) << static_cast<int>(category);
+			EXPECT_LE(Count(counts, category), 20) << static_cast<int>(category);
+		}
+		EXPECT_GE(Count(counts, VendorCategory::Helmets), 18);
+		EXPECT_LE(Count(counts, VendorCategory::Helmets), 24);
+		EXPECT_EQ(Count(counts, VendorCategory::Jewelry), 0) << "Griswold's basic stock has no rings or amulets";
+		EXPECT_EQ(Count(counts, VendorCategory::Supplies), 0);
+	}
+
+	/** @brief The tabs that list wares, without buyback. */
+	static std::vector<Poe2ShopTab> WareTabs()
+	{
+		std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
+		std::erase(tabs, Poe2ShopTab::Buyback);
+		return tabs;
+	}
+
+	/** @brief How many items the tab's pages lay out. */
+	static size_t ItemsOnPages()
+	{
+		size_t count = 0;
+		for (const VisualStorePage &page : VisualStore.pages)
+			count += page.items.size();
+		return count;
+	}
+};
+
+TEST_F(Poe2ShopTabsTest, SmithStocksAShopTabOfEachKind)
+{
+	for (const int level : { 6, 11, 16 }) {
+		for (uint32_t seed = 1; seed <= 5; seed++) {
+			SetRndSeed(seed);
+			SpawnSmith(level);
+			SCOPED_TRACE(testing::Message() << "level " << level << ", seed " << seed);
+			ExpectSmithShares(CountCategories(SmithItems));
+			EXPECT_LE(SmithItems.size(), static_cast<size_t>(NumSmithBasicItemsPoe2));
+		}
+	}
+}
+
+TEST_F(Poe2ShopTabsTest, SmithWaresAreRecreatedFromTheirSeed)
+{
+	SetRndSeed(7);
+	SpawnSmith(16);
+	ASSERT_FALSE(SmithItems.empty());
+	for (const Item &ware : SmithItems) {
+		Item copy {};
+		RecreateItem(*MyPlayer, copy, static_cast<_item_indexes>(ware.IDidx), ware._iCreateInfo, ware._iSeed, ware._ivalue, ware.dwBuff);
+		EXPECT_EQ(copy.IDidx, ware.IDidx) << ware._iIName;
+	}
+}
+
+TEST_F(Poe2ShopTabsTest, WitchStocksStavesAndSupplies)
+{
+	for (uint32_t seed = 1; seed <= 5; seed++) {
+		SetRndSeed(seed);
+		SpawnWitch(16);
+		ASSERT_GE(WitchItems.size(), static_cast<size_t>(NumWitchPinnedItems));
+		EXPECT_EQ(WitchItems[0].IDidx, IDI_MANA);
+		EXPECT_EQ(WitchItems[1].IDidx, IDI_FULLMANA);
+		EXPECT_EQ(WitchItems[2].IDidx, IDI_IDENTIFY);
+		const CategoryCounts counts = CountCategories(WitchItems, NumWitchPinnedItems);
+		EXPECT_GE(Count(counts, VendorCategory::TwoHanded), 15);
+		EXPECT_LE(Count(counts, VendorCategory::TwoHanded), 20);
+		EXPECT_GE(Count(counts, VendorCategory::Supplies), 3);
+		EXPECT_LE(Count(counts, VendorCategory::Supplies), 6);
+		for (const Item &item : WitchItems) {
+			if (GetVendorCategory(item) == VendorCategory::TwoHanded) {
+				EXPECT_EQ(item._itype, ItemType::Staff) << item._iIName;
+			}
+		}
+	}
+}
+
+TEST_F(Poe2ShopTabsTest, VendorTabs)
+{
+	VisualStore.vendor = VisualStoreVendor::Smith;
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::OneHanded, Poe2ShopTab::TwoHanded, Poe2ShopTab::Bows, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Jewelry, Poe2ShopTab::Buyback }));
+	gbIsMultiplayer = true;
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::OneHanded, Poe2ShopTab::TwoHanded, Poe2ShopTab::Bows, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Buyback }))
+	    << "Premium wares leave out rings and amulets in multiplayer";
+	gbIsMultiplayer = false;
+
+	VisualStore.vendor = VisualStoreVendor::Witch;
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Staves, Poe2ShopTab::Supplies, Poe2ShopTab::Buyback }));
+	VisualStore.vendor = VisualStoreVendor::Healer;
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Items }));
+	VisualStore.vendor = VisualStoreVendor::Boy;
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Items }));
+}
+
+TEST_F(Poe2ShopTabsTest, EveryWareIsOnExactlyOneTab)
+{
+	SetRndSeed(3);
+	SpawnSmith(16);
+	SpawnPremium(*MyPlayer);
+	SpawnWitch(16);
+
+	VisualStore.vendor = VisualStoreVendor::Smith;
+	const std::vector<Poe2ShopTab> smithTabs = WareTabs();
+	const auto expectOneTab = [](const Item &item, const std::vector<Poe2ShopTab> &tabs) {
+		const auto onTabs = std::count_if(tabs.begin(), tabs.end(), [&item](Poe2ShopTab tab) { return ItemOnPoe2ShopTab(item, tab); });
+		EXPECT_EQ(onTabs, 1) << item._iIName;
+	};
+	for (const Item &item : SmithItems)
+		expectOneTab(item, smithTabs);
+	for (const Item &item : PremiumItems)
+		expectOneTab(item, smithTabs);
+
+	VisualStore.vendor = VisualStoreVendor::Witch;
+	const std::vector<Poe2ShopTab> witchTabs = WareTabs();
+	for (const Item &item : WitchItems)
+		expectOneTab(item, witchTabs);
+}
+
+TEST_F(Poe2ShopTabsTest, SmithTabsListTheirKindOnPages)
+{
+	SetRndSeed(5);
+	SpawnSmith(16);
+	// Premium rings and amulets use Hellfire's item graphics, which the test assets lack.
+	PremiumItems.clear();
+
+	OpenVisualStore(VisualStoreVendor::Smith);
+	EXPECT_EQ(ActivePoe2ShopTab, Poe2ShopTab::OneHanded) << "Opens on the first tab";
+
+	size_t listed = 0;
+	bool sawSecondPage = false;
+	for (const Poe2ShopTab tab : WareTabs()) {
+		SetPoe2ShopTab(tab);
+		SCOPED_TRACE(static_cast<int>(tab));
+		const std::span<Item> wares = GetVisualStoreItems();
+		for (const Item &item : wares)
+			EXPECT_TRUE(ItemOnPoe2ShopTab(item, tab)) << item._iIName;
+		listed += wares.size();
+		EXPECT_EQ(ItemsOnPages(), wares.size()) << "Every ware is on one of the tab's pages";
+		if (tab != Poe2ShopTab::Jewelry) {
+			EXPECT_GE(wares.size(), 15u);
+		}
+		if (GetVisualStorePageCount() > 1) {
+			sawSecondPage = true;
+			VisualStoreNextPage();
+			EXPECT_EQ(VisualStore.currentPage, 1u);
+		}
+	}
+	EXPECT_EQ(listed, SmithItems.size());
+	EXPECT_TRUE(sawSecondPage) << "The bigger tabs take more than a page";
+}
+
+TEST_F(Poe2ShopTabsTest, BuyingFromATabTakesThatWare)
+{
+	SetRndSeed(5);
+	SpawnSmith(16);
+	PremiumItems.clear();
+	StripPlayer();
+	SetPlayerGold(100000);
+
+	OpenVisualStore(VisualStoreVendor::Smith);
+	SetPoe2ShopTab(Poe2ShopTab::Bows);
+	const int itemIdx = FindFirstItemIndexOnPage();
+	ASSERT_GE(itemIdx, 0);
+	const Item ware = GetVisualStoreItems()[itemIdx];
+	ASSERT_EQ(GetVendorCategory(ware), VendorCategory::Bows);
+	const size_t stockBefore = SmithItems.size();
+
+	CheckVisualStoreItem(FindFirstItemOnPage(), /*isCtrlHeld=*/true, false);
+
+	EXPECT_EQ(SmithItems.size(), stockBefore - 1);
+	EXPECT_TRUE(std::none_of(SmithItems.begin(), SmithItems.end(), [&ware](const Item &item) { return item._iSeed == ware._iSeed; }))
+	    << "The bought ware left Griswold's stock";
+	bool bought = false;
+	for (int i = 0; i < MyPlayer->_pNumInv; i++)
+		bought = bought || MyPlayer->InvList[i]._iSeed == ware._iSeed;
+	for (const Item &item : MyPlayer->InvBody)
+		bought = bought || (!item.isEmpty() && item._iSeed == ware._iSeed);
+	EXPECT_TRUE(bought) << "The hero has the bow, in the inventory or in hand";
+	for (const Item &item : GetVisualStoreItems())
+		EXPECT_EQ(GetVendorCategory(item), VendorCategory::Bows) << "Still on the Bows tab";
+}
+
+TEST_F(Poe2ShopTabsTest, LevelUpKeepsEachTabsShare)
+{
+	SetRndSeed(11);
+	SetupTownStores();
+	const std::vector<uint32_t> oldSeeds = [] {
+		std::vector<uint32_t> seeds;
+		for (const Item &item : SmithItems)
+			seeds.push_back(item._iSeed);
+		return seeds;
+	}();
+
+	MyPlayer->setCharacterLevel(MyPlayer->getCharacterLevel() + 1);
+	SetupTownStores();
+
+	ExpectSmithShares(CountCategories(SmithItems));
+	const auto kept = std::count_if(SmithItems.begin(), SmithItems.end(), [&oldSeeds](const Item &item) {
+		return std::find(oldSeeds.begin(), oldSeeds.end(), item._iSeed) != oldSeeds.end();
+	});
+	EXPECT_GT(kept, 0) << "About half of the old stock stays";
+	EXPECT_LT(static_cast<size_t>(kept), SmithItems.size()) << "About half of the stock is new";
+	std::vector<Item> sorted(SmithItems.begin(), SmithItems.end());
+	SortVendorStock(sorted, 0);
+	EXPECT_TRUE(std::equal(sorted.begin(), sorted.end(), SmithItems.begin(), [](const Item &a, const Item &b) { return a.IDidx == b.IDidx && a._iIvalue == b._iIvalue; }))
+	    << "Kept wares are sorted in with the new ones";
+}
+
+TEST_F(Poe2ShopTabsTest, VanillaStockIsUnchanged)
+{
+	gbIsPoe2 = false;
+	gbIsHellfire = false;
+	UnloadModArchives();
+	LoadItemData();
+	SetRndSeed(42);
+	SpawnSmith(16);
+	EXPECT_GE(SmithItems.size(), 10u);
+	EXPECT_LE(SmithItems.size(), static_cast<size_t>(NumSmithBasicItems));
+	SpawnWitch(16);
+	EXPECT_GE(WitchItems.size(), 10u);
+	EXPECT_LE(WitchItems.size(), static_cast<size_t>(NumWitchItems));
 }
 
 } // namespace
