@@ -9,7 +9,11 @@
 #include "engine/rectangle.hpp"
 #include "engine/size.hpp"
 
+#ifdef USE_SDL1
+#include "utils/sdl2_to_1_2_backports.h"
+#else
 struct SDL_Renderer;
+#endif
 
 namespace devilution {
 
