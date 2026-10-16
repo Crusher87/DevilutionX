@@ -1024,6 +1024,7 @@ void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
 bool ExportLevelTiles(const std::string &) { return false; }
+const char *PackPalette(uint8_t) { return nullptr; }
 
 #endif
 
