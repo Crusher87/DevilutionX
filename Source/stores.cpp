@@ -2294,9 +2294,42 @@ void TavernEnter()
 
 } // namespace
 
+namespace {
+
+/** @brief Tiles the hero can walk from a stash or vendor before its panel closes. */
+constexpr int InteractionReach = 3;
+std::optional<Point> InteractionSpot;
+
+} // namespace
+
+void RememberInteractionSpot()
+{
+	if (MyPlayer != nullptr)
+		InteractionSpot = MyPlayer->position.tile;
+}
+
+void CloseInteractionPanelsWhenAway()
+{
+	if (!InteractionSpot || MyPlayer == nullptr)
+		return;
+	if (!IsStashOpen && !IsVisualStoreOpen) {
+		InteractionSpot = std::nullopt;
+		return;
+	}
+	if (MyPlayer->position.tile.WalkingDistance(*InteractionSpot) <= InteractionReach)
+		return;
+	InteractionSpot = std::nullopt;
+	if (IsStashOpen) {
+		CloseStash();
+		invflag = false;
+	}
+	CloseVisualStore();
+}
+
 void OpenStashPanel()
 {
 	IsStashOpen = true;
+	RememberInteractionSpot();
 	Stash.RefreshItemStatFlags();
 	invflag = true;
 	if (ControlMode != ControlTypes::KeyboardAndMouse) {

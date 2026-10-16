@@ -597,6 +597,8 @@ Point GetSuperItemLoc(Point position);
 void GetItemAttrs(Item &item, _item_indexes itemData, int lvl);
 void SetupItem(Item &item);
 Item *SpawnUnique(_unique_items uid, Point position, std::optional<int> level = std::nullopt, bool sendmsg = true, bool exactPosition = false);
+/** @brief Makes a fixed unique the way quests hand them out (Arkaine's Valor, Optic Amulet...), on the given base. */
+void MakeFixedUnique(const Player &player, Item &item, _item_indexes base, int level, _unique_items uid);
 void GetSuperItemSpace(Point position, int8_t inum);
 _item_indexes RndItemForMonsterLevel(int8_t monsterLevel);
 void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t iseed, int lvl, int uper, bool onlygood, bool pregen, int uidOffset = 0, bool forceNotUnique = false);

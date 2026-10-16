@@ -403,6 +403,7 @@ void OpenVisualStore(VisualStoreVendor vendor)
 {
 	IsVisualStoreOpen = true;
 	invflag = true; // Open inventory panel alongside
+	RememberInteractionSpot();
 
 	VisualStore.vendor = vendor;
 	VisualStore.activeTab = VisualStoreTab::Basic;

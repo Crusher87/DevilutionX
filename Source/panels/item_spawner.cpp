@@ -91,6 +91,9 @@ std::string LastQuery;
 SpawnerCategory Category = SpawnerCategory::All;
 SpawnerCategory LastCategory = SpawnerCategory::Count;
 size_t Selected = 0;
+/** @brief When the list row was last clicked, so a second click on it spawns (double-click). */
+uint32_t LastRowClickTicks = 0;
+constexpr uint32_t DoubleClickTicks = 450;
 size_t ScrollTop = 0;
 size_t QualityIndex = 2; // Rare
 int Level = 30;
@@ -239,6 +242,12 @@ bool RollUnique(const Player &player, Item &item, int uid, uint32_t firstSeed)
 		found = true;
 	}
 	SetRndSeed(rngState);
+	if (!found) {
+		// Quest uniques never roll from a drop: make them the way the quest does.
+		item = {};
+		MakeFixedUnique(player, item, *base, std::max<int>(unique.UIMinLvl, 1), static_cast<_unique_items>(uid));
+		found = item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid == uid;
+	}
 	return found;
 }
 
@@ -361,6 +370,12 @@ void SpawnSelected(int count)
 		EventPlrMsg(FormatRuntime(_("Spawned {:d}x {:s}"), spawned, entry.name));
 }
 
+/** @brief The "Give" button at the bottom of the preview. */
+Rectangle GiveButton(const Rectangle &preview)
+{
+	return { { preview.position.x + (preview.size.width - 120) / 2, preview.position.y + preview.size.height - 72 }, { 120, 26 } };
+}
+
 bool HandleClick(Point position, bool shift)
 {
 	const Layout layout = CurrentLayout();
@@ -392,12 +407,16 @@ bool HandleClick(Point position, bool shift)
 	if (layout.list.contains(position)) {
 		const size_t row = ScrollTop + static_cast<size_t>((position.y - layout.list.position.y) / RowHeight);
 		if (row < Results.size()) {
+			const uint32_t now = SDL_GetTicks();
+			const bool again = row == Selected && now - LastRowClickTicks <= DoubleClickTicks;
 			Selected = row;
-			SpawnSelected(shift ? BatchCount : 1);
+			LastRowClickTicks = again ? 0 : now;
+			if (again)
+				SpawnSelected(shift ? BatchCount : 1);
 		}
 		return true;
 	}
-	if (layout.preview.contains(position)) {
+	if (GiveButton(layout.preview).contains(position)) {
 		SpawnSelected(shift ? BatchCount : 1);
 	}
 	return true;
@@ -470,7 +489,11 @@ void DrawPreview(const Surface &out, const Rectangle &rect)
 		    { .flags = UiFlags::AlignCenter | UiFlags::ColorWhite });
 		y += 20;
 	}
-	DrawString(out, _("Click or Enter: spawn\nShift: spawn 5"), { { textX, rect.position.y + rect.size.height - 40 }, { textWidth, 36 } },
+	const Rectangle give = GiveButton(rect);
+	FillRectangle(out, give, give.contains(MousePosition) ? ChipActiveColor : ChipColor);
+	DrawFrame(out, give, BorderColor);
+	DrawString(out, _("Give"), give, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+	DrawString(out, _("Double-click, Give or Enter: spawn\nShift: spawn 5"), { { textX, rect.position.y + rect.size.height - 40 }, { textWidth, 36 } },
 	    { .flags = UiFlags::AlignCenter | UiFlags::ColorWhite, .lineHeight = 16 });
 }
 

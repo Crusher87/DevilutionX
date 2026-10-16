@@ -4068,6 +4068,13 @@ void SetupItem(Item &item)
 	item._iIdentified = false;
 }
 
+void MakeFixedUnique(const Player &player, Item &item, _item_indexes base, int level, _unique_items uid)
+{
+	GetItemAttrs(item, base, level);
+	GetUniqueItem(player, item, uid);
+	SetupItem(item);
+}
+
 Item *SpawnUnique(_unique_items uid, Point position, std::optional<int> level /*= std::nullopt*/, bool sendmsg /*= true*/, bool exactPosition /*= false*/)
 {
 	if (ActiveItemCount >= MAXITEMS)

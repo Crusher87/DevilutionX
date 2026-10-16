@@ -175,6 +175,12 @@ void ClearSText(int s, int e);
 void StartStore(TalkID s);
 /** @brief Opens the shared stash beside the inventory. */
 void OpenStashPanel();
+
+/** @brief Remembers where the hero stood when a stash or vendor panel opened, so walking away closes it. */
+void RememberInteractionSpot();
+
+/** @brief Closes the stash and vendor panels once the hero walks more than a few tiles from where they opened. */
+void CloseInteractionPanelsWhenAway();
 void DrawSText(const Surface &out);
 void StoreESC();
 void StoreUp();

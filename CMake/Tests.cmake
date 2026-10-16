@@ -44,6 +44,7 @@ set(tests
   poe2_loot_test
   poe2_modifiers_test
   poe2_crafting_test
+  primitive_render_test
   poe2_economy_test
   poe2_endgame_test
   poe2_monster_mods_test

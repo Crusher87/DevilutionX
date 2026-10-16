@@ -323,7 +323,8 @@ void LeftMouseCmd(bool bShift)
 			NetSendCmdParam1(true, CMD_RATTACKPID, PlayerUnderCursor->getId());
 		}
 	} else {
-		if (bShift || (wasdMovement && pcursmonst != -1 && !CanTalkToMonst(Monsters[pcursmonst]))) {
+		// POE2 Mashup: clicking a monster walks up to it and attacks, with WASD movement too; Shift attacks in place.
+		if (bShift) {
 			if (pcursmonst != -1) {
 				if (CanTalkToMonst(Monsters[pcursmonst])) {
 					NetSendCmdParam1(true, CMD_ATTACKID, pcursmonst);
@@ -1746,6 +1747,7 @@ void GameLogic()
 	RedrawViewport();
 	pfile_update(false);
 	ProcessAutosave();
+	CloseInteractionPanelsWhenAway();
 
 	plrctrls_after_game_logic();
 }

@@ -14,4 +14,4 @@ TOWN_COW	Cow	59	20	North	128			12	3
 TOWN_COWFARM	Complete Nut	61	22	SouthWest	96	towners\farmer\cfrmrn2	15	3		
 TOWN_FARMER	Lester the farmer	62	16	South	96	towners\farmer\farmrn2	15	3		
 TOWN_GIRL	Celia	77	43	South	96	towners\girl\girlw1	20	6		
-TOWN_STASH	Stash	60	43	South	96	objects\chest3	1	1		
+TOWN_STASH	Stash	60	65	South	96	objects\chest3	1	1		
