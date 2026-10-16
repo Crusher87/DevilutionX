@@ -601,6 +601,8 @@ enum item_misc_id : int16_t {
 	IMISC_SUPPORT_TABLE,
 	/** The later Spirit gems (poe2/spirit_skills.hpp), told apart by the item name. */
 	IMISC_SPIRITGEM_TABLE,
+	/** Read for weapon set passive points, like POE2's Book of Specialisation (poe2/weapon_swap.hpp). */
+	IMISC_SPEC_BOOK,
 	IMISC_INVALID = -1,
 };
 

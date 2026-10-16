@@ -87,6 +87,13 @@ enum class PassiveKind : uint8_t {
 
 using PassiveNodeId = uint16_t;
 
+/** @brief Which points a node is allocated with: the main tree, or one weapon set's points (they only count while that set is out). */
+enum class PassivePool : uint8_t {
+	Main,
+	SetI,
+	SetII,
+};
+
 struct PassiveNode {
 	PassiveNodeId id;
 	/** @brief Name of a notable; small nodes are named after their stats. */
@@ -133,19 +140,28 @@ std::optional<PassiveNodeId> ChosenAscendancy(const Player &player);
 
 /** @brief Ascendancies stay hidden until the hero can ascend; once one is chosen, the other is hidden again. */
 bool IsPassiveNodeVisible(const Player &player, const PassiveNode &node);
+/** @brief Whether the node counts right now: allocated in the main tree or in the weapon set that is out. */
 bool IsPassiveAllocated(const Player &player, PassiveNodeId node);
-bool CanAllocatePassive(const Player &player, PassiveNodeId node);
+/** @brief Whether the node is part of that pool's tree: main nodes belong to every pool, set nodes only to their set. */
+bool IsPassiveAllocatedIn(const Player &player, PassiveNodeId node, PassivePool pool);
+/** @brief Whether the node was allocated with that pool's points. */
+bool IsPassiveInPool(const Player &player, PassiveNodeId node, PassivePool pool);
+/** @brief Small, notable and attribute nodes can take weapon set points; ascendancies, shrines and jewel sockets can't. */
+bool CanTakeWeaponSetPoints(const PassiveNode &node);
+int WeaponSetPointsSpent(const Player &player, PassivePool pool);
+int WeaponSetPointsLeft(const Player &player, PassivePool pool);
+bool CanAllocatePassive(const Player &player, PassiveNodeId node, PassivePool pool = PassivePool::Main);
 /** @brief Whether allocating the node needs the player to pick an attribute. */
 bool PassiveNeedsAttributeChoice(PassiveNodeId node);
 /** @param attribute The attribute picked for an "any Attribute" node; ignored for other nodes. */
-bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attribute = PassiveAttribute::Strength);
+bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attribute = PassiveAttribute::Strength, PassivePool pool = PassivePool::Main);
 /** @brief The attribute picked on an allocated "any Attribute" node. */
 PassiveAttribute ChosenPassiveAttribute(const Player &player, PassiveNodeId node);
 PassiveStat PassiveAttributeStat(PassiveAttribute attribute);
 std::string_view PassiveAttributeName(PassiveAttribute attribute);
 /** @brief A node can be refunded if everything else allocated stays linked to the start. */
-bool CanRefundPassive(const Player &player, PassiveNodeId node);
-bool RefundPassive(Player &player, PassiveNodeId node);
+bool CanRefundPassive(const Player &player, PassiveNodeId node, PassivePool pool = PassivePool::Main);
+bool RefundPassive(Player &player, PassiveNodeId node, PassivePool pool = PassivePool::Main);
 void ResetPassives(Player &player);
 
 /** @brief Sum of the stats of every allocated node; all zero in multiplayer, where passives aren't synced yet. */

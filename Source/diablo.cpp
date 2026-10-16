@@ -101,12 +101,14 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/hardcore.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/economy.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -623,7 +625,9 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 
 	if (MyPlayerIsDead) {
 		if (vkey == SDLK_ESCAPE) {
-			if (!gbIsMultiplayer) {
+			if (HardcoreHeroFell()) {
+				ContinueInSoftcore(*MyPlayer);
+			} else if (!gbIsMultiplayer) {
 				if (gbValidSaveFile)
 					gamemenu_load_game(false);
 				else
@@ -1570,35 +1574,23 @@ std::expected<void, std::string> LoadLvlGFX()
 /** @brief Writes every dungeon type's frames for the HD pack maker (POE2 Mashup `--hd-export`). */
 void HdExportAll()
 {
-	struct LevelPalette {
-		dungeon_type type;
-		const char *palette;
-	};
-	constexpr LevelPalette Levels[] = {
-		{ DTYPE_TOWN, "levels\\towndata\\town.pal" },
-		{ DTYPE_CATHEDRAL, "levels\\l1data\\l1_1.pal" },
-		{ DTYPE_CATACOMBS, "levels\\l2data\\l2_1.pal" },
-		{ DTYPE_CAVES, "levels\\l3data\\l3_1.pal" },
-		{ DTYPE_HELL, "levels\\l4data\\l4_1.pal" },
-		{ DTYPE_NEST, "nlevels\\l6data\\l6base1.pal" },
-		{ DTYPE_CRYPT, "nlevels\\l5data\\l5base.pal" },
-	};
-	for (const LevelPalette &level : Levels) {
-		leveltype = level.type;
+	constexpr dungeon_type Levels[] = { DTYPE_TOWN, DTYPE_CATHEDRAL, DTYPE_CATACOMBS, DTYPE_CAVES, DTYPE_HELL, DTYPE_NEST, DTYPE_CRYPT };
+	for (const dungeon_type level : Levels) {
+		leveltype = level;
 		pDungeonCels = nullptr;
 		pMegaTiles = nullptr;
 		pSpecialCels = std::nullopt;
 		std::memset(DPieceMicros, 0, sizeof(DPieceMicros));
 		if (!LoadLevelSOLData().has_value() || !LoadLvlGFX().has_value()) {
-			LogInfo("HD export: skipping level type {}", static_cast<int>(level.type));
+			LogInfo("HD export: skipping level type {}", static_cast<int>(level));
 			pDungeonCels = nullptr;
 			continue;
 		}
 		SetDungeonMicros(pDungeonCels, MicroTileLen);
 		MakeLightTable();
-		LoadPaletteAndInitBlending(level.palette);
+		LoadPaletteAndInitBlending(hd::PackPalette(static_cast<uint8_t>(level)));
 		hd::ExportLevelTiles(HdExportDir);
-		LogInfo("HD export: wrote level type {}", static_cast<int>(level.type));
+		LogInfo("HD export: wrote level type {}", static_cast<int>(level));
 	}
 	pDungeonCels = nullptr;
 	pMegaTiles = nullptr;
@@ -2428,6 +2420,14 @@ void InitKeymapActions()
 	    [] { PressTraySlot(TraySlot::MiddleMouse); },
 	    [] { ReleaseTraySlot(TraySlot::MiddleMouse); },
 	    CanPlayerTakeAction);
+	options.Keymapper.AddAction(
+	    "SwapWeapons",
+	    N_("Swap weapons"),
+	    N_("Swaps between weapon sets I and II (POE2 Mashup)."),
+	    'X',
+	    [] { SwapWeapons(*MyPlayer); },
+	    nullptr,
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
 	options.Keymapper.CommitActions();
 }
 

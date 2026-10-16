@@ -35,6 +35,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "spells.h"
 #include "stores.h"
 #include "utils/format.hpp"
@@ -1193,6 +1194,9 @@ void UseSkillSlot(size_t slot)
 
 	Player &player = *MyPlayer;
 	const SkillSlot skill = player.poe2.skillSlots[slot];
+	// Like POE2, an attack whose weapon is in the other set swaps to it.
+	if (skill.kind == SkillKind::Attack && GetSkillUsability(player, skill) == SkillUsability::Weapon && OtherWeaponSetAllowsSkill(player, skill.attack()))
+		SwapWeapons(player);
 	switch (GetSkillUsability(player, skill)) {
 	case SkillUsability::Empty:
 		EventPlrMsg(_("No skill gem in that socket. Socket one in the Skills panel (K)."), UiFlags::ColorRed);

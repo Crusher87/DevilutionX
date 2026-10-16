@@ -38,6 +38,7 @@
 #include "multi.h"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/hardcore.hpp"
 #include "utils/log.hpp"
 #include "utils/sdl_compat.h"
 #include "utils/sdl_geometry.h"
@@ -464,7 +465,11 @@ void DoLoad(interface_mode uMsg)
 		leveltype = GetLevelType(currlevel);
 		IncProgress();
 		loadResult = LoadGameLevel(false, ENTRY_MAIN);
-		if (loadResult.has_value()) IncProgress();
+		if (loadResult.has_value()) {
+			// POE2 Mashup: a hero who fell in Hardcore is saved in Softcore once back in town.
+			FinishHardcoreFall();
+			IncProgress();
+		}
 		break;
 	default:
 		loadResult = std::unexpected<std::string>("Unknown progress mode");

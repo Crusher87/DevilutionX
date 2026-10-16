@@ -55,6 +55,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -1252,6 +1253,41 @@ void InitInv()
 	pInvCels = LoadCel(StrCat("data\\inv\\", invName).c_str(), static_cast<uint16_t>(SidePanelSize.width));
 }
 
+namespace {
+
+/** @brief POE2 Mashup: the weapon set I and II buttons above the left hand slot. */
+Rectangle WeaponSetButton(uint8_t set)
+{
+	return { GetPanelPosition(UiPanels::Inventory, { 17 + (set * 30), 60 }), { 28, 14 } };
+}
+
+void DrawWeaponSetButtons(const Surface &out, const Player &player)
+{
+	for (uint8_t set = 0; set < NumWeaponSets; set++) {
+		const Rectangle button = WeaponSetButton(set);
+		const bool active = player.poe2.weaponSet == set;
+		FillRect(out, button.position.x, button.position.y, button.size.width, button.size.height, active ? PAL16_YELLOW + 12 : PAL16_GRAY + 14);
+		DrawString(out, WeaponSetName(set), button, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (active ? UiFlags::ColorWhitegold : UiFlags::ColorUiSilverDark) });
+	}
+}
+
+/** @brief A click on the other set's button swaps to it. */
+bool CheckWeaponSetButtons(Player &player)
+{
+	if (!gbIsPoe2 || !player.HoldItem.isEmpty())
+		return false;
+	for (uint8_t set = 0; set < NumWeaponSets; set++) {
+		if (!WeaponSetButton(set).contains(MousePosition))
+			continue;
+		if (player.poe2.weaponSet != set)
+			SwapWeapons(player);
+		return true;
+	}
+	return false;
+}
+
+} // namespace
+
 void DrawInv(const Surface &out)
 {
 	ClxDraw(out, GetPanelPosition(UiPanels::Inventory, { 0, 351 }), (*pInvCels)[0]);
@@ -1338,6 +1374,9 @@ void DrawInv(const Surface &out)
 			DrawItem(myPlayer.InvList[ii], out, position, sprite);
 		}
 	}
+
+	if (gbIsPoe2)
+		DrawWeaponSetButtons(out, myPlayer);
 }
 
 void DrawInvBelt(const Surface &out)
@@ -1729,6 +1768,8 @@ void TransferItemToStash(Player &player, int location)
 void CheckInvItem(bool isShiftHeld, bool isCtrlHeld)
 {
 	if (IsInspectingPlayer())
+		return;
+	if (CheckWeaponSetButtons(*MyPlayer))
 		return;
 	if (!MyPlayer->HoldItem.isEmpty()) {
 		CheckInvPaste(*MyPlayer, MousePosition);
@@ -2373,6 +2414,16 @@ bool UseInvItem(int cii)
 
 	if (IsUncutGem(*item)) {
 		OpenGemcutting(speedlist, c);
+		return true;
+	}
+
+	if (SpecBookIndex(*item) >= 0) {
+		if (UseSpecBook(player, *item)) {
+			if (speedlist)
+				player.RemoveSpdBarItem(c);
+			else
+				player.RemoveInvItem(c);
+		}
 		return true;
 	}
 

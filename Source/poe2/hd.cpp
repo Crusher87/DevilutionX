@@ -19,6 +19,7 @@
 
 #include "engine/assets.hpp"
 #include "engine/light_tables.hpp"
+#include "engine/load_file.hpp"
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/dun_render.hpp"
@@ -131,6 +132,8 @@ struct RasterKeyHash {
 std::unordered_map<RasterKey, Raster, RasterKeyHash> Rasters;
 
 std::array<float, NumLightingLevels> LightLevel;
+/** @brief The level's palette against the one the HD tiles were made in: Cathedral levels pick one of four. */
+std::array<float, 3> TileGain { 1.F, 1.F, 1.F };
 uint32_t PaletteVersion = 1;
 std::array<SDL_Color, 256> LastPalette;
 
@@ -388,10 +391,13 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 	return it->second;
 }
 
-/** @brief A wall tile's HD art cut the way the game cuts it near the hero (see-through or half cut away). */
+/**
+ * @brief A tile's HD art cut to exactly the pixels the game draws for it: the same frame can be drawn as
+ * a floor triangle or a full square, and walls near the hero are see-through or half cut away.
+ */
 SDL_Texture *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &draw)
 {
-	const std::string key = name + "#" + std::to_string(static_cast<int>(draw.mask));
+	const std::string key = name + "#" + std::to_string(static_cast<int>(draw.mask)) + "/" + std::to_string(static_cast<int>(draw.tile)) + "/" + std::to_string(draw.height);
 	auto [it, inserted] = Art.try_emplace(key);
 	HdArt &art = it->second;
 	if (!inserted)
@@ -461,12 +467,36 @@ std::array<float, 3> ScreenTint()
 	return tint;
 }
 
+void UpdateTileGain()
+{
+	TileGain = { 1.F, 1.F, 1.F };
+	const char *path = PackPalette(static_cast<uint8_t>(leveltype));
+	if (path == nullptr)
+		return;
+	std::array<uint8_t, 256 * 3> pack;
+	if (!LoadFileInMemWithStatus(path, pack).has_value())
+		return;
+	std::array<float, 3> current {};
+	std::array<float, 3> made {};
+	// Skip the colour-cycling entries (water, lava), which move every frame.
+	for (int color = 32; color < 256; color++) {
+		current[0] += logical_palette[color].r;
+		current[1] += logical_palette[color].g;
+		current[2] += logical_palette[color].b;
+		for (int c = 0; c < 3; c++)
+			made[c] += pack[color * 3 + c];
+	}
+	for (int c = 0; c < 3; c++)
+		TileGain[c] = made[c] > 0 ? std::clamp(current[c] / made[c], 0.5F, 2.F) : 1.F;
+}
+
 void CheckPalette()
 {
 	if (std::memcmp(LastPalette.data(), logical_palette.data(), sizeof(LastPalette)) != 0) {
 		std::memcpy(LastPalette.data(), logical_palette.data(), sizeof(LastPalette));
 		PaletteVersion++;
 		UpdateLightLevels();
+		UpdateTileGain();
 	}
 }
 
@@ -523,6 +553,20 @@ void BuildLightBuffer(Size size)
 }
 
 } // namespace
+
+const char *PackPalette(uint8_t levelType)
+{
+	switch (static_cast<dungeon_type>(levelType)) {
+	case DTYPE_TOWN: return "levels\\towndata\\town.pal";
+	case DTYPE_CATHEDRAL: return "levels\\l1data\\l1_1.pal";
+	case DTYPE_CATACOMBS: return "levels\\l2data\\l2_1.pal";
+	case DTYPE_CAVES: return "levels\\l3data\\l3_1.pal";
+	case DTYPE_HELL: return "levels\\l4data\\l4_1.pal";
+	case DTYPE_NEST: return "nlevels\\l6data\\l6base1.pal";
+	case DTYPE_CRYPT: return "nlevels\\l5data\\l5base.pal";
+	default: return nullptr;
+	}
+}
 
 bool Enabled()
 {
@@ -760,6 +804,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	const auto drawOne = [&](const Draw &draw, const std::array<float, 3> &colour) {
 		SDL_Texture *texture = nullptr;
 		bool hdArt = false;
+		bool tileArt = false;
 		// Wall tiles cut away near the hero keep the game's own cut-out shape.
 		const bool masked = draw.kind == DrawKind::Tile && draw.mask != MaskType::Solid;
 		if (draw.light >= 0) {
@@ -767,8 +812,9 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 				if (draw.inBetween != 0 && !masked)
 					texture = LoadArt(renderer, *name + "_m" + std::to_string(draw.inBetween));
 				if (texture == nullptr)
-					texture = masked ? MaskedArt(renderer, *name, draw) : LoadArt(renderer, *name);
-				hdArt = texture != nullptr && !masked;
+					texture = draw.kind == DrawKind::Tile ? MaskedArt(renderer, *name, draw) : LoadArt(renderer, *name);
+				hdArt = texture != nullptr && draw.kind != DrawKind::Tile;
+				tileArt = texture != nullptr && draw.kind == DrawKind::Tile;
 			}
 		}
 		// Recolours other than light (stone curse, infravision, unique monsters) are drawn by the game itself.
@@ -776,10 +822,15 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 			texture = RasterTexture(renderer, FallbackRaster(draw, draw.light < 0));
 		if (texture == nullptr)
 			return;
+		std::array<float, 3> mod = colour;
+		if (tileArt) {
+			for (int c = 0; c < 3; c++)
+				mod[c] *= TileGain[c];
+		}
 		SDL_SetTextureColorMod(texture,
-		    static_cast<Uint8>(std::clamp(255.F * colour[0], 0.F, 255.F)),
-		    static_cast<Uint8>(std::clamp(255.F * colour[1], 0.F, 255.F)),
-		    static_cast<Uint8>(std::clamp(255.F * colour[2], 0.F, 255.F)));
+		    static_cast<Uint8>(std::clamp(255.F * mod[0], 0.F, 255.F)),
+		    static_cast<Uint8>(std::clamp(255.F * mod[1], 0.F, 255.F)),
+		    static_cast<Uint8>(std::clamp(255.F * mod[2], 0.F, 255.F)));
 		// The game's own see-through pixels are already in the fallback's coverage.
 		SDL_SetTextureAlphaMod(texture, hdArt && draw.style == SpriteStyle::Blended ? 128 : 255);
 		const SDL_FRect dest {

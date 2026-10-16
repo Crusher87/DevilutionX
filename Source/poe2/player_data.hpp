@@ -548,6 +548,14 @@ struct Poe2PlayerData {
 	std::bitset<MaxPassiveNodes> passives;
 	/** @brief The attribute picked on each allocated "+5 to any Attribute" node, as a PassiveAttribute. */
 	std::array<uint8_t, MaxPassiveNodes> passiveAttributes {};
+	/** @brief Nodes allocated with weapon-set points; they only count while their set is out. */
+	std::array<std::bitset<MaxPassiveNodes>, 2> setPassives {};
+	/** @brief The weapon set that is out: 0 for I, 1 for II (see poe2/weapon_swap.hpp). */
+	uint8_t weaponSet = 0;
+	/** @brief Books of Specialisation read, one bit per book (see poe2/weapon_swap.hpp). */
+	uint8_t specBooks = 0;
+	/** @brief A hardcore hero: on death they move to softcore with only what they wear and carry (poe2/hardcore.hpp). */
+	bool hardcore = false;
 	/** @brief Animation frames skipped by attacks and casts thanks to passives (not saved; from CalcPlrItemVals). */
 	int8_t passiveAttackFrames = 0;
 	int8_t passiveCastFrames = 0;
@@ -659,6 +667,11 @@ struct Poe2PlayerData {
 		castFrame = 0;
 		passives.reset();
 		passiveAttributes.fill(0);
+		for (auto &nodes : setPassives)
+			nodes.reset();
+		weaponSet = 0;
+		specBooks = 0;
+		hardcore = false;
 		passiveAttackFrames = 0;
 		passiveCastFrames = 0;
 		lifeRegen = 0;

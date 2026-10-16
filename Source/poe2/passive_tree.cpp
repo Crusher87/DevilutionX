@@ -11,7 +11,9 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/jewels.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
@@ -65,12 +67,22 @@ bool CanUsePassives()
 	return gbIsPoe2 && !gbIsMultiplayer;
 }
 
-/** @brief Whether every allocated node is linked to the start without going through `without`. */
-bool AllConnected(const Player &player, std::optional<PassiveNodeId> without)
+/** @brief The nodes of a pool's tree: the main nodes, plus that set's own for a weapon set pool. */
+std::bitset<MaxPassiveNodes> PoolNodes(const Player &player, PassivePool pool)
 {
+	std::bitset<MaxPassiveNodes> nodes = player.poe2.passives;
+	if (pool != PassivePool::Main)
+		nodes |= player.poe2.setPassives[static_cast<size_t>(pool) - 1];
+	return nodes;
+}
+
+/** @brief Whether every node of the pool's tree is linked to the start without going through `without`. */
+bool AllConnected(const Player &player, std::optional<PassiveNodeId> without, PassivePool pool = PassivePool::Main)
+{
+	const std::bitset<MaxPassiveNodes> nodes = PoolNodes(player, pool);
 	const std::optional<PassiveNodeId> start = PassiveStartNode(player._pClass);
 	if (!start)
-		return player.poe2.passives.none();
+		return nodes.none();
 	std::bitset<MaxPassiveNodes> reached;
 	std::vector<PassiveNodeId> open { *start };
 	reached.set(*start);
@@ -84,14 +96,14 @@ bool AllConnected(const Player &player, std::optional<PassiveNodeId> without)
 		const PassiveNodeId node = open.back();
 		open.pop_back();
 		for (const PassiveNodeId next : Tree[node].links) {
-			if (reached.test(next) || next == without || !player.poe2.passives.test(next))
+			if (reached.test(next) || next == without || !nodes.test(next))
 				continue;
 			reached.set(next);
 			open.push_back(next);
 		}
 	}
 	for (size_t node = 0; node < Tree.size(); node++) {
-		if (player.poe2.passives.test(node) && node != without && !reached.test(node))
+		if (nodes.test(node) && node != without && !reached.test(node))
 			return false;
 	}
 	return true;
@@ -269,19 +281,58 @@ bool IsPassiveNodeVisible(const Player &player, const PassiveNode &node)
 
 bool IsPassiveAllocated(const Player &player, PassiveNodeId node)
 {
+	return IsPassiveAllocatedIn(player, node, player.poe2.weaponSet == 0 ? PassivePool::SetI : PassivePool::SetII);
+}
+
+bool IsPassiveAllocatedIn(const Player &player, PassiveNodeId node, PassivePool pool)
+{
 	if (node >= Tree.size())
 		return false;
 	if (Tree[node].kind == PassiveKind::Start)
 		return Tree[node].startClass == PassiveTreeClass(player._pClass);
-	return player.poe2.passives.test(node);
+	return PoolNodes(player, pool).test(node);
 }
 
-bool CanAllocatePassive(const Player &player, PassiveNodeId node)
+bool IsPassiveInPool(const Player &player, PassiveNodeId node, PassivePool pool)
 {
-	if (!CanUsePassives() || node >= Tree.size() || IsPassiveAllocated(player, node))
+	if (node >= Tree.size() || Tree[node].kind == PassiveKind::Start)
+		return false;
+	if (pool == PassivePool::Main)
+		return player.poe2.passives.test(node);
+	return player.poe2.setPassives[static_cast<size_t>(pool) - 1].test(node);
+}
+
+bool CanTakeWeaponSetPoints(const PassiveNode &node)
+{
+	return IsAnyOf(node.kind, PassiveKind::Small, PassiveKind::Notable, PassiveKind::Attribute);
+}
+
+int WeaponSetPointsSpent(const Player &player, PassivePool pool)
+{
+	if (pool == PassivePool::Main)
+		return 0;
+	return static_cast<int>(player.poe2.setPassives[static_cast<size_t>(pool) - 1].count());
+}
+
+int WeaponSetPointsLeft(const Player &player, PassivePool pool)
+{
+	return WeaponSetPointsTotal(player) - WeaponSetPointsSpent(player, pool);
+}
+
+bool CanAllocatePassive(const Player &player, PassiveNodeId node, PassivePool pool)
+{
+	if (!CanUsePassives() || node >= Tree.size() || IsPassiveAllocatedIn(player, node, pool))
 		return false;
 	const PassiveNode &passive = Tree[node];
 	if (passive.kind == PassiveKind::Start)
+		return false;
+	if (pool != PassivePool::Main) {
+		if (!CanTakeWeaponSetPoints(passive) || WeaponSetPointsLeft(player, pool) <= 0)
+			return false;
+		return std::any_of(passive.links.begin(), passive.links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, pool); });
+	}
+	// The main tree may grow through weapon set nodes too; taking one with a main point moves it out of the sets.
+	if (player.poe2.passives.test(node))
 		return false;
 	if (passive.kind == PassiveKind::Ascendancy)
 		return passive.startClass == PassiveTreeClass(player._pClass) && player.getCharacterLevel() >= AscendancyLevel && !ChosenAscendancy(player);
@@ -291,7 +342,7 @@ bool CanAllocatePassive(const Player &player, PassiveNodeId node)
 	} else if (PassivePointsLeft(player) <= 0) {
 		return false;
 	}
-	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](PassiveNodeId link) { return IsPassiveAllocated(player, link); });
+	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, PassivePool::Main); });
 }
 
 bool PassiveNeedsAttributeChoice(PassiveNodeId node)
@@ -299,11 +350,17 @@ bool PassiveNeedsAttributeChoice(PassiveNodeId node)
 	return node < Tree.size() && Tree[node].kind == PassiveKind::Attribute;
 }
 
-bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attribute)
+bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attribute, PassivePool pool)
 {
-	if (!CanAllocatePassive(player, node) || attribute >= PassiveAttribute::Count)
+	if (!CanAllocatePassive(player, node, pool) || attribute >= PassiveAttribute::Count)
 		return false;
-	player.poe2.passives.set(node);
+	if (pool == PassivePool::Main) {
+		player.poe2.passives.set(node);
+		for (auto &set : player.poe2.setPassives)
+			set.reset(node);
+	} else {
+		player.poe2.setPassives[static_cast<size_t>(pool) - 1].set(node);
+	}
 	player.poe2.passiveAttributes[node] = PassiveNeedsAttributeChoice(node) ? static_cast<uint8_t>(attribute) : 0;
 	CalcPlrInv(player, true);
 	return true;
@@ -344,22 +401,29 @@ std::string_view PassiveAttributeName(PassiveAttribute attribute)
 	}
 }
 
-bool CanRefundPassive(const Player &player, PassiveNodeId node)
+bool CanRefundPassive(const Player &player, PassiveNodeId node, PassivePool pool)
 {
-	if (!CanUsePassives() || node >= Tree.size() || Tree[node].kind == PassiveKind::Start || !player.poe2.passives.test(node))
+	if (!CanUsePassives() || !IsPassiveInPool(player, node, pool))
 		return false;
+	if (pool != PassivePool::Main)
+		return AllConnected(player, node, pool);
 	// A socket holding a jewel stays until the jewel is taken out.
 	if (Tree[node].kind == PassiveKind::JewelSocket && SocketedJewel(player, node) != nullptr)
 		return false;
-	return AllConnected(player, node);
+	// Both weapon sets grow from the main tree, so they must stay linked too.
+	return AllConnected(player, node) && AllConnected(player, node, PassivePool::SetI) && AllConnected(player, node, PassivePool::SetII);
 }
 
-bool RefundPassive(Player &player, PassiveNodeId node)
+bool RefundPassive(Player &player, PassiveNodeId node, PassivePool pool)
 {
-	if (!CanRefundPassive(player, node))
+	if (!CanRefundPassive(player, node, pool))
 		return false;
-	player.poe2.passives.reset(node);
-	player.poe2.passiveAttributes[node] = 0;
+	if (pool == PassivePool::Main)
+		player.poe2.passives.reset(node);
+	else
+		player.poe2.setPassives[static_cast<size_t>(pool) - 1].reset(node);
+	if (!player.poe2.passives.test(node) && !player.poe2.setPassives[0].test(node) && !player.poe2.setPassives[1].test(node))
+		player.poe2.passiveAttributes[node] = 0;
 	CalcPlrInv(player, true);
 	return true;
 }
@@ -367,6 +431,8 @@ bool RefundPassive(Player &player, PassiveNodeId node)
 void ResetPassives(Player &player)
 {
 	player.poe2.passives.reset();
+	for (auto &set : player.poe2.setPassives)
+		set.reset();
 	player.poe2.passiveAttributes.fill(0);
 	CalcPlrInv(player, true);
 }

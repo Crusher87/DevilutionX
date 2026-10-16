@@ -24,6 +24,7 @@
 #include "panels/spell_icons.hpp"
 #include "panels/spell_list.hpp"
 #include "pfile.h"
+#include "poe2/hardcore.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -582,7 +583,9 @@ void CheckMainPanelButtonUp()
 			break;
 		case PanelButtonMainmenu:
 			if (MyPlayerIsDead) {
-				if (!gbIsMultiplayer) {
+				if (HardcoreHeroFell()) {
+					ContinueInSoftcore(*MyPlayer);
+				} else if (!gbIsMultiplayer) {
 					if (gbValidSaveFile)
 						gamemenu_load_game(false);
 					else
@@ -820,7 +823,9 @@ void DrawDeathText(const Surface &out)
 		break;
 	}
 
-	if (!gbIsMultiplayer) {
+	if (HardcoreHeroFell()) {
+		text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue in Softcore."), buttonText);
+	} else if (!gbIsMultiplayer) {
 		if (gbValidSaveFile)
 			text = FormatRuntime(_("Press {} to load last save."), buttonText);
 		else

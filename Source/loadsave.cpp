@@ -44,6 +44,7 @@
 #include "poe2/stash_tabs.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/playerdat.hpp"
@@ -2426,9 +2427,11 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 7 the rebuilt passive tree with two-byte node ids, version 8 the 12-socket Skills panel and the skill tray,
  * version 9 the fifth flask, version 10 each socketed gem's level, version 11 the Spirit skulls and version 12 the
  * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
- * version 14 their crafting state. Version 17 adds currency shards and version 18 the tier of each socketed support.
+ * version 14 their crafting state. Version 17 adds currency shards, version 18 the tier of each socketed support and
+ * version 19 the weapon sets (the set that is out, the Books of Specialisation, each set's passives and the other set's
+ * weapons) and the hardcore flag.
  */
-constexpr uint8_t Poe2HeroDataVersion = 18;
+constexpr uint8_t Poe2HeroDataVersion = 19;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2668,6 +2671,38 @@ uint8_t ReadPoe2HeroData(Player &player)
 			player.poe2.slotSupportTiers[slot][socket] = static_cast<uint8_t>(std::clamp(tier, 1, SupportTierCount(player.poe2.slotSupports[slot][socket])));
 		}
 	}
+
+	// Version 19: the weapon sets and the hardcore flag.
+	if (version < 19 || !file.IsValid(4))
+		return version;
+	player.poe2.weaponSet = static_cast<uint8_t>(file.NextLE<uint8_t>() % NumWeaponSets);
+	player.poe2.specBooks = static_cast<uint8_t>(file.NextLE<uint8_t>() & ((1 << NumSpecBooks) - 1));
+	player.poe2.hardcore = file.NextLE<uint8_t>() != 0;
+	file.Skip<uint8_t>();
+	for (auto &set : player.poe2.setPassives) {
+		if (!file.IsValid(sizeof(uint16_t)))
+			return version;
+		const uint16_t count = file.NextLE<uint16_t>();
+		if (!file.IsValid(count * 3))
+			return version;
+		for (uint16_t i = 0; i < count; i++) {
+			const uint16_t node = file.NextLE<uint16_t>();
+			const uint8_t attribute = file.NextLE<uint8_t>();
+			if (node >= MaxPassiveNodes || player.poe2.passives.test(node))
+				continue;
+			set.set(node);
+			if (PassiveNeedsAttributeChoice(node))
+				player.poe2.passiveAttributes[node] = std::min<uint8_t>(attribute, static_cast<uint8_t>(PassiveAttribute::Count) - 1);
+		}
+	}
+	const size_t itemSize = gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize;
+	for (Item &item : player.swapHands) {
+		if (!file.IsValid(1))
+			return version;
+		if (file.NextLE<uint8_t>() == 0 || !file.IsValid(itemSize))
+			continue;
+		LoadItem(file, item);
+	}
 	return version;
 }
 
@@ -2678,6 +2713,8 @@ void LoadPoe2HeroData(Player &player)
 	player.poe2.clear();
 	for (Item &jewel : player.jewels)
 		jewel.clear();
+	for (Item &item : player.swapHands)
+		item.clear();
 	const uint8_t version = ReadPoe2HeroData(player);
 	// Heroes from before the skill bar start with the skill for their class's weapon.
 	if (version < 3 && gbIsPoe2)
@@ -2692,6 +2729,12 @@ void LoadPoe2HeroData(Player &player)
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 {
+	{
+		// The league on its own, so the hero list can show it without reading the rest.
+		SaveHelper mode(saveWriter, "poe2mode", 1);
+		mode.WriteLE<uint8_t>(player.poe2.hardcore ? 1 : 0);
+	}
+
 	std::vector<uint16_t> passives;
 	std::vector<uint16_t> attributes;
 	for (size_t node = 0; node < MaxPassiveNodes; node++) {
@@ -2708,7 +2751,15 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			jewelCount++;
 	}
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets));
+	const size_t setNodeCount = player.poe2.setPassives[0].count() + player.poe2.setPassives[1].count();
+	size_t swapItemCount = 0;
+	for (const Item &item : player.swapHands) {
+		if (!item.isEmpty())
+			swapItemCount++;
+	}
+	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
+
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize);
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2810,6 +2861,25 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	for (const SupportTiers &tiers : player.poe2.slotSupportTiers) {
 		for (const uint8_t tier : tiers)
 			file.WriteLE<uint8_t>(tier);
+	}
+	// Version 19: the weapon sets and the hardcore flag.
+	file.WriteLE<uint8_t>(player.poe2.weaponSet);
+	file.WriteLE<uint8_t>(player.poe2.specBooks);
+	file.WriteLE<uint8_t>(player.poe2.hardcore ? 1 : 0);
+	file.WriteLE<uint8_t>(0);
+	for (const auto &set : player.poe2.setPassives) {
+		file.WriteLE<uint16_t>(static_cast<uint16_t>(set.count()));
+		for (size_t node = 0; node < MaxPassiveNodes; node++) {
+			if (!set.test(node))
+				continue;
+			file.WriteLE<uint16_t>(static_cast<uint16_t>(node));
+			file.WriteLE<uint8_t>(player.poe2.passiveAttributes[node]);
+		}
+	}
+	for (const Item &item : player.swapHands) {
+		file.WriteLE<uint8_t>(item.isEmpty() ? 0 : 1);
+		if (!item.isEmpty())
+			SaveItem(file, item);
 	}
 }
 

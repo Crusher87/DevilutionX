@@ -99,6 +99,7 @@
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "qol/stash.h"
 #include "quests.h"
 #include "sound_effect_enums.h"
@@ -2199,6 +2200,14 @@ void PrintItemMisc(const Item &item)
 			AddItemInfoBoxString(line);
 		return;
 	}
+	if (const int book = SpecBookIndex(item); book >= 0) {
+		AddItemInfoBoxString(FormatRuntime(_("Grants {:d} Weapon Set Passive Points"), WeaponSetPointsPerBook));
+		AddItemInfoBoxString(SpecBookSource(book));
+		AddItemInfoBoxString(_("Use to read the book and learn its art"));
+		if (MyPlayer != nullptr && (MyPlayer->poe2.specBooks & (1 << book)) != 0)
+			AddItemInfoBoxString(_("You have already read this book"));
+		return;
+	}
 	if (const int skull = SpiritSkullIndex(item); skull >= 0) {
 		AddItemInfoBoxString(FormatRuntime(_("Grants +{:d} to Maximum Spirit"), SpiritSkullSpirit[skull]));
 		AddItemInfoBoxString(_("Torn from a fallen lord of Hell's servants..."));
@@ -2464,7 +2473,7 @@ bool Poe2VendorWithholds(item_misc_id miscId)
 {
 	if (IsCurrencyMiscId(miscId))
 		return OrbCurrencyBand(miscId) != CurrencyBand::Common;
-	return IsAnyOf(miscId, IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_SPIRIT_SKULL, IMISC_CHARM_LIFE,
+	return IsAnyOf(miscId, IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_SPIRIT_SKULL, IMISC_SPEC_BOOK, IMISC_CHARM_LIFE,
 	    IMISC_CHARM_MANA, IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
 }
 

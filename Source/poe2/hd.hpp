@@ -71,6 +71,9 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
 /** @brief Draws the recorded world in full colour. */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 
+/** @brief The palette the HD pack's art for a dungeon type is made in (the first of its palettes). */
+const char *PackPalette(uint8_t levelType);
+
 /**
  * @brief Writes every dungeon frame of the loaded level, fully lit, as PNGs under `dir`/tiles/<level>/,
  * plus pieces.json saying where each frame sits in its dungeon piece (for the HD pack maker).

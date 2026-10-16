@@ -343,6 +343,8 @@ public:
 	Poe2PlayerData poe2;
 	/** @brief POE2 Mashup: jewels in the passive tree's jewel sockets, in the order of the sockets' node ids; saved with poe2. */
 	std::array<Item, MaxJewelSockets> jewels;
+	/** @brief POE2 Mashup: the weapon set that isn't out (main hand, off hand); swapped with X, saved with poe2. */
+	std::array<Item, 2> swapHands;
 	bool _pBlockFlag;
 	bool _pInvincible;
 	int8_t _pLightRad;

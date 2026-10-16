@@ -871,3 +871,9 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Vizjerei Focus Gem	Gem	12	0	0	0	0	0	0	50	0		SPIRITGEM_TABLE	Null	true	2600
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Berserk Gem	Gem	8	0	0	0	0	0	40	0	0		SPIRITGEM_TABLE	Null	true	1800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Reflect Gem	Gem	8	0	0	0	0	0	35	0	0		SPIRITGEM_TABLE	Null	true	1800
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000

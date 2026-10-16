@@ -54,6 +54,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/hardcore.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
@@ -2931,7 +2932,9 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 		gamemenu_off();
 	}
 
-	const bool dropGold = !gbIsMultiplayer || !(player.isOnLevel(16) || player.isOnArenaLevel());
+	// POE2 Mashup: a hardcore hero keeps everything they wear and carry when they fall to Softcore.
+	const bool fallsFromHardcore = &player == MyPlayer && IsHardcoreHero(player);
+	const bool dropGold = (!gbIsMultiplayer || !(player.isOnLevel(16) || player.isOnArenaLevel())) && !fallsFromHardcore;
 	const bool dropItems = dropGold && deathReason == DeathReason::MonsterOrTrap;
 	const bool dropEar = dropGold && deathReason == DeathReason::Player;
 
@@ -2977,7 +2980,7 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 		if (&player == MyPlayer) {
 			RedrawComponent(PanelDrawComponent::Health);
 
-			if (!player.HoldItem.isEmpty()) {
+			if (!player.HoldItem.isEmpty() && !fallsFromHardcore) {
 				DeadItem(player, std::move(player.HoldItem), { 0, 0 });
 				NewCursor(CURSOR_HAND);
 			}
@@ -3026,6 +3029,8 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 		}
 	}
 	SetPlayerHitPoints(player, Fixed26_6::fromInt(0));
+	if (fallsFromHardcore)
+		FallFromHardcore(player);
 }
 
 void StripTopGold(Player &player)

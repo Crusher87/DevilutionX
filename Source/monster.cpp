@@ -92,6 +92,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
 #include "storm/storm_net.hpp"
@@ -962,6 +963,8 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 	}
 	// POE2 Mashup: some bosses guard a skull that grants Spirit, like POE2's Spirit quests.
 	DropSpiritSkull(monster, sendmsg);
+	// And the quest bosses carry the Books of Specialisation that give weapon set points.
+	DropSpecBook(monster, sendmsg);
 	// And the bundle's bosses roll a unique from their own tables.
 	if (!monster.isPlayerMinion())
 		DropBossUnique(monster, sendmsg);

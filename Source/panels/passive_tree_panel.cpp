@@ -27,6 +27,7 @@
 #include "poe2/jewels.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "sound_effect_enums.h"
 #include "tables/playerdat.hpp"
 #include "utils/format.hpp"
@@ -88,6 +89,8 @@ constexpr uint8_t HoverColor = PAL16_BEIGE;
 constexpr uint8_t TooltipColor = PAL16_GRAY + 14;
 
 bool IsOpen;
+/** @brief Which points clicks spend: the main tree's or a weapon set's. */
+PassivePool Pool = PassivePool::Main;
 /** @brief An "any Attribute" node waiting for the player to pick its attribute. */
 std::optional<PassiveNodeId> PendingAttributeNode;
 /** @brief How far the view is zoomed in, and the tree point at its centre. */
@@ -384,13 +387,32 @@ void DrawClassNames(const Surface &out, const Layout &layout, const Player &play
 	}
 }
 
+/** @brief Weapon set nodes are red for set I and green for set II, like POE2. */
+uint8_t SetColor(PassivePool pool)
+{
+	static const uint8_t SetIIColor = NearestPaletteColor(70, 190, 80);
+	return pool == PassivePool::SetI ? PAL16_RED + 3 : SetIIColor;
+}
+
+/** @brief The pool's tree as the panel shows it: the main view shows both sets' nodes too, so nothing is hidden. */
+bool IsShownAllocated(const Player &player, PassiveNodeId node)
+{
+	if (Pool != PassivePool::Main)
+		return IsPassiveAllocatedIn(player, node, Pool);
+	return IsPassiveAllocatedIn(player, node, PassivePool::Main) || IsPassiveInPool(player, node, PassivePool::SetI) || IsPassiveInPool(player, node, PassivePool::SetII);
+}
+
 uint8_t NodeFillColor(const Player &player, const PassiveNode &node)
 {
 	if (node.kind == PassiveKind::Start)
 		return node.startClass == PassiveTreeClass(player._pClass) ? StartColor : OtherStartColor;
-	if (IsPassiveAllocated(player, node.id))
+	if (IsPassiveInPool(player, node.id, PassivePool::Main))
 		return NodeAllocatedColor;
-	if (CanAllocatePassive(player, node.id))
+	for (const PassivePool set : { PassivePool::SetI, PassivePool::SetII }) {
+		if ((Pool == PassivePool::Main || Pool == set) && IsPassiveInPool(player, node.id, set))
+			return SetColor(set);
+	}
+	if (CanAllocatePassive(player, node.id, Pool))
 		return NodeReachableColor;
 	return NodeColor;
 }
@@ -406,8 +428,8 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 		for (const PassiveNodeId link : node.links) {
 			if (link < node.id || !IsNodeShown(player, tree[link]))
 				continue; // Each link is drawn once.
-			const bool from = IsPassiveAllocated(player, node.id);
-			const bool to = IsPassiveAllocated(player, link);
+			const bool from = IsShownAllocated(player, node.id);
+			const bool to = IsShownAllocated(player, link);
 			const uint8_t color = from && to ? LinkAllocatedColor : (from || to ? LinkReachableColor : LinkColor);
 			DrawLine(out, NodeViewPoint(layout, node), NodeViewPoint(layout, tree[link]), color, from && to ? thickness + 1 : thickness);
 		}
@@ -560,8 +582,23 @@ std::string NodeHint(const Player &player, const PassiveNode &node)
 		if (CanRefundPassive(player, node.id))
 			return std::string(_("Click with a jewel to socket it; right-click to refund"));
 	}
-	if (IsPassiveAllocated(player, node.id))
+	if (Pool != PassivePool::Main) {
+		if (IsPassiveInPool(player, node.id, PassivePool::Main))
+			return std::string(_("Allocated in the main tree"));
+		if (IsPassiveInPool(player, node.id, Pool))
+			return CanRefundPassive(player, node.id, Pool) ? std::string(_("Right-click to refund")) : std::string(_("Other nodes depend on this one"));
+		if (!CanTakeWeaponSetPoints(node))
+			return std::string(_("Weapon set points can't go here"));
+		if (CanAllocatePassive(player, node.id, Pool))
+			return node.kind == PassiveKind::Attribute ? std::string(_("Click to pick an attribute")) : std::string(_("Click to allocate with a weapon set point"));
+		return WeaponSetPointsLeft(player, Pool) <= 0 ? std::string(_("No weapon set points left")) : std::string(_("Not linked to this set's tree yet"));
+	}
+	if (IsPassiveInPool(player, node.id, PassivePool::Main))
 		return CanRefundPassive(player, node.id) ? std::string(_("Right-click to refund")) : std::string(_("Other nodes depend on this one"));
+	for (const PassivePool set : { PassivePool::SetI, PassivePool::SetII }) {
+		if (IsPassiveInPool(player, node.id, set) && !CanAllocatePassive(player, node.id))
+			return FormatRuntime(_("Allocated in weapon set {:s}"), WeaponSetName(set == PassivePool::SetI ? 0 : 1));
+	}
 	if (CanAllocatePassive(player, node.id))
 		return node.kind == PassiveKind::Attribute ? std::string(_("Click to pick an attribute")) : std::string(_("Click to allocate"));
 	return (node.kind == PassiveKind::AscendancyNotable ? AscendancyPointsLeft(player) : PassivePointsLeft(player)) <= 0 ? std::string(_("No points left")) : std::string(_("Not linked to your tree yet"));
@@ -663,10 +700,60 @@ void DrawAttributePicker(const Surface &out, const Layout &layout, const Passive
 
 std::string PointsText(const Player &player)
 {
+	if (Pool != PassivePool::Main) {
+		const int total = WeaponSetPointsTotal(player);
+		if (total == 0)
+			return std::string(_("No weapon set points yet: read Books of Specialisation from quest bosses"));
+		return FormatRuntime(_("{:d} weapon set points left ({:d} of {:d} spent)"), WeaponSetPointsLeft(player, Pool), WeaponSetPointsSpent(player, Pool), total);
+	}
 	const int left = PassivePointsLeft(player);
 	if (AscendancyPointsTotal(player) > 0)
 		return FormatRuntime(_("{:d} passive points, {:d} ascendancy points left"), left, AscendancyPointsLeft(player));
 	return FormatRuntime(_("{:d} points left ({:d} of {:d} spent)"), left, PassivePointsSpent(player), PassivePointsTotal(player));
+}
+
+constexpr std::array<PassivePool, 3> Pools { PassivePool::Main, PassivePool::SetI, PassivePool::SetII };
+
+/** @brief The Main / Weapon Set I / Weapon Set II tabs in the title bar. */
+std::array<Rectangle, 3> PoolTabs(const Layout &layout)
+{
+	constexpr Size TabSize { 120, 24 };
+	constexpr int Gap = 6;
+	const int width = (3 * TabSize.width) + (2 * Gap);
+	const Point origin { layout.panel.position.x + ((layout.panel.size.width - width) / 2), layout.panel.position.y + 7 };
+	std::array<Rectangle, 3> tabs;
+	for (size_t i = 0; i < tabs.size(); i++)
+		tabs[i] = { origin + Displacement { static_cast<int>(i) * (TabSize.width + Gap), 0 }, TabSize };
+	return tabs;
+}
+
+std::string_view PoolName(PassivePool pool)
+{
+	switch (pool) {
+	case PassivePool::SetI:
+		return _("Weapon Set I");
+	case PassivePool::SetII:
+		return _("Weapon Set II");
+	default:
+		return _("Main Tree");
+	}
+}
+
+void DrawPoolTabs(const Surface &out, const Layout &layout, const Player &player)
+{
+	const auto tabs = PoolTabs(layout);
+	for (size_t i = 0; i < tabs.size(); i++) {
+		const PassivePool pool = Pools[i];
+		const bool selected = pool == Pool;
+		const uint8_t accent = pool == PassivePool::Main ? BorderColor : SetColor(pool);
+		FillRectangle(out, tabs[i], selected ? TitleBarColor : PanelColor);
+		DrawFrame(out, tabs[i], selected ? accent : PAL16_GRAY + 8);
+		// The set that is out gets a mark, since only its nodes count right now.
+		std::string label(PoolName(pool));
+		if (pool != PassivePool::Main && static_cast<uint8_t>(static_cast<size_t>(pool) - 1) == player.poe2.weaponSet)
+			label += " *";
+		DrawString(out, label, tabs[i], { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (selected ? UiFlags::ColorWhitegold : UiFlags::ColorUiSilverDark) });
+	}
 }
 
 } // namespace
@@ -689,6 +776,7 @@ void OpenPassiveTree()
 		return;
 	}
 	IsOpen = true;
+	Pool = PassivePool::Main;
 	PendingAttributeNode = std::nullopt;
 	Pressed = false;
 	Dragging = false;
@@ -757,6 +845,10 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 		case SDLK_HOME:
 			CenterOnStart();
 			break;
+		case SDLK_TAB:
+			Pool = Pools[(static_cast<size_t>(Pool) + 1) % Pools.size()];
+			PendingAttributeNode = std::nullopt;
+			break;
 		default:
 			break;
 		}
@@ -785,20 +877,29 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 			if (event.button.button == SDL_BUTTON_LEFT) {
 				for (size_t i = 0; i < buttons.size(); i++) {
 					if (buttons[i].contains(MousePosition))
-						AllocatePassive(player, *PendingAttributeNode, static_cast<PassiveAttribute>(i));
+						AllocatePassive(player, *PendingAttributeNode, static_cast<PassiveAttribute>(i), Pool);
 				}
 			}
 			PendingAttributeNode = std::nullopt;
 			return true;
 		}
+		if (event.button.button == SDL_BUTTON_LEFT) {
+			const auto tabs = PoolTabs(layout);
+			for (size_t i = 0; i < tabs.size(); i++) {
+				if (tabs[i].contains(MousePosition)) {
+					Pool = Pools[i];
+					return true;
+				}
+			}
+		}
 		const std::optional<PassiveNodeId> node = NodeAt(layout, MousePosition);
 		if (event.button.button == SDL_BUTTON_LEFT) {
-			if (node && PassiveNeedsAttributeChoice(*node) && CanAllocatePassive(player, *node)) {
+			if (node && PassiveNeedsAttributeChoice(*node) && CanAllocatePassive(player, *node, Pool)) {
 				PendingAttributeNode = node;
-			} else if (node && PassiveTree()[*node].kind == PassiveKind::JewelSocket && IsJewel(player.HoldItem)) {
+			} else if (node && Pool == PassivePool::Main && PassiveTree()[*node].kind == PassiveKind::JewelSocket && IsJewel(player.HoldItem)) {
 				PlaceHeldJewel(player, *node);
 			} else if (node) {
-				AllocatePassive(player, *node);
+				AllocatePassive(player, *node, PassiveAttribute::Strength, Pool);
 			} else if (layout.view.contains(MousePosition)) {
 				Pressed = true;
 				Dragging = false;
@@ -807,10 +908,10 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 				DragViewY = ViewY;
 			}
 		} else if (node && event.button.button == SDL_BUTTON_RIGHT) {
-			if (SocketedJewel(player, *node) != nullptr)
+			if (Pool == PassivePool::Main && SocketedJewel(player, *node) != nullptr)
 				TakeOutJewel(player, *node);
 			else
-				RefundPassive(player, *node);
+				RefundPassive(player, *node, Pool);
 		}
 		return true;
 	}
@@ -850,7 +951,8 @@ void DrawPassiveTree(const Surface &out)
 
 	const Rectangle title { layout.panel.position + Displacement { Padding, 6 }, { layout.panel.size.width - (2 * Padding), 26 } };
 	DrawString(out, _("Passive Tree"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::VerticalCenter });
-	const bool pointsLeft = PassivePointsLeft(player) > 0 || AscendancyPointsLeft(player) > 0;
+	const bool pointsLeft = Pool == PassivePool::Main ? PassivePointsLeft(player) > 0 || AscendancyPointsLeft(player) > 0 : WeaponSetPointsLeft(player, Pool) > 0;
+	DrawPoolTabs(out, layout, player);
 	DrawString(out, PointsText(player), title, { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (pointsLeft ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
 
 	const Surface view = out.subregion(layout.view.position.x, layout.view.position.y, layout.view.size.width, layout.view.size.height);
@@ -861,7 +963,7 @@ void DrawPassiveTree(const Surface &out)
 	DrawNodes(view, layout, player, hovered);
 	DrawFrame(out, layout.view, BorderColor);
 
-	const std::string help = WordWrapString(_("Click a linked node to allocate it, right-click to refund. Drag or use the arrow keys to move, the wheel or +/- to zoom, Home to recenter. P or Esc closes."), layout.footer.size.width);
+	const std::string help = WordWrapString(_("Click a linked node to allocate it, right-click to refund. Tab or the tabs above switch between the main tree and the weapon sets (X swaps sets in game). Drag or arrow keys move, wheel or +/- zooms, Home recenters. P or Esc closes."), layout.footer.size.width);
 	DrawString(out, help, layout.footer, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed, .lineHeight = 14 });
 
 	if (PendingAttributeNode)

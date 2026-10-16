@@ -41,7 +41,7 @@ bool IsCurrency(const Item &item)
 		return true;
 	if (item._iMiscId > IMISC_OILFIRST && item._iMiscId < IMISC_OILLAST)
 		return true;
-	return IsAnyOf(item._iMiscId, IMISC_ORB_BAUBLE, IMISC_SPIRIT_SKULL);
+	return IsAnyOf(item._iMiscId, IMISC_ORB_BAUBLE, IMISC_SPIRIT_SKULL, IMISC_SPEC_BOOK);
 }
 
 } // namespace

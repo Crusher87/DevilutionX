@@ -9,6 +9,7 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/passive_tree.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -315,6 +316,61 @@ TEST_F(Poe2PassiveTreeTest, MultiplayerIgnoresPassives)
 	gbIsMultiplayer = true;
 	EXPECT_EQ(GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Strength)], 0);
 	EXPECT_FALSE(CanAllocatePassive(player, path[1]));
+}
+
+TEST_F(Poe2PassiveTreeTest, WeaponSetPointsComeFromBooks)
+{
+	Player &player = *MyPlayer;
+	const std::vector<PassiveNodeId> path = WarriorPath();
+	ASSERT_GE(path.size(), 3U);
+	EXPECT_EQ(WeaponSetPointsTotal(player), 0);
+	EXPECT_FALSE(CanAllocatePassive(player, path[0], PassivePool::SetI));
+
+	player.poe2.specBooks = 0b11;
+	EXPECT_EQ(WeaponSetPointsTotal(player), 2 * WeaponSetPointsPerBook);
+	ASSERT_TRUE(AllocatePassive(player, path[0], PassiveAttribute::Dexterity, PassivePool::SetI));
+	EXPECT_EQ(WeaponSetPointsSpent(player, PassivePool::SetI), 1);
+	EXPECT_EQ(WeaponSetPointsSpent(player, PassivePool::SetII), 0);
+	EXPECT_EQ(PassivePointsSpent(player), 0);
+
+	// Set nodes only count while their set is out.
+	player.poe2.weaponSet = 0;
+	EXPECT_TRUE(IsPassiveAllocated(player, path[0]));
+	player.poe2.weaponSet = 1;
+	EXPECT_FALSE(IsPassiveAllocated(player, path[0]));
+	EXPECT_FALSE(CanAllocatePassive(player, path[1], PassivePool::SetII));
+	EXPECT_TRUE(CanAllocatePassive(player, path[1], PassivePool::SetI));
+}
+
+TEST_F(Poe2PassiveTreeTest, WeaponSetNodesGrowFromTheMainTree)
+{
+	Player &player = *MyPlayer;
+	player.poe2.specBooks = 0b1;
+	const std::vector<PassiveNodeId> path = WarriorPath();
+	ASSERT_TRUE(AllocatePassive(player, path[0]));
+	ASSERT_TRUE(AllocatePassive(player, path[1], PassiveAttribute::Strength, PassivePool::SetII));
+	// The main node holds up the set node, so it can't be refunded.
+	EXPECT_FALSE(CanRefundPassive(player, path[0]));
+	EXPECT_TRUE(CanRefundPassive(player, path[1], PassivePool::SetII));
+	EXPECT_FALSE(CanRefundPassive(player, path[1]));
+
+	// Taking a set node with a main point moves it into the main tree.
+	ASSERT_TRUE(AllocatePassive(player, path[1]));
+	EXPECT_EQ(WeaponSetPointsSpent(player, PassivePool::SetII), 0);
+	EXPECT_TRUE(IsPassiveInPool(player, path[1], PassivePool::Main));
+
+	ResetPassives(player);
+	EXPECT_EQ(WeaponSetPointsSpent(player, PassivePool::SetI) + WeaponSetPointsSpent(player, PassivePool::SetII), 0);
+}
+
+TEST_F(Poe2PassiveTreeTest, ItemTableHasEveryBookOfSpecialisation)
+{
+	int books = 0;
+	for (const ItemData &item : AllItemsList) {
+		if (item.iMiscId == IMISC_SPEC_BOOK)
+			books++;
+	}
+	EXPECT_EQ(books, static_cast<int>(NumSpecBooks));
 }
 
 } // namespace

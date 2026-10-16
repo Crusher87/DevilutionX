@@ -797,6 +797,8 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/unique_effects.cpp
   poe2/uniques.cpp
   poe2/waystones.cpp
+  poe2/hardcore.cpp
+  poe2/weapon_swap.cpp
   poe2/default_attack.cpp
   poe2/weapon_skills.cpp
   tables/playerdat.cpp

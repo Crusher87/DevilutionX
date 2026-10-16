@@ -500,6 +500,7 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "UNCUT_SUPPORT") return IMISC_UNCUT_SUPPORT;
 	if (value == "UNCUT_SPIRIT") return IMISC_UNCUT_SPIRIT;
 	if (value == "SPIRIT_SKULL") return IMISC_SPIRIT_SKULL;
+	if (value == "SPEC_BOOK") return IMISC_SPEC_BOOK;
 	if (value == "JEWEL") return IMISC_JEWEL;
 	if (value == "CHARM_LIFE") return IMISC_CHARM_LIFE;
 	if (value == "CHARM_MANA") return IMISC_CHARM_MANA;
