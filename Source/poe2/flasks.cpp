@@ -15,6 +15,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/format.hpp"
@@ -380,6 +381,7 @@ bool UseFlask(Player &player, size_t beltSlot)
 	if (life) {
 		// POE2 Mashup: uniques can lessen what a life flask recovers.
 		auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(effect.life).raw()) * LifeRecoveryPercent(player, true) / 100);
+		raw = static_cast<int32_t>(static_cast<int64_t>(raw) * std::max(100 + PassiveTotal(player, PassiveStat::FlaskRecovery), 0) / 100);
 		if (IsBeltUnique(flask, BeltUniqueId::BorrowedBreath) && IsOnLowLife(player))
 			raw *= 2;
 		const int32_t missing = std::max<int32_t>(player._pMaxHP.raw() - player._pHitPoints.raw(), 0);
@@ -398,7 +400,7 @@ bool UseFlask(Player &player, size_t beltSlot)
 		}
 	}
 	if (mana && canGainMana) {
-		auto raw = Fixed26_6::fromInt(effect.mana).raw();
+		auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(effect.mana).raw()) * std::max(100 + PassiveTotal(player, PassiveStat::FlaskRecovery), 0) / 100);
 		if (IsBeltUnique(flask, BeltUniqueId::BorrowedThought) && static_cast<int64_t>(player._pMana.raw()) * 100 < static_cast<int64_t>(player._pMaxMana.raw()) * 30)
 			raw *= 2;
 		const int32_t missing = std::max<int32_t>(player._pMaxMana.raw() - player._pMana.raw(), 0);
@@ -440,6 +442,15 @@ void ProcessFlaskRecovery(Player &player)
 {
 	if (!gbIsPoe2 || player.hasNoLife())
 		return;
+	// Flasks hold no charges in the bag: one put into a belt slot starts empty and fills from kills.
+	for (size_t slot = 0; slot < NumFlasks; slot++) {
+		const Item &flask = player.SpdList[slot];
+		const uint64_t key = flask.isEmpty() ? 0 : (static_cast<uint64_t>(static_cast<uint32_t>(flask._iSeed)) << 16) | static_cast<uint16_t>(flask.IDidx + 1);
+		if (player.poe2.flaskSlotKeysKnown && key != player.poe2.flaskSlotKeys[slot] && key != 0)
+			player.poe2.flaskCharges[slot] = 0;
+		player.poe2.flaskSlotKeys[slot] = key;
+	}
+	player.poe2.flaskSlotKeysKnown = true;
 	if (player.poe2.oxFlaskTicks > 0)
 		player.poe2.oxFlaskTicks--;
 	if (++player.poe2.springsFlaskTicks >= SpringsChargeTicks) {
@@ -491,6 +502,9 @@ void GainFlaskCharges(Player &player, uint8_t charges)
 	// Some waystones give fewer flask charges.
 	if (const int percent = MapFlaskChargePercent(); percent < 100 && charges > 0)
 		charges = static_cast<uint8_t>(std::max(charges * percent / 100, 1));
+	// The passive tree changes how many charges a kill gives.
+	if (const int passive = PassiveTotal(player, PassiveStat::FlaskCharges); passive != 0 && charges > 0)
+		charges = static_cast<uint8_t>(std::clamp(charges * (100 + passive) / 100, 1, 255));
 	for (size_t slot = 0; slot < NumFlasks; slot++) {
 		// Moonwater: no charges for life flasks while it works.
 		if (player.poe2.uniqueState.moonwaterTicks > 0 && IsFlaskPotion(player.SpdList[slot]) && RecoversLife(player.SpdList[slot]))
@@ -499,6 +513,23 @@ void GainFlaskCharges(Player &player, uint8_t charges)
 		flaskCharges = static_cast<uint8_t>(std::min<int>(MaxFlaskChargesFor(player.SpdList[slot]), flaskCharges + charges));
 	}
 	GainCharmCharges(player, charges);
+}
+
+void RecoverOnKill(Player &player)
+{
+	if (player.hasNoLife())
+		return;
+	if (const int life = PassiveTotal(player, PassiveStat::LifeOnKill); life > 0 && !IsRecoveryLocked(player)) {
+		const auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(life).raw()) * LifeRecoveryPercent(player, false) / 100);
+		Restore(player._pHitPoints, player._pHPBase, player._pMaxHP, raw);
+		OnLifeRecovered(player, raw);
+	}
+	if (const int mana = PassiveTotal(player, PassiveStat::ManaOnKill); mana > 0 && !HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
+		const auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(mana).raw()) * ManaRecoveryPercent(player) / 100);
+		Restore(player._pMana, player._pManaBase, player._pMaxMana, raw);
+	}
+	RedrawComponent(PanelDrawComponent::Health);
+	RedrawComponent(PanelDrawComponent::Mana);
 }
 
 void RefillFlasks(Player &player)

@@ -303,6 +303,9 @@ struct LevelConversionData {
 	item._iPostDraw = file.NextBool32();
 	item._iIdentified = file.NextBool32();
 	item._iMagical = static_cast<item_quality>(file.NextLE<int8_t>());
+	// POE2 Mashup: normal items have nothing to identify.
+	if (gbIsPoe2 && item._iMagical == ITEM_QUALITY_NORMAL)
+		item._iIdentified = true;
 	file.NextBytes(item._iName, ItemNameLength);
 	TerminateUtf8(item._iName, ItemNameLength);
 	file.NextBytes(item._iIName, ItemNameLength);
@@ -2429,9 +2432,10 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
  * version 14 their crafting state. Version 17 adds currency shards, version 18 the tier of each socketed support and
  * version 19 the weapon sets (the set that is out, the Books of Specialisation, each set's passives and the other set's
- * weapons) and the hardcore flag.
+ * weapons) and the hardcore flag. Version 20 adds the default attack's supports, and version 21 the shape of the passive
+ * tree the hero's points were spent on and the quests that gave passive points.
  */
-constexpr uint8_t Poe2HeroDataVersion = 20;
+constexpr uint8_t Poe2HeroDataVersion = 21;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2588,7 +2592,7 @@ uint8_t ReadPoe2HeroData(Player &player)
 		const uint16_t node = file.NextLE<uint16_t>();
 		const uint8_t attribute = file.NextLE<uint8_t>();
 		if (node < MaxPassiveNodes && attribute < static_cast<uint8_t>(PassiveAttribute::Count))
-			player.poe2.passiveAttributes[node] = attribute;
+			SetChosenPassiveAttribute(player, node, static_cast<PassiveAttribute>(attribute), PassivePool::Main);
 	}
 
 	if (version < 13 || !file.IsValid(1))
@@ -2691,8 +2695,10 @@ uint8_t ReadPoe2HeroData(Player &player)
 			if (node >= MaxPassiveNodes || player.poe2.passives.test(node))
 				continue;
 			set.set(node);
-			if (PassiveNeedsAttributeChoice(node))
-				player.poe2.passiveAttributes[node] = std::min<uint8_t>(attribute, static_cast<uint8_t>(PassiveAttribute::Count) - 1);
+			if (PassiveNeedsAttributeChoice(node)) {
+				const PassivePool pool = &set == &player.poe2.setPassives[0] ? PassivePool::SetI : PassivePool::SetII;
+				SetChosenPassiveAttribute(player, node, static_cast<PassiveAttribute>(std::min<uint8_t>(attribute, static_cast<uint8_t>(PassiveAttribute::Count) - 1)), pool);
+			}
 		}
 	}
 	const size_t itemSize = gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize;
@@ -2715,6 +2721,12 @@ uint8_t ReadPoe2HeroData(Player &player)
 		const int tier = file.NextLE<uint8_t>();
 		player.poe2.defaultSupportTiers[socket] = static_cast<uint8_t>(std::clamp(tier, 1, SupportTierCount(player.poe2.defaultSupports[socket])));
 	}
+
+	// Version 21: the passive tree's shape and the quests that gave passive points.
+	if (version < 21 || !file.IsValid(8))
+		return version;
+	player.poe2.passiveTreeHash = file.NextLE<uint32_t>();
+	player.poe2.questsRewarded = file.NextLE<uint32_t>();
 	return version;
 }
 
@@ -2737,6 +2749,9 @@ void LoadPoe2HeroData(Player &player)
 	// Every hero had 30 Spirit before Spirit came from skulls, so older heroes keep it as the first skull.
 	if (version > 0 && version < 11)
 		player.poe2.spiritSkulls = 1;
+	// Points spent on an older tree come back when the tree changes shape.
+	if (version > 0)
+		RefundPassivesForNewTree(player);
 }
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
@@ -2771,7 +2786,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	}
 	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2));
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8);
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2815,7 +2830,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	file.WriteLE<uint16_t>(static_cast<uint16_t>(attributes.size()));
 	for (const uint16_t node : attributes) {
 		file.WriteLE<uint16_t>(node);
-		file.WriteLE<uint8_t>(player.poe2.passiveAttributes[node]);
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(ChosenPassiveAttributeIn(player, node, PassivePool::Main)));
 	}
 	// Version 13: the jewels in the passive tree's sockets.
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(jewelCount));
@@ -2885,7 +2900,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			if (!set.test(node))
 				continue;
 			file.WriteLE<uint16_t>(static_cast<uint16_t>(node));
-			file.WriteLE<uint8_t>(player.poe2.passiveAttributes[node]);
+			file.WriteLE<uint8_t>(static_cast<uint8_t>(ChosenPassiveAttributeIn(player, static_cast<PassiveNodeId>(node), &set == &player.poe2.setPassives[0] ? PassivePool::SetI : PassivePool::SetII)));
 		}
 	}
 	for (const Item &item : player.swapHands) {
@@ -2898,6 +2913,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
 	for (const uint8_t tier : player.poe2.defaultSupportTiers)
 		file.WriteLE<uint8_t>(tier);
+	// Version 21: the passive tree's shape and the quests that gave passive points.
+	file.WriteLE<uint32_t>(PassiveTreeHash() != 0 ? PassiveTreeHash() : player.poe2.passiveTreeHash);
+	file.WriteLE<uint32_t>(player.poe2.questsRewarded);
 }
 
 void LoadHeroItems(Player &player)

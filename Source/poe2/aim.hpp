@@ -11,6 +11,8 @@ constexpr int AimTiles = 14;
 
 /** @brief Records exactly where the mouse points in the dungeon, in tiles with fractions (from CheckCursMove). */
 void SetCursorTileExact(float x, float y);
+/** @brief Where the mouse points, in tiles with fractions; negative before the first mouse move. */
+void GetCursorTileExact(float &x, float &y);
 
 /**
  * @brief A tile far along the exact line from the hero to the mouse, so a projectile aimed at it flies

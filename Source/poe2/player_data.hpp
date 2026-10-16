@@ -21,8 +21,8 @@
 
 namespace devilution {
 
-/** @brief Most nodes a passive tree may have. */
-constexpr size_t MaxPassiveNodes = 1024;
+/** @brief Most nodes a passive tree may have (stage 2 of the tree plan reaches about 1,400 with the ascendancies). */
+constexpr size_t MaxPassiveNodes = 2048;
 
 /** @brief Skills granted by skill gems that aren't spells; most need a certain weapon type. */
 enum class WeaponSkill : uint8_t {
@@ -385,6 +385,8 @@ constexpr int GemSpellLevel(int characterLevel)
 
 /** @brief Highest skill gem level, like POE2's uncorrupted gems. */
 constexpr int MaxGemLevel = 20;
+/** @brief Room for the passive tree's stat totals (PassiveStat::Count must fit). */
+constexpr size_t MaxPassiveStats = 96;
 
 /**
  * @brief Character level each gem level needs: POE2's table (0 to 90 for levels 1 to 20) scaled to Diablo's level 50 cap.
@@ -495,6 +497,9 @@ struct Poe2PlayerData {
 	SupportTiers defaultSupportTiers {};
 	/** @brief Charges of the flasks in belt slots 1 to 5. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
+	/** @brief Which flask was in each belt slot last tick (not saved), so a flask put in from the bag starts empty. */
+	std::array<uint64_t, NumFlasks> flaskSlotKeys {};
+	bool flaskSlotKeysKnown = false;
 	/** @brief Skill gems socketed in the Skills panel. */
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
@@ -565,6 +570,10 @@ struct Poe2PlayerData {
 	uint8_t specBooks = 0;
 	/** @brief A hardcore hero: on death they move to softcore with only what they wear and carry (poe2/hardcore.hpp). */
 	bool hardcore = false;
+	/** @brief The shape of the passive tree the allocations were made on (see PassiveTreeHash); a different tree refunds them. */
+	uint32_t passiveTreeHash = 0;
+	/** @brief Quests that gave passive points, one bit per quest id; points stay with the hero across games. */
+	uint32_t questsRewarded = 0;
 	/** @brief Animation frames skipped by attacks and casts thanks to passives (not saved; from CalcPlrItemVals). */
 	int8_t passiveAttackFrames = 0;
 	int8_t passiveCastFrames = 0;
@@ -574,6 +583,12 @@ struct Poe2PlayerData {
 	int manaRegenBonus = 0;
 	/** @brief Fractions of a raw life and mana point carried to the next tick (not saved). */
 	int lifeRegenRemainder = 0;
+	/** @brief Life regenerated per second in tenths of a percent of maximum life, from the passive tree (not saved). */
+	int lifeRegenPerMille = 0;
+	/** @brief Block chance added by the passive tree, in percent (not saved). */
+	int passiveBlockChance = 0;
+	/** @brief The passive tree's stat totals as of the last CalcPlrItemVals (not saved), indexed by PassiveStat. */
+	std::array<int16_t, MaxPassiveStats> passiveTotals {};
 	int manaRegenRemainder = 0;
 	/** @brief Evasion rating from gear (not saved; from CalcPlrItemVals). */
 	int evasion = 0;
@@ -683,11 +698,16 @@ struct Poe2PlayerData {
 		weaponSet = 0;
 		specBooks = 0;
 		hardcore = false;
+		passiveTreeHash = 0;
+		questsRewarded = 0;
 		passiveAttackFrames = 0;
 		passiveCastFrames = 0;
 		lifeRegen = 0;
 		manaRegenBonus = 0;
 		lifeRegenRemainder = 0;
+		lifeRegenPerMille = 0;
+		passiveBlockChance = 0;
+		passiveTotals.fill(0);
 		manaRegenRemainder = 0;
 		evasion = 0;
 		itemStats.fill(0);

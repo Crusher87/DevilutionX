@@ -70,6 +70,16 @@ enum class InfoLineStyle : uint8_t {
 extern InfoLineStyle CurrentInfoLineStyle;
 /** @brief The style of each floating info line after the title, cleared after each drawn frame. */
 extern std::vector<InfoLineStyle> FloatingInfoStyles;
+/** @brief POE2 Mashup: an equipped item's tooltip, drawn beside the hovered item's to compare them. */
+struct CompareTooltip {
+	/** @brief The label over its box, such as "Equipped: Left Ring". */
+	std::string label;
+	StringOrView text;
+	std::vector<InfoLineStyle> styles;
+	UiFlags color = UiFlags::ColorWhite;
+};
+/** @brief The equipped items the hovered one would replace (both rings for a ring). Cleared after each frame. */
+extern std::vector<CompareTooltip> CompareTooltips;
 
 extern Rectangle MainPanelButtonRect[8];
 extern DVL_API_FOR_TEST Rectangle CharPanelButtonRect[4];

@@ -55,6 +55,10 @@ namespace {
 FILE *LogFile = nullptr;
 /** @brief The gem log: one file kept across sessions, so a gem's levels and results can be followed over time. */
 FILE *GemLogFile = nullptr;
+/** @brief Every mark("...") note ever typed, with the date and session: kept forever, unlike the session logs, so no note is lost. */
+FILE *NotesFile = nullptr;
+/** @brief The session log's name, so each note says which session it came from. */
+std::string SessionName;
 bool Initialized = false;
 uint32_t SessionStartMs = 0;
 
@@ -518,12 +522,9 @@ std::string SkillDamageLine(std::string_view name, const SkillDamage &damage)
 	return text;
 }
 
-/** @brief Writes a line to the gem log, with the date and time, and to the session log. */
-void GemLog(std::string_view text)
+/** @brief The local date and time, for the files kept across sessions. */
+std::string LocalStamp()
 {
-	TelemetryLog("gem", text);
-	if (GemLogFile == nullptr)
-		return;
 	const std::time_t now = std::time(nullptr);
 	std::tm local {};
 #ifdef _WIN32
@@ -533,7 +534,17 @@ void GemLog(std::string_view text)
 #endif
 	char stamp[32];
 	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &local);
-	std::fprintf(GemLogFile, "%s %.*s\n", stamp, static_cast<int>(text.size()), text.data());
+	return stamp;
+}
+
+/** @brief Writes a line to the gem log, with the date and time, and to the session log. */
+void GemLog(std::string_view text)
+{
+	TelemetryLog("gem", text);
+	if (GemLogFile == nullptr)
+		return;
+	const std::string stamp = LocalStamp();
+	std::fprintf(GemLogFile, "%s %.*s\n", stamp.c_str(), static_cast<int>(text.size()), text.data());
 	std::fflush(GemLogFile);
 }
 
@@ -638,6 +649,8 @@ void TelemetryInit()
 	if (LogFile == nullptr)
 		return;
 	GemLogFile = OpenFile(StrCat(folder, "gem_levels.log").c_str(), "ab");
+	NotesFile = OpenFile(StrCat(folder, "playtest_notes.txt").c_str(), "ab");
+	SessionName = StrCat("session_", stamp, ".log");
 
 	char started[32];
 	std::strftime(started, sizeof(started), "%Y-%m-%d %H:%M:%S", &local);
@@ -939,6 +952,12 @@ void TelemetryCrafted(const Player &player, std::string_view currency, const Ite
 void TelemetryMark(std::string_view text)
 {
 	TelemetryLog("mark", text);
+	if (NotesFile == nullptr)
+		return;
+	// One line per note: date, session log, time into the session, where, and the note.
+	const std::string line = StrCat(LocalStamp(), "\t", SessionName, "\t", Clock(Now() - SessionStartMs), "\t", LevelLabel(), "\t", text, "\n");
+	std::fputs(line.c_str(), NotesFile);
+	std::fflush(NotesFile);
 }
 
 void TelemetryStep(std::string_view step)

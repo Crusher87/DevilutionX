@@ -10,9 +10,14 @@
 
 namespace devilution {
 
+bool IsIdentifyScroll(const Item &item)
+{
+	return !item.isEmpty() && item._iMiscId == IMISC_SCROLL && item._iSpell == SpellID::Identify;
+}
+
 bool IsStackable(const Item &item)
 {
-	return gbIsPoe2 && !item.isEmpty() && item._iClass == ICLASS_MISC && IsCurrencyMiscId(item._iMiscId);
+	return gbIsPoe2 && !item.isEmpty() && item._iClass == ICLASS_MISC && (IsCurrencyMiscId(item._iMiscId) || IsIdentifyScroll(item));
 }
 
 int StackCount(const Item &item)

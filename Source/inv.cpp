@@ -2336,6 +2336,9 @@ bool UseInvItem(int cii)
 	if (cii <= INVITEM_INV_LAST) {
 		c = cii - INVITEM_INV_FIRST;
 		item = &player.InvList[c];
+		// POE2 Mashup: flasks and charms only work from the belt; in the bag they hold no charges.
+		if (gbIsPoe2 && (IsFlaskPotion(*item) || IsCharm(*item)))
+			return true;
 	} else {
 		if (ChatFlag)
 			return true;
@@ -2374,6 +2377,15 @@ bool UseInvItem(int cii)
 				}
 			}
 		}
+	}
+
+	// POE2 Mashup: a Scroll of Identify waits on the cursor and is only used up once it identifies an item.
+	if (gbIsPoe2 && IsIdentifyScroll(*item)) {
+		if (&player == MyPlayer) {
+			invflag = true;
+			NewCursor(CURSOR_IDENTIFY);
+		}
+		return true;
 	}
 
 	constexpr int SpeechDelay = 10;

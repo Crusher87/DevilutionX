@@ -14,10 +14,12 @@ namespace devilution {
 
 struct Player;
 
-/** @brief How many of one currency fit in one cell. */
-constexpr int CurrencyStackMax = 20;
+/** @brief How many of one currency (or Scrolls of Identify) fit in one cell. */
+constexpr int CurrencyStackMax = 40;
 
-/** @brief Currency stacks; everything else is one item per cell. */
+/** @brief A Scroll of Identify, which stacks like currency and is only used up when it identifies something. */
+bool IsIdentifyScroll(const Item &item);
+/** @brief Currency and Scrolls of Identify stack; everything else is one item per cell. */
 bool IsStackable(const Item &item);
 /** @brief The number of items in the stack; 1 for anything that doesn't stack. */
 int StackCount(const Item &item);

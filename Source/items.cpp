@@ -71,6 +71,7 @@
 #include "panels/info_box.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "plrmsg.h"
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/boss_loot.hpp"
@@ -1692,6 +1693,9 @@ _item_indexes GetItemIndexForDroppableItem(bool considerDropRate, tl::function_r
 			continue;
 		if (IsAnyOf(item.iSpell, SpellID::Resurrect, SpellID::HealOther) && !gbIsMultiplayer)
 			continue;
+		// Skill gems replaced Diablo's spell books, so no book ever drops or sells.
+		if (gbIsPoe2 && item.itype == ItemType::Misc && item.iMiscId == IMISC_BOOK)
+			continue;
 		if (!isItemOkay(item))
 			continue;
 		unsigned weight = considerDropRate ? item.dropRate : 1;
@@ -2538,8 +2542,14 @@ bool WitchItemOk(const Player & /*player*/, const ItemData &item)
 {
 	if (IsNoneOf(item.itype, ItemType::Misc, ItemType::Staff))
 		return false;
-	if (gbIsPoe2 && Poe2VendorWithholds(item.iMiscId))
-		return false;
+	// POE2 Mashup (Curtis 2026-10-16): Adria sells staves, elixirs and Scrolls of Identify; no currency, jewels,
+	// books, other scrolls or gems.
+	if (gbIsPoe2) {
+		if (item.itype == ItemType::Staff)
+			return SkillForGemData(item).isEmpty();
+		return (item.iMiscId == IMISC_SCROLL && item.iSpell == SpellID::Identify)
+		    || (item.iMiscId >= IMISC_ELIXSTR && item.iMiscId <= IMISC_ELIXVIT);
+	}
 	if (item.iMiscId == IMISC_MANA)
 		return false;
 	if (item.iMiscId == IMISC_FULLMANA)
@@ -3612,6 +3622,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		lightRes += beltResistance;
 		magicRes += beltResistance;
 	}
+	// POE2 Mashup: the passive tree's shrines and rule notables join the gear's unique rules.
+	PassiveTotals passives = GetPassiveTotals(player);
+	AddPassiveRules(passives, uniqueRules);
 	player.poe2.uniqueRules = uniqueRules;
 	const auto uniqueRule = [&uniqueRules](UniqueRule rule) { return static_cast<int>(uniqueRules[static_cast<size_t>(rule)]); };
 	// POE2 Mashup: unique rules that work like gear stats.
@@ -3624,14 +3637,18 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	const auto gearStat = [&poe2Stats](Poe2ItemStat stat) { return poe2Stats[static_cast<size_t>(stat)]; };
 
 	// POE2 Mashup: the passive tree adds to what the gear gives.
-	PassiveTotals passives = GetPassiveTotals(player);
 	// Jewels' percent increases work like the tree's.
 	passives[static_cast<size_t>(PassiveStat::LifePercent)] += gearStat(Poe2ItemStat::LifePercent);
 	passives[static_cast<size_t>(PassiveStat::ManaPercent)] += gearStat(Poe2ItemStat::ManaPercent);
 	passives[static_cast<size_t>(PassiveStat::ArmorPercent)] += gearStat(Poe2ItemStat::ArmourPercent);
 	passives[static_cast<size_t>(PassiveStat::EvasionPercent)] += gearStat(Poe2ItemStat::EvasionPercent);
 	passives[static_cast<size_t>(PassiveStat::EnergyShieldPercent)] += gearStat(Poe2ItemStat::EnergyShieldPercent);
+	CachePassiveTotals(player, passives);
 	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
+	dam += PassiveWeaponDamage(player, passives);
+	lightRadius += passive(PassiveStat::LightRadius);
+	player.poe2.lifeRegenPerMille = passive(PassiveStat::LifeRegenRate);
+	player.poe2.passiveBlockChance = passive(PassiveStat::BlockChance);
 	strength += passive(PassiveStat::Strength);
 	magic += passive(PassiveStat::Magic);
 	dexterity += passive(PassiveStat::Dexterity);
@@ -3650,10 +3667,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	lifeRegen += passive(PassiveStat::LifeRegen);
 	manaRegen += passive(PassiveStat::ManaRegen);
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
-	// Every 10% increased attack or cast speed from gear skips one more animation frame.
+	// Every 10% increased attack or cast speed from the tree and gear skips one more animation frame.
 	// Heavy and focused bases slow attacks and casts, but only by cancelling speed from elsewhere.
-	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp(passive(PassiveStat::AttackSpeed) + (gearStat(Poe2ItemStat::AttackSpeed) / 10), 0, static_cast<int>(MaxPassiveSpeedFrames)));
-	player.poe2.passiveCastFrames = static_cast<int8_t>(std::clamp(passive(PassiveStat::CastSpeed) + (gearStat(Poe2ItemStat::CastSpeed) / 10), 0, static_cast<int>(MaxPassiveSpeedFrames)));
+	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
+	player.poe2.passiveCastFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::CastSpeed) + gearStat(Poe2ItemStat::CastSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
 
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
 	int evasion = 0;
@@ -4226,6 +4243,9 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 	FinishCraftingItem(item);
 	FinishWaystone(item);
 	FinishEndgameItem(item);
+	// POE2 Mashup: normal items have nothing to identify.
+	if (gbIsPoe2 && item._iMagical == ITEM_QUALITY_NORMAL)
+		item._iIdentified = true;
 }
 
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen)
@@ -4613,8 +4633,7 @@ Poe2LootOrigin ContainerLootOrigin(bool pregen)
  */
 int RollDropQuality(_item_indexes idx, item_quality rarity, int poe2ItemLevel)
 {
-	const BaseMeta *base = BaseMetaFor(idx);
-	if (base == nullptr || base->quality == QualityKind::None)
+	if (QualityKindFor(idx) == QualityKind::None)
 		return 0;
 	if (poe2ItemLevel >= ExceptionalItemLevel && LootRandom(10000) < ExceptionalChancePer10000)
 		return MaxItemQuality + 1 + LootRandom(MaxExceptionalQuality - MaxItemQuality);
@@ -5140,6 +5159,9 @@ void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc,
 	_item_indexes idx;
 
 	const int curlv = ItemsGetCurrlevel();
+	// Bookcases and book stands hold scrolls now that skill gems replaced spell books.
+	if (gbIsPoe2 && itemType == ItemType::Misc && imisc == IMISC_BOOK)
+		imisc = IMISC_SCROLL;
 	if (itemType != ItemType::Gold)
 		idx = RndTypeItems(itemType, imisc, curlv);
 	else
@@ -5533,6 +5555,52 @@ void CheckIdentify(Player &player, int cii)
 		pi = &player.InvBody[cii];
 
 	pi->_iIdentified = true;
+	CalcPlrInv(player, true);
+}
+
+void IdentifyWithScroll(Player &player)
+{
+	Item *target = nullptr;
+	bool inStash = false;
+	if (pcursinvitem != -1 && !IsInspectingPlayer() && pcursinvitem <= INVITEM_INV_LAST)
+		target = pcursinvitem >= NUM_INVLOC ? &player.InvList[pcursinvitem - NUM_INVLOC] : &player.InvBody[pcursinvitem];
+	else if (pcursstashitem != StashStruct::EmptyCell) {
+		target = &Stash.stashList[pcursstashitem];
+		inStash = true;
+	}
+	if (target == nullptr || target->isEmpty())
+		return;
+	if (target->_iIdentified) {
+		EventPlrMsg(_("That item is already identified."), UiFlags::ColorRed);
+		return;
+	}
+	// Find the scroll before identifying: removing an inventory item moves the others.
+	int scroll = -1;
+	bool belt = false;
+	for (int i = 0; i < player._pNumInv && scroll < 0; i++) {
+		if (IsIdentifyScroll(player.InvList[i]))
+			scroll = i;
+	}
+	for (int i = 0; i < MaxBeltItems && scroll < 0; i++) {
+		if (IsIdentifyScroll(player.SpdList[i])) {
+			scroll = i;
+			belt = true;
+		}
+	}
+	if (scroll < 0)
+		return;
+	target->_iIdentified = true;
+	if (inStash)
+		Stash.dirty = true;
+	if (belt) {
+		if (!TakeOneFromStack(player.SpdList[scroll]))
+			player.RemoveSpdBarItem(scroll);
+	} else if (TakeOneFromStack(player.InvList[scroll])) {
+		NetSyncInvItem(player, scroll);
+	} else {
+		player.RemoveInvItem(scroll);
+	}
+	PlaySFX(SfxID::ItemScroll);
 	CalcPlrInv(player, true);
 }
 
@@ -6145,19 +6213,59 @@ const Item *EquippedCounterpart(const Player &player, const Item &item)
 
 } // namespace
 
+void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_view slot);
+
 void PrintItemComparison(const Item &item)
 {
-	if (!gbIsPoe2 || MyPlayer == nullptr || (SDL_GetModState() & SDL_KMOD_SHIFT) == 0 || !item.isEquipment())
+	if (!gbIsPoe2 || MyPlayer == nullptr || !item.isEquipment())
 		return;
 	const Player &player = *MyPlayer;
 	const Item *worn = EquippedCounterpart(player, item);
 	if (worn == nullptr || worn == &item)
 		return;
+	// A ring is compared with both rings worn, each in its own box, like POE2's.
+	if (worn == &player.InvBody[INVLOC_RING_LEFT]) {
+		if (&item == &player.InvBody[INVLOC_RING_RIGHT])
+			return;
+		PrintItemComparisonWith(item, player.InvBody[INVLOC_RING_LEFT], _("Left Ring"));
+		PrintItemComparisonWith(item, player.InvBody[INVLOC_RING_RIGHT], _("Right Ring"));
+		return;
+	}
+	PrintItemComparisonWith(item, *worn, {});
+}
+
+void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_view slot)
+{
 	static const Item Nothing {};
-	const Item &other = worn->isEmpty() ? Nothing : *worn;
+	const Item &other = worn.isEmpty() ? Nothing : worn;
+
+	// The equipped item's own tooltip goes beside this one, like POE2's.
+	if (!other.isEmpty()) {
+		StringOrView savedFloating = std::move(FloatingInfoString);
+		StringOrView savedInfo = std::move(InfoString);
+		std::vector<InfoLineStyle> savedStyles = std::move(FloatingInfoStyles);
+		FloatingInfoString = other.getName();
+		InfoString = StringOrView {};
+		FloatingInfoStyles.clear();
+		if (other._iIdentified)
+			PrintItemDetails(other);
+		else
+			PrintItemDur(other);
+		CompareTooltip &compare = CompareTooltips.emplace_back();
+		compare.label = slot.empty() ? std::string(_("Equipped")) : StrCat(_("Equipped: "), slot);
+		compare.text = std::move(FloatingInfoString);
+		compare.styles = std::move(FloatingInfoStyles);
+		compare.color = other.getTextColor();
+		FloatingInfoString = std::move(savedFloating);
+		InfoString = std::move(savedInfo);
+		FloatingInfoStyles = std::move(savedStyles);
+	}
 
 	CurrentInfoLineStyle = InfoLineStyle::Note;
-	AddInfoBoxString(other.isEmpty() ? std::string(_("Compared with nothing equipped:")) : FormatRuntime(_("Compared with your {:s}:"), other.getName().str()), true);
+	if (slot.empty())
+		AddInfoBoxString(other.isEmpty() ? std::string(_("Nothing equipped there; equipping it gives:")) : std::string(_("Equipping it instead:")), true);
+	else
+		AddInfoBoxString(other.isEmpty() ? StrCat(_("Nothing on your "), slot, _("; wearing it there gives:")) : StrCat(_("Instead of your "), slot, ":"), true);
 	int shown = 0;
 	const auto compare = [&shown](int mine, int theirs, std::string_view label, std::string_view suffix = {}) {
 		if (mine == theirs)
@@ -6251,7 +6359,7 @@ void PrintItemDur(const Item &item)
 			AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 		}
 	}
-	if (IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet))
+	if (IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet) && item._iMagical != ITEM_QUALITY_NORMAL)
 		AddItemInfoBoxString(_("Not Identified"));
 	CurrentInfoLineStyle = InfoLineStyle::Note;
 	PrintItemInfo(item);
@@ -6566,12 +6674,15 @@ void SpawnPremium(const Player &player)
 void SpawnWitch(int lvl)
 {
 	constexpr int PinnedItemCount = NumWitchPinnedItems;
-	constexpr std::array<_item_indexes, PinnedItemCount> PinnedItemTypes = { IDI_MANA, IDI_FULLMANA, IDI_PORTAL };
+	// POE2 Mashup: Adria always has Scrolls of Identify instead of Town Portal (the tray has a portal button).
+	const std::array<_item_indexes, PinnedItemCount> PinnedItemTypes = { IDI_MANA, IDI_FULLMANA, gbIsPoe2 ? IDI_IDENTIFY : IDI_PORTAL };
 	constexpr int MaxPinnedBookCount = 4;
 	constexpr std::array<_item_indexes, MaxPinnedBookCount> PinnedBookTypes = { IDI_BOOK1, IDI_BOOK2, IDI_BOOK3, IDI_BOOK4 };
 
 	int bookCount = 0;
-	const int pinnedBookCount = gbIsHellfire ? RandomIntLessThan(MaxPinnedBookCount) : 0;
+	int pinnedBookCount = gbIsHellfire ? RandomIntLessThan(MaxPinnedBookCount) : 0;
+	if (gbIsPoe2)
+		pinnedBookCount = 0; // Skill gems replaced spell books.
 	const int itemCount = RandomIntBetween(10, gbIsHellfire ? NumWitchItemsHf : NumWitchItems);
 	const int maxValue = gbIsHellfire ? MaxVendorValueHf : MaxVendorValue;
 	WitchItems.clear();
@@ -6798,6 +6909,11 @@ int ItemNoFlippy()
 
 void CreateSpellBook(Point position, SpellID ispell, bool sendmsg, bool delta)
 {
+	// A boss's spell book becomes an uncut skill gem now that skill gems replaced spell books.
+	if (gbIsPoe2) {
+		CreateTypeItem(position, false, ItemType::Misc, IMISC_UNCUT_SKILL, sendmsg, delta);
+		return;
+	}
 	int lvl = currlevel;
 
 	if (gbIsHellfire) {
@@ -7036,12 +7152,84 @@ void RechargeItem(Item &item, Player &player)
 	}
 }
 
+/** @brief POE2 Mashup: a currency's sound as it takes hold, layered from Diablo's own effects: a clink, then its magic. */
+void PlayCurrencySound(CurrencyOrb orb, item_quality before, const Item &item)
+{
+	if (CurrencyDestroyedItem) {
+		PlaySFX(SfxID::BarrelBreak);
+		return;
+	}
+	switch (orb) {
+	case CurrencyOrb::Whetstone:
+		PlaySFX(SfxID::ItemSword);
+		PlaySFX(SfxID::ItemAnvil);
+		return;
+	case CurrencyOrb::Scrap:
+		PlaySFX(SfxID::ItemArmor);
+		PlaySFX(SfxID::ItemAnvil);
+		return;
+	case CurrencyOrb::Etcher:
+		PlaySFX(SfxID::ItemStaff);
+		PlaySFX(SfxID::SpellRepair);
+		return;
+	case CurrencyOrb::Bauble:
+	case CurrencyOrb::Catalyst:
+		PlaySFX(SfxID::ItemPotion);
+		PlaySFX(SfxID::SpellRepair);
+		return;
+	case CurrencyOrb::Chaos:
+	case CurrencyOrb::GreaterChaos:
+	case CurrencyOrb::PerfectChaos:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(SfxID::SpellBloodStar);
+		return;
+	case CurrencyOrb::Scouring:
+	case CurrencyOrb::Annul:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(SfxID::SpellEtherealize);
+		return;
+	case CurrencyOrb::Divine:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(SfxID::SpellResurrect);
+		return;
+	case CurrencyOrb::Vaal:
+	case CurrencyOrb::Desecrate:
+		PlaySFX(SfxID::ItemBodyPart);
+		PlaySFX(SfxID::SpellBoneSpirit);
+		return;
+	case CurrencyOrb::Chance:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(item._iMagical == ITEM_QUALITY_UNIQUE ? SfxID::QuestDone : SfxID::OperateShrine);
+		return;
+	case CurrencyOrb::Artificer:
+	case CurrencyOrb::Augment:
+		PlaySFX(SfxID::ItemRock);
+		PlaySFX(SfxID::ItemAnvil);
+		return;
+	default:
+		break;
+	}
+	// Orbs that add modifiers: brighter the higher the item climbs.
+	PlaySFX(SfxID::ItemRing);
+	if (item._iMagical == ITEM_QUALITY_RARE && before != ITEM_QUALITY_RARE)
+		PlaySFX(SfxID::SpellHolyBolt);
+	else if (IsAnyOf(orb, CurrencyOrb::Exalted, CurrencyOrb::GreaterExalted, CurrencyOrb::PerfectExalted, CurrencyOrb::Regal, CurrencyOrb::Essence))
+		PlaySFX(SfxID::SpellHolyBolt);
+	else
+		PlaySFX(SfxID::SpellInfravision);
+}
+
 bool ApplyOilToItem(Item &item, Player &player)
 {
 	int r;
 
-	if (const CurrencyOrb orb = CurrencyOrbForMiscId(player._pOilType); orb != CurrencyOrb::None)
-		return ApplyCurrencyOrb(orb, player, item, player.poe2.currencyVariant);
+	if (const CurrencyOrb orb = CurrencyOrbForMiscId(player._pOilType); orb != CurrencyOrb::None) {
+		const item_quality before = item._iMagical;
+		const bool applied = ApplyCurrencyOrb(orb, player, item, player.poe2.currencyVariant);
+		if (applied && &player == MyPlayer)
+			PlayCurrencySound(orb, before, item);
+		return applied;
+	}
 
 	if (item._iClass == ICLASS_MISC) {
 		return false;

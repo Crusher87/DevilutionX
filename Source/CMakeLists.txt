@@ -830,6 +830,7 @@ target_link_dependencies(libdevilutionx_player
   libdevilutionx_load_cl2
   libdevilutionx_options
   libdevilutionx_paths
+  libdevilutionx_questdat
   libdevilutionx_strings
 )
 

@@ -13,6 +13,9 @@
 #include "lua/lua_global.hpp"
 #include "panels/console.hpp"
 #include "player.h"
+#include "cursor.h"
+#include "missiles.h"
+#include "poe2/aim.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
@@ -71,6 +74,17 @@ void CreateReplEnvironment()
 			return "Modern Effects are off (Settings > Graphics, needs Upscale).";
 		vfx::Showcase(MyPlayer->position.tile);
 		return "Playing every effect around you.";
+	};
+	env["aim"] = []() {
+		if (MyPlayer == nullptr)
+			return std::string("No hero.");
+		float x = 0;
+		float y = 0;
+		GetCursorTileExact(x, y);
+		const Point target = AimAlongCursor(*MyPlayer, AimTiles);
+		AddMissile(MyPlayer->position.tile, target, MyPlayer->_pdir, MissileID::Firebolt, TARGET_MONSTERS, *MyPlayer, 0, 1);
+		return StrCat("hero ", MyPlayer->position.tile.x, ",", MyPlayer->position.tile.y, "  cursor tile ", cursPosition.x, ",", cursPosition.y,
+		    "  exact ", static_cast<int>(x * 100), ",", static_cast<int>(y * 100), " /100  aim ", target.x, ",", target.y);
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

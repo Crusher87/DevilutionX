@@ -1272,9 +1272,9 @@ void ScanMonsters(const View &view)
 		glow.ground = false;
 		if (state.igniteTicks > 0) {
 			Emitters.push_back({ body, height, Ambient::Ignite, { 255, 140, 40 } });
-			glow.r0 = glow.r1 = 26 + height * 0.15F;
-			glow.colour = { 255, 120, 30 };
-			glow.alpha = 0.28F * Flicker(body, 2);
+			glow.r0 = glow.r1 = 20 + height * 0.1F;
+			glow.colour = { 255, 110, 30 };
+			glow.alpha = 0.15F * Flicker(body, 2);
 			FrameGlows.push_back(glow);
 		}
 		if (state.shockTicks > 0 || state.electrocuteTicks > 0) {
@@ -1529,19 +1529,51 @@ void EmitAmbient(float ms)
 			}
 			break;
 		case Ambient::Ignite:
-			for (int i = Occurrences(22, ms); i > 0; i--) {
+			// A slow burn, not a blast: small flames licking over the body, a few embers and thin dark smoke.
+			for (int i = Occurrences(14, ms); i > 0; i--) {
 				const float h = emitter.size;
 				Particle p;
-				p.pos = emitter.pos + Vec { Random(-0.18F, 0.18F) * h, Random(-0.25F, 0.3F) * h };
-				p.vel = { Random(-8, 8), 0 };
-				p.vz = Random(40, 90);
-				p.gravity = -40;
+				p.pos = emitter.pos + Vec { Random(-0.16F, 0.16F) * h, Random(-0.1F, 0.3F) * h };
+				p.vel = { Random(-3, 3), 0 };
+				p.vz = Random(12, 30);
+				p.drag = 2;
+				p.life = Random(160, 300);
+				p.size0 = Random(2, 3.2F);
+				p.size1 = 0.4F;
+				p.c0 = { 255, 190, 80 };
+				p.c1 = { 170, 40, 10 };
+				p.alpha = 0.65F;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(3, ms); i > 0; i--) {
+				const float h = emitter.size;
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-0.15F, 0.15F) * h, Random(-0.1F, 0.2F) * h };
+				p.vel = { Random(-6, 6), 0 };
+				p.vz = Random(30, 55);
+				p.gravity = -15;
 				p.drag = 1;
-				p.life = Random(250, 500);
-				p.size0 = Random(2.5F, 4);
-				p.size1 = 0.5F;
-				p.c0 = { 255, 210, 110 };
-				p.c1 = { 200, 50, 10 };
+				p.life = Random(400, 700);
+				p.size0 = 1.4F;
+				p.size1 = 0.3F;
+				p.c0 = { 255, 170, 70 };
+				p.c1 = { 150, 30, 5 };
+				p.shape = Shape::Streak;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(2.5F, ms); i > 0; i--) {
+				const float h = emitter.size;
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-0.12F, 0.12F) * h, Random(-0.2F, 0.05F) * h };
+				p.vel = { Random(-3, 3), 0 };
+				p.vz = Random(8, 16);
+				p.life = Random(700, 1100);
+				p.size0 = 4;
+				p.size1 = 11;
+				p.c0 = { 55, 45, 38 };
+				p.c1 = { 30, 28, 26 };
+				p.alpha = 0.18F;
+				p.shape = Shape::Puff;
 				AddParticle(p);
 			}
 			break;

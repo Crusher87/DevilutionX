@@ -58,7 +58,7 @@ constexpr int TabWidth = 118;
 constexpr int TabHeight = 24;
 constexpr int TabGap = 3;
 constexpr int TierLabelWidth = 34;
-constexpr Size CellSize { 124, 62 };
+constexpr Size CellSize { 136, 68 };
 constexpr int TierGap = 6;
 constexpr int ScrollStep = 30;
 
@@ -344,7 +344,8 @@ void DrawCell(const Surface &out, const Player &player, const Cell &cell, bool h
 		nameColor = UiFlags::ColorBlue;
 	if (dimmed)
 		nameColor = UiFlags::ColorButtonpushed;
-	DrawString(out, GemName(gem), { rect.position + Displacement { 0, 40 }, { rect.size.width, 12 } }, { .flags = nameColor | UiFlags::AlignCenter | UiFlags::VerticalCenter });
+	// Long names squeeze their letters together rather than run into the next cell.
+	DrawString(out, GemName(gem), { rect.position + Displacement { 2, 40 }, { rect.size.width - 4, 14 } }, { .flags = nameColor | UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::KerningFitSpacing });
 	const std::optional<size_t> socket = SocketToLevel(player, gem);
 	std::string detail;
 	if (socket)
@@ -353,8 +354,8 @@ void DrawCell(const Surface &out, const Player &player, const Cell &cell, bool h
 		detail = _("Already linked");
 	else
 		detail = FormatRuntime(_("Tier level {:d}"), gem.level);
-	DrawString(out, detail, { rect.position + Displacement { 0, 51 }, { rect.size.width, 10 } },
-	    { .flags = UiFlags::FontSize12 | UiFlags::AlignCenter | UiFlags::VerticalCenter | (dimmed ? UiFlags::ColorButtonpushed : UiFlags::ColorWhite) });
+	DrawString(out, detail, { rect.position + Displacement { 2, 54 }, { rect.size.width - 4, 13 } },
+	    { .flags = UiFlags::FontSize12 | UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::KerningFitSpacing | (dimmed ? UiFlags::ColorButtonpushed : UiFlags::ColorWhite) });
 }
 
 void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &gem)

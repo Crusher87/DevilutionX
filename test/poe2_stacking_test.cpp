@@ -77,7 +77,7 @@ TEST_F(Poe2StackingTest, OldSavesWithoutACountHoldOne)
 TEST_F(Poe2StackingTest, MergeFillsUpToTheLimit)
 {
 	Item stack = Make("Chaos Orb");
-	SetStackCount(stack, 15);
+	SetStackCount(stack, CurrencyStackMax - 5);
 	Item more = Make("Chaos Orb");
 	SetStackCount(more, 8);
 	EXPECT_FALSE(MergeStack(stack, more));

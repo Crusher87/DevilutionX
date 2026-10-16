@@ -121,11 +121,12 @@ TEST_F(Poe2DefensesTest, ArmourReducesHitsLikePoe2)
 TEST_F(Poe2DefensesTest, EnergyShieldSoaksDamageThenRecharges)
 {
 	Player &player = *MyPlayer;
-	Wear(player, INVLOC_CHEST, "Robe", 10);
+	Wear(player, INVLOC_CHEST, "Robe", 20);
 	Recalculate(player);
-	ASSERT_EQ(player.poe2.maxEnergyShield, 40);
+	ASSERT_EQ(player.poe2.maxEnergyShield, 20 * EnergyShieldPerDefense);
+	ASSERT_EQ(player.poe2.maxEnergyShield, 60);
 
-	const Fixed26_6 leftover = AbsorbWithEnergyShield(player, Fixed26_6::fromInt(50));
+	const Fixed26_6 leftover = AbsorbWithEnergyShield(player, Fixed26_6::fromInt(70));
 	EXPECT_EQ(leftover, Fixed26_6::fromInt(10));
 	EXPECT_EQ(player.poe2.energyShield, 0);
 
@@ -135,10 +136,10 @@ TEST_F(Poe2DefensesTest, EnergyShieldSoaksDamageThenRecharges)
 	EXPECT_EQ(player.poe2.energyShield, 0);
 	for (int i = 0; i < 20; i++)
 		RechargeEnergyShield(player);
-	EXPECT_EQ(player.poe2.energyShield, 5 * 64);
+	EXPECT_EQ(player.poe2.energyShield, 60 * 64 / 8);
 	for (int i = 0; i < 20 * 10; i++)
 		RechargeEnergyShield(player);
-	EXPECT_EQ(player.poe2.energyShield, 40 * 64);
+	EXPECT_EQ(player.poe2.energyShield, 60 * 64);
 }
 
 TEST_F(Poe2DefensesTest, ResistancesDropInDeeperAreas)

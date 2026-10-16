@@ -79,6 +79,12 @@ void ApplyBaseProperties(Item &item);
 /** @brief The implicits' tooltip lines. */
 std::vector<std::string> ItemImplicitText(const Item &item);
 
+/**
+ * @brief What quality does on a base: from its metadata, else from its kind of item, so Diablo's body armours
+ * and older bases take quality too.
+ */
+QualityKind QualityKindFor(int itemIndex);
+QualityKind ItemQualityKind(const Item &item);
 /** @brief The item's quality, 0 to 30; stored on equipment only. */
 int ItemQuality(const Item &item);
 void SetItemQuality(Item &item, int quality);

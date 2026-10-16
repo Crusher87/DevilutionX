@@ -1746,6 +1746,11 @@ void GameLogic()
 	CheckQuests();
 	RedrawViewport();
 	pfile_update(false);
+	// POE2 Mashup: a finished quest gives passive points once per hero, like POE2's quest rewards.
+	if (const int gained = MyPlayer != nullptr ? RecordQuestPassivePoints(*MyPlayer) : 0; gained > 0) {
+		EventPlrMsg(FormatRuntime(_("Quest complete: +{:d} Passive Skill Points"), gained), UiFlags::ColorGold);
+		RequestAutosave();
+	}
 	ProcessAutosave();
 	CloseInteractionPanelsWhenAway();
 
@@ -3131,6 +3136,11 @@ bool TryIconCurs()
 
 	Player &myPlayer = *MyPlayer;
 
+	if (pcurs == CURSOR_IDENTIFY && gbIsPoe2) {
+		IdentifyWithScroll(myPlayer);
+		NewCursor(CURSOR_HAND);
+		return true;
+	}
 	if (pcurs == CURSOR_IDENTIFY) {
 		if (pcursinvitem != -1 && !IsInspectingPlayer())
 			CheckIdentify(myPlayer, pcursinvitem);

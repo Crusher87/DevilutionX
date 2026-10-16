@@ -160,13 +160,13 @@ void ApplyBaseProperties(Item &item)
 		return;
 	for (const ItemImplicit &implicit : ItemImplicits(item))
 		ApplyModEffect(item, implicit.implicit->effect, implicit.values[0], implicit.values[1]);
-	const BaseMeta *base = ItemBaseMeta(item);
+	const QualityKind kind = ItemQualityKind(item);
 	const int quality = ItemQuality(item);
-	if (base == nullptr || quality == 0)
+	if (quality == 0)
 		return;
-	if (base->quality == QualityKind::Weapon)
+	if (kind == QualityKind::Weapon)
 		item._iPLDam = static_cast<int16_t>(item._iPLDam + quality);
-	else if (base->quality == QualityKind::Defence)
+	else if (kind == QualityKind::Defence)
 		item._iPLAC = static_cast<int16_t>(item._iPLAC + quality);
 }
 
@@ -178,9 +178,40 @@ std::vector<std::string> ItemImplicitText(const Item &item)
 	return lines;
 }
 
+QualityKind QualityKindFor(int itemIndex)
+{
+	if (const BaseMeta *base = BaseMetaFor(itemIndex); base != nullptr)
+		return base->quality;
+	if (itemIndex < 0 || static_cast<size_t>(itemIndex) >= AllItemsList.size())
+		return QualityKind::None;
+	switch (AllItemsList[static_cast<size_t>(itemIndex)].itype) {
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor:
+	case ItemType::Helm:
+	case ItemType::Shield:
+		return QualityKind::Defence;
+	case ItemType::Sword:
+	case ItemType::Axe:
+	case ItemType::Mace:
+	case ItemType::Bow:
+		return QualityKind::Weapon;
+	case ItemType::Staff:
+		return QualityKind::Caster;
+	default:
+		return QualityKind::None;
+	}
+}
+
+QualityKind ItemQualityKind(const Item &item)
+{
+	return item.isEmpty() ? QualityKind::None : QualityKindFor(item.IDidx);
+}
+
 int ItemQuality(const Item &item)
 {
-	if (ItemBaseMeta(item) == nullptr)
+	// Rings and amulets have no quality kind but hold a catalyst's quality.
+	if (ItemBaseMeta(item) == nullptr && ItemQualityKind(item) == QualityKind::None)
 		return 0;
 	return static_cast<int>((item.dwBuff & CF_POE2_QUALITY) >> 23);
 }
@@ -198,8 +229,7 @@ bool IsExceptional(const Item &item)
 
 bool HasQuality(const Item &item)
 {
-	const BaseMeta *base = ItemBaseMeta(item);
-	return base != nullptr && base->quality != QualityKind::None;
+	return ItemQualityKind(item) != QualityKind::None;
 }
 
 } // namespace devilution

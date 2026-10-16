@@ -291,12 +291,16 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 	if (missileData.isArrow()) {
 		hper = player.GetRangedPiercingToHit();
 		hper -= player.CalculateArmorPierce(monster.armorClass, false);
-		hper -= (dist * dist) / 2;
+		// POE2 Mashup: accuracy falls off gently with distance instead of with its square.
+		hper -= gbIsPoe2 ? dist : (dist * dist) / 2;
 	} else {
 		hper = player.GetMagicToHit() - (monster.level(sgGameInitInfo.nDifficulty) * 2) - dist;
 	}
 
 	hper = std::clamp(hper, 5, 95);
+	// POE2 Mashup: spells always hit, as in POE2; only attacks roll against the monster's defences.
+	if (gbIsPoe2 && !missileData.isArrow())
+		hper = 100;
 	// POE2 Mashup: some uniques make attacks unevadable.
 	const bool isAttack = missileData.isArrow() && damageType == DamageType::Physical;
 	if (isAttack && AttacksCannotBeEvaded(player))
@@ -538,7 +542,10 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 	int mid = dMonster[position.x][position.y];
 	if (mid != 0) {
 		Monster &monster = Monsters[std::abs(mid) - 1];
-		if (onlyHitWalking.has_value() ? (monster.isWalking() && CheckCanHitOnlyWalking(missile, monster.position, *onlyHitWalking)) : (mid > 0 || monster.mode == MonsterMode::Petrified)) {
+		// POE2 Mashup: the hero's projectiles also hit a monster on the tile it is walking into, where it is drawn,
+		// so bolts don't pass through monsters that are on the move.
+		const bool walkingInto = gbIsPoe2 && mid < 0 && missile.sourceType() == MissileSource::Player && monster.isWalking();
+		if (onlyHitWalking.has_value() ? (monster.isWalking() && CheckCanHitOnlyWalking(missile, monster.position, *onlyHitWalking)) : (mid > 0 || monster.mode == MonsterMode::Petrified || walkingInto)) {
 			if (missile.IsTrap()
 			    || (missile._micaster == TARGET_PLAYERS && (                                     // or was fired by a monster and
 			            monster.isPlayerMinion() != Monsters[missile._misource].isPlayerMinion() //  the monsters are on opposing factions
@@ -1199,7 +1206,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	int blkper = player.GetBlockChance(false);
 	if (monster != nullptr)
 		blkper -= (monster->level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel()) * 2;
-	blkper = std::clamp(blkper, 0, 100);
+	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
+	blkper = std::clamp(blkper, 0, player.GetMaxBlockChance(gbIsPoe2));
 
 	int8_t resper;
 	switch (damageType) {

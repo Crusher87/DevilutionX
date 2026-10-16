@@ -14,6 +14,10 @@ struct Poe2MonsterState {
 	int8_t igniteSource = -1;
 	/** @brief Fire damage per tick as a raw Fixed26_6 value. */
 	int32_t igniteDamagePerTick = 0;
+	/** @brief POE2's Flammability: the chance in per mille that a fire hit ignites, built up by fire hits. */
+	int16_t flammability = 0;
+	/** @brief Flammability fades this many ticks after the last fire hit. */
+	uint8_t flammabilityTicks = 0;
 	uint8_t shockTicks = 0;
 	int regenRemainder = 0;
 	uint8_t chillTicks = 0;

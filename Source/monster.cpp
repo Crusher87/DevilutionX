@@ -1245,7 +1245,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		blkper = GenerateRnd(100);
 	}
 	int blk = player.GetBlockChance() - (monster.level(sgGameInitInfo.nDifficulty) * 2);
-	blk = std::clamp(blk, 0, 100);
+	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
+	blk = std::clamp(blk, 0, player.GetMaxBlockChance(gbIsPoe2));
 	if (hper >= hit)
 		return;
 	if (blkper < blk) {
@@ -4137,6 +4138,7 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0) {
 		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
+		RecoverOnKill(*MyPlayer);
 		QueueHeraldTriggers(*MyPlayer, monster);
 		OnTableCursedMonsterKilled(monster);
 		OnMonsterKilled(*MyPlayer, monster);
@@ -4969,7 +4971,8 @@ void TalktoMonster(Player &player, Monster &monster)
 			Quests[Q_ZHAR]._qvar1 = QS_ZHAR_ITEM_SPAWNED;
 			SetRndSeed(monster.rndItemSeed);
 			DiscardRandomValues(10);
-			CreateTypeItem(monster.position.tile + Displacement { 1, 1 }, false, ItemType::Misc, IMISC_BOOK, false, false, true);
+			// Zhar's book becomes an uncut skill gem now that skill gems replaced spell books.
+			CreateTypeItem(monster.position.tile + Displacement { 1, 1 }, false, ItemType::Misc, gbIsPoe2 ? IMISC_UNCUT_SKILL : IMISC_BOOK, false, false, true);
 			monster.flags |= MFLAG_QUEST_COMPLETE;
 			NetSendCmdQuest(true, Quests[Q_ZHAR]);
 		}

@@ -157,7 +157,8 @@ bool ApplyCurrencyToFlask(CurrencyOrb orb, Item &item)
 			EventPlrMsg(_("This flask is already at 20% quality."), UiFlags::ColorRed);
 			return false;
 		}
-		quality++;
+		// Curtis's rule (2026-10-16): quality currency adds 2% to normal and magic items.
+		quality = std::min(quality + 2, MaxFlaskQuality);
 		break;
 	default:
 		EventPlrMsg(_("Flasks only take Transmutation, Augmentation, Scouring and Glassblower's Baubles."), UiFlags::ColorRed);
@@ -510,21 +511,21 @@ std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8
 /** @brief Blacksmith's Whetstone, Arcanist's Etcher, Armourer's Scrap and catalysts add quality: +2% on normal, magic and rare items, +1% on uniques. */
 bool ApplyQualityCurrency(CurrencyOrb orb, const Player &player, Item &item, uint8_t variant)
 {
-	const BaseMeta *base = ItemBaseMeta(item);
+	const QualityKind kind = ItemQualityKind(item);
 	const bool jewellery = IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet);
 	bool fits = false;
 	switch (orb) {
 	case CurrencyOrb::Whetstone:
-		fits = base != nullptr && base->quality == QualityKind::Weapon;
+		fits = kind == QualityKind::Weapon;
 		break;
 	case CurrencyOrb::Etcher:
-		fits = base != nullptr && base->quality == QualityKind::Caster;
+		fits = kind == QualityKind::Caster;
 		break;
 	case CurrencyOrb::Scrap:
-		fits = base != nullptr && base->quality == QualityKind::Defence;
+		fits = kind == QualityKind::Defence;
 		break;
 	case CurrencyOrb::Catalyst:
-		fits = base != nullptr && jewellery;
+		fits = ItemBaseMeta(item) != nullptr && jewellery;
 		break;
 	default:
 		break;
@@ -803,7 +804,7 @@ std::string_view CurrencyOrbDescription(CurrencyOrb orb)
 	case CurrencyOrb::Vaal:
 		return _("Corrupts an item, with unpredictable results");
 	case CurrencyOrb::Bauble:
-		return _("Adds 1% quality to a flask, up to 20%");
+		return _("Adds 2% quality to a flask, up to 20%");
 	case CurrencyOrb::Chance:
 		return _("Turns a normal item into a unique of its base, or destroys it");
 	case CurrencyOrb::Annul:

@@ -10,10 +10,12 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/map_play.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
@@ -225,9 +227,12 @@ void ProcessMonsterAilments(Monster &monster)
 	decay(state.freezeBuildup, FreezeThresholdPercent);
 	decay(state.stunBuildup, HeavyStunThresholdPercent);
 
+	if (state.flammabilityTicks > 0 && --state.flammabilityTicks == 0)
+		state.flammability = 0;
 	if (state.igniteTicks > 0) {
 		state.igniteTicks--;
-		if (state.igniteTicks % 10 == 0)
+		// Modern Effects draw a slow burn on the body; without them a small flame now and then marks the ignite.
+		if (state.igniteTicks % 30 == 0 && !vfx::Enabled())
 			AddVisualEffect(monster.position.tile, MissileGraphicID::FireArrowExplosion);
 		// Only the player who lit the fire applies its damage, which the game then syncs.
 		if (state.igniteSource >= 0 && state.igniteSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
@@ -247,12 +252,14 @@ Fixed26_6 ApplyShock(const Monster &monster, Fixed26_6 damage)
 	return Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent * MapExposurePercent() / 10000);
 }
 
-int AilmentChancePercent(const Monster &monster, Fixed26_6 damage)
+int AilmentChancePerMille(const Monster &monster, DamageType damageType, Fixed26_6 damage)
 {
 	if (monster.maxHitPoints <= 0 || damage <= 0)
 		return 0;
-	const int64_t percent = static_cast<int64_t>(damage.raw()) * 200 / monster.maxHitPoints.raw();
-	return static_cast<int>(std::clamp<int64_t>(percent, 5, 100));
+	// The ailment threshold is the monster's life; uniques have half, so their ailments still land.
+	const int64_t threshold = std::max<int64_t>(monster.isUnique() ? monster.maxHitPoints.raw() / 2 : monster.maxHitPoints.raw(), 1);
+	const int64_t perMilleAtThreshold = damageType == DamageType::Fire ? 200 : 250;
+	return static_cast<int>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * perMilleAtThreshold / threshold, 1000));
 }
 
 bool IsMonsterImmobilized(const Monster &monster)
@@ -342,7 +349,9 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 		return;
 	if (damageType == DamageType::Magic) {
 		// POE2 Mashup: supports make cold build up harder (Deep Freeze) or not at all (Elemental Focus).
-		const int effect = SupportAilmentEffectPercent(damageType) * SupportAilmentChancePercent(damageType) / 100;
+		int effect = SupportAilmentEffectPercent(damageType) * SupportAilmentChancePercent(damageType) / 100;
+		if (effect > 0)
+			effect = effect * std::max(100 + PassiveTotal(player, PassiveStat::FreezeBuildup), 0) / 100;
 		if (effect <= 0)
 			return;
 		if (InflictCold(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * effect / 100)))) {
@@ -359,14 +368,24 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	}
 	if (damageType != DamageType::Fire && damageType != DamageType::Lightning)
 		return;
-	int chance = AilmentChancePercent(monster, damage);
+	int chance = AilmentChancePerMille(monster, damageType, damage);
 	if (damageType == DamageType::Fire)
 		chance = chance * UniqueIgniteChancePercent(player) / 100;
+	else
+		chance = chance * std::max(100 + PassiveTotal(player, PassiveStat::ShockChance), 0) / 100;
 	chance = chance * SupportAilmentChancePercent(damageType) / 100;
-	if (GenerateRnd(100) >= chance)
+	Poe2MonsterState &state = monster.poe2;
+	if (damageType == DamageType::Fire) {
+		// POE2's Flammability: each fire hit adds its chance to the monster's, and the hit ignites with the total.
+		if (chance <= 0)
+			return;
+		state.flammability = static_cast<int16_t>(std::min(state.flammability + chance, 1000));
+		state.flammabilityTicks = FlammabilityTicks;
+		chance = state.flammability;
+	}
+	if (GenerateRnd(1000) >= chance)
 		return;
 
-	Poe2MonsterState &state = monster.poe2;
 	const bool wasShocked = state.shockTicks > 0;
 	OnAilmentInflicted(player, monster, damageType, wasShocked);
 	if (damageType == DamageType::Fire) {

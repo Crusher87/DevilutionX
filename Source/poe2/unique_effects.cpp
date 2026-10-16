@@ -14,6 +14,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -91,6 +92,17 @@ int ResourceSpentBonus(const Player &player)
 	return std::min<int32_t>(State(player).resourcesSpent / 64 / 100 * 2, cap);
 }
 
+constexpr int SpiritDamageCap = 30;
+
+/** @brief Spells' increased damage in percent (100 = none): the tree's and gear's spell damage, Scholar and mana-scaled damage. */
+int SpellIncreasedDamage(const Player &player)
+{
+	int increased = 100 + Rule(player, UniqueRule::SpellDamage) + State(player).scholarPercent;
+	if (const int share = Rule(player, UniqueRule::ManaSpellDamage); share > 0)
+		increased += std::max<int32_t>(player._pMaxMana.whole(), 0) * share / 100;
+	return increased;
+}
+
 /** @brief The rules' "more damage" for every hit, attack or spell, in percent. */
 int GeneralDamagePercent(const Player &player)
 {
@@ -100,8 +112,9 @@ int GeneralDamagePercent(const Player &player)
 		const int highest = std::max({ player._pStrength, player._pMagic, player._pDexterity });
 		percent += std::min(highest / 50, cap);
 	}
+	// Unreserved Spirit's bonus (the Shimmering Shrine) stops at 30% more.
 	if (const int perTen = Rule(player, UniqueRule::SpiritDamage); perTen > 0)
-		percent += std::max(MaxSpirit(player) - ReservedSpirit(player), 0) / 10 * perTen;
+		percent += std::min(std::max(MaxSpirit(player) - ReservedSpirit(player), 0) / 10 * perTen, SpiritDamageCap);
 	if (const int more = Rule(player, UniqueRule::DistanceRule); more > 0 && state.nearestEnemy > FarRangeTiles)
 		percent = percent * (100 + more) / 100;
 	percent = percent * (100 + ResourceSpentBonus(player)) / 100;
@@ -117,6 +130,11 @@ Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, in
 		return Fixed26_6::fromInt(0);
 	if (type != DamageType::Physical && monster.isResistant(MissileID::Arrow, type))
 		raw >>= 2;
+	// Element damage adds to the attack's increased damage rather than multiplying it.
+	if (const int element = PassiveElementDamage(player, type); element != 0) {
+		const int64_t increased = std::max(100 + player._pIBonusDam, 1);
+		raw = static_cast<int32_t>(static_cast<int64_t>(raw) * std::max<int64_t>(increased + element, 0) / increased);
+	}
 	raw = Percent(raw, MonsterDamageTakenPercent(monster, type));
 	const Fixed26_6 damage = ApplyShock(monster, Fixed26_6::fromRaw(raw));
 	ApplyMonsterDamage(type, monster, damage);
@@ -442,10 +460,7 @@ int UniqueSpellDamagePercent(const Player &player, SpellID spell)
 	if (!gbIsPoe2)
 		return 100;
 	const UniqueRuleState &state = State(player);
-	int increased = 100 + Rule(player, UniqueRule::SpellDamage) + state.scholarPercent;
-	if (const int share = Rule(player, UniqueRule::ManaSpellDamage); share > 0)
-		increased += std::max<int32_t>(player._pMaxMana.whole(), 0) * share / 100;
-	int percent = increased * state.castDamagePercent / 100;
+	int percent = SpellIncreasedDamage(player) * state.castDamagePercent / 100;
 	if (state.castingRepeat)
 		percent = percent * (100 - Rule(player, UniqueRule::RepeatedSpellLess)) / 100;
 	(void)spell;
@@ -459,6 +474,9 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 	UniqueRuleState &state = State(player);
 	state.lastHitBySpell = true;
 	int percent = GeneralDamagePercent(player);
+	// Element damage adds to the spell's increased damage rather than multiplying it.
+	const int increased = std::max(SpellIncreasedDamage(player), 1);
+	percent = percent * std::max(increased + PassiveElementDamage(player, type), 0) / increased;
 	if (const int more = Rule(player, UniqueRule::SpellElementCycle); more > 0 && IsElemental(type)) {
 		if (type == CycleElement(state.cycleElement))
 			percent = percent * (100 + more) / 100;
@@ -544,6 +562,8 @@ Fixed26_6 PaySpellCostWithEnergyShield(Player &player, Fixed26_6 cost)
 		return cost;
 	player.poe2.energyShield -= paid;
 	State(player).shieldSpent += paid;
+	// Spending energy shield on spells restarts its recharge, like taking a hit.
+	player.poe2.energyShieldRechargeTicks = 0;
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Health);
 	return Fixed26_6::fromRaw(cost.raw() - paid);
@@ -634,22 +654,23 @@ int UniqueMinionDamagePercent(const Player &owner, bool minionLowLife)
 
 int UniqueMinionLifePercent(const Player &owner)
 {
-	return std::max(100 - Rule(owner, UniqueRule::LessMinionLife), 10);
+	return std::max(100 - Rule(owner, UniqueRule::LessMinionLife) + PassiveTotal(owner, PassiveStat::MinionLife), 10);
 }
 
 int UniqueIgniteChancePercent(const Player &player)
 {
 	if (Rule(player, UniqueRule::CannotIgnite) > 0)
 		return 0;
-	return 100 + Rule(player, UniqueRule::IgniteBuildup);
+	return 100 + Rule(player, UniqueRule::IgniteBuildup) + PassiveTotal(player, PassiveStat::IgniteChance);
 }
 
 int UniqueStunBuildupPercent(const Player &player)
 {
 	const int per = Rule(player, UniqueRule::ArmourStunBuildup);
+	const int passive = PassiveTotal(player, PassiveStat::StunBuildup);
 	if (per <= 0)
-		return 100;
-	return 100 + Poe2Armour(player) / per;
+		return std::max(100 + passive, 0);
+	return std::max(100 + passive + Poe2Armour(player) / per, 0);
 }
 
 void OnAilmentInflicted(const Player &player, Monster &monster, DamageType type, bool wasShocked)
@@ -754,12 +775,15 @@ int UniqueDefencePercent(const Player &player)
 	return 100;
 }
 
+constexpr int MaxSpellEvasion = 25;
+
 int SpellEvasion(const Player &player)
 {
 	const int share = Rule(player, UniqueRule::EvasionVsSpells);
 	if (share <= 0)
 		return 0;
-	return EvasionRating(player) * share / 100;
+	// At most 25 points off a spell's chance to hit, so spells still land.
+	return std::min(EvasionRating(player) * share / 100, MaxSpellEvasion);
 }
 
 Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
@@ -843,7 +867,7 @@ int EnergyShieldRechargePercent(const Player &player)
 {
 	if (Rule(player, UniqueRule::NoEnergyShieldRecharge) > 0)
 		return 0;
-	return std::max(100 - Rule(player, UniqueRule::LessEnergyShieldRecharge), 0);
+	return std::max((100 - Rule(player, UniqueRule::LessEnergyShieldRecharge)) * (100 + PassiveTotal(player, PassiveStat::EnergyShieldRecharge)) / 100, 0);
 }
 
 int StolenRegenPerMille(const Player &player)

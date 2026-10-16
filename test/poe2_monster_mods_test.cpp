@@ -132,16 +132,24 @@ TEST_F(Poe2MonsterModsTest, RegeneratingMonstersHeal)
 TEST_F(Poe2MonsterModsTest, BigElementalHitsIgniteAndShock)
 {
 	Monster monster = MakeMonster(1);
-	EXPECT_EQ(AilmentChancePercent(monster, Fixed26_6::fromInt(50)), 100);
-	EXPECT_EQ(AilmentChancePercent(monster, Fixed26_6::fromInt(10)), 20);
-	EXPECT_EQ(AilmentChancePercent(monster, Fixed26_6::fromInt(1)), 5);
+	// Like POE2: 1% per 5% of the monster's life as fire, 1% per 4% as lightning.
+	EXPECT_EQ(AilmentChancePerMille(monster, DamageType::Fire, Fixed26_6::fromInt(50)), 100);
+	EXPECT_EQ(AilmentChancePerMille(monster, DamageType::Fire, Fixed26_6::fromInt(10)), 20);
+	EXPECT_EQ(AilmentChancePerMille(monster, DamageType::Lightning, Fixed26_6::fromInt(50)), 125);
+	EXPECT_EQ(AilmentChancePerMille(monster, DamageType::Fire, Fixed26_6::fromInt(1000)), 1000);
 
 	Players.resize(1);
-	TryInflictAilment(monster, Players[0], DamageType::Lightning, Fixed26_6::fromInt(60));
+	for (int i = 0; i < 200 && monster.poe2.shockTicks == 0; i++)
+		TryInflictAilment(monster, Players[0], DamageType::Lightning, Fixed26_6::fromInt(60));
 	EXPECT_EQ(monster.poe2.shockTicks, ShockTicks);
 	EXPECT_EQ(ApplyShock(monster, Fixed26_6::fromInt(10)), Fixed26_6::fromInt(12));
 
-	TryInflictAilment(monster, Players[0], DamageType::Fire, Fixed26_6::fromInt(60));
+	// Each fire hit adds Flammability, so repeated hits surely ignite once it reaches 100%.
+	TryInflictAilment(monster, Players[0], DamageType::Fire, Fixed26_6::fromInt(10));
+	EXPECT_EQ(monster.poe2.flammability, 20);
+	for (int i = 0; i < 9; i++)
+		TryInflictAilment(monster, Players[0], DamageType::Fire, Fixed26_6::fromInt(60));
+	EXPECT_EQ(monster.poe2.flammability, 1000);
 	EXPECT_EQ(monster.poe2.igniteTicks, IgniteTicks);
 	// 20% of the hit per second, spread over 20 ticks.
 	EXPECT_EQ(monster.poe2.igniteDamagePerTick, Fixed26_6::fromInt(60).raw() * IgnitePercentPerSecond / 100 / 20);

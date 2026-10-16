@@ -1,6 +1,11 @@
 #include "poe2/passive_tree.hpp"
 
 #include <algorithm>
+#include <bit>
+#include <climits>
+#include <cstdint>
+#include <cstdlib>
+#include <functional>
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -12,6 +17,7 @@
 #include "player.h"
 #include "poe2/jewels.hpp"
 #include "poe2/weapon_swap.hpp"
+#include "tables/questdat.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -24,6 +30,30 @@ namespace devilution {
 namespace {
 
 std::vector<PassiveNode> Tree;
+uint32_t TreeHash = 0;
+/** @brief Which nodes are ascendancy nodes, and which of those cost ascendancy points, for counting points by bit masks. */
+std::bitset<MaxPassiveNodes> AscendancyNodes;
+std::bitset<MaxPassiveNodes> AscendancyNotables;
+std::vector<PassiveNodeId> AscendancyRoots;
+
+/** @brief Links from the node to every other, or -1 where there's no way. */
+std::vector<int> StepsFrom(PassiveNodeId from)
+{
+	std::vector<int> steps(Tree.size(), -1);
+	if (from >= Tree.size())
+		return steps;
+	std::vector<PassiveNodeId> open { from };
+	steps[from] = 0;
+	for (size_t i = 0; i < open.size(); i++) {
+		for (const PassiveNodeId next : Tree[open[i]].links) {
+			if (steps[next] < 0) {
+				steps[next] = steps[open[i]] + 1;
+				open.push_back(next);
+			}
+		}
+	}
+	return steps;
+}
 
 std::optional<int> ParseInt(std::string_view text)
 {
@@ -114,6 +144,10 @@ bool AllConnected(const Player &player, std::optional<PassiveNodeId> without, Pa
 void LoadPassiveTreeData()
 {
 	Tree.clear();
+	TreeHash = 0;
+	AscendancyNodes.reset();
+	AscendancyNotables.reset();
+	AscendancyRoots.clear();
 	if (!gbIsPoe2)
 		return;
 
@@ -154,6 +188,8 @@ void LoadPassiveTreeData()
 			if (target && *target >= 0 && *target < static_cast<int>(MaxPassiveNodes))
 				node.links.push_back(static_cast<PassiveNodeId>(*target));
 		}
+		reader.readString("region", node.region);
+		reader.readString("lore", node.lore);
 		Tree.push_back(std::move(node));
 	}
 	// Drop links to nodes that don't exist, and make every link go both ways.
@@ -183,6 +219,30 @@ void LoadPassiveTreeData()
 			}
 		}
 	}
+	for (const PassiveNode &node : Tree) {
+		if (IsAscendancyNode(node))
+			AscendancyNodes.set(node.id);
+		if (node.kind == PassiveKind::AscendancyNotable)
+			AscendancyNotables.set(node.id);
+		if (node.kind == PassiveKind::Ascendancy)
+			AscendancyRoots.push_back(node.id);
+	}
+	// The tree's shape: its nodes' kinds and links. Stats can change without refunding anyone.
+	TreeHash = 2166136261U;
+	const auto mix = [](uint32_t value) {
+		TreeHash = (TreeHash ^ value) * 16777619U;
+	};
+	for (const PassiveNode &node : Tree) {
+		mix(node.id);
+		mix(static_cast<uint32_t>(node.kind));
+		for (const PassiveNodeId link : node.links)
+			mix(link);
+	}
+}
+
+uint32_t PassiveTreeHash()
+{
+	return TreeHash;
 }
 
 const std::vector<PassiveNode> &PassiveTree()
@@ -212,19 +272,33 @@ std::optional<PassiveNodeId> PassiveStartNode(HeroClass heroClass)
 	return std::nullopt;
 }
 
+int QuestPassivePoints(const Player &player)
+{
+	return std::min(std::popcount(player.poe2.questsRewarded) * QuestPassivePointsEach, MaxQuestPassivePoints);
+}
+
+int RecordQuestPassivePoints(Player &player)
+{
+	if (!CanUsePassives())
+		return 0;
+	const int before = QuestPassivePoints(player);
+	for (size_t quest = 0; quest < MAXQUESTS && quest < 32; quest++) {
+		if (Quests[quest]._qactive == QUEST_DONE)
+			player.poe2.questsRewarded |= 1U << quest;
+	}
+	return QuestPassivePoints(player) - before;
+}
+
 int PassivePointsTotal(const Player &player)
 {
-	return std::max(player.getCharacterLevel() - 1, 0);
+	return std::max(player.getCharacterLevel() - 1, 0) + QuestPassivePoints(player);
 }
 
 int PassivePointsSpent(const Player &player)
 {
-	int spent = 0;
-	for (const PassiveNode &node : Tree) {
-		if (!IsAscendancyNode(node) && player.poe2.passives.test(node.id))
-			spent++;
-	}
-	return spent;
+	const int spent = static_cast<int>((player.poe2.passives & ~AscendancyNodes).count());
+	// Like POE2, weapon set passives spend normal points, but a Set I node and a Set II node cost one point together.
+	return spent + static_cast<int>(std::max(player.poe2.setPassives[0].count(), player.poe2.setPassives[1].count()));
 }
 
 int PassivePointsLeft(const Player &player)
@@ -247,12 +321,7 @@ int AscendancyPointsTotal(const Player &player)
 
 int AscendancyPointsSpent(const Player &player)
 {
-	int spent = 0;
-	for (const PassiveNode &node : Tree) {
-		if (node.kind == PassiveKind::AscendancyNotable && player.poe2.passives.test(node.id))
-			spent++;
-	}
-	return spent;
+	return static_cast<int>((player.poe2.passives & AscendancyNotables).count());
 }
 
 int AscendancyPointsLeft(const Player &player)
@@ -262,9 +331,9 @@ int AscendancyPointsLeft(const Player &player)
 
 std::optional<PassiveNodeId> ChosenAscendancy(const Player &player)
 {
-	for (const PassiveNode &node : Tree) {
-		if (node.kind == PassiveKind::Ascendancy && player.poe2.passives.test(node.id))
-			return node.id;
+	for (const PassiveNodeId root : AscendancyRoots) {
+		if (player.poe2.passives.test(root))
+			return root;
 	}
 	return std::nullopt;
 }
@@ -290,7 +359,10 @@ bool IsPassiveAllocatedIn(const Player &player, PassiveNodeId node, PassivePool 
 		return false;
 	if (Tree[node].kind == PassiveKind::Start)
 		return Tree[node].startClass == PassiveTreeClass(player._pClass);
-	return PoolNodes(player, pool).test(node);
+	// Test the bits directly: building the pool's whole bitset for one node is slow on a big tree.
+	if (player.poe2.passives.test(node))
+		return true;
+	return pool != PassivePool::Main && player.poe2.setPassives[static_cast<size_t>(pool) - 1].test(node);
 }
 
 bool IsPassiveInPool(const Player &player, PassiveNodeId node, PassivePool pool)
@@ -319,6 +391,15 @@ int WeaponSetPointsLeft(const Player &player, PassivePool pool)
 	return WeaponSetPointsTotal(player) - WeaponSetPointsSpent(player, pool);
 }
 
+bool WeaponSetNeedsPassivePoint(const Player &player, PassivePool pool)
+{
+	if (pool == PassivePool::Main)
+		return false;
+	// A node in the set with more nodes costs a normal point; one that pairs up with the other set is free.
+	const PassivePool other = pool == PassivePool::SetI ? PassivePool::SetII : PassivePool::SetI;
+	return WeaponSetPointsSpent(player, pool) >= WeaponSetPointsSpent(player, other) && PassivePointsLeft(player) <= 0;
+}
+
 bool CanAllocatePassive(const Player &player, PassiveNodeId node, PassivePool pool)
 {
 	if (!CanUsePassives() || node >= Tree.size() || IsPassiveAllocatedIn(player, node, pool))
@@ -327,7 +408,7 @@ bool CanAllocatePassive(const Player &player, PassiveNodeId node, PassivePool po
 	if (passive.kind == PassiveKind::Start)
 		return false;
 	if (pool != PassivePool::Main) {
-		if (!CanTakeWeaponSetPoints(passive) || WeaponSetPointsLeft(player, pool) <= 0)
+		if (!CanTakeWeaponSetPoints(passive) || WeaponSetPointsLeft(player, pool) <= 0 || WeaponSetNeedsPassivePoint(player, pool))
 			return false;
 		return std::any_of(passive.links.begin(), passive.links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, pool); });
 	}
@@ -343,6 +424,41 @@ bool CanAllocatePassive(const Player &player, PassiveNodeId node, PassivePool po
 		return false;
 	}
 	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, PassivePool::Main); });
+}
+
+std::vector<PassiveNodeId> PassiveRoute(const Player &player, PassiveNodeId target, PassivePool pool)
+{
+	if (!CanUsePassives() || target >= Tree.size() || IsPassiveAllocatedIn(player, target, pool))
+		return {};
+	const auto canTake = [&](const PassiveNode &node) {
+		if (IsAscendancyNode(node) || node.kind == PassiveKind::Start)
+			return false;
+		return pool == PassivePool::Main || CanTakeWeaponSetPoints(node);
+	};
+	if (!canTake(Tree[target]))
+		return {};
+	// Searches outwards from the target, so the first allocated node found ends the quickest route.
+	std::vector<int> previous(Tree.size(), -1);
+	std::vector<PassiveNodeId> open { target };
+	previous[target] = target;
+	for (size_t i = 0; i < open.size(); i++) {
+		const PassiveNodeId node = open[i];
+		for (const PassiveNodeId next : Tree[node].links) {
+			if (previous[next] >= 0)
+				continue;
+			previous[next] = node;
+			if (IsPassiveAllocatedIn(player, next, pool) && IsPassiveNodeVisible(player, Tree[next])) {
+				std::vector<PassiveNodeId> route { next };
+				for (PassiveNodeId step = node; step != target; step = static_cast<PassiveNodeId>(previous[step]))
+					route.push_back(step);
+				route.push_back(target);
+				return route;
+			}
+			if (canTake(Tree[next]))
+				open.push_back(next);
+		}
+	}
+	return {};
 }
 
 bool PassiveNeedsAttributeChoice(PassiveNodeId node)
@@ -361,16 +477,39 @@ bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attrib
 	} else {
 		player.poe2.setPassives[static_cast<size_t>(pool) - 1].set(node);
 	}
-	player.poe2.passiveAttributes[node] = PassiveNeedsAttributeChoice(node) ? static_cast<uint8_t>(attribute) : 0;
+	SetChosenPassiveAttribute(player, node, PassiveNeedsAttributeChoice(node) ? attribute : PassiveAttribute::Strength, pool);
 	CalcPlrInv(player, true);
 	return true;
 }
 
 PassiveAttribute ChosenPassiveAttribute(const Player &player, PassiveNodeId node)
 {
-	if (node >= MaxPassiveNodes || player.poe2.passiveAttributes[node] >= static_cast<uint8_t>(PassiveAttribute::Count))
+	if (node >= MaxPassiveNodes)
 		return PassiveAttribute::Strength;
-	return static_cast<PassiveAttribute>(player.poe2.passiveAttributes[node]);
+	const bool setII = !player.poe2.passives.test(node) && player.poe2.weaponSet == 1 && player.poe2.setPassives[1].test(node);
+	return ChosenPassiveAttributeIn(player, node, setII ? PassivePool::SetII : PassivePool::Main);
+}
+
+PassiveAttribute ChosenPassiveAttributeIn(const Player &player, PassiveNodeId node, PassivePool pool)
+{
+	if (node >= MaxPassiveNodes)
+		return PassiveAttribute::Strength;
+	const uint8_t value = pool == PassivePool::SetII ? (player.poe2.passiveAttributes[node] >> 4) : (player.poe2.passiveAttributes[node] & 0x0F);
+	return value < static_cast<uint8_t>(PassiveAttribute::Count) ? static_cast<PassiveAttribute>(value) : PassiveAttribute::Strength;
+}
+
+void SetChosenPassiveAttribute(Player &player, PassiveNodeId node, PassiveAttribute attribute, PassivePool pool)
+{
+	if (node >= MaxPassiveNodes)
+		return;
+	uint8_t &value = player.poe2.passiveAttributes[node];
+	const uint8_t pick = static_cast<uint8_t>(attribute) & 0x0F;
+	if (pool == PassivePool::Main)
+		value = static_cast<uint8_t>(pick | (pick << 4));
+	else if (pool == PassivePool::SetI)
+		value = static_cast<uint8_t>((value & 0xF0) | pick);
+	else
+		value = static_cast<uint8_t>((value & 0x0F) | (pick << 4));
 }
 
 PassiveStat PassiveAttributeStat(PassiveAttribute attribute)
@@ -422,10 +561,45 @@ bool RefundPassive(Player &player, PassiveNodeId node, PassivePool pool)
 		player.poe2.passives.reset(node);
 	else
 		player.poe2.setPassives[static_cast<size_t>(pool) - 1].reset(node);
-	if (!player.poe2.passives.test(node) && !player.poe2.setPassives[0].test(node) && !player.poe2.setPassives[1].test(node))
-		player.poe2.passiveAttributes[node] = 0;
+	if (!player.poe2.passives.test(node) && !player.poe2.setPassives[1].test(node))
+		player.poe2.passiveAttributes[node] &= 0x0F;
+	if (!player.poe2.passives.test(node) && !player.poe2.setPassives[0].test(node))
+		player.poe2.passiveAttributes[node] &= 0xF0;
 	CalcPlrInv(player, true);
 	return true;
+}
+
+void RefundPassivesForNewTree(Player &player)
+{
+	if (TreeHash == 0 || player.poe2.passiveTreeHash == TreeHash)
+		return;
+	player.poe2.passives.reset();
+	for (auto &set : player.poe2.setPassives)
+		set.reset();
+	player.poe2.passiveAttributes.fill(0);
+	player.poe2.passiveTreeHash = TreeHash;
+	// Jewels are kept by socket number, so they wait in the new tree's sockets nearest the hero's start, and work again once
+	// those are taken.
+	const std::optional<PassiveNodeId> start = PassiveStartNode(player._pClass);
+	if (!start)
+		return;
+	std::vector<Item> jewels;
+	for (Item &jewel : player.jewels) {
+		if (!jewel.isEmpty())
+			jewels.push_back(jewel);
+		jewel.clear();
+	}
+	std::vector<std::pair<int, size_t>> sockets; // steps from the start, socket number
+	const std::vector<int> steps = StepsFrom(*start);
+	for (const PassiveNode &node : Tree) {
+		if (node.kind != PassiveKind::JewelSocket)
+			continue;
+		if (const std::optional<size_t> index = JewelSocketIndex(node.id); index)
+			sockets.emplace_back(steps[node.id] < 0 ? INT_MAX : steps[node.id], *index);
+	}
+	std::sort(sockets.begin(), sockets.end());
+	for (size_t i = 0; i < jewels.size() && i < sockets.size(); i++)
+		player.jewels[sockets[i].second] = jewels[i];
 }
 
 void ResetPassives(Player &player)
@@ -449,6 +623,164 @@ PassiveTotals GetPassiveTotals(const Player &player)
 			totals[static_cast<size_t>(stat)] += value;
 	}
 	return totals;
+}
+
+static_assert(static_cast<size_t>(PassiveStat::Count) <= MaxPassiveStats, "Poe2PlayerData::passiveTotals is too small");
+
+int PassiveTotal(const Player &player, PassiveStat stat)
+{
+	return player.poe2.passiveTotals[static_cast<size_t>(stat)];
+}
+
+void CachePassiveTotals(Player &player, const PassiveTotals &passives)
+{
+	for (size_t stat = 0; stat < passives.size(); stat++)
+		player.poe2.passiveTotals[stat] = static_cast<int16_t>(std::clamp<int>(passives[stat], INT16_MIN, INT16_MAX));
+}
+
+namespace {
+
+std::optional<UniqueRule> RuleForStat(PassiveStat stat)
+{
+	switch (stat) {
+	case PassiveStat::SpellDamage:
+		return UniqueRule::SpellDamage;
+	case PassiveStat::StunThreshold:
+		return UniqueRule::StunThreshold;
+	case PassiveStat::ManaCost:
+		return UniqueRule::ManaCost;
+	case PassiveStat::MaxElementalResist:
+		return UniqueRule::MaxElementalResistance;
+	case PassiveStat::MaxMagicResist:
+		return UniqueRule::MaxMagicResistance;
+	case PassiveStat::ArmourVsElements:
+		return UniqueRule::ArmourVsElements;
+	case PassiveStat::EvasionVsSpells:
+		return UniqueRule::EvasionVsSpells;
+	case PassiveStat::HitDamageFromMana:
+		return UniqueRule::HitDamageFromMana;
+	case PassiveStat::ManaSpellDamage:
+		return UniqueRule::ManaSpellDamage;
+	case PassiveStat::LifeRecoveryToShield:
+		return UniqueRule::LifeRecoveryToShield;
+	case PassiveStat::NoEnergyShieldRecharge:
+		return UniqueRule::NoEnergyShieldRecharge;
+	case PassiveStat::StationaryDefences:
+		return UniqueRule::StationaryDefences;
+	case PassiveStat::MovingVulnerability:
+		return UniqueRule::MovingVulnerability;
+	case PassiveStat::PhysicalToFire:
+		return UniqueRule::PhysicalToFire;
+	case PassiveStat::SpellsSpendEnergyShield:
+		return UniqueRule::SpellsSpendEnergyShield;
+	case PassiveStat::LessEnergyShieldRecharge:
+		return UniqueRule::LessEnergyShieldRecharge;
+	case PassiveStat::LessManaRecovery:
+		return UniqueRule::LessManaRecovery;
+	case PassiveStat::SpiritDamage:
+		return UniqueRule::SpiritDamage;
+	case PassiveStat::DamageVsRareUnique:
+		return UniqueRule::DamageVsRareUnique;
+	case PassiveStat::LessDamageVsNormal:
+		return UniqueRule::LessDamageVsNormal;
+	case PassiveStat::FifthAttackRepeat:
+		return UniqueRule::FifthAttackRepeat;
+	case PassiveStat::NoEvasion:
+		return UniqueRule::NoEvasion;
+	case PassiveStat::LessMaxLife:
+		return UniqueRule::LessMaxLife;
+	case PassiveStat::DistanceRule:
+		return UniqueRule::DistanceRule;
+	case PassiveStat::SpellElementCycle:
+		return UniqueRule::SpellElementCycle;
+	case PassiveStat::OffElementLess:
+		return UniqueRule::OffElementLess;
+	default:
+		return std::nullopt;
+	}
+}
+
+/** @brief Rules a shrine and a unique can both give: the stronger one counts, they don't add up. */
+bool IsKeystoneRule(UniqueRule rule)
+{
+	return IsAnyOf(rule, UniqueRule::FifthAttackRepeat, UniqueRule::SpellsSpendEnergyShield, UniqueRule::LessEnergyShieldRecharge,
+	    UniqueRule::LessManaRecovery, UniqueRule::LifeRecoveryToShield, UniqueRule::NoEnergyShieldRecharge, UniqueRule::SpiritDamage,
+	    UniqueRule::LessDamageVsNormal, UniqueRule::NoEvasion, UniqueRule::LessMaxLife, UniqueRule::DistanceRule,
+	    UniqueRule::SpellElementCycle, UniqueRule::OffElementLess, UniqueRule::MovingVulnerability);
+}
+
+struct RuleCap {
+	UniqueRule rule;
+	int min;
+	int max;
+};
+
+/** @brief Rules that tree, gear and shrines together must not push past these. */
+constexpr RuleCap RuleCaps[] {
+	{ UniqueRule::DamageVsRareUnique, INT16_MIN, 40 },
+	{ UniqueRule::EvasionVsSpells, INT16_MIN, 25 },
+	{ UniqueRule::StationaryDefences, INT16_MIN, 25 },
+	{ UniqueRule::ArmourVsElements, INT16_MIN, 30 },
+	{ UniqueRule::ManaCost, -25, INT16_MAX },
+	{ UniqueRule::HitDamageFromMana, INT16_MIN, 50 },
+	{ UniqueRule::PhysicalToFire, INT16_MIN, 100 },
+};
+
+} // namespace
+
+void AddPassiveRules(const PassiveTotals &passives, UniqueRuleTotals &rules)
+{
+	for (size_t stat = 0; stat < passives.size(); stat++) {
+		const int value = passives[stat];
+		const std::optional<UniqueRule> rule = RuleForStat(static_cast<PassiveStat>(stat));
+		if (value == 0 || !rule)
+			continue;
+		int16_t &total = rules[static_cast<size_t>(*rule)];
+		const int combined = IsKeystoneRule(*rule) ? std::max<int>(total, value) : total + value;
+		total = static_cast<int16_t>(std::clamp<int>(combined, INT16_MIN, INT16_MAX));
+	}
+	for (const RuleCap &cap : RuleCaps) {
+		int16_t &total = rules[static_cast<size_t>(cap.rule)];
+		total = static_cast<int16_t>(std::clamp<int>(total, cap.min, cap.max));
+	}
+}
+
+int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives)
+{
+	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
+	const Item *weapon = nullptr;
+	for (const Item &item : { std::cref(player.InvBody[INVLOC_HAND_LEFT]), std::cref(player.InvBody[INVLOC_HAND_RIGHT]) }) {
+		if (!item.isEmpty() && item._iStatFlag && IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff)) {
+			weapon = &item;
+			break;
+		}
+	}
+	// Unarmed counts as a melee attack; the Monk's staff training works barehanded too.
+	if (weapon == nullptr)
+		return passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage);
+	switch (weapon->_itype) {
+	case ItemType::Bow:
+		return passive(PassiveStat::BowDamage);
+	case ItemType::Staff:
+		// Like POE2's quarterstaves: a two-handed melee weapon with nodes of its own.
+		return passive(PassiveStat::StaffDamage) + passive(PassiveStat::MeleeDamage) + passive(PassiveStat::TwoHandDamage);
+	default:
+		return passive(PassiveStat::MeleeDamage) + passive(weapon->_iLoc == ILOC_TWOHAND ? PassiveStat::TwoHandDamage : PassiveStat::OneHandDamage);
+	}
+}
+
+int PassiveElementDamage(const Player &player, DamageType type)
+{
+	switch (type) {
+	case DamageType::Fire:
+		return PassiveTotal(player, PassiveStat::FireDamage);
+	case DamageType::Lightning:
+		return PassiveTotal(player, PassiveStat::LightningDamage);
+	case DamageType::Magic:
+		return PassiveTotal(player, PassiveStat::ColdDamage);
+	default:
+		return 0;
+	}
 }
 
 std::string PassiveStatText(PassiveStat stat, int value)
@@ -491,9 +823,9 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::SpellLevels:
 		return FormatRuntime(_("{:+d} to all Spell Levels"), value);
 	case PassiveStat::AttackSpeed:
-		return value > 1 ? std::string(_("Much faster Attacks")) : std::string(_("Faster Attacks"));
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Attack Speed"), _(/*xgettext:no-c-format*/ "{:d}% reduced Attack Speed"));
 	case PassiveStat::CastSpeed:
-		return value > 1 ? std::string(_("Much faster Casting")) : std::string(_("Faster Casting"));
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Cast Speed"), _(/*xgettext:no-c-format*/ "{:d}% reduced Cast Speed"));
 	case PassiveStat::EvasionPercent:
 		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Evasion"), _(/*xgettext:no-c-format*/ "{:d}% reduced Evasion"));
 	case PassiveStat::EnergyShieldPercent:
@@ -504,6 +836,100 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return percent(_(/*xgettext:no-c-format*/ "Minions deal {:d}% increased Damage"), _(/*xgettext:no-c-format*/ "Minions deal {:d}% reduced Damage"));
 	case PassiveStat::AnyAttribute:
 		return FormatRuntime(_("{:+d} to any Attribute"), value);
+	case PassiveStat::MeleeDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Melee Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Melee Damage"));
+	case PassiveStat::BowDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Damage with Bows"), _(/*xgettext:no-c-format*/ "{:d}% reduced Damage with Bows"));
+	case PassiveStat::StaffDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Damage with Staves"), _(/*xgettext:no-c-format*/ "{:d}% reduced Damage with Staves"));
+	case PassiveStat::TwoHandDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Damage with Two Handed Weapons"), _(/*xgettext:no-c-format*/ "{:d}% reduced Damage with Two Handed Weapons"));
+	case PassiveStat::OneHandDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Damage with One Handed Weapons"), _(/*xgettext:no-c-format*/ "{:d}% reduced Damage with One Handed Weapons"));
+	case PassiveStat::SpellDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Spell Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Spell Damage"));
+	case PassiveStat::FireDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Fire Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Fire Damage"));
+	case PassiveStat::LightningDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Lightning Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Lightning Damage"));
+	case PassiveStat::ColdDamage:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Magic (cold) Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Magic (cold) Damage"));
+	case PassiveStat::IgniteChance:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased chance to Ignite"), _(/*xgettext:no-c-format*/ "{:d}% reduced chance to Ignite"));
+	case PassiveStat::ShockChance:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased chance to Shock"), _(/*xgettext:no-c-format*/ "{:d}% reduced chance to Shock"));
+	case PassiveStat::FreezeBuildup:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Freeze Buildup"), _(/*xgettext:no-c-format*/ "{:d}% reduced Freeze Buildup"));
+	case PassiveStat::StunBuildup:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Stun Buildup"), _(/*xgettext:no-c-format*/ "{:d}% reduced Stun Buildup"));
+	case PassiveStat::StunThreshold:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Stun Threshold"), _(/*xgettext:no-c-format*/ "{:d}% reduced Stun Threshold"));
+	case PassiveStat::BlockChance:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Block chance with a shield"), value);
+	case PassiveStat::LifeOnKill:
+		return FormatRuntime(_("Recover {:d} Life on kill"), value);
+	case PassiveStat::ManaOnKill:
+		return FormatRuntime(_("Recover {:d} Mana on kill"), value);
+	case PassiveStat::FlaskRecovery:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Flask Recovery"), _(/*xgettext:no-c-format*/ "{:d}% reduced Flask Recovery"));
+	case PassiveStat::FlaskCharges:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Flask Charges gained"), _(/*xgettext:no-c-format*/ "{:d}% reduced Flask Charges gained"));
+	case PassiveStat::EnergyShieldRecharge:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% faster Energy Shield Recharge"), _(/*xgettext:no-c-format*/ "{:d}% slower Energy Shield Recharge"));
+	case PassiveStat::MinionLife:
+		return percent(_(/*xgettext:no-c-format*/ "Minions have {:d}% increased maximum Life"), _(/*xgettext:no-c-format*/ "Minions have {:d}% reduced maximum Life"));
+	case PassiveStat::LightRadius:
+		return FormatRuntime(_("{:+d} to Light Radius"), value);
+	case PassiveStat::LifeRegenRate:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Regenerate {:d}.{:d}% of maximum Life per second"), value / 10, std::abs(value) % 10);
+	case PassiveStat::ManaCost:
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Mana Cost of Skills"), _(/*xgettext:no-c-format*/ "{:d}% reduced Mana Cost of Skills"));
+	case PassiveStat::MaxElementalResist:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Fire and Lightning Resistances"), value);
+	case PassiveStat::MaxMagicResist:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Magic Resistance"), value);
+	case PassiveStat::ArmourVsElements:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Armour also applies to Fire, Cold and Lightning Damage"), value);
+	case PassiveStat::EvasionVsSpells:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Evasion also applies to Spells"), value);
+	case PassiveStat::HitDamageFromMana:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Damage from Hits is taken from Mana before Life"), value);
+	case PassiveStat::ManaSpellDamage:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Spells deal {:d}% increased Damage per 100 maximum Mana"), value);
+	case PassiveStat::LifeRecoveryToShield:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Life Recovery also recovers Energy Shield"), value);
+	case PassiveStat::NoEnergyShieldRecharge:
+		return std::string(_("Energy Shield does not Recharge"));
+	case PassiveStat::StationaryDefences:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% more Defences while standing still"), value);
+	case PassiveStat::MovingVulnerability:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% more Damage taken for a second after moving"), value);
+	case PassiveStat::PhysicalToFire:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Physical Damage converted to Fire"), value);
+	case PassiveStat::SpellsSpendEnergyShield:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Spells cost Energy Shield before Mana; up to {:d}% more Spell Damage from Energy Shield spent recently"), value);
+	case PassiveStat::LessEnergyShieldRecharge:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% slower Energy Shield Recharge"), value);
+	case PassiveStat::LessManaRecovery:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% less Mana Recovery"), value);
+	case PassiveStat::SpiritDamage:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% more Damage per 10 unreserved Spirit"), value);
+	case PassiveStat::DamageVsRareUnique:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% more Damage against Rare and Unique monsters"), value);
+	case PassiveStat::LessDamageVsNormal:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% less Damage against Normal monsters"), value);
+	case PassiveStat::FifthAttackRepeat:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Every 5th Attack repeats at {:d}% of its Damage"), value);
+	case PassiveStat::NoEvasion:
+		return std::string(_("You have no Evasion"));
+	case PassiveStat::LessMaxLife:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% less maximum Life"), value);
+	case PassiveStat::DistanceRule:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% more Damage while no enemy is within 3 tiles"), value);
+	case PassiveStat::SpellElementCycle:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Spells cycle Fire, Lightning and Magic: {:d}% more Damage with the current element"), value);
+	case PassiveStat::OffElementLess:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% less Spell Damage with the other elements"), value);
 	default:
 		return {};
 	}

@@ -627,9 +627,15 @@ public:
 	 * @brief Return block chance
 	 * @param useLevel - indicate if player's level should be added to block chance (the only case where it isn't is blocking a trap)
 	 */
+	/** @brief POE2 Mashup: block caps at 50%, raised by the passive tree's block up to 75%, as in POE2. */
+	int GetMaxBlockChance(bool isPoe2) const
+	{
+		return isPoe2 ? std::min(50 + poe2.passiveBlockChance, 75) : 100;
+	}
+
 	int GetBlockChance(bool useLevel = true) const
 	{
-		int blkper = _pDexterity + getBaseToBlock();
+		int blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
 		if (useLevel)
 			blkper += getCharacterLevel() * 2;
 		return blkper;

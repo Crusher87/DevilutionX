@@ -131,6 +131,9 @@ uint8_t FlaskChargesForKill(const Monster &monster);
 
 void GainFlaskCharges(Player &player, uint8_t charges);
 
+/** @brief Life and mana the passive tree recovers when the hero helps kill a monster. */
+void RecoverOnKill(Player &player);
+
 void RefillFlasks(Player &player);
 
 /** @brief Recovers the life and mana of flasks being drunk; once per game tick. */

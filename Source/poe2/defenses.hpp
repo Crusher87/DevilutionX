@@ -39,7 +39,7 @@ struct BodyArmourImplicit {
 };
 
 /** @brief Energy shield granted per point of defense on cloth bases. */
-constexpr int EnergyShieldPerDefense = 4;
+constexpr int EnergyShieldPerDefense = 3;
 /** @brief A hit stuns the player (hit recovery) only when it takes at least this percent of their maximum life. */
 constexpr int PlayerStunPercent = 15;
 /** @brief POE2: energy shield starts recharging 4 seconds after the last hit. */

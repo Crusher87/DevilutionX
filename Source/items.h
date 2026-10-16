@@ -640,6 +640,11 @@ void FreeItemGFX();
 void GetItemFrm(Item &item);
 void GetItemStr(Item &item);
 void CheckIdentify(Player &player, int cii);
+/**
+ * @brief POE2 Mashup: identifies the item under the cursor and only then uses up one Scroll of Identify;
+ * nothing is used up when there is no unidentified item there.
+ */
+void IdentifyWithScroll(Player &player);
 void DoRepair(Player &player, int cii);
 void DoRecharge(Player &player, int cii);
 bool DoOil(Player &player, int cii);

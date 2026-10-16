@@ -331,9 +331,12 @@ TEST_F(Poe2UniquesTest, AilmentRules)
 	Player &player = *MyPlayer;
 	Monster monster = MakeMonster();
 	Wear(Make("Tyrant's Spark"), INVLOC_HAND_LEFT);
-	TryInflictAilment(monster, player, DamageType::Lightning, Fixed26_6::fromInt(60));
+	// Shock is a chance (1% per 4% of the monster's life), so hit until it lands.
+	for (int i = 0; i < 200 && monster.poe2.shockTicks == 0; i++)
+		TryInflictAilment(monster, player, DamageType::Lightning, Fixed26_6::fromInt(60));
 	EXPECT_EQ(monster.poe2.electrocuteTicks, 0);
-	TryInflictAilment(monster, player, DamageType::Lightning, Fixed26_6::fromInt(60));
+	for (int i = 0; i < 200 && monster.poe2.electrocuteTicks == 0; i++)
+		TryInflictAilment(monster, player, DamageType::Lightning, Fixed26_6::fromInt(60));
 	EXPECT_EQ(monster.poe2.electrocuteTicks, ElectrocuteTicks);
 	EXPECT_TRUE(IsMonsterImmobilized(monster));
 	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Lightning), 115);
