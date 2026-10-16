@@ -131,9 +131,11 @@ struct RasterKeyHash {
 };
 std::unordered_map<RasterKey, Raster, RasterKeyHash> Rasters;
 
-std::array<float, NumLightingLevels> LightLevel;
+std::array<std::array<float, 3>, NumLightingLevels> LightLevel;
 /** @brief The level's palette against the one the HD tiles were made in: Cathedral levels pick one of four. */
 std::array<float, 3> TileGain { 1.F, 1.F, 1.F };
+/** @brief Which of its palettes the level uses (1 is the one the pack was made in); the pack can hold tiles recoloured for each. */
+int PaletteVariant = 1;
 uint32_t PaletteVersion = 1;
 std::array<SDL_Color, 256> LastPalette;
 
@@ -153,20 +155,31 @@ float Luminance(const SDL_Color &color)
 	return 0.2126F * color.r + 0.7152F * color.g + 0.0722F * color.b;
 }
 
-/** @brief How bright each of the 16 light levels leaves the palette, as a fraction. */
+/**
+ * @brief How bright each of the 16 light levels leaves the palette, per colour channel.
+ *
+ * Measured per channel so the light keeps the hue the game's light tables give it (the Cathedral's
+ * shadows lean green and purple), not just its brightness.
+ */
 void UpdateLightLevels()
 {
 	for (size_t level = 0; level < NumLightingLevels; level++) {
-		float lit = 0;
-		float base = 0;
+		std::array<float, 3> lit {};
+		std::array<float, 3> base {};
 		for (int color = 32; color < 256; color++) {
-			const float original = Luminance(logical_palette[color]);
-			if (original < 24)
+			const SDL_Color &original = logical_palette[color];
+			if (Luminance(original) < 24)
 				continue;
-			base += original;
-			lit += Luminance(logical_palette[LightTables[level][color]]);
+			const SDL_Color &shaded = logical_palette[LightTables[level][color]];
+			base[0] += original.r;
+			base[1] += original.g;
+			base[2] += original.b;
+			lit[0] += shaded.r;
+			lit[1] += shaded.g;
+			lit[2] += shaded.b;
 		}
-		LightLevel[level] = base > 0 ? std::clamp(lit / base, 0.F, 1.F) : 1.F;
+		for (int c = 0; c < 3; c++)
+			LightLevel[level][c] = base[c] > 0 ? std::clamp(lit[c] / base[c], 0.F, 1.F) : 1.F;
 	}
 }
 
@@ -467,12 +480,37 @@ std::array<float, 3> ScreenTint()
 	return tint;
 }
 
+/** @brief Finds which of the level type's numbered palettes is loaded, by comparing the stone colours. */
+int FindPaletteVariant(const char *path)
+{
+	std::string variant(path);
+	const size_t dot = variant.rfind("1.pal");
+	if (dot == std::string::npos)
+		return 1;
+	for (int v = 2; v <= 5; v++) {
+		variant[dot] = static_cast<char>('0' + v);
+		std::array<uint8_t, 256 * 3> colours;
+		if (!LoadFileInMemWithStatus(variant.c_str(), colours).has_value())
+			continue;
+		bool same = true;
+		for (int color = 32; color < 256 && same; color++) {
+			same = colours[color * 3] == logical_palette[color].r && colours[color * 3 + 1] == logical_palette[color].g
+			    && colours[color * 3 + 2] == logical_palette[color].b;
+		}
+		if (same)
+			return v;
+	}
+	return 1;
+}
+
 void UpdateTileGain()
 {
 	TileGain = { 1.F, 1.F, 1.F };
+	PaletteVariant = 1;
 	const char *path = PackPalette(static_cast<uint8_t>(leveltype));
 	if (path == nullptr)
 		return;
+	PaletteVariant = FindPaletteVariant(path);
 	std::array<uint8_t, 256 * 3> pack;
 	if (!LoadFileInMemWithStatus(path, pack).has_value())
 		return;
@@ -805,16 +843,25 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		SDL_Texture *texture = nullptr;
 		bool hdArt = false;
 		bool tileArt = false;
+		bool recoloured = false;
 		// Wall tiles cut away near the hero keep the game's own cut-out shape.
 		const bool masked = draw.kind == DrawKind::Tile && draw.mask != MaskType::Solid;
 		if (draw.light >= 0) {
 			if (const std::string *name = ArtName(draw); name != nullptr) {
 				if (draw.inBetween != 0 && !masked)
 					texture = LoadArt(renderer, *name + "_m" + std::to_string(draw.inBetween));
+				// Tiles recoloured for this level's palette, e.g. tiles/l1_p3/120, beat evening out the base ones.
+				if (texture == nullptr && draw.kind == DrawKind::Tile && PaletteVariant > 1) {
+					const size_t slash = name->find('/', 6);
+					if (slash != std::string::npos) {
+						texture = MaskedArt(renderer, name->substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name->substr(slash), draw);
+						recoloured = texture != nullptr;
+					}
+				}
 				if (texture == nullptr)
 					texture = draw.kind == DrawKind::Tile ? MaskedArt(renderer, *name, draw) : LoadArt(renderer, *name);
 				hdArt = texture != nullptr && draw.kind != DrawKind::Tile;
-				tileArt = texture != nullptr && draw.kind == DrawKind::Tile;
+				tileArt = texture != nullptr && draw.kind == DrawKind::Tile && !recoloured;
 			}
 		}
 		// Recolours other than light (stone curse, infravision, unique monsters) are drawn by the game itself.
@@ -868,7 +915,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		for (size_t level = 0; level < NumLightingLevels; level++) {
 			uint32_t pixel = 0xFF000000U;
 			for (int c = 0; c < 3; c++)
-				pixel |= static_cast<uint32_t>(std::clamp(255.F * LightLevel[level] * tint[c], 0.F, 255.F)) << (16 - c * 8);
+				pixel |= static_cast<uint32_t>(std::clamp(255.F * LightLevel[level][c] * tint[c], 0.F, 255.F)) << (16 - c * 8);
 			shades[level] = pixel;
 		}
 		LightPixels.resize(LightBuffer.size());
