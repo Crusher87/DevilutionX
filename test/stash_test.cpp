@@ -980,7 +980,7 @@ TEST_F(Poe2StashTabsTest, CurrencyTabKeepsEachCurrencyInItsSlot)
 	// Taking from the slot gives a full inventory stack and leaves the rest.
 	const Item taken = TakeFromStash(chaos);
 	EXPECT_EQ(StackCount(taken), CurrencyStackMax);
-	EXPECT_EQ(StoredStackCount(Stash.stashList[StashTabSlotItem(page, *chaosSlot)]), 40);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[StashTabSlotItem(page, *chaosSlot)]), 60 - CurrencyStackMax);
 }
 
 TEST_F(Poe2StashTabsTest, CurrencyWithoutASlotGoesToOther)
