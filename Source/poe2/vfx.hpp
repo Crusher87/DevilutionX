@@ -23,7 +23,10 @@
 #endif
 #endif
 
+#include "engine/clx_sprite.hpp"
+
 namespace devilution {
+struct Object;
 struct Surface;
 } // namespace devilution
 
@@ -73,6 +76,13 @@ void Showcase(Point tile);
 void SetCamera(Point viewTile, Displacement offset, bool zoom);
 /** @brief Follows the frame's missiles: trails and glows on projectiles, bursts where explosions appear. */
 void ScanMissiles();
+/** @brief Whether the effects draw this missile themselves this frame, so its classic sprite is left out. */
+bool ReplacesSprite(const Missile &missile);
+/**
+ * @brief The frame to draw of a light object: candles hold one frame (their glow sways instead) and torches run at
+ * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.
+ */
+ClxSprite ObjectSprite(const Object &object);
 /**
  * @brief Finds what the dungeon itself gives off this frame: the flames of torches, candles, fires and fire traps, and
  * the lava and water on screen (the palette-animated colours of the frame just drawn).

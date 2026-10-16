@@ -109,6 +109,43 @@ IMPLICITS = {
 	'sage_amulet': ('ManaRegeneration', 8, 12, '{0}% increased Mana Regeneration Rate'),
 	'staff_casting': ('CastSpeed', 8, 8, '{0}% increased Cast Speed'),
 }
+# Jewellery whose bundle implicit has no mechanic here gets the nearest one that has (every ring and amulet has one).
+IMPLICIT_STAND_INS = {
+	'Opal Ring': ('AllResistances', 6, 9, '+{0}% to all Elemental Resistances'),
+	'Gold Ring': ('AllAttributes', 3, 5, '+{0} to all Attributes'),
+	'Keen Amulet': ('Dexterity', 6, 9, '+{0} to Dexterity'),
+}
+
+
+def one_implicit(implicits):
+	"""POE2 Mashup rule (Curtis, 2026-10-16): a base has at most one implicit.
+
+	Speed lines of one kind are summed first (a focused staff's slower casting and the staff's own faster casting
+	are one line). Then faster attacks or casting win (swift and quick bases), else Intelligence (a caster weapon's
+	power), else the base's own line, else a slower speed (heavy bases).
+	"""
+	merged = []
+	for effect, lo, hi, text in implicits:
+		if effect in ('CastSpeed', 'AttackSpeed'):
+			same = next((m for m in merged if m[0] == effect), None)
+			if same is not None:
+				same[1] += lo
+				same[2] += hi
+				continue
+		merged.append([effect, lo, hi, text])
+	for m in merged:
+		if m[0] in ('CastSpeed', 'AttackSpeed'):
+			word = 'Cast Speed' if m[0] == 'CastSpeed' else 'Attack Speed'
+			m[3] = f'{abs(m[1])}% {"increased" if m[1] > 0 else "reduced"} {word}'
+	merged = [m for m in merged if not (m[0] in ('CastSpeed', 'AttackSpeed') and m[1] == 0)]
+
+	def rank(m):
+		if m[0] in ('CastSpeed', 'AttackSpeed'):
+			return 0 if m[1] > 0 else 3
+		return 1 if m[0] == 'Intelligence' else 2
+	return [tuple(min(merged, key=rank))] if merged else []
+
+
 # Spell power of staves and sceptres becomes Intelligence, which powers Diablo's spells.
 SPELL_POWER_TO_INTELLIGENCE = 0.4
 
@@ -257,8 +294,11 @@ def main():
 			if implicit in IMPLICITS:
 				implicits.append(IMPLICITS[implicit])
 		implicits = [i for i in implicits if i is not None]
+		implicits = one_implicit(implicits)
 
 		is_jewellery = cls in ('ring', 'amulet')
+		if is_jewellery and not implicits and name in IMPLICIT_STAND_INS:
+			implicits = [IMPLICIT_STAND_INS[name]]
 		value = (1000 + b['drop_level'] * 50) if is_jewellery else (100 + b['drop_level'] * 100)
 		row = [
 			ID_PREFIX + b['id'], '1', item_class, equip, cursor, item_type, unique, name, short, str(level),

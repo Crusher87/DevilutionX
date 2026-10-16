@@ -26,6 +26,7 @@
 #include "multi.h"
 #include "options.h"
 #include "pfile.h"
+#include "poe2/autosave.hpp"
 #include "qol/floatingnumbers.h"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -58,6 +59,18 @@ TMenuItem sgSingleMenu[] = {
 	// dwFlags,      pszStr,                  fnMenu
 	{ GMENU_ENABLED, N_("Options"),           &GamemenuOptions    },
 	{ GMENU_ENABLED, N_("Save Game"),         &gamemenu_save_game },
+	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
+	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
+	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
+	{ GMENU_ENABLED, N_("Admin Tools"),       &AdminMenuOpen      },
+	{ GMENU_ENABLED, nullptr,                 nullptr             },
+	// clang-format on
+};
+/** POE2 Mashup: the single player menu without Save Game; the game saves on its own (poe2/autosave.hpp). */
+TMenuItem sgPoe2SingleMenu[] = {
+	// clang-format off
+	// dwFlags,      pszStr,                  fnMenu
+	{ GMENU_ENABLED, N_("Options"),           &GamemenuOptions    },
 	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
 	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
 	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
@@ -110,6 +123,16 @@ void GamemenuUpdateSingle()
 	sgSingleMenu[5].setEnabled(enable);
 }
 
+void GamemenuUpdatePoe2Single()
+{
+	sgPoe2SingleMenu[1].setEnabled(gbValidSaveFile);
+
+	const bool enable = MyPlayer->_pmode != PM_DEATH && !MyPlayerIsDead;
+
+	sgPoe2SingleMenu[0].setEnabled(enable);
+	sgPoe2SingleMenu[4].setEnabled(enable);
+}
+
 void GamemenuPrevious(bool /*bActivate*/)
 {
 	gamemenu_on();
@@ -117,6 +140,8 @@ void GamemenuPrevious(bool /*bActivate*/)
 
 void GamemenuNewGame(bool /*bActivate*/)
 {
+	// POE2 Mashup: leaving saves the game, as there is no Save Game.
+	AutosaveNow();
 	for (Player &player : Players) {
 		player._pmode = PM_QUIT;
 		player._pInvincible = true;
@@ -449,7 +474,9 @@ void gamemenu_save_game(bool /*bActivate*/)
 void gamemenu_on()
 {
 	isGameMenuOpen = true;
-	if (!gbIsMultiplayer) {
+	if (!gbIsMultiplayer && gbIsPoe2) {
+		gmenu_set_items(sgPoe2SingleMenu, GamemenuUpdatePoe2Single);
+	} else if (!gbIsMultiplayer) {
 		gmenu_set_items(sgSingleMenu, GamemenuUpdateSingle);
 	} else {
 		gmenu_set_items(sgMultiMenu, nullptr);

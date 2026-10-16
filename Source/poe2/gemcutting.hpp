@@ -81,6 +81,14 @@ bool CanCutGem(const Item &uncut, const GemEntry &gem);
 /** @brief Makes a fresh gem item. */
 bool CreateGemItem(Item &item, const GemEntry &gem, int level = 1);
 
+/**
+ * @brief The level of an uncut gem dropping in an area, as in POE2: the highest gem level whose character level
+ * requirement the area level meets, so a gem found in an area is always usable by a hero who belongs there.
+ */
+int UncutGemLevelForArea(int areaLevel);
+/** @brief Sets an uncut gem's level. */
+void SetUncutGemLevel(Item &item, int level);
+
 /** @brief The skill gem level an uncut gem gives a character: its own level, up to what the character can use. */
 int GemLevelFromUncut(const Item &uncut, int characterLevel);
 

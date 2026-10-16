@@ -288,8 +288,8 @@ TEST_F(Poe2CraftingTest, QualityCurrencyFitsItsKind)
 	const int quality = ItemQuality(armour);
 	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Whetstone, *MyPlayer, armour));
 	armour = Crafted(CurrencyOrb::Scrap, armour);
-	EXPECT_EQ(ItemQuality(armour), std::min(quality + 5, MaxCraftedQuality));
-	for (int i = 0; i < 5; i++)
+	EXPECT_EQ(ItemQuality(armour), std::min(quality + 2, MaxCraftedQuality));
+	for (int i = 0; i < 10; i++)
 		ApplyCurrencyOrb(CurrencyOrb::Scrap, *MyPlayer, armour);
 	EXPECT_EQ(ItemQuality(armour), std::max(quality, MaxCraftedQuality));
 }

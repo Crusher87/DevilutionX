@@ -16,6 +16,7 @@
 #include "poe2/weapon_skills.hpp"
 #include "tables/spelldat.h"
 #include "utils/format.hpp"
+#include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
 #include "utils/str_split.hpp"
@@ -809,6 +810,38 @@ std::vector<std::string> ItemModText(const Poe2ItemMod &mod)
 	}
 	if (!lines.empty())
 		lines.back().append(StrCat(" (T", mod.tier, ")"));
+	return lines;
+}
+
+std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod)
+{
+	std::vector<std::string> lines;
+	const ModFamily *family = ItemModFamily(mod);
+	if (family == nullptr)
+		return lines;
+	lines.push_back(FormatRuntime(family->prefix ? _("{{ Prefix Modifier \"{:s}\" (Tier: {:d}) }}") : _("{{ Suffix Modifier \"{:s}\" (Tier: {:d}) }}"), family->word, mod.tier));
+	const ModTier *tier = nullptr;
+	for (const ModTier &candidate : family->tiers) {
+		if (candidate.tier == mod.tier)
+			tier = &candidate;
+	}
+	std::array<std::string, 2> shown;
+	for (size_t stat = 0; stat < 2; stat++) {
+		shown[stat] = StrCat(mod.values[stat]);
+		if (tier == nullptr)
+			continue;
+		const int low = ScaleValue(tier->min[stat], family->scale[stat]);
+		const int high = ScaleValue(tier->max[stat], family->scale[stat]);
+		if (low != high)
+			shown[stat].append(StrCat("(", std::min(low, high), "-", std::max(low, high), ")"));
+	}
+	const std::string text = FormatRuntime(family->text, shown[0], shown[1]);
+	for (const std::string_view line : SplitByChar(text, ';')) {
+		std::string_view trimmed = line;
+		while (!trimmed.empty() && trimmed.front() == ' ')
+			trimmed.remove_prefix(1);
+		lines.emplace_back(trimmed);
+	}
 	return lines;
 }
 

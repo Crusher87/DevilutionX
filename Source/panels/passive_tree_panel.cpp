@@ -63,7 +63,7 @@ constexpr int PanStep = 48;
 /** Mouse travel before a press on empty space counts as a drag. */
 constexpr int DragThreshold = 3;
 
-constexpr uint8_t PanelColor = PAL16_GRAY + 15;
+constexpr uint8_t PanelColor = 0; // black: palette entry 255 is white
 constexpr uint8_t BorderColor = PAL16_YELLOW + 8;
 constexpr uint8_t ViewColor = PAL16_RED + 15;
 constexpr uint8_t SealColor = PAL16_RED + 11;
@@ -80,7 +80,7 @@ constexpr uint8_t NotableInnerRimColor = PAL16_GRAY + 15;
 constexpr uint8_t ShrineRimColor = PAL16_BLUE + 4;
 constexpr uint8_t AttributeRimColor = PAL16_BEIGE + 6;
 constexpr uint8_t SocketRimColor = PAL16_GRAY + 4;
-constexpr uint8_t SocketHoleColor = PAL16_GRAY + 15;
+constexpr uint8_t SocketHoleColor = 0;
 constexpr uint8_t SocketGemColor = PAL16_BLUE + 6;
 constexpr uint8_t TitleBarColor = PAL16_GRAY + 13;
 constexpr uint8_t StartColor = PAL16_RED + 6;

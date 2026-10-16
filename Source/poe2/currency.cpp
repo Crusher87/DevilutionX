@@ -507,7 +507,7 @@ std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8
 	return true;
 }
 
-/** @brief Blacksmith's Whetstone, Arcanist's Etcher, Armourer's Scrap and catalysts add quality, more on normal items. */
+/** @brief Blacksmith's Whetstone, Arcanist's Etcher, Armourer's Scrap and catalysts add quality: +2% on normal, magic and rare items, +1% on uniques. */
 bool ApplyQualityCurrency(CurrencyOrb orb, const Player &player, Item &item, uint8_t variant)
 {
 	const BaseMeta *base = ItemBaseMeta(item);
@@ -542,8 +542,8 @@ bool ApplyQualityCurrency(CurrencyOrb orb, const Player &player, Item &item, uin
 		Fizzle(FormatRuntime(_("This item is already at {:d}% quality."), CraftQualityLimit(item)));
 		return false;
 	}
-	const int step = item._iMagical == ITEM_QUALITY_NORMAL ? 5 : item._iMagical == ITEM_QUALITY_MAGIC ? 2
-	                                                                                                  : 1;
+	// Curtis's rule (2026-10-16): +2% on normal, magic and rare items, +1% on uniques.
+	const int step = item._iMagical == ITEM_QUALITY_UNIQUE ? 1 : 2;
 	quality = std::min(std::max(quality, std::min(quality + step, CraftQualityLimit(item))), MaxExceptionalQuality);
 	Item probe = item;
 	SetItemQuality(probe, quality);
@@ -1081,6 +1081,12 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 			return false;
 		}
 		wanted = ITEM_QUALITY_MAGIC;
+		// POE2: Transmutation gives exactly one modifier.
+		accept = [](const Item &candidate) {
+			if (candidate._iPoe2Mods[0].family != 0)
+				return ModAffixCount(candidate) == 1;
+			return (candidate._iPrePower != IPL_INVALID) != (candidate._iSufPower != IPL_INVALID);
+		};
 		break;
 	case CurrencyOrb::Alchemy:
 		if (IsNoneOf(item._iMagical, ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC)) {

@@ -33,7 +33,7 @@ constexpr int LineHeight = 13;
 /** Frames the banner stays up after the cursor leaves the monster, so it doesn't flicker mid-fight. */
 constexpr int LingerFrames = 45;
 
-constexpr uint8_t FrameDark = PAL16_GRAY + 15;
+constexpr uint8_t FrameDark = 0;
 constexpr uint8_t GoldLight = PAL16_YELLOW + 6;
 constexpr uint8_t GoldDark = PAL16_YELLOW + 12;
 constexpr uint8_t BarEmpty = PAL16_RED + 15;

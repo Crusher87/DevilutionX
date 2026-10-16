@@ -841,7 +841,7 @@ SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int leve
 
 std::string SupportSocketMessage(SupportSocketResult result, const Player &player, size_t slot, SupportGem gem)
 {
-	const SkillSlot skill = player.poe2.skillSlots[slot];
+	const SkillSlot skill = RowSkill(player, slot);
 	switch (result) {
 	case SupportSocketResult::NoSkill:
 		return std::string(_("Socket a skill gem in this slot first."));
@@ -858,7 +858,7 @@ std::string SupportSocketMessage(SupportSocketResult result, const Player &playe
 		return FormatRuntime(_("Not enough {:s} for another {:s} support ({:d}/{:d})."), GemColorName(color), GemColorName(color), SupportsUsed(player.poe2, color), SupportCapacity(player, color));
 	}
 	case SupportSocketResult::PowerTaken:
-		return FormatRuntime(_("{:s} already has a Power support ({:s}); a skill takes only one."), SkillName(skill), SupportGemName(OtherPowerSupport(player.poe2.slotSupports[slot], std::nullopt)));
+		return FormatRuntime(_("{:s} already has a Power support ({:s}); a skill takes only one."), SkillName(skill), SupportGemName(OtherPowerSupport(player.poe2.supportsAt(slot), std::nullopt)));
 	case SupportSocketResult::Conflict:
 		return FormatRuntime(_("{:s} clashes with a support {:s} already has."), SupportGemName(gem), SkillName(skill));
 	case SupportSocketResult::LineageInUse:

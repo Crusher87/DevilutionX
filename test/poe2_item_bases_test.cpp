@@ -120,8 +120,8 @@ TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
 	const Item quick = MakeItem("Quick Pilgrim Staff", 1);
 	const Item focused = MakeItem("Focused Pilgrim Staff", 1);
 	EXPECT_GT(Stat(quick, Poe2ItemStat::CastSpeed), Stat(focused, Poe2ItemStat::CastSpeed));
-	EXPECT_GE(focused._iPLMag, quick._iPLMag);
-	EXPECT_GT(quick._iPLMag, 0);
+	// One implicit each (Curtis 2026-10-16): the quick staff casts faster, the focused one gives Intelligence.
+	EXPECT_GT(focused._iPLMag, quick._iPLMag);
 }
 
 TEST_F(Poe2ItemBasesTest, ImplicitsRollFromTheSeedAndSurviveRebuilding)

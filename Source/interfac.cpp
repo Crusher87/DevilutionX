@@ -38,6 +38,7 @@
 #include "multi.h"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/autosave.hpp"
 #include "poe2/hardcore.hpp"
 #include "utils/log.hpp"
 #include "utils/sdl_compat.h"
@@ -561,6 +562,8 @@ void ProgressEventHandler(const SDL_Event &event, uint16_t modState)
 
 		gbSomebodyWonGameKludge = false;
 		ProgressEventHandlerState.done = true;
+		// POE2 Mashup: arriving on a level is a checkpoint; save once the game runs again.
+		RequestAutosave();
 
 #if !defined(USE_SDL1) && !defined(__vita__)
 		if (renderer != nullptr) {

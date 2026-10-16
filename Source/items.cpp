@@ -2220,6 +2220,12 @@ void PrintItemMisc(const Item &item)
 		// Short lines: the info box doesn't wrap, so long ones ran into each other.
 		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
 		AddItemInfoBoxString(FormatRuntime(_("Cuts a {:s} gem of its tier"), UncutKindName(UncutGemKind(item))));
+		// The gem it cuts can't be above the hero's own gem level limit: say so, instead of a lower gem appearing.
+		if (MyPlayer != nullptr && UncutGemKind(item) != UncutKind::Support) {
+			const int cuts = GemLevelFromUncut(item, MyPlayer->getCharacterLevel());
+			if (cuts < UncutGemLevel(item))
+				AddItemInfoBoxString(FormatRuntime(_("Cuts level {:d} now, {:d} at character level {:d}"), cuts, UncutGemLevel(item), CharacterLevelForGemLevel(UncutGemLevel(item))));
+		}
 		if (UncutGemKind(item) != UncutKind::Support)
 			AddItemInfoBoxString(_("or levels up a socketed gem"));
 		AddItemInfoBoxString(_("Right-click to cut"));
@@ -2349,10 +2355,61 @@ _item_indexes RndSmithItem(const Player &player, int lvl)
 	return RndVendorItem<SmithItemOk, true>(player, 0, lvl);
 }
 
+/** POE2 Mashup: merchants list weapons, then off-hands, armour by slot, jewellery, then the rest. */
+int VendorTypeRank(const Item &item)
+{
+	switch (item._itype) {
+	case ItemType::Sword: return item._iLoc == ILOC_TWOHAND ? 1 : 0;
+	case ItemType::Axe: return item._iLoc == ILOC_TWOHAND ? 3 : 2;
+	case ItemType::Mace: return item._iLoc == ILOC_TWOHAND ? 5 : 4;
+	case ItemType::Staff: return 6;
+	case ItemType::Bow: return 7;
+	default: break;
+	}
+	if (const std::optional<ModSlot> slot = ItemModSlot(item)) {
+		switch (*slot) {
+		case ModSlot::Shield: return 10;
+		case ModSlot::Focus: return 11;
+		case ModSlot::Quiver: return 12;
+		case ModSlot::Helmet: return 20;
+		case ModSlot::BodyArmour: return 21;
+		case ModSlot::Gloves: return 22;
+		case ModSlot::Boots: return 23;
+		case ModSlot::Belt: return 24;
+		case ModSlot::Ring: return 30;
+		case ModSlot::Amulet: return 31;
+		default: break;
+		}
+	}
+	switch (item._itype) {
+	case ItemType::Shield: return 10;
+	case ItemType::Helm: return 20;
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor: return 21;
+	case ItemType::Ring: return 30;
+	case ItemType::Amulet: return 31;
+	default: return 40;
+	}
+}
+
+bool VendorOrderLess(const Item &a, const Item &b)
+{
+	if (!gbIsPoe2)
+		return a.IDidx < b.IDidx;
+	const int ra = VendorTypeRank(a);
+	const int rb = VendorTypeRank(b);
+	if (ra != rb)
+		return ra < rb;
+	if (a.IDidx != b.IDidx)
+		return a.IDidx < b.IDidx;
+	return a._iIvalue < b._iIvalue;
+}
+
 void SortVendor(std::span<Item> itemList, size_t PinnedItemCount)
 {
 	auto cmp = [](const Item &a, const Item &b) {
-		return a.IDidx < b.IDidx;
+		return VendorOrderLess(a, b);
 	};
 
 	std::sort(itemList.begin() + PinnedItemCount, itemList.end(), cmp);
@@ -4645,6 +4702,8 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
+	if (IsPoe2UncutGem(item._iMiscId))
+		SetUncutGemLevel(item, UncutGemLevelForArea(origin.baseLevel));
 	if (IsWaystone(item))
 		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
 	if (IsMapFragment(item))
@@ -5500,6 +5559,42 @@ void DoRecharge(Player &player, int cii)
 	CalcPlrInv(player, true);
 }
 
+namespace {
+int HeldCurrencyMisc = -1;
+int HeldCurrencySeed = 0;
+uint32_t HeldCurrencyVariant = 0;
+} // namespace
+
+void HoldCurrencyForUse(const Item &item)
+{
+	HeldCurrencyMisc = item._iMiscId;
+	HeldCurrencySeed = item._iSeed;
+	HeldCurrencyVariant = item.dwBuff & CF_POE2_VARIANT;
+}
+
+void SpendHeldCurrency(Player &player)
+{
+	if (HeldCurrencyMisc < 0)
+		return;
+	// The very stack it came from if it's still there, else any stack of the same kind.
+	for (const bool exact : { true, false }) {
+		for (int i = 0; i < player._pNumInv; i++) {
+			Item &stack = player.InvList[i];
+			if (stack._iMiscId != HeldCurrencyMisc || (stack.dwBuff & CF_POE2_VARIANT) != HeldCurrencyVariant || (exact && stack._iSeed != HeldCurrencySeed))
+				continue;
+			if (TakeOneFromStack(stack)) {
+				if (&player == MyPlayer)
+					NetSyncInvItem(player, i);
+			} else {
+				player.RemoveInvItem(i);
+			}
+			HeldCurrencyMisc = -1;
+			return;
+		}
+	}
+	HeldCurrencyMisc = -1;
+}
+
 bool DoOil(Player &player, int cii)
 {
 	Item *pi;
@@ -5516,6 +5611,7 @@ bool DoOil(Player &player, int cii)
 			OpenDesecrationReveal(*pi);
 		return false;
 	}
+	SpendHeldCurrency(player);
 	for (const ItemData &data : AllItemsList) {
 		if (data.iMiscId == player._pOilType) {
 			TelemetryCrafted(player, data.iName, *pi);
@@ -5960,10 +6056,21 @@ void PrintItemDetails(const Item &item)
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
 	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
+		// Holding Alt shows each modifier's side, name and tier, and the range it can roll, as in POE2.
+		const bool advanced = gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0;
 		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
-			for (const std::string &line : ItemModText(mod))
-				AddItemInfoBoxString(line);
+			if (!advanced) {
+				for (const std::string &line : ItemModText(mod))
+					AddItemInfoBoxString(line);
+				continue;
+			}
+			const std::vector<std::string> lines = ItemModAdvancedText(mod);
+			for (size_t i = 0; i < lines.size(); i++) {
+				CurrentInfoLineStyle = i == 0 ? InfoLineStyle::Note : InfoLineStyle::Mod;
+				AddItemInfoBoxString(lines[i]);
+			}
 		}
+		CurrentInfoLineStyle = InfoLineStyle::Mod;
 	} else if (item._iMagical == ITEM_QUALITY_RARE) {
 		for (size_t i = 0; i < item._iRarePowers.size(); i++) {
 			if (item._iRarePowers[i] != IPL_INVALID)
@@ -6397,6 +6504,8 @@ void ReplacePremium(const Player &player, int idx)
 	int plvl = gbIsHellfire ? itemLevelAddHf[idx] : itemLevelAdd[idx];
 	plvl += player.getCharacterLevel();
 	SpawnOnePremium(PremiumItems[idx], plvl, player);
+	if (gbIsPoe2)
+		SortVendor(PremiumItems, 0);
 }
 
 void SpawnPremium(const Player &player)
@@ -6410,6 +6519,23 @@ void SpawnPremium(const Player &player)
 		SpawnOnePremium(item, plvl, player);
 		PremiumItems.push_back(item);
 	}
+
+	while (gbIsPoe2 && PremiumItemLevel < lvl) {
+		// The list is sorted by type, so slots no longer track level: refresh the lowest-level stock instead.
+		PremiumItemLevel++;
+		const int refresh = gbIsHellfire ? 3 : 2;
+		for (int n = 0; n < refresh; n++) {
+			size_t lowest = 0;
+			for (size_t i = 1; i < PremiumItems.size(); i++) {
+				if ((PremiumItems[i]._iCreateInfo & CF_LEVEL) < (PremiumItems[lowest]._iCreateInfo & CF_LEVEL))
+					lowest = i;
+			}
+			const size_t slot = PremiumItems.size() - 1 - n;
+			SpawnOnePremium(PremiumItems[lowest], PremiumItemLevel + (gbIsHellfire ? itemLevelAddHf[slot] : itemLevelAdd[slot]), player);
+		}
+	}
+	if (gbIsPoe2)
+		SortVendor(PremiumItems, 0);
 
 	while (PremiumItemLevel < lvl) {
 		PremiumItemLevel++;

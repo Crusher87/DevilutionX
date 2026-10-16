@@ -511,6 +511,23 @@ bool CheckCanHitOnlyWalking(const Missile &missile, const ActorPosition &positio
 	return false;
 }
 
+/**
+ * @brief POE2 Mashup: Firebolt and Ice Bolt burst a little where they hit, like POE2's bolts, so a hit at the edge
+ * of a pack still counts: the monsters right beside the one hit take part of the damage.
+ */
+void SplashBoltHit(const Missile &missile, const Player &player, const Monster &target, int minDamage, int maxDamage, DamageType damageType, bool isDamageShifted)
+{
+	const SkillSlot skill = MissileSkill(missile);
+	if (!gbIsPoe2 || (skill != SkillSlot::ForSpell(SpellID::Firebolt) && skill != SkillSlot::ForAttack(WeaponSkill::IceBolt)))
+		return;
+	for (int i = 0; i < 8; i++) {
+		Monster *beside = FindMonsterAtPosition(target.position.tile + static_cast<Direction>(i));
+		if (beside == nullptr || beside == &target || beside->isPlayerMinion() || beside->hasNoLife())
+			continue;
+		MonsterMHit(player, *beside, minDamage * BoltSplashPercent / 100, maxDamage * BoltSplashPercent / 100, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
+	}
+}
+
 void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int maxDamage, bool isDamageShifted, Point position, bool dontDeleteOnCollision, std::optional<Direction> onlyHitWalking = {})
 {
 	if (!InDungeonBounds(position))
@@ -537,8 +554,10 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 				const SupportHitScope supportScope(*missile.sourcePlayer(), MissileSkill(missile));
 				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, supportedMin, supportedMax, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
 				// POE2 Mashup: only a projectile's direct hit pierces, forks or chains, not its explosion.
-				if (isMonsterHit && !dontDeleteOnCollision)
+				if (isMonsterHit && !dontDeleteOnCollision) {
+					SplashBoltHit(missile, *missile.sourcePlayer(), monster, supportedMin, supportedMax, damageType, isDamageShifted);
 					keepFlying = OnSupportedMissileHit(missile, monster);
+				}
 			}
 		}
 	}

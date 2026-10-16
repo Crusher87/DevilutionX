@@ -239,37 +239,37 @@ Swift Runebolt Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased A
 Heavy Dragonspine Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed
 Dragonspine Crossbow	crossbow	balanced		weapon	
 Swift Dragonspine Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed
-Focused Pilgrim Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|5|5|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Pilgrim Staff	staff	rapid		caster	Intelligence|4|4|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Ashen Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|8|8|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Ashen Staff	staff	rapid		caster	Intelligence|7|7|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Scholar Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|13|13|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Scholar Staff	staff	rapid		caster	Intelligence|11|11|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Ritual Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|19|19|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Ritual Staff	staff	rapid		caster	Intelligence|16|16|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Archmage Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|26|26|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Archmage Staff	staff	rapid		caster	Intelligence|21|21|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Elder Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|35|35|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Elder Staff	staff	rapid		caster	Intelligence|29|29|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Astral Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|45|45|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Astral Staff	staff	rapid		caster	Intelligence|37|37|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Worldroot Staff	staff	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|58|58|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Quick Worldroot Staff	staff	rapid		caster	Intelligence|48|48|+{0} to Intelligence;CastSpeed|8|8|{0}% increased Cast Speed
-Focused Bone Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|3|3|+{0} to Intelligence
+Focused Pilgrim Staff	staff	focused		caster	Intelligence|5|5|+{0} to Intelligence
+Quick Pilgrim Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Ashen Staff	staff	focused		caster	Intelligence|8|8|+{0} to Intelligence
+Quick Ashen Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Scholar Staff	staff	focused		caster	Intelligence|13|13|+{0} to Intelligence
+Quick Scholar Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Ritual Staff	staff	focused		caster	Intelligence|19|19|+{0} to Intelligence
+Quick Ritual Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Archmage Staff	staff	focused		caster	Intelligence|26|26|+{0} to Intelligence
+Quick Archmage Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Elder Staff	staff	focused		caster	Intelligence|35|35|+{0} to Intelligence
+Quick Elder Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Astral Staff	staff	focused		caster	Intelligence|45|45|+{0} to Intelligence
+Quick Astral Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Worldroot Staff	staff	focused		caster	Intelligence|58|58|+{0} to Intelligence
+Quick Worldroot Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed
+Focused Bone Sceptre	sceptre	focused		caster	Intelligence|3|3|+{0} to Intelligence
 Quick Bone Sceptre	sceptre	rapid		caster	Intelligence|2|2|+{0} to Intelligence
-Focused Bronze Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|4|4|+{0} to Intelligence
+Focused Bronze Sceptre	sceptre	focused		caster	Intelligence|4|4|+{0} to Intelligence
 Quick Bronze Sceptre	sceptre	rapid		caster	Intelligence|4|4|+{0} to Intelligence
-Focused Priest Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|7|7|+{0} to Intelligence
+Focused Priest Sceptre	sceptre	focused		caster	Intelligence|7|7|+{0} to Intelligence
 Quick Priest Sceptre	sceptre	rapid		caster	Intelligence|6|6|+{0} to Intelligence
-Focused Sun Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|10|10|+{0} to Intelligence
+Focused Sun Sceptre	sceptre	focused		caster	Intelligence|10|10|+{0} to Intelligence
 Quick Sun Sceptre	sceptre	rapid		caster	Intelligence|8|8|+{0} to Intelligence
-Focused Templar Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|14|14|+{0} to Intelligence
+Focused Templar Sceptre	sceptre	focused		caster	Intelligence|14|14|+{0} to Intelligence
 Quick Templar Sceptre	sceptre	rapid		caster	Intelligence|11|11|+{0} to Intelligence
-Focused Oracle Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|18|18|+{0} to Intelligence
+Focused Oracle Sceptre	sceptre	focused		caster	Intelligence|18|18|+{0} to Intelligence
 Quick Oracle Sceptre	sceptre	rapid		caster	Intelligence|15|15|+{0} to Intelligence
-Focused Saint's Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|24|24|+{0} to Intelligence
+Focused Saint's Sceptre	sceptre	focused		caster	Intelligence|24|24|+{0} to Intelligence
 Quick Saint's Sceptre	sceptre	rapid		caster	Intelligence|20|20|+{0} to Intelligence
-Focused Sovereign Sceptre	sceptre	focused		caster	CastSpeed|-15|-15|15% reduced Cast Speed;Intelligence|30|30|+{0} to Intelligence
+Focused Sovereign Sceptre	sceptre	focused		caster	Intelligence|30|30|+{0} to Intelligence
 Quick Sovereign Sceptre	sceptre	rapid		caster	Intelligence|25|25|+{0} to Intelligence
 Iron Cap	helmet	armour	Armour	defence	
 Guard Helm	helmet	armour	Armour	defence	
@@ -373,13 +373,13 @@ Topaz Ring	ring	resistance		none	LightningResistance|12|16|+{0}% to Lightning Re
 Coral Ring	ring	life		none	Life|20|30|+{0} to maximum Life
 Lapis Ring	ring	mana		none	Mana|18|28|+{0} to maximum Mana
 Iron Ring	ring	attack		none	AddedPhysicalToAttacks|2|4|Adds {0} to {1} Physical Damage to Attacks
-Opal Ring	ring	caster		none	
-Gold Ring	ring	rarity		none	
+Opal Ring	ring	caster		none	AllResistances|6|9|+{0}% to all Elemental Resistances
+Gold Ring	ring	rarity		none	AllAttributes|3|5|+{0} to all Attributes
 Amber Amulet	amulet	attribute		none	Strength|6|9|+{0} to Strength
 Jade Amulet	amulet	attribute		none	Dexterity|6|9|+{0} to Dexterity
 Azure Amulet	amulet	attribute		none	Intelligence|6|9|+{0} to Intelligence
 Prismatic Amulet	amulet	resistance		none	AllResistances|8|12|+{0}% to all Elemental Resistances
 Vital Amulet	amulet	life		none	Life|25|35|+{0} to maximum Life
 Spirit Amulet	amulet	spirit		none	Spirit|60|90|+{0} to Spirit
-Keen Amulet	amulet	critical		none	
+Keen Amulet	amulet	critical		none	Dexterity|6|9|+{0} to Dexterity
 Sage Amulet	amulet	mana		none	ManaRegeneration|8|12|{0}% increased Mana Regeneration Rate

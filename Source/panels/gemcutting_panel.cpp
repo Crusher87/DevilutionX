@@ -509,6 +509,42 @@ bool IsGemcuttingOpen()
 	return IsOpen;
 }
 
+namespace {
+
+/** @brief The tab a skill gem opens on: the class's own line (Sorcerer elemental, Rogue bows, Monk staves), the Warrior's by weapon. */
+GemCategory DefaultSkillCategory(const Player &player)
+{
+	switch (player._pClass) {
+	case HeroClass::Sorcerer:
+		return GemCategory::Elemental;
+	case HeroClass::Rogue:
+		return GemCategory::Bow;
+	case HeroClass::Monk:
+		return GemCategory::Staff;
+	default:
+		break;
+	}
+	for (const Item &item : { player.InvBody[INVLOC_HAND_LEFT], player.InvBody[INVLOC_HAND_RIGHT] }) {
+		switch (item._itype) {
+		case ItemType::Axe:
+			return GemCategory::Axe;
+		case ItemType::Sword:
+			return GemCategory::Sword;
+		case ItemType::Mace:
+			return GemCategory::Mace;
+		case ItemType::Bow:
+			return GemCategory::Bow;
+		case ItemType::Staff:
+			return GemCategory::Staff;
+		default:
+			break;
+		}
+	}
+	return GemCategory::Mace;
+}
+
+} // namespace
+
 void OpenGemcutting(bool fromBelt, int index)
 {
 	const Player &player = *MyPlayer;
@@ -530,7 +566,7 @@ void OpenGemcutting(bool fromBelt, int index)
 		Category = GemCategory::Spirit;
 		break;
 	default:
-		Category = GemCategory::All;
+		Category = DefaultSkillCategory(player);
 		break;
 	}
 	Open();

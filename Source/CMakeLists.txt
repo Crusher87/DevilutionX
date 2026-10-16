@@ -28,7 +28,9 @@ set(libdevilutionx_SRCS
   nthread.cpp
   pfile.cpp
   plrmsg.cpp
+  poe2/autosave.cpp
   poe2/craft_state.cpp
+  poe2/skill_details.cpp
   poe2/crafting_items.cpp
   poe2/desecration.cpp
   poe2/economy.cpp
@@ -809,6 +811,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/hardcore.cpp
   poe2/weapon_swap.cpp
   poe2/default_attack.cpp
+  poe2/aim.cpp
   poe2/weapon_skills.cpp
   tables/playerdat.cpp
 )

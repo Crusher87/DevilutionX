@@ -33,6 +33,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/loot.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/uniques.hpp"
@@ -62,7 +63,7 @@ constexpr int Padding = 12;
 constexpr int RowHeight = 18;
 constexpr int ChipHeight = 20;
 
-constexpr uint8_t PanelColor = PAL16_GRAY + 15;
+constexpr uint8_t PanelColor = 0; // black: palette entry 255 is white
 constexpr uint8_t BorderColor = PAL16_YELLOW + 8;
 constexpr uint8_t FieldColor = PAL16_GRAY + 14;
 constexpr uint8_t ChipColor = PAL16_GRAY + 12;
@@ -686,8 +687,13 @@ bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_qua
 	}
 	if (entry.uniqueId >= 0)
 		return RollUnique(player, item, entry.uniqueId, seed);
-	if (entry.rollsQuality)
-		return RollItemOfQuality(player, item, entry.baseIndex, quality, std::clamp(level, MinLevel, MaxLevel), seed);
+	if (entry.rollsQuality) {
+		// Like a drop from an area of this level: POE2 item level and modifiers from the itemization tables.
+		Item stamp {};
+		SetPoe2ItemLevel(stamp, Poe2ItemLevel(std::clamp(level, MinLevel, MaxLevel)));
+		SetLootRarity(stamp, quality);
+		return RollItemOfQuality(player, item, entry.baseIndex, quality, std::clamp(level, MinLevel, MaxLevel), seed, 0, {}, stamp.dwBuff);
+	}
 
 	// Gems, orbs and potions have no quality; only uncut gems use the level.
 	InitializeItem(item, entry.baseIndex);

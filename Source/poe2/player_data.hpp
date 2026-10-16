@@ -280,6 +280,8 @@ enum class SkillKind : uint8_t {
 	Attack,
 	/** A Spirit gem that is active while socketed; the id is a PersistentSkill. */
 	Persistent,
+	/** The weapon's own attack, which costs no mana; the id is a DefaultAttack. It isn't a gem: it has its own row in the Skills panel. */
+	Default,
 };
 
 /** @brief A Skills panel socket: the skill of the gem socketed in it. */
@@ -295,6 +297,8 @@ struct SkillSlot {
 	static SkillSlot ForSpell(SpellID spell) { return { SkillKind::Spell, static_cast<uint8_t>(spell) }; }
 	static SkillSlot ForAttack(WeaponSkill skill) { return { SkillKind::Attack, static_cast<uint8_t>(skill) }; }
 	static SkillSlot ForPersistent(PersistentSkill skill) { return { SkillKind::Persistent, static_cast<uint8_t>(skill) }; }
+	/** @param attack A DefaultAttack (poe2/default_attack.hpp). */
+	static SkillSlot ForDefault(uint8_t attack) { return { SkillKind::Default, attack }; }
 
 	bool operator==(const SkillSlot &other) const = default;
 };
@@ -303,6 +307,8 @@ struct SkillSlot {
 constexpr size_t NumSkillSlots = 12;
 /** @brief Sockets heroes had before the Skills panel grew to 12 (hero data before version 8). */
 constexpr size_t OldNumSkillSlots = 6;
+/** @brief The Skills panel row of the weapon's default attack, after the gem sockets: it takes supports like a gem. */
+constexpr size_t DefaultAttackRow = NumSkillSlots;
 
 /** @brief Slots of the skill tray: the three mouse buttons, then six keys (Q, E, R, T, F and G by default). */
 enum class TraySlot : uint8_t {
@@ -484,6 +490,9 @@ struct Poe2PlayerData {
 	std::array<SupportSockets, NumSkillSlots> slotSupports {};
 	/** @brief The tier of each socketed support. */
 	std::array<SupportTiers, NumSkillSlots> slotSupportTiers {};
+	/** @brief Supports of the weapon's default attack (the DefaultAttackRow) and their tiers. */
+	SupportSockets defaultSupports {};
+	SupportTiers defaultSupportTiers {};
 	/** @brief Charges of the flasks in belt slots 1 to 5. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
 	/** @brief Skill gems socketed in the Skills panel. */
@@ -638,6 +647,8 @@ struct Poe2PlayerData {
 			supports.fill(SupportGem::None);
 		for (SupportTiers &tiers : slotSupportTiers)
 			tiers.fill(1);
+		defaultSupports.fill(SupportGem::None);
+		defaultSupportTiers.fill(1);
 		flaskCharges.fill(MaxFlaskCharges);
 		lifeFlaskRaw = 0;
 		lifeFlaskTicks = 0;
@@ -777,8 +788,13 @@ struct Poe2PlayerData {
 	/** @brief The tier of the support in a socket, 1 to 3. */
 	[[nodiscard]] int socketTier(size_t slot, size_t socket) const
 	{
-		return std::clamp<int>(slotSupportTiers[slot][socket], 1, MaxSupportTier);
+		return std::clamp<int>(tiersAt(slot)[socket], 1, MaxSupportTier);
 	}
+	/** @brief The support sockets of a Skills panel row: a gem socket, or the DefaultAttackRow. */
+	[[nodiscard]] SupportSockets &supportsAt(size_t row) { return row == DefaultAttackRow ? defaultSupports : slotSupports[row]; }
+	[[nodiscard]] const SupportSockets &supportsAt(size_t row) const { return row == DefaultAttackRow ? defaultSupports : slotSupports[row]; }
+	[[nodiscard]] SupportTiers &tiersAt(size_t row) { return row == DefaultAttackRow ? defaultSupportTiers : slotSupportTiers[row]; }
+	[[nodiscard]] const SupportTiers &tiersAt(size_t row) const { return row == DefaultAttackRow ? defaultSupportTiers : slotSupportTiers[row]; }
 	[[nodiscard]] bool hasSupport(SpellID spell, SupportGem gem) const { return hasSupport(SkillSlot::ForSpell(spell), gem); }
 
 	/** @brief Whether a gem for the spell is socketed in the Skills panel. */

@@ -38,6 +38,9 @@ constexpr int BarrageArrows = 5;
 /** @brief Ember Fusillade's embers before its gem level adds more. */
 constexpr int EmberFusilladeEmbers = 5;
 
+/** @brief Firebolt and Ice Bolt hit the monsters right beside the one they strike for this percent of the damage. */
+constexpr int BoltSplashPercent = 35;
+
 /** @brief Fireball travels at this percent of Diablo's speed and Firebolt at this percent, so the heavy orb and the quick bolt feel apart. */
 constexpr int FireballSpeedPercent = 75;
 constexpr int FireboltSpeedPercent = 140;

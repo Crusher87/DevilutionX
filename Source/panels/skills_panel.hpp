@@ -22,6 +22,8 @@ void CloseSkillsPanel();
 void ToggleSkillsPanel();
 
 void DrawSkillsPanel(const Surface &out);
+/** @brief Whether the position is on the panel or its open skill details. */
+bool SkillsPanelContains(Point position);
 /** @brief Handles a left click inside the panel. */
 void HandleSkillsPanelClick(Point mousePosition);
 

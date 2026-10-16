@@ -42,6 +42,7 @@
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
 #include "poe2/crafting_items.hpp"
+#include "poe2/currency.hpp"
 #include "poe2/economy.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
@@ -56,6 +57,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_swap.hpp"
+#include "qol/floatingnumbers.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -1375,8 +1377,26 @@ void DrawInv(const Surface &out)
 		}
 	}
 
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		DrawWeaponSetButtons(out, myPlayer);
+		// The league's gold, shared by every hero in it.
+		DrawString(out, FormatRuntime(_("Gold: {:s}"), FormatInteger(Stash.gold)), { GetPanelPosition(UiPanels::Inventory, { 80, 184 }), { 164, 16 } },
+		    { .flags = UiFlags::AlignCenter | UiFlags::ColorGold | UiFlags::FontSize12 });
+	}
+}
+
+void MoveInventoryGoldToLeague(Player &player)
+{
+	if (!gbIsPoe2 || &player != MyPlayer)
+		return;
+	for (int i = player._pNumInv - 1; i >= 0; i--) {
+		if (player.InvList[i]._itype != ItemType::Gold)
+			continue;
+		Stash.gold += player.InvList[i]._ivalue;
+		player.RemoveInvItem(i);
+		Stash.dirty = true;
+	}
+	player._pGold = 0;
 }
 
 void DrawInvBelt(const Surface &out)
@@ -1627,6 +1647,13 @@ int RoomForGold()
 
 int AddGoldToInventory(Player &player, int value)
 {
+	// POE2 Mashup: gold isn't an item; it goes to the league's purse, shared by every hero in the league (kept with the stash).
+	if (gbIsPoe2 && &player == MyPlayer && value > 0) {
+		Stash.gold += value;
+		Stash.dirty = true;
+		AddFloatingNumber(player.position.tile, { 0, -80 }, StrCat("+", FormatInteger(value), " ", _("gold")), UiFlags::ColorGold | UiFlags::FontSize12, 0x601D);
+		return 0;
+	}
 	// Top off existing piles
 	for (int i = 0; i < player._pNumInv && value > 0; i++) {
 		Item &goldItem = player.InvList[i];
@@ -2501,6 +2528,11 @@ bool UseInvItem(int cii)
 	if (player.InvList[c]._iMiscId == IMISC_NOTE) {
 		InitQTextMsg(TEXT_BOOK9);
 		CloseInventory();
+		return true;
+	}
+	// POE2 Mashup: currency goes on the cursor and is only used up once it changes an item (see SpendHeldCurrency).
+	if (gbIsPoe2 && IsCurrencyMiscId(player.InvList[c]._iMiscId)) {
+		HoldCurrencyForUse(player.InvList[c]);
 		return true;
 	}
 	// POE2 Mashup: a currency stack loses one.

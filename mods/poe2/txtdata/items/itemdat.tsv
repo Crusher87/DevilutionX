@@ -171,7 +171,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Empower Support	Gem	5	0	0	0	0	0	0	0	0		SUPPORT_EMPOWER	Null	true	800
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Faster Casting Support	Gem	2	0	0	0	0	0	0	0	0		SUPPORT_FASTCAST	Null	true	800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Efficiency Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_EFFICIENCY	Null	true	800
-	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Orb of Transmutation	Orb	1	0	0	0	0	0	0	0	0		ORB_TRANSMUTE	Null	true	200
+	1	Misc	Unequippable	22	Misc	NONE	Orb of Transmutation	Orb	1	0	0	0	0	0	0	0	0		ORB_TRANSMUTE	Null	true	200
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Orb of Alchemy	Orb	6	0	0	0	0	0	0	0	0		ORB_ALCHEMY	Null	true	1000
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Chaos Orb	Orb	10	0	0	0	0	0	0	0	0		ORB_CHAOS	Null	true	1500
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Orb of Scouring	Orb	4	0	0	0	0	0	0	0	0		ORB_SCOURING	Null	true	500
@@ -214,7 +214,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Chain Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_CHAIN	Null	true	800
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Concentrated Effect Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_CONCENTRATED	Null	true	800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Faster Projectiles Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_FASTERPROJ	Null	true	800
-	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Orb of Augmentation	Orb	3	0	0	0	0	0	0	0	0		ORB_AUGMENT	Null	true	300
+	1	Misc	Unequippable	24	Misc	NONE	Orb of Augmentation	Orb	3	0	0	0	0	0	0	0	0		ORB_AUGMENT	Null	true	300
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Regal Orb	Orb	8	0	0	0	0	0	0	0	0		ORB_REGAL	Null	true	1500
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Exalted Orb	Orb	14	0	0	0	0	0	0	0	0		ORB_EXALTED	Null	true	5000
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Divine Orb	Orb	16	0	0	0	0	0	0	0	0		ORB_DIVINE	Null	true	6000
@@ -689,7 +689,7 @@ poe2:keen_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Keen Amulet	Amule
 poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	22	0	0	0	0	0	0	0	0		AMULET	Null	false	4000
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Chance	Orb	9	0	0	0	0	0	0	0	0		ORB_CHANCE	Null	true	1500
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Annulment	Orb	27	0	0	0	0	0	0	0	0		ORB_ANNUL	Null	true	4000
-	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Blacksmith's Whetstone	Whetstone	1	0	0	0	0	0	0	0	0		ORB_WHETSTONE	Null	true	200
+	1	Misc	Unequippable	43	Misc	NONE	Blacksmith's Whetstone	Whetstone	1	0	0	0	0	0	0	0	0		ORB_WHETSTONE	Null	true	200
 	1	Misc	Unequippable	OIL	Misc	NONE	Arcanist's Etcher	Etcher	8	0	0	0	0	0	0	0	0		ORB_ETCHER	Null	true	400
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Armourer's Scrap	Scrap	1	0	0	0	0	0	0	0	0		ORB_SCRAP	Null	true	200
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Greater Exalted Orb	Orb	55	0	0	0	0	0	0	0	0		ORB_GREATER_EXALTED	Null	true	12000
@@ -700,8 +700,8 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	1	Misc	Unequippable	BRAIN	Misc	NONE	Ancient Bone	Bone	19	0	0	0	0	0	0	0	0		ORB_DESECRATE	Null	true	3000
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Catalyst	Catalyst	27	0	0	0	0	0	0	0	0		ORB_CATALYST	Null	true	1500
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Essence	Essence	15	0	0	0	0	0	0	0	0		ESSENCE	Null	true	1200
-	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Omen	Omen	31	0	0	0	0	0	0	0	0		OMEN	Null	true	5000
-	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Rune	Augment	8	0	0	0	0	0	0	0	0		AUGMENT	Null	true	1000
+	1	Misc	Unequippable	28	Misc	NONE	Omen	Omen	31	0	0	0	0	0	0	0	0		OMEN	Null	true	5000
+	1	Misc	Unequippable	23	Misc	NONE	Rune	Augment	8	0	0	0	0	0	0	0	0		AUGMENT	Null	true	1000
 	2	Misc	Unequippable	RECONSTRUCTED_NOTE	Misc	NONE	Tablet	Tablet	20	0	0	0	0	0	0	0	0		TABLET	Null	false	1500
 	1	Misc	Unequippable	TORN_NOTE_1	Misc	NONE	Fragment	Fragment	25	0	0	0	0	0	0	0	0		MAP_FRAGMENT	Null	true	2500
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Gate Key	Key	25	0	0	0	0	0	0	0	0		MAP_KEY	Null	true	10000

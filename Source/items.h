@@ -641,6 +641,10 @@ void CheckIdentify(Player &player, int cii);
 void DoRepair(Player &player, int cii);
 void DoRecharge(Player &player, int cii);
 bool DoOil(Player &player, int cii);
+/** @brief POE2 Mashup: notes the currency put on the cursor; it is only used up once it takes (see SpendHeldCurrency). */
+void HoldCurrencyForUse(const Item &item);
+/** @brief Uses up one of the currency on the cursor, after it changed an item. */
+void SpendHeldCurrency(Player &player);
 [[nodiscard]] StringOrView PrintItemPower(char plidx, const Item &item);
 void DrawUniqueInfo(const Surface &out);
 void PrintItemDetails(const Item &item);

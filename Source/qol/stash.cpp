@@ -352,7 +352,8 @@ void CheckStashButtonRelease(Point mousePosition)
 			Stash.PreviousPage();
 			break;
 		case 2:
-			StartGoldWithdraw();
+			if (!gbIsPoe2)
+				StartGoldWithdraw();
 			break;
 		case 3:
 			Stash.NextPage();
@@ -434,8 +435,11 @@ void DrawStash(const Surface &out)
 		DrawString(out, StrCat(Stash.GetPage() + 1), { position + Displacement { 132, 0 }, { 57, textboxHeight } },
 		    { .flags = UiFlags::AlignCenter | style });
 	}
-	DrawString(out, FormatInteger(Stash.gold), { position + Displacement { 122, 19 }, { 107, textboxHeight } },
-	    { .flags = UiFlags::AlignRight | style });
+	// POE2 Mashup: gold isn't deposited; the league's gold shows in the inventory.
+	if (!gbIsPoe2) {
+		DrawString(out, FormatInteger(Stash.gold), { position + Displacement { 122, 19 }, { 107, textboxHeight } },
+		    { .flags = UiFlags::AlignRight | style });
+	}
 	if (gbIsPoe2)
 		DrawStashTabUi(out);
 }

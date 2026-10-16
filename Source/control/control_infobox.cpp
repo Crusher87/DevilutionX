@@ -426,7 +426,10 @@ void PrintPoe2ItemTooltip(const Surface &out)
 		for (int i = 0; i < 3; i++)
 			DrawHalfTransparentRectTo(out, box.position.x, box.position.y, box.size.width, box.size.height);
 		poe2ui::DrawFrame(out, box, frame);
-		DrawItem(*pictured, out, { box.position.x + 8, box.position.y + 6 + pictureSize.height - 1 }, GetInvItemSprite(pictureCursor));
+		// Ground items never get their usable flag worked out: red only if the hero really can't use it.
+		Item shown = *pictured;
+		shown._iStatFlag = MyPlayer->CanUseItem(shown);
+		DrawItem(shown, out, { box.position.x + 8, box.position.y + 6 + pictureSize.height - 1 }, GetInvItemSprite(pictureCursor));
 	}
 	// Dark body, a little see-through like POE2's, with a frame in the rarity's colour.
 	for (int i = 0; i < 3; i++)

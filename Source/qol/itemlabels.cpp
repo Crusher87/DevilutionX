@@ -13,6 +13,7 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "engine/ui_scale.hpp"
+#include "game_mode.hpp"
 #include "gmenu.h"
 #include "inv.h"
 #include "options.h"
@@ -109,6 +110,9 @@ void AddItemToLabelQueue(int id, Point position)
 		return;
 	Item &item = Items[id];
 	if (IsItemHiddenByLootFilter(item))
+		return;
+	// POE2 Mashup: gold has no label; picking it up shows the amount over the hero.
+	if (gbIsPoe2 && item._itype == ItemType::Gold)
 		return;
 
 	StringOrView textOnGround;

@@ -355,6 +355,9 @@ void DrawMissilePrivate(const Surface &out, const Missile &missile, Point target
 {
 	if (missile._miPreFlag != pre || !missile._miDrawFlag || !missile._miAnimData)
 		return;
+	// POE2 Mashup: with Modern Effects the effects draw projectiles themselves; the classic sprite would be a second bolt.
+	if (vfx::ReplacesSprite(missile))
+		return;
 
 	const Point missileRenderPosition { targetBufferPosition + missile.position.offsetForRendering - Displacement { missile._miAnimWidth2, 0 } };
 	const ClxSprite sprite = (*missile._miAnimData)[missile._miAnimFrame - 1];
@@ -559,7 +562,8 @@ void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPo
  */
 void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
-	const ClxSprite sprite = objectToDraw.currentSprite();
+	// POE2 Mashup: with Modern Effects, candles hold still and torches flicker out of step (see vfx::ObjectSprite).
+	const ClxSprite sprite = vfx::ObjectSprite(objectToDraw);
 
 	const Point screenPosition = targetBufferPosition + objectToDraw.getRenderingOffset(sprite, tilePosition);
 

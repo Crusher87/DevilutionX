@@ -240,8 +240,26 @@ std::vector<Crack> Cracks;
 std::vector<Sweep> Sweeps;
 /** @brief Glows that last one frame (projectile heads). */
 std::vector<Ring> FrameGlows;
+/** @brief A projectile's body this frame, drawn instead of its classic sprite: a bright head and a tapering tail. */
+struct Comet {
+	Vec head;
+	/** @brief Unit vector of its flight. */
+	Vec dir;
+	Element element;
+	float scale;
+	bool small;
+	uint32_t seed;
+};
+std::vector<Comet> FrameComets;
+/** @brief The scan the effects were last drawn after; until they are, classic sprites stay. */
+uint32_t LastDrawnScan = 0;
 std::unordered_map<const Missile *, Trail> Trails;
-std::unordered_map<const Missile *, uint32_t> SeenBursts;
+/** @brief Bursts seen this frame (frame number) and whether their effect has gone off. */
+struct SeenBurst {
+	uint32_t frame;
+	bool fired;
+};
+std::unordered_map<const Missile *, SeenBurst> SeenBursts;
 uint32_t ScanFrame = 0;
 
 /** @brief What a patch of the dungeon gives off while it's on screen. */
@@ -289,6 +307,8 @@ struct HotSpot {
 
 /** @brief The flames found in each sprite frame, by its pixel data; sprites are reloaded with each level. */
 std::unordered_map<const uint8_t *, std::vector<HotSpot>> HotSpots;
+/** @brief The flames of a whole animation, where they sit across its frames, by the first frame's pixel data. */
+std::unordered_map<const uint8_t *, std::vector<HotSpot>> SteadySpots;
 
 /** @brief How much a monster stands out: magic and rare monsters, uniques, and the quest bosses and Diablo. */
 enum class Rank : uint8_t {
@@ -299,7 +319,7 @@ enum class Rank : uint8_t {
 	Boss,
 };
 
-/** @brief The mark under a monster of rank: a ring for magic, a turning gold ring for rares, a rune circle for uniques. */
+/** @brief The mark under a monster of rank: a faint glow for magic and rares, a rune circle for uniques. */
 struct Halo {
 	Vec pos;
 	float radius;
@@ -873,6 +893,98 @@ float Flicker(Vec pos, float speed = 1)
 	return 0.84F + 0.09F * std::sin(t * 0.011F + phase) + 0.07F * std::sin(t * 0.029F + phase * 1.7F);
 }
 
+/** @brief Smooth noise in 0..1 along time, from a seed: a value per step, eased between. */
+float SmoothNoise(uint32_t seed, float time)
+{
+	const auto value = [seed](int step) {
+		uint32_t h = (static_cast<uint32_t>(step) * 2654435761U) ^ (seed * 2246822519U);
+		h ^= h >> 15;
+		h *= 2246822519U;
+		h ^= h >> 13;
+		return static_cast<float>(h & 0xFFFF) / 65535.F;
+	};
+	const float floor = std::floor(time);
+	const float f = time - floor;
+	const float ease = f * f * (3 - 2 * f);
+	const int step = static_cast<int>(floor);
+	return value(step) + (value(step + 1) - value(step)) * ease;
+}
+
+/**
+ * @brief A real flame's brightness: a slow breathing, a quicker waver and now and then a gust that dips it, never
+ * in step with another flame. Candles burn steadier than torches.
+ */
+float NaturalFlicker(uint32_t seed, bool candle)
+{
+	const float t = AmbientTime;
+	const float phase = static_cast<float>(seed % 628) / 100.F;
+	const float breathe = std::sin(t * 0.0013F + phase);
+	const float waver = SmoothNoise(seed, t * 0.009F) - 0.5F;
+	const float gust = std::max(0.F, SmoothNoise(seed ^ 0x9E3779B9U, t * 0.0016F) - 0.72F) / 0.28F;
+	if (candle)
+		return 0.93F + 0.03F * breathe + 0.06F * waver - 0.08F * gust;
+	return 0.86F + 0.05F * breathe + 0.16F * waver - 0.2F * gust;
+}
+
+bool IsCandle(const Object &object)
+{
+	return IsAnyOf(object._otype, OBJ_CANDLE1, OBJ_CANDLE2, OBJ_BOOKCANDLE, OBJ_STORYCANDLE, OBJ_L5CANDLE);
+}
+
+/**
+ * @brief The flames of an object's whole animation: the spots found in its frames, grouped where they sit, so the
+ * glow stays put while the classic sprite flickers through its frames. A candle has one flame.
+ */
+const std::vector<HotSpot> &SteadyFlameSpots(const Object &object)
+{
+	const ClxSpriteList list = *object._oAnimData;
+	const ClxSprite first = list[0];
+	auto [it, added] = SteadySpots.try_emplace(first.pixelData());
+	std::vector<HotSpot> &steady = it->second;
+	if (!added)
+		return steady;
+	struct Group {
+		float x = 0, y = 0, size = 0;
+		int frames = 0;
+	};
+	std::vector<Group> groups;
+	const uint32_t frames = list.numSprites();
+	for (uint32_t frame = 0; frame < frames; frame++) {
+		const ClxSprite sprite = list[frame];
+		// Frames of other widths sit differently; keep to the first frame's.
+		if (sprite.width() != first.width())
+			continue;
+		for (const HotSpot &spot : FlameSpots(sprite)) {
+			Group *match = nullptr;
+			for (Group &group : groups) {
+				const float gx = group.x / static_cast<float>(group.frames);
+				const float gy = group.y / static_cast<float>(group.frames);
+				if (std::abs(gx - spot.offset.x) < 9 && std::abs(gy - spot.offset.y) < 9) {
+					match = &group;
+					break;
+				}
+			}
+			if (match == nullptr)
+				match = &groups.emplace_back();
+			match->x += spot.offset.x;
+			match->y += spot.offset.y;
+			match->size += spot.size;
+			match->frames++;
+		}
+	}
+	for (const Group &group : groups) {
+		// A flame shows in most frames; a stray bright pixel now and then isn't one.
+		if (group.frames * 3 < static_cast<int>(frames))
+			continue;
+		const float n = static_cast<float>(group.frames);
+		steady.push_back({ { group.x / n, group.y / n }, group.size / n });
+	}
+	std::sort(steady.begin(), steady.end(), [](const HotSpot &a, const HotSpot &b) { return a.size > b.size; });
+	if (IsCandle(object) && steady.size() > 1)
+		steady.resize(1);
+	return steady;
+}
+
 Rank RankOf(const Monster &monster)
 {
 	if (monster.type().type == MT_DIABLO || (monster.isUnique() && monster.uniqueType <= UniqueMonsterType::NaKrul))
@@ -962,14 +1074,22 @@ void ScanFlames(const View &view)
 		const Object &object = Objects[ActiveObjects[i]];
 		if (!IsFlameObject(object) || !object._oAnimData || object._oAnimFrame == 0)
 			continue;
-		const ClxSprite sprite = object.currentSprite();
+		const ClxSprite sprite = ObjectSprite(object);
 		const Displacement offset = object.getRenderingOffset(sprite, object.position);
 		const Vec corner = TileCentre(object.position) + Vec { static_cast<float>(offset.deltaX - 32), static_cast<float>(offset.deltaY + 16) };
 		if (!view.contains(corner, 200))
 			continue;
-		for (const HotSpot &spot : FlameSpots(sprite)) {
-			const Vec pos = corner + spot.offset;
-			const float flicker = Flicker(pos);
+		const bool candle = IsCandle(object);
+		uint32_t seed = (static_cast<uint32_t>(object.position.x) * 73856093U) ^ (static_cast<uint32_t>(object.position.y) * 19349663U);
+		// The grate's fire comes and goes with its frames; the lights keep their flames where the whole animation has them.
+		const std::vector<HotSpot> &spots = object._otype == OBJ_FLAMEHOLE ? FlameSpots(sprite) : SteadyFlameSpots(object);
+		for (const HotSpot &spot : spots) {
+			seed = seed * 1664525U + 1013904223U;
+			Vec pos = corner + spot.offset;
+			// A candle's flame sways a little.
+			if (candle)
+				pos.x += 0.6F * std::sin(AmbientTime * 0.0021F + static_cast<float>(seed % 628) / 100.F);
+			const float flicker = NaturalFlicker(seed, candle);
 			const float s = spot.size;
 			Ring glow;
 			glow.pos = pos;
@@ -1125,10 +1245,10 @@ void ScanMonsters(const View &view)
 			Halos.push_back({ feet, radius, rank, affixes.has(MonsterMod::Resistant), static_cast<uint32_t>(ActiveMonsters[i]) * 2654435761U | 1 });
 			switch (rank) {
 			case Rank::Magic:
-				Emitters.push_back({ feet, 1.5F, Ambient::Motes, { 130, 160, 255 }, radius });
+				Emitters.push_back({ feet, 1, Ambient::Motes, { 130, 160, 255 }, radius });
 				break;
 			case Rank::Rare:
-				Emitters.push_back({ feet, 3, Ambient::Motes, { 255, 205, 90 }, radius });
+				Emitters.push_back({ feet, 2, Ambient::Motes, { 255, 205, 90 }, radius });
 				if (affixes.has(MonsterMod::Regenerating))
 					Emitters.push_back({ body, 5, Ambient::Motes, { 90, 235, 110 }, 14 });
 				if (affixes.has(MonsterMod::ExtraLife))
@@ -1506,10 +1626,12 @@ void Clear()
 	Cracks.clear();
 	Sweeps.clear();
 	FrameGlows.clear();
+	FrameComets.clear();
 	Trails.clear();
 	SeenBursts.clear();
 	Emitters.clear();
 	HotSpots.clear();
+	SteadySpots.clear();
 	Halos.clear();
 	LastModes.clear();
 }
@@ -1656,26 +1778,28 @@ void ScanMissiles()
 	}
 	ScanFrame++;
 	FrameGlows.clear();
+	FrameComets.clear();
 	for (const Missile &missile : Missiles) {
 		const GraphicLook look = LookOf(missile._miAnimType);
 		if (missile._mitype == MissileID::VisualEffect && look.projectile) {
 			// A projectile's graphic standing still is a hit flash (steel on steel): sparks, not a flying glow.
-			if (!missile._miDrawFlag)
-				continue;
-			auto [it, added] = SeenBursts.try_emplace(&missile, ScanFrame);
-			it->second = ScanFrame;
-			if (added)
+			// Once per missile, even if it blinks out of sight and back (else the flash repeats endlessly).
+			SeenBurst &seen = SeenBursts.try_emplace(&missile, SeenBurst { ScanFrame, false }).first->second;
+			seen.frame = ScanFrame;
+			if (missile._miDrawFlag && !seen.fired) {
+				seen.fired = true;
 				SparksAt(TileCentre(missile.position.tile), look.element == Element::Lightning && missile._miAnimType == MissileGraphicID::ChargedBolt ? Element::Physical : look.element, 0.8F);
+			}
 			continue;
 		}
-		const float scale = CasterScale(missile);
+		const float scale = CasterScale(missile) * (missile.poe2.look == 1 ? 0.6F : 1.F);
 		if (look.burst > 0) {
-			if (!missile._miDrawFlag)
-				continue;
-			auto [it, added] = SeenBursts.try_emplace(&missile, ScanFrame);
-			it->second = ScanFrame;
-			if (added)
+			SeenBurst &seen = SeenBursts.try_emplace(&missile, SeenBurst { ScanFrame, false }).first->second;
+			seen.frame = ScanFrame;
+			if (missile._miDrawFlag && !seen.fired) {
+				seen.fired = true;
 				ImpactAt(TileCentre(missile.position.tile), look.element, look.burst * scale);
+			}
 			continue;
 		}
 		if (!look.projectile || !missile._miDrawFlag)
@@ -1696,6 +1820,13 @@ void ScanMissiles()
 		}
 		const Colours c = ColoursOf(look.element);
 		const bool arrow = missile._miAnimType == MissileGraphicID::Arrow;
+		const bool small = missile.poe2.look == 1;
+		if (!trail.arrow) {
+			const Vec velocity { static_cast<float>(missile.position.velocity.deltaX), static_cast<float>(missile.position.velocity.deltaY) };
+			const float speed = Length(velocity);
+			const Vec dir = speed > 0.001F ? velocity * (1 / speed) : Vec { 1, 0 };
+			FrameComets.push_back({ head, dir, look.element, scale, small, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4) });
+		}
 		Ring glow;
 		glow.pos = head;
 		glow.r0 = glow.r1 = (arrow ? 6.F : 20.F) * scale;
@@ -1706,7 +1837,7 @@ void ScanMissiles()
 		glow.disc = true;
 		glow.ground = false;
 		FrameGlows.push_back(glow);
-		if (trail.style == TrailStyle::Orb) {
+		if (trail.style == TrailStyle::Orb && !small) {
 			// The orb throbs.
 			glow.r0 = glow.r1 = 30 * scale * (1 + 0.3F * std::sin(AmbientTime * 0.018F + head.x * 0.05F));
 			glow.alpha = 0.3F;
@@ -1726,13 +1857,44 @@ void ScanMissiles()
 			FrameGlows.push_back(glow);
 		}
 	}
-	std::erase_if(SeenBursts, [](const auto &entry) { return entry.second != ScanFrame; });
+	std::erase_if(SeenBursts, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 	// An arrow that vanished hit something (or the wall): sparks where it stopped.
 	for (const auto &[missile, trail] : Trails) {
 		if (trail.frame != ScanFrame && trail.arrow && trail.count > 0)
 			SparksAt(trail.points[0] + Vec { 0, 16 }, trail.element, 0.6F);
 	}
 	std::erase_if(Trails, [](const auto &entry) { return entry.second.frame != ScanFrame; });
+}
+
+bool ReplacesSprite(const Missile &missile)
+{
+	if (!Enabled() || ScanFrame == 0 || ScanFrame - LastDrawnScan > 2)
+		return false;
+	if (missile._mitype == MissileID::VisualEffect)
+		return false;
+	// Arrows keep their sprite: the effects only streak and spark them.
+	if (IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow))
+		return false;
+	return LookOf(missile._miAnimType).projectile;
+}
+
+ClxSprite ObjectSprite(const Object &object)
+{
+	const ClxSprite current = object.currentSprite();
+	if (!Enabled() || object._otype == OBJ_FLAMEHOLE || !IsFlameObject(object))
+		return current;
+	const ClxSpriteList list = *object._oAnimData;
+	const uint32_t frames = object._oAnimLen > 0 ? std::min(object._oAnimLen, list.numSprites()) : list.numSprites();
+	if (frames < 2)
+		return current;
+	const uint32_t seed = (static_cast<uint32_t>(object.position.x) * 73856093U) ^ (static_cast<uint32_t>(object.position.y) * 19349663U);
+	// A candle holds one frame: its glow sways instead of the art stepping through a loop.
+	if (IsCandle(object))
+		return list[seed % frames];
+	// A torch runs at 80% to 125% of its art's pace, from its own starting frame.
+	const float msPerFrame = 50.F * static_cast<float>(std::max(object._oAnimDelay, 1));
+	const float rate = 0.8F + (0.45F * static_cast<float>(seed % 1000) / 1000.F);
+	return list[(static_cast<uint32_t>(AmbientTime * rate / msPerFrame) + seed) % frames];
 }
 
 void ScanWorld(const Surface &world)
@@ -1938,6 +2100,48 @@ void DrawRings()
 	}
 	for (const Ring &glow : FrameGlows)
 		SoftDisc(Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
+}
+
+/** @brief Projectile bodies: a white-hot head and a tail tapering back along the flight, shaped by the element. */
+void DrawComets()
+{
+	for (const Comet &comet : FrameComets) {
+		const Colours c = ColoursOf(comet.element);
+		uint32_t seed = comet.seed + static_cast<uint32_t>(AmbientTime * 0.05F);
+		const float s = comet.scale;
+		const Vec back = comet.dir * -1;
+		const Vec side { -comet.dir.y, comet.dir.x };
+		switch (comet.element) {
+		case Element::Cold: {
+			// A long glassy shard: sharp nose, a pale core and a thin frosty tail.
+			const Vec nose = comet.head + comet.dir * (10 * s);
+			SoftLine(Glowing, nose, comet.head + back * (16 * s), 9 * s, c.core, c.mid, 1.F, 0.8F);
+			SoftLine(Glowing, comet.head + back * (10 * s), comet.head + back * (46 * s), 6 * s, c.mid, c.edge, 0.7F, 0);
+			SoftLine(Glowing, comet.head + side * (5 * s), comet.head - side * (5 * s), 5 * s, c.core, c.core, 0.5F, 0.5F);
+			break;
+		}
+		case Element::Lightning: {
+			// A crackling spark: a jagged tail that changes every frame.
+			Vec at = comet.head;
+			for (int i = 0; i < 4; i++) {
+				const Vec next = at + back * (9 * s) + side * ((SeededRandom(seed) - 0.5F) * 10 * s);
+				SoftLine(Glowing, at, next, 4 * s, c.core, c.mid, 1.F - i * 0.2F, 0.8F - i * 0.2F);
+				at = next;
+			}
+			SoftDisc(Glowing, comet.head, 6 * s, c.core, 1, false);
+			break;
+		}
+		default: {
+			// Fire and the rest: a flickering flame licking back from a white-hot head.
+			const float flicker = 0.85F + 0.3F * SeededRandom(seed);
+			const float length = (comet.small ? 18.F : 34.F) * s * flicker;
+			SoftLine(Glowing, comet.head, comet.head + back * length + side * ((SeededRandom(seed) - 0.5F) * 6 * s), (comet.small ? 8.F : 14.F) * s, c.mid, c.edge, 0.9F, 0);
+			SoftLine(Glowing, comet.head, comet.head + back * (length * 0.55F), (comet.small ? 4.F : 7.F) * s, c.core, c.mid, 1.F, 0.2F);
+			SoftDisc(Glowing, comet.head, (comet.small ? 4.F : 7.F) * s, c.core, 1, false);
+			break;
+		}
+		}
+	}
 }
 
 void DrawParticles()
@@ -2194,18 +2398,17 @@ void DrawHalos()
 		switch (halo.rank) {
 		case Rank::Normal:
 			break;
+		// Magic and rare monsters get no ring on the ground (Curtis: rings break immersion), only a faint glow at
+		// their feet and a few motes; their name colour says the rest, as in POE2.
 		case Rank::Magic: {
 			const float pulse = 0.75F + 0.25F * std::sin(t * 0.004F + phase);
-			SoftDisc(Glowing, pos, r * 1.1F, { 60, 80, 200 }, 0.1F * pulse, true);
-			SoftRing(Glowing, pos, r, 2, { 120, 150, 255 }, 0.45F * pulse, 0, 1);
+			SoftDisc(Glowing, pos, r * 1.3F, { 60, 80, 200 }, 0.06F * pulse, true);
 			break;
 		}
 		case Rank::Rare: {
-			const Rgb gold = halo.prismatic ? Hue(t * 0.0005F + phase * 0.1F) : Rgb { 255, 200, 80 };
-			const float spin = t * 0.0012F + phase;
-			SoftDisc(Glowing, pos, r * 1.15F, { 200, 130, 30 }, 0.14F, true);
-			SoftRing(Glowing, pos, r, 3, gold, 0.8F, 0, 1, 6, spin);
-			SoftRing(Glowing, pos, r * 0.78F, 1.5F, gold, 0.45F, 0, 1, 0, -spin);
+			const Rgb glow = halo.prismatic ? Hue(t * 0.0005F + phase * 0.1F) : Rgb { 200, 130, 30 };
+			const float pulse = 0.8F + 0.2F * std::sin(t * 0.003F + phase);
+			SoftDisc(Glowing, pos, r * 1.4F, glow, 0.09F * pulse, true);
 			break;
 		}
 		case Rank::Unique:
@@ -2310,6 +2513,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		Advance(elapsed);
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
+	LastDrawnScan = ScanFrame;
 	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty())
 		return;
 
@@ -2319,6 +2523,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawCracks();
 	DrawSigils();
 	DrawRings();
+	DrawComets();
 	DrawBolts();
 	DrawSweeps();
 	DrawParticles();

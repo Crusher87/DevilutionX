@@ -10,6 +10,7 @@
 #include "monster.h"
 #include "msg.h"
 #include "player.h"
+#include "poe2/aim.hpp"
 #include "tables/itemdat.h"
 #include "utils/language.h"
 
@@ -54,6 +55,13 @@ DefaultAttack DefaultAttackFor(const Player &player)
 	default:
 		return DefaultAttack::Punch;
 	}
+}
+
+SkillSlot DefaultSkillSlot(const Player &player)
+{
+	if (!gbIsPoe2)
+		return {};
+	return SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttackFor(player)));
 }
 
 std::string_view DefaultAttackName(DefaultAttack attack)
@@ -118,7 +126,7 @@ int RollStaffBoltDamage(const Player &player)
 {
 	const int base = RandomIntBetween(player._pIMinDam, std::max(player._pIMinDam, player._pIMaxDam));
 	const int bonus = (base * player._pIBonusDam) / 100;
-	return std::max(1, base + bonus + (player._pMagic * StaffBoltMagicPercent / 100));
+	return std::max(1, ((base + bonus) * StaffBoltDamagePercent / 100) + (player._pMagic * StaffBoltMagicPercent / 100));
 }
 
 bool UseDefaultAttack(Player &player)
@@ -136,6 +144,9 @@ bool UseDefaultAttack(Player &player)
 	Point target = cursPosition;
 	if (target == player.position.tile || !InDungeonBounds(target))
 		target = player.position.tile + player._pdir;
+	// Arrows and staff bolts fly exactly where the cursor points, at any angle.
+	if (ranged)
+		target = AimAlongCursor(player, AimTiles);
 	LastPlayerAction = PlayerActionType::Attack;
 	NetSendCmdLoc(player.getId(), true, ranged ? CMD_RATTACKXY : CMD_SATTACKXY, target);
 	return true;

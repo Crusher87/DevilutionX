@@ -1820,6 +1820,10 @@ void WalkInDir(Player &player, AxisDirection dir)
 		// POE2 Mashup: once a held ranged attack or spell has fired, the hero can step before the next one.
 		const bool shotFired = gbIsPoe2 && IsAnyOf(player._pmode, PM_RATTACK, PM_SPELL) && player.poe2.castSkill == WeaponSkill::None
 		    && player.destAction == ACTION_NONE && player.CanChangeAction();
+		// POE2 Mashup: a walk to an item, object or person started by a click gives way to the movement keys.
+		if (gbIsPoe2 && sgbMouseDown == CLICK_NONE
+		    && IsAnyOf(player.destAction, ACTION_PICKUPITEM, ACTION_PICKUPAITEM, ACTION_OPERATE, ACTION_DISARM, ACTION_TALK, ACTION_ATTACKMON, ACTION_ATTACKPLR))
+			player.destAction = ACTION_NONE;
 		if ((sgbMouseDown != CLICK_NONE || player.destAction != ACTION_NONE) && !shotFired)
 			return;
 	}

@@ -7,6 +7,7 @@
 #include "items.h"
 #include "levels/gendung.h"
 #include "player.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -156,6 +157,8 @@ std::string_view SkillName(SkillSlot skill)
 		return WeaponSkillName(skill.attack());
 	case SkillKind::Persistent:
 		return PersistentSkillName(skill.persistent());
+	case SkillKind::Default:
+		return DefaultAttackName(static_cast<DefaultAttack>(skill.id));
 	default:
 		return {};
 	}
@@ -175,6 +178,9 @@ int SkillManaCost(const Player &player, SkillSlot skill)
 
 SkillUsability GetSkillUsability(const Player &player, SkillSlot skill)
 {
+	// The weapon's own attack needs no gem and no mana.
+	if (skill.kind == SkillKind::Default)
+		return SkillUsability::Ready;
 	const std::optional<size_t> gemIndex = SkillGemItemIndex(skill);
 	if (!gemIndex)
 		return SkillUsability::Empty;

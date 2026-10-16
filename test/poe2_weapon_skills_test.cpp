@@ -110,8 +110,9 @@ TEST_F(Poe2WeaponSkillsTest, StaffBoltScalesWithTheStaff)
 	SetRndSeed(3);
 	for (int i = 0; i < 200; i++) {
 		const int damage = RollStaffBoltDamage(player);
-		EXPECT_GE(damage, 4 + 2 + 10);
-		EXPECT_LE(damage, 12 + 6 + 10);
+		// The staff's damage with its bonus, cut to StaffBoltDamagePercent, plus 10% of Magic.
+		EXPECT_GE(damage, ((4 + 2) * StaffBoltDamagePercent / 100) + 5);
+		EXPECT_LE(damage, ((12 + 6) * StaffBoltDamagePercent / 100) + 5);
 	}
 }
 

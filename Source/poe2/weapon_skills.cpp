@@ -17,6 +17,7 @@
 #include "multi.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/aim.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
@@ -168,7 +169,11 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 	if (!CanStartSkill(player))
 		return false;
 	PaySkillMana(player, skill);
-	BeginSkillAnimation(player, skill, graphic, SkillTarget(player));
+	Point target = SkillTarget(player);
+	// Projectiles with nothing under the cursor fly exactly where it points, at any angle.
+	if (pcursmonst == -1 && &player == MyPlayer && IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt))
+		target = AimAlongCursor(player, AimTiles);
+	BeginSkillAnimation(player, skill, graphic, target);
 	return true;
 }
 
@@ -204,8 +209,9 @@ void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID mi
 /** @brief A point far along the line from the player through the target, so a fan aimed at it stays narrow. */
 Point FarAlong(const Player &player, Point target, int tiles)
 {
-	const Direction dir = GetDirection(player.position.tile, target);
-	return player.position.tile + Displacement { dir } * tiles;
+	if (target == player.position.tile)
+		return player.position.tile + Displacement { player._pdir } * tiles;
+	return FarAlongLine(player.position.tile, target, tiles);
 }
 
 /** @brief Fires one shot of a skill's stream. */
@@ -729,6 +735,9 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 	Point target = cursPosition;
 	if (target == player.position.tile || !InDungeonBounds(target))
 		target = player.position.tile + player._pdir;
+	// Shots fly exactly where the cursor points; Rain of Arrows lands on the spot itself.
+	if (ranged && skill != WeaponSkill::RainOfArrows)
+		target = AimAlongCursor(player, AimTiles);
 	NetSendCmdLoc(player.getId(), true, ranged ? CMD_RATTACKXY : CMD_SATTACKXY, target);
 	return true;
 }
@@ -1061,9 +1070,9 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		break;
 	case WeaponSkill::IceBolt:
 		vfx::Impact(tile + dir, vfx::Element::Cold, 0.5F);
-		// Frost gathers in the caster's hand.
+		// Frost gathers in the caster's hand, with a bright crystal zing (the Stone Curse thud was dull, Curtis 2026-10-16).
 		AddVisualEffect(tile + dir, MissileGraphicID::StoneCurseShatter, 0, 4);
-		PlaySfxLoc(SfxID::SpellStoneCurse, tile);
+		PlaySfxLoc(SfxID::SpellHolyBolt, tile);
 		break;
 	case WeaponSkill::FrostNova:
 		vfx::Impact(tile, vfx::Element::Cold, 1.6F);

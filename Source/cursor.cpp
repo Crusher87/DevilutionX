@@ -40,6 +40,7 @@
 #include "missiles.h"
 #include "options.h"
 #include "panels/skills_panel.hpp"
+#include "poe2/aim.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stacking.hpp"
@@ -874,6 +875,8 @@ bool CheckPanelsAndFlags(Rectangle mainPanel)
 	if (IsLeftPanelOpen() && GetLeftPanel().contains(MousePosition)) {
 		return true;
 	}
+	if (SkillsPanelContains(MousePosition))
+		return true;
 	return false;
 }
 
@@ -946,7 +949,18 @@ void CheckCursMove()
 		AlterMousePositionViaPlayer(screenPosition, myPlayer);
 
 		currentTile = ConvertToTileGrid(screenPosition);
+		const Point unshifted = currentTile;
 		ShiftToDiamondGridAlignment(screenPosition, currentTile, flipflag);
+		// POE2 Mashup: also where in its tile the mouse points, so projectiles fly at any angle (see AimAlongCursor).
+		const int px = screenPosition.x % TILE_WIDTH;
+		const int py = screenPosition.y % TILE_HEIGHT;
+		const bool up = py < px / 2;
+		const bool down = py >= TILE_HEIGHT - px / 2;
+		const Point tile = unshifted + Displacement { down ? 1 : 0, up ? -1 : 0 };
+		// The tile's centre in this cell: the left corner, moved half a tile up-right (up) and down-right (down).
+		const float ox = static_cast<float>(px - ((up ? TILE_WIDTH / 2 : 0) + (down ? TILE_WIDTH / 2 : 0)));
+		const float oy = static_cast<float>(py - (TILE_HEIGHT / 2 - (up ? TILE_HEIGHT / 2 : 0) + (down ? TILE_HEIGHT / 2 : 0)));
+		SetCursorTileExact(static_cast<float>(tile.x) + (ox / (TILE_WIDTH / 2.F) + oy / (TILE_HEIGHT / 2.F)) / 2, static_cast<float>(tile.y) + (oy / (TILE_HEIGHT / 2.F) - ox / (TILE_WIDTH / 2.F)) / 2);
 	}
 
 	if (CheckMouseHold(currentTile)) return;

@@ -230,6 +230,16 @@ bool CreateGemItem(Item &item, const GemEntry &gem, int level)
 	return CreateSkillGemItem(item, gem.skill, level);
 }
 
+int UncutGemLevelForArea(int areaLevel)
+{
+	return MaxGemLevelForCharacter(std::max(areaLevel, 1));
+}
+
+void SetUncutGemLevel(Item &item, int level)
+{
+	item._iCreateInfo = static_cast<uint16_t>((item._iCreateInfo & ~CF_LEVEL) | std::clamp(level, 1, MaxGemLevel));
+}
+
 int GemLevelFromUncut(const Item &uncut, int characterLevel)
 {
 	return std::min({ UncutGemLevel(uncut), MaxGemLevel, MaxGemLevelForCharacter(characterLevel) });

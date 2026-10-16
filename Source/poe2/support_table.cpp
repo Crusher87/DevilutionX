@@ -17,6 +17,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
@@ -846,6 +847,17 @@ uint32_t SkillTags(SkillSlot skill)
 		}
 	case SkillKind::Attack:
 		break;
+	case SkillKind::Default:
+		switch (static_cast<DefaultAttack>(skill.id)) {
+		case DefaultAttack::BowShot:
+			return ST_Attack | ST_Projectile | ST_Bow | ST_Physical | Hit;
+		case DefaultAttack::StaffBolt:
+			return ST_Attack | ST_Projectile | ST_Staff | ST_Physical | Hit;
+		case DefaultAttack::StaffStrike:
+			return ST_Attack | ST_Melee | ST_Strike | ST_Staff | ST_Physical | Hit;
+		default:
+			return ST_Attack | ST_Melee | ST_Strike | ST_Physical | Hit;
+		}
 	default:
 		return 0;
 	}
@@ -1013,6 +1025,12 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 		return false;
 	if ((tags & data.needAll) != data.needAll || (tags & data.exclude) != 0)
 		return false;
+	// The default attack doesn't go through OnSkillUsed, so supports that act when a skill is used don't fit it.
+	if (skill.kind == SkillKind::Default
+	    && IsAnyOf(data.gem, SG::SpellEcho, SG::HoradricSeals, SG::BaalsEcho, SG::EchoingShout, SG::Cascade, SG::RuneMastery, SG::ClusterRunes, SG::NaKrulsPrison,
+	        SG::Aftershock, SG::ImmortalKingsStride, SG::RallyingCry, SG::BlinkStrike, SG::Sanctify, SG::Wrathforged, SG::ComboFinisher, SG::TalRashasPrism,
+	        SG::KashyasVolley, SG::ZharsMadness))
+		return false;
 	switch (data.gem) {
 	case SG::BoneArmy:
 		return IsAnyOf(skill.persistent(), PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages);
@@ -1045,9 +1063,9 @@ bool SupportsConflict(SupportGem a, SupportGem b)
 
 bool LineageSupportInUse(const Poe2PlayerData &data, SupportGem gem, size_t slot, size_t socket)
 {
-	for (size_t s = 0; s < NumSkillSlots; s++) {
+	for (size_t s = 0; s <= DefaultAttackRow; s++) {
 		for (size_t i = 0; i < MaxSupportSockets; i++) {
-			if ((s != slot || i != socket) && data.slotSupports[s][i] == gem)
+			if ((s != slot || i != socket) && data.supportsAt(s)[i] == gem)
 				return true;
 		}
 	}

@@ -98,6 +98,7 @@
 #include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/autosave.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
@@ -479,7 +480,7 @@ void LeftMouseDown(uint16_t modState)
 					CheckVisualStoreItem(MousePosition, isCtrlHeld, isShiftHeld);
 				}
 				CheckVisualStoreButtonPress(MousePosition);
-			} else if (IsSkillsPanelOpen() && GetLeftPanel().contains(MousePosition)) {
+			} else if (SkillsPanelContains(MousePosition)) {
 				HandleSkillsPanelClick(MousePosition);
 			} else if (SpellbookFlag && GetRightPanel().contains(MousePosition)) {
 				CheckSBook();
@@ -1054,6 +1055,8 @@ void RunGameLoop(interface_mode uMsg)
 		uint16_t modState;
 		while (FetchMessage(&event, &modState)) {
 			if (event.type == SDL_EVENT_QUIT) {
+				// POE2 Mashup: closing the window saves, as there is no Save Game.
+				AutosaveNow();
 				gbRunGameResult = false;
 				gbRunGame = false;
 				break;
@@ -1742,6 +1745,7 @@ void GameLogic()
 	CheckQuests();
 	RedrawViewport();
 	pfile_update(false);
+	ProcessAutosave();
 
 	plrctrls_after_game_logic();
 }
@@ -2133,11 +2137,14 @@ void InitKeymapActions()
 	    N_("Show/hide items on ground."),
 	    SDLK_LALT,
 	    // POE2 Mashup: Alt toggles the labels, which stay up until it's pressed again; the loot filter decides which show.
+	    // Over an item it only shows the item's modifier details, so checking an item doesn't flip the labels.
 	    [] {
-		    if (gbIsPoe2)
-			    ToggleItemLabelHighlight();
-		    else
+		    if (gbIsPoe2) {
+			    if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursitem == -1)
+				    ToggleItemLabelHighlight();
+		    } else {
 			    HighlightKeyPressed(true);
+		    }
 	    },
 	    [] {
 		    if (!gbIsPoe2)
@@ -3168,6 +3175,8 @@ bool TryIconCurs()
 		else if (pcursstashitem != StashStruct::EmptyCell) {
 			Item &item = Stash.stashList[pcursstashitem];
 			changeCursor = ApplyOilToItem(item, myPlayer);
+			if (changeCursor)
+				SpendHeldCurrency(myPlayer);
 			if (CurrencyDestroyedItem) {
 				CurrencyDestroyedItem = false;
 				Stash.RemoveStashItem(pcursstashitem);
@@ -3754,6 +3763,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	if (firstflag || lvldir == ENTRY_LOAD) {
 		LoadGameLevelStash();
+		MoveInventoryGoldToLeague(*MyPlayer);
 	}
 
 	IncProgress();

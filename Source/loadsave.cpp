@@ -2431,7 +2431,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 19 the weapon sets (the set that is out, the Books of Specialisation, each set's passives and the other set's
  * weapons) and the hardcore flag.
  */
-constexpr uint8_t Poe2HeroDataVersion = 19;
+constexpr uint8_t Poe2HeroDataVersion = 20;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2703,6 +2703,18 @@ uint8_t ReadPoe2HeroData(Player &player)
 			continue;
 		LoadItem(file, item);
 	}
+
+	// Version 20: the supports of the weapon's default attack, and their tiers.
+	if (version < 20 || !file.IsValid(MaxSupportSockets * 2))
+		return version;
+	for (SupportGem &gem : player.poe2.defaultSupports) {
+		const uint8_t value = file.NextLE<uint8_t>();
+		gem = value < static_cast<uint8_t>(SupportGem::Count) ? static_cast<SupportGem>(value) : SupportGem::None;
+	}
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		const int tier = file.NextLE<uint8_t>();
+		player.poe2.defaultSupportTiers[socket] = static_cast<uint8_t>(std::clamp(tier, 1, SupportTierCount(player.poe2.defaultSupports[socket])));
+	}
 	return version;
 }
 
@@ -2759,7 +2771,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	}
 	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2881,6 +2893,11 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		if (!item.isEmpty())
 			SaveItem(file, item);
 	}
+	// Version 20: the default attack's supports.
+	for (const SupportGem gem : player.poe2.defaultSupports)
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
+	for (const uint8_t tier : player.poe2.defaultSupportTiers)
+		file.WriteLE<uint8_t>(tier);
 }
 
 void LoadHeroItems(Player &player)

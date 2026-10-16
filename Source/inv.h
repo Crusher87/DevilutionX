@@ -245,6 +245,8 @@ bool UseInvItem(int cii);
 bool EquipInvItem(Player &player, int cii);
 void DoTelekinesis();
 int CalculateGold(Player &player);
+/** @brief POE2 Mashup: gold left in an old save's inventory joins the league's purse. */
+void MoveInventoryGoldToLeague(Player &player);
 
 /**
  * @brief Gets the size, in inventory cells, of the given item.

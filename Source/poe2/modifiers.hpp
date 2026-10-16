@@ -229,6 +229,11 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1);
 
 /** @brief The modifier's tooltip lines, with its tier at the end. */
 std::vector<std::string> ItemModText(const Poe2ItemMod &mod);
+/**
+ * @brief The modifier as POE2 shows it with Alt held: a header line with its side, name and tier, then each stat with
+ * the tier's range after the rolled value, like "+8(3-10) to Armour".
+ */
+std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod);
 
 /** @brief The family of a rolled modifier, or nullptr for an empty one. */
 const ModFamily *ItemModFamily(const Poe2ItemMod &mod);

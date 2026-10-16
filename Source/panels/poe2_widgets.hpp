@@ -19,7 +19,8 @@
 
 namespace devilution::poe2ui {
 
-constexpr uint8_t PanelColor = PAL16_GRAY + 15;
+// Palette entry 255 is white in every Diablo palette, so the panel uses 0, which is black.
+constexpr uint8_t PanelColor = 0;
 constexpr uint8_t BorderColor = PAL16_YELLOW + 8;
 constexpr uint8_t InnerBorderColor = PAL16_YELLOW + 12;
 constexpr uint8_t RowColor = PAL16_GRAY + 14;

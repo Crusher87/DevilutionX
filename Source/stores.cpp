@@ -1702,7 +1702,7 @@ void StoreSellItem()
 
 	AddGoldToInventory(myPlayer, cost);
 
-	myPlayer._pGold += cost;
+	myPlayer._pGold = CalculateGold(myPlayer);
 }
 
 void SmithSellEnter()

@@ -174,6 +174,10 @@ int SupportExtraProjectiles(const Player &player, SpellID spell);
 
 /** @brief The weapon skill whose attack or animation is in progress. */
 WeaponSkill CurrentWeaponSkill(const Player &player);
+/** @brief The skill of the attack in progress: the weapon skill, or the weapon's default attack when there is none. */
+SkillSlot CurrentAttackSkill(const Player &player);
+/** @brief The skill of a Skills panel row: the gem in a socket, or the default attack for the DefaultAttackRow. */
+SkillSlot RowSkill(const Player &player, size_t row);
 /** @brief Damage multiplier in percent for a melee hit, from the current skill's gem level and supports. */
 int SupportMeleeDamagePercent(const Player &player);
 /** @brief Whether a melee hit of the current skill knocks the monster back. */

@@ -47,6 +47,8 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/aim.hpp"
+#include "poe2/autosave.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
@@ -579,8 +581,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	if (gbIsPoe2 && monster.isPlayerMinion())
 		return false;
 	// POE2 Mashup: the hit is the current skill's, for its supports.
-	const WeaponSkill hitSkill = CurrentWeaponSkill(player);
-	const SupportHitScope supportScope(player, hitSkill != WeaponSkill::None ? SkillSlot::ForAttack(hitSkill) : SkillSlot {});
+	const SupportHitScope supportScope(player, CurrentAttackSkill(player));
 
 	if (adjacentDamage) {
 		if (player.getCharacterLevel() > 20)
@@ -1041,12 +1042,29 @@ bool DoRangeAttack(Player &player)
 	const bool rain = player.poe2.activeSkill == WeaponSkill::RainOfArrows && arrows == 1;
 	if (rain)
 		arrows = 9;
+	// POE2 Mashup: the weapon's free default attack takes supports, like a skill: extra projectiles fan out.
+	const SkillSlot defaultSkill = player.poe2.activeSkill == WeaponSkill::None ? DefaultSkillSlot(player) : SkillSlot {};
+	const int defaultExtra = !defaultSkill.isEmpty() && arrows == 1 ? SupportExtraProjectileCount(player, defaultSkill) : 0;
 	// POE2 Mashup: a staff's ranged attack is its free Staff Bolt, a fire bolt rolled from the staff's damage.
 	if (FiresStaffBolt(player)) {
-		if (arrows == 1)
-			AddMissile(player.position.tile, player.position.temp, player._pdir, MissileID::Firebolt, TARGET_MONSTERS, player, RollStaffBoltDamage(player), 0);
+		if (arrows == 1) {
+			const Direction dir = GetDirection(player.position.tile, player.position.temp);
+			for (int i = 0; i <= defaultExtra; i++) {
+				// 0, -1, 1, -2, 2, ... tiles to the side at the target.
+				const int side = ((i + 1) / 2) * (i % 2 == 0 ? 1 : -1);
+				Missile *bolt = AddMissile(player.position.tile, player.position.temp + Displacement { Left(Left(dir)) } * side, player._pdir, MissileID::Firebolt, TARGET_MONSTERS, player, RollStaffBoltDamage(player), 0);
+				if (bolt == nullptr)
+					continue;
+				// Drawn as the staff's own small ember, not a Firebolt.
+				bolt->poe2.look = 1;
+				if (!defaultSkill.isEmpty())
+					SetMissileSkill(*bolt, player, defaultSkill);
+			}
+		}
 		arrows = 0;
 	}
+	if (defaultExtra > 0 && arrows == 1)
+		arrows += defaultExtra;
 	const bool lightningArrow = player.poe2.activeSkill == WeaponSkill::LightningArrow && arrows == 1;
 	if (rain || lightningArrow) {
 		PlaySkillEffects(player, player.poe2.activeSkill, player.position.temp);
@@ -1060,7 +1078,8 @@ bool DoRangeAttack(Player &player)
 			xoff = RainOfArrowsVolley[arrow].deltaX;
 			yoff = RainOfArrowsVolley[arrow].deltaY;
 		} else if (arrows != 1) {
-			const int angle = arrow == 0 ? -1 : 1;
+			// Two arrows go either side; a supported default shot fans out 0, -1, 1, -2, 2, ...
+			const int angle = defaultExtra > 0 ? ((arrow + 1) / 2) * (arrow % 2 == 0 ? 1 : -1) : (arrow == 0 ? -1 : 1);
 			const int x = player.position.temp.x - player.position.tile.x;
 			if (x != 0)
 				yoff = x < 0 ? angle : -angle;
@@ -1100,6 +1119,11 @@ bool DoRangeAttack(Player &player)
 		// POE2 Mashup: a bow skill's arrows hit harder as its gem levels up.
 		if (missile != nullptr && (rain || lightningArrow))
 			missile->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(SkillSlot::ForAttack(player.poe2.activeSkill), player.poe2.skillLevel(player.poe2.activeSkill)));
+		// The free Bow Shot hits softer than a gem's skill, and carries its own supports.
+		if (missile != nullptr && !defaultSkill.isEmpty()) {
+			missile->poe2.damagePercent = static_cast<int16_t>(DefaultAttackDamagePercent);
+			SetMissileSkill(*missile, player, defaultSkill);
+		}
 
 		if (arrow == 0 && mistype != MissileID::SpectralArrow) {
 			PlaySfxLoc(arrows != 1 ? SfxID::ShootBow2 : SfxID::ShootBow, player.position.tile);
@@ -2605,6 +2629,8 @@ int CalcStatDiff(Player &player)
 void NextPlrLevel(Player &player)
 {
 	player.setCharacterLevel(player.getCharacterLevel() + 1);
+	if (&player == MyPlayer)
+		RequestAutosave();
 
 	CalcPlrInv(player, true);
 
@@ -3533,6 +3559,9 @@ void CheckPlrSpell(bool isShiftHeld, SpellID spellID, SpellType spellType)
 				targetedTile = myPlayer.position.temp + relativeMove;
 			}
 		}
+		// POE2 Mashup: bolts fly exactly where the cursor points, at any angle, not toward the nearest tile's centre.
+		if (gbIsPoe2 && IsAnyOf(spellID, SpellID::Firebolt, SpellID::Fireball, SpellID::ChargedBolt, SpellID::HolyBolt, SpellID::Lightning, SpellID::BloodStar, SpellID::Elemental))
+			targetedTile = AimAlongCursor(myPlayer, AimTiles);
 		LastPlayerAction = PlayerActionType::Spell;
 		NetSendCmdLocParam3(true, CMD_SPELLXY, targetedTile, static_cast<int8_t>(spellID), static_cast<uint8_t>(spellType), spellFrom);
 	}

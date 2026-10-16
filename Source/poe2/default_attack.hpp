@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <string_view>
 
+#include "poe2/player_data.hpp"
+
 namespace devilution {
 
 struct Player;
@@ -26,10 +28,18 @@ enum class DefaultAttack : uint8_t {
 	ShieldBash,
 };
 
-/** @brief The staff bolt's damage is the staff's attack damage plus this percent of the hero's Magic. */
-constexpr int StaffBoltMagicPercent = 20;
+/**
+ * @brief The default attacks hit for this percent of the weapon's damage: weaker than skills cut from gems, since they
+ * cost no mana (Curtis, 2026-10-16).
+ */
+constexpr int DefaultAttackDamagePercent = 85;
+/** @brief The staff bolt's damage is this percent of the staff's attack damage, plus a part of the hero's Magic. */
+constexpr int StaffBoltDamagePercent = 70;
+constexpr int StaffBoltMagicPercent = 10;
 
 DefaultAttack DefaultAttackFor(const Player &player);
+/** @brief The hero's default attack as a skill, for its supports; empty outside POE2 Mashup. */
+SkillSlot DefaultSkillSlot(const Player &player);
 std::string_view DefaultAttackName(DefaultAttack attack);
 /** @brief A word or two for the skill tray slot. */
 std::string_view DefaultAttackLabel(DefaultAttack attack);

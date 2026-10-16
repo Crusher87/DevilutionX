@@ -13,6 +13,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -165,6 +166,13 @@ const SupportSockets &Poe2PlayerData::supportsFor(SkillSlot skill) const
 	static const SupportSockets None {};
 	if (skill.isEmpty())
 		return None;
+	if (skill.kind == SkillKind::Default) {
+		// The default attack keeps its supports when the weapon changes; only the ones that fit the new attack work.
+		static SupportSockets fitting {};
+		for (size_t i = 0; i < MaxSupportSockets; i++)
+			fitting[i] = SupportGemCanSupport(defaultSupports[i], skill) ? defaultSupports[i] : SupportGem::None;
+		return fitting;
+	}
 	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
 		if (skillSlots[slot] == skill)
 			return slotSupports[slot];
@@ -184,6 +192,13 @@ int Poe2PlayerData::supportTier(SkillSlot skill, SupportGem gem) const
 {
 	if (gem == SupportGem::None || skill.isEmpty())
 		return 0;
+	if (skill.kind == SkillKind::Default) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			if (defaultSupports[socket] == gem)
+				return socketTier(DefaultAttackRow, socket);
+		}
+		return 0;
+	}
 	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
 		if (skillSlots[slot] != skill)
 			continue;
@@ -428,7 +443,7 @@ bool SkillTakesSupports(SkillSlot skill)
 {
 	if (skill.kind == SkillKind::Persistent)
 		return (SkillTags(skill) & ST_Minion) != 0;
-	return skill.kind == SkillKind::Spell || skill.kind == SkillKind::Attack;
+	return IsAnyOf(skill.kind, SkillKind::Spell, SkillKind::Attack, SkillKind::Default);
 }
 
 std::string_view SupportGemNeeds(SupportGem gem)
@@ -467,7 +482,21 @@ bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 	if (skill.kind == SkillKind::Persistent)
 		return false;
 	if (gem == SupportGem::Efficiency)
-		return true;
+		return skill.kind != SkillKind::Default;
+	if (skill.kind == SkillKind::Default) {
+		// Bow Shot and Staff Bolt fire projectiles; the rest are melee strikes.
+		const bool melee = (SkillTags(skill) & ST_Melee) != 0;
+		switch (gem) {
+		case SupportGem::Brutality:
+		case SupportGem::Knockback:
+		case SupportGem::BattleRage:
+			return melee;
+		case SupportGem::MartialTempo:
+			return true;
+		default:
+			return false;
+		}
+	}
 	if (skill.kind == SkillKind::Attack) {
 		const WeaponSkill attack = skill.attack();
 		switch (gem) {
@@ -528,8 +557,8 @@ int SupportCapacity(const Player &player, GemColor color)
 int SupportsUsed(const Poe2PlayerData &data, GemColor color)
 {
 	int used = 0;
-	for (const SupportSockets &supports : data.slotSupports) {
-		for (const SupportGem gem : supports) {
+	for (size_t row = 0; row <= DefaultAttackRow; row++) {
+		for (const SupportGem gem : data.supportsAt(row)) {
 			if (gem != SupportGem::None && SupportGemColor(gem) == color)
 				used++;
 		}
@@ -543,13 +572,13 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 	if (replacedTier != nullptr)
 		*replacedTier = 1;
 	tier = std::clamp(tier, 1, SupportTierCount(gem));
-	if (slot >= NumSkillSlots || player.poe2.skillSlots[slot].isEmpty())
+	if (slot > DefaultAttackRow || RowSkill(player, slot).isEmpty())
 		return SupportSocketResult::NoSkill;
-	const SkillSlot skill = player.poe2.skillSlots[slot];
+	const SkillSlot skill = RowSkill(player, slot);
 	if (!SupportGemCanSupport(gem, skill))
 		return SupportSocketResult::NotApplicable;
 
-	SupportSockets &supports = player.poe2.slotSupports[slot];
+	SupportSockets &supports = player.poe2.supportsAt(slot);
 	const size_t open = SupportSocketCount(player);
 	if (socket) {
 		if (*socket >= open)
@@ -588,7 +617,7 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 		return SupportSocketResult::NoCapacity;
 
 	supports[*socket] = gem;
-	player.poe2.slotSupportTiers[slot][*socket] = static_cast<uint8_t>(tier);
+	player.poe2.tiersAt(slot)[*socket] = static_cast<uint8_t>(tier);
 	replaced = current;
 	if (replacedTier != nullptr)
 		*replacedTier = currentTier;
@@ -613,21 +642,21 @@ std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem)
 
 SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket, int *tier)
 {
-	if (slot >= NumSkillSlots || socket >= MaxSupportSockets)
+	if (slot > DefaultAttackRow || socket >= MaxSupportSockets)
 		return SupportGem::None;
 	if (tier != nullptr)
 		*tier = data.socketTier(slot, socket);
-	data.slotSupportTiers[slot][socket] = 1;
-	return std::exchange(data.slotSupports[slot][socket], SupportGem::None);
+	data.tiersAt(slot)[socket] = 1;
+	return std::exchange(data.supportsAt(slot)[socket], SupportGem::None);
 }
 
 std::vector<TieredSupport> TakeSlotSupports(Poe2PlayerData &data, size_t slot)
 {
 	std::vector<TieredSupport> taken;
-	if (slot >= NumSkillSlots)
+	if (slot > DefaultAttackRow)
 		return taken;
 	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
-		if (data.slotSupports[slot][socket] == SupportGem::None)
+		if (data.supportsAt(slot)[socket] == SupportGem::None)
 			continue;
 		int tier = 1;
 		const SupportGem gem = UnsocketSupportGem(data, slot, socket, &tier);
@@ -712,32 +741,49 @@ WeaponSkill CurrentWeaponSkill(const Player &player)
 	return player.poe2.castSkill != WeaponSkill::None ? player.poe2.castSkill : player.poe2.activeSkill;
 }
 
+SkillSlot CurrentAttackSkill(const Player &player)
+{
+	const WeaponSkill skill = CurrentWeaponSkill(player);
+	return skill != WeaponSkill::None ? SkillSlot::ForAttack(skill) : DefaultSkillSlot(player);
+}
+
+SkillSlot RowSkill(const Player &player, size_t row)
+{
+	if (row == DefaultAttackRow)
+		return DefaultSkillSlot(player);
+	return row < NumSkillSlots ? player.poe2.skillSlots[row] : SkillSlot {};
+}
+
 int SupportMeleeDamagePercent(const Player &player)
 {
 	const WeaponSkill skill = CurrentWeaponSkill(player);
-	if (skill == WeaponSkill::None)
-		return 100;
+	if (skill == WeaponSkill::None) {
+		const SkillSlot base = DefaultSkillSlot(player);
+		if (base.isEmpty())
+			return 100;
+		// The free default attack hits softer than a skill gem: costing nothing is its strength.
+		return DefaultAttackDamagePercent * (100 + SupportValue(player.poe2, base, SupportGem::Brutality, 0)) / 100;
+	}
 	const int brutality = 100 + SupportValue(player.poe2, SkillSlot::ForAttack(skill), SupportGem::Brutality, 0);
 	return GemDamagePercent(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill)) * brutality / 100;
 }
 
 bool SupportMeleeKnocksBack(const Player &player)
 {
-	const WeaponSkill skill = CurrentWeaponSkill(player);
-	return skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Knockback);
+	return player.poe2.hasSupport(CurrentAttackSkill(player), SupportGem::Knockback);
 }
 
 bool SupportMeleeIsPhysicalOnly(const Player &player)
 {
-	const WeaponSkill skill = CurrentWeaponSkill(player);
-	return skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality);
+	return player.poe2.hasSupport(CurrentAttackSkill(player), SupportGem::Brutality);
 }
 
 int8_t SupportAttackSkippedFrames(const Player &player, WeaponSkill skill)
 {
-	if (skill == WeaponSkill::None)
+	// No weapon skill: the weapon's default attack, which takes supports too.
+	const SkillSlot slot = skill != WeaponSkill::None ? SkillSlot::ForAttack(skill) : DefaultSkillSlot(player);
+	if (slot.isEmpty())
 		return 0;
-	const SkillSlot slot = SkillSlot::ForAttack(skill);
 	int frames = SupportValue(player.poe2, slot, SupportGem::MartialTempo, 0) + SupportAttackFrameBonus(player, slot);
 	// Rage III: faster while not at full Rage.
 	if (player.poe2.rage < MaxRage)

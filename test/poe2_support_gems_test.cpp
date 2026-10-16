@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
@@ -262,11 +263,12 @@ TEST_F(Poe2SupportGemsTest, AttackSupports)
 	EXPECT_TRUE(SupportGemCanSupport(SupportGem::Efficiency, cleave));
 	EXPECT_FALSE(SupportGemCanSupport(SupportGem::Efficiency, herald));
 
-	EXPECT_EQ(SupportMeleeDamagePercent(player), 100);
+	// With no skill it's the weapon's free default attack, which hits softer.
+	EXPECT_EQ(SupportMeleeDamagePercent(player), DefaultAttackDamagePercent);
 	EXPECT_EQ(Socket(player, cleave, SupportGem::Brutality), SupportSocketResult::Socketed);
 	EXPECT_EQ(Socket(player, cleave, SupportGem::MartialTempo), SupportSocketResult::Socketed);
 	// The supports apply while the skill's attack is in progress.
-	EXPECT_EQ(SupportMeleeDamagePercent(player), 100);
+	EXPECT_EQ(SupportMeleeDamagePercent(player), DefaultAttackDamagePercent);
 	player.poe2.activeSkill = WeaponSkill::Cleave;
 	EXPECT_EQ(SupportMeleeDamagePercent(player), BrutalityDamagePercent);
 	EXPECT_EQ(SupportAttackSkippedFrames(player, WeaponSkill::Cleave), MartialTempoFrames);
