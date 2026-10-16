@@ -255,11 +255,19 @@ target_link_dependencies(libdevilutionx_cl2_to_clx
   libdevilutionx_endian_write
 )
 
+add_devilutionx_object_library(libdevilutionx_hd_hooks
+  poe2/hd_hooks.cpp
+)
+target_link_dependencies(libdevilutionx_hd_hooks PUBLIC
+  DevilutionX::SDL
+)
+
 add_devilutionx_object_library(libdevilutionx_clx_render
   engine/render/clx_render.cpp
 )
 target_link_dependencies(libdevilutionx_clx_render PUBLIC
   DevilutionX::SDL
+  libdevilutionx_hd_hooks
   libdevilutionx_light_render
   libdevilutionx_palette_blending
   libdevilutionx_strings
@@ -378,6 +386,7 @@ add_devilutionx_object_library(libdevilutionx_dun_render
 target_link_dependencies(libdevilutionx_dun_render
   PUBLIC
   DevilutionX::SDL
+  libdevilutionx_hd_hooks
   libdevilutionx_light_render
   libdevilutionx_surface
   libdevilutionx_palette_blending

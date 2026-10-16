@@ -42,7 +42,6 @@ namespace devilution {
 
 namespace hd {
 
-bool Recording = false;
 float SubFrame = 0;
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
@@ -672,6 +671,9 @@ bool Active()
 	return Enabled() && *GetOptions().Graphics.zoom;
 }
 
+void RecordTileImpl(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl);
+void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap);
+
 void BeginWorld(const Surface &out, Rectangle viewport)
 {
 	Draws.clear();
@@ -681,6 +683,8 @@ void BeginWorld(const Surface &out, Rectangle viewport)
 	(void)out;
 	if (CacheCels != pDungeonCels.get() || CacheLevelType != leveltype)
 		IndexTiles();
+	RecordTileHook = RecordTileImpl;
+	RecordSpriteHook = RecordSpriteImpl;
 	Recording = true;
 }
 
@@ -689,7 +693,7 @@ void EndWorld()
 	Recording = false;
 }
 
-void RecordTile(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl)
+void RecordTileImpl(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl)
 {
 	const bool perPixel = *GetOptions().Graphics.perPixelLighting;
 	Draws.push_back(Draw {
@@ -712,7 +716,7 @@ void RecordTile(const Surface &out, const Lightmap &lightmap, Point position, Ti
 	});
 }
 
-void RecordSprite(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap)
+void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap)
 {
 	const bool perPixel = lightmap != nullptr && *GetOptions().Graphics.perPixelLighting;
 	const int pad = style == SpriteStyle::Outline ? 1 : 0;
@@ -1016,8 +1020,6 @@ bool Enabled() { return false; }
 bool Active() { return false; }
 void BeginWorld(const Surface &, Rectangle) { }
 void EndWorld() { }
-void RecordTile(const Surface &, const Lightmap &, Point, TileType, const uint8_t *, int, MaskType, const uint8_t *) { }
-void RecordSprite(const Surface &, Point, ClxSprite, const uint8_t *, SpriteStyle, uint8_t, const Lightmap *) { }
 void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }

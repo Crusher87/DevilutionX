@@ -61,9 +61,27 @@ bool Active();
 void BeginWorld(const Surface &out, Rectangle viewport);
 void EndWorld();
 
-void RecordTile(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl);
+using RecordTileFn = void (*)(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl);
+using RecordSpriteFn = void (*)(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap);
+
+/**
+ * @brief Set by the HD renderer before it starts recording.
+ *
+ * Pointers (in hd_hooks.cpp) so the small render libraries and their tests don't link the whole renderer.
+ */
+extern RecordTileFn RecordTileHook;
+extern RecordSpriteFn RecordSpriteHook;
+
+inline void RecordTile(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl)
+{
+	RecordTileHook(out, lightmap, position, tile, src, height, mask, tbl);
+}
+
 /** @param lightmap The per-pixel light the sprite is drawn with, if any. */
-void RecordSprite(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor = 0, const Lightmap *lightmap = nullptr);
+inline void RecordSprite(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor = 0, const Lightmap *lightmap = nullptr)
+{
+	RecordSpriteHook(out, position, clx, trn, style, outlineColor, lightmap);
+}
 
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
