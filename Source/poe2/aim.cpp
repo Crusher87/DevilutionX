@@ -18,13 +18,19 @@ Point ClampToDungeon(Point tile)
 	return { std::clamp(tile.x, 0, MAXDUNX - 1), std::clamp(tile.y, 0, MAXDUNY - 1) };
 }
 
+/** @brief Rounds to the nearest whole number (the Amiga toolchain has no std::lround). */
+int RoundToInt(float value)
+{
+	return static_cast<int>(value < 0 ? value - 0.5F : value + 0.5F);
+}
+
 Point Extend(Point from, float dx, float dy, int tiles)
 {
 	const float length = std::sqrt(dx * dx + dy * dy);
 	if (length < 0.01F)
 		return from;
 	const float scale = static_cast<float>(tiles) / length;
-	return ClampToDungeon({ from.x + static_cast<int>(std::lround(dx * scale)), from.y + static_cast<int>(std::lround(dy * scale)) });
+	return ClampToDungeon({ from.x + RoundToInt(dx * scale), from.y + RoundToInt(dy * scale) });
 }
 
 } // namespace
