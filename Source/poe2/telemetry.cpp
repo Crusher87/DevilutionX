@@ -38,6 +38,16 @@
 #include "utils/sdl_compat.h"
 #include "utils/str_cat.hpp"
 
+#ifdef _WIN32
+// Suppress definitions of `min` and `max` macros by <windows.h>:
+#define NOMINMAX 1
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+// <windows.h> defines these as empty; this file uses them as names.
+#undef near
+#undef far
+#endif
+
 namespace devilution {
 
 namespace {
@@ -286,6 +296,78 @@ void HandleCrashSignal(int signal)
 	std::signal(signal, SIG_DFL);
 	std::raise(signal);
 }
+
+#if defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
+/**
+ * @brief Windows ends the game on an access violation before std::signal sees it in some cases, so the
+ * crash is caught here first: the exception, where it happened and the call stack, as offsets into the
+ * exe that the build's link map (devilutionx.map) turns into function names.
+ */
+LONG WINAPI HandleWindowsException(EXCEPTION_POINTERS *info)
+{
+	const DWORD code = info->ExceptionRecord->ExceptionCode;
+	switch (code) {
+	case EXCEPTION_ACCESS_VIOLATION:
+	case EXCEPTION_STACK_OVERFLOW:
+	case EXCEPTION_ILLEGAL_INSTRUCTION:
+	case EXCEPTION_INT_DIVIDE_BY_ZERO:
+	case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+	case EXCEPTION_PRIV_INSTRUCTION:
+	case EXCEPTION_IN_PAGE_ERROR:
+		break;
+	default:
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	static bool written = false;
+	if (written || LogFile == nullptr)
+		return EXCEPTION_CONTINUE_SEARCH;
+	written = true;
+
+	const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+	const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+	const auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
+	const uintptr_t end = base + nt->OptionalHeader.SizeOfImage;
+	const auto where = [&](uintptr_t address) {
+		char text[48];
+		if (address >= base && address < end)
+			std::snprintf(text, sizeof(text), "exe+0x%llx", static_cast<unsigned long long>(address - base));
+		else
+			std::snprintf(text, sizeof(text), "0x%llx", static_cast<unsigned long long>(address));
+		return std::string(text);
+	};
+
+	const auto address = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
+	std::fprintf(LogFile, "%s %s [crash] exception 0x%08lx at %s", Clock(Now() - SessionStartMs).c_str(), LevelLabel().c_str(), static_cast<unsigned long>(code), where(address).c_str());
+	if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
+		const ULONG_PTR kind = info->ExceptionRecord->ExceptionInformation[0];
+		std::fprintf(LogFile, " (%s 0x%llx)", kind == 0 ? "reading" : kind == 1 ? "writing" : "executing", static_cast<unsigned long long>(info->ExceptionRecord->ExceptionInformation[1]));
+	}
+	std::fprintf(LogFile, ", image base 0x%llx\n", static_cast<unsigned long long>(base));
+
+	// Walk the stack from the faulting frame with the exe's own unwind tables.
+	std::fputs("Call stack:", LogFile);
+	if (code != EXCEPTION_STACK_OVERFLOW) {
+		CONTEXT context = *info->ContextRecord;
+		for (int frame = 0; frame < 48 && context.Rip != 0; frame++) {
+			std::fprintf(LogFile, " %s", where(context.Rip).c_str());
+			DWORD64 imageBase = 0;
+			PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(context.Rip, &imageBase, nullptr);
+			if (function == nullptr) {
+				context.Rip = *reinterpret_cast<DWORD64 *>(context.Rsp);
+				context.Rsp += 8;
+				continue;
+			}
+			PVOID handlerData = nullptr;
+			DWORD64 establisherFrame = 0;
+			RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, context.Rip, function, &context, &handlerData, &establisherFrame, nullptr);
+		}
+	}
+	std::fputc('\n', LogFile);
+	WriteRecentEvents();
+	std::fflush(LogFile);
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
 
 template <typename Fn>
 void Count(Fn &&fn)
@@ -568,6 +650,9 @@ void TelemetryInit()
 #endif
 	for (const int signal : { SIGSEGV, SIGABRT, SIGFPE, SIGILL })
 		std::signal(signal, &HandleCrashSignal);
+#if defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
+	AddVectoredExceptionHandler(1, &HandleWindowsException);
+#endif
 	FatalErrorHook = &TelemetryFatal;
 }
 
@@ -854,6 +939,11 @@ void TelemetryCrafted(const Player &player, std::string_view currency, const Ite
 void TelemetryMark(std::string_view text)
 {
 	TelemetryLog("mark", text);
+}
+
+void TelemetryStep(std::string_view step)
+{
+	TelemetryLog("load", step);
 }
 
 void TelemetryTick()

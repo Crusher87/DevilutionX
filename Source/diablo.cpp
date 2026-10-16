@@ -3436,21 +3436,27 @@ void LoadGameLevelStash()
 std::expected<void, std::string> LoadGameLevelDungeon(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
 	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pLvlVisited[currlevel] || gbIsMultiplayer) {
+		TelemetryStep("theme rooms");
 		HoldThemeRooms();
 		[[maybe_unused]] const uint32_t mid1Seed = GetLCGEngineState();
 		InitGolems();
+		TelemetryStep("objects");
 		InitObjects();
 		[[maybe_unused]] const uint32_t mid2Seed = GetLCGEngineState();
 
 		IncProgress();
 
+		TelemetryStep("monsters");
 		RETURN_IF_ERROR(InitMonsters());
+		TelemetryStep("items");
 		InitItems();
+		TelemetryStep("theme room contents");
 		CreateThemeRooms();
 
 		IncProgress();
 
 		[[maybe_unused]] const uint32_t mid3Seed = GetLCGEngineState();
+		TelemetryStep("missiles");
 		InitMissiles();
 		InitCorpses();
 #ifdef _DEBUG
@@ -3612,6 +3618,7 @@ std::expected<void, std::string> LoadGameLevelSetLevel(bool firstflag, lvl_entry
 
 std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
+	TelemetryStep("generating the level");
 	CreateLevel(lvldir);
 
 	IncProgress();
@@ -3619,8 +3626,10 @@ std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_
 	SetRndSeedForDungeonLevel();
 
 	if (leveltype != DTYPE_TOWN) {
+		TelemetryStep("monster types");
 		RETURN_IF_ERROR(GetLevelMTypes());
 		InitThemes();
+		TelemetryStep("graphics");
 		if (!HeadlessMode)
 			RETURN_IF_ERROR(LoadAllGFX());
 	} else if (!HeadlessMode) {
@@ -3649,6 +3658,7 @@ std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_
 
 	IncProgress();
 
+	TelemetryStep("players");
 	LoadGameLevelInitPlayers(firstflag, lvldir);
 	InitMultiView();
 
@@ -3720,12 +3730,14 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	IncProgress();
 
+	TelemetryStep(StrCat("start, level ", currlevel, ", type ", static_cast<int>(leveltype)));
 	RETURN_IF_ERROR(LoadTrns());
 	MakeLightTable();
 	RETURN_IF_ERROR(LoadLevelSOLData());
 
 	IncProgress();
 
+	TelemetryStep("tile graphics");
 	RETURN_IF_ERROR(LoadLvlGFX());
 	SetDungeonMicros(pDungeonCels, MicroTileLen);
 	ClearClxDrawCache();
@@ -3752,6 +3764,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 		InitLighting();
 	}
 
+	TelemetryStep("automap and light");
 	InitLevelMonsters();
 
 	IncProgress();
@@ -3764,6 +3777,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 		RETURN_IF_ERROR(LoadGameLevelStandardLevel(firstflag, lvldir, myPlayer));
 	}
 
+	TelemetryStep("portals");
 	SyncPortals();
 	LoadGameLevelSyncPlayerEntry(lvldir);
 
@@ -3776,6 +3790,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	IncProgress();
 
+	TelemetryStep("monster lights");
 	UpdateMonsterLights();
 	UnstuckChargers();
 
@@ -3790,6 +3805,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 #endif
 	LoadGameLevelStartMusic(neededTrack);
 
+	TelemetryStep("finishing");
 	CompleteProgress();
 
 	MarkWalkabilityChanged();

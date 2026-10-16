@@ -57,6 +57,8 @@ void TelemetryInit();
 bool TelemetryEnabled();
 /** @brief Writes one line: time, level and the event. */
 void TelemetryLog(std::string_view category, std::string_view text);
+/** @brief Notes a step of loading a level, so a crash while loading shows the last step reached. */
+void TelemetryStep(std::string_view step);
 
 void TelemetryGameStarted(const Player &player, bool loaded);
 void TelemetryGameEnded();

@@ -635,6 +635,11 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
     endif()
     set(CPACK_STRIP_FILES TRUE)
     install(TARGETS ${BIN_TARGET} DESTINATION .)
+    if(MINGW)
+      # POE2 Mashup: a link map, so the crash offsets in poe2_logs can be named.
+      target_link_options(${BIN_TARGET} PRIVATE "-Wl,-Map=${CMAKE_BINARY_DIR}/devilutionx.map")
+      install(FILES "${CMAKE_BINARY_DIR}/devilutionx.map" DESTINATION ".")
+    endif()
     install(FILES "${PROJECT_SOURCE_DIR}/Packaging/windows/README.txt"
       DESTINATION "."
     )
