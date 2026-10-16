@@ -5,9 +5,11 @@
  */
 #include "engine/render/scrollrt.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
@@ -73,6 +75,7 @@
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/monster_mods.hpp"
 #include "poe2/vfx.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
@@ -125,6 +128,35 @@ bool frameflag;
 namespace {
 
 constexpr auto RightFrameDisplacement = Displacement { DunFrameWidth, 0 };
+
+/**
+ * @brief POE2 Mashup: magic, rare and unique monsters get a thin outline in their rank's colour.
+ *
+ * It is drawn with the monster's sprite, so walls in front of the monster hide it, and it fades
+ * with the light so it never glows out of the dark.
+ */
+std::optional<uint8_t> RankOutlineColor(const Monster &monster, int lightTableIndex)
+{
+	if (!gbIsPoe2 || monster.isPlayerMinion() || lightTableIndex >= LightsMax - 2)
+		return std::nullopt;
+	uint8_t base;
+	if (monster.isUnique()) {
+		base = PAL16_ORANGE;
+	} else {
+		switch (GetMonsterAffixes(monster).rarity) {
+		case MonsterRarity::Magic:
+			base = PAL16_BLUE;
+			break;
+		case MonsterRarity::Rare:
+			base = PAL16_YELLOW;
+			break;
+		default:
+			return std::nullopt;
+		}
+	}
+	// Shade 9 is a soft mid tone in full light; darker shades as the light drops.
+	return static_cast<uint8_t>(base + std::min(9 + lightTableIndex / 3, 14));
+}
 
 [[nodiscard]] DVL_ALWAYS_INLINE bool IsFloor(Point tilePosition)
 {
@@ -809,6 +841,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	const Point monsterRenderPosition = targetBufferPosition + offset;
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
+	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {
+		ClxDrawOutlineSkipColorZero(out, *rank, monsterRenderPosition, sprite);
 	}
 	DrawMonster(out, tilePosition, monsterRenderPosition, monster, lightTableIndex);
 }

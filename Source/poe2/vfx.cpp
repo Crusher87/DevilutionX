@@ -23,6 +23,7 @@
 #include "headless_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
+#include "levels/tile_properties.hpp"
 #include "missiles.h"
 #include "monster.h"
 #include "objects.h"
@@ -1207,6 +1208,16 @@ void OnModeChange(const Monster &monster, MonsterMode from, MonsterMode to, Vec 
 	}
 }
 
+/**
+ * @brief Whether a wall stands between the tile and the camera. The effects layer is drawn over the world, so effects
+ * on a monster behind a wall would shine through it (Curtis 2026-10-16); they are left out instead.
+ */
+bool BehindWall(Point tile)
+{
+	const auto solid = [](Point p) { return InDungeonBounds(p) && IsTileSolid(p); };
+	return solid(tile + Displacement { 1, 1 }) || (solid(tile + Displacement { 1, 0 }) && solid(tile + Displacement { 0, 1 }));
+}
+
 void ScanMonsters(const View &view)
 {
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
@@ -1230,35 +1241,25 @@ void ScanMonsters(const View &view)
 		const Rank rank = RankOf(monster);
 		if (!added && was != mode)
 			OnModeChange(monster, was, mode, feet, rank);
-		if (mode == MonsterMode::Death)
+		if (mode == MonsterMode::Death || BehindWall(tile))
 			continue;
 		const float height = std::min(static_cast<float>(monster.animInfo.currentSprite().height()), 128.F);
 		const Vec body = feet - Vec { 0, height * 0.35F };
-		const float width = static_cast<float>(monster.animInfo.currentSprite().width());
 
 		if (mode == MonsterMode::Charge)
 			Emitters.push_back({ feet, 1, Ambient::Charge, { 115, 100, 80 } });
 
-		if (rank != Rank::Normal) {
+		// Rank shows as a thin outline in its colour, drawn with the monster (see DrawMonsterRankOutline), not here:
+		// rings and glows under them were too much (Curtis 2026-10-16). Only a few of a rare's modifiers show.
+		if (rank == Rank::Rare) {
 			const MonsterAffixes affixes = GetMonsterAffixes(monster);
-			const float radius = rank >= Rank::Unique ? std::max(TileRadius * 0.85F, width * 0.42F) : TileRadius * 0.6F;
-			Halos.push_back({ feet, radius, rank, affixes.has(MonsterMod::Resistant), static_cast<uint32_t>(ActiveMonsters[i]) * 2654435761U | 1 });
-			switch (rank) {
-			case Rank::Magic:
-				Emitters.push_back({ feet, 1, Ambient::Motes, { 130, 160, 255 }, radius });
-				break;
-			case Rank::Rare:
-				Emitters.push_back({ feet, 2, Ambient::Motes, { 255, 205, 90 }, radius });
+			{
 				if (affixes.has(MonsterMod::Regenerating))
 					Emitters.push_back({ body, 5, Ambient::Motes, { 90, 235, 110 }, 14 });
 				if (affixes.has(MonsterMod::ExtraLife))
 					Emitters.push_back({ body, 4, Ambient::Motes, { 235, 40, 50 }, 14 });
 				if (affixes.has(MonsterMod::HardHitting))
 					Emitters.push_back({ body, 1, Ambient::Embers, { 255, 160, 60 } });
-				break;
-			default:
-				Emitters.push_back({ feet, rank == Rank::Boss ? 16.F : 9.F, Ambient::Motes, { 255, 120, 40 }, radius });
-				break;
 			}
 		}
 
