@@ -56,7 +56,6 @@ constexpr float TreeExtent = 720;
 constexpr float SealRadius = 672;
 constexpr float SanctumRadius = 110;
 /** @brief Area names sit just inside the seal, past the outermost nodes. */
-constexpr float RegionNameRadius = 692;
 
 constexpr float MinZoom = 1.0F;
 constexpr float MaxZoom = 5.0F;
@@ -79,8 +78,8 @@ constexpr uint8_t LinkAllocatedColor = PAL16_YELLOW + 4;
 constexpr uint8_t NodeColor = PAL16_GRAY + 9;
 constexpr uint8_t NodeReachableColor = PAL16_GRAY + 2;
 constexpr uint8_t NodeAllocatedColor = PAL16_YELLOW + 2;
-constexpr uint8_t NotableRimColor = PAL16_ORANGE + 4;
-constexpr uint8_t NotableInnerRimColor = PAL16_GRAY + 15;
+constexpr uint8_t NotableRimColor = PAL16_ORANGE + 9;
+constexpr uint8_t NotableInnerRimColor = PAL16_GRAY + 14; // +15 is palette 255, white
 constexpr uint8_t ShrineRimColor = PAL16_BLUE + 4;
 constexpr uint8_t AttributeRimColor = PAL16_BEIGE + 6;
 constexpr uint8_t SocketRimColor = PAL16_GRAY + 4;
@@ -122,6 +121,22 @@ bool Searching;
 std::string SearchQuery;
 std::vector<PassiveNodeId> SearchHits;
 std::vector<bool> SearchHitMask;
+
+/** @brief While a search has text in it, everything it doesn't match is drawn a few shades darker. */
+bool FadesNode(PassiveNodeId node)
+{
+	return !SearchHitMask.empty() && !SearchQuery.empty() && (node >= SearchHitMask.size() || !SearchHitMask[node]);
+}
+
+/** @brief The same colour a few shades darker along its palette ramp. */
+uint8_t Faded(uint8_t color)
+{
+	if (color == 0)
+		return color;
+	if (color >= 128)
+		return static_cast<uint8_t>((color & 0xF0) | std::min((color & 0x0F) + 5, 14)); // 255 is white, not the darkest grey
+	return static_cast<uint8_t>((color & 0xF8) | std::min((color & 0x07) + 3, 7));
+}
 size_t SearchIndex;
 Point DragStart;
 float DragViewX;
@@ -396,61 +411,10 @@ void DrawSeal(const Surface &out, const Layout &layout, const Player &player)
 	}
 }
 
-struct RegionLabel {
-	std::string name;
-	float x;
-	float y;
-	/** @brief The class whose own area this is, if it's one. */
-	std::optional<HeroClass> heroClass;
-};
-
-/** @brief Each area's name, placed at the rim in the direction of its nodes. Worked out again whenever the tree changes. */
-const std::vector<RegionLabel> &RegionLabels()
+/** @brief Whether an area is a class's own, whose name the tree doesn't show. */
+bool IsClassRegion(std::string_view region)
 {
-	static std::vector<RegionLabel> labels;
-	static const PassiveNode *cachedTree = nullptr;
-	static size_t cachedSize = 0;
-	const std::vector<PassiveNode> &tree = PassiveTree();
-	if (cachedTree == tree.data() && cachedSize == tree.size())
-		return labels;
-	cachedTree = tree.data();
-	cachedSize = tree.size();
-	labels.clear();
-	std::vector<std::pair<float, float>> sums;
-	for (const PassiveNode &node : tree) {
-		if (node.region.empty() || IsAscendancyNode(node))
-			continue;
-		auto it = std::find_if(labels.begin(), labels.end(), [&](const RegionLabel &label) { return label.name == node.region; });
-		if (it == labels.end()) {
-			labels.push_back({ node.region, 0, 0, std::nullopt });
-			sums.emplace_back(0.0F, 0.0F);
-			it = labels.end() - 1;
-		}
-		const size_t index = static_cast<size_t>(it - labels.begin());
-		sums[index].first += static_cast<float>(node.x);
-		sums[index].second += static_cast<float>(node.y);
-		if (node.kind == PassiveKind::Start)
-			it->heroClass = node.startClass;
-	}
-	for (size_t i = 0; i < labels.size(); i++) {
-		const float length = std::sqrt((sums[i].first * sums[i].first) + (sums[i].second * sums[i].second));
-		labels[i].x = length > 0 ? sums[i].first * RegionNameRadius / length : 0;
-		labels[i].y = length > 0 ? sums[i].second * RegionNameRadius / length : 0;
-	}
-	return labels;
-}
-
-/** @brief The names of the areas round the rim: the classes' own in their colours, the borders between them dimmer. */
-void DrawRegionNames(const Surface &out, const Layout &layout, const Player &player)
-{
-	for (const RegionLabel &region : RegionLabels()) {
-		const Point center = ViewPoint(layout, region.x, region.y);
-		const Rectangle label { center + Displacement { -100, -9 }, { 200, 18 } };
-		const bool mine = region.heroClass && *region.heroClass == PassiveTreeClass(player._pClass);
-		const std::string_view name = region.heroClass ? std::string_view(GetPlayerDataForClass(*region.heroClass).className) : std::string_view(region.name);
-		DrawString(out, name, label,
-		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (mine ? UiFlags::ColorUiGold : (region.heroClass ? UiFlags::ColorUiSilver : UiFlags::ColorUiSilverDark)) });
-	}
+	return region == "Warrior" || region == "Rogue" || region == "Sorcerer" || region == "Monk";
 }
 
 /** @brief Weapon set nodes are red for set I and green for set II, like POE2. */
@@ -535,7 +499,9 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 				continue; // Each link is drawn once.
 			const bool from = IsShownAllocated(player, node.id);
 			const bool to = IsShownAllocated(player, link);
-			const uint8_t color = from && to ? LinkAllocatedColor : (from || to ? LinkReachableColor : LinkColor);
+			uint8_t color = from && to ? LinkAllocatedColor : (from || to ? LinkReachableColor : LinkColor);
+			if (FadesNode(node.id) && FadesNode(link))
+				color = Faded(color);
 			DrawLine(out, NodeViewPoint(layout, node), NodeViewPoint(layout, tree[link]), color, from && to ? thickness + 1 : thickness);
 		}
 	}
@@ -550,7 +516,10 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 			continue;
 		const uint8_t color = NodeFillColor(player, node);
 		const bool diamond = node.kind == PassiveKind::Shrine;
+		const bool faded = FadesNode(node.id);
 		const auto fill = [&](int size, uint8_t fillColor) {
+			if (faded)
+				fillColor = Faded(fillColor);
 			if (diamond)
 				FillDiamond(out, center, size, fillColor);
 			else
@@ -601,15 +570,10 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 	}
 }
 
-/**
- * @brief Names under the nodes, more as the view zooms in: shrines first, then the notables you have or searched for,
- * then every notable. A name that would overlap one already drawn is left out.
- */
+/** @brief Names under the notables and shrines a search finds, once zoomed in. A name that would overlap one already drawn is left out. */
 void DrawNodeLabels(const Surface &out, const Layout &layout, const Player &player)
 {
 	const float scale = Scale(layout);
-	if (scale < 0.8F)
-		return;
 	std::vector<Rectangle> drawn;
 	const auto overlaps = [&drawn](const Rectangle &rect) {
 		return std::any_of(drawn.begin(), drawn.end(), [&rect](const Rectangle &other) {
@@ -617,27 +581,22 @@ void DrawNodeLabels(const Surface &out, const Layout &layout, const Player &play
 			    && rect.position.y < other.position.y + other.size.height && other.position.y < rect.position.y + rect.size.height;
 		});
 	};
-	// Shrines claim their space first, then notables.
-	for (const bool shrines : { true, false }) {
-		for (const PassiveNode &node : PassiveTree()) {
-			if ((node.kind == PassiveKind::Shrine) != shrines || IsAscendancyNode(node) || !IsNodeShown(player, node))
-				continue;
-			if (!shrines) {
-				if (node.kind != PassiveKind::Notable)
-					continue;
-				const bool marked = IsShownAllocated(player, node.id) || (node.id < SearchHitMask.size() && SearchHitMask[node.id]);
-				if (scale < (marked ? 1.6F : 2.2F))
-					continue;
-			}
-			const Point center = NodeViewPoint(layout, node);
-			const int width = GetLineWidth(node.name) + 6;
-			const Rectangle label { center + Displacement { -width / 2, NodeRadius(layout, node) + 3 }, { width, 14 } };
-			if (label.position.x < 0 || label.position.y < 0 || label.position.x + width > out.w() || label.position.y + 14 > out.h() || overlaps(label))
-				continue;
-			drawn.push_back(label);
-			const UiFlags color = node.kind == PassiveKind::Shrine ? UiFlags::ColorBlue : (IsShownAllocated(player, node.id) ? UiFlags::ColorUiGold : UiFlags::ColorUiSilverDark);
-			DrawString(out, node.name, label, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | color });
-		}
+	// POE2 Mashup: names are found by hovering; only the notables and shrines a search finds are named on the tree.
+	if (scale < 1.6F || SearchQuery.empty())
+		return;
+	for (const PassiveNode &node : PassiveTree()) {
+		if ((node.kind != PassiveKind::Notable && node.kind != PassiveKind::Shrine) || IsAscendancyNode(node) || !IsNodeShown(player, node))
+			continue;
+		if (node.id >= SearchHitMask.size() || !SearchHitMask[node.id])
+			continue;
+		const Point center = NodeViewPoint(layout, node);
+		const int width = GetLineWidth(node.name) + 6;
+		const Rectangle label { center + Displacement { -width / 2, NodeRadius(layout, node) + 3 }, { width, 14 } };
+		if (label.position.x < 0 || label.position.y < 0 || label.position.x + width > out.w() || label.position.y + 14 > out.h() || overlaps(label))
+			continue;
+		drawn.push_back(label);
+		const UiFlags color = IsShownAllocated(player, node.id) ? UiFlags::ColorUiGold : UiFlags::ColorUiSilver;
+		DrawString(out, node.name, label, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | color });
 	}
 }
 
@@ -652,7 +611,7 @@ std::string Lowered(std::string_view text)
 	return lowered;
 }
 
-/** @brief Finds the nodes whose name, stats or area hold the search text, nearest the view's centre first. */
+/** @brief Finds the nodes whose name or stats hold the search text, nearest the view's centre first. */
 void UpdateSearchHits(const Player &player)
 {
 	const std::string query = Lowered(SearchInput.value());
@@ -668,7 +627,7 @@ void UpdateSearchHits(const Player &player)
 	for (const PassiveNode &node : tree) {
 		if (node.kind == PassiveKind::Start || !IsNodeShown(player, node))
 			continue;
-		std::string text = StrCat(PassiveNodeName(node), "\n", node.region);
+		std::string text = PassiveNodeName(node);
 		for (const auto &[stat, value] : node.stats)
 			text = StrCat(text, "\n", PassiveStatText(stat, value));
 		if (Lowered(text).find(query) != std::string::npos) {
@@ -885,7 +844,7 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 		}
 	}
 	const std::string title = PassiveNodeName(node);
-	const std::string kind = node.region.empty() || node.kind == PassiveKind::Start || IsAscendancyNode(node)
+	const std::string kind = node.region.empty() || node.kind == PassiveKind::Start || IsAscendancyNode(node) || IsClassRegion(node.region)
 	    ? std::string(NodeKindText(node))
 	    : StrCat(NodeKindText(node), "  -  ", node.region);
 	std::string hint = NodeHint(player, node);
@@ -1277,7 +1236,6 @@ void DrawPassiveTree(const Surface &out)
 	const Surface view = out.subregion(layout.view.position.x, layout.view.position.y, layout.view.size.width, layout.view.size.height);
 	FillRect(view, 0, 0, view.w(), view.h(), ViewColor);
 	DrawSeal(view, layout, player);
-	DrawRegionNames(view, layout, player);
 	const std::optional<PassiveNodeId> hovered = Dragging || PendingAttributeNode ? std::nullopt : NodeAt(layout, MousePosition);
 	const std::vector<PassiveNodeId> route = hovered ? PassiveRoute(player, *hovered, Pool) : std::vector<PassiveNodeId> {};
 	UpdateSearchHits(player);
