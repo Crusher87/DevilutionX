@@ -1517,7 +1517,9 @@ void StartBarmaid()
 	AddSText(0, 2, _("Gillian"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 9, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 12, _("Talk to Gillian"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	AddSText(0, 14, _("Access Storage"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	// POE2 Mashup: the stash chest in town holds everything, so Gillian doesn't.
+	if (!gbIsPoe2)
+		AddSText(0, 14, _("Access Storage"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSText(0, 18, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSLine(5);
 	CurrentItemIndex = 20;
@@ -2217,9 +2219,8 @@ void StorytellerEnter()
 		break;
 	case 14:
 		if (gbIsPoe2) {
-			const int count = IdentifyAllForFree(*MyPlayer);
 			ActiveStore = TalkID::None;
-			EventPlrMsg(count > 0 ? FormatRuntime(ngettext("Cain identified {:d} item.", "Cain identified {:d} items.", count), count) : _("You have nothing to identify."));
+			CainIdentifyAll();
 			break;
 		}
 		StartStore(TalkID::StorytellerIdentify);
@@ -2307,6 +2308,12 @@ void TavernEnter()
 }
 
 } // namespace
+
+void CainIdentifyAll()
+{
+	const int count = IdentifyAllForFree(*MyPlayer);
+	EventPlrMsg(count > 0 ? FormatRuntime(ngettext("Cain identified {:d} item.", "Cain identified {:d} items.", count), count) : _("You have nothing to identify."));
+}
 
 namespace {
 

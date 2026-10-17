@@ -325,6 +325,10 @@ UiFlags TooltipLineColor(InfoLineStyle style)
 		return UiFlagsColorGreen;
 	case InfoLineStyle::Worse:
 		return UiFlags::ColorRed;
+	case InfoLineStyle::FireDamage:
+		return UiFlags::ColorOrange;
+	case InfoLineStyle::LightningDamage:
+		return UiFlags::ColorYellow;
 	default:
 		return UiFlags::ColorWhite;
 	}
@@ -336,6 +340,9 @@ int TooltipGroup(InfoLineStyle style)
 	switch (style) {
 	case InfoLineStyle::Property:
 	case InfoLineStyle::Default:
+	case InfoLineStyle::PhysicalDamage:
+	case InfoLineStyle::FireDamage:
+	case InfoLineStyle::LightningDamage:
 		return 0;
 	case InfoLineStyle::Implicit:
 		return 1;

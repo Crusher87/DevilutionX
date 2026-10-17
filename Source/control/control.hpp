@@ -65,6 +65,10 @@ enum class InfoLineStyle : uint8_t {
 	Better,
 	/** A stat the item would lower. */
 	Worse,
+	/** A weapon's damage of one type in the Alt view, in that type's colour. */
+	PhysicalDamage,
+	FireDamage,
+	LightningDamage,
 };
 /** @brief The style given to the next floating info lines; reset to Default after each item. */
 extern InfoLineStyle CurrentInfoLineStyle;

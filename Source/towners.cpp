@@ -893,6 +893,12 @@ void TalkToTowner(Player &player, int t)
 		return;
 	}
 
+	// POE2 Mashup: Ctrl+click on Cain identifies everything without the talk menu.
+	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && towner._ttype == TOWN_STORY) {
+		QuickTradeTowner = -1;
+		CainIdentifyAll();
+		return;
+	}
 	// POE2 Mashup: Ctrl+click on a trader opens their shop without the talk menu.
 	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && UseVisualStoreUi()) {
 		QuickTradeTowner = -1;

@@ -117,6 +117,8 @@ uint8_t MaxFlaskChargesFor(const Item &item);
 std::string FlaskDescription(const Item &item);
 /** @brief The flask's mods and quality as info box lines. */
 std::vector<std::string> FlaskModLines(const Item &item);
+/** @brief The extra lines shown while Alt is held: affix names, charges, and how it refills. */
+std::vector<std::string> FlaskAdvancedLines(const Item &item, const Player *player);
 /** @brief Armour bonus percent while an Ox flask is recovering. */
 int FlaskArmourPercent(const Player &player);
 

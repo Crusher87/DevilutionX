@@ -2271,7 +2271,14 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(FlaskDescription(item));
 		for (const std::string &line : FlaskModLines(item))
 			AddItemInfoBoxString(line);
-		AddItemInfoBoxString(_("Flask in belt slots 1-5, refills from kills"));
+		// Holding Alt shows the rest, like other items.
+		if ((SDL_GetModState() & SDL_KMOD_ALT) != 0) {
+			CurrentInfoLineStyle = InfoLineStyle::Note;
+			for (const std::string &line : FlaskAdvancedLines(item, MyPlayer))
+				AddItemInfoBoxString(line);
+			CurrentInfoLineStyle = InfoLineStyle::Default;
+		}
+		return;
 	}
 	if (item._iMiscId == IMISC_EAR) {
 		AddItemInfoBoxString(FormatRuntime(pgettext("player", "Level: {:d}"), item._ivalue));
@@ -6111,16 +6118,39 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(std::string_view(item._iName));
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	if (item._iClass == ICLASS_WEAPON) {
-		if (item._iMinDam == item._iMaxDam) {
+		// POE2 Mashup: the damage shown is the weapon's whole hit, with its increased physical and added elemental damage.
+		int minDamage = item._iMinDam;
+		int maxDamage = item._iMaxDam;
+		const int physicalMin = item._iMinDam * (100 + item._iPLDam) / 100;
+		const int physicalMax = item._iMaxDam * (100 + item._iPLDam) / 100;
+		if (gbIsPoe2) {
+			minDamage = physicalMin + item._iFMinDam + item._iLMinDam;
+			maxDamage = physicalMax + item._iFMaxDam + item._iLMaxDam;
+		}
+		if (minDamage == maxDamage) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), item._iMinDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), minDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}  Dur: {:d}/{:d}"), minDamage, item._iDurability, item._iMaxDur));
 		} else {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), item._iMinDam, item._iMaxDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), minDamage, maxDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iMaxDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
+		}
+		// Holding Alt splits it by damage type, each in its colour.
+		if (gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0 && (item._iFMaxDam > 0 || item._iLMaxDam > 0 || item._iPLDam != 0)) {
+			CurrentInfoLineStyle = InfoLineStyle::PhysicalDamage;
+			AddItemInfoBoxString(FormatRuntime(_("Physical Damage: {:d}-{:d}"), physicalMin, physicalMax));
+			if (item._iFMaxDam > 0) {
+				CurrentInfoLineStyle = InfoLineStyle::FireDamage;
+				AddItemInfoBoxString(FormatRuntime(_("Fire Damage: {:d}-{:d}"), item._iFMinDam, item._iFMaxDam));
+			}
+			if (item._iLMaxDam > 0) {
+				CurrentInfoLineStyle = InfoLineStyle::LightningDamage;
+				AddItemInfoBoxString(FormatRuntime(_("Lightning Damage: {:d}-{:d}"), item._iLMinDam, item._iLMaxDam));
+			}
+			CurrentInfoLineStyle = InfoLineStyle::Property;
 		}
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Implicit;
@@ -6292,9 +6322,15 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
 		shown++;
 	};
-	// Unidentified items only show their base: damage and defence.
-	compare(item._iMinDam, other._iMinDam, _("to minimum Damage"));
-	compare(item._iMaxDam, other._iMaxDam, _("to maximum Damage"));
+	// Unidentified items only show their base: damage and defence. Identified weapons compare their whole hit, as the tooltip shows it.
+	const auto hitDamage = [](const Item &it, bool max) {
+		const int base = max ? it._iMaxDam : it._iMinDam;
+		if (it.isEmpty() || !it._iIdentified)
+			return base;
+		return (base * (100 + it._iPLDam) / 100) + (max ? it._iFMaxDam + it._iLMaxDam : it._iFMinDam + it._iLMinDam);
+	};
+	compare(hitDamage(item, false), hitDamage(other, false), _("to minimum Damage"));
+	compare(hitDamage(item, true), hitDamage(other, true), _("to maximum Damage"));
 	int armour = 0;
 	int evasion = 0;
 	int energyShield = 0;

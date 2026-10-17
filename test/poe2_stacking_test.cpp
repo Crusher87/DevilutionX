@@ -101,6 +101,24 @@ TEST_F(Poe2StackingTest, DifferentKindsDontStack)
 	EXPECT_TRUE(CanStackWith(omenA, omenB));
 }
 
+TEST_F(Poe2StackingTest, BoughtAndFoundIdentifyScrollsStack)
+{
+	// The shop sells one Scroll of Identify base and the dungeon drops another; they are the same scroll.
+	std::vector<size_t> bases;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_SCROLL && AllItemsList[i].iSpell == SpellID::Identify)
+			bases.push_back(i);
+	}
+	ASSERT_GE(bases.size(), 2U);
+	Item bought;
+	InitializeItem(bought, static_cast<_item_indexes>(bases[0]));
+	Item found;
+	InitializeItem(found, static_cast<_item_indexes>(bases[1]));
+	EXPECT_TRUE(CanStackWith(bought, found));
+	EXPECT_TRUE(MergeStack(bought, found));
+	EXPECT_EQ(StackCount(bought), 2);
+}
+
 TEST_F(Poe2StackingTest, SplitAndUse)
 {
 	Item stack = Make("Chaos Orb");

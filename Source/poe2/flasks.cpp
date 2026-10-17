@@ -329,6 +329,28 @@ std::vector<std::string> FlaskModLines(const Item &item)
 	return lines;
 }
 
+std::vector<std::string> FlaskAdvancedLines(const Item &item, const Player *player)
+{
+	std::vector<std::string> lines;
+	if (const std::string_view prefix = PrefixName(GetFlaskPrefix(item)); !prefix.empty())
+		lines.emplace_back(StrCat(_("Prefix: "), prefix));
+	if (const std::string_view suffix = SuffixName(GetFlaskSuffix(item)); !suffix.empty())
+		lines.emplace_back(StrCat(_("Suffix: "), suffix));
+	int charges = -1;
+	if (player != nullptr) {
+		for (size_t slot = 0; slot < NumFlasks; slot++) {
+			if (&player->SpdList[slot] == &item)
+				charges = player->poe2.flaskCharges[slot];
+		}
+	}
+	if (charges >= 0)
+		lines.emplace_back(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), charges, MaxFlaskChargesFor(item), FlaskChargesPerUseFor(item)));
+	else
+		lines.emplace_back(FormatRuntime(_("Holds {:d} charges, {:d} per use"), MaxFlaskChargesFor(item), FlaskChargesPerUseFor(item)));
+	lines.emplace_back(_("Refills from kills; drink with keys 1-5"));
+	return lines;
+}
+
 int FlaskArmourPercent(const Player &player)
 {
 	return player.poe2.oxFlaskTicks > 0 ? OxArmourPercent : 0;

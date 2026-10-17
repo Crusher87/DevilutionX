@@ -37,7 +37,9 @@ bool CanStackWith(const Item &stack, const Item &item)
 {
 	if (&stack == &item || !IsStackable(stack) || !IsStackable(item))
 		return false;
-	return stack.IDidx == item.IDidx && stack._iMiscId == item._iMiscId
+	// The shop's Scroll of Identify and the one found in the dungeon are different bases but the same scroll.
+	const bool sameBase = stack.IDidx == item.IDidx || (IsIdentifyScroll(stack) && IsIdentifyScroll(item));
+	return sameBase && stack._iMiscId == item._iMiscId
 	    && (stack.dwBuff & CF_POE2_VARIANT) == (item.dwBuff & CF_POE2_VARIANT);
 }
 
