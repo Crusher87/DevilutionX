@@ -4691,7 +4691,9 @@ void PrintMonstHistory(int mt)
 		AddInfoBoxString(FormatRuntime(_("Hit Points: {:d}-{:d}"), minHP, maxHP));
 	}
 	if (MonsterKillCounts[mt] >= 15) {
-		const int res = (sgGameInitInfo.nDifficulty != DIFF_HELL) ? MonstersData[mt].resistance : MonstersData[mt].resistanceHell;
+		int res = (sgGameInitInfo.nDifficulty != DIFF_HELL) ? MonstersData[mt].resistance : MonstersData[mt].resistanceHell;
+		if (gbIsPoe2) // immunities are resistances in POE2 mode
+			res = (res & ~(IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) | ((res & (IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) >> 3);
 		if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
 			AddInfoBoxString(_("No magic resistance"));
 		} else {
@@ -4726,7 +4728,7 @@ void PrintUniqueHistory()
 		AddInfoBoxString(FormatRuntime(_("Type: {:s}"), GetMonsterTypeText(monster.data())));
 	}
 
-	const int res = monster.resistance & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
+	const int res = monster.shownResistance() & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
 	if (res == 0) {
 		AddInfoBoxString(_("No resistances"));
 		AddInfoBoxString(_("No Immunities"));
@@ -5219,10 +5221,11 @@ bool Monster::isWalking() const
 
 bool Monster::isImmune(MissileID missileType, DamageType missileElement) const
 {
-	if (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
+	// POE2 Mashup: POE2 has no full immunities, so Diablo's immunities count as resistances instead.
+	if (!gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
 	    || ((resistance & IMMUNE_FIRE) != 0 && missileElement == DamageType::Fire)
 	    || ((resistance & IMMUNE_LIGHTNING) != 0 && missileElement == DamageType::Lightning)
-	    || ((resistance & IMMUNE_ACID) != 0 && missileElement == DamageType::Acid))
+	    || ((resistance & IMMUNE_ACID) != 0 && missileElement == DamageType::Acid)))
 		return true;
 	if (missileType == MissileID::HolyBolt && type().type != MT_DIABLO && data().monsterClass != MonsterClass::Undead)
 		return true;
@@ -5231,6 +5234,10 @@ bool Monster::isImmune(MissileID missileType, DamageType missileElement) const
 
 bool Monster::isResistant(MissileID missileType, DamageType missileElement) const
 {
+	if (gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
+	        || ((resistance & IMMUNE_FIRE) != 0 && missileElement == DamageType::Fire)
+	        || ((resistance & IMMUNE_LIGHTNING) != 0 && missileElement == DamageType::Lightning)))
+		return true;
 	if (((resistance & RESIST_MAGIC) != 0 && missileElement == DamageType::Magic)
 	    || ((resistance & RESIST_FIRE) != 0 && missileElement == DamageType::Fire)
 	    || ((resistance & RESIST_LIGHTNING) != 0 && missileElement == DamageType::Lightning))
@@ -5238,6 +5245,14 @@ bool Monster::isResistant(MissileID missileType, DamageType missileElement) cons
 	if (gbIsHellfire && missileType == MissileID::HolyBolt && IsAnyOf(type().type, MT_DIABLO, MT_BONEDEMN))
 		return true;
 	return false;
+}
+
+uint16_t Monster::shownResistance() const
+{
+	if (!gbIsPoe2)
+		return resistance;
+	const uint16_t immunes = resistance & (IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
+	return static_cast<uint16_t>((resistance & ~immunes) | (immunes >> 3));
 }
 
 bool Monster::isPlayerMinion() const

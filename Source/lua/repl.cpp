@@ -17,6 +17,7 @@
 #include "missiles.h"
 #include "poe2/aim.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/hit_trace.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/str_cat.hpp"
@@ -85,6 +86,11 @@ void CreateReplEnvironment()
 		AddMissile(MyPlayer->position.tile, target, MyPlayer->_pdir, MissileID::Firebolt, TARGET_MONSTERS, *MyPlayer, 0, 1);
 		return StrCat("hero ", MyPlayer->position.tile.x, ",", MyPlayer->position.tile.y, "  cursor tile ", cursPosition.x, ",", cursPosition.y,
 		    "  exact ", static_cast<int>(x * 100), ",", static_cast<int>(y * 100), " /100  aim ", target.x, ",", target.y);
+	};
+	// hittrace(true) logs every tile your spells fly through, not just one line per spell; hittrace(false) goes back.
+	env["hittrace"] = [](bool detail) {
+		HitTraceSetDetail(detail);
+		return detail ? "Hit trace logs every tile now." : "Hit trace logs one line per spell.";
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

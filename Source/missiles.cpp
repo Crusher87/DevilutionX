@@ -46,6 +46,7 @@
 #include "player.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/hit_trace.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
@@ -277,13 +278,35 @@ int ProjectileTrapDamage()
 	return currlevel + GenerateRnd(2 * currlevel);
 }
 
+/** @brief Why a monster can't be hit right now, for the hit trace. */
+std::string_view UnhittableReason(const Monster &monster)
+{
+	if (monster.hasNoLife())
+		return "already dead";
+	if (monster.talkMsg != TEXT_NONE)
+		return "talking (quest monster)";
+	if (monster.mode == MonsterMode::Charge)
+		return "charging";
+	if (monster.mode == MonsterMode::Death)
+		return "dying";
+	return "retreating or in a special state";
+}
+
 bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam, int dist, MissileID t, WorldTilePosition startPos, DamageType damageType, bool shift)
 {
-	if (!monster.isPossibleToHit() || monster.isImmune(t, damageType))
+	if (!monster.isPossibleToHit()) {
+		HitTraceRefused(monster, UnhittableReason(monster));
 		return false;
+	}
+	if (monster.isImmune(t, damageType)) {
+		HitTraceRefused(monster, StrCat("immune to damage type ", static_cast<int>(damageType)));
+		return false;
+	}
 	// POE2 Mashup: your spells pass through minions.
-	if (gbIsPoe2 && monster.isPlayerMinion())
+	if (gbIsPoe2 && monster.isPlayerMinion()) {
+		HitTraceRefused(monster, "your minion");
 		return false;
+	}
 
 	int hit = RandomIntLessThan(100);
 	int hper = 0;
@@ -316,7 +339,10 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 #ifdef _DEBUG
 		if (!DebugGodMode)
 #endif
+		{
+			HitTraceRefused(monster, StrCat("missed, rolled ", hit, " against ", hper, "% to hit"));
 			return false;
+		}
 	}
 
 	int dam;
@@ -361,6 +387,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 			TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam));
 		}
 	}
+	HitTraceHit(monster, dam, resist);
 
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
@@ -537,6 +564,7 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 	if (!InDungeonBounds(position))
 		return;
 
+	const HitTraceScope traceScope(missile);
 	bool isMonsterHit = false;
 	bool keepFlying = false;
 	int mid = dMonster[position.x][position.y];
@@ -554,7 +582,9 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 			            ))) {
 				// then the missile can potentially hit this target
 				isMonsterHit = MonsterTrapHit(monster, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted);
-			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && !SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
+			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
+				HitTraceRefused(monster, "this projectile already pierced it");
+			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS)) {
 				int supportedMin = minDamage;
 				int supportedMax = maxDamage;
 				ScaleSupportedMissileDamage(missile, supportedMin, supportedMax);
@@ -566,6 +596,8 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 					keepFlying = OnSupportedMissileHit(missile, monster);
 				}
 			}
+		} else if (!onlyHitWalking.has_value()) {
+			HitTraceRefused(monster, mid < 0 ? "only moving into this tile, not walking" : "not hittable here");
 		}
 	}
 
@@ -718,6 +750,7 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 		if (ignoreStart && missile.position.start == tile)
 			return true;
 
+		HitTraceTile(missile, tile);
 		CheckMissileCol(missile, damageType, mindam, maxdam, false, tile, false);
 
 		// Did missile hit anything?
@@ -727,7 +760,11 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 		if (missile._miHitFlag && GetMissileData(missile._mitype).movementDistribution == MissileMovementDistribution::Blockable)
 			return false;
 
-		return !IsMissileBlockedByTile(tile);
+		if (IsMissileBlockedByTile(tile)) {
+			HitTraceWall(missile, tile);
+			return false;
+		}
+		return true;
 	};
 
 	const bool tileChanged = MoveMissile(missile, checkTile, ifCollidesDontMoveToHitTile);
@@ -4375,6 +4412,10 @@ void ProcessRedPortal(Missile &missile)
 
 static void DeleteMissiles()
 {
+	for (const Missile &missile : Missiles) {
+		if (missile._miDelFlag)
+			HitTraceEnd(missile);
+	}
 	Missiles.remove_if([](Missile &missile) { return missile._miDelFlag; });
 }
 

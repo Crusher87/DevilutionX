@@ -450,6 +450,8 @@ struct Monster { // note: missing field _mAFNum
 	[[nodiscard]] bool isWalking() const;
 	[[nodiscard]] bool isImmune(MissileID mitype, DamageType missileElement) const;
 	[[nodiscard]] bool isResistant(MissileID mitype, DamageType missileElement) const;
+	/** @brief The resistance flags as the player sees them: in POE2 mode an immunity shows as a resistance. */
+	[[nodiscard]] uint16_t shownResistance() const;
 
 	/**
 	 * Is this a player's golem?

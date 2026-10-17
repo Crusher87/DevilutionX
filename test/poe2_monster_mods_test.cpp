@@ -86,6 +86,24 @@ TEST_F(Poe2MonsterModsTest, SomeMonstersAreMagicOrRare)
 	EXPECT_NEAR(rare * 1000 / Count, RareMonsterPerMille, 8);
 }
 
+TEST_F(Poe2MonsterModsTest, ImmunitiesAreResistancesInPoe2)
+{
+	// Zombies and skeletons are immune to Magic in Diablo, so Ice Bolt flew straight through them.
+	Monster zombie = MakeMonster(1);
+	zombie.resistance = IMMUNE_MAGIC | RESIST_FIRE;
+	EXPECT_FALSE(zombie.isImmune(MissileID::BlueFlare, DamageType::Magic));
+	EXPECT_TRUE(zombie.isResistant(MissileID::BlueFlare, DamageType::Magic));
+	EXPECT_TRUE(zombie.isResistant(MissileID::Firebolt, DamageType::Fire));
+	EXPECT_FALSE(zombie.isResistant(MissileID::LightningControl, DamageType::Lightning));
+	EXPECT_EQ(zombie.shownResistance(), RESIST_MAGIC | RESIST_FIRE);
+
+	gbIsPoe2 = false;
+	EXPECT_TRUE(zombie.isImmune(MissileID::BlueFlare, DamageType::Magic));
+	EXPECT_FALSE(zombie.isResistant(MissileID::BlueFlare, DamageType::Magic));
+	EXPECT_EQ(zombie.shownResistance(), IMMUNE_MAGIC | RESIST_FIRE);
+	gbIsPoe2 = true;
+}
+
 TEST_F(Poe2MonsterModsTest, UniquesAndVanillaStayNormal)
 {
 	const uint32_t seed = FindSeed(MonsterRarity::Rare, MonsterMod::ExtraLife);

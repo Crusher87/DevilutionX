@@ -128,9 +128,9 @@ std::string ResistanceText(const Monster &monster)
 	std::string resists;
 	std::string immunes;
 	for (const auto &element : Elements) {
-		if ((monster.resistance & element.immune) != 0)
+		if ((monster.shownResistance() & element.immune) != 0)
 			StrAppend(immunes, immunes.empty() ? "" : ", ", _(element.name));
-		else if ((monster.resistance & element.resist) != 0)
+		else if ((monster.shownResistance() & element.resist) != 0)
 			StrAppend(resists, resists.empty() ? "" : ", ", _(element.name));
 	}
 	std::string text;
