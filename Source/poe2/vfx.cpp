@@ -229,6 +229,13 @@ struct Crystal {
 	float delay;
 };
 
+/** @brief A glinting chevron of frost left on the ground round an ice spike. */
+struct FrostMark {
+	Vec pos;
+	float angle;
+	float length;
+};
+
 /** @brief Ice spikes bursting out of the ground: frost cracks while it waits, then the crystals, then the shatter. */
 struct IceSpikeFx {
 	Vec pos;
@@ -237,6 +244,7 @@ struct IceSpikeFx {
 	float wait;
 	float size;
 	std::vector<Crystal> crystals;
+	std::vector<FrostMark> marks;
 	bool erupted = false;
 	bool shattered = false;
 };
@@ -244,6 +252,9 @@ struct IceSpikeFx {
 /** @brief How long the crystals stand before they shatter, and how long the shatter takes, in ms. */
 constexpr float IceSpikeStand = 650;
 constexpr float IceSpikeShatter = 140;
+/** @brief How long a crystal takes to punch up to full height, and how long the frost marks outlast the shatter, in ms. */
+constexpr float IceSpikeRise = 55;
+constexpr float IceSpikeFrost = 700;
 
 /** @brief How a projectile's trail looks beyond its element, so each monster's spell reads differently. */
 enum class TrailStyle : uint8_t {
@@ -922,13 +933,13 @@ void AdvanceIceSpikes(float ms)
 		if (!fx.erupted && fx.age >= fx.wait) {
 			// The ground bursts: a white flash, a frost shockwave, chips of ice and earth thrown high, and cold mist.
 			fx.erupted = true;
-			AddRing(fx.pos + Vec { 0, -40 * fx.size }, 0, 60 * fx.size, 160, 0, { 235, 248, 255 }, 1.F, true, false);
+			AddRing(fx.pos + Vec { 0, -50 * fx.size }, 0, 34 * fx.size, 120, 0, { 235, 248, 255 }, 0.8F, true, false);
 			AddRing(fx.pos, 0, TileRadius * 2.2F * fx.size, 320, 5, cold.core, 1.F, false, true, false, 0.15F);
-			AddRing(fx.pos, TileRadius * 0.6F * fx.size, TileRadius * 2.F * fx.size, 600, 0, cold.mid, 0.45F, true, true);
+			AddRing(fx.pos, TileRadius * 0.6F * fx.size, TileRadius * 2.F * fx.size, 600, 0, cold.mid, 0.25F, true, true);
 			for (int i = 0; i < Scaled(34 * fx.size); i++)
 				IceSplinter(fx.pos, Random(0, 30), Random(40, 200) * fx.size, Random(350, 750), cold.core, Random(5, 9), Random(500, 900));
 			Spray(fx.pos, Scaled(12 * fx.size), 60, 200, 600, 1000, Shape::Chunk, { 70, 64, 60 }, { 35, 32, 30 }, 3.5F, 3, 200, 420, 900, 0.4F, 1);
-			Spray(fx.pos, Scaled(14 * fx.size), 15, 70, 1200, 2000, Shape::Puff, { 170, 205, 235 }, { 100, 130, 170 }, 14 * fx.size, 40 * fx.size, 10, 50, -5, 0.5F, 0.35F);
+			Spray(fx.pos, Scaled(6 * fx.size), 15, 60, 900, 1500, Shape::Puff, { 170, 205, 235 }, { 100, 130, 170 }, 12 * fx.size, 34 * fx.size, 10, 40, -5, 0.5F, 0.22F);
 			// Frost left on the ground.
 			AddRing(fx.pos, TileRadius * 1.5F * fx.size, TileRadius * 1.5F * fx.size, 5000, 0, { 170, 220, 255 }, 0.16F, true, true, false, 0.25F);
 		}
@@ -942,7 +953,8 @@ void AdvanceIceSpikes(float ms)
 					const float up = Random(0, 1) * crystal.height;
 					IceSplinter(base + crystal.lean * up, up, Random(60, 220), Random(-40, 260), Random(0, 1) < 0.5F ? cold.core : cold.mid, Random(4, 8), Random(400, 750));
 				}
-				Spray(base + Vec { 0, -crystal.height * 0.5F }, Scaled(3), 10, 50, 900, 1500, Shape::Puff, { 190, 220, 245 }, { 110, 140, 180 }, 10, 26, 0, 30, -5, 0.5F, 0.3F);
+				if (crystal.height > 70 * fx.size)
+					Spray(base + Vec { 0, -crystal.height * 0.5F }, Scaled(2), 10, 50, 700, 1200, Shape::Puff, { 190, 220, 245 }, { 110, 140, 180 }, 10, 24, 0, 30, -5, 0.5F, 0.22F);
 			}
 			AddRing(fx.pos + Vec { 0, -50 * fx.size }, 0, 50 * fx.size, 140, 0, cold.mid, 0.7F, true, false);
 		}
@@ -1394,7 +1406,7 @@ void ScanTowners(const View &view)
 			continue;
 		const float height = std::min(static_cast<float>(towner.currentSprite().height()), 110.F);
 		const float phase = static_cast<float>(static_cast<int>(towner._ttype) * 37 % 97);
-		const Vec pos = feet - Vec { 0, height * 0.8F + 12 + 3 * std::sin(AmbientTime * 0.003F + phase) };
+		const Vec pos = feet - Vec { 0, height * 0.8F + 24 + 3 * std::sin(AmbientTime * 0.003F + phase) };
 		const bool reward = marker == QuestMarker::Reward;
 		const int key = static_cast<int>(towner._ttype) * 2 + (reward ? 1 : 0);
 		const auto seen = QuestMarkSince.find(key);
@@ -1864,7 +1876,7 @@ bool FloorFresh = false;
 
 bool WantsFloorCopy()
 {
-	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty());
+	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !IceSpikes.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty());
 }
 
 void CopyFloor(const Surface &world)
@@ -1951,16 +1963,30 @@ void IceSpike(Point tile, int delayMs, float size)
 	fx.pos = TileCentre(tile);
 	fx.wait = static_cast<float>(std::max(delayMs, 0));
 	fx.size = size;
-	fx.life = fx.wait + IceSpikeStand + IceSpikeShatter;
-	// One great spike in the middle and a ring of smaller ones leaning out from it.
-	fx.crystals.push_back({ { Random(-4, 4), Random(-2, 2) }, { Random(-0.12F, 0.12F), 0 }, Random(125, 145) * size, 24 * size, 0 });
-	const int ring = 7 + static_cast<int>(NextRandom() % 3);
-	for (int i = 0; i < ring; i++) {
-		const float angle = (2 * Pi * i) / ring + Random(-0.25F, 0.25F);
-		const float out = Random(16, 34) * size;
+	fx.life = fx.wait + IceSpikeStand + IceSpikeShatter + IceSpikeFrost;
+	// Like a cluster of grim pillars: one great pillar in the middle, a tight crown of shorter ones packed round its foot
+	// leaning only a little out, and a few small shards at the edge.
+	fx.crystals.push_back({ { Random(-3, 3), Random(-1.5F, 1.5F) }, { Random(-0.06F, 0.06F), 0 }, Random(150, 170) * size, 30 * size, 0 });
+	const int crown = 8 + static_cast<int>(NextRandom() % 3);
+	for (int i = 0; i < crown; i++) {
+		const float angle = (2 * Pi * i) / crown + Random(-0.2F, 0.2F);
+		const float out = Random(12, 24) * size;
 		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
-		const float lean = Random(0.25F, 0.55F);
-		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(45, 95) * size, Random(10, 16) * size, Random(10, 70) });
+		const float lean = Random(0.12F, 0.3F);
+		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(60, 110) * size, Random(15, 21) * size, Random(5, 30) });
+	}
+	const int edge = 6 + static_cast<int>(NextRandom() % 3);
+	for (int i = 0; i < edge; i++) {
+		const float angle = (2 * Pi * i) / edge + Random(-0.35F, 0.35F);
+		const float out = Random(30, 42) * size;
+		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
+		const float lean = Random(0.35F, 0.6F);
+		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(22, 40) * size, Random(8, 12) * size, Random(20, 45) });
+	}
+	for (int i = 0; i < 20 * size; i++) {
+		const float angle = Random(0, 2 * Pi);
+		const float out = Random(0.7F, 2.1F) * TileRadius * size;
+		fx.marks.push_back({ fx.pos + Vec { std::cos(angle) * out, std::sin(angle) * out * 0.5F }, Random(0, 2 * Pi), Random(5, 10) });
 	}
 	// Draw the ones at the back first.
 	std::sort(fx.crystals.begin(), fx.crystals.end(), [](const Crystal &a, const Crystal &b) { return a.base.y < b.base.y; });
@@ -2675,42 +2701,77 @@ void DrawIceSpikes()
 		if (!fx.erupted)
 			continue;
 		const float t = fx.age - fx.wait;
+
+		// Frost marks glint on the ground round it, like glyphs scratched in ice, and fade after the shatter.
+		const float frost = std::clamp(t / 120.F, 0.F, 1.F) * (1 - std::clamp((t - IceSpikeStand - IceSpikeShatter) / IceSpikeFrost, 0.F, 1.F));
+		for (size_t i = 0; i < fx.marks.size(); i++) {
+			const FrostMark &mark = fx.marks[i];
+			const float glint = 0.6F + 0.4F * std::sin(AmbientTime * 0.006F + static_cast<float>(i) * 1.7F);
+			const Vec d { std::cos(mark.angle) * mark.length, std::sin(mark.angle) * mark.length * 0.5F };
+			const Vec n { -d.y * 0.6F, d.x * 0.6F };
+			SoftLine(Ground, mark.pos - d, mark.pos + n, 2.2F, cold.mid, cold.core, 0.55F * frost * glint, 0.8F * frost * glint);
+			SoftLine(Ground, mark.pos + n, mark.pos + d, 2.2F, cold.core, cold.mid, 0.8F * frost * glint, 0.55F * frost * glint);
+		}
+
 		// After the stand the crystals crack apart: they fade and sink a little as the splinters fly.
 		const float gone = std::clamp((t - IceSpikeStand) / IceSpikeShatter, 0.F, 1.F);
 		const float alpha = 1 - gone;
+		if (alpha <= 0)
+			continue;
 		for (const Crystal &crystal : fx.crystals) {
 			const float local = t - crystal.delay;
 			if (local <= 0)
 				continue;
 			// They punch up fast and overshoot a little, like they were forced out of the earth.
-			const float h = crystal.height * EaseOutBack(local / 90.F) * (1 - gone * 0.3F);
+			const float h = crystal.height * EaseOutBack(local / IceSpikeRise) * (1 - gone * 0.3F);
 			const float w = crystal.width;
 			const Vec base = fx.pos + crystal.base;
-			const Vec tip = base + crystal.lean * h + Vec { 0, -h };
-			const Vec left = base + Vec { -w / 2, 0 };
-			const Vec right = base + Vec { w / 2, 0 };
-			const Vec front = base + Vec { w * 0.08F, w * 0.3F };
-			// A shoulder part way up gives each crystal a faceted, chipped look rather than a flat triangle.
-			const Vec shoulder = base + crystal.lean * (h * 0.55F) + Vec { w * 0.2F, -h * 0.55F };
-			const float hot = std::max(0.F, 1 - local / 250.F);
-			const Rgb shadow = Mix({ 30, 70, 125 }, cold.core, hot * 0.4F);
-			const Rgb face = Mix({ 95, 160, 220 }, cold.core, hot * 0.4F);
-			const Rgb lit = Mix({ 180, 222, 250 }, { 255, 255, 255 }, hot);
-			const int vl = Dark.add(ToScreen(left), shadow, 0.9F * alpha);
-			const int vf = Dark.add(ToScreen(front), face, 0.92F * alpha);
-			const int vr = Dark.add(ToScreen(right), face, 0.88F * alpha);
-			const int vs = Dark.add(ToScreen(shoulder), lit, 0.9F * alpha);
-			const int vt = Dark.add(ToScreen(tip), lit, 0.95F * alpha);
-			Dark.tri(vl, vf, vt);
-			Dark.tri(vf, vs, vt);
-			Dark.tri(vf, vr, vs);
-			Dark.tri(vs, vr, vt);
-			// Light caught along the ridges and a cold glow through the ice.
-			SoftLine(Glowing, front, shoulder, 2, lit, lit, 0.35F * alpha, 0.5F * alpha);
-			SoftLine(Glowing, shoulder, tip, 2, lit, { 255, 255, 255 }, 0.5F * alpha, 0.75F * alpha);
-			SoftLine(Glowing, left, tip, 1.5F, cold.mid, cold.core, 0.15F * alpha, 0.3F * alpha);
-			SoftLine(Glowing, base, tip, w * 0.5F, cold.mid, cold.edge, (0.06F + hot * 0.35F) * alpha, 0.02F * alpha);
-			SoftDisc(Glowing, tip, 4 + hot * 7, { 230, 248, 255 }, (0.25F + hot * 0.5F) * alpha, false);
+			const Vec up = crystal.lean + Vec { 0, -1 };
+			const Vec tip = base + up * h;
+			// A six-sided pillar seen from above the front: three faces show, narrowing a little, then a faceted point.
+			const float neck = h * 0.74F;
+			const float taper = 0.82F;
+			const Vec bl = base + Vec { -w * 0.5F, -w * 0.06F };
+			const Vec bm1 = base + Vec { -w * 0.17F, w * 0.17F };
+			const Vec bm2 = base + Vec { w * 0.2F, w * 0.15F };
+			const Vec br = base + Vec { w * 0.5F, -w * 0.04F };
+			const auto raise = [&](Vec p) { return base + (p - base) * taper + up * neck; };
+			const Vec tl = raise(bl);
+			const Vec tm1 = raise(bm1);
+			const Vec tm2 = raise(bm2);
+			const Vec tr = raise(br);
+			const float hot = std::max(0.F, 1 - local / 220.F);
+			const Rgb shadow = Mix({ 22, 60, 120 }, cold.core, hot * 0.4F);
+			const Rgb face = Mix({ 70, 145, 215 }, cold.core, hot * 0.4F);
+			const Rgb lit = Mix({ 165, 215, 250 }, { 255, 255, 255 }, hot);
+			const auto quad = [&](Vec a, Vec b, Vec c, Vec d, Rgb ca, Rgb cb, float al) {
+				const int va = Dark.add(ToScreen(a), ca, al);
+				const int vb = Dark.add(ToScreen(b), ca, al);
+				const int vc = Dark.add(ToScreen(c), cb, al);
+				const int vd = Dark.add(ToScreen(d), cb, al);
+				Dark.tri(va, vb, vc);
+				Dark.tri(va, vc, vd);
+			};
+			const auto tri = [&](Vec a, Vec b, Vec c, Rgb colour, float al) {
+				Dark.tri(Dark.add(ToScreen(a), colour, al), Dark.add(ToScreen(b), colour, al), Dark.add(ToScreen(c), colour, al));
+			};
+			// The ice is see-through near the ground and clearer toward the top.
+			quad(bl, bm1, tm1, tl, shadow, Mix(shadow, face, 0.3F), 0.78F * alpha);
+			quad(bm1, bm2, tm2, tm1, face, Mix(face, lit, 0.35F), 0.82F * alpha);
+			quad(bm2, br, tr, tm2, Mix(face, lit, 0.4F), lit, 0.8F * alpha);
+			tri(tl, tm1, tip, Mix(shadow, face, 0.5F), 0.86F * alpha);
+			tri(tm1, tm2, tip, Mix(face, lit, 0.6F), 0.88F * alpha);
+			tri(tm2, tr, tip, lit, 0.9F * alpha);
+
+			// Cold light inside it, and white light caught along its edges and point.
+			SoftLine(Glowing, base + up * (h * 0.3F), base + up * (h * 0.85F), w * 0.5F, cold.mid, cold.core, (0.08F + hot * 0.25F) * alpha, 0.1F * alpha);
+			SoftLine(Glowing, bm1, tm1, 1.6F, lit, lit, 0.15F * alpha, 0.45F * alpha);
+			SoftLine(Glowing, bm2, tm2, 1.8F, lit, lit, 0.2F * alpha, 0.6F * alpha);
+			SoftLine(Glowing, tm2, tip, 2, lit, { 255, 255, 255 }, 0.6F * alpha, 0.85F * alpha);
+			SoftLine(Glowing, tm1, tip, 1.4F, lit, lit, 0.3F * alpha, 0.6F * alpha);
+			SoftLine(Glowing, br, tr, 1.4F, cold.core, lit, 0.15F * alpha, 0.4F * alpha);
+			SoftDisc(Glowing, tip, 3 + hot * 8, { 230, 248, 255 }, (0.3F + hot * 0.5F) * alpha, false);
+			SoftDisc(Glowing, base, w * 0.6F, cold.mid, (0.03F + hot * 0.1F) * alpha, true);
 		}
 	}
 }
@@ -3265,157 +3326,297 @@ void DrawHalos()
 	}
 }
 
-/**
- * @brief A tongue of flame licking up from base along dir (mostly up), height and width in world units: hot at the root,
- * swaying more and reddening toward a tip that fades out. Drawn twice, a wide red body and a narrow yellow heart.
- */
-void FlameTongue(Vec base, Vec dir, float height, float width, uint32_t seed, Rgb heart, Rgb body, Rgb tip, float alpha)
+/** @brief A number from 0 to 1 that depends only on a and b, for effects that look the same every frame without state. */
+float Hash01(uint32_t a, uint32_t b)
 {
-	if (height < 0.5F || alpha <= 0)
+	uint32_t h = (a * 2654435761U) ^ ((b + 0x9E3779B9U) * 2246822519U);
+	h ^= h >> 15;
+	h *= 2246822519U;
+	h ^= h >> 13;
+	h *= 3266489917U;
+	h ^= h >> 16;
+	return static_cast<float>(h & 0xFFFFFF) / static_cast<float>(0xFFFFFF);
+}
+
+/** @brief A soft blob, bright in the middle and fading to its edge, rx wide and ry tall. */
+void SoftBlob(Batch &batch, Vec centre, float rx, float ry, Rgb colour, float alpha)
+{
+	const Vec c = ToScreen(centre);
+	rx *= CameraScale;
+	ry *= CameraScale;
+	if (rx < 0.3F || ry < 0.3F || alpha <= 0)
 		return;
-	const float t = AmbientTime;
-	const Vec side { -dir.y, dir.x };
-	constexpr int Rows = 8;
-	for (int pass = 0; pass < 2; pass++) {
-		const bool inner = pass == 1;
-		const float h = height * (inner ? 0.62F : 1.F);
-		const float w = width * (inner ? 0.55F : 1.F);
-		int previous[3] = {};
-		for (int i = 0; i <= Rows; i++) {
-			const float f = static_cast<float>(i) / Rows;
-			const float sway = (SmoothNoise(seed, t * 0.007F - f * 1.6F) - 0.5F) * 2 * width * 0.9F * f;
-			const Vec c = ToScreen(base + dir * (h * f) + side * sway);
-			const float half = w * 0.5F * std::sqrt(1 - f) * std::min(1.F, 0.55F + f * 2.5F) * CameraScale;
-			const Vec n = side * half;
-			Rgb colour;
-			if (inner)
-				colour = Mix(heart, body, f);
-			else
-				colour = f < 0.45F ? Mix(body, tip, f / 0.45F * 0.4F) : Mix(body, tip, 0.4F + (f - 0.45F) / 0.55F * 0.6F);
-			const float a = alpha * (inner ? 0.95F : 0.6F) * std::pow(1 - f, 1.1F);
-			const int l = Glowing.add(c + n, colour, 0);
-			const int m = Glowing.add(c, colour, a);
-			const int r = Glowing.add(c - n, colour, 0);
-			if (i > 0) {
-				Glowing.tri(previous[0], previous[1], l);
-				Glowing.tri(previous[1], m, l);
-				Glowing.tri(previous[1], previous[2], m);
-				Glowing.tri(previous[2], r, m);
-			}
-			previous[0] = l;
-			previous[1] = m;
-			previous[2] = r;
+	constexpr int Segments = 12;
+	const int middle = batch.add(c, colour, alpha);
+	const int first = static_cast<int>(batch.vertices.size());
+	for (int i = 0; i < Segments; i++) {
+		const float angle = 2 * Pi * i / Segments;
+		batch.add(c + Vec { std::cos(angle) * rx, std::sin(angle) * ry }, colour, 0);
+	}
+	for (int i = 0; i < Segments; i++)
+		batch.tri(middle, first + i, first + (i + 1) % Segments);
+}
+
+/** @brief A closed outline going clockwise from its first point, with each point's outward normal and how far round it is. */
+struct Outline {
+	std::vector<Vec> points;
+	std::vector<Vec> normals;
+	/** @brief Distance from the first point the shorter way round, as a share of half the length, 0 to 1. */
+	std::vector<float> reach;
+
+	void finish()
+	{
+		const size_t n = points.size();
+		normals.resize(n);
+		reach.resize(n);
+		std::vector<float> along(n + 1, 0);
+		for (size_t i = 0; i < n; i++) {
+			const Vec tangent = points[(i + 1) % n] - points[(i + n - 1) % n];
+			const float length = std::max(Length(tangent), 0.001F);
+			normals[i] = Vec { tangent.y, -tangent.x } * (1 / length);
+			along[i + 1] = along[i] + Length(points[(i + 1) % n] - points[i]);
 		}
+		const float total = along[n];
+		for (size_t i = 0; i < n; i++)
+			reach[i] = std::min(along[i], total - along[i]) / (total / 2);
+	}
+};
+
+/**
+ * @brief The outline as one unbroken soft band, pushed out along its normals by offset, drawn only as far round as shown
+ * (0 to 1, both ways from the first point at once). waver makes its brightness crawl along it like burning.
+ */
+void StrokeOutline(Batch &batch, const Outline &outline, float offset, float width, Rgb colour, float alpha, float shown, uint32_t seed, float waver)
+{
+	const size_t n = outline.points.size();
+	const int first = static_cast<int>(batch.vertices.size());
+	for (size_t i = 0; i < n; i++) {
+		const Vec p = outline.points[i];
+		const Vec normal = outline.normals[i];
+		const float a = alpha * (1 - waver + waver * SmoothNoise(seed, static_cast<float>(i) * 0.45F + AmbientTime * 0.006F));
+		batch.add(ToScreen(p + normal * (offset + width / 2)), colour, 0);
+		batch.add(ToScreen(p + normal * offset), colour, a);
+		batch.add(ToScreen(p + normal * (offset - width / 2)), colour, 0);
+	}
+	for (size_t i = 0; i < n; i++) {
+		const size_t j = (i + 1) % n;
+		if (outline.reach[i] > shown || outline.reach[j] > shown)
+			continue;
+		const int a = first + static_cast<int>(i) * 3;
+		const int b = first + static_cast<int>(j) * 3;
+		batch.tri(a, a + 1, b);
+		batch.tri(a + 1, b + 1, b);
+		batch.tri(a + 1, a + 2, b + 1);
+		batch.tri(a + 2, b + 2, b + 1);
 	}
 }
 
+/** @brief Where flames rise off an outline: a point, the way out, how likely a flame starts there and how tall it burns. */
+struct FlameSite {
+	Vec pos;
+	Vec out;
+	float weight;
+	float height;
+};
+
 /**
- * @brief A quest marker: a black "!" cut like the letters of the Diablo logo, its outline burning in like a line of a
- * summoning circle when it appears, then flames licking up off its top and sides. Hellfire for a quest to give, gold fire
- * when the hero has what the towner wants.
+ * @brief Fire licking up off a line of sites: many small flamelets, each born on the line, rising and swaying with its
+ * neighbours so they gather into tongues, white hot at the root and reddening as they thin out at the top.
+ */
+void DrawFire(const std::vector<FlameSite> &sites, int count, float scale, uint32_t seed, Rgb heart, Rgb body, Rgb tip, float strength)
+{
+	if (sites.empty() || strength <= 0)
+		return;
+	float total = 0;
+	for (const FlameSite &site : sites)
+		total += site.weight;
+	const float t = AmbientTime;
+	for (int i = 0; i < count; i++) {
+		const uint32_t id = seed * 977U + static_cast<uint32_t>(i);
+		const float life = 420 + 380 * Hash01(id, 1);
+		const float clock = (t + Hash01(id, 2) * life) / life;
+		const auto cycle = static_cast<uint32_t>(clock);
+		const float a = clock - static_cast<float>(cycle);
+		// Pick where this flamelet is born this time round, weighted toward the top.
+		float pick = Hash01(id, cycle * 4 + 5) * total;
+		size_t s = 0;
+		while (s + 1 < sites.size() && pick > sites[s].weight) {
+			pick -= sites[s].weight;
+			s++;
+		}
+		const FlameSite &site = sites[s];
+		const FlameSite &next = sites[(s + 1) % sites.size()];
+		const float between = Hash01(id, cycle * 4 + 6);
+		const Vec root = site.pos + (next.pos - site.pos) * between;
+		Vec dir = site.out * 0.55F + Vec { 0, -1 };
+		dir = dir * (1 / Length(dir));
+		// Columns of fire swell and die down slowly, so the top breaks into separate tongues of different heights.
+		const auto column = static_cast<uint32_t>(static_cast<int>(root.x / (2.5F * scale)) + 4096);
+		const float swell = 0.45F + 1.05F * SmoothNoise(seed * 53U + column, t * 0.0028F);
+		const float height = (17 + 22 * Hash01(id, cycle * 4 + 7)) * scale * site.height * swell;
+		const float rise = std::pow(a, 1.15F);
+		// Neighbouring flamelets sway together, so they read as tongues rather than sparks.
+		const float sway = (SmoothNoise(seed * 31U + column, t * 0.006F - a * 2.2F) - 0.5F) * 12 * scale * a;
+		const Vec pos = root + site.out * (0.6F * scale) + dir * (height * rise) + Vec { sway, 0 };
+		const float size = (1.9F + 1.2F * Hash01(id, 3)) * scale * (1 - a * 0.7F) * std::min(1.F, 0.45F + a * 6);
+		Rgb colour;
+		if (a < 0.22F)
+			colour = Mix(heart, body, a / 0.22F);
+		else if (a < 0.6F)
+			colour = Mix(body, tip, (a - 0.22F) / 0.38F);
+		else
+			colour = tip;
+		const float alpha = 0.36F * strength * std::pow(1 - a, 1.3F) * std::min(1.F, a / 0.06F);
+		SoftBlob(Glowing, pos, size * 0.85F, size * 2.1F, colour, alpha);
+	}
+}
+
+/** @brief A cubic Bezier curve. */
+Vec Bezier(Vec p0, Vec p1, Vec p2, Vec p3, float t)
+{
+	const float u = 1 - t;
+	return p0 * (u * u * u) + p1 * (3 * u * u * t) + p2 * (3 * u * t * t) + p3 * (t * t * t);
+}
+
+/** @brief The quest marker's two outlines in its own units: a "!" with a rounded, pointed top and curved sides, and its dot. */
+const std::array<Outline, 2> &QuestGlyph()
+{
+	static const std::array<Outline, 2> glyph = [] {
+		std::array<Outline, 2> result;
+		Outline &stem = result[0];
+		const Vec top { 0, -24.5F };
+		const Vec shoulder { 6.2F, -17.8F };
+		const Vec point { 0, 6.8F };
+		constexpr int ArchSteps = 8;
+		constexpr int SideSteps = 18;
+		std::vector<Vec> right;
+		for (int i = 0; i < ArchSteps; i++) {
+			const float s = static_cast<float>(i) / ArchSteps;
+			right.push_back(Bezier(top, { 1.6F, -23.4F }, { 5.2F, -21.2F }, shoulder, s));
+		}
+		for (int i = 0; i < SideSteps; i++) {
+			const float s = static_cast<float>(i) / SideSteps;
+			right.push_back(Bezier(shoulder, { 6.9F, -12 }, { 2.4F, -1.5F }, point, s));
+		}
+		stem.points = right;
+		stem.points.push_back(point);
+		for (size_t i = right.size() - 1; i >= 1; i--)
+			stem.points.push_back({ -right[i].x, right[i].y });
+		Outline &dot = result[1];
+		constexpr int DotSteps = 28;
+		for (int i = 0; i < DotSteps; i++) {
+			const float angle = -Pi / 2 + 2 * Pi * i / DotSteps;
+			const float c = std::cos(angle);
+			const float s = std::sin(angle);
+			const auto curve = [](float v) { return (v < 0 ? -1.F : 1.F) * std::pow(std::abs(v), 1.25F); };
+			dot.points.push_back({ 4.3F * curve(c), 14.3F + 4.5F * curve(s) });
+		}
+		stem.finish();
+		dot.finish();
+		return result;
+	}();
+	return glyph;
+}
+
+/**
+ * @brief A quest marker: a black "!" shaped like the letters of the Diablo logo, its outline burning in like a line of a
+ * summoning circle when it appears, then catching fire, flames pouring up off its top and licking off its sides. Hellfire
+ * for a quest to give, gold fire when the hero has what the towner wants.
  */
 void DrawQuestMarks()
 {
 	const float t = AmbientTime;
 	constexpr float DrawMs = 650;
-	constexpr float IgniteMs = 400;
+	constexpr float IgniteMs = 450;
+	constexpr float K = 1.4F;
+	const std::array<Outline, 2> &glyph = QuestGlyph();
 	for (const QuestMark &mark : QuestMarks) {
 		const Vec c = mark.pos;
 		const uint32_t seed = static_cast<uint32_t>(mark.phase) * 7919U + 17;
 		const float drawn = EaseOut(mark.age / DrawMs);
-		const float lit = std::clamp((mark.age - DrawMs * 0.7F) / IgniteMs, 0.F, 1.F);
+		const float lit = std::clamp((mark.age - DrawMs * 0.6F) / IgniteMs, 0.F, 1.F);
 		const float flicker = 0.85F + 0.15F * (SmoothNoise(seed, t * 0.012F) * 0.6F + SmoothNoise(seed + 5, t * 0.031F) * 0.4F);
-		const Rgb heart = mark.reward ? Rgb { 255, 250, 215 } : Rgb { 255, 235, 150 };
-		const Rgb body = mark.reward ? Rgb { 255, 185, 50 } : Rgb { 255, 110, 20 };
-		const Rgb tip = mark.reward ? Rgb { 200, 90, 10 } : Rgb { 170, 20, 5 };
-		const Rgb rim = mark.reward ? Rgb { 255, 215, 110 } : Rgb { 255, 140, 45 };
-		const Rgb face = mark.reward ? Rgb { 38, 24, 8 } : Rgb { 22, 6, 4 };
-		const Rgb core = mark.reward ? Rgb { 120, 70, 15 } : Rgb { 90, 14, 6 };
-		constexpr float K = 1.55F;
-		auto p = [&](float x, float y) { return c + Vec { x, y } * K; };
+		const Rgb heart = mark.reward ? Rgb { 255, 250, 220 } : Rgb { 255, 240, 170 };
+		const Rgb body = mark.reward ? Rgb { 255, 180, 45 } : Rgb { 255, 105, 18 };
+		const Rgb tip = mark.reward ? Rgb { 190, 80, 8 } : Rgb { 160, 18, 4 };
+		const Rgb rim = mark.reward ? Rgb { 255, 215, 120 } : Rgb { 255, 150, 55 };
+		const Rgb face = mark.reward ? Rgb { 34, 22, 8 } : Rgb { 18, 5, 4 };
+		const Rgb core = mark.reward ? Rgb { 110, 64, 14 } : Rgb { 80, 12, 5 };
 
-		// The glyph: a stroke cut with a slanted, peaked top like the logo's letters, narrowing to a point, over a diamond.
-		const std::array<Vec, 6> stem { p(-6.6F, -18.4F), p(0.6F, -22), p(7, -19), p(3.4F, 1.6F), p(0, 7), p(-3.1F, 1.6F) };
-		const std::array<Vec, 4> dot { p(0, 9.8F), p(4.8F, 14.4F), p(0, 19.2F), p(-4.8F, 14.4F) };
-		const Vec stemMiddle = p(0.3F, -9);
-		const Vec dotMiddle = p(0, 14.4F);
+		std::array<Outline, 2> shape = glyph;
+		for (Outline &outline : shape) {
+			for (Vec &v : outline.points)
+				v = c + v * K;
+		}
+		const Outline &stem = shape[0];
+		const Outline &dot = shape[1];
 
 		// A dark halo so the black glyph reads against the town, and the fire's light around it.
-		SoftDisc(Dark, p(0, -2), 26 * K, { 4, 1, 1 }, 0.45F * drawn, false);
-		SoftDisc(Glowing, p(0, -6), 30 * K, tip, (0.05F + 0.07F * lit) * flicker, false);
-		SoftDisc(Glowing, p(0, -30), 12 * K, body, 0.12F * lit * flicker, false);
+		SoftDisc(Dark, c + Vec { 0, -3 } * K, 24 * K, { 4, 1, 1 }, 0.4F * drawn, false);
+		SoftDisc(Glowing, c + Vec { 0, -10 } * K, 28 * K, tip, (0.04F + 0.06F * lit) * flicker, false);
 
 		// The black face, faintly molten down its middle.
-		const auto fill = [&](const auto &poly, Vec centre) {
-			const int mid = Dark.add(ToScreen(centre), Mix(face, core, 0.35F), 0.96F * drawn);
+		const auto fill = [&](const Outline &outline, Vec middle) {
+			const int centre = Dark.add(ToScreen(middle), Mix(face, core, 0.3F), 0.96F * drawn);
 			const int first = static_cast<int>(Dark.vertices.size());
-			for (const Vec &v : poly)
+			for (const Vec &v : outline.points)
 				Dark.add(ToScreen(v), face, 0.96F * drawn);
-			for (size_t i = 0; i < poly.size(); i++)
-				Dark.tri(mid, first + static_cast<int>(i), first + static_cast<int>((i + 1) % poly.size()));
+			const int n = static_cast<int>(outline.points.size());
+			for (int i = 0; i < n; i++)
+				Dark.tri(centre, first + i, first + (i + 1) % n);
 		};
-		fill(stem, stemMiddle);
-		fill(dot, dotMiddle);
-		SoftLine(Glowing, p(0.4F, -17), p(0.1F, 0), 1.6F * K, core, core, 0.3F * lit * flicker, 0.1F * lit);
-		SoftDisc(Glowing, dotMiddle, 1.6F * K, core, 0.35F * lit * flicker, false);
+		fill(stem, c + Vec { 0, -9 } * K);
+		fill(dot, c + Vec { 0, 14.3F } * K);
+		SoftLine(Glowing, c + Vec { 0, -19 } * K, c + Vec { 0, 1 } * K, 1.4F * K, core, core, 0.2F * lit * flicker, 0.05F * lit);
+		SoftDisc(Glowing, c + Vec { 0, 14.3F } * K, 1.6F * K, core, 0.3F * lit * flicker, false);
 
-		// The outline burns in from the peak down both sides to the point, then round the diamond, a pen of fire at each
-		// head; once lit it flickers along its length like the lines of a summoning circle.
-		// The glow sits just outside the outline so the black face stays black, like the logo's letters.
-		const auto edge = [&](Vec a, Vec b, Vec middle, float from, float to, float phase) {
-			const float shown = std::clamp((drawn - from) / (to - from), 0.F, 1.F);
+		// The outline burns in from the top of each part down both sides at once, then glows on, its light crawling
+		// along it: a hot white thread in a burning rim with a red heat haze outside.
+		const float stemShown = std::clamp(drawn / 0.75F, 0.F, 1.F);
+		const float dotShown = std::clamp((drawn - 0.75F) / 0.25F, 0.F, 1.F);
+		for (int part = 0; part < 2; part++) {
+			const Outline &outline = part == 0 ? stem : dot;
+			const float shown = part == 0 ? stemShown : dotShown;
 			if (shown <= 0)
-				return;
-			Vec out = Vec { a.y - b.y, b.x - a.x } * (1 / Length(b - a));
-			const Vec centre = (a + b) * 0.5F - middle;
-			if (out.x * centre.x + out.y * centre.y < 0)
-				out = out * -1;
-			const Vec e = a + (b - a) * shown;
-			const float wa = 0.75F + 0.25F * SmoothNoise(seed + static_cast<uint32_t>(phase * 13), t * 0.02F);
-			const float wb = 0.75F + 0.25F * SmoothNoise(seed + static_cast<uint32_t>(phase * 13) + 1, t * 0.02F);
-			const Vec halo = out * (3.2F * K);
-			const Vec lip = out * (0.5F * K);
-			SoftLine(Glowing, a + halo, e + halo, 6 * K, tip, tip, 0.4F * wa, 0.4F * wb);
-			SoftLine(Glowing, a + lip, e + lip, 2.2F * K, rim, rim, 0.9F * wa, 0.9F * wb);
-			SoftLine(Glowing, a + lip, e + lip, 0.9F * K, heart, heart, 0.55F * wa, 0.55F * wb);
-			if (shown < 1) {
-				SoftDisc(Glowing, e, 4.5F * K, heart, 0.9F, false);
-				SoftDisc(Glowing, e, 9 * K, body, 0.4F, false);
+				continue;
+			StrokeOutline(Glowing, outline, 2.6F * K, 5.5F * K, tip, 0.4F * flicker, shown, seed + part * 3, 0.5F);
+			StrokeOutline(Glowing, outline, 0.5F * K, 2.1F * K, rim, 0.92F, shown, seed + part * 3 + 1, 0.3F);
+			StrokeOutline(Glowing, outline, 0.5F * K, 0.8F * K, heart, 0.6F, shown, seed + part * 3 + 2, 0.3F);
+			if (shown >= 1)
+				continue;
+			// A pen of fire at each head as it burns round.
+			const size_t n = outline.points.size();
+			for (size_t i = 0; i < n; i++) {
+				const size_t j = (i + 1) % n;
+				const float ra = outline.reach[i];
+				const float rb = outline.reach[j];
+				if ((ra <= shown) == (rb <= shown))
+					continue;
+				const float f = std::clamp((shown - ra) / (rb - ra), 0.F, 1.F);
+				const Vec head = outline.points[i] + (outline.points[j] - outline.points[i]) * f;
+				SoftDisc(Glowing, head, 4 * K, heart, 0.9F, false);
+				SoftDisc(Glowing, head, 9 * K, body, 0.35F, false);
 			}
-		};
-		edge(stem[1], stem[0], stemMiddle, 0, 0.22F, 0);
-		edge(stem[1], stem[2], stemMiddle, 0, 0.22F, 1);
-		edge(stem[0], stem[5], stemMiddle, 0.22F, 0.62F, 2);
-		edge(stem[2], stem[3], stemMiddle, 0.22F, 0.62F, 3);
-		edge(stem[5], stem[4], stemMiddle, 0.62F, 0.78F, 4);
-		edge(stem[3], stem[4], stemMiddle, 0.62F, 0.78F, 5);
-		edge(dot[0], dot[1], dotMiddle, 0.78F, 0.89F, 6);
-		edge(dot[0], dot[3], dotMiddle, 0.78F, 0.89F, 7);
-		edge(dot[1], dot[2], dotMiddle, 0.89F, 1, 8);
-		edge(dot[3], dot[2], dotMiddle, 0.89F, 1, 9);
+		}
 
-		// Flames lick up off the top like the logo's letters, smaller ones curl off the sides and the dot.
+		// Then it catches: fire pours up off the top and licks off the upper sides and the dot.
 		if (lit <= 0)
 			continue;
-		const float grow = EaseOut(lit);
-		const auto tongue = [&](Vec base, Vec lean, float height, float width, uint32_t s) {
-			const float breathe = 0.65F + 0.55F * SmoothNoise(seed * 31 + s, t * 0.0045F);
-			Vec dir = Vec { lean.x, -1 };
-			dir = dir * (1 / Length(dir));
-			FlameTongue(base, dir, height * K * breathe * grow, width * K, seed * 131 + s, heart, body, tip, flicker * grow);
-		};
-		const auto along = [](Vec a, Vec b, float f) { return a + (b - a) * f; };
-		tongue(along(stem[0], stem[1], 0.15F), { -0.35F, 0 }, 15, 5.5F, 1);
-		tongue(along(stem[0], stem[1], 0.6F), { -0.1F, 0 }, 22, 6.5F, 2);
-		tongue(stem[1], { 0.02F, 0 }, 28, 7, 3);
-		tongue(along(stem[1], stem[2], 0.5F), { 0.12F, 0 }, 21, 6.5F, 4);
-		tongue(along(stem[1], stem[2], 0.9F), { 0.4F, 0 }, 14, 5.5F, 5);
-		tongue(along(stem[0], stem[5], 0.3F), { -0.8F, 0 }, 10, 4, 6);
-		tongue(along(stem[2], stem[3], 0.3F), { 0.8F, 0 }, 10, 4, 7);
-		tongue(along(stem[0], stem[5], 0.68F), { -0.9F, 0 }, 7, 3.2F, 8);
-		tongue(along(stem[2], stem[3], 0.68F), { 0.9F, 0 }, 7, 3.2F, 9);
-		tongue(along(dot[3], dot[0], 0.6F), { -0.4F, 0 }, 7, 3.5F, 10);
-		tongue(along(dot[0], dot[1], 0.4F), { 0.4F, 0 }, 7, 3.5F, 11);
+		std::vector<FlameSite> sites;
+		const size_t n = stem.points.size();
+		for (size_t i = 0; i < n; i++) {
+			const Vec local = (stem.points[i] - c) * (1 / K);
+			if (local.y > -2)
+				continue;
+			const float topness = std::clamp((-local.y - 2) / 21.F, 0.F, 1.F);
+			const bool arch = local.y < -17.4F;
+			sites.push_back({ stem.points[i], stem.normals[i], arch ? 3.F : 0.25F + 1.1F * topness, arch ? 1.F : 0.3F + 0.35F * topness });
+		}
+		for (size_t i = 0; i < dot.points.size(); i++) {
+			if (dot.normals[i].y < -0.3F)
+				sites.push_back({ dot.points[i], dot.normals[i], 0.3F, 0.3F });
+		}
+		DrawFire(sites, 170, K, seed, heart, body, tip, EaseOut(lit) * flicker);
 	}
 }
 
@@ -3535,13 +3736,18 @@ std::optional<SDL_Rect> FillFloorMask(Size worldSize)
 	int pitch;
 	if (SDL_LockTexture(Layer.mask, &rect, &pixels, &pitch) != 0)
 		return std::nullopt;
+	// Shadows are painted into the sprites in black, so a black or near-black pixel over the floor is a shadow lying on
+	// it, not something standing on it: the floor effects show through those.
+	std::array<bool, 256> solid;
+	for (size_t i = 0; i < solid.size(); i++)
+		solid[i] = i != 0 && Luminance(logical_palette[i]) >= 14;
 	for (int y = 0; y < rect.h; y++) {
 		const uint8_t *now = world.at(rect.x, rect.y + y);
 		const uint8_t *bare = static_cast<const uint8_t *>(FloorSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FloorSurface->pitch + rect.x;
 		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
 		for (int x = 0; x < rect.w; x++, out += 4) {
 			out[0] = out[1] = out[2] = 0;
-			out[3] = now[x] != bare[x] ? 255 : 0;
+			out[3] = now[x] != bare[x] && solid[now[x]] ? 255 : 0;
 		}
 	}
 	SDL_UnlockTexture(Layer.mask);
