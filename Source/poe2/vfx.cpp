@@ -310,7 +310,7 @@ constexpr float RitualInnerStart = RitualStarStart + 5 * RitualStrokeMs;
 constexpr float RitualInnerMs = 160;
 constexpr float RitualRuneStart = 550;
 constexpr float RitualRuneMs = 90;
-constexpr float RitualBurnStart = 2700;
+constexpr float RitualBurnStart = 3300;
 constexpr float RitualBurnMs = 900;
 constexpr float RitualScorchMs = 2200;
 
@@ -3070,6 +3070,151 @@ float RitualSide(Vec g)
 	return std::abs(a) / Pi;
 }
 
+/** @brief A number from 0 to 1 that depends only on a and b, for effects that look the same every frame without state. */
+float Hash01(uint32_t a, uint32_t b)
+{
+	uint32_t h = (a * 2654435761U) ^ ((b + 0x9E3779B9U) * 2246822519U);
+	h ^= h >> 15;
+	h *= 2246822519U;
+	h ^= h >> 13;
+	h *= 3266489917U;
+	h ^= h >> 16;
+	return static_cast<float>(h & 0xFFFFFF) / static_cast<float>(0xFFFFFF);
+}
+
+/** @brief A soft blob, bright in the middle and fading to its edge, rx wide and ry tall. */
+void SoftBlob(Batch &batch, Vec centre, float rx, float ry, Rgb colour, float alpha)
+{
+	const Vec c = ToScreen(centre);
+	rx *= CameraScale;
+	ry *= CameraScale;
+	if (rx < 0.3F || ry < 0.3F || alpha <= 0)
+		return;
+	constexpr int Segments = 12;
+	const int middle = batch.add(c, colour, alpha);
+	const int first = static_cast<int>(batch.vertices.size());
+	for (int i = 0; i < Segments; i++) {
+		const float angle = 2 * Pi * i / Segments;
+		batch.add(c + Vec { std::cos(angle) * rx, std::sin(angle) * ry }, colour, 0);
+	}
+	for (int i = 0; i < Segments; i++)
+		batch.tri(middle, first + i, first + (i + 1) % Segments);
+}
+
+/** @brief A closed outline going clockwise from its first point, with each point's outward normal and how far round it is. */
+struct Outline {
+	std::vector<Vec> points;
+	std::vector<Vec> normals;
+	/** @brief Distance from the first point the shorter way round, as a share of half the length, 0 to 1. */
+	std::vector<float> reach;
+
+	void finish()
+	{
+		const size_t n = points.size();
+		normals.resize(n);
+		reach.resize(n);
+		std::vector<float> along(n + 1, 0);
+		for (size_t i = 0; i < n; i++) {
+			const Vec tangent = points[(i + 1) % n] - points[(i + n - 1) % n];
+			const float length = std::max(Length(tangent), 0.001F);
+			normals[i] = Vec { tangent.y, -tangent.x } * (1 / length);
+			along[i + 1] = along[i] + Length(points[(i + 1) % n] - points[i]);
+		}
+		const float total = along[n];
+		for (size_t i = 0; i < n; i++)
+			reach[i] = std::min(along[i], total - along[i]) / (total / 2);
+	}
+};
+
+/**
+ * @brief The outline as one unbroken soft band, pushed out along its normals by offset, drawn only as far round as shown
+ * (0 to 1, both ways from the first point at once). waver makes its brightness crawl along it like burning.
+ */
+void StrokeOutline(Batch &batch, const Outline &outline, float offset, float width, Rgb colour, float alpha, float shown, uint32_t seed, float waver)
+{
+	const size_t n = outline.points.size();
+	const int first = static_cast<int>(batch.vertices.size());
+	for (size_t i = 0; i < n; i++) {
+		const Vec p = outline.points[i];
+		const Vec normal = outline.normals[i];
+		const float a = alpha * (1 - waver + waver * SmoothNoise(seed, static_cast<float>(i) * 0.45F + AmbientTime * 0.006F));
+		batch.add(ToScreen(p + normal * (offset + width / 2)), colour, 0);
+		batch.add(ToScreen(p + normal * offset), colour, a);
+		batch.add(ToScreen(p + normal * (offset - width / 2)), colour, 0);
+	}
+	for (size_t i = 0; i < n; i++) {
+		const size_t j = (i + 1) % n;
+		if (outline.reach[i] > shown || outline.reach[j] > shown)
+			continue;
+		const int a = first + static_cast<int>(i) * 3;
+		const int b = first + static_cast<int>(j) * 3;
+		batch.tri(a, a + 1, b);
+		batch.tri(a + 1, b + 1, b);
+		batch.tri(a + 1, a + 2, b + 1);
+		batch.tri(a + 2, b + 2, b + 1);
+	}
+}
+
+/** @brief Where flames rise off an outline: a point, the way out, how likely a flame starts there and how tall it burns. */
+struct FlameSite {
+	Vec pos;
+	Vec out;
+	float weight;
+	float height;
+};
+
+/**
+ * @brief Fire licking up off a line of sites: many small flamelets, each born on the line, rising and swaying with its
+ * neighbours so they gather into tongues, white hot at the root and reddening as they thin out at the top.
+ */
+void DrawFire(const std::vector<FlameSite> &sites, int count, float scale, uint32_t seed, Rgb heart, Rgb body, Rgb tip, float strength, Batch &batch = Glowing)
+{
+	if (sites.empty() || strength <= 0)
+		return;
+	float total = 0;
+	for (const FlameSite &site : sites)
+		total += site.weight;
+	const float t = AmbientTime;
+	for (int i = 0; i < count; i++) {
+		const uint32_t id = seed * 977U + static_cast<uint32_t>(i);
+		const float life = 420 + 380 * Hash01(id, 1);
+		const float clock = (t + Hash01(id, 2) * life) / life;
+		const auto cycle = static_cast<uint32_t>(clock);
+		const float a = clock - static_cast<float>(cycle);
+		// Pick where this flamelet is born this time round, weighted toward the top.
+		float pick = Hash01(id, cycle * 4 + 5) * total;
+		size_t s = 0;
+		while (s + 1 < sites.size() && pick > sites[s].weight) {
+			pick -= sites[s].weight;
+			s++;
+		}
+		const FlameSite &site = sites[s];
+		const FlameSite &next = sites[(s + 1) % sites.size()];
+		const float between = Hash01(id, cycle * 4 + 6);
+		const Vec root = site.pos + (next.pos - site.pos) * between;
+		Vec dir = site.out * 0.55F + Vec { 0, -1 };
+		dir = dir * (1 / Length(dir));
+		// Columns of fire swell and die down slowly, so the top breaks into separate tongues of different heights.
+		const auto column = static_cast<uint32_t>(static_cast<int>(root.x / (2.5F * scale)) + 4096);
+		const float swell = 0.45F + 1.05F * SmoothNoise(seed * 53U + column, t * 0.0028F);
+		const float height = (17 + 22 * Hash01(id, cycle * 4 + 7)) * scale * site.height * swell;
+		const float rise = std::pow(a, 1.15F);
+		// Neighbouring flamelets sway together, so they read as tongues rather than sparks.
+		const float sway = (SmoothNoise(seed * 31U + column, t * 0.006F - a * 2.2F) - 0.5F) * 12 * scale * a;
+		const Vec pos = root + site.out * (0.6F * scale) + dir * (height * rise) + Vec { sway, 0 };
+		const float size = (1.9F + 1.2F * Hash01(id, 3)) * scale * (1 - a * 0.7F) * std::min(1.F, 0.45F + a * 6);
+		Rgb colour;
+		if (a < 0.22F)
+			colour = Mix(heart, body, a / 0.22F);
+		else if (a < 0.6F)
+			colour = Mix(body, tip, (a - 0.22F) / 0.38F);
+		else
+			colour = tip;
+		const float alpha = 0.36F * strength * std::pow(1 - a, 1.3F) * std::min(1.F, a / 0.06F);
+		SoftBlob(batch, pos, size * 0.85F, size * 2.1F, colour, alpha);
+	}
+}
+
 /** @brief One line of the circle: glowing, white-hot just before the burning edge reaches it, then a fading scorch mark. */
 void RitualLine(const RitualFx &fx, Vec a, Vec b, float width, Rgb colour, float alpha)
 {
@@ -3181,9 +3326,241 @@ void RitualWrite(const RitualFx &fx, const std::vector<Polyline> &lines, float p
 	}
 }
 
+/** @brief How many cracks hellfire breaks through the Horadric seal, when the first opens and how far apart they come. */
+constexpr int SealCracks = 7;
+constexpr float SealCrackStart = 1350;
+constexpr float SealCrackSpread = 480;
+constexpr float SealCrackGrowMs = 220;
+/** @brief How long the fire takes to run round the band from a crack to the next one, in ms. */
+constexpr float SealFireSpreadMs = 650;
+
+/** @brief Where crack k of a ritual's seal crosses the band, and when it opens. */
+float SealCrackAngle(const RitualFx &fx, int k)
+{
+	uint32_t seed = fx.seed * 2654435761U + static_cast<uint32_t>(k) * 97U + 1;
+	return Pi / 2 + 2 * Pi * (static_cast<float>(k) + 0.5F) / SealCracks + (SeededRandom(seed) - 0.5F) * 0.5F;
+}
+
+float SealCrackTime(float angle)
+{
+	return SealCrackStart + RitualSide(RitualPoint(1, angle)) * SealCrackSpread;
+}
+
+/** @brief A crack across the band in ground space: a jagged line from the inner edge to the outer one, and a branch along it. */
+std::array<Polyline, 2> SealCrack(const RitualFx &fx, int k, float inner, float outer)
+{
+	uint32_t seed = fx.seed * 40503U + static_cast<uint32_t>(k) * 7919U + 3;
+	const float angle = SealCrackAngle(fx, k);
+	std::array<Polyline, 2> lines;
+	constexpr int Steps = 5;
+	for (int i = 0; i <= Steps; i++) {
+		const float f = static_cast<float>(i) / Steps;
+		const float a = angle + (SeededRandom(seed) - 0.5F) * 0.07F;
+		lines[0].push_back(RitualPoint(inner - 3 + (outer - inner + 6) * f, a));
+	}
+	const Vec middle = lines[0][Steps / 2];
+	float a = std::atan2(middle.y, middle.x);
+	float rad = Length(middle);
+	const float way = SeededRandom(seed) < 0.5F ? -1.F : 1.F;
+	lines[1].push_back(middle);
+	for (int i = 0; i < 4; i++) {
+		a += way * (0.04F + SeededRandom(seed) * 0.04F);
+		rad = std::clamp(rad + (SeededRandom(seed) - 0.5F) * (outer - inner) * 0.5F, inner + 2, outer - 2);
+		lines[1].push_back(RitualPoint(rad, a));
+	}
+	return lines;
+}
+
+/** @brief A small mark carved into the seal, strokes on a 3x3 grid like the Horadrim's script, in ground space. */
+std::vector<Polyline> SealMark(uint32_t seed, Vec centre, Vec along, Vec across, float size)
+{
+	std::vector<Polyline> lines;
+	const int strokes = 3 + static_cast<int>(SeededRandom(seed) * 2.99F);
+	auto grid = [&]() { return static_cast<float>(static_cast<int>(SeededRandom(seed) * 2.99F)) - 1.F; };
+	float u = grid();
+	float v = -1;
+	Polyline line { centre + along * (u * size) + across * (v * size) };
+	for (int i = 0; i < strokes; i++) {
+		const float nu = grid();
+		const float nv = grid();
+		if (nu == u && nv == v)
+			continue;
+		u = nu;
+		v = nv;
+		line.push_back(centre + along * (u * size) + across * (v * size));
+	}
+	lines.push_back(line);
+	// A short bar across most marks, as the Horadric glyphs have.
+	if (SeededRandom(seed) < 0.6F)
+		lines.push_back({ centre + along * (-0.6F * size) + across * (0.25F * size), centre + along * (0.6F * size) + across * (0.25F * size) });
+	return lines;
+}
+
+/**
+ * @brief The outer band of the level-up circle: a plain stone ring carved with Horadric marks, like the seals the Horadrim
+ * set over Diablo. It is laid from the front round both sides, its marks lit pale blue as it holds; then hellfire cracks it
+ * open from inside, bursts up through each crack and runs round the band until the whole ring burns, and the burn takes it.
+ */
+void DrawHoradricSeal(RitualFx &fx, float laid)
+{
+	const Colours &c = fx.colours;
+	const float r = fx.radius;
+	const float age = fx.age;
+	const float inner = r * 0.94F;
+	const float outer = r * 1.1F;
+	const float middle = (inner + outer) / 2;
+	const Rgb stone { 52, 48, 46 };
+	const Rgb rim { 112, 104, 96 };
+	const Rgb groove { 12, 10, 10 };
+	const Rgb horadric { 150, 185, 255 };
+
+	std::array<float, SealCracks> crackAngle;
+	std::array<float, SealCracks> crackTime;
+	for (int k = 0; k < SealCracks; k++) {
+		crackAngle[k] = SealCrackAngle(fx, k);
+		crackTime[k] = SealCrackTime(crackAngle[k]);
+	}
+	const auto burnSince = [&](Vec g) { return age - (RitualBurnStart + RitualSide(g) * RitualBurnMs); };
+	// How long a point of the band has been burning: fire spreads both ways from each crack once it opens.
+	const auto burning = [&](float angle) {
+		float best = -1;
+		for (int k = 0; k < SealCracks; k++) {
+			float d = std::abs(angle - crackAngle[k]);
+			d = std::min(d, 2 * Pi - std::fmod(d, 2 * Pi));
+			const float reached = crackTime[k] + SealCrackGrowMs * 0.6F + d / (2 * Pi / SealCracks) * SealFireSpreadMs;
+			best = std::max(best, age - reached);
+		}
+		return best;
+	};
+
+	// The stone band, laid round from the front, crumbling away as the burn goes past.
+	constexpr int Segments = 96;
+	const int band = static_cast<int>(GroundDark.vertices.size());
+	for (int i = 0; i <= Segments; i++) {
+		const float a = Pi / 2 + 2 * Pi * i / Segments;
+		GroundDark.add(ToScreen(RitualToWorld(fx, RitualPoint(inner, a))), stone, 0);
+		GroundDark.add(ToScreen(RitualToWorld(fx, RitualPoint(middle, a))), stone, 0);
+		GroundDark.add(ToScreen(RitualToWorld(fx, RitualPoint(outer, a))), stone, 0);
+	}
+	for (int i = 0; i < Segments; i++) {
+		const float a = Pi / 2 + 2 * Pi * (i + 0.5F) / Segments;
+		const Vec g = RitualPoint(middle, a);
+		if (RitualSide(g) > laid)
+			continue;
+		const float crumble = std::clamp(burnSince(g) / 500, 0.F, 1.F);
+		const float alpha = 0.88F * (1 - crumble);
+		for (int v = 0; v < 3; v++) {
+			GroundDark.vertices[band + i * 3 + v].color.a = static_cast<uint8_t>(alpha * (v == 1 ? 255 : 200));
+			GroundDark.vertices[band + (i + 1) * 3 + v].color.a = static_cast<uint8_t>(alpha * (v == 1 ? 255 : 200));
+		}
+		const int p = band + i * 3;
+		const int q = band + (i + 1) * 3;
+		GroundDark.tri(p, p + 1, q);
+		GroundDark.tri(p + 1, q + 1, q);
+		GroundDark.tri(p + 1, p + 2, q + 1);
+		GroundDark.tri(p + 2, q + 2, q + 1);
+		// Its carved edges.
+		const float a0 = Pi / 2 + 2 * Pi * i / Segments;
+		const float a1 = Pi / 2 + 2 * Pi * (i + 1) / Segments;
+		for (const float edge : { inner, outer }) {
+			const Vec w0 = RitualToWorld(fx, RitualPoint(edge, a0));
+			const Vec w1 = RitualToWorld(fx, RitualPoint(edge, a1));
+			SoftLine(GroundDark, w0, w1, 2.2F, rim, rim, 0.75F * (1 - crumble), 0.75F * (1 - crumble));
+		}
+	}
+
+	// Horadric marks cut round it, lit pale blue while the seal holds, turning to embers as the fire takes them.
+	constexpr int Marks = 22;
+	for (int m = 0; m < Marks; m++) {
+		const float a = Pi / 2 + 2 * Pi * (m + 0.5F) / Marks;
+		const Vec g = RitualPoint(middle, a);
+		if (RitualSide(g) > laid)
+			continue;
+		const float crumble = std::clamp(burnSince(g) / 400, 0.F, 1.F);
+		if (crumble >= 1)
+			continue;
+		const Vec across = RitualPoint(1, a);
+		const Vec along { -across.y, across.x };
+		const float lit = burning(a);
+		const float hold = std::clamp((age - RitualSide(g) * RitualRingMs) / 250, 0.F, 1.F) * (lit > 0 ? std::max(0.F, 1 - lit / 250) : 1.F);
+		const float heat = lit > 0 ? std::min(1.F, lit / 250) : 0.F;
+		for (const Polyline &line : SealMark(fx.seed + static_cast<uint32_t>(m) * 131U, g, along, across, (outer - inner) * 0.24F)) {
+			for (size_t s = 0; s + 1 < line.size(); s++) {
+				const Vec w0 = RitualToWorld(fx, line[s]);
+				const Vec w1 = RitualToWorld(fx, line[s + 1]);
+				SoftLine(GroundDark, w0, w1, 2.4F, groove, groove, 0.8F * (1 - crumble), 0.8F * (1 - crumble));
+				if (hold > 0)
+					SoftLine(Ground, w0, w1, 2.2F, horadric, horadric, 0.45F * hold, 0.45F * hold);
+				if (heat > 0)
+					SoftLine(Ground, w0, w1, 2, c.mid, c.core, 0.6F * heat * (1 - crumble), 0.6F * heat * (1 - crumble));
+			}
+		}
+	}
+
+	// The cracks: black splits in the stone with hellfire glaring up through them, growing as they open.
+	std::vector<FlameSite> back;
+	std::vector<FlameSite> front;
+	for (int k = 0; k < SealCracks; k++) {
+		const float open = (age - crackTime[k]) / SealCrackGrowMs;
+		if (open <= 0)
+			continue;
+		const float crumble = std::clamp(burnSince(RitualPoint(middle, crackAngle[k])) / 500, 0.F, 1.F);
+		const float fade = 1 - crumble;
+		const float flash = std::clamp(1 - (open - 1) / 2.5F, 0.F, 1.F);
+		const std::array<Polyline, 2> crack = SealCrack(fx, k, inner, outer);
+		for (int l = 0; l < 2; l++) {
+			const Polyline &line = crack[l];
+			const float shown = std::clamp(l == 0 ? open : open * 1.6F - 0.6F, 0.F, 1.F) * static_cast<float>(line.size() - 1);
+			for (size_t s = 0; s + 1 < line.size() && static_cast<float>(s) < shown; s++) {
+				const float f = std::min(1.F, shown - static_cast<float>(s));
+				const Vec w0 = RitualToWorld(fx, line[s]);
+				const Vec w1 = RitualToWorld(fx, line[s] + (line[s + 1] - line[s]) * f);
+				const float width = l == 0 ? 3.2F : 2.2F;
+				SoftLine(GroundDark, w0, w1, width * 1.8F, groove, groove, 0.9F * fade, 0.9F * fade);
+				SoftLine(Ground, w0, w1, width * 4, c.edge, c.edge, (0.3F + 0.4F * flash) * fade, (0.3F + 0.4F * flash) * fade);
+				SoftLine(Ground, w0, w1, width, c.mid, c.core, (0.8F + 0.2F * flash) * fade, (0.8F + 0.2F * flash) * fade);
+			}
+		}
+		if (open < 1.3F && NextRandom() % 100 < static_cast<uint32_t>(60 * Intensity())) {
+			// Chips of stone and sparks thrown up as it splits.
+			const Vec at = RitualToWorld(fx, RitualPoint(Random(inner, outer), crackAngle[k] + Random(-0.04F, 0.04F)));
+			Spray(at, 1, 20, 70, 400, 700, Shape::Chunk, { 90, 84, 78 }, { 40, 36, 34 }, 2.2F, 1.6F, 120, 260, 700, 0.4F, 1);
+			Spray(at, 2, 10, 50, 300, 600, Shape::Streak, c.core, c.edge, 2.2F, 0.4F, 60, 160, -20, 0.5F, 1);
+		}
+	}
+
+	// Fire on the band: up through each crack first, then running round until the whole ring burns, dying where the
+	// burn has gone past. Flames at the back hide behind whoever stands in front of them.
+	constexpr int Sites = 120;
+	for (int i = 0; i < Sites; i++) {
+		const float a = Pi / 2 + 2 * Pi * (i + 0.5F) / Sites;
+		const float lit = burning(a);
+		if (lit <= 0)
+			continue;
+		const Vec g = RitualPoint(middle, a);
+		const float since = burnSince(g);
+		const float life = std::min(1.F, lit / 200) * (since > 0 ? std::max(0.F, 1 - since / 350) : 1.F);
+		if (life <= 0)
+			continue;
+		// Taller where a crack has just burst.
+		float burst = 0;
+		for (int k = 0; k < SealCracks; k++) {
+			float d = std::abs(a - crackAngle[k]);
+			d = std::min(d, 2 * Pi - std::fmod(d, 2 * Pi));
+			const float near = std::max(0.F, 1 - d / 0.25F);
+			const float fresh = std::clamp(1 - (age - crackTime[k] - SealCrackGrowMs) / 900, 0.F, 1.F);
+			burst = std::max(burst, near * fresh);
+		}
+		const FlameSite site { RitualToWorld(fx, g), { 0, 0 }, life, (0.7F + 1.1F * burst) * life };
+		(std::sin(a) < 0 ? back : front).push_back(site);
+	}
+	DrawFire(back, 300, 1.7F, fx.seed, { 255, 235, 160 }, c.mid, c.edge, 1.2F, Ground);
+	DrawFire(front, 300, 1.7F, fx.seed + 1, { 255, 235, 160 }, c.mid, c.edge, 1.2F, Glowing);
+}
+
 void DrawRituals()
 {
-	for (const RitualFx &fx : Rituals) {
+	for (RitualFx &fx : Rituals) {
 		const Colours &c = fx.colours;
 		const float r = fx.radius;
 		const float age = fx.age;
@@ -3193,21 +3570,10 @@ void DrawRituals()
 		// The floor inside the circle glows red until the burn has gone round it.
 		SoftDisc(Ground, fx.pos, r, c.edge, 0.22F * EaseOut(age / 600) * (1 - burnt), true);
 
-		// The outer ring and its crown of thorns, turning slowly.
+		// The outer band: a Horadric seal laid round from the front, with a thin line of hellfire just inside it.
 		const float ring = EaseOut(age / RitualRingMs);
-		RitualRing(fx, r, ring, 3, c.mid, pulse, true);
-		RitualRing(fx, r * 0.94F, ring, 1.4F, c.core, 0.8F * pulse, false);
-		const int thorns = 40;
-		const float spin = age * 0.00008F;
-		for (int i = 0; i < thorns; i++) {
-			const float a = spin + 2 * Pi * i / thorns;
-			const float half = Pi / thorns * 0.8F;
-			const Vec tip = RitualPoint(r * 1.09F, a);
-			if (RitualSide(tip) > ring)
-				continue;
-			RitualLine(fx, RitualPoint(r, a - half), tip, 1.5F, c.mid, 0.85F * pulse);
-			RitualLine(fx, tip, RitualPoint(r, a + half), 1.5F, c.mid, 0.85F * pulse);
-		}
+		DrawHoradricSeal(fx, ring);
+		RitualRing(fx, r * 0.92F, ring, 1.4F, c.mid, 0.8F * pulse, true);
 
 		// The pentagram, one line after another, its lower point to the front: P0, P2, P4, P1, P3 and back to P0.
 		std::array<Vec, 5> star;
@@ -3246,20 +3612,6 @@ void DrawRituals()
 			RitualWrite(fx, lines, written, 2 + flare, flare > 0.5F ? c.core : c.mid, std::min(1.F, pulse + flare));
 		}
 
-		// Flames licking up off the outer ring while it stands.
-		if (ring >= 1 && age < RitualBurnStart && NextRandom() % 100 < static_cast<uint32_t>(45 * Intensity())) {
-			Particle p;
-			p.pos = RitualToWorld(fx, RitualPoint(r * Random(0.98F, 1.06F), Random(0, 2 * Pi)));
-			p.vz = Random(30, 80);
-			p.gravity = -40;
-			p.life = Random(350, 700);
-			p.size0 = 2.4F;
-			p.size1 = 0.4F;
-			p.c0 = c.core;
-			p.c1 = c.edge;
-			p.shape = Shape::Streak;
-			AddParticle(p);
-		}
 	}
 }
 
@@ -3323,151 +3675,6 @@ void DrawHalos()
 			break;
 		}
 		}
-	}
-}
-
-/** @brief A number from 0 to 1 that depends only on a and b, for effects that look the same every frame without state. */
-float Hash01(uint32_t a, uint32_t b)
-{
-	uint32_t h = (a * 2654435761U) ^ ((b + 0x9E3779B9U) * 2246822519U);
-	h ^= h >> 15;
-	h *= 2246822519U;
-	h ^= h >> 13;
-	h *= 3266489917U;
-	h ^= h >> 16;
-	return static_cast<float>(h & 0xFFFFFF) / static_cast<float>(0xFFFFFF);
-}
-
-/** @brief A soft blob, bright in the middle and fading to its edge, rx wide and ry tall. */
-void SoftBlob(Batch &batch, Vec centre, float rx, float ry, Rgb colour, float alpha)
-{
-	const Vec c = ToScreen(centre);
-	rx *= CameraScale;
-	ry *= CameraScale;
-	if (rx < 0.3F || ry < 0.3F || alpha <= 0)
-		return;
-	constexpr int Segments = 12;
-	const int middle = batch.add(c, colour, alpha);
-	const int first = static_cast<int>(batch.vertices.size());
-	for (int i = 0; i < Segments; i++) {
-		const float angle = 2 * Pi * i / Segments;
-		batch.add(c + Vec { std::cos(angle) * rx, std::sin(angle) * ry }, colour, 0);
-	}
-	for (int i = 0; i < Segments; i++)
-		batch.tri(middle, first + i, first + (i + 1) % Segments);
-}
-
-/** @brief A closed outline going clockwise from its first point, with each point's outward normal and how far round it is. */
-struct Outline {
-	std::vector<Vec> points;
-	std::vector<Vec> normals;
-	/** @brief Distance from the first point the shorter way round, as a share of half the length, 0 to 1. */
-	std::vector<float> reach;
-
-	void finish()
-	{
-		const size_t n = points.size();
-		normals.resize(n);
-		reach.resize(n);
-		std::vector<float> along(n + 1, 0);
-		for (size_t i = 0; i < n; i++) {
-			const Vec tangent = points[(i + 1) % n] - points[(i + n - 1) % n];
-			const float length = std::max(Length(tangent), 0.001F);
-			normals[i] = Vec { tangent.y, -tangent.x } * (1 / length);
-			along[i + 1] = along[i] + Length(points[(i + 1) % n] - points[i]);
-		}
-		const float total = along[n];
-		for (size_t i = 0; i < n; i++)
-			reach[i] = std::min(along[i], total - along[i]) / (total / 2);
-	}
-};
-
-/**
- * @brief The outline as one unbroken soft band, pushed out along its normals by offset, drawn only as far round as shown
- * (0 to 1, both ways from the first point at once). waver makes its brightness crawl along it like burning.
- */
-void StrokeOutline(Batch &batch, const Outline &outline, float offset, float width, Rgb colour, float alpha, float shown, uint32_t seed, float waver)
-{
-	const size_t n = outline.points.size();
-	const int first = static_cast<int>(batch.vertices.size());
-	for (size_t i = 0; i < n; i++) {
-		const Vec p = outline.points[i];
-		const Vec normal = outline.normals[i];
-		const float a = alpha * (1 - waver + waver * SmoothNoise(seed, static_cast<float>(i) * 0.45F + AmbientTime * 0.006F));
-		batch.add(ToScreen(p + normal * (offset + width / 2)), colour, 0);
-		batch.add(ToScreen(p + normal * offset), colour, a);
-		batch.add(ToScreen(p + normal * (offset - width / 2)), colour, 0);
-	}
-	for (size_t i = 0; i < n; i++) {
-		const size_t j = (i + 1) % n;
-		if (outline.reach[i] > shown || outline.reach[j] > shown)
-			continue;
-		const int a = first + static_cast<int>(i) * 3;
-		const int b = first + static_cast<int>(j) * 3;
-		batch.tri(a, a + 1, b);
-		batch.tri(a + 1, b + 1, b);
-		batch.tri(a + 1, a + 2, b + 1);
-		batch.tri(a + 2, b + 2, b + 1);
-	}
-}
-
-/** @brief Where flames rise off an outline: a point, the way out, how likely a flame starts there and how tall it burns. */
-struct FlameSite {
-	Vec pos;
-	Vec out;
-	float weight;
-	float height;
-};
-
-/**
- * @brief Fire licking up off a line of sites: many small flamelets, each born on the line, rising and swaying with its
- * neighbours so they gather into tongues, white hot at the root and reddening as they thin out at the top.
- */
-void DrawFire(const std::vector<FlameSite> &sites, int count, float scale, uint32_t seed, Rgb heart, Rgb body, Rgb tip, float strength)
-{
-	if (sites.empty() || strength <= 0)
-		return;
-	float total = 0;
-	for (const FlameSite &site : sites)
-		total += site.weight;
-	const float t = AmbientTime;
-	for (int i = 0; i < count; i++) {
-		const uint32_t id = seed * 977U + static_cast<uint32_t>(i);
-		const float life = 420 + 380 * Hash01(id, 1);
-		const float clock = (t + Hash01(id, 2) * life) / life;
-		const auto cycle = static_cast<uint32_t>(clock);
-		const float a = clock - static_cast<float>(cycle);
-		// Pick where this flamelet is born this time round, weighted toward the top.
-		float pick = Hash01(id, cycle * 4 + 5) * total;
-		size_t s = 0;
-		while (s + 1 < sites.size() && pick > sites[s].weight) {
-			pick -= sites[s].weight;
-			s++;
-		}
-		const FlameSite &site = sites[s];
-		const FlameSite &next = sites[(s + 1) % sites.size()];
-		const float between = Hash01(id, cycle * 4 + 6);
-		const Vec root = site.pos + (next.pos - site.pos) * between;
-		Vec dir = site.out * 0.55F + Vec { 0, -1 };
-		dir = dir * (1 / Length(dir));
-		// Columns of fire swell and die down slowly, so the top breaks into separate tongues of different heights.
-		const auto column = static_cast<uint32_t>(static_cast<int>(root.x / (2.5F * scale)) + 4096);
-		const float swell = 0.45F + 1.05F * SmoothNoise(seed * 53U + column, t * 0.0028F);
-		const float height = (17 + 22 * Hash01(id, cycle * 4 + 7)) * scale * site.height * swell;
-		const float rise = std::pow(a, 1.15F);
-		// Neighbouring flamelets sway together, so they read as tongues rather than sparks.
-		const float sway = (SmoothNoise(seed * 31U + column, t * 0.006F - a * 2.2F) - 0.5F) * 12 * scale * a;
-		const Vec pos = root + site.out * (0.6F * scale) + dir * (height * rise) + Vec { sway, 0 };
-		const float size = (1.9F + 1.2F * Hash01(id, 3)) * scale * (1 - a * 0.7F) * std::min(1.F, 0.45F + a * 6);
-		Rgb colour;
-		if (a < 0.22F)
-			colour = Mix(heart, body, a / 0.22F);
-		else if (a < 0.6F)
-			colour = Mix(body, tip, (a - 0.22F) / 0.38F);
-		else
-			colour = tip;
-		const float alpha = 0.36F * strength * std::pow(1 - a, 1.3F) * std::min(1.F, a / 0.06F);
-		SoftBlob(Glowing, pos, size * 0.85F, size * 2.1F, colour, alpha);
 	}
 }
 
