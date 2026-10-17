@@ -234,9 +234,23 @@ void ZoomAt(const Layout &layout, float factor, Point anchor)
 	ClampView();
 }
 
+/** @brief Before an ascendancy is chosen, the root under the cursor: its island is drawn faintly as a preview. */
+std::optional<PassiveNodeId> PreviewRoot;
+
+/** @brief Before the choice, an island's nodes past its root are only a preview. */
+bool IsIslandPreview(const Player &player, const PassiveNode &node)
+{
+	return IsAscendancyNode(node) && node.kind != PassiveKind::Ascendancy && !ChosenAscendancy(player);
+}
+
+/** @brief The islands overlap in the sanctum, so before the choice only the roots show, and the hovered root's island as a preview; after it, only the chosen island. */
 bool IsNodeShown(const Player &player, const PassiveNode &node)
 {
-	return IsPassiveNodeVisible(player, node);
+	if (!IsPassiveNodeVisible(player, node))
+		return false;
+	if (IsIslandPreview(player, node))
+		return PreviewRoot && node.ascendancyRoot == PreviewRoot;
+	return true;
 }
 
 /** @brief Node radius in tree units. */
@@ -554,7 +568,7 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 			const bool lattice = IsLatticeLink(node, tree[link]);
 			const bool profane = IsProfaneNode(node) || IsProfaneNode(tree[link]);
 			uint8_t color = from && to ? LinkAllocatedColor : (from || to ? LinkReachableColor : (profane ? ProfaneLinkColor : (lattice ? LatticeLinkColor : LinkColor)));
-			if (FadesNode(node.id) && FadesNode(link))
+			if ((FadesNode(node.id) && FadesNode(link)) || IsIslandPreview(player, node) || IsIslandPreview(player, tree[link]))
 				color = Faded(color);
 			DrawLink(out, layout, node, tree[link], color, thickness + (from && to ? 1 : 0) + (lattice ? 1 : 0), profane && !(from && to));
 		}
@@ -570,7 +584,7 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 			continue;
 		const uint8_t color = NodeFillColor(player, node);
 		const bool diamond = node.kind == PassiveKind::Shrine;
-		const bool faded = FadesNode(node.id);
+		const bool faded = FadesNode(node.id) || IsIslandPreview(player, node);
 		const auto fill = [&](int size, uint8_t fillColor) {
 			if (faded)
 				fillColor = Faded(fillColor);
@@ -1300,6 +1314,8 @@ void DrawPassiveTree(const Surface &out)
 	FillRect(view, 0, 0, view.w(), view.h(), ViewColor);
 	DrawSeal(view, layout, player);
 	const std::optional<PassiveNodeId> hovered = Dragging || PendingAttributeNode ? std::nullopt : NodeAt(layout, MousePosition);
+	if (!hovered || PassiveTree()[*hovered].ascendancyRoot != PreviewRoot)
+		PreviewRoot = hovered && PassiveTree()[*hovered].kind == PassiveKind::Ascendancy && !ChosenAscendancy(player) ? hovered : std::nullopt;
 	const std::vector<PassiveNodeId> route = hovered ? PassiveRoute(player, *hovered, Pool) : std::vector<PassiveNodeId> {};
 	UpdateSearchHits(player);
 	DrawNodes(view, layout, player, hovered, route);
