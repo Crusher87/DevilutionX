@@ -10,15 +10,10 @@ namespace devilution {
 
 std::optional<size_t> JewelSocketIndex(PassiveNodeId node)
 {
-	size_t index = 0;
-	for (const PassiveNode &candidate : PassiveTree()) {
-		if (candidate.kind != PassiveKind::JewelSocket)
-			continue;
-		if (candidate.id == node)
-			return index < MaxJewelSockets ? std::optional<size_t>(index) : std::nullopt;
-		index++;
-	}
-	return std::nullopt;
+	const std::vector<PassiveNode> &tree = PassiveTree();
+	if (node >= tree.size() || !tree[node].socketIndex)
+		return std::nullopt;
+	return *tree[node].socketIndex;
 }
 
 const Item *SocketedJewel(const Player &player, PassiveNodeId node)

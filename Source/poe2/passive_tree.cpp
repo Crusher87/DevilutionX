@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <bit>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
 
+#include <ankerl/unordered_dense.h>
 #include <magic_enum/magic_enum.hpp>
 
 #include "data/file.hpp"
@@ -93,6 +95,123 @@ std::vector<std::pair<PassiveStat, int>> ParseStats(std::string_view text)
 	return stats;
 }
 
+/** @brief How a link bends, as the tree file gives it for each link from its lower id end. */
+struct LinkArc {
+	PassiveNodeId from;
+	PassiveNodeId to;
+	/** @brief 0: straight; otherwise the radius of a circular arc, positive when it bends clockwise on screen going from the lower id node to the higher. */
+	float radius = 0;
+	/** @brief Follows the orbit round the cluster's centre. */
+	bool orbit = false;
+};
+
+/** @brief Every link's points, in one list, and where each link's run of points starts, by (lower id, higher id). */
+std::vector<PassiveTreePoint> LinkPoints;
+std::vector<std::pair<uint32_t, std::pair<uint32_t, uint32_t>>> LinkRuns;
+
+uint32_t LinkKey(PassiveNodeId a, PassiveNodeId b)
+{
+	return (static_cast<uint32_t>(std::min(a, b)) << 16) | std::max(a, b);
+}
+
+constexpr float Pi = 3.14159265F;
+/** @brief Points along each curved link, ends included. */
+constexpr int CurvePoints = 17;
+
+/** @brief Adds the points of an arc round a centre, from one angle turning by sweep (positive is clockwise on screen). */
+void AddArcPoints(PassiveTreePoint centre, float radius, float start, float sweep)
+{
+	for (int i = 0; i < CurvePoints; i++) {
+		const float angle = start + sweep * static_cast<float>(i) / static_cast<float>(CurvePoints - 1);
+		LinkPoints.push_back({ centre.x + radius * std::cos(angle), centre.y + radius * std::sin(angle) });
+	}
+}
+
+/** @brief The shorter turn from one angle to another, between -pi and pi. */
+float ShortTurn(float from, float to)
+{
+	float turn = std::fmod(to - from, 2 * Pi);
+	if (turn > Pi)
+		turn -= 2 * Pi;
+	if (turn < -Pi)
+		turn += 2 * Pi;
+	return turn;
+}
+
+/** @brief Works out the points every link is drawn through, once, when the tree loads. */
+void BuildLinkPoints(const std::vector<LinkArc> &arcs)
+{
+	LinkPoints.clear();
+	LinkRuns.clear();
+	ankerl::unordered_dense::map<uint32_t, const LinkArc *> arcByLink;
+	for (const LinkArc &arc : arcs)
+		arcByLink.emplace(LinkKey(arc.from, arc.to), &arc);
+	for (const PassiveNode &node : Tree) {
+		for (const PassiveNodeId link : node.links) {
+			if (link < node.id)
+				continue;
+			const PassiveNode &other = Tree[link];
+			const PassiveTreePoint a { static_cast<float>(node.x), static_cast<float>(node.y) };
+			const PassiveTreePoint b { static_cast<float>(other.x), static_cast<float>(other.y) };
+			const auto first = static_cast<uint32_t>(LinkPoints.size());
+			const auto found = arcByLink.find(LinkKey(node.id, link));
+			const LinkArc *arc = found != arcByLink.end() ? found->second : nullptr;
+			const float dx = b.x - a.x;
+			const float dy = b.y - a.y;
+			const float chord = std::sqrt(dx * dx + dy * dy);
+			if (arc != nullptr && arc->orbit && node.clusterId == other.clusterId && node.orbit == other.orbit && node.orbit >= 0) {
+				// Round the cluster's centre, the short way; the ends snap to the nodes, which the file rounds.
+				const PassiveTreePoint centre { static_cast<float>(node.gx), static_cast<float>(node.gy) };
+				const float start = std::atan2(a.y - centre.y, a.x - centre.x);
+				const float end = std::atan2(b.y - centre.y, b.x - centre.x);
+				const float radiusA = std::sqrt((a.x - centre.x) * (a.x - centre.x) + (a.y - centre.y) * (a.y - centre.y));
+				const float radiusB = std::sqrt((b.x - centre.x) * (b.x - centre.x) + (b.y - centre.y) * (b.y - centre.y));
+				AddArcPoints(centre, (radiusA + radiusB) / 2, start, ShortTurn(start, end));
+				LinkPoints[first] = a;
+				LinkPoints.back() = b;
+			} else if (arc != nullptr && arc->radius != 0 && chord > 0 && std::abs(arc->radius) * 2 >= chord - 0.5F) {
+				// A circular arc, the minor one: its centre is on the side it turns towards.
+				const float radius = std::max(std::abs(arc->radius), chord / 2);
+				const float side = arc->radius > 0 ? 1.F : -1.F;
+				const float height = std::sqrt(std::max(radius * radius - (chord / 2) * (chord / 2), 0.F));
+				const PassiveTreePoint centre { (a.x + b.x) / 2 - dy / chord * height * side, (a.y + b.y) / 2 + dx / chord * height * side };
+				const float start = std::atan2(a.y - centre.y, a.x - centre.x);
+				const float end = std::atan2(b.y - centre.y, b.x - centre.x);
+				float sweep = ShortTurn(start, end);
+				if (sweep * side < 0)
+					sweep += 2 * Pi * side; // a half circle can land on either side
+				AddArcPoints(centre, radius, start, sweep);
+				LinkPoints[first] = a;
+				LinkPoints.back() = b;
+			} else {
+				LinkPoints.push_back(a);
+				LinkPoints.push_back(b);
+			}
+			LinkRuns.push_back({ LinkKey(node.id, link), { first, static_cast<uint32_t>(LinkPoints.size()) - first } });
+		}
+	}
+	std::sort(LinkRuns.begin(), LinkRuns.end());
+}
+
+/** @brief Reads a link's arc token: "-" straight, "o" along the orbit, "+R" or "-R" a circular arc of radius R. */
+std::optional<LinkArc> ParseArc(std::string_view token, PassiveNodeId from, PassiveNodeId to)
+{
+	LinkArc arc { from, to };
+	if (token == "-" || token.empty())
+		return arc;
+	if (token == "o") {
+		arc.orbit = true;
+		return arc;
+	}
+	if (token.size() < 2 || (token[0] != '+' && token[0] != '-'))
+		return std::nullopt;
+	const std::optional<int> radius = ParseInt(token.substr(1));
+	if (!radius || *radius <= 0)
+		return std::nullopt;
+	arc.radius = static_cast<float>(token[0] == '+' ? *radius : -*radius);
+	return arc;
+}
+
 bool CanUsePassives()
 {
 	return gbIsPoe2 && !gbIsMultiplayer;
@@ -146,6 +265,8 @@ void LoadPassiveTreeData()
 {
 	Tree.clear();
 	TreeHash = 0;
+	LinkPoints.clear();
+	LinkRuns.clear();
 	AscendancyNodes.reset();
 	AscendancyNotables.reset();
 	AscendancyRoots.clear();
@@ -159,6 +280,7 @@ void LoadPassiveTreeData()
 		return;
 	}
 	dataFile->skipHeaderOrDie(Filename);
+	std::vector<LinkArc> arcs;
 	for (DataFileRecord record : *dataFile) {
 		RecordReader reader { record, Filename };
 		PassiveNode node {};
@@ -191,6 +313,38 @@ void LoadPassiveTreeData()
 		}
 		reader.readString("region", node.region);
 		reader.readString("lore", node.lore);
+		reader.readString("group", node.group);
+		reader.readString("cluster_id", text);
+		node.clusterId = ParseInt(text).value_or(node.id);
+		reader.readString("gx", text);
+		node.gx = ParseInt(text).value_or(node.x);
+		reader.readString("gy", text);
+		node.gy = ParseInt(text).value_or(node.y);
+		reader.readString("orbit", text);
+		node.orbit = static_cast<int8_t>(std::clamp(ParseInt(text).value_or(-1), -1, 6));
+		// One arc token for each of this row's links to a higher id, in the row's order.
+		reader.readString("arcs", text);
+		if (!text.empty()) {
+			std::vector<PassiveNodeId> higher;
+			for (const PassiveNodeId link : node.links) {
+				if (link > node.id)
+					higher.push_back(link);
+			}
+			std::vector<std::string_view> tokens;
+			for (const std::string_view token : SplitByChar(text, ','))
+				tokens.push_back(token);
+			if (tokens.size() != higher.size()) {
+				LogError("Passive tree node {} has {} arcs for {} links; drawing them straight", node.id, tokens.size(), higher.size());
+			} else {
+				for (size_t i = 0; i < tokens.size(); i++) {
+					if (const std::optional<LinkArc> arc = ParseArc(tokens[i], node.id, higher[i]); arc)
+						arcs.push_back(*arc);
+					else
+						LogError("Passive tree node {} has a bad arc \"{}\"; drawing it straight", node.id, tokens[i]);
+				}
+			}
+		}
+		reader.readString("motif", text);
 		Tree.push_back(std::move(node));
 	}
 	// Drop links to nodes that don't exist, and make every link go both ways.
@@ -202,6 +356,17 @@ void LoadPassiveTreeData()
 	for (PassiveNode &node : Tree) {
 		std::sort(node.links.begin(), node.links.end());
 		node.links.erase(std::unique(node.links.begin(), node.links.end()), node.links.end());
+	}
+	BuildLinkPoints(arcs);
+	uint8_t socket = 0;
+	for (PassiveNode &node : Tree) {
+		if (node.kind != PassiveKind::JewelSocket)
+			continue;
+		if (socket < MaxJewelSockets)
+			node.socketIndex = socket;
+		else
+			LogError("The passive tree has more jewel sockets than the {} a hero can fill", MaxJewelSockets);
+		socket++;
 	}
 	// Each ascendancy is the root and the ascendancy nodes linked to it.
 	for (const PassiveNode &root : Tree) {
@@ -249,6 +414,30 @@ uint32_t PassiveTreeHash()
 const std::vector<PassiveNode> &PassiveTree()
 {
 	return Tree;
+}
+
+std::span<const PassiveTreePoint> PassiveLinkPoints(PassiveNodeId a, PassiveNodeId b)
+{
+	const uint32_t key = LinkKey(a, b);
+	const auto it = std::lower_bound(LinkRuns.begin(), LinkRuns.end(), key, [](const auto &run, uint32_t value) { return run.first < value; });
+	if (it == LinkRuns.end() || it->first != key)
+		return {};
+	return { LinkPoints.data() + it->second.first, it->second.second };
+}
+
+bool IsLatticeLink(const PassiveNode &a, const PassiveNode &b)
+{
+	return a.orbit < 0 && b.orbit < 0;
+}
+
+bool IsProfaneNode(const PassiveNode &node)
+{
+	return node.group == "profane";
+}
+
+bool IsCapstoneNode(const PassiveNode &node)
+{
+	return node.group == "capstone";
 }
 
 HeroClass PassiveTreeClass(HeroClass heroClass)
@@ -456,7 +645,8 @@ std::vector<PassiveNodeId> PassiveRoute(const Player &player, PassiveNodeId targ
 				route.push_back(target);
 				return route;
 			}
-			if (canTake(Tree[next]))
+			// The marked route never goes through a Profane Path's notable the hero hasn't taken.
+			if (canTake(Tree[next]) && !(IsProfaneNode(Tree[next]) && Tree[next].kind == PassiveKind::Notable))
 				open.push_back(next);
 		}
 	}

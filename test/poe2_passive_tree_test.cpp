@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -492,6 +493,38 @@ TEST_F(Poe2PassiveTreeTest, ClassesSitFarApartLikePoe2)
 	EXPECT_GE(WarriorPathTo(*PassiveStartNode(HeroClass::Monk)).size(), 22U);
 	for (const HeroClass neighbour : { HeroClass::Rogue, HeroClass::Sorcerer })
 		EXPECT_GE(WarriorPathTo(*PassiveStartNode(neighbour)).size(), 12U) << static_cast<int>(neighbour);
+}
+
+TEST_F(Poe2PassiveTreeTest, EveryLinkHasPointsFromNodeToNode)
+{
+	const std::vector<PassiveNode> &tree = PassiveTree();
+	for (const PassiveNode &node : tree) {
+		for (const PassiveNodeId link : node.links) {
+			const std::span<const PassiveTreePoint> points = PassiveLinkPoints(node.id, link);
+			ASSERT_GE(points.size(), 2U) << node.id << "-" << link;
+			const PassiveNode &first = tree[std::min(node.id, link)];
+			const PassiveNode &last = tree[std::max(node.id, link)];
+			EXPECT_FLOAT_EQ(points.front().x, static_cast<float>(first.x));
+			EXPECT_FLOAT_EQ(points.front().y, static_cast<float>(first.y));
+			EXPECT_FLOAT_EQ(points.back().x, static_cast<float>(last.x));
+			EXPECT_FLOAT_EQ(points.back().y, static_cast<float>(last.y));
+		}
+	}
+	EXPECT_TRUE(PassiveLinkPoints(0, 0).empty());
+}
+
+TEST_F(Poe2PassiveTreeTest, EverySocketHasAJewelSlot)
+{
+	std::vector<bool> used(MaxJewelSockets);
+	for (const PassiveNode &node : PassiveTree()) {
+		if (node.kind != PassiveKind::JewelSocket)
+			continue;
+		ASSERT_TRUE(node.socketIndex.has_value()) << node.id;
+		ASSERT_LT(*node.socketIndex, MaxJewelSockets);
+		EXPECT_FALSE(used[*node.socketIndex]) << "socket slot used twice";
+		used[*node.socketIndex] = true;
+		EXPECT_EQ(JewelSocketIndex(node.id), std::optional<size_t>(*node.socketIndex));
+	}
 }
 
 TEST_F(Poe2PassiveTreeTest, ANewTreeMovesJewelsNearTheStart)

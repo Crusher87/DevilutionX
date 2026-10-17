@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -167,7 +168,7 @@ struct PassiveNode {
 	PassiveKind kind;
 	/** @brief The class that starts here, for start nodes, or that may take this ascendancy node. */
 	std::optional<HeroClass> startClass;
-	/** @brief Position in the tree; the tree is a circle with a radius of about 420, the ascendancies in its middle. */
+	/** @brief Position in the tree, in tree units; the tree is a circle with a radius of about 1,200, the ascendancies in its middle. */
 	int x;
 	int y;
 	std::vector<std::pair<PassiveStat, int>> stats;
@@ -178,6 +179,22 @@ struct PassiveNode {
 	std::string region;
 	/** @brief One line of Diablo lore for notables and shrines. */
 	std::string lore;
+	/** @brief The generator's tag for the node's part of the tree; "profane" marks a Profane Path and "capstone" a capstone notable. */
+	std::string group;
+	/** @brief The cluster the node belongs to (a lattice node is its own), and the centre its orbit arcs are drawn round. */
+	int clusterId = 0;
+	int gx = 0;
+	int gy = 0;
+	/** @brief The node's orbit round its cluster's centre; -1 for nodes of the attribute web (the lattice). */
+	int8_t orbit = -1;
+	/** @brief Which of the player's jewel slots a jewel socket uses. */
+	std::optional<uint8_t> socketIndex;
+};
+
+/** @brief A point in the tree, in tree units. */
+struct PassiveTreePoint {
+	float x;
+	float y;
 };
 
 using PassiveTotals = std::array<int, static_cast<size_t>(PassiveStat::Count)>;
@@ -196,6 +213,12 @@ constexpr int MaxQuestPassivePoints = 24;
 /** @brief Loads the tree from the POE2 Mashup mod, or clears it outside POE2 mode. */
 void LoadPassiveTreeData();
 const std::vector<PassiveNode> &PassiveTree();
+/** @brief The points a link is drawn through, from the lower id node to the higher: its two ends for a straight link, more along a curve. Empty when the nodes aren't linked. */
+std::span<const PassiveTreePoint> PassiveLinkPoints(PassiveNodeId a, PassiveNodeId b);
+/** @brief Whether both ends of a link are on the attribute web (the lattice), which is drawn thicker. */
+bool IsLatticeLink(const PassiveNode &a, const PassiveNode &b);
+bool IsProfaneNode(const PassiveNode &node);
+bool IsCapstoneNode(const PassiveNode &node);
 
 /** @brief The class whose start and ascendancies a hero uses: the tree has the four main classes, so the Bard uses the Rogue's and the Barbarian the Warrior's. */
 HeroClass PassiveTreeClass(HeroClass heroClass);

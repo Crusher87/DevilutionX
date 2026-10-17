@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <span>
 #include <climits>
 #include <cmath>
 #include <cstdlib>
@@ -75,6 +76,12 @@ constexpr uint8_t SanctumRimColor = PAL16_YELLOW + 6;
 constexpr uint8_t LinkColor = PAL16_GRAY + 11;
 constexpr uint8_t LinkReachableColor = PAL16_GRAY + 6;
 constexpr uint8_t LinkAllocatedColor = PAL16_YELLOW + 4;
+/** @brief The attribute web's links: a gold-brown, drawn thicker, so the shape of each class's area reads at a glance. */
+constexpr uint8_t LatticeLinkColor = PAL16_YELLOW + 10;
+/** @brief A Profane Path's links: a dull red, cracked. */
+constexpr uint8_t ProfaneLinkColor = PAL16_RED + 10;
+/** @brief The dim frame round a capstone notable. */
+constexpr uint8_t CapstoneFrameColor = PAL16_YELLOW + 9;
 constexpr uint8_t NodeColor = PAL16_GRAY + 9;
 constexpr uint8_t NodeReachableColor = PAL16_GRAY + 2;
 constexpr uint8_t NodeAllocatedColor = PAL16_YELLOW + 2;
@@ -470,7 +477,7 @@ uint8_t NodeFillColor(const Player &player, const PassiveNode &node)
 		return NodeAllocatedColor;
 	for (const PassivePool set : { PassivePool::SetI, PassivePool::SetII }) {
 		if ((Pool == PassivePool::Main || Pool == set) && IsPassiveInPool(player, node.id, set))
-			return SetColor(set);
+			return NodeAllocatedColor; // with the set's colour round it
 	}
 	if (IsAscendancyNode(node))
 		return CanAllocatePassive(player, node.id, Pool) ? NodeReachableColor : NodeColor;
@@ -478,12 +485,57 @@ uint8_t NodeFillColor(const Player &player, const PassiveNode &node)
 }
 
 /** @brief The links of the quickest route to the hovered node, in a pale gold over the plain links. */
+/** @brief Draws a link along its curve; every other step is left out when cracked. */
+void DrawLink(const Surface &out, const Layout &layout, const PassiveNode &a, const PassiveNode &b, uint8_t color, int thickness, bool cracked = false)
+{
+	const std::span<const PassiveTreePoint> points = PassiveLinkPoints(a.id, b.id);
+	if (points.size() < 2) {
+		DrawLine(out, NodeViewPoint(layout, a), NodeViewPoint(layout, b), color, thickness);
+		return;
+	}
+	if (!cracked && points.size() == 2) {
+		DrawLine(out, NodeViewPoint(layout, a), NodeViewPoint(layout, b), color, thickness);
+		return;
+	}
+	// A straight cracked link is split up so the cracks show.
+	std::array<PassiveTreePoint, 9> straight;
+	std::span<const PassiveTreePoint> run = points;
+	if (points.size() == 2) {
+		for (size_t i = 0; i < straight.size(); i++) {
+			const float t = static_cast<float>(i) / static_cast<float>(straight.size() - 1);
+			straight[i] = { points[0].x + (points[1].x - points[0].x) * t, points[0].y + (points[1].y - points[0].y) * t };
+		}
+		run = straight;
+	}
+	Point previous = ViewPoint(layout, run[0].x, run[0].y);
+	for (size_t i = 1; i < run.size(); i++) {
+		const Point next = ViewPoint(layout, run[i].x, run[i].y);
+		if (!cracked || i % 3 != 2)
+			DrawLine(out, previous, next, color, thickness);
+		// Dot the joints of thick curves so they don't show gaps.
+		if (thickness >= 3 && i + 1 < run.size())
+			FillCircle(out, next, thickness / 2, color);
+		previous = next;
+	}
+}
+
 void DrawRoute(const Surface &out, const Layout &layout, const std::vector<PassiveNodeId> &route)
 {
 	const std::vector<PassiveNode> &tree = PassiveTree();
 	const int thickness = std::max(RoundToInt(Scale(layout) * 1.5F), 1) + 1;
 	for (size_t i = 1; i < route.size(); i++)
-		DrawLine(out, NodeViewPoint(layout, tree[route[i - 1]]), NodeViewPoint(layout, tree[route[i]]), RouteColor, thickness);
+		DrawLink(out, layout, tree[route[i - 1]], tree[route[i]], RouteColor, thickness);
+}
+
+/** @brief A six-sided frame round a capstone notable. */
+void DrawHexagon(const Surface &out, Point center, int radius, uint8_t color, int thickness)
+{
+	constexpr std::array<std::array<float, 2>, 6> Corners { { { 1.F, 0.F }, { 0.5F, 0.866F }, { -0.5F, 0.866F }, { -1.F, 0.F }, { -0.5F, -0.866F }, { 0.5F, -0.866F } } };
+	for (size_t i = 0; i < Corners.size(); i++) {
+		const auto &from = Corners[i];
+		const auto &to = Corners[(i + 1) % Corners.size()];
+		DrawLine(out, center + Displacement { RoundToInt(from[0] * radius), RoundToInt(from[1] * radius) }, center + Displacement { RoundToInt(to[0] * radius), RoundToInt(to[1] * radius) }, color, thickness);
+	}
 }
 
 void DrawNodes(const Surface &out, const Layout &layout, const Player &player, std::optional<PassiveNodeId> hovered, const std::vector<PassiveNodeId> &route)
@@ -499,10 +551,12 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 				continue; // Each link is drawn once.
 			const bool from = IsShownAllocated(player, node.id);
 			const bool to = IsShownAllocated(player, link);
-			uint8_t color = from && to ? LinkAllocatedColor : (from || to ? LinkReachableColor : LinkColor);
+			const bool lattice = IsLatticeLink(node, tree[link]);
+			const bool profane = IsProfaneNode(node) || IsProfaneNode(tree[link]);
+			uint8_t color = from && to ? LinkAllocatedColor : (from || to ? LinkReachableColor : (profane ? ProfaneLinkColor : (lattice ? LatticeLinkColor : LinkColor)));
 			if (FadesNode(node.id) && FadesNode(link))
 				color = Faded(color);
-			DrawLine(out, NodeViewPoint(layout, node), NodeViewPoint(layout, tree[link]), color, from && to ? thickness + 1 : thickness);
+			DrawLink(out, layout, node, tree[link], color, thickness + (from && to ? 1 : 0) + (lattice ? 1 : 0), profane && !(from && to));
 		}
 	}
 	DrawRoute(out, layout, route);
@@ -528,6 +582,13 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 		const int rim = std::max(RoundToInt(scale * 1.5F), 1);
 		if (node.id < SearchHitMask.size() && SearchHitMask[node.id])
 			fill(radius + rim + 4, SearchColor);
+		// A node bought with a weapon set's points wears that set's colour round its gold.
+		for (const PassivePool set : { PassivePool::SetI, PassivePool::SetII }) {
+			if ((Pool == PassivePool::Main || Pool == set) && IsPassiveInPool(player, node.id, set) && !IsPassiveInPool(player, node.id, PassivePool::Main))
+				fill(radius + (2 * rim) + 1, SetColor(set));
+		}
+		if (IsCapstoneNode(node))
+			DrawHexagon(out, center, radius + (2 * rim) + 2, faded ? Faded(CapstoneFrameColor) : CapstoneFrameColor, rim);
 		if (hovered == node.id)
 			fill(radius + rim + 1, HoverColor);
 		else if (std::find(route.begin() + (route.empty() ? 0 : 1), route.end(), node.id) != route.end())
@@ -847,6 +908,8 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 	const std::string kind = node.region.empty() || node.kind == PassiveKind::Start || IsAscendancyNode(node) || IsClassRegion(node.region)
 	    ? std::string(NodeKindText(node))
 	    : StrCat(NodeKindText(node), "  -  ", node.region);
+	if (IsProfaneNode(node) && node.kind == PassiveKind::Notable)
+		lines.push_back({ std::string(_("Profane Path: the short way passes through here")), UiFlags::ColorRed });
 	std::string hint = NodeHint(player, node);
 	if (route.size() > 2)
 		hint = FormatRuntime(_("{:d} points away by the marked route"), static_cast<int>(route.size()) - 1);
