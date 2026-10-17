@@ -929,9 +929,11 @@ bool DoAttack(Player &player)
 				look = vfx::Element::Fire;
 			else if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage))
 				look = vfx::Element::Lightning;
-			vfx::Swing(player.position.tile, player.position.tile + player._pdir, look, player.CanCleave());
+			const auto holds = [&](ItemType type) { return player.InvBody[INVLOC_HAND_LEFT]._itype == type || player.InvBody[INVLOC_HAND_RIGHT]._itype == type; };
+			const bool heavy = !holds(ItemType::Sword) && (holds(ItemType::Axe) || holds(ItemType::Mace) || holds(ItemType::Staff));
+			vfx::Swing(player.position.tile, player.position.tile + player._pdir, look, player.CanCleave(), heavy);
 			if (didhit)
-				vfx::Sparks(player.position.tile + player._pdir, look, 1.F);
+				vfx::Cut(player.position.tile + player._pdir, look);
 		}
 
 		// POE2 Mashup: Brutality's price is the weapon's fire and lightning damage.

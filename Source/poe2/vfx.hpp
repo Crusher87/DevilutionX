@@ -63,12 +63,14 @@ void Fissure(Point from, Point to, Element element);
 void Impact(Point tile, Element element, float size);
 /** @brief A small shower of bright sparks and a flash, like steel striking: a weapon hit or an arrow landing. */
 void Sparks(Point tile, Element element, float size);
+/** @brief A weapon biting into a target: blood and a few sparks for plain steel, the element's sparks otherwise. */
+void Cut(Point tile, Element element);
 /** @brief Lightning arcing between two tiles. */
 void Arc(Point from, Point to, Element element);
 /** @brief Lightning striking down from the sky onto a tile. */
 void SkyStrike(Point tile, Element element);
-/** @brief A glowing crescent swept through the air by a weapon, from a tile towards another. */
-void Swing(Point from, Point toward, Element element, bool wide);
+/** @brief A crescent smear swept through the air by a weapon, from a tile towards another; it glows only for an elemental weapon. Heavy is an axe, mace or staff: a shorter, thicker arc. */
+void Swing(Point from, Point toward, Element element, bool wide, bool heavy = false);
 /** @brief One of each effect around a tile, to see them all (the console's vfx()). */
 void Showcase(Point tile);
 

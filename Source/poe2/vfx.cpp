@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iterator>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -195,6 +196,8 @@ struct Sweep {
 	float age = 0;
 	float life;
 	Colours colours;
+	Element element;
+	bool heavy;
 };
 
 struct Crack {
@@ -1745,6 +1748,21 @@ void Sparks(Point tile, Element element, float size)
 	SparksAt(TileCentre(tile), element, size);
 }
 
+void Cut(Point tile, Element element)
+{
+	if (!Enabled())
+		return;
+	if (element != Element::Physical) {
+		SparksAt(TileCentre(tile), element, 1.F);
+		return;
+	}
+	// Steel biting into a body: a dull flash, a few short sparks off the edge and a spatter of blood.
+	const Vec pos = TileCentre(tile) + Vec { 0, -16 };
+	AddRing(pos, 0, 10, 70, 0, { 235, 225, 210 }, 0.35F, true, false);
+	Spray(pos, Scaled(5), 80, 220, 70, 160, Shape::Streak, { 255, 225, 170 }, { 200, 120, 50 }, 1.2F, 0.4F, 30, 120, 500, 2.F, 0.8F);
+	Spray(pos, Scaled(7), 40, 130, 300, 550, Shape::Chunk, { 110, 8, 8 }, { 45, 0, 0 }, 1.2F, 0.8F, 60, 160, 700, 0.6F, 0.9F);
+}
+
 void Arc(Point from, Point to, Element element)
 {
 	if (!Enabled())
@@ -1763,19 +1781,22 @@ void SkyStrike(Point tile, Element element)
 	ImpactAt(pos, element, 1.2F);
 }
 
-void Swing(Point from, Point toward, Element element, bool wide)
+void Swing(Point from, Point toward, Element element, bool wide, bool heavy)
 {
 	if (!Enabled())
 		return;
 	const Vec pos = TileCentre(from);
 	const Vec d = TileCentre(toward) - pos;
 	Sweep sweep;
-	sweep.pos = pos + Vec { 0, -26 };
+	sweep.pos = pos + Vec { 0, -40 };
 	sweep.facing = std::atan2(d.y * 2, d.x);
-	sweep.span = wide ? Pi * 0.75F : Pi * 0.4F;
-	sweep.radius = TileRadius * (wide ? 1.15F : 0.9F);
-	sweep.life = 220;
+	// A heavy weapon's arc is shorter and thicker; a cleave sweeps wide.
+	sweep.span = (wide ? Pi * 0.8F : Pi * 0.5F) * (heavy ? 0.8F : 1.F);
+	sweep.radius = TileRadius * (wide ? 1.5F : 1.25F);
+	sweep.life = heavy ? 240 : 190;
 	sweep.colours = ColoursOf(element);
+	sweep.element = element;
+	sweep.heavy = heavy;
 	Sweeps.push_back(sweep);
 }
 
@@ -2285,26 +2306,53 @@ void DrawSweeps()
 {
 	for (const Sweep &sweep : Sweeps) {
 		const float t = sweep.age / sweep.life;
-		// The blade's edge races across the arc; the band behind it fades.
-		const float head = EaseOut(std::min(t * 1.6F, 1.F));
-		const float tailLag = 0.45F;
-		const int steps = 18;
+		// A crescent smear left in the air by the blade: thickest in the middle of the arc, tapered to points at
+		// both ends, bright at its outer edge and fading towards the inside. It blends over the world rather than
+		// glowing, so a plain steel blade reads as a cut, not an electric arc.
+		const float head = EaseOut(std::min(t * 1.8F, 1.F));
+		const float tailLag = sweep.heavy ? 0.85F : 0.7F;
+		const float fade = 1 - t * t;
+		const float thickness = sweep.radius * (sweep.heavy ? 0.5F : 0.36F);
+		const bool elemental = sweep.element != Element::Physical;
+		const Rgb rim = elemental ? sweep.colours.core : Rgb { 245, 245, 250 };
+		const Rgb body = elemental ? sweep.colours.mid : Rgb { 175, 180, 192 };
 		const float start = sweep.facing - sweep.span / 2;
-		for (int i = 0; i < steps; i++) {
-			const float u0 = static_cast<float>(i) / steps;
-			const float u1 = static_cast<float>(i + 1) / steps;
-			if (u1 > head || u0 < head - tailLag)
+		const int steps = 28;
+		int previous[3] = { -1, -1, -1 };
+		int previousGlow[2] = { -1, -1 };
+		for (int i = 0; i <= steps; i++) {
+			const float u = static_cast<float>(i) / steps;
+			if (u > head + 0.001F || u < head - tailLag - 0.001F) {
+				previous[0] = -1;
+				previousGlow[0] = -1;
 				continue;
-			const float a0 = start + sweep.span * u0;
-			const float a1 = start + sweep.span * u1;
-			const float bright = (1 - (head - u1) / tailLag) * (1 - t * t);
-			const Vec p0 = OnGround(sweep.pos, sweep.radius, a0);
-			const Vec p1 = OnGround(sweep.pos, sweep.radius, a1);
-			SoftLine(Glowing, p0, p1, 3, sweep.colours.core, sweep.colours.core, bright, bright);
-			SoftLine(Glowing, p0, p1, 16, sweep.colours.mid, sweep.colours.mid, bright * 0.35F, bright * 0.35F);
-			const Vec q0 = OnGround(sweep.pos, sweep.radius * 0.7F, a0);
-			const Vec q1 = OnGround(sweep.pos, sweep.radius * 0.7F, a1);
-			SoftLine(Glowing, q0, q1, 8, sweep.colours.edge, sweep.colours.edge, bright * 0.3F, bright * 0.3F);
+			}
+			// How far behind the blade's edge this point is (0 at the edge), and the crescent's taper.
+			const float behind = std::clamp((head - u) / tailLag, 0.F, 1.F);
+			const float taper = std::pow(std::sin(Pi * u), 0.7F);
+			const float alpha = (1 - behind) * (1 - behind) * fade * (0.35F + 0.65F * taper);
+			const float angle = start + sweep.span * u;
+			const float width = std::max(thickness * taper * (1 - behind * 0.5F), 1.5F);
+			const Vec outer = ToScreen(OnGround(sweep.pos, sweep.radius, angle));
+			const Vec edge = ToScreen(OnGround(sweep.pos, sweep.radius - std::min(2.F, width * 0.3F), angle));
+			const Vec inner = ToScreen(OnGround(sweep.pos, sweep.radius - width, angle));
+			const int v[3] = { Dark.add(outer, rim, alpha * 0.85F), Dark.add(edge, rim, std::min(alpha * 1.15F, 1.F)), Dark.add(inner, body, alpha * 0.15F) };
+			if (previous[0] >= 0) {
+				Dark.tri(previous[0], v[0], previous[1]);
+				Dark.tri(previous[1], v[0], v[1]);
+				Dark.tri(previous[1], v[1], previous[2]);
+				Dark.tri(previous[2], v[1], v[2]);
+			}
+			std::copy(std::begin(v), std::end(v), std::begin(previous));
+			// A faint sheen on the edge; elemental blades glow properly in their element's colour.
+			const float glow = alpha * (elemental ? 0.55F : 0.18F);
+			const Vec glowInner = ToScreen(OnGround(sweep.pos, sweep.radius - width * 0.6F, angle));
+			const int g[2] = { Glowing.add(edge, elemental ? sweep.colours.mid : rim, glow), Glowing.add(glowInner, sweep.colours.edge, 0) };
+			if (previousGlow[0] >= 0) {
+				Glowing.tri(previousGlow[0], g[0], previousGlow[1]);
+				Glowing.tri(previousGlow[1], g[0], g[1]);
+			}
+			std::copy(std::begin(g), std::end(g), std::begin(previousGlow));
 		}
 	}
 }
