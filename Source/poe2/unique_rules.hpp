@@ -141,6 +141,40 @@ enum class UniqueRule : uint8_t {
 	/** Minions deal more damage while below half life. */
 	MinionLowLifeDamage,
 	FullLifeLessHitDamage,
+	// Passive tree capstones, crossovers and Profane notables.
+	/** Kills with a two-handed melee weapon grant a Frenzy Charge. */
+	TwoHandKillFrenzy,
+	/** After a block, the next melee hit within 3 seconds deals this much more. */
+	BlockRiposte,
+	/** A spell's hits deal this much more when the spell before it hit with another element within 3 seconds. */
+	ElementRotation,
+	/** Minions get this percent of the hero's increased spell damage, up to 40%. */
+	MinionSpellDamage,
+	/** Percent of a staff attack's physical damage converted to lightning (after fire). */
+	StaffToLightning,
+	/** A staff hit on a shocked enemy arcs to one other enemy nearby for this much of its damage. */
+	StaffArc,
+	/** Seconds an unarmed hit's stack lasts, up to 10 stacks. */
+	UnarmedHitStacks,
+	/** Enemies a hero's arrow pierces. */
+	ArrowPierce,
+	/** After swapping to another weapon type, the next 3 hits within 4 seconds deal this much more. */
+	SwapStrike,
+	/** Percent of the character damage bonus a non-Rogue's arrows add (50 without it). */
+	ArrowDamageMod,
+	/** Percent of increased spell damage that also applies to an attack's fire damage. */
+	SpellDamageToFireAttacks,
+	StaffAppliesToBow,
+	/** Hits kill normal and magic monsters left at this percent of life or less. */
+	Cull,
+	/** The first hit on an enemy at full life deals this much more. */
+	FirstStrike,
+	/** A melee kill bursts for this percent of the monster's maximum life to the enemies beside it. */
+	KillBurst,
+	/** Drinking a flask grants a Frenzy Charge. */
+	FlaskFrenzy,
+	/** More damage against heavy stunned enemies. */
+	MoreVsStunned,
 	Count,
 };
 
@@ -200,6 +234,23 @@ struct UniqueRuleState {
 	bool castingRepeat = false;
 	/** @brief On low life (35% or less), updated every game tick. */
 	bool lowLife = false;
+	/** @brief Whether the last hit on a monster was an arrow, for kills. */
+	bool lastHitRanged = false;
+	/** @brief Lachdanan's Guard: game ticks the counter after a block stays ready. */
+	uint8_t blockRiposteTicks = 0;
+	/** @brief Wheel of the Elements: the element (DamageType + 1, 0 for none) of the last spell that hit, its ticks left,
+	 * the spell count it belongs to, and whether the current spell's hits get the bonus. */
+	uint8_t rotationElement = 0;
+	uint8_t rotationTicks = 0;
+	uint16_t rotationSpell = 0;
+	bool rotationBonus = false;
+	/** @brief Ceaseless Hands: stacks from unarmed hits, and game ticks until they all fall off. */
+	uint8_t unarmedStacks = 0;
+	uint8_t unarmedTicks = 0;
+	/** @brief Knife in the Dark: empowered hits left after a swap, their game ticks left, and ticks until it can trigger again. */
+	uint8_t swapStrikes = 0;
+	uint8_t swapStrikeTicks = 0;
+	uint8_t swapStrikeCooldown = 0;
 
 	// Unique flasks and charms (poe2/belt_uniques.hpp).
 	uint16_t heartglassCooldown = 0;

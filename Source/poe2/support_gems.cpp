@@ -860,12 +860,14 @@ void ScaleSupportedMissileDamage(const Missile &missile, int &minDamage, int &ma
 
 bool SupportedMissileIgnoresMonster(const Missile &missile, int monsterId)
 {
-	return missile.poe2.spell != SpellID::Invalid && missile.poe2.lastHitMonster == monsterId;
+	// Only set by a projectile that hit and flew on (see OnSupportedMissileHit).
+	return missile.poe2.lastHitMonster == monsterId;
 }
 
 bool OnSupportedMissileHit(Missile &missile, const Monster &monster)
 {
-	if (missile.poe2.spell == SpellID::Invalid)
+	// Arrows have no spell but can pierce (pierce skills, Two Fallen, One Arrow).
+	if (missile.poe2.spell == SpellID::Invalid && missile.poe2.piercesLeft <= 0)
 		return false;
 	missile.poe2.lastHitMonster = static_cast<int16_t>(monster.getId());
 

@@ -359,7 +359,7 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
 	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * (100 + souls) / 100, INT16_MAX));
 	if ((data.flags & TF_Pierce) != 0)
-		missile->poe2.piercesLeft = 3;
+		missile->poe2.piercesLeft = static_cast<int8_t>(missile->poe2.piercesLeft + 3);
 	if ((data.flags & TF_LandingBurst) != 0) {
 		// The burst goes off about when the projectile gets there.
 		const int ticks = std::clamp(from.WalkingDistance(target) * 2, 2, 30);

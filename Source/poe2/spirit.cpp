@@ -22,6 +22,7 @@
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 
@@ -239,7 +240,8 @@ bool ItemGrantsSpirit(const Item &item)
 
 int MinionDamagePercent(const Player &player)
 {
-	return 100 + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::MinionDamage)] + player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionDamage)];
+	return 100 + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::MinionDamage)] + player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionDamage)]
+	    + MinionSpellDamageBonus(player);
 }
 
 int SkullSpirit(const Player &player)

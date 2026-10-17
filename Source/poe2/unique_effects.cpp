@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <functional>
 
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
@@ -40,6 +41,17 @@ constexpr int BigHitPercent = 30;
 constexpr int HeavyHitPercent = 10;
 /** @brief POE2 armour above which Colossus Hide slows the hero. */
 constexpr int HeavyArmour = 10000;
+/** @brief Passive tree capstones: how long their buffs last, how far a staff arc reaches. */
+constexpr int BlockRiposteTicks = 3 * TicksPerSecond;
+constexpr int ElementRotationTicks = 3 * TicksPerSecond;
+constexpr int SwapStrikeTicks = 4 * TicksPerSecond;
+constexpr uint8_t SwapStrikeHits = 3;
+constexpr uint8_t MaxUnarmedStacks = 10;
+constexpr int StaffArcTiles = 3;
+constexpr int MinionSpellDamageCap = 40;
+/** @brief Fresh Meat and Gharbad's Bargain: Frenzy Charges they give, at most, and for how long. */
+constexpr uint8_t RuleFrenzyCharges = 2;
+constexpr uint16_t RuleFrenzyTicks = 4 * TicksPerSecond;
 
 int Rule(const Player &player, UniqueRule rule)
 {
@@ -54,6 +66,93 @@ UniqueRuleState &State(const Player &player)
 int32_t Percent(int32_t raw, int percent)
 {
 	return static_cast<int32_t>(static_cast<int64_t>(raw) * percent / 100);
+}
+
+/** @brief The weapon in the hero's hands (a shield is not one), or nullptr when unarmed. */
+const Item *HeldWeapon(const Player &player)
+{
+	for (const Item &item : { std::cref(player.InvBody[INVLOC_HAND_LEFT]), std::cref(player.InvBody[INVLOC_HAND_RIGHT]) }) {
+		if (!item.isEmpty() && IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff))
+			return &item;
+	}
+	return nullptr;
+}
+
+ItemType HeldWeaponType(const Player &player)
+{
+	const Item *weapon = HeldWeapon(player);
+	return weapon != nullptr ? weapon->_itype : ItemType::None;
+}
+
+/** @brief Two-handed melee weapons, staves included (they take the tree's two-handed damage too). */
+bool HoldsTwoHandMelee(const Player &player)
+{
+	const Item *weapon = HeldWeapon(player);
+	return weapon != nullptr && weapon->_iLoc == ILOC_TWOHAND && weapon->_itype != ItemType::Bow;
+}
+
+/** @brief A Frenzy Charge from a passive rule: up to two, for 4 seconds, keeping a longer one from a skill. */
+void GainRuleFrenzyCharge(Player &player)
+{
+	Poe2PlayerData &data = player.poe2;
+	if (data.frenzyCharges >= RuleFrenzyCharges)
+		return;
+	data.frenzyCharges++;
+	data.frenzyTicks = std::max(data.frenzyTicks, RuleFrenzyTicks);
+	AddVisualEffect(player.position.tile, MissileGraphicID::BloodStarRedExplosion);
+}
+
+/** @brief The closest other living enemy within the range, or nullptr. */
+Monster *NearestOtherMonster(const Monster &from, int range)
+{
+	Monster *nearest = nullptr;
+	int best = range + 1;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (&monster == &from || monster.hasNoLife() || monster.isPlayerMinion())
+			continue;
+		const int distance = std::max(std::abs(monster.position.tile.x - from.position.tile.x), std::abs(monster.position.tile.y - from.position.tile.y));
+		if (distance < best) {
+			best = distance;
+			nearest = &monster;
+		}
+	}
+	return nearest;
+}
+
+/** @brief More damage from the state of the monster hit (The Maiden's Whisper, Overhead Chop), in percent. */
+int HitConditionPercent(const Player &player, const Monster &monster)
+{
+	int percent = 100;
+	if (const int more = Rule(player, UniqueRule::FirstStrike); more > 0 && monster.hitPoints >= monster.maxHitPoints)
+		percent = percent * (100 + more) / 100;
+	if (const int more = Rule(player, UniqueRule::MoreVsStunned); more > 0 && monster.poe2.heavyStunTicks > 0)
+		percent = percent * (100 + more) / 100;
+	return percent;
+}
+
+Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, int32_t raw);
+
+/** @brief The Dark Sickness: a monster killed in melee bursts and hurts the enemies beside it. Its kills don't burst. */
+void BurstCorpse(const Player &player, const Monster &corpse, int percent)
+{
+	static bool bursting = false;
+	const int32_t raw = Percent(corpse.maxHitPoints.raw(), percent);
+	if (bursting || raw <= 0)
+		return;
+	bursting = true;
+	AddVisualEffect(corpse.position.tile, MissileGraphicID::BloodStarExplosion);
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (&monster == &corpse || monster.hasNoLife() || monster.isPlayerMinion())
+			continue;
+		if (std::max(std::abs(monster.position.tile.x - corpse.position.tile.x), std::abs(monster.position.tile.y - corpse.position.tile.y)) > 1)
+			continue;
+		DealPacket(player, monster, DamageType::Physical, raw);
+		if (monster.hasNoLife())
+			M_StartKill(monster, player);
+	}
+	bursting = false;
 }
 
 /** @brief The element (a DamageType) of fire, cold and lightning, in the order spells cycle them. */
@@ -273,6 +372,13 @@ void ProcessUniqueRules(Player &player)
 	countDown(state.recoveryLockTicks);
 	countDown(state.witchglassTicks);
 	countDown(state.moonwaterTicks);
+	countDown(state.blockRiposteTicks);
+	countDown(state.rotationTicks);
+	countDown(state.swapStrikeCooldown);
+	if (state.swapStrikeTicks > 0 && --state.swapStrikeTicks == 0)
+		state.swapStrikes = 0;
+	if (state.unarmedTicks > 0 && --state.unarmedTicks == 0)
+		state.unarmedStacks = 0;
 	for (uint8_t &ticks : state.guardianTicks)
 		countDown(ticks);
 	if (state.scholarTicks > 0 && --state.scholarTicks == 0)
@@ -368,10 +474,13 @@ int UniqueAttackSpeedPercent(const Player &player)
 		percent += std::min(MissingLifePercent(player) / 4, cap);
 	if (State(player).critSpeedTicks > 0)
 		percent += Rule(player, UniqueRule::CritActionSpeed);
+	// Ceaseless Hands: an attack frame faster per 5 stacks.
+	if (Rule(player, UniqueRule::UnarmedHitStacks) > 0 && HeldWeapon(player) == nullptr)
+		percent += State(player).unarmedStacks / 5 * 10;
 	return percent;
 }
 
-Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed26_6 damage, bool crit)
+Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed26_6 damage, bool crit, bool ranged)
 {
 	if (!gbIsPoe2) {
 		const Fixed26_6 dealt = ApplyShock(monster, damage);
@@ -381,7 +490,11 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	}
 	UniqueRuleState &state = State(player);
 	state.lastHitBySpell = false;
+	state.lastHitRanged = ranged;
 	state.attacks++;
+	const ItemType weapon = HeldWeaponType(player);
+	const bool staffHit = !ranged && weapon == ItemType::Staff;
+	const bool wasShocked = monster.poe2.shockTicks > 0;
 
 	int64_t raw = Percent(damage.raw(), GeneralDamagePercent(player));
 	if (!crit)
@@ -402,6 +515,19 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		raw = raw * (100 + state.storedChill) / 100;
 		state.storedChill = 0;
 	}
+	raw = raw * HitConditionPercent(player, monster) / 100;
+	if (const int more = Rule(player, UniqueRule::BlockRiposte); more > 0 && !ranged && state.blockRiposteTicks > 0) {
+		raw = raw * (100 + more) / 100;
+		state.blockRiposteTicks = 0;
+	}
+	if (const int more = Rule(player, UniqueRule::SwapStrike); more > 0 && state.swapStrikes > 0) {
+		raw = raw * (100 + more) / 100;
+		state.swapStrikes--;
+	}
+	if (const int seconds = Rule(player, UniqueRule::UnarmedHitStacks); seconds > 0 && !ranged && weapon == ItemType::None) {
+		state.unarmedStacks = static_cast<uint8_t>(std::min<int>(state.unarmedStacks + 1, MaxUnarmedStacks));
+		state.unarmedTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
+	}
 
 	// Split the hit into physical and elemental packets.
 	std::array<int64_t, 4> packets {}; // physical, fire, lightning, cold
@@ -420,10 +546,21 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	} else if (third > 0) {
 		packets[0] = packets[0] * (100 - Rule(player, UniqueRule::OtherAttacksLessPhysical)) / 100;
 	}
-	if (const int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100); toFire > 0) {
-		const int64_t converted = packets[0] * toFire / 100;
-		packets[0] -= converted;
-		packets[1] += converted;
+	// Fire converts first; a staff's lightning (Staff of the Storm Gods) takes what is left.
+	const int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100);
+	const int toLightning = staffHit ? std::clamp(Rule(player, UniqueRule::StaffToLightning), 0, 100 - toFire) : 0;
+	if (toFire > 0 || toLightning > 0) {
+		const int64_t fire = packets[0] * toFire / 100;
+		const int64_t lightning = packets[0] * toLightning / 100;
+		packets[0] -= fire + lightning;
+		packets[1] += fire;
+		packets[2] += lightning;
+	}
+	// Fire in the Hand: spell damage adds to the increased damage of the attack's fire.
+	if (const int share = Rule(player, UniqueRule::SpellDamageToFireAttacks); share > 0 && packets[1] > 0) {
+		const int64_t increased = std::max(100 + player._pIBonusDam, 1);
+		const int64_t extra = std::max(SpellIncreasedDamage(player) - 100, 0) * share / 100;
+		packets[1] = packets[1] * (increased + extra) / increased;
 	}
 	if (Rule(player, UniqueRule::NoColdDamage) > 0)
 		packets[3] = 0;
@@ -444,12 +581,23 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		state.guardTicks = GuardStackTicks;
 	}
 
+	// Staff of the Storm Gods: a staff hit on a shocked enemy arcs on as lightning.
+	if (const int arc = Rule(player, UniqueRule::StaffArc); arc > 0 && staffHit && wasShocked) {
+		if (Monster *next = NearestOtherMonster(monster, StaffArcTiles); next != nullptr) {
+			AddVisualEffect(next->position.tile, MissileGraphicID::ThinLightning);
+			DealPacket(player, *next, DamageType::Lightning, static_cast<int32_t>(std::min<int64_t>(raw * arc / 100, INT32_MAX)));
+			if (next->hasNoLife())
+				M_StartKill(*next, player);
+		}
+	}
+	ApplyCull(player, monster);
+
 	// Every 5th attack repeats once, at less damage and without counting as another attack.
 	static bool repeating = false;
 	if (const int repeat = Rule(player, UniqueRule::FifthAttackRepeat); repeat > 0 && !repeating && state.attacks % 5 == 0 && !monster.hasNoLife()) {
 		repeating = true;
 		state.attacks--;
-		dealt += ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(Percent(damage.raw(), repeat)), false);
+		dealt += ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(Percent(damage.raw(), repeat)), false, ranged);
 		repeating = false;
 	}
 	return dealt;
@@ -483,6 +631,19 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 		else
 			percent = percent * (100 - Rule(player, UniqueRule::OffElementLess)) / 100;
 	}
+	// Wheel of the Elements: the first hit of each spell decides whether its element differs from the last one's.
+	if (const int more = Rule(player, UniqueRule::ElementRotation); more > 0 && IsElemental(type)) {
+		if (state.rotationSpell != state.spells) {
+			const auto element = static_cast<uint8_t>(static_cast<int>(type) + 1);
+			state.rotationSpell = state.spells;
+			state.rotationBonus = state.rotationTicks > 0 && state.rotationElement != 0 && state.rotationElement != element;
+			state.rotationElement = element;
+			state.rotationTicks = ElementRotationTicks;
+		}
+		if (state.rotationBonus)
+			percent = percent * (100 + more) / 100;
+	}
+	percent = percent * HitConditionPercent(player, monster) / 100;
 	if (const int penetration = Rule(player, UniqueRule::MemoryPenetration); penetration > 0 && state.memoryTicks > 0 && static_cast<uint8_t>(type) == state.memoryElement)
 		percent = percent * (100 + penetration) / 100;
 	if (const int cap = Rule(player, UniqueRule::SpellsSpendEnergyShield); cap > 0 && player.poe2.maxEnergyShield > 0)
@@ -612,11 +773,16 @@ bool UniqueSlowSkipsWalkTick(Player &player)
 	return true;
 }
 
-void OnMonsterKilled(const Player &player, const Monster &monster)
+void OnMonsterKilled(Player &player, const Monster &monster)
 {
 	if (!gbIsPoe2)
 		return;
 	UniqueRuleState &state = State(player);
+	const bool meleeKill = !state.lastHitBySpell && !state.lastHitRanged;
+	if (Rule(player, UniqueRule::TwoHandKillFrenzy) > 0 && meleeKill && HoldsTwoHandMelee(player))
+		GainRuleFrenzyCharge(player);
+	if (const int burst = Rule(player, UniqueRule::KillBurst); burst > 0 && meleeKill)
+		BurstCorpse(player, monster, burst);
 	if (Rule(player, UniqueRule::SpellEchoes) > 0 && state.lastHitBySpell)
 		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
 	if (const int seconds = Rule(player, UniqueRule::StealRareMod); seconds > 0 && GetMonsterAffixes(monster).rarity == MonsterRarity::Rare) {
@@ -873,6 +1039,67 @@ int EnergyShieldRechargePercent(const Player &player)
 int StolenRegenPerMille(const Player &player)
 {
 	return State(player).stolenMod == static_cast<int>(MonsterMod::Regenerating) + 1 ? RegenPerMillePerSecond : 0;
+}
+
+void ApplyCull(const Player &player, Monster &monster)
+{
+	const int cull = Rule(player, UniqueRule::Cull);
+	if (cull <= 0 || monster.hasNoLife() || monster.isUnique() || monster.type().type == MT_DIABLO || monster.isPlayerMinion())
+		return;
+	if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
+		return;
+	if (static_cast<int64_t>(monster.hitPoints.raw()) * 100 > static_cast<int64_t>(monster.maxHitPoints.raw()) * cull)
+		return;
+	AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+	ApplyMonsterDamage(DamageType::Physical, monster, monster.hitPoints);
+}
+
+int ArrowPierceCount(const Player &player)
+{
+	return std::max(Rule(player, UniqueRule::ArrowPierce), 0);
+}
+
+int ArrowDamageModPercent(const Player &player)
+{
+	return Rule(player, UniqueRule::ArrowDamageMod);
+}
+
+void OnPlayerBlocked(const Player &player)
+{
+	if (Rule(player, UniqueRule::BlockRiposte) > 0)
+		State(player).blockRiposteTicks = BlockRiposteTicks;
+}
+
+void OnWeaponsSwapped(const Player &player, ItemType before)
+{
+	UniqueRuleState &state = State(player);
+	if (Rule(player, UniqueRule::SwapStrike) <= 0 || state.swapStrikeCooldown > 0 || HeldWeaponType(player) == before)
+		return;
+	state.swapStrikes = SwapStrikeHits;
+	state.swapStrikeTicks = SwapStrikeTicks;
+	state.swapStrikeCooldown = SwapStrikeTicks;
+}
+
+void OnFlaskDrunk(Player &player)
+{
+	if (Rule(player, UniqueRule::FlaskFrenzy) > 0)
+		GainRuleFrenzyCharge(player);
+}
+
+int MinionSpellDamageBonus(const Player &player)
+{
+	const int share = Rule(player, UniqueRule::MinionSpellDamage);
+	if (share <= 0)
+		return 0;
+	return std::min(std::max(SpellIncreasedDamage(player) - 100, 0) * share / 100, MinionSpellDamageCap);
+}
+
+int UnarmedEvasionPercent(const Player &player)
+{
+	const UniqueRuleState &state = State(player);
+	if (Rule(player, UniqueRule::UnarmedHitStacks) <= 0 || state.unarmedTicks == 0 || HeldWeapon(player) != nullptr)
+		return 0;
+	return state.unarmedStacks * 2;
 }
 
 } // namespace devilution

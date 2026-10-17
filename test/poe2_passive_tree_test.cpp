@@ -108,7 +108,7 @@ public:
 		return best.value_or(0);
 	}
 
-	/** @brief The way to the Warrior's nearest notable: three small nodes, then the notable. */
+	/** @brief The way to the Warrior's nearest notable: the small nodes, then the notable (5 points). */
 	static std::vector<PassiveNodeId> WarriorPath()
 	{
 		return WarriorPathTo(NearestWarriorNode(PassiveKind::Notable));
@@ -200,9 +200,8 @@ TEST_F(Poe2PassiveTreeTest, RefundsKeepTheTreeConnected)
 	for (const PassiveNodeId node : path)
 		ASSERT_TRUE(AllocatePassive(player, node)) << node;
 	EXPECT_FALSE(CanRefundPassive(player, path[1]));
-	EXPECT_TRUE(RefundPassive(player, path[3]));
-	EXPECT_TRUE(RefundPassive(player, path[2]));
-	EXPECT_TRUE(RefundPassive(player, path[1]));
+	for (size_t i = path.size() - 1; i >= 1; i--)
+		EXPECT_TRUE(RefundPassive(player, path[i])) << i;
 	EXPECT_EQ(PassivePointsSpent(player), 1);
 	ResetPassives(player);
 	EXPECT_EQ(PassivePointsSpent(player), 0);
@@ -324,7 +323,7 @@ TEST_F(Poe2PassiveTreeTest, EveryClassHasTwoAscendancies)
 TEST_F(Poe2PassiveTreeTest, AscendancyUnlocksAtLevel15)
 {
 	Player &player = *MyPlayer;
-	const PassiveNodeId knight = FindNode("Knight of Westmarch");
+	const PassiveNodeId knight = FindNode("Knight of Khanduras");
 	const PassiveNodeId warlord = FindNode("Blood Warlord");
 	EXPECT_EQ(AscendancyPointsTotal(player), 0);
 	EXPECT_FALSE(CanAllocatePassive(player, knight));
@@ -481,7 +480,7 @@ TEST_F(Poe2PassiveTreeTest, RouteMarksTheQuickestWay)
 	ASSERT_TRUE(AllocatePassive(player, path[0]));
 	EXPECT_EQ(PassiveRoute(player, path.back()).size(), path.size());
 	EXPECT_TRUE(PassiveRoute(player, path[0]).empty()); // taken already
-	EXPECT_TRUE(PassiveRoute(player, FindNode("Knight of Westmarch")).empty()); // ascendancies aren't bought with points
+	EXPECT_TRUE(PassiveRoute(player, FindNode("Knight of Khanduras")).empty()); // ascendancies aren't bought with points
 }
 
 TEST_F(Poe2PassiveTreeTest, ClassesSitFarApartLikePoe2)
@@ -556,6 +555,43 @@ TEST_F(Poe2PassiveTreeTest, ItemTableHasEveryBookOfSpecialisation)
 			books++;
 	}
 	EXPECT_EQ(books, static_cast<int>(NumSpecBooks));
+}
+
+TEST_F(Poe2PassiveTreeTest, EveryNotableHasStats)
+{
+	// A stat name the game doesn't know is dropped when the tree loads, which would leave a notable empty.
+	for (const PassiveNode &node : PassiveTree()) {
+		if (node.kind == PassiveKind::Notable)
+			EXPECT_FALSE(node.stats.empty()) << node.name;
+	}
+	const PassiveNode &freshMeat = PassiveTree()[FindNode("Fresh Meat")];
+	EXPECT_TRUE(std::any_of(freshMeat.stats.begin(), freshMeat.stats.end(), [](const auto &stat) { return stat.first == PassiveStat::TwoHandKillFrenzy; }));
+}
+
+TEST_F(Poe2PassiveTreeTest, CapstoneRulesHaveTextAndReachTheRules)
+{
+	for (size_t stat = static_cast<size_t>(PassiveStat::TwoHandKillFrenzy); stat < static_cast<size_t>(PassiveStat::Count); stat++) {
+		const auto passive = static_cast<PassiveStat>(stat);
+		EXPECT_FALSE(PassiveStatText(passive, 2).empty()) << stat;
+		PassiveTotals passives {};
+		passives[stat] = 2;
+		UniqueRuleTotals rules {};
+		AddPassiveRules(passives, rules);
+		EXPECT_EQ(std::count_if(rules.begin(), rules.end(), [](int16_t value) { return value == 2; }), 1) << stat;
+	}
+}
+
+TEST_F(Poe2PassiveTreeTest, TheSistersGiftCountsStaffDamageForBows)
+{
+	Player &player = *MyPlayer;
+	player.InvBody[INVLOC_HAND_LEFT]._itype = ItemType::Bow;
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	PassiveTotals passives {};
+	passives[static_cast<size_t>(PassiveStat::BowDamage)] = 10;
+	passives[static_cast<size_t>(PassiveStat::StaffDamage)] = 15;
+	EXPECT_EQ(PassiveWeaponDamage(player, passives), 10);
+	passives[static_cast<size_t>(PassiveStat::StaffAppliesToBow)] = 1;
+	EXPECT_EQ(PassiveWeaponDamage(player, passives), 25);
 }
 
 } // namespace

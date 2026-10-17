@@ -2866,8 +2866,9 @@ void StartPlrBlock(Player &player, Direction dir)
 		return;
 	}
 
-	// POE2 Mashup: a block readies Riposte.
+	// POE2 Mashup: a block readies Riposte, and Lachdanan's Guard.
 	player.poe2.riposteTicks = RiposteTicks;
+	OnPlayerBlocked(player);
 
 	PlaySfxLoc(SfxID::ItemSword, player.position.tile);
 

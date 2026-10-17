@@ -12,6 +12,7 @@
 #include "engine/world_tile.hpp"
 #include "tables/spelldat.h"
 #include "utils/fixed_point.hpp"
+#include "tables/itemdat.h"
 
 namespace devilution {
 
@@ -57,7 +58,23 @@ void ProcessUniqueRules(Player &player);
  * inflicts ailments and counts the attack.
  * @return The damage dealt.
  */
-Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed26_6 damage, bool crit);
+Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed26_6 damage, bool crit, bool ranged = false);
+/** @brief Cull: kills a normal or magic monster the hero's hit left on low enough life. */
+void ApplyCull(const Player &player, Monster &monster);
+/** @brief Enemies the hero's arrows pierce (Two Fallen, One Arrow). */
+[[nodiscard]] int ArrowPierceCount(const Player &player);
+/** @brief Percent of the character damage bonus a non-Rogue's arrows add, from the tree (0 for none). */
+[[nodiscard]] int ArrowDamageModPercent(const Player &player);
+/** @brief The hero blocked a hit (Lachdanan's Guard). */
+void OnPlayerBlocked(const Player &player);
+/** @brief The hero swapped weapon sets; the weapon type held before (Knife in the Dark). */
+void OnWeaponsSwapped(const Player &player, ItemType before);
+/** @brief The hero drank a flask (Gharbad's Bargain). */
+void OnFlaskDrunk(Player &player);
+/** @brief Na-Krul's Jailer: minions' increased damage from the hero's spell damage, in percent. */
+[[nodiscard]] int MinionSpellDamageBonus(const Player &player);
+/** @brief Ceaseless Hands: more evasion from unarmed hit stacks, in percent. */
+[[nodiscard]] int UnarmedEvasionPercent(const Player &player);
 
 /** @brief The rules' multiplier on a spell's damage when it is cast, in percent. */
 [[nodiscard]] int UniqueSpellDamagePercent(const Player &player, SpellID spell);
@@ -85,7 +102,7 @@ void NoteResourceSpent(const Player &player, Fixed26_6 amount);
 /** @brief Whether a slowed walk skips this game tick. */
 bool UniqueSlowSkipsWalkTick(Player &player);
 
-void OnMonsterKilled(const Player &player, const Monster &monster);
+void OnMonsterKilled(Player &player, const Monster &monster);
 void OnMinionDied(Player &owner);
 /** @brief The owner's minions' damage, in percent. */
 /** @param minionLowLife Whether the minion is below half life. */

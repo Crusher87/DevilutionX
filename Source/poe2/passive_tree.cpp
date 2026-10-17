@@ -901,6 +901,40 @@ std::optional<UniqueRule> RuleForStat(PassiveStat stat)
 		return UniqueRule::SpellElementCycle;
 	case PassiveStat::OffElementLess:
 		return UniqueRule::OffElementLess;
+	case PassiveStat::TwoHandKillFrenzy:
+		return UniqueRule::TwoHandKillFrenzy;
+	case PassiveStat::BlockRiposte:
+		return UniqueRule::BlockRiposte;
+	case PassiveStat::ElementRotation:
+		return UniqueRule::ElementRotation;
+	case PassiveStat::MinionSpellDamage:
+		return UniqueRule::MinionSpellDamage;
+	case PassiveStat::StaffToLightning:
+		return UniqueRule::StaffToLightning;
+	case PassiveStat::StaffArc:
+		return UniqueRule::StaffArc;
+	case PassiveStat::UnarmedHitStacks:
+		return UniqueRule::UnarmedHitStacks;
+	case PassiveStat::ArrowPierce:
+		return UniqueRule::ArrowPierce;
+	case PassiveStat::SwapStrike:
+		return UniqueRule::SwapStrike;
+	case PassiveStat::ArrowDamageMod:
+		return UniqueRule::ArrowDamageMod;
+	case PassiveStat::SpellDamageToFireAttacks:
+		return UniqueRule::SpellDamageToFireAttacks;
+	case PassiveStat::StaffAppliesToBow:
+		return UniqueRule::StaffAppliesToBow;
+	case PassiveStat::Cull:
+		return UniqueRule::Cull;
+	case PassiveStat::FirstStrike:
+		return UniqueRule::FirstStrike;
+	case PassiveStat::KillBurst:
+		return UniqueRule::KillBurst;
+	case PassiveStat::FlaskFrenzy:
+		return UniqueRule::FlaskFrenzy;
+	case PassiveStat::MoreVsStunned:
+		return UniqueRule::MoreVsStunned;
 	default:
 		return std::nullopt;
 	}
@@ -930,6 +964,9 @@ constexpr RuleCap RuleCaps[] {
 	{ UniqueRule::ManaCost, -25, INT16_MAX },
 	{ UniqueRule::HitDamageFromMana, INT16_MIN, 50 },
 	{ UniqueRule::PhysicalToFire, INT16_MIN, 100 },
+	{ UniqueRule::StaffToLightning, INT16_MIN, 100 },
+	{ UniqueRule::Cull, INT16_MIN, 20 },
+	{ UniqueRule::ArrowPierce, INT16_MIN, 5 },
 };
 
 } // namespace
@@ -966,7 +1003,8 @@ int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives)
 		return passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage);
 	switch (weapon->_itype) {
 	case ItemType::Bow:
-		return passive(PassiveStat::BowDamage);
+		// The Sisters' Gift: staff training carries over to the bow.
+		return passive(PassiveStat::BowDamage) + (passive(PassiveStat::StaffAppliesToBow) > 0 ? passive(PassiveStat::StaffDamage) : 0);
 	case ItemType::Staff:
 		// Like POE2's quarterstaves: a two-handed melee weapon with nodes of its own.
 		return passive(PassiveStat::StaffDamage) + passive(PassiveStat::MeleeDamage) + passive(PassiveStat::TwoHandDamage);
@@ -1136,6 +1174,40 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "Spells cycle Fire, Lightning and Magic: {:d}% more Damage with the current element"), value);
 	case PassiveStat::OffElementLess:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% less Spell Damage with the other elements"), value);
+	case PassiveStat::TwoHandKillFrenzy:
+		return std::string(_("Kills with Two Handed melee weapons grant a Frenzy Charge for 4 seconds, up to 2"));
+	case PassiveStat::BlockRiposte:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "After you Block, your next melee hit within 3 seconds deals {:d}% more Damage"), value);
+	case PassiveStat::ElementRotation:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Spells deal {:d}% more Damage if your last Spell hit, within 3 seconds, was a different element"), value);
+	case PassiveStat::MinionSpellDamage:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Minions get {:d}% of your increased Spell Damage as increased Damage, up to 40%"), value);
+	case PassiveStat::StaffToLightning:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Physical Damage with Staves converted to Lightning"), value);
+	case PassiveStat::StaffArc:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Staff hits on Shocked enemies arc to another enemy nearby for {:d}% of their Damage"), value);
+	case PassiveStat::UnarmedHitStacks:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "While Unarmed, each hit grants a stack and refreshes them all for {:d} seconds, up to 10: 2% more Evasion each, and 10% increased Attack Speed per 5 stacks"), value);
+	case PassiveStat::ArrowPierce:
+		return FormatRuntime(_("Arrows Pierce {:d} additional enemies"), value);
+	case PassiveStat::SwapStrike:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "After swapping to a different weapon type, your next 3 hits within 4 seconds deal {:d}% more Damage; once every 4 seconds"), value);
+	case PassiveStat::ArrowDamageMod:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Arrows get {:d}% of the damage bonus from your attributes, instead of half"), value);
+	case PassiveStat::SpellDamageToFireAttacks:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of your increased Spell Damage also applies to the Fire Damage of your attacks"), value);
+	case PassiveStat::StaffAppliesToBow:
+		return std::string(_("Increases to Staff Damage also apply to Bows, and Bows take the Staff damage bonus from your attributes"));
+	case PassiveStat::Cull:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Your hits kill Normal and Magic monsters left at {:d}% Life or less"), value);
+	case PassiveStat::FirstStrike:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Your first hit on an enemy at full Life deals {:d}% more Damage"), value);
+	case PassiveStat::KillBurst:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Enemies you kill with melee hits burst for {:d}% of their maximum Life as Physical Damage to enemies beside them"), value);
+	case PassiveStat::FlaskFrenzy:
+		return std::string(_("Drinking a Flask grants a Frenzy Charge for 4 seconds, up to 2"));
+	case PassiveStat::MoreVsStunned:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Your hits deal {:d}% more Damage to Stunned enemies"), value);
 	default:
 		return {};
 	}

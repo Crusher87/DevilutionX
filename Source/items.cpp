@@ -3270,7 +3270,9 @@ void CalcPlrDamageMod(Player &player)
 		player._pDamageMod = strDexMod / 200;
 		break;
 	case HeroClass::Monk:
-		if (player.isHoldingItem(ItemType::Staff) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())) {
+		// POE2 Mashup: The Sisters' Gift lets the bow take the staff's bonus.
+		if (player.isHoldingItem(ItemType::Staff) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())
+		    || (gbIsPoe2 && player.isHoldingItem(ItemType::Bow) && PassiveTotal(player, PassiveStat::StaffAppliesToBow) > 0)) {
 			player._pDamageMod = strDexMod / 150;
 		} else {
 			player._pDamageMod = strDexMod / 300;

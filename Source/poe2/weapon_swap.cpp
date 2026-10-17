@@ -14,8 +14,10 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 
 namespace devilution {
@@ -51,6 +53,12 @@ bool SwapWeapons(Player &player)
 {
 	if (!CanSwapWeapons(player))
 		return false;
+	// The weapon type held before, for Knife in the Dark (a shield or empty hands hold none).
+	ItemType before = ItemType::None;
+	for (const Item *item : { &player.InvBody[INVLOC_HAND_RIGHT], &player.InvBody[INVLOC_HAND_LEFT] }) {
+		if (!item->isEmpty() && IsAnyOf(item->_itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff))
+			before = item->_itype;
+	}
 	for (const size_t hand : { static_cast<size_t>(INVLOC_HAND_LEFT), static_cast<size_t>(INVLOC_HAND_RIGHT) })
 		std::swap(player.InvBody[hand], InactiveHand(player, hand));
 	player.poe2.weaponSet = static_cast<uint8_t>((player.poe2.weaponSet + 1) % NumWeaponSets);
@@ -66,6 +74,7 @@ bool SwapWeapons(Player &player)
 			PlaySFX(ItemInvSnds[ItemCAnimTbl[weapon._iCurs]]);
 	}
 	CalcPlrInv(player, true);
+	OnWeaponsSwapped(player, before);
 	return true;
 }
 

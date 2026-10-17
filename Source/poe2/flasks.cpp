@@ -387,6 +387,7 @@ bool UseFlask(Player &player, size_t beltSlot)
 		return false;
 	}
 	player.poe2.flaskCharges[beltSlot] -= FlaskChargesPerUseFor(flask);
+	OnFlaskDrunk(player);
 	if (&player == MyPlayer)
 		PlaySFX(ItemInvSnds[ItemCAnimTbl[flask._iCurs]]);
 

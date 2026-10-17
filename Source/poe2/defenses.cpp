@@ -116,7 +116,7 @@ int ArmourRating(const Player &player)
 
 int EvasionRating(const Player &player)
 {
-	return std::max(player.poe2.evasion + player._pDexterity / 5, 0) * UniqueDefencePercent(player) / 100;
+	return std::max(player.poe2.evasion + player._pDexterity / 5, 0) * UniqueDefencePercent(player) / 100 * (100 + UnarmedEvasionPercent(player)) / 100;
 }
 
 int HitDefense(const Player &player)

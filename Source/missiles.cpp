@@ -361,7 +361,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		if (player._pClass == HeroClass::Rogue)
 			dam += player._pDamageMod;
 		else
-			dam += player._pDamageMod / 2;
+			dam += player._pDamageMod * std::max(ArrowDamageModPercent(player), 50) / 100;
 		if (monster.data().monsterClass == MonsterClass::Demon && HasAnyOf(player._pIFlags, ItemSpecialEffect::TripleDemonDamage))
 			dam *= 3;
 		if (crit)
@@ -376,7 +376,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 	if (isAttack && gbIsPoe2) {
 		// POE2 Mashup: an arrow hits like an attack, with the uniques' conversions and ailments.
 		if (&player == MyPlayer)
-			dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit).raw();
+			dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit, true).raw();
 	} else {
 		if (gbIsPoe2 && !missileData.isArrow())
 			dam = dam * UniqueSpellHitPercent(player, monster, damageType) / 100;
@@ -387,6 +387,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		if (&player == MyPlayer) {
 			ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
 			TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam));
+			ApplyCull(player, monster);
 		}
 	}
 	HitTraceHit(monster, dam, resist);
@@ -1940,6 +1941,9 @@ void AddArrow(Missile &missile, AddMissileParameter &parameter)
 	UpdateMissileVelocity(missile, dst, av);
 	missile._miAnimFrame = static_cast<int>(GetDirection16(missile.position.start, dst)) + 1;
 	missile.duration = 256;
+	// POE2 Mashup: Two Fallen, One Arrow.
+	if (missile._micaster == TARGET_MONSTERS && gbIsPoe2)
+		missile.poe2.piercesLeft = static_cast<int8_t>(ArrowPierceCount(Players[missile._misource]));
 }
 
 void UpdateVileMissPos(Missile &missile, Point dst)
