@@ -1205,8 +1205,13 @@ TEST_F(Poe2ShopTabsTest, SmithTabsListTheirKindOnPages)
 {
 	SetRndSeed(5);
 	SpawnSmith(16);
-	// Premium rings and amulets use Hellfire's item graphics, which the test assets lack.
+	// Premium rings and amulets use Hellfire's item graphics, which the test assets lack, and so may some of the
+	// Jewelry tab's wares.
 	PremiumItems.clear();
+	for (size_t i = SmithItems.size(); i-- > 0;) {
+		if (SmithItems[i]._iCurs >= ICURS_XORINES_RING)
+			SmithItems.erase(&SmithItems[i]);
+	}
 
 	OpenVisualStore(VisualStoreVendor::Smith);
 	EXPECT_EQ(ActivePoe2ShopTab, Poe2ShopTab::Weapons) << "Opens on the first tab";
