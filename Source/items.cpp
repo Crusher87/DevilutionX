@@ -3413,7 +3413,9 @@ PlayerWeaponGraphic GetPlrAnimWeaponId(const Player &player)
 		weaponItemType = leftHandItem._itype;
 	}
 
-	if (!rightHandItem.isEmpty() && rightHandItem._iClass == ICLASS_WEAPON && rightHandUsable) {
+	// POE2 Mashup: a sceptre held with another weapon doesn't decide how the hero swings.
+	const bool rightIsOffhandSceptre = gbIsPoe2 && ItemGrantsSpirit(rightHandItem) && weaponItemType != ItemType::None && !ItemGrantsSpirit(leftHandItem);
+	if (!rightHandItem.isEmpty() && rightHandItem._iClass == ICLASS_WEAPON && rightHandUsable && !rightIsOffhandSceptre) {
 		weaponItemType = rightHandItem._itype;
 	}
 
@@ -3585,12 +3587,28 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		break;
 	}
 
+	// POE2 Mashup: a sceptre held with another weapon adds its modifiers and Spirit but not its damage (Curtis 2026-10-16).
+	const Item *offhandSceptre = nullptr;
+	if (gbIsPoe2) {
+		const Item &left = player.InvBody[INVLOC_HAND_LEFT];
+		const Item &right = player.InvBody[INVLOC_HAND_RIGHT];
+		const auto isWeapon = [](const Item &hand) { return !hand.isEmpty() && hand._iStatFlag && hand._iClass == ICLASS_WEAPON; };
+		if (isWeapon(left) && isWeapon(right)) {
+			if (ItemGrantsSpirit(right))
+				offhandSceptre = &right;
+			else if (ItemGrantsSpirit(left))
+				offhandSceptre = &left;
+		}
+	}
+
 	for (const Item *wornItem : worn) {
 		const Item &item = *wornItem;
 		if (!item.isEmpty() && item._iStatFlag) {
 
-			minDamage += item._iMinDam;
-			maxDamage += item._iMaxDam;
+			if (wornItem != offhandSceptre) {
+				minDamage += item._iMinDam;
+				maxDamage += item._iMaxDam;
+			}
 			ac += item._iAC;
 
 			if (IsValidSpell(item._iSpell) && item._iCharges != 0) {

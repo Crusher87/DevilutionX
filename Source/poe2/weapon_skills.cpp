@@ -22,6 +22,7 @@
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -377,9 +378,11 @@ WeaponSkill WeaponSkillForItem(const Item &item)
 WeaponSkill WeaponSkillFor(const Player &player)
 {
 	const WeaponSkill left = WeaponSkillForItem(player.InvBody[INVLOC_HAND_LEFT]);
-	if (left != WeaponSkill::None)
+	const WeaponSkill right = WeaponSkillForItem(player.InvBody[INVLOC_HAND_RIGHT]);
+	// A sceptre held with another weapon leaves the skill to that weapon.
+	if (left != WeaponSkill::None && !(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_LEFT]) && right != WeaponSkill::None))
 		return left;
-	return WeaponSkillForItem(player.InvBody[INVLOC_HAND_RIGHT]);
+	return right;
 }
 
 std::string_view WeaponSkillName(WeaponSkill skill)

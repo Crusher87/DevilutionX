@@ -1815,9 +1815,13 @@ void WalkInDir(Player &player, AxisDirection dir)
 		return;
 	}
 
-	// Let a dodge roll finish its dash before walking on.
-	if (player.poe2.isDodging())
-		return;
+	// Let a dodge roll finish its dash before walking on. Held keys take over on its last step, so the walk carries
+	// straight on with no pause (Curtis 2026-10-16); a Leap Slam or Shield Charge still lands first.
+	if (player.poe2.isDodging()) {
+		if (player.poe2.dashSkillTicks > 0 || player.walkpath[0] != WALK_NONE)
+			return;
+		player.poe2.dodgeTicks = 0;
+	}
 
 	if (ControlMode == ControlTypes::KeyboardAndMouse) {
 		walkingWithKeyboard = true;

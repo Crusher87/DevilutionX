@@ -2,6 +2,7 @@
 
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "player.h"
 #include "poe2/passive_tree.hpp"
@@ -56,6 +57,35 @@ public:
 		return IDI_GOLD;
 	}
 };
+
+TEST_F(Poe2SpiritTest, SceptreGoesWithAnyOneHandedWeapon)
+{
+	Player &player = *MyPlayer;
+	InitializeItem(player.InvBody[INVLOC_HAND_LEFT], FindBase("Short Sword"));
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	CalcPlrInv(player, false);
+	const int swordMin = player._pIMinDam;
+	const int swordMax = player._pIMaxDam;
+
+	Item sceptre;
+	InitializeItem(sceptre, FindBase("Rattling Sceptre"));
+	sceptre._iStatFlag = true;
+	ASSERT_TRUE(AutoEquip(player, sceptre, true, false)) << "The sceptre goes in the free hand";
+	EXPECT_TRUE(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_RIGHT]));
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player._pIMinDam, swordMin) << "Its damage isn't added to the sword's";
+	EXPECT_EQ(player._pIMaxDam, swordMax);
+	EXPECT_GE(MaxSpirit(player), SceptreSpirit) << "It still grants Spirit";
+
+	Item sword;
+	InitializeItem(sword, FindBase("Short Sword"));
+	sword._iStatFlag = true;
+	player.InvBody[INVLOC_HAND_RIGHT].clear();
+	EXPECT_FALSE(AutoEquip(player, sword, false, false)) << "Two swords don't pair; only a sceptre goes with any weapon";
+	gbIsPoe2 = false;
+	EXPECT_FALSE(AutoEquip(player, sceptre, false, false)) << "Diablo keeps one weapon per hero";
+	gbIsPoe2 = true;
+}
 
 TEST_F(Poe2SpiritTest, SpiritGemsAreSkillGems)
 {

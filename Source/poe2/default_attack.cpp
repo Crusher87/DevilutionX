@@ -11,6 +11,7 @@
 #include "msg.h"
 #include "player.h"
 #include "poe2/aim.hpp"
+#include "poe2/spirit.hpp"
 #include "tables/itemdat.h"
 #include "utils/language.h"
 
@@ -20,12 +21,14 @@ namespace {
 
 const Item *MainWeapon(const Player &player)
 {
+	const Item *weapon = nullptr;
 	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 		const Item &item = player.InvBody[hand];
-		if (!item.isEmpty() && item._iClass == ICLASS_WEAPON)
-			return &item;
+		// A sceptre held with another weapon isn't the main one.
+		if (!item.isEmpty() && item._iClass == ICLASS_WEAPON && (weapon == nullptr || ItemGrantsSpirit(*weapon)))
+			weapon = &item;
 	}
-	return nullptr;
+	return weapon;
 }
 
 bool HoldsShield(const Player &player)

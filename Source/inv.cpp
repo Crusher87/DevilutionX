@@ -233,6 +233,14 @@ bool CanEquip(const Item &item)
 	    && item._iStatFlag;
 }
 
+/** @brief POE2 Mashup: a sceptre can be held with any one-handed weapon (Curtis 2026-10-16). */
+bool IsSceptrePair(const Player &player, const Item &first, const Item &second)
+{
+	return gbIsPoe2 && first._iClass == ICLASS_WEAPON && second._iClass == ICLASS_WEAPON
+	    && player.GetItemLocation(first) == ILOC_ONEHAND && player.GetItemLocation(second) == ILOC_ONEHAND
+	    && (ItemGrantsSpirit(first) || ItemGrantsSpirit(second));
+}
+
 /**
  * @brief A specialized version of 'CanEquip(int, Item&, int)' that specifically checks whether the item can be equipped
  * in one/both of the player's hands.
@@ -276,7 +284,7 @@ bool CanWield(Player &player, const Item &item)
 
 	return player.GetItemLocation(item) == ILOC_ONEHAND
 	    && player.GetItemLocation(occupiedHand) == ILOC_ONEHAND
-	    && item._iClass != occupiedHand._iClass;
+	    && (item._iClass != occupiedHand._iClass || IsSceptrePair(player, item, occupiedHand));
 }
 
 /**
@@ -416,7 +424,8 @@ void ChangeEquippedItem(Player &player, uint8_t slot)
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 
 	const bool pasteIntoSelectedHand = (player.InvBody[otherHand].isEmpty() || player.InvBody[otherHand]._iClass != player.HoldItem._iClass)
-	    || (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield) && player.InvBody[otherHand]._iClass == ICLASS_WEAPON && player.HoldItem._iClass == ICLASS_WEAPON);
+	    || (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield) && player.InvBody[otherHand]._iClass == ICLASS_WEAPON && player.HoldItem._iClass == ICLASS_WEAPON)
+	    || IsSceptrePair(player, player.InvBody[otherHand], player.HoldItem);
 
 	const bool dequipTwoHandedWeapon = (!player.InvBody[otherHand].isEmpty() && player.GetItemLocation(player.InvBody[otherHand]) == ILOC_TWOHAND);
 
@@ -885,12 +894,13 @@ void CheckInvCut(Player &player, Point cursorPosition, bool automaticMove, bool 
 						break;
 					case ILOC_ONEHAND:
 						if (!player.InvBody[INVLOC_HAND_LEFT].isEmpty()
-						    && (player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_LEFT]._iClass
+						    && ((player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_LEFT]._iClass && !IsSceptrePair(player, player.InvList[iv], player.InvBody[INVLOC_HAND_LEFT]))
 						        || player.GetItemLocation(player.InvBody[INVLOC_HAND_LEFT]) == ILOC_TWOHAND)) {
 							// The left hand is not empty and we're either trying to equip the same type of item or
 							// it's holding a two handed weapon, so it must be unequipped
 							invloc = INVLOC_HAND_LEFT;
-						} else if (!player.InvBody[INVLOC_HAND_RIGHT].isEmpty() && player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_RIGHT]._iClass) {
+						} else if (!player.InvBody[INVLOC_HAND_RIGHT].isEmpty() && player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_RIGHT]._iClass
+						    && !IsSceptrePair(player, player.InvList[iv], player.InvBody[INVLOC_HAND_RIGHT])) {
 							// The right hand is not empty and we're trying to equip the same type of item, so we need
 							// to unequip that item
 							invloc = INVLOC_HAND_RIGHT;

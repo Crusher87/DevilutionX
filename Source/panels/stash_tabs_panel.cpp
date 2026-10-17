@@ -910,8 +910,8 @@ void BuildUniquesView(TabView &view, unsigned page)
 		    .onClick = [category] { OpenUniqueCategory = category; UniqueScroll = 0; },
 		    .detail = StrCat(percent, "%") });
 	}
-	view.labels.push_back({ At(10, 80, 140, 12), StrCat(_("Collected"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
-	view.buttons.push_back({ .rect = At(150, 77, 112, 18), .text = std::string(_("Collected only")), .selected = UniquesCollectedOnly,
+	view.labels.push_back({ At(10, 80, 114, 12), StrCat(_("Collected"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
+	view.buttons.push_back({ .rect = At(126, 77, 138, 18), .text = std::string(_("Collected only")), .selected = UniquesCollectedOnly,
 	    .onClick = [] { UniquesCollectedOnly = !UniquesCollectedOnly; UniqueScroll = 0; } });
 	AddSettingsButton(view, 77);
 
