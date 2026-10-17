@@ -191,6 +191,8 @@ struct SigilFx {
 	uint32_t seed;
 	int glyphs;
 	int star;
+	/** @brief Lights and darkens the floor inside the circle; off where the hero stands in the middle of it. */
+	bool floor = true;
 };
 
 struct Sweep {
@@ -272,6 +274,18 @@ std::vector<Particle> Particles;
 std::vector<Ring> Rings;
 std::vector<Bolt> Bolts;
 std::vector<SigilFx> Sigils;
+
+/** @brief A pillar of light standing up from the ground. */
+struct Beam {
+	Vec pos;
+	float age = 0;
+	float life;
+	float height;
+	float width;
+	Colours colours;
+};
+
+std::vector<Beam> Beams;
 std::vector<Crack> Cracks;
 std::vector<IceSpikeFx> IceSpikes;
 std::vector<Sweep> Sweeps;
@@ -1796,6 +1810,7 @@ void Clear()
 	Bolts.clear();
 	Sigils.clear();
 	Cracks.clear();
+	Beams.clear();
 	IceSpikes.clear();
 	Sweeps.clear();
 	FrameGlows.clear();
@@ -1979,6 +1994,56 @@ void Swing(Point from, Point toward, Element element, bool wide, bool heavy)
 	Sweeps.push_back(sweep);
 }
 
+void LevelUp(Point tile)
+{
+	TelemetryEffect("vfx", "LevelUp", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	const Vec pos = TileCentre(tile);
+	const Colours hell { { 255, 246, 220 }, { 255, 140, 35 }, { 175, 18, 8 } };
+	const Colours blood { { 255, 205, 185 }, { 225, 30, 20 }, { 90, 0, 0 } };
+	// A flash that whites the hero out.
+	AddRing(pos + Vec { 0, -40 }, 0, 75, 140, 0, hell.core, 0.7F, true, false);
+	// The pillar of hellfire, and a thinner crimson one inside it that outlasts it.
+	Beams.push_back({ pos, 0, 1400, 560, 30, hell });
+	Beams.push_back({ pos, 0, 1800, 640, 12, blood });
+	// A pentagram burning into the floor under them.
+	SigilFx sigil;
+	sigil.pos = pos;
+	sigil.radius = TileRadius * 2.8F;
+	sigil.life = 1900;
+	sigil.colours = hell;
+	sigil.seed = NextRandom() | 1;
+	sigil.glyphs = 12;
+	sigil.star = 5;
+	sigil.floor = false;
+	Sigils.push_back(sigil);
+	// Shockwaves rolling out across the floor.
+	AddRing(pos, 0, TileRadius * 7, 700, 6, hell.mid, 1, false, true, false, 0.02F);
+	AddRing(pos, 0, TileRadius * 5, 950, 18, blood.mid, 0.5F, false, true);
+	AddRing(pos, TileRadius, TileRadius * 3.5F, 850, 0, hell.edge, 0.45F, true, true);
+	AddCracks(pos, TileRadius * 2.6F, 10, hell.mid, 2800);
+	// A fountain of embers raining back down, and sparks blown out along the ground.
+	Spray(pos + Vec { 0, -10 }, Scaled(150), 30, 250, 1000, 1900, Shape::Streak, hell.core, hell.edge, 2.6F, 0.6F, 280, 680, 520, 0.8F, 1);
+	Spray(pos, Scaled(70), 160, 440, 400, 900, Shape::Streak, hell.core, blood.mid, 2, 0.5F, 30, 140, 300, 1.5F, 1);
+	// Souls rising up the pillar.
+	for (int i = Scaled(36); i > 0; i--) {
+		Particle p;
+		p.pos = pos + Vec { Random(-16, 16), Random(-8, 8) };
+		p.vel = { Random(-12, 12), 0 };
+		p.vz = Random(180, 520);
+		p.gravity = -80;
+		p.life = Random(900, 1700);
+		p.size0 = 3.2F;
+		p.size1 = 0.4F;
+		p.c0 = hell.core;
+		p.c1 = blood.mid;
+		p.shape = Shape::Dot;
+		AddParticle(p);
+	}
+	ShakeCamera(ShakeStrength::Heavy, 8);
+}
+
 void Showcase(Point tile)
 {
 	if (!Enabled())
@@ -2159,6 +2224,7 @@ void Advance(float ms)
 	AdvanceParticles(ms);
 	Age(Rings, ms);
 	Age(Sigils, ms);
+	Age(Beams, ms);
 	Age(Cracks, ms);
 	Age(Sweeps, ms);
 	AdvanceIceSpikes(ms);
@@ -2179,7 +2245,7 @@ size_t ParticleCount()
 
 size_t ShapeCount()
 {
-	return Rings.size() + Sigils.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size();
+	return Rings.size() + Sigils.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size();
 }
 
 size_t AmbientCount()
@@ -2617,6 +2683,28 @@ void DrawGlyph(Vec centre, float size, float angle, uint32_t seed, Rgb colour, f
 	}
 }
 
+void DrawBeams()
+{
+	for (const Beam &beam : Beams) {
+		const float t = beam.age / beam.life;
+		// Slams down in an instant, holds, then thins out and fades from the top.
+		const float in = EaseOut(beam.age / 110.F);
+		const float out = 1 - std::clamp((t - 0.3F) / 0.7F, 0.F, 1.F);
+		const float alpha = in * out;
+		const float w = beam.width * (0.5F + 0.5F * out) * (1 + 0.08F * std::sin(beam.age * 0.04F));
+		const Colours &c = beam.colours;
+		// The pillar rises from just over the hero's head, so the hero stays in sight inside a faint sheath of it.
+		const Vec base = beam.pos - Vec { 0, 70 };
+		const Vec top = beam.pos - Vec { 0, beam.height * (0.6F + 0.4F * in) };
+		SoftLine(Glowing, beam.pos, base, w * 2.2F, c.edge, c.mid, 0.12F * alpha, 0.3F * alpha);
+		SoftLine(Glowing, base, top, w * 2.6F, c.edge, c.edge, 0.4F * alpha, 0);
+		SoftLine(Glowing, base, top, w, c.mid, c.mid, 0.85F * alpha, 0.1F * alpha);
+		SoftLine(Glowing, base, top, w * 0.25F, c.core, c.core, 0.85F * alpha, 0.2F * alpha);
+		SoftDisc(Glowing, base, w * 0.9F, c.core, 0.5F * alpha, false);
+		SoftDisc(Glowing, beam.pos, w * 2.2F, c.mid, 0.5F * alpha, true);
+	}
+}
+
 void DrawSigils()
 {
 	for (const SigilFx &sigil : Sigils) {
@@ -2633,8 +2721,13 @@ void DrawSigils()
 		const uint32_t seed = sigil.seed;
 
 		// The glowing floor inside the circle, brighter as it charges.
-		SoftDisc(Glowing, sigil.pos, r * 1.05F, c.edge, (0.10F + 0.25F * std::min(t, 1.F)) * alpha * draw, true);
-		SoftDisc(Dark, sigil.pos, r * 0.98F, { 10, 5, 15 }, 0.3F * alpha * draw, true);
+		if (sigil.floor) {
+			SoftDisc(Glowing, sigil.pos, r * 1.05F, c.edge, (0.10F + 0.25F * std::min(t, 1.F)) * alpha * draw, true);
+			SoftDisc(Dark, sigil.pos, r * 0.98F, { 10, 5, 15 }, 0.3F * alpha * draw, true);
+		} else {
+			// Only the rim glows, so the hero in the middle isn't washed out.
+			SoftRing(Glowing, sigil.pos, r * 0.93F, r * 0.25F, c.edge, 0.3F * alpha * draw, 0, 1);
+		}
 
 		// Outer double ring, drawn in around the circle.
 		const int segments = 64;
@@ -2909,7 +3002,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
 	LastDrawnScan = ScanFrame;
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty())
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty())
 		return;
 
 	Glowing.clear();
@@ -2917,6 +3010,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawHalos();
 	DrawCracks();
 	DrawSigils();
+	DrawBeams();
 	DrawIceSpikes();
 	DrawRings();
 	DrawComets();

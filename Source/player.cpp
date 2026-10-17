@@ -2675,6 +2675,8 @@ void NextPlrLevel(Player &player)
 	CalcPlrInv(player, true);
 	PlaySFX(SfxID::ItemArmor);
 	PlaySFX(SfxID::ItemSign);
+	if (gbIsPoe2)
+		vfx::LevelUp(player.position.tile);
 	TelemetryLevelUp(player);
 }
 
