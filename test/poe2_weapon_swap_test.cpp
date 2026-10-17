@@ -122,11 +122,23 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	const PassiveNodeId first = PassiveTree()[start].links.front();
 	ASSERT_TRUE(AllocatePassive(player, first, PassiveAttribute::Dexterity, PassivePool::SetII));
 	player.swapHands[1] = Sword();
+	// The bigger tree's last jewel socket is saved too.
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_JEWEL) {
+			InitializeItem(player.jewels[MaxJewelSockets - 1], static_cast<_item_indexes>(i));
+			break;
+		}
+	}
+	const int jewelIndex = player.jewels[MaxJewelSockets - 1].IDidx;
+	ASSERT_GE(jewelIndex, 0);
 	pfile_write_hero(/*writeGameData=*/false);
 
 	player.poe2.clear();
 	player.swapHands[1].clear();
+	player.jewels[MaxJewelSockets - 1].clear();
 	LoadPoe2HeroData(player);
+	EXPECT_EQ(MaxJewelSockets, 12U);
+	EXPECT_EQ(player.jewels[MaxJewelSockets - 1].IDidx, jewelIndex);
 	EXPECT_TRUE(player.poe2.hardcore);
 	EXPECT_EQ(player.poe2.specBooks, 0b101);
 	EXPECT_EQ(player.poe2.weaponSet, 1);

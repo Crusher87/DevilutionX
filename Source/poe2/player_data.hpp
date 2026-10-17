@@ -427,7 +427,7 @@ using SupportTiers = std::array<uint8_t, MaxSupportSockets>;
 constexpr int MaxSupportTier = 3;
 
 /** @brief Most jewel sockets the passive tree can have. */
-constexpr size_t MaxJewelSockets = 8;
+constexpr size_t MaxJewelSockets = 12;
 
 /** @brief Timers and counters of the support gems, per character (not saved; see poe2/support_table.cpp). */
 struct SupportRuntime {
