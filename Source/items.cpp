@@ -2264,7 +2264,7 @@ void PrintItemMisc(const Item &item)
 	}
 	if (const CurrencyOrb orb = CurrencyOrbForMiscId(item._iMiscId); orb != CurrencyOrb::None) {
 		AddItemInfoBoxString(CurrencyOrbDescription(orb));
-		AddItemInfoBoxString(_("Use, then click the item to craft"));
+		AddItemInfoBoxString(JewellerSocket(orb) ? _("Use, then click a skill in the Skills panel (K)") : _("Use, then click the item to craft"));
 		if (IsStackable(item))
 			AddItemInfoBoxString(FormatRuntime(_("Stack Size: {:d}/{:d}, shift-click to split"), StackCount(item), CurrencyStackMax));
 		return;

@@ -961,11 +961,11 @@ std::string_view CurrencyOrbDescription(CurrencyOrb orb)
 	case CurrencyOrb::Catalyst:
 		return _("Adds quality to a ring or amulet");
 	case CurrencyOrb::LesserJeweller:
-		return _("Opens a skill's third support socket. Use it on a skill in the Skills panel (K)");
+		return _("Opens a skill's third support socket");
 	case CurrencyOrb::GreaterJeweller:
-		return _("Opens a skill's fourth support socket. Use it on a skill in the Skills panel (K)");
+		return _("Opens a skill's fourth support socket");
 	case CurrencyOrb::PerfectJeweller:
-		return _("Opens a skill's fifth support socket. Use it on a skill in the Skills panel (K)");
+		return _("Opens a skill's fifth support socket");
 	default:
 		return {};
 	}
