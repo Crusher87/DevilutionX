@@ -18,6 +18,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <magic_enum/magic_enum.hpp>
+
 #include "appfat.h"
 #include "control/control.hpp"
 #include "controls/control_mode.hpp"
@@ -2205,6 +2207,7 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	// The effect missile only exists in the POE2 Mashup missile data.
 	if (!gbIsPoe2 || !InDungeonBounds(tile))
 		return;
+	TelemetryEffect("visual", magic_enum::enum_name(graphic), tile.x, tile.y);
 	// Some graphic ids have no sprite file of their own (Diablo drew hits from monster art), so they borrow a look-alike.
 	switch (graphic) {
 	case MissileGraphicID::MetalHit:

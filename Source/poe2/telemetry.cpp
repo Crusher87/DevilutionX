@@ -681,6 +681,61 @@ void TelemetryLog(std::string_view category, std::string_view text)
 	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", LevelLabel(), " [", category, "] ", text));
 }
 
+namespace {
+
+/** @brief One kind of effect's lines in the current second. */
+struct EffectRate {
+	uint32_t windowStart = 0;
+	int written = 0;
+	int skipped = 0;
+	int lastX = 0;
+	int lastY = 0;
+};
+
+constexpr int EffectLinesPerSecond = 3;
+ankerl::unordered_dense::map<std::string, EffectRate> EffectRates;
+
+std::string HeroTile()
+{
+	if (MyPlayer == nullptr)
+		return {};
+	return std::format(", hero at {:d},{:d}", MyPlayer->position.tile.x, MyPlayer->position.tile.y);
+}
+
+void FlushEffects(uint32_t now, bool all)
+{
+	for (auto &[key, rate] : EffectRates) {
+		if (rate.skipped == 0 || (!all && now - rate.windowStart < 1000))
+			continue;
+		TelemetryLog("fx", std::format("{:s} x{:d} more in the last second, last at {:d},{:d}{:s}", key, rate.skipped, rate.lastX, rate.lastY, HeroTile()));
+		rate.skipped = 0;
+	}
+}
+
+} // namespace
+
+void TelemetryEffect(std::string_view source, std::string_view what, int x, int y)
+{
+	if (LogFile == nullptr)
+		return;
+	const uint32_t now = Now();
+	EffectRate &rate = EffectRates[StrCat(source, " ", what)];
+	if (now - rate.windowStart >= 1000) {
+		if (rate.skipped > 0)
+			FlushEffects(now, false);
+		rate.windowStart = now;
+		rate.written = 0;
+	}
+	rate.lastX = x;
+	rate.lastY = y;
+	if (rate.written >= EffectLinesPerSecond) {
+		rate.skipped++;
+		return;
+	}
+	rate.written++;
+	TelemetryLog("fx", StrCat(source, " ", what, " at ", x, ",", y, HeroTile()));
+}
+
 void TelemetryGameStarted(const Player &player, bool loaded)
 {
 	Totals = {};
@@ -984,6 +1039,7 @@ void TelemetryTick()
 	TrackBuild(player, now);
 	if (now - WindowStartMs >= TelemetryStatsIntervalMs)
 		WriteStatsLine(now);
+	FlushEffects(now, false);
 }
 
 void TelemetryFatal(std::string_view message)

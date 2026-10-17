@@ -83,6 +83,16 @@ TEST_F(Poe2TelemetryTest, WritesEventsToTheSessionLog)
 	EXPECT_NE(log.find("[skill] Fireball, 12 mana"), std::string::npos);
 }
 
+TEST_F(Poe2TelemetryTest, EffectsAreLoggedWithoutFlooding)
+{
+	for (int i = 0; i < 10; i++)
+		TelemetryEffect("visual", "BloodHit", 20 + i, 30);
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[fx] visual BloodHit at 20,30, hero at"), std::string::npos) << log;
+	EXPECT_NE(log.find("[fx] visual BloodHit at 22,30"), std::string::npos) << log;
+	EXPECT_EQ(log.find("[fx] visual BloodHit at 23,30"), std::string::npos) << "Only a few lines a second for each kind";
+}
+
 TEST_F(Poe2TelemetryTest, CountsWastedFlasksAndFailedSkills)
 {
 	Item flask {};

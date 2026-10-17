@@ -57,6 +57,12 @@ void TelemetryInit();
 bool TelemetryEnabled();
 /** @brief Writes one line: time, level and the event. */
 void TelemetryLog(std::string_view category, std::string_view text);
+/**
+ * @brief Notes an effect going off (a visual effect missile, a code-drawn effect, a missile's burst) with where
+ * the hero is, so effects that replay can be traced. Each kind is written at most a few times a second; the rest
+ * are counted and summed up once a second.
+ */
+void TelemetryEffect(std::string_view source, std::string_view what, int x, int y);
 /** @brief Notes a step of loading a level, so a crash while loading shows the last step reached. */
 void TelemetryStep(std::string_view step);
 

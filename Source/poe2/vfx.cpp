@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <magic_enum/magic_enum.hpp>
+
 #include "diablo.h"
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
@@ -31,8 +33,10 @@
 #include "options.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/telemetry.hpp"
 #include "towners.h"
 #include "utils/is_of.hpp"
+#include "utils/str_cat.hpp"
 
 #ifndef USE_SDL1
 #include "utils/display.h"
@@ -374,6 +378,8 @@ struct QuestMark {
 std::vector<QuestMark> QuestMarks;
 /** @brief Each monster's mode last frame, to catch it starting to cast, fade, charge or die. */
 std::unordered_map<const Monster *, MonsterMode> LastModes;
+/** @brief Each monster's burning, shocked, frozen and chilled looks last frame, for the play log. */
+std::unordered_map<const Monster *, uint8_t> LastStatus;
 
 Vec CameraOrigin;
 float CameraScale = 1;
@@ -1245,6 +1251,8 @@ std::optional<Element> CastingElement(const Monster &monster)
 void OnModeChange(const Monster &monster, MonsterMode from, MonsterMode to, Vec feet, Rank rank)
 {
 	const float big = rank >= Rank::Unique ? 1.5F : 1.F;
+	if (IsAnyOf(to, MonsterMode::RangedAttack, MonsterMode::SpecialRangedAttack, MonsterMode::FadeIn, MonsterMode::FadeOut, MonsterMode::Heal) || (to == MonsterMode::Death && rank != Rank::Normal))
+		TelemetryEffect("monster", StrCat(monster.name(), " ", magic_enum::enum_name(to)), monster.position.tile.x, monster.position.tile.y);
 	switch (to) {
 	case MonsterMode::RangedAttack:
 	case MonsterMode::SpecialRangedAttack:
@@ -1383,6 +1391,19 @@ void ScanMonsters(const View &view)
 
 		// What the hero did to it.
 		const Poe2MonsterState &state = monster.poe2;
+		{
+			const uint8_t status = (state.igniteTicks > 0 ? 1 : 0) | (state.shockTicks > 0 || state.electrocuteTicks > 0 ? 2 : 0) | (state.freezeTicks > 0 ? 4 : 0) | (state.chillTicks > 0 ? 8 : 0);
+			uint8_t &was = LastStatus[&monster];
+			if (status != was) {
+				static constexpr std::array<std::string_view, 4> Names { "burning", "shocked", "frozen", "chilled" };
+				for (size_t bit = 0; bit < Names.size(); bit++) {
+					const bool now = (status & (1 << bit)) != 0;
+					if (now != ((was & (1 << bit)) != 0))
+						TelemetryEffect("status", StrCat(monster.name(), " ", Names[bit], now ? " starts" : " ends"), tile.x, tile.y);
+				}
+				was = status;
+			}
+		}
 		Ring glow;
 		glow.pos = body;
 		glow.life = 1;
@@ -1787,10 +1808,12 @@ void Clear()
 	Halos.clear();
 	QuestMarks.clear();
 	LastModes.clear();
+	LastStatus.clear();
 }
 
 void Sigil(Point tile, int radiusTiles, int durationMs, Element element)
 {
+	TelemetryEffect("vfx", StrCat("Sigil ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	SigilFx sigil;
@@ -1806,6 +1829,7 @@ void Sigil(Point tile, int radiusTiles, int durationMs, Element element)
 
 void IceSpike(Point tile, int delayMs, float size)
 {
+	TelemetryEffect("vfx", "IceSpike", tile.x, tile.y);
 	if (!Enabled())
 		return;
 	IceSpikeFx fx;
@@ -1836,6 +1860,7 @@ void IceSpike(Point tile, int delayMs, float size)
 
 void Slam(Point tile, int radiusTiles, Element element)
 {
+	TelemetryEffect("vfx", StrCat("Slam ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	const Vec pos = TileCentre(tile);
@@ -1851,6 +1876,7 @@ void Slam(Point tile, int radiusTiles, Element element)
 
 void Fissure(Point from, Point to, Element element)
 {
+	TelemetryEffect("vfx", StrCat("Fissure ", magic_enum::enum_name(element)), from.x, from.y);
 	if (!Enabled())
 		return;
 	const Vec a = TileCentre(from);
@@ -1883,6 +1909,7 @@ void Fissure(Point from, Point to, Element element)
 
 void Impact(Point tile, Element element, float size)
 {
+	TelemetryEffect("vfx", StrCat("Impact ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	ImpactAt(TileCentre(tile), element, size);
@@ -1890,6 +1917,7 @@ void Impact(Point tile, Element element, float size)
 
 void Sparks(Point tile, Element element, float size)
 {
+	TelemetryEffect("vfx", StrCat("Sparks ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	SparksAt(TileCentre(tile), element, size);
@@ -1897,6 +1925,7 @@ void Sparks(Point tile, Element element, float size)
 
 void Cut(Point tile, Element element)
 {
+	TelemetryEffect("vfx", StrCat("Cut ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	if (element != Element::Physical) {
@@ -1912,6 +1941,7 @@ void Cut(Point tile, Element element)
 
 void Arc(Point from, Point to, Element element)
 {
+	TelemetryEffect("vfx", StrCat("Arc ", magic_enum::enum_name(element)), from.x, from.y);
 	if (!Enabled())
 		return;
 	AddBolt(TileCentre(from) + Vec { 0, -30 }, TileCentre(to) + Vec { 0, -30 }, 220, 3, ColoursOf(element));
@@ -1919,6 +1949,7 @@ void Arc(Point from, Point to, Element element)
 
 void SkyStrike(Point tile, Element element)
 {
+	TelemetryEffect("vfx", StrCat("SkyStrike ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	const Vec pos = TileCentre(tile);
@@ -1930,6 +1961,7 @@ void SkyStrike(Point tile, Element element)
 
 void Swing(Point from, Point toward, Element element, bool wide, bool heavy)
 {
+	TelemetryEffect("vfx", StrCat("Swing ", magic_enum::enum_name(element)), from.x, from.y);
 	if (!Enabled())
 		return;
 	const Vec pos = TileCentre(from);
@@ -1989,6 +2021,7 @@ void ScanMissiles()
 			seen.frame = ScanFrame;
 			if (missile._miDrawFlag && !seen.fired) {
 				seen.fired = true;
+				TelemetryEffect("hit flash", magic_enum::enum_name(missile._miAnimType), missile.position.tile.x, missile.position.tile.y);
 				SparksAt(TileCentre(missile.position.tile), look.element == Element::Lightning && missile._miAnimType == MissileGraphicID::ChargedBolt ? Element::Physical : look.element, 0.8F);
 			}
 			continue;
@@ -1999,6 +2032,7 @@ void ScanMissiles()
 			seen.frame = ScanFrame;
 			if (missile._miDrawFlag && !seen.fired) {
 				seen.fired = true;
+				TelemetryEffect("burst", StrCat(magic_enum::enum_name(missile._mitype), " ", magic_enum::enum_name(missile._miAnimType)), missile.position.tile.x, missile.position.tile.y);
 				ImpactAt(TileCentre(missile.position.tile), look.element, look.burst * scale);
 			}
 			continue;
