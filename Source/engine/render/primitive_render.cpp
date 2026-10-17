@@ -113,7 +113,7 @@ void DrawVerticalLine(const Surface &out, Point from, int height, std::uint8_t c
 		from.y = 0;
 	}
 	if (from.y + height > out.h())
-		height = (from.y + height) - out.h();
+		height = out.h() - from.y;
 	return UnsafeDrawVerticalLine(out, from, height, colorIndex);
 }
 

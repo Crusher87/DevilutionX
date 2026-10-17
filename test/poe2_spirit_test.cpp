@@ -2,6 +2,7 @@
 
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "player.h"
 #include "poe2/passive_tree.hpp"
@@ -57,6 +58,35 @@ public:
 	}
 };
 
+TEST_F(Poe2SpiritTest, SceptreGoesWithAnyOneHandedWeapon)
+{
+	Player &player = *MyPlayer;
+	InitializeItem(player.InvBody[INVLOC_HAND_LEFT], FindBase("Short Sword"));
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	CalcPlrInv(player, false);
+	const int swordMin = player._pIMinDam;
+	const int swordMax = player._pIMaxDam;
+
+	Item sceptre;
+	InitializeItem(sceptre, FindBase("Rattling Sceptre"));
+	sceptre._iStatFlag = true;
+	ASSERT_TRUE(AutoEquip(player, sceptre, true, false)) << "The sceptre goes in the free hand";
+	EXPECT_TRUE(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_RIGHT]));
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player._pIMinDam, swordMin) << "Its damage isn't added to the sword's";
+	EXPECT_EQ(player._pIMaxDam, swordMax);
+	EXPECT_GE(MaxSpirit(player), SceptreSpirit) << "It still grants Spirit";
+
+	Item sword;
+	InitializeItem(sword, FindBase("Short Sword"));
+	sword._iStatFlag = true;
+	player.InvBody[INVLOC_HAND_RIGHT].clear();
+	EXPECT_FALSE(AutoEquip(player, sword, false, false)) << "Two swords don't pair; only a sceptre goes with any weapon";
+	gbIsPoe2 = false;
+	EXPECT_FALSE(AutoEquip(player, sceptre, false, false)) << "Diablo keeps one weapon per hero";
+	gbIsPoe2 = true;
+}
+
 TEST_F(Poe2SpiritTest, SpiritGemsAreSkillGems)
 {
 	for (const PersistentSkill skill : { PersistentSkill::HeraldOfAsh, PersistentSkill::HeraldOfThunder, PersistentSkill::PurityOfElements, PersistentSkill::SummonGolem, PersistentSkill::SkeletalWarriors }) {
@@ -73,14 +103,16 @@ TEST_F(Poe2SpiritTest, SkeletalWarriorsGrowWithLevel)
 	EXPECT_EQ(SkeletalWarriorCount(10), 3);
 	EXPECT_EQ(SkeletalWarriorCount(25), 4);
 	EXPECT_EQ(SkeletalWarriorCount(50), 4);
-	// Fits in the Spirit every character has, unlike the golem.
-	EXPECT_LE(SpiritReservation(PersistentSkill::SkeletalWarriors), BaseSpirit);
+	// Fits in the Spirit from the first skull, unlike the golem.
+	EXPECT_LE(SpiritReservation(PersistentSkill::SkeletalWarriors), SpiritSkullSpirit[0]);
 }
 
 TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 {
 	Player &player = *MyPlayer;
-	EXPECT_EQ(MaxSpirit(player), BaseSpirit);
+	EXPECT_EQ(MaxSpirit(player), 0);
+	player.poe2.spiritSkulls = 1;
+	EXPECT_EQ(MaxSpirit(player), 30);
 
 	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh));
 	SocketSkill(player, 1, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder));
@@ -93,9 +125,24 @@ TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 	InitializeItem(player.InvBody[INVLOC_HAND_LEFT], FindBase("Rattling Sceptre"));
 	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
 	EXPECT_TRUE(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_LEFT]));
-	EXPECT_EQ(MaxSpirit(player), BaseSpirit + SceptreSpirit);
+	EXPECT_EQ(MaxSpirit(player), 30 + SceptreSpirit);
 	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder));
 	EXPECT_EQ(ReservedSpirit(player), 60);
+}
+
+TEST_F(Poe2SpiritTest, SkullsGrantSpiritOnce)
+{
+	Player &player = *MyPlayer;
+	Item skull;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_SPIRIT_SKULL && AllItemsList[i].iName == "Skull of the Archbishop")
+			InitializeItem(skull, static_cast<_item_indexes>(i));
+	}
+	ASSERT_EQ(SpiritSkullIndex(skull), 2);
+	EXPECT_TRUE(UseSpiritSkull(player, skull));
+	EXPECT_EQ(MaxSpirit(player), 40);
+	EXPECT_FALSE(UseSpiritSkull(player, skull));
+	EXPECT_EQ(MaxSpirit(player), 40);
 }
 
 TEST_F(Poe2SpiritTest, PurityGrantsResistances)

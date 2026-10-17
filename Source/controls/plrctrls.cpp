@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdint>
 #include <list>
+#include <optional>
+#include <utility>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_events.h>
@@ -1062,8 +1064,11 @@ void VisualStoreMove(AxisDirection dir)
 
 	if (dir.x == AxisDirectionX_RIGHT) {
 		if (VisualStoreSlot.y == -1) { // Tabs
-			if (VisualStoreSlot.x == 0 && VisualStore.vendor == VisualStoreVendor::Smith) {
-				VisualStoreSlot.x = 1;
+			// POE2 Mashup: along the vendor's tabs, in order.
+			const bool hasNextTab = gbIsPoe2 ? static_cast<size_t>(VisualStoreSlot.x) + 1 < Poe2ShopTabs().size()
+			                                 : VisualStoreSlot.x == 0 && VisualStore.vendor == VisualStoreVendor::Smith;
+			if (hasNextTab) {
+				VisualStoreSlot.x++;
 			} else {
 				// Transition to inventory
 				VisualStoreSlot = { -1, -1 }; // Invalidate visual store slot
@@ -1171,6 +1176,8 @@ void VisualStoreMove(AxisDirection dir)
 		// 0: Basic, 1: Premium
 		// Map to button IDs: TabButtonBasic=0, TabButtonPremium=1
 		int btnId = VisualStoreSlot.x == 0 ? 0 : 1;
+		if (gbIsPoe2)
+			btnId = Poe2ShopTabButton(static_cast<size_t>(VisualStoreSlot.x));
 		mousePos = GetVisualBtnCoord(btnId).Center();
 	} else if (VisualStoreSlot.y == VisualStoreGridHeight) {
 		// Repair buttons
@@ -1743,6 +1750,58 @@ bool IsPathBlocked(Point position, Direction dir)
 	return !PosOkPlayer(myPlayer, leftStep) && !PosOkPlayer(myPlayer, rightStep);
 }
 
+bool CanStep(const Player &player, Direction dir)
+{
+	return PosOkPlayer(player, player.position.future + dir) && !IsPathBlocked(player.position.future, dir);
+}
+
+/**
+ * @brief POE2 Mashup: the step to take when walking with the keyboard.
+ *
+ * A little leeway, not a slide: when the hero just clips the corner of a wall or object, they step 45 degrees
+ * around it, but only if the way they want to go is clear right after. A long wall still stops them, and
+ * monsters always block, so a surrounded hero is stuck until they dodge roll out.
+ */
+/** @brief POE2 Mashup: stairs and level entrances take a click; walking with the keyboard stops short of them. */
+bool IsLevelTrigger(Point tile)
+{
+	for (int i = 0; i < numtrigs; i++) {
+		if (trigs[i].position == tile)
+			return true;
+	}
+	return false;
+}
+
+bool CanKeyboardStep(const Player &player, Direction dir)
+{
+	return CanStep(player, dir) && !(gbIsPoe2 && IsLevelTrigger(player.position.future + dir));
+}
+
+std::optional<Direction> KeyboardStep(const Player &player, Direction wanted)
+{
+	if (CanKeyboardStep(player, wanted))
+		return wanted;
+	const Point ahead = player.position.future + wanted;
+	if (InDungeonBounds(ahead) && (dMonster[ahead.x][ahead.y] != 0 || dPlayer[ahead.x][ahead.y] != 0))
+		return std::nullopt;
+	// Prefer the side that went around the last corner, so the hero doesn't zigzag between two.
+	static Direction lastSlide = Direction::South;
+	Direction first = Left(wanted);
+	Direction second = Right(wanted);
+	if (lastSlide == second)
+		std::swap(first, second);
+	for (const Direction slide : { first, second }) {
+		if (!CanKeyboardStep(player, slide))
+			continue;
+		const Point side = player.position.future + slide;
+		if (PosOkPlayer(player, side + wanted) && !IsPathBlocked(side, wanted)) {
+			lastSlide = slide;
+			return slide;
+		}
+	}
+	return std::nullopt;
+}
+
 void WalkInDir(Player &player, AxisDirection dir)
 {
 	// Set while WASD keys drive the player, so letting go of them stops the walk
@@ -1756,14 +1815,25 @@ void WalkInDir(Player &player, AxisDirection dir)
 		return;
 	}
 
-	// Let a dodge roll finish its dash before walking on.
-	if (player.poe2.isDodging())
-		return;
+	// Let a dodge roll finish its dash before walking on. Held keys take over on its last step, so the walk carries
+	// straight on with no pause (Curtis 2026-10-16); a Leap Slam or Shield Charge still lands first.
+	if (player.poe2.isDodging()) {
+		if (player.poe2.dashSkillTicks > 0 || player.walkpath[0] != WALK_NONE)
+			return;
+		player.poe2.dodgeTicks = 0;
+	}
 
 	if (ControlMode == ControlTypes::KeyboardAndMouse) {
 		walkingWithKeyboard = true;
 		// Let mouse attacks and spells happen first; walking resumes once they've started.
-		if (sgbMouseDown != CLICK_NONE || player.destAction != ACTION_NONE)
+		// POE2 Mashup: once a held ranged attack or spell has fired, the hero can step before the next one.
+		const bool shotFired = gbIsPoe2 && IsAnyOf(player._pmode, PM_RATTACK, PM_SPELL) && player.poe2.castSkill == WeaponSkill::None
+		    && player.destAction == ACTION_NONE && player.CanChangeAction();
+		// POE2 Mashup: a walk to an item, object or person started by a click gives way to the movement keys.
+		if (gbIsPoe2 && sgbMouseDown == CLICK_NONE
+		    && IsAnyOf(player.destAction, ACTION_PICKUPITEM, ACTION_PICKUPAITEM, ACTION_OPERATE, ACTION_DISARM, ACTION_TALK, ACTION_ATTACKMON, ACTION_ATTACKPLR))
+			player.destAction = ACTION_NONE;
+		if ((sgbMouseDown != CLICK_NONE || player.destAction != ACTION_NONE) && !shotFired)
 			return;
 	}
 
@@ -1776,6 +1846,17 @@ void WalkInDir(Player &player, AxisDirection dir)
 	if (IsStandingGround()) {
 		if (player._pmode == PM_STAND)
 			StartStand(player, pdir);
+		return;
+	}
+
+	if (walkingWithKeyboard) {
+		const std::optional<Direction> step = KeyboardStep(player, pdir);
+		if (!step) {
+			if (player._pmode == PM_STAND)
+				StartStand(player, pdir);
+			return;
+		}
+		NetSendCmdLoc(player.getId(), true, CMD_WALKXY, player.position.future + *step);
 		return;
 	}
 

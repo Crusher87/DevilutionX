@@ -10,6 +10,8 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -81,8 +83,15 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	EXPECT_EQ(skills, 39U);
-	EXPECT_EQ(supports, static_cast<size_t>(SupportGem::Count) - 1);
+	EXPECT_EQ(skills, 128U);
+	// Lineage supports are found, never cut; the rest have an entry for each tier.
+	size_t tiers = 0;
+	for (size_t i = 1; i < static_cast<size_t>(SupportGem::Count); i++) {
+		if (!IsLineageSupport(static_cast<SupportGem>(i)))
+			tiers += static_cast<size_t>(SupportTierCount(static_cast<SupportGem>(i)));
+	}
+	EXPECT_EQ(supports, tiers);
+	EXPECT_GT(tiers, static_cast<size_t>(SupportGem::Count) - 1 - 16);
 }
 
 TEST_F(Poe2GemcuttingTest, CategoriesFollowWeapons)
@@ -123,7 +132,10 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 {
 	const Item skillUncut = MakeUncut(IMISC_UNCUT_SKILL, 6);
 	const Item supportUncut = MakeUncut(IMISC_UNCUT_SUPPORT, 3);
+	const Item spiritUncut = MakeUncut(IMISC_UNCUT_SPIRIT, 20);
 	ASSERT_TRUE(IsUncutGem(skillUncut));
+	ASSERT_TRUE(IsUncutGem(spiritUncut));
+	EXPECT_EQ(UncutGemKind(spiritUncut), UncutKind::Spirit);
 	EXPECT_FALSE(IsUncutSupportGem(skillUncut));
 	EXPECT_TRUE(IsUncutSupportGem(supportUncut));
 	EXPECT_EQ(UncutGemLevel(skillUncut), 6);
@@ -131,11 +143,22 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 	int cuttable = 0;
 	for (const GemEntry &gem : GemCatalog()) {
 		const bool isSupport = gem.support != SupportGem::None;
-		EXPECT_EQ(CanCutGem(skillUncut, gem), !isSupport && gem.level <= 6) << GemName(gem);
-		EXPECT_EQ(CanCutGem(supportUncut, gem), isSupport && gem.level <= 3) << GemName(gem);
+		// POE2: Spirit gems need uncut Spirit gems, not uncut skill gems.
+		const bool isSpirit = gem.skill.kind == SkillKind::Persistent;
+		// An uncut gem cuts any gem of its tier or lower (levels 1-2 are tier I, 3-5 tier III, 6-9 tier V).
+		EXPECT_EQ(CanCutGem(skillUncut, gem), !isSupport && !isSpirit && GemTier(gem.level) <= GemTier(6)) << GemName(gem);
+		EXPECT_EQ(CanCutGem(supportUncut, gem), isSupport && GemTier(gem.level) <= GemTier(3)) << GemName(gem);
+		EXPECT_EQ(CanCutGem(spiritUncut, gem), isSpirit) << GemName(gem);
 		cuttable += CanCutGem(skillUncut, gem) ? 1 : 0;
 	}
 	EXPECT_GT(cuttable, 5);
+
+	// A level 1 uncut gem cuts the level 2 tier I spells like Firebolt.
+	const Item firstUncut = MakeUncut(IMISC_UNCUT_SKILL, 1);
+	for (const GemEntry &gem : GemCatalog()) {
+		if (gem.skill.kind == SkillKind::Spell && gem.skill.spell() == SpellID::Firebolt)
+			EXPECT_TRUE(CanCutGem(firstUncut, gem));
+	}
 }
 
 TEST_F(Poe2GemcuttingTest, OnlyUncutGemsDrop)

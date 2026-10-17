@@ -83,6 +83,16 @@ TEST_F(Poe2TelemetryTest, WritesEventsToTheSessionLog)
 	EXPECT_NE(log.find("[skill] Fireball, 12 mana"), std::string::npos);
 }
 
+TEST_F(Poe2TelemetryTest, EffectsAreLoggedWithoutFlooding)
+{
+	for (int i = 0; i < 10; i++)
+		TelemetryEffect("visual", "BloodHit", 20 + i, 30);
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[fx] visual BloodHit at 20,30, hero at"), std::string::npos) << log;
+	EXPECT_NE(log.find("[fx] visual BloodHit at 22,30"), std::string::npos) << log;
+	EXPECT_EQ(log.find("[fx] visual BloodHit at 23,30"), std::string::npos) << "Only a few lines a second for each kind";
+}
+
 TEST_F(Poe2TelemetryTest, CountsWastedFlasksAndFailedSkills)
 {
 	Item flask {};
@@ -102,6 +112,17 @@ TEST_F(Poe2TelemetryTest, CloseCallNamesTheAttacker)
 	TelemetryPlayerDamaged(player, DamageType::Fire, Fixed26_6::fromInt(10));
 	EXPECT_NE(ReadLatestLog().find("[close call] took 10 fire damage from Goatman, life 15/100"), std::string::npos);
 	EXPECT_NE(TelemetryStatsText().find("1 close calls"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, GemLevelsGoToTheGemLog)
+{
+	TelemetryGemLevelChanged(*MyPlayer, SkillSlot::ForAttack(WeaponSkill::Cleave), 8, 9);
+	std::ifstream stream(LogFolder() + "gem_levels.log");
+	std::stringstream contents;
+	contents << stream.rdbuf();
+	const std::string log = contents.str();
+	EXPECT_NE(log.find("Cleave raised from gem level 8 to 9"), std::string::npos) << log;
+	EXPECT_NE(log.find("level 9: 182% weapon damage"), std::string::npos) << log;
 }
 
 TEST_F(Poe2TelemetryTest, SkillDamageStartsEmpty)

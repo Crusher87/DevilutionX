@@ -12,6 +12,7 @@
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_rect.h>
+#include <SDL3/SDL_timer.h>
 #else
 #include <SDL.h>
 #endif
@@ -41,13 +42,24 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
+#include "poe2/crafting_items.hpp"
+#include "poe2/currency.hpp"
+#include "poe2/economy.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/hud_globes.hpp"
+#include "poe2/jewels.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/stacking.hpp"
+#include "poe2/stash_tabs.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
+#include "qol/floatingnumbers.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -150,6 +162,19 @@ const Rectangle InvRect[] = {
 
 namespace {
 
+/** @brief POE2 Mashup: the outline of items the currency held for use fits. */
+constexpr uint8_t CurrencyFitsOutline = PAL16_ORANGE + 2;
+
+/** @brief POE2 Mashup: a Book of Specialisation glows gold in the inventory, slowly brightening and fading. */
+std::optional<uint8_t> SpecBookGlow(const Item &item)
+{
+	if (!gbIsPoe2 || item._iMiscId != IMISC_SPEC_BOOK)
+		return std::nullopt;
+	const int step = static_cast<int>((SDL_GetTicks() / 140) % 8);
+	return static_cast<uint8_t>(PAL16_YELLOW + 1 + (step < 4 ? step : 7 - step));
+}
+
+
 OptionalOwnedClxSpriteList pInvCels;
 
 /**
@@ -219,6 +244,14 @@ bool CanEquip(const Item &item)
 	    && item._iStatFlag;
 }
 
+/** @brief POE2 Mashup: a sceptre can be held with any one-handed weapon (Curtis 2026-10-16). */
+bool IsSceptrePair(const Player &player, const Item &first, const Item &second)
+{
+	return gbIsPoe2 && first._iClass == ICLASS_WEAPON && second._iClass == ICLASS_WEAPON
+	    && player.GetItemLocation(first) == ILOC_ONEHAND && player.GetItemLocation(second) == ILOC_ONEHAND
+	    && (ItemGrantsSpirit(first) || ItemGrantsSpirit(second));
+}
+
 /**
  * @brief A specialized version of 'CanEquip(int, Item&, int)' that specifically checks whether the item can be equipped
  * in one/both of the player's hands.
@@ -262,7 +295,7 @@ bool CanWield(Player &player, const Item &item)
 
 	return player.GetItemLocation(item) == ILOC_ONEHAND
 	    && player.GetItemLocation(occupiedHand) == ILOC_ONEHAND
-	    && item._iClass != occupiedHand._iClass;
+	    && (item._iClass != occupiedHand._iClass || IsSceptrePair(player, item, occupiedHand));
 }
 
 /**
@@ -402,7 +435,8 @@ void ChangeEquippedItem(Player &player, uint8_t slot)
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 
 	const bool pasteIntoSelectedHand = (player.InvBody[otherHand].isEmpty() || player.InvBody[otherHand]._iClass != player.HoldItem._iClass)
-	    || (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield) && player.InvBody[otherHand]._iClass == ICLASS_WEAPON && player.HoldItem._iClass == ICLASS_WEAPON);
+	    || (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield) && player.InvBody[otherHand]._iClass == ICLASS_WEAPON && player.HoldItem._iClass == ICLASS_WEAPON)
+	    || IsSceptrePair(player, player.InvBody[otherHand], player.HoldItem);
 
 	const bool dequipTwoHandedWeapon = (!player.InvBody[otherHand].isEmpty() && player.GetItemLocation(player.InvBody[otherHand]) == ILOC_TWOHAND);
 
@@ -527,6 +561,13 @@ bool ChangeInvItem(Player &player, int slot, Size itemSize)
 			NetSendCmdChInvItem(false, ii);
 		}
 	} else {
+		// POE2 Mashup: currency dropped on a matching stack joins it, and what doesn't fit stays on the cursor.
+		if (prevItemId != 0 && CanStackWith(player.InvList[prevItemId - 1], player.HoldItem) && StackRoom(player.InvList[prevItemId - 1]) > 0) {
+			MergeStack(player.InvList[prevItemId - 1], player.HoldItem);
+			if (&player == MyPlayer)
+				NetSyncInvItem(player, prevItemId - 1);
+			return true;
+		}
 		if (prevItemId == 0) {
 			player.InvList[player._pNumInv] = player.HoldItem.pop();
 			player._pNumInv++;
@@ -826,7 +867,12 @@ void CheckInvCut(Player &player, Point cursorPosition, bool automaticMove, bool 
 		const unsigned ig = r - SLOTXY_INV_FIRST;
 		const int iv = std::abs(player.InvGrid[ig]) - 1;
 		if (iv >= 0) {
-			if (automaticMove) {
+			if (automaticMove && StackCount(player.InvList[iv]) > 1) {
+				// POE2 Mashup: shift-click takes half of a currency stack onto the cursor.
+				holdItem = *SplitStack(player.InvList[iv]);
+				if (&player == MyPlayer)
+					NetSyncInvItem(player, iv);
+			} else if (automaticMove) {
 				attemptedMove = true;
 				if (CanBePlacedOnBelt(player, player.InvList[iv])) {
 					automaticallyMoved = AutoPlaceItemInBelt(player, player.InvList[iv], true, &player == MyPlayer);
@@ -859,12 +905,13 @@ void CheckInvCut(Player &player, Point cursorPosition, bool automaticMove, bool 
 						break;
 					case ILOC_ONEHAND:
 						if (!player.InvBody[INVLOC_HAND_LEFT].isEmpty()
-						    && (player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_LEFT]._iClass
+						    && ((player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_LEFT]._iClass && !IsSceptrePair(player, player.InvList[iv], player.InvBody[INVLOC_HAND_LEFT]))
 						        || player.GetItemLocation(player.InvBody[INVLOC_HAND_LEFT]) == ILOC_TWOHAND)) {
 							// The left hand is not empty and we're either trying to equip the same type of item or
 							// it's holding a two handed weapon, so it must be unequipped
 							invloc = INVLOC_HAND_LEFT;
-						} else if (!player.InvBody[INVLOC_HAND_RIGHT].isEmpty() && player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_RIGHT]._iClass) {
+						} else if (!player.InvBody[INVLOC_HAND_RIGHT].isEmpty() && player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_RIGHT]._iClass
+						    && !IsSceptrePair(player, player.InvList[iv], player.InvBody[INVLOC_HAND_RIGHT])) {
 							// The right hand is not empty and we're trying to equip the same type of item, so we need
 							// to unequip that item
 							invloc = INVLOC_HAND_RIGHT;
@@ -1165,17 +1212,35 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 		return;
 
 	uint8_t colorShift;
-	switch (itemQuality) {
-	case ITEM_QUALITY_MAGIC:
-		colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BLUE : PAL16_ORANGE) - 1;
-		break;
-	case ITEM_QUALITY_UNIQUE:
-	case ITEM_QUALITY_RARE:
-		colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_YELLOW : PAL16_ORANGE) - 1;
-		break;
-	default:
-		colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BEIGE : PAL16_ORANGE) - 1;
-		break;
+	if (gbIsPoe2 && !IsInspectingPlayer()) {
+		// POE2 Mashup: the slot shows the item's rarity: plain grey for normal items, blue magic, yellow rare
+		// and orange unique.
+		switch (itemQuality) {
+		case ITEM_QUALITY_MAGIC:
+			colorShift = PAL16_GRAY - PAL16_BLUE - 1;
+			break;
+		case ITEM_QUALITY_RARE:
+			colorShift = PAL16_GRAY - PAL16_YELLOW - 1;
+			break;
+		case ITEM_QUALITY_UNIQUE:
+			colorShift = PAL16_GRAY - PAL16_ORANGE - 1;
+			break;
+		default:
+			return;
+		}
+	} else {
+		switch (itemQuality) {
+		case ITEM_QUALITY_MAGIC:
+			colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BLUE : PAL16_ORANGE) - 1;
+			break;
+		case ITEM_QUALITY_UNIQUE:
+		case ITEM_QUALITY_RARE:
+			colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_YELLOW : PAL16_ORANGE) - 1;
+			break;
+		default:
+			colorShift = PAL16_GRAY - (!IsInspectingPlayer() ? PAL16_BEIGE : PAL16_ORANGE) - 1;
+			break;
+		}
 	}
 
 	uint8_t *dst = &out[targetPosition];
@@ -1192,6 +1257,8 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 
 bool CanBePlacedOnBelt(const Player &player, const Item &item)
 {
+	if (gbIsPoe2 && !IsFlaskPotion(item) && !IsCharm(item))
+		return false; // The POE2 belt holds flasks and charms only.
 	return FitsInBeltSlot(item)
 	    && item._itype != ItemType::Gold
 	    && player.CanUseItem(item)
@@ -1211,6 +1278,61 @@ void InitInv()
 		invName = "inv";
 	}
 	pInvCels = LoadCel(StrCat("data\\inv\\", invName).c_str(), static_cast<uint16_t>(SidePanelSize.width));
+}
+
+namespace {
+
+/** @brief POE2 Mashup: the weapon set I and II buttons above the left hand slot. */
+Rectangle WeaponSetButton(uint8_t set)
+{
+	return { GetPanelPosition(UiPanels::Inventory, { 17 + (set * 30), 60 }), { 28, 14 } };
+}
+
+void DrawWeaponSetButtons(const Surface &out, const Player &player)
+{
+	for (uint8_t set = 0; set < NumWeaponSets; set++) {
+		const Rectangle button = WeaponSetButton(set);
+		const bool active = player.poe2.weaponSet == set;
+		FillRect(out, button.position.x, button.position.y, button.size.width, button.size.height, active ? PAL16_YELLOW + 12 : PAL16_GRAY + 14);
+		DrawString(out, WeaponSetName(set), button, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (active ? UiFlags::ColorWhitegold : UiFlags::ColorUiSilverDark) });
+	}
+}
+
+/** @brief A click on the other set's button swaps to it. */
+bool CheckWeaponSetButtons(Player &player)
+{
+	if (!gbIsPoe2 || !player.HoldItem.isEmpty())
+		return false;
+	for (uint8_t set = 0; set < NumWeaponSets; set++) {
+		if (!WeaponSetButton(set).contains(MousePosition))
+			continue;
+		if (player.poe2.weaponSet != set)
+			SwapWeapons(player);
+		return true;
+	}
+	return false;
+}
+
+} // namespace
+
+void DrawInventoryGridBackground(const Surface &out, Point topLeft, Size cells)
+{
+	if (!pInvCels)
+		return;
+	const ClxSprite art = (*pInvCels)[0];
+	// The bag's cells in the art: 10 x 4 from (17, 222), 29 pixels apart.
+	constexpr Point ArtGrid { 17, 222 };
+	constexpr int ArtRows = 4;
+	constexpr int Pitch = INV_SLOT_SIZE_PX + 1;
+	for (int row = 0; row < cells.height; row += ArtRows) {
+		const int rows = std::min(ArtRows, cells.height - row);
+		const int width = std::min(cells.width, 10) * Pitch;
+		// Only the first band keeps the art's frame line above the grid.
+		const int skip = row == 0 ? 0 : 1;
+		const Surface band = out.subregion(topLeft.x - 1, topLeft.y - 1 + skip + (row * Pitch), width + 1, (rows * Pitch) + 1 - skip);
+		// The art's bottom-left, placed so its grid lines up with the band.
+		ClxDraw(band, { 1 - ArtGrid.x, 1 - skip - ArtGrid.y + static_cast<int>(art.height()) - 1 }, art);
+	}
 }
 
 void DrawInv(const Surface &out)
@@ -1260,6 +1382,8 @@ void DrawInv(const Surface &out)
 
 			if (pcursinvitem == slot) {
 				ClxDrawOutline(out, GetOutlineColor(myPlayer.InvBody[slot], true), position, sprite);
+			} else if (HeldCurrencyFits(myPlayer.InvBody[slot])) {
+				ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
 			}
 
 			DrawItem(myPlayer.InvBody[slot], out, position, sprite);
@@ -1294,11 +1418,36 @@ void DrawInv(const Surface &out)
 			const Point position = GetPanelPosition(UiPanels::Inventory, InvRect[j + SLOTXY_INV_FIRST].position) + Displacement { 0, InventorySlotSizeInPixels.height };
 			if (pcursinvitem == ii + INVITEM_INV_FIRST) {
 				ClxDrawOutline(out, GetOutlineColor(myPlayer.InvList[ii], true), position, sprite);
+			} else if (HeldCurrencyFits(myPlayer.InvList[ii])) {
+				ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
+			} else if (const std::optional<uint8_t> glow = SpecBookGlow(myPlayer.InvList[ii]); glow) {
+				ClxDrawOutline(out, *glow, position, sprite);
 			}
 
 			DrawItem(myPlayer.InvList[ii], out, position, sprite);
 		}
 	}
+
+	if (gbIsPoe2) {
+		DrawWeaponSetButtons(out, myPlayer);
+		// The league's gold, shared by every hero in it.
+		DrawString(out, FormatRuntime(_("Gold: {:s}"), FormatInteger(Stash.gold)), { GetPanelPosition(UiPanels::Inventory, { 80, 184 }), { 164, 16 } },
+		    { .flags = UiFlags::AlignCenter | UiFlags::ColorGold | UiFlags::FontSize12 });
+	}
+}
+
+void MoveInventoryGoldToLeague(Player &player)
+{
+	if (!gbIsPoe2 || &player != MyPlayer)
+		return;
+	for (int i = player._pNumInv - 1; i >= 0; i--) {
+		if (player.InvList[i]._itype != ItemType::Gold)
+			continue;
+		Stash.gold += player.InvList[i]._ivalue;
+		player.RemoveInvItem(i);
+		Stash.dirty = true;
+	}
+	player._pGold = 0;
 }
 
 void DrawInvBelt(const Surface &out)
@@ -1328,6 +1477,8 @@ void DrawInvBelt(const Surface &out)
 			if (ControlMode == ControlTypes::KeyboardAndMouse || invflag) {
 				ClxDrawOutline(out, GetOutlineColor(myPlayer.SpdList[i], true), position, sprite);
 			}
+		} else if (HeldCurrencyFits(myPlayer.SpdList[i])) {
+			ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
 		}
 
 		DrawItem(myPlayer.SpdList[i], out, position, sprite);
@@ -1337,7 +1488,7 @@ void DrawInvBelt(const Surface &out)
 			DrawFlaskLiquidLevel(out, position, sprite, myPlayer.poe2.flaskCharges[i], MaxFlaskChargesFor(flask));
 			DrawFlaskCharges(out, position, myPlayer.poe2.flaskCharges[i], FlaskChargesPerUseFor(flask), MaxFlaskChargesFor(flask));
 		} else if (gbIsPoe2 && IsCharm(myPlayer.SpdList[i])) {
-			DrawFlaskCharges(out, position, static_cast<uint8_t>(myPlayer.SpdList[i]._iCharges), CharmChargesPerUseFor(GetCharmEffect(myPlayer.SpdList[i])), MaxCharmCharges);
+			DrawFlaskCharges(out, position, static_cast<uint8_t>(myPlayer.SpdList[i]._iCharges), CharmChargesPerUseFor(myPlayer.SpdList[i]), MaxCharmCharges);
 		}
 
 		if (myPlayer.SpdList[i].isUsable()
@@ -1434,11 +1585,14 @@ bool AutoEquipEnabled(const Player &player, const Item &item)
 
 bool CanFitItemInInventory(const Player &player, const Item &item)
 {
-	return static_cast<bool>(FindSlotForItem(player, GetInventorySize(item)));
+	return InventoryStacksHaveRoom(player, item) || static_cast<bool>(FindSlotForItem(player, GetInventorySize(item)));
 }
 
 bool AutoPlaceItemInInventory(Player &player, const Item &item, bool sendNetworkMessage)
 {
+	if (MergeIntoInventoryStacks(player, item, sendNetworkMessage))
+		return true;
+
 	const Size itemSize = GetInventorySize(item);
 	std::optional<int> targetSlot = FindSlotForItem(player, itemSize);
 
@@ -1546,6 +1700,13 @@ int RoomForGold()
 
 int AddGoldToInventory(Player &player, int value)
 {
+	// POE2 Mashup: gold isn't an item; it goes to the league's purse, shared by every hero in the league (kept with the stash).
+	if (gbIsPoe2 && &player == MyPlayer && value > 0) {
+		Stash.gold += value;
+		Stash.dirty = true;
+		AddFloatingNumber(player.position.tile, { 0, -80 }, StrCat("+", FormatInteger(value), " ", _("gold")), UiFlags::ColorGold | UiFlags::FontSize12, 0x601D);
+		return 0;
+	}
 	// Top off existing piles
 	for (int i = 0; i < player._pNumInv && value > 0; i++) {
 		Item &goldItem = player.InvList[i];
@@ -1668,7 +1829,24 @@ void TransferItemToStash(Player &player, int location)
 	}
 
 	const Item &item = GetInventoryItem(player, location);
-	if (!AutoPlaceItemInStash(item, true)) {
+	// POE2 Mashup: Ctrl+click sends an item to its own tab (currency to Currency) from whichever tab is open.
+	bool sent = false;
+	if (gbIsPoe2) {
+		if (const std::optional<unsigned> home = StashTabs.affinityTabFor(item); home && *home != Stash.GetPage()) {
+			const unsigned current = Stash.GetPage();
+			Stash.SetPage(*home);
+			sent = AutoPlaceItemInStash(item, true);
+			Stash.SetPage(current);
+			if (sent)
+				EventPlrMsg(StrCat(_("Sent to "), StashTabs.displayName(*home)), UiFlags::ColorWhitegold);
+		}
+	}
+	if (sent) {
+		// Placed: removed from the hero below.
+	} else if (const std::string_view refusal = StashTabRefusal(Stash.GetPage(), item); !refusal.empty()) {
+		EventPlrMsg(refusal, UiFlags::ColorWhite);
+		return;
+	} else if (!AutoPlaceItemInStash(item, true)) {
 		player.SaySpecific(HeroSpeech::WhereWouldIPutThis);
 		return;
 	}
@@ -1687,6 +1865,8 @@ void TransferItemToStash(Player &player, int location)
 void CheckInvItem(bool isShiftHeld, bool isCtrlHeld)
 {
 	if (IsInspectingPlayer())
+		return;
+	if (CheckWeaponSetButtons(*MyPlayer))
 		return;
 	if (!MyPlayer->HoldItem.isEmpty()) {
 		CheckInvPaste(*MyPlayer, MousePosition);
@@ -1813,7 +1993,10 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	}
 
 	if (done) {
-		if (!autoEquipped && *GetOptions().Audio.itemPickupSound && &player == MyPlayer) {
+		if (gbIsPoe2 && item._itype == ItemType::Gold && &player == MyPlayer) {
+			// POE2 Mashup: gold picked up by walking near it just clinks.
+			PlaySFX(SfxID::ItemGold);
+		} else if (!autoEquipped && *GetOptions().Audio.itemPickupSound && &player == MyPlayer) {
 			PlaySFX(SfxID::GrabItem);
 		}
 
@@ -2055,6 +2238,22 @@ int8_t CheckInvHLight()
 		} else {
 			PrintItemDur(*pi);
 		}
+		if (rv >= INVITEM_INV_FIRST)
+			PrintItemComparison(*pi);
+		// POE2 Mashup: at a vendor, your own items show what they sell for.
+		if (gbIsPoe2 && rv >= INVITEM_INV_FIRST) {
+			if (const std::optional<int> price = VisualStoreSellPrice(*pi); price) {
+				CurrentInfoLineStyle = InfoLineStyle::Note;
+				AddInfoBoxString(FormatRuntime(_("Sells for {:s} gold"), FormatInteger(*price)), true);
+				CurrentInfoLineStyle = InfoLineStyle::Requirement;
+				AddInfoBoxString(_("Drop it on the vendor to sell; Ctrl+click sells at once"), true);
+				if (VisualStore.vendor == VisualStoreVendor::Smith && GetSalvageYield(*pi))
+					AddInfoBoxString(_("Shift+right-click salvages it for quality currency"), true);
+				if (VisualStore.vendor == VisualStoreVendor::Witch && GetDisenchantYield(*pi))
+					AddInfoBoxString(_("Shift+right-click disenchants it for shards"), true);
+				CurrentInfoLineStyle = InfoLineStyle::Default;
+			}
+		}
 	}
 
 	return rv;
@@ -2135,13 +2334,14 @@ namespace {
 /** @brief POE2 Mashup: sockets a support gem into the first skill in the Skills panel with a free socket it fits. */
 void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
 {
+	const int tier = SupportGemItemTier(speedlist ? player.SpdList[c] : player.InvList[c]);
 	const std::optional<size_t> slot = FindSlotForSupport(player, gem);
 	if (!slot) {
-		EventPlrMsg(FormatRuntime(_("No skill in the Skills panel has a free socket for {:s}. Open it (K) to swap supports."), SupportGemName(gem)), UiFlags::ColorRed);
+		EventPlrMsg(FormatRuntime(_("No skill in the Skills panel has a free socket for {:s}. Open it (K) to swap supports."), SupportGemTierName(gem, tier)), UiFlags::ColorRed);
 		return;
 	}
 	SupportGem replaced;
-	const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem, replaced);
+	const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem, replaced, tier);
 	if (result != SupportSocketResult::Socketed) {
 		EventPlrMsg(SupportSocketMessage(result, player, *slot, gem), UiFlags::ColorRed);
 		return;
@@ -2157,6 +2357,32 @@ void UseSupportGem(Player &player, SupportGem gem, bool speedlist, int c)
 }
 
 } // namespace
+
+bool EquipInvItem(Player &player, int cii)
+{
+	if (cii < INVITEM_INV_FIRST || cii > INVITEM_INV_LAST || IsInspectingPlayer())
+		return false;
+	const Item &item = player.InvList[cii - INVITEM_INV_FIRST];
+	if (!item.isEmpty() && IsJewel(item)) {
+		// POE2 Mashup: a jewel goes into the first allocated jewel socket on the passive tree that's free.
+		const std::optional<PassiveNodeId> socket = FreeJewelSocket(player);
+		if (!socket) {
+			EventPlrMsg(_("Allocate a free Jewel Socket on the passive tree (P) first."), UiFlags::ColorRed);
+			return true;
+		}
+		Item jewel = item;
+		if (SocketJewel(player, *socket, jewel)) {
+			PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+			player.RemoveInvItem(cii - INVITEM_INV_FIRST);
+		}
+		return true;
+	}
+	if (item.isEmpty() || !item.isEquipment())
+		return false;
+	// The same as Shift+click: equip it, and move what was worn into its place.
+	CheckInvCut(player, MousePosition, true, false);
+	return true;
+}
 
 bool UseInvItem(int cii)
 {
@@ -2180,6 +2406,9 @@ bool UseInvItem(int cii)
 	if (cii <= INVITEM_INV_LAST) {
 		c = cii - INVITEM_INV_FIRST;
 		item = &player.InvList[c];
+		// POE2 Mashup: flasks and charms only work from the belt; in the bag they hold no charges.
+		if (gbIsPoe2 && (IsFlaskPotion(*item) || IsCharm(*item)))
+			return true;
 	} else {
 		if (ChatFlag)
 			return true;
@@ -2218,6 +2447,15 @@ bool UseInvItem(int cii)
 				}
 			}
 		}
+	}
+
+	// POE2 Mashup: a Scroll of Identify waits on the cursor and is only used up once it identifies an item.
+	if (gbIsPoe2 && IsIdentifyScroll(*item)) {
+		if (&player == MyPlayer) {
+			invflag = true;
+			NewCursor(CURSOR_IDENTIFY);
+		}
+		return true;
 	}
 
 	constexpr int SpeechDelay = 10;
@@ -2288,8 +2526,45 @@ bool UseInvItem(int cii)
 		return true;
 	}
 
+	if (SpecBookIndex(*item) >= 0) {
+		if (UseSpecBook(player, *item)) {
+			if (speedlist)
+				player.RemoveSpdBarItem(c);
+			else
+				player.RemoveInvItem(c);
+		}
+		return true;
+	}
+
+	if (SpiritSkullIndex(*item) >= 0) {
+		if (UseSpiritSkull(player, *item)) {
+			if (speedlist)
+				player.RemoveSpdBarItem(c);
+			else
+				player.RemoveInvItem(c);
+		}
+		return true;
+	}
+
 	if (IsWaystone(*item)) {
 		if (UseWaystone(player, *item)) {
+			if (speedlist)
+				player.RemoveSpdBarItem(c);
+			else
+				player.RemoveInvItem(c);
+			// The map's tablets are used up once the waystone is gone, so the inventory places hold.
+			SpendMapTablets(player);
+		}
+		return true;
+	}
+	// POE2 Mashup: fragments assemble into keys, and keys open pinnacle arenas.
+	if (IsMapFragment(*item)) {
+		if (!speedlist)
+			AssembleMapKey(player, c);
+		return true;
+	}
+	if (IsMapKey(*item)) {
+		if (UseMapKey(player, *item)) {
 			if (speedlist)
 				player.RemoveSpdBarItem(c);
 			else
@@ -2303,6 +2578,14 @@ bool UseInvItem(int cii)
 			EventPlrMsg(_("Charms go off on their own while they're in your belt."), UiFlags::ColorWhite);
 		return true;
 	}
+
+	if (item->_iMiscId == IMISC_OMEN) {
+		if (&player == MyPlayer)
+			EventPlrMsg(_("Omens work from your inventory: the next matching craft uses it up."), UiFlags::ColorWhite);
+		return true;
+	}
+	// POE2 Mashup: remember which essence, augment or catalyst is going on the cursor.
+	player.poe2.currencyVariant = static_cast<uint8_t>((item->dwBuff & CF_POE2_VARIANT) >> 16);
 
 	const int idata = ItemCAnimTbl[item->_iCurs];
 	if (item->_iMiscId == IMISC_BOOK)
@@ -2327,6 +2610,17 @@ bool UseInvItem(int cii)
 	if (player.InvList[c]._iMiscId == IMISC_NOTE) {
 		InitQTextMsg(TEXT_BOOK9);
 		CloseInventory();
+		return true;
+	}
+	// POE2 Mashup: currency goes on the cursor and is only used up once it changes an item (see SpendHeldCurrency).
+	if (gbIsPoe2 && IsCurrencyMiscId(player.InvList[c]._iMiscId)) {
+		HoldCurrencyForUse(player.InvList[c]);
+		return true;
+	}
+	// POE2 Mashup: a currency stack loses one.
+	if (TakeOneFromStack(player.InvList[c])) {
+		if (&player == MyPlayer)
+			NetSyncInvItem(player, c);
 		return true;
 	}
 	if (!item->isScroll() && !item->isRune())
@@ -2356,7 +2650,8 @@ void CloseStash()
 		} else {
 			if (!AutoPlaceItemInBelt(myPlayer, myPlayer.HoldItem, true, true)
 			    && !AutoPlaceItemInInventory(myPlayer, myPlayer.HoldItem, true)
-			    && !AutoPlaceItemInStash(myPlayer.HoldItem, true)) {
+			    && !AutoPlaceItemInStash(myPlayer.HoldItem, true)
+			    && !(gbIsPoe2 && AutoPlaceItemInAnyStashTab(myPlayer.HoldItem))) {
 				// This can fail for max gold, arena potions and a stash that has been arranged
 				// to not have room for the item all 3 cases are extremely unlikely
 				app_fatal(_("No room for item"));

@@ -46,6 +46,8 @@ constexpr int RegenPerMillePerSecond = 15;
 
 /** @brief POE2: ignite deals 20% of the hit per second for 4 seconds. */
 constexpr int IgniteTicks = 4 * 20;
+/** @brief How long Flammability lasts after the last fire hit, like POE2's 8 seconds on monsters. */
+constexpr int FlammabilityTicks = 8 * 20;
 constexpr int IgnitePercentPerSecond = 20;
 /** @brief POE2: shocked monsters take 20% more damage for 4 seconds. */
 constexpr int ShockTicks = 4 * 20;
@@ -106,7 +108,10 @@ int MonsterBuildupPercent(const Monster &monster);
  * magic (cold) hits chill and build up freeze; physical hits build up heavy stun.
  */
 void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage);
-/** @brief Chance in percent that a hit inflicts an ailment: twice the share of the monster's life it took. */
-int AilmentChancePercent(const Monster &monster, Fixed26_6 damage);
+/**
+ * @brief Chance in per mille that a hit inflicts an ailment, like POE2: 1% per 5% of the monster's ailment threshold
+ * dealt as fire (its Flammability), 1% per 4% as lightning. Unique monsters' threshold is half their life.
+ */
+int AilmentChancePerMille(const Monster &monster, DamageType damageType, Fixed26_6 damage);
 
 } // namespace devilution

@@ -63,6 +63,8 @@ bool selhero_isSavegame;
 std::vector<std::unique_ptr<UiItemBase>> vecSelHeroDialog;
 std::vector<std::unique_ptr<UiListItem>> vecSelHeroDlgItems;
 std::vector<std::unique_ptr<UiItemBase>> vecSelDlgItems;
+/** POE2 Mashup: the Softcore / Hardcore choice; kept apart from the class list, which the name screen reads. */
+std::vector<std::unique_ptr<UiListItem>> vecLeagueItems;
 
 UiImageClx *SELHERO_DIALOG_HERO_IMG;
 
@@ -332,6 +334,65 @@ void SelheroClassSelectorEsc()
 	SelheroListEsc();
 }
 
+void SelheroCreateHero()
+{
+	if (gfnHeroCreate(&selhero_heroInfo)) {
+		SelheroLoadSelect(1);
+		return;
+	}
+	UiErrorOkDialog(_(/* TRANSLATORS: Error Message */ "Unable to create character."), vecSelHeroDialog);
+	memset(selhero_heroInfo.name, '\0', sizeof(selhero_heroInfo.name));
+	SelheroClassSelectorSelect(0);
+}
+
+void SelheroLeagueFocus(size_t /*value*/)
+{
+}
+
+void SelheroLeagueSelect(size_t value)
+{
+	selhero_heroInfo.hardcore = vecLeagueItems[value]->m_value == 1;
+	vecLeagueItems.clear();
+	SelheroCreateHero();
+}
+
+void SelheroLeagueEsc()
+{
+	// Back to the name screen, keeping the name typed.
+	char name[sizeof(selhero_heroInfo.name)];
+	memcpy(name, selhero_heroInfo.name, sizeof(name));
+	vecLeagueItems.clear();
+	SelheroClassSelectorSelect(0);
+	memcpy(selhero_heroInfo.name, name, sizeof(name));
+}
+
+/** POE2 Mashup: single player heroes pick a league after their name. */
+void SelheroLeagueInit()
+{
+	const Point uiPosition = GetUIRectangle().position;
+	vecSelDlgItems.clear();
+	vecLeagueItems.clear();
+	selhero_heroInfo.hardcore = false;
+
+	const SDL_Rect rect1 = { (Sint16)(uiPosition.x + 242), (Sint16)(uiPosition.y + 211), 365, 33 };
+	vecSelDlgItems.push_back(std::make_unique<UiArtText>(_("Choose League").data(), rect1, UiFlags::AlignCenter | UiFlags::FontSize30 | UiFlags::ColorUiSilver, 3));
+
+	vecLeagueItems.push_back(std::make_unique<UiListItem>(_("Softcore"), 0));
+	vecLeagueItems.push_back(std::make_unique<UiListItem>(_("Hardcore"), 1));
+	vecSelDlgItems.push_back(std::make_unique<UiList>(vecLeagueItems, vecLeagueItems.size(), uiPosition.x + 265, (uiPosition.y + 256), 320, 26, UiFlags::AlignCenter | UiFlags::FontSize24 | UiFlags::ColorUiGold));
+
+	const SDL_Rect rect2 = { (Sint16)(uiPosition.x + 252), (Sint16)(uiPosition.y + 320), 345, 100 };
+	vecSelDlgItems.push_back(std::make_unique<UiArtText>(_("Hardcore heroes have one life and their own stash. If one dies, they carry on in Softcore with only what they wear and carry.").data(), rect2, UiFlags::AlignCenter | UiFlags::FontSize12 | UiFlags::ColorUiSilverDark));
+
+	const SDL_Rect rect3 = { (Sint16)(uiPosition.x + 279), (Sint16)(uiPosition.y + 429), 140, 35 };
+	vecSelDlgItems.push_back(std::make_unique<UiArtTextButton>(_("OK"), &UiFocusNavigationSelect, rect3, UiFlags::AlignCenter | UiFlags::FontSize30 | UiFlags::ColorUiGold));
+
+	const SDL_Rect rect4 = { (Sint16)(uiPosition.x + 429), (Sint16)(uiPosition.y + 429), 144, 35 };
+	vecSelDlgItems.push_back(std::make_unique<UiArtTextButton>(_("Cancel"), &UiFocusNavigationEsc, rect4, UiFlags::AlignCenter | UiFlags::FontSize30 | UiFlags::ColorUiGold));
+
+	UiInitList(SelheroLeagueFocus, SelheroLeagueSelect, SelheroLeagueEsc, vecSelDlgItems);
+}
+
 void SelheroNameSelect(size_t /*value*/)
 {
 	// only check names in multiplayer, we don't care about them in single
@@ -340,6 +401,11 @@ void SelheroNameSelect(size_t /*value*/)
 		UiSelOkDialog(title, _("Invalid name. A name cannot contain spaces, reserved characters, or reserved words.\n").data(), false);
 		AddSelHeroBackground();
 	} else {
+		if (gbIsPoe2 && !selhero_isMultiPlayer) {
+			SelheroLeagueInit();
+			return;
+		}
+		selhero_heroInfo.hardcore = false;
 		if (gfnHeroCreate(&selhero_heroInfo)) {
 			SelheroLoadSelect(1);
 			return;
@@ -539,7 +605,10 @@ void selhero_List_Init()
 
 	vecSelHeroDlgItems.clear();
 	for (std::size_t i = 0; i < selhero_SaveCount; i++) {
-		vecSelHeroDlgItems.push_back(std::make_unique<UiListItem>(std::string_view(selhero_heros[i].name), static_cast<int>(i)));
+		if (selhero_heros[i].hardcore)
+			vecSelHeroDlgItems.push_back(std::make_unique<UiListItem>(StrCat(std::string_view(selhero_heros[i].name), " (", _("Hardcore"), ")"), static_cast<int>(i)));
+		else
+			vecSelHeroDlgItems.push_back(std::make_unique<UiListItem>(std::string_view(selhero_heros[i].name), static_cast<int>(i)));
 		if (selhero_heros[i].saveNumber == selhero_heroInfo.saveNumber)
 			selectedItem = i;
 	}

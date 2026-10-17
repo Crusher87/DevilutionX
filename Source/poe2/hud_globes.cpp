@@ -276,6 +276,16 @@ void DrawPoe2ManaGlobe(const Surface &out, bool dome)
 	    LitArcSegments(ReservedSpirit(player), maxSpirit, SpiritArc.segments), maxSpirit > 0);
 }
 
+bool IsHoveringLifeGlobe()
+{
+	return IsHoveringGlobe(LifeGlobeX);
+}
+
+bool IsHoveringManaGlobe()
+{
+	return IsHoveringGlobe(ManaGlobeX);
+}
+
 void DrawPoe2GlobeValues(const Surface &out)
 {
 	const Player &player = *MyPlayer;
@@ -289,6 +299,13 @@ void DrawPoe2GlobeValues(const Surface &out)
 		DrawShadowedValue(out, StrCat("Spirit ", ReservedSpirit(player), "/", maxSpirit),
 		    panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 44 }, UiFlags::ColorGold);
 	}
+	// Rage, Combo and Frenzy charges only show while built up.
+	if (player.poe2.rage > 0)
+		DrawShadowedValue(out, StrCat("Rage ", player.poe2.rage), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorRed);
+	if (player.poe2.combo > 0)
+		DrawShadowedValue(out, StrCat("Combo ", player.poe2.combo), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorWhite);
+	if (player.poe2.frenzyCharges > 0)
+		DrawShadowedValue(out, StrCat("Frenzy ", player.poe2.frenzyCharges), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorOrange);
 }
 
 void DrawFlaskLiquidLevel(const Surface &out, Point position, ClxSprite sprite, int charges, int maxCharges)

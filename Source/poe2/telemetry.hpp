@@ -11,6 +11,7 @@
 #include <string>
 #include <string_view>
 
+#include "poe2/player_data.hpp"
 #include "utils/fixed_point.hpp"
 
 namespace devilution {
@@ -36,6 +37,17 @@ constexpr uint32_t TelemetryStatsIntervalMs = 60 * 1000;
 constexpr uint32_t TelemetryStallMs = 250;
 /** @brief Damage dealt within this long of using a skill is credited to that skill. */
 constexpr uint32_t TelemetrySkillCreditMs = 3000;
+/** @brief Monster density: monsters this close (in tiles) count as near the player... */
+constexpr int TelemetryNearTiles = 5;
+/** @brief ...and awake monsters this close count as aware of them. */
+constexpr int TelemetryAwareTiles = 10;
+/** @brief This many monsters next to the player counts as surrounded. */
+constexpr int TelemetrySurroundedCount = 4;
+/** @brief This many monsters near the player at once is logged as a swarm. */
+constexpr int TelemetrySwarmCount = 8;
+/** @brief Game ticks per second, and the quiet stretch (10 s) logged as a lull. */
+constexpr int TelemetryTicksPerSecond = 20;
+constexpr int TelemetryLullTicks = 10 * TelemetryTicksPerSecond;
 /** @brief Detailed events kept in memory and written out when the game crashes. */
 constexpr size_t TelemetryRecentEvents = 30;
 
@@ -45,6 +57,14 @@ void TelemetryInit();
 bool TelemetryEnabled();
 /** @brief Writes one line: time, level and the event. */
 void TelemetryLog(std::string_view category, std::string_view text);
+/**
+ * @brief Notes an effect going off (a visual effect missile, a code-drawn effect, a missile's burst) with where
+ * the hero is, so effects that replay can be traced. Each kind is written at most a few times a second; the rest
+ * are counted and summed up once a second.
+ */
+void TelemetryEffect(std::string_view source, std::string_view what, int x, int y);
+/** @brief Notes a step of loading a level, so a crash while loading shows the last step reached. */
+void TelemetryStep(std::string_view step);
 
 void TelemetryGameStarted(const Player &player, bool loaded);
 void TelemetryGameEnded();
@@ -58,7 +78,10 @@ void TelemetryMonsterKilled(const Monster &monster);
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);
 void TelemetryPlayerDied(const Player &player);
 void TelemetryLevelUp(const Player &player);
-void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost);
+/** @brief A socketed gem was raised with an uncut gem: written to the gem log with every step's numbers. */
+void TelemetryGemLevelChanged(const Player &player, SkillSlot skill, int fromLevel, int toLevel);
+/** @brief A skill was used; gemLevel (when the skill comes from a socketed gem) keeps each gem level's stats apart. */
+void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost, int gemLevel = 0);
 /** @brief A skill or spell that couldn't be used, and why. */
 void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason);
 /**

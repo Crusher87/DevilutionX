@@ -53,4 +53,7 @@ enum class UiFlags : uint32_t {
 };
 use_enum_as_flags(UiFlags);
 
+/** @brief POE2 Mashup: green text, for stats an item would improve. Every flag bit is taken, so it's blue and yellow together. */
+constexpr UiFlags UiFlagsColorGreen = UiFlags::ColorBlue | UiFlags::ColorYellow;
+
 } // namespace devilution

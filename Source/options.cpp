@@ -547,7 +547,7 @@ std::vector<OptionEntryBase *> AudioOptions::GetEntries()
 }
 
 OptionEntryResolution::OptionEntryResolution()
-    : OptionEntryListBase("", OptionEntryFlags::CantChangeInGame | OptionEntryFlags::RecreateUI, N_("Resolution"), N_("Affect the game's internal resolution and determine your view area. Note: This can differ from screen resolution, when Upscaling, Integer Scaling or Fit to Screen is used."))
+    : OptionEntryListBase("", OptionEntryFlags::RecreateUI, N_("Resolution"), N_("Affect the game's internal resolution and determine your view area. Note: This can differ from screen resolution, when Upscaling, Integer Scaling or Fit to Screen is used."))
 {
 }
 void OptionEntryResolution::LoadFromIni(std::string_view category)
@@ -794,6 +794,10 @@ GraphicsOptions::GraphicsOptions()
 #endif
               { FrameRateControl::CPUSleep, N_("Limit FPS") },
           })
+    , uiScale("UI Scale", OptionEntryFlags::RecreateUI, N_("UI Scale"), N_("Draws the panels, text and menus bigger, in percent, while the world keeps the full resolution and view area. Needs Upscale."), 100, { 100, 125, 150, 175, 200 })
+    , modernEffects("Modern Effects", OptionEntryFlags::None, N_("Modern Effects"), N_("Skill effects drawn in full colour with glow, bloom, particles and ground sigils. Needs Upscale."), true)
+    , effectIntensity("Effect Intensity", OptionEntryFlags::None, N_("Effect Intensity"), N_("How many particles and how much glow the modern effects use, in percent."), 100, { 25, 50, 75, 100, 125, 150 })
+    , hdGraphics("HD Graphics", OptionEntryFlags::None, N_("HD Graphics"), N_("Draws the world with the upscaled HD art pack while zoomed in (Z). Needs the HD pack and Upscale."), true)
     , brightness("Brightness Correction", OptionEntryFlags::Invisible, "Brightness Correction", "Brightness correction level.", 0)
     , zoom("Zoom", OptionEntryFlags::None, N_("Zoom"), N_("Zoom on when enabled."), false)
     , perPixelLighting("Per-pixel Lighting", OptionEntryFlags::None, N_("Per-pixel Lighting"), N_("Subtile lighting for smoother light gradients."), DEFAULT_PER_PIXEL_LIGHTING)
@@ -812,6 +816,12 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 	// clang-format off
 	return {
 		&resolution,
+#ifndef USE_SDL1
+		&uiScale,
+		&modernEffects,
+		&effectIntensity,
+		&hdGraphics,
+#endif
 #ifndef __vita__
 		&fullscreen,
 #endif

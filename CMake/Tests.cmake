@@ -39,16 +39,32 @@ set(tests
   poe2_item_bases_test
   poe2_item_spawner_test
   poe2_hud_globes_test
+  poe2_jewels_test
   poe2_loot_filter_test
+  poe2_loot_test
+  poe2_modifiers_test
+  poe2_crafting_test
+  primitive_render_test
+  poe2_economy_test
+  poe2_endgame_test
   poe2_monster_mods_test
   poe2_passive_tree_test
+  poe2_weapon_swap_test
   poe2_rare_items_test
   poe2_skill_effects_test
   poe2_spirit_test
   poe2_regen_test
   poe2_skill_gems_test
+  poe2_skill_resources_test
+  poe2_table_skills_test
+  poe2_support_table_test
+  poe2_spirit_skills_test
+  poe2_stacking_test
   poe2_support_gems_test
   poe2_telemetry_test
+  poe2_ui_scale_test
+  poe2_vfx_test
+  poe2_uniques_test
   poe2_waystones_test
   poe2_weapon_skills_test
   player_test

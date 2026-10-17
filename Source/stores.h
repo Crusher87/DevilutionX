@@ -39,6 +39,10 @@ constexpr int NumWitchItems = 17;
 constexpr int NumWitchItemsHf = 24;
 constexpr int NumWitchPinnedItems = 3;
 
+/** POE2 Mashup: Griswold and Adria keep enough stock to fill a shop tab for each kind of item they sell. */
+constexpr int NumSmithBasicItemsPoe2 = 130;
+constexpr int NumWitchItemsPoe2 = 40;
+
 constexpr int NumStoreLines = 104;
 
 enum class TalkID : uint8_t {
@@ -66,6 +70,8 @@ enum class TalkID : uint8_t {
 	Tavern,
 	Drunk,
 	Barmaid,
+	/** POE2 Mashup: Wirt's gambling. */
+	Gamble,
 };
 
 /** Currently active store */
@@ -79,7 +85,7 @@ extern int8_t PlayerItemIndexes[48];
 extern DVL_API_FOR_TEST Item PlayerItems[48];
 
 /** Items sold by Griswold */
-extern DVL_API_FOR_TEST StaticVector<Item, NumSmithBasicItemsHf> SmithItems;
+extern DVL_API_FOR_TEST StaticVector<Item, NumSmithBasicItemsPoe2> SmithItems;
 /** Number of premium items for sale by Griswold */
 extern DVL_API_FOR_TEST int PremiumItemCount;
 /** Base level of current premium items sold by Griswold */
@@ -91,7 +97,7 @@ extern DVL_API_FOR_TEST StaticVector<Item, NumSmithItemsHf> PremiumItems;
 extern DVL_API_FOR_TEST StaticVector<Item, NumHealerItemsHf> HealerItems;
 
 /** Items sold by Adria */
-extern DVL_API_FOR_TEST StaticVector<Item, NumWitchItemsHf> WitchItems;
+extern DVL_API_FOR_TEST StaticVector<Item, NumWitchItemsPoe2> WitchItems;
 
 /** Current level of the item sold by Wirt */
 extern DVL_API_FOR_TEST int BoyItemLevel;
@@ -171,6 +177,16 @@ void DrawSLine(const Surface &out, int sy);
 void DrawSTextHelp();
 void ClearSText(int s, int e);
 void StartStore(TalkID s);
+/** @brief Opens the shared stash beside the inventory. */
+void OpenStashPanel();
+/** @brief POE2 Mashup: Cain identifies everything the hero carries, for free, and says how many. */
+void CainIdentifyAll();
+
+/** @brief Remembers where the hero stood when a stash or vendor panel opened, so walking away closes it. */
+void RememberInteractionSpot();
+
+/** @brief Closes the stash and vendor panels once the hero walks more than a few tiles from where they opened. */
+void CloseInteractionPanelsWhenAway();
 void DrawSText(const Surface &out);
 void StoreESC();
 void StoreUp();

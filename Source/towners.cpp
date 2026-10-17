@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <unordered_map>
 
 #include "cursor.h"
@@ -12,7 +13,11 @@
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
+#include "levels/gendung.h"
+#include "levels/tile_properties.hpp"
 #include "minitext.h"
+#include "player.h"
+#include "qol/visual_store.h"
 #include "stores.h"
 #include "tables/textdat.h"
 #include "tables/townerdat.hpp"
@@ -576,6 +581,39 @@ void TalkToFarmer(Player &player, Towner &farmer)
 	}
 }
 
+/** @brief Puts the stash on the nearest open tile to its spot, so it never stands in a wall or on another towner. */
+void InitStash(Towner &towner, const TownerDataEntry &entry)
+{
+	InitTownerFromData(towner, entry);
+	const int8_t id = dMonster[entry.position.x][entry.position.y];
+	const auto isFree = [](Point tile) {
+		return InDungeonBounds(tile) && IsTileWalkable(tile) && dMonster[tile.x][tile.y] == 0;
+	};
+	if (id == 0 || IsTileWalkable(entry.position))
+		return;
+	dMonster[entry.position.x][entry.position.y] = 0;
+	for (int radius = 1; radius <= 6; radius++) {
+		for (int dy = -radius; dy <= radius; dy++) {
+			for (int dx = -radius; dx <= radius; dx++) {
+				const Point tile = entry.position + Displacement { dx, dy };
+				if (std::max(std::abs(dx), std::abs(dy)) != radius || !isFree(tile))
+					continue;
+				towner.position = tile;
+				dMonster[tile.x][tile.y] = id;
+				return;
+			}
+		}
+	}
+	dMonster[entry.position.x][entry.position.y] = id;
+}
+
+void TalkToStash(Player &player, Towner & /*stash*/)
+{
+	if (&player != MyPlayer)
+		return;
+	OpenStashPanel();
+}
+
 void TalkToCowFarmer(Player &player, Towner &cowFarmer)
 {
 	if (RemoveInventoryItemById(player, IDI_GREYSUIT)) {
@@ -697,6 +735,7 @@ const TownerData TownersData[] = {
 	{ TOWN_COWFARM, InitCowFarmer, TalkToCowFarmer   },
 	{ TOWN_FARMER,  nullptr,       TalkToFarmer      },
 	{ TOWN_GIRL,    nullptr,       TalkToGirl        },
+	{ TOWN_STASH,   InitStash,     TalkToStash       },
 	// clang-format on
 };
 
@@ -720,6 +759,7 @@ const std::unordered_map<_talker_id, const char *> TownerShortNames = {
 	{ TOWN_FARMER, "lester" },
 	{ TOWN_GIRL, "celia" },
 	{ TOWN_COWFARM, "nut" },
+	{ TOWN_STASH, "stash" },
 };
 
 size_t GetNumTownerTypes()
@@ -741,6 +781,8 @@ bool IsTownerPresent(_talker_id npc)
 		return gbIsHellfire && sgGameInitInfo.bCowQuest == 0 && Quests[Q_FARMER]._qactive != QUEST_HIVE_DONE;
 	case TOWN_COWFARM:
 		return gbIsHellfire && sgGameInitInfo.bCowQuest != 0;
+	case TOWN_STASH:
+		return gbIsPoe2;
 	case TOWN_GIRL:
 		return gbIsHellfire && sgGameInitInfo.bTheoQuest != 0 && MyPlayer->_pLvlVisited[17] && Quests[Q_GIRL]._qactive != QUEST_DONE;
 	default:
@@ -838,6 +880,133 @@ void ProcessTowners()
 	}
 }
 
+int QuickTradeTowner = -1;
+
+QuestMarker TownerQuestMarker(const Player &player, const Towner &towner)
+{
+	// Each case mirrors the quest branches of the towner's talk function above, in the same order.
+	const auto visited = [&](int a, int b) { return player._pLvlVisited[a] || player._pLvlVisited[b]; };
+	const auto has = [&](_item_indexes id) { return HasInventoryItemWithId(player, id); };
+	switch (towner._ttype) {
+	case TOWN_TAVERN: {
+		if (!player._pLvlVisited[0])
+			return QuestMarker::None;
+		const Quest &king = Quests[Q_SKELKING];
+		if (king._qactive != QUEST_NOTAVAIL && visited(2, 4)) {
+			if (king._qvar2 == 0)
+				return QuestMarker::News;
+			if (king._qactive == QUEST_DONE && king._qvar2 == 1)
+				return QuestMarker::Reward;
+		}
+		const Quest &banner = Quests[Q_LTBANNER];
+		if (banner._qactive != QUEST_NOTAVAIL && banner._qactive != QUEST_DONE && visited(3, 4)) {
+			if (banner._qvar2 == 0)
+				return QuestMarker::News;
+			if (banner._qvar2 == 1 && has(IDI_BANNER))
+				return QuestMarker::Reward;
+		}
+		return QuestMarker::None;
+	}
+	case TOWN_DEADGUY: {
+		const Quest &butcher = Quests[Q_BUTCHER];
+		return butcher._qactive != QUEST_DONE && butcher._qvar1 != 1 ? QuestMarker::News : QuestMarker::None;
+	}
+	case TOWN_SMITH: {
+		const Quest &rock = Quests[Q_ROCK];
+		if (rock._qactive != QUEST_NOTAVAIL && rock._qactive != QUEST_DONE && visited(4, 5)) {
+			if (rock._qvar2 == 0)
+				return QuestMarker::News;
+			if (rock._qvar2 == 1 && has(IDI_ROCK))
+				return QuestMarker::Reward;
+		}
+		const Quest &anvil = Quests[Q_ANVIL];
+		if (IsNoneOf(anvil._qactive, QUEST_NOTAVAIL, QUEST_DONE)) {
+			if (visited(9, 10) && anvil._qvar2 == 0)
+				return QuestMarker::News;
+			if (anvil._qvar2 == 1 && has(IDI_ANVIL))
+				return QuestMarker::Reward;
+		}
+		return QuestMarker::None;
+	}
+	case TOWN_WITCH: {
+		const Quest &mushroom = Quests[Q_MUSHROOM];
+		if (mushroom._qactive == QUEST_INIT && has(IDI_FUNGALTM))
+			return QuestMarker::Reward;
+		if (mushroom._qactive != QUEST_ACTIVE)
+			return QuestMarker::None;
+		if (mushroom._qvar1 >= QS_TOMEGIVEN && mushroom._qvar1 < QS_MUSHGIVEN) {
+			if (has(IDI_MUSHROOM))
+				return QuestMarker::Reward;
+			if (mushroom._qmsg != TEXT_MUSH9)
+				return QuestMarker::News;
+		}
+		if (mushroom._qvar1 >= QS_MUSHGIVEN) {
+			if (has(IDI_BRAIN) && mushroom._qvar2 != TEXT_MUSH11)
+				return QuestMarker::News;
+			if (HasInventoryOrBeltItemWithId(player, IDI_SPECELIX))
+				return QuestMarker::Reward;
+		}
+		return QuestMarker::None;
+	}
+	case TOWN_BMAID:
+		return !player._pLvlVisited[21] && has(IDI_MAPOFDOOM) && Quests[Q_GRAVE]._qmsg != TEXT_GRAVE8 ? QuestMarker::News : QuestMarker::None;
+	case TOWN_HEALER: {
+		const Quest &water = Quests[Q_PWATER];
+		if (water._qactive != QUEST_NOTAVAIL) {
+			if ((water._qactive == QUEST_INIT && visited(1, 5)) || (water._qactive == QUEST_ACTIVE && !water._qlog))
+				return QuestMarker::News;
+			if (water._qactive == QUEST_DONE && water._qvar1 != 2)
+				return QuestMarker::Reward;
+		}
+		const Quest &mushroom = Quests[Q_MUSHROOM];
+		if (mushroom._qactive == QUEST_ACTIVE && mushroom._qvar1 >= QS_MUSHGIVEN && mushroom._qvar1 < QS_BRAINGIVEN && has(IDI_BRAIN))
+			return QuestMarker::Reward;
+		return QuestMarker::None;
+	}
+	case TOWN_STORY: {
+		const Quest &betrayer = Quests[Q_BETRAYER];
+		if (!UseMultiplayerQuests() ? betrayer._qactive == QUEST_INIT && has(IDI_LAZSTAFF) : betrayer._qactive == QUEST_ACTIVE && !betrayer._qlog)
+			return QuestMarker::News;
+		return betrayer._qactive == QUEST_DONE && betrayer._qvar1 == 7 ? QuestMarker::News : QuestMarker::None;
+	}
+	case TOWN_FARMER: {
+		const Quest &farmer = Quests[Q_FARMER];
+		if (farmer._qactive == QUEST_DONE)
+			return QuestMarker::Reward;
+		if (farmer._qactive != QUEST_NOTAVAIL && farmer._qactive != QUEST_INIT)
+			return QuestMarker::None;
+		// Before then he only grumbles about the weather.
+		return has(IDI_RUNEBOMB) || player._pLvlVisited[9] || player.getCharacterLevel() >= 15 ? QuestMarker::News : QuestMarker::None;
+	}
+	case TOWN_COWFARM: {
+		const Quest &jersey = Quests[Q_JERSEY];
+		if (has(IDI_BROWNSUIT))
+			return QuestMarker::Reward;
+		if (has(IDI_RUNEBOMB))
+			return jersey._qactive == QUEST_ACTIVE ? QuestMarker::None : QuestMarker::News;
+		switch (jersey._qactive) {
+		case QUEST_NOTAVAIL:
+		case QUEST_INIT:
+		case QUEST_HIVE_TEASE1:
+		case QUEST_HIVE_TEASE2:
+			return QuestMarker::News;
+		case QUEST_HIVE_ACTIVE:
+			return player._pLvlVisited[9] || player.getCharacterLevel() >= 15 ? QuestMarker::News : QuestMarker::None;
+		default:
+			return QuestMarker::None;
+		}
+	}
+	case TOWN_GIRL: {
+		const Quest &girl = Quests[Q_GIRL];
+		if (girl._qactive != QUEST_DONE && has(IDI_THEODORE))
+			return QuestMarker::Reward;
+		return IsAnyOf(girl._qactive, QUEST_NOTAVAIL, QUEST_INIT) ? QuestMarker::News : QuestMarker::None;
+	}
+	default:
+		return QuestMarker::None;
+	}
+}
+
 void TalkToTowner(Player &player, int t)
 {
 	auto &towner = Towners[t];
@@ -847,6 +1016,30 @@ void TalkToTowner(Player &player, int t)
 
 	if (!player.HoldItem.isEmpty()) {
 		return;
+	}
+
+	// POE2 Mashup: Ctrl+click on Cain identifies everything without the talk menu.
+	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && towner._ttype == TOWN_STORY) {
+		QuickTradeTowner = -1;
+		CainIdentifyAll();
+		return;
+	}
+	// POE2 Mashup: Ctrl+click on a trader opens their shop without the talk menu, unless they have quest news.
+	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && UseVisualStoreUi() && TownerQuestMarker(player, towner) == QuestMarker::None) {
+		QuickTradeTowner = -1;
+		switch (towner._ttype) {
+		case TOWN_SMITH:
+			OpenVisualStore(VisualStoreVendor::Smith);
+			return;
+		case TOWN_WITCH:
+			OpenVisualStore(VisualStoreVendor::Witch);
+			return;
+		case TOWN_HEALER:
+			OpenVisualStore(VisualStoreVendor::Healer);
+			return;
+		default:
+			break;
+		}
 	}
 
 	towner.talk(player, towner);

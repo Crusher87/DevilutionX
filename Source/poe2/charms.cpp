@@ -1,15 +1,22 @@
 #include "poe2/charms.hpp"
 
 #include <algorithm>
+#include <optional>
 
+#include "effects.h"
 #include "engine/backbuffer_state.hpp"
+#include "levels/tile_properties.hpp"
+#include "msg.h"
 #include "game_mode.hpp"
 #include "items.h"
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "plrmsg.h"
+#include "poe2/belt_uniques.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
 
@@ -17,23 +24,52 @@ namespace devilution {
 
 namespace {
 
+/** @brief What activating a charm does for the unique charms. */
+void OnCharmActivated(Player &player, Item &item, bool startCooldown)
+{
+	if (startCooldown)
+		player.poe2.charmCooldown = CharmCooldownTicks;
+	if (IsBeltUnique(item, BeltUniqueId::Witchglass))
+		player.poe2.uniqueState.witchglassTicks = WitchglassTicks;
+	TelemetryCharmUsed(player, item._iIName);
+}
+
 /**
  * @brief Spends a use of the first charged charm with this effect in the belt.
  * @param startCooldown Whether the life, mana and Guard charms wait a second afterwards; the charms that answer a hit don't hold them up.
+ * @return The charm used, or nullptr.
  */
-bool UseCharm(Player &player, CharmEffect effect, bool startCooldown = true)
+Item *UseCharm(Player &player, CharmEffect effect, bool startCooldown = true)
 {
-	const int cost = CharmChargesPerUseFor(effect);
+	UniqueRuleState &state = player.poe2.uniqueState;
 	for (Item &item : player.SpdList) {
-		if (GetCharmEffect(item) != effect || item._iCharges < cost)
+		if (GetCharmEffect(item) != effect || item._iCharges < CharmChargesPerUseFor(item))
 			continue;
-		item._iCharges -= cost;
-		if (startCooldown)
-			player.poe2.charmCooldown = CharmCooldownTicks;
-		TelemetryCharmUsed(player, item._iIName);
-		return true;
+		// The Second Bell: every third activation is free.
+		const bool free = IsBeltUnique(item, BeltUniqueId::SecondBell) && ++state.bellActivations % 3 == 0;
+		if (!free)
+			item._iCharges -= CharmChargesPerUseFor(item);
+		OnCharmActivated(player, item, startCooldown);
+		return &item;
 	}
-	return false;
+	// Saint's Token activates while empty, then rests.
+	for (Item &item : player.SpdList) {
+		if (GetCharmEffect(item) != effect || !IsBeltUnique(item, BeltUniqueId::SaintsToken) || state.saintsTokenCooldown > 0)
+			continue;
+		state.saintsTokenCooldown = SaintsTokenCooldownTicks;
+		OnCharmActivated(player, item, startCooldown);
+		return &item;
+	}
+	return nullptr;
+}
+
+/** @brief A charm effect's duration after the charm's increased duration. */
+int CharmTicks(const Item &item, int ticks)
+{
+	int percent = 100 + BeltUniqueEffect(item);
+	if (IsBeltUnique(item, BeltUniqueId::Witchglass))
+		percent -= 25;
+	return std::clamp(ticks * percent / 100, 1, 255);
 }
 
 int ResistCharmIndex(DamageType damageType)
@@ -118,6 +154,11 @@ int CharmChargesPerUseFor(CharmEffect effect)
 	return effect == CharmEffect::Golden ? MaxCharmCharges : CharmChargesPerUse;
 }
 
+int CharmChargesPerUseFor(const Item &item)
+{
+	return std::min(CharmChargesPerUseFor(GetCharmEffect(item)) * BeltUniqueChargePercent(item) / 100, MaxCharmCharges);
+}
+
 void GainCharmCharges(Player &player, int charges)
 {
 	for (Item &item : player.SpdList) {
@@ -131,6 +172,85 @@ void RefillCharms(Player &player)
 	GainCharmCharges(player, MaxCharmCharges);
 }
 
+bool IsBesideTownWell(Point tile)
+{
+	// The well in Tristram's square covers tiles 60-61, 70-71 (see CleanTownFountain); a step from its rim counts.
+	return tile.x >= 58 && tile.x <= 63 && tile.y >= 68 && tile.y <= 73;
+}
+
+namespace {
+
+/** The local hero clicked the well and is on the way to it. */
+bool WellAsked = false;
+/** Ticks before giving up on reaching it, so the walk has time to start. */
+int WellWaitTicks = 0;
+
+void UseTownWell(Player &player)
+{
+	bool refilled = false;
+	for (Item &item : player.SpdList) {
+		if (IsCharm(item) && item._iCharges < MaxCharmCharges) {
+			item._iCharges = MaxCharmCharges;
+			refilled = true;
+		}
+	}
+	if (&player != MyPlayer)
+		return;
+	PlaySfxLoc(SfxID::OperateFountain, player.position.tile);
+	EventPlrMsg(refilled ? _("The well refills your charms.") : _("Your charms are already full."), UiFlags::ColorWhitegold);
+	RedrawEverything();
+}
+
+} // namespace
+
+bool IsTownWellTile(Point tile)
+{
+	return tile.x >= 60 && tile.x <= 61 && tile.y >= 70 && tile.y <= 71;
+}
+
+void ClickTownWell(Player &player)
+{
+	if (!gbIsPoe2 || !player.isOnLevel(0))
+		return;
+	if (IsBesideTownWell(player.position.tile)) {
+		WellAsked = false;
+		UseTownWell(player);
+		return;
+	}
+	// Walk to the nearest open tile beside the well.
+	std::optional<Point> best;
+	for (int y = 69; y <= 72; y++) {
+		for (int x = 59; x <= 62; x++) {
+			const Point tile { x, y };
+			if (IsTownWellTile(tile) || IsTileSolid(tile))
+				continue;
+			if (!best || player.position.tile.WalkingDistance(tile) < player.position.tile.WalkingDistance(*best))
+				best = tile;
+		}
+	}
+	if (!best)
+		return;
+	WellAsked = true;
+	WellWaitTicks = 10;
+	NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, *best);
+}
+
+void RefillCharmsAtWell(Player &player)
+{
+	if (!WellAsked || &player != MyPlayer)
+		return;
+	if (!gbIsPoe2 || !player.isOnLevel(0)) {
+		WellAsked = false;
+		return;
+	}
+	if (IsBesideTownWell(player.position.tile) && player._pmode == PM_STAND) {
+		WellAsked = false;
+		UseTownWell(player);
+	} else if (--WellWaitTicks <= 0 && player._pmode == PM_STAND && player.walkpath[0] == WALK_NONE) {
+		WellAsked = false; // It stopped short.
+	}
+}
+
 void ProcessCharms(Player &player)
 {
 	if (!gbIsPoe2 || player.hasNoLife())
@@ -140,9 +260,13 @@ void ProcessCharms(Player &player)
 		data.guardTicks--;
 	if (data.stunImmuneTicks > 0)
 		data.stunImmuneTicks--;
-	for (uint8_t &ticks : data.resistCharmTicks) {
-		if (ticks > 0)
-			ticks--;
+	for (size_t i = 0; i < data.resistCharmTicks.size(); i++) {
+		uint8_t &ticks = data.resistCharmTicks[i];
+		// Little Guardian keeps some of its resistance a little longer.
+		if (ticks > 0 && --ticks == 0 && data.uniqueState.guardianArmed[i]) {
+			data.uniqueState.guardianArmed[i] = false;
+			data.uniqueState.guardianTicks[i] = LittleGuardianTicks;
+		}
 	}
 	if (data.charmCooldown > 0) {
 		data.charmCooldown--;
@@ -151,15 +275,15 @@ void ProcessCharms(Player &player)
 	if (&player != MyPlayer)
 		return;
 
-	if (player._pMaxHP > 0 && player._pHitPoints.raw() < PercentOf(player._pMaxHP, CharmLifeThreshold) && UseCharm(player, CharmEffect::Life)) {
-		const Fixed26_6 heal = Fixed26_6::fromRaw(PercentOf(player._pMaxHP, CharmLifeRecovery));
+	if (player._pMaxHP > 0 && player._pHitPoints.raw() < PercentOf(player._pMaxHP, CharmLifeThreshold) && UseCharm(player, CharmEffect::Life) != nullptr) {
+		const Fixed26_6 heal = Fixed26_6::fromRaw(PercentOf(player._pMaxHP, CharmLifeRecovery) * LifeRecoveryPercent(player, false) / 100);
 		player._pHitPoints = std::min(player._pHitPoints + heal, player._pMaxHP);
 		player._pHPBase = std::min(player._pHPBase + heal, player._pMaxHPBase);
 		AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);
 		RedrawComponent(PanelDrawComponent::Health);
 		return;
 	}
-	if (player._pMaxMana > 0 && player._pMana.raw() < PercentOf(player._pMaxMana, CharmManaThreshold) && UseCharm(player, CharmEffect::Mana)) {
+	if (player._pMaxMana > 0 && player._pMana.raw() < PercentOf(player._pMaxMana, CharmManaThreshold) && UseCharm(player, CharmEffect::Mana) != nullptr) {
 		const Fixed26_6 mana = Fixed26_6::fromRaw(PercentOf(player._pMaxMana, CharmManaRecovery));
 		player._pMana = std::min(player._pMana + mana, player._pMaxMana);
 		player._pManaBase = std::min(player._pManaBase + mana, player._pMaxManaBase);
@@ -175,9 +299,11 @@ Fixed26_6 ApplyGuard(Player &player, Fixed26_6 damage)
 	if (player.poe2.guardTicks > 0)
 		damage = Fixed26_6::fromRaw(damage.raw() - PercentOf(damage, GuardDamageReduction));
 	if (player.poe2.guardTicks == 0 && player.poe2.charmCooldown == 0 && &player == MyPlayer
-	    && damage.raw() >= PercentOf(player._pMaxHP, GuardHitThreshold) && UseCharm(player, CharmEffect::Guard)) {
-		player.poe2.guardTicks = GuardTicks;
-		AddVisualEffect(player.position.tile, MissileGraphicID::ManaShield);
+	    && damage.raw() >= PercentOf(player._pMaxHP, GuardHitThreshold)) {
+		if (const Item *charm = UseCharm(player, CharmEffect::Guard); charm != nullptr) {
+			player.poe2.guardTicks = static_cast<uint8_t>(CharmTicks(*charm, GuardTicks));
+			AddVisualEffect(player.position.tile, MissileGraphicID::ManaShield);
+		}
 	}
 	return damage;
 }
@@ -190,12 +316,19 @@ int ResistanceAgainstHit(Player &player, DamageType damageType, int resistance)
 	uint8_t &ticks = player.poe2.resistCharmTicks[index];
 	static constexpr CharmEffect Effects[] = { CharmEffect::Fire, CharmEffect::Lightning, CharmEffect::Magic };
 	static constexpr MissileGraphicID Visuals[] = { MissileGraphicID::OrangeFlareExplosion, MissileGraphicID::YellowFlareExplosion, MissileGraphicID::BlueFlareExplosion };
-	if (ticks == 0 && &player == MyPlayer && UseCharm(player, Effects[index], false)) {
-		ticks = ResistCharmTicks;
-		AddVisualEffect(player.position.tile, Visuals[index]);
+	if (ticks == 0 && &player == MyPlayer) {
+		if (const Item *charm = UseCharm(player, Effects[index], false); charm != nullptr) {
+			ticks = static_cast<uint8_t>(CharmTicks(*charm, ResistCharmTicks));
+			player.poe2.uniqueState.guardianArmed[index] = IsBeltUnique(*charm, BeltUniqueId::LittleGuardian);
+			AddVisualEffect(player.position.tile, Visuals[index]);
+		}
 	}
-	if (ticks == 0)
+	if (ticks == 0) {
+		// Little Guardian's lingering resistance.
+		if (player.poe2.uniqueState.guardianTicks[index] > 0)
+			return std::min(resistance + ResistCharmBonus * LittleGuardianPercent / 100, MaxResistance);
 		return resistance;
+	}
 	return std::min(resistance + ResistCharmBonus, MaxResistance);
 }
 
@@ -205,9 +338,18 @@ bool CharmPreventsStun(Player &player)
 		return false;
 	if (player.poe2.stunImmuneTicks > 0)
 		return true;
-	if (&player != MyPlayer || !UseCharm(player, CharmEffect::Stun, false))
+	if (&player != MyPlayer)
 		return false;
-	player.poe2.stunImmuneTicks = StunImmuneTicks;
+	const Item *charm = UseCharm(player, CharmEffect::Stun, false);
+	// The Last Warning, a Guard charm, also breaks stuns.
+	if (charm == nullptr) {
+		const bool lastWarning = std::any_of(std::begin(player.SpdList), std::end(player.SpdList), [](const Item &item) { return IsBeltUnique(item, BeltUniqueId::LastWarning); });
+		if (lastWarning)
+			charm = UseCharm(player, CharmEffect::Guard, false);
+	}
+	if (charm == nullptr)
+		return false;
+	player.poe2.stunImmuneTicks = static_cast<uint8_t>(CharmTicks(*charm, StunImmuneTicks));
 	AddVisualEffect(player.position.tile, MissileGraphicID::StoneCurseShatter);
 	return true;
 }
@@ -218,7 +360,7 @@ int GoldenCharmExtraDrops(Player &player, const Monster &monster)
 		return 0;
 	if (!monster.isUnique() && GetMonsterAffixes(monster).rarity != MonsterRarity::Rare)
 		return 0;
-	return UseCharm(player, CharmEffect::Golden, false) ? 1 : 0;
+	return UseCharm(player, CharmEffect::Golden, false) != nullptr ? 1 : 0;
 }
 
 } // namespace devilution

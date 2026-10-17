@@ -5,7 +5,11 @@
  */
 #include "engine/dx.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_rect.h>
@@ -24,9 +28,12 @@
 #include "controls/control_mode.hpp"
 #include "controls/plrctrls.h"
 #include "engine/render/primitive_render.hpp"
+#include "engine/ui_scale.hpp"
 #include "headless_mode.hpp"
 #include "init.hpp"
 #include "options.h"
+#include "poe2/hd.hpp"
+#include "poe2/vfx.hpp"
 #include "utils/display.h"
 #include "utils/log.hpp"
 #include "utils/sdl_wrap.h"
@@ -56,6 +63,147 @@ SDLSurfaceUniquePtr RendererTextureSurface;
 
 /** 8-bit surface that we render to */
 SDL_Surface *PalSurface;
+
+namespace {
+
+/** POE2 Mashup: with the UI scaled, the full-size frame: the world, then the UI scaled up over it. */
+SDLSurfaceUniquePtr WorldSurface;
+/** The UI frame as it was before the UI was drawn on it: what's left unchanged shows the full-size world. */
+std::vector<uint8_t> UiBase;
+/** For each full-size column and row, the UI column and row it shows. */
+std::vector<uint16_t> UiColumnOf;
+std::vector<uint16_t> UiRowOf;
+bool HaveScaledWorld = false;
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+/** POE2 Mashup: a frame waiting to be presented in layers: the world, the effects, then the UI over them. */
+bool LayeredFramePending = false;
+/** The UI with the world left out (transparent), at the UI's size. */
+SDL_Texture *UiOverlay = nullptr;
+SDL_Renderer *UiOverlayRenderer = nullptr;
+int UiOverlayWidth = 0;
+int UiOverlayHeight = 0;
+
+bool WantsLayeredFrame()
+{
+	return WorldSurface != nullptr && HaveScaledWorld && renderer != nullptr && (vfx::Enabled() || hd::Active());
+}
+
+/** @brief Fills the UI overlay: the UI's own pixels opaque, the ones still showing the world transparent. */
+bool UpdateUiOverlay()
+{
+	if (UiOverlay == nullptr || UiOverlayRenderer != renderer || UiOverlayWidth != gnScreenWidth || UiOverlayHeight != gnScreenHeight) {
+		if (UiOverlay != nullptr && UiOverlayRenderer == renderer)
+			SDL_DestroyTexture(UiOverlay);
+		UiOverlay = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, gnScreenWidth, gnScreenHeight);
+		UiOverlayRenderer = renderer;
+		UiOverlayWidth = gnScreenWidth;
+		UiOverlayHeight = gnScreenHeight;
+		if (UiOverlay == nullptr)
+			return false;
+		SDL_SetTextureBlendMode(UiOverlay, SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		SDL_SetTextureScaleMode(UiOverlay, SDL_ScaleModeNearest);
+#endif
+	}
+	void *pixels;
+	int pitch;
+	if (SDL_LockTexture(UiOverlay, nullptr, &pixels, &pitch) != 0)
+		return false;
+	const SDL_Color *colors = Palette->colors;
+	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
+	for (int y = 0; y < gnScreenHeight; y++) {
+		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * PalSurface->pitch;
+		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(y) * gnScreenWidth;
+		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
+		if (std::memcmp(uiLine, baseLine, gnScreenWidth) == 0) {
+			std::memset(out, 0, static_cast<size_t>(gnScreenWidth) * 4);
+			continue;
+		}
+		for (int x = 0; x < gnScreenWidth; x++, out += 4) {
+			if (uiLine[x] == baseLine[x]) {
+				out[3] = 0;
+				continue;
+			}
+			const SDL_Color &color = colors[uiLine[x]];
+			out[0] = color.r;
+			out[1] = color.g;
+			out[2] = color.b;
+			out[3] = 255;
+		}
+	}
+	SDL_UnlockTexture(UiOverlay);
+	return true;
+}
+
+/** @brief Presents the world, the effects over it, and the UI over both. */
+void PresentLayeredFrame(SDL_Surface *surface)
+{
+	LayeredFramePending = false;
+	Blit(WorldSurface.get(), nullptr, nullptr);
+	if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
+	if (SDL_RenderClear(renderer) <= -1) ErrSdl();
+	if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+	if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+	// POE2 Mashup: the HD world goes over the game's own, which still shows outside the view.
+	if (hd::Active())
+		hd::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
+	vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
+	if (UpdateUiOverlay())
+		SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
+}
+#endif
+
+void CreateWorldSurface()
+{
+	WorldSurface = nullptr;
+	UiBase.clear();
+	HaveScaledWorld = false;
+	if (!IsUiScaled())
+		return;
+	WorldSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, gnRenderWidth, gnRenderHeight, 8, SDL_PIXELFORMAT_INDEX8);
+#ifdef USE_SDL3
+	if (!SDL_SetSurfacePalette(WorldSurface.get(), Palette.get())) ErrSdl();
+#elif !defined(USE_SDL1)
+	if (SDL_SetSurfacePalette(WorldSurface.get(), Palette.get()) < 0)
+		ErrSdl();
+#endif
+	UiBase.assign(static_cast<size_t>(gnScreenWidth) * gnScreenHeight, 0);
+	UiColumnOf.resize(gnRenderWidth);
+	for (int x = 0; x < gnRenderWidth; x++)
+		UiColumnOf[x] = static_cast<uint16_t>(std::min(x * gnScreenWidth / gnRenderWidth, gnScreenWidth - 1));
+	UiRowOf.resize(gnRenderHeight);
+	for (int y = 0; y < gnRenderHeight; y++)
+		UiRowOf[y] = static_cast<uint16_t>(std::min(y * gnScreenHeight / gnRenderHeight, gnScreenHeight - 1));
+}
+
+/** @brief Builds the full-size frame: the UI scaled up, over the world where the UI drew. */
+void ComposeScaledFrame()
+{
+	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
+	const int uiPitch = PalSurface->pitch;
+	auto *frame = static_cast<uint8_t *>(WorldSurface->pixels);
+	const int framePitch = WorldSurface->pitch;
+	for (int y = 0; y < gnRenderHeight; y++) {
+		const int uiRow = UiRowOf[y];
+		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(uiRow) * uiPitch;
+		uint8_t *frameLine = frame + static_cast<ptrdiff_t>(y) * framePitch;
+		if (!HaveScaledWorld) {
+			for (int x = 0; x < gnRenderWidth; x++)
+				frameLine[x] = uiLine[UiColumnOf[x]];
+			continue;
+		}
+		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(uiRow) * gnScreenWidth;
+		if (std::memcmp(uiLine, baseLine, gnScreenWidth) == 0)
+			continue;
+		for (int x = 0; x < gnRenderWidth; x++) {
+			const uint8_t color = uiLine[UiColumnOf[x]];
+			if (color != baseLine[UiColumnOf[x]])
+				frameLine[x] = color;
+		}
+	}
+}
+
+} // namespace
 namespace {
 SDLSurfaceUniquePtr PinnedPalSurface;
 
@@ -129,6 +277,38 @@ Surface GlobalBackBuffer()
 	return Surface(PalSurface, SDL_Rect { 0, 0, gnScreenWidth, gnScreenHeight });
 }
 
+Surface WorldBackBuffer()
+{
+	if (WorldSurface == nullptr)
+		return GlobalBackBuffer();
+	return Surface(WorldSurface.get(), SDL_Rect { 0, 0, gnRenderWidth, gnRenderHeight });
+}
+
+void PrepareScaledUi()
+{
+	if (WorldSurface == nullptr)
+		return;
+	const auto *world = static_cast<const uint8_t *>(WorldSurface->pixels);
+	const int worldPitch = WorldSurface->pitch;
+	auto *ui = static_cast<uint8_t *>(PalSurface->pixels);
+	const int uiPitch = PalSurface->pitch;
+	for (int y = 0; y < gnScreenHeight; y++) {
+		// Sample the middle of the patch of the world each UI pixel covers.
+		const int worldY = std::min((2 * y + 1) * gnRenderHeight / (2 * gnScreenHeight), gnRenderHeight - 1);
+		const uint8_t *worldLine = world + static_cast<ptrdiff_t>(worldY) * worldPitch;
+		uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * uiPitch;
+		for (int x = 0; x < gnScreenWidth; x++)
+			uiLine[x] = worldLine[std::min((2 * x + 1) * gnRenderWidth / (2 * gnScreenWidth), gnRenderWidth - 1)];
+		std::memcpy(UiBase.data() + static_cast<size_t>(y) * gnScreenWidth, uiLine, gnScreenWidth);
+	}
+	HaveScaledWorld = true;
+}
+
+void ClearScaledWorld()
+{
+	HaveScaledWorld = false;
+}
+
 void dx_cleanup()
 {
 #ifndef USE_SDL1
@@ -138,6 +318,7 @@ void dx_cleanup()
 
 	PalSurface = nullptr;
 	PinnedPalSurface = nullptr;
+	WorldSurface = nullptr;
 	Palette = nullptr;
 	RendererTextureSurface = nullptr;
 #ifndef USE_SDL1
@@ -176,10 +357,23 @@ void CreateBackBuffer()
 	// time the global `palette` is changed. No need to do anything here as
 	// the global `palette` doesn't have any colors set yet.
 #endif
+	CreateWorldSurface();
 }
 
 void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 {
+	if (WorldSurface != nullptr && !HeadlessMode) {
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+		// With the effects layer, the world and the UI go up separately when the frame is presented.
+		LayeredFramePending = WantsLayeredFrame();
+		if (LayeredFramePending)
+			return;
+#endif
+		// The UI is scaled up over the full-size world, always the whole frame.
+		ComposeScaledFrame();
+		Blit(WorldSurface.get(), nullptr, nullptr);
+		return;
+	}
 	if (RenderDirectlyToOutputSurface) {
 #ifndef USE_SDL1
 		// A null rect means the caller changed the entire surface.
@@ -309,10 +503,20 @@ void RenderPresent()
 		if (!SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch)) ErrSdl();
 		if (!SDL_RenderTexture(renderer, texture.get(), nullptr, nullptr)) ErrSdl();
 #else
-		if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
-		if (SDL_RenderClear(renderer) <= -1) ErrSdl();
-		if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
-		if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+		if (LayeredFramePending && WantsLayeredFrame()) {
+			PresentLayeredFrame(surface);
+		} else {
+			if (LayeredFramePending) {
+				// The effects were turned off since the frame was drawn: compose it the usual way.
+				LayeredFramePending = false;
+				ComposeScaledFrame();
+				Blit(WorldSurface.get(), nullptr, nullptr);
+			}
+			if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
+			if (SDL_RenderClear(renderer) <= -1) ErrSdl();
+			if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+			if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+		}
 #endif
 
 		if (ControlMode == ControlTypes::VirtualGamepad) {

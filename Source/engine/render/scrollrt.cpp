@@ -5,9 +5,11 @@
  */
 #include "engine/render/scrollrt.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
@@ -30,12 +32,14 @@
 #include "engine/backbuffer_state.hpp"
 #include "engine/displacement.hpp"
 #include "engine/dx.h"
+#include "engine/light_tables.hpp"
 #include "engine/point.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/dun_render.hpp"
 #include "engine/render/light_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
+#include "engine/ui_scale.hpp"
 #include "engine/world_tile.hpp"
 #include "game_mode.hpp"
 #include "gmenu.h"
@@ -53,10 +57,13 @@
 #include "missiles.h"
 #include "nthread.h"
 #include "options.h"
+#include "panels/atlas_panel.hpp"
 #include "panels/charpanel.hpp"
 #include "panels/console.hpp"
+#include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/item_spawner.hpp"
+#include "panels/monster_banner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
@@ -64,8 +71,12 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
+#include "poe2/camera_shake.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/monster_mods.hpp"
+#include "poe2/vfx.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -117,6 +128,35 @@ bool frameflag;
 namespace {
 
 constexpr auto RightFrameDisplacement = Displacement { DunFrameWidth, 0 };
+
+/**
+ * @brief POE2 Mashup: magic, rare and unique monsters get a thin outline in their rank's colour.
+ *
+ * It is drawn with the monster's sprite, so walls in front of the monster hide it, and it fades
+ * with the light so it never glows out of the dark.
+ */
+std::optional<uint8_t> RankOutlineColor(const Monster &monster, int lightTableIndex)
+{
+	if (!gbIsPoe2 || monster.isPlayerMinion() || lightTableIndex >= LightsMax - 2)
+		return std::nullopt;
+	uint8_t base;
+	if (monster.isUnique()) {
+		base = PAL16_ORANGE;
+	} else {
+		switch (GetMonsterAffixes(monster).rarity) {
+		case MonsterRarity::Magic:
+			base = PAL16_BLUE;
+			break;
+		case MonsterRarity::Rare:
+			base = PAL16_YELLOW;
+			break;
+		default:
+			return std::nullopt;
+		}
+	}
+	// Shade 9 is a soft mid tone in full light; darker shades as the light drops.
+	return static_cast<uint8_t>(base + std::min(9 + lightTableIndex / 3, 14));
+}
 
 [[nodiscard]] DVL_ALWAYS_INLINE bool IsFloor(Point tilePosition)
 {
@@ -345,7 +385,10 @@ void DrawCursor(const Surface &out)
  */
 void DrawMissilePrivate(const Surface &out, const Missile &missile, Point targetBufferPosition, bool pre, int lightTableIndex)
 {
-	if (missile._miPreFlag != pre || !missile._miDrawFlag)
+	if (missile._miPreFlag != pre || !missile._miDrawFlag || !missile._miAnimData)
+		return;
+	// POE2 Mashup: with Modern Effects the effects draw projectiles themselves; the classic sprite would be a second bolt.
+	if (vfx::ReplacesSprite(missile))
 		return;
 
 	const Point missileRenderPosition { targetBufferPosition + missile.position.offsetForRendering - Displacement { missile._miAnimWidth2, 0 } };
@@ -390,6 +433,7 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 	}
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
+	const hd::SubFrameScope subFrame(monster.animInfo.getFrameFraction());
 
 	if (!IsTileLit(tilePosition)) {
 		ClxDrawTRN(out, targetBufferPosition, sprite, GetInfravisionTRN());
@@ -466,6 +510,24 @@ uint8_t GetPlayerOutlineColor(int id)
 }
 
 /**
+ * @brief POE2 Mashup: fading afterimages trailing a dodge roll or dash, darker the further back they are.
+ */
+void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sprite, Point spriteBufferPosition)
+{
+	if (!player.poe2.isDodging() || !player.isWalking())
+		return;
+	// One tile's step on screen in the direction of travel.
+	const Displacement step { player._pdir };
+	const Displacement screenStep { (step.deltaX - step.deltaY) * 32, (step.deltaX + step.deltaY) * 16 };
+	constexpr int Ghosts = 3;
+	for (int ghost = Ghosts; ghost >= 1; ghost--) {
+		const Point position = spriteBufferPosition - Displacement { screenStep.deltaX * ghost / 3, screenStep.deltaY * ghost / 3 };
+		const size_t light = std::min<size_t>(LightTables.size() - 1, static_cast<size_t>(3 + (ghost * 3)));
+		ClxDrawBlendedTRN(out, position, sprite, LightTables[light].data());
+	}
+}
+
+/**
  * @brief Render a player sprite
  * @param out Output buffer
  * @param player Player reference
@@ -479,7 +541,9 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	}
 
 	const ClxSprite sprite = player.currentSprite();
+	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
+	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
 
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
@@ -530,7 +594,8 @@ void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPo
  */
 void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
-	const ClxSprite sprite = objectToDraw.currentSprite();
+	// POE2 Mashup: with Modern Effects, candles hold still and torches flicker out of step (see vfx::ObjectSprite).
+	const ClxSprite sprite = vfx::ObjectSprite(objectToDraw);
 
 	const Point screenPosition = targetBufferPosition + objectToDraw.getRenderingOffset(sprite, tilePosition);
 
@@ -776,6 +841,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	const Point monsterRenderPosition = targetBufferPosition + offset;
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
+	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {
+		ClxDrawOutlineSkipColorZero(out, *rank, monsterRenderPosition, sprite);
 	}
 	DrawMonster(out, tilePosition, monsterRenderPosition, monster, lightTableIndex);
 }
@@ -1287,9 +1354,24 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	    out.at(0, 0), out.pitch(), LightTables, FullyLitLightTable, FullyDarkLightTable,
 	    dLight, MicroTileLen);
 
+	// POE2 Mashup: the HD renderer replays these draws in full colour at twice the size.
+	if (*GetOptions().Graphics.zoom && hd::Active()) {
+		int viewportWidth = fullOut.w();
+		int viewportOffsetX = 0;
+		if (CanPanelsCoverView()) {
+			if (IsLeftPanelOpen()) {
+				viewportWidth -= SidePanelSize.width;
+				viewportOffsetX = SidePanelSize.width;
+			} else if (IsRightPanelOpen()) {
+				viewportWidth -= SidePanelSize.width;
+			}
+		}
+		hd::BeginWorld(out, Rectangle { Point { viewportOffsetX, 0 }, Size { viewportWidth, gnViewportHeight } });
+	}
 	DrawFloor(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawTileContent(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawOOB(out, lightmap, position, Point {} + offset, rows, columns);
+	hd::EndWorld();
 
 	if (*GetOptions().Graphics.zoom) {
 		Zoom(fullOut.subregionY(0, gnViewportHeight));
@@ -1325,8 +1407,15 @@ void DrawView(const Surface &out, Point startPosition)
 	DebugCoordsMap.clear();
 #endif
 	Displacement offset = {};
-	CalcFirstTilePosition(startPosition, offset);
-	DrawGame(out, startPosition, offset);
+	{
+		// POE2 Mashup: with the UI scaled, the world is drawn at the full size and the UI over a shrunk copy of it.
+		const WorldSpaceScope worldSpace;
+		CalcFirstTilePosition(startPosition, offset);
+		// POE2 Mashup: heavy hits jolt the view.
+		offset += CameraShakeOffset();
+		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
+	}
+	PrepareScaledUi();
 	if (AutomapActive) {
 		DrawAutomap(out.subregionY(0, gnViewportHeight));
 	}
@@ -1399,8 +1488,16 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 #endif
 	DrawItemNameLabels(out);
-	DrawMonsterHealthBar(out);
+	if (gbIsPoe2)
+		DrawMonsterBanner(out);
+	else
+		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
+	// POE2 Mashup: the effects layer lines up with this frame's view.
+	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
+	vfx::ScanMissiles();
+	if (IsUiScaled())
+		vfx::ScanWorld(WorldBackBuffer());
 
 	if (IsPlayerInStore() && !qtextflag)
 		DrawSText(out);
@@ -1686,10 +1783,12 @@ void TilesInView(int *rcolumns, int *rrows)
 
 void CalcViewportGeometry()
 {
+	// POE2 Mashup: the world's geometry, at the full size when the UI is scaled.
+	const WorldSpaceScope worldSpace;
 	const int zoomFactor = *GetOptions().Graphics.zoom ? 2 : 1;
 	const int screenWidth = GetScreenWidth() / zoomFactor;
 	const int screenHeight = GetScreenHeight() / zoomFactor;
-	const int panelHeight = GetMainPanel().size.height / zoomFactor;
+	const int panelHeight = UiToWorldHeight(GetMainPanel().size.height) / zoomFactor;
 	const int pixelsToPanel = screenHeight - panelHeight;
 	Point playerPosition { screenWidth / 2, pixelsToPanel / 2 };
 
@@ -1905,13 +2004,13 @@ void DrawAndBlit()
 	DrawXPBar(out);
 	if (gbIsPoe2)
 		DrawPoe2GlobeValues(out);
-	if (*GetOptions().Gameplay.showHealthValues)
+	if (*GetOptions().Gameplay.showHealthValues || (gbIsPoe2 && IsHoveringLifeGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
-	if (*GetOptions().Gameplay.showManaValues)
+	if (*GetOptions().Gameplay.showManaValues || (gbIsPoe2 && IsHoveringManaGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
 		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
-	if (*GetOptions().Gameplay.floatingInfoBox)
+	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
 
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)
@@ -1919,6 +2018,8 @@ void DrawAndBlit()
 
 	DrawPassiveTree(out);
 	DrawGemcutting(out);
+	DrawDesecrationReveal(out);
+	DrawAtlas(out);
 	DrawItemSpawner(out);
 	DrawCursor(out);
 

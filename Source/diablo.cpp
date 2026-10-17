@@ -82,7 +82,9 @@
 #include "nthread.h"
 #include "objects.h"
 #include "options.h"
+#include "panels/atlas_panel.hpp"
 #include "panels/console.hpp"
+#include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/info_box.hpp"
 #include "panels/item_spawner.hpp"
@@ -93,13 +95,22 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/autosave.hpp"
+#include "poe2/charms.hpp"
+#include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/hardcore.hpp"
+#include "poe2/hd.hpp"
+#include "poe2/economy.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -174,6 +185,9 @@ extern void plrctrls_after_game_logic();
 
 namespace {
 
+/** @brief Where `--hd-export` writes the dungeon frames for the HD pack maker. */
+std::string HdExportDir;
+
 char gszVersionNumber[64] = "internal version unknown";
 
 bool gbGameLoopStartup;
@@ -238,7 +252,7 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen())) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen() || IsAtlasOpen())) {
 		RedrawViewport();
 		return false;
 	}
@@ -250,6 +264,7 @@ bool ProcessInput()
 		CheckCursMove();
 		plrctrls_after_check_curs_move();
 		RepeatPlayerAction();
+		RepeatHeldTraySlot();
 	}
 
 	return true;
@@ -264,14 +279,28 @@ void LeftMouseCmd(bool bShift)
 	// POE2 Mashup: with WASD movement, clicking the ground doesn't walk and attacks don't chase.
 	const bool wasdMovement = IsWasdMovementEnabled();
 
+	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
+	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
+		LastPlayerAction = PlayerActionType::Walk;
+		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
+		return;
+	}
+
 	if (leveltype == DTYPE_TOWN) {
 		CloseGoldWithdraw();
 		CloseStash();
 		CloseVisualStore();
 		if (pcursitem != -1 && pcurs == CURSOR_HAND)
 			NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
-		if (pcursmonst != -1)
+		if (pcursmonst != -1) {
+			QuickTradeTowner = (SDL_GetModState() & SDL_KMOD_CTRL) != 0 ? pcursmonst : -1;
 			NetSendCmdLocParam1(true, CMD_TALKXY, cursPosition, pcursmonst);
+		}
+		// POE2 Mashup: clicking the well walks to it and refills the charms.
+		if (gbIsPoe2 && pcursitem == -1 && pcursmonst == -1 && IsTownWellTile(cursPosition)) {
+			ClickTownWell(*MyPlayer);
+			return;
+		}
 		if (!wasdMovement && pcursitem == -1 && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
 			LastPlayerAction = PlayerActionType::Walk;
 			NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
@@ -302,7 +331,8 @@ void LeftMouseCmd(bool bShift)
 			NetSendCmdParam1(true, CMD_RATTACKPID, PlayerUnderCursor->getId());
 		}
 	} else {
-		if (bShift || (wasdMovement && pcursmonst != -1 && !CanTalkToMonst(Monsters[pcursmonst]))) {
+		// POE2 Mashup: clicking a monster walks up to it and attacks, with WASD movement too; Shift attacks in place.
+		if (bShift) {
 			if (pcursmonst != -1) {
 				if (CanTalkToMonst(Monsters[pcursmonst])) {
 					NetSendCmdParam1(true, CMD_ATTACKID, pcursmonst);
@@ -351,10 +381,12 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 	if (!IsSkillBarShown() || leveltype == DTYPE_TOWN)
 		return false;
 	const TrayBinding binding = MyPlayer->poe2.tray[static_cast<size_t>(slot)];
-	if (binding == DefaultTrayBinding(slot))
+	if (binding == DefaultTrayBinding(slot) && binding.action != TrayAction::WeaponAttack)
 		return false;
-	// The left button still picks up items and opens chests and doors under the cursor.
-	if (slot == TraySlot::LeftMouse && (pcursitem != -1 || (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled())))
+	// The left button still picks up items, opens chests and doors, takes stairs and portals, and talks.
+	if (slot == TraySlot::LeftMouse
+	    && (pcursitem != -1 || trigflag || (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled())
+	        || (pcursmonst != -1 && CanTalkToMonst(Monsters[pcursmonst]))))
 		return false;
 	switch (binding.action) {
 	case TrayAction::MoveAndAttack:
@@ -367,7 +399,8 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 		CheckPlrSpell(isShiftHeld);
 		return true;
 	case TrayAction::Gem:
-		UseTraySlot(slot);
+	case TrayAction::WeaponAttack:
+		PressTraySlot(slot);
 		return true;
 	default:
 		return false;
@@ -456,10 +489,13 @@ void LeftMouseDown(uint16_t modState)
 					CheckVisualStoreItem(MousePosition, isCtrlHeld, isShiftHeld);
 				}
 				CheckVisualStoreButtonPress(MousePosition);
-			} else if (IsSkillsPanelOpen() && GetLeftPanel().contains(MousePosition)) {
+			} else if (SkillsPanelContains(MousePosition)) {
 				HandleSkillsPanelClick(MousePosition);
 			} else if (SpellbookFlag && GetRightPanel().contains(MousePosition)) {
 				CheckSBook();
+			} else if (HasPendingPurchase()) {
+				// A ware that isn't paid for can't be dropped on the ground.
+				CancelPendingPurchase();
 			} else if (!MyPlayer->HoldItem.isEmpty()) {
 				if (!TryOpenDungeonWithMouse()) {
 					const Point currentPosition = MyPlayer->position.tile;
@@ -533,6 +569,19 @@ void RightMouseDown(bool isShiftHeld)
 		return;
 	if (TryIconCurs())
 		return;
+	// POE2 Mashup: Shift+right-click at Griswold salvages an item, and at Adria disenchants it.
+	if (gbIsPoe2 && isShiftHeld && IsVisualStoreOpen && MyPlayer->HoldItem.isEmpty() && pcursinvitem >= INVITEM_INV_FIRST && pcursinvitem <= INVITEM_INV_LAST
+	    && IsAnyOf(VisualStore.vendor, VisualStoreVendor::Smith, VisualStoreVendor::Witch)) {
+		const int invIndex = pcursinvitem - INVITEM_INV_FIRST;
+		const bool done = VisualStore.vendor == VisualStoreVendor::Smith ? SalvageInvItem(*MyPlayer, invIndex) : DisenchantInvItem(*MyPlayer, invIndex);
+		if (done)
+			PlaySFX(SfxID::ItemGold);
+		return;
+	}
+	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
+	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
+		return;
+	SetStickyItemUse(isShiftHeld);
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
 		return;
 	if (pcursstashitem != StashStruct::EmptyCell && UseStashItem(pcursstashitem))
@@ -587,7 +636,9 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 
 	if (MyPlayerIsDead) {
 		if (vkey == SDLK_ESCAPE) {
-			if (!gbIsMultiplayer) {
+			if (HardcoreHeroFell()) {
+				ContinueInSoftcore(*MyPlayer);
+			} else if (!gbIsMultiplayer) {
 				if (gbValidSaveFile)
 					gamemenu_load_game(false);
 				else
@@ -780,6 +831,10 @@ void HandleMouseButtonDown(Uint8 button, uint16_t modState)
 
 void HandleMouseButtonUp(Uint8 button, uint16_t modState)
 {
+	if (button == SDL_BUTTON_LEFT)
+		ReleaseTraySlot(TraySlot::LeftMouse);
+	else if (button == SDL_BUTTON_RIGHT)
+		ReleaseTraySlot(TraySlot::RightMouse);
 	if (sgbMouseDown == CLICK_LEFT && button == SDL_BUTTON_LEFT) {
 		LastPlayerAction = PlayerActionType::None;
 		sgbMouseDown = CLICK_NONE;
@@ -839,10 +894,20 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		return;
 	}
 
+	if (StashTabsHandleEvent(event)) {
+		return;
+	}
+
 	if (PassiveTreeHandleEvent(event)) {
 		return;
 	}
 
+	if (DesecrationRevealHandleEvent(event)) {
+		return;
+	}
+	if (AtlasHandleEvent(event)) {
+		return;
+	}
 	if (GemcuttingHandleEvent(event)) {
 		return;
 	}
@@ -897,6 +962,8 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollUp();
 			} else if (IsStashOpen) {
 				Stash.PreviousPage();
+			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+				VisualStorePreviousPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
 					AutomapZoomIn();
@@ -915,6 +982,8 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollDown();
 			} else if (IsStashOpen) {
 				Stash.NextPage();
+			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+				VisualStoreNextPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
 					AutomapZoomOut();
@@ -934,14 +1003,15 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 			if (gbIsMultiplayer)
 				pfile_write_hero();
 			nthread_ignore_mutex(true);
-			PaletteFadeOut(8);
+			// POE2 Mashup: quick fades between levels, and no loading screen when the level loads quickly.
+			PaletteFadeOut(LevelChangeFadeSpeed());
 			sound_stop();
 			ShowProgress(GetCustomEvent(event));
 
 			PrepareForFadeIn();
 			LoadPWaterPalette();
 			if (gbRunGame)
-				PaletteFadeIn(8);
+				PaletteFadeIn(LevelChangeFadeSpeed());
 			nthread_ignore_mutex(false);
 			gbGameLoopStartup = true;
 			return;
@@ -999,6 +1069,8 @@ void RunGameLoop(interface_mode uMsg)
 		uint16_t modState;
 		while (FetchMessage(&event, &modState)) {
 			if (event.type == SDL_EVENT_QUIT) {
+				// POE2 Mashup: closing the window saves, as there is no Save Game.
+				AutosaveNow();
 				gbRunGameResult = false;
 				gbRunGame = false;
 				break;
@@ -1240,6 +1312,12 @@ void DiabloParseFlags(int argc, char **argv)
 			EnableFrameCount();
 		} else if (arg == "--spawn") {
 			forceSpawn = true;
+		} else if (arg == "--hd-export") {
+			if (i + 1 == argc) {
+				PrintFlagRequiresArgument("--hd-export");
+				diablo_quit(64);
+			}
+			HdExportDir = argv[++i];
 		} else if (arg == "--diablo") {
 			forceDiablo = true;
 		} else if (arg == "--hellfire") {
@@ -1510,6 +1588,32 @@ std::expected<void, std::string> LoadLvlGFX()
 	}
 }
 
+/** @brief Writes every dungeon type's frames for the HD pack maker (POE2 Mashup `--hd-export`). */
+void HdExportAll()
+{
+	constexpr dungeon_type Levels[] = { DTYPE_TOWN, DTYPE_CATHEDRAL, DTYPE_CATACOMBS, DTYPE_CAVES, DTYPE_HELL, DTYPE_NEST, DTYPE_CRYPT };
+	for (const dungeon_type level : Levels) {
+		leveltype = level;
+		pDungeonCels = nullptr;
+		pMegaTiles = nullptr;
+		pSpecialCels = std::nullopt;
+		std::memset(DPieceMicros, 0, sizeof(DPieceMicros));
+		if (!LoadLevelSOLData().has_value() || !LoadLvlGFX().has_value()) {
+			LogInfo("HD export: skipping level type {}", static_cast<int>(level));
+			pDungeonCels = nullptr;
+			continue;
+		}
+		SetDungeonMicros(pDungeonCels, MicroTileLen);
+		MakeLightTable();
+		LoadPaletteAndInitBlending(hd::PackPalette(static_cast<uint8_t>(level)));
+		hd::ExportLevelTiles(HdExportDir);
+		LogInfo("HD export: wrote level type {}", static_cast<int>(level));
+	}
+	pDungeonCels = nullptr;
+	pMegaTiles = nullptr;
+	pSpecialCels = std::nullopt;
+}
+
 std::expected<void, std::string> LoadAllGFX()
 {
 	IncProgress();
@@ -1619,6 +1723,7 @@ void GameLogic()
 		ProcessPlayers();
 	}
 	TelemetryTick();
+	SettlePendingPurchase();
 	if (leveltype != DTYPE_TOWN) {
 		gGameLogicStep = GameLogicStep::ProcessMonsters;
 #ifdef _DEBUG
@@ -1654,6 +1759,13 @@ void GameLogic()
 	CheckQuests();
 	RedrawViewport();
 	pfile_update(false);
+	// POE2 Mashup: a finished quest gives passive points once per hero, like POE2's quest rewards.
+	if (const int gained = MyPlayer != nullptr ? RecordQuestPassivePoints(*MyPlayer) : 0; gained > 0) {
+		EventPlrMsg(FormatRuntime(_("Quest complete: +{:d} Passive Skill Points"), gained), UiFlags::ColorGold);
+		RequestAutosave();
+	}
+	ProcessAutosave();
+	CloseInteractionPanelsWhenAway();
 
 	plrctrls_after_game_logic();
 }
@@ -2044,8 +2156,20 @@ void InitKeymapActions()
 	    N_("Item highlighting"),
 	    N_("Show/hide items on ground."),
 	    SDLK_LALT,
-	    [] { HighlightKeyPressed(true); },
-	    [] { HighlightKeyPressed(false); });
+	    // POE2 Mashup: Alt toggles the labels, which stay up until it's pressed again; the loot filter decides which show.
+	    // Over an item it only shows the item's modifier details, so checking an item doesn't flip the labels.
+	    [] {
+		    if (gbIsPoe2) {
+			    if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursitem == -1)
+				    ToggleItemLabelHighlight();
+		    } else {
+			    HighlightKeyPressed(true);
+		    }
+	    },
+	    [] {
+		    if (!gbIsPoe2)
+			    HighlightKeyPressed(false);
+	    });
 	options.Keymapper.AddAction(
 	    "ToggleItemHighlighting",
 	    N_("Toggle item highlighting"),
@@ -2128,11 +2252,15 @@ void InitKeymapActions()
 	    N_("Hide all info screens."),
 	    SDLK_SPACE,
 	    [] {
-		    // POE2 Mashup: with nothing to hide, Space dodge rolls instead.
-		    const bool anythingShown = AutomapActive || IsLeftPanelOpen() || IsRightPanelOpen() || HelpFlag || ChatLogFlag
-		        || SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
-		    if (!anythingShown && TryDodgeRoll(*MyPlayer))
-			    return;
+		    // POE2 Mashup: Space dodge rolls, as in POE2, and leaves the map and panels open; it only dismisses
+		    // menus and messages that stop play.
+		    if (gbIsPoe2) {
+			    const bool modalShown = SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
+			    if (!modalShown) {
+				    TryDodgeRoll(*MyPlayer);
+				    return;
+			    }
+		    }
 
 		    if (CanAutomapBeToggledOff())
 			    AutomapActive = false;
@@ -2272,6 +2400,18 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return gbIsPoe2 && !gmenu_is_active(); });
+	options.Keymapper.AddAction(
+	    "AtlasPassives",
+	    N_("Atlas"),
+	    N_("Opens the Atlas passives, where completed maps give points (POE2 Mashup)."),
+	    'U',
+	    [] {
+		    if (!gbIsPoe2 || IsPlayerInStore())
+			    return;
+		    ToggleAtlas();
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && !gmenu_is_active(); });
 	// POE2 opens the passive tree with P. Outside the mod (or in multiplayer) P still pauses.
 	options.Keymapper.AddAction(
 	    "PassiveTree",
@@ -2294,8 +2434,8 @@ void InitKeymapActions()
 		    N_("Skill tray key {}"),
 		    N_("Use the skill on this skill tray slot (POE2 Mashup)."),
 		    TrayKeys[i],
-		    [i] { UseTraySlot(TrayKeySlot(i)); },
-		    nullptr,
+		    [i] { PressTraySlot(TrayKeySlot(i)); },
+		    [i] { ReleaseTraySlot(TrayKeySlot(i)); },
 		    CanPlayerTakeAction,
 		    i + 1);
 	}
@@ -2304,9 +2444,17 @@ void InitKeymapActions()
 	    N_("Skill tray middle button"),
 	    N_("Use the skill on the middle mouse button's skill tray slot (POE2 Mashup)."),
 	    SDL_BUTTON_MIDDLE | KeymapperMouseButtonMask,
-	    [] { UseTraySlot(TraySlot::MiddleMouse); },
-	    nullptr,
+	    [] { PressTraySlot(TraySlot::MiddleMouse); },
+	    [] { ReleaseTraySlot(TraySlot::MiddleMouse); },
 	    CanPlayerTakeAction);
+	options.Keymapper.AddAction(
+	    "SwapWeapons",
+	    N_("Swap weapons"),
+	    N_("Swaps between weapon sets I and II (POE2 Mashup)."),
+	    'X',
+	    [] { SwapWeapons(*MyPlayer); },
+	    nullptr,
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
 	options.Keymapper.CommitActions();
 }
 
@@ -2951,10 +3099,15 @@ int DiabloMain(int argc, char **argv)
 	LoadMonsterData();
 	LoadItemData();
 	LoadPassiveTreeData();
+	LoadModifierData();
 	LoadObjectData();
 	LoadQuestData();
 
 	DiabloInit();
+	if (!HdExportDir.empty()) {
+		HdExportAll();
+		diablo_quit(0);
+	}
 #ifdef __UWP__
 	onInitialized();
 #endif
@@ -2996,6 +3149,15 @@ bool TryIconCurs()
 
 	Player &myPlayer = *MyPlayer;
 
+	if (pcurs == CURSOR_IDENTIFY && gbIsPoe2) {
+		IdentifyWithScroll(myPlayer);
+		// With Shift, the next scroll stays on the cursor.
+		if (!WantsStickyItemUse() || !HasIdentifyScroll(myPlayer)) {
+			SetStickyItemUse(false);
+			NewCursor(CURSOR_HAND);
+		}
+		return true;
+	}
 	if (pcurs == CURSOR_IDENTIFY) {
 		if (pcursinvitem != -1 && !IsInspectingPlayer())
 			CheckIdentify(myPlayer, pcursinvitem);
@@ -3039,13 +3201,32 @@ bool TryIconCurs()
 		bool changeCursor = true;
 		if (pcursinvitem != -1 && !IsInspectingPlayer())
 			changeCursor = DoOil(myPlayer, pcursinvitem);
-		else if (pcursstashitem != StashStruct::EmptyCell) {
+		else if (gbIsPoe2 && JewellerSocket(CurrencyOrbForMiscId(myPlayer._pOilType)) && SkillsPanelContains(MousePosition)) {
+			// Jeweller's Orbs go on a skill in the Skills panel.
+			changeCursor = UseJewellerOnSkillsPanel(myPlayer, MousePosition);
+			if (changeCursor) {
+				SpendHeldCurrency(myPlayer);
+				PlaySFX(SfxID::ItemRing);
+				PlaySFX(SfxID::SpellHolyBolt);
+			}
+		} else if (pcursstashitem != StashStruct::EmptyCell) {
 			Item &item = Stash.stashList[pcursstashitem];
 			changeCursor = ApplyOilToItem(item, myPlayer);
+			if (changeCursor)
+				SpendHeldCurrency(myPlayer);
+			if (CurrencyDestroyedItem) {
+				CurrencyDestroyedItem = false;
+				Stash.RemoveStashItem(pcursstashitem);
+			} else if (DesecrationRevealItem) {
+				OpenDesecrationReveal(item);
+			}
+			ConsumeCraftOmens(myPlayer);
 			Stash.dirty = true;
 		}
-		if (changeCursor)
+		if (changeCursor && !(gbIsPoe2 && KeepCurrencyOnCursor(myPlayer))) {
+			SetStickyItemUse(false);
 			NewCursor(CURSOR_HAND);
+		}
 		return true;
 	}
 
@@ -3106,6 +3287,7 @@ bool diablo_is_focused()
 
 void diablo_focus_pause()
 {
+	ReleaseAllTraySlots();
 	if (!movie_playing && (gbIsMultiplayer || MinimizePaused)) {
 		return;
 	}
@@ -3302,21 +3484,27 @@ void LoadGameLevelStash()
 std::expected<void, std::string> LoadGameLevelDungeon(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
 	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pLvlVisited[currlevel] || gbIsMultiplayer) {
+		TelemetryStep("theme rooms");
 		HoldThemeRooms();
 		[[maybe_unused]] const uint32_t mid1Seed = GetLCGEngineState();
 		InitGolems();
+		TelemetryStep("objects");
 		InitObjects();
 		[[maybe_unused]] const uint32_t mid2Seed = GetLCGEngineState();
 
 		IncProgress();
 
+		TelemetryStep("monsters");
 		RETURN_IF_ERROR(InitMonsters());
+		TelemetryStep("items");
 		InitItems();
+		TelemetryStep("theme room contents");
 		CreateThemeRooms();
 
 		IncProgress();
 
 		[[maybe_unused]] const uint32_t mid3Seed = GetLCGEngineState();
+		TelemetryStep("missiles");
 		InitMissiles();
 		InitCorpses();
 #ifdef _DEBUG
@@ -3478,6 +3666,7 @@ std::expected<void, std::string> LoadGameLevelSetLevel(bool firstflag, lvl_entry
 
 std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
+	TelemetryStep("generating the level");
 	CreateLevel(lvldir);
 
 	IncProgress();
@@ -3485,8 +3674,10 @@ std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_
 	SetRndSeedForDungeonLevel();
 
 	if (leveltype != DTYPE_TOWN) {
+		TelemetryStep("monster types");
 		RETURN_IF_ERROR(GetLevelMTypes());
 		InitThemes();
+		TelemetryStep("graphics");
 		if (!HeadlessMode)
 			RETURN_IF_ERROR(LoadAllGFX());
 	} else if (!HeadlessMode) {
@@ -3515,6 +3706,7 @@ std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_
 
 	IncProgress();
 
+	TelemetryStep("players");
 	LoadGameLevelInitPlayers(firstflag, lvldir);
 	InitMultiView();
 
@@ -3586,12 +3778,14 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	IncProgress();
 
+	TelemetryStep(StrCat("start, level ", currlevel, ", type ", static_cast<int>(leveltype)));
 	RETURN_IF_ERROR(LoadTrns());
 	MakeLightTable();
 	RETURN_IF_ERROR(LoadLevelSOLData());
 
 	IncProgress();
 
+	TelemetryStep("tile graphics");
 	RETURN_IF_ERROR(LoadLvlGFX());
 	SetDungeonMicros(pDungeonCels, MicroTileLen);
 	ClearClxDrawCache();
@@ -3608,6 +3802,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	if (firstflag || lvldir == ENTRY_LOAD) {
 		LoadGameLevelStash();
+		MoveInventoryGoldToLeague(*MyPlayer);
 	}
 
 	IncProgress();
@@ -3618,6 +3813,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 		InitLighting();
 	}
 
+	TelemetryStep("automap and light");
 	InitLevelMonsters();
 
 	IncProgress();
@@ -3630,6 +3826,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 		RETURN_IF_ERROR(LoadGameLevelStandardLevel(firstflag, lvldir, myPlayer));
 	}
 
+	TelemetryStep("portals");
 	SyncPortals();
 	LoadGameLevelSyncPlayerEntry(lvldir);
 
@@ -3642,6 +3839,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	IncProgress();
 
+	TelemetryStep("monster lights");
 	UpdateMonsterLights();
 	UnstuckChargers();
 
@@ -3656,6 +3854,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 #endif
 	LoadGameLevelStartMusic(neededTrack);
 
+	TelemetryStep("finishing");
 	CompleteProgress();
 
 	MarkWalkabilityChanged();

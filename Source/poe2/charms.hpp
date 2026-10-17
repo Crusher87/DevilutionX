@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "engine/point.hpp"
 #include "utils/fixed_point.hpp"
 
 namespace devilution {
@@ -63,9 +64,19 @@ bool IsCharm(const Item &item);
 std::string_view CharmDescription(CharmEffect effect);
 /** @brief Charges a charm spends each time it goes off; a Golden Charm spends all of them. */
 int CharmChargesPerUseFor(CharmEffect effect);
+/** @brief Charges the charm uses per activation, after its unique's cost. */
+int CharmChargesPerUseFor(const Item &item);
 
 void GainCharmCharges(Player &player, int charges);
 void RefillCharms(Player &player);
+/** @brief Whether the tile is at the well in Tristram's square. */
+bool IsBesideTownWell(Point tile);
+/** @brief Whether the tile is the well itself, which the hero clicks to use. */
+bool IsTownWellTile(Point tile);
+/** @brief The hero clicked the well: uses it now if beside it, else walks over and uses it on arriving. */
+void ClickTownWell(Player &player);
+/** @brief Charms don't refill in town on their own: the hero clicks the well to fill them (Curtis 2026-10-16, 2026-10-17). */
+void RefillCharmsAtWell(Player &player);
 
 /** @brief Sets off Bloodstone and Sapphire charms and counts down charm effects; once per game tick. */
 void ProcessCharms(Player &player);

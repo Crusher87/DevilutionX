@@ -450,6 +450,8 @@ struct Monster { // note: missing field _mAFNum
 	[[nodiscard]] bool isWalking() const;
 	[[nodiscard]] bool isImmune(MissileID mitype, DamageType missileElement) const;
 	[[nodiscard]] bool isResistant(MissileID mitype, DamageType missileElement) const;
+	/** @brief The resistance flags as the player sees them: in POE2 mode an immunity shows as a resistance. */
+	[[nodiscard]] uint16_t shownResistance() const;
 
 	/**
 	 * Is this a player's golem?
@@ -589,10 +591,24 @@ void TalktoMonster(Player &player, Monster &monster);
 void SpawnGolem(const Player &player, Point position, uint8_t spellLevel);
 /** @brief POE2 Mashup: the monster raised by the Skeletal Warriors gem. */
 constexpr _monster_id SkeletonMinionType = MT_WSKELAX;
-size_t CountSkeletonMinions(const Player &player);
-void KillSkeletonMinions(const Player &player);
-/** @brief Raises a Skeletal Warrior for the player; false if the level has no room for it. */
-bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel);
+/** @brief POE2 Mashup: the monster raised by the Skeletal Mages gem; it hurls firebolts at range. */
+constexpr _monster_id SkeletonMageMinionType = MT_RSKELBW;
+size_t CountSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+void KillSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+/** @brief Raises a Skeletal Warrior (or Mage) for the player; false if the level has no room for it. */
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type = SkeletonMinionType);
+/** @brief POE2 Mashup Revive: what a raised monster keeps from its life before. */
+struct RevivedStats {
+	Fixed26_6 life;
+	uint8_t minDamage;
+	uint8_t maxDamage;
+	uint8_t armorClass;
+	uint16_t resistance;
+};
+size_t CountRevivedMinions(const Player &player);
+void KillRevivedMinions(const Player &player);
+/** @brief Raises a monster of the type to fight for the player, with the stats it had. */
+Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

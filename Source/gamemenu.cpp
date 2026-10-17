@@ -16,6 +16,7 @@
 #include "engine/backbuffer_state.hpp"
 #include "engine/demomode.h"
 #include "engine/events.hpp"
+#include "engine/render/scrollrt.h"
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
 #include "game_mode.hpp"
@@ -25,7 +26,9 @@
 #include "multi.h"
 #include "options.h"
 #include "pfile.h"
+#include "poe2/autosave.hpp"
 #include "qol/floatingnumbers.h"
+#include "utils/format.hpp"
 #include "utils/language.h"
 
 #ifndef USE_SDL1
@@ -47,6 +50,8 @@ void GamemenuSoundVolume(bool bActivate);
 void GamemenuBrightness(bool bActivate);
 void GamemenuSpeed(bool bActivate);
 void GamemenuMovement(bool bActivate);
+void GamemenuUiScale(bool bActivate);
+void GamemenuResolution(bool bActivate);
 
 /** Contains the game menu items of the single player menu. */
 TMenuItem sgSingleMenu[] = {
@@ -54,6 +59,18 @@ TMenuItem sgSingleMenu[] = {
 	// dwFlags,      pszStr,                  fnMenu
 	{ GMENU_ENABLED, N_("Options"),           &GamemenuOptions    },
 	{ GMENU_ENABLED, N_("Save Game"),         &gamemenu_save_game },
+	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
+	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
+	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
+	{ GMENU_ENABLED, N_("Admin Tools"),       &AdminMenuOpen      },
+	{ GMENU_ENABLED, nullptr,                 nullptr             },
+	// clang-format on
+};
+/** POE2 Mashup: the single player menu without Save Game; the game saves on its own (poe2/autosave.hpp). */
+TMenuItem sgPoe2SingleMenu[] = {
+	// clang-format off
+	// dwFlags,      pszStr,                  fnMenu
+	{ GMENU_ENABLED, N_("Options"),           &GamemenuOptions    },
 	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
 	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
 	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
@@ -79,6 +96,8 @@ TMenuItem sgOptionsMenu[] = {
 	{ GMENU_ENABLED | GMENU_SLIDER, N_("Gamma"),         &GamemenuBrightness   },
 	{ GMENU_ENABLED | GMENU_SLIDER, N_("Speed"),         &GamemenuSpeed        },
 	{ GMENU_ENABLED               , nullptr,             &GamemenuMovement     },
+	{ GMENU_ENABLED               , nullptr,             &GamemenuUiScale      },
+	{ GMENU_ENABLED               , nullptr,             &GamemenuResolution   },
 	{ GMENU_ENABLED               , N_("Previous Menu"), &GamemenuPrevious     },
 	{ GMENU_ENABLED               , nullptr,             nullptr               },
 	// clang-format on
@@ -104,6 +123,16 @@ void GamemenuUpdateSingle()
 	sgSingleMenu[5].setEnabled(enable);
 }
 
+void GamemenuUpdatePoe2Single()
+{
+	sgPoe2SingleMenu[1].setEnabled(gbValidSaveFile);
+
+	const bool enable = MyPlayer->_pmode != PM_DEATH && !MyPlayerIsDead;
+
+	sgPoe2SingleMenu[0].setEnabled(enable);
+	sgPoe2SingleMenu[4].setEnabled(enable);
+}
+
 void GamemenuPrevious(bool /*bActivate*/)
 {
 	gamemenu_on();
@@ -111,6 +140,8 @@ void GamemenuPrevious(bool /*bActivate*/)
 
 void GamemenuNewGame(bool /*bActivate*/)
 {
+	// POE2 Mashup: leaving saves the game, as there is no Save Game.
+	AutosaveNow();
 	for (Player &player : Players) {
 		player._pmode = PM_QUIT;
 		player._pInvincible = true;
@@ -188,6 +219,51 @@ void GamemenuGetMovement()
 	sgOptionsMenu[4].pszStr = IsWasdMovementEnabled() ? N_("Movement: WASD") : N_("Movement: Click");
 }
 
+// POE2 Mashup: UI Scale and Resolution change during a game; each click picks the next value.
+std::string UiScaleMenuText;
+std::string ResolutionMenuText;
+
+void GamemenuGetUiScale()
+{
+	OptionEntryInt<int> &uiScale = GetOptions().Graphics.uiScale;
+#ifdef USE_SDL1
+	constexpr bool CanScaleUi = false;
+#else
+	const bool CanScaleUi = *GetOptions().Graphics.upscale;
+#endif
+	if (!CanScaleUi) {
+		sgOptionsMenu[5].removeFlags(GMENU_ENABLED);
+		UiScaleMenuText = _("UI Scale: needs Upscale");
+	} else {
+		sgOptionsMenu[5].addFlags(GMENU_ENABLED);
+		UiScaleMenuText = FormatRuntime(_("UI Scale: {:d}%"), *uiScale);
+	}
+	sgOptionsMenu[5].pszStr = UiScaleMenuText.c_str();
+}
+
+void GamemenuGetResolution()
+{
+	OptionEntryResolution &resolution = GetOptions().Graphics.resolution;
+	const Size size = *resolution;
+	ResolutionMenuText = FormatRuntime(_("Resolution: {:d}x{:d}"), size.width, size.height);
+	if (resolution.GetListSize() > 1)
+		sgOptionsMenu[6].addFlags(GMENU_ENABLED);
+	else
+		sgOptionsMenu[6].removeFlags(GMENU_ENABLED);
+	sgOptionsMenu[6].pszStr = ResolutionMenuText.c_str();
+}
+
+/** @brief Steps a list option to its next value, wrapping around, and refits the game view to the new size. */
+void StepDisplayOption(OptionEntryListBase &option)
+{
+	const size_t count = option.GetListSize();
+	if (count < 2)
+		return;
+	option.SetActiveListIndex((option.GetActiveListIndex() + 1) % count);
+	CalcViewportGeometry();
+	RedrawEverything();
+}
+
 int GamemenuSliderBrightness()
 {
 	return gmenu_slider_get(&sgOptionsMenu[2], 0, 100);
@@ -200,6 +276,8 @@ void GamemenuOptions(bool /*bActivate*/)
 	GamemenuGetBrightness();
 	GamemenuGetSpeed();
 	GamemenuGetMovement();
+	GamemenuGetUiScale();
+	GamemenuGetResolution();
 	gmenu_set_items(sgOptionsMenu, nullptr);
 }
 
@@ -295,6 +373,18 @@ void GamemenuMovement(bool /*bActivate*/)
 	GamemenuGetMovement();
 }
 
+void GamemenuUiScale(bool /*bActivate*/)
+{
+	StepDisplayOption(GetOptions().Graphics.uiScale);
+	GamemenuGetUiScale();
+}
+
+void GamemenuResolution(bool /*bActivate*/)
+{
+	StepDisplayOption(GetOptions().Graphics.resolution);
+	GamemenuGetResolution();
+}
+
 } // namespace
 
 void gamemenu_exit_game(bool bActivate)
@@ -384,7 +474,9 @@ void gamemenu_save_game(bool /*bActivate*/)
 void gamemenu_on()
 {
 	isGameMenuOpen = true;
-	if (!gbIsMultiplayer) {
+	if (!gbIsMultiplayer && gbIsPoe2) {
+		gmenu_set_items(sgPoe2SingleMenu, GamemenuUpdatePoe2Single);
+	} else if (!gbIsMultiplayer) {
 		gmenu_set_items(sgSingleMenu, GamemenuUpdateSingle);
 	} else {
 		gmenu_set_items(sgMultiMenu, nullptr);

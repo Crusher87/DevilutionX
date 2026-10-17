@@ -24,7 +24,11 @@ bool IsSkillGem(const Item &item);
 
 /** @brief The item table index of the gem that grants the skill. */
 std::optional<size_t> SkillGemItemIndex(SkillSlot skill);
-bool CreateSkillGemItem(Item &item, SkillSlot skill);
+bool CreateSkillGemItem(Item &item, SkillSlot skill, int level = 1);
+
+/** @brief A skill gem item's level, 1 to 20. */
+int SkillGemItemLevel(const Item &item);
+void SetSkillGemItemLevel(Item &item, int level);
 
 std::string_view SkillName(SkillSlot skill);
 int SkillManaCost(const Player &player, SkillSlot skill);
@@ -56,10 +60,12 @@ std::optional<size_t> FindSkillSlot(const Player &player, SkillSlot skill);
  * Tray slots that used the socket go back to their default when it's emptied or gets a Spirit gem.
  * @return The skill that was in the socket before (empty if none).
  */
-SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill);
+SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill, int level = 1);
 
 /** @brief Only the left and right mouse buttons can move, interact or cast the readied spell. */
 bool TraySlotTakesActions(TraySlot slot);
+/** @brief Whether a slot can take the binding: gems and the weapon attack go anywhere, the other actions only on those two buttons. */
+bool TrayBindingFits(TrayBinding binding, TraySlot slot);
 /** @brief The first tray slot that uses the gem in a Skills panel socket, if any. */
 std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket);
 /** @brief The skill a tray slot uses; empty unless it's bound to a socketed gem. */

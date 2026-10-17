@@ -9,9 +9,11 @@
 #include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/tile_properties.hpp"
+#include "monster.h"
 #include "msg.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/support_table.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -23,6 +25,8 @@ constexpr int DodgeTicksPerTile = 4;
 constexpr int DodgeGraceTicks = 2;
 /** Game ticks between rolls, so the invulnerability can't be chained forever. */
 constexpr int DodgeCooldownTicks = 20;
+/** Game ticks at the start of a roll that hits and missiles pass through, like POE2's brief i-frames. */
+constexpr int DodgeUntouchableTicks = 6;
 
 Direction WasdDirection(AxisDirection dir)
 {
@@ -46,6 +50,23 @@ bool CanStepTo(const Player &player, Point from, Direction dir)
 			return false;
 	}
 	return true;
+}
+
+/**
+ * @brief Shoves a monster in the roll's way to one side, like POE2's roll pushing small monsters aside.
+ * Unique monsters stand their ground, and a monster with no room to move blocks the roll, so a crowd can still trap the hero.
+ */
+bool ShoveAside(Point tile, Direction dir)
+{
+	Monster *monster = FindMonsterAtPosition(tile, true);
+	if (monster == nullptr || monster->isUnique() || monster->hasNoLife() || monster->mode == MonsterMode::Petrified)
+		return false;
+	for (const Direction side : { Left(Left(dir)), Right(Right(dir)), Left(dir), Right(dir) }) {
+		M_GetKnockback(*monster, tile - Displacement { side });
+		if (monster->position.old != tile)
+			return true;
+	}
+	return false;
 }
 
 } // namespace
@@ -72,7 +93,7 @@ bool TryDodgeRoll(Player &player)
 
 	Point target = player.position.future;
 	int tiles = 0;
-	while (tiles < DodgeRollTiles && CanStepTo(player, target, dir)) {
+	while (tiles < DodgeRollTiles && (CanStepTo(player, target, dir) || (ShoveAside(target + dir, dir) && CanStepTo(player, target, dir)))) {
 		target += dir;
 		tiles++;
 	}
@@ -81,7 +102,9 @@ bool TryDodgeRoll(Player &player)
 
 	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
 	player.poe2.dodgeCooldown = DodgeCooldownTicks;
+	player.poe2.untouchableTicks = DodgeUntouchableTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, target);
+	OnSupportedDodge(player);
 	return true;
 }
 
@@ -100,6 +123,7 @@ std::optional<Point> DashTowards(Player &player, Point target, int maxTiles)
 		return std::nullopt;
 
 	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
+	player.poe2.untouchableTicks = player.poe2.dodgeTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, end);
 	return end;
 }

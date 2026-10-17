@@ -17,8 +17,8 @@ struct Item;
 struct Monster;
 struct Player;
 
-/** @brief Every character has some Spirit, like the Spirit POE2 grants early in the campaign. */
-constexpr int BaseSpirit = 30;
+/** @brief Characters start with no Spirit, as in POE2; it comes from Spirit skulls (see SpiritSkullSpirit) and gear. */
+constexpr int BaseSpirit = 0;
 /** @brief Sceptres grant Spirit, as in POE2. */
 constexpr int SceptreSpirit = 100;
 constexpr int PurityResistance = 25;
@@ -29,6 +29,9 @@ constexpr int HeraldOfAshRadius = 2;
 constexpr int HeraldOfThunderBolts = 2;
 constexpr int HeraldOfThunderPercent = 25;
 constexpr int HeraldOfThunderRadius = 6;
+/** @brief Herald of Frost: a chilled or frozen enemy you kill shatters, dealing this share of its life as cold to its neighbours. */
+constexpr int HeraldOfFrostPercent = 12;
+constexpr int HeraldOfFrostRadius = 2;
 /** @brief A fallen golem comes back after 4 seconds. */
 constexpr int GolemReviveTicks = 4 * 20;
 /** @brief A fallen Skeletal Warrior rises again after 3 seconds. */
@@ -36,6 +39,8 @@ constexpr int SkeletonReviveTicks = 3 * 20;
 
 /** @brief Skeletal Warriors raises 2 skeletons, one more at character level 10 and 20. */
 int SkeletalWarriorCount(int characterLevel);
+/** @brief Skeletal Mages raises 1 mage, one more at character level 20 and 40. */
+int SkeletalMageCount(int characterLevel);
 
 std::string_view PersistentSkillName(PersistentSkill skill);
 std::string_view PersistentSkillDescription(PersistentSkill skill);
@@ -44,6 +49,14 @@ int SpiritReservation(PersistentSkill skill);
 /** @brief Whether the item grants Spirit as an implicit (sceptres). */
 bool ItemGrantsSpirit(const Item &item);
 int MaxSpirit(const Player &player);
+/** @brief Spirit from the skulls the character has broken. */
+int SkullSpirit(const Player &player);
+/** @brief Which skull (0 to 2) the item is; -1 if it isn't a Spirit skull. */
+int SpiritSkullIndex(const Item &item);
+/** @brief Breaks a Spirit skull for its Spirit. @return true if the skull was used up. */
+bool UseSpiritSkull(Player &player, const Item &item);
+/** @brief Drops a Spirit skull when a boss that guards one dies and the player hasn't broken it yet. */
+void DropSpiritSkull(const Monster &monster, bool sendmsg);
 /** @brief Minion damage in percent of normal, from the passive tree and ascendancy. */
 int MinionDamagePercent(const Player &player);
 /** @brief Spirit reserved by the active Spirit gems. */
@@ -60,7 +73,7 @@ void QueueHeraldTriggers(const Player &player, const Monster &monster);
 void ProcessHeralds();
 void ClearHeralds();
 
-/** @brief Keeps the Summon Golem and Skeletal Warriors minions alive while its gem is active; once per game tick for the local player. */
+/** @brief Keeps the Summon Golem, Skeletal Warriors and Skeletal Mages minions alive while its gem is active; once per game tick for the local player. */
 void ProcessPersistentSkills(Player &player);
 
 } // namespace devilution

@@ -20,10 +20,28 @@ enum class DefenseType : uint8_t {
 	/** Half armour, half evasion, like POE2's mail. */
 	ArmourEvasion,
 	EnergyShield,
+	/** Half armour, half energy shield, like POE2's vestments and mantles. */
+	ArmourEnergyShield,
+	/** Half evasion, half energy shield, like POE2's garbs and jackets. */
+	EvasionEnergyShield,
+	/** A third each of armour, evasion and energy shield (Grand Regalia). */
+	All,
+};
+
+/** @brief The fixed bonus some top POE2 body armour bases carry. */
+struct BodyArmourImplicit {
+	int life = 0;
+	int spirit = 0;
+	int allResistances = 0;
+	int magicResistance = 0;
+	int manaRegenPercent = 0;
+	int evasionPercent = 0;
 };
 
 /** @brief Energy shield granted per point of defense on cloth bases. */
-constexpr int EnergyShieldPerDefense = 4;
+constexpr int EnergyShieldPerDefense = 3;
+/** @brief A hit stuns the player (hit recovery) only when it takes at least this percent of their maximum life. */
+constexpr int PlayerStunPercent = 15;
 /** @brief POE2: energy shield starts recharging 4 seconds after the last hit. */
 constexpr int EnergyShieldRechargeDelayTicks = 4 * 20;
 /** @brief POE2: a recharging energy shield refills 12.5% of its maximum per second. */
@@ -33,6 +51,13 @@ constexpr int MaxArmourReductionPercent = 90;
 
 /** @brief Which defense an armor, helm or shield base grants. */
 DefenseType ItemDefenseType(const Item &item);
+/** @brief The implicit of the item's base, all zero for bases without one. */
+BodyArmourImplicit GetBodyArmourImplicit(const Item &item);
+/**
+ * @brief Splits an item's defense between armour, evasion and energy shield points (energy shield not yet
+ * multiplied by EnergyShieldPerDefense). Armour gets the rounding remainder.
+ */
+void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield);
 
 /** @brief Armour from gear and class bonuses. */
 int ArmourRating(const Player &player);

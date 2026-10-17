@@ -275,4 +275,25 @@ TEST(TownerDat, QuestDialogOptionalColumns)
 	EXPECT_EQ(result, TEXT_NONE) << "Should return TEXT_NONE for unused quest columns";
 }
 
+TEST(TownerDat, Poe2AddsTheStashChest)
+{
+	InitializeSDL();
+	SetTestAssetsPath();
+	LoadTownerData();
+	EXPECT_EQ(FindTownerDataByType(TOWN_STASH), nullptr) << "Only the POE2 Mashup mod has a stash chest";
+
+	LoadModArchives({ { "hf", "poe2" } });
+	LoadTownerData();
+	const TownerDataEntry *stash = FindTownerDataByType(TOWN_STASH);
+	ASSERT_NE(stash, nullptr);
+	EXPECT_EQ(stash->name, "Stash");
+	EXPECT_EQ(stash->animPath, "objects\\chest3");
+	// The mod keeps every towner of Hellfire's table.
+	EXPECT_NE(FindTownerDataByType(TOWN_GIRL), nullptr);
+	EXPECT_NE(FindTownerDataByType(TOWN_COWFARM), nullptr);
+
+	UnloadModArchives();
+	LoadTownerData();
+}
+
 } // namespace devilution

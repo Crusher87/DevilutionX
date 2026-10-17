@@ -84,6 +84,21 @@ uint8_t AnimationInfo::getAnimationProgress() const
 	return static_cast<uint8_t>(animationFraction);
 }
 
+float AnimationInfo::getFrameFraction() const
+{
+	TicksFixed ticksSinceSequenceStarted = std::max(TicksFixed::fromInt(0), ticksSinceSequenceStarted_);
+	RateFixed tickModifier = tickModifier_;
+	if (relevantFramesForDistributing_ <= 0 || currentFrame >= relevantFramesForDistributing_) {
+		if (ticksPerFrame <= 0)
+			return 0;
+		ticksSinceSequenceStarted = TicksFixed::fromInt((currentFrame * ticksPerFrame) + tickCounterOfCurrentFrame);
+		tickModifier = RateFixed(RateFixed::fromInt(1) / ticksPerFrame);
+	}
+	const FixedPoint<int, 7> total = getProgressToNextGameTick() + ticksSinceSequenceStarted;
+	const FixedPoint<int, 7> frames = total.multiplyWithoutWidening(tickModifier);
+	return static_cast<float>(frames.fractional()) / static_cast<float>(baseValueFraction);
+}
+
 void AnimationInfo::setNewAnimation(OptionalClxSpriteList celSprite, int8_t numberOfFrames, int8_t ticksPerFrame, AnimationDistributionFlags flags /*= AnimationDistributionFlags::None*/, int8_t numSkippedFrames /*= 0*/, int8_t distributeFramesBeforeFrame /*= 0*/, uint8_t previewShownGameTickFragments /*= 0*/)
 {
 	if ((flags & AnimationDistributionFlags::RepeatedAction) == AnimationDistributionFlags::RepeatedAction && distributeFramesBeforeFrame != 0 && this->numberOfFrames == numberOfFrames && currentFrame + 1 >= distributeFramesBeforeFrame && currentFrame != this->numberOfFrames - 1) {

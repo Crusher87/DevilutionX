@@ -27,6 +27,7 @@
 #include "monster.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
@@ -37,11 +38,27 @@
 #include "utils/sdl_compat.h"
 #include "utils/str_cat.hpp"
 
+#ifdef _WIN32
+// Suppress definitions of `min` and `max` macros by <windows.h>:
+#define NOMINMAX 1
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+// <windows.h> defines these as empty; this file uses them as names.
+#undef near
+#undef far
+#endif
+
 namespace devilution {
 
 namespace {
 
 FILE *LogFile = nullptr;
+/** @brief The gem log: one file kept across sessions, so a gem's levels and results can be followed over time. */
+FILE *GemLogFile = nullptr;
+/** @brief Every mark("...") note ever typed, with the date and session: kept forever, unlike the session logs, so no note is lost. */
+FILE *NotesFile = nullptr;
+/** @brief The session log's name, so each note says which session it came from. */
+std::string SessionName;
 bool Initialized = false;
 uint32_t SessionStartMs = 0;
 
@@ -75,6 +92,14 @@ struct TelemetryCounts {
 	int levelsEntered = 0;
 	int64_t experience = 0;
 	int gold = 0;
+	/** Monster density, sampled every game tick: hostile monsters near the player, aware ones, and how often none or a crowd. */
+	int densityTicks = 0;
+	int64_t nearSum = 0;
+	int64_t awareSum = 0;
+	int peakNear = 0;
+	int quietTicks = 0;
+	int surroundedTicks = 0;
+	int swarms = 0;
 };
 
 /** @brief Damage a skill dealt this game. */
@@ -82,6 +107,13 @@ struct SkillDamage {
 	int64_t raw = 0;
 	int hits = 0;
 	int kills = 0;
+	/** Time from the first hit to the kill, summed over the kills. */
+	uint32_t killMs = 0;
+	int uses = 0;
+	int mana = 0;
+	/** When the skill was first and last used, for its damage per second while in use. */
+	uint32_t firstUseMs = 0;
+	uint32_t lastUseMs = 0;
 };
 
 /** @brief A monster the player is fighting: when it was first hit, and by what. */
@@ -113,8 +145,14 @@ struct LevelVisit {
 	int kills = 0;
 	int drops = 0;
 	int64_t damageTakenRaw = 0;
+	int monstersAtEntry = 0;
 };
 LevelVisit CurrentLevel;
+
+/** @brief Ticks since an enemy was last near, and whether a swarm is in progress, for the lull and swarm events. */
+int QuietStreakTicks = 0;
+bool InSwarm = false;
+uint32_t LastSwarmLogMs = 0;
 
 std::string LastBuild;
 uint32_t LastBuildCheckMs = 0;
@@ -263,6 +301,78 @@ void HandleCrashSignal(int signal)
 	std::raise(signal);
 }
 
+#if defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
+/**
+ * @brief Windows ends the game on an access violation before std::signal sees it in some cases, so the
+ * crash is caught here first: the exception, where it happened and the call stack, as offsets into the
+ * exe that the build's link map (devilutionx.map) turns into function names.
+ */
+LONG WINAPI HandleWindowsException(EXCEPTION_POINTERS *info)
+{
+	const DWORD code = info->ExceptionRecord->ExceptionCode;
+	switch (code) {
+	case EXCEPTION_ACCESS_VIOLATION:
+	case EXCEPTION_STACK_OVERFLOW:
+	case EXCEPTION_ILLEGAL_INSTRUCTION:
+	case EXCEPTION_INT_DIVIDE_BY_ZERO:
+	case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+	case EXCEPTION_PRIV_INSTRUCTION:
+	case EXCEPTION_IN_PAGE_ERROR:
+		break;
+	default:
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	static bool written = false;
+	if (written || LogFile == nullptr)
+		return EXCEPTION_CONTINUE_SEARCH;
+	written = true;
+
+	const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+	const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+	const auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
+	const uintptr_t end = base + nt->OptionalHeader.SizeOfImage;
+	const auto where = [&](uintptr_t address) {
+		char text[48];
+		if (address >= base && address < end)
+			std::snprintf(text, sizeof(text), "exe+0x%llx", static_cast<unsigned long long>(address - base));
+		else
+			std::snprintf(text, sizeof(text), "0x%llx", static_cast<unsigned long long>(address));
+		return std::string(text);
+	};
+
+	const auto address = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
+	std::fprintf(LogFile, "%s %s [crash] exception 0x%08lx at %s", Clock(Now() - SessionStartMs).c_str(), LevelLabel().c_str(), static_cast<unsigned long>(code), where(address).c_str());
+	if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
+		const ULONG_PTR kind = info->ExceptionRecord->ExceptionInformation[0];
+		std::fprintf(LogFile, " (%s 0x%llx)", kind == 0 ? "reading" : kind == 1 ? "writing" : "executing", static_cast<unsigned long long>(info->ExceptionRecord->ExceptionInformation[1]));
+	}
+	std::fprintf(LogFile, ", image base 0x%llx\n", static_cast<unsigned long long>(base));
+
+	// Walk the stack from the faulting frame with the exe's own unwind tables.
+	std::fputs("Call stack:", LogFile);
+	if (code != EXCEPTION_STACK_OVERFLOW) {
+		CONTEXT context = *info->ContextRecord;
+		for (int frame = 0; frame < 48 && context.Rip != 0; frame++) {
+			std::fprintf(LogFile, " %s", where(context.Rip).c_str());
+			DWORD64 imageBase = 0;
+			PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(context.Rip, &imageBase, nullptr);
+			if (function == nullptr) {
+				context.Rip = *reinterpret_cast<DWORD64 *>(context.Rsp);
+				context.Rsp += 8;
+				continue;
+			}
+			PVOID handlerData = nullptr;
+			DWORD64 establisherFrame = 0;
+			RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, context.Rip, function, &context, &handlerData, &establisherFrame, nullptr);
+		}
+	}
+	std::fputc('\n', LogFile);
+	WriteRecentEvents();
+	std::fflush(LogFile);
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 template <typename Fn>
 void Count(Fn &&fn)
 {
@@ -286,21 +396,95 @@ int Sum(const std::array<int, NumRarities> &counts)
 	return sum;
 }
 
+std::string DensityText(const TelemetryCounts &counts)
+{
+	if (counts.densityTicks == 0)
+		return "density: no dungeon time";
+	const double ticks = counts.densityTicks;
+	return std::format("density: {:.1f} monsters within {:d} tiles on average (peak {:d}), {:.1f} aware within {:d}, "
+	                   "no enemy near {:.0f}% of the time, surrounded {:.0f}%, {:d} swarms",
+	    counts.nearSum / ticks, TelemetryNearTiles, counts.peakNear, counts.awareSum / ticks, TelemetryAwareTiles,
+	    counts.quietTicks * 100 / ticks, counts.surroundedTicks * 100 / ticks, counts.swarms);
+}
+
+/** @brief Monsters that fight the player: alive, not minions, not towners. */
+bool IsHostile(const Monster &monster)
+{
+	return !monster.isPlayerMinion() && !monster.hasNoLife() && monster.talkMsg == TEXT_NONE;
+}
+
+int HostileMonsterCount()
+{
+	int count = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		if (IsHostile(Monsters[ActiveMonsters[i]]))
+			count++;
+	}
+	return count;
+}
+
+/** @brief Samples how many monsters are around the player this tick. */
+void TrackDensity(const Player &player, uint32_t now)
+{
+	int near = 0;
+	int aware = 0;
+	int adjacent = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (!IsHostile(monster))
+			continue;
+		const int distance = player.position.tile.WalkingDistance(monster.position.tile);
+		if (distance <= 1)
+			adjacent++;
+		if (distance <= TelemetryNearTiles)
+			near++;
+		if (distance <= TelemetryAwareTiles && monster.activeForTicks > 0)
+			aware++;
+	}
+	const bool quiet = aware == 0 && near == 0;
+	const bool surrounded = adjacent >= TelemetrySurroundedCount;
+	Count([&](TelemetryCounts &counts) {
+		counts.densityTicks++;
+		counts.nearSum += near;
+		counts.awareSum += aware;
+		counts.peakNear = std::max(counts.peakNear, near);
+		if (quiet)
+			counts.quietTicks++;
+		if (surrounded)
+			counts.surroundedTicks++;
+	});
+
+	// A long stretch with nothing to fight is logged when it ends, so slow pacing shows up.
+	if (quiet) {
+		QuietStreakTicks++;
+	} else {
+		if (QuietStreakTicks >= TelemetryLullTicks)
+			TelemetryLog("lull", std::format("{:.1f} s with no enemy near, ended by {:d} monsters", QuietStreakTicks / static_cast<double>(TelemetryTicksPerSecond), std::max(near, aware)));
+		QuietStreakTicks = 0;
+	}
+
+	if (near >= TelemetrySwarmCount && !InSwarm) {
+		InSwarm = true;
+		Count([](TelemetryCounts &counts) { counts.swarms++; });
+		if (now - LastSwarmLogMs >= 10000) {
+			LastSwarmLogMs = now;
+			TelemetryLog("swarm", std::format("{:d} monsters within {:d} tiles, {:d} next to the player, life {:d}%", near, TelemetryNearTiles, adjacent, Percent(player._pHitPoints, player._pMaxHP)));
+		}
+	} else if (near < TelemetrySwarmCount / 2) {
+		InSwarm = false;
+	}
+}
+
 std::string RatesText(const TelemetryCounts &counts, double minutes)
 {
 	const int lowManaPercent = counts.ticks > 0 ? counts.lowManaTicks * 100 / counts.ticks : 0;
-	return std::format("kills {:d} ({:.1f}/min, {:d} rare, {:d} unique), damage dealt {:d} ({:.0f}/min), "
-	                   "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage), "
-	                   "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
-	                   "flasks {:d} ({:d} wasted), charms {:d}, "
-	                   "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
-	                   "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}",
-	    counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes,
-	    counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw),
-	    counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent,
-	    counts.flaskUses, counts.wastedFlasks, counts.charmUses,
-	    counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes,
-	    CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls);
+	return StrCat(DensityText(counts), "; ", std::format("kills {:d} ({:.1f}/min, {:d} rare, {:d} unique), damage dealt {:d} ({:.0f}/min), "
+	                                                     "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage), "
+	                                                     "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
+	                                                     "flasks {:d} ({:d} wasted), charms {:d}, "
+	                                                     "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
+	                                                     "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}",
+	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls));
 }
 
 void WriteStatsLine(uint32_t now)
@@ -316,9 +500,61 @@ void EndLevelVisit()
 	if (CurrentLevel.startMs == 0)
 		return;
 	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", CurrentLevel.label, " [level] left after ",
-	    std::format("{:.1f} s: {:d} kills, {:d} drops, {:d} damage taken", (Now() - CurrentLevel.startMs) / 1000.0, CurrentLevel.kills,
+	    std::format("{:.1f} s: {:d} kills of {:d} monsters ({:d}% cleared), {:d} drops, {:d} damage taken", (Now() - CurrentLevel.startMs) / 1000.0, CurrentLevel.kills,
+	        CurrentLevel.monstersAtEntry, CurrentLevel.monstersAtEntry > 0 ? CurrentLevel.kills * 100 / CurrentLevel.monstersAtEntry : 0,
 	        CurrentLevel.drops, Whole(CurrentLevel.damageTakenRaw))));
 	CurrentLevel = {};
+}
+
+std::string SkillDamageLine(std::string_view name, const SkillDamage &damage)
+{
+	const int average = damage.hits > 0 ? Whole(damage.raw) / damage.hits : 0;
+	std::string text = std::format("{:s} {:d} ({:d} hits, {:d} average, {:d} kills", name, Whole(damage.raw), damage.hits, average, damage.kills);
+	if (damage.kills > 0)
+		StrAppend(text, std::format(", {:.1f} s to kill", damage.killMs / 1000.0 / damage.kills));
+	if (damage.uses > 0)
+		StrAppend(text, std::format(", {:d} uses", damage.uses));
+	if (damage.mana > 0)
+		StrAppend(text, std::format(", {:d} mana, {:.1f} damage per mana", damage.mana, static_cast<double>(Whole(damage.raw)) / damage.mana));
+	if (damage.lastUseMs > damage.firstUseMs)
+		StrAppend(text, std::format(", {:.0f} damage per second in use", Whole(damage.raw) * 1000.0 / (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs)));
+	text += ')';
+	return text;
+}
+
+/** @brief The local date and time, for the files kept across sessions. */
+std::string LocalStamp()
+{
+	const std::time_t now = std::time(nullptr);
+	std::tm local {};
+#ifdef _WIN32
+	localtime_s(&local, &now);
+#else
+	localtime_r(&now, &local);
+#endif
+	char stamp[32];
+	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &local);
+	return stamp;
+}
+
+/** @brief Writes a line to the gem log, with the date and time, and to the session log. */
+void GemLog(std::string_view text)
+{
+	TelemetryLog("gem", text);
+	if (GemLogFile == nullptr)
+		return;
+	const std::string stamp = LocalStamp();
+	std::fprintf(GemLogFile, "%s %.*s\n", stamp.c_str(), static_cast<int>(text.size()), text.data());
+	std::fflush(GemLogFile);
+}
+
+/** @brief Each gem level's results this game, to the gem log. */
+void WriteGemResults()
+{
+	for (const auto &[name, damage] : DamageBySkill) {
+		if (name.find(" gem ") != std::string::npos)
+			GemLog(StrCat("results: ", SkillDamageLine(name, damage)));
+	}
 }
 
 SkillDamage &DamageFor(std::string_view source)
@@ -412,6 +648,9 @@ void TelemetryInit()
 	LogFile = OpenFile(StrCat(folder, "session_", stamp, ".log").c_str(), "wb");
 	if (LogFile == nullptr)
 		return;
+	GemLogFile = OpenFile(StrCat(folder, "gem_levels.log").c_str(), "ab");
+	NotesFile = OpenFile(StrCat(folder, "playtest_notes.txt").c_str(), "ab");
+	SessionName = StrCat("session_", stamp, ".log");
 
 	char started[32];
 	std::strftime(started, sizeof(started), "%Y-%m-%d %H:%M:%S", &local);
@@ -424,6 +663,9 @@ void TelemetryInit()
 #endif
 	for (const int signal : { SIGSEGV, SIGABRT, SIGFPE, SIGILL })
 		std::signal(signal, &HandleCrashSignal);
+#if defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
+	AddVectoredExceptionHandler(1, &HandleWindowsException);
+#endif
 	FatalErrorHook = &TelemetryFatal;
 }
 
@@ -437,6 +679,61 @@ void TelemetryLog(std::string_view category, std::string_view text)
 	if (LogFile == nullptr)
 		return;
 	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", LevelLabel(), " [", category, "] ", text));
+}
+
+namespace {
+
+/** @brief One kind of effect's lines in the current second. */
+struct EffectRate {
+	uint32_t windowStart = 0;
+	int written = 0;
+	int skipped = 0;
+	int lastX = 0;
+	int lastY = 0;
+};
+
+constexpr int EffectLinesPerSecond = 3;
+ankerl::unordered_dense::map<std::string, EffectRate> EffectRates;
+
+std::string HeroTile()
+{
+	if (MyPlayer == nullptr)
+		return {};
+	return std::format(", hero at {:d},{:d}", MyPlayer->position.tile.x, MyPlayer->position.tile.y);
+}
+
+void FlushEffects(uint32_t now, bool all)
+{
+	for (auto &[key, rate] : EffectRates) {
+		if (rate.skipped == 0 || (!all && now - rate.windowStart < 1000))
+			continue;
+		TelemetryLog("fx", std::format("{:s} x{:d} more in the last second, last at {:d},{:d}{:s}", key, rate.skipped, rate.lastX, rate.lastY, HeroTile()));
+		rate.skipped = 0;
+	}
+}
+
+} // namespace
+
+void TelemetryEffect(std::string_view source, std::string_view what, int x, int y)
+{
+	if (LogFile == nullptr)
+		return;
+	const uint32_t now = Now();
+	EffectRate &rate = EffectRates[StrCat(source, " ", what)];
+	if (now - rate.windowStart >= 1000) {
+		if (rate.skipped > 0)
+			FlushEffects(now, false);
+		rate.windowStart = now;
+		rate.written = 0;
+	}
+	rate.lastX = x;
+	rate.lastY = y;
+	if (rate.written >= EffectLinesPerSecond) {
+		rate.skipped++;
+		return;
+	}
+	rate.written++;
+	TelemetryLog("fx", StrCat(source, " ", what, " at ", x, ",", y, HeroTile()));
 }
 
 void TelemetryGameStarted(const Player &player, bool loaded)
@@ -454,8 +751,18 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	LastExperience = player._pExperience;
 	LastGold = player._pGold;
 	TelemetryLog("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo")));
-	if (LogFile != nullptr)
+	if (LogFile != nullptr) {
 		WriteSettings();
+		// What each socketed gem does now and at its next level, to compare against the results later.
+		GemLog(std::format("--- {:s}, level {:d} {:s}, {:s} ---", player._pName, player.getCharacterLevel(), player.getClassName(), loaded ? "loaded" : "new game"));
+		std::string gems = SocketedGemsText(player);
+		size_t start = 0;
+		while (start < gems.size()) {
+			const size_t end = std::min(gems.find('\n', start), gems.size());
+			GemLog(std::string_view(gems).substr(start, end - start));
+			start = end + 1;
+		}
+	}
 }
 
 void TelemetryGameEnded()
@@ -465,6 +772,7 @@ void TelemetryGameEnded()
 	EndLevelVisit();
 	TelemetryLog("game", StrCat("ended. ", TelemetryStatsText()));
 	TelemetryLog("damage", TelemetrySkillDamageText());
+	WriteGemResults();
 	GameStartMs = 0;
 }
 
@@ -475,7 +783,10 @@ void TelemetryLevelEntered()
 	CurrentLevel.label = LevelLabel();
 	CurrentLevel.startMs = Now();
 	Count([](TelemetryCounts &counts) { counts.levelsEntered++; });
-	TelemetryLog("level", std::format("entered, {:d} monsters", static_cast<int>(ActiveMonsterCount)));
+	CurrentLevel.monstersAtEntry = HostileMonsterCount();
+	QuietStreakTicks = 0;
+	InSwarm = false;
+	TelemetryLog("level", std::format("entered, {:d} monsters", CurrentLevel.monstersAtEntry));
 }
 
 void TelemetryNoteAttacker(std::string_view attacker)
@@ -532,7 +843,9 @@ void TelemetryMonsterKilled(const Monster &monster)
 	const auto it = Engagements.find(monster.getId());
 	if (it != Engagements.end()) {
 		const Engagement &engagement = it->second;
-		DamageFor(engagement.lastSource).kills++;
+		SkillDamage &killer = DamageFor(engagement.lastSource);
+		killer.kills++;
+		killer.killMs += now - engagement.firstHitMs;
 		fight = std::format(", killed by {:s} {:.1f} s after the first hit, {:d} overkill", engagement.lastSource, (now - engagement.firstHitMs) / 1000.0, engagement.overkill);
 		Engagements.erase(it);
 	} else {
@@ -584,19 +897,53 @@ void TelemetryLevelUp(const Player &player)
 	if (&player != MyPlayer)
 		return;
 	TelemetryLog("levelup", std::format("character level {:d}, life {:d}, mana {:d}, {:.1f} min into the game", player.getCharacterLevel(), player._pMaxHP.whole(), player._pMaxMana.whole(), (Now() - GameStartMs) / 60000.0));
+	// A new gem level unlocks: say what it would add to each socketed gem.
+	const int unlocked = MaxGemLevelForCharacter(player.getCharacterLevel());
+	if (unlocked == MaxGemLevelForCharacter(player.getCharacterLevel() - 1))
+		return;
+	for (size_t socket = 0; socket < player.poe2.skillSlots.size(); socket++) {
+		const SkillSlot skill = player.poe2.skillSlots[socket];
+		const int level = player.poe2.gemLevel(socket);
+		if (skill.isEmpty() || level >= unlocked)
+			continue;
+		GemLog(std::format("{:s} can now go to gem level {:d} with a level {:d} uncut gem: {:s} {:s}", SkillName(skill), unlocked, unlocked, GemLevelText(skill, unlocked), GemStepText(skill, level, unlocked)));
+	}
 }
 
-void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost)
+void TelemetryGemLevelChanged(const Player &player, SkillSlot skill, int fromLevel, int toLevel)
 {
 	if (&player != MyPlayer)
 		return;
-	LastSkill = skill;
+	GemLog(std::format("{:s} raised from gem level {:d} to {:d} at character level {:d}", SkillName(skill), fromLevel, toLevel, player.getCharacterLevel()));
+	GemLog(StrCat("  before: ", GemLevelText(skill, fromLevel)));
+	for (int level = fromLevel + 1; level <= toLevel; level++)
+		GemLog(StrCat("  ", GemLevelText(skill, level), " ", GemStepText(skill, level - 1, level)));
+	// The results so far at the old level, to compare with the new one.
+	const auto it = std::find_if(DamageBySkill.begin(), DamageBySkill.end(), [&](const auto &entry) { return entry.first == std::format("{:s} gem {:d}", SkillName(skill), fromLevel); });
+	if (it != DamageBySkill.end())
+		GemLog(StrCat("  results at the old level: ", SkillDamageLine(it->first, it->second)));
+}
+
+void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost, int gemLevel)
+{
+	if (&player != MyPlayer)
+		return;
+	// Each gem level is tracked on its own, so the stats show what a level is worth.
+	LastSkill = gemLevel > 0 ? std::format("{:s} gem {:d}", skill, gemLevel) : std::string(skill);
 	LastSkillMs = Now();
 	Count([&](TelemetryCounts &counts) {
 		counts.skillUses++;
 		counts.manaSpent += manaCost;
 	});
-	TelemetryLog("skill", std::format("{:s}, {:d} mana, {:d}/{:d} left", skill, manaCost, player._pMana.whole(), player._pMaxMana.whole()));
+	if (LogFile != nullptr) {
+		SkillDamage &stats = DamageFor(LastSkill);
+		stats.uses++;
+		stats.mana += manaCost;
+		if (stats.firstUseMs == 0)
+			stats.firstUseMs = LastSkillMs;
+		stats.lastUseMs = LastSkillMs;
+	}
+	TelemetryLog("skill", std::format("{:s}, {:d} mana, {:d}/{:d} left", LastSkill, manaCost, player._pMana.whole(), player._pMaxMana.whole()));
 }
 
 void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason)
@@ -660,6 +1007,17 @@ void TelemetryCrafted(const Player &player, std::string_view currency, const Ite
 void TelemetryMark(std::string_view text)
 {
 	TelemetryLog("mark", text);
+	if (NotesFile == nullptr)
+		return;
+	// One line per note: date, session log, time into the session, where, and the note.
+	const std::string line = StrCat(LocalStamp(), "\t", SessionName, "\t", Clock(Now() - SessionStartMs), "\t", LevelLabel(), "\t", text, "\n");
+	std::fputs(line.c_str(), NotesFile);
+	std::fflush(NotesFile);
+}
+
+void TelemetryStep(std::string_view step)
+{
+	TelemetryLog("load", step);
 }
 
 void TelemetryTick()
@@ -676,9 +1034,12 @@ void TelemetryTick()
 	});
 	TrackGains(player);
 	TrackStalls(now);
+	if (leveltype != DTYPE_TOWN)
+		TrackDensity(player, now);
 	TrackBuild(player, now);
 	if (now - WindowStartMs >= TelemetryStatsIntervalMs)
 		WriteStatsLine(now);
+	FlushEffects(now, false);
 }
 
 void TelemetryFatal(std::string_view message)
@@ -702,10 +1063,8 @@ std::string TelemetrySkillDamageText()
 	std::string text = "damage by skill:";
 	if (sorted.empty())
 		StrAppend(text, " none yet");
-	for (const auto &[name, damage] : sorted) {
-		const int average = damage.hits > 0 ? Whole(damage.raw) / damage.hits : 0;
-		StrAppend(text, std::format(" {:s} {:d} ({:d} hits, {:d} average, {:d} kills);", name, Whole(damage.raw), damage.hits, average, damage.kills));
-	}
+	for (const auto &[name, damage] : sorted)
+		StrAppend(text, " ", SkillDamageLine(name, damage), ";");
 	return text;
 }
 
@@ -722,7 +1081,7 @@ std::string TelemetryBuildText(const Player &player)
 		const SkillSlot slot = player.poe2.skillSlots[i];
 		if (slot.isEmpty())
 			continue;
-		StrAppend(text, " ", SkillName(slot));
+		StrAppend(text, " ", SkillName(slot), " gem ", player.poe2.gemLevel(i));
 		for (const SupportGem support : player.poe2.slotSupports[i]) {
 			if (support != SupportGem::None)
 				StrAppend(text, " +", SupportGemName(support));

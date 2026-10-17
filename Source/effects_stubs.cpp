@@ -42,6 +42,7 @@ void PlaySfxLoc(SfxID psfx, Point position, bool randomizeByCategory)
 
 	PlaySFX(psfx);
 }
+void PlayModSfxLoc(std::string_view path, Point position) { }
 void sound_stop() { }
 void sound_update() { }
 void effects_cleanup_sfx(bool fullUnload) { }

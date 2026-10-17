@@ -69,6 +69,8 @@ struct _uiheroinfo {
 	uint16_t vitality;
 	bool hassaved;
 	bool spawned;
+	/** POE2 Mashup: a Hardcore league hero. */
+	bool hardcore;
 };
 
 extern OptionalOwnedClxSpriteList ArtLogo;

@@ -23,7 +23,8 @@ bool IsValidSpell(SpellID spl);
 bool IsValidSpellFrom(int spellFrom);
 bool IsWallSpell(SpellID spl);
 bool TargetsMonster(SpellID id);
-Fixed26_6 GetManaAmount(const Player &player, SpellID sn);
+/** @param lifeShare false for the full cost, before supports move part of it to life. */
+Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare = true);
 void ConsumeSpell(Player &player, SpellID sn);
 SpellCheckResult CheckSpell(const Player &player, SpellID sn, SpellType st, bool manaonly);
 

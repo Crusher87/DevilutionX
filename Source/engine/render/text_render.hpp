@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -58,7 +59,13 @@ enum text_color : uint8_t {
 	ColorInGameDialogWhite,  // Dialog white in-game
 	ColorInGameDialogYellow, // Dialog yellow in-game
 	ColorInGameDialogRed,    // Dialog red in-game
+
+	/** POE2 Mashup: made from the white font and the nearest greens of the current palette. */
+	ColorGreen,
 };
+
+/** @brief Gives the text renderer the game's palette, which it needs for green text. */
+void SetTextRenderPalette(const std::array<SDL_Color, 256> *palette);
 
 constexpr GameFontTables GetFontSizeFromUiFlags(UiFlags flags)
 {

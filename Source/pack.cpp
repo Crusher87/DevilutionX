@@ -339,7 +339,8 @@ void UnPackItem(const ItemPack &packedItem, const Player &player, Item &item, bo
 		// so if we carry it over from packedItem, it may be incorrect
 		const uint32_t dwBuff = Swap32LE(packedItem.dwBuff) | (isHellfire ? CF_HELLFIRE : 0);
 		RecreateItem(player, item, idx, Swap16LE(packedItem.iCreateInfo), Swap32LE(packedItem.iSeed), Swap16LE(packedItem.wValue), dwBuff);
-		item._iIdentified = (packedItem.bId & 1) != 0;
+		// POE2 Mashup: normal items have nothing to identify.
+		item._iIdentified = (packedItem.bId & 1) != 0 || (gbIsPoe2 && item._iMagical == ITEM_QUALITY_NORMAL);
 		item._iMaxDur = packedItem.bMDur;
 		item._iDurability = ClampDurability(item, packedItem.bDur);
 		item._iMaxCharges = std::clamp<int>(packedItem.bMCh, 0, item._iMaxCharges);

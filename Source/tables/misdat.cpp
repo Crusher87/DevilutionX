@@ -20,6 +20,7 @@
 #include "data/iterators.hpp"
 #include "data/record_reader.hpp"
 #include "engine/clx_sprite.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "missiles.h"
 #include "mpq/mpq_common.hpp"
@@ -461,6 +462,14 @@ std::expected<void, std::string> InitMissileGFX()
 		if (missileSprite.flags == MissileGraphicsFlags::MonsterOwned)
 			continue;
 		RETURN_IF_ERROR(missileSprite.LoadGFX());
+	}
+	// POE2 Mashup: skills and their effects also use some monster missiles, so those are always loaded.
+	if (gbIsPoe2) {
+		for (const MissileGraphicID graphic : { MissileGraphicID::MagmaBall, MissileGraphicID::ThinLightning, MissileGraphicID::BloodStarRed, MissileGraphicID::BloodStarRedExplosion,
+		         MissileGraphicID::BloodStarBlue, MissileGraphicID::BloodStarBlueExplosion, MissileGraphicID::DiabloApocalypseBoom,
+		         MissileGraphicID::BlueFlare2, MissileGraphicID::BlueFlareExplosion, MissileGraphicID::BlueFlareExplosion2 }) {
+			RETURN_IF_ERROR(GetMissileSpriteData(graphic).LoadGFX());
+		}
 	}
 	return {};
 }

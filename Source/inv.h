@@ -109,6 +109,11 @@ void InitInv();
  * @brief Render the inventory panel to the given buffer.
  */
 void DrawInv(const Surface &out);
+/**
+ * @brief POE2 Mashup: draws the inventory panel's stone grid behind a grid of the given cells at the given top-left,
+ * repeating its four rows (the stash grid uses it).
+ */
+void DrawInventoryGridBackground(const Surface &out, Point topLeft, Size cells);
 
 void DrawInvBelt(const Surface &out);
 
@@ -241,8 +246,12 @@ void ConsumeStaffCharge(Player &player);
 bool CanUseStaff(Player &player, SpellID spellId);
 Item &GetInventoryItem(Player &player, int location);
 bool UseInvItem(int cii);
+/** @brief POE2 Mashup: puts on the inventory item under the cursor, swapping out what's worn; false if it isn't equipment. */
+bool EquipInvItem(Player &player, int cii);
 void DoTelekinesis();
 int CalculateGold(Player &player);
+/** @brief POE2 Mashup: gold left in an old save's inventory joins the league's purse. */
+void MoveInventoryGoldToLeague(Player &player);
 
 /**
  * @brief Gets the size, in inventory cells, of the given item.

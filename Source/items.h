@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 
 #include "DiabloUI/ui_flags.hpp"
 #include "cursor.h"
@@ -16,14 +17,20 @@
 #include "engine/animationinfo.h"
 #include "engine/point.hpp"
 #include "engine/surface.hpp"
+#include "game_mode.hpp"
 #include "levels/dun_tile.hpp"
 #include "monster.h"
+#include "poe2/craft_types.hpp"
+#include "poe2/item_stats.hpp"
 #include "tables/itemdat.h"
 #include "utils/fixed_point.hpp"
 #include "utils/is_of.hpp"
 #include "utils/string_or_view.hpp"
 
 namespace devilution {
+
+enum class MapReward : uint8_t;
+enum class GambleFamily : uint8_t;
 
 #define MAXITEMS 127
 #define ITEMTYPES 43
@@ -43,6 +50,16 @@ constexpr int MaxBoyValueHf = 200000;
 
 /** Maximum number of affixes on a rare item (up to 3 prefixes and 3 suffixes). */
 constexpr size_t MaxRareAffixes = 6;
+
+/** POE2 Mashup: a modifier rolled from the itemization tables (see poe2/modifiers.hpp). */
+struct Poe2ItemMod {
+	/** Index of the modifier family plus 1; 0 for none. */
+	uint8_t family = 0;
+	/** 1 is the strongest. */
+	uint8_t tier = 0;
+	/** The rolled values, already scaled to the game. */
+	std::array<int16_t, 2> values {};
+};
 
 enum item_quality : uint8_t {
 	ITEM_QUALITY_NORMAL,
@@ -203,8 +220,21 @@ enum icreateinfo_flag2 {
 	CF_POE2_FLASK_QUALITY = ((1 << 5) - 1) << 22,
 	/** The flask's mods have been rolled, so rebuilding it keeps them. */
 	CF_POE2_FLASK_ROLLED = 1 << 27,
+	/** A skill gem's level, 1 to 20; 0 on gems from before gem levels (level 1). Shares the flask bits, which only flasks use. */
+	CF_POE2_GEM_LEVEL = ((1 << 5) - 1) << 16,
+	/** POE2 item level, 1 to 82, on equipment only (the same bits hold flask mods and gem levels); 0 on older items. */
+	CF_POE2_ILVL = ((1 << 7) - 1) << 16,
+	/** Equipment quality, 0 to 30 (above 20 on Exceptional bases); shares the flask bits, which only flasks use. */
+	CF_POE2_QUALITY = ((1 << 5) - 1) << 23,
+	/** The rarity a POE2 loot roll gave this item (item_quality: normal, magic, rare or unique). */
+	CF_POE2_LOOT_RARITY = ((1 << 2) - 1) << 28,
+	/** The item was dropped by the POE2 loot rules, so it's built with the rarity above. */
+	CF_POE2_LOOT_SET = 1 << 30,
 	// clang-format on
 };
+
+/** POE2 Mashup: the item rolls its affixes from the itemization tables (poe2/modifiers.hpp); set with its POE2 item level. */
+constexpr uint32_t CF_POE2_MODS = 1U << 31;
 
 // All item animation frames have this width.
 constexpr int ItemAnimWidth = 96;
@@ -282,6 +312,12 @@ struct Item {
 	uint8_t _iPreTier = 0;
 	uint8_t _iSufTier = 0;
 	std::array<uint8_t, MaxRareAffixes> _iRareTiers {};
+	/** POE2 Mashup: modifiers of an item with CF_POE2_MODS, in the order they were rolled. Not saved; restored from the item seed. */
+	std::array<Poe2ItemMod, MaxRareAffixes> _iPoe2Mods {};
+	/** POE2 Mashup: crafting state the seed can't rebuild. */
+	Poe2Craft _iPoe2Craft {};
+	/** POE2 Mashup: stats from those modifiers. Not saved; restored from the item seed. */
+	std::array<int16_t, static_cast<size_t>(Poe2ItemStat::Count)> _iPoe2Stats {};
 	int _iVAdd1 = 0;
 	int _iVMult1 = 0;
 	int _iVAdd2 = 0;
@@ -471,10 +507,14 @@ struct Item {
 		case ITEM_QUALITY_MAGIC:
 			return UiFlags::ColorBlue;
 		case ITEM_QUALITY_UNIQUE:
-			return UiFlags::ColorWhitegold;
+			// POE2 Mashup: uniques are orange, as in POE2.
+			return gbIsPoe2 ? UiFlags::ColorOrange : UiFlags::ColorWhitegold;
 		case ITEM_QUALITY_RARE:
 			return UiFlags::ColorYellow;
 		default:
+			// POE2 Mashup: Books of Specialisation are quest rewards, gold like POE2's.
+			if (gbIsPoe2 && _iMiscId == IMISC_SPEC_BOOK)
+				return UiFlags::ColorWhitegold;
 			return UiFlags::ColorWhite;
 		}
 	}
@@ -561,15 +601,34 @@ Point GetSuperItemLoc(Point position);
 void GetItemAttrs(Item &item, _item_indexes itemData, int lvl);
 void SetupItem(Item &item);
 Item *SpawnUnique(_unique_items uid, Point position, std::optional<int> level = std::nullopt, bool sendmsg = true, bool exactPosition = false);
+/** @brief Makes a fixed unique the way quests hand them out (Arkaine's Valor, Optic Amulet...), on the given base. */
+void MakeFixedUnique(const Player &player, Item &item, _item_indexes base, int level, _unique_items uid);
 void GetSuperItemSpace(Point position, int8_t inum);
 _item_indexes RndItemForMonsterLevel(int8_t monsterLevel);
 void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t iseed, int lvl, int uper, bool onlygood, bool pregen, int uidOffset = 0, bool forceNotUnique = false);
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen);
 void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn = false);
+/** @brief POE2 Mashup: a boss rolls a unique from its own table (poe2/boss_loot.hpp). */
+/** @brief POE2 Mashup: drops a waystone of the tier, like a map boss does. */
+void DropWaystone(Point position, int tier, bool sendmsg);
+/** @brief POE2 Mashup: drops one roll of a map encounter's or reward chest's loot; `rarityBonus` raises its item rarity, in percent. */
+void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBonus = 0);
+/** @brief POE2 Mashup: makes the gambler's item of the family, its rarity rolled as the gambler's. */
+bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int areaLevel);
+/** @brief POE2 Mashup: puts a currency item in the hero's inventory, or at their feet if it's full. */
+void GiveCurrencyItem(Player &player, item_misc_id miscId);
+void DropBossUnique(Monster &monster, bool sendmsg);
+/** @brief POE2 Mashup: drops a kill's loot by the POE2 rules: a number of rolls by how tough the monster was, and a boss's extras. */
+void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);
+/** @brief POE2 Mashup: drops this many extra loot rolls, e.g. from a Golden Charm. */
+void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int rolls);
 void CreateRndItem(Point position, bool onlygood, bool sendmsg, bool delta);
 void CreateRndUseful(Point position, bool sendmsg);
 void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc, bool sendmsg, bool delta, bool spawn = false);
-void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff);
+/** @brief Drops a fresh item of the given base near a tile, e.g. a boss's Spirit skull. */
+void SpawnBaseItem(Point position, _item_indexes idx, bool sendmsg);
+/** @param craft POE2 Mashup: crafting state the item had, which its seed can't rebuild. */
+void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff, const Poe2Craft &craft = {});
 void RecreateEar(Item &item, uint16_t ic, uint32_t iseed, uint8_t bCursval, std::string_view heroName);
 void CornerstoneSave();
 void CornerstoneLoad(Point position);
@@ -585,9 +644,26 @@ void FreeItemGFX();
 void GetItemFrm(Item &item);
 void GetItemStr(Item &item);
 void CheckIdentify(Player &player, int cii);
+/**
+ * @brief POE2 Mashup: identifies the item under the cursor and only then uses up one Scroll of Identify;
+ * nothing is used up when there is no unidentified item there.
+ */
+void IdentifyWithScroll(Player &player);
 void DoRepair(Player &player, int cii);
 void DoRecharge(Player &player, int cii);
 bool DoOil(Player &player, int cii);
+/** @brief POE2 Mashup: notes the currency put on the cursor; it is only used up once it takes (see SpendHeldCurrency). */
+void HoldCurrencyForUse(const Item &item);
+/** @brief POE2 Mashup: while currency is held for use, whether it fits the item (the inventory outlines those). */
+bool HeldCurrencyFits(const Item &item);
+/** @brief Uses up one of the currency on the cursor, after it changed an item. */
+void SpendHeldCurrency(Player &player);
+/** @brief POE2 Mashup: whether the item was picked up with Shift+right-click, to use it again and again (Shift held when using it counts too). */
+void SetStickyItemUse(bool sticky);
+[[nodiscard]] bool WantsStickyItemUse();
+/** @brief After currency was used with Shift: puts the next one of its kind on the cursor; false if there's none or no Shift. */
+bool KeepCurrencyOnCursor(Player &player);
+[[nodiscard]] bool HasIdentifyScroll(const Player &player);
 [[nodiscard]] StringOrView PrintItemPower(char plidx, const Item &item);
 void DrawUniqueInfo(const Surface &out);
 void PrintItemDetails(const Item &item);
@@ -597,6 +673,8 @@ void PrintItemDetails(const Item &item);
  */
 uint8_t AffixTier(const std::vector<PLStruct> &affixes, const PLStruct &affix);
 void PrintItemDur(const Item &item);
+/** @brief POE2 Mashup: while Shift is held, lists how the item's stats differ from the equipped one in green and red. */
+void PrintItemComparison(const Item &item);
 void UseItem(Player &player, item_misc_id Mid, SpellID spellID, int spellFrom);
 bool UseItemOpensHive(const Item &item, Point position);
 bool UseItemOpensGrave(const Item &item, Point position);
@@ -606,6 +684,23 @@ void SpawnPremium(const Player &player);
 void SpawnWitch(int lvl);
 void SpawnBoy(int lvl);
 void SpawnHealer(int lvl);
+/** @brief POE2 Mashup: the kinds of wares vendors group onto their shop tabs. */
+enum class VendorCategory : uint8_t {
+	OneHanded,
+	TwoHanded,
+	Bows,
+	BodyArmour,
+	Helmets,
+	Shields,
+	Jewelry,
+	/** Potions, scrolls, elixirs and everything else that isn't equipment. */
+	Supplies,
+};
+constexpr size_t NumVendorCategories = 8;
+/** @brief Which kind of ware an item is on a POE2 Mashup vendor's shop tabs. */
+VendorCategory GetVendorCategory(const Item &item);
+/** @brief Sorts a vendor's stock, after the pinned wares, the way the vendor lists it. */
+void SortVendorStock(std::span<Item> stock, size_t pinnedCount);
 void MakeGoldStack(Item &goldItem, int value);
 int ItemNoFlippy();
 void CreateSpellBook(Point position, SpellID ispell, bool sendmsg, bool delta);
@@ -638,6 +733,26 @@ std::string GetRareItemName(const Item &item);
  * @brief POE2 Mashup: refills the affix data that isn't saved (rare powers, regeneration) by regenerating the item from its seed.
  */
 void RestoreRareItemPowers(Item &item);
+
+/**
+ * @brief POE2 Mashup: makes one of the bundle's uniques (poe2/uniques.hpp) on its base, the way a drop of it is made.
+ * @return false if the uid isn't a bundle unique.
+ */
+bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed);
+
+enum class ChanceResult : uint8_t {
+	/** No unique is made on the base. */
+	NoUniques,
+	/** The rolled tier has no unique on the base: the item is destroyed. */
+	Failed,
+	Made,
+};
+
+/**
+ * @brief POE2 Mashup: an Orb of Chance on a normal item rolls a unique tier, then a unique of that tier on the item's base.
+ * @param unique Receives the unique when one is made.
+ */
+ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &unique, uint32_t roll);
 
 /* data */
 

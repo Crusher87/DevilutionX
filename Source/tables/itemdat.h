@@ -431,7 +431,7 @@ enum class ItemSpecialEffectHf : uint8_t {
 };
 use_enum_as_flags(ItemSpecialEffectHf);
 
-enum item_misc_id : int8_t {
+enum item_misc_id : int16_t {
 	IMISC_NONE,
 	IMISC_USEFIRST,
 	IMISC_FULLHEAL,
@@ -553,6 +553,60 @@ enum item_misc_id : int8_t {
 	IMISC_CHARM_GOLDEN,
 	/** Glassblower's Bauble: adds quality to a flask. */
 	IMISC_ORB_BAUBLE,
+	/** Cut into a Spirit gem of up to the item's level at the gemcutting panel. */
+	IMISC_UNCUT_SPIRIT,
+	/** Broken for a permanent boost to maximum Spirit, like POE2's Gemrot Skull. */
+	IMISC_SPIRIT_SKULL,
+	/** Goes in an allocated jewel socket of the passive tree (POE2 Ruby, Emerald or Sapphire). */
+	IMISC_JEWEL,
+	/** POE2 Mashup crafting currency. */
+	IMISC_ORB_CHANCE,
+	IMISC_ORB_ANNUL,
+	IMISC_ORB_WHETSTONE,
+	IMISC_ORB_ETCHER,
+	IMISC_ORB_SCRAP,
+	IMISC_ORB_GREATER_EXALTED,
+	IMISC_ORB_PERFECT_EXALTED,
+	IMISC_ORB_GREATER_CHAOS,
+	IMISC_ORB_PERFECT_CHAOS,
+	IMISC_ORB_ARTIFICER,
+	IMISC_ORB_DESECRATE,
+	/** Adds quality to jewellery; which catalyst it is is in the create flags (poe2/crafting_items.hpp). */
+	IMISC_ORB_CATALYST,
+	/** Essences, omens and augments come in kinds kept in the create flags. */
+	IMISC_ESSENCE,
+	IMISC_OMEN,
+	IMISC_AUGMENT,
+	/** Endgame: tablets add to maps, fragments assemble into keys for pinnacle bosses (poe2/endgame.hpp). */
+	IMISC_TABLET,
+	IMISC_MAP_FRAGMENT,
+	IMISC_MAP_KEY,
+	/** The second wave of skill gems, Spirit gems and supports. */
+	IMISC_SKILLGEM_ICEBOLT,
+	IMISC_SKILLGEM_FROSTNOVA,
+	IMISC_SKILLGEM_RIPOSTE,
+	IMISC_SKILLGEM_SHADOWSTEP,
+	IMISC_SKILLGEM_FRENZY,
+	IMISC_SKILLGEM_SMITE,
+	IMISC_SKILLGEM_FISTSOFTHUNDER,
+	IMISC_SKILLGEM_RAPIDFIRE,
+	IMISC_SKILLGEM_SHIELDBASH,
+	IMISC_SKILLGEM_AMPLIFYDAMAGE,
+	IMISC_SPIRITGEM_HERALDFROST,
+	IMISC_SPIRITGEM_SKELETALMAGES,
+	IMISC_SUPPORT_BATTLERAGE,
+	/** The skills described by the skill table (poe2/table_skills.hpp), told apart by the item name. */
+	IMISC_SKILLGEM_TABLE,
+	/** The supports described by the support table (poe2/support_table.hpp), told apart by the item name. */
+	IMISC_SUPPORT_TABLE,
+	/** The later Spirit gems (poe2/spirit_skills.hpp), told apart by the item name. */
+	IMISC_SPIRITGEM_TABLE,
+	/** Read for weapon set passive points, like POE2's Book of Specialisation (poe2/weapon_swap.hpp). */
+	IMISC_SPEC_BOOK,
+	/** Jeweller's Orbs: open a skill's third, fourth and fifth support sockets in the Skills panel. */
+	IMISC_ORB_LESSER_JEWELLER,
+	IMISC_ORB_GREATER_JEWELLER,
+	IMISC_ORB_PERFECT_JEWELLER,
 	IMISC_INVALID = -1,
 };
 

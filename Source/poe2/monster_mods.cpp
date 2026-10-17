@@ -9,7 +9,13 @@
 #include "monster.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/map_play.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
@@ -63,11 +69,21 @@ MonsterAffixes GetMonsterAffixes(const Monster &monster)
 	const uint32_t hash = Mix(monster.rndItemSeed ^ 0x6D6F6E73U);
 	const int roll = static_cast<int>(hash % 1000);
 	const int mapTier = ActiveMapTier();
-	const int rarePerMille = RareMonsterPerMille + (mapTier * MapRarePerMillePerTier);
-	const int magicPerMille = MagicMonsterPerMille + (mapTier * MapMagicPerMillePerTier);
+	int rarePerMille = RareMonsterPerMille + (mapTier * MapRarePerMillePerTier);
+	int magicPerMille = MagicMonsterPerMille + (mapTier * MapMagicPerMillePerTier);
+	if (mapTier > 0) {
+		// The map's monster rarity and its "more magic and rare monsters" danger.
+		const MapEffects &map = ActiveMapEffects();
+		const int percent = map[MapAxis::MonsterRarity] * (100 + map[MapDanger::MoreMagicRare]) / 100;
+		rarePerMille = std::min(rarePerMille * percent / 100, 400);
+		magicPerMille = std::min(magicPerMille * percent / 100, 900 - rarePerMille);
+	}
 	if (roll < rarePerMille) {
 		affixes.rarity = MonsterRarity::Rare;
-		affixes.mods = ChooseMods(hash, RareMonsterModCount);
+		int count = RareMonsterModCount;
+		if (const int extra = ActiveMapEffects()[MapDanger::RareExtraMod]; extra > 0 && static_cast<int>((hash >> 12) % 100) < extra)
+			count++;
+		affixes.mods = ChooseMods(hash, std::min(count, static_cast<int>(MonsterMod::Count)));
 	} else if (roll < rarePerMille + magicPerMille) {
 		affixes.rarity = MonsterRarity::Magic;
 		affixes.mods = ChooseMods(hash, 1);
@@ -79,10 +95,17 @@ void ApplyMonsterRarity(Monster &monster)
 {
 	monster.poe2 = {};
 	if (const int mapTier = ActiveMapTier(); mapTier > 0 && CanHaveRarity(monster)) {
-		const int lifePercent = 100 + (mapTier * MapLifePercentPerTier);
-		monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100));
+		const MapEffects &map = ActiveMapEffects();
+		// The tier, the waystone's life and energy shield (as life), and monster effectiveness all multiply.
+		int64_t lifePercent = 100 + (mapTier * MapLifePercentPerTier);
+		lifePercent = lifePercent * (100 + map[MapDanger::MonsterLife]) / 100;
+		lifePercent = lifePercent * (100 + map[MapDanger::MonsterEnergyShield]) / 100;
+		lifePercent = lifePercent * map[MapAxis::Effectiveness] / 100;
+		monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100, INT32_MAX / 4)));
 		monster.hitPoints = monster.maxHitPoints;
-		const int damagePercent = 100 + (mapTier * MapDamagePercentPerTier);
+		const int damagePercent = (100 + (mapTier * MapDamagePercentPerTier)) * (100 + map[MapDanger::MonsterDamage]) / 100;
+		const int defencePercent = 100 + map[MapDanger::MonsterArmour] + map[MapDanger::MonsterEvasion];
+		monster.armorClass = static_cast<uint8_t>(std::min(monster.armorClass * defencePercent / 100, 255));
 		const auto scale = [damagePercent](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * damagePercent / 100, 255)); };
 		scale(monster.minDamage);
 		scale(monster.maxDamage);
@@ -136,14 +159,18 @@ std::string RareMonsterName(const Monster &monster)
 
 int MonsterExperiencePercent(const Monster &monster)
 {
+	int percent = 100;
 	switch (GetMonsterAffixes(monster).rarity) {
 	case MonsterRarity::Magic:
-		return 150;
+		percent = 150;
+		break;
 	case MonsterRarity::Rare:
-		return 300;
+		percent = 300;
+		break;
 	default:
-		return 100;
+		break;
 	}
+	return percent * MapExperiencePercent() / 100;
 }
 
 int MonsterExtraDrops(const Monster &monster)
@@ -164,9 +191,12 @@ void ProcessMonsterAilments(Monster &monster)
 		return;
 	Poe2MonsterState &state = monster.poe2;
 
-	if (monster.hitPoints < monster.maxHitPoints && GetMonsterAffixes(monster).has(MonsterMod::Regenerating)) {
+	int regenPerMille = GetMonsterAffixes(monster).has(MonsterMod::Regenerating) ? RegenPerMillePerSecond : 0;
+	if (!monster.isPlayerMinion())
+		regenPerMille += MapMonsterRegenTenths();
+	if (monster.hitPoints < monster.maxHitPoints && regenPerMille > 0) {
 		constexpr int64_t Divisor = 1000 * TicksPerSecond;
-		const int64_t total = static_cast<int64_t>(monster.maxHitPoints.raw()) * RegenPerMillePerSecond + state.regenRemainder;
+		const int64_t total = static_cast<int64_t>(monster.maxHitPoints.raw()) * regenPerMille + state.regenRemainder;
 		state.regenRemainder = static_cast<int>(total % Divisor);
 		monster.hitPoints = std::min(monster.hitPoints + Fixed26_6::fromRaw(static_cast<int32_t>(total / Divisor)), monster.maxHitPoints);
 	}
@@ -181,6 +211,12 @@ void ProcessMonsterAilments(Monster &monster)
 		state.freezeTicks--;
 	if (state.heavyStunTicks > 0)
 		state.heavyStunTicks--;
+	if (state.amplifyTicks > 0 && --state.amplifyTicks % 20 == 0)
+		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+	if (state.armourBreakTicks > 0)
+		state.armourBreakTicks--;
+	ProcessTableCurses(monster);
+	ProcessSupportMonsterEffects(monster);
 	const auto decay = [&](int32_t &buildup, int thresholdPercent) {
 		if (buildup <= 0)
 			return;
@@ -191,9 +227,12 @@ void ProcessMonsterAilments(Monster &monster)
 	decay(state.freezeBuildup, FreezeThresholdPercent);
 	decay(state.stunBuildup, HeavyStunThresholdPercent);
 
+	if (state.flammabilityTicks > 0 && --state.flammabilityTicks == 0)
+		state.flammability = 0;
 	if (state.igniteTicks > 0) {
 		state.igniteTicks--;
-		if (state.igniteTicks % 10 == 0)
+		// Modern Effects draw a slow burn on the body; without them a small flame now and then marks the ignite.
+		if (state.igniteTicks % 30 == 0 && !vfx::Enabled())
 			AddVisualEffect(monster.position.tile, MissileGraphicID::FireArrowExplosion);
 		// Only the player who lit the fire applies its damage, which the game then syncs.
 		if (state.igniteSource >= 0 && state.igniteSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
@@ -203,26 +242,29 @@ void ProcessMonsterAilments(Monster &monster)
 				M_StartKill(monster, *MyPlayer);
 		}
 	}
+	ProcessUniqueMonsterAilments(monster);
 }
 
 Fixed26_6 ApplyShock(const Monster &monster, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || monster.poe2.shockTicks == 0)
 		return damage;
-	return Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent / 100);
+	return Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent * MapExposurePercent() / 10000);
 }
 
-int AilmentChancePercent(const Monster &monster, Fixed26_6 damage)
+int AilmentChancePerMille(const Monster &monster, DamageType damageType, Fixed26_6 damage)
 {
 	if (monster.maxHitPoints <= 0 || damage <= 0)
 		return 0;
-	const int64_t percent = static_cast<int64_t>(damage.raw()) * 200 / monster.maxHitPoints.raw();
-	return static_cast<int>(std::clamp<int64_t>(percent, 5, 100));
+	// The ailment threshold is the monster's life; uniques have half, so their ailments still land.
+	const int64_t threshold = std::max<int64_t>(monster.isUnique() ? monster.maxHitPoints.raw() / 2 : monster.maxHitPoints.raw(), 1);
+	const int64_t perMilleAtThreshold = damageType == DamageType::Fire ? 200 : 250;
+	return static_cast<int>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * perMilleAtThreshold / threshold, 1000));
 }
 
 bool IsMonsterImmobilized(const Monster &monster)
 {
-	return gbIsPoe2 && (monster.poe2.freezeTicks > 0 || monster.poe2.heavyStunTicks > 0);
+	return gbIsPoe2 && (monster.poe2.freezeTicks > 0 || monster.poe2.heavyStunTicks > 0 || IsMonsterElectrocuted(monster));
 }
 
 bool MonsterSkipsTick(Monster &monster)
@@ -232,9 +274,11 @@ bool MonsterSkipsTick(Monster &monster)
 	if (IsMonsterImmobilized(monster))
 		return true;
 	Poe2MonsterState &state = monster.poe2;
-	if (state.chillTicks == 0)
+	// Bleeding from some uniques hinders, slowing like a chill; the stronger slow counts.
+	const int slow = std::max<int>(state.chillTicks > 0 ? state.chillPercent : 0, MonsterHinderPercent(monster));
+	if (slow == 0)
 		return false;
-	state.chillCarry = static_cast<uint8_t>(state.chillCarry + state.chillPercent);
+	state.chillCarry = static_cast<uint8_t>(state.chillCarry + slow);
 	if (state.chillCarry < 100)
 		return false;
 	state.chillCarry = static_cast<uint8_t>(state.chillCarry - 100);
@@ -243,11 +287,13 @@ bool MonsterSkipsTick(Monster &monster)
 
 int MonsterBuildupPercent(const Monster &monster)
 {
+	int percent = 100;
 	if (monster.isUnique())
-		return UniqueBuildupPercent;
-	if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
-		return RareBuildupPercent;
-	return 100;
+		percent = UniqueBuildupPercent;
+	else if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
+		percent = RareBuildupPercent;
+	// Waystones can raise the stun and freeze thresholds.
+	return percent * 100 / MapThresholdPercent();
 }
 
 namespace {
@@ -268,7 +314,8 @@ bool BuildUp(const Monster &monster, int32_t &buildup, Fixed26_6 damage, int thr
 	return false;
 }
 
-void InflictCold(Monster &monster, Fixed26_6 damage)
+/** @return Whether the hit froze the monster. */
+bool InflictCold(Monster &monster, Fixed26_6 damage)
 {
 	Poe2MonsterState &state = monster.poe2;
 	// A bigger share of the monster's life makes a stronger chill; a stronger chill replaces a weaker one.
@@ -280,7 +327,9 @@ void InflictCold(Monster &monster, Fixed26_6 damage)
 	if (BuildUp(monster, state.freezeBuildup, damage, FreezeThresholdPercent)) {
 		state.freezeTicks = FreezeTicks;
 		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter);
+		return true;
 	}
+	return false;
 }
 
 void InflictPhysical(Monster &monster, Fixed26_6 damage)
@@ -299,21 +348,48 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	if (!gbIsPoe2 || monster.hasNoLife() || damage <= 0)
 		return;
 	if (damageType == DamageType::Magic) {
-		InflictCold(monster, damage);
+		// POE2 Mashup: supports make cold build up harder (Deep Freeze) or not at all (Elemental Focus).
+		int effect = SupportAilmentEffectPercent(damageType) * SupportAilmentChancePercent(damageType) / 100;
+		if (effect > 0)
+			effect = effect * std::max(100 + PassiveTotal(player, PassiveStat::FreezeBuildup), 0) / 100;
+		if (effect <= 0)
+			return;
+		if (InflictCold(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * effect / 100)))) {
+			OnMonsterFrozen(player);
+			OnSupportedFreeze(player);
+		}
+		OnAilmentInflicted(player, monster, damageType, false);
 		return;
 	}
 	if (damageType == DamageType::Physical) {
-		InflictPhysical(monster, damage);
+		// Some uniques add stun buildup.
+		InflictPhysical(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * UniqueStunBuildupPercent(player) / 100)));
 		return;
 	}
 	if (damageType != DamageType::Fire && damageType != DamageType::Lightning)
 		return;
-	if (GenerateRnd(100) >= AilmentChancePercent(monster, damage))
-		return;
-
+	int chance = AilmentChancePerMille(monster, damageType, damage);
+	if (damageType == DamageType::Fire)
+		chance = chance * UniqueIgniteChancePercent(player) / 100;
+	else
+		chance = chance * std::max(100 + PassiveTotal(player, PassiveStat::ShockChance), 0) / 100;
+	chance = chance * SupportAilmentChancePercent(damageType) / 100;
 	Poe2MonsterState &state = monster.poe2;
 	if (damageType == DamageType::Fire) {
-		const int32_t perTick = std::max<int32_t>(damage.raw() * IgnitePercentPerSecond / 100 / TicksPerSecond, 1);
+		// POE2's Flammability: each fire hit adds its chance to the monster's, and the hit ignites with the total.
+		if (chance <= 0)
+			return;
+		state.flammability = static_cast<int16_t>(std::min(state.flammability + chance, 1000));
+		state.flammabilityTicks = FlammabilityTicks;
+		chance = state.flammability;
+	}
+	if (GenerateRnd(1000) >= chance)
+		return;
+
+	const bool wasShocked = state.shockTicks > 0;
+	OnAilmentInflicted(player, monster, damageType, wasShocked);
+	if (damageType == DamageType::Fire) {
+		const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * IgnitePercentPerSecond / 100 * SupportAilmentEffectPercent(damageType) / 100 / TicksPerSecond), 1);
 		// A new ignite only replaces a weaker one, like POE2.
 		if (state.igniteTicks == 0 || perTick >= state.igniteDamagePerTick) {
 			state.igniteDamagePerTick = perTick;

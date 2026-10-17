@@ -1,11 +1,15 @@
 #include "poe2/skill_gems.hpp"
 
+#include <algorithm>
 #include <array>
+#include <bit>
 
 #include "items.h"
 #include "levels/gendung.h"
 #include "player.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "utils/language.h"
@@ -43,6 +47,34 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForAttack(WeaponSkill::EmberFusillade);
 	case IMISC_SKILLGEM_SPARK:
 		return SkillSlot::ForAttack(WeaponSkill::Spark);
+	case IMISC_SKILLGEM_ICEBOLT:
+		return SkillSlot::ForAttack(WeaponSkill::IceBolt);
+	case IMISC_SKILLGEM_FROSTNOVA:
+		return SkillSlot::ForAttack(WeaponSkill::FrostNova);
+	case IMISC_SKILLGEM_RIPOSTE:
+		return SkillSlot::ForAttack(WeaponSkill::Riposte);
+	case IMISC_SKILLGEM_SHADOWSTEP:
+		return SkillSlot::ForAttack(WeaponSkill::ShadowStep);
+	case IMISC_SKILLGEM_FRENZY:
+		return SkillSlot::ForAttack(WeaponSkill::Frenzy);
+	case IMISC_SKILLGEM_SMITE:
+		return SkillSlot::ForAttack(WeaponSkill::Smite);
+	case IMISC_SKILLGEM_FISTSOFTHUNDER:
+		return SkillSlot::ForAttack(WeaponSkill::FistsOfThunder);
+	case IMISC_SKILLGEM_RAPIDFIRE:
+		return SkillSlot::ForAttack(WeaponSkill::RapidFire);
+	case IMISC_SKILLGEM_SHIELDBASH:
+		return SkillSlot::ForAttack(WeaponSkill::ShieldBash);
+	case IMISC_SKILLGEM_AMPLIFYDAMAGE:
+		return SkillSlot::ForAttack(WeaponSkill::AmplifyDamage);
+	case IMISC_SKILLGEM_TABLE:
+		if (const TableSkillData *table = FindTableSkillGem(data); table != nullptr)
+			return SkillSlot::ForAttack(table->skill);
+		return {};
+	case IMISC_SPIRITGEM_HERALDFROST:
+		return SkillSlot::ForPersistent(PersistentSkill::HeraldOfFrost);
+	case IMISC_SPIRITGEM_SKELETALMAGES:
+		return SkillSlot::ForPersistent(PersistentSkill::SkeletalMages);
 	case IMISC_SPIRITGEM_HERALDASH:
 		return SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh);
 	case IMISC_SPIRITGEM_HERALDTHUNDER:
@@ -53,6 +85,17 @@ SkillSlot SkillForGemData(const ItemData &data)
 		return SkillSlot::ForPersistent(PersistentSkill::SummonGolem);
 	case IMISC_SPIRITGEM_SKELETONS:
 		return SkillSlot::ForPersistent(PersistentSkill::SkeletalWarriors);
+	case IMISC_SPIRITGEM_TABLE: {
+		// The later Spirit gems are told apart by name ("Blood Golem Gem").
+		const std::string_view name = data.iName;
+		for (int i = static_cast<int>(PersistentSkill::BloodGolem); i <= static_cast<int>(PersistentSkill::Last); i++) {
+			const auto skill = static_cast<PersistentSkill>(i);
+			const std::string_view skillName = PersistentSkillName(skill);
+			if (name.size() == skillName.size() + 4 && name.starts_with(skillName) && name.ends_with(" Gem"))
+				return SkillSlot::ForPersistent(skill);
+		}
+		return {};
+	}
 	default:
 		return {};
 	}
@@ -81,7 +124,7 @@ std::optional<size_t> SkillGemItemIndex(SkillSlot skill)
 	return std::nullopt;
 }
 
-bool CreateSkillGemItem(Item &item, SkillSlot skill)
+bool CreateSkillGemItem(Item &item, SkillSlot skill, int level)
 {
 	const std::optional<size_t> index = SkillGemItemIndex(skill);
 	if (!index)
@@ -89,7 +132,20 @@ bool CreateSkillGemItem(Item &item, SkillSlot skill)
 	InitializeItem(item, static_cast<_item_indexes>(*index));
 	GenerateNewSeed(item);
 	item._iIdentified = true;
+	SetSkillGemItemLevel(item, level);
 	return true;
+}
+
+int SkillGemItemLevel(const Item &item)
+{
+	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+	return std::clamp(static_cast<int>((item.dwBuff & CF_POE2_GEM_LEVEL) >> Shift), 1, MaxGemLevel);
+}
+
+void SetSkillGemItemLevel(Item &item, int level)
+{
+	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+	item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (static_cast<uint32_t>(std::clamp(level, 1, MaxGemLevel)) << Shift);
 }
 
 std::string_view SkillName(SkillSlot skill)
@@ -101,6 +157,8 @@ std::string_view SkillName(SkillSlot skill)
 		return WeaponSkillName(skill.attack());
 	case SkillKind::Persistent:
 		return PersistentSkillName(skill.persistent());
+	case SkillKind::Default:
+		return DefaultAttackName(static_cast<DefaultAttack>(skill.id));
 	default:
 		return {};
 	}
@@ -120,6 +178,9 @@ int SkillManaCost(const Player &player, SkillSlot skill)
 
 SkillUsability GetSkillUsability(const Player &player, SkillSlot skill)
 {
+	// The weapon's own attack needs no gem and no mana.
+	if (skill.kind == SkillKind::Default)
+		return SkillUsability::Ready;
 	const std::optional<size_t> gemIndex = SkillGemItemIndex(skill);
 	if (!gemIndex)
 		return SkillUsability::Empty;
@@ -152,10 +213,11 @@ std::optional<size_t> FindSkillSlot(const Player &player, SkillSlot skill)
 	return std::nullopt;
 }
 
-SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill)
+SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill, int level)
 {
 	const SkillSlot previous = player.poe2.skillSlots[slot];
 	player.poe2.skillSlots[slot] = skill;
+	player.poe2.slotLevels[slot] = static_cast<uint8_t>(std::clamp(level, 1, MaxGemLevel));
 	if (skill.isEmpty() || skill.kind == SkillKind::Persistent) {
 		for (size_t traySlot = 0; traySlot < NumTraySlots; traySlot++) {
 			if (player.poe2.tray[traySlot] == TrayBinding::ForGem(slot))
@@ -206,6 +268,11 @@ bool TraySlotTakesActions(TraySlot slot)
 	return slot == TraySlot::LeftMouse || slot == TraySlot::RightMouse;
 }
 
+bool TrayBindingFits(TrayBinding binding, TraySlot slot)
+{
+	return binding.isGem() || binding.action == TrayAction::None || binding.action == TrayAction::WeaponAttack || TraySlotTakesActions(slot);
+}
+
 std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket)
 {
 	for (size_t slot = 0; slot < NumTraySlots; slot++) {
@@ -229,7 +296,7 @@ void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding)
 		ClearTraySlot(player, slot);
 		return;
 	}
-	if (!binding.isGem() && !TraySlotTakesActions(slot))
+	if (!TrayBindingFits(binding, slot))
 		return;
 	TrayBinding &target = player.poe2.tray[static_cast<size_t>(slot)];
 	if (binding.isGem()) {
@@ -237,7 +304,7 @@ void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding)
 			TrayBinding &otherBinding = player.poe2.tray[static_cast<size_t>(*other)];
 			otherBinding = target;
 			// An empty slot, or an action a key can't take, leaves the other slot at its default.
-			if (otherBinding.action == TrayAction::None || (!otherBinding.isGem() && !TraySlotTakesActions(*other)))
+			if (otherBinding.action == TrayAction::None || !TrayBindingFits(otherBinding, *other))
 				otherBinding = DefaultTrayBinding(*other);
 		}
 	}
