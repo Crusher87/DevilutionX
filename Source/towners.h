@@ -104,6 +104,18 @@ bool IsTownerPresent(_talker_id npc);
  */
 Towner *GetTowner(_talker_id type);
 
+/** @brief POE2 Mashup: what a towner has for the hero, shown as a marker over their head. */
+enum class QuestMarker : uint8_t {
+	None,
+	/** @brief They have a quest to give or news to tell. */
+	News,
+	/** @brief The hero has what they asked for, or a reward is waiting. */
+	Reward,
+};
+
+/** @brief Whether talking to the towner now would move a quest on, read without changing anything. */
+QuestMarker TownerQuestMarker(const Player &player, const Towner &towner);
+
 void InitTowners();
 void FreeTownerGFX();
 void ProcessTowners();

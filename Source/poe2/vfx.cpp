@@ -31,6 +31,7 @@
 #include "options.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/monster_mods.hpp"
+#include "towners.h"
 #include "utils/is_of.hpp"
 
 #ifndef USE_SDL1
@@ -362,6 +363,15 @@ struct Halo {
 };
 
 std::vector<Halo> Halos;
+
+/** @brief The marker over a towner's head who has a quest to give (News) or is waiting on the hero (Reward). */
+struct QuestMark {
+	Vec pos;
+	bool reward;
+	float phase;
+};
+
+std::vector<QuestMark> QuestMarks;
 /** @brief Each monster's mode last frame, to catch it starting to cast, fade, charge or die. */
 std::unordered_map<const Monster *, MonsterMode> LastModes;
 
@@ -1305,6 +1315,27 @@ bool BehindWall(Point tile)
 	return solid(tile + Displacement { 1, 1 }) || (solid(tile + Displacement { 1, 0 }) && solid(tile + Displacement { 0, 1 }));
 }
 
+/** @brief Puts a marker over each towner in town who has quest news, with a few motes rising off it. */
+void ScanTowners(const View &view)
+{
+	if (leveltype != DTYPE_TOWN || MyPlayer == nullptr)
+		return;
+	for (const Towner &towner : Towners) {
+		const QuestMarker marker = TownerQuestMarker(*MyPlayer, towner);
+		if (marker == QuestMarker::None || !towner.anim)
+			continue;
+		const Vec feet = TileCentre(towner.position);
+		if (!view.contains(feet, 150))
+			continue;
+		const float height = std::min(static_cast<float>(towner.currentSprite().height()), 110.F);
+		const float phase = static_cast<float>(static_cast<int>(towner._ttype) * 37 % 97);
+		const Vec pos = feet - Vec { 0, height * 0.8F + 12 + 3 * std::sin(AmbientTime * 0.003F + phase) };
+		const bool reward = marker == QuestMarker::Reward;
+		QuestMarks.push_back({ pos, reward, phase });
+		Emitters.push_back({ pos + Vec { 0, 6 }, 5, Ambient::Motes, reward ? Rgb { 255, 200, 70 } : Rgb { 255, 70, 30 }, 7 });
+	}
+}
+
 void ScanMonsters(const View &view)
 {
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
@@ -1754,6 +1785,7 @@ void Clear()
 	HotSpots.clear();
 	SteadySpots.clear();
 	Halos.clear();
+	QuestMarks.clear();
 	LastModes.clear();
 }
 
@@ -2070,12 +2102,14 @@ void ScanWorld(const Surface &world)
 {
 	Emitters.clear();
 	Halos.clear();
+	QuestMarks.clear();
 	if (!Enabled() || world.w() <= 0 || world.h() <= 0)
 		return;
 	const View view { CameraOrigin, CameraOrigin + Vec { static_cast<float>(world.w()), static_cast<float>(world.h()) } * (1 / CameraScale) };
 	ScanFlames(view);
 	ScanFluids(world, view);
 	ScanMonsters(view);
+	ScanTowners(view);
 }
 
 void Advance(float ms)
@@ -2686,6 +2720,82 @@ void DrawHalos()
 	}
 }
 
+/**
+ * @brief A quest marker: a dagger plunged point down over a gem, so it reads as "!" but looks forged in Hell. Blood red
+ * with a burning edge for a quest to give, gold with a turning ring when the hero has what the towner wants.
+ */
+void DrawQuestMarks()
+{
+	const float t = AmbientTime;
+	for (const QuestMark &mark : QuestMarks) {
+		const Vec c = mark.pos;
+		const float pulse = 0.8F + 0.2F * std::sin(t * 0.005F + mark.phase);
+		const Rgb face = mark.reward ? Rgb { 70, 45, 12 } : Rgb { 42, 10, 8 };
+		const Rgb edge = mark.reward ? Rgb { 255, 205, 90 } : Rgb { 255, 120, 40 };
+		const Rgb hot = mark.reward ? Rgb { 255, 245, 200 } : Rgb { 255, 215, 150 };
+		const Rgb glow = mark.reward ? Rgb { 220, 150, 30 } : Rgb { 200, 25, 10 };
+		const Rgb gem = mark.reward ? Rgb { 255, 225, 120 } : Rgb { 255, 35, 25 };
+		constexpr float K = 1.35F;
+		auto p = [&](float x, float y) { return c + Vec { x, y } * K; };
+		auto quad = [&](Vec a, Vec b, Vec d, Vec e, Rgb colour, float alpha) {
+			const int va = Dark.add(ToScreen(a), colour, alpha);
+			const int vb = Dark.add(ToScreen(b), colour, alpha);
+			const int vd = Dark.add(ToScreen(d), colour, alpha);
+			const int ve = Dark.add(ToScreen(e), colour, alpha);
+			Dark.tri(va, vb, vd);
+			Dark.tri(va, vd, ve);
+		};
+
+		// A hellish glow behind it, so it stands out against the town at night, and a dark shadow of the dagger
+		// itself so its iron face reads against bright ground.
+		SoftDisc(Dark, p(0, 0), 24 * K, { 6, 2, 2 }, 0.4F, false);
+		SoftDisc(Glowing, p(0, 0), 28 * K, glow, 0.2F * pulse, false);
+		SoftDisc(Glowing, p(0, 16), 13 * K, glow, 0.3F * pulse, false);
+		SoftLine(Dark, p(0, -21), p(0, 21), 13 * K, { 0, 0, 0 }, { 0, 0, 0 }, 0.55F, 0.55F);
+		SoftLine(Dark, p(-11, -12), p(11, -12), 8 * K, { 0, 0, 0 }, { 0, 0, 0 }, 0.5F, 0.5F);
+
+		// The blade, point down, with a dark iron face and a burning edge.
+		const Vec bladeL = p(-3.6F, -9);
+		const Vec bladeR = p(3.6F, -9);
+		const Vec tip = p(0, 10);
+		const int vl = Dark.add(ToScreen(bladeL), face, 0.95F);
+		const int vr = Dark.add(ToScreen(bladeR), Mix(face, edge, 0.25F), 0.95F);
+		const int vt = Dark.add(ToScreen(tip), face, 0.95F);
+		Dark.tri(vl, vr, vt);
+		SoftLine(Glowing, bladeL, tip, 2.8F, edge, hot, 0.75F * pulse, 0.95F);
+		SoftLine(Glowing, bladeR, tip, 2.8F, edge, hot, 0.75F * pulse, 0.95F);
+		SoftLine(Glowing, p(0, -9), p(0, 6), 1.2F, hot, hot, 0.25F, 0.5F);
+		SoftDisc(Glowing, tip, 3 * K, hot, 0.8F * pulse, false);
+
+		// Crossguard with swept horns, then the grip and pommel.
+		quad(p(-8, -12.5F), p(8, -12.5F), p(7, -9.5F), p(-7, -9.5F), face, 0.95F);
+		SoftLine(Glowing, p(-9, -14.5F), p(-7, -11), 2, edge, edge, 0.9F, 0.7F);
+		SoftLine(Glowing, p(-7, -11), p(7, -11), 2, edge, edge, 0.7F, 0.7F);
+		SoftLine(Glowing, p(7, -11), p(9, -14.5F), 2, edge, edge, 0.7F, 0.9F);
+		quad(p(-1.6F, -18), p(1.6F, -18), p(1.6F, -12.5F), p(-1.6F, -12.5F), face, 0.95F);
+		SoftLine(Glowing, p(0, -18), p(0, -12.5F), 1.2F, edge, edge, 0.45F, 0.45F);
+		SoftDisc(Dark, p(0, -19.5F), 2.6F * K, face, 0.95F, false, 0.95F);
+		SoftDisc(Glowing, p(0, -19.5F), 2.4F * K, edge, 0.7F, false);
+
+		// The gem under the point, the dot of the "!": a cut stone with a dark rim, lit from inside.
+		const float g = 4.4F;
+		quad(p(0, 16 - g - 1.2F), p(g + 1, 16), p(0, 16 + g + 1.2F), p(-g - 1, 16), { 8, 3, 3 }, 0.9F);
+		quad(p(0, 16 - g), p(g * 0.85F, 16), p(0, 16 + g), p(-g * 0.85F, 16), Mix(face, gem, 0.5F), 0.95F);
+		quad(p(0, 16 - g * 0.55F), p(g * 0.45F, 16), p(0, 16 + g * 0.55F), p(-g * 0.45F, 16), gem, 0.95F);
+		SoftDisc(Glowing, p(0, 16), g * K * (0.9F + 0.3F * pulse), gem, 0.75F * pulse, false);
+		SoftDisc(Glowing, p(-1, 14.6F), 1.3F * K, { 255, 255, 255 }, 0.85F, false);
+		if (mark.reward) {
+			// A gold ring turning round it with three sparks riding it: something is waiting for the hero.
+			const Vec ring = p(0, 3);
+			SoftRing(Glowing, ring, 16 * K, 1.4F, edge, 0.45F * pulse, 0, 1);
+			for (int i = 0; i < 3; i++) {
+				const float a = t * 0.003F + 2 * Pi * static_cast<float>(i) / 3;
+				SoftDisc(Glowing, OnGround(ring, 16 * K, a), 2.6F, hot, 0.9F, false);
+			}
+		}
+	}
+}
+
 /** @brief Render targets for the glowing layer and its blurred copies; remade when the size or renderer changes. */
 struct Targets {
 	SDL_Renderer *renderer = nullptr;
@@ -2765,7 +2875,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
 	LastDrawnScan = ScanFrame;
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty())
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty())
 		return;
 
 	Glowing.clear();
@@ -2778,6 +2888,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawComets();
 	DrawBolts();
 	DrawSweeps();
+	DrawQuestMarks();
 	DrawParticles();
 
 	const float toLogical = static_cast<float>(logicalSize.width) / static_cast<float>(worldSize.width);
