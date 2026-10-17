@@ -1369,12 +1369,18 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 		hd::BeginWorld(out, Rectangle { Point { viewportOffsetX, 0 }, Size { viewportWidth, gnViewportHeight } });
 	}
 	DrawFloor(out, lightmap, position, Point {} + offset, rows, columns);
+	// POE2 Mashup: the effects lying on the floor hide behind whatever is drawn over it from here on.
+	const bool floorCopy = IsUiScaled() && vfx::WantsFloorCopy();
+	if (floorCopy)
+		vfx::CopyFloor(fullOut);
 	DrawTileContent(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawOOB(out, lightmap, position, Point {} + offset, rows, columns);
 	hd::EndWorld();
 
 	if (*GetOptions().Graphics.zoom) {
 		Zoom(fullOut.subregionY(0, gnViewportHeight));
+		if (floorCopy && vfx::FloorCopy().w() == fullOut.w())
+			Zoom(vfx::FloorCopy().subregionY(0, gnViewportHeight));
 	}
 
 #ifdef DUN_RENDER_STATS

@@ -10,14 +10,17 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <iterator>
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
 #include <magic_enum/magic_enum.hpp>
 
 #include "diablo.h"
+#include "engine/dx.h"
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/scrollrt.h"
@@ -286,6 +289,39 @@ struct Beam {
 };
 
 std::vector<Beam> Beams;
+
+constexpr int RitualRunes = 15;
+// The level-up circle's timeline, in ms from the start.
+constexpr float RitualRingMs = 450;
+constexpr float RitualStarStart = 300;
+constexpr float RitualStrokeMs = 170;
+constexpr float RitualInnerStart = RitualStarStart + 5 * RitualStrokeMs;
+constexpr float RitualInnerMs = 160;
+constexpr float RitualRuneStart = 550;
+constexpr float RitualRuneMs = 90;
+constexpr float RitualBurnStart = 2700;
+constexpr float RitualBurnMs = 900;
+constexpr float RitualScorchMs = 2200;
+
+/**
+ * @brief The level-up circle: a ring of thorns that draws itself in from the front, a pentagram drawn one line at a time,
+ * Diablo II runes written one by one into the band between the rings, then a burning edge that eats it from the front
+ * round to the back and leaves it scorched into the floor.
+ */
+struct RitualFx {
+	Vec pos;
+	float radius;
+	float age = 0;
+	float life;
+	Colours colours;
+	uint32_t seed;
+	std::array<uint8_t, RitualRunes> runes;
+};
+
+std::vector<RitualFx> Rituals;
+
+/** @brief The 33 runes of Diablo II, El to Zod. */
+constexpr size_t RuneCount = 33;
 std::vector<Crack> Cracks;
 std::vector<IceSpikeFx> IceSpikes;
 std::vector<Sweep> Sweeps;
@@ -1803,12 +1839,61 @@ bool Enabled()
 #endif
 }
 
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+namespace {
+
+SDL_Surface *FloorSurface = nullptr;
+/** @brief Whether FloorSurface holds the floor of the frame about to be shown. */
+bool FloorFresh = false;
+
+} // namespace
+
+bool WantsFloorCopy()
+{
+	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty());
+}
+
+void CopyFloor(const Surface &world)
+{
+	if (FloorSurface == nullptr || FloorSurface->w != world.w() || FloorSurface->h != world.h()) {
+		if (FloorSurface != nullptr)
+			SDL_FreeSurface(FloorSurface);
+		FloorSurface = SDL_CreateRGBSurfaceWithFormat(0, world.w(), world.h(), 8, SDL_PIXELFORMAT_INDEX8);
+		if (FloorSurface == nullptr)
+			return;
+	}
+	for (int y = 0; y < world.h(); y++)
+		std::memcpy(static_cast<uint8_t *>(FloorSurface->pixels) + static_cast<ptrdiff_t>(y) * FloorSurface->pitch, world.at(0, y), world.w());
+	FloorFresh = true;
+}
+
+Surface FloorCopy()
+{
+	return FloorSurface != nullptr ? Surface(FloorSurface) : Surface();
+}
+#else
+bool WantsFloorCopy()
+{
+	return false;
+}
+
+void CopyFloor(const Surface &)
+{
+}
+
+Surface FloorCopy()
+{
+	return {};
+}
+#endif
+
 void Clear()
 {
 	Particles.clear();
 	Rings.clear();
 	Bolts.clear();
 	Sigils.clear();
+	Rituals.clear();
 	Cracks.clear();
 	Beams.clear();
 	IceSpikes.clear();
@@ -2007,22 +2092,27 @@ void LevelUp(Point tile)
 	// The pillar of hellfire, and a thinner crimson one inside it that outlasts it.
 	Beams.push_back({ pos, 0, 1400, 560, 30, hell });
 	Beams.push_back({ pos, 0, 1800, 640, 12, blood });
-	// A pentagram burning into the floor under them.
-	SigilFx sigil;
-	sigil.pos = pos;
-	sigil.radius = TileRadius * 2.8F;
-	sigil.life = 1900;
-	sigil.colours = hell;
-	sigil.seed = NextRandom() | 1;
-	sigil.glyphs = 12;
-	sigil.star = 5;
-	sigil.floor = false;
-	Sigils.push_back(sigil);
+	// A circle of thorns, a pentagram and runes written into the floor under them, which then burn away.
+	RitualFx ritual;
+	ritual.pos = pos;
+	ritual.radius = TileRadius * 3.2F;
+	ritual.life = RitualBurnStart + RitualBurnMs + RitualScorchMs;
+	ritual.colours = hell;
+	ritual.seed = NextRandom() | 1;
+	// Fifteen different runes, in a random order.
+	std::array<uint8_t, RuneCount> pool;
+	for (size_t i = 0; i < pool.size(); i++)
+		pool[i] = static_cast<uint8_t>(i);
+	for (size_t i = 0; i < ritual.runes.size(); i++) {
+		std::swap(pool[i], pool[i + NextRandom() % (pool.size() - i)]);
+		ritual.runes[i] = pool[i];
+	}
+	Rituals.push_back(ritual);
 	// Shockwaves rolling out across the floor.
 	AddRing(pos, 0, TileRadius * 7, 700, 6, hell.mid, 1, false, true, false, 0.02F);
 	AddRing(pos, 0, TileRadius * 5, 950, 18, blood.mid, 0.5F, false, true);
 	AddRing(pos, TileRadius, TileRadius * 3.5F, 850, 0, hell.edge, 0.45F, true, true);
-	AddCracks(pos, TileRadius * 2.6F, 10, hell.mid, 2800);
+	AddCracks(pos, TileRadius * 1.4F, 6, hell.mid, 1600);
 	// A fountain of embers raining back down, and sparks blown out along the ground.
 	Spray(pos + Vec { 0, -10 }, Scaled(150), 30, 250, 1000, 1900, Shape::Streak, hell.core, hell.edge, 2.6F, 0.6F, 280, 680, 520, 0.8F, 1);
 	Spray(pos, Scaled(70), 160, 440, 400, 900, Shape::Streak, hell.core, blood.mid, 2, 0.5F, 30, 140, 300, 1.5F, 1);
@@ -2224,6 +2314,7 @@ void Advance(float ms)
 	AdvanceParticles(ms);
 	Age(Rings, ms);
 	Age(Sigils, ms);
+	Age(Rituals, ms);
 	Age(Beams, ms);
 	Age(Cracks, ms);
 	Age(Sweeps, ms);
@@ -2245,7 +2336,7 @@ size_t ParticleCount()
 
 size_t ShapeCount()
 {
-	return Rings.size() + Sigils.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size();
+	return Rings.size() + Sigils.size() + Rituals.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size();
 }
 
 size_t AmbientCount()
@@ -2287,6 +2378,9 @@ struct Batch {
 
 Batch Glowing;
 Batch Dark;
+/** @brief Glowing and dark shapes lying on the floor, which hide behind whatever stands or lies on it. */
+Batch Ground;
+Batch GroundDark;
 
 Vec ToScreen(Vec world)
 {
@@ -2384,7 +2478,7 @@ void DrawRings()
 		const float radius = ring.r0 + (ring.r1 - ring.r0) * grow;
 		// Bright at once, then fading out over its life.
 		const float alpha = ring.alpha * (1 - t * t);
-		Batch &batch = ring.dark ? Dark : Glowing;
+		Batch &batch = ring.ground ? (ring.dark ? GroundDark : Ground) : (ring.dark ? Dark : Glowing);
 		if (ring.disc) {
 			if (ring.dark && ring.jitter > 0) {
 				// Scorch marks: an uneven dark patch.
@@ -2403,7 +2497,7 @@ void DrawRings()
 		}
 	}
 	for (const Ring &glow : FrameGlows)
-		SoftDisc(Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
+		SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
 }
 
 /** @brief Projectile bodies: a white-hot head and a tail tapering back along the flight, shaped by the element. */
@@ -2543,10 +2637,10 @@ void DrawCracks()
 		for (size_t i = 0; i < shown; i++) {
 			const Vec a = crack.pos + crack.segments[i][0];
 			const Vec b = crack.pos + crack.segments[i][1];
-			SoftLine(Dark, a, b, 4, { 15, 10, 8 }, { 15, 10, 8 }, 0.85F * fade, 0.85F * fade);
+			SoftLine(GroundDark, a, b, 4, { 15, 10, 8 }, { 15, 10, 8 }, 0.85F * fade, 0.85F * fade);
 			if (heat > 0) {
-				SoftLine(Glowing, a, b, 2, crack.glow, crack.glow, heat, heat);
-				SoftLine(Glowing, a, b, 8, crack.glow, crack.glow, heat * 0.3F, heat * 0.3F);
+				SoftLine(Ground, a, b, 2, crack.glow, crack.glow, heat, heat);
+				SoftLine(Ground, a, b, 8, crack.glow, crack.glow, heat * 0.3F, heat * 0.3F);
 			}
 		}
 	}
@@ -2722,11 +2816,11 @@ void DrawSigils()
 
 		// The glowing floor inside the circle, brighter as it charges.
 		if (sigil.floor) {
-			SoftDisc(Glowing, sigil.pos, r * 1.05F, c.edge, (0.10F + 0.25F * std::min(t, 1.F)) * alpha * draw, true);
-			SoftDisc(Dark, sigil.pos, r * 0.98F, { 10, 5, 15 }, 0.3F * alpha * draw, true);
+			SoftDisc(Ground, sigil.pos, r * 1.05F, c.edge, (0.10F + 0.25F * std::min(t, 1.F)) * alpha * draw, true);
+			SoftDisc(GroundDark, sigil.pos, r * 0.98F, { 10, 5, 15 }, 0.3F * alpha * draw, true);
 		} else {
 			// Only the rim glows, so the hero in the middle isn't washed out.
-			SoftRing(Glowing, sigil.pos, r * 0.93F, r * 0.25F, c.edge, 0.3F * alpha * draw, 0, 1);
+			SoftRing(Ground, sigil.pos, r * 0.93F, r * 0.25F, c.edge, 0.3F * alpha * draw, 0, 1);
 		}
 
 		// Outer double ring, drawn in around the circle.
@@ -2735,14 +2829,14 @@ void DrawSigils()
 		for (int i = 0; i < drawn; i++) {
 			const float a0 = spin + 2 * Pi * i / segments;
 			const float a1 = spin + 2 * Pi * (i + 1) / segments;
-			SoftLine(Glowing, OnGround(sigil.pos, r, a0), OnGround(sigil.pos, r, a1), 3, c.mid, c.mid, pulse * alpha, pulse * alpha);
-			SoftLine(Glowing, OnGround(sigil.pos, r, a0), OnGround(sigil.pos, r, a1), 12, c.mid, c.mid, 0.25F * pulse * alpha, 0.25F * pulse * alpha);
-			SoftLine(Glowing, OnGround(sigil.pos, r * 0.86F, a0), OnGround(sigil.pos, r * 0.86F, a1), 1.6F, c.core, c.core, 0.8F * alpha, 0.8F * alpha);
+			SoftLine(Ground, OnGround(sigil.pos, r, a0), OnGround(sigil.pos, r, a1), 3, c.mid, c.mid, pulse * alpha, pulse * alpha);
+			SoftLine(Ground, OnGround(sigil.pos, r, a0), OnGround(sigil.pos, r, a1), 12, c.mid, c.mid, 0.25F * pulse * alpha, 0.25F * pulse * alpha);
+			SoftLine(Ground, OnGround(sigil.pos, r * 0.86F, a0), OnGround(sigil.pos, r * 0.86F, a1), 1.6F, c.core, c.core, 0.8F * alpha, 0.8F * alpha);
 		}
 		// Ticks between the rings.
 		for (int i = 0; i < 48 && i < drawn * 48 / segments; i += 2) {
 			const float a = spin + 2 * Pi * i / 48;
-			SoftLine(Glowing, OnGround(sigil.pos, r * 0.88F, a), OnGround(sigil.pos, r * 0.98F, a), 1.4F, c.core, c.core, 0.7F * alpha, 0.2F * alpha);
+			SoftLine(Ground, OnGround(sigil.pos, r * 0.88F, a), OnGround(sigil.pos, r * 0.98F, a), 1.4F, c.core, c.core, 0.7F * alpha, 0.2F * alpha);
 		}
 		// Runes in a band, turning the other way, each lighting up as the circle charges.
 		uint32_t glyphSeed = seed;
@@ -2762,10 +2856,10 @@ void DrawSigils()
 			for (int i = 0; i < points; i++) {
 				const float a0 = starSpin + 2 * Pi * i / points;
 				const float a1 = starSpin + 2 * Pi * ((i + skip) % points) / points;
-				SoftLine(Glowing, OnGround(sigil.pos, r * 0.58F, a0), OnGround(sigil.pos, r * 0.58F, a1), 2, c.mid, c.mid, 0.85F * pulse * alpha, 0.85F * pulse * alpha);
+				SoftLine(Ground, OnGround(sigil.pos, r * 0.58F, a0), OnGround(sigil.pos, r * 0.58F, a1), 2, c.mid, c.mid, 0.85F * pulse * alpha, 0.85F * pulse * alpha);
 			}
-			SoftRing(Glowing, sigil.pos, r * 0.58F, 1.5F, c.core, 0.6F * alpha, 0, 1);
-			SoftRing(Glowing, sigil.pos, r * 0.2F, 2, c.core, pulse * alpha, 0, 1);
+			SoftRing(Ground, sigil.pos, r * 0.58F, 1.5F, c.core, 0.6F * alpha, 0, 1);
+			SoftRing(Ground, sigil.pos, r * 0.2F, 2, c.core, pulse * alpha, 0, 1);
 		}
 		// Motes rising off the circle while it charges.
 		if (exploding == 0 && NextRandom() % 100 < static_cast<uint32_t>(25 * Intensity())) {
@@ -2780,7 +2874,316 @@ void DrawSigils()
 			AddParticle(p);
 		}
 		if (exploding > 0)
-			SoftRing(Glowing, sigil.pos, r * (1 + exploding * 0.6F), 6, c.core, 1 - exploding, 0, 1);
+			SoftRing(Ground, sigil.pos, r * (1 + exploding * 0.6F), 6, c.core, 1 - exploding, 0, 1);
+	}
+}
+
+/** @brief A rune's strokes on a 0-8 grid (x to the right, y down from the rune's top), as "x,y x,y|x,y x,y" polylines; "ox,y" is a dot. */
+struct RuneShape {
+	std::string_view name;
+	std::string_view strokes;
+};
+
+// clang-format off
+// Traced from the Diablo II rune stones: the shapes of their carved glyphs, simplified to a few strokes each.
+constexpr std::array<RuneShape, RuneCount> RuneShapes { {
+	{ "El", "2,1 1,2 1,5 2,7 5,7 7,6|6,0 5,2 4,4|o5,5|7,1 7,3 6,5" },
+	{ "Eld", "1,2 2,1 3,2 3,3 5,5 6,6 6,7 5,7|7,1 6,0 5,1 6,2 5,4 4,5 3,6 3,7 4,8" },
+	{ "Tir", "1,3 3,2 2,4 3,6 4,7 5,6|4,6 5,1 6,6|8,2 7,3 7,5 6,6" },
+	{ "Nef", "6,2 6,1 2,1 2,3 4,4 4,6 3,7 2,7 2,6|o6,6" },
+	{ "Eth", "5,1 3,1 4,3 3,4 4,5 3,6 4,7|6,2 6,6|8,1 6,4 8,7" },
+	{ "Ith", "4,0 3,2 2,4 3,5 2,7|5,2 4,4 5,6 4,7|6,0 7,2 7,4 6,5 7,7" },
+	{ "Tal", "2,2 5,2 3,7 6,7 2,2|6,2 7,0 8,1|6,8 8,5|7,8 8,7" },
+	{ "Ral", "3,2 2,4 3,6 4,7|6,0 7,2 6,4 5,6|3,6 5,6|4,6 4,8" },
+	{ "Ort", "4,1 3,3 2,5 3,7 5,7 6,5 5,3 4,1|3,2 2,1 1,1 1,2|5,2 6,1 7,1 7,2" },
+	{ "Thul", "2,1 3,1 2,7|2,7 5,4 5,7 7,3|6,3 7,3 7,4|1,6 4,4" },
+	{ "Amn", "3,1 4,0 5,1 5,2 4,3 4,4 5,5 6,6|2,3 2,6 4,8 6,8 7,6 7,4" },
+	{ "Sol", "2,1 3,3 4,5 5,3 7,1|4,5 4,6|1,6 7,6|2,6 2,7|3,6 3,7|5,6 5,7|6,6 6,7" },
+	{ "Shael", "4,0 4,8|3,2 6,2|4,4 3,3 2,4 3,5 4,5|5,3 6,4" },
+	{ "Dol", "2,0 6,5|6,0 2,5|3,4 2,6 3,8 5,8 7,6 6,4" },
+	{ "Hel", "o4,4|3,1 5,1 6,2|7,3 7,5 6,6|5,7 3,7 2,6|1,5 1,3 2,2" },
+	{ "Io", "4,0 4,8|3,0 4,1 5,0|3,6 5,6|2,2 1,4 2,6|6,2 7,4 6,6" },
+	{ "Lum", "2,2 3,1 5,1 7,3 7,5 5,7 3,7 2,8|2,2 2,3 3,3" },
+	{ "Ko", "2,1 2,6|1,3 3,3|4,0 4,8|7,2 6,1 5,2 6,4 7,6 6,7 5,7" },
+	{ "Fal", "2,0 3,1 2,2 1,1 2,0|1,3 6,3|4,1 4,7 5,8|4,6 6,5 6,3" },
+	{ "Lem", "1,3 4,3|2,2 1,3 2,4|4,1 4,8|6,0 7,1 6,4 6,8" },
+	{ "Pul", "4,1 3,3 4,4 5,3 4,1|2,1 2,4 4,7 6,4 6,1|4,7 4,8" },
+	{ "Um", "2,1 3,3 5,2 6,1|5,1 5,5 7,6 6,7|2,4 3,6 5,4" },
+	{ "Mal", "2,1 3,3 4,4 6,2 6,0|1,4 3,5 4,4|4,4 4,6|o4,7" },
+	{ "Ist", "2,0 1,3 3,6 4,8|6,0 6,2 4,4 4,8|5,3 7,4 8,3" },
+	{ "Gul", "2,0 4,3 7,7|4,3 1,7|3,7 4,5 5,7 3,7" },
+	{ "Vex", "3,2 4,3 4,5 3,6 2,5 2,3 3,2|4,4 6,2 7,0|7,0 6,4 7,7|5,7 7,6" },
+	{ "Ohm", "3,0 4,2 6,2 7,1|3,2 3,3 5,4 7,3|4,4 4,6 6,7 6,6" },
+	{ "Lo", "4,0 4,3 2,6|4,3 6,6|2,1 1,3 2,4 3,3|6,1 7,3 6,4 5,3|3,8 4,6 5,8 3,8" },
+	{ "Sur", "2,2 3,1 6,1 6,2|4,1 4,8|4,4 6,4 7,6 6,8" },
+	{ "Ber", "3,0 3,8|7,0 7,5|3,4 7,4|5,1 4,3 6,3 5,1|7,5 6,6 7,7" },
+	{ "Jah", "2,0 2,8|7,0 7,8|2,2 7,5|7,2 2,5|o4,7" },
+	{ "Cham", "3,0 3,8|3,0 7,1 3,4 7,6 3,8" },
+	{ "Zod", "2,1 5,1 2,5 6,5|6,0 7,1 6,2|o3,7|o5,7" },
+} };
+// clang-format on
+
+using Polyline = std::vector<Vec>;
+
+/** @brief A rune's strokes in a unit box (0 to 1, y down), read once from RuneShapes. */
+const std::vector<Polyline> &RuneStrokes(size_t rune)
+{
+	static std::array<std::vector<Polyline>, RuneCount> cache;
+	static std::array<bool, RuneCount> read {};
+	std::vector<Polyline> &strokes = cache[rune];
+	if (read[rune])
+		return strokes;
+	read[rune] = true;
+	std::string_view text = RuneShapes[rune].strokes;
+	Polyline line;
+	while (!text.empty()) {
+		const char ch = text.front();
+		if (ch == '|') {
+			if (line.size() >= 2)
+				strokes.push_back(line);
+			line.clear();
+			text.remove_prefix(1);
+			continue;
+		}
+		if (ch == ' ') {
+			text.remove_prefix(1);
+			continue;
+		}
+		const bool dot = ch == 'o';
+		if (dot)
+			text.remove_prefix(1);
+		// "x,y" with single digits.
+		if (text.size() < 3)
+			break;
+		const Vec at { static_cast<float>(text[0] - '0') / 8, static_cast<float>(text[2] - '0') / 8 };
+		text.remove_prefix(3);
+		if (!dot) {
+			line.push_back(at);
+			continue;
+		}
+		// A dot is a tiny ring.
+		Polyline ring;
+		for (int i = 0; i <= 6; i++)
+			ring.push_back(at + Vec { std::cos(2 * Pi * i / 6), std::sin(2 * Pi * i / 6) } * 0.06F);
+		strokes.push_back(ring);
+	}
+	if (line.size() >= 2)
+		strokes.push_back(line);
+	return strokes;
+}
+
+/** @brief Ground space (centred on the circle, y not yet halved for the view) to the world. */
+Vec RitualToWorld(const RitualFx &fx, Vec g)
+{
+	return fx.pos + Vec { g.x, g.y * 0.5F };
+}
+
+Vec RitualPoint(float radius, float angle)
+{
+	return { std::cos(angle) * radius, std::sin(angle) * radius };
+}
+
+/** @brief How far round from the front (0) to the back (1) a point of the circle lies; the burn and the ring both run this way. */
+float RitualSide(Vec g)
+{
+	float a = std::atan2(g.y, g.x) - Pi / 2;
+	while (a > Pi)
+		a -= 2 * Pi;
+	while (a < -Pi)
+		a += 2 * Pi;
+	return std::abs(a) / Pi;
+}
+
+/** @brief One line of the circle: glowing, white-hot just before the burning edge reaches it, then a fading scorch mark. */
+void RitualLine(const RitualFx &fx, Vec a, Vec b, float width, Rgb colour, float alpha)
+{
+	const Colours &c = fx.colours;
+	const int pieces = std::max(1, static_cast<int>(Length(b - a) / 10));
+	for (int i = 0; i < pieces; i++) {
+		const Vec p0 = a + (b - a) * (static_cast<float>(i) / pieces);
+		const Vec p1 = a + (b - a) * (static_cast<float>(i + 1) / pieces);
+		const float since = fx.age - (RitualBurnStart + RitualSide((p0 + p1) * 0.5F) * RitualBurnMs);
+		const Vec w0 = RitualToWorld(fx, p0);
+		const Vec w1 = RitualToWorld(fx, p1);
+		if (since > 0) {
+			const float scorch = 0.75F * (1 - since / RitualScorchMs);
+			if (scorch > 0)
+				SoftLine(GroundDark, w0, w1, width * 2.2F, { 22, 12, 8 }, { 22, 12, 8 }, scorch, scorch);
+			const float embers = 1 - since / 160;
+			if (embers > 0) {
+				SoftLine(Ground, w0, w1, width * 1.6F, c.mid, c.edge, embers * alpha, embers * alpha);
+				if (NextRandom() % 100 < static_cast<uint32_t>(10 * Intensity())) {
+					Particle p;
+					p.pos = w0;
+					p.vel = { Random(-14, 14), Random(-6, 6) };
+					p.vz = Random(40, 120);
+					p.gravity = -30;
+					p.life = Random(400, 900);
+					p.size0 = 2.2F;
+					p.size1 = 0.3F;
+					p.c0 = c.core;
+					p.c1 = c.edge;
+					AddParticle(p);
+				}
+			}
+			continue;
+		}
+		// White-hot as the burning edge comes near.
+		const float heat = std::clamp(1 + since / 110, 0.F, 1.F);
+		SoftLine(Ground, w0, w1, width * (1 + heat), heat > 0.5F ? c.core : colour, heat > 0.5F ? c.core : colour, alpha, alpha);
+		SoftLine(Ground, w0, w1, width * 4, colour, colour, alpha * (0.22F + 0.3F * heat), alpha * (0.22F + 0.3F * heat));
+	}
+}
+
+/** @brief The bright tip of whatever is drawing the circle's lines, throwing a spark now and then. */
+void RitualPen(const RitualFx &fx, Vec g, float size)
+{
+	const Vec w = RitualToWorld(fx, g);
+	SoftDisc(Ground, w, size * 3, fx.colours.mid, 0.6F, true);
+	SoftDisc(Ground, w, size, fx.colours.core, 1, false);
+	if (NextRandom() % 100 < static_cast<uint32_t>(30 * Intensity())) {
+		Particle p;
+		p.pos = w;
+		p.vel = { Random(-60, 60), Random(-30, 30) };
+		p.vz = Random(40, 140);
+		p.gravity = 260;
+		p.life = Random(200, 450);
+		p.size0 = 1.8F;
+		p.size1 = 0.3F;
+		p.c0 = fx.colours.core;
+		p.c1 = fx.colours.mid;
+		p.shape = Shape::Streak;
+		AddParticle(p);
+	}
+}
+
+/** @brief A ring of the circle, drawn in from the front round both sides to the back as shown goes from 0 to 1. */
+void RitualRing(const RitualFx &fx, float radius, float shown, float width, Rgb colour, float alpha, bool pen)
+{
+	if (shown <= 0)
+		return;
+	const int segments = 72;
+	for (int i = 0; i < segments; i++) {
+		const float a0 = Pi / 2 + 2 * Pi * i / segments;
+		const float a1 = Pi / 2 + 2 * Pi * (i + 1) / segments;
+		const Vec p0 = RitualPoint(radius, a0);
+		const Vec p1 = RitualPoint(radius, a1);
+		if (RitualSide((p0 + p1) * 0.5F) <= shown)
+			RitualLine(fx, p0, p1, width, colour, alpha);
+	}
+	if (pen && shown < 1) {
+		RitualPen(fx, RitualPoint(radius, Pi / 2 + shown * Pi), width);
+		RitualPen(fx, RitualPoint(radius, Pi / 2 - shown * Pi), width);
+	}
+}
+
+/** @brief A polyline drawn up to a share of its length (0 to 1), with the pen at its end while it's being drawn. */
+void RitualWrite(const RitualFx &fx, const std::vector<Polyline> &lines, float progress, float width, Rgb colour, float alpha)
+{
+	float total = 0;
+	for (const Polyline &line : lines) {
+		for (size_t i = 1; i < line.size(); i++)
+			total += Length(line[i] - line[i - 1]);
+	}
+	float left = total * std::clamp(progress, 0.F, 1.F);
+	for (const Polyline &line : lines) {
+		for (size_t i = 1; i < line.size(); i++) {
+			if (left <= 0)
+				return;
+			const float length = Length(line[i] - line[i - 1]);
+			if (left >= length) {
+				RitualLine(fx, line[i - 1], line[i], width, colour, alpha);
+				left -= length;
+				continue;
+			}
+			const Vec end = line[i - 1] + (line[i] - line[i - 1]) * (left / length);
+			RitualLine(fx, line[i - 1], end, width, colour, alpha);
+			if (progress < 1)
+				RitualPen(fx, end, width * 0.8F);
+			return;
+		}
+	}
+}
+
+void DrawRituals()
+{
+	for (const RitualFx &fx : Rituals) {
+		const Colours &c = fx.colours;
+		const float r = fx.radius;
+		const float age = fx.age;
+		const float pulse = 0.85F + 0.15F * std::sin(age * 0.009F);
+		const float burnt = std::clamp((age - RitualBurnStart) / RitualBurnMs, 0.F, 1.F);
+
+		// The floor inside the circle glows red until the burn has gone round it.
+		SoftDisc(Ground, fx.pos, r, c.edge, 0.22F * EaseOut(age / 600) * (1 - burnt), true);
+
+		// The outer ring and its crown of thorns, turning slowly.
+		const float ring = EaseOut(age / RitualRingMs);
+		RitualRing(fx, r, ring, 3, c.mid, pulse, true);
+		RitualRing(fx, r * 0.94F, ring, 1.4F, c.core, 0.8F * pulse, false);
+		const int thorns = 40;
+		const float spin = age * 0.00008F;
+		for (int i = 0; i < thorns; i++) {
+			const float a = spin + 2 * Pi * i / thorns;
+			const float half = Pi / thorns * 0.8F;
+			const Vec tip = RitualPoint(r * 1.09F, a);
+			if (RitualSide(tip) > ring)
+				continue;
+			RitualLine(fx, RitualPoint(r, a - half), tip, 1.5F, c.mid, 0.85F * pulse);
+			RitualLine(fx, tip, RitualPoint(r, a + half), 1.5F, c.mid, 0.85F * pulse);
+		}
+
+		// The pentagram, one line after another, its lower point to the front: P0, P2, P4, P1, P3 and back to P0.
+		std::array<Vec, 5> star;
+		for (int k = 0; k < 5; k++)
+			star[k] = RitualPoint(r * 0.66F, Pi / 2 + 2 * Pi * k / 5);
+		for (int j = 0; j < 5; j++) {
+			const float drawn = (age - RitualStarStart - j * RitualStrokeMs) / RitualStrokeMs;
+			if (drawn <= 0)
+				break;
+			const std::vector<Polyline> stroke { { star[(2 * j) % 5], star[(2 * j + 2) % 5] } };
+			RitualWrite(fx, stroke, drawn, 2.4F, c.mid, pulse);
+		}
+		// Then the inner double ring that holds it.
+		const float inner = EaseOut((age - RitualInnerStart) / RitualInnerMs);
+		RitualRing(fx, r * 0.69F, inner, 2, c.mid, pulse, true);
+		RitualRing(fx, r * 0.66F, inner, 1.2F, c.core, 0.7F * pulse, false);
+
+		// The runes, written one by one round the band from the front, each flaring as it's finished.
+		const float height = r * 0.17F;
+		const float width = r * 0.13F;
+		for (int k = 0; k < RitualRunes; k++) {
+			const float written = (age - RitualRuneStart - k * RitualRuneMs) / RitualRuneMs;
+			if (written <= 0)
+				break;
+			const float angle = Pi / 2 + (k + 0.5F) * 2 * Pi / RitualRunes;
+			const Vec out = RitualPoint(1, angle);
+			// Their tops face the middle, so the ones at the front read upright.
+			const Vec right { out.y, -out.x };
+			const Vec centre = RitualPoint(r * 0.815F, angle);
+			std::vector<Polyline> lines = RuneStrokes(fx.runes[k]);
+			for (Polyline &line : lines) {
+				for (Vec &v : line)
+					v = centre + right * ((v.x - 0.5F) * width) + out * ((v.y - 0.5F) * height);
+			}
+			const float flare = std::clamp(1 - (age - RitualRuneStart - (k + 1) * RitualRuneMs) / 350, 0.F, 1.F);
+			RitualWrite(fx, lines, written, 2 + flare, flare > 0.5F ? c.core : c.mid, std::min(1.F, pulse + flare));
+		}
+
+		// Flames licking up off the outer ring while it stands.
+		if (ring >= 1 && age < RitualBurnStart && NextRandom() % 100 < static_cast<uint32_t>(45 * Intensity())) {
+			Particle p;
+			p.pos = RitualToWorld(fx, RitualPoint(r * Random(0.98F, 1.06F), Random(0, 2 * Pi)));
+			p.vz = Random(30, 80);
+			p.gravity = -40;
+			p.life = Random(350, 700);
+			p.size0 = 2.4F;
+			p.size1 = 0.4F;
+			p.c0 = c.core;
+			p.c1 = c.edge;
+			p.shape = Shape::Streak;
+			AddParticle(p);
+		}
 	}
 }
 
@@ -2931,14 +3334,18 @@ struct Targets {
 	SDL_Texture *half = nullptr;
 	SDL_Texture *quarter = nullptr;
 	SDL_Texture *eighth = nullptr;
+	/** @brief The dark shapes lying on the floor, cut out before they're blended onto the world. */
+	SDL_Texture *ground = nullptr;
+	/** @brief Opaque where something stands on the floor; drawn over the floor shapes, it cuts them away there. */
+	SDL_Texture *mask = nullptr;
 
 	void release()
 	{
-		for (SDL_Texture *texture : { full, half, quarter, eighth }) {
+		for (SDL_Texture *texture : { full, half, quarter, eighth, ground, mask }) {
 			if (texture != nullptr)
 				SDL_DestroyTexture(texture);
 		}
-		full = half = quarter = eighth = nullptr;
+		full = half = quarter = eighth = ground = mask = nullptr;
 	}
 
 	bool ensure(SDL_Renderer *wanted, Size wantedSize)
@@ -2949,7 +3356,7 @@ struct Targets {
 			release();
 		renderer = wanted;
 		size = wantedSize;
-		full = half = quarter = eighth = nullptr;
+		full = half = quarter = eighth = ground = mask = nullptr;
 		if (!SDL_RenderTargetSupported(renderer))
 			return false;
 		auto make = [&](int divisor) {
@@ -2966,6 +3373,19 @@ struct Targets {
 		if (full == nullptr || half == nullptr || quarter == nullptr || eighth == nullptr) {
 			release();
 			return false;
+		}
+		// The cut-out keeps what's under the mask in proportion to how see-through the mask is. Without custom blend
+		// modes the floor shapes go over everything, as the rest of the effects do.
+		const SDL_BlendMode cutout = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
+		    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+		mask = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, size.width, size.height);
+		ground = make(1);
+		if (mask == nullptr || ground == nullptr || SDL_SetTextureBlendMode(mask, cutout) != 0 || SDL_SetTextureBlendMode(ground, SDL_BLENDMODE_BLEND) != 0) {
+			if (mask != nullptr)
+				SDL_DestroyTexture(mask);
+			if (ground != nullptr)
+				SDL_DestroyTexture(ground);
+			mask = ground = nullptr;
 		}
 		return true;
 	}
@@ -2988,6 +3408,53 @@ void Submit(SDL_Renderer *renderer, Batch &batch, float scale)
 
 uint32_t LastTicks = 0;
 
+/**
+ * @brief Fills the mask where the world differs from its bare floor, over the floor shapes' bounds; that's where walls,
+ * objects, items and characters stand. Returns the bounds, or nothing when the floor shapes can't be cut out this frame.
+ */
+std::optional<SDL_Rect> FillFloorMask(Size worldSize)
+{
+	if (!FloorFresh || FloorSurface == nullptr || Layer.mask == nullptr)
+		return std::nullopt;
+	const Surface world = WorldBackBuffer();
+	if (world.w() != FloorSurface->w || world.h() != FloorSurface->h || world.w() != worldSize.width || world.h() != worldSize.height)
+		return std::nullopt;
+	float x0 = static_cast<float>(worldSize.width);
+	float y0 = static_cast<float>(worldSize.height);
+	float x1 = 0;
+	float y1 = 0;
+	for (const Batch *batch : { &Ground, &GroundDark }) {
+		for (const SDL_Vertex &v : batch->vertices) {
+			x0 = std::min(x0, v.position.x);
+			y0 = std::min(y0, v.position.y);
+			x1 = std::max(x1, v.position.x);
+			y1 = std::max(y1, v.position.y);
+		}
+	}
+	SDL_Rect rect;
+	rect.x = std::clamp(static_cast<int>(x0) - 1, 0, worldSize.width);
+	rect.y = std::clamp(static_cast<int>(y0) - 1, 0, worldSize.height);
+	rect.w = std::clamp(static_cast<int>(x1) + 2, 0, worldSize.width) - rect.x;
+	rect.h = std::clamp(static_cast<int>(y1) + 2, 0, worldSize.height) - rect.y;
+	if (rect.w <= 0 || rect.h <= 0)
+		return std::nullopt;
+	void *pixels;
+	int pitch;
+	if (SDL_LockTexture(Layer.mask, &rect, &pixels, &pitch) != 0)
+		return std::nullopt;
+	for (int y = 0; y < rect.h; y++) {
+		const uint8_t *now = world.at(rect.x, rect.y + y);
+		const uint8_t *bare = static_cast<const uint8_t *>(FloorSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FloorSurface->pitch + rect.x;
+		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
+		for (int x = 0; x < rect.w; x++, out += 4) {
+			out[0] = out[1] = out[2] = 0;
+			out[3] = now[x] != bare[x] ? 255 : 0;
+		}
+	}
+	SDL_UnlockTexture(Layer.mask);
+	return rect;
+}
+
 } // namespace
 #endif
 
@@ -3002,14 +3469,17 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
 	LastDrawnScan = ScanFrame;
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty())
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty())
 		return;
 
 	Glowing.clear();
 	Dark.clear();
+	Ground.clear();
+	GroundDark.clear();
 	DrawHalos();
 	DrawCracks();
 	DrawSigils();
+	DrawRituals();
 	DrawBeams();
 	DrawIceSpikes();
 	DrawRings();
@@ -3020,22 +3490,45 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawParticles();
 
 	const float toLogical = static_cast<float>(logicalSize.width) / static_cast<float>(worldSize.width);
-	// Smoke, dust, debris and scorch marks blend straight onto the world.
+	const bool targets = Layer.ensure(renderer, worldSize);
+	const std::optional<SDL_Rect> cut = targets ? FillFloorMask(worldSize) : std::nullopt;
+	FloorFresh = false;
+
+	// Scorch marks on the floor, cut away where something stands on it, then smoke, dust and debris: all blend
+	// straight onto the world.
+	if (cut && !GroundDark.indices.empty()) {
+		SDL_SetRenderTarget(renderer, Layer.ground);
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+		SDL_RenderClear(renderer);
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+		Submit(renderer, GroundDark, 1);
+		SDL_RenderCopy(renderer, Layer.mask, &*cut, &*cut);
+		SDL_SetRenderTarget(renderer, nullptr);
+		SDL_RenderCopy(renderer, Layer.ground, nullptr, nullptr);
+	} else {
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+		Submit(renderer, GroundDark, toLogical);
+	}
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 	Submit(renderer, Dark, toLogical);
 
-	if (!Layer.ensure(renderer, worldSize)) {
+	if (!targets) {
 		// No render targets: the glow goes straight on, without bloom.
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+		Submit(renderer, Ground, toLogical);
 		Submit(renderer, Glowing, toLogical);
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 		return;
 	}
-	// The glowing layer adds up on black (opaque, so copying it with additive blending adds its colours).
+	// The glowing layer adds up on black (opaque, so copying it with additive blending adds its colours). The glow on
+	// the floor goes first, so it can be cut away where something stands on it.
 	SDL_SetRenderTarget(renderer, Layer.full);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_RenderClear(renderer);
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+	Submit(renderer, Ground, 1);
+	if (cut)
+		SDL_RenderCopy(renderer, Layer.mask, &*cut, &*cut);
 	Submit(renderer, Glowing, 1);
 	// Bloom: ever smaller copies, each a blur of the last.
 	SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_NONE);

@@ -13,6 +13,7 @@
 #include "engine/displacement.hpp"
 #include "engine/point.hpp"
 #include "engine/size.hpp"
+#include "engine/surface.hpp"
 #include "tables/misdat.h"
 
 #ifndef USE_SDL1
@@ -27,7 +28,6 @@
 
 namespace devilution {
 struct Object;
-struct Surface;
 } // namespace devilution
 
 namespace devilution::vfx {
@@ -97,6 +97,15 @@ ClxSprite ObjectSprite(const Object &object);
  * the lava and water on screen (the palette-animated colours of the frame just drawn).
  */
 void ScanWorld(const Surface &world);
+/**
+ * @brief Whether to keep a copy of the bare floor while the world is drawn, so the effects lying on the floor (circles,
+ * cracks, shockwaves, light pools) can hide behind the walls, objects, items and characters drawn over it.
+ */
+bool WantsFloorCopy();
+/** @brief Copies the world just after its floor is drawn, before anything stands on it. */
+void CopyFloor(const Surface &world);
+/** @brief The copy of the floor, to zoom it the same way as the world; empty when there's none. */
+Surface FloorCopy();
 /** @brief Moves every effect on by the given time. */
 void Advance(float ms);
 
