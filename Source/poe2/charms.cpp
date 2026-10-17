@@ -8,6 +8,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "plrmsg.h"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
@@ -165,6 +166,29 @@ void GainCharmCharges(Player &player, int charges)
 void RefillCharms(Player &player)
 {
 	GainCharmCharges(player, MaxCharmCharges);
+}
+
+bool IsBesideTownWell(Point tile)
+{
+	// The well in Tristram's square covers tiles 60-61, 70-71 (see CleanTownFountain); a step from its rim counts.
+	return tile.x >= 58 && tile.x <= 63 && tile.y >= 68 && tile.y <= 73;
+}
+
+void RefillCharmsAtWell(Player &player)
+{
+	if (!gbIsPoe2 || !player.isOnLevel(0) || !IsBesideTownWell(player.position.tile))
+		return;
+	bool refilled = false;
+	for (Item &item : player.SpdList) {
+		if (IsCharm(item) && item._iCharges < MaxCharmCharges) {
+			item._iCharges = MaxCharmCharges;
+			refilled = true;
+		}
+	}
+	if (refilled && &player == MyPlayer) {
+		EventPlrMsg(_("The well refills your charms."), UiFlags::ColorWhitegold);
+		RedrawEverything();
+	}
 }
 
 void ProcessCharms(Player &player)

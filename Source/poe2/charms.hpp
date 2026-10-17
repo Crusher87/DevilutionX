@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include "engine/point.hpp"
 #include "utils/fixed_point.hpp"
 
 namespace devilution {
@@ -68,6 +69,10 @@ int CharmChargesPerUseFor(const Item &item);
 
 void GainCharmCharges(Player &player, int charges);
 void RefillCharms(Player &player);
+/** @brief Whether the tile is at the well in Tristram's square. */
+bool IsBesideTownWell(Point tile);
+/** @brief Charms don't refill in town on their own: the hero fills them at the well (Curtis 2026-10-16). */
+void RefillCharmsAtWell(Player &player);
 
 /** @brief Sets off Bloodstone and Sapphire charms and counts down charm effects; once per game tick. */
 void ProcessCharms(Player &player);

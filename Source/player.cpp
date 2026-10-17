@@ -3328,8 +3328,10 @@ void ProcessPlayers()
 				}
 			}
 			// Flasks refill in town, like in POE2.
-			if (gbIsPoe2 && player.isOnLevel(0))
+			if (gbIsPoe2 && player.isOnLevel(0)) {
 				RefillFlasks(player);
+				RefillCharmsAtWell(player);
+			}
 			ApplyRegen(player);
 			ProcessMapPlayer(player);
 			RechargeEnergyShield(player);

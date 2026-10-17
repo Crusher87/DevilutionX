@@ -135,6 +135,21 @@ TEST_F(Poe2CharmsTest, KillsRefillCharmsButTownDoesNot)
 	EXPECT_EQ(charm._iCharges, MaxCharmCharges);
 }
 
+TEST_F(Poe2CharmsTest, TheTownWellRefillsCharms)
+{
+	Player &player = *MyPlayer;
+	Item &charm = PutInBelt(player, 4, "Bloodstone Charm");
+	charm._iCharges = 1;
+	player.plrlevel = 0;
+	player.plrIsOnSetLevel = false;
+	player.position.tile = { 40, 40 };
+	RefillCharmsAtWell(player);
+	EXPECT_EQ(charm._iCharges, 1) << "Away from the well";
+	player.position.tile = { 59, 70 };
+	RefillCharmsAtWell(player);
+	EXPECT_EQ(charm._iCharges, MaxCharmCharges);
+}
+
 TEST_F(Poe2CharmsTest, RubyCharmRaisesFireResistanceWhenAFireHitLands)
 {
 	Player &player = *MyPlayer;
