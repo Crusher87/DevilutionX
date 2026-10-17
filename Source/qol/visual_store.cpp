@@ -38,6 +38,7 @@
 #include "spells.h"
 #include "stores.h"
 #include "utils/format_int.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -49,7 +50,7 @@ int16_t pcursstoreitem = -1;
 int16_t pcursstorebtn = -1;
 std::vector<BuybackEntry> SmithBuyback;
 std::vector<BuybackEntry> WitchBuyback;
-Poe2ShopTab ActivePoe2ShopTab = Poe2ShopTab::OneHanded;
+Poe2ShopTab ActivePoe2ShopTab = Poe2ShopTab::Weapons;
 
 bool UseVisualStoreUi()
 {
@@ -159,6 +160,8 @@ void RebuildShopView()
 std::string_view Poe2ShopTabName(Poe2ShopTab tab)
 {
 	switch (tab) {
+	case Poe2ShopTab::Weapons:
+		return _("Weapons");
 	case Poe2ShopTab::OneHanded:
 		return _("1-Handed");
 	case Poe2ShopTab::TwoHanded:
@@ -405,6 +408,10 @@ void RefreshVisualStoreLayout()
 			}
 		}
 
+		// POE2 Mashup (Curtis 2026-10-16): a vendor tab is one page, with no scrolling; a ware that doesn't fit isn't shown.
+		if (!placed && gbIsPoe2 && ActivePoe2ShopTab != Poe2ShopTab::Buyback)
+			continue;
+
 		if (!placed) {
 			// Start new page
 			currentPage = &createNewPage();
@@ -459,8 +466,8 @@ std::vector<Poe2ShopTab> Poe2ShopTabs()
 {
 	switch (VisualStore.vendor) {
 	case VisualStoreVendor::Smith: {
-		std::vector<Poe2ShopTab> tabs { Poe2ShopTab::OneHanded, Poe2ShopTab::TwoHanded, Poe2ShopTab::Bows, Poe2ShopTab::BodyArmour,
-			Poe2ShopTab::Helmets, Poe2ShopTab::Shields };
+		// One tab for all weapons (Curtis 2026-10-16), sorted so the kinds stay together.
+		std::vector<Poe2ShopTab> tabs { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields };
 		// Rings and amulets only come with his premium wares, which leave them out in multiplayer.
 		if (!gbIsMultiplayer)
 			tabs.push_back(Poe2ShopTab::Jewelry);
@@ -478,6 +485,8 @@ bool ItemOnPoe2ShopTab(const Item &item, Poe2ShopTab tab)
 {
 	const VendorCategory category = GetVendorCategory(item);
 	switch (tab) {
+	case Poe2ShopTab::Weapons:
+		return IsAnyOf(category, VendorCategory::OneHanded, VendorCategory::TwoHanded, VendorCategory::Bows);
 	case Poe2ShopTab::OneHanded:
 		return category == VendorCategory::OneHanded;
 	case Poe2ShopTab::TwoHanded:

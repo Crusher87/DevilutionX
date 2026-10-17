@@ -56,6 +56,7 @@ public:
 			if (AllItemsList[i].iName == name) {
 				Item &item = player.SpdList[slot];
 				InitializeItem(item, static_cast<_item_indexes>(i));
+				item._iCharges = item._iMaxCharges; // as if filled from kills
 				return item;
 			}
 		}
@@ -64,13 +65,16 @@ public:
 	}
 };
 
-TEST_F(Poe2CharmsTest, CharmsStartFullAndAreBeltItems)
+TEST_F(Poe2CharmsTest, CharmsStartEmptyAndAreBeltItems)
 {
 	Player &player = *MyPlayer;
 	for (const std::string_view name : { "Bloodstone Charm", "Sapphire Charm", "Iron Charm", "Ruby Charm", "Topaz Charm", "Amethyst Charm", "Stone Charm", "Golden Charm" }) {
 		Item &charm = PutInBelt(player, 4, name);
+		InitializeItem(charm, charm.IDidx);
 		EXPECT_TRUE(IsCharm(charm)) << name;
-		EXPECT_EQ(charm._iCharges, MaxCharmCharges) << name;
+		EXPECT_EQ(charm._iCharges, 0) << name;
+		EXPECT_EQ(charm._iMaxCharges, MaxCharmCharges) << name;
+		charm._iCharges = MaxCharmCharges;
 		EXPECT_TRUE(charm.isUsable()) << name;
 	}
 }
@@ -118,7 +122,7 @@ TEST_F(Poe2CharmsTest, IronCharmGrantsGuardAfterAHeavyHit)
 	EXPECT_EQ(ApplyGuard(player, Fixed26_6::fromInt(10)).whole(), 6);
 }
 
-TEST_F(Poe2CharmsTest, KillsAndTownRefillCharms)
+TEST_F(Poe2CharmsTest, KillsRefillCharmsButTownDoesNot)
 {
 	Player &player = *MyPlayer;
 	Item &charm = PutInBelt(player, 4, "Bloodstone Charm");
@@ -126,6 +130,8 @@ TEST_F(Poe2CharmsTest, KillsAndTownRefillCharms)
 	GainFlaskCharges(player, 2);
 	EXPECT_EQ(charm._iCharges, 2);
 	RefillFlasks(player);
+	EXPECT_EQ(charm._iCharges, 2);
+	RefillCharms(player);
 	EXPECT_EQ(charm._iCharges, MaxCharmCharges);
 }
 

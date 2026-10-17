@@ -558,7 +558,7 @@ void RefillFlasks(Player &player)
 {
 	for (size_t slot = 0; slot < NumFlasks; slot++)
 		player.poe2.flaskCharges[slot] = MaxFlaskChargesFor(player.SpdList[slot]);
-	RefillCharms(player);
+	// Charms don't refill in town: they fill from kills (Curtis 2026-10-16).
 }
 
 } // namespace devilution

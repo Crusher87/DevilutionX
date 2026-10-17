@@ -2557,8 +2557,8 @@ bool WitchItemOk(const Player & /*player*/, const ItemData &item)
 	if (gbIsPoe2) {
 		if (item.itype == ItemType::Staff)
 			return SkillForGemData(item).isEmpty();
-		return (item.iMiscId == IMISC_SCROLL && item.iSpell == SpellID::Identify)
-		    || (item.iMiscId >= IMISC_ELIXSTR && item.iMiscId <= IMISC_ELIXVIT);
+		// Scrolls of Identify only as her pinned ware, which never sells out (Curtis 2026-10-16).
+		return item.iMiscId >= IMISC_ELIXSTR && item.iMiscId <= IMISC_ELIXVIT;
 	}
 	if (item.iMiscId == IMISC_MANA)
 		return false;
@@ -2629,6 +2629,12 @@ void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
 	SetRndSeed(iseed);
 	const _item_indexes itype = RndSmithItem(player, lvl);
 	GetItemAttrs(item, itype, lvl);
+	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff; skip the rarity roll and give it its modifiers.
+	if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
+		item._iSeed = iseed; // the modifiers roll from it
+		DiscardRandomValues(1);
+		GetItemBonus(player, item, lvl / 2, lvl, true, false);
+	}
 
 	item._iSeed = iseed;
 	item._iCreateInfo = lvl | CF_SMITH;
@@ -3823,10 +3829,11 @@ void InitializeItem(Item &item, _item_indexes itemData)
 	if (pAllItem.iMiscId == IMISC_STAFF) {
 		item._iCharges = gbIsHellfire ? 18 : 40;
 	}
+	// Curtis 2026-10-16: charms start empty and fill from kills.
 	if (IsCharm(item))
-		item._iCharges = MaxCharmCharges;
+		item._iCharges = 0;
 
-	item._iMaxCharges = item._iCharges;
+	item._iMaxCharges = IsCharm(item) ? MaxCharmCharges : item._iCharges;
 	if (IsStackable(item))
 		SetStackCount(item, 1);
 	item._iDurability = pAllItem.iDurability;
@@ -4060,7 +4067,7 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 
 	if (IsCharm(item)) {
 		item._iMaxCharges = MaxCharmCharges;
-		item._iCharges = MaxCharmCharges;
+		item._iCharges = 0;
 	}
 	if (IsStackable(item))
 		SetStackCount(item, 1);
@@ -6676,14 +6683,17 @@ struct VendorStockQuota {
 	int max;
 };
 
-/** Griswold's stock: each kind of equipment fills most of its shop tab, the bigger kinds a page or two. */
+/**
+ * Griswold's stock: each shop tab is one page (Curtis 2026-10-16), with room left for his premium wares.
+ * One-handers, two-handers and bows share the Weapons tab.
+ */
 constexpr VendorStockQuota SmithStockQuotas[] = {
-	{ VendorCategory::OneHanded, 20, 26 },
-	{ VendorCategory::TwoHanded, 15, 20 },
-	{ VendorCategory::Bows, 15, 20 },
-	{ VendorCategory::BodyArmour, 15, 20 },
-	{ VendorCategory::Helmets, 18, 24 },
-	{ VendorCategory::Shields, 15, 20 },
+	{ VendorCategory::OneHanded, 5, 6 },
+	{ VendorCategory::TwoHanded, 2, 3 },
+	{ VendorCategory::Bows, 2, 3 },
+	{ VendorCategory::BodyArmour, 8, 10 },
+	{ VendorCategory::Helmets, 10, 12 },
+	{ VendorCategory::Shields, 8, 10 },
 };
 
 /** Adria's stock besides her pinned wares: a tab of staves, and a few more scrolls and elixirs. */
@@ -6741,6 +6751,13 @@ Item RollSmithItem(int lvl, int maxValue)
 		SetRndSeed(newItem._iSeed);
 		const _item_indexes itemData = RndSmithItem(*MyPlayer, lvl);
 		GetItemAttrs(newItem, itemData, lvl);
+		if (gbIsPoe2 && EquipmentClassWeight(newItem._itype) > 0) {
+			// POE2 Mashup (Curtis 2026-10-16): mostly normal wares, some magic, a few rare, never unique.
+			SetVendorPoe2ItemLevel(newItem, lvl);
+			SetLootRarity(newItem, RollVendorRarity());
+			if (GetLootRarity(newItem) != ITEM_QUALITY_NORMAL)
+				GetItemBonus(*MyPlayer, newItem, lvl / 2, lvl, true, false);
+		}
 	} while (newItem._iIvalue > maxValue);
 
 	newItem._iCreateInfo = lvl | CF_SMITH;

@@ -352,8 +352,9 @@ std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8
 		craft.rarity = ITEM_QUALITY_RARE;
 		craft.mods = {};
 		const int wanted = IsJewel(item) ? 3 : 4;
-		for (int i = 0; i < wanted; i++)
-			AddRandomMod(item, craft, CraftSeed(item, orb, static_cast<uint32_t>(i)), {});
+		// A roll can fail when nothing fits that side, so it tries again with new seeds until it has them all.
+		for (uint32_t attempt = 0; CraftModCount(craft) < wanted && attempt < 32; attempt++)
+			AddRandomMod(item, craft, CraftSeed(item, orb, attempt), {});
 		if (CraftModCount(craft) == 0) {
 			Fizzle(_("The orb fizzles. This item can't roll that."));
 			return false;
@@ -822,12 +823,21 @@ bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
 	case CurrencyOrb::Alchemy:
 		return IsAnyOf(rarity, ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC);
 	case CurrencyOrb::Augmentation:
+		// One Augmentation per item: only a magic item with a single affix has room.
+		if (rarity != ITEM_QUALITY_MAGIC)
+			return false;
+		if (CanCraftMods(item) && !IsVendorItem(item))
+			return CraftModCount(CurrentCraft(item)) < 2;
+		if (item._iPoe2Mods[0].family != 0)
+			return ModAffixCount(item) == 1;
+		return item._iPrePower == IPL_INVALID || item._iSufPower == IPL_INVALID;
 	case CurrencyOrb::Regal:
 		return rarity == ITEM_QUALITY_MAGIC;
+	case CurrencyOrb::Exalted:
+		return IsAnyOf(rarity, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE);
 	case CurrencyOrb::Chaos:
 	case CurrencyOrb::GreaterChaos:
 	case CurrencyOrb::PerfectChaos:
-	case CurrencyOrb::Exalted:
 	case CurrencyOrb::GreaterExalted:
 	case CurrencyOrb::PerfectExalted:
 	case CurrencyOrb::Desecrate:
@@ -867,7 +877,7 @@ std::string_view CurrencyOrbDescription(CurrencyOrb orb)
 	case CurrencyOrb::Regal:
 		return _("Turns a magic item rare, keeping its affixes");
 	case CurrencyOrb::Exalted:
-		return _("Adds an affix to a rare item");
+		return _("Adds an affix to a rare item, or makes a magic item rare with one more affix");
 	case CurrencyOrb::Divine:
 		return _("Rerolls the values of a magic, rare or unique item's modifiers");
 	case CurrencyOrb::Vaal:
@@ -1060,6 +1070,9 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 		EventPlrMsg(_("Uniques only take Divine and Vaal Orbs, quality currency and augments."), UiFlags::ColorRed);
 		return false;
 	}
+	// Curtis 2026-10-16: an Exalted Orb on a magic item makes it rare and adds an affix, as a Regal Orb does.
+	if (orb == CurrencyOrb::Exalted && item._iMagical == ITEM_QUALITY_MAGIC)
+		orb = CurrencyOrb::Regal;
 
 	if (CanCraftMods(item) && !IsVendorItem(item)) {
 		if (const std::optional<bool> crafted = CraftMods(orb, player, item, variant, omens); crafted)

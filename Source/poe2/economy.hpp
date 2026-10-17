@@ -47,8 +47,10 @@ std::string_view GambleFamilyName(GambleFamily family);
 bool GambleFamilyHas(GambleFamily family, ItemType type);
 /** @brief The gambler's price: round(class base * (1 + 0.045 * item level)^1.22). */
 int GamblePrice(GambleFamily family, int poe2ItemLevel);
-/** @brief Rolls the rarity of a gamble: normal 52%, magic 36%, rare 10.5%, unique 1.5%. */
+/** @brief Rolls the rarity of a gamble: normal 52%, magic 36%, rare 12%; never unique (Curtis 2026-10-16). */
 item_quality RollGambleRarity();
+/** @brief Rolls the rarity of a vendor's ware from the item's own seed: normal 75%, magic 21%, rare 4%, never unique. */
+item_quality RollVendorRarity();
 /** @brief Gambling uses up charges in the campaign; in the endgame (after the first map) it doesn't. */
 bool GambleUsesCharges(const Player &player);
 /** @brief Whether the hero may gamble now: a charge left, or in the endgame. */

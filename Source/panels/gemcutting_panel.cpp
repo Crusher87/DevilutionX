@@ -446,6 +446,21 @@ void CutGem(const GemEntry &gem)
 		return;
 	}
 
+	// Curtis 2026-10-16: a support cut for the skill picked in the cutter goes straight into a free socket of that skill.
+	if (gem.support != SupportGem::None && SupportedSkill) {
+		if (const std::optional<size_t> slot = FindSkillSlot(player, *SupportedSkill); slot) {
+			SupportGem replaced = SupportGem::None;
+			const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem.support, replaced, gem.tier);
+			if (result == SupportSocketResult::Socketed) {
+				const SfxID sound = ItemInvSnds[ItemCAnimTbl[uncut->_iCurs]];
+				UseUpUncut(player);
+				PlaySFX(sound);
+				EventPlrMsg(SupportSocketMessage(result, player, *slot, gem.support));
+				return;
+			}
+		}
+	}
+
 	Item cut;
 	if (!CreateGemItem(cut, gem, level))
 		return;

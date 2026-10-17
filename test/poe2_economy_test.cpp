@@ -61,8 +61,21 @@ TEST_F(Poe2EconomyTest, GambleRaritiesFollowTheWeights)
 		counts[RollGambleRarity()]++;
 	EXPECT_NEAR(counts[ITEM_QUALITY_NORMAL] * 1000 / Rolls, 520, 25);
 	EXPECT_NEAR(counts[ITEM_QUALITY_MAGIC] * 1000 / Rolls, 360, 25);
-	EXPECT_NEAR(counts[ITEM_QUALITY_RARE] * 1000 / Rolls, 105, 15);
-	EXPECT_NEAR(counts[ITEM_QUALITY_UNIQUE] * 1000 / Rolls, 15, 6);
+	EXPECT_NEAR(counts[ITEM_QUALITY_RARE] * 1000 / Rolls, 120, 15);
+	EXPECT_EQ(counts[ITEM_QUALITY_UNIQUE], 0) << "No uniques from vendors or the gambler";
+}
+
+TEST_F(Poe2EconomyTest, VendorRaritiesFollowTheWeights)
+{
+	SetRndSeed(42);
+	std::array<int, 4> counts {};
+	constexpr int Rolls = 20000;
+	for (int i = 0; i < Rolls; i++)
+		counts[RollVendorRarity()]++;
+	EXPECT_NEAR(counts[ITEM_QUALITY_NORMAL] * 100 / Rolls, 75, 3);
+	EXPECT_NEAR(counts[ITEM_QUALITY_MAGIC] * 100 / Rolls, 21, 3);
+	EXPECT_NEAR(counts[ITEM_QUALITY_RARE] * 100 / Rolls, 4, 2);
+	EXPECT_EQ(counts[ITEM_QUALITY_UNIQUE], 0);
 }
 
 TEST_F(Poe2EconomyTest, GamblesGiveItemsOfTheFamily)

@@ -178,6 +178,31 @@ TEST_F(Poe2CraftingTest, AlchemyGivesExactlyFourModifiers)
 	}
 }
 
+TEST_F(Poe2CraftingTest, OneAugmentThenExaltMakesItRare)
+{
+	Item item = Crafted(CurrencyOrb::Transmutation, MakeItem("Full Plate Mail", 9, ITEM_QUALITY_NORMAL, 60));
+	EXPECT_TRUE(CurrencyFitsItem(CurrencyOrb::Augmentation, item));
+	item = Crafted(CurrencyOrb::Augmentation, item);
+	ASSERT_EQ(Mods(item).size(), 2U);
+	// A second Augmentation has no room, so the item isn't outlined for it.
+	EXPECT_FALSE(CurrencyFitsItem(CurrencyOrb::Augmentation, item));
+	EXPECT_TRUE(CurrencyFitsItem(CurrencyOrb::Exalted, item));
+	item = Crafted(CurrencyOrb::Exalted, item);
+	EXPECT_EQ(item._iMagical, ITEM_QUALITY_RARE);
+	EXPECT_EQ(Mods(item).size(), 3U);
+}
+
+TEST_F(Poe2CraftingTest, AlchemyRerollsAMagicItem)
+{
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		Item item = Crafted(CurrencyOrb::Transmutation, MakeItem("Full Plate Mail", seed, ITEM_QUALITY_NORMAL, 70));
+		ASSERT_EQ(item._iMagical, ITEM_QUALITY_MAGIC);
+		item = Crafted(CurrencyOrb::Alchemy, item);
+		EXPECT_EQ(item._iMagical, ITEM_QUALITY_RARE);
+		EXPECT_EQ(Mods(item).size(), 4U) << seed;
+	}
+}
+
 TEST_F(Poe2CraftingTest, ExaltFillsUpToSixThenStops)
 {
 	Item item = Crafted(CurrencyOrb::Alchemy, MakeItem("Leather Armor", 3, ITEM_QUALITY_NORMAL, 70));

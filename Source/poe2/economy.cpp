@@ -94,9 +94,17 @@ item_quality RollGambleRarity()
 		return ITEM_QUALITY_NORMAL;
 	if (roll < 880)
 		return ITEM_QUALITY_MAGIC;
-	if (roll < 985)
-		return ITEM_QUALITY_RARE;
-	return ITEM_QUALITY_UNIQUE;
+	return ITEM_QUALITY_RARE;
+}
+
+item_quality RollVendorRarity()
+{
+	const int roll = GenerateRnd(100);
+	if (roll < 75)
+		return ITEM_QUALITY_NORMAL;
+	if (roll < 96)
+		return ITEM_QUALITY_MAGIC;
+	return ITEM_QUALITY_RARE;
 }
 
 bool GambleUsesCharges(const Player &player)

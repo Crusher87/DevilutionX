@@ -55,6 +55,7 @@ bool UseVisualStoreUi();
 
 /** @brief POE2 Mashup: the vendor's tabs, like POE2's vendor screen: one per kind of item, and buyback. */
 enum class Poe2ShopTab : uint8_t {
+	Weapons,
 	OneHanded,
 	TwoHanded,
 	Bows,
