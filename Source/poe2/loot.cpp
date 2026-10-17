@@ -199,6 +199,7 @@ CurrencyBand OrbCurrencyBand(item_misc_id miscId)
 	case IMISC_ORB_ETCHER:
 	case IMISC_ORB_ARTIFICER:
 	case IMISC_ORB_CATALYST:
+	case IMISC_ORB_LESSER_JEWELLER:
 	case IMISC_AUGMENT:
 	case IMISC_ESSENCE:
 		return CurrencyBand::Uncommon;
@@ -209,10 +210,12 @@ CurrencyBand OrbCurrencyBand(item_misc_id miscId)
 	case IMISC_ORB_ANNUL:
 	case IMISC_ORB_DESECRATE:
 	case IMISC_OMEN:
+	case IMISC_ORB_GREATER_JEWELLER:
 		return CurrencyBand::Rare;
 	case IMISC_ORB_DIVINE:
 	case IMISC_ORB_GREATER_EXALTED:
 	case IMISC_ORB_GREATER_CHAOS:
+	case IMISC_ORB_PERFECT_JEWELLER:
 		return CurrencyBand::Premium;
 	case IMISC_ORB_PERFECT_EXALTED:
 	case IMISC_ORB_PERFECT_CHAOS:

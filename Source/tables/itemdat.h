@@ -603,6 +603,10 @@ enum item_misc_id : int16_t {
 	IMISC_SPIRITGEM_TABLE,
 	/** Read for weapon set passive points, like POE2's Book of Specialisation (poe2/weapon_swap.hpp). */
 	IMISC_SPEC_BOOK,
+	/** Jeweller's Orbs: open a skill's third, fourth and fifth support sockets in the Skills panel. */
+	IMISC_ORB_LESSER_JEWELLER,
+	IMISC_ORB_GREATER_JEWELLER,
+	IMISC_ORB_PERFECT_JEWELLER,
 	IMISC_INVALID = -1,
 };
 

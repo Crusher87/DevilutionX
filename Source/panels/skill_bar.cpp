@@ -480,7 +480,7 @@ bool IsOverPopup(Point position)
 void DrawSupportSockets(const Surface &out, const Player &player, const PopupLayout &layout, size_t slot, const PopupHit &hover)
 {
 	const SkillSlot skill = player.poe2.skillSlots[slot];
-	const size_t open = SupportSocketCount(player);
+	const size_t open = SupportSocketCount(player, slot);
 	const SupportGem held = SupportGemForItem(player.HoldItem);
 	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
 		const Rectangle &rect = layout.sockets[socket];
@@ -548,8 +548,8 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 	case PopupHit::Kind::Socket: {
 		if (!slot)
 			return;
-		if (hover.index >= SupportSocketCount(player)) {
-			lines.emplace_back(FormatRuntime(_("Opens at character level {:d}"), static_cast<int>((hover.index - 1) * 10)), UiFlags::ColorWhite);
+		if (hover.index >= SupportSocketCount(player, *slot)) {
+			lines.emplace_back(JewellerSocketHint(hover.index), UiFlags::ColorWhite);
 			DrawTooltip(out, bounds, MousePosition, std::string(_("Locked socket")), UiFlags::ColorButtonpushed, lines);
 			return;
 		}
@@ -711,8 +711,8 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 	case PopupHit::Kind::Socket: {
 		if (!slot)
 			return;
-		if (hit.index >= SupportSocketCount(player)) {
-			EventPlrMsg(FormatRuntime(_("That socket opens at character level {:d}."), static_cast<int>((hit.index - 1) * 10)), UiFlags::ColorRed);
+		if (hit.index >= SupportSocketCount(player, *slot)) {
+			EventPlrMsg(JewellerSocketHint(hit.index) + ".", UiFlags::ColorRed);
 			return;
 		}
 		if (!player.HoldItem.isEmpty()) {
@@ -850,7 +850,7 @@ std::string SupportSocketMessage(SupportSocketResult result, const Player &playe
 	case SupportSocketResult::AlreadySocketed:
 		return FormatRuntime(_("{:s} already supports {:s}."), SupportGemName(gem), SkillName(skill));
 	case SupportSocketResult::Locked:
-		return std::string(_("That socket opens at a higher level."));
+		return std::string(_("That socket is locked: a Jeweller's Orb opens it."));
 	case SupportSocketResult::NoFreeSocket:
 		return FormatRuntime(_("{:s} has no free support socket."), SkillName(skill));
 	case SupportSocketResult::NoCapacity: {
@@ -1101,7 +1101,7 @@ bool HandleSkillBarRightClick(Point mousePosition)
 		const PopupLayout layout = LayoutPopup(owned);
 		const PopupHit hit = PopupHitAt(player, layout, owned, mousePosition);
 		const std::optional<size_t> slot = PopupSupportsSocket(player);
-		if (hit.kind == PopupHit::Kind::Socket && slot && hit.index < SupportSocketCount(player)) {
+		if (hit.kind == PopupHit::Kind::Socket && slot && hit.index < SupportSocketCount(player, *slot)) {
 			TakeOutSupport(player, *slot, hit.index);
 			return true;
 		}

@@ -19,6 +19,7 @@
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
@@ -252,7 +253,7 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		return;
 	}
 
-	const size_t open = SupportSocketCount(player);
+	const size_t open = SupportSocketCount(player, slot);
 	const SupportGem held = SupportGemForItem(player.HoldItem);
 	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
 		const Rectangle rect = SocketRect(slot, socket);
@@ -321,11 +322,11 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 		return;
 	}
 
-	const size_t open = SupportSocketCount(player);
+	const size_t open = SupportSocketCount(player, hover.slot);
 	const SupportGem gem = player.poe2.supportsAt(hover.slot)[hover.socket];
 	const SupportGem held = SupportGemForItem(player.HoldItem);
 	if (hover.socket >= open) {
-		lines.emplace_back(FormatRuntime(_("Opens at character level {:d}"), static_cast<int>((hover.socket - 1) * 10)), UiFlags::ColorWhite);
+		lines.emplace_back(JewellerSocketHint(hover.socket), UiFlags::ColorWhite);
 		DrawTooltip(out, bounds, MousePosition, std::string(_("Locked socket")), UiFlags::ColorButtonpushed, lines);
 		return;
 	}
@@ -515,6 +516,28 @@ void DrawSkillsPanel(const Surface &out)
 		DrawHoverTooltip(out, player, hover);
 }
 
+bool UseJewellerOnSkillsPanel(Player &player, Point mousePosition)
+{
+	if (!IsOpen || !PanelRect().contains(mousePosition))
+		return false;
+	const Hit hit = HitAt(mousePosition);
+	if (IsNoneOf(hit.kind, Hit::Kind::Row, Hit::Kind::Skill, Hit::Kind::Socket))
+		return false;
+	return ApplyJewellerOrb(CurrencyOrbForMiscId(player._pOilType), player, hit.slot);
+}
+
+std::string JewellerSocketHint(size_t socket)
+{
+	switch (socket) {
+	case 2:
+		return std::string(_("Use a Lesser Jeweller's Orb on this skill to open it"));
+	case 3:
+		return std::string(_("Use a Greater Jeweller's Orb on this skill to open it"));
+	default:
+		return std::string(_("Use a Perfect Jeweller's Orb on this skill to open it"));
+	}
+}
+
 void HandleSkillsPanelClick(Point mousePosition)
 {
 	Player &player = *MyPlayer;
@@ -539,7 +562,7 @@ void HandleSkillsPanelClick(Point mousePosition)
 			ClickSkillSlot(player, hit.slot, /*canTakeOut=*/true);
 		break;
 	case Hit::Kind::Socket:
-		if (hit.socket < SupportSocketCount(player) && SkillTakesSupports(RowSkill(player, hit.slot)))
+		if (hit.socket < SupportSocketCount(player, hit.slot) && SkillTakesSupports(RowSkill(player, hit.slot)))
 			ClickSocket(player, hit.slot, hit.socket);
 		break;
 	default:

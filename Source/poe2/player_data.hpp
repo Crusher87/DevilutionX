@@ -495,6 +495,8 @@ struct Poe2PlayerData {
 	/** @brief Supports of the weapon's default attack (the DefaultAttackRow) and their tiers. */
 	SupportSockets defaultSupports {};
 	SupportTiers defaultSupportTiers {};
+	/** @brief Support sockets each Skills panel row has opened with Jeweller's Orbs, beyond the first two; the last is the default attack's. */
+	std::array<uint8_t, NumSkillSlots + 1> openedSockets {};
 	/** @brief Charges of the flasks in belt slots 1 to 5. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
 	/** @brief Which flask or charm was in each belt slot last tick (not saved), so one put in from the bag or the ground starts empty. */
@@ -667,6 +669,7 @@ struct Poe2PlayerData {
 			tiers.fill(1);
 		defaultSupports.fill(SupportGem::None);
 		defaultSupportTiers.fill(1);
+		openedSockets.fill(0);
 		flaskCharges.fill(MaxFlaskCharges);
 		lifeFlaskRaw = 0;
 		lifeFlaskTicks = 0;

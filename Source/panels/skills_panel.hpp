@@ -5,7 +5,9 @@
  */
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <string>
 
 #include "engine/point.hpp"
 #include "engine/rectangle.hpp"
@@ -15,6 +17,8 @@
 #include "poe2/support_gems.hpp"
 
 namespace devilution {
+
+struct Player;
 
 bool IsSkillsPanelOpen();
 void OpenSkillsPanel();
@@ -26,6 +30,10 @@ void DrawSkillsPanel(const Surface &out);
 bool SkillsPanelContains(Point position);
 /** @brief Handles a left click inside the panel. */
 void HandleSkillsPanelClick(Point mousePosition);
+/** @brief Uses the Jeweller's Orb on the cursor on the skill under the mouse; true if it opened a socket. */
+bool UseJewellerOnSkillsPanel(Player &player, Point mousePosition);
+/** @brief The tooltip line on a locked support socket: which Jeweller's Orb opens it. */
+std::string JewellerSocketHint(size_t socket);
 
 /** @brief Palette color of a gem's attribute: red Strength, yellow Dexterity, blue Magic. */
 uint8_t GemPaletteColor(GemColor color);

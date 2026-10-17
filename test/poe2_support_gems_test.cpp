@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
@@ -176,10 +177,10 @@ TEST_F(Poe2SupportGemsTest, SocketingRules)
 	EXPECT_TRUE(player.poe2.hasSupport(SpellID::Firebolt, SupportGem::Empower));
 	EXPECT_FALSE(player.poe2.hasSupport(SpellID::Fireball, SupportGem::Empower));
 
-	// A level 1 hero has two open sockets.
-	EXPECT_EQ(SupportSocketCount(player), 2U);
-	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::FasterCasting), SupportSocketResult::NoFreeSocket);
+	// A skill starts with two open sockets.
 	const size_t slot = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Firebolt));
+	EXPECT_EQ(SupportSocketCount(player, slot), 2U);
+	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::FasterCasting), SupportSocketResult::NoFreeSocket);
 	EXPECT_EQ(SocketSupportGem(player, slot, 2, SupportGem::FasterCasting, replaced), SupportSocketResult::Locked);
 
 	// Swapping a gem into a full socket hands back the old one.
@@ -195,6 +196,7 @@ TEST_F(Poe2SupportGemsTest, OnePowerSupportPerSkill)
 {
 	Player &player = FreshPlayer();
 	player.setCharacterLevel(30);
+	player.poe2.openedSockets.fill(3); // every socket open, as Jeweller's Orbs would
 	EXPECT_TRUE(IsPowerSupport(SupportGem::Empower));
 	EXPECT_TRUE(IsPowerSupport(SupportGem::ConcentratedEffect));
 	EXPECT_TRUE(IsPowerSupport(SupportGem::Brutality));
@@ -212,14 +214,37 @@ TEST_F(Poe2SupportGemsTest, OnePowerSupportPerSkill)
 	EXPECT_EQ(replaced, SupportGem::Empower);
 }
 
-TEST_F(Poe2SupportGemsTest, SocketsOpenWithLevel)
+TEST_F(Poe2SupportGemsTest, JewellerOrbsOpenSocketsInOrder)
 {
-	EXPECT_EQ(SupportSocketCount(1), 2U);
-	EXPECT_EQ(SupportSocketCount(9), 2U);
-	EXPECT_EQ(SupportSocketCount(10), 3U);
-	EXPECT_EQ(SupportSocketCount(20), 4U);
-	EXPECT_EQ(SupportSocketCount(30), 5U);
-	EXPECT_EQ(SupportSocketCount(50), MaxSupportSockets);
+	Player &player = FreshPlayer();
+	player.setCharacterLevel(50);
+	Socket(player, SpellID::Firebolt, SupportGem::Empower);
+	Socket(player, SpellID::Fireball, SupportGem::Pierce);
+	const size_t slot = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Firebolt));
+	EXPECT_EQ(SupportSocketCount(player, slot), 2U) << "Levels no longer open sockets";
+
+	EXPECT_FALSE(ApplyJewellerOrb(CurrencyOrb::GreaterJeweller, player, slot)) << "The fourth socket needs the third first";
+	EXPECT_TRUE(ApplyJewellerOrb(CurrencyOrb::LesserJeweller, player, slot));
+	EXPECT_EQ(SupportSocketCount(player, slot), 3U);
+	EXPECT_FALSE(ApplyJewellerOrb(CurrencyOrb::LesserJeweller, player, slot)) << "A Lesser opens only the third";
+	EXPECT_TRUE(ApplyJewellerOrb(CurrencyOrb::GreaterJeweller, player, slot));
+	EXPECT_TRUE(ApplyJewellerOrb(CurrencyOrb::PerfectJeweller, player, slot));
+	EXPECT_EQ(SupportSocketCount(player, slot), MaxSupportSockets);
+	EXPECT_FALSE(ApplyJewellerOrb(CurrencyOrb::PerfectJeweller, player, slot));
+
+	// Each skill has its own sockets; an empty row takes no orb.
+	const size_t other = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Fireball));
+	EXPECT_EQ(SupportSocketCount(player, other), 2U);
+	const std::optional<size_t> empty = FirstFreeSkillSlot(player);
+	ASSERT_TRUE(empty.has_value());
+	EXPECT_FALSE(ApplyJewellerOrb(CurrencyOrb::LesserJeweller, player, *empty));
+
+	// Jeweller's Orbs are never used on items.
+	Item ring {};
+	EXPECT_FALSE(CurrencyFitsItem(CurrencyOrb::LesserJeweller, ring));
+	EXPECT_EQ(LevelOpenedSockets(9), 0);
+	EXPECT_EQ(LevelOpenedSockets(25), 2);
+	EXPECT_EQ(LevelOpenedSockets(80), 3);
 }
 
 TEST_F(Poe2SupportGemsTest, AttributesLimitSupports)
@@ -228,6 +253,7 @@ TEST_F(Poe2SupportGemsTest, AttributesLimitSupports)
 	player._pDexterity = 9;
 	player._pMagic = 35;
 	player.setCharacterLevel(30);
+	player.poe2.openedSockets.fill(3); // every socket open, as Jeweller's Orbs would
 	// One Dexterity support plus one per 5 points.
 	EXPECT_EQ(SupportCapacity(player, GemColor::Dexterity), 2);
 	EXPECT_EQ(SupportCapacity(player, GemColor::Magic), 8);

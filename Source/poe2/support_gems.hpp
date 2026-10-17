@@ -128,9 +128,12 @@ inline bool SupportGemCanSupport(SupportGem gem, SpellID spell) { return Support
 /** @brief Whether the skill takes support gems at all (Spirit gems don't). */
 bool SkillTakesSupports(SkillSlot skill);
 
-/** @brief Support sockets open on every skill: 2, plus one at levels 10, 20 and 30. */
-size_t SupportSocketCount(int characterLevel);
-size_t SupportSocketCount(const Player &player);
+/** @brief Support sockets every skill starts with; Jeweller's Orbs open the rest. */
+constexpr size_t BaseSupportSockets = 2;
+/** @brief Support sockets open on the skill in a Skills panel row: 2, plus those Jeweller's Orbs opened. */
+size_t SupportSocketCount(const Player &player, size_t row);
+/** @brief Sockets heroes from before Jeweller's Orbs had opened by level (one at 10, 20 and 30), which they keep. */
+uint8_t LevelOpenedSockets(int characterLevel);
 
 /** @brief Points of an attribute that allow one more support of its color: each +5 attribute pick on the tree. */
 constexpr int SupportAttributeStep = 5;

@@ -3201,7 +3201,15 @@ bool TryIconCurs()
 		bool changeCursor = true;
 		if (pcursinvitem != -1 && !IsInspectingPlayer())
 			changeCursor = DoOil(myPlayer, pcursinvitem);
-		else if (pcursstashitem != StashStruct::EmptyCell) {
+		else if (gbIsPoe2 && JewellerSocket(CurrencyOrbForMiscId(myPlayer._pOilType)) && SkillsPanelContains(MousePosition)) {
+			// Jeweller's Orbs go on a skill in the Skills panel.
+			changeCursor = UseJewellerOnSkillsPanel(myPlayer, MousePosition);
+			if (changeCursor) {
+				SpendHeldCurrency(myPlayer);
+				PlaySFX(SfxID::ItemRing);
+				PlaySFX(SfxID::SpellHolyBolt);
+			}
+		} else if (pcursstashitem != StashStruct::EmptyCell) {
 			Item &item = Stash.stashList[pcursstashitem];
 			changeCursor = ApplyOilToItem(item, myPlayer);
 			if (changeCursor)

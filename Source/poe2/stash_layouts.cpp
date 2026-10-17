@@ -50,6 +50,9 @@ constexpr item_misc_id OrbSlots[] = {
 	IMISC_ORB_ETCHER,
 	IMISC_ORB_SCRAP,
 	IMISC_ORB_BAUBLE,
+	IMISC_ORB_LESSER_JEWELLER,
+	IMISC_ORB_GREATER_JEWELLER,
+	IMISC_ORB_PERFECT_JEWELLER,
 };
 
 constexpr unsigned EssenceTiers = static_cast<unsigned>(EssenceTier::Count);

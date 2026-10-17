@@ -527,14 +527,16 @@ bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 	}
 }
 
-size_t SupportSocketCount(int characterLevel)
+size_t SupportSocketCount(const Player &player, size_t row)
 {
-	return std::min<size_t>(2 + static_cast<size_t>(std::max(characterLevel, 0) / 10), MaxSupportSockets);
+	if (row > DefaultAttackRow)
+		return BaseSupportSockets;
+	return std::min<size_t>(BaseSupportSockets + player.poe2.openedSockets[row], MaxSupportSockets);
 }
 
-size_t SupportSocketCount(const Player &player)
+uint8_t LevelOpenedSockets(int characterLevel)
 {
-	return SupportSocketCount(player.getCharacterLevel());
+	return static_cast<uint8_t>(std::min<size_t>(static_cast<size_t>(std::max(characterLevel, 0) / 10), MaxSupportSockets - BaseSupportSockets));
 }
 
 int SupportCapacity(const Player &player, GemColor color)
@@ -579,7 +581,7 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 		return SupportSocketResult::NotApplicable;
 
 	SupportSockets &supports = player.poe2.supportsAt(slot);
-	const size_t open = SupportSocketCount(player);
+	const size_t open = SupportSocketCount(player, slot);
 	if (socket) {
 		if (*socket >= open)
 			return SupportSocketResult::Locked;
@@ -626,8 +628,8 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 
 std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem)
 {
-	const size_t open = SupportSocketCount(player);
 	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		const size_t open = SupportSocketCount(player, slot);
 		const SkillSlot skill = player.poe2.skillSlots[slot];
 		const SupportSockets &supports = player.poe2.slotSupports[slot];
 		if (!SupportGemCanSupport(gem, skill) || std::find(supports.begin(), supports.end(), gem) != supports.end())

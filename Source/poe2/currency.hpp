@@ -5,8 +5,10 @@
  */
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string_view>
 
 #include "items.h"
@@ -59,7 +61,16 @@ enum class CurrencyOrb : uint8_t {
 	Catalyst,
 	Essence,
 	Augment,
+	/** Jeweller's Orbs: open a skill's third, fourth and fifth support sockets. */
+	LesserJeweller,
+	GreaterJeweller,
+	PerfectJeweller,
 };
+
+/** @brief The support socket a Jeweller's Orb opens, counting from 0 (2, 3 or 4), or nothing for other orbs. */
+std::optional<size_t> JewellerSocket(CurrencyOrb orb);
+/** @brief Uses a Jeweller's Orb on the skill in a Skills panel row; false, with a message, if it can't. */
+bool ApplyJewellerOrb(CurrencyOrb orb, Player &player, size_t row);
 
 /** @brief Most affixes an Exalted Orb can bring a rare item to. */
 constexpr int MaxExaltedAffixes = 6;

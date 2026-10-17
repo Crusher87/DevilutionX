@@ -42,6 +42,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_swap.hpp"
@@ -2433,9 +2434,10 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 14 their crafting state. Version 17 adds currency shards, version 18 the tier of each socketed support and
  * version 19 the weapon sets (the set that is out, the Books of Specialisation, each set's passives and the other set's
  * weapons) and the hardcore flag. Version 20 adds the default attack's supports, and version 21 the shape of the passive
- * tree the hero's points were spent on and the quests that gave passive points.
+ * tree the hero's points were spent on and the quests that gave passive points. Version 22 adds the support sockets
+ * Jeweller's Orbs opened on each Skills panel row.
  */
-constexpr uint8_t Poe2HeroDataVersion = 21;
+constexpr uint8_t Poe2HeroDataVersion = 22;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2727,6 +2729,12 @@ uint8_t ReadPoe2HeroData(Player &player)
 		return version;
 	player.poe2.passiveTreeHash = file.NextLE<uint32_t>();
 	player.poe2.questsRewarded = file.NextLE<uint32_t>();
+
+	// Version 22: the support sockets Jeweller's Orbs opened.
+	if (version < 22 || !file.IsValid(player.poe2.openedSockets.size()))
+		return version;
+	for (uint8_t &opened : player.poe2.openedSockets)
+		opened = std::min<uint8_t>(file.NextLE<uint8_t>(), static_cast<uint8_t>(MaxSupportSockets - BaseSupportSockets));
 	return version;
 }
 
@@ -2749,6 +2757,9 @@ void LoadPoe2HeroData(Player &player)
 	// Every hero had 30 Spirit before Spirit came from skulls, so older heroes keep it as the first skull.
 	if (version > 0 && version < 11)
 		player.poe2.spiritSkulls = 1;
+	// Before Jeweller's Orbs, sockets opened with the hero's level; heroes keep the ones they had.
+	if (version > 0 && version < 22)
+		player.poe2.openedSockets.fill(LevelOpenedSockets(player.getCharacterLevel()));
 	// Points spent on an older tree come back when the tree changes shape.
 	if (version > 0) {
 		RefundPassivesForNewTree(player);
@@ -2788,7 +2799,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	}
 	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size());
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2918,6 +2929,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	// Version 21: the passive tree's shape and the quests that gave passive points.
 	file.WriteLE<uint32_t>(PassiveTreeHash() != 0 ? PassiveTreeHash() : player.poe2.passiveTreeHash);
 	file.WriteLE<uint32_t>(player.poe2.questsRewarded);
+	// Version 22: the support sockets Jeweller's Orbs opened.
+	for (const uint8_t opened : player.poe2.openedSockets)
+		file.WriteLE<uint8_t>(opened);
 }
 
 void LoadHeroItems(Player &player)

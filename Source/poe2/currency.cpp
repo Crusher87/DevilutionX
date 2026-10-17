@@ -13,7 +13,9 @@
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/format.hpp"
@@ -773,14 +775,64 @@ CurrencyOrb CurrencyOrbForMiscId(int miscId)
 		return CurrencyOrb::Essence;
 	case IMISC_AUGMENT:
 		return CurrencyOrb::Augment;
+	case IMISC_ORB_LESSER_JEWELLER:
+		return CurrencyOrb::LesserJeweller;
+	case IMISC_ORB_GREATER_JEWELLER:
+		return CurrencyOrb::GreaterJeweller;
+	case IMISC_ORB_PERFECT_JEWELLER:
+		return CurrencyOrb::PerfectJeweller;
 	default:
 		return CurrencyOrb::None;
 	}
 }
 
+std::optional<size_t> JewellerSocket(CurrencyOrb orb)
+{
+	switch (orb) {
+	case CurrencyOrb::LesserJeweller:
+		return 2;
+	case CurrencyOrb::GreaterJeweller:
+		return 3;
+	case CurrencyOrb::PerfectJeweller:
+		return 4;
+	default:
+		return std::nullopt;
+	}
+}
+
+bool ApplyJewellerOrb(CurrencyOrb orb, Player &player, size_t row)
+{
+	const std::optional<size_t> socket = JewellerSocket(orb);
+	if (!socket || row > DefaultAttackRow)
+		return false;
+	const SkillSlot skill = RowSkill(player, row);
+	if (skill.isEmpty()) {
+		EventPlrMsg(_("Use a Jeweller's Orb on a skill."), UiFlags::ColorRed);
+		return false;
+	}
+	if (!SkillTakesSupports(skill)) {
+		EventPlrMsg(_("Spirit gems take no supports."), UiFlags::ColorRed);
+		return false;
+	}
+	// Each orb opens one socket, in order: a Lesser the third, a Greater the fourth, a Perfect the fifth.
+	const size_t open = SupportSocketCount(player, row);
+	if (open > *socket) {
+		EventPlrMsg(FormatRuntime(_("{:s} already has {:d} support sockets."), SkillName(skill), static_cast<int>(open)), UiFlags::ColorRed);
+		return false;
+	}
+	if (open < *socket) {
+		const std::string_view needed = open == 2 ? _("Lesser") : _("Greater");
+		EventPlrMsg(FormatRuntime(_("{:s} needs a {:s} Jeweller's Orb first."), SkillName(skill), needed), UiFlags::ColorRed);
+		return false;
+	}
+	player.poe2.openedSockets[row]++;
+	EventPlrMsg(FormatRuntime(_("{:s} now has {:d} support sockets."), SkillName(skill), static_cast<int>(open + 1)));
+	return true;
+}
+
 bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
 {
-	if (orb == CurrencyOrb::None || item.isEmpty())
+	if (orb == CurrencyOrb::None || item.isEmpty() || JewellerSocket(orb))
 		return false;
 	if (IsFlaskPotion(item) && (item.dwBuff & CF_POE2) != 0) {
 		switch (orb) {
@@ -908,6 +960,12 @@ std::string_view CurrencyOrbDescription(CurrencyOrb orb)
 		return _("Desecrates a rare item: adds a modifier you reveal by using another Ancient Bone");
 	case CurrencyOrb::Catalyst:
 		return _("Adds quality to a ring or amulet");
+	case CurrencyOrb::LesserJeweller:
+		return _("Opens a skill's third support socket. Use it on a skill in the Skills panel (K)");
+	case CurrencyOrb::GreaterJeweller:
+		return _("Opens a skill's fourth support socket. Use it on a skill in the Skills panel (K)");
+	case CurrencyOrb::PerfectJeweller:
+		return _("Opens a skill's fifth support socket. Use it on a skill in the Skills panel (K)");
 	default:
 		return {};
 	}
@@ -983,6 +1041,10 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 	PendingOmens.clear();
 	CurrencyDestroyedItem = false;
 	DesecrationRevealItem = false;
+	if (JewellerSocket(orb)) {
+		EventPlrMsg(_("Jeweller's Orbs go on a skill in the Skills panel (K)."), UiFlags::ColorRed);
+		return false;
+	}
 	if (IsFlaskPotion(item) && (item.dwBuff & CF_POE2) != 0)
 		return ApplyCurrencyToFlask(orb, item);
 	if (IsWaystone(item))

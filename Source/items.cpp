@@ -69,6 +69,7 @@
 #include "pack.h"
 #include "panels/desecration_panel.hpp"
 #include "panels/info_box.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
@@ -6679,6 +6680,9 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 	case IMISC_ORB_CATALYST:
 	case IMISC_ESSENCE:
 	case IMISC_AUGMENT:
+	case IMISC_ORB_LESSER_JEWELLER:
+	case IMISC_ORB_GREATER_JEWELLER:
+	case IMISC_ORB_PERFECT_JEWELLER:
 		player._pOilType = mid;
 		if (&player != MyPlayer) {
 			return;
@@ -6689,6 +6693,9 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 		if (!invflag) {
 			invflag = true;
 		}
+		// Jeweller's Orbs go on a skill, so the Skills panel opens beside the bag.
+		if (JewellerSocket(CurrencyOrbForMiscId(mid)) && !IsSkillsPanelOpen())
+			OpenSkillsPanel();
 		NewCursor(CURSOR_OIL);
 		break;
 	case IMISC_SPECELIX:
