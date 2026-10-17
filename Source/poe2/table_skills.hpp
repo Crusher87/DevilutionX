@@ -75,6 +75,8 @@ enum class TableZone : uint8_t {
 	Delayed,
 	/** After `delay` ticks, bursts into a ring of ice shards. */
 	ShardRing,
+	/** After `delay` ticks, an ice spike bursts out of the ground and hits everything in the radius once. */
+	IceSpike,
 };
 
 enum class TableWeapon : uint8_t {

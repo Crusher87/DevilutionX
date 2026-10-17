@@ -111,7 +111,7 @@ const TableSkillData Table[] = {
 	{ WS::Meteor, "Meteor", "After a moment, a meteor crashes down on the target", 13, 25, TW::None, 2, Zone, 450, 0, 2, 0, 0, 30, DT::Fire, MissileID::Null, MG::ApocalypseBoom, TF_Spell, TableZone::Delayed, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::FireCloud), TableCurve::Fireball, 250 },
 	{ WS::Thunderstorm, "Thunderstorm", "A storm follows you for 10 seconds, striking the nearest enemy", 13, 20, TW::None, 3, Zone, 220, 0, 6, 200, 20, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_FollowPlayer | TF_AtPlayer, TableZone::NearestStrike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Fireball, 250 },
 	// Frost
-	{ WS::GlacialSpike, "Glacial Spike", "An ice spike that shatters into a freezing burst", 5, 10, TW::None, 1, Projectiles, 220, 1, 1, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::BlueFlareExplosion, TF_Spell | TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 250 },
+	{ WS::GlacialSpike, "Glacial Spike", "A great spike of ice bursts out of the ground under the target, then shatters", 5, 10, TW::None, 1, Zone, 220, 0, 1, 0, 0, 6, DT::Magic, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 250 },
 	{ WS::FrozenArmor, "Frozen Armor", "For 15 seconds, take 20% less damage from melee hits and chill those who strike you", 7, 12, TW::None, 1, Buff, Flat, 0, 0, 300, 0, 0, DT::Magic, MissileID::Null, MG::StoneCurseShatter, 0, TableZone::None, TableCurse::None, TableBuff::FrozenArmor, TT_Elemental, Icon(SpellIcon::ManaShield), TableCurve::Boneshatter, 100 },
 	{ WS::Blizzard, "Blizzard", "Ice shards rain on the target area for 4 seconds", 9, 16, TW::None, 1, Zone, 60, 0, 3, 80, 4, 0, DT::Magic, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::RandomStrikes, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Fireball, 250 },
 	{ WS::IceBarrage, "Ice Barrage", "A rapid stream of ice shards", 11, 14, TW::None, 1, Stream, 70, 8, 0, 0, 2, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 250 },
@@ -329,6 +329,8 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 	// A delayed blast draws its rune circle on the ground while it charges.
 	if (data.zone == TableZone::Delayed)
 		vfx::Sigil(center, std::max<int>(data.radius, 1), delay * gnTickDelay, LookOf(data));
+	else if (data.zone == TableZone::IceSpike)
+		vfx::IceSpike(center, delay * gnTickDelay, std::max<int>(data.radius, 1));
 }
 
 /** @brief A burst of a zone or a landing: hits everything within the radius. */
@@ -849,11 +851,14 @@ void ProcessSkillZones(Player &player)
 			zone.delay--;
 		} else if (!done) {
 			// Landing bursts of projectiles, and Delayed zones, go off once.
-			if ((data->flags & TF_LandingBurst) != 0 || data->zone == TableZone::Delayed) {
+			if ((data->flags & TF_LandingBurst) != 0 || IsAnyOf(data->zone, TableZone::Delayed, TableZone::IceSpike)) {
 				ZoneBurst(player, *data, zone.center, std::max(radius, 1), zone.damage);
 				if (data->zone == TableZone::Delayed) {
 					PlaySfxLoc(SfxID::BigExplosion, zone.center);
 					ShakeCamera(ShakeStrength::Medium, 6);
+				} else if (data->zone == TableZone::IceSpike) {
+					PlayModSfxLoc("sfx\\poe2\\glacial_spike.wav", zone.center);
+					ShakeCamera(ShakeStrength::Medium, 5);
 				}
 				done = true;
 			} else if (data->zone == TableZone::ShardRing) {

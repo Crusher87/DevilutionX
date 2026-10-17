@@ -80,6 +80,7 @@ endif()
 set(poe2_mod
   manifest.ini
   lua/mods/poe2/init.lua
+  sfx/poe2/glacial_spike.wav
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
   txtdata/missiles/misdat.tsv

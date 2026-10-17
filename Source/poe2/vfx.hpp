@@ -55,6 +55,11 @@ void Clear();
 
 /** @brief A rune circle that draws itself on the ground and charges up for the given time, then flashes. */
 void Sigil(Point tile, int radiusTiles, int durationMs, Element element);
+/**
+ * @brief Frost cracks spread over a tile for the given time, then a cluster of ice spikes bursts up out of the ground,
+ * stands a moment and shatters. Size 1 is one tile across.
+ */
+void IceSpike(Point tile, int delayMs, float size);
 /** @brief A heavy landing: flash, shockwave, dust, debris and glowing cracks. */
 void Slam(Point tile, int radiusTiles, Element element);
 /** @brief The ground splitting open from one tile to another. */
