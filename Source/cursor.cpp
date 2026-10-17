@@ -5,6 +5,7 @@
  */
 #include "cursor.h"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -25,6 +26,7 @@
 #include "doom.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/demomode.h"
+#include "engine/palette.h"
 #include "engine/point.hpp"
 #include "engine/points_in_rectangle_range.hpp"
 #include "engine/render/clx_render.hpp"
@@ -568,7 +570,20 @@ void FreeHalfSizeItemSprites()
 void DrawItem(const Item &item, const Surface &out, Point position, ClxSprite clx)
 {
 	const bool usable = !IsInspectingPlayer() ? item._iStatFlag : InspectPlayer->CanUseItem(item);
-	if (usable) {
+	if (usable && gbIsPoe2 && item._iMiscId == IMISC_SPEC_BOOK) {
+		// POE2 Mashup: a Book of Specialisation is bound in gold, not the plain red of a spell book (Curtis 2026-10-16).
+		// The cover's dusky reds (the beige ramp's darker half) become the gold of the game's own lettering.
+		static const std::array<uint8_t, 256> GoldBinding = [] {
+			constexpr uint8_t Gold[] = { 3, 4, 5, 7, 8, 9, 10, 12, 14 };
+			std::array<uint8_t, 256> trn;
+			for (size_t i = 0; i < trn.size(); i++)
+				trn[i] = static_cast<uint8_t>(i);
+			for (size_t shade = 0; shade < std::size(Gold); shade++)
+				trn[PAL16_BEIGE + 6 + shade] = static_cast<uint8_t>(PAL16_YELLOW + Gold[shade]);
+			return trn;
+		}();
+		ClxDrawTRN(out, position, clx, GoldBinding.data());
+	} else if (usable) {
 		ClxDraw(out, position, clx);
 	} else {
 		ClxDrawTRN(out, position, clx, GetInfravisionTRN());

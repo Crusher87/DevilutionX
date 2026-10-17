@@ -12,6 +12,7 @@
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_rect.h>
+#include <SDL3/SDL_timer.h>
 #else
 #include <SDL.h>
 #endif
@@ -162,6 +163,15 @@ namespace {
 
 /** @brief POE2 Mashup: the outline of items the currency held for use fits. */
 constexpr uint8_t CurrencyFitsOutline = PAL16_ORANGE + 2;
+
+/** @brief POE2 Mashup: a Book of Specialisation glows gold in the inventory, slowly brightening and fading. */
+std::optional<uint8_t> SpecBookGlow(const Item &item)
+{
+	if (!gbIsPoe2 || item._iMiscId != IMISC_SPEC_BOOK)
+		return std::nullopt;
+	const int step = static_cast<int>((SDL_GetTicks() / 140) % 8);
+	return static_cast<uint8_t>(PAL16_YELLOW + 1 + (step < 4 ? step : 7 - step));
+}
 
 
 OptionalOwnedClxSpriteList pInvCels;
@@ -1389,6 +1399,8 @@ void DrawInv(const Surface &out)
 				ClxDrawOutline(out, GetOutlineColor(myPlayer.InvList[ii], true), position, sprite);
 			} else if (HeldCurrencyFits(myPlayer.InvList[ii])) {
 				ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
+			} else if (const std::optional<uint8_t> glow = SpecBookGlow(myPlayer.InvList[ii]); glow) {
+				ClxDrawOutline(out, *glow, position, sprite);
 			}
 
 			DrawItem(myPlayer.InvList[ii], out, position, sprite);
