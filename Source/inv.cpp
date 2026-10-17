@@ -1315,6 +1315,26 @@ bool CheckWeaponSetButtons(Player &player)
 
 } // namespace
 
+void DrawInventoryGridBackground(const Surface &out, Point topLeft, Size cells)
+{
+	if (!pInvCels)
+		return;
+	const ClxSprite art = (*pInvCels)[0];
+	// The bag's cells in the art: 10 x 4 from (17, 222), 29 pixels apart.
+	constexpr Point ArtGrid { 17, 222 };
+	constexpr int ArtRows = 4;
+	constexpr int Pitch = INV_SLOT_SIZE_PX + 1;
+	for (int row = 0; row < cells.height; row += ArtRows) {
+		const int rows = std::min(ArtRows, cells.height - row);
+		const int width = std::min(cells.width, 10) * Pitch;
+		// Only the first band keeps the art's frame line above the grid.
+		const int skip = row == 0 ? 0 : 1;
+		const Surface band = out.subregion(topLeft.x - 1, topLeft.y - 1 + skip + (row * Pitch), width + 1, (rows * Pitch) + 1 - skip);
+		// The art's bottom-left, placed so its grid lines up with the band.
+		ClxDraw(band, { 1 - ArtGrid.x, 1 - skip - ArtGrid.y + static_cast<int>(art.height()) - 1 }, art);
+	}
+}
+
 void DrawInv(const Surface &out)
 {
 	ClxDraw(out, GetPanelPosition(UiPanels::Inventory, { 0, 351 }), (*pInvCels)[0]);

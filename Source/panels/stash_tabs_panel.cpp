@@ -1229,6 +1229,11 @@ void DrawPoe2StashFrame(const Surface &out)
 
 void DrawPoe2StashGridBack(const Surface &out)
 {
+	// The same stone grid as the hero's bag (Curtis 2026-10-17).
+	if (gbIsPoe2) {
+		DrawInventoryGridBackground(out, GetStashSlotCoord({ 0, 0 }), StashGridSize);
+		return;
+	}
 	FillRectangle(out, { GetStashSlotCoord({ 0, 0 }) - Displacement { 1, 1 }, { (StashGridSize.width * CellPitch) + 1, (StashGridSize.height * CellPitch) + 1 } }, SocketRimColor);
 	for (const Point slot : StashGridRange)
 		FillRectangle(out, { GetStashSlotCoord(slot), CellSize }, SocketColor);

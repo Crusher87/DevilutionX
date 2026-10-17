@@ -109,6 +109,11 @@ void InitInv();
  * @brief Render the inventory panel to the given buffer.
  */
 void DrawInv(const Surface &out);
+/**
+ * @brief POE2 Mashup: draws the inventory panel's stone grid behind a grid of the given cells at the given top-left,
+ * repeating its four rows (the stash grid uses it).
+ */
+void DrawInventoryGridBackground(const Surface &out, Point topLeft, Size cells);
 
 void DrawInvBelt(const Surface &out);
 

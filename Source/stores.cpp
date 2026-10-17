@@ -2312,6 +2312,8 @@ void TavernEnter()
 void CainIdentifyAll()
 {
 	const int count = IdentifyAllForFree(*MyPlayer);
+	if (count > 0)
+		PlaySFX(SfxID::CastSkill); // The same sound as reading a Scroll of Identify.
 	EventPlrMsg(count > 0 ? FormatRuntime(ngettext("Cain identified {:d} item.", "Cain identified {:d} items.", count), count) : _("You have nothing to identify."));
 }
 
