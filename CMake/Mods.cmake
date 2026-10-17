@@ -88,6 +88,7 @@ set(poe2_mod
   txtdata/poe2/modifier_families.tsv
   txtdata/poe2/modifier_tiers.tsv
   txtdata/poe2/passive_tree.tsv
+  txtdata/poe2/unique_lore.tsv
   txtdata/poe2/uniques.tsv)
 
 if(APPLE)

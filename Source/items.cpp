@@ -2333,6 +2333,17 @@ void PrintItemInfo(const Item &item)
 			CurrentInfoLineStyle = InfoLineStyle::Note;
 			AddItemInfoBoxString(FormatRuntime(_("Item Level: {:d}"), itemLevel));
 		}
+		// A known unique ends with its flavour text, like POE2's.
+		std::string_view uniqueName;
+		if (const BeltUnique *beltUnique = GetBeltUnique(item); beltUnique != nullptr)
+			uniqueName = beltUnique->name;
+		else if (item._iMagical == ITEM_QUALITY_UNIQUE && item._iIdentified && item._iUid >= 0 && static_cast<size_t>(item._iUid) < UniqueItems.size())
+			uniqueName = UniqueItems[item._iUid].UIName;
+		if (const std::span<const std::string> lore = UniqueLore(uniqueName); !lore.empty()) {
+			CurrentInfoLineStyle = InfoLineStyle::Flavour;
+			for (const std::string &line : lore)
+				AddItemInfoBoxString(line);
+		}
 	}
 }
 

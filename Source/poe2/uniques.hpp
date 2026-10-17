@@ -9,7 +9,9 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "poe2/loot.hpp"
@@ -66,6 +68,8 @@ std::vector<std::pair<const UniqueEffect *, int>> RollUniqueEffects(const Item &
 void ApplyPoe2UniqueEffects(Item &item);
 /** @brief Adds the rules of a worn bundle unique to the totals. */
 void AddUniqueRules(const Item &item, UniqueRuleTotals &totals);
+/** @brief A unique's flavour text lines by its name (Diablo's, the bundle's or a belt unique), from txtdata/poe2/unique_lore.tsv; empty if it has none. */
+std::span<const std::string> UniqueLore(std::string_view name);
 /** @brief The unique's tooltip lines. */
 std::vector<std::string> Poe2UniqueText(const Item &item);
 

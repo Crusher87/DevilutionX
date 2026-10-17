@@ -1,6 +1,7 @@
 #include "poe2/uniques.hpp"
 
 #include <algorithm>
+#include <span>
 #include <string_view>
 
 #include <magic_enum/magic_enum.hpp>
@@ -20,6 +21,34 @@ namespace devilution {
 namespace {
 
 std::vector<Poe2Unique> Uniques;
+/** Each unique's flavour text by name, sorted for lookup. */
+std::vector<std::pair<std::string, std::vector<std::string>>> Lore;
+
+void LoadUniqueLore()
+{
+	Lore.clear();
+	constexpr std::string_view Filename = "txtdata\\poe2\\unique_lore.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value())
+		return;
+	dataFile->skipHeaderOrDie(Filename);
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		std::string name;
+		std::string text;
+		reader.readString("name", name);
+		reader.readString("lore", text);
+		std::vector<std::string> lines;
+		// The tooltip doesn't wrap, so the file breaks the lines with |.
+		for (const std::string_view line : SplitByChar(text, '|')) {
+			if (!line.empty())
+				lines.emplace_back(line);
+		}
+		if (!name.empty() && !lines.empty())
+			Lore.emplace_back(std::move(name), std::move(lines));
+	}
+	std::sort(Lore.begin(), Lore.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+}
 
 std::optional<UniqueTier> ParseTier(std::string_view text)
 {
@@ -93,8 +122,10 @@ uint32_t EffectHash(uint32_t seed, size_t index)
 void LoadPoe2Uniques()
 {
 	RemoveLoadedUniques();
+	Lore.clear();
 	if (!gbIsPoe2)
 		return;
+	LoadUniqueLore();
 
 	constexpr std::string_view Filename = "txtdata\\poe2\\uniques.tsv";
 	auto dataFile = DataFile::load(Filename);
@@ -146,6 +177,14 @@ void LoadPoe2Uniques()
 		unique.uid = static_cast<int>(UniqueItems.size()) - 1;
 		Uniques.push_back(std::move(unique));
 	}
+}
+
+std::span<const std::string> UniqueLore(std::string_view name)
+{
+	const auto it = std::lower_bound(Lore.begin(), Lore.end(), name, [](const auto &entry, std::string_view key) { return entry.first < key; });
+	if (it == Lore.end() || it->first != name)
+		return {};
+	return it->second;
 }
 
 const std::vector<Poe2Unique> &Poe2Uniques()

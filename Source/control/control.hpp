@@ -69,6 +69,8 @@ enum class InfoLineStyle : uint8_t {
 	PhysicalDamage,
 	FireDamage,
 	LightningDamage,
+	/** A unique's flavour text, at the end of its tooltip. */
+	Flavour,
 };
 /** @brief The style given to the next floating info lines; reset to Default after each item. */
 extern InfoLineStyle CurrentInfoLineStyle;
