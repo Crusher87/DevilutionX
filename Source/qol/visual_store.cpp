@@ -467,12 +467,8 @@ std::vector<Poe2ShopTab> Poe2ShopTabs()
 	switch (VisualStore.vendor) {
 	case VisualStoreVendor::Smith: {
 		// One tab for all weapons (Curtis 2026-10-16), sorted so the kinds stay together.
-		std::vector<Poe2ShopTab> tabs { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields };
-		// Rings and amulets only come with his premium wares, which leave them out in multiplayer.
-		if (!gbIsMultiplayer)
-			tabs.push_back(Poe2ShopTab::Jewelry);
-		tabs.push_back(Poe2ShopTab::Buyback);
-		return tabs;
+		// His basic stock always has rings and amulets (Curtis 2026-10-17), so the Jewelry tab is always there.
+		return { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Jewelry, Poe2ShopTab::Buyback };
 	}
 	case VisualStoreVendor::Witch:
 		return { Poe2ShopTab::Staves, Poe2ShopTab::Supplies, Poe2ShopTab::Buyback };

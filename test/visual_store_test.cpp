@@ -1165,8 +1165,8 @@ TEST_F(Poe2ShopTabsTest, VendorTabs)
 	VisualStore.vendor = VisualStoreVendor::Smith;
 	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Jewelry, Poe2ShopTab::Buyback }));
 	gbIsMultiplayer = true;
-	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Buyback }))
-	    << "Premium wares leave out rings and amulets in multiplayer";
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Jewelry, Poe2ShopTab::Buyback }))
+	    << "His basic stock has rings and amulets in multiplayer too";
 	gbIsMultiplayer = false;
 
 	VisualStore.vendor = VisualStoreVendor::Witch;
