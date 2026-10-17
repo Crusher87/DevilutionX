@@ -155,8 +155,13 @@ std::optional<unsigned> StashTabSet::affinityTabFor(const Item &item) const
 	const StashAffinity affinity = GetStashAffinity(item);
 	if (affinity == StashAffinity::None)
 		return std::nullopt;
+	// A blank tab the player gave its affinity, else the premade tab for it (Currency, Gems, Maps, Uniques).
 	for (unsigned page = 0; page < tabs.size(); page++) {
 		if (hasAffinity(page, affinity))
+			return page;
+	}
+	for (unsigned page = 0; page < tabs.size(); page++) {
+		if (tabs[page].isPremade() && PremadeTabTakes(tabs[page].kind, item))
 			return page;
 	}
 	return std::nullopt;

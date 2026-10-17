@@ -25,9 +25,11 @@
 #include "headless_mode.hpp"
 #include "hwcursor.hpp"
 #include "inv.h"
+#include "items.h"
 #include "minitext.h"
 #include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
+#include "poe2/currency.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
@@ -462,6 +464,8 @@ void DrawStash(const Surface &out)
 		if (pcursstashitem == itemId) {
 			const uint8_t color = GetOutlineColor(item, true);
 			ClxDrawOutline(out, color, position, sprite);
+		} else if (HeldCurrencyFits(item)) {
+			ClxDrawOutline(out, PAL16_ORANGE + 2, position, sprite);
 		}
 
 		DrawItem(item, out, position, sprite);
@@ -605,6 +609,12 @@ bool UseStashItem(uint16_t c)
 
 	if (Stash.stashList[c]._iMiscId == IMISC_MAPOFDOOM)
 		return true;
+	// POE2 Mashup: currency goes on the cursor and one comes off the stack once it changes an item, as from the bag.
+	if (gbIsPoe2 && IsCurrencyMiscId(Stash.stashList[c]._iMiscId)) {
+		HoldCurrencyForUse(Stash.stashList[c]);
+		SetStickyItemUse((SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
+		return true;
+	}
 	if (Stash.stashList[c]._iMiscId == IMISC_NOTE) {
 		InitQTextMsg(TEXT_BOOK9);
 		CloseInventory();

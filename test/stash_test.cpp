@@ -814,7 +814,7 @@ TEST_F(Poe2StashTabsTest, AnAffinityBelongsToOneTab)
 	EXPECT_EQ(StashTabs.affinityTabFor(MakeOrb()), 3u);
 	EXPECT_EQ(StashTabs.affinityText(3), "Currency");
 	StashTabs.setAffinity(3, StashAffinity::Currency, false);
-	EXPECT_FALSE(StashTabs.affinityTabFor(MakeOrb()).has_value());
+	EXPECT_EQ(StashTabs.affinityTabFor(MakeOrb()), PageOf(StashTabKind::Currency)) << "Else the premade Currency tab";
 	StashTabs.setAffinity(PageOf(StashTabKind::Gems), StashAffinity::Flasks, true);
 	EXPECT_FALSE(StashTabs.hasAffinity(PageOf(StashTabKind::Gems), StashAffinity::Flasks)) << "Premade tabs have no affinities";
 }

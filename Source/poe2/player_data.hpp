@@ -497,9 +497,12 @@ struct Poe2PlayerData {
 	SupportTiers defaultSupportTiers {};
 	/** @brief Charges of the flasks in belt slots 1 to 5. */
 	std::array<uint8_t, NumFlasks> flaskCharges {};
-	/** @brief Which flask was in each belt slot last tick (not saved), so a flask put in from the bag starts empty. */
-	std::array<uint64_t, NumFlasks> flaskSlotKeys {};
+	/** @brief Which flask or charm was in each belt slot last tick (not saved), so one put in from the bag or the ground starts empty. */
+	std::array<uint64_t, 8> flaskSlotKeys {};
 	bool flaskSlotKeysKnown = false;
+	/** @brief The flask or charm lifted from the belt onto the cursor (not saved): put back in the belt, it keeps its charges. */
+	uint64_t liftedBeltKey = 0;
+	uint8_t liftedFlaskCharges = 0;
 	/** @brief Skill gems socketed in the Skills panel. */
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */

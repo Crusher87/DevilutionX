@@ -250,7 +250,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	RING_OF_MAGMA	Misc	NONE	Ruby Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_FIRE	Null	true	400
 	1	Misc	Unequippable	RING_OF_THUNDER	Misc	NONE	Topaz Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_LIGHTNING	Null	true	400
 	1	Misc	Unequippable	AMULET_OF_WARDING	Misc	NONE	Amethyst Charm	Charm	5	0	0	0	0	0	0	0	0		CHARM_MAGIC	Null	true	400
-	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Stone Charm	Charm	4	0	0	0	0	0	0	0	0		CHARM_STUN	Null	true	400
+	1	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Stone Charm	Charm	4	0	0	0	0	0	0	0	0		CHARM_STUN	Null	true	400
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Golden Charm	Charm	8	0	0	0	0	0	0	0	0		CHARM_GOLDEN	Null	true	800
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Glassblower's Bauble	Orb	2	0	0	0	0	0	0	0	0		ORB_BAUBLE	Null	true	400
 	2	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Uncut Spirit Gem	Uncut Gem	3	0	0	0	0	0	0	0	0		UNCUT_SPIRIT	Null	true	600

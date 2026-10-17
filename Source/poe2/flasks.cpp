@@ -464,15 +464,44 @@ void ProcessFlaskRecovery(Player &player)
 {
 	if (!gbIsPoe2 || player.hasNoLife())
 		return;
-	// Flasks hold no charges in the bag: one put into a belt slot starts empty and fills from kills.
-	for (size_t slot = 0; slot < NumFlasks; slot++) {
-		const Item &flask = player.SpdList[slot];
-		const uint64_t key = flask.isEmpty() ? 0 : (static_cast<uint64_t>(static_cast<uint32_t>(flask._iSeed)) << 16) | static_cast<uint16_t>(flask.IDidx + 1);
-		if (player.poe2.flaskSlotKeysKnown && key != player.poe2.flaskSlotKeys[slot] && key != 0)
-			player.poe2.flaskCharges[slot] = 0;
-		player.poe2.flaskSlotKeys[slot] = key;
+	// Flasks and charms hold no charges in the bag or on the ground: one put into a belt slot from there starts empty
+	// and fills from kills. One lifted from the belt onto the cursor and put back in the belt keeps its charges.
+	static_assert(MaxBeltItems == std::tuple_size_v<decltype(player.poe2.flaskSlotKeys)>);
+	const auto keyOf = [](const Item &item) -> uint64_t {
+		return item.isEmpty() ? 0 : (static_cast<uint64_t>(static_cast<uint32_t>(item._iSeed)) << 16) | static_cast<uint16_t>(item.IDidx + 1);
+	};
+	Poe2PlayerData &data = player.poe2;
+	const uint64_t held = keyOf(player.HoldItem);
+	for (size_t slot = 0; slot < MaxBeltItems; slot++) {
+		Item &item = player.SpdList[slot];
+		const uint64_t key = keyOf(item);
+		const uint64_t was = data.flaskSlotKeys[slot];
+		data.flaskSlotKeys[slot] = key;
+		if (!data.flaskSlotKeysKnown || key == was)
+			continue;
+		const uint8_t wasCharges = slot < NumFlasks ? data.flaskCharges[slot] : 0;
+		if (key != 0) {
+			const bool putBack = key == data.liftedBeltKey;
+			if (slot < NumFlasks)
+				data.flaskCharges[slot] = putBack ? data.liftedFlaskCharges : 0;
+			else if (!putBack && IsCharm(item))
+				item._iCharges = 0;
+			if (putBack)
+				data.liftedBeltKey = 0;
+		}
+		// What was here went onto the cursor (picked up, or swapped for the held one).
+		if (was != 0 && was == held) {
+			data.liftedBeltKey = was;
+			data.liftedFlaskCharges = wasCharges;
+		}
 	}
-	player.poe2.flaskSlotKeysKnown = true;
+	if (data.liftedBeltKey != held)
+		data.liftedBeltKey = 0;
+	data.flaskSlotKeysKnown = true;
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (IsCharm(player.InvList[i]))
+			player.InvList[i]._iCharges = 0;
+	}
 	if (player.poe2.oxFlaskTicks > 0)
 		player.poe2.oxFlaskTicks--;
 	if (++player.poe2.springsFlaskTicks >= SpringsChargeTicks) {

@@ -79,6 +79,7 @@
 #include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/stash_layouts.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/desecration.hpp"
 #include "poe2/economy.hpp"
@@ -138,13 +139,13 @@ CornerStoneStruct CornerStone;
 bool UniqueItemFlags[128];
 int MaxGold = GOLD_MAX_LIMIT;
 
-/** Maps from item_cursor_graphic to in-memory item type. */
+/** Maps from item_cursor_graphic to in-memory item type. POE2 Mashup: 43, the Blacksmith's Whetstone, drops as a stone, not armour. */
 int8_t ItemCAnimTbl[] = {
 	20, 16, 16, 16, 4, 4, 4, 12, 12, 12,
 	12, 12, 12, 12, 12, 21, 21, 25, 12, 28,
 	28, 28, 38, 38, 38, 32, 38, 38, 38, 24,
 	24, 26, 2, 25, 22, 23, 24, 21, 27, 27,
-	29, 0, 0, 0, 12, 12, 12, 12, 12, 0,
+	29, 0, 0, 9, 12, 12, 12, 12, 12, 0,
 	8, 8, 0, 8, 8, 8, 8, 8, 8, 6,
 	8, 8, 8, 6, 8, 8, 6, 8, 8, 6,
 	6, 6, 8, 8, 8, 5, 9, 13, 13, 13,
@@ -5684,7 +5685,56 @@ namespace {
 int HeldCurrencyMisc = -1;
 int HeldCurrencySeed = 0;
 uint32_t HeldCurrencyVariant = 0;
+/** The kind last used up, so Shift can pick up the next one of it. */
+int SpentCurrencyMisc = -1;
+uint32_t SpentCurrencyVariant = 0;
+bool StickyUse = false;
 } // namespace
+
+void SetStickyItemUse(bool sticky)
+{
+	StickyUse = sticky;
+}
+
+bool WantsStickyItemUse()
+{
+	return gbIsPoe2 && (StickyUse || (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
+}
+
+bool KeepCurrencyOnCursor(Player &player)
+{
+	if (!WantsStickyItemUse() || SpentCurrencyMisc < 0)
+		return false;
+	for (int i = 0; i < player._pNumInv; i++) {
+		const Item &stack = player.InvList[i];
+		if (stack._iMiscId == SpentCurrencyMisc && (stack.dwBuff & CF_POE2_VARIANT) == SpentCurrencyVariant) {
+			HoldCurrencyForUse(stack);
+			return true;
+		}
+	}
+	if (IsStashOpen) {
+		for (const Item &stack : Stash.stashList) {
+			if (stack._iMiscId == SpentCurrencyMisc && (stack.dwBuff & CF_POE2_VARIANT) == SpentCurrencyVariant) {
+				HoldCurrencyForUse(stack);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool HasIdentifyScroll(const Player &player)
+{
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (IsIdentifyScroll(player.InvList[i]))
+			return true;
+	}
+	for (const Item &item : player.SpdList) {
+		if (IsIdentifyScroll(item))
+			return true;
+	}
+	return false;
+}
 
 void HoldCurrencyForUse(const Item &item)
 {
@@ -5695,6 +5745,9 @@ void HoldCurrencyForUse(const Item &item)
 
 bool HeldCurrencyFits(const Item &item)
 {
+	// A Scroll of Identify on the cursor picks out what it can identify.
+	if (gbIsPoe2 && pcurs == CURSOR_IDENTIFY)
+		return !item.isEmpty() && !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL;
 	if (!gbIsPoe2 || HeldCurrencyMisc < 0 || pcurs != CURSOR_OIL)
 		return false;
 	return CurrencyFitsItem(CurrencyOrbForMiscId(HeldCurrencyMisc), item);
@@ -5710,12 +5763,31 @@ void SpendHeldCurrency(Player &player)
 			Item &stack = player.InvList[i];
 			if (stack._iMiscId != HeldCurrencyMisc || (stack.dwBuff & CF_POE2_VARIANT) != HeldCurrencyVariant || (exact && stack._iSeed != HeldCurrencySeed))
 				continue;
+			SpentCurrencyMisc = HeldCurrencyMisc;
+			SpentCurrencyVariant = HeldCurrencyVariant;
 			if (TakeOneFromStack(stack)) {
 				if (&player == MyPlayer)
 					NetSyncInvItem(player, i);
 			} else {
 				player.RemoveInvItem(i);
 			}
+			HeldCurrencyMisc = -1;
+			return;
+		}
+		// Used from the stash: one comes off its stack there.
+		if (&player != MyPlayer)
+			continue;
+		for (size_t i = 0; i < Stash.stashList.size(); i++) {
+			Item &stack = Stash.stashList[i];
+			if (stack._iMiscId != HeldCurrencyMisc || (stack.dwBuff & CF_POE2_VARIANT) != HeldCurrencyVariant || (exact && stack._iSeed != HeldCurrencySeed))
+				continue;
+			SpentCurrencyMisc = HeldCurrencyMisc;
+			SpentCurrencyVariant = HeldCurrencyVariant;
+			if (const int count = StoredStackCount(stack); count > 1)
+				SetStoredStackCount(stack, count - 1);
+			else
+				Stash.RemoveStashItem(static_cast<StashStruct::StashCell>(i));
+			Stash.dirty = true;
 			HeldCurrencyMisc = -1;
 			return;
 		}
@@ -6260,12 +6332,21 @@ namespace {
 /** @brief The worn item the given item would replace; nullptr if it isn't equipment. */
 const Item *EquippedCounterpart(const Player &player, const Item &item)
 {
-	const auto hand = [&player](item_class itemClass, inv_body_loc fallback) {
+	// A hand item is compared with a held one of its own kind (a sceptre with a sceptre), else of its class
+	// (a weapon with a weapon, a shield with a shield or focus), never across classes.
+	static const Item Nothing {};
+	const auto hand = [&player, &item](item_class itemClass) {
+		const std::optional<ModSlot> kind = ItemModSlot(item);
+		for (const inv_body_loc slot : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+			const Item &held = player.InvBody[slot];
+			if (!held.isEmpty() && held._iClass == itemClass && kind && ItemModSlot(held) == kind)
+				return &held;
+		}
 		for (const inv_body_loc slot : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 			if (!player.InvBody[slot].isEmpty() && player.InvBody[slot]._iClass == itemClass)
 				return &player.InvBody[slot];
 		}
-		return &player.InvBody[fallback];
+		return &Nothing;
 	};
 	switch (player.GetItemLocation(item)) {
 	case ILOC_ARMOR:
@@ -6277,11 +6358,9 @@ const Item *EquippedCounterpart(const Player &player, const Item &item)
 	case ILOC_RING:
 		return &player.InvBody[INVLOC_RING_LEFT];
 	case ILOC_ONEHAND:
-		if (item._iClass == ICLASS_ARMOR)
-			return hand(ICLASS_ARMOR, INVLOC_HAND_RIGHT);
-		return hand(ICLASS_WEAPON, INVLOC_HAND_LEFT);
+		return hand(item._iClass == ICLASS_ARMOR ? ICLASS_ARMOR : ICLASS_WEAPON);
 	case ILOC_TWOHAND:
-		return hand(ICLASS_WEAPON, INVLOC_HAND_LEFT);
+		return hand(ICLASS_WEAPON);
 	default:
 		return nullptr;
 	}

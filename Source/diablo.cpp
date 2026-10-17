@@ -99,6 +99,7 @@
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/autosave.hpp"
+#include "poe2/charms.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
@@ -294,6 +295,11 @@ void LeftMouseCmd(bool bShift)
 		if (pcursmonst != -1) {
 			QuickTradeTowner = (SDL_GetModState() & SDL_KMOD_CTRL) != 0 ? pcursmonst : -1;
 			NetSendCmdLocParam1(true, CMD_TALKXY, cursPosition, pcursmonst);
+		}
+		// POE2 Mashup: clicking the well walks to it and refills the charms.
+		if (gbIsPoe2 && pcursitem == -1 && pcursmonst == -1 && IsTownWellTile(cursPosition)) {
+			ClickTownWell(*MyPlayer);
+			return;
 		}
 		if (!wasdMovement && pcursitem == -1 && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
 			LastPlayerAction = PlayerActionType::Walk;
@@ -575,6 +581,7 @@ void RightMouseDown(bool isShiftHeld)
 	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
 	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
 		return;
+	SetStickyItemUse(isShiftHeld);
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
 		return;
 	if (pcursstashitem != StashStruct::EmptyCell && UseStashItem(pcursstashitem))
@@ -3144,7 +3151,11 @@ bool TryIconCurs()
 
 	if (pcurs == CURSOR_IDENTIFY && gbIsPoe2) {
 		IdentifyWithScroll(myPlayer);
-		NewCursor(CURSOR_HAND);
+		// With Shift, the next scroll stays on the cursor.
+		if (!WantsStickyItemUse() || !HasIdentifyScroll(myPlayer)) {
+			SetStickyItemUse(false);
+			NewCursor(CURSOR_HAND);
+		}
 		return true;
 	}
 	if (pcurs == CURSOR_IDENTIFY) {
@@ -3204,8 +3215,10 @@ bool TryIconCurs()
 			ConsumeCraftOmens(myPlayer);
 			Stash.dirty = true;
 		}
-		if (changeCursor)
+		if (changeCursor && !(gbIsPoe2 && KeepCurrencyOnCursor(myPlayer))) {
+			SetStickyItemUse(false);
 			NewCursor(CURSOR_HAND);
+		}
 		return true;
 	}
 

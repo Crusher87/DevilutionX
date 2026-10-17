@@ -142,11 +142,11 @@ TEST_F(Poe2CharmsTest, TheTownWellRefillsCharms)
 	charm._iCharges = 1;
 	player.plrlevel = 0;
 	player.plrIsOnSetLevel = false;
-	player.position.tile = { 40, 40 };
-	RefillCharmsAtWell(player);
-	EXPECT_EQ(charm._iCharges, 1) << "Away from the well";
 	player.position.tile = { 59, 70 };
 	RefillCharmsAtWell(player);
+	EXPECT_EQ(charm._iCharges, 1) << "Standing by the well doesn't refill: it's clicked";
+	EXPECT_TRUE(IsTownWellTile({ 60, 70 }));
+	ClickTownWell(player);
 	EXPECT_EQ(charm._iCharges, MaxCharmCharges);
 }
 

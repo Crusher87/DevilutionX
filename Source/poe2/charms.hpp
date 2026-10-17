@@ -71,7 +71,11 @@ void GainCharmCharges(Player &player, int charges);
 void RefillCharms(Player &player);
 /** @brief Whether the tile is at the well in Tristram's square. */
 bool IsBesideTownWell(Point tile);
-/** @brief Charms don't refill in town on their own: the hero fills them at the well (Curtis 2026-10-16). */
+/** @brief Whether the tile is the well itself, which the hero clicks to use. */
+bool IsTownWellTile(Point tile);
+/** @brief The hero clicked the well: uses it now if beside it, else walks over and uses it on arriving. */
+void ClickTownWell(Player &player);
+/** @brief Charms don't refill in town on their own: the hero clicks the well to fill them (Curtis 2026-10-16, 2026-10-17). */
 void RefillCharmsAtWell(Player &player);
 
 /** @brief Sets off Bloodstone and Sapphire charms and counts down charm effects; once per game tick. */

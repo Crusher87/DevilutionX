@@ -54,6 +54,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/stash_tabs.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
@@ -1808,12 +1809,24 @@ void TransferItemToStash(Player &player, int location)
 	}
 
 	const Item &item = GetInventoryItem(player, location);
-	// POE2 Mashup: the open tab only takes what it's for; the player switches to a tab that takes it.
-	if (const std::string_view refusal = StashTabRefusal(Stash.GetPage(), item); !refusal.empty()) {
+	// POE2 Mashup: Ctrl+click sends an item to its own tab (currency to Currency) from whichever tab is open.
+	bool sent = false;
+	if (gbIsPoe2) {
+		if (const std::optional<unsigned> home = StashTabs.affinityTabFor(item); home && *home != Stash.GetPage()) {
+			const unsigned current = Stash.GetPage();
+			Stash.SetPage(*home);
+			sent = AutoPlaceItemInStash(item, true);
+			Stash.SetPage(current);
+			if (sent)
+				EventPlrMsg(StrCat(_("Sent to "), StashTabs.displayName(*home)), UiFlags::ColorWhitegold);
+		}
+	}
+	if (sent) {
+		// Placed: removed from the hero below.
+	} else if (const std::string_view refusal = StashTabRefusal(Stash.GetPage(), item); !refusal.empty()) {
 		EventPlrMsg(refusal, UiFlags::ColorWhite);
 		return;
-	}
-	if (!AutoPlaceItemInStash(item, true)) {
+	} else if (!AutoPlaceItemInStash(item, true)) {
 		player.SaySpecific(HeroSpeech::WhereWouldIPutThis);
 		return;
 	}

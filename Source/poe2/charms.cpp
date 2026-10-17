@@ -1,8 +1,12 @@
 #include "poe2/charms.hpp"
 
 #include <algorithm>
+#include <optional>
 
+#include "effects.h"
 #include "engine/backbuffer_state.hpp"
+#include "levels/tile_properties.hpp"
+#include "msg.h"
 #include "game_mode.hpp"
 #include "items.h"
 #include "missiles.h"
@@ -174,10 +178,15 @@ bool IsBesideTownWell(Point tile)
 	return tile.x >= 58 && tile.x <= 63 && tile.y >= 68 && tile.y <= 73;
 }
 
-void RefillCharmsAtWell(Player &player)
+namespace {
+
+/** The local hero clicked the well and is on the way to it. */
+bool WellAsked = false;
+/** Ticks before giving up on reaching it, so the walk has time to start. */
+int WellWaitTicks = 0;
+
+void UseTownWell(Player &player)
 {
-	if (!gbIsPoe2 || !player.isOnLevel(0) || !IsBesideTownWell(player.position.tile))
-		return;
 	bool refilled = false;
 	for (Item &item : player.SpdList) {
 		if (IsCharm(item) && item._iCharges < MaxCharmCharges) {
@@ -185,9 +194,60 @@ void RefillCharmsAtWell(Player &player)
 			refilled = true;
 		}
 	}
-	if (refilled && &player == MyPlayer) {
-		EventPlrMsg(_("The well refills your charms."), UiFlags::ColorWhitegold);
-		RedrawEverything();
+	if (&player != MyPlayer)
+		return;
+	PlaySfxLoc(SfxID::OperateFountain, player.position.tile);
+	EventPlrMsg(refilled ? _("The well refills your charms.") : _("Your charms are already full."), UiFlags::ColorWhitegold);
+	RedrawEverything();
+}
+
+} // namespace
+
+bool IsTownWellTile(Point tile)
+{
+	return tile.x >= 60 && tile.x <= 61 && tile.y >= 70 && tile.y <= 71;
+}
+
+void ClickTownWell(Player &player)
+{
+	if (!gbIsPoe2 || !player.isOnLevel(0))
+		return;
+	if (IsBesideTownWell(player.position.tile)) {
+		WellAsked = false;
+		UseTownWell(player);
+		return;
+	}
+	// Walk to the nearest open tile beside the well.
+	std::optional<Point> best;
+	for (int y = 69; y <= 72; y++) {
+		for (int x = 59; x <= 62; x++) {
+			const Point tile { x, y };
+			if (IsTownWellTile(tile) || IsTileSolid(tile))
+				continue;
+			if (!best || player.position.tile.WalkingDistance(tile) < player.position.tile.WalkingDistance(*best))
+				best = tile;
+		}
+	}
+	if (!best)
+		return;
+	WellAsked = true;
+	WellWaitTicks = 10;
+	NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, *best);
+}
+
+void RefillCharmsAtWell(Player &player)
+{
+	if (!WellAsked || &player != MyPlayer)
+		return;
+	if (!gbIsPoe2 || !player.isOnLevel(0)) {
+		WellAsked = false;
+		return;
+	}
+	if (IsBesideTownWell(player.position.tile) && player._pmode == PM_STAND) {
+		WellAsked = false;
+		UseTownWell(player);
+	} else if (--WellWaitTicks <= 0 && player._pmode == PM_STAND && player.walkpath[0] == WALK_NONE) {
+		WellAsked = false; // It stopped short.
 	}
 }
 

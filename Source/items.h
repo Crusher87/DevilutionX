@@ -658,6 +658,12 @@ void HoldCurrencyForUse(const Item &item);
 bool HeldCurrencyFits(const Item &item);
 /** @brief Uses up one of the currency on the cursor, after it changed an item. */
 void SpendHeldCurrency(Player &player);
+/** @brief POE2 Mashup: whether the item was picked up with Shift+right-click, to use it again and again (Shift held when using it counts too). */
+void SetStickyItemUse(bool sticky);
+[[nodiscard]] bool WantsStickyItemUse();
+/** @brief After currency was used with Shift: puts the next one of its kind on the cursor; false if there's none or no Shift. */
+bool KeepCurrencyOnCursor(Player &player);
+[[nodiscard]] bool HasIdentifyScroll(const Player &player);
 [[nodiscard]] StringOrView PrintItemPower(char plidx, const Item &item);
 void DrawUniqueInfo(const Surface &out);
 void PrintItemDetails(const Item &item);
