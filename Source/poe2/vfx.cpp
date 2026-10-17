@@ -423,9 +423,13 @@ struct QuestMark {
 	Vec pos;
 	bool reward;
 	float phase;
+	/** @brief How long it has been showing, so it can draw itself in when it first comes into view. */
+	float age;
 };
 
 std::vector<QuestMark> QuestMarks;
+/** @brief When each towner's marker came into view, by towner type. */
+std::unordered_map<int, float> QuestMarkSince;
 /** @brief Each monster's mode last frame, to catch it starting to cast, fade, charge or die. */
 std::unordered_map<const Monster *, MonsterMode> LastModes;
 /** @brief Each monster's burning, shocked, frozen and chilled looks last frame, for the play log. */
@@ -1376,8 +1380,11 @@ bool BehindWall(Point tile)
 /** @brief Puts a marker over each towner in town who has quest news, with a few motes rising off it. */
 void ScanTowners(const View &view)
 {
-	if (leveltype != DTYPE_TOWN || MyPlayer == nullptr)
+	if (leveltype != DTYPE_TOWN || MyPlayer == nullptr) {
+		QuestMarkSince.clear();
 		return;
+	}
+	std::unordered_map<int, float> since;
 	for (const Towner &towner : Towners) {
 		const QuestMarker marker = TownerQuestMarker(*MyPlayer, towner);
 		if (marker == QuestMarker::None || !towner.anim)
@@ -1389,9 +1396,16 @@ void ScanTowners(const View &view)
 		const float phase = static_cast<float>(static_cast<int>(towner._ttype) * 37 % 97);
 		const Vec pos = feet - Vec { 0, height * 0.8F + 12 + 3 * std::sin(AmbientTime * 0.003F + phase) };
 		const bool reward = marker == QuestMarker::Reward;
-		QuestMarks.push_back({ pos, reward, phase });
-		Emitters.push_back({ pos + Vec { 0, 6 }, 5, Ambient::Motes, reward ? Rgb { 255, 200, 70 } : Rgb { 255, 70, 30 }, 7 });
+		const int key = static_cast<int>(towner._ttype) * 2 + (reward ? 1 : 0);
+		const auto seen = QuestMarkSince.find(key);
+		const float first = seen != QuestMarkSince.end() ? seen->second : AmbientTime;
+		since[key] = first;
+		const float age = AmbientTime - first;
+		QuestMarks.push_back({ pos, reward, phase, age });
+		if (age > 500)
+			Emitters.push_back({ pos - Vec { 0, 40 }, 8, Ambient::Flame, {}, 0 });
 	}
+	QuestMarkSince = std::move(since);
 }
 
 void ScanMonsters(const View &view)
@@ -1907,6 +1921,7 @@ void Clear()
 	SteadySpots.clear();
 	Halos.clear();
 	QuestMarks.clear();
+	QuestMarkSince.clear();
 	LastModes.clear();
 	LastStatus.clear();
 }
@@ -3251,78 +3266,156 @@ void DrawHalos()
 }
 
 /**
- * @brief A quest marker: a dagger plunged point down over a gem, so it reads as "!" but looks forged in Hell. Blood red
- * with a burning edge for a quest to give, gold with a turning ring when the hero has what the towner wants.
+ * @brief A tongue of flame licking up from base along dir (mostly up), height and width in world units: hot at the root,
+ * swaying more and reddening toward a tip that fades out. Drawn twice, a wide red body and a narrow yellow heart.
+ */
+void FlameTongue(Vec base, Vec dir, float height, float width, uint32_t seed, Rgb heart, Rgb body, Rgb tip, float alpha)
+{
+	if (height < 0.5F || alpha <= 0)
+		return;
+	const float t = AmbientTime;
+	const Vec side { -dir.y, dir.x };
+	constexpr int Rows = 8;
+	for (int pass = 0; pass < 2; pass++) {
+		const bool inner = pass == 1;
+		const float h = height * (inner ? 0.62F : 1.F);
+		const float w = width * (inner ? 0.55F : 1.F);
+		int previous[3] = {};
+		for (int i = 0; i <= Rows; i++) {
+			const float f = static_cast<float>(i) / Rows;
+			const float sway = (SmoothNoise(seed, t * 0.007F - f * 1.6F) - 0.5F) * 2 * width * 0.9F * f;
+			const Vec c = ToScreen(base + dir * (h * f) + side * sway);
+			const float half = w * 0.5F * std::sqrt(1 - f) * std::min(1.F, 0.55F + f * 2.5F) * CameraScale;
+			const Vec n = side * half;
+			Rgb colour;
+			if (inner)
+				colour = Mix(heart, body, f);
+			else
+				colour = f < 0.45F ? Mix(body, tip, f / 0.45F * 0.4F) : Mix(body, tip, 0.4F + (f - 0.45F) / 0.55F * 0.6F);
+			const float a = alpha * (inner ? 0.95F : 0.6F) * std::pow(1 - f, 1.1F);
+			const int l = Glowing.add(c + n, colour, 0);
+			const int m = Glowing.add(c, colour, a);
+			const int r = Glowing.add(c - n, colour, 0);
+			if (i > 0) {
+				Glowing.tri(previous[0], previous[1], l);
+				Glowing.tri(previous[1], m, l);
+				Glowing.tri(previous[1], previous[2], m);
+				Glowing.tri(previous[2], r, m);
+			}
+			previous[0] = l;
+			previous[1] = m;
+			previous[2] = r;
+		}
+	}
+}
+
+/**
+ * @brief A quest marker: a black "!" cut like the letters of the Diablo logo, its outline burning in like a line of a
+ * summoning circle when it appears, then flames licking up off its top and sides. Hellfire for a quest to give, gold fire
+ * when the hero has what the towner wants.
  */
 void DrawQuestMarks()
 {
 	const float t = AmbientTime;
+	constexpr float DrawMs = 650;
+	constexpr float IgniteMs = 400;
 	for (const QuestMark &mark : QuestMarks) {
 		const Vec c = mark.pos;
-		const float pulse = 0.8F + 0.2F * std::sin(t * 0.005F + mark.phase);
-		const Rgb face = mark.reward ? Rgb { 70, 45, 12 } : Rgb { 42, 10, 8 };
-		const Rgb edge = mark.reward ? Rgb { 255, 205, 90 } : Rgb { 255, 120, 40 };
-		const Rgb hot = mark.reward ? Rgb { 255, 245, 200 } : Rgb { 255, 215, 150 };
-		const Rgb glow = mark.reward ? Rgb { 220, 150, 30 } : Rgb { 200, 25, 10 };
-		const Rgb gem = mark.reward ? Rgb { 255, 225, 120 } : Rgb { 255, 35, 25 };
-		constexpr float K = 1.35F;
+		const uint32_t seed = static_cast<uint32_t>(mark.phase) * 7919U + 17;
+		const float drawn = EaseOut(mark.age / DrawMs);
+		const float lit = std::clamp((mark.age - DrawMs * 0.7F) / IgniteMs, 0.F, 1.F);
+		const float flicker = 0.85F + 0.15F * (SmoothNoise(seed, t * 0.012F) * 0.6F + SmoothNoise(seed + 5, t * 0.031F) * 0.4F);
+		const Rgb heart = mark.reward ? Rgb { 255, 250, 215 } : Rgb { 255, 235, 150 };
+		const Rgb body = mark.reward ? Rgb { 255, 185, 50 } : Rgb { 255, 110, 20 };
+		const Rgb tip = mark.reward ? Rgb { 200, 90, 10 } : Rgb { 170, 20, 5 };
+		const Rgb rim = mark.reward ? Rgb { 255, 215, 110 } : Rgb { 255, 140, 45 };
+		const Rgb face = mark.reward ? Rgb { 38, 24, 8 } : Rgb { 22, 6, 4 };
+		const Rgb core = mark.reward ? Rgb { 120, 70, 15 } : Rgb { 90, 14, 6 };
+		constexpr float K = 1.55F;
 		auto p = [&](float x, float y) { return c + Vec { x, y } * K; };
-		auto quad = [&](Vec a, Vec b, Vec d, Vec e, Rgb colour, float alpha) {
-			const int va = Dark.add(ToScreen(a), colour, alpha);
-			const int vb = Dark.add(ToScreen(b), colour, alpha);
-			const int vd = Dark.add(ToScreen(d), colour, alpha);
-			const int ve = Dark.add(ToScreen(e), colour, alpha);
-			Dark.tri(va, vb, vd);
-			Dark.tri(va, vd, ve);
+
+		// The glyph: a stroke cut with a slanted, peaked top like the logo's letters, narrowing to a point, over a diamond.
+		const std::array<Vec, 6> stem { p(-6.6F, -18.4F), p(0.6F, -22), p(7, -19), p(3.4F, 1.6F), p(0, 7), p(-3.1F, 1.6F) };
+		const std::array<Vec, 4> dot { p(0, 9.8F), p(4.8F, 14.4F), p(0, 19.2F), p(-4.8F, 14.4F) };
+		const Vec stemMiddle = p(0.3F, -9);
+		const Vec dotMiddle = p(0, 14.4F);
+
+		// A dark halo so the black glyph reads against the town, and the fire's light around it.
+		SoftDisc(Dark, p(0, -2), 26 * K, { 4, 1, 1 }, 0.45F * drawn, false);
+		SoftDisc(Glowing, p(0, -6), 30 * K, tip, (0.05F + 0.07F * lit) * flicker, false);
+		SoftDisc(Glowing, p(0, -30), 12 * K, body, 0.12F * lit * flicker, false);
+
+		// The black face, faintly molten down its middle.
+		const auto fill = [&](const auto &poly, Vec centre) {
+			const int mid = Dark.add(ToScreen(centre), Mix(face, core, 0.35F), 0.96F * drawn);
+			const int first = static_cast<int>(Dark.vertices.size());
+			for (const Vec &v : poly)
+				Dark.add(ToScreen(v), face, 0.96F * drawn);
+			for (size_t i = 0; i < poly.size(); i++)
+				Dark.tri(mid, first + static_cast<int>(i), first + static_cast<int>((i + 1) % poly.size()));
 		};
+		fill(stem, stemMiddle);
+		fill(dot, dotMiddle);
+		SoftLine(Glowing, p(0.4F, -17), p(0.1F, 0), 1.6F * K, core, core, 0.3F * lit * flicker, 0.1F * lit);
+		SoftDisc(Glowing, dotMiddle, 1.6F * K, core, 0.35F * lit * flicker, false);
 
-		// A hellish glow behind it, so it stands out against the town at night, and a dark shadow of the dagger
-		// itself so its iron face reads against bright ground.
-		SoftDisc(Dark, p(0, 0), 24 * K, { 6, 2, 2 }, 0.4F, false);
-		SoftDisc(Glowing, p(0, 0), 28 * K, glow, 0.2F * pulse, false);
-		SoftDisc(Glowing, p(0, 16), 13 * K, glow, 0.3F * pulse, false);
-		SoftLine(Dark, p(0, -21), p(0, 21), 13 * K, { 0, 0, 0 }, { 0, 0, 0 }, 0.55F, 0.55F);
-		SoftLine(Dark, p(-11, -12), p(11, -12), 8 * K, { 0, 0, 0 }, { 0, 0, 0 }, 0.5F, 0.5F);
-
-		// The blade, point down, with a dark iron face and a burning edge.
-		const Vec bladeL = p(-3.6F, -9);
-		const Vec bladeR = p(3.6F, -9);
-		const Vec tip = p(0, 10);
-		const int vl = Dark.add(ToScreen(bladeL), face, 0.95F);
-		const int vr = Dark.add(ToScreen(bladeR), Mix(face, edge, 0.25F), 0.95F);
-		const int vt = Dark.add(ToScreen(tip), face, 0.95F);
-		Dark.tri(vl, vr, vt);
-		SoftLine(Glowing, bladeL, tip, 2.8F, edge, hot, 0.75F * pulse, 0.95F);
-		SoftLine(Glowing, bladeR, tip, 2.8F, edge, hot, 0.75F * pulse, 0.95F);
-		SoftLine(Glowing, p(0, -9), p(0, 6), 1.2F, hot, hot, 0.25F, 0.5F);
-		SoftDisc(Glowing, tip, 3 * K, hot, 0.8F * pulse, false);
-
-		// Crossguard with swept horns, then the grip and pommel.
-		quad(p(-8, -12.5F), p(8, -12.5F), p(7, -9.5F), p(-7, -9.5F), face, 0.95F);
-		SoftLine(Glowing, p(-9, -14.5F), p(-7, -11), 2, edge, edge, 0.9F, 0.7F);
-		SoftLine(Glowing, p(-7, -11), p(7, -11), 2, edge, edge, 0.7F, 0.7F);
-		SoftLine(Glowing, p(7, -11), p(9, -14.5F), 2, edge, edge, 0.7F, 0.9F);
-		quad(p(-1.6F, -18), p(1.6F, -18), p(1.6F, -12.5F), p(-1.6F, -12.5F), face, 0.95F);
-		SoftLine(Glowing, p(0, -18), p(0, -12.5F), 1.2F, edge, edge, 0.45F, 0.45F);
-		SoftDisc(Dark, p(0, -19.5F), 2.6F * K, face, 0.95F, false, 0.95F);
-		SoftDisc(Glowing, p(0, -19.5F), 2.4F * K, edge, 0.7F, false);
-
-		// The gem under the point, the dot of the "!": a cut stone with a dark rim, lit from inside.
-		const float g = 4.4F;
-		quad(p(0, 16 - g - 1.2F), p(g + 1, 16), p(0, 16 + g + 1.2F), p(-g - 1, 16), { 8, 3, 3 }, 0.9F);
-		quad(p(0, 16 - g), p(g * 0.85F, 16), p(0, 16 + g), p(-g * 0.85F, 16), Mix(face, gem, 0.5F), 0.95F);
-		quad(p(0, 16 - g * 0.55F), p(g * 0.45F, 16), p(0, 16 + g * 0.55F), p(-g * 0.45F, 16), gem, 0.95F);
-		SoftDisc(Glowing, p(0, 16), g * K * (0.9F + 0.3F * pulse), gem, 0.75F * pulse, false);
-		SoftDisc(Glowing, p(-1, 14.6F), 1.3F * K, { 255, 255, 255 }, 0.85F, false);
-		if (mark.reward) {
-			// A gold ring turning round it with three sparks riding it: something is waiting for the hero.
-			const Vec ring = p(0, 3);
-			SoftRing(Glowing, ring, 16 * K, 1.4F, edge, 0.45F * pulse, 0, 1);
-			for (int i = 0; i < 3; i++) {
-				const float a = t * 0.003F + 2 * Pi * static_cast<float>(i) / 3;
-				SoftDisc(Glowing, OnGround(ring, 16 * K, a), 2.6F, hot, 0.9F, false);
+		// The outline burns in from the peak down both sides to the point, then round the diamond, a pen of fire at each
+		// head; once lit it flickers along its length like the lines of a summoning circle.
+		// The glow sits just outside the outline so the black face stays black, like the logo's letters.
+		const auto edge = [&](Vec a, Vec b, Vec middle, float from, float to, float phase) {
+			const float shown = std::clamp((drawn - from) / (to - from), 0.F, 1.F);
+			if (shown <= 0)
+				return;
+			Vec out = Vec { a.y - b.y, b.x - a.x } * (1 / Length(b - a));
+			const Vec centre = (a + b) * 0.5F - middle;
+			if (out.x * centre.x + out.y * centre.y < 0)
+				out = out * -1;
+			const Vec e = a + (b - a) * shown;
+			const float wa = 0.75F + 0.25F * SmoothNoise(seed + static_cast<uint32_t>(phase * 13), t * 0.02F);
+			const float wb = 0.75F + 0.25F * SmoothNoise(seed + static_cast<uint32_t>(phase * 13) + 1, t * 0.02F);
+			const Vec halo = out * (3.2F * K);
+			const Vec lip = out * (0.5F * K);
+			SoftLine(Glowing, a + halo, e + halo, 6 * K, tip, tip, 0.4F * wa, 0.4F * wb);
+			SoftLine(Glowing, a + lip, e + lip, 2.2F * K, rim, rim, 0.9F * wa, 0.9F * wb);
+			SoftLine(Glowing, a + lip, e + lip, 0.9F * K, heart, heart, 0.55F * wa, 0.55F * wb);
+			if (shown < 1) {
+				SoftDisc(Glowing, e, 4.5F * K, heart, 0.9F, false);
+				SoftDisc(Glowing, e, 9 * K, body, 0.4F, false);
 			}
-		}
+		};
+		edge(stem[1], stem[0], stemMiddle, 0, 0.22F, 0);
+		edge(stem[1], stem[2], stemMiddle, 0, 0.22F, 1);
+		edge(stem[0], stem[5], stemMiddle, 0.22F, 0.62F, 2);
+		edge(stem[2], stem[3], stemMiddle, 0.22F, 0.62F, 3);
+		edge(stem[5], stem[4], stemMiddle, 0.62F, 0.78F, 4);
+		edge(stem[3], stem[4], stemMiddle, 0.62F, 0.78F, 5);
+		edge(dot[0], dot[1], dotMiddle, 0.78F, 0.89F, 6);
+		edge(dot[0], dot[3], dotMiddle, 0.78F, 0.89F, 7);
+		edge(dot[1], dot[2], dotMiddle, 0.89F, 1, 8);
+		edge(dot[3], dot[2], dotMiddle, 0.89F, 1, 9);
+
+		// Flames lick up off the top like the logo's letters, smaller ones curl off the sides and the dot.
+		if (lit <= 0)
+			continue;
+		const float grow = EaseOut(lit);
+		const auto tongue = [&](Vec base, Vec lean, float height, float width, uint32_t s) {
+			const float breathe = 0.65F + 0.55F * SmoothNoise(seed * 31 + s, t * 0.0045F);
+			Vec dir = Vec { lean.x, -1 };
+			dir = dir * (1 / Length(dir));
+			FlameTongue(base, dir, height * K * breathe * grow, width * K, seed * 131 + s, heart, body, tip, flicker * grow);
+		};
+		const auto along = [](Vec a, Vec b, float f) { return a + (b - a) * f; };
+		tongue(along(stem[0], stem[1], 0.15F), { -0.35F, 0 }, 15, 5.5F, 1);
+		tongue(along(stem[0], stem[1], 0.6F), { -0.1F, 0 }, 22, 6.5F, 2);
+		tongue(stem[1], { 0.02F, 0 }, 28, 7, 3);
+		tongue(along(stem[1], stem[2], 0.5F), { 0.12F, 0 }, 21, 6.5F, 4);
+		tongue(along(stem[1], stem[2], 0.9F), { 0.4F, 0 }, 14, 5.5F, 5);
+		tongue(along(stem[0], stem[5], 0.3F), { -0.8F, 0 }, 10, 4, 6);
+		tongue(along(stem[2], stem[3], 0.3F), { 0.8F, 0 }, 10, 4, 7);
+		tongue(along(stem[0], stem[5], 0.68F), { -0.9F, 0 }, 7, 3.2F, 8);
+		tongue(along(stem[2], stem[3], 0.68F), { 0.9F, 0 }, 7, 3.2F, 9);
+		tongue(along(dot[3], dot[0], 0.6F), { -0.4F, 0 }, 7, 3.5F, 10);
+		tongue(along(dot[0], dot[1], 0.4F), { 0.4F, 0 }, 7, 3.5F, 11);
 	}
 }
 
