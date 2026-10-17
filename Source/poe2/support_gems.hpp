@@ -74,8 +74,6 @@ enum class SupportSocketResult : uint8_t {
 	Locked,
 	/** Every open socket of the skill is taken. */
 	NoFreeSocket,
-	/** The character's attribute can't carry another support of this color. */
-	NoCapacity,
 	/** The skill already has a Power support, and a skill takes only one. */
 	PowerTaken,
 	/** The skill has a support that rules this one out. */
@@ -134,13 +132,6 @@ constexpr size_t BaseSupportSockets = 2;
 size_t SupportSocketCount(const Player &player, size_t row);
 /** @brief Sockets heroes from before Jeweller's Orbs had opened by level (one at 10, 20 and 30), which they keep. */
 uint8_t LevelOpenedSockets(int characterLevel);
-
-/** @brief Points of an attribute that allow one more support of its color: each +5 attribute pick on the tree. */
-constexpr int SupportAttributeStep = 5;
-
-/** @brief How many supports of a color the character can socket: 1, plus 1 per 5 points of the attribute. */
-int SupportCapacity(const Player &player, GemColor color);
-int SupportsUsed(const Poe2PlayerData &data, GemColor color);
 
 /**
  * @brief Sockets a support gem into a skill in the Skills panel.

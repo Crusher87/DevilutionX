@@ -247,25 +247,20 @@ TEST_F(Poe2SupportGemsTest, JewellerOrbsOpenSocketsInOrder)
 	EXPECT_EQ(LevelOpenedSockets(80), 3);
 }
 
-TEST_F(Poe2SupportGemsTest, AttributesLimitSupports)
+TEST_F(Poe2SupportGemsTest, AttributesDontLimitSupports)
 {
 	Player &player = FreshPlayer();
-	player._pDexterity = 9;
+	player._pDexterity = 0;
 	player._pMagic = 35;
 	player.setCharacterLevel(30);
 	player.poe2.openedSockets.fill(3); // every socket open, as Jeweller's Orbs would
-	// One Dexterity support plus one per 5 points.
-	EXPECT_EQ(SupportCapacity(player, GemColor::Dexterity), 2);
-	EXPECT_EQ(SupportCapacity(player, GemColor::Magic), 8);
-
+	// Only open sockets limit supports, however low the attribute.
 	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::Pierce), SupportSocketResult::Socketed);
 	EXPECT_EQ(Socket(player, SpellID::Firebolt, SupportGem::Fork), SupportSocketResult::Socketed);
-	EXPECT_EQ(SupportsUsed(player.poe2, GemColor::Dexterity), 2);
-	EXPECT_EQ(Socket(player, SpellID::Fireball, SupportGem::FasterProjectiles), SupportSocketResult::NoCapacity);
-	// Gems of other colors still fit.
+	EXPECT_EQ(Socket(player, SpellID::Fireball, SupportGem::FasterProjectiles), SupportSocketResult::Socketed);
 	EXPECT_EQ(Socket(player, SpellID::Fireball, SupportGem::Empower), SupportSocketResult::Socketed);
 
-	// Swapping a Dexterity gem for another doesn't need more capacity.
+	// Swapping a gem in a full row replaces it.
 	const size_t slot = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Firebolt));
 	SupportGem replaced;
 	EXPECT_EQ(SocketSupportGem(player, slot, 1, SupportGem::FasterProjectiles, replaced), SupportSocketResult::Replaced);

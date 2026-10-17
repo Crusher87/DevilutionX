@@ -191,18 +191,6 @@ void DrawHeader(const Surface &out, const Player &player, const Hit &hover)
 	FillRectangle(out, button, hover.kind == Hit::Kind::GemcuttingButton ? RowHoverColor : RowColor);
 	DrawFrame(out, button, BorderColor);
 	DrawString(out, _("Gemcutting"), button, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
-
-	Rectangle line { panel.position + Displacement { 10, 32 }, { panel.size.width - 20, 16 } };
-	DrawString(out, _("Supports:"), line, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
-	int x = 84;
-	for (const GemColor color : { GemColor::Strength, GemColor::Dexterity, GemColor::Magic }) {
-		const int used = SupportsUsed(player.poe2, color);
-		const int capacity = SupportCapacity(player, color);
-		const Rectangle cell { panel.position + Displacement { x, 32 }, { 74, 16 } };
-		DrawString(out, FormatRuntime("{:s} {:d}/{:d}", GemColorName(color), used, capacity), cell,
-		    { .flags = (used >= capacity ? UiFlags::ColorWhitegold : GemTextColor(color)) | UiFlags::VerticalCenter });
-		x += 76;
-	}
 }
 
 void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &hover)

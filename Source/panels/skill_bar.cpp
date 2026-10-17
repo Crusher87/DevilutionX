@@ -362,10 +362,6 @@ std::string SupportBlocker(const Player &player, size_t slot, size_t socket, Sup
 	// Another tier of the support in its own socket swaps in.
 	if (current == gem ? player.poe2.socketTier(slot, socket) == tier : player.poe2.hasSupport(skill, gem))
 		return std::string(_("Already socketed"));
-	const GemColor color = SupportGemColor(gem);
-	const int freed = current != SupportGem::None && SupportGemColor(current) == color ? 1 : 0;
-	if (SupportsUsed(player.poe2, color) - freed >= SupportCapacity(player, color))
-		return FormatRuntime(_("Not enough {:s}"), GemColorName(color));
 	return {};
 }
 
@@ -853,10 +849,6 @@ std::string SupportSocketMessage(SupportSocketResult result, const Player &playe
 		return std::string(_("That socket is locked: a Jeweller's Orb opens it."));
 	case SupportSocketResult::NoFreeSocket:
 		return FormatRuntime(_("{:s} has no free support socket."), SkillName(skill));
-	case SupportSocketResult::NoCapacity: {
-		const GemColor color = SupportGemColor(gem);
-		return FormatRuntime(_("Not enough {:s} for another {:s} support ({:d}/{:d})."), GemColorName(color), GemColorName(color), SupportsUsed(player.poe2, color), SupportCapacity(player, color));
-	}
 	case SupportSocketResult::PowerTaken:
 		return FormatRuntime(_("{:s} already has a Power support ({:s}); a skill takes only one."), SkillName(skill), SupportGemName(OtherPowerSupport(player.poe2.supportsAt(slot), std::nullopt)));
 	case SupportSocketResult::Conflict:

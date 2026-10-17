@@ -539,35 +539,6 @@ uint8_t LevelOpenedSockets(int characterLevel)
 	return static_cast<uint8_t>(std::min<size_t>(static_cast<size_t>(std::max(characterLevel, 0) / 10), MaxSupportSockets - BaseSupportSockets));
 }
 
-int SupportCapacity(const Player &player, GemColor color)
-{
-	int attribute;
-	switch (color) {
-	case GemColor::Strength:
-		attribute = player._pStrength;
-		break;
-	case GemColor::Dexterity:
-		attribute = player._pDexterity;
-		break;
-	default:
-		attribute = player._pMagic;
-		break;
-	}
-	return 1 + (std::max(attribute, 0) / SupportAttributeStep);
-}
-
-int SupportsUsed(const Poe2PlayerData &data, GemColor color)
-{
-	int used = 0;
-	for (size_t row = 0; row <= DefaultAttackRow; row++) {
-		for (const SupportGem gem : data.supportsAt(row)) {
-			if (gem != SupportGem::None && SupportGemColor(gem) == color)
-				used++;
-		}
-	}
-	return used;
-}
-
 SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced, int tier, int *replacedTier)
 {
 	replaced = SupportGem::None;
@@ -613,10 +584,6 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 	}
 	if (IsLineageSupport(gem) && LineageSupportInUse(player.poe2, gem, slot, *socket))
 		return SupportSocketResult::LineageInUse;
-	const GemColor color = SupportGemColor(gem);
-	const int freed = current != SupportGem::None && SupportGemColor(current) == color ? 1 : 0;
-	if (SupportsUsed(player.poe2, color) - freed >= SupportCapacity(player, color))
-		return SupportSocketResult::NoCapacity;
 
 	supports[*socket] = gem;
 	player.poe2.tiersAt(slot)[*socket] = static_cast<uint8_t>(tier);
