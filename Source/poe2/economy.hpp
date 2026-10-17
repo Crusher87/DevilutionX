@@ -19,8 +19,6 @@ struct Player;
 
 // --- Vendors ---
 
-/** @brief Share of an ordinary vendor's stock replaced when the hero gains a level, in percent. */
-constexpr int VendorRefreshPercent = 50;
 /** @brief Gold a vendor asks to replace all of their stock now. */
 int VendorRerollCost(int characterLevel);
 

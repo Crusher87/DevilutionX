@@ -520,42 +520,12 @@ bool PayForVendorReroll(TalkID store, int line)
 	return true;
 }
 
-/**
- * @brief Keeps about half of a vendor's old stock in place of the fresh stock (not the pinned wares).
- * A kept ware takes the place of a fresh one of the same kind, so each shop tab keeps its size.
- */
-template <typename Stock>
-void KeepHalfOfStock(Stock &fresh, const std::vector<Item> &old, size_t pinned)
-{
-	std::vector<bool> kept(old.size(), false);
-	for (size_t i = pinned; i < fresh.size(); i++) {
-		if (GenerateRnd(100) < VendorRefreshPercent)
-			continue;
-		const VendorCategory category = GetVendorCategory(fresh[i]);
-		for (size_t j = pinned; j < old.size(); j++) {
-			if (!kept[j] && GetVendorCategory(old[j]) == category) {
-				fresh[i] = old[j];
-				kept[j] = true;
-				break;
-			}
-		}
-	}
-	SortVendorStock({ fresh.data(), fresh.size() }, pinned);
-}
-
-/** @brief The hero gained a level: about half of each vendor's stock is replaced. */
+/** @brief The hero gained a level: every vendor restocks in full (Curtis 2026-10-17). */
 void RefreshVendorStock(int level)
 {
-	// Copies on the heap: Griswold's stock is too big for a small stack.
-	const std::vector<Item> oldSmith(SmithItems.begin(), SmithItems.end());
-	const std::vector<Item> oldWitch(WitchItems.begin(), WitchItems.end());
-	const std::vector<Item> oldHealer(HealerItems.begin(), HealerItems.end());
 	SpawnSmith(level);
 	SpawnWitch(level);
 	SpawnHealer(level);
-	KeepHalfOfStock(SmithItems, oldSmith, 0);
-	KeepHalfOfStock(WitchItems, oldWitch, NumWitchPinnedItems);
-	KeepHalfOfStock(HealerItems, oldHealer, NumHealerPinnedItems);
 }
 
 constexpr int GambleFirstLine = 5;
@@ -2508,7 +2478,7 @@ void SetupTownStores()
 	const int l = TownVendorLevel();
 	const int characterLevel = myPlayer.getCharacterLevel();
 	if (VendorsCanReroll() && VendorStockLevel != 0) {
-		// POE2 Mashup: the stock stays between visits; a level-up replaces about half of it.
+		// POE2 Mashup: the stock stays between visits; a level-up replaces all of it.
 		if (characterLevel > VendorStockLevel)
 			RefreshVendorStock(l);
 	} else {

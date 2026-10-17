@@ -1065,7 +1065,8 @@ protected:
 		}
 		EXPECT_GE(Count(counts, VendorCategory::Helmets), 10);
 		EXPECT_LE(Count(counts, VendorCategory::Helmets), 12);
-		EXPECT_EQ(Count(counts, VendorCategory::Jewelry), 0) << "Griswold's basic stock has no rings or amulets";
+		EXPECT_GE(Count(counts, VendorCategory::Jewelry), 5) << "Griswold keeps a tab of rings and amulets";
+		EXPECT_LE(Count(counts, VendorCategory::Jewelry), 7);
 		EXPECT_EQ(Count(counts, VendorCategory::Supplies), 0);
 	}
 
@@ -1233,7 +1234,6 @@ TEST_F(Poe2ShopTabsTest, BuyingFromATabTakesThatWare)
 	SpawnSmith(16);
 	PremiumItems.clear();
 	StripPlayer();
-	SetPlayerGold(20000); // few enough gold piles to leave room for a tall shield
 
 	OpenVisualStore(VisualStoreVendor::Smith);
 	SetPoe2ShopTab(Poe2ShopTab::Shields);
@@ -1242,6 +1242,7 @@ TEST_F(Poe2ShopTabsTest, BuyingFromATabTakesThatWare)
 	const Item ware = GetVisualStoreItems()[itemIdx];
 	ASSERT_EQ(GetVendorCategory(ware), VendorCategory::Shields);
 	const size_t stockBefore = SmithItems.size();
+	SetPlayerGold(ware._iIvalue); // just enough, in few enough gold piles to leave room for a tall shield
 
 	CheckVisualStoreItem(FindFirstItemOnPage(), /*isCtrlHeld=*/true, false);
 
@@ -1258,7 +1259,7 @@ TEST_F(Poe2ShopTabsTest, BuyingFromATabTakesThatWare)
 		EXPECT_EQ(GetVendorCategory(item), VendorCategory::Shields) << "Still on the Shields tab";
 }
 
-TEST_F(Poe2ShopTabsTest, LevelUpKeepsEachTabsShare)
+TEST_F(Poe2ShopTabsTest, LevelUpRestocksInFull)
 {
 	SetRndSeed(11);
 	SetupTownStores();
@@ -1276,12 +1277,7 @@ TEST_F(Poe2ShopTabsTest, LevelUpKeepsEachTabsShare)
 	const auto kept = std::count_if(SmithItems.begin(), SmithItems.end(), [&oldSeeds](const Item &item) {
 		return std::find(oldSeeds.begin(), oldSeeds.end(), item._iSeed) != oldSeeds.end();
 	});
-	EXPECT_GT(kept, 0) << "About half of the old stock stays";
-	EXPECT_LT(static_cast<size_t>(kept), SmithItems.size()) << "About half of the stock is new";
-	std::vector<Item> sorted(SmithItems.begin(), SmithItems.end());
-	SortVendorStock(sorted, 0);
-	EXPECT_TRUE(std::equal(sorted.begin(), sorted.end(), SmithItems.begin(), [](const Item &a, const Item &b) { return a.IDidx == b.IDidx && a._iIvalue == b._iIvalue; }))
-	    << "Kept wares are sorted in with the new ones";
+	EXPECT_EQ(kept, 0) << "Every ware is new after a level-up";
 }
 
 TEST_F(Poe2ShopTabsTest, VanillaStockIsUnchanged)

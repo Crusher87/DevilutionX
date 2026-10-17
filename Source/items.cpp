@@ -2356,9 +2356,8 @@ bool SmithItemOk(const Player & /*player*/, const ItemData &item)
 		return false;
 	if (item.itype == ItemType::Staff && (!gbIsHellfire || IsValidSpell(item.iSpell)))
 		return false;
-	if (item.itype == ItemType::Ring)
-		return false;
-	if (item.itype == ItemType::Amulet)
+	// POE2 Mashup (Curtis 2026-10-17): Griswold keeps a tab of rings and amulets too.
+	if (!gbIsPoe2 && IsAnyOf(item.itype, ItemType::Ring, ItemType::Amulet))
 		return false;
 
 	return true;
@@ -6802,6 +6801,7 @@ constexpr VendorStockQuota SmithStockQuotas[] = {
 	{ VendorCategory::BodyArmour, 8, 10 },
 	{ VendorCategory::Helmets, 10, 12 },
 	{ VendorCategory::Shields, 8, 10 },
+	{ VendorCategory::Jewelry, 5, 7 },
 };
 
 /** Adria's stock besides her pinned wares: a tab of staves, and a few more scrolls and elixirs. */
@@ -6949,19 +6949,11 @@ void SpawnPremium(const Player &player)
 		PremiumItems.push_back(item);
 	}
 
-	while (gbIsPoe2 && PremiumItemLevel < lvl) {
-		// The list is sorted by type, so slots no longer track level: refresh the lowest-level stock instead.
-		PremiumItemLevel++;
-		const int refresh = gbIsHellfire ? 3 : 2;
-		for (int n = 0; n < refresh; n++) {
-			size_t lowest = 0;
-			for (size_t i = 1; i < PremiumItems.size(); i++) {
-				if ((PremiumItems[i]._iCreateInfo & CF_LEVEL) < (PremiumItems[lowest]._iCreateInfo & CF_LEVEL))
-					lowest = i;
-			}
-			const size_t slot = PremiumItems.size() - 1 - n;
-			SpawnOnePremium(PremiumItems[lowest], PremiumItemLevel + (gbIsHellfire ? itemLevelAddHf[slot] : itemLevelAdd[slot]), player);
-		}
+	if (gbIsPoe2 && PremiumItemLevel < lvl) {
+		// POE2 Mashup (Curtis 2026-10-17): a level-up replaces all of the premium stock.
+		PremiumItemLevel = lvl;
+		for (size_t i = 0; i < PremiumItems.size(); i++)
+			SpawnOnePremium(PremiumItems[i], PremiumItemLevel + (gbIsHellfire ? itemLevelAddHf[i] : itemLevelAdd[i]), player);
 	}
 	if (gbIsPoe2)
 		SortVendor(PremiumItems, 0);
