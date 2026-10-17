@@ -805,6 +805,19 @@ bool AutoPlaceItemInStash(const Item &item, bool persistItem)
 	// POE2 Mashup: items go to the open tab only, and only if it takes them; the player switches tabs for the rest.
 	if (gbIsPoe2) {
 		const unsigned page = Stash.GetPage();
+		// A unique goes to its slot on the Uniques tab whichever tab is open, when the slot is free (Curtis 2026-10-16).
+		if (item._iMagical == ITEM_QUALITY_UNIQUE && StashTabs.kind(page) != StashTabKind::Uniques) {
+			for (unsigned uniquesPage = 0; uniquesPage < pageCount; uniquesPage++) {
+				if (StashTabs.kind(uniquesPage) != StashTabKind::Uniques || !StashTabRefusal(uniquesPage, item).empty() || !PremadeTabHasRoom(uniquesPage, item))
+					continue;
+				if (persistItem) {
+					Item rest = item;
+					StoreInPremadeTab(uniquesPage, rest);
+					EventPlrMsg(StrCat(_("Sent to "), StashTabs.displayName(uniquesPage)), UiFlags::ColorWhitegold);
+				}
+				return true;
+			}
+		}
 		if (!StashTabRefusal(page, item).empty())
 			return false;
 		if (StashTabs.kind(page) != StashTabKind::Blank) {

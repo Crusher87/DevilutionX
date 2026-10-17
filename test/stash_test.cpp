@@ -1047,6 +1047,30 @@ TEST_F(Poe2StashTabsTest, UniqueCollectionHoldsOneOfEach)
 	EXPECT_EQ(StashTabItems(page).size(), 2u);
 }
 
+TEST_F(Poe2StashTabsTest, CtrlClickSendsAUniqueToTheUniquesTab)
+{
+	const unsigned uniques = PageOf(StashTabKind::Uniques);
+	Stash.SetPage(0);
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeUnique(4), true));
+	EXPECT_NE(StashTabSlotItem(uniques, 4), StashStruct::EmptyCell) << "Into its slot on the Uniques tab";
+	EXPECT_TRUE(StashTabItems(0).empty());
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeUnique(4), true)) << "A second copy stays on the open tab";
+	EXPECT_EQ(StashTabItems(0).size(), 1u);
+}
+
+TEST_F(Poe2StashTabsTest, QuestUniquesAreInTheCollection)
+{
+	std::optional<size_t> crown;
+	for (size_t uid = 0; uid < UniqueItems.size(); uid++) {
+		if (UniqueItems[uid].UIItemId == AllItemsList[IDI_SKCROWN].iItemId)
+			crown = uid;
+	}
+	ASSERT_TRUE(crown) << "The Undead Crown";
+	const std::vector<UniqueCollectionEntry> &collection = UniqueCollection();
+	ASSERT_LT(*crown, collection.size());
+	EXPECT_TRUE(collection[*crown].listed) << "Leoric's crown has a slot on the Uniques tab";
+}
+
 TEST_F(Poe2StashTabsTest, RepairMovesMisplacedItems)
 {
 	const unsigned page = PageOf(StashTabKind::Currency);

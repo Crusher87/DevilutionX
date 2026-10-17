@@ -27,6 +27,7 @@
 #include "engine/light_tables.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/trn.hpp"
+#include "lighting.h"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "inv.h"
@@ -650,6 +651,8 @@ int OpenMapTier = 1;
 int OpenMapPage = 0;
 UniqueCategory OpenUniqueCategory = UniqueCategory::Weapons;
 int UniqueScroll = 0;
+/** Whether the Uniques tab hides the uniques not in the collection yet (Curtis 2026-10-16). */
+bool UniquesCollectedOnly = false;
 
 /** @brief The button that opens the tab's settings, at the right end of a row. */
 void AddSettingsButton(TabView &view, int y, int x = 268)
@@ -828,13 +831,19 @@ void BuildMapsView(TabView &view, unsigned page)
 	for (const uint16_t index : all)
 		counts[static_cast<size_t>(MapTabTier(Stash.stashList[index]))]++;
 
-	// Tiers I to XVI, then the tablets, fragments and keys.
+	// Tiers I to XVI, then the tablets, fragments and keys. A button is as wide as its label needs, so none is cut off.
+	int x = 8;
 	for (int i = 0; i <= MaxWaystoneTier; i++) {
 		const int tier = i < MaxWaystoneTier ? i + 1 : MapTabOtherTier;
 		const int row = i / 9;
-		const int column = i % 9;
-		view.buttons.push_back({ .rect = At(8 + (column * 34), 26 + (row * 26), 32, 24),
-		    .text = tier == MapTabOtherTier ? std::string(_("Other")) : std::string(TierNumeral(tier)),
+		if (i % 9 == 0)
+			x = 8;
+		std::string text = tier == MapTabOtherTier ? std::string(_("Other")) : std::string(TierNumeral(tier));
+		const int width = std::max(32, GetLineWidth(text) + 8);
+		const Rectangle rect = At(x, 26 + (row * 26), width, 24);
+		x += width + 2;
+		view.buttons.push_back({ .rect = rect,
+		    .text = std::move(text),
 		    .selected = OpenMapTier == tier,
 		    .onClick = [tier] { OpenMapTier = tier; OpenMapPage = 0; },
 		    .detail = StrCat(counts[static_cast<size_t>(tier)]) });
@@ -889,7 +898,7 @@ void BuildUniquesView(TabView &view, unsigned page)
 			collected[category]++;
 			allCollected++;
 		}
-		if (entry.category == OpenUniqueCategory)
+		if (entry.category == OpenUniqueCategory && (have || !UniquesCollectedOnly))
 			shown.push_back(slot);
 	}
 	for (uint8_t i = 0; i < static_cast<uint8_t>(UniqueCategory::Count); i++) {
@@ -901,7 +910,9 @@ void BuildUniquesView(TabView &view, unsigned page)
 		    .onClick = [category] { OpenUniqueCategory = category; UniqueScroll = 0; },
 		    .detail = StrCat(percent, "%") });
 	}
-	view.labels.push_back({ At(10, 80, 200, 12), StrCat(_("Collected"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
+	view.labels.push_back({ At(10, 80, 140, 12), StrCat(_("Collected"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
+	view.buttons.push_back({ .rect = At(150, 77, 112, 18), .text = std::string(_("Collected only")), .selected = UniquesCollectedOnly,
+	    .onClick = [] { UniquesCollectedOnly = !UniquesCollectedOnly; UniqueScroll = 0; } });
 	AddSettingsButton(view, 77);
 
 	const int rows = static_cast<int>((shown.size() + UniqueColumns - 1) / UniqueColumns);
@@ -918,7 +929,7 @@ void BuildUniquesView(TabView &view, unsigned page)
 		}
 	}
 	if (shown.empty())
-		view.labels.push_back({ At(12, 150, 296, 14), std::string(_("No uniques of this kind.")), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
+		view.labels.push_back({ At(12, 150, 296, 14), std::string(UniquesCollectedOnly ? _("None of this kind collected yet.") : _("No uniques of this kind.")), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
 	view.scroll = ScrollView { At(302, UniqueAreaTop, 8, UniqueRows * (UniqueSlotSize.height + 2)), UniqueScroll, std::min(rows, UniqueRows), rows };
 	view.onScroll = [maxScroll](int delta) { UniqueScroll = std::clamp(UniqueScroll + delta, 0, maxScroll); };
 }
@@ -991,6 +1002,19 @@ const uint8_t *DimTrn()
 	return LightTables[std::min<size_t>(7, NumLightingLevels - 1)].data();
 }
 
+/** @brief Grey and dark: a unique not in the collection yet, so it can't be mistaken for one that is. */
+const uint8_t *MissingTrn()
+{
+	static std::array<uint8_t, 256> trn;
+	const std::array<uint8_t, 256> &dark = LightTables[std::min<size_t>(9, NumLightingLevels - 1)];
+	for (size_t i = 0; i < trn.size(); i++)
+		trn[i] = dark[StoneTable[i]];
+	return trn.data();
+}
+
+/** A unique in the collection has a gold frame. */
+constexpr uint8_t CollectedFrameColor = PAL16_YELLOW + 2;
+
 int SlotCursor(const SlotView &slot, bool collection)
 {
 	if (slot.fixedSlot < 0)
@@ -1018,11 +1042,17 @@ std::string SlotName(const SlotView &slot, bool collection)
 void DrawSlot(const Surface &out, const SlotView &slot, bool collection)
 {
 	const bool hovered = slot.rect.contains(MousePosition) && OpenPopup == Popup::None;
+	const bool empty = slot.index == StashStruct::EmptyCell || slot.index >= Stash.stashList.size();
 	FillRectangle(out, slot.rect, SocketColor);
-	DrawFrame(out, slot.rect, hovered ? HoverColor : (collection ? InnerBorderColor : SocketRimColor));
-	if (slot.index == StashStruct::EmptyCell || slot.index >= Stash.stashList.size()) {
+	uint8_t frame = SocketRimColor;
+	if (hovered)
+		frame = HoverColor;
+	else if (collection)
+		frame = empty ? SocketRimColor : CollectedFrameColor;
+	DrawFrame(out, slot.rect, frame);
+	if (empty) {
 		if (!HeadlessMode)
-			DrawPicture(out, SlotCursor(slot, collection), slot.rect, DimTrn(), std::nullopt);
+			DrawPicture(out, SlotCursor(slot, collection), slot.rect, collection ? MissingTrn() : DimTrn(), std::nullopt);
 		return;
 	}
 	const Item &item = Stash.stashList[slot.index];

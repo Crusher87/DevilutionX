@@ -364,6 +364,11 @@ void BuildCollection()
 				if (AllItemsList[i].iItemId == unique.UIItemId && AllItemsList[i].iMiscId != IMISC_UNIQUE && IsItemAvailable(static_cast<int>(i)))
 					base = i;
 			}
+			// Quest uniques such as the Undead Crown (Leoric's Crown) have only a base of their own.
+			for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+				if (AllItemsList[i].iItemId == unique.UIItemId && IsItemAvailable(static_cast<int>(i)))
+					base = i;
+			}
 		}
 		if (!base)
 			continue;
