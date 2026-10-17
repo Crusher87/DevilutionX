@@ -16,7 +16,7 @@ namespace devilution {
 
 namespace {
 
-bool AttackInCategory(WeaponSkill skill, GemCategory category)
+bool AttackInListedCategory(WeaponSkill skill, GemCategory category)
 {
 	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
 		return category < GemCategory::Spirit && (table->tabs & (1 << static_cast<int>(category))) != 0;
@@ -42,6 +42,20 @@ bool AttackInCategory(WeaponSkill skill, GemCategory category)
 	default:
 		return false;
 	}
+}
+
+/** @brief A weapon's skill is listed only under its weapon tabs, not Elemental or Occult too (Curtis 2026-10-17). */
+bool AttackInCategory(WeaponSkill skill, GemCategory category)
+{
+	if (!AttackInListedCategory(skill, category))
+		return false;
+	if (!IsAnyOf(category, GemCategory::Elemental, GemCategory::Occult))
+		return true;
+	for (int weapon = 0; weapon < static_cast<int>(GemCategory::Elemental); weapon++) {
+		if (AttackInListedCategory(skill, static_cast<GemCategory>(weapon)))
+			return false;
+	}
+	return true;
 }
 
 } // namespace
