@@ -2205,9 +2205,12 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (const int book = SpecBookIndex(item); book >= 0) {
-		AddItemInfoBoxString(FormatRuntime(_("Grants {:d} Weapon Set Passive Points"), WeaponSetPointsPerBook));
+		AddItemInfoBoxString(FormatRuntime(_("Grants {:d} Passive Points and {:d} Weapon Set Passive Points"), PassivePointsPerBook, WeaponSetPointsPerBook));
+		CurrentInfoLineStyle = InfoLineStyle::Note;
 		AddItemInfoBoxString(SpecBookSource(book));
-		AddItemInfoBoxString(_("Use to read the book and learn its art"));
+		CurrentInfoLineStyle = InfoLineStyle::Requirement;
+		AddItemInfoBoxString(_("Right-click to read the book and learn its art"));
+		CurrentInfoLineStyle = InfoLineStyle::Default;
 		if (MyPlayer != nullptr && (MyPlayer->poe2.specBooks & (1 << book)) != 0)
 			AddItemInfoBoxString(_("You have already read this book"));
 		return;
@@ -5999,11 +6002,11 @@ uint8_t AffixTier(const std::vector<PLStruct> &affixes, const PLStruct &affix)
 
 namespace {
 
-/** @brief The affix text, with its POE2-style tier at the end. */
+/** @brief The affix text, with its POE2-style tier at the end while Alt is held. */
 std::string PrintItemPowerWithTier(item_effect_type power, const Item &item, uint8_t tier)
 {
 	std::string text { PrintItemPower(power, item).str() };
-	if (gbIsPoe2 && tier > 0)
+	if (gbIsPoe2 && tier > 0 && (SDL_GetModState() & SDL_KMOD_ALT) != 0)
 		text.append(FormatRuntime(" (T{:d})", tier));
 	return text;
 }
@@ -6230,6 +6233,13 @@ void PrintItemComparison(const Item &item)
 	const Item *worn = EquippedCounterpart(player, item);
 	if (worn == nullptr || worn == &item)
 		return;
+	// Comparing only while Shift is held, like POE2's.
+	if ((SDL_GetModState() & SDL_KMOD_SHIFT) == 0) {
+		CurrentInfoLineStyle = InfoLineStyle::Note;
+		AddInfoBoxString(_("Hold Shift to compare"), true);
+		CurrentInfoLineStyle = InfoLineStyle::Default;
+		return;
+	}
 	// A ring is compared with both rings worn, each in its own box, like POE2's.
 	if (worn == &player.InvBody[INVLOC_RING_LEFT]) {
 		if (&item == &player.InvBody[INVLOC_RING_RIGHT])
@@ -6296,8 +6306,10 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 	compare(armour, otherArmour, _("Armour"));
 	compare(evasion, otherEvasion, _("Evasion"));
 	compare(energyShield * EnergyShieldPerDefense, otherEnergyShield * EnergyShieldPerDefense, _("Energy Shield"));
-	const auto identified = [](const Item &it) { return it.isEmpty() || it._iIdentified; };
-	if (identified(item) && identified(other)) {
+	// Normal items have no modifiers to hide.
+	const auto identified = [](const Item &it) { return it.isEmpty() || it._iIdentified || it._iMagical == ITEM_QUALITY_NORMAL; };
+	const bool bothIdentified = identified(item) && identified(other);
+	if (bothIdentified) {
 		compare(item._iPLDam, other._iPLDam, _("increased Damage"), "%");
 		compare(item._iPLToHit, other._iPLToHit, _("Accuracy"), "%");
 		compare(item._iPLAC, other._iPLAC, _("increased Defence"), "%");
@@ -6320,7 +6332,7 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		CurrentInfoLineStyle = InfoLineStyle::Requirement;
 		AddInfoBoxString(_("Identify both to compare modifiers"), true);
 	}
-	if (shown == 0) {
+	if (shown == 0 && bothIdentified) {
 		CurrentInfoLineStyle = InfoLineStyle::Requirement;
 		AddInfoBoxString(_("No differences"), true);
 	}

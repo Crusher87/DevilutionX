@@ -685,6 +685,7 @@ void DrawInfoBox(const Surface &out)
 			if (gbIsPoe2 && Items[pcursitem]._itype != ItemType::Gold) {
 				FloatingInfoString = Items[pcursitem].getName();
 				FloatingInfoStyles.clear();
+				CompareTooltips.clear(); // the info box can be drawn twice a frame
 				if (Items[pcursitem]._iIdentified)
 					PrintItemDetails(Items[pcursitem]);
 				else

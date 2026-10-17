@@ -227,7 +227,7 @@ void ApplyItemMod(Item &item, const Poe2ItemMod &mod);
 /** @brief Changes the item by an effect with its values, for modifiers and base implicits alike. */
 void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1);
 
-/** @brief The modifier's tooltip lines, with its tier at the end. */
+/** @brief The modifier's tooltip lines; its tier shows only in the Alt view. */
 std::vector<std::string> ItemModText(const Poe2ItemMod &mod);
 /**
  * @brief The modifier as POE2 shows it with Alt held: a header line with its side, name and tier, then each stat with

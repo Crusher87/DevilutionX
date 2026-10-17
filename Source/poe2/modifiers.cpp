@@ -808,8 +808,6 @@ std::vector<std::string> ItemModText(const Poe2ItemMod &mod)
 			trimmed.remove_prefix(1);
 		lines.emplace_back(trimmed);
 	}
-	if (!lines.empty())
-		lines.back().append(StrCat(" (T", mod.tier, ")"));
 	return lines;
 }
 

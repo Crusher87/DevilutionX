@@ -512,6 +512,9 @@ struct Item {
 		case ITEM_QUALITY_RARE:
 			return UiFlags::ColorYellow;
 		default:
+			// POE2 Mashup: Books of Specialisation are quest rewards, gold like POE2's.
+			if (gbIsPoe2 && _iMiscId == IMISC_SPEC_BOOK)
+				return UiFlags::ColorWhitegold;
 			return UiFlags::ColorWhite;
 		}
 	}

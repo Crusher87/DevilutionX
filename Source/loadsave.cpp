@@ -2750,8 +2750,10 @@ void LoadPoe2HeroData(Player &player)
 	if (version > 0 && version < 11)
 		player.poe2.spiritSkulls = 1;
 	// Points spent on an older tree come back when the tree changes shape.
-	if (version > 0)
+	if (version > 0) {
 		RefundPassivesForNewTree(player);
+		RefundOverspentWeaponSets(player);
+	}
 }
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)

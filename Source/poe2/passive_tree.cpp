@@ -18,6 +18,7 @@
 #include "poe2/jewels.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "tables/questdat.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -291,7 +292,8 @@ int RecordQuestPassivePoints(Player &player)
 
 int PassivePointsTotal(const Player &player)
 {
-	return std::max(player.getCharacterLevel() - 1, 0) + QuestPassivePoints(player);
+	return std::max(player.getCharacterLevel() - 1, 0) + QuestPassivePoints(player)
+	    + std::popcount(static_cast<unsigned>(player.poe2.specBooks)) * PassivePointsPerBook;
 }
 
 int PassivePointsSpent(const Player &player)
@@ -567,6 +569,20 @@ bool RefundPassive(Player &player, PassiveNodeId node, PassivePool pool)
 		player.poe2.passiveAttributes[node] &= 0xF0;
 	CalcPlrInv(player, true);
 	return true;
+}
+
+void RefundOverspentWeaponSets(Player &player)
+{
+	const int total = WeaponSetPointsTotal(player);
+	if (WeaponSetPointsSpent(player, PassivePool::SetI) <= total && WeaponSetPointsSpent(player, PassivePool::SetII) <= total)
+		return;
+	for (size_t node = 0; node < player.poe2.passiveAttributes.size(); node++) {
+		if (!player.poe2.passives.test(node))
+			player.poe2.passiveAttributes[node] = 0;
+	}
+	for (auto &set : player.poe2.setPassives)
+		set.reset();
+	TelemetryLog("weaponset", FormatRuntime("refunded weapon sets: {:d} points each now", total));
 }
 
 void RefundPassivesForNewTree(Player &player)

@@ -125,7 +125,7 @@ bool UseSpecBook(Player &player, const Item &item)
 		return false;
 	}
 	player.poe2.specBooks |= static_cast<uint8_t>(1 << book);
-	EventPlrMsg(FormatRuntime(_("+{:d} Weapon Set Passive Points"), WeaponSetPointsPerBook), UiFlags::ColorWhitegold);
+	EventPlrMsg(FormatRuntime(_("+{:d} Passive Points and +{:d} Weapon Set Passive Points"), PassivePointsPerBook, WeaponSetPointsPerBook), UiFlags::ColorWhitegold);
 	TelemetryLog("weaponset", FormatRuntime("read book {:d}, now {:d} weapon set points", book, WeaponSetPointsTotal(player)));
 	return true;
 }

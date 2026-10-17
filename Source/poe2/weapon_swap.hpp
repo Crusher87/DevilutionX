@@ -36,10 +36,12 @@ std::string_view WeaponSetName(uint8_t set);
 
 /**
  * @brief Weapon set passive points come from Books of Specialisation that quest bosses drop, like POE2's campaign
- * rewards: one book for each part of the dungeon, each worth WeaponSetPointsPerBook points for both sets.
+ * rewards: one book for each part of the dungeon. Like POE2's, each book is worth 2 weapon set points for both sets,
+ * plus 2 normal passive points to pay for the set nodes that don't pair up.
  */
 constexpr size_t NumSpecBooks = 6;
-constexpr int WeaponSetPointsPerBook = 4;
+constexpr int WeaponSetPointsPerBook = 2;
+constexpr int PassivePointsPerBook = 2;
 
 /** @brief Weapon set points from the books read so far; each set gets this many. */
 int WeaponSetPointsTotal(const Player &player);

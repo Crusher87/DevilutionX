@@ -198,14 +198,14 @@ TEST_F(Poe2ModifiersTest, ModifiersChangeTheItemAndShowTheirTier)
 	EXPECT_EQ(ring._iPLHP, Fixed10_6::fromInt(80));
 	const std::vector<std::string> lines = ItemModText({ static_cast<uint8_t>(*life + 1), 3, { 80, 0 } });
 	ASSERT_EQ(lines.size(), 1U);
-	EXPECT_EQ(lines[0], "+80 to maximum Life (T3)");
+	EXPECT_EQ(lines[0], "+80 to maximum Life");
 
 	const std::optional<uint8_t> hybrid = FindModifierFamily("life_armour_hybrid");
 	ASSERT_TRUE(hybrid);
 	const std::vector<std::string> hybridLines = ItemModText({ static_cast<uint8_t>(*hybrid + 1), 2, { 70, 50 } });
 	ASSERT_EQ(hybridLines.size(), 2U);
 	EXPECT_EQ(hybridLines[0], "+70 to maximum Life");
-	EXPECT_EQ(hybridLines[1], "50% increased Armour (T2)");
+	EXPECT_EQ(hybridLines[1], "50% increased Armour");
 
 	const std::optional<uint8_t> added = FindModifierFamily("local_added_physical");
 	ASSERT_TRUE(added);

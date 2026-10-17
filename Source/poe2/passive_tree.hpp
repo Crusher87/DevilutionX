@@ -205,6 +205,8 @@ std::optional<PassiveNodeId> PassiveStartNode(HeroClass heroClass);
 uint32_t PassiveTreeHash();
 /** @brief Refunds every passive if the hero's allocations were made on a differently shaped tree. */
 void RefundPassivesForNewTree(Player &player);
+/** @brief Refunds both weapon sets if a hero spent more set points than the books now give (books used to give 4). */
+void RefundOverspentWeaponSets(Player &player);
 
 /** @brief Points from quests: 2 for each completed quest, up to 24. They stay with the hero across games. */
 int QuestPassivePoints(const Player &player);

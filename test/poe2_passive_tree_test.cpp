@@ -432,6 +432,42 @@ TEST_F(Poe2PassiveTreeTest, WeaponSetNodesPairUpForOnePoint)
 	EXPECT_FALSE(CanAllocatePassive(player, path[2], PassivePool::SetI));
 }
 
+TEST_F(Poe2PassiveTreeTest, BooksGivePointsToSpendInTheSets)
+{
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(1);
+	const std::vector<PassiveNodeId> path = WarriorPath();
+	ASSERT_EQ(PassivePointsLeft(player), 0);
+	// A level 1 hero who reads a book can spend it: like POE2's, a book brings 2 normal points as well as 2 set points.
+	player.poe2.specBooks = 0b1;
+	EXPECT_EQ(PassivePointsLeft(player), PassivePointsPerBook);
+	EXPECT_EQ(WeaponSetPointsTotal(player), WeaponSetPointsPerBook);
+	ASSERT_TRUE(AllocatePassive(player, path[0], PassiveAttribute::Strength, PassivePool::SetI));
+	ASSERT_TRUE(AllocatePassive(player, path[0], PassiveAttribute::Strength, PassivePool::SetII));
+	ASSERT_TRUE(AllocatePassive(player, path[1], PassiveAttribute::Strength, PassivePool::SetI));
+	ASSERT_TRUE(AllocatePassive(player, path[1], PassiveAttribute::Strength, PassivePool::SetII));
+	EXPECT_EQ(WeaponSetPointsLeft(player, PassivePool::SetI), 0);
+	EXPECT_EQ(PassivePointsLeft(player), 0);
+}
+
+TEST_F(Poe2PassiveTreeTest, OverspentWeaponSetsAreRefunded)
+{
+	Player &player = *MyPlayer;
+	player.poe2.specBooks = 0b1;
+	const std::vector<PassiveNodeId> path = WarriorPath();
+	ASSERT_TRUE(AllocatePassive(player, path[0]));
+	ASSERT_TRUE(AllocatePassive(player, path[1], PassiveAttribute::Strength, PassivePool::SetI));
+	RefundOverspentWeaponSets(player);
+	EXPECT_TRUE(IsPassiveInPool(player, path[1], PassivePool::SetI));
+
+	// Books used to give 4 set points, so an older hero can have spent more than one book now gives.
+	player.poe2.setPassives[0].set(path[2]);
+	player.poe2.setPassives[0].set(path[3]);
+	RefundOverspentWeaponSets(player);
+	EXPECT_EQ(WeaponSetPointsSpent(player, PassivePool::SetI), 0);
+	EXPECT_TRUE(IsPassiveInPool(player, path[0], PassivePool::Main));
+}
+
 TEST_F(Poe2PassiveTreeTest, RouteMarksTheQuickestWay)
 {
 	Player &player = *MyPlayer;

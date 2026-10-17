@@ -222,10 +222,18 @@ int DrawDurIcon4Item(const Surface &out, Item &pItem, int x, int c)
 	return x - (*pDurIcons)[c].height() - 8; // Add in spacing for the next durability icon
 }
 
-/** @brief POE2 Mashup: the level-up button is for unspent passive points, and opens the passive tree. */
+/** @brief Whether the weapon set has a point the hero can spend now. */
+bool HasWeaponSetPointToSpend(const Player &player, PassivePool pool)
+{
+	return WeaponSetPointsLeft(player, pool) > 0 && !WeaponSetNeedsPassivePoint(player, pool);
+}
+
+/** @brief POE2 Mashup: the level-up button is for unspent passive or weapon set points, and opens the passive tree. */
 bool LevelUpButtonIsForPassives()
 {
-	return gbIsPoe2 && MyPlayer != nullptr && MyPlayer->_pStatPts == 0 && PassivePointsLeft(*MyPlayer) > 0;
+	if (!gbIsPoe2 || MyPlayer == nullptr || MyPlayer->_pStatPts != 0)
+		return false;
+	return PassivePointsLeft(*MyPlayer) > 0 || HasWeaponSetPointToSpend(*MyPlayer, PassivePool::SetI) || HasWeaponSetPointToSpend(*MyPlayer, PassivePool::SetII);
 }
 
 bool IsLevelUpButtonVisible()
