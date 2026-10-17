@@ -11,6 +11,7 @@
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_timer.h>
 #else
 #ifdef USE_SDL1
 #include "utils/sdl2_to_1_2_backports.h"
@@ -53,16 +54,23 @@ namespace {
 using namespace poe2ui;
 
 // ---------------------------------------------------------------------------
-// Popups: the list of tabs and a tab's settings
+// The drawer with the list of tabs, and the popup with a tab's settings
 // ---------------------------------------------------------------------------
 
 enum class Popup : uint8_t {
 	None,
-	List,
 	Settings,
 };
 
 Popup OpenPopup = Popup::None;
+/**
+ * The list of tabs is a drawer beside the stash (Curtis 2026-10-16): it slides out to the right and stays open while
+ * tabs are clicked, so the stash can be used with it open.
+ */
+bool DrawerOpen = false;
+uint32_t DrawerOpenedAt = 0;
+constexpr uint32_t DrawerSlideMs = 140;
+constexpr int DrawerWidth = 230;
 unsigned SettingsPage = 0;
 unsigned ListScroll = 0;
 bool EditingName = false;
@@ -102,9 +110,17 @@ unsigned ListEntries()
 	return StashTabs.count() + (StashTabs.count() < MaxStashTabs ? 1 : 0);
 }
 
+/** @brief The drawer, against the stash panel's right edge, kept on the screen. */
+Rectangle DrawerRect()
+{
+	Rectangle rect = At(320, 8, DrawerWidth, 338);
+	rect.position.x = std::min(rect.position.x, static_cast<int>(gnScreenWidth) - DrawerWidth);
+	return rect;
+}
+
 Rectangle ListRow(unsigned visibleRow)
 {
-	const Rectangle popup = PopupRect();
+	const Rectangle popup = DrawerRect();
 	return { popup.position + Displacement { 6, ListTop + (static_cast<int>(visibleRow) * RowHeight) }, { popup.size.width - 12, RowHeight - 2 } };
 }
 
@@ -179,14 +195,15 @@ void StopEditingName()
 	SDLC_StopTextInput(ghMainWnd);
 }
 
-void OpenList()
+void ToggleDrawer()
 {
-	StopEditingName();
-	OpenPopup = Popup::List;
+	DrawerOpen = !DrawerOpen;
+	if (!DrawerOpen)
+		return;
+	DrawerOpenedAt = SDL_GetTicks();
 	const unsigned page = Stash.GetPage();
 	if (page < ListScroll || page >= ListScroll + ListRows)
 		ListScroll = page >= ListRows / 2 ? page - (ListRows / 2) : 0;
-	ClearWasdMovementKeys();
 }
 
 void OpenSettings(unsigned page)
@@ -218,7 +235,14 @@ void DrawButton(const Surface &out, const Rectangle &rect, std::string_view text
 
 void DrawList(const Surface &out)
 {
-	const Rectangle popup = PopupRect();
+	const Rectangle popup = DrawerRect();
+	// Slides out from behind the stash's edge; the rows appear once it's open.
+	const uint32_t elapsed = SDL_GetTicks() - DrawerOpenedAt;
+	if (elapsed < DrawerSlideMs) {
+		const int width = std::max(8, static_cast<int>((popup.size.width * elapsed) / DrawerSlideMs));
+		DrawPanel(out, { popup.position, { width, popup.size.height } });
+		return;
+	}
 	DrawPanel(out, popup);
 	DrawString(out, _("Stash tabs"), { popup.position + Displacement { 0, 4 }, { popup.size.width, 18 } },
 	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
@@ -228,7 +252,7 @@ void DrawList(const Surface &out)
 		if (entry >= ListEntries())
 			break;
 		const Rectangle rect = ListRow(row);
-		const bool hovered = rect.contains(MousePosition);
+		const bool hovered = rect.contains(MousePosition) && OpenPopup == Popup::None;
 		if (entry >= StashTabs.count()) {
 			FillRectangle(out, rect, hovered ? RowHoverColor : RowColor);
 			DrawString(out, _("+ New tab"), rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorGold });
@@ -240,16 +264,16 @@ void DrawList(const Surface &out)
 		FillRectangle(out, swatch, StashTabPaletteColor(tab.color));
 		DrawFrame(out, swatch, InnerBorderColor);
 		const UiFlags nameColor = hovered && entry != Stash.GetPage() ? UiFlags::ColorBlack : UiFlags::ColorWhite;
-		DrawString(out, FitText(StashTabs.displayName(entry), 120), { rect.position + Displacement { 24, 0 }, { 124, rect.size.height } },
+		DrawString(out, FitText(StashTabs.displayName(entry), 100), { rect.position + Displacement { 24, 0 }, { 104, rect.size.height } },
 		    { .flags = UiFlags::VerticalCenter | nameColor });
-		const std::string what = tab.isPremade() ? StrCat(StashTabKindName(tab.kind), _(" tab")) : StashTabs.affinityText(entry);
-		if (!what.empty()) {
-			DrawString(out, FitText(what, 130), { rect.position + Displacement { 150, 0 }, { rect.size.width - 154, rect.size.height } },
+		const std::string what = tab.isPremade() ? std::string(StashTabKindName(tab.kind)) : StashTabs.affinityText(entry);
+		if (!what.empty() && what != StashTabs.displayName(entry)) {
+			DrawString(out, FitText(what, rect.size.width - 134), { rect.position + Displacement { 130, 0 }, { rect.size.width - 134, rect.size.height } },
 			    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | UiFlags::ColorGold });
 		}
 	}
 
-	DrawString(out, _("Click: open   Right-click: settings"), { popup.position + Displacement { 0, popup.size.height - 22 }, { popup.size.width, 16 } },
+	DrawString(out, _("Right-click: settings"), { popup.position + Displacement { 0, popup.size.height - 22 }, { popup.size.width, 16 } },
 	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
 }
 
@@ -351,12 +375,10 @@ bool HandleListClick(bool rightClick)
 			}
 			return true;
 		}
-		if (rightClick) {
+		if (rightClick)
 			OpenSettings(entry);
-		} else {
+		else
 			Stash.SetPage(entry);
-			OpenPopup = Popup::None;
-		}
 		return true;
 	}
 	return true;
@@ -401,7 +423,9 @@ bool HandleSettingsClick()
 		}
 	}
 	if (ListButton().contains(MousePosition)) {
-		OpenList();
+		OpenPopup = Popup::None;
+		if (!DrawerOpen)
+			ToggleDrawer();
 		return true;
 	}
 	if (DoneButton().contains(MousePosition))
@@ -423,7 +447,7 @@ bool HandlePopupEvent(const SDL_Event &event)
 			if (EditingName)
 				StopEditingName();
 			else
-				CloseStashTabPopups();
+				OpenPopup = Popup::None;
 			break;
 		case SDLK_RETURN:
 		case SDLK_KP_ENTER:
@@ -443,30 +467,25 @@ bool HandlePopupEvent(const SDL_Event &event)
 		return true;
 	case SDL_EVENT_MOUSE_BUTTON_DOWN: {
 #ifdef USE_SDL1
-		if (event.button.button == SDL_BUTTON_WHEELUP || event.button.button == SDL_BUTTON_WHEELDOWN) {
-			if (OpenPopup == Popup::List)
-				ScrollList(event.button.button == SDL_BUTTON_WHEELUP ? -3 : 3);
+		if (event.button.button == SDL_BUTTON_WHEELUP || event.button.button == SDL_BUTTON_WHEELDOWN)
 			return true;
-		}
 #endif
 		if (event.button.button != SDL_BUTTON_LEFT && event.button.button != SDL_BUTTON_RIGHT)
 			return true;
 		if (!PopupRect().contains(MousePosition)) {
-			if (EditingName)
+			if (EditingName) {
 				CommitName();
-			CloseStashTabPopups();
+				StopEditingName();
+			}
+			OpenPopup = Popup::None;
 			return true;
 		}
-		if (OpenPopup == Popup::List)
-			return HandleListClick(event.button.button == SDL_BUTTON_RIGHT);
 		return HandleSettingsClick();
 	}
 	case SDL_EVENT_MOUSE_BUTTON_UP:
 		return true;
 #ifndef USE_SDL1
 	case SDL_EVENT_MOUSE_WHEEL:
-		if (OpenPopup == Popup::List)
-			ScrollList(SDLC_EventWheelIntY(event) > 0 ? -3 : 3);
 		return true;
 #endif
 	default:
@@ -910,7 +929,7 @@ void BuildUniquesView(TabView &view, unsigned page)
 		    .onClick = [category] { OpenUniqueCategory = category; UniqueScroll = 0; },
 		    .detail = StrCat(percent, "%") });
 	}
-	view.labels.push_back({ At(10, 80, 114, 12), StrCat(_("Collected"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
+	view.labels.push_back({ At(10, 80, 114, 12), StrCat(_("Have"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
 	view.buttons.push_back({ .rect = At(126, 77, 138, 18), .text = std::string(_("Collected only")), .selected = UniquesCollectedOnly,
 	    .onClick = [] { UniquesCollectedOnly = !UniquesCollectedOnly; UniqueScroll = 0; } });
 	AddSettingsButton(view, 77);
@@ -1131,8 +1150,7 @@ bool HandleStripClick()
 		return true;
 	}
 	if (StripListButton().contains(MousePosition)) {
-		if (MyPlayer->HoldItem.isEmpty())
-			OpenList();
+		ToggleDrawer();
 		return true;
 	}
 	for (const VisibleTab &visible : VisibleTabs()) {
@@ -1192,6 +1210,7 @@ void CloseStashTabPopups()
 {
 	StopEditingName();
 	OpenPopup = Popup::None;
+	DrawerOpen = false;
 }
 
 void DrawPoe2StashFrame(const Surface &out)
@@ -1225,9 +1244,9 @@ void DrawStashTabUi(const Surface &out)
 		DrawEmptySlotTooltip(out, view);
 	}
 
-	if (OpenPopup == Popup::List)
+	if (DrawerOpen)
 		DrawList(out);
-	else if (OpenPopup == Popup::Settings)
+	if (OpenPopup == Popup::Settings)
 		DrawSettings(out);
 }
 
@@ -1269,12 +1288,40 @@ bool HandlePoe2StashClick(Point mousePosition, bool /*isShiftHeld*/, bool isCtrl
 bool StashTabsHandleEvent(const SDL_Event &event)
 {
 	if (!gbIsPoe2 || !IsStashOpen) {
-		if (OpenPopup != Popup::None)
+		if (OpenPopup != Popup::None || DrawerOpen)
 			CloseStashTabPopups();
 		return false;
 	}
 	if (OpenPopup != Popup::None)
 		return HandlePopupEvent(event);
+
+	// The drawer takes clicks and the wheel over it, and Escape; everything else goes to the stash as usual.
+	if (DrawerOpen) {
+		if (event.type == SDL_EVENT_KEY_DOWN && SDLC_EventKey(event) == SDLK_ESCAPE) {
+			DrawerOpen = false;
+			return true;
+		}
+		if (DrawerRect().contains(MousePosition)) {
+#ifdef USE_SDL1
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && (event.button.button == SDL_BUTTON_WHEELUP || event.button.button == SDL_BUTTON_WHEELDOWN)) {
+				ScrollList(event.button.button == SDL_BUTTON_WHEELUP ? -3 : 3);
+				return true;
+			}
+#else
+			if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+				ScrollList(SDLC_EventWheelIntY(event) > 0 ? -3 : 3);
+				return true;
+			}
+#endif
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+				if (event.button.button == SDL_BUTTON_LEFT || event.button.button == SDL_BUTTON_RIGHT)
+					HandleListClick(event.button.button == SDL_BUTTON_RIGHT);
+				return true;
+			}
+			if (event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+				return true;
+		}
+	}
 
 #ifndef USE_SDL1
 	if (event.type == SDL_EVENT_MOUSE_WHEEL && GetLeftPanel().contains(MousePosition)) {
