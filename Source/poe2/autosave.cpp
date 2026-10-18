@@ -37,8 +37,9 @@ bool CanSaveNow()
 	const Player &player = *MyPlayer;
 	if (player._pmode == PM_DEATH || MyPlayerIsDead || player.hasNoLife() || HardcoreHeroFell())
 		return false;
-	// The game's own save keeps only items in the inventory, not on the cursor.
-	return pcurs == CURSOR_HAND && player.HoldItem.isEmpty();
+	// The game's own save keeps only items in the inventory, not on the cursor. A tool cursor like a Scroll of
+	// Identify's holds nothing: its scroll or orb stays in the inventory until it is used.
+	return pcurs < CURSOR_FIRSTITEM && player.HoldItem.isEmpty();
 }
 
 bool MonsterNearby()

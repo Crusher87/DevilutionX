@@ -3322,6 +3322,13 @@ bool PressEscKey()
 {
 	bool rv = false;
 
+	// POE2 Mashup: Escape puts down a tool cursor, like a Scroll of Identify's or an orb's.
+	if (gbIsPoe2 && pcurs > CURSOR_HAND && pcurs < CURSOR_FIRSTITEM) {
+		SetStickyItemUse(false);
+		NewCursor(CURSOR_HAND);
+		return true;
+	}
+
 	if (DoomFlag) {
 		doom_close();
 		rv = true;

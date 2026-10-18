@@ -5700,7 +5700,9 @@ void SetStickyItemUse(bool sticky)
 
 bool WantsStickyItemUse()
 {
-	return gbIsPoe2 && (StickyUse || (SDL_GetModState() & SDL_KMOD_SHIFT) != 0);
+	// As in POE2, the item stays on the cursor only while Shift is held: letting go of Shift ends it, so the cursor
+	// can't get stuck (Curtis 2026-10-18).
+	return gbIsPoe2 && StickyUse && (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
 }
 
 bool KeepCurrencyOnCursor(Player &player)
