@@ -518,6 +518,7 @@ uint16_t CheckStashHLight(Point mousePosition)
 			PrintItemDetails(item);
 		else
 			PrintItemDur(item);
+		PrintItemComparison(item);
 		return itemId;
 	}
 	Point slot = InvalidStashPoint;
@@ -556,6 +557,9 @@ uint16_t CheckStashHLight(Point mousePosition)
 	} else {
 		PrintItemDur(item);
 	}
+	// POE2 Mashup: Shift compares stash items with what's equipped, like items in the bag.
+	if (gbIsPoe2)
+		PrintItemComparison(item);
 
 	return itemId;
 }
