@@ -1135,6 +1135,49 @@ TEST_F(Poe2ShopTabsTest, SmithWaresAreMostlyNormalSomeMagicFewRareNeverUnique)
 	EXPECT_NEAR(counts[ITEM_QUALITY_NORMAL] * 100 / total, 75, 8);
 }
 
+TEST_F(Poe2ShopTabsTest, WitchStavesAreMostlyNormalSomeMagicFewRareNeverUnique)
+{
+	std::array<int, 4> counts {};
+	int total = 0;
+	for (uint32_t seed = 1; seed <= 20; seed++) {
+		SetRndSeed(seed);
+		SpawnWitch(16);
+		for (size_t i = NumWitchPinnedItems; i < WitchItems.size(); i++) {
+			const Item &ware = WitchItems[i];
+			if (ware._itype != ItemType::Staff)
+				continue;
+			counts[ware._iMagical]++;
+			total++;
+		}
+	}
+	ASSERT_GT(total, 0);
+	EXPECT_GT(counts[ITEM_QUALITY_NORMAL], counts[ITEM_QUALITY_MAGIC]);
+	EXPECT_GT(counts[ITEM_QUALITY_MAGIC], counts[ITEM_QUALITY_RARE]);
+	EXPECT_GT(counts[ITEM_QUALITY_RARE], 0) << "Adria's staves roll rare like Griswold's wares";
+	EXPECT_EQ(counts[ITEM_QUALITY_UNIQUE], 0);
+	EXPECT_NEAR(counts[ITEM_QUALITY_NORMAL] * 100 / total, 75, 8);
+}
+
+TEST_F(Poe2ShopTabsTest, WitchWaresAreRecreatedFromTheirSeed)
+{
+	bool sawMagicOrRare = false;
+	for (uint32_t seed = 1; seed <= 5; seed++) {
+		SetRndSeed(seed);
+		SpawnWitch(16);
+		for (size_t i = NumWitchPinnedItems; i < WitchItems.size(); i++) {
+			const Item &ware = WitchItems[i];
+			sawMagicOrRare = sawMagicOrRare || ware._iMagical != ITEM_QUALITY_NORMAL;
+			Item copy {};
+			RecreateItem(*MyPlayer, copy, static_cast<_item_indexes>(ware.IDidx), ware._iCreateInfo, ware._iSeed, ware._ivalue, ware.dwBuff);
+			EXPECT_EQ(copy.IDidx, ware.IDidx) << ware._iIName;
+			EXPECT_EQ(copy._iMagical, ware._iMagical) << ware._iIName;
+			EXPECT_STREQ(copy._iIName, ware._iIName);
+			EXPECT_EQ(copy._iIvalue, ware._iIvalue) << ware._iIName;
+		}
+	}
+	EXPECT_TRUE(sawMagicOrRare);
+}
+
 TEST_F(Poe2ShopTabsTest, WitchStocksStavesAndSupplies)
 {
 	for (uint32_t seed = 1; seed <= 5; seed++) {

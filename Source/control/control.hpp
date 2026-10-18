@@ -76,6 +76,8 @@ enum class InfoLineStyle : uint8_t {
 	 * only on a group's first line) on the left and the tier ("T3") on the right; either may be empty.
 	 */
 	Affix,
+	/** A property the item's modifiers raised, in blue like POE2's augmented values. */
+	AugmentedProperty,
 };
 /** @brief The style given to the next floating info lines; reset to Default after each item. */
 extern InfoLineStyle CurrentInfoLineStyle;

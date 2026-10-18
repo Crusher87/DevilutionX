@@ -2689,13 +2689,22 @@ void RecreateWitchItem(const Player &player, Item &item, _item_indexes idx, int 
 		SetRndSeed(iseed);
 		const _item_indexes itype = RndWitchItem(player, lvl);
 		GetItemAttrs(item, itype, lvl);
-		int iblvl = -1;
-		if (GenerateRnd(100) <= 5)
-			iblvl = 2 * lvl;
-		if (iblvl == -1 && item._iMiscId == IMISC_STAFF)
-			iblvl = 2 * lvl;
-		if (iblvl != -1)
-			GetItemBonus(player, item, iblvl / 2, iblvl, true, true);
+		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff; skip the rarity roll and give it its modifiers.
+		if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity) {
+			if (*rarity != ITEM_QUALITY_NORMAL) {
+				item._iSeed = iseed; // the modifiers roll from it
+				DiscardRandomValues(1);
+				GetItemBonus(player, item, lvl / 2, lvl, true, false);
+			}
+		} else {
+			int iblvl = -1;
+			if (GenerateRnd(100) <= 5)
+				iblvl = 2 * lvl;
+			if (iblvl == -1 && item._iMiscId == IMISC_STAFF)
+				iblvl = 2 * lvl;
+			if (iblvl != -1)
+				GetItemBonus(player, item, iblvl / 2, iblvl, true, true);
+		}
 	}
 
 	item._iSeed = iseed;
@@ -6238,6 +6247,10 @@ void PrintItemDetails(const Item &item)
 		if (gbIsPoe2) {
 			minDamage = physicalMin + item._iFMinDam + item._iLMinDam;
 			maxDamage = physicalMax + item._iFMaxDam + item._iLMaxDam;
+			// Blue when the modifiers raised it, like POE2, so the total is plainly the final hit (Curtis 2026-10-18).
+			const ItemData &base = AllItemsList[item.IDidx];
+			if (minDamage != base.iMinDam || maxDamage != base.iMaxDam)
+				CurrentInfoLineStyle = InfoLineStyle::AugmentedProperty;
 		}
 		if (minDamage == maxDamage) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
@@ -6250,6 +6263,7 @@ void PrintItemDetails(const Item &item)
 			else
 				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
 		}
+		CurrentInfoLineStyle = InfoLineStyle::Property;
 		// Holding Alt splits it by damage type, each in its colour.
 		if (gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0 && (item._iFMaxDam > 0 || item._iLMaxDam > 0 || item._iPLDam != 0)) {
 			CurrentInfoLineStyle = InfoLineStyle::PhysicalDamage;
@@ -6476,11 +6490,15 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 	const auto identified = [](const Item &it) { return it.isEmpty() || it._iIdentified || it._iMagical == ITEM_QUALITY_NORMAL; };
 	const bool bothIdentified = identified(item) && identified(other);
 	if (bothIdentified) {
-		compare(item._iPLDam, other._iPLDam, _("increased Damage"), "%");
+		// A weapon's increased and added damage are already in the whole hit compared above.
+		const bool weapons = item._iClass == ICLASS_WEAPON && (other.isEmpty() || other._iClass == ICLASS_WEAPON);
+		if (!weapons) {
+			compare(item._iPLDam, other._iPLDam, _("increased Damage"), "%");
+			compare((item._iFMinDam + item._iFMaxDam) / 2, (other._iFMinDam + other._iFMaxDam) / 2, _("average Fire Damage"));
+			compare((item._iLMinDam + item._iLMaxDam) / 2, (other._iLMinDam + other._iLMaxDam) / 2, _("average Lightning Damage"));
+		}
 		compare(item._iPLToHit, other._iPLToHit, _("Accuracy"), "%");
 		compare(item._iPLAC, other._iPLAC, _("increased Defence"), "%");
-		compare((item._iFMinDam + item._iFMaxDam) / 2, (other._iFMinDam + other._iFMaxDam) / 2, _("average Fire Damage"));
-		compare((item._iLMinDam + item._iLMaxDam) / 2, (other._iLMinDam + other._iLMaxDam) / 2, _("average Lightning Damage"));
 		compare(item._iPLStr, other._iPLStr, _("Strength"));
 		compare(item._iPLDex, other._iPLDex, _("Dexterity"));
 		compare(item._iPLMag, other._iPLMag, _("Intelligence"));
@@ -6905,13 +6923,22 @@ Item RollWitchItem(int lvl, int maxValue)
 		SetRndSeed(item._iSeed);
 		const _item_indexes itemData = RndWitchItem(*MyPlayer, lvl);
 		GetItemAttrs(item, itemData, lvl);
-		int maxlvl = -1;
-		if (GenerateRnd(100) <= 5)
-			maxlvl = 2 * lvl;
-		if (maxlvl == -1 && item._iMiscId == IMISC_STAFF)
-			maxlvl = 2 * lvl;
-		if (maxlvl != -1)
-			GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
+		if (gbIsPoe2 && EquipmentClassWeight(item._itype) > 0) {
+			// POE2 Mashup: Adria's staves roll rarity like Griswold's wares: mostly normal, some magic, a few rare, never unique.
+			// The item level goes on first so the modifiers come from the POE2 tables.
+			SetVendorPoe2ItemLevel(item, lvl);
+			SetLootRarity(item, RollVendorRarity());
+			if (GetLootRarity(item) != ITEM_QUALITY_NORMAL)
+				GetItemBonus(*MyPlayer, item, lvl / 2, lvl, true, false);
+		} else {
+			int maxlvl = -1;
+			if (GenerateRnd(100) <= 5)
+				maxlvl = 2 * lvl;
+			if (maxlvl == -1 && item._iMiscId == IMISC_STAFF)
+				maxlvl = 2 * lvl;
+			if (maxlvl != -1)
+				GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
+		}
 	} while (item._iIvalue > maxValue);
 
 	item._iCreateInfo = lvl | CF_WITCH;

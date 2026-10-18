@@ -315,6 +315,7 @@ UiFlags TooltipLineColor(InfoLineStyle style)
 	switch (style) {
 	case InfoLineStyle::Mod:
 	case InfoLineStyle::Affix:
+	case InfoLineStyle::AugmentedProperty:
 		return UiFlags::ColorBlue;
 	case InfoLineStyle::Corrupted:
 		return UiFlags::ColorRed;
@@ -342,6 +343,7 @@ int TooltipGroup(InfoLineStyle style)
 {
 	switch (style) {
 	case InfoLineStyle::Property:
+	case InfoLineStyle::AugmentedProperty:
 	case InfoLineStyle::Default:
 	case InfoLineStyle::PhysicalDamage:
 	case InfoLineStyle::FireDamage:
