@@ -30,11 +30,13 @@
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/ui_scale.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "options.h"
 #include "stores.h"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
+#include "utils/str_cat.hpp"
 #include "utils/ui_fwd.h"
 
 namespace devilution {
@@ -288,6 +290,9 @@ void gmenu_draw(const Surface &out)
 				y += GMenuItemHeight;
 			}
 		}
+		// POE2 Mashup: the mod's version, under the menu rather than always in the corner of the screen.
+		if (gbIsPoe2 && !Poe2ModVersion.empty())
+			DrawString(out, StrCat("POE2 Mashup ", Poe2ModVersion), { { 0, y + 8 }, { gnScreenWidth, 20 } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorWhitegold });
 	}
 }
 

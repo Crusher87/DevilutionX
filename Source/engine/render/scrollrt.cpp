@@ -74,6 +74,7 @@
 #include "poe2/camera_shake.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
+#include "poe2/hud_minions.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/monster_mods.hpp"
@@ -2019,6 +2020,7 @@ void DrawAndBlit()
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
 	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
+	DrawMinionHud(out);
 
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)
 		DrawPartyMemberInfoPanel(out);

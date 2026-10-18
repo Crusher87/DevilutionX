@@ -74,6 +74,10 @@ int MinionLevelForGemLevel(int gemLevel);
 void HastenMinionRevives(Player &player, int ticks);
 /** @brief Minions of the gem waiting to rise, and the game ticks until the first; for the HUD. */
 int PendingMinionRevives(const Player &player, PersistentSkill skill, int *ticksLeft = nullptr);
+/** @brief Minions the gem keeps up here: its count plus any a support adds, or 0 where none rise (town). */
+int MinionTarget(const Player &player, PersistentSkill skill);
+/** @brief The gem's minions alive on this level. */
+int AliveMinionCount(const Player &player, PersistentSkill skill);
 
 std::string_view PersistentSkillName(PersistentSkill skill);
 std::string_view PersistentSkillDescription(PersistentSkill skill);

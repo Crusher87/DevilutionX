@@ -627,6 +627,16 @@ void RemoveRevive(MinionRevives &revives, size_t index)
 	revives.pending--;
 }
 
+_monster_id MinionMonsterType(PersistentSkill skill)
+{
+	return skill == PersistentSkill::SkeletalMages ? SkeletonMageMinionType : SkeletonMinionType;
+}
+
+int TargetMinions(const Player &player, PersistentSkill skill, int active)
+{
+	return std::min(active + SupportExtraMinions(player, skill), static_cast<int>(MinionRevives {}.ticks.size()));
+}
+
 /**
  * @brief Keeps the gem's skeletons at its count. Like POE2, each one that falls rises again after the revive time;
  * ones that haven't been raised yet (on a new level, or when the count goes up) come up at once, a few ticks apart.
@@ -648,7 +658,7 @@ void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type,
 		revives = {};
 		revives.level = CurrentLevelKey();
 	}
-	const int target = std::min(active + SupportExtraMinions(player, skill), static_cast<int>(revives.ticks.size()));
+	const int target = TargetMinions(player, skill, active);
 	int alive = static_cast<int>(CountSkeletonMinions(player, type));
 	if (alive > target) {
 		KillFarthestSkeletonMinion(player, type);
@@ -716,6 +726,19 @@ int PendingMinionRevives(const Player &player, PersistentSkill skill, int *ticks
 	return revives.pending;
 }
 
+int MinionTarget(const Player &player, PersistentSkill skill)
+{
+	const int active = ActiveMinionCount(player, skill);
+	if (active <= 0 || !CanRaiseMinions(player))
+		return 0;
+	return TargetMinions(player, skill, active);
+}
+
+int AliveMinionCount(const Player &player, PersistentSkill skill)
+{
+	return IsMinionCountSkill(skill) ? static_cast<int>(CountSkeletonMinions(player, MinionMonsterType(skill))) : 0;
+}
+
 void ProcessPersistentSkills(Player &player)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
@@ -723,7 +746,7 @@ void ProcessPersistentSkills(Player &player)
 	KeepGolemAlive(player);
 	for (size_t i = 0; i < MinionCountSkills.size(); i++) {
 		const PersistentSkill skill = MinionCountSkills[i];
-		KeepSkeletonsAlive(player, skill, skill == PersistentSkill::SkeletalMages ? SkeletonMageMinionType : SkeletonMinionType, player.poe2.minionRevives[i]);
+		KeepSkeletonsAlive(player, skill, MinionMonsterType(skill), player.poe2.minionRevives[i]);
 	}
 	ProcessSpiritSkills(player);
 }
