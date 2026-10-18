@@ -107,6 +107,16 @@ uint8_t SkillElement(SkillSlot skill)
 	}
 }
 
+/** @brief Whether a socketed skill can eat an element infusion; without one, infusions would only glow forever. */
+bool UsesInfusions(const Player &player)
+{
+	for (const SkillSlot &slot : player.poe2.skillSlots) {
+		if (!slot.isEmpty() && SkillElement(slot) != 0)
+			return true;
+	}
+	return false;
+}
+
 void KeepGuardianWatch(Player &player)
 {
 	SpiritRuntime &state = player.poe2.spiritState;
@@ -178,6 +188,9 @@ void KeepRevivedAlive(Player &player)
 void ProcessMotes(Player &player)
 {
 	SpiritRuntime &state = player.poe2.spiritState;
+	// Unsocketing the last skill that eats infusions drops the ones carried.
+	if (state.infusions != 0 && !UsesInfusions(player))
+		state.infusions = 0;
 	for (size_t i = 0; i < Motes.size();) {
 		InfusionMote &mote = Motes[i];
 		if (mote.ticks % 15 == 0)
@@ -340,7 +353,7 @@ void ReflectMeleeHit(Player &player, Monster &monster, Fixed26_6 damage)
 
 void TryDropInfusion(const Monster &monster)
 {
-	if (!gbIsPoe2 || MyPlayer == nullptr || monster.isPlayerMinion())
+	if (!gbIsPoe2 || MyPlayer == nullptr || monster.isPlayerMinion() || !UsesInfusions(*MyPlayer))
 		return;
 	uint8_t element = 0;
 	if (monster.poe2.igniteTicks > 0)

@@ -130,6 +130,11 @@ TEST_F(Poe2SpiritSkillsTest, InfusionMotesComeFromAilingMonsters)
 {
 	Monster monster {};
 	monster.poe2.igniteTicks = 10;
+	// Only a hero with a skill that eats infusions gets them.
+	ClearSpiritSkills();
+	TryDropInfusion(monster);
+	EXPECT_EQ(InfusionMoteCount(), 0U);
+	MyPlayer->poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::Meteor);
 	size_t drops = 0;
 	for (int i = 0; i < 200; i++) {
 		ClearSpiritSkills();
@@ -142,6 +147,22 @@ TEST_F(Poe2SpiritSkillsTest, InfusionMotesComeFromAilingMonsters)
 	ClearSpiritSkills();
 	TryDropInfusion(monster);
 	EXPECT_EQ(InfusionMoteCount(), 0U);
+	MyPlayer->poe2.skillSlots[0] = {};
+}
+
+TEST_F(Poe2SpiritSkillsTest, InfusionsFadeWithoutASkillToEatThem)
+{
+	leveltype = DTYPE_CATHEDRAL;
+	MyPlayer->position.tile = { 40, 40 };
+	MyPlayer->_pMaxHP = MyPlayer->_pHitPoints = Fixed26_6::fromInt(100);
+	MyPlayer->poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::Meteor);
+	MyPlayer->poe2.spiritState.infusions = Infusion_Fire;
+	ProcessSpiritSkills(*MyPlayer);
+	EXPECT_EQ(MyPlayer->poe2.spiritState.infusions, Infusion_Fire);
+	MyPlayer->poe2.skillSlots[0] = {};
+	ProcessSpiritSkills(*MyPlayer);
+	EXPECT_EQ(MyPlayer->poe2.spiritState.infusions, 0);
+	leveltype = DTYPE_TOWN;
 }
 
 TEST_F(Poe2SpiritSkillsTest, SpiritSkillsTickInAnEmptyDungeon)
