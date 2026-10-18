@@ -138,5 +138,12 @@ bool AutoPlaceItemInAnyStashTab(const Item &item);
 void RepairStashTabs();
 /** @brief POE2 Mashup: stash items saved when they were bigger let go of the cells they no longer cover. */
 void FitOneCellStashItems();
+/** @brief POE2 Mashup: moves a tab to another place in the order, its grids and items with it. */
+void MoveStashTab(unsigned from, unsigned to);
+/**
+ * @brief POE2 Mashup: a stash keeps one tab of each premade kind and two blank tabs (Curtis 2026-10-17). Items on any
+ * others move to the tabs that are kept, and the emptied tabs go; a tab whose items fit nowhere else stays.
+ */
+void ConsolidateStashTabs();
 
 } // namespace devilution

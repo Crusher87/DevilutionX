@@ -3074,7 +3074,11 @@ void LoadStash()
 		// Stashes from before premade tabs get one of each at the end.
 		if (tabsVersion < 2)
 			StashTabs.addMissingPremadeTabs();
+		// The open tab is set first so that it stays open as tabs are merged.
+		Stash.SetPage(openPage);
 		RepairStashTabs();
+		ConsolidateStashTabs();
+		return;
 	}
 
 	Stash.SetPage(openPage);

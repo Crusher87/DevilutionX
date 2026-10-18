@@ -68,8 +68,10 @@ constexpr StashTabKind PremadeStashTabKinds[] = {
 };
 
 constexpr unsigned MaxStashTabs = 100;
-/** @brief A new stash starts with this many blank tabs, then one of each premade tab. */
-constexpr unsigned DefaultBlankStashTabs = 4;
+/** @brief A stash has at most this many blank tabs and one tab of each premade kind (Curtis 2026-10-17). */
+constexpr unsigned MaxBlankStashTabs = 2;
+/** @brief A new stash starts with its blank tabs, then one of each premade tab. */
+constexpr unsigned DefaultBlankStashTabs = MaxBlankStashTabs;
 constexpr unsigned DefaultStashTabs = DefaultBlankStashTabs + std::size(PremadeStashTabKinds);
 constexpr size_t MaxStashTabNameLength = 16;
 /** @brief Six hues in three shades: dark, mid and light. */
@@ -97,15 +99,22 @@ struct StashTabSet {
 	[[nodiscard]] unsigned count() const { return static_cast<unsigned>(tabs.size()); }
 	/** @brief Back to a new stash's tabs. */
 	void reset();
-	/** @brief Adds tabs until there are at least this many (up to the maximum). */
+	/** @brief Adds tabs until there are at least this many (up to the maximum), for pages of older stashes. */
 	void ensureCount(unsigned count);
-	/** @brief Adds a tab at the end; false once the stash has the maximum. */
+	[[nodiscard]] unsigned countOf(StashTabKind kind) const;
+	/** @brief Whether the stash may have another tab of the kind: a third blank tab or a second premade one it may not. */
+	[[nodiscard]] bool canHaveAnother(StashTabKind kind) const;
+	/** @brief Adds a tab at the end; false when the stash may not have another of the kind. */
 	bool addTab(StashTabKind kind = StashTabKind::Blank);
+	/** @brief Adds a blank tab past the limit, only so that stored items are never lost. */
+	bool addOverflowTab();
 	/** @brief Adds a premade tab of each kind the stash has none of, at the end, for stashes from before premade tabs. */
 	void addMissingPremadeTabs();
 	[[nodiscard]] StashTabKind kind(unsigned page) const;
-	/** @brief Makes the tab another kind; the caller checks it's empty. Premade tabs have no affinities. */
-	void setKind(unsigned page, StashTabKind kind);
+	/** @brief Makes the tab another kind if the stash may have another of it; the caller checks it's empty. Premade tabs have no affinities. */
+	bool setKind(unsigned page, StashTabKind kind);
+	/** @brief Moves the tab to another place in the order; the stash's grids are moved by MoveStashTab. */
+	void moveTab(unsigned from, unsigned to);
 	/** @brief Whether the tab takes the item: a premade tab its own kind, a blank tab anything its affinities allow. */
 	[[nodiscard]] bool accepts(unsigned page, const Item &item) const;
 	[[nodiscard]] std::string displayName(unsigned page) const;

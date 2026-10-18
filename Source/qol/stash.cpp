@@ -1251,12 +1251,143 @@ bool AutoPlaceItemInAnyStashTab(const Item &item)
 		Stash.SetPage(page);
 		placed = AutoPlaceItemInStash(item, true);
 	}
-	while (!placed && StashTabs.addTab()) {
+	while (!placed && StashTabs.addOverflowTab()) {
 		Stash.SetPage(StashTabs.count() - 1);
 		placed = AutoPlaceItemInStash(item, true);
 	}
 	Stash.SetPage(current);
 	return placed;
+}
+
+namespace {
+
+/** @brief Gives each grid the key of its tab's new page; pages past the tabs keep theirs. */
+template <typename NewPage>
+void RekeyStashGrids(NewPage newPage)
+{
+	ankerl::unordered_dense::map<unsigned, StashStruct::StashGrid> grids;
+	for (auto &[key, grid] : Stash.stashGrids) {
+		const std::optional<unsigned> page = newPage(StashGridPage(key));
+		if (page)
+			grids[StashGridKey(*page, GridIndexOfKey(key))] = grid;
+	}
+	Stash.stashGrids = std::move(grids);
+	Stash.dirty = true;
+}
+
+/** @brief Removes an empty tab; the tabs after it move up a page. */
+void RemoveEmptyStashTab(unsigned page)
+{
+	const unsigned open = Stash.GetPage();
+	RekeyStashGrids([page](unsigned owner) -> std::optional<unsigned> {
+		if (owner == page)
+			return std::nullopt;
+		return owner > page ? owner - 1 : owner;
+	});
+	StashTabs.tabs.erase(StashTabs.tabs.begin() + page);
+	Stash.SetPage(open > page ? open - 1 : open);
+}
+
+/** @brief A tab too many: a second tab of a premade kind, or a blank tab after the first two. */
+bool IsSurplusStashTab(unsigned page)
+{
+	const StashTabKind kind = StashTabs.kind(page);
+	unsigned before = 0;
+	for (unsigned other = 0; other < page; other++) {
+		if (StashTabs.kind(other) == kind)
+			before++;
+	}
+	return before >= (kind == StashTabKind::Blank ? MaxBlankStashTabs : 1U);
+}
+
+bool PlaceOnBlankTab(unsigned page, const Item &item)
+{
+	const unsigned open = Stash.GetPage();
+	Stash.SetPage(page);
+	const bool placed = AutoPlaceItemInStash(item, true);
+	Stash.SetPage(open);
+	return placed;
+}
+
+/** @brief Stores the item on the tabs that are kept: its premade tab, else a blank one. What doesn't fit stays in item. */
+bool PlaceOnKeptTabs(Item &item, unsigned surplusPage)
+{
+	for (unsigned page = 0; page < StashTabs.count() && !item.isEmpty(); page++) {
+		if (page != surplusPage && StashTabs.kind(page) != StashTabKind::Blank && !IsSurplusStashTab(page))
+			StoreInPremadeTab(page, item);
+	}
+	// A blank tab holds stacks of an inventory stack's size at most.
+	while (!item.isEmpty()) {
+		Item part = item;
+		const bool split = IsStackable(item) && StoredStackCount(item) > CurrencyStackMax;
+		if (IsStackable(part))
+			SetStackCount(part, std::min(StoredStackCount(item), CurrencyStackMax));
+		bool placed = false;
+		for (unsigned page = 0; page < StashTabs.count() && !placed; page++) {
+			if (page != surplusPage && StashTabs.kind(page) == StashTabKind::Blank && !IsSurplusStashTab(page))
+				placed = PlaceOnBlankTab(page, part);
+		}
+		if (!placed)
+			return false;
+		if (split)
+			SetStoredStackCount(item, StoredStackCount(item) - CurrencyStackMax);
+		else
+			item.clear();
+	}
+	return true;
+}
+
+} // namespace
+
+void MoveStashTab(unsigned from, unsigned to)
+{
+	const unsigned count = StashTabs.count();
+	if (from >= count || to >= count || from == to)
+		return;
+	const auto newPage = [from, to](unsigned page) -> unsigned {
+		if (page == from)
+			return to;
+		if (from < to && page > from && page <= to)
+			return page - 1;
+		if (to < from && page >= to && page < from)
+			return page + 1;
+		return page;
+	};
+	const unsigned open = Stash.GetPage();
+	RekeyStashGrids([&newPage](unsigned page) -> std::optional<unsigned> { return newPage(page); });
+	StashTabs.moveTab(from, to);
+	Stash.SetPage(newPage(open));
+}
+
+void ConsolidateStashTabs()
+{
+	if (!gbIsPoe2)
+		return;
+	// From the last tab back, so removing one leaves the pages still to look at where they were.
+	for (unsigned page = StashTabs.count(); page-- > 0;) {
+		if (!IsSurplusStashTab(page))
+			continue;
+		std::vector<uint16_t> indices = StashTabItems(page);
+		std::vector<Item> items;
+		items.reserve(indices.size());
+		for (const uint16_t index : indices)
+			items.push_back(Stash.stashList[index]);
+		std::sort(indices.begin(), indices.end(), std::greater<>());
+		for (const uint16_t index : indices)
+			Stash.RemoveStashItem(index);
+		bool emptied = true;
+		for (Item &item : items) {
+			if (PlaceOnKeptTabs(item, page))
+				continue;
+			// It stays on this tab, which stays too.
+			emptied = false;
+			const bool back = StashTabs.kind(page) == StashTabKind::Blank ? PlaceOnBlankTab(page, item) : StoreInPremadeTab(page, item);
+			if (!back && !AutoPlaceItemInAnyStashTab(item))
+				LogError("Stash: no room for {}, it was lost", item._iIName);
+		}
+		if (emptied && IsStashTabEmpty(page))
+			RemoveEmptyStashTab(page);
+	}
 }
 
 void FitOneCellStashItems()

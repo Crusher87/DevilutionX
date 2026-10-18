@@ -67,11 +67,29 @@ void StashTabSet::ensureCount(unsigned count)
 		tabs.resize(count);
 }
 
+unsigned StashTabSet::countOf(StashTabKind kind) const
+{
+	return static_cast<unsigned>(std::count_if(tabs.begin(), tabs.end(), [kind](const StashTab &tab) { return tab.kind == kind; }));
+}
+
+bool StashTabSet::canHaveAnother(StashTabKind kind) const
+{
+	return countOf(kind) < (kind == StashTabKind::Blank ? MaxBlankStashTabs : 1);
+}
+
 bool StashTabSet::addTab(StashTabKind kind)
+{
+	if (tabs.size() >= MaxStashTabs || !canHaveAnother(kind))
+		return false;
+	tabs.push_back({ .color = kind == StashTabKind::Blank ? DefaultStashTabColor : DefaultStashTabColorFor(kind), .kind = kind });
+	return true;
+}
+
+bool StashTabSet::addOverflowTab()
 {
 	if (tabs.size() >= MaxStashTabs)
 		return false;
-	tabs.push_back({ .color = kind == StashTabKind::Blank ? DefaultStashTabColor : DefaultStashTabColorFor(kind), .kind = kind });
+	tabs.emplace_back();
 	return true;
 }
 
@@ -88,13 +106,27 @@ StashTabKind StashTabSet::kind(unsigned page) const
 	return page < tabs.size() ? tabs[page].kind : StashTabKind::Blank;
 }
 
-void StashTabSet::setKind(unsigned page, StashTabKind kind)
+bool StashTabSet::setKind(unsigned page, StashTabKind kind)
 {
 	if (page >= tabs.size() || kind >= StashTabKind::Count)
-		return;
+		return false;
+	if (tabs[page].kind == kind)
+		return true;
+	if (!canHaveAnother(kind))
+		return false;
 	tabs[page].kind = kind;
 	if (kind != StashTabKind::Blank)
 		tabs[page].affinities = 0;
+	return true;
+}
+
+void StashTabSet::moveTab(unsigned from, unsigned to)
+{
+	if (from >= tabs.size() || to >= tabs.size() || from == to)
+		return;
+	StashTab tab = std::move(tabs[from]);
+	tabs.erase(tabs.begin() + from);
+	tabs.insert(tabs.begin() + to, std::move(tab));
 }
 
 bool StashTabSet::accepts(unsigned page, const Item &item) const
@@ -115,7 +147,10 @@ std::string StashTabSet::displayName(unsigned page) const
 		return tabs[page].name;
 	if (page < tabs.size() && tabs[page].isPremade())
 		return std::string(StashTabKindName(tabs[page].kind));
-	return StrCat(page + 1);
+	if (page >= tabs.size())
+		return StrCat(page + 1);
+	// Blank tabs are numbered among themselves, so moving a premade tab doesn't renumber them.
+	return StrCat(std::count_if(tabs.begin(), tabs.begin() + page + 1, [](const StashTab &tab) { return !tab.isPremade(); }));
 }
 
 void StashTabSet::rename(unsigned page, std::string_view name)

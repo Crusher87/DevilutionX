@@ -75,6 +75,20 @@ unsigned SettingsPage = 0;
 unsigned ListScroll = 0;
 bool EditingName = false;
 
+/** A tab being dragged to another place in the order, from the strip or the drawer (Curtis 2026-10-17). */
+struct TabDrag {
+	unsigned page;
+	Point start;
+	/** A drag from the drawer: the game never saw its mouse down, so it doesn't see the mouse up either. */
+	bool fromDrawer = false;
+	bool moving = false;
+};
+std::optional<TabDrag> Drag;
+/** The mouse moves this far with the button down before a click on a tab becomes a drag. */
+constexpr int DragThreshold = 5;
+uint32_t DragScrolledAt = 0;
+constexpr uint32_t DragScrollMs = 250;
+
 char NameBuffer[MaxStashTabNameLength + 1];
 TextInputCursorState NameCursor;
 TextInputState NameInput {
@@ -105,9 +119,33 @@ Rectangle PopupRect()
 	return At(10, 8, 300, 338);
 }
 
+/** @brief The kind a new tab gets: blank, else a premade kind the stash has none of; none once it has them all. */
+std::optional<StashTabKind> NewTabKind()
+{
+	if (StashTabs.count() >= MaxStashTabs)
+		return std::nullopt;
+	if (StashTabs.canHaveAnother(StashTabKind::Blank))
+		return StashTabKind::Blank;
+	for (const StashTabKind kind : PremadeStashTabKinds) {
+		if (StashTabs.canHaveAnother(kind))
+			return kind;
+	}
+	return std::nullopt;
+}
+
 unsigned ListEntries()
 {
-	return StashTabs.count() + (StashTabs.count() < MaxStashTabs ? 1 : 0);
+	return StashTabs.count() + (NewTabKind() ? 1 : 0);
+}
+
+/** @brief Why the tab can't become the kind, or empty when it can. */
+std::string KindRefusal(unsigned page, StashTabKind kind)
+{
+	if (StashTabs.kind(page) == kind || StashTabs.canHaveAnother(kind))
+		return {};
+	if (kind == StashTabKind::Blank)
+		return std::string(_("A stash has two blank tabs at most."));
+	return StrCat(_("You already have a "), StashTabKindName(kind), _(" tab."));
 }
 
 /** @brief The drawer, against the stash panel's right edge, kept on the screen. */
@@ -122,6 +160,14 @@ Rectangle ListRow(unsigned visibleRow)
 {
 	const Rectangle popup = DrawerRect();
 	return { popup.position + Displacement { 6, ListTop + (static_cast<int>(visibleRow) * RowHeight) }, { popup.size.width - 12, RowHeight - 2 } };
+}
+
+/** @brief Where in the drawer's list a dragged tab would go: before this page, or the tab count for the end. */
+unsigned DrawerInsertionAt(Point position)
+{
+	const int offset = std::max(position.y - ListRow(0).position.y + (RowHeight / 2), 0);
+	const unsigned row = std::min(static_cast<unsigned>(offset / RowHeight), static_cast<unsigned>(ListRows));
+	return std::min(ListScroll + row, StashTabs.count());
 }
 
 Rectangle NameField()
@@ -252,10 +298,13 @@ void DrawList(const Surface &out)
 		if (entry >= ListEntries())
 			break;
 		const Rectangle rect = ListRow(row);
-		const bool hovered = rect.contains(MousePosition) && OpenPopup == Popup::None;
+		// While a tab is dragged only the marker shows where it goes.
+		const bool hovered = rect.contains(MousePosition) && OpenPopup == Popup::None && !(Drag && Drag->moving);
 		if (entry >= StashTabs.count()) {
 			FillRectangle(out, rect, hovered ? RowHoverColor : RowColor);
-			DrawString(out, _("+ New tab"), rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorGold });
+			const StashTabKind kind = NewTabKind().value_or(StashTabKind::Blank);
+			DrawString(out, kind == StashTabKind::Blank ? std::string(_("+ New tab")) : StrCat(_("+ New "), StashTabKindName(kind), _(" tab")), rect,
+			    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorGold });
 			continue;
 		}
 		const StashTab &tab = StashTabs.tabs[entry];
@@ -273,6 +322,17 @@ void DrawList(const Surface &out)
 		}
 	}
 
+	if (Drag && Drag->moving && popup.contains(MousePosition)) {
+		const unsigned insertion = DrawerInsertionAt(MousePosition);
+		if (insertion >= ListScroll && insertion <= ListScroll + ListRows) {
+			const Rectangle row = ListRow(0);
+			const int y = row.position.y + (static_cast<int>(insertion - ListScroll) * RowHeight) - 2;
+			FillRectangle(out, { { row.position.x, y }, { row.size.width, 2 } }, HoverColor);
+		}
+	}
+
+	DrawString(out, _("Drag a tab to move it"), { popup.position + Displacement { 0, popup.size.height - 38 }, { popup.size.width, 16 } },
+	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
 	DrawString(out, _("Right-click: settings"), { popup.position + Displacement { 0, popup.size.height - 22 }, { popup.size.width, 16 } },
 	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
 }
@@ -316,12 +376,13 @@ void DrawSettings(const Surface &out)
 	for (size_t i = 0; i < std::size(KindChoices); i++) {
 		const Rectangle rect = KindRect(i);
 		const bool selected = tab.kind == KindChoices[i];
+		const bool allowed = empty && KindRefusal(SettingsPage, KindChoices[i]).empty();
 		FillRectangle(out, rect, selected ? RowHoverColor : RowColor);
-		DrawFrame(out, rect, selected ? HoverColor : (rect.contains(MousePosition) && empty ? HoverColor : BorderColor));
+		DrawFrame(out, rect, selected ? HoverColor : (rect.contains(MousePosition) && allowed ? HoverColor : BorderColor));
 		DrawString(out, FitText(std::string(StashTabKindName(KindChoices[i])), rect.size.width - 4), rect,
-		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (selected ? UiFlags::ColorWhitegold : (empty ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed)) });
+		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (selected ? UiFlags::ColorWhitegold : (allowed ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed)) });
 	}
-	DrawString(out, empty ? _("Premade tabs lay out their own items") : _("Empty the tab to change its kind"),
+	DrawString(out, empty ? _("One of each premade tab, two blank tabs") : _("Empty the tab to change its kind"),
 	    { popup.position + Displacement { 14, 186 }, { popup.size.width - 28, 16 } }, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
 
 	if (tab.isPremade()) {
@@ -369,16 +430,20 @@ bool HandleListClick(bool rightClick)
 		if (!ListRow(row).contains(MousePosition))
 			continue;
 		if (entry >= StashTabs.count()) {
-			if (StashTabs.addTab()) {
+			const std::optional<StashTabKind> kind = NewTabKind();
+			if (kind && StashTabs.addTab(*kind)) {
 				Stash.dirty = true;
 				ScrollList(1);
 			}
 			return true;
 		}
-		if (rightClick)
+		if (rightClick) {
 			OpenSettings(entry);
-		else
+		} else {
 			Stash.SetPage(entry);
+			if (MyPlayer->HoldItem.isEmpty())
+				Drag = TabDrag { .page = entry, .start = MousePosition, .fromDrawer = true };
+		}
 		return true;
 	}
 	return true;
@@ -406,6 +471,11 @@ bool HandleSettingsClick()
 			continue;
 		if (!IsStashTabEmpty(SettingsPage)) {
 			EventPlrMsg(_("Empty the tab to change its kind."), UiFlags::ColorWhite);
+			return true;
+		}
+		const std::string refusal = KindRefusal(SettingsPage, KindChoices[i]);
+		if (!refusal.empty()) {
+			EventPlrMsg(refusal, UiFlags::ColorWhite);
 			return true;
 		}
 		StashTabs.setKind(SettingsPage, KindChoices[i]);
@@ -547,6 +617,17 @@ std::vector<VisibleTab> VisibleTabs()
 	return visible;
 }
 
+/** @brief Where in the strip a dragged tab would go: before this page, or after the last tab shown. */
+unsigned StripInsertionAt(Point position)
+{
+	const std::vector<VisibleTab> visible = VisibleTabs();
+	for (const VisibleTab &tab : visible) {
+		if (position.x < tab.rect.position.x + (tab.rect.size.width / 2))
+			return tab.page;
+	}
+	return visible.empty() ? StashTabs.count() : visible.back().page + 1;
+}
+
 bool CanScrollTabsRight()
 {
 	const std::vector<VisibleTab> visible = VisibleTabs();
@@ -611,6 +692,89 @@ void DrawTabStrip(const Surface &out)
 		DrawString(out, FitText(StashTabs.displayName(visible.page), visible.rect.size.width - 6), visible.rect,
 		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | TextColorOn(tab.color) });
 	}
+
+	if (!Drag || !Drag->moving)
+		return;
+	// Holding a dragged tab over an arrow scrolls the strip.
+	if (SDL_GetTicks() - DragScrolledAt >= DragScrollMs) {
+		if (StripLeftArrow().contains(MousePosition) && TabScroll > 0) {
+			TabScroll--;
+			DragScrolledAt = SDL_GetTicks();
+		} else if (StripRightArrow().contains(MousePosition) && CanScrollTabsRight()) {
+			TabScroll++;
+			DragScrolledAt = SDL_GetTicks();
+		}
+	}
+	if (!At(0, 0, 320, HeaderY).contains(MousePosition))
+		return;
+	const std::vector<VisibleTab> visible = VisibleTabs();
+	if (visible.empty())
+		return;
+	const unsigned insertion = StripInsertionAt(MousePosition);
+	const auto before = std::find_if(visible.begin(), visible.end(), [insertion](const VisibleTab &tab) { return tab.page == insertion; });
+	const int x = before != visible.end() ? before->rect.position.x - 2 : visible.back().rect.position.x + visible.back().rect.size.width;
+	FillRectangle(out, { { x, visible.front().rect.position.y - 1 }, { 2, StripHeight + 2 } }, HoverColor);
+}
+
+/** @brief The dragged tab's name under the cursor. */
+void DrawDraggedTab(const Surface &out)
+{
+	if (!Drag || !Drag->moving || Drag->page >= StashTabs.count())
+		return;
+	const StashTab &tab = StashTabs.tabs[Drag->page];
+	const Rectangle rect { MousePosition + Displacement { 8, 6 }, { TabWidth(Drag->page), StripHeight } };
+	FillRectangle(out, rect, StashTabPaletteColor(tab.color));
+	DrawFrame(out, rect, HoverColor);
+	DrawString(out, FitText(StashTabs.displayName(Drag->page), rect.size.width - 6), rect,
+	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | TextColorOn(tab.color) });
+}
+
+/** @brief Puts the tab at the insertion place, the open tab staying open. */
+void DropTab(unsigned page, unsigned insertion)
+{
+	const unsigned to = insertion > page ? insertion - 1 : insertion;
+	if (to == page || to >= StashTabs.count())
+		return;
+	MoveStashTab(page, to);
+	EnsureTabVisible(Stash.GetPage());
+	LastShownPage = Stash.GetPage();
+}
+
+/** @brief Starts, follows and ends dragging a tab; on the drop, whether the stash took the event. */
+std::optional<bool> HandleTabDragEvent(const SDL_Event &event)
+{
+	if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT && MyPlayer->HoldItem.isEmpty() && !Drag) {
+		const Point position { SDLC_EventButtonIntX(event), SDLC_EventButtonIntY(event) };
+		if (!DrawerOpen || !DrawerRect().contains(position)) {
+			for (const VisibleTab &visible : VisibleTabs()) {
+				if (visible.rect.contains(position))
+					Drag = TabDrag { .page = visible.page, .start = position };
+			}
+		}
+		// The click itself still opens the tab.
+		return std::nullopt;
+	}
+	if (event.type == SDL_EVENT_MOUSE_MOTION) {
+		if (Drag && !Drag->moving) {
+			const Point position { SDLC_EventMotionIntX(event), SDLC_EventMotionIntY(event) };
+			if (std::abs(position.x - Drag->start.x) + std::abs(position.y - Drag->start.y) > DragThreshold)
+				Drag->moving = true;
+		}
+		return std::nullopt;
+	}
+	if (event.type != SDL_EVENT_MOUSE_BUTTON_UP || event.button.button != SDL_BUTTON_LEFT || !Drag)
+		return std::nullopt;
+	const TabDrag drag = *Drag;
+	Drag = std::nullopt;
+	if (drag.moving) {
+		const Point position { SDLC_EventButtonIntX(event), SDLC_EventButtonIntY(event) };
+		if (DrawerOpen && DrawerRect().contains(position))
+			DropTab(drag.page, DrawerInsertionAt(position));
+		else if (At(0, 0, 320, HeaderY).contains(position))
+			DropTab(drag.page, StripInsertionAt(position));
+	}
+	// The game lets go of the mouse button it saw go down.
+	return drag.fromDrawer;
 }
 
 // ---------------------------------------------------------------------------
@@ -1210,6 +1374,7 @@ void CloseStashTabPopups()
 {
 	StopEditingName();
 	OpenPopup = Popup::None;
+	Drag = std::nullopt;
 	// The drawer stays as it was, so it is open again next time the stash is (Curtis 2026-10-18).
 }
 
@@ -1253,6 +1418,7 @@ void DrawStashTabUi(const Surface &out)
 		DrawList(out);
 	if (OpenPopup == Popup::Settings)
 		DrawSettings(out);
+	DrawDraggedTab(out);
 }
 
 StashStruct::StashCell PremadeTabItemUnderCursor(Point mousePosition)
@@ -1293,12 +1459,14 @@ bool HandlePoe2StashClick(Point mousePosition, bool /*isShiftHeld*/, bool isCtrl
 bool StashTabsHandleEvent(const SDL_Event &event)
 {
 	if (!gbIsPoe2 || !IsStashOpen) {
-		if (OpenPopup != Popup::None)
+		if (OpenPopup != Popup::None || Drag)
 			CloseStashTabPopups();
 		return false;
 	}
 	if (OpenPopup != Popup::None)
 		return HandlePopupEvent(event);
+	if (const std::optional<bool> dropped = HandleTabDragEvent(event))
+		return *dropped;
 
 	// The drawer takes clicks and the wheel over it; everything else goes to the stash as usual, so Escape closes
 	// the whole stash, drawer and all (Curtis 2026-10-18).
