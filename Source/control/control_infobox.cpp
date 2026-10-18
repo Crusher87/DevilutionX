@@ -314,6 +314,7 @@ UiFlags TooltipLineColor(InfoLineStyle style)
 {
 	switch (style) {
 	case InfoLineStyle::Mod:
+	case InfoLineStyle::Affix:
 		return UiFlags::ColorBlue;
 	case InfoLineStyle::Corrupted:
 		return UiFlags::ColorRed;
@@ -349,6 +350,7 @@ int TooltipGroup(InfoLineStyle style)
 	case InfoLineStyle::Implicit:
 		return 1;
 	case InfoLineStyle::Mod:
+	case InfoLineStyle::Affix:
 	case InfoLineStyle::Corrupted:
 		return 2;
 	case InfoLineStyle::Better:
@@ -390,6 +392,41 @@ constexpr int TooltipTitleHeight = 18;
 constexpr int TooltipPadding = 12;
 constexpr int TooltipSeparatorHeight = 9;
 
+/** @brief An Alt view modifier line split into its side ("Prefix"), stat text and tier ("T3"). */
+struct AffixLine {
+	std::string_view side;
+	std::string_view text;
+	std::string_view tier;
+};
+
+AffixLine SplitAffixLine(std::string_view line)
+{
+	AffixLine parts;
+	const size_t first = line.find('\t');
+	if (first == std::string_view::npos) {
+		parts.text = line;
+		return parts;
+	}
+	parts.side = line.substr(0, first);
+	line.remove_prefix(first + 1);
+	const size_t second = line.find('\t');
+	parts.text = line.substr(0, second);
+	if (second != std::string_view::npos)
+		parts.tier = line.substr(second + 1);
+	return parts;
+}
+
+/** @brief The widths of the side and tier columns of the Alt view's modifier lines. */
+int AffixSideWidth()
+{
+	return std::max(GetLineWidth(_("Prefix"), GameFont12, 1), GetLineWidth(_("Suffix"), GameFont12, 1)) + 10;
+}
+
+int AffixTierWidth()
+{
+	return GetLineWidth("T10", GameFont12, 1) + 8;
+}
+
 /** @brief Splits a tooltip's text into its title lines and body, and measures it. */
 TooltipLayout MeasureTooltip(const Surface &out, const std::string &text, const std::vector<InfoLineStyle> &lineStyles)
 {
@@ -412,7 +449,10 @@ TooltipLayout MeasureTooltip(const Surface &out, const std::string &text, const 
 	int bodyHeight = 0;
 	int previousGroup = -1;
 	for (size_t i = layout.first; i < layout.lines.size(); i++) {
-		layout.width = std::max(layout.width, GetLineWidth(layout.lines[i], GameFont12, 1) + (TooltipPadding * 2));
+		if (layout.styles[i - 1] == InfoLineStyle::Affix)
+			layout.width = std::max(layout.width, GetLineWidth(SplitAffixLine(layout.lines[i]).text, GameFont12, 1) + (std::max(AffixSideWidth(), AffixTierWidth()) * 2) + (TooltipPadding * 2));
+		else
+			layout.width = std::max(layout.width, GetLineWidth(layout.lines[i], GameFont12, 1) + (TooltipPadding * 2));
 		const int group = TooltipGroup(layout.styles[i - 1]);
 		if (previousGroup != -1 && group != previousGroup)
 			bodyHeight += TooltipSeparatorHeight;
@@ -469,7 +509,16 @@ void DrawTooltipBox(const Surface &out, const TooltipLayout &layout, int x, int 
 			lineY += TooltipSeparatorHeight;
 		}
 		previousGroup = group;
-		DrawString(out, layout.lines[i], { { x, lineY }, { width, TooltipLineHeight } }, { .flags = TooltipLineColor(style) | UiFlags::AlignCenter, .spacing = 1 });
+		if (style == InfoLineStyle::Affix) {
+			// Like POE2's Alt view: the side on the left, the stat in the middle, the tier on the right.
+			const AffixLine parts = SplitAffixLine(layout.lines[i]);
+			DrawString(out, parts.side, { { x + TooltipPadding, lineY }, { AffixSideWidth(), TooltipLineHeight } }, { .flags = UiFlags::ColorButtonpushed, .spacing = 1 });
+			DrawString(out, parts.text, { { x, lineY }, { width, TooltipLineHeight } }, { .flags = TooltipLineColor(style) | UiFlags::AlignCenter, .spacing = 1 });
+			const UiFlags tierColor = parts.tier == "T1" ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed;
+			DrawString(out, parts.tier, { { x + width - TooltipPadding - AffixTierWidth(), lineY }, { AffixTierWidth(), TooltipLineHeight } }, { .flags = tierColor | UiFlags::AlignRight, .spacing = 1 });
+		} else {
+			DrawString(out, layout.lines[i], { { x, lineY }, { width, TooltipLineHeight } }, { .flags = TooltipLineColor(style) | UiFlags::AlignCenter, .spacing = 1 });
+		}
 		lineY += TooltipLineHeight;
 	}
 }

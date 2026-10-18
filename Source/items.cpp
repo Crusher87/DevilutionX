@@ -6281,18 +6281,29 @@ void PrintItemDetails(const Item &item)
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
 	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
-		// Holding Alt shows each modifier's side, name and tier, and the range it can roll, as in POE2.
+		// Holding Alt shows the prefixes, then the suffixes, each stat with the range it can roll and its tier at the
+		// end of the line, as compact as POE2's (Curtis 2026-10-18).
 		const bool advanced = gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0;
-		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
-			if (!advanced) {
+		if (!advanced) {
+			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
 				for (const std::string &line : ItemModText(mod))
 					AddItemInfoBoxString(line);
-				continue;
 			}
-			const std::vector<std::string> lines = ItemModAdvancedText(mod);
-			for (size_t i = 0; i < lines.size(); i++) {
-				CurrentInfoLineStyle = i == 0 ? InfoLineStyle::Note : InfoLineStyle::Mod;
-				AddItemInfoBoxString(lines[i]);
+		} else {
+			CurrentInfoLineStyle = InfoLineStyle::Affix;
+			for (const bool prefixes : { true, false }) {
+				bool first = true;
+				for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+					const ModFamily *family = ItemModFamily(mod);
+					if (family == nullptr || family->prefix != prefixes)
+						continue;
+					const std::vector<std::string> lines = ItemModAdvancedText(mod);
+					for (size_t i = 0; i < lines.size(); i++) {
+						const std::string_view side = !first ? "" : prefixes ? _("Prefix") : _("Suffix");
+						AddItemInfoBoxString(StrCat(side, "\t", lines[i], "\t", i + 1 == lines.size() ? StrCat("T", mod.tier) : ""));
+						first = false;
+					}
+				}
 			}
 		}
 		CurrentInfoLineStyle = InfoLineStyle::Mod;

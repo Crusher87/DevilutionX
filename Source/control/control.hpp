@@ -71,6 +71,11 @@ enum class InfoLineStyle : uint8_t {
 	LightningDamage,
 	/** A unique's flavour text, at the end of its tooltip. */
 	Flavour,
+	/**
+	 * A modifier line in the Alt view, laid out like POE2's: "side\tstat\ttier", with the side ("Prefix" or "Suffix",
+	 * only on a group's first line) on the left and the tier ("T3") on the right; either may be empty.
+	 */
+	Affix,
 };
 /** @brief The style given to the next floating info lines; reset to Default after each item. */
 extern InfoLineStyle CurrentInfoLineStyle;

@@ -817,7 +817,6 @@ std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod)
 	const ModFamily *family = ItemModFamily(mod);
 	if (family == nullptr)
 		return lines;
-	lines.push_back(FormatRuntime(family->prefix ? _("{{ Prefix Modifier \"{:s}\" (Tier: {:d}) }}") : _("{{ Suffix Modifier \"{:s}\" (Tier: {:d}) }}"), family->word, mod.tier));
 	const ModTier *tier = nullptr;
 	for (const ModTier &candidate : family->tiers) {
 		if (candidate.tier == mod.tier)

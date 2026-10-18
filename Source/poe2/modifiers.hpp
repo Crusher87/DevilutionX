@@ -230,8 +230,8 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1);
 /** @brief The modifier's tooltip lines; its tier shows only in the Alt view. */
 std::vector<std::string> ItemModText(const Poe2ItemMod &mod);
 /**
- * @brief The modifier as POE2 shows it with Alt held: a header line with its side, name and tier, then each stat with
- * the tier's range after the rolled value, like "+8(3-10) to Armour".
+ * @brief The modifier's stats as POE2 shows them with Alt held: the tier's range after the rolled value, like
+ * "+8(3-10) to Armour". The tooltip adds its side (Prefix or Suffix) and tier beside the lines.
  */
 std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod);
 
