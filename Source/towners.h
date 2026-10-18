@@ -39,6 +39,8 @@ enum _talker_id : uint8_t {
 	TOWN_COWFARM,
 	/** POE2 Mashup: the shared stash, a chest by the town portals. */
 	TOWN_STASH,
+	/** POE2 Mashup: the anvil beside Griswold's smithy, where items are salvaged. */
+	TOWN_ANVIL,
 	// Note: Enum values are parsed from TSV using magic_enum
 	// The actual count is determined dynamically from TSV data
 };

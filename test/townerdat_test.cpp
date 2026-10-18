@@ -288,6 +288,11 @@ TEST(TownerDat, Poe2AddsTheStashChest)
 	ASSERT_NE(stash, nullptr);
 	EXPECT_EQ(stash->name, "Stash");
 	EXPECT_EQ(stash->animPath, "objects\\chest3");
+	// And the anvil beside the smithy, for salvaging.
+	const TownerDataEntry *anvil = FindTownerDataByType(TOWN_ANVIL);
+	ASSERT_NE(anvil, nullptr);
+	EXPECT_EQ(anvil->name, "Anvil");
+	EXPECT_EQ(anvil->animOrder.size(), 1U);
 	// The mod keeps every towner of Hellfire's table.
 	EXPECT_NE(FindTownerDataByType(TOWN_GIRL), nullptr);
 	EXPECT_NE(FindTownerDataByType(TOWN_COWFARM), nullptr);

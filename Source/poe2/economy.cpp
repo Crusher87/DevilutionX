@@ -175,7 +175,7 @@ std::optional<SalvageYield> GetSalvageYield(const Item &item)
 		}
 	}
 	const int quality = ItemQuality(item);
-	return SalvageYield { currency, quality / 5, (quality % 5) * 20, std::min<int>(item._iPoe2Craft.sockets, 3) };
+	return SalvageYield { currency, (quality + 4) / 5, std::min<int>(item._iPoe2Craft.sockets, 3) };
 }
 
 int AddShards(Player &player, ShardKind kind, int shards)
@@ -236,16 +236,33 @@ bool SalvageInvItem(Player &player, int invIndex)
 	}
 	TelemetryLog("economy", StrCat("salvaged ", item.getName()));
 	player.RemoveInvItem(invIndex);
-	int full = yield->full;
-	if (yield->extraPercent > 0 && GenerateRnd(100) < yield->extraPercent)
-		full++;
-	for (int i = 0; i < full; i++)
+	for (int i = 0; i < yield->full; i++)
 		GiveCurrencyItem(player, yield->currency);
+	if (yield->full > 0)
+		EventPlrMsg(SalvageYieldText(SalvageYield { yield->currency, yield->full, 0 }));
 	if (yield->socketShards > 0)
 		GainShards(player, ShardKind::Artificer, yield->socketShards);
-	else if (full == 0)
+	else if (yield->full == 0)
 		EventPlrMsg(_("Salvaging it gave nothing: it had no quality or sockets."));
 	return true;
+}
+
+std::string SalvageYieldText(const SalvageYield &yield)
+{
+	std::string text;
+	if (yield.full > 0) {
+		std::string_view name = _("currency");
+		for (const ItemData &data : AllItemsList) {
+			if (data.iMiscId == yield.currency) {
+				name = _(data.iName);
+				break;
+			}
+		}
+		StrAppend(text, yield.full, " ", name, yield.full == 1 ? "" : "s");
+	}
+	if (yield.socketShards > 0)
+		StrAppend(text, text.empty() ? "" : _(" and "), yield.socketShards, " ", ShardName(ShardKind::Artificer), yield.socketShards == 1 ? "" : "s");
+	return text.empty() ? std::string(_("nothing")) : text;
 }
 
 std::string_view ShardName(ShardKind kind)

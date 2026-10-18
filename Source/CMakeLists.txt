@@ -152,6 +152,7 @@ set(libdevilutionx_SRCS
   panels/quest_log.cpp
   panels/item_spawner.cpp
   panels/atlas_panel.cpp
+  panels/anvil_panel.cpp
   panels/desecration_panel.cpp
   panels/gemcutting_panel.cpp
   panels/passive_tree_panel.cpp

@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include "items.h"
@@ -68,10 +69,9 @@ struct DisenchantYield {
 std::optional<DisenchantYield> GetDisenchantYield(const Item &item);
 
 struct SalvageYield {
-	/** @brief The quality currency it gives, its full items, and the chance in percent of one more. */
+	/** @brief The quality currency it gives, and how many: one per 5% quality, rounded up, like POE2's salvage bench. */
 	item_misc_id currency;
 	int full;
-	int extraPercent;
 	/** @brief Artificer shards from its sockets. */
 	int socketShards;
 };
@@ -85,6 +85,8 @@ item_misc_id ShardCurrency(ShardKind kind);
 bool DisenchantInvItem(Player &player, int invIndex);
 /** @brief Salvages the inventory item: it's destroyed for quality currency and socket shards. */
 bool SalvageInvItem(Player &player, int invIndex);
+/** @brief "3 Blacksmith's Whetstones and 2 Artificer's Shards", or "nothing", for the anvil. */
+std::string SalvageYieldText(const SalvageYield &yield);
 std::string_view ShardName(ShardKind kind);
 
 } // namespace devilution

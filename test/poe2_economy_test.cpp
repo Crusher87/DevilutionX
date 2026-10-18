@@ -142,9 +142,12 @@ TEST_F(Poe2EconomyTest, DisenchantAndSalvageYields)
 	const std::optional<SalvageYield> yield = GetSalvageYield(item);
 	ASSERT_TRUE(yield);
 	EXPECT_EQ(yield->currency, IMISC_ORB_WHETSTONE);
-	EXPECT_EQ(yield->full, ItemQuality(item) / 5);
-	EXPECT_EQ(yield->extraPercent, (ItemQuality(item) % 5) * 20);
+	// One per 5% quality, rounded up.
+	EXPECT_EQ(yield->full, (ItemQuality(item) + 4) / 5);
 	EXPECT_EQ(yield->socketShards, 2);
+	EXPECT_EQ(SalvageYieldText(SalvageYield { IMISC_ORB_WHETSTONE, 3, 2 }), "3 Blacksmith's Whetstones and 2 Artificer's Shards");
+	EXPECT_EQ(SalvageYieldText(SalvageYield { IMISC_ORB_WHETSTONE, 1, 0 }), "1 Blacksmith's Whetstone");
+	EXPECT_EQ(SalvageYieldText(SalvageYield { IMISC_ORB_WHETSTONE, 0, 0 }), "nothing");
 
 	Item ring;
 	ASSERT_TRUE(MakeGambleItem(*MyPlayer, ring, GambleFamily::Ring, 20));

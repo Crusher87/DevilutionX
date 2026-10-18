@@ -15,3 +15,4 @@ TOWN_COWFARM	Complete Nut	61	22	SouthWest	96	towners\farmer\cfrmrn2	15	3
 TOWN_FARMER	Lester the farmer	62	16	South	96	towners\farmer\farmrn2	15	3		
 TOWN_GIRL	Celia	77	43	South	96	towners\girl\girlw1	20	6		
 TOWN_STASH	Stash	60	65	South	96	objects\chest3	1	1		
+TOWN_ANVIL	Anvil	64	63	South	96	items\fanvil	13	1000		12

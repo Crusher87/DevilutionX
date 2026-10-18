@@ -82,6 +82,7 @@
 #include "nthread.h"
 #include "objects.h"
 #include "options.h"
+#include "panels/anvil_panel.hpp"
 #include "panels/atlas_panel.hpp"
 #include "panels/console.hpp"
 #include "panels/desecration_panel.hpp"
@@ -252,7 +253,7 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen() || IsAtlasOpen())) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen() || IsAtlasOpen() || IsAnvilOpen())) {
 		RedrawViewport();
 		return false;
 	}
@@ -569,12 +570,10 @@ void RightMouseDown(bool isShiftHeld)
 		return;
 	if (TryIconCurs())
 		return;
-	// POE2 Mashup: Shift+right-click at Griswold salvages an item, and at Adria disenchants it.
+	// POE2 Mashup: Shift+right-click at Adria disenchants an item. Salvaging is at the anvil beside the smithy.
 	if (gbIsPoe2 && isShiftHeld && IsVisualStoreOpen && MyPlayer->HoldItem.isEmpty() && pcursinvitem >= INVITEM_INV_FIRST && pcursinvitem <= INVITEM_INV_LAST
-	    && IsAnyOf(VisualStore.vendor, VisualStoreVendor::Smith, VisualStoreVendor::Witch)) {
-		const int invIndex = pcursinvitem - INVITEM_INV_FIRST;
-		const bool done = VisualStore.vendor == VisualStoreVendor::Smith ? SalvageInvItem(*MyPlayer, invIndex) : DisenchantInvItem(*MyPlayer, invIndex);
-		if (done)
+	    && VisualStore.vendor == VisualStoreVendor::Witch) {
+		if (DisenchantInvItem(*MyPlayer, pcursinvitem - INVITEM_INV_FIRST))
 			PlaySFX(SfxID::ItemGold);
 		return;
 	}
@@ -909,6 +908,9 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		return;
 	}
 	if (GemcuttingHandleEvent(event)) {
+		return;
+	}
+	if (AnvilHandleEvent(event)) {
 		return;
 	}
 

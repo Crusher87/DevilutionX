@@ -16,6 +16,7 @@
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
 #include "minitext.h"
+#include "panels/anvil_panel.hpp"
 #include "player.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -614,6 +615,21 @@ void TalkToStash(Player &player, Towner & /*stash*/)
 	OpenStashPanel();
 }
 
+/** @brief The anvil is the Anvil of Fury's sprite, resting on its last frame. */
+void InitAnvil(Towner &towner, const TownerDataEntry &entry)
+{
+	InitStash(towner, entry);
+	if (!towner.animOrder.empty())
+		towner._tAnimFrame = towner.animOrder.front();
+}
+
+void TalkToAnvil(Player &player, Towner & /*anvil*/)
+{
+	if (&player != MyPlayer)
+		return;
+	OpenAnvil();
+}
+
 void TalkToCowFarmer(Player &player, Towner &cowFarmer)
 {
 	if (RemoveInventoryItemById(player, IDI_GREYSUIT)) {
@@ -736,6 +752,7 @@ const TownerData TownersData[] = {
 	{ TOWN_FARMER,  nullptr,       TalkToFarmer      },
 	{ TOWN_GIRL,    nullptr,       TalkToGirl        },
 	{ TOWN_STASH,   InitStash,     TalkToStash       },
+	{ TOWN_ANVIL,   InitAnvil,     TalkToAnvil       },
 	// clang-format on
 };
 
@@ -760,6 +777,7 @@ const std::unordered_map<_talker_id, const char *> TownerShortNames = {
 	{ TOWN_GIRL, "celia" },
 	{ TOWN_COWFARM, "nut" },
 	{ TOWN_STASH, "stash" },
+	{ TOWN_ANVIL, "anvil" },
 };
 
 size_t GetNumTownerTypes()
@@ -782,6 +800,7 @@ bool IsTownerPresent(_talker_id npc)
 	case TOWN_COWFARM:
 		return gbIsHellfire && sgGameInitInfo.bCowQuest != 0;
 	case TOWN_STASH:
+	case TOWN_ANVIL:
 		return gbIsPoe2;
 	case TOWN_GIRL:
 		return gbIsHellfire && sgGameInitInfo.bTheoQuest != 0 && MyPlayer->_pLvlVisited[17] && Quests[Q_GIRL]._qactive != QUEST_DONE;

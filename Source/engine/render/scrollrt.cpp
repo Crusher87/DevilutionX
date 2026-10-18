@@ -57,6 +57,7 @@
 #include "missiles.h"
 #include "nthread.h"
 #include "options.h"
+#include "panels/anvil_panel.hpp"
 #include "panels/atlas_panel.hpp"
 #include "panels/charpanel.hpp"
 #include "panels/console.hpp"
@@ -2027,6 +2028,7 @@ void DrawAndBlit()
 
 	DrawPassiveTree(out);
 	DrawGemcutting(out);
+	DrawAnvil(out);
 	DrawDesecrationReveal(out);
 	DrawAtlas(out);
 	DrawItemSpawner(out);

@@ -2248,7 +2248,7 @@ int8_t CheckInvHLight()
 				CurrentInfoLineStyle = InfoLineStyle::Requirement;
 				AddInfoBoxString(_("Drop it on the vendor to sell; Ctrl+click sells at once"), true);
 				if (VisualStore.vendor == VisualStoreVendor::Smith && GetSalvageYield(*pi))
-					AddInfoBoxString(_("Shift+right-click salvages it for quality currency"), true);
+					AddInfoBoxString(_("The anvil beside the smithy salvages it for quality currency"), true);
 				if (VisualStore.vendor == VisualStoreVendor::Witch && GetDisenchantYield(*pi))
 					AddInfoBoxString(_("Shift+right-click disenchants it for shards"), true);
 				CurrentInfoLineStyle = InfoLineStyle::Default;
