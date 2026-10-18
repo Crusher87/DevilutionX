@@ -1210,7 +1210,7 @@ void CloseStashTabPopups()
 {
 	StopEditingName();
 	OpenPopup = Popup::None;
-	DrawerOpen = false;
+	// The drawer stays as it was, so it is open again next time the stash is (Curtis 2026-10-18).
 }
 
 void DrawPoe2StashFrame(const Surface &out)
@@ -1293,19 +1293,16 @@ bool HandlePoe2StashClick(Point mousePosition, bool /*isShiftHeld*/, bool isCtrl
 bool StashTabsHandleEvent(const SDL_Event &event)
 {
 	if (!gbIsPoe2 || !IsStashOpen) {
-		if (OpenPopup != Popup::None || DrawerOpen)
+		if (OpenPopup != Popup::None)
 			CloseStashTabPopups();
 		return false;
 	}
 	if (OpenPopup != Popup::None)
 		return HandlePopupEvent(event);
 
-	// The drawer takes clicks and the wheel over it, and Escape; everything else goes to the stash as usual.
+	// The drawer takes clicks and the wheel over it; everything else goes to the stash as usual, so Escape closes
+	// the whole stash, drawer and all (Curtis 2026-10-18).
 	if (DrawerOpen) {
-		if (event.type == SDL_EVENT_KEY_DOWN && SDLC_EventKey(event) == SDLK_ESCAPE) {
-			DrawerOpen = false;
-			return true;
-		}
 		if (DrawerRect().contains(MousePosition)) {
 #ifdef USE_SDL1
 			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && (event.button.button == SDL_BUTTON_WHEELUP || event.button.button == SDL_BUTTON_WHEELDOWN)) {
