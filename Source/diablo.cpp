@@ -3210,18 +3210,7 @@ bool TryIconCurs()
 				PlaySFX(SfxID::SpellHolyBolt);
 			}
 		} else if (pcursstashitem != StashStruct::EmptyCell) {
-			Item &item = Stash.stashList[pcursstashitem];
-			changeCursor = ApplyOilToItem(item, myPlayer);
-			if (changeCursor)
-				SpendHeldCurrency(myPlayer);
-			if (CurrencyDestroyedItem) {
-				CurrencyDestroyedItem = false;
-				Stash.RemoveStashItem(pcursstashitem);
-			} else if (DesecrationRevealItem) {
-				OpenDesecrationReveal(item);
-			}
-			ConsumeCraftOmens(myPlayer);
-			Stash.dirty = true;
+			changeCursor = DoOilOnStashItem(myPlayer, pcursstashitem);
 		}
 		if (changeCursor && !(gbIsPoe2 && KeepCurrencyOnCursor(myPlayer))) {
 			SetStickyItemUse(false);

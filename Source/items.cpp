@@ -5808,6 +5808,21 @@ void SpendHeldCurrency(Player &player)
 	HeldCurrencyMisc = -1;
 }
 
+namespace {
+
+/** @brief Notes the craft in the play log, naming the currency on the cursor. */
+void TelemetryCurrencyCraft(const Player &player, const Item &item)
+{
+	for (const ItemData &data : AllItemsList) {
+		if (data.iMiscId == player._pOilType) {
+			TelemetryCrafted(player, data.iName, item);
+			return;
+		}
+	}
+}
+
+} // namespace
+
 bool DoOil(Player &player, int cii)
 {
 	Item *pi;
@@ -5824,13 +5839,12 @@ bool DoOil(Player &player, int cii)
 			OpenDesecrationReveal(*pi);
 		return false;
 	}
-	SpendHeldCurrency(player);
-	for (const ItemData &data : AllItemsList) {
-		if (data.iMiscId == player._pOilType) {
-			TelemetryCrafted(player, data.iName, *pi);
-			break;
-		}
-	}
+	// All that touches the crafted item comes before the currency is spent: using up the last orb of a stack takes it
+	// out of the bag, which moves every later item down one place, so pi and cii would name the next item (the play
+	// log said an Orb of Alchemy made Arkaine's Valor unique, and a failed Orb of Chance would destroy that next item).
+	TelemetryCurrencyCraft(player, *pi);
+	if (DesecrationRevealItem && &player == MyPlayer)
+		OpenDesecrationReveal(*pi);
 	// POE2 Mashup: a failed Orb of Chance destroys the item.
 	if (CurrencyDestroyedItem) {
 		CurrencyDestroyedItem = false;
@@ -5841,11 +5855,33 @@ bool DoOil(Player &player, int cii)
 		else
 			RemoveEquipment(player, static_cast<inv_body_loc>(cii), false);
 	}
+	// The orb and the omens are found by their kind, wherever they are by now.
+	SpendHeldCurrency(player);
 	ConsumeCraftOmens(player);
 	CalcPlrInv(player, true);
-	if (DesecrationRevealItem && &player == MyPlayer)
-		OpenDesecrationReveal(*pi);
 	return true;
+}
+
+bool DoOilOnStashItem(Player &player, uint16_t index)
+{
+	Item &item = Stash.stashList[index];
+	const bool applied = ApplyOilToItem(item, player);
+	// As in DoOil, the item first: using up the last of a stash stack moves the stash's last item into that stack's
+	// place, so item and index could then name another item, or one past the end of the stash.
+	if (applied)
+		TelemetryCurrencyCraft(player, item);
+	if (CurrencyDestroyedItem) {
+		CurrencyDestroyedItem = false;
+		Stash.RemoveStashItem(index);
+	} else if (DesecrationRevealItem && &player == MyPlayer) {
+		OpenDesecrationReveal(item);
+	}
+	if (applied) {
+		SpendHeldCurrency(player);
+		ConsumeCraftOmens(player);
+	}
+	Stash.dirty = true;
+	return applied;
 }
 
 [[nodiscard]] StringOrView PrintItemPower(char plidx, const Item &item)

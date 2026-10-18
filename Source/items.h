@@ -652,6 +652,8 @@ void IdentifyWithScroll(Player &player);
 void DoRepair(Player &player, int cii);
 void DoRecharge(Player &player, int cii);
 bool DoOil(Player &player, int cii);
+/** @brief POE2 Mashup: uses the currency on the cursor on a stash item, as DoOil does on one of the hero's. */
+bool DoOilOnStashItem(Player &player, uint16_t index);
 /** @brief POE2 Mashup: notes the currency put on the cursor; it is only used up once it takes (see SpendHeldCurrency). */
 void HoldCurrencyForUse(const Item &item);
 /** @brief POE2 Mashup: while currency is held for use, whether it fits the item (the inventory outlines those). */

@@ -10,10 +10,13 @@
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "player.h"
 #include "poe2/currency.hpp"
+#include "poe2/stacking.hpp"
 #include "spells.h"
+#include "tables/playerdat.hpp"
 
 namespace devilution {
 namespace {
@@ -217,4 +220,50 @@ TEST_F(Poe2CurrencyTest, VaalCorruptsForGood)
 }
 
 } // namespace
+TEST_F(Poe2CurrencyTest, UsingUpTheLastOrbBeforeTheItemDestroysThatItem)
+{
+	// Another player, so nothing is sent over the network, which the tests don't start.
+	LoadPlayerDataFiles();
+	Players.resize(2);
+	MyPlayer = &Players[0];
+	Player &player = Players[1];
+	player = {};
+	player.setCharacterLevel(20);
+	// A normal item a failed Orb of Chance crumbles.
+	Item target;
+	for (size_t base = 0; base < AllItemsList.size() && target.isEmpty(); base++) {
+		if (AllItemsList[base].dropRate == 0 || IsNoneOf(AllItemsList[base].iClass, ICLASS_WEAPON, ICLASS_ARMOR))
+			continue;
+		for (int seed = 1; seed < 200 && target.isEmpty(); seed++) {
+			Item item;
+			if (!AdminGenerateItem(player, item, static_cast<_item_indexes>(base), ITEM_QUALITY_NORMAL, 20, seed) || item._iMagical != ITEM_QUALITY_NORMAL)
+				continue;
+			Item probe = item;
+			if (ApplyCurrencyOrb(CurrencyOrb::Chance, player, probe) && CurrencyDestroyedItem)
+				target = item;
+		}
+	}
+	CurrencyDestroyedItem = false;
+	ASSERT_FALSE(target.isEmpty());
+	Item orb;
+	ASSERT_TRUE(AdminGenerateItem(player, orb, FindBase("Orb of Chance"), ITEM_QUALITY_NORMAL, 1, 5));
+	ASSERT_EQ(StackCount(orb), 1);
+	const Item bystander = Make("Iron Cap", ITEM_QUALITY_MAGIC);
+	// The bag: the last Orb of Chance, the item, then another item (placed by hand: the tests load no item graphics).
+	const Item bag[] = { orb, target, bystander };
+	for (int i = 0; i < 3; i++) {
+		player.InvList[i] = bag[i];
+		player.InvGrid[i] = static_cast<int8_t>(i + 1);
+	}
+	player._pNumInv = 3;
+	player._pOilType = orb._iMiscId;
+	HoldCurrencyForUse(player.InvList[0]);
+
+	ASSERT_TRUE(DoOil(player, NUM_INVLOC + 1));
+	ASSERT_EQ(player._pNumInv, 1);
+	// Before the fix the orb's removal moved the bystander into the item's place and it was destroyed instead.
+	EXPECT_EQ(player.InvList[0]._iSeed, bystander._iSeed);
+	EXPECT_EQ(player.InvList[0].IDidx, bystander.IDidx);
+}
+
 } // namespace devilution

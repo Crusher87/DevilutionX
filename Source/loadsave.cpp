@@ -279,6 +279,11 @@ struct LevelConversionData {
 
 [[nodiscard]] bool LoadItemData(LoadHelper &file, Item &item)
 {
+	// A blank item first. The save doesn't hold an item's POE2 modifiers and stats, rare powers, tiers or life and mana
+	// regeneration; RestoreRareItemPowers rebuilds them from the seed, but not on a normal item without a POE2 base.
+	// Such an item (an Orb of Alchemy) kept those of whatever the Item held before: the previous item of the bag in
+	// LoadMatchingItems, the item at its place in the bag before an in-game load, or an old floor item in Items[].
+	item = {};
 	// POE2 Mashup: crafting state lives in the alignment bytes, which older saves leave at zero.
 	std::array<uint8_t, CraftStateSaveSize> craftBytes {};
 	size_t craftRead = 0;
@@ -1105,9 +1110,8 @@ bool LevelFileExists(SaveWriter &archive)
 
 void LoadMatchingItems(LoadHelper &file, const Player &player, const int n, Item *pItem)
 {
-	Item heroItem;
-
 	for (int i = 0; i < n; i++) {
+		Item heroItem;
 		Item &unpackedItem = pItem[i];
 		const bool success = LoadItemData(file, heroItem);
 		if (!success) {
