@@ -10,6 +10,7 @@
 
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "items.h"
 #include "items/validation.h"
 #include "loadsave.h"
 #include "plrmsg.h"
@@ -425,6 +426,8 @@ void UnPackPlayer(const PlayerPack &packed, Player &player)
 
 	for (int i = 0; i < InventoryGridCells; i++)
 		player.InvGrid[i] = packed.InvGrid[i];
+	if (gbIsPoe2)
+		FitOneCellItems(player);
 
 	VerifyGoldSeeds(player);
 
@@ -566,6 +569,8 @@ bool UnPackNetPlayer(const PlayerNetPack &packed, Player &player)
 
 	for (int i = 0; i < InventoryGridCells; i++)
 		player.InvGrid[i] = packed.InvGrid[i];
+	if (gbIsPoe2)
+		FitOneCellItems(player);
 
 	for (int i = 0; i < MaxBeltItems; i++) {
 		Item &item = player.SpdList[i];

@@ -251,6 +251,11 @@ std::expected<item_cursor_graphic, std::string> ParseItemCursorGraphic(std::stri
 	if (value == "BLITZEN") return ICURS_BLITZEN;
 	if (value == "DEMON_PLATE_ARMOR") return ICURS_DEMON_PLATE_ARMOR;
 	if (value == "BOVINE") return ICURS_BOVINE;
+	if (value == "MAGIC_ROCK_SMALL") return ICURS_MAGIC_ROCK_SMALL;
+	if (value == "MAP_OF_THE_STARS_SMALL") return ICURS_MAP_OF_THE_STARS_SMALL;
+	if (value == "BOOK_RED_SMALL") return ICURS_BOOK_RED_SMALL;
+	if (value == "TORN_NOTE_1_SMALL") return ICURS_TORN_NOTE_1_SMALL;
+	if (value == "RECONSTRUCTED_NOTE_SMALL") return ICURS_RECONSTRUCTED_NOTE_SMALL;
 	if (value == "") return ICURS_DEFAULT;
 
 	// also support providing the item cursor icon frame number directly
@@ -659,6 +664,24 @@ std::expected<goodorevil, std::string> ParseAffixAlignment(std::string_view valu
 }
 
 } // namespace
+
+item_cursor_graphic FullSizeItemCursor(item_cursor_graphic cursor)
+{
+	switch (cursor) {
+	case ICURS_MAGIC_ROCK_SMALL:
+		return ICURS_MAGIC_ROCK;
+	case ICURS_MAP_OF_THE_STARS_SMALL:
+		return ICURS_MAP_OF_THE_STARS;
+	case ICURS_BOOK_RED_SMALL:
+		return ICURS_BOOK_RED;
+	case ICURS_TORN_NOTE_1_SMALL:
+		return ICURS_TORN_NOTE_1;
+	case ICURS_RECONSTRUCTED_NOTE_SMALL:
+		return ICURS_RECONSTRUCTED_NOTE;
+	default:
+		return cursor;
+	}
+}
 
 void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId)
 {

@@ -578,6 +578,13 @@ void InitItemGFX();
 void InitItems();
 void CalcPlrItemVals(Player &player, bool Loadgfx);
 void CalcPlrInv(Player &player, bool Loadgfx);
+/** @brief POE2 Mashup: whether the item shows a one-cell copy of a bigger picture. */
+inline bool IsOneCellCopy(const Item &item)
+{
+	return FullSizeItemCursor(static_cast<item_cursor_graphic>(item._iCurs)) != item._iCurs;
+}
+/** @brief POE2 Mashup: items saved when they were bigger let go of the inventory cells they no longer cover. */
+void FitOneCellItems(Player &player);
 void InitializeItem(Item &item, _item_indexes itemData);
 void GenerateNewSeed(Item &item);
 int GetGoldCursor(int value);

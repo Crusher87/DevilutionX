@@ -283,6 +283,12 @@ enum item_cursor_graphic : uint8_t {
 	ICURS_BLITZEN                     = 219,
 	ICURS_DEMON_PLATE_ARMOR           = 225,
 	ICURS_BOVINE                      = 226,
+	// POE2 Mashup: one-cell copies of bigger pictures, for items that take one cell in POE2 (made in cursor.cpp).
+	ICURS_MAGIC_ROCK_SMALL            = 229,
+	ICURS_MAP_OF_THE_STARS_SMALL      = 230,
+	ICURS_BOOK_RED_SMALL              = 231,
+	ICURS_TORN_NOTE_1_SMALL           = 232,
+	ICURS_RECONSTRUCTED_NOTE_SMALL    = 233,
 
 	ICURS_DEFAULT = static_cast<uint8_t>(-1),
 	// clang-format on
@@ -784,6 +790,8 @@ std::expected<_item_indexes, std::string> ParseItemId(std::string_view value);
 void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId);
 void LoadUniqueItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId);
 void LoadItemData();
+/** @brief POE2 Mashup: the full-size picture a one-cell copy is made from, or the cursor itself when it isn't one. */
+item_cursor_graphic FullSizeItemCursor(item_cursor_graphic cursor);
 
 } // namespace devilution
 

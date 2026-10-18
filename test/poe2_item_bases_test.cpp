@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <iterator>
 #include <string_view>
 
 #include <gtest/gtest.h>
@@ -5,6 +7,7 @@
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "player.h"
 #include "poe2/bases.hpp"
@@ -67,6 +70,51 @@ public:
 		return item._iPoe2Stats[static_cast<size_t>(stat)];
 	}
 };
+
+TEST_F(Poe2ItemBasesTest, JewelsWaystonesAndBooksTakeOneCell)
+{
+	for (const std::string_view name : { "Emerald", "Waystone", "Book of Specialisation", "Tablet", "Fragment" }) {
+		Item item {};
+		item._iCurs = AllItemsList[FindBase(name)].iCurs;
+		EXPECT_TRUE(IsOneCellCopy(item)) << name;
+		const Size size = GetInventorySize(item);
+		EXPECT_EQ(size.width, 1) << name;
+		EXPECT_EQ(size.height, 1) << name;
+	}
+	// The quest items with the same pictures keep their size.
+	EXPECT_EQ(AllItemsList[IDI_ROCK].iCurs, ICURS_MAGIC_ROCK);
+	EXPECT_EQ(AllItemsList[IDI_MAPOFDOOM].iCurs, ICURS_MAP_OF_THE_STARS);
+}
+
+TEST_F(Poe2ItemBasesTest, OneCellItemsLetGoOfTheirOldCells)
+{
+	Player &player = *MyPlayer;
+	player._pNumInv = 1;
+	player.InvList[0] = {};
+	player.InvList[0]._iCurs = ICURS_MAGIC_ROCK_SMALL;
+	std::fill(std::begin(player.InvGrid), std::end(player.InvGrid), 0);
+	// Saved as a 2x2 jewel whose bottom-left cell is column 0 of row 1.
+	player.InvGrid[0] = -1;
+	player.InvGrid[1] = -1;
+	player.InvGrid[10] = 1;
+	player.InvGrid[11] = -1;
+
+	FitOneCellItems(player);
+
+	EXPECT_EQ(player.InvGrid[10], 1);
+	EXPECT_EQ(player.InvGrid[0], 0);
+	EXPECT_EQ(player.InvGrid[1], 0);
+	EXPECT_EQ(player.InvGrid[11], 0);
+
+	// A bigger item keeps all its cells.
+	player.InvList[0]._iCurs = ICURS_MAGIC_ROCK;
+	player.InvGrid[0] = -1;
+	FitOneCellItems(player);
+	EXPECT_EQ(player.InvGrid[0], -1);
+	player._pNumInv = 0;
+	player.InvList[0] = {};
+	std::fill(std::begin(player.InvGrid), std::end(player.InvGrid), 0);
+}
 
 TEST_F(Poe2ItemBasesTest, BundleBasesReplaceTheOldOnes)
 {

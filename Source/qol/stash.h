@@ -136,5 +136,7 @@ Item TakeFromStash(uint16_t index);
 bool AutoPlaceItemInAnyStashTab(const Item &item);
 /** @brief POE2 Mashup: items a premade tab doesn't hold the way it holds them are stored again; for loading older stashes. */
 void RepairStashTabs();
+/** @brief POE2 Mashup: stash items saved when they were bigger let go of the cells they no longer cover. */
+void FitOneCellStashItems();
 
 } // namespace devilution

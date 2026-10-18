@@ -1259,6 +1259,22 @@ bool AutoPlaceItemInAnyStashTab(const Item &item)
 	return placed;
 }
 
+void FitOneCellStashItems()
+{
+	for (auto &[key, grid] : Stash.stashGrids) {
+		for (int x = 0; x < 10; x++) {
+			for (int y = 0; y < 10; y++) {
+				const StashStruct::StashCell cell = grid[x][y];
+				if (cell == 0 || cell - 1U >= Stash.stashList.size())
+					continue;
+				const Item &item = Stash.stashList[cell - 1];
+				if (IsOneCellCopy(item) && item.position != Point { x, y })
+					grid[x][y] = 0;
+			}
+		}
+	}
+}
+
 void RepairStashTabs()
 {
 	if (!gbIsPoe2)

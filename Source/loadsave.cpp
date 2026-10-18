@@ -419,6 +419,12 @@ void LoadAndValidateItemData(LoadHelper &file, Item &item)
 	}
 
 	RemoveInvalidItem(item);
+	// POE2 Mashup: an item that now takes one cell gets the one-cell copy of the picture it was saved with.
+	if (gbIsPoe2 && !item.isEmpty() && item.IDidx >= 0 && static_cast<size_t>(item.IDidx) < AllItemsList.size()) {
+		const item_cursor_graphic cursor = AllItemsList[item.IDidx].iCurs;
+		if (cursor != item._iCurs && FullSizeItemCursor(cursor) == item._iCurs)
+			item._iCurs = cursor;
+	}
 }
 
 void LoadPlayer(LoadHelper &file, Player &player)
@@ -614,6 +620,8 @@ void LoadPlayer(LoadHelper &file, Player &player)
 
 	for (int8_t &cell : player.InvGrid)
 		cell = file.NextLE<int8_t>();
+	if (gbIsPoe2)
+		FitOneCellItems(player);
 
 	for (Item &item : player.SpdList)
 		LoadAndValidateItemData(file, item);
@@ -3045,6 +3053,8 @@ void LoadStash()
 	for (unsigned i = 0; i < itemCount; i++) {
 		LoadAndValidateItemData(file, Stash.stashList[i]);
 	}
+	if (gbIsPoe2)
+		FitOneCellStashItems();
 
 	const uint32_t openPage = file.NextLE<uint32_t>();
 

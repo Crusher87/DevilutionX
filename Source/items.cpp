@@ -164,7 +164,9 @@ int8_t ItemCAnimTbl[] = {
 	36, 36, 37, 38, 38, 38, 38, 38, 41, 42,
 	8, 8, 8, 17, 0, 6, 8, 11, 11, 3,
 	3, 1, 6, 6, 6, 1, 8, 6, 11, 3,
-	6, 8, 1, 6, 6, 17, 40, 0, 0
+	6, 8, 1, 6, 6, 17, 40, 0, 0,
+	// POE2 Mashup: the one-cell copies drop like the Ruby, the Cathedral Map, a book and the notes.
+	32, 16, 18, 36, 37
 };
 
 /** Maps of drop sounds effect of placing the item in the inventory. */
@@ -3821,6 +3823,16 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	CalcPlrAuricBonus(player);
 	RedrawComponent(PanelDrawComponent::Mana);
 	RedrawComponent(PanelDrawComponent::Health);
+}
+
+void FitOneCellItems(Player &player)
+{
+	// A one-cell item keeps only its own cell; the others are marked with its negative number.
+	for (int8_t &cell : player.InvGrid) {
+		const int index = -cell - 1;
+		if (cell < 0 && index < player._pNumInv && IsOneCellCopy(player.InvList[index]))
+			cell = 0;
+	}
 }
 
 void CalcPlrInv(Player &player, bool loadgfx)

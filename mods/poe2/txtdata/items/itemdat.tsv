@@ -246,7 +246,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Bloodstone Charm	Charm	1	0	0	0	0	0	0	0	0		CHARM_LIFE	Null	true	300
 	0	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Sapphire Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_MANA	Null	true	300
 	1	Misc	Unequippable	GIANTS_KNUCKLE	Misc	NONE	Iron Charm	Charm	6	0	0	0	0	0	0	0	0		CHARM_GUARD	Null	true	500
-	2	Misc	Unequippable	MAP_OF_THE_STARS	Misc	NONE	Waystone	Waystone	20	0	0	0	0	0	0	0	0		WAYSTONE	Null	true	1500
+	2	Misc	Unequippable	MAP_OF_THE_STARS_SMALL	Misc	NONE	Waystone	Waystone	20	0	0	0	0	0	0	0	0		WAYSTONE	Null	true	1500
 	1	Misc	Unequippable	RING_OF_MAGMA	Misc	NONE	Ruby Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_FIRE	Null	true	400
 	1	Misc	Unequippable	RING_OF_THUNDER	Misc	NONE	Topaz Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_LIGHTNING	Null	true	400
 	1	Misc	Unequippable	AMULET_OF_WARDING	Misc	NONE	Amethyst Charm	Charm	5	0	0	0	0	0	0	0	0		CHARM_MAGIC	Null	true	400
@@ -301,7 +301,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Armor	Armor	CLOAK	LightArmor	NONE	Devout Garb	Armor	27	50	0	0	64	75	0	41	41		NONE	Null	false	8370
 	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Grand Regalia	Plate	26	80	0	0	70	82	29	29	29		NONE	Null	false	8940
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Ruby	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
-	1	Misc	Unequippable	MAGIC_ROCK	Misc	NONE	Emerald	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
+	1	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Emerald	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Sapphire	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
 poe2:one_hand_axe_heavy_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Heavy Hatchet	Axe	1	35	3	6	0	0	3	0	0		NONE	Null	false	200
 poe2:one_hand_axe_balanced_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Hatchet	Axe	1	35	3	6	0	0	3	0	0		NONE	Null	false	200
@@ -702,8 +702,8 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Essence	Essence	15	0	0	0	0	0	0	0	0		ESSENCE	Null	true	1200
 	1	Misc	Unequippable	28	Misc	NONE	Omen	Omen	31	0	0	0	0	0	0	0	0		OMEN	Null	true	5000
 	1	Misc	Unequippable	23	Misc	NONE	Rune	Augment	8	0	0	0	0	0	0	0	0		AUGMENT	Null	true	1000
-	2	Misc	Unequippable	RECONSTRUCTED_NOTE	Misc	NONE	Tablet	Tablet	20	0	0	0	0	0	0	0	0		TABLET	Null	false	1500
-	1	Misc	Unequippable	TORN_NOTE_1	Misc	NONE	Fragment	Fragment	25	0	0	0	0	0	0	0	0		MAP_FRAGMENT	Null	true	2500
+	2	Misc	Unequippable	RECONSTRUCTED_NOTE_SMALL	Misc	NONE	Tablet	Tablet	20	0	0	0	0	0	0	0	0		TABLET	Null	false	1500
+	1	Misc	Unequippable	TORN_NOTE_1_SMALL	Misc	NONE	Fragment	Fragment	25	0	0	0	0	0	0	0	0		MAP_FRAGMENT	Null	true	2500
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Gate Key	Key	25	0	0	0	0	0	0	0	0		MAP_KEY	Null	true	10000
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Ring of Fire Gem	Gem	12	0	0	0	0	0	0	27	0		SKILLGEM_SPELL	RingOfFire	true	1320
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Lightning Wall Gem	Gem	12	0	0	0	0	0	0	27	0		SKILLGEM_SPELL	LightningWall	true	1320
@@ -871,12 +871,12 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Vizjerei Focus Gem	Gem	12	0	0	0	0	0	0	50	0		SPIRITGEM_TABLE	Null	true	2600
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Berserk Gem	Gem	8	0	0	0	0	0	40	0	0		SPIRITGEM_TABLE	Null	true	1800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Reflect Gem	Gem	8	0	0	0	0	0	35	0	0		SPIRITGEM_TABLE	Null	true	1800
-	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Lesser Jeweller's Orb	Orb	5	0	0	0	0	0	0	0	0		ORB_LESSER_JEWELLER	Null	true	1500
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Greater Jeweller's Orb	Orb	18	0	0	0	0	0	0	0	0		ORB_GREATER_JEWELLER	Null	true	6000
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Perfect Jeweller's Orb	Orb	35	0	0	0	0	0	0	0	0		ORB_PERFECT_JEWELLER	Null	true	20000

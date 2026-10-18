@@ -79,6 +79,19 @@ OptionalOwnedClxSpriteList pCursCels2;
 OptionalOwnedClxSpriteList *HalfSizeItemSprites;
 OptionalOwnedClxSpriteList *HalfSizeItemSpritesRed;
 
+/** POE2 Mashup: items that take one cell in POE2 but have a bigger Diablo picture show a shrunken copy of it. */
+constexpr int FirstSmallItemCursor = ICURS_MAGIC_ROCK_SMALL;
+constexpr int SmallItemCursorCount = ICURS_RECONSTRUCTED_NOTE_SMALL - FirstSmallItemCursor + 1;
+std::array<OptionalOwnedClxSpriteList, SmallItemCursorCount> SmallItemSprites;
+
+std::optional<size_t> SmallItemCursorIndex(int cursId)
+{
+	const int icurs = cursId - static_cast<int>(CURSOR_FIRSTITEM);
+	if (icurs < FirstSmallItemCursor || icurs >= FirstSmallItemCursor + SmallItemCursorCount)
+		return std::nullopt;
+	return static_cast<size_t>(icurs - FirstSmallItemCursor);
+}
+
 bool IsValidMonsterForSelection(const Monster &monster)
 {
 	if (monster.hasNoLife())
@@ -476,10 +489,14 @@ void FreeCursor()
 {
 	pCursCels = std::nullopt;
 	pCursCels2 = std::nullopt;
+	for (OptionalOwnedClxSpriteList &sprite : SmallItemSprites)
+		sprite = std::nullopt;
 	ClearCursor();
 }
 
-ClxSprite GetInvItemSprite(int cursId)
+namespace {
+
+ClxSprite SheetItemSprite(int cursId)
 {
 	assert(cursId > 0);
 	const size_t numSprites = pCursCels->numSprites();
@@ -491,8 +508,45 @@ ClxSprite GetInvItemSprite(int cursId)
 	return (*pCursCels2)[cursId - numSprites - 1];
 }
 
+/** @brief The picture halved until it fits one cell, centred in it. Made when first drawn, once the palette is in. */
+ClxSprite SmallItemSprite(size_t index)
+{
+	OptionalOwnedClxSpriteList &cached = SmallItemSprites[index];
+	if (!cached) {
+		const auto source = static_cast<item_cursor_graphic>(FirstSmallItemCursor + static_cast<int>(index));
+		const ClxSprite sprite = SheetItemSprite(static_cast<int>(CURSOR_FIRSTITEM) + FullSizeItemCursor(source));
+		std::optional<OwnedSurface> picture;
+		picture.emplace(sprite.width(), sprite.height());
+		SDL_FillSurfaceRect(picture->surface, nullptr, 1);
+		ClxDraw(*picture, { 0, picture->h() }, sprite);
+		while (picture->w() > INV_SLOT_SIZE_PX || picture->h() > INV_SLOT_SIZE_PX) {
+			OwnedSurface half { std::max(picture->w() / 2, 1), std::max(picture->h() / 2, 1) };
+			BilinearDownscaleByHalf8(picture->surface, paletteTransparencyLookup, half.surface, 1);
+			picture.emplace(std::move(half));
+		}
+		OwnedSurface cell { INV_SLOT_SIZE_PX, INV_SLOT_SIZE_PX };
+		SDL_FillSurfaceRect(cell.surface, nullptr, 1);
+		cell.BlitFrom(*picture, MakeSdlRect(0, 0, picture->w(), picture->h()),
+		    { (INV_SLOT_SIZE_PX - picture->w()) / 2, (INV_SLOT_SIZE_PX - picture->h()) / 2 });
+		cached.emplace(SurfaceToClx(cell, 1, 1));
+	}
+	return (*cached)[0];
+}
+
+} // namespace
+
+ClxSprite GetInvItemSprite(int cursId)
+{
+	if (const std::optional<size_t> small = SmallItemCursorIndex(cursId))
+		return SmallItemSprite(*small);
+	return SheetItemSprite(cursId);
+}
+
 Size GetInvItemSize(int cursId)
 {
+	// A shrunken copy is always one cell, known before it is made.
+	if (SmallItemCursorIndex(cursId))
+		return { INV_SLOT_SIZE_PX, INV_SLOT_SIZE_PX };
 	const ClxSprite sprite = GetInvItemSprite(cursId);
 	return { sprite.width(), sprite.height() };
 }
