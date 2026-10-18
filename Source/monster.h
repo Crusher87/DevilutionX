@@ -11,6 +11,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include <function_ref.hpp>
@@ -57,6 +58,10 @@ enum monster_flag : uint16_t {
 	MFLAG_NO_ENEMY        = 1 << 10,
 	MFLAG_BERSERK         = 1 << 11,
 	MFLAG_NOLIFESTEAL     = 1 << 12,
+	/** @brief POE2 Mashup: rose hostile after a kill on Leoric's Road; gives no reward. */
+	MFLAG_RISEN           = 1 << 13,
+	/** @brief POE2 Mashup: one of the King's dead (Leoric's Road pact), a minion for a while; not Revive's. */
+	MFLAG_KINGS_DEAD      = 1 << 14,
 	// clang-format on
 };
 
@@ -537,7 +542,7 @@ void LoadDeltaSpawnedMonster(size_t typeIndex, size_t monsterId, uint32_t seed, 
 /**
  * @brief Initialize a spanwed monster (from a network message or from SpawnMonster-function).
  */
-void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel);
+void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel, bool risen = false);
 void AddDoppelganger(Monster &monster);
 void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damage);
 void MonsterReducePlayerAttribute(Monster &monster, Player &player);
@@ -619,6 +624,14 @@ size_t CountRevivedMinions(const Player &player);
 void KillRevivedMinions(const Player &player);
 /** @brief Raises a monster of the type to fight for the player, with the stats it had. */
 Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats);
+/** @brief POE2 Mashup, Leoric's Road: a monster of the level type rises hostile, awake and hunting the hero. */
+Monster *SpawnRisenMonster(Point position, size_t typeIndex);
+/** @brief A random skeleton type of the level (a level type index), as Leoric raises them. */
+std::optional<size_t> RandomLevelSkeletonType();
+/** @brief No player or monster stands on the tile, and monsters can walk it. */
+bool IsTileFreeForMonster(Point position);
+/** @brief Takes a monster off the level at once, without a death or a body. @param activeIndex its index in ActiveMonsters. */
+void RemoveMonsterQuietly(size_t activeIndex);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

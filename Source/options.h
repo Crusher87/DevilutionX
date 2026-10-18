@@ -882,6 +882,11 @@ struct ModOptions : OptionCategoryBase {
 	void AddModEntry(const std::string &modName);
 	void RemoveModEntry(const std::string &modName);
 	void SetHellfireEnabled(bool enableHellfire);
+	/**
+	 * @brief POE2 mode always plays on Hellfire (Curtis 2026-10-18): switches Hellfire on when POE2 is on and Hellfire isn't.
+	 * @return true if it switched Hellfire on, whose own change then reloads the mods.
+	 */
+	bool SwitchOnHellfireForPoe2();
 
 private:
 	struct ModEntry {

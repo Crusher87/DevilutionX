@@ -174,6 +174,8 @@ int SupportAttackFrameBonus(const Player &player, SkillSlot skill);
 int SupportLifeManaPercent(const Player &player, SkillSlot skill);
 /** @brief Pays the life part of a skill's cost; @param manaCost the cost the skill would have without them. */
 void PaySupportLifeCost(Player &player, SkillSlot skill, int manaCost);
+/** @brief Paid in Blood (the pact of Bartuc's Road): each melee attack costs 1% of maximum life. */
+void PayMeleeAttackLife(Player &player);
 /** @brief Horadric Totem: the spell is placed as a totem instead of cast. @return true if a totem was placed. */
 bool TryPlaceSpellTotem(Player &player, SpellID spell, Point target);
 

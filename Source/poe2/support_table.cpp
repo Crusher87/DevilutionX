@@ -20,6 +20,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -306,6 +307,12 @@ Fixed26_6 SkillBaseDamage(const Player &player, SkillSlot skill, int percent)
 	return Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 64, INT32_MAX / 2)));
 }
 
+/** @brief Whether the hit in progress is a spell's or an attack's, for the rules that stop ailments. */
+AilmentSource HitSource()
+{
+	return !Hit.skill.isEmpty() && (SkillTags(Hit.skill) & ST_Spell) != 0 ? AilmentSource::Spell : AilmentSource::Strike;
+}
+
 /** @brief Damage straight from a support, outside the hit: no more supports apply, but ailments do. */
 void DealExtra(const Player &player, Monster &monster, DamageType type, Fixed26_6 damage)
 {
@@ -314,7 +321,7 @@ void DealExtra(const Player &player, Monster &monster, DamageType type, Fixed26_
 	const Fixed26_6 dealt = Fixed26_6::fromRaw(Percent(damage.raw(), MonsterDamageTakenPercent(monster, type)));
 	ApplyMonsterDamage(type, monster, dealt);
 	monster.tag(player);
-	TryInflictAilment(monster, player, type, dealt);
+	TryInflictAilment(monster, player, type, dealt, HitSource());
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);
 }
@@ -448,6 +455,8 @@ SkillSlot SocketedCurse(const Player &player)
 
 void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks)
 {
+	if (!AilmentAllowed(player, HitSource()))
+		return;
 	Poe2MonsterState &state = monster.poe2;
 	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
 	const int32_t cap = perTick * maxStacks;
@@ -1720,12 +1729,40 @@ int SupportAttackFrameBonus(const Player &player, SkillSlot skill)
 	return frames;
 }
 
+namespace {
+
+/** @brief Bartuc's Hunger (the toll of Bartuc's Road): this share of every mana cost is paid in life instead. */
+constexpr int HungerLifePercent = 25;
+
+bool HasBartucsHunger(const Player &player)
+{
+	return gbIsPoe2 && PassiveTotal(player, PassiveStat::BartucsHunger) > 0;
+}
+
+/** @brief Takes life paid as a cost: it stops at 1 life, bypasses energy shield and isn't a hit. @return the life taken. */
+Fixed26_6 PayLife(Player &player, Fixed26_6 life)
+{
+	const Fixed26_6 cost = std::min(life, player._pHitPoints - Fixed26_6::fromInt(1));
+	if (cost <= 0)
+		return Fixed26_6::fromInt(0);
+	player._pHitPoints -= cost;
+	player._pHPBase -= cost;
+	RedrawComponent(PanelDrawComponent::Health);
+	AddVisualEffect(player.position.tile, MissileGraphicID::BloodHit);
+	return cost;
+}
+
+} // namespace
+
 int SupportLifeManaPercent(const Player &player, SkillSlot skill)
 {
+	// With a life-cost support on the skill, the larger life share applies, not Bartuc's Hunger as well.
 	if (Has(player, skill, SG::BloodPrice))
 		return 0;
 	if (Has(player, skill, SG::BartucsBloodletting))
 		return 50;
+	if (HasBartucsHunger(player))
+		return 100 - HungerLifePercent;
 	return 100;
 }
 
@@ -1738,19 +1775,24 @@ void PaySupportLifeCost(Player &player, SkillSlot skill, int manaCost)
 		life = manaCost * 120 / 100;
 	else if (Has(player, skill, SG::BartucsBloodletting))
 		life = manaCost / 2;
+	else if (HasBartucsHunger(player))
+		life = std::max(manaCost * HungerLifePercent / 100, 1);
 	if (life <= 0)
 		return;
-	const Fixed26_6 cost = std::min(Fixed26_6::fromInt(life), player._pHitPoints - Fixed26_6::fromInt(1));
+	const Fixed26_6 cost = PayLife(player, Fixed26_6::fromInt(life));
 	if (cost <= 0)
 		return;
-	player._pHitPoints -= cost;
-	player._pHPBase -= cost;
-	RedrawComponent(PanelDrawComponent::Health);
-	AddVisualEffect(player.position.tile, MissileGraphicID::BloodHit);
 	if (Has(player, skill, SG::BartucsBloodletting)) {
 		player.poe2.supportState.bartucDamage = cost.raw() * 3;
 		player.poe2.supportState.bartucTicks = SpentBonusTicks;
 	}
+}
+
+void PayMeleeAttackLife(Player &player)
+{
+	if (!gbIsPoe2 || PassiveTotal(player, PassiveStat::PaidInBlood) <= 0)
+		return;
+	PayLife(player, std::max(Fixed26_6::fromRaw(player._pMaxHP.raw() / 100), Fixed26_6::fromInt(1)));
 }
 
 bool TryPlaceSpellTotem(Player &player, SpellID spell, Point target)

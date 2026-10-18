@@ -247,6 +247,8 @@ struct UniqueRuleState {
 	/** @brief Ceaseless Hands: stacks from unarmed hits, and game ticks until they all fall off. */
 	uint8_t unarmedStacks = 0;
 	uint8_t unarmedTicks = 0;
+	/** @brief The Sickness Road toll's fever: game ticks in which the hero's own hits and spells inflict no ailment. */
+	uint8_t feverTicks = 0;
 	/** @brief Knife in the Dark: empowered hits left after a swap, their game ticks left, and ticks until it can trigger again. */
 	uint8_t swapStrikes = 0;
 	uint8_t swapStrikeTicks = 0;

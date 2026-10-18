@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdlib>
 #include <functional>
+#include <optional>
 
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
@@ -17,6 +18,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -125,8 +127,9 @@ Monster *NearestOtherMonster(const Monster &from, int range)
 int HitConditionPercent(const Player &player, const Monster &monster)
 {
 	int percent = 100;
+	// The Maiden's Road toll adds as much again against a monster that hasn't noticed the hero.
 	if (const int more = Rule(player, UniqueRule::FirstStrike); more > 0 && monster.hitPoints >= monster.maxHitPoints)
-		percent = percent * (100 + more) / 100;
+		percent = percent * (100 + more + UnawareFirstStrikeBonus(player, monster)) / 100;
 	if (const int more = Rule(player, UniqueRule::MoreVsStunned); more > 0 && monster.poe2.heavyStunTicks > 0)
 		percent = percent * (100 + more) / 100;
 	return percent;
@@ -134,7 +137,58 @@ int HitConditionPercent(const Player &player, const Monster &monster)
 
 Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, int32_t raw);
 
-/** @brief The Dark Sickness: a monster killed in melee bursts and hurts the enemies beside it. Its kills don't burst. */
+/** @brief The Sickness Road toll's fever: 2 seconds in which the hero's own hits inflict no ailment. */
+constexpr uint8_t FeverTicks = 2 * TicksPerSecond;
+/** @brief The Sickness Road pact: this share of the tree's own melee damage also applies to spell hits. */
+constexpr int HiveBridgePercent = 75;
+/** @brief The Sickness Road pact: spell hits on a monster carrying no ailment deal this much less. */
+constexpr int HiveHealthyLessPercent = 20;
+
+/** @brief The monster whose ailments Kill Burst's contagion passed on as it died (the pact's death spread skips it). */
+std::optional<size_t> BurstSpreadMonster;
+
+bool HasDarkSickness(const Player &player)
+{
+	return PassiveTotal(player, PassiveStat::DarkSickness) > 0;
+}
+
+bool HasHiveBreath(const Player &player)
+{
+	return PassiveTotal(player, PassiveStat::HiveBreath) > 0;
+}
+
+/**
+ * @brief The Sickness Road pact's bridge: 75% of the tree's own increased melee damage for the weapon in hand, never a
+ * bridged stat (design v8 §5, S6). Nothing with a bow.
+ */
+int HiveBridge(const Player &player)
+{
+	if (!HasHiveBreath(player))
+		return 0;
+	const auto passive = [&player](PassiveStat stat) { return PassiveTotal(player, stat); };
+	const Item *weapon = HeldWeapon(player);
+	int melee;
+	if (weapon == nullptr)
+		melee = passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage);
+	else if (weapon->_itype == ItemType::Bow)
+		melee = 0;
+	else if (weapon->_itype == ItemType::Staff)
+		melee = passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage) + passive(PassiveStat::TwoHandDamage);
+	else
+		melee = passive(PassiveStat::MeleeDamage) + passive(weapon->_iLoc == ILOC_TWOHAND ? PassiveStat::TwoHandDamage : PassiveStat::OneHandDamage);
+	return std::max(melee, 0) * HiveBridgePercent / 100;
+}
+
+/** @brief The Sickness Road pact's price on a spell hit: less damage to a monster carrying no ailment, in percent. */
+int HiveHealthyPercent(const Player &player, const Monster &monster)
+{
+	return HasHiveBreath(player) && !CarriesAilment(monster) ? 100 - HiveHealthyLessPercent : 100;
+}
+
+/**
+ * @brief Kill Burst: a monster killed in melee bursts and hurts the enemies beside it. Its kills don't burst. With the
+ * Sickness Road toll, the enemies it hits catch the corpse's ignite, shock, chill and poison, and the hero the fever.
+ */
 void BurstCorpse(const Player &player, const Monster &corpse, int percent)
 {
 	static bool bursting = false;
@@ -142,16 +196,29 @@ void BurstCorpse(const Player &player, const Monster &corpse, int percent)
 	if (bursting || raw <= 0)
 		return;
 	bursting = true;
-	AddVisualEffect(corpse.position.tile, MissileGraphicID::BloodStarExplosion);
+	const bool contagion = HasDarkSickness(player);
+	bool passed = false;
+	AddVisualEffect(corpse.position.tile, contagion ? MissileGraphicID::AcidSplat : MissileGraphicID::BloodStarExplosion);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (&monster == &corpse || monster.hasNoLife() || monster.isPlayerMinion())
 			continue;
 		if (std::max(std::abs(monster.position.tile.x - corpse.position.tile.x), std::abs(monster.position.tile.y - corpse.position.tile.y)) > 1)
 			continue;
+		// It catches the sickness before the blow lands, so a monster the burst kills dies carrying it.
+		if (contagion && CopyAilments(corpse, monster, player)) {
+			passed = true;
+			AddVisualEffect(monster.position.tile, MissileGraphicID::AcidSplat);
+		}
 		DealPacket(player, monster, DamageType::Physical, raw);
 		if (monster.hasNoLife())
 			M_StartKill(monster, player);
+	}
+	if (contagion) {
+		BurstSpreadMonster = corpse.getId();
+		// You carry it: a new burst sets the fever back to its full time, never longer.
+		if (passed)
+			State(player).feverTicks = FeverTicks;
 	}
 	bursting = false;
 }
@@ -373,6 +440,9 @@ void ProcessUniqueRules(Player &player)
 	countDown(state.moonwaterTicks);
 	countDown(state.blockRiposteTicks);
 	countDown(state.rotationTicks);
+	// The fever shows: the hero coughs up a sickly green splash now and then while it runs.
+	if (state.feverTicks > 0 && --state.feverTicks % 10 == 9 && &player == MyPlayer)
+		AddVisualEffect(player.position.tile, MissileGraphicID::AcidSplat);
 	countDown(state.swapStrikeCooldown);
 	if (state.swapStrikeTicks > 0 && --state.swapStrikeTicks == 0)
 		state.swapStrikes = 0;
@@ -490,6 +560,9 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	UniqueRuleState &state = State(player);
 	state.lastHitBySpell = false;
 	state.lastHitRanged = ranged;
+	// Leoric's Road: any hit puts a monster still rising down for good.
+	if (TryPutDownRisen(player, monster))
+		return damage;
 	state.attacks++;
 	const ItemType weapon = HeldWeaponType(player);
 	const bool staffHit = !ranged && weapon == ItemType::Staff;
@@ -621,9 +694,10 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 	UniqueRuleState &state = State(player);
 	state.lastHitBySpell = true;
 	int percent = GeneralDamagePercent(player);
-	// Element damage adds to the spell's increased damage rather than multiplying it.
+	// Element damage adds to the spell's increased damage rather than multiplying it, and so does the Sickness Road's
+	// melee bridge.
 	const int increased = std::max(SpellIncreasedDamage(player), 1);
-	percent = percent * std::max(increased + PassiveElementDamage(player, type), 0) / increased;
+	percent = percent * std::max(increased + PassiveElementDamage(player, type) + HiveBridge(player), 0) / increased;
 	if (const int more = Rule(player, UniqueRule::SpellElementCycle); more > 0 && IsElemental(type)) {
 		if (type == CycleElement(state.cycleElement))
 			percent = percent * (100 + more) / 100;
@@ -650,7 +724,37 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
 		state.bossEchoTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
 	}
-	return percent;
+	return percent * HiveHealthyPercent(player, monster) / 100;
+}
+
+int SicknessSpellHitPercent(const Player &player, const Monster &monster)
+{
+	if (!gbIsPoe2 || !HasHiveBreath(player))
+		return 100;
+	const int increased = std::max(SpellIncreasedDamage(player), 1);
+	return (increased + HiveBridge(player)) * HiveHealthyPercent(player, monster) / increased;
+}
+
+bool AilmentAllowed(const Player &player, AilmentSource source)
+{
+	if (!gbIsPoe2 || source == AilmentSource::Spread)
+		return true;
+	if (State(player).feverTicks > 0)
+		return false;
+	return source != AilmentSource::Spell || !HasHiveBreath(player);
+}
+
+int SicknessFeverTicks(const Player &player)
+{
+	return gbIsPoe2 ? State(player).feverTicks : 0;
+}
+
+bool TakeBurstSpread(const Monster &monster)
+{
+	if (BurstSpreadMonster != monster.getId())
+		return false;
+	BurstSpreadMonster = std::nullopt;
+	return true;
 }
 
 void OnSpellCast(const Player &player, SpellID spell, WorldTilePosition target, int spellLevel)
@@ -776,9 +880,13 @@ void OnMonsterKilled(Player &player, const Monster &monster)
 		return;
 	UniqueRuleState &state = State(player);
 	const bool meleeKill = !state.lastHitBySpell && !state.lastHitRanged;
-	if (Rule(player, UniqueRule::TwoHandKillFrenzy) > 0 && meleeKill && HoldsTwoHandMelee(player))
+	// Leoric's Road pact: Fresh Meat fires on bow kills too.
+	const bool bowKill = !state.lastHitBySpell && state.lastHitRanged && player.isHoldingItem(ItemType::Bow)
+	    && PassiveTotal(player, PassiveStat::KingsDeadPact) > 0;
+	if (Rule(player, UniqueRule::TwoHandKillFrenzy) > 0 && ((meleeKill && HoldsTwoHandMelee(player)) || bowKill))
 		GainRuleFrenzyCharge(player);
-	if (const int burst = Rule(player, UniqueRule::KillBurst); burst > 0 && meleeKill)
+	// The Sickness Road toll: Kill Burst needs a monster carrying an ailment.
+	if (const int burst = Rule(player, UniqueRule::KillBurst); burst > 0 && meleeKill && (!HasDarkSickness(player) || CarriesAilment(monster)))
 		BurstCorpse(player, monster, burst);
 	if (Rule(player, UniqueRule::SpellEchoes) > 0 && state.lastHitBySpell)
 		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
@@ -1059,6 +1167,8 @@ void ApplyCull(const Player &player, Monster &monster)
 	if (static_cast<int64_t>(monster.hitPoints.raw()) * 100 > static_cast<int64_t>(monster.maxHitPoints.raw()) * cull)
 		return;
 	AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+	// Leoric's Road reads it when the monster dies: a culled monster stays dead.
+	monster.poe2.culled = true;
 	ApplyMonsterDamage(DamageType::Physical, monster, monster.hitPoints);
 }
 

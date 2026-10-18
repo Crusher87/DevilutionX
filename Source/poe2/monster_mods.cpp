@@ -37,12 +37,19 @@ uint32_t Mix(uint32_t value)
 	return value;
 }
 
-bool CanHaveRarity(const Monster &monster)
+/** @brief The map tier's life and damage scaling: every plain monster, risen ones too (they come out at the map's strength). */
+bool CanTakeMapScaling(const Monster &monster)
 {
 	if (!gbIsPoe2 || monster.isUnique() || monster.isPlayerMinion())
 		return false;
 	const _monster_id type = monster.type().type;
 	return type != MT_GOLEM && type != MT_DIABLO && type != MT_NAKRUL;
+}
+
+/** @brief The magic and rare roll: a monster risen on Leoric's Road never rolls one. */
+bool CanRollRarity(const Monster &monster)
+{
+	return CanTakeMapScaling(monster) && (monster.flags & MFLAG_RISEN) == 0;
 }
 
 uint8_t ChooseMods(uint32_t hash, int count)
@@ -64,7 +71,7 @@ uint8_t ChooseMods(uint32_t hash, int count)
 MonsterAffixes GetMonsterAffixes(const Monster &monster)
 {
 	MonsterAffixes affixes;
-	if (!CanHaveRarity(monster))
+	if (!CanRollRarity(monster))
 		return affixes;
 	const uint32_t hash = Mix(monster.rndItemSeed ^ 0x6D6F6E73U);
 	const int roll = static_cast<int>(hash % 1000);
@@ -94,7 +101,7 @@ MonsterAffixes GetMonsterAffixes(const Monster &monster)
 void ApplyMonsterRarity(Monster &monster)
 {
 	monster.poe2 = {};
-	if (const int mapTier = ActiveMapTier(); mapTier > 0 && CanHaveRarity(monster)) {
+	if (const int mapTier = ActiveMapTier(); mapTier > 0 && CanTakeMapScaling(monster)) {
 		const MapEffects &map = ActiveMapEffects();
 		// The tier, the waystone's life and energy shield (as life), and monster effectiveness all multiply.
 		int64_t lifePercent = 100 + (mapTier * MapLifePercentPerTier);
@@ -270,9 +277,15 @@ bool MonsterSkipsTick(Monster &monster)
 {
 	if (!gbIsPoe2 || monster.hasNoLife())
 		return false;
+	Poe2MonsterState &state = monster.poe2;
+	// Leoric's Road: a risen monster can't act in its first second; a skeleton's rising animation plays meanwhile.
+	if (state.risingTicks > 0) {
+		state.risingTicks--;
+		if (monster.mode != MonsterMode::SpecialStand)
+			return true;
+	}
 	if (IsMonsterImmobilized(monster))
 		return true;
-	Poe2MonsterState &state = monster.poe2;
 	// Bleeding from some uniques hinders, slowing like a chill; the stronger slow counts.
 	const int slow = std::max<int>(state.chillTicks > 0 ? state.chillPercent : 0, MonsterHinderPercent(monster));
 	if (slow == 0)
@@ -342,9 +355,12 @@ void InflictPhysical(Monster &monster, Fixed26_6 damage)
 
 } // namespace
 
-void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage)
+void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage, AilmentSource source)
 {
 	if (!gbIsPoe2 || monster.hasNoLife() || damage <= 0)
+		return;
+	// The Sickness Road: the toll's fever and the pact stop some of the hero's ailments (stun buildup isn't one).
+	if (damageType != DamageType::Physical && !AilmentAllowed(player, source))
 		return;
 	if (damageType == DamageType::Magic) {
 		// POE2 Mashup: supports make cold build up harder (Deep Freeze) or not at all (Elemental Focus).
@@ -400,6 +416,51 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 			AddVisualEffect(monster.position.tile, MissileGraphicID::BlueFlareExplosion);
 		state.shockTicks = ShockTicks;
 	}
+}
+
+bool CarriesAilment(const Monster &monster)
+{
+	const Poe2MonsterState &state = monster.poe2;
+	return state.igniteTicks > 0 || state.shockTicks > 0 || state.chillTicks > 0 || state.poisonTicks > 0;
+}
+
+bool CopyAilments(const Monster &from, Monster &to, const Player &player, bool withIgnite)
+{
+	if (&from == &to || to.hasNoLife() || to.isPlayerMinion())
+		return false;
+	const Poe2MonsterState &source = from.poe2;
+	Poe2MonsterState &target = to.poe2;
+	// A copy replaces only a weaker ailment, or as strong a one with less time left.
+	const auto better = [](int32_t strength, uint8_t ticks, int32_t theirStrength, uint8_t theirTicks) {
+		return theirTicks == 0 || strength > theirStrength || (strength == theirStrength && ticks > theirTicks);
+	};
+	bool passed = false;
+	if (withIgnite && source.igniteTicks > 0 && better(source.igniteDamagePerTick, source.igniteTicks, target.igniteDamagePerTick, target.igniteTicks)) {
+		target.igniteTicks = source.igniteTicks;
+		target.igniteDamagePerTick = source.igniteDamagePerTick;
+		target.igniteSource = static_cast<int8_t>(player.getId());
+		passed = true;
+	}
+	if (source.shockTicks > target.shockTicks) {
+		if (target.shockTicks == 0)
+			AddVisualEffect(to.position.tile, MissileGraphicID::BlueFlareExplosion);
+		target.shockTicks = source.shockTicks;
+		passed = true;
+	}
+	if (source.chillTicks > 0 && better(source.chillPercent, source.chillTicks, target.chillPercent, target.chillTicks)) {
+		target.chillTicks = source.chillTicks;
+		target.chillPercent = source.chillPercent;
+		passed = true;
+	}
+	if (source.poisonTicks > 0 && better(source.poisonDamagePerTick, source.poisonTicks, target.poisonDamagePerTick, target.poisonTicks)) {
+		target.poisonTicks = source.poisonTicks;
+		target.poisonDamagePerTick = source.poisonDamagePerTick;
+		target.poisonSource = static_cast<int8_t>(player.getId());
+		passed = true;
+	}
+	if (passed)
+		to.tag(player);
+	return passed;
 }
 
 } // namespace devilution

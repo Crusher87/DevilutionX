@@ -8,6 +8,7 @@
 #include "levels/gendung.h"
 #include "player.h"
 #include "poe2/default_attack.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -186,7 +187,7 @@ SkillUsability GetSkillUsability(const Player &player, SkillSlot skill)
 		return SkillUsability::Empty;
 
 	const ItemData &gem = AllItemsList[*gemIndex];
-	if (player._pStrength < gem.iMinStr || player._pMagic < gem.iMinMag || player._pDexterity < gem.iMinDex)
+	if (RequirementStrength(player) < gem.iMinStr || player._pMagic < gem.iMinMag || player._pDexterity < gem.iMinDex)
 		return SkillUsability::Requirements;
 	if (skill.kind == SkillKind::Persistent) {
 		// A minion count set to 0 is the player's choice, not a lack of Spirit.

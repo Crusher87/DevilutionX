@@ -1652,6 +1652,22 @@ void ModOptions::SetHellfireEnabled(bool enableHellfire)
 	}
 }
 
+bool ModOptions::SwitchOnHellfireForPoe2()
+{
+	bool poe2 = false;
+	ModEntry *hellfire = nullptr;
+	for (auto &modEntry : GetModEntries()) {
+		if (modEntry.name == "poe2")
+			poe2 = *modEntry.enabled;
+		else if (modEntry.name == "hf")
+			hellfire = &modEntry;
+	}
+	if (!poe2 || hellfire == nullptr || *hellfire->enabled)
+		return false;
+	hellfire->enabled.SetValue(true);
+	return true;
+}
+
 std::forward_list<ModOptions::ModEntry> &ModOptions::GetModEntries()
 {
 	if (modEntries)

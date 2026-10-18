@@ -15,6 +15,7 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/spirit.hpp"
+#include "poe2/unique_effects.hpp"
 #include "utils/str_cat.hpp"
 #include "utils/timer.hpp"
 
@@ -307,6 +308,9 @@ void DrawPoe2GlobeValues(const Surface &out)
 		DrawShadowedValue(out, StrCat("Combo ", player.poe2.combo), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorWhite);
 	if (player.poe2.frenzyCharges > 0)
 		DrawShadowedValue(out, StrCat("Frenzy ", player.poe2.frenzyCharges), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorOrange);
+	// The Sickness Road toll's fever, while it keeps the hero's own hits from inflicting ailments.
+	if (const int fever = SicknessFeverTicks(player); fever > 0)
+		DrawShadowedValue(out, StrCat("Fever ", (fever + 19) / 20, "s"), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorYellow);
 }
 
 void DrawFlaskLiquidLevel(const Surface &out, Point position, ClxSprite sprite, int charges, int maxCharges)

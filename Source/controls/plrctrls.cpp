@@ -51,6 +51,8 @@
 #include "panels/ui_panels.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/profane_roads.hpp"
 #include "qol/chatlog.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -275,6 +277,39 @@ bool CanTargetMonster(const Monster &monster)
 	return dMonster[mx][my] != 0;
 }
 
+/**
+ * @brief POE2 Mashup: the Maiden's Road toll. With nothing lit to shoot at, the aim opens on the nearest shape in the
+ * dark, preferring one that hasn't noticed the hero.
+ */
+void FindShapeInTheDark()
+{
+	constexpr int ShapeAimTiles = 15;
+	const Player &myPlayer = *MyPlayer;
+	if (!gbIsPoe2 || PassiveTotal(myPlayer, PassiveStat::EyesInTheDark) <= 0 || !myPlayer.UsesRangedWeapon())
+		return;
+	int best = -1;
+	int bestDistance = 0;
+	bool bestUnaware = false;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const int mi = ActiveMonsters[i];
+		const Monster &monster = Monsters[mi];
+		if ((monster.flags & MFLAG_HIDDEN) != 0 || monster.isPlayerMinion() || monster.hasNoLife() || IsTileLit(monster.position.tile))
+			continue;
+		if (dMonster[monster.position.tile.x][monster.position.tile.y] == 0)
+			continue;
+		const int distance = myPlayer.position.future.ExactDistance(monster.position.future);
+		if (distance > ShapeAimTiles)
+			continue;
+		const bool unaware = monster.activeForTicks == 0;
+		if (best != -1 && (bestUnaware != unaware ? bestUnaware : distance >= bestDistance))
+			continue;
+		best = mi;
+		bestDistance = distance;
+		bestUnaware = unaware;
+	}
+	pcursmonst = best;
+}
+
 void FindRangedTarget()
 {
 	int rotations = 0;
@@ -304,6 +339,8 @@ void FindRangedTarget()
 		canTalk = newCanTalk;
 		pcursmonst = mi;
 	}
+	if (pcursmonst == -1)
+		FindShapeInTheDark();
 }
 
 void FindMeleeTarget()

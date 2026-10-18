@@ -142,8 +142,41 @@ enum class PassiveStat : uint8_t {
 	KillBurst,
 	FlaskFrenzy,
 	MoreVsStunned,
+	// The Profane Roads' rules (design v8, Curtis 2026-10-18): flags with the value 1, read as held or not, never summed.
+	/** Leoric's toll: 1 in 4 kills rise as hostile skeletons; Culled monsters stay dead. */
+	DeadDoNotRest,
+	/** Leoric's pact: two-handed passives and Fresh Meat reach bows; Culled and put-down dead rise for you; 1 in 3 other kills rise at full life. */
+	KingsDeadPact,
+	/** Bartuc's toll: a quarter of mana costs is paid in life. */
+	BartucsHunger,
+	/** Bartuc's pact: half your Magic counts as Strength; each melee attack costs 1% of maximum life. */
+	PaidInBlood,
+	/** The Sickness's toll: Kill Burst only from ailing monsters, and it passes their ailments on; then a short fever. */
+	DarkSickness,
+	/** The Sickness's pact: melee passives reach spell hits; every death spreads ailments; spells can't inflict them. */
+	HiveBreath,
+	/** The Maiden's toll: infravision and more damage against unaware monsters; light capped at 7, and monsters wake at 10 tiles. */
+	EyesInTheDark,
+	/** The Maiden's pact: bow passives reach staves; with a staff nothing shoots from beyond 5 tiles until it has struck; light capped at 4. */
+	OutOfDarkness,
 	Count,
 };
+
+/** @brief The four Profane Roads of design v8, each one-way from its door. */
+enum class ProfaneRoad : uint8_t {
+	/** The Warrior's, into the Rogue's bow side: The King's Dead. */
+	Leoric,
+	/** The Sorcerer's, into the Warrior's two-hand side. */
+	Bartuc,
+	/** The Monk's, into the Sorcerer's elemental side: The Carrier. */
+	Sickness,
+	/** The Rogue's, into the Monk's staff side: Out of Darkness. */
+	Maiden,
+	Count,
+};
+
+/** @brief Nodes on each road, from the door: small, small, toll, small, small, pact, greater small, greater small. */
+constexpr int ProfaneRoadNodes = 8;
 
 /** @brief The attributes an "any Attribute" node can give. */
 enum class PassiveAttribute : uint8_t {
@@ -207,6 +240,9 @@ struct PassiveNode {
 	int8_t orbit = -1;
 	/** @brief Which of the player's jewel slots a jewel socket uses. */
 	std::optional<uint8_t> socketIndex;
+	/** @brief The Profane Road the node is on, and its place from the door (1 to 8). */
+	std::optional<ProfaneRoad> road;
+	uint8_t roadStep = 0;
 };
 
 /** @brief A point in the tree, in tree units. */
@@ -237,6 +273,12 @@ std::span<const PassiveTreePoint> PassiveLinkPoints(PassiveNodeId a, PassiveNode
 bool IsLatticeLink(const PassiveNode &a, const PassiveNode &b);
 bool IsProfaneNode(const PassiveNode &node);
 bool IsCapstoneNode(const PassiveNode &node);
+/** @brief The node a Profane Road is entered from: its first node's one link off the road. */
+std::optional<PassiveNodeId> ProfaneRoadDoor(ProfaneRoad road);
+/** @brief The ordinary node past a Profane Road's last node. It can't step back onto the road. */
+std::optional<PassiveNodeId> ProfaneRoadFarGate(ProfaneRoad road);
+/** @brief Whether a hero holding `from` may take `to` next: a road is walked only from its door toward its far end. */
+bool CanStepPassive(PassiveNodeId from, PassiveNodeId to);
 
 /** @brief The class whose start and ascendancies a hero uses: the tree has the four main classes, so the Bard uses the Rogue's and the Barbarian the Warrior's. */
 HeroClass PassiveTreeClass(HeroClass heroClass);
@@ -312,10 +354,25 @@ void CachePassiveTotals(Player &player, const PassiveTotals &passives);
 void AddPassiveRules(const PassiveTotals &passives, UniqueRuleTotals &rules);
 /** @brief Increased attack damage from the weapon-type stats for the weapons the hero holds. */
 int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives);
+/** @brief Strength for item and gem requirements and the melee damage bonus: with Paid in Blood (the pact of Bartuc's
+ * Road) half of Magic, gear included, counts as Strength. The character sheet's Strength doesn't change. */
+int RequirementStrength(const Player &player);
+/** @brief The same for the given Strength and Magic, reading the hero's tree afresh (the equipment check runs before the
+ * cached totals are updated). */
+int RequirementStrength(const Player &player, int strength, int magic);
 /** @brief Increased damage of one type (fire, lightning or Magic) from the tree. */
 int PassiveElementDamage(const Player &player, DamageType type);
 
 std::string PassiveStatText(PassiveStat stat, int value);
+/** @brief A tooltip line: its text, and whether it is a price (drawn red). */
+struct PassiveStatLine {
+	std::string text;
+	bool price;
+};
+/** @brief The stat's tooltip lines: one for most stats, the rule and its price apart for a Profane Road's rules. */
+std::vector<PassiveStatLine> PassiveStatLines(PassiveStat stat, int value);
+/** @brief Extra tooltip lines for a node a Profane Road starts or ends at. */
+std::vector<PassiveStatLine> ProfaneRoadEndLines(PassiveNodeId node);
 std::string PassiveNodeName(const PassiveNode &node);
 /** @brief The node's stat lines as the player has them: an allocated "any Attribute" node names the attribute picked. */
 std::vector<std::pair<PassiveStat, int>> PassiveNodeStats(const Player &player, const PassiveNode &node);

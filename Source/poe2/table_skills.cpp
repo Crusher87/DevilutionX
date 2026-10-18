@@ -21,6 +21,7 @@
 #include "poe2/camera_shake.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
@@ -210,14 +211,30 @@ Fixed26_6 FixedDamage(const Player &player, const TableSkillData &data)
 	return Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 64, INT32_MAX / 2)));
 }
 
-void SpellHitMonster(const Player &player, Monster &monster, DamageType type, Fixed26_6 damage)
+/** @brief Whether a table skill's hits count as a spell's or an attack's, for the rules that stop ailments. */
+AilmentSource SourceOf(const TableSkillData &data)
+{
+	// As the supports tag them: a spell needs no weapon.
+	return data.weapon == TableWeapon::None && (data.flags & TF_Spell) != 0 ? AilmentSource::Spell : AilmentSource::Strike;
+}
+
+void SpellHitMonster(const Player &player, Monster &monster, DamageType type, Fixed26_6 damage, AilmentSource source)
 {
 	if (&player != MyPlayer || !CanHit(monster) || damage <= 0)
 		return;
+	// The Sickness Road pact reaches table spells too: its melee bridge, and less against a healthy monster.
+	if (source == AilmentSource::Spell)
+		damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * SicknessSpellHitPercent(player, monster) / 100, INT32_MAX / 2)));
+	// Leoric's Road: a hit puts a monster still rising down for good.
+	if (TryPutDownRisen(player, monster)) {
+		monster.tag(player);
+		M_StartKill(monster, player);
+		return;
+	}
 	const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * MonsterDamageTakenPercent(monster, type) / 100));
 	ApplyMonsterDamage(type, monster, dealt);
 	monster.tag(player);
-	TryInflictAilment(monster, player, type, dealt);
+	TryInflictAilment(monster, player, type, dealt, source);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);
 	else if (type == DamageType::Physical)
@@ -260,12 +277,12 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 	// Elemental attacks: part of the hit lands again as the skill's element.
 	if (data.type != DamageType::Physical) {
 		const Fixed26_6 extra = Fixed26_6::fromRaw(FixedDamage(player, data).raw() / 3);
-		SpellHitMonster(player, monster, data.type, extra);
+		SpellHitMonster(player, monster, data.type, extra, SourceOf(data));
 	}
 	if ((data.flags & TF_Elements) != 0) {
 		const Fixed26_6 extra = Fixed26_6::fromRaw(FixedDamage(player, data).raw() / 4);
 		for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Magic })
-			SpellHitMonster(player, monster, type, extra);
+			SpellHitMonster(player, monster, type, extra, SourceOf(data));
 		AddVisualEffect(monster.position.tile, MissileGraphicID::Lightning, 1);
 	}
 }
@@ -337,7 +354,7 @@ void ZoneBurst(const Player &player, const TableSkillData &data, Point center, i
 {
 	AddVisualEffect(center, data.effect, 0, 4);
 	ForEachMonsterNear(center, radius, [&](Monster &monster) {
-		SpellHitMonster(player, monster, data.type, damage);
+		SpellHitMonster(player, monster, data.type, damage, SourceOf(data));
 		if ((data.flags & TF_Stun) != 0 && !monster.hasNoLife())
 			HeavyStunMonster(monster);
 	});
@@ -417,8 +434,11 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		break;
 	case TableCurse::Decrepify:
 		state.decrepifyTicks = ticks;
-		state.chillTicks = ticks;
-		state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, 40));
+		// Its chill is a curse's, which the Sickness Road can stop.
+		if (AilmentAllowed(player, AilmentSource::Spell)) {
+			state.chillTicks = ticks;
+			state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, 40));
+		}
 		break;
 	case TableCurse::LowerResist:
 		state.lowerResistTicks = ticks;
@@ -892,7 +912,7 @@ void ProcessSkillZones(Player &player)
 					if (Monster *monster = TargetMonsterNear(zone.center, radius); monster != nullptr) {
 						AddVisualEffect(monster->position.tile, MissileGraphicID::ThinLightning, 0, 6);
 						AddVisualEffect(monster->position.tile, data->effect);
-						SpellHitMonster(player, *monster, data->type, zone.damage);
+						SpellHitMonster(player, *monster, data->type, zone.damage, SourceOf(*data));
 						PlaySfxLoc(SfxID::SpellLightning, monster->position.tile);
 					}
 					break;
@@ -941,8 +961,10 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 		percent -= DecrepifyPercent;
 	if (player.poe2.frozenArmorTicks > 0) {
 		percent -= FrozenArmorPercent;
-		monster.poe2.chillTicks = 60;
-		monster.poe2.chillPercent = static_cast<uint8_t>(std::max<int>(monster.poe2.chillPercent, 30));
+		if (AilmentAllowed(player, AilmentSource::Spell)) {
+			monster.poe2.chillTicks = 60;
+			monster.poe2.chillPercent = static_cast<uint8_t>(std::max<int>(monster.poe2.chillPercent, 30));
+		}
 	}
 	if (player.poe2.holyShieldTicks > 0)
 		percent -= HolyShieldPercent;

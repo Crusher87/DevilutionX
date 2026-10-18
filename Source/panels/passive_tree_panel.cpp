@@ -810,6 +810,31 @@ void TakeOutJewel(Player &player, PassiveNodeId node)
 	NewCursor(player.HoldItem);
 }
 
+/** @brief "Leoric's Road, toll" and the like, for a node on a Profane Road. */
+std::string ProfaneRoadStepText(const PassiveNode &node)
+{
+	std::string_view road;
+	switch (*node.road) {
+	case ProfaneRoad::Leoric:
+		road = _("Leoric's Road");
+		break;
+	case ProfaneRoad::Bartuc:
+		road = _("Bartuc's Road");
+		break;
+	case ProfaneRoad::Sickness:
+		road = _("The Sickness Road");
+		break;
+	default:
+		road = _("The Maiden's Road");
+		break;
+	}
+	if (node.roadStep == 3)
+		return StrCat(road, ", ", _("toll"));
+	if (node.roadStep == 6)
+		return StrCat(road, ", ", _("pact"));
+	return StrCat(road, ", ", node.roadStep, "/", ProfaneRoadNodes);
+}
+
 std::string_view NodeKindText(const PassiveNode &node)
 {
 	switch (node.kind) {
@@ -894,6 +919,8 @@ std::string NodeHint(const Player &player, const PassiveNode &node)
 	}
 	if (CanAllocatePassive(player, node.id))
 		return node.kind == PassiveKind::Attribute ? std::string(_("Click to pick an attribute")) : std::string(_("Click to allocate"));
+	if (node.road && PassivePointsLeft(player) > 0 && std::any_of(node.links.begin(), node.links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, PassivePool::Main); }))
+		return std::string(_("A Profane Road is walked from its door"));
 	return (node.kind == PassiveKind::AscendancyNotable ? AscendancyPointsLeft(player) : PassivePointsLeft(player)) <= 0 ? std::string(_("No points left")) : std::string(_("Not linked to your tree yet"));
 }
 
@@ -905,8 +932,12 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 		UiFlags color;
 	};
 	std::vector<Line> lines;
-	for (const auto &[stat, value] : PassiveNodeStats(player, node))
-		lines.push_back({ PassiveStatText(stat, value), value < 0 ? UiFlags::ColorRed : UiFlags::ColorBlue });
+	for (const auto &[stat, value] : PassiveNodeStats(player, node)) {
+		for (PassiveStatLine &line : PassiveStatLines(stat, value))
+			lines.push_back({ std::move(line.text), line.price ? UiFlags::ColorRed : UiFlags::ColorBlue });
+	}
+	for (PassiveStatLine &line : ProfaneRoadEndLines(node.id))
+		lines.push_back({ std::move(line.text), line.price ? UiFlags::ColorRed : UiFlags::ColorWhite });
 	if (node.kind == PassiveKind::JewelSocket) {
 		if (const Item *jewel = SocketedJewel(player, node.id); jewel != nullptr) {
 			lines.push_back({ std::string(jewel->_iIName), jewel->_iMagical == ITEM_QUALITY_RARE ? UiFlags::ColorYellow : UiFlags::ColorBlue });
@@ -919,10 +950,12 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 		}
 	}
 	const std::string title = PassiveNodeName(node);
-	const std::string kind = node.region.empty() || node.kind == PassiveKind::Start || IsAscendancyNode(node) || IsClassRegion(node.region)
+	std::string kind = node.region.empty() || node.kind == PassiveKind::Start || IsAscendancyNode(node) || IsClassRegion(node.region)
 	    ? std::string(NodeKindText(node))
 	    : StrCat(NodeKindText(node), "  -  ", node.region);
-	if (IsProfaneNode(node) && node.kind == PassiveKind::Notable)
+	if (node.road)
+		kind = StrCat(NodeKindText(node), "  -  ", ProfaneRoadStepText(node));
+	else if (IsProfaneNode(node) && node.kind == PassiveKind::Notable)
 		lines.push_back({ std::string(_("Profane Path: the short way passes through here")), UiFlags::ColorRed });
 	std::string hint = NodeHint(player, node);
 	if (route.size() > 2)
@@ -936,12 +969,20 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 	int width = std::max({ GetLineWidth(title, GameFont24) + (2 * Pad), GetLineWidth(kind) + (2 * Pad), GetLineWidth(hint) + (2 * Pad), 300 });
 	for (const Line &line : lines)
 		width = std::max(width, GetLineWidth(line.text, GameFont24) + (2 * Pad));
-	width = std::min(width, layout.panel.size.width - 8);
+	// Long rule lines (the Profane Roads') wrap rather than stretch the popup across the panel.
+	constexpr int MaxWidth = 640;
+	width = std::min({ width, layout.panel.size.width - 8, std::max(MaxWidth, GetLineWidth(title, GameFont24) + (2 * Pad)) });
+	int statRows = 0;
+	for (Line &line : lines) {
+		if (GetLineWidth(line.text, GameFont24) > width - (2 * Pad))
+			line.text = WordWrapString(line.text, width - (2 * Pad), GameFont24);
+		statRows += static_cast<int>(std::count(line.text.begin(), line.text.end(), '\n')) + 1;
+	}
 	constexpr int LoreLineHeight = 16;
 	const std::string lore = node.lore.empty() ? std::string() : WordWrapString(node.lore, width - (2 * Pad));
 	const int loreLines = lore.empty() ? 0 : static_cast<int>(std::count(lore.begin(), lore.end(), '\n')) + 1;
 	const int loreHeight = loreLines == 0 ? 0 : (loreLines * LoreLineHeight) + 6;
-	const int height = TitleHeight + KindHeight + 6 + (static_cast<int>(lines.size()) * StatHeight) + loreHeight + HintHeight + Pad;
+	const int height = TitleHeight + KindHeight + 6 + (statRows * StatHeight) + loreHeight + HintHeight + Pad;
 
 	// Beside the cursor, never under it: to its right, or to its left near the panel's right edge.
 	constexpr int CursorClearance = 36;
@@ -968,8 +1009,10 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 	line.position.y += KindHeight + 6;
 	line.size.height = StatHeight;
 	for (const Line &stat : lines) {
-		DrawString(out, stat.text, line, { .flags = UiFlags::FontSize24 | UiFlags::AlignCenter | UiFlags::VerticalCenter | stat.color });
-		line.position.y += StatHeight;
+		const int rows = static_cast<int>(std::count(stat.text.begin(), stat.text.end(), '\n')) + 1;
+		const Rectangle box { line.position, { line.size.width, rows * StatHeight } };
+		DrawString(out, stat.text, box, { .flags = UiFlags::FontSize24 | UiFlags::AlignCenter | UiFlags::VerticalCenter | stat.color, .lineHeight = StatHeight });
+		line.position.y += rows * StatHeight;
 	}
 	if (loreHeight > 0) {
 		const Rectangle loreBox { line.position + Displacement { 0, 4 }, { line.size.width, loreLines * LoreLineHeight } };

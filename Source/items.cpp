@@ -93,6 +93,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -567,7 +568,7 @@ void CalcSelfItems(Player &player)
 
 			bool isValid = IsItemValid(player, equipment);
 
-			if (currstr < equipment._iMinStr
+			if (RequirementStrength(player, currstr, currmag) < equipment._iMinStr
 			    || currmag < equipment._iMinMag
 			    || currdex < equipment._iMinDex)
 				isValid = false;
@@ -2481,7 +2482,7 @@ void SetVendorPoe2ItemLevel(Item &item, int level)
 
 void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 {
-	int strength = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Strength), player._pStrength);
+	int strength = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Strength), RequirementStrength(player));
 	int dexterity = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Dexterity), player._pDexterity);
 	int magic = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Magic), player._pMagic);
 	strength += strength / 5;
@@ -3276,8 +3277,10 @@ void CalcPlrDamageMod(Player &player)
 	const uint8_t playerLevel = player.getCharacterLevel();
 	const Item &leftHandItem = player.InvBody[INVLOC_HAND_LEFT];
 	const Item &rightHandItem = player.InvBody[INVLOC_HAND_RIGHT];
-	const int strMod = playerLevel * player._pStrength;
-	const int strDexMod = playerLevel * (player._pStrength + player._pDexterity);
+	// POE2 Mashup: Paid in Blood counts half of Magic as Strength here too.
+	const int strength = RequirementStrength(player);
+	const int strMod = playerLevel * strength;
+	const int strDexMod = playerLevel * (strength + player._pDexterity);
 
 	switch (player._pClass) {
 	case HeroClass::Rogue:
@@ -3790,7 +3793,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pIGetHit = getHit;
 	player.poe2.lifeRegen = lifeRegen;
 	player.poe2.manaRegenBonus = manaRegen;
-	CalcPlrLightRadius(player, lightRadius);
+	// POE2 Mashup: the Maiden's Road caps the light after base, tree and gear, before the 2 to 15 clamp.
+	CalcPlrLightRadius(player, std::min(lightRadius, ProfaneLightRadiusCap(player)));
 	CalcPlrDamageMod(player);
 	player._pISpells = spells;
 	EnsureValidReadiedSpell(player);
@@ -7151,7 +7155,7 @@ void SpawnBoy(int lvl)
 	const Player &myPlayer = *MyPlayer;
 
 	const HeroClass pc = myPlayer._pClass;
-	int strength = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Strength), myPlayer._pStrength);
+	int strength = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Strength), RequirementStrength(myPlayer));
 	int dexterity = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Dexterity), myPlayer._pDexterity);
 	int magic = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Magic), myPlayer._pMagic);
 	strength += strength / 5;

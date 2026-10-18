@@ -6,9 +6,11 @@
 #include "engine/render/scrollrt.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 
 #ifdef USE_SDL3
@@ -72,11 +74,14 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
 #include "plrmsg.h"
+#include "engine/palette.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/hud_minions.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/vfx.hpp"
@@ -140,10 +145,17 @@ constexpr auto RightFrameDisplacement = Displacement { DunFrameWidth, 0 };
  */
 std::optional<uint8_t> RankOutlineColor(const Monster &monster, int lightTableIndex)
 {
-	if (!gbIsPoe2 || monster.isPlayerMinion() || lightTableIndex >= LightsMax - 2)
+	if (!gbIsPoe2 || lightTableIndex >= LightsMax - 2)
 		return std::nullopt;
 	uint8_t base;
-	if (monster.isUnique()) {
+	// Leoric's Road: the King's dead in a pale bone colour, and the hostile risen in red.
+	if (IsKingsDead(monster)) {
+		base = PAL16_BEIGE;
+	} else if (monster.isPlayerMinion()) {
+		return std::nullopt;
+	} else if (IsRisen(monster)) {
+		base = PAL16_RED;
+	} else if (monster.isUnique()) {
 		base = PAL16_ORANGE;
 	} else {
 		switch (GetMonsterAffixes(monster).rarity) {
@@ -439,6 +451,15 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 	const hd::SubFrameScope subFrame(monster.animInfo.getFrameFraction());
 
 	if (!IsTileLit(tilePosition)) {
+		// POE2 Mashup: the Maiden's Road, shapes that haven't noticed the hero are drawn dimmer.
+		if (gbIsPoe2 && monster.activeForTicks == 0 && HasInfravision(*MyPlayer)) {
+			std::array<uint8_t, 256> dim;
+			const uint8_t *infravision = GetInfravisionTRN();
+			for (size_t i = 0; i < dim.size(); i++)
+				dim[i] = LightTables[std::min<size_t>(6, LightTables.size() - 1)][infravision[i]];
+			ClxDrawTRN(out, targetBufferPosition, sprite, dim.data());
+			return;
+		}
 		ClxDrawTRN(out, targetBufferPosition, sprite, GetInfravisionTRN());
 		return;
 	}
@@ -447,7 +468,7 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 		trn = monster.uniqueMonsterTRN.get();
 	if (monster.mode == MonsterMode::Petrified)
 		trn = GetStoneTRN();
-	if (MyPlayer->_pInfraFlag && lightTableIndex > 8)
+	if (HasInfravision(*MyPlayer) && lightTableIndex > 8)
 		trn = GetInfravisionTRN();
 	if (trn != nullptr)
 		ClxDrawTRN(out, targetBufferPosition, sprite, trn);
@@ -513,6 +534,41 @@ uint8_t GetPlayerOutlineColor(int id)
 }
 
 /**
+ * @brief POE2 Mashup: the Sickness Road's fever tints the hero a sickly green, in the colours of the palette shown now
+ * (rebuilt when the palette changes).
+ */
+const uint8_t *FeverTRN()
+{
+	static std::array<uint8_t, 256> trn;
+	static std::array<SDL_Color, 256> builtFor;
+	static bool built = false;
+	if (built && std::memcmp(builtFor.data(), logical_palette.data(), sizeof(builtFor)) == 0)
+		return trn.data();
+	builtFor = logical_palette;
+	built = true;
+	for (size_t i = 0; i < trn.size(); i++) {
+		const SDL_Color colour = logical_palette[i];
+		const int r = colour.r * 60 / 100;
+		const int g = std::min(colour.g * 90 / 100 + 28, 255);
+		const int b = colour.b * 45 / 100;
+		size_t best = i;
+		int bestDistance = 3 * 256 * 256;
+		for (size_t j = 0; j < logical_palette.size(); j++) {
+			const int dr = logical_palette[j].r - r;
+			const int dg = logical_palette[j].g - g;
+			const int db = logical_palette[j].b - b;
+			const int distance = dr * dr + dg * dg + db * db;
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				best = j;
+			}
+		}
+		trn[i] = static_cast<uint8_t>(best);
+	}
+	return trn.data();
+}
+
+/**
  * @brief POE2 Mashup: fading afterimages trailing a dodge roll or dash, darker the further back they are.
  */
 void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sprite, Point spriteBufferPosition)
@@ -539,7 +595,7 @@ void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sp
  */
 void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
-	if (!IsTileLit(tilePosition) && !MyPlayer->_pInfraFlag && !MyPlayer->isOnArenaLevel() && leveltype != DTYPE_TOWN) {
+	if (!IsTileLit(tilePosition) && !HasInfravision(*MyPlayer) && !MyPlayer->isOnArenaLevel() && leveltype != DTYPE_TOWN) {
 		return;
 	}
 
@@ -551,20 +607,27 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
 
+	const bool fever = &player == MyPlayer && SicknessFeverTicks(player) > 0;
 	if (&player == MyPlayer && IsNoneOf(leveltype, DTYPE_NEST, DTYPE_CRYPT)) {
-		ClxDraw(out, spriteBufferPosition, sprite);
+		if (fever)
+			ClxDrawTRN(out, spriteBufferPosition, sprite, FeverTRN());
+		else
+			ClxDraw(out, spriteBufferPosition, sprite);
 		DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);
 		return;
 	}
 
-	if (!IsTileLit(tilePosition) || ((MyPlayer->_pInfraFlag || MyPlayer->isOnArenaLevel()) && lightTableIndex > 8)) {
+	if (!IsTileLit(tilePosition) || ((HasInfravision(*MyPlayer) || MyPlayer->isOnArenaLevel()) && lightTableIndex > 8)) {
 		ClxDrawTRN(out, spriteBufferPosition, sprite, GetInfravisionTRN());
 		DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/true, lightTableIndex);
 		return;
 	}
 
 	lightTableIndex = std::max(lightTableIndex - 5, 0);
-	ClxDrawLight(out, spriteBufferPosition, sprite, lightTableIndex);
+	if (fever)
+		ClxDrawTRN(out, spriteBufferPosition, sprite, FeverTRN());
+	else
+		ClxDrawLight(out, spriteBufferPosition, sprite, lightTableIndex);
 	DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);
 }
 
@@ -824,7 +887,7 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		return;
 	}
 
-	if (!IsTileLit(tilePosition) && !(MyPlayer->_pInfraFlag && IsFloor(tilePosition))) {
+	if (!IsTileLit(tilePosition) && !(HasInfravision(*MyPlayer) && IsFloor(tilePosition))) {
 		return;
 	}
 

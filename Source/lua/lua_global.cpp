@@ -286,6 +286,17 @@ void LuaReloadActiveMods()
 	lua::LoadModsComplete();
 }
 
+namespace {
+
+/** @brief A mod was switched on or off. POE2 mode always plays on Hellfire, so Hellfire is switched back on first, and that change reloads the mods. */
+void OnModToggled()
+{
+	if (!GetOptions().Mods.SwitchOnHellfireForPoe2())
+		LuaReloadActiveMods();
+}
+
+} // namespace
+
 void LuaInitialize()
 {
 	CurrentLuaState.emplace();
@@ -330,10 +341,10 @@ void LuaInitialize()
 	lua["setEnvironment"] = [](const sol::environment &env, const sol::function &fn) { sol::set_environment(env, fn); };
 
 	for (OptionEntryBase *mod : GetOptions().Mods.GetEntries()) {
-		mod->SetValueChangedCallback(LuaReloadActiveMods);
+		mod->SetValueChangedCallback(OnModToggled);
 	}
 
-	LuaReloadActiveMods();
+	OnModToggled();
 }
 
 void LuaShutdown()

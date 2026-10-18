@@ -708,7 +708,8 @@ bool gbSkipSync = false;
 	monster.goalVar1 = file->NextLENarrow<int32_t, int16_t>();
 	monster.goalVar2 = file->NextLENarrow<int32_t, int8_t>();
 	monster.goalVar3 = file->NextLENarrow<int32_t, int8_t>();
-	file->Skip(4); // Unused
+	// POE2 Mashup: the King's dead keep their time left here (0 for every other monster, and in older saves).
+	monster.poe2.kingsDeadTicks = static_cast<uint16_t>(std::clamp<int32_t>(file->NextLE<int32_t>(), 0, UINT16_MAX));
 	monster.pathCount = file->NextLE<uint8_t>();
 	file->Skip(3); // Alignment
 	monster.position.tile.x = file->NextLE<int32_t>();
@@ -830,8 +831,10 @@ void LoadMonsters(LoadHelper &file, ankerl::unordered_dense::set<unsigned> &remo
 		if (levelConversionData != nullptr)
 			monsterConversionData = &levelConversionData->monsterConversionData[ActiveMonsters[i]];
 		const bool valid = LoadMonster(&file, monster, monsterConversionData);
-		// Ailments don't carry over from whatever used this slot before.
+		// Ailments don't carry over from whatever used this slot before; the King's dead keep their time left.
+		const uint16_t kingsDeadTicks = (monster.flags & MFLAG_KINGS_DEAD) != 0 ? monster.poe2.kingsDeadTicks : 0;
 		monster.poe2 = {};
+		monster.poe2.kingsDeadTicks = kingsDeadTicks;
 		if (!valid) {
 			Monsters[ActiveMonsters[i]] = {};
 			removedMonsterIds.insert(ActiveMonsters[i]);
@@ -1555,7 +1558,8 @@ void SaveMonster(SaveHelper *file, Monster &monster, MonsterConversionData *mons
 	file->WriteLE<int32_t>(monster.goalVar1);
 	file->WriteLE<int32_t>(monster.goalVar2);
 	file->WriteLE<int32_t>(monster.goalVar3);
-	file->Skip(4); // Unused
+	// POE2 Mashup: the King's dead keep their time left in this spare slot.
+	file->WriteLE<int32_t>((monster.flags & MFLAG_KINGS_DEAD) != 0 ? monster.poe2.kingsDeadTicks : 0);
 	file->WriteLE<uint8_t>(monster.pathCount);
 	file->Skip(3); // Alignment
 	file->WriteLE<int32_t>(monster.position.tile.x);

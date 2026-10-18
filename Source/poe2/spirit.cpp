@@ -64,7 +64,7 @@ void HeraldHit(Monster &monster, DamageType damageType, Fixed26_6 damage)
 	damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * MonsterDamageTakenPercent(monster, damageType) / 100));
 	ApplyMonsterDamage(damageType, monster, damage);
 	monster.tag(player);
-	TryInflictAilment(monster, player, damageType, damage);
+	TryInflictAilment(monster, player, damageType, damage, AilmentSource::Spell);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);
 }
@@ -606,7 +606,8 @@ void KillFarthestSkeletonMinion(const Player &player, _monster_id type)
 	int farthestDistance = -1;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type != type || !monster.isPlayerMinion() || monster.goalVar3 != player.getId() || monster.hasNoLife() || monster.poe2.revived)
+		if (monster.type().type != type || !monster.isPlayerMinion() || monster.goalVar3 != player.getId() || monster.hasNoLife() || monster.poe2.revived
+		    || (monster.flags & MFLAG_KINGS_DEAD) != 0)
 			continue;
 		const int distance = monster.position.tile.WalkingDistance(player.position.tile);
 		if (distance > farthestDistance) {

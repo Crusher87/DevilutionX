@@ -95,6 +95,100 @@ std::vector<std::pair<PassiveStat, int>> ParseStats(std::string_view text)
 	return stats;
 }
 
+/** @brief Each Profane Road's door, its 8 nodes from the door, and its far gate. */
+struct RoadEnds {
+	PassiveNodeId door;
+	std::array<PassiveNodeId, ProfaneRoadNodes> nodes;
+	PassiveNodeId farGate;
+};
+std::array<std::optional<RoadEnds>, static_cast<size_t>(ProfaneRoad::Count)> Roads;
+
+/** @brief Reads a node's road column: "leoric:3" is the third node from Leoric's Road's door. */
+void ParseRoad(std::string_view text, PassiveNode &node)
+{
+	const size_t colon = text.find(':');
+	if (text.empty() || colon == std::string_view::npos)
+		return;
+	const std::string_view name = text.substr(0, colon);
+	const std::optional<int> step = ParseInt(text.substr(colon + 1));
+	std::optional<ProfaneRoad> road;
+	if (name == "leoric")
+		road = ProfaneRoad::Leoric;
+	else if (name == "bartuc")
+		road = ProfaneRoad::Bartuc;
+	else if (name == "sickness")
+		road = ProfaneRoad::Sickness;
+	else if (name == "maiden")
+		road = ProfaneRoad::Maiden;
+	if (!road || !step || *step < 1 || *step > ProfaneRoadNodes) {
+		LogError("Passive tree node {} has a bad road \"{}\"", node.id, text);
+		return;
+	}
+	node.road = road;
+	node.roadStep = static_cast<uint8_t>(*step);
+}
+
+/** @brief The node's one link that isn't on its road, or nothing when there are none or several. */
+std::optional<PassiveNodeId> OffRoadLink(const PassiveNode &node)
+{
+	std::optional<PassiveNodeId> found;
+	for (const PassiveNodeId link : node.links) {
+		if (Tree[link].road)
+			continue;
+		if (found)
+			return std::nullopt;
+		found = link;
+	}
+	return found;
+}
+
+/** @brief Finds each road's door and far gate, checking every road is one chain of 8 with one way in and one out. */
+void FindRoadEnds()
+{
+	for (size_t road = 0; road < Roads.size(); road++) {
+		Roads[road] = std::nullopt;
+		std::array<std::optional<PassiveNodeId>, ProfaneRoadNodes> nodes;
+		bool ok = true;
+		for (const PassiveNode &node : Tree) {
+			if (node.road != static_cast<ProfaneRoad>(road))
+				continue;
+			std::optional<PassiveNodeId> &slot = nodes[node.roadStep - 1];
+			ok = ok && !slot;
+			slot = node.id;
+		}
+		if (std::none_of(nodes.begin(), nodes.end(), [](const auto &node) { return node.has_value(); }))
+			continue;
+		RoadEnds ends {};
+		for (int step = 0; ok && step < ProfaneRoadNodes; step++) {
+			ok = nodes[step].has_value();
+			if (ok)
+				ends.nodes[step] = *nodes[step];
+		}
+		for (int step = 0; ok && step + 1 < ProfaneRoadNodes; step++) {
+			const std::vector<PassiveNodeId> &links = Tree[ends.nodes[step]].links;
+			ok = std::find(links.begin(), links.end(), ends.nodes[step + 1]) != links.end();
+		}
+		const std::optional<PassiveNodeId> door = ok ? OffRoadLink(Tree[ends.nodes.front()]) : std::nullopt;
+		const std::optional<PassiveNodeId> farGate = ok ? OffRoadLink(Tree[ends.nodes.back()]) : std::nullopt;
+		// The middle nodes link only along the road.
+		for (int step = 1; ok && step + 1 < ProfaneRoadNodes; step++)
+			ok = Tree[ends.nodes[step]].links.size() == 2;
+		if (!ok || !door || !farGate || *door == *farGate) {
+			LogError("Profane Road {} isn't one chain of {} nodes with a door and a far gate; it is left out", road, ProfaneRoadNodes);
+			for (PassiveNode &node : Tree) {
+				if (node.road == static_cast<ProfaneRoad>(road)) {
+					node.road = std::nullopt;
+					node.roadStep = 0;
+				}
+			}
+			continue;
+		}
+		ends.door = *door;
+		ends.farGate = *farGate;
+		Roads[road] = ends;
+	}
+}
+
 /** @brief How a link bends, as the tree file gives it for each link from its lower id end. */
 struct LinkArc {
 	PassiveNodeId from;
@@ -246,7 +340,8 @@ bool AllConnected(const Player &player, std::optional<PassiveNodeId> without, Pa
 		const PassiveNodeId node = open.back();
 		open.pop_back();
 		for (const PassiveNodeId next : Tree[node].links) {
-			if (reached.test(next) || next == without || !nodes.test(next))
+			// A Profane Road holds only while it is linked from its door's side: it is never walked back.
+			if (reached.test(next) || next == without || !nodes.test(next) || !CanStepPassive(node, next))
 				continue;
 			reached.set(next);
 			open.push_back(next);
@@ -270,6 +365,7 @@ void LoadPassiveTreeData()
 	AscendancyNodes.reset();
 	AscendancyNotables.reset();
 	AscendancyRoots.clear();
+	Roads = {};
 	if (!gbIsPoe2)
 		return;
 
@@ -345,6 +441,8 @@ void LoadPassiveTreeData()
 			}
 		}
 		reader.readString("motif", text);
+		reader.readString("road", text);
+		ParseRoad(text, node);
 		Tree.push_back(std::move(node));
 	}
 	// Drop links to nodes that don't exist, and make every link go both ways.
@@ -358,6 +456,7 @@ void LoadPassiveTreeData()
 		node.links.erase(std::unique(node.links.begin(), node.links.end()), node.links.end());
 	}
 	BuildLinkPoints(arcs);
+	FindRoadEnds();
 	uint8_t socket = 0;
 	for (PassiveNode &node : Tree) {
 		if (node.kind != PassiveKind::JewelSocket)
@@ -438,6 +537,32 @@ bool IsProfaneNode(const PassiveNode &node)
 bool IsCapstoneNode(const PassiveNode &node)
 {
 	return node.group == "capstone";
+}
+
+std::optional<PassiveNodeId> ProfaneRoadDoor(ProfaneRoad road)
+{
+	const std::optional<RoadEnds> &ends = Roads[static_cast<size_t>(road)];
+	return ends ? std::optional<PassiveNodeId>(ends->door) : std::nullopt;
+}
+
+std::optional<PassiveNodeId> ProfaneRoadFarGate(ProfaneRoad road)
+{
+	const std::optional<RoadEnds> &ends = Roads[static_cast<size_t>(road)];
+	return ends ? std::optional<PassiveNodeId>(ends->farGate) : std::nullopt;
+}
+
+bool CanStepPassive(PassiveNodeId from, PassiveNodeId to)
+{
+	if (from >= Tree.size() || to >= Tree.size())
+		return false;
+	const PassiveNode &next = Tree[to];
+	if (!next.road)
+		return true;
+	const std::optional<RoadEnds> &ends = Roads[static_cast<size_t>(*next.road)];
+	if (!ends)
+		return true;
+	// Each road node needs the one before it, the first one the door; from the far gate the road can't be entered.
+	return from == (next.roadStep == 1 ? ends->door : ends->nodes[next.roadStep - 2]);
 }
 
 HeroClass PassiveTreeClass(HeroClass heroClass)
@@ -567,7 +692,8 @@ bool IsPassiveInPool(const Player &player, PassiveNodeId node, PassivePool pool)
 
 bool CanTakeWeaponSetPoints(const PassiveNode &node)
 {
-	return IsAnyOf(node.kind, PassiveKind::Small, PassiveKind::Notable, PassiveKind::Attribute);
+	// Profane nodes take main points only (design v8 §1.5).
+	return IsAnyOf(node.kind, PassiveKind::Small, PassiveKind::Notable, PassiveKind::Attribute) && !IsProfaneNode(node);
 }
 
 int WeaponSetPointsSpent(const Player &player, PassivePool pool)
@@ -601,7 +727,7 @@ bool CanAllocatePassive(const Player &player, PassiveNodeId node, PassivePool po
 	if (pool != PassivePool::Main) {
 		if (!CanTakeWeaponSetPoints(passive) || WeaponSetPointsLeft(player, pool) <= 0 || WeaponSetNeedsPassivePoint(player, pool))
 			return false;
-		return std::any_of(passive.links.begin(), passive.links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, pool); });
+		return std::any_of(passive.links.begin(), passive.links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, pool) && CanStepPassive(link, node); });
 	}
 	// The main tree may grow through weapon set nodes too; taking one with a main point moves it out of the sets.
 	if (player.poe2.passives.test(node))
@@ -614,7 +740,7 @@ bool CanAllocatePassive(const Player &player, PassiveNodeId node, PassivePool po
 	} else if (PassivePointsLeft(player) <= 0) {
 		return false;
 	}
-	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, PassivePool::Main); });
+	return std::any_of(Tree[node].links.begin(), Tree[node].links.end(), [&](PassiveNodeId link) { return IsPassiveAllocatedIn(player, link, PassivePool::Main) && CanStepPassive(link, node); });
 }
 
 std::vector<PassiveNodeId> PassiveRoute(const Player &player, PassiveNodeId target, PassivePool pool)
@@ -635,7 +761,8 @@ std::vector<PassiveNodeId> PassiveRoute(const Player &player, PassiveNodeId targ
 	for (size_t i = 0; i < open.size(); i++) {
 		const PassiveNodeId node = open[i];
 		for (const PassiveNodeId next : Tree[node].links) {
-			if (previous[next] >= 0)
+			// The route runs from next to node, so a Profane Road is followed only from its door.
+			if (previous[next] >= 0 || !CanStepPassive(next, node))
 				continue;
 			previous[next] = node;
 			if (IsPassiveAllocatedIn(player, next, pool) && IsPassiveNodeVisible(player, Tree[next])) {
@@ -967,6 +1094,8 @@ constexpr RuleCap RuleCaps[] {
 	{ UniqueRule::StaffToLightning, INT16_MIN, 100 },
 	{ UniqueRule::Cull, INT16_MIN, 20 },
 	{ UniqueRule::ArrowPierce, INT16_MIN, 5 },
+	// Iron Draw and the Black Curse together: arrows can't take more than the whole bonus.
+	{ UniqueRule::ArrowDamageMod, INT16_MIN, 100 },
 };
 
 } // namespace
@@ -988,6 +1117,20 @@ void AddPassiveRules(const PassiveTotals &passives, UniqueRuleTotals &rules)
 	}
 }
 
+int RequirementStrength(const Player &player)
+{
+	if (PassiveTotal(player, PassiveStat::PaidInBlood) <= 0)
+		return player._pStrength;
+	return player._pStrength + player._pMagic / 2;
+}
+
+int RequirementStrength(const Player &player, int strength, int magic)
+{
+	if (GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::PaidInBlood)] <= 0)
+		return strength;
+	return strength + magic / 2;
+}
+
 int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives)
 {
 	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
@@ -998,16 +1141,19 @@ int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives)
 			break;
 		}
 	}
-	// Unarmed counts as a melee attack; the Monk's staff training works barehanded too.
+	// Unarmed counts as a melee attack; the Monk's staff training works barehanded too. The Maiden's bow bridge doesn't reach bare hands.
 	if (weapon == nullptr)
 		return passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage);
+	// A bridge copies only the other weapon's own stat, never its total, so no bridge feeds another (design v8 §1.6).
 	switch (weapon->_itype) {
 	case ItemType::Bow:
-		// The Sisters' Gift: staff training carries over to the bow.
-		return passive(PassiveStat::BowDamage) + (passive(PassiveStat::StaffAppliesToBow) > 0 ? passive(PassiveStat::StaffDamage) : 0);
+		// The Sisters' Gift: staff training carries over to the bow. Leoric's pact: two-handed training does too.
+		return passive(PassiveStat::BowDamage) + (passive(PassiveStat::StaffAppliesToBow) > 0 ? passive(PassiveStat::StaffDamage) : 0)
+		    + (passive(PassiveStat::KingsDeadPact) > 0 ? passive(PassiveStat::TwoHandDamage) : 0);
 	case ItemType::Staff:
-		// Like POE2's quarterstaves: a two-handed melee weapon with nodes of its own.
-		return passive(PassiveStat::StaffDamage) + passive(PassiveStat::MeleeDamage) + passive(PassiveStat::TwoHandDamage);
+		// Like POE2's quarterstaves: a two-handed melee weapon with nodes of its own. The Maiden's pact adds bow training.
+		return passive(PassiveStat::StaffDamage) + passive(PassiveStat::MeleeDamage) + passive(PassiveStat::TwoHandDamage)
+		    + (passive(PassiveStat::OutOfDarkness) > 0 ? passive(PassiveStat::BowDamage) : 0);
 	default:
 		return passive(PassiveStat::MeleeDamage) + passive(weapon->_iLoc == ILOC_TWOHAND ? PassiveStat::TwoHandDamage : PassiveStat::OneHandDamage);
 	}
@@ -1208,9 +1354,72 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return std::string(_("Drinking a Flask grants a Frenzy Charge for 4 seconds, up to 2"));
 	case PassiveStat::MoreVsStunned:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "Your hits deal {:d}% more Damage to Stunned enemies"), value);
+	case PassiveStat::DeadDoNotRest:
+	case PassiveStat::KingsDeadPact:
+	case PassiveStat::BartucsHunger:
+	case PassiveStat::PaidInBlood:
+	case PassiveStat::DarkSickness:
+	case PassiveStat::HiveBreath:
+	case PassiveStat::EyesInTheDark:
+	case PassiveStat::OutOfDarkness:
+		return PassiveStatLines(stat, value).front().text;
 	default:
 		return {};
 	}
+}
+
+std::vector<PassiveStatLine> PassiveStatLines(PassiveStat stat, int value)
+{
+	const auto line = [](std::string_view text, bool price = false) { return PassiveStatLine { std::string(text), price }; };
+	switch (stat) {
+	case PassiveStat::DeadDoNotRest:
+		return { line(_("The dead do not rest: 1 in 4 of your kills rise again as a skeleton, hostile, at half Life"), true),
+			line(_("Culled monsters stay dead, and any hit in a rising skeleton's first second puts it down for good")) };
+	case PassiveStat::KingsDeadPact:
+		return { line(_("Increases to Two Handed Damage also apply to Bows, and Fresh Meat works with Bow kills")),
+			line(_("The King's dead: monsters you Cull, and skeletons you put down, rise for you for 12 seconds")),
+			line(_("1 in 3 of your other kills rise against you instead, at full Life"), true) };
+	case PassiveStat::BartucsHunger:
+		return { line(_("A quarter of your skills' Mana costs is paid in Life"), true) };
+	case PassiveStat::PaidInBlood:
+		return { line(_("Half your Magic counts as Strength, for damage and item requirements")),
+			line(_("Each melee attack costs 1% of your maximum Life"), true) };
+	case PassiveStat::DarkSickness:
+		return { line(_("Your Kill Burst needs a monster carrying an ailment, and passes its ignite, shock, chill and poison on")),
+			line(_("You carry it: each time your Kill Burst passes an ailment on, you catch the fever. For 2 seconds you can't ignite, shock, chill, freeze or poison anything, but the sickness keeps spreading without you"), true) };
+	case PassiveStat::HiveBreath:
+		return { line(_("75% of your increased Melee Damage also applies to your Spell hits")),
+			line(_("Every death spreads it: a monster that dies carrying an ailment passes it to the enemies beside it")),
+			line(_("Your spells, Heralds and curses can't freeze, ignite, shock, chill or poison, and deal 20% less to anything not already sick"), true) };
+	case PassiveStat::EyesInTheDark:
+		return { line(_("Eyes in the dark: you see monsters past your light as shapes. Hold Shift to shoot at shapes in the dark")),
+			line(_("Your first hit on a monster that hasn't noticed you deals 40% more Damage again")),
+			line(_("Your Light Radius can't exceed 7, and your darkness doesn't hide you: monsters within 10 tiles that have a clear line to you wake"), true) };
+	case PassiveStat::OutOfDarkness:
+		return { line(_("Increases to Bow Damage also apply to Staves")),
+			line(_("Out of mind: while you wield a staff, no monster shoots or casts at you from more than 5 tiles away, or without a clear line, until it has attacked you once")),
+			line(_("While you wield a staff, your Light Radius can't exceed 4, and each enemy's first attack on you can't be evaded and ignores your Armour"), true) };
+	default:
+		return { line(PassiveStatText(stat, value), value < 0) };
+	}
+}
+
+std::vector<PassiveStatLine> ProfaneRoadEndLines(PassiveNodeId node)
+{
+	std::vector<PassiveStatLine> lines;
+	for (size_t road = 0; road < Roads.size(); road++) {
+		const std::optional<RoadEnds> &ends = Roads[road];
+		if (!ends)
+			continue;
+		if (ends->door == node) {
+			lines.push_back({ std::string(_("The door of a Profane Road: it is walked one way, from here")), true });
+			if (static_cast<ProfaneRoad>(road) == ProfaneRoad::Sickness)
+				lines.push_back({ std::string(_("This road's pact stops your spells, Heralds and curses from inflicting ailments, and weakens them against healthy enemies")), true });
+		}
+		if (ends->farGate == node)
+			lines.push_back({ std::string(_("The far end of a Profane Road: the road can't be entered from here")), false });
+	}
+	return lines;
 }
 
 std::vector<std::pair<PassiveStat, int>> PassiveNodeStats(const Player &player, const PassiveNode &node)

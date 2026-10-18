@@ -86,6 +86,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
@@ -209,7 +210,7 @@ void InitMonsterTRN(CMonster &monst)
 	}
 }
 
-void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point position)
+void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point position, bool risen = false)
 {
 	monster.direction = rd;
 	monster.position.tile = position;
@@ -259,6 +260,9 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 	monster.leader = Monster::NoLeader;
 	monster.leaderRelation = LeaderRelation::None;
 	monster.flags = monster.data().abilityFlags;
+	// POE2 Mashup: set before the rarity below, which a risen monster never rolls.
+	if (risen)
+		monster.flags |= MFLAG_RISEN;
 	monster.talkMsg = TEXT_NONE;
 
 	if (monster.ai == MonsterAIID::Gargoyle) {
@@ -880,8 +884,25 @@ void StartAttack(Monster &monster)
 	monster.position.old = monster.position.tile;
 }
 
+bool RandomWalk(Monster &monster, Direction md);
+
+/**
+ * @brief POE2 Mashup: the Maiden's Road pact, out of mind. A monster that can't shoot at the hero from where it stands
+ * walks toward her instead.
+ */
+bool OutOfMindRefuses(Monster &monster, MissileID missileType)
+{
+	if (missileType == MissileID::HorkSpawn || CanShootAtPlayer(monster))
+		return false;
+	monster.goal = MonsterGoal::Normal;
+	RandomWalk(monster, GetMonsterDirection(monster));
+	return true;
+}
+
 void StartRangedAttack(Monster &monster, MissileID missileType, int dam)
 {
+	if (OutOfMindRefuses(monster, missileType))
+		return;
 	const Direction md = GetMonsterDirection(monster);
 	NewMonsterAnim(monster, MonsterGraphic::Attack, md, AnimationDistributionFlags::ProcessAnimationPending);
 	monster.mode = MonsterMode::RangedAttack;
@@ -893,6 +914,8 @@ void StartRangedAttack(Monster &monster, MissileID missileType, int dam)
 
 void StartRangedSpecialAttack(Monster &monster, MissileID missileType, int dam)
 {
+	if (OutOfMindRefuses(monster, missileType))
+		return;
 	const Direction md = GetMonsterDirection(monster);
 	int8_t distributeFramesBeforeFrame = 0;
 	if (monster.ai == MonsterAIID::Mega)
@@ -1267,6 +1290,10 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		ac += 40;
 	if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::ACAgainstUndead) && monster.data().monsterClass == MonsterClass::Undead)
 		ac += 20;
+	// The Maiden's Road pact, with a staff: each monster's first blow can't be evaded and ignores armour.
+	const bool firstBlow = TakeFirstBlow(monster, player);
+	if (firstBlow)
+		ac = 0;
 	hit += 2 * (monster.level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel())
 	    + 30
 	    - ac;
@@ -1297,7 +1324,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	// New method fixes a bug which caused the maximum possible damage value to be 63/64ths too low.
 	Fixed26_6 dam = Fixed26_6::fromRaw(RandomIntBetween(minDam << 6, maxDam << 6));
 	dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
-	dam = ApplyArmour(player, dam);
+	if (!firstBlow)
+		dam = ApplyArmour(player, dam);
 	if (&player == MyPlayer)
 		dam = ApplyMapMonsterHit(player, dam);
 	if (gbIsPoe2 && &player == MyPlayer)
@@ -2170,7 +2198,8 @@ void ZombieAi(Monster &monster)
 		return;
 	}
 
-	if (!IsTileVisible(monster.position.tile)) {
+	// POE2 Mashup: the Maiden's Road toll, her darkness doesn't hide her.
+	if (!IsTileVisible(monster.position.tile) && !MaidenSeesYou(monster)) {
 		return;
 	}
 
@@ -3544,6 +3573,7 @@ void InitLevelMonsters()
 	ClearSkillZones();
 	ClearSupportEffects();
 	ClearSpiritSkills();
+	ClearPendingRises();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -3985,7 +4015,7 @@ void LoadDeltaSpawnedMonster(size_t typeIndex, size_t monsterId, uint32_t seed, 
 	}
 }
 
-void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel)
+void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel, bool risen)
 {
 	SetRndSeed(seed);
 	EnsureMonsterIndexIsActive(monsterId);
@@ -4006,7 +4036,7 @@ void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, s
 	position = freePosition.value_or(position);
 
 	monster.occupyTile(position, false);
-	InitMonster(monster, dir, typeIndex, position);
+	InitMonster(monster, dir, typeIndex, position, risen);
 
 	if (monster.type().type == MT_GOLEM) {
 		InitGolem(monster, golemOwnerPlayerId, golemSpellLevel);
@@ -4171,10 +4201,15 @@ void M_StartHit(Monster &monster, const Player &player, int dam)
 
 void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 {
-	if (!monster.isPlayerMinion())
+	// POE2 Mashup: Leoric's Road. A kill may rise again (before the other on-kill effects); a risen monster gives no
+	// reward and runs no on-kill effect, only its death.
+	const bool risen = gbIsPoe2 && IsRisen(monster);
+	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0)
+		OnProfaneRoadKill(*MyPlayer, monster);
+	if (!monster.isPlayerMinion() && !risen)
 		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100, monster.whoHit);
 	int goldenDrops = 0;
-	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0) {
+	if (gbIsPoe2 && !monster.isPlayerMinion() && !risen && (monster.whoHit & (1 << MyPlayerId)) != 0) {
 		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
 		RecoverOnKill(*MyPlayer);
@@ -4186,6 +4221,9 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		OnReviveCandidateKilled(*MyPlayer, monster);
 		TryDropInfusion(monster);
 	}
+	// POE2 Mashup: the Sickness Road pact, every death passes its ailments on.
+	if (gbIsPoe2 && !risen)
+		OnProfaneRoadDeath(monster);
 	// POE2 Mashup: a minion's death can frenzy its owner's other minions.
 	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
 		OnMinionDied(Players[static_cast<size_t>(monster.goalVar3)]);
@@ -4200,16 +4238,18 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	monster.flags &= ~MFLAG_HIDDEN;
 	SetRndSeed(monster.rndItemSeed);
 
-	SpawnLoot(monster, sendmsg);
-	// POE2 Mashup: in maps, magic and rare monsters may explode, and the map boss completes the map.
-	OnMapMonsterDeath(monster);
-	OnEndgameMonsterKilled(monster, sendmsg);
-	OnMapBossKilled(monster, sendmsg);
+	if (!risen) {
+		SpawnLoot(monster, sendmsg);
+		// POE2 Mashup: in maps, magic and rare monsters may explode, and the map boss completes the map.
+		OnMapMonsterDeath(monster);
+		OnEndgameMonsterKilled(monster, sendmsg);
+		OnMapBossKilled(monster, sendmsg);
+	}
 	// POE2 Mashup: each unique monster slain gives the gambler another purchase.
 	if (gbIsPoe2 && monster.isUnique() && !monster.isPlayerMinion() && MyPlayer != nullptr)
 		OnUniqueMonsterKilledForGamble(*MyPlayer);
 	// POE2 Mashup: magic and rare monsters drop more.
-	if (!monster.isPlayerMinion()) {
+	if (!monster.isPlayerMinion() && !risen) {
 		if (gbIsPoe2)
 			SpawnPoe2LootRolls(monster, monster.position.tile, sendmsg, goldenDrops);
 		else
@@ -4617,6 +4657,8 @@ void ProcessMonsters()
 {
 	DeleteMonsterList();
 	ProcessHeralds();
+	// POE2 Mashup: Leoric's Road, the dead rising and the King's dead leaving.
+	ProcessProfaneRoads();
 
 	assert(ActiveMonsterCount <= MaxMonsters);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
@@ -4639,7 +4681,8 @@ void ProcessMonsters()
 		if (MonsterSkipsTick(monster))
 			continue;
 
-		const bool isMonsterVisible = IsTileVisible(monster.position.tile);
+		// POE2 Mashup: the Maiden's Road toll, monsters near her with a clear line see her in the dark too.
+		const bool isMonsterVisible = IsTileVisible(monster.position.tile) || MaidenSeesYou(monster);
 		if (isMonsterVisible && monster.activeForTicks == 0) {
 			if (monster.type().type == MT_CLEAVER) {
 				PlaySFX(SfxID::ButcherGreeting);
@@ -5227,7 +5270,8 @@ size_t CountSkeletonMinions(const Player &player, _monster_id type)
 	size_t count = 0;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived)
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived
+		    && !IsKingsDead(monster))
 			count++;
 	}
 	return count;
@@ -5237,7 +5281,8 @@ void KillSkeletonMinions(const Player &player, _monster_id type)
 {
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived)
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived
+		    && !IsKingsDead(monster))
 			KillGolem(monster);
 	}
 }
@@ -5318,19 +5363,59 @@ bool MakeRoomForMinion(const Player &player)
 	}
 	if (!farthest)
 		return false;
-	Monster &monster = Monsters[ActiveMonsters[*farthest]];
+	RemoveMonsterQuietly(*farthest);
+	return true;
+}
+
+} // namespace
+
+void RemoveMonsterQuietly(size_t activeIndex)
+{
+	Monster &monster = Monsters[ActiveMonsters[activeIndex]];
 	M_ClearSquares(monster);
 	dMonster[monster.position.tile.x][monster.position.tile.y] = 0;
 	MarkWalkabilityChanged();
 	monster.isInvalid = true;
 	M_UpdateRelations(monster);
-	if (pcursmonst == static_cast<int>(ActiveMonsters[*farthest]))
+	if (pcursmonst == static_cast<int>(ActiveMonsters[activeIndex]))
 		pcursmonst = -1;
-	DeleteMonster(*farthest);
-	return true;
+	DeleteMonster(activeIndex);
 }
 
+namespace {
+
+constexpr size_t RisenMinionRoom = 4;
+
 } // namespace
+
+Monster *SpawnRisenMonster(Point position, size_t typeIndex)
+{
+	// A rise takes the slot its dead monster just left, so it isn't held to the enemy limit (dense levels pass it), only
+	// to a few slots kept free for the hero's minions.
+	if (ActiveMonsterCount + RisenMinionRoom >= MaxMonsters || typeIndex >= LevelMonsterTypeCount || !MyPlayer->isLevelOwnedByLocalClient())
+		return nullptr;
+	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];
+	ActiveMonsterCount += 1;
+	// Single player only: the rise isn't sent to other players.
+	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, GetLCGEngineState(), 0, 0, /*risen=*/true);
+	Monster &monster = Monsters[monsterIndex];
+	// Awake and hunting its killer, so it never counts as unaware.
+	monster.activeForTicks = UINT8_MAX;
+	monster.enemy = static_cast<uint8_t>(MyPlayerId);
+	monster.enemyPosition = MyPlayer->position.future;
+	monster.position.last = MyPlayer->position.future;
+	return &monster;
+}
+
+std::optional<size_t> RandomLevelSkeletonType()
+{
+	return GetRandomSkeletonTypeIndex();
+}
+
+bool IsTileFreeForMonster(Point position)
+{
+	return IsTileAvailable(position);
+}
 
 bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type)
 {

@@ -230,6 +230,7 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 	}
 
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	PayMeleeAttackLife(player);
 	skippedAnimationFrames += WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
@@ -1791,7 +1792,7 @@ bool Player::CanUseItem(const Item &item) const
 	if (!IsItemValid(*this, item))
 		return false;
 
-	return _pStrength >= item._iMinStr
+	return RequirementStrength(*this) >= item._iMinStr
 	    && _pMagic >= item._iMinMag
 	    && _pDexterity >= item._iMinDex;
 }

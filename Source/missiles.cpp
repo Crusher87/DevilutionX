@@ -49,6 +49,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/hit_trace.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
@@ -389,9 +390,10 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 			dam = dam * MonsterDamageTakenPercent(monster, damageType) / 100;
 		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
 
-		if (&player == MyPlayer) {
+		// POE2 Mashup: Leoric's Road, a spell hit puts a monster still rising down for good.
+		if (&player == MyPlayer && !TryPutDownRisen(player, monster)) {
 			ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
-			TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam));
+			TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam), AilmentSource::Spell);
 			ApplyCull(player, monster);
 		}
 	}
@@ -1214,9 +1216,11 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (DebugGodMode)
 		hit = 1000;
 #endif
+	// POE2 Mashup: the Maiden's Road pact, with a staff: each monster's first blow can't be evaded and ignores armour.
+	const bool firstBlow = monster != nullptr && TakeFirstBlow(*monster, player);
 	int hper = 40;
 	if (missileData.isArrow()) {
-		const int tac = HitDefense(player);
+		const int tac = firstBlow ? 0 : HitDefense(player);
 		if (monster != nullptr) {
 			hper = monster->toHit(sgGameInitInfo.nDifficulty)
 			    + ((monster->level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel()) * 2)
@@ -1228,7 +1232,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	} else if (monster != nullptr) {
 		hper += (monster->level(sgGameInitInfo.nDifficulty) * 2) - (player.getCharacterLevel() * 2) - (dist * 2);
 		// POE2 Mashup: some uniques let evasion avoid spells too.
-		hper -= SpellEvasion(player);
+		if (!firstBlow)
+			hper -= SpellEvasion(player);
 	}
 
 	int minhit = 10;
@@ -1299,7 +1304,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		dam = std::max(dam, 64);
 	}
 	Fixed26_6 damage = Fixed26_6::fromRaw(dam);
-	if (damageType == DamageType::Physical && mtype != MissileID::BoneSpirit)
+	if (damageType == DamageType::Physical && mtype != MissileID::BoneSpirit && !firstBlow)
 		damage = ApplyArmour(player, damage);
 
 	if ((resper <= 0 || gbIsHellfire) && blk < blkper) {
@@ -2237,7 +2242,7 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 		break;
 	}
 	// Graphics that aren't loaded (monster-owned ones without their monster, or ones with no file) can't be drawn.
-	if (graphic >= MissileGraphicID::None)
+	if (graphic >= MissileGraphicID::None || !HasMissileSpriteData(graphic))
 		return;
 	const MissileFileData &spriteData = GetMissileSpriteData(graphic);
 	if (spriteData.name[0] == '\0' || (spriteData.flags == MissileGraphicsFlags::MonsterOwned && !spriteData.sprites))

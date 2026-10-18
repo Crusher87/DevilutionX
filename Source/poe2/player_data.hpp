@@ -390,7 +390,7 @@ constexpr int GemSpellLevel(int characterLevel)
 /** @brief Highest skill gem level, like POE2's uncorrupted gems. */
 constexpr int MaxGemLevel = 20;
 /** @brief Room for the passive tree's stat totals (PassiveStat::Count must fit). */
-constexpr size_t MaxPassiveStats = 96;
+constexpr size_t MaxPassiveStats = 112;
 
 /**
  * @brief Character level each gem level needs: POE2's table (0 to 90 for levels 1 to 20) scaled to Diablo's level 50 cap.

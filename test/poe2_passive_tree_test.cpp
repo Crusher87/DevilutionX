@@ -570,7 +570,8 @@ TEST_F(Poe2PassiveTreeTest, EveryNotableHasStats)
 
 TEST_F(Poe2PassiveTreeTest, CapstoneRulesHaveTextAndReachTheRules)
 {
-	for (size_t stat = static_cast<size_t>(PassiveStat::TwoHandKillFrenzy); stat < static_cast<size_t>(PassiveStat::Count); stat++) {
+	// The Profane Roads' flags come after these; the game reads them directly, not as rules.
+	for (size_t stat = static_cast<size_t>(PassiveStat::TwoHandKillFrenzy); stat < static_cast<size_t>(PassiveStat::DeadDoNotRest); stat++) {
 		const auto passive = static_cast<PassiveStat>(stat);
 		EXPECT_FALSE(PassiveStatText(passive, 2).empty()) << stat;
 		PassiveTotals passives {};
@@ -579,6 +580,101 @@ TEST_F(Poe2PassiveTreeTest, CapstoneRulesHaveTextAndReachTheRules)
 		AddPassiveRules(passives, rules);
 		EXPECT_EQ(std::count_if(rules.begin(), rules.end(), [](int16_t value) { return value == 2; }), 1) << stat;
 	}
+}
+
+TEST_F(Poe2PassiveTreeTest, ProfaneRoadFlagsHaveTextAndAPriceLine)
+{
+	for (size_t stat = static_cast<size_t>(PassiveStat::DeadDoNotRest); stat < static_cast<size_t>(PassiveStat::Count); stat++) {
+		const std::vector<PassiveStatLine> lines = PassiveStatLines(static_cast<PassiveStat>(stat), 1);
+		ASSERT_FALSE(lines.empty()) << stat;
+		EXPECT_TRUE(std::any_of(lines.begin(), lines.end(), [](const PassiveStatLine &line) { return line.price; })) << stat;
+	}
+}
+
+/** @brief A road's nodes in order from its door. */
+std::vector<PassiveNodeId> RoadNodes(ProfaneRoad road)
+{
+	std::vector<PassiveNodeId> nodes(ProfaneRoadNodes);
+	size_t found = 0;
+	for (const PassiveNode &node : PassiveTree()) {
+		if (node.road == road) {
+			nodes[node.roadStep - 1] = node.id;
+			found++;
+		}
+	}
+	EXPECT_EQ(found, nodes.size()) << static_cast<int>(road);
+	return nodes;
+}
+
+TEST_F(Poe2PassiveTreeTest, ProfaneRoadsGoOneWayFromTheirDoor)
+{
+	for (const ProfaneRoad road : { ProfaneRoad::Leoric, ProfaneRoad::Bartuc, ProfaneRoad::Sickness, ProfaneRoad::Maiden }) {
+		const std::optional<PassiveNodeId> door = ProfaneRoadDoor(road);
+		const std::optional<PassiveNodeId> farGate = ProfaneRoadFarGate(road);
+		ASSERT_TRUE(door.has_value() && farGate.has_value()) << static_cast<int>(road);
+		const std::vector<PassiveNodeId> nodes = RoadNodes(road);
+		EXPECT_TRUE(CanStepPassive(*door, nodes.front()));
+		EXPECT_FALSE(CanStepPassive(*farGate, nodes.back()));
+		for (size_t i = 1; i < nodes.size(); i++) {
+			EXPECT_TRUE(CanStepPassive(nodes[i - 1], nodes[i])) << i;
+			EXPECT_FALSE(CanStepPassive(nodes[i], nodes[i - 1])) << i;
+		}
+		// The toll and the pact are the road's notables.
+		EXPECT_EQ(PassiveTree()[nodes[2]].kind, PassiveKind::Notable);
+		EXPECT_EQ(PassiveTree()[nodes[5]].kind, PassiveKind::Notable);
+	}
+}
+
+TEST_F(Poe2PassiveTreeTest, ARoadIsWalkedFromItsDoorWithMainPoints)
+{
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(70);
+	player.poe2.specBooks = 0b1;
+	for (const PassiveNodeId node : WarriorPathTo(*ProfaneRoadDoor(ProfaneRoad::Leoric)))
+		ASSERT_TRUE(AllocatePassive(player, node)) << node;
+	const std::vector<PassiveNodeId> road = RoadNodes(ProfaneRoad::Leoric);
+	EXPECT_FALSE(CanAllocatePassive(player, road[1]));
+	EXPECT_FALSE(CanAllocatePassive(player, road[0], PassivePool::SetI));
+	for (const PassiveNodeId node : road)
+		ASSERT_TRUE(AllocatePassive(player, node)) << node;
+	// Refunds keep the road whole: only its last node taken can go.
+	EXPECT_FALSE(CanRefundPassive(player, road[3]));
+	EXPECT_TRUE(RefundPassive(player, road.back()));
+	EXPECT_TRUE(RefundPassive(player, road[road.size() - 2]));
+}
+
+TEST_F(Poe2PassiveTreeTest, ARoadCantBeEnteredFromItsFarGate)
+{
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(70);
+	// Bartuc's Road runs from the Sorcerer into the Warrior's ground, so its far gate is near him.
+	const PassiveNodeId farGate = *ProfaneRoadFarGate(ProfaneRoad::Bartuc);
+	for (const PassiveNodeId node : WarriorPathTo(farGate))
+		ASSERT_TRUE(AllocatePassive(player, node) || IsPassiveAllocated(player, node)) << node;
+	ASSERT_TRUE(IsPassiveAllocated(player, farGate));
+	EXPECT_FALSE(CanAllocatePassive(player, RoadNodes(ProfaneRoad::Bartuc).back()));
+}
+
+TEST_F(Poe2PassiveTreeTest, RoadBridgesCopyOnlyTheOtherWeaponsOwnStat)
+{
+	Player &player = *MyPlayer;
+	Item &weapon = player.InvBody[INVLOC_HAND_LEFT];
+	weapon._iStatFlag = true;
+	PassiveTotals passives {};
+	passives[static_cast<size_t>(PassiveStat::BowDamage)] = 10;
+	passives[static_cast<size_t>(PassiveStat::StaffDamage)] = 5;
+	passives[static_cast<size_t>(PassiveStat::TwoHandDamage)] = 7;
+	passives[static_cast<size_t>(PassiveStat::MeleeDamage)] = 3;
+	weapon._itype = ItemType::Bow;
+	EXPECT_EQ(PassiveWeaponDamage(player, passives), 10);
+	// Leoric's pact: two-handed training reaches the bow.
+	passives[static_cast<size_t>(PassiveStat::KingsDeadPact)] = 1;
+	EXPECT_EQ(PassiveWeaponDamage(player, passives), 17);
+	// The Maiden's pact: bow training reaches the staff, but not what other bridges gave the bow.
+	weapon._itype = ItemType::Staff;
+	EXPECT_EQ(PassiveWeaponDamage(player, passives), 15);
+	passives[static_cast<size_t>(PassiveStat::OutOfDarkness)] = 1;
+	EXPECT_EQ(PassiveWeaponDamage(player, passives), 25);
 }
 
 TEST_F(Poe2PassiveTreeTest, TheSistersGiftCountsStaffDamageForBows)

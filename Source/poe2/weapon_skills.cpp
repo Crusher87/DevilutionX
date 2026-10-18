@@ -152,6 +152,8 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	if (!DashTowards(player, SkillTarget(player), tiles))
 		return false;
 	PaySkillMana(player, skill);
+	if (!player.UsesRangedWeapon())
+		PayMeleeAttackLife(player);
 	// Debris kicked up at take-off.
 	AddVisualEffect(player.position.tile, skill == WeaponSkill::LeapSlam ? MissileGraphicID::StoneCurseShatter : MissileGraphicID::BoneHit);
 	player.poe2.dashSkill = skill;
@@ -170,6 +172,8 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 	if (!CanStartSkill(player))
 		return false;
 	PaySkillMana(player, skill);
+	if (graphic == player_graphic::Attack && !player.UsesRangedWeapon())
+		PayMeleeAttackLife(player);
 	Point target = SkillTarget(player);
 	// Projectiles with nothing under the cursor fly exactly where it points, at any angle.
 	if (pcursmonst == -1 && &player == MyPlayer && IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt))
