@@ -9,19 +9,24 @@
 #include <SDL3/SDL_timer.h>
 #endif
 
+#include "DiabloUI/diabloui.h"
+#include "DiabloUI/settingsmenu.h"
 #include "admin_menu.hpp"
 #include "controls/wasd_movement.hpp"
 #include "cursor.h"
+#include "diablo.h"
 #include "diablo_msg.hpp"
 #include "engine/backbuffer_state.hpp"
 #include "engine/demomode.h"
 #include "engine/events.hpp"
+#include "engine/palette.h"
 #include "engine/render/scrollrt.h"
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
 #include "game_mode.hpp"
 #include "gmenu.h"
 #include "headless_mode.hpp"
+#include "items.h"
 #include "loadsave.h"
 #include "multi.h"
 #include "options.h"
@@ -52,6 +57,7 @@ void GamemenuSpeed(bool bActivate);
 void GamemenuMovement(bool bActivate);
 void GamemenuUiScale(bool bActivate);
 void GamemenuResolution(bool bActivate);
+void GamemenuAllSettings(bool bActivate);
 
 /** Contains the game menu items of the single player menu. */
 TMenuItem sgSingleMenu[] = {
@@ -98,6 +104,7 @@ TMenuItem sgOptionsMenu[] = {
 	{ GMENU_ENABLED               , nullptr,             &GamemenuMovement     },
 	{ GMENU_ENABLED               , nullptr,             &GamemenuUiScale      },
 	{ GMENU_ENABLED               , nullptr,             &GamemenuResolution   },
+	{ GMENU_ENABLED               , N_("All Settings"),  &GamemenuAllSettings  },
 	{ GMENU_ENABLED               , N_("Previous Menu"), &GamemenuPrevious     },
 	{ GMENU_ENABLED               , nullptr,             nullptr               },
 	// clang-format on
@@ -278,6 +285,8 @@ void GamemenuOptions(bool /*bActivate*/)
 	GamemenuGetMovement();
 	GamemenuGetUiScale();
 	GamemenuGetResolution();
+	// The Settings menu stops the game while it is open, which only a single player game can do.
+	sgOptionsMenu[7].setEnabled(!gbIsMultiplayer);
 	gmenu_set_items(sgOptionsMenu, nullptr);
 }
 
@@ -383,6 +392,33 @@ void GamemenuResolution(bool /*bActivate*/)
 {
 	StepDisplayOption(GetOptions().Graphics.resolution);
 	GamemenuGetResolution();
+}
+
+/** @brief POE2 Mashup: the main menu's full Settings list, during a game (Curtis 2026-10-14: every option reachable in game). */
+void GamemenuAllSettings(bool /*bActivate*/)
+{
+	if (gbIsMultiplayer)
+		return;
+	gamemenu_off();
+	ClearWasdMovementKeys();
+	const int cursor = pcurs;
+	const std::array<SDL_Color, 256> gamePalette = logical_palette;
+	NewCursor(CURSOR_NONE);
+
+	UiInitialize();
+	UiSettingsMenu(/*inGame=*/true);
+	UnloadUiGFX();
+
+	// The menu drew with its own palette, and a resolution or UI scale change reloads the items' ground pictures.
+	logical_palette = gamePalette;
+	for (int i = 0; i < ActiveItemCount; i++)
+		GetItemFrm(Items[ActiveItems[i]]);
+	CalcViewportGeometry();
+	sgbMouseDown = CLICK_NONE;
+	NewCursor(cursor);
+	RedrawEverything();
+	DrawAndBlit();
+	PaletteFadeIn(8);
 }
 
 } // namespace
