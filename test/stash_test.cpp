@@ -966,6 +966,7 @@ TEST_F(Poe2StashTabsTest, TabsSurviveSaving)
 	StashTabs.setColor(0, 7);
 	StashTabs.setAffinity(1, StashAffinity::Gems, true);
 	StashTabs.moveTab(DefaultStashTabs - 1, 0);
+	StashTabs.tabs[0].bigPictures = true;
 	const std::vector<uint8_t> data = SerializeStashTabs(StashTabs);
 
 	StashTabSet loaded;
@@ -974,6 +975,8 @@ TEST_F(Poe2StashTabsTest, TabsSurviveSaving)
 	EXPECT_EQ(version, StashTabsVersion);
 	ASSERT_EQ(loaded.count(), DefaultStashTabs);
 	EXPECT_EQ(loaded.kind(0), StashTabKind::Uniques) << "Tabs keep their order";
+	EXPECT_TRUE(loaded.tabs[0].bigPictures);
+	EXPECT_FALSE(loaded.tabs[1].bigPictures);
 	EXPECT_EQ(loaded.tabs[1].name, "Currency dump th");
 	EXPECT_EQ(loaded.tabs[1].color, 7);
 	EXPECT_TRUE(loaded.hasAffinity(2, StashAffinity::Gems));

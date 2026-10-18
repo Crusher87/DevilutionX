@@ -415,6 +415,9 @@ std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs)
 	// Version 2: the kinds, after the version 1 data.
 	for (const StashTab &tab : tabs.tabs)
 		data.push_back(static_cast<uint8_t>(tab.kind));
+	// Version 3: view options, one bit each.
+	for (const StashTab &tab : tabs.tabs)
+		data.push_back(tab.bigPictures ? 1 : 0);
 	return data;
 }
 
@@ -452,6 +455,12 @@ bool DeserializeStashTabs(std::span<const uint8_t> data, StashTabSet &tabs, uint
 			if (tab.isPremade())
 				tab.affinities = 0;
 		}
+	}
+	if (dataVersion >= 3) {
+		if (offset + count > data.size())
+			return false;
+		for (StashTab &tab : result.tabs)
+			tab.bigPictures = (data[offset++] & 1) != 0;
 	}
 	// An affinity belongs to one tab; the first tab that claims it keeps it.
 	uint8_t claimed = 0;

@@ -87,6 +87,8 @@ struct StashTab {
 	/** StashAffinity bits; blank tabs only. */
 	uint8_t affinities = 0;
 	StashTabKind kind = StashTabKind::Blank;
+	/** Uniques tab: pictures at full size instead of half (Curtis 2026-10-17). */
+	bool bigPictures = false;
 
 	[[nodiscard]] bool isPremade() const { return kind != StashTabKind::Blank; }
 };
@@ -164,8 +166,8 @@ uint8_t StashTabPaletteColor(uint8_t color);
 /** @brief Light tab colours get dark text. */
 bool IsLightStashTabColor(uint8_t color);
 
-/** @brief Version 2 adds each tab's kind after the version 1 tabs. */
-constexpr uint8_t StashTabsVersion = 2;
+/** @brief Version 2 adds each tab's kind after the version 1 tabs, version 3 each tab's view options after that. */
+constexpr uint8_t StashTabsVersion = 3;
 
 std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs);
 /**

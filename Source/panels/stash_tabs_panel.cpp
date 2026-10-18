@@ -1059,6 +1059,47 @@ constexpr int UniqueColumns = 9;
 constexpr Size UniqueSlotSize { 30, 45 };
 constexpr int UniqueAreaTop = 96;
 constexpr int UniqueRows = 5;
+constexpr int UniqueAreaLeft = 10;
+constexpr int UniqueAreaWidth = 292;
+constexpr int UniqueAreaHeight = UniqueRows * (UniqueSlotSize.height + 2);
+
+/** @brief The biggest picture among a category's uniques, which the large pictures make room for. */
+Size LargestUniquePicture(UniqueCategory category)
+{
+	if (HeadlessMode)
+		return { 2 * INV_SLOT_SIZE_PX, 3 * INV_SLOT_SIZE_PX };
+	Size largest { INV_SLOT_SIZE_PX, INV_SLOT_SIZE_PX };
+	for (const UniqueCollectionEntry &entry : UniqueCollection()) {
+		if (!entry.listed || entry.category != category || entry.cursor < 0)
+			continue;
+		const Size size = GetInvItemSize(entry.cursor + static_cast<int>(CURSOR_FIRSTITEM));
+		largest.width = std::max(largest.width, size.width);
+		largest.height = std::max(largest.height, size.height);
+	}
+	return largest;
+}
+
+struct UniqueGrid {
+	Size slot;
+	int columns;
+	int rows;
+	int gap;
+	int left;
+};
+
+/** @brief Small pictures are half size in a fixed grid; large ones are full size, in as many columns and rows as fit. */
+UniqueGrid UniqueGridFor(unsigned page)
+{
+	if (page >= StashTabs.count() || !StashTabs.tabs[page].bigPictures)
+		return { UniqueSlotSize, UniqueColumns, UniqueRows, 2, UniqueAreaLeft };
+	const Size picture = LargestUniquePicture(OpenUniqueCategory);
+	const Size slot { picture.width + 1, picture.height + 1 };
+	constexpr int Gap = 1;
+	const int columns = std::max(UniqueAreaWidth / (slot.width + Gap), 1);
+	const int rows = std::max(UniqueAreaHeight / (slot.height + Gap), 1);
+	const int used = (columns * (slot.width + Gap)) - Gap;
+	return { slot, columns, rows, Gap, UniqueAreaLeft + ((UniqueAreaWidth - used) / 2) };
+}
 
 void BuildUniquesView(TabView &view, unsigned page)
 {
@@ -1093,27 +1134,36 @@ void BuildUniquesView(TabView &view, unsigned page)
 		    .onClick = [category] { OpenUniqueCategory = category; UniqueScroll = 0; },
 		    .detail = StrCat(percent, "%") });
 	}
-	view.labels.push_back({ At(10, 80, 114, 12), StrCat(_("Have"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
-	view.buttons.push_back({ .rect = At(126, 77, 138, 18), .text = std::string(_("Collected only")), .selected = UniquesCollectedOnly,
+	// The count sits under the grid, where the other premade tabs show theirs.
+	view.labels.push_back({ At(12, 334, 140, 12), StrCat(_("Have"), " ", allCollected, " / ", allTotal), UiFlags::ColorWhite });
+	view.buttons.push_back({ .rect = At(10, 77, 124, 18), .text = std::string(_("Collected only")), .selected = UniquesCollectedOnly,
 	    .onClick = [] { UniquesCollectedOnly = !UniquesCollectedOnly; UniqueScroll = 0; } });
+	// Full-size pictures, remembered with the tab (Curtis 2026-10-17).
+	view.buttons.push_back({ .rect = At(138, 77, 126, 18), .text = std::string(_("Large pictures")), .selected = StashTabs.tabs[page].bigPictures,
+	    .onClick = [page] {
+		    StashTabs.tabs[page].bigPictures = !StashTabs.tabs[page].bigPictures;
+		    Stash.dirty = true;
+		    UniqueScroll = 0;
+	    } });
 	AddSettingsButton(view, 77);
 
-	const int rows = static_cast<int>((shown.size() + UniqueColumns - 1) / UniqueColumns);
-	const int maxScroll = std::max(rows - UniqueRows, 0);
+	const UniqueGrid grid = UniqueGridFor(page);
+	const int rows = static_cast<int>((shown.size() + grid.columns - 1) / grid.columns);
+	const int maxScroll = std::max(rows - grid.rows, 0);
 	UniqueScroll = std::clamp(UniqueScroll, 0, maxScroll);
-	for (int row = 0; row < UniqueRows; row++) {
-		for (int column = 0; column < UniqueColumns; column++) {
-			const size_t at = static_cast<size_t>(((UniqueScroll + row) * UniqueColumns) + column);
+	for (int row = 0; row < grid.rows; row++) {
+		for (int column = 0; column < grid.columns; column++) {
+			const size_t at = static_cast<size_t>(((UniqueScroll + row) * grid.columns) + column);
 			if (at >= shown.size())
 				break;
 			const unsigned slot = shown[at];
-			view.slots.push_back({ At(10 + (column * (UniqueSlotSize.width + 2)), UniqueAreaTop + (row * (UniqueSlotSize.height + 2)), UniqueSlotSize.width, UniqueSlotSize.height),
+			view.slots.push_back({ At(grid.left + (column * (grid.slot.width + grid.gap)), UniqueAreaTop + (row * (grid.slot.height + grid.gap)), grid.slot.width, grid.slot.height),
 			    StashTabSlotItem(page, slot), static_cast<int>(slot) });
 		}
 	}
 	if (shown.empty())
 		view.labels.push_back({ At(12, 150, 296, 14), std::string(UniquesCollectedOnly ? _("None of this kind collected yet.") : _("No uniques of this kind.")), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
-	view.scroll = ScrollView { At(302, UniqueAreaTop, 8, UniqueRows * (UniqueSlotSize.height + 2)), UniqueScroll, std::min(rows, UniqueRows), rows };
+	view.scroll = ScrollView { At(302, UniqueAreaTop, 8, UniqueAreaHeight), UniqueScroll, std::min(rows, grid.rows), rows };
 	view.onScroll = [maxScroll](int delta) { UniqueScroll = std::clamp(UniqueScroll + delta, 0, maxScroll); };
 }
 
