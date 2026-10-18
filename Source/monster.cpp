@@ -695,6 +695,35 @@ DVL_ALWAYS_INLINE bool IsRanged(Monster &monster)
 	return IsAnyOf(monster.ai, MonsterAIID::SkeletonRanged, MonsterAIID::GoatRanged, MonsterAIID::Succubus, MonsterAIID::LazarusSuccubus);
 }
 
+/** POE2 Mashup: minions stay near their owner, like POE2's. They fight what comes close to the owner, come back when
+ * the owner moves on, hurry when they fall behind and appear beside the owner when left far behind. */
+constexpr int MinionFollowRadius = 3;
+constexpr int MinionEngageRadius = 6;
+constexpr int MinionLeashRadius = 9;
+constexpr int MinionCatchUpRadius = 5;
+constexpr int MinionTeleportRadius = 14;
+
+/** @brief The minion's owner when it is on this level and able to lead; null otherwise (then the minion fights on its own). */
+const Player *MinionLeader(const Monster &minion)
+{
+	if (!gbIsPoe2 || !minion.isPlayerMinion() || minion.goalVar3 < 0 || static_cast<size_t>(minion.goalVar3) >= Players.size())
+		return nullptr;
+	const Player &owner = Players[minion.goalVar3];
+	if (!owner.plractive || !owner.isOnActiveLevel() || owner._pLvlChanging || owner.hasNoLife())
+		return nullptr;
+	return &owner;
+}
+
+/** @brief A minion picks fights near its owner, or with what is already next to it. */
+bool MinionMayEngage(const Monster &minion, const Monster &enemy)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr)
+		return true;
+	return enemy.position.tile.WalkingDistance(owner->position.tile) <= MinionEngageRadius
+	    || enemy.position.tile.WalkingDistance(minion.position.tile) <= 1;
+}
+
 void UpdateEnemy(Monster &monster)
 {
 	WorldTilePosition target;
@@ -734,6 +763,8 @@ void UpdateEnemy(Monster &monster)
 		if (otherMonster.talkMsg != TEXT_NONE && M_Talker(otherMonster))
 			continue;
 		if (isPlayerMinion && otherMonster.isPlayerMinion()) // prevent golems from fighting each other
+			continue;
+		if (isPlayerMinion && !MinionMayEngage(monster, otherMonster))
 			continue;
 
 		const int dist = otherMonster.position.tile.WalkingDistance(position);
@@ -4334,6 +4365,140 @@ bool Walk(Monster &monster, Direction md)
 	return true;
 }
 
+namespace {
+
+void DropMinionTarget(Monster &minion)
+{
+	minion.flags &= ~MFLAG_TARGETS_MONSTER;
+	minion.flags |= MFLAG_NO_ENEMY;
+}
+
+/** @brief Puts a minion left far behind on a free tile next to its owner. */
+void BringMinionToOwner(Monster &minion, const Player &owner)
+{
+	const std::optional<Point> tile = FindClosestValidPosition(
+	    [&minion](Point position) { return IsTileAvailable(minion, position) && !IsTileOccupied(position); }, owner.position.tile, 1, 4);
+	if (!tile)
+		return;
+	M_ClearSquares(minion);
+	dMonster[minion.position.tile.x][minion.position.tile.y] = 0;
+	minion.position.tile = *tile;
+	minion.position.future = *tile;
+	minion.position.old = *tile;
+	minion.occupyTile(*tile, false);
+	ChangeLightXY(minion.lightId, *tile);
+	DropMinionTarget(minion);
+	minion.poe2.minionReturning = false;
+	minion.poe2.minionStuck = 0;
+	M_StartStand(minion, owner._pdir);
+	AddVisualEffect(*tile, MissileGraphicID::Resurrect);
+}
+
+/** @brief Where an idle minion stands: behind and beside its owner, a spot of its own so they don't crowd the way ahead. */
+Point MinionRestingTile(const Monster &minion, const Player &owner)
+{
+	int index = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &other = Monsters[ActiveMonsters[i]];
+		if (&other != &minion && other.isPlayerMinion() && other.goalVar3 == minion.goalVar3 && !other.hasNoLife() && other.getId() < minion.getId())
+			index++;
+	}
+	const Direction back = Opposite(owner._pdir);
+	const std::array<Direction, 5> sides { back, Left(back), Right(back), Left(Left(back)), Right(Right(back)) };
+	const Point home = owner.position.future;
+	const Point tile = home + Displacement(sides[static_cast<size_t>(index) % sides.size()]) * (2 + (index / static_cast<int>(sides.size())));
+	return InDungeonBounds(tile) && IsTileWalkable(tile) ? tile : home;
+}
+
+/** @brief Walks the minion towards a tile; it steps straight that way when there is no path. */
+bool WalkMinionTowards(Monster &minion, Point tile)
+{
+	minion.enemyPosition = tile;
+	if (AiPlanWalk(minion)) {
+		minion.poe2.minionStuck = 0;
+		return true;
+	}
+	minion.poe2.minionStuck = static_cast<uint8_t>(std::min(minion.poe2.minionStuck + 1, 255));
+	const Direction toward = GetDirection(minion.position.tile, tile);
+	return Walk(minion, toward) || Walk(minion, Left(toward)) || Walk(minion, Right(toward));
+}
+
+/**
+ * @brief POE2 minions: brought along when far, called back past the leash, and a target that wandered off is let go.
+ * @return Whether the minion's turn is taken.
+ */
+bool LeashMinion(Monster &minion)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr)
+		return false;
+	const int distance = minion.position.tile.WalkingDistance(owner->position.future);
+	if (distance > MinionTeleportRadius || minion.poe2.minionStuck >= 30) {
+		BringMinionToOwner(minion, *owner);
+		return true;
+	}
+	if (distance > MinionLeashRadius)
+		minion.poe2.minionReturning = true;
+	if (minion.poe2.minionReturning) {
+		if (distance <= MinionFollowRadius) {
+			minion.poe2.minionReturning = false;
+			return false;
+		}
+		DropMinionTarget(minion);
+		WalkMinionTowards(minion, MinionRestingTile(minion, *owner));
+		return true;
+	}
+	if ((minion.flags & MFLAG_NO_ENEMY) == 0 && (minion.flags & MFLAG_TARGETS_MONSTER) != 0) {
+		const Monster &enemy = Monsters[minion.enemy];
+		if (enemy.hasNoLife() || !MinionMayEngage(minion, enemy))
+			DropMinionTarget(minion);
+	}
+	return false;
+}
+
+/** @brief An idle POE2 minion goes back to its spot near the owner and waits there. */
+bool FollowOwner(Monster &minion)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr)
+		return false;
+	// It also moves off the owner's tile, after the owner walked through it.
+	if (minion.position.tile.WalkingDistance(owner->position.future) > MinionFollowRadius || minion.position.tile == owner->position.tile) {
+		WalkMinionTowards(minion, MinionRestingTile(minion, *owner));
+		return true;
+	}
+	minion.poe2.minionStuck = 0;
+	AiDelay(minion, 3);
+	return true;
+}
+
+} // namespace
+
+bool IsMinionOf(const Monster &monster, const Player &player)
+{
+	return gbIsPoe2 && monster.isPlayerMinion() && monster.goalVar3 == static_cast<int8_t>(player.getId()) && !monster.hasNoLife();
+}
+
+void MakeWayForOwner(const Player &owner, Point tile, Direction dir)
+{
+	Monster *minion = FindMonsterAtPosition(tile);
+	if (minion == nullptr || !IsMinionOf(*minion, owner) || IsNoneOf(minion->mode, MonsterMode::Stand, MonsterMode::Delay))
+		return;
+	// Out to the side first, so it doesn't end up in the way again; a busy minion is simply walked through.
+	for (const Direction aside : { Left(Left(dir)), Right(Right(dir)), Left(dir), Right(dir), dir }) {
+		if (Walk(*minion, aside))
+			return;
+	}
+}
+
+bool MinionCatchUpTick(Monster &minion)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr || minion.hasNoLife() || !minion.isWalking())
+		return false;
+	return minion.position.tile.WalkingDistance(owner->position.future) > MinionCatchUpRadius;
+}
+
 void GolumAi(Monster &golem)
 {
 	if (golem.position.tile.x == 1 && golem.position.tile.y == 0) {
@@ -4343,6 +4508,9 @@ void GolumAi(Monster &golem)
 	if (IsAnyOf(golem.mode, MonsterMode::Death, MonsterMode::SpecialStand) || golem.isWalking()) {
 		return;
 	}
+
+	if (IsNoneOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack) && LeashMinion(golem))
+		return;
 
 	if ((golem.flags & MFLAG_TARGETS_MONSTER) == 0)
 		UpdateEnemy(golem);
@@ -4386,6 +4554,9 @@ void GolumAi(Monster &golem)
 		if (AiPlanPath(golem))
 			return;
 	}
+
+	if (FollowOwner(golem))
+		return;
 
 	golem.pathCount++;
 	if (golem.pathCount > 8)
@@ -4525,7 +4696,8 @@ void ProcessMonsters()
 			if (monster.mode != MonsterMode::Petrified && (monster.flags & MFLAG_ALLOW_SPECIAL) == 0) {
 				monster.animInfo.processAnimation((monster.flags & MFLAG_LOCK_ANIMATION) != 0);
 			}
-			if (turn > 0 || monster.hasNoLife() || !MapMonsterExtraTick(monster))
+			// And a minion left behind hurries after its owner.
+			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster)))
 				break;
 		}
 	}
@@ -5114,8 +5286,50 @@ Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id ty
 	return &monster;
 }
 
+namespace {
+
+/**
+ * @brief POE2 Mashup: a level saved full of monsters, from before slots were kept free for minions, lets the plain
+ * monster farthest from the player go so a minion can rise. It is well out of sight, so nobody sees it leave.
+ */
+bool MakeRoomForMinion(const Player &player)
+{
+	constexpr int OutOfSight = 16;
+	if (!gbIsPoe2 || gbIsMultiplayer)
+		return false;
+	std::optional<size_t> farthest;
+	int farthestDistance = OutOfSight;
+	for (size_t i = ReservedMonsterSlotsForGolems; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.isInvalid || monster.hasNoLife() || monster.isUnique() || monster.isPlayerMinion()
+		    || monster.leaderRelation != LeaderRelation::None || monster.hasLeashedMinions())
+			continue;
+		const int distance = monster.position.tile.WalkingDistance(player.position.tile);
+		if (distance > farthestDistance) {
+			farthest = i;
+			farthestDistance = distance;
+		}
+	}
+	if (!farthest)
+		return false;
+	Monster &monster = Monsters[ActiveMonsters[*farthest]];
+	M_ClearSquares(monster);
+	dMonster[monster.position.tile.x][monster.position.tile.y] = 0;
+	MarkWalkabilityChanged();
+	monster.isInvalid = true;
+	M_UpdateRelations(monster);
+	if (pcursmonst == static_cast<int>(ActiveMonsters[*farthest]))
+		pcursmonst = -1;
+	DeleteMonster(*farthest);
+	return true;
+}
+
+} // namespace
+
 bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type)
 {
+	if (ActiveMonsterCount >= MaxMonsters && gemLevel != 0)
+		MakeRoomForMinion(player);
 	if (gemLevel == 0 || ActiveMonsterCount >= MaxMonsters)
 		return false;
 	const size_t typeIndex = GetMonsterTypeIndex(type);

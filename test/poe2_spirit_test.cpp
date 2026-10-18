@@ -4,6 +4,8 @@
 #include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
+#include "levels/gendung.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -169,6 +171,39 @@ TEST_F(Poe2SpiritTest, MinionsFightAtTheirGemsLevel)
 			EXPECT_LT(MinionLevelForGemLevel(gem - 1), level) << level;
 	}
 	EXPECT_EQ(MinionLevelForGemLevel(MaxGemLevel), 50);
+}
+
+TEST_F(Poe2SpiritTest, YouWalkThroughYourOwnMinions)
+{
+	const dungeon_type oldLevelType = leveltype;
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player.position.tile = { 10, 10 };
+	Monster &minion = Monsters[5];
+	minion.flags = MFLAG_GOLEM;
+	minion.goalVar3 = 0;
+	minion.hitPoints = Fixed26_6::fromInt(20);
+	const Point tile { 11, 10 };
+	dMonster[tile.x][tile.y] = 6;
+
+	EXPECT_TRUE(PosOkPlayer(player, tile));
+	dMonster[tile.x][tile.y] = -6; // walking into the tile
+	EXPECT_TRUE(PosOkPlayer(player, tile));
+
+	minion.goalVar3 = 1; // someone else's minion
+	EXPECT_FALSE(PosOkPlayer(player, tile));
+	minion.goalVar3 = 0;
+	minion.flags = 0; // an enemy
+	EXPECT_FALSE(PosOkPlayer(player, tile));
+
+	minion.flags = MFLAG_GOLEM;
+	gbIsPoe2 = false;
+	EXPECT_FALSE(PosOkPlayer(player, tile));
+	gbIsPoe2 = true;
+
+	dMonster[tile.x][tile.y] = 0;
+	minion = {};
+	leveltype = oldLevelType;
 }
 
 TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)

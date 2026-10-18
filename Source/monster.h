@@ -556,6 +556,12 @@ void M_UpdateRelations(const Monster &monster);
 void DoEnding();
 void PrepDoEnding();
 bool Walk(Monster &monster, Direction md);
+/** @brief POE2 Mashup: whether a walking minion that fell behind its owner takes a second step this tick. */
+bool MinionCatchUpTick(Monster &minion);
+/** @brief POE2 Mashup: whether the monster is one of the player's own minions, which the player walks through. */
+bool IsMinionOf(const Monster &monster, const Player &player);
+/** @brief POE2 Mashup: an idle minion on the tile the owner steps onto moves aside. */
+void MakeWayForOwner(const Player &owner, Point tile, Direction dir);
 void GolumAi(Monster &golem);
 void DeleteMonsterList();
 void RemoveEnemyReferences(const Player &player);

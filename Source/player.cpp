@@ -164,6 +164,7 @@ void HandleWalkMode(Player &player, Direction dir)
 
 	// The player's tile position after finishing this movement action
 	player.position.future = player.position.tile + dirModeParams.dir;
+	MakeWayForOwner(player, player.position.future, dir);
 
 	WalkInDirection(player, dirModeParams);
 
@@ -3441,6 +3442,10 @@ bool PosOkPlayer(const Player &player, Point position)
 	if (dMonster[position.x][position.y] != 0) {
 		if (leveltype == DTYPE_TOWN) {
 			return false;
+		}
+		// POE2 Mashup: you walk through your own minions, like in POE2.
+		if (IsMinionOf(Monsters[std::abs(dMonster[position.x][position.y]) - 1], player)) {
+			return true;
 		}
 		if (dMonster[position.x][position.y] <= 0) {
 			return false;

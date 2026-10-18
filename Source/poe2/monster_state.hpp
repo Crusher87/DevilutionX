@@ -75,6 +75,10 @@ struct Poe2MonsterState {
 	int32_t poisonDamagePerTick = 0;
 	/** @brief Raised by Revive: a minion that keeps the strength it had. */
 	bool revived = false;
+	/** @brief A player's minion heading back to its owner, ignoring enemies until it's close again. */
+	bool minionReturning = false;
+	/** @brief Times in a row a minion failed to find a way back to its owner. */
+	uint8_t minionStuck = 0;
 };
 
 } // namespace devilution
