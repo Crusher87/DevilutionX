@@ -77,6 +77,13 @@ struct ShopOrigin {
 /** POE2 Mashup: the items on the current tab, copied from the vendor's lists, and where each came from. */
 std::vector<Item> ShopView;
 std::vector<ShopOrigin> ShopOrigins;
+/**
+ * POE2 Mashup: the ware in ShopView shown in its own slot under the grid, on every tab but buyback: Adria's Scroll of
+ * Identify, which never sells out and so shouldn't take up her shelves (Curtis 2026-10-16).
+ */
+std::optional<uint16_t> FixedWare;
+/** Where the fixed ware sits: under the grid's last column. */
+constexpr Rectangle FixedWareRect { { 278, 310 }, { INV_SLOT_SIZE_PX, INV_SLOT_SIZE_PX } };
 
 /** Buttons for POE2 tabs start at this id, after the four classic buttons and the page buttons. */
 constexpr int Poe2TabButtonFirst = 10;
@@ -110,10 +117,16 @@ std::vector<BuybackEntry> *VendorBuyback()
 	}
 }
 
+/** @brief A ware that has its own slot instead of a place on the shelves. */
+bool IsFixedWare(const Item &item, ShopSource source)
+{
+	return source == ShopSource::Witch && IsIdentifyScroll(item);
+}
+
 void AddToShopView(std::span<Item> items, ShopSource source)
 {
 	for (size_t i = 0; i < items.size(); i++) {
-		if (!items[i].isEmpty() && ItemOnPoe2ShopTab(items[i], ActivePoe2ShopTab)) {
+		if (!items[i].isEmpty() && (ItemOnPoe2ShopTab(items[i], ActivePoe2ShopTab) || IsFixedWare(items[i], source))) {
 			ShopView.push_back(items[i]);
 			ShopOrigins.push_back({ source, i });
 		}
@@ -362,6 +375,7 @@ void RefreshVisualStoreLayout()
 	if (gbIsPoe2)
 		RebuildShopView();
 	VisualStore.pages.clear();
+	FixedWare = std::nullopt;
 	std::span<Item> items = GetVisualStoreItems();
 
 	if (items.empty()) {
@@ -384,6 +398,10 @@ void RefreshVisualStoreLayout()
 		const Item &item = items[i];
 		if (item.isEmpty())
 			continue;
+		if (gbIsPoe2 && i < ShopOrigins.size() && IsFixedWare(item, ShopOrigins[i].source)) {
+			FixedWare = i;
+			continue;
+		}
 
 		const Size itemSize = GetInventorySize(item);
 		bool placed = false;
@@ -837,6 +855,22 @@ void DrawVisualStore(const Surface &out)
 		DrawItem(item, out, position, sprite);
 	}
 
+	// POE2 Mashup: the ware with its own slot, under the grid.
+	if (FixedWare && *FixedWare < allItems.size()) {
+		const Item &item = allItems[*FixedWare];
+		const Rectangle slot { GetPanelPosition(UiPanels::Stash, FixedWareRect.position), FixedWareRect.size };
+		poe2ui::FillRectangle(out, slot, poe2ui::SocketColor);
+		poe2ui::DrawFrame(out, { slot.position - Displacement { 1, 1 }, Size { slot.size.width + 2, slot.size.height + 2 } }, poe2ui::SocketRimColor);
+		const Point position = slot.position + offset;
+		InvDrawSlotBack(out, position, InventorySlotSizeInPixels, item._iMagical);
+		const ClxSprite sprite = GetInvItemSprite(item._iCurs + CURSOR_FIRSTITEM);
+		if (pcursstoreitem == *FixedWare)
+			ClxDrawOutline(out, GetOutlineColor(item, true), position, sprite);
+		DrawItem(item, out, position, sprite);
+		DrawString(out, _("Always in stock"), { panelPos + Displacement { 196, FixedWareRect.position.y }, { FixedWareRect.position.x - 200, FixedWareRect.size.height } },
+		    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
+	}
+
 	// Draw player gold at bottom
 	uint32_t totalGold = MyPlayer->_pGold + Stash.gold;
 	DrawString(out, StrCat(_("Gold: "), FormatInteger(totalGold)),
@@ -853,6 +887,39 @@ void DrawVisualStore(const Surface &out)
 		RenderClxSprite(out, (*VisualStoreRepairButtonArt)[VisualStoreButtonPressed == RepairBtn], repairBtnPos.position);
 	}
 }
+
+namespace {
+
+/** @brief The info box of the ware under the cursor. */
+void PrintWareInfo(int itemIndex)
+{
+	const Item &item = GetVisualStoreItems()[itemIndex];
+	const int price = VisualStoreItemPrice(itemIndex);
+	const bool canAfford = PlayerCanAfford(price);
+
+	InfoString = item.getName();
+	FloatingInfoString = item.getName();
+	InfoColor = canAfford ? item.getTextColor() : UiFlags::ColorRed;
+
+	if (item._iIdentified) {
+		PrintItemDetails(item);
+	} else {
+		PrintItemDur(item);
+	}
+
+	if (gbIsPoe2) {
+		PrintItemComparison(item);
+		CurrentInfoLineStyle = InfoLineStyle::Note;
+		AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
+		CurrentInfoLineStyle = InfoLineStyle::Requirement;
+		AddInfoBoxString(_("Click to pick up, then place it in your inventory to buy; Ctrl+click buys at once"), true);
+		CurrentInfoLineStyle = InfoLineStyle::Default;
+	} else {
+		AddInfoBoxString(StrCat(FormatInteger(price), " Gold"));
+	}
+}
+
+} // namespace
 
 int16_t CheckVisualStoreHLight(Point mousePosition)
 {
@@ -954,7 +1021,12 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 		return -1;
 
 	const VisualStorePage &page = VisualStore.pages[VisualStore.currentPage];
-	std::span<Item> allItems = GetVisualStoreItems();
+
+	if (FixedWare && *FixedWare < GetVisualStoreItems().size()
+	    && Rectangle { GetPanelPosition(UiPanels::Stash, FixedWareRect.position), FixedWareRect.size }.contains(mousePosition)) {
+		PrintWareInfo(*FixedWare);
+		return static_cast<int16_t>(*FixedWare);
+	}
 
 	for (int y = 0; y < VisualStoreGridHeight; y++) {
 		for (int x = 0; x < VisualStoreGridWidth; x++) {
@@ -963,38 +1035,13 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 				continue;
 
 			const int itemIndex = itemPlusOne - 1;
-			const Item &item = allItems[itemIndex];
-
 			const Rectangle cell {
 				GetVisualStoreSlotCoord({ x, y }),
 				InventorySlotSizeInPixels + 1
 			};
 
 			if (cell.contains(mousePosition)) {
-				const int price = VisualStoreItemPrice(itemIndex);
-				const bool canAfford = PlayerCanAfford(price);
-
-				InfoString = item.getName();
-				FloatingInfoString = item.getName();
-				InfoColor = canAfford ? item.getTextColor() : UiFlags::ColorRed;
-
-				if (item._iIdentified) {
-					PrintItemDetails(item);
-				} else {
-					PrintItemDur(item);
-				}
-
-				if (gbIsPoe2) {
-					PrintItemComparison(item);
-					CurrentInfoLineStyle = InfoLineStyle::Note;
-					AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
-					CurrentInfoLineStyle = InfoLineStyle::Requirement;
-					AddInfoBoxString(_("Click to pick up, then place it in your inventory to buy; Ctrl+click buys at once"), true);
-					CurrentInfoLineStyle = InfoLineStyle::Default;
-				} else {
-					AddInfoBoxString(StrCat(FormatInteger(price), " Gold"));
-				}
-
+				PrintWareInfo(itemIndex);
 				return static_cast<int16_t>(itemIndex);
 			}
 		}
