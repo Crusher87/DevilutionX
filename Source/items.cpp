@@ -2251,7 +2251,10 @@ void PrintItemMisc(const Item &item)
 			AddItemInfoBoxString(FormatRuntime(_("Grants the {:s} spell"), SkillName(skill)));
 		} else if (skill.kind == SkillKind::Persistent) {
 			AddItemInfoBoxString(PersistentSkillDescription(skill.persistent()));
-			AddItemInfoBoxString(FormatRuntime(_("Spirit gem, reserves {:d} Spirit"), SpiritReservation(skill.persistent())));
+			if (IsMinionCountSkill(skill.persistent()))
+				AddItemInfoBoxString(StrCat(_("Spirit gem: "), SpiritCostText(skill.persistent(), gemLevel)));
+			else
+				AddItemInfoBoxString(FormatRuntime(_("Spirit gem, reserves {:d} Spirit"), SpiritReservation(skill.persistent())));
 		} else {
 			AddItemInfoBoxString(WeaponSkillDescription(skill.attack()));
 			if (WeaponSkillNeedsWeapon(skill.attack()))

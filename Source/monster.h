@@ -40,6 +40,8 @@ struct Player;
 
 constexpr size_t MaxMonsters = 200;
 constexpr size_t MaxLvlMTypes = 24;
+/** @brief POE2 Mashup: monster slots kept free for the players' minions, so a crowded level can't stop them rising. */
+constexpr size_t MinionMonsterSlots = 40;
 
 enum monster_flag : uint16_t {
 	// clang-format off
@@ -519,6 +521,8 @@ void WeakenNaKrul();
 void InitGolems();
 std::expected<void, std::string> InitMonsters();
 std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point startPosition);
+/** @brief Most monsters a level may hold besides the players' minions. */
+size_t MaxEnemyMonsters();
 Monster *AddMonster(Point position, Direction dir, size_t typeIndex, bool inMap);
 /**
  * @brief Spawns a new monsters (dynamically/not on level load).

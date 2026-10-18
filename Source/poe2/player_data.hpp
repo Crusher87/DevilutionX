@@ -477,6 +477,26 @@ struct SpiritRuntime {
 	uint8_t infusions = 0;
 };
 
+/** @brief Spirit gems whose number of minions is set in the Skills panel, like POE2's "Set Minion Count". */
+constexpr std::array<PersistentSkill, 2> MinionCountSkills { PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages };
+/** @brief Most minions one gem keeps, besides the ones its supports add. */
+constexpr uint8_t MaxMinionsPerGem = 12;
+/** @brief A minion count the player hasn't chosen yet: the gem raises its default number. */
+constexpr uint8_t DefaultMinionCount = 0xFF;
+
+/** @brief Revive timers of one minion gem (not saved; see poe2/spirit.cpp). */
+struct MinionRevives {
+	/** Game ticks until each fallen minion rises again. */
+	std::array<uint16_t, MaxMinionsPerGem + 4> ticks {};
+	uint8_t pending = 0;
+	/** Minions alive last tick, to tell a death from a minion that hasn't been raised yet. */
+	uint8_t lastAlive = 0;
+	/** Game ticks until the next minion that hasn't been raised yet comes up. */
+	uint8_t raiseTicks = 0;
+	/** The level the minions were on, so changing level raises them at once instead of reviving them. */
+	int16_t level = -1;
+};
+
 struct Poe2PlayerData;
 
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */
@@ -511,6 +531,8 @@ struct Poe2PlayerData {
 	std::array<uint8_t, NumSkillSlots> slotLevels {};
 	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
 	uint8_t spiritSkulls = 0;
+	/** @brief How many minions each of the MinionCountSkills keeps, or DefaultMinionCount. */
+	std::array<uint8_t, MinionCountSkills.size()> minionCounts { DefaultMinionCount, DefaultMinionCount };
 	/** @brief What each skill tray slot does. */
 	std::array<TrayBinding, NumTraySlots> tray {};
 	/** @brief Game ticks left in the current dodge roll (not saved). */
@@ -540,8 +562,6 @@ struct Poe2PlayerData {
 	uint8_t comboTicks = 0;
 	uint8_t rage = 0;
 	uint8_t rageTicks = 0;
-	/** @brief Skeletal Mages' revive timer (not saved). */
-	uint8_t mageCooldown = 0;
 	/** @brief Defensive skill buffs (not saved): Frozen Armor, Holy Shield and Shield Wall, in game ticks left. */
 	uint16_t frozenArmorTicks = 0;
 	uint16_t holyShieldTicks = 0;
@@ -615,8 +635,8 @@ struct Poe2PlayerData {
 	int energyShieldRemainder = 0;
 	/** @brief Game ticks before Summon Golem brings the golem back (not saved). */
 	uint8_t golemCooldown = 0;
-	/** @brief Game ticks before Skeletal Warriors raises the next skeleton (not saved). */
-	uint8_t skeletonCooldown = 0;
+	/** @brief Revive timers of the MinionCountSkills' minions (not saved). */
+	std::array<MinionRevives, MinionCountSkills.size()> minionRevives {};
 	/** @brief Support gem timers and counters; mutable so hits can count (not saved). */
 	mutable SupportRuntime supportState {};
 	/** @brief Spirit skill timers and the element infusions carried (not saved). */
@@ -679,6 +699,7 @@ struct Poe2PlayerData {
 		skillSlots.fill({});
 		slotLevels.fill(1);
 		spiritSkulls = 0;
+		minionCounts.fill(DefaultMinionCount);
 		for (size_t slot = 0; slot < NumTraySlots; slot++)
 			tray[slot] = DefaultTrayBinding(static_cast<TraySlot>(slot));
 		dodgeTicks = 0;
@@ -726,8 +747,7 @@ struct Poe2PlayerData {
 		energyShieldRechargeTicks = 0;
 		energyShieldRemainder = 0;
 		golemCooldown = 0;
-		skeletonCooldown = 0;
-		mageCooldown = 0;
+		minionRevives = {};
 		supportState = {};
 		spiritState = {};
 		frozenArmorTicks = 0;

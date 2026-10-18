@@ -8,6 +8,7 @@
 #include "player.h"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/is_of.hpp"
@@ -283,6 +284,8 @@ std::string GemLevelText(SkillSlot skill, int gemLevel)
 	const int projectiles = GemExtraProjectiles(skill, gemLevel);
 	if (projectiles > 0)
 		StrAppend(text, std::format(", +{:d} projectiles", projectiles));
+	if (IsMinionCountSkill(skill.persistent()))
+		StrAppend(text, std::format(": minions level {:d}, {:d} Spirit each", MinionLevelForGemLevel(gemLevel), BaseSpiritPerMinion(skill.persistent(), gemLevel)));
 	return text;
 }
 

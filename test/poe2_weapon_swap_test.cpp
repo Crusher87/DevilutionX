@@ -13,6 +13,7 @@
 #include "player.h"
 #include "poe2/hardcore.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "spells.h"
 #include "tables/monstdat.h"
@@ -131,6 +132,7 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	}
 	const int jewelIndex = player.jewels[MaxJewelSockets - 1].IDidx;
 	ASSERT_GE(jewelIndex, 0);
+	SetChosenMinionCount(player, PersistentSkill::SkeletalWarriors, 5);
 	pfile_write_hero(/*writeGameData=*/false);
 
 	player.poe2.clear();
@@ -146,6 +148,8 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	EXPECT_FALSE(IsPassiveInPool(player, first, PassivePool::Main));
 	EXPECT_EQ(player.swapHands[1].IDidx, IDI_WARRIOR);
 	EXPECT_TRUE(player.swapHands[0].isEmpty());
+	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalWarriors), 5);
+	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalMages), StartingMinionCount(PersistentSkill::SkeletalMages));
 
 	// The hero list reads the league on its own.
 	HardcoreListed = false;

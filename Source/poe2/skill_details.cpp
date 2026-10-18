@@ -433,7 +433,17 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		                                                                                      : std::format("{:d}% of the weapon's", DefaultAttackDamagePercent));
 	else
 		Value(lines, "Level", level != gemLevel ? std::format("{:d} (gem {:d}, {:+d} from gear)", level, gemLevel, level - gemLevel) : std::format("{:d}", level));
-	if (skill.kind == SkillKind::Persistent)
+	if (skill.kind == SkillKind::Persistent && IsMinionCountSkill(skill.persistent())) {
+		const PersistentSkill persistent = skill.persistent();
+		const int chosen = ChosenMinionCount(player, persistent);
+		const int active = ActiveMinionCount(player, persistent);
+		Value(lines, "Minions", active < chosen ? std::format("{:d} of {:d} (not enough Spirit)", active, chosen) : std::format("{:d}", chosen));
+		Value(lines, "Reserves", std::format("{:d} Spirit", GemSpiritReservation(player, persistent)));
+		const int free = FreeMinions(persistent);
+		Value(lines, "Spirit per minion", free > 0 ? std::format("{:d}, first {:d} free", SpiritPerMinion(player, persistent), free) : std::format("{:d}", SpiritPerMinion(player, persistent)));
+		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+		Value(lines, "Revives after", std::format("{:d} seconds", SkeletonReviveTicks / 20));
+	} else if (skill.kind == SkillKind::Persistent)
 		Value(lines, "Reserves", std::format("{:d} Spirit", SpiritReservation(skill.persistent())));
 	else if (const int mana = SkillManaCost(player, skill); mana > 0)
 		Value(lines, "Cost", std::format("{:d} Mana", mana));

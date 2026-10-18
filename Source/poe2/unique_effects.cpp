@@ -806,7 +806,7 @@ void OnMinionDied(Player &owner)
 	if (const int seconds = Rule(owner, UniqueRule::MinionResummon); seconds > 0 && state.minionFrenzy >= MaxStacks) {
 		const auto quick = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
 		owner.poe2.golemCooldown = std::min(owner.poe2.golemCooldown, quick);
-		owner.poe2.skeletonCooldown = std::min(owner.poe2.skeletonCooldown, quick);
+		HastenMinionRevives(owner, quick);
 	}
 	state.minionFrenzy = static_cast<uint8_t>(std::min<int>(state.minionFrenzy + 1, MaxStacks));
 	state.minionFrenzyTicks = 4 * TicksPerSecond;

@@ -1202,7 +1202,9 @@ void UseSkillSlot(size_t slot)
 
 	if (skill.kind == SkillKind::Persistent) {
 		if (GetSkillUsability(player, skill) == SkillUsability::Spirit)
-			EventPlrMsg(FormatRuntime(_("{:s} needs {:d} Spirit; you have {:d} left."), SkillName(skill), SpiritReservation(skill.persistent()), MaxSpirit(player) - ReservedSpirit(player)), UiFlags::ColorRed);
+			EventPlrMsg(FormatRuntime(_("{:s} needs {:d} Spirit; you have {:d} left."), SkillName(skill),
+			                IsMinionCountSkill(skill.persistent()) ? SpiritPerMinion(player, skill.persistent()) : SpiritReservation(skill.persistent()), AvailableSpirit(player)),
+			    UiFlags::ColorRed);
 		else
 			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
 		return;

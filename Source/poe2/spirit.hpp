@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include "poe2/player_data.hpp"
@@ -34,13 +35,45 @@ constexpr int HeraldOfFrostPercent = 12;
 constexpr int HeraldOfFrostRadius = 2;
 /** @brief A fallen golem comes back after 4 seconds. */
 constexpr int GolemReviveTicks = 4 * 20;
-/** @brief A fallen Skeletal Warrior rises again after 3 seconds. */
-constexpr int SkeletonReviveTicks = 3 * 20;
+/** @brief A fallen skeleton rises again after 12 seconds, POE2's minion revive time. */
+constexpr int SkeletonReviveTicks = 12 * 20;
+/** @brief Skeletons that haven't been raised yet (a new level, a higher count) come up this many ticks apart. */
+constexpr int SkeletonRaiseTicks = 4;
 
-/** @brief Skeletal Warriors raises 2 skeletons, one more at character level 10 and 20. */
+/** @brief How many skeletons Skeletal Warriors raised before the count could be chosen: 2, one more at character level 10 and 20. */
 int SkeletalWarriorCount(int characterLevel);
-/** @brief Skeletal Mages raises 1 mage, one more at character level 20 and 40. */
+/** @brief The same for Skeletal Mages: 1, one more at character level 20 and 40. */
 int SkeletalMageCount(int characterLevel);
+
+/** @brief Index of the skill in MinionCountSkills; -1 if its number of minions isn't chosen. */
+int MinionCountSkillIndex(PersistentSkill skill);
+inline bool IsMinionCountSkill(PersistentSkill skill) { return MinionCountSkillIndex(skill) >= 0; }
+/** @brief Minions that reserve no Spirit: POE2's Skeletal Warriors raises its first 2 for free. */
+int FreeMinions(PersistentSkill skill);
+/** @brief Minions a gem raises until the player chooses, POE2's "desired initial amount". */
+int StartingMinionCount(PersistentSkill skill);
+/** @brief POE2's Spirit per minion at a gem level; higher levels cost less. */
+int BaseSpiritPerMinion(PersistentSkill skill, int gemLevel);
+/** @brief Spirit each minion past the free ones reserves at the socketed gem's level, with the uniques that raise reservations. */
+int SpiritPerMinion(const Player &player, PersistentSkill skill);
+/** @brief What a Spirit gem reserves at a gem level, for tooltips. */
+std::string SpiritCostText(PersistentSkill skill, int gemLevel);
+/** @brief Number of minions the player set for the gem in the Skills panel. */
+int ChosenMinionCount(const Player &player, PersistentSkill skill);
+/** @brief Sets it, from 0 to MaxMinionsPerGem. */
+void SetChosenMinionCount(Player &player, PersistentSkill skill, int count);
+/** @brief Minions the gem keeps: the chosen number, or as many as the Spirit left fits. */
+int ActiveMinionCount(const Player &player, PersistentSkill skill);
+/** @brief Most minions the gem could keep with the Spirit the gems before it leave, up to MaxMinionsPerGem. */
+int AffordableMinionCount(const Player &player, PersistentSkill skill);
+/** @brief Spirit the socketed gem reserves now. */
+int GemSpiritReservation(const Player &player, PersistentSkill skill);
+/** @brief The level a minion fights at: the highest character level its gem level is meant for. */
+int MinionLevelForGemLevel(int gemLevel);
+/** @brief Brings the gems' fallen minions back within this many game ticks. */
+void HastenMinionRevives(Player &player, int ticks);
+/** @brief Minions of the gem waiting to rise, and the game ticks until the first; for the HUD. */
+int PendingMinionRevives(const Player &player, PersistentSkill skill, int *ticksLeft = nullptr);
 
 std::string_view PersistentSkillName(PersistentSkill skill);
 std::string_view PersistentSkillDescription(PersistentSkill skill);
@@ -61,6 +94,8 @@ void DropSpiritSkull(const Monster &monster, bool sendmsg);
 int MinionDamagePercent(const Player &player);
 /** @brief Spirit reserved by the active Spirit gems. */
 int ReservedSpirit(const Player &player);
+/** @brief Spirit not reserved, which POE2's globe shows lit. */
+inline int AvailableSpirit(const Player &player) { return MaxSpirit(player) - ReservedSpirit(player); }
 /**
  * @brief Whether a socketed Spirit gem is active. Gems reserve Spirit from the first skill slot on;
  * a gem the character can't use, or that doesn't fit in the Spirit left, stays inactive.

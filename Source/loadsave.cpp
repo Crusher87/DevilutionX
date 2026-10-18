@@ -41,6 +41,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/stash_tabs.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
@@ -2441,7 +2442,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * tree the hero's points were spent on and the quests that gave passive points. Version 22 adds the support sockets
  * Jeweller's Orbs opened on each Skills panel row.
  */
-constexpr uint8_t Poe2HeroDataVersion = 22;
+constexpr uint8_t Poe2HeroDataVersion = 23;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2739,6 +2740,19 @@ uint8_t ReadPoe2HeroData(Player &player)
 		return version;
 	for (uint8_t &opened : player.poe2.openedSockets)
 		opened = std::min<uint8_t>(file.NextLE<uint8_t>(), static_cast<uint8_t>(MaxSupportSockets - BaseSupportSockets));
+
+	// Version 23: the number of minions set for each minion gem, as skill and count pairs.
+	if (version < 23 || !file.IsValid(1))
+		return version;
+	const uint8_t minionGems = file.NextLE<uint8_t>();
+	if (!file.IsValid(minionGems * 2U))
+		return version;
+	for (uint8_t i = 0; i < minionGems; i++) {
+		const auto skill = static_cast<PersistentSkill>(file.NextLE<uint8_t>());
+		const uint8_t count = file.NextLE<uint8_t>();
+		if (const int index = MinionCountSkillIndex(skill); index >= 0)
+			player.poe2.minionCounts[static_cast<size_t>(index)] = count == DefaultMinionCount ? count : std::min(count, MaxMinionsPerGem);
+	}
 	return version;
 }
 
@@ -2764,6 +2778,11 @@ void LoadPoe2HeroData(Player &player)
 	// Before Jeweller's Orbs, sockets opened with the hero's level; heroes keep the ones they had.
 	if (version > 0 && version < 22)
 		player.poe2.openedSockets.fill(LevelOpenedSockets(player.getCharacterLevel()));
+	// Before the number of minions could be set, it grew with the hero's level; heroes keep the number they had.
+	if (version > 0 && version < 23) {
+		SetChosenMinionCount(player, PersistentSkill::SkeletalWarriors, SkeletalWarriorCount(player.getCharacterLevel()));
+		SetChosenMinionCount(player, PersistentSkill::SkeletalMages, SkeletalMageCount(player.getCharacterLevel()));
+	}
 	// Points spent on an older tree come back when the tree changes shape.
 	if (version > 0) {
 		RefundPassivesForNewTree(player);
@@ -2803,7 +2822,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	}
 	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size());
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2936,6 +2955,12 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	// Version 22: the support sockets Jeweller's Orbs opened.
 	for (const uint8_t opened : player.poe2.openedSockets)
 		file.WriteLE<uint8_t>(opened);
+	// Version 23: the number of minions set for each minion gem.
+	file.WriteLE<uint8_t>(static_cast<uint8_t>(MinionCountSkills.size()));
+	for (size_t i = 0; i < MinionCountSkills.size(); i++) {
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(MinionCountSkills[i]));
+		file.WriteLE<uint8_t>(player.poe2.minionCounts[i]);
+	}
 }
 
 void LoadHeroItems(Player &player)

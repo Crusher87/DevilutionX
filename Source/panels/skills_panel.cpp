@@ -65,6 +65,9 @@ struct Hit {
 		PageTab,
 		/** The rest of a skill's row: opens its details. */
 		Row,
+		/** A minion gem's [-] and [+], POE2's Set Minion Count. */
+		CountMinus,
+		CountPlus,
 	} kind
 	    = Kind::None;
 	size_t slot = 0;
@@ -112,6 +115,18 @@ Rectangle SocketRect(size_t slot, size_t socket)
 	return { row.position + Displacement { 48 + (static_cast<int>(socket) * (SocketSize + SocketGap)), RowHeight - SocketSize - 3 }, { SocketSize, SocketSize } };
 }
 
+/** @brief A minion gem's [-] or [+], at the right of the row's first line. */
+Rectangle CountButtonRect(size_t slot, bool plus)
+{
+	const Rectangle row = RowRect(slot);
+	return { row.position + Displacement { row.size.width - (plus ? 18 : 50), 1 }, { 14, 15 } };
+}
+
+bool RowHasMinionCount(const Player &player, size_t slot)
+{
+	return slot != DefaultAttackRow && IsMinionCountSkill(RowSkill(player, slot).persistent());
+}
+
 /** @brief The rows shown: the default attack's, then the current page of gem sockets. */
 std::array<size_t, RowsPerPage + 1> VisibleRows()
 {
@@ -135,6 +150,12 @@ Hit HitAt(Point position)
 			continue;
 		if (IconRect(slot).contains(position))
 			return { Hit::Kind::Skill, slot };
+		if (MyPlayer != nullptr && RowHasMinionCount(*MyPlayer, slot)) {
+			if (CountButtonRect(slot, false).contains(position))
+				return { Hit::Kind::CountMinus, slot };
+			if (CountButtonRect(slot, true).contains(position))
+				return { Hit::Kind::CountPlus, slot };
+		}
 		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
 			if (SocketRect(slot, socket).contains(position))
 				return { Hit::Kind::Socket, slot, socket };
@@ -168,6 +189,8 @@ std::string SkillLevelText(const Player &player, SkillSlot skill)
 
 std::string SkillCostText(const Player &player, SkillSlot skill)
 {
+	if (IsMinionCountSkill(skill.persistent()))
+		return FormatRuntime(_("Spirit {:d}"), GemSpiritReservation(player, skill.persistent()));
 	if (skill.kind == SkillKind::Persistent)
 		return FormatRuntime(_("Spirit {:d}"), SpiritReservation(skill.persistent()));
 	return FormatRuntime(_("Mana {:d}"), SkillManaCost(player, skill));
@@ -191,6 +214,25 @@ void DrawHeader(const Surface &out, const Player &player, const Hit &hover)
 	FillRectangle(out, button, hover.kind == Hit::Kind::GemcuttingButton ? RowHoverColor : RowColor);
 	DrawFrame(out, button, BorderColor);
 	DrawString(out, _("Gemcutting"), button, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+}
+
+void DrawMinionCount(const Surface &out, const Player &player, size_t slot, const Hit &hover)
+{
+	const PersistentSkill skill = RowSkill(player, slot).persistent();
+	const int chosen = ChosenMinionCount(player, skill);
+	const int active = ActiveMinionCount(player, skill);
+	const int affordable = AffordableMinionCount(player, skill);
+	for (const bool plus : { false, true }) {
+		const Rectangle button = CountButtonRect(slot, plus);
+		const bool usable = plus ? chosen < affordable : chosen > 0;
+		const bool hovered = hover.kind == (plus ? Hit::Kind::CountPlus : Hit::Kind::CountMinus) && hover.slot == slot;
+		FillRectangle(out, button, hovered && usable ? RowHoverColor : RowColor);
+		DrawFrame(out, button, usable ? BorderColor : InnerBorderColor);
+		DrawString(out, plus ? "+" : "-", button, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (usable ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed) });
+	}
+	const Rectangle number { CountButtonRect(slot, false).position + Displacement { 14, 0 }, { 18, 15 } };
+	// Red when Spirit runs short of the count chosen, as the gem then keeps fewer.
+	DrawString(out, StrCat(std::min(active, chosen)), number, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (active < chosen ? UiFlags::ColorRed : UiFlags::ColorWhite) });
 }
 
 void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &hover)
@@ -227,8 +269,14 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 	    : skill.kind == SkillKind::Spell                                                               ? UiFlags::ColorBlue
 	                                                                                                   : UiFlags::ColorWhitegold;
 	DrawString(out, SkillName(skill), title, { .flags = nameColor | UiFlags::VerticalCenter });
-	DrawString(out, isDefault ? std::string(_("No mana")) : StrCat(SkillLevelText(player, skill), "   ", SkillCostText(player, skill)), title,
-	    { .flags = UiFlags::AlignRight | UiFlags::ColorWhite | UiFlags::VerticalCenter });
+	// A minion gem shows its count there instead; its level and Spirit are in the count's tooltip and the details.
+	if (!RowHasMinionCount(player, slot)) {
+		std::string right = isDefault ? std::string(_("No mana")) : StrCat(SkillLevelText(player, skill), "   ", SkillCostText(player, skill));
+		// A long name leaves room for the cost alone.
+		if (!isDefault && GetLineWidth(SkillName(skill)) + GetLineWidth(right) + 8 > title.size.width)
+			right = SkillCostText(player, skill);
+		DrawString(out, right, title, { .flags = UiFlags::AlignRight | UiFlags::ColorWhite | UiFlags::VerticalCenter });
+	}
 	// The arrow that opens the skill's details, as in POE2's Skills panel.
 	const bool showing = DetailsSlot == slot;
 	const Rectangle arrow { row.position + Displacement { row.size.width - 52, 20 }, { 48, 24 } };
@@ -264,6 +312,9 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		if (gem != SupportGem::None)
 			DrawSupportGemIcon(out, rect, gem);
 	}
+
+	if (RowHasMinionCount(player, slot))
+		DrawMinionCount(out, player, slot, hover);
 }
 
 void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover)
@@ -278,6 +329,24 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 	if (hover.kind == Hit::Kind::PageTab || hover.kind == Hit::Kind::Row)
 		return;
 	const SkillSlot skill = RowSkill(player, hover.slot);
+	if (IsAnyOf(hover.kind, Hit::Kind::CountMinus, Hit::Kind::CountPlus)) {
+		const PersistentSkill persistent = skill.persistent();
+		const int chosen = ChosenMinionCount(player, persistent);
+		const int active = ActiveMinionCount(player, persistent);
+		const int perMinion = SpiritPerMinion(player, persistent);
+		if (const int free = FreeMinions(persistent); free > 0)
+			lines.emplace_back(FormatRuntime(_("The first {:d} reserve no Spirit; each one more reserves {:d}."), free, perMinion), UiFlags::ColorWhite);
+		else
+			lines.emplace_back(FormatRuntime(_("Each one reserves {:d} Spirit."), perMinion), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(_("Gem level {:d}: minions fight at level {:d}."), player.poe2.skillLevel(persistent), MinionLevelForGemLevel(player.poe2.skillLevel(persistent))), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(_("Reserving {:d} Spirit; {:d} of {:d} left."), GemSpiritReservation(player, persistent), AvailableSpirit(player), MaxSpirit(player)), UiFlags::ColorWhite);
+		if (active < chosen)
+			lines.emplace_back(FormatRuntime(_("Not enough Spirit for {:d}: raising {:d}."), chosen, active), UiFlags::ColorRed);
+		lines.emplace_back(FormatRuntime(_("Fallen minions rise again after {:d} seconds."), SkeletonReviveTicks / 20), UiFlags::ColorWhite);
+		lines.emplace_back(hover.kind == Hit::Kind::CountPlus ? _("Click for one more") : _("Click for one fewer"), UiFlags::ColorButtonpushed);
+		DrawTooltip(out, bounds, MousePosition, FormatRuntime(_("{:s}: {:d} minions"), SkillName(skill), chosen), UiFlags::ColorWhitegold, lines);
+		return;
+	}
 	const std::string key = hover.slot == DefaultAttackRow ? std::string {} : SkillSlotKeyName(hover.slot);
 	if (hover.kind == Hit::Kind::Skill && hover.slot == DefaultAttackRow) {
 		lines.emplace_back(_("Your weapon's own attack: it costs no mana and changes with the weapon."), UiFlags::ColorWhite);
@@ -428,6 +497,23 @@ void HoldGem(Player &player, Item &&item)
 	NewCursor(player.HoldItem);
 }
 
+void ChangeMinionCount(Player &player, PersistentSkill skill, bool more)
+{
+	const int affordable = AffordableMinionCount(player, skill);
+	// A count Spirit no longer covers drops to what the gem keeps first.
+	const int chosen = std::min(ChosenMinionCount(player, skill), affordable);
+	if (more && chosen >= affordable) {
+		EventPlrMsg(chosen >= MaxMinionsPerGem ? FormatRuntime(_("{:s} keeps at most {:d} minions."), SkillName(SkillSlot::ForPersistent(skill)), MaxMinionsPerGem)
+		                                      : FormatRuntime(_("Not enough Spirit: another one needs {:d}."), SpiritPerMinion(player, skill)),
+		    UiFlags::ColorRed);
+		return;
+	}
+	if (!more && chosen <= 0 && ChosenMinionCount(player, skill) <= 0)
+		return;
+	SetChosenMinionCount(player, skill, more ? chosen + 1 : std::max(chosen - 1, 0));
+	PlaySFX(SfxID::MenuMove);
+}
+
 void ClickSocket(Player &player, size_t slot, size_t socket)
 {
 	if (!player.HoldItem.isEmpty()) {
@@ -552,6 +638,10 @@ void HandleSkillsPanelClick(Point mousePosition)
 	case Hit::Kind::Socket:
 		if (hit.socket < SupportSocketCount(player, hit.slot) && SkillTakesSupports(RowSkill(player, hit.slot)))
 			ClickSocket(player, hit.slot, hit.socket);
+		break;
+	case Hit::Kind::CountMinus:
+	case Hit::Kind::CountPlus:
+		ChangeMinionCount(player, RowSkill(player, hit.slot).persistent(), hit.kind == Hit::Kind::CountPlus);
 		break;
 	default:
 		break;

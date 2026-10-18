@@ -188,8 +188,12 @@ SkillUsability GetSkillUsability(const Player &player, SkillSlot skill)
 	const ItemData &gem = AllItemsList[*gemIndex];
 	if (player._pStrength < gem.iMinStr || player._pMagic < gem.iMinMag || player._pDexterity < gem.iMinDex)
 		return SkillUsability::Requirements;
-	if (skill.kind == SkillKind::Persistent)
+	if (skill.kind == SkillKind::Persistent) {
+		// A minion count set to 0 is the player's choice, not a lack of Spirit.
+		if (IsMinionCountSkill(skill.persistent()) && ChosenMinionCount(player, skill.persistent()) == 0)
+			return SkillUsability::Ready;
 		return IsPersistentSkillActive(player, skill.persistent()) ? SkillUsability::Ready : SkillUsability::Spirit;
+	}
 	if (skill.kind == SkillKind::Attack && !WeaponAllowsSkill(player, skill.attack()))
 		return SkillUsability::Weapon;
 	if (skill.kind == SkillKind::Spell && leveltype == DTYPE_TOWN && !GetSpellData(skill.spell()).isAllowedInTown())

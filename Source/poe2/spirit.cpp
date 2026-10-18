@@ -345,11 +345,91 @@ int MaxSpirit(const Player &player)
 	return spirit;
 }
 
+int MinionCountSkillIndex(PersistentSkill skill)
+{
+	for (size_t i = 0; i < MinionCountSkills.size(); i++) {
+		if (MinionCountSkills[i] == skill)
+			return static_cast<int>(i);
+	}
+	return -1;
+}
+
+int FreeMinions(PersistentSkill skill)
+{
+	return skill == PersistentSkill::SkeletalWarriors ? 2 : 0;
+}
+
+int StartingMinionCount(PersistentSkill skill)
+{
+	return skill == PersistentSkill::SkeletalWarriors ? 2 : 1;
+}
+
+int BaseSpiritPerMinion(PersistentSkill skill, int gemLevel)
+{
+	// POE2's Spirit per minion for gem levels 1 to 20: Skeletal Warrior, and Skeletal Arsonist for the fire-hurling mages.
+	constexpr std::array<uint8_t, MaxGemLevel> Warrior { 60, 44, 33, 27, 25, 25, 23, 23, 23, 22, 22, 22, 21, 21, 21, 21, 20, 20, 20, 20 };
+	constexpr std::array<uint8_t, MaxGemLevel> Mage { 90, 65, 50, 47, 47, 47, 44, 44, 44, 42, 42, 42, 40, 40, 40, 40, 39, 39, 39, 39 };
+	const auto level = static_cast<size_t>(std::clamp(gemLevel, 1, MaxGemLevel) - 1);
+	return (skill == PersistentSkill::SkeletalMages ? Mage : Warrior)[level];
+}
+
+int SpiritPerMinion(const Player &player, PersistentSkill skill)
+{
+	const int base = BaseSpiritPerMinion(skill, player.poe2.skillLevel(skill));
+	// POE2 Mashup: some uniques raise every reservation.
+	return std::max(base * (100 + player.poe2.rule(UniqueRule::MoreSpiritReservation)) / 100, 1);
+}
+
+std::string SpiritCostText(PersistentSkill skill, int gemLevel)
+{
+	if (!IsMinionCountSkill(skill))
+		return FormatRuntime(_("Reserves {:d} Spirit"), SpiritReservation(skill));
+	if (const int free = FreeMinions(skill); free > 0)
+		return FormatRuntime(_("{:d} minions free, then {:d} Spirit each"), free, BaseSpiritPerMinion(skill, gemLevel));
+	return FormatRuntime(_("Reserves {:d} Spirit per minion"), BaseSpiritPerMinion(skill, gemLevel));
+}
+
+int ChosenMinionCount(const Player &player, PersistentSkill skill)
+{
+	const int index = MinionCountSkillIndex(skill);
+	if (index < 0)
+		return 0;
+	const uint8_t count = player.poe2.minionCounts[static_cast<size_t>(index)];
+	return count == DefaultMinionCount ? StartingMinionCount(skill) : std::min<int>(count, MaxMinionsPerGem);
+}
+
+void SetChosenMinionCount(Player &player, PersistentSkill skill, int count)
+{
+	const int index = MinionCountSkillIndex(skill);
+	if (index < 0)
+		return;
+	player.poe2.minionCounts[static_cast<size_t>(index)] = static_cast<uint8_t>(std::clamp<int>(count, 0, MaxMinionsPerGem));
+}
+
+int MinionLevelForGemLevel(int gemLevel)
+{
+	if (gemLevel >= MaxGemLevel)
+		return CharacterLevelForGemLevel(MaxGemLevel);
+	return std::max(CharacterLevelForGemLevel(gemLevel + 1) - 1, 1);
+}
+
 namespace {
 
-/** @brief Walks the Skills panel in order, reserving Spirit for each usable Spirit gem that fits. */
+struct GemReservation {
+	PersistentSkill skill;
+	/** Minions the gem keeps, or 1 for a gem without a count; 0 when it's inactive. */
+	int count;
+	int spirit;
+	/** Spirit the gems before this one left. */
+	int spiritLeft;
+};
+
+/**
+ * @brief Walks the Skills panel in order, reserving Spirit for each usable Spirit gem that fits.
+ * A minion gem reserves Spirit for each minion past its free ones and, like POE2, keeps as many as the Spirit left fits.
+ */
 template <typename F>
-int ReserveSpirit(const Player &player, F &&onActive)
+int ReserveSpirit(const Player &player, F &&onGem)
 {
 	const int max = MaxSpirit(player);
 	int reserved = 0;
@@ -357,33 +437,73 @@ int ReserveSpirit(const Player &player, F &&onActive)
 		const PersistentSkill skill = slot.persistent();
 		if (skill == PersistentSkill::None || !MeetsGemRequirements(player, skill))
 			continue;
+		const int spiritLeft = max - reserved;
+		if (IsMinionCountSkill(skill)) {
+			const int chosen = ChosenMinionCount(player, skill);
+			const int free = std::min(chosen, FreeMinions(skill));
+			const int perMinion = SpiritPerMinion(player, skill);
+			const int paid = std::min(chosen - free, std::max(spiritLeft, 0) / perMinion);
+			reserved += paid * perMinion;
+			onGem(GemReservation { skill, free + paid, paid * perMinion, spiritLeft });
+			continue;
+		}
 		// POE2 Mashup: some uniques raise every reservation.
 		const int cost = SpiritReservation(skill) * (100 + player.poe2.rule(UniqueRule::MoreSpiritReservation)) / 100;
-		if (reserved + cost > max)
+		if (cost > spiritLeft) {
+			onGem(GemReservation { skill, 0, 0, spiritLeft });
 			continue;
+		}
 		reserved += cost;
-		onActive(skill);
+		onGem(GemReservation { skill, 1, cost, spiritLeft });
 	}
 	return reserved;
+}
+
+std::optional<GemReservation> FindGemReservation(const Player &player, PersistentSkill skill)
+{
+	std::optional<GemReservation> found;
+	ReserveSpirit(player, [&](const GemReservation &gem) {
+		if (gem.skill == skill && !found)
+			found = gem;
+	});
+	return found;
 }
 
 } // namespace
 
 int ReservedSpirit(const Player &player)
 {
-	return ReserveSpirit(player, [](PersistentSkill) {});
+	return ReserveSpirit(player, [](const GemReservation &) {});
 }
 
 bool IsPersistentSkillActive(const Player &player, PersistentSkill skill)
 {
 	if (!gbIsPoe2 || skill == PersistentSkill::None)
 		return false;
-	bool active = false;
-	ReserveSpirit(player, [&](PersistentSkill activeSkill) {
-		if (activeSkill == skill)
-			active = true;
-	});
-	return active;
+	const std::optional<GemReservation> gem = FindGemReservation(player, skill);
+	return gem && gem->count > 0;
+}
+
+int ActiveMinionCount(const Player &player, PersistentSkill skill)
+{
+	if (!gbIsPoe2 || !IsMinionCountSkill(skill))
+		return 0;
+	const std::optional<GemReservation> gem = FindGemReservation(player, skill);
+	return gem ? gem->count : 0;
+}
+
+int AffordableMinionCount(const Player &player, PersistentSkill skill)
+{
+	const std::optional<GemReservation> gem = FindGemReservation(player, skill);
+	if (!gem || !IsMinionCountSkill(skill))
+		return 0;
+	return std::min(FreeMinions(skill) + std::max(gem->spiritLeft, 0) / SpiritPerMinion(player, skill), static_cast<int>(MaxMinionsPerGem));
+}
+
+int GemSpiritReservation(const Player &player, PersistentSkill skill)
+{
+	const std::optional<GemReservation> gem = FindGemReservation(player, skill);
+	return gem ? gem->spirit : 0;
 }
 
 void QueueHeraldTriggers(const Player &player, const Monster &monster)
@@ -477,41 +597,134 @@ void KeepGolemAlive(Player &player)
 	player.poe2.golemCooldown = GolemReviveTicks;
 }
 
-template <typename Cooldown>
-void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type, int count, Cooldown &cooldown)
+/** @brief Kills the skeleton of the type farthest from its owner, when the count is lowered. */
+void KillFarthestSkeletonMinion(const Player &player, _monster_id type)
 {
-	if (!IsPersistentSkillActive(player, skill)) {
-		cooldown = 0;
+	Monster *farthest = nullptr;
+	int farthestDistance = -1;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.type().type != type || !monster.isPlayerMinion() || monster.goalVar3 != player.getId() || monster.hasNoLife() || monster.poe2.revived)
+			continue;
+		const int distance = monster.position.tile.WalkingDistance(player.position.tile);
+		if (distance > farthestDistance) {
+			farthest = &monster;
+			farthestDistance = distance;
+		}
+	}
+	if (farthest != nullptr)
+		KillGolem(*farthest);
+}
+
+int16_t CurrentLevelKey()
+{
+	return static_cast<int16_t>(setlevel ? 1000 + static_cast<int>(setlvlnum) : static_cast<int>(currlevel));
+}
+
+void RemoveRevive(MinionRevives &revives, size_t index)
+{
+	revives.ticks[index] = revives.ticks[revives.pending - 1];
+	revives.pending--;
+}
+
+/**
+ * @brief Keeps the gem's skeletons at its count. Like POE2, each one that falls rises again after the revive time;
+ * ones that haven't been raised yet (on a new level, or when the count goes up) come up at once, a few ticks apart.
+ */
+void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type, MinionRevives &revives)
+{
+	const int active = ActiveMinionCount(player, skill);
+	if (active <= 0) {
+		revives = {};
 		if (CountSkeletonMinions(player, type) > 0)
 			KillSkeletonMinions(player, type);
 		return;
 	}
-	count += SupportExtraMinions(player, skill);
-	if (!CanRaiseMinions(player) || CountSkeletonMinions(player, type) >= static_cast<size_t>(std::max(count, 0))) {
-		cooldown = SkeletonReviveTicks / 4;
+	if (!CanRaiseMinions(player)) {
+		revives = {};
 		return;
 	}
-	if (cooldown > 0) {
-		cooldown--;
+	if (revives.level != CurrentLevelKey()) {
+		revives = {};
+		revives.level = CurrentLevelKey();
+	}
+	const int target = std::min(active + SupportExtraMinions(player, skill), static_cast<int>(revives.ticks.size()));
+	int alive = static_cast<int>(CountSkeletonMinions(player, type));
+	if (alive > target) {
+		KillFarthestSkeletonMinion(player, type);
+		revives.pending = 0;
+		revives.lastAlive = static_cast<uint8_t>(alive - 1);
 		return;
 	}
-	const std::optional<Point> position = FindMinionSpawnPosition(player);
-	if (!position)
-		return;
-	if (SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(skill), 1)), type))
-		AddVisualEffect(*position, MissileGraphicID::Resurrect);
-	cooldown = SkeletonReviveTicks;
+	for (int fallen = revives.lastAlive - alive; fallen > 0 && revives.pending < revives.ticks.size(); fallen--)
+		revives.ticks[revives.pending++] = SkeletonReviveTicks;
+	// A lower count no longer needs the longest revives.
+	while (revives.pending > target - alive) {
+		size_t longest = 0;
+		for (size_t i = 1; i < revives.pending; i++) {
+			if (revives.ticks[i] > revives.ticks[longest])
+				longest = i;
+		}
+		RemoveRevive(revives, longest);
+	}
+	std::optional<size_t> ready;
+	for (size_t i = 0; i < revives.pending; i++) {
+		if (revives.ticks[i] > 0)
+			revives.ticks[i]--;
+		if (revives.ticks[i] == 0 && !ready)
+			ready = i;
+	}
+	if (revives.raiseTicks > 0)
+		revives.raiseTicks--;
+	const bool raiseNew = alive + revives.pending < target && revives.raiseTicks == 0;
+	if (ready || raiseNew) {
+		const std::optional<Point> position = FindMinionSpawnPosition(player);
+		if (position && SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(skill), 1)), type)) {
+			AddVisualEffect(*position, MissileGraphicID::Resurrect);
+			alive++;
+			if (ready)
+				RemoveRevive(revives, *ready);
+			else
+				revives.raiseTicks = SkeletonRaiseTicks;
+		}
+	}
+	revives.lastAlive = static_cast<uint8_t>(alive);
 }
 
 } // namespace
+
+void HastenMinionRevives(Player &player, int ticks)
+{
+	for (MinionRevives &revives : player.poe2.minionRevives) {
+		for (size_t i = 0; i < revives.pending; i++)
+			revives.ticks[i] = static_cast<uint16_t>(std::min<int>(revives.ticks[i], std::max(ticks, 0)));
+	}
+}
+
+int PendingMinionRevives(const Player &player, PersistentSkill skill, int *ticksLeft)
+{
+	const int index = MinionCountSkillIndex(skill);
+	if (index < 0)
+		return 0;
+	const MinionRevives &revives = player.poe2.minionRevives[static_cast<size_t>(index)];
+	if (ticksLeft != nullptr) {
+		int soonest = 0;
+		for (size_t i = 0; i < revives.pending; i++)
+			soonest = i == 0 ? revives.ticks[i] : std::min<int>(soonest, revives.ticks[i]);
+		*ticksLeft = soonest;
+	}
+	return revives.pending;
+}
 
 void ProcessPersistentSkills(Player &player)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
 		return;
 	KeepGolemAlive(player);
-	KeepSkeletonsAlive(player, PersistentSkill::SkeletalWarriors, SkeletonMinionType, SkeletalWarriorCount(player.getCharacterLevel()), player.poe2.skeletonCooldown);
-	KeepSkeletonsAlive(player, PersistentSkill::SkeletalMages, SkeletonMageMinionType, SkeletalMageCount(player.getCharacterLevel()), player.poe2.mageCooldown);
+	for (size_t i = 0; i < MinionCountSkills.size(); i++) {
+		const PersistentSkill skill = MinionCountSkills[i];
+		KeepSkeletonsAlive(player, skill, skill == PersistentSkill::SkeletalMages ? SkeletonMageMinionType : SkeletonMinionType, player.poe2.minionRevives[i]);
+	}
 	ProcessSpiritSkills(player);
 }
 

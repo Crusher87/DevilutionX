@@ -375,7 +375,7 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 		lines.emplace_back(FormatRuntime(_("{:d} mana"), WeaponSkillManaCost(gem.skill.attack())), UiFlags::ColorWhite);
 	} else if (gem.skill.kind == SkillKind::Persistent) {
 		lines.emplace_back(std::string(PersistentSkillDescription(gem.skill.persistent())), UiFlags::ColorWhite);
-		lines.emplace_back(FormatRuntime(_("Reserves {:d} Spirit"), SpiritReservation(gem.skill.persistent())), UiFlags::ColorWhite);
+		lines.emplace_back(SpiritCostText(gem.skill.persistent(), 1), UiFlags::ColorWhite);
 	} else {
 		lines.emplace_back(FormatRuntime(_("Grants the {:s} spell"), GemName(gem)), UiFlags::ColorWhite);
 	}

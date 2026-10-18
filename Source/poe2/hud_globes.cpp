@@ -273,7 +273,7 @@ void DrawPoe2ManaGlobe(const Surface &out, bool dome)
 	const Player &player = *MyPlayer;
 	const int maxSpirit = MaxSpirit(player);
 	DrawGlobe(out, *pManaBuff, ManaGlobeX, GlobeLiquid::Mana, player._pManaPer, dome, false, SpiritArc,
-	    LitArcSegments(ReservedSpirit(player), maxSpirit, SpiritArc.segments), maxSpirit > 0);
+	    LitArcSegments(AvailableSpirit(player), maxSpirit, SpiritArc.segments), maxSpirit > 0);
 }
 
 bool IsHoveringLifeGlobe()
@@ -296,7 +296,8 @@ void DrawPoe2GlobeValues(const Surface &out)
 	}
 	const int maxSpirit = MaxSpirit(player);
 	if (maxSpirit > 0 && (*GetOptions().Gameplay.showManaValues || IsHoveringGlobe(ManaGlobeX))) {
-		DrawShadowedValue(out, StrCat("Spirit ", ReservedSpirit(player), "/", maxSpirit),
+		// Like POE2, the Spirit not reserved yet.
+		DrawShadowedValue(out, StrCat("Spirit ", AvailableSpirit(player), "/", maxSpirit),
 		    panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 44 }, UiFlags::ColorGold);
 	}
 	// Rage, Combo and Frenzy charges only show while built up.

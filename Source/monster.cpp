@@ -2469,7 +2469,7 @@ void LeoricAi(Monster &monster)
 		    && ((distanceToEnemy >= 3 && v < 4 * monster.intelligence + 35) || v < 6)
 		    && LineClearMissile(monster.position.tile, monster.enemyPosition)) {
 			const Point newPosition = monster.position.tile + md;
-			if (IsTileAvailable(monster, newPosition) && ActiveMonsterCount < MaxMonsters) {
+			if (IsTileAvailable(monster, newPosition) && ActiveMonsterCount < MaxEnemyMonsters()) {
 				auto typeIndex = GetRandomSkeletonTypeIndex();
 				if (typeIndex) {
 					SpawnMonster(newPosition, md, *typeIndex);
@@ -3105,7 +3105,7 @@ void HorkDemonAi(Monster &monster)
 	if (monster.goal == MonsterGoal::Normal) {
 		if ((distanceToEnemy >= 3) && v < 2 * monster.intelligence + 43) {
 			const Point position = monster.position.tile + monster.direction;
-			if (IsTileAvailable(monster, position) && ActiveMonsterCount < MaxMonsters) {
+			if (IsTileAvailable(monster, position) && ActiveMonsterCount < MaxEnemyMonsters()) {
 				StartRangedSpecialAttack(monster, MissileID::HorkSpawn, 0);
 			}
 		} else if (distanceToEnemy < 2) {
@@ -3348,7 +3348,8 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	monster.ai = MonsterAIID::Golem;
 	monster.goalVar3 = static_cast<int8_t>(ownerPlayerId);
 	const Player &player = Players[ownerPlayerId];
-	const int level = player.getCharacterLevel();
+	// Like POE2, the gem's level makes the minions stronger: a gem at the right level for its owner fights at the owner's level.
+	const int level = MinionLevelForGemLevel(gemLevel);
 	// Mages stay back and hurl fire, so they are frailer than the warriors.
 	const int lifePercent = monster.type().type == SkeletonMageMinionType ? 60 : 100;
 	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
@@ -3520,7 +3521,7 @@ void InitLevelMonsters()
 
 	ClrAllMonsters();
 	ActiveMonsterCount = 0;
-	totalmonsters = MaxMonsters;
+	totalmonsters = MaxEnemyMonsters();
 
 	std::iota(std::begin(ActiveMonsters), std::end(ActiveMonsters), 0U);
 	uniquetrans = 0;
@@ -3832,8 +3833,9 @@ std::expected<void, std::string> InitMonsters()
 			numplacemonsters = numplacemonsters * static_cast<size_t>(map[MapAxis::PackSize]) / 100;
 			numplacemonsters = numplacemonsters * static_cast<size_t>(100 + map[MapDanger::MorePacks]) / 100;
 		}
-		if (ActiveMonsterCount + numplacemonsters > MaxMonsters - 10)
-			numplacemonsters = MaxMonsters - 10 - ActiveMonsterCount;
+		const size_t room = MaxEnemyMonsters() - 10;
+		if (ActiveMonsterCount + numplacemonsters > room)
+			numplacemonsters = ActiveMonsterCount < room ? room - ActiveMonsterCount : 0;
 		totalmonsters = ActiveMonsterCount + numplacemonsters;
 		int numscattypes = 0;
 		size_t scattertypes[NUM_MAX_MTYPES];
@@ -3901,9 +3903,14 @@ std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point s
 	return {};
 }
 
+size_t MaxEnemyMonsters()
+{
+	return gbIsPoe2 ? MaxMonsters - MinionMonsterSlots : MaxMonsters;
+}
+
 Monster *AddMonster(Point position, Direction dir, size_t typeIndex, bool inMap)
 {
-	if (ActiveMonsterCount < MaxMonsters) {
+	if (ActiveMonsterCount < MaxEnemyMonsters()) {
 		Monster &monster = Monsters[ActiveMonsters[ActiveMonsterCount++]];
 		if (inMap)
 			monster.occupyTile(position, false);
@@ -3916,7 +3923,7 @@ Monster *AddMonster(Point position, Direction dir, size_t typeIndex, bool inMap)
 
 void SpawnMonster(Point position, Direction dir, size_t typeIndex)
 {
-	if (ActiveMonsterCount >= MaxMonsters)
+	if (ActiveMonsterCount >= MaxEnemyMonsters())
 		return;
 
 	// The command is only executed for the level owner, to prevent desyncs in multiplayer.

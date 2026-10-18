@@ -97,14 +97,78 @@ TEST_F(Poe2SpiritTest, SpiritGemsAreSkillGems)
 	}
 }
 
-TEST_F(Poe2SpiritTest, SkeletalWarriorsGrowWithLevel)
+TEST_F(Poe2SpiritTest, SkeletalWarriorsGrewWithLevelInOldSaves)
 {
 	EXPECT_EQ(SkeletalWarriorCount(1), 2);
 	EXPECT_EQ(SkeletalWarriorCount(10), 3);
 	EXPECT_EQ(SkeletalWarriorCount(25), 4);
 	EXPECT_EQ(SkeletalWarriorCount(50), 4);
-	// Fits in the Spirit from the first skull, unlike the golem.
-	EXPECT_LE(SpiritReservation(PersistentSkill::SkeletalWarriors), SpiritSkullSpirit[0]);
+}
+
+TEST_F(Poe2SpiritTest, MinionGemsReserveSpiritPerMinion)
+{
+	Player &player = *MyPlayer;
+	constexpr PersistentSkill Warriors = PersistentSkill::SkeletalWarriors;
+	player.poe2.spiritSkulls = 1;
+	SocketSkill(player, 0, SkillSlot::ForPersistent(Warriors));
+	player.poe2.slotLevels[0] = 4;
+	// POE2: the first 2 skeletons are free, so they need no Spirit at all.
+	EXPECT_EQ(ChosenMinionCount(player, Warriors), 2);
+	EXPECT_EQ(ActiveMinionCount(player, Warriors), 2);
+	EXPECT_EQ(ReservedSpirit(player), 0);
+	EXPECT_EQ(SpiritPerMinion(player, Warriors), 27);
+	EXPECT_EQ(AffordableMinionCount(player, Warriors), 3);
+
+	SetChosenMinionCount(player, Warriors, 3);
+	EXPECT_EQ(ReservedSpirit(player), 27);
+	EXPECT_EQ(AvailableSpirit(player), 3);
+	EXPECT_EQ(GemSpiritReservation(player, Warriors), 27);
+
+	// Short of Spirit, the gem keeps as many as fit.
+	SetChosenMinionCount(player, Warriors, 4);
+	EXPECT_EQ(ActiveMinionCount(player, Warriors), 3);
+	EXPECT_EQ(ReservedSpirit(player), 27);
+	EXPECT_TRUE(IsPersistentSkillActive(player, Warriors));
+
+	// A higher gem level costs less per minion.
+	player.poe2.slotLevels[0] = 20;
+	EXPECT_EQ(SpiritPerMinion(player, Warriors), 20);
+	EXPECT_EQ(ActiveMinionCount(player, Warriors), 3);
+
+	// None at all is a choice, not a lack of Spirit.
+	SetChosenMinionCount(player, Warriors, 0);
+	EXPECT_FALSE(IsPersistentSkillActive(player, Warriors));
+	EXPECT_EQ(GetSkillUsability(player, SkillSlot::ForPersistent(Warriors)), SkillUsability::Ready);
+	SetChosenMinionCount(player, Warriors, 99);
+	EXPECT_EQ(ChosenMinionCount(player, Warriors), MaxMinionsPerGem);
+}
+
+TEST_F(Poe2SpiritTest, SkeletalMagesHaveNoFreeMinions)
+{
+	Player &player = *MyPlayer;
+	constexpr PersistentSkill Mages = PersistentSkill::SkeletalMages;
+	player.poe2.spiritSkulls = 1;
+	SocketSkill(player, 0, SkillSlot::ForPersistent(Mages));
+	player.poe2.slotLevels[0] = 4;
+	EXPECT_EQ(ChosenMinionCount(player, Mages), 1);
+	EXPECT_EQ(SpiritPerMinion(player, Mages), 47);
+	EXPECT_FALSE(IsPersistentSkillActive(player, Mages));
+	EXPECT_EQ(GetSkillUsability(player, SkillSlot::ForPersistent(Mages)), SkillUsability::Spirit);
+	player.poe2.spiritSkulls = AllSpiritSkulls;
+	EXPECT_EQ(ActiveMinionCount(player, Mages), 1);
+	EXPECT_EQ(ReservedSpirit(player), 47);
+}
+
+TEST_F(Poe2SpiritTest, MinionsFightAtTheirGemsLevel)
+{
+	// A gem at the right level for the character fights at least at the character's level; one level lower, below it.
+	for (int level = 2; level <= 50; level++) {
+		const int gem = MaxGemLevelForCharacter(level);
+		EXPECT_GE(MinionLevelForGemLevel(gem), level) << level;
+		if (gem > 1)
+			EXPECT_LT(MinionLevelForGemLevel(gem - 1), level) << level;
+	}
+	EXPECT_EQ(MinionLevelForGemLevel(MaxGemLevel), 50);
 }
 
 TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
