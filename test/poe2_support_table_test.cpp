@@ -97,7 +97,7 @@ TEST_F(Poe2SupportTableTest, EveryTableSupportHasAnItemAndFitsSomething)
 		if (IsLineageSupport(data.gem))
 			lineage++;
 	}
-	EXPECT_EQ(SupportTable().size(), 76U);
+	EXPECT_EQ(SupportTable().size(), 79U);
 	EXPECT_EQ(lineage, 16U);
 	EXPECT_EQ(FindSupportData(SupportGem::Empower), nullptr);
 }

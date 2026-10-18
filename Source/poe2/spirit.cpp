@@ -60,6 +60,8 @@ void HeraldHit(Monster &monster, DamageType damageType, Fixed26_6 damage)
 	Player &player = *MyPlayer;
 	TelemetryNoteDamageSource(damageType == DamageType::Fire ? "Herald of Ash" : damageType == DamageType::Lightning ? "Herald of Thunder"
 	                                                                                                                 : "Herald of Frost");
+	// The monster's resistance and curses count, like for any other hit.
+	damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * MonsterDamageTakenPercent(monster, damageType) / 100));
 	ApplyMonsterDamage(damageType, monster, damage);
 	monster.tag(player);
 	TryInflictAilment(monster, player, damageType, damage);

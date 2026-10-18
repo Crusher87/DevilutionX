@@ -880,3 +880,6 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Lesser Jeweller's Orb	Orb	5	0	0	0	0	0	0	0	0		ORB_LESSER_JEWELLER	Null	true	1500
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Greater Jeweller's Orb	Orb	18	0	0	0	0	0	0	0	0		ORB_GREATER_JEWELLER	Null	true	6000
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Perfect Jeweller's Orb	Orb	35	0	0	0	0	0	0	0	0		ORB_PERFECT_JEWELLER	Null	true	20000
+	0	Misc	Unequippable	RUNE_OF_FIRE	Misc	NONE	Fire Penetration Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Lightning Penetration Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Cold Penetration Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800

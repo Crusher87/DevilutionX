@@ -230,6 +230,10 @@ enum class SupportGem : uint8_t {
 	AndarielsAnguish,
 	BaalsEcho,
 	WirtsLeg,
+	/** Penetration supports (Curtis 2026-10-18, with POE2-style monster resistances). */
+	FirePenetration,
+	LightningPenetration,
+	ColdPenetration,
 	Count,
 };
 

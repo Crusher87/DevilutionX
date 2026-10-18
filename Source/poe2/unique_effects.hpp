@@ -120,7 +120,10 @@ void OnMonsterFrozen(const Player &player);
 /** @brief Bleeding, exposure, electrocution and spreading ignites, each game tick. */
 void ProcessUniqueMonsterAilments(Monster &monster);
 /** @brief More damage the monster takes from exposure and electrocution, in percent. */
+/** @brief Damage the monster takes in percent: its resistance, curses, exposure, supports and more. */
 [[nodiscard]] int MonsterDamageTakenPercent(const Monster &monster, DamageType type);
+/** @brief The local player's penetration for the hit in progress: its supports' and the uniques'. */
+[[nodiscard]] int HitPenetration(DamageType type);
 [[nodiscard]] bool IsMonsterElectrocuted(const Monster &monster);
 /** @brief How much a hindered (bleeding) monster is slowed, in percent. */
 [[nodiscard]] int MonsterHinderPercent(const Monster &monster);

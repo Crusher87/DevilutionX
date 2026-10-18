@@ -129,8 +129,7 @@ void ApplyMonsterRarity(Monster &monster)
 		boost(monster.minDamageSpecial);
 		boost(monster.maxDamageSpecial);
 	}
-	if (affixes.has(MonsterMod::Resistant))
-		monster.resistance |= RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING;
+	// MonsterMod::Resistant adds to the monster's resistances where they are worked out (monster_resistance.cpp).
 }
 
 std::string_view MonsterModName(MonsterMod mod)

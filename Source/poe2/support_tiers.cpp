@@ -138,6 +138,16 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::ComboFinisher, 1, 1, 100, { 25, 3, 0 }, "With 3 Combo or more, spends it all\nfor 25% more damage" },
 	{ SG::ComboFinisher, 2, 3, 100, { 40, 5, 0 }, "With 5 Combo or more, spends it all\nfor 40% more damage" },
 	{ SG::MixedHost, 1, 3, 100, {}, "Minions deal 7% more damage for each\nkind of minion you have" },
+	// Penetration I-III: resistance the hits get past.
+	{ SG::FirePenetration, 1, 2, 100, { 15, 0, 0 }, "Fire hits penetrate 15% of the\nmonster's fire resistance" },
+	{ SG::FirePenetration, 2, 3, 100, { 20, 0, 0 }, "Fire hits penetrate 20% of the\nmonster's fire resistance" },
+	{ SG::FirePenetration, 3, 5, 100, { 25, 0, 0 }, "Fire hits penetrate 25% of the\nmonster's fire resistance" },
+	{ SG::LightningPenetration, 1, 2, 100, { 15, 0, 0 }, "Lightning hits penetrate 15% of the\nmonster's lightning resistance" },
+	{ SG::LightningPenetration, 2, 3, 100, { 20, 0, 0 }, "Lightning hits penetrate 20% of the\nmonster's lightning resistance" },
+	{ SG::LightningPenetration, 3, 5, 100, { 25, 0, 0 }, "Lightning hits penetrate 25% of the\nmonster's lightning resistance" },
+	{ SG::ColdPenetration, 1, 2, 100, { 15, 0, 0 }, "Cold hits penetrate 15% of the\nmonster's magic resistance" },
+	{ SG::ColdPenetration, 2, 3, 100, { 20, 0, 0 }, "Cold hits penetrate 20% of the\nmonster's magic resistance" },
+	{ SG::ColdPenetration, 3, 5, 100, { 25, 0, 0 }, "Cold hits penetrate 25% of the\nmonster's magic resistance" },
 };
 
 } // namespace

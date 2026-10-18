@@ -796,6 +796,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/loot.cpp
   poe2/modifiers.cpp
   poe2/monster_mods.cpp
+  poe2/monster_resistance.cpp
   poe2/passive_tree.cpp
   poe2/regen.cpp
   poe2/skill_gems.cpp

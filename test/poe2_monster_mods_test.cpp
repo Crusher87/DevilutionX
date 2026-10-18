@@ -6,6 +6,8 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
+#include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
 #include "tables/monstdat.h"
 
@@ -133,7 +135,69 @@ TEST_F(Poe2MonsterModsTest, ModifiersChangeTheMonster)
 
 	Monster resistant = MakeMonster(FindSeed(MonsterRarity::Magic, MonsterMod::Resistant));
 	ApplyMonsterRarity(resistant);
-	EXPECT_NE(resistant.resistance & RESIST_FIRE, 0);
+	EXPECT_EQ(resistant.resistance, 0);
+	EXPECT_EQ(MonsterResistance(resistant, DamageType::Fire), ResistantModPercent);
+	EXPECT_EQ(MonsterResistance(resistant, DamageType::Magic), ResistantModPercent);
+	EXPECT_EQ(MonsterResistance(resistant, DamageType::Physical), 0);
+}
+
+TEST_F(Poe2MonsterModsTest, DiablosMarksArePercentages)
+{
+	Monster zombie = MakeMonster(1);
+	zombie.resistance = IMMUNE_MAGIC | RESIST_FIRE;
+	ASSERT_EQ(GetMonsterAffixes(zombie).rarity, MonsterRarity::Normal);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), ResistMarkPercent);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Lightning), 0);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), MagicImmuneMarkPercent);
+	EXPECT_EQ(ResistanceMarkPercent(IMMUNE_FIRE, DamageType::Fire), ImmuneMarkPercent);
+	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Magic), MagicResistMarkPercent);
+	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE), "Resistances: Fire 30%, Magic 40%");
+	EXPECT_EQ(ResistanceMarksText(0), "No resistances");
+
+	// A magic-immune zombie takes 60% of Ice Bolt's damage rather than none.
+	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - MagicImmuneMarkPercent);
+
+	gbIsPoe2 = false;
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), 0);
+	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2MonsterModsTest, CursesAndExposureLowerResistance)
+{
+	Monster zombie = MakeMonster(1);
+	zombie.resistance = IMMUNE_MAGIC;
+	zombie.poe2.lowerResistTicks = 10;
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), MagicImmuneMarkPercent - LowerResistCursePercent);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), -LowerResistCursePercent);
+	zombie.poe2.exposureTicks = 10;
+	zombie.poe2.exposureElement = static_cast<uint8_t>(DamageType::Magic);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), MagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), -LowerResistCursePercent);
+	// Below zero the monster takes more damage.
+	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - (MagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent));
+
+	// Rare and unique monsters shrug off part of it.
+	Monster rare = MakeMonster(FindSeed(MonsterRarity::Rare, MonsterMod::ExtraLife));
+	rare.poe2.lowerResistTicks = 10;
+	EXPECT_EQ(CurseEffectPercent(rare), 70);
+	EXPECT_EQ(MonsterResistanceLowered(rare, DamageType::Fire), LowerResistCursePercent * 70 / 100);
+	Monster unique = MakeMonster(1);
+	unique.uniqueType = UniqueMonsterType::Garbud;
+	EXPECT_EQ(CurseEffectPercent(unique), 50);
+}
+
+TEST_F(Poe2MonsterModsTest, ResistanceIsCappedAndPenetrationStopsAtZero)
+{
+	Monster lord = MakeMonster(FindSeed(MonsterRarity::Rare, MonsterMod::Resistant));
+	lord.resistance = IMMUNE_FIRE;
+	EXPECT_EQ(MonsterBaseResistance(lord, DamageType::Fire), ImmuneMarkPercent + ResistantModPercent);
+	EXPECT_EQ(MonsterResistance(lord, DamageType::Fire), MaxMonsterResistance);
+	EXPECT_EQ(MonsterHitResistance(lord, DamageType::Fire, 25), MaxMonsterResistance - 25);
+	EXPECT_EQ(MonsterHitResistance(lord, DamageType::Fire, 200), 0);
+
+	Monster cursed = MakeMonster(1);
+	cursed.poe2.lowerResistTicks = 10;
+	EXPECT_EQ(MonsterHitResistance(cursed, DamageType::Fire, 25), -LowerResistCursePercent);
 }
 
 TEST_F(Poe2MonsterModsTest, RegeneratingMonstersHeal)

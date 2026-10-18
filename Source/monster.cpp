@@ -85,6 +85,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
@@ -4871,9 +4872,10 @@ void PrintMonstHistory(int mt)
 	}
 	if (MonsterKillCounts[mt] >= 15) {
 		int res = (sgGameInitInfo.nDifficulty != DIFF_HELL) ? MonstersData[mt].resistance : MonstersData[mt].resistanceHell;
-		if (gbIsPoe2) // immunities are resistances in POE2 mode
-			res = (res & ~(IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) | ((res & (IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) >> 3);
-		if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
+		if (gbIsPoe2) {
+			// POE2 Mashup: resistances are percentages, and no monster is immune.
+			AddInfoBoxString(ResistanceMarksText(static_cast<uint16_t>(res)));
+		} else if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
 			AddInfoBoxString(_("No magic resistance"));
 		} else {
 			if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING)) != 0) {
@@ -4907,6 +4909,10 @@ void PrintUniqueHistory()
 		AddInfoBoxString(FormatRuntime(_("Type: {:s}"), GetMonsterTypeText(monster.data())));
 	}
 
+	if (gbIsPoe2) {
+		AddInfoBoxString(ResistanceMarksText(monster.resistance));
+		return;
+	}
 	const int res = monster.shownResistance() & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
 	if (res == 0) {
 		AddInfoBoxString(_("No resistances"));

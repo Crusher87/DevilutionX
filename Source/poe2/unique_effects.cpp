@@ -15,6 +15,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
@@ -227,8 +228,6 @@ Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, in
 {
 	if (raw <= 0 || monster.hasNoLife() || monster.isImmune(MissileID::Arrow, type))
 		return Fixed26_6::fromInt(0);
-	if (type != DamageType::Physical && monster.isResistant(MissileID::Arrow, type))
-		raw >>= 2;
 	// Element damage adds to the attack's increased damage rather than multiplying it.
 	if (const int element = PassiveElementDamage(player, type); element != 0) {
 		const int64_t increased = std::max(100 + player._pIBonusDam, 1);
@@ -644,8 +643,6 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 			percent = percent * (100 + more) / 100;
 	}
 	percent = percent * HitConditionPercent(player, monster) / 100;
-	if (const int penetration = Rule(player, UniqueRule::MemoryPenetration); penetration > 0 && state.memoryTicks > 0 && static_cast<uint8_t>(type) == state.memoryElement)
-		percent = percent * (100 + penetration) / 100;
 	if (const int cap = Rule(player, UniqueRule::SpellsSpendEnergyShield); cap > 0 && player.poe2.maxEnergyShield > 0)
 		percent = percent * (100 + std::min<int>(static_cast<int>(static_cast<int64_t>(state.shieldSpent) * 100 / (player.poe2.maxEnergyShield * 64)), cap)) / 100;
 	if (const int seconds = Rule(player, UniqueRule::BossEchoes); seconds > 0 && state.bossEchoTicks == 0
@@ -893,8 +890,6 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 	if (!gbIsPoe2)
 		return 100;
 	int percent = 100;
-	if (monster.poe2.exposureTicks > 0 && static_cast<uint8_t>(type) == monster.poe2.exposureElement)
-		percent += ExposurePercent * MapExposurePercent() / 100;
 	// Amplify Damage and Smite's armour break.
 	if (type == DamageType::Physical) {
 		if (monster.poe2.amplifyTicks > 0)
@@ -902,11 +897,8 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		if (monster.poe2.armourBreakTicks > 0)
 			percent += ArmourBreakDamagePercent;
 	}
-	// Death Mark, Lower Resist and Decrepify.
+	// Death Mark and Decrepify.
 	percent += TableCurseDamageTakenPercent(monster, type);
-	// Waystones can give map monsters more elemental resistance.
-	if (IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic) && !monster.isPlayerMinion())
-		percent -= MapMonsterResistance();
 	if (type == DamageType::Lightning && IsMonsterElectrocuted(monster) && MyPlayer != nullptr)
 		percent += Rule(*MyPlayer, UniqueRule::ElectrocutedLightning);
 	// Talismans and desecrated modifiers that favour hunting rare and unique monsters.
@@ -918,7 +910,23 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 	}
 	// The supports of the hit in progress, and wither.
 	percent = percent * SupportHitDamagePercent(monster, type) / 100;
+	// The monster's resistance, which curses and exposure lower and the hit's penetration gets past.
+	percent = percent * (100 - MonsterHitResistance(monster, type, HitPenetration(type))) / 100;
 	return std::max(percent, 0);
+}
+
+int HitPenetration(DamageType type)
+{
+	if (!gbIsPoe2)
+		return 0;
+	int penetration = SupportHitPenetration(type);
+	// Storm Thesis and its kind: spells penetrate the resistance of the remembered element.
+	if (MyPlayer != nullptr) {
+		const UniqueRuleState &state = State(*MyPlayer);
+		if (const int memory = Rule(*MyPlayer, UniqueRule::MemoryPenetration); memory > 0 && state.lastHitBySpell && state.memoryTicks > 0 && static_cast<uint8_t>(type) == state.memoryElement)
+			penetration += memory;
+	}
+	return penetration;
 }
 
 bool IsMonsterElectrocuted(const Monster &monster)

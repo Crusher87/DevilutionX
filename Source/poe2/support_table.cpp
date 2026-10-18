@@ -132,6 +132,10 @@ const SupportData Table[] = {
 	{ SG::AndarielsAnguish, "Andariel's Anguish", "Hits leave Anguish: 10% of the hit again\neach second for 4s, up to 5; can't ignite", "Needs a damaging skill", GC::Dexterity, 0, 120, 0, DamageSkill, 0, SF_Lineage, NoFamily },
 	{ SG::BaalsEcho, "Baal's Echo", "A shadow repeats the skill half a second\nlater at 40% damage", "Needs an attack or spell", GC::Magic, 0, 130, ST_Attack | ST_Spell, ST_Damage, ST_Channelling | ST_Movement, SF_Lineage, Repeat },
 	{ SG::WirtsLeg, "Wirt's Leg", "10% chance for a hit to deal 300% damage\nand knock back; you move 10% slower", "Needs a melee attack", GC::Strength, 0, 100, 0, ST_Melee, 0, SF_Lineage, NoFamily },
+	// Penetration: hits get past part of the monster's resistance, never below 0.
+	{ SG::FirePenetration, "Fire Penetration", "Fire hits penetrate 15% of the\nmonster's fire resistance", "Needs a fire skill", GC::Strength, 3, 100, 0, ST_Fire, 0, 0, NoFamily },
+	{ SG::LightningPenetration, "Lightning Penetration", "Lightning hits penetrate 15% of the\nmonster's lightning resistance", "Needs a lightning skill", GC::Dexterity, 3, 100, 0, ST_Lightning, 0, 0, NoFamily },
+	{ SG::ColdPenetration, "Cold Penetration", "Cold hits penetrate 15% of the\nmonster's magic resistance", "Needs a cold skill", GC::Magic, 3, 100, 0, ST_Frost, 0, 0, NoFamily },
 };
 // clang-format on
 
@@ -1126,6 +1130,22 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 	Hit.lastType = type;
 	if (type == DamageType::Physical)
 		Hit.physical += damage.raw();
+}
+
+int SupportHitPenetration(DamageType type)
+{
+	if (Hit.depth == 0 || Hit.finishing || Hit.player == nullptr || Hit.skill.isEmpty())
+		return 0;
+	switch (type) {
+	case DamageType::Fire:
+		return Value(*Hit.player, Hit.skill, SG::FirePenetration, 0);
+	case DamageType::Lightning:
+		return Value(*Hit.player, Hit.skill, SG::LightningPenetration, 0);
+	case DamageType::Magic:
+		return Value(*Hit.player, Hit.skill, SG::ColdPenetration, 0);
+	default:
+		return 0;
+	}
 }
 
 int SupportHitDamagePercent(const Monster &monster, DamageType type)

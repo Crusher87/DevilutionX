@@ -51,6 +51,7 @@
 #include "poe2/hit_trace.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -367,11 +368,15 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		if (crit)
 			dam = dam * CritDamagePercent(player) / 100;
 	}
-	const bool resist = monster.isResistant(t, damageType);
+	// POE2 Mashup: resistance is a percentage, and only a very resistant monster doesn't flinch.
+	const bool resist = gbIsPoe2 ? MonsterResistance(monster, damageType) >= FlinchProofResistance : monster.isResistant(t, damageType);
 	if (!shift)
 		dam <<= 6;
-	if (resist)
+	if (!gbIsPoe2 && resist)
 		dam >>= 2;
+	// An elemental arrow meets its element's resistance here: its hit is split into packets as if it were physical.
+	if (isAttack && gbIsPoe2)
+		dam = static_cast<int>(static_cast<int64_t>(dam) * (100 - MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType))) / 100);
 
 	if (isAttack && gbIsPoe2) {
 		// POE2 Mashup: an arrow hits like an attack, with the uniques' conversions and ailments.
@@ -1158,11 +1163,13 @@ bool MonsterTrapHit(Monster &monster, int mindam, int maxdam, int dist, MissileI
 			return false;
 	}
 
-	const bool resist = monster.isResistant(t, damageType);
+	const bool resist = gbIsPoe2 ? MonsterResistance(monster, damageType) >= FlinchProofResistance : monster.isResistant(t, damageType);
 	int dam = RandomIntBetween(mindam, maxdam);
 	if (!shift)
 		dam <<= 6;
-	if (resist)
+	if (gbIsPoe2)
+		dam = dam * (100 - MonsterResistance(monster, damageType)) / 100;
+	else if (resist)
 		dam /= 4;
 	ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
 #ifdef _DEBUG

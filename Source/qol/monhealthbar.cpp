@@ -15,6 +15,8 @@
 #include "engine/render/primitive_render.hpp"
 #include "game_mode.hpp"
 #include "options.h"
+#include "poe2/monster_resistance.hpp"
+#include "tables/misdat.h"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -162,6 +164,16 @@ void DrawMonsterHealthBar(const Surface &out)
 
 		int resOffset = 5;
 		for (size_t i = 0; i < 3; i++) {
+			if (gbIsPoe2) {
+				// POE2 Mashup: the big icon for 50% or more, the small one below; the numbers are on the banner.
+				constexpr DamageType Types[] = { DamageType::Magic, DamageType::Fire, DamageType::Lightning };
+				const int percent = MonsterResistance(monster, Types[i]);
+				if (percent > 0) {
+					RenderClxSprite(out, (*resistance)[(i * 2) + (percent >= 50 ? 1 : 0)], position + Displacement { resOffset, height - 6 });
+					resOffset += (*resistance)[0].width() + 2;
+				}
+				continue;
+			}
 			if ((monster.shownResistance() & immunes[i]) != 0) {
 				RenderClxSprite(out, (*resistance)[(i * 2) + 1], position + Displacement { resOffset, height - 6 });
 				resOffset += (*resistance)[0].width() + 2;

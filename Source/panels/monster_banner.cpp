@@ -10,11 +10,14 @@
 #include "engine/palette.h"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "game_mode.hpp"
 #include "levels/gendung.h"
 #include "monster.h"
 #include "panels/poe2_widgets.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
+#include "tables/misdat.h"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -116,6 +119,24 @@ std::string ResistanceText(const Monster &monster)
 {
 	if (!monster.isUnique() && MonsterKillCounts[monster.type().type] < 15)
 		return {};
+	if (gbIsPoe2) {
+		// POE2 Mashup: the resistances as they are now, curses and exposure included (Curtis 2026-10-18).
+		constexpr struct {
+			DamageType type;
+			const char *name;
+		} Poe2Elements[] = {
+			{ DamageType::Fire, N_("Fire") },
+			{ DamageType::Lightning, N_("Lightning") },
+			{ DamageType::Magic, N_("Magic") },
+		};
+		std::string text;
+		for (const auto &element : Poe2Elements) {
+			const int resistance = MonsterResistance(monster, element.type);
+			if (resistance != 0)
+				StrAppend(text, text.empty() ? "" : "   ", _(element.name), " ", resistance, "%");
+		}
+		return text;
+	}
 	constexpr struct {
 		uint16_t resist;
 		uint16_t immune;

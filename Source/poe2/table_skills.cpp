@@ -126,7 +126,7 @@ const TableSkillData Table[] = {
 	{ WS::Weaken, "Weaken", "Curses enemies to hit 30% softer", 3, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Weaken, TableBuff::None, TT_Occult, Icon(SpellIcon::Mana), TableCurve::Boneshatter, 100 },
 	{ WS::IronMaiden, "Iron Maiden", "Curses enemies so their melee hits wound them as well", 5, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::IronMaiden, TableBuff::None, TT_Occult, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 100 },
 	{ WS::Decrepify, "Decrepify", "Curses enemies to move slowly, hit softer and take more physical damage", 7, 10, TW::None, 1, Curse, Flat, 0, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Decrepify, TableBuff::None, TT_Occult, Icon(SpellIcon::StoneCurse), TableCurve::Boneshatter, 100 },
-	{ WS::LowerResist, "Lower Resist", "Curses enemies to take 30% more fire, lightning and cold damage", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::LowerResist, TableBuff::None, TT_Occult | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 100 },
+	{ WS::LowerResist, "Lower Resist", "Curses enemies with -30% to fire, lightning and magic resistance", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::LowerResist, TableBuff::None, TT_Occult | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 100 },
 	{ WS::Confuse, "Confuse", "Curses enemies to attack each other for 6 seconds", 11, 12, TW::None, 1, Curse, Flat, 0, 2, 120, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Confuse, TableBuff::None, TT_Occult, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 100 },
 	{ WS::Attract, "Attract", "Turns a whole pack on each other for 3 seconds", 13, 14, TW::None, 1, Curse, Flat, 0, 5, 60, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Attract, TableBuff::None, TT_Occult, Icon(SpellIcon::Telekinesis), TableCurve::Boneshatter, 100 },
 };
@@ -140,7 +140,6 @@ constexpr int HolyShieldPercent = 15;
 /** Traps and sentries out at once, per skill. */
 constexpr int MaxPlacedZones = 3;
 constexpr int ShieldWallPercent = 40;
-constexpr int LowerResistPercent = 30;
 constexpr int DeathMarkPercent = 25;
 constexpr int SoulDamagePercent = 3;
 constexpr int MaxSouls = 10;
@@ -978,8 +977,6 @@ int TableCurseDamageTakenPercent(const Monster &monster, DamageType type)
 	int percent = 0;
 	if (monster.poe2.deathMarkTicks > 0)
 		percent += DeathMarkPercent;
-	if (monster.poe2.lowerResistTicks > 0 && IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic))
-		percent += LowerResistPercent;
 	if (monster.poe2.decrepifyTicks > 0 && type == DamageType::Physical)
 		percent += DecrepifyPercent;
 	return percent;

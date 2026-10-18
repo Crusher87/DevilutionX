@@ -113,8 +113,9 @@ TEST_F(Poe2TableSkillsTest, CursesMakeMonstersTakeMoreDamage)
 	EXPECT_GT(TableCurseDamageTakenPercent(monster, DamageType::Physical), 0);
 	monster.poe2.deathMarkTicks = 0;
 	monster.poe2.lowerResistTicks = 10;
+	// Lower Resist lowers resistance rather than adding damage taken.
 	EXPECT_EQ(TableCurseDamageTakenPercent(monster, DamageType::Physical), 0);
-	EXPECT_GT(TableCurseDamageTakenPercent(monster, DamageType::Fire), 0);
+	EXPECT_EQ(TableCurseDamageTakenPercent(monster, DamageType::Fire), 0);
 	ProcessTableCurses(monster);
 	EXPECT_EQ(monster.poe2.lowerResistTicks, 9);
 }

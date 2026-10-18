@@ -127,6 +127,8 @@ void SetMissileSkill(Missile &missile, const Player &player, SkillSlot skill);
 void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage);
 /** @brief More or less damage from the supports of the hit in progress, and from wither, in percent. */
 int SupportHitDamagePercent(const Monster &monster, DamageType type);
+/** @brief The penetration supports of the hit in progress, against the damage type's resistance. */
+int SupportHitPenetration(DamageType type);
 /** @brief Ailment chance of the hit in progress, in percent of normal. */
 int SupportAilmentChancePercent(DamageType type);
 /** @brief Ailment strength of the hit in progress (ignite damage, cold buildup), in percent of normal. */
