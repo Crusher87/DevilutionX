@@ -1654,27 +1654,47 @@ void ScanFluids(const Surface &world, const View &view)
 		return;
 	}
 	const std::array<uint8_t, 32> kinds = FluidColours(last);
+	// The samples and patches are fixed to the dungeon, not the screen, so a patch's glow doesn't flicker as the camera
+	// moves over it (Curtis 2026-10-18: "it flashes weird on cells").
 	constexpr int Step = 8;
-	constexpr int Cell = 32;
-	constexpr int SamplesPerCell = (Cell / Step) * (Cell / Step);
+	constexpr int Cell = 48;
+	const auto floorDiv = [](int value, int by) { return value >= 0 ? value / by : -((-value + by - 1) / by); };
+	const int scale = CameraScale > 1.5F ? 2 : 1;
 	const int width = world.w();
 	const int height = world.h();
-	const int columns = (width + Cell - 1) / Cell;
-	const int rows = (height + Cell - 1) / Cell;
+	const int originX = static_cast<int>(std::floor(CameraOrigin.x));
+	const int originY = static_cast<int>(std::floor(CameraOrigin.y));
+	const int worldWidth = width / scale;
+	const int worldHeight = height / scale;
+	const int firstColumn = floorDiv(originX, Cell);
+	const int firstRow = floorDiv(originY, Cell);
+	const int columns = floorDiv(originX + worldWidth - 1, Cell) - firstColumn + 1;
+	const int rows = floorDiv(originY + worldHeight - 1, Cell) - firstRow + 1;
 	struct Patch {
+		int samples = 0;
 		int lava = 0;
 		int water = 0;
 		float light = 0;
 		float r = 0, g = 0, b = 0;
 	};
 	std::vector<Patch> patches(static_cast<size_t>(columns * rows));
-	for (int y = Step / 2; y < height; y += Step) {
+	const int firstY = (floorDiv(originY, Step) * Step) + (Step / 2);
+	const int firstX = (floorDiv(originX, Step) * Step) + (Step / 2);
+	for (int wy = firstY; wy < originY + worldHeight; wy += Step) {
+		const int y = (wy - originY) * scale;
+		if (y < 0 || y >= height)
+			continue;
 		const uint8_t *line = world.at(0, y);
-		for (int x = Step / 2; x < width; x += Step) {
+		Patch *rowPatches = &patches[static_cast<size_t>((floorDiv(wy, Cell) - firstRow) * columns)];
+		for (int wx = firstX; wx < originX + worldWidth; wx += Step) {
+			const int x = (wx - originX) * scale;
+			if (x < 0 || x >= width)
+				continue;
+			Patch &patch = rowPatches[floorDiv(wx, Cell) - firstColumn];
+			patch.samples++;
 			const uint8_t index = line[x];
 			if (index == 0 || index > last || kinds[index] == 0)
 				continue;
-			Patch &patch = patches[static_cast<size_t>((y / Cell) * columns + x / Cell)];
 			const SDL_Color &c = logical_palette[index];
 			(kinds[index] == 1 ? patch.lava : patch.water)++;
 			patch.light += Luminance(c) / 255.F;
@@ -1683,7 +1703,9 @@ void ScanFluids(const Surface &world, const View &view)
 			patch.b += c.b;
 		}
 	}
-	const float spread = Cell / 2.F / CameraScale;
+	const float spread = Cell / 2.F;
+	// Fewer, bigger patches than before keep a screen full of lava cheap to draw; their emitters make up the rate.
+	constexpr float EmitterRate = 1.5F;
 	const float pulseTime = AmbientTime * 0.0016F;
 	for (int row = 0; row < rows; row++) {
 		for (int column = 0; column < columns; column++) {
@@ -1691,28 +1713,32 @@ void ScanFluids(const Surface &world, const View &view)
 			const int total = patch.lava + patch.water;
 			if (total == 0)
 				continue;
-			const Vec pos = Vec { (column + 0.5F) * Cell, (row + 0.5F) * Cell } * (1 / CameraScale) + CameraOrigin;
-			if (!view.contains(pos, 0))
+			const int worldColumn = firstColumn + column;
+			const int worldRow = firstRow + row;
+			const Vec pos { (static_cast<float>(worldColumn) + 0.5F) * Cell, (static_cast<float>(worldRow) + 0.5F) * Cell };
+			if (!view.contains(pos, Cell))
 				continue;
-			const float share = static_cast<float>(total) / SamplesPerCell;
+			// Of the samples on screen, so a patch half off the edge doesn't dim.
+			const float share = static_cast<float>(total) / static_cast<float>(patch.samples);
 			const float light = patch.light / total;
 			const Rgb average { static_cast<uint8_t>(patch.r / total), static_cast<uint8_t>(patch.g / total), static_cast<uint8_t>(patch.b / total) };
 			if (patch.lava >= patch.water) {
-				// Molten glow that slowly breathes, spilling a little past the lava's edge.
-				const float pulse = 0.85F + 0.15F * std::sin(pulseTime + column * 0.9F + row * 1.3F);
+				// Molten glow that slowly breathes, spilling a little past the lava's edge. It lies on the floor, so
+				// skills, monsters and the hero over the lava are drawn on top of it, not under it.
+				const float pulse = 0.85F + 0.15F * std::sin(pulseTime + worldColumn * 0.9F + worldRow * 1.3F);
 				Ring glow;
 				glow.pos = pos;
 				glow.life = 1;
 				glow.width = 0;
 				glow.disc = true;
-				glow.ground = false;
-				glow.r0 = glow.r1 = spread * 2.1F;
+				glow.ground = true;
+				glow.r0 = glow.r1 = Cell * 1.05F;
 				glow.colour = { 255, 90, 20 };
-				glow.alpha = 0.16F * share * (0.35F + light) * pulse;
+				glow.alpha = 0.3F * share * (0.35F + light) * pulse;
 				FrameGlows.push_back(glow);
-				Emitters.push_back({ pos, share, Ambient::Lava, average, spread });
+				Emitters.push_back({ pos, share * EmitterRate, Ambient::Lava, average, spread });
 			} else {
-				Emitters.push_back({ pos, share, Ambient::Water, Mix(average, { 235, 245, 255 }, 0.55F), spread });
+				Emitters.push_back({ pos, share * EmitterRate, Ambient::Water, Mix(average, { 235, 245, 255 }, 0.55F), spread });
 			}
 		}
 	}
