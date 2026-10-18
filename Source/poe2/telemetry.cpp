@@ -89,6 +89,11 @@ struct TelemetryCounts {
 	std::array<int, NumRarities> pickups {};
 	int crafts = 0;
 	int stalls = 0;
+	/** Frames drawn, how many took longer than a 30 fps frame, and the slowest, to keep the frame rate honest. */
+	int frames = 0;
+	int slowFrames = 0;
+	uint32_t worstFrameMs = 0;
+	uint32_t frameMs = 0;
 	int levelsEntered = 0;
 	int64_t experience = 0;
 	int gold = 0;
@@ -483,8 +488,10 @@ std::string RatesText(const TelemetryCounts &counts, double minutes)
 	                                                     "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
 	                                                     "flasks {:d} ({:d} wasted), charms {:d}, "
 	                                                     "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
-	                                                     "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}",
-	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls));
+	                                                     "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}, "
+	                                                     "fps {:.0f} ({:d} frames under 30 fps, slowest {:d} ms)",
+	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls,
+	                                             counts.frameMs > 0 ? counts.frames * 1000.0 / counts.frameMs : 0.0, counts.slowFrames, counts.worstFrameMs));
 }
 
 void WriteStatsLine(uint32_t now)
@@ -1018,6 +1025,26 @@ void TelemetryMark(std::string_view text)
 void TelemetryStep(std::string_view step)
 {
 	TelemetryLog("load", step);
+}
+
+void TelemetryFrameDrawn()
+{
+	if (LogFile == nullptr || GameStartMs == 0)
+		return;
+	static uint32_t lastFrameMs = 0;
+	const uint32_t now = Now();
+	const uint32_t gap = now - lastFrameMs;
+	lastFrameMs = now;
+	// Longer gaps are pauses, menus and loading screens; the stall line covers those.
+	if (gap > 1000)
+		return;
+	Count([gap](TelemetryCounts &counts) {
+		counts.frames++;
+		counts.frameMs += gap;
+		if (gap > 33)
+			counts.slowFrames++;
+		counts.worstFrameMs = std::max(counts.worstFrameMs, gap);
+	});
 }
 
 void TelemetryTick()

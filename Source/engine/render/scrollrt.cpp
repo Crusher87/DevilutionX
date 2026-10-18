@@ -74,6 +74,7 @@
 #include "poe2/camera_shake.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/vfx.hpp"
@@ -2028,6 +2029,7 @@ void DrawAndBlit()
 	DrawAtlas(out);
 	DrawItemSpawner(out);
 	DrawCursor(out);
+	TelemetryFrameDrawn();
 
 	DrawFPS(out);
 

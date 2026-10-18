@@ -98,6 +98,8 @@ void TelemetryCrafted(const Player &player, std::string_view currency, const Ite
 void TelemetryMark(std::string_view text);
 /** @brief Once per game tick: tracks mana, stalls and build changes, and writes the stats line when it's due. */
 void TelemetryTick();
+/** @brief Once per drawn frame: the frame rate and slow frames for the stats line. */
+void TelemetryFrameDrawn();
 /** @brief Writes the error that is about to close the game, then the latest detailed events. */
 void TelemetryFatal(std::string_view message);
 
