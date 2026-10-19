@@ -71,7 +71,7 @@ const SupportData Table[] = {
 	{ SG::Overcharge, "Overcharge", "Shocks twice as often. 25% less\ndamage with hits. Mana +10%", "Needs a lightning skill", GC::Dexterity, 4, 110, 0, ST_Lightning, 0, 0, NoFamily },
 	{ SG::DeepFreeze, "Deep Freeze", "Freezes sooner. 20% less damage\nwith hits. Mana +10%", "Needs a cold skill", GC::Magic, 4, 110, 0, ST_Frost, 0, 0, NoFamily },
 	{ SG::WitheringTouch, "Withering Touch", "Hits wither: 5% more damage taken\na stack, up to 10. 15% less damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
-	{ SG::CastOnKill, "Cast on Kill", "Casts the spell when you kill. 20% less\ndamage, at most every half second. Mana +20%", "Needs a spell", GC::Magic, 6, 120, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
+	{ SG::CastOnKill, "Cast on Kill", "Retired: it's the Reaper's Invocation\nSpirit gem now, which holds the spells", "Retired", GC::Magic, 6, 120, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastWhenHit, "Cast when Hit", "Retired: it's the Cast when Damage Taken\nSpirit gem now, which holds the spells", "Retired", GC::Strength, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastOnDodge, "Cast on Dodge", "Retired: it's the Cast on Dodge Spirit\ngem now, which holds the spells", "Retired", GC::Dexterity, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastWhileChannelling, "Cast while Channelling", "Retired: it's the Cast while Channelling\nSpirit gem now, which holds the spells", "Retired", GC::Magic, 9, 130, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
@@ -114,7 +114,7 @@ const SupportData Table[] = {
 	{ SG::Wrathforged, "Wrathforged", "Spends 10 Rage when it can for 35% more\ndamage. Mana +10%", "Needs an attack", GC::Strength, 6, 110, 0, ST_Attack | ST_Damage, 0, 0, NoFamily },
 	{ SG::ComboFinisher, "Combo Finisher", "Spends all Combo for 3% more damage a\npoint. Mana +10%", "Needs a quarterstaff attack", GC::Dexterity, 6, 110, 0, ST_Staff | ST_Damage, 0, 0, NoFamily },
 	{ SG::HoradricTotem, "Horadric Totem", "Places a totem that casts the spell at\nmonsters, 30% slower; up to 2 totems", "Needs a Diablo spell", GC::Magic, 9, 120, 0, ST_Spell | ST_Damage, ST_Channelling | ST_Movement, 0, NoFamily },
-	{ SG::Decoy, "Decoy", "When you dodge roll, a decoy repeats the\nattack for 4s at 50% damage. Mana +30%", "Needs a bow or crossbow attack", GC::Dexterity, 8, 130, 0, ST_Bow, 0, 0, NoFamily },
+	{ SG::Decoy, "Decoy", "Retired: it's the Mirage Archer Spirit\ngem now", "Retired", GC::Dexterity, 8, 130, 0, ST_Bow, 0, 0, NoFamily },
 	{ SG::Legion, "Legion", "1 more out at a time, 50% shorter.\nMana +10%", "Needs walls, runes, sentries or totems", GC::Strength, 7, 110, 0, ST_Placed, 0, 0, NoFamily },
 	{ SG::MixedHost, "Mixed Host", "Minions deal 7% more damage for each\nkind of minion you have", "Needs a minion skill", GC::Magic, 7, 100, 0, ST_Minion, 0, 0, NoFamily },
 	// Lineage supports.
@@ -166,11 +166,12 @@ constexpr int LeechPoolTicks = 2 * TicksPerSecond;
 constexpr int RecentSpellTicks = 8 * TicksPerSecond;
 constexpr int MaxWitherStacks = 10;
 constexpr int WitherTicks = 4 * 20;
-constexpr int TriggerCooldownKill = 10;
-constexpr int TriggerPercent = 80;
 constexpr int TotemCastTicks = 26;
 constexpr int TotemTicks = 8 * 20;
-constexpr int DecoyTicks = 4 * 20;
+/** Mirage Archer's mirage: it shoots for 5 seconds with 30% less damage, and a dodge leaves one at most every 10 seconds. */
+constexpr int MirageTicks = 5 * 20;
+constexpr int MirageCooldownTicks = 10 * 20;
+constexpr int MirageDamagePercent = 70;
 constexpr int DecoyShotTicks = 12;
 constexpr int MaxWarlordStacks = 10;
 constexpr int FrostbiteTicks = 5 * 20;
@@ -373,23 +374,6 @@ Point NearestTarget(const Player &player, Point from, int range)
 	if (!nearest.empty())
 		return nearest.front()->position.tile;
 	return from + player._pdir;
-}
-
-/** @brief Casts every spell in the Skills panel that carries the trigger support. */
-void FireTriggers(Player &player, SupportGem gem, Point target, int cooldown)
-{
-	if (Repeating || &player != MyPlayer)
-		return;
-	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
-		const SkillSlot skill = player.poe2.skillSlots[slot];
-		if (skill.isEmpty() || !Has(player, skill, gem))
-			continue;
-		uint8_t &wait = player.poe2.supportState.triggerCooldown[slot];
-		if (wait > 0)
-			continue;
-		wait = static_cast<uint8_t>(cooldown);
-		UseSkillFree(player, skill, player.position.tile, target, TriggerPercent);
-	}
 }
 
 PersistentSkill MinionSkillOf(const Monster &minion);
@@ -761,7 +745,7 @@ void ProcessStands(Player &player)
 			stand.cooldown = DecoyShotTicks;
 			Missile *arrow = AddMissile(stand.position, target, GetDirection(stand.position, target), MissileID::Arrow, TARGET_MONSTERS, player, ElementalArrowBaseDamage, 0);
 			if (arrow != nullptr) {
-				arrow->poe2.damagePercent = static_cast<int16_t>(std::min(GemDamagePercent(stand.skill, SkillLevel(player, stand.skill)) / 2, 32000));
+				arrow->poe2.damagePercent = static_cast<int16_t>(std::min(GemDamagePercent(stand.skill, SkillLevel(player, stand.skill)) * MirageDamagePercent / 100, 32000));
 				SetMissileSkill(*arrow, player, stand.skill);
 			}
 			PlaySfxLoc(SfxID::ShootBow, stand.position);
@@ -1490,7 +1474,7 @@ void OnSupportedKill(Monster &monster)
 			}
 		}
 	}
-	FireTriggers(player, SG::CastOnKill, monster.position.tile, TriggerCooldownKill);
+	OnMetaKill(player, monster, skill);
 }
 
 void OnPlayerHitBySupportedMonster(Player &player, Monster &monster)
@@ -1506,14 +1490,32 @@ void OnSupportedDodge(Player &player, int tiles)
 	if (!gbIsPoe2 || &player != MyPlayer)
 		return;
 	OnMetaDodge(player, tiles);
+	// Mirage Archer: the roll leaves a mirage that shoots the bow attack, at most every 10 seconds.
+	SupportRuntime &state = player.poe2.supportState;
+	if (state.mirageCooldown > 0 || !IsPersistentSkillActive(player, PersistentSkill::MirageArcher))
+		return;
+	const SkillSlot attack = MirageArcherAttack(player);
+	if (attack.isEmpty())
+		return;
+	state.mirageCooldown = MirageCooldownTicks;
+	Stands.push_back({ attack, player.position.tile, MirageTicks, 0, true });
+	AddVisualEffect(player.position.tile, MissileGraphicID::Etherealize, 0, 4);
+	while (CountStands(true) > 1)
+		Stands.erase(std::find_if(Stands.begin(), Stands.end(), [](const Stand &stand) { return stand.decoy; }));
+}
+
+SkillSlot MirageArcherAttack(const Player &player)
+{
 	for (const SkillSlot skill : player.poe2.skillSlots) {
-		if (skill.isEmpty() || !Has(player, skill, SG::Decoy))
-			continue;
-		Stands.push_back({ skill, player.position.tile, DecoyTicks, 0, true });
-		AddVisualEffect(player.position.tile, MissileGraphicID::Etherealize, 0, 4);
-		while (CountStands(true) > 1)
-			Stands.erase(std::find_if(Stands.begin(), Stands.end(), [](const Stand &stand) { return stand.decoy; }));
+		if (skill.kind == SkillKind::Attack && (SkillTags(skill) & ST_Bow) != 0 && WeaponAllowsSkill(player, skill.attack()))
+			return skill;
 	}
+	return {};
+}
+
+int MirageCount()
+{
+	return CountStands(true);
 }
 
 void ProcessSupportEffects(Player &player)
@@ -1521,10 +1523,8 @@ void ProcessSupportEffects(Player &player)
 	if (!gbIsPoe2 || &player != MyPlayer)
 		return;
 	SupportRuntime &state = player.poe2.supportState;
-	for (uint8_t &wait : state.triggerCooldown) {
-		if (wait > 0)
-			wait--;
-	}
+	if (state.mirageCooldown > 0)
+		state.mirageCooldown--;
 	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
 		const SkillSlot skill = player.poe2.skillSlots[slot];
 		int maxSeals = 0;

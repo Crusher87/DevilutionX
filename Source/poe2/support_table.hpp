@@ -152,6 +152,10 @@ void OnSupportedKill(Monster &monster);
 void OnPlayerHitBySupportedMonster(Player &player, Monster &monster);
 /** @brief The local player started a dodge roll. */
 void OnSupportedDodge(Player &player, int tiles);
+/** @brief The attack Mirage Archer's mirage shoots: the first bow attack in the Skills panel the weapon allows. */
+SkillSlot MirageArcherAttack(const Player &player);
+/** @brief Mirages shooting now. */
+int MirageCount();
 /** @brief Repeats, totems, decoys, seals and timers; once per game tick for the local player. */
 void ProcessSupportEffects(Player &player);
 /** @brief Poison and wither; once per game tick per monster. */

@@ -163,6 +163,10 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Cast when Damage Taken");
 	case PersistentSkill::CastWhileChannelling:
 		return _("Cast while Channelling");
+	case PersistentSkill::ReapersInvocation:
+		return _("Reaper's Invocation");
+	case PersistentSkill::MirageArcher:
+		return _("Mirage Archer");
 	default:
 		return {};
 	}
@@ -209,6 +213,10 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Meta gem: holds spells in its sockets. Each hit you take fills its Energy, and when it's full the spells inside all cast");
 	case PersistentSkill::CastWhileChannelling:
 		return _("Meta gem: holds spells in its sockets. Channelling a stream skill fills its Energy, and when it's full the spells inside all cast");
+	case PersistentSkill::ReapersInvocation:
+		return _("Meta gem: holds spells in its sockets. Melee kills store Energy, up to 500; use it from the skill tray to cast the spells inside");
+	case PersistentSkill::MirageArcher:
+		return _("Each dodge roll leaves a mirage that shoots your bow attack for 5 seconds, with 30% less damage; once every 10 seconds");
 	default:
 		return {};
 	}
@@ -251,6 +259,10 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::CastWhenDamageTaken:
 	case PersistentSkill::CastWhileChannelling:
 		return 100;
+	case PersistentSkill::ReapersInvocation:
+		return 30;
+	case PersistentSkill::MirageArcher:
+		return 60;
 	default:
 		return 0;
 	}

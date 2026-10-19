@@ -235,12 +235,16 @@ void DrawEnergyBar(const Surface &out, const Player &player, size_t slot)
 	const Rectangle row = RowRect(slot);
 	const Rectangle bar { row.position + Displacement { 48, RowHeight - 3 }, { row.size.width - 52, 2 } };
 	FillRectangle(out, bar, EnergyEmptyColor);
-	const int max = MetaMaxEnergy(player.poe2, slot);
-	if (max <= 0)
+	const int cap = MetaEnergyCap(player.poe2, slot);
+	const int cost = MetaMaxEnergy(player.poe2, slot);
+	if (cap <= 0 || cost <= 0)
 		return;
-	const int filled = bar.size.width * std::min(MetaEnergy(player, slot), max) / max;
+	const int filled = bar.size.width * std::min(MetaEnergy(player, slot), cap) / cap;
 	if (filled > 0)
 		FillRectangle(out, { bar.position, { filled, bar.size.height } }, EnergyColor);
+	// An invocation stores several casts: a notch marks each one.
+	for (int energy = cost; energy < cap; energy += cost)
+		FillRectangle(out, { bar.position + Displacement { bar.size.width * energy / cap, 0 }, { 1, bar.size.height } }, SocketColor);
 }
 
 void DrawHeader(const Surface &out, const Player &player, const Hit &hover)
@@ -435,6 +439,8 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 		if (IsMetaGem(skill)) {
 			if (MetaSkillCount(player.poe2, hover.slot) == 0)
 				lines.emplace_back(_("Put spell gems in its sockets: they cast when its Energy is full."), UiFlags::ColorWhite);
+			else if (IsInvocationGem(skill))
+				lines.emplace_back(FormatRuntime(_("Energy {:d} of {:d}; a cast takes {:d}"), MetaEnergy(player, hover.slot), ReaperMaxEnergy, MetaMaxEnergy(player.poe2, hover.slot)), UiFlags::ColorBlue);
 			else
 				lines.emplace_back(FormatRuntime(_("Energy {:d} of {:d}"), MetaEnergy(player, hover.slot), MetaMaxEnergy(player.poe2, hover.slot)), UiFlags::ColorBlue);
 		}
@@ -443,7 +449,7 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 			    WeaponAllowsSkill(player, skill.attack()) ? UiFlags::ColorWhite : UiFlags::ColorRed);
 		if (GetSkillUsability(player, skill) == SkillUsability::Requirements)
 			lines.emplace_back(MissingSkillRequirements(player, skill), UiFlags::ColorRed);
-		if (skill.kind != SkillKind::Persistent && key.empty())
+		if (SkillGoesOnTray(skill) && key.empty())
 			lines.emplace_back(_("Not on the skill tray: click a tray slot to put it there"), UiFlags::ColorWhite);
 		if (skill.kind == SkillKind::Persistent) {
 			if (player.poe2.spiritGemOn(hover.slot))
@@ -466,7 +472,7 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 	}
 	if (const SkillSlot inside = MetaSkillAt(player, hover.slot, hover.socket); !inside.isEmpty()) {
 		lines.emplace_back(StrCat(SkillLevelText(player, inside), "   ", SkillCostText(player, inside)), UiFlags::ColorWhite);
-		lines.emplace_back(FormatRuntime(_("Casts when {:s} is full of Energy"), SkillName(skill)), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(IsInvocationGem(skill) ? _("Casts when you use {:s}") : _("Casts when {:s} is full of Energy"), SkillName(skill)), UiFlags::ColorWhite);
 		if (GetSkillUsability(player, inside) == SkillUsability::Requirements)
 			lines.emplace_back(MissingSkillRequirements(player, inside), UiFlags::ColorRed);
 		if (held != SupportGem::None)

@@ -11,6 +11,9 @@
 #include "panels/item_spawner.hpp"
 #include "panels/skill_bar.hpp"
 #include "player.h"
+#include "levels/gendung.h"
+#include "monster.h"
+#include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -82,6 +85,8 @@ std::string_view EventWord(PersistentSkill meta, int events)
 		return events == 1 ? "roll" : "rolls";
 	case PersistentSkill::CastWhenDamageTaken:
 		return events == 1 ? "hit taken" : "hits taken";
+	case PersistentSkill::ReapersInvocation:
+		return events == 1 ? "kill" : "kills";
 	default:
 		return events == 1 ? "second" : "seconds";
 	}
@@ -110,7 +115,9 @@ void CastMetaSkills(Player &player, size_t row, Point target)
 	}
 	const int events = state.metaEvents[row];
 	TelemetryLog("meta", StrCat(PersistentSkillName(meta), " cast ", cast, " after ", events, " ", EventWord(meta, events)));
-	state.metaEnergy[row] = 0;
+	// An invocation spends what the cast takes and keeps the rest.
+	const int spent = IsInvocationGem(SkillSlot::ForPersistent(meta)) ? MetaMaxEnergy(player.poe2, row) * CentiPerEnergy : state.metaEnergy[row];
+	state.metaEnergy[row] = static_cast<uint16_t>(std::max(state.metaEnergy[row] - spent, 0));
 	state.metaEvents[row] = 0;
 }
 
@@ -122,11 +129,12 @@ void GainEnergy(Player &player, PersistentSkill meta, int centiEnergy, Point tar
 		return;
 	SupportRuntime &state = player.poe2.supportState;
 	const int gained = centiEnergy * EnergyGainPercent(player, *row) / 100;
-	const int max = MetaMaxEnergy(player.poe2, *row) * CentiPerEnergy;
-	state.metaEnergy[*row] = static_cast<uint16_t>(std::clamp(state.metaEnergy[*row] + gained, 0, max));
+	const int cap = MetaEnergyCap(player.poe2, *row) * CentiPerEnergy;
+	state.metaEnergy[*row] = static_cast<uint16_t>(std::clamp(state.metaEnergy[*row] + gained, 0, cap));
 	if (countEvent)
 		state.metaEvents[*row] = static_cast<uint8_t>(std::min(state.metaEvents[*row] + 1, 255));
-	if (state.metaEnergy[*row] >= max)
+	// An invocation stores its Energy until you use it.
+	if (!IsInvocationGem(SkillSlot::ForPersistent(meta)) && state.metaEnergy[*row] >= MetaMaxEnergy(player.poe2, *row) * CentiPerEnergy)
 		CastMetaSkills(player, *row, target);
 }
 
@@ -134,12 +142,17 @@ void GainEnergy(Player &player, PersistentSkill meta, int centiEnergy, Point tar
 
 bool IsMetaGem(PersistentSkill skill)
 {
-	return IsAnyOf(skill, PersistentSkill::CastOnDodge, PersistentSkill::CastWhenDamageTaken, PersistentSkill::CastWhileChannelling);
+	return IsAnyOf(skill, PersistentSkill::CastOnDodge, PersistentSkill::CastWhenDamageTaken, PersistentSkill::CastWhileChannelling, PersistentSkill::ReapersInvocation);
 }
 
 bool IsMetaGem(SkillSlot skill)
 {
 	return IsMetaGem(skill.persistent());
+}
+
+bool IsInvocationGem(SkillSlot skill)
+{
+	return skill.persistent() == PersistentSkill::ReapersInvocation;
 }
 
 bool CanGoInMetaGem(SkillSlot skill)
@@ -208,14 +221,25 @@ int MetaMaxEnergy(const Poe2PlayerData &data, size_t row)
 	return MetaEnergyPerSpell * MetaSkillCount(data, row);
 }
 
+int MetaEnergyCap(const Poe2PlayerData &data, size_t row)
+{
+	if (row < NumSkillSlots && IsInvocationGem(data.skillSlots[row]))
+		return ReaperMaxEnergy;
+	return MetaMaxEnergy(data, row);
+}
+
 int MetaEnergy(const Player &player, size_t row)
 {
 	return row < NumSkillSlots ? player.poe2.supportState.metaEnergy[row] / CentiPerEnergy : 0;
 }
 
-PersistentSkill MetaGemForRetiredSupport(SupportGem gem)
+PersistentSkill SpiritGemForRetiredSupport(SupportGem gem)
 {
 	switch (gem) {
+	case SupportGem::CastOnKill:
+		return PersistentSkill::ReapersInvocation;
+	case SupportGem::Decoy:
+		return PersistentSkill::MirageArcher;
 	case SupportGem::CastOnDodge:
 		return PersistentSkill::CastOnDodge;
 	case SupportGem::CastWhenHit:
@@ -229,7 +253,7 @@ PersistentSkill MetaGemForRetiredSupport(SupportGem gem)
 
 bool IsRetiredSupport(SupportGem gem)
 {
-	return MetaGemForRetiredSupport(gem) != PersistentSkill::None;
+	return SpiritGemForRetiredSupport(gem) != PersistentSkill::None;
 }
 
 MetaSocketResult SocketSkillInMeta(Player &player, size_t row, size_t socket, SkillSlot skill, int level, SkillSlot &replaced, int &replacedLevel)
@@ -272,7 +296,7 @@ SkillSlot UnsocketMetaSkill(Poe2PlayerData &data, size_t row, size_t socket, int
 	data.metaSkills[row][socket] = {};
 	data.metaSkillLevels[row][socket] = 1;
 	// The bar is as long as the spells inside, so what's left can't be more than that.
-	data.supportState.metaEnergy[row] = static_cast<uint16_t>(std::min<int>(data.supportState.metaEnergy[row], MetaMaxEnergy(data, row) * CentiPerEnergy));
+	data.supportState.metaEnergy[row] = static_cast<uint16_t>(std::min<int>(data.supportState.metaEnergy[row], MetaEnergyCap(data, row) * CentiPerEnergy));
 	return skill;
 }
 
@@ -301,6 +325,42 @@ void OnMetaDamageTaken(Player &player, Point attacker)
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
 		return;
 	GainEnergy(player, PersistentSkill::CastWhenDamageTaken, CastWhenDamageTakenEnergy * CentiPerEnergy, attacker, true);
+}
+
+void OnMetaKill(Player &player, const Monster &monster, SkillSlot skill)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || (SkillTags(skill) & ST_Melee) == 0)
+		return;
+	int energy = ReaperEnergyNormal;
+	if (monster.isUnique()) {
+		energy = ReaperEnergyUnique;
+	} else {
+		switch (GetMonsterAffixes(monster).rarity) {
+		case MonsterRarity::Magic:
+			energy = ReaperEnergyMagic;
+			break;
+		case MonsterRarity::Rare:
+			energy = ReaperEnergyRare;
+			break;
+		default:
+			break;
+		}
+	}
+	GainEnergy(player, PersistentSkill::ReapersInvocation, energy * CentiPerEnergy, monster.position.tile, true);
+}
+
+InvokeResult InvokeMetaGem(Player &player, size_t row, Point target)
+{
+	if (row >= NumSkillSlots || !IsInvocationGem(player.poe2.skillSlots[row]) || !IsPersistentSkillActive(player, player.poe2.skillSlots[row].persistent()))
+		return InvokeResult::Off;
+	if (MetaSkillCount(player.poe2, row) == 0)
+		return InvokeResult::NoSpells;
+	if (leveltype == DTYPE_TOWN)
+		return InvokeResult::Town;
+	if (MetaEnergy(player, row) < MetaMaxEnergy(player.poe2, row))
+		return InvokeResult::NotEnoughEnergy;
+	CastMetaSkills(player, row, target);
+	return InvokeResult::Cast;
 }
 
 void ProcessMetaGems(Player &player)
@@ -335,7 +395,7 @@ void MigrateTriggerSupports(Player &player)
 	Poe2PlayerData &data = player.poe2;
 	for (size_t row = 0; row < NumSkillSlots; row++) {
 		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
-			const PersistentSkill meta = MetaGemForRetiredSupport(data.slotSupports[row][socket]);
+			const PersistentSkill meta = SpiritGemForRetiredSupport(data.slotSupports[row][socket]);
 			if (meta == PersistentSkill::None)
 				continue;
 			const SkillSlot gem = SkillSlot::ForPersistent(meta);

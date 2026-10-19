@@ -289,6 +289,10 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::BloodBoil;
 	case PersistentSkill::CastWhileChannelling:
 		return SpellIcon::Apocalypse;
+	case PersistentSkill::ReapersInvocation:
+		return SpellIcon::RedSkull;
+	case PersistentSkill::MirageArcher:
+		return SpellIcon::Invisibility;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -541,7 +545,7 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 		const SkillSlot skill = player.poe2.skillSlots[hover.index];
 		if (skill.isEmpty())
 			return;
-		if (skill.kind == SkillKind::Persistent)
+		if (!SkillGoesOnTray(skill))
 			lines.emplace_back(_("Spirit gems are active while socketed"), UiFlags::ColorButtonpushed);
 		else
 			lines.emplace_back(FormatRuntime(_("Click to use it with {:s}"), TraySlotKeyName(Popup.slot)), UiFlags::ColorWhite);
@@ -617,12 +621,12 @@ void DrawPopup(const Surface &out, const Player &player)
 		const Rectangle &cell = layout.gems[socket];
 		const SkillSlot skill = player.poe2.skillSlots[socket];
 		FillRectangle(out, cell, RowColor);
-		const bool usable = !skill.isEmpty() && skill.kind != SkillKind::Persistent && GetSkillUsability(player, skill) == SkillUsability::Ready;
+		const bool usable = SkillGoesOnTray(skill) && GetSkillUsability(player, skill) == SkillUsability::Ready;
 		DrawSkillIcon(out, BottomLeft(cell), skill, usable);
 		if (binding.isGem() && binding.socket == socket) {
 			DrawFrame(out, cell, BorderColor);
 			DrawFrame(out, { cell.position + Displacement { 1, 1 }, { cell.size.width - 2, cell.size.height - 2 } }, BorderColor);
-		} else if (hover.kind == PopupHit::Kind::Gem && hover.index == socket && !skill.isEmpty() && skill.kind != SkillKind::Persistent) {
+		} else if (hover.kind == PopupHit::Kind::Gem && hover.index == socket && SkillGoesOnTray(skill)) {
 			DrawSmallSpellIconBorder(out, BottomLeft(cell));
 		}
 		const std::string key = SkillSlotKeyName(socket);
@@ -702,7 +706,7 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 			EventPlrMsg(_("That socket is empty. Socket skill gems in the Skills panel (K)."), UiFlags::ColorRed);
 			return;
 		}
-		if (skill.kind == SkillKind::Persistent) {
+		if (!SkillGoesOnTray(skill)) {
 			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
 			return;
 		}
@@ -754,7 +758,7 @@ void DropOnTraySlot(Player &player, TraySlot traySlot)
 		}
 		// A skill gem on a slot with a gem takes that gem's socket; Spirit gems just go in a free socket.
 		std::optional<size_t> socket;
-		if (binding.isGem() && skill.kind != SkillKind::Persistent)
+		if (binding.isGem() && SkillGoesOnTray(skill))
 			socket = binding.socket;
 		else
 			socket = FirstFreeSkillSlot(player);
@@ -766,7 +770,7 @@ void DropOnTraySlot(Player &player, TraySlot traySlot)
 		const int previousLevel = player.poe2.gemLevel(*socket);
 		const SkillSlot previous = ChangeSlotSkill(player, *socket, skill, SkillGemItemLevel(player.HoldItem));
 		player.HoldItem.clear();
-		if (skill.kind != SkillKind::Persistent)
+		if (SkillGoesOnTray(skill))
 			BindTraySlot(player, traySlot, TrayBinding::ForGem(*socket));
 		Item returned;
 		if (!previous.isEmpty() && CreateSkillGemItem(returned, previous, previousLevel))
@@ -1199,6 +1203,32 @@ std::string MissingSkillRequirements(const Player &player, SkillSlot skill)
 	return MissingRequirements(player, skill);
 }
 
+namespace {
+
+/** @brief Casts the spells inside an invocation at the cursor, if it has the Energy. */
+void UseInvocation(Player &player, size_t slot)
+{
+	const SkillSlot skill = player.poe2.skillSlots[slot];
+	switch (InvokeMetaGem(player, slot, cursPosition)) {
+	case InvokeResult::NoSpells:
+		EventPlrMsg(FormatRuntime(_("{:s} has no spells inside. Put spell gems in its sockets (K)."), SkillName(skill)), UiFlags::ColorRed);
+		break;
+	case InvokeResult::Town:
+		EventPlrMsg(_("Spells don't cast in town."), UiFlags::ColorRed);
+		break;
+	case InvokeResult::NotEnoughEnergy:
+		EventPlrMsg(FormatRuntime(_("{:s} has {:d} Energy; casting takes {:d}."), SkillName(skill), MetaEnergy(player, slot), MetaMaxEnergy(player.poe2, slot)), UiFlags::ColorRed);
+		break;
+	case InvokeResult::Off:
+		EventPlrMsg(FormatRuntime(_("{:s} is switched off. Right-click it in the Skills panel (K)."), SkillName(skill)), UiFlags::ColorRed);
+		break;
+	default:
+		break;
+	}
+}
+
+} // namespace
+
 void UseSkillSlot(size_t slot)
 {
 	if (!IsSkillBarShown() || slot >= NumSkillSlots)
@@ -1225,6 +1255,8 @@ void UseSkillSlot(size_t slot)
 			EventPlrMsg(FormatRuntime(_("{:s} needs {:d} Spirit; you have {:d} left."), SkillName(skill),
 			                IsMinionCountSkill(skill.persistent()) ? SpiritPerMinion(player, skill.persistent()) : GemSpiritCost(player, skill.persistent()), AvailableSpirit(player)),
 			    UiFlags::ColorRed);
+		else if (IsInvocationGem(skill))
+			UseInvocation(player, slot);
 		else
 			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
 		return;
@@ -1343,7 +1375,7 @@ bool SocketSkillGemFromInventory(Player &player, bool fromBelt, int index)
 
 	PlayGemSound(gem);
 	ChangeSlotSkill(player, *slot, skill, SkillGemItemLevel(gem));
-	if (skill.kind == SkillKind::Persistent)
+	if (!SkillGoesOnTray(skill))
 		EventPlrMsg(FormatRuntime(_("{:s} socketed. It's active while socketed."), SkillName(skill)));
 	else if (const std::optional<TraySlot> traySlot = AutoBindSocket(player, *slot); traySlot)
 		EventPlrMsg(FormatRuntime(_("{:s} socketed. Use it with {:s}."), SkillName(skill), TraySlotKeyName(*traySlot)));

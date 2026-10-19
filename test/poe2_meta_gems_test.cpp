@@ -8,13 +8,16 @@
 #include "items.h"
 #include "levels/gendung.h"
 #include "missiles.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/meta_gems.hpp"
+#include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "spells.h"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 
 namespace devilution {
@@ -49,6 +52,8 @@ public:
 		LoadSpellData();
 		LoadPlayerDataFiles();
 		LoadMissileData();
+		LoadMonsterData();
+		LevelMonsterTypes[0].type = MT_NZOMBIE;
 		Missiles.clear();
 		leveltype = DTYPE_CATHEDRAL;
 		MyPlayer->setCharacterLevel(30);
@@ -66,6 +71,28 @@ public:
 		gbIsPoe2 = false;
 		leveltype = DTYPE_TOWN;
 		UnloadModArchives();
+	}
+
+	static Monster MakeMonster(uint32_t seed)
+	{
+		Monster monster {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.flags = 0;
+		monster.rndItemSeed = seed;
+		monster.position.tile = { 43, 40 };
+		return monster;
+	}
+
+	static Monster MonsterOf(MonsterRarity rarity)
+	{
+		for (uint32_t seed = 1; seed < 100000; seed++) {
+			Monster monster = MakeMonster(seed);
+			if (GetMonsterAffixes(monster).rarity == rarity)
+				return monster;
+		}
+		ADD_FAILURE();
+		return MakeMonster(0);
 	}
 
 	static MetaSocketResult Inside(size_t socket, SkillSlot skill, int level = 1, SkillSlot *replaced = nullptr)
@@ -258,6 +285,100 @@ TEST_F(Poe2MetaGemsTest, OldTriggerSupportsBecomeMetaGems)
 	// A second load changes nothing.
 	MigrateTriggerSupports(*MyPlayer);
 	EXPECT_EQ(std::count(data.skillSlots.begin(), data.skillSlots.end(), CastOnDodge), 1);
+}
+
+TEST_F(Poe2MetaGemsTest, ReapersInvocationStoresMeleeKillsUntilYouUseIt)
+{
+	Player &player = *MyPlayer;
+	const SkillSlot reaper = SkillSlot::ForPersistent(PersistentSkill::ReapersInvocation);
+	player.poe2.skillSlots[MetaRow] = reaper;
+	EXPECT_TRUE(IsInvocationGem(reaper));
+	EXPECT_TRUE(SkillGoesOnTray(reaper));
+	EXPECT_FALSE(SkillGoesOnTray(CastOnDodge));
+	EXPECT_EQ(SpiritReservation(PersistentSkill::ReapersInvocation), 30);
+	ASSERT_EQ(Inside(0, Firebolt), MetaSocketResult::Socketed);
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+
+	// Only melee kills count.
+	OnMetaKill(player, MonsterOf(MonsterRarity::Normal), Firebolt);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), 0);
+	OnMetaKill(player, MonsterOf(MonsterRarity::Normal), cleave);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), ReaperEnergyNormal);
+	OnMetaKill(player, MonsterOf(MonsterRarity::Magic), cleave);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), ReaperEnergyNormal + ReaperEnergyMagic);
+	// It stores the Energy rather than casting at full.
+	EXPECT_TRUE(Missiles.empty());
+	OnMetaKill(player, MonsterOf(MonsterRarity::Rare), cleave);
+	OnMetaKill(player, MonsterOf(MonsterRarity::Rare), cleave);
+	OnMetaKill(player, MonsterOf(MonsterRarity::Rare), cleave);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), ReaperMaxEnergy);
+	EXPECT_TRUE(Missiles.empty());
+
+	// Using it casts the spells inside and spends one cast's Energy.
+	EXPECT_EQ(InvokeMetaGem(player, MetaRow, { 43, 40 }), InvokeResult::Cast);
+	EXPECT_FALSE(Missiles.empty());
+	EXPECT_EQ(MetaEnergy(player, MetaRow), ReaperMaxEnergy - MetaEnergyPerSpell);
+	player.poe2.supportState.metaEnergy[MetaRow] = (MetaEnergyPerSpell - 1) * 100;
+	EXPECT_EQ(InvokeMetaGem(player, MetaRow, { 43, 40 }), InvokeResult::NotEnoughEnergy);
+	leveltype = DTYPE_TOWN;
+	player.poe2.supportState.metaEnergy[MetaRow] = ReaperMaxEnergy * 100;
+	EXPECT_EQ(InvokeMetaGem(player, MetaRow, { 43, 40 }), InvokeResult::Town);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), ReaperMaxEnergy);
+	leveltype = DTYPE_CATHEDRAL;
+	EXPECT_EQ(InvokeMetaGem(player, 0, { 43, 40 }), InvokeResult::Off);
+	UnsocketMetaSkill(player.poe2, MetaRow, 0);
+	EXPECT_EQ(InvokeMetaGem(player, MetaRow, { 43, 40 }), InvokeResult::NoSpells);
+}
+
+TEST_F(Poe2MetaGemsTest, MirageArcherNeedsABowAttack)
+{
+	Player &player = *MyPlayer;
+	player.poe2.skillSlots[MetaRow] = SkillSlot::ForPersistent(PersistentSkill::MirageArcher);
+	EXPECT_FALSE(IsMetaGem(PersistentSkill::MirageArcher));
+	EXPECT_EQ(SpiritReservation(PersistentSkill::MirageArcher), 60);
+	// No bow attack in the Skills panel: no mirage.
+	OnSupportedDodge(player, 3);
+	EXPECT_EQ(MirageCount(), 0);
+	EXPECT_TRUE(MirageArcherAttack(player).isEmpty());
+
+	// With a bow and a bow attack, a roll leaves a mirage, and the next roll has to wait 10 seconds.
+	const SkillSlot barrage = SkillSlot::ForAttack(WeaponSkill::Barrage);
+	player.poe2.skillSlots[0] = barrage;
+	EXPECT_TRUE(MirageArcherAttack(player).isEmpty());
+	InitializeItem(player.InvBody[INVLOC_HAND_LEFT], IDI_ROGUE);
+	ASSERT_EQ(MirageArcherAttack(player), barrage);
+	OnSupportedDodge(player, 3);
+	EXPECT_EQ(MirageCount(), 1);
+	EXPECT_EQ(player.poe2.supportState.mirageCooldown, 10 * 20);
+	ClearSupportEffects();
+	OnSupportedDodge(player, 3);
+	EXPECT_EQ(MirageCount(), 0);
+	for (int tick = 0; tick < 10 * 20; tick++)
+		ProcessSupportEffects(player);
+	OnSupportedDodge(player, 3);
+	EXPECT_EQ(MirageCount(), 1);
+	// Switched off, it leaves none.
+	ClearSupportEffects();
+	player.poe2.supportState.mirageCooldown = 0;
+	player.poe2.spiritGemsOn = 0;
+	OnSupportedDodge(player, 3);
+	EXPECT_EQ(MirageCount(), 0);
+}
+
+TEST_F(Poe2MetaGemsTest, CastOnKillAndDecoyBecomeTheirSpiritGems)
+{
+	Poe2PlayerData &data = MyPlayer->poe2;
+	data.skillSlots[0] = Firebolt;
+	data.slotSupports[0][0] = SupportGem::CastOnKill;
+	data.skillSlots[1] = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	data.slotSupports[1][1] = SupportGem::Decoy;
+	MigrateTriggerSupports(*MyPlayer);
+	EXPECT_EQ(data.slotSupports[0][0], SupportGem::None);
+	EXPECT_EQ(data.slotSupports[1][1], SupportGem::None);
+	EXPECT_EQ(data.skillSlots[2], SkillSlot::ForPersistent(PersistentSkill::ReapersInvocation));
+	EXPECT_EQ(data.skillSlots[3], SkillSlot::ForPersistent(PersistentSkill::MirageArcher));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::CastOnKill, Firebolt));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::Decoy, SkillSlot::ForAttack(WeaponSkill::Barrage)));
 }
 
 } // namespace

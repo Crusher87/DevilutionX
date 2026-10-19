@@ -15,6 +15,7 @@
 
 namespace devilution {
 
+struct Monster;
 struct Player;
 
 /** @brief Energy each spell inside adds to the bar: POE2's 10 per 0.1 second of cast time, with every spell counted as 0.8 seconds. */
@@ -28,9 +29,17 @@ constexpr int CastWhenDamageTakenEnergy = 30;
 /** @brief Cast while Channelling's Energy each second while channelling, and what it loses each second while not (POE2). */
 constexpr int ChannellingEnergyPerSecond = 60;
 constexpr int ChannellingDrainPerSecond = 25;
+/** @brief Reaper's Invocation's Energy for a melee kill of a normal, magic, rare and unique monster, and the most it stores. */
+constexpr int ReaperEnergyNormal = 30;
+constexpr int ReaperEnergyMagic = 60;
+constexpr int ReaperEnergyRare = 150;
+constexpr int ReaperEnergyUnique = 600;
+constexpr int ReaperMaxEnergy = 500;
 
 [[nodiscard]] bool IsMetaGem(PersistentSkill skill);
 [[nodiscard]] bool IsMetaGem(SkillSlot skill);
+/** @brief A meta gem that stores Energy and casts when you use it from the skill tray, like POE2's invocations. */
+[[nodiscard]] bool IsInvocationGem(SkillSlot skill);
 /** @brief Whether the skill can go inside a meta gem: a spell that isn't a movement or a channelled one, like POE2's triggerable spells. */
 [[nodiscard]] bool CanGoInMetaGem(SkillSlot skill);
 /** @brief Whether a support fits the spells of a meta gem: supports that act when you use a skill yourself don't (POE2). */
@@ -47,13 +56,15 @@ constexpr int ChannellingDrainPerSecond = 25;
 
 /** @brief Skills inside the meta gem of a Skills panel row. */
 [[nodiscard]] int MetaSkillCount(const Poe2PlayerData &data, size_t row);
-/** @brief The Energy at which the row's meta gem casts: MetaEnergyPerSpell for each spell inside. */
+/** @brief The Energy at which the row's meta gem casts, or that an invocation spends: MetaEnergyPerSpell for each spell inside. */
 [[nodiscard]] int MetaMaxEnergy(const Poe2PlayerData &data, size_t row);
+/** @brief The most Energy the row's meta gem holds: what it casts at, or ReaperMaxEnergy for an invocation. */
+[[nodiscard]] int MetaEnergyCap(const Poe2PlayerData &data, size_t row);
 /** @brief Energy the row's meta gem has now. */
 [[nodiscard]] int MetaEnergy(const Player &player, size_t row);
 
-/** @brief The old trigger support a meta gem replaced, which comes out as the meta gem from older heroes. */
-[[nodiscard]] PersistentSkill MetaGemForRetiredSupport(SupportGem gem);
+/** @brief The Spirit gem that replaced an old support, which comes out as that gem from older heroes. */
+[[nodiscard]] PersistentSkill SpiritGemForRetiredSupport(SupportGem gem);
 [[nodiscard]] bool IsRetiredSupport(SupportGem gem);
 
 enum class MetaSocketResult : uint8_t {
@@ -81,10 +92,24 @@ void ReturnMetaSkills(Player &player, size_t row);
 void OnMetaDodge(Player &player, int tiles);
 /** @brief The player took damage from a hit: Cast when Damage Taken gains Energy. */
 void OnMetaDamageTaken(Player &player, Point attacker);
+/** @brief The player killed a monster with this skill: a melee kill stores Energy in Reaper's Invocation. */
+void OnMetaKill(Player &player, const Monster &monster, SkillSlot skill);
 /** @brief Each game tick: Cast while Channelling gains Energy while a stream skill fires and loses it while not. */
 void ProcessMetaGems(Player &player);
 
-/** @brief Older heroes had Cast on Dodge, Cast when Hit and Cast while Channelling as supports: they come out as the new meta gems. */
+enum class InvokeResult : uint8_t {
+	Cast,
+	/** The row holds no invocation, or it's switched off or short of Spirit. */
+	Off,
+	NoSpells,
+	Town,
+	NotEnoughEnergy,
+};
+
+/** @brief Uses the row's invocation: with the Energy for it, the spells inside cast at the target and it spends that Energy. */
+InvokeResult InvokeMetaGem(Player &player, size_t row, Point target);
+
+/** @brief Older heroes had Cast on Dodge, Cast when Hit, Cast while Channelling, Cast on Kill and Decoy as supports: they come out as the new Spirit gems. */
 void MigrateTriggerSupports(Player &player);
 
 } // namespace devilution

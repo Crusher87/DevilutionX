@@ -8,6 +8,7 @@
 #include "levels/gendung.h"
 #include "player.h"
 #include "poe2/default_attack.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/table_skills.hpp"
@@ -327,7 +328,7 @@ void ClearTraySlot(Player &player, TraySlot slot)
 std::optional<TraySlot> AutoBindSocket(Player &player, size_t socket)
 {
 	const SkillSlot skill = player.poe2.skillSlots[socket];
-	if (skill.isEmpty() || skill.kind == SkillKind::Persistent)
+	if (!SkillGoesOnTray(skill))
 		return std::nullopt;
 	if (const std::optional<TraySlot> bound = TraySlotForSocket(player, socket))
 		return bound;
@@ -339,6 +340,11 @@ std::optional<TraySlot> AutoBindSocket(Player &player, size_t socket)
 		}
 	}
 	return std::nullopt;
+}
+
+bool SkillGoesOnTray(SkillSlot skill)
+{
+	return !skill.isEmpty() && (skill.kind != SkillKind::Persistent || IsInvocationGem(skill));
 }
 
 void MigrateOldSkillBar(Player &player)

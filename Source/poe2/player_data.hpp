@@ -282,7 +282,11 @@ enum class PersistentSkill : uint8_t {
 	CastWhenDamageTaken,
 	/** Channelling a stream skill fills it. */
 	CastWhileChannelling,
-	Last = CastWhileChannelling,
+	/** Melee kills store its Energy, up to 500, and using it from the skill tray casts the spells inside. */
+	ReapersInvocation,
+	/** Not a meta gem: a dodge roll leaves a mirage that shoots your bow attack for a few seconds. */
+	MirageArcher,
+	Last = MirageArcher,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -445,8 +449,6 @@ constexpr size_t MaxJewelSockets = 12;
 
 /** @brief Timers and counters of the support gems, per character (not saved; see poe2/support_table.cpp). */
 struct SupportRuntime {
-	/** Game ticks before a trigger support in each Skills panel socket can go off again. */
-	std::array<uint8_t, NumSkillSlots> triggerCooldown {};
 	/** Seals stored by Horadric Seals and Stored Volley, and the ticks towards the next one. */
 	std::array<uint8_t, NumSkillSlots> seals {};
 	std::array<uint8_t, NumSkillSlots> sealTicks {};
@@ -484,6 +486,8 @@ struct SupportRuntime {
 	std::array<uint8_t, NumSkillSlots> metaEvents {};
 	/** Cast while Channelling: ticks of the current second of channelling. */
 	uint8_t metaChannelTicks = 0;
+	/** Mirage Archer: ticks until a dodge roll can leave another mirage. */
+	uint16_t mirageCooldown = 0;
 };
 
 /** @brief Timers of the Spirit skills and the element infusions, per character (not saved; see poe2/spirit_skills.cpp). */

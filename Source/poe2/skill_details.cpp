@@ -453,7 +453,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(lines, "Cost", "No mana");
 
 	if (IsMetaGem(skill) && !isDefault) {
-		Value(lines, "Energy", std::format("{:d} of {:d}", MetaEnergy(player, socket), MetaMaxEnergy(player.poe2, socket)));
+		Value(lines, "Energy", std::format("{:d} of {:d}", MetaEnergy(player, socket), MetaEnergyCap(player.poe2, socket)));
+		if (IsInvocationGem(skill))
+			Value(lines, "A cast takes", std::format("{:d} Energy", MetaMaxEnergy(player.poe2, socket)));
 		Value(lines, "Energy gain", std::format("+{:d}% from gem level", MetaEnergyPercentPerLevel * (gemLevel - 1)));
 		Heading(lines, "Spells inside");
 		if (MetaSkillCount(player.poe2, socket) == 0)
@@ -462,7 +464,7 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 			if (!inside.isEmpty())
 				Value(lines, std::string(SkillName(inside)), std::format("level {:d}, {:d} mana", player.poe2.skillLevel(inside), SkillManaCost(player, inside)));
 		}
-		Text(lines, Kind::Note, "They cast together when the Energy is full, for their mana");
+		Text(lines, Kind::Note, IsInvocationGem(skill) ? "They cast together when you use it from the skill tray, for their mana" : "They cast together when the Energy is full, for their mana");
 	}
 
 	const HitEstimate hit = EstimateHit(player, skill, std::max(skill.kind == SkillKind::Spell ? gemLevel : level, 1));

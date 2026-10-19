@@ -83,10 +83,12 @@ void ClearTraySlot(Player &player, TraySlot slot);
 /**
  * @brief Puts a socketed skill on the first free key, then the middle mouse button, unless it's on the tray already.
  *
- * Spirit gems are active while socketed and need no tray slot.
+ * Spirit gems are active while socketed and need no tray slot, except invocations.
  * @return The slot the skill is on, if any.
  */
 std::optional<TraySlot> AutoBindSocket(Player &player, size_t socket);
+/** @brief Whether the skill is used from the skill tray: every skill but the Spirit gems, which are active while socketed, except invocations. */
+bool SkillGoesOnTray(SkillSlot skill);
 
 /** @brief Fills the tray of heroes from before it existed: each old bar slot (E, R, T, F, G, V) moves to the key with the same default letter, and V to Q. */
 void MigrateOldSkillBar(Player &player);
