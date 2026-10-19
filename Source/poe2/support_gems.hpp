@@ -100,6 +100,8 @@ std::string_view SupportGemDescription(SupportGem gem, int tier);
 
 /** @brief Makes a fresh support gem item of a tier (1 to 3), e.g. when a linked gem is swapped back out. */
 bool CreateSupportGemItem(Item &item, SupportGem gem, int tier = 1);
+/** @brief Like CreateSupportGemItem, for drawing only: leaves the game's random numbers untouched, so opening a panel can't change drops. */
+bool CreateSupportGemDisplayItem(Item &item, SupportGem gem, int tier = 1);
 /** @brief The tier of a support gem item, 1 to 3. */
 int SupportGemItemTier(const Item &item);
 /** @brief Gives the support gem item its tier and the name that goes with it ("Brutality II Support"). */

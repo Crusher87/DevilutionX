@@ -811,6 +811,13 @@ bool gbSkipSync = false;
 	if (monster.mode == MonsterMode::Petrified)
 		monster.animInfo.isPetrified = true;
 
+	// POE2 Mashup: the level's monster types are rebuilt by the running build, so a saved type index can point past them
+	// (a type with no pictures, or past the table). Such a monster is dropped instead of crashing when it's drawn.
+	if (monster.levelType >= LevelMonsterTypeCount) {
+		LogWarn("Monster type {} is not on this level any more, skipping it.", monster.levelType);
+		return false;
+	}
+
 	if (monster.isUnique()) {
 		// check if the unique monster is still valid (it could no longer be valid e.g. because the loaded mods changed and the unique monsters changed as a consequence)
 		const bool valid = IsMonsterValid(monster);
@@ -2162,9 +2169,9 @@ std::expected<void, std::string> LoadLevel(LevelConversionData *levelConversionD
 const int DiabloItemSaveSize = 368;
 const int HellfireItemSaveSize = 372;
 
-bool IsStashSizeValid(size_t stashSize, uint32_t pages, uint32_t itemCount)
+bool IsStashSizeValid(size_t stashSize, uint32_t pages, uint32_t itemCount, bool hellfireItems = gbIsHellfire)
 {
-	const size_t itemSize = (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize);
+	const size_t itemSize = (hellfireItems ? HellfireItemSaveSize : DiabloItemSaveSize);
 
 	const size_t expectedSize = sizeof(uint8_t)
 	    + sizeof(uint32_t)
@@ -2503,9 +2510,15 @@ uint8_t ReadPoe2HeroData(Player &player)
 	if (!file.IsValid(2 * sizeof(uint8_t)))
 		return 0;
 
-	const uint8_t version = file.NextLE<uint8_t>();
-	if (version == 0 || version > Poe2HeroDataVersion)
+	uint8_t version = file.NextLE<uint8_t>();
+	if (version == 0)
 		return 0;
+	// POE2 Mashup: hero data only ever gains fields at the end, so a hero saved by a newer build is read as far as this
+	// build knows. Returning 0 here would wipe the gems, tree, jewels and swap weapons on the next save.
+	if (version > Poe2HeroDataVersion) {
+		LogError("POE2 hero data version {} is newer than this build's {}; reading the parts this build knows", version, Poe2HeroDataVersion);
+		version = Poe2HeroDataVersion;
+	}
 
 	// Older heroes linked supports to spells; they move into the skill bar once it's read.
 	std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> spellSupports {};
@@ -3087,15 +3100,25 @@ void LoadStash()
 	}
 
 	auto itemCount = file.NextLE<uint32_t>();
-	if (!IsStashSizeValid(file.Size(), pages, itemCount)) {
+	// POE2 Mashup: POE2 stashes share one file name with and without Hellfire, and POE2 now forces Hellfire on, so a
+	// stash written with the other item size is read in that size and rewritten, never thrown away.
+	bool hellfireItems = gbIsHellfire;
+	if (!IsStashSizeValid(file.Size(), pages, itemCount, hellfireItems) && gbIsPoe2 && IsStashSizeValid(file.Size(), pages, itemCount, !hellfireItems))
+		hellfireItems = !hellfireItems;
+	if (!IsStashSizeValid(file.Size(), pages, itemCount, hellfireItems)) {
 		Stash = {};
 		EventPlrMsg(_("Stash size invalid. If you attempt to access your stash, data will be overwritten!!"), UiFlags::ColorRed);
 		return;
 	}
+	const bool wasHellfireSaveGame = gbIsHellfireSaveGame;
+	gbIsHellfireSaveGame = hellfireItems;
 	Stash.stashList.resize(itemCount);
 	for (unsigned i = 0; i < itemCount; i++) {
 		LoadAndValidateItemData(file, Stash.stashList[i]);
 	}
+	gbIsHellfireSaveGame = wasHellfireSaveGame;
+	if (hellfireItems != gbIsHellfire)
+		Stash.dirty = true;
 	if (gbIsPoe2)
 		FitOneCellStashItems();
 

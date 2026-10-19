@@ -677,7 +677,7 @@ void DeleteMonster(size_t activeIndex)
 
 void NewMonsterAnim(Monster &monster, MonsterGraphic graphic, Direction md, AnimationDistributionFlags flags = AnimationDistributionFlags::None, int8_t numSkippedFrames = 0, int8_t distributeFramesBeforeFrame = 0)
 {
-	const auto &animData = monster.type().getAnimData(graphic);
+	const auto &animData = monster.animDataOrWalk(graphic);
 	monster.animInfo.setNewAnimation(animData.spritesForDirection(md), animData.frames, animData.rate, flags, numSkippedFrames, distributeFramesBeforeFrame);
 	monster.flags &= ~(MFLAG_LOCK_ANIMATION | MFLAG_ALLOW_SPECIAL);
 	monster.direction = md;
@@ -5444,7 +5444,8 @@ bool MakeRoomForMinion(const Player &player)
 	for (size_t i = ReservedMonsterSlotsForGolems; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (monster.isInvalid || monster.hasNoLife() || monster.isUnique() || monster.isPlayerMinion()
-		    || monster.leaderRelation != LeaderRelation::None || monster.hasLeashedMinions())
+		    || monster.leaderRelation != LeaderRelation::None || monster.hasLeashedMinions()
+		    || MapMonsterTitle(monster)) // never the map boss or an encounter leader
 			continue;
 		const int distance = monster.position.tile.WalkingDistance(player.position.tile);
 		if (distance > farthestDistance) {

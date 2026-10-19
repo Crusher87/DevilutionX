@@ -221,6 +221,9 @@ bool Conflicts(uint8_t family, const std::vector<Poe2ItemMod> &rolled)
 {
 	const ModFamily &candidate = Families[family];
 	for (const Poe2ItemMod &mod : rolled) {
+		// Desecration-only families (and anything a shorter table no longer has) aren't in Families.
+		if (mod.family == 0 || mod.family > Families.size())
+			continue;
 		const uint8_t other = mod.family - 1;
 		if (other == family || Families[other].group == candidate.group)
 			return true;

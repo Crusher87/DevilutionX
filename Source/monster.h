@@ -309,9 +309,21 @@ struct Monster { // note: missing field _mAFNum
 	 * @param graphic Animation sequence of interest
 	 * @param desiredDirection Desired desiredDirection the monster should be visually facing
 	 */
-	void changeAnimationData(MonsterGraphic graphic, Direction desiredDirection)
+	/**
+	 * @brief Returns the animation for the given sequence, or the walk animation if the type has no sprites for it
+	 * (the Golem has no Stand or GotHit frames).
+	 */
+	[[nodiscard]] const AnimStruct &animDataOrWalk(MonsterGraphic graphic) const
 	{
 		const AnimStruct &animationData = type().getAnimData(graphic);
+		if (!animationData.sprites && type().getAnimData(MonsterGraphic::Walk).sprites)
+			return type().getAnimData(MonsterGraphic::Walk);
+		return animationData;
+	}
+
+	void changeAnimationData(MonsterGraphic graphic, Direction desiredDirection)
+	{
+		const AnimStruct &animationData = animDataOrWalk(graphic);
 
 		// Passing the frames and rate properties here is only relevant when initialising a monster, but doesn't cause any harm when switching animations.
 		this->animInfo.changeAnimationData(animationData.spritesForDirection(desiredDirection), animationData.frames, animationData.rate);
