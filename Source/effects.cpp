@@ -7,7 +7,10 @@
 
 #include <cstdint>
 #include <expected>
+#include <memory>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -41,6 +44,9 @@ TSFX *sgpStreamSFX = nullptr;
 
 /** List of all sounds, except monsters and music */
 std::vector<TSFX> sgSFX;
+
+/** POE2 Mashup: sounds a mod ships that have no SfxID, by path. */
+std::unordered_map<std::string, std::unique_ptr<TSnd>> ModSounds;
 
 void StreamPlay(TSFX *pSFX, int lVolume, int lPan)
 {
@@ -231,6 +237,24 @@ void PlaySfxLoc(SfxID psfx, Point position, bool randomizeByCategory)
 	PlaySfxPriv(&sgSFX[static_cast<int16_t>(psfx)], true, position);
 }
 
+void PlayModSfxLoc(std::string_view path, Point position)
+{
+	if (!gbSndInited || !gbSoundOn || gbBufferMsgs != 0)
+		return;
+	if (MyPlayer->pLvlLoad != 0 && gbIsMultiplayer)
+		return;
+	int lVolume = 0;
+	int lPan = 0;
+	if (!CalculateSoundPosition(position, &lVolume, &lPan))
+		return;
+	std::unique_ptr<TSnd> &snd = ModSounds[std::string(path)];
+	if (snd == nullptr)
+		snd = sound_file_load(std::string(path).c_str());
+	if (snd == nullptr || !snd->DSB.IsLoaded())
+		return;
+	snd_play_snd(snd.get(), lVolume, lPan, *GetOptions().Audio.soundVolume);
+}
+
 void sound_stop()
 {
 	if (!gbSndInited)
@@ -240,6 +264,10 @@ void sound_stop()
 		if (sfx.pSnd != nullptr && sfx.pSnd->DSB.IsLoaded()) {
 			sfx.pSnd->DSB.Stop();
 		}
+	}
+	for (auto &[path, snd] : ModSounds) {
+		if (snd != nullptr && snd->DSB.IsLoaded())
+			snd->DSB.Stop();
 	}
 }
 
@@ -255,6 +283,7 @@ void sound_update()
 void effects_cleanup_sfx(bool fullUnload)
 {
 	sound_stop();
+	ModSounds.clear();
 
 	if (fullUnload) {
 		sgSFX.clear();

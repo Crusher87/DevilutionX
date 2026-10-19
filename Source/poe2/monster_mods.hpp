@@ -46,6 +46,8 @@ constexpr int RegenPerMillePerSecond = 15;
 
 /** @brief POE2: ignite deals 20% of the hit per second for 4 seconds. */
 constexpr int IgniteTicks = 4 * 20;
+/** @brief How long Flammability lasts after the last fire hit, like POE2's 8 seconds on monsters. */
+constexpr int FlammabilityTicks = 8 * 20;
 constexpr int IgnitePercentPerSecond = 20;
 /** @brief POE2: shocked monsters take 20% more damage for 4 seconds. */
 constexpr int ShockTicks = 4 * 20;
@@ -101,12 +103,33 @@ bool IsMonsterImmobilized(const Monster &monster);
 /** @brief How much of a cold or physical hit counts towards a freeze or heavy stun, in percent. */
 int MonsterBuildupPercent(const Monster &monster);
 
+/** @brief Where an ailment comes from, for the rules that stop some of them (the Sickness Road, design v8 §5). */
+enum class AilmentSource : uint8_t {
+	/** Melee and bow hits, attack skills and minions. */
+	Strike,
+	/** Spells, Heralds and curses. */
+	Spell,
+	/** An ailment passed on from one monster to another. */
+	Spread,
+};
+
 /**
  * @brief Inflicts ailments for a hit: fire may ignite and lightning may shock, more likely the bigger the hit;
  * magic (cold) hits chill and build up freeze; physical hits build up heavy stun.
  */
-void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage);
-/** @brief Chance in percent that a hit inflicts an ailment: twice the share of the monster's life it took. */
-int AilmentChancePercent(const Monster &monster, Fixed26_6 damage);
+void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage, AilmentSource source = AilmentSource::Strike);
+/** @brief Whether the monster is ignited, shocked, chilled or poisoned. */
+bool CarriesAilment(const Monster &monster);
+/**
+ * @brief Passes a monster's ignite, shock, chill and poison to another, each replacing only a weaker or shorter one
+ * (the Sickness Road's contagion). Never onto a player's minion.
+ * @return Whether anything passed.
+ */
+bool CopyAilments(const Monster &from, Monster &to, const Player &player, bool withIgnite = true);
+/**
+ * @brief Chance in per mille that a hit inflicts an ailment, like POE2: 1% per 5% of the monster's ailment threshold
+ * dealt as fire (its Flammability), 1% per 4% as lightning. Unique monsters' threshold is half their life.
+ */
+int AilmentChancePerMille(const Monster &monster, DamageType damageType, Fixed26_6 damage);
 
 } // namespace devilution

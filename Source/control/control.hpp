@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_events.h>
@@ -48,6 +49,50 @@ extern UiFlags InfoColor;
 
 extern StringOrView InfoString;
 extern StringOrView FloatingInfoString;
+
+/** @brief POE2 Mashup: what kind of line an item tooltip line is, for its colour and the separators between groups. */
+enum class InfoLineStyle : uint8_t {
+	Default,
+	/** The second title line, like a rare item's base name. */
+	Subtitle,
+	Property,
+	Implicit,
+	Mod,
+	Corrupted,
+	Requirement,
+	Note,
+	/** A stat the item would raise over what's equipped. */
+	Better,
+	/** A stat the item would lower. */
+	Worse,
+	/** A weapon's damage of one type in the Alt view, in that type's colour. */
+	PhysicalDamage,
+	FireDamage,
+	LightningDamage,
+	/** A unique's flavour text, at the end of its tooltip. */
+	Flavour,
+	/**
+	 * A modifier line in the Alt view, laid out like POE2's: "side\tstat\ttier", with the side ("Prefix" or "Suffix",
+	 * only on a group's first line) on the left and the tier ("T3") on the right; either may be empty.
+	 */
+	Affix,
+	/** A property the item's modifiers raised, in blue like POE2's augmented values. */
+	AugmentedProperty,
+};
+/** @brief The style given to the next floating info lines; reset to Default after each item. */
+extern InfoLineStyle CurrentInfoLineStyle;
+/** @brief The style of each floating info line after the title, cleared after each drawn frame. */
+extern std::vector<InfoLineStyle> FloatingInfoStyles;
+/** @brief POE2 Mashup: an equipped item's tooltip, drawn beside the hovered item's to compare them. */
+struct CompareTooltip {
+	/** @brief The label over its box, such as "Equipped: Left Ring". */
+	std::string label;
+	StringOrView text;
+	std::vector<InfoLineStyle> styles;
+	UiFlags color = UiFlags::ColorWhite;
+};
+/** @brief The equipped items the hovered one would replace (both rings for a ring). Cleared after each frame. */
+extern std::vector<CompareTooltip> CompareTooltips;
 
 extern Rectangle MainPanelButtonRect[8];
 extern DVL_API_FOR_TEST Rectangle CharPanelButtonRect[4];

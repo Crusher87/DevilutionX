@@ -15,6 +15,7 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/spirit.hpp"
+#include "poe2/unique_effects.hpp"
 #include "utils/str_cat.hpp"
 #include "utils/timer.hpp"
 
@@ -273,7 +274,17 @@ void DrawPoe2ManaGlobe(const Surface &out, bool dome)
 	const Player &player = *MyPlayer;
 	const int maxSpirit = MaxSpirit(player);
 	DrawGlobe(out, *pManaBuff, ManaGlobeX, GlobeLiquid::Mana, player._pManaPer, dome, false, SpiritArc,
-	    LitArcSegments(ReservedSpirit(player), maxSpirit, SpiritArc.segments), maxSpirit > 0);
+	    LitArcSegments(AvailableSpirit(player), maxSpirit, SpiritArc.segments), maxSpirit > 0);
+}
+
+bool IsHoveringLifeGlobe()
+{
+	return IsHoveringGlobe(LifeGlobeX);
+}
+
+bool IsHoveringManaGlobe()
+{
+	return IsHoveringGlobe(ManaGlobeX);
 }
 
 void DrawPoe2GlobeValues(const Surface &out)
@@ -286,9 +297,20 @@ void DrawPoe2GlobeValues(const Surface &out)
 	}
 	const int maxSpirit = MaxSpirit(player);
 	if (maxSpirit > 0 && (*GetOptions().Gameplay.showManaValues || IsHoveringGlobe(ManaGlobeX))) {
-		DrawShadowedValue(out, StrCat("Spirit ", ReservedSpirit(player), "/", maxSpirit),
+		// Like POE2, the Spirit not reserved yet.
+		DrawShadowedValue(out, StrCat("Spirit ", AvailableSpirit(player), "/", maxSpirit),
 		    panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 44 }, UiFlags::ColorGold);
 	}
+	// Rage, Combo and Frenzy charges only show while built up.
+	if (player.poe2.rage > 0)
+		DrawShadowedValue(out, StrCat("Rage ", player.poe2.rage), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorRed);
+	if (player.poe2.combo > 0)
+		DrawShadowedValue(out, StrCat("Combo ", player.poe2.combo), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorWhite);
+	if (player.poe2.frenzyCharges > 0)
+		DrawShadowedValue(out, StrCat("Frenzy ", player.poe2.frenzyCharges), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorOrange);
+	// The Sickness Road toll's fever, while it keeps the hero's own hits from inflicting ailments.
+	if (const int fever = SicknessFeverTicks(player); fever > 0)
+		DrawShadowedValue(out, StrCat("Fever ", (fever + 19) / 20, "s"), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorYellow);
 }
 
 void DrawFlaskLiquidLevel(const Surface &out, Point position, ClxSprite sprite, int charges, int maxCharges)

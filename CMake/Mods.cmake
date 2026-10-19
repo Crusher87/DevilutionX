@@ -19,6 +19,7 @@ set(hellfire_mod
   txtdata/items/item_suffixes.tsv
   txtdata/items/unique_itemdat.tsv
   txtdata/missiles/misdat.tsv
+  txtdata/towners/towners.tsv
   txtdata/missiles/missile_sprites.tsv
   txtdata/monsters/monstdat.tsv
   txtdata/sound/effects.tsv
@@ -79,10 +80,22 @@ endif()
 set(poe2_mod
   manifest.ini
   lua/mods/poe2/init.lua
+  sfx/poe2/glacial_spike.wav
+  sfx/poe2/blizzard_cast.wav
+  sfx/poe2/blizzard_shard1.wav
+  sfx/poe2/blizzard_shard2.wav
+  sfx/poe2/blizzard_shard3.wav
+  sfx/poe2/blizzard_shard4.wav
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
   txtdata/missiles/misdat.tsv
-  txtdata/poe2/passive_tree.tsv)
+  txtdata/towners/towners.tsv
+  txtdata/poe2/base_meta.tsv
+  txtdata/poe2/modifier_families.tsv
+  txtdata/poe2/modifier_tiers.tsv
+  txtdata/poe2/passive_tree.tsv
+  txtdata/poe2/unique_lore.tsv
+  txtdata/poe2/uniques.tsv)
 
 if(APPLE)
   foreach(asset_file ${poe2_mod})

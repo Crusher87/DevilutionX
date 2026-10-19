@@ -40,6 +40,7 @@
 #include "lua/modules/towners.hpp"
 #include "options.h"
 #include "plrmsg.h"
+#include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "stores.h"
 #include "utils/console.h"
@@ -278,11 +279,23 @@ void LuaReloadActiveMods()
 	LoadMonsterData();
 	LoadItemData();
 	LoadPassiveTreeData();
+	LoadModifierData();
 	LoadObjectData();
 	LoadQuestData();
 
 	lua::LoadModsComplete();
 }
+
+namespace {
+
+/** @brief A mod was switched on or off. POE2 mode always plays on Hellfire, so Hellfire is switched back on first, and that change reloads the mods. */
+void OnModToggled()
+{
+	if (!GetOptions().Mods.SwitchOnHellfireForPoe2())
+		LuaReloadActiveMods();
+}
+
+} // namespace
 
 void LuaInitialize()
 {
@@ -328,10 +341,10 @@ void LuaInitialize()
 	lua["setEnvironment"] = [](const sol::environment &env, const sol::function &fn) { sol::set_environment(env, fn); };
 
 	for (OptionEntryBase *mod : GetOptions().Mods.GetEntries()) {
-		mod->SetValueChangedCallback(LuaReloadActiveMods);
+		mod->SetValueChangedCallback(OnModToggled);
 	}
 
-	LuaReloadActiveMods();
+	OnModToggled();
 }
 
 void LuaShutdown()

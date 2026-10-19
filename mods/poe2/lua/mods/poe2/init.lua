@@ -1,10 +1,6 @@
-local events = require("devilutionx.events")
-local render = require("devilutionx.render")
 local poe2 = require("devilutionx.poe2")
 
 poe2.enable()
 
--- Shows the mod version so it's obvious in game that the mod is loaded.
-events.GameDrawComplete.add(function()
-  render.string("POE2 Mashup v0.10.0", 6, 6)
-end)
+-- The game menu (Esc) shows the version, so it's easy to check which build is installed.
+poe2.set_version("v0.10.0")

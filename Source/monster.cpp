@@ -79,10 +79,23 @@
 #include "player.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/economy.hpp"
+#include "poe2/hd.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/map_play.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_skills.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "quests.h"
 #include "sound_effect_enums.h"
 #include "storm/storm_net.hpp"
@@ -198,7 +211,7 @@ void InitMonsterTRN(CMonster &monst)
 	}
 }
 
-void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point position)
+void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point position, bool risen = false)
 {
 	monster.direction = rd;
 	monster.position.tile = position;
@@ -248,6 +261,9 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 	monster.leader = Monster::NoLeader;
 	monster.leaderRelation = LeaderRelation::None;
 	monster.flags = monster.data().abilityFlags;
+	// POE2 Mashup: set before the rarity below, which a risen monster never rolls.
+	if (risen)
+		monster.flags |= MFLAG_RISEN;
 	monster.talkMsg = TEXT_NONE;
 
 	if (monster.ai == MonsterAIID::Gargoyle) {
@@ -661,7 +677,7 @@ void DeleteMonster(size_t activeIndex)
 
 void NewMonsterAnim(Monster &monster, MonsterGraphic graphic, Direction md, AnimationDistributionFlags flags = AnimationDistributionFlags::None, int8_t numSkippedFrames = 0, int8_t distributeFramesBeforeFrame = 0)
 {
-	const auto &animData = monster.type().getAnimData(graphic);
+	const auto &animData = monster.animDataOrWalk(graphic);
 	monster.animInfo.setNewAnimation(animData.spritesForDirection(md), animData.frames, animData.rate, flags, numSkippedFrames, distributeFramesBeforeFrame);
 	monster.flags &= ~(MFLAG_LOCK_ANIMATION | MFLAG_ALLOW_SPECIAL);
 	monster.direction = md;
@@ -685,6 +701,35 @@ DVL_ALWAYS_INLINE bool IsRanged(Monster &monster)
 	return IsAnyOf(monster.ai, MonsterAIID::SkeletonRanged, MonsterAIID::GoatRanged, MonsterAIID::Succubus, MonsterAIID::LazarusSuccubus);
 }
 
+/** POE2 Mashup: minions stay near their owner, like POE2's. They fight what comes close to the owner, come back when
+ * the owner moves on, hurry when they fall behind and appear beside the owner when left far behind. */
+constexpr int MinionFollowRadius = 3;
+constexpr int MinionEngageRadius = 6;
+constexpr int MinionLeashRadius = 9;
+constexpr int MinionCatchUpRadius = 5;
+constexpr int MinionTeleportRadius = 14;
+
+/** @brief The minion's owner when it is on this level and able to lead; null otherwise (then the minion fights on its own). */
+const Player *MinionLeader(const Monster &minion)
+{
+	if (!gbIsPoe2 || !minion.isPlayerMinion() || minion.goalVar3 < 0 || static_cast<size_t>(minion.goalVar3) >= Players.size())
+		return nullptr;
+	const Player &owner = Players[minion.goalVar3];
+	if (!owner.plractive || !owner.isOnActiveLevel() || owner._pLvlChanging || owner.hasNoLife())
+		return nullptr;
+	return &owner;
+}
+
+/** @brief A minion picks fights near its owner, or with what is already next to it. */
+bool MinionMayEngage(const Monster &minion, const Monster &enemy)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr)
+		return true;
+	return enemy.position.tile.WalkingDistance(owner->position.tile) <= MinionEngageRadius
+	    || enemy.position.tile.WalkingDistance(minion.position.tile) <= 1;
+}
+
 void UpdateEnemy(Monster &monster)
 {
 	WorldTilePosition target;
@@ -693,6 +738,9 @@ void UpdateEnemy(Monster &monster)
 	bool bestsameroom = false;
 	const WorldTilePosition position = monster.position.tile;
 	const bool isPlayerMinion = monster.isPlayerMinion();
+	// POE2 Mashup: Lingering Illusion, an illusion of the hero draws the enemies near it.
+	int decoy = -1;
+	int decoyDist = IllusionDrawTiles + 1;
 	if (!isPlayerMinion) {
 		for (size_t pnum = 0; pnum < Players.size(); pnum++) {
 			const Player &player = Players[pnum];
@@ -725,8 +773,14 @@ void UpdateEnemy(Monster &monster)
 			continue;
 		if (isPlayerMinion && otherMonster.isPlayerMinion()) // prevent golems from fighting each other
 			continue;
+		if (isPlayerMinion && !MinionMayEngage(monster, otherMonster))
+			continue;
 
 		const int dist = otherMonster.position.tile.WalkingDistance(position);
+		if (!isPlayerMinion && otherMonster.poe2.decoy && dist < decoyDist) {
+			decoy = static_cast<int>(monsterId);
+			decoyDist = dist;
+		}
 		if (((monster.flags & MFLAG_GOLEM) == 0
 		        && (monster.flags & MFLAG_BERSERK) == 0
 		        && dist >= 2
@@ -746,6 +800,11 @@ void UpdateEnemy(Monster &monster)
 			bestDist = dist;
 			bestsameroom = sameroom;
 		}
+	}
+	if (decoy != -1) {
+		monster.flags |= MFLAG_TARGETS_MONSTER;
+		menemy = decoy;
+		target = Monsters[decoy].position.future;
 	}
 	if (menemy != -1) {
 		monster.flags &= ~MFLAG_NO_ENEMY;
@@ -838,8 +897,25 @@ void StartAttack(Monster &monster)
 	monster.position.old = monster.position.tile;
 }
 
+bool RandomWalk(Monster &monster, Direction md);
+
+/**
+ * @brief POE2 Mashup: the Maiden's Road pact, out of mind. A monster that can't shoot at the hero from where it stands
+ * walks toward her instead.
+ */
+bool OutOfMindRefuses(Monster &monster, MissileID missileType)
+{
+	if (missileType == MissileID::HorkSpawn || CanShootAtPlayer(monster))
+		return false;
+	monster.goal = MonsterGoal::Normal;
+	RandomWalk(monster, GetMonsterDirection(monster));
+	return true;
+}
+
 void StartRangedAttack(Monster &monster, MissileID missileType, int dam)
 {
+	if (OutOfMindRefuses(monster, missileType))
+		return;
 	const Direction md = GetMonsterDirection(monster);
 	NewMonsterAnim(monster, MonsterGraphic::Attack, md, AnimationDistributionFlags::ProcessAnimationPending);
 	monster.mode = MonsterMode::RangedAttack;
@@ -851,6 +927,8 @@ void StartRangedAttack(Monster &monster, MissileID missileType, int dam)
 
 void StartRangedSpecialAttack(Monster &monster, MissileID missileType, int dam)
 {
+	if (OutOfMindRefuses(monster, missileType))
+		return;
 	const Direction md = GetMonsterDirection(monster);
 	int8_t distributeFramesBeforeFrame = 0;
 	if (monster.ai == MonsterAIID::Mega)
@@ -951,6 +1029,13 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 	} else if (!monster.isPlayerMinion()) {
 		SpawnItem(monster, monster.position.tile, sendmsg);
 	}
+	// POE2 Mashup: some bosses guard a skull that grants Spirit, like POE2's Spirit quests.
+	DropSpiritSkull(monster, sendmsg);
+	// And the quest bosses carry the Books of Specialisation that give weapon set points.
+	DropSpecBook(monster, sendmsg);
+	// And the bundle's bosses roll a unique from their own tables.
+	if (!monster.isPlayerMinion())
+		DropBossUnique(monster, sendmsg);
 }
 
 std::optional<Point> GetTeleportTile(const Monster &monster)
@@ -1131,9 +1216,33 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 	if (hit >= hper)
 		return;
 
-	const int dam = RandomIntBetween(mind, maxd) << 6;
+	int dam = RandomIntBetween(mind, maxd) << 6;
+	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
+	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
+		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
+		dam = dam * UniqueMinionDamagePercent(owner, attacker.hitPoints.raw() * 2 < attacker.maxHitPoints.raw()) / 100;
+		// Their skill's supports too, and the skeleton's kind and Rage.
+		if (gbIsPoe2)
+			dam = dam * SupportMinionDamagePercent(owner, attacker) / 100 * MinionGemDamagePercent(attacker) / 100;
+	}
+	if (gbIsPoe2 && target.isPlayerMinion() && static_cast<size_t>(target.goalVar3) < Players.size())
+		dam = dam * SupportMinionDamageTakenPercent(Players[static_cast<size_t>(target.goalVar3)], target) / 100;
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
-	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
+	// POE2 Mashup: most of a raging spirit's blow is fire.
+	if (const int firePercent = gbIsPoe2 ? MinionGemFirePercent(attacker) : 0; firePercent > 0) {
+		const int fire = dam * firePercent / 100;
+		ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam - fire));
+		if (!target.hasNoLife())
+			ApplyMonsterDamage(DamageType::Fire, target, Fixed26_6::fromRaw(fire * MonsterDamageTakenPercent(target, DamageType::Fire) / 100));
+	} else {
+		ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
+	}
+	// POE2 Mashup: Blood Golem heals its owner and Fire Golem's blows burn.
+	if (gbIsPoe2 && attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
+		OnMinionHitMonster(Players[static_cast<size_t>(attacker.goalVar3)], attacker, target, Fixed26_6::fromRaw(dam));
+		// And a Reaver's Rage and a Brute's stun.
+		OnMinionGemHit(Players[static_cast<size_t>(attacker.goalVar3)], attacker, target, Fixed26_6::fromRaw(dam));
+	}
 
 	if (attacker.isPlayerMinion()) {
 		const auto playerId = static_cast<size_t>(attacker.goalVar3);
@@ -1188,11 +1297,13 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 {
 	if (player.hasNoLife() || player._pInvincible || HasAnyOf(player._pSpellFlags, SpellFlag::Etherealize))
 		return;
-	// POE2 Mashup: dodge rolls avoid melee hits.
-	if (player.poe2.isDodging())
-		return;
 	if (monster.position.tile.WalkingDistance(player.position.tile) >= 2)
 		return;
+	// POE2 Mashup: the start of a dodge roll avoids melee hits.
+	if (player.poe2.isUntouchable()) {
+		TelemetryMeleeSwing(player, SwingOutcome::Dodged);
+		return;
+	}
 
 	int hper = GenerateRnd(100);
 #ifdef _DEBUG
@@ -1205,6 +1316,10 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		ac += 40;
 	if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::ACAgainstUndead) && monster.data().monsterClass == MonsterClass::Undead)
 		ac += 20;
+	// The Maiden's Road pact, with a staff: each monster's first blow can't be evaded and ignores armour.
+	const bool firstBlow = TakeFirstBlow(monster, player);
+	if (firstBlow)
+		ac = 0;
 	hit += 2 * (monster.level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel())
 	    + 30
 	    - ac;
@@ -1215,10 +1330,14 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		blkper = GenerateRnd(100);
 	}
 	int blk = player.GetBlockChance() - (monster.level(sgGameInitInfo.nDifficulty) * 2);
-	blk = std::clamp(blk, 0, 100);
-	if (hper >= hit)
+	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
+	blk = std::clamp(blk, 0, player.GetMaxBlockChance(gbIsPoe2));
+	if (hper >= hit) {
+		TelemetryMeleeSwing(player, SwingOutcome::Evaded);
 		return;
+	}
 	if (blkper < blk) {
+		TelemetryMeleeSwing(player, SwingOutcome::Blocked);
 		const Direction dir = GetDirection(player.position.tile, monster.position.tile);
 		StartPlrBlock(player, dir);
 		if (&player == MyPlayer && player.wReflections > 0) {
@@ -1234,14 +1353,21 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	// New method fixes a bug which caused the maximum possible damage value to be 63/64ths too low.
 	Fixed26_6 dam = Fixed26_6::fromRaw(RandomIntBetween(minDam << 6, maxDam << 6));
 	dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
-	dam = ApplyArmour(player, dam);
+	if (!firstBlow)
+		dam = ApplyArmour(player, dam);
+	if (&player == MyPlayer)
+		dam = ApplyMapMonsterHit(player, dam);
+	if (gbIsPoe2 && &player == MyPlayer)
+		dam = ApplyTableSkillDefences(monster, player, dam);
 	if (&player == MyPlayer) {
 		if (player.wReflections > 0) {
 			const Fixed26_6 reflectedDamage = CheckReflect(monster, player, dam);
 			dam = std::max(dam - reflectedDamage, Fixed26_6::fromInt(0));
 		}
+		TelemetryMeleeSwing(player, SwingOutcome::Landed);
 		TelemetryNoteAttacker(monster.name());
-		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, dam));
+		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, dam, DamageType::Physical)));
+		ReflectMeleeHit(player, monster, dam);
 	}
 
 	// Reflect can also kill a monster, so make sure the monster is still alive
@@ -1257,6 +1383,9 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 
 	if ((monster.flags & MFLAG_NOLIFESTEAL) == 0 && monster.type().type == MT_SKING && gbIsMultiplayer)
 		monster.hitPoints += dam;
+	// POE2 Mashup: Cast when Hit and the like.
+	if (gbIsPoe2 && &player == MyPlayer && !player.hasNoLife())
+		OnPlayerHitBySupportedMonster(player, monster);
 	if (player.hasNoLife()) {
 		if (gbIsHellfire)
 			M_StartStand(monster, monster.direction);
@@ -1315,6 +1444,35 @@ bool MonsterAttack(Monster &monster)
 	return false;
 }
 
+/** @brief POE2 Mashup: a skeleton's arrow, bolt or Storm Mage's two charged bolts, dealing its own damage. */
+void FireMinionShot(const Monster &minion, MissileID missileType, int damage)
+{
+	const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
+	const int shots = missileType == MissileID::ChargedBolt ? 2 : 1;
+	for (int i = 0; i < shots; i++) {
+		Missile *shot = AddMissile(minion.position.tile, minion.enemyPosition, minion.direction, missileType, TARGET_MONSTERS, owner, damage, 0);
+		if (shot == nullptr)
+			continue;
+		// A charged bolt sets its damage from the hero's Magic, and an arrow would pierce like the hero's.
+		shot->_midam = damage;
+		shot->poe2.minionShot = true;
+		shot->poe2.piercesLeft = 0;
+	}
+}
+
+/** @brief POE2 Mashup: a skeleton's shot, in percent of its blow, with its owner's uniques and the gem's supports. */
+int MinionShotDamage(const Monster &minion, int percent)
+{
+	int damage = RandomIntBetween(minion.minDamage, minion.maxDamage) * percent / 100;
+	if (static_cast<size_t>(minion.goalVar3) < Players.size()) {
+		const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
+		damage = damage * UniqueMinionDamagePercent(owner, minion.hitPoints.raw() * 2 < minion.maxHitPoints.raw()) / 100;
+		damage = damage * SupportMinionDamagePercent(owner, minion) / 100;
+	}
+	// A missile with no damage would take the hero's.
+	return std::clamp(damage, 1, static_cast<int>(INT16_MAX));
+}
+
 bool MonsterRangedAttack(Monster &monster)
 {
 	if (monster.animInfo.currentFrame == monster.data().animFrameNum - 1) {
@@ -1323,6 +1481,11 @@ bool MonsterRangedAttack(Monster &monster)
 			int multimissiles = 1;
 			if (missileType == MissileID::ChargedBolt)
 				multimissiles = 3;
+			// POE2 Mashup: a skeleton's shot is its owner's, so it flies past the other minions and only hits enemies.
+			if (monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
+				FireMinionShot(monster, missileType, monster.var2);
+				multimissiles = 0;
+			}
 			for (int mi = 0; mi < multimissiles; mi++) {
 				AddMissile(
 				    monster.position.tile,
@@ -2094,7 +2257,8 @@ void ZombieAi(Monster &monster)
 		return;
 	}
 
-	if (!IsTileVisible(monster.position.tile)) {
+	// POE2 Mashup: the Maiden's Road toll, her darkness doesn't hide her.
+	if (!IsTileVisible(monster.position.tile) && !MaidenSeesYou(monster)) {
 		return;
 	}
 
@@ -2425,7 +2589,7 @@ void LeoricAi(Monster &monster)
 		    && ((distanceToEnemy >= 3 && v < 4 * monster.intelligence + 35) || v < 6)
 		    && LineClearMissile(monster.position.tile, monster.enemyPosition)) {
 			const Point newPosition = monster.position.tile + md;
-			if (IsTileAvailable(monster, newPosition) && ActiveMonsterCount < MaxMonsters) {
+			if (IsTileAvailable(monster, newPosition) && ActiveMonsterCount < MaxEnemyMonsters()) {
 				auto typeIndex = GetRandomSkeletonTypeIndex();
 				if (typeIndex) {
 					SpawnMonster(newPosition, md, *typeIndex);
@@ -3061,7 +3225,7 @@ void HorkDemonAi(Monster &monster)
 	if (monster.goal == MonsterGoal::Normal) {
 		if ((distanceToEnemy >= 3) && v < 2 * monster.intelligence + 43) {
 			const Point position = monster.position.tile + monster.direction;
-			if (IsTileAvailable(monster, position) && ActiveMonsterCount < MaxMonsters) {
+			if (IsTileAvailable(monster, position) && ActiveMonsterCount < MaxEnemyMonsters()) {
 				StartRangedSpecialAttack(monster, MissileID::HorkSpawn, 0);
 			}
 		} else if (distanceToEnemy < 2) {
@@ -3287,7 +3451,7 @@ void InitGolem(devilution::Monster &monster, uint8_t golemOwnerPlayerId, int16_t
 	monster.flags |= MFLAG_GOLEM;
 	monster.goalVar3 = static_cast<int8_t>(golemOwnerPlayerId);
 	const Player &player = Players[golemOwnerPlayerId];
-	monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3));
+	monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3) * UniqueMinionLifePercent(player) / 100);
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 25;
 	monster.golemToHit = 5 * (golemSpellLevel + 8) + 2 * player.getCharacterLevel();
@@ -3301,11 +3465,17 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 {
 	monster.poe2 = {};
 	monster.flags |= MFLAG_GOLEM;
+	// An Illusion Weaver raised as a minion stays in sight.
+	monster.flags &= ~MFLAG_HIDDEN;
 	monster.ai = MonsterAIID::Golem;
 	monster.goalVar3 = static_cast<int8_t>(ownerPlayerId);
 	const Player &player = Players[ownerPlayerId];
-	const int level = player.getCharacterLevel();
-	monster.maxHitPoints = Fixed26_6::fromInt(30 + (8 * level) + (4 * gemLevel));
+	// Like POE2, the gem's level makes the minions stronger: a gem at the right level for its owner fights at the owner's level.
+	const int level = MinionLevelForGemLevel(gemLevel);
+	// The ones that stay back and shoot are frailer than the warriors, the Brutes tougher.
+	const MinionGemData *gem = FindMinionGemByType(monster.type().type);
+	const int lifePercent = gem != nullptr ? gem->lifePercent : 100;
+	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
 	monster.golemToHit = 40 + (2 * level) + (2 * gemLevel);
@@ -3315,10 +3485,10 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	UpdateEnemy(monster);
 }
 
-/** @brief Whether a spawn message carries a Skeletal Warrior: a minion owner and level on a monster that isn't a golem. */
+/** @brief Whether a spawn message carries a skeleton gem's minion: a minion owner and level on one of their types. */
 bool IsSkeletonMinionSpawn(const Monster &monster, int16_t golemSpellLevel)
 {
-	return gbIsPoe2 && golemSpellLevel > 0 && monster.type().type == SkeletonMinionType;
+	return gbIsPoe2 && golemSpellLevel > 0 && IsMinionGemType(monster.type().type);
 }
 
 bool PosOkMissile(Point position)
@@ -3462,6 +3632,11 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 void InitLevelMonsters()
 {
 	ClearHeralds();
+	ClearSkillZones();
+	ClearSupportEffects();
+	ClearSpiritSkills();
+	ClearMinionGems();
+	ClearPendingRises();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -3471,7 +3646,7 @@ void InitLevelMonsters()
 
 	ClrAllMonsters();
 	ActiveMonsterCount = 0;
-	totalmonsters = MaxMonsters;
+	totalmonsters = MaxEnemyMonsters();
 
 	std::iota(std::begin(ActiveMonsters), std::end(ActiveMonsters), 0U);
 	uniquetrans = 0;
@@ -3480,9 +3655,11 @@ void InitLevelMonsters()
 std::expected<void, std::string> GetLevelMTypes()
 {
 	RETURN_IF_ERROR(AddMonsterType(MT_GOLEM, PLACE_SPECIAL));
-	// POE2 Mashup: Skeletal Warriors can be raised on every level.
-	if (gbIsPoe2)
+	// POE2 Mashup: Skeletal Warriors and Mages can be raised on every level.
+	if (gbIsPoe2) {
 		RETURN_IF_ERROR(AddMonsterType(SkeletonMinionType, PLACE_SPECIAL));
+		RETURN_IF_ERROR(AddMonsterType(SkeletonMageMinionType, PLACE_SPECIAL));
+	}
 	if (currlevel == 16) {
 		RETURN_IF_ERROR(AddMonsterType(MT_ADVOCATE, PLACE_SCATTER));
 		RETURN_IF_ERROR(AddMonsterType(MT_RBLACK, PLACE_SCATTER));
@@ -3622,6 +3799,14 @@ std::expected<void, std::string> InitMonsterGFX(CMonster &monsterType, MonsterSp
 
 	if (!monsterData.trnFile.empty()) {
 		InitMonsterTRN(monsterType);
+	}
+	for (size_t i = 0; i < numAnims; ++i) {
+		if (!monsterType.anims[i].sprites)
+			continue;
+		std::string name = StrCat("monsters\\", monsterData.spritePath(), std::string_view(&Animletter[i], 1));
+		if (!monsterData.trnFile.empty())
+			StrAppend(name, "@", monsterData.trnFile);
+		hd::RegisterSprites(name, *monsterType.anims[i].sprites);
 	}
 
 	if (IsAnyOf(mtype, MT_NMAGMA, MT_YMAGMA, MT_BMAGMA, MT_WMAGMA))
@@ -3767,8 +3952,15 @@ std::expected<void, std::string> InitMonsters()
 		// POE2 Mashup: denser levels for faster, busier fights.
 		if (gbIsPoe2)
 			numplacemonsters += numplacemonsters / 2;
-		if (ActiveMonsterCount + numplacemonsters > MaxMonsters - 10)
-			numplacemonsters = MaxMonsters - 10 - ActiveMonsterCount;
+		// And a map's pack size and "more packs" add more.
+		if (ActiveMapTier() > 0) {
+			const MapEffects &map = ActiveMapEffects();
+			numplacemonsters = numplacemonsters * static_cast<size_t>(map[MapAxis::PackSize]) / 100;
+			numplacemonsters = numplacemonsters * static_cast<size_t>(100 + map[MapDanger::MorePacks]) / 100;
+		}
+		const size_t room = MaxEnemyMonsters() - 10;
+		if (ActiveMonsterCount + numplacemonsters > room)
+			numplacemonsters = ActiveMonsterCount < room ? room - ActiveMonsterCount : 0;
 		totalmonsters = ActiveMonsterCount + numplacemonsters;
 		int numscattypes = 0;
 		size_t scattertypes[NUM_MAX_MTYPES];
@@ -3790,11 +3982,26 @@ std::expected<void, std::string> InitMonsters()
 				PlaceGroup(typeIndex, na);
 			}
 		}
+		// POE2 Mashup: a map's toughest monster becomes its boss, and its encounters take their places.
+		ChooseMapBoss();
+		PlaceMapEncounters();
 	}
 	for (int i = 0; i < nt; i++) {
 		for (int s = -2; s < 2; s++) {
 			for (int t = -2; t < 2; t++)
 				DoUnVision(trigs[i].position + Displacement { s, t }, 15);
+		}
+	}
+	// POE2 Mashup: every minion gem can raise its minions on every level. Their types come last, so the types of
+	// levels saved before keep their places.
+	if (gbIsPoe2) {
+		for (const MinionGemData &gem : MinionGemTable()) {
+			if (LevelMonsterTypeCount >= MaxLvlMTypes)
+				break;
+			// Hellfire's fire bats need Hellfire's data, which POE2 turns on; the shareware has none of the deeper monsters.
+			if (static_cast<size_t>(gem.type) >= MonstersData.size() || (gbIsSpawn && MonstersData[gem.type].availability == MonsterAvailability::Retail))
+				continue;
+			RETURN_IF_ERROR(AddMonsterType(gem.type, PLACE_SPECIAL));
 		}
 	}
 
@@ -3804,8 +4011,10 @@ std::expected<void, std::string> InitMonsters()
 std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point startPosition)
 {
 	RETURN_IF_ERROR(AddMonsterType(MT_GOLEM, PLACE_SPECIAL));
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		RETURN_IF_ERROR(AddMonsterType(SkeletonMinionType, PLACE_SPECIAL));
+		RETURN_IF_ERROR(AddMonsterType(SkeletonMageMinionType, PLACE_SPECIAL));
+	}
 	if (setlevel)
 		for (int i = 0; i < ReservedMonsterSlotsForGolems; i++)
 			AddMonster(GolemHoldingCell, Direction::South, 0, false);
@@ -3831,9 +4040,14 @@ std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point s
 	return {};
 }
 
+size_t MaxEnemyMonsters()
+{
+	return gbIsPoe2 ? MaxMonsters - MinionMonsterSlots : MaxMonsters;
+}
+
 Monster *AddMonster(Point position, Direction dir, size_t typeIndex, bool inMap)
 {
-	if (ActiveMonsterCount < MaxMonsters) {
+	if (ActiveMonsterCount < MaxEnemyMonsters()) {
 		Monster &monster = Monsters[ActiveMonsters[ActiveMonsterCount++]];
 		if (inMap)
 			monster.occupyTile(position, false);
@@ -3846,7 +4060,7 @@ Monster *AddMonster(Point position, Direction dir, size_t typeIndex, bool inMap)
 
 void SpawnMonster(Point position, Direction dir, size_t typeIndex)
 {
-	if (ActiveMonsterCount >= MaxMonsters)
+	if (ActiveMonsterCount >= MaxEnemyMonsters())
 		return;
 
 	// The command is only executed for the level owner, to prevent desyncs in multiplayer.
@@ -3876,7 +4090,7 @@ void LoadDeltaSpawnedMonster(size_t typeIndex, size_t monsterId, uint32_t seed, 
 	}
 }
 
-void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel)
+void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel, bool risen)
 {
 	SetRndSeed(seed);
 	EnsureMonsterIndexIsActive(monsterId);
@@ -3897,7 +4111,7 @@ void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, s
 	position = freePosition.value_or(position);
 
 	monster.occupyTile(position, false);
-	InitMonster(monster, dir, typeIndex, position);
+	InitMonster(monster, dir, typeIndex, position, risen);
 
 	if (monster.type().type == MT_GOLEM) {
 		InitGolem(monster, golemOwnerPlayerId, golemSpellLevel);
@@ -3934,6 +4148,7 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 	const Fixed26_6 lifeBefore = monster.hitPoints;
 	monster.hitPoints -= damage;
 	TelemetryMonsterDamaged(monster, damage, lifeBefore);
+	NoteSupportedDamage(monster, damageType, damage);
 
 	if (monster.hasNoLife()) {
 		// A monster without life no longer blocks the tile it stands on.
@@ -4061,13 +4276,34 @@ void M_StartHit(Monster &monster, const Player &player, int dam)
 
 void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 {
-	if (!monster.isPlayerMinion())
+	// POE2 Mashup: Leoric's Road. A kill may rise again (before the other on-kill effects); a risen monster gives no
+	// reward and runs no on-kill effect, only its death.
+	const bool risen = gbIsPoe2 && IsRisen(monster);
+	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0)
+		OnProfaneRoadKill(*MyPlayer, monster);
+	if (!monster.isPlayerMinion() && !risen)
 		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100, monster.whoHit);
 	int goldenDrops = 0;
-	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0) {
+	if (gbIsPoe2 && !monster.isPlayerMinion() && !risen && (monster.whoHit & (1 << MyPlayerId)) != 0) {
 		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
+		RecoverOnKill(*MyPlayer);
 		QueueHeraldTriggers(*MyPlayer, monster);
+		OnTableCursedMonsterKilled(monster);
+		OnMonsterKilled(*MyPlayer, monster);
+		OnSupportedKill(monster);
+		TryDropLineageSupport(monster, sendmsg);
+		OnReviveCandidateKilled(*MyPlayer, monster);
+		TryDropInfusion(monster);
+	}
+	// POE2 Mashup: the Sickness Road pact, every death passes its ailments on.
+	if (gbIsPoe2 && !risen)
+		OnProfaneRoadDeath(monster);
+	// POE2 Mashup: a minion's death can frenzy its owner's other minions.
+	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
+		OnMinionDied(Players[static_cast<size_t>(monster.goalVar3)]);
+		OnSupportedMinionDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
+		OnMinionGemDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
 	}
 
 	TelemetryMonsterKilled(monster);
@@ -4078,11 +4314,23 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	monster.flags &= ~MFLAG_HIDDEN;
 	SetRndSeed(monster.rndItemSeed);
 
-	SpawnLoot(monster, sendmsg);
+	if (!risen) {
+		SpawnLoot(monster, sendmsg);
+		// POE2 Mashup: in maps, magic and rare monsters may explode, and the map boss completes the map.
+		OnMapMonsterDeath(monster);
+		OnEndgameMonsterKilled(monster, sendmsg);
+		OnMapBossKilled(monster, sendmsg);
+	}
+	// POE2 Mashup: each unique monster slain gives the gambler another purchase.
+	if (gbIsPoe2 && monster.isUnique() && !monster.isPlayerMinion() && MyPlayer != nullptr)
+		OnUniqueMonsterKilledForGamble(*MyPlayer);
 	// POE2 Mashup: magic and rare monsters drop more.
-	if (!monster.isPlayerMinion()) {
-		for (int i = MonsterExtraDrops(monster) + goldenDrops; i > 0; i--)
-			SpawnItem(monster, monster.position.tile, sendmsg);
+	if (!monster.isPlayerMinion() && !risen) {
+		if (gbIsPoe2)
+			SpawnPoe2LootRolls(monster, monster.position.tile, sendmsg, goldenDrops);
+		else
+			for (int i = MonsterExtraDrops(monster) + goldenDrops; i > 0; i--)
+				SpawnItem(monster, monster.position.tile, sendmsg);
 	}
 
 	if (monster.type().type == MT_DIABLO)
@@ -4234,6 +4482,140 @@ bool Walk(Monster &monster, Direction md)
 	return true;
 }
 
+namespace {
+
+void DropMinionTarget(Monster &minion)
+{
+	minion.flags &= ~MFLAG_TARGETS_MONSTER;
+	minion.flags |= MFLAG_NO_ENEMY;
+}
+
+/** @brief Puts a minion left far behind on a free tile next to its owner. */
+void BringMinionToOwner(Monster &minion, const Player &owner)
+{
+	const std::optional<Point> tile = FindClosestValidPosition(
+	    [&minion](Point position) { return IsTileAvailable(minion, position) && !IsTileOccupied(position); }, owner.position.tile, 1, 4);
+	if (!tile)
+		return;
+	M_ClearSquares(minion);
+	dMonster[minion.position.tile.x][minion.position.tile.y] = 0;
+	minion.position.tile = *tile;
+	minion.position.future = *tile;
+	minion.position.old = *tile;
+	minion.occupyTile(*tile, false);
+	ChangeLightXY(minion.lightId, *tile);
+	DropMinionTarget(minion);
+	minion.poe2.minionReturning = false;
+	minion.poe2.minionStuck = 0;
+	M_StartStand(minion, owner._pdir);
+	AddVisualEffect(*tile, MissileGraphicID::Resurrect);
+}
+
+/** @brief Where an idle minion stands: behind and beside its owner, a spot of its own so they don't crowd the way ahead. */
+Point MinionRestingTile(const Monster &minion, const Player &owner)
+{
+	int index = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &other = Monsters[ActiveMonsters[i]];
+		if (&other != &minion && other.isPlayerMinion() && other.goalVar3 == minion.goalVar3 && !other.hasNoLife() && other.getId() < minion.getId())
+			index++;
+	}
+	const Direction back = Opposite(owner._pdir);
+	const std::array<Direction, 5> sides { back, Left(back), Right(back), Left(Left(back)), Right(Right(back)) };
+	const Point home = owner.position.future;
+	const Point tile = home + Displacement(sides[static_cast<size_t>(index) % sides.size()]) * (2 + (index / static_cast<int>(sides.size())));
+	return InDungeonBounds(tile) && IsTileWalkable(tile) ? tile : home;
+}
+
+/** @brief Walks the minion towards a tile; it steps straight that way when there is no path. */
+bool WalkMinionTowards(Monster &minion, Point tile)
+{
+	minion.enemyPosition = tile;
+	if (AiPlanWalk(minion)) {
+		minion.poe2.minionStuck = 0;
+		return true;
+	}
+	minion.poe2.minionStuck = static_cast<uint8_t>(std::min(minion.poe2.minionStuck + 1, 255));
+	const Direction toward = GetDirection(minion.position.tile, tile);
+	return Walk(minion, toward) || Walk(minion, Left(toward)) || Walk(minion, Right(toward));
+}
+
+/**
+ * @brief POE2 minions: brought along when far, called back past the leash, and a target that wandered off is let go.
+ * @return Whether the minion's turn is taken.
+ */
+bool LeashMinion(Monster &minion)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr)
+		return false;
+	const int distance = minion.position.tile.WalkingDistance(owner->position.future);
+	if (distance > MinionTeleportRadius || minion.poe2.minionStuck >= 30) {
+		BringMinionToOwner(minion, *owner);
+		return true;
+	}
+	if (distance > MinionLeashRadius)
+		minion.poe2.minionReturning = true;
+	if (minion.poe2.minionReturning) {
+		if (distance <= MinionFollowRadius) {
+			minion.poe2.minionReturning = false;
+			return false;
+		}
+		DropMinionTarget(minion);
+		WalkMinionTowards(minion, MinionRestingTile(minion, *owner));
+		return true;
+	}
+	if ((minion.flags & MFLAG_NO_ENEMY) == 0 && (minion.flags & MFLAG_TARGETS_MONSTER) != 0) {
+		const Monster &enemy = Monsters[minion.enemy];
+		if (enemy.hasNoLife() || !MinionMayEngage(minion, enemy))
+			DropMinionTarget(minion);
+	}
+	return false;
+}
+
+/** @brief An idle POE2 minion goes back to its spot near the owner and waits there. */
+bool FollowOwner(Monster &minion)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr)
+		return false;
+	// It also moves off the owner's tile, after the owner walked through it.
+	if (minion.position.tile.WalkingDistance(owner->position.future) > MinionFollowRadius || minion.position.tile == owner->position.tile) {
+		WalkMinionTowards(minion, MinionRestingTile(minion, *owner));
+		return true;
+	}
+	minion.poe2.minionStuck = 0;
+	AiDelay(minion, 3);
+	return true;
+}
+
+} // namespace
+
+bool IsMinionOf(const Monster &monster, const Player &player)
+{
+	return gbIsPoe2 && monster.isPlayerMinion() && monster.goalVar3 == static_cast<int8_t>(player.getId()) && !monster.hasNoLife();
+}
+
+void MakeWayForOwner(const Player &owner, Point tile, Direction dir)
+{
+	Monster *minion = FindMonsterAtPosition(tile);
+	if (minion == nullptr || !IsMinionOf(*minion, owner) || IsNoneOf(minion->mode, MonsterMode::Stand, MonsterMode::Delay))
+		return;
+	// Out to the side first, so it doesn't end up in the way again; a busy minion is simply walked through.
+	for (const Direction aside : { Left(Left(dir)), Right(Right(dir)), Left(dir), Right(dir), dir }) {
+		if (Walk(*minion, aside))
+			return;
+	}
+}
+
+bool MinionCatchUpTick(Monster &minion)
+{
+	const Player *owner = MinionLeader(minion);
+	if (owner == nullptr || minion.hasNoLife() || !minion.isWalking())
+		return false;
+	return minion.position.tile.WalkingDistance(owner->position.future) > MinionCatchUpRadius;
+}
+
 void GolumAi(Monster &golem)
 {
 	if (golem.position.tile.x == 1 && golem.position.tile.y == 0) {
@@ -4244,19 +4626,44 @@ void GolumAi(Monster &golem)
 		return;
 	}
 
+	// POE2 Mashup: Lingering Illusion's illusion stands where the dodge roll began.
+	if (golem.poe2.decoy)
+		return;
+
+	if (IsNoneOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack) && LeashMinion(golem))
+		return;
+
 	if ((golem.flags & MFLAG_TARGETS_MONSTER) == 0)
 		UpdateEnemy(golem);
 
-	if (golem.mode == MonsterMode::MeleeAttack) {
+	if (IsAnyOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack)) {
 		return;
 	}
 
-	if ((golem.flags & MFLAG_NO_ENEMY) == 0) {
+	// POE2 Mashup: the skeleton gems' kinds fight their own ways; Clerics don't fight at all.
+	const MinionGemData *gem = gbIsPoe2 ? MinionGemOf(golem) : nullptr;
+	if ((golem.flags & MFLAG_NO_ENEMY) == 0 && (gem == nullptr || gem->damagePercent > 0)) {
 		Monster &enemy = Monsters[golem.enemy];
 		const int mex = golem.position.tile.x - enemy.position.future.x;
 		const int mey = golem.position.tile.y - enemy.position.future.y;
 		golem.direction = GetDirection(golem.position.tile, enemy.position.tile);
+		// The archers and mages keep their distance and shoot.
+		const int distance = std::max(std::abs(mex), std::abs(mey));
+		if (gem != nullptr && gem->shot != MinionShot::None && distance >= 2 && distance <= gem->range && LineClearMissile(golem.position.tile, enemy.position.tile)) {
+			// Snipers take aim between their shots.
+			if (golem.poe2.minionAttackWait > 0)
+				return;
+			golem.enemyPosition = enemy.position.tile;
+			StartRangedAttack(golem, MinionShotMissile(gem->shot), MinionShotDamage(golem, gem->shotPercent));
+			golem.poe2.minionAttackWait = gem->attackTicks;
+			return;
+		}
 		if (std::abs(mex) < 2 && std::abs(mey) < 2) {
+			// Brutes heave their weapon up between their blows.
+			if (golem.poe2.minionAttackWait > 0)
+				return;
+			if (gem != nullptr)
+				golem.poe2.minionAttackWait = gem->attackTicks;
 			golem.enemyPosition = enemy.position.tile;
 			if (enemy.activeForTicks == 0) {
 				enemy.activeForTicks = UINT8_MAX;
@@ -4279,6 +4686,9 @@ void GolumAi(Monster &golem)
 		if (AiPlanPath(golem))
 			return;
 	}
+
+	if (FollowOwner(golem))
+		return;
 
 	golem.pathCount++;
 	if (golem.pathCount > 8)
@@ -4338,6 +4748,8 @@ void ProcessMonsters()
 {
 	DeleteMonsterList();
 	ProcessHeralds();
+	// POE2 Mashup: Leoric's Road, the dead rising and the King's dead leaving.
+	ProcessProfaneRoads();
 
 	assert(ActiveMonsterCount <= MaxMonsters);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
@@ -4360,7 +4772,8 @@ void ProcessMonsters()
 		if (MonsterSkipsTick(monster))
 			continue;
 
-		const bool isMonsterVisible = IsTileVisible(monster.position.tile);
+		// POE2 Mashup: the Maiden's Road toll, monsters near her with a clear line see her in the dark too.
+		const bool isMonsterVisible = IsTileVisible(monster.position.tile) || MaidenSeesYou(monster);
 		if (isMonsterVisible && monster.activeForTicks == 0) {
 			if (monster.type().type == MT_CLEAVER) {
 				PlaySFX(SfxID::ButcherGreeting);
@@ -4403,18 +4816,24 @@ void ProcessMonsters()
 			}
 		}
 
-		while (true) {
-			if ((monster.flags & MFLAG_SEARCH) == 0 || !AiPlanPath(monster)) {
-				AiProc[static_cast<int8_t>(monster.ai)](monster);
+		// POE2 Mashup: hasted map monsters now and then take a second turn in a tick.
+		for (int turn = 0; turn < 2; turn++) {
+			while (true) {
+				if ((monster.flags & MFLAG_SEARCH) == 0 || !AiPlanPath(monster)) {
+					AiProc[static_cast<int8_t>(monster.ai)](monster);
+				}
+
+				if (!UpdateModeStance(monster))
+					break;
+
+				GroupUnity(monster);
 			}
-
-			if (!UpdateModeStance(monster))
+			if (monster.mode != MonsterMode::Petrified && (monster.flags & MFLAG_ALLOW_SPECIAL) == 0) {
+				monster.animInfo.processAnimation((monster.flags & MFLAG_LOCK_ANIMATION) != 0);
+			}
+			// And a minion left behind hurries after its owner.
+			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster)))
 				break;
-
-			GroupUnity(monster);
-		}
-		if (monster.mode != MonsterMode::Petrified && (monster.flags & MFLAG_ALLOW_SPECIAL) == 0) {
-			monster.animInfo.processAnimation((monster.flags & MFLAG_LOCK_ANIMATION) != 0);
 		}
 	}
 
@@ -4586,8 +5005,11 @@ void PrintMonstHistory(int mt)
 		AddInfoBoxString(FormatRuntime(_("Hit Points: {:d}-{:d}"), minHP, maxHP));
 	}
 	if (MonsterKillCounts[mt] >= 15) {
-		const int res = (sgGameInitInfo.nDifficulty != DIFF_HELL) ? MonstersData[mt].resistance : MonstersData[mt].resistanceHell;
-		if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
+		int res = (sgGameInitInfo.nDifficulty != DIFF_HELL) ? MonstersData[mt].resistance : MonstersData[mt].resistanceHell;
+		if (gbIsPoe2) {
+			// POE2 Mashup: resistances are percentages, and no monster is immune.
+			AddInfoBoxString(ResistanceMarksText(static_cast<uint16_t>(res)));
+		} else if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
 			AddInfoBoxString(_("No magic resistance"));
 		} else {
 			if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING)) != 0) {
@@ -4621,7 +5043,11 @@ void PrintUniqueHistory()
 		AddInfoBoxString(FormatRuntime(_("Type: {:s}"), GetMonsterTypeText(monster.data())));
 	}
 
-	const int res = monster.resistance & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
+	if (gbIsPoe2) {
+		AddInfoBoxString(ResistanceMarksText(monster.resistance));
+		return;
+	}
+	const int res = monster.shownResistance() & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
 	if (res == 0) {
 		AddInfoBoxString(_("No resistances"));
 		AddInfoBoxString(_("No Immunities"));
@@ -4866,7 +5292,8 @@ void TalktoMonster(Player &player, Monster &monster)
 			Quests[Q_ZHAR]._qvar1 = QS_ZHAR_ITEM_SPAWNED;
 			SetRndSeed(monster.rndItemSeed);
 			DiscardRandomValues(10);
-			CreateTypeItem(monster.position.tile + Displacement { 1, 1 }, false, ItemType::Misc, IMISC_BOOK, false, false, true);
+			// Zhar's book becomes an uncut skill gem now that skill gems replaced spell books.
+			CreateTypeItem(monster.position.tile + Displacement { 1, 1 }, false, ItemType::Misc, gbIsPoe2 ? IMISC_UNCUT_SKILL : IMISC_BOOK, false, false, true);
 			monster.flags |= MFLAG_QUEST_COMPLETE;
 			NetSendCmdQuest(true, Quests[Q_ZHAR]);
 		}
@@ -4929,31 +5356,166 @@ void SpawnGolem(const Player &player, Point position, uint8_t spellLevel)
 	NetSendCmdSpawnMonster(position, Direction::South, 0, static_cast<uint16_t>(monsterIndex), seed, player.getId(), spellLevel);
 }
 
-size_t CountSkeletonMinions(const Player &player)
+size_t CountSkeletonMinions(const Player &player, _monster_id type)
 {
 	size_t count = 0;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == SkeletonMinionType && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived
+		    && !IsKingsDead(monster))
 			count++;
 	}
 	return count;
 }
 
-void KillSkeletonMinions(const Player &player)
+void KillSkeletonMinions(const Player &player, _monster_id type)
 {
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == SkeletonMinionType && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived
+		    && !IsKingsDead(monster))
 			KillGolem(monster);
 	}
 }
 
-bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel)
+size_t CountRevivedMinions(const Player &player)
 {
+	size_t count = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.poe2.revived && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+			count++;
+	}
+	return count;
+}
+
+void KillRevivedMinions(const Player &player)
+{
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.poe2.revived && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife())
+			KillGolem(monster);
+	}
+}
+
+Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats)
+{
+	if (ActiveMonsterCount >= MaxMonsters || type == MT_GOLEM)
+		return nullptr;
+	const size_t typeIndex = GetMonsterTypeIndex(type);
+	if (typeIndex >= LevelMonsterTypeCount)
+		return nullptr;
+	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];
+	ActiveMonsterCount += 1;
+	// Single player only for now: the revive isn't sent to other players.
+	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, GetLCGEngineState(), player.getId(), 0);
+	Monster &monster = Monsters[monsterIndex];
+	monster.poe2 = {};
+	monster.poe2.revived = true;
+	monster.flags |= MFLAG_GOLEM;
+	monster.flags &= ~MFLAG_BERSERK;
+	monster.ai = MonsterAIID::Golem;
+	monster.goalVar3 = static_cast<int8_t>(player.getId());
+	monster.maxHitPoints = std::max(stats.life, Fixed26_6::fromInt(1));
+	monster.hitPoints = monster.maxHitPoints;
+	monster.armorClass = stats.armorClass;
+	monster.resistance = stats.resistance;
+	monster.golemToHit = 40 + (2 * player.getCharacterLevel());
+	const int damagePercent = MinionDamagePercent(player);
+	monster.minDamage = static_cast<uint8_t>(std::min(stats.minDamage * damagePercent / 100, 255));
+	monster.maxDamage = static_cast<uint8_t>(std::min(std::max(stats.maxDamage, stats.minDamage) * damagePercent / 100, 255));
+	UpdateEnemy(monster);
+	return &monster;
+}
+
+namespace {
+
+/**
+ * @brief POE2 Mashup: a level saved full of monsters, from before slots were kept free for minions, lets the plain
+ * monster farthest from the player go so a minion can rise. It is well out of sight, so nobody sees it leave.
+ */
+bool MakeRoomForMinion(const Player &player)
+{
+	constexpr int OutOfSight = 16;
+	if (!gbIsPoe2 || gbIsMultiplayer)
+		return false;
+	std::optional<size_t> farthest;
+	int farthestDistance = OutOfSight;
+	for (size_t i = ReservedMonsterSlotsForGolems; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.isInvalid || monster.hasNoLife() || monster.isUnique() || monster.isPlayerMinion()
+		    || monster.leaderRelation != LeaderRelation::None || monster.hasLeashedMinions()
+		    || MapMonsterTitle(monster)) // never the map boss or an encounter leader
+			continue;
+		const int distance = monster.position.tile.WalkingDistance(player.position.tile);
+		if (distance > farthestDistance) {
+			farthest = i;
+			farthestDistance = distance;
+		}
+	}
+	if (!farthest)
+		return false;
+	RemoveMonsterQuietly(*farthest);
+	return true;
+}
+
+} // namespace
+
+void RemoveMonsterQuietly(size_t activeIndex)
+{
+	Monster &monster = Monsters[ActiveMonsters[activeIndex]];
+	M_ClearSquares(monster);
+	dMonster[monster.position.tile.x][monster.position.tile.y] = 0;
+	MarkWalkabilityChanged();
+	monster.isInvalid = true;
+	M_UpdateRelations(monster);
+	if (pcursmonst == static_cast<int>(ActiveMonsters[activeIndex]))
+		pcursmonst = -1;
+	DeleteMonster(activeIndex);
+}
+
+namespace {
+
+constexpr size_t RisenMinionRoom = 4;
+
+} // namespace
+
+Monster *SpawnRisenMonster(Point position, size_t typeIndex)
+{
+	// A rise takes the slot its dead monster just left, so it isn't held to the enemy limit (dense levels pass it), only
+	// to a few slots kept free for the hero's minions.
+	if (ActiveMonsterCount + RisenMinionRoom >= MaxMonsters || typeIndex >= LevelMonsterTypeCount || !MyPlayer->isLevelOwnedByLocalClient())
+		return nullptr;
+	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];
+	ActiveMonsterCount += 1;
+	// Single player only: the rise isn't sent to other players.
+	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, GetLCGEngineState(), 0, 0, /*risen=*/true);
+	Monster &monster = Monsters[monsterIndex];
+	// Awake and hunting its killer, so it never counts as unaware.
+	monster.activeForTicks = UINT8_MAX;
+	monster.enemy = static_cast<uint8_t>(MyPlayerId);
+	monster.enemyPosition = MyPlayer->position.future;
+	monster.position.last = MyPlayer->position.future;
+	return &monster;
+}
+
+std::optional<size_t> RandomLevelSkeletonType()
+{
+	return GetRandomSkeletonTypeIndex();
+}
+
+bool IsTileFreeForMonster(Point position)
+{
+	return IsTileAvailable(position);
+}
+
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type)
+{
+	if (ActiveMonsterCount >= MaxMonsters && gemLevel != 0)
+		MakeRoomForMinion(player);
 	if (gemLevel == 0 || ActiveMonsterCount >= MaxMonsters)
 		return false;
-	const size_t typeIndex = GetMonsterTypeIndex(SkeletonMinionType);
+	const size_t typeIndex = GetMonsterTypeIndex(type);
 	if (typeIndex >= LevelMonsterTypeCount)
 		return false;
 	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];
@@ -4961,6 +5523,16 @@ bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel)
 	const uint32_t seed = GetLCGEngineState();
 	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, seed, player.getId(), gemLevel);
 	NetSendCmdSpawnMonster(position, Direction::South, static_cast<uint16_t>(typeIndex), static_cast<uint16_t>(monsterIndex), seed, player.getId(), gemLevel);
+	// POE2 Mashup: supports of the minion skill change the minions' life.
+	if (gbIsPoe2) {
+		Monster &minion = Monsters[monsterIndex];
+		const MinionGemData *gem = FindMinionGemByType(type);
+		const int percent = SupportMinionLifePercent(player, gem != nullptr ? gem->skill : PersistentSkill::SkeletalWarriors);
+		if (percent != 100) {
+			minion.maxHitPoints = Fixed26_6::fromRaw(std::max<int32_t>(minion.maxHitPoints.raw() * percent / 100, 64));
+			minion.hitPoints = minion.maxHitPoints;
+		}
+	}
 	return true;
 }
 
@@ -5054,10 +5626,11 @@ bool Monster::isWalking() const
 
 bool Monster::isImmune(MissileID missileType, DamageType missileElement) const
 {
-	if (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
+	// POE2 Mashup: POE2 has no full immunities, so Diablo's immunities count as resistances instead.
+	if (!gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
 	    || ((resistance & IMMUNE_FIRE) != 0 && missileElement == DamageType::Fire)
 	    || ((resistance & IMMUNE_LIGHTNING) != 0 && missileElement == DamageType::Lightning)
-	    || ((resistance & IMMUNE_ACID) != 0 && missileElement == DamageType::Acid))
+	    || ((resistance & IMMUNE_ACID) != 0 && missileElement == DamageType::Acid)))
 		return true;
 	if (missileType == MissileID::HolyBolt && type().type != MT_DIABLO && data().monsterClass != MonsterClass::Undead)
 		return true;
@@ -5066,6 +5639,10 @@ bool Monster::isImmune(MissileID missileType, DamageType missileElement) const
 
 bool Monster::isResistant(MissileID missileType, DamageType missileElement) const
 {
+	if (gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
+	        || ((resistance & IMMUNE_FIRE) != 0 && missileElement == DamageType::Fire)
+	        || ((resistance & IMMUNE_LIGHTNING) != 0 && missileElement == DamageType::Lightning)))
+		return true;
 	if (((resistance & RESIST_MAGIC) != 0 && missileElement == DamageType::Magic)
 	    || ((resistance & RESIST_FIRE) != 0 && missileElement == DamageType::Fire)
 	    || ((resistance & RESIST_LIGHTNING) != 0 && missileElement == DamageType::Lightning))
@@ -5073,6 +5650,14 @@ bool Monster::isResistant(MissileID missileType, DamageType missileElement) cons
 	if (gbIsHellfire && missileType == MissileID::HolyBolt && IsAnyOf(type().type, MT_DIABLO, MT_BONEDEMN))
 		return true;
 	return false;
+}
+
+uint16_t Monster::shownResistance() const
+{
+	if (!gbIsPoe2)
+		return resistance;
+	const uint16_t immunes = resistance & (IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
+	return static_cast<uint16_t>((resistance & ~immunes) | (immunes >> 3));
 }
 
 bool Monster::isPlayerMinion() const

@@ -20,6 +20,7 @@
 #include "data/iterators.hpp"
 #include "data/record_reader.hpp"
 #include "engine/clx_sprite.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "missiles.h"
 #include "mpq/mpq_common.hpp"
@@ -441,6 +442,11 @@ MissileFileData &GetMissileSpriteData(MissileGraphicID graphicId)
 	return MissileSpriteData[static_cast<std::underlying_type_t<MissileGraphicID>>(graphicId)];
 }
 
+bool HasMissileSpriteData(MissileGraphicID graphicId)
+{
+	return static_cast<size_t>(graphicId) < MissileSpriteData.size();
+}
+
 void LoadMissileData()
 {
 	LoadMissileSpriteData();
@@ -461,6 +467,17 @@ std::expected<void, std::string> InitMissileGFX()
 		if (missileSprite.flags == MissileGraphicsFlags::MonsterOwned)
 			continue;
 		RETURN_IF_ERROR(missileSprite.LoadGFX());
+	}
+	// POE2 Mashup: skills and their effects also use some monster missiles, so those are always loaded.
+	if (gbIsPoe2) {
+		for (const MissileGraphicID graphic : { MissileGraphicID::MagmaBall, MissileGraphicID::ThinLightning, MissileGraphicID::BloodStarRed, MissileGraphicID::BloodStarRedExplosion,
+		         MissileGraphicID::BloodStarBlue, MissileGraphicID::BloodStarBlueExplosion, MissileGraphicID::DiabloApocalypseBoom,
+		         MissileGraphicID::BlueFlare2, MissileGraphicID::BlueFlareExplosion, MissileGraphicID::BlueFlareExplosion2,
+		         MissileGraphicID::AcidSplat, MissileGraphicID::RedFlareExplosion }) {
+			// The red flare only comes with the Hellfire mod.
+			if (HasMissileSpriteData(graphic))
+				RETURN_IF_ERROR(GetMissileSpriteData(graphic).LoadGFX());
+		}
 	}
 	return {};
 }

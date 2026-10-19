@@ -251,6 +251,11 @@ std::expected<item_cursor_graphic, std::string> ParseItemCursorGraphic(std::stri
 	if (value == "BLITZEN") return ICURS_BLITZEN;
 	if (value == "DEMON_PLATE_ARMOR") return ICURS_DEMON_PLATE_ARMOR;
 	if (value == "BOVINE") return ICURS_BOVINE;
+	if (value == "MAGIC_ROCK_SMALL") return ICURS_MAGIC_ROCK_SMALL;
+	if (value == "MAP_OF_THE_STARS_SMALL") return ICURS_MAP_OF_THE_STARS_SMALL;
+	if (value == "BOOK_RED_SMALL") return ICURS_BOOK_RED_SMALL;
+	if (value == "TORN_NOTE_1_SMALL") return ICURS_TORN_NOTE_1_SMALL;
+	if (value == "RECONSTRUCTED_NOTE_SMALL") return ICURS_RECONSTRUCTED_NOTE_SMALL;
 	if (value == "") return ICURS_DEFAULT;
 
 	// also support providing the item cursor icon frame number directly
@@ -498,6 +503,13 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SPIRITGEM_SKELETONS") return IMISC_SPIRITGEM_SKELETONS;
 	if (value == "UNCUT_SKILL") return IMISC_UNCUT_SKILL;
 	if (value == "UNCUT_SUPPORT") return IMISC_UNCUT_SUPPORT;
+	if (value == "UNCUT_SPIRIT") return IMISC_UNCUT_SPIRIT;
+	if (value == "SPIRIT_SKULL") return IMISC_SPIRIT_SKULL;
+	if (value == "SPEC_BOOK") return IMISC_SPEC_BOOK;
+	if (value == "ORB_LESSER_JEWELLER") return IMISC_ORB_LESSER_JEWELLER;
+	if (value == "ORB_GREATER_JEWELLER") return IMISC_ORB_GREATER_JEWELLER;
+	if (value == "ORB_PERFECT_JEWELLER") return IMISC_ORB_PERFECT_JEWELLER;
+	if (value == "JEWEL") return IMISC_JEWEL;
 	if (value == "CHARM_LIFE") return IMISC_CHARM_LIFE;
 	if (value == "CHARM_MANA") return IMISC_CHARM_MANA;
 	if (value == "CHARM_GUARD") return IMISC_CHARM_GUARD;
@@ -508,6 +520,40 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "CHARM_STUN") return IMISC_CHARM_STUN;
 	if (value == "CHARM_GOLDEN") return IMISC_CHARM_GOLDEN;
 	if (value == "ORB_BAUBLE") return IMISC_ORB_BAUBLE;
+	if (value == "ORB_CHANCE") return IMISC_ORB_CHANCE;
+	if (value == "ORB_ANNUL") return IMISC_ORB_ANNUL;
+	if (value == "ORB_WHETSTONE") return IMISC_ORB_WHETSTONE;
+	if (value == "ORB_ETCHER") return IMISC_ORB_ETCHER;
+	if (value == "ORB_SCRAP") return IMISC_ORB_SCRAP;
+	if (value == "ORB_GREATER_EXALTED") return IMISC_ORB_GREATER_EXALTED;
+	if (value == "ORB_PERFECT_EXALTED") return IMISC_ORB_PERFECT_EXALTED;
+	if (value == "ORB_GREATER_CHAOS") return IMISC_ORB_GREATER_CHAOS;
+	if (value == "ORB_PERFECT_CHAOS") return IMISC_ORB_PERFECT_CHAOS;
+	if (value == "ORB_ARTIFICER") return IMISC_ORB_ARTIFICER;
+	if (value == "ORB_DESECRATE") return IMISC_ORB_DESECRATE;
+	if (value == "ORB_CATALYST") return IMISC_ORB_CATALYST;
+	if (value == "ESSENCE") return IMISC_ESSENCE;
+	if (value == "TABLET") return IMISC_TABLET;
+	if (value == "MAP_FRAGMENT") return IMISC_MAP_FRAGMENT;
+	if (value == "MAP_KEY") return IMISC_MAP_KEY;
+	if (value == "SKILLGEM_ICEBOLT") return IMISC_SKILLGEM_ICEBOLT;
+	if (value == "SKILLGEM_FROSTNOVA") return IMISC_SKILLGEM_FROSTNOVA;
+	if (value == "SKILLGEM_RIPOSTE") return IMISC_SKILLGEM_RIPOSTE;
+	if (value == "SKILLGEM_SHADOWSTEP") return IMISC_SKILLGEM_SHADOWSTEP;
+	if (value == "SKILLGEM_FRENZY") return IMISC_SKILLGEM_FRENZY;
+	if (value == "SKILLGEM_SMITE") return IMISC_SKILLGEM_SMITE;
+	if (value == "SKILLGEM_FISTSOFTHUNDER") return IMISC_SKILLGEM_FISTSOFTHUNDER;
+	if (value == "SKILLGEM_RAPIDFIRE") return IMISC_SKILLGEM_RAPIDFIRE;
+	if (value == "SKILLGEM_SHIELDBASH") return IMISC_SKILLGEM_SHIELDBASH;
+	if (value == "SKILLGEM_AMPLIFYDAMAGE") return IMISC_SKILLGEM_AMPLIFYDAMAGE;
+	if (value == "SKILLGEM_TABLE") return IMISC_SKILLGEM_TABLE;
+	if (value == "SUPPORT_TABLE") return IMISC_SUPPORT_TABLE;
+	if (value == "SPIRITGEM_TABLE") return IMISC_SPIRITGEM_TABLE;
+	if (value == "SPIRITGEM_HERALDFROST") return IMISC_SPIRITGEM_HERALDFROST;
+	if (value == "SPIRITGEM_SKELETALMAGES") return IMISC_SPIRITGEM_SKELETALMAGES;
+	if (value == "SUPPORT_BATTLERAGE") return IMISC_SUPPORT_BATTLERAGE;
+	if (value == "OMEN") return IMISC_OMEN;
+	if (value == "AUGMENT") return IMISC_AUGMENT;
 	return std::unexpected("Unknown enum value");
 }
 
@@ -618,6 +664,24 @@ std::expected<goodorevil, std::string> ParseAffixAlignment(std::string_view valu
 }
 
 } // namespace
+
+item_cursor_graphic FullSizeItemCursor(item_cursor_graphic cursor)
+{
+	switch (cursor) {
+	case ICURS_MAGIC_ROCK_SMALL:
+		return ICURS_MAGIC_ROCK;
+	case ICURS_MAP_OF_THE_STARS_SMALL:
+		return ICURS_MAP_OF_THE_STARS;
+	case ICURS_BOOK_RED_SMALL:
+		return ICURS_BOOK_RED;
+	case ICURS_TORN_NOTE_1_SMALL:
+		return ICURS_TORN_NOTE_1;
+	case ICURS_RECONSTRUCTED_NOTE_SMALL:
+		return ICURS_RECONSTRUCTED_NOTE;
+	default:
+		return cursor;
+	}
+}
 
 void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId)
 {

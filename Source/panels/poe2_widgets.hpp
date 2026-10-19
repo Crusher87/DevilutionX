@@ -19,7 +19,8 @@
 
 namespace devilution::poe2ui {
 
-constexpr uint8_t PanelColor = PAL16_GRAY + 15;
+// Palette entry 255 is white in every Diablo palette, so the panel uses 0, which is black.
+constexpr uint8_t PanelColor = 0;
 constexpr uint8_t BorderColor = PAL16_YELLOW + 8;
 constexpr uint8_t InnerBorderColor = PAL16_YELLOW + 12;
 constexpr uint8_t RowColor = PAL16_GRAY + 14;
@@ -68,8 +69,13 @@ inline void DrawTooltip(const Surface &out, const Rectangle &bounds, Point mouse
 {
 	constexpr int LineHeight = 16;
 	constexpr int Width = 250;
+	// Lines too long for the box wrap onto the next.
+	std::vector<std::pair<std::string, UiFlags>> wrapped;
+	wrapped.reserve(lines.size());
+	for (const auto &[text, color] : lines)
+		wrapped.emplace_back(WordWrapString(text, Width - 16), color);
 	int lineCount = 0;
-	for (const auto &line : lines)
+	for (const auto &line : wrapped)
 		lineCount += static_cast<int>(std::count(line.first.begin(), line.first.end(), '\n')) + 1;
 	const int height = 30 + (lineCount * LineHeight);
 	Point position = mouse + Displacement { 16, 8 };
@@ -82,7 +88,7 @@ inline void DrawTooltip(const Surface &out, const Rectangle &bounds, Point mouse
 	Rectangle line { position + Displacement { 8, 6 }, { Width - 16, 20 } };
 	DrawString(out, title, line, { .flags = titleColor | UiFlags::VerticalCenter });
 	line.position.y += 22;
-	for (const auto &[text, color] : lines) {
+	for (const auto &[text, color] : wrapped) {
 		const int count = static_cast<int>(std::count(text.begin(), text.end(), '\n')) + 1;
 		line.size.height = LineHeight * count;
 		DrawString(out, text, line, { .flags = color, .lineHeight = LineHeight });

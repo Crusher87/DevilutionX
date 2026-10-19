@@ -22,8 +22,14 @@
 #include "inv.h"
 #include "levels/gendung.h"
 #include "missiles.h"
+#include "poe2/gem_levels.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/weapon_skills.hpp"
 
 namespace devilution {
 
@@ -108,7 +114,7 @@ bool TargetsMonster(SpellID id)
 	    || id == SpellID::FlameWave;
 }
 
-Fixed26_6 GetManaAmount(const Player &player, SpellID sn)
+Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 {
 	int ma; // whole mana amount
 
@@ -128,8 +134,13 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn)
 		adj = sl * (GetSpellData(SpellID::Resurrect).sManaCost / 8);
 	}
 
+	// POE2 Mashup: a socketed spell gem costs more as it levels up, like POE2's gems, instead of less.
+	const int gemLevel = gbIsPoe2 ? player.poe2.skillLevel(sn) : 0;
+
 	if (sn == SpellID::Healing || sn == SpellID::HealOther) {
 		ma = (GetSpellData(SpellID::Healing).sManaCost + 2 * player.getCharacterLevel() - adj);
+	} else if (gemLevel > 0 && GetSpellData(sn).sManaCost != 255) {
+		ma = GemBaseManaCost(SkillSlot::ForSpell(sn), gemLevel);
 	} else if (GetSpellData(sn).sManaCost == 255) {
 		ma = player._pMaxManaBase.whole() - adj;
 	} else {
@@ -145,7 +156,9 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn)
 		manaAmount = Fixed26_6::fromInt(GetSpellData(sn).sMinMana);
 	}
 
-	manaAmount = Fixed26_6::fromRaw(manaAmount.raw() * SupportManaCostPercent(player, sn) / 100);
+	manaAmount = Fixed26_6::fromRaw(manaAmount.raw() * SupportManaCostPercent(player, sn, lifeShare) / 100);
+	// POE2 Mashup: Vizjerei Focus makes spells cost a share of maximum mana more.
+	manaAmount += Fixed26_6::fromRaw(SpiritSpellExtraManaRaw(player));
 
 	return manaAmount;
 }
@@ -168,14 +181,20 @@ void ConsumeSpell(Player &player, SpellID sn)
 		if (DebugGodMode)
 			break;
 #endif
-		Fixed26_6 ma = GetManaAmount(player, sn);
+		// POE2 Mashup: a unique's repeat of a spell costs nothing, and some uniques pay with energy shield first.
+		if (IsCastingRepeat(player) || TakeFreeSkill(player))
+			break;
+		const Fixed26_6 cost = GetManaAmount(player, sn);
+		const Fixed26_6 ma = PaySpellCostWithEnergyShield(player, cost);
 		player._pMana -= ma;
 		player._pManaBase -= ma;
-		manaCost = ma.whole();
+		manaCost = cost.whole();
 		RedrawComponent(PanelDrawComponent::Mana);
+		// POE2 Mashup: Blood Price and Bartuc's Bloodletting move part of the cost to life.
+		PaySupportLifeCost(player, SkillSlot::ForSpell(sn), GetManaAmount(player, sn, false).whole());
 		break;
 	}
-	TelemetrySkillUsed(player, GetSpellData(sn).sNameText, manaCost);
+	TelemetrySkillUsed(player, GetSpellData(sn).sNameText, manaCost, player.poe2.skillLevel(sn));
 	if (sn == SpellID::BloodStar) {
 		TelemetryNoteAttacker("own Blood Star");
 		ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromInt(5));
@@ -212,7 +231,7 @@ SpellCheckResult CheckSpell(const Player &player, SpellID sn, SpellType st, bool
 		return SpellCheckResult::Fail_Level0;
 	}
 
-	if (player._pMana < GetManaAmount(player, sn) || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
+	if (player._pMana + SpendableEnergyShield(player) < GetManaAmount(player, sn) || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
 		return SpellCheckResult::Fail_NoMana;
 	}
 
@@ -228,13 +247,19 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 
 	const SpellData &spellData = GetSpellData(spl);
 	const bool supported = player.executedSpell.spellType == SpellType::Spell;
+	// POE2 Mashup: Apocalypse eats an element infusion for a much bigger cast.
+	const uint8_t infusion = supported ? TakeInfusion(player, SkillSlot::ForSpell(spl)) : 0;
 	const auto spawnMissiles = [&](WorldTilePosition target) {
 		bool fizzled = false;
 		for (size_t i = 0; i < sizeof(spellData.sMissiles) / sizeof(spellData.sMissiles[0]) && spellData.sMissiles[i] != MissileID::Null; i++) {
 			Missile *missile = AddMissile(src, target, dir, spellData.sMissiles[i], TARGET_MONSTERS, player, 0, spllvl);
 			fizzled |= (missile == nullptr);
+			if (missile != nullptr && gbIsPoe2)
+				SetSpellMissileSpeed(*missile, spl);
 			if (missile != nullptr && supported)
 				ApplySupportsToMissile(*missile, player, spl);
+			if (missile != nullptr && infusion != 0)
+				missile->poe2.damagePercent = static_cast<int16_t>(std::min(missile->poe2.damagePercent * (100 + InfusionDamagePercent) / 100, static_cast<int>(INT16_MAX)));
 		}
 		if (spl == SpellID::ChargedBolt) {
 			for (int i = (spllvl / 2) + 3; i > 0; i--) {
@@ -256,8 +281,35 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 			const int angle = (i % 2 == 0 ? -1 : 1) * step * MultipleProjectilesSpreadDegrees;
 			spawnMissiles(RotateSpellTarget(src, dst, angle));
 		}
+		// Nova Projectiles: the projectiles also go out in every other direction.
+		if (SupportFiresNova(player, SkillSlot::ForSpell(spl)) && (SkillTags(SkillSlot::ForSpell(spl)) & ST_Projectile) != 0) {
+			const Direction aim = GetDirection(src, dst);
+			for (int i = 1; i < 8; i++) {
+				const Direction around = static_cast<Direction>((static_cast<int>(aim) + i) % 8);
+				const Point far = Point(src) + Displacement { around } * 6;
+				if (InDungeonBounds(far))
+					spawnMissiles(WorldTilePosition(static_cast<WorldTileCoord>(far.x), static_cast<WorldTileCoord>(far.y)));
+			}
+			// Nova Projectiles II: more, between the others.
+			const int novaExtra = SupportNovaExtraProjectiles(player, SkillSlot::ForSpell(spl));
+			for (int i = 0; i < novaExtra; i++) {
+				const Direction around = static_cast<Direction>((static_cast<int>(aim) + i + 1) % 8);
+				const Point far = Point(src) + Displacement { around } * 6;
+				if (InDungeonBounds(far))
+					spawnMissiles(RotateSpellTarget(src, WorldTilePosition(static_cast<WorldTileCoord>(far.x), static_cast<WorldTileCoord>(far.y)), 30));
+			}
+		}
+	}
+	if (!fizzled && infusion != 0) {
+		const Fixed26_6 burst = Fixed26_6::fromInt((10 + (4 * spllvl) + player.getCharacterLevel()) * SupportSpellDamagePercent(player, spl) / 100);
+		SkillBurst(player, Point(dst), 3, InfusionDamageType(infusion), burst, MissileGraphicID::ApocalypseBoom);
 	}
 	if (!fizzled) {
+		// POE2 Mashup: uniques count spells cast and queue their repeats.
+		if (supported) {
+			OnSpellCast(player, spl, dst, spllvl);
+			OnSkillUsed(player, SkillSlot::ForSpell(spl), Point(dst));
+		}
 		ConsumeSpell(player, spl);
 	}
 }

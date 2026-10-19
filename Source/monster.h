@@ -11,6 +11,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include <function_ref.hpp>
@@ -39,7 +40,9 @@ struct Missile;
 struct Player;
 
 constexpr size_t MaxMonsters = 200;
-constexpr size_t MaxLvlMTypes = 24;
+constexpr size_t MaxLvlMTypes = 40;
+/** @brief POE2 Mashup: monster slots kept free for the players' minions, so a crowded level can't stop them rising. */
+constexpr size_t MinionMonsterSlots = 40;
 
 enum monster_flag : uint16_t {
 	// clang-format off
@@ -55,6 +58,10 @@ enum monster_flag : uint16_t {
 	MFLAG_NO_ENEMY        = 1 << 10,
 	MFLAG_BERSERK         = 1 << 11,
 	MFLAG_NOLIFESTEAL     = 1 << 12,
+	/** @brief POE2 Mashup: rose hostile after a kill on Leoric's Road; gives no reward. */
+	MFLAG_RISEN           = 1 << 13,
+	/** @brief POE2 Mashup: one of the King's dead (Leoric's Road pact), a minion for a while; not Revive's. */
+	MFLAG_KINGS_DEAD      = 1 << 14,
 	// clang-format on
 };
 
@@ -302,9 +309,21 @@ struct Monster { // note: missing field _mAFNum
 	 * @param graphic Animation sequence of interest
 	 * @param desiredDirection Desired desiredDirection the monster should be visually facing
 	 */
-	void changeAnimationData(MonsterGraphic graphic, Direction desiredDirection)
+	/**
+	 * @brief Returns the animation for the given sequence, or the walk animation if the type has no sprites for it
+	 * (the Golem has no Stand or GotHit frames).
+	 */
+	[[nodiscard]] const AnimStruct &animDataOrWalk(MonsterGraphic graphic) const
 	{
 		const AnimStruct &animationData = type().getAnimData(graphic);
+		if (!animationData.sprites && type().getAnimData(MonsterGraphic::Walk).sprites)
+			return type().getAnimData(MonsterGraphic::Walk);
+		return animationData;
+	}
+
+	void changeAnimationData(MonsterGraphic graphic, Direction desiredDirection)
+	{
+		const AnimStruct &animationData = animDataOrWalk(graphic);
 
 		// Passing the frames and rate properties here is only relevant when initialising a monster, but doesn't cause any harm when switching animations.
 		this->animInfo.changeAnimationData(animationData.spritesForDirection(desiredDirection), animationData.frames, animationData.rate);
@@ -450,6 +469,8 @@ struct Monster { // note: missing field _mAFNum
 	[[nodiscard]] bool isWalking() const;
 	[[nodiscard]] bool isImmune(MissileID mitype, DamageType missileElement) const;
 	[[nodiscard]] bool isResistant(MissileID mitype, DamageType missileElement) const;
+	/** @brief The resistance flags as the player sees them: in POE2 mode an immunity shows as a resistance. */
+	[[nodiscard]] uint16_t shownResistance() const;
 
 	/**
 	 * Is this a player's golem?
@@ -517,6 +538,8 @@ void WeakenNaKrul();
 void InitGolems();
 std::expected<void, std::string> InitMonsters();
 std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point startPosition);
+/** @brief Most monsters a level may hold besides the players' minions. */
+size_t MaxEnemyMonsters();
 Monster *AddMonster(Point position, Direction dir, size_t typeIndex, bool inMap);
 /**
  * @brief Spawns a new monsters (dynamically/not on level load).
@@ -531,7 +554,7 @@ void LoadDeltaSpawnedMonster(size_t typeIndex, size_t monsterId, uint32_t seed, 
 /**
  * @brief Initialize a spanwed monster (from a network message or from SpawnMonster-function).
  */
-void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel);
+void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel, bool risen = false);
 void AddDoppelganger(Monster &monster);
 void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damage);
 void MonsterReducePlayerAttribute(Monster &monster, Player &player);
@@ -550,6 +573,12 @@ void M_UpdateRelations(const Monster &monster);
 void DoEnding();
 void PrepDoEnding();
 bool Walk(Monster &monster, Direction md);
+/** @brief POE2 Mashup: whether a walking minion that fell behind its owner takes a second step this tick. */
+bool MinionCatchUpTick(Monster &minion);
+/** @brief POE2 Mashup: whether the monster is one of the player's own minions, which the player walks through. */
+bool IsMinionOf(const Monster &monster, const Player &player);
+/** @brief POE2 Mashup: an idle minion on the tile the owner steps onto moves aside. */
+void MakeWayForOwner(const Player &owner, Point tile, Direction dir);
 void GolumAi(Monster &golem);
 void DeleteMonsterList();
 void RemoveEnemyReferences(const Player &player);
@@ -589,10 +618,32 @@ void TalktoMonster(Player &player, Monster &monster);
 void SpawnGolem(const Player &player, Point position, uint8_t spellLevel);
 /** @brief POE2 Mashup: the monster raised by the Skeletal Warriors gem. */
 constexpr _monster_id SkeletonMinionType = MT_WSKELAX;
-size_t CountSkeletonMinions(const Player &player);
-void KillSkeletonMinions(const Player &player);
-/** @brief Raises a Skeletal Warrior for the player; false if the level has no room for it. */
-bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel);
+/** @brief POE2 Mashup: the monster raised by the Skeletal Mages gem; it hurls firebolts at range. */
+constexpr _monster_id SkeletonMageMinionType = MT_RSKELBW;
+size_t CountSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+void KillSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+/** @brief Raises a Skeletal Warrior (or Mage) for the player; false if the level has no room for it. */
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type = SkeletonMinionType);
+/** @brief POE2 Mashup Revive: what a raised monster keeps from its life before. */
+struct RevivedStats {
+	Fixed26_6 life;
+	uint8_t minDamage;
+	uint8_t maxDamage;
+	uint8_t armorClass;
+	uint16_t resistance;
+};
+size_t CountRevivedMinions(const Player &player);
+void KillRevivedMinions(const Player &player);
+/** @brief Raises a monster of the type to fight for the player, with the stats it had. */
+Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats);
+/** @brief POE2 Mashup, Leoric's Road: a monster of the level type rises hostile, awake and hunting the hero. */
+Monster *SpawnRisenMonster(Point position, size_t typeIndex);
+/** @brief A random skeleton type of the level (a level type index), as Leoric raises them. */
+std::optional<size_t> RandomLevelSkeletonType();
+/** @brief No player or monster stands on the tile, and monsters can walk it. */
+bool IsTileFreeForMonster(Point position);
+/** @brief Takes a monster off the level at once, without a death or a body. @param activeIndex its index in ActiveMonsters. */
+void RemoveMonsterQuietly(size_t activeIndex);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

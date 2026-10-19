@@ -6,8 +6,15 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
+
+#ifdef USE_SDL3
+#include <SDL3/SDL_events.h>
+#else
+#include <SDL.h>
+#endif
 
 #include "engine/point.hpp"
 #include "engine/surface.hpp"
@@ -48,6 +55,44 @@ struct VisualStoreState {
 	unsigned currentPage;
 	std::vector<VisualStorePage> pages;
 };
+
+/** @brief Whether stores use the grid UI: always in POE2 mode, otherwise when the option picks it. */
+bool UseVisualStoreUi();
+
+/** @brief POE2 Mashup: the vendor's tabs, like POE2's vendor screen: one per kind of item, and buyback. */
+enum class Poe2ShopTab : uint8_t {
+	Weapons,
+	OneHanded,
+	TwoHanded,
+	Bows,
+	BodyArmour,
+	Helmets,
+	Shields,
+	Jewelry,
+	Staves,
+	Supplies,
+	Items,
+	Buyback,
+};
+
+/** @brief POE2 Mashup: an item sold to a vendor, which can be bought back for what it sold for. */
+struct BuybackEntry {
+	Item item;
+	int price;
+};
+constexpr size_t MaxBuybackItems = 30;
+extern DVL_API_FOR_TEST std::vector<BuybackEntry> SmithBuyback;
+extern DVL_API_FOR_TEST std::vector<BuybackEntry> WitchBuyback;
+extern DVL_API_FOR_TEST Poe2ShopTab ActivePoe2ShopTab;
+/** @brief The tabs the current vendor shows in POE2 mode. */
+std::vector<Poe2ShopTab> Poe2ShopTabs();
+void SetPoe2ShopTab(Poe2ShopTab tab);
+/** @brief Whether a ware is listed on a POE2 shop tab. */
+bool ItemOnPoe2ShopTab(const Item &item, Poe2ShopTab tab);
+/** @brief The button id of the POE2 shop tab at an index, for GetVisualBtnCoord. */
+int Poe2ShopTabButton(size_t index);
+/** @brief The price of a store item as shown: the buyback price on the buyback tab. */
+int VisualStoreItemPrice(int index);
 
 extern DVL_API_FOR_TEST bool IsVisualStoreOpen;
 extern DVL_API_FOR_TEST VisualStoreState VisualStore;
@@ -98,6 +143,12 @@ void VisualStorePreviousPage();
 void DrawVisualStore(const Surface &out);
 
 /**
+ * @brief POE2 Mashup: the shop's search box takes clicks on it and, while typing, the keyboard.
+ * @return true when the event was used
+ */
+bool ShopSearchHandleEvent(const SDL_Event &event);
+
+/**
  * @brief Handle a click on the visual store panel.
  * @param mousePosition The mouse position.
  */
@@ -108,6 +159,13 @@ void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld
  * @param mousePosition The mouse position.
  */
 void CheckVisualStorePaste(Point mousePosition);
+
+/** @brief Whether a ware picked up at a POE2 Mashup vendor is on the cursor, not paid for yet. */
+bool HasPendingPurchase();
+/** @brief Puts a picked-up ware back on the vendor's shelf. */
+void CancelPendingPurchase();
+/** @brief Pays for a picked-up ware once it has left the cursor for the inventory. */
+void SettlePendingPurchase();
 
 /**
  * @brief Check for item highlight under the cursor.
@@ -140,6 +198,9 @@ bool CanSellToCurrentVendor(const Item &item);
  * @param invIndex The inventory index of the item.
  */
 void SellItemToVisualStore(int invIndex);
+
+/** @brief What the open vendor pays for the item, if they'd buy it. */
+std::optional<int> VisualStoreSellPrice(const Item &item);
 
 /**
  * @brief Get the number of items for the current vendor/tab.

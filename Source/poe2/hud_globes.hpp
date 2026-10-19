@@ -92,6 +92,9 @@ void DrawPoe2LifeGlobe(const Surface &out, bool dome);
 void DrawPoe2ManaGlobe(const Surface &out, bool dome);
 /** @brief Energy shield and Spirit numbers, shown with the life/mana values or while hovering a globe. */
 void DrawPoe2GlobeValues(const Surface &out);
+/** @brief Whether the mouse is over the life or mana globe, which then shows its current / max value. */
+bool IsHoveringLifeGlobe();
+bool IsHoveringManaGlobe();
 
 /**
  * @brief Darkens the empty top part of a flask in the belt and lights its liquid surface.

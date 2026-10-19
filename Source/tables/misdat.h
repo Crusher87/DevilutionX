@@ -242,6 +242,8 @@ struct MissileFileData {
 
 const MissileData &GetMissileData(MissileID missileId);
 MissileFileData &GetMissileSpriteData(MissileGraphicID graphicId);
+/** @brief Whether the loaded sprite table has this graphic (some only come with the Hellfire mod). */
+bool HasMissileSpriteData(MissileGraphicID graphicId);
 
 void LoadMissileData();
 

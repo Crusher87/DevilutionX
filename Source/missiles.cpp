@@ -18,6 +18,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <magic_enum/magic_enum.hpp>
+
 #include "appfat.h"
 #include "control/control.hpp"
 #include "controls/control_mode.hpp"
@@ -46,9 +48,18 @@
 #include "player.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/hit_trace.hpp"
+#include "poe2/profane_roads.hpp"
+#include "poe2/map_play.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
 #include "tables/misdat.h"
@@ -273,26 +284,63 @@ int ProjectileTrapDamage()
 	return currlevel + GenerateRnd(2 * currlevel);
 }
 
+/** @brief Why a monster can't be hit right now, for the hit trace. */
+std::string_view UnhittableReason(const Monster &monster)
+{
+	if (monster.hasNoLife())
+		return "already dead";
+	if (monster.talkMsg != TEXT_NONE)
+		return "talking (quest monster)";
+	if (monster.mode == MonsterMode::Charge)
+		return "charging";
+	if (monster.mode == MonsterMode::Death)
+		return "dying";
+	return "retreating or in a special state";
+}
+
+/** @brief POE2 Mashup: set while a minion's shot checks its hit, so even an arrow hits like a spell, without the hero's attack. */
+bool MinionShotHits = false;
+
 bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam, int dist, MissileID t, WorldTilePosition startPos, DamageType damageType, bool shift)
 {
-	if (!monster.isPossibleToHit() || monster.isImmune(t, damageType))
+	if (!monster.isPossibleToHit()) {
+		HitTraceRefused(monster, UnhittableReason(monster));
 		return false;
+	}
+	if (monster.isImmune(t, damageType)) {
+		HitTraceRefused(monster, StrCat("immune to damage type ", static_cast<int>(damageType)));
+		return false;
+	}
 	// POE2 Mashup: your spells pass through minions.
-	if (gbIsPoe2 && monster.isPlayerMinion())
+	if (gbIsPoe2 && monster.isPlayerMinion()) {
+		HitTraceRefused(monster, "your minion");
 		return false;
+	}
 
 	int hit = RandomIntLessThan(100);
 	int hper = 0;
 	const MissileData &missileData = GetMissileData(t);
-	if (missileData.isArrow()) {
+	const bool isArrow = missileData.isArrow() && !MinionShotHits;
+	if (isArrow) {
 		hper = player.GetRangedPiercingToHit();
 		hper -= player.CalculateArmorPierce(monster.armorClass, false);
-		hper -= (dist * dist) / 2;
+		// POE2 Mashup: accuracy falls off gently with distance instead of with its square.
+		hper -= gbIsPoe2 ? dist : (dist * dist) / 2;
+		// POE2 Mashup: War Banner's accuracy.
+		if (hper > 0)
+			hper = hper * (100 + BannerAccuracyPercent(player)) / 100;
 	} else {
 		hper = player.GetMagicToHit() - (monster.level(sgGameInitInfo.nDifficulty) * 2) - dist;
 	}
 
 	hper = std::clamp(hper, 5, 95);
+	// POE2 Mashup: spells always hit, as in POE2; only attacks roll against the monster's defences.
+	if (gbIsPoe2 && !isArrow)
+		hper = 100;
+	// POE2 Mashup: some uniques make attacks unevadable.
+	const bool isAttack = isArrow && damageType == DamageType::Physical;
+	if (isAttack && AttacksCannotBeEvaded(player))
+		hper = 100;
 
 	if (monster.mode == MonsterMode::Petrified)
 		hit = 0;
@@ -304,7 +352,10 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 #ifdef _DEBUG
 		if (!DebugGodMode)
 #endif
+		{
+			HitTraceRefused(monster, StrCat("missed, rolled ", hit, " against ", hper, "% to hit"));
 			return false;
+		}
 	}
 
 	int dam;
@@ -314,26 +365,48 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		dam = RandomIntBetween(mindam, maxdam);
 	}
 
-	if (missileData.isArrow() && damageType == DamageType::Physical) {
+	// POE2 Mashup: arrows can crit like other attacks.
+	const bool crit = isAttack && gbIsPoe2 && RollAttackCrit(player);
+	if (isAttack) {
 		dam = player._pIBonusDamMod + dam * player._pIBonusDam / 100 + dam;
 		if (player._pClass == HeroClass::Rogue)
 			dam += player._pDamageMod;
 		else
-			dam += player._pDamageMod / 2;
+			dam += player._pDamageMod * std::max(ArrowDamageModPercent(player), 50) / 100;
 		if (monster.data().monsterClass == MonsterClass::Demon && HasAnyOf(player._pIFlags, ItemSpecialEffect::TripleDemonDamage))
 			dam *= 3;
+		if (crit)
+			dam = dam * CritDamagePercent(player) / 100;
 	}
-	const bool resist = monster.isResistant(t, damageType);
+	// POE2 Mashup: resistance is a percentage, and only a very resistant monster doesn't flinch.
+	const bool resist = gbIsPoe2 ? MonsterResistance(monster, damageType) >= FlinchProofResistance : monster.isResistant(t, damageType);
 	if (!shift)
 		dam <<= 6;
-	if (resist)
+	if (!gbIsPoe2 && resist)
 		dam >>= 2;
-	dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
+	// An elemental arrow meets its element's resistance here: its hit is split into packets as if it were physical.
+	if (isAttack && gbIsPoe2)
+		dam = static_cast<int>(static_cast<int64_t>(dam) * (100 - MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType))) / 100);
 
-	if (&player == MyPlayer) {
-		ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
-		TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam));
+	if (isAttack && gbIsPoe2) {
+		// POE2 Mashup: an arrow hits like an attack, with the uniques' conversions and ailments.
+		if (&player == MyPlayer)
+			dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit, true).raw();
+	} else {
+		if (gbIsPoe2 && !isArrow)
+			dam = dam * UniqueSpellHitPercent(player, monster, damageType) / 100;
+		if (gbIsPoe2)
+			dam = dam * MonsterDamageTakenPercent(monster, damageType) / 100;
+		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
+
+		// POE2 Mashup: Leoric's Road, a spell hit puts a monster still rising down for good.
+		if (&player == MyPlayer && !TryPutDownRisen(player, monster)) {
+			ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
+			TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam), AilmentSource::Spell);
+			ApplyCull(player, monster);
+		}
 	}
+	HitTraceHit(monster, dam, resist);
 
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
@@ -341,7 +414,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		monster.tag(player);
 		PlayEffect(monster, MonsterSound::Hit);
 	} else {
-		if (monster.mode != MonsterMode::Petrified && missileData.isArrow() && HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback))
+		if (monster.mode != MonsterMode::Petrified && isArrow && HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback))
 			M_GetKnockback(monster, startPos);
 		if (monster.type().type != MT_GOLEM)
 			M_StartHit(monster, player, dam);
@@ -488,17 +561,38 @@ bool CheckCanHitOnlyWalking(const Missile &missile, const ActorPosition &positio
 	return false;
 }
 
+/**
+ * @brief POE2 Mashup: Firebolt and Ice Bolt burst a little where they hit, like POE2's bolts, so a hit at the edge
+ * of a pack still counts: the monsters right beside the one hit take part of the damage.
+ */
+void SplashBoltHit(const Missile &missile, const Player &player, const Monster &target, int minDamage, int maxDamage, DamageType damageType, bool isDamageShifted)
+{
+	const SkillSlot skill = MissileSkill(missile);
+	if (!gbIsPoe2 || (skill != SkillSlot::ForSpell(SpellID::Firebolt) && skill != SkillSlot::ForAttack(WeaponSkill::IceBolt)))
+		return;
+	for (int i = 0; i < 8; i++) {
+		Monster *beside = FindMonsterAtPosition(target.position.tile + static_cast<Direction>(i));
+		if (beside == nullptr || beside == &target || beside->isPlayerMinion() || beside->hasNoLife())
+			continue;
+		MonsterMHit(player, *beside, minDamage * BoltSplashPercent / 100, maxDamage * BoltSplashPercent / 100, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
+	}
+}
+
 void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int maxDamage, bool isDamageShifted, Point position, bool dontDeleteOnCollision, std::optional<Direction> onlyHitWalking = {})
 {
 	if (!InDungeonBounds(position))
 		return;
 
+	const HitTraceScope traceScope(missile);
 	bool isMonsterHit = false;
 	bool keepFlying = false;
 	int mid = dMonster[position.x][position.y];
 	if (mid != 0) {
 		Monster &monster = Monsters[std::abs(mid) - 1];
-		if (onlyHitWalking.has_value() ? (monster.isWalking() && CheckCanHitOnlyWalking(missile, monster.position, *onlyHitWalking)) : (mid > 0 || monster.mode == MonsterMode::Petrified)) {
+		// POE2 Mashup: the hero's projectiles also hit a monster on the tile it is walking into, where it is drawn,
+		// so bolts don't pass through monsters that are on the move.
+		const bool walkingInto = gbIsPoe2 && mid < 0 && missile.sourceType() == MissileSource::Player && monster.isWalking();
+		if (onlyHitWalking.has_value() ? (monster.isWalking() && CheckCanHitOnlyWalking(missile, monster.position, *onlyHitWalking)) : (mid > 0 || monster.mode == MonsterMode::Petrified || walkingInto)) {
 			if (missile.IsTrap()
 			    || (missile._micaster == TARGET_PLAYERS && (                                     // or was fired by a monster and
 			            monster.isPlayerMinion() != Monsters[missile._misource].isPlayerMinion() //  the monsters are on opposing factions
@@ -507,15 +601,28 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 			            ))) {
 				// then the missile can potentially hit this target
 				isMonsterHit = MonsterTrapHit(monster, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted);
-			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && !SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
+			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
+				HitTraceRefused(monster, "this projectile already pierced it");
+			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS)) {
 				int supportedMin = minDamage;
 				int supportedMax = maxDamage;
 				ScaleSupportedMissileDamage(missile, supportedMin, supportedMax);
+				const SupportHitScope supportScope(*missile.sourcePlayer(), MissileSkill(missile));
+				MinionShotHits = missile.poe2.minionShot;
+				if (MinionShotHits)
+					TelemetryNoteDamageSource("minions");
 				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, supportedMin, supportedMax, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
+				if (MinionShotHits)
+					TelemetryNoteDamageSource({});
+				MinionShotHits = false;
 				// POE2 Mashup: only a projectile's direct hit pierces, forks or chains, not its explosion.
-				if (isMonsterHit && !dontDeleteOnCollision)
+				if (isMonsterHit && !dontDeleteOnCollision) {
+					SplashBoltHit(missile, *missile.sourcePlayer(), monster, supportedMin, supportedMax, damageType, isDamageShifted);
 					keepFlying = OnSupportedMissileHit(missile, monster);
+				}
 			}
+		} else if (!onlyHitWalking.has_value()) {
+			HitTraceRefused(monster, mid < 0 ? "only moving into this tile, not walking" : "not hittable here");
 		}
 	}
 
@@ -552,7 +659,17 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 		missile._miHitFlag = true;
 	}
 
+	// POE2 Mashup: the hero's skills and spells smash barrels, urns and pods they pass through.
+	if (gbIsPoe2 && missile.sourceType() == MissileSource::Player) {
+		Object *object = FindObjectAtPosition(position);
+		if (object != nullptr && object->IsBarrel() && !object->IsBroken())
+			BreakObject(*missile.sourcePlayer(), *object);
+	}
+
 	if (IsMissileBlockedByTile(position)) {
+		// POE2 Mashup: Ricochet sends a new projectile off the wall at the nearest enemy.
+		if (!isMonsterHit && missile.poe2.ricochet)
+			OnSupportedMissileHitWall(missile, position);
 		Object *object = FindObjectAtPosition(position);
 		if (object != nullptr && object->IsBreakable()) {
 			BreakObjectMissile(*object);
@@ -658,6 +775,7 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 		if (ignoreStart && missile.position.start == tile)
 			return true;
 
+		HitTraceTile(missile, tile);
 		CheckMissileCol(missile, damageType, mindam, maxdam, false, tile, false);
 
 		// Did missile hit anything?
@@ -667,7 +785,11 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 		if (missile._miHitFlag && GetMissileData(missile._mitype).movementDistribution == MissileMovementDistribution::Blockable)
 			return false;
 
-		return !IsMissileBlockedByTile(tile);
+		if (IsMissileBlockedByTile(tile)) {
+			HitTraceWall(missile, tile);
+			return false;
+		}
+		return true;
 	};
 
 	const bool tileChanged = MoveMissile(missile, checkTile, ifCollidesDontMoveToHitTile);
@@ -1058,11 +1180,13 @@ bool MonsterTrapHit(Monster &monster, int mindam, int maxdam, int dist, MissileI
 			return false;
 	}
 
-	const bool resist = monster.isResistant(t, damageType);
+	const bool resist = gbIsPoe2 ? MonsterResistance(monster, damageType) >= FlinchProofResistance : monster.isResistant(t, damageType);
 	int dam = RandomIntBetween(mindam, maxdam);
 	if (!shift)
 		dam <<= 6;
-	if (resist)
+	if (gbIsPoe2)
+		dam = dam * (100 - MonsterResistance(monster, damageType)) / 100;
+	else if (resist)
 		dam /= 4;
 	ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
 #ifdef _DEBUG
@@ -1091,8 +1215,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		return false;
 	}
 
-	// POE2 Mashup: dodge rolls avoid missiles.
-	if (player.poe2.isDodging()) {
+	// POE2 Mashup: the start of a dodge roll avoids missiles.
+	if (player.poe2.isUntouchable()) {
 		return false;
 	}
 
@@ -1107,9 +1231,11 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (DebugGodMode)
 		hit = 1000;
 #endif
+	// POE2 Mashup: the Maiden's Road pact, with a staff: each monster's first blow can't be evaded and ignores armour.
+	const bool firstBlow = monster != nullptr && TakeFirstBlow(*monster, player);
 	int hper = 40;
 	if (missileData.isArrow()) {
-		const int tac = HitDefense(player);
+		const int tac = firstBlow ? 0 : HitDefense(player);
 		if (monster != nullptr) {
 			hper = monster->toHit(sgGameInitInfo.nDifficulty)
 			    + ((monster->level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel()) * 2)
@@ -1120,6 +1246,9 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		}
 	} else if (monster != nullptr) {
 		hper += (monster->level(sgGameInitInfo.nDifficulty) * 2) - (player.getCharacterLevel() * 2) - (dist * 2);
+		// POE2 Mashup: some uniques let evasion avoid spells too.
+		if (!firstBlow)
+			hper -= SpellEvasion(player);
 	}
 
 	int minhit = 10;
@@ -1144,7 +1273,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	int blkper = player.GetBlockChance(false);
 	if (monster != nullptr)
 		blkper -= (monster->level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel()) * 2;
-	blkper = std::clamp(blkper, 0, 100);
+	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
+	blkper = std::clamp(blkper, 0, player.GetMaxBlockChance(gbIsPoe2));
 
 	int8_t resper;
 	switch (damageType) {
@@ -1189,7 +1319,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		dam = std::max(dam, 64);
 	}
 	Fixed26_6 damage = Fixed26_6::fromRaw(dam);
-	if (damageType == DamageType::Physical && mtype != MissileID::BoneSpirit)
+	if (damageType == DamageType::Physical && mtype != MissileID::BoneSpirit && !firstBlow)
 		damage = ApplyArmour(player, damage);
 
 	if ((resper <= 0 || gbIsHellfire) && blk < blkper) {
@@ -1203,17 +1333,25 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 	// POE2 Mashup: a Ruby, Topaz or Amethyst charm answers the hit landing.
 	resper = static_cast<int8_t>(ResistanceAgainstHit(player, damageType, resper));
+	// Map monsters' hits can penetrate resistances, and poison or make the hero bleed.
+	if (monster != nullptr && damageType != DamageType::Physical)
+		resper = static_cast<int8_t>(resper - MapPenetration());
+	if (monster != nullptr && &player == MyPlayer)
+		OnMapMonsterSpellHit(player, damage);
 
 	if (monster != nullptr) {
 		MonsterReducePlayerAttribute(*monster, player);
 	}
 	if (&player == MyPlayer)
 		TelemetryNoteAttacker(monster != nullptr ? monster->name() : "a trap");
+	// POE2 Mashup: Cast when Damage Taken gains Energy.
+	if (gbIsPoe2 && &player == MyPlayer)
+		OnMetaDamageTaken(player, monster != nullptr ? monster->position.tile : player.position.tile);
 
 	if (resper > 0 || (gbIsPoe2 && resper < 0)) { // POE2 Mashup: negative resistance adds damage
 		damage -= damage * resper / 100;
 		if (&player == MyPlayer) {
-			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, damage), 0, deathReason);
+			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType)), 0, deathReason);
 		}
 
 		if (!player.hasNoLife()) {
@@ -1223,7 +1361,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 
 	if (&player == MyPlayer) {
-		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, damage), 0, deathReason);
+		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType)), 0, deathReason);
 	}
 
 	if (!player.hasNoLife()) {
@@ -1833,6 +1971,9 @@ void AddArrow(Missile &missile, AddMissileParameter &parameter)
 	UpdateMissileVelocity(missile, dst, av);
 	missile._miAnimFrame = static_cast<int>(GetDirection16(missile.position.start, dst)) + 1;
 	missile.duration = 256;
+	// POE2 Mashup: Two Fallen, One Arrow.
+	if (missile._micaster == TARGET_MONSTERS && gbIsPoe2)
+		missile.poe2.piercesLeft = static_cast<int8_t>(ArrowPierceCount(Players[missile._misource]));
 }
 
 void UpdateVileMissPos(Missile &missile, Point dst)
@@ -2100,8 +2241,29 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	// The effect missile only exists in the POE2 Mashup missile data.
 	if (!gbIsPoe2 || !InDungeonBounds(tile))
 		return;
-	// Monster-owned graphics are only loaded with their monster.
-	if (GetMissileSpriteData(graphic).flags == MissileGraphicsFlags::MonsterOwned)
+	TelemetryEffect("visual", magic_enum::enum_name(graphic), tile.x, tile.y);
+	// Some graphic ids have no sprite file of their own (Diablo drew hits from monster art), so they borrow a look-alike.
+	switch (graphic) {
+	case MissileGraphicID::MetalHit:
+		graphic = MissileGraphicID::ChargedBolt;
+		break;
+	case MissileGraphicID::BloodHit:
+		graphic = MissileGraphicID::BloodStarRedExplosion;
+		break;
+	case MissileGraphicID::BoneHit:
+		graphic = MissileGraphicID::StoneCurseShatter;
+		break;
+	case MissileGraphicID::FireArrowExplosion:
+		graphic = MissileGraphicID::MagmaBallExplosion;
+		break;
+	default:
+		break;
+	}
+	// Graphics that aren't loaded (monster-owned ones without their monster, or ones with no file) can't be drawn.
+	if (graphic >= MissileGraphicID::None || !HasMissileSpriteData(graphic))
+		return;
+	const MissileFileData &spriteData = GetMissileSpriteData(graphic);
+	if (spriteData.name[0] == '\0' || (spriteData.flags == MissileGraphicsFlags::MonsterOwned && !spriteData.sprites))
 		return;
 	AddMissile(tile, tile, dir, MissileID::VisualEffect, TARGET_MONSTERS, -1, light, static_cast<int>(graphic) | (delay << 8));
 }
@@ -2295,6 +2457,13 @@ void AddChainLightning(Missile &missile, AddMissileParameter &parameter)
 namespace {
 void InitMissileAnimationFromMonster(Missile &mis, Direction midir, const Monster &mon, MonsterGraphic graphic)
 {
+	// POE2 Mashup: a monster without that animation charges in another one it has, rather than crashing.
+	for (const MonsterGraphic fallback : { MonsterGraphic::Walk, MonsterGraphic::Stand }) {
+		if (mon.type().getAnimData(graphic).sprites)
+			break;
+		TelemetryMissingSprite(StrCat("monster ", mon.name(), " charging (type ", static_cast<int>(mon.type().type), ", graphic ", static_cast<int>(graphic), ")"));
+		graphic = fallback;
+	}
 	const AnimStruct &anim = mon.type().getAnimData(graphic);
 	mis.setDirection(midir);
 	mis._miAnimFlags = MissileGraphicsFlags::None;
@@ -3009,6 +3178,12 @@ void ProcessArrow(Missile &missile)
 	int maxd;
 	switch (missile.sourceType()) {
 	case MissileSource::Player: {
+		// POE2 Mashup: a Skeletal Sniper's arrow carries its own damage.
+		if (missile.poe2.minionShot) {
+			mind = missile._midam;
+			maxd = missile._midam;
+			break;
+		}
 		// BUGFIX: damage of missile should be encoded in missile struct; player can be dead/have left the game before missile arrives.
 		const Player &player = *missile.sourcePlayer();
 		mind = player._pIMinDam;
@@ -3213,6 +3388,9 @@ void ProcessFireball(Missile &missile)
 			missile.setAnimation(MissileGraphicID::BigExplosion);
 			missile.duration = missile._miAnimLen - 1;
 			missile.position.velocity = {};
+			// POE2 Mashup: a player's Fireball detonates with a shockwave that throws enemies back.
+			if (missile._mitype == MissileID::Fireball && missile.sourceType() == MissileSource::Player)
+				OnFireballDetonated(missile, missilePosition);
 		} else if (missile.position.tile != Point { missile.var1, missile.var2 }) {
 			missile.var1 = missile.position.tile.x;
 			missile.var2 = missile.position.tile.y;
@@ -4284,6 +4462,10 @@ void ProcessRedPortal(Missile &missile)
 
 static void DeleteMissiles()
 {
+	for (const Missile &missile : Missiles) {
+		if (missile._miDelFlag)
+			HitTraceEnd(missile);
+	}
 	Missiles.remove_if([](Missile &missile) { return missile._miDelFlag; });
 }
 

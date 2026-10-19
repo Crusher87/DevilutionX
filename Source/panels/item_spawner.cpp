@@ -28,10 +28,15 @@
 #include "multi.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/belt_uniques.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/loot.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/display.h"
@@ -58,7 +63,7 @@ constexpr int Padding = 12;
 constexpr int RowHeight = 18;
 constexpr int ChipHeight = 20;
 
-constexpr uint8_t PanelColor = PAL16_GRAY + 15;
+constexpr uint8_t PanelColor = 0; // black: palette entry 255 is white
 constexpr uint8_t BorderColor = PAL16_YELLOW + 8;
 constexpr uint8_t FieldColor = PAL16_GRAY + 14;
 constexpr uint8_t ChipColor = PAL16_GRAY + 12;
@@ -86,6 +91,9 @@ std::string LastQuery;
 SpawnerCategory Category = SpawnerCategory::All;
 SpawnerCategory LastCategory = SpawnerCategory::Count;
 size_t Selected = 0;
+/** @brief When the list row was last clicked, so a second click on it spawns (double-click). */
+uint32_t LastRowClickTicks = 0;
+constexpr uint32_t DoubleClickTicks = 450;
 size_t ScrollTop = 0;
 size_t QualityIndex = 2; // Rare
 int Level = 30;
@@ -195,7 +203,7 @@ std::optional<_item_indexes> UniqueBase(const UniqueItem &unique)
 bool IsSpawnableMisc(const ItemData &data)
 {
 	// Skill and support gems don't drop (uncut gems do), but they're handy for testing.
-	const bool isGem = !SkillForGemData(data).isEmpty() || SupportGemForMiscId(data.iMiscId) != SupportGem::None;
+	const bool isGem = !SkillForGemData(data).isEmpty() || SupportGemForItemData(data) != SupportGem::None;
 	return (data.dropRate > 0 || isGem) && data.iClass == ICLASS_MISC && IsAnyOf(data.iLoc, ILOC_UNEQUIPABLE, ILOC_BELT) && data.iMiscId != IMISC_UNIQUE;
 }
 
@@ -234,6 +242,12 @@ bool RollUnique(const Player &player, Item &item, int uid, uint32_t firstSeed)
 		found = true;
 	}
 	SetRndSeed(rngState);
+	if (!found) {
+		// Quest uniques never roll from a drop: make them the way the quest does.
+		item = {};
+		MakeFixedUnique(player, item, *base, std::max<int>(unique.UIMinLvl, 1), static_cast<_unique_items>(uid));
+		found = item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid == uid;
+	}
 	return found;
 }
 
@@ -356,6 +370,12 @@ void SpawnSelected(int count)
 		EventPlrMsg(FormatRuntime(_("Spawned {:d}x {:s}"), spawned, entry.name));
 }
 
+/** @brief The "Give" button at the bottom of the preview. */
+Rectangle GiveButton(const Rectangle &preview)
+{
+	return { { preview.position.x + (preview.size.width - 120) / 2, preview.position.y + preview.size.height - 72 }, { 120, 26 } };
+}
+
 bool HandleClick(Point position, bool shift)
 {
 	const Layout layout = CurrentLayout();
@@ -387,12 +407,16 @@ bool HandleClick(Point position, bool shift)
 	if (layout.list.contains(position)) {
 		const size_t row = ScrollTop + static_cast<size_t>((position.y - layout.list.position.y) / RowHeight);
 		if (row < Results.size()) {
+			const uint32_t now = SDL_GetTicks();
+			const bool again = row == Selected && now - LastRowClickTicks <= DoubleClickTicks;
 			Selected = row;
-			SpawnSelected(shift ? BatchCount : 1);
+			LastRowClickTicks = again ? 0 : now;
+			if (again)
+				SpawnSelected(shift ? BatchCount : 1);
 		}
 		return true;
 	}
-	if (layout.preview.contains(position)) {
+	if (GiveButton(layout.preview).contains(position)) {
 		SpawnSelected(shift ? BatchCount : 1);
 	}
 	return true;
@@ -465,7 +489,11 @@ void DrawPreview(const Surface &out, const Rectangle &rect)
 		    { .flags = UiFlags::AlignCenter | UiFlags::ColorWhite });
 		y += 20;
 	}
-	DrawString(out, _("Click or Enter: spawn\nShift: spawn 5"), { { textX, rect.position.y + rect.size.height - 40 }, { textWidth, 36 } },
+	const Rectangle give = GiveButton(rect);
+	FillRectangle(out, give, give.contains(MousePosition) ? ChipActiveColor : ChipColor);
+	DrawFrame(out, give, BorderColor);
+	DrawString(out, _("Give"), give, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+	DrawString(out, _("Double-click, Give or Enter: spawn\nShift: spawn 5"), { { textX, rect.position.y + rect.size.height - 40 }, { textWidth, 36 } },
 	    { .flags = UiFlags::AlignCenter | UiFlags::ColorWhite, .lineHeight = 16 });
 }
 
@@ -507,6 +535,50 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		if (std::find(seenNames.begin(), seenNames.end(), data.iName) != seenNames.end())
 			continue;
 
+		// Tablets, fragments and keys are listed one kind at a time too.
+		if (IsAnyOf(data.iMiscId, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY)) {
+			Item probe;
+			InitializeItem(probe, static_cast<_item_indexes>(i));
+			const uint8_t count = data.iMiscId == IMISC_TABLET ? static_cast<uint8_t>(TabletKind::Count) : static_cast<uint8_t>(FragmentSet::Count);
+			for (uint8_t variant = 1; variant < count; variant++) {
+				SetCraftingItemVariant(probe, variant);
+				probe._iPoe2Craft = {};
+				FinishEndgameItem(probe);
+				catalog.push_back(SpawnerEntry { .name = std::string(probe._iIName), .detail = std::string(_("Endgame")), .category = SpawnerCategory::Misc, .baseIndex = static_cast<_item_indexes>(i), .cursor = data.iCurs, .variant = variant });
+			}
+			continue;
+		}
+		// Essences, omens, augments and catalysts are listed one kind at a time below.
+		if (IsAnyOf(data.iMiscId, IMISC_ESSENCE, IMISC_OMEN, IMISC_AUGMENT, IMISC_ORB_CATALYST)) {
+			Item probe;
+			InitializeItem(probe, static_cast<_item_indexes>(i));
+			const auto addVariant = [&](uint8_t variant) {
+				SetCraftingItemVariant(probe, variant);
+				FinishCraftingItem(probe);
+				catalog.push_back(SpawnerEntry { .name = std::string(probe._iIName), .detail = std::string(_("Currency")), .category = SpawnerCategory::Orbs, .baseIndex = static_cast<_item_indexes>(i), .cursor = data.iCurs, .variant = variant });
+			};
+			switch (data.iMiscId) {
+			case IMISC_ESSENCE:
+				for (uint8_t kind = 1; kind < static_cast<uint8_t>(EssenceKind::Count); kind++) {
+					for (uint8_t tier = 0; tier < static_cast<uint8_t>(EssenceTier::Count); tier++)
+						addVariant(EssenceVariant(static_cast<EssenceKind>(kind), static_cast<EssenceTier>(tier)));
+				}
+				break;
+			case IMISC_OMEN:
+				for (uint8_t omen = 1; omen < static_cast<uint8_t>(OmenId::Count); omen++)
+					addVariant(omen);
+				break;
+			case IMISC_AUGMENT:
+				for (uint8_t augment = 1; augment < static_cast<uint8_t>(AugmentId::Count); augment++)
+					addVariant(augment);
+				break;
+			default:
+				for (uint8_t catalyst = 1; catalyst < static_cast<uint8_t>(Catalyst::Count); catalyst++)
+					addVariant(catalyst);
+				break;
+			}
+			continue;
+		}
 		SpawnerEntry entry { .name = std::string(data.iName), .detail = {}, .category = SpawnerCategory::Misc, .baseIndex = static_cast<_item_indexes>(i), .uniqueId = -1, .cursor = data.iCurs };
 		const SkillSlot skill = SkillForGemData(data);
 		if (!skill.isEmpty()) {
@@ -517,7 +589,7 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 			if (skill.kind == SkillKind::Attack && WeaponSkillNeedsWeapon(skill.attack()))
 				weapon = std::string(WeaponSkillWeapons(skill.attack()));
 			entry.detail = JoinDetail(JoinDetail(kind, weapon), Requirements(data));
-		} else if (const SupportGem gem = SupportGemForMiscId(data.iMiscId); gem != SupportGem::None) {
+		} else if (const SupportGem gem = SupportGemForItemData(data); gem != SupportGem::None) {
 			entry.category = SpawnerCategory::Gems;
 			entry.detail = std::string(_("Support gem"));
 		} else if (CurrencyOrbForMiscId(data.iMiscId) != CurrencyOrb::None) {
@@ -544,7 +616,9 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 
 	for (size_t uid = 0; uid < UniqueItems.size(); uid++) {
 		const UniqueItem &unique = UniqueItems[uid];
-		const std::optional<_item_indexes> base = UniqueBase(unique);
+		// The bundle's uniques have a base of their own rather than a Diablo base type.
+		const Poe2Unique *poe2Unique = Poe2UniqueFor(static_cast<int>(uid));
+		const std::optional<_item_indexes> base = poe2Unique != nullptr ? std::optional(static_cast<_item_indexes>(poe2Unique->baseItem)) : UniqueBase(unique);
 		if (unique.UIName.empty() || !base || AllItemsList[*base].iMiscId == IMISC_UNIQUE)
 			continue;
 		const ItemData &data = AllItemsList[*base];
@@ -555,6 +629,21 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		    .baseIndex = *base,
 		    .uniqueId = static_cast<int>(uid),
 		    .cursor = unique.UICurs != ICURS_DEFAULT ? unique.UICurs : data.iCurs,
+		});
+	}
+
+	for (const BeltUnique &unique : BeltUniques()) {
+		const std::optional<int> base = BeltUniqueBase(unique);
+		if (!base)
+			continue;
+		const ItemData &data = AllItemsList[*base];
+		catalog.push_back(SpawnerEntry {
+		    .name = std::string(unique.name),
+		    .detail = JoinDetail(unique.kind == BeltUniqueKind::Charm ? data.iName : (unique.kind == BeltUniqueKind::LifeFlask ? _("Life Flask") : _("Mana Flask")), StrCat(_("Level"), " ", unique.dropLevel)),
+		    .category = SpawnerCategory::Uniques,
+		    .baseIndex = static_cast<_item_indexes>(*base),
+		    .cursor = data.iCurs,
+		    .beltUnique = static_cast<uint8_t>(unique.id),
 		});
 	}
 
@@ -595,10 +684,39 @@ std::vector<size_t> FilterItemSpawnerCatalog(const std::vector<SpawnerEntry> &ca
 
 bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_quality quality, int level, uint32_t seed, Item &item)
 {
+	if (entry.variant != 0) {
+		InitializeItem(item, entry.baseIndex);
+		item._iSeed = static_cast<int32_t>(seed >> 1);
+		item.dwBuff |= CF_POE2;
+		SetCraftingItemVariant(item, entry.variant);
+		FinishCraftingItem(item);
+		FinishEndgameItem(item);
+		SetupItem(item);
+		return !item.isEmpty();
+	}
+	if (entry.beltUnique != 0) {
+		InitializeItem(item, entry.baseIndex);
+		item._iSeed = static_cast<int32_t>(seed >> 1);
+		item.dwBuff |= CF_POE2;
+		MakeBeltUnique(item, static_cast<BeltUniqueId>(entry.beltUnique));
+		SetupItem(item);
+		return !item.isEmpty();
+	}
+	if (entry.uniqueId >= 0 && Poe2UniqueFor(entry.uniqueId) != nullptr) {
+		if (!CreatePoe2Unique(player, item, entry.uniqueId, seed >> 1))
+			return false;
+		SetupItem(item);
+		return true;
+	}
 	if (entry.uniqueId >= 0)
 		return RollUnique(player, item, entry.uniqueId, seed);
-	if (entry.rollsQuality)
-		return RollItemOfQuality(player, item, entry.baseIndex, quality, std::clamp(level, MinLevel, MaxLevel), seed);
+	if (entry.rollsQuality) {
+		// Like a drop from an area of this level: POE2 item level and modifiers from the itemization tables.
+		Item stamp {};
+		SetPoe2ItemLevel(stamp, Poe2ItemLevel(std::clamp(level, MinLevel, MaxLevel)));
+		SetLootRarity(stamp, quality);
+		return RollItemOfQuality(player, item, entry.baseIndex, quality, std::clamp(level, MinLevel, MaxLevel), seed, 0, {}, stamp.dwBuff);
+	}
 
 	// Gems, orbs and potions have no quality; only uncut gems use the level.
 	InitializeItem(item, entry.baseIndex);
@@ -606,6 +724,11 @@ bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_qua
 	SetupItem(item);
 	if (IsUncutGem(item) || IsWaystone(item))
 		item._iCreateInfo = static_cast<uint16_t>((item._iCreateInfo & ~CF_LEVEL) | std::clamp(level, MinLevel, static_cast<int>(CF_LEVEL)));
+	// A waystone's tier follows the level: tier 16 at level 90.
+	if (IsWaystone(item)) {
+		item._iPoe2Craft = {};
+		FinishWaystone(item);
+	}
 	return !item.isEmpty();
 }
 
@@ -622,6 +745,8 @@ void GiveItemToPlayer(Player &player, Item &item)
 	const int ii = AllocateItem();
 	Items[ii] = item;
 	GetSuperItemSpace(player.position.tile, ii);
+	// Its look on the ground, or drawing and hovering it would crash.
+	RespawnItem(Items[ii], true);
 	NetSendCmdPItem(false, CMD_SPAWNITEM, Items[ii].position, Items[ii]);
 }
 

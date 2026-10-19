@@ -38,6 +38,8 @@
 #include "multi.h"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/autosave.hpp"
+#include "poe2/hardcore.hpp"
 #include "utils/log.hpp"
 #include "utils/sdl_compat.h"
 #include "utils/sdl_geometry.h"
@@ -263,6 +265,7 @@ struct {
 void InitRendering()
 {
 	// Blit the background once and then free it.
+	ClearScaledWorld();
 	DrawCutsceneBackground();
 	if (RenderDirectlyToOutputSurface && PalSurface != nullptr) {
 		// Render into all the backbuffers if there are multiple.
@@ -281,13 +284,16 @@ void InitRendering()
 
 	// The loading thread sets `logical_palette`, so we make sure to use
 	// our own palette for the fade-in.
-	PaletteFadeIn(8, ProgressEventHandlerState.palette);
+	PaletteFadeIn(LevelChangeFadeSpeed(), ProgressEventHandlerState.palette);
 }
 
 void CheckShouldSkipRendering()
 {
 	if (!ProgressEventHandlerState.skipRendering) return;
-	const bool shouldSkip = ProgressEventHandlerState.loadStartedAt + *GetOptions().Gameplay.skipLoadingScreenThresholdMs > SDL_GetTicks();
+	// POE2 Mashup: a level that loads within this long shows no loading screen, just a quick fade.
+	constexpr uint32_t Poe2SkipLoadingScreenMs = 2000;
+	const uint32_t threshold = gbIsPoe2 ? std::max<uint32_t>(*GetOptions().Gameplay.skipLoadingScreenThresholdMs, Poe2SkipLoadingScreenMs) : *GetOptions().Gameplay.skipLoadingScreenThresholdMs;
+	const bool shouldSkip = ProgressEventHandlerState.loadStartedAt + threshold > SDL_GetTicks();
 	if (shouldSkip) return;
 	ProgressEventHandlerState.skipRendering = false;
 	if (!HeadlessMode) InitRendering();
@@ -460,7 +466,11 @@ void DoLoad(interface_mode uMsg)
 		leveltype = GetLevelType(currlevel);
 		IncProgress();
 		loadResult = LoadGameLevel(false, ENTRY_MAIN);
-		if (loadResult.has_value()) IncProgress();
+		if (loadResult.has_value()) {
+			// POE2 Mashup: a hero who fell in Hardcore is saved in Softcore once back in town.
+			FinishHardcoreFall();
+			IncProgress();
+		}
 		break;
 	default:
 		loadResult = std::unexpected<std::string>("Unknown progress mode");
@@ -530,7 +540,7 @@ void ProgressEventHandler(const SDL_Event &event, uint16_t modState)
 
 				// The loading thread sets `logical_palette`, so we make sure to use
 				// our own palette for the fade-out.
-				PaletteFadeOut(8, ProgressEventHandlerState.palette);
+				PaletteFadeOut(LevelChangeFadeSpeed(), ProgressEventHandlerState.palette);
 
 				// Once the fade-out is done, restore the system palette.
 				UpdateSystemPalette(logical_palette);
@@ -552,6 +562,8 @@ void ProgressEventHandler(const SDL_Event &event, uint16_t modState)
 
 		gbSomebodyWonGameKludge = false;
 		ProgressEventHandlerState.done = true;
+		// POE2 Mashup: arriving on a level is a checkpoint; save once the game runs again.
+		RequestAutosave();
 
 #if !defined(USE_SDL1) && !defined(__vita__)
 		if (renderer != nullptr) {
@@ -639,6 +651,11 @@ void CompleteProgress()
 	if (sgdwProgress < MaxProgress) {
 		IncProgress((MaxProgress - sgdwProgress) / ProgressStepSize);
 	}
+}
+
+int LevelChangeFadeSpeed()
+{
+	return gbIsPoe2 ? 32 : 8;
 }
 
 void ShowProgress(interface_mode uMsg)

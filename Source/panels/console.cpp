@@ -449,9 +449,8 @@ void AcceptSuggestion()
 {
 	const LuaAutocompleteSuggestion &suggestion = AutocompleteSuggestions[AutocompleteSuggestionFocusIndex];
 	ConsoleInputState.type(suggestion.completionText);
-	if (suggestion.cursorAdjust == -1) {
+	for (int i = suggestion.cursorAdjust; i < 0; i++)
 		ConsoleInputState.moveCursorLeft(/*word=*/false);
-	}
 }
 
 bool ConsoleHandleEvent(const SDL_Event &event)
@@ -568,7 +567,9 @@ void DrawConsole(const Surface &out)
 	const std::string_view originalInputText = ConsoleInputState.value();
 	if (CurrentInputTextState != InputTextState::UpToDate) {
 		WrappedInputText = WordWrapString(StrCat(Prompt, originalInputText), OuterRect.size.width - (2 * TextPaddingX), TextFontSize, TextSpacing);
-		if (CurrentInputTextState == InputTextState::RestoredFromHistory) {
+		// POE2 Mashup: suggest only while typing the first word, not inside a call's arguments like a mark note.
+		const std::string_view beforeCursor = originalInputText.substr(0, std::min<size_t>(ConsoleInputCursor.position, originalInputText.size()));
+		if (CurrentInputTextState == InputTextState::RestoredFromHistory || beforeCursor.find_first_of(" (\"',") != std::string_view::npos) {
 			AutocompleteSuggestions.clear();
 		} else {
 			GetLuaAutocompleteSuggestions(originalInputText, ConsoleInputCursor.position, GetLuaReplEnvironment(), /*maxSuggestions=*/MaxSuggestions, AutocompleteSuggestions);

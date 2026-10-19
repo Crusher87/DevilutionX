@@ -547,6 +547,14 @@ struct GraphicsOptions : OptionCategoryBase {
 	std::vector<OptionEntryBase *> GetEntries() override;
 
 	OptionEntryResolution resolution;
+	/** @brief POE2 Mashup: draws the UI bigger, in percent, while the world keeps the full resolution. */
+	OptionEntryInt<int> uiScale;
+	/** @brief POE2 Mashup: skill effects drawn by code in full colour, with glow and bloom. */
+	OptionEntryBoolean modernEffects;
+	/** @brief POE2 Mashup: how many particles and how much glow the modern effects use, in percent. */
+	OptionEntryInt<int> effectIntensity;
+	/** @brief POE2 Mashup: draws the world with the upscaled HD art pack while zoomed in. */
+	OptionEntryBoolean hdGraphics;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)
@@ -874,6 +882,11 @@ struct ModOptions : OptionCategoryBase {
 	void AddModEntry(const std::string &modName);
 	void RemoveModEntry(const std::string &modName);
 	void SetHellfireEnabled(bool enableHellfire);
+	/**
+	 * @brief POE2 mode always plays on Hellfire (Curtis 2026-10-18): switches Hellfire on when POE2 is on and Hellfire isn't.
+	 * @return true if it switched Hellfire on, whose own change then reloads the mods.
+	 */
+	bool SwitchOnHellfireForPoe2();
 
 private:
 	struct ModEntry {

@@ -7,11 +7,13 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cassert>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -20,6 +22,7 @@
 #include <vector>
 
 #ifdef USE_SDL3
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_timer.h>
 #else
 #include <SDL.h>
@@ -64,22 +67,44 @@
 #include "objects.h"
 #include "options.h"
 #include "pack.h"
+#include "panels/desecration_panel.hpp"
 #include "panels/info_box.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "plrmsg.h"
+#include "poe2/bases.hpp"
+#include "poe2/belt_uniques.hpp"
+#include "poe2/boss_loot.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/craft_state.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/stash_layouts.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/desecration.hpp"
+#include "poe2/economy.hpp"
+#include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/jewels.hpp"
+#include "poe2/loot.hpp"
+#include "poe2/map_play.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
+#include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "qol/stash.h"
 #include "quests.h"
 #include "sound_effect_enums.h"
@@ -98,6 +123,7 @@
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/math.h"
+#include "utils/sdl_compat.h"
 #include "utils/sdl_geometry.h"
 #include "utils/static_vector.hpp"
 #include "utils/str_cat.hpp"
@@ -116,13 +142,13 @@ CornerStoneStruct CornerStone;
 bool UniqueItemFlags[128];
 int MaxGold = GOLD_MAX_LIMIT;
 
-/** Maps from item_cursor_graphic to in-memory item type. */
+/** Maps from item_cursor_graphic to in-memory item type. POE2 Mashup: 43, the Blacksmith's Whetstone, drops as a stone, not armour. */
 int8_t ItemCAnimTbl[] = {
 	20, 16, 16, 16, 4, 4, 4, 12, 12, 12,
 	12, 12, 12, 12, 12, 21, 21, 25, 12, 28,
 	28, 28, 38, 38, 38, 32, 38, 38, 38, 24,
 	24, 26, 2, 25, 22, 23, 24, 21, 27, 27,
-	29, 0, 0, 0, 12, 12, 12, 12, 12, 0,
+	29, 0, 0, 9, 12, 12, 12, 12, 12, 0,
 	8, 8, 0, 8, 8, 8, 8, 8, 8, 6,
 	8, 8, 8, 6, 8, 8, 6, 8, 8, 6,
 	6, 6, 8, 8, 8, 5, 9, 13, 13, 13,
@@ -140,7 +166,9 @@ int8_t ItemCAnimTbl[] = {
 	36, 36, 37, 38, 38, 38, 38, 38, 41, 42,
 	8, 8, 8, 17, 0, 6, 8, 11, 11, 3,
 	3, 1, 6, 6, 6, 1, 8, 6, 11, 3,
-	6, 8, 1, 6, 6, 17, 40, 0, 0
+	6, 8, 1, 6, 6, 17, 40, 0, 0,
+	// POE2 Mashup: the one-cell copies drop like the Ruby, the Cathedral Map, a book and the notes.
+	32, 16, 18, 36, 37
 };
 
 /** Maps of drop sounds effect of placing the item in the inventory. */
@@ -541,7 +569,7 @@ void CalcSelfItems(Player &player)
 
 			bool isValid = IsItemValid(player, equipment);
 
-			if (currstr < equipment._iMinStr
+			if (RequirementStrength(player, currstr, currmag) < equipment._iMinStr
 			    || currmag < equipment._iMinMag
 			    || currdex < equipment._iMinDex)
 				isValid = false;
@@ -1291,7 +1319,9 @@ struct RareAffixRoll {
 std::vector<RareAffixRoll> RollRareAffixes(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
 {
 	const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
-	const int wantedAffixes = std::min<int>(3 + GenerateRnd(4) + exalts, static_cast<int>(MaxRareAffixes));
+	// Rares from the POE2 loot rules have 4 to 6 affixes, mostly 4; crafted ones 3 to 6.
+	const int baseAffixes = GetLootRarity(item) ? RollNaturalRareAffixCount() : 3 + GenerateRnd(4);
+	const int wantedAffixes = std::min<int>(baseAffixes + exalts, static_cast<int>(MaxRareAffixes));
 	int prefixes = 0;
 	int suffixes = 0;
 	std::vector<RareAffixRoll> rolls;
@@ -1377,12 +1407,137 @@ void GetItemPowerRare(const Player &player, Item &item, int minlvl, int maxlvl, 
 	CalcItemValue(item);
 }
 
+/** @brief Whether the item rolls its affixes from the POE2 itemization tables rather than Diablo's affix lists. */
+bool HasPoe2ModTables(const Item &item)
+{
+	return gbIsPoe2 && (item.dwBuff & CF_POE2_MODS) != 0 && GetPoe2ItemLevel(item) > 0 && !ModifierFamilies().empty() && ItemModSlot(item).has_value();
+}
+
+/**
+ * @brief Rolls a magic or rare item's modifiers from the POE2 itemization tables.
+ *
+ * The picks come from the item seed, and the values from a seed a Divine Orb changes, so a Divine Orb rerolls values only.
+ */
+std::vector<Poe2ItemMod> RollNaturalPoe2Mods(const Item &item, bool rare)
+{
+	const uint32_t seed = static_cast<uint32_t>(item._iSeed);
+	const uint32_t divine = (item.dwBuff & CF_POE2_DIVINE) >> 9;
+	const uint32_t valueSeed = seed ^ 0x6A09E667U ^ (divine * 0x9E3779B9U);
+	int count;
+	int perSide;
+	if (rare && IsJewel(item)) {
+		// Rare jewels have 3 or 4 modifiers, at most 2 of each kind.
+		const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
+		count = std::min(2 + MagicModCount(seed) + exalts, 2 * MaxRareJewelModsPerSide);
+		perSide = MaxRareJewelModsPerSide;
+	} else if (rare) {
+		const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
+		count = std::min(RareModCount(seed) + exalts, static_cast<int>(MaxRareAffixes));
+		perSide = MaxRareModsPerSide;
+	} else {
+		count = MagicModCount(seed);
+		perSide = MaxMagicModsPerSide;
+	}
+	// Ground drops can roll a hidden quality tier that culls weak modifiers; crafting and shops always use the full pool.
+	const int itemLevel = GetPoe2ItemLevel(item);
+	const int unidentifiedTier = GetLootRarity(item) ? UnidentifiedTier(seed, itemLevel) : 1;
+	return RollItemMods(*ItemModSlot(item), ItemModBaseTags(item), itemLevel, count, perSide, seed, valueSeed, unidentifiedTier);
+}
+
+/** @brief The rarity the item is made with: the one crafting gave it, or the one the loot roll picked. */
+std::optional<item_quality> RarityToRoll(const Item &item)
+{
+	// A waystone's rarity and modifiers are its own (poe2/waystones.cpp).
+	if (item._iMiscId == IMISC_WAYSTONE)
+		return std::nullopt;
+	if (item._iPoe2Craft.explicitMods)
+		return static_cast<item_quality>(item._iPoe2Craft.rarity);
+	return GetLootRarity(item);
+}
+
+/**
+ * @brief Gives a magic or rare item its modifiers from the POE2 itemization tables.
+ *
+ * Crafted items have theirs written out; others roll them from their seed.
+ */
+void GetItemPowerPoe2Mods(Item &item, bool rare)
+{
+	std::vector<Poe2ItemMod> mods;
+	if (item._iPoe2Craft.explicitMods) {
+		rare = item._iPoe2Craft.rarity == ITEM_QUALITY_RARE;
+		mods = ResolveCraftMods(item, RollNaturalPoe2Mods(item, !item._iPoe2Craft.rolledMagic));
+	} else {
+		mods = RollNaturalPoe2Mods(item, rare);
+		if (mods.empty())
+			return;
+	}
+	// POE2 Mashup: a catalyst's quality on jewellery boosts its kind of modifiers.
+	if (const auto catalyst = static_cast<Catalyst>(item._iPoe2Craft.catalyst); catalyst != Catalyst::None) {
+		const int quality = ItemQuality(item);
+		for (Poe2ItemMod &mod : mods) {
+			const ModFamily *family = ItemModFamily(mod);
+			if (family == nullptr || !CatalystBoosts(catalyst, family->effect))
+				continue;
+			for (int16_t &value : mod.values)
+				value = static_cast<int16_t>(value + (value * quality / 100));
+		}
+	}
+	// Like POE2, prefixes are listed before suffixes.
+	std::stable_partition(mods.begin(), mods.end(), [](const Poe2ItemMod &mod) { return ItemModFamily(mod)->prefix; });
+
+	int valueAdd = 0;
+	for (size_t i = 0; i < mods.size(); i++) {
+		ApplyItemMod(item, mods[i]);
+		item._iPoe2Mods[i] = mods[i];
+		// Better tiers are worth much more gold.
+		const int strength = 9 - mods[i].tier;
+		valueAdd += strength * strength * 120;
+	}
+	item._iMagical = rare ? ITEM_QUALITY_RARE : ITEM_QUALITY_MAGIC;
+	item._iVAdd1 = valueAdd;
+	item._iVMult1 = static_cast<int>(mods.size());
+	item._iVAdd2 = 0;
+	item._iVMult2 = 0;
+	if (rare) {
+		CopyUtf8(item._iIName, GetRareItemName(item), ItemNameLength);
+	} else {
+		CopyUtf8(item._iIName, MagicModItemName(item, item._iName), ItemNameLength);
+		if (!StringInPanel(item._iIName))
+			CopyUtf8(item._iIName, MagicModItemName(item, AllItemsList[item.IDidx].iSName), ItemNameLength);
+	}
+	CalcItemValue(item);
+}
+
+/**
+ * @brief POE2 jewels are always magic or rare and roll from the jewel modifier pools.
+ *
+ * A jewel made without an item level (a shop or the item spawner) takes one from the level it was made at.
+ */
+void SetupJewel(Item &item, int lvl)
+{
+	if (GetPoe2ItemLevel(item) == 0)
+		SetPoe2ItemLevel(item, Poe2ItemLevel(lvl + (15 * sgGameInitInfo.nDifficulty)));
+	const std::optional<item_quality> lootRarity = RarityToRoll(item);
+	// Without a loot roll, one jewel in four is rare.
+	const bool rare = lootRarity ? *lootRarity == ITEM_QUALITY_RARE : (static_cast<uint32_t>(item._iSeed) * 0x9E3779B9U) >> 30 == 0;
+	GetItemPowerPoe2Mods(item, rare);
+}
+
 void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs, bool onlygood)
 {
-	if ((item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0) {
+	// POE2 loot drops already know their rarity; older items roll 1 in 5 magic items as rare.
+	const std::optional<item_quality> lootRarity = RarityToRoll(item);
+	const bool rare = lootRarity == ITEM_QUALITY_RARE || (!lootRarity && (item.dwBuff & CF_POE2) != 0 && GenerateRnd(RareItemChance) == 0);
+	if (HasPoe2ModTables(item)) {
+		GetItemPowerPoe2Mods(item, rare);
+		return;
+	}
+	if (rare) {
 		GetItemPowerRare(player, item, minlvl, maxlvl, flgs);
 		return;
 	}
+	if (lootRarity)
+		onlygood = true;
 
 	const PLStruct *pPrefix = nullptr;
 	const PLStruct *pSufix = nullptr;
@@ -1544,6 +1699,9 @@ _item_indexes GetItemIndexForDroppableItem(bool considerDropRate, tl::function_r
 			continue;
 		if (IsAnyOf(item.iSpell, SpellID::Resurrect, SpellID::HealOther) && !gbIsMultiplayer)
 			continue;
+		// Skill gems replaced Diablo's spell books, so no book ever drops or sells.
+		if (gbIsPoe2 && item.itype == ItemType::Misc && item.iMiscId == IMISC_BOOK)
+			continue;
 		if (!isItemOkay(item))
 			continue;
 		unsigned weight = considerDropRate ? item.dropRate : 1;
@@ -1637,11 +1795,18 @@ void GetUniqueItem(const Player &player, Item &item, _unique_items uid)
 {
 	const auto &uniqueItemData = UniqueItems[uid];
 
+	// POE2 Mashup: a Divine Orb rolls the values again from a seed of their own.
+	const uint32_t divine = (item.dwBuff & CF_POE2) != 0 ? (item.dwBuff & CF_POE2_DIVINE) >> 9 : 0;
+	const uint32_t rngState = GetLCGEngineState();
+	if (divine != 0)
+		SetRndSeed(static_cast<uint32_t>(item._iSeed) ^ (divine * 0x9E3779B9U));
 	for (auto power : uniqueItemData.powers) {
 		if (power.type == IPL_INVALID)
 			break;
 		SaveItemPower(player, item, power);
 	}
+	if (divine != 0)
+		SetRndSeed(rngState);
 
 	CopyUtf8(item._iIName, uniqueItemData.UIName, ItemNameLength);
 	if (uniqueItemData.UICurs != ICURS_DEFAULT)
@@ -1654,6 +1819,7 @@ void GetUniqueItem(const Player &player, Item &item, _unique_items uid)
 	item._iUid = uid;
 	item._iMagical = ITEM_QUALITY_UNIQUE;
 	item._iCreateInfo |= CF_UNIQUE;
+	ApplyPoe2UniqueEffects(item);
 }
 
 void ItemRndDur(Item &item)
@@ -1686,6 +1852,8 @@ void SetupBaseItem(Point position, _item_indexes idx, bool onlygood, bool sendms
 	GetSuperItemSpace(position, ii);
 	const int curlv = ItemsGetCurrlevel();
 
+	if (gbIsPoe2 && EquipmentClassWeight(AllItemsList[idx].itype) > 0)
+		SetPoe2ItemLevel(item, Poe2ItemLevel((2 * curlv) + (15 * sgGameInitInfo.nDifficulty)));
 	SetupAllItems(*MyPlayer, item, idx, AdvanceRndSeed(), 2 * curlv, 1, onlygood, delta);
 	TryRandomUniqueItem(item, idx, 2 * curlv, 1, onlygood, delta);
 	SetupItem(item);
@@ -1814,13 +1982,14 @@ void ItemDoppel()
 
 void AddItemInfoBoxString(const std::string_view str)
 {
-	const bool floatingInfoBoxEnabled = *GetOptions().Gameplay.floatingInfoBox;
+	// POE2 Mashup: item details always go in the tooltip by the item, never the box at the bottom.
+	const bool floatingInfoBoxEnabled = gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox;
 	AddInfoBoxString(str, floatingInfoBoxEnabled);
 }
 
 void AddItemInfoBoxString(std::string &&str)
 {
-	const bool floatingInfoBoxEnabled = *GetOptions().Gameplay.floatingInfoBox;
+	const bool floatingInfoBoxEnabled = gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox;
 	AddInfoBoxString(std::move(str), floatingInfoBoxEnabled);
 }
 
@@ -2003,37 +2172,93 @@ void printItemMiscGamepad(const Item &item, bool isOil, bool isCastOnTarget)
 void PrintItemMisc(const Item &item)
 {
 	if (const SupportGem gem = SupportGemForItem(item); gem != SupportGem::None) {
-		AddItemInfoBoxString(SupportGemDescription(gem));
+		AddItemInfoBoxString(SupportGemDescription(gem, SupportGemItemTier(item)));
 		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
 		return;
 	}
+	if (IsCraftingVariantItem(item)) {
+		for (const std::string &line : CraftingItemText(item))
+			AddItemInfoBoxString(line);
+		if (item._iMiscId != IMISC_OMEN)
+			AddItemInfoBoxString(_("Right-click to use, then click an item"));
+		if (IsStackable(item))
+			AddItemInfoBoxString(FormatRuntime(_("Stack Size: {:d}/{:d}, shift-click to split"), StackCount(item), CurrencyStackMax));
+		return;
+	}
+	if (IsJewel(item)) {
+		AddItemInfoBoxString(_("Place in an allocated Jewel Socket"));
+		AddItemInfoBoxString(_("on the Passive Tree (P)"));
+		AddItemInfoBoxString(_("Right-click to socket"));
+		return;
+	}
 	if (IsWaystone(item)) {
-		const int tier = WaystoneTier(item);
-		AddItemInfoBoxString(StrCat(_("Map tier "), tier));
-		AddItemInfoBoxString(FormatRuntime(_("Monsters: {:d}% more life, {:d}% more damage"), tier * MapLifePercentPerTier, tier * MapDamagePercentPerTier));
-		AddItemInfoBoxString(_("More magic and rare monsters"));
-		AddItemInfoBoxString(_("Use in town to open the map"));
+		for (const std::string &line : WaystoneText(item))
+			AddItemInfoBoxString(line);
+		return;
+	}
+	if (IsEndgameItem(item)) {
+		for (const std::string &line : EndgameItemText(item))
+			AddItemInfoBoxString(line);
 		return;
 	}
 	if (const CharmEffect charm = GetCharmEffect(item); charm != CharmEffect::None) {
 		AddItemInfoBoxString(CharmDescription(charm));
-		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUseFor(charm)));
+		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), item._iCharges, MaxCharmCharges, CharmChargesPerUseFor(item)));
 		AddItemInfoBoxString(_("Works on its own from the belt; refills from kills and in town"));
+		for (const std::string &line : BeltUniqueText(item))
+			AddItemInfoBoxString(line);
+		return;
+	}
+	if (const int book = SpecBookIndex(item); book >= 0) {
+		AddItemInfoBoxString(FormatRuntime(_("Grants {:d} Passive Points and {:d} Weapon Set Passive Points"), PassivePointsPerBook, WeaponSetPointsPerBook));
+		CurrentInfoLineStyle = InfoLineStyle::Note;
+		AddItemInfoBoxString(SpecBookSource(book));
+		CurrentInfoLineStyle = InfoLineStyle::Requirement;
+		AddItemInfoBoxString(_("Right-click to read the book and learn its art"));
+		CurrentInfoLineStyle = InfoLineStyle::Default;
+		if (MyPlayer != nullptr && (MyPlayer->poe2.specBooks & (1 << book)) != 0)
+			AddItemInfoBoxString(_("You have already read this book"));
+		return;
+	}
+	if (const int skull = SpiritSkullIndex(item); skull >= 0) {
+		AddItemInfoBoxString(FormatRuntime(_("Grants +{:d} to Maximum Spirit"), SpiritSkullSpirit[skull]));
+		AddItemInfoBoxString(_("Torn from a fallen lord of Hell's servants..."));
+		AddItemInfoBoxString(_("Use to break the skull and release the energies within"));
+		if (MyPlayer != nullptr && (MyPlayer->poe2.spiritSkulls & (1 << skull)) != 0)
+			AddItemInfoBoxString(_("You have already broken this skull"));
 		return;
 	}
 	if (IsUncutGem(item)) {
+		// Short lines: the info box doesn't wrap, so long ones ran into each other.
 		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
-		AddItemInfoBoxString(IsUncutSupportGem(item) ? _("Cut into a support gem of this level or lower") : _("Cut into a skill gem of this level or lower"));
-		AddItemInfoBoxString(_("Use to open gemcutting"));
+		AddItemInfoBoxString(FormatRuntime(_("Cuts a {:s} gem of its tier"), UncutKindName(UncutGemKind(item))));
+		// The gem it cuts can't be above the hero's own gem level limit: say so, instead of a lower gem appearing.
+		if (MyPlayer != nullptr && UncutGemKind(item) != UncutKind::Support) {
+			const int cuts = GemLevelFromUncut(item, MyPlayer->getCharacterLevel());
+			if (cuts < UncutGemLevel(item))
+				AddItemInfoBoxString(FormatRuntime(_("Cuts level {:d} now, {:d} at character level {:d}"), cuts, UncutGemLevel(item), CharacterLevelForGemLevel(UncutGemLevel(item))));
+		}
+		if (UncutGemKind(item) != UncutKind::Support)
+			AddItemInfoBoxString(_("or levels up a socketed gem"));
+		AddItemInfoBoxString(_("Right-click to cut"));
 		return;
 	}
 	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {
+		const int gemLevel = SkillGemItemLevel(item);
+		AddItemInfoBoxString(FormatRuntime(_("Gem level {:d}, needs character level {:d}"), gemLevel, CharacterLevelForGemLevel(gemLevel)));
+		// POE2 Mashup: what the gem does at this level and the next, so the curve is easy to follow.
+		AddItemInfoBoxString(FormatRuntime(_("Now {:s}"), GemLevelText(skill, gemLevel)));
+		if (gemLevel < MaxGemLevel)
+			AddItemInfoBoxString(FormatRuntime(_("Next {:s}"), GemLevelText(skill, gemLevel + 1)));
 		if (skill.kind == SkillKind::Spell) {
 			AddItemInfoBoxString(FormatRuntime(_("Grants the {:s} spell"), SkillName(skill)));
 		} else if (skill.kind == SkillKind::Persistent) {
 			AddItemInfoBoxString(PersistentSkillDescription(skill.persistent()));
-			AddItemInfoBoxString(FormatRuntime(_("Spirit gem, reserves {:d} Spirit"), SpiritReservation(skill.persistent())));
+			if (IsMinionCountSkill(skill.persistent()))
+				AddItemInfoBoxString(StrCat(_("Spirit gem: "), SpiritCostText(skill.persistent(), gemLevel)));
+			else
+				AddItemInfoBoxString(FormatRuntime(_("Spirit gem, reserves {:d} Spirit"), SpiritReservation(skill.persistent())));
 		} else {
 			AddItemInfoBoxString(WeaponSkillDescription(skill.attack()));
 			if (WeaponSkillNeedsWeapon(skill.attack()))
@@ -2046,14 +2271,23 @@ void PrintItemMisc(const Item &item)
 	}
 	if (const CurrencyOrb orb = CurrencyOrbForMiscId(item._iMiscId); orb != CurrencyOrb::None) {
 		AddItemInfoBoxString(CurrencyOrbDescription(orb));
-		AddItemInfoBoxString(_("Use, then click the item to craft"));
+		AddItemInfoBoxString(JewellerSocket(orb) ? _("Use, then click a skill in the Skills panel (K)") : _("Use, then click the item to craft"));
+		if (IsStackable(item))
+			AddItemInfoBoxString(FormatRuntime(_("Stack Size: {:d}/{:d}, shift-click to split"), StackCount(item), CurrencyStackMax));
 		return;
 	}
 	if (gbIsPoe2 && IsFlaskPotion(item)) {
 		AddItemInfoBoxString(FlaskDescription(item));
 		for (const std::string &line : FlaskModLines(item))
 			AddItemInfoBoxString(line);
-		AddItemInfoBoxString(_("Flask in belt slots 1-5, refills from kills"));
+		// Holding Alt shows the rest, like other items.
+		if ((SDL_GetModState() & SDL_KMOD_ALT) != 0) {
+			CurrentInfoLineStyle = InfoLineStyle::Note;
+			for (const std::string &line : FlaskAdvancedLines(item, MyPlayer))
+				AddItemInfoBoxString(line);
+			CurrentInfoLineStyle = InfoLineStyle::Default;
+		}
+		return;
 	}
 	if (item._iMiscId == IMISC_EAR) {
 		AddItemInfoBoxString(FormatRuntime(pgettext("player", "Level: {:d}"), item._ivalue));
@@ -2092,6 +2326,7 @@ void PrintItemInfo(const Item &item)
 	uint8_t str = item._iMinStr;
 	uint8_t dex = item._iMinDex;
 	uint8_t mag = item._iMinMag;
+	CurrentInfoLineStyle = InfoLineStyle::Requirement;
 	if (str != 0 || mag != 0 || dex != 0) {
 		std::string text = std::string(_("Required:"));
 		if (str != 0)
@@ -2101,6 +2336,23 @@ void PrintItemInfo(const Item &item)
 		if (dex != 0)
 			text.append(FormatRuntime(_(" {:d} Dex"), dex));
 		AddItemInfoBoxString(text);
+	}
+	if (gbIsPoe2) {
+		if (const int itemLevel = GetPoe2ItemLevel(item); itemLevel > 0) {
+			CurrentInfoLineStyle = InfoLineStyle::Note;
+			AddItemInfoBoxString(FormatRuntime(_("Item Level: {:d}"), itemLevel));
+		}
+		// A known unique ends with its flavour text, like POE2's.
+		std::string_view uniqueName;
+		if (const BeltUnique *beltUnique = GetBeltUnique(item); beltUnique != nullptr)
+			uniqueName = beltUnique->name;
+		else if (item._iMagical == ITEM_QUALITY_UNIQUE && item._iIdentified && item._iUid >= 0 && static_cast<size_t>(item._iUid) < UniqueItems.size())
+			uniqueName = UniqueItems[item._iUid].UIName;
+		if (const std::span<const std::string> lore = UniqueLore(uniqueName); !lore.empty()) {
+			CurrentInfoLineStyle = InfoLineStyle::Flavour;
+			for (const std::string &line : lore)
+				AddItemInfoBoxString(line);
+		}
 	}
 }
 
@@ -2112,9 +2364,8 @@ bool SmithItemOk(const Player & /*player*/, const ItemData &item)
 		return false;
 	if (item.itype == ItemType::Staff && (!gbIsHellfire || IsValidSpell(item.iSpell)))
 		return false;
-	if (item.itype == ItemType::Ring)
-		return false;
-	if (item.itype == ItemType::Amulet)
+	// POE2 Mashup (Curtis 2026-10-17): Griswold keeps a tab of rings and amulets too.
+	if (!gbIsPoe2 && IsAnyOf(item.itype, ItemType::Ring, ItemType::Amulet))
 		return false;
 
 	return true;
@@ -2137,10 +2388,61 @@ _item_indexes RndSmithItem(const Player &player, int lvl)
 	return RndVendorItem<SmithItemOk, true>(player, 0, lvl);
 }
 
+/** POE2 Mashup: merchants list weapons, then off-hands, armour by slot, jewellery, then the rest. */
+int VendorTypeRank(const Item &item)
+{
+	switch (item._itype) {
+	case ItemType::Sword: return item._iLoc == ILOC_TWOHAND ? 1 : 0;
+	case ItemType::Axe: return item._iLoc == ILOC_TWOHAND ? 3 : 2;
+	case ItemType::Mace: return item._iLoc == ILOC_TWOHAND ? 5 : 4;
+	case ItemType::Staff: return 6;
+	case ItemType::Bow: return 7;
+	default: break;
+	}
+	if (const std::optional<ModSlot> slot = ItemModSlot(item)) {
+		switch (*slot) {
+		case ModSlot::Shield: return 10;
+		case ModSlot::Focus: return 11;
+		case ModSlot::Quiver: return 12;
+		case ModSlot::Helmet: return 20;
+		case ModSlot::BodyArmour: return 21;
+		case ModSlot::Gloves: return 22;
+		case ModSlot::Boots: return 23;
+		case ModSlot::Belt: return 24;
+		case ModSlot::Ring: return 30;
+		case ModSlot::Amulet: return 31;
+		default: break;
+		}
+	}
+	switch (item._itype) {
+	case ItemType::Shield: return 10;
+	case ItemType::Helm: return 20;
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor: return 21;
+	case ItemType::Ring: return 30;
+	case ItemType::Amulet: return 31;
+	default: return 40;
+	}
+}
+
+bool VendorOrderLess(const Item &a, const Item &b)
+{
+	if (!gbIsPoe2)
+		return a.IDidx < b.IDidx;
+	const int ra = VendorTypeRank(a);
+	const int rb = VendorTypeRank(b);
+	if (ra != rb)
+		return ra < rb;
+	if (a.IDidx != b.IDidx)
+		return a.IDidx < b.IDidx;
+	return a._iIvalue < b._iIvalue;
+}
+
 void SortVendor(std::span<Item> itemList, size_t PinnedItemCount)
 {
 	auto cmp = [](const Item &a, const Item &b) {
-		return a.IDidx < b.IDidx;
+		return VendorOrderLess(a, b);
 	};
 
 	std::sort(itemList.begin() + PinnedItemCount, itemList.end(), cmp);
@@ -2172,9 +2474,16 @@ _item_indexes RndPremiumItem(const Player &player, int minlvl, int maxlvl)
 	return RndVendorItem<PremiumItemOk>(player, minlvl, maxlvl);
 }
 
+/** @brief Shop equipment gets a POE2 item level from the level it was stocked at. */
+void SetVendorPoe2ItemLevel(Item &item, int level)
+{
+	if (gbIsPoe2 && EquipmentClassWeight(item._itype) > 0)
+		SetPoe2ItemLevel(item, Poe2ItemLevel(level));
+}
+
 void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 {
-	int strength = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Strength), player._pStrength);
+	int strength = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Strength), RequirementStrength(player));
 	int dexterity = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Dexterity), player._pDexterity);
 	int magic = std::max(player.GetMaximumAttributeValue(CharacterAttribute::Magic), player._pMagic);
 	strength += strength / 5;
@@ -2241,14 +2550,35 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 		}
 	}
 	premiumItem._iCreateInfo = plvl | CF_SMITHPREMIUM;
+	SetVendorPoe2ItemLevel(premiumItem, plvl);
 	premiumItem._iIdentified = true;
 	premiumItem._iStatFlag = player.CanUseItem(premiumItem);
+}
+
+/**
+ * @brief POE2 vendors keep valuable currency, waystones, gems and charms out of their stock: those come from drops.
+ * Adria still sells the common orbs (Transmute, Augment, Scouring, Bauble) and her scrolls.
+ */
+bool Poe2VendorWithholds(item_misc_id miscId)
+{
+	if (IsCurrencyMiscId(miscId))
+		return OrbCurrencyBand(miscId) != CurrencyBand::Common;
+	return IsAnyOf(miscId, IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_SPIRIT_SKULL, IMISC_SPEC_BOOK, IMISC_CHARM_LIFE,
+	    IMISC_CHARM_MANA, IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
 }
 
 bool WitchItemOk(const Player & /*player*/, const ItemData &item)
 {
 	if (IsNoneOf(item.itype, ItemType::Misc, ItemType::Staff))
 		return false;
+	// POE2 Mashup (Curtis 2026-10-16): Adria sells staves, elixirs and Scrolls of Identify; no currency, jewels,
+	// books, other scrolls or gems.
+	if (gbIsPoe2) {
+		if (item.itype == ItemType::Staff)
+			return SkillForGemData(item).isEmpty();
+		// Scrolls of Identify only as her pinned ware, which never sells out (Curtis 2026-10-16).
+		return item.iMiscId >= IMISC_ELIXSTR && item.iMiscId <= IMISC_ELIXVIT;
+	}
 	if (item.iMiscId == IMISC_MANA)
 		return false;
 	if (item.iMiscId == IMISC_FULLMANA)
@@ -2318,6 +2648,12 @@ void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
 	SetRndSeed(iseed);
 	const _item_indexes itype = RndSmithItem(player, lvl);
 	GetItemAttrs(item, itype, lvl);
+	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff; skip the rarity roll and give it its modifiers.
+	if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
+		item._iSeed = iseed; // the modifiers roll from it
+		DiscardRandomValues(1);
+		GetItemBonus(player, item, lvl / 2, lvl, true, false);
+	}
 
 	item._iSeed = iseed;
 	item._iCreateInfo = lvl | CF_SMITH;
@@ -2360,13 +2696,22 @@ void RecreateWitchItem(const Player &player, Item &item, _item_indexes idx, int 
 		SetRndSeed(iseed);
 		const _item_indexes itype = RndWitchItem(player, lvl);
 		GetItemAttrs(item, itype, lvl);
-		int iblvl = -1;
-		if (GenerateRnd(100) <= 5)
-			iblvl = 2 * lvl;
-		if (iblvl == -1 && item._iMiscId == IMISC_STAFF)
-			iblvl = 2 * lvl;
-		if (iblvl != -1)
-			GetItemBonus(player, item, iblvl / 2, iblvl, true, true);
+		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff; skip the rarity roll and give it its modifiers.
+		if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity) {
+			if (*rarity != ITEM_QUALITY_NORMAL) {
+				item._iSeed = iseed; // the modifiers roll from it
+				DiscardRandomValues(1);
+				GetItemBonus(player, item, lvl / 2, lvl, true, false);
+			}
+		} else {
+			int iblvl = -1;
+			if (GenerateRnd(100) <= 5)
+				iblvl = 2 * lvl;
+			if (iblvl == -1 && item._iMiscId == IMISC_STAFF)
+				iblvl = 2 * lvl;
+			if (iblvl != -1)
+				GetItemBonus(player, item, iblvl / 2, iblvl, true, true);
+		}
 	}
 
 	item._iSeed = iseed;
@@ -2450,6 +2795,10 @@ StringOrView GetTranslatedItemName(const Item &item)
 {
 	const auto &baseItemData = AllItemsList[static_cast<size_t>(item.IDidx)];
 
+	// POE2 Mashup: essences, omens, runes, catalysts, waystones and support gems share a base each and carry their
+	// own full name, such as "Lesser Essence of Clarity".
+	if (gbIsPoe2 && item._iIName[0] != '\0' && (IsCraftingVariantItem(item) || IsWaystone(item) || SupportGemForItem(item) != SupportGem::None))
+		return std::string_view(item._iIName);
 	if (item._iCreateInfo == 0) {
 		return _(baseItemData.iName);
 	}
@@ -2660,18 +3009,96 @@ std::string GetRareItemName(const Item &item)
 
 void RestoreRareItemPowers(Item &item)
 {
-	if (item._iMagical == ITEM_QUALITY_NORMAL || Players.empty())
+	// Normal items too when their base has implicits: their POE2 stats aren't saved either.
+	if ((item._iMagical == ITEM_QUALITY_NORMAL && ItemBaseMeta(item) == nullptr) || Players.empty())
 		return;
 	const uint32_t currentSeed = GetLCGEngineState();
 	Item regenerated;
-	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
+	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
 	item._iRarePowers = regenerated._iRarePowers;
 	item._iRareTiers = regenerated._iRareTiers;
 	item._iPreTier = regenerated._iPreTier;
 	item._iSufTier = regenerated._iSufTier;
 	item._iPLLifeRegen = regenerated._iPLLifeRegen;
 	item._iPLManaRegen = regenerated._iPLManaRegen;
+	item._iPoe2Mods = regenerated._iPoe2Mods;
+	item._iPoe2Stats = regenerated._iPoe2Stats;
 	SetRndSeed(currentSeed);
+}
+
+bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed)
+{
+	const Poe2Unique *unique = Poe2UniqueFor(uid);
+	if (unique == nullptr || !IsItemAvailable(unique->baseItem))
+		return false;
+	const std::vector<int> onBase = Poe2UniquesOnBase(unique->baseItem);
+	const int offset = static_cast<int>(std::find(onBase.begin(), onBase.end(), uid) - onBase.begin());
+	item = {};
+	SetLootRarity(item, ITEM_QUALITY_UNIQUE);
+	SetPoe2ItemLevel(item, unique->dropLevel);
+	item.dwBuff |= ((static_cast<uint32_t>(offset) << 1) & CF_UIDOFFSET) | CF_POE2_BUNDLE_UNIQUE;
+	SetupAllItems(player, item, static_cast<_item_indexes>(unique->baseItem), seed, std::max<int>(UniqueItems[uid].UIMinLvl, 1), 1, true, false, offset);
+	return item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid == uid;
+}
+
+ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &unique, uint32_t roll)
+{
+	struct Candidate {
+		int uid;
+		int offset;
+		bool bundle;
+	};
+	std::array<std::vector<Candidate>, static_cast<size_t>(UniqueTier::Count)> byTier;
+	const int base = item.IDidx;
+	const std::vector<int> bundleUniques = Poe2UniquesOnBase(base);
+	for (size_t i = 0; i < bundleUniques.size(); i++) {
+		const Poe2Unique *poe2Unique = Poe2UniqueFor(bundleUniques[i]);
+		if (poe2Unique != nullptr && poe2Unique->isGlobal() && i <= (CF_UIDOFFSET >> 1))
+			byTier[static_cast<size_t>(poe2Unique->tier)].push_back({ bundleUniques[i], static_cast<int>(i), true });
+	}
+	// Diablo's uniques of the base, up to the higher of the item's and the hero's level.
+	const int level = std::clamp(std::max<int>(item._iCreateInfo & CF_LEVEL, player.getCharacterLevel()), 1, static_cast<int>(CF_LEVEL));
+	const std::vector<uint8_t> valid = GetValidUniques(level, AllItemsList[base].iItemId);
+	for (size_t i = 0; i < valid.size(); i++) {
+		const int offset = static_cast<int>(valid.size() - 1 - i);
+		if (offset <= static_cast<int>(CF_UIDOFFSET >> 1) && Poe2UniqueFor(valid[i]) == nullptr)
+			byTier[static_cast<size_t>(LegacyUniqueTier(UniqueItems[valid[i]].UIMinLvl))].push_back({ valid[i], offset, false });
+	}
+	if (std::all_of(byTier.begin(), byTier.end(), [](const std::vector<Candidate> &pool) { return pool.empty(); }))
+		return ChanceResult::NoUniques;
+
+	const std::array<int, static_cast<size_t>(UniqueTier::Count)> weights = UniqueTierWeights(LootSource::Normal);
+	int total = 0;
+	for (const int weight : weights)
+		total += weight;
+	int pick = static_cast<int>(roll % static_cast<uint32_t>(total));
+	size_t tier = 0;
+	while (tier + 1 < weights.size() && pick >= weights[tier]) {
+		pick -= weights[tier];
+		tier++;
+	}
+	const std::vector<Candidate> &pool = byTier[tier];
+	if (pool.empty())
+		return ChanceResult::Failed;
+	const Candidate &chosen = pool[(roll >> 16) % pool.size()];
+	const uint32_t seed = (roll * 1103515245U + 12345U) >> 1;
+	const uint32_t rngState = GetLCGEngineState();
+	bool made;
+	if (chosen.bundle) {
+		made = CreatePoe2Unique(player, unique, chosen.uid, seed);
+	} else {
+		unique = {};
+		SetLootRarity(unique, ITEM_QUALITY_UNIQUE);
+		SetPoe2ItemLevel(unique, GetPoe2ItemLevel(item));
+		unique.dwBuff |= (static_cast<uint32_t>(chosen.offset) << 1) & CF_UIDOFFSET;
+		SetupAllItems(player, unique, static_cast<_item_indexes>(base), seed, level, 1, true, false, chosen.offset);
+		made = unique._iMagical == ITEM_QUALITY_UNIQUE && unique._iUid == chosen.uid;
+	}
+	SetRndSeed(rngState);
+	if (!made)
+		return ChanceResult::Failed;
+	SetupItem(unique);
+	return ChanceResult::Made;
 }
 
 bool IsItemAvailable(int i)
@@ -2855,15 +3282,19 @@ void CalcPlrDamageMod(Player &player)
 	const uint8_t playerLevel = player.getCharacterLevel();
 	const Item &leftHandItem = player.InvBody[INVLOC_HAND_LEFT];
 	const Item &rightHandItem = player.InvBody[INVLOC_HAND_RIGHT];
-	const int strMod = playerLevel * player._pStrength;
-	const int strDexMod = playerLevel * (player._pStrength + player._pDexterity);
+	// POE2 Mashup: Paid in Blood counts half of Magic as Strength here too.
+	const int strength = RequirementStrength(player);
+	const int strMod = playerLevel * strength;
+	const int strDexMod = playerLevel * (strength + player._pDexterity);
 
 	switch (player._pClass) {
 	case HeroClass::Rogue:
 		player._pDamageMod = strDexMod / 200;
 		break;
 	case HeroClass::Monk:
-		if (player.isHoldingItem(ItemType::Staff) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())) {
+		// POE2 Mashup: The Sisters' Gift lets the bow take the staff's bonus.
+		if (player.isHoldingItem(ItemType::Staff) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())
+		    || (gbIsPoe2 && player.isHoldingItem(ItemType::Bow) && PassiveTotal(player, PassiveStat::StaffAppliesToBow) > 0)) {
 			player._pDamageMod = strDexMod / 150;
 		} else {
 			player._pDamageMod = strDexMod / 300;
@@ -2934,9 +3365,28 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 	if (gbIsPoe2) {
 		// POE2 Mashup: resistances drop as you go deeper and can go negative.
 		const int penalty = ResistancePenalty(player);
-		player._pMagResist = Poe2Resistance(magic, penalty, MaxResistance);
-		player._pFireResist = Poe2Resistance(fire, penalty, MaxResistance);
-		player._pLghtResist = Poe2Resistance(lightning, penalty, MaxResistance);
+		Poe2PlayerData &data = player.poe2;
+		const int maxElemental = MaxResistance + data.rule(UniqueRule::MaxElementalResistance) + BannerMaxResistance(player);
+		data.maxResistances = { static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental + data.rule(UniqueRule::MaxMagicResistance)) };
+		std::array<int, 3> uncapped { fire - penalty, lightning - penalty, magic - penalty };
+		if (const int share = data.rule(UniqueRule::ResistanceShare); share > 0) {
+			// The highest resistance that isn't over its cap also counts towards the lowest.
+			std::optional<size_t> highest;
+			size_t lowest = 0;
+			for (size_t i = 0; i < uncapped.size(); i++) {
+				if (uncapped[i] <= data.maxResistances[i] && (!highest || uncapped[i] > uncapped[*highest]))
+					highest = i;
+				if (uncapped[i] < uncapped[lowest])
+					lowest = i;
+			}
+			if (highest && *highest != lowest)
+				uncapped[lowest] += std::max(uncapped[*highest], 0) * share / 100;
+		}
+		for (size_t i = 0; i < uncapped.size(); i++)
+			data.uncappedResistances[i] = static_cast<int16_t>(std::clamp(uncapped[i], -1000, 1000));
+		player._pFireResist = Poe2Resistance(uncapped[0], 0, data.maxResistances[0]);
+		player._pLghtResist = Poe2Resistance(uncapped[1], 0, data.maxResistances[1]);
+		player._pMagResist = Poe2Resistance(uncapped[2], 0, data.maxResistances[2]);
 		return;
 	}
 	player._pMagResist = std::clamp(magic, 0, MaxResistance);
@@ -2944,11 +3394,14 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 	player._pLghtResist = std::clamp(lightning, 0, MaxResistance);
 }
 
-void CalcPlrLifeMana(Player &player, int vitality, int magic, Fixed26_6 life, Fixed26_6 mana)
+void CalcPlrLifeMana(Player &player, int vitality, int magic, Fixed26_6 life, Fixed26_6 mana, int lessLifePercent = 0)
 {
 	const ClassAttributes &playerClassAttributes = player.getClassAttributes();
 	vitality = (playerClassAttributes.itmLife * vitality).whole();
 	life += Fixed26_6::fromInt(vitality);
+	// POE2 Mashup: "less maximum life" takes from the bonus, so current life drops by the same amount.
+	if (lessLifePercent > 0)
+		life -= Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>((life + player._pMaxHPBase).raw()) * std::min(lessLifePercent, 90) / 100));
 
 	magic = (playerClassAttributes.itmMana * magic).whole();
 	mana += Fixed26_6::fromInt(magic);
@@ -2996,7 +3449,9 @@ PlayerWeaponGraphic GetPlrAnimWeaponId(const Player &player)
 		weaponItemType = leftHandItem._itype;
 	}
 
-	if (!rightHandItem.isEmpty() && rightHandItem._iClass == ICLASS_WEAPON && rightHandUsable) {
+	// POE2 Mashup: a sceptre held with another weapon doesn't decide how the hero swings.
+	const bool rightIsOffhandSceptre = gbIsPoe2 && ItemGrantsSpirit(rightHandItem) && weaponItemType != ItemType::None && !ItemGrantsSpirit(leftHandItem);
+	if (!rightHandItem.isEmpty() && rightHandItem._iClass == ICLASS_WEAPON && rightHandUsable && !rightIsOffhandSceptre) {
 		weaponItemType = rightHandItem._itype;
 	}
 
@@ -3142,12 +3597,54 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	int maxLightDam = 0;
 	int lifeRegen = 0;
 	int manaRegen = 0;
+	std::array<int, static_cast<size_t>(Poe2ItemStat::Count)> poe2Stats {};
+	UniqueRuleTotals uniqueRules {};
 
-	for (const Item &item : player.InvBody) {
+	// POE2 Mashup: jewels in allocated passive tree sockets count like worn gear.
+	std::vector<const Item *> worn;
+	for (const Item &item : player.InvBody)
+		worn.push_back(&item);
+	for (const Item *jewel : ActiveJewels(player))
+		worn.push_back(jewel);
+	// A unique ring can double the other ring's implicit: a copy of just the implicit counts as one more worn item.
+	Item mirroredImplicit;
+	for (const auto &[ring, other] : { std::pair { INVLOC_RING_LEFT, INVLOC_RING_RIGHT }, std::pair { INVLOC_RING_RIGHT, INVLOC_RING_LEFT } }) {
+		UniqueRuleTotals ringRules {};
+		AddUniqueRules(player.InvBody[ring], ringRules);
+		const Item &otherRing = player.InvBody[other];
+		if (ringRules[static_cast<size_t>(UniqueRule::MirrorRing)] <= 0 || otherRing.isEmpty() || !otherRing._iStatFlag)
+			continue;
+		mirroredImplicit._itype = otherRing._itype;
+		mirroredImplicit._iStatFlag = true;
+		mirroredImplicit._iMagical = ITEM_QUALITY_NORMAL;
+		for (const ItemImplicit &implicit : ItemImplicits(otherRing))
+			ApplyModEffect(mirroredImplicit, implicit.implicit->effect, implicit.values[0], implicit.values[1]);
+		worn.push_back(&mirroredImplicit);
+		break;
+	}
+
+	// POE2 Mashup: a sceptre held with another weapon adds its modifiers and Spirit but not its damage (Curtis 2026-10-16).
+	const Item *offhandSceptre = nullptr;
+	if (gbIsPoe2) {
+		const Item &left = player.InvBody[INVLOC_HAND_LEFT];
+		const Item &right = player.InvBody[INVLOC_HAND_RIGHT];
+		const auto isWeapon = [](const Item &hand) { return !hand.isEmpty() && hand._iStatFlag && hand._iClass == ICLASS_WEAPON; };
+		if (isWeapon(left) && isWeapon(right)) {
+			if (ItemGrantsSpirit(right))
+				offhandSceptre = &right;
+			else if (ItemGrantsSpirit(left))
+				offhandSceptre = &left;
+		}
+	}
+
+	for (const Item *wornItem : worn) {
+		const Item &item = *wornItem;
 		if (!item.isEmpty() && item._iStatFlag) {
 
-			minDamage += item._iMinDam;
-			maxDamage += item._iMaxDam;
+			if (wornItem != offhandSceptre) {
+				minDamage += item._iMinDam;
+				maxDamage += item._iMaxDam;
+			}
 			ac += item._iAC;
 
 			if (IsValidSpell(item._iSpell) && item._iCharges != 0) {
@@ -3180,13 +3677,48 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 				maxLightDam += item._iLMaxDam;
 				lifeRegen += item._iPLLifeRegen;
 				manaRegen += item._iPLManaRegen;
+				for (size_t stat = 0; stat < poe2Stats.size(); stat++)
+					poe2Stats[stat] += item._iPoe2Stats[stat];
+				AddUniqueRules(item, uniqueRules);
+				AddCraftRules(item, uniqueRules);
 			}
 		}
 	}
+	// POE2 Mashup: boss unique flasks and charms work from the belt.
+	for (const Item &beltItem : player.SpdList) {
+		AddBeltUniqueRules(beltItem, uniqueRules);
+		const int beltResistance = BeltUniqueResistance(beltItem);
+		fireRes += beltResistance;
+		lightRes += beltResistance;
+		magicRes += beltResistance;
+	}
+	// POE2 Mashup: the passive tree's shrines and rule notables join the gear's unique rules.
+	PassiveTotals passives = GetPassiveTotals(player);
+	AddPassiveRules(passives, uniqueRules);
+	player.poe2.uniqueRules = uniqueRules;
+	const auto uniqueRule = [&uniqueRules](UniqueRule rule) { return static_cast<int>(uniqueRules[static_cast<size_t>(rule)]); };
+	// POE2 Mashup: unique rules that work like gear stats.
+	poe2Stats[static_cast<size_t>(Poe2ItemStat::AttackSpeed)] += uniqueRule(UniqueRule::ActionSpeed);
+	poe2Stats[static_cast<size_t>(Poe2ItemStat::CastSpeed)] += uniqueRule(UniqueRule::ActionSpeed);
+	for (const Poe2ItemStat stat : { Poe2ItemStat::MeleeSkillLevels, Poe2ItemStat::ProjectileSkillLevels, Poe2ItemStat::SpellSkillLevels })
+		poe2Stats[static_cast<size_t>(stat)] += uniqueRule(UniqueRule::AllSkillLevels);
+	for (size_t stat = 0; stat < poe2Stats.size(); stat++)
+		player.poe2.itemStats[stat] = static_cast<int16_t>(std::clamp(poe2Stats[stat], static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
+	const auto gearStat = [&poe2Stats](Poe2ItemStat stat) { return poe2Stats[static_cast<size_t>(stat)]; };
 
 	// POE2 Mashup: the passive tree adds to what the gear gives.
-	const PassiveTotals passives = GetPassiveTotals(player);
+	// Jewels' percent increases work like the tree's.
+	passives[static_cast<size_t>(PassiveStat::LifePercent)] += gearStat(Poe2ItemStat::LifePercent);
+	passives[static_cast<size_t>(PassiveStat::ManaPercent)] += gearStat(Poe2ItemStat::ManaPercent);
+	passives[static_cast<size_t>(PassiveStat::ArmorPercent)] += gearStat(Poe2ItemStat::ArmourPercent);
+	passives[static_cast<size_t>(PassiveStat::EvasionPercent)] += gearStat(Poe2ItemStat::EvasionPercent);
+	passives[static_cast<size_t>(PassiveStat::EnergyShieldPercent)] += gearStat(Poe2ItemStat::EnergyShieldPercent);
+	CachePassiveTotals(player, passives);
 	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
+	dam += PassiveWeaponDamage(player, passives);
+	lightRadius += passive(PassiveStat::LightRadius);
+	player.poe2.lifeRegenPerMille = passive(PassiveStat::LifeRegenRate);
+	player.poe2.passiveBlockChance = passive(PassiveStat::BlockChance);
 	strength += passive(PassiveStat::Strength);
 	magic += passive(PassiveStat::Magic);
 	dexterity += passive(PassiveStat::Dexterity);
@@ -3197,55 +3729,62 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
 	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
 	if (IsPersistentSkillActive(player, PersistentSkill::PurityOfElements)) {
-		fireRes += PurityResistance;
-		lightRes += PurityResistance;
-		magicRes += PurityResistance;
+		const int purity = PurityResistance * MapAuraPercent() / 100;
+		fireRes += purity;
+		lightRes += purity;
+		magicRes += purity;
 	}
 	lifeRegen += passive(PassiveStat::LifeRegen);
 	manaRegen += passive(PassiveStat::ManaRegen);
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
-	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::min(passive(PassiveStat::AttackSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
-	player.poe2.passiveCastFrames = static_cast<int8_t>(std::min(passive(PassiveStat::CastSpeed), static_cast<int>(MaxPassiveSpeedFrames)));
+	// Every 10% increased attack or cast speed from the tree and gear skips one more animation frame.
+	// Heavy and focused bases slow attacks and casts, but only by cancelling speed from elsewhere.
+	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
+	player.poe2.passiveCastFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::CastSpeed) + gearStat(Poe2ItemStat::CastSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
 
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
 	int evasion = 0;
 	int energyShield = 0;
+	int evasionPercent = 0;
 	if (gbIsPoe2) {
 		for (const Item &item : player.InvBody) {
 			if (item.isEmpty() || !item._iStatFlag || item._iAC == 0)
 				continue;
 			const int baseDefense = item._iAC;
 			const int bonusDefense = (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified) ? GetBonusAC(item) : 0;
-			int movedBase = 0;
-			int movedBonus = 0;
-			switch (ItemDefenseType(item)) {
-			case DefenseType::EnergyShield:
-				movedBase = baseDefense;
-				movedBonus = bonusDefense;
-				energyShield += (baseDefense + bonusDefense) * EnergyShieldPerDefense;
-				break;
-			case DefenseType::Evasion:
-				movedBase = baseDefense;
-				movedBonus = bonusDefense;
-				evasion += baseDefense + bonusDefense;
-				break;
-			case DefenseType::ArmourEvasion:
-				movedBase = baseDefense / 2;
-				movedBonus = bonusDefense / 2;
-				evasion += movedBase + movedBonus;
-				break;
-			case DefenseType::Armour:
-				break;
-			}
-			ac -= movedBase;
-			bonusAc -= movedBonus;
+			const DefenseType type = ItemDefenseType(item);
+			int baseArmour;
+			int baseEvasion;
+			int baseShield;
+			SplitDefense(type, baseDefense, baseArmour, baseEvasion, baseShield);
+			int bonusArmour;
+			int bonusEvasion;
+			int bonusShield;
+			SplitDefense(type, bonusDefense, bonusArmour, bonusEvasion, bonusShield);
+			evasion += baseEvasion + bonusEvasion;
+			energyShield += (baseShield + bonusShield) * EnergyShieldPerDefense;
+			ac -= baseDefense - baseArmour;
+			bonusAc -= bonusDefense - bonusArmour;
 		}
-		evasion += evasion * passive(PassiveStat::EvasionPercent) / 100;
+		for (const Item &item : player.InvBody) {
+			if (item.isEmpty() || !item._iStatFlag)
+				continue;
+			const BodyArmourImplicit implicit = GetBodyArmourImplicit(item);
+			life += Fixed26_6::fromInt(implicit.life);
+			fireRes += implicit.allResistances;
+			lightRes += implicit.allResistances;
+			magicRes += implicit.allResistances + implicit.magicResistance;
+			manaRegen += implicit.manaRegenPercent;
+			evasionPercent += implicit.evasionPercent;
+		}
+		evasion += evasion * (passive(PassiveStat::EvasionPercent) + evasionPercent) / 100;
 		energyShield += energyShield * passive(PassiveStat::EnergyShieldPercent) / 100;
 	}
 	ac += ac * passive(PassiveStat::ArmorPercent) / 100;
+	ac -= ac * std::min(uniqueRule(UniqueRule::LessArmour), 100) / 100;
+	if (uniqueRule(UniqueRule::NoEvasion) > 0)
+		evasion = 0;
 	player.poe2.evasion = evasion;
-	SetMaxEnergyShield(player, energyShield);
 
 	CalcPlrDamage(player, minDamage, maxDamage);
 	CalcPlrPrimaryStats(player, strength, magic, dexterity, vitality);
@@ -3259,7 +3798,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pIGetHit = getHit;
 	player.poe2.lifeRegen = lifeRegen;
 	player.poe2.manaRegenBonus = manaRegen;
-	CalcPlrLightRadius(player, lightRadius);
+	// POE2 Mashup: the Maiden's Road caps the light after base, tree and gear, before the 2 to 15 clamp.
+	CalcPlrLightRadius(player, std::min(lightRadius, ProfaneLightRadiusCap(player)));
 	CalcPlrDamageMod(player);
 	player._pISpells = spells;
 	EnsureValidReadiedSpell(player);
@@ -3276,7 +3816,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		life += Fixed26_6::fromRaw(baseLife.raw() * passive(PassiveStat::LifePercent) / 100);
 		mana += Fixed26_6::fromRaw(baseMana.raw() * passive(PassiveStat::ManaPercent) / 100);
 	}
-	CalcPlrLifeMana(player, vitality, magic, life, mana);
+	CalcPlrLifeMana(player, vitality, magic, life, mana, uniqueRule(UniqueRule::LessMaxLife));
+	// A share of maximum mana can count as energy shield too.
+	energyShield += player._pMaxMana.whole() * uniqueRule(UniqueRule::ManaToEnergyShield) / 100;
+	SetMaxEnergyShield(player, energyShield);
 	player._pIFMinDam = minFireDam;
 	player._pIFMaxDam = maxFireDam;
 	player._pILMinDam = minLightDam;
@@ -3289,6 +3832,22 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	CalcPlrAuricBonus(player);
 	RedrawComponent(PanelDrawComponent::Mana);
 	RedrawComponent(PanelDrawComponent::Health);
+}
+
+bool TakesOneCell(const Item &item)
+{
+	// Every charm picture is one cell; an old Stone Charm was saved with the 2x2 Magic Rock.
+	return IsOneCellCopy(item) || IsCharm(item);
+}
+
+void FitOneCellItems(Player &player)
+{
+	// A one-cell item keeps only its own cell; the others are marked with its negative number.
+	for (int8_t &cell : player.InvGrid) {
+		const int index = -cell - 1;
+		if (cell < 0 && index < player._pNumInv && index < InventoryGridCells && TakesOneCell(player.InvList[index]))
+			cell = 0;
+	}
 }
 
 void CalcPlrInv(Player &player, bool loadgfx)
@@ -3341,10 +3900,13 @@ void InitializeItem(Item &item, _item_indexes itemData)
 	if (pAllItem.iMiscId == IMISC_STAFF) {
 		item._iCharges = gbIsHellfire ? 18 : 40;
 	}
+	// Curtis 2026-10-16: charms start empty and fill from kills.
 	if (IsCharm(item))
-		item._iCharges = MaxCharmCharges;
+		item._iCharges = 0;
 
-	item._iMaxCharges = item._iCharges;
+	item._iMaxCharges = IsCharm(item) ? MaxCharmCharges : item._iCharges;
+	if (IsStackable(item))
+		SetStackCount(item, 1);
 	item._iDurability = pAllItem.iDurability;
 	item._iMaxDur = pAllItem.iDurability;
 	item._iMinStr = pAllItem.iMinStr;
@@ -3359,11 +3921,14 @@ void InitializeItem(Item &item, _item_indexes itemData)
 	item._iRareTiers.fill(0);
 	item._iMagical = ITEM_QUALITY_NORMAL;
 	item._iRarePowers.fill(IPL_INVALID);
+	item._iPoe2Mods = {};
+	item._iPoe2Stats = {};
 	item.IDidx = itemData;
 	if (gbIsHellfire)
 		item.dwBuff |= CF_HELLFIRE;
 	if (gbIsPoe2)
 		item.dwBuff |= CF_POE2;
+	ApplyBaseProperties(item);
 }
 
 void GenerateNewSeed(Item &item)
@@ -3561,6 +4126,9 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 	item._iSufTier = 0;
 	item._iRareTiers.fill(0);
 	item._iRarePowers.fill(IPL_INVALID);
+	item._iPoe2Mods = {};
+	item._iPoe2Stats = {};
+	ApplyBaseProperties(item);
 
 	if (item._iMiscId == IMISC_BOOK)
 		GetBookSpell(item, lvl);
@@ -3570,8 +4138,10 @@ void GetItemAttrs(Item &item, _item_indexes itemData, int lvl)
 
 	if (IsCharm(item)) {
 		item._iMaxCharges = MaxCharmCharges;
-		item._iCharges = MaxCharmCharges;
+		item._iCharges = 0;
 	}
+	if (IsStackable(item))
+		SetStackCount(item, 1);
 	NameFlask(item);
 
 	if (item._itype != ItemType::Gold)
@@ -3601,6 +4171,13 @@ void SetupItem(Item &item)
 {
 	item.setNewAnimation(MyPlayer != nullptr && MyPlayer->pLvlLoad == 0);
 	item._iIdentified = false;
+}
+
+void MakeFixedUnique(const Player &player, Item &item, _item_indexes base, int level, _unique_items uid)
+{
+	GetItemAttrs(item, base, level);
+	GetUniqueItem(player, item, uid);
+	SetupItem(item);
 }
 
 Item *SpawnUnique(_unique_items uid, Point position, std::optional<int> level /*= std::nullopt*/, bool sendmsg /*= true*/, bool exactPosition /*= false*/)
@@ -3694,7 +4271,35 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 	else if (uper == 1)
 		item._iCreateInfo |= CF_UPER1;
 
-	if (item._iMiscId != IMISC_UNIQUE) {
+	if (gbIsPoe2 && item._iMiscId == IMISC_JEWEL) {
+		SetupJewel(item, lvl);
+		return;
+	}
+
+	if (const std::optional<item_quality> lootRarity = RarityToRoll(item); lootRarity && item._iMiscId != IMISC_UNIQUE) {
+		// POE2 Mashup: the loot roll picked the rarity; a unique keeps the pick stored in its unique offset.
+		std::optional<_unique_items> uid;
+		if (*lootRarity == ITEM_QUALITY_UNIQUE && (item.dwBuff & CF_POE2_BUNDLE_UNIQUE) != 0) {
+			// One of the bundle's uniques: the offset is its place among its base's.
+			const std::vector<int> bundleUniques = Poe2UniquesOnBase(item.IDidx);
+			if (static_cast<size_t>(uidOffset) < bundleUniques.size())
+				uid = static_cast<_unique_items>(bundleUniques[uidOffset]);
+		} else if (*lootRarity == ITEM_QUALITY_UNIQUE) {
+			const std::vector<uint8_t> validUniques = GetValidUniques(lvl, AllItemsList[item.IDidx].iItemId);
+			if (static_cast<size_t>(uidOffset) < validUniques.size())
+				uid = static_cast<_unique_items>(validUniques[validUniques.size() - 1 - uidOffset]);
+		}
+		if (uid) {
+			GetUniqueItem(player, item, *uid);
+		} else if (*lootRarity != ITEM_QUALITY_NORMAL) {
+			if (*lootRarity == ITEM_QUALITY_UNIQUE)
+				SetLootRarity(item, ITEM_QUALITY_RARE);
+			GetItemBonus(player, item, lvl / 2, lvl, true, true);
+		}
+		if (item._iMagical != ITEM_QUALITY_UNIQUE)
+			ItemRndDur(item);
+		ApplyCorruptionImplicit(player, item);
+	} else if (item._iMiscId != IMISC_UNIQUE) {
 		const int iblvl = GetItemBLevel(lvl, item._iMiscId, onlygood, uper == 15);
 		if (iblvl != -1) {
 			_unique_items uid = UITEM_INVALID;
@@ -3723,6 +4328,12 @@ void SetupAllItems(const Player &player, Item &item, _item_indexes idx, uint32_t
 		}
 	}
 	FinishFlask(item);
+	FinishCraftingItem(item);
+	FinishWaystone(item);
+	FinishEndgameItem(item);
+	// POE2 Mashup: normal items have nothing to identify.
+	if (gbIsPoe2 && item._iMagical == ITEM_QUALITY_NORMAL)
+		item._iIdentified = true;
 }
 
 void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper, bool onlygood, bool pregen)
@@ -3832,6 +4443,692 @@ void TryRandomUniqueItem(Item &item, _item_indexes idx, int8_t mLevel, int uper,
 	}
 }
 
+namespace {
+
+bool IsPoe2FlaskOrCharm(item_misc_id miscId)
+{
+	return IsAnyOf(miscId, IMISC_HEAL, IMISC_FULLHEAL, IMISC_MANA, IMISC_FULLMANA, IMISC_REJUV, IMISC_FULLREJUV, IMISC_CHARM_LIFE, IMISC_CHARM_MANA,
+	    IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
+}
+
+bool IsPoe2Orb(item_misc_id miscId)
+{
+	return IsCurrencyMiscId(miscId);
+}
+
+bool IsPoe2UncutGem(item_misc_id miscId)
+{
+	return IsAnyOf(miscId, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT);
+}
+
+/** @brief Diablo's leftovers that still drop now and then: scrolls, oils, elixirs and runes, but no spell books. */
+bool IsPoe2MiscLoot(const ItemData &data)
+{
+	return data.itype == ItemType::Misc && data.iMiscId != IMISC_BOOK && !IsPoe2FlaskOrCharm(data.iMiscId) && !IsPoe2Orb(data.iMiscId)
+	    && !IsPoe2UncutGem(data.iMiscId) && !IsAnyOf(data.iMiscId, IMISC_WAYSTONE, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY) && SkillForGemData(data).isEmpty();
+}
+
+bool IsPoe2Equipment(const ItemData &data)
+{
+	return EquipmentClassWeight(data.itype) > 0;
+}
+
+bool IsPoe2LootCandidate(size_t index, int itemLevel)
+{
+	if (!IsItemAvailable(static_cast<int>(index)))
+		return false;
+	const ItemData &data = AllItemsList[index];
+	if (data.dropRate == 0 || data.iMinMLvl > itemLevel)
+		return false;
+	return !IsAnyOf(data.iSpell, SpellID::Resurrect, SpellID::HealOther) || gbIsMultiplayer;
+}
+
+/** @brief Picks a kind of equipment by its class weight, then one of its bases, favouring bases near the item level. */
+std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel)
+{
+	// ItemType::None is -1, so the last real type sets the size.
+	std::array<int, static_cast<size_t>(ItemType::Amulet) + 1> classWeights {};
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, itemLevel))
+			classWeights[static_cast<size_t>(data.itype)] = EquipmentClassWeight(data.itype);
+	}
+	const int classTotal = std::accumulate(classWeights.begin(), classWeights.end(), 0);
+	if (classTotal == 0)
+		return std::nullopt;
+	int roll = LootRandom(classTotal);
+	size_t type = 0;
+	while (roll >= classWeights[type]) {
+		roll -= classWeights[type];
+		type++;
+	}
+
+	std::vector<std::pair<_item_indexes, int>> bases;
+	int total = 0;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		if (static_cast<size_t>(data.itype) != type || !IsPoe2LootCandidate(i, itemLevel))
+			continue;
+		const int weight = data.dropRate * BaseRecencyPercent(itemLevel, data.iMinMLvl);
+		bases.emplace_back(static_cast<_item_indexes>(i), weight);
+		total += weight;
+	}
+	roll = LootRandom(total);
+	for (const auto &[index, weight] : bases) {
+		if (roll < weight)
+			return index;
+		roll -= weight;
+	}
+	return bases.back().first;
+}
+
+std::optional<_item_indexes> PickPoe2Weighted(int itemLevel, tl::function_ref<bool(const ItemData &)> isOkay)
+{
+	std::vector<std::pair<_item_indexes, int>> items;
+	int total = 0;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (!IsPoe2LootCandidate(i, itemLevel) || !isOkay(AllItemsList[i]))
+			continue;
+		items.emplace_back(static_cast<_item_indexes>(i), AllItemsList[i].dropRate);
+		total += AllItemsList[i].dropRate;
+	}
+	if (total == 0)
+		return std::nullopt;
+	int roll = LootRandom(total);
+	for (const auto &[index, weight] : items) {
+		if (roll < weight)
+			return index;
+		roll -= weight;
+	}
+	return items.back().first;
+}
+
+std::optional<_item_indexes> PickPoe2Currency(int itemLevel)
+{
+	// A band with nothing in it yet (chase) falls to the band below.
+	for (int band = static_cast<int>(RollCurrencyBand()); band >= 0; band--) {
+		const std::optional<_item_indexes> orb = PickPoe2Weighted(itemLevel, [band](const ItemData &data) {
+			return IsPoe2Orb(data.iMiscId) && static_cast<int>(OrbCurrencyBand(data.iMiscId)) == band;
+		});
+		if (orb)
+			return orb;
+	}
+	return std::nullopt;
+}
+
+std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel)
+{
+	switch (category) {
+	case LootCategory::Equipment:
+		return PickPoe2EquipmentBase(itemLevel);
+	case LootCategory::Gold:
+		return IDI_GOLD;
+	case LootCategory::Currency:
+		return PickPoe2Currency(itemLevel);
+	case LootCategory::FlaskOrCharm:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId); });
+	case LootCategory::Gem:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId); });
+	case LootCategory::Endgame:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });
+	case LootCategory::Jewel:
+		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_JEWEL; });
+	default:
+		return PickPoe2Weighted(itemLevel, IsPoe2MiscLoot);
+	}
+}
+
+/** @brief A unique a loot roll picked: its base and its offset there, among Diablo's or the bundle's uniques. */
+struct Poe2UniquePick {
+	_item_indexes base;
+	int offset;
+	bool bundle;
+	/** A unique flask or charm instead. */
+	BeltUniqueId belt = BeltUniqueId::None;
+};
+
+/**
+ * @brief Turns a unique roll into a unique with the base it belongs on: one of the bundle's, or one of Diablo's the hero
+ * hasn't found yet. The tier is rolled first, as in POE2, and a tier with nothing left falls back to the next lower one.
+ * @return Nothing if no unique can drop at this level.
+ */
+std::optional<Poe2UniquePick> PickPoe2Unique(int itemLevel, int poe2ItemLevel, LootSource source)
+{
+	std::array<std::vector<Poe2UniquePick>, static_cast<size_t>(UniqueTier::Count)> candidates;
+	for (const Poe2Unique &unique : Poe2Uniques()) {
+		// Boss uniques only drop from their boss's table.
+		if (!unique.isGlobal() || unique.dropLevel > poe2ItemLevel || !IsItemAvailable(unique.baseItem))
+			continue;
+		const std::vector<int> onBase = Poe2UniquesOnBase(unique.baseItem);
+		const auto found = std::find(onBase.begin(), onBase.end(), unique.uid);
+		const int offset = static_cast<int>(found - onBase.begin());
+		if (offset > static_cast<int>(CF_UIDOFFSET >> 1))
+			continue;
+		candidates[static_cast<size_t>(unique.tier)].push_back({ static_cast<_item_indexes>(unique.baseItem), offset, true });
+	}
+	for (const BeltUnique &unique : BeltUniques()) {
+		const std::optional<int> base = BeltUniqueBase(unique);
+		if (!unique.isGlobal() || unique.dropLevel > poe2ItemLevel || !base)
+			continue;
+		candidates[static_cast<size_t>(unique.tier)].push_back({ static_cast<_item_indexes>(*base), 0, false, unique.id });
+	}
+	for (size_t uid = 0; uid < UniqueItems.size() && uid < std::size(UniqueItemFlags); uid++) {
+		const UniqueItem &unique = UniqueItems[uid];
+		if (unique.UIMinLvl > itemLevel || (UniqueItemFlags[uid] && !gbIsMultiplayer))
+			continue;
+		std::optional<_item_indexes> base;
+		for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+			if (AllItemsList[i].iItemId == unique.UIItemId && IsItemAvailable(static_cast<int>(i)) && AllItemsList[i].iMiscId != IMISC_UNIQUE && IsPoe2Equipment(AllItemsList[i]))
+				base = static_cast<_item_indexes>(i);
+		}
+		if (!base)
+			continue;
+		const std::vector<uint8_t> valid = GetValidUniques(itemLevel, unique.UIItemId);
+		const auto found = std::find(valid.begin(), valid.end(), static_cast<uint8_t>(uid));
+		if (found == valid.end())
+			continue;
+		const int offset = static_cast<int>(valid.end() - found) - 1;
+		if (offset > static_cast<int>(CF_UIDOFFSET >> 1))
+			continue;
+		candidates[static_cast<size_t>(LegacyUniqueTier(unique.UIMinLvl))].push_back({ *base, offset, false });
+	}
+	const int rolled = static_cast<int>(RollUniqueTier(source));
+	for (int i = 0; i < static_cast<int>(candidates.size()); i++) {
+		// The rolled tier, then lower tiers, then higher ones if only those are left.
+		const int tier = i <= rolled ? rolled - i : i;
+		const std::vector<Poe2UniquePick> &pool = candidates[tier];
+		if (!pool.empty())
+			return pool[LootRandom(static_cast<int>(pool.size()))];
+	}
+	return std::nullopt;
+}
+
+/** @brief Where a loot roll comes from and the levels it drops at. */
+struct Poe2LootOrigin {
+	LootSource source;
+	/** Diablo's item level, which picks affixes and uniques and is checked in multiplayer. */
+	int itemLevel;
+	/** The level that decides which bases can drop. */
+	int baseLevel;
+	/** The POE2 item level stored on equipment. */
+	int poe2ItemLevel;
+	std::string_view name;
+	/** Generated with the level, so multiplayer rebuilds it the same. */
+	bool pregen = false;
+};
+
+/** @brief The open map's item rarity, quantity (from monster effectiveness) and waystone drops; none outside maps. */
+LootBonus MapLootBonus()
+{
+	LootBonus bonus;
+	if (ActiveMapTier() == 0)
+		return bonus;
+	const MapEffects &map = ActiveMapEffects();
+	bonus.rarity = map[MapAxis::ItemRarity];
+	// "Loot quality varies": each roll's rarity swings up or down.
+	if (const int variance = map[MapDanger::LootVariance]; variance > 0)
+		bonus.rarity = std::max(bonus.rarity + LootRandom((2 * variance) + 1) - variance, 0);
+	bonus.quantity = 100 + ((map[MapAxis::Effectiveness] - 100) * 55 / 100);
+	bonus.waystones = map[MapAxis::WaystoneFind];
+	bonus.equipment = AtlasEquipmentPercent(*MyPlayer);
+	bonus.unique = AtlasUniquePercent(*MyPlayer, false);
+	return bonus;
+}
+
+/** @brief The tier of a waystone dropping here: around the map's own tier inside a map. */
+int DropWaystoneTier(int poe2ItemLevel)
+{
+	const int mapTier = ActiveMapTier();
+	if (mapTier == 0)
+		return WaystoneTierForItemLevel(poe2ItemLevel);
+	const int roll = LootRandom(100);
+	return std::clamp(roll < 15 ? mapTier + 1 : roll < 25 ? mapTier - 1
+	                                                      : mapTier,
+	    1, MaxWaystoneTier);
+}
+
+Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
+{
+	const LootSource source = GetLootSource(monster);
+	const int bonus = LootItemLevelBonus(source);
+	// Multiplayer checks that a dropped item's level is one some monster has, so the bonus only applies in single player.
+	return {
+		source,
+		std::min<int>(monster.data().level + (gbIsMultiplayer ? 0 : bonus), CF_LEVEL),
+		static_cast<int>(monster.level(sgGameInitInfo.nDifficulty)) + bonus,
+		Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty),
+		monster.name(),
+	};
+}
+
+Poe2LootOrigin ContainerLootOrigin(bool pregen)
+{
+	// Chests and barrels drop at twice the dungeon level, as in Diablo.
+	const int level = 2 * ItemsGetCurrlevel();
+	return {
+		LootSource::Normal,
+		std::min<int>(level, CF_LEVEL),
+		level + (15 * sgGameInitInfo.nDifficulty),
+		Poe2ItemLevel(level + (15 * sgGameInitInfo.nDifficulty)),
+		"container",
+		pregen,
+	};
+}
+
+/**
+ * @brief The quality an equipment drop comes with: some normal and magic items have a little, and at item
+ * level 78 and up a rare few are Exceptional bases with 21-30%.
+ */
+int RollDropQuality(_item_indexes idx, item_quality rarity, int poe2ItemLevel)
+{
+	if (QualityKindFor(idx) == QualityKind::None)
+		return 0;
+	if (poe2ItemLevel >= ExceptionalItemLevel && LootRandom(10000) < ExceptionalChancePer10000)
+		return MaxItemQuality + 1 + LootRandom(MaxExceptionalQuality - MaxItemQuality);
+	if (IsAnyOf(rarity, ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC) && LootRandom(100) < QualityDropPercent)
+		return 1 + LootRandom(MaxDropQuality);
+	return 0;
+}
+
+void DropPoe2BeltUnique(const Poe2LootOrigin &origin, Point position, bool sendmsg, _item_indexes idx, BeltUniqueId id)
+{
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	GetSuperItemSpace(position, ii);
+	item.dwBuff |= CF_POE2;
+	SetupAllItems(*MyPlayer, item, idx, AdvanceRndSeed(), origin.itemLevel, 1, /*onlygood=*/false, origin.pregen, 0, /*forceNotUnique=*/true);
+	MakeBeltUnique(item, id);
+	SetupItem(item);
+	TelemetryItemDropped(item, origin.name);
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+	if (origin.pregen)
+		DeltaAddItem(ii);
+}
+
+/** @brief The endgame drop: mostly waystones, some tablets, and in maps now and then a pinnacle fragment. */
+std::optional<_item_indexes> PickPoe2EndgameItem(const Poe2LootOrigin &origin)
+{
+	int fragmentWeight = origin.poe2ItemLevel >= MapAreaLevelBase + 1 ? 10 : 0;
+	if (MyPlayer != nullptr)
+		fragmentWeight = fragmentWeight * AtlasFragmentPercent(*MyPlayer) / 100;
+	const int roll = LootRandom(70 + 20 + fragmentWeight);
+	const item_misc_id miscId = roll < 70 ? IMISC_WAYSTONE : roll < 90 ? IMISC_TABLET
+	                                                                   : IMISC_MAP_FRAGMENT;
+	return PickPoe2Weighted(origin.baseLevel, [miscId](const ItemData &data) { return data.iMiscId == miscId; });
+}
+
+void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt, std::optional<_item_indexes> forcedIdx = std::nullopt)
+{
+	if (ActiveItemCount >= MAXITEMS)
+		return;
+	const int itemLevel = origin.itemLevel;
+
+	std::optional<_item_indexes> idx = forcedIdx ? forcedIdx : category == LootCategory::Endgame ? PickPoe2EndgameItem(origin)
+	                                                                                             : PickPoe2LootItem(category, origin.baseLevel);
+	int uidOffset = 0;
+	bool bundleUnique = false;
+	BeltUniqueId beltUnique = BeltUniqueId::None;
+	if (category == LootCategory::Equipment) {
+		if (!rarity)
+			rarity = RollEquipmentRarity(origin.source, MapLootBonus());
+		if (*rarity == ITEM_QUALITY_UNIQUE) {
+			if (const std::optional<Poe2UniquePick> unique = PickPoe2Unique(itemLevel, origin.poe2ItemLevel, origin.source); unique) {
+				idx = unique->base;
+				uidOffset = unique->offset;
+				bundleUnique = unique->bundle;
+				beltUnique = unique->belt;
+			} else {
+				rarity = ITEM_QUALITY_RARE;
+			}
+		}
+	}
+	if (category == LootCategory::Jewel) {
+		// Jewels are always magic or rare: a normal roll makes a magic jewel and a unique roll a rare one.
+		const item_quality roll = rarity.value_or(RollEquipmentRarity(origin.source, MapLootBonus()));
+		rarity = IsAnyOf(roll, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE) ? ITEM_QUALITY_RARE : ITEM_QUALITY_MAGIC;
+	}
+	if (!idx)
+		return;
+	if (beltUnique != BeltUniqueId::None) {
+		// A unique flask or charm is made on a plain base, then marked.
+		DropPoe2BeltUnique(origin, position, sendmsg, *idx, beltUnique);
+		return;
+	}
+
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	GetSuperItemSpace(position, ii);
+	if (IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel)) {
+		SetLootRarity(item, *rarity);
+		SetPoe2ItemLevel(item, origin.poe2ItemLevel);
+		item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
+		if (bundleUnique)
+			item.dwBuff |= CF_POE2_BUNDLE_UNIQUE;
+	}
+	if (category == LootCategory::Equipment && *rarity != ITEM_QUALITY_UNIQUE)
+		SetItemQuality(item, RollDropQuality(*idx, *rarity, origin.poe2ItemLevel));
+	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
+	// Diablo's uniques drop once per game; the bundle's, like POE2's, can drop again.
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
+		UniqueItemFlags[item._iUid] = true;
+	if (*idx == IDI_GOLD) {
+		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
+		SetPlrHandGoldCurs(item);
+	}
+	if (IsPoe2UncutGem(item._iMiscId))
+		SetUncutGemLevel(item, UncutGemLevelForArea(origin.baseLevel));
+	if (IsWaystone(item))
+		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
+	if (IsMapFragment(item))
+		RollFragmentSet(item, origin.poe2ItemLevel);
+	SetupItem(item);
+	TelemetryItemDropped(item, origin.name);
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+	if (origin.pregen)
+		DeltaAddItem(ii);
+}
+
+/** @brief A chest, barrel or sarcophagus item: one loot roll, or a guaranteed magic-or-better item when `onlygood`. */
+void DropPoe2ContainerItem(Point position, bool onlygood, bool sendmsg, bool delta)
+{
+	const Poe2LootOrigin origin = ContainerLootOrigin(delta);
+	if (!onlygood) {
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, MapLootBonus()));
+		return;
+	}
+	// Special chests always hold something good: the rare monster table, with normal results made magic.
+	item_quality rarity = RollEquipmentRarity(LootSource::Rare);
+	if (rarity == ITEM_QUALITY_NORMAL)
+		rarity = ITEM_QUALITY_MAGIC;
+	DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, rarity);
+}
+
+/** @brief Diablo's "useful" container drop (potions and scrolls) becomes gold, currency or a flask, in the bible's proportions. */
+void DropPoe2ContainerUseful(Point position, bool sendmsg)
+{
+	const auto weights = LootCategoryWeights(LootSource::Normal);
+	const std::array<LootCategory, 3> categories { LootCategory::Gold, LootCategory::Currency, LootCategory::FlaskOrCharm };
+	int total = 0;
+	for (const LootCategory category : categories)
+		total += weights[static_cast<size_t>(category)];
+	int roll = LootRandom(total);
+	for (const LootCategory category : categories) {
+		const int weight = weights[static_cast<size_t>(category)];
+		if (roll < weight) {
+			DropPoe2LootItem(ContainerLootOrigin(false), position, sendmsg, category);
+			return;
+		}
+		roll -= weight;
+	}
+}
+
+} // namespace
+
+void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int rolls)
+{
+	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
+	for (int i = 0; i < rolls; i++)
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, MapLootBonus()));
+}
+
+void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
+{
+	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
+	SpawnPoe2LootRolls(monster, position, sendmsg, RollLootCount(origin.source, MapLootBonus()));
+	if (origin.source != LootSource::Boss)
+		return;
+	// Bosses always drop a rare, often some currency and now and then a unique on top of their rolls.
+	DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_RARE);
+	if (LootRandom(100) < BossBonusCurrencyPercent)
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
+	if (LootRandom(100) < BossBonusUniquePercent)
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
+}
+
+void DropWaystone(Point position, int tier, bool sendmsg)
+{
+	if (ActiveItemCount >= MAXITEMS)
+		return;
+	std::optional<_item_indexes> base;
+	for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+		if (AllItemsList[i].iMiscId == IMISC_WAYSTONE && IsItemAvailable(static_cast<int>(i)))
+			base = static_cast<_item_indexes>(i);
+	}
+	if (!base)
+		return;
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	GetSuperItemSpace(position, ii);
+	item.dwBuff |= CF_POE2;
+	SetupAllItems(*MyPlayer, item, *base, AdvanceRndSeed(), std::min<int>(2 * ItemsGetCurrlevel(), CF_LEVEL), 1, /*onlygood=*/false, /*pregen=*/false);
+	RollWaystone(item, tier);
+	SetupItem(item);
+	TelemetryItemDropped(item, "map boss");
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+}
+
+namespace {
+
+/** @brief Where map rewards drop from: the map's area level, as a rare monster would. */
+Poe2LootOrigin MapRewardOrigin()
+{
+	Poe2LootOrigin origin = ContainerLootOrigin(false);
+	origin.source = LootSource::Rare;
+	if (const int tier = ActiveMapTier(); tier > 0)
+		origin.poe2ItemLevel = MapAreaLevelBase + tier;
+	origin.name = "map reward";
+	return origin;
+}
+
+std::optional<_item_indexes> PickMiscReward(int level, std::initializer_list<item_misc_id> miscIds)
+{
+	return PickPoe2Weighted(level, [&miscIds](const ItemData &data) { return std::find(miscIds.begin(), miscIds.end(), data.iMiscId) != miscIds.end(); });
+}
+
+/** @brief Equipment of one class: picks bases until one fits. */
+std::optional<_item_indexes> PickEquipmentOfClass(int level, item_class itemClass)
+{
+	for (int tries = 0; tries < 20; tries++) {
+		const std::optional<_item_indexes> idx = PickPoe2EquipmentBase(level);
+		if (idx && AllItemsList[*idx].iClass == itemClass)
+			return idx;
+	}
+	return std::nullopt;
+}
+
+} // namespace
+
+void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBonus)
+{
+	const Poe2LootOrigin origin = MapRewardOrigin();
+	const int level = origin.baseLevel;
+	LootBonus bonus = MapLootBonus();
+	bonus.rarity = bonus.rarity * (100 + rarityBonus) / 100;
+	const auto equipment = [&](std::optional<item_quality> rarity, std::optional<_item_indexes> idx = std::nullopt) {
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, rarity ? rarity : std::optional<item_quality>(RollEquipmentRarity(origin.source, bonus)), idx);
+	};
+	const auto misc = [&](std::initializer_list<item_misc_id> miscIds) {
+		if (const std::optional<_item_indexes> idx = PickMiscReward(level, miscIds); idx)
+			DropPoe2LootItem(origin, position, sendmsg, LootCategory::Misc, std::nullopt, idx);
+		else
+			DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
+	};
+	switch (reward) {
+	case MapReward::Equipment:
+		equipment(std::nullopt);
+		break;
+	case MapReward::RareEquipment:
+		equipment(ITEM_QUALITY_RARE);
+		break;
+	case MapReward::Unique:
+		equipment(ITEM_QUALITY_UNIQUE);
+		break;
+	case MapReward::Armour:
+	case MapReward::RareArmour:
+		equipment(reward == MapReward::RareArmour ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(level, ICLASS_ARMOR));
+		break;
+	case MapReward::Weapon:
+	case MapReward::RareWeapon:
+		equipment(reward == MapReward::RareWeapon ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(level, ICLASS_WEAPON));
+		break;
+	case MapReward::Currency:
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
+		break;
+	case MapReward::PremiumCurrency:
+		misc({ IMISC_ORB_DIVINE, IMISC_ORB_EXALTED, IMISC_ORB_GREATER_EXALTED, IMISC_ORB_PERFECT_EXALTED, IMISC_ORB_GREATER_CHAOS, IMISC_ORB_PERFECT_CHAOS });
+		break;
+	case MapReward::Gold:
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Gold);
+		break;
+	case MapReward::Gem:
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Gem);
+		break;
+	case MapReward::Essence:
+		misc({ IMISC_ESSENCE });
+		break;
+	case MapReward::Omen:
+		misc({ IMISC_OMEN });
+		break;
+	case MapReward::Augment:
+		misc({ IMISC_AUGMENT });
+		break;
+	case MapReward::Catalyst:
+		misc({ IMISC_ORB_CATALYST });
+		break;
+	case MapReward::QualityCurrency:
+		misc({ IMISC_ORB_WHETSTONE, IMISC_ORB_ETCHER, IMISC_ORB_SCRAP, IMISC_ORB_BAUBLE });
+		break;
+	case MapReward::Corruption:
+		misc({ IMISC_ORB_VAAL });
+		break;
+	case MapReward::Desecration:
+		misc({ IMISC_ORB_DESECRATE });
+		break;
+	case MapReward::Waystone:
+		DropWaystone(position, DropWaystoneTier(origin.poe2ItemLevel), sendmsg);
+		break;
+	case MapReward::Tablet:
+		misc({ IMISC_TABLET });
+		break;
+	case MapReward::Fragment:
+		misc({ IMISC_MAP_FRAGMENT });
+		break;
+	default:
+		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, bonus));
+		break;
+	}
+}
+
+bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int areaLevel)
+{
+	const int itemLevel = std::clamp(areaLevel, 1, static_cast<int>(CF_LEVEL));
+	const int poe2ItemLevel = Poe2ItemLevel(areaLevel);
+	item_quality rarity = RollGambleRarity();
+	std::optional<_item_indexes> idx;
+	int uidOffset = 0;
+	bool bundleUnique = false;
+	if (rarity == ITEM_QUALITY_UNIQUE) {
+		for (int tries = 0; tries < 40 && !idx; tries++) {
+			const std::optional<Poe2UniquePick> unique = PickPoe2Unique(itemLevel, poe2ItemLevel, LootSource::Rare);
+			if (!unique)
+				break;
+			if (unique->belt != BeltUniqueId::None || !GambleFamilyHas(family, AllItemsList[unique->base].itype))
+				continue;
+			idx = unique->base;
+			uidOffset = unique->offset;
+			bundleUnique = unique->bundle;
+		}
+		if (!idx)
+			rarity = ITEM_QUALITY_RARE;
+	}
+	if (!idx)
+		idx = PickPoe2Weighted(areaLevel, [family](const ItemData &data) { return IsPoe2Equipment(data) && GambleFamilyHas(family, data.itype); });
+	if (!idx)
+		return false;
+	item = {};
+	SetLootRarity(item, rarity);
+	SetPoe2ItemLevel(item, poe2ItemLevel);
+	item.dwBuff |= (static_cast<uint32_t>(uidOffset) << 1) & CF_UIDOFFSET;
+	if (bundleUnique)
+		item.dwBuff |= CF_POE2_BUNDLE_UNIQUE;
+	if (rarity != ITEM_QUALITY_UNIQUE)
+		SetItemQuality(item, RollDropQuality(*idx, rarity, poe2ItemLevel));
+	SetupAllItems(player, item, *idx, AdvanceRndSeed(), itemLevel, 1, /*onlygood=*/true, /*pregen=*/false, uidOffset);
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
+		UniqueItemFlags[item._iUid] = true;
+	// The gambler hides what it is until it's bought.
+	item._iIdentified = true;
+	TelemetryItemDropped(item, "gambler");
+	return true;
+}
+
+void GiveCurrencyItem(Player &player, item_misc_id miscId)
+{
+	std::optional<_item_indexes> idx;
+	for (size_t i = 0; i < AllItemsList.size() && !idx; i++) {
+		if (AllItemsList[i].iMiscId == miscId && IsItemAvailable(static_cast<int>(i)))
+			idx = static_cast<_item_indexes>(i);
+	}
+	if (!idx)
+		return;
+	Item item {};
+	SetupAllItems(player, item, *idx, AdvanceRndSeed(), 1, 1, /*onlygood=*/false, /*pregen=*/false);
+	item._iIdentified = true;
+	TelemetryItemDropped(item, "salvage");
+	if (AutoPlaceItemInInventory(player, item))
+		return;
+	// No room: it lands at the hero's feet.
+	if (ActiveItemCount >= MAXITEMS)
+		return;
+	const int ii = AllocateItem();
+	Items[ii] = item;
+	GetSuperItemSpace(player.position.tile, ii);
+	SetupItem(Items[ii]);
+}
+
+void DropBossUnique(Monster &monster, bool sendmsg)
+{
+	const BossLootTable *table = gbIsPoe2 ? BossLootTableFor(monster) : nullptr;
+	if (table == nullptr || ActiveItemCount >= MAXITEMS || LootRandom(100) >= table->chancePercent)
+		return;
+	int total = 0;
+	for (const BossUniqueEntry &entry : table->pool)
+		total += entry.weight;
+	if (total <= 0)
+		return;
+	int roll = LootRandom(total);
+	std::string_view name;
+	for (const BossUniqueEntry &entry : table->pool) {
+		if (roll < entry.weight) {
+			name = entry.unique;
+			break;
+		}
+		roll -= entry.weight;
+	}
+	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
+	const Point position = monster.position.tile;
+	if (const BeltUnique *belt = FindBeltUnique(name); belt != nullptr) {
+		if (const std::optional<int> base = BeltUniqueBase(*belt); base)
+			DropPoe2BeltUnique(origin, position, sendmsg, static_cast<_item_indexes>(*base), belt->id);
+		return;
+	}
+	const Poe2Unique *unique = FindPoe2Unique(name);
+	Item created;
+	if (unique == nullptr || !CreatePoe2Unique(*MyPlayer, created, unique->uid, AdvanceRndSeed()))
+		return;
+	const int ii = AllocateItem();
+	Item &item = Items[ii];
+	item = std::move(created);
+	GetSuperItemSpace(position, ii);
+	SetupItem(item);
+	TelemetryItemDropped(item, origin.name);
+	if (sendmsg)
+		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
+}
+
 void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= false*/)
 {
 	_item_indexes idx;
@@ -3839,6 +5136,25 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 
 	const bool dropsSpecialTreasure = (monster.data().treasure & T_UNIQ) != 0;
 	const bool dropBrain = Quests[Q_MUSHROOM]._qactive == QUEST_ACTIVE && Quests[Q_MUSHROOM]._qvar1 == QS_MUSHGIVEN;
+
+	// POE2 Mashup: loot rolls by monster toughness. Quest items still drop as before, on top of the rolls.
+	if (gbIsPoe2 && !spawn) {
+		if (dropsSpecialTreasure && !UseMultiplayerQuests()) {
+			Item *uniqueItem = SpawnUnique(static_cast<_unique_items>(monster.data().treasure & T_MASK), position, std::nullopt, false);
+			if (uniqueItem != nullptr)
+				TelemetryItemDropped(*uniqueItem, monster.name());
+			if (uniqueItem != nullptr && sendmsg)
+				NetSendCmdPItem(false, CMD_DROPITEM, uniqueItem->position, *uniqueItem);
+		} else if (dropBrain && !monster.isUnique()) {
+			Quests[Q_MUSHROOM]._qvar1 = QS_BRAINSPAWNED;
+			NetSendCmdQuest(true, Quests[Q_MUSHROOM]);
+			SpawnQuestItem(IDI_BRAIN, GetSuperItemLoc(position), 0, SelectionRegion::None, sendmsg);
+		}
+		if ((monster.data().treasure & T_NODROP) != 0 && !monster.isUnique())
+			return;
+		SpawnPoe2Loot(monster, position, sendmsg);
+		return;
+	}
 
 	if (dropsSpecialTreasure && !UseMultiplayerQuests()) {
 		Item *uniqueItem = SpawnUnique(static_cast<_unique_items>(monster.data().treasure & T_MASK), position, std::nullopt, false);
@@ -3898,6 +5214,10 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 
 void CreateRndItem(Point position, bool onlygood, bool sendmsg, bool delta)
 {
+	if (gbIsPoe2 && !gbIsSpawn) {
+		DropPoe2ContainerItem(position, onlygood, sendmsg, delta);
+		return;
+	}
 	const _item_indexes idx = onlygood ? RndUItem(nullptr) : RndAllItems();
 
 	SetupBaseItem(position, idx, onlygood, sendmsg, delta);
@@ -3905,6 +5225,10 @@ void CreateRndItem(Point position, bool onlygood, bool sendmsg, bool delta)
 
 void CreateRndUseful(Point position, bool sendmsg)
 {
+	if (gbIsPoe2 && !gbIsSpawn) {
+		DropPoe2ContainerUseful(position, sendmsg);
+		return;
+	}
 	if (ActiveItemCount >= MAXITEMS)
 		return;
 
@@ -3923,6 +5247,9 @@ void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc,
 	_item_indexes idx;
 
 	const int curlv = ItemsGetCurrlevel();
+	// Bookcases and book stands hold scrolls now that skill gems replaced spell books.
+	if (gbIsPoe2 && itemType == ItemType::Misc && imisc == IMISC_BOOK)
+		imisc = IMISC_SCROLL;
 	if (itemType != ItemType::Gold)
 		idx = RndTypeItems(itemType, imisc, curlv);
 	else
@@ -3931,9 +5258,14 @@ void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc,
 	SetupBaseItem(position, idx, onlygood, sendmsg, delta, spawn);
 }
 
+void SpawnBaseItem(Point position, _item_indexes idx, bool sendmsg)
+{
+	SetupBaseItem(position, idx, false, sendmsg, false);
+}
+
 namespace {
 
-void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
+void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff, const Poe2Craft &craft)
 {
 	// Generate with the mod state the item was created with, like gbIsHellfire below.
 	struct Poe2StateGuard {
@@ -3944,6 +5276,8 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 
 	const bool tmpIsHellfire = gbIsHellfire;
 	item.dwBuff = dwBuff;
+	// POE2 Mashup: crafting state, which generation reads like dwBuff.
+	item._iPoe2Craft = craft;
 	gbIsHellfire = (item.dwBuff & CF_HELLFIRE) != 0;
 
 	if (idx == IDI_GOLD) {
@@ -3991,21 +5325,52 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 	auto uidOffset = static_cast<int>((item.dwBuff & CF_UIDOFFSET) >> 1);
 
 	SetupAllItems(player, item, idx, iseed, level, uper, onlygood, pregen, uidOffset, forceNotUnique);
+	// POE2 Mashup: augments and corruption enchantments come on top of the item's roll.
+	if (!item._iPoe2Craft.isEmpty()) {
+		ApplyAugments(item);
+		ApplyCorruptionEnchant(item);
+	}
 	SetupItem(item);
 	gbIsHellfire = tmpIsHellfire;
 }
 
 } // namespace
 
-void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff)
+void RecreateItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, uint32_t iseed, int ivalue, uint32_t dwBuff, const Poe2Craft &craft)
 {
-	RecreateItemBase(player, item, idx, icreateinfo, iseed, ivalue, dwBuff);
+	RecreateItemBase(player, item, idx, icreateinfo, iseed, ivalue, dwBuff, craft);
 	// POE2 Mashup: a flask keeps the mods and quality it was given.
 	if ((dwBuff & CF_POE2_FLASK_ROLLED) != 0) {
 		constexpr uint32_t FlaskBits = CF_POE2_FLASK_PREFIX | CF_POE2_FLASK_SUFFIX | CF_POE2_FLASK_QUALITY | CF_POE2_FLASK_ROLLED;
 		item.dwBuff = (item.dwBuff & ~FlaskBits) | (dwBuff & FlaskBits);
 	}
+	// And a unique flask or charm stays that unique.
+	if (IsFlaskPotion(item) || IsCharm(item))
+		item.dwBuff = (item.dwBuff & ~CF_POE2_BELT_UNIQUE) | (dwBuff & CF_POE2_BELT_UNIQUE);
 	FinishFlask(item);
+	// And an essence, omen, augment or catalyst stays the one it was.
+	if (IsCraftingVariantItem(item)) {
+		item.dwBuff = (item.dwBuff & ~CF_POE2_VARIANT) | (dwBuff & CF_POE2_VARIANT);
+		FinishCraftingItem(item);
+	}
+	// POE2 Mashup: and a skill gem keeps its level, and a support gem its tier.
+	if (IsSkillGem(item))
+		item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (dwBuff & CF_POE2_GEM_LEVEL);
+	if (SupportGemForItem(item) != SupportGem::None && (dwBuff & CF_POE2_GEM_LEVEL) != 0) {
+		constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+		SetSupportGemItemTier(item, static_cast<int>((dwBuff & CF_POE2_GEM_LEVEL) >> Shift));
+	}
+	// And a tablet, fragment or key stays the one it was.
+	if (IsEndgameItem(item)) {
+		item.dwBuff = (item.dwBuff & ~CF_POE2_VARIANT) | (dwBuff & CF_POE2_VARIANT);
+		item._iPoe2Craft = craft;
+		FinishEndgameItem(item);
+	}
+	// And a waystone keeps its tier and modifiers.
+	if (IsWaystone(item)) {
+		item._iPoe2Craft = craft;
+		FinishWaystone(item);
+	}
 }
 
 void RecreateEar(Item &item, uint16_t ic, uint32_t iseed, uint8_t bCursval, std::string_view heroName)
@@ -4255,6 +5620,17 @@ void GetItemFrm(Item &item)
 	const int it = ItemCAnimTbl[item._iCurs];
 	if (itemanims[it])
 		item.AnimInfo.sprites.emplace(*itemanims[it]);
+	// POE2 Mashup: an item saved with another picture (a one-cell copy now) keeps the frame count it was saved with,
+	// and drawing would read past the end of its new picture. Let it rest on the new picture's last frame.
+	const int8_t numberOfFrames = ItemAnimLs[it];
+	if (item.AnimInfo.numberOfFrames != numberOfFrames) {
+		item.AnimInfo.numberOfFrames = numberOfFrames;
+		item.AnimInfo.currentFrame = numberOfFrames - 1;
+		item._iAnimFlag = false;
+		item.selectionRegion = SelectionRegion::Bottom;
+	} else if (item.AnimInfo.currentFrame >= numberOfFrames || item.AnimInfo.currentFrame < 0) {
+		item.AnimInfo.currentFrame = std::max(numberOfFrames - 1, 0);
+	}
 }
 
 void GetItemStr(Item &item)
@@ -4278,6 +5654,52 @@ void CheckIdentify(Player &player, int cii)
 		pi = &player.InvBody[cii];
 
 	pi->_iIdentified = true;
+	CalcPlrInv(player, true);
+}
+
+void IdentifyWithScroll(Player &player)
+{
+	Item *target = nullptr;
+	bool inStash = false;
+	if (pcursinvitem != -1 && !IsInspectingPlayer() && pcursinvitem <= INVITEM_INV_LAST)
+		target = pcursinvitem >= NUM_INVLOC ? &player.InvList[pcursinvitem - NUM_INVLOC] : &player.InvBody[pcursinvitem];
+	else if (pcursstashitem != StashStruct::EmptyCell) {
+		target = &Stash.stashList[pcursstashitem];
+		inStash = true;
+	}
+	if (target == nullptr || target->isEmpty())
+		return;
+	if (target->_iIdentified) {
+		EventPlrMsg(_("That item is already identified."), UiFlags::ColorRed);
+		return;
+	}
+	// Find the scroll before identifying: removing an inventory item moves the others.
+	int scroll = -1;
+	bool belt = false;
+	for (int i = 0; i < player._pNumInv && scroll < 0; i++) {
+		if (IsIdentifyScroll(player.InvList[i]))
+			scroll = i;
+	}
+	for (int i = 0; i < MaxBeltItems && scroll < 0; i++) {
+		if (IsIdentifyScroll(player.SpdList[i])) {
+			scroll = i;
+			belt = true;
+		}
+	}
+	if (scroll < 0)
+		return;
+	target->_iIdentified = true;
+	if (inStash)
+		Stash.dirty = true;
+	if (belt) {
+		if (!TakeOneFromStack(player.SpdList[scroll]))
+			player.RemoveSpdBarItem(scroll);
+	} else if (TakeOneFromStack(player.InvList[scroll])) {
+		NetSyncInvItem(player, scroll);
+	} else {
+		player.RemoveInvItem(scroll);
+	}
+	PlaySFX(SfxID::ItemScroll);
 	CalcPlrInv(player, true);
 }
 
@@ -4311,6 +5733,137 @@ void DoRecharge(Player &player, int cii)
 	CalcPlrInv(player, true);
 }
 
+namespace {
+int HeldCurrencyMisc = -1;
+int HeldCurrencySeed = 0;
+uint32_t HeldCurrencyVariant = 0;
+/** The kind last used up, so Shift can pick up the next one of it. */
+int SpentCurrencyMisc = -1;
+uint32_t SpentCurrencyVariant = 0;
+bool StickyUse = false;
+} // namespace
+
+void SetStickyItemUse(bool sticky)
+{
+	StickyUse = sticky;
+}
+
+bool WantsStickyItemUse()
+{
+	// As in POE2, the item stays on the cursor only while Shift is held: letting go of Shift ends it, so the cursor
+	// can't get stuck (Curtis 2026-10-18).
+	return gbIsPoe2 && StickyUse && (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+}
+
+bool KeepCurrencyOnCursor(Player &player)
+{
+	if (!WantsStickyItemUse() || SpentCurrencyMisc < 0)
+		return false;
+	for (int i = 0; i < player._pNumInv; i++) {
+		const Item &stack = player.InvList[i];
+		if (stack._iMiscId == SpentCurrencyMisc && (stack.dwBuff & CF_POE2_VARIANT) == SpentCurrencyVariant) {
+			HoldCurrencyForUse(stack);
+			return true;
+		}
+	}
+	if (IsStashOpen) {
+		for (const Item &stack : Stash.stashList) {
+			if (stack._iMiscId == SpentCurrencyMisc && (stack.dwBuff & CF_POE2_VARIANT) == SpentCurrencyVariant) {
+				HoldCurrencyForUse(stack);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool HasIdentifyScroll(const Player &player)
+{
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (IsIdentifyScroll(player.InvList[i]))
+			return true;
+	}
+	for (const Item &item : player.SpdList) {
+		if (IsIdentifyScroll(item))
+			return true;
+	}
+	return false;
+}
+
+void HoldCurrencyForUse(const Item &item)
+{
+	HeldCurrencyMisc = item._iMiscId;
+	HeldCurrencySeed = item._iSeed;
+	HeldCurrencyVariant = item.dwBuff & CF_POE2_VARIANT;
+}
+
+bool HeldCurrencyFits(const Item &item)
+{
+	// A Scroll of Identify on the cursor picks out what it can identify.
+	if (gbIsPoe2 && pcurs == CURSOR_IDENTIFY)
+		return !item.isEmpty() && !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL;
+	if (!gbIsPoe2 || HeldCurrencyMisc < 0 || pcurs != CURSOR_OIL)
+		return false;
+	return CurrencyFitsItem(CurrencyOrbForMiscId(HeldCurrencyMisc), item);
+}
+
+void SpendHeldCurrency(Player &player)
+{
+	if (HeldCurrencyMisc < 0)
+		return;
+	// The very stack it came from if it's still there, else any stack of the same kind.
+	for (const bool exact : { true, false }) {
+		for (int i = 0; i < player._pNumInv; i++) {
+			Item &stack = player.InvList[i];
+			if (stack._iMiscId != HeldCurrencyMisc || (stack.dwBuff & CF_POE2_VARIANT) != HeldCurrencyVariant || (exact && stack._iSeed != HeldCurrencySeed))
+				continue;
+			SpentCurrencyMisc = HeldCurrencyMisc;
+			SpentCurrencyVariant = HeldCurrencyVariant;
+			if (TakeOneFromStack(stack)) {
+				if (&player == MyPlayer)
+					NetSyncInvItem(player, i);
+			} else {
+				player.RemoveInvItem(i);
+			}
+			HeldCurrencyMisc = -1;
+			return;
+		}
+		// Used from the stash: one comes off its stack there.
+		if (&player != MyPlayer)
+			continue;
+		for (size_t i = 0; i < Stash.stashList.size(); i++) {
+			Item &stack = Stash.stashList[i];
+			if (stack._iMiscId != HeldCurrencyMisc || (stack.dwBuff & CF_POE2_VARIANT) != HeldCurrencyVariant || (exact && stack._iSeed != HeldCurrencySeed))
+				continue;
+			SpentCurrencyMisc = HeldCurrencyMisc;
+			SpentCurrencyVariant = HeldCurrencyVariant;
+			if (const int count = StoredStackCount(stack); count > 1)
+				SetStoredStackCount(stack, count - 1);
+			else
+				Stash.RemoveStashItem(static_cast<StashStruct::StashCell>(i));
+			Stash.dirty = true;
+			HeldCurrencyMisc = -1;
+			return;
+		}
+	}
+	HeldCurrencyMisc = -1;
+}
+
+namespace {
+
+/** @brief Notes the craft in the play log, naming the currency on the cursor. */
+void TelemetryCurrencyCraft(const Player &player, const Item &item)
+{
+	for (const ItemData &data : AllItemsList) {
+		if (data.iMiscId == player._pOilType) {
+			TelemetryCrafted(player, data.iName, item);
+			return;
+		}
+	}
+}
+
+} // namespace
+
 bool DoOil(Player &player, int cii)
 {
 	Item *pi;
@@ -4322,16 +5875,54 @@ bool DoOil(Player &player, int cii)
 	} else {
 		pi = &player.InvBody[cii];
 	}
-	if (!ApplyOilToItem(*pi, player))
+	if (!ApplyOilToItem(*pi, player)) {
+		if (DesecrationRevealItem && &player == MyPlayer)
+			OpenDesecrationReveal(*pi);
 		return false;
-	for (const ItemData &data : AllItemsList) {
-		if (data.iMiscId == player._pOilType) {
-			TelemetryCrafted(player, data.iName, *pi);
-			break;
-		}
 	}
+	// All that touches the crafted item comes before the currency is spent: using up the last orb of a stack takes it
+	// out of the bag, which moves every later item down one place, so pi and cii would name the next item (the play
+	// log said an Orb of Alchemy made Arkaine's Valor unique, and a failed Orb of Chance would destroy that next item).
+	TelemetryCurrencyCraft(player, *pi);
+	if (DesecrationRevealItem && &player == MyPlayer)
+		OpenDesecrationReveal(*pi);
+	// POE2 Mashup: a failed Orb of Chance destroys the item.
+	if (CurrencyDestroyedItem) {
+		CurrencyDestroyedItem = false;
+		if (cii >= INVITEM_BELT_FIRST)
+			player.RemoveSpdBarItem(cii - INVITEM_BELT_FIRST);
+		else if (cii >= NUM_INVLOC)
+			player.RemoveInvItem(cii - NUM_INVLOC);
+		else
+			RemoveEquipment(player, static_cast<inv_body_loc>(cii), false);
+	}
+	// The orb and the omens are found by their kind, wherever they are by now.
+	SpendHeldCurrency(player);
+	ConsumeCraftOmens(player);
 	CalcPlrInv(player, true);
 	return true;
+}
+
+bool DoOilOnStashItem(Player &player, uint16_t index)
+{
+	Item &item = Stash.stashList[index];
+	const bool applied = ApplyOilToItem(item, player);
+	// As in DoOil, the item first: using up the last of a stash stack moves the stash's last item into that stack's
+	// place, so item and index could then name another item, or one past the end of the stash.
+	if (applied)
+		TelemetryCurrencyCraft(player, item);
+	if (CurrencyDestroyedItem) {
+		CurrencyDestroyedItem = false;
+		Stash.RemoveStashItem(index);
+	} else if (DesecrationRevealItem && &player == MyPlayer) {
+		OpenDesecrationReveal(item);
+	}
+	if (applied) {
+		SpendHeldCurrency(player);
+		ConsumeCraftOmens(player);
+	}
+	Stash.dirty = true;
+	return applied;
 }
 
 [[nodiscard]] StringOrView PrintItemPower(char plidx, const Item &item)
@@ -4575,24 +6166,38 @@ void DrawUniqueInfo(const Surface &out)
 	}
 }
 
-/** @brief POE2 Mashup: armor pieces show the defense their base grants. */
+/** @brief The armour, evasion and energy shield an item gives when worn, counting quality and local % like CalcPlrInv. */
+void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energyShield)
+{
+	const DefenseType type = ItemDefenseType(item);
+	SplitDefense(type, item._iAC, armour, evasion, energyShield);
+	if (item.isEmpty() || (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified))
+		return;
+	int bonusArmour;
+	int bonusEvasion;
+	int bonusShield;
+	SplitDefense(type, GetBonusAC(item), bonusArmour, bonusEvasion, bonusShield);
+	armour += bonusArmour;
+	evasion += bonusEvasion;
+	energyShield += bonusShield;
+}
+
+/** @brief POE2 Mashup: armor pieces show the defense they grant when worn. */
 void PrintPoe2ItemDefense(const Item &item)
 {
 	std::string defense;
-	switch (ItemDefenseType(item)) {
-	case DefenseType::EnergyShield:
-		defense = FormatRuntime(_("energy shield: {:d}"), item._iAC * EnergyShieldPerDefense);
-		break;
-	case DefenseType::Evasion:
-		defense = FormatRuntime(_("evasion: {:d}"), item._iAC);
-		break;
-	case DefenseType::ArmourEvasion:
-		defense = FormatRuntime(_("armour: {:d}  evasion: {:d}"), item._iAC - (item._iAC / 2), item._iAC / 2);
-		break;
-	case DefenseType::Armour:
+	int armour;
+	int evasion;
+	int energyShield;
+	SplitWornDefense(item, armour, evasion, energyShield);
+	if (armour > 0)
+		StrAppend(defense, FormatRuntime(_("armour: {:d}"), armour));
+	if (evasion > 0)
+		StrAppend(defense, defense.empty() ? "" : "  ", FormatRuntime(_("evasion: {:d}"), evasion));
+	if (energyShield > 0)
+		StrAppend(defense, defense.empty() ? "" : "  ", FormatRuntime(_("energy shield: {:d}"), energyShield * EnergyShieldPerDefense));
+	if (defense.empty())
 		defense = FormatRuntime(_("armour: {:d}"), item._iAC);
-		break;
-	}
 	AddItemInfoBoxString(defense);
 	if (item._iMaxDur == DUR_INDESTRUCTIBLE)
 		AddItemInfoBoxString(_("Indestructible"));
@@ -4618,21 +6223,46 @@ uint8_t AffixTier(const std::vector<PLStruct> &affixes, const PLStruct &affix)
 
 namespace {
 
-/** @brief The affix text, with its POE2-style tier at the end. */
+/** @brief The affix text, with its POE2-style tier at the end while Alt is held. */
 std::string PrintItemPowerWithTier(item_effect_type power, const Item &item, uint8_t tier)
 {
 	std::string text { PrintItemPower(power, item).str() };
-	if (gbIsPoe2 && tier > 0)
+	if (gbIsPoe2 && tier > 0 && (SDL_GetModState() & SDL_KMOD_ALT) != 0)
 		text.append(FormatRuntime(" (T{:d})", tier));
 	return text;
 }
 
 } // namespace
 
+/** @brief POE2 Mashup: crafting state shown under the modifiers: an unrevealed modifier, catalyst quality and augment sockets. */
+void PrintItemCraftState(const Item &item)
+{
+	// Waystones and tablets keep their tier and uses where jewellery keeps its catalyst.
+	if (IsWaystone(item) || IsEndgameItem(item))
+		return;
+	const Poe2Craft &craft = item._iPoe2Craft;
+	for (const Poe2CraftMod &mod : craft.mods) {
+		if (mod.family == UnrevealedModFamily)
+			AddItemInfoBoxString(IsCraftPrefix(mod) ? _("Unrevealed desecrated prefix") : _("Unrevealed desecrated suffix"));
+		if (const DesecratedMod *desecrated = GetDesecratedMod(mod.family); desecrated != nullptr) {
+			for (const std::string &line : DesecratedModText(item, mod))
+				AddItemInfoBoxString(StrCat(line, " (", desecrated->name, ")"));
+		}
+	}
+	if (const auto catalyst = static_cast<Catalyst>(craft.catalyst); catalyst != Catalyst::None)
+		AddItemInfoBoxString(FormatRuntime(_("Quality: +{:d}% ({:s} modifiers)"), ItemQuality(item), CatalystName(catalyst)));
+	if (craft.desecrated)
+		AddItemInfoBoxString(_("Desecrated"));
+	for (const std::string &line : AugmentSocketText(item))
+		AddItemInfoBoxString(line);
+}
+
 void PrintItemCorruption(const Item &item)
 {
 	if ((item.dwBuff & CF_POE2_CORRUPTED) == 0)
 		return;
+	if (const std::string enchant = CorruptionEnchantText(item); !enchant.empty())
+		AddItemInfoBoxString(FormatRuntime(_("enchant: {:s}"), enchant));
 	const int kind = static_cast<int>((item.dwBuff & CF_POE2_CORRUPT_IMPLICIT) >> 14);
 	const ItemPower power = CorruptionImplicitPower(kind);
 	switch (power.type) {
@@ -4658,16 +6288,25 @@ void PrintItemImplicits(const Item &item)
 {
 	if (gbIsPoe2 && ItemGrantsSpirit(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
-	if (gbIsPoe2) {
-		std::string skills;
-		for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Last); i++) {
-			const auto skill = static_cast<WeaponSkill>(i);
-			if (ItemAllowsWeaponSkill(item, skill))
-				StrAppend(skills, skills.empty() ? "" : ", ", WeaponSkillName(skill));
-		}
-		if (!skills.empty())
-			AddItemInfoBoxString(FormatRuntime(_("skill gems: {:s}"), skills));
-	}
+	for (const std::string &line : ItemImplicitText(item))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), line));
+	if (const int quality = ItemQuality(item); quality > 0 && HasQuality(item))
+		AddItemInfoBoxString(FormatRuntime(IsExceptional(item) ? _("Exceptional, quality: +{:d}%") : _("Quality: +{:d}%"), quality));
+	const BodyArmourImplicit armourImplicit = GetBodyArmourImplicit(item);
+	if (armourImplicit.life > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to life"), armourImplicit.life));
+	if (armourImplicit.spirit > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), armourImplicit.spirit));
+	if (armourImplicit.allResistances > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to all resistances"), armourImplicit.allResistances));
+	if (armourImplicit.magicResistance > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to magic resistance"), armourImplicit.magicResistance));
+	if (armourImplicit.manaRegenPercent > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:d}% increased mana regeneration"), armourImplicit.manaRegenPercent));
+	if (armourImplicit.evasionPercent > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:d}% increased evasion"), armourImplicit.evasionPercent));
+	// The list of skill gems a weapon can use was dropped: it read like the weapon granted them all.
+	// Each skill gem's own text says which weapons it needs.
 
 	const ItemSpecialEffect baseFlags = AllItemsList[item.IDidx].iFlags;
 	if (baseFlags == ItemSpecialEffect::None)
@@ -4679,6 +6318,8 @@ void PrintItemImplicits(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_FASTATTACK, implicitView).str()));
 	if (HasAnyOf(baseFlags, ItemSpecialEffect::Knockback))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_KNOCKBACK, implicitView).str()));
+	if (HasAnyOf(baseFlags, ItemSpecialEffect::FastHitRecovery | ItemSpecialEffect::FasterHitRecovery | ItemSpecialEffect::FastestHitRecovery))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_FASTRECOVER, implicitView).str()));
 }
 
 void PrintItemDetails(const Item &item)
@@ -4686,23 +6327,56 @@ void PrintItemDetails(const Item &item)
 	if (HeadlessMode)
 		return;
 
+	CurrentInfoLineStyle = InfoLineStyle::Subtitle;
 	if (item._iMagical == ITEM_QUALITY_RARE)
 		AddItemInfoBoxString(std::string_view(item._iName));
+	CurrentInfoLineStyle = InfoLineStyle::Property;
 	if (item._iClass == ICLASS_WEAPON) {
-		if (item._iMinDam == item._iMaxDam) {
+		// POE2 Mashup: the damage shown is the weapon's whole hit, with its increased physical and added elemental damage.
+		int minDamage = item._iMinDam;
+		int maxDamage = item._iMaxDam;
+		const int physicalMin = item._iMinDam * (100 + item._iPLDam) / 100;
+		const int physicalMax = item._iMaxDam * (100 + item._iPLDam) / 100;
+		if (gbIsPoe2) {
+			minDamage = physicalMin + item._iFMinDam + item._iLMinDam;
+			maxDamage = physicalMax + item._iFMaxDam + item._iLMaxDam;
+			// Blue when the modifiers raised it, like POE2, so the total is plainly the final hit (Curtis 2026-10-18).
+			const ItemData &base = AllItemsList[item.IDidx];
+			if (minDamage != base.iMinDam || maxDamage != base.iMaxDam)
+				CurrentInfoLineStyle = InfoLineStyle::AugmentedProperty;
+		}
+		if (minDamage == maxDamage) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), item._iMinDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), minDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}  Dur: {:d}/{:d}"), minDamage, item._iDurability, item._iMaxDur));
 		} else {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), item._iMinDam, item._iMaxDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), minDamage, maxDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iMaxDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
+		}
+		CurrentInfoLineStyle = InfoLineStyle::Property;
+		// Holding Alt splits it by damage type, each in its colour.
+		if (gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0 && (item._iFMaxDam > 0 || item._iLMaxDam > 0 || item._iPLDam != 0)) {
+			CurrentInfoLineStyle = InfoLineStyle::PhysicalDamage;
+			AddItemInfoBoxString(FormatRuntime(_("Physical Damage: {:d}-{:d}"), physicalMin, physicalMax));
+			if (item._iFMaxDam > 0) {
+				CurrentInfoLineStyle = InfoLineStyle::FireDamage;
+				AddItemInfoBoxString(FormatRuntime(_("Fire Damage: {:d}-{:d}"), item._iFMinDam, item._iFMaxDam));
+			}
+			if (item._iLMaxDam > 0) {
+				CurrentInfoLineStyle = InfoLineStyle::LightningDamage;
+				AddItemInfoBoxString(FormatRuntime(_("Lightning Damage: {:d}-{:d}"), item._iLMinDam, item._iLMaxDam));
+			}
+			CurrentInfoLineStyle = InfoLineStyle::Property;
 		}
 	}
+	CurrentInfoLineStyle = InfoLineStyle::Implicit;
 	PrintItemImplicits(item);
+	CurrentInfoLineStyle = InfoLineStyle::Corrupted;
 	PrintItemCorruption(item);
+	CurrentInfoLineStyle = InfoLineStyle::Property;
 	if (item._iClass == ICLASS_ARMOR && gbIsPoe2) {
 		PrintPoe2ItemDefense(item);
 	} else if (item._iClass == ICLASS_ARMOR) {
@@ -4714,7 +6388,35 @@ void PrintItemDetails(const Item &item)
 	if (item._iMiscId == IMISC_STAFF && item._iMaxCharges != 0) {
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
-	if (item._iMagical == ITEM_QUALITY_RARE) {
+	CurrentInfoLineStyle = InfoLineStyle::Mod;
+	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
+		// Holding Alt shows the prefixes, then the suffixes, each stat with the range it can roll and its tier at the
+		// end of the line, as compact as POE2's (Curtis 2026-10-18).
+		const bool advanced = gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0;
+		if (!advanced) {
+			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+				for (const std::string &line : ItemModText(mod))
+					AddItemInfoBoxString(line);
+			}
+		} else {
+			CurrentInfoLineStyle = InfoLineStyle::Affix;
+			for (const bool prefixes : { true, false }) {
+				bool first = true;
+				for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+					const ModFamily *family = ItemModFamily(mod);
+					if (family == nullptr || family->prefix != prefixes)
+						continue;
+					const std::vector<std::string> lines = ItemModAdvancedText(mod);
+					for (size_t i = 0; i < lines.size(); i++) {
+						const std::string_view side = !first ? "" : prefixes ? _("Prefix") : _("Suffix");
+						AddItemInfoBoxString(StrCat(side, "\t", lines[i], "\t", i + 1 == lines.size() ? StrCat("T", mod.tier) : ""));
+						first = false;
+					}
+				}
+			}
+		}
+		CurrentInfoLineStyle = InfoLineStyle::Mod;
+	} else if (item._iMagical == ITEM_QUALITY_RARE) {
 		for (size_t i = 0; i < item._iRarePowers.size(); i++) {
 			if (item._iRarePowers[i] != IPL_INVALID)
 				AddItemInfoBoxString(PrintItemPowerWithTier(item._iRarePowers[i], item, item._iRareTiers[i]));
@@ -4727,12 +6429,194 @@ void PrintItemDetails(const Item &item)
 			AddItemInfoBoxString(PrintItemPowerWithTier(item._iSufPower, item, item._iSufTier));
 		}
 	}
-	if (item._iMagical == ITEM_QUALITY_UNIQUE) {
+	PrintItemCraftState(item);
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && gbIsPoe2) {
+		// POE2 Mashup: a unique's powers are listed in its tooltip, not in a separate window.
+		for (const std::string &line : Poe2UniqueText(item))
+			AddItemInfoBoxString(line);
+		// Belt uniques have no classic unique behind them; their lines come from the flask text.
+		if (GetBeltUnique(item) == nullptr) {
+			for (const auto &power : UniqueItems[item._iUid].powers) {
+				if (power.type == IPL_INVALID)
+					break;
+				AddItemInfoBoxString(PrintItemPower(power.type, item));
+			}
+		}
+	} else if (item._iMagical == ITEM_QUALITY_UNIQUE) {
 		AddItemInfoBoxString(_("unique item"));
 		ShowUniqueItemInfoBox = true;
 		curruitem = item;
 	}
+	CurrentInfoLineStyle = InfoLineStyle::Note;
 	PrintItemInfo(item);
+	CurrentInfoLineStyle = InfoLineStyle::Default;
+}
+
+namespace {
+
+/** @brief The worn item the given item would replace; nullptr if it isn't equipment. */
+const Item *EquippedCounterpart(const Player &player, const Item &item)
+{
+	// A hand item is compared with a held one of its own kind (a sceptre with a sceptre), else of its class
+	// (a weapon with a weapon, a shield with a shield or focus), never across classes.
+	static const Item Nothing {};
+	const auto hand = [&player, &item](item_class itemClass) {
+		const std::optional<ModSlot> kind = ItemModSlot(item);
+		for (const inv_body_loc slot : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+			const Item &held = player.InvBody[slot];
+			if (!held.isEmpty() && held._iClass == itemClass && kind && ItemModSlot(held) == kind)
+				return &held;
+		}
+		for (const inv_body_loc slot : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+			if (!player.InvBody[slot].isEmpty() && player.InvBody[slot]._iClass == itemClass)
+				return &player.InvBody[slot];
+		}
+		return &Nothing;
+	};
+	switch (player.GetItemLocation(item)) {
+	case ILOC_ARMOR:
+		return &player.InvBody[INVLOC_CHEST];
+	case ILOC_HELM:
+		return &player.InvBody[INVLOC_HEAD];
+	case ILOC_AMULET:
+		return &player.InvBody[INVLOC_AMULET];
+	case ILOC_RING:
+		return &player.InvBody[INVLOC_RING_LEFT];
+	case ILOC_ONEHAND:
+		return hand(item._iClass == ICLASS_ARMOR ? ICLASS_ARMOR : ICLASS_WEAPON);
+	case ILOC_TWOHAND:
+		return hand(ICLASS_WEAPON);
+	default:
+		return nullptr;
+	}
+}
+
+} // namespace
+
+void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_view slot);
+
+void PrintItemComparison(const Item &item)
+{
+	if (!gbIsPoe2 || MyPlayer == nullptr || !item.isEquipment())
+		return;
+	const Player &player = *MyPlayer;
+	const Item *worn = EquippedCounterpart(player, item);
+	if (worn == nullptr || worn == &item)
+		return;
+	// Comparing only while Shift is held, like POE2's.
+	if ((SDL_GetModState() & SDL_KMOD_SHIFT) == 0) {
+		CurrentInfoLineStyle = InfoLineStyle::Note;
+		AddInfoBoxString(_("Hold Shift to compare"), true);
+		CurrentInfoLineStyle = InfoLineStyle::Default;
+		return;
+	}
+	// A ring is compared with both rings worn, each in its own box, like POE2's.
+	if (worn == &player.InvBody[INVLOC_RING_LEFT]) {
+		if (&item == &player.InvBody[INVLOC_RING_RIGHT])
+			return;
+		PrintItemComparisonWith(item, player.InvBody[INVLOC_RING_LEFT], _("Left Ring"));
+		PrintItemComparisonWith(item, player.InvBody[INVLOC_RING_RIGHT], _("Right Ring"));
+		return;
+	}
+	PrintItemComparisonWith(item, *worn, {});
+}
+
+void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_view slot)
+{
+	static const Item Nothing {};
+	const Item &other = worn.isEmpty() ? Nothing : worn;
+
+	// The equipped item's own tooltip goes beside this one, like POE2's.
+	if (!other.isEmpty()) {
+		StringOrView savedFloating = std::move(FloatingInfoString);
+		StringOrView savedInfo = std::move(InfoString);
+		std::vector<InfoLineStyle> savedStyles = std::move(FloatingInfoStyles);
+		FloatingInfoString = other.getName();
+		InfoString = StringOrView {};
+		FloatingInfoStyles.clear();
+		if (other._iIdentified)
+			PrintItemDetails(other);
+		else
+			PrintItemDur(other);
+		CompareTooltip &compare = CompareTooltips.emplace_back();
+		compare.label = slot.empty() ? std::string(_("Equipped")) : StrCat(_("Equipped: "), slot);
+		compare.text = std::move(FloatingInfoString);
+		compare.styles = std::move(FloatingInfoStyles);
+		compare.color = other.getTextColor();
+		FloatingInfoString = std::move(savedFloating);
+		InfoString = std::move(savedInfo);
+		FloatingInfoStyles = std::move(savedStyles);
+	}
+
+	CurrentInfoLineStyle = InfoLineStyle::Note;
+	if (slot.empty())
+		AddInfoBoxString(other.isEmpty() ? std::string(_("Nothing equipped there; equipping it gives:")) : std::string(_("Equipping it instead:")), true);
+	else
+		AddInfoBoxString(other.isEmpty() ? StrCat(_("Nothing on your "), slot, _("; wearing it there gives:")) : StrCat(_("Instead of your "), slot, ":"), true);
+	int shown = 0;
+	const auto compare = [&shown](int mine, int theirs, std::string_view label, std::string_view suffix = {}) {
+		if (mine == theirs)
+			return;
+		const int difference = mine - theirs;
+		CurrentInfoLineStyle = difference > 0 ? InfoLineStyle::Better : InfoLineStyle::Worse;
+		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
+		shown++;
+	};
+	// Unidentified items only show their base: damage and defence. Identified weapons compare their whole hit, as the tooltip shows it.
+	const auto hitDamage = [](const Item &it, bool max) {
+		const int base = max ? it._iMaxDam : it._iMinDam;
+		if (it.isEmpty() || !it._iIdentified)
+			return base;
+		return (base * (100 + it._iPLDam) / 100) + (max ? it._iFMaxDam + it._iLMaxDam : it._iFMinDam + it._iLMinDam);
+	};
+	compare(hitDamage(item, false), hitDamage(other, false), _("to minimum Damage"));
+	compare(hitDamage(item, true), hitDamage(other, true), _("to maximum Damage"));
+	int armour = 0;
+	int evasion = 0;
+	int energyShield = 0;
+	SplitWornDefense(item, armour, evasion, energyShield);
+	int otherArmour = 0;
+	int otherEvasion = 0;
+	int otherEnergyShield = 0;
+	SplitWornDefense(other, otherArmour, otherEvasion, otherEnergyShield);
+	compare(armour, otherArmour, _("Armour"));
+	compare(evasion, otherEvasion, _("Evasion"));
+	compare(energyShield * EnergyShieldPerDefense, otherEnergyShield * EnergyShieldPerDefense, _("Energy Shield"));
+	// Normal items have no modifiers to hide.
+	const auto identified = [](const Item &it) { return it.isEmpty() || it._iIdentified || it._iMagical == ITEM_QUALITY_NORMAL; };
+	const bool bothIdentified = identified(item) && identified(other);
+	if (bothIdentified) {
+		// A weapon's increased and added damage are already in the whole hit compared above.
+		const bool weapons = item._iClass == ICLASS_WEAPON && (other.isEmpty() || other._iClass == ICLASS_WEAPON);
+		if (!weapons) {
+			compare(item._iPLDam, other._iPLDam, _("increased Damage"), "%");
+			compare((item._iFMinDam + item._iFMaxDam) / 2, (other._iFMinDam + other._iFMaxDam) / 2, _("average Fire Damage"));
+			compare((item._iLMinDam + item._iLMaxDam) / 2, (other._iLMinDam + other._iLMaxDam) / 2, _("average Lightning Damage"));
+		}
+		compare(item._iPLToHit, other._iPLToHit, _("Accuracy"), "%");
+		compare(item._iPLAC, other._iPLAC, _("increased Defence"), "%");
+		compare(item._iPLStr, other._iPLStr, _("Strength"));
+		compare(item._iPLDex, other._iPLDex, _("Dexterity"));
+		compare(item._iPLMag, other._iPLMag, _("Intelligence"));
+		compare(item._iPLVit, other._iPLVit, _("Vitality"));
+		compare(item._iPLHP.whole(), other._iPLHP.whole(), _("maximum Life"));
+		compare(item._iPLMana.whole(), other._iPLMana.whole(), _("maximum Mana"));
+		compare(item._iPLFR, other._iPLFR, _("Fire Resistance"), "%");
+		compare(item._iPLLR, other._iPLLR, _("Lightning Resistance"), "%");
+		compare(item._iPLMR, other._iPLMR, _("Magic Resistance"), "%");
+		compare(item._iPLLifeRegen, other._iPLLifeRegen, _("Life regenerated per second"));
+		compare(item._iPLManaRegen, other._iPLManaRegen, _("increased Mana Regeneration"), "%");
+		compare(item._iSplLvlAdd, other._iSplLvlAdd, _("to Level of all Spells"));
+		compare(-item._iPLGetHit, -other._iPLGetHit, _("less damage taken from hits"));
+	} else {
+		CurrentInfoLineStyle = InfoLineStyle::Requirement;
+		AddInfoBoxString(_("Identify both to compare modifiers"), true);
+	}
+	if (shown == 0 && bothIdentified) {
+		CurrentInfoLineStyle = InfoLineStyle::Requirement;
+		AddInfoBoxString(_("No differences"), true);
+	}
+	CurrentInfoLineStyle = InfoLineStyle::Default;
 }
 
 void PrintItemDur(const Item &item)
@@ -4740,6 +6624,7 @@ void PrintItemDur(const Item &item)
 	if (HeadlessMode)
 		return;
 
+	CurrentInfoLineStyle = InfoLineStyle::Property;
 	if (item._iClass == ICLASS_WEAPON) {
 		if (item._iMinDam == item._iMaxDam) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
@@ -4773,9 +6658,11 @@ void PrintItemDur(const Item &item)
 			AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 		}
 	}
-	if (IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet))
+	if (IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet) && item._iMagical != ITEM_QUALITY_NORMAL)
 		AddItemInfoBoxString(_("Not Identified"));
+	CurrentInfoLineStyle = InfoLineStyle::Note;
 	PrintItemInfo(item);
+	CurrentInfoLineStyle = InfoLineStyle::Default;
 }
 
 void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
@@ -4908,6 +6795,23 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 	case IMISC_ORB_DIVINE:
 	case IMISC_ORB_VAAL:
 	case IMISC_ORB_BAUBLE:
+	case IMISC_ORB_CHANCE:
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_WHETSTONE:
+	case IMISC_ORB_ETCHER:
+	case IMISC_ORB_SCRAP:
+	case IMISC_ORB_GREATER_EXALTED:
+	case IMISC_ORB_PERFECT_EXALTED:
+	case IMISC_ORB_GREATER_CHAOS:
+	case IMISC_ORB_PERFECT_CHAOS:
+	case IMISC_ORB_ARTIFICER:
+	case IMISC_ORB_DESECRATE:
+	case IMISC_ORB_CATALYST:
+	case IMISC_ESSENCE:
+	case IMISC_AUGMENT:
+	case IMISC_ORB_LESSER_JEWELLER:
+	case IMISC_ORB_GREATER_JEWELLER:
+	case IMISC_ORB_PERFECT_JEWELLER:
 		player._pOilType = mid;
 		if (&player != MyPlayer) {
 			return;
@@ -4918,6 +6822,9 @@ void UseItem(Player &player, item_misc_id mid, SpellID spellID, int spellFrom)
 		if (!invflag) {
 			invflag = true;
 		}
+		// Jeweller's Orbs go on a skill, so the Skills panel opens beside the bag.
+		if (JewellerSocket(CurrencyOrbForMiscId(mid)) && !IsSkillsPanelOpen())
+			OpenSkillsPanel();
 		NewCursor(CURSOR_OIL);
 		break;
 	case IMISC_SPECELIX:
@@ -4978,6 +6885,166 @@ bool UseItemOpensGrave(const Item &item, Point position)
 	return false;
 }
 
+VendorCategory GetVendorCategory(const Item &item)
+{
+	switch (item._itype) {
+	case ItemType::Sword:
+	case ItemType::Axe:
+	case ItemType::Mace:
+		return item._iLoc == ILOC_TWOHAND ? VendorCategory::TwoHanded : VendorCategory::OneHanded;
+	case ItemType::Staff:
+		return VendorCategory::TwoHanded;
+	case ItemType::Bow:
+		return VendorCategory::Bows;
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor:
+		return VendorCategory::BodyArmour;
+	case ItemType::Helm:
+		return VendorCategory::Helmets;
+	case ItemType::Shield:
+		return VendorCategory::Shields;
+	case ItemType::Ring:
+	case ItemType::Amulet:
+		return VendorCategory::Jewelry;
+	default:
+		return VendorCategory::Supplies;
+	}
+}
+
+void SortVendorStock(std::span<Item> stock, size_t pinnedCount)
+{
+	SortVendor(stock, pinnedCount);
+}
+
+namespace {
+
+/** @brief POE2 Mashup: how many wares of one kind a vendor stocks. */
+struct VendorStockQuota {
+	VendorCategory category;
+	int min;
+	int max;
+};
+
+/**
+ * Griswold's stock: each shop tab is one page (Curtis 2026-10-16), with room left for his premium wares.
+ * One-handers, two-handers and bows share the Weapons tab.
+ */
+constexpr VendorStockQuota SmithStockQuotas[] = {
+	{ VendorCategory::OneHanded, 5, 6 },
+	{ VendorCategory::TwoHanded, 2, 3 },
+	{ VendorCategory::Bows, 2, 3 },
+	{ VendorCategory::BodyArmour, 8, 10 },
+	{ VendorCategory::Helmets, 10, 12 },
+	{ VendorCategory::Shields, 8, 10 },
+	{ VendorCategory::Jewelry, 5, 7 },
+};
+
+/** Adria's stock besides her pinned wares: a tab of staves, and a few more scrolls and elixirs. */
+constexpr VendorStockQuota WitchStockQuotas[] = {
+	{ VendorCategory::TwoHanded, 15, 20 },
+	{ VendorCategory::Supplies, 3, 6 },
+};
+
+constexpr int MaxStockCount(std::span<const VendorStockQuota> quotas)
+{
+	int count = 0;
+	for (const VendorStockQuota &quota : quotas)
+		count += quota.max;
+	return count;
+}
+
+static_assert(MaxStockCount(SmithStockQuotas) <= NumSmithBasicItemsPoe2);
+static_assert(NumWitchPinnedItems + MaxStockCount(WitchStockQuotas) <= NumWitchItemsPoe2);
+
+/** A vendor gives up on a kind of ware it can't find at its level after this many rolls. */
+constexpr int MaxStockRolls = 4000;
+
+/**
+ * @brief POE2 Mashup: rolls wares until each kind has its share, so every shop tab fills up.
+ * Each ware is rolled the usual way from its own seed, so it is recreated the same from that seed; a ware of a kind
+ * the vendor already has enough of is passed over.
+ */
+template <typename Stock, typename Roll>
+void FillStockByCategory(Stock &stock, std::span<const VendorStockQuota> quotas, Roll roll)
+{
+	std::array<int, NumVendorCategories> wanted {};
+	int remaining = 0;
+	for (const VendorStockQuota &quota : quotas) {
+		const int count = RandomIntBetween(quota.min, quota.max);
+		wanted[static_cast<size_t>(quota.category)] += count;
+		remaining += count;
+	}
+	for (int rolls = 0; remaining > 0 && rolls < MaxStockRolls; rolls++) {
+		const Item item = roll();
+		int &want = wanted[static_cast<size_t>(GetVendorCategory(item))];
+		if (want == 0)
+			continue;
+		want--;
+		remaining--;
+		stock.push_back(item);
+	}
+}
+
+Item RollSmithItem(int lvl, int maxValue)
+{
+	Item newItem;
+	do {
+		newItem = {};
+		newItem._iSeed = AdvanceRndSeed();
+		SetRndSeed(newItem._iSeed);
+		const _item_indexes itemData = RndSmithItem(*MyPlayer, lvl);
+		GetItemAttrs(newItem, itemData, lvl);
+		if (gbIsPoe2 && EquipmentClassWeight(newItem._itype) > 0) {
+			// POE2 Mashup (Curtis 2026-10-16): mostly normal wares, some magic, a few rare, never unique.
+			SetVendorPoe2ItemLevel(newItem, lvl);
+			SetLootRarity(newItem, RollVendorRarity());
+			if (GetLootRarity(newItem) != ITEM_QUALITY_NORMAL)
+				GetItemBonus(*MyPlayer, newItem, lvl / 2, lvl, true, false);
+		}
+	} while (newItem._iIvalue > maxValue);
+
+	newItem._iCreateInfo = lvl | CF_SMITH;
+	SetVendorPoe2ItemLevel(newItem, lvl);
+	newItem._iIdentified = true;
+	return newItem;
+}
+
+Item RollWitchItem(int lvl, int maxValue)
+{
+	Item item;
+	do {
+		item = {};
+		item._iSeed = AdvanceRndSeed();
+		SetRndSeed(item._iSeed);
+		const _item_indexes itemData = RndWitchItem(*MyPlayer, lvl);
+		GetItemAttrs(item, itemData, lvl);
+		if (gbIsPoe2 && EquipmentClassWeight(item._itype) > 0) {
+			// POE2 Mashup: Adria's staves roll rarity like Griswold's wares: mostly normal, some magic, a few rare, never unique.
+			// The item level goes on first so the modifiers come from the POE2 tables.
+			SetVendorPoe2ItemLevel(item, lvl);
+			SetLootRarity(item, RollVendorRarity());
+			if (GetLootRarity(item) != ITEM_QUALITY_NORMAL)
+				GetItemBonus(*MyPlayer, item, lvl / 2, lvl, true, false);
+		} else {
+			int maxlvl = -1;
+			if (GenerateRnd(100) <= 5)
+				maxlvl = 2 * lvl;
+			if (maxlvl == -1 && item._iMiscId == IMISC_STAFF)
+				maxlvl = 2 * lvl;
+			if (maxlvl != -1)
+				GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
+		}
+	} while (item._iIvalue > maxValue);
+
+	item._iCreateInfo = lvl | CF_WITCH;
+	SetVendorPoe2ItemLevel(item, lvl);
+	item._iIdentified = true;
+	return item;
+}
+
+} // namespace
+
 void SpawnSmith(int lvl)
 {
 	constexpr int PinnedItemCount = 0;
@@ -4989,24 +7056,19 @@ void SpawnSmith(int lvl)
 		maxItems = NumSmithBasicItemsHf;
 	}
 
+	if (gbIsPoe2) {
+		// POE2 Mashup: a shop tab's worth of each kind of equipment.
+		SmithItems.clear();
+		FillStockByCategory(SmithItems, SmithStockQuotas, [lvl, maxValue]() { return RollSmithItem(lvl, maxValue); });
+		SortVendor(SmithItems, PinnedItemCount);
+		return;
+	}
+
 	const size_t iCnt = RandomIntBetween(10, maxItems);
 	SmithItems.clear();
 
-	while (SmithItems.size() < iCnt) {
-		Item newItem;
-		do {
-			newItem = {};
-			newItem._iSeed = AdvanceRndSeed();
-			SetRndSeed(newItem._iSeed);
-			const _item_indexes itemData = RndSmithItem(*MyPlayer, lvl);
-			GetItemAttrs(newItem, itemData, lvl);
-		} while (newItem._iIvalue > maxValue);
-
-		newItem._iCreateInfo = lvl | CF_SMITH;
-		newItem._iIdentified = true;
-
-		SmithItems.push_back(newItem);
-	}
+	while (SmithItems.size() < iCnt)
+		SmithItems.push_back(RollSmithItem(lvl, maxValue));
 
 	SortVendor(SmithItems, PinnedItemCount);
 }
@@ -5016,6 +7078,8 @@ void ReplacePremium(const Player &player, int idx)
 	int plvl = gbIsHellfire ? itemLevelAddHf[idx] : itemLevelAdd[idx];
 	plvl += player.getCharacterLevel();
 	SpawnOnePremium(PremiumItems[idx], plvl, player);
+	if (gbIsPoe2)
+		SortVendor(PremiumItems, 0);
 }
 
 void SpawnPremium(const Player &player)
@@ -5029,6 +7093,15 @@ void SpawnPremium(const Player &player)
 		SpawnOnePremium(item, plvl, player);
 		PremiumItems.push_back(item);
 	}
+
+	if (gbIsPoe2 && PremiumItemLevel < lvl) {
+		// POE2 Mashup (Curtis 2026-10-17): a level-up replaces all of the premium stock.
+		PremiumItemLevel = lvl;
+		for (size_t i = 0; i < PremiumItems.size(); i++)
+			SpawnOnePremium(PremiumItems[i], PremiumItemLevel + (gbIsHellfire ? itemLevelAddHf[i] : itemLevelAdd[i]), player);
+	}
+	if (gbIsPoe2)
+		SortVendor(PremiumItems, 0);
 
 	while (PremiumItemLevel < lvl) {
 		PremiumItemLevel++;
@@ -5052,25 +7125,42 @@ void SpawnPremium(const Player &player)
 void SpawnWitch(int lvl)
 {
 	constexpr int PinnedItemCount = NumWitchPinnedItems;
-	constexpr std::array<_item_indexes, PinnedItemCount> PinnedItemTypes = { IDI_MANA, IDI_FULLMANA, IDI_PORTAL };
+	// POE2 Mashup: Adria always has Scrolls of Identify instead of Town Portal (the tray has a portal button).
+	const std::array<_item_indexes, PinnedItemCount> PinnedItemTypes = { IDI_MANA, IDI_FULLMANA, gbIsPoe2 ? IDI_IDENTIFY : IDI_PORTAL };
 	constexpr int MaxPinnedBookCount = 4;
 	constexpr std::array<_item_indexes, MaxPinnedBookCount> PinnedBookTypes = { IDI_BOOK1, IDI_BOOK2, IDI_BOOK3, IDI_BOOK4 };
 
 	int bookCount = 0;
-	const int pinnedBookCount = gbIsHellfire ? RandomIntLessThan(MaxPinnedBookCount) : 0;
+	int pinnedBookCount = gbIsHellfire ? RandomIntLessThan(MaxPinnedBookCount) : 0;
+	if (gbIsPoe2)
+		pinnedBookCount = 0; // Skill gems replaced spell books.
 	const int itemCount = RandomIntBetween(10, gbIsHellfire ? NumWitchItemsHf : NumWitchItems);
 	const int maxValue = gbIsHellfire ? MaxVendorValueHf : MaxVendorValue;
 	WitchItems.clear();
+
+	const auto addPinnedItem = [&](int i) {
+		Item item = {};
+		item._iSeed = AdvanceRndSeed();
+		GetItemAttrs(item, PinnedItemTypes[i], 1);
+		item._iCreateInfo = lvl;
+		item._iStatFlag = true;
+		WitchItems.push_back(item);
+	};
+
+	if (gbIsPoe2) {
+		// POE2 Mashup: her pinned wares, then a shop tab of staves and a few more scrolls and elixirs.
+		for (int i = 0; i < PinnedItemCount; i++)
+			addPinnedItem(i);
+		FillStockByCategory(WitchItems, WitchStockQuotas, [lvl, maxValue]() { return RollWitchItem(lvl, maxValue); });
+		SortVendor(WitchItems, PinnedItemCount);
+		return;
+	}
 
 	for (int i = 0; i < itemCount; i++) {
 		Item item = {};
 
 		if (i < PinnedItemCount) {
-			item._iSeed = AdvanceRndSeed();
-			GetItemAttrs(item, PinnedItemTypes[i], 1);
-			item._iCreateInfo = lvl;
-			item._iStatFlag = true;
-			WitchItems.push_back(item);
+			addPinnedItem(i);
 			continue;
 		}
 
@@ -5091,25 +7181,7 @@ void SpawnWitch(int lvl)
 			}
 		}
 
-		do {
-			item = {};
-			item._iSeed = AdvanceRndSeed();
-			SetRndSeed(item._iSeed);
-			const _item_indexes itemData = RndWitchItem(*MyPlayer, lvl);
-			GetItemAttrs(item, itemData, lvl);
-			int maxlvl = -1;
-			if (GenerateRnd(100) <= 5)
-				maxlvl = 2 * lvl;
-			if (maxlvl == -1 && item._iMiscId == IMISC_STAFF)
-				maxlvl = 2 * lvl;
-			if (maxlvl != -1)
-				GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
-		} while (item._iIvalue > maxValue);
-
-		item._iCreateInfo = lvl | CF_WITCH;
-		item._iIdentified = true;
-
-		WitchItems.push_back(item);
+		WitchItems.push_back(RollWitchItem(lvl, maxValue));
 	}
 
 	SortVendor(WitchItems, PinnedItemCount);
@@ -5124,7 +7196,7 @@ void SpawnBoy(int lvl)
 	const Player &myPlayer = *MyPlayer;
 
 	const HeroClass pc = myPlayer._pClass;
-	int strength = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Strength), myPlayer._pStrength);
+	int strength = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Strength), RequirementStrength(myPlayer));
 	int dexterity = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Dexterity), myPlayer._pDexterity);
 	int magic = std::max(myPlayer.GetMaximumAttributeValue(CharacterAttribute::Magic), myPlayer._pMagic);
 	strength += strength / 5;
@@ -5227,6 +7299,7 @@ void SpawnBoy(int lvl)
 	            || BoyItem._iIvalue < ivalue)
 	        && count < 250));
 	BoyItem._iCreateInfo = lvl | CF_BOY;
+	SetVendorPoe2ItemLevel(BoyItem, lvl);
 	BoyItem._iIdentified = true;
 	BoyItemLevel = lvl / 2;
 }
@@ -5282,6 +7355,11 @@ int ItemNoFlippy()
 
 void CreateSpellBook(Point position, SpellID ispell, bool sendmsg, bool delta)
 {
+	// A boss's spell book becomes an uncut skill gem now that skill gems replaced spell books.
+	if (gbIsPoe2) {
+		CreateTypeItem(position, false, ItemType::Misc, IMISC_UNCUT_SKILL, sendmsg, delta);
+		return;
+	}
 	int lvl = currlevel;
 
 	if (gbIsHellfire) {
@@ -5432,6 +7510,9 @@ StringOrView Item::getName() const
 	if (isEmpty()) {
 		return std::string_view("");
 	}
+	// POE2 Mashup: belt uniques keep unique id 0, which is The Butcher's Cleaver, so they name themselves.
+	if (const BeltUnique *belt = GetBeltUnique(*this); belt != nullptr)
+		return belt->name;
 	if (!_iIdentified || _iCreateInfo == 0 || _iMagical == ITEM_QUALITY_NORMAL) {
 		return GetTranslatedItemName(*this);
 	}
@@ -5440,6 +7521,9 @@ StringOrView Item::getName() const
 	}
 	if (_iMagical == ITEM_QUALITY_RARE) {
 		return GetRareItemName(*this);
+	}
+	if (_iPoe2Mods[0].family != 0) {
+		return std::string_view(_iIName);
 	}
 	return GetTranslatedItemNameMagical(*this, dwBuff & CF_HELLFIRE, true, std::nullopt);
 }
@@ -5517,12 +7601,84 @@ void RechargeItem(Item &item, Player &player)
 	}
 }
 
+/** @brief POE2 Mashup: a currency's sound as it takes hold, layered from Diablo's own effects: a clink, then its magic. */
+void PlayCurrencySound(CurrencyOrb orb, item_quality before, const Item &item)
+{
+	if (CurrencyDestroyedItem) {
+		PlaySFX(SfxID::BarrelBreak);
+		return;
+	}
+	switch (orb) {
+	case CurrencyOrb::Whetstone:
+		PlaySFX(SfxID::ItemSword);
+		PlaySFX(SfxID::ItemAnvil);
+		return;
+	case CurrencyOrb::Scrap:
+		PlaySFX(SfxID::ItemArmor);
+		PlaySFX(SfxID::ItemAnvil);
+		return;
+	case CurrencyOrb::Etcher:
+		PlaySFX(SfxID::ItemStaff);
+		PlaySFX(SfxID::SpellRepair);
+		return;
+	case CurrencyOrb::Bauble:
+	case CurrencyOrb::Catalyst:
+		PlaySFX(SfxID::ItemPotion);
+		PlaySFX(SfxID::SpellRepair);
+		return;
+	case CurrencyOrb::Chaos:
+	case CurrencyOrb::GreaterChaos:
+	case CurrencyOrb::PerfectChaos:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(SfxID::SpellBloodStar);
+		return;
+	case CurrencyOrb::Scouring:
+	case CurrencyOrb::Annul:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(SfxID::SpellEtherealize);
+		return;
+	case CurrencyOrb::Divine:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(SfxID::SpellResurrect);
+		return;
+	case CurrencyOrb::Vaal:
+	case CurrencyOrb::Desecrate:
+		PlaySFX(SfxID::ItemBodyPart);
+		PlaySFX(SfxID::SpellBoneSpirit);
+		return;
+	case CurrencyOrb::Chance:
+		PlaySFX(SfxID::ItemRing);
+		PlaySFX(item._iMagical == ITEM_QUALITY_UNIQUE ? SfxID::QuestDone : SfxID::OperateShrine);
+		return;
+	case CurrencyOrb::Artificer:
+	case CurrencyOrb::Augment:
+		PlaySFX(SfxID::ItemRock);
+		PlaySFX(SfxID::ItemAnvil);
+		return;
+	default:
+		break;
+	}
+	// Orbs that add modifiers: brighter the higher the item climbs.
+	PlaySFX(SfxID::ItemRing);
+	if (item._iMagical == ITEM_QUALITY_RARE && before != ITEM_QUALITY_RARE)
+		PlaySFX(SfxID::SpellHolyBolt);
+	else if (IsAnyOf(orb, CurrencyOrb::Exalted, CurrencyOrb::GreaterExalted, CurrencyOrb::PerfectExalted, CurrencyOrb::Regal, CurrencyOrb::Essence))
+		PlaySFX(SfxID::SpellHolyBolt);
+	else
+		PlaySFX(SfxID::SpellInfravision);
+}
+
 bool ApplyOilToItem(Item &item, Player &player)
 {
 	int r;
 
-	if (const CurrencyOrb orb = CurrencyOrbForMiscId(player._pOilType); orb != CurrencyOrb::None)
-		return ApplyCurrencyOrb(orb, player, item);
+	if (const CurrencyOrb orb = CurrencyOrbForMiscId(player._pOilType); orb != CurrencyOrb::None) {
+		const item_quality before = item._iMagical;
+		const bool applied = ApplyCurrencyOrb(orb, player, item, player.poe2.currencyVariant);
+		if (applied && &player == MyPlayer)
+			PlayCurrencySound(orb, before, item);
+		return applied;
+	}
 
 	if (item._iClass == ICLASS_MISC) {
 		return false;

@@ -37,6 +37,8 @@
 
 namespace devilution {
 
+struct Monster;
+
 constexpr int InventoryGridCells = 40;
 constexpr int MaxBeltItems = 8;
 constexpr int MaxResistance = 75;
@@ -339,6 +341,10 @@ public:
 	SpellType _pSplTHotKey[NumHotkeys];
 	/** @brief POE2 Mashup state (support gems, ...), saved separately from the hero file. */
 	Poe2PlayerData poe2;
+	/** @brief POE2 Mashup: jewels in the passive tree's jewel sockets, in the order of the sockets' node ids; saved with poe2. */
+	std::array<Item, MaxJewelSockets> jewels;
+	/** @brief POE2 Mashup: the weapon set that isn't out (main hand, off hand); swapped with X, saved with poe2. */
+	std::array<Item, 2> swapHands;
 	bool _pBlockFlag;
 	bool _pInvincible;
 	int8_t _pLightRad;
@@ -621,12 +627,19 @@ public:
 	 * @brief Return block chance
 	 * @param useLevel - indicate if player's level should be added to block chance (the only case where it isn't is blocking a trap)
 	 */
+	/** @brief POE2 Mashup: block caps at 50%, raised by the passive tree's block up to 75%, as in POE2. */
+	int GetMaxBlockChance(bool isPoe2) const
+	{
+		return isPoe2 ? std::min(50 + poe2.passiveBlockChance, 75) : 100;
+	}
+
 	int GetBlockChance(bool useLevel = true) const
 	{
-		int blkper = _pDexterity + getBaseToBlock();
+		int blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
 		if (useLevel)
 			blkper += getCharacterLevel() * 2;
-		return blkper;
+		// POE2 Mashup: Magma Barrier's increased block chance.
+		return blkper * (100 + poe2.spiritState.blockPercent) / 100;
 	}
 
 	/**
@@ -648,8 +661,8 @@ public:
 		}
 
 		int level = _pSplLvl[static_cast<std::size_t>(spell)];
-		if (poe2.hasSpellGem(spell))
-			level = std::max(level, GemSpellLevel(getCharacterLevel()));
+		// POE2 Mashup: a socketed spell gem casts at the gem's level.
+		level = std::max(level, poe2.skillLevel(spell));
 		return std::max<int>(_pISplLvlAdd + level, 0);
 	}
 
@@ -986,6 +999,10 @@ void StartWarpLvl(Player &player, size_t pidx);
 void ProcessPlayers();
 void ClrPlrPath(Player &player);
 bool PosOkPlayer(const Player &player, Point position);
+/** @brief POE2 Mashup: a skill's melee hit on a monster, for the given share of its damage. */
+bool SkillHitMonster(Player &player, Monster &monster, int damagePercent);
+/** @brief POE2 Mashup: moves the player to a tile at once, as Teleport does. */
+void MovePlayerTo(Player &player, Point destination);
 /**
  * @brief Checks if the player is close enough to the object to operate it without walking.
  */

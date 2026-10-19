@@ -13,6 +13,7 @@
 #include "engine/palette.h"
 #include "engine/render/automap_render.hpp"
 #include "engine/render/primitive_render.hpp"
+#include "game_mode.hpp"
 #include "levels/gendung.h"
 #include "levels/setmaps.h"
 #include "options.h"
@@ -1495,7 +1496,9 @@ void DrawAutomapText(const Surface &out)
 	}
 
 	const std::string description = FormatRuntime(_(/* TRANSLATORS: {:s} means: Game Difficulty. */ "Difficulty: {:s}"), difficulty);
-	drawStringAndAdvanceLine(description);
+	// POE2 Mashup has area levels instead of difficulties.
+	if (!gbIsPoe2)
+		drawStringAndAdvanceLine(description);
 
 #ifdef _DEBUG
 	if (DebugGodMode || DebugInvisible || DisableLighting || DebugVision || DebugPath || DebugGrid || DebugScrollViewEnabled) {

@@ -46,6 +46,9 @@ public:
 		return lightmapBuffer.data() + row * lightmapPitch + rowOffset;
 	}
 
+	/** @brief The light level of each pixel, as stored (used by the POE2 HD renderer). */
+	[[nodiscard]] std::span<const uint8_t> buffer() const { return lightmapBuffer; }
+
 	[[nodiscard]] bool isFullyLitLightTable(const uint8_t *lightTable) const { return lightTable == fullyLitLightTable_; }
 	[[nodiscard]] bool isFullyDarkLightTable(const uint8_t *lightTable) const { return lightTable == fullyDarkLightTable_; }
 

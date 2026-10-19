@@ -13,7 +13,13 @@
 #include "lua/lua_global.hpp"
 #include "panels/console.hpp"
 #include "player.h"
+#include "cursor.h"
+#include "missiles.h"
+#include "poe2/aim.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/hit_trace.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/vfx.hpp"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -54,7 +60,37 @@ void CreateReplEnvironment()
 	env["print"] = LuaPrintToConsole;
 	// POE2 Mashup play log: stats() shows this game's numbers, mark("text") notes a moment in the log.
 	env["stats"] = []() {
-		return StrCat(TelemetryStatsText(), "\n", TelemetrySkillDamageText(), "\n", MyPlayer != nullptr ? TelemetryBuildText(*MyPlayer) : std::string());
+		return StrCat(TelemetryStatsText(), "\n", TelemetrySkillDamageText(), "\n", TelemetryDamageTakenText(), "\n", MyPlayer != nullptr ? TelemetryBuildText(*MyPlayer) : std::string());
+	};
+	// gems() shows each socketed gem's numbers now and at its next level; gemcurve("Cleave") shows levels 1 to 20.
+	env["gems"] = []() {
+		return MyPlayer != nullptr ? SocketedGemsText(*MyPlayer) : std::string("No hero loaded.");
+	};
+	env["gemcurve"] = [](std::string_view name) {
+		return GemCurveTextByName(name);
+	};
+	// vfx() plays one of each modern effect around the hero.
+	env["vfx"] = []() {
+		if (MyPlayer == nullptr || !vfx::Enabled())
+			return "Modern Effects are off (Settings > Graphics, needs Upscale).";
+		vfx::Showcase(MyPlayer->position.tile);
+		return "Playing every effect around you.";
+	};
+	env["aim"] = []() {
+		if (MyPlayer == nullptr)
+			return std::string("No hero.");
+		float x = 0;
+		float y = 0;
+		GetCursorTileExact(x, y);
+		const Point target = AimAlongCursor(*MyPlayer, AimTiles);
+		AddMissile(MyPlayer->position.tile, target, MyPlayer->_pdir, MissileID::Firebolt, TARGET_MONSTERS, *MyPlayer, 0, 1);
+		return StrCat("hero ", MyPlayer->position.tile.x, ",", MyPlayer->position.tile.y, "  cursor tile ", cursPosition.x, ",", cursPosition.y,
+		    "  exact ", static_cast<int>(x * 100), ",", static_cast<int>(y * 100), " /100  aim ", target.x, ",", target.y);
+	};
+	// hittrace(true) logs every tile your spells fly through, not just one line per spell; hittrace(false) goes back.
+	env["hittrace"] = [](bool detail) {
+		HitTraceSetDetail(detail);
+		return detail ? "Hit trace logs every tile now." : "Hit trace logs one line per spell.";
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

@@ -62,6 +62,12 @@ std::string MissingSkillRequirements(const Player &player, SkillSlot skill);
 void UseSkillSlot(size_t slot);
 /** @brief Uses what a tray slot holds; mouse actions like move and attack are handled by the click itself. */
 void UseTraySlot(TraySlot slot);
+/** @brief Uses a tray slot and keeps using it each time the character is free while the key or button is held. */
+void PressTraySlot(TraySlot slot);
+void ReleaseTraySlot(TraySlot slot);
+void ReleaseAllTraySlots();
+/** @brief Called every game tick: uses the held tray slot's skill again once the character can act. */
+void RepeatHeldTraySlot();
 /** @brief Opens a town portal for free, like POE2's portal button. */
 void UseFreeTownPortal();
 
@@ -72,13 +78,13 @@ void UseFreeTownPortal();
 bool SocketSkillGemFromInventory(Player &player, bool fromBelt, int index);
 
 /** @brief Puts support gems in the inventory, or at the player's feet if it's full. */
-void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems);
+void GiveSupportGems(Player &player, const std::vector<TieredSupport> &gems);
 
 /**
  * @brief Changes the skill in a socket; supports the new skill can't use come back out as items.
  * @return The skill that was in the socket.
  */
-SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill);
+SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int level = 1);
 
 /** @brief What happened when a support gem was socketed, for the player. */
 std::string SupportSocketMessage(SupportSocketResult result, const Player &player, size_t slot, SupportGem gem);

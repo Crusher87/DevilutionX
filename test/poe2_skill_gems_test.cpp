@@ -6,6 +6,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -68,8 +69,8 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 			EXPECT_EQ(AllItemsList[i].iMinMag, GetSpellData(skill.spell()).minInt) << AllItemsList[i].iName;
 		}
 	}
-	// 34 skill gems plus 5 Spirit gems.
-	EXPECT_EQ(gems, 39);
+	// Skill gems plus 69 Spirit gems.
+	EXPECT_EQ(gems, 181);
 }
 
 TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)
@@ -78,9 +79,10 @@ TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)
 	player.setCharacterLevel(9);
 	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), 0);
 
-	SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::Fireball));
-	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), GemSpellLevel(9));
-	EXPECT_EQ(GemSpellLevel(9), 3);
+	// The spell is cast at the gem's level.
+	SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::Fireball), 3);
+	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), 3);
+	EXPECT_EQ(player.poe2.skillLevel(SpellID::Fireball), 3);
 
 	// A higher level learned from books wins.
 	player._pSplLvl[static_cast<size_t>(SpellID::Fireball)] = 7;
@@ -89,6 +91,85 @@ TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)
 	EXPECT_EQ(SocketSkill(player, 2, {}), SkillSlot::ForSpell(SpellID::Fireball));
 	player._pSplLvl[static_cast<size_t>(SpellID::Fireball)] = 0;
 	EXPECT_EQ(player.GetSpellLevel(SpellID::Fireball), 0);
+}
+
+TEST_F(Poe2SkillGemsTest, GemLevelsFollowPoe2)
+{
+	// POE2's character level table scaled to Diablo's level 50 cap.
+	EXPECT_EQ(CharacterLevelForGemLevel(1), 1);
+	EXPECT_EQ(CharacterLevelForGemLevel(10), 20);
+	EXPECT_EQ(CharacterLevelForGemLevel(20), 50);
+	EXPECT_EQ(MaxGemLevelForCharacter(1), 1);
+	EXPECT_EQ(MaxGemLevelForCharacter(19), 9);
+	EXPECT_EQ(MaxGemLevelForCharacter(50), 20);
+
+	// Cleave follows Boneshatter: 100%, 142%, 191%, 244%, 312% at levels 1, 5, 10, 15, 20.
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	EXPECT_EQ(GemDamagePercent(cleave, 1), 100);
+	EXPECT_EQ(GemDamagePercent(cleave, 5), 142);
+	EXPECT_EQ(GemDamagePercent(cleave, 10), 191);
+	EXPECT_EQ(GemDamagePercent(cleave, 15), 244);
+	EXPECT_EQ(GemDamagePercent(cleave, 20), 312);
+	EXPECT_EQ(GemManaPercent(cleave, 20), 500);
+}
+
+TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
+{
+	const SkillSlot leapSlam = SkillSlot::ForAttack(WeaponSkill::LeapSlam);
+	const SkillSlot barrage = SkillSlot::ForAttack(WeaponSkill::Barrage);
+	EXPECT_EQ(GemDamagePercent(leapSlam, 20), 408);
+	EXPECT_EQ(GemDamagePercent(barrage, 20), 280);
+	// Steps are uneven like POE2's: Boneshatter's level 9 adds little, level 16 a lot.
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	EXPECT_EQ(GemDamagePercent(cleave, 8), 174);
+	EXPECT_EQ(GemDamagePercent(cleave, 9), 182);
+	EXPECT_EQ(GemDamagePercent(cleave, 16), 257);
+	EXPECT_EQ(GemStepText(cleave, 15, 16), "[+5% damage, +8% mana]");
+	for (int level = 2; level <= MaxGemLevel; level++)
+		EXPECT_GT(GemDamagePercent(leapSlam, level), GemDamagePercent(leapSlam, level - 1)) << level;
+
+	// Spark gains projectiles at POE2 Spark's levels; Fireball relies on Diablo's own spell level growth.
+	const SkillSlot spark = SkillSlot::ForAttack(WeaponSkill::Spark);
+	EXPECT_EQ(GemExtraProjectiles(spark, 1), 0);
+	EXPECT_EQ(GemExtraProjectiles(spark, 2), 1);
+	EXPECT_EQ(GemExtraProjectiles(spark, 20), 5);
+	EXPECT_NE(GemStepText(spark, 6, 7).find("+1 projectile, big step"), std::string::npos) << GemStepText(spark, 6, 7);
+	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 100);
+	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
+	EXPECT_EQ(BattleCryDamagePercent(1), 50);
+	EXPECT_EQ(BattleCryDamagePercent(20), 100);
+}
+
+TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)
+{
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 6 mana");
+	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 20 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
+	EXPECT_EQ(GemCurveTextByName("nothing"), "No skill gem is called nothing.");
+}
+
+TEST_F(Poe2SkillGemsTest, GemItemsKeepTheirLevel)
+{
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForAttack(WeaponSkill::Cleave), 7));
+	EXPECT_EQ(SkillGemItemLevel(gem), 7);
+
+	Item rebuilt;
+	RecreateItem(*MyPlayer, rebuilt, static_cast<_item_indexes>(gem.IDidx), gem._iCreateInfo, gem._iSeed, gem._ivalue, gem.dwBuff);
+	EXPECT_EQ(SkillGemItemLevel(rebuilt), 7);
+
+	// Gems from before gem levels are level 1.
+	gem.dwBuff &= ~CF_POE2_GEM_LEVEL;
+	EXPECT_EQ(SkillGemItemLevel(gem), 1);
+}
+
+TEST_F(Poe2SkillGemsTest, AttackGemLevelRaisesManaCost)
+{
+	Player &player = *MyPlayer;
+	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 1);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam));
+	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 20);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 5);
 }
 
 TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
@@ -102,7 +183,7 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 	player._pStrength = 60;
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Weapon);
 
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Maul");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Ready);
 
 	player._pMana = Fixed26_6::fromInt(1);
@@ -112,30 +193,30 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 
 TEST_F(Poe2SkillGemsTest, WeaponsAllowMatchingSkills)
 {
-	const Item dagger = MakeBase("Dagger");
+	const Item dagger = MakeBase("Shiv");
 	EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Flurry));
 	EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Cleave));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Barrage));
 
-	const Item axe = MakeBase("Battle Axe");
+	const Item axe = MakeBase("Woodsman's Axe");
 	EXPECT_TRUE(ItemAllowsWeaponSkill(axe, WeaponSkill::Cleave));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(axe, WeaponSkill::Flurry));
 
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::Barrage));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::RainOfArrows));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Maul"), WeaponSkill::LeapSlam));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::Barrage));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::RainOfArrows));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Sledge"), WeaponSkill::LeapSlam));
 	EXPECT_TRUE(ItemAllowsWeaponSkill(axe, WeaponSkill::LeapSlam));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::LeapSlam));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::LeapSlam));
 	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::RainOfArrows));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Buckler"), WeaponSkill::Cleave));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Hide Buckler"), WeaponSkill::Cleave));
 }
 
 TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
 {
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Buckler"), WeaponSkill::ShieldCharge));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Battle Axe"), WeaponSkill::ShieldCharge));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::LightningArrow));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), WeaponSkill::EscapeShot));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Hide Buckler"), WeaponSkill::ShieldCharge));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Woodsman's Axe"), WeaponSkill::ShieldCharge));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::LightningArrow));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::EscapeShot));
 	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::LightningArrow));
 	EXPECT_FALSE(IsRangedWeaponSkill(WeaponSkill::EscapeShot));
 
@@ -144,10 +225,10 @@ TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
 	for (const WeaponSkill skill : { WeaponSkill::BattleCry, WeaponSkill::EmberFusillade, WeaponSkill::Spark }) {
 		EXPECT_FALSE(WeaponSkillNeedsWeapon(skill)) << WeaponSkillName(skill);
 		EXPECT_TRUE(WeaponAllowsSkill(player, skill)) << WeaponSkillName(skill);
-		EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Long Bow"), skill)) << WeaponSkillName(skill);
+		EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), skill)) << WeaponSkillName(skill);
 	}
 	EXPECT_FALSE(WeaponAllowsSkill(player, WeaponSkill::ShieldCharge));
-	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Buckler");
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Hide Buckler");
 	EXPECT_TRUE(WeaponAllowsSkill(player, WeaponSkill::ShieldCharge));
 
 	// Every skill has a name, a description and a gem with a stat requirement.
@@ -197,12 +278,12 @@ TEST_F(Poe2SkillGemsTest, TrayStartsWithDiabloMouseButtons)
 	const Player &player = *MyPlayer;
 	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
 	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::ReadiedSpell);
-	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::None);
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::WeaponAttack) << "the free weapon attack";
 	for (size_t key = 0; key < NumTrayKeys; key++)
 		EXPECT_EQ(TrayOf(player, TrayKeySlot(key)).action, TrayAction::None);
 }
 
-TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeysThenTheMiddleButton)
+TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeys)
 {
 	Player &player = *MyPlayer;
 	for (size_t socket = 0; socket < 7; socket++)
@@ -213,7 +294,9 @@ TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeysThenTheMiddleButton)
 
 	for (size_t key = 0; key < NumTrayKeys; key++)
 		EXPECT_EQ(TrayOf(player, TrayKeySlot(key)), TrayBinding::ForGem(key));
-	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse), TrayBinding::ForGem(6));
+	// The middle button keeps the free weapon attack; a seventh skill is bound by hand.
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::WeaponAttack);
+	EXPECT_EQ(TraySlotForSocket(player, 6), std::nullopt);
 	// Spirit gems are active while socketed and need no slot.
 	EXPECT_EQ(TraySlotForSocket(player, 7), std::nullopt);
 	// The mouse buttons keep their actions.
@@ -241,6 +324,9 @@ TEST_F(Poe2SkillGemsTest, BindingAGemOnAnotherSlotSwapsThem)
 	EXPECT_EQ(TrayOf(player, TraySlot::Key2).action, TrayAction::None);
 	BindTraySlot(player, TraySlot::Key3, { TrayAction::Interact, 0 });
 	EXPECT_EQ(TrayOf(player, TraySlot::Key3).action, TrayAction::None);
+	// The weapon attack fits any slot.
+	BindTraySlot(player, TraySlot::Key3, { TrayAction::WeaponAttack, 0 });
+	EXPECT_EQ(TrayOf(player, TraySlot::Key3).action, TrayAction::WeaponAttack);
 
 	// The right button can take an action; clearing puts a slot back to its default.
 	BindTraySlot(player, TraySlot::RightMouse, { TrayAction::Interact, 0 });

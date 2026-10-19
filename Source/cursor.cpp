@@ -5,6 +5,7 @@
  */
 #include "cursor.h"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -25,21 +26,30 @@
 #include "doom.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/demomode.h"
+#include "engine/palette.h"
 #include "engine/point.hpp"
 #include "engine/points_in_rectangle_range.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
+#include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
+#include "engine/ui_scale.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "hwcursor.hpp"
 #include "inv.h"
 #include "levels/trigs.h"
 #include "missiles.h"
 #include "options.h"
+#include "panels/skills_panel.hpp"
+#include "poe2/aim.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/stacking.hpp"
 #include "qol/itemlabels.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
+#include "stores.h"
 #include "towners.h"
 #include "track.h"
 #include "utils/attributes.h"
@@ -48,6 +58,7 @@
 #include "utils/language.h"
 #include "utils/palette_blending.hpp"
 #include "utils/sdl_bilinear_scale.hpp"
+#include "utils/str_cat.hpp"
 #include "utils/surface_to_clx.hpp"
 #include "utils/utf8.hpp"
 
@@ -67,6 +78,19 @@ OptionalOwnedClxSpriteList pCursCels2;
 
 OptionalOwnedClxSpriteList *HalfSizeItemSprites;
 OptionalOwnedClxSpriteList *HalfSizeItemSpritesRed;
+
+/** POE2 Mashup: items that take one cell in POE2 but have a bigger Diablo picture show a shrunken copy of it. */
+constexpr int FirstSmallItemCursor = ICURS_MAGIC_ROCK_SMALL;
+constexpr int SmallItemCursorCount = ICURS_RECONSTRUCTED_NOTE_SMALL - FirstSmallItemCursor + 1;
+std::array<OptionalOwnedClxSpriteList, SmallItemCursorCount> SmallItemSprites;
+
+std::optional<size_t> SmallItemCursorIndex(int cursId)
+{
+	const int icurs = cursId - static_cast<int>(CURSOR_FIRSTITEM);
+	if (icurs < FirstSmallItemCursor || icurs >= FirstSmallItemCursor + SmallItemCursorCount)
+		return std::nullopt;
+	return static_cast<size_t>(icurs - FirstSmallItemCursor);
+}
 
 bool IsValidMonsterForSelection(const Monster &monster)
 {
@@ -220,32 +244,38 @@ bool TrySelectObject(bool flipflag, Point tile)
 	return true;
 }
 
+/** @brief Whether hovering the item highlights it; POE2 Mashup picks gold up by walking near it, so gold isn't. */
+bool CanHoverItem(const Item &item)
+{
+	return !IsItemHiddenByLootFilter(item) && !(gbIsPoe2 && item._itype == ItemType::Gold);
+}
+
 bool TrySelectItem(bool flipflag, Point tile)
 {
 	if (!flipflag && tile.x + 1 < MAXDUNX && dItem[tile.x + 1][tile.y] > 0) {
 		const uint8_t itemId = dItem[tile.x + 1][tile.y] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile + Displacement { 1, 0 };
 			pcursitem = static_cast<int8_t>(itemId);
 		}
 	}
 	if (flipflag && tile.y + 1 < MAXDUNY && dItem[tile.x][tile.y + 1] > 0) {
 		const uint8_t itemId = dItem[tile.x][tile.y + 1] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile + Displacement { 0, 1 };
 			pcursitem = static_cast<int8_t>(itemId);
 		}
 	}
 	if (dItem[tile.x][tile.y] > 0) {
 		const uint8_t itemId = dItem[tile.x][tile.y] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Bottom) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Bottom) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile;
 			pcursitem = static_cast<int8_t>(itemId);
 		}
 	}
 	if (tile.x + 1 < MAXDUNX && tile.y + 1 < MAXDUNY && dItem[tile.x + 1][tile.y + 1] > 0) {
 		const uint8_t itemId = dItem[tile.x + 1][tile.y + 1] - 1;
-		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && !IsItemHiddenByLootFilter(Items[itemId])) {
+		if (HasAnyOf(Items[itemId].selectionRegion, SelectionRegion::Middle) && CanHoverItem(Items[itemId])) {
 			cursPosition = tile + Displacement { 1, 1 };
 			pcursitem = static_cast<int8_t>(itemId);
 		}
@@ -316,7 +346,7 @@ bool TrySelectPixelBased(Point tile)
 				}
 			} else {
 				const Monster &monster = Monsters[monsterId];
-				if (IsTileLit(adjacentTile) && IsValidMonsterForSelection(monster)) {
+				if (IsTileLit(adjacentTile) && IsValidMonsterForSelection(monster) && monster.animInfo.sprites) {
 					const ClxSprite sprite = monster.animInfo.currentSprite();
 					const Displacement renderingOffset = monster.getRenderingOffset(sprite);
 					if (checkSprite(adjacentTile, sprite, renderingOffset)) {
@@ -357,7 +387,7 @@ bool TrySelectPixelBased(Point tile)
 		}
 
 		Object *object = FindObjectAtPosition(adjacentTile);
-		if (object != nullptr && object->canInteractWith()) {
+		if (object != nullptr && object->canInteractWith() && object->_oAnimData) {
 			const ClxSprite sprite = object->currentSprite();
 			const Displacement renderingOffset = object->getRenderingOffset(sprite, adjacentTile);
 			if (checkSprite(adjacentTile, sprite, renderingOffset)) {
@@ -371,9 +401,12 @@ bool TrySelectPixelBased(Point tile)
 		if (itemId != 0) {
 			itemId = itemId - 1;
 			const Item &item = Items[itemId];
+			// An item with no picture can't be hovered (the drawing skips it too).
+			if (!item.AnimInfo.sprites)
+				continue;
 			const ClxSprite sprite = item.AnimInfo.currentSprite();
 			const Displacement renderingOffset = item.getRenderingOffset(sprite);
-			if (!IsItemHiddenByLootFilter(item) && checkSprite(adjacentTile, sprite, renderingOffset)) {
+			if (CanHoverItem(item) && checkSprite(adjacentTile, sprite, renderingOffset)) {
 				cursPosition = adjacentTile;
 				pcursitem = static_cast<int8_t>(itemId);
 				return true;
@@ -459,10 +492,14 @@ void FreeCursor()
 {
 	pCursCels = std::nullopt;
 	pCursCels2 = std::nullopt;
+	for (OptionalOwnedClxSpriteList &sprite : SmallItemSprites)
+		sprite = std::nullopt;
 	ClearCursor();
 }
 
-ClxSprite GetInvItemSprite(int cursId)
+namespace {
+
+ClxSprite SheetItemSprite(int cursId)
 {
 	assert(cursId > 0);
 	const size_t numSprites = pCursCels->numSprites();
@@ -474,8 +511,45 @@ ClxSprite GetInvItemSprite(int cursId)
 	return (*pCursCels2)[cursId - numSprites - 1];
 }
 
+/** @brief The picture halved until it fits one cell, centred in it. Made when first drawn, once the palette is in. */
+ClxSprite SmallItemSprite(size_t index)
+{
+	OptionalOwnedClxSpriteList &cached = SmallItemSprites[index];
+	if (!cached) {
+		const auto source = static_cast<item_cursor_graphic>(FirstSmallItemCursor + static_cast<int>(index));
+		const ClxSprite sprite = SheetItemSprite(static_cast<int>(CURSOR_FIRSTITEM) + FullSizeItemCursor(source));
+		std::optional<OwnedSurface> picture;
+		picture.emplace(sprite.width(), sprite.height());
+		SDL_FillSurfaceRect(picture->surface, nullptr, 1);
+		ClxDraw(*picture, { 0, picture->h() }, sprite);
+		while (picture->w() > INV_SLOT_SIZE_PX || picture->h() > INV_SLOT_SIZE_PX) {
+			OwnedSurface half { std::max(picture->w() / 2, 1), std::max(picture->h() / 2, 1) };
+			BilinearDownscaleByHalf8(picture->surface, paletteTransparencyLookup, half.surface, 1);
+			picture.emplace(std::move(half));
+		}
+		OwnedSurface cell { INV_SLOT_SIZE_PX, INV_SLOT_SIZE_PX };
+		SDL_FillSurfaceRect(cell.surface, nullptr, 1);
+		cell.BlitFrom(*picture, MakeSdlRect(0, 0, picture->w(), picture->h()),
+		    { (INV_SLOT_SIZE_PX - picture->w()) / 2, (INV_SLOT_SIZE_PX - picture->h()) / 2 });
+		cached.emplace(SurfaceToClx(cell, 1, 1));
+	}
+	return (*cached)[0];
+}
+
+} // namespace
+
+ClxSprite GetInvItemSprite(int cursId)
+{
+	if (const std::optional<size_t> small = SmallItemCursorIndex(cursId))
+		return SmallItemSprite(*small);
+	return SheetItemSprite(cursId);
+}
+
 Size GetInvItemSize(int cursId)
 {
+	// A shrunken copy is always one cell, known before it is made.
+	if (SmallItemCursorIndex(cursId))
+		return { INV_SLOT_SIZE_PX, INV_SLOT_SIZE_PX };
 	const ClxSprite sprite = GetInvItemSprite(cursId);
 	return { sprite.width(), sprite.height() };
 }
@@ -553,10 +627,28 @@ void FreeHalfSizeItemSprites()
 void DrawItem(const Item &item, const Surface &out, Point position, ClxSprite clx)
 {
 	const bool usable = !IsInspectingPlayer() ? item._iStatFlag : InspectPlayer->CanUseItem(item);
-	if (usable) {
+	if (usable && gbIsPoe2 && item._iMiscId == IMISC_SPEC_BOOK) {
+		// POE2 Mashup: a Book of Specialisation is bound in gold, not the plain red of a spell book (Curtis 2026-10-16).
+		// The cover's dusky reds (the beige ramp's darker half) become the gold of the game's own lettering.
+		static const std::array<uint8_t, 256> GoldBinding = [] {
+			constexpr uint8_t Gold[] = { 3, 4, 5, 7, 8, 9, 10, 12, 14 };
+			std::array<uint8_t, 256> trn;
+			for (size_t i = 0; i < trn.size(); i++)
+				trn[i] = static_cast<uint8_t>(i);
+			for (size_t shade = 0; shade < std::size(Gold); shade++)
+				trn[PAL16_BEIGE + 6 + shade] = static_cast<uint8_t>(PAL16_YELLOW + Gold[shade]);
+			return trn;
+		}();
+		ClxDrawTRN(out, position, clx, GoldBinding.data());
+	} else if (usable) {
 		ClxDraw(out, position, clx);
 	} else {
 		ClxDrawTRN(out, position, clx, GetInfravisionTRN());
+	}
+	// POE2 Mashup: a currency stack shows its count in the top left corner.
+	if (const int count = StackCount(item); count > 1) {
+		DrawString(out, StrCat(count), { position + Displacement { 2, 1 - static_cast<int>(clx.height()) }, { clx.width(), 12 } },
+		    { .flags = UiFlags::ColorWhite | UiFlags::FontSize12 | UiFlags::Outlined });
 	}
 }
 
@@ -571,6 +663,10 @@ void NewCursor(const Item &item)
 		NewCursor(CURSOR_HAND);
 	} else {
 		NewCursor(item._iCurs + CURSOR_FIRSTITEM);
+		// POE2 Mashup: picking up a skill gem opens the Skills panel so it can go straight into a socket.
+		if (gbIsPoe2 && !HeadlessMode && MyPlayer != nullptr && &item == &MyPlayer->HoldItem && IsSkillGem(item)
+		    && !IsSkillsPanelOpen() && !IsStashOpen && !IsPlayerInStore())
+			OpenSkillsPanel();
 	}
 }
 
@@ -851,6 +947,8 @@ bool CheckPanelsAndFlags(Rectangle mainPanel)
 	if (IsLeftPanelOpen() && GetLeftPanel().contains(MousePosition)) {
 		return true;
 	}
+	if (SkillsPanelContains(MousePosition))
+		return true;
 	return false;
 }
 
@@ -905,27 +1003,47 @@ void CheckCursMove()
 	if (IsItemLabelHighlighted())
 		return;
 
-	Point screenPosition = MousePosition;
 	const Rectangle &mainPanel = GetMainPanel();
-
-	AlterMousePositionViaPanels(screenPosition);
-	AlterMousePositionViaScrolling(screenPosition, mainPanel);
-	AlterMousePositionViaZoom(screenPosition);
-
 	const Player &myPlayer = *MyPlayer;
-
-	AlterMousePositionViaPlayer(screenPosition, myPlayer);
+	const bool scrollingOverPanel = mainPanel.contains(MousePosition) && track_isscrolling();
 
 	bool flipflag = false;
-	Point currentTile = ConvertToTileGrid(screenPosition);
+	Point currentTile;
+	{
+		// POE2 Mashup: the tile under the mouse, in the full-size world when the UI is scaled.
+		const WorldSpaceScope worldSpace;
+		Point screenPosition = MousePosition;
 
-	ShiftToDiamondGridAlignment(screenPosition, currentTile, flipflag);
+		AlterMousePositionViaPanels(screenPosition);
+		if (scrollingOverPanel)
+			screenPosition.y = UiToWorld(mainPanel.position).y - 1;
+		AlterMousePositionViaZoom(screenPosition);
+		AlterMousePositionViaPlayer(screenPosition, myPlayer);
+
+		currentTile = ConvertToTileGrid(screenPosition);
+		const Point unshifted = currentTile;
+		ShiftToDiamondGridAlignment(screenPosition, currentTile, flipflag);
+		// POE2 Mashup: also where in its tile the mouse points, so projectiles fly at any angle (see AimAlongCursor).
+		const int px = screenPosition.x % TILE_WIDTH;
+		const int py = screenPosition.y % TILE_HEIGHT;
+		const bool up = py < px / 2;
+		const bool down = py >= TILE_HEIGHT - px / 2;
+		const Point tile = unshifted + Displacement { down ? 1 : 0, up ? -1 : 0 };
+		// The tile's centre in this cell: the left corner, moved half a tile up-right (up) and down-right (down).
+		const float ox = static_cast<float>(px - ((up ? TILE_WIDTH / 2 : 0) + (down ? TILE_WIDTH / 2 : 0)));
+		const float oy = static_cast<float>(py - (TILE_HEIGHT / 2 - (up ? TILE_HEIGHT / 2 : 0) + (down ? TILE_HEIGHT / 2 : 0)));
+		SetCursorTileExact(static_cast<float>(tile.x) + (ox / (TILE_WIDTH / 2.F) + oy / (TILE_HEIGHT / 2.F)) / 2, static_cast<float>(tile.y) + (oy / (TILE_HEIGHT / 2.F) - ox / (TILE_WIDTH / 2.F)) / 2);
+	}
 
 	if (CheckMouseHold(currentTile)) return;
 
 	ResetCursorInfo();
 
-	if (CheckPlayerState(currentTile, myPlayer) || CheckPanelsAndFlags(mainPanel) || CheckCursorActions(currentTile, flipflag)) return;
+	if (CheckPlayerState(currentTile, myPlayer) || CheckPanelsAndFlags(mainPanel)) return;
+	{
+		const WorldSpaceScope worldSpace;
+		if (CheckCursorActions(currentTile, flipflag)) return;
+	}
 
 	// update cursor position
 	cursPosition = currentTile;

@@ -4,6 +4,7 @@
  * Implementation of functions for handling the engines color palette.
  */
 #include "engine/palette.h"
+#include "engine/render/text_render.hpp"
 
 #include <algorithm>
 #include <array>
@@ -183,6 +184,7 @@ void LoadPalette(const char *path)
 	for (unsigned i = 0; i < palData.size(); i++) {
 		logical_palette[i] = palData[i].toSDL();
 	}
+	SetTextRenderPalette(&logical_palette);
 }
 
 void LoadPaletteAndInitBlending(const char *path)

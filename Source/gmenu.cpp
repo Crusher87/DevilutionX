@@ -29,11 +29,14 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "engine/ui_scale.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "options.h"
 #include "stores.h"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
+#include "utils/str_cat.hpp"
 #include "utils/ui_fwd.h"
 
 namespace devilution {
@@ -116,6 +119,18 @@ void GmenuLeftRight(bool isRight)
 	}
 	sgpCurrItem->setSliderStep(step);
 	sgpCurrItem->fnMenu(false);
+}
+
+/** @brief POE2 Mashup: the menu's top; a long menu at a big UI Scale is lifted clear of the main panel. */
+int GmenuTop()
+{
+	const int top = GetUIRectangle().position.y;
+	if (!IsUiScaled())
+		return top;
+	const int bottom = top + GMenuTop + sgCurrentMenuIdx * GMenuItemHeight;
+	const int overlap = bottom - GetMainPanel().position.y;
+	// The logo may slide off the top of a short screen before the items reach the panel.
+	return top - std::clamp(overlap, 0, std::max(top, 0) + GMenuTop - 10);
 }
 
 int GmenuGetLineWidth(TMenuItem *pItem)
@@ -262,9 +277,10 @@ void gmenu_draw(const Surface &out)
 				LogoAnim_tick = ticks;
 			}
 		}
-		const int uiPositionY = GetUIRectangle().position.y;
+		const int uiPositionY = GmenuTop();
 		const ClxSprite sprite = (*sgpLogo)[LogoAnim_frame];
-		ClxDraw(out, { (gnScreenWidth - sprite.width()) / 2, 102 + uiPositionY }, sprite);
+		if (102 + uiPositionY - sprite.height() >= 0)
+			ClxDraw(out, { (gnScreenWidth - sprite.width()) / 2, 102 + uiPositionY }, sprite);
 		int y = 110 + uiPositionY;
 		TMenuItem *i = sgpCurrentMenu;
 		if (sgpCurrentMenu->fnMenu != nullptr) {
@@ -274,6 +290,9 @@ void gmenu_draw(const Surface &out)
 				y += GMenuItemHeight;
 			}
 		}
+		// POE2 Mashup: the mod's version, under the menu rather than always in the corner of the screen.
+		if (gbIsPoe2 && !Poe2ModVersion.empty())
+			DrawString(out, StrCat("POE2 Mashup ", Poe2ModVersion), { { 0, y + 8 }, { gnScreenWidth, 20 } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorWhitegold });
 	}
 }
 
@@ -338,14 +357,14 @@ bool gmenu_left_mouse(bool isDown)
 	if (sgpCurrentMenu == nullptr) {
 		return false;
 	}
-	const Point uiPosition = GetUIRectangle().position;
 	if (MousePosition.y >= GetMainPanel().position.y) {
 		return false;
 	}
-	if (MousePosition.y - (GMenuTop + uiPosition.y) < 0) {
+	const int menuTop = GmenuTop();
+	if (MousePosition.y - (GMenuTop + menuTop) < 0) {
 		return true;
 	}
-	const int i = (MousePosition.y - (GMenuTop + uiPosition.y)) / GMenuItemHeight;
+	const int i = (MousePosition.y - (GMenuTop + menuTop)) / GMenuItemHeight;
 	if (i >= sgCurrentMenuIdx) {
 		return true;
 	}

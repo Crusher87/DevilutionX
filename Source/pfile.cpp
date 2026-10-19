@@ -31,6 +31,7 @@
 #include "mods/mod_identity.h"
 #include "mpq/mpq_common.hpp"
 #include "pack.h"
+#include "poe2/hardcore.hpp"
 #include "poe2/skill_gems.hpp"
 #include "qol/stash.h"
 #include "tables/playerdat.hpp"
@@ -97,8 +98,10 @@ std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 std::string GetStashSavePath()
 {
 	const std::string_view ext = GetSaveExtension();
+	// POE2 Mashup: Hardcore heroes share their own stash.
+	const bool hardcore = MyPlayer != nullptr && IsHardcoreHero(*MyPlayer);
 	return StrCat(paths::PrefPath(),
-	    gbIsSpawn ? "stash_spawn" : "stash",
+	    gbIsSpawn ? "stash_spawn" : "stash", hardcore ? "_hardcore" : "",
 #ifdef UNPACKED_SAVES
 	    "_", ext, DIRECTORY_SEPARATOR_STR
 #else
@@ -221,6 +224,7 @@ void Game2UiPlayer(const Player &player, _uiheroinfo *heroinfo, bool bHasSaveFil
 	heroinfo->hassaved = bHasSaveFile;
 	heroinfo->herorank = player.pDiabloKillLevel;
 	heroinfo->spawned = gbIsSpawn;
+	heroinfo->hardcore = player.poe2.hardcore;
 }
 
 bool GetFileName(uint8_t lvl, char *dst)
@@ -716,6 +720,9 @@ bool pfile_ui_set_hero_infos(bool (*uiAddHeroInfo)(_uiheroinfo *))
 				LoadHeroItems(player);
 				RemoveAllInvalidItems(player);
 				CalcPlrInv(player, false);
+				size_t modeLength = 0;
+				const std::unique_ptr<std::byte[]> mode = ReadArchive(*archive, "poe2mode", &modeLength);
+				player.poe2.hardcore = mode != nullptr && modeLength >= 1 && mode[0] != std::byte { 0 };
 
 				Game2UiPlayer(player, &uihero, hasSaveGame);
 				uiAddHeroInfo(&uihero);
@@ -764,6 +771,7 @@ bool pfile_ui_save_create(_uiheroinfo *heroinfo)
 	CreatePlayer(player, heroinfo->heroclass);
 	CopyUtf8(player._pName, heroinfo->name, PlayerNameLength);
 	player.poe2.clear();
+	player.poe2.hardcore = gbIsPoe2 && heroinfo->hardcore;
 	if (gbIsPoe2)
 		GrantStarterSkill(player);
 	PackPlayer(pkplr, player);

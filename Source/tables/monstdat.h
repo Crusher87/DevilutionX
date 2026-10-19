@@ -350,7 +350,7 @@ struct UniqueMonsterData {
 
 extern DVL_API_FOR_TEST std::vector<MonsterData> MonstersData;
 extern const _monster_id MonstConvTbl[];
-extern std::vector<UniqueMonsterData> UniqueMonstersData;
+extern DVL_API_FOR_TEST std::vector<UniqueMonsterData> UniqueMonstersData;
 
 void LoadMonstDatFromFile(DataFile &dataFile, std::string_view filename, bool grow);
 void LoadUniqueMonstDatFromFile(DataFile &dataFile, std::string_view filename);

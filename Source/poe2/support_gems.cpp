@@ -1,25 +1,37 @@
 #include "poe2/support_gems.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdlib>
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "engine/displacement.hpp"
+#include "engine/random.hpp"
 #include "items.h"
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/default_attack.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/meta_gems.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spirit_skills.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
+#include "utils/str_cat.hpp"
+#include "utils/utf8.hpp"
 
 namespace devilution {
 
 namespace {
 
-constexpr int MultipleProjectilesExtra = 2;
 constexpr int EmpowerLevels = 2;
-constexpr int8_t FasterCastingFrames = 3;
 
 bool IsProjectileSpell(SpellID spell)
 {
@@ -35,14 +47,18 @@ bool IsDirectProjectileSpell(SpellID spell)
 
 bool IsMeleeAttackSkill(WeaponSkill skill)
 {
-	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge);
+	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+		return IsTableMeleeSkill(*table);
+	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge,
+	    WeaponSkill::Riposte, WeaponSkill::ShadowStep, WeaponSkill::Frenzy, WeaponSkill::Smite, WeaponSkill::FistsOfThunder, WeaponSkill::ShieldBash);
 }
 
 /** @brief Attack skills that use the normal attack animation, so they can attack faster. */
 bool IsQuickenableAttackSkill(WeaponSkill skill)
 {
 	return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff, WeaponSkill::Flurry,
-	    WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow);
+	    WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow, WeaponSkill::Frenzy, WeaponSkill::Smite,
+	    WeaponSkill::FistsOfThunder, WeaponSkill::ShieldBash);
 }
 
 bool IsProjectileSupport(SupportGem gem)
@@ -86,8 +102,16 @@ std::optional<WorldTilePosition> FindChainTarget(const Monster &from)
 	return best;
 }
 
-int ManaCostPercent(SupportGem gem)
+int ManaCostPercent(SupportGem gem, int tier)
 {
+	if (const SupportTierData *data = FindSupportTier(gem, std::clamp(tier, 1, SupportTierCount(gem))); data != nullptr) {
+		// Efficiency and Zenith II make the skill cheaper.
+		if (gem == SupportGem::Efficiency)
+			return 100 - data->value[0];
+		if (gem == SupportGem::BrimmingMana)
+			return data->mana * (100 - data->value[1]) / 100;
+		return data->mana;
+	}
 	switch (gem) {
 	case SupportGem::MultipleProjectiles:
 		return 130;
@@ -95,8 +119,6 @@ int ManaCostPercent(SupportGem gem)
 		return 140;
 	case SupportGem::FasterCasting:
 		return 120;
-	case SupportGem::Efficiency:
-		return 70;
 	case SupportGem::Pierce:
 		return 110;
 	case SupportGem::Fork:
@@ -113,22 +135,52 @@ int ManaCostPercent(SupportGem gem)
 		return 120;
 	case SupportGem::Knockback:
 		return 110;
+	case SupportGem::BattleRage:
+		return 115;
 	default:
+		if (const SupportData *data = FindSupportData(gem); data != nullptr)
+			return data->mana;
 		return 100;
 	}
 }
 
 } // namespace
 
+bool IsPowerSupport(SupportGem gem)
+{
+	if (const SupportData *data = FindSupportData(gem); data != nullptr)
+		return (data->flags & SF_Power) != 0;
+	return IsAnyOf(gem, SupportGem::Empower, SupportGem::ConcentratedEffect, SupportGem::Brutality);
+}
+
+SupportGem OtherPowerSupport(const SupportSockets &supports, std::optional<size_t> exceptSocket)
+{
+	for (size_t i = 0; i < supports.size(); i++) {
+		if (exceptSocket != i && IsPowerSupport(supports[i]))
+			return supports[i];
+	}
+	return SupportGem::None;
+}
+
 const SupportSockets &Poe2PlayerData::supportsFor(SkillSlot skill) const
 {
 	static const SupportSockets None {};
 	if (skill.isEmpty())
 		return None;
+	if (skill.kind == SkillKind::Default) {
+		// The default attack keeps its supports when the weapon changes; only the ones that fit the new attack work.
+		static SupportSockets fitting {};
+		for (size_t i = 0; i < MaxSupportSockets; i++)
+			fitting[i] = SupportGemCanSupport(defaultSupports[i], skill) ? defaultSupports[i] : SupportGem::None;
+		return fitting;
+	}
 	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
 		if (skillSlots[slot] == skill)
 			return slotSupports[slot];
 	}
+	// A spell inside a meta gem takes the meta gem's supports that fit it.
+	if (metaSocketOf(skill))
+		return MetaSupportsFor(*this, skill);
 	return None;
 }
 
@@ -138,6 +190,36 @@ bool Poe2PlayerData::hasSupport(SkillSlot skill, SupportGem gem) const
 		return false;
 	const SupportSockets &supports = supportsFor(skill);
 	return std::find(supports.begin(), supports.end(), gem) != supports.end();
+}
+
+int Poe2PlayerData::supportTier(SkillSlot skill, SupportGem gem) const
+{
+	if (gem == SupportGem::None || skill.isEmpty())
+		return 0;
+	if (skill.kind == SkillKind::Default) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			if (defaultSupports[socket] == gem)
+				return socketTier(DefaultAttackRow, socket);
+		}
+		return 0;
+	}
+	std::optional<size_t> row = std::nullopt;
+	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		if (skillSlots[slot] == skill) {
+			row = slot;
+			break;
+		}
+	}
+	if (!row) {
+		if (!hasSupport(skill, gem))
+			return 0;
+		row = metaSocketOf(skill)->first;
+	}
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		if (slotSupports[*row][socket] == gem)
+			return socketTier(*row, socket);
+	}
+	return 0;
 }
 
 SupportGem SupportGemForMiscId(int miscId)
@@ -167,15 +249,26 @@ SupportGem SupportGemForMiscId(int miscId)
 		return SupportGem::MartialTempo;
 	case IMISC_SUPPORT_KNOCKBACK:
 		return SupportGem::Knockback;
+	case IMISC_SUPPORT_BATTLERAGE:
+		return SupportGem::BattleRage;
 	default:
 		return SupportGem::None;
 	}
+}
+
+SupportGem SupportGemForItemData(const ItemData &data)
+{
+	if (data.iMiscId == IMISC_SUPPORT_TABLE)
+		return SupportGemForTableItem(data);
+	return SupportGemForMiscId(data.iMiscId);
 }
 
 SupportGem SupportGemForItem(const Item &item)
 {
 	if (item.isEmpty())
 		return SupportGem::None;
+	if (item._iMiscId == IMISC_SUPPORT_TABLE && item.IDidx >= 0 && static_cast<size_t>(item.IDidx) < AllItemsList.size())
+		return SupportGemForTableItem(AllItemsList[item.IDidx]);
 	return SupportGemForMiscId(item._iMiscId);
 }
 
@@ -206,9 +299,20 @@ std::string_view SupportGemName(SupportGem gem)
 		return _("Martial Tempo");
 	case SupportGem::Knockback:
 		return _("Knockback");
+	case SupportGem::BattleRage:
+		return _("Battle Rage");
 	default:
+		if (const SupportData *data = FindSupportData(gem); data != nullptr)
+			return _(data->name.data());
 		return {};
 	}
+}
+
+std::string_view SupportGemDescription(SupportGem gem, int tier)
+{
+	if (const SupportTierData *data = FindSupportTier(gem, std::clamp(tier, 1, SupportTierCount(gem))); data != nullptr)
+		return _(data->description.data());
+	return SupportGemDescription(gem);
 }
 
 std::string_view SupportGemDescription(SupportGem gem)
@@ -217,7 +321,7 @@ std::string_view SupportGemDescription(SupportGem gem)
 	case SupportGem::MultipleProjectiles:
 		return _("Fires 2 extra projectiles. 35% less\ndamage, 20% slower casts. Mana +30%");
 	case SupportGem::Empower:
-		return _("+2 spell level. 10% slower casts.\nMana +40%");
+		return _("Power: +2 spell level. 10% slower\ncasts. Mana +40%");
 	case SupportGem::FasterCasting:
 		return _("Casts much faster. Mana +20%");
 	case SupportGem::Efficiency:
@@ -229,39 +333,107 @@ std::string_view SupportGemDescription(SupportGem gem)
 	case SupportGem::Chain:
 		return _("Bolts jump to 2 more monsters.\n30% less damage. Mana +30%");
 	case SupportGem::ConcentratedEffect:
-		return _("Bolts deal 30% more damage but fly\n30% slower. Mana +30%");
+		return _("Power: bolts deal 30% more damage\nbut fly 30% slower. Mana +30%");
 	case SupportGem::FasterProjectiles:
 		return _("Bolts fly 60% faster. Mana +20%");
 	case SupportGem::Brutality:
-		return _("25% more melee damage, but no fire\nor lightning from the weapon. Mana +20%");
+		return _("Power: 25% more melee damage, but no\nfire or lightning from the weapon. Mana +20%");
 	case SupportGem::MartialTempo:
 		return _("Attack skills attack faster.\nMana +20%");
 	case SupportGem::Knockback:
 		return _("Melee attack skills knock enemies\nback. Mana +10%");
+	case SupportGem::BattleRage:
+		return _("Melee hits build Rage (up to 30):\n1% more attack damage each. Mana +15%");
 	default:
+		if (const SupportData *data = FindSupportData(gem); data != nullptr)
+			return _(data->description.data());
 		return {};
 	}
 }
 
-bool CreateSupportGemItem(Item &item, SupportGem gem)
+bool CreateSupportGemItem(Item &item, SupportGem gem, int tier)
 {
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
-		if (SupportGemForMiscId(AllItemsList[i].iMiscId) != gem)
+		if (SupportGemForItemData(AllItemsList[i]) != gem)
 			continue;
 		InitializeItem(item, static_cast<_item_indexes>(i));
 		GenerateNewSeed(item);
 		item._iIdentified = true;
+		SetSupportGemItemTier(item, tier);
 		return true;
 	}
 	return false;
 }
 
+bool CreateSupportGemDisplayItem(Item &item, SupportGem gem, int tier)
+{
+	const uint32_t rngState = GetLCGEngineState();
+	const bool made = CreateSupportGemItem(item, gem, tier);
+	SetRndSeed(rngState);
+	return made;
+}
+
+int SupportGemItemTier(const Item &item)
+{
+	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+	return std::clamp(static_cast<int>((item.dwBuff & CF_POE2_GEM_LEVEL) >> Shift), 1, MaxSupportTier);
+}
+
+void SetSupportGemItemTier(Item &item, int tier)
+{
+	const SupportGem gem = SupportGemForItem(item);
+	if (gem == SupportGem::None)
+		return;
+	tier = std::clamp(tier, 1, SupportTierCount(gem));
+	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
+	item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (static_cast<uint32_t>(tier) << Shift);
+	if (tier == 1 || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
+		return;
+	// "Brutality Support" becomes "Brutality II Support".
+	std::string name(_(AllItemsList[item.IDidx].iName));
+	const std::string_view numeral = SupportTierNumeral(tier);
+	const size_t support = name.rfind(" Support");
+	if (support != std::string::npos)
+		name.insert(support, StrCat(" ", numeral));
+	else
+		name = StrCat(name, " ", numeral);
+	CopyUtf8(item._iName, name, sizeof(item._iName));
+	CopyUtf8(item._iIName, name, sizeof(item._iIName));
+}
+
+bool SupportGemHasTiers(SupportGem gem)
+{
+	return gem != SupportGem::None && !IsLineageSupport(gem) && SupportTierCount(gem) > 1;
+}
+
+std::string_view SupportTierNumeral(int tier)
+{
+	switch (tier) {
+	case 2:
+		return "II";
+	case 3:
+		return "III";
+	default:
+		return "I";
+	}
+}
+
+std::string SupportGemTierName(SupportGem gem, int tier)
+{
+	if (tier <= 1 || !SupportGemHasTiers(gem))
+		return std::string(SupportGemName(gem));
+	return StrCat(SupportGemName(gem), " ", SupportTierNumeral(tier));
+}
+
 GemColor SupportGemColor(SupportGem gem)
 {
+	if (const SupportData *data = FindSupportData(gem); data != nullptr)
+		return data->color;
 	switch (gem) {
 	case SupportGem::ConcentratedEffect:
 	case SupportGem::Brutality:
 	case SupportGem::Knockback:
+	case SupportGem::BattleRage:
 		return GemColor::Strength;
 	case SupportGem::MultipleProjectiles:
 	case SupportGem::Pierce:
@@ -288,14 +460,20 @@ std::string_view GemColorName(GemColor color)
 
 bool SkillTakesSupports(SkillSlot skill)
 {
-	return skill.kind == SkillKind::Spell || skill.kind == SkillKind::Attack;
+	// Minion gems, heralds, whose supports change their explosions, and meta gems, whose supports change the spells inside (POE2).
+	if (skill.kind == SkillKind::Persistent)
+		return (SkillTags(skill) & (ST_Minion | ST_Herald)) != 0 || IsMetaGem(skill);
+	return IsAnyOf(skill.kind, SkillKind::Spell, SkillKind::Attack, SkillKind::Default);
 }
 
 std::string_view SupportGemNeeds(SupportGem gem)
 {
+	if (const SupportData *data = FindSupportData(gem); data != nullptr)
+		return data->needs.empty() ? std::string_view {} : std::string_view { _(data->needs.data()) };
 	switch (gem) {
 	case SupportGem::Brutality:
 	case SupportGem::Knockback:
+	case SupportGem::BattleRage:
 		return _("Needs a melee attack");
 	case SupportGem::MartialTempo:
 		return _("Needs an attack");
@@ -317,15 +495,36 @@ std::string_view SupportGemNeeds(SupportGem gem)
 
 bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 {
-	if (gem == SupportGem::None || !SkillTakesSupports(skill))
+	if (gem == SupportGem::None || !SkillTakesSupports(skill) || IsRetiredSupport(gem))
+		return false;
+	if (IsMetaGem(skill))
+		return MetaGemTakesSupport(skill, gem);
+	if (const SupportData *data = FindSupportData(gem); data != nullptr)
+		return TableSupportFits(*data, skill);
+	if (skill.kind == SkillKind::Persistent)
 		return false;
 	if (gem == SupportGem::Efficiency)
-		return true;
+		return skill.kind != SkillKind::Default;
+	if (skill.kind == SkillKind::Default) {
+		// Bow Shot and Staff Bolt fire projectiles; the rest are melee strikes.
+		const bool melee = (SkillTags(skill) & ST_Melee) != 0;
+		switch (gem) {
+		case SupportGem::Brutality:
+		case SupportGem::Knockback:
+		case SupportGem::BattleRage:
+			return melee;
+		case SupportGem::MartialTempo:
+			return true;
+		default:
+			return false;
+		}
+	}
 	if (skill.kind == SkillKind::Attack) {
 		const WeaponSkill attack = skill.attack();
 		switch (gem) {
 		case SupportGem::Brutality:
 		case SupportGem::Knockback:
+		case SupportGem::BattleRage:
 			return IsMeleeAttackSkill(attack);
 		case SupportGem::MartialTempo:
 			return IsQuickenableAttackSkill(attack);
@@ -341,6 +540,7 @@ bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 	case SupportGem::Brutality:
 	case SupportGem::Knockback:
 	case SupportGem::MartialTempo:
+	case SupportGem::BattleRage:
 		return false;
 	case SupportGem::MultipleProjectiles:
 		return IsProjectileSpell(spell);
@@ -349,62 +549,42 @@ bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 	}
 }
 
-size_t SupportSocketCount(int characterLevel)
+size_t SupportSocketCount(const Player &player, size_t row)
 {
-	return std::min<size_t>(2 + static_cast<size_t>(std::max(characterLevel, 0) / 10), MaxSupportSockets);
+	if (row > DefaultAttackRow)
+		return BaseSupportSockets;
+	return std::min<size_t>(BaseSupportSockets + player.poe2.openedSockets[row], MaxSupportSockets);
 }
 
-size_t SupportSocketCount(const Player &player)
+uint8_t LevelOpenedSockets(int characterLevel)
 {
-	return SupportSocketCount(player.getCharacterLevel());
+	return static_cast<uint8_t>(std::min<size_t>(static_cast<size_t>(std::max(characterLevel, 0) / 10), MaxSupportSockets - BaseSupportSockets));
 }
 
-int SupportCapacity(const Player &player, GemColor color)
-{
-	int attribute;
-	switch (color) {
-	case GemColor::Strength:
-		attribute = player._pStrength;
-		break;
-	case GemColor::Dexterity:
-		attribute = player._pDexterity;
-		break;
-	default:
-		attribute = player._pMagic;
-		break;
-	}
-	return 1 + (std::max(attribute, 0) / 15);
-}
-
-int SupportsUsed(const Poe2PlayerData &data, GemColor color)
-{
-	int used = 0;
-	for (const SupportSockets &supports : data.slotSupports) {
-		for (const SupportGem gem : supports) {
-			if (gem != SupportGem::None && SupportGemColor(gem) == color)
-				used++;
-		}
-	}
-	return used;
-}
-
-SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced)
+SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced, int tier, int *replacedTier)
 {
 	replaced = SupportGem::None;
-	if (slot >= NumSkillSlots || player.poe2.skillSlots[slot].isEmpty())
+	if (replacedTier != nullptr)
+		*replacedTier = 1;
+	tier = std::clamp(tier, 1, SupportTierCount(gem));
+	if (slot > DefaultAttackRow || RowSkill(player, slot).isEmpty())
 		return SupportSocketResult::NoSkill;
-	const SkillSlot skill = player.poe2.skillSlots[slot];
+	const SkillSlot skill = RowSkill(player, slot);
 	if (!SupportGemCanSupport(gem, skill))
 		return SupportSocketResult::NotApplicable;
 
-	SupportSockets &supports = player.poe2.slotSupports[slot];
-	const size_t open = SupportSocketCount(player);
+	SupportSockets &supports = player.poe2.supportsAt(slot);
+	const size_t open = SupportSocketCount(player, slot);
+	// A meta gem's sockets hold spells as well as supports.
+	const auto holdsSpell = [&](size_t i) { return slot < NumSkillSlots && !player.poe2.metaSkills[slot][i].isEmpty(); };
 	if (socket) {
 		if (*socket >= open)
 			return SupportSocketResult::Locked;
+		if (holdsSpell(*socket))
+			return SupportSocketResult::SpellInSocket;
 	} else {
 		for (size_t i = 0; i < open; i++) {
-			if (supports[i] == SupportGem::None) {
+			if (supports[i] == SupportGem::None && !holdsSpell(i)) {
 				socket = i;
 				break;
 			}
@@ -414,51 +594,70 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 	}
 
 	const SupportGem current = supports[*socket];
-	if (current == gem)
+	const int currentTier = player.poe2.socketTier(slot, *socket);
+	// Another tier of the same support takes its place.
+	if (current == gem && currentTier == tier)
 		return SupportSocketResult::AlreadySocketed;
 	for (size_t i = 0; i < MaxSupportSockets; i++) {
 		if (i != *socket && supports[i] == gem)
 			return SupportSocketResult::AlreadySocketed;
 	}
-	const GemColor color = SupportGemColor(gem);
-	const int freed = current != SupportGem::None && SupportGemColor(current) == color ? 1 : 0;
-	if (SupportsUsed(player.poe2, color) - freed >= SupportCapacity(player, color))
-		return SupportSocketResult::NoCapacity;
+	if (IsPowerSupport(gem) && OtherPowerSupport(supports, socket) != SupportGem::None)
+		return SupportSocketResult::PowerTaken;
+	for (size_t i = 0; i < MaxSupportSockets; i++) {
+		if (i != *socket && SupportsConflict(gem, supports[i]))
+			return SupportSocketResult::Conflict;
+	}
+	if (IsLineageSupport(gem) && LineageSupportInUse(player.poe2, gem, slot, *socket))
+		return SupportSocketResult::LineageInUse;
 
 	supports[*socket] = gem;
+	player.poe2.tiersAt(slot)[*socket] = static_cast<uint8_t>(tier);
 	replaced = current;
+	if (replacedTier != nullptr)
+		*replacedTier = currentTier;
 	return current == SupportGem::None ? SupportSocketResult::Socketed : SupportSocketResult::Replaced;
 }
 
 std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem)
 {
-	const size_t open = SupportSocketCount(player);
 	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		const size_t open = SupportSocketCount(player, slot);
 		const SkillSlot skill = player.poe2.skillSlots[slot];
 		const SupportSockets &supports = player.poe2.slotSupports[slot];
 		if (!SupportGemCanSupport(gem, skill) || std::find(supports.begin(), supports.end(), gem) != supports.end())
 			continue;
-		if (std::find(supports.begin(), supports.begin() + static_cast<std::ptrdiff_t>(open), SupportGem::None) != supports.begin() + static_cast<std::ptrdiff_t>(open))
-			return slot;
+		if (IsPowerSupport(gem) && OtherPowerSupport(supports, std::nullopt) != SupportGem::None)
+			continue;
+		for (size_t i = 0; i < open; i++) {
+			if (supports[i] == SupportGem::None && player.poe2.metaSkills[slot][i].isEmpty())
+				return slot;
+		}
 	}
 	return std::nullopt;
 }
 
-SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket)
+SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket, int *tier)
 {
-	if (slot >= NumSkillSlots || socket >= MaxSupportSockets)
+	if (slot > DefaultAttackRow || socket >= MaxSupportSockets)
 		return SupportGem::None;
-	return std::exchange(data.slotSupports[slot][socket], SupportGem::None);
+	if (tier != nullptr)
+		*tier = data.socketTier(slot, socket);
+	data.tiersAt(slot)[socket] = 1;
+	return std::exchange(data.supportsAt(slot)[socket], SupportGem::None);
 }
 
-std::vector<SupportGem> TakeSlotSupports(Poe2PlayerData &data, size_t slot)
+std::vector<TieredSupport> TakeSlotSupports(Poe2PlayerData &data, size_t slot)
 {
-	std::vector<SupportGem> taken;
-	if (slot >= NumSkillSlots)
+	std::vector<TieredSupport> taken;
+	if (slot > DefaultAttackRow)
 		return taken;
-	for (SupportGem &gem : data.slotSupports[slot]) {
-		if (gem != SupportGem::None)
-			taken.push_back(std::exchange(gem, SupportGem::None));
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		if (data.supportsAt(slot)[socket] == SupportGem::None)
+			continue;
+		int tier = 1;
+		const SupportGem gem = UnsocketSupportGem(data, slot, socket, &tier);
+		taken.push_back({ gem, tier });
 	}
 	return taken;
 }
@@ -468,26 +667,37 @@ int SupportSpellLevelBonus(const Player &player, SpellID spell)
 	return player.poe2.hasSupport(spell, SupportGem::Empower) ? EmpowerLevels : 0;
 }
 
-int SupportManaCostPercent(const Player &player, SkillSlot skill)
+int SupportManaCostPercent(const Player &player, SkillSlot skill, bool lifeShare)
 {
-	int percent = 100;
+	int percent = UniqueManaCostPercent(player);
 	for (const SupportGem gem : player.poe2.supportsFor(skill))
-		percent = percent * ManaCostPercent(gem) / 100;
+		percent = percent * ManaCostPercent(gem, player.poe2.supportTier(skill, gem)) / 100;
+	if (lifeShare)
+		percent = percent * SupportLifeManaPercent(player, skill) / 100;
 	return percent;
 }
 
 int8_t SupportCastSkippedFrames(const Player &player, SpellID spell)
 {
-	return player.poe2.hasSupport(spell, SupportGem::FasterCasting) ? FasterCastingFrames : 0;
+	const SkillSlot skill = SkillSlot::ForSpell(spell);
+	if (!player.poe2.hasSupport(skill, SupportGem::FasterCasting))
+		return 0;
+	// Rapid Casting III: faster for each different spell cast lately.
+	int frames = SupportValue(player.poe2, skill, SupportGem::FasterCasting, 0);
+	if (const int perSpell = SupportValue(player.poe2, skill, SupportGem::FasterCasting, 1); perSpell > 0)
+		frames += perSpell * RecentSpellCount(player.poe2.supportState);
+	return static_cast<int8_t>(frames);
 }
 
 int SupportCastRecoveryTicks(const Player &player, SpellID spell, int castFrames)
 {
 	int speed = 100;
 	if (IsProjectileSpell(spell) && player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles))
-		speed = speed * (100 - MultipleProjectilesSlowPercent) / 100;
+		speed = speed * (100 - SupportValue(player.poe2, SkillSlot::ForSpell(spell), SupportGem::MultipleProjectiles, 2)) / 100;
 	if (player.poe2.hasSupport(spell, SupportGem::Empower))
 		speed = speed * (100 - EmpowerSlowPercent) / 100;
+	speed = speed * (100 - UniqueCastSlowPercent(player)) / 100;
+	speed = speed * (100 - SupportCastSlowPercent(player, SkillSlot::ForSpell(spell))) / 100;
 	if (speed >= 100 || castFrames <= 0)
 		return 0;
 	// At speed% of the normal speed the cast takes 100/speed as long.
@@ -496,14 +706,21 @@ int SupportCastRecoveryTicks(const Player &player, SpellID spell, int castFrames
 
 int SupportSpellDamagePercent(const Player &player, SpellID spell)
 {
-	int percent = 100;
+	// A socketed spell gem hits harder as it levels up, on top of what Diablo's spell level adds.
+	const int gemLevel = player.poe2.skillLevel(spell);
+	int percent = gemLevel > 0 ? GemDamagePercent(SkillSlot::ForSpell(spell), gemLevel) : 100;
+	percent = percent * UniqueSpellDamagePercent(player, spell) / 100;
+	percent = percent * SpiritSpellDamagePercent(player) / 100;
+	const SkillSlot skill = SkillSlot::ForSpell(spell);
 	if (IsProjectileSpell(spell) && player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles))
-		percent = percent * MultipleProjectilesDamagePercent / 100;
+		percent = percent * (100 - SupportValue(player.poe2, skill, SupportGem::MultipleProjectiles, 1)) / 100;
 	if (IsDirectProjectileSpell(spell)) {
 		if (player.poe2.hasSupport(spell, SupportGem::Chain))
-			percent = percent * ChainDamagePercent / 100;
+			percent = percent * (100 - SupportValue(player.poe2, skill, SupportGem::Chain, 1)) / 100;
 		if (player.poe2.hasSupport(spell, SupportGem::ConcentratedEffect))
 			percent = percent * ConcentratedEffectDamagePercent / 100;
+		// Projectile Acceleration III: the speed adds to the damage.
+		percent = percent * (100 + SupportValue(player.poe2, skill, SupportGem::FasterProjectiles, 2)) / 100;
 	}
 	return percent;
 }
@@ -512,7 +729,8 @@ int SupportExtraProjectiles(const Player &player, SpellID spell)
 {
 	if (!IsProjectileSpell(spell))
 		return 0;
-	return player.poe2.hasSupport(spell, SupportGem::MultipleProjectiles) ? MultipleProjectilesExtra : 0;
+	const int extra = SupportValue(player.poe2, SkillSlot::ForSpell(spell), SupportGem::MultipleProjectiles, 0);
+	return extra + SupportExtraProjectileCount(player, SkillSlot::ForSpell(spell));
 }
 
 WeaponSkill CurrentWeaponSkill(const Player &player)
@@ -520,31 +738,54 @@ WeaponSkill CurrentWeaponSkill(const Player &player)
 	return player.poe2.castSkill != WeaponSkill::None ? player.poe2.castSkill : player.poe2.activeSkill;
 }
 
+SkillSlot CurrentAttackSkill(const Player &player)
+{
+	const WeaponSkill skill = CurrentWeaponSkill(player);
+	return skill != WeaponSkill::None ? SkillSlot::ForAttack(skill) : DefaultSkillSlot(player);
+}
+
+SkillSlot RowSkill(const Player &player, size_t row)
+{
+	if (row == DefaultAttackRow)
+		return DefaultSkillSlot(player);
+	return row < NumSkillSlots ? player.poe2.skillSlots[row] : SkillSlot {};
+}
+
 int SupportMeleeDamagePercent(const Player &player)
 {
 	const WeaponSkill skill = CurrentWeaponSkill(player);
-	if (skill == WeaponSkill::None)
-		return 100;
-	return player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality) ? BrutalityDamagePercent : 100;
+	if (skill == WeaponSkill::None) {
+		const SkillSlot base = DefaultSkillSlot(player);
+		if (base.isEmpty())
+			return 100;
+		// The free default attack hits softer than a skill gem: costing nothing is its strength.
+		return DefaultAttackDamagePercent * (100 + SupportValue(player.poe2, base, SupportGem::Brutality, 0)) / 100;
+	}
+	const int brutality = 100 + SupportValue(player.poe2, SkillSlot::ForAttack(skill), SupportGem::Brutality, 0);
+	return GemDamagePercent(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill)) * brutality / 100;
 }
 
 bool SupportMeleeKnocksBack(const Player &player)
 {
-	const WeaponSkill skill = CurrentWeaponSkill(player);
-	return skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Knockback);
+	return player.poe2.hasSupport(CurrentAttackSkill(player), SupportGem::Knockback);
 }
 
 bool SupportMeleeIsPhysicalOnly(const Player &player)
 {
-	const WeaponSkill skill = CurrentWeaponSkill(player);
-	return skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::Brutality);
+	return player.poe2.hasSupport(CurrentAttackSkill(player), SupportGem::Brutality);
 }
 
 int8_t SupportAttackSkippedFrames(const Player &player, WeaponSkill skill)
 {
-	if (skill == WeaponSkill::None)
+	// No weapon skill: the weapon's default attack, which takes supports too.
+	const SkillSlot slot = skill != WeaponSkill::None ? SkillSlot::ForAttack(skill) : DefaultSkillSlot(player);
+	if (slot.isEmpty())
 		return 0;
-	return player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::MartialTempo) ? MartialTempoFrames : 0;
+	int frames = SupportValue(player.poe2, slot, SupportGem::MartialTempo, 0) + SupportAttackFrameBonus(player, slot);
+	// Rage III: faster while not at full Rage.
+	if (player.poe2.rage < MaxRage)
+		frames += SupportValue(player.poe2, slot, SupportGem::BattleRage, 1);
+	return static_cast<int8_t>(std::clamp(frames, -4, 8));
 }
 
 WorldTilePosition RotateSpellTarget(WorldTilePosition src, WorldTilePosition dst, int degrees)
@@ -574,6 +815,7 @@ WorldTilePosition RotateSpellTarget(WorldTilePosition src, WorldTilePosition dst
 void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spell)
 {
 	missile.poe2.damagePercent = static_cast<int16_t>(SupportSpellDamagePercent(player, spell));
+	SetMissileSkill(missile, player, SkillSlot::ForSpell(spell));
 	if (!IsDirectProjectileSpell(spell))
 		return;
 	const Poe2PlayerData &data = player.poe2;
@@ -581,16 +823,23 @@ void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spel
 		return;
 
 	missile.poe2.spell = spell;
-	if (data.hasSupport(spell, SupportGem::Pierce))
-		missile.poe2.piercesLeft = PierceCount;
-	if (data.hasSupport(spell, SupportGem::Chain))
-		missile.poe2.chainsLeft = ChainCount;
+	const SkillSlot skill = SkillSlot::ForSpell(spell);
+	if (data.hasSupport(skill, SupportGem::Pierce)) {
+		missile.poe2.piercesLeft = static_cast<int8_t>(SupportValue(data, skill, SupportGem::Pierce, 0));
+		missile.poe2.pierceLessPercent = static_cast<int8_t>(SupportValue(data, skill, SupportGem::Pierce, 1));
+		missile.poe2.pierceEachLessPercent = static_cast<int8_t>(SupportValue(data, skill, SupportGem::Pierce, 2));
+	}
+	// Projectile Acceleration II: a chance to pierce a monster.
+	if (const int chance = SupportValue(data, skill, SupportGem::FasterProjectiles, 1); chance > 0 && missile.poe2.piercesLeft == 0 && GenerateRnd(100) < chance)
+		missile.poe2.piercesLeft = 1;
+	if (data.hasSupport(skill, SupportGem::Chain))
+		missile.poe2.chainsLeft = static_cast<int8_t>(SupportValue(data, skill, SupportGem::Chain, 0));
 	missile.poe2.canFork = data.hasSupport(spell, SupportGem::Fork);
 	int speed = 100;
 	if (data.hasSupport(spell, SupportGem::ConcentratedEffect))
 		speed = speed * ConcentratedEffectSpeedPercent / 100;
-	if (data.hasSupport(spell, SupportGem::FasterProjectiles))
-		speed = speed * FasterProjectilesSpeedPercent / 100;
+	if (data.hasSupport(skill, SupportGem::FasterProjectiles))
+		speed = speed * (100 + SupportValue(data, skill, SupportGem::FasterProjectiles, 0)) / 100;
 	missile.poe2.speedPercent = static_cast<int16_t>(speed);
 	if (speed != 100)
 		missile.position.velocity = missile.position.velocity * speed / 100;
@@ -606,20 +855,26 @@ void ScaleSupportedMissileDamage(const Missile &missile, int &minDamage, int &ma
 
 bool SupportedMissileIgnoresMonster(const Missile &missile, int monsterId)
 {
-	return missile.poe2.spell != SpellID::Invalid && missile.poe2.lastHitMonster == monsterId;
+	// Only set by a projectile that hit and flew on (see OnSupportedMissileHit).
+	return missile.poe2.lastHitMonster == monsterId;
 }
 
 bool OnSupportedMissileHit(Missile &missile, const Monster &monster)
 {
-	if (missile.poe2.spell == SpellID::Invalid)
+	// Arrows have no spell but can pierce (pierce skills, Two Fallen, One Arrow).
+	if (missile.poe2.spell == SpellID::Invalid && missile.poe2.piercesLeft <= 0)
 		return false;
 	missile.poe2.lastHitMonster = static_cast<int16_t>(monster.getId());
 
 	// Like POE2: a projectile pierces first, then forks, then chains.
 	if (missile.poe2.piercesLeft > 0) {
-		// Once it has pierced, it hits for less.
-		if (missile.poe2.piercesLeft == PierceCount)
-			missile.poe2.damagePercent = static_cast<int16_t>(missile.poe2.damagePercent * PierceDamagePercent / 100);
+		// Once it has pierced, it hits for less (Pierce I), or less again for each monster (Pierce III).
+		if (missile.poe2.pierceLessPercent > 0) {
+			missile.poe2.damagePercent = static_cast<int16_t>(missile.poe2.damagePercent * (100 - missile.poe2.pierceLessPercent) / 100);
+			missile.poe2.pierceLessPercent = 0;
+		}
+		if (missile.poe2.pierceEachLessPercent > 0)
+			missile.poe2.damagePercent = static_cast<int16_t>(missile.poe2.damagePercent * (100 - missile.poe2.pierceEachLessPercent) / 100);
 		missile.poe2.piercesLeft--;
 		return true;
 	}

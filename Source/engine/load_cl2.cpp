@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "mpq/mpq_common.hpp"
+#include "poe2/hd.hpp"
 #include "utils/status_macros.hpp"
 #include "utils/str_cat.hpp"
 
@@ -27,7 +28,9 @@ std::expected<OwnedClxSpriteListOrSheet, std::string> LoadCl2ListOrSheetWithStat
 #else
 	size_t size;
 	ASSIGN_OR_RETURN(std::unique_ptr<uint8_t[]> data, LoadFileInMemWithStatus<uint8_t>(path, &size));
-	return Cl2ToClx(std::move(data), size, widthOrWidths);
+	OwnedClxSpriteListOrSheet result = Cl2ToClx(std::move(data), size, widthOrWidths);
+	hd::RegisterSprites(pszName, ClxSpriteListOrSheet { result });
+	return result;
 #endif
 }
 

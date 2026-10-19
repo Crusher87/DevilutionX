@@ -1,5 +1,6 @@
 #include "poe2/dodge_roll.hpp"
 
+#include <algorithm>
 #include <cstddef>
 
 #include "controls/wasd_movement.hpp"
@@ -9,9 +10,15 @@
 #include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/tile_properties.hpp"
+#include "monster.h"
+#include "missiles.h"
 #include "msg.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/minion_gems.hpp"
+#include "poe2/spirit_buffs.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -23,6 +30,8 @@ constexpr int DodgeTicksPerTile = 4;
 constexpr int DodgeGraceTicks = 2;
 /** Game ticks between rolls, so the invulnerability can't be chained forever. */
 constexpr int DodgeCooldownTicks = 20;
+/** Game ticks at the start of a roll that hits and missiles pass through, like POE2's brief i-frames. */
+constexpr int DodgeUntouchableTicks = 6;
 
 Direction WasdDirection(AxisDirection dir)
 {
@@ -48,6 +57,48 @@ bool CanStepTo(const Player &player, Point from, Direction dir)
 	return true;
 }
 
+/**
+ * @brief Shoves a monster in the roll's way to one side, like POE2's roll pushing small monsters aside.
+ * Unique monsters stand their ground, and a monster with no room to move blocks the roll, so a crowd can still trap the hero.
+ */
+bool ShoveAside(Point tile, Direction dir)
+{
+	Monster *monster = FindMonsterAtPosition(tile, true);
+	if (monster == nullptr || monster->isUnique() || monster->hasNoLife() || monster->mode == MonsterMode::Petrified)
+		return false;
+	for (const Direction side : { Left(Left(dir)), Right(Right(dir)), Left(dir), Right(dir) }) {
+		M_GetKnockback(*monster, tile - Displacement { side });
+		if (monster->position.old != tile)
+			return true;
+	}
+	return false;
+}
+
+/** @brief Blink: a short teleport the roll's way instead of the roll. It isn't a dodge roll, so nothing set off by rolls goes. */
+bool Blink(Player &player, Direction dir)
+{
+	const int gemLevel = std::max(player.poe2.skillLevel(PersistentSkill::Blink), 1);
+	const Point from = player.position.future;
+	Point to = from;
+	for (int i = 1; i <= BlinkTiles(gemLevel); i++) {
+		const Point step = from + Displacement { dir } * i;
+		if (!InDungeonBounds(step) || !LineClearMissile(from, step))
+			break;
+		if (PosOkPlayer(player, step))
+			to = step;
+	}
+	if (to == from)
+		return false;
+	ClrPlrPath(player);
+	StartStand(player, dir);
+	AddVisualEffect(player.position.tile, MissileGraphicID::BlueFlareExplosion2);
+	AddVisualEffect(to, MissileGraphicID::BlueFlareExplosion2, 1);
+	AddMissile(player.position.tile, to, dir, MissileID::Teleport, TARGET_MONSTERS, player, 0, 0);
+	player.poe2.dodgeCooldown = static_cast<uint8_t>(std::clamp(BlinkCooldownTicks(gemLevel), 1, 255));
+	TelemetryLog("spirit", "Blink");
+	return true;
+}
+
 } // namespace
 
 bool TryDodgeRoll(Player &player)
@@ -69,10 +120,13 @@ bool TryDodgeRoll(Player &player)
 	} else {
 		dir = player._pdir;
 	}
+	if (BlinkReplacesDodge(player))
+		return Blink(player, dir);
 
-	Point target = player.position.future;
+	const Point start = player.position.future;
+	Point target = start;
 	int tiles = 0;
-	while (tiles < DodgeRollTiles && CanStepTo(player, target, dir)) {
+	while (tiles < DodgeRollTiles && (CanStepTo(player, target, dir) || (ShoveAside(target + dir, dir) && CanStepTo(player, target, dir)))) {
 		target += dir;
 		tiles++;
 	}
@@ -81,7 +135,11 @@ bool TryDodgeRoll(Player &player)
 
 	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
 	player.poe2.dodgeCooldown = DodgeCooldownTicks;
+	player.poe2.untouchableTicks = DodgeUntouchableTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, target);
+	OnSupportedDodge(player, tiles);
+	OnSpiritDodge(player, start, target);
+	OnIllusionDodge(player, start);
 	return true;
 }
 
@@ -100,6 +158,7 @@ std::optional<Point> DashTowards(Player &player, Point target, int maxTiles)
 		return std::nullopt;
 
 	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
+	player.poe2.untouchableTicks = player.poe2.dodgeTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, end);
 	return end;
 }

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -19,6 +20,7 @@
 namespace devilution {
 
 struct Item;
+struct ItemData;
 struct Missile;
 struct Monster;
 struct Player;
@@ -72,18 +74,50 @@ enum class SupportSocketResult : uint8_t {
 	Locked,
 	/** Every open socket of the skill is taken. */
 	NoFreeSocket,
-	/** The character's attribute can't carry another support of this color. */
-	NoCapacity,
+	/** The skill already has a Power support, and a skill takes only one. */
+	PowerTaken,
+	/** The skill has a support that rules this one out. */
+	Conflict,
+	/** A lineage support can be in use on only one skill. */
+	LineageInUse,
+	/** The socket holds a spell inside a meta gem. */
+	SpellInSocket,
 };
 
 /** @brief The support gem an item represents, or SupportGem::None. */
 SupportGem SupportGemForItem(const Item &item);
+/** @brief Flat-damage supports are the Power family; a skill takes only one of them. */
+bool IsPowerSupport(SupportGem gem);
+/** @brief The Power support already in a skill's sockets other than the given one, if any. */
+SupportGem OtherPowerSupport(const SupportSockets &supports, std::optional<size_t> exceptSocket);
 SupportGem SupportGemForMiscId(int miscId);
+/** @brief The support gem an item base is, including the table supports, or SupportGem::None. */
+SupportGem SupportGemForItemData(const ItemData &data);
 std::string_view SupportGemName(SupportGem gem);
 std::string_view SupportGemDescription(SupportGem gem);
+/** @brief What a tier of the support does. */
+std::string_view SupportGemDescription(SupportGem gem, int tier);
 
-/** @brief Makes a fresh support gem item, e.g. when a linked gem is swapped back out. */
-bool CreateSupportGemItem(Item &item, SupportGem gem);
+/** @brief Makes a fresh support gem item of a tier (1 to 3), e.g. when a linked gem is swapped back out. */
+bool CreateSupportGemItem(Item &item, SupportGem gem, int tier = 1);
+/** @brief Like CreateSupportGemItem, for drawing only: leaves the game's random numbers untouched, so opening a panel can't change drops. */
+bool CreateSupportGemDisplayItem(Item &item, SupportGem gem, int tier = 1);
+/** @brief The tier of a support gem item, 1 to 3. */
+int SupportGemItemTier(const Item &item);
+/** @brief Gives the support gem item its tier and the name that goes with it ("Brutality II Support"). */
+void SetSupportGemItemTier(Item &item, int tier);
+/** @brief Lineage supports have no tiers. */
+bool SupportGemHasTiers(SupportGem gem);
+/** @brief "I", "II" or "III". */
+std::string_view SupportTierNumeral(int tier);
+/** @brief "Brutality II"; just the name at tier I. */
+std::string SupportGemTierName(SupportGem gem, int tier);
+
+/** @brief A support gem and its tier. */
+struct TieredSupport {
+	SupportGem gem = SupportGem::None;
+	int tier = 1;
+};
 
 GemColor SupportGemColor(SupportGem gem);
 std::string_view GemColorName(GemColor color);
@@ -96,32 +130,34 @@ inline bool SupportGemCanSupport(SupportGem gem, SpellID spell) { return Support
 /** @brief Whether the skill takes support gems at all (Spirit gems don't). */
 bool SkillTakesSupports(SkillSlot skill);
 
-/** @brief Support sockets open on every skill: 2, plus one at levels 10, 20 and 30. */
-size_t SupportSocketCount(int characterLevel);
-size_t SupportSocketCount(const Player &player);
-
-/** @brief How many supports of a color the character can socket: 1, plus 1 per 15 points of the attribute. */
-int SupportCapacity(const Player &player, GemColor color);
-int SupportsUsed(const Poe2PlayerData &data, GemColor color);
+/** @brief Support sockets every skill starts with; Jeweller's Orbs open the rest. */
+constexpr size_t BaseSupportSockets = 2;
+/** @brief Support sockets open on the skill in a Skills panel row: 2, plus those Jeweller's Orbs opened. */
+size_t SupportSocketCount(const Player &player, size_t row);
+/** @brief Sockets heroes from before Jeweller's Orbs had opened by level (one at 10, 20 and 30), which they keep. */
+uint8_t LevelOpenedSockets(int characterLevel);
 
 /**
  * @brief Sockets a support gem into a skill in the Skills panel.
  * @param socket The socket to fill; the first free open socket if empty.
  * @param replaced Set to the support that was in the socket, if any.
+ * @param tier The tier of the gem being socketed.
+ * @param replacedTier If given, set to the tier of the support that was in the socket.
  */
-SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced);
+SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<size_t> socket, SupportGem gem, SupportGem &replaced, int tier = 1, int *replacedTier = nullptr);
 /** @brief The first Skills panel socket whose skill has a free socket the gem can go in. */
 std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem);
-/** @brief Takes a support out of a socket. */
-SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket);
+/** @brief Takes a support out of a socket. @param tier If given, set to the support's tier. */
+SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket, int *tier = nullptr);
 /** @brief Takes every support out of a slot, e.g. when its skill gem is taken out. */
-std::vector<SupportGem> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
+std::vector<TieredSupport> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
 
 /** @brief Extra spell levels the spell's supports add. */
 int SupportSpellLevelBonus(const Player &player, SpellID spell);
 /** @brief Mana cost multiplier in percent from the skill's supports. */
-int SupportManaCostPercent(const Player &player, SkillSlot skill);
-inline int SupportManaCostPercent(const Player &player, SpellID spell) { return SupportManaCostPercent(player, SkillSlot::ForSpell(spell)); }
+/** @param lifeShare false for the full cost, before Blood Price and the like move part of it to life. */
+int SupportManaCostPercent(const Player &player, SkillSlot skill, bool lifeShare = true);
+inline int SupportManaCostPercent(const Player &player, SpellID spell, bool lifeShare = true) { return SupportManaCostPercent(player, SkillSlot::ForSpell(spell), lifeShare); }
 /** @brief Animation frames skipped when casting the spell. */
 int8_t SupportCastSkippedFrames(const Player &player, SpellID spell);
 /**
@@ -136,7 +172,11 @@ int SupportExtraProjectiles(const Player &player, SpellID spell);
 
 /** @brief The weapon skill whose attack or animation is in progress. */
 WeaponSkill CurrentWeaponSkill(const Player &player);
-/** @brief Damage multiplier in percent for a melee hit, from the current skill's supports. */
+/** @brief The skill of the attack in progress: the weapon skill, or the weapon's default attack when there is none. */
+SkillSlot CurrentAttackSkill(const Player &player);
+/** @brief The skill of a Skills panel row: the gem in a socket, or the default attack for the DefaultAttackRow. */
+SkillSlot RowSkill(const Player &player, size_t row);
+/** @brief Damage multiplier in percent for a melee hit, from the current skill's gem level and supports. */
 int SupportMeleeDamagePercent(const Player &player);
 /** @brief Whether a melee hit of the current skill knocks the monster back. */
 bool SupportMeleeKnocksBack(const Player &player);

@@ -84,6 +84,11 @@ public:
 	[[nodiscard]] uint8_t getAnimationProgress() const;
 
 	/**
+	 * @brief How far the shown frame is towards the next one, from 0 to just under 1 (POE2 HD in-between frames).
+	 */
+	[[nodiscard]] float getFrameFraction() const;
+
+	/**
 	 * @brief Sets the new Animation with all relevant information for rendering
 	 * @param sprites Animation sprites
 	 * @param numberOfFrames Number of Frames in Animation

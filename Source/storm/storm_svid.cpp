@@ -32,6 +32,7 @@
 #include "engine/dx.h"
 #include "engine/palette.h"
 #include "engine/sound.h"
+#include "engine/ui_scale.hpp"
 #include "options.h"
 #include "utils/display.h"
 #include "utils/log.hpp"
@@ -548,11 +549,11 @@ void SVidPlayEnd()
 
 #ifndef USE_SDL1
 	if (renderer != nullptr) {
-		texture = SDLWrap::CreateTexture(renderer, DEVILUTIONX_DISPLAY_TEXTURE_FORMAT, SDL_TEXTUREACCESS_STREAMING, gnScreenWidth, gnScreenHeight);
+		texture = SDLWrap::CreateTexture(renderer, DEVILUTIONX_DISPLAY_TEXTURE_FORMAT, SDL_TEXTUREACCESS_STREAMING, gnRenderWidth, gnRenderHeight);
 		if (
 #ifdef USE_SDL3
 		    !SDL_SetRenderLogicalPresentation(renderer, gnScreenWidth, gnScreenHeight,
-		        *GetOptions().Graphics.integerScaling ? SDL_LOGICAL_PRESENTATION_INTEGER_SCALE : SDL_LOGICAL_PRESENTATION_LETTERBOX)
+		        *GetOptions().Graphics.integerScaling && !IsUiScaled() ? SDL_LOGICAL_PRESENTATION_INTEGER_SCALE : SDL_LOGICAL_PRESENTATION_LETTERBOX)
 #else
 		    SDL_RenderSetLogicalSize(renderer, gnScreenWidth, gnScreenHeight) <= -1
 #endif

@@ -20,10 +20,28 @@ enum class DefenseType : uint8_t {
 	/** Half armour, half evasion, like POE2's mail. */
 	ArmourEvasion,
 	EnergyShield,
+	/** Half armour, half energy shield, like POE2's vestments and mantles. */
+	ArmourEnergyShield,
+	/** Half evasion, half energy shield, like POE2's garbs and jackets. */
+	EvasionEnergyShield,
+	/** A third each of armour, evasion and energy shield (Grand Regalia). */
+	All,
+};
+
+/** @brief The fixed bonus some top POE2 body armour bases carry. */
+struct BodyArmourImplicit {
+	int life = 0;
+	int spirit = 0;
+	int allResistances = 0;
+	int magicResistance = 0;
+	int manaRegenPercent = 0;
+	int evasionPercent = 0;
 };
 
 /** @brief Energy shield granted per point of defense on cloth bases. */
-constexpr int EnergyShieldPerDefense = 4;
+constexpr int EnergyShieldPerDefense = 3;
+/** @brief A hit stuns the player (hit recovery) only when it takes at least this percent of their maximum life. */
+constexpr int PlayerStunPercent = 15;
 /** @brief POE2: energy shield starts recharging 4 seconds after the last hit. */
 constexpr int EnergyShieldRechargeDelayTicks = 4 * 20;
 /** @brief POE2: a recharging energy shield refills 12.5% of its maximum per second. */
@@ -33,17 +51,24 @@ constexpr int MaxArmourReductionPercent = 90;
 
 /** @brief Which defense an armor, helm or shield base grants. */
 DefenseType ItemDefenseType(const Item &item);
+/** @brief The implicit of the item's base, all zero for bases without one. */
+BodyArmourImplicit GetBodyArmourImplicit(const Item &item);
+/**
+ * @brief Splits an item's defense between armour, evasion and energy shield points (energy shield not yet
+ * multiplied by EnergyShieldPerDefense). Armour gets the rounding remainder.
+ */
+void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield);
 
-/** @brief Armour from gear and class bonuses. */
-int ArmourRating(const Player &player);
-/** @brief Evasion from gear plus a fifth of dexterity; replaces armor class in monster hit rolls. */
-int EvasionRating(const Player &player);
+/** @brief Armour from gear and class bonuses, and Barkskin's unless it's left out (the build log leaves it out). */
+int ArmourRating(const Player &player, bool withSpiritBuffs = true);
+/** @brief Evasion from gear plus a fifth of dexterity, and Wind Dancer's stages unless left out; replaces armor class in monster hit rolls. */
+int EvasionRating(const Player &player, bool withSpiritBuffs = true);
 /** @brief The defense monster hit rolls use: evasion in POE2 mode, armor class otherwise. */
 int HitDefense(const Player &player);
 
 /** @brief Percent of a physical hit that armour removes: armour / (armour + 10 * damage), like POE2. */
 int ArmourReductionPercent(int armour, Fixed26_6 damage);
-/** @brief Physical damage after armour, in POE2 mode. */
+/** @brief Physical damage after armour, in POE2 mode, for a hit that lands on the player: Iron Ward stores what it stops. */
 Fixed26_6 ApplyArmour(const Player &player, Fixed26_6 damage);
 
 /**

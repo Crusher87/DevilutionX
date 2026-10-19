@@ -29,6 +29,8 @@ bool effect_is_playing(SfxID nSFX);
 void stream_stop();
 void PlaySFX(SfxID psfx);
 void PlaySfxLoc(SfxID psfx, Point position, bool randomizeByCategory = true);
+/** @brief POE2 Mashup: plays a mod's own sound file at a tile, loading it the first time. */
+void PlayModSfxLoc(std::string_view path, Point position);
 void sound_stop();
 void sound_update();
 void effects_cleanup_sfx(bool fullUnload = true);

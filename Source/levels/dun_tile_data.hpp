@@ -115,7 +115,7 @@ extern int8_t dPlayer[MAXDUNX][MAXDUNY];
  * (monsters array index) in the dungeon.
  * Negative id indicates monsters moving.
  */
-extern int16_t dMonster[MAXDUNX][MAXDUNY];
+extern DVL_API_FOR_TEST int16_t dMonster[MAXDUNX][MAXDUNY];
 /**
  * Contains the dead numbers (deads array indices) and dead direction of
  * the map, encoded as specified by the pseudo-code below.

@@ -51,6 +51,8 @@ constexpr size_t IndexPadTimerText = 2;
 
 bool endMenu = false;
 bool backToMain = false;
+/** POE2 Mashup: the menu was opened during a game. */
+bool openedInGame = false;
 
 std::vector<std::unique_ptr<UiListItem>> vecDialogItems;
 std::vector<std::unique_ptr<UiItemBase>> vecDialog;
@@ -89,6 +91,8 @@ bool IsValidEntry(OptionEntryBase *pOptionEntry)
 {
 	auto flags = pOptionEntry->GetFlags();
 	if (HasAnyOf(flags, OptionEntryFlags::NeedDiabloMpq) && !HaveIntro())
+		return false;
+	if (openedInGame && HasAnyOf(flags, OptionEntryFlags::CantChangeInGame))
 		return false;
 	return HasNoneOf(flags, OptionEntryFlags::Invisible | (gbIsHellfire ? OptionEntryFlags::OnlyDiablo : OptionEntryFlags::OnlyHellfire));
 }
@@ -359,8 +363,9 @@ void FullscreenChanged()
 
 } // namespace
 
-void UiSettingsMenu()
+void UiSettingsMenu(bool inGame)
 {
+	openedInGame = inGame;
 	backToMain = false;
 	shownMenu = ShownMenuType::Categories;
 	selectedCategory = nullptr;
@@ -407,6 +412,11 @@ void UiSettingsMenu()
 		case ShownMenuType::Categories: {
 			size_t catIndex = 0;
 			for (OptionCategoryBase *pCategory : GetOptions().GetCategories()) {
+				// The game mode and the mods are picked before a game starts.
+				if (inGame && (pCategory == &GetOptions().GameMode || pCategory == &GetOptions().Mods)) {
+					catIndex++;
+					continue;
+				}
 				for (OptionEntryBase *pEntry : pCategory->GetEntries()) {
 					if (!IsValidEntry(pEntry))
 						continue;

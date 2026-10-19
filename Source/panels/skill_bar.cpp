@@ -29,11 +29,17 @@
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/default_attack.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "spells.h"
+#include "stores.h"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -81,6 +87,7 @@ TrayPopup Popup;
 /** @brief A kind of support gem the character carries, and where the first one is. */
 struct OwnedSupport {
 	SupportGem gem;
+	int tier;
 	int count;
 	bool inBelt;
 	int index;
@@ -91,6 +98,7 @@ struct PopupLayout {
 	Rectangle title;
 	bool hasActions = false;
 	std::array<Rectangle, MouseActions.size()> actions;
+	Rectangle weaponAttack;
 	Rectangle gemsLabel;
 	std::array<Rectangle, NumSkillSlots> gems;
 	Rectangle supportsLabel;
@@ -103,6 +111,7 @@ struct PopupHit {
 		None,
 		Box,
 		Action,
+		WeaponAttack,
 		Gem,
 		Socket,
 		Picker,
@@ -213,7 +222,29 @@ SpellIcon AttackIcon(WeaponSkill skill)
 		return SpellIcon::BloodStar;
 	case WeaponSkill::Spark:
 		return SpellIcon::LightningWall;
+	case WeaponSkill::IceBolt:
+		return SpellIcon::StoneCurse;
+	case WeaponSkill::FrostNova:
+		return SpellIcon::Nova;
+	case WeaponSkill::Riposte:
+		return SpellIcon::ItemRepair;
+	case WeaponSkill::ShadowStep:
+		return SpellIcon::Invisibility;
+	case WeaponSkill::Frenzy:
+		return SpellIcon::BloodBoil;
+	case WeaponSkill::Smite:
+		return SpellIcon::HolyBolt;
+	case WeaponSkill::FistsOfThunder:
+		return SpellIcon::ChargedBolt;
+	case WeaponSkill::RapidFire:
+		return SpellIcon::Search;
+	case WeaponSkill::ShieldBash:
+		return SpellIcon::Telekinesis;
+	case WeaponSkill::AmplifyDamage:
+		return SpellIcon::Mana;
 	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return static_cast<SpellIcon>(table->icon);
 		return SpellIcon::Empty;
 	}
 }
@@ -231,6 +262,134 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::Golem;
 	case PersistentSkill::SkeletalWarriors:
 		return SpellIcon::BoneSpirit;
+	case PersistentSkill::HeraldOfFrost:
+		return SpellIcon::Infravision;
+	case PersistentSkill::SkeletalMages:
+		return SpellIcon::Resurrect;
+	case PersistentSkill::BloodGolem:
+		return SpellIcon::BloodStar;
+	case PersistentSkill::FireGolem:
+		return SpellIcon::Immolation;
+	case PersistentSkill::Guardian:
+		return SpellIcon::Sentinel;
+	case PersistentSkill::ShadowWarrior:
+		return SpellIcon::Etherealize;
+	case PersistentSkill::Revive:
+		return SpellIcon::Resurrect;
+	case PersistentSkill::ManaShield:
+		return SpellIcon::ManaShield;
+	case PersistentSkill::VizjereiFocus:
+		return SpellIcon::Lightning;
+	case PersistentSkill::Berserk:
+		return SpellIcon::Berserk;
+	case PersistentSkill::Reflect:
+		return SpellIcon::Reflect;
+	case PersistentSkill::CastOnDodge:
+		return SpellIcon::Phasing;
+	case PersistentSkill::CastWhenDamageTaken:
+		return SpellIcon::BloodBoil;
+	case PersistentSkill::CastWhileChannelling:
+		return SpellIcon::Apocalypse;
+	case PersistentSkill::ReapersInvocation:
+		return SpellIcon::RedSkull;
+	case PersistentSkill::MirageArcher:
+		return SpellIcon::Invisibility;
+	case PersistentSkill::Blasphemy:
+		return SpellIcon::Pentagram;
+	case PersistentSkill::HoradricTotem:
+		return SpellIcon::LightningWall;
+	case PersistentSkill::CastOnCritical:
+		return SpellIcon::Flash;
+	case PersistentSkill::CastOnElementalAilment:
+		return SpellIcon::Elemental;
+	case PersistentSkill::CastOnMinionDeath:
+		return SpellIcon::BoneSpirit;
+	case PersistentSkill::BarrierInvocation:
+		return SpellIcon::RingOfFire;
+	case PersistentSkill::ElementalInvocation:
+		return SpellIcon::Inferno;
+	case PersistentSkill::WindDancer:
+		return SpellIcon::Warp;
+	case PersistentSkill::GhostDance:
+		return SpellIcon::Etherealize;
+	case PersistentSkill::Barkskin:
+		return SpellIcon::StoneCurse;
+	case PersistentSkill::ArcticArmour:
+		return SpellIcon::Nova;
+	case PersistentSkill::HeraldOfPlague:
+		return SpellIcon::DoomSerpents;
+	case PersistentSkill::CombatFrenzy:
+		return SpellIcon::LongHorn;
+	case PersistentSkill::EternalRage:
+		return SpellIcon::BloodRitual;
+	case PersistentSkill::ElementalConflux:
+		return SpellIcon::PentaStar;
+	case PersistentSkill::AlchemistsBoon:
+		return SpellIcon::Healing;
+	case PersistentSkill::OverwhelmingPresence:
+		return SpellIcon::Telekinesis;
+	case PersistentSkill::TrailOfCaltrops:
+		return SpellIcon::TrapDisarm;
+	case PersistentSkill::ManaRemnants:
+		return SpellIcon::Mana;
+	case PersistentSkill::Attrition:
+		return SpellIcon::Search;
+	case PersistentSkill::Blink:
+		return SpellIcon::Teleport;
+	case PersistentSkill::IronWard:
+		return SpellIcon::ItemRepair;
+	case PersistentSkill::PlagueBearer:
+		return SpellIcon::FireCloud;
+	case PersistentSkill::Convalescence:
+		return SpellIcon::HealOther;
+	case PersistentSkill::GrimFeast:
+		return SpellIcon::BloodStar;
+	case PersistentSkill::WarBanner:
+		return SpellIcon::FlameWave;
+	case PersistentSkill::DefianceBanner:
+		return SpellIcon::Sentinel;
+	case PersistentSkill::DreadBanner:
+		return SpellIcon::Pentagram;
+	case PersistentSkill::Briarpatch:
+		return SpellIcon::TrapDisarm;
+	case PersistentSkill::MagmaBarrier:
+		return SpellIcon::Immolation;
+	case PersistentSkill::ScavengedPlating:
+		return SpellIcon::Golem;
+	case PersistentSkill::TimeOfNeed:
+		return SpellIcon::Healing;
+	case PersistentSkill::ChargeRegulation:
+		return SpellIcon::ChargedBolt;
+	case PersistentSkill::WitheringPresence:
+		return SpellIcon::Infravision;
+	case PersistentSkill::Trinity:
+		return SpellIcon::Elemental;
+	case PersistentSkill::SiphonElements:
+		return SpellIcon::StaffRecharge;
+	case PersistentSkill::HeraldOfBlood:
+		return SpellIcon::BloodBoil;
+	case PersistentSkill::SkeletalSnipers:
+		return SpellIcon::Search;
+	case PersistentSkill::SkeletalFrostMages:
+		return SpellIcon::StoneCurse;
+	case PersistentSkill::SkeletalStormMages:
+		return SpellIcon::Lightning;
+	case PersistentSkill::SkeletalReavers:
+		return SpellIcon::Berserk;
+	case PersistentSkill::SkeletalBrutes:
+		return SpellIcon::LongHorn;
+	case PersistentSkill::SkeletalClerics:
+		return SpellIcon::HealOther;
+	case PersistentSkill::WolfPack:
+		return SpellIcon::RedSkull;
+	case PersistentSkill::RagingSpirits:
+		return SpellIcon::Inferno;
+	case PersistentSkill::RavenousSwarm:
+		return SpellIcon::DoomSerpents;
+	case PersistentSkill::Sacrifice:
+		return SpellIcon::BloodRitual;
+	case PersistentSkill::LingeringIllusion:
+		return SpellIcon::Invisibility;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -273,19 +432,20 @@ std::vector<OwnedSupport> OwnedSupports(const Player &player)
 		const SupportGem gem = SupportGemForItem(item);
 		if (gem == SupportGem::None)
 			return;
+		const int tier = SupportGemItemTier(item);
 		for (OwnedSupport &entry : owned) {
-			if (entry.gem == gem) {
+			if (entry.gem == gem && entry.tier == tier) {
 				entry.count++;
 				return;
 			}
 		}
-		owned.push_back({ gem, 1, inBelt, index });
+		owned.push_back({ gem, tier, 1, inBelt, index });
 	};
 	for (int i = 0; i < player._pNumInv; i++)
 		add(player.InvList[i], false, i);
 	for (int i = 0; i < MaxBeltItems; i++)
 		add(player.SpdList[i], true, i);
-	std::sort(owned.begin(), owned.end(), [](const OwnedSupport &a, const OwnedSupport &b) { return a.gem < b.gem; });
+	std::sort(owned.begin(), owned.end(), [](const OwnedSupport &a, const OwnedSupport &b) { return a.gem != b.gem ? a.gem < b.gem : a.tier > b.tier; });
 	return owned;
 }
 
@@ -299,7 +459,7 @@ std::optional<size_t> PopupSupportsSocket(const Player &player)
 }
 
 /** @brief Why a support gem can't go in a support socket of a skill, or empty if it can. */
-std::string SupportBlocker(const Player &player, size_t slot, size_t socket, SupportGem gem)
+std::string SupportBlocker(const Player &player, size_t slot, size_t socket, SupportGem gem, int tier)
 {
 	const SkillSlot skill = player.poe2.skillSlots[slot];
 	if (!SupportGemCanSupport(gem, skill)) {
@@ -307,12 +467,9 @@ std::string SupportBlocker(const Player &player, size_t slot, size_t socket, Sup
 		return needs.empty() ? FormatRuntime(_("Can't support {:s}"), SkillName(skill)) : std::string(needs);
 	}
 	const SupportGem current = player.poe2.slotSupports[slot][socket];
-	if (current == gem || player.poe2.hasSupport(skill, gem))
+	// Another tier of the support in its own socket swaps in.
+	if (current == gem ? player.poe2.socketTier(slot, socket) == tier : player.poe2.hasSupport(skill, gem))
 		return std::string(_("Already socketed"));
-	const GemColor color = SupportGemColor(gem);
-	const int freed = current != SupportGem::None && SupportGemColor(current) == color ? 1 : 0;
-	if (SupportsUsed(player.poe2, color) - freed >= SupportCapacity(player, color))
-		return FormatRuntime(_("Not enough {:s}"), GemColorName(color));
 	return {};
 }
 
@@ -329,6 +486,8 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 			layout.actions[i] = { { PopupPad + (static_cast<int>(i) * (ActionButtonSize.width + ActionButtonGap)), y }, ActionButtonSize };
 		y += ActionButtonSize.height + 6;
 	}
+	layout.weaponAttack = { { PopupPad, y }, { innerWidth, ActionButtonSize.height } };
+	y += ActionButtonSize.height + 6;
 	layout.gemsLabel = { { PopupPad, y }, { innerWidth, 14 } };
 	y += 16;
 	const int gridWidth = (GemColumns * (SlotSize.width + SlotGap)) - SlotGap;
@@ -362,6 +521,7 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 	place(layout.title);
 	for (Rectangle &rect : layout.actions)
 		place(rect);
+	place(layout.weaponAttack);
 	place(layout.gemsLabel);
 	for (Rectangle &rect : layout.gems)
 		place(rect);
@@ -387,6 +547,8 @@ PopupHit PopupHitAt(const Player &player, const PopupLayout &layout, const std::
 				return { PopupHit::Kind::Action, i };
 		}
 	}
+	if (layout.weaponAttack.contains(position))
+		return { PopupHit::Kind::WeaponAttack };
 	for (size_t i = 0; i < NumSkillSlots; i++) {
 		if (layout.gems[i].contains(position))
 			return { PopupHit::Kind::Gem, i };
@@ -422,7 +584,7 @@ bool IsOverPopup(Point position)
 void DrawSupportSockets(const Surface &out, const Player &player, const PopupLayout &layout, size_t slot, const PopupHit &hover)
 {
 	const SkillSlot skill = player.poe2.skillSlots[slot];
-	const size_t open = SupportSocketCount(player);
+	const size_t open = SupportSocketCount(player, slot);
 	const SupportGem held = SupportGemForItem(player.HoldItem);
 	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
 		const Rectangle &rect = layout.sockets[socket];
@@ -461,9 +623,9 @@ void DrawPicker(const Surface &out, const Player &player, const PopupLayout &lay
 		const Rectangle rect = PickerRowRect(layout, row);
 		if (hover.kind == PopupHit::Kind::Picker && hover.index == row)
 			FillRectangle(out, rect, RowHoverColor);
-		const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem);
+		const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem, entry.tier);
 		const Rectangle text { rect.position + Displacement { 4, 0 }, { rect.size.width - 8, rect.size.height } };
-		const std::string name = entry.count > 1 ? FormatRuntime("{:s} x{:d}", SupportGemName(entry.gem), entry.count) : std::string(SupportGemName(entry.gem));
+		const std::string name = entry.count > 1 ? FormatRuntime("{:s} x{:d}", SupportGemTierName(entry.gem, entry.tier), entry.count) : SupportGemTierName(entry.gem, entry.tier);
 		DrawString(out, name, text, { .flags = (blocker.empty() ? GemTextColor(SupportGemColor(entry.gem)) : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
 		if (!blocker.empty())
 			DrawString(out, blocker, text, { .flags = UiFlags::AlignRight | UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
@@ -480,7 +642,7 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 		const SkillSlot skill = player.poe2.skillSlots[hover.index];
 		if (skill.isEmpty())
 			return;
-		if (skill.kind == SkillKind::Persistent)
+		if (!SkillGoesOnTray(skill))
 			lines.emplace_back(_("Spirit gems are active while socketed"), UiFlags::ColorButtonpushed);
 		else
 			lines.emplace_back(FormatRuntime(_("Click to use it with {:s}"), TraySlotKeyName(Popup.slot)), UiFlags::ColorWhite);
@@ -490,8 +652,8 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 	case PopupHit::Kind::Socket: {
 		if (!slot)
 			return;
-		if (hover.index >= SupportSocketCount(player)) {
-			lines.emplace_back(FormatRuntime(_("Opens at character level {:d}"), static_cast<int>((hover.index - 1) * 10)), UiFlags::ColorWhite);
+		if (hover.index >= SupportSocketCount(player, *slot)) {
+			lines.emplace_back(JewellerSocketHint(hover.index), UiFlags::ColorWhite);
 			DrawTooltip(out, bounds, MousePosition, std::string(_("Locked socket")), UiFlags::ColorButtonpushed, lines);
 			return;
 		}
@@ -501,19 +663,21 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 			DrawTooltip(out, bounds, MousePosition, std::string(_("Empty support socket")), UiFlags::ColorWhite, lines);
 			return;
 		}
-		lines.emplace_back(std::string(SupportGemDescription(gem)), UiFlags::ColorWhite);
+		const int tier = player.poe2.socketTier(*slot, hover.index);
+		lines.emplace_back(std::string(SupportGemDescription(gem, tier)), UiFlags::ColorWhite);
 		lines.emplace_back(_("Click to swap it, right-click to take it out"), UiFlags::ColorButtonpushed);
-		DrawTooltip(out, bounds, MousePosition, std::string(SupportGemName(gem)), GemTextColor(SupportGemColor(gem)), lines);
+		DrawTooltip(out, bounds, MousePosition, SupportGemTierName(gem, tier), GemTextColor(SupportGemColor(gem)), lines);
 		return;
 	}
 	case PopupHit::Kind::Picker: {
 		if (!slot || hover.index >= owned.size())
 			return;
 		const SupportGem gem = owned[hover.index].gem;
-		lines.emplace_back(std::string(SupportGemDescription(gem)), UiFlags::ColorWhite);
-		const std::string blocker = SupportBlocker(player, *slot, Popup.pickerSocket, gem);
+		const int tier = owned[hover.index].tier;
+		lines.emplace_back(std::string(SupportGemDescription(gem, tier)), UiFlags::ColorWhite);
+		const std::string blocker = SupportBlocker(player, *slot, Popup.pickerSocket, gem, tier);
 		lines.emplace_back(blocker.empty() ? std::string(_("Click to socket it")) : blocker, blocker.empty() ? UiFlags::ColorButtonpushed : UiFlags::ColorRed);
-		DrawTooltip(out, bounds, MousePosition, std::string(SupportGemName(gem)), GemTextColor(SupportGemColor(gem)), lines);
+		DrawTooltip(out, bounds, MousePosition, SupportGemTierName(gem, tier), GemTextColor(SupportGemColor(gem)), lines);
 		return;
 	}
 	default:
@@ -541,17 +705,25 @@ void DrawPopup(const Surface &out, const Player &player)
 		}
 	}
 
+	{
+		const bool current = binding.action == TrayAction::WeaponAttack;
+		FillRectangle(out, layout.weaponAttack, current || hover.kind == PopupHit::Kind::WeaponAttack ? RowHoverColor : RowColor);
+		DrawFrame(out, layout.weaponAttack, current ? BorderColor : InnerBorderColor);
+		DrawString(out, FormatRuntime(_("{:s} (no mana)"), DefaultAttackName(DefaultAttackFor(player))), layout.weaponAttack,
+		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (current ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+	}
+
 	DrawString(out, _("Skill gems"), layout.gemsLabel, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
 	for (size_t socket = 0; socket < NumSkillSlots; socket++) {
 		const Rectangle &cell = layout.gems[socket];
 		const SkillSlot skill = player.poe2.skillSlots[socket];
 		FillRectangle(out, cell, RowColor);
-		const bool usable = !skill.isEmpty() && skill.kind != SkillKind::Persistent && GetSkillUsability(player, skill) == SkillUsability::Ready;
+		const bool usable = SkillGoesOnTray(skill) && GetSkillUsability(player, skill) == SkillUsability::Ready;
 		DrawSkillIcon(out, BottomLeft(cell), skill, usable);
 		if (binding.isGem() && binding.socket == socket) {
 			DrawFrame(out, cell, BorderColor);
 			DrawFrame(out, { cell.position + Displacement { 1, 1 }, { cell.size.width - 2, cell.size.height - 2 } }, BorderColor);
-		} else if (hover.kind == PopupHit::Kind::Gem && hover.index == socket && !skill.isEmpty() && skill.kind != SkillKind::Persistent) {
+		} else if (hover.kind == PopupHit::Kind::Gem && hover.index == socket && SkillGoesOnTray(skill)) {
 			DrawSmallSpellIconBorder(out, BottomLeft(cell));
 		}
 		const std::string key = SkillSlotKeyName(socket);
@@ -578,22 +750,24 @@ void DrawPopup(const Surface &out, const Player &player)
 /** @brief Takes a support out of the popup skill's socket and puts it in the inventory. */
 void TakeOutSupport(Player &player, size_t slot, size_t socket)
 {
-	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket);
+	int tier = 1;
+	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket, &tier);
 	if (gem == SupportGem::None)
 		return;
-	GiveSupportGems(player, { gem });
-	EventPlrMsg(FormatRuntime(_("{:s} is back in your inventory."), SupportGemName(gem)));
+	GiveSupportGems(player, { { gem, tier } });
+	EventPlrMsg(FormatRuntime(_("{:s} is back in your inventory."), SupportGemTierName(gem, tier)));
 }
 
 void SocketOwnedSupport(Player &player, size_t slot, const OwnedSupport &entry)
 {
-	const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem);
+	const std::string blocker = SupportBlocker(player, slot, Popup.pickerSocket, entry.gem, entry.tier);
 	if (!blocker.empty()) {
 		EventPlrMsg(blocker, UiFlags::ColorRed);
 		return;
 	}
 	SupportGem replaced = SupportGem::None;
-	const SupportSocketResult result = SocketSupportGem(player, slot, Popup.pickerSocket, entry.gem, replaced);
+	int replacedTier = 1;
+	const SupportSocketResult result = SocketSupportGem(player, slot, Popup.pickerSocket, entry.gem, replaced, entry.tier, &replacedTier);
 	if (!IsAnyOf(result, SupportSocketResult::Socketed, SupportSocketResult::Replaced)) {
 		EventPlrMsg(SupportSocketMessage(result, player, slot, entry.gem), UiFlags::ColorRed);
 		return;
@@ -606,7 +780,7 @@ void SocketOwnedSupport(Player &player, size_t slot, const OwnedSupport &entry)
 		player.RemoveInvItem(entry.index);
 	}
 	if (replaced != SupportGem::None)
-		GiveSupportGems(player, { replaced });
+		GiveSupportGems(player, { { replaced, replacedTier } });
 	EventPlrMsg(SupportSocketMessage(result, player, slot, entry.gem));
 	Popup.pickerOpen = false;
 }
@@ -619,13 +793,17 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 		BindTraySlot(player, Popup.slot, { MouseActions[hit.index], 0 });
 		CloseSkillTrayPopup();
 		return;
+	case PopupHit::Kind::WeaponAttack:
+		BindTraySlot(player, Popup.slot, { TrayAction::WeaponAttack, 0 });
+		CloseSkillTrayPopup();
+		return;
 	case PopupHit::Kind::Gem: {
 		const SkillSlot skill = player.poe2.skillSlots[hit.index];
 		if (skill.isEmpty()) {
 			EventPlrMsg(_("That socket is empty. Socket skill gems in the Skills panel (K)."), UiFlags::ColorRed);
 			return;
 		}
-		if (skill.kind == SkillKind::Persistent) {
+		if (!SkillGoesOnTray(skill)) {
 			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
 			return;
 		}
@@ -637,8 +815,8 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 	case PopupHit::Kind::Socket: {
 		if (!slot)
 			return;
-		if (hit.index >= SupportSocketCount(player)) {
-			EventPlrMsg(FormatRuntime(_("That socket opens at character level {:d}."), static_cast<int>((hit.index - 1) * 10)), UiFlags::ColorRed);
+		if (hit.index >= SupportSocketCount(player, *slot)) {
+			EventPlrMsg(JewellerSocketHint(hit.index) + ".", UiFlags::ColorRed);
 			return;
 		}
 		if (!player.HoldItem.isEmpty()) {
@@ -671,13 +849,13 @@ void DropOnTraySlot(Player &player, TraySlot traySlot)
 	const TrayBinding binding = Binding(player, traySlot);
 	if (IsSkillGem(player.HoldItem)) {
 		const SkillSlot skill = SkillForGem(player.HoldItem);
-		if (FindSkillSlot(player, skill)) {
+		if (FindSkillSlot(player, skill) || player.poe2.metaSocketOf(skill)) {
 			EventPlrMsg(FormatRuntime(_("{:s} is already in the Skills panel."), SkillName(skill)), UiFlags::ColorRed);
 			return;
 		}
 		// A skill gem on a slot with a gem takes that gem's socket; Spirit gems just go in a free socket.
 		std::optional<size_t> socket;
-		if (binding.isGem() && skill.kind != SkillKind::Persistent)
+		if (binding.isGem() && SkillGoesOnTray(skill))
 			socket = binding.socket;
 		else
 			socket = FirstFreeSkillSlot(player);
@@ -686,12 +864,13 @@ void DropOnTraySlot(Player &player, TraySlot traySlot)
 			return;
 		}
 		PlayGemSound(player.HoldItem);
-		const SkillSlot previous = ChangeSlotSkill(player, *socket, skill);
+		const int previousLevel = player.poe2.gemLevel(*socket);
+		const SkillSlot previous = ChangeSlotSkill(player, *socket, skill, SkillGemItemLevel(player.HoldItem));
 		player.HoldItem.clear();
-		if (skill.kind != SkillKind::Persistent)
+		if (SkillGoesOnTray(skill))
 			BindTraySlot(player, traySlot, TrayBinding::ForGem(*socket));
 		Item returned;
-		if (!previous.isEmpty() && CreateSkillGemItem(returned, previous))
+		if (!previous.isEmpty() && CreateSkillGemItem(returned, previous, previousLevel))
 			HoldItem(player, std::move(returned));
 		else
 			NewCursor(CURSOR_HAND);
@@ -715,13 +894,19 @@ void SocketHeldSkillGem(Player &player, size_t slot)
 		EventPlrMsg(FormatRuntime(_("{:s} is already in the Skills panel."), SkillName(skill)), UiFlags::ColorRed);
 		return;
 	}
+	// A spell inside a meta gem is in no other socket.
+	if (const auto meta = player.poe2.metaSocketOf(skill)) {
+		EventPlrMsg(FormatRuntime(_("{:s} is already inside {:s}."), SkillName(skill), SkillName(player.poe2.skillSlots[meta->first])), UiFlags::ColorRed);
+		return;
+	}
 
 	PlayGemSound(player.HoldItem);
-	const SkillSlot previous = ChangeSlotSkill(player, slot, skill);
+	const int previousLevel = player.poe2.gemLevel(slot);
+	const SkillSlot previous = ChangeSlotSkill(player, slot, skill, SkillGemItemLevel(player.HoldItem));
 	player.HoldItem.clear();
 	AutoBindSocket(player, slot);
 	Item returned;
-	if (!previous.isEmpty() && CreateSkillGemItem(returned, previous))
+	if (!previous.isEmpty() && CreateSkillGemItem(returned, previous, previousLevel))
 		HoldItem(player, std::move(returned));
 	else
 		NewCursor(CURSOR_HAND);
@@ -737,31 +922,38 @@ bool IsOverPanel(Point position)
 
 } // namespace
 
-void GiveSupportGems(Player &player, const std::vector<SupportGem> &gems)
+void GiveSupportGems(Player &player, const std::vector<TieredSupport> &gems)
 {
-	for (const SupportGem gem : gems) {
+	for (const TieredSupport &gem : gems) {
 		Item item;
-		if (CreateSupportGemItem(item, gem))
+		if (CreateSupportGemItem(item, gem.gem, gem.tier))
 			GiveItemToPlayer(player, item);
 	}
 }
 
-SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill)
+SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int level)
 {
 	// Supports stay socketed if the new skill can use them, like moving them over in POE2; the rest come back out.
-	std::vector<SupportGem> returned;
-	for (SupportGem &gem : player.poe2.slotSupports[slot]) {
-		if (gem != SupportGem::None && !SupportGemCanSupport(gem, skill))
-			returned.push_back(std::exchange(gem, SupportGem::None));
+	std::vector<TieredSupport> returned;
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		const SupportGem gem = player.poe2.slotSupports[slot][socket];
+		if (gem == SupportGem::None || SupportGemCanSupport(gem, skill))
+			continue;
+		int tier = 1;
+		UnsocketSupportGem(player.poe2, slot, socket, &tier);
+		returned.push_back({ gem, tier });
 	}
-	const SkillSlot previous = SocketSkill(player, slot, skill);
+	// The spells inside a meta gem come out with it.
+	if (IsMetaGem(player.poe2.skillSlots[slot]) && player.poe2.skillSlots[slot] != skill)
+		ReturnMetaSkills(player, slot);
+	const SkillSlot previous = SocketSkill(player, slot, skill, level);
 	GiveSupportGems(player, returned);
 	return previous;
 }
 
 std::string SupportSocketMessage(SupportSocketResult result, const Player &player, size_t slot, SupportGem gem)
 {
-	const SkillSlot skill = player.poe2.skillSlots[slot];
+	const SkillSlot skill = RowSkill(player, slot);
 	switch (result) {
 	case SupportSocketResult::NoSkill:
 		return std::string(_("Socket a skill gem in this slot first."));
@@ -770,13 +962,17 @@ std::string SupportSocketMessage(SupportSocketResult result, const Player &playe
 	case SupportSocketResult::AlreadySocketed:
 		return FormatRuntime(_("{:s} already supports {:s}."), SupportGemName(gem), SkillName(skill));
 	case SupportSocketResult::Locked:
-		return std::string(_("That socket opens at a higher level."));
+		return std::string(_("That socket is locked: a Jeweller's Orb opens it."));
 	case SupportSocketResult::NoFreeSocket:
 		return FormatRuntime(_("{:s} has no free support socket."), SkillName(skill));
-	case SupportSocketResult::NoCapacity: {
-		const GemColor color = SupportGemColor(gem);
-		return FormatRuntime(_("Not enough {:s} for another {:s} support ({:d}/{:d})."), GemColorName(color), GemColorName(color), SupportsUsed(player.poe2, color), SupportCapacity(player, color));
-	}
+	case SupportSocketResult::PowerTaken:
+		return FormatRuntime(_("{:s} already has a Power support ({:s}); a skill takes only one."), SkillName(skill), SupportGemName(OtherPowerSupport(player.poe2.supportsAt(slot), std::nullopt)));
+	case SupportSocketResult::Conflict:
+		return FormatRuntime(_("{:s} clashes with a support {:s} already has."), SupportGemName(gem), SkillName(skill));
+	case SupportSocketResult::LineageInUse:
+		return FormatRuntime(_("{:s} is a lineage support and already in use on another skill."), SupportGemName(gem));
+	case SupportSocketResult::SpellInSocket:
+		return std::string(_("A spell is in that socket: take it out first."));
 	default:
 		return FormatRuntime(_("{:s} now supports {:s}."), SupportGemName(gem), SkillName(skill));
 	}
@@ -786,7 +982,8 @@ bool SocketHeldSupportGem(Player &player, size_t slot, std::optional<size_t> soc
 {
 	const SupportGem gem = SupportGemForItem(player.HoldItem);
 	SupportGem replaced = SupportGem::None;
-	const SupportSocketResult result = SocketSupportGem(player, slot, socket, gem, replaced);
+	int replacedTier = 1;
+	const SupportSocketResult result = SocketSupportGem(player, slot, socket, gem, replaced, SupportGemItemTier(player.HoldItem), &replacedTier);
 	if (!IsAnyOf(result, SupportSocketResult::Socketed, SupportSocketResult::Replaced)) {
 		EventPlrMsg(SupportSocketMessage(result, player, slot, gem), UiFlags::ColorRed);
 		return false;
@@ -796,7 +993,7 @@ bool SocketHeldSupportGem(Player &player, size_t slot, std::optional<size_t> soc
 	player.HoldItem.clear();
 	EventPlrMsg(SupportSocketMessage(result, player, slot, gem));
 	Item returned;
-	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced))
+	if (replaced != SupportGem::None && CreateSupportGemItem(returned, replaced, replacedTier))
 		HoldItem(player, std::move(returned));
 	else
 		NewCursor(CURSOR_HAND);
@@ -855,7 +1052,9 @@ void DrawSkillBar(const Surface &out)
 		switch (binding.action) {
 		case TrayAction::Gem: {
 			const SkillSlot skill = player.poe2.skillSlots[binding.socket];
-			DrawSkillIcon(out, bottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready);
+			// A Spirit gem used from the tray greys out until using it would do something.
+			const bool spiritUse = skill.kind == SkillKind::Persistent && IsSpiritUseGem(skill.persistent());
+			DrawSkillIcon(out, bottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready && (!spiritUse || SpiritGemReady(player, skill.persistent())));
 			break;
 		}
 		case TrayAction::ReadiedSpell:
@@ -871,6 +1070,9 @@ void DrawSkillBar(const Surface &out)
 			break;
 		case TrayAction::Interact:
 			DrawString(out, _("Use"), rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+			break;
+		case TrayAction::WeaponAttack:
+			DrawString(out, DefaultAttackLabel(DefaultAttackFor(player)), rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
 			break;
 		default:
 			break;
@@ -908,12 +1110,16 @@ void SetSkillBarInfo()
 	const std::string key = TraySlotKeyName(*slot);
 	if (!binding.isGem()) {
 		InfoColor = UiFlags::ColorWhite;
-		if (binding.action == TrayAction::None)
+		if (binding.action == TrayAction::None) {
 			InfoString = FormatRuntime(_("Empty tray slot [{:s}]"), key);
-		else if (binding.action == TrayAction::ReadiedSpell && IsValidSpell(player._pRSpell))
+		} else if (binding.action == TrayAction::ReadiedSpell && IsValidSpell(player._pRSpell)) {
 			InfoString = FormatRuntime("{:s} [{:s}]", pgettext("spell", GetSpellData(player._pRSpell).sNameText), key);
-		else
+		} else if (binding.action == TrayAction::WeaponAttack) {
+			InfoString = FormatRuntime("{:s} [{:s}]", DefaultAttackName(DefaultAttackFor(player)), key);
+			AddInfoBoxString(_("Your weapon's attack, no mana cost"));
+		} else {
 			InfoString = FormatRuntime("{:s} [{:s}]", ActionName(binding.action), key);
+		}
 		AddInfoBoxString(_("Click to pick a skill"));
 		return;
 	}
@@ -930,9 +1136,10 @@ void SetSkillBarInfo()
 			AddInfoBoxString(FormatRuntime(_("{:d} mana"), SkillManaCost(player, skill)));
 	}
 	std::string supports;
-	for (const SupportGem gem : player.poe2.slotSupports[binding.socket]) {
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		const SupportGem gem = player.poe2.slotSupports[binding.socket][socket];
 		if (gem != SupportGem::None)
-			StrAppend(supports, supports.empty() ? "" : ", ", SupportGemName(gem));
+			StrAppend(supports, supports.empty() ? "" : ", ", SupportGemTierName(gem, player.poe2.socketTier(binding.socket, socket)));
 	}
 	if (!supports.empty())
 		AddInfoBoxString(FormatRuntime(_("Supports: {:s}"), supports));
@@ -997,6 +1204,9 @@ bool HandleSkillBarClick(Point mousePosition)
 
 bool HandleSkillBarRightClick(Point mousePosition)
 {
+	// The Skills panel's Spirit gems switch on and off with a right-click.
+	if (HandleSkillsPanelRightClick(mousePosition))
+		return true;
 	if (!IsSkillBarVisible())
 		return false;
 
@@ -1006,7 +1216,7 @@ bool HandleSkillBarRightClick(Point mousePosition)
 		const PopupLayout layout = LayoutPopup(owned);
 		const PopupHit hit = PopupHitAt(player, layout, owned, mousePosition);
 		const std::optional<size_t> slot = PopupSupportsSocket(player);
-		if (hit.kind == PopupHit::Kind::Socket && slot && hit.index < SupportSocketCount(player)) {
+		if (hit.kind == PopupHit::Kind::Socket && slot && hit.index < SupportSocketCount(player, *slot)) {
 			TakeOutSupport(player, *slot, hit.index);
 			return true;
 		}
@@ -1041,7 +1251,7 @@ void ClickSkillSlot(Player &player, size_t slot, bool canTakeOut)
 	const SkillSlot skill = player.poe2.skillSlots[slot];
 	if (canTakeOut && !skill.isEmpty()) {
 		Item gem;
-		if (CreateSkillGemItem(gem, skill)) {
+		if (CreateSkillGemItem(gem, skill, player.poe2.gemLevel(slot))) {
 			ChangeSlotSkill(player, slot, {});
 			PlayGemSound(gem);
 			HoldItem(player, std::move(gem));
@@ -1092,6 +1302,77 @@ std::string MissingSkillRequirements(const Player &player, SkillSlot skill)
 	return MissingRequirements(player, skill);
 }
 
+namespace {
+
+/** @brief Casts the spells inside an invocation at the cursor, if it has the Energy, or places a Horadric Totem there. */
+void UseMetaGemFromTray(Player &player, size_t slot)
+{
+	const SkillSlot skill = player.poe2.skillSlots[slot];
+	const bool totem = skill.persistent() == PersistentSkill::HoradricTotem;
+	switch (totem ? PlaceHoradricTotem(player, slot, cursPosition) : InvokeMetaGem(player, slot, cursPosition)) {
+	case InvokeResult::NoSpells:
+		EventPlrMsg(FormatRuntime(_("{:s} has no spells inside. Put spell gems in its sockets (K)."), SkillName(skill)), UiFlags::ColorRed);
+		break;
+	case InvokeResult::Town:
+		EventPlrMsg(_("Spells don't cast in town."), UiFlags::ColorRed);
+		break;
+	case InvokeResult::NotEnoughEnergy:
+		EventPlrMsg(FormatRuntime(_("{:s} has {:d} Energy; casting takes {:d}."), SkillName(skill), MetaEnergy(player, slot), MetaMaxEnergy(player.poe2, slot)), UiFlags::ColorRed);
+		break;
+	case InvokeResult::NoMana:
+		EventPlrMsg(FormatRuntime(_("{:s} needs {:d} mana."), SkillName(skill), HoradricTotemManaCost(player.poe2.gemLevel(slot))), UiFlags::ColorRed);
+		break;
+	case InvokeResult::Off:
+		EventPlrMsg(FormatRuntime(_("{:s} is switched off. Right-click it in the Skills panel (K)."), SkillName(skill)), UiFlags::ColorRed);
+		break;
+	default:
+		break;
+	}
+}
+
+/** @brief Releases the gem's store, starts its buff or plants its banner, or says why it can't. */
+void UseSpiritGemFromTray(Player &player, PersistentSkill skill)
+{
+	const std::string_view name = SkillName(SkillSlot::ForPersistent(skill));
+	switch (UseSpiritGem(player, skill)) {
+	case SpiritUseResult::Off:
+		EventPlrMsg(FormatRuntime(_("{:s} is switched off. Right-click it in the Skills panel (K)."), name), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::Town:
+		EventPlrMsg(FormatRuntime(_("{:s} can't be used in town."), name), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::Empty:
+		if (skill == PersistentSkill::GrimFeast)
+			EventPlrMsg(_("Grim Feast hasn't stored enough life to raise a skeleton. Walk over the remnants of fallen ones."), UiFlags::ColorRed);
+		else if (skill == PersistentSkill::IronWard)
+			EventPlrMsg(_("Iron Ward has nothing stored. It stores the damage your armour stops."), UiFlags::ColorRed);
+		else
+			EventPlrMsg(_("Plague Bearer has nothing stored. It stores part of the poison damage you deal."), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::NotEnoughGlory: {
+		const SpiritStore glory = SpiritGemStore(player, skill);
+		EventPlrMsg(FormatRuntime(_("{:s} has {:d} Glory; planting it takes {:d}. Attack hits build Glory."), name, glory.value, glory.cap), UiFlags::ColorRed);
+		break;
+	}
+	case SpiritUseResult::Cooldown:
+		EventPlrMsg(FormatRuntime(_("{:s} isn't ready yet."), name), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::NoMana:
+		EventPlrMsg(FormatRuntime(_("{:s} needs {:d} mana."), name, ConvalescenceManaCost), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::ShieldFull:
+		EventPlrMsg(_("Your energy shield is already full."), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::NothingToRaise:
+		EventPlrMsg(_("None of your skeletons are waiting to rise."), UiFlags::ColorRed);
+		break;
+	default:
+		break;
+	}
+}
+
+} // namespace
+
 void UseSkillSlot(size_t slot)
 {
 	if (!IsSkillBarShown() || slot >= NumSkillSlots)
@@ -1099,6 +1380,9 @@ void UseSkillSlot(size_t slot)
 
 	Player &player = *MyPlayer;
 	const SkillSlot skill = player.poe2.skillSlots[slot];
+	// Like POE2, an attack whose weapon is in the other set swaps to it.
+	if (skill.kind == SkillKind::Attack && GetSkillUsability(player, skill) == SkillUsability::Weapon && OtherWeaponSetAllowsSkill(player, skill.attack()))
+		SwapWeapons(player);
 	switch (GetSkillUsability(player, skill)) {
 	case SkillUsability::Empty:
 		EventPlrMsg(_("No skill gem in that socket. Socket one in the Skills panel (K)."), UiFlags::ColorRed);
@@ -1112,7 +1396,13 @@ void UseSkillSlot(size_t slot)
 
 	if (skill.kind == SkillKind::Persistent) {
 		if (GetSkillUsability(player, skill) == SkillUsability::Spirit)
-			EventPlrMsg(FormatRuntime(_("{:s} needs {:d} Spirit; you have {:d} left."), SkillName(skill), SpiritReservation(skill.persistent()), MaxSpirit(player) - ReservedSpirit(player)), UiFlags::ColorRed);
+			EventPlrMsg(FormatRuntime(_("{:s} needs {:d} Spirit; you have {:d} left."), SkillName(skill),
+			                IsMinionCountSkill(skill.persistent()) ? SpiritPerMinion(player, skill.persistent()) : GemSpiritCost(player, skill.persistent()), AvailableSpirit(player)),
+			    UiFlags::ColorRed);
+		else if (IsInvocationGem(skill) || skill.persistent() == PersistentSkill::HoradricTotem)
+			UseMetaGemFromTray(player, slot);
+		else if (IsSpiritUseGem(skill.persistent()))
+			UseSpiritGemFromTray(player, skill.persistent());
 		else
 			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
 		return;
@@ -1139,6 +1429,9 @@ void UseTraySlot(TraySlot slot)
 	case TrayAction::Gem:
 		UseSkillSlot(binding.socket);
 		return;
+	case TrayAction::WeaponAttack:
+		UseDefaultAttack(*MyPlayer);
+		return;
 	case TrayAction::None:
 		EventPlrMsg(FormatRuntime(_("Nothing on {:s}. Click its tray slot to pick a skill."), TraySlotKeyName(slot)), UiFlags::ColorRed);
 		return;
@@ -1146,6 +1439,56 @@ void UseTraySlot(TraySlot slot)
 		// Moving, interacting and the readied spell happen through the mouse click itself.
 		return;
 	}
+}
+
+namespace {
+
+/** The tray slot whose key or button is held down, most recent press first. */
+std::optional<TraySlot> HeldTraySlot;
+
+} // namespace
+
+void PressTraySlot(TraySlot slot)
+{
+	UseTraySlot(slot);
+	if (IsSkillBarShown() && IsAnyOf(Binding(*MyPlayer, slot).action, TrayAction::Gem, TrayAction::WeaponAttack))
+		HeldTraySlot = slot;
+}
+
+void ReleaseTraySlot(TraySlot slot)
+{
+	if (HeldTraySlot == slot)
+		HeldTraySlot = std::nullopt;
+}
+
+void ReleaseAllTraySlots()
+{
+	HeldTraySlot = std::nullopt;
+}
+
+void RepeatHeldTraySlot()
+{
+	if (!HeldTraySlot || MyPlayer == nullptr)
+		return;
+	if (!IsSkillBarShown() || pcurs != CURSOR_HAND || IsPlayerInStore() || leveltype == DTYPE_TOWN) {
+		HeldTraySlot = std::nullopt;
+		return;
+	}
+	Player &player = *MyPlayer;
+	if (player.destAction != ACTION_NONE || player._pInvincible || !player.CanChangeAction())
+		return;
+	const TrayBinding &binding = Binding(player, *HeldTraySlot);
+	if (binding.action == TrayAction::WeaponAttack) {
+		UseDefaultAttack(player);
+		return;
+	}
+	if (binding.action != TrayAction::Gem || binding.socket >= NumSkillSlots)
+		return;
+	const SkillSlot skill = player.poe2.skillSlots[binding.socket];
+	// Out of mana or missing a weapon: wait quietly rather than repeating the warning every tick.
+	if (skill.kind == SkillKind::Persistent || GetSkillUsability(player, skill) != SkillUsability::Ready)
+		return;
+	UseSkillSlot(binding.socket);
 }
 
 void UseFreeTownPortal()
@@ -1177,8 +1520,8 @@ bool SocketSkillGemFromInventory(Player &player, bool fromBelt, int index)
 	}
 
 	PlayGemSound(gem);
-	ChangeSlotSkill(player, *slot, skill);
-	if (skill.kind == SkillKind::Persistent)
+	ChangeSlotSkill(player, *slot, skill, SkillGemItemLevel(gem));
+	if (!SkillGoesOnTray(skill))
 		EventPlrMsg(FormatRuntime(_("{:s} socketed. It's active while socketed."), SkillName(skill)));
 	else if (const std::optional<TraySlot> traySlot = AutoBindSocket(player, *slot); traySlot)
 		EventPlrMsg(FormatRuntime(_("{:s} socketed. Use it with {:s}."), SkillName(skill), TraySlotKeyName(*traySlot)));

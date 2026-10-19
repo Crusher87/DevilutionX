@@ -37,6 +37,10 @@ enum _talker_id : uint8_t {
 	TOWN_FARMER,
 	TOWN_GIRL,
 	TOWN_COWFARM,
+	/** POE2 Mashup: the shared stash, a chest by the town portals. */
+	TOWN_STASH,
+	/** POE2 Mashup: the anvil beside Griswold's smithy, where items are salvaged. */
+	TOWN_ANVIL,
 	// Note: Enum values are parsed from TSV using magic_enum
 	// The actual count is determined dynamically from TSV data
 };
@@ -102,10 +106,24 @@ bool IsTownerPresent(_talker_id npc);
  */
 Towner *GetTowner(_talker_id type);
 
+/** @brief POE2 Mashup: what a towner has for the hero, shown as a marker over their head. */
+enum class QuestMarker : uint8_t {
+	None,
+	/** @brief They have a quest to give or news to tell. */
+	News,
+	/** @brief The hero has what they asked for, or a reward is waiting. */
+	Reward,
+};
+
+/** @brief Whether talking to the towner now would move a quest on, read without changing anything. */
+QuestMarker TownerQuestMarker(const Player &player, const Towner &towner);
+
 void InitTowners();
 void FreeTownerGFX();
 void ProcessTowners();
 void TalkToTowner(Player &player, int t);
+/** @brief POE2 Mashup: the towner the hero was sent to with Ctrl+click, to open their shop straight away; -1 for none. */
+extern int QuickTradeTowner;
 
 void UpdateGirlAnimAfterQuestComplete();
 void UpdateCowFarmerAnimAfterQuestComplete();
