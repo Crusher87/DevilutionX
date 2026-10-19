@@ -6,6 +6,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -84,10 +85,13 @@ void ApplyAuraAmplifyDamage(const Player &player, Monster &monster, int gemLevel
 	monster.tag(player);
 }
 
-void BreakMonsterArmour(Monster &monster)
+void BreakMonsterArmour(Monster &monster, const Player *breaker)
 {
-	if (monster.poe2.armourBreakTicks == 0)
+	if (monster.poe2.armourBreakTicks == 0) {
 		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter);
+		if (breaker != nullptr)
+			OnSpiritArmourBroken(*breaker, monster);
+	}
 	monster.poe2.armourBreakTicks = ArmourBreakTicks;
 }
 

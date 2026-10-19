@@ -17,6 +17,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -526,6 +527,8 @@ void OnMetaCrit(Player &player, const Monster &monster, Fixed26_6 dealt)
 
 void OnMetaAilment(Player &player, const Monster &monster, MetaAilment ailment)
 {
+	// Siphon Elements works for every skill, the meta gems' own included.
+	OnSpiritElementalAilment(player, monster, ailment == MetaAilment::Ignite ? DamageType::Fire : ailment == MetaAilment::Shock ? DamageType::Lightning : DamageType::Magic);
 	if (!gbIsPoe2 || &player != MyPlayer || FromMetaSkill(player))
 		return;
 	int energy = IgniteEnergyPerPower;

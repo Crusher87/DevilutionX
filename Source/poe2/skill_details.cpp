@@ -16,6 +16,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
@@ -451,6 +452,46 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 			Value(lines, "In its area", std::format("{:d}% more armour and evasion, {:d}% faster movement", DefianceBannerDefencePercent, DefianceBannerMovementPercent));
 		else
 			Value(lines, "In its area", std::format("+{:d}% maximum resistances, half a flask charge a second", DreadBannerMaxResistance));
+		break;
+	case PersistentSkill::Briarpatch:
+		Value(lines, "Stores", std::format("{:d}% of your attacks' physical damage", BriarpatchStorePercent));
+		Value(lines, "Holds up to", std::format("{:d}% of your maximum life", BriarpatchCapPercent(level)));
+		Value(lines, "Thorny ground", std::format("{:d} tiles for {:d} seconds, at most every {:d} seconds", BriarpatchRadius, BriarpatchTicks / 20, BriarpatchCooldownTicks / 20));
+		break;
+	case PersistentSkill::MagmaBarrier:
+		Value(lines, "Block chance", std::format("{:d}% increased, with a shield", MagmaBarrierBlockPercent));
+		Value(lines, "Charges in", ticks(MagmaBarrierChargeTicks(level)));
+		Value(lines, "Fire spray", std::format("{:d} plus {:d}% of the shield's armour, {:d} tiles ahead", MagmaBarrierDamage(level), MagmaBarrierArmourPercent, MagmaBarrierTiles));
+		break;
+	case PersistentSkill::ScavengedPlating:
+		Value(lines, "Each plating", std::format("{:d}% more armour, {:d} thorns damage", ScavengedPlatingArmourPerStack, ScavengedPlatingThorns(level)));
+		Value(lines, "Platings", std::format("up to {:d}, for {:d} seconds", ScavengedPlatingMaxStacks, ScavengedPlatingTicks / 20));
+		break;
+	case PersistentSkill::TimeOfNeed:
+		Value(lines, "Heals", std::format("{:d}% of your maximum life", TimeOfNeedHealPercent(level)));
+		Value(lines, "At most every", ticks(TimeOfNeedTicks(level)));
+		break;
+	case PersistentSkill::ChargeRegulation:
+		Value(lines, "Speed", std::format("{:d}% more attack and cast speed", ChargeRegulationSpeedPercent(level)));
+		Value(lines, "Each Frenzy charge", std::format("{:d} seconds", ChargeRegulationTicksPerCharge / 20));
+		break;
+	case PersistentSkill::WitheringPresence:
+		Value(lines, "A stack every", ticks(WitheringPresencePulseTicks(level)));
+		Value(lines, "Stacks", std::format("up to {:d}, for {:d} seconds", WitheringPresenceMaxStacks, WitheringPresenceTicks / 20));
+		Value(lines, "Reaches", std::format("{:d} tiles around you", PresenceTiles));
+		break;
+	case PersistentSkill::Trinity:
+		Value(lines, "Resonance a hit", std::format("+{:d} of its element, -{:d} of the others", TrinityResonanceGained(level), TrinityResonanceLost));
+		Value(lines, "More elemental damage", std::format("{:d}% for every {:d} Resonance in all", TrinityPercentPerStep(level), TrinityResonancePerStep));
+		Value(lines, "Fades", std::format("after {:d} seconds without an elemental hit", TrinityIdleTicks / 20));
+		break;
+	case PersistentSkill::SiphonElements:
+		Value(lines, "Infusion chance", std::format("{:d}% a freeze, shock or ignite", SiphonElementsChance(level)));
+		Value(lines, "Picked up from", std::format("{:d} tiles", SiphonElementsPickupTiles(level)));
+		break;
+	case PersistentSkill::HeraldOfBlood:
+		Value(lines, "Burst", std::format("{:d}% of the dead enemy's life, {:d} tiles around", HeraldOfBloodPercent, HeraldOfBloodRadius));
+		Value(lines, "Bleed chance", std::format("{:d}%", HeraldOfBloodBleedChance(level)));
 		break;
 	default:
 		break;

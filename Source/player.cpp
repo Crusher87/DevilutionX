@@ -63,6 +63,7 @@
 #include "poe2/regen.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -94,10 +95,10 @@ bool MyPlayerIsDead;
 
 namespace {
 
-/** @brief POE2 Mashup: attack animation frames skipped for the passive tree's attack speed, the uniques' changing attack speed and War Banner. */
+/** @brief POE2 Mashup: attack animation frames skipped for the passive tree's attack speed, the uniques' changing attack speed, War Banner and Charge Regulation. */
 int8_t AttackSpeedFrames(const Player &player)
 {
-	const int frames = player.poe2.passiveAttackFrames + (UniqueAttackSpeedPercent(player) + BannerAttackSpeedPercent(player)) / 10;
+	const int frames = player.poe2.passiveAttackFrames + (UniqueAttackSpeedPercent(player) + BannerAttackSpeedPercent(player) + SpiritAuraSpeedPercent(player)) / 10;
 	return static_cast<int8_t>(std::clamp(frames, 0, MaxPassiveSpeedFrames + 1));
 }
 
@@ -318,7 +319,8 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	if (player._pmode == PM_SPELL)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
 	const bool isLearnedSpell = player.queuedSpell.spellType == SpellType::Spell;
-	const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames;
+	// Charge Regulation's cast speed: a frame for every 10%.
+	const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames + (SpiritAuraSpeedPercent(player) / 10);
 	NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
 
 	PlaySfxLoc(GetSpellData(player.queuedSpell.spellId).sSFX, player.position.tile);
@@ -909,7 +911,7 @@ bool DoAttack(Player &player)
 					break;
 				case WeaponSkill::Smite:
 					if (!monster->hasNoLife())
-						BreakMonsterArmour(*monster);
+						BreakMonsterArmour(*monster, &player);
 					break;
 				case WeaponSkill::FistsOfThunder:
 					if (AddCombo(player) % FistsOfThunderBurstEvery == 0)

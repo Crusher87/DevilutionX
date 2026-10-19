@@ -53,7 +53,7 @@ void OnSkillMeleeHit(Player &player);
 void CastAmplifyDamage(const Player &player, Point target, int gemLevel);
 /** @brief Blasphemy: Amplify Damage at part strength on one monster for a few ticks, unless a stronger one lasts longer. */
 void ApplyAuraAmplifyDamage(const Player &player, Monster &monster, int gemLevel, int strengthPercent, int ticks);
-void BreakMonsterArmour(Monster &monster);
+void BreakMonsterArmour(Monster &monster, const Player *breaker = nullptr);
 /** @brief Knocks a monster out of the fight: a heavy stun. */
 void HeavyStunMonster(Monster &monster);
 

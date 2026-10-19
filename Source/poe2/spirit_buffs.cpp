@@ -20,6 +20,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -494,8 +495,9 @@ void OnSpiritMeleeHitTaken(Player &player, Monster &monster)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || !CanHit(monster))
 		return;
+	OnAuraMeleeHitTaken(player, monster);
 	SpiritRuntime &state = player.poe2.spiritState;
-	if (state.arcticStages == 0 || !On(player, PersistentSkill::ArcticArmour))
+	if (state.arcticStages == 0 || !On(player, PersistentSkill::ArcticArmour) || !CanHit(monster))
 		return;
 	state.arcticStages--;
 	const int level = GemLevel(player, PersistentSkill::ArcticArmour);
@@ -549,6 +551,7 @@ int SpiritBuffDamagePercent(const Monster &monster, DamageType type)
 		const int more = std::min(monster.poe2.attritionTicks / AttritionTicksPerPercent, AttritionMaxPercent(GemLevel(player, PersistentSkill::Attrition)));
 		percent = percent * (100 + more) / 100;
 	}
+	percent = percent * (100 + TrinityDamagePercent(player, type)) / 100;
 	return percent;
 }
 

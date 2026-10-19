@@ -24,6 +24,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
@@ -524,7 +525,7 @@ void FinishHit()
 		if (Has(player, skill, SG::AndarielsAnguish))
 			InflictPoison(player, monster, total * 10 / 100 * 4, 80, 5);
 		if (Has(player, skill, SG::SunderArmour) && physical > 0) {
-			BreakMonsterArmour(monster);
+			BreakMonsterArmour(monster, &player);
 			monster.poe2.armourBreakTicks = static_cast<uint8_t>(std::max<int>(monster.poe2.armourBreakTicks, Value(player, skill, SG::SunderArmour, 0) * TicksPerSecond));
 		}
 		if (Has(player, skill, SG::ButchersHook)) {
@@ -784,6 +785,8 @@ uint32_t SkillTags(SkillSlot skill)
 			return ST_Herald | ST_Area | ST_Frost | Hit;
 		case PersistentSkill::HeraldOfPlague:
 			return ST_Herald | ST_Area | ST_Physical | ST_DamageOverTime;
+		case PersistentSkill::HeraldOfBlood:
+			return ST_Herald | ST_Area | ST_Physical | Hit;
 		default:
 			return 0;
 		}
@@ -1132,6 +1135,8 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 	Hit.monster = &monster;
 	Hit.total += damage.raw();
 	Hit.lastType = type;
+	// Trinity: the hit's element builds Resonance.
+	OnSpiritElementalHit(*Hit.player, type);
 	if (type == DamageType::Physical)
 		Hit.physical += damage.raw();
 }

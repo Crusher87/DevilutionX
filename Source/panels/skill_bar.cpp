@@ -350,6 +350,24 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::Sentinel;
 	case PersistentSkill::DreadBanner:
 		return SpellIcon::Pentagram;
+	case PersistentSkill::Briarpatch:
+		return SpellIcon::TrapDisarm;
+	case PersistentSkill::MagmaBarrier:
+		return SpellIcon::Immolation;
+	case PersistentSkill::ScavengedPlating:
+		return SpellIcon::Golem;
+	case PersistentSkill::TimeOfNeed:
+		return SpellIcon::Healing;
+	case PersistentSkill::ChargeRegulation:
+		return SpellIcon::ChargedBolt;
+	case PersistentSkill::WitheringPresence:
+		return SpellIcon::Infravision;
+	case PersistentSkill::Trinity:
+		return SpellIcon::Elemental;
+	case PersistentSkill::SiphonElements:
+		return SpellIcon::StaffRecharge;
+	case PersistentSkill::HeraldOfBlood:
+		return SpellIcon::BloodBoil;
 	default:
 		return SpellIcon::Empty;
 	}

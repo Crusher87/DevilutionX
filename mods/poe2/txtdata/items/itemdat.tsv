@@ -917,3 +917,12 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	War Banner Gem	Gem	6	0	0	0	0	0	15	0	15		SPIRITGEM_TABLE	Null	true	1500
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Defiance Banner Gem	Gem	12	0	0	0	0	0	20	0	20		SPIRITGEM_TABLE	Null	true	2600
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Dread Banner Gem	Gem	21	0	0	0	0	0	30	0	30		SPIRITGEM_TABLE	Null	true	3600
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Briarpatch Gem	Gem	6	0	0	0	0	0	15	15	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Magma Barrier Gem	Gem	6	0	0	0	0	0	30	0	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Scavenged Plating Gem	Gem	6	0	0	0	0	0	30	0	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Time of Need Gem	Gem	12	0	0	0	0	0	20	20	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Charge Regulation Gem	Gem	21	0	0	0	0	0	0	30	30		SPIRITGEM_TABLE	Null	true	3600
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Withering Presence Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Trinity Gem	Gem	21	0	0	0	0	0	0	30	30		SPIRITGEM_TABLE	Null	true	3600
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Siphon Elements Gem	Gem	12	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Herald of Blood Gem	Gem	6	0	0	0	0	0	15	0	15		SPIRITGEM_TABLE	Null	true	1500

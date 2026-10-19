@@ -61,6 +61,7 @@ set(tests
   poe2_spirit_skills_test
   poe2_spirit_buffs_test
   poe2_spirit_uses_test
+  poe2_spirit_auras_test
   poe2_stacking_test
   poe2_support_gems_test
   poe2_item_search_test

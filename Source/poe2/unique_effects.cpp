@@ -21,6 +21,7 @@
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -644,6 +645,8 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		packets[3] = 0;
 
 	const int32_t physical = static_cast<int32_t>(packets[0]);
+	// Briarpatch stores part of the physical damage as thorns.
+	OnSpiritPhysicalAttack(player, physical);
 	Fixed26_6 dealt = DealPacket(player, monster, DamageType::Physical, physical);
 	dealt += DealPacket(player, monster, DamageType::Fire, static_cast<int32_t>(packets[1]));
 	dealt += DealPacket(player, monster, DamageType::Lightning, static_cast<int32_t>(packets[2]));
@@ -771,6 +774,7 @@ void OnSpellCast(const Player &player, SpellID spell, WorldTilePosition target, 
 {
 	if (!gbIsPoe2 || IsCastingRepeat(player))
 		return;
+	OnSpiritSpellCast(player);
 	UniqueRuleState &state = State(player);
 	state.spells++;
 	state.cycleElement = static_cast<uint8_t>((state.spells - 1) % 3);
@@ -1210,6 +1214,7 @@ void OnPlayerBlocked(const Player &player)
 {
 	if (Rule(player, UniqueRule::BlockRiposte) > 0)
 		State(player).blockRiposteTicks = BlockRiposteTicks;
+	OnSpiritBlocked(Players[player.getId()]);
 }
 
 void OnWeaponsSwapped(const Player &player, ItemType before)

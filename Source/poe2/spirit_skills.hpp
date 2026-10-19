@@ -77,6 +77,8 @@ void ReflectMeleeHit(Player &player, Monster &monster, Fixed26_6 damage);
 
 /** @brief A monster the local player hit died; it may leave an infusion mote. */
 void TryDropInfusion(const Monster &monster);
+/** @brief Leaves an infusion mote (an InfusionElement) for the local hero, if a socketed skill eats them and there are fewer than 3 of it; whether it did. */
+bool DropInfusionMote(const Player &player, Point position, uint8_t element);
 /**
  * @brief Meteor, Thunderstorm, Frozen Orb and Apocalypse eat an infusion, the skill's own element first.
  * @return the infusion eaten (an InfusionElement), or 0 if the skill doesn't take one or none is carried.

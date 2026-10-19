@@ -13,6 +13,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/telemetry.hpp"
@@ -116,7 +117,8 @@ int ArmourRating(const Player &player, bool withSpiritBuffs)
 {
 	// Barkskin adds armour from energy shield lost, up to the gear's; Defiance Banner gives more.
 	const int armour = std::max(player._pIAC + player._pIBonusAC, 0) + (withSpiritBuffs ? SpiritBuffArmour(player) : 0);
-	return armour * (100 + FlaskArmourPercent(player)) / 100 * UniqueDefencePercent(player) / 100 * (100 + (withSpiritBuffs ? BannerDefencePercent(player) : 0)) / 100;
+	return armour * (100 + FlaskArmourPercent(player)) / 100 * UniqueDefencePercent(player) / 100 * (100 + (withSpiritBuffs ? BannerDefencePercent(player) : 0)) / 100
+	    * (100 + (withSpiritBuffs ? ScavengedArmourPercent(player) : 0)) / 100;
 }
 
 int EvasionRating(const Player &player, bool withSpiritBuffs)

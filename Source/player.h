@@ -638,7 +638,8 @@ public:
 		int blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
 		if (useLevel)
 			blkper += getCharacterLevel() * 2;
-		return blkper;
+		// POE2 Mashup: Magma Barrier's increased block chance.
+		return blkper * (100 + poe2.spiritState.blockPercent) / 100;
 	}
 
 	/**

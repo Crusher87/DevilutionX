@@ -343,7 +343,25 @@ enum class PersistentSkill : uint8_t {
 	DefianceBanner,
 	/** Banner of higher maximum resistances and flask charges. */
 	DreadBanner,
-	Last = DreadBanner,
+	/** Physical attack hits store thorns; casting a spell spreads them as thorny ground around you. */
+	Briarpatch,
+	/** More block chance with a shield; a charged block sprays fire ahead of you. */
+	MagmaBarrier,
+	/** Breaking an enemy's armour gives stacks of more armour and thorns. */
+	ScavengedPlating,
+	/** Every few seconds, when you're hurt, you recover part of your life. */
+	TimeOfNeed,
+	/** Spends Frenzy charges on faster attacks and casts. */
+	ChargeRegulation,
+	/** Aura: enemies near you wither. */
+	WitheringPresence,
+	/** Elemental hits build Resonance of their element; the more you have, the more elemental damage you deal. */
+	Trinity,
+	/** Freezing, shocking and igniting enemies may leave element infusions. */
+	SiphonElements,
+	/** Bleeding enemies you kill burst, making those nearby bleed. */
+	HeraldOfBlood,
+	Last = HeraldOfBlood,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -602,6 +620,28 @@ struct SpiritRuntime {
 	uint16_t bannerFlaskCarry = 0;
 	/** Defiance Banner's movement speed, in hundredths of a walk frame skipped. */
 	uint8_t walkCarry = 0;
+	/** Briarpatch: the thorns stored and its cooldown; the thorny ground's place, game ticks left and damage each pulse, in 1/64 points. */
+	int32_t briarStore = 0;
+	uint8_t briarCooldown = 0;
+	Point briarPosition {};
+	uint8_t briarTicks = 0;
+	int32_t briarPulse = 0;
+	/** Magma Barrier: game ticks until the next block sprays fire (0 when charged), and the block chance it adds now, in percent. */
+	uint8_t magmaTicks = 0;
+	uint8_t blockPercent = 0;
+	/** Scavenged Plating's stacks and the game ticks they have left. */
+	uint8_t platingStacks = 0;
+	uint8_t platingTicks = 0;
+	/** Time of Need: game ticks until it can heal again. */
+	uint8_t needTicks = 0;
+	/** Charge Regulation: game ticks of faster attacks and casts left. */
+	uint16_t regulationTicks = 0;
+	/** Withering Presence: game ticks to the next pulse. */
+	uint8_t witherPulseTicks = 0;
+	/** Trinity: Resonance of fire, lightning and cold; the elements that gained this tick (bits); game ticks since the last gain. */
+	std::array<uint8_t, 3> resonance {};
+	uint8_t resonanceGained = 0;
+	uint8_t resonanceIdleTicks = 0;
 };
 
 /** @brief Spirit gems whose number of minions is set in the Skills panel, like POE2's "Set Minion Count". */

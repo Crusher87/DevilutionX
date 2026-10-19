@@ -84,6 +84,15 @@ constexpr PersistentSkill BuffSkills[] = {
 	PersistentSkill::WarBanner,
 	PersistentSkill::DefianceBanner,
 	PersistentSkill::DreadBanner,
+	PersistentSkill::Briarpatch,
+	PersistentSkill::MagmaBarrier,
+	PersistentSkill::ScavengedPlating,
+	PersistentSkill::TimeOfNeed,
+	PersistentSkill::ChargeRegulation,
+	PersistentSkill::WitheringPresence,
+	PersistentSkill::Trinity,
+	PersistentSkill::SiphonElements,
+	PersistentSkill::HeraldOfBlood,
 };
 
 void DrawBuffTooltip(const Surface &out, PersistentSkill skill)

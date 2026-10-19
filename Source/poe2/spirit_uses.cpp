@@ -17,6 +17,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -548,7 +549,7 @@ std::string SpiritUsePortraitText(const Player &player, PersistentSkill skill)
 		return PercentText(state.glory[static_cast<size_t>(kind)], GloryForBanner);
 	}
 	default:
-		return {};
+		return SpiritAuraPortraitText(player, skill);
 	}
 }
 

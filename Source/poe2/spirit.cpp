@@ -21,11 +21,13 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -43,6 +45,8 @@ struct HeraldTrigger {
 	/** Herald of Plague: the dead monster's poison, to spread. */
 	uint8_t poisonTicks = 0;
 	int32_t poisonPerTick = 0;
+	/** Herald of Blood: the dead monster was bleeding. */
+	bool blood = false;
 };
 
 std::vector<HeraldTrigger> PendingHeralds;
@@ -117,6 +121,35 @@ void SpreadPlague(const HeraldTrigger &trigger)
 	}
 	if (spread > 0)
 		TelemetryLog("spirit", StrCat("Herald of Plague spread poison to ", spread));
+}
+
+/** @brief Herald of Blood: the bleeding monster that died bursts, and those its blood hits may bleed. */
+void BurstBlood(const HeraldTrigger &trigger)
+{
+	Player &player = *MyPlayer;
+	AddVisualEffect(trigger.position, MissileGraphicID::BloodStarRedExplosion);
+	vfx::Impact(trigger.position, vfx::Element::Blood, 1.5F);
+	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfBloodPercent * MapAuraPercent() / 10000));
+	const int radius = SupportAreaRadius(player, SkillSlot::ForPersistent(PersistentSkill::HeraldOfBlood), HeraldOfBloodRadius);
+	const int bleedChance = HeraldOfBloodBleedChance(std::max(player.poe2.skillLevel(PersistentSkill::HeraldOfBlood), 1));
+	// A bleed deals 70% of the hit over 4 seconds, like Serrated Edge's.
+	constexpr int BleedTicks = 4 * 20;
+	const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * 70 / 100 / BleedTicks), 1);
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (!CanHeraldHit(monster) || trigger.position.ExactDistance(monster.position.tile) > radius)
+			continue;
+		HeraldHit(monster, PersistentSkill::HeraldOfBlood, DamageType::Physical, damage);
+		if (!CanHeraldHit(monster) || GenerateRnd(100) >= bleedChance)
+			continue;
+		Poe2MonsterState &state = monster.poe2;
+		if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
+			state.bleedDamagePerTick = perTick;
+			state.bleedSource = static_cast<int8_t>(MyPlayerId);
+		}
+		state.bleedTicks = std::max<uint8_t>(state.bleedTicks, BleedTicks);
+		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+	}
 }
 
 void ShatterFrost(const HeraldTrigger &trigger)
@@ -257,6 +290,24 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Defiance Banner");
 	case PersistentSkill::DreadBanner:
 		return _("Dread Banner");
+	case PersistentSkill::Briarpatch:
+		return _("Briarpatch");
+	case PersistentSkill::MagmaBarrier:
+		return _("Magma Barrier");
+	case PersistentSkill::ScavengedPlating:
+		return _("Scavenged Plating");
+	case PersistentSkill::TimeOfNeed:
+		return _("Time of Need");
+	case PersistentSkill::ChargeRegulation:
+		return _("Charge Regulation");
+	case PersistentSkill::WitheringPresence:
+		return _("Withering Presence");
+	case PersistentSkill::Trinity:
+		return _("Trinity");
+	case PersistentSkill::SiphonElements:
+		return _("Siphon Elements");
+	case PersistentSkill::HeraldOfBlood:
+		return _("Herald of Blood");
 	default:
 		return {};
 	}
@@ -363,6 +414,24 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Attack hits build Glory. At 200, use it from the skill tray to plant a banner: in its area you have 30% more armour and evasion and move 30% faster");
 	case PersistentSkill::DreadBanner:
 		return _("Attack hits build Glory. At 200, use it from the skill tray to plant a banner: in its area your maximum resistances are 4% higher and your flasks gain charges");
+	case PersistentSkill::Briarpatch:
+		return _("Your attacks store 10% of their physical damage as thorns. Casting a spell spreads them as thorny ground around you for 6 seconds, which hurts and hinders enemies in it. Every 8 seconds");
+	case PersistentSkill::MagmaBarrier:
+		return _("With a shield: 25% increased block chance. Every 8 seconds your next block sprays fire from the shield at the enemies in front of you");
+	case PersistentSkill::ScavengedPlating:
+		return _("Breaking an enemy's armour gives you plating, more from stronger enemies, up to 10. Each gives 4% more armour and thorns that hurt enemies hitting you in melee");
+	case PersistentSkill::TimeOfNeed:
+		return _("Every 10 seconds, the next time you're hurt you recover 10% of your maximum life at once");
+	case PersistentSkill::ChargeRegulation:
+		return _("Spends your Frenzy charges on speed: each one gives 8 seconds of 20% more attack and cast speed, taken as the last runs low");
+	case PersistentSkill::WitheringPresence:
+		return _("Aura: enemies near you wither, taking 5% more damage a stack, up to 5 stacks");
+	case PersistentSkill::Trinity:
+		return _("Fire, lightning and cold hits build Resonance of their element and take some from the other two. Every 30 Resonance in all gives more elemental damage, so mixing elements pays");
+	case PersistentSkill::SiphonElements:
+		return _("Freezing, shocking and igniting enemies may leave an infusion of that element, for Meteor, Thunderstorm, Frozen Orb and Apocalypse to eat");
+	case PersistentSkill::HeraldOfBlood:
+		return _("Bleeding enemies you kill burst, hitting those nearby for 15% of their life as physical damage and making them bleed");
 	default:
 		return {};
 	}
@@ -434,7 +503,17 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::WarBanner:
 	case PersistentSkill::DefianceBanner:
 	case PersistentSkill::DreadBanner:
+	case PersistentSkill::Briarpatch:
+	case PersistentSkill::MagmaBarrier:
+	case PersistentSkill::ScavengedPlating:
+	case PersistentSkill::TimeOfNeed:
+	case PersistentSkill::ChargeRegulation:
+	case PersistentSkill::WitheringPresence:
+	case PersistentSkill::SiphonElements:
+	case PersistentSkill::HeraldOfBlood:
 		return 30;
+	case PersistentSkill::Trinity:
+		return 100;
 	case PersistentSkill::ElementalConflux:
 	case PersistentSkill::Blink:
 		return 60;
@@ -770,9 +849,11 @@ void QueueHeraldTriggers(const Player &player, const Monster &monster)
 	const bool thunder = IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder);
 	const bool frost = (monster.poe2.chillTicks > 0 || monster.poe2.freezeTicks > 0) && IsPersistentSkillActive(player, PersistentSkill::HeraldOfFrost);
 	const bool plague = monster.poe2.poisonTicks > 0 && monster.poe2.poisonDamagePerTick > 0 && IsPersistentSkillActive(player, PersistentSkill::HeraldOfPlague);
-	if (!ash && !thunder && !frost && !plague)
+	const bool blood = monster.poe2.bleedTicks > 0 && IsPersistentSkillActive(player, PersistentSkill::HeraldOfBlood);
+	if (!ash && !thunder && !frost && !plague && !blood)
 		return;
 	HeraldTrigger trigger { monster.position.tile, monster.maxHitPoints.raw(), ash, thunder, frost };
+	trigger.blood = blood;
 	if (plague) {
 		trigger.poisonTicks = monster.poe2.poisonTicks;
 		trigger.poisonPerTick = monster.poe2.poisonDamagePerTick;
@@ -796,6 +877,8 @@ void ProcessHeralds()
 			ShatterFrost(trigger);
 		if (trigger.poisonTicks > 0)
 			SpreadPlague(trigger);
+		if (trigger.blood)
+			BurstBlood(trigger);
 	}
 }
 

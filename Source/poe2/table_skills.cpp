@@ -271,7 +271,7 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 	if ((data.flags & TF_Knockback) != 0 && alive && !monster.isUnique() && monster.mode != MonsterMode::Petrified)
 		M_GetKnockback(monster, player.position.tile);
 	if ((data.flags & TF_ArmourBreak) != 0 && alive)
-		BreakMonsterArmour(monster);
+		BreakMonsterArmour(monster, &player);
 	if ((data.flags & TF_Bleed) != 0 && alive)
 		InflictTableBleed(player, monster, FixedDamage(player, data), 80);
 	if (!alive)

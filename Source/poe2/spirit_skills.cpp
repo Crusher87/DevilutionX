@@ -19,6 +19,7 @@
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_table.hpp"
@@ -201,7 +202,7 @@ void ProcessMotes(Player &player)
 		InfusionMote &mote = Motes[i];
 		if (mote.ticks % 15 == 0)
 			AddVisualEffect(mote.position, InfusionGraphic(mote.element));
-		if (player.position.tile.WalkingDistance(mote.position) <= 1 && (state.infusions & mote.element) == 0) {
+		if (player.position.tile.WalkingDistance(mote.position) <= InfusionPickupTiles(player) && (state.infusions & mote.element) == 0) {
 			state.infusions |= mote.element;
 			AddVisualEffect(player.position.tile, InfusionGraphic(mote.element), 0, 4);
 			TelemetryLog("infusion", mote.element == Infusion_Fire ? "picked up fire" : mote.element == Infusion_Lightning ? "picked up lightning"
@@ -379,10 +380,18 @@ void TryDropInfusion(const Monster &monster)
 		element = Infusion_Cold;
 	if (element == 0 || GenerateRnd(100) >= InfusionDropPercent)
 		return;
+	DropInfusionMote(*MyPlayer, monster.position.tile, element);
+}
+
+bool DropInfusionMote(const Player &player, Point position, uint8_t element)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || !UsesInfusions(player))
+		return false;
 	if (std::count_if(Motes.begin(), Motes.end(), [&](const InfusionMote &mote) { return mote.element == element; }) >= 3)
-		return;
-	Motes.push_back({ monster.position.tile, element, InfusionMoteTicks });
-	AddVisualEffect(monster.position.tile, InfusionGraphic(element), 0, 3);
+		return false;
+	Motes.push_back({ position, element, InfusionMoteTicks });
+	AddVisualEffect(position, InfusionGraphic(element), 0, 3);
+	return true;
 }
 
 uint8_t TakeInfusion(Player &player, SkillSlot skill)
@@ -426,6 +435,7 @@ void ProcessSpiritSkills(Player &player)
 		return;
 	ProcessSpiritBuffs(player);
 	ProcessSpiritUses(player);
+	ProcessSpiritAuras(player);
 	if (leveltype == DTYPE_TOWN) {
 		Motes.clear();
 		return;
@@ -439,6 +449,7 @@ void ProcessSpiritSkills(Player &player)
 void ClearSpiritSkills()
 {
 	ClearSpiritBuffs();
+	ClearSpiritAuras();
 	Motes.clear();
 	Candidate = {};
 }
