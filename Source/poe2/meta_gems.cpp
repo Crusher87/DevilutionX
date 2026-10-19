@@ -645,17 +645,16 @@ void MigrateTriggerSupports(Player &player)
 			if (meta == PersistentSkill::None)
 				continue;
 			const SkillSlot gem = SkillSlot::ForPersistent(meta);
-			// The new gem goes in a free row of the Skills panel, switched off, or else the inventory.
+			// The new gem goes in a free row of the Skills panel, switched off. This runs while the hero is loaded, before
+			// the inventory is, so a gem put in the bag here would be lost: with every row full the old support stays where
+			// it is, doing nothing, and moves on a later load once a row is free.
 			if (!RowOf(data, gem)) {
-				if (const std::optional<size_t> free = RowOf(data, {})) {
-					data.skillSlots[*free] = gem;
-					data.slotLevels[*free] = 1;
-					data.spiritGemsOn &= static_cast<uint16_t>(~(1U << *free));
-				} else {
-					Item item;
-					if (!CreateSkillGemItem(item, gem, 1) || !AutoPlaceItemInInventory(player, item, true))
-						continue; // No room anywhere: the old support stays where it is, doing nothing.
-				}
+				const std::optional<size_t> free = RowOf(data, {});
+				if (!free)
+					continue;
+				data.skillSlots[*free] = gem;
+				data.slotLevels[*free] = 1;
+				data.spiritGemsOn &= static_cast<uint16_t>(~(1U << *free));
 			}
 			data.slotSupports[row][socket] = SupportGem::None;
 			data.tiersAt(row)[socket] = 1;
