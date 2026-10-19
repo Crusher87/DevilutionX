@@ -156,6 +156,9 @@ uint32_t WindowStartMs = 0;
 uint32_t LastKillMs = 0;
 uint32_t LastTickMs = 0;
 uint32_t LastStallLogMs = 0;
+/** The longest wait between drawn frames since the last game tick, to tell a freeze from a pause. */
+uint32_t FrameGapSinceTick = 0;
+uint32_t LastFrameMs = 0;
 
 std::string PendingAttacker;
 /** Energy shield soaked from the hit being applied (raw), added to it when it's counted. */
@@ -749,8 +752,14 @@ void TrackStalls(uint32_t now)
 {
 	const uint32_t gap = now - LastTickMs;
 	LastTickMs = now;
+	// A freeze in the game logic can be followed by a catch-up tick before any frame is drawn, so the time since the
+	// last frame counts too.
+	const uint32_t frameGap = std::max(std::exchange(FrameGapSinceTick, 0), now - LastFrameMs);
 	// Longer gaps are pauses, menus and loading screens rather than stutter.
 	if (gap < TelemetryStallMs || gap > 5000)
+		return;
+	// The game waits while a menu is open, but frames keep coming: that's a pause, not a freeze.
+	if (frameGap < TelemetryStallMs)
 		return;
 	Count([](TelemetryCounts &counts) { counts.stalls++; });
 	if (now - LastStallLogMs < 10000)
@@ -1216,10 +1225,10 @@ void TelemetryFrameDrawn()
 	DrawStep = nullptr;
 	if (LogFile == nullptr || GameStartMs == 0)
 		return;
-	static uint32_t lastFrameMs = 0;
 	const uint32_t now = Now();
-	const uint32_t gap = now - lastFrameMs;
-	lastFrameMs = now;
+	const uint32_t gap = now - LastFrameMs;
+	LastFrameMs = now;
+	FrameGapSinceTick = std::max(FrameGapSinceTick, gap);
 	// Longer gaps are pauses, menus and loading screens; the stall line covers those.
 	if (gap > 1000)
 		return;
