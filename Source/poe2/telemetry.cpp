@@ -160,6 +160,8 @@ uint32_t LastStallLogMs = 0;
 std::string PendingAttacker;
 /** Energy shield soaked from the hit being applied (raw), added to it when it's counted. */
 int32_t PendingShieldRaw = 0;
+/** The last hit the hero took, for the death line. */
+std::string LastHitText;
 std::string PendingDamageSource;
 std::string LastSkill;
 uint32_t LastSkillMs = 0;
@@ -889,6 +891,7 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	LastSkill.clear();
 	PendingAttacker.clear();
 	PendingShieldRaw = 0;
+	LastHitText.clear();
 	PendingDamageSource.clear();
 	LastBuild.clear();
 	GameStartMs = WindowStartMs = LastKillMs = LastTickMs = Now();
@@ -1062,6 +1065,7 @@ void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26
 	StrAppend(text, std::format(", life {:d}/{:d}", after.whole(), max.whole()));
 	if (player.poe2.maxEnergyShield > 0)
 		StrAppend(text, std::format(", energy shield {:d}/{:d}", player.poe2.energyShield / 64, player.poe2.maxEnergyShield));
+	LastHitText = text;
 	if (closeCall)
 		TelemetryLog("close call", text);
 	else if (big)
@@ -1075,7 +1079,7 @@ void TelemetryPlayerDied(const Player &player)
 	if (&player != MyPlayer)
 		return;
 	Count([](TelemetryCounts &counts) { counts.deaths++; });
-	TelemetryLog("death", std::format("died at character level {:d}", player.getCharacterLevel()));
+	TelemetryLog("death", std::format("died at character level {:d}{:s}", player.getCharacterLevel(), LastHitText.empty() ? "" : StrCat(", last hit: ", LastHitText)));
 	WriteRecentEvents();
 }
 
