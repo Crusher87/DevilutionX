@@ -365,6 +365,14 @@ bool CreateSupportGemItem(Item &item, SupportGem gem, int tier)
 	return false;
 }
 
+bool CreateSupportGemDisplayItem(Item &item, SupportGem gem, int tier)
+{
+	const uint32_t rngState = GetLCGEngineState();
+	const bool made = CreateSupportGemItem(item, gem, tier);
+	SetRndSeed(rngState);
+	return made;
+}
+
 int SupportGemItemTier(const Item &item)
 {
 	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));

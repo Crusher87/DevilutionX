@@ -328,7 +328,7 @@ void DrawGemIcon(const Surface &out, const Rectangle &box, const GemEntry &gem, 
 		return;
 	}
 	Item item;
-	if (!CreateSupportGemItem(item, gem.support, gem.tier))
+	if (!CreateSupportGemDisplayItem(item, gem.support, gem.tier))
 		return;
 	item._iStatFlag = ready;
 	const int cursId = item._iCurs + CURSOR_FIRSTITEM;

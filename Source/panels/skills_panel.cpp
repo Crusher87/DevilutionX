@@ -198,7 +198,7 @@ const Item &SupportGemItem(SupportGem gem)
 	// The item table can be reloaded when mods change, so remake the item when it is.
 	if (itemCounts[index] != AllItemsList.size()) {
 		items[index] = {};
-		CreateSupportGemItem(items[index], gem);
+		CreateSupportGemDisplayItem(items[index], gem);
 		items[index]._iStatFlag = true;
 		itemCounts[index] = AllItemsList.size();
 	}
