@@ -321,6 +321,16 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Skeletal Brutes");
 	case PersistentSkill::SkeletalClerics:
 		return _("Skeletal Clerics");
+	case PersistentSkill::WolfPack:
+		return _("Wolf Pack");
+	case PersistentSkill::RagingSpirits:
+		return _("Raging Spirits");
+	case PersistentSkill::RavenousSwarm:
+		return _("Ravenous Swarm");
+	case PersistentSkill::Sacrifice:
+		return _("Sacrifice");
+	case PersistentSkill::LingeringIllusion:
+		return _("Lingering Illusion");
 	default:
 		return {};
 	}
@@ -457,6 +467,16 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Tough, slow skeletons whose heavy blows stun, and who rise again when they fall");
 	case PersistentSkill::SkeletalClerics:
 		return _("Skeletal priests that don't fight: they heal your most hurt minion nearby and raise your fallen minions twice as fast");
+	case PersistentSkill::WolfPack:
+		return _("A pack of shadow beasts hunts at your side, more of them as the gem levels, and they rise again when they fall");
+	case PersistentSkill::RagingSpirits:
+		return _("Hits of fire spells you cast yourself call flaming spirits beside the enemy, two at most each cast. They bite with fire for a few seconds, then burn out");
+	case PersistentSkill::RavenousSwarm:
+		return _("While enemies are near, a swarm of insects leaves you every few seconds to bite and poison one of them. Swarms can't be hit");
+	case PersistentSkill::Sacrifice:
+		return _("Corpse Explosion and Soul Harvest can use your skeletons as corpses; they rise again later. All your minions rise again more slowly");
+	case PersistentSkill::LingeringIllusion:
+		return _("Each dodge roll leaves an illusion of you that draws enemies near it. If they destroy it, it leaves a remnant that gives a Frenzy charge");
 	default:
 		return {};
 	}
@@ -542,11 +562,16 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::WitheringPresence:
 	case PersistentSkill::SiphonElements:
 	case PersistentSkill::HeraldOfBlood:
+	case PersistentSkill::RagingSpirits:
+	case PersistentSkill::RavenousSwarm:
+	case PersistentSkill::LingeringIllusion:
 		return 30;
 	case PersistentSkill::Trinity:
 		return 100;
 	case PersistentSkill::ElementalConflux:
 	case PersistentSkill::Blink:
+	case PersistentSkill::WolfPack:
+	case PersistentSkill::Sacrifice:
 		return 60;
 	case PersistentSkill::EternalRage:
 		return 100;
@@ -696,6 +721,22 @@ int MinionCountSkillIndex(PersistentSkill skill)
 			return static_cast<int>(i);
 	}
 	return -1;
+}
+
+int RevivingMinionIndex(PersistentSkill skill)
+{
+	for (size_t i = 0; i < RevivingMinionSkills.size(); i++) {
+		if (RevivingMinionSkills[i] == skill)
+			return static_cast<int>(i);
+	}
+	return -1;
+}
+
+int MinionReviveTicks(const Player &player)
+{
+	if (!IsPersistentSkillActive(player, PersistentSkill::Sacrifice))
+		return SkeletonReviveTicks;
+	return SkeletonReviveTicks * SacrificeRevivePercent(std::max(player.poe2.skillLevel(PersistentSkill::Sacrifice), 1)) / 100;
 }
 
 int FreeMinions(PersistentSkill skill)
@@ -860,6 +901,13 @@ int ActiveMinionCount(const Player &player, PersistentSkill skill)
 	return gem ? gem->count : 0;
 }
 
+int KeptMinionCount(const Player &player, PersistentSkill skill)
+{
+	if (skill == PersistentSkill::WolfPack)
+		return IsPersistentSkillActive(player, skill) ? WolfPackSize(std::max(player.poe2.skillLevel(skill), 1)) : 0;
+	return ActiveMinionCount(player, skill);
+}
+
 int AffordableMinionCount(const Player &player, PersistentSkill skill)
 {
 	const std::optional<GemReservation> gem = FindGemReservation(player, skill);
@@ -1019,12 +1067,12 @@ int TargetMinions(const Player &player, PersistentSkill skill, int active)
 }
 
 /**
- * @brief Keeps the gem's skeletons at its count. Like POE2, each one that falls rises again after the revive time;
- * ones that haven't been raised yet (on a new level, or when the count goes up) come up at once, a few ticks apart.
+ * @brief Keeps the gem's skeletons (or wolves) at its count. Like POE2, each one that falls rises again after the revive
+ * time; ones that haven't been raised yet (on a new level, or when the count goes up) come up at once, a few ticks apart.
  */
 void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type, MinionRevives &revives, bool clericStands)
 {
-	const int active = ActiveMinionCount(player, skill);
+	const int active = KeptMinionCount(player, skill);
 	if (active <= 0) {
 		revives = {};
 		if (CountSkeletonMinions(player, type) > 0)
@@ -1047,8 +1095,9 @@ void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type,
 		revives.lastAlive = static_cast<uint8_t>(alive - 1);
 		return;
 	}
+	const int reviveTicks = MinionReviveTicks(player);
 	for (int fallen = revives.lastAlive - alive; fallen > 0 && revives.pending < revives.ticks.size(); fallen--)
-		revives.ticks[revives.pending++] = SkeletonReviveTicks;
+		revives.ticks[revives.pending++] = static_cast<uint16_t>(reviveTicks);
 	// A lower count no longer needs the longest revives.
 	while (revives.pending > target - alive) {
 		size_t longest = 0;
@@ -1095,7 +1144,7 @@ void HastenMinionRevives(Player &player, int ticks)
 
 int PendingMinionRevives(const Player &player, PersistentSkill skill, int *ticksLeft)
 {
-	const int index = MinionCountSkillIndex(skill);
+	const int index = RevivingMinionIndex(skill);
 	if (index < 0)
 		return 0;
 	const MinionRevives &revives = player.poe2.minionRevives[static_cast<size_t>(index)];
@@ -1110,7 +1159,7 @@ int PendingMinionRevives(const Player &player, PersistentSkill skill, int *ticks
 
 int MinionTarget(const Player &player, PersistentSkill skill)
 {
-	const int active = ActiveMinionCount(player, skill);
+	const int active = KeptMinionCount(player, skill);
 	if (active <= 0 || !CanRaiseMinions(player))
 		return 0;
 	return TargetMinions(player, skill, active);
@@ -1118,7 +1167,7 @@ int MinionTarget(const Player &player, PersistentSkill skill)
 
 int AliveMinionCount(const Player &player, PersistentSkill skill)
 {
-	return IsMinionCountSkill(skill) ? static_cast<int>(CountSkeletonMinions(player, MinionMonsterType(skill))) : 0;
+	return IsRevivingMinionSkill(skill) ? static_cast<int>(CountSkeletonMinions(player, MinionMonsterType(skill))) : 0;
 }
 
 void ProcessPersistentSkills(Player &player)
@@ -1127,8 +1176,8 @@ void ProcessPersistentSkills(Player &player)
 		return;
 	KeepGolemAlive(player);
 	const bool clericStands = ClericStands(player);
-	for (size_t i = 0; i < MinionCountSkills.size(); i++) {
-		const PersistentSkill skill = MinionCountSkills[i];
+	for (size_t i = 0; i < RevivingMinionSkills.size(); i++) {
+		const PersistentSkill skill = RevivingMinionSkills[i];
 		KeepSkeletonsAlive(player, skill, MinionMonsterType(skill), player.poe2.minionRevives[i], clericStands);
 	}
 	ProcessMinionGems(player);

@@ -11,7 +11,10 @@
 #include "player.h"
 #include "poe2/minion_gems.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_skills.hpp"
+#include "poe2/support_table.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
 #include "tables/monstdat.h"
@@ -28,6 +31,12 @@ public:
 		MyPlayer = &Players[0];
 		*MyPlayer = {};
 		MyPlayer->poe2.clear();
+		MyPlayer->_pStrength = 200;
+		MyPlayer->_pMagic = 200;
+		MyPlayer->_pDexterity = 200;
+		// Every Spirit skull broken: 100 Spirit.
+		MyPlayer->poe2.spiritSkulls = 7;
+		MyPlayer->poe2.spiritGemsOn = 0xFFFF;
 		gbIsSpawn = false;
 		gbIsMultiplayer = false;
 		gbIsHellfire = true;
@@ -40,12 +49,16 @@ public:
 		LoadMissileData();
 		LoadMonsterData();
 		LevelMonsterTypes[0].type = MT_NZOMBIE;
-		for (size_t i = 0; i < MinionCountSkills.size(); i++)
-			LevelMonsterTypes[i + 1].type = FindMinionGem(MinionCountSkills[i])->type;
+		for (size_t i = 0; i < MinionGemTable().size(); i++)
+			LevelMonsterTypes[i + 1].type = MinionGemTable()[i].type;
 		leveltype = DTYPE_CATHEDRAL;
 		MyPlayer->setCharacterLevel(30);
 		MyPlayer->position.tile = { 40, 40 };
+		MyPlayer->_pMaxHP = MyPlayer->_pHitPoints = Fixed26_6::fromInt(1000);
+		MyPlayer->_pMaxHPBase = MyPlayer->_pHPBase = Fixed26_6::fromInt(1000);
 		ActiveMonsterCount = 0;
+		Missiles.clear();
+		ClearMinionGems();
 		// Damage to monsters goes out as a network message.
 		SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
 	}
@@ -53,9 +66,19 @@ public:
 	void TearDown() override
 	{
 		ActiveMonsterCount = 0;
+		Missiles.clear();
+		ClearMinionGems();
+		ClearSpiritSkills();
 		gbIsPoe2 = false;
 		leveltype = DTYPE_TOWN;
 		UnloadModArchives();
+	}
+
+	static void Socket(PersistentSkill skill, int gemLevel = 1)
+	{
+		MyPlayer->poe2.skillSlots[0] = SkillSlot::ForPersistent(skill);
+		MyPlayer->poe2.slotLevels[0] = static_cast<uint8_t>(gemLevel);
+		ASSERT_TRUE(IsPersistentSkillActive(*MyPlayer, skill)) << PersistentSkillName(skill);
 	}
 
 	static Monster &Place(size_t slot, Point tile, int levelType, int life)
@@ -71,10 +94,15 @@ public:
 		return monster;
 	}
 
-	/** @brief One of the hero's skeletons of the gem. */
+	/** @brief One of the hero's minions of the gem. */
 	static Monster &PlaceMinion(size_t slot, Point tile, PersistentSkill gem, int life = 100)
 	{
-		Monster &minion = Place(slot, tile, MinionCountSkillIndex(gem) + 1, life);
+		int levelType = 0;
+		for (size_t i = 0; i < MinionGemTable().size(); i++) {
+			if (MinionGemTable()[i].skill == gem)
+				levelType = static_cast<int>(i) + 1;
+		}
+		Monster &minion = Place(slot, tile, levelType, life);
 		minion.flags |= MFLAG_GOLEM;
 		minion.goalVar3 = static_cast<int8_t>(MyPlayerId);
 		return minion;
@@ -222,6 +250,155 @@ TEST_F(Poe2MinionGemsTest, SlowKindsWaitBetweenAttacks)
 	for (int i = 0; i < FindMinionGem(PersistentSkill::SkeletalSnipers)->attackTicks; i++)
 		ProcessMinionGems(player);
 	EXPECT_EQ(sniper.poe2.minionAttackWait, 0);
+}
+
+TEST_F(Poe2MinionGemsTest, TheOtherMinionGemsHaveTheirOwnKinds)
+{
+	EXPECT_EQ(FindMinionGem(PersistentSkill::WolfPack)->type, MT_WSCAV);
+	EXPECT_EQ(FindMinionGem(PersistentSkill::RagingSpirits)->type, MT_FIREBAT);
+	EXPECT_EQ(FindMinionGem(PersistentSkill::LingeringIllusion)->type, MT_ILLWEAV);
+	// Swarms aren't monsters, so nothing can hit them.
+	EXPECT_EQ(FindMinionGem(PersistentSkill::RavenousSwarm), nullptr);
+	std::set<_monster_id> types;
+	for (const MinionGemData &gem : MinionGemTable())
+		types.insert(gem.type);
+	EXPECT_EQ(types.size(), MinionGemTable().size());
+	for (const PersistentSkill skill : { PersistentSkill::WolfPack, PersistentSkill::RagingSpirits, PersistentSkill::RavenousSwarm, PersistentSkill::Sacrifice, PersistentSkill::LingeringIllusion }) {
+		EXPECT_FALSE(PersistentSkillName(skill).empty());
+		EXPECT_FALSE(PersistentSkillDescription(skill).empty());
+		EXPECT_FALSE(IsMinionCountSkill(skill));
+		Item item;
+		ASSERT_TRUE(CreateSkillGemItem(item, SkillSlot::ForPersistent(skill))) << PersistentSkillName(skill);
+		EXPECT_EQ(SkillForGem(item), SkillSlot::ForPersistent(skill));
+	}
+	// POE2's reservations: the pack and Sacrifice 60, the others 30.
+	EXPECT_EQ(SpiritReservation(PersistentSkill::WolfPack), 60);
+	EXPECT_EQ(SpiritReservation(PersistentSkill::Sacrifice), 60);
+	EXPECT_EQ(SpiritReservation(PersistentSkill::RagingSpirits), 30);
+	EXPECT_EQ(SpiritReservation(PersistentSkill::RavenousSwarm), 30);
+	EXPECT_EQ(SpiritReservation(PersistentSkill::LingeringIllusion), 30);
+	// Wolves rise again like the skeletons.
+	EXPECT_EQ(RevivingMinionIndex(PersistentSkill::WolfPack), static_cast<int>(MinionCountSkills.size()));
+	EXPECT_EQ(RevivingMinionIndex(PersistentSkill::RagingSpirits), -1);
+}
+
+TEST_F(Poe2MinionGemsTest, WolfPackKeepsAPackThatGrowsWithTheGem)
+{
+	Player &player = *MyPlayer;
+	EXPECT_EQ(WolfPackSize(1), 3);
+	EXPECT_EQ(WolfPackSize(20), 6);
+	EXPECT_EQ(KeptMinionCount(player, PersistentSkill::WolfPack), 0);
+	Socket(PersistentSkill::WolfPack, 20);
+	EXPECT_EQ(KeptMinionCount(player, PersistentSkill::WolfPack), 6);
+	Monster &wolf = PlaceMinion(0, { 41, 40 }, PersistentSkill::WolfPack);
+	EXPECT_EQ(MinionGemDamagePercent(wolf), FindMinionGem(PersistentSkill::WolfPack)->damagePercent);
+	EXPECT_EQ(MinionGemFirePercent(wolf), 0);
+}
+
+TEST_F(Poe2MinionGemsTest, RagingSpiritsComeFromTheHerosOwnFireSpells)
+{
+	Player &player = *MyPlayer;
+	const uint8_t &budget = player.poe2.spiritState.ragingBudget;
+	const SkillSlot fireball = SkillSlot::ForSpell(SpellID::Fireball);
+	const uint32_t fireTags = SkillTags(fireball);
+	Monster &enemy = Place(0, { 44, 40 }, 0, 1000);
+	// Without the gem, nothing.
+	OnRagingSpiritsCast(player, fireball, fireTags);
+	EXPECT_EQ(budget, 0);
+	Socket(PersistentSkill::RagingSpirits);
+	// Nor from a lightning spell.
+	OnRagingSpiritsCast(player, SkillSlot::ForSpell(SpellID::ChargedBolt), SkillTags(SkillSlot::ForSpell(SpellID::ChargedBolt)));
+	EXPECT_EQ(budget, 0);
+	OnRagingSpiritsCast(player, fireball, fireTags);
+	EXPECT_EQ(budget, RagingSpiritsPerCast);
+	// Hits of another skill, or not of fire, call none.
+	OnRagingSpiritsHit(player, SkillSlot::ForSpell(SpellID::Firebolt), enemy, DamageType::Fire);
+	OnRagingSpiritsHit(player, fireball, enemy, DamageType::Physical);
+	EXPECT_EQ(budget, RagingSpiritsPerCast);
+	// Two at most from a cast, however many it hits.
+	for (int i = 0; i < 5; i++)
+		OnRagingSpiritsHit(player, fireball, enemy, DamageType::Fire);
+	EXPECT_EQ(budget, 0);
+	ClearMinionGems();
+	// A cast's hits have a few seconds to call theirs.
+	OnRagingSpiritsCast(player, fireball, fireTags);
+	for (int i = 0; i < RagingSpiritsCastTicks; i++)
+		ProcessMinionGems(player);
+	EXPECT_EQ(budget, 0);
+	// Most of a spirit's blow is fire.
+	Monster &spirit = PlaceMinion(1, { 41, 40 }, PersistentSkill::RagingSpirits);
+	EXPECT_EQ(MinionGemFirePercent(spirit), RagingSpiritFirePercent);
+}
+
+TEST_F(Poe2MinionGemsTest, SwarmsLeaveForNearbyEnemiesBiteAndPoison)
+{
+	Player &player = *MyPlayer;
+	Socket(PersistentSkill::RavenousSwarm, 20);
+	EXPECT_EQ(SwarmTicks(20), 196);
+	EXPECT_GT(SwarmBiteRaw(player, 20), SwarmBiteRaw(player, 1));
+	// No enemy near: no swarm.
+	Monster &far = Place(0, { 40 + SwarmReachTiles + 3, 40 }, 0, 10000);
+	ProcessMinionGems(player);
+	EXPECT_EQ(SwarmCount(player), 0);
+	Monster &near = Place(1, { 42, 40 }, 0, 10000);
+	ProcessMinionGems(player);
+	ASSERT_EQ(SwarmCount(player), 1);
+	EXPECT_EQ(player.poe2.spiritState.swarms[0].target, 1);
+	// It bites at once and poisons; the enemy further off is left alone.
+	EXPECT_LT(near.hitPoints, near.maxHitPoints);
+	EXPECT_GT(near.poe2.poisonTicks, 0);
+	EXPECT_GT(near.poe2.poisonDamagePerTick, 0);
+	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
+	// The next swarm leaves 6 seconds later.
+	for (int i = 0; i < SwarmEveryTicks - 1; i++)
+		ProcessMinionGems(player);
+	EXPECT_EQ(SwarmCount(player), 1);
+	ProcessMinionGems(player);
+	EXPECT_EQ(SwarmCount(player), 2);
+	// Taking the gem out calls them back.
+	player.poe2.skillSlots[0] = {};
+	ProcessMinionGems(player);
+	EXPECT_EQ(SwarmCount(player), 0);
+}
+
+TEST_F(Poe2MinionGemsTest, SacrificeUsesSkeletonsAsCorpsesAndSlowsRevives)
+{
+	Player &player = *MyPlayer;
+	Monster &warrior = PlaceMinion(0, { 43, 40 }, PersistentSkill::SkeletalWarriors);
+	PlaceMinion(1, { 41, 40 }, PersistentSkill::WolfPack);
+	EXPECT_EQ(SacrificeMinionNear(player, { 40, 40 }, 5), nullptr);
+	EXPECT_EQ(MinionReviveTicks(player), SkeletonReviveTicks);
+	Socket(PersistentSkill::Sacrifice);
+	// The wolf is nearer, but only the undead can be used.
+	EXPECT_EQ(SacrificeMinionNear(player, { 40, 40 }, 5), &warrior);
+	EXPECT_EQ(SacrificeMinionNear(player, { 40, 40 }, 2), nullptr);
+	EXPECT_EQ(MinionReviveTicks(player), SkeletonReviveTicks * SacrificeRevivePercent(1) / 100);
+	EXPECT_EQ(SacrificeRevivePercent(1), 159);
+	EXPECT_EQ(SacrificeRevivePercent(20), 140);
+}
+
+TEST_F(Poe2MinionGemsTest, BrokenIllusionsLeaveFrenzyRemnants)
+{
+	Player &player = *MyPlayer;
+	Socket(PersistentSkill::LingeringIllusion);
+	Monster &illusion = PlaceMinion(0, { 44, 40 }, PersistentSkill::LingeringIllusion);
+	illusion.poe2.decoy = true;
+	EXPECT_EQ(MinionGemDamagePercent(illusion), 0);
+	// One that fades on its own leaves nothing.
+	OnMinionGemDied(player, illusion);
+	EXPECT_EQ(FrenzyRemnantCount(), 0U);
+	// One an enemy breaks leaves a remnant (a second one only at higher gem levels).
+	illusion.poe2.minionLifeTicks = 20;
+	OnMinionGemDied(player, illusion);
+	EXPECT_EQ(FrenzyRemnantCount(), 1U);
+	EXPECT_EQ(IllusionSecondRemnantChance(1), 0);
+	EXPECT_EQ(IllusionSecondRemnantChance(20), 76);
+	// Walking over it gives a Frenzy charge.
+	player.position.tile = { 44, 41 };
+	ProcessMinionGems(player);
+	EXPECT_EQ(player.poe2.frenzyCharges, 1);
+	EXPECT_EQ(FrenzyRemnantCount(), 0U);
+	EXPECT_EQ(illusion.poe2.minionLifeTicks, 19);
 }
 
 } // namespace

@@ -15,6 +15,7 @@
 #include "msg.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/minion_gems.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -138,6 +139,7 @@ bool TryDodgeRoll(Player &player)
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, target);
 	OnSupportedDodge(player, tiles);
 	OnSpiritDodge(player, start, target);
+	OnIllusionDodge(player, start);
 	return true;
 }
 

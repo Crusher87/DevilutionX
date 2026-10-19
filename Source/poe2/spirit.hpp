@@ -48,6 +48,11 @@ int SkeletalMageCount(int characterLevel);
 /** @brief Index of the skill in MinionCountSkills; -1 if its number of minions isn't chosen. */
 int MinionCountSkillIndex(PersistentSkill skill);
 inline bool IsMinionCountSkill(PersistentSkill skill) { return MinionCountSkillIndex(skill) >= 0; }
+/** @brief Index of the skill in RevivingMinionSkills (the skeleton gems and Wolf Pack); -1 for any other. */
+int RevivingMinionIndex(PersistentSkill skill);
+inline bool IsRevivingMinionSkill(PersistentSkill skill) { return RevivingMinionIndex(skill) >= 0; }
+/** @brief Game ticks a fallen minion takes to rise again: POE2's 12 seconds, longer with Sacrifice. */
+int MinionReviveTicks(const Player &player);
 /** @brief Minions that reserve no Spirit: POE2's Skeletal Warriors raises its first 2 for free. */
 int FreeMinions(PersistentSkill skill);
 /** @brief Minions a gem raises until the player chooses, POE2's "desired initial amount". */
@@ -74,6 +79,8 @@ int MinionLevelForGemLevel(int gemLevel);
 void HastenMinionRevives(Player &player, int ticks);
 /** @brief Minions of the gem waiting to rise, and the game ticks until the first; for the HUD. */
 int PendingMinionRevives(const Player &player, PersistentSkill skill, int *ticksLeft = nullptr);
+/** @brief Minions the gem keeps: the chosen count of a skeleton gem, Wolf Pack's pack, or 0 while inactive. */
+int KeptMinionCount(const Player &player, PersistentSkill skill);
 /** @brief Minions the gem keeps up here: its count plus any a support adds, or 0 where none rise (town). */
 int MinionTarget(const Player &player, PersistentSkill skill);
 /** @brief The gem's minions alive on this level. */

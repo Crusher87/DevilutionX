@@ -738,6 +738,9 @@ void UpdateEnemy(Monster &monster)
 	bool bestsameroom = false;
 	const WorldTilePosition position = monster.position.tile;
 	const bool isPlayerMinion = monster.isPlayerMinion();
+	// POE2 Mashup: Lingering Illusion, an illusion of the hero draws the enemies near it.
+	int decoy = -1;
+	int decoyDist = IllusionDrawTiles + 1;
 	if (!isPlayerMinion) {
 		for (size_t pnum = 0; pnum < Players.size(); pnum++) {
 			const Player &player = Players[pnum];
@@ -774,6 +777,10 @@ void UpdateEnemy(Monster &monster)
 			continue;
 
 		const int dist = otherMonster.position.tile.WalkingDistance(position);
+		if (!isPlayerMinion && otherMonster.poe2.decoy && dist < decoyDist) {
+			decoy = static_cast<int>(monsterId);
+			decoyDist = dist;
+		}
 		if (((monster.flags & MFLAG_GOLEM) == 0
 		        && (monster.flags & MFLAG_BERSERK) == 0
 		        && dist >= 2
@@ -793,6 +800,11 @@ void UpdateEnemy(Monster &monster)
 			bestDist = dist;
 			bestsameroom = sameroom;
 		}
+	}
+	if (decoy != -1) {
+		monster.flags |= MFLAG_TARGETS_MONSTER;
+		menemy = decoy;
+		target = Monsters[decoy].position.future;
 	}
 	if (menemy != -1) {
 		monster.flags &= ~MFLAG_NO_ENEMY;
@@ -1216,7 +1228,15 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 	if (gbIsPoe2 && target.isPlayerMinion() && static_cast<size_t>(target.goalVar3) < Players.size())
 		dam = dam * SupportMinionDamageTakenPercent(Players[static_cast<size_t>(target.goalVar3)], target) / 100;
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
-	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
+	// POE2 Mashup: most of a raging spirit's blow is fire.
+	if (const int firePercent = gbIsPoe2 ? MinionGemFirePercent(attacker) : 0; firePercent > 0) {
+		const int fire = dam * firePercent / 100;
+		ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam - fire));
+		if (!target.hasNoLife())
+			ApplyMonsterDamage(DamageType::Fire, target, Fixed26_6::fromRaw(fire * MonsterDamageTakenPercent(target, DamageType::Fire) / 100));
+	} else {
+		ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
+	}
 	// POE2 Mashup: Blood Golem heals its owner and Fire Golem's blows burn.
 	if (gbIsPoe2 && attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
 		OnMinionHitMonster(Players[static_cast<size_t>(attacker.goalVar3)], attacker, target, Fixed26_6::fromRaw(dam));
@@ -3445,6 +3465,8 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 {
 	monster.poe2 = {};
 	monster.flags |= MFLAG_GOLEM;
+	// An Illusion Weaver raised as a minion stays in sight.
+	monster.flags &= ~MFLAG_HIDDEN;
 	monster.ai = MonsterAIID::Golem;
 	monster.goalVar3 = static_cast<int8_t>(ownerPlayerId);
 	const Player &player = Players[ownerPlayerId];
@@ -3613,6 +3635,7 @@ void InitLevelMonsters()
 	ClearSkillZones();
 	ClearSupportEffects();
 	ClearSpiritSkills();
+	ClearMinionGems();
 	ClearPendingRises();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
@@ -3969,13 +3992,16 @@ std::expected<void, std::string> InitMonsters()
 				DoUnVision(trigs[i].position + Displacement { s, t }, 15);
 		}
 	}
-	// POE2 Mashup: every skeleton gem can raise its minions on every level. Their types come last, so the types of
+	// POE2 Mashup: every minion gem can raise its minions on every level. Their types come last, so the types of
 	// levels saved before keep their places.
 	if (gbIsPoe2) {
-		for (const PersistentSkill skill : MinionCountSkills) {
+		for (const MinionGemData &gem : MinionGemTable()) {
 			if (LevelMonsterTypeCount >= MaxLvlMTypes)
 				break;
-			RETURN_IF_ERROR(AddMonsterType(FindMinionGem(skill)->type, PLACE_SPECIAL));
+			// Hellfire's fire bats need Hellfire's data, which POE2 turns on; the shareware has none of the deeper monsters.
+			if (static_cast<size_t>(gem.type) >= MonstersData.size() || (gbIsSpawn && MonstersData[gem.type].availability == MonsterAvailability::Retail))
+				continue;
+			RETURN_IF_ERROR(AddMonsterType(gem.type, PLACE_SPECIAL));
 		}
 	}
 
@@ -4277,6 +4303,7 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
 		OnMinionDied(Players[static_cast<size_t>(monster.goalVar3)]);
 		OnSupportedMinionDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
+		OnMinionGemDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
 	}
 
 	TelemetryMonsterKilled(monster);
@@ -4598,6 +4625,10 @@ void GolumAi(Monster &golem)
 	if (IsAnyOf(golem.mode, MonsterMode::Death, MonsterMode::SpecialStand) || golem.isWalking()) {
 		return;
 	}
+
+	// POE2 Mashup: Lingering Illusion's illusion stands where the dodge roll began.
+	if (golem.poe2.decoy)
+		return;
 
 	if (IsNoneOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack) && LeashMinion(golem))
 		return;

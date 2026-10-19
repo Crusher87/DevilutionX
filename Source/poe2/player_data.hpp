@@ -373,7 +373,17 @@ enum class PersistentSkill : uint8_t {
 	SkeletalBrutes,
 	/** Skeletal Clerics heal your other minions and raise the fallen sooner. */
 	SkeletalClerics,
-	Last = SkeletalClerics,
+	/** A pack of wolves (Shadow Beasts) that rise again when they fall. */
+	WolfPack,
+	/** Your own fire spells' hits call flaming spirits that fight for a few seconds. */
+	RagingSpirits,
+	/** Swarms of insects leave you to bite and poison enemies near you. */
+	RavenousSwarm,
+	/** Corpse Explosion and Soul Harvest can use your skeletons as corpses; minions rise again more slowly. */
+	Sacrifice,
+	/** Each dodge roll leaves an illusion of you that draws enemies; one they destroy leaves Frenzy remnants. */
+	LingeringIllusion,
+	Last = LingeringIllusion,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -579,6 +589,15 @@ struct SupportRuntime {
 	uint8_t blasphemyTicks = 0;
 };
 
+/** @brief One of Ravenous Swarm's swarms (see poe2/minion_gems.cpp). */
+struct RavenousSwarm {
+	/** The monster it bites, or -1 while it looks for one. */
+	int16_t target = -1;
+	/** Game ticks it has left (0: none out), and until its next bite. */
+	uint16_t ticks = 0;
+	uint8_t biteTicks = 0;
+};
+
 /** @brief Timers of the Spirit skills and the element infusions, per character (not saved; see poe2/spirit_skills.cpp). */
 struct SpiritRuntime {
 	uint8_t guardianCooldown = 0;
@@ -615,8 +634,8 @@ struct SpiritRuntime {
 	int32_t ironWardStore = 0;
 	int32_t plagueStore = 0;
 	int32_t grimFeastStore = 0;
-	/** Grim Feast: the life of the last skeleton of each minion gem that died, in 1/64 points, to price a revive. */
-	std::array<int32_t, 8> grimMinionLife {};
+	/** Grim Feast: the life of the last minion of each reviving minion gem that died, in 1/64 points, to price a revive. */
+	std::array<int32_t, 9> grimMinionLife {};
 	uint8_t grimFeastCooldown = 0;
 	/** Convalescence: the game ticks its buff has left, and its cooldown. */
 	uint8_t convalescenceTicks = 0;
@@ -654,6 +673,13 @@ struct SpiritRuntime {
 	std::array<uint8_t, 3> resonance {};
 	uint8_t resonanceGained = 0;
 	uint8_t resonanceIdleTicks = 0;
+	/** Raging Spirits: the fire spell the hero cast last, the spirits its hits may still call, and the game ticks left to call them. */
+	SkillSlot ragingSkill {};
+	uint8_t ragingBudget = 0;
+	uint8_t ragingTicks = 0;
+	/** Ravenous Swarm: game ticks until the next swarm can leave, and the swarms out now. */
+	uint8_t swarmTicks = 0;
+	std::array<RavenousSwarm, 3> swarms {};
 };
 
 /** @brief Spirit gems whose number of minions is set in the Skills panel, like POE2's "Set Minion Count". */
@@ -667,7 +693,6 @@ constexpr std::array<PersistentSkill, 8> MinionCountSkills {
 	PersistentSkill::SkeletalBrutes,
 	PersistentSkill::SkeletalClerics,
 };
-static_assert(MinionCountSkills.size() == std::tuple_size_v<decltype(SpiritRuntime::grimMinionLife)>);
 /** @brief Most minions one gem keeps, besides the ones its supports add. */
 constexpr uint8_t MaxMinionsPerGem = 12;
 /** @brief A minion count the player hasn't chosen yet: the gem raises its default number. */
@@ -679,6 +704,16 @@ constexpr std::array<uint8_t, MinionCountSkills.size()> DefaultMinionCounts()
 	counts.fill(DefaultMinionCount);
 	return counts;
 }
+
+/** @brief Spirit gems whose minions rise again after they fall: the skeleton gems, then Wolf Pack. */
+constexpr std::array<PersistentSkill, MinionCountSkills.size() + 1> RevivingMinionSkills = [] {
+	std::array<PersistentSkill, MinionCountSkills.size() + 1> skills {};
+	for (size_t i = 0; i < MinionCountSkills.size(); i++)
+		skills[i] = MinionCountSkills[i];
+	skills.back() = PersistentSkill::WolfPack;
+	return skills;
+}();
+static_assert(RevivingMinionSkills.size() == std::tuple_size_v<decltype(SpiritRuntime::grimMinionLife)>);
 
 /** @brief Revive timers of one minion gem (not saved; see poe2/spirit.cpp). */
 struct MinionRevives {
@@ -839,8 +874,8 @@ struct Poe2PlayerData {
 	int energyShieldRemainder = 0;
 	/** @brief Game ticks before Summon Golem brings the golem back (not saved). */
 	uint8_t golemCooldown = 0;
-	/** @brief Revive timers of the MinionCountSkills' minions (not saved). */
-	std::array<MinionRevives, MinionCountSkills.size()> minionRevives {};
+	/** @brief Revive timers of the RevivingMinionSkills' minions (not saved). */
+	std::array<MinionRevives, RevivingMinionSkills.size()> minionRevives {};
 	/** @brief Support gem timers and counters; mutable so hits can count (not saved). */
 	mutable SupportRuntime supportState {};
 	/** @brief Spirit skill timers and the element infusions carried (not saved). */

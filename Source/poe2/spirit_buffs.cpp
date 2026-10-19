@@ -17,6 +17,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
@@ -639,6 +640,18 @@ std::string SpiritBuffPortraitText(const Player &player, PersistentSkill skill)
 		}
 	case PersistentSkill::TrailOfCaltrops:
 		return Caltrops.empty() ? std::string {} : StrCat(Caltrops.size());
+	case PersistentSkill::RagingSpirits:
+		if (const size_t spirits = CountSkeletonMinions(player, MT_FIREBAT); spirits > 0)
+			return StrCat(spirits);
+		return {};
+	case PersistentSkill::RavenousSwarm:
+		if (const int swarms = SwarmCount(player); swarms > 0)
+			return StrCat(swarms);
+		return {};
+	case PersistentSkill::LingeringIllusion:
+		if (const size_t remnants = FrenzyRemnantCount(); remnants > 0)
+			return StrCat(remnants);
+		return {};
 	default:
 		return SpiritUsePortraitText(player, skill);
 	}

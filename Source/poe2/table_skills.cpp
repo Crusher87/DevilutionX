@@ -20,6 +20,7 @@
 #include "plrmsg.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
@@ -620,11 +621,12 @@ bool IsTableAreaSkill(const TableSkillData &data)
 bool StartTableSkill(Player &player, const TableSkillData &data)
 {
 	// Checks that need the world; the caller pays for and starts the skill.
-	if (data.shape == CorpseBurst && !CorpseNear(SkillTargetTile(player), data.radius)) {
+	// Sacrifice: the hero's skeletons count as corpses.
+	if (data.shape == CorpseBurst && !CorpseNear(SkillTargetTile(player), data.radius) && SacrificeMinionNear(player, SkillTargetTile(player), data.radius) == nullptr) {
 		EventPlrMsg(_("Corpse Explosion needs a corpse near the target."), UiFlags::ColorRed);
 		return false;
 	}
-	if (data.shape == SoulHarvest && !CorpseNear(player.position.tile, data.radius)) {
+	if (data.shape == SoulHarvest && !CorpseNear(player.position.tile, data.radius) && SacrificeMinionNear(player, player.position.tile, data.radius) == nullptr) {
 		EventPlrMsg(_("Soul Harvest needs corpses nearby."), UiFlags::ColorRed);
 		return false;
 	}
@@ -786,6 +788,11 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			dCorpse[corpse->x][corpse->y] = 0;
 			ZoneBurst(player, data, *corpse, data.radius, FixedDamage(player, data));
 			PlaySfxLoc(SfxID::BigExplosion, *corpse);
+		} else if (Monster *skeleton = SacrificeMinionNear(player, target, data.radius); skeleton != nullptr) {
+			const Point at = skeleton->position.tile;
+			SacrificeMinion(*skeleton);
+			ZoneBurst(player, data, at, data.radius, FixedDamage(player, data));
+			PlaySfxLoc(SfxID::BigExplosion, at);
 		}
 		break;
 	case SoulHarvest: {
@@ -799,6 +806,15 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 				AddVisualEffect(at, MissileGraphicID::Resurrect, souls);
 				souls++;
 			}
+		}
+		// Sacrifice: the hero's skeletons give their souls too, once the corpses run out.
+		while (souls < MaxSouls) {
+			Monster *skeleton = SacrificeMinionNear(player, tile, data.radius);
+			if (skeleton == nullptr)
+				break;
+			AddVisualEffect(skeleton->position.tile, MissileGraphicID::Resurrect, souls);
+			SacrificeMinion(*skeleton);
+			souls++;
 		}
 		player.poe2.soulStacks = static_cast<uint8_t>(std::min(player.poe2.soulStacks + souls, MaxSouls));
 		player.poe2.soulTicks = data.duration;

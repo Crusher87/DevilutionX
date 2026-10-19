@@ -422,11 +422,11 @@ std::pair<int, int> CountMinions(const Player &owner)
 
 bool AnyMinionSkillHas(const Player &player, SupportGem gem)
 {
-	for (const PersistentSkill skill : { PersistentSkill::SummonGolem, PersistentSkill::BloodGolem, PersistentSkill::FireGolem, PersistentSkill::Revive }) {
+	for (const PersistentSkill skill : { PersistentSkill::SummonGolem, PersistentSkill::BloodGolem, PersistentSkill::FireGolem, PersistentSkill::Revive, PersistentSkill::RagingSpirits }) {
 		if (Has(player, SkillSlot::ForPersistent(skill), gem))
 			return true;
 	}
-	for (const PersistentSkill skill : MinionCountSkills) {
+	for (const PersistentSkill skill : RevivingMinionSkills) {
 		if (Has(player, SkillSlot::ForPersistent(skill), gem))
 			return true;
 	}
@@ -781,8 +781,10 @@ uint32_t SkillTags(SkillSlot skill)
 		case PersistentSkill::SkeletalClerics:
 		case PersistentSkill::BloodGolem:
 		case PersistentSkill::Revive:
+		case PersistentSkill::WolfPack:
 			return ST_Minion;
 		case PersistentSkill::FireGolem:
+		case PersistentSkill::RagingSpirits:
 			return ST_Minion | ST_Fire;
 		// A herald's explosion is an area hit of its element.
 		case PersistentSkill::HeraldOfAsh:
@@ -1054,7 +1056,7 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 		return false;
 	switch (data.gem) {
 	case SG::BoneArmy:
-		return FindMinionGem(skill.persistent()) != nullptr;
+		return IsMinionCountSkill(skill.persistent());
 	case SG::NaKrulsPrison:
 		return IsAnyOf(skill.spell(), SpellID::FireWall, SpellID::LightningWall);
 	default:
@@ -1145,6 +1147,8 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 	Hit.lastType = type;
 	// Trinity: the hit's element builds Resonance.
 	OnSpiritElementalHit(*Hit.player, type);
+	// Raging Spirits: a fire hit of the hero's own fire spell calls a spirit (the scope is only ever the local hero's).
+	OnRagingSpiritsHit(*MyPlayer, Hit.skill, monster, type);
 	if (type == DamageType::Physical)
 		Hit.physical += damage.raw();
 }
@@ -1333,6 +1337,8 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 	state.spentBonusTicks = 0;
 	if (skill.kind == SkillKind::Spell)
 		NoteRecentSpell(state, skill.id);
+	// Raging Spirits: the hits of a fire spell the hero casts themselves call spirits.
+	OnRagingSpiritsCast(player, skill, tags);
 
 	for (const SupportGem gem : player.poe2.supportsFor(skill)) {
 		switch (gem) {

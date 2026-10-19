@@ -380,6 +380,16 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::LongHorn;
 	case PersistentSkill::SkeletalClerics:
 		return SpellIcon::HealOther;
+	case PersistentSkill::WolfPack:
+		return SpellIcon::RedSkull;
+	case PersistentSkill::RagingSpirits:
+		return SpellIcon::Inferno;
+	case PersistentSkill::RavenousSwarm:
+		return SpellIcon::DoomSerpents;
+	case PersistentSkill::Sacrifice:
+		return SpellIcon::BloodRitual;
+	case PersistentSkill::LingeringIllusion:
+		return SpellIcon::Invisibility;
 	default:
 		return SpellIcon::Empty;
 	}

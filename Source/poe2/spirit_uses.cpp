@@ -72,11 +72,11 @@ int32_t StoreCap(const Player &player, PersistentSkill skill)
 	return Percent(player._pMaxHP.raw(), SpiritStoreCapPercent(GemLevel(player, skill)));
 }
 
-/** @brief Which of the skeleton gems a minion belongs to, or -1. */
+/** @brief Which of the reviving minion gems (the skeletons and Wolf Pack) a minion belongs to, or -1. */
 int SkeletonIndex(const Monster &minion)
 {
 	const MinionGemData *gem = FindMinionGemByType(minion.type().type);
-	return gem != nullptr ? MinionCountSkillIndex(gem->skill) : -1;
+	return gem != nullptr ? RevivingMinionIndex(gem->skill) : -1;
 }
 
 /** @brief The life of a skeleton of that gem: the toughest one standing, else the last one that died. */
@@ -94,7 +94,7 @@ int32_t SkeletonLife(const Player &player, int index)
 int32_t GrimFeastCap(const Player &player)
 {
 	int32_t toughest = 0;
-	for (size_t i = 0; i < MinionCountSkills.size(); i++)
+	for (size_t i = 0; i < RevivingMinionSkills.size(); i++)
 		toughest = std::max(toughest, SkeletonLife(player, static_cast<int>(i)));
 	return Percent(toughest, GrimFeastCapPercent(GemLevel(player, PersistentSkill::GrimFeast)));
 }

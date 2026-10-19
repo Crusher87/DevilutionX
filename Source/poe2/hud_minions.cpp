@@ -93,6 +93,10 @@ constexpr PersistentSkill BuffSkills[] = {
 	PersistentSkill::Trinity,
 	PersistentSkill::SiphonElements,
 	PersistentSkill::HeraldOfBlood,
+	PersistentSkill::RagingSpirits,
+	PersistentSkill::RavenousSwarm,
+	PersistentSkill::Sacrifice,
+	PersistentSkill::LingeringIllusion,
 };
 
 void DrawBuffTooltip(const Surface &out, PersistentSkill skill)
@@ -117,7 +121,8 @@ void DrawMinionHud(const Surface &out)
 		int ticksLeft;
 	};
 	std::optional<Hover> hover;
-	for (const PersistentSkill skill : MinionCountSkills) {
+	const int reviveTicks = MinionReviveTicks(player);
+	for (const PersistentSkill skill : RevivingMinionSkills) {
 		const int target = MinionTarget(player, skill);
 		if (target <= 0)
 			continue;
@@ -140,7 +145,7 @@ void DrawMinionHud(const Surface &out)
 		if (pending > 0) {
 			const Point bar { portrait.position.x, portrait.position.y + portrait.size.height + 2 };
 			FillRect(out, bar.x, bar.y, portrait.size.width, BarHeight, BarBackColor);
-			const int filled = portrait.size.width * (SkeletonReviveTicks - std::min(ticksLeft, SkeletonReviveTicks)) / SkeletonReviveTicks;
+			const int filled = portrait.size.width * (reviveTicks - std::min(ticksLeft, reviveTicks)) / reviveTicks;
 			if (filled > 0)
 				FillRect(out, bar.x, bar.y, filled, BarHeight, BarColor);
 		}

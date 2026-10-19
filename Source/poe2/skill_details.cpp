@@ -367,7 +367,7 @@ std::string Seconds(double seconds)
 /** @brief How a skeleton gem's minions fight, against a Skeletal Warrior. */
 void MinionGemDetails(std::vector<SkillDetailLine> &lines, const MinionGemData &gem)
 {
-	if (gem.skill == PersistentSkill::SkeletalWarriors)
+	if (gem.skill == PersistentSkill::SkeletalWarriors || gem.skill == PersistentSkill::LingeringIllusion)
 		return;
 	Value(lines, "Life", std::format("{:d}% of a Skeletal Warrior's", gem.lifePercent));
 	if (gem.damagePercent > 0)
@@ -523,6 +523,32 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 		Value(lines, "Heals", std::format("{:d}% of a hurt minion's life every {:d} seconds, within {:d} tiles", ClericHealPercent(level), ClericHealTicks / 20, ClericRadius));
 		Value(lines, "Fallen minions", "rise twice as fast while a Cleric stands");
 		break;
+	case PersistentSkill::WolfPack:
+		Value(lines, "Wolves", std::format("{:d}", WolfPackSize(level)));
+		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+		Value(lines, "Revives after", std::format("{:d} seconds", SkeletonReviveTicks / 20));
+		break;
+	case PersistentSkill::RagingSpirits:
+		Value(lines, "Spirits", std::format("{:d} a cast at most, {:d} at once", RagingSpiritsPerCast, RagingSpiritsMax));
+		Value(lines, "Burn for", ticks(RagingSpiritTicks));
+		Value(lines, "Fire", std::format("{:d}% of their blows", RagingSpiritFirePercent));
+		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+		break;
+	case PersistentSkill::RavenousSwarm:
+		Value(lines, "A swarm every", std::format("{:d} seconds, with an enemy within {:d} tiles", SwarmEveryTicks / 20, SwarmReachTiles));
+		Value(lines, "Each swarm lasts", ticks(SwarmTicks(level)));
+		Value(lines, "Bites", std::format("every {:.1f}s for {:d}% of a Skeletal Warrior's blow", SwarmBiteTicks / 20.0, SwarmBitePercent));
+		Value(lines, "Poison", std::format("{:d}% of the bite over {:d} seconds", SwarmPoisonPercent, SwarmPoisonTicks / 20));
+		break;
+	case PersistentSkill::Sacrifice:
+		Value(lines, "Corpses", "your skeletons, for Corpse Explosion and Soul Harvest");
+		Value(lines, "Minions rise again after", std::format("{:.1f} seconds", SkeletonReviveTicks * SacrificeRevivePercent(level) / 100 / 20.0));
+		break;
+	case PersistentSkill::LingeringIllusion:
+		Value(lines, "Illusion", std::format("{:d} seconds, 1% of your life, draws enemies within {:d} tiles", IllusionTicks / 20, IllusionDrawTiles));
+		Value(lines, "Broken by an enemy", std::format("a Frenzy remnant for {:d} seconds", IllusionRemnantTicks / 20));
+		Value(lines, "Second remnant", std::format("{:d}% chance", IllusionSecondRemnantChance(level)));
+		break;
 	default:
 		break;
 	}
@@ -613,7 +639,7 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		const int free = FreeMinions(persistent);
 		Value(lines, "Spirit per minion", free > 0 ? std::format("{:d}, first {:d} free", SpiritPerMinion(player, persistent), free) : std::format("{:d}", SpiritPerMinion(player, persistent)));
 		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
-		Value(lines, "Revives after", std::format("{:d} seconds", SkeletonReviveTicks / 20));
+		Value(lines, "Revives after", std::format("{:.1f} seconds", MinionReviveTicks(player) / 20.0));
 	} else if (skill.persistent() == PersistentSkill::HoradricTotem && skill.kind == SkillKind::Persistent)
 		Value(lines, "Cost", std::format("{:d} Mana for each totem", HoradricTotemManaCost(gemLevel)));
 	else if (skill.kind == SkillKind::Persistent)

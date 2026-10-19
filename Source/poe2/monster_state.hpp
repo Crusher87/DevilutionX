@@ -101,6 +101,10 @@ struct Poe2MonsterState {
 	uint8_t minionRageTicks = 0;
 	/** @brief A Skeletal Cleric's game ticks before its next heal (not saved). */
 	uint8_t clericTicks = 0;
+	/** @brief Game ticks a short-lived minion (a raging spirit, an illusion) has left; 0 for one that stays (not saved). */
+	uint8_t minionLifeTicks = 0;
+	/** @brief Lingering Illusion's illusion of the hero, which draws enemies near it (not saved). */
+	bool decoy = false;
 };
 
 } // namespace devilution
