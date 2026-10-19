@@ -243,6 +243,20 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Attrition");
 	case PersistentSkill::Blink:
 		return _("Blink");
+	case PersistentSkill::IronWard:
+		return _("Iron Ward");
+	case PersistentSkill::PlagueBearer:
+		return _("Plague Bearer");
+	case PersistentSkill::Convalescence:
+		return _("Convalescence");
+	case PersistentSkill::GrimFeast:
+		return _("Grim Feast");
+	case PersistentSkill::WarBanner:
+		return _("War Banner");
+	case PersistentSkill::DefianceBanner:
+		return _("Defiance Banner");
+	case PersistentSkill::DreadBanner:
+		return _("Dread Banner");
 	default:
 		return {};
 	}
@@ -335,6 +349,20 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Rare and unique enemies near you take more damage the longer they stay near you, and after 40 seconds you can cull them");
 	case PersistentSkill::Blink:
 		return _("Your dodge roll becomes a short teleport, every 4.5 seconds. It isn't a roll, so nothing set off by rolling goes");
+	case PersistentSkill::IronWard:
+		return _("Stores the physical damage your armour stops. Use it from the skill tray to release it all as a nova that stuns hard, wider the more it holds");
+	case PersistentSkill::PlagueBearer:
+		return _("Stores 4% of the poison damage you deal. Use it from the skill tray to release it as a nova that poisons everything it hits");
+	case PersistentSkill::Convalescence:
+		return _("Use it from the skill tray for 20 mana: your energy shield starts recharging at once, and hits can't stop it for 3 seconds. Every 30 seconds");
+	case PersistentSkill::GrimFeast:
+		return _("Your skeletons that die near you leave life remnants. Walk over them to store the life, and use it from the skill tray to raise fallen skeletons at once");
+	case PersistentSkill::WarBanner:
+		return _("Attack hits build Glory. At 200, use it from the skill tray to plant a banner: in its area you and your minions deal 25% more attack damage, with more accuracy and attack speed");
+	case PersistentSkill::DefianceBanner:
+		return _("Attack hits build Glory. At 200, use it from the skill tray to plant a banner: in its area you have 30% more armour and evasion and move 30% faster");
+	case PersistentSkill::DreadBanner:
+		return _("Attack hits build Glory. At 200, use it from the skill tray to plant a banner: in its area your maximum resistances are 4% higher and your flasks gain charges");
 	default:
 		return {};
 	}
@@ -399,6 +427,13 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::TrailOfCaltrops:
 	case PersistentSkill::ManaRemnants:
 	case PersistentSkill::Attrition:
+	case PersistentSkill::IronWard:
+	case PersistentSkill::PlagueBearer:
+	case PersistentSkill::Convalescence:
+	case PersistentSkill::GrimFeast:
+	case PersistentSkill::WarBanner:
+	case PersistentSkill::DefianceBanner:
+	case PersistentSkill::DreadBanner:
 		return 30;
 	case PersistentSkill::ElementalConflux:
 	case PersistentSkill::Blink:

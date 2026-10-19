@@ -103,6 +103,8 @@ int PresenceThresholdPercent(const Monster &monster, bool stun);
 bool AttritionCulls(const Player &player, const Monster &monster);
 /** @brief Alchemist's Boon: the share of a life flask's recovery that also heals the minions nearby, in percent. */
 int FlaskMinionHealPercent(const Player &player);
+/** @brief Deals the damage to the monster for the local hero, with its ailments built this much harder, in percent; whether it lives. */
+bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent = 100);
 /** @brief Blink replaces the dodge roll while its gem is on. */
 [[nodiscard]] bool BlinkReplacesDodge(const Player &player);
 /** @brief A dodge roll covered these tiles from the start: Trail of Caltrops. */

@@ -910,3 +910,10 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Mana Remnants Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Attrition Gem	Gem	6	0	0	0	0	0	15	0	15		SPIRITGEM_TABLE	Null	true	1500
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blink Gem	Gem	12	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Iron Ward Gem	Gem	6	0	0	0	0	0	30	0	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Plague Bearer Gem	Gem	6	0	0	0	0	0	0	0	30		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Convalescence Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Grim Feast Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	War Banner Gem	Gem	6	0	0	0	0	0	15	0	15		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Defiance Banner Gem	Gem	12	0	0	0	0	0	20	0	20		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Dread Banner Gem	Gem	21	0	0	0	0	0	30	0	30		SPIRITGEM_TABLE	Null	true	3600

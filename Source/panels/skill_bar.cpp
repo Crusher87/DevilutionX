@@ -33,6 +33,7 @@
 #include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -335,6 +336,20 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::Search;
 	case PersistentSkill::Blink:
 		return SpellIcon::Teleport;
+	case PersistentSkill::IronWard:
+		return SpellIcon::ItemRepair;
+	case PersistentSkill::PlagueBearer:
+		return SpellIcon::FireCloud;
+	case PersistentSkill::Convalescence:
+		return SpellIcon::HealOther;
+	case PersistentSkill::GrimFeast:
+		return SpellIcon::BloodStar;
+	case PersistentSkill::WarBanner:
+		return SpellIcon::FlameWave;
+	case PersistentSkill::DefianceBanner:
+		return SpellIcon::Sentinel;
+	case PersistentSkill::DreadBanner:
+		return SpellIcon::Pentagram;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -997,7 +1012,9 @@ void DrawSkillBar(const Surface &out)
 		switch (binding.action) {
 		case TrayAction::Gem: {
 			const SkillSlot skill = player.poe2.skillSlots[binding.socket];
-			DrawSkillIcon(out, bottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready);
+			// A Spirit gem used from the tray greys out until using it would do something.
+			const bool spiritUse = skill.kind == SkillKind::Persistent && IsSpiritUseGem(skill.persistent());
+			DrawSkillIcon(out, bottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready && (!spiritUse || SpiritGemReady(player, skill.persistent())));
 			break;
 		}
 		case TrayAction::ReadiedSpell:
@@ -1273,6 +1290,47 @@ void UseMetaGemFromTray(Player &player, size_t slot)
 	}
 }
 
+/** @brief Releases the gem's store, starts its buff or plants its banner, or says why it can't. */
+void UseSpiritGemFromTray(Player &player, PersistentSkill skill)
+{
+	const std::string_view name = SkillName(SkillSlot::ForPersistent(skill));
+	switch (UseSpiritGem(player, skill)) {
+	case SpiritUseResult::Off:
+		EventPlrMsg(FormatRuntime(_("{:s} is switched off. Right-click it in the Skills panel (K)."), name), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::Town:
+		EventPlrMsg(FormatRuntime(_("{:s} can't be used in town."), name), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::Empty:
+		if (skill == PersistentSkill::GrimFeast)
+			EventPlrMsg(_("Grim Feast hasn't stored enough life to raise a skeleton. Walk over the remnants of fallen ones."), UiFlags::ColorRed);
+		else if (skill == PersistentSkill::IronWard)
+			EventPlrMsg(_("Iron Ward has nothing stored. It stores the damage your armour stops."), UiFlags::ColorRed);
+		else
+			EventPlrMsg(_("Plague Bearer has nothing stored. It stores part of the poison damage you deal."), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::NotEnoughGlory: {
+		const SpiritStore glory = SpiritGemStore(player, skill);
+		EventPlrMsg(FormatRuntime(_("{:s} has {:d} Glory; planting it takes {:d}. Attack hits build Glory."), name, glory.value, glory.cap), UiFlags::ColorRed);
+		break;
+	}
+	case SpiritUseResult::Cooldown:
+		EventPlrMsg(FormatRuntime(_("{:s} isn't ready yet."), name), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::NoMana:
+		EventPlrMsg(FormatRuntime(_("{:s} needs {:d} mana."), name, ConvalescenceManaCost), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::ShieldFull:
+		EventPlrMsg(_("Your energy shield is already full."), UiFlags::ColorRed);
+		break;
+	case SpiritUseResult::NothingToRaise:
+		EventPlrMsg(_("None of your skeletons are waiting to rise."), UiFlags::ColorRed);
+		break;
+	default:
+		break;
+	}
+}
+
 } // namespace
 
 void UseSkillSlot(size_t slot)
@@ -1303,6 +1361,8 @@ void UseSkillSlot(size_t slot)
 			    UiFlags::ColorRed);
 		else if (IsInvocationGem(skill) || skill.persistent() == PersistentSkill::HoradricTotem)
 			UseMetaGemFromTray(player, slot);
+		else if (IsSpiritUseGem(skill.persistent()))
+			UseSpiritGemFromTray(player, skill.persistent());
 		else
 			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
 		return;

@@ -97,6 +97,7 @@
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
@@ -3365,7 +3366,7 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 		// POE2 Mashup: resistances drop as you go deeper and can go negative.
 		const int penalty = ResistancePenalty(player);
 		Poe2PlayerData &data = player.poe2;
-		const int maxElemental = MaxResistance + data.rule(UniqueRule::MaxElementalResistance);
+		const int maxElemental = MaxResistance + data.rule(UniqueRule::MaxElementalResistance) + BannerMaxResistance(player);
 		data.maxResistances = { static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental + data.rule(UniqueRule::MaxMagicResistance)) };
 		std::array<int, 3> uncapped { fire - penalty, lightning - penalty, magic - penalty };
 		if (const int share = data.rule(UniqueRule::ResistanceShare); share > 0) {

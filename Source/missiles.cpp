@@ -54,6 +54,7 @@
 #include "poe2/meta_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -321,6 +322,9 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		hper -= player.CalculateArmorPierce(monster.armorClass, false);
 		// POE2 Mashup: accuracy falls off gently with distance instead of with its square.
 		hper -= gbIsPoe2 ? dist : (dist * dist) / 2;
+		// POE2 Mashup: War Banner's accuracy.
+		if (hper > 0)
+			hper = hper * (100 + BannerAccuracyPercent(player)) / 100;
 	} else {
 		hper = player.GetMagicToHit() - (monster.level(sgGameInitInfo.nDifficulty) * 2) - dist;
 	}

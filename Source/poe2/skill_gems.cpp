@@ -11,6 +11,7 @@
 #include "poe2/meta_gems.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -344,7 +345,7 @@ std::optional<TraySlot> AutoBindSocket(Player &player, size_t socket)
 
 bool SkillGoesOnTray(SkillSlot skill)
 {
-	return !skill.isEmpty() && (skill.kind != SkillKind::Persistent || IsInvocationGem(skill) || skill.persistent() == PersistentSkill::HoradricTotem);
+	return !skill.isEmpty() && (skill.kind != SkillKind::Persistent || IsInvocationGem(skill) || skill.persistent() == PersistentSkill::HoradricTotem || IsSpiritUseGem(skill.persistent()));
 }
 
 void MigrateOldSkillBar(Player &player)

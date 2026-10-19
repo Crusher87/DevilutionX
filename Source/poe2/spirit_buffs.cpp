@@ -20,6 +20,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/str_cat.hpp"
@@ -581,6 +582,11 @@ int FlaskMinionHealPercent(const Player &player)
 	return On(player, PersistentSkill::AlchemistsBoon) ? AlchemistMinionHealPercent(GemLevel(player, PersistentSkill::AlchemistsBoon)) : 0;
 }
 
+bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent)
+{
+	return HitMonster(player, monster, type, damage, ailmentPercent);
+}
+
 bool BlinkReplacesDodge(const Player &player)
 {
 	return On(player, PersistentSkill::Blink);
@@ -631,7 +637,7 @@ std::string SpiritBuffPortraitText(const Player &player, PersistentSkill skill)
 	case PersistentSkill::TrailOfCaltrops:
 		return Caltrops.empty() ? std::string {} : StrCat(Caltrops.size());
 	default:
-		return {};
+		return SpiritUsePortraitText(player, skill);
 	}
 }
 
@@ -664,6 +670,7 @@ void ClearSpiritBuffs()
 {
 	Caltrops.clear();
 	Remnants.clear();
+	ClearSpiritUses();
 }
 
 size_t CaltropCount()

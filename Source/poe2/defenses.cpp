@@ -14,6 +14,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/spirit_buffs.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/is_of.hpp"
@@ -113,15 +114,15 @@ void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int 
 
 int ArmourRating(const Player &player, bool withSpiritBuffs)
 {
-	// Barkskin adds armour from energy shield lost, up to the gear's.
+	// Barkskin adds armour from energy shield lost, up to the gear's; Defiance Banner gives more.
 	const int armour = std::max(player._pIAC + player._pIBonusAC, 0) + (withSpiritBuffs ? SpiritBuffArmour(player) : 0);
-	return armour * (100 + FlaskArmourPercent(player)) / 100 * UniqueDefencePercent(player) / 100;
+	return armour * (100 + FlaskArmourPercent(player)) / 100 * UniqueDefencePercent(player) / 100 * (100 + (withSpiritBuffs ? BannerDefencePercent(player) : 0)) / 100;
 }
 
 int EvasionRating(const Player &player, bool withSpiritBuffs)
 {
 	return std::max(player.poe2.evasion + player._pDexterity / 5, 0) * UniqueDefencePercent(player) / 100 * (100 + UnarmedEvasionPercent(player)) / 100
-	    * (100 + (withSpiritBuffs ? SpiritBuffEvasionPercent(player) : 0)) / 100;
+	    * (100 + (withSpiritBuffs ? SpiritBuffEvasionPercent(player) : 0)) / 100 * (100 + (withSpiritBuffs ? BannerDefencePercent(player) : 0)) / 100;
 }
 
 int HitDefense(const Player &player)
@@ -145,7 +146,10 @@ Fixed26_6 ApplyArmour(const Player &player, Fixed26_6 damage)
 	if (!gbIsPoe2)
 		return damage;
 	const int percent = ArmourReductionPercent(ArmourRating(player), damage);
-	return Fixed26_6::fromRaw(damage.raw() - damage.raw() * percent / 100);
+	const Fixed26_6 stopped = Fixed26_6::fromRaw(damage.raw() * percent / 100);
+	// Iron Ward stores what armour stops.
+	OnSpiritArmourStopped(player, stopped);
+	return Fixed26_6::fromRaw(damage.raw() - stopped.raw());
 }
 
 Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
@@ -154,7 +158,9 @@ Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
 		return damage;
 	damage = ApplyGuard(player, damage);
 	Poe2PlayerData &data = player.poe2;
-	data.energyShieldRechargeTicks = 0;
+	// Convalescence keeps hits from stopping the recharge for a while.
+	if (!RechargeCantBeInterrupted(player))
+		data.energyShieldRechargeTicks = 0;
 	data.energyShieldRemainder = 0;
 	const int32_t absorbed = std::min(data.energyShield, damage.raw());
 	// Every hit that lands comes through here: Wind Dancer, Ghost Dance and Barkskin.

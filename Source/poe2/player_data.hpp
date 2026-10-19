@@ -13,6 +13,7 @@
 #include <optional>
 #include <utility>
 
+#include "engine/point.hpp"
 #include "poe2/craft_types.hpp"
 #include "poe2/economy_state.hpp"
 #include "poe2/flasks.hpp"
@@ -328,7 +329,21 @@ enum class PersistentSkill : uint8_t {
 	Attrition,
 	/** Your dodge roll becomes a short teleport. */
 	Blink,
-	Last = Blink,
+	/** Stores the physical damage your armour stops; use it from the skill tray to release it as a nova. */
+	IronWard,
+	/** Stores part of your poison damage; use it from the skill tray to release a poison nova. */
+	PlagueBearer,
+	/** Use it from the skill tray to start energy shield recharge at once; hits can't interrupt it for a few seconds. */
+	Convalescence,
+	/** Your skeletons that die leave life remnants; use it from the skill tray to spend that life raising them at once. */
+	GrimFeast,
+	/** Banners (POE2): attack hits build Glory; at 200, use it from the skill tray to plant a banner that empowers attacks. */
+	WarBanner,
+	/** Banner of more armour, evasion and movement speed. */
+	DefianceBanner,
+	/** Banner of higher maximum resistances and flask charges. */
+	DreadBanner,
+	Last = DreadBanner,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -566,6 +581,27 @@ struct SpiritRuntime {
 	/** Elemental Conflux's element (a DamageType), -1 while it's down, and the ticks until it changes. */
 	int8_t confluxElement = -1;
 	uint8_t confluxTicks = 0;
+	/** Iron Ward's and Plague Bearer's stored damage, and Grim Feast's stored life, in 1/64 points. */
+	int32_t ironWardStore = 0;
+	int32_t plagueStore = 0;
+	int32_t grimFeastStore = 0;
+	/** Grim Feast: the life of the last skeleton of each minion gem that died, in 1/64 points, to price a revive. */
+	std::array<int32_t, 2> grimMinionLife {};
+	uint8_t grimFeastCooldown = 0;
+	/** Convalescence: the game ticks its buff has left, and its cooldown. */
+	uint8_t convalescenceTicks = 0;
+	uint16_t convalescenceCooldown = 0;
+	/** Each banner's Glory, in War, Defiance and Dread order. */
+	std::array<uint16_t, 3> glory {};
+	/** The banner standing (one at a time): its kind (0 to 2, -1 for none), place and the game ticks it has left. */
+	int8_t bannerKind = -1;
+	Point bannerPosition {};
+	uint8_t bannerTicks = 0;
+	/** Whether the hero stood in the banner's area last tick, for the resistances it raises. */
+	bool inDreadBanner = false;
+	uint16_t bannerFlaskCarry = 0;
+	/** Defiance Banner's movement speed, in hundredths of a walk frame skipped. */
+	uint8_t walkCarry = 0;
 };
 
 /** @brief Spirit gems whose number of minions is set in the Skills panel, like POE2's "Set Minion Count". */

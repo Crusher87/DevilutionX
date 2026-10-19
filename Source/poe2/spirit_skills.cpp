@@ -20,6 +20,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -424,6 +425,7 @@ void ProcessSpiritSkills(Player &player)
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
 		return;
 	ProcessSpiritBuffs(player);
+	ProcessSpiritUses(player);
 	if (leveltype == DTYPE_TOWN) {
 		Motes.clear();
 		return;

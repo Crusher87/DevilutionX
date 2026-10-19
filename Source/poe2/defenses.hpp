@@ -68,7 +68,7 @@ int HitDefense(const Player &player);
 
 /** @brief Percent of a physical hit that armour removes: armour / (armour + 10 * damage), like POE2. */
 int ArmourReductionPercent(int armour, Fixed26_6 damage);
-/** @brief Physical damage after armour, in POE2 mode. */
+/** @brief Physical damage after armour, in POE2 mode, for a hit that lands on the player: Iron Ward stores what it stops. */
 Fixed26_6 ApplyArmour(const Player &player, Fixed26_6 damage);
 
 /**

@@ -22,6 +22,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/meta_gems.hpp"
@@ -590,6 +591,9 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		state.storedChill = 0;
 	}
 	raw = raw * HitConditionPercent(player, monster) / 100;
+	// War Banner: more attack damage in its area. Every attack hit builds the banners' Glory.
+	raw = raw * (100 + BannerAttackDamagePercent(player)) / 100;
+	OnSpiritAttackHit(player, monster);
 	if (const int more = Rule(player, UniqueRule::BlockRiposte); more > 0 && !ranged && state.blockRiposteTicks > 0) {
 		raw = raw * (100 + more) / 100;
 		state.blockRiposteTicks = 0;

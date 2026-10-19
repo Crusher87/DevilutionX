@@ -63,6 +63,7 @@
 #include "poe2/regen.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -93,10 +94,10 @@ bool MyPlayerIsDead;
 
 namespace {
 
-/** @brief POE2 Mashup: attack animation frames skipped for the passive tree's attack speed and the uniques' changing attack speed. */
+/** @brief POE2 Mashup: attack animation frames skipped for the passive tree's attack speed, the uniques' changing attack speed and War Banner. */
 int8_t AttackSpeedFrames(const Player &player)
 {
-	const int frames = player.poe2.passiveAttackFrames + UniqueAttackSpeedPercent(player) / 10;
+	const int frames = player.poe2.passiveAttackFrames + (UniqueAttackSpeedPercent(player) + BannerAttackSpeedPercent(player)) / 10;
 	return static_cast<int8_t>(std::clamp(frames, 0, MaxPassiveSpeedFrames + 1));
 }
 
@@ -177,9 +178,9 @@ void StartWalkAnimation(Player &player, Direction dir, bool pmWillBeCalled)
 	int8_t skippedFrames = -2;
 	if (leveltype == DTYPE_TOWN && sgGameInitInfo.bRunInTown != 0)
 		skippedFrames = 2;
-	// POE2 Mashup: always run, in the dungeon as well as in town, and dash while dodge rolling.
+	// POE2 Mashup: always run, in the dungeon as well as in town, and dash while dodge rolling. Defiance Banner runs faster.
 	if (gbIsPoe2)
-		skippedFrames = player.poe2.isDodging() ? DodgeRollSkippedWalkFrames : 2;
+		skippedFrames = player.poe2.isDodging() ? DodgeRollSkippedWalkFrames : static_cast<int8_t>(2 + BannerWalkSkippedFrames(player, player._pWFrames));
 	if (pmWillBeCalled)
 		skippedFrames += 1;
 	NewPlrAnim(player, player_graphic::Walk, dir, AnimationDistributionFlags::ProcessAnimationPending, skippedFrames);
@@ -598,6 +599,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	}
 
 	hper += player.GetMeleePiercingToHit() - player.CalculateArmorPierce(monster.armorClass, true);
+	// POE2 Mashup: War Banner's accuracy.
+	if (hper > 0)
+		hper = hper * (100 + BannerAccuracyPercent(player)) / 100;
 	hper = std::clamp(hper, 5, 95);
 	// POE2 Mashup: some uniques make attacks unevadable.
 	if (AttacksCannotBeEvaded(player))

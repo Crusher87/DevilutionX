@@ -25,6 +25,7 @@
 #include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
@@ -247,6 +248,20 @@ void DrawEnergyBar(const Surface &out, const Player &player, size_t slot)
 		FillRectangle(out, { bar.position + Displacement { bar.size.width * energy / cap, 0 }, { 1, bar.size.height } }, SocketColor);
 }
 
+/** @brief What a Spirit gem used from the tray holds, a thin bar under its row: Glory, or stored damage or life. */
+void DrawStoreBar(const Surface &out, const Player &player, size_t slot, PersistentSkill skill)
+{
+	const SpiritStore store = SpiritGemStore(player, skill);
+	if (store.cap <= 0)
+		return;
+	const Rectangle row = RowRect(slot);
+	const Rectangle bar { row.position + Displacement { 48, RowHeight - 3 }, { row.size.width - 52, 2 } };
+	FillRectangle(out, bar, EnergyEmptyColor);
+	const int filled = static_cast<int>(static_cast<int64_t>(bar.size.width) * std::clamp(store.value, 0, store.cap) / store.cap);
+	if (filled > 0)
+		FillRectangle(out, { bar.position, { filled, bar.size.height } }, EnergyColor);
+}
+
 void DrawHeader(const Surface &out, const Player &player, const Hit &hover)
 {
 	const Rectangle panel = PanelRect();
@@ -349,6 +364,8 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		const int detailsLeft = arrow.position.x + arrow.size.width - static_cast<int>(GetLineWidth(detailsText));
 		DrawString(out, on ? _("On (right-click: off)") : _("Off (right-click: on)"), { row.position + Displacement { 48, 20 }, { detailsLeft - row.position.x - 48 - 8, 24 } },
 		    { .flags = (on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
+		if (skill.kind == SkillKind::Persistent && IsSpiritUseGem(skill.persistent()))
+			DrawStoreBar(out, player, slot, skill.persistent());
 		return;
 	}
 
@@ -449,6 +466,16 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 				lines.emplace_back(FormatRuntime(_("Energy {:d} of {:d}; a cast takes {:d}"), MetaEnergy(player, hover.slot), MetaEnergyCap(player.poe2, hover.slot), MetaMaxEnergy(player.poe2, hover.slot)), UiFlags::ColorBlue);
 			else
 				lines.emplace_back(FormatRuntime(_("Energy {:d} of {:d}"), MetaEnergy(player, hover.slot), MetaMaxEnergy(player.poe2, hover.slot)), UiFlags::ColorBlue);
+		}
+		if (skill.kind == SkillKind::Persistent && IsSpiritUseGem(skill.persistent())) {
+			const PersistentSkill used = skill.persistent();
+			const SpiritStore store = SpiritGemStore(player, used);
+			if (IsAnyOf(used, PersistentSkill::WarBanner, PersistentSkill::DefianceBanner, PersistentSkill::DreadBanner))
+				lines.emplace_back(FormatRuntime(_("Glory {:d} of {:d}"), store.value, store.cap), UiFlags::ColorBlue);
+			else if (used == PersistentSkill::GrimFeast)
+				lines.emplace_back(FormatRuntime(_("Life stored {:d} of {:d}"), store.value, store.cap), UiFlags::ColorBlue);
+			else if (store.cap > 0)
+				lines.emplace_back(FormatRuntime(_("Damage stored {:d} of {:d}"), store.value, store.cap), UiFlags::ColorBlue);
 		}
 		if (skill.kind == SkillKind::Attack && WeaponSkillNeedsWeapon(skill.attack()))
 			lines.emplace_back(FormatRuntime(_("Needs a {:s}"), WeaponSkillWeapons(skill.attack())),

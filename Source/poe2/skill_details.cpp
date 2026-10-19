@@ -17,6 +17,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -418,6 +419,38 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 	case PersistentSkill::Blink:
 		Value(lines, "Distance", std::format("{:d} tiles", BlinkTiles(level)));
 		Value(lines, "Cooldown", ticks(BlinkCooldownTicks(level)));
+		break;
+	case PersistentSkill::IronWard:
+		Value(lines, "Stores", std::format("{:d}% of the damage armour stops", IronWardStorePercent(level)));
+		Value(lines, "Holds up to", std::format("{:d}% of your maximum life", SpiritStoreCapPercent(level)));
+		Value(lines, "Nova", std::format("{:d} to {:d} tiles, {:d}% more stun", IronWardMinRadius, IronWardMaxRadius, IronWardStunPercent - 100));
+		break;
+	case PersistentSkill::PlagueBearer:
+		Value(lines, "Stores", std::format("{:d}% of your poison damage", PlagueBearerStorePercent));
+		Value(lines, "Holds up to", std::format("{:d}% of your maximum life", SpiritStoreCapPercent(level)));
+		Value(lines, "Nova", std::format("{:d} tiles, always poisons", PlagueBearerRadius));
+		break;
+	case PersistentSkill::Convalescence:
+		Value(lines, "Mana", std::format("{:d}", ConvalescenceManaCost));
+		Value(lines, "Can't be stopped for", ticks(ConvalescenceTicks(level)));
+		Value(lines, "Cooldown", ticks(ConvalescenceCooldownTicks));
+		break;
+	case PersistentSkill::GrimFeast:
+		Value(lines, "Remnant", std::format("{:d}% of the skeleton's life, for {:d} seconds", GrimFeastRemnantPercent, GrimFeastRemnantTicks / 20));
+		Value(lines, "Holds up to", std::format("{:d}% of your toughest skeleton's life", GrimFeastCapPercent(level)));
+		break;
+	case PersistentSkill::WarBanner:
+	case PersistentSkill::DefianceBanner:
+	case PersistentSkill::DreadBanner:
+		Value(lines, "Glory to plant", std::format("{:d}", GloryForBanner));
+		Value(lines, "Banner lasts", ticks(BannerTicks(level)));
+		Value(lines, "Area", std::format("{:d} tiles", BannerTiles));
+		if (skill == PersistentSkill::WarBanner)
+			Value(lines, "In its area", std::format("{:d}% more attack damage, {:d}% more accuracy, {:d}% faster attacks", WarBannerDamagePercent, WarBannerAccuracyPercent, WarBannerAttackSpeedPercent));
+		else if (skill == PersistentSkill::DefianceBanner)
+			Value(lines, "In its area", std::format("{:d}% more armour and evasion, {:d}% faster movement", DefianceBannerDefencePercent, DefianceBannerMovementPercent));
+		else
+			Value(lines, "In its area", std::format("+{:d}% maximum resistances, half a flask charge a second", DreadBannerMaxResistance));
 		break;
 	default:
 		break;

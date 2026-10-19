@@ -25,6 +25,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
+#include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/table_skills.hpp"
@@ -1602,6 +1603,7 @@ void ProcessSupportMonsterEffects(Monster &monster)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
 		if (state.poisonSource >= 0 && state.poisonSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr && !monster.hasNoLife()) {
 			ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(state.poisonDamagePerTick));
+			OnSpiritPoisonDealt(*MyPlayer, Fixed26_6::fromRaw(state.poisonDamagePerTick));
 			if (monster.hasNoLife())
 				M_StartKill(monster, *MyPlayer);
 		}
@@ -1855,7 +1857,8 @@ int SupportMinionDamagePercent(const Player &owner, const Monster &minion)
 		percent = percent * (100 + MinionValue(owner, MinionSkillOf(minion), SG::FeedingFrenzy, 0)) / 100;
 	if (MinionHas(owner, minion, SG::MixedHost))
 		percent = percent * (100 + 7 * CountMinions(owner).second) / 100;
-	return percent;
+	// Not a support, but every minion hit comes here: War Banner.
+	return percent * (100 + BannerMinionDamagePercent(owner, minion)) / 100;
 }
 
 int SupportMinionDamageTakenPercent(const Player &owner, const Monster &minion)
@@ -1885,6 +1888,7 @@ void OnSupportedMinionDied(Player &owner, Monster &minion)
 	if (!gbIsPoe2 || &owner != MyPlayer)
 		return;
 	OnMetaMinionDied(owner, minion);
+	OnSpiritMinionDied(owner, minion);
 	const Fixed26_6 life = Fixed26_6::fromRaw(std::max<int32_t>(minion.maxHitPoints.raw() / 4, 64));
 	if (MinionHas(owner, minion, SG::GravePact)) {
 		AddVisualEffect(minion.position.tile, MissileGraphicID::BloodStarExplosion, 0, 6);
