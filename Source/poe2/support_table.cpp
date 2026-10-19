@@ -781,6 +781,8 @@ uint32_t SkillTags(SkillSlot skill)
 			return ST_Herald | ST_Area | ST_Lightning | Hit;
 		case PersistentSkill::HeraldOfFrost:
 			return ST_Herald | ST_Area | ST_Frost | Hit;
+		case PersistentSkill::HeraldOfPlague:
+			return ST_Herald | ST_Area | ST_Physical | ST_DamageOverTime;
 		default:
 			return 0;
 		}

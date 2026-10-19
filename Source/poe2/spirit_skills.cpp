@@ -19,6 +19,7 @@
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_buffs.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -349,6 +350,7 @@ void OnSpiritMeleeHit(Player &player)
 
 void ReflectMeleeHit(Player &player, Monster &monster, Fixed26_6 damage)
 {
+	OnSpiritMeleeHitTaken(player, monster);
 	if (!gbIsPoe2 || &player != MyPlayer || damage <= 0 || monster.hasNoLife() || monster.mode == MonsterMode::Death || !Active(player, PersistentSkill::Reflect))
 		return;
 	const Fixed26_6 reflected = Fixed26_6::fromRaw(damage.raw() * ReflectPercent / 100);
@@ -364,6 +366,7 @@ void ReflectMeleeHit(Player &player, Monster &monster, Fixed26_6 damage)
 
 void TryDropInfusion(const Monster &monster)
 {
+	OnSpiritBuffKill(monster);
 	if (!gbIsPoe2 || MyPlayer == nullptr || monster.isPlayerMinion() || !UsesInfusions(*MyPlayer))
 		return;
 	uint8_t element = 0;
@@ -420,6 +423,7 @@ void ProcessSpiritSkills(Player &player)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
 		return;
+	ProcessSpiritBuffs(player);
 	if (leveltype == DTYPE_TOWN) {
 		Motes.clear();
 		return;
@@ -432,6 +436,7 @@ void ProcessSpiritSkills(Player &player)
 
 void ClearSpiritSkills()
 {
+	ClearSpiritBuffs();
 	Motes.clear();
 	Candidate = {};
 }

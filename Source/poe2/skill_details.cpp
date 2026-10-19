@@ -16,6 +16,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_buffs.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -359,6 +360,70 @@ std::string Seconds(double seconds)
 	return std::format("{:.2f}s", seconds);
 }
 
+/** @brief The numbers of POE2's buff Spirit gems at the gem's level (poe2/spirit_buffs.hpp). */
+void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skill, int level)
+{
+	const auto ticks = [](int gameTicks) { return Seconds(gameTicks / 20.0); };
+	switch (skill) {
+	case PersistentSkill::WindDancer:
+		Value(lines, "A stage every", ticks(WindDancerStageTicks(level)));
+		Value(lines, "Each stage", std::format("{:d}% more evasion, up to {:d}", WindDancerEvasionPerStage, WindDancerMaxStages));
+		Value(lines, "Gale Force", std::format("{:d}% of the weapon's damage, {:d}% more per stage", GaleForceDamagePercent(level), GaleForceDamagePerStage));
+		break;
+	case PersistentSkill::GhostDance:
+		Value(lines, "A shroud every", ticks(GhostShroudTicks(level)));
+		Value(lines, "Losing one", std::format("{:d}% of evasion as energy shield per second, for {:d} seconds", GhostDanceRegenPercent, GhostDanceRegenTicks / 20));
+		break;
+	case PersistentSkill::Barkskin:
+		Value(lines, "Armour", std::format("{:d}% of the energy shield lost, for {:d} seconds", BarkskinArmourPercent(level), BarkskinTicks / 20));
+		break;
+	case PersistentSkill::ArcticArmour:
+		Value(lines, "A stage every", ticks(ArcticArmourStageTicks(level)));
+		Value(lines, "Stages", std::format("up to {:d}", ArcticArmourMaxStages(level)));
+		break;
+	case PersistentSkill::HeraldOfPlague:
+		Value(lines, "Spreads to", std::format("{:d} tiles around", HeraldOfPlagueRadius));
+		Value(lines, "Hinder chance", std::format("{:d}% for {:d} seconds", HeraldOfPlagueHinderChance(level), HeraldOfPlagueHinderTicks / 20));
+		break;
+	case PersistentSkill::CombatFrenzy:
+		Value(lines, "At most every", ticks(CombatFrenzyCooldownTicks(level)));
+		break;
+	case PersistentSkill::EternalRage:
+		Value(lines, "Rage per second", std::format("{:.2f}", EternalRageCentiPerSecond(level) / 100.0));
+		break;
+	case PersistentSkill::ElementalConflux:
+		Value(lines, "More damage", std::format("{:d}%, the element changes every {:d} seconds", ConfluxDamagePercent(level), ConfluxTicks / 20));
+		break;
+	case PersistentSkill::AlchemistsBoon:
+		Value(lines, "Flask charges", std::format("{:.2f} per second", AlchemistChargesMilliPerSecond(level) / 1000.0));
+		Value(lines, "Minions heal", std::format("{:d}% of a life flask's recovery", AlchemistMinionHealPercent(level)));
+		break;
+	case PersistentSkill::OverwhelmingPresence:
+		Value(lines, "Stun threshold", std::format("{:d}% lower", PresenceStunThresholdPercent(level)));
+		Value(lines, "Ailment threshold", std::format("{:d}% lower", PresenceAilmentThresholdPercent(level)));
+		Value(lines, "Reaches", std::format("{:d} tiles around you", PresenceTiles));
+		break;
+	case PersistentSkill::TrailOfCaltrops:
+		Value(lines, "Caltrop damage", std::format("{:d}% of the weapon's", CaltropDamagePercent(level)));
+		Value(lines, "Caltrops last", std::format("{:d} seconds, up to {:d}", CaltropTicks / 20, MaxCaltrops));
+		break;
+	case PersistentSkill::ManaRemnants:
+		Value(lines, "Mana each", std::format("{:d}", ManaRemnantMana(level)));
+		Value(lines, "From kills", std::format("{:d}% chance", ManaRemnantDropPercent));
+		break;
+	case PersistentSkill::Attrition:
+		Value(lines, "More damage", std::format("1% each {:d} seconds near you, up to {:d}%", AttritionTicksPerPercent / 20, AttritionMaxPercent(level)));
+		Value(lines, "Cull after", std::format("{:d} seconds, rares at {:d}%, uniques at {:d}%", AttritionCullTicks(level) / 20, AttritionCullRarePercent, AttritionCullUniquePercent));
+		break;
+	case PersistentSkill::Blink:
+		Value(lines, "Distance", std::format("{:d} tiles", BlinkTiles(level)));
+		Value(lines, "Cooldown", ticks(BlinkCooldownTicks(level)));
+		break;
+	default:
+		break;
+	}
+}
+
 } // namespace
 
 std::string SkillTagText(SkillSlot skill)
@@ -453,6 +518,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(lines, "Cost", std::format("{:d} Mana", mana));
 	else
 		Value(lines, "Cost", "No mana");
+
+	if (skill.kind == SkillKind::Persistent && !isDefault)
+		SpiritBuffDetails(lines, skill.persistent(), std::max(level, 1));
 
 	if (IsMetaGem(skill) && !isDefault) {
 		const PersistentSkill meta = skill.persistent();

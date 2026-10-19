@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "engine/path.h"
+#include "engine/random.hpp"
 #include "engine/point.hpp"
 #include "game_mode.hpp"
 #include "items.h"
@@ -20,6 +21,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -38,6 +40,9 @@ struct HeraldTrigger {
 	bool ash;
 	bool thunder;
 	bool frost;
+	/** Herald of Plague: the dead monster's poison, to spread. */
+	uint8_t poisonTicks = 0;
+	int32_t poisonPerTick = 0;
 };
 
 std::vector<HeraldTrigger> PendingHeralds;
@@ -84,6 +89,34 @@ void ExplodeAsh(const HeraldTrigger &trigger)
 		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= radius)
 			HeraldHit(monster, PersistentSkill::HeraldOfAsh, DamageType::Fire, damage);
 	}
+}
+
+/** @brief Herald of Plague: the poison of the poisoned monster that died passes to those around, unless theirs is stronger. */
+void SpreadPlague(const HeraldTrigger &trigger)
+{
+	Player &player = *MyPlayer;
+	AddVisualEffect(trigger.position, MissileGraphicID::AcidSplat);
+	const int radius = SupportAreaRadius(player, SkillSlot::ForPersistent(PersistentSkill::HeraldOfPlague), HeraldOfPlagueRadius);
+	const int hinderChance = HeraldOfPlagueHinderChance(std::max(player.poe2.skillLevel(PersistentSkill::HeraldOfPlague), 1));
+	int spread = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (!CanHeraldHit(monster) || trigger.position.ExactDistance(monster.position.tile) > radius)
+			continue;
+		Poe2MonsterState &state = monster.poe2;
+		if (state.poisonTicks > 0 && state.poisonDamagePerTick > trigger.poisonPerTick)
+			continue;
+		state.poisonDamagePerTick = trigger.poisonPerTick;
+		state.poisonTicks = std::max(state.poisonTicks, trigger.poisonTicks);
+		state.poisonSource = static_cast<int8_t>(MyPlayerId);
+		monster.tag(player);
+		AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
+		if (GenerateRnd(100) < hinderChance)
+			state.hinderTicks = std::max<uint8_t>(state.hinderTicks, HeraldOfPlagueHinderTicks);
+		spread++;
+	}
+	if (spread > 0)
+		TelemetryLog("spirit", StrCat("Herald of Plague spread poison to ", spread));
 }
 
 void ShatterFrost(const HeraldTrigger &trigger)
@@ -182,6 +215,34 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Barrier Invocation");
 	case PersistentSkill::ElementalInvocation:
 		return _("Elemental Invocation");
+	case PersistentSkill::WindDancer:
+		return _("Wind Dancer");
+	case PersistentSkill::GhostDance:
+		return _("Ghost Dance");
+	case PersistentSkill::Barkskin:
+		return _("Barkskin");
+	case PersistentSkill::ArcticArmour:
+		return _("Arctic Armour");
+	case PersistentSkill::HeraldOfPlague:
+		return _("Herald of Plague");
+	case PersistentSkill::CombatFrenzy:
+		return _("Combat Frenzy");
+	case PersistentSkill::EternalRage:
+		return _("Eternal Rage");
+	case PersistentSkill::ElementalConflux:
+		return _("Elemental Conflux");
+	case PersistentSkill::AlchemistsBoon:
+		return _("Alchemist's Boon");
+	case PersistentSkill::OverwhelmingPresence:
+		return _("Overwhelming Presence");
+	case PersistentSkill::TrailOfCaltrops:
+		return _("Trail of Caltrops");
+	case PersistentSkill::ManaRemnants:
+		return _("Mana Remnants");
+	case PersistentSkill::Attrition:
+		return _("Attrition");
+	case PersistentSkill::Blink:
+		return _("Blink");
 	default:
 		return {};
 	}
@@ -246,6 +307,34 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Meta gem: holds spells in its sockets. Energy shield lost to hits stores Energy, up to 500; use it from the skill tray to cast the spells inside");
 	case PersistentSkill::ElementalInvocation:
 		return _("Meta gem: holds spells in its sockets. Freezing, shocking and igniting enemies stores Energy, up to 500; use it from the skill tray to cast the spells inside");
+	case PersistentSkill::WindDancer:
+		return _("Every 1.5 seconds gain a stage of 10% more evasion, up to 3. A hit on you spends them in a burst of wind that knocks enemies back, bigger with more stages");
+	case PersistentSkill::GhostDance:
+		return _("Every 12 seconds gain a Ghost Shroud, up to 3. A hit on you takes one, and for 4 seconds energy shield regenerates by 2% of your evasion per second");
+	case PersistentSkill::Barkskin:
+		return _("Energy shield lost to hits turns into armour for 6 seconds, up to the armour of your gear");
+	case PersistentSkill::ArcticArmour:
+		return _("Gains icy stages over time. A melee hit on you spends one to blast the attacker with cold that chills and freezes twice as hard");
+	case PersistentSkill::HeraldOfPlague:
+		return _("Poisoned enemies you kill spread their poison to those nearby, which may be hindered");
+	case PersistentSkill::CombatFrenzy:
+		return _("Freezing or electrocuting an enemy gives a Frenzy charge, at most once every 8 seconds");
+	case PersistentSkill::EternalRage:
+		return _("You regenerate Rage, and it doesn't fade while this is up");
+	case PersistentSkill::ElementalConflux:
+		return _("Deal 40% more damage of one element: fire, lightning or cold. The element changes every 8 seconds");
+	case PersistentSkill::AlchemistsBoon:
+		return _("Your flasks gain charges over time, and life flasks also heal your minions nearby");
+	case PersistentSkill::OverwhelmingPresence:
+		return _("Aura: enemies near you are easier to stun, freeze, ignite and shock");
+	case PersistentSkill::TrailOfCaltrops:
+		return _("Each dodge roll leaves caltrops behind you. Enemies that step on them take your weapon's damage and are hindered");
+	case PersistentSkill::ManaRemnants:
+		return _("Enemies with an elemental ailment may leave a mana remnant when they die or take a critical hit. Walk over it for mana");
+	case PersistentSkill::Attrition:
+		return _("Rare and unique enemies near you take more damage the longer they stay near you, and after 40 seconds you can cull them");
+	case PersistentSkill::Blink:
+		return _("Your dodge roll becomes a short teleport, every 4.5 seconds. It isn't a roll, so nothing set off by rolling goes");
 	default:
 		return {};
 	}
@@ -298,6 +387,24 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::MirageArcher:
 	case PersistentSkill::ElementalInvocation:
 		return 60;
+	// The other POE2 Spirit gems, at POE2's reservations.
+	case PersistentSkill::WindDancer:
+	case PersistentSkill::GhostDance:
+	case PersistentSkill::Barkskin:
+	case PersistentSkill::ArcticArmour:
+	case PersistentSkill::HeraldOfPlague:
+	case PersistentSkill::CombatFrenzy:
+	case PersistentSkill::AlchemistsBoon:
+	case PersistentSkill::OverwhelmingPresence:
+	case PersistentSkill::TrailOfCaltrops:
+	case PersistentSkill::ManaRemnants:
+	case PersistentSkill::Attrition:
+		return 30;
+	case PersistentSkill::ElementalConflux:
+	case PersistentSkill::Blink:
+		return 60;
+	case PersistentSkill::EternalRage:
+		return 100;
 	// For each curse inside (GemSpiritCost counts them).
 	case PersistentSkill::Blasphemy:
 		return BlasphemySpiritPerCurse;
@@ -627,9 +734,15 @@ void QueueHeraldTriggers(const Player &player, const Monster &monster)
 	const bool ash = IsPersistentSkillActive(player, PersistentSkill::HeraldOfAsh);
 	const bool thunder = IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder);
 	const bool frost = (monster.poe2.chillTicks > 0 || monster.poe2.freezeTicks > 0) && IsPersistentSkillActive(player, PersistentSkill::HeraldOfFrost);
-	if (!ash && !thunder && !frost)
+	const bool plague = monster.poe2.poisonTicks > 0 && monster.poe2.poisonDamagePerTick > 0 && IsPersistentSkillActive(player, PersistentSkill::HeraldOfPlague);
+	if (!ash && !thunder && !frost && !plague)
 		return;
-	PendingHeralds.push_back({ monster.position.tile, monster.maxHitPoints.raw(), ash, thunder, frost });
+	HeraldTrigger trigger { monster.position.tile, monster.maxHitPoints.raw(), ash, thunder, frost };
+	if (plague) {
+		trigger.poisonTicks = monster.poe2.poisonTicks;
+		trigger.poisonPerTick = monster.poe2.poisonDamagePerTick;
+	}
+	PendingHeralds.push_back(trigger);
 }
 
 void ProcessHeralds()
@@ -646,6 +759,8 @@ void ProcessHeralds()
 			ReleaseThunder(trigger);
 		if (trigger.frost)
 			ShatterFrost(trigger);
+		if (trigger.poisonTicks > 0)
+			SpreadPlague(trigger);
 	}
 }
 

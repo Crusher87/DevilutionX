@@ -76,6 +76,10 @@ struct Poe2MonsterState {
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;
+	/** @brief Hindered by caltrops or Herald of Plague: slowed like a chill, in game ticks left. */
+	uint8_t hinderTicks = 0;
+	/** @brief Attrition: game ticks the rare or unique monster has spent near the hero (not saved). */
+	uint16_t attritionTicks = 0;
 	/** @brief Raised by Revive: a minion that keeps the strength it had. */
 	bool revived = false;
 	/** @brief Killed by a Cull (set where the Cull lands, read when it dies; not saved, since the death follows at once). */

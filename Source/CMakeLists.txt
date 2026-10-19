@@ -809,6 +809,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/support_table.cpp
   poe2/support_tiers.cpp
   poe2/spirit.cpp
+  poe2/spirit_buffs.cpp
   poe2/spirit_skills.cpp
   poe2/support_gems.cpp
   poe2/telemetry.cpp

@@ -1341,7 +1341,7 @@ std::string TelemetryBuildText(const Player &player)
 	}
 	StrAppend(text, " | passives ", player.poe2.passives.count());
 	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% magic {:d}%, spirit {:d}/{:d}",
-	                    ArmourRating(player), EvasionRating(player), player.poe2.maxEnergyShield, std::clamp(player.GetBlockChance(false), 0, player.GetMaxBlockChance(gbIsPoe2)),
+	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, std::clamp(player.GetBlockChance(false), 0, player.GetMaxBlockChance(gbIsPoe2)),
 	                    player._pFireResist, player._pLghtResist, player._pMagResist, ReservedSpirit(player), MaxSpirit(player)));
 	StrAppend(text, " | belt:");
 	for (const Item &item : player.SpdList) {

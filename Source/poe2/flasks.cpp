@@ -16,6 +16,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/spirit_buffs.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/format.hpp"
@@ -412,6 +413,9 @@ bool UseFlask(Player &player, size_t beltSlot)
 			player.poe2.guardTicks = static_cast<uint8_t>(std::max<int>(player.poe2.guardTicks, GuardTicks));
 		if (IsBeltUnique(flask, BeltUniqueId::LongRecovery))
 			HealNearbyMinions(player, raw * 40 / 100);
+		// Alchemist's Boon shares the recovery with the minions nearby too.
+		if (const int share = FlaskMinionHealPercent(player); share > 0)
+			HealNearbyMinions(player, static_cast<int32_t>(static_cast<int64_t>(raw) * share / 100));
 		const auto instant = static_cast<int32_t>(static_cast<int64_t>(raw) * effect.instantPercent / 100);
 		Restore(player._pHitPoints, player._pHPBase, player._pMaxHP, instant);
 		OnLifeRecovered(player, raw);

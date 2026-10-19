@@ -18,6 +18,7 @@
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_buffs.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -57,7 +58,26 @@ void DrawMinionTooltip(const Surface &out, PersistentSkill skill, int alive, int
 }
 
 /** Spirit gems with nothing on screen to show they're working get a portrait beside the minions (Curtis 2026-10-19). */
-constexpr PersistentSkill BuffSkills[] = { PersistentSkill::HeraldOfAsh, PersistentSkill::HeraldOfThunder, PersistentSkill::HeraldOfFrost, PersistentSkill::PurityOfElements };
+constexpr PersistentSkill BuffSkills[] = {
+	PersistentSkill::HeraldOfAsh,
+	PersistentSkill::HeraldOfThunder,
+	PersistentSkill::HeraldOfFrost,
+	PersistentSkill::HeraldOfPlague,
+	PersistentSkill::PurityOfElements,
+	PersistentSkill::WindDancer,
+	PersistentSkill::GhostDance,
+	PersistentSkill::Barkskin,
+	PersistentSkill::ArcticArmour,
+	PersistentSkill::CombatFrenzy,
+	PersistentSkill::EternalRage,
+	PersistentSkill::ElementalConflux,
+	PersistentSkill::AlchemistsBoon,
+	PersistentSkill::OverwhelmingPresence,
+	PersistentSkill::TrailOfCaltrops,
+	PersistentSkill::ManaRemnants,
+	PersistentSkill::Attrition,
+	PersistentSkill::Blink,
+};
 
 void DrawBuffTooltip(const Surface &out, PersistentSkill skill)
 {
@@ -120,6 +140,11 @@ void DrawMinionHud(const Surface &out)
 		DrawHalfTransparentRectTo(out, portrait.position.x, portrait.position.y, portrait.size.width, portrait.size.height);
 		const Point bottomLeft { portrait.position.x, portrait.position.y + portrait.size.height - 1 };
 		DrawSkillIcon(out, bottomLeft, SkillSlot::ForPersistent(skill), true);
+		// Stages, armour or the element, like the minions' count.
+		if (const std::string text = SpiritBuffPortraitText(player, skill); !text.empty()) {
+			DrawString(out, text, { portrait.position + Displacement { 2, portrait.size.height - 14 }, { portrait.size.width - 4, 12 } },
+			    { .flags = UiFlags::ColorWhite | UiFlags::AlignRight | UiFlags::Outlined | UiFlags::FontSize12, .spacing = 0 });
+		}
 		if (portrait.contains(MousePosition)) {
 			DrawSmallSpellIconBorder(out, bottomLeft);
 			buffHover = skill;

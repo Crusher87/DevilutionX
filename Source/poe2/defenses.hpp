@@ -59,10 +59,10 @@ BodyArmourImplicit GetBodyArmourImplicit(const Item &item);
  */
 void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield);
 
-/** @brief Armour from gear and class bonuses. */
-int ArmourRating(const Player &player);
-/** @brief Evasion from gear plus a fifth of dexterity; replaces armor class in monster hit rolls. */
-int EvasionRating(const Player &player);
+/** @brief Armour from gear and class bonuses, and Barkskin's unless it's left out (the build log leaves it out). */
+int ArmourRating(const Player &player, bool withSpiritBuffs = true);
+/** @brief Evasion from gear plus a fifth of dexterity, and Wind Dancer's stages unless left out; replaces armor class in monster hit rolls. */
+int EvasionRating(const Player &player, bool withSpiritBuffs = true);
 /** @brief The defense monster hit rolls use: evasion in POE2 mode, armor class otherwise. */
 int HitDefense(const Player &player);
 

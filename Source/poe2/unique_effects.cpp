@@ -21,6 +21,7 @@
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/meta_gems.hpp"
@@ -643,8 +644,10 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	dealt += DealPacket(player, monster, DamageType::Fire, static_cast<int32_t>(packets[1]));
 	dealt += DealPacket(player, monster, DamageType::Lightning, static_cast<int32_t>(packets[2]));
 	dealt += DealPacket(player, monster, DamageType::Magic, static_cast<int32_t>(packets[3]));
-	if (crit)
+	if (crit) {
 		OnMetaCrit(Players[player.getId()], monster, dealt);
+		OnSpiritCrit(Players[player.getId()], monster);
+	}
 
 	if (crit && !monster.hasNoLife()) {
 		if (const int bleed = Rule(player, UniqueRule::CritBleed); bleed > 0 && physical > 0)
@@ -962,6 +965,7 @@ void OnAilmentInflicted(const Player &player, Monster &monster, DamageType type,
 		if (monster.poe2.electrocuteTicks == 0)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::BlueFlareExplosion);
 		monster.poe2.electrocuteTicks = ElectrocuteTicks;
+		OnSpiritFreezeOrElectrocute(Players[player.getId()]);
 	}
 }
 
@@ -1021,6 +1025,8 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 	}
 	// The supports of the hit in progress, and wither.
 	percent = percent * SupportHitDamagePercent(monster, type) / 100;
+	// Elemental Conflux and Attrition.
+	percent = percent * SpiritBuffDamagePercent(monster, type) / 100;
 	// The monster's resistance, which curses and exposure lower and the hit's penetration gets past.
 	percent = percent * (100 - MonsterHitResistance(monster, type, HitPenetration(type))) / 100;
 	return std::max(percent, 0);
@@ -1048,6 +1054,9 @@ bool IsMonsterElectrocuted(const Monster &monster)
 int MonsterHinderPercent(const Monster &monster)
 {
 	const Poe2MonsterState &state = monster.poe2;
+	// Caltrops and Herald of Plague.
+	if (gbIsPoe2 && state.hinderTicks > 0)
+		return HinderPercent;
 	if (!gbIsPoe2 || state.bleedTicks == 0 || state.bleedSource < 0 || static_cast<size_t>(state.bleedSource) >= Players.size())
 		return 0;
 	return Rule(Players[static_cast<size_t>(state.bleedSource)], UniqueRule::BleedHinder) > 0 ? HinderPercent : 0;
@@ -1162,6 +1171,14 @@ int StolenRegenPerMille(const Player &player)
 
 void ApplyCull(const Player &player, Monster &monster)
 {
+	// Attrition's Culling Strike takes rares and uniques that stayed near the hero long enough.
+	if (AttritionCulls(player, monster)) {
+		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodStarRedExplosion, 0, 4);
+		TelemetryLog("spirit", "Attrition culled a monster");
+		monster.poe2.culled = true;
+		ApplyMonsterDamage(DamageType::Physical, monster, monster.hitPoints);
+		return;
+	}
 	const int cull = Rule(player, UniqueRule::Cull);
 	if (cull <= 0 || monster.hasNoLife() || monster.isUnique() || monster.type().type == MT_DIABLO || monster.isPlayerMinion())
 		return;

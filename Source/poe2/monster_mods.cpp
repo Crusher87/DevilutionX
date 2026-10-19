@@ -12,6 +12,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/spirit_buffs.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
@@ -210,6 +211,8 @@ void ProcessMonsterAilments(Monster &monster)
 
 	if (state.shockTicks > 0)
 		state.shockTicks--;
+	if (state.hinderTicks > 0)
+		state.hinderTicks--;
 	if (state.chillTicks > 0 && --state.chillTicks == 0) {
 		state.chillPercent = 0;
 		state.chillCarry = 0;
@@ -263,8 +266,10 @@ int AilmentChancePerMille(const Monster &monster, DamageType damageType, Fixed26
 {
 	if (monster.maxHitPoints <= 0 || damage <= 0)
 		return 0;
-	// The ailment threshold is the monster's life; uniques have half, so their ailments still land.
-	const int64_t threshold = std::max<int64_t>(monster.isUnique() ? monster.maxHitPoints.raw() / 2 : monster.maxHitPoints.raw(), 1);
+	// The ailment threshold is the monster's life; uniques have half, so their ailments still land. Overwhelming
+	// Presence lowers it near the hero.
+	const int64_t life = monster.isUnique() ? monster.maxHitPoints.raw() / 2 : monster.maxHitPoints.raw();
+	const int64_t threshold = std::max<int64_t>(life * PresenceThresholdPercent(monster, false) / 100, 1);
 	const int64_t perMilleAtThreshold = damageType == DamageType::Fire ? 200 : 250;
 	return static_cast<int>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * perMilleAtThreshold / threshold, 1000));
 }
@@ -314,7 +319,9 @@ namespace {
 /** @brief Adds a hit to a buildup; true when it reaches the threshold, which empties it. */
 bool BuildUp(const Monster &monster, int32_t &buildup, Fixed26_6 damage, int thresholdPercent)
 {
-	const int64_t threshold = static_cast<int64_t>(monster.maxHitPoints.raw()) * thresholdPercent / 100;
+	// Overwhelming Presence lowers the stun and freeze thresholds near the hero.
+	const int presence = PresenceThresholdPercent(monster, thresholdPercent == HeavyStunThresholdPercent);
+	const int64_t threshold = static_cast<int64_t>(monster.maxHitPoints.raw()) * thresholdPercent / 100 * presence / 100;
 	if (threshold <= 0)
 		return false;
 	const int64_t added = static_cast<int64_t>(damage.raw()) * MonsterBuildupPercent(monster) / 100;
@@ -372,6 +379,7 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 			return;
 		if (InflictCold(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * effect / 100)))) {
 			OnMonsterFrozen(player);
+			OnSpiritFreezeOrElectrocute(Players[player.getId()]);
 			OnSupportedFreeze(player);
 			OnMetaAilment(Players[player.getId()], monster, MetaAilment::Freeze);
 		}

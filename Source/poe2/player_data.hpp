@@ -300,7 +300,35 @@ enum class PersistentSkill : uint8_t {
 	BarrierInvocation,
 	/** Invocation: freezing, shocking and igniting monsters store its Energy. */
 	ElementalInvocation,
-	Last = ElementalInvocation,
+	/** Gains stages of more evasion; a hit on you spends them in a burst of wind that throws enemies back. */
+	WindDancer,
+	/** Gains Ghost Shrouds; a hit on you takes one, and energy shield regenerates from your evasion for a while. */
+	GhostDance,
+	/** Energy shield lost to hits turns into armour for a few seconds. */
+	Barkskin,
+	/** Gains icy stages; a melee hit on you spends one to blast the attacker with cold. */
+	ArcticArmour,
+	/** Killing a poisoned enemy spreads its poison to those nearby, which may be hindered. */
+	HeraldOfPlague,
+	/** Freezing or electrocuting an enemy gives a Frenzy charge, once in a while. */
+	CombatFrenzy,
+	/** You regenerate Rage, and it doesn't fade while this is up. */
+	EternalRage,
+	/** Much more damage of one element, which changes every 8 seconds. */
+	ElementalConflux,
+	/** Flasks gain charges over time; life flasks also heal your minions nearby. */
+	AlchemistsBoon,
+	/** Aura: enemies near you are easier to stun, freeze, ignite and shock. */
+	OverwhelmingPresence,
+	/** Dodge rolls leave caltrops that hurt and hinder the enemies stepping on them. */
+	TrailOfCaltrops,
+	/** Enemies with elemental ailments leave mana remnants when they die or take a critical hit. */
+	ManaRemnants,
+	/** Rare and unique enemies near you take more damage the longer they stay, then can be culled. */
+	Attrition,
+	/** Your dodge roll becomes a short teleport. */
+	Blink,
+	Last = Blink,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -514,6 +542,30 @@ struct SpiritRuntime {
 	uint8_t glowTicks = 0;
 	/** Element infusions carried: bit 0 fire, bit 1 lightning, bit 2 cold. */
 	uint8_t infusions = 0;
+	/** Wind Dancer's stages and the timer to the next; Gale Force's cooldown and the stages it spends next tick (-1 for none). */
+	uint8_t windStages = 0;
+	uint8_t windTicks = 0;
+	uint8_t galeCooldown = 0;
+	int8_t galePending = -1;
+	/** Ghost Dance's shrouds, the timer to the next, and the energy shield regeneration after losing one. */
+	uint8_t shrouds = 0;
+	uint16_t shroudTicks = 0;
+	uint8_t shroudRegenTicks = 0;
+	uint8_t shroudRegenCarry = 0;
+	/** Arctic Armour's stages and the timer to the next. */
+	uint8_t arcticStages = 0;
+	uint8_t arcticTicks = 0;
+	/** Barkskin's armour stacks and the game ticks each has left (BarkskinMaxStacks). */
+	std::array<uint16_t, 8> barkArmour {};
+	std::array<uint8_t, 8> barkTicks {};
+	uint8_t frenzyCooldown = 0;
+	uint8_t remnantCooldown = 0;
+	/** Eternal Rage and Alchemist's Boon build up fractions of a point here. */
+	uint16_t rageCarry = 0;
+	uint16_t flaskCarry = 0;
+	/** Elemental Conflux's element (a DamageType), -1 while it's down, and the ticks until it changes. */
+	int8_t confluxElement = -1;
+	uint8_t confluxTicks = 0;
 };
 
 /** @brief Spirit gems whose number of minions is set in the Skills panel, like POE2's "Set Minion Count". */

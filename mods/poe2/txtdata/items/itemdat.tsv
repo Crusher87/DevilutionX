@@ -896,3 +896,17 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Cast on Minion Death Gem	Gem	12	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2600
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Barrier Invocation Gem	Gem	14	0	0	0	0	0	0	45	0		SPIRITGEM_TABLE	Null	true	3000
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Elemental Invocation Gem	Gem	16	0	0	0	0	0	0	50	0		SPIRITGEM_TABLE	Null	true	3200
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Wind Dancer Gem	Gem	6	0	0	0	0	0	0	0	30		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Ghost Dance Gem	Gem	6	0	0	0	0	0	0	20	20		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Barkskin Gem	Gem	12	0	0	0	0	0	25	25	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Arctic Armour Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Herald of Plague Gem	Gem	12	0	0	0	0	0	0	0	40		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Combat Frenzy Gem	Gem	12	0	0	0	0	0	0	0	40		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Eternal Rage Gem	Gem	21	0	0	0	0	0	60	0	0		SPIRITGEM_TABLE	Null	true	3600
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Elemental Conflux Gem	Gem	21	0	0	0	0	0	0	60	0		SPIRITGEM_TABLE	Null	true	3600
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Alchemist's Boon Gem	Gem	21	0	0	0	0	0	0	0	60		SPIRITGEM_TABLE	Null	true	3600
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Overwhelming Presence Gem	Gem	12	0	0	0	0	0	40	0	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Trail of Caltrops Gem	Gem	12	0	0	0	0	0	0	0	40		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Mana Remnants Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Attrition Gem	Gem	6	0	0	0	0	0	15	0	15		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blink Gem	Gem	12	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2600

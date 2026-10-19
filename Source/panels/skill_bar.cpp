@@ -307,6 +307,34 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::RingOfFire;
 	case PersistentSkill::ElementalInvocation:
 		return SpellIcon::Inferno;
+	case PersistentSkill::WindDancer:
+		return SpellIcon::Warp;
+	case PersistentSkill::GhostDance:
+		return SpellIcon::Etherealize;
+	case PersistentSkill::Barkskin:
+		return SpellIcon::StoneCurse;
+	case PersistentSkill::ArcticArmour:
+		return SpellIcon::Nova;
+	case PersistentSkill::HeraldOfPlague:
+		return SpellIcon::DoomSerpents;
+	case PersistentSkill::CombatFrenzy:
+		return SpellIcon::LongHorn;
+	case PersistentSkill::EternalRage:
+		return SpellIcon::BloodRitual;
+	case PersistentSkill::ElementalConflux:
+		return SpellIcon::PentaStar;
+	case PersistentSkill::AlchemistsBoon:
+		return SpellIcon::Healing;
+	case PersistentSkill::OverwhelmingPresence:
+		return SpellIcon::Telekinesis;
+	case PersistentSkill::TrailOfCaltrops:
+		return SpellIcon::TrapDisarm;
+	case PersistentSkill::ManaRemnants:
+		return SpellIcon::Mana;
+	case PersistentSkill::Attrition:
+		return SpellIcon::Search;
+	case PersistentSkill::Blink:
+		return SpellIcon::Teleport;
 	default:
 		return SpellIcon::Empty;
 	}

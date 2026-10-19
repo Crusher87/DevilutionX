@@ -339,13 +339,15 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 	// The arrow that opens the skill's details, as in POE2's Skills panel.
 	const bool showing = DetailsSlot == slot;
 	const Rectangle arrow { row.position + Displacement { row.size.width - 52, 20 }, { 48, 24 } };
-	DrawString(out, showing ? _("Details <") : _("Details >"), arrow,
+	const std::string_view detailsText = showing ? _("Details <") : _("Details >");
+	DrawString(out, detailsText, arrow,
 	    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (showing || (hover.kind == Hit::Kind::Row && hover.slot == slot) ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed) });
 
 	if (!SkillTakesSupports(skill)) {
 		const bool on = skill.kind == SkillKind::Persistent && player.poe2.spiritGemOn(slot);
-		// Stops short of the Details arrow.
-		DrawString(out, on ? _("On: right-click to turn off") : _("Off: right-click to turn on"), { row.position + Displacement { 48, 20 }, { arrow.position.x - row.position.x - 52, 24 } },
+		// Stops short of the Details arrow, whose text reaches left past its box.
+		const int detailsLeft = arrow.position.x + arrow.size.width - static_cast<int>(GetLineWidth(detailsText));
+		DrawString(out, on ? _("On (right-click: off)") : _("Off (right-click: on)"), { row.position + Displacement { 48, 20 }, { detailsLeft - row.position.x - 48 - 8, 24 } },
 		    { .flags = (on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
 		return;
 	}
