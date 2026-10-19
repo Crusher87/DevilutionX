@@ -5609,6 +5609,15 @@ void GetItemFrm(Item &item)
 	const int it = ItemCAnimTbl[item._iCurs];
 	if (itemanims[it])
 		item.AnimInfo.sprites.emplace(*itemanims[it]);
+	// POE2 Mashup: an item saved with another picture (a one-cell copy now) keeps the frame count it was saved with,
+	// and drawing would read past the end of its new picture. Let it rest on the new picture's last frame.
+	const int8_t numberOfFrames = ItemAnimLs[it];
+	if (item.AnimInfo.numberOfFrames != numberOfFrames) {
+		item.AnimInfo.numberOfFrames = numberOfFrames;
+		item.AnimInfo.currentFrame = numberOfFrames - 1;
+		item._iAnimFlag = false;
+		item.selectionRegion = SelectionRegion::Bottom;
+	}
 }
 
 void GetItemStr(Item &item)

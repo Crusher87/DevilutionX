@@ -116,6 +116,31 @@ TEST_F(Poe2ItemBasesTest, OneCellItemsLetGoOfTheirOldCells)
 	std::fill(std::begin(player.InvGrid), std::end(player.InvGrid), 0);
 }
 
+TEST_F(Poe2ItemBasesTest, OneCellItemsOnTheFloorFitTheirNewPicture)
+{
+	// An Emerald dropped before it took one cell was saved with the 20-frame Magic Rock picture, part way through it.
+	Item item {};
+	item._iCurs = ICURS_MAGIC_ROCK_SMALL;
+	item._iAnimFlag = true;
+	item.AnimInfo.numberOfFrames = 20;
+	item.AnimInfo.currentFrame = 15;
+
+	GetItemFrm(item);
+
+	EXPECT_EQ(item.AnimInfo.numberOfFrames, 13);
+	EXPECT_EQ(item.AnimInfo.currentFrame, 12);
+	EXPECT_FALSE(item._iAnimFlag);
+
+	// An item that already matches its picture keeps its frame.
+	item._iCurs = ICURS_MAGIC_ROCK;
+	item._iAnimFlag = true;
+	item.AnimInfo.numberOfFrames = 20;
+	item.AnimInfo.currentFrame = 15;
+	GetItemFrm(item);
+	EXPECT_EQ(item.AnimInfo.currentFrame, 15);
+	EXPECT_TRUE(item._iAnimFlag);
+}
+
 TEST_F(Poe2ItemBasesTest, BundleBasesReplaceTheOldOnes)
 {
 	for (const std::string_view name : { "Shortsword", "Heavy Imperial Edge", "Ash Staff", "Light Crossbow", "Quick Bone Sceptre", "Wooden Focus", "Iron Cap", "Hide Buckler", "Ruby Ring", "Sage Amulet" }) {
