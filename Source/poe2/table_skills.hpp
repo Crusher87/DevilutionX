@@ -214,6 +214,12 @@ void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target)
 void FireTableShot(Player &player, const TableSkillData &data, Point target, int index);
 /** @brief Puts a table curse skill's curse on a monster, for the given part of its duration. */
 void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, int durationPercent);
+/**
+ * @brief Blasphemy: puts a table curse on a monster at part strength for a few ticks. A curse cast by hand that lasts longer stays as it is.
+ */
+void ApplyAuraCurse(const Player &player, Monster &monster, WeaponSkill skill, int strengthPercent, int ticks);
+/** @brief How strong a monster's table curse is, in percent: Blasphemy's are weaker than those cast by hand. */
+[[nodiscard]] int TableCurseStrength(const Monster &monster, TableCurse curse);
 /** @brief The cast effects of a table skill. */
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target);
 

@@ -10,12 +10,14 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
 #include "spells.h"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
@@ -66,6 +68,7 @@ public:
 
 	void TearDown() override
 	{
+		ActiveMonsterCount = 0;
 		Missiles.clear();
 		ClearSupportEffects();
 		gbIsPoe2 = false;
@@ -93,6 +96,19 @@ public:
 		}
 		ADD_FAILURE();
 		return MakeMonster(0);
+	}
+
+	/** @brief Puts a monster in the level, where Blasphemy and totems look for them. */
+	static Monster &PlaceMonster(Point tile, int life = 100)
+	{
+		Monster &monster = Monsters[0];
+		monster = MakeMonster(1);
+		monster.talkMsg = TEXT_NONE;
+		monster.position.tile = tile;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(life);
+		ActiveMonsters[0] = 0;
+		ActiveMonsterCount = 1;
+		return monster;
 	}
 
 	static MetaSocketResult Inside(size_t socket, SkillSlot skill, int level = 1, SkillSlot *replaced = nullptr)
@@ -379,6 +395,202 @@ TEST_F(Poe2MetaGemsTest, CastOnKillAndDecoyBecomeTheirSpiritGems)
 	EXPECT_EQ(data.skillSlots[3], SkillSlot::ForPersistent(PersistentSkill::MirageArcher));
 	EXPECT_FALSE(SupportGemCanSupport(SupportGem::CastOnKill, Firebolt));
 	EXPECT_FALSE(SupportGemCanSupport(SupportGem::Decoy, SkillSlot::ForAttack(WeaponSkill::Barrage)));
+}
+
+TEST_F(Poe2MetaGemsTest, VizjereiFocusReservesAsMuchAsArchmage)
+{
+	EXPECT_EQ(SpiritReservation(PersistentSkill::VizjereiFocus), 100);
+}
+
+TEST_F(Poe2MetaGemsTest, BlasphemyCursesTheEnemiesAroundYouAtHalfStrength)
+{
+	Player &player = *MyPlayer;
+	const SkillSlot weaken = SkillSlot::ForAttack(WeaponSkill::Weaken);
+	const SkillSlot amplify = SkillSlot::ForAttack(WeaponSkill::AmplifyDamage);
+	player.poe2.skillSlots[MetaRow] = SkillSlot::ForPersistent(PersistentSkill::Blasphemy);
+	// It takes curses, but not spells or curses that take control of an enemy.
+	EXPECT_EQ(Inside(0, Firebolt), MetaSocketResult::NotTriggerable);
+	EXPECT_EQ(Inside(0, SkillSlot::ForAttack(WeaponSkill::Confuse)), MetaSocketResult::NotTriggerable);
+	EXPECT_EQ(Inside(0, SkillSlot::ForAttack(WeaponSkill::Haunt)), MetaSocketResult::NotTriggerable);
+	ASSERT_EQ(Inside(0, weaken), MetaSocketResult::Socketed);
+	ASSERT_EQ(Inside(1, amplify), MetaSocketResult::Socketed);
+	// 60 Spirit for each curse: two need more than the 100 there is.
+	EXPECT_EQ(BlasphemyCurseCount(player), 2);
+	EXPECT_EQ(GemSpiritCost(player, PersistentSkill::Blasphemy), 120);
+	EXPECT_FALSE(IsPersistentSkillActive(player, PersistentSkill::Blasphemy));
+	UnsocketMetaSkill(player.poe2, MetaRow, 1);
+	EXPECT_EQ(GemSpiritCost(player, PersistentSkill::Blasphemy), 60);
+	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::Blasphemy));
+	EXPECT_FALSE(UsesMetaEnergy(SkillSlot::ForPersistent(PersistentSkill::Blasphemy)));
+
+	Monster &monster = PlaceMonster({ 42, 40 });
+	ProcessMetaGems(player);
+	EXPECT_EQ(monster.poe2.weakenTicks, BlasphemyCurseTicks);
+	EXPECT_EQ(TableCurseStrength(monster, TableCurse::Weaken), BlasphemyStrength(1));
+	EXPECT_EQ(BlasphemyStrength(1), 50);
+	EXPECT_EQ(BlasphemyStrength(20), 59);
+	// Weaken at half strength: 15% softer hits rather than 30%.
+	EXPECT_EQ(ApplyTableSkillDefences(monster, player, Fixed26_6::fromInt(100)).whole(), 85);
+
+	// Cast by hand, the curse is at full strength, and the aura leaves it be while it lasts longer.
+	ApplyTableCurse(player, monster, WeaponSkill::Weaken, 100);
+	EXPECT_EQ(TableCurseStrength(monster, TableCurse::Weaken), 100);
+	const uint8_t handTicks = monster.poe2.weakenTicks;
+	for (int tick = 0; tick < BlasphemyPulseTicks; tick++)
+		ProcessMetaGems(player);
+	EXPECT_EQ(monster.poe2.weakenTicks, handTicks);
+	EXPECT_EQ(TableCurseStrength(monster, TableCurse::Weaken), 100);
+
+	// An enemy out of reach isn't cursed.
+	Monster &far = PlaceMonster({ 40 + BlasphemyRadius + 2, 40 });
+	for (int tick = 0; tick < BlasphemyPulseTicks; tick++)
+		ProcessMetaGems(player);
+	EXPECT_EQ(far.poe2.weakenTicks, 0);
+}
+
+TEST_F(Poe2MetaGemsTest, HoradricTotemPlacesTotemsForMana)
+{
+	Player &player = *MyPlayer;
+	const SkillSlot totem = SkillSlot::ForPersistent(PersistentSkill::HoradricTotem);
+	player.poe2.skillSlots[MetaRow] = totem;
+	EXPECT_TRUE(SkillGoesOnTray(totem));
+	EXPECT_FALSE(IsSpiritGemSwitchable(PersistentSkill::HoradricTotem));
+	EXPECT_FALSE(ToggleSpiritGem(player, MetaRow));
+	EXPECT_EQ(GemSpiritCost(player, PersistentSkill::HoradricTotem), 0);
+	EXPECT_EQ(PlaceHoradricTotem(player, MetaRow, { 43, 40 }), InvokeResult::NoSpells);
+	ASSERT_EQ(Inside(0, Firebolt), MetaSocketResult::Socketed);
+
+	EXPECT_EQ(PlaceHoradricTotem(player, MetaRow, { 43, 40 }), InvokeResult::Cast);
+	EXPECT_EQ(player._pMana.whole(), 1000 - HoradricTotemManaCost(1));
+	EXPECT_EQ(HoradricTotemCount(), 1);
+	// One totem at gem level 1, two from gem level 14.
+	EXPECT_EQ(PlaceHoradricTotem(player, MetaRow, { 43, 41 }), InvokeResult::Cast);
+	EXPECT_EQ(HoradricTotemCount(), 1);
+	player.poe2.slotLevels[MetaRow] = 14;
+	EXPECT_EQ(PlaceHoradricTotem(player, MetaRow, { 43, 42 }), InvokeResult::Cast);
+	EXPECT_EQ(HoradricTotemCount(), 2);
+	EXPECT_EQ(HoradricTotemManaCost(14), 74);
+
+	// The totem casts at the nearest monster, for no mana.
+	PlaceMonster({ 46, 40 });
+	const Fixed26_6 mana = player._pMana;
+	for (int tick = 0; tick < 12; tick++)
+		ProcessSupportEffects(player);
+	EXPECT_FALSE(Missiles.empty());
+	EXPECT_EQ(player._pMana, mana);
+
+	// It goes when its spells come out.
+	UnsocketMetaSkill(player.poe2, MetaRow, 0);
+	ProcessSupportEffects(player);
+	EXPECT_EQ(HoradricTotemCount(), 0);
+
+	ASSERT_EQ(Inside(0, Firebolt), MetaSocketResult::Socketed);
+	player._pMana = Fixed26_6::fromInt(10);
+	EXPECT_EQ(PlaceHoradricTotem(player, MetaRow, { 43, 40 }), InvokeResult::NoMana);
+	player._pMana = Fixed26_6::fromInt(1000);
+	leveltype = DTYPE_TOWN;
+	EXPECT_EQ(PlaceHoradricTotem(player, MetaRow, { 43, 40 }), InvokeResult::Town);
+}
+
+TEST_F(Poe2MetaGemsTest, CastOnCriticalFillsMoreFromHarderHitsOnStrongerMonsters)
+{
+	Player &player = *MyPlayer;
+	player.poe2.skillSlots[MetaRow] = SkillSlot::ForPersistent(PersistentSkill::CastOnCritical);
+	EXPECT_EQ(SpiritReservation(PersistentSkill::CastOnCritical), 100);
+	ASSERT_EQ(Inside(0, Firebolt), MetaSocketResult::Socketed);
+	Monster normal = MonsterOf(MonsterRarity::Normal);
+	normal.maxHitPoints = normal.hitPoints = Fixed26_6::fromInt(100);
+	// Half its life: half of 100 Energy.
+	OnMetaCrit(player, normal, Fixed26_6::fromInt(50));
+	EXPECT_EQ(MetaEnergy(player, MetaRow), 50);
+	// A scratch still counts a little.
+	OnMetaCrit(player, normal, Fixed26_6::fromInt(1));
+	EXPECT_EQ(MetaEnergy(player, MetaRow), 55);
+	EXPECT_TRUE(Missiles.empty());
+	// A rare is worth 5 times as much: 5% of its life fills the rest, and the spell casts.
+	Monster rare = MonsterOf(MonsterRarity::Rare);
+	rare.maxHitPoints = rare.hitPoints = Fixed26_6::fromInt(100);
+	OnMetaCrit(player, rare, Fixed26_6::fromInt(5));
+	EXPECT_FALSE(Missiles.empty());
+	EXPECT_EQ(MetaEnergy(player, MetaRow), 0);
+	EXPECT_EQ(MonsterPower(rare), 5);
+}
+
+TEST_F(Poe2MetaGemsTest, ElementalAilmentsFillTheirMetaGems)
+{
+	Player &player = *MyPlayer;
+	player.poe2.skillSlots[MetaRow] = SkillSlot::ForPersistent(PersistentSkill::CastOnElementalAilment);
+	ASSERT_EQ(Inside(0, Firebolt), MetaSocketResult::Socketed);
+	const Monster normal = MonsterOf(MonsterRarity::Normal);
+	OnMetaAilment(player, normal, MetaAilment::Shock);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), ShockEnergyPerPower);
+	OnMetaAilment(player, normal, MetaAilment::Ignite);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), ShockEnergyPerPower + IgniteEnergyPerPower);
+	// A freeze counts ten times as much; two fill a one-spell gem.
+	OnMetaAilment(player, normal, MetaAilment::Freeze);
+	EXPECT_TRUE(Missiles.empty());
+	OnMetaAilment(player, normal, MetaAilment::Freeze);
+	EXPECT_FALSE(Missiles.empty());
+
+	// Elemental Invocation stores the same Energy until you use it.
+	Missiles.clear();
+	UnsocketMetaSkill(player.poe2, MetaRow, 0);
+	player.poe2.skillSlots[MetaRow] = SkillSlot::ForPersistent(PersistentSkill::ElementalInvocation);
+	EXPECT_TRUE(IsInvocationGem(player.poe2.skillSlots[MetaRow]));
+	ASSERT_EQ(Inside(0, Fireball), MetaSocketResult::Socketed);
+	for (int i = 0; i < 20; i++)
+		OnMetaAilment(player, normal, MetaAilment::Freeze);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), InvocationMaxEnergy);
+	EXPECT_TRUE(Missiles.empty());
+	EXPECT_EQ(InvokeMetaGem(player, MetaRow, { 43, 40 }), InvokeResult::Cast);
+	EXPECT_FALSE(Missiles.empty());
+}
+
+TEST_F(Poe2MetaGemsTest, MinionDeathsFillCastOnMinionDeath)
+{
+	Player &player = *MyPlayer;
+	player.poe2.skillSlots[MetaRow] = SkillSlot::ForPersistent(PersistentSkill::CastOnMinionDeath);
+	EXPECT_EQ(SpiritReservation(PersistentSkill::CastOnMinionDeath), 30);
+	ASSERT_EQ(Inside(0, Firebolt), MetaSocketResult::Socketed);
+	const Monster minion = MonsterOf(MonsterRarity::Normal);
+	OnMetaMinionDied(player, minion);
+	EXPECT_EQ(MetaEnergy(player, MetaRow), MinionDeathEnergy);
+	EXPECT_TRUE(Missiles.empty());
+	OnMetaMinionDied(player, minion);
+	EXPECT_FALSE(Missiles.empty());
+}
+
+TEST_F(Poe2MetaGemsTest, BarrierInvocationStoresEnergyShieldLostToHits)
+{
+	Player &player = *MyPlayer;
+	player.poe2.skillSlots[MetaRow] = SkillSlot::ForPersistent(PersistentSkill::BarrierInvocation);
+	ASSERT_EQ(Inside(0, Firebolt), MetaSocketResult::Socketed);
+	player.poe2.maxEnergyShield = 500;
+	player.poe2.energyShield = 500 * 64;
+	// 200 of the hit lands on energy shield: 20 Energy.
+	AbsorbWithEnergyShield(player, Fixed26_6::fromInt(200));
+	EXPECT_EQ(MetaEnergy(player, MetaRow), 200 / BarrierShieldPerEnergy);
+	OnMetaShieldLost(player, Fixed26_6::fromInt(10000));
+	EXPECT_EQ(MetaEnergy(player, MetaRow), InvocationMaxEnergy);
+	EXPECT_TRUE(Missiles.empty());
+	EXPECT_EQ(InvokeMetaGem(player, MetaRow, { 43, 40 }), InvokeResult::Cast);
+	EXPECT_FALSE(Missiles.empty());
+}
+
+TEST_F(Poe2MetaGemsTest, CurseOnHitAndHoradricTotemSupportsBecomeSpiritGems)
+{
+	Poe2PlayerData &data = MyPlayer->poe2;
+	data.skillSlots[0] = Firebolt;
+	data.slotSupports[0][0] = SupportGem::HoradricTotem;
+	data.skillSlots[1] = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	data.slotSupports[1][1] = SupportGem::CurseOnHit;
+	MigrateTriggerSupports(*MyPlayer);
+	EXPECT_EQ(data.slotSupports[0][0], SupportGem::None);
+	EXPECT_EQ(data.slotSupports[1][1], SupportGem::None);
+	EXPECT_EQ(data.skillSlots[2], SkillSlot::ForPersistent(PersistentSkill::HoradricTotem));
+	EXPECT_EQ(data.skillSlots[3], SkillSlot::ForPersistent(PersistentSkill::Blasphemy));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::HoradricTotem, Firebolt));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::CurseOnHit, SkillSlot::ForAttack(WeaponSkill::Cleave)));
 }
 
 } // namespace

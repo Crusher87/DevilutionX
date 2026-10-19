@@ -92,8 +92,10 @@ struct SupportData {
 
 /** @brief The skill's tags. */
 uint32_t SkillTags(SkillSlot skill);
-/** @brief Uses a skill as a trigger does: free (the caller pays), at full damage, and it can't set off more supports. */
-void UseTriggeredSkill(Player &player, SkillSlot skill, Point target);
+/** @brief Uses a skill as a trigger does: free (the caller pays), at this damage in percent, and it can't set off more supports. */
+void UseTriggeredSkill(Player &player, SkillSlot skill, Point target, int damagePercent = 100);
+/** @brief The skill of the hit in progress; empty outside a hit. */
+SkillSlot SupportHitSkill();
 /** @brief The nearest monster's tile within range, else the tile in front of the player. */
 Point NearestMonsterTarget(const Player &player, Point from, int range);
 /** @brief Spirit the supports of a Spirit gem add to its reservation, like Deadly Herald's 20. */
@@ -188,8 +190,10 @@ int SupportLifeManaPercent(const Player &player, SkillSlot skill);
 void PaySupportLifeCost(Player &player, SkillSlot skill, int manaCost);
 /** @brief Paid in Blood (the pact of Bartuc's Road): each melee attack costs 1% of maximum life. */
 void PayMeleeAttackLife(Player &player);
-/** @brief Horadric Totem: the spell is placed as a totem instead of cast. @return true if a totem was placed. */
-bool TryPlaceSpellTotem(Player &player, SpellID spell, Point target);
+/** @brief Places a Horadric Totem at the target that casts the spells inside the gem of a Skills panel row; the oldest goes past the limit. */
+void AddHoradricTotem(Player &player, size_t row, Point target, int limit);
+/** @brief How many Horadric Totems stand. */
+int HoradricTotemCount();
 
 /** @brief Minion damage dealt, damage taken and life from the minion skill's supports, in percent. */
 int SupportMinionDamagePercent(const Player &owner, const Monster &minion);

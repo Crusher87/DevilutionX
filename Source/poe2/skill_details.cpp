@@ -445,7 +445,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(lines, "Spirit per minion", free > 0 ? std::format("{:d}, first {:d} free", SpiritPerMinion(player, persistent), free) : std::format("{:d}", SpiritPerMinion(player, persistent)));
 		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
 		Value(lines, "Revives after", std::format("{:d} seconds", SkeletonReviveTicks / 20));
-	} else if (skill.kind == SkillKind::Persistent)
+	} else if (skill.persistent() == PersistentSkill::HoradricTotem && skill.kind == SkillKind::Persistent)
+		Value(lines, "Cost", std::format("{:d} Mana for each totem", HoradricTotemManaCost(gemLevel)));
+	else if (skill.kind == SkillKind::Persistent)
 		Value(lines, "Reserves", std::format("{:d} Spirit", GemSpiritCost(player, skill.persistent())));
 	else if (const int mana = SkillManaCost(player, skill); mana > 0)
 		Value(lines, "Cost", std::format("{:d} Mana", mana));
@@ -453,18 +455,37 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(lines, "Cost", "No mana");
 
 	if (IsMetaGem(skill) && !isDefault) {
-		Value(lines, "Energy", std::format("{:d} of {:d}", MetaEnergy(player, socket), MetaEnergyCap(player.poe2, socket)));
-		if (IsInvocationGem(skill))
-			Value(lines, "A cast takes", std::format("{:d} Energy", MetaMaxEnergy(player.poe2, socket)));
-		Value(lines, "Energy gain", std::format("+{:d}% from gem level", MetaEnergyPercentPerLevel * (gemLevel - 1)));
-		Heading(lines, "Spells inside");
+		const PersistentSkill meta = skill.persistent();
+		if (UsesMetaEnergy(skill)) {
+			Value(lines, "Energy", std::format("{:d} of {:d}", MetaEnergy(player, socket), MetaEnergyCap(player.poe2, socket)));
+			if (IsInvocationGem(skill))
+				Value(lines, "A cast takes", std::format("{:d} Energy", MetaMaxEnergy(player.poe2, socket)));
+			Value(lines, "Energy gain", std::format("+{:d}% from gem level", MetaEnergyPercentPerLevel * (gemLevel - 1)));
+		}
+		if (meta == PersistentSkill::CastOnCritical)
+			Value(lines, "Damage of the spells", std::format("{:d}%", CastOnCriticalDamagePercent));
+		if (meta == PersistentSkill::Blasphemy) {
+			Value(lines, "Curse strength", std::format("{:d}%", BlasphemyStrength(gemLevel)));
+			Value(lines, "Reaches", std::format("{:d} tiles around you", BlasphemyRadius));
+			Value(lines, "Spirit per curse", std::format("{:d}", BlasphemySpiritPerCurse));
+		}
+		if (meta == PersistentSkill::HoradricTotem) {
+			Value(lines, "Totems", std::format("up to {:d}, for {:d} seconds", HoradricTotemLimit(gemLevel), HoradricTotemTicks / 20));
+			Value(lines, "Casts", std::format("one spell each {:s}, taking turns", Seconds(HoradricTotemCastTicks / 20.0)));
+		}
+		Heading(lines, meta == PersistentSkill::Blasphemy ? "Curses inside" : "Spells inside");
 		if (MetaSkillCount(player.poe2, socket) == 0)
-			Text(lines, Kind::Note, "None yet: drop a spell gem in a socket");
+			Text(lines, Kind::Note, meta == PersistentSkill::Blasphemy ? "None yet: drop a curse gem in a socket" : "None yet: drop a spell gem in a socket");
 		for (const SkillSlot inside : player.poe2.metaSkills[socket]) {
 			if (!inside.isEmpty())
 				Value(lines, std::string(SkillName(inside)), std::format("level {:d}, {:d} mana", player.poe2.skillLevel(inside), SkillManaCost(player, inside)));
 		}
-		Text(lines, Kind::Note, IsInvocationGem(skill) ? "They cast together when you use it from the skill tray, for their mana" : "They cast together when the Energy is full, for their mana");
+		if (meta == PersistentSkill::Blasphemy)
+			Text(lines, Kind::Note, "They curse every enemy around you, and cost no mana");
+		else if (meta == PersistentSkill::HoradricTotem)
+			Text(lines, Kind::Note, "The totem casts them at the nearest enemy, and they cost no mana");
+		else
+			Text(lines, Kind::Note, IsInvocationGem(skill) ? "They cast together when you use it from the skill tray, for their mana" : "They cast together when the Energy is full, for their mana");
 	}
 
 	const HitEstimate hit = EstimateHit(player, skill, std::max(skill.kind == SkillKind::Spell ? gemLevel : level, 1));

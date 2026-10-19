@@ -62,6 +62,9 @@ struct Poe2MonsterState {
 	/** @brief Haunt and Locust Swarm drain the monster and move on to another when it dies. */
 	uint8_t hauntTicks = 0;
 	uint8_t locustTicks = 0;
+	/** @brief Curses Blasphemy put on, one bit for each TableCurse, and how strong they are in percent (not saved, like the curses). */
+	uint16_t auraCurses = 0;
+	uint8_t auraCurseStrength = 100;
 	/** @brief The skill that last hit the monster (a SkillSlot's kind and id) and the player who used it, for kill supports. */
 	uint8_t lastHitSkillKind = 0;
 	uint8_t lastHitSkillId = 0;

@@ -148,7 +148,7 @@ SkillSlot MetaSkillAt(const Player &player, size_t slot, size_t socket)
 /** @brief Whether the held item is a spell gem that can go inside the row's meta gem. */
 bool HeldSpellFitsMeta(const Player &player, size_t slot)
 {
-	return IsMetaRow(player, slot) && IsSkillGem(player.HoldItem) && CanGoInMetaGem(SkillForGem(player.HoldItem));
+	return IsMetaRow(player, slot) && IsSkillGem(player.HoldItem) && CanGoInMetaGem(RowSkill(player, slot).persistent(), SkillForGem(player.HoldItem));
 }
 
 /** @brief The rows shown: the default attack's, then the current page of gem sockets. */
@@ -302,10 +302,12 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		const Rectangle label { icon.position - Displacement { 4, 0 }, { icon.size.width + 8, icon.size.height } };
 		DrawString(out, DefaultAttackLabel(DefaultAttackFor(player)), label, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold | UiFlags::FontSize12, .spacing = 0 });
 	} else {
-		const bool spiritOff = skill.kind == SkillKind::Persistent && !player.poe2.spiritGemOn(slot);
+		// The Horadric Totem is never switched off: it costs mana when you use it.
+		const bool switchable = skill.kind == SkillKind::Persistent && IsSpiritGemSwitchable(skill.persistent());
+		const bool spiritOff = switchable && !player.poe2.spiritGemOn(slot);
 		DrawSkillIcon(out, iconBottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready && !spiritOff);
 		// A Spirit gem that is switched on wears a bright frame.
-		if (skill.kind == SkillKind::Persistent && !spiritOff) {
+		if (switchable && !spiritOff) {
 			DrawFrame(out, icon, SpiritOnColor);
 			DrawFrame(out, { icon.position + Displacement { 1, 1 }, { icon.size.width - 2, icon.size.height - 2 } }, SpiritOnColor);
 		}
@@ -379,7 +381,7 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		else if (gem != SupportGem::None)
 			DrawSupportGemIcon(out, rect, gem);
 	}
-	if (IsMetaRow(player, slot))
+	if (UsesMetaEnergy(skill))
 		DrawEnergyBar(out, player, slot);
 
 	if (RowHasMinionCount(player, slot))
@@ -438,9 +440,11 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 			lines.emplace_back(FormatRuntime(_("Spell level {:d}"), player.GetSpellLevel(skill.spell())), UiFlags::ColorWhite);
 		if (IsMetaGem(skill)) {
 			if (MetaSkillCount(player.poe2, hover.slot) == 0)
-				lines.emplace_back(_("Put spell gems in its sockets: they cast when its Energy is full."), UiFlags::ColorWhite);
+				lines.emplace_back(std::string(MetaEmptyHint(skill.persistent())), UiFlags::ColorWhite);
+			else if (!UsesMetaEnergy(skill))
+				lines.emplace_back(MetaInsideText(player, hover.slot), UiFlags::ColorBlue);
 			else if (IsInvocationGem(skill))
-				lines.emplace_back(FormatRuntime(_("Energy {:d} of {:d}; a cast takes {:d}"), MetaEnergy(player, hover.slot), ReaperMaxEnergy, MetaMaxEnergy(player.poe2, hover.slot)), UiFlags::ColorBlue);
+				lines.emplace_back(FormatRuntime(_("Energy {:d} of {:d}; a cast takes {:d}"), MetaEnergy(player, hover.slot), MetaEnergyCap(player.poe2, hover.slot), MetaMaxEnergy(player.poe2, hover.slot)), UiFlags::ColorBlue);
 			else
 				lines.emplace_back(FormatRuntime(_("Energy {:d} of {:d}"), MetaEnergy(player, hover.slot), MetaMaxEnergy(player.poe2, hover.slot)), UiFlags::ColorBlue);
 		}
@@ -451,13 +455,15 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 			lines.emplace_back(MissingSkillRequirements(player, skill), UiFlags::ColorRed);
 		if (SkillGoesOnTray(skill) && key.empty())
 			lines.emplace_back(_("Not on the skill tray: click a tray slot to put it there"), UiFlags::ColorWhite);
-		if (skill.kind == SkillKind::Persistent) {
+		if (skill.kind == SkillKind::Persistent && !IsSpiritGemSwitchable(skill.persistent())) {
+			lines.emplace_back(FormatRuntime(_("Use it from the skill tray: it costs {:d} mana, not Spirit"), HoradricTotemManaCost(player.poe2.gemLevel(hover.slot))), UiFlags::ColorWhite);
+		} else if (skill.kind == SkillKind::Persistent) {
 			if (player.poe2.spiritGemOn(hover.slot))
 				lines.emplace_back(_("On. Right-click to switch it off"), UiFlags::ColorWhite);
 			else
 				lines.emplace_back(_("Off: it reserves no Spirit. Right-click to switch it on"), UiFlags::ColorRed);
 		}
-		lines.emplace_back(IsMetaGem(skill) && MetaSkillCount(player.poe2, hover.slot) > 0 ? _("Click to take the gem out, with the spells inside") : _("Click to take the gem out"), UiFlags::ColorButtonpushed);
+		lines.emplace_back(IsMetaGem(skill) && MetaSkillCount(player.poe2, hover.slot) > 0 ? _("Click to take the gem out, with the gems inside") : _("Click to take the gem out"), UiFlags::ColorButtonpushed);
 		DrawTooltip(out, bounds, MousePosition, key.empty() ? std::string(SkillName(skill)) : FormatRuntime("{:s} [{:s}]", SkillName(skill), key), UiFlags::ColorWhitegold, lines);
 		return;
 	}
@@ -472,11 +478,11 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 	}
 	if (const SkillSlot inside = MetaSkillAt(player, hover.slot, hover.socket); !inside.isEmpty()) {
 		lines.emplace_back(StrCat(SkillLevelText(player, inside), "   ", SkillCostText(player, inside)), UiFlags::ColorWhite);
-		lines.emplace_back(FormatRuntime(IsInvocationGem(skill) ? _("Casts when you use {:s}") : _("Casts when {:s} is full of Energy"), SkillName(skill)), UiFlags::ColorWhite);
+		lines.emplace_back(MetaInsideText(player, hover.slot), UiFlags::ColorWhite);
 		if (GetSkillUsability(player, inside) == SkillUsability::Requirements)
 			lines.emplace_back(MissingSkillRequirements(player, inside), UiFlags::ColorRed);
 		if (held != SupportGem::None)
-			lines.emplace_back(_("Take the spell out to put a support here"), UiFlags::ColorRed);
+			lines.emplace_back(FormatRuntime(_("Take the {:s} out to put a support here"), MetaSkillWord(skill.persistent())), UiFlags::ColorRed);
 		else
 			lines.emplace_back(IsSkillGem(player.HoldItem) ? _("Click to swap in the held gem") : _("Click to take it out"), UiFlags::ColorButtonpushed);
 		DrawTooltip(out, bounds, MousePosition, std::string(SkillName(inside)), UiFlags::ColorBlue, lines);
@@ -498,19 +504,19 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 	const bool meta = IsMetaRow(player, hover.slot);
 	if (meta && IsSkillGem(player.HoldItem)) {
 		const SkillSlot heldSkill = SkillForGem(player.HoldItem);
-		if (CanGoInMetaGem(heldSkill))
+		if (CanGoInMetaGem(skill.persistent(), heldSkill))
 			lines.emplace_back(FormatRuntime(_("Click to put {:s} inside"), SkillName(heldSkill)), UiFlags::ColorWhite);
 		else
-			lines.emplace_back(FormatRuntime(_("{:s} can't go inside: only spells that aren't movement or channelled can"), SkillName(heldSkill)), UiFlags::ColorRed);
+			lines.emplace_back(FormatRuntime(_("{:s} can't go inside. {:s}"), SkillName(heldSkill), MetaGemTakesText(skill.persistent())), UiFlags::ColorRed);
 	} else if (held != SupportGem::None && meta && MetaSkillCount(player.poe2, hover.slot) == 0) {
-		lines.emplace_back(_("Put a spell inside first: supports here work on the spells inside"), UiFlags::ColorRed);
+		lines.emplace_back(FormatRuntime(_("Put a {0:s} inside first: supports here work on the {0:s}s inside"), MetaSkillWord(skill.persistent())), UiFlags::ColorRed);
 	} else if (held != SupportGem::None) {
 		const bool fits = SupportGemCanSupport(held, skill);
 		const std::string heldName = SupportGemTierName(held, SupportGemItemTier(player.HoldItem));
 		lines.emplace_back(fits ? FormatRuntime(_("Click to socket {:s}"), heldName) : FormatRuntime(_("{:s} can't support {:s}"), heldName, SkillName(skill)),
 		    fits ? UiFlags::ColorWhite : UiFlags::ColorRed);
 	} else if (meta) {
-		lines.emplace_back(_("Click with a spell gem to put it inside,\nor with a support gem for the spells inside."), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(_("Click with a {0:s} gem to put it inside,\nor with a support gem for the {0:s}s inside."), MetaSkillWord(skill.persistent())), UiFlags::ColorWhite);
 	} else {
 		lines.emplace_back(_("Click with a support gem to socket it.\nSupports change how the skill works."), UiFlags::ColorWhite);
 	}
@@ -636,7 +642,7 @@ void SocketHeldSkillInMeta(Player &player, size_t slot, size_t socket)
 		EventPlrMsg(_("That socket is locked: a Jeweller's Orb opens it."), UiFlags::ColorRed);
 		return;
 	case MetaSocketResult::NotTriggerable:
-		EventPlrMsg(FormatRuntime(_("{:s} can't go inside {:s}: only spells that aren't movement or channelled can."), SkillName(skill), SkillName(meta)), UiFlags::ColorRed);
+		EventPlrMsg(FormatRuntime(_("{:s} can't go inside {:s}. {:s}"), SkillName(skill), SkillName(meta), MetaGemTakesText(meta.persistent())), UiFlags::ColorRed);
 		return;
 	case MetaSocketResult::AlreadySocketed:
 		EventPlrMsg(FormatRuntime(_("{:s} is already in the Skills panel."), SkillName(skill)), UiFlags::ColorRed);

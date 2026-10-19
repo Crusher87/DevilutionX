@@ -142,6 +142,8 @@ constexpr int HolyShieldPercent = 15;
 constexpr int MaxPlacedZones = 3;
 constexpr int ShieldWallPercent = 40;
 constexpr int DeathMarkPercent = 25;
+/** Decrepify chills the cursed monster this much, in percent. */
+constexpr int DecrepifyChillPercent = 40;
 constexpr int SoulDamagePercent = 3;
 constexpr int MaxSouls = 10;
 constexpr int RagePercent = 5;
@@ -425,10 +427,35 @@ void FireFanOf(Player &player, const TableSkillData &data, Point target, int cou
 	}
 }
 
+constexpr uint16_t AuraCurseBit(TableCurse curse)
+{
+	return static_cast<uint16_t>(1U << static_cast<unsigned>(curse));
+}
+
+uint8_t *CurseTicks(Poe2MonsterState &state, TableCurse curse)
+{
+	switch (curse) {
+	case TableCurse::Weaken:
+		return &state.weakenTicks;
+	case TableCurse::IronMaiden:
+		return &state.ironMaidenTicks;
+	case TableCurse::Decrepify:
+		return &state.decrepifyTicks;
+	case TableCurse::LowerResist:
+		return &state.lowerResistTicks;
+	case TableCurse::DeathMark:
+		return &state.deathMarkTicks;
+	default:
+		return nullptr;
+	}
+}
+
 void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &data)
 {
 	Poe2MonsterState &state = monster.poe2;
 	const uint8_t ticks = static_cast<uint8_t>(std::min<int>(data.duration, 255));
+	// Cast by hand, the curse has its full strength.
+	state.auraCurses &= static_cast<uint16_t>(~AuraCurseBit(data.curse));
 	switch (data.curse) {
 	case TableCurse::Weaken:
 		state.weakenTicks = ticks;
@@ -441,7 +468,7 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		// Its chill is a curse's, which the Sickness Road can stop.
 		if (AilmentAllowed(player, AilmentSource::Spell)) {
 			state.chillTicks = ticks;
-			state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, 40));
+			state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, DecrepifyChillPercent));
 		}
 		break;
 	case TableCurse::LowerResist:
@@ -523,6 +550,34 @@ void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, 
 	TableSkillData scaled = *data;
 	scaled.duration = static_cast<uint16_t>(std::max(data->duration * durationPercent / 100, 1));
 	ApplyCurse(player, monster, scaled);
+}
+
+void ApplyAuraCurse(const Player &player, Monster &monster, WeaponSkill skill, int strengthPercent, int ticks)
+{
+	const TableSkillData *data = FindTableSkill(skill);
+	if (data == nullptr)
+		return;
+	Poe2MonsterState &state = monster.poe2;
+	uint8_t *left = CurseTicks(state, data->curse);
+	const uint16_t bit = AuraCurseBit(data->curse);
+	if (left == nullptr || (*left > ticks && (state.auraCurses & bit) == 0))
+		return;
+	const bool fresh = *left == 0;
+	*left = static_cast<uint8_t>(std::clamp(ticks, 1, 255));
+	state.auraCurses |= bit;
+	state.auraCurseStrength = static_cast<uint8_t>(std::clamp(strengthPercent, 1, 100));
+	if (data->curse == TableCurse::Decrepify && AilmentAllowed(player, AilmentSource::Spell)) {
+		state.chillTicks = std::max(state.chillTicks, *left);
+		state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, DecrepifyChillPercent * state.auraCurseStrength / 100));
+	}
+	monster.tag(player);
+	if (fresh)
+		AddVisualEffect(monster.position.tile, data->effect);
+}
+
+int TableCurseStrength(const Monster &monster, TableCurse curse)
+{
+	return (monster.poe2.auraCurses & AuraCurseBit(curse)) != 0 ? monster.poe2.auraCurseStrength : 100;
 }
 
 const TableSkillData *FindTableSkill(WeaponSkill skill)
@@ -973,9 +1028,9 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 		return damage;
 	int percent = 100;
 	if (monster.poe2.weakenTicks > 0)
-		percent -= WeakenPercent;
+		percent -= WeakenPercent * TableCurseStrength(monster, TableCurse::Weaken) / 100;
 	if (monster.poe2.decrepifyTicks > 0)
-		percent -= DecrepifyPercent;
+		percent -= DecrepifyPercent * TableCurseStrength(monster, TableCurse::Decrepify) / 100;
 	if (player.poe2.frozenArmorTicks > 0) {
 		percent -= FrozenArmorPercent;
 		if (AilmentAllowed(player, AilmentSource::Spell)) {
@@ -990,7 +1045,7 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 	damage = Fixed26_6::fromRaw(damage.raw() * std::max(percent, 10) / 100);
 	// Iron Maiden: the monster takes its own hit.
 	if (monster.poe2.ironMaidenTicks > 0 && !monster.hasNoLife() && &player == MyPlayer) {
-		ApplyMonsterDamage(DamageType::Physical, monster, damage);
+		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(damage.raw() * TableCurseStrength(monster, TableCurse::IronMaiden) / 100));
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
 		if (monster.hasNoLife())
 			M_StartKill(monster, player);
@@ -1015,9 +1070,9 @@ int TableCurseDamageTakenPercent(const Monster &monster, DamageType type)
 {
 	int percent = 0;
 	if (monster.poe2.deathMarkTicks > 0)
-		percent += DeathMarkPercent;
+		percent += DeathMarkPercent * TableCurseStrength(monster, TableCurse::DeathMark) / 100;
 	if (monster.poe2.decrepifyTicks > 0 && type == DamageType::Physical)
-		percent += DecrepifyPercent;
+		percent += DecrepifyPercent * TableCurseStrength(monster, TableCurse::Decrepify) / 100;
 	return percent;
 }
 

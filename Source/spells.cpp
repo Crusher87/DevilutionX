@@ -247,11 +247,6 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 
 	const SpellData &spellData = GetSpellData(spl);
 	const bool supported = player.executedSpell.spellType == SpellType::Spell;
-	// POE2 Mashup: Horadric Totem places the spell as a totem, which casts it for the player.
-	if (supported && TryPlaceSpellTotem(player, spl, dst)) {
-		ConsumeSpell(player, spl);
-		return;
-	}
 	// POE2 Mashup: Apocalypse eats an element infusion for a much bigger cast.
 	const uint8_t infusion = supported ? TakeInfusion(player, SkillSlot::ForSpell(spl)) : 0;
 	const auto spawnMissiles = [&](WorldTilePosition target) {

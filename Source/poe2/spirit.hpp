@@ -84,6 +84,8 @@ std::string_view PersistentSkillDescription(PersistentSkill skill);
 int SpiritReservation(PersistentSkill skill);
 /** @brief Spirit the gem reserves when on, with its supports (Deadly Herald) and uniques that raise reservations. */
 int GemSpiritCost(const Player &player, PersistentSkill skill);
+/** @brief Whether a right-click in the Skills panel switches the gem on and off: all but Horadric Totem, which is used from the skill tray. */
+[[nodiscard]] bool IsSpiritGemSwitchable(PersistentSkill skill);
 
 /** @brief Whether the item grants Spirit as an implicit (sceptres). */
 bool ItemGrantsSpirit(const Item &item);

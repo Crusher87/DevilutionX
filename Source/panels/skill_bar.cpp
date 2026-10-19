@@ -293,6 +293,20 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::RedSkull;
 	case PersistentSkill::MirageArcher:
 		return SpellIcon::Invisibility;
+	case PersistentSkill::Blasphemy:
+		return SpellIcon::Pentagram;
+	case PersistentSkill::HoradricTotem:
+		return SpellIcon::LightningWall;
+	case PersistentSkill::CastOnCritical:
+		return SpellIcon::Flash;
+	case PersistentSkill::CastOnElementalAilment:
+		return SpellIcon::Elemental;
+	case PersistentSkill::CastOnMinionDeath:
+		return SpellIcon::BoneSpirit;
+	case PersistentSkill::BarrierInvocation:
+		return SpellIcon::RingOfFire;
+	case PersistentSkill::ElementalInvocation:
+		return SpellIcon::Inferno;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -1205,11 +1219,12 @@ std::string MissingSkillRequirements(const Player &player, SkillSlot skill)
 
 namespace {
 
-/** @brief Casts the spells inside an invocation at the cursor, if it has the Energy. */
-void UseInvocation(Player &player, size_t slot)
+/** @brief Casts the spells inside an invocation at the cursor, if it has the Energy, or places a Horadric Totem there. */
+void UseMetaGemFromTray(Player &player, size_t slot)
 {
 	const SkillSlot skill = player.poe2.skillSlots[slot];
-	switch (InvokeMetaGem(player, slot, cursPosition)) {
+	const bool totem = skill.persistent() == PersistentSkill::HoradricTotem;
+	switch (totem ? PlaceHoradricTotem(player, slot, cursPosition) : InvokeMetaGem(player, slot, cursPosition)) {
 	case InvokeResult::NoSpells:
 		EventPlrMsg(FormatRuntime(_("{:s} has no spells inside. Put spell gems in its sockets (K)."), SkillName(skill)), UiFlags::ColorRed);
 		break;
@@ -1218,6 +1233,9 @@ void UseInvocation(Player &player, size_t slot)
 		break;
 	case InvokeResult::NotEnoughEnergy:
 		EventPlrMsg(FormatRuntime(_("{:s} has {:d} Energy; casting takes {:d}."), SkillName(skill), MetaEnergy(player, slot), MetaMaxEnergy(player.poe2, slot)), UiFlags::ColorRed);
+		break;
+	case InvokeResult::NoMana:
+		EventPlrMsg(FormatRuntime(_("{:s} needs {:d} mana."), SkillName(skill), HoradricTotemManaCost(player.poe2.gemLevel(slot))), UiFlags::ColorRed);
 		break;
 	case InvokeResult::Off:
 		EventPlrMsg(FormatRuntime(_("{:s} is switched off. Right-click it in the Skills panel (K)."), SkillName(skill)), UiFlags::ColorRed);
@@ -1255,8 +1273,8 @@ void UseSkillSlot(size_t slot)
 			EventPlrMsg(FormatRuntime(_("{:s} needs {:d} Spirit; you have {:d} left."), SkillName(skill),
 			                IsMinionCountSkill(skill.persistent()) ? SpiritPerMinion(player, skill.persistent()) : GemSpiritCost(player, skill.persistent()), AvailableSpirit(player)),
 			    UiFlags::ColorRed);
-		else if (IsInvocationGem(skill))
-			UseInvocation(player, slot);
+		else if (IsInvocationGem(skill) || skill.persistent() == PersistentSkill::HoradricTotem)
+			UseMetaGemFromTray(player, slot);
 		else
 			EventPlrMsg(FormatRuntime(_("{:s} is always active while socketed."), SkillName(skill)));
 		return;

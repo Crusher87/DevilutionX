@@ -7,6 +7,7 @@
 #include "monster.h"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
 #include "tables/monstdat.h"
@@ -85,7 +86,7 @@ int MonsterResistanceLowered(const Monster &monster, DamageType type)
 		return 0;
 	int lowered = 0;
 	if (monster.poe2.lowerResistTicks > 0)
-		lowered += LowerResistCursePercent;
+		lowered += LowerResistCursePercent * TableCurseStrength(monster, TableCurse::LowerResist) / 100;
 	// Only the strongest exposure of an element applies, and a monster has one at a time.
 	if (monster.poe2.exposureTicks > 0 && static_cast<uint8_t>(type) == monster.poe2.exposureElement)
 		lowered += ExposurePercent * MapExposurePercent() / 100;

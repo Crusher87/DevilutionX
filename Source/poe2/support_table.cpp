@@ -81,7 +81,7 @@ const SupportData Table[] = {
 	{ SG::BoneArmy, "Bone Army", "2 more skeletons, with 30% less life\nand damage each", "Needs skeleton minions", GC::Magic, 6, 100, 0, ST_Minion, 0, 0, NoFamily },
 	{ SG::FeedingFrenzy, "Feeding Frenzy", "Minions deal 30% more damage, but\ntake 20% more", "Needs a minion skill", GC::Strength, 5, 100, 0, ST_Minion, 0, 0, NoFamily },
 	{ SG::GravePact, "Grave Pact", "Dying minions explode. Minions have\n20% less life", "Needs a minion skill", GC::Magic, 6, 100, 0, ST_Minion, 0, 0, NoFamily },
-	{ SG::CurseOnHit, "Curse on Hit", "Hits curse with your socketed curse, 25%\nshorter. Mana +30%", "Needs a damaging skill", GC::Magic, 7, 130, 0, DamageSkill, ST_Curse, 0, NoFamily },
+	{ SG::CurseOnHit, "Curse on Hit", "Retired: it's the Blasphemy Spirit gem\nnow, which holds the curses", "Retired", GC::Magic, 7, 130, 0, DamageSkill, ST_Curse, 0, NoFamily },
 	{ SG::CurseMastery, "Curse Mastery", "Larger, longer curses. Mana +30%", "Needs a curse", GC::Magic, 5, 130, 0, ST_Curse, 0, 0, NoFamily },
 	{ SG::RuneMastery, "Rune Mastery", "Places 2 runes at once. Mana +30%", "Needs a rune", GC::Dexterity, 5, 130, 0, ST_Rune, 0, 0, Runes },
 	{ SG::ClusterRunes, "Cluster Runes", "Places 3 runes in a ring. Mana +40%", "Needs a rune", GC::Dexterity, 8, 140, 0, ST_Rune, 0, 0, Runes },
@@ -113,7 +113,7 @@ const SupportData Table[] = {
 	{ SG::CoupDeGrace, "Coup de Grace", "Power: 40% more damage to monsters\nbelow 35% life. Mana +10%", "Needs a damaging skill", GC::Strength, 6, 110, 0, DamageSkill, 0, SF_Power, NoFamily },
 	{ SG::Wrathforged, "Wrathforged", "Spends 10 Rage when it can for 35% more\ndamage. Mana +10%", "Needs an attack", GC::Strength, 6, 110, 0, ST_Attack | ST_Damage, 0, 0, NoFamily },
 	{ SG::ComboFinisher, "Combo Finisher", "Spends all Combo for 3% more damage a\npoint. Mana +10%", "Needs a quarterstaff attack", GC::Dexterity, 6, 110, 0, ST_Staff | ST_Damage, 0, 0, NoFamily },
-	{ SG::HoradricTotem, "Horadric Totem", "Places a totem that casts the spell at\nmonsters, 30% slower; up to 2 totems", "Needs a Diablo spell", GC::Magic, 9, 120, 0, ST_Spell | ST_Damage, ST_Channelling | ST_Movement, 0, NoFamily },
+	{ SG::HoradricTotem, "Horadric Totem", "Retired: it's the Horadric Totem Spirit\ngem now, which holds the spells", "Retired", GC::Magic, 9, 120, 0, ST_Spell | ST_Damage, ST_Channelling | ST_Movement, 0, NoFamily },
 	{ SG::Decoy, "Decoy", "Retired: it's the Mirage Archer Spirit\ngem now", "Retired", GC::Dexterity, 8, 130, 0, ST_Bow, 0, 0, NoFamily },
 	{ SG::Legion, "Legion", "1 more out at a time, 50% shorter.\nMana +10%", "Needs walls, runes, sentries or totems", GC::Strength, 7, 110, 0, ST_Placed, 0, 0, NoFamily },
 	{ SG::MixedHost, "Mixed Host", "Minions deal 7% more damage for each\nkind of minion you have", "Needs a minion skill", GC::Magic, 7, 100, 0, ST_Minion, 0, 0, NoFamily },
@@ -166,8 +166,6 @@ constexpr int LeechPoolTicks = 2 * TicksPerSecond;
 constexpr int RecentSpellTicks = 8 * TicksPerSecond;
 constexpr int MaxWitherStacks = 10;
 constexpr int WitherTicks = 4 * 20;
-constexpr int TotemCastTicks = 26;
-constexpr int TotemTicks = 8 * 20;
 /** Mirage Archer's mirage: it shoots for 5 seconds with 30% less damage, and a dodge leaves one at most every 10 seconds. */
 constexpr int MirageTicks = 5 * 20;
 constexpr int MirageCooldownTicks = 10 * 20;
@@ -199,13 +197,16 @@ struct PendingUse {
 	int16_t monster;
 };
 
-/** @brief A Horadric Totem casting a spell, or a decoy repeating an attack. */
+/** @brief A Horadric Totem casting the spells inside its gem, or a mirage repeating an attack. */
 struct Stand {
 	SkillSlot skill;
 	Point position;
 	int16_t ticksLeft;
 	int16_t cooldown;
 	bool decoy;
+	/** The Skills panel row of a totem's gem, and the socket of the spell it casts next. */
+	int8_t row = -1;
+	uint8_t next = 0;
 };
 
 std::vector<GroundBurst> Bursts;
@@ -428,16 +429,6 @@ bool AnyMinionSkillHas(const Player &player, SupportGem gem)
 	return false;
 }
 
-/** @brief The curse skill in the Skills panel that Curse on Hit spreads. */
-SkillSlot SocketedCurse(const Player &player)
-{
-	for (const SkillSlot skill : player.poe2.skillSlots) {
-		if (!skill.isEmpty() && (SkillTags(skill) & ST_Curse) != 0 && skill.kind == SkillKind::Attack)
-			return skill;
-	}
-	return {};
-}
-
 void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks)
 {
 	if (!AilmentAllowed(player, HitSource()))
@@ -534,12 +525,6 @@ void FinishHit()
 		if (Has(player, skill, SG::SunderArmour) && physical > 0) {
 			BreakMonsterArmour(monster);
 			monster.poe2.armourBreakTicks = static_cast<uint8_t>(std::max<int>(monster.poe2.armourBreakTicks, Value(player, skill, SG::SunderArmour, 0) * TicksPerSecond));
-		}
-		if (Has(player, skill, SG::CurseOnHit)) {
-			if (const SkillSlot curse = SocketedCurse(player); !curse.isEmpty())
-				ApplyTableCurse(player, monster, curse.attack(), 75);
-			else if (player.poe2.skillLevel(WeaponSkill::AmplifyDamage) > 0)
-				CastAmplifyDamage(player, monster.position.tile, player.poe2.skillLevel(WeaponSkill::AmplifyDamage));
 		}
 		if (Has(player, skill, SG::ButchersHook)) {
 			InflictSupportBleed(player, monster, std::max(physical, total / 2));
@@ -728,6 +713,13 @@ void ProcessStands(Player &player)
 			Stands.erase(Stands.begin() + static_cast<std::ptrdiff_t>(i));
 			continue;
 		}
+		// A totem goes when its gem leaves the row, or the row has nothing it can cast.
+		uint8_t next = stand.next;
+		if (!stand.decoy && (stand.row < 0 || NextTotemSpell(player, static_cast<size_t>(stand.row), next).isEmpty())) {
+			AddVisualEffect(stand.position, MissileGraphicID::StoneCurseShatter);
+			Stands.erase(Stands.begin() + static_cast<std::ptrdiff_t>(i));
+			continue;
+		}
 		if (stand.ticksLeft % 20 == 0)
 			AddVisualEffect(stand.position, stand.decoy ? MissileGraphicID::Etherealize : MissileGraphicID::HolyBoltExplosion);
 		if (stand.cooldown > 0) {
@@ -750,9 +742,11 @@ void ProcessStands(Player &player)
 			}
 			PlaySfxLoc(SfxID::ShootBow, stand.position);
 		} else {
-			stand.cooldown = TotemCastTicks;
-			const SkillSlot skill = stand.skill;
+			const SkillSlot skill = NextTotemSpell(player, static_cast<size_t>(stand.row), stand.next);
+			stand.cooldown = HoradricTotemCastTicks;
+			stand.skill = skill;
 			const Point from = stand.position;
+			AddVisualEffect(from, MissileGraphicID::HolyBoltExplosion);
 			UseSkillFree(player, skill, from, target, 100);
 		}
 		i++;
@@ -1028,7 +1022,7 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 		if ((tags & ST_Herald) != 0) {
 			// Like POE2, supports for skills you use yourself don't fit a herald: what it pays with, moving first and
 			// the curse. Gharbad's Greed would drop loot from every monster of a chain of explosions.
-			if (IsAnyOf(data.gem, SG::BloodPrice, SG::BartucsBloodletting, SG::Momentum, SG::CurseOnHit, SG::GharbadsGreed))
+			if (IsAnyOf(data.gem, SG::BloodPrice, SG::BartucsBloodletting, SG::Momentum, SG::GharbadsGreed))
 				return false;
 		} else if ((data.needAll & ST_Minion) == 0) {
 			return false;
@@ -1047,8 +1041,6 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 	switch (data.gem) {
 	case SG::BoneArmy:
 		return IsAnyOf(skill.persistent(), PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages);
-	case SG::HoradricTotem:
-		return skill.kind == SkillKind::Spell;
 	case SG::NaKrulsPrison:
 		return IsAnyOf(skill.spell(), SpellID::FireWall, SpellID::LightningWall);
 	default:
@@ -1623,9 +1615,14 @@ void ClearSupportEffects()
 	Stands.clear();
 }
 
-void UseTriggeredSkill(Player &player, SkillSlot skill, Point target)
+void UseTriggeredSkill(Player &player, SkillSlot skill, Point target, int damagePercent)
 {
-	UseSkillFree(player, skill, player.position.tile, target, 100);
+	UseSkillFree(player, skill, player.position.tile, target, damagePercent);
+}
+
+SkillSlot SupportHitSkill()
+{
+	return Hit.depth > 0 ? Hit.skill : SkillSlot {};
 }
 
 Point NearestMonsterTarget(const Player &player, Point from, int range)
@@ -1827,20 +1824,22 @@ void PayMeleeAttackLife(Player &player)
 	PayLife(player, std::max(Fixed26_6::fromRaw(player._pMaxHP.raw() / 100), Fixed26_6::fromInt(1)));
 }
 
-bool TryPlaceSpellTotem(Player &player, SpellID spell, Point target)
+void AddHoradricTotem(Player &player, size_t row, Point target, int limit)
 {
-	const SkillSlot skill = SkillSlot::ForSpell(spell);
-	if (!gbIsPoe2 || &player != MyPlayer || Repeating || IsCastingRepeat(player) || !Has(player, skill, SG::HoradricTotem))
-		return false;
 	Point at = target;
-	if (!InDungeonBounds(at) || IsTileSolid(at))
+	if (!InDungeonBounds(at) || IsTileSolid(at) || at.WalkingDistance(player.position.tile) > 8)
 		at = player.position.tile;
-	Stands.push_back({ skill, at, TotemTicks, 10, false });
-	const int limit = SupportZoneLimit(player, skill, 2);
-	while (CountStands(false) > limit)
+	// It casts its first spell half a second after it lands.
+	Stands.push_back({ SkillSlot::ForPersistent(PersistentSkill::HoradricTotem), at, HoradricTotemTicks, 10, false, static_cast<int8_t>(row), 0 });
+	while (CountStands(false) > std::max(limit, 1))
 		Stands.erase(std::find_if(Stands.begin(), Stands.end(), [](const Stand &stand) { return !stand.decoy; }));
 	AddVisualEffect(at, MissileGraphicID::HolyBoltExplosion, 0, 6);
-	return true;
+	PlaySfxLoc(SfxID::SpellStoneCurse, at);
+}
+
+int HoradricTotemCount()
+{
+	return CountStands(false);
 }
 
 int SupportMinionDamagePercent(const Player &owner, const Monster &minion)
@@ -1883,6 +1882,7 @@ void OnSupportedMinionDied(Player &owner, Monster &minion)
 {
 	if (!gbIsPoe2 || &owner != MyPlayer)
 		return;
+	OnMetaMinionDied(owner, minion);
 	const Fixed26_6 life = Fixed26_6::fromRaw(std::max<int32_t>(minion.maxHitPoints.raw() / 4, 64));
 	if (MinionHas(owner, minion, SG::GravePact)) {
 		AddVisualEffect(minion.position.tile, MissileGraphicID::BloodStarExplosion, 0, 6);

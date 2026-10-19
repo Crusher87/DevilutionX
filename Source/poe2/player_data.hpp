@@ -286,7 +286,21 @@ enum class PersistentSkill : uint8_t {
 	ReapersInvocation,
 	/** Not a meta gem: a dodge roll leaves a mirage that shoots your bow attack for a few seconds. */
 	MirageArcher,
-	Last = MirageArcher,
+	/** Meta gem holding curses: they become an aura around you, weaker than cast by hand (POE2). */
+	Blasphemy,
+	/** Meta gem used from the skill tray: it places a totem that casts the spells inside for a few seconds. No Spirit; it costs mana. */
+	HoradricTotem,
+	/** Critical hits fill it, more for stronger monsters and harder hits; the spells inside deal 20% less damage. */
+	CastOnCritical,
+	/** Freezing, shocking and igniting monsters fill it. */
+	CastOnElementalAilment,
+	/** Your minions dying fill it. */
+	CastOnMinionDeath,
+	/** Invocation: energy shield lost to hits stores its Energy. */
+	BarrierInvocation,
+	/** Invocation: freezing, shocking and igniting monsters store its Energy. */
+	ElementalInvocation,
+	Last = ElementalInvocation,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -488,6 +502,8 @@ struct SupportRuntime {
 	uint8_t metaChannelTicks = 0;
 	/** Mirage Archer: ticks until a dodge roll can leave another mirage. */
 	uint16_t mirageCooldown = 0;
+	/** Blasphemy: ticks until its curses next reach the enemies around you. */
+	uint8_t blasphemyTicks = 0;
 };
 
 /** @brief Timers of the Spirit skills and the element infusions, per character (not saved; see poe2/spirit_skills.cpp). */

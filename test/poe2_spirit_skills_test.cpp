@@ -65,7 +65,10 @@ TEST_F(Poe2SpiritSkillsTest, EveryNewSpiritSkillHasAGemNameAndReservation)
 		const auto skill = static_cast<PersistentSkill>(i);
 		EXPECT_FALSE(PersistentSkillName(skill).empty()) << i;
 		EXPECT_FALSE(PersistentSkillDescription(skill).empty()) << i;
-		EXPECT_GT(SpiritReservation(skill), 0) << i;
+		// The Horadric Totem costs mana when you place it, not Spirit.
+		if (skill != PersistentSkill::HoradricTotem) {
+			EXPECT_GT(SpiritReservation(skill), 0) << i;
+		}
 		EXPECT_LE(SpiritReservation(skill), 100) << i;
 		Item gem;
 		ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForPersistent(skill), 1)) << PersistentSkillName(skill);

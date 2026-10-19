@@ -16,6 +16,7 @@
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -167,6 +168,20 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Reaper's Invocation");
 	case PersistentSkill::MirageArcher:
 		return _("Mirage Archer");
+	case PersistentSkill::Blasphemy:
+		return _("Blasphemy");
+	case PersistentSkill::HoradricTotem:
+		return _("Horadric Totem");
+	case PersistentSkill::CastOnCritical:
+		return _("Cast on Critical");
+	case PersistentSkill::CastOnElementalAilment:
+		return _("Cast on Elemental Ailment");
+	case PersistentSkill::CastOnMinionDeath:
+		return _("Cast on Minion Death");
+	case PersistentSkill::BarrierInvocation:
+		return _("Barrier Invocation");
+	case PersistentSkill::ElementalInvocation:
+		return _("Elemental Invocation");
 	default:
 		return {};
 	}
@@ -217,6 +232,20 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Meta gem: holds spells in its sockets. Melee kills store Energy, up to 500; use it from the skill tray to cast the spells inside");
 	case PersistentSkill::MirageArcher:
 		return _("Each dodge roll leaves a mirage that shoots your bow attack for 5 seconds, with 30% less damage; once every 10 seconds");
+	case PersistentSkill::Blasphemy:
+		return _("Meta gem: holds curses in its sockets. They curse every enemy around you, at half strength; it reserves 60 Spirit for each curse");
+	case PersistentSkill::HoradricTotem:
+		return _("Meta gem: holds spells in its sockets. Use it from the skill tray to place a totem that casts them at enemies for 8 seconds, 25% slower");
+	case PersistentSkill::CastOnCritical:
+		return _("Meta gem: holds spells in its sockets. Critical hits fill its Energy, more on stronger enemies; the spells inside deal 20% less damage");
+	case PersistentSkill::CastOnElementalAilment:
+		return _("Meta gem: holds spells in its sockets. Freezing, shocking and igniting enemies fills its Energy, and when it's full the spells inside all cast");
+	case PersistentSkill::CastOnMinionDeath:
+		return _("Meta gem: holds spells in its sockets. Each of your minions that dies fills its Energy, and when it's full the spells inside all cast");
+	case PersistentSkill::BarrierInvocation:
+		return _("Meta gem: holds spells in its sockets. Energy shield lost to hits stores Energy, up to 500; use it from the skill tray to cast the spells inside");
+	case PersistentSkill::ElementalInvocation:
+		return _("Meta gem: holds spells in its sockets. Freezing, shocking and igniting enemies stores Energy, up to 500; use it from the skill tray to cast the spells inside");
 	default:
 		return {};
 	}
@@ -248,8 +277,9 @@ int SpiritReservation(PersistentSkill skill)
 		return 50;
 	case PersistentSkill::ManaShield:
 		return 30;
+	// POE2's Archmage reserves 100 (Curtis 2026-10-19).
 	case PersistentSkill::VizjereiFocus:
-		return 40;
+		return 100;
 	case PersistentSkill::Berserk:
 		return 30;
 	case PersistentSkill::Reflect:
@@ -258,19 +288,36 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::CastOnDodge:
 	case PersistentSkill::CastWhenDamageTaken:
 	case PersistentSkill::CastWhileChannelling:
+	case PersistentSkill::CastOnCritical:
+	case PersistentSkill::CastOnElementalAilment:
 		return 100;
 	case PersistentSkill::ReapersInvocation:
+	case PersistentSkill::CastOnMinionDeath:
+	case PersistentSkill::BarrierInvocation:
 		return 30;
 	case PersistentSkill::MirageArcher:
+	case PersistentSkill::ElementalInvocation:
 		return 60;
+	// For each curse inside (GemSpiritCost counts them).
+	case PersistentSkill::Blasphemy:
+		return BlasphemySpiritPerCurse;
+	// A totem costs mana when you place it, not Spirit.
 	default:
 		return 0;
 	}
 }
 
+bool IsSpiritGemSwitchable(PersistentSkill skill)
+{
+	return skill != PersistentSkill::HoradricTotem;
+}
+
 int GemSpiritCost(const Player &player, PersistentSkill skill)
 {
-	const int spirit = SpiritReservation(skill) + SupportAddedSpirit(player, SkillSlot::ForPersistent(skill));
+	int spirit = SpiritReservation(skill);
+	if (skill == PersistentSkill::Blasphemy)
+		spirit *= BlasphemyCurseCount(player);
+	spirit += SupportAddedSpirit(player, SkillSlot::ForPersistent(skill));
 	// POE2 Mashup: some uniques raise every reservation.
 	return spirit * (100 + player.poe2.rule(UniqueRule::MoreSpiritReservation)) / 100;
 }
@@ -427,6 +474,10 @@ int SpiritPerMinion(const Player &player, PersistentSkill skill)
 
 std::string SpiritCostText(PersistentSkill skill, int gemLevel)
 {
+	if (skill == PersistentSkill::Blasphemy)
+		return FormatRuntime(_("Reserves {:d} Spirit per curse"), SpiritReservation(skill));
+	if (!IsSpiritGemSwitchable(skill))
+		return FormatRuntime(_("Costs {:d} mana"), HoradricTotemManaCost(gemLevel));
 	if (!IsMinionCountSkill(skill))
 		return FormatRuntime(_("Reserves {:d} Spirit"), SpiritReservation(skill));
 	if (const int free = FreeMinions(skill); free > 0)
@@ -483,8 +534,8 @@ int ReserveSpirit(const Player &player, F &&onGem)
 		if (skill == PersistentSkill::None || !MeetsGemRequirements(player, skill))
 			continue;
 		const int spiritLeft = max - reserved;
-		// A gem switched off in the Skills panel reserves nothing and does nothing.
-		if (!player.poe2.spiritGemOn(socket)) {
+		// A gem switched off in the Skills panel reserves nothing and does nothing; a totem is never switched off.
+		if (!player.poe2.spiritGemOn(socket) && IsSpiritGemSwitchable(skill)) {
 			onGem(GemReservation { skill, 0, 0, spiritLeft });
 			continue;
 		}
@@ -530,7 +581,7 @@ bool ToggleSpiritGem(Player &player, size_t socket)
 	if (!gbIsPoe2 || socket >= NumSkillSlots)
 		return false;
 	const PersistentSkill skill = player.poe2.skillSlots[socket].persistent();
-	if (skill == PersistentSkill::None)
+	if (skill == PersistentSkill::None || !IsSpiritGemSwitchable(skill))
 		return false;
 	player.poe2.spiritGemsOn ^= static_cast<uint16_t>(1U << socket);
 	TelemetryLog("spirit", StrCat(PersistentSkillName(skill), player.poe2.spiritGemOn(socket) ? " switched on" : " switched off"));

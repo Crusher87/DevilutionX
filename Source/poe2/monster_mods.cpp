@@ -11,6 +11,7 @@
 #include "player.h"
 #include "poe2/map_play.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
@@ -372,6 +373,7 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 		if (InflictCold(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * effect / 100)))) {
 			OnMonsterFrozen(player);
 			OnSupportedFreeze(player);
+			OnMetaAilment(Players[player.getId()], monster, MetaAilment::Freeze);
 		}
 		OnAilmentInflicted(player, monster, damageType, false);
 		return;
@@ -411,10 +413,12 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 			state.igniteSource = static_cast<int8_t>(player.getId());
 		}
 		state.igniteTicks = IgniteTicks;
+		OnMetaAilment(Players[player.getId()], monster, MetaAilment::Ignite);
 	} else {
 		if (state.shockTicks == 0)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::BlueFlareExplosion);
 		state.shockTicks = ShockTicks;
+		OnMetaAilment(Players[player.getId()], monster, MetaAilment::Shock);
 	}
 }
 

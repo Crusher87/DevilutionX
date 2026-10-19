@@ -401,6 +401,9 @@ bool TrySelectPixelBased(Point tile)
 		if (itemId != 0) {
 			itemId = itemId - 1;
 			const Item &item = Items[itemId];
+			// An item with no picture can't be hovered (the drawing skips it too).
+			if (!item.AnimInfo.sprites)
+				continue;
 			const ClxSprite sprite = item.AnimInfo.currentSprite();
 			const Displacement renderingOffset = item.getRenderingOffset(sprite);
 			if (CanHoverItem(item) && checkSprite(adjacentTile, sprite, renderingOffset)) {

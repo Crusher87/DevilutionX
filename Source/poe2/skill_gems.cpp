@@ -344,7 +344,7 @@ std::optional<TraySlot> AutoBindSocket(Player &player, size_t socket)
 
 bool SkillGoesOnTray(SkillSlot skill)
 {
-	return !skill.isEmpty() && (skill.kind != SkillKind::Persistent || IsInvocationGem(skill));
+	return !skill.isEmpty() && (skill.kind != SkillKind::Persistent || IsInvocationGem(skill) || skill.persistent() == PersistentSkill::HoradricTotem);
 }
 
 void MigrateOldSkillBar(Player &player)

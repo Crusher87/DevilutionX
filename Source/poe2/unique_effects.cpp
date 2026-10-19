@@ -23,6 +23,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
@@ -642,6 +643,8 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	dealt += DealPacket(player, monster, DamageType::Fire, static_cast<int32_t>(packets[1]));
 	dealt += DealPacket(player, monster, DamageType::Lightning, static_cast<int32_t>(packets[2]));
 	dealt += DealPacket(player, monster, DamageType::Magic, static_cast<int32_t>(packets[3]));
+	if (crit)
+		OnMetaCrit(Players[player.getId()], monster, dealt);
 
 	if (crit && !monster.hasNoLife()) {
 		if (const int bleed = Rule(player, UniqueRule::CritBleed); bleed > 0 && physical > 0)

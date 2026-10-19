@@ -745,6 +745,8 @@ void GiveItemToPlayer(Player &player, Item &item)
 	const int ii = AllocateItem();
 	Items[ii] = item;
 	GetSuperItemSpace(player.position.tile, ii);
+	// Its look on the ground, or drawing and hovering it would crash.
+	RespawnItem(Items[ii], true);
 	NetSendCmdPItem(false, CMD_SPAWNITEM, Items[ii].position, Items[ii]);
 }
 

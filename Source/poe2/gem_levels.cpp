@@ -210,6 +210,10 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 		return std::format("{:d}-{:d} damage", range.min * percent / 100, range.max * percent / 100);
 	}
 	case SkillKind::Persistent:
+		if (skill.persistent() == PersistentSkill::Blasphemy)
+			return std::format("curses at {:d}% strength", BlasphemyStrength(gemLevel));
+		if (skill.persistent() == PersistentSkill::HoradricTotem)
+			return std::format("{:d} mana, up to {:d} totems", HoradricTotemManaCost(gemLevel), HoradricTotemLimit(gemLevel));
 		if (IsMetaGem(skill))
 			return std::format("{:d}% more Energy", MetaEnergyPercentPerLevel * (gemLevel - 1));
 		return std::format("minion level {:d}", gemLevel);

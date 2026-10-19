@@ -70,6 +70,20 @@ void CastAmplifyDamage(const Player &player, Point target, int gemLevel)
 	}
 }
 
+void ApplyAuraAmplifyDamage(const Player &player, Monster &monster, int gemLevel, int strengthPercent, int ticks)
+{
+	const int percent = (AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (std::max(gemLevel, 1) - 1))) * strengthPercent / 100;
+	Poe2MonsterState &state = monster.poe2;
+	// A curse cast by hand outlasts the aura's, and keeps its strength while it does.
+	if (state.amplifyTicks > ticks)
+		return;
+	if (state.amplifyTicks == 0)
+		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+	state.amplifyTicks = static_cast<uint8_t>(std::clamp(ticks, 1, 255));
+	state.amplifyPercent = static_cast<uint8_t>(std::clamp(percent, 0, 255));
+	monster.tag(player);
+}
+
 void BreakMonsterArmour(Monster &monster)
 {
 	if (monster.poe2.armourBreakTicks == 0)
