@@ -55,6 +55,8 @@ size_t Page;
 std::optional<size_t> DetailsSlot;
 constexpr int DetailsWidth = 340;
 constexpr int DetailsLineHeight = 16;
+/** The frame of a Spirit gem that is switched on. */
+constexpr uint8_t SpiritOnColor = PAL16_ORANGE + 2;
 
 struct Hit {
 	enum class Kind : uint8_t {
@@ -251,7 +253,13 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		const Rectangle label { icon.position - Displacement { 4, 0 }, { icon.size.width + 8, icon.size.height } };
 		DrawString(out, DefaultAttackLabel(DefaultAttackFor(player)), label, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold | UiFlags::FontSize12, .spacing = 0 });
 	} else {
-		DrawSkillIcon(out, iconBottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready);
+		const bool spiritOff = skill.kind == SkillKind::Persistent && !player.poe2.spiritGemOn(slot);
+		DrawSkillIcon(out, iconBottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready && !spiritOff);
+		// A Spirit gem that is switched on wears a bright frame.
+		if (skill.kind == SkillKind::Persistent && !spiritOff) {
+			DrawFrame(out, icon, SpiritOnColor);
+			DrawFrame(out, { icon.position + Displacement { 1, 1 }, { icon.size.width - 2, icon.size.height - 2 } }, SpiritOnColor);
+		}
 	}
 	if (hover.kind == Hit::Kind::Skill && hover.slot == slot)
 		DrawSmallSpellIconBorder(out, iconBottomLeft);
@@ -284,8 +292,10 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 	    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (showing || (hover.kind == Hit::Kind::Row && hover.slot == slot) ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed) });
 
 	if (!SkillTakesSupports(skill)) {
-		DrawString(out, _("Spirit gems take no supports"), { row.position + Displacement { 48, 20 }, { row.size.width - 52, 24 } },
-		    { .flags = UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
+		const bool on = skill.kind == SkillKind::Persistent && player.poe2.spiritGemOn(slot);
+		// Stops short of the Details arrow.
+		DrawString(out, on ? _("On: right-click to turn off") : _("Off: right-click to turn on"), { row.position + Displacement { 48, 20 }, { arrow.position.x - row.position.x - 52, 24 } },
+		    { .flags = (on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
 		return;
 	}
 
@@ -374,6 +384,12 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 			lines.emplace_back(MissingSkillRequirements(player, skill), UiFlags::ColorRed);
 		if (skill.kind != SkillKind::Persistent && key.empty())
 			lines.emplace_back(_("Not on the skill tray: click a tray slot to put it there"), UiFlags::ColorWhite);
+		if (skill.kind == SkillKind::Persistent) {
+			if (player.poe2.spiritGemOn(hover.slot))
+				lines.emplace_back(_("On. Right-click to switch it off"), UiFlags::ColorWhite);
+			else
+				lines.emplace_back(_("Off: it reserves no Spirit. Right-click to switch it on"), UiFlags::ColorRed);
+		}
 		lines.emplace_back(_("Click to take the gem out"), UiFlags::ColorButtonpushed);
 		DrawTooltip(out, bounds, MousePosition, key.empty() ? std::string(SkillName(skill)) : FormatRuntime("{:s} [{:s}]", SkillName(skill), key), UiFlags::ColorWhitegold, lines);
 		return;
@@ -588,6 +604,20 @@ void DrawSkillsPanel(const Surface &out)
 	DrawDetailsPane(out, player);
 	if (hover.kind != Hit::Kind::None)
 		DrawHoverTooltip(out, player, hover);
+}
+
+bool HandleSkillsPanelRightClick(Point mousePosition)
+{
+	if (!IsOpen || MyPlayer == nullptr || !PanelRect().contains(mousePosition))
+		return false;
+	const Hit hit = HitAt(mousePosition);
+	if (IsNoneOf(hit.kind, Hit::Kind::Skill, Hit::Kind::Row) || hit.slot >= NumSkillSlots)
+		return false;
+	Player &player = *MyPlayer;
+	if (!ToggleSpiritGem(player, hit.slot))
+		return false;
+	PlaySFX(player.poe2.spiritGemOn(hit.slot) ? SfxID::SpellManaShield : SfxID::SpellEnd);
+	return true;
 }
 
 bool UseJewellerOnSkillsPanel(Player &player, Point mousePosition)

@@ -358,6 +358,9 @@ TEST_F(Poe2UniquesTest, EveryBeltUniqueBuildsAndRebuildsTheSame)
 		const Item item = MakeBelt(unique.id);
 		ASSERT_EQ(GetBeltUnique(item), &unique) << unique.name;
 		EXPECT_EQ(std::string_view(item._iIName), unique.name);
+		// Belt uniques keep unique id 0 (The Butcher's Cleaver): their name and lines must still be their own.
+		EXPECT_EQ(item.getName().str(), unique.name);
+		EXPECT_TRUE(Poe2UniqueText(item).empty()) << unique.name;
 		EXPECT_EQ(item._iMagical, ITEM_QUALITY_UNIQUE);
 		EXPECT_EQ(unique.kind == BeltUniqueKind::Charm, IsCharm(item)) << unique.name;
 		EXPECT_FALSE(BeltUniqueText(item).empty());

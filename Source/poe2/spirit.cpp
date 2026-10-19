@@ -25,6 +25,7 @@
 #include "poe2/unique_effects.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 
@@ -435,11 +436,16 @@ int ReserveSpirit(const Player &player, F &&onGem)
 {
 	const int max = MaxSpirit(player);
 	int reserved = 0;
-	for (const SkillSlot &slot : player.poe2.skillSlots) {
-		const PersistentSkill skill = slot.persistent();
+	for (size_t socket = 0; socket < player.poe2.skillSlots.size(); socket++) {
+		const PersistentSkill skill = player.poe2.skillSlots[socket].persistent();
 		if (skill == PersistentSkill::None || !MeetsGemRequirements(player, skill))
 			continue;
 		const int spiritLeft = max - reserved;
+		// A gem switched off in the Skills panel reserves nothing and does nothing.
+		if (!player.poe2.spiritGemOn(socket)) {
+			onGem(GemReservation { skill, 0, 0, spiritLeft });
+			continue;
+		}
 		if (IsMinionCountSkill(skill)) {
 			const int chosen = ChosenMinionCount(player, skill);
 			const int free = std::min(chosen, FreeMinions(skill));
@@ -476,6 +482,20 @@ std::optional<GemReservation> FindGemReservation(const Player &player, Persisten
 int ReservedSpirit(const Player &player)
 {
 	return ReserveSpirit(player, [](const GemReservation &) {});
+}
+
+bool ToggleSpiritGem(Player &player, size_t socket)
+{
+	if (!gbIsPoe2 || socket >= NumSkillSlots)
+		return false;
+	const PersistentSkill skill = player.poe2.skillSlots[socket].persistent();
+	if (skill == PersistentSkill::None)
+		return false;
+	player.poe2.spiritGemsOn ^= static_cast<uint16_t>(1U << socket);
+	TelemetryLog("spirit", StrCat(PersistentSkillName(skill), player.poe2.spiritGemOn(socket) ? " switched on" : " switched off"));
+	// Spirit gems can change stats, like Purity of Elements' resistances.
+	CalcPlrInv(player, false);
+	return true;
 }
 
 bool IsPersistentSkillActive(const Player &player, PersistentSkill skill)

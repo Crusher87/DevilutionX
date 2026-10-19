@@ -30,6 +30,8 @@ void DrawSkillsPanel(const Surface &out);
 bool SkillsPanelContains(Point position);
 /** @brief Handles a left click inside the panel. */
 void HandleSkillsPanelClick(Point mousePosition);
+/** @brief Right-click on a Spirit gem switches it on or off. @return true if the click was used. */
+bool HandleSkillsPanelRightClick(Point mousePosition);
 /** @brief Uses the Jeweller's Orb on the cursor on the skill under the mouse; true if it opened a socket. */
 bool UseJewellerOnSkillsPanel(Player &player, Point mousePosition);
 /** @brief The tooltip line on a locked support socket: which Jeweller's Orb opens it. */

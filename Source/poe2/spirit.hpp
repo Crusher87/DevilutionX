@@ -98,6 +98,8 @@ void DropSpiritSkull(const Monster &monster, bool sendmsg);
 int MinionDamagePercent(const Player &player);
 /** @brief Spirit reserved by the active Spirit gems. */
 int ReservedSpirit(const Player &player);
+/** @brief Right-click in the Skills panel: switches the Spirit gem in a socket on or off. @return false if it holds no Spirit gem. */
+bool ToggleSpiritGem(Player &player, size_t socket);
 /** @brief Spirit not reserved, which POE2's globe shows lit. */
 inline int AvailableSpirit(const Player &player) { return MaxSpirit(player) - ReservedSpirit(player); }
 /**

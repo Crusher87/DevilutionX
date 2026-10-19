@@ -319,6 +319,22 @@ TEST_F(Poe2CraftingTest, QualityCurrencyFitsItsKind)
 	EXPECT_EQ(ItemQuality(armour), std::max(quality, MaxCraftedQuality));
 }
 
+TEST_F(Poe2CraftingTest, CraftingKeepsShrineAndOilBonuses)
+{
+	// A Gloomy Shrine's +2 armour and an oil's damage aren't in the item's seed (Curtis 2026-10-19: quality lowered a
+	// robe's energy shield).
+	Item armour = MakeItem("Iron Cap", 4, ITEM_QUALITY_NORMAL, 50);
+	armour._iAC += 2;
+	const int armourBefore = armour._iAC;
+	armour = Crafted(CurrencyOrb::Scrap, armour);
+	EXPECT_EQ(armour._iAC, armourBefore);
+	Item weapon = MakeItem("Heavy Hatchet", 4, ITEM_QUALITY_NORMAL, 50);
+	weapon._iMaxDam += 3;
+	const int maxBefore = weapon._iMaxDam;
+	weapon = Crafted(CurrencyOrb::Transmutation, weapon);
+	EXPECT_EQ(weapon._iMaxDam, maxBefore);
+}
+
 TEST_F(Poe2CraftingTest, ArtificerAndAugments)
 {
 	Item helmet = Crafted(CurrencyOrb::Alchemy, MakeItem("Iron Cap", 13, ITEM_QUALITY_NORMAL, 60));

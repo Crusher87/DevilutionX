@@ -111,6 +111,15 @@ TEST_F(Poe2ItemBasesTest, OneCellItemsLetGoOfTheirOldCells)
 	player.InvGrid[0] = -1;
 	FitOneCellItems(player);
 	EXPECT_EQ(player.InvGrid[0], -1);
+
+	// A Stone Charm saved when it still had the 2x2 Magic Rock picture takes one cell.
+	InitializeItem(player.InvList[0], FindBase("Stone Charm"));
+	EXPECT_EQ(player.InvList[0]._iCurs, ICURS_RUNE_OF_STONE);
+	player.InvList[0]._iCurs = ICURS_MAGIC_ROCK;
+	EXPECT_TRUE(TakesOneCell(player.InvList[0]));
+	FitOneCellItems(player);
+	EXPECT_EQ(player.InvGrid[0], 0);
+	EXPECT_EQ(player.InvGrid[10], 1);
 	player._pNumInv = 0;
 	player.InvList[0] = {};
 	std::fill(std::begin(player.InvGrid), std::end(player.InvGrid), 0);

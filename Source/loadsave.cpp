@@ -37,6 +37,7 @@
 #include "mpq/mpq_common.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/charms.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/passive_tree.hpp"
@@ -419,10 +420,11 @@ void LoadAndValidateItemData(LoadHelper &file, Item &item)
 	}
 
 	RemoveInvalidItem(item);
-	// POE2 Mashup: an item that now takes one cell gets the one-cell copy of the picture it was saved with.
+	// POE2 Mashup: an item that now takes one cell gets the one-cell copy of the picture it was saved with, and a
+	// charm saved with an older picture gets its one-cell one (the Stone Charm was the 2x2 Magic Rock until 10-17).
 	if (gbIsPoe2 && !item.isEmpty() && item.IDidx >= 0 && static_cast<size_t>(item.IDidx) < AllItemsList.size()) {
 		const item_cursor_graphic cursor = AllItemsList[item.IDidx].iCurs;
-		if (cursor != item._iCurs && FullSizeItemCursor(cursor) == item._iCurs)
+		if (cursor != item._iCurs && (FullSizeItemCursor(cursor) == item._iCurs || IsCharm(item)))
 			item._iCurs = cursor;
 	}
 }
@@ -2454,7 +2456,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * tree the hero's points were spent on and the quests that gave passive points. Version 22 adds the support sockets
  * Jeweller's Orbs opened on each Skills panel row.
  */
-constexpr uint8_t Poe2HeroDataVersion = 23;
+constexpr uint8_t Poe2HeroDataVersion = 24;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2765,6 +2767,11 @@ uint8_t ReadPoe2HeroData(Player &player)
 		if (const int index = MinionCountSkillIndex(skill); index >= 0)
 			player.poe2.minionCounts[static_cast<size_t>(index)] = count == DefaultMinionCount ? count : std::min(count, MaxMinionsPerGem);
 	}
+
+	// Version 24: the Spirit gems switched on in the Skills panel.
+	if (version < 24 || !file.IsValid(2))
+		return version;
+	player.poe2.spiritGemsOn = file.NextLE<uint16_t>();
 	return version;
 }
 
@@ -2795,6 +2802,9 @@ void LoadPoe2HeroData(Player &player)
 		SetChosenMinionCount(player, PersistentSkill::SkeletalWarriors, SkeletalWarriorCount(player.getCharacterLevel()));
 		SetChosenMinionCount(player, PersistentSkill::SkeletalMages, SkeletalMageCount(player.getCharacterLevel()));
 	}
+	// Spirit gems were always on before they could be switched off; heroes keep theirs running.
+	if (version > 0 && version < 24)
+		player.poe2.spiritGemsOn = static_cast<uint16_t>((1U << NumSkillSlots) - 1);
 	// Points spent on an older tree come back when the tree changes shape.
 	if (version > 0) {
 		RefundPassivesForNewTree(player);
@@ -2973,6 +2983,8 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		file.WriteLE<uint8_t>(static_cast<uint8_t>(MinionCountSkills[i]));
 		file.WriteLE<uint8_t>(player.poe2.minionCounts[i]);
 	}
+	// Version 24: the Spirit gems switched on in the Skills panel.
+	file.WriteLE<uint16_t>(player.poe2.spiritGemsOn);
 }
 
 void LoadHeroItems(Player &player)

@@ -28,6 +28,8 @@ void DrawPoe2StashFrame(const Surface &out);
 void DrawPoe2StashGridBack(const Surface &out);
 /** @brief Draws a premade tab's layout and any open tab popup. */
 void DrawStashTabUi(const Surface &out);
+/** @brief The name of the empty premade slot under the mouse, drawn on top of everything with the item info box. */
+void DrawStashTabTooltip(const Surface &out);
 /** @brief The stash item under the mouse on a premade tab, or EmptyCell. */
 StashStruct::StashCell PremadeTabItemUnderCursor(Point mousePosition);
 /**

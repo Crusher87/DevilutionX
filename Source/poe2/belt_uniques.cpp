@@ -27,7 +27,7 @@ std::vector<BeltUnique> MakeTable()
 		{ RedMercy, "Red Mercy", Kind::LifeFlask, CharmEffect::None, 0, UniqueTier::Common, 12, "global", 8, 16, {}, NoRoll, NoRoll,
 		    { "50% of Recovery is instant", "Remaining Recovery occurs over 6 seconds" } },
 		{ LastDraught, "Last Draught", Kind::LifeFlask, CharmEffect::None, 1, UniqueTier::Common, 24, "global", 8, 16, {}, NoRoll, NoRoll,
-		    { "Overhealing from this Flask grants Guard for 4 seconds" } },
+		    { "Overhealing from this Flask: take 40% less damage for 4 seconds" } },
 		{ SaintsBlood, "Saint's Blood", Kind::LifeFlask, CharmEffect::None, 2, UniqueTier::Uncommon, 36, "global", 9, 18, {}, NoRoll, NoRoll,
 		    { "Recovers 20% more Life" } },
 		{ BorrowedBreath, "Borrowed Breath", Kind::LifeFlask, CharmEffect::None, 3, UniqueTier::Uncommon, 52, "global", 9, 18, {}, NoRoll, NoRoll,

@@ -533,6 +533,8 @@ struct Poe2PlayerData {
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
 	std::array<uint8_t, NumSkillSlots> slotLevels {};
+	/** @brief Spirit gems switched on with a right-click in the Skills panel, one bit per socket; an off gem reserves nothing. */
+	uint16_t spiritGemsOn = 0;
 	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
 	uint8_t spiritSkulls = 0;
 	/** @brief How many minions each of the MinionCountSkills keeps, or DefaultMinionCount. */
@@ -702,6 +704,7 @@ struct Poe2PlayerData {
 		manaFlaskTicks = 0;
 		skillSlots.fill({});
 		slotLevels.fill(1);
+		spiritGemsOn = 0;
 		spiritSkulls = 0;
 		minionCounts.fill(DefaultMinionCount);
 		for (size_t slot = 0; slot < NumTraySlots; slot++)
@@ -861,6 +864,12 @@ struct Poe2PlayerData {
 	[[nodiscard]] int gemLevel(size_t socket) const
 	{
 		return std::clamp<int>(slotLevels[socket], 1, MaxGemLevel);
+	}
+
+	/** @brief Whether the Spirit gem in a Skills panel socket is switched on. */
+	[[nodiscard]] bool spiritGemOn(size_t socket) const
+	{
+		return socket < NumSkillSlots && ((spiritGemsOn >> socket) & 1U) != 0;
 	}
 
 	/** @brief Level the skill is used at: its socketed gem's level plus what gear adds; 0 if it isn't socketed. */

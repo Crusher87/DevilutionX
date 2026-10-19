@@ -325,6 +325,10 @@ vfx::Element LookOf(const TableSkillData &data)
 	return vfx::ElementOf(data.type, (data.flags & TF_Spell) != 0);
 }
 
+/** @brief Game ticks between Blizzard shard sounds, across every Blizzard at once. */
+constexpr int ShardSoundGap = 9;
+int ShardSoundCooldown = 0;
+
 void AddZone(const Player &player, const TableSkillData &data, Point center, int delay)
 {
 	SkillZone zone;
@@ -845,6 +849,10 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	case SoulHarvest:
 		EffectRingAround(tile, 2, MissileGraphicID::BloodHit, 0);
 		break;
+	case Zone:
+		if (data.skill == WeaponSkill::Blizzard)
+			PlayModSfxLoc("sfx\\poe2\\blizzard_cast.wav", target);
+		break;
 	default:
 		break;
 	}
@@ -852,6 +860,8 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 
 void ProcessSkillZones(Player &player)
 {
+	if (ShardSoundCooldown > 0)
+		ShardSoundCooldown--;
 	if (Zones.empty())
 		return;
 	if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
@@ -904,8 +914,15 @@ void ProcessSkillZones(Player &player)
 					break;
 				case TableZone::RandomStrikes: {
 					const Point at = zone.center + Displacement { GenerateRnd(2 * radius + 1) - radius, GenerateRnd(2 * radius + 1) - radius };
-					if (InDungeonBounds(at))
+					if (InDungeonBounds(at)) {
 						ZoneBurst(player, *data, at, 1, zone.damage);
+						// A Blizzard drops a lot of these, so only some make a sound: soft, short and one of four.
+						if (data->skill == WeaponSkill::Blizzard && ShardSoundCooldown <= 0) {
+							constexpr std::string_view Shards[] = { "sfx\\poe2\\blizzard_shard1.wav", "sfx\\poe2\\blizzard_shard2.wav", "sfx\\poe2\\blizzard_shard3.wav", "sfx\\poe2\\blizzard_shard4.wav" };
+							PlayModSfxLoc(Shards[static_cast<size_t>(zone.counter + at.x + at.y) % 4], at);
+							ShardSoundCooldown = ShardSoundGap;
+						}
+					}
 					break;
 				}
 				case TableZone::NearestStrike:

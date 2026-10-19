@@ -81,6 +81,11 @@ set(poe2_mod
   manifest.ini
   lua/mods/poe2/init.lua
   sfx/poe2/glacial_spike.wav
+  sfx/poe2/blizzard_cast.wav
+  sfx/poe2/blizzard_shard1.wav
+  sfx/poe2/blizzard_shard2.wav
+  sfx/poe2/blizzard_shard3.wav
+  sfx/poe2/blizzard_shard4.wav
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
   txtdata/missiles/misdat.tsv

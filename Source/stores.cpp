@@ -2321,6 +2321,11 @@ void CloseInteractionPanelsWhenAway()
 
 void OpenStashPanel()
 {
+	// The stash takes the left side, so the character sheet, quest log, Skills panel and any shop close first.
+	CloseCharPanel();
+	QuestLogIsOpen = false;
+	CloseSkillsPanel();
+	CloseVisualStore();
 	IsStashOpen = true;
 	RememberInteractionSpot();
 	Stash.RefreshItemStatFlags();

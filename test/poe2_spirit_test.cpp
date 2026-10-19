@@ -60,6 +60,14 @@ public:
 	}
 };
 
+/** @brief Sockets a Spirit gem and switches it on, as a right-click in the Skills panel does. */
+void SocketOn(Player &player, size_t slot, PersistentSkill skill)
+{
+	SocketSkill(player, slot, SkillSlot::ForPersistent(skill));
+	if (!player.poe2.spiritGemOn(slot))
+		ToggleSpiritGem(player, slot);
+}
+
 TEST_F(Poe2SpiritTest, SceptreGoesWithAnyOneHandedWeapon)
 {
 	Player &player = *MyPlayer;
@@ -112,7 +120,7 @@ TEST_F(Poe2SpiritTest, MinionGemsReserveSpiritPerMinion)
 	Player &player = *MyPlayer;
 	constexpr PersistentSkill Warriors = PersistentSkill::SkeletalWarriors;
 	player.poe2.spiritSkulls = 1;
-	SocketSkill(player, 0, SkillSlot::ForPersistent(Warriors));
+	SocketOn(player, 0, Warriors);
 	player.poe2.slotLevels[0] = 4;
 	// POE2: the first 2 skeletons are free, so they need no Spirit at all.
 	EXPECT_EQ(ChosenMinionCount(player, Warriors), 2);
@@ -150,7 +158,7 @@ TEST_F(Poe2SpiritTest, SkeletalMagesHaveNoFreeMinions)
 	Player &player = *MyPlayer;
 	constexpr PersistentSkill Mages = PersistentSkill::SkeletalMages;
 	player.poe2.spiritSkulls = 1;
-	SocketSkill(player, 0, SkillSlot::ForPersistent(Mages));
+	SocketOn(player, 0, Mages);
 	player.poe2.slotLevels[0] = 4;
 	EXPECT_EQ(ChosenMinionCount(player, Mages), 1);
 	EXPECT_EQ(SpiritPerMinion(player, Mages), 47);
@@ -213,8 +221,8 @@ TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 	player.poe2.spiritSkulls = 1;
 	EXPECT_EQ(MaxSpirit(player), 30);
 
-	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh));
-	SocketSkill(player, 1, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder));
+	SocketOn(player, 0, PersistentSkill::HeraldOfAsh);
+	SocketOn(player, 1, PersistentSkill::HeraldOfThunder);
 	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfAsh));
 	EXPECT_FALSE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder));
 	EXPECT_EQ(GetSkillUsability(player, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder)), SkillUsability::Spirit);
@@ -227,6 +235,24 @@ TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 	EXPECT_EQ(MaxSpirit(player), 30 + SceptreSpirit);
 	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder));
 	EXPECT_EQ(ReservedSpirit(player), 60);
+}
+
+TEST_F(Poe2SpiritTest, SpiritGemsStartOffUntilSwitchedOn)
+{
+	Player &player = *MyPlayer;
+	player.poe2.spiritSkulls = 1;
+	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh));
+	EXPECT_FALSE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfAsh));
+	EXPECT_EQ(ReservedSpirit(player), 0);
+	EXPECT_TRUE(ToggleSpiritGem(player, 0));
+	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfAsh));
+	EXPECT_EQ(ReservedSpirit(player), 30);
+	// Socketing the same gem again keeps it on; another gem starts off.
+	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh));
+	EXPECT_TRUE(player.poe2.spiritGemOn(0));
+	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder));
+	EXPECT_FALSE(player.poe2.spiritGemOn(0));
+	EXPECT_EQ(ReservedSpirit(player), 0);
 }
 
 TEST_F(Poe2SpiritTest, SkullsGrantSpiritOnce)
@@ -250,7 +276,7 @@ TEST_F(Poe2SpiritTest, PurityGrantsResistances)
 	InitializeItem(player.InvBody[INVLOC_HAND_LEFT], FindBase("Rattling Sceptre"));
 	CalcPlrInv(player, false);
 	const int fire = player._pFireResist;
-	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::PurityOfElements));
+	SocketOn(player, 0, PersistentSkill::PurityOfElements);
 	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::PurityOfElements));
 	EXPECT_EQ(player._pFireResist, fire + PurityResistance);
 	SocketSkill(player, 0, {});

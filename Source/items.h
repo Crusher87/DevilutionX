@@ -583,6 +583,8 @@ inline bool IsOneCellCopy(const Item &item)
 {
 	return FullSizeItemCursor(static_cast<item_cursor_graphic>(item._iCurs)) != item._iCurs;
 }
+/** @brief POE2 Mashup: whether the item takes one cell, whatever picture it was saved with (one-cell copies and charms). */
+bool TakesOneCell(const Item &item);
 /** @brief POE2 Mashup: items saved when they were bigger let go of the inventory cells they no longer cover. */
 void FitOneCellItems(Player &player);
 void InitializeItem(Item &item, _item_indexes itemData);

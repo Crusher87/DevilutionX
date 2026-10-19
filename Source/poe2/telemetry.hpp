@@ -65,6 +65,8 @@ void TelemetryLog(std::string_view category, std::string_view text);
 void TelemetryEffect(std::string_view source, std::string_view what, int x, int y);
 /** @brief Notes a step of loading a level, so a crash while loading shows the last step reached. */
 void TelemetryStep(std::string_view step);
+/** @brief Notes something on screen that had no picture to draw and was skipped, once per kind, so the cause can be found. */
+void TelemetryMissingSprite(std::string_view what);
 
 void TelemetryGameStarted(const Player &player, bool loaded);
 void TelemetryGameEnded();

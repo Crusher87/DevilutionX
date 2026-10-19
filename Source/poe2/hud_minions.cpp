@@ -56,6 +56,15 @@ void DrawMinionTooltip(const Surface &out, PersistentSkill skill, int alive, int
 	poe2ui::DrawTooltip(out, { { 0, 0 }, { out.w(), out.h() } }, MousePosition, std::string(PersistentSkillName(skill)), UiFlags::ColorWhitegold, lines);
 }
 
+/** Spirit gems with nothing on screen to show they're working get a portrait beside the minions (Curtis 2026-10-19). */
+constexpr PersistentSkill BuffSkills[] = { PersistentSkill::HeraldOfAsh, PersistentSkill::HeraldOfThunder, PersistentSkill::HeraldOfFrost, PersistentSkill::PurityOfElements };
+
+void DrawBuffTooltip(const Surface &out, PersistentSkill skill)
+{
+	const std::vector<std::pair<std::string, UiFlags>> lines { { std::string(PersistentSkillDescription(skill)), UiFlags::ColorWhite } };
+	poe2ui::DrawTooltip(out, { { 0, 0 }, { out.w(), out.h() } }, MousePosition, std::string(PersistentSkillName(skill)), UiFlags::ColorWhitegold, lines);
+}
+
 } // namespace
 
 void DrawMinionHud(const Surface &out)
@@ -103,8 +112,24 @@ void DrawMinionHud(const Surface &out)
 			hover = Hover { skill, alive, target, pending, ticksLeft };
 		position.x += portrait.size.width + PortraitGap;
 	}
+	std::optional<PersistentSkill> buffHover;
+	for (const PersistentSkill skill : BuffSkills) {
+		if (!IsPersistentSkillActive(player, skill))
+			continue;
+		const Rectangle portrait { position, PortraitSize };
+		DrawHalfTransparentRectTo(out, portrait.position.x, portrait.position.y, portrait.size.width, portrait.size.height);
+		const Point bottomLeft { portrait.position.x, portrait.position.y + portrait.size.height - 1 };
+		DrawSkillIcon(out, bottomLeft, SkillSlot::ForPersistent(skill), true);
+		if (portrait.contains(MousePosition)) {
+			DrawSmallSpellIconBorder(out, bottomLeft);
+			buffHover = skill;
+		}
+		position.x += portrait.size.width + PortraitGap;
+	}
 	if (hover)
 		DrawMinionTooltip(out, hover->skill, hover->alive, hover->target, hover->pending, hover->ticksLeft);
+	else if (buffHover)
+		DrawBuffTooltip(out, *buffHover);
 }
 
 } // namespace devilution

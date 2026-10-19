@@ -1399,7 +1399,7 @@ void FitOneCellStashItems()
 				if (cell == 0 || cell - 1U >= Stash.stashList.size())
 					continue;
 				const Item &item = Stash.stashList[cell - 1];
-				if (IsOneCellCopy(item) && item.position != Point { x, y })
+				if (TakesOneCell(item) && item.position != Point { x, y })
 					grid[x][y] = 0;
 			}
 		}

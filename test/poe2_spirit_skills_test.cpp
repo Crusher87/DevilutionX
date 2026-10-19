@@ -30,6 +30,8 @@ public:
 		MyPlayer->_pDexterity = 200;
 		// Every Spirit skull broken: 100 Spirit.
 		MyPlayer->poe2.spiritSkulls = 7;
+		// These tests are about what the gems do, so every socket's Spirit gem is switched on.
+		MyPlayer->poe2.spiritGemsOn = 0xFFFF;
 		gbIsSpawn = false;
 		gbIsMultiplayer = false;
 		gbIsHellfire = true;

@@ -2439,6 +2439,13 @@ void AddChainLightning(Missile &missile, AddMissileParameter &parameter)
 namespace {
 void InitMissileAnimationFromMonster(Missile &mis, Direction midir, const Monster &mon, MonsterGraphic graphic)
 {
+	// POE2 Mashup: a monster without that animation charges in another one it has, rather than crashing.
+	for (const MonsterGraphic fallback : { MonsterGraphic::Walk, MonsterGraphic::Stand }) {
+		if (mon.type().getAnimData(graphic).sprites)
+			break;
+		TelemetryMissingSprite(StrCat("monster ", mon.name(), " charging (type ", static_cast<int>(mon.type().type), ", graphic ", static_cast<int>(graphic), ")"));
+		graphic = fallback;
+	}
 	const AnimStruct &anim = mon.type().getAnimData(graphic);
 	mis.setDirection(midir);
 	mis._miAnimFlags = MissileGraphicsFlags::None;

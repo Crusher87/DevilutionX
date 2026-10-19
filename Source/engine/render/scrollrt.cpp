@@ -73,6 +73,7 @@
 #include "panels/skill_bar.hpp"
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
 #include "engine/palette.h"
 #include "poe2/camera_shake.hpp"
@@ -488,6 +489,10 @@ void DrawPlayerIconHelper(const Surface &out, MissileGraphicID missileGraphicId,
 
 	position.x -= GetMissileSpriteData(missileGraphicId).animWidth2;
 
+	if (!GetMissileSpriteData(missileGraphicId).sprites) {
+		TelemetryMissingSprite(StrCat("hero icon ", static_cast<int>(missileGraphicId)));
+		return;
+	}
 	const ClxSprite sprite = (*GetMissileSpriteData(missileGraphicId).sprites).list()[0];
 
 	if (!lighting) {
@@ -599,6 +604,10 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 		return;
 	}
 
+	if (!player.previewCelSprite && !player.AnimInfo.sprites) {
+		TelemetryMissingSprite(StrCat("hero ", player._pName, " (mode ", static_cast<int>(player._pmode), ")"));
+		return;
+	}
 	const ClxSprite sprite = player.currentSprite();
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
@@ -660,6 +669,10 @@ void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPo
  */
 void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
+	if (!objectToDraw._oAnimData) {
+		TelemetryMissingSprite(StrCat("object ", objectToDraw.name().str(), " (type ", static_cast<int>(objectToDraw._otype), ")"));
+		return;
+	}
 	// POE2 Mashup: with Modern Effects, candles hold still and torches flicker out of step (see vfx::ObjectSprite).
 	const ClxSprite sprite = vfx::ObjectSprite(objectToDraw);
 
@@ -854,6 +867,10 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
 	const Item &item = Items[itemIndex];
 	if (IsItemHiddenByLootFilter(item))
 		return;
+	if (!item.AnimInfo.sprites) {
+		TelemetryMissingSprite(StrCat("item ", item.getName().str(), " (picture ", item._iCurs, ")"));
+		return;
+	}
 	const ClxSprite sprite = item.AnimInfo.currentSprite();
 	const Point position = targetBufferPosition + item.getRenderingOffset(sprite);
 	if (!IsPlayerInStore() && (itemIndex == pcursitem || AutoMapShowItems)) {
@@ -898,6 +915,17 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 
 	const auto &monster = Monsters[mi];
 	if ((monster.flags & MFLAG_HIDDEN) != 0) {
+		return;
+	}
+	// POE2 Mashup: a monster caught without a picture is skipped and logged, not a crash (Curtis 2026-10-19, maps).
+	if (!monster.animInfo.sprites) {
+		std::string missing;
+		for (const MonsterGraphic graphic : { MonsterGraphic::Stand, MonsterGraphic::Walk, MonsterGraphic::Attack, MonsterGraphic::GotHit, MonsterGraphic::Death, MonsterGraphic::Special }) {
+			if (!monster.type().getAnimData(graphic).sprites)
+				StrAppend(missing, " ", static_cast<int>(graphic));
+		}
+		TelemetryMissingSprite(StrCat("monster ", monster.name(), " (type ", static_cast<int>(monster.type().type), ", mode ", static_cast<int>(monster.mode),
+		    monster.isPlayerMinion() ? ", a minion" : "", ", graphics not loaded:", missing.empty() ? " none" : missing, ")"));
 		return;
 	}
 
@@ -2084,6 +2112,7 @@ void DrawAndBlit()
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
 	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
+	DrawStashTabTooltip(out);
 	DrawMinionHud(out);
 
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)

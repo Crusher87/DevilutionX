@@ -10,6 +10,7 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/belt_uniques.hpp"
 #include "tables/itemdat.h"
 #include "utils/format.hpp"
 #include "utils/log.hpp"
@@ -221,7 +222,8 @@ std::vector<int> Poe2UniquesOnBase(int itemIndex)
 std::vector<std::pair<const UniqueEffect *, int>> RollUniqueEffects(const Item &item)
 {
 	std::vector<std::pair<const UniqueEffect *, int>> rolled;
-	if (item._iMagical != ITEM_QUALITY_UNIQUE)
+	// Belt uniques keep unique id 0 (The Butcher's Cleaver) and carry their own text.
+	if (item._iMagical != ITEM_QUALITY_UNIQUE || GetBeltUnique(item) != nullptr)
 		return rolled;
 	const Poe2Unique *unique = Poe2UniqueFor(item._iUid);
 	if (unique == nullptr)

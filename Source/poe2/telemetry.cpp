@@ -721,6 +721,14 @@ void FlushEffects(uint32_t now, bool all)
 
 } // namespace
 
+void TelemetryMissingSprite(std::string_view what)
+{
+	static ankerl::unordered_dense::set<std::string> reported;
+	if (LogFile == nullptr || reported.size() >= 64 || !reported.emplace(what).second)
+		return;
+	TelemetryLog("bug", StrCat("nothing to draw for ", what, ", skipped it", HeroTile()));
+}
+
 void TelemetryEffect(std::string_view source, std::string_view what, int x, int y)
 {
 	if (LogFile == nullptr)

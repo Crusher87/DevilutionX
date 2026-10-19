@@ -319,7 +319,7 @@ std::vector<std::string> FlaskModLines(const Item &item)
 	case FlaskSuffix::Ox: lines.emplace_back(FormatRuntime(_("{:d}% more armour while recovering"), OxArmourPercent)); break;
 	case FlaskSuffix::Plenty: lines.emplace_back(_("25% fewer charges used")); break;
 	case FlaskSuffix::Springs: lines.emplace_back(_("Gains a charge every 3 seconds")); break;
-	case FlaskSuffix::Guarding: lines.emplace_back(_("Guard for 2 seconds when drunk")); break;
+	case FlaskSuffix::Guarding: lines.emplace_back(FormatRuntime(_("When drunk: take {:d}% less damage for {:d} seconds"), GuardDamageReduction, GuardingFlaskTicks / 20)); break;
 	default: break;
 	}
 	if (const int quality = GetFlaskQuality(item); quality > 0)

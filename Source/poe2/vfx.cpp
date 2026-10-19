@@ -4173,28 +4173,38 @@ std::optional<SDL_Rect> FillFloorMask(Size worldSize)
 	// not something standing on it: the floor effects show through those. But shade on a sprite also darkens some of
 	// its own pixels to colour 0, and some of a sprite's pixels happen to match the floor under them, so a pixel like
 	// that with the sprite close on both sides is filled in as solid.
-	std::vector<uint8_t> solid(static_cast<size_t>(rect.w) * rect.h);
-	std::vector<uint8_t> zero(solid.size());
+	// A lava lake fills the whole frame with floor glow, so this runs over millions of pixels: the solid flags sit in
+	// rows padded with 3 empty pixels on every side, which keeps every neighbour lookup in bounds and the loops free of
+	// branches (Curtis 2026-10-19: lava levels slowed the game).
+	constexpr int Reach = 3;
+	// A covered pixel is black with full alpha, in the mask's byte order.
+	constexpr uint8_t CoveredBytes[4] = { 0, 0, 0, 255 };
+	uint32_t covered;
+	std::memcpy(&covered, CoveredBytes, sizeof(covered));
+	const int stride = rect.w + 2 * Reach;
+	static std::vector<uint8_t> padded;
+	padded.assign(static_cast<size_t>(stride) * (rect.h + 2 * Reach), 0);
+	const auto row = [&](int y) { return &padded[(static_cast<size_t>(y + Reach) * stride) + Reach]; };
 	for (int y = 0; y < rect.h; y++) {
 		const uint8_t *now = world.at(rect.x, rect.y + y);
 		const uint8_t *bare = static_cast<const uint8_t *>(FloorSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FloorSurface->pitch + rect.x;
-		for (int x = 0; x < rect.w; x++) {
-			const size_t i = static_cast<size_t>(y) * rect.w + x;
-			solid[i] = now[x] != bare[x] && now[x] != 0 ? 1 : 0;
-			zero[i] = solid[i] == 0 ? 1 : 0;
-		}
+		uint8_t *solid = row(y);
+		for (int x = 0; x < rect.w; x++)
+			solid[x] = static_cast<uint8_t>(static_cast<int>(now[x] != bare[x]) & static_cast<int>(now[x] != 0));
 	}
-	const auto at = [&](int x, int y) { return x >= 0 && y >= 0 && x < rect.w && y < rect.h && solid[static_cast<size_t>(y) * rect.w + x] != 0; };
-	const auto near = [&](int x, int y, int dx, int dy) { return at(x + dx, y + dy) || at(x + 2 * dx, y + 2 * dy) || at(x + 3 * dx, y + 3 * dy); };
 	for (int y = 0; y < rect.h; y++) {
-		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
-		for (int x = 0; x < rect.w; x++, out += 4) {
-			const size_t i = static_cast<size_t>(y) * rect.w + x;
-			bool cover = solid[i] != 0;
-			if (!cover && zero[i] != 0)
-				cover = (near(x, y, -1, 0) && near(x, y, 1, 0)) || (near(x, y, 0, -1) && near(x, y, 0, 1));
-			out[0] = out[1] = out[2] = 0;
-			out[3] = cover ? 255 : 0;
+		const uint8_t *s = row(y);
+		const uint8_t *up1 = row(y - 1);
+		const uint8_t *up2 = row(y - 2);
+		const uint8_t *up3 = row(y - 3);
+		const uint8_t *down1 = row(y + 1);
+		const uint8_t *down2 = row(y + 2);
+		const uint8_t *down3 = row(y + 3);
+		auto *out = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch);
+		for (int x = 0; x < rect.w; x++) {
+			const uint32_t across = static_cast<uint32_t>((s[x - 1] | s[x - 2] | s[x - 3]) & (s[x + 1] | s[x + 2] | s[x + 3]));
+			const uint32_t upDown = static_cast<uint32_t>((up1[x] | up2[x] | up3[x]) & (down1[x] | down2[x] | down3[x]));
+			out[x] = (s[x] | across | upDown) * covered;
 		}
 	}
 	SDL_UnlockTexture(Layer.mask);
@@ -4267,14 +4277,24 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	}
 	// The glowing layer adds up on black (opaque, so copying it with additive blending adds its colours). The glow on
-	// the floor goes first, so it can be cut away where something stands on it.
+	// the floor goes on by itself first, cut away where something stands on it, and without bloom: a lava lake's bloom
+	// spread over the skills and monsters on it and hid them (Curtis 2026-10-19).
+	if (!Ground.indices.empty()) {
+		SDL_SetRenderTarget(renderer, Layer.full);
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		SDL_RenderClear(renderer);
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+		Submit(renderer, Ground, 1);
+		if (cut)
+			SDL_RenderCopy(renderer, Layer.mask, &*cut, &*cut);
+		SDL_SetRenderTarget(renderer, nullptr);
+		SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_ADD);
+		SDL_RenderCopy(renderer, Layer.full, nullptr, nullptr);
+	}
 	SDL_SetRenderTarget(renderer, Layer.full);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_RenderClear(renderer);
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-	Submit(renderer, Ground, 1);
-	if (cut)
-		SDL_RenderCopy(renderer, Layer.mask, &*cut, &*cut);
 	Submit(renderer, Glowing, 1);
 	// Bloom: ever smaller copies, each a blur of the last.
 	SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_NONE);

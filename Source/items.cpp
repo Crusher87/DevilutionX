@@ -2794,6 +2794,10 @@ StringOrView GetTranslatedItemName(const Item &item)
 {
 	const auto &baseItemData = AllItemsList[static_cast<size_t>(item.IDidx)];
 
+	// POE2 Mashup: essences, omens, runes, catalysts, waystones and support gems share a base each and carry their
+	// own full name, such as "Lesser Essence of Clarity".
+	if (gbIsPoe2 && item._iIName[0] != '\0' && (IsCraftingVariantItem(item) || IsWaystone(item) || SupportGemForItem(item) != SupportGem::None))
+		return std::string_view(item._iIName);
 	if (item._iCreateInfo == 0) {
 		return _(baseItemData.iName);
 	}
@@ -3829,12 +3833,18 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	RedrawComponent(PanelDrawComponent::Health);
 }
 
+bool TakesOneCell(const Item &item)
+{
+	// Every charm picture is one cell; an old Stone Charm was saved with the 2x2 Magic Rock.
+	return IsOneCellCopy(item) || IsCharm(item);
+}
+
 void FitOneCellItems(Player &player)
 {
 	// A one-cell item keeps only its own cell; the others are marked with its negative number.
 	for (int8_t &cell : player.InvGrid) {
 		const int index = -cell - 1;
-		if (cell < 0 && index < player._pNumInv && IsOneCellCopy(player.InvList[index]))
+		if (cell < 0 && index < player._pNumInv && TakesOneCell(player.InvList[index]))
 			cell = 0;
 	}
 }
@@ -6153,14 +6163,30 @@ void DrawUniqueInfo(const Surface &out)
 	}
 }
 
-/** @brief POE2 Mashup: armor pieces show the defense their base grants. */
+/** @brief The armour, evasion and energy shield an item gives when worn, counting quality and local % like CalcPlrInv. */
+void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energyShield)
+{
+	const DefenseType type = ItemDefenseType(item);
+	SplitDefense(type, item._iAC, armour, evasion, energyShield);
+	if (item.isEmpty() || (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified))
+		return;
+	int bonusArmour;
+	int bonusEvasion;
+	int bonusShield;
+	SplitDefense(type, GetBonusAC(item), bonusArmour, bonusEvasion, bonusShield);
+	armour += bonusArmour;
+	evasion += bonusEvasion;
+	energyShield += bonusShield;
+}
+
+/** @brief POE2 Mashup: armor pieces show the defense they grant when worn. */
 void PrintPoe2ItemDefense(const Item &item)
 {
 	std::string defense;
 	int armour;
 	int evasion;
 	int energyShield;
-	SplitDefense(ItemDefenseType(item), item._iAC, armour, evasion, energyShield);
+	SplitWornDefense(item, armour, evasion, energyShield);
 	if (armour > 0)
 		StrAppend(defense, FormatRuntime(_("armour: {:d}"), armour));
 	if (evasion > 0)
@@ -6405,10 +6431,13 @@ void PrintItemDetails(const Item &item)
 		// POE2 Mashup: a unique's powers are listed in its tooltip, not in a separate window.
 		for (const std::string &line : Poe2UniqueText(item))
 			AddItemInfoBoxString(line);
-		for (const auto &power : UniqueItems[item._iUid].powers) {
-			if (power.type == IPL_INVALID)
-				break;
-			AddItemInfoBoxString(PrintItemPower(power.type, item));
+		// Belt uniques have no classic unique behind them; their lines come from the flask text.
+		if (GetBeltUnique(item) == nullptr) {
+			for (const auto &power : UniqueItems[item._iUid].powers) {
+				if (power.type == IPL_INVALID)
+					break;
+				AddItemInfoBoxString(PrintItemPower(power.type, item));
+			}
 		}
 	} else if (item._iMagical == ITEM_QUALITY_UNIQUE) {
 		AddItemInfoBoxString(_("unique item"));
@@ -6542,11 +6571,11 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 	int armour = 0;
 	int evasion = 0;
 	int energyShield = 0;
-	SplitDefense(ItemDefenseType(item), item._iAC, armour, evasion, energyShield);
+	SplitWornDefense(item, armour, evasion, energyShield);
 	int otherArmour = 0;
 	int otherEvasion = 0;
 	int otherEnergyShield = 0;
-	SplitDefense(ItemDefenseType(other), other._iAC, otherArmour, otherEvasion, otherEnergyShield);
+	SplitWornDefense(other, otherArmour, otherEvasion, otherEnergyShield);
 	compare(armour, otherArmour, _("Armour"));
 	compare(evasion, otherEvasion, _("Evasion"));
 	compare(energyShield * EnergyShieldPerDefense, otherEnergyShield * EnergyShieldPerDefense, _("Energy Shield"));
@@ -7478,6 +7507,9 @@ StringOrView Item::getName() const
 	if (isEmpty()) {
 		return std::string_view("");
 	}
+	// POE2 Mashup: belt uniques keep unique id 0, which is The Butcher's Cleaver, so they name themselves.
+	if (const BeltUnique *belt = GetBeltUnique(*this); belt != nullptr)
+		return belt->name;
 	if (!_iIdentified || _iCreateInfo == 0 || _iMagical == ITEM_QUALITY_NORMAL) {
 		return GetTranslatedItemName(*this);
 	}

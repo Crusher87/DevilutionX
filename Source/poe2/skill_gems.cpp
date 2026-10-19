@@ -223,6 +223,9 @@ SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill, int level)
 	const SkillSlot previous = player.poe2.skillSlots[slot];
 	player.poe2.skillSlots[slot] = skill;
 	player.poe2.slotLevels[slot] = static_cast<uint8_t>(std::clamp(level, 1, MaxGemLevel));
+	// Curtis 2026-10-19: a Spirit gem starts switched off; a right-click in the Skills panel switches it on.
+	if (previous != skill)
+		player.poe2.spiritGemsOn &= static_cast<uint16_t>(~(1U << slot));
 	if (skill.isEmpty() || skill.kind == SkillKind::Persistent) {
 		for (size_t traySlot = 0; traySlot < NumTraySlots; traySlot++) {
 			if (player.poe2.tray[traySlot] == TrayBinding::ForGem(slot))

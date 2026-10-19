@@ -1084,6 +1084,9 @@ bool HandleSkillBarClick(Point mousePosition)
 
 bool HandleSkillBarRightClick(Point mousePosition)
 {
+	// The Skills panel's Spirit gems switch on and off with a right-click.
+	if (HandleSkillsPanelRightClick(mousePosition))
+		return true;
 	if (!IsSkillBarVisible())
 		return false;
 

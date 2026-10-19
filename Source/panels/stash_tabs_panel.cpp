@@ -34,6 +34,7 @@
 #include "inv.h"
 #include "items.h"
 #include "panels/poe2_widgets.hpp"
+#include "panels/quest_log.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/crafting_items.hpp"
@@ -1461,7 +1462,6 @@ void DrawStashTabUi(const Surface &out)
 	if (StashTabs.kind(Stash.GetPage()) != StashTabKind::Blank) {
 		const TabView view = BuildTabView();
 		DrawTabView(out, view);
-		DrawEmptySlotTooltip(out, view);
 	}
 
 	if (DrawerOpen)
@@ -1469,6 +1469,16 @@ void DrawStashTabUi(const Surface &out)
 	if (OpenPopup == Popup::Settings)
 		DrawSettings(out);
 	DrawDraggedTab(out);
+}
+
+void DrawStashTabTooltip(const Surface &out)
+{
+	// Drawn with the item info box, above the tab list and the HUD, which would otherwise cover the right of it.
+	if (!gbIsPoe2 || !IsStashOpen || CharFlag || QuestLogIsOpen || StashTabs.count() == 0 || StashTabs.kind(Stash.GetPage()) == StashTabKind::Blank)
+		return;
+	if (DrawerOpen && DrawerRect().contains(MousePosition))
+		return;
+	DrawEmptySlotTooltip(out, BuildTabView());
 }
 
 StashStruct::StashCell PremadeTabItemUnderCursor(Point mousePosition)

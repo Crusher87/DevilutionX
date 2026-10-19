@@ -28,6 +28,7 @@
 #include "panels/item_spawner.hpp"
 #include "panels/poe2_widgets.hpp"
 #include "panels/skill_bar.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
@@ -585,6 +586,9 @@ void OpenGemcutting(bool fromBelt, int index)
 		Category = DefaultSkillCategory(player);
 		break;
 	}
+	// Curtis 2026-10-19: the cut gem goes into the Skills panel, so that opens on the left in place of the stash or
+	// character sheet (the stash's tab list would also take the cutter's clicks).
+	OpenSkillsPanel();
 	Open();
 }
 

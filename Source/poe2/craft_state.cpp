@@ -1,6 +1,8 @@
 #include "poe2/craft_state.hpp"
 
 #include <algorithm>
+#include <limits>
+#include <type_traits>
 
 #include "engine/random.hpp"
 #include "poe2/desecration.hpp"
@@ -191,9 +193,29 @@ std::vector<Poe2ItemMod> ResolveCraftMods(const Item &item, const std::vector<Po
 Item RebuildWithCraft(const Player &player, const Item &item, uint32_t dwBuff, const Poe2Craft &craft)
 {
 	const uint32_t rngState = GetLCGEngineState();
+	// Shrines, oils and repairs change an item after it drops; the seed doesn't know them, so carry them across.
+	Item seeded;
+	RecreateItem(player, seeded, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
 	Item rebuilt;
 	RecreateItem(player, rebuilt, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, dwBuff, craft);
 	SetRndSeed(rngState);
+	const auto carry = [](auto &field, int now, int before) {
+		using Field = std::remove_reference_t<decltype(field)>;
+		field = static_cast<Field>(std::clamp<int>(field + now - before, std::numeric_limits<Field>::min(), std::numeric_limits<Field>::max()));
+	};
+	carry(rebuilt._iAC, item._iAC, seeded._iAC);
+	carry(rebuilt._iMinDam, item._iMinDam, seeded._iMinDam);
+	carry(rebuilt._iMaxDam, item._iMaxDam, seeded._iMaxDam);
+	if (rebuilt._iMaxDam < rebuilt._iMinDam)
+		rebuilt._iMaxDam = rebuilt._iMinDam;
+	carry(rebuilt._iPLToHit, item._iPLToHit, seeded._iPLToHit);
+	carry(rebuilt._iMinStr, item._iMinStr, seeded._iMinStr);
+	carry(rebuilt._iMinMag, item._iMinMag, seeded._iMinMag);
+	carry(rebuilt._iMinDex, item._iMinDex, seeded._iMinDex);
+	if (item._iMaxDur == DUR_INDESTRUCTIBLE)
+		rebuilt._iMaxDur = DUR_INDESTRUCTIBLE;
+	else if (rebuilt._iMaxDur > 0 && rebuilt._iMaxDur != DUR_INDESTRUCTIBLE)
+		rebuilt._iMaxDur = std::clamp(rebuilt._iMaxDur + item._iMaxDur - seeded._iMaxDur, 1, DUR_INDESTRUCTIBLE - 1);
 	rebuilt._iIdentified = true;
 	rebuilt.position = item.position;
 	rebuilt._iDurability = std::min<int>(item._iDurability, rebuilt._iMaxDur);

@@ -346,7 +346,7 @@ bool TrySelectPixelBased(Point tile)
 				}
 			} else {
 				const Monster &monster = Monsters[monsterId];
-				if (IsTileLit(adjacentTile) && IsValidMonsterForSelection(monster)) {
+				if (IsTileLit(adjacentTile) && IsValidMonsterForSelection(monster) && monster.animInfo.sprites) {
 					const ClxSprite sprite = monster.animInfo.currentSprite();
 					const Displacement renderingOffset = monster.getRenderingOffset(sprite);
 					if (checkSprite(adjacentTile, sprite, renderingOffset)) {
@@ -387,7 +387,7 @@ bool TrySelectPixelBased(Point tile)
 		}
 
 		Object *object = FindObjectAtPosition(adjacentTile);
-		if (object != nullptr && object->canInteractWith()) {
+		if (object != nullptr && object->canInteractWith() && object->_oAnimData) {
 			const ClxSprite sprite = object->currentSprite();
 			const Displacement renderingOffset = object->getRenderingOffset(sprite, adjacentTile);
 			if (checkSprite(adjacentTile, sprite, renderingOffset)) {

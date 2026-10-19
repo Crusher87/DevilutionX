@@ -30,6 +30,8 @@
 #include "options.h"
 #include "panels/info_box.hpp"
 #include "panels/poe2_widgets.hpp"
+#include "panels/quest_log.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/loot.hpp"
@@ -553,6 +555,10 @@ int VisualStoreItemPrice(int index)
 
 void OpenVisualStore(VisualStoreVendor vendor)
 {
+	// The shop takes the left side, so the character sheet, quest log and Skills panel close first.
+	CloseCharPanel();
+	QuestLogIsOpen = false;
+	CloseSkillsPanel();
 	IsVisualStoreOpen = true;
 	invflag = true; // Open inventory panel alongside
 	RememberInteractionSpot();
