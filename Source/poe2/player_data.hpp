@@ -10,6 +10,8 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <utility>
 
 #include "poe2/craft_types.hpp"
 #include "poe2/economy_state.hpp"
@@ -274,7 +276,13 @@ enum class PersistentSkill : uint8_t {
 	Berserk,
 	/** Melee hits on you are partly turned back on the attacker. */
 	Reflect,
-	Last = Reflect,
+	/** Meta gems (POE2): they hold spells in their sockets and cast them all when their Energy fills. Dodge rolls fill this one. */
+	CastOnDodge,
+	/** Hits you take fill it. */
+	CastWhenDamageTaken,
+	/** Channelling a stream skill fills it. */
+	CastWhileChannelling,
+	Last = CastWhileChannelling,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -471,6 +479,11 @@ struct SupportRuntime {
 	uint8_t leechPoolTicks = 0;
 	/** Nova Projectiles II: ticks before each Skills panel socket's skill can fire another nova. */
 	std::array<uint8_t, NumSkillSlots> novaCooldown {};
+	/** Energy of the meta gem in each Skills panel socket, in hundredths (see poe2/meta_gems.hpp), and the events since it last cast. */
+	std::array<uint16_t, NumSkillSlots> metaEnergy {};
+	std::array<uint8_t, NumSkillSlots> metaEvents {};
+	/** Cast while Channelling: ticks of the current second of channelling. */
+	uint8_t metaChannelTicks = 0;
 };
 
 /** @brief Timers of the Spirit skills and the element infusions, per character (not saved; see poe2/spirit_skills.cpp). */
@@ -535,6 +548,12 @@ struct Poe2PlayerData {
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
 	std::array<uint8_t, NumSkillSlots> slotLevels {};
+	/**
+	 * @brief Skill gems inside a meta gem's sockets, like the spells Cast on Dodge casts, and their levels.
+	 * A socket holds a support (slotSupports) or a skill, never both, and a skill inside a meta gem is in no other socket.
+	 */
+	std::array<std::array<SkillSlot, MaxSupportSockets>, NumSkillSlots> metaSkills {};
+	std::array<std::array<uint8_t, MaxSupportSockets>, NumSkillSlots> metaSkillLevels {};
 	/** @brief Spirit gems switched on with a right-click in the Skills panel, one bit per socket; an off gem reserves nothing. */
 	uint16_t spiritGemsOn = 0;
 	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
@@ -706,6 +725,10 @@ struct Poe2PlayerData {
 		manaFlaskTicks = 0;
 		skillSlots.fill({});
 		slotLevels.fill(1);
+		for (auto &skills : metaSkills)
+			skills.fill({});
+		for (auto &levels : metaSkillLevels)
+			levels.fill(1);
 		spiritGemsOn = 0;
 		spiritSkulls = 0;
 		minionCounts.fill(DefaultMinionCount);
@@ -874,6 +897,20 @@ struct Poe2PlayerData {
 		return socket < NumSkillSlots && ((spiritGemsOn >> socket) & 1U) != 0;
 	}
 
+	/** @brief The Skills panel row and socket of the meta gem the skill is inside, if it is. */
+	[[nodiscard]] std::optional<std::pair<size_t, size_t>> metaSocketOf(SkillSlot skill) const
+	{
+		if (skill.isEmpty())
+			return std::nullopt;
+		for (size_t row = 0; row < NumSkillSlots; row++) {
+			for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+				if (metaSkills[row][socket] == skill)
+					return std::make_pair(row, socket);
+			}
+		}
+		return std::nullopt;
+	}
+
 	/** @brief Level the skill is used at: its socketed gem's level plus what gear adds; 0 if it isn't socketed. */
 	[[nodiscard]] int skillLevel(SkillSlot skill) const
 	{
@@ -881,6 +918,9 @@ struct Poe2PlayerData {
 			if (!skill.isEmpty() && skillSlots[socket] == skill)
 				return std::clamp(gemLevel(socket) + ItemSkillLevelBonus(*this, skill), 1, static_cast<int>(MaxGemLevel));
 		}
+		// A spell inside a meta gem has its own level.
+		if (const auto meta = metaSocketOf(skill))
+			return std::clamp(metaSkillLevels[meta->first][meta->second] + ItemSkillLevelBonus(*this, skill), 1, static_cast<int>(MaxGemLevel));
 		return 0;
 	}
 	[[nodiscard]] int skillLevel(SpellID spell) const { return skillLevel(SkillSlot::ForSpell(spell)); }

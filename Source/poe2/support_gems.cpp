@@ -15,6 +15,7 @@
 #include "player.h"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
@@ -177,6 +178,9 @@ const SupportSockets &Poe2PlayerData::supportsFor(SkillSlot skill) const
 		if (skillSlots[slot] == skill)
 			return slotSupports[slot];
 	}
+	// A spell inside a meta gem takes the meta gem's supports that fit it.
+	if (metaSocketOf(skill))
+		return MetaSupportsFor(*this, skill);
 	return None;
 }
 
@@ -199,14 +203,21 @@ int Poe2PlayerData::supportTier(SkillSlot skill, SupportGem gem) const
 		}
 		return 0;
 	}
+	std::optional<size_t> row = std::nullopt;
 	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
-		if (skillSlots[slot] != skill)
-			continue;
-		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
-			if (slotSupports[slot][socket] == gem)
-				return socketTier(slot, socket);
+		if (skillSlots[slot] == skill) {
+			row = slot;
+			break;
 		}
-		return 0;
+	}
+	if (!row) {
+		if (!hasSupport(skill, gem))
+			return 0;
+		row = metaSocketOf(skill)->first;
+	}
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		if (slotSupports[*row][socket] == gem)
+			return socketTier(*row, socket);
 	}
 	return 0;
 }
@@ -441,9 +452,9 @@ std::string_view GemColorName(GemColor color)
 
 bool SkillTakesSupports(SkillSlot skill)
 {
-	// Minion gems, and heralds, whose supports change their explosions (POE2).
+	// Minion gems, heralds, whose supports change their explosions, and meta gems, whose supports change the spells inside (POE2).
 	if (skill.kind == SkillKind::Persistent)
-		return (SkillTags(skill) & (ST_Minion | ST_Herald)) != 0;
+		return (SkillTags(skill) & (ST_Minion | ST_Herald)) != 0 || IsMetaGem(skill);
 	return IsAnyOf(skill.kind, SkillKind::Spell, SkillKind::Attack, SkillKind::Default);
 }
 
@@ -476,8 +487,10 @@ std::string_view SupportGemNeeds(SupportGem gem)
 
 bool SupportGemCanSupport(SupportGem gem, SkillSlot skill)
 {
-	if (gem == SupportGem::None || !SkillTakesSupports(skill))
+	if (gem == SupportGem::None || !SkillTakesSupports(skill) || IsRetiredSupport(gem))
 		return false;
+	if (IsMetaGem(skill))
+		return MetaGemTakesSupport(skill, gem);
 	if (const SupportData *data = FindSupportData(gem); data != nullptr)
 		return TableSupportFits(*data, skill);
 	if (skill.kind == SkillKind::Persistent)
@@ -554,12 +567,16 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 
 	SupportSockets &supports = player.poe2.supportsAt(slot);
 	const size_t open = SupportSocketCount(player, slot);
+	// A meta gem's sockets hold spells as well as supports.
+	const auto holdsSpell = [&](size_t i) { return slot < NumSkillSlots && !player.poe2.metaSkills[slot][i].isEmpty(); };
 	if (socket) {
 		if (*socket >= open)
 			return SupportSocketResult::Locked;
+		if (holdsSpell(*socket))
+			return SupportSocketResult::SpellInSocket;
 	} else {
 		for (size_t i = 0; i < open; i++) {
-			if (supports[i] == SupportGem::None) {
+			if (supports[i] == SupportGem::None && !holdsSpell(i)) {
 				socket = i;
 				break;
 			}
@@ -604,8 +621,10 @@ std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem)
 			continue;
 		if (IsPowerSupport(gem) && OtherPowerSupport(supports, std::nullopt) != SupportGem::None)
 			continue;
-		if (std::find(supports.begin(), supports.begin() + static_cast<std::ptrdiff_t>(open), SupportGem::None) != supports.begin() + static_cast<std::ptrdiff_t>(open))
-			return slot;
+		for (size_t i = 0; i < open; i++) {
+			if (supports[i] == SupportGem::None && player.poe2.metaSkills[slot][i].isEmpty())
+				return slot;
+		}
 	}
 	return std::nullopt;
 }

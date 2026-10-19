@@ -80,6 +80,8 @@ enum class SupportSocketResult : uint8_t {
 	Conflict,
 	/** A lineage support can be in use on only one skill. */
 	LineageInUse,
+	/** The socket holds a spell inside a meta gem. */
+	SpellInSocket,
 };
 
 /** @brief The support gem an item represents, or SupportGem::None. */

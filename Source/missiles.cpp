@@ -51,6 +51,7 @@
 #include "poe2/hit_trace.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/support_gems.hpp"
@@ -1329,6 +1330,9 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 	if (&player == MyPlayer)
 		TelemetryNoteAttacker(monster != nullptr ? monster->name() : "a trap");
+	// POE2 Mashup: Cast when Damage Taken gains Energy.
+	if (gbIsPoe2 && &player == MyPlayer)
+		OnMetaDamageTaken(player, monster != nullptr ? monster->position.tile : player.position.tile);
 
 	if (resper > 0 || (gbIsPoe2 && resper < 0)) { // POE2 Mashup: negative resistance adds damage
 		damage -= damage * resper / 100;

@@ -62,6 +62,7 @@ set(tests
   poe2_stacking_test
   poe2_support_gems_test
   poe2_item_search_test
+  poe2_meta_gems_test
   poe2_telemetry_test
   poe2_ui_scale_test
   poe2_vfx_test

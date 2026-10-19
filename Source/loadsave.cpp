@@ -40,6 +40,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -2454,9 +2455,9 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * version 19 the weapon sets (the set that is out, the Books of Specialisation, each set's passives and the other set's
  * weapons) and the hardcore flag. Version 20 adds the default attack's supports, and version 21 the shape of the passive
  * tree the hero's points were spent on and the quests that gave passive points. Version 22 adds the support sockets
- * Jeweller's Orbs opened on each Skills panel row.
+ * Jeweller's Orbs opened on each Skills panel row. Version 25 adds the skills inside meta gems.
  */
-constexpr uint8_t Poe2HeroDataVersion = 24;
+constexpr uint8_t Poe2HeroDataVersion = 25;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2772,6 +2773,20 @@ uint8_t ReadPoe2HeroData(Player &player)
 	if (version < 24 || !file.IsValid(2))
 		return version;
 	player.poe2.spiritGemsOn = file.NextLE<uint16_t>();
+
+	// Version 25: the skills inside meta gems, and their levels.
+	if (version < 25 || !file.IsValid(NumSkillSlots * MaxSupportSockets * 3))
+		return version;
+	for (size_t row = 0; row < NumSkillSlots; row++) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			const SkillSlot skill { static_cast<SkillKind>(file.NextLE<uint8_t>()), file.NextLE<uint8_t>() };
+			const int level = file.NextLE<uint8_t>();
+			if (skill.isEmpty() || !IsMetaGem(player.poe2.skillSlots[row]) || !SkillGemItemIndex(skill))
+				continue;
+			player.poe2.metaSkills[row][socket] = skill;
+			player.poe2.metaSkillLevels[row][socket] = static_cast<uint8_t>(std::clamp(level, 1, MaxGemLevel));
+		}
+	}
 	return version;
 }
 
@@ -2805,6 +2820,9 @@ void LoadPoe2HeroData(Player &player)
 	// Spirit gems were always on before they could be switched off; heroes keep theirs running.
 	if (version > 0 && version < 24)
 		player.poe2.spiritGemsOn = static_cast<uint16_t>((1U << NumSkillSlots) - 1);
+	// Cast on Dodge and the other trigger supports became meta gems.
+	if (version > 0)
+		MigrateTriggerSupports(player);
 	// Points spent on an older tree come back when the tree changes shape.
 	if (version > 0) {
 		RefundPassivesForNewTree(player);
@@ -2844,7 +2862,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	}
 	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2));
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2) + sizeof(uint16_t) + (NumSkillSlots * MaxSupportSockets * 3));
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -2985,6 +3003,15 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	}
 	// Version 24: the Spirit gems switched on in the Skills panel.
 	file.WriteLE<uint16_t>(player.poe2.spiritGemsOn);
+	// Version 25: the skills inside meta gems, and their levels.
+	for (size_t row = 0; row < NumSkillSlots; row++) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			const SkillSlot skill = player.poe2.metaSkills[row][socket];
+			file.WriteLE<uint8_t>(static_cast<uint8_t>(skill.kind));
+			file.WriteLE<uint8_t>(skill.id);
+			file.WriteLE<uint8_t>(player.poe2.metaSkillLevels[row][socket]);
+		}
+	}
 }
 
 void LoadHeroItems(Player &player)

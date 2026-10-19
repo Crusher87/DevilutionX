@@ -157,6 +157,12 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Berserk");
 	case PersistentSkill::Reflect:
 		return _("Reflect");
+	case PersistentSkill::CastOnDodge:
+		return _("Cast on Dodge");
+	case PersistentSkill::CastWhenDamageTaken:
+		return _("Cast when Damage Taken");
+	case PersistentSkill::CastWhileChannelling:
+		return _("Cast while Channelling");
 	default:
 		return {};
 	}
@@ -197,6 +203,12 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Melee hits build Rage and you deal 20% more attack damage, but take 15% more damage");
 	case PersistentSkill::Reflect:
 		return _("Enemies that hit you in melee take 30% of the damage back");
+	case PersistentSkill::CastOnDodge:
+		return _("Meta gem: holds spells in its sockets. Dodge rolling fills its Energy, and when it's full the spells inside all cast");
+	case PersistentSkill::CastWhenDamageTaken:
+		return _("Meta gem: holds spells in its sockets. Each hit you take fills its Energy, and when it's full the spells inside all cast");
+	case PersistentSkill::CastWhileChannelling:
+		return _("Meta gem: holds spells in its sockets. Channelling a stream skill fills its Energy, and when it's full the spells inside all cast");
 	default:
 		return {};
 	}
@@ -234,6 +246,11 @@ int SpiritReservation(PersistentSkill skill)
 		return 30;
 	case PersistentSkill::Reflect:
 		return 30;
+	// POE2's meta gems.
+	case PersistentSkill::CastOnDodge:
+	case PersistentSkill::CastWhenDamageTaken:
+	case PersistentSkill::CastWhileChannelling:
+		return 100;
 	default:
 		return 0;
 	}

@@ -30,6 +30,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/default_attack.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -282,6 +283,12 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::Berserk;
 	case PersistentSkill::Reflect:
 		return SpellIcon::Reflect;
+	case PersistentSkill::CastOnDodge:
+		return SpellIcon::Phasing;
+	case PersistentSkill::CastWhenDamageTaken:
+		return SpellIcon::BloodBoil;
+	case PersistentSkill::CastWhileChannelling:
+		return SpellIcon::Apocalypse;
 	default:
 		return SpellIcon::Empty;
 	}
@@ -741,7 +748,7 @@ void DropOnTraySlot(Player &player, TraySlot traySlot)
 	const TrayBinding binding = Binding(player, traySlot);
 	if (IsSkillGem(player.HoldItem)) {
 		const SkillSlot skill = SkillForGem(player.HoldItem);
-		if (FindSkillSlot(player, skill)) {
+		if (FindSkillSlot(player, skill) || player.poe2.metaSocketOf(skill)) {
 			EventPlrMsg(FormatRuntime(_("{:s} is already in the Skills panel."), SkillName(skill)), UiFlags::ColorRed);
 			return;
 		}
@@ -784,6 +791,11 @@ void SocketHeldSkillGem(Player &player, size_t slot)
 	const SkillSlot skill = SkillForGem(player.HoldItem);
 	if (const std::optional<size_t> existing = FindSkillSlot(player, skill); existing && *existing != slot) {
 		EventPlrMsg(FormatRuntime(_("{:s} is already in the Skills panel."), SkillName(skill)), UiFlags::ColorRed);
+		return;
+	}
+	// A spell inside a meta gem is in no other socket.
+	if (const auto meta = player.poe2.metaSocketOf(skill)) {
+		EventPlrMsg(FormatRuntime(_("{:s} is already inside {:s}."), SkillName(skill), SkillName(player.poe2.skillSlots[meta->first])), UiFlags::ColorRed);
 		return;
 	}
 
@@ -830,6 +842,9 @@ SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int leve
 		UnsocketSupportGem(player.poe2, slot, socket, &tier);
 		returned.push_back({ gem, tier });
 	}
+	// The spells inside a meta gem come out with it.
+	if (IsMetaGem(player.poe2.skillSlots[slot]) && player.poe2.skillSlots[slot] != skill)
+		ReturnMetaSkills(player, slot);
 	const SkillSlot previous = SocketSkill(player, slot, skill, level);
 	GiveSupportGems(player, returned);
 	return previous;
@@ -855,6 +870,8 @@ std::string SupportSocketMessage(SupportSocketResult result, const Player &playe
 		return FormatRuntime(_("{:s} clashes with a support {:s} already has."), SupportGemName(gem), SkillName(skill));
 	case SupportSocketResult::LineageInUse:
 		return FormatRuntime(_("{:s} is a lineage support and already in use on another skill."), SupportGemName(gem));
+	case SupportSocketResult::SpellInSocket:
+		return std::string(_("A spell is in that socket: take it out first."));
 	default:
 		return FormatRuntime(_("{:s} now supports {:s}."), SupportGemName(gem), SkillName(skill));
 	}

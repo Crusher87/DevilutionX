@@ -19,6 +19,7 @@
 #include "player.h"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_resources.hpp"
@@ -71,9 +72,9 @@ const SupportData Table[] = {
 	{ SG::DeepFreeze, "Deep Freeze", "Freezes sooner. 20% less damage\nwith hits. Mana +10%", "Needs a cold skill", GC::Magic, 4, 110, 0, ST_Frost, 0, 0, NoFamily },
 	{ SG::WitheringTouch, "Withering Touch", "Hits wither: 5% more damage taken\na stack, up to 10. 15% less damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::CastOnKill, "Cast on Kill", "Casts the spell when you kill. 20% less\ndamage, at most every half second. Mana +20%", "Needs a spell", GC::Magic, 6, 120, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
-	{ SG::CastWhenHit, "Cast when Hit", "Casts the spell when you are hit. 20% less\ndamage, at most once a second. Mana +20%", "Needs a spell", GC::Strength, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
-	{ SG::CastOnDodge, "Cast on Dodge", "Casts the spell when you dodge roll.\n20% less damage. Mana +20%", "Needs a spell", GC::Dexterity, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
-	{ SG::CastWhileChannelling, "Cast while Channelling", "Casts the spell every second while a\nstream skill fires. 30% less damage. Mana +30%", "Needs a spell", GC::Magic, 9, 130, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
+	{ SG::CastWhenHit, "Cast when Hit", "Retired: it's the Cast when Damage Taken\nSpirit gem now, which holds the spells", "Retired", GC::Strength, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
+	{ SG::CastOnDodge, "Cast on Dodge", "Retired: it's the Cast on Dodge Spirit\ngem now, which holds the spells", "Retired", GC::Dexterity, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
+	{ SG::CastWhileChannelling, "Cast while Channelling", "Retired: it's the Cast while Channelling\nSpirit gem now, which holds the spells", "Retired", GC::Magic, 9, 130, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::BlinkStrike, "Blink Strike", "Where you land bursts with arcane\ndamage. 20% slower casts. Mana +40%", "Needs a movement skill", GC::Magic, 7, 140, 0, ST_Movement, 0, 0, NoFamily },
 	{ SG::EchoingShout, "Echoing Shout", "The warcry repeats twice, each echo\n50% weaker. Mana +30%", "Needs a warcry", GC::Strength, 5, 130, 0, ST_Warcry, 0, 0, Repeat },
 	{ SG::RallyingCry, "Rallying Cry", "The warcry hits all around for 150%\nweapon damage. Mana +30%", "Needs a warcry", GC::Strength, 5, 130, 0, ST_Warcry, 0, 0, NoFamily },
@@ -166,8 +167,6 @@ constexpr int RecentSpellTicks = 8 * TicksPerSecond;
 constexpr int MaxWitherStacks = 10;
 constexpr int WitherTicks = 4 * 20;
 constexpr int TriggerCooldownKill = 10;
-constexpr int TriggerCooldownHit = 20;
-constexpr int TriggerCooldownChannel = 20;
 constexpr int TriggerPercent = 80;
 constexpr int TotemCastTicks = 26;
 constexpr int TotemTicks = 8 * 20;
@@ -1499,14 +1498,14 @@ void OnPlayerHitBySupportedMonster(Player &player, Monster &monster)
 	if (!gbIsPoe2 || &player != MyPlayer)
 		return;
 	player.poe2.supportState.warlordStacks = 0;
-	FireTriggers(player, SG::CastWhenHit, monster.position.tile, TriggerCooldownHit);
+	OnMetaDamageTaken(player, monster.position.tile);
 }
 
-void OnSupportedDodge(Player &player)
+void OnSupportedDodge(Player &player, int tiles)
 {
 	if (!gbIsPoe2 || &player != MyPlayer)
 		return;
-	FireTriggers(player, SG::CastOnDodge, NearestTarget(player, player.position.tile, 8), 1);
+	OnMetaDodge(player, tiles);
 	for (const SkillSlot skill : player.poe2.skillSlots) {
 		if (skill.isEmpty() || !Has(player, skill, SG::Decoy))
 			continue;
@@ -1588,9 +1587,7 @@ void ProcessSupportEffects(Player &player)
 	} else if (state.moveDecayTicks > 0 && --state.moveDecayTicks == 0) {
 		state.movedTiles = 0;
 	}
-	// Cast while Channelling: a stream skill is firing.
-	if (player.poe2.volleyShotsLeft > 0)
-		FireTriggers(player, SG::CastWhileChannelling, { player.poe2.volleyTargetX, player.poe2.volleyTargetY }, TriggerCooldownChannel);
+	ProcessMetaGems(player);
 	if (leveltype == DTYPE_TOWN || player.hasNoLife()) {
 		ClearSupportEffects();
 		return;
@@ -1624,6 +1621,16 @@ void ClearSupportEffects()
 	Bursts.clear();
 	Pending.clear();
 	Stands.clear();
+}
+
+void UseTriggeredSkill(Player &player, SkillSlot skill, Point target)
+{
+	UseSkillFree(player, skill, player.position.tile, target, 100);
+}
+
+Point NearestMonsterTarget(const Player &player, Point from, int range)
+{
+	return NearestTarget(player, from, range);
 }
 
 int SupportAddedSpirit(const Player &player, SkillSlot skill)

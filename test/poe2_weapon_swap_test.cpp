@@ -133,6 +133,10 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	const int jewelIndex = player.jewels[MaxJewelSockets - 1].IDidx;
 	ASSERT_GE(jewelIndex, 0);
 	SetChosenMinionCount(player, PersistentSkill::SkeletalWarriors, 5);
+	// A meta gem keeps the spells inside it, at their levels.
+	player.poe2.skillSlots[5] = SkillSlot::ForPersistent(PersistentSkill::CastOnDodge);
+	player.poe2.metaSkills[5][1] = SkillSlot::ForSpell(SpellID::Fireball);
+	player.poe2.metaSkillLevels[5][1] = 4;
 	pfile_write_hero(/*writeGameData=*/false);
 
 	player.poe2.clear();
@@ -149,6 +153,9 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	EXPECT_EQ(player.swapHands[1].IDidx, IDI_WARRIOR);
 	EXPECT_TRUE(player.swapHands[0].isEmpty());
 	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalWarriors), 5);
+	EXPECT_EQ(player.poe2.metaSkills[5][1], SkillSlot::ForSpell(SpellID::Fireball));
+	EXPECT_EQ(player.poe2.metaSkillLevels[5][1], 4);
+	EXPECT_TRUE(player.poe2.metaSkills[5][0].isEmpty());
 	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalMages), StartingMinionCount(PersistentSkill::SkeletalMages));
 
 	// The hero list reads the league on its own.

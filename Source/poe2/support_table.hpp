@@ -92,6 +92,10 @@ struct SupportData {
 
 /** @brief The skill's tags. */
 uint32_t SkillTags(SkillSlot skill);
+/** @brief Uses a skill as a trigger does: free (the caller pays), at full damage, and it can't set off more supports. */
+void UseTriggeredSkill(Player &player, SkillSlot skill, Point target);
+/** @brief The nearest monster's tile within range, else the tile in front of the player. */
+Point NearestMonsterTarget(const Player &player, Point from, int range);
 /** @brief Spirit the supports of a Spirit gem add to its reservation, like Deadly Herald's 20. */
 int SupportAddedSpirit(const Player &player, SkillSlot skill);
 
@@ -147,7 +151,7 @@ void OnSupportedKill(Monster &monster);
 /** @brief A monster hit the local player. */
 void OnPlayerHitBySupportedMonster(Player &player, Monster &monster);
 /** @brief The local player started a dodge roll. */
-void OnSupportedDodge(Player &player);
+void OnSupportedDodge(Player &player, int tiles);
 /** @brief Repeats, totems, decoys, seals and timers; once per game tick for the local player. */
 void ProcessSupportEffects(Player &player);
 /** @brief Poison and wither; once per game tick per monster. */

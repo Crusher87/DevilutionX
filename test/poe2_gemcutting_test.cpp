@@ -8,6 +8,7 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/gemcutting.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -83,11 +84,12 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	EXPECT_EQ(skills, 128U);
+	EXPECT_EQ(skills, 131U);
 	// Lineage supports are found, never cut; the rest have an entry for each tier.
 	size_t tiers = 0;
 	for (size_t i = 1; i < static_cast<size_t>(SupportGem::Count); i++) {
-		if (!IsLineageSupport(static_cast<SupportGem>(i)))
+		// The old trigger supports are meta gems now, and can't be cut.
+		if (!IsLineageSupport(static_cast<SupportGem>(i)) && !IsRetiredSupport(static_cast<SupportGem>(i)))
 			tiers += static_cast<size_t>(SupportTierCount(static_cast<SupportGem>(i)));
 	}
 	EXPECT_EQ(supports, tiers);

@@ -884,3 +884,6 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	RUNE_OF_LIGHTNING	Misc	NONE	Lightning Penetration Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Cold Penetration Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Deadly Herald Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Cast on Dodge Gem	Gem	14	0	0	0	0	0	0	25	25		SPIRITGEM_TABLE	Null	true	3000
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Cast when Damage Taken Gem	Gem	11	0	0	0	0	0	25	25	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Cast while Channelling Gem	Gem	11	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2600

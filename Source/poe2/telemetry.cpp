@@ -1328,6 +1328,11 @@ std::string TelemetryBuildText(const Player &player)
 		if (slot.isEmpty())
 			continue;
 		StrAppend(text, " ", SkillName(slot), " gem ", player.poe2.gemLevel(i));
+		// The spells inside a meta gem, in brackets.
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			if (const SkillSlot inside = player.poe2.metaSkills[i][socket]; !inside.isEmpty())
+				StrAppend(text, " [", SkillName(inside), " gem ", static_cast<int>(player.poe2.metaSkillLevels[i][socket]), "]");
+		}
 		for (const SupportGem support : player.poe2.slotSupports[i]) {
 			if (support != SupportGem::None)
 				StrAppend(text, " +", SupportGemName(support));

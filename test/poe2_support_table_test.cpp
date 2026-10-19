@@ -12,6 +12,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/gemcutting.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -93,7 +94,8 @@ TEST_F(Poe2SupportTableTest, EveryTableSupportHasAnItemAndFitsSomething)
 		bool fits = false;
 		for (const SkillSlot skill : Candidates())
 			fits = fits || SupportGemCanSupport(data.gem, skill);
-		EXPECT_TRUE(fits) << data.name;
+		// The old trigger supports are meta gems now and fit nothing.
+		EXPECT_EQ(fits, !IsRetiredSupport(data.gem)) << data.name;
 		if (IsLineageSupport(data.gem))
 			lineage++;
 	}

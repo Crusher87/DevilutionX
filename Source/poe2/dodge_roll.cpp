@@ -104,7 +104,7 @@ bool TryDodgeRoll(Player &player)
 	player.poe2.dodgeCooldown = DodgeCooldownTicks;
 	player.poe2.untouchableTicks = DodgeUntouchableTicks;
 	NetSendCmdLoc(player.getId(), true, CMD_WALKXY, target);
-	OnSupportedDodge(player);
+	OnSupportedDodge(player, tiles);
 	return true;
 }
 

@@ -31,6 +31,7 @@ set(libdevilutionx_SRCS
   poe2/autosave.cpp
   poe2/craft_state.cpp
   poe2/item_search.cpp
+  poe2/meta_gems.cpp
   poe2/skill_details.cpp
   poe2/crafting_items.cpp
   poe2/desecration.cpp

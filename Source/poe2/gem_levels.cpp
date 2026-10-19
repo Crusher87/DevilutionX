@@ -6,6 +6,7 @@
 
 #include "missiles.h"
 #include "player.h"
+#include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
@@ -209,6 +210,8 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 		return std::format("{:d}-{:d} damage", range.min * percent / 100, range.max * percent / 100);
 	}
 	case SkillKind::Persistent:
+		if (IsMetaGem(skill))
+			return std::format("{:d}% more Energy", MetaEnergyPercentPerLevel * (gemLevel - 1));
 		return std::format("minion level {:d}", gemLevel);
 	default:
 		return {};

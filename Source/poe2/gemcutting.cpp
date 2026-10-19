@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "items.h"
+#include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -102,8 +103,8 @@ const std::vector<GemEntry> &GemCatalog()
 		GemEntry entry { i, SkillForGemData(data), SupportGemForItemData(data), std::max<int>(data.iMinMLvl, 1) };
 		if (entry.skill.isEmpty() && entry.support == SupportGem::None)
 			continue;
-		// Lineage supports are found, never cut.
-		if (IsLineageSupport(entry.support))
+		// Lineage supports are found, never cut, and the old trigger supports are meta gems now.
+		if (IsLineageSupport(entry.support) || IsRetiredSupport(entry.support))
 			continue;
 		if (entry.support != SupportGem::None) {
 			// One entry per tier, each cut from its own uncut support gem level.

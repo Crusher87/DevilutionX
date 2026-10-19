@@ -11,6 +11,7 @@
 #include "player.h"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/meta_gems.hpp"
 #include "poe2/player_data.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/skill_gems.hpp"
@@ -122,7 +123,8 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		return hit;
 	}
 	case SkillKind::Persistent:
-		hit.effect = std::format("Minions at level {:d}", level);
+		if ((SkillTags(skill) & ST_Minion) != 0)
+			hit.effect = std::format("Minions at level {:d}", level);
 		return hit;
 	case SkillKind::Attack:
 		break;
@@ -449,6 +451,19 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(lines, "Cost", std::format("{:d} Mana", mana));
 	else
 		Value(lines, "Cost", "No mana");
+
+	if (IsMetaGem(skill) && !isDefault) {
+		Value(lines, "Energy", std::format("{:d} of {:d}", MetaEnergy(player, socket), MetaMaxEnergy(player.poe2, socket)));
+		Value(lines, "Energy gain", std::format("+{:d}% from gem level", MetaEnergyPercentPerLevel * (gemLevel - 1)));
+		Heading(lines, "Spells inside");
+		if (MetaSkillCount(player.poe2, socket) == 0)
+			Text(lines, Kind::Note, "None yet: drop a spell gem in a socket");
+		for (const SkillSlot inside : player.poe2.metaSkills[socket]) {
+			if (!inside.isEmpty())
+				Value(lines, std::string(SkillName(inside)), std::format("level {:d}, {:d} mana", player.poe2.skillLevel(inside), SkillManaCost(player, inside)));
+		}
+		Text(lines, Kind::Note, "They cast together when the Energy is full, for their mana");
+	}
 
 	const HitEstimate hit = EstimateHit(player, skill, std::max(skill.kind == SkillKind::Spell ? gemLevel : level, 1));
 	const bool usable = skill.kind != SkillKind::Persistent;

@@ -269,12 +269,25 @@ std::optional<size_t> CellAt(const Layout &layout, Point position)
 	return std::nullopt;
 }
 
-/** @brief The Skills panel socket whose gem an uncut gem would level up instead of cutting a new one. */
-std::optional<size_t> SocketToLevel(const Player &player, const GemEntry &gem)
+/** @brief The level of the socketed gem an uncut gem would level up instead of cutting a new one: in a Skills panel row, or inside a meta gem. */
+std::optional<int> SocketedGemLevel(const Player &player, const GemEntry &gem)
 {
 	if (gem.support != SupportGem::None)
 		return std::nullopt;
-	return FindSkillSlot(player, gem.skill);
+	if (const std::optional<size_t> socket = FindSkillSlot(player, gem.skill); socket)
+		return player.poe2.gemLevel(*socket);
+	if (const auto meta = player.poe2.metaSocketOf(gem.skill); meta)
+		return std::clamp<int>(player.poe2.metaSkillLevels[meta->first][meta->second], 1, MaxGemLevel);
+	return std::nullopt;
+}
+
+void SetSocketedGemLevel(Player &player, const GemEntry &gem, int level)
+{
+	const auto value = static_cast<uint8_t>(std::clamp(level, 1, MaxGemLevel));
+	if (const std::optional<size_t> socket = FindSkillSlot(player, gem.skill); socket)
+		player.poe2.slotLevels[*socket] = value;
+	else if (const auto meta = player.poe2.metaSocketOf(gem.skill); meta)
+		player.poe2.metaSkillLevels[meta->first][meta->second] = value;
 }
 
 bool CanCut(const GemEntry &gem)
@@ -347,10 +360,10 @@ void DrawCell(const Surface &out, const Player &player, const Cell &cell, bool h
 		nameColor = UiFlags::ColorButtonpushed;
 	// Long names squeeze their letters together rather than run into the next cell.
 	DrawString(out, GemName(gem), { rect.position + Displacement { 2, 40 }, { rect.size.width - 4, 14 } }, { .flags = nameColor | UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::KerningFitSpacing });
-	const std::optional<size_t> socket = SocketToLevel(player, gem);
+	const std::optional<int> socketedLevel = SocketedGemLevel(player, gem);
 	std::string detail;
-	if (socket)
-		detail = FormatRuntime(_("Socketed, gem level {:d}"), player.poe2.gemLevel(*socket));
+	if (socketedLevel)
+		detail = FormatRuntime(_("Socketed, gem level {:d}"), *socketedLevel);
 	else if (gem.support != SupportGem::None && IsLinkedToSupportedSkill(player, gem.support, gem.tier))
 		detail = _("Already linked");
 	else
@@ -388,13 +401,13 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 		lines.emplace_back(FormatRuntime(_("Use an uncut {:s} gem to cut or level this"), UncutKindName(GemUncutKind(gem))), UiFlags::ColorButtonpushed);
 	} else if (CanCutGem(*uncut, gem)) {
 		const int level = GemLevelFromUncut(*uncut, player.getCharacterLevel());
-		if (const std::optional<size_t> socket = SocketToLevel(player, gem); socket) {
-			if (level > player.poe2.gemLevel(*socket)) {
-				lines.emplace_back(FormatRuntime(_("Click to raise your gem from level {:d} to {:d}"), player.poe2.gemLevel(*socket), level), UiFlags::ColorWhitegold);
-				lines.emplace_back(FormatRuntime(_("Now {:s}"), GemLevelText(gem.skill, player.poe2.gemLevel(*socket))), UiFlags::ColorWhite);
+		if (const std::optional<int> current = SocketedGemLevel(player, gem); current) {
+			if (level > *current) {
+				lines.emplace_back(FormatRuntime(_("Click to raise your gem from level {:d} to {:d}"), *current, level), UiFlags::ColorWhitegold);
+				lines.emplace_back(FormatRuntime(_("Now {:s}"), GemLevelText(gem.skill, *current)), UiFlags::ColorWhite);
 				lines.emplace_back(FormatRuntime(_("Then {:s}"), GemLevelText(gem.skill, level)), UiFlags::ColorWhite);
 			} else {
-				lines.emplace_back(FormatRuntime(_("Your gem is already level {:d}"), player.poe2.gemLevel(*socket)), UiFlags::ColorRed);
+				lines.emplace_back(FormatRuntime(_("Your gem is already level {:d}"), *current), UiFlags::ColorRed);
 			}
 		} else if (gem.support == SupportGem::None) {
 			lines.emplace_back(FormatRuntime(_("Click to cut a level {:d} gem"), level), UiFlags::ColorWhitegold);
@@ -431,15 +444,15 @@ void CutGem(const GemEntry &gem)
 	const int level = GemLevelFromUncut(*uncut, player.getCharacterLevel());
 
 	// POE2: an uncut gem raises a gem you already have to its level.
-	if (const std::optional<size_t> socket = SocketToLevel(player, gem); socket) {
-		const int current = player.poe2.gemLevel(*socket);
+	if (const std::optional<int> socketedLevel = SocketedGemLevel(player, gem); socketedLevel) {
+		const int current = *socketedLevel;
 		if (level <= current) {
 			EventPlrMsg(FormatRuntime(_("{:s} is already level {:d}; this uncut gem gives level {:d} at your character level."), GemName(gem), current, level), UiFlags::ColorRed);
 			return;
 		}
 		const SfxID sound = ItemInvSnds[ItemCAnimTbl[uncut->_iCurs]];
 		UseUpUncut(player);
-		player.poe2.slotLevels[*socket] = static_cast<uint8_t>(level);
+		SetSocketedGemLevel(player, gem, level);
 		PlaySFX(sound);
 		EventPlrMsg(FormatRuntime(_("{:s} is now level {:d}."), GemName(gem), level));
 		TelemetryGemLevelChanged(player, gem.skill, current, level);
