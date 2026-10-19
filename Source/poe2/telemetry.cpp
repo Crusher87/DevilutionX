@@ -4,6 +4,8 @@
 #include <array>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <string>
 #include <utility>
@@ -20,6 +22,7 @@
 #include <config.h>
 
 #include "appfat.h"
+#include "diablo.h"
 #include "game_mode.hpp"
 #include "items.h"
 #include "levels/gendung.h"
@@ -27,10 +30,13 @@
 #include "monster.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/file_util.h"
 #include "utils/format.hpp"
@@ -76,6 +82,14 @@ struct TelemetryCounts {
 	int hitsTaken = 0;
 	int bigHits = 0;
 	int closeCalls = 0;
+	/** Damage energy shield soaked; damageTakenRaw is what reached life. */
+	int64_t shieldTakenRaw = 0;
+	/** The lowest life the hero fell to, in percent of maximum life. */
+	int lowestLifePercent = 100;
+	int swings = 0;
+	int evaded = 0;
+	int blocked = 0;
+	int dodged = 0;
 	int deaths = 0;
 	int skillUses = 0;
 	int failedSkills = 0;
@@ -121,6 +135,13 @@ struct SkillDamage {
 	uint32_t lastUseMs = 0;
 };
 
+/** @brief Damage one kind of attacker did to the hero this game, life and energy shield together. */
+struct AttackerDamage {
+	int64_t raw = 0;
+	int hits = 0;
+	int64_t biggestRaw = 0;
+};
+
 /** @brief A monster the player is fighting: when it was first hit, and by what. */
 struct Engagement {
 	uint32_t firstHitMs = 0;
@@ -137,10 +158,15 @@ uint32_t LastTickMs = 0;
 uint32_t LastStallLogMs = 0;
 
 std::string PendingAttacker;
+/** Energy shield soaked from the hit being applied (raw), added to it when it's counted. */
+int32_t PendingShieldRaw = 0;
 std::string PendingDamageSource;
 std::string LastSkill;
 uint32_t LastSkillMs = 0;
 std::vector<std::pair<std::string, SkillDamage>> DamageBySkill;
+std::vector<std::pair<std::string, AttackerDamage>> DamageByAttacker;
+/** Stats lines written this game; every few, the damage summaries are written too, so a crash doesn't lose them. */
+int StatsLinesWritten = 0;
 ankerl::unordered_dense::map<size_t, Engagement> Engagements;
 
 /** @brief The level being played: where, since when, and how it's going. */
@@ -150,6 +176,7 @@ struct LevelVisit {
 	int kills = 0;
 	int drops = 0;
 	int64_t damageTakenRaw = 0;
+	int64_t shieldTakenRaw = 0;
 	int monstersAtEntry = 0;
 };
 LevelVisit CurrentLevel;
@@ -184,6 +211,9 @@ std::string LevelLabel()
 		return "town";
 	if (setlevel)
 		return std::format("set{:d}", static_cast<int>(setlvlnum));
+	// A map rebuilds a campaign level, so it's named by its tier and the level it rebuilds.
+	if (const int tier = ActiveMapTier(); tier > 0)
+		return std::format("map{:d}-L{:d}", tier, static_cast<int>(currlevel));
 	return std::format("L{:d}", static_cast<int>(currlevel));
 }
 
@@ -296,6 +326,26 @@ void SDLCALL LogEngineMessage(void *userdata, int category, SDL_LogPriority prio
 }
 #endif
 
+/** @brief What the game was doing: drawing something (TelemetryDrawStep) or a step of the game logic. */
+const char *DrawStep = nullptr;
+
+std::string CrashContext()
+{
+	const char *step = nullptr;
+	switch (gGameLogicStep) {
+	case GameLogicStep::ProcessPlayers: step = "updating heroes"; break;
+	case GameLogicStep::ProcessMonsters: step = "updating monsters"; break;
+	case GameLogicStep::ProcessObjects: step = "updating objects"; break;
+	case GameLogicStep::ProcessMissiles:
+	case GameLogicStep::ProcessMissilesTown: step = "updating missiles"; break;
+	case GameLogicStep::ProcessItems:
+	case GameLogicStep::ProcessItemsTown: step = "updating items"; break;
+	case GameLogicStep::ProcessTowners: step = "updating townsfolk"; break;
+	default: step = DrawStep; break;
+	}
+	return step != nullptr ? StrCat(" while ", step) : std::string();
+}
+
 void HandleCrashSignal(int signal)
 {
 	if (LogFile != nullptr) {
@@ -307,10 +357,112 @@ void HandleCrashSignal(int signal)
 }
 
 #if defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
+/** @brief Function starts from the build's link map (devilutionx.map beside the exe), to name call stack frames. */
+std::vector<std::pair<uint64_t, std::string>> MapSymbols;
+uint64_t MapImageBase = 0;
+bool MapSymbolsRead = false;
+
+void ReadMapSymbols()
+{
+	if (MapSymbolsRead)
+		return;
+	MapSymbolsRead = true;
+	wchar_t exePath[MAX_PATH];
+	const DWORD length = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+	if (length == 0 || length >= MAX_PATH)
+		return;
+	std::wstring mapPath(exePath, length);
+	const size_t dot = mapPath.rfind(L'.');
+	if (dot == std::wstring::npos)
+		return;
+	mapPath.replace(dot, std::wstring::npos, L".map");
+	FILE *file = _wfopen(mapPath.c_str(), L"r");
+	if (file == nullptr)
+		return;
+	// A symbol line is 16 spaces, the address, 16 spaces and the name; "name = value" lines are assignments.
+	constexpr char Gap[] = "                ";
+	char line[1024];
+	while (std::fgets(line, sizeof(line), file) != nullptr) {
+		if (std::strncmp(line, Gap, 16) != 0 || line[16] != '0' || line[17] != 'x')
+			continue;
+		char *end = nullptr;
+		const uint64_t address = std::strtoull(line + 16, &end, 16);
+		if (end == nullptr || std::strncmp(end, Gap, 16) != 0)
+			continue;
+		std::string name(end + 16);
+		while (!name.empty() && (name.back() == '\n' || name.back() == '\r'))
+			name.pop_back();
+		if (name.rfind("__ImageBase = ", 0) == 0)
+			MapImageBase = address;
+		if (name.empty() || name.find(" = ") != std::string::npos || address < 0x1000)
+			continue;
+		MapSymbols.emplace_back(address, std::move(name));
+	}
+	std::fclose(file);
+	std::sort(MapSymbols.begin(), MapSymbols.end());
+}
+
+/** @brief Where an address is: an offset into the exe, and the function before it in the link map when there is one. */
+std::string DescribeAddress(uintptr_t address, bool withName)
+{
+	const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+	const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+	const auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
+	char text[48];
+	if (address < base || address >= base + nt->OptionalHeader.SizeOfImage) {
+		std::snprintf(text, sizeof(text), "0x%llx", static_cast<unsigned long long>(address));
+		return text;
+	}
+	std::snprintf(text, sizeof(text), "exe+0x%llx", static_cast<unsigned long long>(address - base));
+	if (!withName)
+		return text;
+	ReadMapSymbols();
+	if (MapSymbols.empty() || MapImageBase == 0)
+		return text;
+	const uint64_t mapped = MapImageBase + (address - base);
+	auto after = std::upper_bound(MapSymbols.begin(), MapSymbols.end(), mapped, [](uint64_t value, const auto &symbol) { return value < symbol.first; });
+	if (after == MapSymbols.begin())
+		return text;
+	const auto &symbol = *(after - 1);
+	// Functions local to a file aren't in the map, so the name is the nearest one before: "in or after" it.
+	char offset[24];
+	std::snprintf(offset, sizeof(offset), "+0x%llx", static_cast<unsigned long long>(mapped - symbol.first));
+	return StrCat(text, " (", symbol.second, offset, ")");
+}
+
+/** @brief Walks the stack from a frame with the exe's own unwind tables and writes it: offsets first, then names. */
+void WriteCallStack(const CONTEXT &start)
+{
+	std::vector<uintptr_t> frames;
+	CONTEXT context = start;
+	for (int frame = 0; frame < 48 && context.Rip != 0; frame++) {
+		frames.push_back(static_cast<uintptr_t>(context.Rip));
+		DWORD64 imageBase = 0;
+		PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(context.Rip, &imageBase, nullptr);
+		if (function == nullptr) {
+			context.Rip = *reinterpret_cast<DWORD64 *>(context.Rsp);
+			context.Rsp += 8;
+			continue;
+		}
+		PVOID handlerData = nullptr;
+		DWORD64 establisherFrame = 0;
+		RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, context.Rip, function, &context, &handlerData, &establisherFrame, nullptr);
+	}
+	std::fputs("Call stack:", LogFile);
+	for (const uintptr_t address : frames)
+		std::fprintf(LogFile, " %s", DescribeAddress(address, false).c_str());
+	std::fputc('\n', LogFile);
+	std::fflush(LogFile);
+	// Naming the frames reads the link map; it comes second so the offsets are already safe in the log.
+	std::fputs("Call stack with names (innermost first):\n", LogFile);
+	for (const uintptr_t address : frames)
+		std::fprintf(LogFile, "  %s\n", DescribeAddress(address, true).c_str());
+	std::fflush(LogFile);
+}
+
 /**
  * @brief Windows ends the game on an access violation before std::signal sees it in some cases, so the
- * crash is caught here first: the exception, where it happened and the call stack, as offsets into the
- * exe that the build's link map (devilutionx.map) turns into function names.
+ * crash is caught here first: the exception, where it happened, what the game was doing and the call stack.
  */
 LONG WINAPI HandleWindowsException(EXCEPTION_POINTERS *info)
 {
@@ -333,47 +485,17 @@ LONG WINAPI HandleWindowsException(EXCEPTION_POINTERS *info)
 	written = true;
 
 	const auto base = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
-	const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
-	const auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
-	const uintptr_t end = base + nt->OptionalHeader.SizeOfImage;
-	const auto where = [&](uintptr_t address) {
-		char text[48];
-		if (address >= base && address < end)
-			std::snprintf(text, sizeof(text), "exe+0x%llx", static_cast<unsigned long long>(address - base));
-		else
-			std::snprintf(text, sizeof(text), "0x%llx", static_cast<unsigned long long>(address));
-		return std::string(text);
-	};
-
 	const auto address = reinterpret_cast<uintptr_t>(info->ExceptionRecord->ExceptionAddress);
-	std::fprintf(LogFile, "%s %s [crash] exception 0x%08lx at %s", Clock(Now() - SessionStartMs).c_str(), LevelLabel().c_str(), static_cast<unsigned long>(code), where(address).c_str());
+	std::fprintf(LogFile, "%s %s [crash] exception 0x%08lx at %s%s", Clock(Now() - SessionStartMs).c_str(), LevelLabel().c_str(), static_cast<unsigned long>(code), DescribeAddress(address, false).c_str(), CrashContext().c_str());
 	if (code == EXCEPTION_ACCESS_VIOLATION && info->ExceptionRecord->NumberParameters >= 2) {
 		const ULONG_PTR kind = info->ExceptionRecord->ExceptionInformation[0];
 		std::fprintf(LogFile, " (%s 0x%llx)", kind == 0 ? "reading" : kind == 1 ? "writing" : "executing", static_cast<unsigned long long>(info->ExceptionRecord->ExceptionInformation[1]));
 	}
 	std::fprintf(LogFile, ", image base 0x%llx\n", static_cast<unsigned long long>(base));
-
-	// Walk the stack from the faulting frame with the exe's own unwind tables.
-	std::fputs("Call stack:", LogFile);
-	if (code != EXCEPTION_STACK_OVERFLOW) {
-		CONTEXT context = *info->ContextRecord;
-		for (int frame = 0; frame < 48 && context.Rip != 0; frame++) {
-			std::fprintf(LogFile, " %s", where(context.Rip).c_str());
-			DWORD64 imageBase = 0;
-			PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(context.Rip, &imageBase, nullptr);
-			if (function == nullptr) {
-				context.Rip = *reinterpret_cast<DWORD64 *>(context.Rsp);
-				context.Rsp += 8;
-				continue;
-			}
-			PVOID handlerData = nullptr;
-			DWORD64 establisherFrame = 0;
-			RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, context.Rip, function, &context, &handlerData, &establisherFrame, nullptr);
-		}
-	}
-	std::fputc('\n', LogFile);
-	WriteRecentEvents();
 	std::fflush(LogFile);
+	WriteRecentEvents();
+	if (code != EXCEPTION_STACK_OVERFLOW)
+		WriteCallStack(*info->ContextRecord);
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
@@ -484,13 +606,14 @@ std::string RatesText(const TelemetryCounts &counts, double minutes)
 {
 	const int lowManaPercent = counts.ticks > 0 ? counts.lowManaTicks * 100 / counts.ticks : 0;
 	return StrCat(DensityText(counts), "; ", std::format("kills {:d} ({:.1f}/min, {:d} rare, {:d} unique), damage dealt {:d} ({:.0f}/min), "
-	                                                     "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage), "
+	                                                     "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage, {:d} to energy shield, lowest life {:d}%), "
+	                                                     "melee swings {:d} ({:d} evaded, {:d} blocked, {:d} dodged), "
 	                                                     "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
 	                                                     "flasks {:d} ({:d} wasted), charms {:d}, "
 	                                                     "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
 	                                                     "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}, "
 	                                                     "fps {:.0f} ({:d} frames under 30 fps, slowest {:d} ms)",
-	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls,
+	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), Whole(counts.shieldTakenRaw), counts.lowestLifePercent, counts.swings, counts.evaded, counts.blocked, counts.dodged, counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls,
 	                                             counts.frameMs > 0 ? counts.frames * 1000.0 / counts.frameMs : 0.0, counts.slowFrames, counts.worstFrameMs));
 }
 
@@ -500,6 +623,10 @@ void WriteStatsLine(uint32_t now)
 	TelemetryLog("stats", std::format("last {:.1f} min: {:s}", minutes, RatesText(Window, minutes)));
 	Window = {};
 	WindowStartMs = now;
+	if (++StatsLinesWritten % TelemetrySummaryEvery == 0) {
+		TelemetryLog("damage", TelemetrySkillDamageText());
+		TelemetryLog("taken", TelemetryDamageTakenText());
+	}
 }
 
 void EndLevelVisit()
@@ -507,9 +634,9 @@ void EndLevelVisit()
 	if (CurrentLevel.startMs == 0)
 		return;
 	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", CurrentLevel.label, " [level] left after ",
-	    std::format("{:.1f} s: {:d} kills of {:d} monsters ({:d}% cleared), {:d} drops, {:d} damage taken", (Now() - CurrentLevel.startMs) / 1000.0, CurrentLevel.kills,
+	    std::format("{:.1f} s: {:d} kills of {:d} monsters ({:d}% cleared), {:d} drops, {:d} damage taken, {:d} to energy shield", (Now() - CurrentLevel.startMs) / 1000.0, CurrentLevel.kills,
 	        CurrentLevel.monstersAtEntry, CurrentLevel.monstersAtEntry > 0 ? CurrentLevel.kills * 100 / CurrentLevel.monstersAtEntry : 0,
-	        CurrentLevel.drops, Whole(CurrentLevel.damageTakenRaw))));
+	        CurrentLevel.drops, Whole(CurrentLevel.damageTakenRaw), Whole(CurrentLevel.shieldTakenRaw))));
 	CurrentLevel = {};
 }
 
@@ -756,9 +883,12 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	Totals = {};
 	Window = {};
 	DamageBySkill.clear();
+	DamageByAttacker.clear();
+	StatsLinesWritten = 0;
 	Engagements.clear();
 	LastSkill.clear();
 	PendingAttacker.clear();
+	PendingShieldRaw = 0;
 	PendingDamageSource.clear();
 	LastBuild.clear();
 	GameStartMs = WindowStartMs = LastKillMs = LastTickMs = Now();
@@ -787,6 +917,7 @@ void TelemetryGameEnded()
 	EndLevelVisit();
 	TelemetryLog("game", StrCat("ended. ", TelemetryStatsText()));
 	TelemetryLog("damage", TelemetrySkillDamageText());
+	TelemetryLog("taken", TelemetryDamageTakenText());
 	WriteGemResults();
 	GameStartMs = 0;
 }
@@ -870,26 +1001,67 @@ void TelemetryMonsterKilled(const Monster &monster)
 	LastKillMs = now;
 }
 
+void TelemetryShieldAbsorbed(const Player &player, Fixed26_6 absorbed)
+{
+	if (&player == MyPlayer)
+		PendingShieldRaw += absorbed.raw();
+}
+
+void TelemetryMeleeSwing(const Player &player, SwingOutcome outcome)
+{
+	if (&player != MyPlayer || LogFile == nullptr)
+		return;
+	Count([outcome](TelemetryCounts &counts) {
+		counts.swings++;
+		switch (outcome) {
+		case SwingOutcome::Landed: break;
+		case SwingOutcome::Evaded: counts.evaded++; break;
+		case SwingOutcome::Blocked: counts.blocked++; break;
+		case SwingOutcome::Dodged: counts.dodged++; break;
+		}
+	});
+}
+
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage)
 {
 	const std::string attacker = PendingAttacker.empty() ? "unknown" : std::exchange(PendingAttacker, {});
-	if (&player != MyPlayer || damage <= 0 || LogFile == nullptr)
+	const int32_t shield = std::exchange(PendingShieldRaw, 0);
+	if (&player != MyPlayer || (damage <= 0 && shield <= 0) || LogFile == nullptr)
 		return;
+	damage = std::max(damage, Fixed26_6::fromInt(0));
 	const Fixed26_6 max = player._pMaxHP;
 	const Fixed26_6 after = player._pHitPoints;
 	const Fixed26_6 before = after + damage;
-	const bool big = max > 0 && damage.raw() * 100 >= static_cast<int64_t>(max.raw()) * TelemetryBigHitPercent;
+	// A big hit is measured against life and energy shield together, the pool the hit came out of.
+	const int64_t pool = static_cast<int64_t>(max.raw()) + static_cast<int64_t>(player.poe2.maxEnergyShield) * 64;
+	const int64_t total = static_cast<int64_t>(damage.raw()) + shield;
+	const bool big = pool > 0 && total * 100 >= pool * TelemetryBigHitPercent;
 	const bool closeCall = after > 0 && Percent(after, max) < TelemetryCloseCallPercent && Percent(before, max) >= TelemetryCloseCallPercent;
+	const int lifePercent = max > 0 ? std::max(Percent(after, max), 0) : 100;
 	Count([&](TelemetryCounts &counts) {
 		counts.hitsTaken++;
 		counts.damageTakenRaw += damage.raw();
+		counts.shieldTakenRaw += shield;
+		counts.lowestLifePercent = std::min(counts.lowestLifePercent, lifePercent);
 		if (big)
 			counts.bigHits++;
 		if (closeCall)
 			counts.closeCalls++;
 	});
 	CurrentLevel.damageTakenRaw += damage.raw();
-	const std::string text = std::format("took {:d} {:s} damage from {:s}, life {:d}/{:d}", damage.whole(), DamageTypeName(damageType), attacker, after.whole(), max.whole());
+	CurrentLevel.shieldTakenRaw += shield;
+	auto byAttacker = std::find_if(DamageByAttacker.begin(), DamageByAttacker.end(), [&](const auto &entry) { return entry.first == attacker; });
+	if (byAttacker == DamageByAttacker.end())
+		byAttacker = DamageByAttacker.insert(DamageByAttacker.end(), { attacker, AttackerDamage {} });
+	byAttacker->second.raw += total;
+	byAttacker->second.hits++;
+	byAttacker->second.biggestRaw = std::max(byAttacker->second.biggestRaw, total);
+	std::string text = std::format("took {:d} {:s} damage from {:s}", Whole(total), DamageTypeName(damageType), attacker);
+	if (shield > 0)
+		StrAppend(text, std::format(" ({:d} to energy shield)", Whole(shield)));
+	StrAppend(text, std::format(", life {:d}/{:d}", after.whole(), max.whole()));
+	if (player.poe2.maxEnergyShield > 0)
+		StrAppend(text, std::format(", energy shield {:d}/{:d}", player.poe2.energyShield / 64, player.poe2.maxEnergyShield));
 	if (closeCall)
 		TelemetryLog("close call", text);
 	else if (big)
@@ -1037,6 +1209,7 @@ void TelemetryStep(std::string_view step)
 
 void TelemetryFrameDrawn()
 {
+	DrawStep = nullptr;
 	if (LogFile == nullptr || GameStartMs == 0)
 		return;
 	static uint32_t lastFrameMs = 0;
@@ -1079,8 +1252,21 @@ void TelemetryTick()
 
 void TelemetryFatal(std::string_view message)
 {
-	TelemetryLog("crash", message);
+	TelemetryLog("crash", StrCat(message, CrashContext()));
 	WriteRecentEvents();
+#if defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
+	// An error message, like a failed check, has no exception: the stack is taken from here.
+	if (LogFile != nullptr) {
+		CONTEXT context;
+		RtlCaptureContext(&context);
+		WriteCallStack(context);
+	}
+#endif
+}
+
+void TelemetryDrawStep(const char *step)
+{
+	DrawStep = step;
 }
 
 std::string TelemetryStatsText()
@@ -1089,6 +1275,18 @@ std::string TelemetryStatsText()
 	const int dropped = Sum(Totals.drops);
 	return std::format("{:.1f} min played, {:d} deaths, {:d} levels entered, {:.0f} drops/hour: {:s}", minutes, Totals.deaths, Totals.levelsEntered,
 	    dropped / minutes * 60, RatesText(Totals, minutes));
+}
+
+std::string TelemetryDamageTakenText()
+{
+	std::vector<std::pair<std::string, AttackerDamage>> sorted = DamageByAttacker;
+	std::sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) { return a.second.raw > b.second.raw; });
+	std::string text = "damage taken by attacker:";
+	if (sorted.empty())
+		return StrCat(text, " none yet");
+	for (const auto &[name, damage] : sorted)
+		StrAppend(text, std::format(" {:s} {:d} ({:d} hits, biggest {:d});", name, Whole(damage.raw), damage.hits, Whole(damage.biggestRaw)));
+	return text;
 }
 
 std::string TelemetrySkillDamageText()
@@ -1123,7 +1321,11 @@ std::string TelemetryBuildText(const Player &player)
 		}
 		StrAppend(text, ";");
 	}
-	StrAppend(text, " | passives ", player.poe2.passives.count(), " | belt:");
+	StrAppend(text, " | passives ", player.poe2.passives.count());
+	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% magic {:d}%, spirit {:d}/{:d}",
+	                    ArmourRating(player), EvasionRating(player), player.poe2.maxEnergyShield, std::clamp(player.GetBlockChance(false), 0, player.GetMaxBlockChance(gbIsPoe2)),
+	                    player._pFireResist, player._pLghtResist, player._pMagResist, ReservedSpirit(player), MaxSpirit(player)));
+	StrAppend(text, " | belt:");
 	for (const Item &item : player.SpdList) {
 		if (!item.isEmpty())
 			StrAppend(text, " ", item._iIName, ";");

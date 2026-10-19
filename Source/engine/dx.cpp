@@ -33,6 +33,7 @@
 #include "init.hpp"
 #include "options.h"
 #include "poe2/hd.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/display.h"
 #include "utils/log.hpp"
@@ -145,9 +146,11 @@ void PresentLayeredFrame(SDL_Surface *surface)
 	if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
 	if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
 	// POE2 Mashup: the HD world goes over the game's own, which still shows outside the view.
+	TelemetryDrawStep("drawing effects");
 	if (hd::Active())
 		hd::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
 	vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
+	TelemetryDrawStep(nullptr);
 	if (UpdateUiOverlay())
 		SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
 }

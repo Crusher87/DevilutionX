@@ -12,6 +12,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/is_of.hpp"
 
@@ -155,6 +156,7 @@ Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
 	if (absorbed <= 0)
 		return damage;
 	data.energyShield -= absorbed;
+	TelemetryShieldAbsorbed(player, Fixed26_6::fromRaw(absorbed));
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Health);
 	return Fixed26_6::fromRaw(damage.raw() - absorbed);

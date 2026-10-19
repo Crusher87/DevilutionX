@@ -60,7 +60,7 @@ void CreateReplEnvironment()
 	env["print"] = LuaPrintToConsole;
 	// POE2 Mashup play log: stats() shows this game's numbers, mark("text") notes a moment in the log.
 	env["stats"] = []() {
-		return StrCat(TelemetryStatsText(), "\n", TelemetrySkillDamageText(), "\n", MyPlayer != nullptr ? TelemetryBuildText(*MyPlayer) : std::string());
+		return StrCat(TelemetryStatsText(), "\n", TelemetrySkillDamageText(), "\n", TelemetryDamageTakenText(), "\n", MyPlayer != nullptr ? TelemetryBuildText(*MyPlayer) : std::string());
 	};
 	// gems() shows each socketed gem's numbers now and at its next level; gemcurve("Cleave") shows levels 1 to 20.
 	env["gems"] = []() {

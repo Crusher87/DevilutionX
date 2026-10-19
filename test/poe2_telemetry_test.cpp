@@ -8,6 +8,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "poe2/telemetry.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
@@ -112,6 +113,29 @@ TEST_F(Poe2TelemetryTest, CloseCallNamesTheAttacker)
 	TelemetryPlayerDamaged(player, DamageType::Fire, Fixed26_6::fromInt(10));
 	EXPECT_NE(ReadLatestLog().find("[close call] took 10 fire damage from Goatman, life 15/100"), std::string::npos);
 	EXPECT_NE(TelemetryStatsText().find("1 close calls"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, HitsOnEnergyShieldCountAsHitsTaken)
+{
+	Player &player = *MyPlayer;
+	SetMaxEnergyShield(player, 50);
+	TelemetryNoteAttacker("Fallen One");
+	ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, Fixed26_6::fromInt(20)));
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(100)) << "the shield took it all";
+	EXPECT_NE(ReadLatestLog().find("[hit] took 20 physical damage from Fallen One (20 to energy shield), life 100/100, energy shield 30/50"), std::string::npos) << ReadLatestLog();
+	const std::string stats = TelemetryStatsText();
+	EXPECT_NE(stats.find("hits taken 1 (1 big, 0 close calls, 0 damage, 20 to energy shield, lowest life 100%)"), std::string::npos) << stats;
+}
+
+TEST_F(Poe2TelemetryTest, CountsMeleeSwingsByOutcome)
+{
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Landed);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Evaded);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Evaded);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Blocked);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Dodged);
+	const std::string stats = TelemetryStatsText();
+	EXPECT_NE(stats.find("melee swings 5 (2 evaded, 1 blocked, 1 dodged)"), std::string::npos) << stats;
 }
 
 TEST_F(Poe2TelemetryTest, GemLevelsGoToTheGemLog)

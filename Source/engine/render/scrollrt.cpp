@@ -401,6 +401,7 @@ void DrawCursor(const Surface &out)
  */
 void DrawMissilePrivate(const Surface &out, const Missile &missile, Point targetBufferPosition, bool pre, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing a missile");
 	if (missile._miPreFlag != pre || !missile._miDrawFlag || !missile._miAnimData)
 		return;
 	// POE2 Mashup: with Modern Effects the effects draw projectiles themselves; the classic sprite would be a second bolt.
@@ -600,6 +601,7 @@ void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sp
  */
 void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing a hero");
 	if (!IsTileLit(tilePosition) && !HasInfravision(*MyPlayer) && !MyPlayer->isOnArenaLevel() && leveltype != DTYPE_TOWN) {
 		return;
 	}
@@ -648,6 +650,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
  */
 void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing a dead hero");
 	dFlags[tilePosition.x][tilePosition.y] &= ~DungeonFlag::DeadPlayer;
 
 	for (const Player &player : Players) {
@@ -669,6 +672,7 @@ void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPo
  */
 void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing an object");
 	if (!objectToDraw._oAnimData) {
 		TelemetryMissingSprite(StrCat("object ", objectToDraw.name().str(), " (type ", static_cast<int>(objectToDraw._otype), ")"));
 		return;
@@ -864,6 +868,7 @@ void DrawFloorTile(const Surface &out, const Lightmap &lightmap, Point tilePosit
  */
 void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing an item");
 	const Item &item = Items[itemIndex];
 	if (IsItemHiddenByLootFilter(item))
 		return;
@@ -889,6 +894,7 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
  */
 void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing a monster");
 	int mi = dMonster[tilePosition.x][tilePosition.y];
 
 	mi = std::abs(mi) - 1;
@@ -1398,6 +1404,8 @@ void CalcFirstTilePosition(Point &position, Displacement &offset)
  */
 void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 {
+	// POE2 Mashup: a crash report names what was being drawn; the steps below narrow it down.
+	TelemetryDrawStep("drawing the dungeon");
 	// Limit rendering to the view area
 	const Surface &out = !*GetOptions().Graphics.zoom
 	    ? fullOut.subregionY(0, gnViewportHeight)
@@ -1515,6 +1523,7 @@ void DrawView(const Surface &out, Point startPosition)
 		offset += CameraShakeOffset();
 		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
 	}
+	TelemetryDrawStep("drawing the map, names and banners");
 	PrepareScaledUi();
 	if (AutomapActive) {
 		DrawAutomap(out.subregionY(0, gnViewportHeight));
@@ -1594,11 +1603,13 @@ void DrawView(const Surface &out, Point startPosition)
 		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
 	// POE2 Mashup: the effects layer lines up with this frame's view.
+	TelemetryDrawStep("finding effects to draw");
 	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
 	vfx::ScanMissiles();
 	if (IsUiScaled())
 		vfx::ScanWorld(WorldBackBuffer());
 
+	TelemetryDrawStep("drawing the open windows");
 	if (IsPlayerInStore() && !qtextflag)
 		DrawSText(out);
 	if (invflag) {
@@ -2081,6 +2092,7 @@ void DrawAndBlit()
 
 	this_sdl_thread::yield();
 	DrawView(out, ViewPosition);
+	TelemetryDrawStep("drawing the panels");
 	if (drawCtrlPan) {
 		DrawMainPanel(out);
 	}
@@ -2124,6 +2136,7 @@ void DrawAndBlit()
 	DrawDesecrationReveal(out);
 	DrawAtlas(out);
 	DrawItemSpawner(out);
+	TelemetryDrawStep("drawing the cursor");
 	DrawCursor(out);
 	TelemetryFrameDrawn();
 

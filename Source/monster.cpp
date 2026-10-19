@@ -1273,11 +1273,13 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 {
 	if (player.hasNoLife() || player._pInvincible || HasAnyOf(player._pSpellFlags, SpellFlag::Etherealize))
 		return;
-	// POE2 Mashup: the start of a dodge roll avoids melee hits.
-	if (player.poe2.isUntouchable())
-		return;
 	if (monster.position.tile.WalkingDistance(player.position.tile) >= 2)
 		return;
+	// POE2 Mashup: the start of a dodge roll avoids melee hits.
+	if (player.poe2.isUntouchable()) {
+		TelemetryMeleeSwing(player, SwingOutcome::Dodged);
+		return;
+	}
 
 	int hper = GenerateRnd(100);
 #ifdef _DEBUG
@@ -1306,9 +1308,12 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	int blk = player.GetBlockChance() - (monster.level(sgGameInitInfo.nDifficulty) * 2);
 	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
 	blk = std::clamp(blk, 0, player.GetMaxBlockChance(gbIsPoe2));
-	if (hper >= hit)
+	if (hper >= hit) {
+		TelemetryMeleeSwing(player, SwingOutcome::Evaded);
 		return;
+	}
 	if (blkper < blk) {
+		TelemetryMeleeSwing(player, SwingOutcome::Blocked);
 		const Direction dir = GetDirection(player.position.tile, monster.position.tile);
 		StartPlrBlock(player, dir);
 		if (&player == MyPlayer && player.wReflections > 0) {
@@ -1335,6 +1340,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 			const Fixed26_6 reflectedDamage = CheckReflect(monster, player, dam);
 			dam = std::max(dam - reflectedDamage, Fixed26_6::fromInt(0));
 		}
+		TelemetryMeleeSwing(player, SwingOutcome::Landed);
 		TelemetryNoteAttacker(monster.name());
 		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, dam, DamageType::Physical)));
 		ReflectMeleeHit(player, monster, dam);

@@ -50,6 +50,8 @@ constexpr int TelemetryTicksPerSecond = 20;
 constexpr int TelemetryLullTicks = 10 * TelemetryTicksPerSecond;
 /** @brief Detailed events kept in memory and written out when the game crashes. */
 constexpr size_t TelemetryRecentEvents = 30;
+/** @brief Every this many stats lines, the damage dealt and taken summaries are written too. */
+constexpr int TelemetrySummaryEvery = 5;
 
 /** @brief Opens this session's log file and starts catching crashes. Safe to call more than once. */
 void TelemetryInit();
@@ -73,6 +75,18 @@ void TelemetryGameEnded();
 void TelemetryLevelEntered();
 /** @brief Names what is about to hit the player (a monster or a trap) for the hit that follows. */
 void TelemetryNoteAttacker(std::string_view attacker);
+/** @brief Notes damage energy shield soaked from the hit about to be applied, so hits on energy shield count as hits taken. */
+void TelemetryShieldAbsorbed(const Player &player, Fixed26_6 absorbed);
+/** @brief How a monster's melee swing at the hero ended. */
+enum class SwingOutcome : uint8_t {
+	Landed,
+	Evaded,
+	Blocked,
+	/** Avoided by the start of a dodge roll. */
+	Dodged,
+};
+/** @brief Counts a monster's melee swing at the hero by how it ended, to show how well evasion and block hold up. */
+void TelemetryMeleeSwing(const Player &player, SwingOutcome outcome);
 /** @brief Names what is about to damage a monster (minions, ignite, a herald); otherwise the last skill gets the credit. */
 void TelemetryNoteDamageSource(std::string_view source);
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);
@@ -104,11 +118,15 @@ void TelemetryTick();
 void TelemetryFrameDrawn();
 /** @brief Writes the error that is about to close the game, then the latest detailed events. */
 void TelemetryFatal(std::string_view message);
+/** @brief Notes what is being drawn (a fixed text, or nullptr when done), so a crash while drawing names it. */
+void TelemetryDrawStep(const char *step);
 
 /** @brief This session's totals and current rates, for the console's stats() command. */
 std::string TelemetryStatsText();
 /** @brief Damage dealt by each skill this game, most first. */
 std::string TelemetrySkillDamageText();
+/** @brief Damage taken this game by attacker, most first, with each one's hits and biggest hit. */
+std::string TelemetryDamageTakenText();
 /** @brief One line describing the character's gear, skills, supports, passives and belt. */
 std::string TelemetryBuildText(const Player &player);
 
