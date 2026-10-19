@@ -10,6 +10,12 @@
 #include <span>
 #include <vector>
 
+#ifdef USE_SDL3
+#include <SDL3/SDL_events.h>
+#else
+#include <SDL.h>
+#endif
+
 #include "engine/point.hpp"
 #include "engine/surface.hpp"
 #include "items.h"
@@ -135,6 +141,12 @@ void VisualStorePreviousPage();
  * @brief Render the visual store panel to the given buffer.
  */
 void DrawVisualStore(const Surface &out);
+
+/**
+ * @brief POE2 Mashup: the shop's search box takes clicks on it and, while typing, the keyboard.
+ * @return true when the event was used
+ */
+bool ShopSearchHandleEvent(const SDL_Event &event);
 
 /**
  * @brief Handle a click on the visual store panel.

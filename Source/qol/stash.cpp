@@ -30,6 +30,7 @@
 #include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
+#include "poe2/item_search.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
@@ -469,6 +470,9 @@ void DrawStash(const Surface &out)
 		}
 
 		DrawItem(item, out, position, sprite);
+		// POE2 Mashup: a search frames the items that match and dims the rest.
+		if (gbIsPoe2 && StashSearch.searching())
+			DrawItemSearchMark(out, { { position.x, position.y - sprite.height() + 1 }, { sprite.width(), sprite.height() } }, StashSearch.matches(item));
 	}
 
 	const Point position = GetPanelPosition(UiPanels::Stash);

@@ -38,6 +38,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/crafting_items.hpp"
+#include "poe2/item_search.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
@@ -113,6 +114,13 @@ constexpr StashTabKind KindChoices[] = { StashTabKind::Blank, StashTabKind::Curr
 Rectangle At(int x, int y, int width, int height)
 {
 	return { GetPanelPosition(UiPanels::Stash, { x, y }), { width, height } };
+}
+
+/** The search box, in a strip under the grid (Curtis 2026-10-19). */
+constexpr int SearchStripHeight = 26;
+Rectangle StashSearchRect()
+{
+	return At(8, 354, 304, 20);
 }
 
 Rectangle PopupRect()
@@ -1300,6 +1308,8 @@ void DrawSlot(const Surface &out, const SlotView &slot, bool collection)
 		DrawString(out, StrCat(count), { slot.rect.position + Displacement { 2, 1 }, { slot.rect.size.width, 12 } },
 		    { .flags = UiFlags::ColorWhite | UiFlags::Outlined });
 	}
+	if (StashSearch.searching())
+		DrawItemSearchMark(out, slot.rect, StashSearch.matches(item));
 }
 
 void DrawScroll(const Surface &out, const ScrollView &scroll)
@@ -1431,8 +1441,9 @@ void CloseStashTabPopups()
 
 void DrawPoe2StashFrame(const Surface &out)
 {
-	const Rectangle panel = At(0, 0, 320, 352);
+	const Rectangle panel = At(0, 0, 320, 352 + SearchStripHeight);
 	DrawPanel(out, panel);
+	StashSearch.draw(out, StashSearchRect());
 	// The tab's colour as a thin band under the strip, so the open tab reads at a glance.
 	if (StashTabs.count() > 0) {
 		const unsigned page = std::min(Stash.GetPage(), StashTabs.count() - 1);
@@ -1521,12 +1532,15 @@ bool StashTabsHandleEvent(const SDL_Event &event)
 	if (!gbIsPoe2 || !IsStashOpen) {
 		if (OpenPopup != Popup::None || Drag)
 			CloseStashTabPopups();
+		StashSearch.unfocus();
 		return false;
 	}
 	if (OpenPopup != Popup::None)
 		return HandlePopupEvent(event);
 	if (const std::optional<bool> dropped = HandleTabDragEvent(event))
 		return *dropped;
+	if (StashSearch.handleEvent(event, StashSearchRect()))
+		return true;
 
 	// The drawer takes clicks and the wheel over it; everything else goes to the stash as usual, so Escape closes
 	// the whole stash, drawer and all (Curtis 2026-10-18).

@@ -897,6 +897,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		return;
 	}
 
+	if (ShopSearchHandleEvent(event)) {
+		return;
+	}
+
 	if (PassiveTreeHandleEvent(event)) {
 		return;
 	}

@@ -34,6 +34,7 @@
 #include "panels/skills_panel.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/item_search.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/stacking.hpp"
 #include "qol/stash.h"
@@ -766,6 +767,26 @@ int GetVisualStorePageCount()
 	return std::max(1, static_cast<int>(VisualStore.pages.size()));
 }
 
+namespace {
+
+constexpr int ShopSearchStripHeight = 28;
+
+Rectangle ShopSearchRect()
+{
+	return { GetPanelPosition(UiPanels::Stash, { 8, 354 }), { 304, 20 } };
+}
+
+} // namespace
+
+bool ShopSearchHandleEvent(const SDL_Event &event)
+{
+	if (!gbIsPoe2 || !IsVisualStoreOpen) {
+		ShopSearch.unfocus();
+		return false;
+	}
+	return ShopSearch.handleEvent(event, ShopSearchRect());
+}
+
 void DrawVisualStore(const Surface &out)
 {
 	if (!VisualStorePanelArt)
@@ -774,6 +795,11 @@ void DrawVisualStore(const Surface &out)
 	RenderClxSprite(out, (*VisualStorePanelArt)[0], GetPanelPosition(UiPanels::Stash));
 
 	const Point panelPos = GetPanelPosition(UiPanels::Stash);
+	// POE2 Mashup: the search box, in a strip under the shop (Curtis 2026-10-19).
+	if (gbIsPoe2) {
+		poe2ui::DrawPanel(out, { panelPos + Displacement { 0, 350 }, { 320, ShopSearchStripHeight } });
+		ShopSearch.draw(out, ShopSearchRect());
+	}
 	const UiFlags styleWhite = UiFlags::VerticalCenter | UiFlags::ColorWhite;
 	const UiFlags styleTabPushed = UiFlags::VerticalCenter | UiFlags::ColorButtonpushed;
 	constexpr int TextHeight = 13;
@@ -859,6 +885,9 @@ void DrawVisualStore(const Surface &out)
 		}
 
 		DrawItem(item, out, position, sprite);
+		// POE2 Mashup: a search frames the wares that match and dims the rest.
+		if (gbIsPoe2 && ShopSearch.searching())
+			DrawItemSearchMark(out, { { position.x, position.y - sprite.height() + 1 }, { sprite.width(), sprite.height() } }, ShopSearch.matches(item));
 	}
 
 	// POE2 Mashup: the ware with its own slot, under the grid.
@@ -873,6 +902,8 @@ void DrawVisualStore(const Surface &out)
 		if (pcursstoreitem == *FixedWare)
 			ClxDrawOutline(out, GetOutlineColor(item, true), position, sprite);
 		DrawItem(item, out, position, sprite);
+		if (ShopSearch.searching())
+			DrawItemSearchMark(out, { { position.x, position.y - sprite.height() + 1 }, { sprite.width(), sprite.height() } }, ShopSearch.matches(item));
 		DrawString(out, _("Always in stock"), { panelPos + Displacement { 196, FixedWareRect.position.y }, { FixedWareRect.position.x - 200, FixedWareRect.size.height } },
 		    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
 	}
