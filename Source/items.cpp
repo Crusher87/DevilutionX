@@ -3845,7 +3845,7 @@ void FitOneCellItems(Player &player)
 	// A one-cell item keeps only its own cell; the others are marked with its negative number.
 	for (int8_t &cell : player.InvGrid) {
 		const int index = -cell - 1;
-		if (cell < 0 && index < player._pNumInv && TakesOneCell(player.InvList[index]))
+		if (cell < 0 && index < player._pNumInv && index < InventoryGridCells && TakesOneCell(player.InvList[index]))
 			cell = 0;
 	}
 }
@@ -5628,6 +5628,8 @@ void GetItemFrm(Item &item)
 		item.AnimInfo.currentFrame = numberOfFrames - 1;
 		item._iAnimFlag = false;
 		item.selectionRegion = SelectionRegion::Bottom;
+	} else if (item.AnimInfo.currentFrame >= numberOfFrames || item.AnimInfo.currentFrame < 0) {
+		item.AnimInfo.currentFrame = std::max(numberOfFrames - 1, 0);
 	}
 }
 

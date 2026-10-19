@@ -1674,6 +1674,11 @@ void ReorganizeInventory(Player &player)
 
 	// If reorganization failed, restore items and InvGrid from tempStorage and originalInvGrid
 	if (reorganizationFailed) {
+		// The items placed before the failure are copies of ones in tempStorage: clear them so nothing is doubled
+		// or written past the end of InvList.
+		for (int i = 0; i < player._pNumInv; ++i)
+			player.InvList[i] = {};
+		player._pNumInv = 0;
 		for (const Item &item : tempStorage) {
 			if (!item.isEmpty()) {
 				player.InvList[player._pNumInv++] = item;
