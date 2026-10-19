@@ -86,6 +86,8 @@ enum item_color : uint8_t {
 extern DVL_API_FOR_TEST bool invflag;
 extern const Rectangle InvRect[NUM_XY_SLOTS];
 
+/** @brief The rarity an item's slot is coloured for: its own, except waystones in POE2 mode, which get no colour. */
+item_quality SlotBackQuality(const Item &item);
 void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_quality itemQuality);
 /**
  * @brief Checks whether the given item can be placed on the belt. Takes item size as well as characteristics into account. Items

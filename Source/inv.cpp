@@ -1204,6 +1204,14 @@ int CreateGoldItemInInventorySlot(Player &player, int slotIndex, int value)
 
 } // namespace
 
+item_quality SlotBackQuality(const Item &item)
+{
+	// POE2 Mashup: waystones show their rarity in the name only; Curtis found the coloured square behind them odd.
+	if (gbIsPoe2 && IsWaystone(item))
+		return ITEM_QUALITY_NORMAL;
+	return item._iMagical;
+}
+
 void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_quality itemQuality)
 {
 	SDL_Rect srcRect = MakeSdlRect(0, 0, size.width, size.height);
@@ -1365,7 +1373,7 @@ void DrawInv(const Surface &out)
 		if (!myPlayer.InvBody[slot].isEmpty()) {
 			int screenX = slotPos[slot].x;
 			int screenY = slotPos[slot].y;
-			InvDrawSlotBack(out, GetPanelPosition(UiPanels::Inventory, { screenX, screenY }), { slotSize[slot].width * InventorySlotSizeInPixels.width, slotSize[slot].height * InventorySlotSizeInPixels.height }, myPlayer.InvBody[slot]._iMagical);
+			InvDrawSlotBack(out, GetPanelPosition(UiPanels::Inventory, { screenX, screenY }), { slotSize[slot].width * InventorySlotSizeInPixels.width, slotSize[slot].height * InventorySlotSizeInPixels.height }, SlotBackQuality(myPlayer.InvBody[slot]));
 
 			const int cursId = myPlayer.InvBody[slot]._iCurs + CURSOR_FIRSTITEM;
 
@@ -1390,7 +1398,7 @@ void DrawInv(const Surface &out)
 
 			if (slot == INVLOC_HAND_LEFT) {
 				if (myPlayer.GetItemLocation(myPlayer.InvBody[slot]) == ILOC_TWOHAND) {
-					InvDrawSlotBack(out, GetPanelPosition(UiPanels::Inventory, slotPos[INVLOC_HAND_RIGHT]), { slotSize[INVLOC_HAND_RIGHT].width * InventorySlotSizeInPixels.width, slotSize[INVLOC_HAND_RIGHT].height * InventorySlotSizeInPixels.height }, myPlayer.InvBody[slot]._iMagical);
+					InvDrawSlotBack(out, GetPanelPosition(UiPanels::Inventory, slotPos[INVLOC_HAND_RIGHT]), { slotSize[INVLOC_HAND_RIGHT].width * InventorySlotSizeInPixels.width, slotSize[INVLOC_HAND_RIGHT].height * InventorySlotSizeInPixels.height }, SlotBackQuality(myPlayer.InvBody[slot]));
 					const int dstX = GetRightPanel().position.x + slotPos[INVLOC_HAND_RIGHT].x + (frameSize.width == InventorySlotSizeInPixels.width ? INV_SLOT_HALF_SIZE_PX : 0) - 1;
 					const int dstY = GetRightPanel().position.y + slotPos[INVLOC_HAND_RIGHT].y;
 					ClxDrawBlended(out, { dstX, dstY }, sprite);
@@ -1405,7 +1413,7 @@ void DrawInv(const Surface &out)
 			    out,
 			    GetPanelPosition(UiPanels::Inventory, InvRect[i + SLOTXY_INV_FIRST].position) + Displacement { 0, InventorySlotSizeInPixels.height },
 			    InventorySlotSizeInPixels,
-			    myPlayer.InvList[std::abs(myPlayer.InvGrid[i]) - 1]._iMagical);
+			    SlotBackQuality(myPlayer.InvList[std::abs(myPlayer.InvGrid[i]) - 1]));
 		}
 	}
 
@@ -1468,7 +1476,7 @@ void DrawInvBelt(const Surface &out)
 		}
 
 		const Point position { InvRect[i + SLOTXY_BELT_FIRST].position.x + mainPanelPosition.x, InvRect[i + SLOTXY_BELT_FIRST].position.y + mainPanelPosition.y + InventorySlotSizeInPixels.height };
-		InvDrawSlotBack(out, position, InventorySlotSizeInPixels, myPlayer.SpdList[i]._iMagical);
+		InvDrawSlotBack(out, position, InventorySlotSizeInPixels, SlotBackQuality(myPlayer.SpdList[i]));
 		const int cursId = myPlayer.SpdList[i]._iCurs + CURSOR_FIRSTITEM;
 
 		const ClxSprite sprite = GetInvItemSprite(cursId);

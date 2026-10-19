@@ -434,7 +434,7 @@ def report(sessions, out):
                 m = STALL.match(text)
                 if m:
                     stalls.append((int(m.group(1)), label, int(m.group(2)), int(m.group(3)), s.date[:16]))
-    # Before build 31b9377 the count also took in pauses (a menu open while frames kept drawing), mostly in town.
+    # Before build 2bc3c0f the count also took in pauses (a menu open while frames kept drawing), mostly in town.
     w(f'Freezes over 250 ms: {len(stalls)}' + (f', {sum(1 for x in stalls if x[1] == "town")} in town' if stalls else ''))
     for ms, label, monsters, missiles, day in sorted(stalls, reverse=True)[:8]:
         w(f'  {ms} ms on {label} ({monsters} monsters, {missiles} missiles), {day}')

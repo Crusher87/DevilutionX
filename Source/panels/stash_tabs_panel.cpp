@@ -1291,7 +1291,7 @@ void DrawSlot(const Surface &out, const SlotView &slot, bool collection)
 	}
 	const Item &item = Stash.stashList[slot.index];
 	if (!collection)
-		InvDrawSlotBack(out, slot.rect.position + Displacement { 0, slot.rect.size.height - 1 }, slot.rect.size, item._iMagical);
+		InvDrawSlotBack(out, slot.rect.position + Displacement { 0, slot.rect.size.height - 1 }, slot.rect.size, SlotBackQuality(item));
 	std::optional<uint8_t> outline;
 	if (pcursstashitem == slot.index)
 		outline = GetOutlineColor(item, true);

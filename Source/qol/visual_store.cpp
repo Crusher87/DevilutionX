@@ -840,7 +840,7 @@ void DrawVisualStore(const Surface &out)
 
 			const Item &item = allItems[itemPlusOne - 1];
 			Point position = GetVisualStoreSlotCoord({ x, y }) + offset;
-			InvDrawSlotBack(out, position, InventorySlotSizeInPixels, item._iMagical);
+			InvDrawSlotBack(out, position, InventorySlotSizeInPixels, SlotBackQuality(item));
 		}
 	}
 
@@ -868,7 +868,7 @@ void DrawVisualStore(const Surface &out)
 		poe2ui::FillRectangle(out, slot, poe2ui::SocketColor);
 		poe2ui::DrawFrame(out, { slot.position - Displacement { 1, 1 }, Size { slot.size.width + 2, slot.size.height + 2 } }, poe2ui::SocketRimColor);
 		const Point position = slot.position + offset;
-		InvDrawSlotBack(out, position, InventorySlotSizeInPixels, item._iMagical);
+		InvDrawSlotBack(out, position, InventorySlotSizeInPixels, SlotBackQuality(item));
 		const ClxSprite sprite = GetInvItemSprite(item._iCurs + CURSOR_FIRSTITEM);
 		if (pcursstoreitem == *FixedWare)
 			ClxDrawOutline(out, GetOutlineColor(item, true), position, sprite);
