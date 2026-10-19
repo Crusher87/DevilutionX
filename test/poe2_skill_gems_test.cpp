@@ -69,8 +69,8 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 			EXPECT_EQ(AllItemsList[i].iMinMag, GetSpellData(skill.spell()).minInt) << AllItemsList[i].iName;
 		}
 	}
-	// Skill gems plus 58 Spirit gems.
-	EXPECT_EQ(gems, 170);
+	// Skill gems plus 64 Spirit gems.
+	EXPECT_EQ(gems, 176);
 }
 
 TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)

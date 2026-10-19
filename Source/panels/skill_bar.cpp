@@ -368,6 +368,18 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::StaffRecharge;
 	case PersistentSkill::HeraldOfBlood:
 		return SpellIcon::BloodBoil;
+	case PersistentSkill::SkeletalSnipers:
+		return SpellIcon::Search;
+	case PersistentSkill::SkeletalFrostMages:
+		return SpellIcon::StoneCurse;
+	case PersistentSkill::SkeletalStormMages:
+		return SpellIcon::Lightning;
+	case PersistentSkill::SkeletalReavers:
+		return SpellIcon::Berserk;
+	case PersistentSkill::SkeletalBrutes:
+		return SpellIcon::LongHorn;
+	case PersistentSkill::SkeletalClerics:
+		return SpellIcon::HealOther;
 	default:
 		return SpellIcon::Empty;
 	}

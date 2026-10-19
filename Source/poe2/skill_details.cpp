@@ -15,6 +15,7 @@
 #include "poe2/player_data.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -363,9 +364,27 @@ std::string Seconds(double seconds)
 }
 
 /** @brief The numbers of POE2's buff Spirit gems at the gem's level (poe2/spirit_buffs.hpp). */
+/** @brief How a skeleton gem's minions fight, against a Skeletal Warrior. */
+void MinionGemDetails(std::vector<SkillDetailLine> &lines, const MinionGemData &gem)
+{
+	if (gem.skill == PersistentSkill::SkeletalWarriors)
+		return;
+	Value(lines, "Life", std::format("{:d}% of a Skeletal Warrior's", gem.lifePercent));
+	if (gem.damagePercent > 0)
+		Value(lines, "Blows", std::format("{:d}% of a Skeletal Warrior's", gem.damagePercent));
+	if (gem.shot != MinionShot::None) {
+		const std::string_view shot = gem.shot == MinionShot::Arrow ? "Arrows" : gem.shot == MinionShot::FrostBolt ? "Frost bolts" : gem.shot == MinionShot::ChargedBolts ? "Two charged bolts" : "Firebolts";
+		Value(lines, std::string(shot), std::format("{:d}% of a blow each, from up to {:d} tiles", gem.shotPercent, gem.range));
+	}
+	if (gem.attackTicks > 0)
+		Value(lines, "Attacks every", Seconds(gem.attackTicks / 20.0));
+}
+
 void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skill, int level)
 {
 	const auto ticks = [](int gameTicks) { return Seconds(gameTicks / 20.0); };
+	if (const MinionGemData *gem = FindMinionGem(skill); gem != nullptr)
+		MinionGemDetails(lines, *gem);
 	switch (skill) {
 	case PersistentSkill::WindDancer:
 		Value(lines, "A stage every", ticks(WindDancerStageTicks(level)));
@@ -492,6 +511,17 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 	case PersistentSkill::HeraldOfBlood:
 		Value(lines, "Burst", std::format("{:d}% of the dead enemy's life, {:d} tiles around", HeraldOfBloodPercent, HeraldOfBloodRadius));
 		Value(lines, "Bleed chance", std::format("{:d}%", HeraldOfBloodBleedChance(level)));
+		break;
+	case PersistentSkill::SkeletalReavers:
+		Value(lines, "Rage", std::format("+1 a blow, up to {:d}; {:d}% more damage each", ReaverMaxRage, ReaverRagePercent));
+		Value(lines, "Rage fades", std::format("{:d} seconds after its last blow", ReaverRageTicks / 20));
+		break;
+	case PersistentSkill::SkeletalBrutes:
+		Value(lines, "Heavy stun", std::format("{:d}% more buildup from its blows", BruteStunPercent));
+		break;
+	case PersistentSkill::SkeletalClerics:
+		Value(lines, "Heals", std::format("{:d}% of a hurt minion's life every {:d} seconds, within {:d} tiles", ClericHealPercent(level), ClericHealTicks / 20, ClericRadius));
+		Value(lines, "Fallen minions", "rise twice as fast while a Cleric stands");
 		break;
 	default:
 		break;

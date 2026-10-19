@@ -361,7 +361,19 @@ enum class PersistentSkill : uint8_t {
 	SiphonElements,
 	/** Bleeding enemies you kill burst, making those nearby bleed. */
 	HeraldOfBlood,
-	Last = HeraldOfBlood,
+	/** Skeletal Snipers shoot arrows from far away. */
+	SkeletalSnipers,
+	/** Skeletal Frost Mages hurl frost bolts that chill and freeze. */
+	SkeletalFrostMages,
+	/** Skeletal Storm Mages hurl charged bolts that shock. */
+	SkeletalStormMages,
+	/** Skeletal Reavers build Rage as they hit, hitting harder. */
+	SkeletalReavers,
+	/** Skeletal Brutes are tough and slow, and their heavy blows stun. */
+	SkeletalBrutes,
+	/** Skeletal Clerics heal your other minions and raise the fallen sooner. */
+	SkeletalClerics,
+	Last = SkeletalClerics,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -604,7 +616,7 @@ struct SpiritRuntime {
 	int32_t plagueStore = 0;
 	int32_t grimFeastStore = 0;
 	/** Grim Feast: the life of the last skeleton of each minion gem that died, in 1/64 points, to price a revive. */
-	std::array<int32_t, 2> grimMinionLife {};
+	std::array<int32_t, 8> grimMinionLife {};
 	uint8_t grimFeastCooldown = 0;
 	/** Convalescence: the game ticks its buff has left, and its cooldown. */
 	uint8_t convalescenceTicks = 0;
@@ -645,11 +657,28 @@ struct SpiritRuntime {
 };
 
 /** @brief Spirit gems whose number of minions is set in the Skills panel, like POE2's "Set Minion Count". */
-constexpr std::array<PersistentSkill, 2> MinionCountSkills { PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages };
+constexpr std::array<PersistentSkill, 8> MinionCountSkills {
+	PersistentSkill::SkeletalWarriors,
+	PersistentSkill::SkeletalMages,
+	PersistentSkill::SkeletalSnipers,
+	PersistentSkill::SkeletalFrostMages,
+	PersistentSkill::SkeletalStormMages,
+	PersistentSkill::SkeletalReavers,
+	PersistentSkill::SkeletalBrutes,
+	PersistentSkill::SkeletalClerics,
+};
+static_assert(MinionCountSkills.size() == std::tuple_size_v<decltype(SpiritRuntime::grimMinionLife)>);
 /** @brief Most minions one gem keeps, besides the ones its supports add. */
 constexpr uint8_t MaxMinionsPerGem = 12;
 /** @brief A minion count the player hasn't chosen yet: the gem raises its default number. */
 constexpr uint8_t DefaultMinionCount = 0xFF;
+
+constexpr std::array<uint8_t, MinionCountSkills.size()> DefaultMinionCounts()
+{
+	std::array<uint8_t, MinionCountSkills.size()> counts {};
+	counts.fill(DefaultMinionCount);
+	return counts;
+}
 
 /** @brief Revive timers of one minion gem (not saved; see poe2/spirit.cpp). */
 struct MinionRevives {
@@ -707,7 +736,7 @@ struct Poe2PlayerData {
 	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
 	uint8_t spiritSkulls = 0;
 	/** @brief How many minions each of the MinionCountSkills keeps, or DefaultMinionCount. */
-	std::array<uint8_t, MinionCountSkills.size()> minionCounts { DefaultMinionCount, DefaultMinionCount };
+	std::array<uint8_t, MinionCountSkills.size()> minionCounts = DefaultMinionCounts();
 	/** @brief What each skill tray slot does. */
 	std::array<TrayBinding, NumTraySlots> tray {};
 	/** @brief Game ticks left in the current dodge roll (not saved). */

@@ -84,6 +84,7 @@
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/profane_roads.hpp"
@@ -1208,17 +1209,20 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
 		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
 		dam = dam * UniqueMinionDamagePercent(owner, attacker.hitPoints.raw() * 2 < attacker.maxHitPoints.raw()) / 100;
-		// Their skill's supports too.
+		// Their skill's supports too, and the skeleton's kind and Rage.
 		if (gbIsPoe2)
-			dam = dam * SupportMinionDamagePercent(owner, attacker) / 100;
+			dam = dam * SupportMinionDamagePercent(owner, attacker) / 100 * MinionGemDamagePercent(attacker) / 100;
 	}
 	if (gbIsPoe2 && target.isPlayerMinion() && static_cast<size_t>(target.goalVar3) < Players.size())
 		dam = dam * SupportMinionDamageTakenPercent(Players[static_cast<size_t>(target.goalVar3)], target) / 100;
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
 	ApplyMonsterDamage(DamageType::Physical, target, Fixed26_6::fromRaw(dam));
 	// POE2 Mashup: Blood Golem heals its owner and Fire Golem's blows burn.
-	if (gbIsPoe2 && attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size())
+	if (gbIsPoe2 && attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
 		OnMinionHitMonster(Players[static_cast<size_t>(attacker.goalVar3)], attacker, target, Fixed26_6::fromRaw(dam));
+		// And a Reaver's Rage and a Brute's stun.
+		OnMinionGemHit(Players[static_cast<size_t>(attacker.goalVar3)], attacker, target, Fixed26_6::fromRaw(dam));
+	}
 
 	if (attacker.isPlayerMinion()) {
 		const auto playerId = static_cast<size_t>(attacker.goalVar3);
@@ -1420,6 +1424,35 @@ bool MonsterAttack(Monster &monster)
 	return false;
 }
 
+/** @brief POE2 Mashup: a skeleton's arrow, bolt or Storm Mage's two charged bolts, dealing its own damage. */
+void FireMinionShot(const Monster &minion, MissileID missileType, int damage)
+{
+	const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
+	const int shots = missileType == MissileID::ChargedBolt ? 2 : 1;
+	for (int i = 0; i < shots; i++) {
+		Missile *shot = AddMissile(minion.position.tile, minion.enemyPosition, minion.direction, missileType, TARGET_MONSTERS, owner, damage, 0);
+		if (shot == nullptr)
+			continue;
+		// A charged bolt sets its damage from the hero's Magic, and an arrow would pierce like the hero's.
+		shot->_midam = damage;
+		shot->poe2.minionShot = true;
+		shot->poe2.piercesLeft = 0;
+	}
+}
+
+/** @brief POE2 Mashup: a skeleton's shot, in percent of its blow, with its owner's uniques and the gem's supports. */
+int MinionShotDamage(const Monster &minion, int percent)
+{
+	int damage = RandomIntBetween(minion.minDamage, minion.maxDamage) * percent / 100;
+	if (static_cast<size_t>(minion.goalVar3) < Players.size()) {
+		const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
+		damage = damage * UniqueMinionDamagePercent(owner, minion.hitPoints.raw() * 2 < minion.maxHitPoints.raw()) / 100;
+		damage = damage * SupportMinionDamagePercent(owner, minion) / 100;
+	}
+	// A missile with no damage would take the hero's.
+	return std::clamp(damage, 1, static_cast<int>(INT16_MAX));
+}
+
 bool MonsterRangedAttack(Monster &monster)
 {
 	if (monster.animInfo.currentFrame == monster.data().animFrameNum - 1) {
@@ -1428,9 +1461,9 @@ bool MonsterRangedAttack(Monster &monster)
 			int multimissiles = 1;
 			if (missileType == MissileID::ChargedBolt)
 				multimissiles = 3;
-			// POE2 Mashup: a Skeletal Mage's fire is its owner's, so it flies past the other minions and only hits enemies.
+			// POE2 Mashup: a skeleton's shot is its owner's, so it flies past the other minions and only hits enemies.
 			if (monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
-				AddMissile(monster.position.tile, monster.enemyPosition, monster.direction, missileType, TARGET_MONSTERS, Players[monster.goalVar3], monster.var2, 0);
+				FireMinionShot(monster, missileType, monster.var2);
 				multimissiles = 0;
 			}
 			for (int mi = 0; mi < multimissiles; mi++) {
@@ -3417,8 +3450,9 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	const Player &player = Players[ownerPlayerId];
 	// Like POE2, the gem's level makes the minions stronger: a gem at the right level for its owner fights at the owner's level.
 	const int level = MinionLevelForGemLevel(gemLevel);
-	// Mages stay back and hurl fire, so they are frailer than the warriors.
-	const int lifePercent = monster.type().type == SkeletonMageMinionType ? 60 : 100;
+	// The ones that stay back and shoot are frailer than the warriors, the Brutes tougher.
+	const MinionGemData *gem = FindMinionGemByType(monster.type().type);
+	const int lifePercent = gem != nullptr ? gem->lifePercent : 100;
 	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
@@ -3429,10 +3463,10 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	UpdateEnemy(monster);
 }
 
-/** @brief Whether a spawn message carries a Skeletal Warrior: a minion owner and level on a monster that isn't a golem. */
+/** @brief Whether a spawn message carries a skeleton gem's minion: a minion owner and level on one of their types. */
 bool IsSkeletonMinionSpawn(const Monster &monster, int16_t golemSpellLevel)
 {
-	return gbIsPoe2 && golemSpellLevel > 0 && IsAnyOf(monster.type().type, SkeletonMinionType, SkeletonMageMinionType);
+	return gbIsPoe2 && golemSpellLevel > 0 && IsMinionGemType(monster.type().type);
 }
 
 bool PosOkMissile(Point position)
@@ -3933,6 +3967,15 @@ std::expected<void, std::string> InitMonsters()
 		for (int s = -2; s < 2; s++) {
 			for (int t = -2; t < 2; t++)
 				DoUnVision(trigs[i].position + Displacement { s, t }, 15);
+		}
+	}
+	// POE2 Mashup: every skeleton gem can raise its minions on every level. Their types come last, so the types of
+	// levels saved before keep their places.
+	if (gbIsPoe2) {
+		for (const PersistentSkill skill : MinionCountSkills) {
+			if (LevelMonsterTypeCount >= MaxLvlMTypes)
+				break;
+			RETURN_IF_ERROR(AddMonsterType(FindMinionGem(skill)->type, PLACE_SPECIAL));
 		}
 	}
 
@@ -4566,19 +4609,30 @@ void GolumAi(Monster &golem)
 		return;
 	}
 
-	if ((golem.flags & MFLAG_NO_ENEMY) == 0) {
+	// POE2 Mashup: the skeleton gems' kinds fight their own ways; Clerics don't fight at all.
+	const MinionGemData *gem = gbIsPoe2 ? MinionGemOf(golem) : nullptr;
+	if ((golem.flags & MFLAG_NO_ENEMY) == 0 && (gem == nullptr || gem->damagePercent > 0)) {
 		Monster &enemy = Monsters[golem.enemy];
 		const int mex = golem.position.tile.x - enemy.position.future.x;
 		const int mey = golem.position.tile.y - enemy.position.future.y;
 		golem.direction = GetDirection(golem.position.tile, enemy.position.tile);
-		// POE2 Mashup: Skeletal Mages keep their distance and hurl firebolts.
+		// The archers and mages keep their distance and shoot.
 		const int distance = std::max(std::abs(mex), std::abs(mey));
-		if (gbIsPoe2 && golem.type().type == SkeletonMageMinionType && distance >= 2 && distance <= 7 && LineClearMissile(golem.position.tile, enemy.position.tile)) {
+		if (gem != nullptr && gem->shot != MinionShot::None && distance >= 2 && distance <= gem->range && LineClearMissile(golem.position.tile, enemy.position.tile)) {
+			// Snipers take aim between their shots.
+			if (golem.poe2.minionAttackWait > 0)
+				return;
 			golem.enemyPosition = enemy.position.tile;
-			StartRangedAttack(golem, MissileID::Firebolt, RandomIntBetween(golem.minDamage, golem.maxDamage) * 3 / 2);
+			StartRangedAttack(golem, MinionShotMissile(gem->shot), MinionShotDamage(golem, gem->shotPercent));
+			golem.poe2.minionAttackWait = gem->attackTicks;
 			return;
 		}
 		if (std::abs(mex) < 2 && std::abs(mey) < 2) {
+			// Brutes heave their weapon up between their blows.
+			if (golem.poe2.minionAttackWait > 0)
+				return;
+			if (gem != nullptr)
+				golem.poe2.minionAttackWait = gem->attackTicks;
 			golem.enemyPosition = enemy.position.tile;
 			if (enemy.activeForTicks == 0) {
 				enemy.activeForTicks = UINT8_MAX;
@@ -5440,7 +5494,8 @@ bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel,
 	// POE2 Mashup: supports of the minion skill change the minions' life.
 	if (gbIsPoe2) {
 		Monster &minion = Monsters[monsterIndex];
-		const int percent = SupportMinionLifePercent(player, type == SkeletonMageMinionType ? PersistentSkill::SkeletalMages : PersistentSkill::SkeletalWarriors);
+		const MinionGemData *gem = FindMinionGemByType(type);
+		const int percent = SupportMinionLifePercent(player, gem != nullptr ? gem->skill : PersistentSkill::SkeletalWarriors);
 		if (percent != 100) {
 			minion.maxHitPoints = Fixed26_6::fromRaw(std::max<int32_t>(minion.maxHitPoints.raw() * percent / 100, 64));
 			minion.hitPoints = minion.maxHitPoints;

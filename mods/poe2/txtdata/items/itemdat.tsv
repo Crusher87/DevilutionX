@@ -926,3 +926,9 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Trinity Gem	Gem	21	0	0	0	0	0	0	30	30		SPIRITGEM_TABLE	Null	true	3600
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Siphon Elements Gem	Gem	12	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2600
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Herald of Blood Gem	Gem	6	0	0	0	0	0	15	0	15		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Snipers Gem	Gem	6	0	0	0	0	0	0	30	10		SPIRITGEM_TABLE	Null	true	1500
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Frost Mages Gem	Gem	10	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2200
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Storm Mages Gem	Gem	12	0	0	0	0	0	0	45	0		SPIRITGEM_TABLE	Null	true	2600
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Reavers Gem	Gem	8	0	0	0	0	0	20	30	0		SPIRITGEM_TABLE	Null	true	1800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Brutes Gem	Gem	14	0	0	0	0	0	30	35	0		SPIRITGEM_TABLE	Null	true	2800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeletal Clerics Gem	Gem	10	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2200

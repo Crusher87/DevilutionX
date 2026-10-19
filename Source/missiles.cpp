@@ -298,6 +298,9 @@ std::string_view UnhittableReason(const Monster &monster)
 	return "retreating or in a special state";
 }
 
+/** @brief POE2 Mashup: set while a minion's shot checks its hit, so even an arrow hits like a spell, without the hero's attack. */
+bool MinionShotHits = false;
+
 bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam, int dist, MissileID t, WorldTilePosition startPos, DamageType damageType, bool shift)
 {
 	if (!monster.isPossibleToHit()) {
@@ -317,7 +320,8 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 	int hit = RandomIntLessThan(100);
 	int hper = 0;
 	const MissileData &missileData = GetMissileData(t);
-	if (missileData.isArrow()) {
+	const bool isArrow = missileData.isArrow() && !MinionShotHits;
+	if (isArrow) {
 		hper = player.GetRangedPiercingToHit();
 		hper -= player.CalculateArmorPierce(monster.armorClass, false);
 		// POE2 Mashup: accuracy falls off gently with distance instead of with its square.
@@ -331,10 +335,10 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 
 	hper = std::clamp(hper, 5, 95);
 	// POE2 Mashup: spells always hit, as in POE2; only attacks roll against the monster's defences.
-	if (gbIsPoe2 && !missileData.isArrow())
+	if (gbIsPoe2 && !isArrow)
 		hper = 100;
 	// POE2 Mashup: some uniques make attacks unevadable.
-	const bool isAttack = missileData.isArrow() && damageType == DamageType::Physical;
+	const bool isAttack = isArrow && damageType == DamageType::Physical;
 	if (isAttack && AttacksCannotBeEvaded(player))
 		hper = 100;
 
@@ -389,7 +393,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		if (&player == MyPlayer)
 			dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit, true).raw();
 	} else {
-		if (gbIsPoe2 && !missileData.isArrow())
+		if (gbIsPoe2 && !isArrow)
 			dam = dam * UniqueSpellHitPercent(player, monster, damageType) / 100;
 		if (gbIsPoe2)
 			dam = dam * MonsterDamageTakenPercent(monster, damageType) / 100;
@@ -410,7 +414,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		monster.tag(player);
 		PlayEffect(monster, MonsterSound::Hit);
 	} else {
-		if (monster.mode != MonsterMode::Petrified && missileData.isArrow() && HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback))
+		if (monster.mode != MonsterMode::Petrified && isArrow && HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback))
 			M_GetKnockback(monster, startPos);
 		if (monster.type().type != MT_GOLEM)
 			M_StartHit(monster, player, dam);
@@ -604,7 +608,13 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 				int supportedMax = maxDamage;
 				ScaleSupportedMissileDamage(missile, supportedMin, supportedMax);
 				const SupportHitScope supportScope(*missile.sourcePlayer(), MissileSkill(missile));
+				MinionShotHits = missile.poe2.minionShot;
+				if (MinionShotHits)
+					TelemetryNoteDamageSource("minions");
 				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, supportedMin, supportedMax, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
+				if (MinionShotHits)
+					TelemetryNoteDamageSource({});
+				MinionShotHits = false;
 				// POE2 Mashup: only a projectile's direct hit pierces, forks or chains, not its explosion.
 				if (isMonsterHit && !dontDeleteOnCollision) {
 					SplashBoltHit(missile, *missile.sourcePlayer(), monster, supportedMin, supportedMax, damageType, isDamageShifted);
@@ -3168,6 +3178,12 @@ void ProcessArrow(Missile &missile)
 	int maxd;
 	switch (missile.sourceType()) {
 	case MissileSource::Player: {
+		// POE2 Mashup: a Skeletal Sniper's arrow carries its own damage.
+		if (missile.poe2.minionShot) {
+			mind = missile._midam;
+			maxd = missile._midam;
+			break;
+		}
 		// BUGFIX: damage of missile should be encoded in missile struct; player can be dead/have left the game before missile arrives.
 		const Player &player = *missile.sourcePlayer();
 		mind = player._pIMinDam;

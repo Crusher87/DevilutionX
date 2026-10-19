@@ -74,8 +74,11 @@ TEST_F(Poe2SpiritSkillsTest, EveryNewSpiritSkillHasAGemNameAndReservation)
 		ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForPersistent(skill), 1)) << PersistentSkillName(skill);
 		EXPECT_EQ(SkillForGem(gem), SkillSlot::ForPersistent(skill));
 		Socket(skill);
+		// A level 1 Brute costs more than 100 Spirit, as in POE2; at level 20 every minion gem fits.
+		MyPlayer->poe2.slotLevels[0] = IsMinionCountSkill(skill) ? 20 : 1;
 		EXPECT_TRUE(IsPersistentSkillActive(*MyPlayer, skill)) << PersistentSkillName(skill);
 	}
+	MyPlayer->poe2.slotLevels[0] = 1;
 }
 
 TEST_F(Poe2SpiritSkillsTest, OneGolemSkillAtATime)

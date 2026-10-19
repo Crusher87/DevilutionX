@@ -16,6 +16,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -71,15 +72,11 @@ int32_t StoreCap(const Player &player, PersistentSkill skill)
 	return Percent(player._pMaxHP.raw(), SpiritStoreCapPercent(GemLevel(player, skill)));
 }
 
-/** @brief Which of the two skeleton gems a minion belongs to, or -1. */
+/** @brief Which of the skeleton gems a minion belongs to, or -1. */
 int SkeletonIndex(const Monster &minion)
 {
-	const _monster_id type = minion.type().type;
-	if (type == SkeletonMinionType)
-		return 0;
-	if (type == SkeletonMageMinionType)
-		return 1;
-	return -1;
+	const MinionGemData *gem = FindMinionGemByType(minion.type().type);
+	return gem != nullptr ? MinionCountSkillIndex(gem->skill) : -1;
 }
 
 /** @brief The life of a skeleton of that gem: the toughest one standing, else the last one that died. */
@@ -96,7 +93,10 @@ int32_t SkeletonLife(const Player &player, int index)
 
 int32_t GrimFeastCap(const Player &player)
 {
-	return Percent(std::max(SkeletonLife(player, 0), SkeletonLife(player, 1)), GrimFeastCapPercent(GemLevel(player, PersistentSkill::GrimFeast)));
+	int32_t toughest = 0;
+	for (size_t i = 0; i < MinionCountSkills.size(); i++)
+		toughest = std::max(toughest, SkeletonLife(player, static_cast<int>(i)));
+	return Percent(toughest, GrimFeastCapPercent(GemLevel(player, PersistentSkill::GrimFeast)));
 }
 
 int BannerIndex(PersistentSkill skill)

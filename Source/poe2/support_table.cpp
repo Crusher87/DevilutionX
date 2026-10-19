@@ -20,6 +20,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_resources.hpp"
@@ -390,11 +391,8 @@ PersistentSkill MinionSkillOf(const Monster &minion)
 {
 	if (minion.poe2.revived)
 		return PersistentSkill::Revive;
-	const _monster_id type = minion.type().type;
-	if (type == SkeletonMinionType)
-		return PersistentSkill::SkeletalWarriors;
-	if (type == SkeletonMageMinionType)
-		return PersistentSkill::SkeletalMages;
+	if (const MinionGemData *gem = FindMinionGemByType(minion.type().type); gem != nullptr)
+		return gem->skill;
 	if (static_cast<size_t>(minion.goalVar3) < Players.size()) {
 		if (const PersistentSkill golem = ActiveGolemSkill(Players[static_cast<size_t>(minion.goalVar3)]); golem != PersistentSkill::None)
 			return golem;
@@ -424,7 +422,11 @@ std::pair<int, int> CountMinions(const Player &owner)
 
 bool AnyMinionSkillHas(const Player &player, SupportGem gem)
 {
-	for (const PersistentSkill skill : { PersistentSkill::SummonGolem, PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages, PersistentSkill::BloodGolem, PersistentSkill::FireGolem, PersistentSkill::Revive }) {
+	for (const PersistentSkill skill : { PersistentSkill::SummonGolem, PersistentSkill::BloodGolem, PersistentSkill::FireGolem, PersistentSkill::Revive }) {
+		if (Has(player, SkillSlot::ForPersistent(skill), gem))
+			return true;
+	}
+	for (const PersistentSkill skill : MinionCountSkills) {
 		if (Has(player, SkillSlot::ForPersistent(skill), gem))
 			return true;
 	}
@@ -771,6 +773,12 @@ uint32_t SkillTags(SkillSlot skill)
 		case PersistentSkill::SummonGolem:
 		case PersistentSkill::SkeletalWarriors:
 		case PersistentSkill::SkeletalMages:
+		case PersistentSkill::SkeletalSnipers:
+		case PersistentSkill::SkeletalFrostMages:
+		case PersistentSkill::SkeletalStormMages:
+		case PersistentSkill::SkeletalReavers:
+		case PersistentSkill::SkeletalBrutes:
+		case PersistentSkill::SkeletalClerics:
 		case PersistentSkill::BloodGolem:
 		case PersistentSkill::Revive:
 			return ST_Minion;
@@ -1046,7 +1054,7 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 		return false;
 	switch (data.gem) {
 	case SG::BoneArmy:
-		return IsAnyOf(skill.persistent(), PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages);
+		return FindMinionGem(skill.persistent()) != nullptr;
 	case SG::NaKrulsPrison:
 		return IsAnyOf(skill.spell(), SpellID::FireWall, SpellID::LightningWall);
 	default:

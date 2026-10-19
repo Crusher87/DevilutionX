@@ -18,6 +18,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -308,6 +309,18 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Siphon Elements");
 	case PersistentSkill::HeraldOfBlood:
 		return _("Herald of Blood");
+	case PersistentSkill::SkeletalSnipers:
+		return _("Skeletal Snipers");
+	case PersistentSkill::SkeletalFrostMages:
+		return _("Skeletal Frost Mages");
+	case PersistentSkill::SkeletalStormMages:
+		return _("Skeletal Storm Mages");
+	case PersistentSkill::SkeletalReavers:
+		return _("Skeletal Reavers");
+	case PersistentSkill::SkeletalBrutes:
+		return _("Skeletal Brutes");
+	case PersistentSkill::SkeletalClerics:
+		return _("Skeletal Clerics");
 	default:
 		return {};
 	}
@@ -432,6 +445,18 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Freezing, shocking and igniting enemies may leave an infusion of that element, for Meteor, Thunderstorm, Frozen Orb and Apocalypse to eat");
 	case PersistentSkill::HeraldOfBlood:
 		return _("Bleeding enemies you kill burst, hitting those nearby for 15% of their life as physical damage and making them bleed");
+	case PersistentSkill::SkeletalSnipers:
+		return _("Skeletal archers shoot heavy arrows from far away, taking aim between shots, and rise again when they fall");
+	case PersistentSkill::SkeletalFrostMages:
+		return _("Skeletal mages hurl frost bolts that chill and freeze, and rise again when they fall");
+	case PersistentSkill::SkeletalStormMages:
+		return _("Skeletal mages hurl two crackling charged bolts at a time that shock, and rise again when they fall");
+	case PersistentSkill::SkeletalReavers:
+		return _("Fierce skeletons that build Rage with every blow, hitting harder the longer they fight, and rise again when they fall");
+	case PersistentSkill::SkeletalBrutes:
+		return _("Tough, slow skeletons whose heavy blows stun, and who rise again when they fall");
+	case PersistentSkill::SkeletalClerics:
+		return _("Skeletal priests that don't fight: they heal your most hurt minion nearby and raise your fallen minions twice as fast");
 	default:
 		return {};
 	}
@@ -451,6 +476,12 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::SkeletalWarriors:
 		return 30;
 	case PersistentSkill::SkeletalMages:
+	case PersistentSkill::SkeletalSnipers:
+	case PersistentSkill::SkeletalFrostMages:
+	case PersistentSkill::SkeletalStormMages:
+	case PersistentSkill::SkeletalReavers:
+	case PersistentSkill::SkeletalBrutes:
+	case PersistentSkill::SkeletalClerics:
 		return 40;
 	case PersistentSkill::BloodGolem:
 	case PersistentSkill::FireGolem:
@@ -669,21 +700,23 @@ int MinionCountSkillIndex(PersistentSkill skill)
 
 int FreeMinions(PersistentSkill skill)
 {
-	return skill == PersistentSkill::SkeletalWarriors ? 2 : 0;
+	const MinionGemData *gem = FindMinionGem(skill);
+	return gem != nullptr ? gem->freeMinions : 0;
 }
 
 int StartingMinionCount(PersistentSkill skill)
 {
-	return skill == PersistentSkill::SkeletalWarriors ? 2 : 1;
+	const MinionGemData *gem = FindMinionGem(skill);
+	return gem != nullptr ? gem->startingCount : 1;
 }
 
 int BaseSpiritPerMinion(PersistentSkill skill, int gemLevel)
 {
-	// POE2's Spirit per minion for gem levels 1 to 20: Skeletal Warrior, and Skeletal Arsonist for the fire-hurling mages.
-	constexpr std::array<uint8_t, MaxGemLevel> Warrior { 60, 44, 33, 27, 25, 25, 23, 23, 23, 22, 22, 22, 21, 21, 21, 21, 20, 20, 20, 20 };
-	constexpr std::array<uint8_t, MaxGemLevel> Mage { 90, 65, 50, 47, 47, 47, 44, 44, 44, 42, 42, 42, 40, 40, 40, 40, 39, 39, 39, 39 };
-	const auto level = static_cast<size_t>(std::clamp(gemLevel, 1, MaxGemLevel) - 1);
-	return (skill == PersistentSkill::SkeletalMages ? Mage : Warrior)[level];
+	const MinionGemData *gem = FindMinionGem(skill);
+	if (gem == nullptr)
+		return 0;
+	static_assert(std::tuple_size_v<decltype(MinionGemData::spirit)> == MaxGemLevel);
+	return gem->spirit[static_cast<size_t>(std::clamp(gemLevel, 1, MaxGemLevel) - 1)];
 }
 
 int SpiritPerMinion(const Player &player, PersistentSkill skill)
@@ -977,7 +1010,7 @@ void RemoveRevive(MinionRevives &revives, size_t index)
 
 _monster_id MinionMonsterType(PersistentSkill skill)
 {
-	return skill == PersistentSkill::SkeletalMages ? SkeletonMageMinionType : SkeletonMinionType;
+	return FindMinionGem(skill)->type;
 }
 
 int TargetMinions(const Player &player, PersistentSkill skill, int active)
@@ -989,7 +1022,7 @@ int TargetMinions(const Player &player, PersistentSkill skill, int active)
  * @brief Keeps the gem's skeletons at its count. Like POE2, each one that falls rises again after the revive time;
  * ones that haven't been raised yet (on a new level, or when the count goes up) come up at once, a few ticks apart.
  */
-void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type, MinionRevives &revives)
+void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type, MinionRevives &revives, bool clericStands)
 {
 	const int active = ActiveMinionCount(player, skill);
 	if (active <= 0) {
@@ -1026,9 +1059,10 @@ void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type,
 		RemoveRevive(revives, longest);
 	}
 	std::optional<size_t> ready;
+	// A Skeletal Cleric raises the fallen twice as fast.
+	const int step = clericStands ? 2 : 1;
 	for (size_t i = 0; i < revives.pending; i++) {
-		if (revives.ticks[i] > 0)
-			revives.ticks[i]--;
+		revives.ticks[i] = static_cast<uint16_t>(std::max(revives.ticks[i] - step, 0));
 		if (revives.ticks[i] == 0 && !ready)
 			ready = i;
 	}
@@ -1092,10 +1126,12 @@ void ProcessPersistentSkills(Player &player)
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
 		return;
 	KeepGolemAlive(player);
+	const bool clericStands = ClericStands(player);
 	for (size_t i = 0; i < MinionCountSkills.size(); i++) {
 		const PersistentSkill skill = MinionCountSkills[i];
-		KeepSkeletonsAlive(player, skill, MinionMonsterType(skill), player.poe2.minionRevives[i]);
+		KeepSkeletonsAlive(player, skill, MinionMonsterType(skill), player.poe2.minionRevives[i], clericStands);
 	}
+	ProcessMinionGems(player);
 	ProcessSpiritSkills(player);
 }
 

@@ -31,6 +31,8 @@ struct Poe2MissileData {
 	uint8_t skillId = 0;
 	/** @brief Ricochet: bounces off the next wall towards a monster. */
 	bool ricochet = false;
+	/** @brief Fired by one of the hero's minions: it deals its own damage and hits like a spell, even an arrow. */
+	bool minionShot = false;
 	/** @brief How the effects draw it: 0 by its graphic, 1 the staff's own small bolt. */
 	uint8_t look = 0;
 };

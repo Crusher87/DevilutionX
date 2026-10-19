@@ -40,7 +40,7 @@ struct Missile;
 struct Player;
 
 constexpr size_t MaxMonsters = 200;
-constexpr size_t MaxLvlMTypes = 24;
+constexpr size_t MaxLvlMTypes = 40;
 /** @brief POE2 Mashup: monster slots kept free for the players' minions, so a crowded level can't stop them rising. */
 constexpr size_t MinionMonsterSlots = 40;
 

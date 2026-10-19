@@ -94,6 +94,13 @@ struct Poe2MonsterState {
 	bool minionReturning = false;
 	/** @brief Times in a row a minion failed to find a way back to its owner. */
 	uint8_t minionStuck = 0;
+	/** @brief Game ticks before a slow minion (a Sniper or a Brute) attacks again (not saved). */
+	uint8_t minionAttackWait = 0;
+	/** @brief A Skeletal Reaver's Rage, and the game ticks before it starts to fade (not saved). */
+	uint8_t minionRage = 0;
+	uint8_t minionRageTicks = 0;
+	/** @brief A Skeletal Cleric's game ticks before its next heal (not saved). */
+	uint8_t clericTicks = 0;
 };
 
 } // namespace devilution

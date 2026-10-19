@@ -58,6 +58,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/hardcore.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -3181,8 +3182,7 @@ void RemovePlrMissiles(const Player &player)
 		while ((golem = FindGolemForPlayer(player)) != nullptr) {
 			KillGolem(*golem);
 		}
-		KillSkeletonMinions(player);
-		KillSkeletonMinions(player, SkeletonMageMinionType);
+		KillGemMinions(player);
 	}
 
 	for (auto &missile : Missiles) {
