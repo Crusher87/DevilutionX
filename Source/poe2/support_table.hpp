@@ -56,6 +56,8 @@ enum SkillTag : uint32_t {
 	/** The skill keeps firing while it is used, like Barrage's stream. */
 	ST_Channelling = 1U << 22,
 	ST_Strike = 1U << 23,
+	/** A herald: its explosions hit for it, and only supports that change those fit. */
+	ST_Herald = 1U << 24,
 	ST_Elemental = ST_Fire | ST_Lightning | ST_Frost,
 };
 
@@ -90,6 +92,8 @@ struct SupportData {
 
 /** @brief The skill's tags. */
 uint32_t SkillTags(SkillSlot skill);
+/** @brief Spirit the supports of a Spirit gem add to its reservation, like Deadly Herald's 20. */
+int SupportAddedSpirit(const Player &player, SkillSlot skill);
 
 std::span<const SupportData> SupportTable();
 /** @brief The table entry of a support, or nullptr for the first supports, which have their own code. */

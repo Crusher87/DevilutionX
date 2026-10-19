@@ -441,8 +441,9 @@ std::string_view GemColorName(GemColor color)
 
 bool SkillTakesSupports(SkillSlot skill)
 {
+	// Minion gems, and heralds, whose supports change their explosions (POE2).
 	if (skill.kind == SkillKind::Persistent)
-		return (SkillTags(skill) & ST_Minion) != 0;
+		return (SkillTags(skill) & (ST_Minion | ST_Herald)) != 0;
 	return IsAnyOf(skill.kind, SkillKind::Spell, SkillKind::Attack, SkillKind::Default);
 }
 

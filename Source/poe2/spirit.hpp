@@ -82,6 +82,8 @@ int AliveMinionCount(const Player &player, PersistentSkill skill);
 std::string_view PersistentSkillName(PersistentSkill skill);
 std::string_view PersistentSkillDescription(PersistentSkill skill);
 int SpiritReservation(PersistentSkill skill);
+/** @brief Spirit the gem reserves when on, with its supports (Deadly Herald) and uniques that raise reservations. */
+int GemSpiritCost(const Player &player, PersistentSkill skill);
 
 /** @brief Whether the item grants Spirit as an implicit (sceptres). */
 bool ItemGrantsSpirit(const Item &item);

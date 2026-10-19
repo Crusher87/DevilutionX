@@ -65,7 +65,7 @@ public:
 			skills.push_back(SkillSlot::ForSpell(spell));
 		for (int i = 1; i <= static_cast<int>(WeaponSkill::Last); i++)
 			skills.push_back(SkillSlot::ForAttack(static_cast<WeaponSkill>(i)));
-		for (const PersistentSkill skill : { PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages, PersistentSkill::SummonGolem })
+		for (const PersistentSkill skill : { PersistentSkill::SkeletalWarriors, PersistentSkill::SkeletalMages, PersistentSkill::SummonGolem, PersistentSkill::HeraldOfAsh })
 			skills.push_back(SkillSlot::ForPersistent(skill));
 		return skills;
 	}
@@ -97,7 +97,7 @@ TEST_F(Poe2SupportTableTest, EveryTableSupportHasAnItemAndFitsSomething)
 		if (IsLineageSupport(data.gem))
 			lineage++;
 	}
-	EXPECT_EQ(SupportTable().size(), 79U);
+	EXPECT_EQ(SupportTable().size(), 80U);
 	EXPECT_EQ(lineage, 16U);
 	EXPECT_EQ(FindSupportData(SupportGem::Empower), nullptr);
 }

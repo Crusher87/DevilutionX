@@ -10,6 +10,8 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -253,6 +255,53 @@ TEST_F(Poe2SpiritTest, SpiritGemsStartOffUntilSwitchedOn)
 	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder));
 	EXPECT_FALSE(player.poe2.spiritGemOn(0));
 	EXPECT_EQ(ReservedSpirit(player), 0);
+}
+
+TEST_F(Poe2SpiritTest, HeraldsTakeSupportsForTheirExplosions)
+{
+	Player &player = *MyPlayer;
+	player.poe2.spiritSkulls = 3;
+	const SkillSlot ash = SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh);
+	const SkillSlot thunder = SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder);
+	EXPECT_TRUE(SkillTakesSupports(ash));
+	EXPECT_FALSE(SkillTakesSupports(SkillSlot::ForPersistent(PersistentSkill::PurityOfElements)));
+
+	// Supports that change the explosion fit, by its element; supports for skills you use yourself don't.
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::IncreasedArea, ash));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::ElementalFocus, ash));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::LifeLeech, thunder));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::FirePenetration, ash));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::FirePenetration, thunder));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::LightningPenetration, thunder));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::SpellEcho, ash));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::BloodPrice, ash));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::Efficiency, ash));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::Momentum, ash));
+
+	// Deadly Herald fits heralds only.
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::DeadlyHerald, ash));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::DeadlyHerald, thunder));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::DeadlyHerald, SkillSlot::ForSpell(SpellID::Firebolt)));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::DeadlyHerald, SkillSlot::ForPersistent(PersistentSkill::SkeletalWarriors)));
+
+	// It adds 20 Spirit to the herald's reservation; other supports add none.
+	SocketOn(player, 0, PersistentSkill::HeraldOfAsh);
+	EXPECT_EQ(ReservedSpirit(player), 30);
+	SupportGem replaced;
+	EXPECT_EQ(SocketSupportGem(player, 0, std::nullopt, SupportGem::ElementalFocus, replaced), SupportSocketResult::Socketed);
+	EXPECT_EQ(ReservedSpirit(player), 30);
+	EXPECT_EQ(SocketSupportGem(player, 0, std::nullopt, SupportGem::DeadlyHerald, replaced), SupportSocketResult::Socketed);
+	EXPECT_EQ(ReservedSpirit(player), 50);
+	EXPECT_EQ(GemSpiritCost(player, PersistentSkill::HeraldOfAsh), 50);
+
+	// While the herald's explosion hits, its supports change the damage: 25% more elemental, then 30% more.
+	Monster monster {};
+	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Fire), 100);
+	{
+		const SupportHitScope hit(player, ash);
+		EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Fire), 125 * 130 / 100);
+	}
+	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Fire), 100);
 }
 
 TEST_F(Poe2SpiritTest, SkullsGrantSpiritOnce)

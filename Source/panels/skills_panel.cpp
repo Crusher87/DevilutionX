@@ -194,7 +194,7 @@ std::string SkillCostText(const Player &player, SkillSlot skill)
 	if (IsMinionCountSkill(skill.persistent()))
 		return FormatRuntime(_("Spirit {:d}"), GemSpiritReservation(player, skill.persistent()));
 	if (skill.kind == SkillKind::Persistent)
-		return FormatRuntime(_("Spirit {:d}"), SpiritReservation(skill.persistent()));
+		return FormatRuntime(_("Spirit {:d}"), GemSpiritCost(player, skill.persistent()));
 	return FormatRuntime(_("Mana {:d}"), SkillManaCost(player, skill));
 }
 

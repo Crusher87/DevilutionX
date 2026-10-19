@@ -234,6 +234,8 @@ enum class SupportGem : uint8_t {
 	FirePenetration,
 	LightningPenetration,
 	ColdPenetration,
+	/** Herald supports (Curtis 2026-10-19): POE2's Deadly Herald. */
+	DeadlyHerald,
 	Count,
 };
 

@@ -137,6 +137,8 @@ const SupportData Table[] = {
 	{ SG::FirePenetration, "Fire Penetration", "Fire hits penetrate 15% of the\nmonster's fire resistance", "Needs a fire skill", GC::Strength, 3, 100, 0, ST_Fire, 0, 0, NoFamily },
 	{ SG::LightningPenetration, "Lightning Penetration", "Lightning hits penetrate 15% of the\nmonster's lightning resistance", "Needs a lightning skill", GC::Dexterity, 3, 100, 0, ST_Lightning, 0, 0, NoFamily },
 	{ SG::ColdPenetration, "Cold Penetration", "Cold hits penetrate 15% of the\nmonster's magic resistance", "Needs a cold skill", GC::Magic, 3, 100, 0, ST_Frost, 0, 0, NoFamily },
+	// POE2's herald-only support (Curtis 2026-10-19).
+	{ SG::DeadlyHerald, "Deadly Herald", "The herald's explosions deal 30% more\ndamage. Reserves 20 more Spirit", "Needs a herald", GC::Dexterity, 6, 100, 0, ST_Herald, 0, 0, NoFamily },
 };
 // clang-format on
 
@@ -795,6 +797,13 @@ uint32_t SkillTags(SkillSlot skill)
 			return ST_Minion;
 		case PersistentSkill::FireGolem:
 			return ST_Minion | ST_Fire;
+		// A herald's explosion is an area hit of its element.
+		case PersistentSkill::HeraldOfAsh:
+			return ST_Herald | ST_Area | ST_Fire | Hit;
+		case PersistentSkill::HeraldOfThunder:
+			return ST_Herald | ST_Area | ST_Lightning | Hit;
+		case PersistentSkill::HeraldOfFrost:
+			return ST_Herald | ST_Area | ST_Frost | Hit;
 		default:
 			return 0;
 		}
@@ -1032,8 +1041,16 @@ bool IsLineageSupport(SupportGem gem)
 bool TableSupportFits(const SupportData &data, SkillSlot skill)
 {
 	const uint32_t tags = SkillTags(skill);
-	if (skill.kind == SkillKind::Persistent && (data.needAll & ST_Minion) == 0)
-		return false;
+	if (skill.kind == SkillKind::Persistent) {
+		if ((tags & ST_Herald) != 0) {
+			// Like POE2, supports for skills you use yourself don't fit a herald: what it pays with, moving first and
+			// the curse. Gharbad's Greed would drop loot from every monster of a chain of explosions.
+			if (IsAnyOf(data.gem, SG::BloodPrice, SG::BartucsBloodletting, SG::Momentum, SG::CurseOnHit, SG::GharbadsGreed))
+				return false;
+		} else if ((data.needAll & ST_Minion) == 0) {
+			return false;
+		}
+	}
 	if (data.needAny != 0 && (tags & data.needAny) == 0)
 		return false;
 	if ((tags & data.needAll) != data.needAll || (tags & data.exclude) != 0)
@@ -1217,6 +1234,9 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 		case SG::ElementalFocus:
 			if (elemental)
 				more(25);
+			break;
+		case SG::DeadlyHerald:
+			more(Value(player, skill, gem, 0));
 			break;
 		case SG::Bloodlust:
 			if (type == DamageType::Physical && monster.poe2.bleedTicks > 0)
@@ -1604,6 +1624,11 @@ void ClearSupportEffects()
 	Bursts.clear();
 	Pending.clear();
 	Stands.clear();
+}
+
+int SupportAddedSpirit(const Player &player, SkillSlot skill)
+{
+	return Value(player, skill, SG::DeadlyHerald, 1);
 }
 
 int SupportAreaRadius(const Player &player, SkillSlot skill, int radius)

@@ -55,12 +55,15 @@ bool CanHeraldHit(const Monster &monster)
 	return !monster.hasNoLife() && !monster.isPlayerMinion() && monster.isPossibleToHit() && monster.mode != MonsterMode::Death;
 }
 
-/** @brief Deals herald damage to a monster on behalf of the local player, killing it if it drops. */
-void HeraldHit(Monster &monster, DamageType damageType, Fixed26_6 damage)
+/**
+ * @brief Deals herald damage to a monster on behalf of the local player, killing it if it drops.
+ * It's a hit of the herald, so the herald's supports change it (POE2).
+ */
+void HeraldHit(Monster &monster, PersistentSkill herald, DamageType damageType, Fixed26_6 damage)
 {
 	Player &player = *MyPlayer;
-	TelemetryNoteDamageSource(damageType == DamageType::Fire ? "Herald of Ash" : damageType == DamageType::Lightning ? "Herald of Thunder"
-	                                                                                                                 : "Herald of Frost");
+	TelemetryNoteDamageSource(PersistentSkillName(herald));
+	const SupportHitScope supported(player, SkillSlot::ForPersistent(herald));
 	// The monster's resistance and curses count, like for any other hit.
 	damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * MonsterDamageTakenPercent(monster, damageType) / 100));
 	ApplyMonsterDamage(damageType, monster, damage);
@@ -74,10 +77,11 @@ void ExplodeAsh(const HeraldTrigger &trigger)
 {
 	AddVisualEffect(trigger.position, MissileGraphicID::BigExplosion);
 	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfAshPercent * MapAuraPercent() / 10000));
+	const int radius = SupportAreaRadius(*MyPlayer, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh), HeraldOfAshRadius);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= HeraldOfAshRadius)
-			HeraldHit(monster, DamageType::Fire, damage);
+		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= radius)
+			HeraldHit(monster, PersistentSkill::HeraldOfAsh, DamageType::Fire, damage);
 	}
 }
 
@@ -85,19 +89,21 @@ void ShatterFrost(const HeraldTrigger &trigger)
 {
 	AddVisualEffect(trigger.position, MissileGraphicID::BlueFlareExplosion);
 	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfFrostPercent * MapAuraPercent() / 10000));
+	const int radius = SupportAreaRadius(*MyPlayer, SkillSlot::ForPersistent(PersistentSkill::HeraldOfFrost), HeraldOfFrostRadius);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= HeraldOfFrostRadius)
-			HeraldHit(monster, DamageType::Magic, damage);
+		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= radius)
+			HeraldHit(monster, PersistentSkill::HeraldOfFrost, DamageType::Magic, damage);
 	}
 }
 
 void ReleaseThunder(const HeraldTrigger &trigger)
 {
 	std::vector<Monster *> targets;
+	const int radius = SupportAreaRadius(*MyPlayer, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder), HeraldOfThunderRadius);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= HeraldOfThunderRadius)
+		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= radius)
 			targets.push_back(&monster);
 	}
 	std::sort(targets.begin(), targets.end(), [&trigger](const Monster *a, const Monster *b) {
@@ -110,7 +116,7 @@ void ReleaseThunder(const HeraldTrigger &trigger)
 	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfThunderPercent * MapAuraPercent() / 10000));
 	for (Monster *monster : targets) {
 		AddVisualEffect(monster->position.tile, MissileGraphicID::LightningArrow);
-		HeraldHit(*monster, DamageType::Lightning, damage);
+		HeraldHit(*monster, PersistentSkill::HeraldOfThunder, DamageType::Lightning, damage);
 	}
 }
 
@@ -231,6 +237,13 @@ int SpiritReservation(PersistentSkill skill)
 	default:
 		return 0;
 	}
+}
+
+int GemSpiritCost(const Player &player, PersistentSkill skill)
+{
+	const int spirit = SpiritReservation(skill) + SupportAddedSpirit(player, SkillSlot::ForPersistent(skill));
+	// POE2 Mashup: some uniques raise every reservation.
+	return spirit * (100 + player.poe2.rule(UniqueRule::MoreSpiritReservation)) / 100;
 }
 
 bool ItemGrantsSpirit(const Item &item)
@@ -455,8 +468,7 @@ int ReserveSpirit(const Player &player, F &&onGem)
 			onGem(GemReservation { skill, free + paid, paid * perMinion, spiritLeft });
 			continue;
 		}
-		// POE2 Mashup: some uniques raise every reservation.
-		const int cost = SpiritReservation(skill) * (100 + player.poe2.rule(UniqueRule::MoreSpiritReservation)) / 100;
+		const int cost = GemSpiritCost(player, skill);
 		if (cost > spiritLeft) {
 			onGem(GemReservation { skill, 0, 0, spiritLeft });
 			continue;

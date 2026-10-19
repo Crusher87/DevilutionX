@@ -444,7 +444,7 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
 		Value(lines, "Revives after", std::format("{:d} seconds", SkeletonReviveTicks / 20));
 	} else if (skill.kind == SkillKind::Persistent)
-		Value(lines, "Reserves", std::format("{:d} Spirit", SpiritReservation(skill.persistent())));
+		Value(lines, "Reserves", std::format("{:d} Spirit", GemSpiritCost(player, skill.persistent())));
 	else if (const int mana = SkillManaCost(player, skill); mana > 0)
 		Value(lines, "Cost", std::format("{:d} Mana", mana));
 	else
