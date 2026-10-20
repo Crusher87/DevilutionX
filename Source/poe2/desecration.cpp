@@ -8,6 +8,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -71,16 +72,6 @@ constexpr std::array<ProfaneMod, 8> ProfaneMods { {
 	{ "attack_speed", 50, 75 },
 	{ "cast_speed", 50, 75 },
 } };
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
-}
 
 std::optional<size_t> UnrevealedIndex(const Poe2Craft &craft)
 {

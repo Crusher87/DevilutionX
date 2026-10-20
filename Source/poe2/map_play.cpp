@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
@@ -37,16 +38,6 @@ struct MapPlayState {
 };
 
 MapPlayState State;
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
-}
 
 int Danger(MapDanger danger)
 {

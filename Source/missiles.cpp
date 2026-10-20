@@ -365,6 +365,11 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		dam = RandomIntBetween(mindam, maxdam);
 	}
 
+	// POE2 Mashup: deep damage logging follows the hit step by step.
+	if (&player == MyPlayer) {
+		TelemetryHitStart(false, isAttack ? "arrow" : (isArrow ? "elemental arrow" : "spell"));
+		TelemetryHitStep(false, "rolled", shift ? dam : static_cast<int64_t>(dam) << 6);
+	}
 	// POE2 Mashup: arrows can crit like other attacks.
 	const bool crit = isAttack && gbIsPoe2 && RollAttackCrit(player);
 	if (isAttack) {
@@ -377,6 +382,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 			dam *= 3;
 		if (crit)
 			dam = dam * CritDamagePercent(player) / 100;
+		TelemetryHitStep(false, crit ? "after attack bonuses, critical strike" : "after attack bonuses", shift ? dam : static_cast<int64_t>(dam) << 6);
 	}
 	// POE2 Mashup: resistance is a percentage, and only a very resistant monster doesn't flinch.
 	const bool resist = gbIsPoe2 ? MonsterResistance(monster, damageType) >= FlinchProofResistance : monster.isResistant(t, damageType);
@@ -385,16 +391,22 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 	if (!gbIsPoe2 && resist)
 		dam >>= 2;
 	// An elemental arrow meets its element's resistance here: its hit is split into packets as if it were physical.
-	if (isAttack && gbIsPoe2)
-		dam = static_cast<int>(static_cast<int64_t>(dam) * (100 - MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType))) / 100);
+	if (isAttack && gbIsPoe2) {
+		const int resistance = MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType));
+		dam = static_cast<int>(static_cast<int64_t>(dam) * (100 - resistance) / 100);
+		TelemetryHitStep(false, "monster resistance after penetration", resistance, true);
+	}
 
 	if (isAttack && gbIsPoe2) {
 		// POE2 Mashup: an arrow hits like an attack, with the uniques' conversions and ailments.
 		if (&player == MyPlayer)
 			dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit, true).raw();
 	} else {
-		if (gbIsPoe2 && !isArrow)
-			dam = dam * UniqueSpellHitPercent(player, monster, damageType) / 100;
+		if (gbIsPoe2 && !isArrow) {
+			const int uniquePercent = UniqueSpellHitPercent(player, monster, damageType);
+			dam = dam * uniquePercent / 100;
+			TelemetryHitStep(false, "spell rules from uniques and the tree", uniquePercent, true);
+		}
 		if (gbIsPoe2)
 			dam = dam * MonsterDamageTakenPercent(monster, damageType) / 100;
 		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
@@ -1319,8 +1331,15 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		dam = std::max(dam, 64);
 	}
 	Fixed26_6 damage = Fixed26_6::fromRaw(dam);
-	if (damageType == DamageType::Physical && mtype != MissileID::BoneSpirit && !firstBlow)
+	// POE2 Mashup: deep damage logging follows the hit step by step.
+	if (&player == MyPlayer) {
+		TelemetryHitStart(true, monster != nullptr ? monster->name() : "a trap");
+		TelemetryHitStep(true, "rolled", damage.raw());
+	}
+	if (damageType == DamageType::Physical && mtype != MissileID::BoneSpirit && !firstBlow) {
 		damage = ApplyArmour(player, damage);
+		TelemetryHitStep(true, "after armour", damage.raw());
+	}
 
 	if ((resper <= 0 || gbIsHellfire) && blk < blkper) {
 		Direction dir = player._pdir;
@@ -1350,6 +1369,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 
 	if (resper > 0 || (gbIsPoe2 && resper < 0)) { // POE2 Mashup: negative resistance adds damage
 		damage -= damage * resper / 100;
+		TelemetryHitStep(true, "resistance", resper, true);
+		TelemetryHitStep(true, "after resistance", damage.raw());
 		if (&player == MyPlayer) {
 			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType)), 0, deathReason);
 		}

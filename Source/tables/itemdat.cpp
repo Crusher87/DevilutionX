@@ -259,9 +259,13 @@ std::expected<item_cursor_graphic, std::string> ParseItemCursorGraphic(std::stri
 	if (value == "") return ICURS_DEFAULT;
 
 	// also support providing the item cursor icon frame number directly
-	return ParseInt<uint8_t>(value)
-	    .transform([](auto numericalValue) { return static_cast<item_cursor_graphic>(numericalValue); })
-	    .transform_error([](auto) { return std::string("Unknown enum value"); });
+	const auto numericalValue = ParseInt<uint8_t>(value);
+	if (!numericalValue.has_value())
+		return std::unexpected("Unknown enum value");
+	// POE2 Mashup: only frames that have a picture (and a drop sound in ItemCAnimTbl).
+	if (*numericalValue > ICURS_RECONSTRUCTED_NOTE_SMALL && *numericalValue != ICURS_DEFAULT)
+		return std::unexpected("Item picture number out of range");
+	return static_cast<item_cursor_graphic>(*numericalValue);
 }
 
 std::expected<ItemType, std::string> ParseItemType(std::string_view value)

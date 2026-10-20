@@ -12,6 +12,7 @@
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stacking.hpp"
@@ -75,16 +76,6 @@ bool KeepsMods(const Item &candidate, const std::array<Poe2ItemMod, MaxRareAffix
 	return std::all_of(mods.begin(), mods.end(), [&candidate](const Poe2ItemMod &mod) {
 		return mod.family == 0 || std::any_of(candidate._iPoe2Mods.begin(), candidate._iPoe2Mods.end(), [&mod](const Poe2ItemMod &other) { return other.family == mod.family && other.tier == mod.tier; });
 	});
-}
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
 }
 
 /** @brief Rebuilds the item from its seed with new crafting bits. */

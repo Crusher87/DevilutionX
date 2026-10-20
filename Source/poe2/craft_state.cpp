@@ -7,6 +7,7 @@
 #include "engine/random.hpp"
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
 
 namespace devilution {
@@ -21,16 +22,6 @@ uint8_t Checksum(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 	for (size_t i = 0; i + 1 < bytes.size(); i++)
 		sum = (sum * 31U) + bytes[i];
 	return static_cast<uint8_t>((sum ^ (sum >> 8) ^ 0xA5U) & 0xFFU);
-}
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
 }
 
 } // namespace

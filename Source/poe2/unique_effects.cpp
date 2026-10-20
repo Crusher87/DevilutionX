@@ -294,6 +294,18 @@ int GeneralDamagePercent(const Player &player)
 	return percent * MapPlayerDamagePercent() / 100;
 }
 
+/** @brief Names a packet of a split hit, for the deep damage breakdown. */
+const char *DamageTypePacketName(DamageType type)
+{
+	switch (type) {
+	case DamageType::Fire: return "fire part";
+	case DamageType::Lightning: return "lightning part";
+	case DamageType::Magic: return "magic part";
+	case DamageType::Acid: return "acid part";
+	default: return "physical part";
+	}
+}
+
 /** @brief Deals one packet of a hit to the monster, after its resistance, shock and the rules. */
 Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, int32_t raw)
 {
@@ -304,6 +316,7 @@ Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, in
 		const int64_t increased = std::max(100 + player._pIBonusDam, 1);
 		raw = static_cast<int32_t>(static_cast<int64_t>(raw) * std::max<int64_t>(increased + element, 0) / increased);
 	}
+	TelemetryHitStep(false, DamageTypePacketName(type), raw, false, true);
 	raw = Percent(raw, MonsterDamageTakenPercent(monster, type));
 	const Fixed26_6 damage = ApplyShock(monster, Fixed26_6::fromRaw(raw));
 	ApplyMonsterDamage(type, monster, damage);
@@ -572,7 +585,9 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	const bool staffHit = !ranged && weapon == ItemType::Staff;
 	const bool wasShocked = monster.poe2.shockTicks > 0;
 
-	int64_t raw = Percent(damage.raw(), GeneralDamagePercent(player));
+	const int generalPercent = GeneralDamagePercent(player);
+	int64_t raw = Percent(damage.raw(), generalPercent);
+	TelemetryHitStep(false, "more damage from uniques, spirit and maps", generalPercent, true);
 	if (!crit)
 		raw = raw * (100 - Rule(player, UniqueRule::NonCritLess)) / 100;
 	raw = raw * (100 + Rule(player, UniqueRule::GuardStackDamage) * state.guardStacks) / 100;
@@ -595,6 +610,7 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	// War Banner: more attack damage in its area. Every attack hit builds the banners' Glory.
 	raw = raw * (100 + BannerAttackDamagePercent(player)) / 100;
 	OnSpiritAttackHit(player, monster);
+	TelemetryHitStep(false, "after hit conditions and banners", raw);
 	if (const int more = Rule(player, UniqueRule::BlockRiposte); more > 0 && !ranged && state.blockRiposteTicks > 0) {
 		raw = raw * (100 + more) / 100;
 		state.blockRiposteTicks = 0;
@@ -1020,6 +1036,7 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		if (monster.poe2.armourBreakTicks > 0)
 			percent += ArmourBreakDamagePercent;
 	}
+	const bool deep = TelemetryDeepDamage();
 	// Death Mark and Decrepify.
 	percent += TableCurseDamageTakenPercent(monster, type);
 	if (type == DamageType::Lightning && IsMonsterElectrocuted(monster) && MyPlayer != nullptr)
@@ -1031,12 +1048,23 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		else
 			percent -= Rule(*MyPlayer, UniqueRule::LessDamageVsNormal);
 	}
+	if (deep)
+		TelemetryHitStep(false, "curses, armour break and rules against this monster", percent, true, true);
 	// The supports of the hit in progress, and wither.
-	percent = percent * SupportHitDamagePercent(monster, type) / 100;
+	const int supportPercent = SupportHitDamagePercent(monster, type);
+	percent = percent * supportPercent / 100;
 	// Elemental Conflux and Attrition.
-	percent = percent * SpiritBuffDamagePercent(monster, type) / 100;
+	const int spiritPercent = SpiritBuffDamagePercent(monster, type);
+	percent = percent * spiritPercent / 100;
 	// The monster's resistance, which curses and exposure lower and the hit's penetration gets past.
-	percent = percent * (100 - MonsterHitResistance(monster, type, HitPenetration(type))) / 100;
+	const int resistance = MonsterHitResistance(monster, type, HitPenetration(type));
+	percent = percent * (100 - resistance) / 100;
+	if (deep) {
+		TelemetryHitStep(false, "supports and wither", supportPercent, true, true);
+		TelemetryHitStep(false, "spirit buffs", spiritPercent, true, true);
+		TelemetryHitStep(false, "monster resistance after penetration", resistance, true, true);
+		TelemetryHitStep(false, "damage taken in all", std::max(percent, 0), true, true);
+	}
 	return std::max(percent, 0);
 }
 

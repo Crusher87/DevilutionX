@@ -22,6 +22,7 @@
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/spell_base.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -71,7 +72,7 @@ bool IsCrossbow(const Item &item)
 /** @brief Ice Bolt's damage before the gem curve: like Firebolt's, from Magic and the gem level. */
 int IceBoltDamage(const Player &player, int gemLevel)
 {
-	return GenerateRnd(10) + (player._pMagic / 8) + gemLevel + 2;
+	return RollSpellBase(player, gemLevel);
 }
 
 /** @brief Fires a skill's ice shard, which deals cold (Magic) damage and so chills and freezes. */

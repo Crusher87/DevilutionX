@@ -18,6 +18,7 @@
 #include "poe2/endgame.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -31,16 +32,6 @@ namespace {
 MapEffects CurrentEffects;
 /** Where the local player came into the map, for revives (not saved; the level's entrance after a load). */
 std::optional<Point> MapEntrance;
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
-}
 
 int SideCount(const Poe2Craft &craft, bool prefix)
 {
