@@ -1,6 +1,7 @@
 #include "poe2/spirit.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -87,7 +88,9 @@ void HeraldHit(Monster &monster, PersistentSkill herald, DamageType damageType, 
 void ExplodeAsh(const HeraldTrigger &trigger)
 {
 	AddVisualEffect(trigger.position, MissileGraphicID::BigExplosion);
-	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfAshPercent * MapAuraPercent() / 10000));
+	// Huge map bosses could overflow int32: clamp before the cast.
+	const int64_t raw = static_cast<int64_t>(trigger.lifeRaw) * HeraldOfAshPercent * MapAuraPercent() / 10000;
+	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 0, std::numeric_limits<int32_t>::max())));
 	const int radius = SupportAreaRadius(*MyPlayer, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh), HeraldOfAshRadius);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
@@ -1025,6 +1028,12 @@ void KeepGolemAlive(Player &player)
 	player.poe2.golemCooldown = GolemReviveTicks;
 }
 
+/** @brief Whether the level loaded the monster type: when its type table is full, minion types are left out. */
+bool MonsterTypeOnLevel(_monster_id type)
+{
+	return std::any_of(LevelMonsterTypes, LevelMonsterTypes + LevelMonsterTypeCount, [type](const CMonster &levelType) { return levelType.type == type; });
+}
+
 /** @brief Kills the skeleton of the type farthest from its owner, when the count is lowered. */
 void KillFarthestSkeletonMinion(const Player &player, _monster_id type)
 {
@@ -1118,7 +1127,8 @@ void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type,
 	if (revives.raiseTicks > 0)
 		revives.raiseTicks--;
 	const bool raiseNew = alive + revives.pending < target && revives.raiseTicks == 0;
-	if (ready || raiseNew) {
+	// Without the type on the level, the spawn would fail every tick.
+	if ((ready || raiseNew) && MonsterTypeOnLevel(type)) {
 		const std::optional<Point> position = FindMinionSpawnPosition(player);
 		if (position && SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(skill), 1)), type)) {
 			AddVisualEffect(*position, MissileGraphicID::Resurrect);
