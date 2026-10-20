@@ -70,6 +70,7 @@ set(tests
   poe2_telemetry_test
   poe2_ui_scale_test
   poe2_vfx_test
+  poe2_weather_test
   poe2_uniques_test
   poe2_waystones_test
   poe2_weapon_skills_test

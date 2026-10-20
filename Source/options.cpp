@@ -797,6 +797,7 @@ GraphicsOptions::GraphicsOptions()
     , uiScale("UI Scale", OptionEntryFlags::RecreateUI, N_("UI Scale"), N_("Draws the panels, text and menus bigger, in percent, while the world keeps the full resolution and view area. Needs Upscale."), 100, { 100, 125, 150, 175, 200 })
     , modernEffects("Modern Effects", OptionEntryFlags::None, N_("Modern Effects"), N_("Skill effects drawn in full colour with glow, bloom, particles and ground sigils. Needs Upscale."), true)
     , effectIntensity("Effect Intensity", OptionEntryFlags::None, N_("Effect Intensity"), N_("How many particles and how much glow the modern effects use, in percent."), 100, { 25, 50, 75, 100, 125, 150 })
+    , weather("Weather", OptionEntryFlags::None, N_("Weather"), N_("Rain and snow that come and go outdoors, with their sound. Needs Modern Effects."), true)
     , hdGraphics("HD Graphics", OptionEntryFlags::None, N_("HD Graphics"), N_("Draws the world with the upscaled HD art pack while zoomed in (Z). Needs the HD pack and Upscale."), true)
     , brightness("Brightness Correction", OptionEntryFlags::Invisible, "Brightness Correction", "Brightness correction level.", 0)
     , zoom("Zoom", OptionEntryFlags::None, N_("Zoom"), N_("Zoom on when enabled."), false)
@@ -820,6 +821,7 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&uiScale,
 		&modernEffects,
 		&effectIntensity,
+		&weather,
 		&hdGraphics,
 #endif
 #ifndef __vita__
