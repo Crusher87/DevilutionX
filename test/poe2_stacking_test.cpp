@@ -127,6 +127,7 @@ TEST_F(Poe2StackingTest, SplitAndUse)
 	ASSERT_TRUE(half.has_value());
 	EXPECT_EQ(StackCount(*half), 3);
 	EXPECT_EQ(StackCount(stack), 4);
+	EXPECT_NE(half->_iSeed, stack._iSeed);
 
 	EXPECT_TRUE(TakeOneFromStack(stack));
 	EXPECT_EQ(StackCount(stack), 3);

@@ -740,11 +740,18 @@ void GiveItemToPlayer(Player &player, Item &item)
 		CalcPlrInv(player, true);
 		return;
 	}
-	if (ActiveItemCount >= MAXITEMS)
+	// POE2 Mashup: no room on the floor either: free the slot instead of leaving an invisible item.
+	if (ActiveItemCount >= MAXITEMS) {
+		EventPlrMsg(_("No room for the item."), UiFlags::ColorRed);
 		return;
+	}
 	const int ii = AllocateItem();
 	Items[ii] = item;
-	GetSuperItemSpace(player.position.tile, ii);
+	if (!GetSuperItemSpace(player.position.tile, ii)) {
+		DeleteItem(ActiveItemCount - 1);
+		EventPlrMsg(_("No room for the item."), UiFlags::ColorRed);
+		return;
+	}
 	// Its look on the ground, or drawing and hovering it would crash.
 	RespawnItem(Items[ii], true);
 	NetSendCmdPItem(false, CMD_SPAWNITEM, Items[ii].position, Items[ii]);
