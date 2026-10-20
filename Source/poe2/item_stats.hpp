@@ -34,6 +34,8 @@ enum class Poe2ItemStat : uint8_t {
 	FlatArmour,
 	FlatEvasion,
 	FlatEnergyShield,
+	/** Increased rarity of items found in percent. */
+	ItemRarity,
 	Count,
 };
 

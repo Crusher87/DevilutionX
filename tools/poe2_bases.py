@@ -36,16 +36,32 @@ RENAMES = {
 	'lapis_ring': 'Lazuli Ring',
 	'opal_ring': 'Pearl Ring',
 	'gold_ring': 'Golden Hoop',
+	# POE2's amulets, each bundle base going to the POE2 amulet with the nearest implicit (Curtis 2026-10-20).
+	'azure_amulet': 'Lapis Amulet',
+	'prismatic_amulet': 'Pearlescent Amulet',
+	'vital_amulet': 'Bloodstone Amulet',
+	'spirit_amulet': 'Solar Amulet',
+	'keen_amulet': 'Stellar Amulet',
+	'sage_amulet': 'Azure Amulet',
 }
 
-# Rings follow POE2's lineup and drop levels rather than the bundle's: Iron and Lazuli first, then Ruby, Sapphire and
-# Golden Hoop, Topaz, Pearl. POE2 has no Coral Ring, so it only carries its unique. Other jewellery keeps the bundle's
-# drop level; jewellery levels are POE2 item levels, not scaled to Diablo's (the game checks them against those).
-POE2_RING_LEVELS = {
+# Rings and amulets follow POE2's lineup and drop levels rather than the bundle's: Iron and Lazuli first, then Ruby,
+# Sapphire and Golden Hoop, Topaz, Pearl. POE2 has no Coral Ring, so it only carries its unique. Jewellery levels are
+# POE2 item levels, not scaled to Diablo's (the game checks them against those).
+POE2_JEWELLERY_LEVELS = {
 	'iron_ring': 1, 'lapis_ring': 1, 'ruby_ring': 8, 'sapphire_ring': 12, 'gold_ring': 12, 'topaz_ring': 16, 'opal_ring': 32,
 	'coral_ring': 20,
+	'sage_amulet': 1, 'amber_amulet': 8, 'jade_amulet': 8, 'azure_amulet': 8, 'vital_amulet': 18, 'keen_amulet': 24,
+	'spirit_amulet': 30, 'prismatic_amulet': 30,
 }
 RETIRED_BASES = {'coral_ring'}
+
+# POE2 amulets the bundle lacks, added after its bases: (id, name, level).
+POE2_EXTRA_AMULETS = [
+	('crimson_amulet', 'Crimson Amulet', 1),
+	('lunar_amulet', 'Lunar Amulet', 14),
+	('gold_amulet', 'Gold Amulet', 35),
+]
 
 # bundle class -> (itemdat class, equip type, item type, short name, quality, unique-type source)
 CLASSES = {
@@ -102,6 +118,7 @@ RING_CURSORS = {
 	'Amber Amulet': 'AMULET', 'Jade Amulet': 'OPTIC_AMULET', 'Azure Amulet': 'AMULET_OF_WARDING',
 	'Prismatic Amulet': 'AURIC_AMULET', 'Vital Amulet': 'ACOLYTES_AMULET', 'Spirit Amulet': 'OPTIC_AMULET',
 	'Keen Amulet': 'AMULET_OF_WARDING', 'Sage Amulet': 'ACOLYTES_AMULET',
+	'Crimson Amulet': 'AMULET', 'Lunar Amulet': 'OPTIC_AMULET', 'Gold Amulet': 'AURIC_AMULET',
 }
 
 # Implicits the game can do: bundle id -> (effect, min, max, text). Values are scaled to Diablo the way
@@ -126,8 +143,25 @@ IMPLICITS = {
 IMPLICIT_STAND_INS = {
 	'Pearl Ring': ('CastSpeed', 7, 10, '{0}% increased Cast Speed'),
 	'Golden Hoop': ('AllAttributes', 3, 5, '+{0} to all Attributes'),
-	'Keen Amulet': ('Dexterity', 6, 9, '+{0} to Dexterity'),
 }
+
+# Amulets take POE2's own implicits (Path of Building 2's amulet data), scaled like the matching modifiers: attributes
+# 40%, energy shield 10% in defence points (shown as 30%). Spirit is already on POE2's scale (Heralds reserve 30).
+POE2_AMULET_IMPLICITS = {
+	'Crimson Amulet': ('LifeRegeneration', 2, 4, 'Regenerate {0} Life per second'),
+	'Azure Amulet': ('ManaRegeneration', 20, 30, '{0}% increased Mana Regeneration Rate'),
+	'Amber Amulet': ('Strength', 4, 6, '+{0} to Strength'),
+	'Jade Amulet': ('Dexterity', 4, 6, '+{0} to Dexterity'),
+	'Lapis Amulet': ('Intelligence', 4, 6, '+{0} to Intelligence'),
+	'Lunar Amulet': ('FlatEnergyShield', 2, 3, '+{0} to maximum Energy Shield'),
+	'Bloodstone Amulet': ('Life', 30, 40, '+{0} to maximum Life'),
+	'Stellar Amulet': ('AllAttributes', 2, 3, '+{0} to all Attributes'),
+	'Solar Amulet': ('Spirit', 10, 15, '+{0} to Spirit'),
+	'Pearlescent Amulet': ('AllResistances', 7, 10, '+{0}% to all Elemental Resistances'),
+	'Gold Amulet': ('ItemRarity', 12, 20, '{0}% increased Rarity of Items found'),
+}
+# The bundle's identity for the amulets that took another amulet's place, and the added ones.
+POE2_AMULET_IDENTITIES = {'Stellar Amulet': 'attribute', 'Crimson Amulet': 'life', 'Lunar Amulet': 'defence', 'Gold Amulet': 'rarity'}
 
 
 def one_implicit(implicits):
@@ -274,7 +308,7 @@ def main():
 		stats = b['base_stats']
 		tier = b['progression_tier']
 		is_jewellery = cls in ('ring', 'amulet')
-		level = POE2_RING_LEVELS.get(b['id'], b['drop_level']) if is_jewellery else d1_level(b['drop_level'])
+		level = POE2_JEWELLERY_LEVELS.get(b['id'], b['drop_level']) if is_jewellery else d1_level(b['drop_level'])
 		req = b['requirements']
 
 		group = b.get('upgrade_group') or cls
@@ -312,7 +346,9 @@ def main():
 
 		if is_jewellery and not implicits and name in IMPLICIT_STAND_INS:
 			implicits = [IMPLICIT_STAND_INS[name]]
-		value = (1000 + b['drop_level'] * 50) if is_jewellery else (100 + b['drop_level'] * 100)
+		if name in POE2_AMULET_IMPLICITS:
+			implicits = [POE2_AMULET_IMPLICITS[name]]
+		value = (1000 + level * 50) if cls == 'amulet' else (1000 + b['drop_level'] * 50) if is_jewellery else (100 + b['drop_level'] * 100)
 		row = [
 			ID_PREFIX + b['id'], '0' if b['id'] in RETIRED_BASES else '1', item_class, equip, cursor, item_type, unique, name, short, str(level),
 			'0' if is_jewellery else str(30 + tier * 5), str(min_dam), str(max_dam), str(min_ac), str(max_ac),
@@ -327,9 +363,25 @@ def main():
 
 		defense_line = DEFENSE_LINES.get(b.get('design_identity', ''), '') if min_ac else ''
 		meta_rows.append([
-			name, cls, b.get('design_identity', ''), defense_line, quality if cls != 'focus' else 'defence',
+			name, cls, POE2_AMULET_IDENTITIES.get(name, b.get('design_identity', '')), defense_line, quality if cls != 'focus' else 'defence',
 			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits),
 		])
+
+	for base_id, name, level in POE2_EXTRA_AMULETS:
+		assert name not in taken and name not in generated, f'{name} clashes with another base'
+		generated.add(name)
+		unique = min(unique_types['Amulet'], key=lambda t: (abs(t[0] - level), t[0]))[1] if 'Amulet' in unique_types else 'NONE'
+		row = [
+			ID_PREFIX + base_id, '1', 'Misc', 'Amulet', RING_CURSORS[name], 'Amulet', unique, name, 'Amulet', str(level),
+			'0', '0', '0', '0', '0', '0', '0', '0', '', 'AMULET', 'Null', 'false', str(1000 + level * 50),
+		]
+		if row[0] in by_id:
+			rows[by_id[row[0]]] = row
+		else:
+			by_id[row[0]] = len(rows)
+			rows.append(row)
+		effect, lo, hi, text = POE2_AMULET_IMPLICITS[name]
+		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}'])
 
 	with open(ITEMDAT, 'w', encoding='utf-8', newline='') as f:
 		for row in rows:

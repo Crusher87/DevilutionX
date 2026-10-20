@@ -4699,17 +4699,22 @@ struct Poe2LootOrigin {
 	bool pregen = false;
 };
 
-/** @brief The open map's item rarity, quantity (from monster effectiveness) and waystone drops; none outside maps. */
+/** @brief The open map's item rarity, quantity (from monster effectiveness) and waystone drops, none outside maps, plus the hero's own item rarity. */
 LootBonus MapLootBonus()
 {
 	LootBonus bonus;
-	if (ActiveMapTier() == 0)
+	// Increased rarity from gear (the Gold Amulet) adds to the map's, as in POE2.
+	const int gearRarity = MyPlayer != nullptr ? MyPlayer->poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ItemRarity)] : 0;
+	if (ActiveMapTier() == 0) {
+		bonus.rarity = std::max(100 + gearRarity, 0);
 		return bonus;
+	}
 	const MapEffects &map = ActiveMapEffects();
 	bonus.rarity = map[MapAxis::ItemRarity];
 	// "Loot quality varies": each roll's rarity swings up or down.
 	if (const int variance = map[MapDanger::LootVariance]; variance > 0)
 		bonus.rarity = std::max(bonus.rarity + LootRandom((2 * variance) + 1) - variance, 0);
+	bonus.rarity = std::max(bonus.rarity + gearRarity, 0);
 	bonus.quantity = 100 + ((map[MapAxis::Effectiveness] - 100) * 55 / 100);
 	bonus.waystones = map[MapAxis::WaystoneFind];
 	bonus.equipment = AtlasEquipmentPercent(*MyPlayer);

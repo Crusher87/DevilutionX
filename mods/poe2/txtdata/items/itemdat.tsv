@@ -679,14 +679,14 @@ poe2:lapis_ring	1	Misc	Ring	RING_OF_THE_MYSTICS	Ring	RING	Lazuli Ring	Ring	1	0	0
 poe2:iron_ring	1	Misc	Ring	GIANTS_KNUCKLE	Ring	RING	Iron Ring	Ring	1	0	0	0	0	0	0	0	0		RING	Null	false	2800
 poe2:opal_ring	1	Misc	Ring	MERCURIAL_RING	Ring	RING	Pearl Ring	Ring	32	0	0	0	0	0	0	0	0		RING	Null	false	3500
 poe2:gold_ring	1	Misc	Ring	RING_OF_ENGAGEMENT	Ring	RING	Golden Hoop	Ring	12	0	0	0	0	0	0	0	0		RING	Null	false	4400
-poe2:amber_amulet	1	Misc	Amulet	AMULET	Amulet	AMULET	Amber Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
-poe2:jade_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Jade Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
-poe2:azure_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Azure Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
-poe2:prismatic_amulet	1	Misc	Amulet	AURIC_AMULET	Amulet	AMULET	Prismatic Amulet	Amulet	20	0	0	0	0	0	0	0	0		AMULET	Null	false	2000
-poe2:vital_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Vital Amulet	Amulet	28	0	0	0	0	0	0	0	0		AMULET	Null	false	2400
-poe2:spirit_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Spirit Amulet	Amulet	36	0	0	0	0	0	0	0	0		AMULET	Null	false	2800
-poe2:keen_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Keen Amulet	Amulet	50	0	0	0	0	0	0	0	0		AMULET	Null	false	3500
-poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	60	0	0	0	0	0	0	0	0		AMULET	Null	false	4000
+poe2:amber_amulet	1	Misc	Amulet	AMULET	Amulet	AMULET	Amber Amulet	Amulet	8	0	0	0	0	0	0	0	0		AMULET	Null	false	1400
+poe2:jade_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Jade Amulet	Amulet	8	0	0	0	0	0	0	0	0		AMULET	Null	false	1400
+poe2:azure_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Lapis Amulet	Amulet	8	0	0	0	0	0	0	0	0		AMULET	Null	false	1400
+poe2:prismatic_amulet	1	Misc	Amulet	AURIC_AMULET	Amulet	AMULET	Pearlescent Amulet	Amulet	30	0	0	0	0	0	0	0	0		AMULET	Null	false	2500
+poe2:vital_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Bloodstone Amulet	Amulet	18	0	0	0	0	0	0	0	0		AMULET	Null	false	1900
+poe2:spirit_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Solar Amulet	Amulet	30	0	0	0	0	0	0	0	0		AMULET	Null	false	2500
+poe2:keen_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Stellar Amulet	Amulet	24	0	0	0	0	0	0	0	0		AMULET	Null	false	2200
+poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Azure Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Chance	Orb	9	0	0	0	0	0	0	0	0		ORB_CHANCE	Null	true	1500
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Annulment	Orb	27	0	0	0	0	0	0	0	0		ORB_ANNUL	Null	true	4000
 	1	Misc	Unequippable	43	Misc	NONE	Blacksmith's Whetstone	Whetstone	1	0	0	0	0	0	0	0	0		ORB_WHETSTONE	Null	true	200
@@ -937,3 +937,6 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Ravenous Swarm Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Sacrifice Gem	Gem	21	0	0	0	0	0	0	60	0		SPIRITGEM_TABLE	Null	true	3600
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Lingering Illusion Gem	Gem	12	0	0	0	0	0	0	20	20		SPIRITGEM_TABLE	Null	true	2600
+poe2:crimson_amulet	1	Misc	Amulet	AMULET	Amulet	AMULET	Crimson Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
+poe2:lunar_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Lunar Amulet	Amulet	14	0	0	0	0	0	0	0	0		AMULET	Null	false	1700
+poe2:gold_amulet	1	Misc	Amulet	AURIC_AMULET	Amulet	AMULET	Gold Amulet	Amulet	35	0	0	0	0	0	0	0	0		AMULET	Null	false	2750

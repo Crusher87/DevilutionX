@@ -809,6 +809,9 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	case ModEffect::EnergyShieldPercent:
 		AddPoe2Stat(item, Poe2ItemStat::EnergyShieldPercent, v0);
 		break;
+	case ModEffect::ItemRarity:
+		AddPoe2Stat(item, Poe2ItemStat::ItemRarity, v0);
+		break;
 	}
 }
 

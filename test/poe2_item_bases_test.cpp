@@ -16,6 +16,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "spells.h"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 namespace {
@@ -157,7 +158,7 @@ TEST_F(Poe2ItemBasesTest, OneCellItemsOnTheFloorFitTheirNewPicture)
 
 TEST_F(Poe2ItemBasesTest, BundleBasesReplaceTheOldOnes)
 {
-	for (const std::string_view name : { "Shortsword", "Heavy Imperial Edge", "Ash Staff", "Light Crossbow", "Quick Bone Sceptre", "Wooden Focus", "Iron Cap", "Hide Buckler", "Ruby Ring", "Sage Amulet" }) {
+	for (const std::string_view name : { "Shortsword", "Heavy Imperial Edge", "Ash Staff", "Light Crossbow", "Quick Bone Sceptre", "Wooden Focus", "Iron Cap", "Hide Buckler", "Ruby Ring", "Azure Amulet" }) {
 		const _item_indexes base = FindBase(name);
 		EXPECT_GT(AllItemsList[base].dropRate, 0) << name;
 		EXPECT_TRUE(IsItemAvailable(base)) << name;
@@ -193,7 +194,8 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			EXPECT_TRUE(meta->defense.has_value()) << data.iName;
 		}
 	}
-	EXPECT_EQ(bases, 384);
+	// The bundle's 384, plus POE2's Crimson, Lunar and Gold Amulets.
+	EXPECT_EQ(bases, 387);
 }
 
 TEST_F(Poe2ItemBasesTest, RingsFollowPoe2)
@@ -208,6 +210,36 @@ TEST_F(Poe2ItemBasesTest, RingsFollowPoe2)
 	EXPECT_EQ(level("Topaz Ring"), 16);
 	EXPECT_EQ(level("Pearl Ring"), 32);
 	EXPECT_GE(Stat(MakeItem("Pearl Ring", 32), Poe2ItemStat::CastSpeed), 7);
+}
+
+TEST_F(Poe2ItemBasesTest, AmuletsFollowPoe2)
+{
+	const auto level = [](std::string_view name) { return AllItemsList[FindBase(name)].iMinMLvl; };
+	EXPECT_EQ(level("Crimson Amulet"), 1);
+	EXPECT_EQ(level("Azure Amulet"), 1);
+	EXPECT_EQ(level("Amber Amulet"), 8);
+	EXPECT_EQ(level("Jade Amulet"), 8);
+	EXPECT_EQ(level("Lapis Amulet"), 8);
+	EXPECT_EQ(level("Lunar Amulet"), 14);
+	EXPECT_EQ(level("Bloodstone Amulet"), 18);
+	EXPECT_EQ(level("Stellar Amulet"), 24);
+	EXPECT_EQ(level("Solar Amulet"), 30);
+	EXPECT_EQ(level("Pearlescent Amulet"), 30);
+	EXPECT_EQ(level("Gold Amulet"), 35);
+
+	const Item crimson = MakeItem("Crimson Amulet", 1);
+	EXPECT_GE(crimson._iPLLifeRegen, 2);
+	const Item solar = MakeItem("Solar Amulet", 1);
+	EXPECT_GE(Stat(solar, Poe2ItemStat::Spirit), 10);
+	EXPECT_LE(Stat(solar, Poe2ItemStat::Spirit), 15);
+	EXPECT_GE(Stat(MakeItem("Gold Amulet", 1), Poe2ItemStat::ItemRarity), 12);
+
+	// The Lunar Amulet's energy shield rolls in defence points and shows as energy shield.
+	const Item lunar = MakeItem("Lunar Amulet", 1);
+	const int points = Stat(lunar, Poe2ItemStat::FlatEnergyShield);
+	EXPECT_GE(points, 2);
+	ASSERT_EQ(ItemImplicitText(lunar).size(), 1U);
+	EXPECT_EQ(ItemImplicitText(lunar)[0], StrCat("+", points * EnergyShieldPerDefense, " to maximum Energy Shield"));
 }
 
 TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)

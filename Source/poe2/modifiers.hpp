@@ -70,6 +70,8 @@ enum class ModEffect : uint8_t {
 	ArmourPercent,
 	EvasionPercent,
 	EnergyShieldPercent,
+	/** Increased rarity of items found, from the Gold Amulet. */
+	ItemRarity,
 };
 
 /** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */
