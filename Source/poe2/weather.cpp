@@ -6,6 +6,13 @@
 #include <memory>
 #include <vector>
 
+#ifdef USE_SDL3
+#include <SDL3/SDL_error.h>
+#else
+#include <Aulib/Stream.h>
+#include <SDL.h>
+#endif
+
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
 #include "game_mode.hpp"
