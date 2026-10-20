@@ -24,6 +24,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/spell_base.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -194,7 +195,7 @@ void ForEachMonsterNear(Point center, int radius, Fn fn)
 /** @brief The base of a table spell's damage, like Firebolt's: from Magic and the gem level. */
 int SpellBase(const Player &player, int gemLevel)
 {
-	return GenerateRnd(10) + (player._pMagic / 8) + gemLevel + 2;
+	return RollSpellBase(player, gemLevel);
 }
 
 /** @brief A table skill's damage as a fixed amount, for zones and spell hits: from Magic, or from an average weapon hit. */

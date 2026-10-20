@@ -14,6 +14,7 @@
 #include "poe2/belt_uniques.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -88,16 +89,6 @@ void HealNearbyMinions(const Player &player, int32_t raw)
 			continue;
 		minion.hitPoints = std::min(minion.hitPoints + Fixed26_6::fromRaw(raw), minion.maxHitPoints);
 	}
-}
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
 }
 
 constexpr const char *TierNames[NumFlaskTiers] = { N_("Minor"), N_("Light"), "", N_("Greater"), N_("Superior"), N_("Full") };
