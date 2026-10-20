@@ -25,17 +25,21 @@
 #include "diablo.h"
 #include "game_mode.hpp"
 #include "items.h"
+#include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "missiles.h"
 #include "monster.h"
 #include "options.h"
+#include "pfile.h"
 #include "player.h"
+#include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry_events.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/file_util.h"
@@ -119,6 +123,12 @@ struct TelemetryCounts {
 	int quietTicks = 0;
 	int surroundedTicks = 0;
 	int swarms = 0;
+	/** Monsters killed by the first hit they took. */
+	int oneHitKills = 0;
+	/** Fights, and fights that took the hero under half of life and energy shield. */
+	int fights = 0;
+	int hardFights = 0;
+	int goldSpent = 0;
 };
 
 /** @brief Damage a skill dealt this game. */
@@ -147,6 +157,7 @@ struct Engagement {
 	uint32_t firstHitMs = 0;
 	std::string lastSource;
 	int overkill = 0;
+	int hits = 0;
 };
 
 TelemetryCounts Totals;
@@ -183,8 +194,15 @@ struct LevelVisit {
 	int64_t damageTakenRaw = 0;
 	int64_t shieldTakenRaw = 0;
 	int monstersAtEntry = 0;
+	/** The middle level of the monsters there at entry: campaign floors have no area level, so this stands in for it. */
+	int monsterLevel = 0;
+	int heroLevel = 0;
+	int fights = 0;
+	int hardFights = 0;
 };
 LevelVisit CurrentLevel;
+/** When the last level was entered, for the time between areas. */
+uint32_t LastAreaMs = 0;
 
 /** @brief Ticks since an enemy was last near, and whether a swarm is in progress, for the lull and swarm events. */
 int QuietStreakTicks = 0;
@@ -196,8 +214,19 @@ uint32_t LastBuildCheckMs = 0;
 uint32_t LastExperience = 0;
 int LastGold = 0;
 
-std::array<std::string, TelemetryRecentEvents> RecentEvents;
+/** @brief An event kept in memory: written ones were in the readable log already, the rest only go out on a crash. */
+struct RecentEvent {
+	std::string text;
+	bool written = false;
+};
+std::array<RecentEvent, TelemetryRecentEvents> RecentEvents;
 size_t RecentNext = 0;
+/** The folder of the play log, and this session's file stamp. */
+std::string LogFolder;
+std::string SessionStamp;
+uint32_t LastFlushMs = 0;
+/** Game ticks so far, to tie a damage breakdown to the tick its hit was worked out in. */
+uint32_t TickCount = 0;
 
 uint32_t Now()
 {
@@ -208,6 +237,21 @@ std::string Clock(uint32_t ms)
 {
 	const uint32_t seconds = ms / 1000;
 	return std::format("{:02d}:{:02d}:{:02d}.{:03d}", seconds / 3600, (seconds / 60) % 60, seconds % 60, ms % 1000);
+}
+
+/** @brief The local date and time, for the files kept across sessions. */
+std::string LocalStamp()
+{
+	const std::time_t now = std::time(nullptr);
+	std::tm local {};
+#ifdef _WIN32
+	localtime_s(&local, &now);
+#else
+	localtime_r(&now, &local);
+#endif
+	char stamp[32];
+	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &local);
+	return stamp;
 }
 
 std::string LevelLabel()
@@ -267,14 +311,37 @@ int Whole(int64_t raw)
 	return static_cast<int>(raw >> 6);
 }
 
-void WriteLine(std::string_view line)
+void KeepRecent(std::string text, bool written)
+{
+	RecentEvents[RecentNext] = { std::move(text), written };
+	RecentNext = (RecentNext + 1) % RecentEvents.size();
+}
+
+/** @brief Writes both files to disk now. */
+void FlushAll()
+{
+	if (LogFile == nullptr)
+		return;
+	const uint32_t start = Now();
+	std::fflush(LogFile);
+	AddTelemetryWriteMs(Now() - start);
+	FlushTelemetryEvents();
+	LastFlushMs = Now();
+}
+
+/**
+ * @brief Writes a line to the readable log. Lines go to disk about once a second rather than one by one;
+ * a crash writes what's waiting first, and so do the lines that matter most (force).
+ */
+void WriteLine(std::string_view line, bool force = false)
 {
 	if (LogFile == nullptr)
 		return;
 	std::fwrite(line.data(), 1, line.size(), LogFile);
 	std::fputc('\n', LogFile);
-	// Flush every line so the log survives a crash.
-	std::fflush(LogFile);
+	KeepRecent(std::string(line), true);
+	if (force || Now() - LastFlushMs >= TelemetryFlushMs)
+		FlushAll();
 }
 
 /** @brief Keeps a detailed event in memory only; the latest are written out if the game crashes. */
@@ -282,40 +349,90 @@ void Remember(std::string_view category, std::string_view text)
 {
 	if (LogFile == nullptr)
 		return;
-	RecentEvents[RecentNext] = StrCat(Clock(Now() - SessionStartMs), " ", LevelLabel(), " [", category, "] ", text);
-	RecentNext = (RecentNext + 1) % RecentEvents.size();
+	KeepRecent(StrCat(Clock(Now() - SessionStartMs), " ", LevelLabel(), " [", category, "] ", text), false);
+}
+
+/** @brief The events kept in memory, oldest first: only those not in the log yet, or all of them for a crash report. */
+void WriteRecentEvents(FILE *file, bool all)
+{
+	if (file == nullptr)
+		return;
+	std::fputs(all ? "Latest events, oldest first:\n" : "Latest detailed events, oldest first:\n", file);
+	for (size_t i = 0; i < RecentEvents.size(); i++) {
+		const RecentEvent &event = RecentEvents[(RecentNext + i) % RecentEvents.size()];
+		if (event.text.empty() || (event.written && !all))
+			continue;
+		std::fputs("  ", file);
+		std::fputs(event.text.c_str(), file);
+		std::fputc('\n', file);
+	}
+	std::fflush(file);
 }
 
 void WriteRecentEvents()
 {
-	if (LogFile == nullptr)
-		return;
-	std::fputs("Latest detailed events, oldest first:\n", LogFile);
-	for (size_t i = 0; i < RecentEvents.size(); i++) {
-		const std::string &event = RecentEvents[(RecentNext + i) % RecentEvents.size()];
-		if (event.empty())
-			continue;
-		std::fputs("  ", LogFile);
-		std::fputs(event.c_str(), LogFile);
-		std::fputc('\n', LogFile);
-	}
-	std::fflush(LogFile);
+	FlushAll();
+	WriteRecentEvents(LogFile, false);
 }
 
+/** @brief Writes a line to the readable log only; the caller writes the event that goes with it. */
+void WriteText(std::string_view category, std::string_view text, bool force = false)
+{
+	if (LogFile == nullptr)
+		return;
+	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", LevelLabel(), " [", category, "] ", text), force);
+}
+
+/** @brief Stamps the next events with the time and area, and makes one. */
+TelemetryEvent Event(LogChannel channel, LogLevel level, std::string_view kind)
+{
+	if (LogLevelOn(channel, level))
+		SetTelemetryEventClock(Now() - SessionStartMs, LevelLabel());
+	return TelemetryEvent(channel, level, kind);
+}
+
+/** @brief Files in a folder whose names start with a prefix, oldest first (names hold the start time). */
+std::vector<std::string> FilesStartingWith(const std::string &folder, std::string_view prefix)
+{
+	std::vector<std::string> files;
+	for (const std::string &file : ListFiles(folder.c_str())) {
+		if (file.rfind(prefix, 0) == 0)
+			files.push_back(file);
+	}
+	std::sort(files.begin(), files.end());
+	return files;
+}
+
+/** @brief The session a file belongs to: its name up to the extension, so a session's .log and .events go together. */
+std::string_view SessionOf(std::string_view file)
+{
+	return file.substr(0, file.find('.'));
+}
+
+/**
+ * @brief Keeps the latest sessions in the folder and moves older ones to old/, which keeps the most recent
+ * MaxTelemetryOldFiles files; history.tsv keeps a line for every session forever.
+ */
 void PruneOldSessions(const std::string &folder)
 {
-	std::vector<std::string> sessions;
-	for (const std::string &file : ListFiles(folder.c_str())) {
-		if (file.rfind("session_", 0) == 0)
-			sessions.push_back(file);
+	const std::vector<std::string> files = FilesStartingWith(folder, "session_");
+	std::vector<std::string_view> sessions;
+	for (const std::string &file : files) {
+		if (sessions.empty() || sessions.back() != SessionOf(file))
+			sessions.push_back(SessionOf(file));
 	}
 	if (sessions.size() < MaxTelemetrySessions)
 		return;
-	// Names hold the start time, so sorting puts the oldest first.
-	std::sort(sessions.begin(), sessions.end());
+	const std::string oldFolder = StrCat(folder, "old", DIRECTORY_SEPARATOR_STR);
+	RecursivelyCreateDir(oldFolder.c_str());
 	const size_t extra = sessions.size() - (MaxTelemetrySessions - 1);
-	for (size_t i = 0; i < extra; i++)
-		RemoveFile(StrCat(folder, sessions[i]).c_str());
+	for (const std::string &file : files) {
+		if (SessionOf(file) < sessions[extra])
+			RenameFile(StrCat(folder, file).c_str(), StrCat(oldFolder, file).c_str());
+	}
+	const std::vector<std::string> old = FilesStartingWith(oldFolder, "session_");
+	for (size_t i = 0; i + MaxTelemetryOldFiles < old.size(); i++)
+		RemoveFile(StrCat(oldFolder, old[i]).c_str());
 }
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -351,11 +468,74 @@ std::string CrashContext()
 	return step != nullptr ? StrCat(" while ", step) : std::string();
 }
 
+/** @brief Copies a file into the crash report, when it's there; saves kept as folders are left out. */
+void CopyIntoCrashReport(const std::string &from, const std::string &to)
+{
+	if (from.empty() || !FileExists(from) || DirectoryExists(from))
+		return;
+	CopyFileOverwrite(from.c_str(), to.c_str());
+}
+
+/**
+ * @brief Writes a crash report to poe2_logs/crashes: what happened, where (level, seed, build), the hero, the latest
+ * events, and copies of this session's log, its events and the last save of the hero and stash, so the moment can be
+ * loaded again. Only the latest MaxTelemetryCrashReports are kept.
+ */
+void WriteCrashReport(std::string_view what)
+{
+	static bool written = false;
+	if (written || LogFile == nullptr || LogFolder.empty())
+		return;
+	written = true;
+	FlushAll();
+	const std::string folder = StrCat(LogFolder, "crashes", DIRECTORY_SEPARATOR_STR);
+	RecursivelyCreateDir(folder.c_str());
+	// Older reports go first, five files each.
+	const std::vector<std::string> reports = FilesStartingWith(folder, "crash_");
+	std::vector<std::string_view> stamps;
+	for (const std::string &file : reports) {
+		if (stamps.empty() || stamps.back() != SessionOf(file).substr(0, 21))
+			stamps.push_back(SessionOf(file).substr(0, 21));
+	}
+	if (stamps.size() >= MaxTelemetryCrashReports) {
+		const std::string_view keepFrom = stamps[stamps.size() - (MaxTelemetryCrashReports - 1)];
+		for (const std::string &file : reports) {
+			if (std::string_view(file).substr(0, 21) < keepFrom)
+				RemoveFile(StrCat(folder, file).c_str());
+		}
+	}
+	const std::string base = StrCat(folder, "crash_", SessionStamp.substr(0, 15));
+	// The copies come first: if the hero's data is what broke, describing it below could fail too.
+	CopyIntoCrashReport(StrCat(LogFolder, SessionName), StrCat(base, ".log"));
+	CopyIntoCrashReport(StrCat(LogFolder, SessionOf(SessionName), ".events"), StrCat(base, ".events"));
+	if (MyPlayer != nullptr) {
+		CopyIntoCrashReport(pfile_hero_save_path(), StrCat(base, "_hero.sv"));
+		CopyIntoCrashReport(pfile_stash_save_path(), StrCat(base, "_stash.sv"));
+	}
+	FILE *report = OpenFile(StrCat(base, ".txt").c_str(), "wb");
+	if (report != nullptr) {
+		std::fprintf(report, "POE2 Mashup crash report, %s %s, %s\n", PROJECT_NAME, PROJECT_VERSION, LocalStamp().c_str());
+		std::fprintf(report, "What happened: %.*s\n", static_cast<int>(what.size()), what.data());
+		std::fprintf(report, "Where: %s (dungeon level %d, level type %d, level seed %u), %.1f min into the session\n", LevelLabel().c_str(), static_cast<int>(currlevel),
+		    static_cast<int>(leveltype), currlevel < NUMLEVELS ? DungeonSeeds[currlevel] : 0U, (Now() - SessionStartMs) / 60000.0);
+		std::fprintf(report, "Session log: %s (copy beside this file)\n", SessionName.c_str());
+		std::fputs("The hero and stash saves beside this file are the last ones written before the crash.\n\n", report);
+		WriteRecentEvents(report, true);
+		std::fflush(report);
+		if (!LastBuild.empty())
+			std::fprintf(report, "\nLast build: %s\n", LastBuild.c_str());
+		std::fclose(report);
+	}
+	TelemetryLog("crash", StrCat("crash report written to crashes", DIRECTORY_SEPARATOR_STR, "crash_", SessionStamp.substr(0, 15), ".txt"));
+	FlushAll();
+}
+
 void HandleCrashSignal(int signal)
 {
 	if (LogFile != nullptr) {
-		std::fprintf(LogFile, "%s %s [crash] signal %d\n", Clock(Now() - SessionStartMs).c_str(), LevelLabel().c_str(), signal);
+		std::fprintf(LogFile, "%s %s [crash] signal %d%s\n", Clock(Now() - SessionStartMs).c_str(), LevelLabel().c_str(), signal, CrashContext().c_str());
 		WriteRecentEvents();
+		WriteCrashReport(StrCat("signal ", signal, CrashContext()));
 	}
 	std::signal(signal, SIG_DFL);
 	std::raise(signal);
@@ -499,8 +679,13 @@ LONG WINAPI HandleWindowsException(EXCEPTION_POINTERS *info)
 	std::fprintf(LogFile, ", image base 0x%llx\n", static_cast<unsigned long long>(base));
 	std::fflush(LogFile);
 	WriteRecentEvents();
-	if (code != EXCEPTION_STACK_OVERFLOW)
+	// With the stack gone there's no room to write a report; the log has the crash.
+	if (code != EXCEPTION_STACK_OVERFLOW) {
 		WriteCallStack(*info->ContextRecord);
+		char text[64];
+		std::snprintf(text, sizeof(text), "exception 0x%08lx at %s", static_cast<unsigned long>(code), DescribeAddress(address, false).c_str());
+		WriteCrashReport(StrCat(text, CrashContext()));
+	}
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif
@@ -555,12 +740,125 @@ int HostileMonsterCount()
 	return count;
 }
 
-/** @brief Samples how many monsters are around the player this tick. */
+/**
+ * @brief An encounter: from the first monster near or aware of the hero to a few seconds with none, leaving the
+ * level or dying. Pressure is how far down the hero's life and energy shield went, 100 for a death.
+ */
+struct Fight {
+	bool active = false;
+	uint32_t startMs = 0;
+	uint32_t lastBusyMs = 0;
+	ankerl::unordered_dense::set<size_t> monsters;
+	ankerl::unordered_dense::set<size_t> reachedMelee;
+	std::array<int, NumRarities> rarities {};
+	int64_t monsterLevelSum = 0;
+	int highestMonsterLevel = 0;
+	int heroLevel = 0;
+	int peakNear = 0;
+	int lowestLifePercent = 100;
+	int lowestPoolPercent = 100;
+	int lowestManaPercent = 100;
+	int64_t lifeLostRaw = 0;
+	int64_t shieldLostRaw = 0;
+	int64_t biggestHitRaw = 0;
+	std::string biggestHitFrom;
+	int hits = 0;
+	int bigHits = 0;
+	int kills = 0;
+	int oneHitKills = 0;
+	int flasks = 0;
+	int skills = 0;
+	int manaSpent = 0;
+	bool died = false;
+};
+Fight CurrentFight;
+
+/** @brief Life and energy shield together, in percent of their maximum. */
+int PoolPercent(const Player &player)
+{
+	const int64_t max = static_cast<int64_t>(player._pMaxHP.raw()) + static_cast<int64_t>(player.poe2.maxEnergyShield) * 64;
+	if (max <= 0)
+		return 100;
+	const int64_t now = std::max<int64_t>(player._pHitPoints.raw(), 0) + static_cast<int64_t>(player.poe2.energyShield);
+	return static_cast<int>(std::clamp<int64_t>(now * 100 / max, 0, 100));
+}
+
+void StartFight(const Player &player, uint32_t now)
+{
+	CurrentFight = {};
+	CurrentFight.active = true;
+	CurrentFight.startMs = CurrentFight.lastBusyMs = now;
+	CurrentFight.heroLevel = player.getCharacterLevel();
+}
+
+void EndFight(std::string_view how)
+{
+	Fight &fight = CurrentFight;
+	if (!fight.active)
+		return;
+	fight.active = false;
+	// A monster that wandered past without a blow on either side isn't a fight.
+	if (fight.monsters.empty() || (fight.kills == 0 && fight.hits == 0 && fight.skills == 0 && !fight.died))
+		return;
+	const int pressure = fight.died ? 100 : 100 - fight.lowestPoolPercent;
+	const bool hard = fight.died || fight.lowestPoolPercent < 50;
+	Count([&](TelemetryCounts &counts) {
+		counts.fights++;
+		if (hard)
+			counts.hardFights++;
+	});
+	CurrentLevel.fights++;
+	if (hard)
+		CurrentLevel.hardFights++;
+	const int count = static_cast<int>(fight.monsters.size());
+	const int averageLevel = static_cast<int>(fight.monsterLevelSum / count);
+	const double seconds = (fight.lastBusyMs - fight.startMs) / 1000.0;
+	WriteText("fight", std::format("{:d} monsters ({:s} normal/magic/rare/unique, level {:d} on average, hero {:d}), {:.1f} s, {:s}: "
+	                               "lowest life {:d}%, life and energy shield {:d}%, mana {:d}%, lost {:d} life and {:d} energy shield in {:d} hits ({:d} big), "
+	                               "{:d} reached melee, {:d} kills ({:d} with one hit), {:d} flasks, pressure {:d}",
+	                       count, CountsByRarity(fight.rarities), averageLevel, fight.heroLevel, seconds, how, fight.lowestLifePercent, fight.lowestPoolPercent,
+	                       fight.lowestManaPercent, Whole(fight.lifeLostRaw), Whole(fight.shieldLostRaw), fight.hits, fight.bigHits,
+	                       static_cast<int>(fight.reachedMelee.size()), fight.kills, fight.oneHitKills, fight.flasks, pressure));
+	Event(LogChannel::Fights, LogLevel::Always, "fight")
+	    .add("p", MyPlayerId)
+	    .add("monsters", count)
+	    .add("normal", fight.rarities[0])
+	    .add("magic", fight.rarities[1])
+	    .add("rare", fight.rarities[2])
+	    .add("unique", fight.rarities[3])
+	    .add("monsterLevel", averageLevel)
+	    .add("highestMonsterLevel", fight.highestMonsterLevel)
+	    .add("areaMonsterLevel", CurrentLevel.monsterLevel)
+	    .add("heroLevel", fight.heroLevel)
+	    .add("seconds", seconds)
+	    .add("end", how)
+	    .add("lowestLife", fight.lowestLifePercent)
+	    .add("lowestPool", fight.lowestPoolPercent)
+	    .add("lowestMana", fight.lowestManaPercent)
+	    .add("lifeLost", Whole(fight.lifeLostRaw))
+	    .add("shieldLost", Whole(fight.shieldLostRaw))
+	    .add("hits", fight.hits)
+	    .add("bigHits", fight.bigHits)
+	    .add("biggestHit", Whole(fight.biggestHitRaw))
+	    .add("biggestHitFrom", fight.biggestHitFrom)
+	    .add("reachedMelee", static_cast<int>(fight.reachedMelee.size()))
+	    .add("peakNear", fight.peakNear)
+	    .add("kills", fight.kills)
+	    .add("oneHitKills", fight.oneHitKills)
+	    .add("flasks", fight.flasks)
+	    .add("skills", fight.skills)
+	    .add("mana", fight.manaSpent)
+	    .add("died", fight.died)
+	    .add("pressure", pressure);
+}
+
+/** @brief Samples how many monsters are around the player this tick, and follows the fight. */
 void TrackDensity(const Player &player, uint32_t now)
 {
 	int near = 0;
 	int aware = 0;
 	int adjacent = 0;
+	Fight &fight = CurrentFight;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (!IsHostile(monster))
@@ -570,8 +868,32 @@ void TrackDensity(const Player &player, uint32_t now)
 			adjacent++;
 		if (distance <= TelemetryNearTiles)
 			near++;
-		if (distance <= TelemetryAwareTiles && monster.activeForTicks > 0)
+		const bool isAware = distance <= TelemetryAwareTiles && monster.activeForTicks > 0;
+		if (isAware)
 			aware++;
+		if (!isAware && distance > TelemetryNearTiles)
+			continue;
+		if (!fight.active)
+			StartFight(player, now);
+		if (fight.monsters.insert(monster.getId()).second) {
+			fight.rarities[MonsterRarityIndex(monster)]++;
+			const int level = monster.level(sgGameInitInfo.nDifficulty);
+			fight.monsterLevelSum += level;
+			fight.highestMonsterLevel = std::max(fight.highestMonsterLevel, level);
+		}
+		if (distance <= 1)
+			fight.reachedMelee.insert(monster.getId());
+	}
+	if (fight.active) {
+		if (near > 0 || aware > 0)
+			fight.lastBusyMs = now;
+		fight.peakNear = std::max(fight.peakNear, near);
+		fight.lowestLifePercent = std::min(fight.lowestLifePercent, std::max(Percent(player._pHitPoints, player._pMaxHP), 0));
+		fight.lowestPoolPercent = std::min(fight.lowestPoolPercent, PoolPercent(player));
+		if (player._pMaxMana > 0)
+			fight.lowestManaPercent = std::min(fight.lowestManaPercent, std::max(Percent(player._pMana, player._pMaxMana), 0));
+		if (now - fight.lastBusyMs >= TelemetryFightEndTicks * 1000 / TelemetryTicksPerSecond)
+			EndFight("no enemy near for 5 s");
 	}
 	const bool quiet = aware == 0 && near == 0;
 	const bool surrounded = adjacent >= TelemetrySurroundedCount;
@@ -590,8 +912,11 @@ void TrackDensity(const Player &player, uint32_t now)
 	if (quiet) {
 		QuietStreakTicks++;
 	} else {
-		if (QuietStreakTicks >= TelemetryLullTicks)
-			TelemetryLog("lull", std::format("{:.1f} s with no enemy near, ended by {:d} monsters", QuietStreakTicks / static_cast<double>(TelemetryTicksPerSecond), std::max(near, aware)));
+		if (QuietStreakTicks >= TelemetryLullTicks) {
+			const double seconds = QuietStreakTicks / static_cast<double>(TelemetryTicksPerSecond);
+			WriteText("lull", std::format("{:.1f} s with no enemy near, ended by {:d} monsters", seconds, std::max(near, aware)));
+			Event(LogChannel::Combat, LogLevel::Normal, "lull").add("seconds", seconds).add("monsters", std::max(near, aware));
+		}
 		QuietStreakTicks = 0;
 	}
 
@@ -600,7 +925,8 @@ void TrackDensity(const Player &player, uint32_t now)
 		Count([](TelemetryCounts &counts) { counts.swarms++; });
 		if (now - LastSwarmLogMs >= 10000) {
 			LastSwarmLogMs = now;
-			TelemetryLog("swarm", std::format("{:d} monsters within {:d} tiles, {:d} next to the player, life {:d}%", near, TelemetryNearTiles, adjacent, Percent(player._pHitPoints, player._pMaxHP)));
+			WriteText("swarm", std::format("{:d} monsters within {:d} tiles, {:d} next to the player, life {:d}%", near, TelemetryNearTiles, adjacent, Percent(player._pHitPoints, player._pMaxHP)));
+			Event(LogChannel::Combat, LogLevel::Normal, "swarm").add("near", near).add("adjacent", adjacent).add("life", Percent(player._pHitPoints, player._pMaxHP));
 		}
 	} else if (near < TelemetrySwarmCount / 2) {
 		InSwarm = false;
@@ -625,23 +951,70 @@ std::string RatesText(const TelemetryCounts &counts, double minutes)
 void WriteStatsLine(uint32_t now)
 {
 	const double minutes = std::max<uint32_t>(now - WindowStartMs, 1) / 60000.0;
-	TelemetryLog("stats", std::format("last {:.1f} min: {:s}", minutes, RatesText(Window, minutes)));
+	WriteText("stats", std::format("last {:.1f} min: {:s}", minutes, RatesText(Window, minutes)));
+	Event(LogChannel::Perf, LogLevel::Normal, "stats")
+	    .add("minutes", minutes)
+	    .add("fps", Window.frameMs > 0 ? Window.frames * 1000.0 / Window.frameMs : 0.0)
+	    .add("slowFrames", Window.slowFrames)
+	    .add("worstFrameMs", Window.worstFrameMs)
+	    .add("stalls", Window.stalls)
+	    .add("kills", Window.kills)
+	    .add("hitsTaken", Window.hitsTaken)
+	    .add("lowManaPercent", Window.ticks > 0 ? Window.lowManaTicks * 100 / Window.ticks : 0)
+	    .add("nearAverage", Window.densityTicks > 0 ? static_cast<double>(Window.nearSum) / Window.densityTicks : 0.0)
+	    .add("quietPercent", Window.densityTicks > 0 ? Window.quietTicks * 100 / Window.densityTicks : 0)
+	    .add("logBytes", TelemetryEventBytes())
+	    .add("logWriteMs", TelemetryWriteMs());
 	Window = {};
 	WindowStartMs = now;
 	if (++StatsLinesWritten % TelemetrySummaryEvery == 0) {
-		TelemetryLog("damage", TelemetrySkillDamageText());
-		TelemetryLog("taken", TelemetryDamageTakenText());
+		WriteText("damage", TelemetrySkillDamageText());
+		WriteText("taken", TelemetryDamageTakenText());
 	}
 }
 
-void EndLevelVisit()
+/** @brief Items still lying on the level, by rarity: what the hero left behind. */
+std::array<int, NumRarities> ItemsLeftOnFloor()
+{
+	std::array<int, NumRarities> left {};
+	for (uint8_t i = 0; i < ActiveItemCount; i++) {
+		const Item &item = Items[ActiveItems[i]];
+		if (!item.isEmpty() && item._itype != ItemType::Gold)
+			left[ItemRarityIndex(item)]++;
+	}
+	return left;
+}
+
+void EndLevelVisit(std::string_view how)
 {
 	if (CurrentLevel.startMs == 0)
 		return;
+	EndFight(how);
+	const double seconds = (Now() - CurrentLevel.startMs) / 1000.0;
+	const int cleared = CurrentLevel.monstersAtEntry > 0 ? CurrentLevel.kills * 100 / CurrentLevel.monstersAtEntry : 0;
+	const std::array<int, NumRarities> left = ItemsLeftOnFloor();
 	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", CurrentLevel.label, " [level] left after ",
-	    std::format("{:.1f} s: {:d} kills of {:d} monsters ({:d}% cleared), {:d} drops, {:d} damage taken, {:d} to energy shield", (Now() - CurrentLevel.startMs) / 1000.0, CurrentLevel.kills,
-	        CurrentLevel.monstersAtEntry, CurrentLevel.monstersAtEntry > 0 ? CurrentLevel.kills * 100 / CurrentLevel.monstersAtEntry : 0,
-	        CurrentLevel.drops, Whole(CurrentLevel.damageTakenRaw), Whole(CurrentLevel.shieldTakenRaw))));
+	    std::format("{:.1f} s: {:d} kills of {:d} monsters ({:d}% cleared), {:d} drops, {:d} damage taken, {:d} to energy shield, {:d} fights ({:d} under half life), items left {:s}", seconds, CurrentLevel.kills,
+	        CurrentLevel.monstersAtEntry, cleared, CurrentLevel.drops, Whole(CurrentLevel.damageTakenRaw), Whole(CurrentLevel.shieldTakenRaw),
+	        CurrentLevel.fights, CurrentLevel.hardFights, CountsByRarity(left))));
+	// Stamped with the level being left, not the one being loaded.
+	if (LogLevelOn(LogChannel::Progress, LogLevel::Always))
+		SetTelemetryEventClock(Now() - SessionStartMs, CurrentLevel.label);
+	TelemetryEvent(LogChannel::Progress, LogLevel::Always, "area_left")
+	    .add("p", MyPlayerId)
+	    .add("seconds", seconds)
+	    .add("kills", CurrentLevel.kills)
+	    .add("monsters", CurrentLevel.monstersAtEntry)
+	    .add("cleared", cleared)
+	    .add("drops", CurrentLevel.drops)
+	    .add("damageTaken", Whole(CurrentLevel.damageTakenRaw))
+	    .add("shieldTaken", Whole(CurrentLevel.shieldTakenRaw))
+	    .add("fights", CurrentLevel.fights)
+	    .add("hardFights", CurrentLevel.hardFights)
+	    .add("leftNormal", left[0])
+	    .add("leftMagic", left[1])
+	    .add("leftRare", left[2])
+	    .add("leftUnique", left[3]);
 	CurrentLevel = {};
 }
 
@@ -659,21 +1032,6 @@ std::string SkillDamageLine(std::string_view name, const SkillDamage &damage)
 		StrAppend(text, std::format(", {:.0f} damage per second in use", Whole(damage.raw) * 1000.0 / (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs)));
 	text += ')';
 	return text;
-}
-
-/** @brief The local date and time, for the files kept across sessions. */
-std::string LocalStamp()
-{
-	const std::time_t now = std::time(nullptr);
-	std::tm local {};
-#ifdef _WIN32
-	localtime_s(&local, &now);
-#else
-	localtime_r(&now, &local);
-#endif
-	char stamp[32];
-	std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", &local);
-	return stamp;
 }
 
 /** @brief Writes a line to the gem log, with the date and time, and to the session log. */
@@ -719,7 +1077,76 @@ void WriteSettings()
 {
 	const Options &options = GetOptions();
 	const Size resolution = *options.Graphics.resolution;
-	TelemetryLog("settings", std::format("resolution {:d}x{:d}, {:s}, zoom {:s}, game speed {:d} ticks/s, difficulty {:d}", resolution.width, resolution.height, *options.Graphics.fullscreen ? "fullscreen" : "windowed", *options.Graphics.zoom ? "on" : "off", *options.Gameplay.tickRate, static_cast<int>(sgGameInitInfo.nDifficulty)));
+	WriteText("settings", std::format("resolution {:d}x{:d}, {:s}, zoom {:s}, game speed {:d} ticks/s, difficulty {:d}", resolution.width, resolution.height, *options.Graphics.fullscreen ? "fullscreen" : "windowed", *options.Graphics.zoom ? "on" : "off", *options.Gameplay.tickRate, static_cast<int>(sgGameInitInfo.nDifficulty)));
+	Event(LogChannel::Session, LogLevel::Always, "settings")
+	    .add("width", resolution.width)
+	    .add("height", resolution.height)
+	    .add("fullscreen", *options.Graphics.fullscreen)
+	    .add("zoom", *options.Graphics.zoom)
+	    .add("tickRate", *options.Gameplay.tickRate)
+	    .add("difficulty", static_cast<int>(sgGameInitInfo.nDifficulty));
+}
+
+/** @brief The build as data: the same as the build line, field by field. */
+void WriteBuildEvent(const Player &player, LogLevel level)
+{
+	TelemetryEvent event = Event(LogChannel::Progress, level, "build");
+	if (!event)
+		return;
+	JsonArray gear;
+	for (const Item &item : player.InvBody) {
+		if (!item.isEmpty())
+			gear.add(item._iIName);
+	}
+	JsonArray skills;
+	for (size_t i = 0; i < player.poe2.skillSlots.size(); i++) {
+		const SkillSlot slot = player.poe2.skillSlots[i];
+		if (slot.isEmpty())
+			continue;
+		std::string skill = "{\"name\":";
+		AppendJsonString(skill, SkillName(slot));
+		StrAppend(skill, ",\"gem\":", player.poe2.gemLevel(i));
+		JsonArray supports;
+		for (const SupportGem support : player.poe2.slotSupports[i]) {
+			if (support != SupportGem::None)
+				supports.add(SupportGemName(support));
+		}
+		JsonArray inside;
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			if (const SkillSlot spell = player.poe2.metaSkills[i][socket]; !spell.isEmpty())
+				inside.add(StrCat(SkillName(spell), " gem ", static_cast<int>(player.poe2.metaSkillLevels[i][socket])));
+		}
+		StrAppend(skill, ",\"supports\":", supports.str(), ",\"inside\":", inside.str(), "}");
+		skills.addRaw(skill);
+	}
+	JsonArray belt;
+	for (const Item &item : player.SpdList) {
+		if (!item.isEmpty())
+			belt.add(item._iIName);
+	}
+	event.add("p", player.getId())
+	    .add("heroLevel", player.getCharacterLevel())
+	    .add("class", player.getClassName())
+	    .add("xp", player._pExperience)
+	    .add("life", player._pMaxHP.whole())
+	    .add("mana", player._pMaxMana.whole())
+	    .add("energyShield", player.poe2.maxEnergyShield)
+	    .add("str", player._pStrength)
+	    .add("mag", player._pMagic)
+	    .add("dex", player._pDexterity)
+	    .add("vit", player._pVitality)
+	    .add("armour", ArmourRating(player, false))
+	    .add("evasion", EvasionRating(player, false))
+	    .add("block", std::clamp(player.GetBlockChance(false), 0, player.GetMaxBlockChance(gbIsPoe2)))
+	    .add("fireRes", player._pFireResist)
+	    .add("lightningRes", player._pLghtResist)
+	    .add("magicRes", player._pMagResist)
+	    .add("spirit", ReservedSpirit(player))
+	    .add("maxSpirit", MaxSpirit(player))
+	    .add("passives", player.poe2.passives.count())
+	    .addRaw("gear", gear.str())
+	    .addRaw("skills", skills.str())
+	    .addRaw("belt", belt.str());
 }
 
 void TrackBuild(const Player &player, uint32_t now)
@@ -731,7 +1158,8 @@ void TrackBuild(const Player &player, uint32_t now)
 	if (build == LastBuild)
 		return;
 	LastBuild = std::move(build);
-	TelemetryLog("build", LastBuild);
+	WriteText("build", LastBuild);
+	WriteBuildEvent(player, LogLevel::Normal);
 }
 
 void TrackGains(const Player &player)
@@ -744,6 +1172,11 @@ void TrackGains(const Player &player)
 	if (player._pGold > LastGold) {
 		const int gained = player._pGold - LastGold;
 		Count([&](TelemetryCounts &counts) { counts.gold += gained; });
+	} else if (player._pGold < LastGold) {
+		// Spent in a shop, or put in the stash.
+		const int spent = LastGold - player._pGold;
+		Count([&](TelemetryCounts &counts) { counts.goldSpent += spent; });
+		Event(LogChannel::Loot, LogLevel::Normal, "gold_out").add("p", player.getId()).add("amount", spent).add("left", player._pGold);
 	}
 	LastGold = player._pGold;
 }
@@ -765,7 +1198,8 @@ void TrackStalls(uint32_t now)
 	if (now - LastStallLogMs < 10000)
 		return;
 	LastStallLogMs = now;
-	TelemetryLog("stall", std::format("game froze for {:d} ms ({:d} monsters, {:d} missiles)", gap, static_cast<int>(ActiveMonsterCount), static_cast<int>(Missiles.size())));
+	WriteText("stall", std::format("game froze for {:d} ms ({:d} monsters, {:d} missiles)", gap, static_cast<int>(ActiveMonsterCount), static_cast<int>(Missiles.size())));
+	Event(LogChannel::Perf, LogLevel::Normal, "stall").add("ms", gap).add("monsters", static_cast<int>(ActiveMonsterCount)).add("missiles", static_cast<int>(Missiles.size()));
 }
 
 } // namespace
@@ -778,6 +1212,7 @@ void TelemetryInit()
 	SessionStartMs = Now();
 
 	const std::string folder = StrCat(paths::PrefPath(), "poe2_logs", DIRECTORY_SEPARATOR_STR);
+	LogFolder = folder;
 	RecursivelyCreateDir(folder.c_str());
 	PruneOldSessions(folder);
 
@@ -795,12 +1230,24 @@ void TelemetryInit()
 		return;
 	GemLogFile = OpenFile(StrCat(folder, "gem_levels.log").c_str(), "ab");
 	NotesFile = OpenFile(StrCat(folder, "playtest_notes.txt").c_str(), "ab");
+	SessionStamp = stamp;
 	SessionName = StrCat("session_", stamp, ".log");
 
 	char started[32];
 	std::strftime(started, sizeof(started), "%Y-%m-%d %H:%M:%S", &local);
 	WriteLine(StrCat("POE2 Mashup play log, ", PROJECT_NAME, " ", PROJECT_VERSION, ", started ", started));
 	WriteLine("Each line: time since start, level (town, L<n> or set<n>), [event], details.");
+	// The same events as data, one JSON object per line, for the reports.
+	std::string header = std::format("{{\"k\":\"header\",\"version\":{:d},\"game\":\"POE2 Mashup\",\"build\":", TelemetryEventsVersion);
+	AppendJsonString(header, StrCat(PROJECT_NAME, " ", PROJECT_VERSION));
+	StrAppend(header, ",\"started\":\"", started, "\",\"log\":");
+	AppendJsonString(header, SessionName);
+	header += '}';
+	if (!OpenTelemetryEvents(StrCat(folder, "session_", stamp, ".events"), header))
+		WriteLine("The event file couldn't be opened; reports will only have this log.");
+	FlushAll();
+	// Whatever is still waiting goes to disk when the game closes.
+	std::atexit([] { FlushAll(); });
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	SDL_GetLogOutputFunction(&PreviousLogOutput, &PreviousLogUserdata);
@@ -819,11 +1266,39 @@ bool TelemetryEnabled()
 	return LogFile != nullptr;
 }
 
+void TelemetryFlush()
+{
+	FlushAll();
+}
+
+namespace {
+
+/** @brief The channel and loudness of a line that has no event of its own. */
+std::pair<LogChannel, LogLevel> ChannelOf(std::string_view category)
+{
+	if (category == "engine" || category == "bug")
+		return { LogChannel::Warnings, LogLevel::Always };
+	if (category == "fx")
+		return { LogChannel::Effects, LogLevel::Normal };
+	if (category == "stall" || category == "stats")
+		return { LogChannel::Perf, LogLevel::Normal };
+	if (category == "hit")
+		return { LogChannel::Damage, LogLevel::Normal };
+	if (category == "crash" || category == "load")
+		return { LogChannel::Session, LogLevel::Always };
+	return { LogChannel::Session, LogLevel::Normal };
+}
+
+} // namespace
+
 void TelemetryLog(std::string_view category, std::string_view text)
 {
 	if (LogFile == nullptr)
 		return;
-	WriteLine(StrCat(Clock(Now() - SessionStartMs), " ", LevelLabel(), " [", category, "] ", text));
+	const auto [channel, level] = ChannelOf(category);
+	// Loading steps and crashes go to disk at once, so a freeze or crash while loading still shows the last step.
+	WriteText(category, text, channel == LogChannel::Session && level == LogLevel::Always);
+	Event(channel, level, category).add("text", text);
 }
 
 namespace {
@@ -889,6 +1364,149 @@ void TelemetryEffect(std::string_view source, std::string_view what, int x, int 
 	TelemetryLog("fx", StrCat(source, " ", what, " at ", x, ",", y, HeroTile()));
 }
 
+namespace {
+
+/** @brief The hero at the start of the game, for the session's line in history.tsv. */
+struct GameStart {
+	std::string hero;
+	std::string heroClass;
+	int level = 0;
+	bool loaded = false;
+};
+GameStart StartOfGame;
+
+/** @brief Damage over time on one monster from one source (an ignite, a bleed), summed into one line per burn. */
+struct Burn {
+	std::string monster;
+	std::string source;
+	uint32_t firstMs = 0;
+	uint32_t lastMs = 0;
+	int64_t raw = 0;
+	int ticks = 0;
+};
+ankerl::unordered_dense::map<std::string, Burn> Burns;
+
+bool IsDamageOverTime(std::string_view source)
+{
+	return source == "ignite" || source == "bleeding" || source == "poison";
+}
+
+/** @brief Writes the burns that have stopped ticking (or all of them). */
+void FlushBurns(uint32_t now, bool all)
+{
+	for (auto it = Burns.begin(); it != Burns.end();) {
+		const Burn &burn = it->second;
+		if (!all && now - burn.lastMs < 1000) {
+			++it;
+			continue;
+		}
+		const double seconds = (burn.lastMs - burn.firstMs) / 1000.0;
+		Remember("dot", std::format("{:s} dealt {:d} to {:s} over {:.1f} s ({:d} ticks)", burn.source, Whole(burn.raw), burn.monster, seconds, burn.ticks));
+		Event(LogChannel::Combat, LogLevel::Normal, "dot")
+		    .add("p", MyPlayerId)
+		    .add("source", burn.source)
+		    .add("monster", burn.monster)
+		    .add("damage", Whole(burn.raw))
+		    .add("seconds", seconds)
+		    .add("ticks", burn.ticks);
+		it = Burns.erase(it);
+	}
+}
+
+/** @brief One step of a hit being worked out, for the deep damage breakdown. */
+struct HitStep {
+	const char *name;
+	int64_t value;
+	bool percent;
+	/** Steps of one packet of a hit split by damage type: dropped once that packet is written. */
+	bool perPacket;
+};
+
+/** @brief The hit being worked out, one each way: the hero's hit on a monster, and a hit on the hero. */
+struct HitBreakdown {
+	bool active = false;
+	uint32_t tick = 0;
+	std::string what;
+	std::vector<HitStep> steps;
+};
+std::array<HitBreakdown, 2> Breakdowns;
+
+HitBreakdown *CurrentBreakdown(bool incoming)
+{
+	HitBreakdown &breakdown = Breakdowns[incoming ? 1 : 0];
+	// A hit is worked out within one game tick; anything older belongs to a hit that never landed.
+	if (!breakdown.active || breakdown.tick != TickCount)
+		return nullptr;
+	return &breakdown;
+}
+
+std::string StepsJson(const HitBreakdown &breakdown)
+{
+	JsonArray steps;
+	for (const HitStep &step : breakdown.steps) {
+		std::string json = "{\"step\":";
+		AppendJsonString(json, step.name);
+		if (step.percent)
+			StrAppend(json, ",\"percent\":", static_cast<int>(step.value), "}");
+		else
+			StrAppend(json, std::format(",\"damage\":{:.2f}}}", step.value / 64.0));
+		steps.addRaw(json);
+	}
+	return steps.str();
+}
+
+} // namespace
+
+void TelemetryHitStart(bool incoming, std::string_view what)
+{
+	if (!TelemetryDeepDamage())
+		return;
+	HitBreakdown &breakdown = Breakdowns[incoming ? 1 : 0];
+	breakdown.active = true;
+	breakdown.tick = TickCount;
+	breakdown.what = what;
+	breakdown.steps.clear();
+}
+
+void TelemetryHitStep(bool incoming, const char *step, int64_t value, bool percent, bool perPacket)
+{
+	if (!TelemetryDeepDamage())
+		return;
+	if (HitBreakdown *breakdown = CurrentBreakdown(incoming); breakdown != nullptr && breakdown->steps.size() < 64)
+		breakdown->steps.push_back({ step, value, percent, perPacket });
+}
+
+bool TelemetryDeepDamage()
+{
+	return LogLevelOn(LogChannel::Damage, LogLevel::Deep);
+}
+
+std::string TelemetryLogLevelsText(std::string_view channel, std::string_view level)
+{
+	if (!TelemetryEnabled())
+		return "The play log isn't open.";
+	if (!channel.empty()) {
+		const std::optional<LogLevel> newLevel = ParseLogLevel(level);
+		if (!newLevel)
+			return "Levels are off, always, normal and deep. Example: log(\"damage\", \"deep\")";
+		if (channel == "all") {
+			for (size_t i = 0; i < static_cast<size_t>(LogChannel::Count); i++)
+				SetLogLevel(static_cast<LogChannel>(i), *newLevel);
+		} else if (const std::optional<LogChannel> parsed = ParseLogChannel(channel); parsed) {
+			SetLogLevel(*parsed, *newLevel);
+		} else {
+			return StrCat("No channel called ", channel, ". Type log() to see them.");
+		}
+		TelemetryLog("log", StrCat(channel, " set to ", level, " for this session"));
+	}
+	std::string text = "Play log channels (log(\"channel\", \"off/always/normal/deep\") changes one until the game closes):";
+	for (size_t i = 0; i < static_cast<size_t>(LogChannel::Count); i++) {
+		const auto each = static_cast<LogChannel>(i);
+		StrAppend(text, "\n  ", LogChannelName(each), ": ", LogLevelName(GetLogLevel(each)));
+	}
+	return text;
+}
+
 void TelemetryGameStarted(const Player &player, bool loaded)
 {
 	Totals = {};
@@ -897,19 +1515,32 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	DamageByAttacker.clear();
 	StatsLinesWritten = 0;
 	Engagements.clear();
+	Burns.clear();
+	CurrentFight = {};
 	LastSkill.clear();
 	PendingAttacker.clear();
 	PendingShieldRaw = 0;
 	LastHitText.clear();
 	PendingDamageSource.clear();
 	LastBuild.clear();
-	GameStartMs = WindowStartMs = LastKillMs = LastTickMs = Now();
+	GameStartMs = WindowStartMs = LastKillMs = LastTickMs = LastAreaMs = Now();
 	LastBuildCheckMs = 0;
 	LastExperience = player._pExperience;
 	LastGold = player._pGold;
-	TelemetryLog("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo")));
+	StartOfGame = { player._pName, std::string(player.getClassName()), player.getCharacterLevel(), loaded };
+	const std::string_view mode = gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo");
+	WriteText("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), mode), true);
+	Event(LogChannel::Session, LogLevel::Always, "game_start")
+	    .add("p", player.getId())
+	    .add("hero", player._pName)
+	    .add("class", player.getClassName())
+	    .add("heroLevel", player.getCharacterLevel())
+	    .add("xp", player._pExperience)
+	    .add("loaded", loaded)
+	    .add("mode", mode);
 	if (LogFile != nullptr) {
 		WriteSettings();
+		WriteBuildEvent(player, LogLevel::Always);
 		// What each socketed gem does now and at its next level, to compare against the results later.
 		GemLog(std::format("--- {:s}, level {:d} {:s}, {:s} ---", player._pName, player.getCharacterLevel(), player.getClassName(), loaded ? "loaded" : "new game"));
 		std::string gems = SocketedGemsText(player);
@@ -922,29 +1553,166 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	}
 }
 
+namespace {
+
+/** @brief One line per game in history.tsv, which is never pruned, to follow a character across sessions. */
+void WriteHistoryLine(double minutes)
+{
+	const std::string path = StrCat(LogFolder, "history.tsv");
+	const bool isNew = !FileExists(path);
+	FILE *file = OpenFile(path.c_str(), "ab");
+	if (file == nullptr)
+		return;
+	if (isNew)
+		std::fputs("date\tsession\thero\tclass\tloaded\tminutes\tstart level\tend level\txp\tdeaths\tkills\trare kills\tunique kills\tone-hit kill %\tfights\tfights under half\t"
+		           "hits taken\tdamage taken\tto energy shield\tlowest life %\tflasks\twasted flasks\tdrops normal/magic/rare/unique\tgold in\tgold spent\tstalls\tfps\n",
+		    file);
+	const int level = MyPlayer != nullptr ? MyPlayer->getCharacterLevel() : 0;
+	const TelemetryCounts &t = Totals;
+	const std::string line = std::format("{:s}\t{:s}\t{:s}\t{:s}\t{:s}\t{:.1f}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:d}\t{:s}\t{:d}\t{:d}\t{:d}\t{:.0f}\n",
+	    LocalStamp(), SessionName, StartOfGame.hero, StartOfGame.heroClass, StartOfGame.loaded ? "yes" : "no", minutes, StartOfGame.level, level, t.experience, t.deaths,
+	    t.kills, t.rareKills, t.uniqueKills, t.kills > 0 ? t.oneHitKills * 100 / t.kills : 0, t.fights, t.hardFights, t.hitsTaken, Whole(t.damageTakenRaw), Whole(t.shieldTakenRaw),
+	    t.lowestLifePercent, t.flaskUses, t.wastedFlasks, CountsByRarity(t.drops), t.gold, t.goldSpent, t.stalls, t.frameMs > 0 ? t.frames * 1000.0 / t.frameMs : 0.0);
+	std::fputs(line.c_str(), file);
+	std::fclose(file);
+}
+
+/** @brief The game's totals as data, and each skill's and attacker's. */
+void WriteSummaryEvents(double minutes)
+{
+	const TelemetryCounts &t = Totals;
+	Event(LogChannel::Session, LogLevel::Always, "summary")
+	    .add("p", MyPlayerId)
+	    .add("minutes", minutes)
+	    .add("heroLevel", MyPlayer != nullptr ? MyPlayer->getCharacterLevel() : 0)
+	    .add("startLevel", StartOfGame.level)
+	    .add("xp", t.experience)
+	    .add("deaths", t.deaths)
+	    .add("levelsEntered", t.levelsEntered)
+	    .add("kills", t.kills)
+	    .add("rareKills", t.rareKills)
+	    .add("uniqueKills", t.uniqueKills)
+	    .add("oneHitKills", t.oneHitKills)
+	    .add("fights", t.fights)
+	    .add("hardFights", t.hardFights)
+	    .add("damageDealt", Whole(t.damageDealtRaw))
+	    .add("hitsTaken", t.hitsTaken)
+	    .add("bigHits", t.bigHits)
+	    .add("closeCalls", t.closeCalls)
+	    .add("damageTaken", Whole(t.damageTakenRaw))
+	    .add("shieldTaken", Whole(t.shieldTakenRaw))
+	    .add("lowestLife", t.lowestLifePercent)
+	    .add("swings", t.swings)
+	    .add("evaded", t.evaded)
+	    .add("blocked", t.blocked)
+	    .add("dodged", t.dodged)
+	    .add("skillUses", t.skillUses)
+	    .add("failedSkills", t.failedSkills)
+	    .add("manaSpent", t.manaSpent)
+	    .add("lowManaPercent", t.ticks > 0 ? t.lowManaTicks * 100 / t.ticks : 0)
+	    .add("flasks", t.flaskUses)
+	    .add("wastedFlasks", t.wastedFlasks)
+	    .add("charms", t.charmUses)
+	    .add("dropsNormal", t.drops[0])
+	    .add("dropsMagic", t.drops[1])
+	    .add("dropsRare", t.drops[2])
+	    .add("dropsUnique", t.drops[3])
+	    .add("pickups", Sum(t.pickups))
+	    .add("crafts", t.crafts)
+	    .add("goldIn", t.gold)
+	    .add("goldSpent", t.goldSpent)
+	    .add("stalls", t.stalls)
+	    .add("fps", t.frameMs > 0 ? t.frames * 1000.0 / t.frameMs : 0.0)
+	    .add("slowFrames", t.slowFrames)
+	    .add("nearAverage", t.densityTicks > 0 ? static_cast<double>(t.nearSum) / t.densityTicks : 0.0)
+	    .add("quietPercent", t.densityTicks > 0 ? t.quietTicks * 100 / t.densityTicks : 0)
+	    .add("surroundedPercent", t.densityTicks > 0 ? t.surroundedTicks * 100 / t.densityTicks : 0)
+	    .add("swarms", t.swarms)
+	    .add("logBytes", TelemetryEventBytes())
+	    .add("logWriteMs", TelemetryWriteMs());
+	for (const auto &[name, damage] : DamageBySkill) {
+		Event(LogChannel::Session, LogLevel::Always, "skill_summary")
+		    .add("skill", name)
+		    .add("damage", Whole(damage.raw))
+		    .add("hits", damage.hits)
+		    .add("kills", damage.kills)
+		    .add("killSeconds", damage.kills > 0 ? damage.killMs / 1000.0 / damage.kills : 0.0)
+		    .add("uses", damage.uses)
+		    .add("mana", damage.mana)
+		    .add("activeSeconds", damage.lastUseMs > damage.firstUseMs ? (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs) / 1000.0 : 0.0);
+	}
+	for (const auto &[name, damage] : DamageByAttacker) {
+		Event(LogChannel::Session, LogLevel::Always, "attacker_summary")
+		    .add("attacker", name)
+		    .add("damage", Whole(damage.raw))
+		    .add("hits", damage.hits)
+		    .add("biggest", Whole(damage.biggestRaw));
+	}
+}
+
+} // namespace
+
 void TelemetryGameEnded()
 {
 	if (LogFile == nullptr || GameStartMs == 0)
 		return;
-	EndLevelVisit();
-	TelemetryLog("game", StrCat("ended. ", TelemetryStatsText()));
-	TelemetryLog("damage", TelemetrySkillDamageText());
-	TelemetryLog("taken", TelemetryDamageTakenText());
+	FlushBurns(Now(), true);
+	EndLevelVisit("game ended");
+	const double minutes = std::max<uint32_t>(Now() - GameStartMs, 1) / 60000.0;
+	WriteText("game", StrCat("ended. ", TelemetryStatsText()));
+	WriteText("damage", TelemetrySkillDamageText());
+	WriteText("taken", TelemetryDamageTakenText());
+	WriteSummaryEvents(minutes);
+	WriteHistoryLine(minutes);
 	WriteGemResults();
+	FlushAll();
 	GameStartMs = 0;
 }
 
 void TelemetryLevelEntered()
 {
-	EndLevelVisit();
+	EndLevelVisit("left the level");
 	Engagements.clear();
+	Burns.clear();
+	const uint32_t now = Now();
 	CurrentLevel.label = LevelLabel();
-	CurrentLevel.startMs = Now();
+	CurrentLevel.startMs = now;
 	Count([](TelemetryCounts &counts) { counts.levelsEntered++; });
 	CurrentLevel.monstersAtEntry = HostileMonsterCount();
+	// Campaign floors have no area level yet: the middle level of the monsters there stands in for it.
+	std::vector<int> levels;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (IsHostile(monster))
+			levels.push_back(monster.level(sgGameInitInfo.nDifficulty));
+	}
+	if (!levels.empty()) {
+		std::nth_element(levels.begin(), levels.begin() + levels.size() / 2, levels.end());
+		CurrentLevel.monsterLevel = levels[levels.size() / 2];
+	}
 	QuietStreakTicks = 0;
 	InSwarm = false;
-	TelemetryLog("level", std::format("entered, {:d} monsters", CurrentLevel.monstersAtEntry));
+	const double sinceLast = (now - LastAreaMs) / 60000.0;
+	LastAreaMs = now;
+	WriteText("level", std::format("entered, {:d} monsters (level {:d} in the middle)", CurrentLevel.monstersAtEntry, CurrentLevel.monsterLevel));
+	if (MyPlayer == nullptr)
+		return;
+	const Player &player = *MyPlayer;
+	CurrentLevel.heroLevel = player.getCharacterLevel();
+	const int tier = ActiveMapTier();
+	Event(LogChannel::Progress, LogLevel::Always, "area")
+	    .add("p", player.getId())
+	    .add("monsters", CurrentLevel.monstersAtEntry)
+	    .add("monsterLevel", CurrentLevel.monsterLevel)
+	    .add("mapTier", tier)
+	    .add("areaLevel", tier > 0 ? MapAreaLevelBase + tier : 0)
+	    .add("dungeonLevel", static_cast<int>(currlevel))
+	    .add("levelType", static_cast<int>(leveltype))
+	    .add("heroLevel", player.getCharacterLevel())
+	    .add("xp", player._pExperience)
+	    .add("gameMinutes", (now - GameStartMs) / 60000.0)
+	    .add("minutesSinceLastArea", sinceLast);
+	WriteBuildEvent(player, LogLevel::Always);
 }
 
 void TelemetryNoteAttacker(std::string_view attacker)
@@ -961,6 +1729,8 @@ void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6
 {
 	if (LogFile == nullptr || damage <= 0 || lifeBefore <= 0)
 		return;
+	// Damage a source was named for (minions, ignite, heralds) isn't the hit being broken down.
+	const bool namedSource = !PendingDamageSource.empty();
 	const std::string source = CurrentDamageSource();
 	// Only the damage that took life away counts; the rest is overkill.
 	const int64_t dealt = std::min(damage.raw(), lifeBefore.raw());
@@ -969,13 +1739,52 @@ void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6
 	skill.raw += dealt;
 	skill.hits++;
 
+	const uint32_t now = Now();
 	Engagement &engagement = Engagements[monster.getId()];
 	if (engagement.firstHitMs == 0)
-		engagement.firstHitMs = Now();
+		engagement.firstHitMs = now;
 	engagement.lastSource = source;
+	engagement.hits++;
 	if (damage > lifeBefore)
 		engagement.overkill = Whole(damage.raw() - lifeBefore.raw());
-	Remember("dealt", std::format("{:d} to {:s} with {:s}, {:d} life left", damage.whole(), monster.name(), source, std::max(Whole(lifeBefore.raw() - damage.raw()), 0)));
+
+	// Damage over time ticks many times a second: it's summed into one line per burn.
+	if (IsDamageOverTime(source)) {
+		Burn &burn = Burns[StrCat(monster.getId(), " ", source)];
+		if (burn.ticks == 0) {
+			burn.monster = monster.name();
+			burn.source = source;
+			burn.firstMs = now;
+		}
+		burn.lastMs = now;
+		burn.raw += dealt;
+		burn.ticks++;
+		return;
+	}
+	const int lifeLeft = std::max(Whole(lifeBefore.raw() - damage.raw()), 0);
+	if (namedSource && TelemetryDeepDamage()) {
+		// Steps worked out for a named source's damage belong to it, not to the next part of the hit.
+		if (HitBreakdown *breakdown = CurrentBreakdown(false); breakdown != nullptr)
+			std::erase_if(breakdown->steps, [](const HitStep &step) { return step.perPacket; });
+	}
+	Remember("dealt", std::format("{:d} to {:s} with {:s}, {:d} life left", damage.whole(), monster.name(), source, lifeLeft));
+	TelemetryEvent event = Event(LogChannel::Damage, LogLevel::Deep, "dealt");
+	if (!event)
+		return;
+	event.add("p", MyPlayerId)
+	    .add("source", source)
+	    .add("monster", monster.name())
+	    .add("rarity", RarityNames[MonsterRarityIndex(monster)])
+	    .add("monsterLevel", monster.level(sgGameInitInfo.nDifficulty))
+	    .add("damage", damage.raw() / 64.0)
+	    .add("lifeBefore", lifeBefore.whole())
+	    .add("lifeLeft", lifeLeft);
+	if (HitBreakdown *breakdown = CurrentBreakdown(false); breakdown != nullptr) {
+		if (!namedSource)
+			event.add("hit", breakdown->what).addRaw("steps", StepsJson(*breakdown));
+		// The next packet of the same hit keeps the steps before the split.
+		std::erase_if(breakdown->steps, [](const HitStep &step) { return step.perPacket; });
+	}
 }
 
 void TelemetryMonsterKilled(const Monster &monster)
@@ -983,33 +1792,65 @@ void TelemetryMonsterKilled(const Monster &monster)
 	if (LogFile == nullptr)
 		return;
 	if (monster.isPlayerMinion()) {
-		TelemetryLog("minion", std::format("{:s} died", monster.name()));
+		WriteText("minion", std::format("{:s} died", monster.name()));
+		Event(LogChannel::Combat, LogLevel::Normal, "minion_died").add("p", MyPlayerId).add("minion", monster.name());
 		return;
 	}
 	const uint32_t now = Now();
 	const size_t rarity = MonsterRarityIndex(monster);
+	const int monsterLevel = monster.level(sgGameInitInfo.nDifficulty);
+	CurrentLevel.kills++;
+
+	std::string fight;
+	std::string killer = "minion or another monster";
+	double seconds = 0;
+	int hits = 0;
+	int overkill = 0;
+	const auto it = Engagements.find(monster.getId());
+	if (it != Engagements.end()) {
+		const Engagement &engagement = it->second;
+		SkillDamage &skill = DamageFor(engagement.lastSource);
+		skill.kills++;
+		skill.killMs += now - engagement.firstHitMs;
+		killer = engagement.lastSource;
+		seconds = (now - engagement.firstHitMs) / 1000.0;
+		hits = engagement.hits;
+		overkill = engagement.overkill;
+		// The report script reads this wording: new parts go at the end.
+		fight = std::format(", killed by {:s} {:.1f} s after the first hit, {:d} overkill, {:d} hits", killer, seconds, overkill, hits);
+		Engagements.erase(it);
+	} else {
+		fight = ", killed by a minion or another monster";
+	}
+	const bool oneHit = hits == 1;
 	Count([&](TelemetryCounts &counts) {
 		counts.kills++;
 		if (rarity == 2)
 			counts.rareKills++;
 		if (rarity == 3)
 			counts.uniqueKills++;
+		if (oneHit)
+			counts.oneHitKills++;
 	});
-	CurrentLevel.kills++;
-
-	std::string fight;
-	const auto it = Engagements.find(monster.getId());
-	if (it != Engagements.end()) {
-		const Engagement &engagement = it->second;
-		SkillDamage &killer = DamageFor(engagement.lastSource);
-		killer.kills++;
-		killer.killMs += now - engagement.firstHitMs;
-		fight = std::format(", killed by {:s} {:.1f} s after the first hit, {:d} overkill", engagement.lastSource, (now - engagement.firstHitMs) / 1000.0, engagement.overkill);
-		Engagements.erase(it);
-	} else {
-		fight = ", killed by a minion or another monster";
+	if (CurrentFight.active) {
+		CurrentFight.kills++;
+		if (oneHit)
+			CurrentFight.oneHitKills++;
 	}
-	TelemetryLog("kill", std::format("{:s} ({:s}, monster level {:d}){:s}, {:.1f} s since the last kill", monster.name(), RarityNames[rarity], monster.level(sgGameInitInfo.nDifficulty), fight, (now - LastKillMs) / 1000.0));
+	const double sinceLast = (now - LastKillMs) / 1000.0;
+	WriteText("kill", std::format("{:s} ({:s}, monster level {:d}){:s}, {:.1f} s since the last kill", monster.name(), RarityNames[rarity], monsterLevel, fight, sinceLast));
+	Event(LogChannel::Combat, LogLevel::Normal, "kill")
+	    .add("p", MyPlayerId)
+	    .add("monster", monster.name())
+	    .add("rarity", RarityNames[rarity])
+	    .add("monsterLevel", monsterLevel)
+	    .add("heroLevel", MyPlayer != nullptr ? MyPlayer->getCharacterLevel() : 0)
+	    .add("killer", killer)
+	    .add("seconds", seconds)
+	    .add("hits", hits)
+	    .add("oneHit", oneHit)
+	    .add("overkill", overkill)
+	    .add("sinceLastKill", sinceLast);
 	LastKillMs = now;
 }
 
@@ -1062,6 +1903,19 @@ void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26
 	});
 	CurrentLevel.damageTakenRaw += damage.raw();
 	CurrentLevel.shieldTakenRaw += shield;
+	if (Fight &fight = CurrentFight; fight.active) {
+		fight.hits++;
+		fight.lifeLostRaw += damage.raw();
+		fight.shieldLostRaw += shield;
+		if (big)
+			fight.bigHits++;
+		if (total > fight.biggestHitRaw) {
+			fight.biggestHitRaw = total;
+			fight.biggestHitFrom = attacker;
+		}
+		fight.lowestLifePercent = std::min(fight.lowestLifePercent, lifePercent);
+		fight.lowestPoolPercent = std::min(fight.lowestPoolPercent, PoolPercent(player));
+	}
 	auto byAttacker = std::find_if(DamageByAttacker.begin(), DamageByAttacker.end(), [&](const auto &entry) { return entry.first == attacker; });
 	if (byAttacker == DamageByAttacker.end())
 		byAttacker = DamageByAttacker.insert(DamageByAttacker.end(), { attacker, AttackerDamage {} });
@@ -1076,11 +1930,27 @@ void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26
 		StrAppend(text, std::format(", energy shield {:d}/{:d}", player.poe2.energyShield / 64, player.poe2.maxEnergyShield));
 	LastHitText = text;
 	if (closeCall)
-		TelemetryLog("close call", text);
+		WriteText("close call", text);
 	else if (big)
-		TelemetryLog("hit", text);
+		WriteText("hit", text);
 	else
 		Remember("hit", text);
+	TelemetryEvent event = Event(LogChannel::Combat, LogLevel::Normal, "hit_taken");
+	event.add("p", player.getId())
+	    .add("attacker", attacker)
+	    .add("type", DamageTypeName(damageType))
+	    .add("damage", total / 64.0)
+	    .add("toShield", shield / 64.0)
+	    .add("life", after.whole())
+	    .add("maxLife", max.whole())
+	    .add("shield", player.poe2.energyShield / 64)
+	    .add("maxShield", player.poe2.maxEnergyShield)
+	    .add("big", big)
+	    .add("closeCall", closeCall);
+	if (HitBreakdown *breakdown = CurrentBreakdown(true); breakdown != nullptr) {
+		event.add("hit", breakdown->what).addRaw("steps", StepsJson(*breakdown));
+		breakdown->active = false;
+	}
 }
 
 void TelemetryPlayerDied(const Player &player)
@@ -1088,7 +1958,15 @@ void TelemetryPlayerDied(const Player &player)
 	if (&player != MyPlayer)
 		return;
 	Count([](TelemetryCounts &counts) { counts.deaths++; });
-	TelemetryLog("death", std::format("died at character level {:d}{:s}", player.getCharacterLevel(), LastHitText.empty() ? "" : StrCat(", last hit: ", LastHitText)));
+	WriteText("death", std::format("died at character level {:d}{:s}", player.getCharacterLevel(), LastHitText.empty() ? "" : StrCat(", last hit: ", LastHitText)), true);
+	Event(LogChannel::Session, LogLevel::Always, "death")
+	    .add("p", player.getId())
+	    .add("heroLevel", player.getCharacterLevel())
+	    .add("lastHit", LastHitText);
+	if (CurrentFight.active) {
+		CurrentFight.died = true;
+		EndFight("hero died");
+	}
 	WriteRecentEvents();
 }
 
@@ -1096,7 +1974,15 @@ void TelemetryLevelUp(const Player &player)
 {
 	if (&player != MyPlayer)
 		return;
-	TelemetryLog("levelup", std::format("character level {:d}, life {:d}, mana {:d}, {:.1f} min into the game", player.getCharacterLevel(), player._pMaxHP.whole(), player._pMaxMana.whole(), (Now() - GameStartMs) / 60000.0));
+	const double minutes = (Now() - GameStartMs) / 60000.0;
+	WriteText("levelup", std::format("character level {:d}, life {:d}, mana {:d}, {:.1f} min into the game", player.getCharacterLevel(), player._pMaxHP.whole(), player._pMaxMana.whole(), minutes));
+	Event(LogChannel::Progress, LogLevel::Always, "levelup")
+	    .add("p", player.getId())
+	    .add("heroLevel", player.getCharacterLevel())
+	    .add("life", player._pMaxHP.whole())
+	    .add("mana", player._pMaxMana.whole())
+	    .add("gameMinutes", minutes)
+	    .add("monsterLevel", CurrentLevel.monsterLevel);
 	// A new gem level unlocks: say what it would add to each socketed gem.
 	const int unlocked = MaxGemLevelForCharacter(player.getCharacterLevel());
 	if (unlocked == MaxGemLevelForCharacter(player.getCharacterLevel() - 1))
@@ -1114,6 +2000,12 @@ void TelemetryGemLevelChanged(const Player &player, SkillSlot skill, int fromLev
 {
 	if (&player != MyPlayer)
 		return;
+	Event(LogChannel::Skills, LogLevel::Always, "gem_level")
+	    .add("p", player.getId())
+	    .add("skill", SkillName(skill))
+	    .add("from", fromLevel)
+	    .add("to", toLevel)
+	    .add("heroLevel", player.getCharacterLevel());
 	GemLog(std::format("{:s} raised from gem level {:d} to {:d} at character level {:d}", SkillName(skill), fromLevel, toLevel, player.getCharacterLevel()));
 	GemLog(StrCat("  before: ", GemLevelText(skill, fromLevel)));
 	for (int level = fromLevel + 1; level <= toLevel; level++)
@@ -1135,6 +2027,10 @@ void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCo
 		counts.skillUses++;
 		counts.manaSpent += manaCost;
 	});
+	if (CurrentFight.active) {
+		CurrentFight.skills++;
+		CurrentFight.manaSpent += manaCost;
+	}
 	if (LogFile != nullptr) {
 		SkillDamage &stats = DamageFor(LastSkill);
 		stats.uses++;
@@ -1143,7 +2039,14 @@ void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCo
 			stats.firstUseMs = LastSkillMs;
 		stats.lastUseMs = LastSkillMs;
 	}
-	TelemetryLog("skill", std::format("{:s}, {:d} mana, {:d}/{:d} left", LastSkill, manaCost, player._pMana.whole(), player._pMaxMana.whole()));
+	WriteText("skill", std::format("{:s}, {:d} mana, {:d}/{:d} left", LastSkill, manaCost, player._pMana.whole(), player._pMaxMana.whole()));
+	Event(LogChannel::Skills, LogLevel::Normal, "skill")
+	    .add("p", player.getId())
+	    .add("skill", skill)
+	    .add("gem", gemLevel)
+	    .add("mana", manaCost)
+	    .add("manaLeft", player._pMana.whole())
+	    .add("maxMana", player._pMaxMana.whole());
 }
 
 void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason)
@@ -1151,7 +2054,13 @@ void TelemetrySkillFailed(const Player &player, std::string_view skill, std::str
 	if (&player != MyPlayer)
 		return;
 	Count([](TelemetryCounts &counts) { counts.failedSkills++; });
-	TelemetryLog("skill failed", std::format("{:s}: {:s}, mana {:d}/{:d}", skill, reason, player._pMana.whole(), player._pMaxMana.whole()));
+	WriteText("skill failed", std::format("{:s}: {:s}, mana {:d}/{:d}", skill, reason, player._pMana.whole(), player._pMaxMana.whole()));
+	Event(LogChannel::Skills, LogLevel::Normal, "skill_failed")
+	    .add("p", player.getId())
+	    .add("skill", skill)
+	    .add("reason", reason)
+	    .add("manaLeft", player._pMana.whole())
+	    .add("maxMana", player._pMaxMana.whole());
 }
 
 void TelemetryFlaskUsed(const Player &player, const Item &flask, int chargesLeft, bool life, bool mana, int lifePercent, int manaPercent)
@@ -1165,7 +2074,19 @@ void TelemetryFlaskUsed(const Player &player, const Item &flask, int chargesLeft
 		if (wasted)
 			counts.wastedFlasks++;
 	});
-	TelemetryLog("flask", std::format("{:s}, {:d} charges left, drunk at {:d}% life and {:d}% mana{:s}", flask._iIName, chargesLeft, lifePercent, manaPercent, wasted ? " (wasted)" : ""));
+	if (CurrentFight.active)
+		CurrentFight.flasks++;
+	WriteText("flask", std::format("{:s}, {:d} charges left, drunk at {:d}% life and {:d}% mana{:s}", flask._iIName, chargesLeft, lifePercent, manaPercent, wasted ? " (wasted)" : ""));
+	Event(LogChannel::Combat, LogLevel::Normal, "flask")
+	    .add("p", player.getId())
+	    .add("flask", flask._iIName)
+	    .add("life", life)
+	    .add("mana", mana)
+	    .add("chargesLeft", chargesLeft)
+	    .add("lifePercent", lifePercent)
+	    .add("manaPercent", manaPercent)
+	    .add("wasted", wasted)
+	    .add("inFight", CurrentFight.active);
 }
 
 void TelemetryCharmUsed(const Player &player, std::string_view charm)
@@ -1173,8 +2094,24 @@ void TelemetryCharmUsed(const Player &player, std::string_view charm)
 	if (&player != MyPlayer)
 		return;
 	Count([](TelemetryCounts &counts) { counts.charmUses++; });
-	TelemetryLog("charm", std::format("{:s} went off, life {:d}/{:d}", charm, player._pHitPoints.whole(), player._pMaxHP.whole()));
+	WriteText("charm", std::format("{:s} went off, life {:d}/{:d}", charm, player._pHitPoints.whole(), player._pMaxHP.whole()));
+	Event(LogChannel::Combat, LogLevel::Normal, "charm").add("p", player.getId()).add("charm", charm).add("life", player._pHitPoints.whole()).add("maxLife", player._pMaxHP.whole());
 }
+
+namespace {
+
+/** @brief The fields every item event shares: name, base, rarity, item level, and whether it's currency. */
+void AddItemFields(TelemetryEvent &event, const Item &item)
+{
+	event.add("item", item._iIName)
+	    .add("base", item.IDidx >= 0 ? std::string_view(AllItemsList[item.IDidx].iName) : std::string_view())
+	    .add("rarity", RarityNames[ItemRarityIndex(item)])
+	    .add("itemLevel", item._iCreateInfo & CF_LEVEL)
+	    .add("type", static_cast<int>(item._itype))
+	    .add("currency", IsCurrencyMiscId(item._iMiscId));
+}
+
+} // namespace
 
 void TelemetryItemDropped(const Item &item, std::string_view source)
 {
@@ -1184,7 +2121,12 @@ void TelemetryItemDropped(const Item &item, std::string_view source)
 	const size_t rarity = ItemRarityIndex(item);
 	Count([&](TelemetryCounts &counts) { counts.drops[rarity]++; });
 	CurrentLevel.drops++;
-	TelemetryLog("drop", std::format("{:s} ({:s}, item level {:d}) from {:s}", item._iIName, RarityNames[rarity], item._iCreateInfo & CF_LEVEL, source));
+	WriteText("drop", std::format("{:s} ({:s}, item level {:d}) from {:s}", item._iIName, RarityNames[rarity], item._iCreateInfo & CF_LEVEL, source));
+	TelemetryEvent event = Event(LogChannel::Loot, LogLevel::Normal, "drop");
+	if (!event)
+		return;
+	AddItemFields(event, item);
+	event.add("source", source).add("monsterLevel", CurrentLevel.monsterLevel);
 }
 
 void TelemetryItemPickedUp(const Player &player, const Item &item)
@@ -1193,7 +2135,12 @@ void TelemetryItemPickedUp(const Player &player, const Item &item)
 		return;
 	const size_t rarity = ItemRarityIndex(item);
 	Count([&](TelemetryCounts &counts) { counts.pickups[rarity]++; });
-	TelemetryLog("pickup", std::format("{:s} ({:s})", item._iIName, RarityNames[rarity]));
+	WriteText("pickup", std::format("{:s} ({:s})", item._iIName, RarityNames[rarity]));
+	TelemetryEvent event = Event(LogChannel::Loot, LogLevel::Normal, "pickup");
+	if (!event)
+		return;
+	event.add("p", player.getId());
+	AddItemFields(event, item);
 }
 
 void TelemetryCrafted(const Player &player, std::string_view currency, const Item &item)
@@ -1201,12 +2148,19 @@ void TelemetryCrafted(const Player &player, std::string_view currency, const Ite
 	if (&player != MyPlayer)
 		return;
 	Count([](TelemetryCounts &counts) { counts.crafts++; });
-	TelemetryLog("craft", std::format("{:s} on {:s}, now {:s}", currency, item._iIName, RarityNames[ItemRarityIndex(item)]));
+	WriteText("craft", std::format("{:s} on {:s}, now {:s}", currency, item._iIName, RarityNames[ItemRarityIndex(item)]));
+	TelemetryEvent event = Event(LogChannel::Loot, LogLevel::Normal, "craft");
+	if (!event)
+		return;
+	event.add("p", player.getId()).add("with", currency);
+	AddItemFields(event, item);
 }
 
 void TelemetryMark(std::string_view text)
 {
-	TelemetryLog("mark", text);
+	WriteText("mark", text, true);
+	Event(LogChannel::Session, LogLevel::Always, "mark").add("text", text);
+	FlushTelemetryEvents();
 	if (NotesFile == nullptr)
 		return;
 	// One line per note: date, session log, time into the session, where, and the note.
@@ -1243,6 +2197,7 @@ void TelemetryFrameDrawn()
 
 void TelemetryTick()
 {
+	TickCount++;
 	if (LogFile == nullptr || GameStartMs == 0 || MyPlayer == nullptr)
 		return;
 	const uint32_t now = Now();
@@ -1261,6 +2216,9 @@ void TelemetryTick()
 	if (now - WindowStartMs >= TelemetryStatsIntervalMs)
 		WriteStatsLine(now);
 	FlushEffects(now, false);
+	FlushBurns(now, false);
+	if (now - LastFlushMs >= TelemetryFlushMs)
+		FlushAll();
 }
 
 void TelemetryFatal(std::string_view message)
@@ -1275,6 +2233,7 @@ void TelemetryFatal(std::string_view message)
 		WriteCallStack(context);
 	}
 #endif
+	WriteCrashReport(StrCat(message, CrashContext()));
 }
 
 void TelemetryDrawStep(const char *step)

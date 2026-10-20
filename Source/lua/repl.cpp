@@ -92,6 +92,10 @@ void CreateReplEnvironment()
 		HitTraceSetDetail(detail);
 		return detail ? "Hit trace logs every tile now." : "Hit trace logs one line per spell.";
 	};
+	// log() shows each play log channel's loudness; log("damage", "deep") breaks down every hit until the game closes.
+	env["log"] = [](sol::optional<std::string> channel, sol::optional<std::string> level) {
+		return TelemetryLogLevelsText(channel.value_or(""), level.value_or(""));
+	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);
 		return TelemetryEnabled() ? "Marked in the play log." : "The play log isn't open.";

@@ -628,24 +628,38 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	const int mind = player._pIMinDam;
 	const int maxd = player._pIMaxDam;
 	int dam = RandomIntBetween(mind, maxd);
+	// POE2 Mashup: deep damage logging follows the hit step by step.
+	if (&player == MyPlayer) {
+		TelemetryHitStart(false, adjacentDamage ? "melee, beside the target" : "melee");
+		TelemetryHitStep(false, "weapon roll", static_cast<int64_t>(dam) << 6);
+	}
 	dam += dam * player._pIBonusDam / 100;
 	dam += player._pIBonusDamMod;
 	int dam2 = dam << 6;
 	dam += player._pDamageMod;
+	TelemetryHitStep(false, "after increased, added and attribute damage", static_cast<int64_t>(dam) << 6);
 	// POE2 Mashup: Battle Cry empowers melee hits, and so does a Brutality support on the skill.
 	if (player.poe2.warcryTicks > 0)
 		dam += dam * BattleCryDamagePercent(player.poe2.skillLevel(WeaponSkill::BattleCry)) / 100;
-	dam = dam * SupportMeleeDamagePercent(player) / 100;
+	const int supportPercent = SupportMeleeDamagePercent(player);
+	dam = dam * supportPercent / 100;
+	TelemetryHitStep(false, "melee supports", supportPercent, true);
 	// POE2 Mashup: Rage and Frenzy charges.
-	if (gbIsPoe2)
-		dam = dam * ResourceAttackDamagePercent(player) / 100;
+	if (gbIsPoe2) {
+		const int chargePercent = ResourceAttackDamagePercent(player);
+		dam = dam * chargePercent / 100;
+		TelemetryHitStep(false, "rage and frenzy charges", chargePercent, true);
+	}
 	// POE2 Mashup: area skills deal less to the tiles beside the target.
 	dam = dam * damagePercent / 100;
 
 	// POE2 Mashup: every attack can crit in POE2 mode, not just the Warrior's.
 	const bool crit = RollAttackCrit(player);
-	if (crit)
-		dam = dam * CritDamagePercent(player) / 100;
+	if (crit) {
+		const int critPercent = CritDamagePercent(player);
+		dam = dam * critPercent / 100;
+		TelemetryHitStep(false, "critical strike", critPercent, true);
+	}
 
 	ItemType phanditype = ItemType::None;
 	if (player.InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Sword || player.InvBody[INVLOC_HAND_RIGHT]._itype == ItemType::Sword) {
@@ -695,6 +709,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 
 	if (adjacentDamage)
 		dam >>= 2;
+	TelemetryHitStep(false, "after weapon against monster type and item specials", dam);
 
 	if (&player == MyPlayer) {
 		if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::Peril)) {

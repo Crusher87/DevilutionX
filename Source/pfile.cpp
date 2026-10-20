@@ -854,4 +854,14 @@ void pfile_update(bool forceSave)
 	sfile_write_stash();
 }
 
+std::string pfile_hero_save_path()
+{
+	return GetSavePath(gSaveNumber);
+}
+
+std::string pfile_stash_save_path()
+{
+	return GetStashSavePath();
+}
+
 } // namespace devilution

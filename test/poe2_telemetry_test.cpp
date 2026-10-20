@@ -22,17 +22,28 @@ std::string LogFolder()
 	return paths::PrefPath() + "poe2_logs" + DIRECTORY_SEPARATOR_STR;
 }
 
-std::string ReadLatestLog()
+std::string ReadLatest(std::string_view extension)
 {
+	TelemetryFlush();
 	std::string latest;
 	for (const std::string &file : ListFiles(LogFolder().c_str())) {
-		if (file > latest)
+		if (file.ends_with(extension) && file > latest)
 			latest = file;
 	}
 	std::ifstream stream(LogFolder() + latest);
 	std::stringstream contents;
 	contents << stream.rdbuf();
 	return contents.str();
+}
+
+std::string ReadLatestLog()
+{
+	return ReadLatest(".log");
+}
+
+std::string ReadLatestEvents()
+{
+	return ReadLatest(".events");
 }
 
 class Poe2TelemetryTest : public ::testing::Test {
@@ -147,6 +158,61 @@ TEST_F(Poe2TelemetryTest, GemLevelsGoToTheGemLog)
 	const std::string log = contents.str();
 	EXPECT_NE(log.find("Cleave raised from gem level 8 to 9"), std::string::npos) << log;
 	EXPECT_NE(log.find("level 9: 182% weapon damage"), std::string::npos) << log;
+}
+
+TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)
+{
+	TelemetryMark("events check");
+	TelemetrySkillUsed(*MyPlayer, "Spark", 7, 3);
+	TelemetryNoteAttacker("Hidden");
+	TelemetryPlayerDamaged(*MyPlayer, DamageType::Lightning, Fixed26_6::fromInt(5));
+	const std::string events = ReadLatestEvents();
+	EXPECT_EQ(events.rfind("{\"k\":\"header\",\"version\":1,", 0), 0U) << events;
+	EXPECT_NE(events.find("\"k\":\"mark\",\"area\":\"town\",\"text\":\"events check\""), std::string::npos) << events;
+	EXPECT_NE(events.find("\"k\":\"skill\",\"area\":\"town\",\"p\":0,\"skill\":\"Spark\",\"gem\":3,\"mana\":7"), std::string::npos) << events;
+	EXPECT_NE(events.find("\"attacker\":\"Hidden\",\"type\":\"lightning\",\"damage\":5.00"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, ChannelsSwitchFromTheConsole)
+{
+	EXPECT_NE(TelemetryLogLevelsText("", "").find("skills: normal"), std::string::npos);
+	EXPECT_NE(TelemetryLogLevelsText("skills", "off").find("skills: off"), std::string::npos);
+	TelemetrySkillUsed(*MyPlayer, "Quiet Spell", 1);
+	EXPECT_EQ(ReadLatestEvents().find("Quiet Spell"), std::string::npos) << "the skills channel is off";
+	EXPECT_NE(ReadLatestLog().find("[skill] Quiet Spell"), std::string::npos) << "the readable log keeps every line";
+	TelemetryLogLevelsText("skills", "normal");
+	EXPECT_NE(TelemetryLogLevelsText("session", "off").find("session: always"), std::string::npos) << "session events can't be switched off";
+	EXPECT_NE(TelemetryLogLevelsText("sound", "deep").find("No channel"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, DeepDamageBreaksDownHitsTaken)
+{
+	Player &player = *MyPlayer;
+	SetMaxEnergyShield(player, 0);
+	TelemetryHitStart(true, "Not on yet");
+	EXPECT_FALSE(TelemetryDeepDamage());
+	TelemetryLogLevelsText("damage", "deep");
+	ASSERT_TRUE(TelemetryDeepDamage());
+	TelemetryHitStart(true, "Overlord");
+	TelemetryHitStep(true, "rolled", 40 * 64);
+	TelemetryHitStep(true, "resistance", 25, true);
+	TelemetryHitStep(true, "after resistance", 30 * 64);
+	TelemetryNoteAttacker("Overlord");
+	ApplyPlrDamage(DamageType::Fire, player, Fixed26_6::fromInt(30));
+	TelemetryLogLevelsText("damage", "normal");
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"hit\":\"Overlord\",\"steps\":[{\"step\":\"rolled\",\"damage\":40.00},{\"step\":\"resistance\",\"percent\":25},{\"step\":\"after resistance\",\"damage\":30.00}]"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, GameEndWritesSummaryAndHistory)
+{
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"summary\""), std::string::npos) << events;
+	std::ifstream stream(LogFolder() + "history.tsv");
+	std::stringstream contents;
+	contents << stream.rdbuf();
+	EXPECT_EQ(contents.str().rfind("date\tsession\thero", 0), 0U) << contents.str();
 }
 
 TEST_F(Poe2TelemetryTest, SkillDamageStartsEmpty)

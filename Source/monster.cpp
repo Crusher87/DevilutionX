@@ -1353,16 +1353,28 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	// New method fixes a bug which caused the maximum possible damage value to be 63/64ths too low.
 	Fixed26_6 dam = Fixed26_6::fromRaw(RandomIntBetween(minDam << 6, maxDam << 6));
 	dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
-	if (!firstBlow)
+	// POE2 Mashup: deep damage logging follows the hit step by step.
+	if (&player == MyPlayer) {
+		TelemetryHitStart(true, monster.name());
+		TelemetryHitStep(true, "rolled", dam.raw());
+	}
+	if (!firstBlow) {
 		dam = ApplyArmour(player, dam);
-	if (&player == MyPlayer)
+		TelemetryHitStep(true, "after armour", dam.raw());
+	}
+	if (&player == MyPlayer) {
 		dam = ApplyMapMonsterHit(player, dam);
-	if (gbIsPoe2 && &player == MyPlayer)
+		TelemetryHitStep(true, "after map modifiers", dam.raw());
+	}
+	if (gbIsPoe2 && &player == MyPlayer) {
 		dam = ApplyTableSkillDefences(monster, player, dam);
+		TelemetryHitStep(true, "after skill defences", dam.raw());
+	}
 	if (&player == MyPlayer) {
 		if (player.wReflections > 0) {
 			const Fixed26_6 reflectedDamage = CheckReflect(monster, player, dam);
 			dam = std::max(dam - reflectedDamage, Fixed26_6::fromInt(0));
+			TelemetryHitStep(true, "after reflect", dam.raw());
 		}
 		TelemetryMeleeSwing(player, SwingOutcome::Landed);
 		TelemetryNoteAttacker(monster.name());

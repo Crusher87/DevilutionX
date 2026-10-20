@@ -259,7 +259,9 @@ Fixed26_6 ApplyShock(const Monster &monster, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || monster.poe2.shockTicks == 0)
 		return damage;
-	return Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent * MapExposurePercent() / 10000);
+	const Fixed26_6 shocked = Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent * MapExposurePercent() / 10000);
+	TelemetryHitStep(false, "after shock", shocked.raw(), false, true);
+	return shocked;
 }
 
 int AilmentChancePerMille(const Monster &monster, DamageType damageType, Fixed26_6 damage)
