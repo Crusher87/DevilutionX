@@ -8,7 +8,8 @@ Each session's event file (session_*.events, in poe2_logs and poe2_logs/old) als
 "tree_refund", "tree_clear" and "tree" events, timed against the fight records, so the report can line up the fights
 before a notable was taken with the fights after.
 
-The page answers, in order: what each hero took and when, which notables are taken by every hero of a class and which
+The page opens with questions for the player about why they took what they took (Curtis asked for these on every
+review of the logs), each with a picture from tree_pictures.py marking the nodes it is about. Then it answers, in order: what each hero took and when, which notables are taken by every hero of a class and which
 by none, what gets refunded, what each notable seemed to change in the fights after it, how far the Profane Roads
 get walked, what goes into the weapon sets, and what the tree adds up to at each level per class.
 
@@ -29,6 +30,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from run_report import esc, num, page, read_events, table  # noqa: E402
 import tree_audit  # noqa: E402
+import tree_pictures  # noqa: E402
 
 NOTABLE_KINDS = {'Notable', 'Shrine', 'AscendancyNotable', 'Ascendancy', 'JewelSocket'}
 ROADS = ('Leoric', 'Bartuc', 'Sickness', 'Maiden')
@@ -232,6 +234,77 @@ def feel_section(log):
             'and points left unspent because nothing near looked worth it. Main tree points only.</p>' + (body if rows else '<p>No history yet.</p>'))
 
 
+# Questions for Curtis about his choices: at most this many per hero, and the unspent points that make one worth asking.
+QUESTIONS_PER_HERO = 8
+UNSPENT_WORTH_ASKING = 3
+TRAVEL_WORTH_ASKING = 6
+
+
+def questions(log, tree, power):
+    """Questions about why a hero took what they took, each with a picture of the nodes it's about.
+    Returns (hero, question, svg) in the order they happened."""
+    if tree is None:
+        return []
+    nodes = tree['nodes']
+    asked = []
+    for hero in sorted(log.heroes()):
+        steps = [r for r in log.history if r.get('hero') == hero and r.get('node', '').isdigit()]
+        builds = [b for b in log.builds if b.get('hero') == hero]
+        held_now = {int(i) for i in (builds[-1].get('main') or '').split() if i.isdigit()} if builds else set()
+        held_now &= set(nodes)
+        mine = []
+        held = set()
+        since_notable = []
+        first_notable = True
+        for i, r in enumerate(steps):
+            node = int(r['node'])
+            if node not in nodes or r.get('pool') != 'main':
+                continue
+            n = nodes[node]
+            level = r.get('hero level', '?')
+            if r['action'] == 'took':
+                held.add(node)
+                if n['road'] and n['step'] == 1:
+                    mine.append((f"Level {level}: you stepped onto {n['road']}'s Profane Road. What pulled you onto it, and did you mean to walk "
+                                 f"it to the toll or the pact?", tree_pictures.svg(nodes, held, [node], [], title=f"{hero}: onto {n['road']}'s road")))
+                if n['kind'] in ('Notable', 'Shrine'):
+                    if first_notable:
+                        mine.append((f"Level {level}: your first notable was {n['name']}, after {len(since_notable)} other points. Why that one first?",
+                                     tree_pictures.svg(nodes, held - {node}, [node], since_notable, title=f"{hero}: first notable")))
+                        first_notable = False
+                    elif len(since_notable) >= TRAVEL_WORTH_ASKING:
+                        mine.append((f"Level {level}: you spent {len(since_notable)} points getting to {n['name']}. Was it the goal all along, "
+                                     f"or did nothing nearer look worth taking?", tree_pictures.svg(nodes, held - {node}, [node], since_notable,
+                                                                                                    title=f"{hero}: the walk to {n['name']}")))
+                    since_notable = []
+                else:
+                    since_notable.append(node)
+            elif r['action'] == 'refunded':
+                held.discard(node)
+                took = next((p for p in reversed(steps[:i]) if p.get('node') == r['node'] and p['action'] == 'took'), None)
+                quick = took is not None and steps.index(took) >= i - 3
+                name = n['name'] or f"the small node {tree_audit.label(n)}"
+                if n['kind'] in ('Notable', 'Shrine') or quick:
+                    when = f"at level {took.get('hero level')}" if took else 'earlier'
+                    ask = 'Was that a misclick or a second thought?' if quick else 'What made you give it back?'
+                    mine.append((f"Level {level}: you refunded {name}, taken {when}. {ask}",
+                                 tree_pictures.svg(nodes, held, [node], [], refunded=[node], title=f"{hero}: refunded {name}")))
+        # Strong notables right next to the build that were never taken.
+        near = {j for i in held_now for j in nodes[i]['links']} - held_now
+        passed = sorted((power.get(str(j), 0), j) for j in near if nodes[j]['kind'] == 'Notable')
+        if passed and passed[-1][0] >= 1.0:
+            score, j = passed[-1]
+            mine.append((f"You hold the node right next to {nodes[j]['name']} (score {score:.2f}) but never took it. Did you look at it, "
+                         f"and what put you off?", tree_pictures.svg(nodes, held_now, [], [], skipped=[j], title=f"{hero}: passed by {nodes[j]['name']}")))
+        unspent = [(int(b.get('points total') or 0) - int(b.get('points spent') or 0), b) for b in builds if b.get('when') == 'levelup']
+        if unspent and max(u for u, _ in unspent) >= UNSPENT_WORTH_ASKING:
+            most, b = max(unspent, key=lambda ub: ub[0])
+            mine.append((f"At level {b.get('hero level')} you had {most} passive points unspent. Were you saving them for something, "
+                         f"or was there nothing nearby worth taking?", tree_pictures.svg(nodes, held_now, [], [], title=f"{hero}: your tree now")))
+        asked += [(hero, q, picture) for q, picture in mine[:QUESTIONS_PER_HERO]]
+    return asked
+
+
 def signed(value, digits=1):
     if value is None:
         return ''
@@ -246,6 +319,14 @@ def report(log, tree):
     refunds = [r for r in log.history if r.get('action') == 'refunded']
     clears = [r for r in log.history if (r.get('action') or '').startswith('cleared')]
     sessions = {r.get('session') for r in log.history + log.builds}
+
+    asked = questions(log, tree, tree_power(tree))
+    if asked:
+        parts.append('<h2>Questions for you</h2><p>About why you took what you took. In each picture the node the question is about has a '
+                     'magenta ring, the points spent getting there a cyan line, a refunded node a red cross, a notable you passed by a green '
+                     'dashed ring, and the nodes you hold are gold.</p>')
+        for number, (hero, question, picture) in enumerate(asked, 1):
+            parts.append(f'<div class="q"><p><b>Q{number} ({esc(hero)})</b>: {esc(question)}</p>{picture}</div>')
 
     parts.append('<h2>Summary</h2>')
     parts.append(table(['', 'Value'], [

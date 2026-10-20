@@ -52,6 +52,7 @@ def load(path):
                 'id': int(row['id']), 'name': row.get('name', ''), 'kind': row.get('kind', ''), 'class': row.get('class', ''),
                 'region': row.get('region', ''), 'group': row.get('group', ''),
                 'stats': [], 'links': set(), 'road': None, 'step': 0,
+                'x': int(row.get('x') or 0), 'y': int(row.get('y') or 0),
             }
             for entry in filter(None, row.get('stats', '').split(',')):
                 stat, _, value = entry.partition('=')
