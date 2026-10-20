@@ -12,6 +12,7 @@
 #include <string_view>
 
 #include "poe2/player_data.hpp"
+#include "poe2/telemetry_events.hpp"
 #include "utils/fixed_point.hpp"
 
 namespace devilution {
@@ -21,8 +22,10 @@ struct Monster;
 struct Player;
 enum class DamageType : uint8_t;
 
-/** @brief Sessions kept in the poe2_logs folder; older ones are deleted when a new one starts. */
+/** @brief Sessions kept in the poe2_logs folder; older ones move to poe2_logs/old when a new one starts. */
 constexpr size_t MaxTelemetrySessions = 20;
+/** @brief Files kept in poe2_logs/old (a session is a .log and an .events file); the oldest are deleted past this. */
+constexpr size_t MaxTelemetryOldFiles = 400;
 /** @brief A hit on the player is logged on its own when it takes at least this percent of their life. */
 constexpr int TelemetryBigHitPercent = 10;
 /** @brief A hit that leaves the player below this percent of their life is logged as a close call. */
@@ -48,8 +51,14 @@ constexpr int TelemetrySwarmCount = 8;
 /** @brief Game ticks per second, and the quiet stretch (10 s) logged as a lull. */
 constexpr int TelemetryTicksPerSecond = 20;
 constexpr int TelemetryLullTicks = 10 * TelemetryTicksPerSecond;
-/** @brief Detailed events kept in memory and written out when the game crashes. */
-constexpr size_t TelemetryRecentEvents = 30;
+/** @brief Events kept in memory and written out when the game crashes. */
+constexpr size_t TelemetryRecentEvents = 300;
+/** @brief A fight ends after this long with no enemy near or aware of the player. */
+constexpr int TelemetryFightEndTicks = 5 * 20;
+/** @brief Crash reports kept in poe2_logs/crashes, each with copies of the save. */
+constexpr size_t MaxTelemetryCrashReports = 10;
+/** @brief Readable log lines are written to disk at least this often (crashes write them at once). */
+constexpr uint32_t TelemetryFlushMs = 1000;
 /** @brief Every this many stats lines, the damage dealt and taken summaries are written too. */
 constexpr int TelemetrySummaryEvery = 5;
 
@@ -57,6 +66,8 @@ constexpr int TelemetrySummaryEvery = 5;
 void TelemetryInit();
 /** @brief Whether a log file is open. */
 bool TelemetryEnabled();
+/** @brief Writes what's waiting in memory to both files now (they're otherwise written about once a second). */
+void TelemetryFlush();
 /** @brief Writes one line: time, level and the event. */
 void TelemetryLog(std::string_view category, std::string_view text);
 /**
@@ -87,6 +98,8 @@ enum class SwingOutcome : uint8_t {
 };
 /** @brief Counts a monster's melee swing at the hero by how it ended, to show how well evasion and block hold up. */
 void TelemetryMeleeSwing(const Player &player, SwingOutcome outcome);
+/** @brief Counts the hero's attack roll against a monster (melee or arrow) and its hit chance, to show how often attacks miss. */
+void TelemetryHeroAttackRoll(const Player &player, int hitChance, bool hit);
 /** @brief Names what is about to damage a monster (minions, ignite, a herald); otherwise the last skill gets the credit. */
 void TelemetryNoteDamageSource(std::string_view source);
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);
@@ -121,6 +134,19 @@ void TelemetryFatal(std::string_view message);
 /** @brief Notes what is being drawn (a fixed text, or nullptr when done), so a crash while drawing names it. */
 void TelemetryDrawStep(const char *step);
 
+/**
+ * @brief Deep damage logging (log("damage", "deep") in the console): starts the breakdown of a hit.
+ * @param incoming True for a hit on the hero, false for the hero's hit on a monster.
+ */
+void TelemetryHitStart(bool incoming, std::string_view what);
+/** @brief Notes one step of the hit being worked out: the damage so far (raw), or a percentage when percent is set. */
+void TelemetryHitStep(bool incoming, const char *step, int64_t value, bool percent = false, bool perPacket = false);
+/** @brief Whether hits are being broken down, so callers can skip working out steps that are only logged. */
+bool TelemetryDeepDamage();
+
+/** @brief The console's log() command: shows each channel's loudness, or sets one ("all" sets every channel). */
+std::string TelemetryLogLevelsText(std::string_view channel, std::string_view level);
+
 /** @brief This session's totals and current rates, for the console's stats() command. */
 std::string TelemetryStatsText();
 /** @brief Damage dealt by each skill this game, most first. */
@@ -129,5 +155,14 @@ std::string TelemetrySkillDamageText();
 std::string TelemetryDamageTakenText();
 /** @brief One line describing the character's gear, skills, supports, passives and belt. */
 std::string TelemetryBuildText(const Player &player);
+
+/** @brief For the log's other parts (the passive tree tracker): a line in the readable log only, with no event of its own. */
+void TelemetryText(std::string_view category, std::string_view text);
+/** @brief An event stamped with the session time and area, like the play log's own. */
+TelemetryEvent TelemetryEventNow(LogChannel channel, LogLevel level, std::string_view kind);
+/** @brief The poe2_logs folder (empty before TelemetryInit), this session's log file name, and the local date and time. */
+const std::string &TelemetryFolder();
+std::string_view TelemetrySessionName();
+std::string TelemetryLocalStamp();
 
 } // namespace devilution

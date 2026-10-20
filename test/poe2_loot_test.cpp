@@ -94,11 +94,12 @@ TEST_F(Poe2LootTest, CategoriesFollowTheBible)
 	const auto weights = LootCategoryWeights(LootSource::Normal);
 	EXPECT_EQ(std::accumulate(weights.begin(), weights.end(), 0), 100);
 	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Equipment)], 48);
-	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gold)], 22);
+	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gold)], 21);
+	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gem)], 4);
 
 	const auto boss = LootCategoryWeights(LootSource::Boss);
 	EXPECT_EQ(boss[static_cast<size_t>(LootCategory::Equipment)], 96);
-	EXPECT_EQ(boss[static_cast<size_t>(LootCategory::Gold)], 11);
+	EXPECT_EQ(boss[static_cast<size_t>(LootCategory::Gold)], 10);
 	EXPECT_EQ(boss[static_cast<size_t>(LootCategory::Misc)], 0);
 }
 
@@ -174,7 +175,22 @@ TEST_F(Poe2LootTest, OrbsSitInValueBands)
 	EXPECT_EQ(OrbCurrencyBand(IMISC_ORB_TRANSMUTE), CurrencyBand::Common);
 	EXPECT_EQ(OrbCurrencyBand(IMISC_ORB_REGAL), CurrencyBand::Uncommon);
 	EXPECT_EQ(OrbCurrencyBand(IMISC_ORB_EXALTED), CurrencyBand::Rare);
+	EXPECT_EQ(OrbCurrencyBand(IMISC_ORB_SCOURING), CurrencyBand::Rare);
 	EXPECT_EQ(OrbCurrencyBand(IMISC_ORB_DIVINE), CurrencyBand::Premium);
+}
+
+TEST_F(Poe2LootTest, CurrencyWaitsForItsItemLevel)
+{
+	// The bundle's levels, with Alchemy held back to Regal's.
+	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_TRANSMUTE), 1);
+	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_AUGMENT), 1);
+	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_ALCHEMY), 12);
+	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_REGAL), 12);
+	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_SCOURING), 20);
+	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_DIVINE), 35);
+	// Transmutation and Augmentation are the most common.
+	EXPECT_GT(CurrencyBandWeight(IMISC_ORB_TRANSMUTE), CurrencyBandWeight(IMISC_ORB_WHETSTONE));
+	EXPECT_GT(CurrencyBandWeight(IMISC_ORB_WHETSTONE), CurrencyBandWeight(IMISC_ORB_BAUBLE));
 }
 
 TEST_F(Poe2LootTest, DropsTakeTheRolledRarityAndRecreateTheSame)

@@ -642,6 +642,19 @@ Vec MissileCentre(const Missile &missile)
 	return TileCentre(missile.position.tileForRendering) + offset + Vec { 0, 16 - missile._miAnimWidth / 2.F };
 }
 
+/**
+ * @brief Where an arrow's head is drawn, from its direction frame (one per Direction16): its shaft sits 12 pixels above the
+ * sprite's centre, so a glow at the centre showed under the arrow (Curtis 2026-10-20).
+ */
+Vec ArrowTip(const Missile &missile)
+{
+	static constexpr std::array<Vec, 16> Tips { {
+	    { -7, 4 }, { -19, 2 }, { -29, -2 }, { -35, -8 }, { -35, -14 }, { -31, -20 }, { -22, -25 }, { -10, -28 },
+	    { 3, -28 }, { 16, -26 }, { 26, -22 }, { 31, -16 }, { 32, -9 }, { 28, -3 }, { 19, 1 }, { 7, 4 },
+	} };
+	return MissileCentre(missile) + Tips[std::clamp(missile._miAnimFrame - 1, 0, 15)];
+}
+
 struct GraphicLook {
 	Element element;
 	/** @brief 0: not an effect of ours; otherwise the burst's size when it appears. */
@@ -1486,26 +1499,21 @@ bool BehindWall(Point tile)
 	return solid(tile + Displacement { 1, 1 }) || (solid(tile + Displacement { 1, 0 }) && solid(tile + Displacement { 0, 1 }));
 }
 
-/** @brief Puts a marker over each towner in town who has quest news, with a few motes rising off it. */
+/**
+ * @brief Puts a marker over each towner in town who has quest news, and over each monster in the dungeon who will talk
+ * (Gharbad, Zhar, Lachdanan, Snotspill), with a few motes rising off it.
+ */
 void ScanTowners(const View &view)
 {
-	if (leveltype != DTYPE_TOWN || MyPlayer == nullptr) {
+	if (MyPlayer == nullptr) {
 		QuestMarkSince.clear();
 		return;
 	}
 	std::unordered_map<int, float> since;
-	for (const Towner &towner : Towners) {
-		const QuestMarker marker = TownerQuestMarker(*MyPlayer, towner);
-		if (marker == QuestMarker::None || !towner.anim)
-			continue;
-		const Vec feet = TileCentre(towner.position);
-		if (!view.contains(feet, 150))
-			continue;
-		const float height = std::min(static_cast<float>(towner.currentSprite().height()), 110.F);
-		const float phase = static_cast<float>(static_cast<int>(towner._ttype) * 37 % 97);
+	const auto mark = [&](Vec feet, float spriteHeight, int key, bool reward) {
+		const float height = std::min(spriteHeight, 110.F);
+		const float phase = static_cast<float>(key * 37 % 97);
 		const Vec pos = feet - Vec { 0, height * 0.8F + 24 + 3 * std::sin(AmbientTime * 0.003F + phase) };
-		const bool reward = marker == QuestMarker::Reward;
-		const int key = static_cast<int>(towner._ttype) * 2 + (reward ? 1 : 0);
 		const auto seen = QuestMarkSince.find(key);
 		const float first = seen != QuestMarkSince.end() ? seen->second : AmbientTime;
 		since[key] = first;
@@ -1513,6 +1521,29 @@ void ScanTowners(const View &view)
 		QuestMarks.push_back({ pos, reward, phase, age });
 		if (age > 500)
 			Emitters.push_back({ pos - Vec { 0, 40 }, 8, Ambient::Flame, {}, 0 });
+	};
+	if (leveltype == DTYPE_TOWN) {
+		for (const Towner &towner : Towners) {
+			const QuestMarker marker = TownerQuestMarker(*MyPlayer, towner);
+			if (marker == QuestMarker::None || !towner.anim)
+				continue;
+			const Vec feet = TileCentre(towner.position);
+			if (!view.contains(feet, 150))
+				continue;
+			const bool reward = marker == QuestMarker::Reward;
+			mark(feet, static_cast<float>(towner.currentSprite().height()), static_cast<int>(towner._ttype) * 2 + (reward ? 1 : 0), reward);
+		}
+	} else {
+		for (size_t i = 0; i < ActiveMonsterCount; i++) {
+			const Monster &monster = Monsters[ActiveMonsters[i]];
+			const Point tile = monster.position.tile;
+			if (!CanTalkToMonst(monster) || !monster.animInfo.sprites || !InDungeonBounds(tile) || !IsTileLit(tile) || BehindWall(tile))
+				continue;
+			const Vec feet = TileCentre(tile);
+			if (!view.contains(feet, 150))
+				continue;
+			mark(feet, static_cast<float>(monster.animInfo.currentSprite().height()), 1000 + static_cast<int>(ActiveMonsters[i]), false);
+		}
 	}
 	QuestMarkSince = std::move(since);
 }
@@ -2204,6 +2235,57 @@ void Sparks(Point tile, Element element, float size)
 	SparksAt(TileCentre(tile), element, size);
 }
 
+void Volley(Point from, Point toward, int arrows, bool feathers)
+{
+	TelemetryEffect("vfx", StrCat("Volley ", arrows), from.x, from.y);
+	if (!Enabled())
+		return;
+	const Vec bow = TileCentre(from) + Vec { 0, -36 };
+	const Vec d = TileCentre(toward) - TileCentre(from);
+	const float length = Length(d);
+	const Vec dir = length > 0.01F ? d * (1 / length) : Vec { 1, 0 };
+	// The bowstring's snap: a small pale flash just ahead of the bow.
+	AddRing(bow + dir * 14, 0, 9, 70, 0, { 245, 240, 225 }, 0.45F, true, false);
+	// Ghostly shafts fanning out ahead, so one loosing reads as a hail of arrows (Curtis 2026-10-20).
+	for (int i = 0; i < arrows; i++) {
+		const float spread = arrows > 1 ? Random(-0.22F, 0.22F) : 0.F;
+		const float c = std::cos(spread);
+		const float s = std::sin(spread);
+		const Vec way { dir.x * c - dir.y * s, dir.x * s + dir.y * c };
+		Particle p;
+		p.pos = bow + way * Random(10, 24);
+		p.vel = way * Random(520, 760);
+		p.life = Random(110, 170);
+		p.shape = Shape::Streak;
+		p.c0 = { 255, 248, 230 };
+		p.c1 = { 170, 150, 120 };
+		p.size0 = 1.6F;
+		p.size1 = 0.6F;
+		p.drag = 1.5F;
+		p.alpha = 0.65F;
+		AddParticle(p);
+	}
+	if (!feathers)
+		return;
+	// A few white fletching flecks shed off the string, drifting down.
+	for (int i = 0; i < 4; i++) {
+		Particle p;
+		p.pos = bow + dir * Random(4, 12) + Vec { Random(-4, 4), Random(-3, 3) };
+		p.vel = dir * Random(30, 70) + Vec { Random(-25, 25), Random(-10, 10) };
+		p.vz = Random(10, 40);
+		p.gravity = 90;
+		p.drag = 2.5F;
+		p.life = Random(380, 620);
+		p.shape = Shape::Shard;
+		p.c0 = { 250, 248, 240 };
+		p.c1 = { 175, 165, 150 };
+		p.size0 = 2.6F;
+		p.size1 = 1.6F;
+		p.alpha = 0.6F;
+		AddParticle(p);
+	}
+}
+
 void Cut(Point tile, Element element)
 {
 	TelemetryEffect("vfx", StrCat("Cut ", magic_enum::enum_name(element)), tile.x, tile.y);
@@ -2375,11 +2457,12 @@ void ScanMissiles()
 		}
 		if (!look.projectile || !missile._miDrawFlag)
 			continue;
-		const Vec head = MissileCentre(missile);
+		const bool isArrow = IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
+		const Vec head = isArrow ? ArrowTip(missile) : MissileCentre(missile);
 		Trail &trail = Trails[&missile];
 		if (trail.frame == 0) {
 			trail.element = look.element;
-			trail.arrow = IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
+			trail.arrow = isArrow;
 			trail.style = StyleOf(missile._mitype);
 			trail.scale = scale;
 		}
@@ -2420,7 +2503,7 @@ void ScanMissiles()
 			glow.alpha = 1;
 			FrameGlows.push_back(glow);
 			// The light the projectile throws on the floor beneath it.
-			glow.pos = head + Vec { 0, missile._miAnimWidth / 2.F - 16 };
+			glow.pos = MissileCentre(missile) + Vec { 0, missile._miAnimWidth / 2.F - 16 };
 			glow.r0 = glow.r1 = TileRadius * 1.6F;
 			glow.colour = c.mid;
 			glow.alpha = 0.22F;
@@ -2432,7 +2515,7 @@ void ScanMissiles()
 	// An arrow that vanished hit something (or the wall): sparks where it stopped.
 	for (const auto &[missile, trail] : Trails) {
 		if (trail.frame != ScanFrame && trail.arrow && trail.count > 0)
-			SparksAt(trail.points[0] + Vec { 0, 16 }, trail.element, 0.6F);
+			SparksAt(trail.points[0] + Vec { 0, 12 }, trail.element, 0.6F);
 	}
 	std::erase_if(Trails, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 }

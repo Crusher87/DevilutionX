@@ -368,15 +368,12 @@ bool MetaGemTakesSupport(SkillSlot meta, SupportGem gem)
 	return row && MetaGemTakesSupport(MyPlayer->poe2, *row, gem);
 }
 
-const SupportSockets &MetaSupportsFor(const Poe2PlayerData &data, SkillSlot skill)
+SupportSockets MetaSupportsFor(const Poe2PlayerData &data, SkillSlot skill)
 {
-	static const SupportSockets None {};
-	// One list for each meta socket, so a caller still going through one isn't changed by a lookup for another skill.
-	static std::array<SupportSockets, NumSkillSlots * MaxSupportSockets> fitting {};
+	SupportSockets result {};
 	const auto meta = data.metaSocketOf(skill);
 	if (!meta)
-		return None;
-	SupportSockets &result = fitting[(meta->first * MaxSupportSockets) + meta->second];
+		return result;
 	const SupportSockets &supports = data.slotSupports[meta->first];
 	for (size_t i = 0; i < MaxSupportSockets; i++) {
 		const SupportGem gem = supports[i];

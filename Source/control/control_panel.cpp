@@ -323,7 +323,7 @@ void OpenCharPanel()
 	QuestLogIsOpen = false;
 	CloseSkillsPanel();
 	CloseGoldWithdraw();
-	CloseStash();
+	CloseStashForPanel();
 	CloseVisualStore();
 	CharFlag = true;
 }
@@ -589,7 +589,7 @@ void CheckMainPanelButtonUp()
 		case PanelButtonQlog:
 			CloseCharPanel();
 			CloseGoldWithdraw();
-			CloseStash();
+			CloseStashForPanel();
 			CloseVisualStore();
 			if (!QuestLogIsOpen)
 				StartQuestlog();
@@ -623,7 +623,7 @@ void CheckMainPanelButtonUp()
 			SpellbookFlag = false;
 			invflag = !invflag;
 			CloseGoldWithdraw();
-			CloseStash();
+			CloseStashForPanel();
 			CloseVisualStore();
 			CloseGoldDrop();
 			break;

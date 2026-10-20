@@ -253,8 +253,8 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Stone Charm	Charm	4	0	0	0	0	0	0	0	0		CHARM_STUN	Null	true	400
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Golden Charm	Charm	8	0	0	0	0	0	0	0	0		CHARM_GOLDEN	Null	true	800
 	1	Misc	Unequippable	ARENA_POTION	Misc	NONE	Glassblower's Bauble	Orb	2	0	0	0	0	0	0	0	0		ORB_BAUBLE	Null	true	400
-	2	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Uncut Spirit Gem	Uncut Gem	3	0	0	0	0	0	0	0	0		UNCUT_SPIRIT	Null	true	600
-	0	Misc	Unequippable	BRAIN	Misc	NONE	Crypt King's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
+	1	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Uncut Spirit Gem	Uncut Gem	3	0	0	0	0	0	0	0	0		UNCUT_SPIRIT	Null	true	600
+	0	Misc	Unequippable	BRAIN	Misc	NONE	Catacomb Lord's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Cavern Lord's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Skull of the Archbishop	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
 	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Rusted Cuirass	Plate	1	60	0	0	6	7	0	0	0		NONE	Null	false	690
@@ -671,22 +671,22 @@ poe2:focus_sage_focus	1	Armor	One-handed	BOOK_BLUE	Shield	NONE	Sage Focus	Focus	
 poe2:focus_occult_focus	1	Armor	One-handed	BOOK_BLUE	Shield	NONE	Occult Focus	Focus	22	60	0	0	24	29	0	56	0		NONE	Null	false	6100
 poe2:focus_astral_focus	1	Armor	One-handed	FUNGAL_TOME	Shield	NONE	Astral Focus	Focus	25	65	0	0	32	39	0	69	0		NONE	Null	false	7100
 poe2:focus_void_focus	1	Armor	One-handed	FUNGAL_TOME	Shield	NONE	Void Focus	Focus	29	70	0	0	41	51	0	82	0		NONE	Null	false	8100
-poe2:ruby_ring	1	Misc	Ring	RING_OF_MAGMA	Ring	RING	Ruby Ring	Ring	1	0	0	0	0	0	0	0	0		RING	Null	false	1050
-poe2:sapphire_ring	1	Misc	Ring	XORINES_RING	Ring	RING	Sapphire Ring	Ring	3	0	0	0	0	0	0	0	0		RING	Null	false	1400
-poe2:topaz_ring	1	Misc	Ring	RING_OF_THUNDER	Ring	RING	Topaz Ring	Ring	5	0	0	0	0	0	0	0	0		RING	Null	false	1700
-poe2:coral_ring	1	Misc	Ring	RING_OF_REGHA	Ring	RING	Coral Ring	Ring	7	0	0	0	0	0	0	0	0		RING	Null	false	2000
-poe2:lapis_ring	1	Misc	Ring	RING_OF_THE_MYSTICS	Ring	RING	Lapis Ring	Ring	10	0	0	0	0	0	0	0	0		RING	Null	false	2400
-poe2:iron_ring	1	Misc	Ring	GIANTS_KNUCKLE	Ring	RING	Iron Ring	Ring	13	0	0	0	0	0	0	0	0		RING	Null	false	2800
-poe2:opal_ring	1	Misc	Ring	MERCURIAL_RING	Ring	RING	Opal Ring	Ring	18	0	0	0	0	0	0	0	0		RING	Null	false	3500
-poe2:gold_ring	1	Misc	Ring	RING_OF_ENGAGEMENT	Ring	RING	Gold Ring	Ring	24	0	0	0	0	0	0	0	0		RING	Null	false	4400
-poe2:amber_amulet	1	Misc	Amulet	AMULET	Amulet	AMULET	Amber Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
-poe2:jade_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Jade Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
-poe2:azure_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Azure Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
-poe2:prismatic_amulet	1	Misc	Amulet	AURIC_AMULET	Amulet	AMULET	Prismatic Amulet	Amulet	7	0	0	0	0	0	0	0	0		AMULET	Null	false	2000
-poe2:vital_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Vital Amulet	Amulet	10	0	0	0	0	0	0	0	0		AMULET	Null	false	2400
-poe2:spirit_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Spirit Amulet	Amulet	13	0	0	0	0	0	0	0	0		AMULET	Null	false	2800
-poe2:keen_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Keen Amulet	Amulet	18	0	0	0	0	0	0	0	0		AMULET	Null	false	3500
-poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	22	0	0	0	0	0	0	0	0		AMULET	Null	false	4000
+poe2:ruby_ring	1	Misc	Ring	RING_OF_MAGMA	Ring	RING	Ruby Ring	Ring	8	0	0	0	0	0	0	0	0		RING	Null	false	1050
+poe2:sapphire_ring	1	Misc	Ring	XORINES_RING	Ring	RING	Sapphire Ring	Ring	12	0	0	0	0	0	0	0	0		RING	Null	false	1400
+poe2:topaz_ring	1	Misc	Ring	RING_OF_THUNDER	Ring	RING	Topaz Ring	Ring	16	0	0	0	0	0	0	0	0		RING	Null	false	1700
+poe2:coral_ring	0	Misc	Ring	RING_OF_REGHA	Ring	RING	Coral Ring	Ring	20	0	0	0	0	0	0	0	0		RING	Null	false	2000
+poe2:lapis_ring	1	Misc	Ring	RING_OF_THE_MYSTICS	Ring	RING	Lazuli Ring	Ring	1	0	0	0	0	0	0	0	0		RING	Null	false	2400
+poe2:iron_ring	1	Misc	Ring	GIANTS_KNUCKLE	Ring	RING	Iron Ring	Ring	1	0	0	0	0	0	0	0	0		RING	Null	false	2800
+poe2:opal_ring	1	Misc	Ring	MERCURIAL_RING	Ring	RING	Pearl Ring	Ring	32	0	0	0	0	0	0	0	0		RING	Null	false	3500
+poe2:gold_ring	1	Misc	Ring	RING_OF_ENGAGEMENT	Ring	RING	Golden Hoop	Ring	12	0	0	0	0	0	0	0	0		RING	Null	false	4400
+poe2:amber_amulet	1	Misc	Amulet	AMULET	Amulet	AMULET	Amber Amulet	Amulet	8	0	0	0	0	0	0	0	0		AMULET	Null	false	1400
+poe2:jade_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Jade Amulet	Amulet	8	0	0	0	0	0	0	0	0		AMULET	Null	false	1400
+poe2:azure_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Lapis Amulet	Amulet	8	0	0	0	0	0	0	0	0		AMULET	Null	false	1400
+poe2:prismatic_amulet	1	Misc	Amulet	AURIC_AMULET	Amulet	AMULET	Pearlescent Amulet	Amulet	30	0	0	0	0	0	0	0	0		AMULET	Null	false	2500
+poe2:vital_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Bloodstone Amulet	Amulet	18	0	0	0	0	0	0	0	0		AMULET	Null	false	1900
+poe2:spirit_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Solar Amulet	Amulet	30	0	0	0	0	0	0	0	0		AMULET	Null	false	2500
+poe2:keen_amulet	1	Misc	Amulet	AMULET_OF_WARDING	Amulet	AMULET	Stellar Amulet	Amulet	24	0	0	0	0	0	0	0	0		AMULET	Null	false	2200
+poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Azure Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Chance	Orb	9	0	0	0	0	0	0	0	0		ORB_CHANCE	Null	true	1500
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Orb of Annulment	Orb	27	0	0	0	0	0	0	0	0		ORB_ANNUL	Null	true	4000
 	1	Misc	Unequippable	43	Misc	NONE	Blacksmith's Whetstone	Whetstone	1	0	0	0	0	0	0	0	0		ORB_WHETSTONE	Null	true	200
@@ -871,12 +871,12 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Vizjerei Focus Gem	Gem	12	0	0	0	0	0	0	50	0		SPIRITGEM_TABLE	Null	true	2600
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Berserk Gem	Gem	8	0	0	0	0	0	40	0	0		SPIRITGEM_TABLE	Null	true	1800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Reflect Gem	Gem	8	0	0	0	0	0	35	0	0		SPIRITGEM_TABLE	Null	true	1800
-	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
-	0	Misc	Unequippable	BOOK_RED_SMALL	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
+	0	Misc	Unequippable	BOOK_RED	Misc	NONE	Book of Specialisation	Book	1	0	0	0	0	0	0	0	0		SPEC_BOOK	Null	true	1000
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Lesser Jeweller's Orb	Orb	5	0	0	0	0	0	0	0	0		ORB_LESSER_JEWELLER	Null	true	1500
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Greater Jeweller's Orb	Orb	18	0	0	0	0	0	0	0	0		ORB_GREATER_JEWELLER	Null	true	6000
 	1	Misc	Unequippable	GOLDEN_ELIXIR	Misc	NONE	Perfect Jeweller's Orb	Orb	35	0	0	0	0	0	0	0	0		ORB_PERFECT_JEWELLER	Null	true	20000
@@ -937,3 +937,6 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Sage Amulet	Amulet	
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Ravenous Swarm Gem	Gem	6	0	0	0	0	0	0	30	0		SPIRITGEM_TABLE	Null	true	1500
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Sacrifice Gem	Gem	21	0	0	0	0	0	0	60	0		SPIRITGEM_TABLE	Null	true	3600
 	0	Misc	Unequippable	GREATER_RUNE_OF_LIGHTNING	Misc	NONE	Lingering Illusion Gem	Gem	12	0	0	0	0	0	0	20	20		SPIRITGEM_TABLE	Null	true	2600
+poe2:crimson_amulet	1	Misc	Amulet	AMULET	Amulet	AMULET	Crimson Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
+poe2:lunar_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Lunar Amulet	Amulet	14	0	0	0	0	0	0	0	0		AMULET	Null	false	1700
+poe2:gold_amulet	1	Misc	Amulet	AURIC_AMULET	Amulet	AMULET	Gold Amulet	Amulet	35	0	0	0	0	0	0	0	0		AMULET	Null	false	2750

@@ -12,10 +12,11 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
-#include "poe2/player_data.hpp"
-#include "poe2/skill_resources.hpp"
-#include "poe2/skill_gems.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/player_data.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spell_base.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -109,8 +110,7 @@ void AddWeaponHit(HitEstimate &hit, const Player &player, int percent)
 /** @brief The base of a spell-like skill, from Magic and the gem level (Ice Bolt, table spells). */
 void AddSpellBase(HitEstimate &hit, const Player &player, int gemLevel, DamageType type, int percent)
 {
-	const int min = (player._pMagic / 8) + gemLevel + 2;
-	hit.parts.push_back({ type, Scale(min, percent), Scale(min + 9, percent) });
+	hit.parts.push_back({ type, Scale(SpellBaseMin(player, gemLevel), percent), Scale(SpellBaseMax(player, gemLevel), percent) });
 }
 
 HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)

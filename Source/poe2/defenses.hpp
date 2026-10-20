@@ -58,6 +58,19 @@ BodyArmourImplicit GetBodyArmourImplicit(const Item &item);
  * multiplied by EnergyShieldPerDefense). Armour gets the rounding remainder.
  */
 void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield);
+/** @brief Armour, evasion and energy shield points (energy shield not yet multiplied by EnergyShieldPerDefense). */
+struct DefensePoints {
+	int armour = 0;
+	int evasion = 0;
+	int energyShield = 0;
+};
+/**
+ * @brief Splits an item's defence like SplitDefense, but the points its flat armour, evasion and energy shield modifiers
+ * gave go to their own kind. With @p modsKnown false (unidentified) everything is split and there is no bonus.
+ * @param base The defence from the base and flat modifiers.
+ * @param bonus What the item's quality and % increases add to it.
+ */
+void SplitItemDefense(const Item &item, bool modsKnown, DefensePoints &base, DefensePoints &bonus);
 
 /** @brief Armour from gear and class bonuses, and Barkskin's unless it's left out (the build log leaves it out). */
 int ArmourRating(const Player &player, bool withSpiritBuffs = true);

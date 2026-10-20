@@ -68,6 +68,8 @@ void Fissure(Point from, Point to, Element element);
 void Impact(Point tile, Element element, float size);
 /** @brief A small shower of bright sparks and a flash, like steel striking: a weapon hit or an arrow landing. */
 void Sparks(Point tile, Element element, float size);
+/** @brief Arrows loosed from a bow: a bowstring snap, pale shafts fanning out toward @p toward, and with @p feathers a few fletching flecks. */
+void Volley(Point from, Point toward, int arrows, bool feathers);
 /** @brief A weapon biting into a target: blood and a few sparks for plain steel, the element's sparks otherwise. */
 void Cut(Point tile, Element element);
 /** @brief Lightning arcing between two tiles. */

@@ -23,8 +23,12 @@ enum class ModEffect : uint8_t {
 	None,
 	Life,
 	Mana,
-	/** Added to the item's armour, evasion or energy shield. */
+	/** Added to the item's defence, split between its armour, evasion and energy shield. */
 	FlatDefense,
+	/** Added to the item's defence, but to its armour, evasion or energy shield only (energy shield in defence points). */
+	FlatArmour,
+	FlatEvasion,
+	FlatEnergyShield,
 	DefensePercent,
 	LifeAndDefensePercent,
 	ManaAndDefensePercent,
@@ -66,6 +70,8 @@ enum class ModEffect : uint8_t {
 	ArmourPercent,
 	EvasionPercent,
 	EnergyShieldPercent,
+	/** Increased rarity of items found, from the Gold Amulet. */
+	ItemRarity,
 };
 
 /** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */

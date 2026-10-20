@@ -58,6 +58,8 @@ public:
 	{
 		Item item;
 		EXPECT_TRUE(AdminGenerateItem(*MyPlayer, item, FindBase(baseName), quality, 20, 777)) << baseName;
+		// Currency waits for identified items, so the hero has read these.
+		item._iIdentified = true;
 		return item;
 	}
 
@@ -65,8 +67,10 @@ public:
 	{
 		for (int seed = 1; seed < 2000; seed++) {
 			Item item;
-			if (AdminGenerateItem(*MyPlayer, item, FindBase(baseName), quality, 30, seed) && wanted(item))
+			if (AdminGenerateItem(*MyPlayer, item, FindBase(baseName), quality, 30, seed) && wanted(item)) {
+				item._iIdentified = true;
 				return item;
+			}
 		}
 		ADD_FAILURE() << "no " << baseName << " matched";
 		return {};
@@ -135,6 +139,22 @@ TEST_F(Poe2CurrencyTest, RejectsWrongItems)
 	Item unique;
 	ASSERT_TRUE(AdminGenerateItem(*MyPlayer, unique, FindBase("Fine Short Bow"), ITEM_QUALITY_UNIQUE, 30, 99));
 	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Alchemy, *MyPlayer, unique));
+}
+
+TEST_F(Poe2CurrencyTest, WaitsUntilTheItemIsIdentified)
+{
+	Item magic = Make("Iron Cap", ITEM_QUALITY_MAGIC);
+	magic._iIdentified = false;
+	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Alchemy, *MyPlayer, magic));
+	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Whetstone, *MyPlayer, magic));
+	EXPECT_FALSE(CurrencyFitsItem(CurrencyOrb::Whetstone, magic));
+	EXPECT_EQ(magic._iMagical, ITEM_QUALITY_MAGIC);
+	EXPECT_FALSE(magic._iIdentified);
+
+	// A plain item has nothing to hide.
+	Item normal = Make("Shortsword", ITEM_QUALITY_NORMAL);
+	normal._iIdentified = false;
+	EXPECT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Transmutation, *MyPlayer, normal));
 }
 
 TEST_F(Poe2CurrencyTest, KeepsTheGameRngState)
@@ -211,6 +231,7 @@ TEST_F(Poe2CurrencyTest, VaalCorruptsForGood)
 	for (int seed = 1; seed <= 12; seed++) {
 		Item item;
 		ASSERT_TRUE(AdminGenerateItem(*MyPlayer, item, FindBase("Iron Cap"), ITEM_QUALITY_RARE, 30, seed));
+		item._iIdentified = true;
 		ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Vaal, *MyPlayer, item));
 		EXPECT_NE(item.dwBuff & CF_POE2_CORRUPTED, 0U);
 		ExpectRecreates(item);

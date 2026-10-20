@@ -30,6 +30,12 @@ enum class Poe2ItemStat : uint8_t {
 	ArmourPercent,
 	EvasionPercent,
 	EnergyShieldPercent,
+	/** The points of the item's defence its flat armour, evasion and energy shield modifiers gave, kept to their own kind. */
+	FlatArmour,
+	FlatEvasion,
+	FlatEnergyShield,
+	/** Increased rarity of items found in percent. */
+	ItemRarity,
 	Count,
 };
 

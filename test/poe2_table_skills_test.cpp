@@ -11,6 +11,7 @@
 #include "player.h"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spell_base.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -48,6 +49,22 @@ public:
 		UnloadModArchives();
 	}
 };
+
+TEST_F(Poe2TableSkillsTest, SpellBaseRollMatchesTheTooltipRange)
+{
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	EXPECT_EQ(SpellBaseMin(player, 3), 15);
+	EXPECT_EQ(SpellBaseMax(player, 3), 24);
+	for (uint32_t seed = 1; seed < 50; seed++) {
+		SetRndSeed(seed);
+		const int rolled = RollSpellBase(player, 3);
+		EXPECT_GE(rolled, SpellBaseMin(player, 3));
+		EXPECT_LE(rolled, SpellBaseMax(player, 3));
+		SetRndSeed(seed);
+		EXPECT_EQ(rolled, GenerateRnd(10) + (80 / 8) + 3 + 2) << "same roll as before the helper";
+	}
+}
 
 TEST_F(Poe2TableSkillsTest, EveryTableSkillHasAGem)
 {

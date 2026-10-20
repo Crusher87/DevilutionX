@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -9,10 +10,14 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/tree_telemetry.hpp"
+#include "spells.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
 #include "utils/paths.h"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 namespace {
@@ -22,11 +27,12 @@ std::string LogFolder()
 	return paths::PrefPath() + "poe2_logs" + DIRECTORY_SEPARATOR_STR;
 }
 
-std::string ReadLatestLog()
+std::string ReadLatest(std::string_view extension)
 {
+	TelemetryFlush();
 	std::string latest;
 	for (const std::string &file : ListFiles(LogFolder().c_str())) {
-		if (file > latest)
+		if (file.ends_with(extension) && file > latest)
 			latest = file;
 	}
 	std::ifstream stream(LogFolder() + latest);
@@ -35,11 +41,22 @@ std::string ReadLatestLog()
 	return contents.str();
 }
 
+std::string ReadLatestLog()
+{
+	return ReadLatest(".log");
+}
+
+std::string ReadLatestEvents()
+{
+	return ReadLatest(".events");
+}
+
 class Poe2TelemetryTest : public ::testing::Test {
 public:
 	static void SetUpTestSuite()
 	{
-		paths::SetPrefPath(::testing::TempDir() + "poe2_telemetry" + DIRECTORY_SEPARATOR_STR);
+		// A folder of its own, as tests run side by side and a session file is named by the second it starts.
+		paths::SetPrefPath(::testing::TempDir() + "poe2_telemetry_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + DIRECTORY_SEPARATOR_STR);
 		TelemetryInit();
 	}
 
@@ -149,9 +166,106 @@ TEST_F(Poe2TelemetryTest, GemLevelsGoToTheGemLog)
 	EXPECT_NE(log.find("level 9: 182% weapon damage"), std::string::npos) << log;
 }
 
+TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)
+{
+	TelemetryMark("events check");
+	TelemetrySkillUsed(*MyPlayer, "Spark", 7, 3);
+	TelemetryNoteAttacker("Hidden");
+	TelemetryPlayerDamaged(*MyPlayer, DamageType::Lightning, Fixed26_6::fromInt(5));
+	const std::string events = ReadLatestEvents();
+	EXPECT_EQ(events.rfind("{\"k\":\"header\",\"version\":1,", 0), 0U) << events;
+	EXPECT_NE(events.find("\"k\":\"mark\",\"area\":\"town\",\"text\":\"events check\""), std::string::npos) << events;
+	EXPECT_NE(events.find("\"k\":\"skill\",\"area\":\"town\",\"p\":0,\"skill\":\"Spark\",\"gem\":3,\"mana\":7"), std::string::npos) << events;
+	EXPECT_NE(events.find("\"attacker\":\"Hidden\",\"type\":\"lightning\",\"damage\":5.00"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, ChannelsSwitchFromTheConsole)
+{
+	EXPECT_NE(TelemetryLogLevelsText("", "").find("skills: normal"), std::string::npos);
+	EXPECT_NE(TelemetryLogLevelsText("skills", "off").find("skills: off"), std::string::npos);
+	TelemetrySkillUsed(*MyPlayer, "Quiet Spell", 1);
+	EXPECT_EQ(ReadLatestEvents().find("Quiet Spell"), std::string::npos) << "the skills channel is off";
+	EXPECT_NE(ReadLatestLog().find("[skill] Quiet Spell"), std::string::npos) << "the readable log keeps every line";
+	TelemetryLogLevelsText("skills", "normal");
+	EXPECT_NE(TelemetryLogLevelsText("session", "off").find("session: always"), std::string::npos) << "session events can't be switched off";
+	EXPECT_NE(TelemetryLogLevelsText("sound", "deep").find("No channel"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, DeepDamageBreaksDownHitsTaken)
+{
+	Player &player = *MyPlayer;
+	SetMaxEnergyShield(player, 0);
+	TelemetryHitStart(true, "Not on yet");
+	EXPECT_FALSE(TelemetryDeepDamage());
+	TelemetryLogLevelsText("damage", "deep");
+	ASSERT_TRUE(TelemetryDeepDamage());
+	TelemetryHitStart(true, "Overlord");
+	TelemetryHitStep(true, "rolled", 40 * 64);
+	TelemetryHitStep(true, "resistance", 25, true);
+	TelemetryHitStep(true, "after resistance", 30 * 64);
+	TelemetryNoteAttacker("Overlord");
+	ApplyPlrDamage(DamageType::Fire, player, Fixed26_6::fromInt(30));
+	TelemetryLogLevelsText("damage", "normal");
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"hit\":\"Overlord\",\"steps\":[{\"step\":\"rolled\",\"damage\":40.00},{\"step\":\"resistance\",\"percent\":25},{\"step\":\"after resistance\",\"damage\":30.00}]"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, GameEndWritesSummaryAndHistory)
+{
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"summary\""), std::string::npos) << events;
+	std::ifstream stream(LogFolder() + "history.tsv");
+	std::stringstream contents;
+	contents << stream.rdbuf();
+	EXPECT_EQ(contents.str().rfind("date\tsession\thero", 0), 0U) << contents.str();
+}
+
 TEST_F(Poe2TelemetryTest, SkillDamageStartsEmpty)
 {
 	EXPECT_EQ(TelemetrySkillDamageText(), "damage by skill: none yet");
+}
+
+TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)
+{
+	LoadSpellData();
+	LoadPassiveTreeData();
+	ASSERT_FALSE(PassiveTree().empty());
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(10);
+	player._pgfxnum = 0;
+	const PassiveNodeId start = *PassiveStartNode(HeroClass::Warrior);
+	const PassiveNodeId next = PassiveTree()[start].links.front();
+	ASSERT_TRUE(AllocatePassive(player, next));
+	TelemetryTreeSnapshot(player, "test");
+	ASSERT_TRUE(RefundPassive(player, next));
+	ResetPassives(player); // nothing left to clear: no line
+
+	const std::string name = PassiveNodeName(PassiveTree()[next]);
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"tree_take\""), std::string::npos) << events;
+	EXPECT_NE(events.find("\"k\":\"tree_refund\""), std::string::npos) << events;
+	EXPECT_NE(events.find(StrCat("\"main\":[", next, "]")), std::string::npos) << "the snapshot lists the node";
+	EXPECT_EQ(events.find("\"k\":\"tree_clear\""), std::string::npos) << "an empty reset isn't logged";
+	EXPECT_NE(ReadLatestLog().find(StrCat("[tree] took ")), std::string::npos);
+
+	std::ifstream history(LogFolder() + "tree_history.tsv");
+	std::stringstream lines;
+	lines << history.rdbuf();
+	EXPECT_EQ(lines.str().rfind("date\tsession\thero\tclass", 0), 0U) << "the file starts with its header";
+	EXPECT_NE(lines.str().find(StrCat("\ttook\tmain\t", next, "\t", name, "\t")), std::string::npos) << lines.str();
+	EXPECT_NE(lines.str().find(StrCat("\trefunded\tmain\t", next, "\t")), std::string::npos) << lines.str();
+	std::ifstream builds(LogFolder() + "tree_builds.tsv");
+	EXPECT_TRUE(builds.good());
+
+	ASSERT_TRUE(AllocatePassive(player, next));
+	const std::string text = TreeTrackerText(player);
+	EXPECT_EQ(text.rfind("Passive points 1/", 0), 0U) << text;
+	ResetPassives(player);
+	EXPECT_NE(ReadLatestEvents().find("\"reason\":\"reset\",\"nodes\":1"), std::string::npos);
+	gbIsPoe2 = false;
+	LoadPassiveTreeData();
 }
 
 } // namespace

@@ -103,7 +103,13 @@ bool CanBePlacedOnBelt(const Player &player, const Item &item);
 using ItemFunc = void (*)(Item &);
 
 void CloseInventory();
-void CloseStash();
+/**
+ * @brief Closes the stash. An item in hand is put down (on the floor or back in a bag) unless @p dropHeldItem is false,
+ * when it stays in hand.
+ */
+void CloseStash(bool dropHeldItem = true);
+/** @brief POE2 Mashup: closes the stash for another panel opening in its place, keeping the item in hand (Curtis 2026-10-20). */
+void CloseStashForPanel();
 void FreeInvGFX();
 void InitInv();
 

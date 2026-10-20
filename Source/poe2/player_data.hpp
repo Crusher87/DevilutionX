@@ -1070,8 +1070,8 @@ struct Poe2PlayerData {
 	[[nodiscard]] int rule(UniqueRule rule) const { return uniqueRules[static_cast<size_t>(rule)]; }
 
 	/** @brief The supports of the Skills panel socket holding the skill; none if it isn't socketed. */
-	[[nodiscard]] const SupportSockets &supportsFor(SkillSlot skill) const;
-	[[nodiscard]] const SupportSockets &supportsFor(SpellID spell) const { return supportsFor(SkillSlot::ForSpell(spell)); }
+	[[nodiscard]] SupportSockets supportsFor(SkillSlot skill) const;
+	[[nodiscard]] SupportSockets supportsFor(SpellID spell) const { return supportsFor(SkillSlot::ForSpell(spell)); }
 	[[nodiscard]] bool hasSupport(SkillSlot skill, SupportGem gem) const;
 	/** @brief The tier of the support on the skill, 1 to 3; 0 if the skill doesn't have it. */
 	[[nodiscard]] int supportTier(SkillSlot skill, SupportGem gem) const;

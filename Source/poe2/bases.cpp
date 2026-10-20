@@ -10,6 +10,7 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/defenses.hpp"
 #include "tables/itemdat.h"
 #include "utils/format.hpp"
 #include "utils/log.hpp"
@@ -173,8 +174,11 @@ void ApplyBaseProperties(Item &item)
 std::vector<std::string> ItemImplicitText(const Item &item)
 {
 	std::vector<std::string> lines;
-	for (const ItemImplicit &implicit : ItemImplicits(item))
-		lines.push_back(FormatRuntime(implicit.implicit->text, implicit.values[0], implicit.values[1]));
+	for (const ItemImplicit &implicit : ItemImplicits(item)) {
+		// Flat energy shield rolls in defence points, like the modifier.
+		const int shown = implicit.implicit->effect == ModEffect::FlatEnergyShield ? implicit.values[0] * EnergyShieldPerDefense : implicit.values[0];
+		lines.push_back(FormatRuntime(implicit.implicit->text, shown, implicit.values[1]));
+	}
 	return lines;
 }
 

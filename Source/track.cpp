@@ -11,12 +11,15 @@
 #include "controls/control_mode.hpp"
 #include "controls/game_controls.h"
 #include "controls/plrctrls.h"
+#include "controls/wasd_movement.hpp"
 #include "cursor.h"
 #include "engine/point.hpp"
+#include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/aim.hpp"
 #include "stores.h"
 
 namespace devilution {
@@ -148,14 +151,21 @@ void RepeatPlayerAction()
 	const bool rangedAttack = myPlayer.UsesRangedWeapon();
 	switch (LastPlayerAction) {
 	case PlayerActionType::Attack:
-		if (InDungeonBounds(cursPosition))
-			NetSendCmdLoc(MyPlayerId, true, rangedAttack ? CMD_RATTACKXY : CMD_SATTACKXY, cursPosition);
+		if (InDungeonBounds(cursPosition)) {
+			// POE2 Mashup: held, a bow keeps shooting exactly where the cursor points.
+			const Point target = gbIsPoe2 && rangedAttack ? AimAlongCursor(myPlayer, AimTiles) : cursPosition;
+			NetSendCmdLoc(MyPlayerId, true, rangedAttack ? CMD_RATTACKXY : CMD_SATTACKXY, target);
+		}
 		break;
 	case PlayerActionType::AttackMonsterTarget:
 		if (pcursmonst != -1) {
 			if (!rangedAttack && IsMeleeAttackRedundant(myPlayer, Monsters[pcursmonst].position.future))
 				break;
 			NetSendCmdParam1(true, rangedAttack ? CMD_RATTACKID : CMD_ATTACKID, pcursmonst);
+		} else if (gbIsPoe2 && rangedAttack && IsWasdMovementEnabled() && InDungeonBounds(cursPosition)) {
+			// POE2 Mashup: once the target dies or slips out of sight, a held bow keeps shooting toward the cursor.
+			LastPlayerAction = PlayerActionType::Attack;
+			NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));
 		}
 		break;
 	case PlayerActionType::AttackPlayerTarget:

@@ -87,8 +87,9 @@ int RollLootCount(LootSource source, const LootBonus &bonus)
 std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source, const LootBonus &bonus)
 {
 	// Equipment, gold, currency, flask or charm, gem, endgame, misc, jewel. Augments (4) aren't in the game yet, so
-	// their weight goes to jewels for now.
-	std::array<int, static_cast<size_t>(LootCategory::Count)> weights { 48, 22, 15, 4, 3, 3, 1, 4 };
+	// their weight goes to jewels for now. Uncut gems take 4 instead of the bible's 3, from gold, since skills only
+	// level with them (Curtis 2026-10-20: none dropped in a whole Rogue run; 4 to 6 a run feels right).
+	std::array<int, static_cast<size_t>(LootCategory::Count)> weights { 48, 21, 15, 4, 4, 3, 1, 4 };
 	if (IsAnyOf(source, LootSource::Miniboss, LootSource::Boss)) {
 		// Bosses favour equipment and give less of the low-value categories.
 		weights[static_cast<size_t>(LootCategory::Equipment)] *= 2;
@@ -205,6 +206,7 @@ CurrencyBand OrbCurrencyBand(item_misc_id miscId)
 		return CurrencyBand::Uncommon;
 	case IMISC_ORB_EXALTED:
 	case IMISC_ORB_CHAOS:
+	case IMISC_ORB_SCOURING:
 	case IMISC_ORB_VAAL:
 	case IMISC_ORB_CHANCE:
 	case IMISC_ORB_ANNUL:
@@ -222,6 +224,101 @@ CurrencyBand OrbCurrencyBand(item_misc_id miscId)
 		return CurrencyBand::Chase;
 	default:
 		return CurrencyBand::Common;
+	}
+}
+
+int CurrencyDropLevel(item_misc_id miscId)
+{
+	// The bundle's drop levels, except Alchemy, which waits for Regal's 12, and Scouring, which the bundle doesn't
+	// have (Curtis 2026-10-20: both were dropping far too early). The rest are the item table's levels on this scale.
+	switch (miscId) {
+	case IMISC_ORB_BAUBLE:
+		return 8;
+	case IMISC_ORB_ETCHER:
+		return 10;
+	case IMISC_ORB_LESSER_JEWELLER:
+		return 5;
+	case IMISC_AUGMENT:
+		return 11;
+	case IMISC_ORB_REGAL:
+	case IMISC_ORB_ALCHEMY:
+	case IMISC_ORB_EXALTED:
+	case IMISC_ORB_CHAOS:
+	case IMISC_ORB_CHANCE:
+		return 12;
+	case IMISC_ORB_VAAL:
+	case IMISC_ORB_ARTIFICER:
+		return 15;
+	case IMISC_ORB_SCOURING:
+	case IMISC_ESSENCE:
+		return 20;
+	case IMISC_ORB_GREATER_JEWELLER:
+		return 24;
+	case IMISC_ORB_DESECRATE:
+		return 25;
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_DIVINE:
+	case IMISC_ORB_CATALYST:
+		return 35;
+	case IMISC_OMEN:
+		return 41;
+	case IMISC_ORB_PERFECT_JEWELLER:
+		return 46;
+	case IMISC_ORB_GREATER_EXALTED:
+	case IMISC_ORB_GREATER_CHAOS:
+		return 72;
+	case IMISC_ORB_PERFECT_EXALTED:
+	case IMISC_ORB_PERFECT_CHAOS:
+		return 79;
+	default:
+		return 1;
+	}
+}
+
+int CurrencyBandWeight(item_misc_id miscId)
+{
+	// The bundle's within-band weights; the ones it doesn't list sit with the scarcer orbs of their band.
+	switch (miscId) {
+	case IMISC_ORB_TRANSMUTE:
+	case IMISC_ORB_AUGMENT:
+		return 800;
+	case IMISC_ORB_WHETSTONE:
+	case IMISC_ORB_SCRAP:
+		return 500;
+	case IMISC_ORB_REGAL:
+		return 450;
+	case IMISC_ORB_ALCHEMY:
+		return 400;
+	case IMISC_ORB_EXALTED:
+		return 350;
+	case IMISC_ORB_BAUBLE:
+		return 260;
+	case IMISC_ORB_ETCHER:
+		return 250;
+	case IMISC_ORB_CHAOS:
+	case IMISC_ORB_ARTIFICER:
+	case IMISC_ORB_LESSER_JEWELLER:
+		return 220;
+	case IMISC_ORB_VAAL:
+		return 200;
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_DESECRATE:
+		return 180;
+	case IMISC_ORB_CHANCE:
+		return 160;
+	case IMISC_ORB_GREATER_EXALTED:
+		return 130;
+	case IMISC_ORB_DIVINE:
+		return 120;
+	case IMISC_ORB_GREATER_CHAOS:
+	case IMISC_ORB_PERFECT_JEWELLER:
+		return 100;
+	case IMISC_ORB_PERFECT_EXALTED:
+		return 30;
+	case IMISC_ORB_PERFECT_CHAOS:
+		return 24;
+	default:
+		return 150;
 	}
 }
 

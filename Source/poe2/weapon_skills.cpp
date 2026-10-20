@@ -22,6 +22,7 @@
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/spell_base.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -71,7 +72,7 @@ bool IsCrossbow(const Item &item)
 /** @brief Ice Bolt's damage before the gem curve: like Firebolt's, from Magic and the gem level. */
 int IceBoltDamage(const Player &player, int gemLevel)
 {
-	return GenerateRnd(10) + (player._pMagic / 8) + gemLevel + 2;
+	return RollSpellBase(player, gemLevel);
 }
 
 /** @brief Fires a skill's ice shard, which deals cold (Magic) damage and so chills and freezes. */
@@ -247,7 +248,9 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 			SetMissileSkill(*arrow, player, slot);
 		}
 		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);
-		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, index == 0 ? 3 : 0);
+		// The opening volley is drawn by PlaySkillEffects; each later arrow adds a shaft or two.
+		if (index > 0)
+			vfx::Volley(tile, aim, 2, false);
 		break;
 	}
 	case WeaponSkill::RapidFire: {
@@ -258,7 +261,8 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 			SetMissileSkill(*bolt, player, slot);
 		}
 		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);
-		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 2);
+		if (index > 0)
+			vfx::Volley(tile, target, 1, false);
 		break;
 	}
 	case WeaponSkill::EmberFusillade: {
@@ -1049,9 +1053,8 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Medium, 8);
 		break;
 	case WeaponSkill::Barrage:
-		vfx::Sparks(tile + dir, vfx::Element::Physical, 0.6F);
-		// The bow strains as the stream begins.
-		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 4);
+		// A hail of arrows leaving the bow, not the spark sprite that read as lightning at the Rogue's feet (Curtis 2026-10-20).
+		vfx::Volley(tile, target, 5, true);
 		break;
 	case WeaponSkill::RainOfArrows:
 		vfx::Sigil(target, 1, 400, vfx::Element::Physical);
@@ -1136,8 +1139,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		AddVisualEffect(target, MissileGraphicID::Lightning, 1);
 		break;
 	case WeaponSkill::RapidFire:
-		vfx::Sparks(tile + dir, vfx::Element::Physical, 0.5F);
-		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 0, 4);
+		vfx::Volley(tile, target, 1, true);
 		break;
 	case WeaponSkill::ShieldBash:
 		vfx::Swing(tile, tile + dir, vfx::Element::Physical, false);
