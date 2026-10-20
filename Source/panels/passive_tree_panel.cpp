@@ -29,6 +29,7 @@
 #include "poe2/jewels.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/tree_telemetry.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "sound_effect_enums.h"
 #include "tables/playerdat.hpp"
@@ -128,6 +129,12 @@ bool Searching;
 std::string SearchQuery;
 std::vector<PassiveNodeId> SearchHits;
 std::vector<bool> SearchHitMask;
+/** @brief The heat map (H): every node coloured by how many of your heroes hold it, from the kept tree logs. */
+bool HeatMap;
+TreeHeat Heat;
+/** @brief The heat ramp from few holders to most: blue, gold, red; filled when the heat map is switched on. */
+std::array<uint8_t, 8> HeatRamp;
+constexpr uint8_t HeatNoneColor = PAL16_GRAY + 13;
 
 /** @brief While a search has text in it, everything it doesn't match is drawn a few shades darker. */
 bool FadesNode(PassiveNodeId node)
@@ -483,10 +490,44 @@ uint8_t NodeAreaColor(const PassiveNode &node, bool reachable)
 	return static_cast<uint8_t>(ramp + (reachable ? 3 : 10));
 }
 
+void ToggleHeatMap()
+{
+	HeatMap = !HeatMap;
+	if (!HeatMap)
+		return;
+	Heat = LoadTreeHeat();
+	if (Heat.heroes == 0) {
+		HeatMap = false;
+		EventPlrMsg(_("No tree history yet: the heat map fills in as your heroes take passives."), UiFlags::ColorWhite);
+		return;
+	}
+	for (size_t i = 0; i < HeatRamp.size(); i++) {
+		const float t = static_cast<float>(i) / static_cast<float>(HeatRamp.size() - 1);
+		// Blue (few) to gold (half) to red (most).
+		const float low = std::min(t * 2, 1.0F);
+		const float high = std::max((t * 2) - 1, 0.0F);
+		const int red = RoundToInt(60 + (170 * low) - (10 * high));
+		const int green = RoundToInt(90 + (110 * low) - (170 * high));
+		const int blue = RoundToInt(210 - (170 * low) - (10 * high));
+		HeatRamp[i] = NearestPaletteColor(red, green, blue);
+	}
+}
+
+uint8_t HeatColor(const PassiveNode &node)
+{
+	const int holders = node.id < Heat.holders.size() ? Heat.holders[node.id] : 0;
+	if (holders == 0)
+		return HeatNoneColor;
+	const size_t step = static_cast<size_t>((holders * (HeatRamp.size() - 1)) / std::max<int>(Heat.mostHolders, 1));
+	return HeatRamp[std::min(step, HeatRamp.size() - 1)];
+}
+
 uint8_t NodeFillColor(const Player &player, const PassiveNode &node)
 {
 	if (node.kind == PassiveKind::Start)
 		return node.startClass == PassiveTreeClass(player._pClass) ? StartColor : OtherStartColor;
+	if (HeatMap)
+		return HeatColor(node);
 	if (IsPassiveInPool(player, node.id, PassivePool::Main))
 		return NodeAllocatedColor;
 	for (const PassivePool set : { PassivePool::SetI, PassivePool::SetII }) {
@@ -957,6 +998,11 @@ void DrawTooltip(const Surface &out, const Layout &layout, const Player &player,
 		kind = StrCat(NodeKindText(node), "  -  ", ProfaneRoadStepText(node));
 	else if (IsProfaneNode(node) && node.kind == PassiveKind::Notable)
 		lines.push_back({ std::string(_("Profane Path: the short way passes through here")), UiFlags::ColorRed });
+	if (HeatMap && node.id < Heat.holders.size() && node.kind != PassiveKind::Start) {
+		lines.push_back({ FormatRuntime(_("Your heroes: {:d} of {:d} hold it, taken {:d} times, refunded {:d}"), static_cast<int>(Heat.holders[node.id]), Heat.heroes,
+		                      static_cast<int>(Heat.takes[node.id]), static_cast<int>(Heat.refunds[node.id])),
+		    UiFlags::ColorWhite });
+	}
 	std::string hint = NodeHint(player, node);
 	if (route.size() > 2)
 		hint = FormatRuntime(_("{:d} points away by the marked route"), static_cast<int>(route.size()) - 1);
@@ -1057,6 +1103,8 @@ void DrawAttributePicker(const Surface &out, const Layout &layout, const Passive
 
 std::string PointsText(const Player &player)
 {
+	if (HeatMap)
+		return FormatRuntime(_("Heat map of {:d} heroes: blue few, red most (H hides it)"), Heat.heroes);
 	if (Pool != PassivePool::Main) {
 		const int total = WeaponSetPointsTotal(player);
 		if (total == 0)
@@ -1133,6 +1181,7 @@ void OpenPassiveTree()
 		return;
 	}
 	IsOpen = true;
+	TelemetryTreeOpened(*MyPlayer);
 	Pool = PassivePool::Main;
 	PendingAttributeNode = std::nullopt;
 	Pressed = false;
@@ -1144,7 +1193,10 @@ void OpenPassiveTree()
 void ClosePassiveTree()
 {
 	StopSearch(false);
+	if (IsOpen && MyPlayer != nullptr)
+		TelemetryTreeClosed(*MyPlayer);
 	IsOpen = false;
+	HeatMap = false;
 	PendingAttributeNode = std::nullopt;
 	Pressed = false;
 	Dragging = false;
@@ -1191,6 +1243,9 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 		switch (SDLC_EventKey(event)) {
 		case SDLK_SLASH:
 			StartSearch();
+			break;
+		case SDLK_H:
+			ToggleHeatMap();
 			break;
 		case SDLK_F:
 			// The whole tree at once.
@@ -1367,7 +1422,7 @@ void DrawPassiveTree(const Surface &out)
 
 	DrawSearchField(out, layout);
 	const Rectangle helpBox { layout.footer.position + Displacement { 310, 0 }, { layout.footer.size.width - 310, layout.footer.size.height } };
-	const std::string help = WordWrapString(_("Click a linked node to allocate it, right-click to refund. Tab or the tabs above switch between the main tree and the weapon sets (X swaps sets in game). Drag or arrow keys move, wheel or +/- zooms, Home recenters, F shows the whole tree. Enter steps through search matches. P or Esc closes."), helpBox.size.width);
+	const std::string help = WordWrapString(_("Click a linked node to allocate it, right-click to refund. Tab or the tabs above switch between the main tree and the weapon sets (X swaps sets in game). Drag or arrow keys move, wheel or +/- zooms, Home recenters, F shows the whole tree, H the heat map of what your heroes take. Enter steps through search matches. P or Esc closes."), helpBox.size.width);
 	DrawString(out, help, helpBox, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorButtonpushed, .lineHeight = 14 });
 
 	if (PendingAttributeNode)

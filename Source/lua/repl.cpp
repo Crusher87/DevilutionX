@@ -19,6 +19,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/hit_trace.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/tree_telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/str_cat.hpp"
 
@@ -95,6 +96,10 @@ void CreateReplEnvironment()
 	// log() shows each play log channel's loudness; log("damage", "deep") breaks down every hit until the game closes.
 	env["log"] = [](sol::optional<std::string> channel, sol::optional<std::string> level) {
 		return TelemetryLogLevelsText(channel.value_or(""), level.value_or(""));
+	};
+	// tree() shows your passive points, notables by area, Profane Roads walked and what the tree adds up to.
+	env["tree"] = []() {
+		return MyPlayer != nullptr ? TreeTrackerText(*MyPlayer) : std::string("No hero loaded.");
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

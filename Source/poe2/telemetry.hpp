@@ -12,6 +12,7 @@
 #include <string_view>
 
 #include "poe2/player_data.hpp"
+#include "poe2/telemetry_events.hpp"
 #include "utils/fixed_point.hpp"
 
 namespace devilution {
@@ -152,5 +153,14 @@ std::string TelemetrySkillDamageText();
 std::string TelemetryDamageTakenText();
 /** @brief One line describing the character's gear, skills, supports, passives and belt. */
 std::string TelemetryBuildText(const Player &player);
+
+/** @brief For the log's other parts (the passive tree tracker): a line in the readable log only, with no event of its own. */
+void TelemetryText(std::string_view category, std::string_view text);
+/** @brief An event stamped with the session time and area, like the play log's own. */
+TelemetryEvent TelemetryEventNow(LogChannel channel, LogLevel level, std::string_view kind);
+/** @brief The poe2_logs folder (empty before TelemetryInit), this session's log file name, and the local date and time. */
+const std::string &TelemetryFolder();
+std::string_view TelemetrySessionName();
+std::string TelemetryLocalStamp();
 
 } // namespace devilution

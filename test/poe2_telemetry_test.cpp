@@ -10,10 +10,14 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/tree_telemetry.hpp"
+#include "spells.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
 #include "utils/paths.h"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 namespace {
@@ -220,6 +224,48 @@ TEST_F(Poe2TelemetryTest, GameEndWritesSummaryAndHistory)
 TEST_F(Poe2TelemetryTest, SkillDamageStartsEmpty)
 {
 	EXPECT_EQ(TelemetrySkillDamageText(), "damage by skill: none yet");
+}
+
+TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)
+{
+	LoadSpellData();
+	LoadPassiveTreeData();
+	ASSERT_FALSE(PassiveTree().empty());
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(10);
+	player._pgfxnum = 0;
+	const PassiveNodeId start = *PassiveStartNode(HeroClass::Warrior);
+	const PassiveNodeId next = PassiveTree()[start].links.front();
+	ASSERT_TRUE(AllocatePassive(player, next));
+	TelemetryTreeSnapshot(player, "test");
+	ASSERT_TRUE(RefundPassive(player, next));
+	ResetPassives(player); // nothing left to clear: no line
+
+	const std::string name = PassiveNodeName(PassiveTree()[next]);
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"tree_take\""), std::string::npos) << events;
+	EXPECT_NE(events.find("\"k\":\"tree_refund\""), std::string::npos) << events;
+	EXPECT_NE(events.find(StrCat("\"main\":[", next, "]")), std::string::npos) << "the snapshot lists the node";
+	EXPECT_EQ(events.find("\"k\":\"tree_clear\""), std::string::npos) << "an empty reset isn't logged";
+	EXPECT_NE(ReadLatestLog().find(StrCat("[tree] took ")), std::string::npos);
+
+	std::ifstream history(LogFolder() + "tree_history.tsv");
+	std::stringstream lines;
+	lines << history.rdbuf();
+	EXPECT_EQ(lines.str().rfind("date\tsession\thero\tclass", 0), 0U) << "the file starts with its header";
+	EXPECT_NE(lines.str().find(StrCat("\ttook\tmain\t", next, "\t", name, "\t")), std::string::npos) << lines.str();
+	EXPECT_NE(lines.str().find(StrCat("\trefunded\tmain\t", next, "\t")), std::string::npos) << lines.str();
+	std::ifstream builds(LogFolder() + "tree_builds.tsv");
+	EXPECT_TRUE(builds.good());
+
+	ASSERT_TRUE(AllocatePassive(player, next));
+	const std::string text = TreeTrackerText(player);
+	EXPECT_EQ(text.rfind("Passive points 1/", 0), 0U) << text;
+	ResetPassives(player);
+	EXPECT_NE(ReadLatestEvents().find("\"reason\":\"reset\",\"nodes\":1"), std::string::npos);
+	gbIsPoe2 = false;
+	LoadPassiveTreeData();
 }
 
 } // namespace
