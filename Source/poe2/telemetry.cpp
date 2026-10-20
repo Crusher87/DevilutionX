@@ -40,6 +40,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry_events.hpp"
+#include "poe2/tree_telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/misdat.h"
 #include "utils/file_util.h"
@@ -1264,6 +1265,31 @@ bool TelemetryEnabled()
 	return LogFile != nullptr;
 }
 
+void TelemetryText(std::string_view category, std::string_view text)
+{
+	WriteText(category, text);
+}
+
+TelemetryEvent TelemetryEventNow(LogChannel channel, LogLevel level, std::string_view kind)
+{
+	return Event(channel, level, kind);
+}
+
+const std::string &TelemetryFolder()
+{
+	return LogFolder;
+}
+
+std::string_view TelemetrySessionName()
+{
+	return SessionName;
+}
+
+std::string TelemetryLocalStamp()
+{
+	return LocalStamp();
+}
+
 void TelemetryFlush()
 {
 	FlushAll();
@@ -1539,6 +1565,7 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	if (LogFile != nullptr) {
 		WriteSettings();
 		WriteBuildEvent(player, LogLevel::Always);
+		TelemetryTreeSnapshot(player, "start");
 		// What each socketed gem does now and at its next level, to compare against the results later.
 		GemLog(std::format("--- {:s}, level {:d} {:s}, {:s} ---", player._pName, player.getCharacterLevel(), player.getClassName(), loaded ? "loaded" : "new game"));
 		std::string gems = SocketedGemsText(player);
@@ -1662,6 +1689,8 @@ void TelemetryGameEnded()
 	WriteText("taken", TelemetryDamageTakenText());
 	WriteSummaryEvents(minutes);
 	WriteHistoryLine(minutes);
+	if (MyPlayer != nullptr)
+		TelemetryTreeSnapshot(*MyPlayer, "end");
 	WriteGemResults();
 	FlushAll();
 	GameStartMs = 0;
@@ -1981,6 +2010,7 @@ void TelemetryLevelUp(const Player &player)
 	    .add("mana", player._pMaxMana.whole())
 	    .add("gameMinutes", minutes)
 	    .add("monsterLevel", CurrentLevel.monsterLevel);
+	TelemetryTreeSnapshot(player, "levelup");
 	// A new gem level unlocks: say what it would add to each socketed gem.
 	const int unlocked = MaxGemLevelForCharacter(player.getCharacterLevel());
 	if (unlocked == MaxGemLevelForCharacter(player.getCharacterLevel() - 1))

@@ -21,6 +21,7 @@
 #include "poe2/weapon_swap.hpp"
 #include "tables/questdat.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/tree_telemetry.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -798,6 +799,7 @@ bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attrib
 	}
 	SetChosenPassiveAttribute(player, node, PassiveNeedsAttributeChoice(node) ? attribute : PassiveAttribute::Strength, pool);
 	CalcPlrInv(player, true);
+	TelemetryPassiveTaken(player, node, pool);
 	return true;
 }
 
@@ -885,6 +887,7 @@ bool RefundPassive(Player &player, PassiveNodeId node, PassivePool pool)
 	if (!player.poe2.passives.test(node) && !player.poe2.setPassives[0].test(node))
 		player.poe2.passiveAttributes[node] &= 0xF0;
 	CalcPlrInv(player, true);
+	TelemetryPassiveRefunded(player, node, pool);
 	return true;
 }
 
@@ -897,6 +900,7 @@ void RefundOverspentWeaponSets(Player &player)
 		if (!player.poe2.passives.test(node))
 			player.poe2.passiveAttributes[node] = 0;
 	}
+	TelemetryPassivesCleared(player, "weapon sets refunded", static_cast<int>(player.poe2.setPassives[0].count() + player.poe2.setPassives[1].count()));
 	for (auto &set : player.poe2.setPassives)
 		set.reset();
 	TelemetryLog("weaponset", FormatRuntime("refunded weapon sets: {:d} points each now", total));
@@ -906,6 +910,7 @@ void RefundPassivesForNewTree(Player &player)
 {
 	if (TreeHash == 0 || player.poe2.passiveTreeHash == TreeHash)
 		return;
+	TelemetryPassivesCleared(player, "tree update refund", static_cast<int>(player.poe2.passives.count() + player.poe2.setPassives[0].count() + player.poe2.setPassives[1].count()));
 	player.poe2.passives.reset();
 	for (auto &set : player.poe2.setPassives)
 		set.reset();
@@ -937,6 +942,7 @@ void RefundPassivesForNewTree(Player &player)
 
 void ResetPassives(Player &player)
 {
+	TelemetryPassivesCleared(player, "reset", static_cast<int>(player.poe2.passives.count() + player.poe2.setPassives[0].count() + player.poe2.setPassives[1].count()));
 	player.poe2.passives.reset();
 	for (auto &set : player.poe2.setPassives)
 		set.reset();

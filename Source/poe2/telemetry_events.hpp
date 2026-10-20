@@ -46,6 +46,8 @@ enum class LogChannel : uint8_t {
 	Perf,
 	/** Visual effects going off. */
 	Effects,
+	/** Passive tree: every node taken or refunded, and the whole tree at game start, each level-up and game end. */
+	Tree,
 	Count,
 };
 
