@@ -613,6 +613,8 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	if (monster.tryLiftGargoyle())
 		return true;
 
+	if (!adjacentDamage)
+		TelemetryHeroAttackRoll(player, hper, hit < hper);
 	if (hit >= hper) {
 #ifdef _DEBUG
 		if (!DebugGodMode)

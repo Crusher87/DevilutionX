@@ -38,6 +38,7 @@ STATS_PARTS = {
     'damage_dealt': re.compile(r'damage dealt (\d+)'),
     'hits': re.compile(r'hits taken (\d+) \((\d+) big, (\d+) close calls, (\d+) damage(?:, (\d+) to energy shield, lowest life (\d+)%)?\)'),
     'swings': re.compile(r'melee swings (\d+) \((\d+) evaded, (\d+) blocked, (\d+) dodged\)'),
+    'attacks': re.compile(r'your attacks (\d+) \((\d+) missed, (\d+)% to hit on average\)'),
     'skills': re.compile(r'skills (\d+) \((\d+) failed, (\d+) mana, low on mana (\d+)% of the time\)'),
     'flasks': re.compile(r'flasks (\d+) \((\d+) wasted\), charms (\d+)'),
     'xp': re.compile(r'xp (\d+) \('),
@@ -272,6 +273,11 @@ def report(sessions, out):
             if m:
                 for key, group in (('swings', 1), ('evaded', 2), ('blocked', 3), ('dodged', 4)):
                     swings[key] += int(m.group(group))
+            m = STATS_PARTS['attacks'].search(text)
+            if m:
+                swings['attacks'] += int(m.group(1))
+                swings['missed'] += int(m.group(2))
+                swings['chance'] += int(m.group(1)) * int(m.group(3))
     dungeon_minutes = sum(a['seconds'] for area, a in areas.items() if area != 'town') / 60 or 1e-9
     w(f'Hits taken: {hits["hits"]} ({hits["hits"] / dungeon_minutes:.1f}/min in the dungeon), {hits["big"]} big, '
       f'{hits["close"]} close calls; damage {hits["life"]} to life, {hits["shield"]} to energy shield; lowest life {lowest}%')
@@ -280,6 +286,9 @@ def report(sessions, out):
           f'{pct(swings["blocked"], swings["swings"]):.0f}% blocked, {pct(swings["dodged"], swings["swings"]):.0f}% dodged')
     else:
         w('Monster melee swings: not in these logs yet (logged from build 31b9377 on).')
+    if swings['attacks']:
+        w(f'Your attacks on monsters: {swings["attacks"]}, {pct(swings["missed"], swings["attacks"]):.0f}% missed, '
+          f'{swings["chance"] / swings["attacks"]:.0f}% to hit on average')
     stuns = sum(1 for s in sessions for e in s.events if e[2] == 'stunned')
     w(f'Stunned: {stuns} times')
     biggest = []

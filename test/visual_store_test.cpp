@@ -1328,7 +1328,7 @@ TEST_F(Poe2ShopTabsTest, LevelUpRestocksInFull)
 	EXPECT_EQ(kept, 0) << "Every ware is new after a level-up";
 }
 
-TEST_F(Poe2ShopTabsTest, AdriasScrollOfIdentifyHasItsOwnSlot)
+TEST_F(Poe2ShopTabsTest, AdriasScrollOfIdentifyIsOnHerSuppliesShelf)
 {
 	SetRndSeed(4);
 	SpawnWitch(16);
@@ -1338,17 +1338,19 @@ TEST_F(Poe2ShopTabsTest, AdriasScrollOfIdentifyHasItsOwnSlot)
 		SCOPED_TRACE(static_cast<int>(tab));
 		const std::span<Item> wares = GetVisualStoreItems();
 		const auto scroll = std::find_if(wares.begin(), wares.end(), [](const Item &item) { return IsIdentifyScroll(item); });
-		ASSERT_NE(scroll, wares.end()) << "Every tab offers it";
-		const auto index = static_cast<uint16_t>(scroll - wares.begin());
-		for (const VisualStorePage &page : VisualStore.pages) {
-			for (const VisualStoreItem &onShelf : page.items)
-				EXPECT_NE(onShelf.index, index) << "It takes no place on the shelves";
+		if (tab != Poe2ShopTab::Supplies) {
+			EXPECT_EQ(scroll, wares.end()) << "Only the Supplies tab offers it";
+			continue;
 		}
-		EXPECT_EQ(CheckVisualStoreHLight(GetPanelPosition(UiPanels::Stash, { 290, 322 })), index) << "It sits in its slot under the grid";
+		ASSERT_NE(scroll, wares.end());
+		const auto index = static_cast<uint16_t>(scroll - wares.begin());
+		bool onShelf = false;
+		for (const VisualStorePage &page : VisualStore.pages) {
+			for (const VisualStoreItem &ware : page.items)
+				onShelf = onShelf || ware.index == index;
+		}
+		EXPECT_TRUE(onShelf) << "It sits on the shelves like any other ware (Curtis 2026-10-20)";
 	}
-
-	SetPoe2ShopTab(Poe2ShopTab::Buyback);
-	EXPECT_EQ(CheckVisualStoreHLight(GetPanelPosition(UiPanels::Stash, { 290, 322 })), -1) << "Not on the buyback tab";
 }
 
 TEST_F(Poe2ShopTabsTest, VanillaStockIsUnchanged)

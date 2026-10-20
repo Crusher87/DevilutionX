@@ -419,6 +419,9 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::Spirit:
 		return Mana;
 	case ModEffect::FlatDefense:
+	case ModEffect::FlatArmour:
+	case ModEffect::FlatEvasion:
+	case ModEffect::FlatEnergyShield:
 	case ModEffect::DefensePercent:
 	case ModEffect::ArmourPercent:
 	case ModEffect::EvasionPercent:
@@ -671,6 +674,18 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	case ModEffect::FlatDefense:
 		item._iAC = static_cast<int16_t>(item._iAC + v0);
 		break;
+	case ModEffect::FlatArmour:
+		item._iAC = static_cast<int16_t>(item._iAC + v0);
+		AddPoe2Stat(item, Poe2ItemStat::FlatArmour, v0);
+		break;
+	case ModEffect::FlatEvasion:
+		item._iAC = static_cast<int16_t>(item._iAC + v0);
+		AddPoe2Stat(item, Poe2ItemStat::FlatEvasion, v0);
+		break;
+	case ModEffect::FlatEnergyShield:
+		item._iAC = static_cast<int16_t>(item._iAC + v0);
+		AddPoe2Stat(item, Poe2ItemStat::FlatEnergyShield, v0);
+		break;
 	case ModEffect::DefensePercent:
 		item._iPLAC = static_cast<int16_t>(item._iPLAC + v0);
 		break;
@@ -797,13 +812,23 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	}
 }
 
+namespace {
+
+/** @brief A modifier's value as its line shows it: flat energy shield is rolled in defence points, each worth EnergyShieldPerDefense. */
+int ShownModValue(const ModFamily &family, size_t stat, int value)
+{
+	return family.effect == ModEffect::FlatEnergyShield && stat == 0 ? value * EnergyShieldPerDefense : value;
+}
+
+} // namespace
+
 std::vector<std::string> ItemModText(const Poe2ItemMod &mod)
 {
 	std::vector<std::string> lines;
 	const ModFamily *family = ItemModFamily(mod);
 	if (family == nullptr)
 		return lines;
-	const std::string text = FormatRuntime(family->text, mod.values[0], mod.values[1]);
+	const std::string text = FormatRuntime(family->text, ShownModValue(*family, 0, mod.values[0]), ShownModValue(*family, 1, mod.values[1]));
 	// Hybrid modifiers show one line per stat, the tier on the last one.
 	for (const std::string_view line : SplitByChar(text, ';')) {
 		std::string_view trimmed = line;
@@ -827,11 +852,11 @@ std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod)
 	}
 	std::array<std::string, 2> shown;
 	for (size_t stat = 0; stat < 2; stat++) {
-		shown[stat] = StrCat(mod.values[stat]);
+		shown[stat] = StrCat(ShownModValue(*family, stat, mod.values[stat]));
 		if (tier == nullptr)
 			continue;
-		const int low = ScaleValue(tier->min[stat], family->scale[stat]);
-		const int high = ScaleValue(tier->max[stat], family->scale[stat]);
+		const int low = ShownModValue(*family, stat, ScaleValue(tier->min[stat], family->scale[stat]));
+		const int high = ShownModValue(*family, stat, ScaleValue(tier->max[stat], family->scale[stat]));
 		if (low != high)
 			shown[stat].append(StrCat("(", std::min(low, high), "-", std::max(low, high), ")"));
 	}

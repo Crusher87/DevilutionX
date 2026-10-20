@@ -44,6 +44,12 @@ bool IsCraftableKind(const Item &item)
 	return IsAnyOf(item._iClass, ICLASS_WEAPON, ICLASS_ARMOR) || IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet) || IsJewel(item);
 }
 
+/** @brief A magic, rare or unique item not yet identified: currency waits until its mods are known. */
+bool HidesItsMods(const Item &item)
+{
+	return !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL;
+}
+
 bool CanTakeCurrency(const Item &item)
 {
 	return IsCraftableKind(item) && item._iMagical != ITEM_QUALITY_UNIQUE;
@@ -841,7 +847,7 @@ bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
 	}
 	if (IsWaystone(item) || IsTablet(item))
 		return orb != CurrencyOrb::Bauble && IsNoneOf(orb, CurrencyOrb::Whetstone, CurrencyOrb::Etcher, CurrencyOrb::Scrap, CurrencyOrb::Catalyst, CurrencyOrb::Artificer, CurrencyOrb::Augment);
-	if (orb == CurrencyOrb::Bauble || !IsCraftableKind(item))
+	if (orb == CurrencyOrb::Bauble || !IsCraftableKind(item) || HidesItsMods(item))
 		return false;
 	const bool corrupted = (item.dwBuff & CF_POE2_CORRUPTED) != 0;
 	if (orb == CurrencyOrb::Augment)
@@ -1048,6 +1054,10 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 	}
 	if (!IsCraftableKind(item)) {
 		EventPlrMsg(_("Currency works on weapons, armour and jewellery."), UiFlags::ColorRed);
+		return false;
+	}
+	if (HidesItsMods(item)) {
+		EventPlrMsg(_("Identify the item first."), UiFlags::ColorRed);
 		return false;
 	}
 

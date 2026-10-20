@@ -131,6 +131,46 @@ bool TrySelectMonster(bool flipflag, Point tile, tl::function_ref<bool(const Mon
 	return pcursmonst != -1;
 }
 
+/**
+ * @brief POE2 Mashup: with a bow, a click just beside a monster picks it, so a near miss still shoots it (Curtis 2026-10-20).
+ * The nearest monster whose body (a line from its feet up to its head on screen) is within a short reach of the cursor.
+ */
+bool TrySelectMonsterNearCursor()
+{
+	if (!gbIsPoe2 || leveltype == DTYPE_TOWN || pcurs != CURSOR_HAND || MyPlayer == nullptr || !MyPlayer->UsesRangedWeapon())
+		return false;
+	float cursorX;
+	float cursorY;
+	GetCursorTileExact(cursorX, cursorY);
+	if (cursorX < 0)
+		return false;
+	constexpr float ReachPixels = 40.F;
+	constexpr float BodyPixels = 64.F;
+	int nearest = -1;
+	float nearestDistance = ReachPixels * ReachPixels;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const int monsterId = static_cast<int>(ActiveMonsters[i]);
+		const Monster &monster = Monsters[monsterId];
+		const Point tile = monster.position.tile;
+		if (!IsTileLit(tile) || !IsValidMonsterForSelection(monster))
+			continue;
+		// On screen one tile east is half a tile right and down, one tile south half a tile left and down.
+		const float dx = (cursorX - static_cast<float>(tile.x) - (cursorY - static_cast<float>(tile.y))) * (TILE_WIDTH / 2.F);
+		const float dy = (cursorX - static_cast<float>(tile.x) + cursorY - static_cast<float>(tile.y)) * (TILE_HEIGHT / 2.F);
+		const float offBody = dy - std::clamp(dy, -BodyPixels, 0.F);
+		const float distance = dx * dx + offBody * offBody;
+		if (distance < nearestDistance) {
+			nearest = monsterId;
+			nearestDistance = distance;
+		}
+	}
+	if (nearest == -1)
+		return false;
+	pcursmonst = nearest;
+	cursPosition = Monsters[nearest].position.tile;
+	return true;
+}
+
 bool TrySelectTowner(bool flipflag, Point tile)
 {
 	auto checkPosition = [&](Displacement displacement) {
@@ -962,6 +1002,10 @@ bool CheckCursorActions(const Point currentTile, bool flipflag)
 		return true;
 	}
 
+	// POE2 Mashup: in town an item on the ground wins over the townsperson standing behind it, like Pepin's dropped ring (Curtis 2026-10-20).
+	if (gbIsPoe2 && leveltype == DTYPE_TOWN && pcurs == CURSOR_HAND && TrySelectItem(flipflag, currentTile))
+		return true;
+
 	if (TrySelectPixelBased(currentTile))
 		return true;
 
@@ -992,7 +1036,8 @@ bool CheckCursorActions(const Point currentTile, bool flipflag)
 
 	return TrySelectPlayer(flipflag, currentTile)
 	    || TrySelectObject(flipflag, currentTile)
-	    || TrySelectItem(flipflag, currentTile);
+	    || TrySelectItem(flipflag, currentTile)
+	    || TrySelectMonsterNearCursor();
 }
 
 /**

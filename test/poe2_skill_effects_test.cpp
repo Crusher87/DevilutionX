@@ -5,6 +5,7 @@
 #include "missiles.h"
 #include "player.h"
 #include "poe2/weapon_skills.hpp"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 namespace {
@@ -73,6 +74,8 @@ TEST_F(Poe2SkillEffectsTest, EverySkillHasEffects)
 		const auto skill = static_cast<WeaponSkill>(i);
 		if (skill == WeaponSkill::LightningArrow)
 			continue; // Its burst plays where the arrow lands.
+		if (IsAnyOf(skill, WeaponSkill::Barrage, WeaponSkill::RapidFire))
+			continue; // Their volley is drawn by the effects layer alone, with no sprite.
 		Missiles.clear();
 		MyPlayer->position.tile = { 40, 40 };
 		PlaySkillEffects(*MyPlayer, skill, { 43, 40 });

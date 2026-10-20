@@ -36,6 +36,9 @@ int CowClicks;
 /** Specifies the active sound effect ID for interacting with cows. */
 SfxID CowPlaying = SfxID::None;
 
+/** @brief POE2 Mashup: Ogden has welcomed the hero since the town was loaded, so his marker goes. Not saved: he welcomes again until the hero first leaves town. */
+bool OgdenWelcomed = false;
+
 /** Storage for animation order data loaded from TSV (needs stable addresses for span). */
 std::vector<std::vector<uint8_t>> TownerAnimOrderStorage;
 
@@ -219,6 +222,8 @@ void TalkToBarOwner(Player &player, Towner &barOwner)
 {
 	if (!player._pLvlVisited[0]) {
 		InitQTextMsg(TEXT_INTRO);
+		if (&player == MyPlayer)
+			OgdenWelcomed = true;
 		return;
 	}
 
@@ -821,6 +826,7 @@ Towner *GetTowner(_talker_id type)
 void InitTowners()
 {
 	assert(!CowSprites);
+	OgdenWelcomed = false;
 
 	// Load towner data from TSV files
 	LoadTownerData();
@@ -908,8 +914,9 @@ QuestMarker TownerQuestMarker(const Player &player, const Towner &towner)
 	const auto has = [&](_item_indexes id) { return HasInventoryItemWithId(player, id); };
 	switch (towner._ttype) {
 	case TOWN_TAVERN: {
+		// A new hero gets Ogden's welcome first.
 		if (!player._pLvlVisited[0])
-			return QuestMarker::None;
+			return OgdenWelcomed ? QuestMarker::None : QuestMarker::News;
 		const Quest &king = Quests[Q_SKELKING];
 		if (king._qactive != QUEST_NOTAVAIL && visited(2, 4)) {
 			if (king._qvar2 == 0)

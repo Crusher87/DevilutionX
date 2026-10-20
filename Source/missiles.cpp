@@ -348,6 +348,8 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 	if (monster.tryLiftGargoyle())
 		return true;
 
+	if (isArrow)
+		TelemetryHeroAttackRoll(player, hper, hit < hper);
 	if (hit >= hper) {
 #ifdef _DEBUG
 		if (!DebugGodMode)

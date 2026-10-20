@@ -1,9 +1,9 @@
 id	name	word	side	group	tags	slots	baseTags	conflicts	template	effect	scale1	scale2	enabled
 maximum_life	Maximum Life	Virile	prefix	maximum_life	life	helmet,body_armour,gloves,boots,ring,amulet,belt,shield,focus,quiver			+{0} to maximum Life	Life	100	100	true
 maximum_mana	Maximum Mana	Azure	prefix	maximum_mana	mana	helmet,body_armour,gloves,boots,ring,amulet,belt,shield,focus,wand,staff,sceptre			+{0} to maximum Mana	Mana	100	100	true
-flat_armour	Flat Armour	Lacquered	prefix	flat_armour	defence,armour,local	helmet,body_armour,gloves,boots,shield,focus	armour_base		+{0} to Armour	FlatDefense	15	100	true
-flat_evasion	Flat Evasion	Shade's	prefix	flat_evasion	defence,evasion,local	helmet,body_armour,gloves,boots,shield,focus	evasion_base		+{0} to Evasion Rating	FlatDefense	15	100	true
-flat_energy_shield	Flat Energy Shield	Glimmering	prefix	flat_energy_shield	defence,energy_shield,local	helmet,body_armour,gloves,boots,shield,focus	energy_shield_base		+{0} to maximum Energy Shield	FlatDefense	10	100	true
+flat_armour	Flat Armour	Lacquered	prefix	flat_armour	defence,armour,local	helmet,body_armour,gloves,boots,shield,focus	armour_base		+{0} to Armour	FlatArmour	15	100	true
+flat_evasion	Flat Evasion	Shade's	prefix	flat_evasion	defence,evasion,local	helmet,body_armour,gloves,boots,shield,focus	evasion_base		+{0} to Evasion Rating	FlatEvasion	15	100	true
+flat_energy_shield	Flat Energy Shield	Glimmering	prefix	flat_energy_shield	defence,energy_shield,local	helmet,body_armour,gloves,boots,shield,focus	energy_shield_base		+{0} to maximum Energy Shield	FlatEnergyShield	10	100	true
 increased_armour	Increased Armour	Reinforced	prefix	increased_armour	defence,armour,local	helmet,body_armour,gloves,boots,shield,focus	armour_base		{0}% increased Armour	DefensePercent	100	100	true
 increased_evasion	Increased Evasion	Agile	prefix	increased_evasion	defence,evasion,local	helmet,body_armour,gloves,boots,shield,focus	evasion_base		{0}% increased Evasion Rating	DefensePercent	100	100	true
 increased_energy_shield	Increased Energy Shield	Protective	prefix	increased_energy_shield	defence,energy_shield,local	helmet,body_armour,gloves,boots,shield,focus	energy_shield_base		{0}% increased Energy Shield	DefensePercent	100	100	true

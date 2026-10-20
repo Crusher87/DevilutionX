@@ -148,7 +148,8 @@ int8_t ItemCAnimTbl[] = {
 	12, 12, 12, 12, 12, 21, 21, 25, 12, 28,
 	28, 28, 38, 38, 38, 32, 38, 38, 38, 24,
 	24, 26, 2, 25, 22, 23, 24, 21, 27, 27,
-	29, 0, 0, 9, 12, 12, 12, 12, 12, 0,
+	// POE2 Mashup: cursor 43, the Blacksmith's Whetstone, lands like the Blood Stone; the floating Magic Rock's frames looked glitchy (Curtis 2026-10-20).
+	29, 0, 0, 32, 12, 12, 12, 12, 12, 0,
 	8, 8, 0, 8, 8, 8, 8, 8, 8, 6,
 	8, 8, 8, 6, 8, 8, 6, 8, 8, 6,
 	6, 6, 8, 8, 8, 5, 9, 13, 13, 13,
@@ -2179,12 +2180,9 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (IsCraftingVariantItem(item)) {
+		// Only what it does: how to use and split a stack is known (Curtis 2026-10-20).
 		for (const std::string &line : CraftingItemText(item))
 			AddItemInfoBoxString(line);
-		if (item._iMiscId != IMISC_OMEN)
-			AddItemInfoBoxString(_("Right-click to use, then click an item"));
-		if (IsStackable(item))
-			AddItemInfoBoxString(FormatRuntime(_("Stack Size: {:d}/{:d}, shift-click to split"), StackCount(item), CurrencyStackMax));
 		return;
 	}
 	if (IsJewel(item)) {
@@ -2271,10 +2269,8 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (const CurrencyOrb orb = CurrencyOrbForMiscId(item._iMiscId); orb != CurrencyOrb::None) {
+		// Only what it does: how to use and split a stack is known (Curtis 2026-10-20).
 		AddItemInfoBoxString(CurrencyOrbDescription(orb));
-		AddItemInfoBoxString(JewellerSocket(orb) ? _("Use, then click a skill in the Skills panel (K)") : _("Use, then click the item to craft"));
-		if (IsStackable(item))
-			AddItemInfoBoxString(FormatRuntime(_("Stack Size: {:d}/{:d}, shift-click to split"), StackCount(item), CurrencyStackMax));
 		return;
 	}
 	if (gbIsPoe2 && IsFlaskPotion(item)) {
@@ -3751,21 +3747,16 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		for (const Item &item : player.InvBody) {
 			if (item.isEmpty() || !item._iStatFlag || item._iAC == 0)
 				continue;
-			const int baseDefense = item._iAC;
-			const int bonusDefense = (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified) ? GetBonusAC(item) : 0;
-			const DefenseType type = ItemDefenseType(item);
-			int baseArmour;
-			int baseEvasion;
-			int baseShield;
-			SplitDefense(type, baseDefense, baseArmour, baseEvasion, baseShield);
-			int bonusArmour;
-			int bonusEvasion;
-			int bonusShield;
-			SplitDefense(type, bonusDefense, bonusArmour, bonusEvasion, bonusShield);
-			evasion += baseEvasion + bonusEvasion;
-			energyShield += (baseShield + bonusShield) * EnergyShieldPerDefense;
-			ac -= baseDefense - baseArmour;
-			bonusAc -= bonusDefense - bonusArmour;
+			// The generic pass above counted all of the item's defence as armour; keep only its armour share.
+			const bool modsKnown = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+			DefensePoints base;
+			DefensePoints bonus;
+			SplitItemDefense(item, modsKnown, base, bonus);
+			evasion += base.evasion + bonus.evasion;
+			energyShield += (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
+			ac -= item._iAC - base.armour;
+			if (modsKnown)
+				bonusAc -= GetBonusAC(item) - bonus.armour;
 		}
 		for (const Item &item : player.InvBody) {
 			if (item.isEmpty() || !item._iStatFlag)
@@ -5857,6 +5848,20 @@ void SpendHeldCurrency(Player &player)
 	HeldCurrencyMisc = -1;
 }
 
+bool HeldCurrencyAvailable(const Player &player)
+{
+	if (HeldCurrencyMisc < 0)
+		return false;
+	const auto matches = [](const Item &stack) {
+		return stack._iMiscId == HeldCurrencyMisc && (stack.dwBuff & CF_POE2_VARIANT) == HeldCurrencyVariant;
+	};
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (matches(player.InvList[i]))
+			return true;
+	}
+	return &player == MyPlayer && std::any_of(Stash.stashList.begin(), Stash.stashList.end(), matches);
+}
+
 namespace {
 
 /** @brief Notes the craft in the play log, naming the currency on the cursor. */
@@ -5868,6 +5873,21 @@ void TelemetryCurrencyCraft(const Player &player, const Item &item)
 			return;
 		}
 	}
+}
+
+/** @brief POE2 Mashup: the defences a base gives, as a % increase to them is worded. */
+std::string_view DefenceKindName(DefenseType type)
+{
+	switch (type) {
+	case DefenseType::Armour: return _("Armour");
+	case DefenseType::Evasion: return _("Evasion Rating");
+	case DefenseType::ArmourEvasion: return _("Armour and Evasion Rating");
+	case DefenseType::EnergyShield: return _("Energy Shield");
+	case DefenseType::ArmourEnergyShield: return _("Armour and Energy Shield");
+	case DefenseType::EvasionEnergyShield: return _("Evasion Rating and Energy Shield");
+	case DefenseType::All: return _("Defences");
+	}
+	return _("Defences");
 }
 
 } // namespace
@@ -5947,6 +5967,13 @@ bool DoOilOnStashItem(Player &player, uint16_t index)
 		return FormatRuntime(_("to hit: {:+d}%, {:+d}% damage"), item._iPLToHit, item._iPLDam);
 	case IPL_ACP:
 	case IPL_ACP_CURSE:
+		if (gbIsPoe2) {
+			// POE2 Mashup: it raises whatever defence the base has, so it's named after that, without the quality (Curtis 2026-10-20).
+			int percent = item._iPLAC;
+			if (ItemQualityKind(item) == QualityKind::Defence)
+				percent -= ItemQuality(item);
+			return FormatRuntime(percent >= 0 ? _(/*xgettext:no-c-format*/ "{:d}% increased {:s}") : _(/*xgettext:no-c-format*/ "{:d}% reduced {:s}"), std::abs(percent), DefenceKindName(ItemDefenseType(item)));
+		}
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% armor"), item._iPLAC);
 	case IPL_SETAC:
 	case IPL_AC_CURSE:
@@ -6174,20 +6201,15 @@ void DrawUniqueInfo(const Surface &out)
 	}
 }
 
-/** @brief The armour, evasion and energy shield an item gives when worn, counting quality and local % like CalcPlrInv. */
+/** @brief The armour, evasion and energy shield (as shown) an item gives when worn, counting quality, local % and flat modifiers like CalcPlrInv. */
 void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energyShield)
 {
-	const DefenseType type = ItemDefenseType(item);
-	SplitDefense(type, item._iAC, armour, evasion, energyShield);
-	if (item.isEmpty() || (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified))
-		return;
-	int bonusArmour;
-	int bonusEvasion;
-	int bonusShield;
-	SplitDefense(type, GetBonusAC(item), bonusArmour, bonusEvasion, bonusShield);
-	armour += bonusArmour;
-	evasion += bonusEvasion;
-	energyShield += bonusShield;
+	DefensePoints base;
+	DefensePoints bonus;
+	SplitItemDefense(item, !item.isEmpty() && (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified), base, bonus);
+	armour = base.armour + bonus.armour;
+	evasion = base.evasion + bonus.evasion;
+	energyShield = (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
 }
 
 /** @brief POE2 Mashup: armor pieces show the defense they grant when worn. */
@@ -6203,7 +6225,7 @@ void PrintPoe2ItemDefense(const Item &item)
 	if (evasion > 0)
 		StrAppend(defense, defense.empty() ? "" : "  ", FormatRuntime(_("evasion: {:d}"), evasion));
 	if (energyShield > 0)
-		StrAppend(defense, defense.empty() ? "" : "  ", FormatRuntime(_("energy shield: {:d}"), energyShield * EnergyShieldPerDefense));
+		StrAppend(defense, defense.empty() ? "" : "  ", FormatRuntime(_("energy shield: {:d}"), energyShield));
 	if (defense.empty())
 		defense = FormatRuntime(_("armour: {:d}"), item._iAC);
 	AddItemInfoBoxString(defense);
@@ -6505,7 +6527,12 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 
 void PrintItemComparison(const Item &item)
 {
-	if (!gbIsPoe2 || MyPlayer == nullptr || !item.isEquipment())
+	if (!gbIsPoe2 || MyPlayer == nullptr)
+		return;
+	// The hover can be worked out more than once before a frame is drawn; a second ring box then got drawn over by a
+	// copy of the first pair and flickered (Curtis 2026-10-20). One hovered item has one set of comparisons.
+	CompareTooltips.clear();
+	if (!item.isEquipment())
 		return;
 	const Player &player = *MyPlayer;
 	const Item *worn = EquippedCounterpart(player, item);
@@ -6589,7 +6616,7 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 	SplitWornDefense(other, otherArmour, otherEvasion, otherEnergyShield);
 	compare(armour, otherArmour, _("Armour"));
 	compare(evasion, otherEvasion, _("Evasion"));
-	compare(energyShield * EnergyShieldPerDefense, otherEnergyShield * EnergyShieldPerDefense, _("Energy Shield"));
+	compare(energyShield, otherEnergyShield, _("Energy Shield"));
 	// Normal items have no modifiers to hide.
 	const auto identified = [](const Item &it) { return it.isEmpty() || it._iIdentified || it._iMagical == ITEM_QUALITY_NORMAL; };
 	const bool bothIdentified = identified(item) && identified(other);

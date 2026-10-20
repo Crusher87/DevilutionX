@@ -113,6 +113,29 @@ void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int 
 	}
 }
 
+void SplitItemDefense(const Item &item, bool modsKnown, DefensePoints &base, DefensePoints &bonus)
+{
+	const auto flat = [&](Poe2ItemStat stat) { return modsKnown ? std::max<int>(item._iPoe2Stats[static_cast<size_t>(stat)], 0) : 0; };
+	DefensePoints flats { flat(Poe2ItemStat::FlatArmour), flat(Poe2ItemStat::FlatEvasion), flat(Poe2ItemStat::FlatEnergyShield) };
+	const int split = std::max(item._iAC - flats.armour - flats.evasion - flats.energyShield, 0);
+	const DefenseType type = ItemDefenseType(item);
+	SplitDefense(type, split, base.armour, base.evasion, base.energyShield);
+	base.armour += flats.armour;
+	base.evasion += flats.evasion;
+	base.energyShield += flats.energyShield;
+	bonus = {};
+	if (!modsKnown || item._iPLAC == 0)
+		return;
+	// As GetBonusAC: any increase gives at least a point.
+	int splitBonus = split * item._iPLAC / 100;
+	if (splitBonus == 0 && split > 0)
+		splitBonus = item._iPLAC > 0 ? 1 : -1;
+	SplitDefense(type, splitBonus, bonus.armour, bonus.evasion, bonus.energyShield);
+	bonus.armour += flats.armour * item._iPLAC / 100;
+	bonus.evasion += flats.evasion * item._iPLAC / 100;
+	bonus.energyShield += flats.energyShield * item._iPLAC / 100;
+}
+
 int ArmourRating(const Player &player, bool withSpiritBuffs)
 {
 	// Barkskin adds armour from energy shield lost, up to the gear's; Defiance Banner gives more.

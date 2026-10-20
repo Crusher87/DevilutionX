@@ -99,6 +99,7 @@
 #include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/aim.hpp"
 #include "poe2/autosave.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/currency.hpp"
@@ -311,8 +312,14 @@ void LeftMouseCmd(bool bShift)
 
 	const Player &myPlayer = *MyPlayer;
 	bNear = myPlayer.position.tile.WalkingDistance(cursPosition) < 2;
+	// POE2 Mashup: a bow shoots where it's clicked: a barrel from where the hero stands, and with WASD movement the ground
+	// or the space beside a monster too, instead of doing nothing (Curtis 2026-10-20).
+	const bool shootsWhereClicked = gbIsPoe2 && myPlayer.UsesRangedWeapon();
 	if (pcursitem != -1 && pcurs == CURSOR_HAND && !bShift) {
 		NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
+	} else if (shootsWhereClicked && pcursmonst == -1 && ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled() && ObjectUnderCursor->_oBreak == 1) {
+		LastPlayerAction = PlayerActionType::Attack;
+		NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));
 	} else if (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled() && (!bShift || (bNear && ObjectUnderCursor->_oBreak == 1))) {
 		LastPlayerAction = PlayerActionType::OperateObject;
 		NetSendCmdLoc(MyPlayerId, true, pcurs == CURSOR_DISARM ? CMD_DISARMXY : CMD_OPOBJXY, cursPosition);
@@ -330,6 +337,9 @@ void LeftMouseCmd(bool bShift)
 		} else if (PlayerUnderCursor != nullptr && !PlayerUnderCursor->hasNoLife() && !myPlayer.friendlyMode) {
 			LastPlayerAction = PlayerActionType::AttackPlayerTarget;
 			NetSendCmdParam1(true, CMD_RATTACKPID, PlayerUnderCursor->getId());
+		} else if (shootsWhereClicked && wasdMovement && InDungeonBounds(cursPosition)) {
+			LastPlayerAction = PlayerActionType::Attack;
+			NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));
 		}
 	} else {
 		// POE2 Mashup: clicking a monster walks up to it and attacks, with WASD movement too; Shift attacks in place.
@@ -513,6 +523,11 @@ void LeftMouseDown(uint16_t modState)
 			}
 		}
 	} else {
+		// POE2 Mashup: currency on the cursor goes on the flask under it in the belt, as it does in the bag.
+		if (gbIsPoe2 && pcurs == CURSOR_OIL && !gmenu_is_active() && pcursinvitem >= INVITEM_BELT_FIRST && pcursinvitem <= INVITEM_BELT_LAST) {
+			TryIconCurs();
+			return;
+		}
 		if (!ChatFlag && !DropGoldFlag && !IsWithdrawGoldOpen && !gmenu_is_active())
 			CheckInvScrn(isShiftHeld, isCtrlHeld);
 		CheckMainPanelButton();
@@ -1867,7 +1882,7 @@ void InventoryKeyPressed()
 	}
 	SpellbookFlag = false;
 	CloseGoldWithdraw();
-	CloseStash();
+	CloseStashForPanel();
 	CloseVisualStore();
 }
 
@@ -1917,7 +1932,7 @@ void QuestLogKeyPressed()
 	CloseCharPanel();
 	CloseSkillsPanel();
 	CloseGoldWithdraw();
-	CloseStash();
+	CloseStashForPanel();
 	CloseVisualStore();
 }
 
@@ -3204,6 +3219,12 @@ bool TryIconCurs()
 	}
 
 	if (pcurs == CURSOR_OIL) {
+		// POE2 Mashup: with the last one used up, nothing is left to craft with (Shift kept the cursor going for free).
+		if (gbIsPoe2 && !HeldCurrencyAvailable(myPlayer)) {
+			SetStickyItemUse(false);
+			NewCursor(CURSOR_HAND);
+			return true;
+		}
 		bool changeCursor = true;
 		if (pcursinvitem != -1 && !IsInspectingPlayer())
 			changeCursor = DoOil(myPlayer, pcursinvitem);

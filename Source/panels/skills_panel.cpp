@@ -737,7 +737,7 @@ void OpenSkillsPanel()
 	CloseCharPanel();
 	QuestLogIsOpen = false;
 	CloseGoldWithdraw();
-	CloseStash();
+	CloseStashForPanel();
 	CloseVisualStore();
 	IsOpen = true;
 }

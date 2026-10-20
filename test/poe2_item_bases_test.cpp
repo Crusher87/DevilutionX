@@ -71,9 +71,9 @@ public:
 	}
 };
 
-TEST_F(Poe2ItemBasesTest, JewelsWaystonesAndBooksTakeOneCell)
+TEST_F(Poe2ItemBasesTest, JewelsAndWaystonesTakeOneCell)
 {
-	for (const std::string_view name : { "Emerald", "Waystone", "Book of Specialisation", "Tablet", "Fragment" }) {
+	for (const std::string_view name : { "Emerald", "Waystone", "Tablet", "Fragment" }) {
 		Item item {};
 		item._iCurs = AllItemsList[FindBase(name)].iCurs;
 		EXPECT_TRUE(IsOneCellCopy(item)) << name;
@@ -81,6 +81,11 @@ TEST_F(Poe2ItemBasesTest, JewelsWaystonesAndBooksTakeOneCell)
 		EXPECT_EQ(size.width, 1) << name;
 		EXPECT_EQ(size.height, 1) << name;
 	}
+	// A Book of Specialisation is a full four-cell book, like Diablo's spell books (Curtis 2026-10-20).
+	Item book {};
+	book._iCurs = AllItemsList[FindBase("Book of Specialisation")].iCurs;
+	EXPECT_EQ(book._iCurs, ICURS_BOOK_RED);
+	EXPECT_FALSE(IsOneCellCopy(book));
 	// The quest items with the same pictures keep their size.
 	EXPECT_EQ(AllItemsList[IDI_ROCK].iCurs, ICURS_MAGIC_ROCK);
 	EXPECT_EQ(AllItemsList[IDI_MAPOFDOOM].iCurs, ICURS_MAP_OF_THE_STARS);

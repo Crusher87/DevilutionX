@@ -32,6 +32,7 @@
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
@@ -136,7 +137,7 @@ bool IsCuttingSupport()
 	return uncut != nullptr && UncutGemKind(*uncut) == UncutKind::Support;
 }
 
-/** @brief The socketed skills that take supports, each once, in Skills panel order. */
+/** @brief The socketed skills that take supports, each once, in Skills panel order, then the weapon's own attack. */
 std::vector<SkillSlot> SupportableSkills(const Player &player)
 {
 	std::vector<SkillSlot> skills;
@@ -144,6 +145,9 @@ std::vector<SkillSlot> SupportableSkills(const Player &player)
 		if (!skill.isEmpty() && SkillTakesSupports(skill) && std::find(skills.begin(), skills.end(), skill) == skills.end())
 			skills.push_back(skill);
 	}
+	// Curtis 2026-10-20: the weapon's own attack (Bow Shot and the like) takes supports too, in its own Skills panel row.
+	if (const SkillSlot weaponAttack = DefaultSkillSlot(player); !weaponAttack.isEmpty() && SkillTakesSupports(weaponAttack))
+		skills.push_back(weaponAttack);
 	return skills;
 }
 
@@ -462,7 +466,8 @@ void CutGem(const GemEntry &gem)
 
 	// Curtis 2026-10-16: a support cut for the skill picked in the cutter goes straight into a free socket of that skill.
 	if (gem.support != SupportGem::None && SupportedSkill) {
-		if (const std::optional<size_t> slot = FindSkillSlot(player, *SupportedSkill); slot) {
+		const std::optional<size_t> slot = SupportedSkill->kind == SkillKind::Default ? std::optional<size_t>(DefaultAttackRow) : FindSkillSlot(player, *SupportedSkill);
+		if (slot) {
 			SupportGem replaced = SupportGem::None;
 			const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem.support, replaced, gem.tier);
 			if (result == SupportSocketResult::Socketed) {
@@ -707,7 +712,7 @@ void DrawGemcutting(const Surface &out)
 			color = UiFlags::ColorBlue;
 		DrawString(out, name, { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } }, { .flags = color | UiFlags::VerticalCenter });
 	}
-	if (layout.skillTabs.size() == 1)
+	if (std::none_of(layout.skillTabs.begin(), layout.skillTabs.end(), [](const SkillTab &tab) { return tab.skill && tab.skill->kind != SkillKind::Default; }))
 		DrawString(out, _("Socket a skill gem in the Skills panel (K) to see the supports that work with it."), { layout.panel.position + Displacement { Padding, HeaderHeight }, { TabWidth, 120 } },
 		    { .flags = UiFlags::FontSize12 | UiFlags::ColorButtonpushed });
 

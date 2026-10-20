@@ -98,6 +98,8 @@ enum class SwingOutcome : uint8_t {
 };
 /** @brief Counts a monster's melee swing at the hero by how it ended, to show how well evasion and block hold up. */
 void TelemetryMeleeSwing(const Player &player, SwingOutcome outcome);
+/** @brief Counts the hero's attack roll against a monster (melee or arrow) and its hit chance, to show how often attacks miss. */
+void TelemetryHeroAttackRoll(const Player &player, int hitChance, bool hit);
 /** @brief Names what is about to damage a monster (minions, ignite, a herald); otherwise the last skill gets the credit. */
 void TelemetryNoteDamageSource(std::string_view source);
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);

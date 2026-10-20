@@ -2553,6 +2553,9 @@ bool UseInvItem(int cii)
 
 	if (SpecBookIndex(*item) >= 0) {
 		if (UseSpecBook(player, *item)) {
+			// Reading it sounds like reading any of Diablo's books (Curtis 2026-10-20).
+			if (&player == MyPlayer)
+				PlaySFX(SfxID::ReadBook);
 			if (speedlist)
 				player.RemoveSpdBarItem(c);
 			else
@@ -2664,13 +2667,13 @@ void CloseInventory()
 	invflag = false;
 }
 
-void CloseStash()
+void CloseStash(bool dropHeldItem)
 {
 	if (!IsStashOpen)
 		return;
 
 	Player &myPlayer = *MyPlayer;
-	if (!myPlayer.HoldItem.isEmpty()) {
+	if (dropHeldItem && !myPlayer.HoldItem.isEmpty()) {
 		std::optional<Point> itemTile = FindAdjacentPositionForItem(myPlayer.position.future, myPlayer._pdir);
 		if (itemTile) {
 			NetSendCmdPItem(true, CMD_PUTITEM, *itemTile, myPlayer.HoldItem);
@@ -2690,6 +2693,11 @@ void CloseStash()
 	}
 
 	IsStashOpen = false;
+}
+
+void CloseStashForPanel()
+{
+	CloseStash(!gbIsPoe2);
 }
 
 void DoTelekinesis()
