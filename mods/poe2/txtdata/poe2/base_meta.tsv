@@ -371,10 +371,10 @@ Ruby Ring	ring	resistance		none	FireResistance|12|16|+{0}% to Fire Resistance
 Sapphire Ring	ring	resistance		none	MagicResistance|12|16|+{0}% to Magic Resistance
 Topaz Ring	ring	resistance		none	LightningResistance|12|16|+{0}% to Lightning Resistance
 Coral Ring	ring	life		none	Life|20|30|+{0} to maximum Life
-Lapis Ring	ring	mana		none	Mana|18|28|+{0} to maximum Mana
+Lazuli Ring	ring	mana		none	Mana|18|28|+{0} to maximum Mana
 Iron Ring	ring	attack		none	AddedPhysicalToAttacks|2|4|Adds {0} to {1} Physical Damage to Attacks
-Opal Ring	ring	caster		none	AllResistances|6|9|+{0}% to all Elemental Resistances
-Gold Ring	ring	rarity		none	AllAttributes|3|5|+{0} to all Attributes
+Pearl Ring	ring	caster		none	CastSpeed|7|10|{0}% increased Cast Speed
+Golden Hoop	ring	rarity		none	AllAttributes|3|5|+{0} to all Attributes
 Amber Amulet	amulet	attribute		none	Strength|6|9|+{0} to Strength
 Jade Amulet	amulet	attribute		none	Dexterity|6|9|+{0} to Dexterity
 Azure Amulet	amulet	attribute		none	Intelligence|6|9|+{0} to Intelligence

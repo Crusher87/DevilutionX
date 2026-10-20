@@ -2570,6 +2570,8 @@ bool UseInvItem(int cii)
 				player.RemoveSpdBarItem(c);
 			else
 				player.RemoveInvItem(c);
+			// The skull leaves a gem to spend the Spirit on.
+			GiveUncutSpiritGem(player);
 		}
 		return true;
 	}

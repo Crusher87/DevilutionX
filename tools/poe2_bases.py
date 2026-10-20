@@ -32,7 +32,20 @@ RENAMES = {
 	'bow_balanced_short_bow': 'Fine Short Bow',
 	'crossbow_balanced_siege_crossbow': 'Fine Siege Crossbow',
 	'evasion_es_helmet_phantom_hood': 'Phantom Cowl',
+	# POE2's own ring names (Path of Building 2's ring data, Curtis 2026-10-20).
+	'lapis_ring': 'Lazuli Ring',
+	'opal_ring': 'Pearl Ring',
+	'gold_ring': 'Golden Hoop',
 }
+
+# Rings follow POE2's lineup and drop levels rather than the bundle's: Iron and Lazuli first, then Ruby, Sapphire and
+# Golden Hoop, Topaz, Pearl. POE2 has no Coral Ring, so it only carries its unique. Other jewellery keeps the bundle's
+# drop level; jewellery levels are POE2 item levels, not scaled to Diablo's (the game checks them against those).
+POE2_RING_LEVELS = {
+	'iron_ring': 1, 'lapis_ring': 1, 'ruby_ring': 8, 'sapphire_ring': 12, 'gold_ring': 12, 'topaz_ring': 16, 'opal_ring': 32,
+	'coral_ring': 20,
+}
+RETIRED_BASES = {'coral_ring'}
 
 # bundle class -> (itemdat class, equip type, item type, short name, quality, unique-type source)
 CLASSES = {
@@ -111,8 +124,8 @@ IMPLICITS = {
 }
 # Jewellery whose bundle implicit has no mechanic here gets the nearest one that has (every ring and amulet has one).
 IMPLICIT_STAND_INS = {
-	'Opal Ring': ('AllResistances', 6, 9, '+{0}% to all Elemental Resistances'),
-	'Gold Ring': ('AllAttributes', 3, 5, '+{0} to all Attributes'),
+	'Pearl Ring': ('CastSpeed', 7, 10, '{0}% increased Cast Speed'),
+	'Golden Hoop': ('AllAttributes', 3, 5, '+{0} to all Attributes'),
 	'Keen Amulet': ('Dexterity', 6, 9, '+{0} to Dexterity'),
 }
 
@@ -260,7 +273,8 @@ def main():
 		generated.add(name)
 		stats = b['base_stats']
 		tier = b['progression_tier']
-		level = d1_level(b['drop_level'])
+		is_jewellery = cls in ('ring', 'amulet')
+		level = POE2_RING_LEVELS.get(b['id'], b['drop_level']) if is_jewellery else d1_level(b['drop_level'])
 		req = b['requirements']
 
 		group = b.get('upgrade_group') or cls
@@ -296,12 +310,11 @@ def main():
 		implicits = [i for i in implicits if i is not None]
 		implicits = one_implicit(implicits)
 
-		is_jewellery = cls in ('ring', 'amulet')
 		if is_jewellery and not implicits and name in IMPLICIT_STAND_INS:
 			implicits = [IMPLICIT_STAND_INS[name]]
 		value = (1000 + b['drop_level'] * 50) if is_jewellery else (100 + b['drop_level'] * 100)
 		row = [
-			ID_PREFIX + b['id'], '1', item_class, equip, cursor, item_type, unique, name, short, str(level),
+			ID_PREFIX + b['id'], '0' if b['id'] in RETIRED_BASES else '1', item_class, equip, cursor, item_type, unique, name, short, str(level),
 			'0' if is_jewellery else str(30 + tier * 5), str(min_dam), str(max_dam), str(min_ac), str(max_ac),
 			str(round(req['strength'] * REQUIREMENT_SCALE)), str(round(req['intelligence'] * REQUIREMENT_SCALE)),
 			str(round(req['dexterity'] * REQUIREMENT_SCALE)), '', cls.upper() if is_jewellery else 'NONE', 'Null', 'false', str(value),

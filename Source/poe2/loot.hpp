@@ -100,6 +100,10 @@ int LootItemLevelBonus(LootSource source);
 
 CurrencyBand RollCurrencyBand();
 CurrencyBand OrbCurrencyBand(item_misc_id miscId);
+/** @brief The POE2 item level a currency starts dropping at. */
+int CurrencyDropLevel(item_misc_id miscId);
+/** @brief How often a currency drops compared with the others of its band. */
+int CurrencyBandWeight(item_misc_id miscId);
 
 /** @brief Natural rares have 4, 5 or 6 affixes, weighted 8:3:1. */
 int RollNaturalRareAffixCount();

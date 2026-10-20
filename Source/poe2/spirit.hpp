@@ -103,6 +103,8 @@ int SkullSpirit(const Player &player);
 int SpiritSkullIndex(const Item &item);
 /** @brief Breaks a Spirit skull for its Spirit. @return true if the skull was used up. */
 bool UseSpiritSkull(Player &player, const Item &item);
+/** @brief The Uncut Spirit Gem a broken skull leaves, into the bag or at the hero's feet (Curtis 2026-10-20). */
+void GiveUncutSpiritGem(Player &player);
 /** @brief Drops a Spirit skull when a boss that guards one dies and the player hasn't broken it yet. */
 void DropSpiritSkull(const Monster &monster, bool sendmsg);
 /** @brief Minion damage in percent of normal, from the passive tree and ascendancy. */

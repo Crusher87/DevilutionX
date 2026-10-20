@@ -9,14 +9,17 @@
 #include "engine/random.hpp"
 #include "engine/point.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
 #include "missiles.h"
 #include "monster.h"
+#include "msg.h"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
+#include "poe2/gemcutting.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
@@ -654,25 +657,46 @@ bool UseSpiritSkull(Player &player, const Item &item)
 	return true;
 }
 
+void GiveUncutSpiritGem(Player &player)
+{
+	if (!gbIsPoe2 || &player != MyPlayer)
+		return;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId != IMISC_UNCUT_SPIRIT || AllItemsList[i].dropRate == 0)
+			continue;
+		Item gem {};
+		SetupAllItems(player, gem, static_cast<_item_indexes>(i), AdvanceRndSeed(), 1, 1, /*onlygood=*/false, /*pregen=*/false);
+		SetUncutGemLevel(gem, UncutGemLevelForArea(player.getCharacterLevel()));
+		gem._iIdentified = true;
+		SetupItem(gem);
+		if (!AutoPlaceItemInInventory(player, gem, true) && ActiveItemCount < MAXITEMS) {
+			// A full bag: it lands at the hero's feet.
+			const int ii = AllocateItem();
+			Items[ii] = gem;
+			GetSuperItemSpace(player.position.tile, static_cast<int8_t>(ii));
+			NetSendCmdPItem(false, CMD_DROPITEM, Items[ii].position, Items[ii]);
+		}
+		EventPlrMsg(_("An Uncut Spirit Gem forms from the skull's energies."), UiFlags::ColorWhitegold);
+		TelemetryLog("spirit", "the skull gave an Uncut Spirit Gem");
+		return;
+	}
+}
+
 namespace {
 
 /** @brief The skull a boss guards, like POE2's Spirit quest bosses; -1 for none. */
-int SkullForMonster(const Monster &monster)
+int SkullForMonster(const Monster &monster, const Player &player)
 {
-	switch (monster.uniqueType) {
-	// The first comes from the early quest bosses; at least one of them is in every game.
-	case UniqueMonsterType::SkeletonKing:
-	case UniqueMonsterType::Butcher:
-	case UniqueMonsterType::Garbud:
-	case UniqueMonsterType::SnotSpill:
-		return 0;
-	case UniqueMonsterType::Lazarus:
+	if (monster.uniqueType == UniqueMonsterType::Lazarus)
 		return 2;
-	default:
-		break;
-	}
-	// The second comes from the first unique monster beaten in the caves or deeper.
-	if (monster.isUnique() && currlevel >= 9)
+	if (!monster.isUnique())
+		return -1;
+	// The first comes from the first named monster beaten in the Catacombs or deeper, like POE2's King in the Mists
+	// partway through Act 1 (Curtis 2026-10-20: 30 Spirit from the Skeleton King came too early). The second comes
+	// from the first one in the caves or deeper, once the first is broken.
+	if (currlevel >= 5 && (player.poe2.spiritSkulls & 1) == 0)
+		return 0;
+	if (currlevel >= 9)
 		return 1;
 	return -1;
 }
@@ -690,14 +714,32 @@ std::optional<size_t> SpiritSkullItemIndex(int skull)
 	return std::nullopt;
 }
 
+/** @brief Whether a copy of the skull already lies on this level or in the hero's bags, so a second named monster doesn't drop another. */
+bool SpiritSkullAround(const Player &player, int skull)
+{
+	for (uint8_t i = 0; i < ActiveItemCount; i++) {
+		if (SpiritSkullIndex(Items[ActiveItems[i]]) == skull)
+			return true;
+	}
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (SpiritSkullIndex(player.InvList[i]) == skull)
+			return true;
+	}
+	for (const Item &item : player.SpdList) {
+		if (SpiritSkullIndex(item) == skull)
+			return true;
+	}
+	return SpiritSkullIndex(player.HoldItem) == skull;
+}
+
 } // namespace
 
 void DropSpiritSkull(const Monster &monster, bool sendmsg)
 {
 	if (!gbIsPoe2 || MyPlayer == nullptr || monster.isPlayerMinion())
 		return;
-	const int skull = SkullForMonster(monster);
-	if (skull < 0 || (MyPlayer->poe2.spiritSkulls & (1 << skull)) != 0)
+	const int skull = SkullForMonster(monster, *MyPlayer);
+	if (skull < 0 || (MyPlayer->poe2.spiritSkulls & (1 << skull)) != 0 || SpiritSkullAround(*MyPlayer, skull))
 		return;
 	if (const std::optional<size_t> index = SpiritSkullItemIndex(skull); index)
 		SpawnBaseItem(monster.position.tile, static_cast<_item_indexes>(*index), sendmsg);

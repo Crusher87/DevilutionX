@@ -2554,7 +2554,7 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 
 /**
  * @brief POE2 vendors keep valuable currency, waystones, gems and charms out of their stock: those come from drops.
- * Adria still sells the common orbs (Transmute, Augment, Scouring, Bauble) and her scrolls.
+ * Adria still sells the common orbs (Transmute, Augment, Bauble, Whetstone, Scrap) and her scrolls.
  */
 bool Poe2VendorWithholds(item_misc_id miscId)
 {
@@ -4466,24 +4466,50 @@ bool IsPoe2Equipment(const ItemData &data)
 	return EquipmentClassWeight(data.itype) > 0;
 }
 
+/**
+ * @brief Swift and Heavy weapons, with their attack speed implicit, start at the third weapon tier, so the Cathedral
+ * drops plain ones (Curtis 2026-10-20: implicits belong on jewellery and higher gear).
+ */
+bool IsHeldBackWeaponBase(size_t index)
+{
+	constexpr uint8_t ImplicitWeaponLevel = 9;
+	const ItemData &data = AllItemsList[index];
+	if (data.iClass != ICLASS_WEAPON || data.iMinMLvl >= ImplicitWeaponLevel)
+		return false;
+	const BaseMeta *meta = BaseMetaFor(static_cast<int>(index));
+	return meta != nullptr && IsAnyOf(meta->identity, "swift", "heavy");
+}
+
 bool IsPoe2LootCandidate(size_t index, int itemLevel)
 {
 	if (!IsItemAvailable(static_cast<int>(index)))
 		return false;
 	const ItemData &data = AllItemsList[index];
-	if (data.dropRate == 0 || data.iMinMLvl > itemLevel)
+	if (data.dropRate == 0 || data.iMinMLvl > itemLevel || IsHeldBackWeaponBase(index))
 		return false;
 	return !IsAnyOf(data.iSpell, SpellID::Resurrect, SpellID::HealOther) || gbIsMultiplayer;
 }
 
+/** @brief Rings and amulets keep the bundle's drop levels, which are POE2 item levels, since their implicits keep its numbers too. */
+bool IsPoe2Jewellery(const ItemData &data)
+{
+	return IsAnyOf(data.itype, ItemType::Ring, ItemType::Amulet);
+}
+
+/** @brief The level a base's drop level is checked against: the POE2 item level for jewellery, Diablo's for the rest. */
+int Poe2BaseLevel(const ItemData &data, int itemLevel, int poe2ItemLevel)
+{
+	return IsPoe2Jewellery(data) ? poe2ItemLevel : itemLevel;
+}
+
 /** @brief Picks a kind of equipment by its class weight, then one of its bases, favouring bases near the item level. */
-std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel)
+std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLevel)
 {
 	// ItemType::None is -1, so the last real type sets the size.
 	std::array<int, static_cast<size_t>(ItemType::Amulet) + 1> classWeights {};
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
-		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, itemLevel))
+		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, Poe2BaseLevel(data, itemLevel, poe2ItemLevel)))
 			classWeights[static_cast<size_t>(data.itype)] = EquipmentClassWeight(data.itype);
 	}
 	const int classTotal = std::accumulate(classWeights.begin(), classWeights.end(), 0);
@@ -4500,9 +4526,10 @@ std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel)
 	int total = 0;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
-		if (static_cast<size_t>(data.itype) != type || !IsPoe2LootCandidate(i, itemLevel))
+		const int level = Poe2BaseLevel(data, itemLevel, poe2ItemLevel);
+		if (static_cast<size_t>(data.itype) != type || !IsPoe2LootCandidate(i, level))
 			continue;
-		const int weight = data.dropRate * BaseRecencyPercent(itemLevel, data.iMinMLvl);
+		const int weight = data.dropRate * BaseRecencyPercent(level, data.iMinMLvl);
 		bases.emplace_back(static_cast<_item_indexes>(i), weight);
 		total += weight;
 	}
@@ -4536,32 +4563,54 @@ std::optional<_item_indexes> PickPoe2Weighted(int itemLevel, tl::function_ref<bo
 	return items.back().first;
 }
 
-std::optional<_item_indexes> PickPoe2Currency(int itemLevel)
+/** @brief A currency by its band, then by the band's weights, among those dropping by the POE2 item level. */
+std::optional<_item_indexes> PickPoe2Currency(int poe2ItemLevel)
 {
 	// A band with nothing in it yet (chase) falls to the band below.
 	for (int band = static_cast<int>(RollCurrencyBand()); band >= 0; band--) {
-		const std::optional<_item_indexes> orb = PickPoe2Weighted(itemLevel, [band](const ItemData &data) {
-			return IsPoe2Orb(data.iMiscId) && static_cast<int>(OrbCurrencyBand(data.iMiscId)) == band;
-		});
-		if (orb)
-			return orb;
+		std::vector<std::pair<_item_indexes, int>> orbs;
+		int total = 0;
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			const ItemData &data = AllItemsList[i];
+			if (!IsPoe2Orb(data.iMiscId) || static_cast<int>(OrbCurrencyBand(data.iMiscId)) != band || data.dropRate == 0
+			    || !IsItemAvailable(static_cast<int>(i)) || CurrencyDropLevel(data.iMiscId) > poe2ItemLevel)
+				continue;
+			orbs.emplace_back(static_cast<_item_indexes>(i), CurrencyBandWeight(data.iMiscId));
+			total += orbs.back().second;
+		}
+		if (total == 0)
+			continue;
+		int roll = LootRandom(total);
+		for (const auto &[index, weight] : orbs) {
+			if (roll < weight)
+				return index;
+			roll -= weight;
+		}
 	}
 	return std::nullopt;
 }
 
-std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel)
+/** @brief Spirit gems wait until the hero has Spirit to spend (Curtis 2026-10-20). */
+bool HeroHasSpirit()
+{
+	return MyPlayer != nullptr && MaxSpirit(*MyPlayer) > 0;
+}
+
+std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel, int poe2ItemLevel)
 {
 	switch (category) {
 	case LootCategory::Equipment:
-		return PickPoe2EquipmentBase(itemLevel);
+		return PickPoe2EquipmentBase(itemLevel, poe2ItemLevel);
 	case LootCategory::Gold:
 		return IDI_GOLD;
 	case LootCategory::Currency:
-		return PickPoe2Currency(itemLevel);
+		return PickPoe2Currency(poe2ItemLevel);
 	case LootCategory::FlaskOrCharm:
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId); });
-	case LootCategory::Gem:
-		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId); });
+	case LootCategory::Gem: {
+		const bool spirit = HeroHasSpirit();
+		return PickPoe2Weighted(itemLevel, [spirit](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT); });
+	}
 	case LootCategory::Endgame:
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });
 	case LootCategory::Jewel:
@@ -4758,7 +4807,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	const int itemLevel = origin.itemLevel;
 
 	std::optional<_item_indexes> idx = forcedIdx ? forcedIdx : category == LootCategory::Endgame ? PickPoe2EndgameItem(origin)
-	                                                                                             : PickPoe2LootItem(category, origin.baseLevel);
+	                                                                                             : PickPoe2LootItem(category, origin.baseLevel, origin.poe2ItemLevel);
 	int uidOffset = 0;
 	bool bundleUnique = false;
 	BeltUniqueId beltUnique = BeltUniqueId::None;
@@ -4925,7 +4974,7 @@ std::optional<_item_indexes> PickMiscReward(int level, std::initializer_list<ite
 std::optional<_item_indexes> PickEquipmentOfClass(int level, item_class itemClass)
 {
 	for (int tries = 0; tries < 20; tries++) {
-		const std::optional<_item_indexes> idx = PickPoe2EquipmentBase(level);
+		const std::optional<_item_indexes> idx = PickPoe2EquipmentBase(level, Poe2ItemLevel(level));
 		if (idx && AllItemsList[*idx].iClass == itemClass)
 			return idx;
 	}

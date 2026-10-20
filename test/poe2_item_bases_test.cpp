@@ -183,7 +183,9 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			continue;
 		bases++;
 		const ItemData &data = AllItemsList[i];
-		EXPECT_GT(data.dropRate, 0) << data.iName;
+		// POE2 has no Coral Ring, so it only carries its unique.
+		if (data.iName != "Coral Ring")
+			EXPECT_GT(data.dropRate, 0) << data.iName;
 		if (data.iClass == ICLASS_WEAPON)
 			EXPECT_GT(data.iMaxDam, data.iMinDam) << data.iName;
 		if (data.iClass == ICLASS_ARMOR) {
@@ -192,6 +194,20 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 		}
 	}
 	EXPECT_EQ(bases, 384);
+}
+
+TEST_F(Poe2ItemBasesTest, RingsFollowPoe2)
+{
+	// POE2's lineup and drop levels, which for jewellery are POE2 item levels.
+	const auto level = [](std::string_view name) { return AllItemsList[FindBase(name)].iMinMLvl; };
+	EXPECT_EQ(level("Iron Ring"), 1);
+	EXPECT_EQ(level("Lazuli Ring"), 1);
+	EXPECT_EQ(level("Ruby Ring"), 8);
+	EXPECT_EQ(level("Sapphire Ring"), 12);
+	EXPECT_EQ(level("Golden Hoop"), 12);
+	EXPECT_EQ(level("Topaz Ring"), 16);
+	EXPECT_EQ(level("Pearl Ring"), 32);
+	EXPECT_GE(Stat(MakeItem("Pearl Ring", 32), Poe2ItemStat::CastSpeed), 7);
 }
 
 TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
