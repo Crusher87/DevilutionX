@@ -645,7 +645,7 @@ template <typename Rnd>
 void PaintField(int x0, int y0, int width, int height, Rnd rnd)
 {
 	constexpr uint16_t Ground[] = { 6, 8, 7, 5, 2, 3, 1, 4 }; // flat Tristram grass and dirt
-	constexpr uint16_t Trees[] = { 47, 44, 55, 41, 34 };
+	constexpr uint16_t Trees[] = { 47, 44, 34 }; // trees whose leaves sit inside their own mega (41 and 55 spill into the next one)
 	constexpr uint16_t Rocks[] = { 63, 62 };
 	const size_t town = 1; // guest 0 is the main set
 	for (int my = y0; my < y0 + height; ++my) {
@@ -756,7 +756,7 @@ int PlaceGuestRegions(uint32_t seed)
 	}
 
 	constexpr uint16_t Ground[] = { 6, 8, 7, 5, 2, 3, 1, 4 }; // flat Tristram grass and dirt
-	constexpr uint16_t Trees[] = { 47, 44, 55, 41, 34 };
+	constexpr uint16_t Trees[] = { 47, 44, 34 }; // trees whose leaves sit inside their own mega (41 and 55 spill into the next one)
 	constexpr uint16_t Rocks[] = { 63, 62 };
 	const size_t town = 1;
 	Bitset2d<DMAXX, DMAXY> blocked;
