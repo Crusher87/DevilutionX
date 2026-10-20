@@ -166,6 +166,12 @@ struct Colour {
 	float r, g, b, w;
 };
 
+/** @brief Rounds and clamps to 0-255 (no std::lround: the Amiga toolchain lacks it). */
+uint8_t ToByte(float v)
+{
+	return static_cast<uint8_t>(std::clamp(static_cast<int>(v + 0.5F), 0, 255));
+}
+
 float Luminance(float r, float g, float b)
 {
 	return 0.299F * r + 0.587F * g + 0.114F * b;
@@ -289,7 +295,7 @@ void BuildSharedPalette(const std::vector<std::pair<const RawSet *, std::array<u
 				size_t best = 0;
 				float bestD = 1e30F;
 				for (size_t j = 0; j < byLum.size(); ++j) {
-					const float d = std::fabs(byLum[j].first - target);
+					const float d = byLum[j].first > target ? byLum[j].first - target : target - byLum[j].first;
 					if (d < bestD) {
 						bestD = d;
 						best = j;
@@ -302,9 +308,9 @@ void BuildSharedPalette(const std::vector<std::pair<const RawSet *, std::array<u
 				g = base.g * scale;
 				b = base.b * scale;
 			}
-			Shared[idx * 3] = static_cast<uint8_t>(std::clamp(std::lround(r), 0L, 255L));
-			Shared[idx * 3 + 1] = static_cast<uint8_t>(std::clamp(std::lround(g), 0L, 255L));
-			Shared[idx * 3 + 2] = static_cast<uint8_t>(std::clamp(std::lround(b), 0L, 255L));
+			Shared[idx * 3] = ToByte(r);
+			Shared[idx * 3 + 1] = ToByte(g);
+			Shared[idx * 3 + 2] = ToByte(b);
 		}
 	}
 	Shared[0] = Shared[1] = Shared[2] = 0;
