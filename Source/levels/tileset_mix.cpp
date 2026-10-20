@@ -36,6 +36,9 @@ namespace devilution {
 namespace tilesetmix {
 namespace {
 
+/** @brief Console test switch for random Cathedral floors (see SetRandomFloors). */
+bool RandomFloorsOn = false;
+
 constexpr int TileColours = 128; // colours 0-127 belong to the ground and walls, 128-255 to everything else
 constexpr int RampCount = 8;
 constexpr int RampLength = 16;
@@ -444,6 +447,9 @@ void SelectForCurrentLevel()
 	if (setlevel && setlvlnum == SL_MIXTEST) {
 		CurrentMix.primary = DTYPE_CATHEDRAL;
 		CurrentMix.guests = { DTYPE_TOWN };
+	} else if (RandomFloorsOn && !setlevel && leveltype == DTYPE_CATHEDRAL) {
+		CurrentMix.primary = DTYPE_CATHEDRAL;
+		CurrentMix.guests = { DTYPE_TOWN };
 	}
 }
 
@@ -583,7 +589,7 @@ void SetMixedDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8
 	for (uint32_t frame = 1; frame <= LevelCelBlock::MaxFrame; ++frame)
 		if (referenced[frame])
 			ReencodedToMerged.push_back(frame);
-	FinishDungeonMicros(dungeonCels, pieceCount, microTileLen);
+	FinishDungeonMicros(dungeonCels, pieceCount, 16);
 }
 
 bool FrameSource(uint32_t reencodedFrame, dungeon_type &type, uint32_t &originalFrame)
@@ -626,34 +632,168 @@ void FillMegaTile(size_t guest, uint16_t megaId, Point position)
 	dPiece[position.x + 1][position.y + 1] = Swap16LE(mega.micro4);
 }
 
-void BuildMixTestLevel()
+namespace {
+
+constexpr uint16_t CathedralFloor = 13;
+
+/**
+ * @brief Paints a Tristram field over a rectangle of megas: flat grass and dirt on the edge ring so it
+ * can always be walked into, a scatter of trees and rocks inside.
+ * @param rnd returns a number in [0, n)
+ */
+template <typename Rnd>
+void PaintField(int x0, int y0, int width, int height, Rnd rnd)
 {
-	// A Tristram yard inside the Cathedral arena's big hall: megas x 3..10, y 13..20 of arena/church.dun,
-	// one ring of Cathedral floor left between the hall walls and the grass.
-	constexpr int X0 = 3;
-	constexpr int Y0 = 13;
-	constexpr int Size = 8;
 	constexpr uint16_t Ground[] = { 6, 8, 7, 5, 2, 3, 1, 4 }; // flat Tristram grass and dirt
 	constexpr uint16_t Trees[] = { 47, 44, 55, 41, 34 };
 	constexpr uint16_t Rocks[] = { 63, 62 };
-	constexpr uint16_t CathedralFloor = 13;
 	const size_t town = 1; // guest 0 is the main set
-	for (int my = Y0; my < Y0 + Size; ++my) {
-		for (int mx = X0; mx < X0 + Size; ++mx) {
+	for (int my = y0; my < y0 + height; ++my) {
+		for (int mx = x0; mx < x0 + width; ++mx) {
 			dungeon[mx][my] = CathedralFloor; // the automap and door logic see plain floor here
 			const Point piece = Point { mx, my }.megaToWorld();
-			uint16_t mega = Ground[GenerateRnd(static_cast<int32_t>(std::size(Ground)))];
-			const bool edge = mx == X0 || my == Y0 || mx == X0 + Size - 1 || my == Y0 + Size - 1;
+			uint16_t mega = Ground[rnd(static_cast<int32_t>(std::size(Ground)))];
+			const bool edge = mx == x0 || my == y0 || mx == x0 + width - 1 || my == y0 + height - 1;
 			if (!edge) {
-				const int roll = GenerateRnd(100);
+				const int roll = rnd(100);
 				if (roll < 8)
-					mega = Trees[GenerateRnd(static_cast<int32_t>(std::size(Trees)))];
+					mega = Trees[rnd(static_cast<int32_t>(std::size(Trees)))];
 				else if (roll < 12)
-					mega = Rocks[GenerateRnd(static_cast<int32_t>(std::size(Rocks)))];
+					mega = Rocks[rnd(static_cast<int32_t>(std::size(Rocks)))];
 			}
 			FillMegaTile(town, mega, piece);
 		}
 	}
+}
+
+/** @brief Plain Cathedral floor and its two cracked variants (the generator sprinkles those in). */
+bool IsPlainFloor(uint8_t mega)
+{
+	return mega == CathedralFloor || mega == 162 || mega == 163;
+}
+
+} // namespace
+
+void BuildMixTestLevel()
+{
+	// A Tristram yard inside the Cathedral arena's big hall: megas x 3..10, y 13..20 of arena/church.dun,
+	// one ring of Cathedral floor left between the hall walls and the grass.
+	PaintField(3, 13, 8, 8, [](int32_t n) { return GenerateRnd(n); });
+}
+
+void SetRandomFloors(bool on)
+{
+	RandomFloorsOn = on;
+}
+
+bool RandomFloors()
+{
+	return RandomFloorsOn;
+}
+
+int PlaceGuestRegions(uint32_t seed)
+{
+	if (Sets.size() < 2)
+		return 0;
+	// Own generator, so monsters, items and objects roll exactly as on the plain level.
+	DiabloGenerator rng(seed ^ 0x6D697874U);
+	const auto rnd = [&rng](int32_t n) { return rng.generateRnd(n); };
+
+	// Cathedral rooms are broken up by pillars and wall shadows, so a field grows outwards from a
+	// room's middle over plain floor only. Shadowed floor next to walls never turns, which keeps a
+	// strip of Cathedral floor along every wall, door and stair.
+	const auto open = [](int x, int y) {
+		return x >= 0 && y >= 0 && x < DMAXX && y < DMAXY && IsPlainFloor(dungeon[x][y]) && !Protected.test(x, y);
+	};
+	std::vector<Point> centres;
+	for (int y = 1; y < DMAXY - 1; ++y) {
+		for (int x = 1; x < DMAXX - 1; ++x) {
+			bool roomMiddle = true;
+			for (int dy = -1; dy <= 1 && roomMiddle; ++dy)
+				for (int dx = -1; dx <= 1 && roomMiddle; ++dx)
+					roomMiddle = open(x + dx, y + dy);
+			if (roomMiddle)
+				centres.push_back({ x, y });
+		}
+	}
+	if (centres.empty())
+		return 0;
+
+	constexpr int MaxAreas = 3;
+	constexpr int MaxMegas = 30;
+	const int wanted = 1 + rnd(MaxAreas);
+	Bitset2d<DMAXX, DMAXY> painted;
+	std::vector<Point> placed;
+	for (int tries = 0; tries < 100 && static_cast<int>(placed.size()) < wanted; ++tries) {
+		const Point centre = centres[rnd(static_cast<int32_t>(centres.size()))];
+		// Keep fields apart so each reads as its own patch.
+		if (std::any_of(placed.begin(), placed.end(), [&centre](Point p) { return p.ManhattanDistance(centre) < 10; }))
+			continue;
+		const int radius = 2 + rnd(3);
+		std::vector<Point> area { centre };
+		Bitset2d<DMAXX, DMAXY> seen;
+		seen.set(centre.x, centre.y);
+		for (size_t i = 0; i < area.size() && static_cast<int>(area.size()) < MaxMegas; ++i) {
+			for (const Displacement step : { Displacement { 1, 0 }, Displacement { -1, 0 }, Displacement { 0, 1 }, Displacement { 0, -1 } }) {
+				const Point next = area[i] + step;
+				if (!open(next.x, next.y) || seen.test(next.x, next.y) || painted.test(next.x, next.y))
+					continue;
+				seen.set(next.x, next.y);
+				// A rough circle with ragged edges.
+				const int d2 = (next.x - centre.x) * (next.x - centre.x) + (next.y - centre.y) * (next.y - centre.y);
+				if (d2 > radius * radius + rnd(radius + 1))
+					continue;
+				area.push_back(next);
+				if (static_cast<int>(area.size()) >= MaxMegas)
+					break;
+			}
+		}
+		if (area.size() < 4)
+			continue;
+		for (const Point m : area)
+			painted.set(m.x, m.y);
+		placed.push_back(centre);
+	}
+
+	constexpr uint16_t Ground[] = { 6, 8, 7, 5, 2, 3, 1, 4 }; // flat Tristram grass and dirt
+	constexpr uint16_t Trees[] = { 47, 44, 55, 41, 34 };
+	constexpr uint16_t Rocks[] = { 63, 62 };
+	const size_t town = 1;
+	Bitset2d<DMAXX, DMAXY> blocked;
+	for (int y = 0; y < DMAXY; ++y) {
+		for (int x = 0; x < DMAXX; ++x) {
+			if (!painted.test(x, y))
+				continue;
+			uint16_t mega = Ground[rnd(static_cast<int32_t>(std::size(Ground)))];
+			// Trees and rocks only deep inside a field and never next to each other, so every
+			// field stays walkable all the way across.
+			bool inner = true;
+			bool crowded = false;
+			for (int dy = -1; dy <= 1; ++dy) {
+				for (int dx = -1; dx <= 1; ++dx) {
+					const int nx = x + dx;
+					const int ny = y + dy;
+					if (nx < 0 || ny < 0 || nx >= DMAXX || ny >= DMAXY || !painted.test(nx, ny))
+						inner = false;
+					else if (blocked.test(nx, ny))
+						crowded = true;
+				}
+			}
+			if (inner && !crowded) {
+				const int roll = rnd(100);
+				if (roll < 14) {
+					mega = Trees[rnd(static_cast<int32_t>(std::size(Trees)))];
+					blocked.set(x, y);
+				} else if (roll < 20) {
+					mega = Rocks[rnd(static_cast<int32_t>(std::size(Rocks)))];
+					blocked.set(x, y);
+				}
+			}
+			dungeon[x][y] = CathedralFloor; // the automap and door logic see plain floor here
+			FillMegaTile(town, mega, Point { x, y }.megaToWorld());
+		}
+	}
+	return static_cast<int>(placed.size());
 }
 
 } // namespace tilesetmix

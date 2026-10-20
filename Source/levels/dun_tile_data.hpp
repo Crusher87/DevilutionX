@@ -227,7 +227,7 @@ std::expected<void, std::string> LoadLevelSOLData();
  * @brief Re-encodes the loaded dungeon cels for the first `pieceCount` entries of `DPieceMicros` and
  * renumbers their frames. SetDungeonMicros ends with this; the tile-set mix fills DPieceMicros itself first.
  */
-void FinishDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, size_t pieceCount, uint_fast8_t microTileLen);
+void FinishDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, size_t pieceCount, uint32_t blocks);
 void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &microTileLen);
 
 } // namespace devilution

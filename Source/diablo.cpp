@@ -1659,6 +1659,8 @@ std::expected<void, std::string> LoadAllGFX()
 void CreateLevel(lvl_entry entry)
 {
 	CreateDungeon(DungeonSeeds[currlevel], entry);
+	if (tilesetmix::Active())
+		tilesetmix::PlaceGuestRegions(DungeonSeeds[currlevel]);
 
 	switch (leveltype) {
 	case DTYPE_TOWN:
