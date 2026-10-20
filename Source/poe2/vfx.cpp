@@ -3039,6 +3039,8 @@ Batch Dark;
 /** @brief Glowing and dark shapes lying on the floor, which hide behind whatever stands or lies on it. */
 Batch Ground;
 Batch GroundDark;
+/** @brief Dark shapes standing on the floor (the portal's eye), blended on after the floor glow so they hide what lies under them. */
+Batch Standing;
 
 Vec ToScreen(Vec world)
 {
@@ -4670,7 +4672,7 @@ void DrawPortal(const PortalFx &portal)
 	const float ry = PortalRy * (0.55F + 0.45F * open);
 	const float alpha = std::min(open, 1.F) * fade;
 	// The dark inside: a hole in the world, so the glow around it reads as depth.
-	SoftOvalDisc(Dark, centre, rx * 0.92F, ry * 0.92F, { 3, 3, 20 }, 0.85F * alpha, 0.3F * alpha);
+	SoftOvalDisc(Standing, centre, rx * 0.96F, ry * 0.96F, { 3, 3, 20 }, 0.97F * alpha, 0.9F * alpha);
 	// The corona: its haze, and the light it spills into the air around it.
 	SoftOvalDisc(Glowing, centre, rx * 2.3F, ry * 1.5F, c.edge, (0.24F + 0.12F * pull) * breath * alpha);
 	SoftOvalDisc(Glowing, centre, rx * 1.4F, ry * 1.15F, c.mid, (0.12F + 0.08F * pull) * breath * alpha);
@@ -5127,6 +5129,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 
 	Glowing.clear();
 	Dark.clear();
+	Standing.clear();
 	Ground.clear();
 	GroundDark.clear();
 	DrawHalos();
@@ -5171,6 +5174,9 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		// No render targets: the glow goes straight on, without bloom.
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
 		Submit(renderer, Ground, toLogical);
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+		Submit(renderer, Standing, toLogical);
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
 		Submit(renderer, Glowing, toLogical);
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 		return;
@@ -5190,6 +5196,9 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_ADD);
 		SDL_RenderCopy(renderer, Layer.full, nullptr, nullptr);
 	}
+	// What stands on the floor and hides it: blended straight on, over the floor glow and under the glowing layer.
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+	Submit(renderer, Standing, toLogical);
 	SDL_SetRenderTarget(renderer, Layer.full);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_RenderClear(renderer);
