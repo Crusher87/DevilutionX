@@ -4706,7 +4706,9 @@ void GolumAi(Monster &golem)
 	if (golem.pathCount > 8)
 		golem.pathCount = 5;
 
-	if (RandomWalk(golem, Players[golem.goalVar3]._pdir))
+	// POE2 Mashup: a minion whose owner id is out of range (a bad save) wanders its own way rather than reading past Players.
+	const Direction ownerDirection = static_cast<size_t>(golem.goalVar3) < Players.size() ? Players[static_cast<size_t>(golem.goalVar3)]._pdir : golem.direction;
+	if (RandomWalk(golem, ownerDirection))
 		return;
 
 	Direction md = Left(golem.direction);
