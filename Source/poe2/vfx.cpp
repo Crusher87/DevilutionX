@@ -34,6 +34,7 @@
 #include "monster.h"
 #include "objects.h"
 #include "options.h"
+#include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
@@ -461,6 +462,47 @@ std::unordered_map<int, float> QuestMarkSince;
 std::unordered_map<const Monster *, MonsterMode> LastModes;
 /** @brief Each monster's burning, shocked, frozen and chilled looks last frame, for the play log. */
 std::unordered_map<const Monster *, uint8_t> LastStatus;
+
+// The town portal's timeline, in ms from its casting.
+constexpr float PortalSealMs = 340;
+constexpr float PortalTearStart = 330;
+constexpr float PortalOpenMs = 760;
+constexpr float PortalCloseMs = 320;
+constexpr float PortalArriveMs = 650;
+/** @brief The portal's oval: how far its centre stands above the tile, and its half width and height. */
+constexpr float PortalLift = 52;
+constexpr float PortalRx = 26;
+constexpr float PortalRy = 48;
+constexpr int PortalRunes = 8;
+
+/**
+ * @brief A town portal (or Lazarus's red portal), drawn by code in place of its classic swirl: a seal that writes
+ * itself into the floor, a seam of light the portal tears open from, then a turning vortex that stands on the tile,
+ * throws light on the floor and breathes embers, until it collapses when its missile goes.
+ */
+struct PortalFx {
+	Vec pos;
+	/** @brief The scan it was last seen in; a portal not seen this scan has closed. */
+	uint32_t frame = 0;
+	/** @brief Ms since it was first seen; a portal that was already open starts part way through. */
+	float age = 0;
+	bool red = false;
+	/** @brief Whether its opening flash has gone off. */
+	bool torn = false;
+	/** @brief 0 to 1: a hero is stepping into it, so it pulls harder and brighter. */
+	float pull = 0;
+	float pullTarget = 0;
+	/** @brief Ms since its missile went, once it has: it folds shut. Negative while open. */
+	float closing = -1;
+	/** @brief Ms since a hero stepped out of it, for the burst of light they arrive in; negative otherwise. */
+	float arrived = -1;
+	uint32_t seed = 1;
+	std::array<uint8_t, PortalRunes> runes {};
+};
+
+std::unordered_map<const Missile *, PortalFx> Portals;
+/** @brief Portals whose missile has gone, folding shut. */
+std::vector<PortalFx> ClosingPortals;
 
 Vec CameraOrigin;
 float CameraScale = 1;
@@ -2076,6 +2118,8 @@ void Clear()
 	Rituals.clear();
 	Cracks.clear();
 	Beams.clear();
+	Portals.clear();
+	ClosingPortals.clear();
 	IceSpikes.clear();
 	Sweeps.clear();
 	FrameGlows.clear();
@@ -2418,12 +2462,53 @@ void SetCamera(Point viewTile, Displacement offset, bool zoom)
 	CameraScale = zoom ? 2.F : 1.F;
 }
 
+/** @brief Where a hero on this level is standing or about to stand. */
+bool HeroSteppingOn(Point tile)
+{
+	for (const Player &player : Players) {
+		if (!player.plractive || !player.isOnActiveLevel())
+			continue;
+		if (player.position.tile == tile || player.position.future == tile)
+			return true;
+	}
+	return false;
+}
+
+/** @brief Follows a town portal missile from frame to frame: starts its effect when it appears, notes a hero stepping in. */
+void TrackPortal(const Missile &missile, bool newLevel)
+{
+	const Point tile = missile.position.tile;
+	auto [it, inserted] = Portals.try_emplace(&missile);
+	PortalFx &portal = it->second;
+	portal.frame = ScanFrame;
+	if (inserted) {
+		portal.pos = TileCentre(tile);
+		portal.red = missile._mitype == MissileID::RedPortal;
+		portal.seed = NextRandom() | 1;
+		for (uint8_t &rune : portal.runes)
+			rune = static_cast<uint8_t>(NextRandom() % RuneCount);
+		// Frame group 0 is the classic swirl opening: a portal cast just now. Any other was already open (synced
+		// from another level, loaded with a game), so it stands open from the start.
+		const bool opening = missile.getFrameGroupRaw() == 0;
+		portal.age = opening ? 0 : PortalOpenMs;
+		portal.torn = !opening;
+		// A portal already open when the level appears, with the hero beside it: they just came through it.
+		if (!opening && newLevel && MyPlayer != nullptr && MyPlayer->position.tile.WalkingDistance(tile) <= 2)
+			portal.arrived = 0;
+		TelemetryEffect("vfx", opening ? "Portal opens" : (portal.arrived >= 0 ? "Portal arrival" : "Portal open"), tile.x, tile.y);
+	}
+	if (!missile._miDrawFlag)
+		portal.frame = ScanFrame - 1;
+	portal.pullTarget = HeroSteppingOn(tile) ? 1.F : 0.F;
+}
+
 void ScanMissiles()
 {
 	if (!Enabled())
 		return;
 	const int level = (setlevel ? 1000 : 0) + currlevel * 16 + static_cast<int>(leveltype);
-	if (level != LevelKey) {
+	const bool newLevel = level != LevelKey;
+	if (newLevel) {
 		Clear();
 		LevelKey = level;
 	}
@@ -2431,6 +2516,10 @@ void ScanMissiles()
 	FrameGlows.clear();
 	FrameComets.clear();
 	for (const Missile &missile : Missiles) {
+		if (IsAnyOf(missile._mitype, MissileID::TownPortal, MissileID::RedPortal)) {
+			TrackPortal(missile, newLevel);
+			continue;
+		}
 		const GraphicLook look = LookOf(missile._miAnimType);
 		if (missile._mitype == MissileID::VisualEffect && look.projectile) {
 			// A projectile's graphic standing still is a hit flash (steel on steel): sparks, not a flying glow.
@@ -2518,6 +2607,14 @@ void ScanMissiles()
 			SparksAt(trail.points[0] + Vec { 0, 12 }, trail.element, 0.6F);
 	}
 	std::erase_if(Trails, [](const auto &entry) { return entry.second.frame != ScanFrame; });
+	// A portal whose missile went folds shut.
+	for (auto &[missile, portal] : Portals) {
+		if (portal.frame != ScanFrame && portal.closing < 0) {
+			portal.closing = 0;
+			ClosingPortals.push_back(portal);
+		}
+	}
+	std::erase_if(Portals, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 }
 
 bool ReplacesSprite(const Missile &missile)
@@ -2526,6 +2623,9 @@ bool ReplacesSprite(const Missile &missile)
 		return false;
 	if (missile._mitype == MissileID::VisualEffect)
 		return false;
+	// The portals are drawn whole by the effects.
+	if (IsAnyOf(missile._mitype, MissileID::TownPortal, MissileID::RedPortal))
+		return true;
 	// Arrows keep their sprite: the effects only streak and spark them.
 	if (IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow))
 		return false;
@@ -2565,6 +2665,148 @@ void ScanWorld(const Surface &world)
 	ScanTowners(view);
 }
 
+Colours PortalColours(const PortalFx &portal)
+{
+	if (portal.red)
+		return { { 255, 232, 205 }, { 255, 85, 40 }, { 150, 12, 12 } };
+	return { { 235, 246, 255 }, { 85, 150, 255 }, { 28, 48, 200 } };
+}
+
+/** @brief The portal tearing open: a flash, a shockwave over the floor and a burst of sparks. */
+void PortalTear(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, PortalLift };
+	AddRing(centre, 0, 55, 150, 0, c.core, 0.65F, true, false);
+	AddRing(portal.pos, 0, TileRadius * 3.2F, 520, 5, c.mid, 0.9F, false, true, false, 0.02F);
+	AddRing(portal.pos, TileRadius * 0.5F, TileRadius * 2.2F, 420, 0, c.edge, 0.4F, true, true);
+	Spray(centre, Scaled(50), 120, 380, 350, 800, Shape::Streak, c.core, c.mid, 2.2F, 0.5F, -120, 160, 220, 1.2F, 1);
+	Spray(portal.pos, Scaled(30), 90, 260, 400, 800, Shape::Streak, c.core, c.edge, 1.8F, 0.4F, 20, 120, 260, 1.4F, 1);
+	ShakeCamera(ShakeStrength::Light, 4);
+}
+
+/** @brief A hero stepping out of the portal: the light they arrive in. */
+void PortalArrival(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, PortalLift };
+	AddRing(centre, 10, 90, 260, 0, c.core, 0.75F, true, false);
+	AddRing(portal.pos, 0, TileRadius * 2.6F, 450, 4, c.mid, 0.8F, false, true);
+	Spray(centre, Scaled(40), 80, 300, 400, 900, Shape::Dot, c.core, c.mid, 2.4F, 0.4F, -80, 120, 180, 1.1F, 1);
+	ShakeCamera(ShakeStrength::Light, 3);
+}
+
+/** @brief The portal folding shut: its last light snaps into a line and goes out in a few sparks. */
+void PortalCollapse(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, PortalLift };
+	AddRing(centre, 40, 0, 220, 0, c.core, 0.6F, true, false);
+	Spray(centre, Scaled(18), 60, 200, 300, 600, Shape::Streak, c.core, c.edge, 1.6F, 0.3F, -60, 100, 200, 1.3F, 1);
+}
+
+/** @brief The embers a standing portal breathes: motes drawn in over its rim, sparks spilling from its foot. */
+void PortalBreathe(PortalFx &portal, float ms)
+{
+	const Colours c = PortalColours(portal);
+	const float pull = portal.pull;
+	// Motes from the dark around it, drawn in over the rim and swallowed at the centre.
+	for (int n = Occurrences((14 + 40 * pull) * Intensity(), ms); n > 0; n--) {
+		const float a = Random(0, 2 * Pi);
+		const float reach = Random(1.3F, 2.2F);
+		Particle p;
+		p.life = Random(450, 750);
+		p.pos = portal.pos + Vec { std::cos(a) * PortalRx * reach, 0 };
+		p.z = PortalLift - std::sin(a) * PortalRy * reach;
+		p.vel = { -(p.pos.x - portal.pos.x) / p.life * 1000, 0 };
+		p.vz = -(p.z - PortalLift) / p.life * 1000;
+		p.size0 = 1.2F;
+		p.size1 = 2.6F;
+		p.c0 = c.edge;
+		p.c1 = c.core;
+		p.alpha = 0.9F;
+		AddParticle(p);
+	}
+	// Sparks spilling out of its foot and drifting up, like the classic portal's.
+	for (int n = Occurrences(9 * Intensity(), ms); n > 0; n--) {
+		Particle p;
+		p.pos = portal.pos + Vec { Random(-PortalRx, PortalRx), Random(-6, 6) };
+		p.vel = { Random(-10, 10), 0 };
+		p.vz = Random(25, 70);
+		p.drag = 0.6F;
+		p.life = Random(700, 1400);
+		p.size0 = 1.8F;
+		p.size1 = 0.3F;
+		p.c0 = c.core;
+		p.c1 = c.mid;
+		AddParticle(p);
+	}
+	// Now and then a thread of lightning crosses the mouth of it.
+	for (int n = Occurrences(1.5F + 6 * pull, ms); n > 0; n--) {
+		const Vec centre = portal.pos - Vec { 0, PortalLift };
+		const float a = Random(0, 2 * Pi);
+		const float b = a + Random(1.5F, 4.5F);
+		AddBolt(centre + Vec { std::cos(a) * PortalRx * 0.9F, std::sin(a) * PortalRy * 0.9F }, centre + Vec { std::cos(b) * PortalRx * 0.9F, std::sin(b) * PortalRy * 0.9F }, 110, 1.4F, c);
+	}
+	// A hero stepping in: the floor at their feet streams up into it.
+	if (pull > 0.05F) {
+		for (int n = Occurrences(60 * pull * Intensity(), ms); n > 0; n--) {
+			Particle p;
+			p.life = Random(300, 500);
+			p.pos = portal.pos + Vec { Random(-TileRadius, TileRadius), Random(-TileRadius * 0.5F, TileRadius * 0.5F) };
+			p.vel = { -(p.pos.x - portal.pos.x) / p.life * 1000, -(p.pos.y - portal.pos.y) / p.life * 1000 };
+			p.vz = PortalLift / p.life * 1000;
+			p.size0 = 1.5F;
+			p.size1 = 2.5F;
+			p.c0 = c.mid;
+			p.c1 = c.core;
+			AddParticle(p);
+		}
+	}
+}
+
+void AdvancePortals(float ms)
+{
+	for (auto &[missile, portal] : Portals) {
+		const float before = portal.age;
+		portal.age += ms;
+		portal.pull += std::clamp(portal.pullTarget - portal.pull, -ms / 180, ms / 180);
+		if (!portal.torn && before < PortalTearStart && portal.age >= PortalTearStart) {
+			portal.torn = true;
+			PortalTear(portal);
+		}
+		if (portal.arrived == 0)
+			PortalArrival(portal);
+		if (portal.arrived >= 0)
+			portal.arrived += ms;
+		// Motes converging on the seal while it is written.
+		if (portal.age < PortalTearStart) {
+			const Colours c = PortalColours(portal);
+			for (int n = Occurrences(70 * Intensity(), ms); n > 0; n--) {
+				Particle p;
+				p.life = Random(250, 400);
+				const float a = Random(0, 2 * Pi);
+				const float r = Random(TileRadius * 1.2F, TileRadius * 2.4F);
+				p.pos = portal.pos + Vec { std::cos(a) * r, std::sin(a) * r * 0.5F };
+				p.vel = (portal.pos - p.pos) * (1000 / p.life);
+				p.size0 = 1.4F;
+				p.size1 = 2.2F;
+				p.c0 = c.edge;
+				p.c1 = c.core;
+				AddParticle(p);
+			}
+		} else if (portal.age >= PortalOpenMs) {
+			PortalBreathe(portal, ms);
+		}
+	}
+	for (PortalFx &portal : ClosingPortals) {
+		if (portal.closing == 0)
+			PortalCollapse(portal);
+		portal.closing += ms;
+	}
+	std::erase_if(ClosingPortals, [](const PortalFx &portal) { return portal.closing >= PortalCloseMs; });
+}
+
 void Advance(float ms)
 {
 	if (ms <= 0)
@@ -2580,6 +2822,7 @@ void Advance(float ms)
 	Age(Sigils, ms);
 	Age(Rituals, ms);
 	Age(Beams, ms);
+	AdvancePortals(ms);
 	Age(Cracks, ms);
 	Age(Sweeps, ms);
 	AdvanceIceSpikes(ms);
@@ -2606,6 +2849,11 @@ size_t ShapeCount()
 size_t AmbientCount()
 {
 	return Emitters.size();
+}
+
+size_t PortalCount()
+{
+	return Portals.size() + ClosingPortals.size();
 }
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
@@ -3940,6 +4188,187 @@ Rgb Hue(float h)
 	}
 }
 
+/** @brief An oval ring facing the camera, with soft edges. */
+void SoftOval(Batch &batch, Vec centre, float rx, float ry, float width, Rgb colour, float alpha, float wobble = 0, uint32_t seed = 1)
+{
+	const Vec c = ToScreen(centre);
+	rx *= CameraScale;
+	ry *= CameraScale;
+	width *= CameraScale;
+	if (rx < 0.5F || ry < 0.5F)
+		return;
+	const int segments = 48;
+	const int first = static_cast<int>(batch.vertices.size());
+	for (int i = 0; i < segments; i++) {
+		const float angle = 2 * Pi * i / segments;
+		const float k = 1 + (wobble > 0 ? (SeededRandom(seed) - 0.5F) * 2 * wobble : 0);
+		const Vec dir { std::cos(angle), std::sin(angle) };
+		const Vec on { dir.x * rx * k, dir.y * ry * k };
+		const Vec out { dir.x * width / 2, dir.y * width / 2 };
+		batch.add(c + on + out, colour, 0);
+		batch.add(c + on, colour, alpha);
+		batch.add(c + on - out, colour, 0);
+	}
+	for (int i = 0; i < segments; i++) {
+		const int a = first + i * 3;
+		const int b = first + ((i + 1) % segments) * 3;
+		batch.tri(a, a + 1, b);
+		batch.tri(a + 1, b + 1, b);
+		batch.tri(a + 1, a + 2, b + 1);
+		batch.tri(a + 2, b + 2, b + 1);
+	}
+}
+
+/** @brief A soft oval facing the camera, bright in the middle and fading to its edge. */
+void SoftOvalDisc(Batch &batch, Vec centre, float rx, float ry, Rgb colour, float alpha, float edgeAlpha = 0)
+{
+	const Vec c = ToScreen(centre);
+	rx *= CameraScale;
+	ry *= CameraScale;
+	if (rx < 0.3F || ry < 0.3F)
+		return;
+	const int segments = 36;
+	const int middle = batch.add(c, colour, alpha);
+	const int first = static_cast<int>(batch.vertices.size());
+	for (int i = 0; i < segments; i++) {
+		const float angle = 2 * Pi * i / segments;
+		batch.add(c + Vec { std::cos(angle) * rx, std::sin(angle) * ry }, colour, edgeAlpha);
+	}
+	for (int i = 0; i < segments; i++)
+		batch.tri(middle, first + i, first + (i + 1) % segments);
+}
+
+/** @brief One arm of the vortex: a ribbon spiralling from the rim into the centre, brightest where it is swallowed. */
+void PortalArm(Vec centre, float rx, float ry, float start, float turns, float width, const Colours &c, float alpha)
+{
+	constexpr int Steps = 36;
+	Vec prev;
+	for (int i = 0; i <= Steps; i++) {
+		const float s = static_cast<float>(i) / Steps;
+		// Out at the rim, in to just short of the centre; the way in tightens near the middle.
+		const float rho = 1 - 0.94F * s * s;
+		const float a = start + s * turns * 2 * Pi;
+		const Vec p = centre + Vec { std::cos(a) * rx * rho, std::sin(a) * ry * rho };
+		if (i > 0) {
+			const float s0 = static_cast<float>(i - 1) / Steps;
+			const Rgb c0 = Mix(c.edge, c.core, s0 * s0);
+			const Rgb c1 = Mix(c.edge, c.core, s * s);
+			const float w = width * (1.1F - 0.75F * s);
+			SoftLine(Glowing, prev, p, w, c0, c1, alpha * (0.35F + 0.65F * s0), alpha * (0.35F + 0.65F * s));
+			SoftLine(Glowing, prev, p, w * 3, c0, c1, 0.18F * alpha, 0.18F * alpha);
+		}
+		prev = p;
+	}
+}
+
+/** @brief The seal under the portal: a ring with runes written into it, drawn in as the portal is cast. */
+void PortalSeal(const PortalFx &portal, const Colours &c, float laid, float alpha, float spin)
+{
+	const float r = TileRadius * 1.05F;
+	const int segments = 48;
+	const int drawn = static_cast<int>(segments * laid);
+	for (int i = 0; i < drawn; i++) {
+		const float a0 = spin + 2 * Pi * i / segments;
+		const float a1 = spin + 2 * Pi * (i + 1) / segments;
+		SoftLine(Ground, OnGround(portal.pos, r, a0), OnGround(portal.pos, r, a1), 2.4F, c.mid, c.mid, 0.9F * alpha, 0.9F * alpha);
+		SoftLine(Ground, OnGround(portal.pos, r, a0), OnGround(portal.pos, r, a1), 9, c.mid, c.mid, 0.22F * alpha, 0.22F * alpha);
+		SoftLine(Ground, OnGround(portal.pos, r * 0.78F, a0), OnGround(portal.pos, r * 0.78F, a1), 1.4F, c.core, c.core, 0.55F * alpha, 0.55F * alpha);
+	}
+	for (size_t i = 0; i < portal.runes.size(); i++) {
+		if (laid * static_cast<float>(portal.runes.size()) < static_cast<float>(i) + 0.5F)
+			break;
+		const float a = -spin * 0.7F + 2 * Pi * static_cast<float>(i) / static_cast<float>(portal.runes.size());
+		const Vec at = OnGround(portal.pos, r * 0.89F, a);
+		const Vec along { std::cos(a + Pi / 2), std::sin(a + Pi / 2) * 0.5F };
+		const Vec across { -along.y * 2, along.x * 0.5F };
+		for (const Polyline &line : RuneStrokes(portal.runes[i])) {
+			for (size_t k = 1; k < line.size(); k++) {
+				const Vec p0 = at + along * ((line[k - 1].x - 4) * 1.6F) + across * ((line[k - 1].y - 4) * 1.6F);
+				const Vec p1 = at + along * ((line[k].x - 4) * 1.6F) + across * ((line[k].y - 4) * 1.6F);
+				SoftLine(Ground, p0, p1, 1.5F, c.core, c.core, 0.8F * alpha, 0.8F * alpha);
+			}
+		}
+	}
+}
+
+void DrawPortal(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, PortalLift };
+	const float t = AmbientTime;
+	const float phase = static_cast<float>(portal.seed % 89);
+	const float pull = portal.pull;
+	// Casting: the seal is written, a seam of light rises, then the portal tears open with a spring.
+	const float laid = EaseOut(portal.age / PortalSealMs);
+	const float seam = EaseOut((portal.age - 110) / 230);
+	float open = portal.age < PortalTearStart ? 0.F : EaseOutBack((portal.age - PortalTearStart) / (PortalOpenMs - PortalTearStart));
+	float fade = 1;
+	if (portal.closing >= 0) {
+		const float shut = std::clamp(portal.closing / PortalCloseMs, 0.F, 1.F);
+		open = 1 - shut * shut;
+		fade = 1 - shut * 0.5F;
+	}
+	const float breath = 0.85F + 0.15F * std::sin(t * 0.0035F + phase) + 0.3F * pull;
+	const float spin = t * (0.0022F + 0.0025F * pull) + phase;
+
+	// The seal on the floor, and the light the portal throws over it.
+	const float sealAlpha = (portal.age >= PortalOpenMs ? 0.55F + 0.3F * pull : 1.F) * fade;
+	PortalSeal(portal, c, laid, sealAlpha, spin * 0.35F);
+	if (open > 0) {
+		SoftDisc(Ground, portal.pos, TileRadius * (1.5F + 0.6F * pull) * open, c.mid, (0.2F + 0.12F * pull) * breath * fade, true);
+		SoftDisc(Ground, portal.pos, TileRadius * 0.7F * open, c.core, 0.18F * breath * fade, true);
+	}
+
+	// The seam: a line of light standing on the tile, which the portal opens out from.
+	if (seam > 0 && open < 1) {
+		const float height = 2 * PortalRy * seam;
+		const Vec foot = portal.pos - Vec { 0, PortalLift - PortalRy };
+		const Vec top = foot - Vec { 0, height };
+		const float bright = std::clamp(seam * (1 - open), 0.F, 1.F);
+		SoftLine(Glowing, foot, top, 3 + 3 * seam, c.core, c.core, bright, bright);
+		SoftLine(Glowing, foot, top, 16, c.mid, c.mid, 0.35F * bright, 0.35F * bright);
+		SoftDisc(Glowing, foot, 10, c.core, 0.6F * bright, false);
+	}
+	if (open <= 0)
+		return;
+
+	const float rx = PortalRx * open * (1 + 0.03F * std::sin(t * 0.006F + phase));
+	const float ry = PortalRy * (0.55F + 0.45F * open);
+	const float alpha = std::min(open, 1.F) * fade;
+	// The dark inside: a hole in the world, so the glow around it reads as depth.
+	SoftOvalDisc(Dark, centre, rx * 0.9F, ry * 0.9F, { 3, 4, 22 }, 0.8F * alpha, 0.2F * alpha);
+	// Its haze, and the light it spills.
+	SoftOvalDisc(Glowing, centre, rx * 1.6F, ry * 1.25F, c.edge, (0.14F + 0.1F * pull) * breath * alpha);
+	// The vortex: three ribbons spiralling in, and a faint counter-spin behind them.
+	SoftOvalDisc(Glowing, centre, rx * 0.95F, ry * 0.95F, c.mid, 0.1F * breath * alpha);
+	for (int arm = 0; arm < 4; arm++)
+		PortalArm(centre, rx, ry, -spin + 2 * Pi * arm / 4, 1.2F, 6, c, (0.75F + 0.25F * pull) * alpha);
+	for (int arm = 0; arm < 2; arm++)
+		PortalArm(centre, rx * 0.8F, ry * 0.8F, spin * 0.6F + Pi * arm, 0.8F, 3, c, 0.3F * alpha);
+	// The rim: a bright edge, and a wider soft one.
+	SoftOval(Glowing, centre, rx, ry, 4, c.mid, (0.7F + 0.3F * pull) * breath * alpha, 0.015F, portal.seed + static_cast<uint32_t>(t / 60));
+	SoftOval(Glowing, centre, rx, ry, 14, c.mid, 0.22F * breath * alpha);
+	SoftOval(Glowing, centre, rx * 0.97F, ry * 0.97F, 1.8F, c.core, 0.5F * alpha);
+	// The eye: the light at the bottom of the hole.
+	const float eye = 0.5F + 0.3F * std::sin(t * 0.009F + phase) + 0.5F * pull;
+	SoftDisc(Glowing, centre, 7 + 3 * pull, c.core, eye * alpha, false);
+	SoftDisc(Glowing, centre, 18, c.mid, 0.3F * eye * alpha, false);
+	// A hero arriving: the whole portal flares and the light runs out over the floor.
+	if (portal.arrived >= 0 && portal.arrived < PortalArriveMs) {
+		const float flare = 1 - portal.arrived / PortalArriveMs;
+		SoftOvalDisc(Glowing, centre, rx * 1.3F, ry * 1.1F, c.core, 0.7F * flare * flare);
+		SoftDisc(Ground, portal.pos, TileRadius * 3 * (1 - flare * 0.5F), c.mid, 0.35F * flare, true);
+	}
+}
+
+void DrawPortals()
+{
+	for (const auto &[missile, portal] : Portals)
+		DrawPortal(portal);
+	for (const PortalFx &portal : ClosingPortals)
+		DrawPortal(portal);
+}
+
 void DrawHalos()
 {
 	const float t = AmbientTime;
@@ -4308,7 +4737,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
 	LastDrawnScan = ScanFrame;
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty())
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty())
 		return;
 
 	Glowing.clear();
@@ -4320,6 +4749,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawSigils();
 	DrawRituals();
 	DrawBeams();
+	DrawPortals();
 	DrawIceSpikes();
 	DrawRings();
 	DrawComets();

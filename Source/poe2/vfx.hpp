@@ -117,6 +117,8 @@ size_t ParticleCount();
 size_t ShapeCount();
 /** @brief How many flames, lava and water patches the last ScanWorld found (tests). */
 size_t AmbientCount();
+/** @brief How many town portals are standing or folding shut (tests). */
+size_t PortalCount();
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /**
