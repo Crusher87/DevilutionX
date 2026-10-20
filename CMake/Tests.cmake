@@ -79,6 +79,7 @@ set(tests
   reencode_dun_cels_test
   scrollrt_test
   stores_test
+  tileset_mix_test
   tile_properties_test
   timedemo_test
   townerdat_test

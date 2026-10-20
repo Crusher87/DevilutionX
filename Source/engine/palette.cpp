@@ -26,6 +26,7 @@
 #include "engine/random.hpp"
 #include "headless_mode.hpp"
 #include "hwcursor.hpp"
+#include "levels/tileset_mix.hpp"
 #include "options.h"
 #include "utils/display.h"
 #include "utils/palette_blending.hpp"
@@ -192,6 +193,8 @@ void LoadPaletteAndInitBlending(const char *path)
 	assert(path != nullptr);
 	if (HeadlessMode) return;
 	LoadPalette(path);
+	if (tilesetmix::Active())
+		tilesetmix::ApplyMixedPalette();
 	if (leveltype == DTYPE_CAVES || leveltype == DTYPE_CRYPT) {
 		GenerateBlendedLookupTable(logical_palette.data(), /*skipFrom=*/1, /*skipTo=*/31);
 	} else if (leveltype == DTYPE_NEST) {

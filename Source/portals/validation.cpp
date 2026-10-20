@@ -23,12 +23,14 @@ dungeon_type GetQuestLevelType(_setlevels questLevel)
 		if (quest._qslvl == questLevel)
 			return quest._qlvltype;
 	}
+	if (questLevel == SL_MIXTEST)
+		return DTYPE_CATHEDRAL;
 	return DTYPE_NONE;
 }
 
 dungeon_type GetSetLevelType(_setlevels setLevel)
 {
-	const bool isArenaLevel = setLevel >= SL_FIRST_ARENA && setLevel <= SL_LAST;
+	const bool isArenaLevel = setLevel >= SL_FIRST_ARENA && setLevel <= SL_LAST_ARENA;
 	return isArenaLevel ? GetArenaLevelType(setLevel) : GetQuestLevelType(setLevel);
 }
 
