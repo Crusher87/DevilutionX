@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "poe2/mix.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -52,16 +53,6 @@ const std::array<WaystoneMod, WaystoneModIds + 1> WaystoneMods { {
 	{ "of Abundance", false, 60, MoreMagicRare, { { { 8, 8 }, { 14, 14 }, { 22, 22 } } }, MapAxis::WaystoneFind, { 10, 16, 24 }, "Area has {}% more magic and rare monsters" },
 	{ "of the Gambler", false, 45, LootVariance, { { { 10, 10 }, { 20, 20 }, { 35, 35 } } }, MapAxis::ItemRarity, { 12, 18, 25 }, "Loot quality varies by up to {}%" },
 } };
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
-}
 
 } // namespace
 

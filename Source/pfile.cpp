@@ -192,6 +192,15 @@ SaveWriter GetStashWriter()
 	return SaveWriter(GetStashSavePath(), /*carryForward=*/true);
 }
 
+/** @brief POE2 Mashup: keeps the previous save as "<file>.bak", so a crash mid-write can't lose the hero or stash. */
+void BackUpSaveFile([[maybe_unused]] const std::string &savePath)
+{
+#ifndef UNPACKED_SAVES
+	if (FileExists(savePath))
+		CopyFileOverwrite(savePath.c_str(), StrCat(savePath, ".bak").c_str());
+#endif
+}
+
 #ifndef DISABLE_DEMOMODE
 void CopySaveFile(uint32_t saveNum, std::string targetPath)
 {
@@ -650,6 +659,7 @@ const char *pfile_get_password()
 
 void pfile_write_hero(bool writeGameData)
 {
+	BackUpSaveFile(GetSavePath(gSaveNumber));
 	SaveWriter saveWriter = GetSaveWriter(gSaveNumber, /*carryForward=*/writeGameData);
 	pfile_write_hero(saveWriter, writeGameData);
 
@@ -691,6 +701,7 @@ void sfile_write_stash()
 	if (!Stash.dirty)
 		return;
 
+	BackUpSaveFile(GetStashSavePath());
 	SaveWriter stashWriter = GetStashWriter();
 
 	SaveStash(stashWriter);
@@ -792,6 +803,7 @@ bool pfile_delete_save(_uiheroinfo *heroInfo)
 	if (saveNum < MAX_CHARACTERS) {
 		hero_names[saveNum][0] = '\0';
 		RemoveFile(GetSavePath(saveNum).c_str());
+		RemoveFile(StrCat(GetSavePath(saveNum), ".bak").c_str());
 	}
 	return true;
 }
@@ -852,6 +864,16 @@ void pfile_update(bool forceSave)
 	prevTick = tick;
 	pfile_write_hero();
 	sfile_write_stash();
+}
+
+std::string pfile_hero_save_path()
+{
+	return GetSavePath(gSaveNumber);
+}
+
+std::string pfile_stash_save_path()
+{
+	return GetStashSavePath();
 }
 
 } // namespace devilution

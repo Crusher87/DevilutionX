@@ -128,5 +128,8 @@ std::expected<void, std::string> pfile_convert_levels();
 void pfile_remove_temp_files();
 std::unique_ptr<std::byte[]> pfile_read(const char *pszName, size_t *pdwLen);
 void pfile_update(bool forceSave);
+/** @brief Where the current hero's save and the stash are kept, for the play log's crash reports. */
+std::string pfile_hero_save_path();
+std::string pfile_stash_save_path();
 
 } // namespace devilution

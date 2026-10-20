@@ -19,6 +19,7 @@
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/format.hpp"
@@ -29,16 +30,6 @@
 namespace devilution {
 
 namespace {
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
-}
 
 // Bundle tablets.json.
 const std::array<TabletData, static_cast<size_t>(TabletKind::Count)> Tablets { {

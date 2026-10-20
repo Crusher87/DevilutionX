@@ -10,8 +10,9 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/map_play.hpp"
-#include "poe2/passive_tree.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/mix.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -28,16 +29,6 @@ namespace devilution {
 namespace {
 
 constexpr int TicksPerSecond = 20;
-
-uint32_t Mix(uint32_t value)
-{
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
-}
 
 /** @brief The map tier's life and damage scaling: every plain monster, risen ones too (they come out at the map's strength). */
 bool CanTakeMapScaling(const Monster &monster)
@@ -259,7 +250,9 @@ Fixed26_6 ApplyShock(const Monster &monster, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || monster.poe2.shockTicks == 0)
 		return damage;
-	return Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent * MapExposurePercent() / 10000);
+	const Fixed26_6 shocked = Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent * MapExposurePercent() / 10000);
+	TelemetryHitStep(false, "after shock", shocked.raw(), false, true);
+	return shocked;
 }
 
 int AilmentChancePerMille(const Monster &monster, DamageType damageType, Fixed26_6 damage)

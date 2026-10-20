@@ -81,6 +81,7 @@ std::optional<Item> SplitStack(Item &stack)
 		return std::nullopt;
 	const int taken = count / 2;
 	Item half = stack;
+	GenerateNewSeed(half); // Its own seed, so the two halves are told apart.
 	SetStackCount(half, taken);
 	SetStackCount(stack, count - taken);
 	return half;

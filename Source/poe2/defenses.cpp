@@ -158,7 +158,9 @@ Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || damage <= 0)
 		return damage;
+	TelemetryHitStep(true, "after unique effects", damage.raw());
 	damage = ApplyGuard(player, damage);
+	TelemetryHitStep(true, "after guard", damage.raw());
 	Poe2PlayerData &data = player.poe2;
 	// Convalescence keeps hits from stopping the recharge for a while.
 	if (!RechargeCantBeInterrupted(player))
@@ -174,6 +176,7 @@ Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
 	OnMetaShieldLost(player, Fixed26_6::fromRaw(absorbed));
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Health);
+	TelemetryHitStep(true, "after energy shield", damage.raw() - absorbed);
 	return Fixed26_6::fromRaw(damage.raw() - absorbed);
 }
 
