@@ -504,6 +504,8 @@ struct PortalFx {
 	float beat = PortalBeatMs;
 	uint32_t seed = 1;
 	std::array<uint8_t, PortalRunes> runes {};
+	/** @brief The seal under it: 0 the Horadric symbol, 1 the Horadrim circle. */
+	uint8_t style = 0;
 };
 
 std::unordered_map<const Missile *, PortalFx> Portals;
@@ -2493,6 +2495,7 @@ void TrackPortal(const Missile &missile, bool newLevel)
 		portal.seed = NextRandom() | 1;
 		for (uint8_t &rune : portal.runes)
 			rune = static_cast<uint8_t>(NextRandom() % RuneCount);
+		portal.style = static_cast<uint8_t>(NextRandom() % 2);
 		// Frame group 0 is the classic swirl opening: a portal cast just now. Any other was already open (synced
 		// from another level, loaded with a game), so it stands open from the start.
 		const bool opening = missile.getFrameGroupRaw() == 0;
@@ -2789,9 +2792,9 @@ void PortalBreathe(PortalFx &portal, float ms)
 		AddParticle(p);
 	}
 	// Lightning crawls along the rim, and now and then a bolt crosses the mouth of it.
-	for (int n = Occurrences(5 + 10 * pull, ms); n > 0; n--) {
+	for (int n = Occurrences(2.5F + 6 * pull, ms); n > 0; n--) {
 		const float a = Random(0, 2 * Pi);
-		const bool across = NextRandom() % 4 == 0;
+		const bool across = NextRandom() % 6 == 0;
 		const float b = a + (across ? Random(2.2F, 4.1F) : Random(0.5F, 1.3F));
 		const float k = across ? 0.85F : 1.02F;
 		AddBolt(centre + Vec { std::cos(a) * PortalRx * k, std::sin(a) * PortalRy * k }, centre + Vec { std::cos(b) * PortalRx * k, std::sin(b) * PortalRy * k }, across ? 120 : 90, across ? 1.6F : 1.2F, c);
@@ -4295,26 +4298,43 @@ void SoftOvalDisc(Batch &batch, Vec centre, float rx, float ry, Rgb colour, floa
 		batch.tri(middle, first + i, first + (i + 1) % segments);
 }
 
-/** @brief One arm of the vortex: a ribbon spiralling from the rim into the centre, brightest where it is swallowed. */
-void PortalArm(Vec centre, float rx, float ry, float start, float turns, float width, const Colours &c, float alpha)
+/**
+ * @brief The swirl: a smooth sheet of light turning into the eye, like the classic portal's bands but without a line
+ * in it. A polar mesh whose vertices are lit by two soft spiral waves, so the light flows inward as it turns.
+ */
+void PortalVortex(Vec centre, float rx, float ry, float spin, const Colours &c, float alpha, float pull)
 {
-	constexpr int Steps = 40;
-	Vec prev;
-	for (int i = 0; i <= Steps; i++) {
-		const float s = static_cast<float>(i) / Steps;
-		// Out at the rim, in to just short of the centre; the way in tightens near the middle.
-		const float rho = 1 - 0.94F * s * s;
-		const float a = start + s * turns * 2 * Pi;
-		const Vec p = centre + Vec { std::cos(a) * rx * rho, std::sin(a) * ry * rho };
-		if (i > 0) {
-			const float s0 = static_cast<float>(i - 1) / Steps;
-			const Rgb c0 = Mix(c.edge, c.core, s0 * s0);
-			const Rgb c1 = Mix(c.edge, c.core, s * s);
-			const float w = width * (1.1F - 0.75F * s);
-			SoftLine(Glowing, prev, p, w, c0, c1, alpha * (0.35F + 0.65F * s0), alpha * (0.35F + 0.65F * s));
-			SoftLine(Glowing, prev, p, w * 3, c0, c1, 0.18F * alpha, 0.18F * alpha);
+	constexpr int Rings = 22;
+	constexpr int Segments = 40;
+	const Vec screen = ToScreen(centre);
+	rx *= CameraScale;
+	ry *= CameraScale;
+	const int first = static_cast<int>(Glowing.vertices.size());
+	for (int i = 0; i <= Rings; i++) {
+		const float rho = static_cast<float>(i) / Rings;
+		for (int j = 0; j < Segments; j++) {
+			const float theta = 2 * Pi * j / Segments;
+			// Two bands winding in, and a fainter third one turning the other way deeper in.
+			const float wave = 0.5F + 0.5F * std::cos(2 * theta - 7.5F * rho + spin * 2);
+			const float under = 0.5F + 0.5F * std::cos(3 * theta + 5 * rho - spin * 1.3F);
+			float light = wave * wave * (0.75F + 0.25F * under) + 0.12F * under;
+			// Bright toward the rim and at the eye, darker in the throat between them.
+			const float depth = 0.35F + 0.65F * std::pow(rho, 1.5F) + 0.55F * std::pow(1 - rho, 6);
+			light *= depth;
+			const Rgb colour = Mix(Mix(c.edge, c.mid, std::min(light * 1.6F, 1.F)), c.core, std::max(0.F, light - 0.55F) * 1.8F);
+			const float a = std::clamp(light * (0.9F + 0.4F * pull), 0.F, 1.F) * alpha;
+			Glowing.add(screen + Vec { std::cos(theta) * rx * rho, std::sin(theta) * ry * rho }, colour, a);
 		}
-		prev = p;
+	}
+	for (int i = 0; i < Rings; i++) {
+		for (int j = 0; j < Segments; j++) {
+			const int a0 = first + i * Segments + j;
+			const int a1 = first + i * Segments + (j + 1) % Segments;
+			const int b0 = a0 + Segments;
+			const int b1 = a1 + Segments;
+			Glowing.tri(a0, b0, b1);
+			Glowing.tri(a0, b1, a1);
+		}
 	}
 }
 
@@ -4330,62 +4350,152 @@ void PortalRays(Vec pos, float radius, int count, float height, const Colours &c
 	}
 }
 
+/** @brief A point of a seal drawn on the ground: unit coordinates (x right, y away from the camera) to the world. */
+Vec SealPoint(Vec pos, float radius, float u, float v)
+{
+	return pos + Vec { u * radius, v * radius * 0.5F };
+}
+
 /**
- * @brief The seal under the portal: two rings with runes written between them and a seven-pointed star inside, drawn
- * in as the portal is cast; the runes turn one way and the star the other.
+ * @brief Lines of a seal drawn in one after another: @p laid is how much of the whole is written, 0 to 1, with a bright
+ * pen point at the end of the line being written.
  */
+void SealStrokes(Vec pos, float radius, const std::vector<Polyline> &strokes, float laid, float width, const Colours &c, float alpha)
+{
+	float total = 0;
+	for (const Polyline &line : strokes)
+		for (size_t k = 1; k < line.size(); k++)
+			total += Length(line[k] - line[k - 1]);
+	float budget = laid * total;
+	for (const Polyline &line : strokes) {
+		for (size_t k = 1; k < line.size(); k++) {
+			const float len = Length(line[k] - line[k - 1]);
+			if (budget <= 0)
+				return;
+			const float part = std::min(1.F, budget / len);
+			const Vec a = line[k - 1];
+			const Vec b = a + (line[k] - a) * part;
+			const Vec pa = SealPoint(pos, radius, a.x, a.y);
+			const Vec pb = SealPoint(pos, radius, b.x, b.y);
+			SoftLine(Ground, pa, pb, width, c.mid, c.mid, 0.95F * alpha, 0.95F * alpha);
+			SoftLine(Ground, pa, pb, width * 4, c.mid, c.mid, 0.22F * alpha, 0.22F * alpha);
+			SoftLine(Ground, pa, pb, width * 0.45F, c.core, c.core, 0.8F * alpha, 0.8F * alpha);
+			if (part < 1) {
+				SoftDisc(Ground, pb, 7, c.core, alpha, true);
+				return;
+			}
+			budget -= len;
+		}
+	}
+}
+
+/** @brief The Horadric symbol: a spiked triangle round a gem, two blades and two drips. */
+const std::vector<Polyline> &HoradricSymbol()
+{
+	static const std::vector<Polyline> strokes = [] {
+		std::vector<Polyline> lines;
+		auto add = [&](std::initializer_list<Vec> points) { lines.emplace_back(points); };
+		// The triangle, doubled like the engraving, with a diamond spike on each corner.
+		add({ { 0, -0.98F }, { 0.92F, 0.72F }, { -0.92F, 0.72F }, { 0, -0.98F } });
+		add({ { 0, -0.8F }, { 0.78F, 0.63F }, { -0.78F, 0.63F }, { 0, -0.8F } });
+		add({ { 0, -1.2F }, { 0.1F, -0.98F }, { 0, -0.76F }, { -0.1F, -0.98F }, { 0, -1.2F } });
+		add({ { -1.12F, 0.8F }, { -0.92F, 0.58F }, { -0.74F, 0.72F }, { -0.92F, 0.9F }, { -1.12F, 0.8F } });
+		add({ { 1.12F, 0.8F }, { 0.92F, 0.58F }, { 0.74F, 0.72F }, { 0.92F, 0.9F }, { 1.12F, 0.8F } });
+		// The gem.
+		add({ { 0, -0.6F }, { 0.18F, -0.28F }, { 0, 0.02F }, { -0.18F, -0.28F }, { 0, -0.6F } });
+		add({ { 0, -0.6F }, { 0, 0.02F } });
+		add({ { -0.18F, -0.28F }, { 0.18F, -0.28F } });
+		// The blades either side, and the point between them.
+		add({ { -0.52F, 0.1F }, { -0.36F, 0.04F }, { -0.14F, 0.1F }, { -0.07F, 0.2F }, { -0.2F, 0.23F }, { -0.44F, 0.2F }, { -0.52F, 0.1F } });
+		add({ { 0.52F, 0.1F }, { 0.36F, 0.04F }, { 0.14F, 0.1F }, { 0.07F, 0.2F }, { 0.2F, 0.23F }, { 0.44F, 0.2F }, { 0.52F, 0.1F } });
+		add({ { 0, 0.26F }, { 0.04F, 0.34F }, { -0.04F, 0.34F }, { 0, 0.26F } });
+		// The drips.
+		add({ { -0.5F, 0.3F }, { -0.28F, 0.3F }, { -0.3F, 0.42F }, { -0.36F, 0.5F }, { -0.3F, 0.6F }, { -0.34F, 0.64F }, { -0.38F, 0.58F } });
+		add({ { 0.5F, 0.3F }, { 0.28F, 0.3F }, { 0.3F, 0.42F }, { 0.36F, 0.5F }, { 0.3F, 0.6F }, { 0.34F, 0.64F }, { 0.38F, 0.58F } });
+		return lines;
+	}();
+	return strokes;
+}
+
+/** @brief The Horadrim circle: two rings, a star of two triangles, three small circled triangles and cross marks. */
+const std::vector<Polyline> &HoradrimCircle()
+{
+	static const std::vector<Polyline> strokes = [] {
+		std::vector<Polyline> lines;
+		auto ring = [&](float r, int n, float from = 0, float to = 2 * Pi) {
+			Polyline line;
+			for (int i = 0; i <= n; i++) {
+				const float a = from + (to - from) * i / n;
+				line.push_back({ std::cos(a) * r, std::sin(a) * r });
+			}
+			lines.push_back(line);
+		};
+		auto triangle = [&](float r, float start, Vec at = { 0, 0 }) {
+			Polyline line;
+			for (int i = 0; i <= 3; i++) {
+				const float a = start + 2 * Pi * i / 3;
+				line.push_back(at + Vec { std::cos(a) * r, std::sin(a) * r });
+			}
+			lines.push_back(line);
+		};
+		ring(1.F, 72);
+		ring(0.9F, 72);
+		// The big triangle pointing away from the camera, and a fainter one against it.
+		triangle(0.82F, Pi / 2);
+		triangle(0.82F, -Pi / 2);
+		ring(0.64F, 60);
+		// Small circled triangles on the big triangle's corners.
+		for (int i = 0; i < 3; i++) {
+			const float a = Pi / 2 + 2 * Pi * i / 3;
+			const Vec at { std::cos(a) * 0.82F, std::sin(a) * 0.82F };
+			Polyline line;
+			for (int k = 0; k <= 24; k++)
+				line.push_back(at + Vec { std::cos(2 * Pi * k / 24) * 0.14F, std::sin(2 * Pi * k / 24) * 0.14F });
+			lines.push_back(line);
+			triangle(0.08F, a + Pi, at);
+		}
+		// Cross marks at the four quarters outside the rings.
+		for (int i = 0; i < 4; i++) {
+			const float a = Pi / 4 + Pi * i / 2;
+			const Vec d { std::cos(a), std::sin(a) };
+			const Vec n { -d.y, d.x };
+			lines.push_back({ d * 1.02F, d * 1.14F });
+			lines.push_back({ d * 1.1F - n * 0.05F, d * 1.1F + n * 0.05F });
+		}
+		return lines;
+	}();
+	return strokes;
+}
+
+/** @brief The seal under the portal: the Horadric symbol or the Horadrim circle, written into the floor as the portal is cast. */
 void PortalSeal(const PortalFx &portal, const Colours &c, float laid, float alpha, float spin)
 {
 	const float r = PortalSealRadius;
-	const int segments = 64;
-	const int drawn = static_cast<int>(segments * laid);
-	for (int i = 0; i < drawn; i++) {
-		const float a0 = spin + 2 * Pi * i / segments;
-		const float a1 = spin + 2 * Pi * (i + 1) / segments;
-		SoftLine(Ground, OnGround(portal.pos, r, a0), OnGround(portal.pos, r, a1), 3, c.mid, c.mid, 0.95F * alpha, 0.95F * alpha);
-		SoftLine(Ground, OnGround(portal.pos, r, a0), OnGround(portal.pos, r, a1), 12, c.mid, c.mid, 0.25F * alpha, 0.25F * alpha);
-		SoftLine(Ground, OnGround(portal.pos, r * 0.74F, a0), OnGround(portal.pos, r * 0.74F, a1), 1.8F, c.core, c.core, 0.7F * alpha, 0.7F * alpha);
-		SoftLine(Ground, OnGround(portal.pos, r * 0.74F, a0), OnGround(portal.pos, r * 0.74F, a1), 7, c.mid, c.mid, 0.2F * alpha, 0.2F * alpha);
+	if (portal.style == 0) {
+		SealStrokes(portal.pos, r * 1.15F, HoradricSymbol(), laid, 3.4F, c, alpha);
+		return;
 	}
-	// The pen: a bright point where the rings are being written.
-	if (laid < 1) {
-		const float a = spin + 2 * Pi * laid;
-		SoftDisc(Ground, OnGround(portal.pos, r, a), 8, c.core, alpha, true);
-		SoftDisc(Ground, OnGround(portal.pos, r * 0.74F, a), 6, c.core, alpha, true);
-	}
-	// Ticks between the rings.
-	for (int i = 0; i < 36 && i < drawn * 36 / segments; i += 3) {
-		const float a = spin + 2 * Pi * i / 36;
-		SoftLine(Ground, OnGround(portal.pos, r * 0.76F, a), OnGround(portal.pos, r * 0.98F, a), 1.4F, c.core, c.core, 0.5F * alpha, 0.2F * alpha);
-	}
-	// The runes, written one after another round the band.
+	SealStrokes(portal.pos, r, HoradrimCircle(), laid, 2.6F, c, alpha);
+	// Runes written round the band between the rings, turning slowly, once the rings are closed.
+	if (laid < 0.3F)
+		return;
+	const float shown = std::min(1.F, (laid - 0.3F) / 0.7F);
 	for (size_t i = 0; i < portal.runes.size(); i++) {
-		if (laid * static_cast<float>(portal.runes.size()) < static_cast<float>(i) + 0.5F)
+		if (shown * static_cast<float>(portal.runes.size()) < static_cast<float>(i) + 0.5F)
 			break;
-		const float a = -spin * 0.6F + 2 * Pi * static_cast<float>(i) / static_cast<float>(portal.runes.size());
-		const Vec at = OnGround(portal.pos, r * 0.87F, a);
+		const float a = spin + 2 * Pi * static_cast<float>(i) / static_cast<float>(portal.runes.size());
+		const Vec at = OnGround(portal.pos, r * 0.74F, a);
 		const Vec along { std::cos(a + Pi / 2), std::sin(a + Pi / 2) * 0.5F };
 		const Vec across { -along.y * 2, along.x * 0.5F };
-		const float k = r * 0.028F;
+		const float k = r * 0.02F;
 		for (const Polyline &line : RuneStrokes(portal.runes[i])) {
 			for (size_t j = 1; j < line.size(); j++) {
 				const Vec p0 = at + along * ((line[j - 1].x - 4) * k) + across * ((line[j - 1].y - 4) * k);
 				const Vec p1 = at + along * ((line[j].x - 4) * k) + across * ((line[j].y - 4) * k);
-				SoftLine(Ground, p0, p1, 1.8F, c.core, c.core, 0.9F * alpha, 0.9F * alpha);
-				SoftLine(Ground, p0, p1, 5, c.mid, c.mid, 0.25F * alpha, 0.25F * alpha);
+				SoftLine(Ground, p0, p1, 1.6F, c.core, c.core, 0.9F * alpha, 0.9F * alpha);
+				SoftLine(Ground, p0, p1, 5, c.mid, c.mid, 0.22F * alpha, 0.22F * alpha);
 			}
 		}
-	}
-	// A seven-pointed star inside, turning against the runes, drawn once the rings are closed.
-	if (laid >= 1) {
-		const float starSpin = -spin * 1.3F;
-		for (int i = 0; i < 7; i++) {
-			const float a0 = starSpin + 2 * Pi * i / 7;
-			const float a1 = starSpin + 2 * Pi * ((i + 3) % 7) / 7;
-			SoftLine(Ground, OnGround(portal.pos, r * 0.62F, a0), OnGround(portal.pos, r * 0.62F, a1), 2, c.mid, c.mid, 0.7F * alpha, 0.7F * alpha);
-		}
-		SoftRing(Ground, portal.pos, r * 0.62F, 1.5F, c.core, 0.5F * alpha, 0, 1);
-		SoftRing(Ground, portal.pos, r * 0.3F, 2.5F, c.core, 0.7F * alpha, 0, 1, 6, spin * 2);
 	}
 }
 
@@ -4478,18 +4588,8 @@ void DrawPortal(const PortalFx &portal)
 	// The corona: its haze, and the light it spills into the air around it.
 	SoftOvalDisc(Glowing, centre, rx * 2.3F, ry * 1.5F, c.edge, (0.24F + 0.12F * pull) * breath * alpha);
 	SoftOvalDisc(Glowing, centre, rx * 1.4F, ry * 1.15F, c.mid, (0.12F + 0.08F * pull) * breath * alpha);
-	// The throat: rings receding into the hole, each turning at its own pace, so it reads as a tunnel.
-	for (int k = 1; k <= 4; k++) {
-		const float depth = std::pow(0.78F, static_cast<float>(k));
-		const float turn = spin * (0.5F + 0.35F * k) * (k % 2 == 0 ? -1 : 1);
-		SoftOval(Glowing, centre - Vec { 0, 3.F * k }, rx * depth, ry * depth, 2.2F, Mix(c.mid, c.edge, k * 0.2F), (0.7F - 0.1F * k) * breath * alpha, 0.03F, portal.seed * static_cast<uint32_t>(k) + static_cast<uint32_t>(turn * 8));
-	}
-	// The vortex: five ribbons spiralling in, and a faint counter-spin behind them.
-	SoftOvalDisc(Glowing, centre, rx * 0.95F, ry * 0.95F, c.mid, 0.12F * breath * alpha);
-	for (int arm = 0; arm < 5; arm++)
-		PortalArm(centre, rx, ry, -spin + 2 * Pi * arm / 5, 1.3F, 7, c, (0.8F + 0.2F * pull) * alpha);
-	for (int arm = 0; arm < 3; arm++)
-		PortalArm(centre, rx * 0.8F, ry * 0.8F, spin * 0.6F + 2 * Pi * arm / 3, 0.9F, 3.5F, c, 0.3F * alpha);
+	// The swirl: a smooth sheet of light turning into the eye.
+	PortalVortex(centre, rx, ry, spin, c, alpha, pull);
 	// The rim: a bright edge, a wide soft one, and tongues of blue fire licking off it.
 	SoftOval(Glowing, centre, rx, ry, 5, c.mid, (0.8F + 0.2F * pull) * breath * alpha, 0.015F, portal.seed + static_cast<uint32_t>(t / 60));
 	SoftOval(Glowing, centre, rx, ry, 18, c.mid, 0.25F * breath * alpha);
