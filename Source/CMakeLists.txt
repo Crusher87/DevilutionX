@@ -109,6 +109,7 @@ set(libdevilutionx_SRCS
 
   levels/setmaps.cpp
   levels/themes.cpp
+  levels/tileset_mix.cpp
   levels/tile_properties.cpp
   levels/town.cpp
   levels/trigs.cpp

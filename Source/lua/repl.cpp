@@ -13,6 +13,10 @@
 #include "lua/lua_global.hpp"
 #include "panels/console.hpp"
 #include "player.h"
+#include "levels/gendung.h"
+#include "levels/setmaps.h"
+#include "levels/tileset_mix.hpp"
+#include "interfac.h"
 #include "cursor.h"
 #include "missiles.h"
 #include "poe2/aim.hpp"
@@ -100,6 +104,27 @@ void CreateReplEnvironment()
 	// tree() shows your passive points, notables by area, Profane Roads walked and what the tree adds up to.
 	env["tree"] = []() {
 		return MyPlayer != nullptr ? TreeTrackerText(*MyPlayer) : std::string("No hero loaded.");
+	};
+	// mixtest() takes you to the tile-set mixing test map: a Cathedral hall with a Tristram yard in it.
+	// mixtest("floors") gives random Cathedral floors Tristram field areas; mixtest("off") turns that off.
+	env["mixtest"] = [](sol::optional<std::string> mode) {
+		if (MyPlayer == nullptr)
+			return std::string("No hero loaded.");
+		if (mode && *mode == "off") {
+			tilesetmix::SetRandomFloors(false);
+			return std::string("Random floors are back to normal from the next level you enter.");
+		}
+		if (mode && *mode == "floors") {
+			tilesetmix::SetRandomFloors(true);
+			const uint8_t level = (!setlevel && MyPlayer->isOnLevel(1)) ? 2 : 1;
+			StartNewLvl(*MyPlayer, WM_DIABNEXTLVL, level);
+			return StrCat("Field areas on: going to Cathedral level ", level, ". Every Cathedral floor you enter gets them until mixtest(\"off\").");
+		}
+		if (setlevel && setlvlnum == SL_MIXTEST)
+			return std::string("You are already on the tile mix test map.");
+		setlvltype = DTYPE_CATHEDRAL;
+		StartNewLvl(*MyPlayer, WM_DIABSETLVL, SL_MIXTEST);
+		return std::string("Going to the tile mix test map. Walk down into the hall; the exit is where you came in.");
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

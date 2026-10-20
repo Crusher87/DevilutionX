@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <memory>
 #include <optional>
@@ -180,13 +181,24 @@ void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &m
 	size_t tileCount;
 	const std::unique_ptr<uint16_t[]> levelPieces = LoadMinData(tileCount);
 
-	ankerl::unordered_dense::map<uint16_t, DunFrameInfo> frameToTypeMap;
-	frameToTypeMap.reserve(4096);
+	// A mixed map before this one may have left taller pieces behind.
+	std::memset(DPieceMicros, 0, sizeof(DPieceMicros));
 	for (size_t levelPieceId = 0; levelPieceId < tileCount / blocks; levelPieceId++) {
 		uint16_t *pieces = &levelPieces[blocks * levelPieceId];
 		for (uint32_t block = 0; block < blocks; block++) {
-			const LevelCelBlock levelCelBlock { Swap16LE(pieces[blocks - 2 + (block & 1) - (block & 0xE)]) };
-			DPieceMicros[levelPieceId].mt[block] = levelCelBlock;
+			DPieceMicros[levelPieceId].mt[block] = LevelCelBlock { Swap16LE(pieces[blocks - 2 + (block & 1) - (block & 0xE)]) };
+		}
+	}
+	FinishDungeonMicros(dungeonCels, tileCount / blocks, static_cast<uint32_t>(blocks));
+}
+
+void FinishDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, size_t pieceCount, uint32_t blocks)
+{
+	ankerl::unordered_dense::map<uint16_t, DunFrameInfo> frameToTypeMap;
+	frameToTypeMap.reserve(8192);
+	for (size_t levelPieceId = 0; levelPieceId < pieceCount; levelPieceId++) {
+		for (uint32_t block = 0; block < blocks; block++) {
+			const LevelCelBlock levelCelBlock = DPieceMicros[levelPieceId].mt[block];
 			if (levelCelBlock.hasValue()) {
 				if (const auto it = frameToTypeMap.find(levelCelBlock.frame()); it == frameToTypeMap.end()) {
 					frameToTypeMap.emplace_hint(it, levelCelBlock.frame(),
@@ -203,15 +215,17 @@ void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &m
 
 	std::vector<std::pair<uint16_t, uint16_t>> celBlockAdjustments = ComputeCelBlockAdjustments(frameToTypeList);
 	if (celBlockAdjustments.size() == 0) return;
-	for (size_t levelPieceId = 0; levelPieceId < tileCount / blocks; levelPieceId++) {
+	for (size_t levelPieceId = 0; levelPieceId < pieceCount; levelPieceId++) {
 		for (uint32_t block = 0; block < blocks; block++) {
 			LevelCelBlock &levelCelBlock = DPieceMicros[levelPieceId].mt[block];
+			if (!levelCelBlock.hasValue())
+				continue;
 			const uint16_t frame = levelCelBlock.frame();
 			const auto pair = std::make_pair(frame, frame);
 			const auto it = std::upper_bound(celBlockAdjustments.begin(), celBlockAdjustments.end(), pair,
 			    [](std::pair<uint16_t, uint16_t> p1, std::pair<uint16_t, uint16_t> p2) { return p1.first < p2.first; });
 			if (it != celBlockAdjustments.end()) {
-				levelCelBlock.data -= it->second;
+				levelCelBlock = LevelCelBlock::make(levelCelBlock.type(), static_cast<uint16_t>(frame - it->second));
 			}
 		}
 	}
