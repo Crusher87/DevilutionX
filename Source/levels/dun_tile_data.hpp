@@ -223,9 +223,6 @@ constexpr bool IsTileLit(Point position)
 
 std::expected<void, std::string> LoadLevelSOLData();
 
-/** @brief The single-set body of LoadLevelSOLData (the tile-set mix loads its main set through it). */
-std::expected<void, std::string> LoadSingleLevelSOLData();
-
 /**
  * @brief Re-encodes the loaded dungeon cels for the first `pieceCount` entries of `DPieceMicros` and
  * renumbers their frames. SetDungeonMicros ends with this; the tile-set mix fills DPieceMicros itself first.

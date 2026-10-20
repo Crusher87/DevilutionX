@@ -19,7 +19,6 @@
 #include "levels/dun_tile.hpp"
 #include "levels/gendung_defs.hpp"
 #include "levels/reencode_dun_cels.hpp"
-#include "levels/tileset_mix.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/bitset2d.hpp"
 #include "utils/endian_swap.hpp"
@@ -100,13 +99,6 @@ std::unique_ptr<uint16_t[]> LoadMinData(size_t &tileCount)
 
 std::expected<void, std::string> LoadLevelSOLData()
 {
-	if (tilesetmix::Active())
-		return tilesetmix::LoadMixedSOLData();
-	return LoadSingleLevelSOLData();
-}
-
-std::expected<void, std::string> LoadSingleLevelSOLData()
-{
 	switch (leveltype) {
 	case DTYPE_TOWN:
 		if (!LoadIntegralFileInMemWithStatus("nlevels\\towndata\\town.sol", SOLData).has_value()) {
@@ -174,10 +166,6 @@ std::expected<void, std::string> LoadSingleLevelSOLData()
 
 void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &microTileLen)
 {
-	if (tilesetmix::Active()) {
-		tilesetmix::SetMixedDungeonMicros(dungeonCels, microTileLen);
-		return;
-	}
 	microTileLen = 10;
 	size_t blocks = 10;
 

@@ -460,7 +460,7 @@ std::expected<void, std::string> LoadMixedSOLData()
 {
 	RETURN_IF_ERROR(EnsureLoaded());
 	// The main set keeps its usual load, with the game's own fixes to the data.
-	RETURN_IF_ERROR(LoadSingleLevelSOLData());
+	RETURN_IF_ERROR(LoadLevelSOLData());
 	for (size_t i = 1; i < Raw.size(); ++i) {
 		const RawSet &set = Raw[i];
 		const LoadedSet &loaded = Sets[i];

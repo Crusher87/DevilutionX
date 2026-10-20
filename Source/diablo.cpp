@@ -1615,6 +1615,7 @@ std::expected<void, std::string> LoadLvlGFX()
 /** @brief Writes every dungeon type's frames for the HD pack maker (POE2 Mashup `--hd-export`). */
 void HdExportAll()
 {
+	tilesetmix::Clear();
 	constexpr dungeon_type Levels[] = { DTYPE_TOWN, DTYPE_CATHEDRAL, DTYPE_CATACOMBS, DTYPE_CAVES, DTYPE_HELL, DTYPE_NEST, DTYPE_CRYPT };
 	for (const dungeon_type level : Levels) {
 		leveltype = level;
@@ -3808,13 +3809,16 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	tilesetmix::SelectForCurrentLevel();
 	RETURN_IF_ERROR(LoadTrns());
 	MakeLightTable();
-	RETURN_IF_ERROR(LoadLevelSOLData());
+	RETURN_IF_ERROR(tilesetmix::Active() ? tilesetmix::LoadMixedSOLData() : LoadLevelSOLData());
 
 	IncProgress();
 
 	TelemetryStep("tile graphics");
 	RETURN_IF_ERROR(LoadLvlGFX());
-	SetDungeonMicros(pDungeonCels, MicroTileLen);
+	if (tilesetmix::Active())
+		tilesetmix::SetMixedDungeonMicros(pDungeonCels, MicroTileLen);
+	else
+		SetDungeonMicros(pDungeonCels, MicroTileLen);
 	ClearClxDrawCache();
 
 	IncProgress();

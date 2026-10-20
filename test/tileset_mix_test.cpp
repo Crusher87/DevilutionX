@@ -74,9 +74,9 @@ protected:
 	void LoadTiles()
 	{
 		MakeLightTable();
-		ASSERT_TRUE(LoadLevelSOLData().has_value());
+		ASSERT_TRUE(tilesetmix::LoadMixedSOLData().has_value());
 		ASSERT_TRUE(tilesetmix::LoadMixedLvlGFX().has_value());
-		SetDungeonMicros(pDungeonCels, MicroTileLen);
+		tilesetmix::SetMixedDungeonMicros(pDungeonCels, MicroTileLen);
 	}
 };
 
