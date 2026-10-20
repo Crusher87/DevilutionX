@@ -5,6 +5,7 @@
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "levels/gendung.h"
+#include "missiles.h"
 #include "poe2/vfx.hpp"
 
 namespace devilution {
@@ -66,6 +67,31 @@ TEST_F(Poe2VfxTest, NothingIsMadeOutsidePoe2OrWithoutAScreen)
 	vfx::Slam({ 40, 40 }, 2, vfx::Element::Physical);
 	EXPECT_EQ(vfx::ShapeCount(), 0U);
 	EXPECT_EQ(vfx::ParticleCount(), 0U);
+}
+
+TEST_F(Poe2VfxTest, ATownPortalIsDrawnByTheEffectsWhileItsMissileLives)
+{
+	Missiles.clear();
+	Missile &portal = Missiles.emplace_back();
+	portal._mitype = MissileID::TownPortal;
+	portal._miAnimType = MissileGraphicID::None;
+	portal.position.tile = { 40, 40 };
+	portal._miDrawFlag = true;
+	portal._miDelFlag = false;
+	portal.setFrameGroup<PortalFrame>(PortalFrame::Start);
+	vfx::ScanMissiles();
+	EXPECT_EQ(vfx::PortalCount(), 1U);
+	// Opening throws its sparks and its light.
+	for (int i = 0; i < 20; i++)
+		vfx::Advance(50);
+	EXPECT_GT(vfx::ParticleCount(), 0U);
+	// Gone from the level: it folds shut, then is forgotten.
+	Missiles.clear();
+	vfx::ScanMissiles();
+	EXPECT_EQ(vfx::PortalCount(), 1U);
+	for (int i = 0; i < 20; i++)
+		vfx::Advance(50);
+	EXPECT_EQ(vfx::PortalCount(), 0U);
 }
 
 /** @brief A screen of the dungeon showing nothing but one palette colour. */
