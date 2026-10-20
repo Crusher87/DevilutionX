@@ -816,9 +816,7 @@ void EndFight(std::string_view how)
 	WriteText("fight", std::format("{:d} monsters ({:s} normal/magic/rare/unique, level {:d} on average, hero {:d}), {:.1f} s, {:s}: "
 	                               "lowest life {:d}%, life and energy shield {:d}%, mana {:d}%, lost {:d} life and {:d} energy shield in {:d} hits ({:d} big), "
 	                               "{:d} reached melee, {:d} kills ({:d} with one hit), {:d} flasks, pressure {:d}",
-	                       count, CountsByRarity(fight.rarities), averageLevel, fight.heroLevel, seconds, how, fight.lowestLifePercent, fight.lowestPoolPercent,
-	                       fight.lowestManaPercent, Whole(fight.lifeLostRaw), Whole(fight.shieldLostRaw), fight.hits, fight.bigHits,
-	                       static_cast<int>(fight.reachedMelee.size()), fight.kills, fight.oneHitKills, fight.flasks, pressure));
+	                       count, CountsByRarity(fight.rarities), averageLevel, fight.heroLevel, seconds, how, fight.lowestLifePercent, fight.lowestPoolPercent, fight.lowestManaPercent, Whole(fight.lifeLostRaw), Whole(fight.shieldLostRaw), fight.hits, fight.bigHits, static_cast<int>(fight.reachedMelee.size()), fight.kills, fight.oneHitKills, fight.flasks, pressure));
 	Event(LogChannel::Fights, LogLevel::Always, "fight")
 	    .add("p", MyPlayerId)
 	    .add("monsters", count)

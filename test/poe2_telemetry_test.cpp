@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -50,7 +51,8 @@ class Poe2TelemetryTest : public ::testing::Test {
 public:
 	static void SetUpTestSuite()
 	{
-		paths::SetPrefPath(::testing::TempDir() + "poe2_telemetry" + DIRECTORY_SEPARATOR_STR);
+		// A folder of its own, as tests run side by side and a session file is named by the second it starts.
+		paths::SetPrefPath(::testing::TempDir() + "poe2_telemetry_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + DIRECTORY_SEPARATOR_STR);
 		TelemetryInit();
 	}
 
