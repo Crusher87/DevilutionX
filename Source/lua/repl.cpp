@@ -21,6 +21,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "poe2/vfx.hpp"
+#include "poe2/weather.hpp"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -76,6 +77,22 @@ void CreateReplEnvironment()
 			return "Modern Effects are off (Settings > Graphics, needs Upscale).";
 		vfx::Showcase(MyPlayer->position.tile);
 		return "Playing every effect around you.";
+	};
+	// weather() shows what the sky is doing; weather("rain", 0.8) or weather("snow") forces a look, weather("auto") hands it back.
+	env["weather"] = [](sol::optional<std::string> what, sol::optional<double> strength) {
+		if (what) {
+			if (*what == "auto") {
+				weather::Force(std::nullopt);
+				return std::string("Weather follows its schedule again.\n") + weather::Text();
+			}
+			const std::optional<weather::Kind> kind = weather::KindNamed(*what);
+			if (!kind)
+				return std::string("Say weather(\"rain\"), weather(\"snow\"), weather(\"clear\") or weather(\"auto\"), with a strength 0 to 1 after rain or snow.");
+			weather::Force(kind, static_cast<float>(strength.value_or(0.8)));
+			weather::Advance(1);
+			return weather::Text();
+		}
+		return weather::Text();
 	};
 	env["aim"] = []() {
 		if (MyPlayer == nullptr)

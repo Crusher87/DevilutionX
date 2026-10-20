@@ -38,6 +38,7 @@
 #include "poe2/camera_shake.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/weather.hpp"
 #include "towners.h"
 #include "utils/is_of.hpp"
 #include "utils/str_cat.hpp"
@@ -1396,6 +1397,26 @@ struct View {
 	}
 };
 
+/** @brief A raindrop or snowflake falling through the view. */
+struct Drop {
+	/** @brief Where it will land. */
+	Vec pos;
+	/** @brief Its height above the ground, drawn as up the screen. */
+	float z;
+	float vz;
+	float vx;
+	/** @brief Snow: where in its side-to-side drift it is. */
+	float sway;
+	float size;
+	bool snow;
+};
+
+std::vector<Drop> Drops;
+/** @brief The world on screen this frame, where the weather falls. */
+View WeatherView;
+/** @brief The world's size on screen, for the weather's dim and lightning over all of it. */
+Vec WeatherSize;
+
 void ScanFlames(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
@@ -2044,6 +2065,60 @@ void EmitAmbient(float ms)
 	}
 }
 
+/** @brief Lets drops fall and land: new ones over the view, splashes where the rain hits the ground. */
+void AdvanceWeather(float ms)
+{
+	const weather::State &w = weather::Current();
+	const bool snow = w.kind == weather::Kind::Snow;
+	const float width = WeatherView.max.x - WeatherView.min.x;
+	const float height = WeatherView.max.y - WeatherView.min.y;
+	if (w.strength > 0 && width > 0 && height > 0) {
+		// Drops a second over a million world pixels: a shower starts sparse and a downpour fills the air.
+		const float perMillion = snow ? 160 * w.strength : 180 * w.strength + 1100 * w.strength * w.strength;
+		const float area = (width + 400) * (height + 100) / 1000000.F;
+		const int room = Scaled(3000) - static_cast<int>(Drops.size());
+		for (int i = std::min(room, Occurrences(perMillion * area, ms)); i > 0; i--) {
+			Drop drop;
+			drop.pos = { Random(WeatherView.min.x - 200, WeatherView.max.x + 200), Random(WeatherView.min.y, WeatherView.max.y + 100) };
+			drop.snow = snow;
+			if (snow) {
+				drop.z = Random(250, 450);
+				drop.vz = Random(-95, -55);
+				drop.vx = w.wind * 110 + Random(-15, 15);
+				drop.size = Random(1.1F, 2.4F);
+			} else {
+				drop.z = Random(320, 520);
+				drop.vz = Random(-1350, -1050) * (0.8F + 0.4F * w.strength);
+				drop.vx = w.wind * 380 + Random(-25, 25);
+				drop.size = Random(0.7F, 1.3F);
+			}
+			drop.sway = Random(0, 2 * Pi);
+			Drops.push_back(drop);
+		}
+	}
+	const float dt = ms / 1000.F;
+	for (size_t i = 0; i < Drops.size();) {
+		Drop &drop = Drops[i];
+		drop.z += drop.vz * dt;
+		drop.pos.x += drop.vx * dt;
+		if (drop.snow)
+			drop.pos.x += std::sin(drop.sway + AmbientTime * 0.0025F) * 22 * dt;
+		const bool gone = drop.pos.x < WeatherView.min.x - 300 || drop.pos.x > WeatherView.max.x + 300;
+		if (drop.z <= 0 || gone) {
+			if (!gone && !drop.snow && Random(0, 1) < 0.35F * std::min(1.F, Intensity())) {
+				// A splash: a small ring on the ground, and now and then a glint off the wet floor.
+				AddRing(drop.pos, 1, Random(4, 7), Random(0.2F, 0.35F), 1.2F, { 150, 185, 220 }, 0.3F, false, true);
+				if (Random(0, 1) < 0.15F)
+					Spray(drop.pos, 1, 10, 30, 80, 160, Shape::Dot, { 200, 220, 245 }, { 120, 150, 190 }, 1.F, 0.3F, 60, 120, 500, 0, 0.5F);
+			}
+			Drops[i] = Drops.back();
+			Drops.pop_back();
+		} else {
+			i++;
+		}
+	}
+}
+
 } // namespace
 
 Element ElementOf(DamageType type, bool spell)
@@ -2133,6 +2208,7 @@ void Clear()
 	Trails.clear();
 	SeenBursts.clear();
 	Emitters.clear();
+	Drops.clear();
 	HotSpots.clear();
 	SteadySpots.clear();
 	Halos.clear();
@@ -2869,6 +2945,11 @@ void Advance(float ms)
 	if (ms <= 0)
 		return;
 	AmbientTime += ms;
+	weather::Advance(ms);
+	if (weather::Enabled())
+		AdvanceWeather(ms);
+	else if (!Drops.empty())
+		Drops.clear();
 	EmitAmbient(ms);
 	for (auto &[missile, trail] : Trails) {
 		if (trail.count > 0)
@@ -2911,6 +2992,11 @@ size_t AmbientCount()
 size_t PortalCount()
 {
 	return Portals.size() + ClosingPortals.size();
+}
+
+size_t DropCount()
+{
+	return Drops.size();
 }
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
@@ -4721,6 +4807,46 @@ void DrawQuestMarks()
 	}
 }
 
+/** @brief The weather: a cold cast over the town, the drops leaning with the wind, and lightning lighting it all. */
+void DrawWeather()
+{
+	const weather::State &w = weather::Current();
+	const bool snow = w.kind == weather::Kind::Snow;
+	auto quad = [&](Batch &batch, Rgb colour, float alpha) {
+		const int a = batch.add({ 0, 0 }, colour, alpha);
+		const int b = batch.add({ WeatherSize.x, 0 }, colour, alpha);
+		const int c = batch.add({ WeatherSize.x, WeatherSize.y }, colour, alpha);
+		const int d = batch.add({ 0, WeatherSize.y }, colour, alpha);
+		batch.tri(a, b, c);
+		batch.tri(a, c, d);
+	};
+	if (w.strength > 0 && WeatherSize.x > 0) {
+		if (snow)
+			quad(Dark, { 70, 80, 100 }, 0.12F * w.strength);
+		else
+			quad(Dark, { 14, 22, 40 }, 0.3F * w.strength);
+	}
+	for (const Drop &drop : Drops) {
+		const Vec at = drop.pos - Vec { 0, drop.z };
+		if (drop.snow) {
+			SoftDisc(Glowing, at, drop.size, { 235, 240, 255 }, 0.5F, false);
+			continue;
+		}
+		// A streak back along its fall; the head, lowest, is the brightest.
+		const Vec tail = at - Vec { drop.vx, drop.vz } * 0.03F;
+		SoftLine(Glowing, at, tail, drop.size, { 185, 205, 235 }, { 120, 140, 170 }, 0.32F, 0.04F);
+	}
+	if (w.flash > 0 && WeatherSize.x > 0) {
+		// Two pulses: the strike, then its flicker.
+		float pulse = 0.6F;
+		if (w.flash > 0.7F)
+			pulse = 1.F;
+		else if (w.flash > 0.45F)
+			pulse = 0.25F;
+		quad(Glowing, { 225, 230, 255 }, 0.22F * w.flash * pulse);
+	}
+}
+
 /** @brief Render targets for the glowing layer and its blurred copies; remade when the size or renderer changes. */
 struct Targets {
 	SDL_Renderer *renderer = nullptr;
@@ -4888,12 +5014,15 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	const uint32_t now = SDL_GetTicks();
 	const float elapsed = LastTicks == 0 ? 0.F : static_cast<float>(std::min<uint32_t>(now - LastTicks, 50));
 	LastTicks = now;
+	WeatherSize = { static_cast<float>(worldSize.width), static_cast<float>(worldSize.height) };
+	WeatherView = { CameraOrigin, CameraOrigin + WeatherSize * (1 / CameraScale) };
 	if (PauseMode == 0)
 		Advance(elapsed);
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
 	LastDrawnScan = ScanFrame;
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty())
+	const weather::State &sky = weather::Current();
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0)
 		return;
 
 	Glowing.clear();
@@ -4913,6 +5042,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawSweeps();
 	DrawQuestMarks();
 	DrawParticles();
+	DrawWeather();
 
 	const float toLogical = static_cast<float>(logicalSize.width) / static_cast<float>(worldSize.width);
 	const bool targets = Layer.ensure(renderer, worldSize);

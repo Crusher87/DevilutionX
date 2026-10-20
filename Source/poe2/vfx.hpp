@@ -119,6 +119,8 @@ size_t ShapeCount();
 size_t AmbientCount();
 /** @brief How many town portals are standing or folding shut (tests). */
 size_t PortalCount();
+/** @brief How many raindrops and snowflakes are falling (tests). */
+size_t DropCount();
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /**
