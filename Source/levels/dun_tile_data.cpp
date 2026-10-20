@@ -19,6 +19,7 @@
 #include "levels/dun_tile.hpp"
 #include "levels/gendung_defs.hpp"
 #include "levels/reencode_dun_cels.hpp"
+#include "levels/tileset_mix.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/bitset2d.hpp"
 #include "utils/endian_swap.hpp"
@@ -99,6 +100,13 @@ std::unique_ptr<uint16_t[]> LoadMinData(size_t &tileCount)
 
 std::expected<void, std::string> LoadLevelSOLData()
 {
+	if (tilesetmix::Active())
+		return tilesetmix::LoadMixedSOLData();
+	return LoadSingleLevelSOLData();
+}
+
+std::expected<void, std::string> LoadSingleLevelSOLData()
+{
 	switch (leveltype) {
 	case DTYPE_TOWN:
 		if (!LoadIntegralFileInMemWithStatus("nlevels\\towndata\\town.sol", SOLData).has_value()) {
@@ -166,6 +174,10 @@ std::expected<void, std::string> LoadLevelSOLData()
 
 void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &microTileLen)
 {
+	if (tilesetmix::Active()) {
+		tilesetmix::SetMixedDungeonMicros(dungeonCels, microTileLen);
+		return;
+	}
 	microTileLen = 10;
 	size_t blocks = 10;
 
@@ -180,13 +192,23 @@ void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &m
 	size_t tileCount;
 	const std::unique_ptr<uint16_t[]> levelPieces = LoadMinData(tileCount);
 
-	ankerl::unordered_dense::map<uint16_t, DunFrameInfo> frameToTypeMap;
-	frameToTypeMap.reserve(4096);
 	for (size_t levelPieceId = 0; levelPieceId < tileCount / blocks; levelPieceId++) {
 		uint16_t *pieces = &levelPieces[blocks * levelPieceId];
 		for (uint32_t block = 0; block < blocks; block++) {
-			const LevelCelBlock levelCelBlock { Swap16LE(pieces[blocks - 2 + (block & 1) - (block & 0xE)]) };
-			DPieceMicros[levelPieceId].mt[block] = levelCelBlock;
+			DPieceMicros[levelPieceId].mt[block] = LevelCelBlock { Swap16LE(pieces[blocks - 2 + (block & 1) - (block & 0xE)]) };
+		}
+	}
+	FinishDungeonMicros(dungeonCels, tileCount / blocks, microTileLen);
+}
+
+void FinishDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, size_t pieceCount, uint_fast8_t microTileLen)
+{
+	const uint32_t blocks = microTileLen;
+	ankerl::unordered_dense::map<uint16_t, DunFrameInfo> frameToTypeMap;
+	frameToTypeMap.reserve(8192);
+	for (size_t levelPieceId = 0; levelPieceId < pieceCount; levelPieceId++) {
+		for (uint32_t block = 0; block < blocks; block++) {
+			const LevelCelBlock levelCelBlock = DPieceMicros[levelPieceId].mt[block];
 			if (levelCelBlock.hasValue()) {
 				if (const auto it = frameToTypeMap.find(levelCelBlock.frame()); it == frameToTypeMap.end()) {
 					frameToTypeMap.emplace_hint(it, levelCelBlock.frame(),
@@ -203,15 +225,17 @@ void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &m
 
 	std::vector<std::pair<uint16_t, uint16_t>> celBlockAdjustments = ComputeCelBlockAdjustments(frameToTypeList);
 	if (celBlockAdjustments.size() == 0) return;
-	for (size_t levelPieceId = 0; levelPieceId < tileCount / blocks; levelPieceId++) {
+	for (size_t levelPieceId = 0; levelPieceId < pieceCount; levelPieceId++) {
 		for (uint32_t block = 0; block < blocks; block++) {
 			LevelCelBlock &levelCelBlock = DPieceMicros[levelPieceId].mt[block];
+			if (!levelCelBlock.hasValue())
+				continue;
 			const uint16_t frame = levelCelBlock.frame();
 			const auto pair = std::make_pair(frame, frame);
 			const auto it = std::upper_bound(celBlockAdjustments.begin(), celBlockAdjustments.end(), pair,
 			    [](std::pair<uint16_t, uint16_t> p1, std::pair<uint16_t, uint16_t> p2) { return p1.first < p2.first; });
 			if (it != celBlockAdjustments.end()) {
-				levelCelBlock.data -= it->second;
+				levelCelBlock = LevelCelBlock::make(levelCelBlock.type(), static_cast<uint16_t>(frame - it->second));
 			}
 		}
 	}

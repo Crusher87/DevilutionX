@@ -13,6 +13,7 @@
 #include "levels/drlg_l3.h"
 #include "levels/drlg_l4.h"
 #include "levels/gendung.h"
+#include "levels/tileset_mix.hpp"
 #include "levels/trigs.h"
 #include "msg.h"
 #include "objects.h"
@@ -34,6 +35,7 @@ const char *const QuestLevelNames[] = {
 	N_("Church Arena"),
 	N_("Hell Arena"),
 	N_("Circle of Life Arena"),
+	N_("Tile Mix Test"),
 };
 
 namespace {
@@ -163,6 +165,11 @@ std::expected<void, std::string> LoadSetMap()
 		break;
 	case SL_ARENA_CIRCLE_OF_LIFE:
 		RETURN_IF_ERROR(LoadArenaMap("arena\\circle_of_death.dun", { 30, 26 }, { 29, 26 }));
+		break;
+	case SL_MIXTEST:
+		// Tile-set mixing test: the Cathedral arena with a Tristram yard built into its hall.
+		RETURN_IF_ERROR(LoadArenaMap("arena\\church.dun", { 29, 22 }, { 28, 20 }));
+		tilesetmix::BuildMixTestLevel();
 		break;
 	case SL_NONE:
 #ifdef _DEBUG

@@ -95,10 +95,20 @@ struct LevelCelBlock {
 
 	/**
 	 * @brief Returns the 1-based index of the frame in `pDungeonCels`.
+	 *
+	 * The files use 12 bits (up to 4095 frames). Bit 15 is unused in the files and serves as
+	 * a 13th frame bit in memory, so a map drawn from more than one tile set can hold up to 8191 frames.
 	 */
 	[[nodiscard]] uint16_t frame() const
 	{
-		return data & 0xFFF;
+		return (data & 0xFFF) | ((data & 0x8000) >> 3);
+	}
+
+	static constexpr uint16_t MaxFrame = 0x1FFF;
+
+	static LevelCelBlock make(TileType type, uint16_t frame)
+	{
+		return LevelCelBlock { static_cast<uint16_t>((static_cast<uint16_t>(type) << 12) | (frame & 0xFFF) | ((frame & 0x1000) << 3)) };
 	}
 };
 

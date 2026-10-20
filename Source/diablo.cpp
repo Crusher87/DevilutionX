@@ -67,6 +67,7 @@
 #include "levels/gendung.h"
 #include "levels/setmaps.h"
 #include "levels/themes.h"
+#include "levels/tileset_mix.hpp"
 #include "levels/town.h"
 #include "levels/trigs.h"
 #include "lighting.h"
@@ -1548,6 +1549,8 @@ void DiabloDeinit()
 std::expected<void, std::string> LoadLvlGFX()
 {
 	assert(pDungeonCels == nullptr);
+	if (tilesetmix::Active())
+		return tilesetmix::LoadMixedLvlGFX();
 	constexpr int SpecialCelWidth = 64;
 
 	const auto loadAll = [](const char *cel, const char *til, const char *special) -> std::expected<void, std::string> {
@@ -3802,6 +3805,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	IncProgress();
 
 	TelemetryStep(StrCat("start, level ", currlevel, ", type ", static_cast<int>(leveltype)));
+	tilesetmix::SelectForCurrentLevel();
 	RETURN_IF_ERROR(LoadTrns());
 	MakeLightTable();
 	RETURN_IF_ERROR(LoadLevelSOLData());

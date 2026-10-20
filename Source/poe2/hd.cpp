@@ -30,6 +30,7 @@
 #include "headless_mode.hpp"
 #include "levels/dun_tile.hpp"
 #include "levels/dun_tile_data.hpp"
+#include "levels/tileset_mix.hpp"
 #include "levels/gendung.h"
 #include "levels/reencode_dun_cels.hpp"
 #include "utils/file_util.h"
@@ -216,9 +217,9 @@ void DestroyTextures()
 	LightTexture = nullptr;
 }
 
-std::string_view LevelTypeName()
+std::string_view LevelTypeName(dungeon_type type)
 {
-	switch (leveltype) {
+	switch (type) {
 	case DTYPE_TOWN: return "town";
 	case DTYPE_CATHEDRAL: return "l1";
 	case DTYPE_CATACOMBS: return "l2";
@@ -228,6 +229,11 @@ std::string_view LevelTypeName()
 	case DTYPE_CRYPT: return "l5";
 	default: return "none";
 	}
+}
+
+std::string_view LevelTypeName()
+{
+	return LevelTypeName(leveltype);
 }
 
 /** @brief Names every dungeon frame of the current level, so a drawn frame can find its HD art. */
@@ -243,8 +249,14 @@ void IndexTiles()
 	const std::string prefix = std::string("tiles/") + std::string(LevelTypeName()) + "/";
 	for (uint32_t frame = 1; frame <= count; frame++) {
 		const uint8_t *data = GetDunFrame(CacheCels, frame);
-		TileNames[data] = prefix + std::to_string(frame);
-		TileNames[data + ReencodedTriangleFrameSize] = prefix + std::to_string(frame) + "f";
+		std::string name = prefix + std::to_string(frame);
+		// A map drawn from more than one tile set names each picture by the set it came from.
+		dungeon_type sourceType;
+		uint32_t sourceFrame;
+		if (tilesetmix::Active() && tilesetmix::FrameSource(frame, sourceType, sourceFrame))
+			name = std::string("tiles/") + std::string(LevelTypeName(sourceType)) + "/" + std::to_string(sourceFrame);
+		TileNames[data] = name;
+		TileNames[data + ReencodedTriangleFrameSize] = name + "f";
 	}
 }
 
