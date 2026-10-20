@@ -108,7 +108,7 @@ constexpr int HoradricTotemSecondAtLevel = 14;
  * @brief The supports that work on a skill inside a meta gem: those of the meta gem's row that fit the skill.
  * Empty if the skill isn't inside one.
  */
-[[nodiscard]] const SupportSockets &MetaSupportsFor(const Poe2PlayerData &data, SkillSlot skill);
+[[nodiscard]] SupportSockets MetaSupportsFor(const Poe2PlayerData &data, SkillSlot skill);
 
 /** @brief Skills inside the meta gem of a Skills panel row. */
 [[nodiscard]] int MetaSkillCount(const Poe2PlayerData &data, size_t row);

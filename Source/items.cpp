@@ -170,6 +170,7 @@ int8_t ItemCAnimTbl[] = {
 	// POE2 Mashup: the one-cell copies drop like the Ruby, the Cathedral Map, a book and the notes.
 	32, 16, 18, 36, 37
 };
+static_assert(std::size(ItemCAnimTbl) == ICURS_RECONSTRUCTED_NOTE_SMALL + 1, "every item picture needs a drop sound");
 
 /** Maps of drop sounds effect of placing the item in the inventory. */
 SfxID ItemInvSnds[] = {
@@ -4221,11 +4222,11 @@ Item *SpawnUnique(_unique_items uid, Point position, std::optional<int> level /*
 	return &item;
 }
 
-void GetSuperItemSpace(Point position, int8_t inum)
+bool GetSuperItemSpace(Point position, int8_t inum)
 {
 	Point positionToCheck = position;
 	if (GetItemSpace(positionToCheck, inum))
-		return;
+		return true;
 	for (int k = 2; k < 50; k++) {
 		for (int j = -k; j <= k; j++) {
 			for (int i = -k; i <= k; i++) {
@@ -4235,10 +4236,11 @@ void GetSuperItemSpace(Point position, int8_t inum)
 					continue;
 				Items[inum].position = positionToCheck;
 				dItem[positionToCheck.x][positionToCheck.y] = inum + 1;
-				return;
+				return true;
 			}
 		}
 	}
+	return false;
 }
 
 _item_indexes RndItemForMonsterLevel(int8_t monsterLevel)
@@ -5081,12 +5083,18 @@ void GiveCurrencyItem(Player &player, item_misc_id miscId)
 	if (AutoPlaceItemInInventory(player, item))
 		return;
 	// No room: it lands at the hero's feet.
-	if (ActiveItemCount >= MAXITEMS)
-		return;
-	const int ii = AllocateItem();
-	Items[ii] = item;
-	GetSuperItemSpace(player.position.tile, ii);
-	SetupItem(Items[ii]);
+	if (ActiveItemCount < MAXITEMS) {
+		const int ii = AllocateItem();
+		Items[ii] = item;
+		if (GetSuperItemSpace(player.position.tile, ii)) {
+			SetupItem(Items[ii]);
+			return;
+		}
+		// POE2 Mashup: no floor tile either: free the slot instead of leaving an invisible item.
+		DeleteItem(ActiveItemCount - 1);
+	}
+	if (&player == MyPlayer)
+		EventPlrMsg(_("No room for the item: it was lost."), UiFlags::ColorRed);
 }
 
 void DropBossUnique(Monster &monster, bool sendmsg)

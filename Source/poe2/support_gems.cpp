@@ -162,14 +162,13 @@ SupportGem OtherPowerSupport(const SupportSockets &supports, std::optional<size_
 	return SupportGem::None;
 }
 
-const SupportSockets &Poe2PlayerData::supportsFor(SkillSlot skill) const
+SupportSockets Poe2PlayerData::supportsFor(SkillSlot skill) const
 {
-	static const SupportSockets None {};
 	if (skill.isEmpty())
-		return None;
+		return {};
 	if (skill.kind == SkillKind::Default) {
 		// The default attack keeps its supports when the weapon changes; only the ones that fit the new attack work.
-		static SupportSockets fitting {};
+		SupportSockets fitting {};
 		for (size_t i = 0; i < MaxSupportSockets; i++)
 			fitting[i] = SupportGemCanSupport(defaultSupports[i], skill) ? defaultSupports[i] : SupportGem::None;
 		return fitting;
@@ -181,14 +180,14 @@ const SupportSockets &Poe2PlayerData::supportsFor(SkillSlot skill) const
 	// A spell inside a meta gem takes the meta gem's supports that fit it.
 	if (metaSocketOf(skill))
 		return MetaSupportsFor(*this, skill);
-	return None;
+	return {};
 }
 
 bool Poe2PlayerData::hasSupport(SkillSlot skill, SupportGem gem) const
 {
 	if (gem == SupportGem::None)
 		return false;
-	const SupportSockets &supports = supportsFor(skill);
+	const SupportSockets supports = supportsFor(skill);
 	return std::find(supports.begin(), supports.end(), gem) != supports.end();
 }
 
@@ -819,7 +818,8 @@ void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spel
 	if (!IsDirectProjectileSpell(spell))
 		return;
 	const Poe2PlayerData &data = player.poe2;
-	if (!std::any_of(data.supportsFor(spell).begin(), data.supportsFor(spell).end(), IsProjectileSupport))
+	const SupportSockets supports = data.supportsFor(spell);
+	if (!std::any_of(supports.begin(), supports.end(), IsProjectileSupport))
 		return;
 
 	missile.poe2.spell = spell;

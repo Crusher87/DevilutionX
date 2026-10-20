@@ -562,7 +562,9 @@ bool ChangeInvItem(Player &player, int slot, Size itemSize)
 		}
 	} else {
 		// POE2 Mashup: currency dropped on a matching stack joins it, and what doesn't fit stays on the cursor.
-		if (prevItemId != 0 && CanStackWith(player.InvList[prevItemId - 1], player.HoldItem) && StackRoom(player.InvList[prevItemId - 1]) > 0) {
+		// An unpaid visual store ware swaps instead, so it is paid for in full when it leaves the cursor.
+		const bool unpaidWare = &player == MyPlayer && HasPendingPurchase();
+		if (prevItemId != 0 && !unpaidWare && CanStackWith(player.InvList[prevItemId - 1], player.HoldItem) && StackRoom(player.InvList[prevItemId - 1]) > 0) {
 			MergeStack(player.InvList[prevItemId - 1], player.HoldItem);
 			if (&player == MyPlayer)
 				NetSyncInvItem(player, prevItemId - 1);
@@ -644,6 +646,8 @@ void CheckInvPaste(Player &player, Point cursorPosition)
 
 	if (location == ILOC_BELT) {
 		if (!CanBePlacedOnBelt(player, player.HoldItem)) return;
+		// POE2 Mashup: only the first NumFlasks belt slots work as flask slots.
+		if (gbIsPoe2 && IsFlaskPotion(player.HoldItem) && static_cast<size_t>(slot - SLOTXY_BELT_FIRST) >= NumFlasks) return;
 	} else if (location != ILOC_UNEQUIPABLE) {
 		if (desiredLocation != location) return;
 	}
@@ -1530,15 +1534,17 @@ bool AutoPlaceItemInBelt(Player &player, const Item &item, bool persistItem, boo
 		return false;
 	}
 
-	for (Item &beltItem : player.SpdList) {
+	// POE2 Mashup: flasks only go in the flask slots at the front of the belt.
+	const size_t beltSlots = gbIsPoe2 && IsFlaskPotion(item) ? NumFlasks : std::size(player.SpdList);
+	for (size_t i = 0; i < beltSlots; i++) {
+		Item &beltItem = player.SpdList[i];
 		if (beltItem.isEmpty()) {
 			if (persistItem) {
 				beltItem = item;
 				player.CalcScrolls();
 				RedrawComponent(PanelDrawComponent::Belt);
 				if (sendNetworkMessage) {
-					const auto beltIndex = static_cast<int>(std::distance<const Item *>(&player.SpdList[0], &beltItem));
-					NetSendCmdChBeltItem(false, beltIndex);
+					NetSendCmdChBeltItem(false, static_cast<int>(i));
 				}
 			}
 
@@ -2435,6 +2441,12 @@ bool UseInvItem(int cii)
 			UseFlask(player, static_cast<size_t>(c));
 			return true;
 		}
+		// POE2 Mashup: a flask past the flask slots (old saves) does nothing.
+		if (gbIsPoe2 && IsFlaskPotion(*item)) {
+			if (&player == MyPlayer)
+				EventPlrMsg(_("Flasks only work in the first belt slots."), UiFlags::ColorWhite);
+			return true;
+		}
 
 		// If selected speedlist item exists in InvList, use the InvList item.
 		for (int i = 0; i < player._pNumInv && *GetOptions().Gameplay.autoRefillBelt; i++) {
@@ -2646,6 +2658,8 @@ void CloseInventory()
 {
 	CloseGoldWithdraw();
 	CloseStash();
+	if (IsStashOpen)
+		return; // POE2 Mashup: the held item had nowhere to go, so the stash stays open.
 	CloseVisualStore();
 	invflag = false;
 }
@@ -2665,9 +2679,9 @@ void CloseStash()
 			    && !AutoPlaceItemInInventory(myPlayer, myPlayer.HoldItem, true)
 			    && !AutoPlaceItemInStash(myPlayer.HoldItem, true)
 			    && !(gbIsPoe2 && AutoPlaceItemInAnyStashTab(myPlayer.HoldItem))) {
-				// This can fail for max gold, arena potions and a stash that has been arranged
-				// to not have room for the item all 3 cases are extremely unlikely
-				app_fatal(_("No room for item"));
+				// POE2 Mashup: no room anywhere (rare): keep the item on the cursor and the stash open instead of ending the game.
+				EventPlrMsg(_("No room for item"), UiFlags::ColorRed);
+				return;
 			}
 			PlaySFX(ItemInvSnds[ItemCAnimTbl[myPlayer.HoldItem._iCurs]]);
 		}
