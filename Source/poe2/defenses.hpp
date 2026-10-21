@@ -12,6 +12,7 @@
 namespace devilution {
 
 struct Item;
+struct Monster;
 struct Player;
 
 enum class DefenseType : uint8_t {
@@ -108,5 +109,28 @@ int Poe2Resistance(int resistance, int penalty, int maxResistance);
 
 /** @brief Sets the new maximum, keeping the missing amount the same, like life does. */
 void SetMaxEnergyShield(Player &player, int maxEnergyShield);
+
+/** @brief POE2's Accuracy Rating for each character level and each point of Dexterity. */
+constexpr int AccuracyPerLevel = 6;
+constexpr int AccuracyPerDexterity = 6;
+/** @brief POE2: attacks keep all their accuracy out to 2 metres (tiles here), then lose it evenly down to a tenth at 9. */
+constexpr int AccuracyFalloffStartTiles = 2;
+constexpr int AccuracyFalloffEndTiles = 9;
+constexpr int MinAccuracyAtRangePercent = 10;
+
+/** @brief The hero's Accuracy Rating, like POE2: 6 a level and 6 a point of Dexterity, raised by War Banner. */
+int AccuracyRating(const Player &player);
+/**
+ * @brief A monster's Evasion Rating against the hero's attacks. It grows with the monster's level, so that a hero of the
+ * same level with ordinary Dexterity hits about 9 in 10; Diablo's armour class makes some kinds harder to hit than others.
+ * @param armorClass The monster's armour class after the hero's armour piercing.
+ */
+int MonsterEvasionRating(const Monster &monster, int armorClass);
+/** @brief The hero's chance to hit, in percent, up close against an ordinary monster of the hero's level (the character panel). */
+int TypicalHitChance(const Player &player);
+/** @brief The share of its accuracy, in percent, an attack keeps at a distance in tiles (see AccuracyFalloffStartTiles). */
+int AccuracyAtDistancePercent(int tiles);
+/** @brief POE2's chance to hit, in percent: 125 x accuracy / (accuracy + 0.3 x evasion), from 5 to 100. */
+int Poe2HitChance(int accuracy, int evasion);
 
 } // namespace devilution

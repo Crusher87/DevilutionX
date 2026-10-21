@@ -7,6 +7,7 @@
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "headless_mode.hpp"
 #include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
@@ -147,11 +148,18 @@ void PaySkillMana(Player &player, WeaponSkill skill)
 	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));
 }
 
+bool CanStartSkill(const Player &player);
+
 /** @brief Dashes at the target; the skill hits when the dash lands (see ProcessPlayers). */
 bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 {
-	if (!DashTowards(player, SkillTarget(player), tiles))
+	if (!CanStartSkill(player))
 		return false;
+	// With no room to dash, such as an enemy right next to you, the skill goes off where you stand (Curtis 2026-10-21:
+	// Whirlwind did nothing when he clicked an enemy in melee).
+	const Point target = SkillTarget(player);
+	if (!DashTowards(player, target, tiles) && target != player.position.tile)
+		player._pdir = GetDirection(player.position.tile, target);
 	PaySkillMana(player, skill);
 	if (!player.UsesRangedWeapon())
 		PayMeleeAttackLife(player);
@@ -796,6 +804,44 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 	player.poe2.castSkill = skill;
 	player.poe2.castFrame = actionFrame;
 	player.poe2.castGraphic = static_cast<uint8_t>(graphic);
+	if (SpinsWhileStriking(skill)) {
+		player.poe2.spinFrom = static_cast<uint8_t>(dir);
+		const TableSkillData *table = FindTableSkill(skill);
+		vfx::Whirl(player.position.tile, table != nullptr ? std::max<int>(table->radius, 1) : 1, vfx::Element::Physical);
+		PlaySfxLoc(SfxID::Swing2, player.position.tile);
+	}
+}
+
+bool SpinsWhileStriking(WeaponSkill skill)
+{
+	return skill == WeaponSkill::Whirlwind;
+}
+
+void TurnWithSpin(Player &player)
+{
+	// One facing a frame: round once in eight frames, all eight directions in turn.
+	const auto dir = static_cast<Direction>((player.poe2.spinFrom + player.AnimInfo.currentFrame) % 8);
+	if (dir == player._pdir)
+		return;
+	player._pdir = dir;
+	if (!HeadlessMode)
+		player.AnimInfo.sprites = player.AnimationData[static_cast<size_t>(player_graphic::Attack)].spritesForDirection(dir);
+}
+
+bool HoldsHeavyWeapon(const Player &player)
+{
+	const auto holds = [&](ItemType type) { return player.InvBody[INVLOC_HAND_LEFT]._itype == type || player.InvBody[INVLOC_HAND_RIGHT]._itype == type; };
+	return !holds(ItemType::Sword) && (holds(ItemType::Axe) || holds(ItemType::Mace) || holds(ItemType::Staff));
+}
+
+vfx::SwingStyle WeaponSwingStyle(const Player &player)
+{
+	// The hero's axe and mace attacks come down from overhead (Curtis 2026-10-21: "the hero swings top-down, but the
+	// effect sweeps sideways").
+	const auto holds = [&](ItemType type) { return player.InvBody[INVLOC_HAND_LEFT]._itype == type || player.InvBody[INVLOC_HAND_RIGHT]._itype == type; };
+	if (!holds(ItemType::Sword) && (holds(ItemType::Axe) || holds(ItemType::Mace)))
+		return vfx::SwingStyle::Chop;
+	return vfx::SwingStyle::Slash;
 }
 
 bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
@@ -970,12 +1016,17 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 	const bool mine = &player == MyPlayer;
 	switch (skill) {
 	case WeaponSkill::Cleave:
-		vfx::Swing(tile, tile + dir, vfx::Element::Physical, true);
+		// Its own long slice through the target and both sides, not the plain swing (Curtis 2026-10-21); an axe
+		// brings it down from overhead first, as the hero's swing does.
+		vfx::Cleave(tile, tile + dir, vfx::Element::Physical, WeaponSwingStyle(player) == vfx::SwingStyle::Chop);
 		// A spray of sparks sweeping across the arc, right to left.
 		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 0, 3);
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 1, 5);
 		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 2, 3);
 		AddVisualEffect(tile + dir, MissileGraphicID::BloodHit, 2);
+		PlaySfxLoc(SfxID::Swing2, tile);
+		if (mine)
+			ShakeCamera(ShakeStrength::Light, 3);
 		break;
 	case WeaponSkill::GroundSlam:
 		vfx::Slam(tile + dir, 2, vfx::Element::Physical);
@@ -1014,14 +1065,20 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 6);
 		break;
-	case WeaponSkill::Flurry:
-		vfx::Swing(tile, target, vfx::Element::Physical, false);
-		vfx::Sparks(target, vfx::Element::Physical, 1.2F);
-		// One burst per strike.
+	case WeaponSkill::Flurry: {
+		// Two real swings: a slash, then a backhand coming back across it that hits harder (Curtis 2026-10-21).
+		const bool backhand = player.poe2.flurryStrike > 0;
+		vfx::SwingAs(tile, target, vfx::Element::Physical, backhand ? vfx::SwingStyle::Backhand : vfx::SwingStyle::Slash, false);
+		vfx::Sparks(target, vfx::Element::Physical, backhand ? 1.5F : 1.F);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 0, 4);
-		AddVisualEffect(target, MissileGraphicID::MetalHit, 3, 4);
-		AddVisualEffect(target, MissileGraphicID::BloodHit, 3);
+		if (backhand) {
+			AddVisualEffect(target, MissileGraphicID::BloodHit, 1);
+			PlaySfxLoc(SfxID::Swing2, tile);
+			if (mine)
+				ShakeCamera(ShakeStrength::Light, 3);
+		}
 		break;
+	}
 	case WeaponSkill::LeapSlam:
 		vfx::Slam(tile, 2, vfx::Element::Fire);
 		// A fiery crater where the player lands, and the shockwave rolling out of it.
@@ -1101,7 +1158,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		PlaySfxLoc(SfxID::SpellBloodStar, target);
 		break;
 	case WeaponSkill::Riposte:
-		vfx::Swing(tile, tile + dir, vfx::Element::Holy, true);
+		vfx::SwingAs(tile, tile + dir, vfx::Element::Holy, WeaponSwingStyle(player), HoldsHeavyWeapon(player));
 		// A flash of steel sweeping back across the arc.
 		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 0, 4);
 		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 1, 6);
@@ -1112,12 +1169,12 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		break;
 	case WeaponSkill::ShadowStep:
 		vfx::Impact(target, vfx::Element::Chaos, 0.7F);
-		vfx::Swing(tile, target, vfx::Element::Chaos, false);
+		vfx::SwingAs(tile, target, vfx::Element::Chaos, WeaponSwingStyle(player), false);
 		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 1, 4);
 		break;
 	case WeaponSkill::Frenzy:
-		vfx::Swing(tile, target, vfx::Element::Blood, false);
+		vfx::SwingAs(tile, target, vfx::Element::Blood, WeaponSwingStyle(player), HoldsHeavyWeapon(player));
 		vfx::Sparks(target, vfx::Element::Blood, 0.9F);
 		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 2, 3);
@@ -1133,7 +1190,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 			ShakeCamera(ShakeStrength::Medium, 6);
 		break;
 	case WeaponSkill::FistsOfThunder:
-		vfx::Swing(tile, target, vfx::Element::Lightning, false);
+		vfx::SwingAs(tile, target, vfx::Element::Lightning, WeaponSwingStyle(player), HoldsHeavyWeapon(player));
 		vfx::Arc(tile, target, vfx::Element::Lightning);
 		AddVisualEffect(target, MissileGraphicID::ThinLightning, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::Lightning, 1);

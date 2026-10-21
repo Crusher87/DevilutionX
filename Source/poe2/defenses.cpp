@@ -8,6 +8,7 @@
 #include "items.h"
 #include "levels/gendung.h"
 #include "levels/gendung_defs.hpp"
+#include "monster.h"
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
@@ -260,6 +261,53 @@ int ResistancePenalty(const Player &player)
 int Poe2Resistance(int resistance, int penalty, int maxResistance)
 {
 	return std::clamp(resistance - penalty, MinPoe2Resistance, maxResistance);
+}
+
+int AccuracyRating(const Player &player)
+{
+	const int accuracy = AccuracyPerLevel * player.getCharacterLevel() + AccuracyPerDexterity * player._pDexterity;
+	return accuracy * (100 + BannerAccuracyPercent(player)) / 100;
+}
+
+namespace {
+
+/** @brief The evasion of an ordinary monster of a level: about 1.16 times the accuracy of a hero of that level with ordinary Dexterity (20, and half a point more a level), so such a hero hits about 9 in 10 (Curtis 2026-10-21: his Warrior missed 1 attack in 4). */
+int UsualEvasion(int level)
+{
+	return 140 + level * 21 / 2;
+}
+
+} // namespace
+
+int MonsterEvasionRating(const Monster &monster, int armorClass)
+{
+	const int evasion = UsualEvasion(static_cast<int>(monster.level(sgGameInitInfo.nDifficulty)));
+	// Diablo's armour class tells nimble and armoured kinds apart, against what's usual for the kind's level.
+	const int usual = 3 * monster.data().level + 30;
+	const int percent = std::clamp((armorClass + 30) * 100 / std::max(usual, 1), 60, 160);
+	return evasion * percent / 100;
+}
+
+int TypicalHitChance(const Player &player)
+{
+	return std::clamp(Poe2HitChance(AccuracyRating(player), UsualEvasion(player.getCharacterLevel())) + player._pIBonusToHit, 5, 100);
+}
+
+int AccuracyAtDistancePercent(int tiles)
+{
+	if (tiles <= AccuracyFalloffStartTiles)
+		return 100;
+	if (tiles >= AccuracyFalloffEndTiles)
+		return MinAccuracyAtRangePercent;
+	const int lost = (100 - MinAccuracyAtRangePercent) * (tiles - AccuracyFalloffStartTiles) / (AccuracyFalloffEndTiles - AccuracyFalloffStartTiles);
+	return 100 - lost;
+}
+
+int Poe2HitChance(int accuracy, int evasion)
+{
+	accuracy = std::max(accuracy, 1);
+	const int64_t chance = int64_t { 125 } * accuracy * 10 / (int64_t { accuracy } * 10 + int64_t { std::max(evasion, 0) } * 3);
+	return std::clamp(static_cast<int>(chance), 5, 100);
 }
 
 } // namespace devilution

@@ -149,6 +149,85 @@ void SetSkillGemItemLevel(Item &item, int level)
 {
 	constexpr int Shift = std::countr_zero(static_cast<uint32_t>(CF_POE2_GEM_LEVEL));
 	item.dwBuff = (item.dwBuff & ~CF_POE2_GEM_LEVEL) | (static_cast<uint32_t>(std::clamp(level, 1, MaxGemLevel)) << Shift);
+	// Shops and other code read the item's own needs, so keep them at the level's.
+	if (const SkillSlot skill = SkillForGem(item); !skill.isEmpty()) {
+		const GemAttributeNeeds needs = SkillGemAttributeNeeds(skill, SkillGemItemLevel(item));
+		item._iMinStr = static_cast<uint8_t>(std::min(needs.strength, 255));
+		item._iMinMag = static_cast<uint8_t>(std::min(needs.magic, 255));
+		item._iMinDex = static_cast<uint8_t>(std::min(needs.dexterity, 255));
+	}
+}
+
+namespace {
+
+/** @brief POE2's character level for each gem level (0.3); ours is this table scaled to the level 50 cap. */
+constexpr std::array<uint8_t, MaxGemLevel> Poe2GemCharacterLevels { 1, 3, 6, 10, 14, 18, 22, 26, 31, 36, 41, 46, 52, 58, 64, 66, 72, 78, 84, 90 };
+
+/** @brief (share / 100)^0.9 in thousandths, the scaling POE2 gives a hybrid gem's attributes. */
+int ShareFactor(int sharePercent)
+{
+	switch (sharePercent) {
+	case 100: return 1000;
+	case 60: return 631;
+	case 50: return 536;
+	case 40: return 438;
+	case 33: return 369;
+	default: return sharePercent * 10;
+	}
+}
+
+} // namespace
+
+int GemAttributeRequirement(int gemLevel, int sharePercent)
+{
+	if (sharePercent <= 0)
+		return 0;
+	// Path of Building 2: round((5 + (level - 3) * 1.7) * (share / 100)^0.9) + 4, and none below 8. In tenths, so
+	// every machine gets the same number.
+	const int level = Poe2GemCharacterLevels[std::clamp(gemLevel, 1, MaxGemLevel) - 1];
+	const int base = 50 + (level - 3) * 17;
+	const int requirement = (base * ShareFactor(sharePercent) + 5000) / 10000 + 4;
+	return requirement < 8 ? 0 : requirement;
+}
+
+GemAttributeNeeds SkillGemAttributeNeeds(SkillSlot skill, int gemLevel)
+{
+	const std::optional<size_t> index = SkillGemItemIndex(skill);
+	if (!index)
+		return {};
+	// The gem's own numbers only say which attributes it uses: one gets all of it; of two, the bigger gets 60%
+	// and the smaller 40%, or half each, like POE2's hybrid gems.
+	const ItemData &gem = AllItemsList[*index];
+	const std::array<int, 3> fixed { gem.iMinStr, gem.iMinMag, gem.iMinDex };
+	const int used = static_cast<int>(std::count_if(fixed.begin(), fixed.end(), [](int value) { return value > 0; }));
+	std::array<int, 3> shares {};
+	for (size_t i = 0; i < fixed.size(); i++) {
+		if (fixed[i] <= 0)
+			continue;
+		if (used == 1) {
+			shares[i] = 100;
+		} else if (used == 2) {
+			const int other = fixed[0] + fixed[1] + fixed[2] - fixed[i];
+			shares[i] = fixed[i] == other ? 50 : (fixed[i] > other ? 60 : 40);
+		} else {
+			shares[i] = 33;
+		}
+	}
+	return { GemAttributeRequirement(gemLevel, shares[0]), GemAttributeRequirement(gemLevel, shares[1]), GemAttributeRequirement(gemLevel, shares[2]) };
+}
+
+int SocketedSkillGemLevel(const Player &player, SkillSlot skill)
+{
+	if (const std::optional<size_t> socket = FindSkillSlot(player, skill); socket)
+		return player.poe2.gemLevel(*socket);
+	if (const auto meta = player.poe2.metaSocketOf(skill); meta)
+		return std::clamp<int>(player.poe2.metaSkillLevels[meta->first][meta->second], 1, MaxGemLevel);
+	return 1;
+}
+
+bool MeetsGemAttributeNeeds(const Player &player, const GemAttributeNeeds &needs)
+{
+	return RequirementStrength(player) >= needs.strength && player._pMagic >= needs.magic && player._pDexterity >= needs.dexterity;
 }
 
 std::string_view SkillName(SkillSlot skill)
@@ -188,8 +267,7 @@ SkillUsability GetSkillUsability(const Player &player, SkillSlot skill)
 	if (!gemIndex)
 		return SkillUsability::Empty;
 
-	const ItemData &gem = AllItemsList[*gemIndex];
-	if (RequirementStrength(player) < gem.iMinStr || player._pMagic < gem.iMinMag || player._pDexterity < gem.iMinDex)
+	if (!MeetsGemAttributeNeeds(player, SkillGemAttributeNeeds(skill, SocketedSkillGemLevel(player, skill))))
 		return SkillUsability::Requirements;
 	if (skill.kind == SkillKind::Persistent) {
 		// A minion count set to 0 is the player's choice, not a lack of Spirit.
@@ -273,14 +351,10 @@ void GrantStarterSkill(Player &player)
 	}
 }
 
-bool TraySlotTakesActions(TraySlot slot)
-{
-	return slot == TraySlot::LeftMouse || slot == TraySlot::RightMouse;
-}
-
 bool TrayBindingFits(TrayBinding binding, TraySlot slot)
 {
-	return binding.isGem() || binding.action == TrayAction::None || binding.action == TrayAction::WeaponAttack || TraySlotTakesActions(slot);
+	// The old Move/attack, Interact and Readied spell choices are gone: the weapon attacks replace them (Curtis 2026-10-21).
+	return binding.isGem() || binding.action == TrayAction::None || (binding.action == TrayAction::WeaponAttack && binding.socket < 2);
 }
 
 std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket)

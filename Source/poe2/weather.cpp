@@ -9,12 +9,15 @@
 #ifdef USE_SDL3
 #include <SDL3/SDL_error.h>
 #else
+#ifndef NOSOUND
 #include <Aulib/Stream.h>
+#endif
 #include <SDL.h>
 #endif
 
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
+#include "engine/ui_scale.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "levels/dun_tile_data.hpp"
@@ -22,7 +25,9 @@
 #include "options.h"
 #include "poe2/vfx.hpp"
 #include "utils/log.hpp"
+#ifndef NOSOUND
 #include "utils/soundsample.h"
+#endif
 #include "utils/str_cat.hpp"
 
 namespace devilution::weather {
@@ -86,7 +91,7 @@ float WetMs = 0;
 constexpr float FadeMs = 30000;
 /** @brief A dungeon has no sky, so going in stops the rain at once. */
 constexpr float NoSkyFadeMs = 300;
-/** @brief A look forced from the console comes quickly, to be seen. */
+/** @brief A look forced from the console comes back quickly when the sky does (walking out into town). */
 constexpr float ForcedFadeMs = 3000;
 
 /** @brief Smooth noise in -1..1 from a few slow sines, so showers swell and ease and the wind gusts. */
@@ -148,6 +153,7 @@ void AdvanceLightning(float ms)
 }
 
 // --- Sound: rain and thunder made in memory, so no audio files are needed. --------------------------------------
+#ifndef NOSOUND
 
 constexpr int SampleRate = 22050;
 
@@ -378,6 +384,15 @@ void PlayThunder(float gain)
 	Audio.thunder->SetVolume(attenuation + *GetOptions().Audio.soundVolume * (ATTENUATION_MIN / VOLUME_MIN), ATTENUATION_MIN, 0);
 	Audio.thunder->Play(1);
 }
+#else
+void UpdateSound()
+{
+}
+
+void PlayThunder(float /*gain*/)
+{
+}
+#endif
 
 /** @brief Opens on a dry spell, but a shorter one, so the first visit to town can be caught in a shower. */
 void Start()
@@ -430,6 +445,13 @@ void Force(std::optional<Kind> kind, float strength)
 {
 	Forced = kind;
 	ForcedStrength = std::clamp(strength, 0.F, 1.F);
+	// Under the sky the console's look is there at once, without the fade: the console's answer read the weather a
+	// moment later and said "Dry right now" while the rain was still coming in (Curtis 2026-10-21: weather("rain", 0.9)
+	// seemed to do nothing). Handing it back to the schedule still eases into the schedule's weather.
+	if (Forced && Outdoors() && Enabled()) {
+		Now.kind = *Forced;
+		Now.strength = *Forced == Kind::Clear ? 0 : ForcedStrength;
+	}
 }
 
 void Advance(float ms)
@@ -498,6 +520,7 @@ void Reseed(uint32_t seed)
 
 void StopSound()
 {
+#ifndef NOSOUND
 	// The samples go too, so nothing of theirs outlives the audio; they're made again when needed.
 	Audio.playing = false;
 	for (std::unique_ptr<SoundSample> *sample : { &Audio.light, &Audio.heavy, &Audio.wind, &Audio.thunder }) {
@@ -506,6 +529,7 @@ void StopSound()
 		sample->reset();
 	}
 	Audio.made = false;
+#endif
 }
 
 std::optional<Kind> KindNamed(std::string_view name)
@@ -529,18 +553,32 @@ std::string Text()
 	std::string text;
 	if (!Enabled())
 		text = "Weather is off (Settings > Graphics: Weather and Modern Effects, needs Upscale).\n";
+	else if (!IsUiScaled())
+		text = "Nothing is drawn at UI Scale 100: the weather needs UI Scale above 100 (Settings > Graphics).\n";
 	if (!Outdoors())
 		text += "No sky here: dungeons stay dry.\n";
 	const int percent = static_cast<int>(Now.strength * 100 + 0.5F);
 	const int wind = static_cast<int>(std::abs(Now.wind) * 100 + 0.5F);
-	if (Now.strength > 0.01F)
-		text += StrCat(kindName, " at ", percent, "%, wind ", wind, "% from the ", Now.wind < 0 ? "right" : "left", ".\n");
-	else
+	if (Now.strength > 0.01F) {
+		// Where it's heading, so a shower handed back to a dry schedule reads as easing off, not as nothing changing.
+		Kind kind;
+		float target;
+		Target(kind, target);
+		if (!Outdoors() || !Enabled() || kind != Now.kind)
+			target = 0;
+		const char *trend = "";
+		if (target < Now.strength - 0.02F)
+			trend = ", easing off";
+		else if (target > Now.strength + 0.02F)
+			trend = ", building";
+		text += StrCat(kindName, " at ", percent, "%, wind ", wind, "% from the ", Now.wind < 0 ? "right" : "left", trend, ".\n");
+	} else {
 		text += "Dry right now.\n";
+	}
 	if (Forced)
-		text += "Forced from the console; weather(\"auto\") hands it back to the schedule.\n";
+		text += "Forced from the console; weather(\"auto\") hands it back to the schedule.";
 	else if (Asked.active)
-		text += StrCat("Called by a skill for another ", static_cast<int>(Asked.left / 1000), " s.\n");
+		text += StrCat("Called by a skill for another ", static_cast<int>(Asked.left / 1000), " s.");
 	else
 		text += StrCat(Plan.wet ? "This shower has " : "Dry spell, ", static_cast<int>(std::max(0.F, Plan.left) / 1000), " s left, then ", Plan.wet ? "it clears." : "a shower.");
 	return text;

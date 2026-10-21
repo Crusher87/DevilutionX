@@ -74,6 +74,8 @@ const BaseMeta *BaseMetaFor(int itemIndex);
 const BaseMeta *ItemBaseMeta(const Item &item);
 /** @brief The item's implicits with their values, rolled from its seed and raised by its quality. */
 std::vector<ItemImplicit> ItemImplicits(const Item &item);
+/** @brief The effects the item's implicits raise, as bits of 1 << ModEffect; one that lowers (slower attacks) doesn't count. */
+uint64_t ImplicitEffectBits(const Item &item);
 /** @brief Applies the base's implicits and quality to a new item. */
 void ApplyBaseProperties(Item &item);
 /** @brief The implicits' tooltip lines. */

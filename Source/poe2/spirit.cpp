@@ -58,11 +58,10 @@ std::vector<HeraldTrigger> PendingHeralds;
 
 bool MeetsGemRequirements(const Player &player, PersistentSkill skill)
 {
-	const std::optional<size_t> gemIndex = SkillGemItemIndex(SkillSlot::ForPersistent(skill));
-	if (!gemIndex)
+	const SkillSlot slot = SkillSlot::ForPersistent(skill);
+	if (!SkillGemItemIndex(slot))
 		return false;
-	const ItemData &gem = AllItemsList[*gemIndex];
-	return player._pStrength >= gem.iMinStr && player._pMagic >= gem.iMinMag && player._pDexterity >= gem.iMinDex;
+	return MeetsGemAttributeNeeds(player, SkillGemAttributeNeeds(slot, SocketedSkillGemLevel(player, slot)));
 }
 
 bool CanHeraldHit(const Monster &monster)

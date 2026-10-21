@@ -141,12 +141,6 @@ int PendingScrollPages;
 int ScrollOffset;
 constexpr int ScrollStep = LineHeight * 3;
 
-void CloseConsole()
-{
-	IsConsoleVisible = false;
-	SDLC_StopTextInput(ghMainWnd);
-}
-
 int GetConsoleLinesInnerWidth()
 {
 	return OuterRect.size.width - (2 * TextPaddingX);
@@ -433,6 +427,12 @@ void ClearConsole()
 }
 
 } // namespace
+
+void CloseConsole()
+{
+	IsConsoleVisible = false;
+	SDLC_StopTextInput(ghMainWnd);
+}
 
 bool IsConsoleOpen()
 {

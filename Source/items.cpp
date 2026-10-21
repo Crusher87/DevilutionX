@@ -100,6 +100,7 @@
 #include "poe2/spirit_uses.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
@@ -1704,6 +1705,9 @@ _item_indexes GetItemIndexForDroppableItem(bool considerDropRate, tl::function_r
 		// Skill gems replaced Diablo's spell books, so no book ever drops or sells.
 		if (gbIsPoe2 && item.itype == ItemType::Misc && item.iMiscId == IMISC_BOOK)
 			continue;
+		// Hellfire's thrown trap runes share their names with POE2's socket runes, so they don't drop or sell (Curtis 2026-10-21).
+		if (gbIsPoe2 && item.iMiscId > IMISC_RUNEFIRST && item.iMiscId < IMISC_RUNELAST)
+			continue;
 		if (!isItemOkay(item))
 			continue;
 		unsigned weight = considerDropRate ? item.dropRate : 1;
@@ -2176,6 +2180,8 @@ void PrintItemMisc(const Item &item)
 	if (const SupportGem gem = SupportGemForItem(item); gem != SupportGem::None) {
 		AddItemInfoBoxString(SupportGemDescription(gem, SupportGemItemTier(item)));
 		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
+		if (IsLineageSupport(gem))
+			AddItemInfoBoxString(_("Lineage support: a rare find that can't be cut"));
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
 		return;
 	}
@@ -2320,9 +2326,16 @@ void PrintItemMisc(const Item &item)
 void PrintItemInfo(const Item &item)
 {
 	PrintItemMisc(item);
-	uint8_t str = item._iMinStr;
-	uint8_t dex = item._iMinDex;
-	uint8_t mag = item._iMinMag;
+	int str = item._iMinStr;
+	int dex = item._iMinDex;
+	int mag = item._iMinMag;
+	// A skill gem's needs grow with its level, like POE2's; worked out here so gems from older saves show it too.
+	if (gbIsPoe2 && IsSkillGem(item)) {
+		const GemAttributeNeeds needs = SkillGemAttributeNeeds(SkillForGem(item), SkillGemItemLevel(item));
+		str = needs.strength;
+		dex = needs.dexterity;
+		mag = needs.magic;
+	}
 	CurrentInfoLineStyle = InfoLineStyle::Requirement;
 	if (str != 0 || mag != 0 || dex != 0) {
 		std::string text = std::string(_("Required:"));
@@ -5239,7 +5252,11 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 		if ((monster.data().treasure & T_NODROP) != 0)
 			return;
 		onlygood = false;
-		idx = RndItemForMonsterLevel(static_cast<int8_t>(monster.level(sgGameInitInfo.nDifficulty)));
+		// POE2 Mashup (Curtis 2026-10-21): Scrolls of Identify drop in the dungeon, from about one kill in 30.
+		if (gbIsPoe2 && GenerateRnd(100) < 3)
+			idx = IDI_IDENTIFY;
+		else
+			idx = RndItemForMonsterLevel(static_cast<int8_t>(monster.level(sgGameInitInfo.nDifficulty)));
 	}
 
 	if (idx == IDI_NONE)
@@ -6406,6 +6423,42 @@ void PrintItemImplicits(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), PrintItemPower(IPL_FASTRECOVER, implicitView).str()));
 }
 
+namespace {
+
+/** @brief POE2 Mashup: a weapon's kind and how many hands it takes, like POE2's "Two Hand Axe" line (Curtis 2026-10-21). */
+void PrintWeaponClass(const Item &item)
+{
+	if (!gbIsPoe2 || item._iClass != ICLASS_WEAPON)
+		return;
+	const bool twoHanded = item._iLoc == ILOC_TWOHAND;
+	std::string_view kind;
+	switch (item._itype) {
+	case ItemType::Sword:
+		kind = AllItemsList[item.IDidx].iItemId == UITYPE_DAGGER ? _("Dagger") : _("Sword");
+		break;
+	case ItemType::Axe:
+		kind = _("Axe");
+		break;
+	case ItemType::Mace:
+		kind = _("Mace");
+		break;
+	case ItemType::Bow:
+		kind = _("Bow");
+		break;
+	case ItemType::Staff:
+		kind = _("Staff");
+		break;
+	default:
+		return;
+	}
+	const InfoLineStyle style = CurrentInfoLineStyle;
+	CurrentInfoLineStyle = InfoLineStyle::Property;
+	AddItemInfoBoxString(twoHanded ? FormatRuntime(_("Two-Handed {:s}"), kind) : FormatRuntime(_("One-Handed {:s}"), kind));
+	CurrentInfoLineStyle = style;
+}
+
+} // namespace
+
 void PrintItemDetails(const Item &item)
 {
 	if (HeadlessMode)
@@ -6415,6 +6468,7 @@ void PrintItemDetails(const Item &item)
 	if (item._iMagical == ITEM_QUALITY_RARE)
 		AddItemInfoBoxString(std::string_view(item._iName));
 	CurrentInfoLineStyle = InfoLineStyle::Property;
+	PrintWeaponClass(item);
 	if (item._iClass == ICLASS_WEAPON) {
 		// POE2 Mashup: the damage shown is the weapon's whole hit, with its increased physical and added elemental damage.
 		int minDamage = item._iMinDam;
@@ -6593,12 +6647,8 @@ void PrintItemComparison(const Item &item)
 	if (worn == nullptr || worn == &item)
 		return;
 	// Comparing only while Shift is held, like POE2's.
-	if ((SDL_GetModState() & SDL_KMOD_SHIFT) == 0) {
-		CurrentInfoLineStyle = InfoLineStyle::Note;
-		AddInfoBoxString(_("Hold Shift to compare"), true);
-		CurrentInfoLineStyle = InfoLineStyle::Default;
+	if ((SDL_GetModState() & SDL_KMOD_SHIFT) == 0)
 		return;
-	}
 	// A ring is compared with both rings worn, each in its own box, like POE2's.
 	if (worn == &player.InvBody[INVLOC_RING_LEFT]) {
 		if (&item == &player.InvBody[INVLOC_RING_RIGHT])
@@ -6714,6 +6764,7 @@ void PrintItemDur(const Item &item)
 		return;
 
 	CurrentInfoLineStyle = InfoLineStyle::Property;
+	PrintWeaponClass(item);
 	if (item._iClass == ICLASS_WEAPON) {
 		if (item._iMinDam == item._iMaxDam) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)

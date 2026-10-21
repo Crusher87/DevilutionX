@@ -71,6 +71,37 @@ bool HasPower(const Item &item, item_effect_type power)
 	return item._iPrePower == power || item._iSufPower == power;
 }
 
+/** @brief Whether an affix power repeats the special effect the base item already has, its implicit. */
+bool RepeatsBaseEffect(const Item &item, item_effect_type power)
+{
+	const ItemSpecialEffect base = AllItemsList[item.IDidx].iFlags;
+	switch (power) {
+	case IPL_FASTATTACK:
+		return HasAnyOf(base, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack | ItemSpecialEffect::FasterAttack | ItemSpecialEffect::FastestAttack);
+	case IPL_FASTRECOVER:
+		return HasAnyOf(base, ItemSpecialEffect::FastHitRecovery | ItemSpecialEffect::FasterHitRecovery | ItemSpecialEffect::FastestHitRecovery);
+	case IPL_FASTBLOCK:
+		return HasAnyOf(base, ItemSpecialEffect::FastBlock);
+	case IPL_KNOCKBACK:
+		return HasAnyOf(base, ItemSpecialEffect::Knockback);
+	case IPL_STEALLIFE:
+	case IPL_RNDSTEALLIFE:
+		return HasAnyOf(base, ItemSpecialEffect::RandomStealLife | ItemSpecialEffect::StealLife3 | ItemSpecialEffect::StealLife5);
+	case IPL_STEALMANA:
+		return HasAnyOf(base, ItemSpecialEffect::StealMana3 | ItemSpecialEffect::StealMana5);
+	default:
+		return false;
+	}
+}
+
+/** @brief Whether any affix on the item repeats its base's implicit (Curtis 2026-10-21: currency never adds a duplicate). */
+bool AffixRepeatsBase(const Item &item)
+{
+	if (item._iMagical == ITEM_QUALITY_RARE)
+		return std::any_of(item._iRarePowers.begin(), item._iRarePowers.end(), [&item](item_effect_type power) { return RepeatsBaseEffect(item, power); });
+	return RepeatsBaseEffect(item, item._iPrePower) || RepeatsBaseEffect(item, item._iSufPower);
+}
+
 int ModAffixCount(const Item &item)
 {
 	return static_cast<int>(std::count_if(item._iPoe2Mods.begin(), item._iPoe2Mods.end(), [](const Poe2ItemMod &mod) { return mod.family != 0; }));
@@ -233,6 +264,8 @@ bool AddRandomMod(const Item &item, Poe2Craft &craft, uint32_t seed, ModRollFilt
 		filter.side = prefixesFull ? ModSide::Suffix : ModSide::Prefix;
 	if ((prefixesFull && suffixesFull) || (filter.side == ModSide::Prefix && prefixesFull) || (filter.side == ModSide::Suffix && suffixesFull))
 		return false;
+	// Curtis 2026-10-21: currency never adds a modifier that repeats the item's implicit.
+	filter.avoidEffects |= ImplicitEffectBits(item);
 	std::vector<Poe2ItemMod> existing = CraftModList(craft);
 	std::optional<Poe2ItemMod> mod = RollAddedMod(*ItemModSlot(item), ItemModBaseTags(item), GetPoe2ItemLevel(item), existing, perSide, seed, filter);
 	if (!mod && filter.minModLevel > 0) {
@@ -1302,9 +1335,17 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 
 	const int level = ItemLevel(player, item);
 
+	// An affix that repeats the base's implicit is never added; one the item already had stays.
+	const bool alreadyRepeats = AffixRepeatsBase(item);
+	const std::function<bool(const Item &)> acceptNoRepeat = [&accept, alreadyRepeats](const Item &candidate) {
+		if (accept && !accept(candidate))
+			return false;
+		return alreadyRepeats || candidate._iPoe2Mods[0].family != 0 || !AffixRepeatsBase(candidate);
+	};
+
 	Item rolled;
 	const uint32_t firstSeed = (static_cast<uint32_t>(item._iSeed) * 31U) + static_cast<uint32_t>(orb);
-	if (!RollItemOfQuality(player, rolled, item.IDidx, wanted, level, firstSeed, static_cast<uint32_t>(item._iSeed), accept, KeptItemLevelBits(item))) {
+	if (!RollItemOfQuality(player, rolled, item.IDidx, wanted, level, firstSeed, static_cast<uint32_t>(item._iSeed), acceptNoRepeat, KeptItemLevelBits(item))) {
 		EventPlrMsg(_("The orb fizzles. This item can't roll that."), UiFlags::ColorRed);
 		return false;
 	}

@@ -599,6 +599,9 @@ int RecordQuestPassivePoints(Player &player)
 		return 0;
 	const int before = QuestPassivePoints(player);
 	for (size_t quest = 0; quest < MAXQUESTS && quest < 32; quest++) {
+		// Hellfire's joke quest gives its item only (Curtis 2026-10-19, Levels 1 to 100 answer 34).
+		if (quest == Q_JERSEY)
+			continue;
 		if (Quests[quest]._qactive == QUEST_DONE)
 			player.poe2.questsRewarded |= 1U << quest;
 	}

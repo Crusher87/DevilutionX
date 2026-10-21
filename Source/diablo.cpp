@@ -104,6 +104,7 @@
 #include "poe2/autosave.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/hardcore.hpp"
@@ -114,6 +115,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_swap.hpp"
+#include "portal.h"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -281,6 +283,11 @@ void LeftMouseCmd(bool bShift)
 
 	// POE2 Mashup: with WASD movement, clicking the ground doesn't walk and attacks don't chase.
 	const bool wasdMovement = IsWasdMovementEnabled();
+	// POE2 Mashup: a town portal takes the hero through only when it's clicked.
+	if (trigflag && pcursitem == -1 && pcursmonst == -1)
+		ChoosePortalAt(cursPosition);
+	else
+		ForgetChosenPortal();
 
 	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
 	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
@@ -370,20 +377,6 @@ void LeftMouseCmd(bool bShift)
 	}
 }
 
-/** @brief POE2 Mashup: walks to the cursor, picks up and opens things, but never attacks. */
-void InteractCmd()
-{
-	if (pcursitem != -1 && pcurs == CURSOR_HAND) {
-		NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
-	} else if (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled()) {
-		LastPlayerAction = PlayerActionType::OperateObject;
-		NetSendCmdLoc(MyPlayerId, true, pcurs == CURSOR_DISARM ? CMD_DISARMXY : CMD_OPOBJXY, cursPosition);
-	} else if (!IsWasdMovementEnabled()) {
-		LastPlayerAction = PlayerActionType::Walk;
-		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
-	}
-}
-
 /**
  * @brief POE2 Mashup: uses what the skill tray puts on a mouse button in the dungeon.
  * @return false if the button does its usual job instead.
@@ -401,17 +394,16 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 	        || (pcursmonst != -1 && CanTalkToMonst(Monsters[pcursmonst]))))
 		return false;
 	switch (binding.action) {
-	case TrayAction::MoveAndAttack:
-		LeftMouseCmd(isShiftHeld);
-		return true;
-	case TrayAction::Interact:
-		InteractCmd();
-		return true;
-	case TrayAction::ReadiedSpell:
-		CheckPlrSpell(isShiftHeld);
+	case TrayAction::WeaponAttack:
+		// With click-to-move, the left button's weapon attack also walks where it's clicked, like Diablo's left click.
+		if (slot == TraySlot::LeftMouse && !IsWasdMovementEnabled()) {
+			if (ReadyWeaponSet(*MyPlayer, binding.socket))
+				LeftMouseCmd(isShiftHeld);
+			return true;
+		}
+		PressTraySlot(slot);
 		return true;
 	case TrayAction::Gem:
-	case TrayAction::WeaponAttack:
 		PressTraySlot(slot);
 		return true;
 	default:
@@ -1785,8 +1777,10 @@ void GameLogic()
 	RedrawViewport();
 	pfile_update(false);
 	// POE2 Mashup: a finished quest gives passive points once per hero, like POE2's quest rewards.
+	const uint32_t rewardedBefore = MyPlayer != nullptr ? MyPlayer->poe2.questsRewarded : 0;
 	if (const int gained = MyPlayer != nullptr ? RecordQuestPassivePoints(*MyPlayer) : 0; gained > 0) {
 		EventPlrMsg(FormatRuntime(_("Quest complete: +{:d} Passive Skill Points"), gained), UiFlags::ColorGold);
+		ShowQuestPointsNotice(MyPlayer->poe2.questsRewarded & ~rewardedBefore, gained);
 		RequestAutosave();
 	}
 	ProcessAutosave();

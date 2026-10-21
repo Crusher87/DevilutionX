@@ -44,6 +44,16 @@ enum class Element : uint8_t {
 	Blood,
 };
 
+/** @brief How a weapon moves through the air, to match the hero's attack animation. */
+enum class SwingStyle : uint8_t {
+	/** @brief Swept level across the front. */
+	Slash,
+	/** @brief Swept back the other way: a second, backhand cut. */
+	Backhand,
+	/** @brief Brought down from overhead onto the target, as the hero swings an axe or a mace. */
+	Chop,
+};
+
 /** @brief The element a skill's damage looks like; spells without an element look arcane. */
 Element ElementOf(DamageType type, bool spell);
 
@@ -78,6 +88,16 @@ void Arc(Point from, Point to, Element element);
 void SkyStrike(Point tile, Element element);
 /** @brief A crescent smear swept through the air by a weapon, from a tile towards another; it glows only for an elemental weapon. Heavy is an axe, mace or staff: a shorter, thicker arc. */
 void Swing(Point from, Point toward, Element element, bool wide, bool heavy = false);
+/** @brief A weapon's smear in the given style. A chop ends in a thud of dust where it lands. */
+void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool heavy);
+/**
+ * @brief Cleave: a long, wide slice that carries on through the target and both sides of it, throwing sparks along
+ * its edge. With @p chop the blade first comes down from overhead, as an axe does, and the slice bursts out sideways
+ * from where it lands.
+ */
+void Cleave(Point from, Point toward, Element element, bool chop);
+/** @brief Whirlwind: blades spinning round a tile for a few turns, in a funnel of wind and kicked-up dust. */
+void Whirl(Point tile, int radiusTiles, Element element);
 /** @brief The hero levelling up: a pillar of hellfire, a pentagram burning into the floor, shockwaves and a fountain of embers. */
 void LevelUp(Point tile);
 /** @brief One of each effect around a tile, to see them all (the console's vfx()). */
@@ -108,6 +128,17 @@ bool WantsFloorCopy();
 void CopyFloor(const Surface &world);
 /** @brief The copy of the floor, to zoom it the same way as the world; empty when there's none. */
 Surface FloorCopy();
+/**
+ * @brief Whether a hero on this tile stands on or in front of a town portal, so they're drawn over it (Curtis
+ * 2026-10-21: arriving in town, the hero was drawn under the portal).
+ */
+bool HeroInFrontOfPortal(Point tile);
+/** @brief Starts this frame's record of the heroes drawn over the portals, before the world's sprites are drawn. */
+void BeginFront(const Surface &world);
+/** @brief Records the shape of a hero's sprite as it's drawn into the world, to draw the hero again over the portal. */
+void MarkFront(const Surface &out, Point position, ClxSprite sprite);
+/** @brief The record of the heroes over the portals, to zoom it with the world; empty when there's none. */
+Surface FrontMask();
 /** @brief Moves every effect on by the given time. */
 void Advance(float ms);
 

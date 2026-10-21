@@ -16,8 +16,11 @@ struct Item;
 struct Monster;
 struct Player;
 
-/** @brief Belt slots 1 to 5 hold flasks. */
+/** @brief Charges are kept for belt slots 1 to 5, where flasks went before there were two flask slots. */
 constexpr size_t NumFlasks = 5;
+/** @brief Belt slots 1 and 2 hold flasks, any mix of life and mana, like POE2's two; slots 3 to 8 hold charms (Curtis 2026-10-21). */
+constexpr size_t FlaskBeltSlots = 2;
+static_assert(FlaskBeltSlots <= NumFlasks);
 /** @brief Flasks saved before the fifth slot. */
 constexpr size_t OldNumFlasks = 4;
 /** @brief A full flask has 6 uses, like POE2's 60-charge flasks. */
@@ -94,6 +97,8 @@ bool IsFlaskPotion(const Item &item);
 
 /** @brief Whether the belt slot holds a flask (POE2 mode only). */
 bool IsFlaskSlot(const Player &player, size_t beltSlot);
+/** @brief Whether a belt slot takes the item: flasks in the first two slots, charms in the rest. */
+bool BeltSlotTakes(const Item &item, size_t beltSlot);
 
 bool CanUseFlask(const Player &player, size_t beltSlot);
 

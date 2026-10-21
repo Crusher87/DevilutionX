@@ -46,18 +46,18 @@ public:
 	}
 };
 
-TEST_F(Poe2FlasksTest, PotionsInTheFirstFiveSlotsAreFlasks)
+TEST_F(Poe2FlasksTest, PotionsInTheFirstTwoSlotsAreFlasks)
 {
 	Player &player = *MyPlayer;
 	InitializeItem(player.SpdList[0], IDI_HEAL);
-	InitializeItem(player.SpdList[4], IDI_HEAL);
-	InitializeItem(player.SpdList[5], IDI_HEAL);
 	InitializeItem(player.SpdList[1], IDI_BOOK1);
+	InitializeItem(player.SpdList[4], IDI_HEAL);
 	EXPECT_TRUE(IsFlaskSlot(player, 0));
-	EXPECT_TRUE(IsFlaskSlot(player, 4));
 	EXPECT_FALSE(IsFlaskSlot(player, 1)) << "only potions are flasks";
 	EXPECT_FALSE(IsFlaskSlot(player, 2)) << "empty slot";
-	EXPECT_FALSE(IsFlaskSlot(player, 5)) << "slots 6-8 keep normal potions";
+	EXPECT_FALSE(IsFlaskSlot(player, 4)) << "slots 3-8 are for charms";
+	EXPECT_TRUE(BeltSlotTakes(player.SpdList[0], 1));
+	EXPECT_FALSE(BeltSlotTakes(player.SpdList[0], 2));
 
 	gbIsPoe2 = false;
 	EXPECT_FALSE(IsFlaskSlot(player, 0));
@@ -286,6 +286,18 @@ TEST_F(Poe2FlasksTest, OxGivesArmourAndSpringsRefills)
 	for (int tick = 0; tick < SpringsChargeTicks * 2; tick++)
 		ProcessFlaskRecovery(player);
 	EXPECT_EQ(player.poe2.flaskCharges[1], 2);
+}
+
+TEST_F(Poe2FlasksTest, FlasksPastTheTwoFlaskSlotsMoveForward)
+{
+	Player &player = *MyPlayer;
+	InitializeItem(player.SpdList[0], IDI_HEAL);
+	InitializeItem(player.SpdList[3], IDI_MANA);
+	player.poe2.flaskCharges[3] = 40;
+	ProcessFlaskRecovery(player);
+	EXPECT_TRUE(player.SpdList[3].isEmpty());
+	ASSERT_TRUE(IsFlaskSlot(player, 1)) << "an older save's flask in slot 4 moves to the free flask slot";
+	EXPECT_EQ(player.poe2.flaskCharges[1], 40) << "with its charges";
 }
 
 } // namespace

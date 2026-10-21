@@ -329,15 +329,12 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 	}
 	if (hover.kind == Hit::Kind::Skill && hover.slot == slot)
 		DrawSmallSpellIconBorder(out, iconBottomLeft);
-	const std::string key = SkillSlotKeyName(slot);
-	if (!key.empty() && key.length() <= 3)
-		DrawString(out, key, { icon.position + Displacement { 2, 1 }, { icon.size.width - 4, 12 } }, { .flags = UiFlags::ColorWhite | UiFlags::Outlined });
+	// No button name on the icon and no words on an empty row: the tray shows the buttons, and the clutter hid the
+	// skills (Curtis 2026-10-21).
+	if (skill.isEmpty())
+		return;
 
 	const Rectangle title { row.position + Displacement { 48, 2 }, { row.size.width - 52, 14 } };
-	if (skill.isEmpty()) {
-		DrawString(out, _("Empty: drop a skill gem here"), title, { .flags = UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
-		return;
-	}
 	const SkillUsability usability = GetSkillUsability(player, skill);
 	const UiFlags nameColor = IsAnyOf(usability, SkillUsability::Requirements, SkillUsability::Spirit) ? UiFlags::ColorRed
 	    : skill.kind == SkillKind::Spell                                                               ? UiFlags::ColorBlue

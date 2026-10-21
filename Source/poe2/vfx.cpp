@@ -39,6 +39,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/weather.hpp"
+#include "quests.h"
 #include "towners.h"
 #include "utils/is_of.hpp"
 #include "utils/str_cat.hpp"
@@ -125,6 +126,12 @@ Vec TileCentre(Point tile)
 	return { static_cast<float>((tile.x - tile.y) * 32), static_cast<float>((tile.x + tile.y) * 16) };
 }
 
+/** @brief A point on a ground circle around centre. */
+Vec OnGround(Vec centre, float radius, float angle)
+{
+	return centre + Vec { std::cos(angle) * radius, std::sin(angle) * radius * 0.5F };
+}
+
 enum class Shape : uint8_t {
 	/** @brief A soft round glow. */
 	Dot,
@@ -175,6 +182,8 @@ struct Ring {
 	uint32_t seed = 1;
 	/** @brief Grows fast then slows (true), or evenly. */
 	bool easeOut = true;
+	/** @brief Fades as it spreads, gone by its full size, instead of only near the end of its life. */
+	bool fadeOut = false;
 };
 
 struct Bolt {
@@ -200,16 +209,32 @@ struct SigilFx {
 	bool floor = true;
 };
 
+/** @brief How a sweep's smear moves: level across the front, down from overhead, or round and round. */
+enum class SweepKind : uint8_t {
+	Flat,
+	Chop,
+	Spin,
+};
+
 struct Sweep {
 	Vec pos;
 	float facing;
 	float span;
 	float radius;
+	/** @brief Negative while it waits to start. */
 	float age = 0;
 	float life;
 	Colours colours;
 	Element element;
 	bool heavy;
+	SweepKind kind = SweepKind::Flat;
+	/** @brief A flat sweep going the other way, left to right. */
+	bool reverse = false;
+	/** @brief How many times a spin goes round. */
+	float turns = 0;
+	/** @brief The smear's thickness, as a share of its radius; 0 for the weapon's own. */
+	float thickness = 0;
+	float alpha = 1;
 };
 
 struct Crack {
@@ -386,6 +411,8 @@ enum class Ambient : uint8_t {
 	Lava,
 	/** @brief A pool: glints and ripples. */
 	Water,
+	/** @brief The Poisoned Water Supply's foul pool: duller glints and ripples in its own sickly yellow-green. */
+	FoulWater,
 	/** @brief A charging monster's feet: dust and speed streaks. */
 	Charge,
 	/** @brief A burning monster: flames licking up its body. */
@@ -471,13 +498,15 @@ constexpr float PortalOpenMs = 1050;
 constexpr float PortalRaysMs = 700;
 constexpr float PortalCloseMs = 360;
 constexpr float PortalArriveMs = 800;
-constexpr float PortalBeatMs = 1900;
+/** @brief Ms between the portal's heartbeats: now and then, not a steady pulse (Curtis 2026-10-21). */
+constexpr float PortalBeatMs = 6500;
 /** @brief The portal's oval: how far its centre stands above the tile, and its half width and height. */
-constexpr float PortalLift = 62;
-constexpr float PortalRx = 34;
-constexpr float PortalRy = 64;
+/** Sized close to the classic portal beside it (Curtis 2026-10-21: it was a little big). */
+constexpr float PortalLift = 52;
+constexpr float PortalRx = 28;
+constexpr float PortalRy = 52;
 /** @brief The seal on the floor: its radius, and the runes written round it. */
-constexpr float PortalSealRadius = TileRadius * 2.1F;
+constexpr float PortalSealRadius = TileRadius * 1.8F;
 constexpr int PortalRunes = 12;
 
 /**
@@ -507,6 +536,7 @@ struct PortalFx {
 	std::array<uint8_t, PortalRunes> runes {};
 	/** @brief The seal under it: 0 the Horadric symbol, 1 the Horadrim circle. */
 	uint8_t style = 0;
+	Point tile;
 };
 
 std::unordered_map<const Missile *, PortalFx> Portals;
@@ -1729,11 +1759,15 @@ void ScanMonsters(const View &view)
 /** @brief Lava (1) or water (2) for each palette-animated colour; 0 for neither. */
 std::array<uint8_t, 32> FluidColours(int last)
 {
+	// The Poisoned Water Supply holds no lava, but its foul water is a murky yellow (red just over green, no blue) that
+	// the test below takes for lava, so it got a molten glow and embers (Curtis 2026-10-21: "Tainted water has odd
+	// colouring").
+	const bool noLava = IsPoisonedWaterLevel();
 	std::array<uint8_t, 32> kinds {};
 	for (int i = 1; i <= last; i++) {
 		const SDL_Color &c = logical_palette[i];
 		if (c.r >= c.b + 40 && c.r >= c.g)
-			kinds[i] = 1;
+			kinds[i] = noLava ? 2 : 1;
 		else if (c.b > c.r || c.g > c.r)
 			kinds[i] = 2;
 	}
@@ -1756,6 +1790,7 @@ void ScanFluids(const Surface &world, const View &view)
 		return;
 	}
 	const std::array<uint8_t, 32> kinds = FluidColours(last);
+	const bool foulWater = IsPoisonedWaterFoul();
 	// The samples and patches are fixed to the dungeon, not the screen, so a patch's glow doesn't flicker as the camera
 	// moves over it (Curtis 2026-10-18: "it flashes weird on cells").
 	constexpr int Step = 8;
@@ -1839,6 +1874,9 @@ void ScanFluids(const Surface &world, const View &view)
 				glow.alpha = 0.3F * share * (0.35F + light) * pulse;
 				FrameGlows.push_back(glow);
 				Emitters.push_back({ pos, share * EmitterRate, Ambient::Lava, average, spread });
+			} else if (foulWater) {
+				// The foul pool keeps its own colour, leaning a little green, with no clean blue-white sheen over it.
+				Emitters.push_back({ pos, share * EmitterRate, Ambient::FoulWater, Mix(average, { 170, 200, 70 }, 0.35F), spread });
 			} else {
 				Emitters.push_back({ pos, share * EmitterRate, Ambient::Water, Mix(average, { 235, 245, 255 }, 0.55F), spread });
 			}
@@ -1936,8 +1974,11 @@ void EmitAmbient(float ms)
 			}
 			break;
 		}
-		case Ambient::Water: {
+		case Ambient::Water:
+		case Ambient::FoulWater: {
 			const float share = emitter.size;
+			// Foul water glints dull and sickly, not clean water's bright blue-white.
+			const bool foul = emitter.kind == Ambient::FoulWater;
 			for (int i = Occurrences(0.6F * share, ms); i > 0; i--) {
 				// Light glinting off the surface.
 				Particle p;
@@ -1945,9 +1986,9 @@ void EmitAmbient(float ms)
 				p.life = Random(180, 420);
 				p.size0 = Random(1.F, 1.6F);
 				p.size1 = 0.3F;
-				p.c0 = { 235, 250, 255 };
+				p.c0 = foul ? Rgb { 215, 225, 130 } : Rgb { 235, 250, 255 };
 				p.c1 = emitter.colour;
-				p.alpha = 0.75F;
+				p.alpha = foul ? 0.45F : 0.75F;
 				AddParticle(p);
 			}
 			for (int i = Occurrences(0.06F * share, ms); i > 0; i--)
@@ -2151,11 +2192,19 @@ SDL_Surface *FloorSurface = nullptr;
 /** @brief Whether FloorSurface holds the floor of the frame about to be shown. */
 bool FloorFresh = false;
 
+/** @brief Solid where a hero standing in front of a portal was drawn this frame, the size of the world. */
+SDL_Surface *FrontSurface = nullptr;
+/** @brief Where FrontSurface starts in the surface the world is drawn on. */
+Point FrontOrigin;
+bool FrontFresh = false;
+bool FrontUsed = false;
+
 } // namespace
 
 bool WantsFloorCopy()
 {
-	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !IceSpikes.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty());
+	// The portals too: without a copy their seals went over rocks and walls, except while a ripple happened to need one.
+	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !IceSpikes.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty() || !Portals.empty() || !ClosingPortals.empty());
 }
 
 void CopyFloor(const Surface &world)
@@ -2176,6 +2225,66 @@ Surface FloorCopy()
 {
 	return FloorSurface != nullptr ? Surface(FloorSurface) : Surface();
 }
+
+bool HeroInFrontOfPortal(Point tile)
+{
+	if (!FrontFresh)
+		return false;
+	// In front: nearer the camera than the portal's own tile (or on it), and close enough to overlap it on screen.
+	const auto inFront = [&](const PortalFx &portal) {
+		return tile.WalkingDistance(portal.tile) <= 2 && tile.x + tile.y >= portal.tile.x + portal.tile.y;
+	};
+	for (const auto &[missile, portal] : Portals) {
+		if (inFront(portal))
+			return true;
+	}
+	return std::any_of(ClosingPortals.begin(), ClosingPortals.end(), inFront);
+}
+
+void BeginFront(const Surface &world)
+{
+	FrontFresh = false;
+	FrontUsed = false;
+	if (!Enabled() || (Portals.empty() && ClosingPortals.empty()))
+		return;
+	if (FrontSurface == nullptr || FrontSurface->w != world.w() || FrontSurface->h != world.h()) {
+		if (FrontSurface != nullptr)
+			SDL_FreeSurface(FrontSurface);
+		FrontSurface = SDL_CreateRGBSurfaceWithFormat(0, world.w(), world.h(), 8, SDL_PIXELFORMAT_INDEX8);
+		if (FrontSurface == nullptr)
+			return;
+	}
+	for (int y = 0; y < FrontSurface->h; y++)
+		std::memset(static_cast<uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(y) * FrontSurface->pitch, 0, FrontSurface->w);
+	FrontOrigin = { world.region.x, world.region.y };
+	FrontFresh = true;
+}
+
+void MarkFront(const Surface &out, Point position, ClxSprite sprite)
+{
+	if (!FrontFresh)
+		return;
+	SDL_Rect region = out.region;
+	region.x -= FrontOrigin.x;
+	region.y -= FrontOrigin.y;
+	if (region.x < 0 || region.y < 0 || region.x >= FrontSurface->w || region.y >= FrontSurface->h)
+		return;
+	region.w = std::min(region.w, FrontSurface->w - region.x);
+	region.h = std::min(region.h, FrontSurface->h - region.y);
+	// Every pixel of the sprite marks solid, its black ones too.
+	static const std::array<uint8_t, 256> Solid = [] {
+		std::array<uint8_t, 256> table;
+		table.fill(255);
+		return table;
+	}();
+	ClxDrawTRN(Surface(FrontSurface, region), position, sprite, Solid.data());
+	FrontUsed = true;
+}
+
+Surface FrontMask()
+{
+	return FrontFresh && FrontUsed ? Surface(FrontSurface) : Surface();
+}
 #else
 bool WantsFloorCopy()
 {
@@ -2187,6 +2296,24 @@ void CopyFloor(const Surface &)
 }
 
 Surface FloorCopy()
+{
+	return {};
+}
+
+bool HeroInFrontOfPortal(Point)
+{
+	return false;
+}
+
+void BeginFront(const Surface &)
+{
+}
+
+void MarkFront(const Surface &, Point, ClxSprite)
+{
+}
+
+Surface FrontMask()
 {
 	return {};
 }
@@ -2470,6 +2597,170 @@ void Swing(Point from, Point toward, Element element, bool wide, bool heavy)
 	Sweeps.push_back(sweep);
 }
 
+namespace {
+
+/** @brief The level angle from one tile towards another, as a sweep's facing. */
+float FacingBetween(Point from, Point toward)
+{
+	const Vec d = TileCentre(toward) - TileCentre(from);
+	return std::atan2(d.y * 2, d.x);
+}
+
+/** @brief A blade brought down from overhead onto the tile in front, from just behind the head to the floor. */
+void AddChop(Point from, Point toward, Element element, bool heavy, float radiusScale)
+{
+	Sweep sweep;
+	sweep.kind = SweepKind::Chop;
+	sweep.facing = FacingBetween(from, toward);
+	// Pivoting a little in front of the hero, so the blade comes down on the tile in front.
+	sweep.pos = TileCentre(from) + Vec { std::cos(sweep.facing) * 16, std::sin(sweep.facing) * 8 - 44 };
+	sweep.span = Pi * 1.15F;
+	sweep.radius = TileRadius * 1.3F * radiusScale;
+	sweep.life = heavy ? 250 : 200;
+	sweep.colours = ColoursOf(element);
+	sweep.element = element;
+	sweep.heavy = heavy;
+	Sweeps.push_back(sweep);
+}
+
+/** @brief The thud of a heavy blow landing on the floor: a dull ring, grit and a puff of dust. */
+void Thud(Vec pos, float size)
+{
+	AddRing(pos, 0, TileRadius * 0.9F * size, 260, 6 * size, { 120, 100, 80 }, 0.45F, false, true, true);
+	Spray(pos, Scaled(6 * size), 50, 150, 450, 800, Shape::Chunk, { 70, 58, 45 }, { 40, 34, 28 }, 2.5F, 2, 90, 200, 700, 0.5F, 1);
+	Spray(pos, Scaled(6 * size), 15, 60, 600, 1000, Shape::Puff, { 115, 100, 80 }, { 70, 60, 50 }, 7 * size, 18 * size, 10, 30, 0, 0.8F, 0.3F);
+}
+
+} // namespace
+
+void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool heavy)
+{
+	TelemetryEffect("vfx", StrCat("SwingAs ", magic_enum::enum_name(style), " ", magic_enum::enum_name(element)), from.x, from.y);
+	if (!Enabled())
+		return;
+	switch (style) {
+	case SwingStyle::Slash:
+	case SwingStyle::Backhand: {
+		Sweep sweep;
+		sweep.pos = TileCentre(from) + Vec { 0, -40 };
+		sweep.facing = FacingBetween(from, toward);
+		sweep.span = Pi * 0.6F * (heavy ? 0.8F : 1.F);
+		sweep.radius = TileRadius * 1.3F;
+		sweep.life = heavy ? 240 : 190;
+		sweep.colours = ColoursOf(element);
+		sweep.element = element;
+		sweep.heavy = heavy;
+		// The backhand comes back the other way, a little higher, so the two cuts cross.
+		if (style == SwingStyle::Backhand) {
+			sweep.reverse = true;
+			sweep.pos.y -= 8;
+		}
+		Sweeps.push_back(sweep);
+		break;
+	}
+	case SwingStyle::Chop:
+		AddChop(from, toward, element, heavy, 1.F);
+		Thud(TileCentre(toward), heavy ? 0.8F : 0.6F);
+		break;
+	}
+}
+
+void Cleave(Point from, Point toward, Element element, bool chop)
+{
+	TelemetryEffect("vfx", StrCat("Cleave ", magic_enum::enum_name(element)), from.x, from.y);
+	if (!Enabled())
+		return;
+	const Vec pos = TileCentre(from);
+	const float facing = FacingBetween(from, toward);
+	const Colours c = ColoursOf(element);
+	const bool elemental = element != Element::Physical;
+	const Rgb spark = elemental ? c.core : Rgb { 255, 240, 200 };
+	const Rgb sparkEdge = elemental ? c.mid : Rgb { 255, 170, 80 };
+	float delay = 0;
+	if (chop) {
+		// The axe comes down on the target first; the slice bursts out of the blow to both sides.
+		AddChop(from, toward, element, true, 1.1F);
+		Thud(TileCentre(toward), 1.F);
+		delay = 70;
+	}
+	// One long, heavy crescent reaching well past the enemies on either side, and a fainter one trailing inside it.
+	for (int layer = 0; layer < 2; layer++) {
+		Sweep sweep;
+		sweep.pos = pos + Vec { 0, layer == 0 ? -36.F : -30.F };
+		sweep.facing = facing;
+		sweep.span = Pi * (layer == 0 ? 1.1F : 0.95F);
+		sweep.radius = TileRadius * (layer == 0 ? 2.F : 1.45F);
+		sweep.life = layer == 0 ? 300 : 260;
+		sweep.age = -(delay + layer * 35.F);
+		sweep.colours = c;
+		sweep.element = element;
+		sweep.heavy = true;
+		sweep.thickness = layer == 0 ? 0.34F : 0.3F;
+		sweep.alpha = layer == 0 ? 1.F : 0.5F;
+		Sweeps.push_back(sweep);
+	}
+	// Sparks thrown off the edge as it passes through each enemy, and a scuff of dust along the floor under it.
+	for (int i = 0; i < 5; i++) {
+		const float angle = facing - Pi * 0.45F + Pi * 0.9F * (static_cast<float>(i) / 4);
+		const Vec edge = OnGround(pos, TileRadius * 1.5F, angle);
+		Spray(edge + Vec { 0, -22 }, Scaled(5), 90, 240, 100, 240, Shape::Streak, spark, sparkEdge, 1.5F, 0.5F, 30, 120, 400, 1.5F, 1);
+		Spray(OnGround(pos, TileRadius * 1.2F, angle), Scaled(2), 20, 70, 500, 900, Shape::Puff, { 115, 100, 80 }, { 70, 60, 50 }, 6, 16, 5, 20, 0, 0.8F, 0.25F);
+	}
+}
+
+void Whirl(Point tile, int radiusTiles, Element element)
+{
+	TelemetryEffect("vfx", StrCat("Whirl ", magic_enum::enum_name(element)), tile.x, tile.y);
+	if (!Enabled())
+		return;
+	const Vec pos = TileCentre(tile);
+	const float r = TileRadius * (std::max(radiusTiles, 1) + 0.35F);
+	const Colours c = ColoursOf(element);
+	const float start = Random(0, 2 * Pi);
+	// The blade spinning round at waist height, with fainter echoes of it above and below.
+	for (int layer = 0; layer < 3; layer++) {
+		Sweep sweep;
+		sweep.kind = SweepKind::Spin;
+		sweep.pos = pos + Vec { 0, -30.F - 14.F * (layer - 1) };
+		sweep.facing = start + layer * 0.7F;
+		sweep.span = Pi * 1.2F;
+		sweep.radius = r * (layer == 1 ? 1.F : 0.8F);
+		sweep.turns = layer == 1 ? 2.F : 1.6F;
+		sweep.life = layer == 1 ? 620 : 540;
+		sweep.age = layer == 1 ? 0 : -40.F * layer;
+		sweep.colours = c;
+		sweep.element = element;
+		sweep.heavy = false;
+		sweep.thickness = 0.3F;
+		sweep.alpha = layer == 1 ? 1.F : 0.45F;
+		Sweeps.push_back(sweep);
+	}
+	// A funnel of wind: pale streaks whipped round and up, the same way the blade turns.
+	for (int i = Scaled(46); i > 0; i--) {
+		const float angle = Random(0, 2 * Pi);
+		const float radius = r * Random(0.35F, 1.15F);
+		Particle p;
+		p.pos = pos + Vec { std::cos(angle) * radius, std::sin(angle) * radius * 0.5F };
+		p.vel = Vec { -std::sin(angle), std::cos(angle) * 0.5F } * Random(240, 420) + Vec { -std::cos(angle), -std::sin(angle) * 0.5F } * Random(20, 60);
+		p.z = Random(4, 50);
+		p.vz = Random(40, 150);
+		p.gravity = -40;
+		p.drag = 1.4F;
+		p.life = Random(240, 520);
+		p.shape = Shape::Streak;
+		p.c0 = element != Element::Physical ? c.core : Rgb { 240, 238, 230 };
+		p.c1 = element != Element::Physical ? c.edge : Rgb { 140, 132, 120 };
+		p.size0 = 1.5F;
+		p.size1 = 0.4F;
+		p.alpha = 0.5F;
+		AddParticle(p);
+	}
+	// Dust dragged up off the floor in a ring, and grit flung out of it.
+	AddRing(pos, r * 0.3F, r * 1.35F, 600, 12, { 120, 105, 85 }, 0.4F, false, true, true);
+	Spray(pos, Scaled(16), 40, 140, 600, 1100, Shape::Puff, { 125, 110, 90 }, { 70, 60, 50 }, 10, 26, 10, 40, 0, 0.8F, 0.3F);
+	Spray(pos, Scaled(10), 140, 300, 300, 600, Shape::Chunk, { 80, 68, 52 }, { 40, 34, 28 }, 2.5F, 2, 60, 160, 600, 0.6F, 1);
+}
+
 void LevelUp(Point tile)
 {
 	TelemetryEffect("vfx", "LevelUp", tile.x, tile.y);
@@ -2566,6 +2857,7 @@ void TrackPortal(const Missile &missile, bool newLevel)
 	PortalFx &portal = it->second;
 	portal.frame = ScanFrame;
 	if (inserted) {
+		portal.tile = tile;
 		portal.pos = TileCentre(tile);
 		portal.red = missile._mitype == MissileID::RedPortal;
 		portal.seed = NextRandom() | 1;
@@ -2813,7 +3105,9 @@ void PortalBeat(const PortalFx &portal)
 {
 	const Colours c = PortalColours(portal);
 	const Vec centre = portal.pos - Vec { 0, PortalLift };
-	AddRing(portal.pos, TileRadius * 0.6F, TileRadius * 3.6F, 900, 5, c.mid, 0.6F + 0.3F * portal.pull, false, true, false, 0.015F);
+	// The ripple over the floor dims the further it runs from the portal (Curtis 2026-10-21).
+	AddRing(portal.pos, TileRadius * 0.6F, TileRadius * 3, 1100, 4, c.mid, 0.5F + 0.3F * portal.pull, false, true, false, 0.015F);
+	Rings.back().fadeOut = true;
 	AddRing(centre, PortalRx * 0.8F, PortalRx * 2.2F, 500, 0, c.mid, 0.3F, true, false);
 }
 
@@ -3041,6 +3335,9 @@ Batch Ground;
 Batch GroundDark;
 /** @brief Dark shapes standing on the floor (the portal's eye), blended on after the floor glow so they hide what lies under them. */
 Batch Standing;
+/** @brief The standing portals' own dark and glowing shapes, drawn before the rest so a hero in front can go over them. */
+Batch PortalStanding;
+Batch PortalGlowing;
 
 Vec ToScreen(Vec world)
 {
@@ -3118,12 +3415,6 @@ void SoftRing(Batch &batch, Vec centre, float radius, float width, Rgb colour, f
 	}
 }
 
-/** @brief A point on a ground circle around centre. */
-Vec OnGround(Vec centre, float radius, float angle)
-{
-	return centre + Vec { std::cos(angle) * radius, std::sin(angle) * radius * 0.5F };
-}
-
 float EaseOut(float t)
 {
 	t = std::clamp(t, 0.F, 1.F);
@@ -3136,8 +3427,8 @@ void DrawRings()
 		const float t = ring.age / ring.life;
 		const float grow = ring.easeOut ? EaseOut(t) : t;
 		const float radius = ring.r0 + (ring.r1 - ring.r0) * grow;
-		// Bright at once, then fading out over its life.
-		const float alpha = ring.alpha * (1 - t * t);
+		// Bright at once, then fading out over its life, or as it spreads.
+		const float alpha = ring.fadeOut ? ring.alpha * (1 - grow) * (1 - grow) : ring.alpha * (1 - t * t);
 		Batch &batch = ring.ground ? (ring.dark ? GroundDark : Ground) : (ring.dark ? Dark : Glowing);
 		if (ring.disc) {
 			if (ring.dark && ring.jitter > 0) {
@@ -3452,40 +3743,78 @@ void DrawIceSpikes()
 	}
 }
 
+/** @brief Where a point of a sweep lies: on a level circle for a slash or a spin, on an upright circle along the facing for a chop (angle 0 straight up, Pi/2 straight ahead). */
+Vec SweepPoint(const Sweep &sweep, float radius, float angle)
+{
+	if (sweep.kind != SweepKind::Chop)
+		return OnGround(sweep.pos, radius, angle);
+	const Vec ahead { std::cos(sweep.facing), std::sin(sweep.facing) * 0.5F };
+	return sweep.pos + ahead * (std::sin(angle) * radius) + Vec { 0, -std::cos(angle) * radius };
+}
+
 void DrawSweeps()
 {
 	for (const Sweep &sweep : Sweeps) {
+		if (sweep.age < 0)
+			continue;
 		const float t = sweep.age / sweep.life;
 		// A crescent smear left in the air by the blade: thickest in the middle of the arc, tapered to points at
 		// both ends, bright at its outer edge and fading towards the inside. It blends over the world rather than
 		// glowing, so a plain steel blade reads as a cut, not an electric arc.
-		const float head = EaseOut(std::min(t * 1.8F, 1.F));
-		const float tailLag = sweep.heavy ? 0.85F : 0.7F;
-		const float fade = 1 - t * t;
-		const float thickness = sweep.radius * (sweep.heavy ? 0.5F : 0.36F);
+		const float fade = (1 - t * t) * sweep.alpha;
+		const float thickness = sweep.radius * (sweep.thickness > 0 ? sweep.thickness : (sweep.heavy ? 0.5F : 0.36F));
 		const bool elemental = sweep.element != Element::Physical;
 		const Rgb rim = elemental ? sweep.colours.core : Rgb { 245, 245, 250 };
 		const Rgb body = elemental ? sweep.colours.mid : Rgb { 175, 180, 192 };
-		const float start = sweep.facing - sweep.span / 2;
-		const int steps = 28;
+		// Where along the smear each point is (u from its tail to its head): its angle, strength and width, or false
+		// where there's nothing to draw.
+		const float head = EaseOut(std::min(t * 1.8F, 1.F));
+		const float tailLag = sweep.heavy ? 0.85F : 0.7F;
+		// A spin's head goes round and round, slowing a little at the end; its smear trails a fixed arc behind it.
+		const float spinTravel = 2 * Pi * sweep.turns * t * (1.35F - 0.35F * t);
+		const float spinHead = sweep.facing + spinTravel;
+		auto sample = [&](float u, float &angle, float &alpha, float &width) {
+			if (sweep.kind == SweepKind::Spin) {
+				const float back = sweep.span * (1 - u);
+				if (back > spinTravel)
+					return false;
+				angle = spinHead - back;
+				const float taper = u < 0.85F ? u / 0.85F : (1 - u) / 0.15F;
+				alpha = std::pow(taper, 0.8F) * fade;
+				width = std::max(thickness * taper, 1.5F);
+				return true;
+			}
+			if (u > head + 0.001F || u < head - tailLag - 0.001F)
+				return false;
+			// How far behind the blade's edge this point is (0 at the edge), and the crescent's taper.
+			const float behind = std::clamp((head - u) / tailLag, 0.F, 1.F);
+			const float taper = std::pow(std::sin(Pi * u), 0.7F);
+			alpha = (1 - behind) * (1 - behind) * fade * (0.35F + 0.65F * taper);
+			width = std::max(thickness * taper * (1 - behind * 0.5F), 1.5F);
+			if (sweep.kind == SweepKind::Chop)
+				angle = -Pi * 0.3F + sweep.span * u;
+			else if (sweep.reverse)
+				angle = sweep.facing + sweep.span / 2 - sweep.span * u;
+			else
+				angle = sweep.facing - sweep.span / 2 + sweep.span * u;
+			return true;
+		};
+		const int steps = sweep.kind == SweepKind::Spin ? 36 : 28;
 		int previous[3] = { -1, -1, -1 };
 		int previousGlow[2] = { -1, -1 };
 		for (int i = 0; i <= steps; i++) {
 			const float u = static_cast<float>(i) / steps;
-			if (u > head + 0.001F || u < head - tailLag - 0.001F) {
+			float angle;
+			float alpha;
+			float width;
+			if (!sample(u, angle, alpha, width)) {
 				previous[0] = -1;
 				previousGlow[0] = -1;
 				continue;
 			}
-			// How far behind the blade's edge this point is (0 at the edge), and the crescent's taper.
-			const float behind = std::clamp((head - u) / tailLag, 0.F, 1.F);
-			const float taper = std::pow(std::sin(Pi * u), 0.7F);
-			const float alpha = (1 - behind) * (1 - behind) * fade * (0.35F + 0.65F * taper);
-			const float angle = start + sweep.span * u;
-			const float width = std::max(thickness * taper * (1 - behind * 0.5F), 1.5F);
-			const Vec outer = ToScreen(OnGround(sweep.pos, sweep.radius, angle));
-			const Vec edge = ToScreen(OnGround(sweep.pos, sweep.radius - std::min(2.F, width * 0.3F), angle));
-			const Vec inner = ToScreen(OnGround(sweep.pos, sweep.radius - width, angle));
+			const Vec outer = ToScreen(SweepPoint(sweep, sweep.radius, angle));
+			const Vec edge = ToScreen(SweepPoint(sweep, sweep.radius - std::min(2.F, width * 0.3F), angle));
+			const Vec inner = ToScreen(SweepPoint(sweep, sweep.radius - width, angle));
 			const int v[3] = { Dark.add(outer, rim, alpha * 0.85F), Dark.add(edge, rim, std::min(alpha * 1.15F, 1.F)), Dark.add(inner, body, alpha * 0.15F) };
 			if (previous[0] >= 0) {
 				Dark.tri(previous[0], v[0], previous[1]);
@@ -3496,7 +3825,7 @@ void DrawSweeps()
 			std::copy(std::begin(v), std::end(v), std::begin(previous));
 			// A faint sheen on the edge; elemental blades glow properly in their element's colour.
 			const float glow = alpha * (elemental ? 0.55F : 0.18F);
-			const Vec glowInner = ToScreen(OnGround(sweep.pos, sweep.radius - width * 0.6F, angle));
+			const Vec glowInner = ToScreen(SweepPoint(sweep, sweep.radius - width * 0.6F, angle));
 			const int g[2] = { Glowing.add(edge, elemental ? sweep.colours.mid : rim, glow), Glowing.add(glowInner, sweep.colours.edge, 0) };
 			if (previousGlow[0] >= 0) {
 				Glowing.tri(previousGlow[0], g[0], previousGlow[1]);
@@ -4645,7 +4974,7 @@ void DrawPortal(const PortalFx &portal)
 	const float raysAge = portal.arrived >= 0 && portal.arrived < PortalRaysMs ? portal.arrived : portal.age - PortalTearStart;
 	if (raysAge >= 0 && raysAge < PortalRaysMs && portal.closing < 0) {
 		const float k = raysAge / PortalRaysMs;
-		PortalRays(portal.pos, PortalSealRadius * (1 + 0.2F * k), 16, 160 * EaseOut(k * 3) * (1 - k * k), c, 1 - k, spin * 0.3F);
+		PortalRays(portal.pos, PortalSealRadius * (1 + 0.2F * k), 16, 135 * EaseOut(k * 3) * (1 - k * k), c, 1 - k, spin * 0.3F);
 	}
 
 	// The seam: a line of light standing on the tile, with lightning crawling up it, which the portal opens out from.
@@ -4689,7 +5018,7 @@ void DrawPortal(const PortalFx &portal)
 			const Vec out { std::cos(a), std::sin(a) };
 			rim.push_back({ centre + Vec { out.x * rx, out.y * ry }, out, 1.F, 0.6F + 0.4F * std::max(0.F, -out.y) });
 		}
-		DrawFire(rim, Scaled(140), 1.4F + 0.6F * pull, portal.seed, c.core, c.mid, c.edge, (1.5F + 0.8F * pull) * alpha);
+		DrawFire(rim, Scaled(140), 1.2F + 0.5F * pull, portal.seed, c.core, c.mid, c.edge, (1.5F + 0.8F * pull) * alpha);
 	}
 	// The eye: the light at the bottom of the hole.
 	const float eye = 0.55F + 0.3F * std::sin(t * 0.009F + phase) + 0.5F * pull;
@@ -4961,14 +5290,16 @@ struct Targets {
 	SDL_Texture *ground = nullptr;
 	/** @brief Opaque where something stands on the floor; drawn over the floor shapes, it cuts them away there. */
 	SDL_Texture *mask = nullptr;
+	/** @brief The heroes standing in front of a portal, drawn again over it. */
+	SDL_Texture *front = nullptr;
 
 	void release()
 	{
-		for (SDL_Texture *texture : { full, half, quarter, eighth, ground, mask }) {
+		for (SDL_Texture *texture : { full, half, quarter, eighth, ground, mask, front }) {
 			if (texture != nullptr)
 				SDL_DestroyTexture(texture);
 		}
-		full = half = quarter = eighth = ground = mask = nullptr;
+		full = half = quarter = eighth = ground = mask = front = nullptr;
 	}
 
 	bool ensure(SDL_Renderer *wanted, Size wantedSize)
@@ -4979,7 +5310,7 @@ struct Targets {
 			release();
 		renderer = wanted;
 		size = wantedSize;
-		full = half = quarter = eighth = ground = mask = nullptr;
+		full = half = quarter = eighth = ground = mask = front = nullptr;
 		if (!SDL_RenderTargetSupported(renderer))
 			return false;
 		auto make = [&](int divisor) {
@@ -5009,6 +5340,11 @@ struct Targets {
 			if (ground != nullptr)
 				SDL_DestroyTexture(ground);
 			mask = ground = nullptr;
+		}
+		front = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, size.width, size.height);
+		if (front != nullptr && SDL_SetTextureBlendMode(front, SDL_BLENDMODE_BLEND) != 0) {
+			SDL_DestroyTexture(front);
+			front = nullptr;
 		}
 		return true;
 	}
@@ -5107,6 +5443,92 @@ std::optional<SDL_Rect> FillFloorMask(Size worldSize)
 	return rect;
 }
 
+/** @brief Glowing shapes, with bloom: they add up on black, then go on with ever smaller, blurrier copies. */
+void SubmitGlow(SDL_Renderer *renderer, Batch &batch)
+{
+	SDL_SetRenderTarget(renderer, Layer.full);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	SDL_RenderClear(renderer);
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+	Submit(renderer, batch, 1);
+	SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_NONE);
+	SDL_SetTextureBlendMode(Layer.half, SDL_BLENDMODE_NONE);
+	SDL_SetTextureBlendMode(Layer.quarter, SDL_BLENDMODE_NONE);
+	SDL_SetRenderTarget(renderer, Layer.half);
+	SDL_RenderCopy(renderer, Layer.full, nullptr, nullptr);
+	SDL_SetRenderTarget(renderer, Layer.quarter);
+	SDL_RenderCopy(renderer, Layer.half, nullptr, nullptr);
+	SDL_SetRenderTarget(renderer, Layer.eighth);
+	SDL_RenderCopy(renderer, Layer.quarter, nullptr, nullptr);
+	SDL_SetRenderTarget(renderer, nullptr);
+
+	const float bloom = std::clamp(Intensity(), 0.F, 1.5F);
+	SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_ADD);
+	SDL_RenderCopy(renderer, Layer.full, nullptr, nullptr);
+	SDL_SetTextureBlendMode(Layer.quarter, SDL_BLENDMODE_ADD);
+	SDL_SetTextureAlphaMod(Layer.quarter, static_cast<uint8_t>(std::min(255.F, 170 * bloom)));
+	SDL_RenderCopy(renderer, Layer.quarter, nullptr, nullptr);
+	SDL_SetTextureBlendMode(Layer.eighth, SDL_BLENDMODE_ADD);
+	SDL_SetTextureAlphaMod(Layer.eighth, static_cast<uint8_t>(std::min(255.F, 200 * bloom)));
+	SDL_RenderCopy(renderer, Layer.eighth, nullptr, nullptr);
+	SDL_SetTextureAlphaMod(Layer.quarter, 255);
+	SDL_SetTextureAlphaMod(Layer.eighth, 255);
+}
+
+/**
+ * @brief Draws the heroes standing in front of a portal again, over it: their pixels as the world shows them, wherever
+ * their sprites were drawn. Only around the portals, as nothing of them is drawn anywhere else.
+ */
+void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
+{
+	if (!FrontFresh || !FrontUsed || FrontSurface == nullptr || Layer.front == nullptr)
+		return;
+	const Surface world = WorldBackBuffer();
+	if (world.w() != FrontSurface->w || world.h() != FrontSurface->h || world.w() != worldSize.width || world.h() != worldSize.height)
+		return;
+	float x0 = static_cast<float>(worldSize.width);
+	float y0 = static_cast<float>(worldSize.height);
+	float x1 = 0;
+	float y1 = 0;
+	const auto around = [&](const PortalFx &portal) {
+		const Vec at = ToScreen(portal.pos);
+		x0 = std::min(x0, at.x - 120 * CameraScale);
+		x1 = std::max(x1, at.x + 120 * CameraScale);
+		y0 = std::min(y0, at.y - 230 * CameraScale);
+		y1 = std::max(y1, at.y + 80 * CameraScale);
+	};
+	for (const auto &[missile, portal] : Portals)
+		around(portal);
+	for (const PortalFx &portal : ClosingPortals)
+		around(portal);
+	SDL_Rect rect;
+	rect.x = std::clamp(static_cast<int>(x0), 0, worldSize.width);
+	rect.y = std::clamp(static_cast<int>(y0), 0, worldSize.height);
+	rect.w = std::clamp(static_cast<int>(x1) + 1, 0, worldSize.width) - rect.x;
+	rect.h = std::clamp(static_cast<int>(y1) + 1, 0, worldSize.height) - rect.y;
+	if (rect.w <= 0 || rect.h <= 0)
+		return;
+	void *pixels;
+	int pitch;
+	if (SDL_LockTexture(Layer.front, &rect, &pixels, &pitch) != 0)
+		return;
+	for (int y = 0; y < rect.h; y++) {
+		const uint8_t *solid = static_cast<const uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FrontSurface->pitch + rect.x;
+		const uint8_t *shown = world.at(rect.x, rect.y + y);
+		uint8_t *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
+		for (int x = 0; x < rect.w; x++, out += 4) {
+			const SDL_Color &c = system_palette[shown[x]];
+			out[0] = c.r;
+			out[1] = c.g;
+			out[2] = c.b;
+			out[3] = solid[x] != 0 ? 255 : 0;
+		}
+	}
+	SDL_UnlockTexture(Layer.front);
+	const SDL_FRect to { static_cast<float>(rect.x) * toLogical, static_cast<float>(rect.y) * toLogical, static_cast<float>(rect.w) * toLogical, static_cast<float>(rect.h) * toLogical };
+	SDL_RenderCopyF(renderer, Layer.front, &rect, &to);
+}
+
 } // namespace
 #endif
 
@@ -5132,12 +5554,17 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	Standing.clear();
 	Ground.clear();
 	GroundDark.clear();
+	// The portals' standing shapes go in batches of their own, drawn first, so a hero in front of one can go over it.
+	PortalStanding.clear();
+	PortalGlowing.clear();
+	DrawPortals();
+	std::swap(Standing, PortalStanding);
+	std::swap(Glowing, PortalGlowing);
 	DrawHalos();
 	DrawCracks();
 	DrawSigils();
 	DrawRituals();
 	DrawBeams();
-	DrawPortals();
 	DrawIceSpikes();
 	DrawRings();
 	DrawComets();
@@ -5175,10 +5602,15 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
 		Submit(renderer, Ground, toLogical);
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+		Submit(renderer, PortalStanding, toLogical);
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+		Submit(renderer, PortalGlowing, toLogical);
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 		Submit(renderer, Standing, toLogical);
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
 		Submit(renderer, Glowing, toLogical);
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+		FrontFresh = false;
 		return;
 	}
 	// The glowing layer adds up on black (opaque, so copying it with additive blending adds its colours). The glow on
@@ -5196,37 +5628,19 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_ADD);
 		SDL_RenderCopy(renderer, Layer.full, nullptr, nullptr);
 	}
+	// The portals, and over them the heroes standing in front of them.
+	if (!PortalStanding.indices.empty() || !PortalGlowing.indices.empty()) {
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+		Submit(renderer, PortalStanding, toLogical);
+		if (!PortalGlowing.indices.empty())
+			SubmitGlow(renderer, PortalGlowing);
+		DrawFront(renderer, worldSize, toLogical);
+	}
+	FrontFresh = false;
 	// What stands on the floor and hides it: blended straight on, over the floor glow and under the glowing layer.
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 	Submit(renderer, Standing, toLogical);
-	SDL_SetRenderTarget(renderer, Layer.full);
-	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-	SDL_RenderClear(renderer);
-	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-	Submit(renderer, Glowing, 1);
-	// Bloom: ever smaller copies, each a blur of the last.
-	SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_NONE);
-	SDL_SetTextureBlendMode(Layer.half, SDL_BLENDMODE_NONE);
-	SDL_SetTextureBlendMode(Layer.quarter, SDL_BLENDMODE_NONE);
-	SDL_SetRenderTarget(renderer, Layer.half);
-	SDL_RenderCopy(renderer, Layer.full, nullptr, nullptr);
-	SDL_SetRenderTarget(renderer, Layer.quarter);
-	SDL_RenderCopy(renderer, Layer.half, nullptr, nullptr);
-	SDL_SetRenderTarget(renderer, Layer.eighth);
-	SDL_RenderCopy(renderer, Layer.quarter, nullptr, nullptr);
-	SDL_SetRenderTarget(renderer, nullptr);
-
-	const float bloom = std::clamp(Intensity(), 0.F, 1.5F);
-	SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_ADD);
-	SDL_RenderCopy(renderer, Layer.full, nullptr, nullptr);
-	SDL_SetTextureBlendMode(Layer.quarter, SDL_BLENDMODE_ADD);
-	SDL_SetTextureAlphaMod(Layer.quarter, static_cast<uint8_t>(std::min(255.F, 170 * bloom)));
-	SDL_RenderCopy(renderer, Layer.quarter, nullptr, nullptr);
-	SDL_SetTextureBlendMode(Layer.eighth, SDL_BLENDMODE_ADD);
-	SDL_SetTextureAlphaMod(Layer.eighth, static_cast<uint8_t>(std::min(255.F, 200 * bloom)));
-	SDL_RenderCopy(renderer, Layer.eighth, nullptr, nullptr);
-	SDL_SetTextureAlphaMod(Layer.quarter, 255);
-	SDL_SetTextureAlphaMod(Layer.eighth, 255);
+	SubmitGlow(renderer, Glowing);
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 #else
 	(void)renderer;

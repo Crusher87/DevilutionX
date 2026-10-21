@@ -50,6 +50,8 @@
 #include "player.h"
 #include "players/validation.hpp"
 #include "plrmsg.h"
+#include "poe2/charms.hpp"
+#include "poe2/flasks.hpp"
 #include "portals/validation.hpp"
 #include "quests/validation.hpp"
 #include "spells.h"
@@ -3197,6 +3199,14 @@ void NetSendCmdGItem(bool bHiPri, _cmd_id bCmd, const Player &player, uint8_t ii
 
 void NetSendCmdPItem(bool bHiPri, _cmd_id bCmd, Point position, const Item &item)
 {
+	// POE2 Mashup (Curtis 2026-10-21): a flask or charm put down on the ground loses its charges.
+	if (bCmd == CMD_PUTITEM && gbIsPoe2 && item._iCharges != 0 && (IsCharm(item) || IsFlaskPotion(item))) {
+		Item emptied = item;
+		emptied._iCharges = 0;
+		NetSendCmdPItem(bHiPri, bCmd, position, emptied);
+		return;
+	}
+
 	TCmdPItem cmd {};
 
 	cmd.bCmd = bCmd;

@@ -614,6 +614,8 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
+	if (gbIsPoe2 && vfx::HeroInFrontOfPortal(tilePosition))
+		vfx::MarkFront(out, spriteBufferPosition, sprite);
 
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
@@ -1475,6 +1477,9 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	const bool floorCopy = IsUiScaled() && vfx::WantsFloorCopy();
 	if (floorCopy)
 		vfx::CopyFloor(fullOut);
+	// POE2 Mashup: and a hero in front of a portal goes over it (not with the HD replay, which draws the world itself).
+	if (IsUiScaled() && !hd::Active())
+		vfx::BeginFront(fullOut);
 	DrawTileContent(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawOOB(out, lightmap, position, Point {} + offset, rows, columns);
 	hd::EndWorld();
@@ -1483,6 +1488,8 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 		Zoom(fullOut.subregionY(0, gnViewportHeight));
 		if (floorCopy && vfx::FloorCopy().w() == fullOut.w())
 			Zoom(vfx::FloorCopy().subregionY(0, gnViewportHeight));
+		if (vfx::FrontMask().w() == fullOut.w())
+			Zoom(vfx::FrontMask().subregionY(0, gnViewportHeight));
 	}
 
 #ifdef DUN_RENDER_STATS
@@ -1665,6 +1672,8 @@ void DrawView(const Surface &out, Point startPosition)
 
 	DrawControllerModifierHints(out);
 	DrawSkillBar(out);
+	if (gbIsPoe2)
+		DrawQuestPointsNotice(out);
 	DrawPlrMsg(out);
 	gmenu_draw(out);
 	doom_draw(out);

@@ -46,6 +46,7 @@
 #include "multi.h"
 #include "objects.h"
 #include "player.h"
+#include "portal.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/hit_trace.hpp"
@@ -321,19 +322,21 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 	int hper = 0;
 	const MissileData &missileData = GetMissileData(t);
 	const bool isArrow = missileData.isArrow() && !MinionShotHits;
-	if (isArrow) {
+	if (isArrow && gbIsPoe2) {
+		// POE2 Mashup: POE2's accuracy against the monster's evasion; past 2 tiles the arrow loses accuracy, down to a
+		// tenth of it at 9 (Curtis 2026-10-21).
+		const int tiles = startPos.ApproxDistance(monster.position.tile);
+		const int accuracy = AccuracyRating(player) * AccuracyAtDistancePercent(tiles) / 100;
+		hper = Poe2HitChance(accuracy, MonsterEvasionRating(monster, player.CalculateArmorPierce(monster.armorClass, false))) + player._pIBonusToHit;
+	} else if (isArrow) {
 		hper = player.GetRangedPiercingToHit();
 		hper -= player.CalculateArmorPierce(monster.armorClass, false);
-		// POE2 Mashup: accuracy falls off gently with distance instead of with its square.
-		hper -= gbIsPoe2 ? dist : (dist * dist) / 2;
-		// POE2 Mashup: War Banner's accuracy.
-		if (hper > 0)
-			hper = hper * (100 + BannerAccuracyPercent(player)) / 100;
+		hper -= (dist * dist) / 2;
 	} else {
 		hper = player.GetMagicToHit() - (monster.level(sgGameInitInfo.nDifficulty) * 2) - dist;
 	}
 
-	hper = std::clamp(hper, 5, 95);
+	hper = std::clamp(hper, 5, gbIsPoe2 ? 100 : 95);
 	// POE2 Mashup: spells always hit, as in POE2; only attacks roll against the monster's defences.
 	if (gbIsPoe2 && !isArrow)
 		hper = 100;
@@ -3666,8 +3669,12 @@ void ProcessTownPortal(Missile &missile)
 
 	for (Player &player : Players) {
 		if (player.plractive && player.isOnActiveLevel() && !player._pLvlChanging && player._pmode == PM_STAND && player.position.tile == missile.position.tile) {
+			// POE2 Mashup: only a hero who clicked the portal goes through; one walking over it or arriving on it stays.
+			if (gbIsPoe2 && &player == MyPlayer && !ChosePortal(missile.position.tile))
+				continue;
 			ClrPlrPath(player);
 			if (&player == MyPlayer) {
+				ForgetChosenPortal();
 				NetSendCmdParam1(true, CMD_WARP, missile._misource);
 				player._pmode = PM_NEWLVL;
 			}

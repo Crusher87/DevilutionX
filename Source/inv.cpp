@@ -646,8 +646,8 @@ void CheckInvPaste(Player &player, Point cursorPosition)
 
 	if (location == ILOC_BELT) {
 		if (!CanBePlacedOnBelt(player, player.HoldItem)) return;
-		// POE2 Mashup: only the first NumFlasks belt slots work as flask slots.
-		if (gbIsPoe2 && IsFlaskPotion(player.HoldItem) && static_cast<size_t>(slot - SLOTXY_BELT_FIRST) >= NumFlasks) return;
+		// POE2 Mashup: flasks go in the two flask slots, charms in the rest of the belt.
+		if (!BeltSlotTakes(player.HoldItem, static_cast<size_t>(slot - SLOTXY_BELT_FIRST))) return;
 	} else if (location != ILOC_UNEQUIPABLE) {
 		if (desiredLocation != location) return;
 	}
@@ -983,10 +983,14 @@ void CheckInvCut(Player &player, Point cursorPosition, bool automaticMove, bool 
 						player.InvBody[invloc] = holdItem.pop();
 					}
 				}
-			} else if (IsVisualStoreOpen && CanSellToCurrentVendor(player.InvList[iv]) && dropItem) {
-				// If visual store is open, ctrl-click sells the item
-				SellItemToVisualStore(iv);
-				automaticallyMoved = true;
+			} else if (IsVisualStoreOpen && dropItem) {
+				// If visual store is open, ctrl-click sells the item, or says the vendor won't take it; it never drops it (Curtis 2026-10-21).
+				if (CanSellToCurrentVendor(player.InvList[iv])) {
+					SellItemToVisualStore(iv);
+					automaticallyMoved = true;
+				} else if (&player == MyPlayer) {
+					SayVendorWontBuy();
+				}
 			} else {
 				holdItem = player.InvList[iv];
 				player.RemoveInvItem(iv, false);
@@ -1534,11 +1538,10 @@ bool AutoPlaceItemInBelt(Player &player, const Item &item, bool persistItem, boo
 		return false;
 	}
 
-	// POE2 Mashup: flasks only go in the flask slots at the front of the belt.
-	const size_t beltSlots = gbIsPoe2 && IsFlaskPotion(item) ? NumFlasks : std::size(player.SpdList);
-	for (size_t i = 0; i < beltSlots; i++) {
+	for (size_t i = 0; i < std::size(player.SpdList); i++) {
 		Item &beltItem = player.SpdList[i];
-		if (beltItem.isEmpty()) {
+		// POE2 Mashup: flasks only go in the two flask slots at the front of the belt, charms behind them.
+		if (beltItem.isEmpty() && BeltSlotTakes(item, i)) {
 			if (persistItem) {
 				beltItem = item;
 				player.CalcScrolls();
@@ -2263,13 +2266,8 @@ int8_t CheckInvHLight()
 		if (gbIsPoe2 && rv >= INVITEM_INV_FIRST) {
 			if (const std::optional<int> price = VisualStoreSellPrice(*pi); price) {
 				CurrentInfoLineStyle = InfoLineStyle::Note;
+				// Only the price: how to sell is in the help, and the hint lines cluttered every hover (Curtis 2026-10-21).
 				AddInfoBoxString(FormatRuntime(_("Sells for {:s} gold"), FormatInteger(*price)), true);
-				CurrentInfoLineStyle = InfoLineStyle::Requirement;
-				AddInfoBoxString(_("Drop it on the vendor to sell; Ctrl+click sells at once"), true);
-				if (VisualStore.vendor == VisualStoreVendor::Smith && GetSalvageYield(*pi))
-					AddInfoBoxString(_("The anvil beside the smithy salvages it for quality currency"), true);
-				if (VisualStore.vendor == VisualStoreVendor::Witch && GetDisenchantYield(*pi))
-					AddInfoBoxString(_("Shift+right-click disenchants it for shards"), true);
 				CurrentInfoLineStyle = InfoLineStyle::Default;
 			}
 		}
@@ -2444,7 +2442,7 @@ bool UseInvItem(int cii)
 		// POE2 Mashup: a flask past the flask slots (old saves) does nothing.
 		if (gbIsPoe2 && IsFlaskPotion(*item)) {
 			if (&player == MyPlayer)
-				EventPlrMsg(_("Flasks only work in the first belt slots."), UiFlags::ColorWhite);
+				EventPlrMsg(_("Flasks only work in the first two belt slots."), UiFlags::ColorWhite);
 			return true;
 		}
 

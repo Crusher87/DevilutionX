@@ -449,15 +449,18 @@ constexpr TraySlot TrayKeySlot(size_t key)
 /** @brief What a skill tray slot does. */
 enum class TrayAction : uint8_t {
 	None,
-	/** Diablo's left click: walks, attacks and picks things up. */
+	/** Old saves only: Diablo's left click. Loading turns it into the weapon attack. */
 	MoveAndAttack,
-	/** Walks, picks things up, opens and talks, but never attacks. */
+	/** Old saves only: walked and picked things up without attacking. Loading turns it into the weapon attack. */
 	Interact,
-	/** Diablo's right click: casts the readied spell. */
+	/** Old saves only: the readied spell. Loading clears it, and an empty right button casts the readied spell. */
 	ReadiedSpell,
 	/** Uses the skill gem in a Skills panel socket. */
 	Gem,
-	/** The weapon's default attack, which costs no mana. Any slot can take it. */
+	/**
+	 * A weapon set's default attack, which costs no mana; the socket is the set (0 or 1). Any slot can take it, and
+	 * using it swaps to its set first, like POE2.
+	 */
 	WeaponAttack,
 	Last = WeaponAttack,
 };
@@ -478,9 +481,6 @@ constexpr TrayBinding DefaultTrayBinding(TraySlot slot)
 {
 	switch (slot) {
 	case TraySlot::LeftMouse:
-		return { TrayAction::MoveAndAttack, 0 };
-	case TraySlot::RightMouse:
-		return { TrayAction::ReadiedSpell, 0 };
 	case TraySlot::MiddleMouse:
 		return { TrayAction::WeaponAttack, 0 };
 	default:
@@ -786,6 +786,10 @@ struct Poe2PlayerData {
 	uint8_t pendingSkillTicks = 0;
 	/** @brief Weapon skill used by the attack in progress (not saved). */
 	WeaponSkill activeSkill = WeaponSkill::None;
+	/** @brief Which of Flurry's strikes the attack in progress is: 0 the first, 1 the backhand (not saved). */
+	uint8_t flurryStrike = 0;
+	/** @brief The facing a spinning skill's animation started from (not saved). */
+	uint8_t spinFrom = 0;
 	/** @brief Skill that hits when the current dash lands, e.g. Leap Slam (not saved). */
 	WeaponSkill dashSkill = WeaponSkill::None;
 	/** @brief Game ticks the dash skill may take to land before it's dropped; 0 if not dashing (not saved). */
@@ -952,6 +956,8 @@ struct Poe2PlayerData {
 		pendingSkill = WeaponSkill::None;
 		pendingSkillTicks = 0;
 		activeSkill = WeaponSkill::None;
+		flurryStrike = 0;
+		spinFrom = 0;
 		dashSkill = WeaponSkill::None;
 		dashSkillTicks = 0;
 		warcryTicks = 0;

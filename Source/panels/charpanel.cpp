@@ -180,7 +180,12 @@ PanelEntry panelEntries[] = {
 	        return StyledText { GetValueColor(InspectPlayer->_pIBonusAC), StrCat(InspectPlayer->GetArmor() + (InspectPlayer->getCharacterLevel() * 2)) };
 	    } },
 	{ N_("Chance To Hit"), { RightColumnLabelX, 191 }, 57, RightColumnLabelWidth,
-	    []() { return StyledText { GetValueColor(InspectPlayer->_pIBonusToHit), StrCat(InspectPlayer->InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow ? InspectPlayer->GetRangedToHit() : InspectPlayer->GetMeleeToHit(), "%") }; } },
+	    []() {
+	        // POE2 Mashup: POE2's accuracy, against an ordinary monster of the hero's level up close.
+	        if (gbIsPoe2)
+		        return StyledText { GetValueColor(InspectPlayer->_pIBonusToHit), StrCat(TypicalHitChance(*InspectPlayer), "%") };
+	        return StyledText { GetValueColor(InspectPlayer->_pIBonusToHit), StrCat(InspectPlayer->InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow ? InspectPlayer->GetRangedToHit() : InspectPlayer->GetMeleeToHit(), "%") };
+	    } },
 	{ N_("Damage"), { RightColumnLabelX, 219 }, 57, RightColumnLabelWidth,
 	    []() {
 	        const auto [dmgMin, dmgMax] = GetDamage();

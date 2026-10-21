@@ -705,6 +705,9 @@ void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t 
 		reader.read("uniqueBaseItem", item.iItemId, ParseOrAddUniqueBaseItem);
 		reader.readString("name", item.iName);
 		reader.readString("shortName", item.iSName);
+		// Starting items have no short name; crafting one magic would leave a gap in its name.
+		if (item.iSName.empty())
+			item.iSName = item.iName;
 		reader.readInt("minMonsterLevel", item.iMinMLvl);
 		reader.readInt("durability", item.iDurability);
 		reader.readInt("minDamage", item.iMinDam);

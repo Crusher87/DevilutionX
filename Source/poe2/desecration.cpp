@@ -259,6 +259,7 @@ std::vector<Poe2CraftMod> DesecrationOffers(const Item &item, bool kinship)
 			existing.push_back({ offer.family, offer.tier, {} });
 		ModRollFilter filter;
 		filter.side = prefix ? ModSide::Prefix : ModSide::Suffix;
+		filter.avoidEffects = ImplicitEffectBits(item);
 		const std::optional<Poe2ItemMod> mod = RollAddedMod(*slot, ItemModBaseTags(item), GetPoe2ItemLevel(item), existing, MaxRareModsPerSide + 1, Mix(seed ^ (0xF111U + attempt)), filter);
 		if (!mod)
 			break;

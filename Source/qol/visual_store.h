@@ -193,6 +193,9 @@ void CheckVisualStoreButtonRelease(Point mousePosition);
  */
 bool CanSellToCurrentVendor(const Item &item);
 
+/** @brief Tells the player the open shop's vendor won't buy the item. */
+void SayVendorWontBuy();
+
 /**
  * @brief Sell an item from the player's inventory to the current vendor.
  * @param invIndex The inventory index of the item.

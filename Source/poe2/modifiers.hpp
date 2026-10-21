@@ -209,7 +209,10 @@ struct ModRollFilter {
 	/** @brief Only this family (index plus 1), for essences; 0 for any. */
 	uint8_t family = 0;
 	ModTagRule tags = ModTagRule::Any;
+	/** @brief Effects the item's implicits already give, as bits of 1 << ModEffect; crafting doesn't repeat them. */
+	uint64_t avoidEffects = 0;
 };
+static_assert(static_cast<int>(ModEffect::ItemRarity) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
 
 /**
  * @brief Picks one more modifier for an item that has these, like an Exalted Orb; its values are left at 0.

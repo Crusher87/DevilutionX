@@ -12,6 +12,7 @@
 #include "player.h"
 #include "poe2/aim.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "tables/itemdat.h"
 #include "utils/language.h"
 
@@ -19,30 +20,22 @@ namespace devilution {
 
 namespace {
 
-const Item *MainWeapon(const Player &player)
+const Item *MainWeapon(const Item &left, const Item &right)
 {
 	const Item *weapon = nullptr;
-	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
-		const Item &item = player.InvBody[hand];
+	for (const Item *item : { &left, &right }) {
 		// A sceptre held with another weapon isn't the main one.
-		if (!item.isEmpty() && item._iClass == ICLASS_WEAPON && (weapon == nullptr || ItemGrantsSpirit(*weapon)))
-			weapon = &item;
+		if (!item->isEmpty() && item->_iClass == ICLASS_WEAPON && (weapon == nullptr || ItemGrantsSpirit(*weapon)))
+			weapon = item;
 	}
 	return weapon;
 }
 
-bool HoldsShield(const Player &player)
+DefaultAttack AttackForHands(const Player &player, const Item &left, const Item &right)
 {
-	return player.InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Shield || player.InvBody[INVLOC_HAND_RIGHT]._itype == ItemType::Shield;
-}
-
-} // namespace
-
-DefaultAttack DefaultAttackFor(const Player &player)
-{
-	const Item *weapon = MainWeapon(player);
+	const Item *weapon = MainWeapon(left, right);
 	if (weapon == nullptr)
-		return HoldsShield(player) ? DefaultAttack::ShieldBash : DefaultAttack::Punch;
+		return left._itype == ItemType::Shield || right._itype == ItemType::Shield ? DefaultAttack::ShieldBash : DefaultAttack::Punch;
 	switch (weapon->_itype) {
 	case ItemType::Sword:
 		return AllItemsList[weapon->IDidx].iItemId == UITYPE_DAGGER ? DefaultAttack::DaggerStab : DefaultAttack::SwordStrike;
@@ -58,6 +51,20 @@ DefaultAttack DefaultAttackFor(const Player &player)
 	default:
 		return DefaultAttack::Punch;
 	}
+}
+
+} // namespace
+
+DefaultAttack DefaultAttackFor(const Player &player)
+{
+	return AttackForHands(player, player.InvBody[INVLOC_HAND_LEFT], player.InvBody[INVLOC_HAND_RIGHT]);
+}
+
+DefaultAttack DefaultAttackForSet(const Player &player, uint8_t set)
+{
+	if (set == player.poe2.weaponSet)
+		return DefaultAttackFor(player);
+	return AttackForHands(player, InactiveHand(player, INVLOC_HAND_LEFT), InactiveHand(player, INVLOC_HAND_RIGHT));
 }
 
 SkillSlot DefaultSkillSlot(const Player &player)
@@ -132,11 +139,21 @@ int RollStaffBoltDamage(const Player &player)
 	return std::max(1, ((base + bonus) * StaffBoltDamagePercent / 100) + (player._pMagic * StaffBoltMagicPercent / 100));
 }
 
-bool UseDefaultAttack(Player &player)
+bool ReadyWeaponSet(Player &player, uint8_t set)
+{
+	if (set == player.poe2.weaponSet || set >= NumWeaponSets)
+		return true;
+	return SwapWeapons(player);
+}
+
+bool UseDefaultAttack(Player &player, uint8_t set)
 {
 	if (player.hasNoLife() || player._pInvincible)
 		return false;
 	if (leveltype == DTYPE_TOWN)
+		return false;
+	// Like POE2, the attack of the other weapon set swaps to it first.
+	if (!ReadyWeaponSet(player, set))
 		return false;
 	const bool ranged = IsRangedDefaultAttack(DefaultAttackFor(player));
 	if (pcursmonst != -1 && !CanTalkToMonst(Monsters[pcursmonst])) {

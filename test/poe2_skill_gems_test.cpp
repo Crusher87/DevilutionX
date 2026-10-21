@@ -176,6 +176,8 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 {
 	Player &player = *MyPlayer;
 	const SkillSlot slam = SkillSlot::ForAttack(WeaponSkill::GroundSlam);
+	player.poe2.skillSlots[0] = slam;
+	player.poe2.slotLevels[0] = 5;
 	player._pStrength = 10;
 	player._pMana = Fixed26_6::fromInt(50);
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Requirements);
@@ -189,6 +191,36 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 	player._pMana = Fixed26_6::fromInt(1);
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Mana);
 	EXPECT_EQ(GetSkillUsability(player, {}), SkillUsability::Empty);
+}
+
+TEST_F(Poe2SkillGemsTest, GemNeedsGrowWithLevelLikePoe2)
+{
+	// Path of Building 2's numbers for a single-attribute gem.
+	EXPECT_EQ(GemAttributeRequirement(1, 100), 0);
+	EXPECT_EQ(GemAttributeRequirement(2, 100), 9);
+	EXPECT_EQ(GemAttributeRequirement(3, 100), 14);
+	EXPECT_EQ(GemAttributeRequirement(10, 100), 65);
+	EXPECT_EQ(GemAttributeRequirement(20, 100), 157);
+	EXPECT_EQ(GemAttributeRequirement(20, 50), 86);
+	EXPECT_EQ(GemAttributeRequirement(20, 0), 0);
+
+	const GemAttributeNeeds cleave = SkillGemAttributeNeeds(SkillSlot::ForAttack(WeaponSkill::Cleave), 3);
+	EXPECT_EQ(cleave.strength, 14);
+	EXPECT_EQ(cleave.magic, 0);
+	EXPECT_EQ(cleave.dexterity, 0);
+	// Whirling Staff is half Strength, half Dexterity.
+	const GemAttributeNeeds whirl = SkillGemAttributeNeeds(SkillSlot::ForAttack(WeaponSkill::WhirlingStaff), 20);
+	EXPECT_EQ(whirl.strength, 86);
+	EXPECT_EQ(whirl.dexterity, 86);
+
+	Player &player = *MyPlayer;
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForAttack(WeaponSkill::Cleave), 10));
+	EXPECT_EQ(gem._iMinStr, 65);
+	player._pStrength = 64;
+	EXPECT_FALSE(player.CanUseItem(gem));
+	player._pStrength = 65;
+	EXPECT_TRUE(player.CanUseItem(gem));
 }
 
 TEST_F(Poe2SkillGemsTest, WeaponsAllowMatchingSkills)
@@ -273,12 +305,12 @@ TrayBinding TrayOf(const Player &player, TraySlot slot)
 	return player.poe2.tray[static_cast<size_t>(slot)];
 }
 
-TEST_F(Poe2SkillGemsTest, TrayStartsWithDiabloMouseButtons)
+TEST_F(Poe2SkillGemsTest, TrayStartsWithTheWeaponAttackOnTheMouse)
 {
 	const Player &player = *MyPlayer;
-	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
-	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::ReadiedSpell);
-	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse).action, TrayAction::WeaponAttack) << "the free weapon attack";
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse), (TrayBinding { TrayAction::WeaponAttack, 0 })) << "weapon set I's free attack";
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse), (TrayBinding { TrayAction::WeaponAttack, 0 }));
+	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::None) << "an empty right button casts the readied spell";
 	for (size_t key = 0; key < NumTrayKeys; key++)
 		EXPECT_EQ(TrayOf(player, TrayKeySlot(key)).action, TrayAction::None);
 }
@@ -300,7 +332,7 @@ TEST_F(Poe2SkillGemsTest, SocketedSkillsFillTheTrayKeys)
 	// Spirit gems are active while socketed and need no slot.
 	EXPECT_EQ(TraySlotForSocket(player, 7), std::nullopt);
 	// The mouse buttons keep their actions.
-	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::WeaponAttack);
 	EXPECT_EQ(AutoBindSocket(player, 0), TraySlot::Key1);
 }
 
@@ -318,23 +350,24 @@ TEST_F(Poe2SkillGemsTest, BindingAGemOnAnotherSlotSwapsThem)
 	EXPECT_EQ(TrayOf(player, TraySlot::Key2), TrayBinding::ForGem(0));
 	EXPECT_EQ(TraySkill(player, TraySlot::Key2), SkillSlot::ForSpell(SpellID::Firebolt));
 
-	// A key can't take a mouse action, so swapping with the left button leaves the key empty.
+	// Swapping with the left button gives the key the left button's weapon attack.
 	BindTraySlot(player, TraySlot::LeftMouse, TrayBinding::ForGem(0));
 	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse), TrayBinding::ForGem(0));
-	EXPECT_EQ(TrayOf(player, TraySlot::Key2).action, TrayAction::None);
+	EXPECT_EQ(TrayOf(player, TraySlot::Key2).action, TrayAction::WeaponAttack);
+	// The old mouse actions don't fit any slot now.
 	BindTraySlot(player, TraySlot::Key3, { TrayAction::Interact, 0 });
 	EXPECT_EQ(TrayOf(player, TraySlot::Key3).action, TrayAction::None);
-	// The weapon attack fits any slot.
-	BindTraySlot(player, TraySlot::Key3, { TrayAction::WeaponAttack, 0 });
-	EXPECT_EQ(TrayOf(player, TraySlot::Key3).action, TrayAction::WeaponAttack);
+	// The weapon attack fits any slot, for either weapon set.
+	BindTraySlot(player, TraySlot::Key3, { TrayAction::WeaponAttack, 1 });
+	EXPECT_EQ(TrayOf(player, TraySlot::Key3), (TrayBinding { TrayAction::WeaponAttack, 1 }));
 
-	// The right button can take an action; clearing puts a slot back to its default.
-	BindTraySlot(player, TraySlot::RightMouse, { TrayAction::Interact, 0 });
-	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::Interact);
+	// Clearing puts a slot back to its default.
+	BindTraySlot(player, TraySlot::RightMouse, { TrayAction::WeaponAttack, 1 });
+	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse), (TrayBinding { TrayAction::WeaponAttack, 1 }));
 	ClearTraySlot(player, TraySlot::RightMouse);
 	ClearTraySlot(player, TraySlot::LeftMouse);
-	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::ReadiedSpell);
-	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
+	EXPECT_EQ(TrayOf(player, TraySlot::RightMouse).action, TrayAction::None);
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse), (TrayBinding { TrayAction::WeaponAttack, 0 }));
 }
 
 TEST_F(Poe2SkillGemsTest, TakingAGemOutClearsItsTraySlot)
@@ -343,7 +376,7 @@ TEST_F(Poe2SkillGemsTest, TakingAGemOutClearsItsTraySlot)
 	SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::Firebolt));
 	BindTraySlot(player, TraySlot::LeftMouse, TrayBinding::ForGem(2));
 	BindTraySlot(player, TraySlot::Key4, TrayBinding::ForGem(2));
-	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::MoveAndAttack);
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse).action, TrayAction::WeaponAttack);
 
 	SocketSkill(player, 2, {});
 	EXPECT_EQ(TrayOf(player, TraySlot::Key4).action, TrayAction::None);
