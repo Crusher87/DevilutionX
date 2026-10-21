@@ -52,6 +52,7 @@
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/floors.hpp"
 #include "portals/validation.hpp"
 #include "quests/validation.hpp"
 #include "spells.h"
@@ -197,6 +198,7 @@ std::string_view CmdIdString(_cmd_id cmd)
 	case CMD_OPENHIVE: return "CMD_OPENHIVE";
 	case CMD_OPENGRAVE: return "CMD_OPENGRAVE";
 	case CMD_SPAWNMONSTER: return "CMD_SPAWNMONSTER";
+	case CMD_POE2_FRESHFLOOR: return "CMD_POE2_FRESHFLOOR";
 	case FAKE_CMD_SETID: return "FAKE_CMD_SETID";
 	case FAKE_CMD_DROPID: return "FAKE_CMD_DROPID";
 	case CMD_INVALID: return "CMD_INVALID";
@@ -2604,6 +2606,21 @@ size_t OnOpenGrave(const TCmd &cmd)
 	return sizeof(cmd);
 }
 
+size_t OnFreshFloor(const TCmdFreshFloor &message, const Player &player)
+{
+	if (gbBufferMsgs == 1)
+		return sizeof(message);
+	if (&player == MyPlayer)
+		return sizeof(message);
+	const bool isSetLevel = message.isSetLevel != 0;
+	const int level = message.level;
+	// Someone standing on that floor keeps the copy they have; the roll only applies to floors nobody is on.
+	const bool onThatFloor = isSetLevel ? (MyPlayer->plrIsOnSetLevel && MyPlayer->plrlevel == level) : MyPlayer->isOnLevel(static_cast<uint8_t>(level));
+	if (!onThatFloor)
+		Poe2ApplyFreshFloor(level, isSetLevel, Swap32LE(message.seed), Swap16LE(message.visits));
+	return sizeof(message);
+}
+
 size_t OnSpawnMonster(const TCmdSpawnMonster &message, const Player &player)
 {
 	if (gbBufferMsgs == 1)
@@ -2990,6 +3007,18 @@ void NetSendCmd(bool bHiPri, _cmd_id bCmd)
 		NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
 	else
 		NetSendLoPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
+}
+
+void NetSendCmdFreshFloor(uint8_t level, bool isSetLevel, uint32_t seed, uint16_t visits)
+{
+	TCmdFreshFloor cmd;
+
+	cmd.bCmd = CMD_POE2_FRESHFLOOR;
+	cmd.level = level;
+	cmd.isSetLevel = isSetLevel ? 1 : 0;
+	cmd.visits = Swap16LE(visits);
+	cmd.seed = Swap32LE(seed);
+	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
 }
 
 void NetSendCmdSpawnMonster(Point position, Direction dir, uint16_t typeIndex, uint16_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, uint8_t golemSpellLevel)
@@ -3508,6 +3537,8 @@ size_t ParseCmd(uint8_t pnum, const TCmd *pCmd, size_t maxCmdSize)
 		return OnOpenGrave(*pCmd);
 	case CMD_SPAWNMONSTER:
 		return HandleCmd(OnSpawnMonster, player, pCmd, maxCmdSize);
+	case CMD_POE2_FRESHFLOOR:
+		return HandleCmd(OnFreshFloor, player, pCmd, maxCmdSize);
 	default:
 		break;
 	}

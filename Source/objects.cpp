@@ -1884,7 +1884,8 @@ void OperateBook(Player &player, Object &book, bool sendmsg)
 	}
 
 	if (setlvlnum == SL_BONECHAMB) {
-		if (sendmsg) {
+		// POE2 Mashup: the Chamber is rebuilt on later visits; the spell is only taught once.
+		if (sendmsg && Quests[Q_SCHAMB]._qactive != QUEST_DONE) {
 			const uint8_t newSpellLevel = player._pSplLvl[static_cast<int8_t>(SpellID::Guardian)] + 1;
 			if (newSpellLevel <= MaxSpellLevel) {
 				player._pSplLvl[static_cast<int8_t>(SpellID::Guardian)] = newSpellLevel;
@@ -1956,7 +1957,8 @@ void OperateBookLever(Object &questBook, bool sendmsg)
 			if (questBook._otype != OBJ_BLOODBOOK)
 				ObjChangeMap(questBook._oVar1, questBook._oVar2, questBook._oVar3, questBook._oVar4);
 			if (questBook._otype == OBJ_BLINDBOOK) {
-				if (sendmsg)
+				// POE2 Mashup: the reward comes once; a rebuilt floor's book is scenery after that.
+				if (sendmsg && Quests[Q_BLIND]._qactive != QUEST_DONE)
 					SpawnUnique(UITEM_OPTAMULET, SetPiece.position.megaToWorld() + Displacement { 5, 5 }, std::nullopt, true, true);
 				auto tren = TransVal;
 				TransVal = 9;
