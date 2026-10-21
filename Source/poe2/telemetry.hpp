@@ -100,6 +100,8 @@ enum class SwingOutcome : uint8_t {
 void TelemetryMeleeSwing(const Player &player, SwingOutcome outcome);
 /** @brief Counts the hero's attack roll against a monster (melee or arrow) and its hit chance, to show how often attacks miss. */
 void TelemetryHeroAttackRoll(const Player &player, int hitChance, bool hit);
+/** @brief Counts the hero's hit on a monster that survived it, and whether it light stunned, to tune POE2 light stun. */
+void TelemetryMonsterHitByHero(const Player &player, bool lightStunned);
 /** @brief Names what is about to damage a monster (minions, ignite, a herald); otherwise the last skill gets the credit. */
 void TelemetryNoteDamageSource(std::string_view source);
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);

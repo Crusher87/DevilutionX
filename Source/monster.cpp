@@ -1087,17 +1087,44 @@ bool IsHardHit(Monster &target, unsigned dam)
 	case MT_ILLWEAV:
 		return true;
 	default:
+		if (gbIsPoe2) {
+			// POE2 Mashup: POE2's light stun, a chance from the hit's share of the monster's life. Diablo's rule (damage
+			// of at least the monster's level + 3) made nearly every hit flinch with our bigger numbers (Curtis 2026-10-21).
+			const int chance = LightStunChance(dam, target.maxHitPoints.raw());
+			return chance > 0 && GenerateRnd(100) < chance;
+		}
 		return (dam >> 6) >= target.level(sgGameInitInfo.nDifficulty) + 3;
+	}
+}
+
+/** @brief How a monster reacts to a hit it survived: a hard hit (a light stun in POE2 mode) interrupts it. */
+void ReactToHit(Monster &monster, bool hardHit)
+{
+	PlayEffect(monster, MonsterSound::Hit);
+
+	if (hardHit) {
+		if (monster.type().type == MT_BLINK) {
+			Teleport(monster);
+		} else if (IsAnyOf(monster.type().type, MT_NSCAV, MT_BSCAV, MT_WSCAV, MT_YSCAV, MT_GRAVEDIG)) {
+			monster.goal = MonsterGoal::Normal;
+			monster.goalVar1 = 0;
+			monster.goalVar2 = 0;
+		}
+		if (monster.mode != MonsterMode::Petrified) {
+			StartMonsterGotHit(monster);
+		}
 	}
 }
 
 void MonsterHitMonster(Monster &attacker, Monster &target, int dam)
 {
-	if (IsHardHit(target, dam)) {
+	// One roll per hit: in POE2 mode the light stun is a chance.
+	const bool hardHit = IsHardHit(target, dam);
+	if (hardHit) {
 		target.direction = Opposite(attacker.direction);
 	}
 
-	M_StartHit(target, dam);
+	ReactToHit(target, hardHit);
 }
 
 void StartDeathFromMonster(Monster &attacker, Monster &target)
@@ -4255,26 +4282,15 @@ void M_GetKnockback(Monster &monster, WorldTilePosition attackerStartPos)
 
 void M_StartHit(Monster &monster, int dam)
 {
-	PlayEffect(monster, MonsterSound::Hit);
-
-	if (IsHardHit(monster, dam)) {
-		if (monster.type().type == MT_BLINK) {
-			Teleport(monster);
-		} else if (IsAnyOf(monster.type().type, MT_NSCAV, MT_BSCAV, MT_WSCAV, MT_YSCAV, MT_GRAVEDIG)) {
-			monster.goal = MonsterGoal::Normal;
-			monster.goalVar1 = 0;
-			monster.goalVar2 = 0;
-		}
-		if (monster.mode != MonsterMode::Petrified) {
-			StartMonsterGotHit(monster);
-		}
-	}
+	ReactToHit(monster, IsHardHit(monster, dam));
 }
 
 void M_StartHit(Monster &monster, const Player &player, int dam)
 {
 	monster.tag(player);
-	if (IsHardHit(monster, dam)) {
+	// One roll per hit: in POE2 mode the light stun is a chance.
+	const bool hardHit = IsHardHit(monster, dam);
+	if (hardHit) {
 		monster.enemy = player.getId();
 		monster.enemyPosition = player.position.future;
 		monster.flags &= ~MFLAG_TARGETS_MONSTER;
@@ -4282,8 +4298,10 @@ void M_StartHit(Monster &monster, const Player &player, int dam)
 			monster.direction = GetMonsterDirection(monster);
 		}
 	}
+	if (gbIsPoe2 && dam > 0)
+		TelemetryMonsterHitByHero(player, hardHit);
 
-	M_StartHit(monster, dam);
+	ReactToHit(monster, hardHit);
 }
 
 void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
