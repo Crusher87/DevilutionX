@@ -2570,18 +2570,6 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 	premiumItem._iStatFlag = player.CanUseItem(premiumItem);
 }
 
-/**
- * @brief POE2 vendors keep valuable currency, waystones, gems and charms out of their stock: those come from drops.
- * Adria still sells the common orbs (Transmute, Augment, Bauble, Whetstone, Scrap) and her scrolls.
- */
-bool Poe2VendorWithholds(item_misc_id miscId)
-{
-	if (IsCurrencyMiscId(miscId))
-		return OrbCurrencyBand(miscId) != CurrencyBand::Common;
-	return IsAnyOf(miscId, IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_SPIRIT_SKULL, IMISC_SPEC_BOOK, IMISC_CHARM_LIFE,
-	    IMISC_CHARM_MANA, IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
-}
-
 bool WitchItemOk(const Player & /*player*/, const ItemData &item)
 {
 	if (IsNoneOf(item.itype, ItemType::Misc, ItemType::Staff))
