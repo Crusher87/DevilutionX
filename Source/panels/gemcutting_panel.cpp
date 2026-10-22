@@ -102,6 +102,11 @@ struct TierBlock {
 	Rectangle label;
 };
 
+struct CategoryTab {
+	GemCategory category;
+	Rectangle rect;
+};
+
 struct SkillTab {
 	/** Empty for the "All gems" tab. */
 	std::optional<SkillSlot> skill;
@@ -110,7 +115,7 @@ struct SkillTab {
 
 struct Layout {
 	Rectangle panel;
-	std::vector<Rectangle> tabs;
+	std::vector<CategoryTab> tabs;
 	/** Shown in place of the category tabs while cutting a support gem. */
 	std::vector<SkillTab> skillTabs;
 	Rectangle grid;
@@ -214,8 +219,13 @@ Layout ComputeLayout(const Surface &out)
 		}
 		layout.skillTabs.push_back({ std::nullopt, { { origin.x + Padding, origin.y + height - FooterHeight - TabHeight }, { TabWidth, TabHeight } } });
 	} else {
-		for (size_t i = 0; i < static_cast<size_t>(GemCategory::Count); i++)
-			layout.tabs.push_back({ origin + Displacement { Padding, HeaderHeight + static_cast<int>(i) * (TabHeight + TabGap) }, { TabWidth, TabHeight } });
+		// Only the tabs of what the uncut gem can become, e.g. no Support or Spirit tab for a skill gem (Curtis 2026-10-22).
+		const Item *uncut = UncutItem();
+		int y = origin.y + HeaderHeight;
+		for (const GemCategory category : GemcuttingTabs(uncut != nullptr ? std::optional<UncutKind>(UncutGemKind(*uncut)) : std::nullopt)) {
+			layout.tabs.push_back({ category, { { origin.x + Padding, y }, { TabWidth, TabHeight } } });
+			y += TabHeight + TabGap;
+		}
 	}
 
 	const int gridX = origin.x + Padding + TabWidth + 10;
@@ -527,9 +537,9 @@ bool HandleClick(Point position)
 		CloseGemcutting();
 		return true;
 	}
-	for (size_t i = 0; i < layout.tabs.size(); i++) {
-		if (layout.tabs[i].contains(position)) {
-			Category = static_cast<GemCategory>(i);
+	for (const CategoryTab &tab : layout.tabs) {
+		if (tab.rect.contains(position)) {
+			Category = tab.category;
 			Scroll = 0;
 			return true;
 		}
@@ -719,12 +729,11 @@ void DrawGemcutting(const Surface &out)
 	DrawString(out, mode, title, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
 	DrawString(out, _("Esc to close"), title, { .flags = UiFlags::AlignRight | UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
 
-	for (size_t i = 0; i < layout.tabs.size(); i++) {
-		const Rectangle &tab = layout.tabs[i];
-		const bool active = static_cast<size_t>(Category) == i;
-		FillRectangle(out, tab, active ? TabActiveColor : (tab.contains(MousePosition) ? RowHoverColor : TabColor));
-		DrawFrame(out, tab, active ? BorderColor : InnerBorderColor);
-		DrawString(out, GemCategoryName(static_cast<GemCategory>(i)), { tab.position + Displacement { 8, 0 }, { tab.size.width - 12, tab.size.height } },
+	for (const CategoryTab &tab : layout.tabs) {
+		const bool active = Category == tab.category;
+		FillRectangle(out, tab.rect, active ? TabActiveColor : (tab.rect.contains(MousePosition) ? RowHoverColor : TabColor));
+		DrawFrame(out, tab.rect, active ? BorderColor : InnerBorderColor);
+		DrawString(out, GemCategoryName(tab.category), { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } },
 		    { .flags = (active ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) | UiFlags::VerticalCenter });
 	}
 	for (const SkillTab &tab : layout.skillTabs) {

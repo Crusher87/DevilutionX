@@ -205,6 +205,32 @@ UncutKind GemUncutKind(const GemEntry &gem)
 	return gem.skill.kind == SkillKind::Persistent ? UncutKind::Spirit : UncutKind::Skill;
 }
 
+std::vector<GemCategory> GemcuttingTabs(std::optional<UncutKind> cutting)
+{
+	std::vector<GemCategory> tabs;
+	for (size_t i = 0; i < static_cast<size_t>(GemCategory::Count); i++) {
+		const auto category = static_cast<GemCategory>(i);
+		bool shown = true;
+		if (cutting) {
+			switch (category) {
+			case GemCategory::Spirit:
+				shown = *cutting == UncutKind::Spirit;
+				break;
+			case GemCategory::Support:
+				shown = *cutting == UncutKind::Support;
+				break;
+			default:
+				// A Spirit or support gem's own tab holds all it can become, so it needs no All Gems tab either.
+				shown = *cutting == UncutKind::Skill;
+				break;
+			}
+		}
+		if (shown)
+			tabs.push_back(category);
+	}
+	return tabs;
+}
+
 std::string_view UncutKindName(UncutKind kind)
 {
 	switch (kind) {
