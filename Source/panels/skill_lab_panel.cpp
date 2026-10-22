@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <string>
 #include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_timer.h>
 #else
 #ifdef USE_SDL1
 #include "utils/sdl2_to_1_2_backports.h"
@@ -20,9 +22,9 @@
 #include "engine/dx.h"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
-#include "plrmsg.h"
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_lab_notes.hpp"
+#include "poe2/skill_looks.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/display.h"
 #include "utils/language.h"
@@ -71,6 +73,56 @@ bool TypingNote;
 /** Folded down to a small tab, to see the whole arena. */
 bool Hidden;
 
+/** A short message under the bar ("Note saved"), until FlashUntil; the game's own messages sit behind the panel. */
+std::string FlashText;
+uint32_t FlashUntil;
+
+void Flash(std::string_view text)
+{
+	FlashText = std::string(text);
+	FlashUntil = static_cast<uint32_t>(SDL_GetTicks()) + 2000;
+}
+
+/** The look sliders are showing. */
+bool LookOpen;
+/** The slider being dragged, or -1. */
+int Dragging = -1;
+
+/** @brief One of a skill look's numbers, as a slider. */
+struct Knob {
+	const char *label;
+	float SkillLook::*field;
+	float lo;
+	float hi;
+};
+
+const std::array<Knob, 7> Knobs { {
+	{ N_("Size"), &SkillLook::size, 0.25F, 3.F },
+	{ N_("Amount"), &SkillLook::amount, 0.F, 3.F },
+	{ N_("Length"), &SkillLook::length, 0.25F, 3.F },
+	{ N_("Bright"), &SkillLook::brightness, 0.F, 2.F },
+	{ N_("Speed"), &SkillLook::speed, 0.25F, 3.F },
+	{ N_("Shake"), &SkillLook::shake, 0.F, 3.F },
+	{ N_("Tint"), &SkillLook::tint, 0.F, 1.F },
+} };
+
+struct Swatch {
+	const char *name;
+	uint8_t r, g, b;
+};
+
+const std::array<Swatch, 9> Swatches { {
+	{ N_("White"), 255, 255, 255 },
+	{ N_("Fire"), 255, 140, 40 },
+	{ N_("Ice"), 140, 210, 255 },
+	{ N_("Storm"), 170, 180, 255 },
+	{ N_("Holy"), 255, 210, 120 },
+	{ N_("Chaos"), 120, 220, 60 },
+	{ N_("Blood"), 220, 30, 30 },
+	{ N_("Arcane"), 120, 140, 255 },
+	{ N_("Shadow"), 80, 48, 112 },
+} };
+
 /** The tab the list shows; Count is every tab. */
 GemCategory Category = GemCategory::All;
 std::vector<int> Results;
@@ -102,6 +154,8 @@ struct Layout {
 	std::vector<Button> controls;
 	/** Labels drawn left of a row of controls. */
 	std::vector<std::pair<Rectangle, std::string>> labels;
+	/** The look sliders' tracks, one per knob. */
+	std::vector<Rectangle> sliders;
 
 	[[nodiscard]] size_t visibleRows() const
 	{
@@ -214,7 +268,7 @@ std::string MomentText(const LabMoment &moment)
 void MarkMoment()
 {
 	if (!LabMarkMoment()) {
-		EventPlrMsg(_("Cast first, then mark"));
+		Flash(_("Cast first, then mark"));
 		return;
 	}
 	StartTyping(true);
@@ -228,7 +282,65 @@ void SaveNote()
 	}
 	NoteInput.clear();
 	StopTyping();
-	EventPlrMsg(_("Note saved"));
+	Flash(_("Note saved"));
+}
+
+std::string SelectedLookKey()
+{
+	if (LabSelectedSkill() < 0)
+		return {};
+	return SkillLookKey(LabSkills()[LabSelectedSkill()].skill);
+}
+
+/** @brief The selected skill's look as it shows now. */
+SkillLook SelectedLook()
+{
+	return GetSkillLook(SelectedLookKey());
+}
+
+void ChangeLook(const SkillLook &look)
+{
+	const std::string key = SelectedLookKey();
+	if (key.empty())
+		return;
+	SetSkillLookEdit(key, SelectedName(), look);
+	SetSkillLookEditsOn(true);
+}
+
+void CycleSwatch()
+{
+	SkillLook look = SelectedLook();
+	size_t next = 0;
+	for (size_t i = 0; i < Swatches.size(); i++) {
+		if (Swatches[i].r == look.r && Swatches[i].g == look.g && Swatches[i].b == look.b) {
+			next = (i + 1) % Swatches.size();
+			break;
+		}
+	}
+	look.r = Swatches[next].r;
+	look.g = Swatches[next].g;
+	look.b = Swatches[next].b;
+	// A colour with no tint shows nothing, so picking one tints halfway.
+	if (look.tint <= 0 && next != 0)
+		look.tint = 0.5F;
+	ChangeLook(look);
+	if (!LabLooping())
+		LabCast();
+}
+
+std::string SwatchName(const SkillLook &look)
+{
+	for (const Swatch &swatch : Swatches) {
+		if (swatch.r == look.r && swatch.g == look.g && swatch.b == look.b)
+			return std::string(_(swatch.name));
+	}
+	return std::string(_("Custom"));
+}
+
+std::string KnobText(float value)
+{
+	const int hundredths = static_cast<int>(value * 100 + 0.5F);
+	return StrCat(hundredths / 100, ".", hundredths % 100 < 10 ? "0" : "", hundredths % 100);
 }
 
 /** @brief Where the next group of controls goes in the bar along the top. */
@@ -263,6 +375,56 @@ void AddGroup(Layout &layout, Flow &flow, std::string_view label, std::vector<Bu
 	flow.x += 3 * Gap;
 }
 
+/**
+ * @brief The look sliders, at the bottom of the left panel under a shorter list, so the arena stays in sight: a label,
+ * the track and the number for each knob, then the colour and the before/after, reset and save chips.
+ */
+void AddLookSliders(Layout &layout, int top)
+{
+	const SkillLook look = SelectedLook();
+	const int left = layout.list.position.x;
+	const int width = layout.list.size.width;
+	int labelWidth = 0;
+	for (const Knob &knob : Knobs)
+		labelWidth = std::max(labelWidth, GetLineWidth(_(knob.label)) + 6);
+	const int valueWidth = GetLineWidth("0.00") + 8;
+	const int trackWidth = width - labelWidth - valueWidth;
+
+	// The chips go under the sliders: laid out from 0, then moved down.
+	Layout chips;
+	Flow flow { left, left + width, left, 0 };
+	AddGroup(chips, flow, _("Colour"), { Button { {}, SwatchName(look), false, [](int) { CycleSwatch(); }, 0 } });
+	AddGroup(chips, flow, {},
+	    {
+	        Button { {}, std::string(_("Before")), !SkillLookEditsOn(), [](int) { SetSkillLookEditsOn(false); if (!LabLooping()) LabCast(); }, 0 },
+	        Button { {}, std::string(_("After")), SkillLookEditsOn(), [](int) { SetSkillLookEditsOn(true); if (!LabLooping()) LabCast(); }, 0 },
+	    });
+	AddGroup(chips, flow, {},
+	    {
+	        Button { {}, std::string(_("Reset")), false, [](int) { ClearSkillLookEdit(SelectedLookKey()); if (!LabLooping()) LabCast(); }, 0 },
+	        Button { {}, std::string(_("Save look")), false, [](int) { Flash(SaveSkillLookEdits() ? _("Look saved") : _("Couldn't save the look")); }, 0 },
+	    });
+	const int rowHeight = ChipHeight + 2;
+	int y = top;
+	for (const Knob &knob : Knobs) {
+		layout.labels.emplace_back(Rectangle { { left, y }, { labelWidth, ChipHeight } }, std::string(_(knob.label)));
+		layout.sliders.push_back({ { left + labelWidth, y }, { trackWidth, ChipHeight } });
+		layout.controls.push_back(Button { { { left + labelWidth + trackWidth, y }, { valueWidth, ChipHeight } }, KnobText(look.*knob.field), false, nullptr, 0 });
+		y += rowHeight;
+	}
+	y += Gap;
+	for (auto &[rect, text] : chips.labels) {
+		rect.position.y += y;
+		layout.labels.emplace_back(rect, text);
+	}
+	for (Button &button : chips.controls) {
+		button.rect.position.y += y;
+		layout.controls.push_back(std::move(button));
+	}
+}
+
+void AddBar(Layout &layout, const Surface &out);
+
 Layout ComputeLayout(const Surface &out)
 {
 	Layout layout;
@@ -283,6 +445,16 @@ Layout ComputeLayout(const Surface &out)
 	layout.hide = { { layout.exit.position.x - Gap - hideWidth, y + 2 }, { hideWidth, ChipHeight } };
 	y += 28;
 
+	if (LookOpen && LabSelectedSkill() >= 0) {
+		// The sliders take the list's place, under the skill's name; Look again brings the list back.
+		layout.labels.emplace_back(Rectangle { { innerX, y }, { innerWidth, 20 } }, LabSkills()[LabSelectedSkill()].name);
+		y += 24;
+		layout.list = { { innerX, y }, { innerWidth, 0 } };
+		AddLookSliders(layout, y);
+		AddBar(layout, out);
+		return layout;
+	}
+
 	layout.search = { { innerX, y }, { innerWidth, 20 } };
 	y += 24;
 
@@ -300,8 +472,13 @@ Layout ComputeLayout(const Surface &out)
 	y += ChipHeight + Gap;
 
 	layout.list = { { innerX, y }, { innerWidth, std::max(layout.panel.position.y + layout.panel.size.height - Padding - y, RowHeight) } };
+	AddBar(layout, out);
+	return layout;
+}
 
-	// The controls go in a bar along the top, right of the list, so the list keeps the panel's height.
+/** @brief The controls in the bar along the top, right of the panel, so the list keeps the panel's height. */
+void AddBar(Layout &layout, const Surface &out)
+{
 	const int barLeft = layout.panel.position.x + layout.panel.size.width + Gap;
 	Flow flow { barLeft + Padding, out.w() - 4 - Padding, barLeft + Padding, layout.panel.position.y + 6 };
 	AddGroup(layout, flow, {},
@@ -375,6 +552,7 @@ Layout ComputeLayout(const Surface &out)
 	const LabStatus current = LabSkillStatus(status);
 	AddGroup(layout, flow, {},
 	    {
+	        Button { {}, std::string(_("Look")), LookOpen, [](int) { LookOpen = !LookOpen; Dragging = -1; }, 0 },
 	        Button { {}, std::string(_("Needs work")), current == LabStatus::NeedsWork, [](int) { LabSetStatus(LabSkillStatus(SelectedName()) == LabStatus::NeedsWork ? LabStatus::Unseen : LabStatus::NeedsWork); }, 0 },
 	        Button { {}, std::string(_("Approved")), current == LabStatus::Approved, [](int) { LabSetStatus(LabSkillStatus(SelectedName()) == LabStatus::Approved ? LabStatus::Unseen : LabStatus::Approved); }, 0 },
 	    });
@@ -391,8 +569,8 @@ Layout ComputeLayout(const Surface &out)
 	layout.note = { { flow.x, flow.y }, { noteWidth, ChipHeight } };
 	flow.x += noteWidth + Gap;
 	layout.controls.push_back(Button { { { flow.x, flow.y }, { saveWidth, ChipHeight } }, saveLabel, false, [](int) { SaveNote(); }, 0 });
+
 	layout.bar = { { barLeft, layout.panel.position.y }, { out.w() - 4 - barLeft, flow.y + ChipHeight + 6 - layout.panel.position.y } };
-	return layout;
 }
 
 Layout CurrentLayout()
@@ -441,6 +619,23 @@ void Scroll(int rows)
 	ScrollTop = static_cast<size_t>(std::clamp(static_cast<int>(ScrollTop) + rows, 0, maxTop));
 }
 
+/** @brief Sets the dragged slider's knob from where the mouse is along its track. */
+void DragSlider(const Layout &layout, Point position)
+{
+	if (Dragging < 0 || static_cast<size_t>(Dragging) >= layout.sliders.size())
+		return;
+	const Rectangle &track = layout.sliders[Dragging];
+	const Knob &knob = Knobs[Dragging];
+	const float t = std::clamp(static_cast<float>(position.x - track.position.x - 3) / static_cast<float>(track.size.width - 6), 0.F, 1.F);
+	// Steps of 0.05, so the numbers stay tidy.
+	const float value = std::round((knob.lo + (knob.hi - knob.lo) * t) * 20) / 20;
+	SkillLook look = SelectedLook();
+	if (look.*knob.field == value && HasSkillLookEdit(SelectedLookKey()))
+		return;
+	look.*knob.field = value;
+	ChangeLook(look);
+}
+
 bool HandleClick(Point position)
 {
 	const Layout layout = CurrentLayout();
@@ -482,6 +677,13 @@ bool HandleClick(Point position)
 		if (row < Results.size())
 			LabSelectSkill(Results[row]);
 		return true;
+	}
+	for (size_t i = 0; i < layout.sliders.size(); i++) {
+		if (layout.sliders[i].contains(position)) {
+			Dragging = static_cast<int>(i);
+			DragSlider(layout, position);
+			return true;
+		}
 	}
 	for (const Button &button : layout.controls) {
 		if (button.rect.contains(position) && button.onClick != nullptr) {
@@ -591,6 +793,14 @@ bool SkillLabPanelHandleEvent(const SDL_Event &event)
 #endif
 		return MouseOverPanel();
 	case SDL_EVENT_MOUSE_BUTTON_UP:
+		if (Dragging >= 0 && event.button.button == SDL_BUTTON_LEFT) {
+			DragSlider(CurrentLayout(), MousePosition);
+			Dragging = -1;
+			// Show the change straight away.
+			if (!LabLooping())
+				LabCast();
+			return true;
+		}
 		return MouseOverPanel();
 #ifndef USE_SDL1
 	case SDL_EVENT_MOUSE_WHEEL:
@@ -609,6 +819,8 @@ void DrawSkillLabPanel(const Surface &out)
 	if (!SkillLabActive())
 		return;
 	RefreshResults();
+	if (Dragging >= 0)
+		DragSlider(ComputeLayout(out), MousePosition);
 	const Layout layout = ComputeLayout(out);
 	const Rectangle &panel = layout.panel;
 	if (Hidden) {
@@ -627,19 +839,21 @@ void DrawSkillLabPanel(const Surface &out)
 	DrawChip(out, layout.exit, _("Exit"), false, layout.exit.contains(MousePosition));
 	DrawChip(out, layout.hide, _("Hide"), false, layout.hide.contains(MousePosition));
 
-	Fill(out, layout.search, FieldColor);
-	DrawFrame(out, layout.search, Typing && !TypingNote ? BorderColor : ChipColor);
-	const Rectangle searchText { layout.search.position + Displacement { 6, 0 }, { layout.search.size.width - 12, layout.search.size.height } };
-	if (QueryInput.empty() && !(Typing && !TypingNote))
-		DrawString(out, _("Search"), searchText, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
-	DrawString(out, QueryInput.value(), searchText,
-	    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite, .cursorPosition = Typing && !TypingNote ? static_cast<int>(QueryCursor.position) : -1 });
+	if (layout.search.size.width > 0) {
+		Fill(out, layout.search, FieldColor);
+		DrawFrame(out, layout.search, Typing && !TypingNote ? BorderColor : ChipColor);
+		const Rectangle searchText { layout.search.position + Displacement { 6, 0 }, { layout.search.size.width - 12, layout.search.size.height } };
+		if (QueryInput.empty() && !(Typing && !TypingNote))
+			DrawString(out, _("Search"), searchText, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
+		DrawString(out, QueryInput.value(), searchText,
+		    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite, .cursorPosition = Typing && !TypingNote ? static_cast<int>(QueryCursor.position) : -1 });
+	}
 
 	for (const Button &tab : layout.tabs)
 		DrawChip(out, tab.rect, tab.label, tab.active, tab.rect.contains(MousePosition));
 
 	const std::vector<LabSkill> &skills = LabSkills();
-	const size_t rows = layout.visibleRows();
+	const size_t rows = layout.list.size.height > 0 ? layout.visibleRows() : 0;
 	for (size_t row = 0; row < rows && ScrollTop + row < Results.size(); row++) {
 		const int index = Results[ScrollTop + row];
 		const LabSkill &skill = skills[index];
@@ -665,7 +879,7 @@ void DrawSkillLabPanel(const Surface &out)
 		}
 		DrawString(out, skill.name, nameRect, { .flags = UiFlags::VerticalCenter | color });
 	}
-	if (Results.size() > rows) {
+	if (rows > 0 && Results.size() > rows) {
 		const int trackHeight = layout.list.size.height;
 		const int thumbHeight = std::max(trackHeight * static_cast<int>(rows) / static_cast<int>(Results.size()), 12);
 		const int thumbY = (trackHeight - thumbHeight) * static_cast<int>(ScrollTop) / std::max(static_cast<int>(Results.size() - rows), 1);
@@ -682,6 +896,27 @@ void DrawSkillLabPanel(const Surface &out)
 	DrawString(out, NoteInput.value(), noteText,
 	    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite, .cursorPosition = Typing && TypingNote ? static_cast<int>(NoteCursor.position) : -1 });
 
+	if (!layout.sliders.empty()) {
+		const SkillLook look = SelectedLook();
+		for (size_t i = 0; i < layout.sliders.size(); i++) {
+			const Rectangle &track = layout.sliders[i];
+			const Knob &knob = Knobs[i];
+			const int middle = track.position.y + track.size.height / 2;
+			FillRect(out, track.position.x + 3, middle - 1, track.size.width - 6, 3, ChipColor);
+			// A tick where the knob does nothing (1, or 0 for tint).
+			const float plain = knob.field == &SkillLook::tint ? 0.F : 1.F;
+			const int plainX = track.position.x + 3 + static_cast<int>((plain - knob.lo) / (knob.hi - knob.lo) * (track.size.width - 6));
+			FillRect(out, plainX, middle - 4, 1, 9, PAL16_GRAY + 8);
+			const float t = std::clamp((look.*knob.field - knob.lo) / (knob.hi - knob.lo), 0.F, 1.F);
+			const int handleX = track.position.x + 3 + static_cast<int>(t * (track.size.width - 6));
+			const bool hot = Dragging == static_cast<int>(i) || track.contains(MousePosition);
+			FillRect(out, handleX - 3, middle - 6, 7, 13, hot ? PAL16_YELLOW + 2 : ChipActiveColor);
+		}
+	}
+	if (!FlashText.empty() && static_cast<uint32_t>(SDL_GetTicks()) < FlashUntil) {
+		const Rectangle flash { { bar.position.x, bar.position.y + bar.size.height + 4 }, { bar.size.width, 20 } };
+		DrawString(out, FlashText, flash, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+	}
 	for (const auto &[rect, text] : layout.labels)
 		DrawString(out, text, rect, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonface });
 	for (const Button &button : layout.controls) {

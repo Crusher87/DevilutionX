@@ -7,7 +7,9 @@ began, 20 a second at normal speed, so the same moment at any lab speed). Each l
 then: class, weapon, gem level, floor, targets and speed.
 
 This prints every skill that has notes or a status, needs work first, with its notes in order. Notes written before
-the skill's latest "approved" are left out unless --all is given, since they were dealt with.
+the skill's latest "approved" are left out unless --all is given, since they were dealt with. It then lists the looks the
+player changed with the lab's sliders (poe2_logs/skill_looks_mine.tsv): fold those into
+mods/poe2/txtdata/poe2/skill_looks.tsv when they're settled.
 
 Usage:
   python3 tools/skill_lab_notes.py [log folder] [--all] [--since YYYY-MM-DD] [--skill NAME]
@@ -36,6 +38,23 @@ def setup(row):
     return ", ".join(p for p in parts if p)
 
 
+def print_looks(path):
+    """The player's own looks, only the numbers that differ from plain."""
+    if not os.path.exists(path):
+        return
+    plain = {"size": "1.00", "amount": "1.00", "length": "1.00", "brightness": "1.00", "speed": "1.00", "shake": "1.00", "tint": "0.00"}
+    rows = read_lines(path)
+    if not rows:
+        return
+    print(f"Looks changed in the Skill Lab ({len(rows)}):")
+    for row in rows:
+        changes = [f"{k} {row.get(k)}" for k, v in plain.items() if row.get(k, v) != v]
+        if row.get("tint", "0.00") != "0.00":
+            changes.append(f"colour #{row.get('colour', '')}")
+        print(f"  {row.get('name') or row.get('key')} [{row.get('key')}]: {', '.join(changes) or 'plain'}")
+    print()
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -46,6 +65,7 @@ def main():
     args = parser.parse_args()
 
     path = os.path.join(args.folder, "skill_lab_notes.tsv")
+    print_looks(os.path.join(args.folder, "skill_looks_mine.tsv"))
     if not os.path.exists(path):
         print(f"No Skill Lab notes yet ({path} not found).")
         return 0
