@@ -46,7 +46,7 @@ const std::array<WaystoneMod, WaystoneModIds + 1> WaystoneMods { {
 	{ "of Frost", false, 90, ChilledGround, { { { 1, 1 }, { 2, 2 }, { 3, 3 } } }, MapAxis::ItemRarity, { 8, 12, 16 }, "Area has patches of chilled ground" },
 	{ "of Storms", false, 90, ShockedGround, { { { 1, 1 }, { 2, 2 }, { 3, 3 } } }, MapAxis::PackSize, { 4, 7, 10 }, "Area has patches of shocked ground" },
 	{ "of Exhaustion", false, 80, MoreSkillCost, { { { 8, 8 }, { 13, 13 }, { 20, 20 } } }, MapAxis::WaystoneFind, { 12, 18, 26 }, "Skills cost {}% more mana" },
-	{ "of Isolation", false, 75, WeakerAuras, { { { 8, 8 }, { 13, 13 }, { 20, 20 } } }, MapAxis::ItemRarity, { 10, 15, 21 }, "Player auras and heralds are {}% weaker" },
+	{ "of Isolation", false, 75, WeakerAuras, { { { 8, 8 }, { 13, 13 }, { 20, 20 } } }, MapAxis::ItemRarity, { 10, 15, 21 }, "Player auras and Aspects are {}% weaker" },
 	{ "of Ruin", false, 65, DeathEffects, { { { 1, 1 }, { 2, 2 }, { 3, 3 } } }, MapAxis::MonsterRarity, { 13, 20, 28 }, "Magic and rare monsters explode on death" },
 	{ "of Hunger", false, 85, LessLeech, { { { 15, 15 }, { 25, 25 }, { 40, 40 } } }, MapAxis::WaystoneFind, { 12, 18, 25 }, "Players recover {}% less from leech" },
 	{ "of the Hunt", false, 70, RareMoveSpeed, { { { 10, 10 }, { 16, 16 }, { 24, 24 } } }, MapAxis::MonsterRarity, { 14, 22, 30 }, "Rare monsters move {}% faster" },

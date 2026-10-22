@@ -140,7 +140,7 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::MixedHost, 1, 3, 100, {}, "Minions deal 7% more damage for each\nkind of minion you have" },
 	// Penetration I-III: resistance the hits get past.
 	// Deadly Herald: more damage, and Spirit added to the herald's reservation.
-	{ SG::DeadlyHerald, 1, 3, 100, { 30, 20, 0 }, "The herald's explosions deal 30% more\ndamage. Reserves 20 more Spirit" },
+	{ SG::DeadlyHerald, 1, 3, 100, { 30, 20, 0 }, "The Aspect's explosions deal 30% more\ndamage. Reserves 20 more Spirit" },
 	{ SG::FirePenetration, 1, 2, 100, { 15, 0, 0 }, "Fire hits penetrate 15% of the\nmonster's fire resistance" },
 	{ SG::FirePenetration, 2, 3, 100, { 20, 0, 0 }, "Fire hits penetrate 20% of the\nmonster's fire resistance" },
 	{ SG::FirePenetration, 3, 5, 100, { 25, 0, 0 }, "Fire hits penetrate 25% of the\nmonster's fire resistance" },
