@@ -83,6 +83,7 @@
 #include "poe2/hd.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/floor_packs.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
@@ -4038,6 +4039,12 @@ std::expected<void, std::string> InitMonsters()
 				scattertypes[numscattypes] = i;
 				numscattypes++;
 			}
+		}
+		// POE2 Mashup: the floor's monsters go out room by room, in packs.
+		if (numscattypes > 0 && UseFloorPacks()) {
+			PlaceFloorPacks(totalmonsters - ActiveMonsterCount, { scattertypes, static_cast<size_t>(numscattypes) });
+			// Fewer only when the floor had no free tile left; the old scatter would look for one forever.
+			totalmonsters = ActiveMonsterCount;
 		}
 		if (numscattypes > 0) {
 			while (ActiveMonsterCount < totalmonsters) {
