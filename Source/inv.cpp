@@ -37,6 +37,7 @@
 #include "minitext.h"
 #include "options.h"
 #include "panels/gemcutting_panel.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
@@ -2549,11 +2550,13 @@ bool UseInvItem(int cii)
 		return true;
 	}
 
-	if (SpecBookIndex(*item) >= 0) {
+	if (const int book = SpecBookIndex(*item); book >= 0) {
 		if (UseSpecBook(player, *item)) {
-			// Reading it sounds like reading any of Diablo's books (Curtis 2026-10-20).
-			if (&player == MyPlayer)
+			// Reading it sounds like reading any of Diablo's books (Curtis 2026-10-20), and the tree opens on what it gave.
+			if (&player == MyPlayer) {
 				PlaySFX(SfxID::ReadBook);
+				ShowBookRead(book);
+			}
 			if (speedlist)
 				player.RemoveSpdBarItem(c);
 			else

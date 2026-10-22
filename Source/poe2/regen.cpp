@@ -37,7 +37,7 @@ void ApplyRegen(Player &player)
 	const int lifeRecovery = LifeRecoveryPercent(player, false);
 	// The passive tree regenerates a share of maximum life (per mille per second) on top of the flat regeneration.
 	const int64_t lifePerSecond = static_cast<int64_t>(player.poe2.lifeRegen) * 64 + static_cast<int64_t>(std::max<int32_t>(player._pMaxHP.raw(), 0)) * player.poe2.lifeRegenPerMille / 1000;
-	// With life recovery going to energy shield (the Quiet Shrine), regeneration keeps working at full life.
+	// With life recovery going to energy shield (the Inner Wellspring keystone), regeneration keeps working at full life.
 	const bool feedsShield = player.poe2.uniqueRules[static_cast<size_t>(UniqueRule::LifeRecoveryToShield)] > 0 && player.poe2.energyShield < player.poe2.maxEnergyShield * 64;
 	if (lifePerSecond > 0 && (player._pHitPoints < player._pMaxHP || feedsShield) && lifeRecovery > 0) {
 		const int64_t total = lifePerSecond * lifeRecovery / 100 + player.poe2.lifeRegenRemainder;

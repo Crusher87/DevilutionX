@@ -1672,8 +1672,6 @@ void DrawView(const Surface &out, Point startPosition)
 
 	DrawControllerModifierHints(out);
 	DrawSkillBar(out);
-	if (gbIsPoe2)
-		DrawQuestPointsNotice(out);
 	DrawPlrMsg(out);
 	gmenu_draw(out);
 	doom_draw(out);

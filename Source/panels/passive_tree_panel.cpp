@@ -90,7 +90,7 @@ constexpr uint8_t NodeReachableColor = PAL16_GRAY + 2;
 constexpr uint8_t NodeAllocatedColor = PAL16_YELLOW + 2;
 constexpr uint8_t NotableRimColor = PAL16_ORANGE + 9;
 constexpr uint8_t NotableInnerRimColor = PAL16_GRAY + 14; // +15 is palette 255, white
-constexpr uint8_t ShrineRimColor = PAL16_BLUE + 4;
+constexpr uint8_t KeystoneRimColor = PAL16_BLUE + 4;
 constexpr uint8_t AttributeRimColor = PAL16_BEIGE + 6;
 constexpr uint8_t SocketRimColor = PAL16_GRAY + 4;
 constexpr uint8_t SocketHoleColor = 0;
@@ -318,7 +318,7 @@ float NodeSize(const PassiveNode &node)
 	switch (node.kind) {
 	case PassiveKind::Start:
 		return 13;
-	case PassiveKind::Shrine:
+	case PassiveKind::Keystone:
 		return 11;
 	case PassiveKind::Ascendancy:
 		return 11;
@@ -418,14 +418,6 @@ void FillCircle(const Surface &out, Point center, int radius, uint8_t color)
 		int width = 0;
 		while ((width + 1) * (width + 1) + y * y <= radius * radius)
 			width++;
-		DrawHorizontalLine(out, center + Displacement { -width, y }, (2 * width) + 1, color);
-	}
-}
-
-void FillDiamond(const Surface &out, Point center, int radius, uint8_t color)
-{
-	for (int y = -radius; y <= radius; y++) {
-		const int width = radius - std::abs(y);
 		DrawHorizontalLine(out, center + Displacement { -width, y }, (2 * width) + 1, color);
 	}
 }
@@ -643,15 +635,11 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 		if (center.x < -radius - 2 || center.y < -radius - 2 || center.x > out.w() + radius + 2 || center.y > out.h() + radius + 2)
 			continue;
 		const uint8_t color = NodeFillColor(player, node);
-		const bool diamond = node.kind == PassiveKind::Shrine;
 		const bool faded = FadesNode(node.id) || IsIslandPreview(player, node);
 		const auto fill = [&](int size, uint8_t fillColor) {
 			if (faded)
 				fillColor = Faded(fillColor);
-			if (diamond)
-				FillDiamond(out, center, size, fillColor);
-			else
-				FillCircle(out, center, size, fillColor);
+			FillCircle(out, center, size, fillColor);
 		};
 		const int rim = std::max(RoundToInt(scale * 1.5F), 1);
 		if (node.id < SearchHitMask.size() && SearchHitMask[node.id])
@@ -668,9 +656,12 @@ void DrawNodes(const Surface &out, const Layout &layout, const Player &player, s
 		else if (std::find(route.begin() + (route.empty() ? 0 : 1), route.end(), node.id) != route.end())
 			fill(radius + rim + 1, RouteColor);
 		switch (node.kind) {
-		case PassiveKind::Shrine:
-			fill(radius + rim, ShrineRimColor);
-			fill(radius, color);
+		case PassiveKind::Keystone:
+			// Keystones: two blue rings with a dark band between them, the biggest round nodes in the tree.
+			fill(radius + rim, KeystoneRimColor);
+			fill(radius, NotableInnerRimColor);
+			fill(std::max(radius - rim, 1), KeystoneRimColor);
+			fill(std::max(radius - (2 * rim), 1), color);
 			break;
 		case PassiveKind::Notable:
 		case PassiveKind::Ascendancy:
@@ -720,7 +711,7 @@ void DrawNodeLabels(const Surface &out, const Layout &layout, const Player &play
 	if (scale < 1.6F || SearchQuery.empty())
 		return;
 	for (const PassiveNode &node : PassiveTree()) {
-		if ((node.kind != PassiveKind::Notable && node.kind != PassiveKind::Shrine) || IsAscendancyNode(node) || !IsNodeShown(player, node))
+		if ((node.kind != PassiveKind::Notable && node.kind != PassiveKind::Keystone) || IsAscendancyNode(node) || !IsNodeShown(player, node))
 			continue;
 		if (node.id >= SearchHitMask.size() || !SearchHitMask[node.id])
 			continue;
@@ -900,8 +891,8 @@ std::string_view NodeKindText(const PassiveNode &node)
 	switch (node.kind) {
 	case PassiveKind::Notable:
 		return _("Notable Passive");
-	case PassiveKind::Shrine:
-		return _("Shrine: a boon with a price");
+	case PassiveKind::Keystone:
+		return _("Keystone: a boon with a price");
 	case PassiveKind::Ascendancy:
 		return _("Ascendancy");
 	case PassiveKind::AscendancyNotable:
@@ -924,8 +915,8 @@ uint8_t NodeFrameColor(const PassiveNode &node)
 		return BorderColor;
 	case PassiveKind::Attribute:
 		return AttributeRimColor;
-	case PassiveKind::Shrine:
-		return ShrineRimColor;
+	case PassiveKind::Keystone:
+		return KeystoneRimColor;
 	case PassiveKind::JewelSocket:
 		return SocketGemColor;
 	default:
@@ -1120,6 +1111,125 @@ void DrawAttributePicker(const Surface &out, const Layout &layout, const Passive
 	}
 }
 
+/** @brief How long the tree's notice band stays up (longer with Cain's words), and the part of it spent fading, in milliseconds. */
+constexpr uint32_t BannerMs = 8000;
+constexpr uint32_t CainBannerMs = 15000;
+constexpr uint32_t BannerFadeMs = 1200;
+
+/** @brief The notice band across the top of the tree: a Book read, or the tree redrawn on load. */
+struct TreeBanner {
+	std::string title;
+	std::string text;
+	uint32_t start = 0;
+	uint32_t length = 0;
+	/** @brief The Book whose shelf slot lights up while the band is up; -1 for none. */
+	int book = -1;
+};
+TreeBanner Banner;
+
+struct PendingNotice {
+	bool redrawn;
+	bool refunded;
+	int pointChange;
+};
+std::optional<PendingNotice> Pending;
+
+bool BannerUp()
+{
+	return Banner.length != 0 && SDL_GetTicks() - Banner.start < Banner.length;
+}
+
+void ShowBanner(std::string title, std::string text, uint32_t length, int book)
+{
+	Banner = { std::move(title), std::move(text), SDL_GetTicks(), length, book };
+}
+
+void DrawBanner(const Surface &out, const Layout &layout)
+{
+	if (!BannerUp())
+		return;
+	const uint32_t elapsed = SDL_GetTicks() - Banner.start;
+	const int width = std::min(680, layout.view.size.width - 32);
+	const std::string text = WordWrapString(Banner.text, width - 32);
+	const int lines = text.empty() ? 0 : 1 + static_cast<int>(std::count(text.begin(), text.end(), '\n'));
+	const int height = 46 + (lines * 18);
+	const int x = layout.view.position.x + ((layout.view.size.width - width) / 2);
+	const int y = layout.view.position.y + 12;
+	const bool fading = elapsed > Banner.length - BannerFadeMs;
+	DrawHalfTransparentRectTo(out, x, y, width, height);
+	if (!fading)
+		DrawHalfTransparentRectTo(out, x, y, width, height);
+	const uint8_t frame = fading ? PAL16_GRAY + 8 : PAL16_YELLOW + 4;
+	DrawHorizontalLine(out, { x, y }, width, frame);
+	DrawHorizontalLine(out, { x, y + height - 1 }, width, frame);
+	DrawString(out, Banner.title, { { x, y + 10 }, { width, 26 } }, { .flags = UiFlags::FontSize24 | UiFlags::ColorGold | UiFlags::AlignCenter });
+	if (lines > 0)
+		DrawString(out, text, { { x + 16, y + 40 }, { width - 32, lines * 18 } }, { .flags = UiFlags::ColorWhitegold | UiFlags::AlignCenter, .lineHeight = 18 });
+}
+
+/**
+ * @brief The Book shelf: a narrow strip of plain wood beside the points line, not a centrepiece (tree start redesign,
+ * plan 4.5). Twelve slots, two Books for each act; a read Book shows its spine, the rest are dark gaps.
+ */
+constexpr int ShelfSpine = 7;
+constexpr int ShelfGap = 3;
+constexpr uint8_t ShelfWoodColor = PAL16_ORANGE + 13;
+constexpr uint8_t ShelfEdgeColor = PAL16_BEIGE + 9;
+constexpr uint8_t ShelfSpineColor = PAL16_YELLOW + 6;
+constexpr uint8_t ShelfLitColor = PAL16_YELLOW + 1;
+
+Rectangle ShelfRect(const Layout &layout)
+{
+	constexpr int Width = (static_cast<int>(BookShelfSlots) * (ShelfSpine + ShelfGap)) + ShelfGap + 2;
+	return { { layout.panel.position.x + layout.panel.size.width - Padding - Width, layout.panel.position.y + 9 }, { Width, 22 } };
+}
+
+Rectangle ShelfSlotRect(const Rectangle &shelf, size_t slot)
+{
+	return { shelf.position + Displacement { 1 + ShelfGap + (static_cast<int>(slot) * (ShelfSpine + ShelfGap)), 3 }, { ShelfSpine, shelf.size.height - 6 } };
+}
+
+/** @brief What a shelf slot says when hovered: the Book's name once read, where to find it until then. */
+std::string ShelfSlotText(const Player &player, size_t slot)
+{
+	const int book = ShelfSlotBook(slot);
+	if (book < 0)
+		return FormatRuntime(_("Act {:d}: not in the game yet"), static_cast<int>(slot / 2) + 1);
+	if ((player.poe2.specBooks & (1 << book)) != 0)
+		return FormatRuntime(_("Book of {:s}"), SpecBookPlace(book));
+	return std::string(SpecBookWhere(book));
+}
+
+void DrawShelf(const Surface &out, const Layout &layout, const Player &player)
+{
+	const Rectangle shelf = ShelfRect(layout);
+	FillRectangle(out, shelf, ShelfWoodColor);
+	DrawFrame(out, shelf, ShelfEdgeColor);
+	std::optional<size_t> hovered;
+	for (size_t slot = 0; slot < BookShelfSlots; slot++) {
+		const Rectangle spine = ShelfSlotRect(shelf, slot);
+		const int book = ShelfSlotBook(slot);
+		if (book >= 0 && (player.poe2.specBooks & (1 << book)) != 0) {
+			FillRectangle(out, spine, BannerUp() && Banner.book == book ? ShelfLitColor : ShelfSpineColor);
+			DrawHorizontalLine(out, spine.position + Displacement { 0, 3 }, spine.size.width, PAL16_BEIGE + 12);
+			DrawHorizontalLine(out, spine.position + Displacement { 0, spine.size.height - 4 }, spine.size.width, PAL16_BEIGE + 12);
+		} else {
+			FillRectangle(out, spine, PanelColor);
+		}
+		if (Rectangle { spine.position - Displacement { 1, 3 }, { spine.size.width + 2, shelf.size.height } }.contains(MousePosition))
+			hovered = slot;
+	}
+	if (!hovered)
+		return;
+	DrawFrame(out, ShelfSlotRect(shelf, *hovered), HoverColor);
+	const std::string text = ShelfSlotText(player, *hovered);
+	const int width = GetLineWidth(text) + 16;
+	const Rectangle box { { shelf.position.x + shelf.size.width - width, shelf.position.y + shelf.size.height + 4 }, { width, 22 } };
+	FillRectangle(out, box, PanelColor);
+	DrawFrame(out, box, BorderColor);
+	DrawString(out, text, box, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhite });
+}
+
 std::string PointsText(const Player &player)
 {
 	if (HeatMap)
@@ -1127,12 +1237,14 @@ std::string PointsText(const Player &player)
 	if (Pool != PassivePool::Main) {
 		const int total = WeaponSetPointsTotal(player);
 		if (total == 0)
-			return std::string(_("No weapon set points yet: read Books of Specialisation from quest bosses"));
+			return std::string(_("No weapon set points yet: each Book read gives 2"));
 		return FormatRuntime(_("{:d} weapon set points left ({:d} of {:d} spent), {:d} passive points left"), WeaponSetPointsLeft(player, Pool), WeaponSetPointsSpent(player, Pool), total, PassivePointsLeft(player));
 	}
 	const int left = PassivePointsLeft(player);
 	if (AscendancyPointsTotal(player) > 0)
 		return FormatRuntime(_("{:d} passive points, {:d} ascendancy points left"), left, AscendancyPointsLeft(player));
+	if (const int books = BookPassivePoints(player); books > 0)
+		return FormatRuntime(_("{:d} points, {:d} left: {:d} from levels, {:d} from Books"), PassivePointsTotal(player), left, PassivePointsTotal(player) - books, books);
 	return FormatRuntime(_("{:d} points left ({:d} of {:d} spent)"), left, PassivePointsSpent(player), PassivePointsTotal(player));
 }
 
@@ -1425,7 +1537,8 @@ void DrawPassiveTree(const Surface &out)
 	DrawString(out, _("Passive Tree"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::VerticalCenter });
 	const bool pointsLeft = Pool == PassivePool::Main ? PassivePointsLeft(player) > 0 || AscendancyPointsLeft(player) > 0 : WeaponSetPointsLeft(player, Pool) > 0;
 	DrawPoolTabs(out, layout, player);
-	DrawString(out, PointsText(player), title, { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (pointsLeft ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+	const Rectangle pointsLine { title.position, { ShelfRect(layout).position.x - 10 - title.position.x, title.size.height } };
+	DrawString(out, PointsText(player), pointsLine, { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (pointsLeft ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
 
 	const Surface view = out.subregion(layout.view.position.x, layout.view.position.y, layout.view.size.width, layout.view.size.height);
 	FillRect(view, 0, 0, view.w(), view.h(), ViewColor);
@@ -1438,6 +1551,7 @@ void DrawPassiveTree(const Surface &out)
 	DrawNodes(view, layout, player, hovered, route);
 	DrawNodeLabels(view, layout, player);
 	DrawFrame(out, layout.view, BorderColor);
+	DrawBanner(out, layout);
 
 	DrawSearchField(out, layout);
 	const Rectangle helpBox { layout.footer.position + Displacement { 310, 0 }, { layout.footer.size.width - 310, layout.footer.size.height } };
@@ -1448,104 +1562,64 @@ void DrawPassiveTree(const Surface &out)
 		DrawAttributePicker(out, layout, PassiveTree()[*PendingAttributeNode]);
 	else if (hovered)
 		DrawTooltip(out, layout, player, PassiveTree()[*hovered], route);
+	DrawShelf(out, layout, player);
 }
 
-namespace {
-
-/** @brief How long the quest points notice stays up, and the part of it spent fading, in milliseconds. */
-constexpr uint32_t QuestNoticeMs = 7000;
-constexpr uint32_t QuestNoticeFadeMs = 1200;
-
-uint32_t QuestNoticeStart;
-bool QuestNoticeUp;
-int QuestNoticePoints;
-quest_id QuestNoticeQuest = Q_INVALID;
-
-/**
- * @brief Why a quest gives passive points, in the world, as Cain might say it of the hero (the story thread's lines,
- * research/quest-points/quest-point-reasons-story.md).
- */
-const char *QuestPointsReason(quest_id quest)
+void ShowBookRead(int book)
 {
-	switch (quest) {
-	case Q_ROCK: return N_("The runes on the Magic Rock stay with you after Griswold takes it.");
-	case Q_MUSHROOM: return N_("Adria's brew clears your head, and new paths open on the tree.");
-	case Q_GARBUD: return N_("Gharbad's tricks taught you to watch a foe's hands, not his words.");
-	case Q_ZHAR: return N_("Buried in Zhar's ravings was true lore, and you kept it.");
-	case Q_VEIL: return N_("Lachdanan's peace leaves a knight's discipline with you.");
-	case Q_DIABLO: return N_("What you learned facing the Lord of Terror cannot be unlearned.");
-	case Q_BUTCHER: return N_("You walked out of the Butcher's room. Few have.");
-	case Q_LTBANNER: return N_("Taking back Ogden's sign taught you to fight in close quarters.");
-	case Q_BLIND: return N_("The Halls of the Blind taught you to trust what you cannot see.");
-	case Q_BLOOD: return N_("Arkaine's valor stirs in whoever carries his armour out.");
-	case Q_ANVIL: return N_("Carrying the Anvil of Fury to Griswold taught you its weight.");
-	case Q_WARLORD: return N_("You learned the Warlord's way of war by breaking it.");
-	case Q_SKELKING: return N_("Laying Leoric to rest, you learned what the dead know.");
-	case Q_PWATER: return N_("Cleansing the water steadied your hands and your will.");
-	case Q_SCHAMB: return N_("The tome in the Chamber of Bone held lore you can use.");
-	case Q_BETRAYER: return N_("Lazarus is dead, and the hold his lies had on you dies with him.");
-	case Q_GRAVE: return N_("What waited in the grave was worth the digging.");
-	case Q_FARMER: return N_("Lester's orchard taught you that some fights are won by patience.");
-	case Q_GIRL: return N_("Celia's lost friend reminds you what you fight for.");
-	case Q_TRADER: return N_("The trader's tales carry tricks of the road.");
-	case Q_DEFILER: return N_("Destroying the Defiler cleansed something in you as well.");
-	case Q_NAKRUL: return N_("Na-Krul's fall leaves its power in the air, and some in you.");
-	case Q_CORNSTN: return N_("The Cornerstone of the World hums with knowledge older than Tristram.");
-	default: return N_("Finishing a quest teaches you something new.");
+	if (MyPlayer == nullptr || book < 0)
+		return;
+	OpenPassiveTree();
+	std::string text = FormatRuntime(_("+{:d} passive points, +{:d} weapon set points"), PassivePointsPerBook, WeaponSetPointsPerBook);
+	const bool first = std::popcount(static_cast<unsigned>(MyPlayer->poe2.specBooks)) == 1;
+	if (first) {
+		// Cain's words with the first Book (tree start redesign, plan 4.5).
+		text += "\n\n";
+		text += _("Cain: \"The Horadrim set their teachings down in tomes, so that what they knew would outlive them. When the Cathedral fell, the tomes were lost, and the fiends below hoard them still. Bring them to me, and what the Horadrim knew shall be yours.\"");
 	}
+	ShowBanner(FormatRuntime(_("Book of {:s} read"), SpecBookPlace(book)), std::move(text), first ? CainBannerMs : BannerMs, book);
 }
 
-} // namespace
-
-void ShowQuestPointsNotice(uint32_t quests, int points)
+void QueueTreeNotice(bool redrawn, bool refunded, int pointChange)
 {
-	if (points <= 0)
-		return;
-	QuestNoticeQuest = Q_INVALID;
-	for (size_t quest = 0; quest < 32; quest++) {
-		if ((quests & (1U << quest)) != 0) {
-			QuestNoticeQuest = static_cast<quest_id>(quest);
-			break;
-		}
-	}
-	QuestNoticePoints = points;
-	QuestNoticeStart = SDL_GetTicks();
-	QuestNoticeUp = true;
-	PlaySFX(SfxID::QuestDone);
+	Pending = PendingNotice { redrawn, refunded, pointChange };
 }
 
-void DrawQuestPointsNotice(const Surface &out)
+void ShowPendingTreeNotice()
 {
-	if (!QuestNoticeUp)
+	if (!Pending || MyPlayer == nullptr || !gbIsPoe2)
 		return;
-	const uint32_t elapsed = SDL_GetTicks() - QuestNoticeStart;
-	if (elapsed >= QuestNoticeMs || IsOpen) {
-		QuestNoticeUp = false;
-		return;
+	const PendingNotice notice = *Pending;
+	Pending = std::nullopt;
+	// The hero stays where they saved and the world keeps running (Curtis chose no hold); only the tree opens.
+	OpenPassiveTree();
+	std::string text;
+	if (notice.refunded)
+		text = _("Every point is back to spend, weapon set points too.");
+	if (notice.redrawn) {
+		if (!text.empty())
+			text += ' ';
+		text += _("Jewels wait in the sockets nearest your start.");
 	}
-
-	// A band across the top of the play area, like POE2's reward notice: what was gained, why, and what to do with it.
-	const int width = std::min(640, out.w() - 32);
-	const int height = 112;
-	const int x = (out.w() - width) / 2;
-	const int y = std::max(out.h() / 6, 48);
-	const bool fading = elapsed > QuestNoticeMs - QuestNoticeFadeMs;
-	DrawHalfTransparentRectTo(out, x, y, width, height);
-	if (!fading)
-		DrawHalfTransparentRectTo(out, x, y, width, height);
-	const uint8_t frame = fading ? PAL16_GRAY + 8 : PAL16_YELLOW + 4;
-	DrawHorizontalLine(out, { x, y }, width, frame);
-	DrawHorizontalLine(out, { x, y + height - 1 }, width, frame);
-
-	DrawString(out, FormatRuntime(ngettext("+{:d} Passive Skill Point", "+{:d} Passive Skill Points", QuestNoticePoints), QuestNoticePoints), { { x, y + 10 }, { width, 30 } },
-	    { .flags = UiFlags::FontSize30 | UiFlags::ColorGold | UiFlags::AlignCenter });
-	const std::string questName = QuestNoticeQuest != Q_INVALID ? std::string(_(QuestsData[QuestNoticeQuest]._qlstr)) : std::string();
-	DrawString(out, questName.empty() ? std::string(_("Quest complete")) : FormatRuntime(_("Quest complete: {:s}"), questName), { { x, y + 46 }, { width, 16 } },
-	    { .flags = UiFlags::ColorWhite | UiFlags::AlignCenter });
-	DrawString(out, _(QuestPointsReason(QuestNoticeQuest)), { { x, y + 64 }, { width, 16 } },
-	    { .flags = UiFlags::ColorWhitegold | UiFlags::AlignCenter });
-	DrawString(out, _("Quests give passive points as well as levels. Press P to spend them."), { { x, y + 86 }, { width, 16 } },
-	    { .flags = UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
+	// The Books line only when the hero's total really changed: most points still come from levels.
+	if (notice.pointChange != 0) {
+		if (!text.empty())
+			text += ' ';
+		const int change = std::abs(notice.pointChange);
+		text += notice.pointChange < 0
+		    ? FormatRuntime(ngettext("Quests now hand over Books instead of points, so you have {:d} point fewer.",
+		                      "Quests now hand over Books instead of points, so you have {:d} points fewer.", change),
+		          change)
+		    : FormatRuntime(ngettext("Quests now hand over Books instead of points, so you have {:d} point more.",
+		                      "Quests now hand over Books instead of points, so you have {:d} points more.", change),
+		          change);
+	}
+	std::string_view header = _("Your passive points are back");
+	if (notice.redrawn)
+		header = _("The tree was redrawn");
+	else if (notice.pointChange != 0)
+		header = _("Quests now hand over Books");
+	ShowBanner(std::string(header), std::move(text), BannerMs, -1);
 }
 
 } // namespace devilution

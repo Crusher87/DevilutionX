@@ -26,11 +26,11 @@ COLOURS = {
 }
 LEGEND = [('held', 'You hold it'), ('focus', 'The node this question is about'), ('path', 'Points spent getting there, numbered in the order taken'),
           ('refunded', 'Taken, then refunded'), ('skipped', 'A notable you passed by')]
-BIG_KINDS = {'Notable', 'Shrine', 'JewelSocket', 'Start', 'Ascendancy', 'AscendancyNotable'}
+BIG_KINDS = {'Notable', 'Keystone', 'Shrine', 'JewelSocket', 'Start', 'Ascendancy', 'AscendancyNotable'}
 
 
 def radius(node):
-    return {'Start': 16, 'Shrine': 13, 'Notable': 11, 'JewelSocket': 11, 'Ascendancy': 12, 'AscendancyNotable': 9, 'Attribute': 7}.get(node['kind'], 5)
+    return {'Start': 16, 'Keystone': 13, 'Shrine': 13, 'Notable': 11, 'JewelSocket': 11, 'Ascendancy': 12, 'AscendancyNotable': 9, 'Attribute': 7}.get(node['kind'], 5)
 
 
 def svg(nodes, held=(), focus=(), path=(), refunded=(), skipped=(), title='', pad=90, size=520):

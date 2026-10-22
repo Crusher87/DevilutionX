@@ -15,6 +15,7 @@
 #include "poe2/weapon_swap.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
+#include "tables/questdat.hpp"
 
 namespace devilution {
 namespace {
@@ -186,7 +187,7 @@ TEST_F(Poe2PassiveTreeTest, NodesMustLinkToTheTree)
 
 	const auto path = WarriorPath();
 	EXPECT_FALSE(CanAllocatePassive(player, path[2]));
-	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Gloomy Shrine")));
+	EXPECT_FALSE(CanAllocatePassive(player, FindNode("Iron Patience")));
 
 	ASSERT_TRUE(AllocatePassive(player, path[0]));
 	EXPECT_EQ(PassivePointsLeft(player), 8);
@@ -291,13 +292,13 @@ TEST_F(Poe2PassiveTreeTest, TheTreeHasFourClassesAndJewelSockets)
 	EXPECT_GE(attributes, 40);
 	EXPECT_EQ(PassiveStartNode(HeroClass::Bard), PassiveStartNode(HeroClass::Rogue));
 	EXPECT_EQ(PassiveStartNode(HeroClass::Barbarian), PassiveStartNode(HeroClass::Warrior));
-	EXPECT_EQ(PassiveNodeName(PassiveTree()[FindNode("Gloomy Shrine")]), "Gloomy Shrine");
+	EXPECT_EQ(PassiveNodeName(PassiveTree()[FindNode("Iron Patience")]), "Iron Patience");
 }
 
-TEST_F(Poe2PassiveTreeTest, ShrinesGiveAndTake)
+TEST_F(Poe2PassiveTreeTest, KeystonesGiveAndTake)
 {
-	const PassiveNode &shrine = PassiveTree()[FindNode("Gloomy Shrine")];
-	EXPECT_EQ(shrine.kind, PassiveKind::Shrine);
+	const PassiveNode &shrine = PassiveTree()[FindNode("Iron Patience")];
+	EXPECT_EQ(shrine.kind, PassiveKind::Keystone);
 	bool hasDrawback = false;
 	for (const auto &[stat, value] : shrine.stats) {
 		if (value < 0)
@@ -545,6 +546,82 @@ TEST_F(Poe2PassiveTreeTest, ANewTreeMovesJewelsNearTheStart)
 		jewels += jewel.isEmpty() ? 0 : 1;
 	EXPECT_EQ(jewels, 1);
 	EXPECT_FALSE(player.jewels[*index].isEmpty());
+}
+
+TEST_F(Poe2PassiveTreeTest, EveryClassOpensOnTwoColumnsWithNotablesAtFive)
+{
+	// Tree start redesign: two exits and no sideways roads, and both first notables cost 5 points.
+	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Rogue, HeroClass::Sorcerer, HeroClass::Monk }) {
+		const PassiveNodeId start = *PassiveStartNode(heroClass);
+		std::vector<int> points(PassiveTree().size(), -1);
+		std::vector<PassiveNodeId> open { start };
+		points[start] = 0;
+		for (size_t i = 0; i < open.size(); i++) {
+			for (const PassiveNodeId link : PassiveTree()[open[i]].links) {
+				if (points[link] == -1 && !IsAscendancyNode(PassiveTree()[link])) {
+					points[link] = points[open[i]] + 1;
+					open.push_back(link);
+				}
+			}
+		}
+		std::array<int, 6> nodes {};
+		int notablesAtFive = 0;
+		for (const PassiveNode &node : PassiveTree()) {
+			if (points[node.id] >= 1 && points[node.id] <= 5) {
+				nodes[points[node.id]]++;
+				EXPECT_TRUE(node.kind != PassiveKind::Notable || points[node.id] == 5) << node.name;
+				if (node.kind == PassiveKind::Notable)
+					notablesAtFive++;
+			}
+		}
+		EXPECT_EQ(nodes[1], 2) << static_cast<int>(heroClass);
+		EXPECT_EQ(nodes[2], 2) << static_cast<int>(heroClass);
+		EXPECT_EQ(notablesAtFive, 2) << static_cast<int>(heroClass);
+	}
+}
+
+TEST_F(Poe2PassiveTreeTest, PointsComeFromLevelsAndBooks)
+{
+	Player &player = *MyPlayer;
+	player.poe2.specBooks = 0b101;
+	EXPECT_EQ(BookPassivePoints(player), 2 * PassivePointsPerBook);
+	EXPECT_EQ(PassivePointsTotal(player), 9 + (2 * PassivePointsPerBook));
+	// Finished quests give no points of their own any more; their Books do.
+	player.poe2.questsRewarded = BooksOnlyFlag | (1U << Q_BUTCHER) | (1U << Q_SCHAMB);
+	EXPECT_EQ(PassivePointsTotal(player), 9 + (2 * PassivePointsPerBook));
+}
+
+TEST_F(Poe2PassiveTreeTest, OlderHeroesMoveToBooks)
+{
+	Player &player = *MyPlayer;
+	// Read the Cathedral's and the Catacombs' Books; finished the Butcher, the Chamber of Bone and Lazarus.
+	player.poe2.specBooks = 0b000011;
+	player.poe2.questsRewarded = (1U << Q_BUTCHER) | (1U << Q_SCHAMB) | (1U << Q_BETRAYER);
+	// Before: 6 quest points and 4 from Books. After: the first two Books are one, and the Chamber of Bone and
+	// Lazarus count as their Books read.
+	EXPECT_EQ(MigrateToBooks(player), 6 - 10);
+	EXPECT_EQ(player.poe2.specBooks, 0b010011);
+	EXPECT_EQ(player.poe2.questsRewarded, BooksOnlyFlag | (1U << Q_SCHAMB) | (1U << Q_BETRAYER));
+	EXPECT_EQ(PassivePointsTotal(player), 9 + 6);
+	// It happens once.
+	EXPECT_EQ(MigrateToBooks(player), 0);
+	EXPECT_EQ(player.poe2.specBooks, 0b010011);
+}
+
+TEST_F(Poe2PassiveTreeTest, TheShelfHoldsEveryBookOnce)
+{
+	std::vector<int> books;
+	for (size_t slot = 0; slot < BookShelfSlots; slot++) {
+		if (const int book = ShelfSlotBook(slot); book >= 0)
+			books.push_back(book);
+	}
+	std::sort(books.begin(), books.end());
+	EXPECT_EQ(books, (std::vector<int> { 0, 1, 2, 3, 4, 5 }));
+	EXPECT_EQ(BookShelfSlots, 12U);
+	for (int book = 0; book < static_cast<int>(NumSpecBooks); book++) {
+		EXPECT_FALSE(SpecBookPlace(book).empty());
+		EXPECT_FALSE(SpecBookWhere(book).empty());
+	}
 }
 
 TEST_F(Poe2PassiveTreeTest, ItemTableHasEveryBookOfSpecialisation)

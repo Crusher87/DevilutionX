@@ -32,7 +32,7 @@ from run_report import esc, num, page, read_events, table  # noqa: E402
 import tree_audit  # noqa: E402
 import tree_pictures  # noqa: E402
 
-NOTABLE_KINDS = {'Notable', 'Shrine', 'AscendancyNotable', 'Ascendancy', 'JewelSocket'}
+NOTABLE_KINDS = {'Notable', 'Keystone', 'Shrine', 'AscendancyNotable', 'Ascendancy', 'JewelSocket'}
 ROADS = ('Leoric', 'Bartuc', 'Sickness', 'Maiden')
 # Fights compared on each side of a take; fewer than MIN_FIGHTS on a side and the change isn't shown.
 FIGHTS_EACH_SIDE = 10
@@ -267,7 +267,7 @@ def questions(log, tree, power):
                 if n['road'] and n['step'] == 1:
                     mine.append((f"Level {level}: you stepped onto {n['road']}'s Profane Road. What pulled you onto it, and did you mean to walk "
                                  f"it to the toll or the pact?", tree_pictures.svg(nodes, held, [node], [], title=f"{hero}: onto {n['road']}'s road")))
-                if n['kind'] in ('Notable', 'Shrine'):
+                if n['kind'] in ('Notable', 'Keystone', 'Shrine'):
                     if first_notable:
                         mine.append((f"Level {level}: your first notable was {n['name']}, after {len(since_notable)} other points. Why that one first?",
                                      tree_pictures.svg(nodes, held - {node}, [node], since_notable, title=f"{hero}: first notable")))
@@ -284,7 +284,7 @@ def questions(log, tree, power):
                 took = next((p for p in reversed(steps[:i]) if p.get('node') == r['node'] and p['action'] == 'took'), None)
                 quick = took is not None and steps.index(took) >= i - 3
                 name = n['name'] or f"the small node {tree_audit.label(n)}"
-                if n['kind'] in ('Notable', 'Shrine') or quick:
+                if n['kind'] in ('Notable', 'Keystone', 'Shrine') or quick:
                     when = f"at level {took.get('hero level')}" if took else 'earlier'
                     ask = 'Was that a misclick or a second thought?' if quick else 'What made you give it back?'
                     mine.append((f"Level {level}: you refunded {name}, taken {when}. {ask}",
@@ -405,10 +405,10 @@ def report(log, tree):
         taken_ids = {node for node, s in stats.items() if s['takes']}
         never = collections.defaultdict(list)
         for node_id, row in tree['rows'].items():
-            if row.get('kind') in ('Notable', 'Shrine') and node_id not in taken_ids:
+            if row.get('kind') in ('Notable', 'Keystone', 'Shrine') and node_id not in taken_ids:
                 score = power.get(node_id)
                 never[row.get('region', '')].append(row.get('name', '') + (f" ({score_text(score)})" if score is not None else ''))
-        total = sum(1 for row in tree['rows'].values() if row.get('kind') in ('Notable', 'Shrine'))
+        total = sum(1 for row in tree['rows'].values() if row.get('kind') in ('Notable', 'Keystone', 'Shrine'))
         missing = sum(len(v) for v in never.values())
         parts.append(f'<p>{missing} of {total} notables and shrines have never been taken on this tree (scores in brackets).</p>')
         parts.append(table(['Area', 'Count', 'Notables'], [[esc(area), len(names), esc(', '.join(sorted(names)))] for area, names in sorted(never.items())], numeric_from=1))

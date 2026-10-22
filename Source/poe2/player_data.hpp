@@ -840,7 +840,8 @@ struct Poe2PlayerData {
 	bool hardcore = false;
 	/** @brief The shape of the passive tree the allocations were made on (see PassiveTreeHash); a different tree refunds them. */
 	uint32_t passiveTreeHash = 0;
-	/** @brief Quests that gave passive points, one bit per quest id; points stay with the hero across games. */
+	/** @brief Quests that handed over their Book, one bit per quest id, once per hero across games; the top bit
+	 * (BooksOnlyFlag) marks a hero moved over from quest points (poe2/weapon_swap.hpp). */
 	uint32_t questsRewarded = 0;
 	/** @brief Animation frames skipped by attacks and casts thanks to passives (not saved; from CalcPlrItemVals). */
 	int8_t passiveAttackFrames = 0;

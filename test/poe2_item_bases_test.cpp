@@ -84,7 +84,7 @@ TEST_F(Poe2ItemBasesTest, JewelsAndWaystonesTakeOneCell)
 	}
 	// A Book of Specialisation is a full four-cell book, like Diablo's spell books (Curtis 2026-10-20).
 	Item book {};
-	book._iCurs = AllItemsList[FindBase("Book of Specialisation")].iCurs;
+	book._iCurs = AllItemsList[FindBase("Book of the Caves")].iCurs;
 	EXPECT_EQ(book._iCurs, ICURS_BOOK_RED);
 	EXPECT_FALSE(IsOneCellCopy(book));
 	// The quest items with the same pictures keep their size.

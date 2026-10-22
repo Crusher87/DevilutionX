@@ -44,7 +44,7 @@ RULE_STATS = {
     'ArmourVsElements', 'EvasionVsSpells', 'StationaryDefences', 'PhysicalToFire', 'MaxElementalResist',
     'MaxMagicResist',
 }
-BLOCKED_KINDS = {'Ascendancy', 'AscendancyNotable', 'Shrine'}
+BLOCKED_KINDS = {'Ascendancy', 'AscendancyNotable', 'Keystone', 'Shrine'}
 VIT_LIFE = 0.5
 
 # name: class, main damage lines, main defence lines, damage attributes (first = main), speed stat, extra weights

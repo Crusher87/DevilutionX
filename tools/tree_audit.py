@@ -31,7 +31,7 @@ from run_report import esc, num, page, table  # noqa: E402
 
 CLASSES = ('Warrior', 'Rogue', 'Sorcerer', 'Monk')
 BLOCKED = {'Ascendancy', 'AscendancyNotable'}
-TARGET_KINDS = ('Notable', 'Shrine', 'JewelSocket')
+TARGET_KINDS = ('Notable', 'Keystone', 'Shrine', 'JewelSocket')
 # A notable's stat line is an outlier at this many times the median line of that stat, or below one over it.
 OUTLIER_RATIO = 2.0
 # Stats seen on fewer notables than this aren't judged.
