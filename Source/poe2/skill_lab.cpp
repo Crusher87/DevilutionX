@@ -53,7 +53,12 @@
 #include "utils/str_cat.hpp"
 #include "utils/png.h"
 #include "utils/sdl_wrap.h"
+#define DEVILUTIONX_SCREENSHOT_FORMAT_PCX 0
+#define DEVILUTIONX_SCREENSHOT_FORMAT_PNG 1
+
+#if DEVILUTIONX_SCREENSHOT_FORMAT == DEVILUTIONX_SCREENSHOT_FORMAT_PNG
 #include "utils/surface_to_png.hpp"
+#endif
 
 namespace devilution {
 
@@ -1360,6 +1365,7 @@ void SkillLabCaptureFrame(const Surface &out)
 	// The screen as shown has the effects, which the game's own picture doesn't.
 	if (PresentedFrames || !WantsClipFrame())
 		return;
+#if DEVILUTIONX_SCREENSHOT_FORMAT == DEVILUTIONX_SCREENSHOT_FORMAT_PNG
 	const std::string path = NextClipPath();
 	SDL_IOStream *stream = SDL_IOFromFile(path.c_str(), "wb");
 	if (stream == nullptr) {
@@ -1368,6 +1374,11 @@ void SkillLabCaptureFrame(const Surface &out)
 	}
 	if (!WriteSurfaceToFilePng(out, stream).has_value())
 		Recording = false;
+#else
+	// No PNG writer on this build.
+	(void)out;
+	Recording = false;
+#endif
 }
 
 bool SkillLabRecordingNow()
