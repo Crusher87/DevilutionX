@@ -45,6 +45,7 @@ set(libdevilutionx_SRCS
   poe2/hud_globes.cpp
   poe2/hud_minions.cpp
   poe2/skill_lab.cpp
+  poe2/skill_lab_notes.cpp
   poe2/vfx.cpp
   poe2/weather.cpp
   poe2/hd.cpp

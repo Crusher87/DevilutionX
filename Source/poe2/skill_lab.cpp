@@ -29,6 +29,7 @@
 #include "plrmsg.h"
 #include "poe2/aim.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/skill_lab_notes.hpp"
 #include "poe2/telemetry_events.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "quests.h"
@@ -113,6 +114,8 @@ std::array<bool, MaxMonsters> DummyFlags {};
 
 Phase CurrentPhase = Phase::Idle;
 int PhaseTicks;
+/** Game ticks since the latest cast began, or -1 before the first one. */
+int CastTicks = -1;
 /** Where the lab cast aims, while it's in flight. */
 std::optional<Point> AimTile;
 int AimMonster = -1;
@@ -582,6 +585,7 @@ void SetUpArena()
 	SpawnDummies();
 	ArenaReady = true;
 	CurrentPhase = Phase::Idle;
+	CastTicks = -1;
 }
 
 void ApplySkill()
@@ -603,6 +607,8 @@ void ApplySkill()
 		}
 	}
 	CurrentPhase = Phase::Idle;
+	CastTicks = -1;
+	LabDropMoment();
 }
 
 void ApplyTickDelay()
@@ -656,7 +662,9 @@ void SkillLabBegin()
 	Paused = false;
 	StepsPending = 0;
 	StepMsPending = 0;
+	CastTicks = -1;
 	TelemetryPaused = true;
+	LabLoadNotes();
 }
 
 void SkillLabEnd()
@@ -750,6 +758,8 @@ void SkillLabTick()
 		return;
 
 	PhaseTicks++;
+	if (CastTicks >= 0)
+		CastTicks++;
 	switch (CurrentPhase) {
 	case Phase::Casting:
 		if ((player._pmode == PM_STAND && PhaseTicks > 2 && player.destAction == ACTION_NONE) || PhaseTicks > MaxCastTicks) {
@@ -859,6 +869,8 @@ void LabCast()
 		NewCursor(cursor);
 	CurrentPhase = Phase::Casting;
 	PhaseTicks = 0;
+	CastTicks = 0;
+	LabDropMoment();
 }
 
 bool LabLooping()
@@ -1062,6 +1074,11 @@ void LabExit()
 {
 	ExitPending = true;
 	EndGame();
+}
+
+int LabTicksSinceCast()
+{
+	return CastTicks;
 }
 
 } // namespace devilution

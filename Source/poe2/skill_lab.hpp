@@ -118,5 +118,7 @@ void LabCycleWeapon(int delta);
 int LabGemLevel();
 void LabSetGemLevel(int level);
 void LabExit();
+/** @brief Game ticks since the latest cast began, or -1 before the first one. */
+int LabTicksSinceCast();
 
 } // namespace devilution

@@ -20,7 +20,9 @@
 #include "engine/dx.h"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "plrmsg.h"
 #include "poe2/skill_lab.hpp"
+#include "poe2/skill_lab_notes.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/display.h"
 #include "utils/language.h"
@@ -54,7 +56,18 @@ TextInputState QueryInput {
 	    .maxLength = sizeof(QueryBuffer) - 1,
 	}
 };
+char NoteBuffer[200];
+TextInputCursorState NoteCursor;
+TextInputState NoteInput {
+	TextInputState::Options {
+	    .value = NoteBuffer,
+	    .cursor = &NoteCursor,
+	    .maxLength = sizeof(NoteBuffer) - 1,
+	}
+};
 bool Typing;
+/** Typing goes to the note rather than the search. */
+bool TypingNote;
 /** Folded down to a small tab, to see the whole arena. */
 bool Hidden;
 
@@ -80,6 +93,8 @@ struct Layout {
 	Rectangle exit;
 	Rectangle hide;
 	Rectangle search;
+	/** The note box in the bar. */
+	Rectangle note;
 	std::vector<Button> tabs;
 	Rectangle list;
 	/** The strip along the top holding the controls. */
@@ -161,6 +176,59 @@ std::string_view ShortFloorName(LabFloor floor)
 	default:
 		return LabFloorName(floor);
 	}
+}
+
+void StartTyping(bool note)
+{
+	TypingNote = note;
+	if (Typing)
+		return;
+	Typing = true;
+	ClearWasdMovementKeys();
+	SDLC_StartTextInput(ghMainWnd);
+}
+
+void StopTyping()
+{
+	if (!Typing)
+		return;
+	Typing = false;
+	ClearWasdMovementKeys();
+	SDLC_StopTextInput(ghMainWnd);
+}
+
+std::string SelectedName()
+{
+	if (LabSelectedSkill() < 0)
+		return {};
+	return LabSkills()[LabSelectedSkill()].name;
+}
+
+/** @brief Seconds into the cast at normal speed, e.g. "0.70s". */
+std::string MomentText(const LabMoment &moment)
+{
+	const int hundredths = moment.tick * 5;
+	return StrCat(hundredths / 100, ".", hundredths % 100 < 10 ? "0" : "", hundredths % 100, "s");
+}
+
+void MarkMoment()
+{
+	if (!LabMarkMoment()) {
+		EventPlrMsg(_("Cast first, then mark"));
+		return;
+	}
+	StartTyping(true);
+}
+
+void SaveNote()
+{
+	if (!LabSaveNote(NoteInput.value())) {
+		StartTyping(true);
+		return;
+	}
+	NoteInput.clear();
+	StopTyping();
+	EventPlrMsg(_("Note saved"));
 }
 
 /** @brief Where the next group of controls goes in the bar along the top. */
@@ -297,6 +365,32 @@ Layout ComputeLayout(const Surface &out)
 			floors.push_back(Button { {}, std::string(ShortFloorName(floor)), LabCurrentFloor() == floor, [](int value) { LabSetFloor(static_cast<LabFloor>(value)); }, i });
 	}
 	AddGroup(layout, flow, {}, std::move(floors));
+
+	// Notes get a line of their own: status, mark, the note box and save.
+	flow.x = flow.left;
+	flow.y += ChipHeight + Gap;
+	std::string status;
+	if (LabSelectedSkill() >= 0)
+		status = LabSkills()[LabSelectedSkill()].name;
+	const LabStatus current = LabSkillStatus(status);
+	AddGroup(layout, flow, {},
+	    {
+	        Button { {}, std::string(_("Needs work")), current == LabStatus::NeedsWork, [](int) { LabSetStatus(LabSkillStatus(SelectedName()) == LabStatus::NeedsWork ? LabStatus::Unseen : LabStatus::NeedsWork); }, 0 },
+	        Button { {}, std::string(_("Approved")), current == LabStatus::Approved, [](int) { LabSetStatus(LabSkillStatus(SelectedName()) == LabStatus::Approved ? LabStatus::Unseen : LabStatus::Approved); }, 0 },
+	    });
+	const std::optional<LabMoment> moment = LabHeldMoment();
+	const std::string markLabel = moment ? StrCat(_("Mark"), " ", MomentText(*moment)) : std::string(_("Mark"));
+	AddGroup(layout, flow, {}, { Button { {}, markLabel, moment.has_value(), [](int) { MarkMoment(); }, 0 } });
+	const std::string saveLabel(_("Save"));
+	const int saveWidth = GetLineWidth(saveLabel) + 12;
+	if (flow.right - flow.x - saveWidth - Gap < 160) {
+		flow.x = flow.left;
+		flow.y += ChipHeight + Gap;
+	}
+	const int noteWidth = flow.right - flow.x - saveWidth - Gap;
+	layout.note = { { flow.x, flow.y }, { noteWidth, ChipHeight } };
+	flow.x += noteWidth + Gap;
+	layout.controls.push_back(Button { { { flow.x, flow.y }, { saveWidth, ChipHeight } }, saveLabel, false, [](int) { SaveNote(); }, 0 });
 	layout.bar = { { barLeft, layout.panel.position.y }, { out.w() - 4 - barLeft, flow.y + ChipHeight + 6 - layout.panel.position.y } };
 	return layout;
 }
@@ -347,22 +441,6 @@ void Scroll(int rows)
 	ScrollTop = static_cast<size_t>(std::clamp(static_cast<int>(ScrollTop) + rows, 0, maxTop));
 }
 
-void StartTyping()
-{
-	Typing = true;
-	ClearWasdMovementKeys();
-	SDLC_StartTextInput(ghMainWnd);
-}
-
-void StopTyping()
-{
-	if (!Typing)
-		return;
-	Typing = false;
-	ClearWasdMovementKeys();
-	SDLC_StopTextInput(ghMainWnd);
-}
-
 bool HandleClick(Point position)
 {
 	const Layout layout = CurrentLayout();
@@ -379,7 +457,11 @@ bool HandleClick(Point position)
 		return true;
 	}
 	if (layout.search.contains(position)) {
-		StartTyping();
+		StartTyping(false);
+		return true;
+	}
+	if (layout.note.contains(position)) {
+		StartTyping(true);
 		return true;
 	}
 	StopTyping();
@@ -424,7 +506,7 @@ bool SkillLabPanelHandleEvent(const SDL_Event &event)
 		return false;
 
 	if (Typing) {
-		if (HandleTextInputEvent(event, QueryInput)) {
+		if (HandleTextInputEvent(event, TypingNote ? NoteInput : QueryInput)) {
 			RefreshResults();
 			return true;
 		}
@@ -432,15 +514,22 @@ bool SkillLabPanelHandleEvent(const SDL_Event &event)
 		case SDL_EVENT_KEY_DOWN:
 			switch (SDLC_EventKey(event)) {
 			case SDLK_ESCAPE:
-			case SDLK_RETURN:
-			case SDLK_KP_ENTER:
 				StopTyping();
 				break;
+			case SDLK_RETURN:
+			case SDLK_KP_ENTER:
+				if (TypingNote)
+					SaveNote();
+				else
+					StopTyping();
+				break;
 			case SDLK_UP:
-				MoveSelection(-1);
+				if (!TypingNote)
+					MoveSelection(-1);
 				break;
 			case SDLK_DOWN:
-				MoveSelection(1);
+				if (!TypingNote)
+					MoveSelection(1);
 				break;
 			default:
 				break;
@@ -477,6 +566,12 @@ bool SkillLabPanelHandleEvent(const SDL_Event &event)
 			return true;
 		case SDLK_PERIOD:
 			LabStep();
+			return true;
+		case SDLK_M:
+			MarkMoment();
+			return true;
+		case SDLK_N:
+			StartTyping(true);
 			return true;
 		default:
 			return false;
@@ -533,12 +628,12 @@ void DrawSkillLabPanel(const Surface &out)
 	DrawChip(out, layout.hide, _("Hide"), false, layout.hide.contains(MousePosition));
 
 	Fill(out, layout.search, FieldColor);
-	DrawFrame(out, layout.search, Typing ? BorderColor : ChipColor);
+	DrawFrame(out, layout.search, Typing && !TypingNote ? BorderColor : ChipColor);
 	const Rectangle searchText { layout.search.position + Displacement { 6, 0 }, { layout.search.size.width - 12, layout.search.size.height } };
-	if (QueryInput.empty() && !Typing)
+	if (QueryInput.empty() && !(Typing && !TypingNote))
 		DrawString(out, _("Search"), searchText, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
 	DrawString(out, QueryInput.value(), searchText,
-	    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite, .cursorPosition = Typing ? static_cast<int>(QueryCursor.position) : -1 });
+	    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite, .cursorPosition = Typing && !TypingNote ? static_cast<int>(QueryCursor.position) : -1 });
 
 	for (const Button &tab : layout.tabs)
 		DrawChip(out, tab.rect, tab.label, tab.active, tab.rect.contains(MousePosition));
@@ -557,7 +652,18 @@ void DrawSkillLabPanel(const Surface &out)
 		if (skill.skill.kind != SkillKind::Default)
 			DrawString(out, GemTierNumeral(skill.tier), tierRect, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonface });
 		const Rectangle nameRect { rowRect.position + Displacement { 36, 0 }, { rowRect.size.width - 40, RowHeight } };
-		DrawString(out, skill.name, nameRect, { .flags = UiFlags::VerticalCenter | (index == LabSelectedSkill() ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+		UiFlags color = index == LabSelectedSkill() ? UiFlags::ColorWhitegold : UiFlags::ColorWhite;
+		switch (LabSkillStatus(skill.name)) {
+		case LabStatus::NeedsWork:
+			color = UiFlags::ColorOrange;
+			break;
+		case LabStatus::Approved:
+			color = UiFlagsColorGreen;
+			break;
+		default:
+			break;
+		}
+		DrawString(out, skill.name, nameRect, { .flags = UiFlags::VerticalCenter | color });
 	}
 	if (Results.size() > rows) {
 		const int trackHeight = layout.list.size.height;
@@ -565,6 +671,16 @@ void DrawSkillLabPanel(const Surface &out)
 		const int thumbY = (trackHeight - thumbHeight) * static_cast<int>(ScrollTop) / std::max(static_cast<int>(Results.size() - rows), 1);
 		FillRect(out, layout.list.position.x + layout.list.size.width - 3, layout.list.position.y + thumbY, 3, thumbHeight, BorderColor);
 	}
+
+	Fill(out, layout.note, FieldColor);
+	DrawFrame(out, layout.note, Typing && TypingNote ? BorderColor : ChipColor);
+	const Rectangle noteText { layout.note.position + Displacement { 6, 0 }, { layout.note.size.width - 12, layout.note.size.height } };
+	if (NoteInput.empty() && !(Typing && TypingNote)) {
+		const int notes = LabNoteCount(SelectedName());
+		DrawString(out, notes > 0 ? StrCat(_("Note for Claude"), " (", notes, ")") : std::string(_("Note for Claude")), noteText, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
+	}
+	DrawString(out, NoteInput.value(), noteText,
+	    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite, .cursorPosition = Typing && TypingNote ? static_cast<int>(NoteCursor.position) : -1 });
 
 	for (const auto &[rect, text] : layout.labels)
 		DrawString(out, text, rect, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonface });
