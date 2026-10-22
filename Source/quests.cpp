@@ -190,7 +190,11 @@ void CheckQuests()
 			    && currentQuest._qslvl != 0
 			    && currentQuest._qactive != QUEST_NOTAVAIL
 			    && MyPlayer->position.tile == currentQuest.position
-			    && (currentQuest._qidx != Q_BETRAYER || currentQuest._qvar1 >= 3)) {
+			    && (currentQuest._qidx != Q_BETRAYER || currentQuest._qvar1 >= 3)
+			    // POE2 Mashup: like the stairs, an entrance such as "To A Dark Passage" takes a click, not a step onto
+			    // it with the movement keys (Curtis 2026-10-22).
+			    && (!gbIsPoe2 || ChoseLevelExit(currentQuest.position))) {
+				ForgetChosenLevelExit();
 				if (currentQuest._qlvltype != DTYPE_NONE) {
 					setlvltype = currentQuest._qlvltype;
 				}

@@ -16,6 +16,7 @@
 #include "engine/point.hpp"
 #include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
+#include "levels/trigs.h"
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
@@ -98,6 +99,11 @@ void RepeatWalk(Player &player)
 	if (IsWalkingRequestRedundant(player, cursPosition))
 		return;
 
+	// POE2 Mashup: holding the button over stairs or a quest entrance takes it, as clicking it does.
+	if (trigflag)
+		ChooseLevelExitAt(cursPosition);
+	else
+		ForgetChosenLevelExit();
 	NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
 }
 

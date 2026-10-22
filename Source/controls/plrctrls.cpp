@@ -1877,8 +1877,10 @@ void WalkInDir(Player &player, AxisDirection dir)
 
 	const Direction pdir = FaceDir[static_cast<std::size_t>(dir.x)][static_cast<std::size_t>(dir.y)];
 	const auto delta = player.position.future + pdir;
-	// POE2 Mashup: walking over a town portal with the keys doesn't take the hero through; only clicking it does.
+	// POE2 Mashup: walking over a town portal, stairs or a quest entrance with the keys doesn't take the hero through;
+	// only clicking it does.
 	ForgetChosenPortal();
+	ForgetChosenLevelExit();
 
 	if (!player.isWalking() && player.CanChangeAction())
 		player._pdir = pdir;
@@ -2713,13 +2715,17 @@ void PerformSecondaryAction()
 		LastPlayerAction = PlayerActionType::OperateObject;
 	} else {
 		if (pcursmissile != nullptr) {
+			// Lazarus' red portal is a quest entrance.
 			ChoosePortalAt(pcursmissile->position.tile);
+			ChooseLevelExitAt(pcursmissile->position.tile);
 			MakePlrPath(myPlayer, pcursmissile->position.tile, true);
 			myPlayer.destAction = ACTION_WALK;
 		} else if (pcurstrig != -1) {
+			ChooseLevelExitAt(trigs[pcurstrig].position);
 			MakePlrPath(myPlayer, trigs[pcurstrig].position, true);
 			myPlayer.destAction = ACTION_WALK;
 		} else if (pcursquest != Q_INVALID) {
+			ChooseLevelExitAt(Quests[pcursquest].position);
 			MakePlrPath(myPlayer, Quests[pcursquest].position, true);
 			myPlayer.destAction = ACTION_WALK;
 		}

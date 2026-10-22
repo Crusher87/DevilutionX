@@ -285,11 +285,14 @@ void LeftMouseCmd(bool bShift)
 
 	// POE2 Mashup: with WASD movement, clicking the ground doesn't walk and attacks don't chase.
 	const bool wasdMovement = IsWasdMovementEnabled();
-	// POE2 Mashup: a town portal takes the hero through only when it's clicked.
-	if (trigflag && pcursitem == -1 && pcursmonst == -1)
+	// POE2 Mashup: a town portal, stairs or a quest entrance takes the hero through only when it's clicked.
+	if (trigflag && pcursitem == -1 && pcursmonst == -1) {
 		ChoosePortalAt(cursPosition);
-	else
+		ChooseLevelExitAt(cursPosition);
+	} else {
 		ForgetChosenPortal();
+		ForgetChosenLevelExit();
+	}
 	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side.
 	Poe2ForceFreshFloor = trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
 
