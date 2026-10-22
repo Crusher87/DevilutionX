@@ -83,23 +83,30 @@ int Scale(int value, int percent)
 	return static_cast<int>(static_cast<int64_t>(value) * percent / 100);
 }
 
-/** @brief A weapon hit before the skill: the weapon's damage with the hero's bonuses, as the character panel shows it. */
-std::pair<int, int> WeaponHit(const Player &player)
+/**
+ * @brief A weapon hit before the skill: the weapon's damage with the hero's bonuses, as the character panel shows it.
+ * Bare fists hit at the skill's gem level, the one shown.
+ */
+std::pair<int, int> WeaponHit(const Player &player, SkillSlot skill, int level)
 {
 	int damageMod = player._pIBonusDamMod;
 	if (player.InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow && player._pClass != HeroClass::Rogue)
 		damageMod += player._pDamageMod / 2;
 	else
 		damageMod += player._pDamageMod;
-	const int min = player._pIMinDam + (player._pIBonusDam * player._pIMinDam / 100) + damageMod;
-	const int max = player._pIMaxDam + (player._pIBonusDam * player._pIMaxDam / 100) + damageMod;
+	std::pair<int, int> weapon = AttackWeaponDamage(player, skill);
+	if (skill.kind == SkillKind::Attack && level > 0 && FightsWithBareFists(player))
+		weapon = BareFistDamage(level);
+	const auto [weaponMin, weaponMax] = weapon;
+	const int min = weaponMin + (player._pIBonusDam * weaponMin / 100) + damageMod;
+	const int max = weaponMax + (player._pIBonusDam * weaponMax / 100) + damageMod;
 	return { std::max(min, 1), std::max(max, std::max(min, 1)) };
 }
 
 /** @brief A weapon hit scaled by the skill, with the weapon's own fire and lightning added. */
-void AddWeaponHit(HitEstimate &hit, const Player &player, int percent)
+void AddWeaponHit(HitEstimate &hit, const Player &player, SkillSlot skill, int level, int percent)
 {
-	const auto [min, max] = WeaponHit(player);
+	const auto [min, max] = WeaponHit(player, skill, level);
 	hit.parts.push_back({ DamageType::Physical, Scale(min, percent), Scale(max, percent) });
 	if (player._pIFMaxDam > 0)
 		hit.parts.push_back({ DamageType::Fire, Scale(player._pIFMinDam, percent), Scale(player._pIFMaxDam, percent) });
@@ -140,7 +147,7 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 			const int max = player._pIMaxDam + (player._pIMaxDam * player._pIBonusDam / 100);
 			hit.parts.push_back({ DamageType::Fire, std::max(1, Scale(min, StaffBoltDamagePercent) + magic), std::max(1, Scale(max, StaffBoltDamagePercent) + magic) });
 		} else {
-			AddWeaponHit(hit, player, DefaultAttackDamagePercent);
+			AddWeaponHit(hit, player, skill, level, DefaultAttackDamagePercent);
 		}
 		return hit;
 	default:
@@ -185,13 +192,13 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		if ((table->flags & TF_Spell) != 0) {
 			AddSpellBase(hit, player, level, table->type, tablePercent);
 		} else {
-			AddWeaponHit(hit, player, tablePercent);
+			AddWeaponHit(hit, player, skill, level, tablePercent);
 			if (table->type != DamageType::Physical && !hit.parts.empty())
 				hit.parts.front().type = table->type;
 		}
 		return hit;
 	}
-	AddWeaponHit(hit, player, percent);
+	AddWeaponHit(hit, player, skill, level, percent);
 	return hit;
 }
 

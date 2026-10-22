@@ -1,6 +1,8 @@
 #include "poe2/default_attack.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 #include "cursor.h"
 #include "diablo.h"
@@ -11,7 +13,9 @@
 #include "msg.h"
 #include "player.h"
 #include "poe2/aim.hpp"
+#include "poe2/bases.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "tables/itemdat.h"
 #include "utils/language.h"
@@ -98,30 +102,6 @@ std::string_view DefaultAttackName(DefaultAttack attack)
 	}
 }
 
-std::string_view DefaultAttackLabel(DefaultAttack attack)
-{
-	switch (attack) {
-	case DefaultAttack::SwordStrike:
-		return _("Strike");
-	case DefaultAttack::DaggerStab:
-		return _("Stab");
-	case DefaultAttack::AxeChop:
-		return _("Chop");
-	case DefaultAttack::MaceSmash:
-		return _("Smash");
-	case DefaultAttack::StaffStrike:
-		return _("Strike");
-	case DefaultAttack::StaffBolt:
-		return _("Bolt");
-	case DefaultAttack::BowShot:
-		return _("Shot");
-	case DefaultAttack::ShieldBash:
-		return _("Bash");
-	default:
-		return _("Punch");
-	}
-}
-
 bool IsRangedDefaultAttack(DefaultAttack attack)
 {
 	return attack == DefaultAttack::BowShot || attack == DefaultAttack::StaffBolt;
@@ -130,6 +110,80 @@ bool IsRangedDefaultAttack(DefaultAttack attack)
 bool FiresStaffBolt(const Player &player)
 {
 	return gbIsPoe2 && DefaultAttackFor(player) == DefaultAttack::StaffBolt;
+}
+
+bool FightsWithBareFists(const Player &player)
+{
+	if (!gbIsPoe2 || player._pClass != HeroClass::Monk)
+		return false;
+	// Like the gear's weapon damage in CalcPlrItemVals: only what the hero can use counts.
+	for (const Item &item : player.InvBody) {
+		if (!item.isEmpty() && item._iStatFlag && (item._iMinDam != 0 || item._iMaxDam != 0))
+			return false;
+	}
+	return true;
+}
+
+std::pair<int, int> BareFistDamage(int gemLevel)
+{
+	struct Staff {
+		int level;
+		int minDamage;
+		int maxDamage;
+	};
+	// The plain heavy quarterstaffs of the item data, by drop level.
+	std::vector<Staff> staffs;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
+		if (data.dropRate <= 0 || base == nullptr || base->itemClass != "quarterstaff" || base->identity != "heavy" || data.iMinDam <= 0)
+			continue;
+		staffs.push_back({ data.iMinMLvl, data.iMinDam, std::max<int>(data.iMaxDam, data.iMinDam) });
+	}
+	if (staffs.empty())
+		return { 1, 1 };
+	std::sort(staffs.begin(), staffs.end(), [](const Staff &a, const Staff &b) { return a.level < b.level; });
+
+	const int level = CharacterLevelForGemLevel(gemLevel);
+	const Staff *below = &staffs.front();
+	const Staff *above = &staffs.front();
+	for (const Staff &staff : staffs) {
+		above = &staff;
+		if (staff.level > level)
+			break;
+		below = &staff;
+	}
+	// Before the first staff or past the last one: that staff. In between: the same growth every level.
+	double fraction = 0;
+	if (above->level > below->level && level > below->level)
+		fraction = static_cast<double>(level - below->level) / (above->level - below->level);
+	const auto between = [fraction](int from, int to) {
+		const double damage = from * std::pow(static_cast<double>(to) / from, fraction);
+		return static_cast<int>(std::round(damage * BareFistStaffPercent / 100));
+	};
+	const int minDamage = std::max(between(below->minDamage, above->minDamage), 1);
+	return { minDamage, std::max(between(below->maxDamage, above->maxDamage), minDamage) };
+}
+
+int BareFistGemLevel(const Player &player, SkillSlot skill)
+{
+	if (skill.kind == SkillKind::Attack) {
+		if (const int level = player.poe2.skillLevel(skill); level > 0)
+			return level;
+	}
+	int best = 1;
+	for (const SkillSlot &socketed : player.poe2.skillSlots) {
+		if (socketed.kind == SkillKind::Attack && (SkillTags(socketed) & ST_Attack) != 0)
+			best = std::max(best, player.poe2.skillLevel(socketed));
+	}
+	return best;
+}
+
+std::pair<int, int> AttackWeaponDamage(const Player &player, SkillSlot skill)
+{
+	if (FightsWithBareFists(player))
+		return BareFistDamage(BareFistGemLevel(player, skill));
+	return { player._pIMinDam, player._pIMaxDam };
 }
 
 int RollStaffBoltDamage(const Player &player)

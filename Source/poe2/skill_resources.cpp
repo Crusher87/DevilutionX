@@ -4,6 +4,7 @@
 
 #include "missiles.h"
 #include "monster.h"
+#include "objects.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit_auras.hpp"
@@ -49,9 +50,10 @@ void AddRage(Player &player, int rage)
 
 void OnSkillMeleeHit(Player &player)
 {
-	const WeaponSkill skill = CurrentWeaponSkill(player);
-	if (skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::BattleRage))
-		AddRage(player, SupportValue(player.poe2, SkillSlot::ForAttack(skill), SupportGem::BattleRage, 0));
+	// The default attack, a punch as much as a weapon's, takes Battle Rage like a skill does (Curtis 2026-10-22).
+	const SkillSlot skill = CurrentAttackSkill(player);
+	if (!skill.isEmpty() && player.poe2.hasSupport(skill, SupportGem::BattleRage))
+		AddRage(player, SupportValue(player.poe2, skill, SupportGem::BattleRage, 0));
 	OnSpiritMeleeHit(player);
 }
 
@@ -108,6 +110,7 @@ void SkillBurst(const Player &player, Point center, int radius, DamageType type,
 	AddVisualEffect(center, effect);
 	if (&player != MyPlayer || damage <= 0)
 		return;
+	BreakObjectsInArea(player, center, radius);
 	const WeaponSkill skill = CurrentWeaponSkill(player);
 	const SupportHitScope scope(player, skill != WeaponSkill::None ? SkillSlot::ForAttack(skill) : SkillSlot {});
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {

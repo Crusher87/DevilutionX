@@ -97,6 +97,7 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stack_split_panel.hpp"
 #include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
@@ -285,11 +286,14 @@ void LeftMouseCmd(bool bShift)
 
 	// POE2 Mashup: with WASD movement, clicking the ground doesn't walk and attacks don't chase.
 	const bool wasdMovement = IsWasdMovementEnabled();
-	// POE2 Mashup: a town portal takes the hero through only when it's clicked.
-	if (trigflag && pcursitem == -1 && pcursmonst == -1)
+	// POE2 Mashup: a town portal, stairs or a quest entrance takes the hero through only when it's clicked.
+	if (trigflag && pcursitem == -1 && pcursmonst == -1) {
 		ChoosePortalAt(cursPosition);
-	else
+		ChooseLevelExitAt(cursPosition);
+	} else {
 		ForgetChosenPortal();
+		ForgetChosenLevelExit();
+	}
 	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side.
 	Poe2ForceFreshFloor = trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
 
@@ -898,6 +902,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		}
 	}
 	if (ctrlEvents.size() > 0 && ctrlEvents[0].button != ControllerButton_NONE) {
+		return;
+	}
+
+	if (StackSplitHandleEvent(event)) {
 		return;
 	}
 
@@ -3393,6 +3401,11 @@ bool PressEscKey()
 
 	if (IsWithdrawGoldOpen) {
 		WithdrawGoldKeyPress(SDLK_ESCAPE);
+		rv = true;
+	}
+
+	if (IsStackSplitOpen()) {
+		CloseStackSplit();
 		rv = true;
 	}
 

@@ -1,5 +1,8 @@
+#include <algorithm>
+#include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -115,6 +118,40 @@ TEST_F(Poe2GemcuttingTest, CategoriesFollowWeapons)
 	EXPECT_TRUE(GemInCategory(find(SkillSlot::ForSpell(SpellID::BoneSpirit)), GemCategory::Occult));
 	EXPECT_TRUE(GemInCategory(find(SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh)), GemCategory::Spirit));
 	EXPECT_FALSE(GemInCategory(find(SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh)), GemCategory::Support));
+}
+
+TEST_F(Poe2GemcuttingTest, TabsFollowTheUncutGem)
+{
+	const auto has = [](const std::vector<GemCategory> &tabs, GemCategory category) {
+		return std::find(tabs.begin(), tabs.end(), category) != tabs.end();
+	};
+	// Browsing shows every tab.
+	EXPECT_EQ(GemcuttingTabs(std::nullopt).size(), static_cast<size_t>(GemCategory::Count));
+
+	// Curtis 2026-10-22: cutting a skill gem shows no Support or Spirit tab, and the other way round.
+	const std::vector<GemCategory> skillTabs = GemcuttingTabs(UncutKind::Skill);
+	EXPECT_FALSE(has(skillTabs, GemCategory::Support));
+	EXPECT_FALSE(has(skillTabs, GemCategory::Spirit));
+	EXPECT_TRUE(has(skillTabs, GemCategory::Staff));
+	EXPECT_TRUE(has(skillTabs, GemCategory::Elemental));
+	EXPECT_TRUE(has(skillTabs, GemCategory::All));
+	EXPECT_EQ(GemcuttingTabs(UncutKind::Support), std::vector<GemCategory> { GemCategory::Support });
+	EXPECT_EQ(GemcuttingTabs(UncutKind::Spirit), std::vector<GemCategory> { GemCategory::Spirit });
+
+	for (const UncutKind kind : { UncutKind::Skill, UncutKind::Spirit, UncutKind::Support }) {
+		const std::vector<GemCategory> tabs = GemcuttingTabs(kind);
+		// Every gem the uncut gem can become is on one of its tabs...
+		for (const GemEntry &gem : GemCatalog()) {
+			if (GemUncutKind(gem) != kind)
+				continue;
+			EXPECT_TRUE(std::any_of(tabs.begin(), tabs.end(), [&gem](GemCategory tab) { return tab != GemCategory::All && GemInCategory(gem, tab); })) << GemName(gem);
+		}
+		// ...and none of its tabs is empty.
+		for (const GemCategory tab : tabs) {
+			EXPECT_TRUE(std::any_of(GemCatalog().begin(), GemCatalog().end(), [kind, tab](const GemEntry &gem) { return GemUncutKind(gem) == kind && GemInCategory(gem, tab); }))
+			    << GemCategoryName(tab);
+		}
+	}
 }
 
 TEST_F(Poe2GemcuttingTest, TiersGroupLevels)

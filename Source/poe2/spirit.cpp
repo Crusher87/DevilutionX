@@ -16,6 +16,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "msg.h"
+#include "objects.h"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
@@ -94,6 +95,7 @@ void ExplodeAsh(const HeraldTrigger &trigger)
 	const int64_t raw = static_cast<int64_t>(trigger.lifeRaw) * HeraldOfAshPercent * MapAuraPercent() / 10000;
 	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 0, std::numeric_limits<int32_t>::max())));
 	const int radius = SupportAreaRadius(*MyPlayer, SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh), HeraldOfAshRadius);
+	BreakObjectsInArea(*MyPlayer, trigger.position, radius);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= radius)
@@ -137,6 +139,7 @@ void BurstBlood(const HeraldTrigger &trigger)
 	vfx::Impact(trigger.position, vfx::Element::Blood, 1.5F);
 	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfBloodPercent * MapAuraPercent() / 10000));
 	const int radius = SupportAreaRadius(player, SkillSlot::ForPersistent(PersistentSkill::HeraldOfBlood), HeraldOfBloodRadius);
+	BreakObjectsInArea(player, trigger.position, radius);
 	const int bleedChance = HeraldOfBloodBleedChance(std::max(player.poe2.skillLevel(PersistentSkill::HeraldOfBlood), 1));
 	// A bleed deals 70% of the hit over 4 seconds, like Serrated Edge's.
 	constexpr int BleedTicks = 4 * 20;
@@ -163,6 +166,7 @@ void ShatterFrost(const HeraldTrigger &trigger)
 	AddVisualEffect(trigger.position, MissileGraphicID::BlueFlareExplosion);
 	const Fixed26_6 damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(trigger.lifeRaw) * HeraldOfFrostPercent * MapAuraPercent() / 10000));
 	const int radius = SupportAreaRadius(*MyPlayer, SkillSlot::ForPersistent(PersistentSkill::HeraldOfFrost), HeraldOfFrostRadius);
+	BreakObjectsInArea(*MyPlayer, trigger.position, radius);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= radius)

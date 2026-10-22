@@ -76,15 +76,19 @@ bool TakeOneFromStack(Item &stack)
 
 std::optional<Item> SplitStack(Item &stack)
 {
-	const int count = StackCount(stack);
-	if (count <= 1)
+	return SplitStack(stack, StackCount(stack) / 2);
+}
+
+std::optional<Item> SplitStack(Item &stack, int count)
+{
+	const int have = StackCount(stack);
+	if (count <= 0 || count >= have)
 		return std::nullopt;
-	const int taken = count / 2;
-	Item half = stack;
-	GenerateNewSeed(half); // Its own seed, so the two halves are told apart.
-	SetStackCount(half, taken);
-	SetStackCount(stack, count - taken);
-	return half;
+	Item part = stack;
+	GenerateNewSeed(part); // Its own seed, so the two parts are told apart.
+	SetStackCount(part, count);
+	SetStackCount(stack, have - count);
+	return part;
 }
 
 bool InventoryStacksHaveRoom(const Player &player, const Item &item)

@@ -73,6 +73,7 @@
 #include "panels/skill_bar.hpp"
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stack_split_panel.hpp"
 #include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
 #include "engine/palette.h"
@@ -2141,6 +2142,7 @@ void DrawAndBlit()
 	DrawGemcutting(out);
 	DrawAnvil(out);
 	DrawDesecrationReveal(out);
+	DrawStackSplit(out);
 	DrawAtlas(out);
 	DrawItemSpawner(out);
 	TelemetryDrawStep("drawing the cursor");

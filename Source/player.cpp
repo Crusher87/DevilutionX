@@ -250,6 +250,9 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 	player._pmode = PM_ATTACK;
 	FixPlayerLocation(player, d);
 	SetPlayerOld(player);
+	// POE2 Mashup: Whirling Staff spins the hero round in a funnel of wind, as Whirlwind does.
+	if (SpinsWhileSwinging(player.poe2.activeSkill))
+		BeginSpinningSwing(player);
 }
 
 void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord cy, bool includesFirstFrame)
@@ -638,8 +641,8 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		const int midam = RandomIntBetween(player._pIFMinDam, player._pIFMaxDam);
 		AddMissile(player.position.tile, player.position.temp, player._pdir, MissileID::SpectralArrow, TARGET_MONSTERS, player, midam, 0);
 	}
-	const int mind = player._pIMinDam;
-	const int maxd = player._pIMaxDam;
+	// POE2 Mashup: a Monk's bare fists hit like a plain quarterstaff of the skill's gem level.
+	const auto [mind, maxd] = AttackWeaponDamage(player, CurrentAttackSkill(player));
 	int dam = RandomIntBetween(mind, maxd);
 	// POE2 Mashup: deep damage logging follows the hit step by step.
 	if (&player == MyPlayer) {
@@ -650,7 +653,11 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	dam += player._pIBonusDamMod;
 	int dam2 = dam << 6;
 	dam += player._pDamageMod;
-	TelemetryHitStep(false, "after increased, added and attribute damage", static_cast<int64_t>(dam) << 6);
+	// POE2 Mashup: from here the hit is worked out in 1/64 points, so the percentages below don't round a small hit
+	// away (Curtis 2026-10-22: the default attack's 85% turned a Monk's 1 damage punches into 0).
+	const int shiftStillToDo = gbIsPoe2 ? 0 : 6;
+	dam <<= 6 - shiftStillToDo;
+	TelemetryHitStep(false, "after increased, added and attribute damage", static_cast<int64_t>(dam) << shiftStillToDo);
 	// POE2 Mashup: Battle Cry empowers melee hits, and so does a Brutality support on the skill.
 	if (player.poe2.warcryTicks > 0)
 		dam += dam * BattleCryDamagePercent(player.poe2.skillLevel(WeaponSkill::BattleCry)) / 100;
@@ -712,7 +719,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		AddDoppelganger(monster);
 	}
 
-	dam <<= 6;
+	dam <<= shiftStillToDo;
 	if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::Jesters)) {
 		int r = GenerateRnd(201);
 		if (r >= 100)
@@ -804,7 +811,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 /** @brief POE2 Mashup: Fists of Thunder's lightning burst around the target, from the weapon's damage. */
 void FistsOfThunderBurst(Player &player, Point center)
 {
-	const int damage = (player._pIMinDam + player._pIMaxDam) / 2 * GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::FistsOfThunder), player.poe2.skillLevel(WeaponSkill::FistsOfThunder)) / 100;
+	const SkillSlot skill = SkillSlot::ForAttack(WeaponSkill::FistsOfThunder);
+	const auto [minDamage, maxDamage] = AttackWeaponDamage(player, skill);
+	const int damage = (minDamage + maxDamage) / 2 * GemDamagePercent(skill, player.poe2.skillLevel(WeaponSkill::FistsOfThunder)) / 100;
 	SkillBurst(player, center, 1, DamageType::Lightning, Fixed26_6::fromInt(std::max(damage * 6 / 10, 1)), MissileGraphicID::BlueFlareExplosion2);
 	PlaySfxLoc(SfxID::SpellLightningHit, center);
 }
@@ -899,6 +908,7 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
 			continue;
 		const Point position = player.position.tile + dir;
+		BreakObjectAt(player, position);
 		Monster *monster = FindMonsterAtPosition(position);
 		if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
 			continue;
@@ -910,6 +920,10 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 
 bool DoAttack(Player &player)
 {
+	// POE2 Mashup: Whirling Staff turns the hero through every facing as he spins.
+	if (SpinsWhileSwinging(player.poe2.activeSkill))
+		TurnSpriteWithSpin(player);
+
 	if (player.AnimInfo.currentFrame == player._pAFNum - 2) {
 		PlaySfxLoc(SfxID::Swing, player.position.tile);
 	}
@@ -958,22 +972,19 @@ bool DoAttack(Player &player)
 			}
 		}
 
-		// POE2 Mashup: the weapon's swing, in the colour of its strongest element, and sparks where it lands. It
-		// follows the hero's animation: an axe or mace comes down from overhead. Skills with their own swing draw it
-		// with their effects.
-		vfx::Element look = vfx::Element::Physical;
-		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage))
-			look = vfx::Element::Fire;
-		else if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage))
-			look = vfx::Element::Lightning;
+		// POE2 Mashup: the weapon's swing and sparks where it lands. It follows the hero's animation: an axe or mace
+		// comes down from overhead. The weapon's strongest added element only flickers faintly along the swing and on
+		// the cut (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"). Skills with their own swing draw
+		// it with their effects.
+		const vfx::Element look = WeaponElementLook(player);
 		if (IsNoneOf(player.poe2.activeSkill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::Frenzy, WeaponSkill::FistsOfThunder, WeaponSkill::WhirlingStaff)) {
 			const vfx::SwingStyle style = WeaponSwingStyle(player);
 			if (player.CanCleave() && style == vfx::SwingStyle::Chop)
-				vfx::Cleave(player.position.tile, player.position.tile + player._pdir, look, true);
+				vfx::Cleave(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, true, look);
 			else if (player.CanCleave())
-				vfx::Swing(player.position.tile, player.position.tile + player._pdir, look, true, HoldsHeavyWeapon(player));
+				vfx::Swing(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, true, HoldsHeavyWeapon(player), look);
 			else
-				vfx::SwingAs(player.position.tile, player.position.tile + player._pdir, look, style, HoldsHeavyWeapon(player));
+				vfx::SwingAs(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, style, HoldsHeavyWeapon(player), look);
 		}
 		if (didhit)
 			vfx::Cut(player.position.tile + player._pdir, look);
@@ -995,6 +1006,9 @@ bool DoAttack(Player &player)
 			// playing as a class/weapon with cleave; the Cleave skill hits the sides at full damage
 			const bool adjacentDamage = skill != WeaponSkill::Cleave;
 			position = player.position.tile + Right(player._pdir);
+			// POE2 Mashup: the sweep smashes the barrels and urns at its sides too (Curtis 2026-10-22).
+			BreakObjectAt(player, position);
+			BreakObjectAt(player, player.position.tile + Left(player._pdir));
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
@@ -1029,14 +1043,20 @@ bool DoAttack(Player &player)
 					const int distance = std::max(std::abs(dx), std::abs(dy));
 					if (skill == WeaponSkill::GroundSlam && !InGroundSlamCone(player._pdir, { dx, dy }))
 						continue;
+					if (distance > 1 && !LineClearMissile(origin, position))
+						continue;
+					// The shockwave and the spin smash the barrels and urns they reach too (Curtis 2026-10-22).
+					BreakObjectAt(player, position);
 					monster = FindMonsterAtPosition(position);
 					if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
 						continue;
-					if (distance > 1 && !LineClearMissile(origin, position))
-						continue;
 					const int damagePercent = distance > 1 && skill == WeaponSkill::WhirlingStaff ? WhirlingStaffOuterDamagePercent : AreaSkillSideDamagePercent;
-					if (PlrHitMonst(player, *monster, false, damagePercent))
+					if (PlrHitMonst(player, *monster, false, damagePercent)) {
 						didhit = true;
+						// The spinning staff bites into each enemy it hits, as Whirlwind's blades do.
+						if (skill == WeaponSkill::WhirlingStaff)
+							vfx::Cut(position, look);
+					}
 					if (skill == WeaponSkill::GroundSlam && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
 						M_GetKnockback(*monster, origin);
 				}
@@ -3396,10 +3416,15 @@ void ProcessPlayers()
 			}
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
-				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {
+				// It lands the moment the hero stands at the dash's end, not after the dodge's last ticks run out
+				// (Curtis 2026-10-22: Dashing Strike stood about a second before it struck).
+				const bool arrived = player.position.tile == player.poe2.dashEnd && player.walkpath[0] == WALK_NONE;
+				if (player._pmode == PM_STAND && (arrived || !player.poe2.isDodging())) {
 					player.poe2.dashSkillTicks = 0;
-					// Land with a swing; the skill hits on the swing's hit frame.
-					BeginSkillAnimation(player, player.poe2.dashSkill, player_graphic::Attack, player.position.tile + player._pdir);
+					player.poe2.dodgeTicks = 0;
+					// Land with a swing; the skill hits on the swing's hit frame, which comes quickly, as the hero arrives
+					// (a spinning skill still plays its whole spin).
+					BeginSkillAnimation(player, player.poe2.dashSkill, player_graphic::Attack, player.position.tile + player._pdir, !SpinsWhileStriking(player.poe2.dashSkill));
 				} else if (--player.poe2.dashSkillTicks == 0) {
 					player.poe2.dashSkill = WeaponSkill::None;
 				}

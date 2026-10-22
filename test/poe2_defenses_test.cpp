@@ -250,6 +250,29 @@ TEST_F(Poe2DefensesTest, HybridBodyArmoursSplitTheirDefense)
 	EXPECT_EQ(player.poe2.maxEnergyShield, 25 * EnergyShieldPerDefense);
 }
 
+TEST_F(Poe2DefensesTest, IdentifyingNeverChangesDefence)
+{
+	// Curtis 2026-10-22: Fate Pelt (Pilgrim Vestments) gave 15 energy shield unidentified, then armour 7 and
+	// energy shield 12 once identified. Its 2 flat armour and 20% increased defence count either way.
+	Player &player = *MyPlayer;
+	Wear(player, INVLOC_CHEST, "Pilgrim Vestments", 10);
+	Item &vestments = player.InvBody[INVLOC_CHEST];
+	vestments._iMagical = ITEM_QUALITY_MAGIC;
+	vestments._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::FlatArmour)] = 2;
+	vestments._iPLAC = 20;
+	vestments._iIdentified = false;
+	Recalculate(player);
+	const int armour = ArmourRating(player);
+	const int energyShield = player.poe2.maxEnergyShield;
+	EXPECT_EQ(armour, 7);
+	EXPECT_EQ(energyShield, 4 * EnergyShieldPerDefense);
+
+	vestments._iIdentified = true;
+	Recalculate(player);
+	EXPECT_EQ(ArmourRating(player), armour);
+	EXPECT_EQ(player.poe2.maxEnergyShield, energyShield);
+}
+
 TEST_F(Poe2DefensesTest, TopBodyArmourBasesCarryImplicits)
 {
 	Player &player = *MyPlayer;

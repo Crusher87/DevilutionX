@@ -24,8 +24,6 @@ namespace devilution {
 namespace {
 
 constexpr float Pi = 3.14159265F;
-constexpr int LifeGlobeX = 96;
-constexpr int ManaGlobeX = 464;
 constexpr int ArcGap = 3;
 constexpr int ArcThickness = 4;
 /** @brief The light table the empty part of a flask is drawn with. */

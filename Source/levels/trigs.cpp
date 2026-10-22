@@ -7,6 +7,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <optional>
 
 #include "control/control.hpp"
 #include "controls/control_mode.hpp"
@@ -65,6 +66,9 @@ const uint16_t L5DownList[] = { 124, 125, 128, 130, 131, 134, 135, 139, 141 };
 const uint16_t L6TWarpUpList[] = { 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91 };
 const uint16_t L6UpList[] = { 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77 };
 const uint16_t L6DownList[] = { 56, 57, 58, 59, 60, 61, 62, 63 };
+
+/** @brief POE2 Mashup: the stairs or quest entrance the local hero clicked, if any. */
+std::optional<Point> ChosenLevelExit;
 } // namespace
 
 void InitNoTriggers()
@@ -872,6 +876,10 @@ void CheckTriggers()
 		if (myPlayer.position.tile != trigs[i].position) {
 			continue;
 		}
+		// POE2 Mashup: only stairs the hero clicked take them through.
+		if (gbIsPoe2 && !ChoseLevelExit(trigs[i].position))
+			continue;
+		ForgetChosenLevelExit();
 
 		switch (trigs[i]._tmsg) {
 		case WM_DIABNEXTLVL:
@@ -932,6 +940,21 @@ void CheckTriggers()
 			app_fatal("Unknown trigger msg");
 		}
 	}
+}
+
+void ChooseLevelExitAt(Point tile)
+{
+	ChosenLevelExit = tile;
+}
+
+void ForgetChosenLevelExit()
+{
+	ChosenLevelExit = std::nullopt;
+}
+
+bool ChoseLevelExit(Point tile)
+{
+	return ChosenLevelExit == tile;
 }
 
 bool EntranceBoundaryContains(Point entrance, Point position)

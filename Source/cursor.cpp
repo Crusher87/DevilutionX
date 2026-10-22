@@ -21,6 +21,7 @@
 
 #include "DiabloUI/diabloui.h"
 #include "control/control.hpp"
+#include "control/control_panel.hpp"
 #include "controls/control_mode.hpp"
 #include "controls/plrctrls.h"
 #include "doom.h"
@@ -950,6 +951,24 @@ void ResetCursorInfo()
 	trigflag = false;
 }
 
+/** @brief POE2 Mashup: with an item on the cursor, the items under it still show their tooltips (Curtis 2026-10-22). */
+void CheckItemsUnderHeldItem(Rectangle mainPanel)
+{
+	// Mouse only: a gamepad acts on the item it points at.
+	if (ControlMode != ControlTypes::KeyboardAndMouse || ControlDevice != ControlTypes::KeyboardAndMouse)
+		return;
+	Rectangle belt = BeltRect;
+	SetPanelObjectPosition(UiPanels::Main, belt);
+	if ((mainPanel.contains(MousePosition) && belt.contains(MousePosition)) || (invflag && GetRightPanel().contains(MousePosition))) {
+		pcursinvitem = CheckInvHLight();
+		return;
+	}
+	if (IsStashOpen && GetLeftPanel().contains(MousePosition))
+		pcursstashitem = CheckStashHLight(MousePosition);
+	if (IsVisualStoreOpen && GetLeftPanel().contains(MousePosition))
+		pcursstoreitem = CheckVisualStoreHLight(MousePosition);
+}
+
 bool CheckPlayerState(const Point currentTile, const Player &myPlayer)
 {
 	if (myPlayer._pInvincible) {
@@ -957,6 +976,8 @@ bool CheckPlayerState(const Point currentTile, const Player &myPlayer)
 	}
 	if (!myPlayer.HoldItem.isEmpty() || SpellSelectFlag) {
 		cursPosition = currentTile;
+		if (gbIsPoe2 && !SpellSelectFlag)
+			CheckItemsUnderHeldItem(GetMainPanel());
 		return true;
 	}
 	return false;

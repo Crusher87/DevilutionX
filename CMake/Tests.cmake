@@ -31,6 +31,8 @@ set(tests
   multi_logging_test
   pack_test
   poe2_admin_tools_test
+  poe2_bare_fists_test
+  poe2_breakables_test
   poe2_charms_test
   poe2_currency_test
   poe2_defenses_test
@@ -42,6 +44,7 @@ set(tests
   poe2_hud_globes_test
   poe2_jewels_test
   poe2_level_census_test
+  poe2_level_exits_test
   poe2_loot_filter_test
   poe2_loot_test
   poe2_modifiers_test

@@ -228,13 +228,23 @@ struct Sweep {
 	Element element;
 	bool heavy;
 	SweepKind kind = SweepKind::Flat;
-	/** @brief A flat sweep going the other way, left to right. */
+	/**
+	 * @brief A flat sweep going the other way, from the hero's left to his right: a backhand. Otherwise it goes from his
+	 * right to his left, as every hero swings right-handed.
+	 */
 	bool reverse = false;
+	/** @brief How far a flat sweep rises at the hero's right and falls at his left, in pixels: a diagonal cut. */
+	float tilt = 0;
 	/** @brief How many times a spin goes round. */
 	float turns = 0;
 	/** @brief The smear's thickness, as a share of its radius; 0 for the weapon's own. */
 	float thickness = 0;
 	float alpha = 1;
+	/** @brief A staff's smear: wood rather than steel, duller and warmer, with no glint on its edge. */
+	bool blunt = false;
+	/** @brief The weapon's added element, shown only as a dim sheen and faint flickers along its edge. */
+	Element imbued = Element::Physical;
+	uint32_t seed = 1;
 };
 
 struct Crack {
@@ -390,6 +400,15 @@ struct Comet {
 	float scale;
 	bool small;
 	uint32_t seed;
+	/** @brief A charged bolt: drawn as a crackling bolt of electricity along its path instead of a head and a tail. */
+	bool bolt = false;
+	/** @brief Not moving: a bolt standing where it landed or burst. */
+	bool still = false;
+	/** @brief How high its head is above the floor. */
+	float lift = 16;
+	/** @brief Where its head has been, newest first (the trail's points). */
+	std::array<Vec, 10> path {};
+	int pathCount = 0;
 };
 std::vector<Comet> FrameComets;
 /** @brief The scan the effects were last drawn after; until they are, classic sprites stay. */
@@ -2546,15 +2565,32 @@ void Cut(Point tile, Element element)
 	TelemetryEffect("vfx", StrCat("Cut ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
-	if (element != Element::Physical) {
-		SparksAt(TileCentre(tile), element, 1.F);
-		return;
-	}
 	// Steel biting into a body: a dull flash, a few short sparks off the edge and a spatter of blood.
 	const Vec pos = TileCentre(tile) + Vec { 0, -16 };
 	AddRing(pos, 0, 10, 70, 0, { 235, 225, 210 }, 0.35F, true, false);
 	Spray(pos, Scaled(5), 80, 220, 70, 160, Shape::Streak, { 255, 225, 170 }, { 200, 120, 50 }, 1.2F, 0.4F, 30, 120, 500, 2.F, 0.8F);
 	Spray(pos, Scaled(7), 40, 130, 300, 550, Shape::Chunk, { 110, 8, 8 }, { 45, 0, 0 }, 1.2F, 0.8F, 60, 160, 700, 0.6F, 0.9F);
+	if (element == Element::Physical)
+		return;
+	// The weapon's added element is only a faint touch on the wound (Curtis 2026-10-22: lightning on his staff was "far
+	// too in-your-face"): a dim glow and a few small sparks of it, never a burst.
+	const Colours c = ColoursOf(element);
+	AddRing(pos, 0, 9, 130, 0, c.mid, 0.25F, true, false);
+	switch (element) {
+	case Element::Lightning:
+		for (int i = 0; i < 2; i++) {
+			const float angle = Random(0, 2 * Pi);
+			const float length = Random(7, 13);
+			AddBolt(pos, pos + Vec { std::cos(angle) * length, std::sin(angle) * length * 0.7F }, Random(70, 110), 0.9F, c);
+		}
+		break;
+	case Element::Fire:
+		Spray(pos, Scaled(4), 10, 40, 300, 520, Shape::Dot, c.mid, c.edge, 1.3F, 0.3F, 20, 60, -30, 1.5F, 0.6F);
+		break;
+	default:
+		Spray(pos, Scaled(3), 30, 80, 200, 360, Shape::Shard, c.core, c.mid, 2.F, 1.F, 20, 70, 300, 1.F, 0.5F);
+		break;
+	}
 }
 
 void Arc(Point from, Point to, Element element)
@@ -2577,7 +2613,18 @@ void SkyStrike(Point tile, Element element)
 	ImpactAt(pos, element, 1.2F);
 }
 
-void Swing(Point from, Point toward, Element element, bool wide, bool heavy)
+namespace {
+
+/** @brief Gives a sweep its weapon's added element, to flicker faintly along its edge (see DrawSweeps). */
+void Imbue(Sweep &sweep, Element imbued)
+{
+	sweep.imbued = imbued;
+	sweep.seed = NextRandom() | 1;
+}
+
+} // namespace
+
+void Swing(Point from, Point toward, Element element, bool wide, bool heavy, Element imbued)
 {
 	TelemetryEffect("vfx", StrCat("Swing ", magic_enum::enum_name(element)), from.x, from.y);
 	if (!Enabled())
@@ -2594,6 +2641,7 @@ void Swing(Point from, Point toward, Element element, bool wide, bool heavy)
 	sweep.colours = ColoursOf(element);
 	sweep.element = element;
 	sweep.heavy = heavy;
+	Imbue(sweep, imbued);
 	Sweeps.push_back(sweep);
 }
 
@@ -2607,7 +2655,7 @@ float FacingBetween(Point from, Point toward)
 }
 
 /** @brief A blade brought down from overhead onto the tile in front, from just behind the head to the floor. */
-void AddChop(Point from, Point toward, Element element, bool heavy, float radiusScale)
+void AddChop(Point from, Point toward, Element element, bool heavy, float radiusScale, Element imbued)
 {
 	Sweep sweep;
 	sweep.kind = SweepKind::Chop;
@@ -2620,6 +2668,7 @@ void AddChop(Point from, Point toward, Element element, bool heavy, float radius
 	sweep.colours = ColoursOf(element);
 	sweep.element = element;
 	sweep.heavy = heavy;
+	Imbue(sweep, imbued);
 	Sweeps.push_back(sweep);
 }
 
@@ -2633,7 +2682,7 @@ void Thud(Vec pos, float size)
 
 } // namespace
 
-void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool heavy)
+void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool heavy, Element imbued)
 {
 	TelemetryEffect("vfx", StrCat("SwingAs ", magic_enum::enum_name(style), " ", magic_enum::enum_name(element)), from.x, from.y);
 	if (!Enabled())
@@ -2650,22 +2699,48 @@ void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool h
 		sweep.colours = ColoursOf(element);
 		sweep.element = element;
 		sweep.heavy = heavy;
-		// The backhand comes back the other way, a little higher, so the two cuts cross.
+		// A blade cuts down across the hero from over his right shoulder, as his attack animation swings it; a heavy
+		// staff sweeps level.
+		sweep.tilt = heavy ? 0.F : 10.F;
+		// The backhand comes back the other way, a little higher and slanting the other way, so the two cuts cross.
 		if (style == SwingStyle::Backhand) {
 			sweep.reverse = true;
+			sweep.tilt = -sweep.tilt;
 			sweep.pos.y -= 8;
 		}
+		Imbue(sweep, imbued);
 		Sweeps.push_back(sweep);
 		break;
 	}
 	case SwingStyle::Chop:
-		AddChop(from, toward, element, heavy, 1.F);
+		AddChop(from, toward, element, heavy, 1.F, imbued);
 		Thud(TileCentre(toward), heavy ? 0.8F : 0.6F);
 		break;
+	case SwingStyle::Jab: {
+		// A fist or a shield punched straight out from the hero's right side: a few quick streaks of air, no smear.
+		const float facing = FacingBetween(from, toward);
+		const Vec ahead { std::cos(facing), std::sin(facing) * 0.5F };
+		const Vec fist = OnGround(TileCentre(from), 10, facing + Pi / 2) + Vec { 0, -38 };
+		for (int i = 0; i < 3; i++) {
+			Particle p;
+			p.pos = fist + ahead * Random(6, 14) + Vec { Random(-3, 3), Random(-4, 4) };
+			p.vel = ahead * Random(420, 560);
+			p.drag = 4.F;
+			p.life = Random(90, 130);
+			p.shape = Shape::Streak;
+			p.c0 = { 245, 240, 230 };
+			p.c1 = { 150, 140, 125 };
+			p.size0 = 1.2F;
+			p.size1 = 0.4F;
+			p.alpha = 0.45F;
+			AddParticle(p);
+		}
+		break;
+	}
 	}
 }
 
-void Cleave(Point from, Point toward, Element element, bool chop)
+void Cleave(Point from, Point toward, Element element, bool chop, Element imbued)
 {
 	TelemetryEffect("vfx", StrCat("Cleave ", magic_enum::enum_name(element)), from.x, from.y);
 	if (!Enabled())
@@ -2679,7 +2754,7 @@ void Cleave(Point from, Point toward, Element element, bool chop)
 	float delay = 0;
 	if (chop) {
 		// The axe comes down on the target first; the slice bursts out of the blow to both sides.
-		AddChop(from, toward, element, true, 1.1F);
+		AddChop(from, toward, element, true, 1.1F, imbued);
 		Thud(TileCentre(toward), 1.F);
 		delay = 70;
 	}
@@ -2697,6 +2772,8 @@ void Cleave(Point from, Point toward, Element element, bool chop)
 		sweep.heavy = true;
 		sweep.thickness = layer == 0 ? 0.34F : 0.3F;
 		sweep.alpha = layer == 0 ? 1.F : 0.5F;
+		if (layer == 0)
+			Imbue(sweep, imbued);
 		Sweeps.push_back(sweep);
 	}
 	// Sparks thrown off the edge as it passes through each enemy, and a scuff of dust along the floor under it.
@@ -2708,40 +2785,68 @@ void Cleave(Point from, Point toward, Element element, bool chop)
 	}
 }
 
-void Whirl(Point tile, int radiusTiles, Element element)
+void Whirl(Point tile, int radiusTiles, Element element, bool staff, Element imbued)
 {
-	TelemetryEffect("vfx", StrCat("Whirl ", magic_enum::enum_name(element)), tile.x, tile.y);
+	TelemetryEffect("vfx", StrCat(staff ? "Whirl staff " : "Whirl ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	const Vec pos = TileCentre(tile);
 	const float r = TileRadius * (std::max(radiusTiles, 1) + 0.35F);
 	const Colours c = ColoursOf(element);
 	const float start = Random(0, 2 * Pi);
-	// The blade spinning round at waist height, with fainter echoes of it above and below.
-	for (int layer = 0; layer < 3; layer++) {
-		Sweep sweep;
-		sweep.kind = SweepKind::Spin;
-		sweep.pos = pos + Vec { 0, -30.F - 14.F * (layer - 1) };
-		sweep.facing = start + layer * 0.7F;
-		sweep.span = Pi * 1.2F;
-		sweep.radius = r * (layer == 1 ? 1.F : 0.8F);
-		sweep.turns = layer == 1 ? 2.F : 1.6F;
-		sweep.life = layer == 1 ? 620 : 540;
-		sweep.age = layer == 1 ? 0 : -40.F * layer;
-		sweep.colours = c;
-		sweep.element = element;
-		sweep.heavy = false;
-		sweep.thickness = 0.3F;
-		sweep.alpha = layer == 1 ? 1.F : 0.45F;
-		Sweeps.push_back(sweep);
+	if (staff) {
+		// Both ends of the staff sweep round, half a turn apart: two shorter, thicker smears of wood rather than one
+		// steel blade, a little inside the reach of its far end, and a faint echo of them lower down.
+		for (int layer = 0; layer < 3; layer++) {
+			const bool end = layer < 2;
+			Sweep sweep;
+			sweep.kind = SweepKind::Spin;
+			sweep.pos = pos + Vec { 0, end ? -34.F : -20.F };
+			sweep.facing = start + (layer == 1 ? Pi : 0) + (end ? 0 : 0.5F);
+			sweep.span = Pi * (end ? 0.8F : 1.1F);
+			sweep.radius = r * (end ? 0.72F : 0.55F);
+			sweep.turns = 1.75F;
+			sweep.life = end ? 600 : 520;
+			sweep.age = end ? 0 : -60.F;
+			sweep.colours = c;
+			sweep.element = element;
+			sweep.heavy = true;
+			sweep.thickness = end ? 0.36F : 0.3F;
+			sweep.alpha = end ? 1.F : 0.4F;
+			sweep.blunt = true;
+			if (end)
+				Imbue(sweep, imbued);
+			Sweeps.push_back(sweep);
+		}
+	} else {
+		// The blade spinning round at waist height, with fainter echoes of it above and below.
+		for (int layer = 0; layer < 3; layer++) {
+			Sweep sweep;
+			sweep.kind = SweepKind::Spin;
+			sweep.pos = pos + Vec { 0, -30.F - 14.F * (layer - 1) };
+			sweep.facing = start + layer * 0.7F;
+			sweep.span = Pi * 1.2F;
+			sweep.radius = r * (layer == 1 ? 1.F : 0.8F);
+			sweep.turns = layer == 1 ? 2.F : 1.6F;
+			sweep.life = layer == 1 ? 620 : 540;
+			sweep.age = layer == 1 ? 0 : -40.F * layer;
+			sweep.colours = c;
+			sweep.element = element;
+			sweep.heavy = false;
+			sweep.thickness = 0.3F;
+			sweep.alpha = layer == 1 ? 1.F : 0.45F;
+			if (layer == 1)
+				Imbue(sweep, imbued);
+			Sweeps.push_back(sweep);
+		}
 	}
 	// A funnel of wind: pale streaks whipped round and up, the same way the blade turns.
-	for (int i = Scaled(46); i > 0; i--) {
+	for (int i = Scaled(staff ? 56.F : 46.F); i > 0; i--) {
 		const float angle = Random(0, 2 * Pi);
 		const float radius = r * Random(0.35F, 1.15F);
 		Particle p;
 		p.pos = pos + Vec { std::cos(angle) * radius, std::sin(angle) * radius * 0.5F };
-		p.vel = Vec { -std::sin(angle), std::cos(angle) * 0.5F } * Random(240, 420) + Vec { -std::cos(angle), -std::sin(angle) * 0.5F } * Random(20, 60);
+		p.vel = Vec { std::sin(angle), -std::cos(angle) * 0.5F } * Random(240, 420) + Vec { -std::cos(angle), -std::sin(angle) * 0.5F } * Random(20, 60);
 		p.z = Random(4, 50);
 		p.vz = Random(40, 150);
 		p.gravity = -40;
@@ -2897,6 +3002,10 @@ void ScanMissiles()
 			TrackPortal(missile, newLevel);
 			continue;
 		}
+		// A weapon's added fire or lightning bursting where it strikes: the swing's flickers and the cut show it, faintly
+		// (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"), so it draws nothing of its own.
+		if (missile._mitype == MissileID::WeaponExplosion)
+			continue;
 		const GraphicLook look = LookOf(missile._miAnimType);
 		if (missile._mitype == MissileID::VisualEffect && look.projectile) {
 			// A projectile's graphic standing still is a hit flash (steel on steel): sparks, not a flying glow.
@@ -2941,19 +3050,28 @@ void ScanMissiles()
 		const Colours c = ColoursOf(look.element);
 		const bool arrow = missile._miAnimType == MissileGraphicID::Arrow;
 		const bool small = missile.poe2.look == 1;
+		// A charged bolt's light crackles with it rather than glowing steadily round a ball.
+		const bool bolt = missile._miAnimType == MissileGraphicID::ChargedBolt;
+		const uint32_t seed = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4);
+		const float crackle = bolt ? 0.55F + 0.45F * SmoothNoise(seed, AmbientTime * 0.03F) : 1.F;
 		if (!trail.arrow) {
 			const Vec velocity { static_cast<float>(missile.position.velocity.deltaX), static_cast<float>(missile.position.velocity.deltaY) };
 			const float speed = Length(velocity);
 			const Vec dir = speed > 0.001F ? velocity * (1 / speed) : Vec { 1, 0 };
-			FrameComets.push_back({ head, dir, look.element, scale, small, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4) });
+			Comet &comet = FrameComets.emplace_back(Comet { head, dir, look.element, scale, small, seed });
+			comet.bolt = bolt;
+			comet.still = speed <= 0.001F;
+			comet.lift = missile._miAnimWidth / 2.F - 16;
+			comet.path = trail.points;
+			comet.pathCount = trail.count;
 		}
 		Ring glow;
 		glow.pos = head;
-		glow.r0 = glow.r1 = (arrow ? 6.F : 20.F) * scale;
+		glow.r0 = glow.r1 = (arrow ? 6.F : (bolt ? 13.F : 20.F)) * scale;
 		glow.life = 1;
 		glow.width = 0;
 		glow.colour = c.mid;
-		glow.alpha = (arrow ? 0.45F : 0.7F) * std::min(scale, 1.F);
+		glow.alpha = (arrow ? 0.45F : (bolt ? 0.3F * crackle : 0.7F)) * std::min(scale, 1.F);
 		glow.disc = true;
 		glow.ground = false;
 		FrameGlows.push_back(glow);
@@ -2964,15 +3082,18 @@ void ScanMissiles()
 			FrameGlows.push_back(glow);
 		}
 		if (!arrow) {
-			glow.r0 = glow.r1 = 7 * scale;
-			glow.colour = c.core;
-			glow.alpha = 1;
-			FrameGlows.push_back(glow);
+			// A white-hot heart; a bolt has no ball at its head, only its crackling filament (see DrawLightningBolt).
+			if (!bolt) {
+				glow.r0 = glow.r1 = 7 * scale;
+				glow.colour = c.core;
+				glow.alpha = 1;
+				FrameGlows.push_back(glow);
+			}
 			// The light the projectile throws on the floor beneath it.
 			glow.pos = MissileCentre(missile) + Vec { 0, missile._miAnimWidth / 2.F - 16 };
 			glow.r0 = glow.r1 = TileRadius * 1.6F;
 			glow.colour = c.mid;
-			glow.alpha = 0.22F;
+			glow.alpha = 0.22F * crackle;
 			glow.ground = true;
 			FrameGlows.push_back(glow);
 		}
@@ -3000,8 +3121,9 @@ bool ReplacesSprite(const Missile &missile)
 		return false;
 	if (missile._mitype == MissileID::VisualEffect)
 		return false;
-	// The portals are drawn whole by the effects.
-	if (IsAnyOf(missile._mitype, MissileID::TownPortal, MissileID::RedPortal))
+	// The portals are drawn whole by the effects, and a weapon's added element shows only faintly on its swing and cut,
+	// without its classic burst.
+	if (IsAnyOf(missile._mitype, MissileID::TownPortal, MissileID::RedPortal, MissileID::WeaponExplosion))
 		return true;
 	// Arrows keep their sprite: the effects only streak and spark them.
 	if (IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow))
@@ -3451,10 +3573,134 @@ void DrawRings()
 		SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
 }
 
+/**
+ * @brief A strand of electricity through the points: a white core inside a blue body inside a violet haze. Its
+ * brightness runs from @p head at its first point through @p middle half way to @p tail at its last.
+ */
+void Filament(const std::vector<Vec> &points, float width, const Colours &c, float head, float middle, float tail)
+{
+	const float last = static_cast<float>(std::max<size_t>(points.size(), 2) - 1);
+	const auto alphaAt = [&](size_t i) {
+		const float u = static_cast<float>(i) / last;
+		return u < 0.5F ? head + (middle - head) * u * 2 : middle + (tail - middle) * (u - 0.5F) * 2;
+	};
+	for (size_t i = 0; i + 1 < points.size(); i++) {
+		const float a0 = alphaAt(i);
+		const float a1 = alphaAt(i + 1);
+		SoftLine(Glowing, points[i], points[i + 1], width * 5, c.edge, c.edge, a0 * 0.3F, a1 * 0.3F);
+		SoftLine(Glowing, points[i], points[i + 1], width * 2.2F, c.mid, c.mid, a0 * 0.7F, a1 * 0.7F);
+		SoftLine(Glowing, points[i], points[i + 1], width, c.core, c.core, a0, a1);
+	}
+}
+
+/**
+ * @brief Zig-zags a line of points: each joint between its ends is thrown sideways up to @p kick, mostly to the other
+ * side from the joint before, so it kinks sharply like lightning rather than wriggling.
+ */
+std::vector<Vec> ZigZag(const std::vector<Vec> &line, float kick, uint32_t &seed)
+{
+	std::vector<Vec> points { line.front() };
+	float side = SeededRandom(seed) < 0.5F ? 1.F : -1.F;
+	for (size_t i = 1; i + 1 < line.size(); i++) {
+		const Vec d = line[i + 1] - line[i - 1];
+		const float length = std::max(Length(d), 0.01F);
+		const Vec normal { -d.y / length, d.x / length };
+		points.push_back(line[i] + normal * (side * (0.4F + 0.6F * SeededRandom(seed)) * kick));
+		if (SeededRandom(seed) < 0.8F)
+			side = -side;
+	}
+	points.push_back(line.back());
+	return points;
+}
+
+/** @brief A jagged strand from one point to another in a few sharp kinks. */
+std::vector<Vec> Jag(Vec from, Vec to, int steps, float kick, uint32_t &seed)
+{
+	std::vector<Vec> line;
+	for (int i = 0; i <= steps; i++)
+		line.push_back(from + (to - from) * (static_cast<float>(i) / steps));
+	return ZigZag(line, kick, seed);
+}
+
+/**
+ * @brief A charged bolt (Curtis 2026-10-22: its round head and tail looked like "little sperms floating around"): a short
+ * bolt of jagged lightning along the path it has just flown, evenly bright with no ball at its head, a fainter second
+ * strand twisting round it, forks flicking off it and now and then an arc down to the floor. It tears itself up and
+ * re-forms every few hundredths of a second. Standing still, it crackles in place.
+ */
+void DrawLightningBolt(const Comet &comet)
+{
+	const Colours c = ColoursOf(Element::Lightning);
+	const float s = comet.scale;
+	// A new shape every 35 ms, different for each bolt; its brightness jumps with it.
+	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / 35) * 40503U)) | 1;
+	SeededRandom(seed);
+	const float flash = 0.7F + 0.3F * SeededRandom(seed);
+	if (comet.still) {
+		for (int i = 0; i < 3; i++) {
+			const float angle = SeededRandom(seed) * 2 * Pi;
+			const float reach = (8 + 10 * SeededRandom(seed)) * s;
+			Filament(Jag(comet.head, comet.head + Vec { std::cos(angle), std::sin(angle) * 0.7F } * reach, 3, 3 * s, seed), 1.3F * s, c, flash, 0.7F * flash, 0.1F);
+		}
+		return;
+	}
+
+	// The path flown, newest first, carried straight on behind its oldest point so it always reaches the bolt's length.
+	const float length = (comet.small ? 22.F : 36.F) * s;
+	std::vector<Vec> path { comet.head };
+	for (int i = 1; i < comet.pathCount; i++)
+		path.push_back(comet.path[i]);
+	const Vec oldest = path.back();
+	Vec onward = path.size() >= 2 ? oldest - path[path.size() - 2] : comet.dir * -1;
+	onward = onward * (1 / std::max(Length(onward), 0.01F));
+	path.push_back(oldest + onward * length);
+
+	// Joints evenly spaced back along it, then zig-zagged: a main strand and a fainter one twisting round it.
+	constexpr int Joints = 6;
+	std::vector<Vec> spine;
+	size_t segment = 0;
+	float segmentStart = 0;
+	for (int n = 0; n < Joints; n++) {
+		const float d = length * static_cast<float>(n) / (Joints - 1);
+		while (segment + 2 < path.size() && segmentStart + Length(path[segment + 1] - path[segment]) < d) {
+			segmentStart += Length(path[segment + 1] - path[segment]);
+			segment++;
+		}
+		const Vec span = path[segment + 1] - path[segment];
+		const float f = std::clamp((d - segmentStart) / std::max(Length(span), 0.01F), 0.F, 1.F);
+		spine.push_back(path[segment] + span * f);
+	}
+	const std::vector<Vec> body = ZigZag(spine, 6 * s, seed);
+	Filament(body, 1.8F * s, c, 0.75F * flash, flash, 0.2F * flash);
+	Filament(ZigZag(spine, 4.5F * s, seed), 1.1F * s, c, 0.35F * flash, 0.45F * flash, 0);
+
+	// Forks flicking off its joints, never the same two frames running.
+	for (int f = 0; f < 3; f++) {
+		if (SeededRandom(seed) < 0.4F)
+			continue;
+		const size_t at = 1 + static_cast<size_t>(SeededRandom(seed) * static_cast<float>(body.size() - 3));
+		const Vec along = body[at + 1] - body[at];
+		const float turn = (SeededRandom(seed) < 0.5F ? 1.F : -1.F) * (0.5F + 0.7F * SeededRandom(seed));
+		const Vec way { along.x * std::cos(turn) - along.y * std::sin(turn), along.x * std::sin(turn) + along.y * std::cos(turn) };
+		const Vec end = body[at] + way * ((8 + 9 * SeededRandom(seed)) * s / std::max(Length(way), 0.01F));
+		Filament(Jag(body[at], end, 3, 3 * s, seed), 1.1F * s, c, 0.8F * flash, 0.5F * flash, 0);
+	}
+	// Now and then it arcs down to the floor beneath it.
+	if (!comet.small && SeededRandom(seed) < 0.3F) {
+		const Vec floor = comet.head + Vec { (SeededRandom(seed) - 0.5F) * 16 * s, comet.lift };
+		Filament(Jag(comet.head, floor, 3, 3 * s, seed), 1.1F * s, c, 0.6F * flash, 0.5F * flash, 0.4F * flash);
+		SoftDisc(Glowing, floor, 4 * s, c.mid, 0.4F * flash, true);
+	}
+}
+
 /** @brief Projectile bodies: a white-hot head and a tail tapering back along the flight, shaped by the element. */
 void DrawComets()
 {
 	for (const Comet &comet : FrameComets) {
+		if (comet.bolt) {
+			DrawLightningBolt(comet);
+			continue;
+		}
 		const Colours c = ColoursOf(comet.element);
 		uint32_t seed = comet.seed + static_cast<uint32_t>(AmbientTime * 0.05F);
 		const float s = comet.scale;
@@ -3746,6 +3992,8 @@ void DrawIceSpikes()
 /** @brief Where a point of a sweep lies: on a level circle for a slash or a spin, on an upright circle along the facing for a chop (angle 0 straight up, Pi/2 straight ahead). */
 Vec SweepPoint(const Sweep &sweep, float radius, float angle)
 {
+	if (sweep.kind == SweepKind::Flat)
+		return OnGround(sweep.pos, radius, angle) + Vec { 0, -sweep.tilt * std::sin(angle - sweep.facing) };
 	if (sweep.kind != SweepKind::Chop)
 		return OnGround(sweep.pos, radius, angle);
 	const Vec ahead { std::cos(sweep.facing), std::sin(sweep.facing) * 0.5F };
@@ -3764,21 +4012,24 @@ void DrawSweeps()
 		const float fade = (1 - t * t) * sweep.alpha;
 		const float thickness = sweep.radius * (sweep.thickness > 0 ? sweep.thickness : (sweep.heavy ? 0.5F : 0.36F));
 		const bool elemental = sweep.element != Element::Physical;
-		const Rgb rim = elemental ? sweep.colours.core : Rgb { 245, 245, 250 };
-		const Rgb body = elemental ? sweep.colours.mid : Rgb { 175, 180, 192 };
+		const bool imbued = !elemental && sweep.imbued != Element::Physical;
+		const Colours tint = ColoursOf(sweep.imbued);
+		const Rgb rim = elemental ? sweep.colours.core : (sweep.blunt ? Rgb { 222, 212, 192 } : Rgb { 245, 245, 250 });
+		const Rgb body = elemental ? sweep.colours.mid : (sweep.blunt ? Rgb { 150, 138, 118 } : Rgb { 175, 180, 192 });
 		// Where along the smear each point is (u from its tail to its head): its angle, strength and width, or false
 		// where there's nothing to draw.
 		const float head = EaseOut(std::min(t * 1.8F, 1.F));
 		const float tailLag = sweep.heavy ? 0.85F : 0.7F;
-		// A spin's head goes round and round, slowing a little at the end; its smear trails a fixed arc behind it.
+		// A spin's head goes round and round, slowing a little at the end; its smear trails a fixed arc behind it. It
+		// turns the way a right-handed swing carries on round, to the hero's left, as the hero turns (see TurnWithSpin).
 		const float spinTravel = 2 * Pi * sweep.turns * t * (1.35F - 0.35F * t);
-		const float spinHead = sweep.facing + spinTravel;
+		const float spinHead = sweep.facing - spinTravel;
 		auto sample = [&](float u, float &angle, float &alpha, float &width) {
 			if (sweep.kind == SweepKind::Spin) {
 				const float back = sweep.span * (1 - u);
 				if (back > spinTravel)
 					return false;
-				angle = spinHead - back;
+				angle = spinHead + back;
 				const float taper = u < 0.85F ? u / 0.85F : (1 - u) / 0.15F;
 				alpha = std::pow(taper, 0.8F) * fade;
 				width = std::max(thickness * taper, 1.5F);
@@ -3791,12 +4042,14 @@ void DrawSweeps()
 			const float taper = std::pow(std::sin(Pi * u), 0.7F);
 			alpha = (1 - behind) * (1 - behind) * fade * (0.35F + 0.65F * taper);
 			width = std::max(thickness * taper * (1 - behind * 0.5F), 1.5F);
+			// A level sweep comes round from the hero's right (Curtis 2026-10-22: "right-handed, so the swing effect
+			// should go from right to left"); a backhand goes back the other way.
 			if (sweep.kind == SweepKind::Chop)
 				angle = -Pi * 0.3F + sweep.span * u;
 			else if (sweep.reverse)
-				angle = sweep.facing + sweep.span / 2 - sweep.span * u;
-			else
 				angle = sweep.facing - sweep.span / 2 + sweep.span * u;
+			else
+				angle = sweep.facing + sweep.span / 2 - sweep.span * u;
 			return true;
 		};
 		const int steps = sweep.kind == SweepKind::Spin ? 36 : 28;
@@ -3823,15 +4076,48 @@ void DrawSweeps()
 				Dark.tri(previous[2], v[1], v[2]);
 			}
 			std::copy(std::begin(v), std::end(v), std::begin(previous));
-			// A faint sheen on the edge; elemental blades glow properly in their element's colour.
-			const float glow = alpha * (elemental ? 0.55F : 0.18F);
+			// A faint sheen on the edge; elemental blades glow properly in their element's colour, and a weapon's added
+			// element only tints the sheen.
+			const float glow = alpha * (elemental ? 0.55F : (imbued ? 0.16F : (sweep.blunt ? 0.06F : 0.18F)));
 			const Vec glowInner = ToScreen(SweepPoint(sweep, sweep.radius - width * 0.6F, angle));
-			const int g[2] = { Glowing.add(edge, elemental ? sweep.colours.mid : rim, glow), Glowing.add(glowInner, sweep.colours.edge, 0) };
+			const int g[2] = { Glowing.add(edge, elemental ? sweep.colours.mid : (imbued ? tint.mid : rim), glow), Glowing.add(glowInner, sweep.colours.edge, 0) };
 			if (previousGlow[0] >= 0) {
 				Glowing.tri(previousGlow[0], g[0], previousGlow[1]);
 				Glowing.tri(previousGlow[1], g[0], g[1]);
 			}
 			std::copy(std::begin(g), std::end(g), std::begin(previousGlow));
+		}
+		if (!imbued)
+			continue;
+		// The weapon's added element (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"): only faint
+		// flickers along the edge as it passes, a different few every 40 ms, never a shape of their own.
+		uint32_t seed = sweep.seed ^ (static_cast<uint32_t>(AmbientTime / 40) * 2654435761U);
+		for (int i = 0; i < 5; i++) {
+			const float u = SeededRandom(seed);
+			float angle;
+			float alpha;
+			float width;
+			if (!sample(u, angle, alpha, width) || alpha < 0.25F)
+				continue;
+			const Vec at = SweepPoint(sweep, sweep.radius - std::min(2.F, width * 0.3F), angle);
+			switch (sweep.imbued) {
+			case Element::Lightning:
+				// Now and then a tiny arc jumps off the edge.
+				if (SeededRandom(seed) < 0.45F) {
+					const float a = SeededRandom(seed) * 2 * Pi;
+					const Vec end = at + Vec { std::cos(a), std::sin(a) * 0.7F } * (4 + 5 * SeededRandom(seed));
+					Filament(Jag(at, end, 2, 1.5F, seed), 0.8F, tint, 0.5F * alpha, 0.4F * alpha, 0.1F * alpha);
+				}
+				break;
+			case Element::Fire:
+				// A few small embers licking up off it.
+				SoftDisc(Glowing, at + Vec { (SeededRandom(seed) - 0.5F) * 4, -SeededRandom(seed) * 5 }, 1.5F, tint.mid, 0.45F * alpha, false);
+				break;
+			default:
+				// A glint of frost here and there.
+				SoftDisc(Glowing, at, 1.3F, tint.core, 0.5F * alpha * SeededRandom(seed), false);
+				break;
+			}
 		}
 	}
 }

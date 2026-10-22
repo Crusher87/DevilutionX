@@ -15,6 +15,9 @@
 
 namespace devilution {
 
+/** @brief Where the life and mana globes' art starts in the main panel. */
+constexpr int LifeGlobeX = 96;
+constexpr int ManaGlobeX = 464;
 /** @brief Size of the bulb art; rows above GlobePanelTopRow stick out above the main panel. */
 constexpr int GlobeArtSize = 88;
 constexpr int GlobeTopRow = 3;

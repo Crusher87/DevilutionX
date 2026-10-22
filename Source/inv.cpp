@@ -39,6 +39,7 @@
 #include "panels/gemcutting_panel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/skill_bar.hpp"
+#include "panels/stack_split_panel.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
@@ -873,7 +874,10 @@ void CheckInvCut(Player &player, Point cursorPosition, bool automaticMove, bool 
 		const int iv = std::abs(player.InvGrid[ig]) - 1;
 		if (iv >= 0) {
 			if (automaticMove && StackCount(player.InvList[iv]) > 1) {
-				// POE2 Mashup: shift-click takes half of a currency stack onto the cursor.
+				// POE2 Mashup: shift-click on a currency stack opens a slider to pick how many to take (Curtis 2026-10-22).
+				// A gamepad takes half.
+				if (&player == MyPlayer && OpenStackSplit(StackSplitSource::Inventory, static_cast<uint16_t>(iv)))
+					return;
 				holdItem = *SplitStack(player.InvList[iv]);
 				if (&player == MyPlayer)
 					NetSyncInvItem(player, iv);

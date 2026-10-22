@@ -35,6 +35,7 @@
 #include "items.h"
 #include "panels/poe2_widgets.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/stack_split_panel.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/crafting_items.hpp"
@@ -1388,7 +1389,7 @@ bool HandleStripClick()
 	return At(0, 0, 320, HeaderY).contains(MousePosition);
 }
 
-bool HandlePremadeSlotClick(const TabView &view, bool isCtrlHeld)
+bool HandlePremadeSlotClick(const TabView &view, bool isShiftHeld, bool isCtrlHeld)
 {
 	Player &player = *MyPlayer;
 	const unsigned page = Stash.GetPage();
@@ -1412,6 +1413,9 @@ bool HandlePremadeSlotClick(const TabView &view, bool isCtrlHeld)
 		return true;
 	}
 	if (slot == view.slots.end() || slot->index == StashStruct::EmptyCell || slot->index >= Stash.stashList.size())
+		return true;
+	// Shift-click on a currency stack opens a slider to pick how many to take (Curtis 2026-10-22).
+	if (isShiftHeld && OpenStackSplit(StackSplitSource::Stash, slot->index))
 		return true;
 	if (isCtrlHeld) {
 		TransferItemToInventory(player, slot->index);
@@ -1504,7 +1508,7 @@ StashStruct::StashCell PremadeTabItemUnderCursor(Point mousePosition)
 	return StashStruct::EmptyCell;
 }
 
-bool HandlePoe2StashClick(Point mousePosition, bool /*isShiftHeld*/, bool isCtrlHeld)
+bool HandlePoe2StashClick(Point mousePosition, bool isShiftHeld, bool isCtrlHeld)
 {
 	if (OpenPopup != Popup::None)
 		return true;
@@ -1521,7 +1525,7 @@ bool HandlePoe2StashClick(Point mousePosition, bool /*isShiftHeld*/, bool isCtrl
 			}
 		}
 		if (!handled && StashTabs.kind(Stash.GetPage()) != StashTabKind::Blank)
-			handled = HandlePremadeSlotClick(view, isCtrlHeld);
+			handled = HandlePremadeSlotClick(view, isShiftHeld, isCtrlHeld);
 	}
 	MousePosition = saved;
 	return handled;

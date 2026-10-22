@@ -355,6 +355,16 @@ void OperateObject(Player &player, Object &object);
 void SyncOpObject(Player &player, int cmd, Object &object);
 void BreakObjectMissile(Object &object);
 void BreakObject(const Player &player, Object &object);
+/**
+ * @brief POE2 Mashup: a skill's hit smashes the barrel, urn, pod or crux on the tile, like a melee swing at it
+ * (Curtis 2026-10-22). Only the local hero's skills break them here; the break reaches the other players as a command.
+ */
+void BreakObjectAt(const Player &player, Point tile);
+/**
+ * @brief POE2 Mashup: an area skill smashes every barrel, urn, pod and crux in its area (see BreakObjectAt).
+ * @param radius Tiles from the centre, counted as the area's monster hits count them (Point::ExactDistance).
+ */
+void BreakObjectsInArea(const Player &player, Point center, int radius);
 void DeltaSyncOpObject(Object &object);
 void DeltaSyncCloseObj(Object &object);
 void DeltaSyncBreakObj(Object &object);

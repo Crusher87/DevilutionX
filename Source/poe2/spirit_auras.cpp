@@ -12,6 +12,7 @@
 #include "levels/gendung.h"
 #include "missiles.h"
 #include "monster.h"
+#include "objects.h"
 #include "player.h"
 #include "poe2/meta_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -106,21 +107,28 @@ void SprayMagma(Player &player)
 	const int armour = shield != nullptr ? std::max<int>(shield->_iAC, 0) : 0;
 	const Fixed26_6 damage = Fixed26_6::fromInt(MagmaBarrierDamage(GemLevel(player, PersistentSkill::MagmaBarrier)) + (armour * MagmaBarrierArmourPercent / 100));
 	TelemetryNoteDamageSource("Magma Barrier");
-	int hit = 0;
-	for (size_t i = 0; i < ActiveMonsterCount; i++) {
-		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (!CanHit(monster))
-			continue;
-		const Point target { monster.position.tile };
+	// Ahead of the hero: within about 50 degrees of the way the hero faces.
+	const auto inSpray = [&](Point target) {
 		const Displacement offset = target - center;
-		const int distance = center.WalkingDistance(monster.position.tile);
+		const int distance = center.WalkingDistance(target);
 		if (distance < 1 || distance > MagmaBarrierTiles)
-			continue;
-		// Ahead of the hero: within about 50 degrees of the way the hero faces.
+			return false;
 		const int64_t dot = (static_cast<int64_t>(offset.deltaX) * facing.deltaX) + (static_cast<int64_t>(offset.deltaY) * facing.deltaY);
 		const int64_t lengths = ((static_cast<int64_t>(offset.deltaX) * offset.deltaX) + (static_cast<int64_t>(offset.deltaY) * offset.deltaY))
 		    * ((facing.deltaX * facing.deltaX) + (facing.deltaY * facing.deltaY));
-		if (dot <= 0 || dot * dot * 100 < lengths * 41)
+		return dot > 0 && dot * dot * 100 >= lengths * 41;
+	};
+	// The spray smashes the barrels and urns it covers too, like the other area skills (Curtis 2026-10-22).
+	for (int dy = -MagmaBarrierTiles; dy <= MagmaBarrierTiles; dy++) {
+		for (int dx = -MagmaBarrierTiles; dx <= MagmaBarrierTiles; dx++) {
+			if (inSpray(center + Displacement { dx, dy }))
+				BreakObjectAt(player, center + Displacement { dx, dy });
+		}
+	}
+	int hit = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (!CanHit(monster) || !inSpray(monster.position.tile))
 			continue;
 		SpiritHitMonster(player, monster, DamageType::Fire, damage);
 		hit++;
@@ -142,6 +150,10 @@ void TickBriarpatch(Player &player, SpiritRuntime &state)
 			AddVisualEffect(state.briarPosition + Displacement { dx, dy }, MissileGraphicID::BoneHit);
 	}
 	TelemetryNoteDamageSource("Briarpatch");
+	for (int dy = -BriarpatchRadius; dy <= BriarpatchRadius; dy++) {
+		for (int dx = -BriarpatchRadius; dx <= BriarpatchRadius; dx++)
+			BreakObjectAt(player, state.briarPosition + Displacement { dx, dy });
+	}
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (!CanHit(monster) || state.briarPosition.WalkingDistance(monster.position.tile) > BriarpatchRadius)

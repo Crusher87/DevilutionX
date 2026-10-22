@@ -80,6 +80,7 @@
 #include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/desecration.hpp"
@@ -1467,6 +1468,9 @@ void GetItemPowerPoe2Mods(Item &item, bool rare)
 {
 	std::vector<Poe2ItemMod> mods;
 	if (item._iPoe2Craft.explicitMods) {
+		// Premium and Wirt's wares always roll a bonus; a scoured one stays normal.
+		if (item._iPoe2Craft.rarity == ITEM_QUALITY_NORMAL)
+			return;
 		rare = item._iPoe2Craft.rarity == ITEM_QUALITY_RARE;
 		mods = ResolveCraftMods(item, RollNaturalPoe2Mods(item, !item._iPoe2Craft.rolledMagic));
 	} else {
@@ -2192,8 +2196,7 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (IsJewel(item)) {
-		AddItemInfoBoxString(_("Place in an allocated Jewel Socket"));
-		AddItemInfoBoxString(_("on the Passive Tree (P)"));
+		// One short hint (Curtis 2026-10-22); without a free socket, right-clicking says to allocate one.
 		AddItemInfoBoxString(_("Right-click to socket"));
 		return;
 	}
@@ -2510,6 +2513,8 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 		SetRndSeed(premiumItem._iSeed);
 		const _item_indexes itemType = RndPremiumItem(player, plvl / 4, plvl);
 		GetItemAttrs(premiumItem, itemType, plvl);
+		// POE2 Mashup: the item level goes on first, so the ware has the POE2 modifiers it rebuilds with.
+		SetVendorPoe2ItemLevel(premiumItem, plvl);
 		GetItemBonus(player, premiumItem, plvl / 2, plvl, true, !gbIsHellfire);
 
 		if (!gbIsHellfire) {
@@ -2563,18 +2568,6 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 	SetVendorPoe2ItemLevel(premiumItem, plvl);
 	premiumItem._iIdentified = true;
 	premiumItem._iStatFlag = player.CanUseItem(premiumItem);
-}
-
-/**
- * @brief POE2 vendors keep valuable currency, waystones, gems and charms out of their stock: those come from drops.
- * Adria still sells the common orbs (Transmute, Augment, Bauble, Whetstone, Scrap) and her scrolls.
- */
-bool Poe2VendorWithholds(item_misc_id miscId)
-{
-	if (IsCurrencyMiscId(miscId))
-		return OrbCurrencyBand(miscId) != CurrencyBand::Common;
-	return IsAnyOf(miscId, IMISC_WAYSTONE, IMISC_UNCUT_SKILL, IMISC_UNCUT_SUPPORT, IMISC_UNCUT_SPIRIT, IMISC_SPIRIT_SKULL, IMISC_SPEC_BOOK, IMISC_CHARM_LIFE,
-	    IMISC_CHARM_MANA, IMISC_CHARM_GUARD, IMISC_CHARM_FIRE, IMISC_CHARM_LIGHTNING, IMISC_CHARM_MAGIC, IMISC_CHARM_STUN, IMISC_CHARM_GOLDEN);
 }
 
 bool WitchItemOk(const Player & /*player*/, const ItemData &item)
@@ -2658,8 +2651,8 @@ void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
 	SetRndSeed(iseed);
 	const _item_indexes itype = RndSmithItem(player, lvl);
 	GetItemAttrs(item, itype, lvl);
-	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff; skip the rarity roll and give it its modifiers.
-	if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
+	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff, or the one crafting gave it; skip the rarity roll and give it its modifiers.
+	if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
 		item._iSeed = iseed; // the modifiers roll from it
 		DiscardRandomValues(1);
 		GetItemBonus(player, item, lvl / 2, lvl, true, false);
@@ -2706,8 +2699,8 @@ void RecreateWitchItem(const Player &player, Item &item, _item_indexes idx, int 
 		SetRndSeed(iseed);
 		const _item_indexes itype = RndWitchItem(player, lvl);
 		GetItemAttrs(item, itype, lvl);
-		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff; skip the rarity roll and give it its modifiers.
-		if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity) {
+		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff, or has the one crafting gave it; skip the rarity roll and give it its modifiers.
+		if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity) {
 			if (*rarity != ITEM_QUALITY_NORMAL) {
 				item._iSeed = iseed; // the modifiers roll from it
 				DiscardRandomValues(1);
@@ -3237,6 +3230,15 @@ void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 	const uint8_t playerLevel = player.getCharacterLevel();
 
 	if (minDamage == 0 && maxDamage == 0) {
+		// POE2 Mashup: a Monk's bare fists hit like a plain quarterstaff of the attack gem's level, not by character
+		// level (Curtis 2026-10-19). Here the default attack's; a skill's hits take its own gem (AttackWeaponDamage).
+		if (gbIsPoe2 && player._pClass == HeroClass::Monk) {
+			const auto [fistMin, fistMax] = BareFistDamage(BareFistGemLevel(player, DefaultSkillSlot(player)));
+			player._pIMinDam = fistMin;
+			player._pIMaxDam = fistMax;
+			return;
+		}
+
 		minDamage = 1;
 		maxDamage = 1;
 
@@ -3762,15 +3764,15 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			if (item.isEmpty() || !item._iStatFlag || item._iAC == 0)
 				continue;
 			// The generic pass above counted all of the item's defence as armour; keep only its armour share.
-			const bool modsKnown = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+			// An item's local defence modifiers count identified or not, so identifying changes nothing (Curtis 2026-10-22).
 			DefensePoints base;
 			DefensePoints bonus;
-			SplitItemDefense(item, modsKnown, base, bonus);
+			SplitItemDefense(item, base, bonus);
 			evasion += base.evasion + bonus.evasion;
 			energyShield += (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
 			ac -= item._iAC - base.armour;
-			if (modsKnown)
-				bonusAc -= GetBonusAC(item) - bonus.armour;
+			const bool counted = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+			bonusAc += bonus.armour - (counted ? GetBonusAC(item) : 0);
 		}
 		for (const Item &item : player.InvBody) {
 			if (item.isEmpty() || !item._iStatFlag)
@@ -5371,6 +5373,12 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 	if ((icreateinfo & CF_UNIQUE) == 0) {
 		if ((icreateinfo & CF_TOWN) != 0) {
 			RecreateTownItem(player, item, idx, icreateinfo, iseed);
+			// POE2 Mashup: a bought ware crafts like a drop, so its augments and corruption come on top too.
+			if (!item._iPoe2Craft.isEmpty()) {
+				ApplyAugments(item);
+				ApplyCorruptionEnchant(item);
+			}
+			ApplyCorruptionImplicit(player, item);
 			gbIsHellfire = tmpIsHellfire;
 			return;
 		}
@@ -6278,7 +6286,8 @@ void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energySh
 {
 	DefensePoints base;
 	DefensePoints bonus;
-	SplitItemDefense(item, !item.isEmpty() && (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified), base, bonus);
+	if (!item.isEmpty())
+		SplitItemDefense(item, base, bonus);
 	armour = base.armour + bonus.armour;
 	evasion = base.evasion + bonus.evasion;
 	energyShield = (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
@@ -6702,7 +6711,8 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
 		shown++;
 	};
-	// Unidentified items only show their base: damage and defence. Identified weapons compare their whole hit, as the tooltip shows it.
+	// Unidentified weapons only show their base damage; identified ones compare their whole hit, as the tooltip shows it.
+	// Defence counts its modifiers either way.
 	const auto hitDamage = [](const Item &it, bool max) {
 		const int base = max ? it._iMaxDam : it._iMinDam;
 		if (it.isEmpty() || !it._iIdentified)
@@ -7353,6 +7363,8 @@ void SpawnBoy(int lvl)
 		SetRndSeed(BoyItem._iSeed);
 		const _item_indexes itype = RndBoyItem(*MyPlayer, lvl);
 		GetItemAttrs(BoyItem, itype, lvl);
+		// POE2 Mashup: the item level goes on first, so the ware has the POE2 modifiers it rebuilds with.
+		SetVendorPoe2ItemLevel(BoyItem, lvl);
 		GetItemBonus(*MyPlayer, BoyItem, lvl, 2 * lvl, true, true);
 
 		if (!gbIsHellfire) {

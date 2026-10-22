@@ -44,14 +44,16 @@ enum class Element : uint8_t {
 	Blood,
 };
 
-/** @brief How a weapon moves through the air, to match the hero's attack animation. */
+/** @brief How a weapon moves through the air, to match the hero's attack animation. Every hero swings right-handed. */
 enum class SwingStyle : uint8_t {
-	/** @brief Swept level across the front. */
+	/** @brief Swept across the front from the hero's right to his left; a blade cuts down from over his right shoulder. */
 	Slash,
-	/** @brief Swept back the other way: a second, backhand cut. */
+	/** @brief Swept back the other way, from his left to his right: a second, backhand cut. */
 	Backhand,
 	/** @brief Brought down from overhead onto the target, as the hero swings an axe or a mace. */
 	Chop,
+	/** @brief Punched straight out at the target, as the hero strikes with a bare fist or a shield. */
+	Jab,
 };
 
 /** @brief The element a skill's damage looks like; spells without an element look arcane. */
@@ -80,24 +82,35 @@ void Impact(Point tile, Element element, float size);
 void Sparks(Point tile, Element element, float size);
 /** @brief Arrows loosed from a bow: a bowstring snap, pale shafts fanning out toward @p toward, and with @p feathers a few fletching flecks. */
 void Volley(Point from, Point toward, int arrows, bool feathers);
-/** @brief A weapon biting into a target: blood and a few sparks for plain steel, the element's sparks otherwise. */
+/**
+ * @brief A weapon biting into a target: a dull flash, a few sparks and blood. A weapon's added element (@p element) is
+ * only a faint touch on it: a dim glow and a few small sparks of that element.
+ */
 void Cut(Point tile, Element element);
 /** @brief Lightning arcing between two tiles. */
 void Arc(Point from, Point to, Element element);
 /** @brief Lightning striking down from the sky onto a tile. */
 void SkyStrike(Point tile, Element element);
-/** @brief A crescent smear swept through the air by a weapon, from a tile towards another; it glows only for an elemental weapon. Heavy is an axe, mace or staff: a shorter, thicker arc. */
-void Swing(Point from, Point toward, Element element, bool wide, bool heavy = false);
-/** @brief A weapon's smear in the given style. A chop ends in a thud of dust where it lands. */
-void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool heavy);
+/**
+ * @brief A crescent smear swept through the air by a weapon, from a tile towards another; it glows in a skill's
+ * @p element. Heavy is an axe, mace or staff: a shorter, thicker arc. A weapon's added element (@p imbued) shows only as
+ * a dim sheen and faint flickers along its edge.
+ */
+void Swing(Point from, Point toward, Element element, bool wide, bool heavy = false, Element imbued = Element::Physical);
+/** @brief A weapon's smear in the given style. A chop ends in a thud of dust where it lands. @p imbued as for Swing. */
+void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool heavy, Element imbued = Element::Physical);
 /**
  * @brief Cleave: a long, wide slice that carries on through the target and both sides of it, throwing sparks along
  * its edge. With @p chop the blade first comes down from overhead, as an axe does, and the slice bursts out sideways
- * from where it lands.
+ * from where it lands. @p imbued as for Swing.
  */
-void Cleave(Point from, Point toward, Element element, bool chop);
-/** @brief Whirlwind: blades spinning round a tile for a few turns, in a funnel of wind and kicked-up dust. */
-void Whirl(Point tile, int radiusTiles, Element element);
+void Cleave(Point from, Point toward, Element element, bool chop, Element imbued = Element::Physical);
+/**
+ * @brief Whirlwind: blades spinning round a tile for a few turns, in a funnel of wind and kicked-up dust. With @p staff
+ * (Whirling Staff), both ends of a staff sweep round half a turn apart, in duller, thicker smears of wood. @p imbued as
+ * for Swing.
+ */
+void Whirl(Point tile, int radiusTiles, Element element, bool staff = false, Element imbued = Element::Physical);
 /** @brief The hero levelling up: a pillar of hellfire, a pentagram burning into the floor, shockwaves and a fountain of embers. */
 void LevelUp(Point tile);
 /** @brief One of each effect around a tile, to see them all (the console's vfx()). */

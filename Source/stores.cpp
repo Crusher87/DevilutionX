@@ -3190,10 +3190,26 @@ bool PlayerCanAfford(int price)
 	return TotalPlayerGold() >= static_cast<uint32_t>(price);
 }
 
+namespace {
+
+/** @brief POE2 Mashup (Curtis 2026-10-22): like POE2's vendors, a shop buys anything with a sell price but quest items. */
+bool Poe2ShopWillBuy(const Item &item)
+{
+	if (item._itype == ItemType::Gold || item._iClass == ICLASS_QUEST || item._iMiscId == IMISC_EAR)
+		return false;
+	if ((item.IDidx >= IDI_FIRSTQUEST && item.IDidx <= IDI_LASTQUEST) || item.IDidx == IDI_LAZSTAFF)
+		return false;
+	return std::max(item._ivalue, item._iIvalue) > 0;
+}
+
+} // namespace
+
 bool SmithWillBuy(const Item &item)
 {
 	if (item.isEmpty())
 		return false;
+	if (gbIsPoe2)
+		return Poe2ShopWillBuy(item);
 
 	if (item._iMiscId > IMISC_OILFIRST && item._iMiscId < IMISC_OILLAST)
 		return true;
@@ -3216,6 +3232,8 @@ bool WitchWillBuy(const Item &item)
 {
 	if (item.isEmpty())
 		return false;
+	if (gbIsPoe2)
+		return Poe2ShopWillBuy(item);
 
 	bool rv = false;
 

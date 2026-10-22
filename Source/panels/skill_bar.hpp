@@ -2,7 +2,8 @@
  * @file panels/skill_bar.hpp
  *
  * POE2 Mashup skill tray: the Town Portal button and 9 slots (the three mouse buttons and six keys), each using an
- * action or a skill gem from the Skills panel. Clicking a slot opens a popup to pick its skill and fill its supports.
+ * action or a skill gem from the Skills panel, in two rows beside the mana globe like POE2's skill bar. Clicking a slot
+ * opens a popup to pick its skill and fill its supports.
  */
 #pragma once
 
@@ -12,6 +13,7 @@
 #include <vector>
 
 #include "engine/point.hpp"
+#include "engine/rectangle.hpp"
 #include "engine/surface.hpp"
 #include "poe2/player_data.hpp"
 #include "poe2/support_gems.hpp"
@@ -23,6 +25,11 @@ struct Player;
 bool IsSkillBarShown();
 /** @brief Whether the mouse is over the tray or its popup. */
 bool IsSkillBarHovered();
+/**
+ * @brief Where the tray is on the screen: beside the mana globe, or where the open side panels leave room for it;
+ * empty when they cover every place it can go.
+ */
+std::optional<Rectangle> SkillTrayRect();
 
 /** @brief Draws the tray, and the slot popup when it's open. */
 void DrawSkillBar(const Surface &out);

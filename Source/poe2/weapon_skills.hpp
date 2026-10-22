@@ -20,6 +20,7 @@ struct Missile;
 struct Player;
 enum class player_graphic : uint8_t;
 namespace vfx {
+enum class Element : uint8_t;
 enum class SwingStyle : uint8_t;
 } // namespace vfx
 
@@ -102,11 +103,15 @@ int8_t WeaponSkillSkippedFrames(const Player &player);
 /** @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile. */
 int LightningArrowDamage(const Player &player);
 
+/** @brief Game ticks from a dash skill's landing to its hit: the swing's wind-up is cut to this (see BeginSkillAnimation). */
+constexpr int8_t DashStrikeWindupTicks = 2;
+
 /**
  * @brief Plays a skill's own animation (as PM_SPELL); the skill goes off on its action frame.
  * @param graphic Attack for weapon skills, else one of the spell casting animations.
+ * @param quickStrike Cuts the wind-up to DashStrikeWindupTicks, for a dash skill striking as it lands.
  */
-void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target);
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike = false);
 
 /**
  * @brief Makes a cast skill go off, on the action frame of its animation.
@@ -119,12 +124,23 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target);
 
 /** @brief Whether the hero holds a heavy weapon (an axe, mace or staff, and no sword): slower, thicker swings. */
 bool HoldsHeavyWeapon(const Player &player);
-/** @brief How the hero's weapon moves on an attack: an axe or a mace comes down from overhead, anything else sweeps level. */
+/**
+ * @brief How the hero's weapon moves on an attack, following the attack animation he plays: an axe or a mace comes down
+ * from overhead, a fist or a shield punches straight out, a sword or a staff sweeps across from his right to his left.
+ */
 vfx::SwingStyle WeaponSwingStyle(const Player &player);
+/** @brief The element the hero's weapon adds to its hits, for the faint flickers on its swing: fire, lightning or none. */
+vfx::Element WeaponElementLook(const Player &player);
 
 /** @brief Whether the hero spins round through every facing while the skill's animation plays (Whirlwind). */
 bool SpinsWhileStriking(WeaponSkill skill);
 /** @brief Turns a spinning hero to the next facing for the animation frame (see SpinsWhileStriking). */
 void TurnWithSpin(Player &player);
+/** @brief Whether the hero's attack spins him round through every facing as he swings (Whirling Staff). */
+bool SpinsWhileSwinging(WeaponSkill skill);
+/** @brief Starts a spinning attack's look as its swing begins: its funnel of wind and its whoosh (see SpinsWhileSwinging). */
+void BeginSpinningSwing(const Player &player);
+/** @brief Shows a spinning hero's next facing for the attack frame; only his sprite turns, so the strike lands where he faces. */
+void TurnSpriteWithSpin(Player &player);
 
 } // namespace devilution

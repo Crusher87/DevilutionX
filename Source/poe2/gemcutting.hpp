@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -70,6 +71,11 @@ enum class UncutKind : uint8_t {
 UncutKind UncutGemKind(const Item &item);
 /** @brief The kind of uncut gem that cuts or levels the gem. */
 UncutKind GemUncutKind(const GemEntry &gem);
+/**
+ * @brief The tabs of the gemcutting panel, in order: all of them while browsing, only those of what the uncut gem
+ * can become while cutting (no Support or Spirit tab for a skill gem, no weapon tabs for a Spirit or support gem).
+ */
+std::vector<GemCategory> GemcuttingTabs(std::optional<UncutKind> cutting);
 /** @brief "skill", "Spirit" or "support". */
 std::string_view UncutKindName(UncutKind kind);
 /** @brief Whether the uncut gem is cut into support gems rather than skill gems. */
