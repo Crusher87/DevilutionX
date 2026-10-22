@@ -921,6 +921,7 @@ bool DoAttack(Player &player)
 	if (player.AnimInfo.currentFrame == player._pAFNum - 1) {
 		// POE2 Mashup: the swing and its sparks take the attack skill's look.
 		const SkillLookScope skillLook(CurrentAttackSkill(player));
+		PlaySkillLookSound(CurrentAttackSkill(player), player.position.tile);
 		Point position = player.position.tile + player._pdir;
 		Monster *monster = FindMonsterAtPosition(position);
 

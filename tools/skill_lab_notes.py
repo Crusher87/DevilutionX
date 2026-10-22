@@ -9,7 +9,8 @@ then: class, weapon, gem level, floor, targets and speed.
 This prints every skill that has notes or a status, needs work first, with its notes in order. Notes written before
 the skill's latest "approved" are left out unless --all is given, since they were dealt with. It then lists the looks the
 player changed with the lab's sliders (poe2_logs/skill_looks_mine.tsv): fold those into
-mods/poe2/txtdata/poe2/skill_looks.tsv when they're settled.
+mods/poe2/txtdata/poe2/skill_looks.tsv when they're settled. Last it lists the lab's recordings
+(poe2_logs/skill_lab_clips/<skill>_<time>/frame_NNN.png, one picture per game tick of the cast).
 
 Usage:
   python3 tools/skill_lab_notes.py [log folder] [--all] [--since YYYY-MM-DD] [--skill NAME]
@@ -55,6 +56,20 @@ def print_looks(path):
     print()
 
 
+def print_clips(folder):
+    """The lab's recordings, newest last, with how many frames each has."""
+    if not os.path.isdir(folder):
+        return
+    clips = sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)))
+    if not clips:
+        return
+    print(f"Skill Lab recordings ({len(clips)}):")
+    for clip in clips:
+        frames = len([f for f in os.listdir(os.path.join(folder, clip)) if f.endswith(".png")])
+        print(f"  {clip}: {frames} frames")
+    print()
+
+
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -66,6 +81,7 @@ def main():
 
     path = os.path.join(args.folder, "skill_lab_notes.tsv")
     print_looks(os.path.join(args.folder, "skill_looks_mine.tsv"))
+    print_clips(os.path.join(args.folder, "skill_lab_clips"))
     if not os.path.exists(path):
         print(f"No Skill Lab notes yet ({path} not found).")
         return 0

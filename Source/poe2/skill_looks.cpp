@@ -9,6 +9,7 @@
 #include <magic_enum/magic_enum.hpp>
 
 #include "data/file.hpp"
+#include "effects.h"
 #include "poe2/telemetry.hpp"
 #include "tables/spelldat.h"
 #include "utils/file_util.h"
@@ -34,9 +35,43 @@ namespace {
 
 constexpr std::string_view ShippedFile = "txtdata\\poe2\\skill_looks.tsv";
 constexpr std::string_view EditsFileName = "skill_looks_mine.tsv";
-constexpr std::string_view Header = "key\tname\tsize\tamount\tlength\tbrightness\tspeed\tshake\ttint\tcolour\n";
+constexpr std::string_view Header = "key\tname\tsize\tamount\tlength\tbrightness\tspeed\tshake\ttint\tcolour\tsound\n";
 
 const SkillLook Plain {};
+
+const SkillLookSound Sounds[] = {
+	{ "", -1 },
+	{ "Swing", static_cast<int16_t>(SfxID::Swing) },
+	{ "Swing2", static_cast<int16_t>(SfxID::Swing2) },
+	{ "CastSkill", static_cast<int16_t>(SfxID::CastSkill) },
+	{ "CastFire", static_cast<int16_t>(SfxID::CastFire) },
+	{ "CastLightning", static_cast<int16_t>(SfxID::CastLightning) },
+	{ "SpellFireHit", static_cast<int16_t>(SfxID::SpellFireHit) },
+	{ "SpellLightningHit", static_cast<int16_t>(SfxID::SpellLightningHit) },
+	{ "SpellFlameWave", static_cast<int16_t>(SfxID::SpellFlameWave) },
+	{ "SpellInferno", static_cast<int16_t>(SfxID::SpellInferno) },
+	{ "SpellNova", static_cast<int16_t>(SfxID::SpellNova) },
+	{ "SpellHolyBolt", static_cast<int16_t>(SfxID::SpellHolyBolt) },
+	{ "SpellBloodStarHit", static_cast<int16_t>(SfxID::SpellBloodStarHit) },
+	{ "SpellBoneSpiritHit", static_cast<int16_t>(SfxID::SpellBoneSpiritHit) },
+	{ "SpellStoneCurse", static_cast<int16_t>(SfxID::SpellStoneCurse) },
+	{ "SpellElemental", static_cast<int16_t>(SfxID::SpellElemental) },
+	{ "SpellDoomSerpents", static_cast<int16_t>(SfxID::SpellDoomSerpents) },
+	{ "SpellApocalypse", static_cast<int16_t>(SfxID::SpellApocalypse) },
+	{ "SpellGolem", static_cast<int16_t>(SfxID::SpellGolem) },
+	{ "ShootBow2", static_cast<int16_t>(SfxID::ShootBow2) },
+	{ "BarrelExpload", static_cast<int16_t>(SfxID::BarrelExpload) },
+	{ "BigExplosion", static_cast<int16_t>(SfxID::BigExplosion) },
+};
+
+uint8_t ParseSound(std::string_view name)
+{
+	for (size_t i = 1; i < std::size(Sounds); i++) {
+		if (Sounds[i].name == name)
+			return static_cast<uint8_t>(i);
+	}
+	return 0;
+}
 
 std::map<std::string, SkillLook, std::less<>> Shipped;
 struct Edit {
@@ -100,6 +135,7 @@ std::optional<std::pair<std::string, Edit>> ParseRow(const std::vector<std::stri
 	look.shake = ParseFloat(column(7), 1);
 	look.tint = std::clamp(ParseFloat(column(8), 0), 0.F, 1.F);
 	ParseColour(column(9), look);
+	look.sound = ParseSound(column(10));
 	return std::pair { std::string(columns[0]), std::move(edit) };
 }
 
@@ -187,6 +223,21 @@ void Enter(const SkillLook *&previous, SkillSlot skill)
 
 } // namespace
 
+std::span<const SkillLookSound> SkillLookSounds()
+{
+	return Sounds;
+}
+
+void PlaySkillLookSound(SkillSlot skill, Point tile)
+{
+	if (skill.isEmpty())
+		return;
+	const SkillLook &look = GetSkillLook(SkillLookKey(skill));
+	if (look.sound == 0 || look.sound >= std::size(Sounds))
+		return;
+	PlaySfxLoc(static_cast<SfxID>(Sounds[look.sound].sfx), tile);
+}
+
 bool SkillLook::isPlain() const
 {
 	return *this == SkillLook {};
@@ -273,7 +324,8 @@ bool SaveSkillLookEdits()
 	for (const auto &[key, edit] : Edits) {
 		const SkillLook &look = edit.look;
 		const std::string line = StrCat(key, "\t", edit.name, "\t", FloatText(look.size), "\t", FloatText(look.amount), "\t", FloatText(look.length), "\t",
-		    FloatText(look.brightness), "\t", FloatText(look.speed), "\t", FloatText(look.shake), "\t", FloatText(look.tint), "\t", ColourText(look), "\n");
+		    FloatText(look.brightness), "\t", FloatText(look.speed), "\t", FloatText(look.shake), "\t", FloatText(look.tint), "\t", ColourText(look), "\t",
+		    Sounds[look.sound < std::size(Sounds) ? look.sound : 0].name, "\n");
 		std::fputs(line.c_str(), file);
 	}
 	std::fclose(file);

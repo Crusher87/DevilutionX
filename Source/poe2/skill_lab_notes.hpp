@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace devilution {
 
@@ -35,6 +36,9 @@ LabStatus LabSkillStatus(std::string_view skill);
 void LabSetStatus(LabStatus status);
 /** @brief How many notes the skill has. */
 int LabNoteCount(std::string_view skill);
+
+/** @brief The cast ticks the skill's notes are pinned to. */
+std::vector<int> LabNoteTicks(std::string_view skill);
 
 /** @brief Pins the next note to this moment of the cast and pauses. False when no cast has started yet. */
 bool LabMarkMoment();

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,7 @@
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_lab_notes.hpp"
 #include "poe2/skill_looks.hpp"
+#include "poe2/support_gems.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/display.h"
 #include "utils/language.h"
@@ -85,6 +87,8 @@ void Flash(std::string_view text)
 
 /** The look sliders are showing. */
 bool LookOpen;
+/** The extras (light, support, sound, compare, record) are showing. */
+bool ExtrasOpen;
 /** The slider being dragged, or -1. */
 int Dragging = -1;
 
@@ -425,6 +429,95 @@ void AddLookSliders(Layout &layout, int top)
 
 void AddBar(Layout &layout, const Surface &out);
 
+std::string SoundName(uint8_t sound)
+{
+	const std::span<const SkillLookSound> sounds = SkillLookSounds();
+	if (sound == 0 || sound >= sounds.size())
+		return std::string(_("None"));
+	std::string_view name = sounds[sound].name;
+	if (name.starts_with("Spell"))
+		name.remove_prefix(5);
+	return std::string(name);
+}
+
+void CycleSound(int delta)
+{
+	SkillLook look = SelectedLook();
+	const int count = static_cast<int>(SkillLookSounds().size());
+	look.sound = static_cast<uint8_t>(((look.sound + delta) % count + count) % count);
+	ChangeLook(look);
+	if (!LabLooping())
+		LabCast();
+}
+
+/** @brief The extras page: light, a support gem, an extra sound, comparing looks and recording, a line each. */
+void AddExtras(Layout &layout, int top)
+{
+	const int left = layout.list.position.x;
+	Flow flow { left, left + layout.list.size.width, left, top };
+	auto nextLine = [&flow]() {
+		flow.x = flow.left;
+		flow.y += ChipHeight + Gap;
+	};
+	std::vector<Button> lights;
+	for (const auto &[light, label] : { std::pair { LabLight::Normal, N_("Normal") }, std::pair { LabLight::Bright, N_("Bright") }, std::pair { LabLight::Dark, N_("Dark") } })
+		lights.push_back(Button { {}, std::string(_(label)), LabLighting() == light, [](int value) { LabSetLighting(static_cast<LabLight>(value)); }, static_cast<int>(light) });
+	AddGroup(layout, flow, _("Light"), std::move(lights));
+	nextLine();
+	const SupportGem support = LabSupport();
+	AddGroup(layout, flow, _("Support"),
+	    {
+	        Button { {}, "<", false, [](int) { LabCycleSupport(-1); }, 0 },
+	        Button { {}, support == SupportGem::None ? std::string(_("None")) : std::string(SupportGemName(support)), support != SupportGem::None, [](int) { LabCycleSupport(1); }, 0 },
+	        Button { {}, ">", false, [](int) { LabCycleSupport(1); }, 0 },
+	    });
+	nextLine();
+	const uint8_t sound = SelectedLook().sound;
+	AddGroup(layout, flow, _("Sound"),
+	    {
+	        Button { {}, "<", false, [](int) { CycleSound(-1); }, 0 },
+	        Button { {}, SoundName(sound), sound != 0, [](int) { CycleSound(1); }, 0 },
+	        Button { {}, ">", false, [](int) { CycleSound(1); }, 0 },
+	    });
+	nextLine();
+	AddGroup(layout, flow, {},
+	    {
+	        Button { {}, std::string(_("Compare looks")), LabComparing(), [](int) { LabSetComparing(!LabComparing()); }, 0 },
+	        Button { {}, std::string(LabRecording() ? _("Recording") : _("Record")), LabRecording(), [](int) { LabRecord(); }, 0 },
+	    });
+}
+
+/** @brief The cast's timeline along the bottom of the arena: seconds, where the hit lands, pinned notes and now. */
+void DrawTimeline(const Surface &out, const Layout &layout)
+{
+	const int now = LabTicksSinceCast();
+	if (now < 0)
+		return;
+	constexpr int TicksPerSecond = 20;
+	const int left = (Hidden ? 4 : layout.panel.position.x + layout.panel.size.width) + 12;
+	const int width = std::min(260, out.w() - left - 8);
+	const int y = GetMainPanel().position.y - 16;
+	// Whole seconds, long enough for the cast before and this one so far.
+	const int span = std::max((std::max({ LabLastCastTicks(), now, TicksPerSecond * 2 }) + TicksPerSecond - 1) / TicksPerSecond * TicksPerSecond, TicksPerSecond);
+	auto xOf = [&](int tick) { return left + std::min(tick, span) * width / span; };
+	FillRect(out, left, y, width, 1, ChipColor);
+	for (int tick = 0; tick <= span; tick += TicksPerSecond / 4) {
+		const bool second = tick % TicksPerSecond == 0;
+		FillRect(out, xOf(tick), y - (second ? 4 : 2), 1, second ? 9 : 5, second ? BorderColor : ChipColor);
+		if (second)
+			DrawString(out, StrCat(tick / TicksPerSecond, "s"), { { xOf(tick) - 10, y - 18 }, { 20, 12 } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorButtonface | UiFlags::FontSize12 });
+	}
+	for (const int tick : LabNoteTicks(SelectedName()))
+		FillRect(out, xOf(tick) - 1, y - 6, 3, 3, PAL16_GRAY);
+	if (const int hit = LabActionTick(); hit >= 0)
+		FillRect(out, xOf(hit) - 1, y - 5, 3, 11, PAL16_RED + 4);
+	FillRect(out, xOf(now) - 1, y - 7, 3, 15, PAL16_YELLOW + 2);
+	if (LabComparing()) {
+		DrawString(out, SkillLookEditsOn() ? _("After") : _("Before"), { { left, y - 34 }, { width, 14 } },
+		    { .flags = UiFlags::ColorWhitegold });
+	}
+}
+
 Layout ComputeLayout(const Surface &out)
 {
 	Layout layout;
@@ -445,12 +538,29 @@ Layout ComputeLayout(const Surface &out)
 	layout.hide = { { layout.exit.position.x - Gap - hideWidth, y + 2 }, { hideWidth, ChipHeight } };
 	y += 28;
 
-	if (LookOpen && LabSelectedSkill() >= 0) {
-		// The sliders take the list's place, under the skill's name; Look again brings the list back.
+	// What the panel shows: the skill list, the selected skill's look sliders, or the extras.
+	int pageX = innerX;
+	for (const auto &[page, label] : { std::pair { 0, N_("Skills") }, std::pair { 1, N_("Look") }, std::pair { 2, N_("Extras") } }) {
+		const std::string text(_(label));
+		const int width = GetLineWidth(text) + 12;
+		const bool shown = (page == 1 && LookOpen) || (page == 2 && ExtrasOpen) || (page == 0 && !LookOpen && !ExtrasOpen);
+		layout.tabs.push_back(Button { { { pageX, y }, { width, ChipHeight } }, text, shown, [](int value) {
+			LookOpen = value == 1;
+			ExtrasOpen = value == 2;
+			Dragging = -1; }, page });
+		pageX += width + Gap;
+	}
+	y += ChipHeight + Gap;
+
+	if ((LookOpen || ExtrasOpen) && LabSelectedSkill() >= 0) {
+		// The sliders or extras take the list's place, under the skill's name; their chip again brings the list back.
 		layout.labels.emplace_back(Rectangle { { innerX, y }, { innerWidth, 20 } }, LabSkills()[LabSelectedSkill()].name);
 		y += 24;
 		layout.list = { { innerX, y }, { innerWidth, 0 } };
-		AddLookSliders(layout, y);
+		if (LookOpen)
+			AddLookSliders(layout, y);
+		else
+			AddExtras(layout, y);
 		AddBar(layout, out);
 		return layout;
 	}
@@ -552,7 +662,6 @@ void AddBar(Layout &layout, const Surface &out)
 	const LabStatus current = LabSkillStatus(status);
 	AddGroup(layout, flow, {},
 	    {
-	        Button { {}, std::string(_("Look")), LookOpen, [](int) { LookOpen = !LookOpen; Dragging = -1; }, 0 },
 	        Button { {}, std::string(_("Needs work")), current == LabStatus::NeedsWork, [](int) { LabSetStatus(LabSkillStatus(SelectedName()) == LabStatus::NeedsWork ? LabStatus::Unseen : LabStatus::NeedsWork); }, 0 },
 	        Button { {}, std::string(_("Approved")), current == LabStatus::Approved, [](int) { LabSetStatus(LabSkillStatus(SelectedName()) == LabStatus::Approved ? LabStatus::Unseen : LabStatus::Approved); }, 0 },
 	    });
@@ -666,6 +775,10 @@ bool HandleClick(Point position)
 	}
 	for (const Button &tab : layout.tabs) {
 		if (tab.rect.contains(position)) {
+			if (tab.onClick != nullptr) {
+				tab.onClick(tab.value);
+				return true;
+			}
 			Category = static_cast<GemCategory>(tab.value);
 			RefreshResults();
 			return true;
@@ -818,11 +931,16 @@ void DrawSkillLabPanel(const Surface &out)
 {
 	if (!SkillLabActive())
 		return;
+	SkillLabCaptureFrame(out);
+	// The panel stays out of the recording's pictures.
+	if (SkillLabRecordingNow())
+		return;
 	RefreshResults();
 	if (Dragging >= 0)
 		DragSlider(ComputeLayout(out), MousePosition);
 	const Layout layout = ComputeLayout(out);
 	const Rectangle &panel = layout.panel;
+	DrawTimeline(out, layout);
 	if (Hidden) {
 		DrawChip(out, panel, _("Skill Lab"), false, panel.contains(MousePosition));
 		return;

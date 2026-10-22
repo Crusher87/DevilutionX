@@ -850,6 +850,7 @@ vfx::SwingStyle WeaponSwingStyle(const Player &player)
 bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 {
 	const SkillLookScope skillLook(skill);
+	PlaySkillLookSound(SkillSlot::ForAttack(skill), target);
 	PlaySkillEffects(player, skill, target);
 	OnSkillUsed(player, SkillSlot::ForAttack(skill), target);
 	switch (skill) {

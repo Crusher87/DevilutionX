@@ -9,9 +9,11 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
+#include "engine/point.hpp"
 #include "poe2/player_data.hpp"
 
 namespace devilution {
@@ -32,10 +34,24 @@ struct SkillLook {
 	uint8_t r = 255;
 	uint8_t g = 255;
 	uint8_t b = 255;
+	/** An extra sound played when the skill goes off: an index into SkillLookSounds(), 0 for none. */
+	uint8_t sound = 0;
 
 	[[nodiscard]] bool isPlain() const;
 	bool operator==(const SkillLook &other) const = default;
 };
+
+/** @brief A sound a look can add, by its name in the files. */
+struct SkillLookSound {
+	std::string_view name;
+	/** A SfxID; -1 for none. */
+	int16_t sfx;
+};
+
+/** @brief The sounds a look can add; the first is none. */
+std::span<const SkillLookSound> SkillLookSounds();
+/** @brief Plays the skill look's extra sound, if it has one, where the skill went off. */
+void PlaySkillLookSound(SkillSlot skill, Point tile);
 
 /** @brief The id a skill's look is stored under, e.g. "Fissure", "Spell Firebolt", "Spirit Blasphemy", "Default". */
 std::string SkillLookKey(SkillSlot skill);

@@ -1,6 +1,7 @@
 #include "poe2/skill_lab_notes.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <string>
 #include <vector>
@@ -24,6 +25,7 @@ constexpr std::string_view Header = "date\tskill\tkind\tstatus\tnote\tmark tick\
 
 ankerl::unordered_dense::map<std::string, LabStatus> Statuses;
 ankerl::unordered_dense::map<std::string, int> NoteCounts;
+ankerl::unordered_dense::map<std::string, std::vector<int>> NoteTicks;
 std::optional<LabMoment> HeldMoment;
 
 std::string_view StatusName(LabStatus status)
@@ -134,6 +136,7 @@ void LabLoadNotes()
 {
 	Statuses.clear();
 	NoteCounts.clear();
+	NoteTicks.clear();
 	HeldMoment = std::nullopt;
 	FILE *file = OpenFile(NotesPath().c_str(), "rb");
 	if (file == nullptr)
@@ -159,6 +162,8 @@ void LabLoadNotes()
 					Statuses[skill] = *status;
 			} else if (columns[2] == "note") {
 				NoteCounts[skill]++;
+				if (columns.size() > 5 && !columns[5].empty())
+					NoteTicks[skill].push_back(std::atoi(std::string(columns[5]).c_str()));
 			}
 		}
 		start = end;
@@ -184,6 +189,12 @@ int LabNoteCount(std::string_view skill)
 {
 	const auto it = NoteCounts.find(std::string(skill));
 	return it == NoteCounts.end() ? 0 : it->second;
+}
+
+std::vector<int> LabNoteTicks(std::string_view skill)
+{
+	const auto it = NoteTicks.find(std::string(skill));
+	return it == NoteTicks.end() ? std::vector<int> {} : it->second;
 }
 
 bool LabMarkMoment()
@@ -213,6 +224,8 @@ bool LabSaveNote(std::string_view text)
 		return false;
 	WriteLine(skill, "note", text, HeldMoment);
 	NoteCounts[skill]++;
+	if (HeldMoment)
+		NoteTicks[skill].push_back(HeldMoment->tick);
 	HeldMoment = std::nullopt;
 	return true;
 }
