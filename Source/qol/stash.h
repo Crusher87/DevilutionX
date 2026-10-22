@@ -132,6 +132,8 @@ bool StoreInPremadeTab(unsigned page, Item &item);
 Item PeekStashTake(uint16_t index);
 /** @brief POE2 Mashup: takes PeekStashTake's item out of the stash. */
 Item TakeFromStash(uint16_t index);
+/** @brief POE2 Mashup: takes count off a currency stack in the stash, at most an inventory stack; all of it when that leaves none. */
+Item TakeFromStash(uint16_t index, int count);
 /** @brief POE2 Mashup: puts the item on whichever tab takes it, adding a tab if need be; for when it can go nowhere else. */
 bool AutoPlaceItemInAnyStashTab(const Item &item);
 /** @brief POE2 Mashup: items a premade tab doesn't hold the way it holds them are stored again; for loading older stashes. */

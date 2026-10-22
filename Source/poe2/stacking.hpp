@@ -40,6 +40,8 @@ bool MergeStack(Item &stack, Item &item);
 bool TakeOneFromStack(Item &stack);
 /** @brief Takes half of a stack off it, rounded down; nothing if the stack has a single item. */
 std::optional<Item> SplitStack(Item &stack);
+/** @brief Takes count items off a stack; nothing unless at least one is left behind. */
+std::optional<Item> SplitStack(Item &stack, int count);
 
 /** @brief The inventory stacks that match the item have room for all of it. */
 bool InventoryStacksHaveRoom(const Player &player, const Item &item);

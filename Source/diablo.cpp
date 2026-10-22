@@ -97,6 +97,7 @@
 #include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stack_split_panel.hpp"
 #include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
@@ -901,6 +902,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		}
 	}
 	if (ctrlEvents.size() > 0 && ctrlEvents[0].button != ControllerButton_NONE) {
+		return;
+	}
+
+	if (StackSplitHandleEvent(event)) {
 		return;
 	}
 
@@ -3396,6 +3401,11 @@ bool PressEscKey()
 
 	if (IsWithdrawGoldOpen) {
 		WithdrawGoldKeyPress(SDLK_ESCAPE);
+		rv = true;
+	}
+
+	if (IsStackSplitOpen()) {
+		CloseStackSplit();
 		rv = true;
 	}
 

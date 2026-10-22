@@ -27,6 +27,7 @@
 #include "inv.h"
 #include "items.h"
 #include "minitext.h"
+#include "panels/stack_split_panel.hpp"
 #include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
@@ -257,6 +258,9 @@ void CheckStashCut(Point cursorPosition, bool automaticMove)
 	const bool automaticallyEquipped = false;
 
 	const StashStruct::StashCell iv = Stash.GetItemIdAtPosition(slot);
+	// POE2 Mashup: shift-click on a currency stack opens a slider to pick how many to take (Curtis 2026-10-22).
+	if (iv != StashStruct::EmptyCell && automaticMove && OpenStackSplit(StackSplitSource::Stash, iv))
+		return;
 	if (iv != StashStruct::EmptyCell) {
 		holdItem = Stash.stashList[iv];
 		if (automaticMove) {
@@ -1242,6 +1246,23 @@ Item TakeFromStash(uint16_t index)
 	} else {
 		Stash.RemoveStashItem(index);
 	}
+	return taken;
+}
+
+Item TakeFromStash(uint16_t index, int count)
+{
+	if (index >= Stash.stashList.size() || count <= 0)
+		return {};
+	Item &stored = Stash.stashList[index];
+	const int have = StoredStackCount(stored);
+	count = std::min(count, CurrencyStackMax);
+	if (!IsStackable(stored) || count >= have)
+		return TakeFromStash(index);
+	Item taken = stored;
+	GenerateNewSeed(taken); // Its own seed, so the two parts are told apart.
+	SetStackCount(taken, count);
+	SetStoredStackCount(stored, have - count);
+	Stash.dirty = true;
 	return taken;
 }
 

@@ -20,6 +20,7 @@
 #include "inv.h"
 #include "items.h"
 #include "loadsave.h"
+#include "panels/stack_split_panel.hpp"
 #include "pfile.h"
 #include "player.h"
 #include "poe2/stacking.hpp"
@@ -1063,6 +1064,53 @@ TEST_F(Poe2StashTabsTest, CurrencyTabKeepsEachCurrencyInItsSlot)
 	const Item taken = TakeFromStash(chaos);
 	EXPECT_EQ(StackCount(taken), CurrencyStackMax);
 	EXPECT_EQ(StoredStackCount(Stash.stashList[StashTabSlotItem(page, *chaosSlot)]), 60 - CurrencyStackMax);
+}
+
+TEST_F(Poe2StashTabsTest, ShiftClickOnAStackPicksHowManyToTake)
+{
+	ControlDevice = ControlTypes::KeyboardAndMouse;
+
+	// In the bag the slider starts at half, and takes what it is set to.
+	StripPlayer();
+	const int bag = PlaceItemInInventory(MakeOrb(IMISC_ORB_CHAOS, 10));
+	ASSERT_GE(bag, 0);
+	ASSERT_TRUE(OpenStackSplit(StackSplitSource::Inventory, static_cast<uint16_t>(bag)));
+	EXPECT_EQ(StackSplitAmount(), 5);
+	SetStackSplitAmount(99);
+	EXPECT_EQ(StackSplitAmount(), 9) << "At least one stays behind";
+	SetStackSplitAmount(3);
+	ConfirmStackSplit();
+	EXPECT_FALSE(IsStackSplitOpen());
+	EXPECT_EQ(StackCount(MyPlayer->HoldItem), 3);
+	EXPECT_EQ(StackCount(MyPlayer->InvList[bag]), 7);
+	MyPlayer->HoldItem.clear();
+
+	// A single item opens nothing.
+	SetStackCount(MyPlayer->InvList[bag], 1);
+	EXPECT_FALSE(OpenStackSplit(StackSplitSource::Inventory, static_cast<uint16_t>(bag)));
+
+	// A Currency tab slot holds more than the cursor does; the slider stops at an inventory stack.
+	const unsigned page = PageOf(StashTabKind::Currency);
+	Stash.SetPage(page);
+	for (int i = 0; i < 3; i++)
+		ASSERT_TRUE(AutoPlaceItemInStash(MakeOrb(IMISC_ORB_CHAOS, 20), true));
+	const std::optional<unsigned> slot = CurrencyFixedSlot(MakeOrb(IMISC_ORB_CHAOS));
+	ASSERT_TRUE(slot);
+	const StashStruct::StashCell chaos = StashTabSlotItem(page, *slot);
+	ASSERT_NE(chaos, StashStruct::EmptyCell);
+	ASSERT_TRUE(OpenStackSplit(StackSplitSource::Stash, chaos));
+	SetStackSplitAmount(100);
+	EXPECT_EQ(StackSplitAmount(), CurrencyStackMax);
+	SetStackSplitAmount(25);
+	ConfirmStackSplit();
+	EXPECT_EQ(StackCount(MyPlayer->HoldItem), 25);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[StashTabSlotItem(page, *slot)]), 35);
+	MyPlayer->HoldItem.clear();
+
+	// Without a mouse there is no slider.
+	ControlDevice = ControlTypes::Gamepad;
+	EXPECT_FALSE(OpenStackSplit(StackSplitSource::Stash, StashTabSlotItem(page, *slot)));
+	ControlDevice = ControlTypes::KeyboardAndMouse;
 }
 
 TEST_F(Poe2StashTabsTest, CurrencyWithoutASlotGoesToOther)

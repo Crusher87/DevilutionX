@@ -136,6 +136,20 @@ TEST_F(Poe2StackingTest, SplitAndUse)
 	EXPECT_FALSE(SplitStack(single).has_value());
 }
 
+TEST_F(Poe2StackingTest, SplitTakesTheChosenCount)
+{
+	Item stack = Make("Chaos Orb");
+	SetStackCount(stack, 10);
+	const std::optional<Item> part = SplitStack(stack, 7);
+	ASSERT_TRUE(part.has_value());
+	EXPECT_EQ(StackCount(*part), 7);
+	EXPECT_EQ(StackCount(stack), 3);
+	EXPECT_NE(part->_iSeed, stack._iSeed);
+	EXPECT_FALSE(SplitStack(stack, 3).has_value()) << "At least one stays behind";
+	EXPECT_FALSE(SplitStack(stack, 0).has_value());
+	EXPECT_EQ(StackCount(stack), 3);
+}
+
 TEST_F(Poe2StackingTest, PickupJoinsTheInventoryStack)
 {
 	Player &player = *MyPlayer;

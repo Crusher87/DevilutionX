@@ -11,6 +11,7 @@
 #include "panels/partypanel.hpp"
 #include "panels/poe2_widgets.hpp"
 #include "panels/skill_bar.hpp"
+#include "panels/stack_split_panel.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/monster_mods.hpp"
 #include "qol/stash.h"
@@ -833,7 +834,8 @@ void DrawFloatingInfoBox(const Surface &out)
 	if (FloatingInfoString.empty())
 		CompareTooltips.clear();
 
-	if (!FloatingInfoString.empty()) {
+	// POE2 Mashup: no tooltip over the stack split's slider.
+	if (!FloatingInfoString.empty() && !IsStackSplitOpen()) {
 		if (gbIsPoe2 && pcursstorebtn == -1)
 			PrintPoe2ItemTooltip(out);
 		else
