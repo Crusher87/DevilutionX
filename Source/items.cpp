@@ -3191,9 +3191,10 @@ void InitItems()
 
 	if (!setlevel) {
 		DiscardRandomValues(1);
-		if (Quests[Q_ROCK].IsAvailable())
+		// POE2 Mashup: a rebuilt floor doesn't put back a quest item that is done or already carried.
+		if (Quests[Q_ROCK].IsRewardPending() && !(MyPlayer != nullptr && !gbIsMultiplayer && HasInventoryItemWithId(*MyPlayer, IDI_ROCK)))
 			SpawnRock();
-		if (Quests[Q_ANVIL].IsAvailable())
+		if (Quests[Q_ANVIL].IsRewardPending() && !(MyPlayer != nullptr && !gbIsMultiplayer && HasInventoryItemWithId(*MyPlayer, IDI_ANVIL)))
 			SpawnQuestItem(IDI_ANVIL, SetPiece.position.megaToWorld() + Displacement { 11, 11 }, 0, SelectionRegion::Bottom, false);
 		if (sgGameInitInfo.bCowQuest != 0 && currlevel == 20)
 			SpawnQuestItem(IDI_BROWNSUIT, { 25, 25 }, 3, SelectionRegion::Bottom, false);
@@ -3201,9 +3202,9 @@ void InitItems()
 			SpawnQuestItem(IDI_GREYSUIT, { 25, 25 }, 3, SelectionRegion::Bottom, false);
 		// In multiplayer items spawn during level generation to avoid desyncs
 		if (gbIsMultiplayer) {
-			if (Quests[Q_MUSHROOM].IsAvailable())
+			if (Quests[Q_MUSHROOM].IsRewardPending())
 				SpawnQuestItem(IDI_FUNGALTM, { 0, 0 }, 5, SelectionRegion::Bottom, false);
-			if (currlevel == Quests[Q_VEIL]._qlevel + 1 && Quests[Q_VEIL]._qactive != QUEST_NOTAVAIL)
+			if (currlevel == Quests[Q_VEIL]._qlevel + 1 && IsNoneOf(Quests[Q_VEIL]._qactive, QUEST_NOTAVAIL, QUEST_DONE))
 				SpawnQuestItem(IDI_GLDNELIX, { 0, 0 }, 5, SelectionRegion::Bottom, false);
 		}
 		if (currlevel > 0 && currlevel < 16)

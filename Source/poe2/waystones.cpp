@@ -16,6 +16,7 @@
 #include "poe2/craft_state.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/endgame.hpp"
+#include "poe2/floors.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/mix.hpp"
@@ -339,8 +340,7 @@ int PrepareMap(Player &player, int tier, uint32_t seed)
 {
 	tier = std::clamp(tier, 1, MaxWaystoneTier);
 	const int level = MapLevelForTier(tier, seed);
-	DungeonSeeds[level] = seed;
-	LevelSeeds[level] = std::nullopt;
+	Poe2ApplyFreshFloor(level, false, seed, static_cast<uint16_t>(Poe2FloorVisits(level, false) + 1));
 	player._pLvlVisited[level] = false;
 	player.poe2.mapLevel = static_cast<uint8_t>(level);
 	player.poe2.mapTier = static_cast<uint8_t>(tier);

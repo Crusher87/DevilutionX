@@ -795,6 +795,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/camera_shake.cpp
   poe2/charms.cpp
   poe2/flasks.cpp
+  poe2/floors.cpp
   poe2/gem_levels.cpp
   poe2/gemcutting.cpp
   poe2/jewels.cpp

@@ -107,6 +107,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/floors.hpp"
 #include "poe2/hardcore.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/economy.hpp"
@@ -288,6 +289,8 @@ void LeftMouseCmd(bool bShift)
 		ChoosePortalAt(cursPosition);
 	else
 		ForgetChosenPortal();
+	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side.
+	Poe2ForceFreshFloor = trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
 
 	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
 	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
@@ -1740,6 +1743,7 @@ void GameLogic()
 		ProcessPlayers();
 	}
 	TelemetryTick();
+	Poe2FloorsTick();
 	SettlePendingPurchase();
 	if (leveltype != DTYPE_TOWN) {
 		gGameLogicStep = GameLogicStep::ProcessMonsters;
@@ -3504,7 +3508,7 @@ void LoadGameLevelStash()
 
 std::expected<void, std::string> LoadGameLevelDungeon(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
-	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pLvlVisited[currlevel] || gbIsMultiplayer) {
+	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pLvlVisited[currlevel] || gbIsMultiplayer || Poe2FloorFresh) {
 		TelemetryStep("theme rooms");
 		HoldThemeRooms();
 		[[maybe_unused]] const uint32_t mid1Seed = GetLCGEngineState();
@@ -3667,7 +3671,7 @@ std::expected<void, std::string> LoadGameLevelSetLevel(bool firstflag, lvl_entry
 	InitMultiView();
 	IncProgress();
 
-	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pSLvlVisited[setlvlnum] || gbIsMultiplayer) {
+	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pSLvlVisited[setlvlnum] || gbIsMultiplayer || Poe2FloorFresh) {
 		InitItems();
 		SavePreLighting();
 	} else {
@@ -3844,6 +3848,9 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	IncProgress();
 
 	const Player &myPlayer = *MyPlayer;
+
+	// POE2 Mashup: a floor left alone long enough is built fresh instead of loaded from the save.
+	Poe2BeginFloorVisit(firstflag, lvldir);
 
 	if (setlevel) {
 		RETURN_IF_ERROR(LoadGameLevelSetLevel(firstflag, lvldir, myPlayer));

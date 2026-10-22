@@ -3578,6 +3578,29 @@ std::expected<void, std::string> InitTRNForUniqueMonster(Monster &monster)
 	return {};
 }
 
+/** @brief POE2 Mashup: whether the quest this unique monster talks for is already finished. */
+bool IsUniqueQuestDone(UniqueMonsterType monsterType)
+{
+	switch (monsterType) {
+	case UniqueMonsterType::Garbud:
+		return Quests[Q_GARBUD]._qactive == QUEST_DONE;
+	case UniqueMonsterType::Zhar:
+		return Quests[Q_ZHAR]._qactive == QUEST_DONE;
+	case UniqueMonsterType::SnotSpill:
+		return Quests[Q_LTBANNER]._qactive == QUEST_DONE;
+	case UniqueMonsterType::Lachdan:
+		return Quests[Q_VEIL]._qactive == QUEST_DONE;
+	case UniqueMonsterType::WarlordOfBlood:
+		return Quests[Q_WARLORD]._qactive == QUEST_DONE;
+	case UniqueMonsterType::Lazarus:
+	case UniqueMonsterType::RedVex:
+	case UniqueMonsterType::BlackJade:
+		return Quests[Q_BETRAYER]._qactive == QUEST_DONE;
+	default:
+		return false;
+	}
+}
+
 std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMonsterType monsterType, size_t minionType, int bosspacksize, const UniqueMonsterData &uniqueMonsterData)
 {
 	monster.uniqueType = monsterType;
@@ -3601,6 +3624,13 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 	monster.reducePlayerMaxMana = uniqueMonsterData.reducePlayerMaxMana;
 	monster.resistance = uniqueMonsterData.mMagicRes;
 	monster.talkMsg = uniqueMonsterData.mtalkmsg;
+	// POE2 Mashup: floors are rebuilt fresh, so a boss whose quest is done comes back as a plain fight: no speech, no reward.
+	if (IsUniqueQuestDone(monsterType)) {
+		monster.talkMsg = TEXT_NONE;
+		// Lachdanan only ever talks; once his quest is over he fights like the Warlord does.
+		if (monsterType == UniqueMonsterType::Lachdan)
+			monster.ai = MonsterAIID::SkeletonMelee;
+	}
 	if (monsterType == UniqueMonsterType::HorkDemon)
 		monster.lightId = NO_LIGHT;
 	else

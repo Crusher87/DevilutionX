@@ -35,6 +35,7 @@ set(tests
   poe2_currency_test
   poe2_defenses_test
   poe2_flasks_test
+  poe2_floors_test
   poe2_gemcutting_test
   poe2_item_bases_test
   poe2_item_spawner_test

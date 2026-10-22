@@ -40,6 +40,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/floors.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -2063,6 +2064,9 @@ void SaveLevel(SaveWriter &saveWriter, LevelConversionData *levelConversionData)
 		myPlayer._pLvlVisited[currlevel] = true;
 	else
 		myPlayer._pSLvlVisited[setlvlnum] = true;
+	// POE2 Mashup: the floor is kept as saved until its timer runs out.
+	if (levelConversionData == nullptr)
+		Poe2FloorSaved(setlevel ? static_cast<int>(setlvlnum) : static_cast<int>(currlevel), setlevel);
 }
 
 std::expected<void, std::string> LoadLevel(LevelConversionData *levelConversionData)
@@ -2811,6 +2815,22 @@ uint8_t ReadPoe2HeroData(Player &player)
 
 } // namespace
 
+void ReadPoe2Floors()
+{
+	Poe2FloorsReset();
+	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2floors");
+	if (!file.IsValid(sizeof(uint32_t)))
+		return;
+	const uint32_t size = file.NextLE<uint32_t>();
+	if (size == 0 || !file.IsValid(size))
+		return;
+	std::vector<uint8_t> data(size);
+	for (uint8_t &byte : data)
+		byte = file.NextLE<uint8_t>();
+	if (!Poe2UnpackFloors(data))
+		Poe2FloorsReset();
+}
+
 void LoadPoe2HeroData(Player &player)
 {
 	player.poe2.clear();
@@ -2819,6 +2839,8 @@ void LoadPoe2HeroData(Player &player)
 	for (Item &item : player.swapHands)
 		item.clear();
 	const uint8_t version = ReadPoe2HeroData(player);
+	if (&player == MyPlayer)
+		ReadPoe2Floors();
 	// Heroes from before the skill bar start with the skill for their class's weapon.
 	if (version < 3 && gbIsPoe2)
 		GrantStarterSkill(player);
@@ -2855,6 +2877,14 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		// The league on its own, so the hero list can show it without reading the rest.
 		SaveHelper mode(saveWriter, "poe2mode", 1);
 		mode.WriteLE<uint8_t>(player.poe2.hardcore ? 1 : 0);
+	}
+	if (&player == MyPlayer) {
+		// Which floors are still kept and the game clock they go stale by.
+		const std::vector<uint8_t> floors = Poe2PackFloors();
+		SaveHelper floorsFile(saveWriter, "poe2floors", sizeof(uint32_t) + floors.size());
+		floorsFile.WriteLE<uint32_t>(static_cast<uint32_t>(floors.size()));
+		for (const uint8_t byte : floors)
+			floorsFile.WriteLE<uint8_t>(byte);
 	}
 
 	std::vector<uint16_t> passives;
@@ -3236,6 +3266,9 @@ std::expected<void, std::string> LoadGame(bool firstflag)
 	}
 
 	RETURN_IF_ERROR(LoadGameLevel(firstflag, ENTRY_LOAD));
+	// POE2 Mashup: loading keeps only the floor you stand on and the one your portal leads to.
+	// (The floor records themselves are read with the hero data inside LoadGameLevel.)
+	Poe2FloorsAfterLoadGame();
 	SetPlrAnims(myPlayer);
 	SyncPlrAnim(myPlayer);
 

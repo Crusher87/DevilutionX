@@ -11,6 +11,7 @@
 #include "missiles.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/floors.hpp"
 #include "tables/misdat.h"
 
 namespace devilution {
@@ -100,7 +101,11 @@ void ActivatePortal(const Player &player, Point position, int lvl, dungeon_type 
 
 void DeactivatePortal(const Player &player)
 {
-	Portals[player.getId()].open = false;
+	Portal &portal = Portals[player.getId()];
+	// POE2 Mashup: the floor the portal kept alive starts its timer now.
+	if (&player == MyPlayer && portal.open && portal.level != 0)
+		Poe2PortalClosed(portal.level, portal.setlvl);
+	portal.open = false;
 }
 
 bool PortalOnLevel(const Player &player)
