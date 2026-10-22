@@ -144,7 +144,7 @@ const SupportData Table[] = {
 	{ SG::LightningPenetration, "Lightning Mastery", "Lightning hits penetrate 15% of the\nmonster's lightning resistance", "Needs a lightning skill", GC::Dexterity, 3, 100, 0, ST_Lightning, 0, 0, NoFamily },
 	{ SG::ColdPenetration, "Cold Mastery", "Cold hits penetrate 15% of the\nmonster's magic resistance", "Needs a cold skill", GC::Magic, 3, 100, 0, ST_Frost, 0, 0, NoFamily },
 	// POE2's herald-only support (Curtis 2026-10-19).
-	{ SG::DeadlyHerald, "Zealous Aura", "The herald's explosions deal 30% more\ndamage. Reserves 20 more Spirit", "Needs a herald", GC::Dexterity, 6, 100, 0, ST_Herald, 0, 0, NoFamily },
+	{ SG::DeadlyHerald, "Zealous Aura", "The Aspect's explosions deal 30% more\ndamage. Reserves 20 more Spirit", "Needs an Aspect", GC::Dexterity, 6, 100, 0, ST_Herald, 0, 0, NoFamily },
 };
 // clang-format on
 
