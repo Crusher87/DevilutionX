@@ -73,7 +73,7 @@ TEST_F(Poe2ItemSpawnerTest, SearchMatchesEveryWordCaseInsensitively)
 
 TEST_F(Poe2ItemSpawnerTest, CategoriesFilterResults)
 {
-	EXPECT_TRUE(Contains(Names("", SpawnerCategory::Gems), "Spark Gem"));
+	EXPECT_TRUE(Contains(Names("", SpawnerCategory::Gems), "Arcing Sparks Gem"));
 	EXPECT_FALSE(Contains(Names("", SpawnerCategory::Gems), "Long Bow"));
 	EXPECT_TRUE(Contains(Names("", SpawnerCategory::Orbs), "Chaos Orb"));
 	EXPECT_TRUE(Contains(Names("", SpawnerCategory::Uniques), "The Rift Bow"));
@@ -85,8 +85,8 @@ TEST_F(Poe2ItemSpawnerTest, CategoriesFilterResults)
 TEST_F(Poe2ItemSpawnerTest, SpawnsGemsAndRolledItems)
 {
 	Item gem;
-	ASSERT_TRUE(CreateSpawnerItem(*MyPlayer, Entry("Spark Gem"), ITEM_QUALITY_RARE, 30, 42, gem));
-	EXPECT_EQ(gem.IDidx, Entry("Spark Gem").baseIndex);
+	ASSERT_TRUE(CreateSpawnerItem(*MyPlayer, Entry("Arcing Sparks Gem"), ITEM_QUALITY_RARE, 30, 42, gem));
+	EXPECT_EQ(gem.IDidx, Entry("Arcing Sparks Gem").baseIndex);
 
 	Item bow;
 	ASSERT_TRUE(CreateSpawnerItem(*MyPlayer, Entry("Long Bow"), ITEM_QUALITY_RARE, 30, 42, bow));

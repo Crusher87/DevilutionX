@@ -148,19 +148,19 @@ TEST_F(Poe2SupportGemsTest, TierItemsKeepTheirTier)
 	Item item;
 	ASSERT_TRUE(CreateSupportGemItem(item, SupportGem::Brutality, 3));
 	EXPECT_EQ(SupportGemItemTier(item), 3);
-	EXPECT_EQ(std::string(item._iName), "Brutality III Support");
+	EXPECT_EQ(std::string(item._iName), "Savagery III Support");
 	EXPECT_EQ(SupportGemDescription(SupportGem::Brutality, 3), FindSupportTier(SupportGem::Brutality, 3)->description);
 
 	// Saved by index, seed and buffs, it comes back as the same tier.
 	Item recreated;
 	RecreateItem(*MyPlayer, recreated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff);
 	EXPECT_EQ(SupportGemItemTier(recreated), 3);
-	EXPECT_EQ(std::string(recreated._iName), "Brutality III Support");
+	EXPECT_EQ(std::string(recreated._iName), "Savagery III Support");
 
 	// Tiers above a support's highest don't exist.
 	ASSERT_TRUE(CreateSupportGemItem(item, SupportGem::Empower, 3));
 	EXPECT_EQ(SupportGemItemTier(item), 1);
-	EXPECT_EQ(std::string(item._iName), "Empower Support");
+	EXPECT_EQ(std::string(item._iName), "Horadric Empowerment Support");
 }
 
 TEST_F(Poe2SupportGemsTest, SocketingRules)
