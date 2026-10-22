@@ -797,6 +797,28 @@ bool pfile_ui_save_create(_uiheroinfo *heroinfo)
 	return true;
 }
 
+bool pfile_create_lab_hero(uint32_t saveNum, HeroClass heroClass, std::string_view name)
+{
+	PlayerPack pkplr;
+	giNumberOfLevels = gbIsHellfire ? 25 : 17;
+
+	SaveWriter saveWriter = GetSaveWriter(saveNum, /*carryForward=*/false);
+	saveWriter.RemoveHashEntries(GetFileName);
+
+	Player &player = Players[0];
+	CreatePlayer(player, heroClass);
+	CopyUtf8(player._pName, name, PlayerNameLength);
+	player.poe2.clear();
+	PackPlayer(pkplr, player);
+	EncodeHero(saveWriter, &pkplr);
+	if (!gbVanilla) {
+		SaveHotkeys(saveWriter, player);
+		SaveHeroItems(saveWriter, player);
+		SavePoe2HeroData(saveWriter, player);
+	}
+	return true;
+}
+
 bool pfile_delete_save(_uiheroinfo *heroInfo)
 {
 	const uint32_t saveNum = heroInfo->saveNumber;

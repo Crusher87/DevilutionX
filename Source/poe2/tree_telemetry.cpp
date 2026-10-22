@@ -18,6 +18,7 @@
 
 #include "player.h"
 #include "poe2/telemetry.hpp"
+#include "poe2/telemetry_events.hpp"
 #include "utils/file_util.h"
 #include "utils/format.hpp"
 #include "utils/str_cat.hpp"
@@ -63,7 +64,7 @@ std::string_view RoadName(const PassiveNode &node)
 /** @brief Appends a line to a file in poe2_logs that is never pruned, writing its header first when the file is new. */
 void AppendKeptLine(std::string_view file, std::string_view header, std::string_view line)
 {
-	if (!TelemetryEnabled() || TelemetryFolder().empty())
+	if (!TelemetryEnabled() || TelemetryPaused || TelemetryFolder().empty())
 		return;
 	const std::string path = StrCat(TelemetryFolder(), file);
 	const bool isNew = !FileExists(path);

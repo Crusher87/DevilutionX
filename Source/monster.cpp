@@ -88,6 +88,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/skill_lab.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
@@ -4216,6 +4217,9 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 
 	const Fixed26_6 lifeBefore = monster.hitPoints;
 	monster.hitPoints -= damage;
+	// POE2 Mashup: the Skill Lab's targets never die.
+	if (IsLabDummy(monster) && monster.hitPoints < Fixed26_6::fromInt(1))
+		monster.hitPoints = Fixed26_6::fromInt(1);
 	TelemetryMonsterDamaged(monster, damage, lifeBefore);
 	NoteSupportedDamage(monster, damageType, damage);
 
@@ -4336,6 +4340,11 @@ void M_StartHit(Monster &monster, const Player &player, int dam)
 
 void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 {
+	// POE2 Mashup: the Skill Lab's targets never die, whatever kills them.
+	if (IsLabDummy(monster)) {
+		monster.hitPoints = monster.maxHitPoints;
+		return;
+	}
 	// POE2 Mashup: Leoric's Road. A kill may rise again (before the other on-kill effects); a risen monster gives no
 	// reward and runs no on-kill effect, only its death.
 	const bool risen = gbIsPoe2 && IsRisen(monster);
@@ -4881,7 +4890,8 @@ void ProcessMonsters()
 		// POE2 Mashup: hasted map monsters now and then take a second turn in a tick.
 		for (int turn = 0; turn < 2; turn++) {
 			while (true) {
-				if ((monster.flags & MFLAG_SEARCH) == 0 || !AiPlanPath(monster)) {
+				// POE2 Mashup: the Skill Lab's targets stand still and never fight back.
+				if (((monster.flags & MFLAG_SEARCH) == 0 || !AiPlanPath(monster)) && !IsLabDummy(monster)) {
 					AiProc[static_cast<int8_t>(monster.ai)](monster);
 				}
 

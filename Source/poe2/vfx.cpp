@@ -37,6 +37,7 @@
 #include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/weather.hpp"
 #include "quests.h"
@@ -5541,7 +5542,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	WeatherSize = { static_cast<float>(worldSize.width), static_cast<float>(worldSize.height) };
 	WeatherView = { CameraOrigin, CameraOrigin + WeatherSize * (1 / CameraScale) };
 	if (PauseMode == 0)
-		Advance(elapsed);
+		Advance(SkillLabEffectMs(elapsed));
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
 	LastDrawnScan = ScanFrame;

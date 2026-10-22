@@ -90,6 +90,7 @@
 #include "panels/gemcutting_panel.hpp"
 #include "panels/info_box.hpp"
 #include "panels/item_spawner.hpp"
+#include "panels/skill_lab_panel.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
@@ -114,6 +115,7 @@
 #include "poe2/level_census.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_swap.hpp"
@@ -270,6 +272,7 @@ bool ProcessInput()
 #endif
 		CheckCursMove();
 		plrctrls_after_check_curs_move();
+		SkillLabAfterCursorMove();
 		RepeatPlayerAction();
 		RepeatHeldTraySlot();
 	}
@@ -898,6 +901,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		}
 	}
 	if (ctrlEvents.size() > 0 && ctrlEvents[0].button != ControllerButton_NONE) {
+		return;
+	}
+
+	if (SkillLabPanelHandleEvent(event)) {
 		return;
 	}
 
@@ -1736,6 +1743,10 @@ void UpdateMonsterLights()
 
 void GameLogic()
 {
+	// POE2 Mashup: the Skill Lab's pause holds the game still, one tick at a time when stepping.
+	if (SkillLabHoldsTick()) {
+		return;
+	}
 	if (!ProcessInput()) {
 		return;
 	}
@@ -1769,6 +1780,7 @@ void GameLogic()
 		ProcessMissiles();
 	}
 	gGameLogicStep = GameLogicStep::None;
+	SkillLabTick();
 
 #ifdef _DEBUG
 	if (DebugScrollViewEnabled && (SDL_GetModState() & SDL_KMOD_SHIFT) != 0) {
@@ -3033,6 +3045,7 @@ bool StartGame(bool bNewGame, bool bSinglePlayer)
 			InitPortals();
 			InitDungMsgs(*MyPlayer);
 			DeltaSyncJunk();
+			SkillLabPrepareNewGame();
 		}
 		giNumberOfLevels = gbIsHellfire ? 25 : 17;
 		interface_mode uMsg = WM_DIABNEWGAME;
@@ -3896,6 +3909,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	UpdateResistancePenalty(*MyPlayer);
 	UpdateActiveMap(*MyPlayer);
 	TelemetryLevelEntered();
+	SkillLabLevelLoaded();
 	return {};
 }
 
