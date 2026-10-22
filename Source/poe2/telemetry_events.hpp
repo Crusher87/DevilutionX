@@ -48,6 +48,8 @@ enum class LogChannel : uint8_t {
 	Effects,
 	/** Passive tree: every node taken or refunded, and the whole tree at game start, each level-up and game end. */
 	Tree,
+	/** Dungeon floors room by room: what each floor holds, and how the time on it was spent. */
+	Rooms,
 	Count,
 };
 

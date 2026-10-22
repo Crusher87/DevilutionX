@@ -35,6 +35,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/level_census.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -997,6 +998,7 @@ void EndLevelVisit(std::string_view how)
 {
 	if (CurrentLevel.startMs == 0)
 		return;
+	LevelCensusLeft(how);
 	EndFight(how);
 	const double seconds = (Now() - CurrentLevel.startMs) / 1000.0;
 	const int cleared = CurrentLevel.monstersAtEntry > 0 ? CurrentLevel.kills * 100 / CurrentLevel.monstersAtEntry : 0;
@@ -1749,6 +1751,7 @@ void TelemetryLevelEntered()
 	    .add("gameMinutes", (now - GameStartMs) / 60000.0)
 	    .add("minutesSinceLastArea", sinceLast);
 	WriteBuildEvent(player, LogLevel::Always);
+	LevelCensusEntered();
 }
 
 void TelemetryNoteAttacker(std::string_view attacker)
@@ -1836,6 +1839,7 @@ void TelemetryMonsterKilled(const Monster &monster)
 	const size_t rarity = MonsterRarityIndex(monster);
 	const int monsterLevel = monster.level(sgGameInitInfo.nDifficulty);
 	CurrentLevel.kills++;
+	LevelCensusKill(monster);
 
 	std::string fight;
 	std::string killer = "minion or another monster";
@@ -2270,8 +2274,10 @@ void TelemetryTick()
 	});
 	TrackGains(player);
 	TrackStalls(now);
-	if (leveltype != DTYPE_TOWN)
+	if (leveltype != DTYPE_TOWN) {
 		TrackDensity(player, now);
+		LevelCensusTick(player, CurrentFight.active);
+	}
 	TrackBuild(player, now);
 	if (now - WindowStartMs >= TelemetryStatsIntervalMs)
 		WriteStatsLine(now);
