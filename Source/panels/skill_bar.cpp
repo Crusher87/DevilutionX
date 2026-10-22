@@ -818,7 +818,7 @@ void DrawPopup(const Surface &out, const Player &player)
 
 	const std::optional<size_t> slot = PopupSupportsSocket(player);
 	if (!slot) {
-		DrawString(out, binding.isGem() ? _("Spirit gems take no supports") : _("Pick a skill gem to fill its supports"), layout.supportsLabel,
+		DrawString(out, binding.isGem() ? _("Spirit gems take no supports") : _("Pick a gem for its supports"), layout.supportsLabel,
 		    { .flags = UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
 	} else {
 		DrawString(out, FormatRuntime(_("Supports for {:s}"), SkillName(player.poe2.skillSlots[*slot])), layout.supportsLabel,
