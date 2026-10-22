@@ -51,6 +51,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/hit_trace.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/skill_looks.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/monster_mods.hpp"
@@ -4525,6 +4526,8 @@ void ProcessMissiles()
 
 	for (auto &missile : Missiles) {
 		const MissileData &missileData = GetMissileData(missile._mitype);
+		// POE2 Mashup: effects the missile makes take the look of the skill that fired it.
+		const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);
 		if (missileData.processFn != nullptr)
 			missileData.processFn(missile);
 		if (missile._miAnimFlags == MissileGraphicsFlags::NotAnimated)

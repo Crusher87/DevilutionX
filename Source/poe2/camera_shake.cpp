@@ -4,6 +4,7 @@
 #include <array>
 
 #include "game_mode.hpp"
+#include "poe2/skill_looks.hpp"
 
 namespace devilution {
 
@@ -32,7 +33,11 @@ void ShakeCamera(ShakeStrength strength, int ticks)
 {
 	if (!gbIsPoe2 || ticks <= 0)
 		return;
-	const int pixels = static_cast<int>(strength);
+	int pixels = static_cast<int>(strength);
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr)
+		pixels = static_cast<int>(pixels * look->shake + 0.5F);
+	if (pixels <= 0)
+		return;
 	// Keep whichever shake is currently stronger.
 	if (ShakeTicksLeft > 0 && ShakePixels * ShakeTicksLeft / ShakeTicksTotal >= pixels)
 		return;

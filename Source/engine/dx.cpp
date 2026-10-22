@@ -33,6 +33,7 @@
 #include "init.hpp"
 #include "options.h"
 #include "poe2/hd.hpp"
+#include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/display.h"
@@ -153,6 +154,7 @@ void PresentLayeredFrame(SDL_Surface *surface)
 	TelemetryDrawStep(nullptr);
 	if (UpdateUiOverlay())
 		SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
+	SkillLabCapturePresented(renderer);
 }
 #endif
 

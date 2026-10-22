@@ -23,6 +23,7 @@
 #include "levels/gendung.h"
 #include "missiles.h"
 #include "poe2/gem_levels.hpp"
+#include "poe2/skill_looks.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
@@ -247,6 +248,9 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 
 	const SpellData &spellData = GetSpellData(spl);
 	const bool supported = player.executedSpell.spellType == SpellType::Spell;
+	// POE2 Mashup: the extra sound of the spell's look (poe2/skill_looks.hpp).
+	if (supported)
+		PlaySkillLookSound(SkillSlot::ForSpell(spl), dst);
 	// POE2 Mashup: Apocalypse eats an element infusion for a much bigger cast.
 	const uint8_t infusion = supported ? TakeInfusion(player, SkillSlot::ForSpell(spl)) : 0;
 	const auto spawnMissiles = [&](WorldTilePosition target) {

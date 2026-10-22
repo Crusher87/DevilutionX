@@ -41,6 +41,8 @@ enum _mainmenu_selections : uint8_t {
 	MAINMENU_SHOW_CREDITS,
 	MAINMENU_EXIT_DIABLO,
 	MAINMENU_ATTRACT_MODE,
+	/** POE2 Mashup: the Skill Lab (poe2/skill_lab.hpp). */
+	MAINMENU_SKILL_LAB,
 };
 
 enum _selhero_selections : uint8_t {

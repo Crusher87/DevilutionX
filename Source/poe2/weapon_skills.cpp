@@ -23,6 +23,7 @@
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/skill_looks.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -231,6 +232,7 @@ Point FarAlong(const Player &player, Point target, int tiles)
 /** @brief Fires one shot of a skill's stream. */
 void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 {
+	const SkillLookScope skillLook(skill);
 	const Point tile = player.position.tile;
 	const Direction dir = GetDirection(tile, target);
 	const SkillSlot slot = SkillSlot::ForAttack(skill);
@@ -791,6 +793,7 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 
 void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target)
 {
+	const SkillLookScope skillLook(skill);
 	const Direction dir = target == player.position.tile ? player._pdir : GetDirection(player.position.tile, target);
 	const bool attack = graphic == player_graphic::Attack;
 	const int8_t actionFrame = attack ? player._pAFNum - 1 : player._pSFNum;
@@ -846,6 +849,8 @@ vfx::SwingStyle WeaponSwingStyle(const Player &player)
 
 bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 {
+	const SkillLookScope skillLook(skill);
+	PlaySkillLookSound(SkillSlot::ForAttack(skill), target);
 	PlaySkillEffects(player, skill, target);
 	OnSkillUsed(player, SkillSlot::ForAttack(skill), target);
 	switch (skill) {
@@ -944,6 +949,7 @@ void SetSpellMissileSpeed(Missile &missile, SpellID spell)
 
 void OnFireballDetonated(Missile &missile, Point position)
 {
+	const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);
 	if (!gbIsPoe2)
 		return;
 	const Player *player = missile.sourcePlayer();
@@ -1011,6 +1017,7 @@ void ProcessSkillVolley(Player &player)
 
 void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 {
+	const SkillLookScope skillLook(skill);
 	const Point tile = player.position.tile;
 	const Direction dir = player._pdir;
 	const bool mine = &player == MyPlayer;

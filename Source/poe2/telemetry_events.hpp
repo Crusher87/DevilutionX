@@ -69,6 +69,8 @@ LogLevel GetLogLevel(LogChannel channel);
 void SetLogLevel(LogChannel channel, LogLevel level);
 /** @brief Whether events of this level on this channel are written. */
 bool LogLevelOn(LogChannel channel, LogLevel level);
+/** @brief While the Skill Lab runs nothing is logged but crashes and the lines that must be written, so play logs stay play. */
+extern bool TelemetryPaused;
 
 /** @brief Opens the event file and writes its header line. */
 bool OpenTelemetryEvents(const std::string &path, std::string_view header);

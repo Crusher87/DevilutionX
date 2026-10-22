@@ -66,6 +66,7 @@
 #include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/item_spawner.hpp"
+#include "panels/skill_lab_panel.hpp"
 #include "panels/monster_banner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
@@ -81,6 +82,7 @@
 #include "poe2/hud_globes.hpp"
 #include "poe2/hud_minions.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/loot_filter.hpp"
@@ -1627,7 +1629,9 @@ void DrawView(const Surface &out, Point startPosition)
 
 	DrawDurIcon(out);
 
-	DrawLevelButton(out);
+	// The lab's stand-in hero has points it never spends.
+	if (!SkillLabActive())
+		DrawLevelButton(out);
 
 	if (CharFlag) {
 		DrawChr(out);
@@ -2139,6 +2143,7 @@ void DrawAndBlit()
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)
 		DrawPartyMemberInfoPanel(out);
 
+	DrawSkillLabPanel(out);
 	DrawPassiveTree(out);
 	DrawGemcutting(out);
 	DrawAnvil(out);

@@ -37,6 +37,8 @@
 #include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/skill_lab.hpp"
+#include "poe2/skill_looks.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/weather.hpp"
 #include "quests.h"
@@ -323,6 +325,9 @@ struct Trail {
 	TrailStyle style = TrailStyle::Plain;
 	/** @brief Monsters' spells are a little smaller than the hero's, bosses' bigger. */
 	float scale = 1;
+	/** @brief The skill that fired it, whose look its trail takes (poe2/skill_looks.hpp). */
+	uint8_t skillKind = 0;
+	uint8_t skillId = 0;
 };
 
 constexpr size_t MaxParticles = 4000;
@@ -552,15 +557,59 @@ float Intensity()
 	return static_cast<float>(*GetOptions().Graphics.effectIntensity) / 100.F;
 }
 
+/** @brief Turns a colour towards a skill look's colour, keeping how bright it is. */
+Rgb Tinted(Rgb colour, const SkillLook &look)
+{
+	if (look.tint <= 0)
+		return colour;
+	const float light = static_cast<float>(std::max({ colour.r, colour.g, colour.b })) / 255.F;
+	const Rgb target { static_cast<uint8_t>(look.r * light), static_cast<uint8_t>(look.g * light), static_cast<uint8_t>(look.b * light) };
+	return Mix(colour, target, look.tint);
+}
+
+Colours Tinted(const Colours &colours, const SkillLook &look)
+{
+	return { Tinted(colours.core, look), Tinted(colours.mid, look), Tinted(colours.edge, look) };
+}
+
+/** @brief How much longer than made a skill look's effects last: length, and shorter when played faster. */
+float Lifetime(const SkillLook &look)
+{
+	return look.length / look.speed;
+}
+
 int Scaled(float count)
 {
-	return std::max(0, static_cast<int>(count * Intensity() + 0.5F));
+	const SkillLook *look = CurrentSkillLook();
+	return std::max(0, static_cast<int>(count * Intensity() * (look != nullptr ? look->amount : 1.F) + 0.5F));
 }
 
 void AddParticle(const Particle &particle)
 {
-	if (Particles.size() < MaxParticles)
+	if (Particles.size() >= MaxParticles)
+		return;
+	const SkillLook *look = CurrentSkillLook();
+	if (look == nullptr) {
 		Particles.push_back(particle);
+		return;
+	}
+	// The skill's look: bigger flies further, faster plays the whole flight quicker.
+	Particle p = particle;
+	const float reach = look->size * look->speed;
+	p.vel = p.vel * reach;
+	p.vz *= reach;
+	p.gravity *= reach * look->speed;
+	p.drag *= look->speed;
+	p.size0 *= look->size;
+	p.size1 *= look->size;
+	p.life *= Lifetime(*look);
+	p.alpha *= look->brightness;
+	// Rock and dust keep their colour.
+	if (IsNoneOf(p.shape, Shape::Chunk, Shape::Puff)) {
+		p.c0 = Tinted(p.c0, *look);
+		p.c1 = Tinted(p.c1, *look);
+	}
+	Particles.push_back(p);
 }
 
 /** @brief A spray of particles outward on the ground plane. */
@@ -601,17 +650,55 @@ void AddRing(Vec pos, float r0, float r1, float life, float width, Rgb colour, f
 	ring.dark = dark;
 	ring.jitter = jitter;
 	ring.seed = NextRandom() | 1;
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr) {
+		ring.r0 *= look->size;
+		ring.r1 *= look->size;
+		ring.width *= look->size;
+		ring.life *= Lifetime(*look);
+		ring.alpha *= look->brightness;
+		if (!dark)
+			ring.colour = Tinted(ring.colour, *look);
+	}
 	Rings.push_back(ring);
 }
 
 void AddBolt(Vec from, Vec to, float life, float width, const Colours &colours)
 {
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr) {
+		Bolts.push_back({ from, to, 0, life * Lifetime(*look), width * look->size, Tinted(colours, *look), NextRandom() | 1, 0 });
+		return;
+	}
 	Bolts.push_back({ from, to, 0, life, width, colours, NextRandom() | 1, 0 });
+}
+
+/** @brief Cracks in a skill's look: longer lasting and recoloured (their reach is set when they're drawn out). */
+void AddCrack(Crack &&crack)
+{
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr) {
+		crack.life *= look->length;
+		crack.glow = Tinted(crack.glow, *look);
+	}
+	Cracks.push_back(std::move(crack));
+}
+
+void AddSweep(Sweep sweep)
+{
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr) {
+		sweep.radius *= look->size;
+		sweep.life *= Lifetime(*look);
+		// A sweep waiting its turn waits less when played faster.
+		sweep.age /= look->speed;
+		sweep.colours = Tinted(sweep.colours, *look);
+		sweep.alpha *= look->brightness;
+	}
+	Sweeps.push_back(sweep);
 }
 
 /** @brief Branching cracks spreading from a point, each segment jittered. */
 void AddCracks(Vec pos, float length, int branches, Rgb glow, float life)
 {
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr)
+		length *= look->size;
 	Crack crack;
 	crack.pos = pos;
 	crack.life = life;
@@ -635,7 +722,7 @@ void AddCracks(Vec pos, float length, int branches, Rgb glow, float life)
 			remaining -= step;
 		}
 	}
-	Cracks.push_back(std::move(crack));
+	AddCrack(std::move(crack));
 }
 
 void FireImpact(Vec pos, float size, const Colours &c)
@@ -2360,6 +2447,11 @@ void Sigil(Point tile, int radiusTiles, int durationMs, Element element)
 	sigil.seed = NextRandom() | 1;
 	sigil.glyphs = 8 + static_cast<int>(NextRandom() % 5);
 	sigil.star = 5 + static_cast<int>(NextRandom() % 3);
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr) {
+		sigil.radius *= look->size;
+		sigil.life *= Lifetime(*look);
+		sigil.colours = Tinted(sigil.colours, *look);
+	}
 	Sigils.push_back(sigil);
 }
 
@@ -2368,6 +2460,8 @@ void IceSpike(Point tile, int delayMs, float size)
 	TelemetryEffect("vfx", "IceSpike", tile.x, tile.y);
 	if (!Enabled())
 		return;
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr)
+		size *= look->size;
 	IceSpikeFx fx;
 	fx.pos = TileCentre(tile);
 	fx.wait = static_cast<float>(std::max(delayMs, 0));
@@ -2466,7 +2560,7 @@ void Fissure(Point from, Point to, Element element)
 			crack.segments.push_back({ next, next + Vec { Random(-18, 18), Random(-9, 9) } });
 		at = next;
 	}
-	Cracks.push_back(std::move(crack));
+	AddCrack(std::move(crack));
 	for (int i = 0; i <= steps; i += 2) {
 		const Vec p = a + span * (static_cast<float>(i) / steps);
 		Spray(p, Scaled(3), 20, 80, 500, 900, Shape::Chunk, { 75, 62, 48 }, { 40, 34, 28 }, 3, 3, 120, 260, 800, 0.4F, 1);
@@ -2594,7 +2688,7 @@ void Swing(Point from, Point toward, Element element, bool wide, bool heavy)
 	sweep.colours = ColoursOf(element);
 	sweep.element = element;
 	sweep.heavy = heavy;
-	Sweeps.push_back(sweep);
+	AddSweep(sweep);
 }
 
 namespace {
@@ -2620,7 +2714,7 @@ void AddChop(Point from, Point toward, Element element, bool heavy, float radius
 	sweep.colours = ColoursOf(element);
 	sweep.element = element;
 	sweep.heavy = heavy;
-	Sweeps.push_back(sweep);
+	AddSweep(sweep);
 }
 
 /** @brief The thud of a heavy blow landing on the floor: a dull ring, grit and a puff of dust. */
@@ -2655,7 +2749,7 @@ void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool h
 			sweep.reverse = true;
 			sweep.pos.y -= 8;
 		}
-		Sweeps.push_back(sweep);
+		AddSweep(sweep);
 		break;
 	}
 	case SwingStyle::Chop:
@@ -2697,7 +2791,7 @@ void Cleave(Point from, Point toward, Element element, bool chop)
 		sweep.heavy = true;
 		sweep.thickness = layer == 0 ? 0.34F : 0.3F;
 		sweep.alpha = layer == 0 ? 1.F : 0.5F;
-		Sweeps.push_back(sweep);
+		AddSweep(sweep);
 	}
 	// Sparks thrown off the edge as it passes through each enemy, and a scuff of dust along the floor under it.
 	for (int i = 0; i < 5; i++) {
@@ -2733,7 +2827,7 @@ void Whirl(Point tile, int radiusTiles, Element element)
 		sweep.heavy = false;
 		sweep.thickness = 0.3F;
 		sweep.alpha = layer == 1 ? 1.F : 0.45F;
-		Sweeps.push_back(sweep);
+		AddSweep(sweep);
 	}
 	// A funnel of wind: pale streaks whipped round and up, the same way the blade turns.
 	for (int i = Scaled(46); i > 0; i--) {
@@ -2897,6 +2991,8 @@ void ScanMissiles()
 			TrackPortal(missile, newLevel);
 			continue;
 		}
+		const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);
+		const SkillLook *styled = CurrentSkillLook();
 		const GraphicLook look = LookOf(missile._miAnimType);
 		if (missile._mitype == MissileID::VisualEffect && look.projectile) {
 			// A projectile's graphic standing still is a hit flash (steel on steel): sparks, not a flying glow.
@@ -2931,6 +3027,8 @@ void ScanMissiles()
 			trail.arrow = isArrow;
 			trail.style = StyleOf(missile._mitype);
 			trail.scale = scale;
+			trail.skillKind = missile.poe2.skillKind;
+			trail.skillId = missile.poe2.skillId;
 		}
 		trail.frame = ScanFrame;
 		if (trail.count == 0 || Length(head - trail.points[0]) > 1.5F) {
@@ -2945,8 +3043,9 @@ void ScanMissiles()
 			const Vec velocity { static_cast<float>(missile.position.velocity.deltaX), static_cast<float>(missile.position.velocity.deltaY) };
 			const float speed = Length(velocity);
 			const Vec dir = speed > 0.001F ? velocity * (1 / speed) : Vec { 1, 0 };
-			FrameComets.push_back({ head, dir, look.element, scale, small, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4) });
+			FrameComets.push_back({ head, dir, look.element, scale * (styled != nullptr ? styled->size : 1.F), small, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4) });
 		}
+		const size_t firstGlow = FrameGlows.size();
 		Ring glow;
 		glow.pos = head;
 		glow.r0 = glow.r1 = (arrow ? 6.F : 20.F) * scale;
@@ -2975,6 +3074,15 @@ void ScanMissiles()
 			glow.alpha = 0.22F;
 			glow.ground = true;
 			FrameGlows.push_back(glow);
+		}
+		if (styled != nullptr) {
+			for (size_t i = firstGlow; i < FrameGlows.size(); i++) {
+				Ring &styledGlow = FrameGlows[i];
+				styledGlow.r0 *= styled->size;
+				styledGlow.r1 *= styled->size;
+				styledGlow.alpha *= styled->brightness;
+				styledGlow.colour = Tinted(styledGlow.colour, *styled);
+			}
 		}
 	}
 	std::erase_if(SeenBursts, [](const auto &entry) { return entry.second.frame != ScanFrame; });
@@ -3249,8 +3357,10 @@ void Advance(float ms)
 		Drops.clear();
 	EmitAmbient(ms);
 	for (auto &[missile, trail] : Trails) {
-		if (trail.count > 0)
+		if (trail.count > 0) {
+			const SkillLookScope skillLook(trail.skillKind, trail.skillId);
 			EmitTrail(trail, trail.points[0], ms);
+		}
 	}
 	AdvanceParticles(ms);
 	Age(Rings, ms);
@@ -5541,7 +5651,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	WeatherSize = { static_cast<float>(worldSize.width), static_cast<float>(worldSize.height) };
 	WeatherView = { CameraOrigin, CameraOrigin + WeatherSize * (1 / CameraScale) };
 	if (PauseMode == 0)
-		Advance(elapsed);
+		Advance(SkillLabEffectMs(elapsed));
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
 	LastDrawnScan = ScanFrame;
