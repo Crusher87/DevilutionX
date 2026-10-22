@@ -50,9 +50,10 @@ void AddRage(Player &player, int rage)
 
 void OnSkillMeleeHit(Player &player)
 {
-	const WeaponSkill skill = CurrentWeaponSkill(player);
-	if (skill != WeaponSkill::None && player.poe2.hasSupport(SkillSlot::ForAttack(skill), SupportGem::BattleRage))
-		AddRage(player, SupportValue(player.poe2, SkillSlot::ForAttack(skill), SupportGem::BattleRage, 0));
+	// The default attack, a punch as much as a weapon's, takes Battle Rage like a skill does (Curtis 2026-10-22).
+	const SkillSlot skill = CurrentAttackSkill(player);
+	if (!skill.isEmpty() && player.poe2.hasSupport(skill, SupportGem::BattleRage))
+		AddRage(player, SupportValue(player.poe2, skill, SupportGem::BattleRage, 0));
 	OnSpiritMeleeHit(player);
 }
 

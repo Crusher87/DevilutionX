@@ -307,7 +307,8 @@ Fixed26_6 SkillBaseDamage(const Player &player, SkillSlot skill, int percent)
 	if ((SkillTags(skill) & ST_Spell) != 0 || skill.kind == SkillKind::Spell) {
 		base = 5 + (player._pMagic / 6) + (2 * level);
 	} else {
-		base = (player._pIMinDam + player._pIMaxDam) / 2;
+		const auto [minDamage, maxDamage] = AttackWeaponDamage(player, skill);
+		base = (minDamage + maxDamage) / 2;
 		base += base * player._pIBonusDam / 100 + player._pIBonusDamMod + player._pDamageMod;
 	}
 	int64_t raw = static_cast<int64_t>(std::max(base, 1)) * 64;

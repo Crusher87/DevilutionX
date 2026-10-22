@@ -641,8 +641,8 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		const int midam = RandomIntBetween(player._pIFMinDam, player._pIFMaxDam);
 		AddMissile(player.position.tile, player.position.temp, player._pdir, MissileID::SpectralArrow, TARGET_MONSTERS, player, midam, 0);
 	}
-	const int mind = player._pIMinDam;
-	const int maxd = player._pIMaxDam;
+	// POE2 Mashup: a Monk's bare fists hit like a plain quarterstaff of the skill's gem level.
+	const auto [mind, maxd] = AttackWeaponDamage(player, CurrentAttackSkill(player));
 	int dam = RandomIntBetween(mind, maxd);
 	// POE2 Mashup: deep damage logging follows the hit step by step.
 	if (&player == MyPlayer) {
@@ -653,7 +653,11 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 	dam += player._pIBonusDamMod;
 	int dam2 = dam << 6;
 	dam += player._pDamageMod;
-	TelemetryHitStep(false, "after increased, added and attribute damage", static_cast<int64_t>(dam) << 6);
+	// POE2 Mashup: from here the hit is worked out in 1/64 points, so the percentages below don't round a small hit
+	// away (Curtis 2026-10-22: the default attack's 85% turned a Monk's 1 damage punches into 0).
+	const int shiftStillToDo = gbIsPoe2 ? 0 : 6;
+	dam <<= 6 - shiftStillToDo;
+	TelemetryHitStep(false, "after increased, added and attribute damage", static_cast<int64_t>(dam) << shiftStillToDo);
 	// POE2 Mashup: Battle Cry empowers melee hits, and so does a Brutality support on the skill.
 	if (player.poe2.warcryTicks > 0)
 		dam += dam * BattleCryDamagePercent(player.poe2.skillLevel(WeaponSkill::BattleCry)) / 100;
@@ -715,7 +719,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		AddDoppelganger(monster);
 	}
 
-	dam <<= 6;
+	dam <<= shiftStillToDo;
 	if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::Jesters)) {
 		int r = GenerateRnd(201);
 		if (r >= 100)
@@ -807,7 +811,9 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 /** @brief POE2 Mashup: Fists of Thunder's lightning burst around the target, from the weapon's damage. */
 void FistsOfThunderBurst(Player &player, Point center)
 {
-	const int damage = (player._pIMinDam + player._pIMaxDam) / 2 * GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::FistsOfThunder), player.poe2.skillLevel(WeaponSkill::FistsOfThunder)) / 100;
+	const SkillSlot skill = SkillSlot::ForAttack(WeaponSkill::FistsOfThunder);
+	const auto [minDamage, maxDamage] = AttackWeaponDamage(player, skill);
+	const int damage = (minDamage + maxDamage) / 2 * GemDamagePercent(skill, player.poe2.skillLevel(WeaponSkill::FistsOfThunder)) / 100;
 	SkillBurst(player, center, 1, DamageType::Lightning, Fixed26_6::fromInt(std::max(damage * 6 / 10, 1)), MissileGraphicID::BlueFlareExplosion2);
 	PlaySfxLoc(SfxID::SpellLightningHit, center);
 }

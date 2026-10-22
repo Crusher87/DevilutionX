@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <utility>
 
 #include "poe2/player_data.hpp"
 
@@ -44,6 +45,30 @@ DefaultAttack DefaultAttackForSet(const Player &player, uint8_t set);
 SkillSlot DefaultSkillSlot(const Player &player);
 std::string_view DefaultAttackName(DefaultAttack attack);
 bool IsRangedDefaultAttack(DefaultAttack attack);
+
+/**
+ * @brief A Monk's bare fists hit for this percent of a plain heavy quarterstaff of the attack gem's level: a bit below
+ * a real staff, which also rolls modifiers (Curtis 2026-10-19).
+ */
+constexpr int BareFistStaffPercent = 85;
+
+/**
+ * @brief Whether the hero fights with bare fists, whose damage comes from the attack gem's level (see BareFistDamage):
+ * a Monk in POE2 Mashup with no weapon that deals damage (one the hero can't use doesn't count, as for the panel).
+ */
+bool FightsWithBareFists(const Player &player);
+/**
+ * @brief Bare fists' damage range at a gem level: BareFistStaffPercent of a plain heavy quarterstaff at the character
+ * level the gem level needs. Between the item data's heavy quarterstaffs it goes geometrically by their drop levels.
+ */
+std::pair<int, int> BareFistDamage(int gemLevel);
+/**
+ * @brief The gem level bare fists hit at for a skill: its own gem's for an attack skill; for the default attack, which
+ * has no gem, the highest of the hero's socketed attack gems; 1 without any.
+ */
+int BareFistGemLevel(const Player &player, SkillSlot skill);
+/** @brief The weapon damage an attack of the skill rolls: bare fists' at its gem level, else the weapon's (_pIMinDam to _pIMaxDam). */
+std::pair<int, int> AttackWeaponDamage(const Player &player, SkillSlot skill);
 
 /** @brief Whether the hero's ranged attack is the staff bolt rather than an arrow. */
 bool FiresStaffBolt(const Player &player);

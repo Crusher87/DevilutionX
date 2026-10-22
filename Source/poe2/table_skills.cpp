@@ -20,6 +20,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/camera_shake.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
@@ -206,7 +207,8 @@ Fixed26_6 FixedDamage(const Player &player, const TableSkillData &data)
 	if ((data.flags & TF_Spell) != 0) {
 		base = SpellBase(player, GemLevel(player, data.skill));
 	} else {
-		base = (player._pIMinDam + player._pIMaxDam) / 2;
+		const auto [minDamage, maxDamage] = AttackWeaponDamage(player, SkillSlot::ForAttack(data.skill));
+		base = (minDamage + maxDamage) / 2;
 		base += base * player._pIBonusDam / 100 + player._pIBonusDamMod + player._pDamageMod;
 	}
 	int64_t raw = static_cast<int64_t>(std::max(base, 1)) * 64;

@@ -80,6 +80,7 @@
 #include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/desecration.hpp"
@@ -3237,6 +3238,15 @@ void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 	const uint8_t playerLevel = player.getCharacterLevel();
 
 	if (minDamage == 0 && maxDamage == 0) {
+		// POE2 Mashup: a Monk's bare fists hit like a plain quarterstaff of the attack gem's level, not by character
+		// level (Curtis 2026-10-19). Here the default attack's; a skill's hits take its own gem (AttackWeaponDamage).
+		if (gbIsPoe2 && player._pClass == HeroClass::Monk) {
+			const auto [fistMin, fistMax] = BareFistDamage(BareFistGemLevel(player, DefaultSkillSlot(player)));
+			player._pIMinDam = fistMin;
+			player._pIMaxDam = fistMax;
+			return;
+		}
+
 		minDamage = 1;
 		maxDamage = 1;
 
