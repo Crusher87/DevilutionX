@@ -965,22 +965,19 @@ bool DoAttack(Player &player)
 			}
 		}
 
-		// POE2 Mashup: the weapon's swing, in the colour of its strongest element, and sparks where it lands. It
-		// follows the hero's animation: an axe or mace comes down from overhead. Skills with their own swing draw it
-		// with their effects.
-		vfx::Element look = vfx::Element::Physical;
-		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage))
-			look = vfx::Element::Fire;
-		else if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage))
-			look = vfx::Element::Lightning;
+		// POE2 Mashup: the weapon's swing and sparks where it lands. It follows the hero's animation: an axe or mace
+		// comes down from overhead. The weapon's strongest added element only flickers faintly along the swing and on
+		// the cut (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"). Skills with their own swing draw
+		// it with their effects.
+		const vfx::Element look = WeaponElementLook(player);
 		if (IsNoneOf(player.poe2.activeSkill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::Frenzy, WeaponSkill::FistsOfThunder, WeaponSkill::WhirlingStaff)) {
 			const vfx::SwingStyle style = WeaponSwingStyle(player);
 			if (player.CanCleave() && style == vfx::SwingStyle::Chop)
-				vfx::Cleave(player.position.tile, player.position.tile + player._pdir, look, true);
+				vfx::Cleave(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, true, look);
 			else if (player.CanCleave())
-				vfx::Swing(player.position.tile, player.position.tile + player._pdir, look, true, HoldsHeavyWeapon(player));
+				vfx::Swing(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, true, HoldsHeavyWeapon(player), look);
 			else
-				vfx::SwingAs(player.position.tile, player.position.tile + player._pdir, look, style, HoldsHeavyWeapon(player));
+				vfx::SwingAs(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, style, HoldsHeavyWeapon(player), look);
 		}
 		if (didhit)
 			vfx::Cut(player.position.tile + player._pdir, look);

@@ -807,7 +807,7 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 	if (SpinsWhileStriking(skill)) {
 		player.poe2.spinFrom = static_cast<uint8_t>(dir);
 		const TableSkillData *table = FindTableSkill(skill);
-		vfx::Whirl(player.position.tile, table != nullptr ? std::max<int>(table->radius, 1) : 1, vfx::Element::Physical);
+		vfx::Whirl(player.position.tile, table != nullptr ? std::max<int>(table->radius, 1) : 1, vfx::Element::Physical, false, WeaponElementLook(player));
 		PlaySfxLoc(SfxID::Swing2, player.position.tile);
 	}
 }
@@ -850,7 +850,7 @@ void BeginSpinningSwing(const Player &player)
 {
 	// Whirlwind's look, with a staff (Curtis 2026-10-22: "quite similar to the Warrior's Whirlwind"): the hero turns
 	// through all eight facings inside a funnel of wind, both ends of the staff sweeping round out to its far reach.
-	vfx::Whirl(player.position.tile, WhirlingStaffReach, vfx::Element::Physical, true);
+	vfx::Whirl(player.position.tile, WhirlingStaffReach, vfx::Element::Physical, true, WeaponElementLook(player));
 	PlaySfxLoc(SfxID::Swing2, player.position.tile);
 }
 
@@ -885,6 +885,15 @@ vfx::SwingStyle WeaponSwingStyle(const Player &player)
 	default:
 		return vfx::SwingStyle::Slash;
 	}
+}
+
+vfx::Element WeaponElementLook(const Player &player)
+{
+	if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage))
+		return vfx::Element::Fire;
+	if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage))
+		return vfx::Element::Lightning;
+	return vfx::Element::Physical;
 }
 
 bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
@@ -1061,7 +1070,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 	case WeaponSkill::Cleave:
 		// Its own long slice through the target and both sides, not the plain swing (Curtis 2026-10-21); an axe
 		// brings it down from overhead first, as the hero's swing does.
-		vfx::Cleave(tile, tile + dir, vfx::Element::Physical, WeaponSwingStyle(player) == vfx::SwingStyle::Chop);
+		vfx::Cleave(tile, tile + dir, vfx::Element::Physical, WeaponSwingStyle(player) == vfx::SwingStyle::Chop, WeaponElementLook(player));
 		// A spray of sparks sweeping across the arc, right to left.
 		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 0, 3);
 		AddVisualEffect(tile + dir, MissileGraphicID::MetalHit, 1, 5);
@@ -1104,7 +1113,7 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 	case WeaponSkill::Flurry: {
 		// Two real swings: a slash, then a backhand coming back across it that hits harder (Curtis 2026-10-21).
 		const bool backhand = player.poe2.flurryStrike > 0;
-		vfx::SwingAs(tile, target, vfx::Element::Physical, backhand ? vfx::SwingStyle::Backhand : vfx::SwingStyle::Slash, false);
+		vfx::SwingAs(tile, target, vfx::Element::Physical, backhand ? vfx::SwingStyle::Backhand : vfx::SwingStyle::Slash, false, WeaponElementLook(player));
 		vfx::Sparks(target, vfx::Element::Physical, backhand ? 1.5F : 1.F);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 0, 4);
 		if (backhand) {

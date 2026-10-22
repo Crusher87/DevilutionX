@@ -875,14 +875,14 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	case Strike:
 	case Flurry:
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
-		vfx::SwingAs(tile, tile + dir, LookOf(data), WeaponSwingStyle(player), HoldsHeavyWeapon(player));
+		vfx::SwingAs(tile, tile + dir, LookOf(data), WeaponSwingStyle(player), HoldsHeavyWeapon(player), WeaponElementLook(player));
 		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
 	case Arc:
 		if (WeaponSwingStyle(player) == vfx::SwingStyle::Chop)
-			vfx::Cleave(tile, tile + dir, LookOf(data), true);
+			vfx::Cleave(tile, tile + dir, LookOf(data), true, WeaponElementLook(player));
 		else
-			vfx::Swing(tile, tile + dir, LookOf(data), true);
+			vfx::Swing(tile, tile + dir, LookOf(data), true, false, WeaponElementLook(player));
 		// The hits follow the blade across, from the hero's right to his left.
 		AddVisualEffect(tile + Right(dir), data.effect, 0);
 		AddVisualEffect(tile + dir, data.effect, 1, 4);

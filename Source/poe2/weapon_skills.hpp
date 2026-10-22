@@ -20,6 +20,7 @@ struct Missile;
 struct Player;
 enum class player_graphic : uint8_t;
 namespace vfx {
+enum class Element : uint8_t;
 enum class SwingStyle : uint8_t;
 } // namespace vfx
 
@@ -124,6 +125,8 @@ bool HoldsHeavyWeapon(const Player &player);
  * from overhead, a fist or a shield punches straight out, a sword or a staff sweeps across from his right to his left.
  */
 vfx::SwingStyle WeaponSwingStyle(const Player &player);
+/** @brief The element the hero's weapon adds to its hits, for the faint flickers on its swing: fire, lightning or none. */
+vfx::Element WeaponElementLook(const Player &player);
 
 /** @brief Whether the hero spins round through every facing while the skill's animation plays (Whirlwind). */
 bool SpinsWhileStriking(WeaponSkill skill);
