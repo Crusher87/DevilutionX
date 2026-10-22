@@ -230,14 +230,15 @@ CurrencyBand OrbCurrencyBand(item_misc_id miscId)
 int CurrencyDropLevel(item_misc_id miscId)
 {
 	// The bundle's drop levels, except Alchemy, which waits for Regal's 12, and Scouring, which the bundle doesn't
-	// have (Curtis 2026-10-20: both were dropping far too early). The rest are the item table's levels on this scale.
+	// have (Curtis 2026-10-20: both were dropping far too early), and the Lesser Jeweller's Orb, which waits for
+	// Act 2's first floor as in POE2 (Curtis 2026-10-22). The rest are the item table's levels on this scale.
 	switch (miscId) {
 	case IMISC_ORB_BAUBLE:
 		return 8;
 	case IMISC_ORB_ETCHER:
 		return 10;
 	case IMISC_ORB_LESSER_JEWELLER:
-		return 5;
+		return 14;
 	case IMISC_AUGMENT:
 		return 11;
 	case IMISC_ORB_REGAL:

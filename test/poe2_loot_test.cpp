@@ -187,6 +187,7 @@ TEST_F(Poe2LootTest, CurrencyWaitsForItsItemLevel)
 	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_ALCHEMY), 12);
 	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_REGAL), 12);
 	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_SCOURING), 20);
+	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_LESSER_JEWELLER), 14) << "Act 2's first floor, never Act 1";
 	EXPECT_EQ(CurrencyDropLevel(IMISC_ORB_DIVINE), 35);
 	// Transmutation and Augmentation are the most common.
 	EXPECT_GT(CurrencyBandWeight(IMISC_ORB_TRANSMUTE), CurrencyBandWeight(IMISC_ORB_WHETSTONE));
