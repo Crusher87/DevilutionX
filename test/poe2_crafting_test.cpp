@@ -123,6 +123,29 @@ public:
 		EXPECT_TRUE(ApplyCurrencyOrb(orb, *MyPlayer, item, variant));
 		return item;
 	}
+
+	/** A ware from Griswold's stock, made from its seed the way the shop rebuilds it. */
+	static Item MakeSmithWare(uint32_t seed, item_quality rarity, int itemLevel)
+	{
+		Item probe = {};
+		SetLootRarity(probe, rarity);
+		SetPoe2ItemLevel(probe, itemLevel);
+		Item ware;
+		RecreateItem(*MyPlayer, ware, FindBase("Ash Staff"), static_cast<uint16_t>(20 | CF_SMITH), seed, 0, probe.dwBuff | CF_POE2 | CF_HELLFIRE, {});
+		return ware;
+	}
+
+	static CurrencyOrb QualityOrbFor(const Item &item)
+	{
+		switch (ItemQualityKind(item)) {
+		case QualityKind::Weapon:
+			return CurrencyOrb::Whetstone;
+		case QualityKind::Caster:
+			return CurrencyOrb::Etcher;
+		default:
+			return CurrencyOrb::Scrap;
+		}
+	}
 };
 
 TEST_F(Poe2CraftingTest, CraftStatePacksAndUnpacks)
@@ -164,6 +187,81 @@ TEST_F(Poe2CraftingTest, TransmuteAugmentRegalBuildUpAnItem)
 	EXPECT_EQ(Mods(item).size(), 3U);
 	ExpectSameMods(item, Rebuilt(item));
 	EXPECT_EQ(std::string_view(item._iIName), std::string_view(Rebuilt(item)._iIName));
+}
+
+TEST_F(Poe2CraftingTest, ShopWaresCraftOneModifierAtATime)
+{
+	// Curtis 2026-10-22: a Regal Orb made a bought magic staff a new rare with five modifiers, as wares rerolled whole.
+	int regals = 0;
+	for (uint32_t seed = 1; seed <= 300 && regals < 4; seed++) {
+		Item ware = MakeSmithWare(seed, ITEM_QUALITY_MAGIC, 30);
+		if (!CanCraftMods(ware) || ware._iMagical != ITEM_QUALITY_MAGIC || Mods(ware).size() != 2)
+			continue;
+		ASSERT_NE(ware._iCreateInfo & CF_TOWN, 0);
+		const std::vector<Poe2ItemMod> before = Mods(ware);
+		Item rare = Crafted(CurrencyOrb::Regal, ware);
+		EXPECT_EQ(rare._iMagical, ITEM_QUALITY_RARE);
+		ASSERT_EQ(Mods(rare).size(), 3U) << seed;
+		EXPECT_LE(Prefixes(rare), 2);
+		for (const Poe2ItemMod &mod : before) {
+			const std::vector<Poe2ItemMod> after = Mods(rare);
+			EXPECT_TRUE(std::any_of(after.begin(), after.end(), [&](const Poe2ItemMod &other) { return other.family == mod.family && other.values == mod.values; }));
+		}
+		// It stays a ware and rebuilds the same, and quality currency adds no modifier.
+		EXPECT_NE(rare._iCreateInfo & CF_TOWN, 0);
+		ExpectSameMods(rare, Rebuilt(rare));
+		Item polished = rare;
+		if (ApplyCurrencyOrb(QualityOrbFor(rare), *MyPlayer, polished))
+			ExpectSameMods(polished, rare);
+		regals++;
+	}
+	EXPECT_GT(regals, 0);
+
+	// A normal ware takes Transmutation, Augmentation and an Artificer's socket like a drop.
+	for (uint32_t seed = 1; seed <= 300; seed++) {
+		Item ware = MakeSmithWare(seed, ITEM_QUALITY_NORMAL, 30);
+		if (!CanCraftMods(ware) || ware._iMagical != ITEM_QUALITY_NORMAL || MaxAugmentSockets(ware) == 0)
+			continue;
+		ware = Crafted(CurrencyOrb::Transmutation, ware);
+		EXPECT_EQ(Mods(ware).size(), 1U);
+		ware = Crafted(CurrencyOrb::Augmentation, ware);
+		EXPECT_EQ(Mods(ware).size(), 2U);
+		ware = Crafted(CurrencyOrb::Artificer, ware);
+		EXPECT_EQ(ware._iPoe2Craft.sockets, 1);
+		ExpectSameMods(ware, Rebuilt(ware));
+		EXPECT_EQ(Rebuilt(ware)._iMagical, ITEM_QUALITY_MAGIC);
+		ware = Crafted(CurrencyOrb::Scouring, ware);
+		EXPECT_EQ(ware._iMagical, ITEM_QUALITY_NORMAL);
+		EXPECT_EQ(Rebuilt(ware)._iMagical, ITEM_QUALITY_NORMAL);
+		return;
+	}
+	FAIL() << "no normal ware to craft";
+}
+
+TEST_F(Poe2CraftingTest, CraftingNeverRepeatsAStatTheItemHas)
+{
+	// Curtis 2026-10-22: a staff with the Physical Damage and Accuracy hybrid had a second "+ to Accuracy Rating".
+	EXPECT_EQ(ModEffectBits(ModEffect::None), 0U);
+	EXPECT_NE(ModEffectBits(ModEffect::PhysicalPercentAndAccuracy) & ModEffectBits(ModEffect::Accuracy), 0U);
+	EXPECT_NE(ModEffectBits(ModEffect::LifeAndDefensePercent) & ModEffectBits(ModEffect::DefensePercent), 0U);
+	const std::optional<uint8_t> hybrid = FindModifierFamily("physical_accuracy_hybrid");
+	const std::optional<uint8_t> accuracy = FindModifierFamily("accuracy_rating");
+	ASSERT_TRUE(hybrid && accuracy);
+	const uint8_t weakest = ModifierFamilies()[*hybrid].tiers.back().tier;
+	for (uint32_t seed = 1; seed <= 12; seed++) {
+		Item staff = MakeItem("Ash Staff", seed, ITEM_QUALITY_NORMAL, 70);
+		ASSERT_TRUE(CanCraftMods(staff));
+		Poe2Craft craft = CurrentCraft(staff);
+		craft.rarity = ITEM_QUALITY_RARE;
+		ASSERT_TRUE(AddCraftMod(craft, { static_cast<uint8_t>(*hybrid + 1), weakest, {} }, seed));
+		staff = RebuildWithCraft(*MyPlayer, staff, staff.dwBuff, craft);
+		for (int i = 0; i < 8 && ApplyCurrencyOrb(CurrencyOrb::Exalted, *MyPlayer, staff); i++) { }
+		const std::vector<Poe2ItemMod> mods = Mods(staff);
+		EXPECT_LE(Prefixes(staff), MaxRareModsPerSide);
+		EXPECT_LE(static_cast<int>(mods.size()) - Prefixes(staff), MaxRareModsPerSide);
+		for (const Poe2ItemMod &mod : mods)
+			EXPECT_NE(mod.family, *accuracy + 1) << seed;
+	}
 }
 
 TEST_F(Poe2CraftingTest, AlchemyGivesExactlyFourModifiers)

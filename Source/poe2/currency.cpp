@@ -55,13 +55,6 @@ bool CanTakeCurrency(const Item &item)
 	return IsCraftableKind(item) && item._iMagical != ITEM_QUALITY_UNIQUE;
 }
 
-/** @brief Items bought from a vendor rebuild from the vendor's roll, which can't carry crafting state. */
-bool IsVendorItem(const Item &item)
-{
-	// Both CF_UPER bits mark a "useful" item; one alone is an ordinary monster drop.
-	return (item._iCreateInfo & CF_TOWN) != 0 || (item._iCreateInfo & CF_USEFUL) == CF_USEFUL;
-}
-
 bool HasPower(const Item &item, item_effect_type power)
 {
 	if (power == IPL_INVALID)
@@ -264,9 +257,10 @@ bool AddRandomMod(const Item &item, Poe2Craft &craft, uint32_t seed, ModRollFilt
 		filter.side = prefixesFull ? ModSide::Suffix : ModSide::Prefix;
 	if ((prefixesFull && suffixesFull) || (filter.side == ModSide::Prefix && prefixesFull) || (filter.side == ModSide::Suffix && suffixesFull))
 		return false;
-	// Curtis 2026-10-21: currency never adds a modifier that repeats the item's implicit.
-	filter.avoidEffects |= ImplicitEffectBits(item);
+	// Curtis 2026-10-21: currency never adds a modifier that repeats the item's implicit or one of its modifiers,
+	// such as a second "+ to Accuracy Rating" next to the Physical Damage and Accuracy hybrid.
 	std::vector<Poe2ItemMod> existing = CraftModList(craft);
+	filter.avoidEffects |= ImplicitEffectBits(item) | ModsEffectBits(existing);
 	std::optional<Poe2ItemMod> mod = RollAddedMod(*ItemModSlot(item), ItemModBaseTags(item), GetPoe2ItemLevel(item), existing, perSide, seed, filter);
 	if (!mod && filter.minModLevel > 0) {
 		filter.minModLevel = 0;
@@ -589,7 +583,7 @@ bool ApplyQualityCurrency(CurrencyOrb orb, const Player &player, Item &item, uin
 bool AddSocket(const Player &player, Item &item)
 {
 	const int max = MaxAugmentSockets(item);
-	if (max == 0 || IsVendorItem(item)) {
+	if (max == 0) {
 		Fizzle(_("Artificer's Orbs work on weapons and armour."));
 		return false;
 	}
@@ -898,7 +892,7 @@ bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
 	case CurrencyOrb::Catalyst:
 		return IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet);
 	case CurrencyOrb::Artificer:
-		return MaxAugmentSockets(item) > item._iPoe2Craft.sockets && !IsVendorItem(item);
+		return MaxAugmentSockets(item) > item._iPoe2Craft.sockets;
 	case CurrencyOrb::Chance:
 	case CurrencyOrb::Transmutation:
 		return rarity == ITEM_QUALITY_NORMAL;
@@ -908,7 +902,7 @@ bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
 		// One Augmentation per item: only a magic item with a single affix has room.
 		if (rarity != ITEM_QUALITY_MAGIC)
 			return false;
-		if (CanCraftMods(item) && !IsVendorItem(item))
+		if (CanCraftMods(item))
 			return CraftModCount(CurrentCraft(item)) < 2;
 		if (item._iPoe2Mods[0].family != 0)
 			return ModAffixCount(item) == 1;
@@ -1155,7 +1149,7 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 		}
 		break;
 	case CurrencyOrb::Vaal:
-		if (item._iMagical == ITEM_QUALITY_UNIQUE || (CanCraftMods(item) && !IsVendorItem(item)))
+		if (item._iMagical == ITEM_QUALITY_UNIQUE || CanCraftMods(item))
 			return CorruptV2(player, item, omens);
 		break;
 	default:
@@ -1170,7 +1164,9 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 	if (orb == CurrencyOrb::Exalted && item._iMagical == ITEM_QUALITY_MAGIC)
 		orb = CurrencyOrb::Regal;
 
-	if (CanCraftMods(item) && !IsVendorItem(item)) {
+	// Shop wares too: they rebuild with their crafting state like drops (Curtis 2026-10-22: a Regal Orb once made a
+	// bought magic staff a whole new rare with five modifiers).
+	if (CanCraftMods(item)) {
 		if (const std::optional<bool> crafted = CraftMods(orb, player, item, variant, omens); crafted)
 			return *crafted;
 	}
@@ -1319,7 +1315,8 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 		}
 		wanted = ITEM_QUALITY_RARE;
 		if (item._iPoe2Mods[0].family != 0) {
-			accept = [mods = item._iPoe2Mods](const Item &candidate) { return KeepsMods(candidate, mods); };
+			// Exactly one modifier more, never a whole new rare.
+			accept = [mods = item._iPoe2Mods, count = ModAffixCount(item)](const Item &candidate) { return ModAffixCount(candidate) == count + 1 && KeepsMods(candidate, mods); };
 			break;
 		}
 		const item_effect_type prefix = item._iPrePower;

@@ -1468,6 +1468,9 @@ void GetItemPowerPoe2Mods(Item &item, bool rare)
 {
 	std::vector<Poe2ItemMod> mods;
 	if (item._iPoe2Craft.explicitMods) {
+		// Premium and Wirt's wares always roll a bonus; a scoured one stays normal.
+		if (item._iPoe2Craft.rarity == ITEM_QUALITY_NORMAL)
+			return;
 		rare = item._iPoe2Craft.rarity == ITEM_QUALITY_RARE;
 		mods = ResolveCraftMods(item, RollNaturalPoe2Mods(item, !item._iPoe2Craft.rolledMagic));
 	} else {
@@ -2511,6 +2514,8 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 		SetRndSeed(premiumItem._iSeed);
 		const _item_indexes itemType = RndPremiumItem(player, plvl / 4, plvl);
 		GetItemAttrs(premiumItem, itemType, plvl);
+		// POE2 Mashup: the item level goes on first, so the ware has the POE2 modifiers it rebuilds with.
+		SetVendorPoe2ItemLevel(premiumItem, plvl);
 		GetItemBonus(player, premiumItem, plvl / 2, plvl, true, !gbIsHellfire);
 
 		if (!gbIsHellfire) {
@@ -2659,8 +2664,8 @@ void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
 	SetRndSeed(iseed);
 	const _item_indexes itype = RndSmithItem(player, lvl);
 	GetItemAttrs(item, itype, lvl);
-	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff; skip the rarity roll and give it its modifiers.
-	if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
+	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff, or the one crafting gave it; skip the rarity roll and give it its modifiers.
+	if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
 		item._iSeed = iseed; // the modifiers roll from it
 		DiscardRandomValues(1);
 		GetItemBonus(player, item, lvl / 2, lvl, true, false);
@@ -2707,8 +2712,8 @@ void RecreateWitchItem(const Player &player, Item &item, _item_indexes idx, int 
 		SetRndSeed(iseed);
 		const _item_indexes itype = RndWitchItem(player, lvl);
 		GetItemAttrs(item, itype, lvl);
-		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff; skip the rarity roll and give it its modifiers.
-		if (const std::optional<item_quality> rarity = GetLootRarity(item); rarity) {
+		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff, or has the one crafting gave it; skip the rarity roll and give it its modifiers.
+		if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity) {
 			if (*rarity != ITEM_QUALITY_NORMAL) {
 				item._iSeed = iseed; // the modifiers roll from it
 				DiscardRandomValues(1);
@@ -5381,6 +5386,12 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 	if ((icreateinfo & CF_UNIQUE) == 0) {
 		if ((icreateinfo & CF_TOWN) != 0) {
 			RecreateTownItem(player, item, idx, icreateinfo, iseed);
+			// POE2 Mashup: a bought ware crafts like a drop, so its augments and corruption come on top too.
+			if (!item._iPoe2Craft.isEmpty()) {
+				ApplyAugments(item);
+				ApplyCorruptionEnchant(item);
+			}
+			ApplyCorruptionImplicit(player, item);
 			gbIsHellfire = tmpIsHellfire;
 			return;
 		}
@@ -7363,6 +7374,8 @@ void SpawnBoy(int lvl)
 		SetRndSeed(BoyItem._iSeed);
 		const _item_indexes itype = RndBoyItem(*MyPlayer, lvl);
 		GetItemAttrs(BoyItem, itype, lvl);
+		// POE2 Mashup: the item level goes on first, so the ware has the POE2 modifiers it rebuilds with.
+		SetVendorPoe2ItemLevel(BoyItem, lvl);
 		GetItemBonus(*MyPlayer, BoyItem, lvl, 2 * lvl, true, true);
 
 		if (!gbIsHellfire) {

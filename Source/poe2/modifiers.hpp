@@ -209,10 +209,15 @@ struct ModRollFilter {
 	/** @brief Only this family (index plus 1), for essences; 0 for any. */
 	uint8_t family = 0;
 	ModTagRule tags = ModTagRule::Any;
-	/** @brief Effects the item's implicits already give, as bits of 1 << ModEffect; crafting doesn't repeat them. */
+	/** @brief Effects the item already has from its implicits and modifiers, as ModEffectBits; crafting doesn't repeat them. */
 	uint64_t avoidEffects = 0;
 };
 static_assert(static_cast<int>(ModEffect::ItemRarity) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
+
+/** @brief The effect as bits of 1 << ModEffect, a hybrid as its two parts; 0 for None. */
+uint64_t ModEffectBits(ModEffect effect);
+/** @brief The ModEffectBits of every one of the modifiers. */
+uint64_t ModsEffectBits(const std::vector<Poe2ItemMod> &mods);
 
 /**
  * @brief Picks one more modifier for an item that has these, like an Exalted Orb; its values are left at 0.

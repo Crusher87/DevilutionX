@@ -505,7 +505,7 @@ uint32_t CollectModCandidates(std::vector<ModCandidate> &candidates, uint32_t sl
 				continue;
 			if (filter->family != 0 && filter->family != f + 1)
 				continue;
-			if (((filter->avoidEffects >> static_cast<uint8_t>(family.effect)) & 1) != 0)
+			if ((filter->avoidEffects & ModEffectBits(family.effect)) != 0)
 				continue;
 			const uint8_t tags = ModEffectTags(family.effect);
 			if (filter->tags == ModTagRule::Shared && (tags & rolledTags) == 0)
@@ -589,6 +589,33 @@ std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLe
 		rolled.push_back({ static_cast<uint8_t>(chosen.family + 1), tier.tier, RollTierValues(family, tier, values) });
 	}
 	return rolled;
+}
+
+uint64_t ModEffectBits(ModEffect effect)
+{
+	const auto bit = [](ModEffect part) { return uint64_t { 1 } << static_cast<uint8_t>(part); };
+	switch (effect) {
+	case ModEffect::None:
+		return 0;
+	case ModEffect::PhysicalPercentAndAccuracy:
+		return bit(ModEffect::PhysicalPercent) | bit(ModEffect::Accuracy);
+	case ModEffect::LifeAndDefensePercent:
+		return bit(ModEffect::Life) | bit(ModEffect::DefensePercent);
+	case ModEffect::ManaAndDefensePercent:
+		return bit(ModEffect::Mana) | bit(ModEffect::DefensePercent);
+	default:
+		return bit(effect);
+	}
+}
+
+uint64_t ModsEffectBits(const std::vector<Poe2ItemMod> &mods)
+{
+	uint64_t bits = 0;
+	for (const Poe2ItemMod &mod : mods) {
+		if (const ModFamily *family = ItemModFamily(mod); family != nullptr)
+			bits |= ModEffectBits(family->effect);
+	}
+	return bits;
 }
 
 std::optional<Poe2ItemMod> RollAddedMod(ModSlot slot, uint8_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &existing, int perSide, uint32_t seed, const ModRollFilter &filter)
