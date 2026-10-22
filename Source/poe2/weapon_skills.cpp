@@ -16,6 +16,7 @@
 #include "monster.h"
 #include "msg.h"
 #include "multi.h"
+#include "objects.h"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/aim.hpp"
@@ -947,6 +948,7 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		player.poe2.riposteTicks = 0;
 		for (const Direction dir : { player._pdir, Left(player._pdir), Right(player._pdir) }) {
 			const Point tile = player.position.tile + dir;
+			BreakObjectAt(player, tile);
 			Monster *monster = FindMonsterAtPosition(tile);
 			if (monster != nullptr && !CanTalkToMonst(*monster) && monster->position.old == tile && !monster->hasNoLife())
 				SkillHitMonster(player, *monster, dir == player._pdir ? RiposteDamagePercent : RiposteDamagePercent / 2);

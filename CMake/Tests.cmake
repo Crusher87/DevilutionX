@@ -31,6 +31,7 @@ set(tests
   multi_logging_test
   pack_test
   poe2_admin_tools_test
+  poe2_breakables_test
   poe2_charms_test
   poe2_currency_test
   poe2_defenses_test

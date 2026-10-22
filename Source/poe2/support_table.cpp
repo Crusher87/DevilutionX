@@ -16,6 +16,7 @@
 #include "levels/tile_properties.hpp"
 #include "missiles.h"
 #include "monster.h"
+#include "objects.h"
 #include "player.h"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
@@ -584,6 +585,7 @@ void FinishHit()
 	}
 	if (Has(player, skill, SG::Shatter) && (SkillTags(skill) & ST_Slam) != 0 && (monster.poe2.freezeTicks > 0 || monster.mode == MonsterMode::Petrified)) {
 		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter, 0, 6);
+		BreakObjectsInArea(player, monster.position.tile, 2);
 		for (Monster *other : NearestMonsters(monster.position.tile, 2, 8, &monster))
 			DealExtra(player, *other, DamageType::Magic, Fixed26_6::fromRaw(total * 3 / 10));
 	}
@@ -660,6 +662,7 @@ void ProcessBursts(Player &player)
 		}
 		AddVisualEffect(burst.center, burst.effect, 0, 4);
 		const GroundBurst copy = burst;
+		BreakObjectsInArea(player, copy.center, copy.radius);
 		std::vector<Monster *> targets;
 		ForEachMonsterNear(copy.center, copy.radius, [&](Monster &monster) { targets.push_back(&monster); });
 		for (Monster *monster : targets)

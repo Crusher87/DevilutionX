@@ -15,6 +15,7 @@
 #include "levels/tile_properties.hpp"
 #include "missiles.h"
 #include "monster.h"
+#include "objects.h"
 #include "panels/spell_icons.hpp"
 #include "player.h"
 #include "plrmsg.h"
@@ -361,6 +362,7 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 void ZoneBurst(const Player &player, const TableSkillData &data, Point center, int radius, Fixed26_6 damage)
 {
 	AddVisualEffect(center, data.effect, 0, 4);
+	BreakObjectsInArea(player, center, radius);
 	ForEachMonsterNear(center, radius, [&](Monster &monster) {
 		SpellHitMonster(player, monster, data.type, damage, SourceOf(data));
 		if ((data.flags & TF_Stun) != 0 && !monster.hasNoLife())
@@ -662,9 +664,13 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	case Strike:
 		if (Monster *monster = MonsterInFrontOf(player); monster != nullptr)
 			WeaponHit(player, *monster, data, data.damagePercent, result);
+		else
+			BreakObjectAt(player, tile + player._pdir);
 		break;
 	case Arc:
 		for (const Direction dir : { player._pdir, Left(player._pdir), Right(player._pdir) }) {
+			// The skills smash the barrels and urns in their area too (Curtis 2026-10-22).
+			BreakObjectAt(player, tile + dir);
 			Monster *monster = FindMonsterAtPosition(tile + dir);
 			if (monster != nullptr && CanHit(*monster) && monster->position.old == tile + dir)
 				WeaponHit(player, *monster, data, data.damagePercent, result);
@@ -672,6 +678,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		break;
 	case Around:
 	case Dash: {
+		BreakObjectsInArea(player, tile, std::max<int>(data.radius, 1));
 		std::vector<Monster *> targets;
 		ForEachMonsterNear(tile, std::max<int>(data.radius, 1), [&](Monster &monster) { targets.push_back(&monster); });
 		for (Monster *monster : targets)
@@ -679,6 +686,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		break;
 	}
 	case Flurry:
+		BreakObjectAt(player, tile + player._pdir);
 		for (int i = 0; i < data.count; i++) {
 			Monster *monster = MonsterInFrontOf(player);
 			if (monster == nullptr)
@@ -700,6 +708,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		if ((data.flags & TF_Spell) != 0) {
 			ZoneBurst(player, data, target, data.radius, FixedDamage(player, data));
 		} else {
+			BreakObjectsInArea(player, target, data.radius);
 			std::vector<Monster *> targets;
 			ForEachMonsterNear(target, data.radius, [&](Monster &monster) { targets.push_back(&monster); });
 			for (Monster *monster : targets)
@@ -723,6 +732,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 				break;
 			end = at;
 			AddVisualEffect(at, data.effect, step * 2, step == 1 ? 4 : 0);
+			BreakObjectsInArea(player, at, data.radius);
 			ForEachMonsterNear(at, data.radius, [&](Monster &monster) {
 				if (std::find(hit.begin(), hit.end(), &monster) == hit.end())
 					hit.push_back(&monster);
@@ -824,6 +834,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	case CallOfTheAncients: {
 		const int rage = player.poe2.rage;
 		player.poe2.rage = 0;
+		BreakObjectsInArea(player, tile, data.radius);
 		std::vector<Monster *> targets;
 		ForEachMonsterNear(tile, data.radius, [&](Monster &monster) { targets.push_back(&monster); });
 		for (int wave = 0; wave < data.count; wave++) {

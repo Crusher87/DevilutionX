@@ -12,6 +12,7 @@
 #include "levels/gendung.h"
 #include "missiles.h"
 #include "monster.h"
+#include "objects.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
@@ -144,6 +145,7 @@ SpiritUseResult UseIronWard(Player &player)
 	vfx::Slam(center, radius, vfx::Element::Physical);
 	AddVisualEffect(center, MissileGraphicID::StoneCurseShatter);
 	RingOfEffects(center, radius, MissileGraphicID::MetalHit);
+	BreakObjectsInArea(player, center, radius);
 	TelemetryNoteDamageSource("Iron Ward");
 	int hit = 0;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
@@ -168,6 +170,7 @@ SpiritUseResult UsePlagueBearer(Player &player)
 	vfx::Impact(center, vfx::Element::Chaos, 2.F);
 	AddVisualEffect(center, MissileGraphicID::AcidSplat);
 	RingOfEffects(center, PlagueBearerRadius, MissileGraphicID::AcidSplat);
+	BreakObjectsInArea(player, center, PlagueBearerRadius);
 	TelemetryNoteDamageSource("Plague Bearer");
 	int hit = 0;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {

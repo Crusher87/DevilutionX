@@ -25,6 +25,7 @@
 #include "engine/load_file.hpp"
 #include "engine/points_in_rectangle_range.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "inv.h"
 #include "inv_iterators.hpp"
@@ -4711,6 +4712,28 @@ void BreakObject(const Player &player, Object &object)
 		BreakBarrel(player, object, false, true);
 	} else if (object.IsCrux()) {
 		BreakCrux(object, true);
+	}
+}
+
+void BreakObjectAt(const Player &player, Point tile)
+{
+	if (!gbIsPoe2 || &player != MyPlayer)
+		return;
+	Object *object = FindObjectAtPosition(tile);
+	if (object != nullptr && object->IsBreakable())
+		BreakObject(player, *object);
+}
+
+void BreakObjectsInArea(const Player &player, Point center, int radius)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || radius < 0)
+		return;
+	for (int dy = -radius; dy <= radius; dy++) {
+		for (int dx = -radius; dx <= radius; dx++) {
+			const Point tile = center + Displacement { dx, dy };
+			if (center.ExactDistance(tile) <= radius)
+				BreakObjectAt(player, tile);
+		}
 	}
 }
 

@@ -4,6 +4,7 @@
 
 #include "missiles.h"
 #include "monster.h"
+#include "objects.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit_auras.hpp"
@@ -108,6 +109,7 @@ void SkillBurst(const Player &player, Point center, int radius, DamageType type,
 	AddVisualEffect(center, effect);
 	if (&player != MyPlayer || damage <= 0)
 		return;
+	BreakObjectsInArea(player, center, radius);
 	const WeaponSkill skill = CurrentWeaponSkill(player);
 	const SupportHitScope scope(player, skill != WeaponSkill::None ? SkillSlot::ForAttack(skill) : SkillSlot {});
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {

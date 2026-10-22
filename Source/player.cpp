@@ -902,6 +902,7 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
 			continue;
 		const Point position = player.position.tile + dir;
+		BreakObjectAt(player, position);
 		Monster *monster = FindMonsterAtPosition(position);
 		if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
 			continue;
@@ -999,6 +1000,9 @@ bool DoAttack(Player &player)
 			// playing as a class/weapon with cleave; the Cleave skill hits the sides at full damage
 			const bool adjacentDamage = skill != WeaponSkill::Cleave;
 			position = player.position.tile + Right(player._pdir);
+			// POE2 Mashup: the sweep smashes the barrels and urns at its sides too (Curtis 2026-10-22).
+			BreakObjectAt(player, position);
+			BreakObjectAt(player, player.position.tile + Left(player._pdir));
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
@@ -1033,10 +1037,12 @@ bool DoAttack(Player &player)
 					const int distance = std::max(std::abs(dx), std::abs(dy));
 					if (skill == WeaponSkill::GroundSlam && !InGroundSlamCone(player._pdir, { dx, dy }))
 						continue;
+					if (distance > 1 && !LineClearMissile(origin, position))
+						continue;
+					// The shockwave and the spin smash the barrels and urns they reach too (Curtis 2026-10-22).
+					BreakObjectAt(player, position);
 					monster = FindMonsterAtPosition(position);
 					if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
-						continue;
-					if (distance > 1 && !LineClearMissile(origin, position))
 						continue;
 					const int damagePercent = distance > 1 && skill == WeaponSkill::WhirlingStaff ? WhirlingStaffOuterDamagePercent : AreaSkillSideDamagePercent;
 					if (PlrHitMonst(player, *monster, false, damagePercent)) {
