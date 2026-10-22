@@ -16,6 +16,7 @@
 #include "levels/trigs.h"
 #include "monster.h"
 #include "objects.h"
+#include "poe2/floor_packs.hpp"
 #include "quests.h"
 #include "utils/algorithm/container.hpp"
 #include "utils/is_of.hpp"
@@ -358,6 +359,11 @@ void PlaceThemeMonsts(int t, int f)
 		}
 	}
 	const size_t mtype = scattertypes[GenerateRnd(numscattypes)];
+	// POE2 Mashup: the room's monsters stand together as one pack.
+	if (UseFloorPacks()) {
+		PlaceThemePack(themes[t].ttval, mtype, f);
+		return;
+	}
 	for (int yp = 0; yp < MAXDUNY; yp++) {
 		for (int xp = 0; xp < MAXDUNX; xp++) {
 			if (dTransVal[xp][yp] == themes[t].ttval && IsTileNotSolid({ xp, yp }) && dItem[xp][yp] == 0 && !IsObjectAtPosition({ xp, yp })) {

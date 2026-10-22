@@ -59,6 +59,28 @@ uint8_t ChooseMods(uint32_t hash, int count)
 	return mods;
 }
 
+/** @brief The life and damage a magic or rare monster gets on top of a plain one. */
+void ApplyRarityStats(Monster &monster, const MonsterAffixes &affixes)
+{
+	if (affixes.rarity == MonsterRarity::Normal)
+		return;
+
+	int lifePercent = 100 + (affixes.rarity == MonsterRarity::Rare ? RareMonsterLifePercent : MagicMonsterLifePercent);
+	if (affixes.has(MonsterMod::ExtraLife))
+		lifePercent += ExtraLifePercent;
+	monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100));
+	monster.hitPoints = monster.maxHitPoints;
+
+	if (affixes.has(MonsterMod::HardHitting)) {
+		const auto boost = [](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * (100 + HardHittingPercent) / 100, 255)); };
+		boost(monster.minDamage);
+		boost(monster.maxDamage);
+		boost(monster.minDamageSpecial);
+		boost(monster.maxDamageSpecial);
+	}
+	// MonsterMod::Resistant adds to the monster's resistances where they are worked out (monster_resistance.cpp).
+}
+
 } // namespace
 
 MonsterAffixes GetMonsterAffixes(const Monster &monster)
@@ -112,24 +134,24 @@ void ApplyMonsterRarity(Monster &monster)
 		scale(monster.minDamageSpecial);
 		scale(monster.maxDamageSpecial);
 	}
-	const MonsterAffixes affixes = GetMonsterAffixes(monster);
-	if (affixes.rarity == MonsterRarity::Normal)
+	ApplyRarityStats(monster, GetMonsterAffixes(monster));
+}
+
+void PromoteMonsterRarity(Monster &monster, MonsterRarity rarity)
+{
+	if (!CanRollRarity(monster) || rarity == MonsterRarity::Normal || GetMonsterAffixes(monster).rarity != MonsterRarity::Normal)
 		return;
-
-	int lifePercent = 100 + (affixes.rarity == MonsterRarity::Rare ? RareMonsterLifePercent : MagicMonsterLifePercent);
-	if (affixes.has(MonsterMod::ExtraLife))
-		lifePercent += ExtraLifePercent;
-	monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100));
-	monster.hitPoints = monster.maxHitPoints;
-
-	if (affixes.has(MonsterMod::HardHitting)) {
-		const auto boost = [](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * (100 + HardHittingPercent) / 100, 255)); };
-		boost(monster.minDamage);
-		boost(monster.maxDamage);
-		boost(monster.minDamageSpecial);
-		boost(monster.maxDamageSpecial);
+	const uint32_t original = monster.rndItemSeed;
+	// A rare seed turns up about once in 33 tries, so this always finds one long before it runs out.
+	for (uint32_t step = 1; step < 4000; step++) {
+		monster.rndItemSeed = (original + (step * 7919U)) & 0x7FFFFFFFU;
+		const MonsterAffixes affixes = GetMonsterAffixes(monster);
+		if (affixes.rarity == rarity) {
+			ApplyRarityStats(monster, affixes);
+			return;
+		}
 	}
-	// MonsterMod::Resistant adds to the monster's resistances where they are worked out (monster_resistance.cpp).
+	monster.rndItemSeed = original;
 }
 
 std::string_view MonsterModName(MonsterMod mod)

@@ -23,11 +23,13 @@
 #include "levels/themes.h"
 #include "levels/tile_properties.hpp"
 #include "levels/trigs.h"
+#include "missiles.h"
 #include "monster.h"
 #include "multi.h"
 #include "objects.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/floor_packs.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
@@ -81,7 +83,9 @@ bool Walkable(Point tile)
 
 bool IsHostile(const Monster &monster)
 {
-	return !monster.isPlayerMinion() && !monster.hasNoLife() && monster.talkMsg == TEXT_NONE && InDungeonBounds(monster.position.tile);
+	// The golems' empty slots wait at their holding cell, off the map.
+	return !monster.isPlayerMinion() && !monster.hasNoLife() && monster.talkMsg == TEXT_NONE && InDungeonBounds(monster.position.tile)
+	    && monster.position.tile != GolemHoldingCell;
 }
 
 int RarityOf(const Monster &monster)
@@ -95,32 +99,9 @@ int RarityOf(const Monster &monster)
 	}
 }
 
-/** Monsters that mostly fight from a distance: archers, casters and spitters. */
 bool IsRanged(const Monster &monster)
 {
-	switch (monster.ai) {
-	case MonsterAIID::SkeletonRanged:
-	case MonsterAIID::GoatRanged:
-	case MonsterAIID::Succubus:
-	case MonsterAIID::LazarusSuccubus:
-	case MonsterAIID::Counselor:
-	case MonsterAIID::Mega:
-	case MonsterAIID::Magma:
-	case MonsterAIID::Storm:
-	case MonsterAIID::Acid:
-	case MonsterAIID::AcidUnique:
-	case MonsterAIID::Zhar:
-	case MonsterAIID::Lazarus:
-	case MonsterAIID::Torchant:
-	case MonsterAIID::Lich:
-	case MonsterAIID::ArchLich:
-	case MonsterAIID::Psychorb:
-	case MonsterAIID::Necromorb:
-	case MonsterAIID::BoneDemon:
-		return true;
-	default:
-		return false;
-	}
+	return IsRangedMonsterAi(monster.ai);
 }
 
 /** Objects worth counting: anything that can still be used or broken, but not doors, levers' walls or traps. */
