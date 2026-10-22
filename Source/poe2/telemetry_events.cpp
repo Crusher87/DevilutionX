@@ -21,7 +21,7 @@ namespace devilution {
 namespace {
 
 constexpr size_t NumChannels = static_cast<size_t>(LogChannel::Count);
-constexpr std::array<std::string_view, NumChannels> ChannelNames { "session", "fights", "combat", "damage", "skills", "loot", "progress", "warnings", "perf", "effects", "tree" };
+constexpr std::array<std::string_view, NumChannels> ChannelNames { "session", "fights", "combat", "damage", "skills", "loot", "progress", "warnings", "perf", "effects", "tree", "rooms" };
 constexpr std::array<std::string_view, 4> LevelNames { "off", "always", "normal", "deep" };
 
 /** Every channel starts at Normal: Deep is only switched on from the console, for one session. */

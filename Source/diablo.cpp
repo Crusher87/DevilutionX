@@ -111,6 +111,7 @@
 #include "poe2/hardcore.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/economy.hpp"
+#include "poe2/level_census.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
@@ -3509,6 +3510,7 @@ void LoadGameLevelStash()
 std::expected<void, std::string> LoadGameLevelDungeon(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
 	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pLvlVisited[currlevel] || gbIsMultiplayer || Poe2FloorFresh) {
+		LevelCensusNoteBuilt();
 		TelemetryStep("theme rooms");
 		HoldThemeRooms();
 		[[maybe_unused]] const uint32_t mid1Seed = GetLCGEngineState();

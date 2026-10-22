@@ -21,6 +21,7 @@
 #include "poe2/aim.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hit_trace.hpp"
+#include "poe2/level_census.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "poe2/vfx.hpp"
@@ -141,6 +142,14 @@ void CreateReplEnvironment()
 		setlvltype = DTYPE_CATHEDRAL;
 		StartNewLvl(*MyPlayer, WM_DIABSETLVL, SL_MIXTEST);
 		return std::string("Going to the tile mix test map. Walk down into the hall; the exit is where you came in.");
+	};
+	// rooms() shows what this floor holds room by room, and how this visit has gone so far.
+	env["rooms"] = []() {
+		return LevelCensusText();
+	};
+	// censusfloors(n) walks between this floor and the next n times, building each one fresh and counting it.
+	env["censusfloors"] = [](int floors) {
+		return LevelCensusStartBatch(floors);
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

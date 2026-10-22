@@ -41,6 +41,7 @@ set(tests
   poe2_item_spawner_test
   poe2_hud_globes_test
   poe2_jewels_test
+  poe2_level_census_test
   poe2_loot_filter_test
   poe2_loot_test
   poe2_modifiers_test
