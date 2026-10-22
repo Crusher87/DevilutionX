@@ -412,37 +412,37 @@ std::string_view WeaponSkillName(WeaponSkill skill)
 	case WeaponSkill::Cleave:
 		return _("Cleave");
 	case WeaponSkill::GroundSlam:
-		return _("Ground Slam");
+		return _("Seismic Slam");
 	case WeaponSkill::Barrage:
-		return _("Barrage");
+		return _("Hail of Arrows");
 	case WeaponSkill::WhirlingStaff:
-		return _("Whirling Staff");
+		return _("Sweeping Wind");
 	case WeaponSkill::Flurry:
-		return _("Flurry");
+		return _("Double Swing");
 	case WeaponSkill::LeapSlam:
-		return _("Leap Slam");
+		return _("Leap Attack");
 	case WeaponSkill::RainOfArrows:
-		return _("Rain of Arrows");
+		return _("Arrow Storm");
 	case WeaponSkill::ShieldCharge:
 		return _("Shield Charge");
 	case WeaponSkill::BattleCry:
 		return _("Battle Cry");
 	case WeaponSkill::LightningArrow:
-		return _("Lightning Arrow");
+		return _("Storm Arrow");
 	case WeaponSkill::EscapeShot:
-		return _("Escape Shot");
+		return _("Vault Shot");
 	case WeaponSkill::EmberFusillade:
-		return _("Ember Fusillade");
+		return _("Hellfire Darts");
 	case WeaponSkill::Spark:
-		return _("Spark");
+		return _("Arcing Sparks");
 	case WeaponSkill::IceBolt:
 		return _("Ice Bolt");
 	case WeaponSkill::FrostNova:
 		return _("Frost Nova");
 	case WeaponSkill::Riposte:
-		return _("Riposte");
+		return _("Counterstrike");
 	case WeaponSkill::ShadowStep:
-		return _("Shadow Step");
+		return _("Shadow Lunge");
 	case WeaponSkill::Frenzy:
 		return _("Frenzy");
 	case WeaponSkill::Smite:
@@ -720,7 +720,7 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		return StartSkillCast(player, skill, player_graphic::Magic);
 	case WeaponSkill::Riposte:
 		if (player.poe2.riposteTicks == 0) {
-			EventPlrMsg(_("Riposte is ready only just after you block."), UiFlags::ColorRed);
+			EventPlrMsg(_("Counterstrike is ready only just after you block."), UiFlags::ColorRed);
 			return false;
 		}
 		return StartSkillCast(player, skill, player_graphic::Attack);
@@ -728,7 +728,7 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		if (!CanStartSkill(player))
 			return false;
 		if (!ShadowStepBehind(player)) {
-			EventPlrMsg(_("Shadow Step needs a monster nearby to step behind."), UiFlags::ColorRed);
+			EventPlrMsg(_("Shadow Lunge needs a monster nearby to step behind."), UiFlags::ColorRed);
 			return false;
 		}
 		return StartSkillCast(player, skill, player_graphic::Attack);
