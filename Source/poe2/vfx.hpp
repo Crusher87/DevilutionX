@@ -44,14 +44,16 @@ enum class Element : uint8_t {
 	Blood,
 };
 
-/** @brief How a weapon moves through the air, to match the hero's attack animation. */
+/** @brief How a weapon moves through the air, to match the hero's attack animation. Every hero swings right-handed. */
 enum class SwingStyle : uint8_t {
-	/** @brief Swept level across the front. */
+	/** @brief Swept across the front from the hero's right to his left; a blade cuts down from over his right shoulder. */
 	Slash,
-	/** @brief Swept back the other way: a second, backhand cut. */
+	/** @brief Swept back the other way, from his left to his right: a second, backhand cut. */
 	Backhand,
 	/** @brief Brought down from overhead onto the target, as the hero swings an axe or a mace. */
 	Chop,
+	/** @brief Punched straight out at the target, as the hero strikes with a bare fist or a shield. */
+	Jab,
 };
 
 /** @brief The element a skill's damage looks like; spells without an element look arcane. */

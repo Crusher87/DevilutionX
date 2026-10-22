@@ -819,10 +819,13 @@ bool SpinsWhileStriking(WeaponSkill skill)
 
 namespace {
 
-/** @brief The facing a spinning hero shows on an animation frame: one facing a frame, round once in eight frames. */
+/**
+ * @brief The facing a spinning hero shows on an animation frame: one facing a frame, round once in eight frames. He
+ * turns to his left, so his right-handed swing carries on round with the spin instead of fighting it.
+ */
 Direction SpinFacing(Direction from, int frame)
 {
-	return static_cast<Direction>((static_cast<int>(from) + frame) % 8);
+	return static_cast<Direction>((static_cast<int>(from) + 8 - frame % 8) % 8);
 }
 
 } // namespace
@@ -867,12 +870,21 @@ bool HoldsHeavyWeapon(const Player &player)
 
 vfx::SwingStyle WeaponSwingStyle(const Player &player)
 {
-	// The hero's axe and mace attacks come down from overhead (Curtis 2026-10-21: "the hero swings top-down, but the
-	// effect sweeps sideways").
-	const auto holds = [&](ItemType type) { return player.InvBody[INVLOC_HAND_LEFT]._itype == type || player.InvBody[INVLOC_HAND_RIGHT]._itype == type; };
-	if (!holds(ItemType::Sword) && (holds(ItemType::Axe) || holds(ItemType::Mace)))
+	// The effect follows the attack animation the hero plays, and every class swings right-handed. Axe and mace attacks
+	// come down from overhead (Curtis 2026-10-21: "the hero swings top-down, but the effect sweeps sideways"); a bare fist
+	// or a shield punches straight out; a sword or a staff sweeps across from the hero's right to his left (Curtis
+	// 2026-10-22).
+	switch (static_cast<PlayerWeaponGraphic>(player._pgfxnum & 0xFU)) {
+	case PlayerWeaponGraphic::Axe:
+	case PlayerWeaponGraphic::Mace:
+	case PlayerWeaponGraphic::MaceShield:
 		return vfx::SwingStyle::Chop;
-	return vfx::SwingStyle::Slash;
+	case PlayerWeaponGraphic::Unarmed:
+	case PlayerWeaponGraphic::UnarmedShield:
+		return vfx::SwingStyle::Jab;
+	default:
+		return vfx::SwingStyle::Slash;
+	}
 }
 
 bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
@@ -1183,10 +1195,10 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		break;
 	case WeaponSkill::Riposte:
 		vfx::SwingAs(tile, tile + dir, vfx::Element::Holy, WeaponSwingStyle(player), HoldsHeavyWeapon(player));
-		// A flash of steel sweeping back across the arc.
-		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 0, 4);
+		// A flash of steel sweeping across the arc with the blade, right to left.
+		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 0, 4);
 		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 1, 6);
-		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 2, 4);
+		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 2, 4);
 		PlaySfxLoc(SfxID::ItemSword, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 4);

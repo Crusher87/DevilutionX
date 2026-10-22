@@ -119,7 +119,10 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target);
 
 /** @brief Whether the hero holds a heavy weapon (an axe, mace or staff, and no sword): slower, thicker swings. */
 bool HoldsHeavyWeapon(const Player &player);
-/** @brief How the hero's weapon moves on an attack: an axe or a mace comes down from overhead, anything else sweeps level. */
+/**
+ * @brief How the hero's weapon moves on an attack, following the attack animation he plays: an axe or a mace comes down
+ * from overhead, a fist or a shield punches straight out, a sword or a staff sweeps across from his right to his left.
+ */
 vfx::SwingStyle WeaponSwingStyle(const Player &player);
 
 /** @brief Whether the hero spins round through every facing while the skill's animation plays (Whirlwind). */

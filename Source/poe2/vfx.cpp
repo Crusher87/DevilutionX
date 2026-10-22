@@ -228,8 +228,13 @@ struct Sweep {
 	Element element;
 	bool heavy;
 	SweepKind kind = SweepKind::Flat;
-	/** @brief A flat sweep going the other way, left to right. */
+	/**
+	 * @brief A flat sweep going the other way, from the hero's left to his right: a backhand. Otherwise it goes from his
+	 * right to his left, as every hero swings right-handed.
+	 */
 	bool reverse = false;
+	/** @brief How far a flat sweep rises at the hero's right and falls at his left, in pixels: a diagonal cut. */
+	float tilt = 0;
 	/** @brief How many times a spin goes round. */
 	float turns = 0;
 	/** @brief The smear's thickness, as a share of its radius; 0 for the weapon's own. */
@@ -2652,9 +2657,13 @@ void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool h
 		sweep.colours = ColoursOf(element);
 		sweep.element = element;
 		sweep.heavy = heavy;
-		// The backhand comes back the other way, a little higher, so the two cuts cross.
+		// A blade cuts down across the hero from over his right shoulder, as his attack animation swings it; a heavy
+		// staff sweeps level.
+		sweep.tilt = heavy ? 0.F : 10.F;
+		// The backhand comes back the other way, a little higher and slanting the other way, so the two cuts cross.
 		if (style == SwingStyle::Backhand) {
 			sweep.reverse = true;
+			sweep.tilt = -sweep.tilt;
 			sweep.pos.y -= 8;
 		}
 		Sweeps.push_back(sweep);
@@ -2664,6 +2673,27 @@ void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool h
 		AddChop(from, toward, element, heavy, 1.F);
 		Thud(TileCentre(toward), heavy ? 0.8F : 0.6F);
 		break;
+	case SwingStyle::Jab: {
+		// A fist or a shield punched straight out from the hero's right side: a few quick streaks of air, no smear.
+		const float facing = FacingBetween(from, toward);
+		const Vec ahead { std::cos(facing), std::sin(facing) * 0.5F };
+		const Vec fist = OnGround(TileCentre(from), 10, facing + Pi / 2) + Vec { 0, -38 };
+		for (int i = 0; i < 3; i++) {
+			Particle p;
+			p.pos = fist + ahead * Random(6, 14) + Vec { Random(-3, 3), Random(-4, 4) };
+			p.vel = ahead * Random(420, 560);
+			p.drag = 4.F;
+			p.life = Random(90, 130);
+			p.shape = Shape::Streak;
+			p.c0 = { 245, 240, 230 };
+			p.c1 = { 150, 140, 125 };
+			p.size0 = 1.2F;
+			p.size1 = 0.4F;
+			p.alpha = 0.45F;
+			AddParticle(p);
+		}
+		break;
+	}
 	}
 }
 
@@ -2767,7 +2797,7 @@ void Whirl(Point tile, int radiusTiles, Element element, bool staff)
 		const float radius = r * Random(0.35F, 1.15F);
 		Particle p;
 		p.pos = pos + Vec { std::cos(angle) * radius, std::sin(angle) * radius * 0.5F };
-		p.vel = Vec { -std::sin(angle), std::cos(angle) * 0.5F } * Random(240, 420) + Vec { -std::cos(angle), -std::sin(angle) * 0.5F } * Random(20, 60);
+		p.vel = Vec { std::sin(angle), -std::cos(angle) * 0.5F } * Random(240, 420) + Vec { -std::cos(angle), -std::sin(angle) * 0.5F } * Random(20, 60);
 		p.z = Random(4, 50);
 		p.vz = Random(40, 150);
 		p.gravity = -40;
@@ -3772,6 +3802,8 @@ void DrawIceSpikes()
 /** @brief Where a point of a sweep lies: on a level circle for a slash or a spin, on an upright circle along the facing for a chop (angle 0 straight up, Pi/2 straight ahead). */
 Vec SweepPoint(const Sweep &sweep, float radius, float angle)
 {
+	if (sweep.kind == SweepKind::Flat)
+		return OnGround(sweep.pos, radius, angle) + Vec { 0, -sweep.tilt * std::sin(angle - sweep.facing) };
 	if (sweep.kind != SweepKind::Chop)
 		return OnGround(sweep.pos, radius, angle);
 	const Vec ahead { std::cos(sweep.facing), std::sin(sweep.facing) * 0.5F };
@@ -3796,15 +3828,16 @@ void DrawSweeps()
 		// where there's nothing to draw.
 		const float head = EaseOut(std::min(t * 1.8F, 1.F));
 		const float tailLag = sweep.heavy ? 0.85F : 0.7F;
-		// A spin's head goes round and round, slowing a little at the end; its smear trails a fixed arc behind it.
+		// A spin's head goes round and round, slowing a little at the end; its smear trails a fixed arc behind it. It
+		// turns the way a right-handed swing carries on round, to the hero's left, as the hero turns (see TurnWithSpin).
 		const float spinTravel = 2 * Pi * sweep.turns * t * (1.35F - 0.35F * t);
-		const float spinHead = sweep.facing + spinTravel;
+		const float spinHead = sweep.facing - spinTravel;
 		auto sample = [&](float u, float &angle, float &alpha, float &width) {
 			if (sweep.kind == SweepKind::Spin) {
 				const float back = sweep.span * (1 - u);
 				if (back > spinTravel)
 					return false;
-				angle = spinHead - back;
+				angle = spinHead + back;
 				const float taper = u < 0.85F ? u / 0.85F : (1 - u) / 0.15F;
 				alpha = std::pow(taper, 0.8F) * fade;
 				width = std::max(thickness * taper, 1.5F);
@@ -3817,12 +3850,14 @@ void DrawSweeps()
 			const float taper = std::pow(std::sin(Pi * u), 0.7F);
 			alpha = (1 - behind) * (1 - behind) * fade * (0.35F + 0.65F * taper);
 			width = std::max(thickness * taper * (1 - behind * 0.5F), 1.5F);
+			// A level sweep comes round from the hero's right (Curtis 2026-10-22: "right-handed, so the swing effect
+			// should go from right to left"); a backhand goes back the other way.
 			if (sweep.kind == SweepKind::Chop)
 				angle = -Pi * 0.3F + sweep.span * u;
 			else if (sweep.reverse)
-				angle = sweep.facing + sweep.span / 2 - sweep.span * u;
-			else
 				angle = sweep.facing - sweep.span / 2 + sweep.span * u;
+			else
+				angle = sweep.facing + sweep.span / 2 - sweep.span * u;
 			return true;
 		};
 		const int steps = sweep.kind == SweepKind::Spin ? 36 : 28;

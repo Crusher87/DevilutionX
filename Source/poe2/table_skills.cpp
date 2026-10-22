@@ -883,9 +883,10 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 			vfx::Cleave(tile, tile + dir, LookOf(data), true);
 		else
 			vfx::Swing(tile, tile + dir, LookOf(data), true);
-		AddVisualEffect(tile + Left(dir), data.effect, 0);
+		// The hits follow the blade across, from the hero's right to his left.
+		AddVisualEffect(tile + Right(dir), data.effect, 0);
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
-		AddVisualEffect(tile + Right(dir), data.effect, 2);
+		AddVisualEffect(tile + Left(dir), data.effect, 2);
 		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
 	case Dash:
