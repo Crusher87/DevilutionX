@@ -4,6 +4,7 @@
 
 #include "engine/load_file.hpp"
 #include "engine/point.hpp"
+#include "game_mode.hpp"
 #include "items.h"
 #include "levels/drlg_l1.h"
 #include "lighting.h"
@@ -729,7 +730,10 @@ bool PlaceCryptStairs(lvl_entry entry)
 	std::optional<Point> position;
 
 	// Place stairs up
-	position = PlaceMiniSet(currlevel != 21 ? L5STAIRSUPHF : L5STAIRSTOWN, DMAXX * DMAXY, true);
+	const Miniset &stairsUp = currlevel != 21 ? L5STAIRSUPHF : L5STAIRSTOWN;
+	// POE2: the way in is at one end of the floor and the way down at the other.
+	position = gbIsPoe2 ? PlaceMiniSetAtFloorEnd(stairsUp, true) : PlaceMiniSet(stairsUp, DMAXX * DMAXY, true);
+	const std::optional<Point> upPosition = position;
 	if (!position) {
 		success = false;
 	} else if (entry == ENTRY_MAIN || entry == ENTRY_TWARPDN) {
@@ -738,7 +742,7 @@ bool PlaceCryptStairs(lvl_entry entry)
 
 	// Place stairs down
 	if (currlevel != 24) {
-		position = PlaceMiniSet(L5STAIRSDOWN, DMAXX * DMAXY, true);
+		position = gbIsPoe2 && upPosition ? PlaceMiniSetFarFrom(L5STAIRSDOWN, *upPosition, stairsUp.size, true) : PlaceMiniSet(L5STAIRSDOWN, DMAXX * DMAXY, true);
 		if (!position)
 			success = false;
 		else if (entry == ENTRY_PREV)

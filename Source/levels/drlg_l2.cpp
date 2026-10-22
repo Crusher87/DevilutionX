@@ -17,6 +17,7 @@
 #include "engine/random.hpp"
 #include "engine/size.hpp"
 #include "engine/world_tile.hpp"
+#include "game_mode.hpp"
 #include "levels/drlg_quests.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
@@ -2651,14 +2652,16 @@ bool PlaceStairs(lvl_entry entry)
 	std::optional<Point> position;
 
 	// Place stairs up
-	position = PlaceMiniSet(USTAIRS);
+	// POE2: the way in is at one end of the floor and the way down at the other.
+	position = gbIsPoe2 ? PlaceMiniSetAtFloorEnd(USTAIRS) : PlaceMiniSet(USTAIRS);
 	if (!position)
 		return false;
+	const Point upPosition = *position;
 	if (entry == ENTRY_MAIN)
 		ViewPosition = position->megaToWorld() + Displacement { 5, 4 };
 
 	// Place stairs down
-	position = PlaceMiniSet(DSTAIRS);
+	position = gbIsPoe2 ? PlaceMiniSetFarFrom(DSTAIRS, upPosition, USTAIRS.size) : PlaceMiniSet(DSTAIRS);
 	if (!position)
 		return false;
 	if (entry == ENTRY_PREV)
