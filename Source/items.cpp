@@ -2196,8 +2196,7 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (IsJewel(item)) {
-		AddItemInfoBoxString(_("Place in an allocated Jewel Socket"));
-		AddItemInfoBoxString(_("on the Passive Tree (P)"));
+		// One short hint (Curtis 2026-10-22); without a free socket, right-clicking says to allocate one.
 		AddItemInfoBoxString(_("Right-click to socket"));
 		return;
 	}
