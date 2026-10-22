@@ -98,30 +98,6 @@ std::string_view DefaultAttackName(DefaultAttack attack)
 	}
 }
 
-std::string_view DefaultAttackLabel(DefaultAttack attack)
-{
-	switch (attack) {
-	case DefaultAttack::SwordStrike:
-		return _("Strike");
-	case DefaultAttack::DaggerStab:
-		return _("Stab");
-	case DefaultAttack::AxeChop:
-		return _("Chop");
-	case DefaultAttack::MaceSmash:
-		return _("Smash");
-	case DefaultAttack::StaffStrike:
-		return _("Strike");
-	case DefaultAttack::StaffBolt:
-		return _("Bolt");
-	case DefaultAttack::BowShot:
-		return _("Shot");
-	case DefaultAttack::ShieldBash:
-		return _("Bash");
-	default:
-		return _("Punch");
-	}
-}
-
 bool IsRangedDefaultAttack(DefaultAttack attack)
 {
 	return attack == DefaultAttack::BowShot || attack == DefaultAttack::StaffBolt;

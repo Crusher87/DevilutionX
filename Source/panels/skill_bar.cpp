@@ -30,6 +30,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/default_attack.hpp"
+#include "poe2/hud_globes.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -53,20 +54,27 @@ namespace {
 
 using namespace poe2ui;
 
-constexpr Size SlotSize { 37, 38 };
+/** @brief The small spell icons skills are drawn with. */
+constexpr Size IconSize { 37, 38 };
+/** @brief A slot is an icon in a thin frame, with its key or mouse button in a strip under it, like POE2's skill bar. */
+constexpr Size SlotSize { IconSize.width + 2, IconSize.height + 2 };
 constexpr int SlotGap = 2;
+constexpr int LabelHeight = 11;
+constexpr int TrayPadding = 3;
 constexpr int TrayColumns = 5;
 constexpr int TrayRows = 2;
-constexpr int TrayWidth = (TrayColumns * (SlotSize.width + SlotGap)) - SlotGap;
-constexpr int TrayHeight = (TrayRows * (SlotSize.height + SlotGap)) - SlotGap;
+constexpr int TrayWidth = (TrayColumns * (SlotSize.width + SlotGap)) - SlotGap + (2 * TrayPadding);
+constexpr int TrayHeight = TrayPadding + (TrayRows * (SlotSize.height + LabelHeight)) + 1;
+/** @brief How far the globes' domes and their rings of Spirit and energy shield rise above the main panel. */
+constexpr int GlobeRise = 20;
+constexpr uint8_t MouseGlyphColor = PAL16_GRAY + 3;
+constexpr uint8_t MouseButtonColor = PAL16_YELLOW + 3;
 constexpr int PortalCell = 0;
 /** @brief The tray cell of each slot, in TraySlot order: the mouse buttons and G on the top row after the Town Portal button, Q to F below. */
 constexpr std::array<int, NumTraySlots> SlotCells { 1, 2, 3, 5, 6, 7, 8, 9, 4 };
 
 constexpr int PopupWidth = 280;
 constexpr int PopupPad = 8;
-constexpr int ActionButtonHeight = 20;
-constexpr int ActionButtonGap = 4;
 constexpr int GemColumns = 6;
 constexpr int PopupSocketSize = 26;
 constexpr int PopupSocketGap = 6;
@@ -94,9 +102,8 @@ struct OwnedSupport {
 struct PopupLayout {
 	Rectangle box;
 	Rectangle title;
-	/** One button for each weapon set's default attack. */
+	/** One slot for each weapon set's default attack. */
 	std::array<Rectangle, NumWeaponSets> weaponAttacks;
-	Rectangle gemsLabel;
 	std::array<Rectangle, NumSkillSlots> gems;
 	Rectangle supportsLabel;
 	std::array<Rectangle, MaxSupportSockets> sockets;
@@ -122,20 +129,48 @@ bool Overlaps(const Rectangle &a, const Rectangle &b)
 	    && a.position.y < b.position.y + b.size.height && b.position.y < a.position.y + a.size.height;
 }
 
-/** @brief The tray sits just above the right end of the main panel, or the left end if the inventory covers that. */
+bool IsCoveredByPanel(const Rectangle &rect)
+{
+	return (IsLeftPanelOpen() && Overlaps(rect, GetLeftPanel())) || (IsRightPanelOpen() && Overlaps(rect, GetRightPanel()));
+}
+
+/**
+ * @brief The tray sits on the main panel just left of the mana globe, like POE2's skill bar beside its globe (Curtis
+ * 2026-10-22). Where a side panel covers that, it moves over the right end of the main panel, or the left end, raised
+ * clear of the globes.
+ */
 Rectangle TrayRect()
 {
 	const Rectangle &panel = GetMainPanel();
-	Rectangle tray { { panel.position.x + panel.size.width - TrayWidth - 4, panel.position.y - TrayHeight - 4 }, { TrayWidth, TrayHeight } };
-	if (IsRightPanelOpen() && Overlaps(tray, GetRightPanel()))
-		tray.position.x = panel.position.x + 4;
-	return tray;
+	const int raisedY = panel.position.y - TrayHeight - GlobeRise;
+	const std::array<Rectangle, 3> spots { {
+	    { { panel.position.x + ManaGlobeX - TrayWidth - 2, panel.position.y - TrayHeight - 2 }, { TrayWidth, TrayHeight } },
+	    { { panel.position.x + panel.size.width - TrayWidth - 4, raisedY }, { TrayWidth, TrayHeight } },
+	    { { panel.position.x + 4, raisedY }, { TrayWidth, TrayHeight } },
+	} };
+	for (const Rectangle &spot : spots) {
+		if (!IsCoveredByPanel(spot))
+			return spot;
+	}
+	return spots[0];
 }
 
 Rectangle CellRect(int cell)
 {
 	const Rectangle tray = TrayRect();
-	return { { tray.position.x + ((cell % TrayColumns) * (SlotSize.width + SlotGap)), tray.position.y + ((cell / TrayColumns) * (SlotSize.height + SlotGap)) }, SlotSize };
+	return { { tray.position.x + TrayPadding + ((cell % TrayColumns) * (SlotSize.width + SlotGap)), tray.position.y + TrayPadding + ((cell / TrayColumns) * (SlotSize.height + LabelHeight)) }, SlotSize };
+}
+
+/** @brief The icon inside a slot's frame. */
+Rectangle IconRect(const Rectangle &slot)
+{
+	return { slot.position + Displacement { 1, 1 }, IconSize };
+}
+
+/** @brief The strip under a slot that holds its key or mouse button. */
+Rectangle LabelRect(const Rectangle &slot)
+{
+	return { { slot.position.x - (SlotGap / 2), slot.position.y + slot.size.height }, { slot.size.width + SlotGap, LabelHeight } };
 }
 
 Rectangle SlotRect(TraySlot slot)
@@ -223,6 +258,36 @@ SpellIcon AttackIcon(WeaponSkill skill)
 			return static_cast<SpellIcon>(table->icon);
 		return SpellIcon::Empty;
 	}
+}
+
+/** @brief The weapon's own attack has an icon for its weapon, so its slot needs no word on it (Curtis 2026-10-22). */
+SpellIcon DefaultAttackIcon(DefaultAttack attack)
+{
+	switch (attack) {
+	case DefaultAttack::SwordStrike:
+		return SpellIcon::Berserk;
+	case DefaultAttack::DaggerStab:
+		return SpellIcon::Jester;
+	case DefaultAttack::AxeChop:
+		return SpellIcon::BloodBoil;
+	case DefaultAttack::MaceSmash:
+		return SpellIcon::PentaStar;
+	case DefaultAttack::StaffStrike:
+	case DefaultAttack::StaffBolt:
+		return SpellIcon::StaffRecharge;
+	case DefaultAttack::BowShot:
+		return SpellIcon::Search;
+	case DefaultAttack::ShieldBash:
+		return SpellIcon::Reflect;
+	default:
+		return SpellIcon::Telekinesis;
+	}
+}
+
+/** @brief A weapon set's default attack, as a skill for its icon. */
+SkillSlot WeaponAttackSkill(const Player &player, uint8_t set)
+{
+	return SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttackForSet(player, set)));
 }
 
 SpellIcon PersistentIcon(PersistentSkill skill)
@@ -456,14 +521,12 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 	int y = PopupPad;
 	layout.title = { { PopupPad, y }, { innerWidth, 18 } };
 	y += 22;
-	const int attackWidth = (innerWidth - ActionButtonGap) / static_cast<int>(NumWeaponSets);
-	for (size_t set = 0; set < NumWeaponSets; set++)
-		layout.weaponAttacks[set] = { { PopupPad + (static_cast<int>(set) * (attackWidth + ActionButtonGap)), y }, { attackWidth, ActionButtonHeight } };
-	y += ActionButtonHeight + 6;
-	layout.gemsLabel = { { PopupPad, y }, { innerWidth, 14 } };
-	y += 16;
 	const int gridWidth = (GemColumns * (SlotSize.width + SlotGap)) - SlotGap;
 	const int gridX = (PopupWidth - gridWidth) / 2;
+	// The weapon sets' attacks, each over its set's numeral, then the skill gems: icons with no words on them.
+	for (size_t set = 0; set < NumWeaponSets; set++)
+		layout.weaponAttacks[set] = { { gridX + (static_cast<int>(set) * (SlotSize.width + SlotGap)), y }, SlotSize };
+	y += SlotSize.height + LabelHeight + 4;
 	for (size_t i = 0; i < NumSkillSlots; i++) {
 		const int column = static_cast<int>(i) % GemColumns;
 		const int row = static_cast<int>(i) / GemColumns;
@@ -493,7 +556,6 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 	place(layout.title);
 	for (Rectangle &rect : layout.weaponAttacks)
 		place(rect);
-	place(layout.gemsLabel);
 	for (Rectangle &rect : layout.gems)
 		place(rect);
 	place(layout.supportsLabel);
@@ -537,8 +599,65 @@ PopupHit PopupHitAt(const Player &player, const PopupLayout &layout, const std::
 
 bool IsSkillBarVisible()
 {
-	// It hides when the left panel covers the spot it moved to for the inventory.
-	return IsSkillBarShown() && !(IsLeftPanelOpen() && Overlaps(TrayRect(), GetLeftPanel()));
+	// It hides when the side panels cover every spot it can take.
+	return IsSkillBarShown() && SkillTrayRect().has_value();
+}
+
+/** @brief The keymapper's name of the key or button using a tray slot, like "Q" or "MMOUSE". */
+std::string TrayKeyName(TraySlot slot)
+{
+	if (slot == TraySlot::MiddleMouse)
+		return std::string(GetOptions().Keymapper.KeyNameForAction("TraySlotMiddle"));
+	return std::string(GetOptions().Keymapper.KeyNameForAction(StrCat("TraySlot", static_cast<size_t>(slot) - static_cast<size_t>(TraySlot::Key1) + 1)));
+}
+
+/** @brief The mouse button used with a tray slot, if it's used with one rather than a key. */
+std::optional<TraySlot> TrayMouseButton(TraySlot slot)
+{
+	if (IsAnyOf(slot, TraySlot::LeftMouse, TraySlot::RightMouse))
+		return slot;
+	if (TrayKeyName(slot) == "MMOUSE")
+		return TraySlot::MiddleMouse;
+	return std::nullopt;
+}
+
+/** @brief A little mouse with one button lit: the label of a slot used with a mouse button, like POE2's. */
+void DrawMouseGlyph(const Surface &out, Point center, TraySlot button)
+{
+	constexpr Size Glyph { 9, 10 };
+	const Point origin = center - Displacement { Glyph.width / 2, Glyph.height / 2 };
+	// A rounded outline, the line under the buttons and the one between them.
+	DrawHorizontalLine(out, origin + Displacement { 1, 0 }, Glyph.width - 2, MouseGlyphColor);
+	DrawHorizontalLine(out, origin + Displacement { 1, Glyph.height - 1 }, Glyph.width - 2, MouseGlyphColor);
+	DrawVerticalLine(out, origin + Displacement { 0, 1 }, Glyph.height - 2, MouseGlyphColor);
+	DrawVerticalLine(out, origin + Displacement { Glyph.width - 1, 1 }, Glyph.height - 2, MouseGlyphColor);
+	DrawHorizontalLine(out, origin + Displacement { 1, 4 }, Glyph.width - 2, MouseGlyphColor);
+	DrawVerticalLine(out, origin + Displacement { Glyph.width / 2, 1 }, 3, MouseGlyphColor);
+	const int buttonX = button == TraySlot::LeftMouse ? 1 : (button == TraySlot::RightMouse ? 5 : 3);
+	FillRect(out, origin.x + buttonX, origin.y + 1, 3, 3, MouseButtonColor);
+}
+
+/** @brief The small label under a tray slot: a little mouse for a mouse button, else the key, with POE2's M4 and M5. */
+void DrawTrayLabel(const Surface &out, const Rectangle &slot, TraySlot traySlot)
+{
+	const Rectangle label = LabelRect(slot);
+	if (const std::optional<TraySlot> button = TrayMouseButton(traySlot); button) {
+		DrawMouseGlyph(out, label.Center(), *button);
+		return;
+	}
+	std::string key = TrayKeyName(traySlot);
+	if (key == "X1MOUSE")
+		key = "M4";
+	else if (key == "X2MOUSE")
+		key = "M5";
+	DrawString(out, key, label, { .flags = UiFlags::ColorWhite | UiFlags::AlignCenter | UiFlags::KerningFitSpacing });
+}
+
+/** @brief A slot's dark square and thin frame, gold for the skill picked; the icon goes inside. */
+void DrawSlot(const Surface &out, const Rectangle &slot, bool picked = false)
+{
+	FillRectangle(out, slot, SocketColor);
+	DrawFrame(out, slot, picked ? BorderColor : InnerBorderColor);
 }
 
 bool IsOverPopup(Point position)
@@ -605,6 +724,13 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 	std::vector<std::pair<std::string, UiFlags>> lines;
 	const std::optional<size_t> slot = PopupSupportsSocket(player);
 	switch (hover.kind) {
+	case PopupHit::Kind::WeaponAttack: {
+		const auto set = static_cast<uint8_t>(hover.index);
+		lines.emplace_back(FormatRuntime(_("Weapon set {:s} attack, no mana cost"), WeaponSetName(set)), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(_("Click to use it with {:s}"), TraySlotKeyName(Popup.slot)), UiFlags::ColorButtonpushed);
+		DrawTooltip(out, bounds, MousePosition, std::string(DefaultAttackName(DefaultAttackForSet(player, set))), UiFlags::ColorWhitegold, lines);
+		return;
+	}
 	case PopupHit::Kind::Gem: {
 		const SkillSlot skill = player.poe2.skillSlots[hover.index];
 		if (skill.isEmpty())
@@ -661,32 +787,33 @@ void DrawPopup(const Surface &out, const Player &player)
 
 	DrawPanel(out, layout.box);
 	DrawString(out, FormatRuntime(_("Skill for {:s}"), TraySlotKeyName(Popup.slot)), layout.title, { .flags = UiFlags::ColorUiGold | UiFlags::VerticalCenter });
-	// Each weapon set's own attack, so the button keeps it after a swap and using it swaps back, like POE2 (Curtis 2026-10-21).
+	// Each weapon set's own attack, so the slot keeps it after a swap and using it swaps back, like POE2 (Curtis 2026-10-21).
 	for (size_t set = 0; set < NumWeaponSets; set++) {
-		const Rectangle &button = layout.weaponAttacks[set];
+		const Rectangle &cell = layout.weaponAttacks[set];
 		const bool current = binding.action == TrayAction::WeaponAttack && BindingWeaponSet(binding) == set;
-		FillRectangle(out, button, current || (hover.kind == PopupHit::Kind::WeaponAttack && hover.index == set) ? RowHoverColor : RowColor);
-		DrawFrame(out, button, current ? BorderColor : InnerBorderColor);
-		DrawString(out, StrCat(WeaponSetName(static_cast<uint8_t>(set)), ": ", DefaultAttackName(DefaultAttackForSet(player, static_cast<uint8_t>(set)))), button,
-		    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (current ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
+		DrawSlot(out, cell, current);
+		const Point bottomLeft = BottomLeft(IconRect(cell));
+		DrawSkillIcon(out, bottomLeft, WeaponAttackSkill(player, static_cast<uint8_t>(set)), true);
+		if (current)
+			DrawFrame(out, IconRect(cell), BorderColor);
+		else if (hover.kind == PopupHit::Kind::WeaponAttack && hover.index == set)
+			DrawSmallSpellIconBorder(out, bottomLeft);
+		DrawString(out, WeaponSetName(static_cast<uint8_t>(set)), LabelRect(cell), { .flags = (current ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) | UiFlags::AlignCenter });
 	}
 
-	DrawString(out, _("Skill gems"), layout.gemsLabel, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
+	// No keys or buttons on the gems: the gold frame marks the one this slot uses, the rest is in the tooltips (Curtis 2026-10-22).
 	for (size_t socket = 0; socket < NumSkillSlots; socket++) {
 		const Rectangle &cell = layout.gems[socket];
 		const SkillSlot skill = player.poe2.skillSlots[socket];
-		FillRectangle(out, cell, RowColor);
+		const bool current = binding.isGem() && binding.socket == socket;
+		DrawSlot(out, cell, current);
+		const Point bottomLeft = BottomLeft(IconRect(cell));
 		const bool usable = SkillGoesOnTray(skill) && GetSkillUsability(player, skill) == SkillUsability::Ready;
-		DrawSkillIcon(out, BottomLeft(cell), skill, usable);
-		if (binding.isGem() && binding.socket == socket) {
-			DrawFrame(out, cell, BorderColor);
-			DrawFrame(out, { cell.position + Displacement { 1, 1 }, { cell.size.width - 2, cell.size.height - 2 } }, BorderColor);
-		} else if (hover.kind == PopupHit::Kind::Gem && hover.index == socket && SkillGoesOnTray(skill)) {
-			DrawSmallSpellIconBorder(out, BottomLeft(cell));
-		}
-		const std::string key = SkillSlotKeyName(socket);
-		if (!key.empty() && key.length() <= 3)
-			DrawString(out, key, { cell.position + Displacement { 2, 1 }, { cell.size.width - 4, 12 } }, { .flags = UiFlags::ColorWhite | UiFlags::Outlined });
+		DrawSkillIcon(out, bottomLeft, skill, usable);
+		if (current)
+			DrawFrame(out, IconRect(cell), BorderColor);
+		else if (hover.kind == PopupHit::Kind::Gem && hover.index == socket && SkillGoesOnTray(skill))
+			DrawSmallSpellIconBorder(out, bottomLeft);
 	}
 
 	const std::optional<size_t> slot = PopupSupportsSocket(player);
@@ -967,6 +1094,14 @@ bool IsSkillBarHovered()
 	return TrayRect().contains(MousePosition) || IsOverPopup(MousePosition);
 }
 
+std::optional<Rectangle> SkillTrayRect()
+{
+	const Rectangle tray = TrayRect();
+	if (IsCoveredByPanel(tray))
+		return std::nullopt;
+	return tray;
+}
+
 bool IsSkillTrayPopupOpen()
 {
 	return Popup.open;
@@ -988,21 +1123,26 @@ void DrawSkillBar(const Surface &out)
 	const bool mouse = ControlMode == ControlTypes::KeyboardAndMouse && !IsOverPopup(MousePosition);
 	const bool inTown = leveltype == DTYPE_TOWN;
 
+	// Like POE2's skill bar: a dark bar of square slots, the icons with nothing on them and a small key under each.
+	const Rectangle tray = TrayRect();
+	FillRectangle(out, tray, PanelColor);
+	DrawFrame(out, tray, BorderColor);
+
 	const Rectangle portal = CellRect(PortalCell);
-	DrawHalfTransparentRectTo(out, portal.position.x, portal.position.y, portal.size.width, portal.size.height);
+	DrawSlot(out, portal);
 	SetSpellTrans(inTown ? SpellType::Invalid : SpellType::Spell);
-	DrawSmallSpellIcon(out, BottomLeft(portal), SpellID::TownPortal);
+	DrawSmallSpellIcon(out, BottomLeft(IconRect(portal)), SpellID::TownPortal);
 	if (mouse && !inTown && portal.contains(MousePosition))
-		DrawSmallSpellIconBorder(out, BottomLeft(portal));
+		DrawSmallSpellIconBorder(out, BottomLeft(IconRect(portal)));
 
 	const std::optional<TraySlot> hovered = mouse ? TraySlotAt(MousePosition) : std::nullopt;
 	for (size_t i = 0; i < NumTraySlots; i++) {
 		const auto slot = static_cast<TraySlot>(i);
 		const Rectangle rect = SlotRect(slot);
-		const Point bottomLeft = BottomLeft(rect);
+		const Point bottomLeft = BottomLeft(IconRect(rect));
 		const TrayBinding &binding = Binding(player, slot);
 
-		DrawHalfTransparentRectTo(out, rect.position.x, rect.position.y, rect.size.width, rect.size.height);
+		DrawSlot(out, rect);
 		switch (binding.action) {
 		case TrayAction::Gem: {
 			const SkillSlot skill = player.poe2.skillSlots[binding.socket];
@@ -1012,17 +1152,14 @@ void DrawSkillBar(const Surface &out)
 			break;
 		}
 		case TrayAction::WeaponAttack:
-			DrawString(out, DefaultAttackLabel(DefaultAttackForSet(player, BindingWeaponSet(binding))), rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
+			DrawSkillIcon(out, bottomLeft, WeaponAttackSkill(player, BindingWeaponSet(binding)), true);
 			break;
 		default:
 			break;
 		}
 		if (hovered == slot || (Popup.open && Popup.slot == slot))
 			DrawSmallSpellIconBorder(out, bottomLeft);
-
-		const std::string key = TraySlotKeyName(slot);
-		if (key.length() <= 3)
-			DrawString(out, key, { rect.position + Displacement { 2, 1 }, { rect.size.width - 4, 12 } }, { .flags = UiFlags::ColorWhite | UiFlags::Outlined });
+		DrawTrayLabel(out, rect, slot);
 	}
 
 	if (Popup.open)
@@ -1206,6 +1343,8 @@ void DrawSkillIcon(const Surface &out, Point bottomLeft, SkillSlot skill, bool r
 		DrawSmallSpellIcon(out, bottomLeft, skill.spell());
 	else if (skill.kind == SkillKind::Persistent)
 		DrawSmallSpellIcon(out, bottomLeft, PersistentIcon(skill.persistent()));
+	else if (skill.kind == SkillKind::Default)
+		DrawSmallSpellIcon(out, bottomLeft, DefaultAttackIcon(static_cast<DefaultAttack>(skill.id)));
 	else
 		DrawSmallSpellIcon(out, bottomLeft, AttackIcon(skill.attack()));
 }
@@ -1217,12 +1356,10 @@ std::string TraySlotKeyName(TraySlot slot)
 		return std::string(_("LMB"));
 	case TraySlot::RightMouse:
 		return std::string(_("RMB"));
-	case TraySlot::MiddleMouse: {
-		const std::string name { GetOptions().Keymapper.KeyNameForAction("TraySlotMiddle") };
+	default: {
+		const std::string name = TrayKeyName(slot);
 		return name == "MMOUSE" ? std::string(_("MMB")) : name;
 	}
-	default:
-		return std::string(GetOptions().Keymapper.KeyNameForAction(StrCat("TraySlot", static_cast<size_t>(slot) - static_cast<size_t>(TraySlot::Key1) + 1)));
 	}
 }
 

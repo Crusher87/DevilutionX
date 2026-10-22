@@ -20,7 +20,6 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
-#include "poe2/default_attack.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
@@ -313,9 +312,8 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 	DrawHalfTransparentRectTo(out, icon.position.x, icon.position.y, icon.size.width, icon.size.height);
 	const Point iconBottomLeft { icon.position.x, icon.position.y + icon.size.height - 1 };
 	if (isDefault) {
-		// The word may be a little wider than the icon; it can spill into the margins.
-		const Rectangle label { icon.position - Displacement { 4, 0 }, { icon.size.width + 8, icon.size.height } };
-		DrawString(out, DefaultAttackLabel(DefaultAttackFor(player)), label, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold | UiFlags::FontSize12, .spacing = 0 });
+		// An icon for the weapon, not a word, like the skill tray (Curtis 2026-10-22).
+		DrawSkillIcon(out, iconBottomLeft, skill, true);
 	} else {
 		// The Horadric Totem is never switched off: it costs mana when you use it.
 		const bool switchable = skill.kind == SkillKind::Persistent && IsSpiritGemSwitchable(skill.persistent());

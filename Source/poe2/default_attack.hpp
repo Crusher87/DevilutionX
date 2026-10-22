@@ -43,8 +43,6 @@ DefaultAttack DefaultAttackForSet(const Player &player, uint8_t set);
 /** @brief The hero's default attack as a skill, for its supports; empty outside POE2 Mashup. */
 SkillSlot DefaultSkillSlot(const Player &player);
 std::string_view DefaultAttackName(DefaultAttack attack);
-/** @brief A word or two for the skill tray slot. */
-std::string_view DefaultAttackLabel(DefaultAttack attack);
 bool IsRangedDefaultAttack(DefaultAttack attack);
 
 /** @brief Whether the hero's ranged attack is the staff bolt rather than an arrow. */
