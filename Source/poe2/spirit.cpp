@@ -203,17 +203,17 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 {
 	switch (skill) {
 	case PersistentSkill::HeraldOfAsh:
-		return _("Herald of Ash");
+		return _("Holy Fire");
 	case PersistentSkill::HeraldOfThunder:
-		return _("Herald of Thunder");
+		return _("Holy Shock");
 	case PersistentSkill::PurityOfElements:
-		return _("Purity of Elements");
+		return _("Salvation");
 	case PersistentSkill::SummonGolem:
-		return _("Summon Golem");
+		return _("Clay Golem");
 	case PersistentSkill::SkeletalWarriors:
-		return _("Skeletal Warriors");
+		return _("Skeleton Warriors");
 	case PersistentSkill::HeraldOfFrost:
-		return _("Herald of Frost");
+		return _("Holy Freeze");
 	case PersistentSkill::SkeletalMages:
 		return _("Skeletal Mages");
 	case PersistentSkill::BloodGolem:
@@ -221,125 +221,125 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 	case PersistentSkill::FireGolem:
 		return _("Fire Golem");
 	case PersistentSkill::Guardian:
-		return _("Guardian");
+		return _("Guardian Spirit");
 	case PersistentSkill::ShadowWarrior:
 		return _("Shadow Warrior");
 	case PersistentSkill::Revive:
 		return _("Revive");
 	case PersistentSkill::ManaShield:
-		return _("Mana Shield");
+		return _("Mana Ward");
 	case PersistentSkill::VizjereiFocus:
 		return _("Vizjerei Focus");
 	case PersistentSkill::Berserk:
-		return _("Berserk");
+		return _("Blood Frenzy");
 	case PersistentSkill::Reflect:
-		return _("Reflect");
+		return _("Iron Reflection");
 	case PersistentSkill::CastOnDodge:
-		return _("Cast on Dodge");
+		return _("Sigil of Evasion");
 	case PersistentSkill::CastWhenDamageTaken:
-		return _("Cast when Damage Taken");
+		return _("Sigil of Retribution");
 	case PersistentSkill::CastWhileChannelling:
-		return _("Cast while Channelling");
+		return _("Sigil of Focus");
 	case PersistentSkill::ReapersInvocation:
-		return _("Reaper's Invocation");
+		return _("Reaper's Call");
 	case PersistentSkill::MirageArcher:
-		return _("Mirage Archer");
+		return _("Phantom Archer");
 	case PersistentSkill::Blasphemy:
-		return _("Blasphemy");
+		return _("Profane Aura");
 	case PersistentSkill::HoradricTotem:
 		return _("Horadric Totem");
 	case PersistentSkill::CastOnCritical:
-		return _("Cast on Critical");
+		return _("Sigil of Precision");
 	case PersistentSkill::CastOnElementalAilment:
-		return _("Cast on Elemental Ailment");
+		return _("Sigil of the Elements");
 	case PersistentSkill::CastOnMinionDeath:
-		return _("Cast on Minion Death");
+		return _("Sigil of the Dead");
 	case PersistentSkill::BarrierInvocation:
-		return _("Barrier Invocation");
+		return _("Arcane Barrier");
 	case PersistentSkill::ElementalInvocation:
-		return _("Elemental Invocation");
+		return _("Vizjerei Conduit");
 	case PersistentSkill::WindDancer:
-		return _("Wind Dancer");
+		return _("Fade");
 	case PersistentSkill::GhostDance:
-		return _("Ghost Dance");
+		return _("Shadow Veil");
 	case PersistentSkill::Barkskin:
-		return _("Barkskin");
+		return _("Oak Sage");
 	case PersistentSkill::ArcticArmour:
-		return _("Arctic Armour");
+		return _("Chilling Armor");
 	case PersistentSkill::HeraldOfPlague:
-		return _("Herald of Plague");
+		return _("Plague Aura");
 	case PersistentSkill::CombatFrenzy:
-		return _("Combat Frenzy");
+		return _("Battle Fervor");
 	case PersistentSkill::EternalRage:
-		return _("Eternal Rage");
+		return _("Unending Fury");
 	case PersistentSkill::ElementalConflux:
-		return _("Elemental Conflux");
+		return _("Shifting Elements");
 	case PersistentSkill::AlchemistsBoon:
-		return _("Alchemist's Boon");
+		return _("Horadric Elixir");
 	case PersistentSkill::OverwhelmingPresence:
-		return _("Overwhelming Presence");
+		return _("Conviction");
 	case PersistentSkill::TrailOfCaltrops:
-		return _("Trail of Caltrops");
+		return _("Caltrops");
 	case PersistentSkill::ManaRemnants:
-		return _("Mana Remnants");
+		return _("Mana Wells");
 	case PersistentSkill::Attrition:
-		return _("Attrition");
+		return _("Unrelenting");
 	case PersistentSkill::Blink:
-		return _("Blink");
+		return _("Dimension Step");
 	case PersistentSkill::IronWard:
-		return _("Iron Ward");
+		return _("Iron Skin");
 	case PersistentSkill::PlagueBearer:
-		return _("Plague Bearer");
+		return _("Corpse Plague");
 	case PersistentSkill::Convalescence:
-		return _("Convalescence");
+		return _("Prayer");
 	case PersistentSkill::GrimFeast:
-		return _("Grim Feast");
+		return _("Feast of Souls");
 	case PersistentSkill::WarBanner:
-		return _("War Banner");
+		return _("War Standard");
 	case PersistentSkill::DefianceBanner:
-		return _("Defiance Banner");
+		return _("Bulwark Standard");
 	case PersistentSkill::DreadBanner:
-		return _("Dread Banner");
+		return _("Terror Standard");
 	case PersistentSkill::Briarpatch:
-		return _("Briarpatch");
+		return _("Thorns");
 	case PersistentSkill::MagmaBarrier:
-		return _("Magma Barrier");
+		return _("Hellfire Ward");
 	case PersistentSkill::ScavengedPlating:
-		return _("Scavenged Plating");
+		return _("Bone Armor");
 	case PersistentSkill::TimeOfNeed:
-		return _("Time of Need");
+		return _("Sanctuary");
 	case PersistentSkill::ChargeRegulation:
-		return _("Charge Regulation");
+		return _("Charge Mastery");
 	case PersistentSkill::WitheringPresence:
-		return _("Withering Presence");
+		return _("Aura of Decay");
 	case PersistentSkill::Trinity:
 		return _("Trinity");
 	case PersistentSkill::SiphonElements:
-		return _("Siphon Elements");
+		return _("Elemental Drain");
 	case PersistentSkill::HeraldOfBlood:
-		return _("Herald of Blood");
+		return _("Blood Rite");
 	case PersistentSkill::SkeletalSnipers:
-		return _("Skeletal Snipers");
+		return _("Skeleton Archers");
 	case PersistentSkill::SkeletalFrostMages:
-		return _("Skeletal Frost Mages");
+		return _("Frost Liches");
 	case PersistentSkill::SkeletalStormMages:
-		return _("Skeletal Storm Mages");
+		return _("Storm Liches");
 	case PersistentSkill::SkeletalReavers:
-		return _("Skeletal Reavers");
+		return _("Skeleton Captains");
 	case PersistentSkill::SkeletalBrutes:
-		return _("Skeletal Brutes");
+		return _("Burning Dead");
 	case PersistentSkill::SkeletalClerics:
-		return _("Skeletal Clerics");
+		return _("Bone Priests");
 	case PersistentSkill::WolfPack:
-		return _("Wolf Pack");
+		return _("Dire Wolves");
 	case PersistentSkill::RagingSpirits:
-		return _("Raging Spirits");
+		return _("Burning Souls");
 	case PersistentSkill::RavenousSwarm:
-		return _("Ravenous Swarm");
+		return _("Fetid Swarm");
 	case PersistentSkill::Sacrifice:
-		return _("Sacrifice");
+		return _("Blood Offering");
 	case PersistentSkill::LingeringIllusion:
-		return _("Lingering Illusion");
+		return _("Phantom Double");
 	default:
 		return {};
 	}

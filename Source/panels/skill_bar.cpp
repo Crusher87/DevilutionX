@@ -1417,11 +1417,11 @@ void UseSpiritGemFromTray(Player &player, PersistentSkill skill)
 		break;
 	case SpiritUseResult::Empty:
 		if (skill == PersistentSkill::GrimFeast)
-			EventPlrMsg(_("Grim Feast hasn't stored enough life to raise a skeleton. Walk over the remnants of fallen ones."), UiFlags::ColorRed);
+			EventPlrMsg(_("Feast of Souls hasn't stored enough life to raise a skeleton. Walk over the remnants of fallen ones."), UiFlags::ColorRed);
 		else if (skill == PersistentSkill::IronWard)
-			EventPlrMsg(_("Iron Ward has nothing stored. It stores the damage your armour stops."), UiFlags::ColorRed);
+			EventPlrMsg(_("Iron Skin has nothing stored. It stores the damage your armour stops."), UiFlags::ColorRed);
 		else
-			EventPlrMsg(_("Plague Bearer has nothing stored. It stores part of the poison damage you deal."), UiFlags::ColorRed);
+			EventPlrMsg(_("Corpse Plague has nothing stored. It stores part of the poison damage you deal."), UiFlags::ColorRed);
 		break;
 	case SpiritUseResult::NotEnoughGlory: {
 		const SpiritStore glory = SpiritGemStore(player, skill);

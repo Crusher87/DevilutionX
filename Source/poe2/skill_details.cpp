@@ -376,9 +376,9 @@ void MinionGemDetails(std::vector<SkillDetailLine> &lines, const MinionGemData &
 {
 	if (gem.skill == PersistentSkill::SkeletalWarriors || gem.skill == PersistentSkill::LingeringIllusion)
 		return;
-	Value(lines, "Life", std::format("{:d}% of a Skeletal Warrior's", gem.lifePercent));
+	Value(lines, "Life", std::format("{:d}% of a Skeleton Warrior's", gem.lifePercent));
 	if (gem.damagePercent > 0)
-		Value(lines, "Blows", std::format("{:d}% of a Skeletal Warrior's", gem.damagePercent));
+		Value(lines, "Blows", std::format("{:d}% of a Skeleton Warrior's", gem.damagePercent));
 	if (gem.shot != MinionShot::None) {
 		const std::string_view shot = gem.shot == MinionShot::Arrow ? "Arrows" : gem.shot == MinionShot::FrostBolt ? "Frost bolts" : gem.shot == MinionShot::ChargedBolts ? "Two charged bolts" : "Firebolts";
 		Value(lines, std::string(shot), std::format("{:d}% of a blow each, from up to {:d} tiles", gem.shotPercent, gem.range));
@@ -544,7 +544,7 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 	case PersistentSkill::RavenousSwarm:
 		Value(lines, "A swarm every", std::format("{:d} seconds, with an enemy within {:d} tiles", SwarmEveryTicks / 20, SwarmReachTiles));
 		Value(lines, "Each swarm lasts", ticks(SwarmTicks(level)));
-		Value(lines, "Bites", std::format("every {:.1f}s for {:d}% of a Skeletal Warrior's blow", SwarmBiteTicks / 20.0, SwarmBitePercent));
+		Value(lines, "Bites", std::format("every {:.1f}s for {:d}% of a Skeleton Warrior's blow", SwarmBiteTicks / 20.0, SwarmBitePercent));
 		Value(lines, "Poison", std::format("{:d}% of the bite over {:d} seconds", SwarmPoisonPercent, SwarmPoisonTicks / 20));
 		break;
 	case PersistentSkill::Sacrifice:
