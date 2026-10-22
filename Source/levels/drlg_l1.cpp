@@ -7,6 +7,7 @@
 #include "engine/point.hpp"
 #include "engine/random.hpp"
 #include "engine/rectangle.hpp"
+#include "game_mode.hpp"
 #include "gendung_defs.hpp"
 #include "levels/crypt.h"
 #include "levels/drlg_quests.hpp"
@@ -1129,7 +1130,10 @@ bool PlaceCathedralStairs(lvl_entry entry)
 	}
 
 	// Place stairs up
-	position = PlaceMiniSet(MyPlayer->pOriginalCathedral && !Quests[Q_LTBANNER].IsAvailable() ? L5STAIRSUP : STAIRSUP, DMAXX * DMAXY, true);
+	const Miniset &stairsUp = MyPlayer->pOriginalCathedral && !Quests[Q_LTBANNER].IsAvailable() ? L5STAIRSUP : STAIRSUP;
+	// POE2: the way in is at one end of the floor and the way down at the other.
+	position = gbIsPoe2 ? PlaceMiniSetAtFloorEnd(stairsUp, true) : PlaceMiniSet(stairsUp, DMAXX * DMAXY, true);
+	const std::optional<Point> upPosition = position;
 	if (!position) {
 		if (MyPlayer->pOriginalCathedral)
 			return false;
@@ -1143,7 +1147,7 @@ bool PlaceCathedralStairs(lvl_entry entry)
 		if (entry == ENTRY_PREV)
 			ViewPosition = SetPiece.position.megaToWorld() + Displacement { 3, 11 };
 	} else {
-		position = PlaceMiniSet(STAIRSDOWN, DMAXX * DMAXY, true);
+		position = gbIsPoe2 && upPosition ? PlaceMiniSetFarFrom(STAIRSDOWN, *upPosition, stairsUp.size, true) : PlaceMiniSet(STAIRSDOWN, DMAXX * DMAXY, true);
 		if (!position) {
 			success = false;
 		} else if (entry == ENTRY_PREV) {

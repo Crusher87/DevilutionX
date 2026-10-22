@@ -545,6 +545,9 @@ void ProgressEventHandler(const SDL_Event &event, uint16_t modState)
 				// Once the fade-out is done, restore the system palette.
 				UpdateSystemPalette(logical_palette);
 			}
+		} else {
+			// The loading screen was skipped (a quick load), so the background was never drawn and freed.
+			FreeCutsceneBackground();
 		}
 
 		[[maybe_unused]] EventHandler prevHandler = SetEventHandler(ProgressEventHandlerState.prevHandler);

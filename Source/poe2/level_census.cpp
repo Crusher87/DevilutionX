@@ -252,6 +252,8 @@ struct Headline {
 
 struct Census {
 	bool valid = false;
+	/** The floor's name in the log, kept for when it's left (by then the next level is loaded). */
+	std::string name;
 	std::array<Room, MaxRooms> rooms;
 	int walkable = 0;
 	int minX = 0;
@@ -635,6 +637,8 @@ void Summarise(Census &census)
 	headline.quietFloorShare = census.walkable > 0 ? quietTiles * 100 / census.walkable : 0;
 }
 
+std::string FloorName();
+
 void TakeCensus(Census &census)
 {
 	census = {};
@@ -646,6 +650,7 @@ void TakeCensus(Census &census)
 	CountObjectsAndItems(census);
 	MeasureMonsterReach(census);
 	Summarise(census);
+	census.name = FloorName();
 	census.valid = true;
 }
 
@@ -974,7 +979,7 @@ void LevelCensusLeft(std::string_view how)
 		TelemetryText("rooms", std::format("left {:s} after {:.0f} s ({:s}): {:.0f} s moving or fighting, {:.0f} s in fights, {:.0f} s quiet, {:s}, "
 		                                   "{:d} quiet stretches (longest {:.0f} s, 90% under {:.0f} s, {:.0f} s on average), {:.0f} s walking back through emptied rooms, "
 		                                   "{:d} of {:d} rooms seen, {:d} kills, at most {:d} monsters near and {:d} next to the hero",
-		                                   FloorName(), Seconds(totalMs), how, Seconds(visit.activeMs), Seconds(visit.fightMs), Seconds(visit.quietMs),
+		                                   Current.name, Seconds(totalMs), how, Seconds(visit.activeMs), Seconds(visit.fightMs), Seconds(visit.quietMs),
 		                                   visit.fightSeen ? std::format("first fight after {:.0f} s", Seconds(visit.firstFightMs)) : std::string("no fights"), static_cast<int>(visit.gaps.size()), Seconds(gaps.worst), Seconds(gaps.p90),
 		                                   Seconds(gaps.mean), Seconds(visit.walkBackMs), visited, Current.headline.rooms, visit.kills, visit.peakNear, visit.peakAdjacent));
 		if (TelemetryEvent event = TelemetryEventNow(LogChannel::Rooms, LogLevel::Always, "floor_pacing"); event) {

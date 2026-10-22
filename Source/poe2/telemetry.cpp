@@ -998,7 +998,6 @@ void EndLevelVisit(std::string_view how)
 {
 	if (CurrentLevel.startMs == 0)
 		return;
-	LevelCensusLeft(how);
 	EndFight(how);
 	const double seconds = (Now() - CurrentLevel.startMs) / 1000.0;
 	const int cleared = CurrentLevel.monstersAtEntry > 0 ? CurrentLevel.kills * 100 / CurrentLevel.monstersAtEntry : 0;
@@ -1010,6 +1009,7 @@ void EndLevelVisit(std::string_view how)
 	// Stamped with the level being left, not the one being loaded.
 	if (LogLevelOn(LogChannel::Progress, LogLevel::Always))
 		SetTelemetryEventClock(Now() - SessionStartMs, CurrentLevel.label);
+	LevelCensusLeft(how);
 	TelemetryEvent(LogChannel::Progress, LogLevel::Always, "area_left")
 	    .add("p", MyPlayerId)
 	    .add("seconds", seconds)
