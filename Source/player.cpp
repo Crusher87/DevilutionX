@@ -250,6 +250,9 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 	player._pmode = PM_ATTACK;
 	FixPlayerLocation(player, d);
 	SetPlayerOld(player);
+	// POE2 Mashup: Whirling Staff spins the hero round in a funnel of wind, as Whirlwind does.
+	if (SpinsWhileSwinging(player.poe2.activeSkill))
+		BeginSpinningSwing(player);
 }
 
 void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord cy, bool includesFirstFrame)
@@ -910,6 +913,10 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 
 bool DoAttack(Player &player)
 {
+	// POE2 Mashup: Whirling Staff turns the hero through every facing as he spins.
+	if (SpinsWhileSwinging(player.poe2.activeSkill))
+		TurnSpriteWithSpin(player);
+
 	if (player.AnimInfo.currentFrame == player._pAFNum - 2) {
 		PlaySfxLoc(SfxID::Swing, player.position.tile);
 	}
@@ -1035,8 +1042,12 @@ bool DoAttack(Player &player)
 					if (distance > 1 && !LineClearMissile(origin, position))
 						continue;
 					const int damagePercent = distance > 1 && skill == WeaponSkill::WhirlingStaff ? WhirlingStaffOuterDamagePercent : AreaSkillSideDamagePercent;
-					if (PlrHitMonst(player, *monster, false, damagePercent))
+					if (PlrHitMonst(player, *monster, false, damagePercent)) {
 						didhit = true;
+						// The spinning staff bites into each enemy it hits, as Whirlwind's blades do.
+						if (skill == WeaponSkill::WhirlingStaff)
+							vfx::Cut(position, look);
+					}
 					if (skill == WeaponSkill::GroundSlam && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
 						M_GetKnockback(*monster, origin);
 				}

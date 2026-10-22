@@ -126,5 +126,11 @@ vfx::SwingStyle WeaponSwingStyle(const Player &player);
 bool SpinsWhileStriking(WeaponSkill skill);
 /** @brief Turns a spinning hero to the next facing for the animation frame (see SpinsWhileStriking). */
 void TurnWithSpin(Player &player);
+/** @brief Whether the hero's attack spins him round through every facing as he swings (Whirling Staff). */
+bool SpinsWhileSwinging(WeaponSkill skill);
+/** @brief Starts a spinning attack's look as its swing begins: its funnel of wind and its whoosh (see SpinsWhileSwinging). */
+void BeginSpinningSwing(const Player &player);
+/** @brief Shows a spinning hero's next facing for the attack frame; only his sprite turns, so the strike lands where he faces. */
+void TurnSpriteWithSpin(Player &player);
 
 } // namespace devilution

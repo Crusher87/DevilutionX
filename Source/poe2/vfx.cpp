@@ -235,6 +235,8 @@ struct Sweep {
 	/** @brief The smear's thickness, as a share of its radius; 0 for the weapon's own. */
 	float thickness = 0;
 	float alpha = 1;
+	/** @brief A staff's smear: wood rather than steel, duller and warmer, with no glint on its edge. */
+	bool blunt = false;
 };
 
 struct Crack {
@@ -2708,35 +2710,59 @@ void Cleave(Point from, Point toward, Element element, bool chop)
 	}
 }
 
-void Whirl(Point tile, int radiusTiles, Element element)
+void Whirl(Point tile, int radiusTiles, Element element, bool staff)
 {
-	TelemetryEffect("vfx", StrCat("Whirl ", magic_enum::enum_name(element)), tile.x, tile.y);
+	TelemetryEffect("vfx", StrCat(staff ? "Whirl staff " : "Whirl ", magic_enum::enum_name(element)), tile.x, tile.y);
 	if (!Enabled())
 		return;
 	const Vec pos = TileCentre(tile);
 	const float r = TileRadius * (std::max(radiusTiles, 1) + 0.35F);
 	const Colours c = ColoursOf(element);
 	const float start = Random(0, 2 * Pi);
-	// The blade spinning round at waist height, with fainter echoes of it above and below.
-	for (int layer = 0; layer < 3; layer++) {
-		Sweep sweep;
-		sweep.kind = SweepKind::Spin;
-		sweep.pos = pos + Vec { 0, -30.F - 14.F * (layer - 1) };
-		sweep.facing = start + layer * 0.7F;
-		sweep.span = Pi * 1.2F;
-		sweep.radius = r * (layer == 1 ? 1.F : 0.8F);
-		sweep.turns = layer == 1 ? 2.F : 1.6F;
-		sweep.life = layer == 1 ? 620 : 540;
-		sweep.age = layer == 1 ? 0 : -40.F * layer;
-		sweep.colours = c;
-		sweep.element = element;
-		sweep.heavy = false;
-		sweep.thickness = 0.3F;
-		sweep.alpha = layer == 1 ? 1.F : 0.45F;
-		Sweeps.push_back(sweep);
+	if (staff) {
+		// Both ends of the staff sweep round, half a turn apart: two shorter, thicker smears of wood rather than one
+		// steel blade, a little inside the reach of its far end, and a faint echo of them lower down.
+		for (int layer = 0; layer < 3; layer++) {
+			const bool end = layer < 2;
+			Sweep sweep;
+			sweep.kind = SweepKind::Spin;
+			sweep.pos = pos + Vec { 0, end ? -34.F : -20.F };
+			sweep.facing = start + (layer == 1 ? Pi : 0) + (end ? 0 : 0.5F);
+			sweep.span = Pi * (end ? 0.8F : 1.1F);
+			sweep.radius = r * (end ? 0.72F : 0.55F);
+			sweep.turns = 1.75F;
+			sweep.life = end ? 600 : 520;
+			sweep.age = end ? 0 : -60.F;
+			sweep.colours = c;
+			sweep.element = element;
+			sweep.heavy = true;
+			sweep.thickness = end ? 0.36F : 0.3F;
+			sweep.alpha = end ? 1.F : 0.4F;
+			sweep.blunt = true;
+			Sweeps.push_back(sweep);
+		}
+	} else {
+		// The blade spinning round at waist height, with fainter echoes of it above and below.
+		for (int layer = 0; layer < 3; layer++) {
+			Sweep sweep;
+			sweep.kind = SweepKind::Spin;
+			sweep.pos = pos + Vec { 0, -30.F - 14.F * (layer - 1) };
+			sweep.facing = start + layer * 0.7F;
+			sweep.span = Pi * 1.2F;
+			sweep.radius = r * (layer == 1 ? 1.F : 0.8F);
+			sweep.turns = layer == 1 ? 2.F : 1.6F;
+			sweep.life = layer == 1 ? 620 : 540;
+			sweep.age = layer == 1 ? 0 : -40.F * layer;
+			sweep.colours = c;
+			sweep.element = element;
+			sweep.heavy = false;
+			sweep.thickness = 0.3F;
+			sweep.alpha = layer == 1 ? 1.F : 0.45F;
+			Sweeps.push_back(sweep);
+		}
 	}
 	// A funnel of wind: pale streaks whipped round and up, the same way the blade turns.
-	for (int i = Scaled(46); i > 0; i--) {
+	for (int i = Scaled(staff ? 56.F : 46.F); i > 0; i--) {
 		const float angle = Random(0, 2 * Pi);
 		const float radius = r * Random(0.35F, 1.15F);
 		Particle p;
@@ -3764,8 +3790,8 @@ void DrawSweeps()
 		const float fade = (1 - t * t) * sweep.alpha;
 		const float thickness = sweep.radius * (sweep.thickness > 0 ? sweep.thickness : (sweep.heavy ? 0.5F : 0.36F));
 		const bool elemental = sweep.element != Element::Physical;
-		const Rgb rim = elemental ? sweep.colours.core : Rgb { 245, 245, 250 };
-		const Rgb body = elemental ? sweep.colours.mid : Rgb { 175, 180, 192 };
+		const Rgb rim = elemental ? sweep.colours.core : (sweep.blunt ? Rgb { 222, 212, 192 } : Rgb { 245, 245, 250 });
+		const Rgb body = elemental ? sweep.colours.mid : (sweep.blunt ? Rgb { 150, 138, 118 } : Rgb { 175, 180, 192 });
 		// Where along the smear each point is (u from its tail to its head): its angle, strength and width, or false
 		// where there's nothing to draw.
 		const float head = EaseOut(std::min(t * 1.8F, 1.F));
@@ -3824,7 +3850,7 @@ void DrawSweeps()
 			}
 			std::copy(std::begin(v), std::end(v), std::begin(previous));
 			// A faint sheen on the edge; elemental blades glow properly in their element's colour.
-			const float glow = alpha * (elemental ? 0.55F : 0.18F);
+			const float glow = alpha * (elemental ? 0.55F : (sweep.blunt ? 0.06F : 0.18F));
 			const Vec glowInner = ToScreen(SweepPoint(sweep, sweep.radius - width * 0.6F, angle));
 			const int g[2] = { Glowing.add(edge, elemental ? sweep.colours.mid : rim, glow), Glowing.add(glowInner, sweep.colours.edge, 0) };
 			if (previousGlow[0] >= 0) {

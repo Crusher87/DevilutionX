@@ -96,8 +96,11 @@ void SwingAs(Point from, Point toward, Element element, SwingStyle style, bool h
  * from where it lands.
  */
 void Cleave(Point from, Point toward, Element element, bool chop);
-/** @brief Whirlwind: blades spinning round a tile for a few turns, in a funnel of wind and kicked-up dust. */
-void Whirl(Point tile, int radiusTiles, Element element);
+/**
+ * @brief Whirlwind: blades spinning round a tile for a few turns, in a funnel of wind and kicked-up dust. With @p staff
+ * (Whirling Staff), both ends of a staff sweep round half a turn apart, in duller, thicker smears of wood.
+ */
+void Whirl(Point tile, int radiusTiles, Element element, bool staff = false);
 /** @brief The hero levelling up: a pillar of hellfire, a pentagram burning into the floor, shockwaves and a fountain of embers. */
 void LevelUp(Point tile);
 /** @brief One of each effect around a tile, to see them all (the console's vfx()). */
