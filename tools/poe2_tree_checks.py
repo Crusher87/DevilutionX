@@ -95,7 +95,7 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
         style = [i for i in nots if T.role[i][0].startswith('style') and T.area[i] == c]
         dfn = [i for i in nots if T.role[i][0] == 'defence' and T.area[i] == c]
         return dict(
-            H=sorted(d[x] for x in k['H']), openers=sorted(d[x] for x in k['N']), corners=sorted(d[x] for x in k['C']),
+            cost1=sum(1 for i in d if d[i] == 1), cost2=sum(1 for i in d if d[i] == 2), openers=sorted(d[x] for x in k['N']), corners=sorted(d[x] for x in k['C']),
             style=sorted(d[i] for i in style), defence=sorted(d[i] for i in dfn), socket=d[k['J']],
             shrine1=d[k['K1']], X=d[k['X']], bsockets=sorted(d[key[b]['B']] for b in bords),
             bshrines=sorted(d[key[b]['K']] for b in bords), deep=d[k['D']],
@@ -113,7 +113,8 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
             n20=sum(1 for i in nots if d.get(i, 99) <= 20),
             nodes6=sum(1 for i in d if 1 <= d[i] <= 6 and T.kind[i] != 'S'))
     RT = {c: row(c) for c in ORDER}
-    spec = [('H', 'rail heads', lambda v: v == [2, 2], '2, 2'),
+    spec = [('cost1', 'nodes at 1 point (exits)', lambda v: v == 2, '2'),
+            ('cost2', 'nodes at 2 points (no sideways roads)', lambda v: v == 2, '2 (start redesign)'),
             ('openers', 'opening notables', lambda v: v == [5, 5], '5, 5'),
             ('corners', 'kite corners', lambda v: v == [8, 8], '8, 8'),
             ('style', 'style notables (2 clusters x 2)', lambda v: len(v) == 4 and max(v) <= 10, '4 notables, 9 (<= 10)'),
@@ -138,12 +139,12 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
             ('n10', 'notables within 10 points', lambda v: v >= 5, '>= 5'),
             ('n15', 'notables within 15 points', lambda v: v >= 19, '>= 19 (Curtis)'),
             ('n20', 'notables within 20 points', lambda v: v >= 34, '>= 34 (Curtis)'),
-            ('nodes6', 'nodes within 6 points', lambda v: 22 <= v <= 30, '22-30')]
+            ('nodes6', 'nodes within 6 points', lambda v: v == 12, '12 (two columns of six, start redesign)')]
     for k_, what, ok, target in spec:
         vals = {c: RT[c][k_] for c in ORDER}
         same = len({str(v) for v in vals.values()}) == 1
         good = all(ok(v) for v in vals.values())
-        exact = k_ in ('H', 'openers', 'corners', 'socket', 'X', 'bsockets', 'nb_sockets', 'op_start', 'deep', 'shrine1',
+        exact = k_ in ('cost1', 'cost2', 'openers', 'corners', 'socket', 'X', 'bsockets', 'nb_sockets', 'op_start', 'deep', 'shrine1',
                        'bshrines', 'shrine2', 'capstones', 'nb_start')
         note = '' if same else 'differs by class'
         K.add(2, what, good and (same or not exact),
@@ -152,6 +153,29 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
     socks = {c: RT[c]['sockets'] for c in ORDER}
     K.add(14, 'socket list, every class', len({str(v) for v in socks.values()}) == 1,
           ','.join(str(x) for x in socks['Warrior']), '10,15,15,19,24,24,29,29,33,33,42,45 identical')
+
+    # ---- 2a the placing rule near the starts (start redesign 4.3, Curtis's answer 9)
+    sr = T.notes.get('start_rule')
+    if sr:
+        nb = {c: len(sr['breaks'][c]) for c in ORDER}
+        K.add('2a', 'stat pairs and stat lines within 12 points (socket zones exempt)', not any(nb.values()),
+              ' / '.join(str(nb[c]) for c in ORDER), '0 every class')
+        K.add('2a', '+5 nodes in the tree', sr['attributes'] == C.ATTRIBUTE_NODES, sr['attributes'],
+              '%d (unchanged)' % C.ATTRIBUTE_NODES)
+        per = {}
+        for i in sr['singles']:
+            c = T.area[i]
+            per[(c, G.node_side(T, c, i))] = per.get((c, G.node_side(T, c, i)), 0) + 1
+        K.add('2a', 'road singles per class side (13-30 points)', 'INFO',
+              ' '.join('%s%d:%d' % (c[0], s_, per.get((c, s_), 0)) for c in ORDER for s_ in (0, 1)),
+              '%d placed' % len(sr['singles']))
+        K.add('2a', 'nodes moved out (corner fix + rule)', 'INFO', '%d + %d' % (len(sr['corner']), len(sr['moved'])),
+              'felt smalls')
+        K.add('2a', 'whole tree: touching +5 pairs / stat nodes mid-line', 'INFO', '%d / %d' % sr['whole'],
+              'warnings only; the lattice pass waits on Curtis')
+    first = {c: sorted(D[c][x] for x in key[c]['N']) for c in ORDER}
+    K.add('2a', 'first notables of every class cost 5', all(v == [5, 5] for v in first.values()),
+          ' / '.join(str(first[c]).replace(' ', '') for c in ORDER), '5, 5')
 
     # ---- 3 fairness (plain tree), Curtis: every rank costing <= 30 within 1
     lists = {c: sorted(D[c][i] for i in nots if i in D[c]) for c in ORDER}
@@ -243,7 +267,9 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
                 for i in nots:
                     if T.area[i] != x or i in prof:
                         continue
-                    need = 40 if opp else (25 if T.role[i][0].startswith('crossover') else 26)
+                    # a class's first notables sit on its columns, which the road to the neighbour runs through
+                    # (start redesign: notable at 5, neighbouring start at 30), so they hold the crossover's 25
+                    need = 40 if opp else (25 if T.role[i][0].startswith('crossover') or i in key[x]['N'] else 26)
                     if Dx[c].get(i, 99) < need:
                         out.append((c, i, Dx[c].get(i), need))
         return out
@@ -264,15 +290,17 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
             lm.append(Dp[c][key[x]['J']] >= (42 if opp else 24))
             lm.append(min(Dp[c][key[x]['K1']], Dp[c][key[x]['K2']]) >= (41 if opp else 25))
     K.add(6, 'with roads: nb start >= 28, opp 48, sockets, shrines', all(lm), '%d of %d' % (sum(lm), len(lm)), 'all')
-    # 6a crossover prize: neighbour's first notable is the crossover facing the border, at 25 (others 26+)
+    # 6a crossover prize: neighbour's first notable is the crossover facing the border, at 25 (others 26+); the
+    # neighbour's own first notable on the column facing this class may also sit at 25 (start redesign)
     ok6a = []
     for c in ORDER:
         for x in G.neighbours(c):
             cands = sorted((D[c][i], i) for i in nots if T.area[i] == x and i in D[c])
             first = [i for v, i in cands if v == cands[0][0]]
-            good = cands[0][0] == 25 and all(T.role[i][0].startswith('crossover') for i in first) and len(first) == 1
+            cross = [i for i in first if T.role[i][0].startswith('crossover')]
+            good = cands[0][0] == 25 and len(cross) == 1 and all(i in cross or i in key[x]['N'] for i in first)
             ok6a.append(good)
-    K.add('6a', "neighbour's only notable at 25 is its crossover", all(ok6a), '%d of 8 sides' % sum(ok6a), '8 of 8')
+    K.add('6a', "neighbour's notables at 25: its crossover (and its first notable)", all(ok6a), '%d of 8 sides' % sum(ok6a), '8 of 8')
 
     # ---- 7 winding
     wind = []
@@ -336,6 +364,8 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
     for bn, ((lo, hi), _) in bands.items():
         tot = hit = 0
         for c, a in G.CLASSES.items():
+            if c == 'Rogue' and lo <= 10:
+                continue      # the Rogue's drawn bow is the one start that is not mirrored (start redesign 4.2)
             for i, v in D[c].items():
                 if lo <= v <= hi and T.area[i] == c and T.kind[i] != 'S':
                     p = T.pos[i]
@@ -360,13 +390,12 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
     near = G.near_straight_runs(T)
     K.add('10b', 'longest near-straight lattice run', max([L for L, _ in near] + [0]) <= 260,
           '%.0f' % max([L for L, _ in near] + [0]), '<= 260 units (Curtis)')
-    rails_ok = 0
+    cols_ok = 0
     for c in ORDER:
-        for rl in key[c]['rails']:
-            if any(T.cl_of[j] >= 0 and T.clusters[T.cl_of[j]]['tag'] in ('style', 'defence', 'cluster', 'set')
-                   for x in rl[1:-1] for j in T.adj[x]):
-                rails_ok += 1
-    K.add('10c', 'rails with a cluster near the middle', rails_ok == 8, '%d of 8' % rails_ok, '8 of 8')
+        for col in key[c]['col']:
+            if any(T.cl_of[j] >= 0 and T.clusters[T.cl_of[j]]['tag'] == 'style' for j in T.adj[col[5]]):
+                cols_ok += 1
+    K.add('10c', 'opening columns with their pair off the 6-point small', cols_ok == 8, '%d of 8' % cols_ok, '8 of 8')
 
     # ---- 11 lead-ins, loops, pass-through
     latt = {i for i in range(n) if G.is_lattice(T, i)}
@@ -440,8 +469,9 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
     K.add(12, 'two-notable or loop shapes', 'INFO', '%.0f%%' % (100 * two), "Curtis: fill with these")
     depth = max_off_depth(T)
     K.add(12, 'off-cluster chain depth', depth <= 1, depth, '1 (Curtis)')
+    # the set pieces and the style pairs beside the columns are placed on purpose, not by the palette
     out_pal = sum(1 for cl in cls_ if MOT[cl['name']]['diablo'] and cl['area'] in G.PALETTE and cl['name'] not in G.PALETTE[cl['area']]
-                  and cl['tag'] != 'set')
+                  and cl['tag'] not in ('set', 'style'))
     K.add(12, 'Diablo shapes outside the area palette', out_pal == 0, out_pal, '0')
     sets = {a: [cl for cl in T.clusters if cl['tag'] == 'set' and cl['area'] == a] for a in areas}
     K.add('12a', 'set pieces: two per area', all(len(v) >= 2 for v in sets.values()),
@@ -452,8 +482,9 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
     for c in ORDER:
         for i, v in D[c].items():
             nearc[i] = min(nearc.get(i, 99), v)
-    tgt = [((1, 5), (0.30, 0.36)), ((6, 10), (0.24, 0.30)), ((11, 15), (0.14, 0.18)), ((16, 20), (0.13, 0.17)),
-           ((21, 25), (0.10, 0.14)), ((26, 99), (0.02, 0.06))]
+    # start redesign: the +5 nodes leave the first 12 points and come back as road singles 13 to 30 points out
+    tgt = [((1, 5), (0.15, 0.25)), ((6, 10), (0.18, 0.30)), ((11, 15), (0.14, 0.22)), ((16, 20), (0.13, 0.24)),
+           ((21, 25), (0.10, 0.18)), ((26, 99), (0.02, 0.06))]
     vals = []
     okb = True
     for (lo, hi), (a, b) in tgt:
@@ -461,23 +492,26 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
         v = sum(1 for i in idsb if T.kind[i] == 'A') / max(1, len(idsb))
         vals.append(v)
         okb &= a <= v <= b
-    K.add(13, 'attribute share by band', okb, ' '.join('%.0f' % (100 * v) for v in vals), '30-36/24-30/14-18/13-17/10-14/2-6%')
+    K.add(13, 'attribute share by band', okb, ' '.join('%.0f' % (100 * v) for v in vals), '15-25/18-30/14-22/13-24/10-18/2-6% (start redesign)')
     attrs = [i for i in main if T.kind[i] == 'A']
     far = sum(1 for i in attrs if nearc.get(i, 0) >= 11) / len(attrs)
     deg3 = sum(1 for i in attrs if len(T.adj[i]) >= 3) / len(attrs)
     K.add(13, 'A nodes at 11+ points / degree >= 3', far >= 0.55 and deg3 >= 0.55, '%.0f%% / %.0f%%' % (100 * far, 100 * deg3), '>= 55% / >= 55%')
     grp = attr_groups(T, attrs)
     K.add(13, 'A nodes in linked groups of 2-5', grp >= 0.30, '%.0f%%' % (100 * grp), '>= 30%')
-    junk = sorted({T.kind[i] for i in range(n) if G.is_lattice(T, i) and T.kind[i] != 'S'
+    junk = sorted({T.kind[i] for i in range(n) if G.is_lattice(T, i) and T.kind[i] != 'S' and i not in getattr(T, 'felt', ())
                    and sum(1 for j in T.adj[i] if G.is_lattice(T, j)) >= 3})
     K.add(13, 'lattice junctions are A or socket', set(junk) <= {'A', 'J'}, ''.join(junk), 'A, J only')
     share_aj = []
+    zone = G.START_RULE_POINTS
     for a in range(4):
         for b in range(4):
             if a != b:
-                p = G.shortest_path_nodes(T, key[ORDER[a]]['S'], key[ORDER[b]]['S'])[1:-1]
+                # past the 12 points round each start, where no two +5 nodes may touch (start redesign 4.3)
+                p = [i for i in G.shortest_path_nodes(T, key[ORDER[a]]['S'], key[ORDER[b]]['S'])
+                     if min(D[c].get(i, 999) for c in ORDER) > zone]
                 share_aj.append(sum(1 for i in p if T.kind[i] in 'AJ') / max(1, len(p)))
-    K.add(13, 'A or socket share of start-to-start routes', min(share_aj) >= 0.65, '%.0f%%' % (100 * min(share_aj)), '>= 65%')
+    K.add(13, 'A or socket share of start-to-start routes', min(share_aj) >= 0.55, '%.0f%%' % (100 * min(share_aj)), '>= 55% past 12 points from any start')
     ent = ent_aj = 0
     for cl in cls_:
         own = set(cl['ids'])
@@ -774,14 +808,23 @@ def equal_routes(T):
     return worst_extra, worst_diff
 
 
+def road_ends_from_links(T, ids):
+    """A road's door and far gate: the one node off the road linked to its first and to its last node."""
+    if not ids:
+        return -1, -1
+    off = lambda i: [n for n in T.adj[i] if n not in ids]
+    return (off(ids[0]) or [-1])[0], (off(ids[-1]) or [-1])[0]
+
+
 def road_check(T):
     """The four class roads: 8 nodes each in a chain from the door, notables at r3 and r6, and every owner pays 15
     for the door and 23 for r8 (design-v8 §1.1)."""
     road = getattr(T, 'road', {})
     out = []
     ok = len(road) == 32
-    for key, (door, far, _) in G.PROFANE_ROADS.items():
+    for key in G.PROFANE_ROADS:
         ids = sorted((i for i in road if road[i][0] == key), key=lambda i: road[i][1])
+        door, far = getattr(T, 'road_ends', {}).get(key) or road_ends_from_links(T, ids)
         chain = [door] + ids + [far]
         ok &= len(ids) == 8 and all(b in T.adj[a] for a, b in zip(chain, chain[1:]))
         ok &= [T.kind[i] for i in ids] == G.ROAD_KINDS

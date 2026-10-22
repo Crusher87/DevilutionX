@@ -203,7 +203,7 @@ class Canvas:
 
 
 def node_size(kind):
-    return {'Start': 13, 'Shrine': 11, 'Ascendancy': 11, 'Notable': 10, 'JewelSocket': 9, 'AscendancyNotable': 8}.get(kind, 5)
+    return {'Start': 13, 'Keystone': 11, 'Shrine': 11, 'Ascendancy': 11, 'Notable': 10, 'JewelSocket': 9, 'AscendancyNotable': 8}.get(kind, 5)
 
 
 def draw_game(T, rows, path, scale=0.28, extent=1300, chosen_class='Sorcerer', upscale=3):
@@ -262,7 +262,7 @@ def draw_game(T, rows, path, scale=0.28, extent=1300, chosen_class='Sorcerer', u
             fill = AREA_FILL.get(r['region'], AREA_FILL_BORDER)
         if r['group'] == 'capstone':
             cv.ring(c, rad + 2 * rim + 2, PAL['Y9'])
-        if kind == 'Shrine':
+        if kind in ('Keystone', 'Shrine'):
             cv.diamond(c, rad + rim, PAL['B4'])
             cv.diamond(c, rad, fill)
         elif kind in ('Notable', 'Ascendancy', 'AscendancyNotable'):

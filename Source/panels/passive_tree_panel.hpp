@@ -26,8 +26,11 @@ void TogglePassiveTree();
 bool PassiveTreeHandleEvent(const SDL_Event &event);
 void DrawPassiveTree(const Surface &out);
 
-/** @brief A notice across the play area that a quest gave passive points (quests: one bit per newly rewarded quest), and why. */
-void ShowQuestPointsNotice(uint32_t quests, int points);
-void DrawQuestPointsNotice(const Surface &out);
+/** @brief Opens the tree on a Book just read: a notice band says what it gave (with Cain's words the first time), and its shelf slot lights. */
+void ShowBookRead(int book);
+/** @brief Called on load: the tree was redrawn and every point refunded, or the hero's points changed when quests became Books. */
+void QueueTreeNotice(bool redrawn, bool refunded, int pointChange);
+/** @brief Opens the tree with the queued load notice, once the game is running. */
+void ShowPendingTreeNotice();
 
 } // namespace devilution

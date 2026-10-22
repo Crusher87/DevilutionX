@@ -60,19 +60,19 @@ BORDERS = {
 CLUSTERS = {
     'Warrior': [
         {'key': 'w_armour', 'band': 'inner', 'title': "Griswold's Forge", 'small': [('ArmorPercent', 8)], 'notables': [
-            ("Griswold's Temper", [('ArmorPercent', 25), ('Strength', 7)], 'Griswold the smith tempered every blade and breastplate the town owned.'),
+            ("Griswold's Temper", [('ArmorPercent', 20), ('LifeRegen', 2)], 'Griswold the smith tempered every blade and breastplate the town owned.'),
         ]},
         {'key': 'w_melee', 'band': 'inner', 'title': 'Brute Force', 'small': [('MeleeDamage', 5)], 'notables': [
-            ("Lachdanan's Oath", [('MeleeDamage', 12), ('LifeOnKill', 6), ('AttackSpeed', 4)], "Lachdanan, captain of Leoric's knights, fought the king's curse with all the honour he had left."),
+            ("Lachdanan's Oath", [('MeleeDamage', 12), ('LifeOnKill', 6)], "Lachdanan, captain of Leoric's knights, fought the king's curse with all the honour he had left."),
         ]},
         {'key': 'w_twohand', 'band': 'mid', 'title': 'Two-Handed Mastery', 'small': [('TwoHandDamage', 6)], 'notables': [
-            ('Executioner', [('TwoHandDamage', 25), ('ToHit', -10)], "The headsman's axe of Leoric's court fell slowly, and once."),
+            ('Executioner', [('TwoHandDamage', 15), ('MoreVsStunned', 10)], "The headsman's axe of Leoric's court fell slowly, and only on men already brought to their knees."),
             ('Cleaving Blow', [('TwoHandDamage', 15), ('StunBuildup', 15)], 'A great swing that staggers whatever it does not cut.'),
             ('Reckless Swings', [('AttackSpeed', 6), ('TwoHandDamage', 8), ('ToHit', -12)], 'Swing twice where others swing once, and trust that one of them lands.'),
         ]},
         {'key': 'w_butchery', 'band': 'mid', 'title': 'Butchery', 'small': [('MeleeDamage', 4)], 'small_alt': [('LifeRegenRate', 2)], 'notables': [
-            ('The Mangler', [('TwoHandDamage', 25), ('LifePercent', -8), ('ManaPercent', -10)], 'A great axe that does terrible work and dulls the mind that swings it.'),
-            ('Eater of Souls', [('MeleeDamage', 12), ('LifeOnKill', 10), ('LifeRegenRate', -2)], 'A great sword that steals life from all it cuts, and slowly from its bearer too.'),
+            ('The Mangler', [('TwoHandDamage', 20), ('Strength', 10)], 'A great axe that does terrible work in strong hands.'),
+            ('Eater of Souls', [('LifeOnKill', 10), ('LifePercent', 4)], 'A great sword that steals life from all it cuts.'),
             ('Singing Steel', [('Spirit', 8), ('MeleeDamage', 8)], "'My blade sings for your blood, mortal, and by my dark masters it shall not be denied.'"),
         ]},
         {'key': 'w_onehand', 'band': 'mid', 'title': 'Blade and Mace', 'small': [('OneHandDamage', 6)], 'notables': [
@@ -81,9 +81,10 @@ CLUSTERS = {
             ("The Gladiator's Bane", [('OneHandDamage', 8), ('ArmorPercent', 15)], 'Studded leather that takes the sting out of every blow.'),
         ]},
         {'key': 'w_shield', 'band': 'mid', 'title': 'Shield Line', 'small': [('BlockChance', 1), ('ArmorPercent', 4)], 'notables': [
-            ('Defender of Tristram', [('BlockChance', 3), ('ArmorPercent', 15)], "With the army lost in Westmarch, Tristram's few defenders held their own doors."),
-            ("King's Guard", [('BlockChance', 3), ('StunThreshold', 20)], "Leoric's household knights were drilled to never give a step."),
+            ('Defender of Tristram', [('BlockChance', 5), ('ArmorPercent', 15)], "With the army lost in Westmarch, Tristram's few defenders held their own doors."),
+            ("King's Guard", [('BlockChance', 4), ('StunThreshold', 20)], "Leoric's household knights were drilled to never give a step."),
             ('Split Skull Shield', [('BlockChance', 3), ('StunBuildup', 20)], 'Catch the blow on the shield, then return it with the rim.'),
+            ('Stormshield', [('BlockChance', 4), ('LifePercent', 4)], 'A great shield that turns the storm aside and keeps the one behind it standing.'),
         ]},
         {'key': 'w_vitality', 'band': 'mid', 'title': 'Vitality', 'small': [('Vitality', 7)], 'notables': [
             ('Unbroken', [('Vitality', 15), ('LifeRegenRate', 4)], 'Some men simply refuse to fall.'),
@@ -116,10 +117,10 @@ CLUSTERS = {
     ],
     'Sorcerer': [
         {'key': 's_shield', 'band': 'inner', 'title': 'Energy Shield', 'small': [('EnergyShieldPercent', 8)], 'notables': [
-            ('Azure Ward', [('EnergyShieldPercent', 25), ('Magic', 7)], 'Raw mana, wrapped about the body like a second skin.'),
+            ('Azure Ward', [('EnergyShieldPercent', 25), ('ManaRegen', 10)], 'Raw mana, wrapped about the body like a second skin.'),
         ]},
         {'key': 's_spell', 'band': 'inner', 'title': 'Spell Power', 'small': [('SpellDamage', 4)], 'notables': [
-            ('Vizjerei Lore', [('SpellDamage', 12), ('ManaOnKill', 4), ('CastSpeed', 4)], 'The Vizjerei clan taught that every spell is a bargain struck with power.'),
+            ('Vizjerei Lore', [('SpellDamage', 12), ('ManaOnKill', 4)], 'The Vizjerei clan taught that every spell is a bargain struck with power.'),
         ]},
         {'key': 's_mana', 'band': 'mid', 'title': 'Mana Flow', 'small': [('ManaRegen', 8)], 'small_alt': [('MinionDamage', 8)], 'notables': [
             ('Thinking Cap', [('ManaRegen', 25), ('ManaPercent', 6)], 'A plain skull cap that holds more mana than many a staff.'),
@@ -134,7 +135,7 @@ CLUSTERS = {
         {'key': 's_lightning', 'band': 'mid', 'title': 'Storm', 'small': [('LightningDamage', 5)], 'notables': [
             ('Storm Spire', [('LightningDamage', 20), ('ShockChance', 15)], 'A war staff from the depths that hums before every storm.'),
             ('Static Field', [('LightningDamage', 18), ('ShockChance', 10), ('LightningResist', -10)], 'The air around you crackles and bites, you included.'),
-            ('Maelstrom', [('CastSpeed', 8), ('LightningDamage', 8), ('ManaCost', 10)], 'Faster words, hungrier spells.'),
+            ('Maelstrom', [('CastSpeed', 8), ('LightningDamage', 12)], 'Faster words, louder thunder.'),
         ]},
         {'key': 's_cold', 'band': 'mid', 'title': 'Frost and Arcana', 'small': [('ColdDamage', 5)], 'notables': [
             ('Frozen Heart', [('ColdDamage', 20), ('FreezeBuildup', 15)], 'Cold magic answers best to those who feel nothing.'),
@@ -148,20 +149,21 @@ CLUSTERS = {
         {'key': 's_minions', 'band': 'mid', 'title': 'Bound Servants', 'small': [('MinionDamage', 8), ('MinionLife', 6)], 'notables': [
             ('Vizjerei Binding', [('MinionDamage', 24), ('MinionLife', 15)], 'The Vizjerei bound demons to their will, and called it scholarship.'),
             ("Horazon's Servants", [('MinionLife', 25), ('Spirit', 8)], 'Horazon kept demons as servants in his sanctuary.'),
-            ('Heart of the Golem', [('MinionDamage', 15), ('MinionLife', 20), ('ManaPercent', -6)], "A golem walks on a share of its maker's mana."),
+            ('Heart of the Golem', [('MinionLife', 25), ('ManaRegen', 10)], "A golem is only as strong as the heart its maker gives it."),
         ]},
         {'key': 's_barrier', 'band': 'outer', 'title': 'Barrier', 'small': [('EnergyShieldPercent', 10)], 'notables': [
-            ('Clan Warding', [('EnergyShieldPercent', 40), ('ManaPercent', -12)], 'Mana poured into the ward is mana not spent on spells.'),
+            ('Clan Warding', [('EnergyShieldPercent', 30), ('EnergyShieldRecharge', 15)], 'A clan ward is drawn once and renewed with every breath.'),
             ('Mana Before Flesh', [('HitDamageFromMana', 10), ('ManaPercent', 10)], 'A Vizjerei can let the blow fall on his mana instead of his flesh.'),
-            ('The Ward Reknits', [('EnergyShieldRecharge', 25), ('EnergyShieldPercent', 10)], 'The shield knits itself back the moment you step clear.'),
+            ('The Ward Reknits', [('EnergyShieldRecharge', 25), ('StunThreshold', 15)], 'The shield knits itself back the moment you step clear.'),
+            ('Mindcry', [('EnergyShieldRecharge', 20), ('CastSpeed', 4)], 'A staff that clears the mind, so the ward mends while the next spell forms.'),
         ]},
         {'key': 's_archmage', 'band': 'outer', 'title': 'Archmage', 'small': [('ManaPercent', 4)], 'notables': [
-            ('Crimson and Azure', [('ManaSpellDamage', 2), ('ManaPercent', 10)], 'The deeper the well, the stronger the spell.'),
-            ('Elements of the Clans', [('FireDamage', 12), ('LightningDamage', 12), ('ColdDamage', 12), ('AllResist', -5)], 'Fire, storm and ice bow to a master, and lash out at him too.'),
+            ('The Deeper Well', [('ManaSpellDamage', 2), ('ManaPercent', 10)], 'The deeper the well, the stronger the spell.'),
+            ('Elements of the Clans', [('SpellDamage', 14), ('AllResist', 5)], 'Fire, storm and ice bow to a master, and spare him.'),
         ]},
         {'key': 's_wards', 'band': 'outer', 'title': 'Wards', 'small': [('AllResist', 3)], 'notables': [
             ('Warding Circle', [('AllResist', 8), ('MaxMagicResist', 2)], 'Chalk, salt and old words keep the worst of it out.'),
-            ("Wisdom's Wrap", [('EnergyShieldPercent', 20), ('HitDamageFromMana', 5), ('ManaPercent', 6)], 'A mage\'s robe that adds to his mana and softens every blow.'),
+            ("Wisdom's Wrap", [('EnergyShieldPercent', 20), ('HitDamageFromMana', 5)], 'A mage\'s robe that adds to his mana and softens every blow.'),
         ]},
         {'key': 's_clans', 'band': 'outer', 'title': 'Mage Clans', 'small': [('SpellDamage', 4)], 'notables': [
             ('Mage Clan Wars', [('SpellDamage', 16), ('IgniteChance', 10)], 'When the clans of Kehjistan turned on each other, whole cities burned.'),
@@ -170,20 +172,20 @@ CLUSTERS = {
     ],
     'Rogue': [
         {'key': 'r_evasion', 'band': 'inner', 'title': 'Evasion', 'small': [('EvasionPercent', 8)], 'notables': [
-            ('Highland Stride', [('EvasionPercent', 25), ('Dexterity', 7)], 'A Sister of the Sightless Eye is never where the blow lands.'),
+            ('Highland Stride', [('EvasionPercent', 25), ('StunThreshold', 10)], 'A Sister of the Sightless Eye is never where the blow lands.'),
         ]},
         {'key': 'r_bow', 'band': 'inner', 'title': 'Archery', 'small': [('BowDamage', 5)], 'notables': [
-            ('Sisterhood Volley', [('BowDamage', 15), ('AttackSpeed', 4)], 'The Sisters loose together, and nothing stands in the field before them.'),
+            ('Sisterhood Volley', [('BowDamage', 15), ('ToHit', 5)], 'The Sisters loose together, and nothing stands in the field before them.'),
         ]},
         {'key': 'r_knife', 'band': 'mid', 'title': 'Knife Work', 'small': [('MeleeDamage', 5)], 'notables': [
             ("Gonnagal's Dirk", [('MeleeDamage', 15), ('AttackSpeed', 4)], 'A short blade from the labyrinth, quick and mean.'),
-            ("Stalker's Step", [('AttackSpeed', 5), ('EvasionPercent', 15), ('LightRadius', -1)], 'Step out of the dark, strike, and step back into it.'),
+            ("Stalker's Step", [('AttackSpeed', 6), ('EvasionPercent', 17)], 'Step out of the dark, strike, and step back into it.'),
             ('Cold Steel', [('ColdDamage', 15), ('MeleeDamage', 8)], 'Freeze them first, and the knife does the rest.'),
         ]},
         {'key': 'r_fletching', 'band': 'mid', 'title': 'Fletching', 'small': [('BowDamage', 6)], 'notables': [
             ('Blackoak Fletching', [('BowDamage', 16), ('AttackSpeed', 4)], 'Arrows of black oak fly straight and true.'),
-            ('Eaglehorn Draw', [('BowDamage', 12), ('ToHit', 10)], 'A battle bow drawn to the ear.'),
-            ('Fleshstinger', [('BowDamage', 25), ('LifePercent', -8)], 'A bow for the archer who would rather kill first and bleed later.'),
+            ('Eaglehorn Draw', [('BowDamage', 12), ('DamageVsRareUnique', 6)], 'A battle bow drawn to the ear.'),
+            ('Fleshstinger', [('BowDamage', 18), ('LifeOnKill', 4)], 'Every kill it makes buys the archer another breath.'),
         ]},
         {'key': 'r_aim', 'band': 'mid', 'title': 'Precision', 'small': [('ToHit', 4)], 'notables': [
             ('Sightless Aim', [('ToHit', 12), ('DamageVsRareUnique', 5)], 'The Sisters are taught to shoot with the inner eye.'),
@@ -198,6 +200,7 @@ CLUSTERS = {
             ("Akara's Remedy", [('FlaskRecovery', 20), ('LifeRegenRate', 4)], "The priestess Akara's draughts kept the Sisters alive."),
             ('Feast of the Fallen', [('LifeOnKill', 10), ('ManaOnKill', 4)], 'The Fallen breed fast and die faster.'),
             ('Quick Hands', [('FlaskCharges', 20), ('AttackSpeed', 3)], 'A Sister drinks between heartbeats.'),
+            ('Rainbow Cloak', [('AllResist', 6), ('LifePercent', 4)], 'A cloak of many colours that turns aside fire, lightning and magic alike.'),
         ]},
         {'key': 'r_lightning', 'band': 'outer', 'title': 'Charged Arrows', 'small': [('LightningDamage', 4)], 'notables': [
             ('Storm Arrows', [('LightningDamage', 18), ('ShockChance', 15)], 'Arrows tipped with captured lightning.'),
@@ -209,16 +212,17 @@ CLUSTERS = {
             ('Flamedart', [('FireDamage', 15), ('AttackSpeed', 4)], 'A bow whose arrows catch light as they leave the string.'),
         ]},
         {'key': 'r_frost', 'band': 'outer', 'title': 'Frost Arrows', 'small': [('ColdDamage', 4)], 'notables': [
-            ('Hoarfrost Shafts', [('ColdDamage', 16), ('FreezeBuildup', 15), ('BowDamage', 8)], 'Shafts left out on the monastery walls overnight.'),
+            ('Hoarfrost Shafts', [('ColdDamage', 18), ('FreezeBuildup', 15)], 'Shafts left out on the monastery walls overnight.'),
             ('Highland Frost', [('ColdDamage', 12), ('EvasionPercent', 12)], 'On the Tamoe Highland a Sister learns to strike and keep moving.'),
         ]},
         {'key': 'r_shadow', 'band': 'outer', 'title': 'Shadows', 'small': [('EvasionPercent', 10)], 'notables': [
             ('Halls of the Blind', [('BowDamage', 12), ('StationaryDefences', 15)], "'Shadows move where light should be.' In the Halls of the Blind an archer holds her ground and shoots at what moves."),
-            ('Elusive', [('EvasionPercent', 25), ('LightRadius', -1), ('StunThreshold', -20)], 'Walk where the light does not reach.'),
+            ('Elusive', [('EvasionPercent', 25), ('EvasionVsSpells', 5)], 'Walk where the light does not reach.'),
+            ('Nightscape', [('EvasionPercent', 12), ('FlaskRecovery', 15)], 'A dark cape for those who fight from the shadows and mend in them.'),
         ]},
         {'key': 'r_blades', 'band': 'mid', 'title': 'Back-Alley Blades', 'small': [('MeleeDamage', 5)], 'notables': [
             ('Black Razor', [('OneHandDamage', 20), ('AttackSpeed', 5)], 'A thin black dagger that cuts far deeper than its size.'),
-            ('Shadowhawk', [('MeleeDamage', 12), ('LifeOnKill', 8), ('EvasionPercent', 10)], 'A broadsword that drinks from every foe it fells and keeps its bearer in shadow.'),
+            ('Shadowhawk', [('MeleeDamage', 12), ('EvasionPercent', 10)], 'A broadsword that keeps its bearer in shadow.'),
         ]},
         {'key': 'r_hunter', 'band': 'outer', 'title': 'Monster Hunter', 'small': [('Dexterity', 7)], 'notables': [
             ("Kashya's Command", [('Dexterity', 15), ('BowDamage', 8)], 'Kashya leads the Sisters with a hard voice and a harder bow.'),
@@ -228,19 +232,19 @@ CLUSTERS = {
     ],
     'Monk': [
         {'key': 'm_hybrid', 'band': 'inner', 'title': 'Balanced Body', 'small': [('EvasionPercent', 8), ('EnergyShieldPercent', 8)], 'notables': [
-            ('The Bending Bough', [('EvasionPercent', 20), ('EnergyShieldPercent', 20)], 'The body moves; the mind shields.'),
+            ('The Bending Bough', [('EvasionPercent', 23), ('EnergyShieldPercent', 22)], 'The body moves; the mind shields.'),
         ]},
         {'key': 'm_staff', 'band': 'inner', 'title': 'Staff Training', 'small': [('StaffDamage', 5)], 'notables': [
-            ('Way of the Staff', [('StaffDamage', 15), ('AttackSpeed', 5)], 'The Brotherhood carries no blade, only the staff.'),
+            ('Way of the Staff', [('StaffDamage', 15), ('StunBuildup', 10)], 'The Brotherhood carries no blade, only the staff.'),
         ]},
         {'key': 'm_palm', 'band': 'mid', 'title': 'Empty Hand', 'small': [('MeleeDamage', 5)], 'notables': [
             ('Open Palm', [('MeleeDamage', 15), ('AttackSpeed', 4)], 'An empty hand hides nothing and needs nothing.'),
-            ('Shun the Blade', [('MeleeDamage', 10), ('EvasionPercent', 12), ('EnergyShieldPercent', 12)], 'The Brotherhood fights without metal weapons, and is lighter for it.'),
+            ('Shun the Blade', [('MeleeDamage', 12), ('EvasionPercent', 15)], 'The Brotherhood fights without metal weapons, and is lighter for it.'),
         ]},
         {'key': 'm_flow', 'band': 'mid', 'title': 'Flow', 'small': [('StaffDamage', 5)], 'notables': [
             ('Flowing Strikes', [('AttackSpeed', 5), ('CastSpeed', 5)], 'Attack and prayer are one movement.'),
             ('Hundred Palms', [('AttackSpeed', 5), ('StaffDamage', 8)], 'Strike faster than the eye can follow.'),
-            ('Wind of Ivgorod', [('AttackSpeed', 6), ('CastSpeed', 6), ('LifePercent', -5)], 'The fastest hands in the East, and the thinnest skin.'),
+            ('Wind of Ivgorod', [('AttackSpeed', 6), ('Dexterity', 10)], 'The fastest hands in the East.'),
         ]},
         {'key': 'm_stillness', 'band': 'mid', 'title': 'Stillness', 'small': [('ManaRegen', 8)], 'notables': [
             ('Inner Stillness', [('ManaRegen', 25), ('EnergyShieldRecharge', 15)], 'Breathe, and the well refills.'),
@@ -248,18 +252,18 @@ CLUSTERS = {
             ('Fast of the Patriarchs', [('LifeRegenRate', 8), ('StunThreshold', 15)], 'A body that has learned to want nothing heals itself.'),
         ]},
         {'key': 'm_storm', 'band': 'mid', 'title': 'Storm Hands', 'small': [('LightningDamage', 4)], 'notables': [
-            ('Thunder Palm', [('LightningDamage', 15), ('MeleeDamage', 8), ('ShockChance', 10)], 'A strike that carries the storm in it.'),
+            ('Thunder Palm', [('LightningDamage', 15), ('MeleeDamage', 10)], 'A strike that carries the storm in it.'),
             ('Thundercall', [('LightningDamage', 12), ('StaffDamage', 12)], 'A staff that answers the sky.'),
             ('Storm Hymn', [('Spirit', 8), ('LightningDamage', 8)], 'Sung to the gods of the storm, who sometimes listen.'),
         ]},
         {'key': 'm_frost', 'band': 'mid', 'title': 'Frost Forms', 'small': [('ColdDamage', 4)], 'notables': [
             ('Frost Kata', [('ColdDamage', 16), ('AttackSpeed', 4)], 'Learned in the icy winds that batter the high eastern passes.'),
-            ('Glacier Stance', [('ColdDamage', 12), ('FreezeBuildup', 15), ('StunThreshold', 10)], 'Plant your feet in the frost you called.'),
+            ('Glacier Stance', [('ColdDamage', 14), ('FreezeBuildup', 15)], 'Plant your feet in the frost you called.'),
             ('Winter Calm', [('ColdDamage', 10), ('EvasionPercent', 12)], 'Cold hands, cold mind, no wasted motion.'),
         ]},
         {'key': 'm_body', 'band': 'outer', 'title': 'Hardened Body', 'small': [('Vitality', 7)], 'notables': [
             ('Iron Body', [('Vitality', 12), ('StunThreshold', 20)], 'Years of training make the body a weapon and a wall.'),
-            ('Wood Against Iron', [('Dexterity', 15), ('Magic', 15), ('LifePercent', -5)], 'The Brotherhood forswore iron; the staff and the trained body had to be enough.'),
+            ('Wood Against Iron', [('Dexterity', 15), ('Magic', 15)], 'The Brotherhood forswore iron; the staff and the trained body had to be enough.'),
         ]},
         {'key': 'm_spirit', 'band': 'outer', 'title': 'Spirit', 'small': [('Spirit', 2), ('MinionDamage', 6)], 'notables': [
             ('Veradani Vow', [('Spirit', 8), ('AllResist', 5)], 'These holy men undergo intense mental and physical training.'),
@@ -268,11 +272,11 @@ CLUSTERS = {
         ]},
         {'key': 'm_quarterstaff', 'band': 'outer', 'title': 'Staff of the Bough', 'small': [('StaffDamage', 6)], 'notables': [
             ('Daibo Form', [('StaffDamage', 20), ('ToHit', 8)], 'The daibo is the first weapon an initiate of Ivgorod learns, and often the last.'),
-            ('Sweeping Staff', [('StaffDamage', 12), ('StunBuildup', 15)], 'A wide arc that knocks them off their feet.'),
-            ('The Protector', [('StaffDamage', 10), ('EvasionPercent', 12), ('EnergyShieldPercent', 12)], 'A staff held across the body turns as many blows as it gives.'),
+            ('Sweeping Staff', [('StunBuildup', 15), ('AttackSpeed', 4)], 'A wide arc that knocks them off their feet.'),
+            ('The Protector', [('StaffDamage', 12), ('EvasionPercent', 15)], 'A staff held across the body turns as many blows as it gives.'),
         ]},
         {'key': 'm_harmony', 'band': 'outer', 'title': 'Harmony', 'small': [('EvasionPercent', 10), ('EnergyShieldPercent', 10)], 'notables': [
-            ('Perfect Harmony', [('EvasionPercent', 25), ('EnergyShieldPercent', 25), ('AllResist', 4)], 'Order and Chaos, held level, as the Patriarchs hold them.'),
+            ('Perfect Harmony', [('EvasionPercent', 25), ('AllResist', 4)], 'Order and Chaos, held level, as the Patriarchs hold them.'),
             ('The Quiet Cell', [('LifeRegenRate', 6), ('ManaRegen', 15)], 'A night in a quiet cell mends what a day of fighting broke.'),
             ('Unseen Hand', [('EvasionVsSpells', 5), ('Dexterity', 10)], 'Spells pass where you no longer stand.'),
         ]},
@@ -287,15 +291,15 @@ CLUSTERS = {
 BORDER_CLUSTERS = {
     'Zakarum Cloister': [
         {'key': 'z_holy', 'band': 'inner', 'title': 'Holy Fire', 'small': [('FireDamage', 4)], 'notables': [
-            ('Light of Zakarum', [('FireDamage', 12), ('MeleeDamage', 8), ('IgniteChance', 10)], 'The Zakarum preached that the Light burns away all evil.'),
+            ('Light of Zakarum', [('FireDamage', 12), ('MeleeDamage', 10)], 'The Zakarum preached that the Light burns away all evil.'),
             ("Akarat's Faith", [('FireResist', 10), ('LifeRegenRate', 6)], 'Faith in the prophet Akarat kept the paladins standing.'),
-            ('Lightforge', [('MeleeDamage', 10), ('FireDamage', 10), ('SpellDamage', 10)], 'A forgotten weapon of light and fire from the old Tristram lists.'),
+            ('Lightforge', [('FireDamage', 12), ('SpellDamage', 12)], 'A forgotten weapon of light and fire from the old Tristram lists.'),
         ]},
         {'key': 'z_cloister', 'band': 'mid', 'title': 'Cloister Guard', 'small': [('ArmorPercent', 7), ('EnergyShieldPercent', 7)], 'notables': [
-            ('Cloister Wall', [('ArmorPercent', 20), ('EnergyShieldPercent', 20), ('BlockChance', 2)], 'The cloister walls never fell while a priest still prayed behind them.'),
+            ('Cloister Wall', [('ArmorPercent', 20), ('EnergyShieldPercent', 20)], 'The cloister walls never fell while a priest still prayed behind them.'),
             ('Holy Defender', [('BlockChance', 4), ('FireResist', 10)], 'A large shield blessed against fire and quick to rise against a blow.'),
-            ('Hand of Zakarum', [('AttackSpeed', 5), ('CastSpeed', 5), ('BlockChance', 2)], 'The battle priest strikes and prays in one breath.'),
-            ("Naj's Light Plate", [('ArmorPercent', 15), ('EnergyShieldPercent', 15), ('ManaPercent', 6)], 'Plate light enough for a mage to wear into battle.'),
+            ('Hand of Zakarum', [('AttackSpeed', 5), ('CastSpeed', 5)], 'The battle priest strikes and prays in one breath.'),
+            ("Naj's Light Plate", [('EnergyShieldPercent', 15), ('ManaPercent', 8)], 'Plate light enough for a mage to wear into battle.'),
         ]},
         {'key': 'z_litany', 'band': 'mid', 'title': 'Litanies', 'small': [('Spirit', 2)], 'small_alt': [('LifeRegenRate', 2)], 'notables': [
             ('Tithe of the Cloister', [('Spirit', 10), ('ManaPercent', -10)], 'The church takes its tithe, and the faithful are stronger for paying it.'),
@@ -311,7 +315,7 @@ BORDER_CLUSTERS = {
         {'key': 'k_guard', 'band': 'inner', 'title': "Leoric's Levies", 'small': [('ArmorPercent', 7), ('EvasionPercent', 7)], 'notables': [
             ('Militia Drill', [('ArmorPercent', 20), ('EvasionPercent', 20)], "Every able man of Tristram drilled on the green before Leoric's march."),
             ("Farnham's Courage", [('StunThreshold', 15), ('LifePercent', 4)], 'Farnham saw what lies below and lived. Barely.'),
-            ('Captain of the Levy', [('Strength', 8), ('Dexterity', 8), ('Damage', 8)], 'A captain fights with whatever the armoury had left.'),
+            ('Captain of the Levy', [('Damage', 10), ('Strength', 8)], 'A captain fights with whatever the armoury had left.'),
         ]},
         {'key': 'k_supply', 'band': 'mid', 'title': 'Supply Wagons', 'small': [('FlaskRecovery', 6)], 'notables': [
             ("Ogden's Provisions", [('FlaskRecovery', 30), ('FlaskCharges', -15)], 'Ogden poured strong for anyone with the nerve to go below, and never had enough to go round.'),
@@ -321,7 +325,7 @@ BORDER_CLUSTERS = {
         {'key': 'k_march', 'band': 'mid', 'title': 'The March North', 'small': [('Damage', 4)], 'notables': [
             ('Levy Shieldmen', [('BlockChance', 4), ('MeleeDamage', 10)], "Leoric's levies marched north with a sword in hand and a shield on the arm."),
             ('Arbalest of the Levy', [('BowDamage', 16), ('ArmorPercent', 10)], 'Crossbows for the men who had never drawn a bow.'),
-            ('Marching Order', [('AttackSpeed', 5), ('ArmorPercent', 10), ('EvasionPercent', 10)], 'Keep pace, keep formation.'),
+            ('Marching Order', [('AttackSpeed', 5), ('ArmorPercent', 12)], 'Keep pace, keep formation.'),
             ('The March on Westmarch', [('AllResist', 6), ('MaxElementalResist', 1)], 'Leoric sent his army north against Westmarch. Few came home.'),
         ]},
         {'key': 'k_risen', 'band': 'outer', 'title': 'The Risen Guard', 'small': [('MinionDamage', 6), ('MinionLife', 6)], 'notables': [
@@ -333,16 +337,16 @@ BORDER_CLUSTERS = {
         {'key': 'e_precision', 'band': 'inner', 'title': 'Discipline', 'small': [('ToHit', 5)], 'notables': [
             ('Monastery Discipline', [('ToHit', 10), ('AttackSpeed', 5)], 'The monastery of the Sightless Eye trains hand and eye until they are one.'),
             ('Swift Strikes', [('AttackSpeed', 5), ('EvasionPercent', 12)], 'Strike and be gone.'),
-            ('Wizardspike', [('MeleeDamage', 8), ('SpellDamage', 8), ('CastSpeed', 5)], "A mage's dagger, as quick to a spell as to a throat."),
+            ('Wizardspike', [('MeleeDamage', 10), ('SpellDamage', 10)], "A mage's dagger, as quick to a spell as to a throat."),
         ]},
         {'key': 'e_sight', 'band': 'mid', 'title': 'Second Sight', 'small': [('EvasionPercent', 6), ('EnergyShieldPercent', 6)], 'notables': [
             ('Inner Sight', [('EvasionVsSpells', 5), ('EvasionPercent', 15)], 'The Sisters learned from Eastern teachers to see without eyes.'),
-            ('Tracker', [('DamageVsRareUnique', 5), ('LightRadius', 1), ('ToHit', 8)], 'The Sisters read the road east like a book.'),
-            ('The Monastery Gate', [('ArmorPercent', 12), ('EvasionPercent', 12), ('BlockChance', 2)], "The Sisters' monastery guarded the only pass between West and East."),
+            ('Tracker', [('DamageVsRareUnique', 6), ('ToHit', 8)], 'The Sisters read the road east like a book.'),
+            ('The Monastery Gate', [('ArmorPercent', 14), ('EvasionPercent', 14)], "The Sisters' monastery guarded the only pass between West and East."),
         ]},
         {'key': 'e_storm', 'band': 'mid', 'title': 'Gathering Storm', 'small': [('LightningDamage', 4)], 'notables': [
-            ('Storm Callers', [('LightningDamage', 12), ('ShockChance', 15), ('ManaOnKill', 3)], 'To a Sister, a storm is only another kind of arrow.'),
-            ('Lightning Reflexes', [('EvasionPercent', 15), ('AttackSpeed', 4), ('CastSpeed', 4)], 'Faster than the bolt.'),
+            ('Storm Callers', [('LightningDamage', 12), ('ShockChance', 15)], 'To a Sister, a storm is only another kind of arrow.'),
+            ('Lightning Reflexes', [('EvasionPercent', 15), ('CastSpeed', 5)], 'Faster than the bolt.'),
             ('Storm Rider', [('LightningDamage', 10), ('ManaOnKill', 5), ('AttackSpeed', 4)], 'Each kill feeds the next bolt.'),
         ]},
         {'key': 'e_celestial', 'band': 'outer', 'title': 'True Aim', 'small': [('ToHit', 4)], 'notables': [
@@ -353,14 +357,14 @@ BORDER_CLUSTERS = {
     'Horadric Archive': [
         {'key': 'h_scroll', 'band': 'inner', 'title': 'Scrolls', 'small': [('ManaRegen', 6), ('SpellDamage', 3)], 'notables': [
             ('Horadric Scrolls', [('SpellDamage', 12), ('ManaRegen', 15)], 'The Horadrim wrote down everything they learned of the Prime Evils.'),
-            ("Cain's Learning", [('Magic', 12), ('ManaCost', -6), ('LightRadius', 1)], 'The last of the Horadrim reads by candlelight.'),
+            ("Cain's Learning", [('Magic', 12), ('ManaCost', -6)], 'The last of the Horadrim reads by candlelight.'),
             ("Naj's Puzzler", [('CastSpeed', 6), ('ManaCost', 8)], 'A staff for a mage in a hurry.'),
         ]},
         {'key': 'h_archive', 'band': 'mid', 'title': 'Horadric Magic', 'small': [('ColdDamage', 4), ('StaffDamage', 3)], 'notables': [
-            ('Frost of the Archive', [('ColdDamage', 16), ('FreezeBuildup', 10), ('ManaCost', -5)], 'The Horadrim fought demons with pure arcane force.'),
+            ('Frost of the Archive', [('ColdDamage', 16), ('FreezeBuildup', 12)], 'The Horadrim fought demons with pure arcane force.'),
             ('Horadric Staff', [('SpellDamage', 16), ('CastSpeed', 5)], "Staff and amulet joined, the key the Horadrim left to Tal Rasha's tomb."),
             ('Soulstone Ward', [('EnergyShieldPercent', 15), ('MaxMagicResist', 1)], 'Soulstones held two Prime Evils for centuries.'),
-            ("Tyrael's Counsel", [('ManaCost', -8), ('Magic', 8), ('CastSpeed', 4)], 'Tyrael gathered the best of the mage clans and named them Horadrim.'),
+            ("Tyrael's Counsel", [('ManaCost', -8), ('Spirit', 8)], 'Tyrael gathered the best of the mage clans and named them Horadrim.'),
         ]},
         {'key': 'h_forbidden', 'band': 'mid', 'title': 'Forbidden Lore', 'small': [('SpellDamage', 4)], 'notables': [
             ("Zhar's Library", [('SpellDamage', 16), ('ManaCost', 10)], "'Here, take this and leave me to my work. Trouble me no more!'"),
@@ -374,55 +378,86 @@ BORDER_CLUSTERS = {
     ],
 }
 
-# Shrines: a big boon with a real cost, named after Diablo's shrines. 'owner' is a region or border zone.
-# 'message' is the shrine's exact in-game message (quoted as it is, no full stop added); 'rules' is the plain rule text.
+# Keystones (kind "Keystone"; until the start redesign they were "Shrine" nodes named after Diablo's shrines): a big
+# boon with a real cost. 'owner' is a region or border zone. 'message' is the Diablo shrine's exact in-game message,
+# kept as the lore line (quoted as it is, no full stop added); 'rules' is the plain rule text.
 SHRINES = [
-    {'name': 'Gloomy Shrine', 'owner': 'Warrior',
+    {'name': 'Iron Patience', 'owner': 'Warrior',
      'stats': [('ArmorPercent', 40), ('ArmourVsElements', 20), ('NoEvasion', 1), ('Damage', -20)],
      'message': 'Those who defend seldom attack', 'rules': 'Armour also applies to fire, cold and lightning hits. You cannot evade. Less attack damage.'},
-    {'name': 'Weird Shrine', 'owner': 'Warrior',
+    {'name': 'Swift Justice', 'owner': 'Warrior',
      'stats': [('FifthAttackRepeat', 100), ('Damage', -20)],
      'message': 'The sword of justice is swift and sharp', 'rules': 'Every fifth attack strikes twice, but all your attacks deal 20% reduced damage.'},
-    {'name': 'Eldritch Shrine', 'owner': 'Sorcerer',
+    {'name': 'Crimson and Azure', 'owner': 'Sorcerer',
      'stats': [('SpellsSpendEnergyShield', 25), ('LessEnergyShieldRecharge', 50)],
      'message': 'Crimson and Azure become as the sun', 'rules': 'Spells spend energy shield before mana, and deal up to 25% more damage for it. Energy shield recharges half as fast.'},
-    {'name': 'Magical Shrine', 'owner': 'Sorcerer',
+    {'name': 'Vigilant Spirit', 'owner': 'Sorcerer',
      'stats': [('HitDamageFromMana', 25), ('LessManaRecovery', 30)],
      'message': 'While the spirit is vigilant the body thrives', 'rules': 'A quarter of hit damage is taken from mana first. Less mana recovery.'},
-    {'name': 'Glimmering Shrine', 'owner': 'Rogue',
+    {'name': 'Light of Reason', 'owner': 'Rogue',
      'stats': [('DamageVsRareUnique', 25), ('LessDamageVsNormal', 15)],
      'message': 'Mysteries are revealed in the light of reason', 'rules': 'More damage against rare and unique monsters, less against the rest.'},
-    {'name': 'Abandoned Shrine', 'owner': 'Rogue',
+    {'name': 'Guided by Fate', 'owner': 'Rogue',
      'stats': [('EvasionVsSpells', 20), ('AllResist', -15)],
      'message': 'The hands of men may be guided by fate', 'rules': 'Evasion also dodges spells. Lower resistances.'},
-    {'name': 'Quiet Shrine', 'owner': 'Monk',
+    {'name': 'Inner Wellspring', 'owner': 'Monk',
      'stats': [('LifeRecoveryToShield', 60), ('NoEnergyShieldRecharge', 1)],
      'message': 'The essence of life flows from within', 'rules': 'Life recovery also recovers 60% as much energy shield, even at full life. Energy shield never recharges.'},
-    {'name': 'Shimmering Shrine', 'owner': 'Monk',
+    {'name': 'Unspent Spirit', 'owner': 'Monk',
      'stats': [('SpiritDamage', 2), ('Spirit', 10), ('LessMaxLife', 10)],
      'message': 'Spiritual energy is restored.', 'rules': '2% increased damage per 10 unreserved Spirit. Less maximum life.'},
-    {'name': 'Ornate Shrine', 'owner': 'Zakarum Cloister',
+    {'name': "Salvation's Price", 'owner': 'Zakarum Cloister',
      'stats': [('PhysicalToFire', 100), ('FireDamage', 15), ('ManaPercent', -20)],
      'message': 'Salvation comes at the cost of wisdom', 'rules': 'All physical attack damage becomes fire. Less maximum mana.'},
-    {'name': 'Mysterious Shrine', 'owner': 'Khanduras Muster',
+    {'name': 'Borrowed Strength', 'owner': 'Khanduras Muster',
      'stats': [('MinionDamage', 40), ('MinionLife', 20), ('Damage', -25), ('SpellDamage', -25)],
      'message': 'Some are weakened as one grows strong', 'rules': 'Your minions deal more damage and have more life. Your own attacks and spells deal less damage.'},
-    {'name': 'Secluded Shrine', 'owner': 'Sightless Eye',
+    {'name': 'The High Vantage', 'owner': 'Sightless Eye',
      'stats': [('DistanceRule', 25), ('MovingVulnerability', 20)],
      'message': 'The way is made clear when viewed from above', 'rules': 'More damage while no enemy is near you. You take more damage for a moment after moving.'},
-    {'name': 'Enchanted Shrine', 'owner': 'Horadric Archive',
+    {'name': 'Horadric Cycle', 'owner': 'Horadric Archive',
      'stats': [('SpellElementCycle', 30), ('OffElementLess', 15)],
      'message': 'Magic is not always what it seems to be', 'rules': 'Your spells cycle fire, cold and lightning. Spells of the current element deal more damage, the others less.'},
 ]
 
 
-# The two links out of each start: the first small node on each, like POE2's start nodes.
+# The two links out of each start: the first small node on each, like POE2's start nodes. Side 0 (anticlockwise)
+# first; each exit matches the opening column it leads into (OPENERS), so the Rogue's and Monk's no longer cross.
 START_EXITS = {
-    'Warrior': [[('ArmorPercent', 8)], [('MeleeDamage', 5)]],
-    'Sorcerer': [[('EnergyShieldPercent', 8)], [('SpellDamage', 4)]],
-    'Rogue': [[('EvasionPercent', 8)], [('BowDamage', 5)]],
-    'Monk': [[('EvasionPercent', 8), ('EnergyShieldPercent', 8)], [('StaffDamage', 5)]],
+    'Warrior': [[('MeleeDamage', 5)], [('ArmorPercent', 8)]],
+    'Sorcerer': [[('SpellDamage', 4)], [('EnergyShieldPercent', 8)]],
+    'Rogue': [[('BowDamage', 5)], [('EvasionPercent', 8)]],
+    'Monk': [[('StaffDamage', 5)], [('EvasionPercent', 8), ('EnergyShieldPercent', 8)]],
 }
+
+# The opening column's smalls (start redesign 4.2), by the opener family the column leads to: the two lead-ins
+# (2 and 3 points) and the two smalls after the first notable (6 and 7). Felt numbers, never speed (plan 4.1 rule 6).
+COLUMN_WORDS = {
+    'w_melee': ([('MeleeDamage', 5)], [('StunBuildup', 10)], [('MeleeDamage', 5)], [('LifeOnKill', 2)]),
+    'w_armour': ([('ArmorPercent', 8)], [('LifeRegen', 1)], [('ArmorPercent', 8)], [('StunThreshold', 10)]),
+    's_spell': ([('SpellDamage', 4)], [('ManaOnKill', 2)], [('SpellDamage', 4)], [('ManaPercent', 4)]),
+    's_shield': ([('EnergyShieldPercent', 8)], [('ManaRegen', 10)], [('EnergyShieldPercent', 8)], [('AllResist', 3)]),
+    'm_staff': ([('StaffDamage', 5)], [('StunBuildup', 10)], [('StaffDamage', 5)], [('ToHit', 5)]),
+    'm_hybrid': ([('EvasionPercent', 8), ('EnergyShieldPercent', 8)], [('ManaRegen', 10)],
+                 [('EvasionPercent', 8), ('EnergyShieldPercent', 8)], [('AllResist', 3)]),
+    'r_bow': ([('BowDamage', 5)], [('ToHit', 5)], [('BowDamage', 5)], [('LifeOnKill', 2)]),
+    'r_evasion': ([('EvasionPercent', 8)], [('StunThreshold', 10)], [('EvasionPercent', 8)], [('LifeRegen', 1)]),
+}
+# The three smalls of the +5 loop beside each class socket (between its two +5 nodes).
+LOOP_SMALLS = [[('LifePercent', 3)], [('AllResist', 3)], [('LifePercent', 3)]]
+# Felt smalls that take the place of a +5 node or travel small wherever the placing rule moves one out (the corner fix
+# and any stat pair or stat line within 12 points of a start), dealt in turn per class.
+FELT_SMALLS = {
+    'Warrior': [[('LifeRegen', 1)], [('StunBuildup', 10)], [('StunThreshold', 10)]],
+    'Sorcerer': [[('ManaRegen', 10)], [('ManaOnKill', 2)], [('StunThreshold', 10)]],
+    'Rogue': [[('ToHit', 5)], [('LifeOnKill', 2)], [('LifeRegen', 1)]],
+    'Monk': [[('StunBuildup', 10)], [('ManaRegen', 10)], [('ToHit', 5)]],
+}
+# The tree keeps this many "+5 to any attribute" nodes (plan 4.3): what the start redesign moves out comes back as
+# single +5 nodes on the through roads, 13 to 30 points from a start, spread over every class side.
+ATTRIBUTE_NODES = 213
+ROAD_SINGLE_COSTS = (13, 30)
+ROAD_SINGLE_GAP = 5
 
 # "+5 to any Attribute" nodes (Strength, Dexterity, Magic or Vitality, the player picks).
 ANY_ATTRIBUTE = [('AnyAttribute', 5)]
@@ -459,37 +494,36 @@ JEWEL_SOCKETS = ['Warrior', 'Monk', 'Sorcerer', 'Sightless Eye', 'Rogue', 'Zakar
 
 # ---------------------------------------------------------------- kite anchors (per class, local u, v)
 # Topology is identical for every class (so every cost is identical); only the drawing differs.
-#   E: the two exits (cost 1), H: rail heads (+5 attribute, cost 2), C: kite corners (8), T: frame tops (9),
-#   J: the own socket at the kite apex (10). Index 0 is the anticlockwise side.
-#   rail_sag: how far each rail (H to C, five nodes) bows outward; outline beads wobble 10 units or less, so the
-#     kite outline reads at 2 px (handmade-look must-fix 2).
-#   side_arc (Sorcerer): the exit, the rail head and the rail all sit on one gently bowed side from the start to
-#     the corner, so the kite is a pentagon: start, two corners, two frame tops; the socket sits flat in the top.
-#   wheel (Monk): (centre radius, centre angle off the axis); the circle passes through the start. phi: angles on
-#     the wheel, measured from the direction that faces the start.
-#   N: opening notables (5), lead: Bezier control points of their three lead-in smalls from the exit,
-#   nctl: control points of the three smalls on from the notable to its kite corner (the second way in).
+# Start redesign (Curtis 2026-10-22): no sideways +5 roads. Each side is one column: E the exit (1), two lead-in
+# smalls (2, 3), a "+5 to any attribute" (4), the opening notable (5), two smalls (6, 7), the kite corner C (8, +5).
+#   T: frame tops (9), J: the own socket at the kite apex (10). Index 0 is the anticlockwise side, the defence side.
+#   Column drawing: with N given, 'pre' (exit to notable) and 'post' (notable to corner) are curves; without it,
+#   'col' is one curve from the exit to the corner and the notable sits 4/7 of the way. A curve is ('bez', control
+#   points), ('arc', sagitta, + left of the way the column runs) or the class wheel.
+#   Warrior, the gatehouse: two short posts from the exits to the notables, then each flares out to its corner.
+#   Sorcerer, the pentagon: the exits are the bottom edge, the notables the side corners, the corners the upper ones.
+#   Rogue, the drawn bow: the defence side is the limb (one long curve), the other the string (straight, a slight sag).
+#   Monk, the wheel: a true circle through the start; both columns run round it and meet at the socket on top.
+#   loop_side: the frame top the +5 loop hangs off; loop_r, loop_turn: its radius and how far it turns off straight out
+#   (turned 50 degrees so the class set pieces keep their ground, 60 the other way for the Rogue's crossing links).
 #   X: mid-ring junction (13), D: deep socket (19); sp1/sp2: spoke guide points and zigzag.
 CLS = {
-    'Warrior': dict(  # heater shield: a flat inner edge (exits run sideways), wide shoulders, pointed apex
-        E=[(232, 46), (230, -46)], H=[(270, 150), (266, -148)],
-        C=[(410, 316), (402, -322)], rail_sag=[10, 8], T=[(600, 230), (632, -170)], J=(760, 80),
-        N=[(350, 38), (346, -36)], lead=[[(292, 58)], [(290, -56)]], nctl=[[(530, 120)], [(526, -126)]],
+    'Warrior': dict(  # gatehouse: two posts, then an arch that flares to the shoulders; pointed apex
+        E=[(232, 46), (230, -46)], N=[(396, 60), (394, -58)],
+        pre=[('bez', [(314, 50)]), ('bez', [(312, -50)])], post=[('bez', [(480, 110)]), ('bez', [(476, -116)])],
+        C=[(410, 316), (402, -322)], T=[(600, 230), (632, -170)], J=(760, 80), loop_side=1, loop_turn=-50,
         X=(860, 10), D=(1030, -206), sp1=[(790, 40)], sp1zig=24, sp2=[(930, -110)], sp2zig=36),
-    'Sorcerer': dict(  # pentagon: start, two corners, two frame tops; the socket sits flat in the top edge
-        side_arc=dict(C=[(395, 180), (390, -186)], sag=[18, 18], frac=(0.15, 0.29)),
-        T=[(600, 128), (606, -122)], J=(610, -58),
-        N=[(500, 25), (496, -30)], lead=[[(370, 14)], [(368, -16)]], nctl=[[(505, 88)], [(500, -94)]],
+    'Sorcerer': dict(  # pentagon: exits on the bottom edge, notables the side corners; the socket sits flat in the top
+        E=[(256, 52), (258, -50)], N=[(332, 168), (336, -170)],
+        pre=[('arc', -6), ('arc', 6)], post=[('arc', -8), ('arc', 8)],
+        C=[(452, 190), (448, -196)], T=[(600, 128), (606, -122)], J=(610, -58), loop_side=1, loop_turn=-50,
         X=(860, -40), D=(1085, -110), sp1=[(760, -40)], sp1zig=20, sp2=[(980, -60)], sp2zig=30),
-    'Rogue': dict(  # arrowhead: lopsided exits (5 and 55 degrees), low corners, barbs flaring back, tip leaning 6
-        E=[(268, 4), (251, -33)], H=[(300, 84), (296, -108)],
-        C=[(410, 226), (440, -196)], rail_sag=[8, 10], T=[(598, 252), (640, -186)], J=(755, 83),
-        N=[(410, 18), (404, -28)], lead=[[(330, 10)], [(325, -35)]], nctl=[[(540, 110)], [(540, -100)]],
+    'Rogue': dict(  # drawn bow: the limb curves away to its tip, the string runs straight; they meet at the socket
+        E=[(268, 4), (251, -33)], col=[('arc', -70), ('arc', 8)],
+        C=[(410, 226), (440, -196)], T=[(598, 252), (640, -186)], J=(755, 83), loop_side=1, loop_turn=60,
         X=(930, 10), D=(1050, -235), sp1=[(860, 60)], sp1zig=20, sp2=[(1010, -120)], sp2zig=30),
     'Monk': dict(  # wheel: a true circle whose centre sits 8 degrees off the axis; the start is on its rim
-        wheel=(455, 8), phi=dict(E=(-5, 21), H=(-18, 34), C=(-99, 109), T=(-140, 145), J=180),
-        N=[(400, 92), (406, -78)], lead=[[(300, 110), (420, 110)], [(306, -96), (432, -14)]],
-        nctl=[[(492, 210)], [(498, -60)]],
+        wheel=(455, 8), phi=dict(E=(-5, 21), C=(-99, 109), T=(-140, 145), J=180), loop_side=1, loop_turn=-50,
         X=(880, -75), D=(1015, 150), sp1=[(770, 15)], sp1zig=22, sp2=[(930, 120)], sp2zig=40, sp2signs=[-1, 1, -1]),
 }
 
@@ -563,10 +597,12 @@ KNOTS = {'Warrior': (900, -30), 'Sorcerer': (860, 115), 'Monk': (900, 200), 'Rog
 
 # ---------------------------------------------------------------- travel smalls (balance must-fix 3)
 # Travel smalls are the lattice beads. Values: Life 3%, All res 2%, Mana 4%. On the landmark spine (exits, rails,
-# spokes, laterals, border spines, rim spurs) they rotate strictly Life, Res, Mana in the order a player meets them,
-# identically for every class. Only the rings and braids carry an area's flavour stat (up to about half).
+# spokes, laterals, border spines, rim spurs) they rotate strictly Res, Life, Mana in the order a player meets them,
+# identically for every class. Only the rings and braids carry an area's flavour stat (up to about half). The start
+# redesign took the sideways roads out, so the rotation starts on Res to keep each class's reference builds on the
+# same Life, Res and Mana counts as before (check 3c).
 TRAVEL_STATS = {'Life': [('LifePercent', 3)], 'Res': [('AllResist', 2)], 'Mana': [('ManaPercent', 4)]}
-TRAVEL_ROTATION = ['Life', 'Res', 'Mana']
+TRAVEL_ROTATION = ['Res', 'Life', 'Mana']
 TRAVEL_FLAVOUR = {'Warrior': 'Life', 'Sorcerer': 'Mana', 'Rogue': 'Res', 'Monk': 'Life',
                   'Zakarum Cloister': 'Life', 'Horadric Archive': 'Mana', 'Sightless Eye': 'Res', 'Khanduras Muster': 'Res'}
 
@@ -599,8 +635,11 @@ STYLE = {
     'Rogue': (('r_fletching', 'bow volley', ['r_fletching', 'r_aim', 'r_speed', 'r_lightning', 'r_fire', 'r_frost']),
               ('r_knife', 'knife work', ['r_knife', 'r_blades', 'r_shadow', 'r_hunter'])),
 }
-OPENERS = {'Warrior': ('w_armour', 'w_melee'), 'Sorcerer': ('s_shield', 's_spell'),
+# The opener on each side matches that side's style pair (start redesign 4.1 rule 5): the Warrior's sword post
+# carries the two-hand pair, the Sorcerer's spell side the fire pair. The defence notable hangs on DEFENCE_SIDE.
+OPENERS = {'Warrior': ('w_melee', 'w_armour'), 'Sorcerer': ('s_spell', 's_shield'),
            'Rogue': ('r_bow', 'r_evasion'), 'Monk': ('m_staff', 'm_hybrid')}
+DEFENCE_SIDE = {'Warrior': 1, 'Sorcerer': 1, 'Monk': 1, 'Rogue': 0}
 DEFENCE = {'Warrior': 'w_vitality', 'Sorcerer': 's_barrier', 'Rogue': 'r_survival', 'Monk': 'm_harmony'}
 # The crossover that enables a second weapon type: (border it faces, the weapon it opens). Fun must-fix 3.
 CROSSOVER_WEAPON = {'Warrior': ('Khanduras Muster', 'bows'), 'Sorcerer': ('Zakarum Cloister', 'attacks with fire (bows, melee)'),
@@ -776,22 +815,22 @@ CONTENT_PASS = {
         {'key': 'w_warlord_road', 'side': 0, 'band': 'mid', 'title': "Warlord's Road", 'small': [('TwoHandDamage', 6)], 'notables': [
             ('The Armories of Hell', [('TwoHandDamage', 18), ('LifeOnKill', 8)], 'The armories of Hell are home to the Warlord of Blood. In his wake lie the bodies of thousands.'),
             ('Heavy Momentum', [('TwoHandDamage', 12), ('AttackSpeed', 4)], 'A great blade is slow to start and slower to stop.'),
-            ('The Wounded Townsman', [('StunBuildup', 20), ('TwoHandDamage', 8), ('LifeOnKill', 6)], "'Avenge us! Find this Butcher and slay him so that our souls may finally rest...'"),
+            ('The Wounded Townsman', [('StunBuildup', 20), ('LifeOnKill', 6)], "'Avenge us! Find this Butcher and slay him so that our souls may finally rest...'"),
             ('Burning Zeal', [('FireDamage', 12), ('TwoHandDamage', 10)], "The cloister's fire burns hottest along a long blade."),
         ]},
         {'key': 'w_deep', 'side': 0, 'band': 'outer', 'title': 'Hardened in the Deep', 'small': [('Vitality', 7)], 'notables': [
             ('Labyrinth Veteran', [('TwoHandDamage', 12), ('LifePercent', 5)], 'Sixteen levels down, a man either grows harder or is carried out.'),
-            ('Overhead Chop', [('TwoHandDamage', 12), ('MoreVsStunned', 20)], 'Lift it high and let its weight do the work.'),
+            ('Overhead Chop', [('StunBuildup', 20), ('MoreVsStunned', 10)], 'Lift it high and let its weight do the work.'),
         ]},
         {'key': 'w_square', 'side': 1, 'band': 'mid', 'title': 'Defence of the Square', 'small': [('OneHandDamage', 6)], 'notables': [
-            ('Rim and Edge', [('OneHandDamage', 12), ('BlockChance', 2), ('ArmorPercent', 10)], 'The palace knights were never handed a sword without a shield to go with it.'),
+            ('Rim and Edge', [('OneHandDamage', 12), ('BlockChance', 3)], 'The palace knights were never handed a sword without a shield to go with it.'),
             ("Snotspill's Banner", [('OneHandDamage', 12), ('LifeOnKill', 6)], '"You give! Yes, good! Go now, we strong. We kill all with big Magic!"'),
             ('Quick Guard', [('AttackSpeed', 5), ('BlockChance', 2), ('OneHandDamage', 6)], 'The shield comes down, the sword goes in.'),
-            ("Albrecht's Champion", [('OneHandDamage', 12), ('DamageVsRareUnique', 5), ('AttackSpeed', 3)], 'Lazarus carried the prince below. Someone had to go down after him.'),
+            ("Albrecht's Champion", [('OneHandDamage', 12), ('DamageVsRareUnique', 8)], 'Lazarus carried the prince below. Someone had to go down after him.'),
         ]},
         {'key': 'w_anvil', 'side': 1, 'band': 'outer', 'title': 'Hammer and Anvil', 'small': [('ArmorPercent', 10)], 'notables': [
             ('Hammer and Anvil', [('OneHandDamage', 14), ('Strength', 8)], 'The old smiths say the anvil teaches more than the hammer.'),
-            ('Broken Fealty', [('BlockChance', 2), ('ArmorPercent', 15), ('StunThreshold', 15)], "Leoric's own knights were forced to kill him. He cursed them for it."),
+            ('Broken Fealty', [('StunThreshold', 15), ('LifePercent', 5)], "Leoric's own knights were forced to kill him. He cursed them for it."),
             ('Tristram by Night', [('ArmorPercent', 15), ('LifePercent', 5)], 'When demons ran through the village at night, every barred door was a wall worth holding.'),
             ('Rising Sun Brawler', [('MeleeDamage', 10), ('Vitality', 8)], 'Ogden kept a club behind the bar of the Rising Sun, and never needed it twice for the same man.'),
         ]},
@@ -800,7 +839,7 @@ CONTENT_PASS = {
         {'key': 's_kehjistan', 'side': 0, 'band': 'mid', 'title': 'Clan Towers', 'small': [('LightningDamage', 5)], 'notables': [
             ('Thunder over Kehjistan', [('LightningDamage', 18), ('ManaOnKill', 4)], 'Over the clan towers of Kehjistan the sky never quite cleared.'),
             ('Warding Glyphs', [('AllResist', 6), ('EnergyShieldRecharge', 15)], 'Glyphs chalked on the sleeve flare and fade as the ward knits.'),
-            ('Clan Gemcutter', [('EnergyShieldPercent', 12), ('SpellDamage', 8), ('ManaOnKill', 4)], 'The clans cut their gems to hold a spell, not to catch the light.'),
+            ('Clan Gemcutter', [('EnergyShieldPercent', 15), ('SpellDamage', 10)], 'The clans cut their gems to hold a spell, not to catch the light.'),
         ]},
         {'key': 's_circle', 'side': 1, 'band': 'mid', 'title': 'The Summoning Circle', 'small': [('MinionDamage', 8)], 'notables': [
             ('The Summoning Circle', [('MinionDamage', 20), ('CastSpeed', 4)], 'Draw the circle quickly. What waits beyond it is not patient.'),
@@ -834,7 +873,7 @@ CONTENT_PASS = {
             ('Head of the Pack', [('DamageVsRareUnique', 5), ('MeleeDamage', 10)], 'Cut down the one they follow and the rest scatter.'),
         ]},
         {'key': 'r_hidden', 'side': 1, 'band': 'outer', 'title': 'Hidden Ways', 'small': [('EvasionPercent', 10)], 'notables': [
-            ('Stony Field', [('EvasionPercent', 18), ('StunThreshold', 15)], 'The Sisters train on the Stony Field, where any step can turn an ankle.'),
+            ('Stony Field', [('StunThreshold', 15), ('LifePercent', 4)], 'The Sisters train on the Stony Field, where any step can turn an ankle.'),
             ("Hunter's Rest", [('EvasionPercent', 12), ('LifeRegenRate', 6)], 'Sleep light, heal fast, move at dawn.'),
             ('Field Rations', [('FlaskRecovery', 15), ('LifeOnKill', 6)], "Bread, salt and one of the priestess's draughts. Save the draught for last."),
             ('Poisoned Water', [('AllResist', 8), ('EvasionPercent', 10)], "Something fouled Tristram's water at its source. Pepin begged someone to go down and look."),
@@ -848,11 +887,11 @@ CONTENT_PASS = {
         {'key': 'm_exile', 'side': 0, 'band': 'mid', 'title': "The Exile's Road", 'small': [('StaffDamage', 6)], 'notables': [
             ("Pilgrim's Staff", [('StaffDamage', 15), ('LifeOnKill', 6)], 'A walking staff on the road, a weapon at the inn.'),
             ('Sky-Struck Staff', [('StaffDamage', 12), ('ShockChance', 15)], 'Ash wood, struck once by lightning. The Patriarchs say it remembers.'),
-            ("Exile's Road", [('StaffDamage', 12), ('Dexterity', 6), ('AttackSpeed', 3)], 'Conquered and driven into the wilderness, the Brotherhood kept only their staves.'),
-            ('Rooted Stance', [('EvasionPercent', 15), ('EnergyShieldPercent', 15), ('StunThreshold', 15)], 'The bough bends. The root does not.'),
+            ("Exile's Road", [('StaffDamage', 12), ('Dexterity', 8)], 'Conquered and driven into the wilderness, the Brotherhood kept only their staves.'),
+            ('Rooted Stance', [('EvasionPercent', 18), ('StunThreshold', 15)], 'The bough bends. The root does not.'),
         ]},
         {'key': 'm_living', 'side': 1, 'band': 'mid', 'title': 'Flesh Over Steel', 'small': [('MeleeDamage', 6)], 'notables': [
-            ('Ice in the Veins', [('MeleeDamage', 12), ('ColdDamage', 10)], 'A calm heart strikes colder.'),
+            ('Ice in the Veins', [('ColdDamage', 12), ('ManaRegen', 10)], 'A calm heart strikes colder.'),
             ('Flesh Over Steel', [('MeleeDamage', 12), ('LifeOnKill', 6)], 'Steel can be taken from you. The hand cannot.'),
             ('Swift Prayer', [('AttackSpeed', 5), ('Magic', 8)], 'A prayer said on the move still reaches the gods.'),
             ('Oath of the Bough', [('MeleeDamage', 10), ('SpellDamage', 10)], 'Conquered once, the Brotherhood swore to master every way of fighting.'),
@@ -885,7 +924,7 @@ CONTENT_PASS = {
             ('Bones of the Garrison', [('MinionDamage', 12), ('ArmorPercent', 15)], 'The old garrison was buried beneath the cathedral. Not all of it stayed buried.'),
             ("Lester's Orchard", [('Damage', 10), ('LifeOnKill', 6)], "\"At the edge of my orchard... there's a horrible thing swelling out of the ground!\""),
             ("Quartermaster's Ledger", [('FlaskCharges', 15), ('ArmorPercent', 10)], 'Every arrow, every potion and every boot, counted twice.'),
-            ('The Talsande Ford', [('StunBuildup', 15), ('Damage', 8), ('StunThreshold', 10)], 'The levy held the ford on the Talsande for a day and a night.'),
+            ('The Talsande Ford', [('StunBuildup', 15), ('StunThreshold', 15)], 'The levy held the ford on the Talsande for a day and a night.'),
         ]},
         {'key': 'k_woods', 'side': 1, 'band': 'mid', 'title': 'Woods of Khanduras', 'small': [('BowDamage', 5), ('EvasionPercent', 5)], 'notables': [
             ('Poachers of Khanduras', [('BowDamage', 12), ('LifeOnKill', 6)], "The king's foresters hanged poachers. In the war they made them archers."),
@@ -905,14 +944,14 @@ CONTENT_PASS = {
             ('Mountain Thunder', [('LightningDamage', 12), ('StaffDamage', 10)], 'Up in the passes you hear the storm in your teeth.'),
         ]},
         {'key': 'e_disciplines', 'side': 1, 'band': 'outer', 'title': 'Two Disciplines', 'small': [('EvasionPercent', 6), ('EnergyShieldPercent', 6)], 'notables': [
-            ('Two Disciplines', [('Dexterity', 8), ('Magic', 8), ('AttackSpeed', 3)], 'Eye and breath are taught in the same courtyard, by the same switch.'),
+            ('Two Disciplines', [('Dexterity', 8), ('Magic', 8)], 'Eye and breath are taught in the same courtyard, by the same switch.'),
             ('Still Waters', [('EnergyShieldPercent', 15), ('EvasionPercent', 15)], 'Stand still enough and the blow has nowhere to land.'),
         ]},
     ],
     'Horadric Archive': [
         {'key': 'h_order', 'side': 0, 'band': 'mid', 'title': "The Order's Staff", 'small': [('StaffDamage', 5), ('ColdDamage', 3)], 'notables': [
             ("The Order's Staff", [('StaffDamage', 14), ('ColdDamage', 10)], 'A Horadric staff was a scholar\'s tool, until a demon came too close.'),
-            ('Strike and Spell', [('AttackSpeed', 4), ('CastSpeed', 4), ('StaffDamage', 10)], 'A blow of the staff, a word of power, and again.'),
+            ('Strike and Spell', [('StaffDamage', 12), ('CastSpeed', 5)], 'A blow of the staff, a word of power, and again.'),
             ('Horadric Vigil', [('ManaPercent', 8), ('LifePercent', 4)], 'Father to son, the Horadrim kept the watch. Then only Cain was left.'),
             ("Jered Cain's Watch", [('Magic', 10), ('ManaRegen', 15)], 'Jered Cain buried the soulstone in Khanduras and set the order to watch over it.'),
         ]},
@@ -964,13 +1003,13 @@ CAPSTONES = {
 # Crossover notables (design-spec §11), keyed (class, the border they face). The CROSSOVER_WEAPON one of each class
 # opens a second weapon type; the other mixes the class with that border.
 CROSSOVERS = {
-    ('Warrior', 'Zakarum Cloister'): ('Sword of the Cloister', [('MeleeDamage', 10), ('FireDamage', 10), ('LifeRegenRate', 3)], "The cloister's knights carried their faith on the edge."),
+    ('Warrior', 'Zakarum Cloister'): ('Sword of the Cloister', [('MeleeDamage', 10), ('FireDamage', 10)], "The cloister's knights carried their faith on the edge."),
     ('Warrior', 'Khanduras Muster'): ('Iron Draw', [('ArrowDamageMod', 65), ('BowDamage', 10)], 'The longbowmen of the levy drew with their backs, not their fingers.'),
-    ('Sorcerer', 'Horadric Archive'): ('Staff and Scroll', [('SpellDamage', 10), ('StaffDamage', 10), ('ManaRegen', 10)], 'The Horadrim read with one hand and held the staff with the other.'),
+    ('Sorcerer', 'Horadric Archive'): ('Staff and Scroll', [('SpellDamage', 10), ('StaffDamage', 10)], 'The Horadrim read with one hand and held the staff with the other.'),
     ('Sorcerer', 'Zakarum Cloister'): ('Fire in the Hand', [('PhysicalToFire', 25), ('SpellDamageToFireAttacks', 50)], 'The battle priests never saw why fire should stay in a spell.'),
-    ('Rogue', 'Khanduras Muster'): ('Shoulder to Shoulder', [('BowDamage', 10), ('ArmorPercent', 12), ('FlaskCharges', 10)], "In the winter after Diablo fell, levy shields and Sisters' bows held the roads of Khanduras together."),
+    ('Rogue', 'Khanduras Muster'): ('Shoulder to Shoulder', [('BowDamage', 10), ('ArmorPercent', 12)], "In the winter after Diablo fell, levy shields and Sisters' bows held the roads of Khanduras together."),
     ('Rogue', 'Sightless Eye'): ('Eastern Teachers', [('StaffDamage', 14), ('AttackSpeed', 4)], 'The Sisters took their inner sight from Eastern teachings. The staff came with it.'),
-    ('Monk', 'Horadric Archive'): ('Pilgrim of the Archive', [('MeleeDamage', 10), ('ColdDamage', 10), ('ManaRegen', 10)], 'Pilgrims who copied the Horadric books learned the cold spells in the margins.'),
+    ('Monk', 'Horadric Archive'): ('Pilgrim of the Archive', [('MeleeDamage', 10), ('ColdDamage', 10)], 'Pilgrims who copied the Horadric books learned the cold spells in the margins.'),
     ('Monk', 'Sightless Eye'): ("The Sisters' Gift", [('StaffAppliesToBow', 1), ('BowDamage', 10)], 'At the monastery the Brotherhood borrowed the bow, and taught the staff in return.'),
 }
 

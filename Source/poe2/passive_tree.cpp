@@ -19,7 +19,6 @@
 #include "player.h"
 #include "poe2/jewels.hpp"
 #include "poe2/weapon_swap.hpp"
-#include "tables/questdat.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "utils/format.hpp"
@@ -588,30 +587,14 @@ std::optional<PassiveNodeId> PassiveStartNode(HeroClass heroClass)
 	return std::nullopt;
 }
 
-int QuestPassivePoints(const Player &player)
+int BookPassivePoints(const Player &player)
 {
-	return std::min(std::popcount(player.poe2.questsRewarded) * QuestPassivePointsEach, MaxQuestPassivePoints);
-}
-
-int RecordQuestPassivePoints(Player &player)
-{
-	if (!CanUsePassives())
-		return 0;
-	const int before = QuestPassivePoints(player);
-	for (size_t quest = 0; quest < MAXQUESTS && quest < 32; quest++) {
-		// Hellfire's joke quest gives its item only (Curtis 2026-10-19, Levels 1 to 100 answer 34).
-		if (quest == Q_JERSEY)
-			continue;
-		if (Quests[quest]._qactive == QUEST_DONE)
-			player.poe2.questsRewarded |= 1U << quest;
-	}
-	return QuestPassivePoints(player) - before;
+	return std::popcount(static_cast<unsigned>(player.poe2.specBooks)) * PassivePointsPerBook;
 }
 
 int PassivePointsTotal(const Player &player)
 {
-	return std::max(player.getCharacterLevel() - 1, 0) + QuestPassivePoints(player)
-	    + std::popcount(static_cast<unsigned>(player.poe2.specBooks)) * PassivePointsPerBook;
+	return std::max(player.getCharacterLevel() - 1, 0) + BookPassivePoints(player);
 }
 
 int PassivePointsSpent(const Player &player)
@@ -909,6 +892,18 @@ void RefundOverspentWeaponSets(Player &player)
 	TelemetryLog("weaponset", FormatRuntime("refunded weapon sets: {:d} points each now", total));
 }
 
+bool RefundOverspentPassives(Player &player)
+{
+	if (PassivePointsLeft(player) >= 0)
+		return false;
+	TelemetryPassivesCleared(player, "overspent refund", static_cast<int>(player.poe2.passives.count() + player.poe2.setPassives[0].count() + player.poe2.setPassives[1].count()));
+	player.poe2.passives.reset();
+	for (auto &set : player.poe2.setPassives)
+		set.reset();
+	player.poe2.passiveAttributes.fill(0);
+	return true;
+}
+
 void RefundPassivesForNewTree(Player &player)
 {
 	if (TreeHash == 0 || player.poe2.passiveTreeHash == TreeHash)
@@ -1184,7 +1179,7 @@ int PassiveElementDamage(const Player &player, DamageType type)
 
 std::string PassiveStatText(PassiveStat stat, int value)
 {
-	// Shrines take as well as give: their negative percentages read as "reduced".
+	// Keystones take as well as give: their negative percentages read as "reduced".
 	const auto percent = [value](std::string_view increased, std::string_view reduced) {
 		return value >= 0 ? FormatRuntime(increased, value) : FormatRuntime(reduced, -value);
 	};

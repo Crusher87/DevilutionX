@@ -127,6 +127,9 @@ Monster *NearestOtherMonster(const Monster &from, int range)
 	return nearest;
 }
 
+/** @brief Executioner and Overhead Chop add up to this much more damage against stunned monsters, no more. */
+constexpr int MoreVsStunnedCap = 20;
+
 /** @brief More damage from the state of the monster hit (The Maiden's Whisper, Overhead Chop), in percent. */
 int HitConditionPercent(const Player &player, const Monster &monster)
 {
@@ -134,7 +137,7 @@ int HitConditionPercent(const Player &player, const Monster &monster)
 	// The Maiden's Road toll adds as much again against a monster that hasn't noticed the hero.
 	if (const int more = Rule(player, UniqueRule::FirstStrike); more > 0 && monster.hitPoints >= monster.maxHitPoints)
 		percent = percent * (100 + more + UnawareFirstStrikeBonus(player, monster)) / 100;
-	if (const int more = Rule(player, UniqueRule::MoreVsStunned); more > 0 && monster.poe2.heavyStunTicks > 0)
+	if (const int more = std::min(Rule(player, UniqueRule::MoreVsStunned), MoreVsStunnedCap); more > 0 && monster.poe2.heavyStunTicks > 0)
 		percent = percent * (100 + more) / 100;
 	return percent;
 }
@@ -283,7 +286,7 @@ int GeneralDamagePercent(const Player &player)
 		const int highest = std::max({ player._pStrength, player._pMagic, player._pDexterity });
 		percent += std::min(highest / 50, cap);
 	}
-	// Unreserved Spirit's bonus (the Shimmering Shrine) stops at 30% more.
+	// Unreserved Spirit's bonus (the Unspent Spirit keystone) stops at 30% more.
 	if (const int perTen = Rule(player, UniqueRule::SpiritDamage); perTen > 0)
 		percent += std::min(std::max(MaxSpirit(player) - ReservedSpirit(player), 0) / 10 * perTen, SpiritDamageCap);
 	if (const int more = Rule(player, UniqueRule::DistanceRule); more > 0 && state.nearestEnemy > FarRangeTiles)

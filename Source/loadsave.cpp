@@ -35,6 +35,7 @@
 #include "monster.h"
 #include "monsters/validation.hpp"
 #include "mpq/mpq_common.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
 #include "poe2/charms.hpp"
@@ -2864,10 +2865,16 @@ void LoadPoe2HeroData(Player &player)
 	// Cast on Dodge and the other trigger supports became meta gems.
 	if (version > 0)
 		MigrateTriggerSupports(player);
-	// Points spent on an older tree come back when the tree changes shape.
+	// Points spent on an older tree come back when the tree changes shape, and quest points became Books (tree start
+	// redesign); the hero stays where they were and sees the tree open with one line saying what changed.
 	if (version > 0) {
+		const int bookChange = gbIsPoe2 ? MigrateToBooks(player) : 0;
+		const bool redrawn = PassiveTreeHash() != 0 && player.poe2.passiveTreeHash != PassiveTreeHash();
 		RefundPassivesForNewTree(player);
+		const bool refunded = redrawn || RefundOverspentPassives(player);
 		RefundOverspentWeaponSets(player);
+		if (&player == MyPlayer && gbIsPoe2 && (refunded || bookChange != 0))
+			QueueTreeNotice(redrawn, refunded, bookChange);
 	}
 }
 

@@ -258,6 +258,9 @@ motif('Fork', False, [('s', 0, -40), ('s', 2, -4), ('N', -30, 22), ('s', 30, 18)
 motif('Horns', True, [('s', 0, -44), ('s', 0, -8), ('s', -34, 10), ('N', -46, 50), ('s', 34, 10), ('N', 46, 50)],
       [(0, 1, 'c', 0.05), (1, 2, 'c', 0.2), (2, 3, 'c', -0.3), (1, 4, 'c', -0.2), (4, 5, 'c', 0.3)], [0], 'all areas',
       "the Lord of Terror's horns: a stem that sweeps out into two horns, a notable at each tip")
+motif('Short Horns', True, [('s', 0, -26), ('s', -34, 6), ('N', -46, 46), ('s', 34, 6), ('N', 46, 46)],
+      [(0, 1, 'c', 0.2), (1, 2, 'c', -0.3), (0, 3, 'c', -0.2), (3, 4, 'c', 0.3)], [0], 'class openings',
+      'the horns without their stem: hung off the small after an opening notable, both notables at 9')
 motif('Crook', False, [('s',) + P(3, -90), ('s',) + P(3, -44), ('s',) + P(3, 8), ('s',) + P(3, 62), ('N', 0, 0)],
       ring_links([0, 1, 2, 3], closed=False) + [(3, 4, 'c', 0.25)], [0], 'all', 'arc that hooks into a centre notable')
 motif('Lens', False, [('s', 0, -36), ('s', -24, 0), ('s', 24, 0), ('N', 0, 38)],
@@ -591,8 +594,145 @@ def wheel_point(c, phi):
     return (cen[0] + rr * math.cos(math.radians(toward + phi)), cen[1] + rr * math.sin(math.radians(toward + phi)))
 
 
+def column_curve(T, c, a, b, spec):
+    """The curve an opening column follows from node a to node b: ('bez', control points in local (u, v)),
+    ('arc', signed sagitta, + left of a->b) or ('wheel', phi0, phi1) round the class's wheel."""
+    p0, p1 = T.pos[a], T.pos[b]
+    if spec[0] == 'bez':
+        cps = [p0] + [P2(c, q) for q in spec[1]] + [p1]
+        return lambda t: bez(cps, t)
+    if spec[0] == 'arc':
+        pts = arc_poly(p0, p1, spec[1], 400) if abs(spec[1]) > 1e-6 else None
+        return (lambda t: pts[int(round(t * 400))]) if pts else (lambda t: (p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t))
+    if spec[0] == 'wheel':
+        return lambda t: wheel_point(c, spec[1] + (spec[2] - spec[1]) * t)
+    raise ValueError(spec)
+
+
+def path_on(T, a, b, kinds, f, tag, labels=None, area=None):
+    """Nodes of the given kinds at equal spacing along curve f from a to b (f(0) at a, f(1) at b); each link is the
+    circular arc through the curve's own midpoint between its ends. Returns the ids, a and b included."""
+    samples = [f(i / 400) for i in range(401)]
+    samples[0], samples[-1] = T.pos[a], T.pos[b]
+    acc = [0.0]
+    for p, q in zip(samples, samples[1:]):
+        acc.append(acc[-1] + math.dist(p, q))
+    n = len(kinds) + 1
+    ids = [a]
+    cuts = [0]
+    k = 0
+    for i, kind in enumerate(kinds):
+        target = acc[-1] * (i + 1) / n
+        while acc[k] < target:
+            k += 1
+        lab = labels[i] if labels else ''
+        ids.append(T.add(samples[k], kind, tag, lab, area if kind == 'N' else None))
+        cuts.append(k)
+    ids.append(b)
+    cuts.append(400)
+    for (u, v), (s0, s1) in zip(zip(ids, ids[1:]), zip(cuts, cuts[1:])):
+        T.link(u, v, sag_rel_from_points(T.pos[u], T.pos[v], samples[(s0 + s1) // 2]), 'clu')
+    return ids
+
+
+# The opening column (start redesign, Curtis 2026-10-22): exit (1), two lead-in smalls (2, 3), "+5 to any
+# attribute" (4), the first notable (5), two smalls (6, 7), the class corner (8). No sideways +5 roads.
+COLUMN_KINDS = 'ssANss'
+
+
+def add_socket_loop(T, c, top, J, Cn):
+    """The +5 loop beside the socket: five nodes hung off a frame top (9), costing 10, 11, 12, 11, 10: +5, Life,
+    All resist, Life, +5. A dead end, so no road gets cheaper. It bows out away from the kite."""
+    pt, pj, pc = T.pos[top], T.pos[J], T.pos[Cn]
+    mid = ((pj[0] + pc[0]) / 2, (pj[1] + pc[1]) / 2)
+    u = unit(mid, pt)
+    r = C.CLS[c].get('loop_r', 50.0)
+    turn = C.CLS[c].get('loop_turn', 0.0)
+    a0 = math.atan2(u[1], u[0]) + math.radians(turn)
+    cen = (pt[0] + r * math.cos(a0), pt[1] + r * math.sin(a0))
+    th0 = math.atan2(pt[1] - cen[1], pt[0] - cen[0])
+    ring = [top]
+    for kk, kind in enumerate('AsssA'):
+        th = th0 + math.radians(60 * (kk + 1))
+        ring.append(T.add((cen[0] + r * math.cos(th), cen[1] + r * math.sin(th)), kind, 'loop'))
+    ring.append(top)
+    for x, y in zip(ring, ring[1:]):
+        px, py = T.pos[x], T.pos[y]
+        tm = math.atan2((py[1] + px[1]) / 2 - cen[1], (py[0] + px[0]) / 2 - cen[0])
+        T.link(x, y, sag_rel_from_points(px, py, (cen[0] + r * math.cos(tm), cen[1] + r * math.sin(tm))), 'clu')
+    return ring[1:-1]
+
+
+def settle_loops(T, turns=40):
+    """Reshapes a socket loop when the layout left it crossing a link, too close to a node or with a link running too
+    close to it: the smallest change that clears it, out of a turn round its frame top, a narrower bow and a smaller or
+    larger loop. Only the five loop nodes move and their links stay dead ends, so no cost or road changes."""
+    shapes = sorted(((turn, w, s) for turn in range(-turns, turns + 1, 2) for w in (1.0, 0.85, 0.7, 0.6, 0.5, 0.4)
+                     for s in (1.0, 0.9, 1.15, 1.3)),
+                    key=lambda v: (abs(v[0]) + 40 * (1 - v[1]) + 40 * abs(1 - v[2]), v))
+    for c in CLASSES:
+        ring = list(T.key[c]['loop'])
+        top = T.key[c]['T'][C.CLS[c].get('loop_side', 1)]
+        own = set(ring) | {top}
+        ring_edges = [e for e in T.edges if e[0] in own and e[1] in own]
+        ring_set = set(map(id, ring_edges))
+        pt = T.pos[top]
+        cen = (sum(T.pos[i][0] for i in own) / 6, sum(T.pos[i][1] for i in own) / 6)
+        r = math.dist(pt, cen)
+        a0 = unit(pt, cen)
+        side = min((1, -1), key=lambda sg: math.dist(T.pos[ring[0]], (pt[0] + r * 0.5 * a0[0] - sg * r * 0.866 * a0[1],
+                                                                     pt[1] + r * 0.5 * a0[1] + sg * r * 0.866 * a0[0])))
+        phi = {top: 0}
+        phi.update({i: 60 * (k + 1) for k, i in enumerate(ring)})
+        reach = 4 * r + 80
+        near = [i for i in range(len(T.pos)) if i not in own and math.dist(T.pos[i], pt) < reach]
+        segs = [s for s in edge_segments(T, [e for e in T.edges if id(e) not in ring_set])
+                if min(math.dist(s[0], pt), math.dist(s[1], pt)) < reach]
+        home = {i: T.pos[i] for i in ring}
+        sags = [e[2] for e in ring_edges]
+
+        def fits():
+            for i in ring:
+                if any(math.dist(T.pos[i], T.pos[j]) < NODE_GAP for j in near):
+                    return False
+                if any(seg_dist(T.pos[i], s[0], s[1]) < LINK_CLEAR for s in segs if i not in (s[2], s[3])):
+                    return False
+            for s in edge_segments(T, ring_edges):
+                if any(seg_dist(T.pos[j], s[0], s[1]) < LINK_CLEAR for j in near):
+                    return False
+                if any(segs_cross(s[0], s[1], t[0], t[1]) for t in segs if not {s[2], s[3]} & {t[2], t[3]}):
+                    return False
+            return True
+        if fits():
+            continue
+        for turn, w, s in shapes:
+            ca, sa = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+            a = (ca * a0[0] - sa * a0[1], sa * a0[0] + ca * a0[1])
+            b = (-side * a[1], side * a[0])
+
+            def at(f):
+                x, y = r * s * (1 - math.cos(math.radians(f))), r * s * w * math.sin(math.radians(f))
+                return (pt[0] + x * a[0] + y * b[0], pt[1] + x * a[1] + y * b[1])
+            for i in ring:
+                T.pos[i] = at(phi[i])
+            for e in ring_edges:
+                f0, f1 = phi[e[0]], phi[e[1]]
+                f0, f1 = (f0 or 360) if f1 > 180 else f0, (f1 or 360) if f0 > 180 else f1
+                e[2] = sag_rel_from_points(T.pos[e[0]], T.pos[e[1]], at((f0 + f1) / 2))
+            if fits():
+                T.notes.setdefault('loop_settle', {})[c] = (turn, w, s)
+                break
+        else:
+            for i in ring:
+                T.pos[i] = home[i]
+            for e, sg in zip(ring_edges, sags):
+                e[2] = sg
+            T.problems.append('%s loop: no shape clears it' % c)
+
+
 def build_lattice():
     T = Tree()
+    T.no_attach = set()
     key = {}
     for c, a in CLASSES.items():
         k = key[c] = {}
@@ -600,72 +740,39 @@ def build_lattice():
         S = k['S'] = T.add(pol(R_START, a), 'S', 'start', c)
         if 'wheel' in p:
             ph = p['phi']
-            _, _, _, phiS = wheel_geom(c)
             E = [T.add(wheel_point(c, ph['E'][i]), 's', 'exit') for i in range(2)]
-            H = [T.add(wheel_point(c, ph['H'][i]), 'A', 'rail') for i in range(2)]
             Cn = [T.add(wheel_point(c, ph['C'][i]), 'A', 'corner') for i in range(2)]
             Tt = [T.add(wheel_point(c, ph['T'][i]), 'A', 'frame') for i in range(2)]
             J = T.add(wheel_point(c, ph['J']), 'J', 'socket', 'own socket')
-            for i in range(2):
-                T.link(S, E[i], 0.0, 'lat')
-                T.link(E[i], H[i], 0.0, 'lat')
-                phis = [ph['H'][i] + (ph['C'][i] - ph['H'][i]) * f / 6 for f in range(1, 6)]
-                ids = [H[i]] + [T.add(wheel_point(c, f), 'A' if j % 2 == 0 else 't', 'rail') for j, f in enumerate(phis)] + [Cn[i]]
-                for u, v in zip(ids, ids[1:]):
-                    T.link(u, v, 0.0, 'lat')
-                k.setdefault('rails', []).append(ids)
-                T.link(Cn[i], Tt[i], 0.0, 'lat')
-                T.link(Tt[i], J, 0.0, 'lat')
-        elif 'side_arc' in p:
-            sa = p['side_arc']
-            Cn = [T.add(P2(c, sa['C'][i]), 'A', 'corner') for i in range(2)]
-            Tt = [T.add(P2(c, p['T'][i]), 'A', 'frame') for i in range(2)]
-            J = T.add(P2(c, p['J']), 'J', 'socket', 'own socket')
-            E, H = [], []
-            for i in range(2):
-                pS, pC = T.pos[S], T.pos[Cn[i]]
-                sag = sa['sag'][i] * (1 if i == 0 else -1)     # outward: left of S->C on the anticlockwise side
-                fe, fh = sa['frac']
-                E.append(T.add(arc_point(pS, pC, sag, fe), 's', 'exit'))
-                H.append(T.add(arc_point(pS, pC, sag, fh), 'A', 'rail'))
-                T.link(S, E[i], 0.0, 'lat')
-                T.link(E[i], H[i], 0.0, 'lat')
-                # the rail nodes on the same arc
-                fr = [fh + (1 - fh) * f / 6 for f in range(1, 6)]
-                pts = [arc_point(pS, pC, sag, f) for f in fr]
-                for j in (1, 3):     # beads on the chord midpoint of their neighbours
-                    pts[j] = ((pts[j - 1][0] + pts[j + 1][0]) / 2, (pts[j - 1][1] + pts[j + 1][1]) / 2)
-                ids = [H[i]] + [T.add(q, 'A' if j % 2 == 0 else 't', 'rail') for j, q in enumerate(pts)] + [Cn[i]]
-                for u, v in zip(ids, ids[1:]):
-                    T.link(u, v, 0.0, 'lat')
-                k.setdefault('rails', []).append(ids)
-                T.link(Cn[i], Tt[i], 0.0, 'lat')
-                T.link(Tt[i], J, 0.0, 'lat')
         else:
             E = [T.add(P2(c, p['E'][i]), 's', 'exit') for i in range(2)]
-            H = [T.add(P2(c, p['H'][i]), 'A', 'rail') for i in range(2)]
             Cn = [T.add(P2(c, p['C'][i]), 'A', 'corner') for i in range(2)]
             Tt = [T.add(P2(c, p['T'][i]), 'A', 'frame') for i in range(2)]
             J = T.add(P2(c, p['J']), 'J', 'socket', 'own socket')
-            for i in range(2):
-                T.link(S, E[i], 0.0, 'lat')
-                T.link(E[i], H[i], 0.0, 'lat')
-                sag = p['rail_sag'][i] * (1 if i == 0 else -1)
-                ids = outline_chain(T, H[i], Cn[i], 'AtAtA', sag, 'rail')
-                k.setdefault('rails', []).append(ids)
-                T.link(Cn[i], Tt[i], 0.0, 'lat')
-                T.link(Tt[i], J, 0.0, 'lat')
-        k.update(E=E, H=H, C=Cn, T=Tt, J=J)
-        # the opening: exit, three lead-in smalls, notable at 5, three smalls on to the kite corner (a second way in;
-        # three, so a neighbour reaches the opener at 26, after its crossover at 25: route-checker must-fix 2)
-        k['N'] = []
-        k['nc'] = []
+        k['N'], k['lead'], k['nc'], k['col'] = [], [], [], []
         for i in range(2):
-            Nn = T.add(P2(c, p['N'][i]), 'N', 'open', 'opening notable', c)
-            ids = curved_path(T, E[i], Nn, 'sss', [P2(c, q) for q in p['lead'][i]], tag='open')
-            k.setdefault('lead', []).append(ids)
-            k['nc'].append(curved_path(T, Nn, Cn[i], 'sss', [P2(c, q) for q in p['nctl'][i]], tag='open'))
+            T.link(S, E[i], 0.0, 'lat')
+            labels = ['', '', '', 'opening notable', '', '']
+            if 'N' in p:
+                Nn = T.add(P2(c, p['N'][i]), 'N', 'open', 'opening notable', c)
+                lead = path_on(T, E[i], Nn, COLUMN_KINDS[:3], column_curve(T, c, E[i], Nn, p['pre'][i]), 'open')
+                nc = path_on(T, Nn, Cn[i], COLUMN_KINDS[4:], column_curve(T, c, Nn, Cn[i], p['post'][i]), 'open')
+                col = lead + nc[1:]
+            else:
+                spec = ('wheel', ph['E'][i], ph['C'][i]) if 'wheel' in p else p['col'][i]
+                col = path_on(T, E[i], Cn[i], COLUMN_KINDS, column_curve(T, c, E[i], Cn[i], spec), 'open', labels, c)
+                Nn = col[4]
             k['N'].append(Nn)
+            k['lead'].append(col[:5])
+            k['nc'].append(col[4:])
+            k['col'].append(col)
+            T.link(Cn[i], Tt[i], 0.0, 'lat')
+            T.link(Tt[i], J, 0.0, 'lat')
+        k.update(E=E, C=Cn, T=Tt, J=J)
+        # nothing hangs off the column before its 6-point small: a level 2 hero sees two roads and nothing sideways
+        T.no_attach |= {S} | {x for col in k['col'] for x in col[:5]}
+        side = p.get('loop_side', 1)
+        k['loop'] = add_socket_loop(T, c, Tt[side], J, Cn[side])
         X = k['X'] = T.add(P2(c, p['X']), 'A', 'junction')
         k['sp1'] = lat_chain(T, J, X, 'At', [P2(c, q) for q in p['sp1']], zig=p['sp1zig'], tag='spoke')
         D = k['D'] = T.add(P2(c, p['D']), 'J', 'deep', 'deep socket')
@@ -824,7 +931,7 @@ def is_lattice_edge(T, e):
     return e[3] == 'lat'
 
 
-HARD_FIXED = {'start', 'exit', 'corner', 'socket', 'junction', 'deep', 'bsocket', 'frame'}
+HARD_FIXED = {'start', 'exit', 'corner', 'socket', 'junction', 'deep', 'bsocket', 'frame', 'open', 'loop'}
 
 
 def lattice_vertex_nbrs(T, adj, i):
@@ -1370,7 +1477,7 @@ def point_in_poly(p, poly):
 
 def kite_ring(T, c):
     k = T.key[c]
-    return [k['S'], k['E'][1]] + k['rails'][1] + [k['T'][1], k['J'], k['T'][0]] + k['rails'][0][::-1] + [k['E'][0]]
+    return [k['S']] + k['col'][1] + [k['T'][1], k['J'], k['T'][0]] + k['col'][0][::-1]
 
 
 def kite_polys(T):
@@ -1803,6 +1910,9 @@ class Placer:
         if any(len(T.adj[n]) + sum(1 for _, nn in att_pairs if nn == n) > MAX_LINKS for _, n in att_pairs):
             self.why = self._f('degree')
             return None
+        if any(n in getattr(T, 'no_attach', ()) for _, n in att_pairs):
+            self.why = self._f('opening')
+            return None
         mk = T.mark()
         ids = [T.add(p, kd, tag, '', area) for p, kd in zip(pts, kinds)]
         for i, j, sr in links:
@@ -2125,8 +2235,8 @@ def place_scenic(Pl):
 
 
 def place_openings(Pl):
-    """First 10 points, in lockstep: on each kite rail a two-notable style cluster (Horns) at the rail's middle
-    attribute node (5), both notables at 9, one weapon or skill family per rail; and a defence cluster at 9."""
+    """First 10 points, in lockstep: off the small after each opening notable (6) a two-notable style cluster
+    (Short Horns), both notables at 9, one weapon or skill family per column; and a defence cluster at 9."""
     T, rm = Pl.T, Pl.rm
     T.notes['style'] = {}
     T.notes['defence'] = {}
@@ -2140,9 +2250,9 @@ def place_openings(Pl):
         mid = ((T.pos[k['S']][0] + T.pos[k['J']][0]) / 2, (T.pos[k['S']][1] + T.pos[k['J']][1]) / 2)
         return math.degrees(math.atan2(mid[1] - T.pos[a][1], mid[0] - T.pos[a][0]))
 
-    def run(at, names, target, tag, role, inward=True):
+    def run(at_of, names, target, tag, role, inward=True):
         def attempt(r):
-            a = rm.get(at, r)
+            a = at_of(r)
             c = ORDER[r]
             if a is None or len(T.adj[a]) >= MAX_LINKS:
                 return None
@@ -2158,28 +2268,25 @@ def place_openings(Pl):
             return None
         return group_place(Pl, attempt)
 
-    k0 = T.key['Warrior']
-    for i in (0, 1):
-        at = k0['rails'][i][3]
-        g = run(at, ['Horns', 'Fork'], 9, 'style', 'style') or run(at, ['Horns', 'Fork'], 9, 'style', 'style', inward=False)
-        for r, c in enumerate(ORDER):
-            T.notes['style'][(c, i)] = g[r] if g else None
-        if not g:
-            T.problems.append('style cluster failed on rail %d' % i)
-    # defence: a one-notable shape of depth 4 at a rail's middle attribute node (9), else depth 3 off an opening small
+    # start redesign: both pairs and the defence notable hang off the small right after each opening notable (6),
+    # the pair's lead small dropped, so every notable stays at 9; the defence notable on the class's DEFENCE_SIDE
+    def six(side_of_class):
+        return lambda r: T.key[ORDER[r]]['nc'][side_of_class(ORDER[r])][1]
     g = None
-    for i in (1, 0):
-        at = k0['rails'][i][3]
-        names = [n for n in ('Long Lens', 'Ring of Six', 'Wheel', 'Spur Arc') if n_depths(n) == (4,)]
+    for names in (['Lens', 'Stub', 'Triangle'], ['Pentagon', 'Bridge Arc', 'Crypt Arch']):
+        at = six(lambda c: C.DEFENCE_SIDE[c])
         g = run(at, names, 9, 'defence', 'defence') or run(at, names, 9, 'defence', 'defence', inward=False)
         if g:
             break
-    if not g:
-        for i in (0, 1):
-            at = k0['nc'][i][1]
-            g = run(at, ['Lens', 'Stub', 'Triangle'], 9, 'defence', 'defence')
-            if g:
-                break
+    defence = g
+    for i in (0, 1):
+        at = six(lambda c, i=i: i)
+        g = run(at, ['Short Horns'], 9, 'style', 'style') or run(at, ['Short Horns'], 9, 'style', 'style', inward=False)
+        for r, c in enumerate(ORDER):
+            T.notes['style'][(c, i)] = g[r] if g else None
+        if not g:
+            T.problems.append('style cluster failed on column %d' % i)
+    g = defence
     for r, c in enumerate(ORDER):
         T.notes['defence'][c] = g[r] if g else None
     if not g:
@@ -2261,7 +2368,7 @@ def place_set_pieces(Pl, bases=None):
     T.notes.setdefault('set', {})
     rnd = random.Random(SEED + 7 + (0 if bases is None else sorted(SET_TARGET).index(bases[0])))
 
-    def attempt_for(base, k, at, mode, turn=1.0):
+    def attempt_for(base, k, at, mode, turn=1.0, bend=True):
         def attempt(r):
             area = rot_area(base, r)
             a = rm.get(at, r)
@@ -2278,7 +2385,7 @@ def place_set_pieces(Pl, bases=None):
                 # spots (check 8b)
                 ids = try_stalk(Pl, [name], a, area, fan(ang_of(T.pos[a]) + SET_TURN[r] * turn, [s * d for d in range(0, 181, 15) for s in (1, -1)][1:]),
                                 gaps=(36, 46, 56, 70)[r % 2:] + (36, 46, 56, 70)[:r % 2], tag='set', vars_=vs[r:] + vs[:r], kinds=kinds, mode=mode,
-                                att_bend=rand_bend(rnd), role='set')
+                                att_bend=rand_bend(rnd) if bend else 0.0, role='set')
                 if ids:
                     return ids
             return None
@@ -2289,7 +2396,12 @@ def place_set_pieces(Pl, bases=None):
             continue
         target = pol(r0, a0)
         got = []
-        for k in (0, 1):
+        placed = set()
+        # the big piece first; if it finds no room near the target, the other piece goes there and the big one
+        # tries again round it (the start redesign's columns and loops crowd the class targets)
+        for k in (0, 1, 0):
+            if k in placed:
+                continue
             mx = 3 if base in CLASSES else 4
             hubs = [i for i in range(T.n_lat) if lattice_ok(T, i, mx) and area_by_cost(Pl.D, i) == base and rm.full(i)
                     and all(lattice_ok(T, rm.get(i, r), mx) for r in range(4))
@@ -2299,13 +2411,16 @@ def place_set_pieces(Pl, bases=None):
             hubs = hubs[:14 if base in CLASSES else 24]
             if got:     # the second element may also hang off a small of the first
                 hubs += [x for x in got[0][1][0] if T.kind[x] == 's' and rm.full(x) and len(T.adj[x]) <= 2]
-            for turn in (1.0, 0.5, 0.0):     # turned copies first (check 8b); straight copies if nothing fits
+            # turned copies first (check 8b); straight copies if nothing fits, and straight links to the hub last (the
+            # start redesign's columns and loops leave the class pieces less room for a bent link)
+            for turn, bend in ((1.0, True), (0.5, True), (0.0, True), (1.0, False), (0.0, False)):
                 for hub_ in hubs:
-                    g = group_place(Pl, attempt_for(base, k, hub_, 'stalk' if hub_ < T.n_lat else 'off', turn))
+                    g = group_place(Pl, attempt_for(base, k, hub_, 'stalk' if hub_ < T.n_lat else 'off', turn, bend))
                     if g:
                         got.append((hub_, g))
+                        placed.add(k)
                         break
-                if len(got) > k:
+                if k in placed:
                     break
         for r in range(4):
             T.notes['set'][rot_area(base, r)] = (rm.get(got[0][0], r) if got else None, len(got))
@@ -2676,14 +2791,15 @@ def place_roads(Pl, areas, offs, lo_min):
 # 24 degree turns, 30 for Bartuc's and the Sickness). They may pass over lattice and cluster links like bridges
 # (Curtis 2026-10-17); the set pieces and the fill grow around them. Content: C.ROADS.
 PROFANE_ROADS = {
-    # road: (door, far gate, the 8 nodes from the door), in internal ids and tree units
-    'leoric': (331, 478, [(720.8, -276.2), (680.8, -356.2), (640.8, -436.2), (590.8, -536.2), (540.8, -636.2),
+    # road: (door, far gate, the 8 nodes from the door) in tree units; the door and the far gate are the nodes with
+    # that tag nearest the point (they were internal ids until the start redesign renumbered the lattice)
+    'leoric': ((772.3, -174.9, 'mid'), (345.1, -951.8, 'rim'), [(720.8, -276.2), (680.8, -356.2), (640.8, -436.2), (590.8, -536.2), (540.8, -636.2),
                           (490.8, -706.2), (430.8, -806.2), (390.8, -876.2)]),
-    'bartuc': (280, 433, [(285.5, 745.6), (365.5, 725.6), (445.5, 705.6), (525.5, 685.6), (635.5, 655.6),
+    'bartuc': ((192.2, 764.2, 'mid'), (912.4, 397.5, 'rim'), [(285.5, 745.6), (365.5, 725.6), (445.5, 705.6), (525.5, 685.6), (635.5, 655.6),
                           (725.5, 585.6), (795.5, 505.6), (855.5, 425.6)]),
-    'sickness': (492, 448, [(-542.3, 582.9), (-542.3, 702.9), (-502.3, 792.9), (-472.3, 862.9), (-432.3, 952.9),
+    'sickness': ((-564.4, 500.0, 'scenic'), (-140.1, 1121.3, 'rim'), [(-542.3, 582.9), (-542.3, 702.9), (-502.3, 792.9), (-472.3, 862.9), (-432.3, 952.9),
                             (-372.3, 1002.9), (-292.3, 1062.9), (-202.3, 1102.9)]),
-    'maiden': (314, 463, [(-242.3, -856.2), (-362.3, -806.2), (-432.3, -776.2), (-542.3, -726.2), (-642.3, -666.2),
+    'maiden': ((-153.5, -893.4, 'mid'), (-1036.7, -394.3, 'rim'), [(-242.3, -856.2), (-362.3, -806.2), (-432.3, -776.2), (-542.3, -726.2), (-642.3, -666.2),
                           (-752.3, -606.2), (-862.3, -546.2), (-962.3, -486.2)]),
 }
 ROAD_KINDS = ['s', 's', 'N', 's', 's', 'N', 's', 's']
@@ -2695,8 +2811,15 @@ def place_class_roads(Pl):
     T = Pl.T
     T.road = {}
     T.road_back = set()
+    T.road_ends = {}
     T.notes['roads'] = {}
+    def node_at(x, y, tag):
+        return min((i for i in range(len(T.pos)) if T.tag[i] == tag or (T.cl_of[i] >= 0 and T.clusters[T.cl_of[i]]['tag'] == tag)),
+                   key=lambda i: math.dist(T.pos[i], (x, y)))
+
     for key, (door, far, pts) in PROFANE_ROADS.items():
+        door, far = node_at(*door), node_at(*far)
+        T.road_ends[key] = (door, far)
         # the line: searched through the ground left free by everything placed so far; the drawn line is the
         # fallback (its spacing faults then go to T.problems)
         ob = RF.Obstacles(T.pos, T.kind, edge_segments(T), NODE_GAP, NOTABLE_GAP, LINK_CLEAR)
@@ -3577,8 +3700,9 @@ def build(quick=False, seeds=None, layout_cache=None):
 
 
 def finish(Pl):
-    """Costs, areas, travel stats, roles and content on a placed tree."""
+    """Loops settled, then costs, areas, travel stats, roles and content on a placed tree."""
     T = Pl.T
+    settle_loops(T)
     T.D = all_costs(T)
     T.Dp = all_costs(T, profane=True)
     for i in range(len(T.pos)):
@@ -3590,7 +3714,152 @@ def finish(Pl):
     assign_travel(T)
     assign_roles(T)
     deal_content(T)
+    apply_start_rule(T)
     return T
+
+
+# ---------------------------------------------------------------- the placing rule near the starts (start redesign 4.3)
+# Curtis: no stat clusters or straight stat lines. Within START_RULE_POINTS of each class start, outside the socket
+# zones (a socket, its direct neighbours, the loop beside it): no two +5 nodes touch and no three stat nodes in a row.
+# A stat node is a +5 node or a small that only carries attributes, Life %, Mana % or all resistances; the column's
+# lead-in smalls and the felt smalls this pass deals are never stat nodes.
+STAT_KEYS = {'AnyAttribute', 'Strength', 'Dexterity', 'Magic', 'Vitality', 'LifePercent', 'ManaPercent', 'AllResist'}
+START_RULE_POINTS = 12
+
+
+def is_stat_node(T, i):
+    if i in T.felt or T.kind[i] not in 'Ast' or (T.tag[i] in ('open', 'loop') and T.kind[i] != 'A'):
+        return False
+    return T.kind[i] == 'A' or (bool(T.stats[i]) and all(s in STAT_KEYS for s, _ in T.stats[i]))
+
+
+def socket_zone(T):
+    zone = set()
+    for i in range(len(T.pos)):
+        if T.kind[i] == 'J':
+            zone |= {i} | set(T.adj[i])
+    for c in ORDER:
+        zone |= set(T.key[c]['loop'])
+    return zone
+
+
+def start_rule_breaks(T, c, zone, limit=START_RULE_POINTS):
+    """(kind, node, others) for class c: 'pair' a +5 node with a +5 neighbour, 'line' a stat node with two or more stat
+    neighbours (the middle of three in a row); every node within limit points of c's start, outside the zone."""
+    D = T.D[c]
+    out = []
+    for i in sorted((i for i in D if D[i] <= limit and i not in zone and is_stat_node(T, i)), key=lambda i: (D[i], i)):
+        nb = [j for j in sorted(T.adj[i]) if j not in zone and is_stat_node(T, j)]
+        pair = [j for j in nb if T.kind[i] == 'A' and T.kind[j] == 'A']
+        if pair:
+            out.append(('pair', i, pair))
+        if len(nb) >= 2:
+            out.append(('line', i, nb))
+    return out
+
+
+def all_breaks(T, zone):
+    """Whole-tree counts the editor shows as warnings: touching +5 pairs and stat nodes in the middle of three."""
+    pairs = sum(1 for a, b, _, _ in T.edges if T.kind[a] == 'A' and T.kind[b] == 'A' and a not in zone and b not in zone)
+    lines = sum(1 for i in range(len(T.pos)) if i not in zone and is_stat_node(T, i)
+                and sum(1 for j in T.adj[i] if j not in zone and is_stat_node(T, j)) >= 2)
+    return pairs, lines
+
+
+def apply_start_rule(T):
+    """The corner fix, the placing rule within 12 points of each start, then single +5 nodes on the through roads
+    until the tree has C.ATTRIBUTE_NODES again. Notes in T.notes['start_rule']."""
+    T.felt = set()
+    zone = socket_zone(T)
+    turn = {c: 0 for c in ORDER}
+    roads = getattr(T, 'road', {})
+    fixed = {'S', 'N', 'K', 'J'}
+    keep = {i for c in ORDER for col in T.key[c]['col'] for i in col} | set(roads)
+
+    def felt(i, c):
+        T.kind[i] = 's'
+        T.stats[i] = list(C.FELT_SMALLS[c][turn[c] % len(C.FELT_SMALLS[c])])
+        turn[c] += 1
+        T.felt.add(i)
+
+    # the corner fix: each class corner touches two +5 nodes at 9, the frame top and the lateral's first; the
+    # lateral's first becomes a felt small
+    corner = []
+    for c in ORDER:
+        for b, (_, c1, c2) in BORDERS.items():
+            if c in (c1, c2):
+                i = T.key[b]['lat'][c]['p9']
+                felt(i, c)
+                corner.append(i)
+    moved = []
+    for c in ORDER:
+        D = T.D[c]
+        for _ in range(200):
+            br = start_rule_breaks(T, c, zone)
+            if not br:
+                break
+            kind, i, others = br[0]
+            # the farther node, a road node before a junction (junctions stay +5 where they can)
+            cand = [x for x in [i] + others if x not in keep and T.kind[x] not in fixed]
+            if kind == 'pair':
+                cand.sort(key=lambda x: (len(T.adj[x]) > 2, -D.get(x, 999), x))
+            else:
+                cand.sort(key=lambda x: (T.kind[x] == 'A', T.kind[x] == 't' and T.stat[x] == 'Life', len(T.adj[x]) > 2,
+                                         x != i, -D.get(x, 999), x))
+            if not cand:
+                T.problems.append('start rule: cannot fix the %s at %d (%s)' % (kind, i, c))
+                break
+            moved.append((c, cand[0], T.kind[cand[0]]))
+            felt(cand[0], c)
+    # road singles: cluster smalls on through roads, 13 to 30 points out, spread over every class side
+    need = C.ATTRIBUTE_NODES - sum(1 for k_ in T.kind if k_ == 'A')
+    lo, hi = C.ROAD_SINGLE_COSTS
+    picked = []
+
+    def far_enough(i):
+        if not picked:
+            return True
+        seen, frontier = {i}, [i]
+        for _ in range(C.ROAD_SINGLE_GAP - 1):
+            nxt = []
+            for u in frontier:
+                for v in T.adj[u]:
+                    if v not in seen:
+                        if v in picked:
+                            return False
+                        seen.add(v)
+                        nxt.append(v)
+            frontier = nxt
+        return True
+
+    if need > 0:
+        per_class = [need // 4 + (1 if r < need % 4 else 0) for r in range(4)]
+        if need % 4:
+            T.problems.append('start rule: %d road singles do not split evenly over the classes' % need)
+        for r, c in enumerate(ORDER):
+            D = T.D[c]
+            quota = [per_class[r] // 2 + per_class[r] % 2, per_class[r] // 2]
+            for side in (0, 1):
+                cand = [i for i in range(len(T.pos)) if T.kind[i] == 's' and T.cl_of[i] >= 0 and T.area[i] == c
+                        and T.clusters[T.cl_of[i]]['tag'] not in ('profane', 'style', 'defence') and i not in roads
+                        and i not in T.felt and len(T.adj[i]) == 2 and lo <= D.get(i, 999) <= hi
+                        and node_side(T, c, i) == side
+                        and not any(is_stat_node(T, j) or T.kind[j] in 'KJS' for j in T.adj[i])]
+                n = quota[side]
+                targets = [lo + (hi - lo) * (k_ + 0.5) / n for k_ in range(n)] if n else []
+                for t in targets:
+                    ok = [i for i in cand if i not in picked and far_enough(i)
+                          and not any(T.kind[j] == 'A' for j in T.adj[i])]
+                    if not ok:
+                        T.problems.append('start rule: no room for a road single on %s side %d' % (c, side))
+                        break
+                    i = min(ok, key=lambda x: (abs(D[x] - t), x))
+                    picked.append(i)
+                    T.kind[i] = 'A'
+                    T.stats[i] = list(C.ANY_ATTRIBUTE)
+    T.notes['start_rule'] = dict(corner=corner, moved=moved, singles=picked, need=need,
+                                 breaks={c: start_rule_breaks(T, c, zone) for c in ORDER},
+                                 whole=all_breaks(T, zone), attributes=sum(1 for k_ in T.kind if k_ == 'A'))
 
 
 # ---------------------------------------------------------------- travel stats (balance must-fix 3)
@@ -3600,7 +3869,7 @@ TRAVEL_SPINE = ('exit', 'rail', 'spoke', 'lateral', 'spine', 'rim', 'frame', 'co
 
 def assign_travel(T):
     """Travel smalls (lattice beads). On the landmark spine (rails, spokes, laterals, border spines, rim spurs) the
-    stats rotate strictly Life, Res, Mana in the order the area's owner meets them (by point cost, then from the
+    stats rotate strictly (C.TRAVEL_ROTATION) in the order the area's owner meets them (by point cost, then from the
     anticlockwise side); every class's quarter is dealt the same way, role by role. On the rings and braids every
     second bead carries the area's flavour stat, the rest keep the rotation."""
     D = T.D
@@ -3755,6 +4024,11 @@ def deal_content(T):
     def pair_of(st):
         return stat_pair(st)
 
+    # the crossovers and capstones are named after the dealing; their stat pairs are taken in their areas up front
+    for (area, _), (_, st, _) in list(C.CROSSOVERS.items()) + list(C.CAPSTONES.items()):
+        if pair_of(st):
+            pairs_used.setdefault(area, set()).add(pair_of(st))
+
     def give(i, key, role):
         if left.get(key):
             # check 27: no two notables of one area share the same two stat keys; take the family's next notable
@@ -3838,6 +4112,19 @@ def deal_content(T):
                     break
         for k_ in rest + mids + outs:
             T.unused_content += [(area, k_, nm) for nm, _, _ in left.get(k_, [])]
+    # a border's content with no slot left goes to its neighbours' empty slots nearest the border (the start redesign
+    # moved a few border notables into the class areas)
+    for area in BORDERS:
+        own = owners_of(area)
+        spare = sorted((i for i in nots if not T.name[i] and T.area[i] in own and T.role[i][0] in ('new', 'set', 'socket', 'scenic')),
+                       key=lambda i: (abs(D[own[0]].get(i, 999) - D[own[1]].get(i, 999)), i))
+        for k_ in sorted({k_ for a_, k_, _ in T.unused_content if a_ == area}):
+            for i in spare:
+                if not left.get(k_):
+                    break
+                if not T.name[i]:
+                    give(i, k_, 'new')
+    T.unused_content = [(a_, k_, nm) for a_, k_, nm in T.unused_content if any(x[0] == nm for x in left.get(k_, []))]
     # placeholders, profane names, capstones, crossovers
     for i in nots:
         role, fam, side = T.role[i]
@@ -3934,8 +4221,15 @@ def small_stats(T, i, fam_of_cluster, fams):
         c = area if area in CLASSES else None
         if c:
             k = T.key[c]
-            side = node_side(T, c, i)
-            key = C.OPENERS[c][side]
+            for side, col in enumerate(k['col']):
+                if i in col and col.index(i) in (1, 2, 5, 6):
+                    words = C.COLUMN_WORDS[C.OPENERS[c][side]]
+                    return list(words[(1, 2, 5, 6).index(col.index(i))])
+            key = C.OPENERS[c][node_side(T, c, i)]
+    elif tag == 'loop':
+        for c in ORDER:
+            if i in T.key[c]['loop']:
+                return list(C.LOOP_SMALLS[T.key[c]['loop'].index(i) - 1])
     elif tag == 'capstone' and area in CLASSES:
         key = C.STYLE[area][node_side(T, area, i)][0]
     if key is None or key not in fams:
@@ -4116,10 +4410,10 @@ def steiner(T, s, targets, block=None, want_tree=False):
 
 # ---------------------------------------------------------------- output (design-spec §11 TSV)
 KIND_NAME = {'S': 'Start', 's': 'Small', 't': 'Small', 'A': 'Attribute', 'N': 'Notable', 'J': 'JewelSocket',
-             'K': 'Shrine'}
+             'K': 'Keystone'}
 START_ORDER = ['Warrior', 'Monk', 'Rogue', 'Sorcerer']      # today's start ids 0-3
-NON_LATTICE_TAGS = ('open', 'spur', 'capstone')              # lattice-built paths drawn as cluster links
-GROUP_OF_TAG = {'open': 'opening', 'spur': 'shrine-spur', 'profane': 'profane'}
+NON_LATTICE_TAGS = ('open', 'spur', 'capstone', 'loop')      # lattice-built paths drawn as cluster links
+GROUP_OF_TAG = {'open': 'opening', 'spur': 'shrine-spur', 'profane': 'profane', 'loop': 'socket-loop'}
 
 
 def is_lattice(T, i):

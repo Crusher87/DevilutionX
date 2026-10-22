@@ -344,7 +344,7 @@ void TelemetryTreeSnapshot(const Player &player, std::string_view when)
 		JsonArray notables;
 		for (const PassiveNodeId id : main) {
 			const PassiveNode &node = PassiveTree()[id];
-			if (node.kind == PassiveKind::Notable || node.kind == PassiveKind::Shrine || node.kind == PassiveKind::AscendancyNotable)
+			if (node.kind == PassiveKind::Notable || node.kind == PassiveKind::Keystone || node.kind == PassiveKind::AscendancyNotable)
 				notables.add(PassiveNodeName(node));
 		}
 		std::string roads = "{";
@@ -471,7 +471,7 @@ std::string TreeTrackerText(const Player &player)
 	    WeaponSetPointsSpent(player, PassivePool::SetI), WeaponSetPointsSpent(player, PassivePool::SetII), AscendancyPointsSpent(player), AscendancyPointsTotal(player));
 	std::map<std::string, std::vector<std::string>> byArea;
 	for (const PassiveNode &node : PassiveTree()) {
-		const bool notable = node.kind == PassiveKind::Notable || node.kind == PassiveKind::Shrine || node.kind == PassiveKind::AscendancyNotable;
+		const bool notable = node.kind == PassiveKind::Notable || node.kind == PassiveKind::Keystone || node.kind == PassiveKind::AscendancyNotable;
 		if (!notable)
 			continue;
 		for (const PassivePool pool : { PassivePool::Main, PassivePool::SetI, PassivePool::SetII }) {

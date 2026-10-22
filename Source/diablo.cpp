@@ -1781,12 +1781,14 @@ void GameLogic()
 	CheckQuests();
 	RedrawViewport();
 	pfile_update(false);
-	// POE2 Mashup: a finished quest gives passive points once per hero, like POE2's quest rewards.
-	const uint32_t rewardedBefore = MyPlayer != nullptr ? MyPlayer->poe2.questsRewarded : 0;
-	if (const int gained = MyPlayer != nullptr ? RecordQuestPassivePoints(*MyPlayer) : 0; gained > 0) {
-		EventPlrMsg(FormatRuntime(_("Quest complete: +{:d} Passive Skill Points"), gained), UiFlags::ColorGold);
-		ShowQuestPointsNotice(MyPlayer->poe2.questsRewarded & ~rewardedBefore, gained);
-		RequestAutosave();
+	// POE2 Mashup: the act's quest hands over its Book of Specialisation at the hero's feet, like POE2's quest
+	// rewards; a hero whose tree was redrawn on load sees it open with a line saying what changed.
+	if (MyPlayer != nullptr) {
+		const uint32_t handedBefore = MyPlayer->poe2.questsRewarded;
+		HandOutQuestBooks(*MyPlayer);
+		if ((MyPlayer->poe2.questsRewarded & ~handedBefore & ~BooksOnlyFlag) != 0)
+			RequestAutosave();
+		ShowPendingTreeNotice();
 	}
 	ProcessAutosave();
 	CloseInteractionPanelsWhenAway();

@@ -191,8 +191,8 @@ enum class PassiveKind : uint8_t {
 	Start,
 	Small,
 	Notable,
-	/** A big boon with a price, like Diablo's shrines. */
-	Shrine,
+	/** A big boon with a price (POE2's keystones; until the start redesign these were named after Diablo's shrines). */
+	Keystone,
 	/** The root of an ascendancy: choosing it picks that ascendancy class. */
 	Ascendancy,
 	/** A node inside an ascendancy, paid for with ascendancy points. */
@@ -260,9 +260,6 @@ constexpr int SpeedPercentPerFrame = 10;
 /** @brief Character level that unlocks the ascendancy, like POE2's first Trial of Ascendancy. */
 constexpr int AscendancyLevel = 15;
 constexpr int MaxAscendancyPoints = 8;
-/** @brief Passive points from each completed quest, and the most quests can give (POE2: 12 quests of 2 points). */
-constexpr int QuestPassivePointsEach = 2;
-constexpr int MaxQuestPassivePoints = 24;
 
 /** @brief Loads the tree from the POE2 Mashup mod, or clears it outside POE2 mode. */
 void LoadPassiveTreeData();
@@ -290,12 +287,12 @@ uint32_t PassiveTreeHash();
 void RefundPassivesForNewTree(Player &player);
 /** @brief Refunds both weapon sets if a hero spent more set points than the books now give (books used to give 4). */
 void RefundOverspentWeaponSets(Player &player);
+/** @brief Refunds every passive if the hero spent more points than they now have (quest points became Books); true if it did. */
+bool RefundOverspentPassives(Player &player);
 
-/** @brief Points from quests: 2 for each completed quest, up to 24. They stay with the hero across games. */
-int QuestPassivePoints(const Player &player);
-/** @brief Marks the quests done in this game as rewarded; returns the passive points that gained. */
-int RecordQuestPassivePoints(Player &player);
-/** @brief One point per level after the first, plus the quest points. */
+/** @brief Points from the Books read (poe2/weapon_swap.hpp): quests and lords hand over Books, not points. */
+int BookPassivePoints(const Player &player);
+/** @brief One point per level after the first, plus the Books' points. */
 int PassivePointsTotal(const Player &player);
 int PassivePointsSpent(const Player &player);
 int PassivePointsLeft(const Player &player);
