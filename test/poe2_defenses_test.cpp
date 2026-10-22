@@ -70,6 +70,21 @@ public:
 	}
 };
 
+TEST_F(Poe2DefensesTest, LightStunFollowsPoe2)
+{
+	// POE2: twice the hit's share of the target's life, up to 100%, and nothing at 20% or less.
+	EXPECT_EQ(LightStunChance(5, 100), 0);
+	EXPECT_EQ(LightStunChance(10, 100), 0);
+	EXPECT_EQ(LightStunChance(11, 100), 22);
+	EXPECT_EQ(LightStunChance(25, 100), 50);
+	EXPECT_EQ(LightStunChance(50, 100), 100);
+	EXPECT_EQ(LightStunChance(500, 100), 100);
+	EXPECT_EQ(LightStunChance(0, 100), 0);
+	EXPECT_EQ(LightStunChance(10, 0), 0);
+	// Works in raw fixed-point units as well: 30 damage against 200 life is a 30% chance.
+	EXPECT_EQ(LightStunChance(int64_t { 30 } << 6, int64_t { 200 } << 6), 30);
+}
+
 TEST_F(Poe2DefensesTest, AccuracyFollowsPoe2)
 {
 	// POE2: 125% x accuracy / (accuracy + 0.3 x evasion), from 5% to 100%.

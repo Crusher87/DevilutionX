@@ -310,4 +310,12 @@ int Poe2HitChance(int accuracy, int evasion)
 	return std::clamp(static_cast<int>(chance), 5, 100);
 }
 
+int LightStunChance(int64_t damage, int64_t maxLife)
+{
+	if (damage <= 0 || maxLife <= 0)
+		return 0;
+	const int64_t chance = std::min<int64_t>(damage * LightStunMultiplierPercent / maxLife, 100);
+	return chance > LightStunMinChancePercent ? static_cast<int>(chance) : 0;
+}
+
 } // namespace devilution

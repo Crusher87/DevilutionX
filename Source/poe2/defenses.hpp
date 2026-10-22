@@ -41,8 +41,10 @@ struct BodyArmourImplicit {
 
 /** @brief Energy shield granted per point of defense on cloth bases. */
 constexpr int EnergyShieldPerDefense = 3;
-/** @brief A hit stuns the player (hit recovery) only when it takes at least this percent of their maximum life. */
-constexpr int PlayerStunPercent = 15;
+/** @brief POE2 light stun: a hit's chance is this percent of its share of the target's maximum life (PoB2 StunBaseMult). */
+constexpr int LightStunMultiplierPercent = 200;
+/** @brief POE2 light stun: a chance this low or lower doesn't stun at all (PoB2 MinStunChanceNeeded). */
+constexpr int LightStunMinChancePercent = 20;
 /** @brief POE2: energy shield starts recharging 4 seconds after the last hit. */
 constexpr int EnergyShieldRechargeDelayTicks = 4 * 20;
 /** @brief POE2: a recharging energy shield refills 12.5% of its maximum per second. */
@@ -132,5 +134,10 @@ int TypicalHitChance(const Player &player);
 int AccuracyAtDistancePercent(int tiles);
 /** @brief POE2's chance to hit, in percent: 125 x accuracy / (accuracy + 0.3 x evasion), from 5 to 100. */
 int Poe2HitChance(int accuracy, int evasion);
+/**
+ * @brief POE2's chance, in percent, that a hit light stuns: twice the hit's share of the target's maximum life, up to
+ * 100, and none at all when that comes to 20% or less. Both values in the same unit.
+ */
+int LightStunChance(int64_t damage, int64_t maxLife);
 
 } // namespace devilution

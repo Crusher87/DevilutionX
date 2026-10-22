@@ -99,6 +99,9 @@ struct TelemetryCounts {
 	int heroAttacks = 0;
 	int heroMisses = 0;
 	int64_t hitChanceSum = 0;
+	/** The hero's hits that left a monster standing, and how many of them light stunned it. */
+	int stunnableHits = 0;
+	int lightStuns = 0;
 	int deaths = 0;
 	int skillUses = 0;
 	int failedSkills = 0;
@@ -943,12 +946,13 @@ std::string RatesText(const TelemetryCounts &counts, double minutes)
 	                                                     "hits taken {:d} ({:d} big, {:d} close calls, {:d} damage, {:d} to energy shield, lowest life {:d}%), "
 	                                                     "melee swings {:d} ({:d} evaded, {:d} blocked, {:d} dodged), "
 	                                                     "your attacks {:d} ({:d} missed, {:d}% to hit on average), "
+	                                                     "light stuns {:d} of {:d} hits, "
 	                                                     "skills {:d} ({:d} failed, {:d} mana, low on mana {:d}% of the time), "
 	                                                     "flasks {:d} ({:d} wasted), charms {:d}, "
 	                                                     "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
 	                                                     "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}, "
 	                                                     "fps {:.0f} ({:d} frames under 30 fps, slowest {:d} ms)",
-	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), Whole(counts.shieldTakenRaw), counts.lowestLifePercent, counts.swings, counts.evaded, counts.blocked, counts.dodged, counts.heroAttacks, counts.heroMisses, counts.heroAttacks > 0 ? static_cast<int>(counts.hitChanceSum / counts.heroAttacks) : 0, counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls,
+	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), Whole(counts.shieldTakenRaw), counts.lowestLifePercent, counts.swings, counts.evaded, counts.blocked, counts.dodged, counts.heroAttacks, counts.heroMisses, counts.heroAttacks > 0 ? static_cast<int>(counts.hitChanceSum / counts.heroAttacks) : 0, counts.lightStuns, counts.stunnableHits, counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls,
 	                                             counts.frameMs > 0 ? counts.frames * 1000.0 / counts.frameMs : 0.0, counts.slowFrames, counts.worstFrameMs));
 }
 
@@ -1916,6 +1920,17 @@ void TelemetryHeroAttackRoll(const Player &player, int hitChance, bool hit)
 		counts.hitChanceSum += hitChance;
 		if (!hit)
 			counts.heroMisses++;
+	});
+}
+
+void TelemetryMonsterHitByHero(const Player &player, bool lightStunned)
+{
+	if (&player != MyPlayer || LogFile == nullptr)
+		return;
+	Count([lightStunned](TelemetryCounts &counts) {
+		counts.stunnableHits++;
+		if (lightStunned)
+			counts.lightStuns++;
 	});
 }
 

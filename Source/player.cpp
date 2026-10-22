@@ -2977,9 +2977,14 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 
 	RedrawComponent(PanelDrawComponent::Health);
 	if (gbIsPoe2) {
-		// POE2 Mashup: only a heavy hit stuns, like POE2, so walking through a pack doesn't lock the hero in place.
-		if (!forcehit && static_cast<int64_t>(dam.raw()) * 100 < static_cast<int64_t>(player._pMaxHP.raw()) * PlayerStunPercent * UniqueStunThresholdPercent(player) / 100)
-			return;
+		// POE2 Mashup: POE2's light stun, a chance from the hit's share of the hero's life, so walking through a pack
+		// doesn't lock the hero in place but a big hit usually does (Curtis 2026-10-21).
+		if (!forcehit) {
+			const int64_t stunDamage = static_cast<int64_t>(dam.raw()) * 100 / std::max(UniqueStunThresholdPercent(player), 1);
+			const int chance = LightStunChance(stunDamage, player._pMaxHP.raw());
+			if (chance == 0 || GenerateRnd(100) >= chance)
+				return;
+		}
 	} else if (player._pClass == HeroClass::Barbarian) {
 		if (dam.whole() < player.getCharacterLevel() + player.getCharacterLevel() / 4 && !forcehit) {
 			return;
