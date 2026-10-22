@@ -3404,10 +3404,15 @@ void ProcessPlayers()
 			}
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
-				if (player._pmode == PM_STAND && !player.poe2.isDodging()) {
+				// It lands the moment the hero stands at the dash's end, not after the dodge's last ticks run out
+				// (Curtis 2026-10-22: Dashing Strike stood about a second before it struck).
+				const bool arrived = player.position.tile == player.poe2.dashEnd && player.walkpath[0] == WALK_NONE;
+				if (player._pmode == PM_STAND && (arrived || !player.poe2.isDodging())) {
 					player.poe2.dashSkillTicks = 0;
-					// Land with a swing; the skill hits on the swing's hit frame.
-					BeginSkillAnimation(player, player.poe2.dashSkill, player_graphic::Attack, player.position.tile + player._pdir);
+					player.poe2.dodgeTicks = 0;
+					// Land with a swing; the skill hits on the swing's hit frame, which comes quickly, as the hero arrives
+					// (a spinning skill still plays its whole spin).
+					BeginSkillAnimation(player, player.poe2.dashSkill, player_graphic::Attack, player.position.tile + player._pdir, !SpinsWhileStriking(player.poe2.dashSkill));
 				} else if (--player.poe2.dashSkillTicks == 0) {
 					player.poe2.dashSkill = WeaponSkill::None;
 				}

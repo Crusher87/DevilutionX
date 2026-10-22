@@ -794,6 +794,8 @@ struct Poe2PlayerData {
 	WeaponSkill dashSkill = WeaponSkill::None;
 	/** @brief Game ticks the dash skill may take to land before it's dropped; 0 if not dashing (not saved). */
 	uint8_t dashSkillTicks = 0;
+	/** @brief Where the current dash ends: the skill lands as soon as the hero stands there (not saved). */
+	Point dashEnd {};
 	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
 	uint8_t warcryTicks = 0;
 	/** @brief Game ticks Riposte stays ready after a block (not saved). */
@@ -961,6 +963,7 @@ struct Poe2PlayerData {
 		spinFrom = 0;
 		dashSkill = WeaponSkill::None;
 		dashSkillTicks = 0;
+		dashEnd = {};
 		warcryTicks = 0;
 		volleySkill = WeaponSkill::None;
 		volleyShotsLeft = 0;

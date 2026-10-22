@@ -158,7 +158,8 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	// With no room to dash, such as an enemy right next to you, the skill goes off where you stand (Curtis 2026-10-21:
 	// Whirlwind did nothing when he clicked an enemy in melee).
 	const Point target = SkillTarget(player);
-	if (!DashTowards(player, target, tiles) && target != player.position.tile)
+	const std::optional<Point> end = DashTowards(player, target, tiles);
+	if (!end && target != player.position.tile)
 		player._pdir = GetDirection(player.position.tile, target);
 	PaySkillMana(player, skill);
 	if (!player.UsesRangedWeapon())
@@ -167,6 +168,7 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	AddVisualEffect(player.position.tile, skill == WeaponSkill::LeapSlam ? MissileGraphicID::StoneCurseShatter : MissileGraphicID::BoneHit);
 	player.poe2.dashSkill = skill;
 	player.poe2.dashSkillTicks = DashSkillTimeoutTicks;
+	player.poe2.dashEnd = end.value_or(player.position.future);
 	return true;
 }
 
@@ -789,12 +791,14 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player.poe2.activeSkill = skill;
 }
 
-void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target)
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike)
 {
 	const Direction dir = target == player.position.tile ? player._pdir : GetDirection(player.position.tile, target);
 	const bool attack = graphic == player_graphic::Attack;
 	const int8_t actionFrame = attack ? player._pAFNum - 1 : player._pSFNum;
-	NewPlrAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, 0, attack ? player._pAFNum : player._pSFNum);
+	// A quick strike skips most of the wind-up's game ticks; the skipped frames still show, sped up, before the hit.
+	const auto skippedFrames = static_cast<int8_t>(quickStrike ? std::max(actionFrame - DashStrikeWindupTicks, 0) : 0);
+	NewPlrAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, skippedFrames, attack ? player._pAFNum : player._pSFNum);
 	player._pmode = PM_SPELL;
 	FixPlayerLocation(player, dir);
 	FixPlrWalkTags(player);

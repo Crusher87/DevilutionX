@@ -103,11 +103,15 @@ int8_t WeaponSkillSkippedFrames(const Player &player);
 /** @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile. */
 int LightningArrowDamage(const Player &player);
 
+/** @brief Game ticks from a dash skill's landing to its hit: the swing's wind-up is cut to this (see BeginSkillAnimation). */
+constexpr int8_t DashStrikeWindupTicks = 2;
+
 /**
  * @brief Plays a skill's own animation (as PM_SPELL); the skill goes off on its action frame.
  * @param graphic Attack for weapon skills, else one of the spell casting animations.
+ * @param quickStrike Cuts the wind-up to DashStrikeWindupTicks, for a dash skill striking as it lands.
  */
-void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target);
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike = false);
 
 /**
  * @brief Makes a cast skill go off, on the action frame of its animation.

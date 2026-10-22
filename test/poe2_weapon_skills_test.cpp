@@ -171,6 +171,33 @@ TEST_F(Poe2WeaponSkillsTest, BattleCryWearsOff)
 	EXPECT_EQ(data.warcryTicks, 0);
 }
 
+TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
+{
+	// Curtis 2026-10-22: Dashing Strike stood about a second after the dash before it struck. A Monk's staff swing:
+	// 13 frames, hitting on the eighth.
+	Player &player = *MyPlayer;
+	player._pAFrames = 13;
+	player._pAFNum = 8;
+	player._pdir = Direction::South;
+	player.position.tile = { 20, 20 };
+	player.position.future = player.position.tile;
+
+	const auto ticksToHit = [&player](bool quickStrike) {
+		BeginSkillAnimation(player, WeaponSkill::DashingStrike, player_graphic::Attack, player.position.tile + Direction::South, quickStrike);
+		EXPECT_EQ(player._pmode, PM_SPELL);
+		int ticks = 0;
+		while (player.AnimInfo.currentFrame != player.poe2.castFrame && ticks < 30) {
+			player.AnimInfo.processAnimation();
+			ticks++;
+		}
+		player.poe2.castSkill = WeaponSkill::None;
+		player._pmode = PM_STAND;
+		return ticks;
+	};
+	EXPECT_EQ(ticksToHit(/*quickStrike=*/false), 7);
+	EXPECT_EQ(ticksToHit(/*quickStrike=*/true), DashStrikeWindupTicks);
+}
+
 TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)
 {
 	// Facing south (down the screen), the cone covers the tiles ahead and not the ones behind or beside.
