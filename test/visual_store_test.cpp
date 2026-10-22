@@ -1353,6 +1353,33 @@ TEST_F(Poe2ShopTabsTest, AdriasScrollOfIdentifyIsOnHerSuppliesShelf)
 	}
 }
 
+TEST_F(Poe2ShopTabsTest, ShopsBuyAnythingWithASellPrice)
+{
+	// Curtis 2026-10-22: like POE2, Griswold and Adria buy whatever has a sell price; quest items stay unsellable.
+	SetRndSeed(4);
+	SpawnSmith(16);
+	SpawnWitch(16);
+	const Item sword = MakeSellableSword();
+	Item staff {};
+	InitializeItem(staff, IDI_SHORTSTAFF);
+	Item scroll {};
+	InitializeItem(scroll, IDI_IDENTIFY);
+	Item rock {};
+	InitializeItem(rock, IDI_ROCK);
+	Item gold {};
+	InitializeItem(gold, IDI_GOLD);
+	for (const VisualStoreVendor vendor : { VisualStoreVendor::Smith, VisualStoreVendor::Witch }) {
+		OpenVisualStore(vendor);
+		SCOPED_TRACE(static_cast<int>(vendor));
+		EXPECT_TRUE(CanSellToCurrentVendor(sword));
+		EXPECT_TRUE(CanSellToCurrentVendor(staff));
+		EXPECT_TRUE(CanSellToCurrentVendor(scroll));
+		EXPECT_FALSE(CanSellToCurrentVendor(rock)) << "a quest item";
+		EXPECT_FALSE(CanSellToCurrentVendor(gold));
+		CloseVisualStore();
+	}
+}
+
 TEST_F(Poe2ShopTabsTest, VanillaStockIsUnchanged)
 {
 	gbIsPoe2 = false;
