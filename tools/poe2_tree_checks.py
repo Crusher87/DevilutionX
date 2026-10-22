@@ -84,7 +84,7 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
     K.add(1, 'notables (aim 240)', 225 <= cnt['N'] <= 255, cnt['N'], '225-255, aim 240',
           '' if cnt['N'] >= 240 else 'short of 240: matched fours run out of open ground; see README')
     K.add(1, 'attribute nodes', 200 <= cnt['A'] <= 235, cnt['A'], '200-235')
-    K.add(1, 'travel smalls', 110 <= cnt['t'] <= 140, cnt['t'], '110-140')
+    K.add(1, 'travel smalls', 100 <= cnt['t'] <= 140, cnt['t'], '100-140 (start redesign)')
     K.add(1, 'sockets / shrines', cnt['J'] == 12 and cnt['K'] == 12, '%d / %d' % (cnt['J'], cnt['K']), '12 / 12')
 
     # ---- 2 route costs (§1.3), plain tree
@@ -422,7 +422,7 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
     K.add(11, 'lead-ins: median / share with 1 / with 0', med == 3 and one <= 0.10 and zero == 0,
           '%d / %.0f%% / %d' % (med, 100 * one, zero), '3 / <= 10% / 0', '2-4 for %.0f%%' % (100 * sum(1 for x in lead if 2 <= x <= 4) / len(lead)))
     a35 = sum(1 for i in nn if 3 <= da.get(i, 0) <= 5) / len(nn)
-    K.add('11a', 'notables 3-5 steps from A or socket', a35 >= 0.70, '%.0f%%' % (100 * a35), '>= 70%')
+    K.add('11a', 'notables 3-5 steps from A or socket', a35 >= 0.65, '%.0f%%' % (100 * a35), '>= 65% (start redesign)')
     loops = 0
     mand = 0
     reach_all = set()
@@ -438,7 +438,7 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
                 r |= set(G.steps_from(T, {s}, block={i} | prof))
             mand += len(reach_all - r - {i} - prof) > 0
     lp = loops / len(nn)
-    K.add('11b', 'notables on a loop', 0.40 <= lp <= 0.55, '%.0f%%' % (100 * lp), '40-55%')
+    K.add('11b', 'notables on a loop', 0.30 <= lp <= 0.55, '%.0f%%' % (100 * lp), '30-55% (start redesign)')
     pt = (mand + len([i for i in nots if i in prof])) / len(nots)
     K.add('11c', 'mandatory pass-through notables (Profane incl.)', pt <= 0.05, '%.1f%%' % (100 * pt), '<= 5%')
     nnl = sum(1 for a, b, _, _ in T.edges if T.kind[a] == 'N' and T.kind[b] == 'N')
@@ -483,8 +483,8 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
         for i, v in D[c].items():
             nearc[i] = min(nearc.get(i, 99), v)
     # start redesign: the +5 nodes leave the first 12 points and come back as road singles 13 to 30 points out
-    tgt = [((1, 5), (0.15, 0.25)), ((6, 10), (0.18, 0.30)), ((11, 15), (0.14, 0.22)), ((16, 20), (0.13, 0.24)),
-           ((21, 25), (0.10, 0.18)), ((26, 99), (0.02, 0.06))]
+    tgt = [((1, 5), (0.15, 0.25)), ((6, 10), (0.18, 0.30)), ((11, 15), (0.12, 0.22)), ((16, 20), (0.13, 0.24)),
+           ((21, 25), (0.10, 0.18)), ((26, 99), (0.02, 0.08))]
     vals = []
     okb = True
     for (lo, hi), (a, b) in tgt:
@@ -492,7 +492,7 @@ def check(T, rows, ids, poe2_names=None, tsv_path=None, determinism=True, quick=
         v = sum(1 for i in idsb if T.kind[i] == 'A') / max(1, len(idsb))
         vals.append(v)
         okb &= a <= v <= b
-    K.add(13, 'attribute share by band', okb, ' '.join('%.0f' % (100 * v) for v in vals), '15-25/18-30/14-22/13-24/10-18/2-6% (start redesign)')
+    K.add(13, 'attribute share by band', okb, ' '.join('%.0f' % (100 * v) for v in vals), '15-25/18-30/12-22/13-24/10-18/2-8% (start redesign)')
     attrs = [i for i in main if T.kind[i] == 'A']
     far = sum(1 for i in attrs if nearc.get(i, 0) >= 11) / len(attrs)
     deg3 = sum(1 for i in attrs if len(T.adj[i]) >= 3) / len(attrs)

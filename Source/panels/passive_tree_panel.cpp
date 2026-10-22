@@ -1244,7 +1244,7 @@ std::string PointsText(const Player &player)
 	if (AscendancyPointsTotal(player) > 0)
 		return FormatRuntime(_("{:d} passive points, {:d} ascendancy points left"), left, AscendancyPointsLeft(player));
 	if (const int books = BookPassivePoints(player); books > 0)
-		return FormatRuntime(_("{:d} points left of {:d}: {:d} from levels, {:d} from Books"), left, PassivePointsTotal(player), PassivePointsTotal(player) - books, books);
+		return FormatRuntime(_("{:d} points, {:d} left: {:d} from levels, {:d} from Books"), PassivePointsTotal(player), left, PassivePointsTotal(player) - books, books);
 	return FormatRuntime(_("{:d} points left ({:d} of {:d} spent)"), left, PassivePointsSpent(player), PassivePointsTotal(player));
 }
 
@@ -1601,14 +1601,25 @@ void ShowPendingTreeNotice()
 			text += ' ';
 		text += _("Jewels wait in the sockets nearest your start.");
 	}
-	if (notice.pointChange < 0) {
+	// The Books line only when the hero's total really changed: most points still come from levels.
+	if (notice.pointChange != 0) {
 		if (!text.empty())
 			text += ' ';
-		text += FormatRuntime(ngettext("Quests now hand over Books instead of points, so you have {:d} point fewer.",
-		                          "Quests now hand over Books instead of points, so you have {:d} points fewer.", -notice.pointChange),
-		    -notice.pointChange);
+		const int change = std::abs(notice.pointChange);
+		text += notice.pointChange < 0
+		    ? FormatRuntime(ngettext("Quests now hand over Books instead of points, so you have {:d} point fewer.",
+		                      "Quests now hand over Books instead of points, so you have {:d} points fewer.", change),
+		          change)
+		    : FormatRuntime(ngettext("Quests now hand over Books instead of points, so you have {:d} point more.",
+		                      "Quests now hand over Books instead of points, so you have {:d} points more.", change),
+		          change);
 	}
-	ShowBanner(std::string(notice.redrawn ? _("The passive tree was redrawn") : _("Points now come from Books")), std::move(text), BannerMs, -1);
+	std::string_view header = _("Your passive points are back");
+	if (notice.redrawn)
+		header = _("The tree was redrawn");
+	else if (notice.pointChange != 0)
+		header = _("Quests now hand over Books");
+	ShowBanner(std::string(header), std::move(text), BannerMs, -1);
 }
 
 } // namespace devilution
