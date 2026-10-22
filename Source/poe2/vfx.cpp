@@ -397,6 +397,15 @@ struct Comet {
 	float scale;
 	bool small;
 	uint32_t seed;
+	/** @brief A charged bolt: drawn as a crackling bolt of electricity along its path instead of a head and a tail. */
+	bool bolt = false;
+	/** @brief Not moving: a bolt standing where it landed or burst. */
+	bool still = false;
+	/** @brief How high its head is above the floor. */
+	float lift = 16;
+	/** @brief Where its head has been, newest first (the trail's points). */
+	std::array<Vec, 10> path {};
+	int pathCount = 0;
 };
 std::vector<Comet> FrameComets;
 /** @brief The scan the effects were last drawn after; until they are, classic sprites stay. */
@@ -2997,19 +3006,28 @@ void ScanMissiles()
 		const Colours c = ColoursOf(look.element);
 		const bool arrow = missile._miAnimType == MissileGraphicID::Arrow;
 		const bool small = missile.poe2.look == 1;
+		// A charged bolt's light crackles with it rather than glowing steadily round a ball.
+		const bool bolt = missile._miAnimType == MissileGraphicID::ChargedBolt;
+		const uint32_t seed = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4);
+		const float crackle = bolt ? 0.55F + 0.45F * SmoothNoise(seed, AmbientTime * 0.03F) : 1.F;
 		if (!trail.arrow) {
 			const Vec velocity { static_cast<float>(missile.position.velocity.deltaX), static_cast<float>(missile.position.velocity.deltaY) };
 			const float speed = Length(velocity);
 			const Vec dir = speed > 0.001F ? velocity * (1 / speed) : Vec { 1, 0 };
-			FrameComets.push_back({ head, dir, look.element, scale, small, static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4) });
+			Comet &comet = FrameComets.emplace_back(Comet { head, dir, look.element, scale, small, seed });
+			comet.bolt = bolt;
+			comet.still = speed <= 0.001F;
+			comet.lift = missile._miAnimWidth / 2.F - 16;
+			comet.path = trail.points;
+			comet.pathCount = trail.count;
 		}
 		Ring glow;
 		glow.pos = head;
-		glow.r0 = glow.r1 = (arrow ? 6.F : 20.F) * scale;
+		glow.r0 = glow.r1 = (arrow ? 6.F : (bolt ? 13.F : 20.F)) * scale;
 		glow.life = 1;
 		glow.width = 0;
 		glow.colour = c.mid;
-		glow.alpha = (arrow ? 0.45F : 0.7F) * std::min(scale, 1.F);
+		glow.alpha = (arrow ? 0.45F : (bolt ? 0.3F * crackle : 0.7F)) * std::min(scale, 1.F);
 		glow.disc = true;
 		glow.ground = false;
 		FrameGlows.push_back(glow);
@@ -3020,15 +3038,18 @@ void ScanMissiles()
 			FrameGlows.push_back(glow);
 		}
 		if (!arrow) {
-			glow.r0 = glow.r1 = 7 * scale;
-			glow.colour = c.core;
-			glow.alpha = 1;
-			FrameGlows.push_back(glow);
+			// A white-hot heart; a bolt has no ball at its head, only its crackling filament (see DrawLightningBolt).
+			if (!bolt) {
+				glow.r0 = glow.r1 = 7 * scale;
+				glow.colour = c.core;
+				glow.alpha = 1;
+				FrameGlows.push_back(glow);
+			}
 			// The light the projectile throws on the floor beneath it.
 			glow.pos = MissileCentre(missile) + Vec { 0, missile._miAnimWidth / 2.F - 16 };
 			glow.r0 = glow.r1 = TileRadius * 1.6F;
 			glow.colour = c.mid;
-			glow.alpha = 0.22F;
+			glow.alpha = 0.22F * crackle;
 			glow.ground = true;
 			FrameGlows.push_back(glow);
 		}
@@ -3507,10 +3528,134 @@ void DrawRings()
 		SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
 }
 
+/**
+ * @brief A strand of electricity through the points: a white core inside a blue body inside a violet haze. Its
+ * brightness runs from @p head at its first point through @p middle half way to @p tail at its last.
+ */
+void Filament(const std::vector<Vec> &points, float width, const Colours &c, float head, float middle, float tail)
+{
+	const float last = static_cast<float>(std::max<size_t>(points.size(), 2) - 1);
+	const auto alphaAt = [&](size_t i) {
+		const float u = static_cast<float>(i) / last;
+		return u < 0.5F ? head + (middle - head) * u * 2 : middle + (tail - middle) * (u - 0.5F) * 2;
+	};
+	for (size_t i = 0; i + 1 < points.size(); i++) {
+		const float a0 = alphaAt(i);
+		const float a1 = alphaAt(i + 1);
+		SoftLine(Glowing, points[i], points[i + 1], width * 5, c.edge, c.edge, a0 * 0.3F, a1 * 0.3F);
+		SoftLine(Glowing, points[i], points[i + 1], width * 2.2F, c.mid, c.mid, a0 * 0.7F, a1 * 0.7F);
+		SoftLine(Glowing, points[i], points[i + 1], width, c.core, c.core, a0, a1);
+	}
+}
+
+/**
+ * @brief Zig-zags a line of points: each joint between its ends is thrown sideways up to @p kick, mostly to the other
+ * side from the joint before, so it kinks sharply like lightning rather than wriggling.
+ */
+std::vector<Vec> ZigZag(const std::vector<Vec> &line, float kick, uint32_t &seed)
+{
+	std::vector<Vec> points { line.front() };
+	float side = SeededRandom(seed) < 0.5F ? 1.F : -1.F;
+	for (size_t i = 1; i + 1 < line.size(); i++) {
+		const Vec d = line[i + 1] - line[i - 1];
+		const float length = std::max(Length(d), 0.01F);
+		const Vec normal { -d.y / length, d.x / length };
+		points.push_back(line[i] + normal * (side * (0.4F + 0.6F * SeededRandom(seed)) * kick));
+		if (SeededRandom(seed) < 0.8F)
+			side = -side;
+	}
+	points.push_back(line.back());
+	return points;
+}
+
+/** @brief A jagged strand from one point to another in a few sharp kinks. */
+std::vector<Vec> Jag(Vec from, Vec to, int steps, float kick, uint32_t &seed)
+{
+	std::vector<Vec> line;
+	for (int i = 0; i <= steps; i++)
+		line.push_back(from + (to - from) * (static_cast<float>(i) / steps));
+	return ZigZag(line, kick, seed);
+}
+
+/**
+ * @brief A charged bolt (Curtis 2026-10-22: its round head and tail looked like "little sperms floating around"): a short
+ * bolt of jagged lightning along the path it has just flown, evenly bright with no ball at its head, a fainter second
+ * strand twisting round it, forks flicking off it and now and then an arc down to the floor. It tears itself up and
+ * re-forms every few hundredths of a second. Standing still, it crackles in place.
+ */
+void DrawLightningBolt(const Comet &comet)
+{
+	const Colours c = ColoursOf(Element::Lightning);
+	const float s = comet.scale;
+	// A new shape every 35 ms, different for each bolt; its brightness jumps with it.
+	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / 35) * 40503U)) | 1;
+	SeededRandom(seed);
+	const float flash = 0.7F + 0.3F * SeededRandom(seed);
+	if (comet.still) {
+		for (int i = 0; i < 3; i++) {
+			const float angle = SeededRandom(seed) * 2 * Pi;
+			const float reach = (8 + 10 * SeededRandom(seed)) * s;
+			Filament(Jag(comet.head, comet.head + Vec { std::cos(angle), std::sin(angle) * 0.7F } * reach, 3, 3 * s, seed), 1.3F * s, c, flash, 0.7F * flash, 0.1F);
+		}
+		return;
+	}
+
+	// The path flown, newest first, carried straight on behind its oldest point so it always reaches the bolt's length.
+	const float length = (comet.small ? 22.F : 36.F) * s;
+	std::vector<Vec> path { comet.head };
+	for (int i = 1; i < comet.pathCount; i++)
+		path.push_back(comet.path[i]);
+	const Vec oldest = path.back();
+	Vec onward = path.size() >= 2 ? oldest - path[path.size() - 2] : comet.dir * -1;
+	onward = onward * (1 / std::max(Length(onward), 0.01F));
+	path.push_back(oldest + onward * length);
+
+	// Joints evenly spaced back along it, then zig-zagged: a main strand and a fainter one twisting round it.
+	constexpr int Joints = 6;
+	std::vector<Vec> spine;
+	size_t segment = 0;
+	float segmentStart = 0;
+	for (int n = 0; n < Joints; n++) {
+		const float d = length * static_cast<float>(n) / (Joints - 1);
+		while (segment + 2 < path.size() && segmentStart + Length(path[segment + 1] - path[segment]) < d) {
+			segmentStart += Length(path[segment + 1] - path[segment]);
+			segment++;
+		}
+		const Vec span = path[segment + 1] - path[segment];
+		const float f = std::clamp((d - segmentStart) / std::max(Length(span), 0.01F), 0.F, 1.F);
+		spine.push_back(path[segment] + span * f);
+	}
+	const std::vector<Vec> body = ZigZag(spine, 6 * s, seed);
+	Filament(body, 1.8F * s, c, 0.75F * flash, flash, 0.2F * flash);
+	Filament(ZigZag(spine, 4.5F * s, seed), 1.1F * s, c, 0.35F * flash, 0.45F * flash, 0);
+
+	// Forks flicking off its joints, never the same two frames running.
+	for (int f = 0; f < 3; f++) {
+		if (SeededRandom(seed) < 0.4F)
+			continue;
+		const size_t at = 1 + static_cast<size_t>(SeededRandom(seed) * static_cast<float>(body.size() - 3));
+		const Vec along = body[at + 1] - body[at];
+		const float turn = (SeededRandom(seed) < 0.5F ? 1.F : -1.F) * (0.5F + 0.7F * SeededRandom(seed));
+		const Vec way { along.x * std::cos(turn) - along.y * std::sin(turn), along.x * std::sin(turn) + along.y * std::cos(turn) };
+		const Vec end = body[at] + way * ((8 + 9 * SeededRandom(seed)) * s / std::max(Length(way), 0.01F));
+		Filament(Jag(body[at], end, 3, 3 * s, seed), 1.1F * s, c, 0.8F * flash, 0.5F * flash, 0);
+	}
+	// Now and then it arcs down to the floor beneath it.
+	if (!comet.small && SeededRandom(seed) < 0.3F) {
+		const Vec floor = comet.head + Vec { (SeededRandom(seed) - 0.5F) * 16 * s, comet.lift };
+		Filament(Jag(comet.head, floor, 3, 3 * s, seed), 1.1F * s, c, 0.6F * flash, 0.5F * flash, 0.4F * flash);
+		SoftDisc(Glowing, floor, 4 * s, c.mid, 0.4F * flash, true);
+	}
+}
+
 /** @brief Projectile bodies: a white-hot head and a tail tapering back along the flight, shaped by the element. */
 void DrawComets()
 {
 	for (const Comet &comet : FrameComets) {
+		if (comet.bolt) {
+			DrawLightningBolt(comet);
+			continue;
+		}
 		const Colours c = ColoursOf(comet.element);
 		uint32_t seed = comet.seed + static_cast<uint32_t>(AmbientTime * 0.05F);
 		const float s = comet.scale;
