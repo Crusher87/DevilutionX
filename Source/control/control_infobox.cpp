@@ -542,8 +542,8 @@ void PrintPoe2ItemTooltip(const Surface &out)
 	const Size pictureSize = pictured != nullptr ? GetInvItemSize(pictureCursor) : Size { 0, 0 };
 	const int pictureHeight = pictured != nullptr ? pictureSize.height + 12 : 0;
 
-	// Beside the cursor, on whichever side has more room, and inside the screen.
-	const int gap = 24;
+	// Beside the cursor, on whichever side has more room, and inside the screen; past the item held on it.
+	const int gap = 24 + (MyPlayer != nullptr && !MyPlayer->HoldItem.isEmpty() ? GetInvItemSize(pcurs).width / 2 : 0);
 	int x = MousePosition.x > out.w() / 2 ? MousePosition.x - gap - width : MousePosition.x + gap;
 	x = std::clamp(x, 4, std::max(out.w() - width - 4, 4));
 	int y = std::clamp(MousePosition.y - ((height + pictureHeight) / 3), 4, std::max(out.h() - height - pictureHeight - 4, 4)) + pictureHeight;
@@ -731,7 +731,9 @@ void DrawInfoBox(const Surface &out)
 	if (SpellSelectFlag || trigflag || pcurs == CURSOR_HOURGLASS) {
 		InfoColor = UiFlags::ColorWhite;
 	} else if (!myPlayer.HoldItem.isEmpty()) {
-		if (myPlayer.HoldItem._itype == ItemType::Gold) {
+		if (gbIsPoe2 && (pcursinvitem != -1 || pcursstashitem != StashStruct::EmptyCell || pcursstoreitem != -1)) {
+			// POE2 Mashup: an item under the held one keeps its own tooltip and colours (Curtis 2026-10-22).
+		} else if (myPlayer.HoldItem._itype == ItemType::Gold) {
 			const int nGold = myPlayer.HoldItem._ivalue;
 			InfoString = FormatRuntime(ngettext("{:s} gold piece", "{:s} gold pieces", nGold), FormatInteger(nGold));
 		} else if (!myPlayer.CanUseItem(myPlayer.HoldItem)) {

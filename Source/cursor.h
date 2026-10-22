@@ -15,7 +15,7 @@
 namespace devilution {
 
 extern int pcursmonst;
-extern int8_t pcursinvitem;
+extern DVL_API_FOR_TEST int8_t pcursinvitem;
 extern uint16_t pcursstashitem;
 extern int8_t pcursitem;
 

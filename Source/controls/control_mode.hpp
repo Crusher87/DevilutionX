@@ -24,7 +24,7 @@ extern DVL_API_FOR_TEST ControlTypes ControlMode;
  *
  * This value is always set to the actual active device type.
  */
-extern ControlTypes ControlDevice;
+extern DVL_API_FOR_TEST ControlTypes ControlDevice;
 
 extern GamepadLayout GamepadType;
 
