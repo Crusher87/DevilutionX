@@ -7,7 +7,17 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <ctime>
 #include <optional>
+
+#ifdef USE_SDL3
+#include <SDL3/SDL_iostream.h>
+#else
+#include <SDL.h>
+
+#include "utils/sdl_compat.h"
+#endif
 
 #include "control/control.hpp"
 #include "crawl.hpp"
@@ -29,11 +39,26 @@
 #include "plrmsg.h"
 #include "poe2/aim.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/skill_lab_notes.hpp"
+#include "poe2/skill_looks.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/support_tiers.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/telemetry_events.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "quests.h"
+#include "utils/file_util.h"
 #include "utils/language.h"
+#include "utils/paths.h"
 #include "utils/str_cat.hpp"
+#include "utils/png.h"
+#include "utils/sdl_wrap.h"
+#define DEVILUTIONX_SCREENSHOT_FORMAT_PCX 0
+#define DEVILUTIONX_SCREENSHOT_FORMAT_PNG 1
+
+#if DEVILUTIONX_SCREENSHOT_FORMAT == DEVILUTIONX_SCREENSHOT_FORMAT_PNG
+#include "utils/surface_to_png.hpp"
+#endif
 
 namespace devilution {
 
@@ -113,6 +138,30 @@ std::array<bool, MaxMonsters> DummyFlags {};
 
 Phase CurrentPhase = Phase::Idle;
 int PhaseTicks;
+/** Game ticks since the latest cast began, or -1 before the first one. */
+int CastTicks = -1;
+/** The tick of the latest cast when the hero's swing or spell went off, or -1. */
+int ActionTick = -1;
+/** How many ticks the cast before took, for the timeline's length. */
+int LastCastTicks;
+
+LabLight Lighting = LabLight::Normal;
+SupportGem Support = SupportGem::None;
+/** Each loop swaps between the looks before and after the player's edits. */
+bool Comparing;
+
+/** Saving each tick of the next cast as a picture. */
+bool RecordPending;
+bool Recording;
+std::string ClipFolder;
+int ClipFrames;
+int LastClipTick = -1;
+/** The cast tick the effects were last moved on to while recording. */
+int EffectTick;
+/** Ticks still to record once the cast is over, for the effects to fade. */
+int RecordTail;
+constexpr int RecordTailTicks = 30;
+constexpr int MaxClipFrames = 200;
 /** Where the lab cast aims, while it's in flight. */
 std::optional<Point> AimTile;
 int AimMonster = -1;
@@ -375,6 +424,23 @@ void Equip(Player &player, int kitIndex)
 }
 
 /** @brief Puts the skill on show in the first Skills panel socket and on the Q key, at the lab's gem level. */
+/** @brief Puts the chosen support gem, at its best tier, in the skill's first support socket. */
+void ApplySupport(Player &player)
+{
+	player.poe2.supportsAt(0).fill(SupportGem::None);
+	player.poe2.supportsAt(DefaultAttackRow).fill(SupportGem::None);
+	if (Selected < 0 || Support == SupportGem::None)
+		return;
+	const SkillSlot skill = Skills[Selected].skill;
+	if (!SupportGemCanSupport(Support, skill)) {
+		Support = SupportGem::None;
+		return;
+	}
+	const size_t row = skill.kind == SkillKind::Default ? DefaultAttackRow : 0;
+	player.poe2.supportsAt(row)[0] = Support;
+	player.poe2.tiersAt(row)[0] = static_cast<uint8_t>(SupportTierCount(Support));
+}
+
 void SocketSelected(Player &player)
 {
 	for (size_t slot = 0; slot < NumSkillSlots; slot++)
@@ -383,11 +449,14 @@ void SocketSelected(Player &player)
 	if (Selected < 0)
 		return;
 	const SkillSlot skill = Skills[Selected].skill;
-	if (skill.kind == SkillKind::Default)
+	if (skill.kind == SkillKind::Default) {
+		ApplySupport(player);
 		return;
+	}
 	SocketSkill(player, 0, skill, GemLevel);
 	if (SkillGoesOnTray(skill))
 		BindTraySlot(player, TrayKeySlot(0), TrayBinding::ForGem(0));
+	ApplySupport(player);
 }
 
 void SetUpHero(Player &player)
@@ -582,6 +651,7 @@ void SetUpArena()
 	SpawnDummies();
 	ArenaReady = true;
 	CurrentPhase = Phase::Idle;
+	CastTicks = -1;
 }
 
 void ApplySkill()
@@ -603,6 +673,8 @@ void ApplySkill()
 		}
 	}
 	CurrentPhase = Phase::Idle;
+	CastTicks = -1;
+	LabDropMoment();
 }
 
 void ApplyTickDelay()
@@ -656,7 +728,9 @@ void SkillLabBegin()
 	Paused = false;
 	StepsPending = 0;
 	StepMsPending = 0;
+	CastTicks = -1;
 	TelemetryPaused = true;
+	LabLoadNotes();
 }
 
 void SkillLabEnd()
@@ -670,6 +744,10 @@ void SkillLabEnd()
 	AimTile = std::nullopt;
 	gnTickDelay = NormalTickDelay;
 	TelemetryPaused = false;
+	Comparing = false;
+	SetSkillLookEditsOn(true);
+	RecordPending = false;
+	Recording = false;
 }
 
 bool SkillLabPrepareHero(GameData *gameData)
@@ -725,6 +803,9 @@ void SkillLabLevelLoaded()
 
 bool SkillLabHoldsTick()
 {
+	// While recording, each tick waits for its picture, however long saving takes, so no tick is missed.
+	if (Active && Recording && CastTicks != LastClipTick)
+		return true;
 	if (!Active || !Paused)
 		return false;
 	if (StepsPending > 0) {
@@ -733,6 +814,50 @@ bool SkillLabHoldsTick()
 	}
 	return true;
 }
+
+namespace {
+
+/** @brief Whether the hero's swing or spell has reached the frame where it goes off. */
+bool HeroStruck(const Player &player)
+{
+	const int frame = player.AnimInfo.currentFrame;
+	switch (player._pmode) {
+	case PM_ATTACK:
+	case PM_RATTACK:
+		return frame >= player._pAFNum - 1;
+	case PM_SPELL:
+		return frame >= (player.poe2.castSkill != WeaponSkill::None ? player.poe2.castFrame : player._pSFNum - 1);
+	default:
+		return false;
+	}
+}
+
+void SetLightRadius(int light, uint8_t radius)
+{
+	if (light != NO_LIGHT && Lights[light].radius != radius)
+		ChangeLightRadius(light, radius);
+}
+
+/** @brief Bright lights the whole arena, Dark leaves only a glimmer round the hero, Normal is the game's own. */
+void ApplyLighting(const Player &player)
+{
+	switch (Lighting) {
+	case LabLight::Bright:
+		SetLightRadius(player.lightId, 15);
+		SetLightRadius(TargetLight, 15);
+		break;
+	case LabLight::Dark:
+		SetLightRadius(player.lightId, 2);
+		SetLightRadius(TargetLight, 1);
+		break;
+	default:
+		SetLightRadius(player.lightId, static_cast<uint8_t>(std::max<int>(player._pLightRad, 0)));
+		SetLightRadius(TargetLight, TargetLightRadius);
+		break;
+	}
+}
+
+} // namespace
 
 void SkillLabTick()
 {
@@ -749,18 +874,30 @@ void SkillLabTick()
 	if (!ArenaReady)
 		return;
 
+	ApplyLighting(player);
 	PhaseTicks++;
+	// The cast's clock runs on a little after it ends, while its effects fade, then stops for the timeline.
+	if (CastTicks >= 0 && (CurrentPhase == Phase::Casting || CastTicks < LastCastTicks + RecordTailTicks))
+		CastTicks++;
+	if (Recording && CurrentPhase != Phase::Casting && --RecordTail <= 0)
+		Recording = false;
 	switch (CurrentPhase) {
 	case Phase::Casting:
+		if (ActionTick < 0 && HeroStruck(player))
+			ActionTick = CastTicks;
 		if ((player._pmode == PM_STAND && PhaseTicks > 2 && player.destAction == ACTION_NONE) || PhaseTicks > MaxCastTicks) {
 			AimTile = std::nullopt;
 			CurrentPhase = Looping ? Phase::Waiting : Phase::Idle;
 			PhaseTicks = 0;
+			LastCastTicks = CastTicks;
+			RecordTail = RecordTailTicks;
 		}
 		break;
 	case Phase::Waiting:
 		if (PhaseTicks >= LoopGapTicks) {
 			ResetPositions();
+			if (Comparing)
+				SetSkillLookEditsOn(!SkillLookEditsOn());
 			LabCast();
 		}
 		break;
@@ -779,6 +916,12 @@ float SkillLabEffectMs(float elapsedMs)
 {
 	if (!Active)
 		return elapsedMs;
+	if (Recording) {
+		// One tick's worth for each tick recorded, so the effects keep step with the pictures.
+		const int ticks = std::max(CastTicks - EffectTick, 0);
+		EffectTick = CastTicks;
+		return static_cast<float>(ticks * NormalTickDelay);
+	}
 	if (Paused) {
 		const float step = StepMsPending;
 		StepMsPending = 0;
@@ -789,7 +932,7 @@ float SkillLabEffectMs(float elapsedMs)
 
 bool SkillLabFreezesAnimation()
 {
-	return Active && Paused && StepsPending == 0;
+	return Active && ((Paused && StepsPending == 0) || Recording);
 }
 
 bool IsLabDummy(const Monster &monster)
@@ -825,6 +968,36 @@ void LabSelectSkill(int index)
 		LabCast();
 }
 
+namespace {
+
+void StartRecording()
+{
+	RecordPending = false;
+	const std::time_t now = std::time(nullptr);
+	std::tm local {};
+#ifdef _WIN32
+	localtime_s(&local, &now);
+#else
+	localtime_r(&now, &local);
+#endif
+	char stamp[32];
+	std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", &local);
+	std::string name = SkillLookKey(Skills[Selected].skill);
+	std::replace(name.begin(), name.end(), ' ', '_');
+	std::string folder = TelemetryFolder();
+	if (folder.empty())
+		folder = StrCat(paths::PrefPath(), "poe2_logs", DIRECTORY_SEPARATOR_STR);
+	ClipFolder = StrCat(folder, "skill_lab_clips", DIRECTORY_SEPARATOR_STR, name, "_", stamp, DIRECTORY_SEPARATOR_STR);
+	RecursivelyCreateDir(ClipFolder.c_str());
+	ClipFrames = 0;
+	LastClipTick = -1;
+	EffectTick = CastTicks;
+	RecordTail = RecordTailTicks;
+	Recording = true;
+}
+
+} // namespace
+
 void LabCast()
 {
 	if (!ArenaReady || Selected < 0 || MyPlayer == nullptr)
@@ -859,6 +1032,11 @@ void LabCast()
 		NewCursor(cursor);
 	CurrentPhase = Phase::Casting;
 	PhaseTicks = 0;
+	CastTicks = 0;
+	ActionTick = -1;
+	LabDropMoment();
+	if (RecordPending)
+		StartRecording();
 }
 
 bool LabLooping()
@@ -1062,6 +1240,150 @@ void LabExit()
 {
 	ExitPending = true;
 	EndGame();
+}
+
+int LabTicksSinceCast()
+{
+	return CastTicks;
+}
+
+int LabActionTick()
+{
+	return ActionTick;
+}
+
+int LabLastCastTicks()
+{
+	return LastCastTicks;
+}
+
+LabLight LabLighting()
+{
+	return Lighting;
+}
+
+void LabSetLighting(LabLight light)
+{
+	Lighting = light;
+}
+
+SupportGem LabSupport()
+{
+	return Support;
+}
+
+void LabCycleSupport(int delta)
+{
+	if (Selected < 0)
+		return;
+	const SkillSlot skill = Skills[Selected].skill;
+	std::vector<SupportGem> fitting { SupportGem::None };
+	for (uint8_t i = 1; i < static_cast<uint8_t>(SupportGem::Count); i++) {
+		const auto gem = static_cast<SupportGem>(i);
+		if (SupportGemCanSupport(gem, skill))
+			fitting.push_back(gem);
+	}
+	const auto it = std::find(fitting.begin(), fitting.end(), Support);
+	const int at = it == fitting.end() ? 0 : static_cast<int>(it - fitting.begin());
+	const int count = static_cast<int>(fitting.size());
+	Support = fitting[((at + delta) % count + count) % count];
+	if (MyPlayer != nullptr && HeroReady)
+		ApplySupport(*MyPlayer);
+}
+
+bool LabComparing()
+{
+	return Comparing;
+}
+
+void LabSetComparing(bool compare)
+{
+	Comparing = compare;
+	if (compare && !Looping)
+		LabSetLooping(true);
+}
+
+bool LabRecording()
+{
+	return Recording || RecordPending;
+}
+
+void LabRecord()
+{
+	if (LabRecording() || Selected < 0)
+		return;
+	RecordPending = true;
+	if (CurrentPhase != Phase::Casting)
+		LabCast();
+}
+
+namespace {
+
+/** Whether frames come from the screen as shown (with the effects drawn over the game), not from the game's own picture. */
+bool PresentedFrames;
+
+std::string NextClipPath()
+{
+	char name[24];
+	std::snprintf(name, sizeof(name), "frame_%03d.png", ClipFrames++);
+	return StrCat(ClipFolder, name);
+}
+
+/** @brief Whether this tick's frame is still to be saved; stops the recording when it's long enough. */
+bool WantsClipFrame()
+{
+	if (!Active || !Recording || CastTicks == LastClipTick)
+		return false;
+	LastClipTick = CastTicks;
+	if (ClipFrames >= MaxClipFrames) {
+		Recording = false;
+		return false;
+	}
+	return true;
+}
+
+} // namespace
+
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+void SkillLabCapturePresented(SDL_Renderer *renderer)
+{
+	PresentedFrames = true;
+	if (!WantsClipFrame())
+		return;
+	int width;
+	int height;
+	if (SDL_GetRendererOutputSize(renderer, &width, &height) != 0)
+		return;
+	SDLSurfaceUniquePtr frame = SDLWrap::CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+	if (SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_RGBA32, frame->pixels, frame->pitch) != 0 || IMG_SavePNG(frame.get(), NextClipPath().c_str()) != 0)
+		Recording = false;
+}
+#endif
+
+void SkillLabCaptureFrame(const Surface &out)
+{
+	// The screen as shown has the effects, which the game's own picture doesn't.
+	if (PresentedFrames || !WantsClipFrame())
+		return;
+#if DEVILUTIONX_SCREENSHOT_FORMAT == DEVILUTIONX_SCREENSHOT_FORMAT_PNG
+	const std::string path = NextClipPath();
+	SDL_IOStream *stream = SDL_IOFromFile(path.c_str(), "wb");
+	if (stream == nullptr) {
+		Recording = false;
+		return;
+	}
+	if (!WriteSurfaceToFilePng(out, stream).has_value())
+		Recording = false;
+#else
+	// No PNG writer on this build.
+	(void)out;
+	Recording = false;
+#endif
+}
+
+bool SkillLabRecordingNow()
+{
+	return Active && Recording;
 }
 
 } // namespace devilution

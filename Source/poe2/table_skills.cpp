@@ -25,6 +25,7 @@
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/skill_looks.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -647,6 +648,7 @@ bool StartTableSkill(Player &player, const TableSkillData &data)
 
 void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point target)
 {
+	const SkillLookScope skillLook(unsupported.skill);
 	// The supports change the skill's area and duration, and its hits are the skill's hits.
 	const SkillSlot slot = SkillSlot::ForAttack(unsupported.skill);
 	TableSkillData data = unsupported;
@@ -854,6 +856,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 
 void FireTableShot(Player &player, const TableSkillData &data, Point target, int index)
 {
+	const SkillLookScope skillLook(data.skill);
 	const Point tile = player.position.tile;
 	const Direction dir = GetDirection(tile, target);
 	constexpr int Wobble[] = { 0, 1, -1, 0, -1, 1 };
@@ -863,6 +866,7 @@ void FireTableShot(Player &player, const TableSkillData &data, Point target, int
 
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target)
 {
+	const SkillLookScope skillLook(data.skill);
 	const Point tile = player.position.tile;
 	const Direction dir = player._pdir;
 	const bool mine = &player == MyPlayer;
@@ -973,6 +977,7 @@ void ProcessSkillZones(Player &player)
 		const TableSkillData *data = FindTableSkill(zone.skill);
 		bool done = data == nullptr;
 		const SupportHitScope scope(player, SkillSlot::ForAttack(zone.skill));
+		const SkillLookScope skillLook(zone.skill);
 		const int radius = zone.radius;
 		if (!done && (data->flags & TF_FollowPlayer) != 0)
 			zone.center = player.position.tile;

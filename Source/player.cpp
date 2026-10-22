@@ -63,6 +63,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/skill_looks.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
@@ -900,6 +901,7 @@ bool PlrHitObj(const Player &player, Object &targetObject)
  */
 void DashSkillLanding(Player &player, WeaponSkill skill)
 {
+	const SkillLookScope skillLook(skill);
 	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
 	PlaySkillEffects(player, skill, player.position.tile + player._pdir);
 	OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
@@ -931,6 +933,9 @@ bool DoAttack(Player &player)
 	bool didhit = false;
 
 	if (player.AnimInfo.currentFrame == player._pAFNum - 1) {
+		// POE2 Mashup: the swing and its sparks take the attack skill's look.
+		const SkillLookScope skillLook(CurrentAttackSkill(player));
+		PlaySkillLookSound(CurrentAttackSkill(player), player.position.tile);
 		Point position = player.position.tile + player._pdir;
 		Monster *monster = FindMonsterAtPosition(position);
 

@@ -83,6 +83,7 @@
 #include "poe2/hud_globes.hpp"
 #include "poe2/hud_minions.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/loot_filter.hpp"
@@ -1629,7 +1630,9 @@ void DrawView(const Surface &out, Point startPosition)
 
 	DrawDurIcon(out);
 
-	DrawLevelButton(out);
+	// The lab's stand-in hero has points it never spends.
+	if (!SkillLabActive())
+		DrawLevelButton(out);
 
 	if (CharFlag) {
 		DrawChr(out);

@@ -8,10 +8,15 @@
 #pragma once
 
 #include <cstdint>
+
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+#include <SDL.h>
+#endif
 #include <string>
 #include <vector>
 
 #include "poe2/gemcutting.hpp"
+#include "engine/surface.hpp"
 #include "poe2/player_data.hpp"
 #include "tables/playerdat.hpp"
 
@@ -41,6 +46,12 @@ enum class LabFloor : uint8_t {
 	Nest,
 	Crypt,
 	Count,
+};
+
+enum class LabLight : uint8_t {
+	Normal,
+	Bright,
+	Dark,
 };
 
 enum class LabTargets : uint8_t {
@@ -118,5 +129,31 @@ void LabCycleWeapon(int delta);
 int LabGemLevel();
 void LabSetGemLevel(int level);
 void LabExit();
+/** @brief Game ticks since the latest cast began, or -1 before the first one. */
+int LabTicksSinceCast();
+/** @brief The tick of the latest cast when the hero's swing or spell went off, or -1. */
+int LabActionTick();
+/** @brief How many ticks the cast before the current one took. */
+int LabLastCastTicks();
+LabLight LabLighting();
+void LabSetLighting(LabLight light);
+/** @brief The support gem in the skill's first socket, or None. */
+SupportGem LabSupport();
+/** @brief The next support gem that fits the skill (None among them). */
+void LabCycleSupport(int delta);
+/** @brief Whether each loop swaps between the look before and after the player's edits. */
+bool LabComparing();
+void LabSetComparing(bool compare);
+/** @brief Whether the next cast is being saved, a picture per tick, to poe2_logs/skill_lab_clips. */
+bool LabRecording();
+void LabRecord();
+/** @brief Saves the frame for the recording from the game's picture, where the effects aren't drawn over it apart. */
+void SkillLabCaptureFrame(const Surface &out);
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+/** @brief Saves the frame for the recording from the screen as shown, effects and all, just before it's presented. */
+void SkillLabCapturePresented(SDL_Renderer *renderer);
+#endif
+/** @brief Whether a recording is being made now (the panel stays out of the pictures). */
+bool SkillLabRecordingNow();
 
 } // namespace devilution
