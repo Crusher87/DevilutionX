@@ -23,6 +23,7 @@
 #include "movie.h"
 #include "options.h"
 #include "pfile.h"
+#include "poe2/skill_lab.hpp"
 #include "storm/storm_net.hpp"
 #include "utils/language.h"
 
@@ -112,6 +113,8 @@ bool mainmenu_select_hero_dialog(GameData *gameData)
 {
 	OptionEntryInt<uint32_t> *pSaveNumberFromOptions = nullptr;
 	_selhero_selections dlgresult = SELHERO_NEW_DUNGEON;
+	if (SkillLabActive())
+		return SkillLabPrepareHero(gameData);
 	if (demo::IsRunning()) {
 		pfile_ui_set_hero_infos(DummyGetHeroInfo);
 		gbLoadGame = true;
@@ -176,6 +179,11 @@ void mainmenu_loop()
 		case MAINMENU_SINGLE_PLAYER:
 			if (!InitSinglePlayerMenu())
 				done = true;
+			break;
+		case MAINMENU_SKILL_LAB:
+			SkillLabBegin();
+			done = !InitSinglePlayerMenu();
+			SkillLabEnd();
 			break;
 		case MAINMENU_MULTIPLAYER:
 			if (!InitMultiPlayerMenu())

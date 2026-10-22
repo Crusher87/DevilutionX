@@ -344,7 +344,7 @@ void FlushAll()
  */
 void WriteLine(std::string_view line, bool force = false)
 {
-	if (LogFile == nullptr)
+	if (LogFile == nullptr || (TelemetryPaused && !force))
 		return;
 	std::fwrite(line.data(), 1, line.size(), LogFile);
 	std::fputc('\n', LogFile);

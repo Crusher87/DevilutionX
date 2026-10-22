@@ -124,9 +124,11 @@ void SetLogLevel(LogChannel channel, LogLevel level)
 	Levels[static_cast<size_t>(channel)] = level;
 }
 
+bool TelemetryPaused = false;
+
 bool LogLevelOn(LogChannel channel, LogLevel level)
 {
-	return EventsFile != nullptr && level <= Levels[static_cast<size_t>(channel)];
+	return EventsFile != nullptr && !TelemetryPaused && level <= Levels[static_cast<size_t>(channel)];
 }
 
 bool OpenTelemetryEvents(const std::string &path, std::string_view header)

@@ -44,6 +44,7 @@ set(libdevilutionx_SRCS
   poe2/dodge_roll.cpp
   poe2/hud_globes.cpp
   poe2/hud_minions.cpp
+  poe2/skill_lab.cpp
   poe2/vfx.cpp
   poe2/weather.cpp
   poe2/hd.cpp
@@ -155,6 +156,7 @@ set(libdevilutionx_SRCS
   panels/partypanel.cpp
   panels/quest_log.cpp
   panels/item_spawner.cpp
+  panels/skill_lab_panel.cpp
   panels/atlas_panel.cpp
   panels/anvil_panel.cpp
   panels/desecration_panel.cpp

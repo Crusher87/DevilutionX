@@ -66,6 +66,7 @@
 #include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/item_spawner.hpp"
+#include "panels/skill_lab_panel.hpp"
 #include "panels/monster_banner.hpp"
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
@@ -2138,6 +2139,7 @@ void DrawAndBlit()
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)
 		DrawPartyMemberInfoPanel(out);
 
+	DrawSkillLabPanel(out);
 	DrawPassiveTree(out);
 	DrawGemcutting(out);
 	DrawAnvil(out);
