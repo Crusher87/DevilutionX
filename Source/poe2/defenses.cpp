@@ -114,9 +114,9 @@ void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int 
 	}
 }
 
-void SplitItemDefense(const Item &item, bool modsKnown, DefensePoints &base, DefensePoints &bonus)
+void SplitItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonus)
 {
-	const auto flat = [&](Poe2ItemStat stat) { return modsKnown ? std::max<int>(item._iPoe2Stats[static_cast<size_t>(stat)], 0) : 0; };
+	const auto flat = [&](Poe2ItemStat stat) { return std::max<int>(item._iPoe2Stats[static_cast<size_t>(stat)], 0); };
 	DefensePoints flats { flat(Poe2ItemStat::FlatArmour), flat(Poe2ItemStat::FlatEvasion), flat(Poe2ItemStat::FlatEnergyShield) };
 	const int split = std::max(item._iAC - flats.armour - flats.evasion - flats.energyShield, 0);
 	const DefenseType type = ItemDefenseType(item);
@@ -125,7 +125,7 @@ void SplitItemDefense(const Item &item, bool modsKnown, DefensePoints &base, Def
 	base.evasion += flats.evasion;
 	base.energyShield += flats.energyShield;
 	bonus = {};
-	if (!modsKnown || item._iPLAC == 0)
+	if (item._iPLAC == 0)
 		return;
 	// As GetBonusAC: any increase gives at least a point.
 	int splitBonus = split * item._iPLAC / 100;

@@ -3777,15 +3777,15 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			if (item.isEmpty() || !item._iStatFlag || item._iAC == 0)
 				continue;
 			// The generic pass above counted all of the item's defence as armour; keep only its armour share.
-			const bool modsKnown = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+			// An item's local defence modifiers count identified or not, so identifying changes nothing (Curtis 2026-10-22).
 			DefensePoints base;
 			DefensePoints bonus;
-			SplitItemDefense(item, modsKnown, base, bonus);
+			SplitItemDefense(item, base, bonus);
 			evasion += base.evasion + bonus.evasion;
 			energyShield += (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
 			ac -= item._iAC - base.armour;
-			if (modsKnown)
-				bonusAc -= GetBonusAC(item) - bonus.armour;
+			const bool counted = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+			bonusAc += bonus.armour - (counted ? GetBonusAC(item) : 0);
 		}
 		for (const Item &item : player.InvBody) {
 			if (item.isEmpty() || !item._iStatFlag)
@@ -6299,7 +6299,8 @@ void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energySh
 {
 	DefensePoints base;
 	DefensePoints bonus;
-	SplitItemDefense(item, !item.isEmpty() && (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified), base, bonus);
+	if (!item.isEmpty())
+		SplitItemDefense(item, base, bonus);
 	armour = base.armour + bonus.armour;
 	evasion = base.evasion + bonus.evasion;
 	energyShield = (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
@@ -6723,7 +6724,8 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
 		shown++;
 	};
-	// Unidentified items only show their base: damage and defence. Identified weapons compare their whole hit, as the tooltip shows it.
+	// Unidentified weapons only show their base damage; identified ones compare their whole hit, as the tooltip shows it.
+	// Defence counts its modifiers either way.
 	const auto hitDamage = [](const Item &it, bool max) {
 		const int base = max ? it._iMaxDam : it._iMinDam;
 		if (it.isEmpty() || !it._iIdentified)
