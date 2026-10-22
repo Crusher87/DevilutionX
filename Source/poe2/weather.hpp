@@ -48,7 +48,10 @@ void SetPreset(Kind kind);
  * and out, after which the schedule takes over again.
  */
 void Request(Kind kind, float strength, float seconds);
-/** @brief The console forcing a look (weather("rain", 0.8)); nullopt hands it back to the schedule. */
+/**
+ * @brief The console forcing a look (weather("rain", 0.8)), there at once wherever there's a sky; nullopt hands it
+ * back to the schedule, which eases into its own weather.
+ */
 void Force(std::optional<Kind> kind, float strength = 1);
 /** @brief Moves the weather on by the given real time: its schedule, wind, lightning and sound. */
 void Advance(float ms);

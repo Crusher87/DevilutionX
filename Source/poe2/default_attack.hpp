@@ -38,6 +38,8 @@ constexpr int StaffBoltDamagePercent = 70;
 constexpr int StaffBoltMagicPercent = 10;
 
 DefaultAttack DefaultAttackFor(const Player &player);
+/** @brief The default attack of a weapon set (0 or 1), whether or not it's the one out. */
+DefaultAttack DefaultAttackForSet(const Player &player, uint8_t set);
 /** @brief The hero's default attack as a skill, for its supports; empty outside POE2 Mashup. */
 SkillSlot DefaultSkillSlot(const Player &player);
 std::string_view DefaultAttackName(DefaultAttack attack);
@@ -51,9 +53,16 @@ bool FiresStaffBolt(const Player &player);
 int RollStaffBoltDamage(const Player &player);
 
 /**
- * @brief Attacks towards the cursor with the weapon's default attack, without moving unless the target is out of reach.
+ * @brief Swaps to a weapon set unless it's already out.
+ * @return false if the swap has to wait (mid-swing or dodging).
+ */
+bool ReadyWeaponSet(Player &player, uint8_t set);
+
+/**
+ * @brief Attacks towards the cursor with a weapon set's default attack, swapping to that set first, without moving
+ * unless the target is out of reach.
  * @return true if the attack was ordered.
  */
-bool UseDefaultAttack(Player &player);
+bool UseDefaultAttack(Player &player, uint8_t set);
 
 } // namespace devilution

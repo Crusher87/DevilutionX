@@ -142,8 +142,9 @@ TEST_F(Poe2SpiritTest, MinionGemsReserveSpiritPerMinion)
 	EXPECT_EQ(ReservedSpirit(player), 27);
 	EXPECT_TRUE(IsPersistentSkillActive(player, Warriors));
 
-	// A higher gem level costs less per minion.
+	// A higher gem level costs less per minion (and, like POE2, needs more Magic: 157 at level 20).
 	player.poe2.slotLevels[0] = 20;
+	player._pBaseMag = player._pMagic = 160;
 	EXPECT_EQ(SpiritPerMinion(player, Warriors), 20);
 	EXPECT_EQ(ActiveMinionCount(player, Warriors), 3);
 

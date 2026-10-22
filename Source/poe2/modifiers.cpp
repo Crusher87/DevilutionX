@@ -505,6 +505,8 @@ uint32_t CollectModCandidates(std::vector<ModCandidate> &candidates, uint32_t sl
 				continue;
 			if (filter->family != 0 && filter->family != f + 1)
 				continue;
+			if (((filter->avoidEffects >> static_cast<uint8_t>(family.effect)) & 1) != 0)
+				continue;
 			const uint8_t tags = ModEffectTags(family.effect);
 			if (filter->tags == ModTagRule::Shared && (tags & rolledTags) == 0)
 				continue;

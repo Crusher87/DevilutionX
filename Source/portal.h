@@ -39,4 +39,13 @@ void GetPortalLevel();
 void GetPortalLvlPos();
 bool PosOkPortal(int lvl, Point position);
 
+/**
+ * @brief POE2 Mashup: a town portal takes the local hero through only when they clicked it, not when they walk over it
+ * or arrive on it (Curtis 2026-10-21). Remembers the portal under the cursor, or forgets the last one if none is there.
+ */
+void ChoosePortalAt(Point tile);
+void ForgetChosenPortal();
+/** @brief Whether the local hero clicked the portal at this tile. */
+bool ChosePortal(Point tile);
+
 } // namespace devilution

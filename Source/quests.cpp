@@ -346,6 +346,17 @@ void UpdatePWaterPalette()
 	palette_update_caves();
 }
 
+bool IsPoisonedWaterLevel()
+{
+	const Quest &poisonWater = Quests[Q_PWATER];
+	return setlevel && setlvlnum == poisonWater._qslvl && leveltype == poisonWater._qlvltype;
+}
+
+bool IsPoisonedWaterFoul()
+{
+	return IsPoisonedWaterLevel() && Quests[Q_PWATER]._qactive != QUEST_DONE;
+}
+
 void ResyncMPQuests()
 {
 	if (gbIsSpawn)

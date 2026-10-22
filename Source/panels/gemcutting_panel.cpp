@@ -305,24 +305,32 @@ const ItemData &GemData(const GemEntry &gem)
 	return AllItemsList[gem.itemIndex];
 }
 
-std::string RequirementsText(const GemEntry &gem)
+/** @brief What the gem needs at a gem level: a skill gem's needs grow with its level, like POE2's; a support gem's don't. */
+GemAttributeNeeds GemNeeds(const GemEntry &gem, int level)
 {
+	if (gem.support == SupportGem::None)
+		return SkillGemAttributeNeeds(gem.skill, level);
 	const ItemData &data = GemData(gem);
+	return { data.iMinStr, data.iMinMag, data.iMinDex };
+}
+
+std::string RequirementsText(const GemEntry &gem, int level)
+{
+	const GemAttributeNeeds needs = GemNeeds(gem, level);
 	std::string text;
 	const auto add = [&text](int needed, std::string_view stat) {
 		if (needed > 0)
 			StrAppend(text, text.empty() ? "" : ", ", FormatRuntime(_("{:d} {:s}"), needed, stat));
 	};
-	add(data.iMinStr, _("Str"));
-	add(data.iMinMag, _("Mag"));
-	add(data.iMinDex, _("Dex"));
+	add(needs.strength, _("Str"));
+	add(needs.magic, _("Mag"));
+	add(needs.dexterity, _("Dex"));
 	return text;
 }
 
-bool MeetsRequirements(const Player &player, const GemEntry &gem)
+bool MeetsRequirements(const Player &player, const GemEntry &gem, int level)
 {
-	const ItemData &data = GemData(gem);
-	return player._pStrength >= data.iMinStr && player._pMagic >= data.iMinMag && player._pDexterity >= data.iMinDex;
+	return MeetsGemAttributeNeeds(player, GemNeeds(gem, level));
 }
 
 void DrawGemIcon(const Surface &out, const Rectangle &box, const GemEntry &gem, bool ready)
@@ -397,10 +405,20 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 	} else {
 		lines.emplace_back(FormatRuntime(_("Grants the {:s} spell"), GemName(gem)), UiFlags::ColorWhite);
 	}
-	if (const std::string requirements = RequirementsText(gem); !requirements.empty())
-		lines.emplace_back(FormatRuntime(_("Requires {:s}"), requirements), MeetsRequirements(player, gem) ? UiFlags::ColorWhite : UiFlags::ColorRed);
-
+	// The needs shown are for the level the gem would have: what the uncut gem cuts, else the socketed gem's.
 	const Item *uncut = UncutItem();
+	const std::optional<int> socketedLevel = SocketedGemLevel(player, gem);
+	int needsLevel = socketedLevel.value_or(std::max<int>(gem.level, 1));
+	if (uncut != nullptr && CanCutGem(*uncut, gem))
+		needsLevel = std::max(GemLevelFromUncut(*uncut, player.getCharacterLevel()), socketedLevel.value_or(0));
+	if (const std::string requirements = RequirementsText(gem, needsLevel); !requirements.empty()) {
+		const bool meets = MeetsRequirements(player, gem, needsLevel);
+		lines.emplace_back(gem.support == SupportGem::None ? FormatRuntime(_("Level {:d} requires {:s}"), needsLevel, requirements) : FormatRuntime(_("Requires {:s}"), requirements), meets ? UiFlags::ColorWhite : UiFlags::ColorRed);
+		// Like POE2: cutting is allowed, but the skill can't be used until the hero has the attributes.
+		if (!meets)
+			lines.emplace_back(_("You can cut it, but can't use it until you meet this"), UiFlags::ColorRed);
+	}
+
 	if (uncut == nullptr) {
 		lines.emplace_back(FormatRuntime(_("Use an uncut {:s} gem to cut or level this"), UncutKindName(GemUncutKind(gem))), UiFlags::ColorButtonpushed);
 	} else if (CanCutGem(*uncut, gem)) {
@@ -458,7 +476,11 @@ void CutGem(const GemEntry &gem)
 		UseUpUncut(player);
 		SetSocketedGemLevel(player, gem, level);
 		PlaySFX(sound);
-		EventPlrMsg(FormatRuntime(_("{:s} is now level {:d}."), GemName(gem), level));
+		// Like POE2, a higher level needs more attributes; say so, or the skill seems to stop for no reason.
+		if (!MeetsRequirements(player, gem, level))
+			EventPlrMsg(FormatRuntime(_("{:s} is now level {:d}, but needs {:s} to use."), GemName(gem), level, RequirementsText(gem, level)), UiFlags::ColorRed);
+		else
+			EventPlrMsg(FormatRuntime(_("{:s} is now level {:d}."), GemName(gem), level));
 		TelemetryGemLevelChanged(player, gem.skill, current, level);
 		CloseGemcutting();
 		return;
@@ -485,7 +507,10 @@ void CutGem(const GemEntry &gem)
 		return;
 	UseUpUncut(player);
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[cut._iCurs]]);
-	EventPlrMsg(gem.support != SupportGem::None ? FormatRuntime(_("You cut a {:s} gem."), GemName(gem)) : FormatRuntime(_("You cut a level {:d} {:s} gem."), level, GemName(gem)));
+	if (!MeetsRequirements(player, gem, level))
+		EventPlrMsg(FormatRuntime(_("You cut {:s}, but you need {:s} to use it."), GemName(gem), RequirementsText(gem, level)), UiFlags::ColorRed);
+	else
+		EventPlrMsg(gem.support != SupportGem::None ? FormatRuntime(_("You cut a {:s} gem."), GemName(gem)) : FormatRuntime(_("You cut a level {:d} {:s} gem."), level, GemName(gem)));
 	if (player.HoldItem.isEmpty()) {
 		player.HoldItem = std::move(cut);
 		NewCursor(player.HoldItem);
@@ -712,9 +737,10 @@ void DrawGemcutting(const Surface &out)
 			color = UiFlags::ColorBlue;
 		DrawString(out, name, { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } }, { .flags = color | UiFlags::VerticalCenter });
 	}
-	if (std::none_of(layout.skillTabs.begin(), layout.skillTabs.end(), [](const SkillTab &tab) { return tab.skill && tab.skill->kind != SkillKind::Default; }))
-		DrawString(out, _("Socket a skill gem in the Skills panel (K) to see the supports that work with it."), { layout.panel.position + Displacement { Padding, HeaderHeight }, { TabWidth, 120 } },
-		    { .flags = UiFlags::FontSize12 | UiFlags::ColorButtonpushed });
+	// Only cutting a support lists skill tabs; the hint drew over the gem categories when cutting a skill gem (Curtis 2026-10-21).
+	if (IsCuttingSupport() && std::none_of(layout.skillTabs.begin(), layout.skillTabs.end(), [](const SkillTab &tab) { return tab.skill && tab.skill->kind != SkillKind::Default; }))
+		DrawString(out, WordWrapString(_("Socket a skill gem in the Skills panel (K) to see its supports."), TabWidth), { layout.panel.position + Displacement { Padding, HeaderHeight + TabHeight + TabGap }, { TabWidth, 120 } },
+		    { .flags = UiFlags::ColorButtonpushed });
 
 	FillRectangle(out, layout.grid, PanelColor);
 	DrawFrame(out, layout.grid, InnerBorderColor);

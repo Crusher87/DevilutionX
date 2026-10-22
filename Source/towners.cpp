@@ -438,7 +438,16 @@ void TalkToHealer(Player &player, Towner &healer)
 		if (poisonWater._qactive == QUEST_DONE && poisonWater._qvar1 != 2) {
 			poisonWater._qvar1 = 2;
 			InitQTextMsg(TEXT_POISON5);
-			SpawnUnique(UITEM_TRING, healer.position + Direction::SouthWest, poisonWater._qlevel);
+			Item *ring = SpawnUnique(UITEM_TRING, healer.position + Direction::SouthWest, poisonWater._qlevel, /*sendmsg=*/!gbIsPoe2);
+			// POE2 Mashup (Curtis 2026-10-21): the ring goes straight into the bag, as Pepin stands over where it lands.
+			if (gbIsPoe2 && ring != nullptr) {
+				if (AutoPlaceItemInInventory(player, *ring, true)) {
+					dItem[ring->position.x][ring->position.y] = 0;
+					DeleteItem(ActiveItemCount - 1);
+				} else {
+					NetSendCmdPItem(false, CMD_SPAWNITEM, ring->position, *ring);
+				}
+			}
 			NetSendCmdQuest(true, poisonWater);
 			return;
 		}

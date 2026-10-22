@@ -5,6 +5,8 @@
  */
 #include "portal.h"
 
+#include <optional>
+
 #include "lighting.h"
 #include "missiles.h"
 #include "multi.h"
@@ -184,6 +186,32 @@ bool PosOkPortal(int lvl, Point position)
 			return true;
 	}
 	return false;
+}
+
+namespace {
+
+/** @brief The town portal the local hero clicked, if any. */
+std::optional<Point> ChosenPortal;
+
+} // namespace
+
+void ChoosePortalAt(Point tile)
+{
+	ChosenPortal = std::nullopt;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype == MissileID::TownPortal && missile.position.tile == tile)
+			ChosenPortal = tile;
+	}
+}
+
+void ForgetChosenPortal()
+{
+	ChosenPortal = std::nullopt;
+}
+
+bool ChosePortal(Point tile)
+{
+	return ChosenPortal == tile;
 }
 
 } // namespace devilution

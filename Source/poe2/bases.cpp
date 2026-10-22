@@ -155,6 +155,16 @@ std::vector<ItemImplicit> ItemImplicits(const Item &item)
 	return implicits;
 }
 
+uint64_t ImplicitEffectBits(const Item &item)
+{
+	uint64_t bits = 0;
+	for (const ItemImplicit &rolled : ItemImplicits(item)) {
+		if (rolled.values[0] > 0 || rolled.values[1] > 0)
+			bits |= uint64_t { 1 } << static_cast<uint8_t>(rolled.implicit->effect);
+	}
+	return bits;
+}
+
 void ApplyBaseProperties(Item &item)
 {
 	if (!gbIsPoe2)

@@ -53,6 +53,7 @@
 #include "poe2/loot_filter.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/profane_roads.hpp"
+#include "portal.h"
 #include "qol/chatlog.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -1876,6 +1877,8 @@ void WalkInDir(Player &player, AxisDirection dir)
 
 	const Direction pdir = FaceDir[static_cast<std::size_t>(dir.x)][static_cast<std::size_t>(dir.y)];
 	const auto delta = player.position.future + pdir;
+	// POE2 Mashup: walking over a town portal with the keys doesn't take the hero through; only clicking it does.
+	ForgetChosenPortal();
 
 	if (!player.isWalking() && player.CanChangeAction())
 		player._pdir = pdir;
@@ -2710,6 +2713,7 @@ void PerformSecondaryAction()
 		LastPlayerAction = PlayerActionType::OperateObject;
 	} else {
 		if (pcursmissile != nullptr) {
+			ChoosePortalAt(pcursmissile->position.tile);
 			MakePlrPath(myPlayer, pcursmissile->position.tile, true);
 			myPlayer.destAction = ACTION_WALK;
 		} else if (pcurstrig != -1) {

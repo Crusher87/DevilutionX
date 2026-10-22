@@ -30,6 +30,23 @@ bool CreateSkillGemItem(Item &item, SkillSlot skill, int level = 1);
 int SkillGemItemLevel(const Item &item);
 void SetSkillGemItemLevel(Item &item, int level);
 
+/** @brief Strength, magic and dexterity a skill gem needs. */
+struct GemAttributeNeeds {
+	int strength = 0;
+	int magic = 0;
+	int dexterity = 0;
+};
+/**
+ * @brief POE2's attribute requirement at a gem level for a gem that puts sharePercent of its requirement on one
+ * attribute (100 for a single-attribute gem): 0 at level 1, about 14 at level 3, 65 at level 10, 157 at level 20.
+ */
+int GemAttributeRequirement(int gemLevel, int sharePercent);
+/** @brief What the skill's gem needs at a gem level. Like POE2, it grows with the level; the gem's attributes keep their share. */
+GemAttributeNeeds SkillGemAttributeNeeds(SkillSlot skill, int gemLevel);
+/** @brief The level of the skill's own gem in the Skills panel or a meta gem, without gear's +levels (POE2 doesn't raise needs for those); 1 if not socketed. */
+int SocketedSkillGemLevel(const Player &player, SkillSlot skill);
+bool MeetsGemAttributeNeeds(const Player &player, const GemAttributeNeeds &needs);
+
 std::string_view SkillName(SkillSlot skill);
 int SkillManaCost(const Player &player, SkillSlot skill);
 
@@ -62,9 +79,7 @@ std::optional<size_t> FindSkillSlot(const Player &player, SkillSlot skill);
  */
 SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill, int level = 1);
 
-/** @brief Only the left and right mouse buttons can move, interact or cast the readied spell. */
-bool TraySlotTakesActions(TraySlot slot);
-/** @brief Whether a slot can take the binding: gems and the weapon attack go anywhere, the other actions only on those two buttons. */
+/** @brief Whether a slot can take the binding: gems and the weapon set attacks go anywhere; the old mouse actions nowhere. */
 bool TrayBindingFits(TrayBinding binding, TraySlot slot);
 /** @brief The first tray slot that uses the gem in a Skills panel socket, if any. */
 std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket);

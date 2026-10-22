@@ -35,7 +35,18 @@ bool IsFlaskPotion(const Item &item)
 
 bool IsFlaskSlot(const Player &player, size_t beltSlot)
 {
-	return gbIsPoe2 && beltSlot < NumFlasks && IsFlaskPotion(player.SpdList[beltSlot]);
+	return gbIsPoe2 && beltSlot < FlaskBeltSlots && IsFlaskPotion(player.SpdList[beltSlot]);
+}
+
+bool BeltSlotTakes(const Item &item, size_t beltSlot)
+{
+	if (!gbIsPoe2)
+		return true;
+	if (IsFlaskPotion(item))
+		return beltSlot < FlaskBeltSlots;
+	if (IsCharm(item))
+		return beltSlot >= FlaskBeltSlots;
+	return true;
 }
 
 namespace {
@@ -335,11 +346,9 @@ std::vector<std::string> FlaskAdvancedLines(const Item &item, const Player *play
 				charges = player->poe2.flaskCharges[slot];
 		}
 	}
-	if (charges >= 0)
-		lines.emplace_back(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), charges, MaxFlaskChargesFor(item), FlaskChargesPerUseFor(item)));
-	else
-		lines.emplace_back(FormatRuntime(_("Holds {:d} charges, {:d} per use"), MaxFlaskChargesFor(item), FlaskChargesPerUseFor(item)));
-	lines.emplace_back(_("Refills from kills; drink with keys 1-5"));
+	// Off the belt a flask holds no charges (Curtis 2026-10-21: say so, so a dropped one doesn't read as full).
+	lines.emplace_back(FormatRuntime(_("Charges: {:d}/{:d}, {:d} per use"), std::max(charges, 0), MaxFlaskChargesFor(item), FlaskChargesPerUseFor(item)));
+	lines.emplace_back(_("Refills from kills; drink with keys 1 and 2"));
 	return lines;
 }
 
@@ -456,10 +465,40 @@ bool UseFlask(Player &player, size_t beltSlot)
 	return true;
 }
 
+namespace {
+
+/** @brief Moves flasks and charms out of belt slots that no longer take them, after the belt went to two flask slots. */
+void FitBeltSlots(Player &player)
+{
+	for (size_t slot = 0; slot < MaxBeltItems; slot++) {
+		Item &item = player.SpdList[slot];
+		if (item.isEmpty() || BeltSlotTakes(item, slot) || !(IsFlaskPotion(item) || IsCharm(item)))
+			continue;
+		bool moved = false;
+		for (size_t other = 0; other < MaxBeltItems && !moved; other++) {
+			if (!player.SpdList[other].isEmpty() || !BeltSlotTakes(item, other))
+				continue;
+			if (other < NumFlasks && slot < NumFlasks)
+				player.poe2.flaskCharges[other] = player.poe2.flaskCharges[slot];
+			player.SpdList[other] = item;
+			moved = true;
+		}
+		if (!moved)
+			moved = AutoPlaceItemInInventory(player, item);
+		if (moved)
+			item.clear();
+	}
+	RedrawComponent(PanelDrawComponent::Belt);
+}
+
+} // namespace
+
 void ProcessFlaskRecovery(Player &player)
 {
 	if (!gbIsPoe2 || player.hasNoLife())
 		return;
+	if (!player.poe2.flaskSlotKeysKnown)
+		FitBeltSlots(player);
 	// Flasks and charms hold no charges in the bag or on the ground: one put into a belt slot from there starts empty
 	// and fills from kills. One lifted from the belt onto the cursor and put back in the belt keeps its charges.
 	static_assert(MaxBeltItems == std::tuple_size_v<decltype(player.poe2.flaskSlotKeys)>);
@@ -478,10 +517,12 @@ void ProcessFlaskRecovery(Player &player)
 		const uint8_t wasCharges = slot < NumFlasks ? data.flaskCharges[slot] : 0;
 		if (key != 0) {
 			const bool putBack = key == data.liftedBeltKey;
-			if (slot < NumFlasks)
+			if (IsCharm(item)) {
+				if (!putBack)
+					item._iCharges = 0;
+			} else if (slot < NumFlasks) {
 				data.flaskCharges[slot] = putBack ? data.liftedFlaskCharges : 0;
-			else if (!putBack && IsCharm(item))
-				item._iCharges = 0;
+			}
 			if (putBack)
 				data.liftedBeltKey = 0;
 		}

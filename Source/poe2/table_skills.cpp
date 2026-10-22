@@ -875,18 +875,32 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	case Strike:
 	case Flurry:
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
-		vfx::Swing(tile, tile + dir, LookOf(data), false);
+		vfx::SwingAs(tile, tile + dir, LookOf(data), WeaponSwingStyle(player), HoldsHeavyWeapon(player));
 		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
 	case Arc:
-		vfx::Swing(tile, tile + dir, LookOf(data), true);
+		if (WeaponSwingStyle(player) == vfx::SwingStyle::Chop)
+			vfx::Cleave(tile, tile + dir, LookOf(data), true);
+		else
+			vfx::Swing(tile, tile + dir, LookOf(data), true);
 		AddVisualEffect(tile + Left(dir), data.effect, 0);
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
 		AddVisualEffect(tile + Right(dir), data.effect, 2);
 		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
-	case Around:
 	case Dash:
+		// Whirlwind's spin and its funnel of wind started with its animation (see BeginSkillAnimation); here its blades
+		// bite into everything around, without the slam's glowing cracks that read as lightning (Curtis 2026-10-21).
+		if (SpinsWhileStriking(data.skill)) {
+			EffectRingAround(tile, 1, data.effect, 0);
+			vfx::Sparks(tile, LookOf(data), 1.3F);
+			PlaySfxLoc(SfxID::Swing, tile);
+			if (mine)
+				ShakeCamera(ShakeStrength::Light, 4);
+			break;
+		}
+		[[fallthrough]];
+	case Around:
 	case CallOfTheAncients:
 		EffectRingAround(tile, 1, data.effect, 0);
 		if (data.radius > 1)

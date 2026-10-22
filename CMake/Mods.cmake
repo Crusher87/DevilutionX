@@ -86,6 +86,7 @@ set(poe2_mod
   sfx/poe2/blizzard_shard2.wav
   sfx/poe2/blizzard_shard3.wav
   sfx/poe2/blizzard_shard4.wav
+  txtdata/classes/warrior/starting_loadout.tsv
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
   txtdata/missiles/misdat.tsv

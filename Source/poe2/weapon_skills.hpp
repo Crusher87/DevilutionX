@@ -19,6 +19,9 @@ struct Item;
 struct Missile;
 struct Player;
 enum class player_graphic : uint8_t;
+namespace vfx {
+enum class SwingStyle : uint8_t;
+} // namespace vfx
 
 /** @brief Where the arrows of Rain of Arrows come down, around the target. */
 constexpr std::array<Displacement, 9> RainOfArrowsVolley = { { { 0, 0 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 2 }, { -2, -2 }, { 2, -2 }, { -2, 2 } } };
@@ -30,6 +33,10 @@ constexpr int GroundSlamReach = 3;
 /** @brief Whirling Staff hits two rings around the player; the outer ring for this percent. */
 constexpr int WhirlingStaffReach = 2;
 constexpr int WhirlingStaffOuterDamagePercent = 50;
+/** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
+constexpr int FlurryBackhandDamagePercent = 150;
+/** @brief The backhand starts from the end of the first swing, so it skips this many more frames of the animation. */
+constexpr int8_t FlurryBackhandSkippedFrames = 4;
 /** @brief Ticks between Barrage's arrows and between Ember Fusillade's embers. */
 constexpr int BarrageShotTicks = 3;
 constexpr int EmberShotTicks = 2;
@@ -109,5 +116,15 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target);
 
 /** @brief Plays the visual effects and sounds of a skill hitting or going off. */
 void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target);
+
+/** @brief Whether the hero holds a heavy weapon (an axe, mace or staff, and no sword): slower, thicker swings. */
+bool HoldsHeavyWeapon(const Player &player);
+/** @brief How the hero's weapon moves on an attack: an axe or a mace comes down from overhead, anything else sweeps level. */
+vfx::SwingStyle WeaponSwingStyle(const Player &player);
+
+/** @brief Whether the hero spins round through every facing while the skill's animation plays (Whirlwind). */
+bool SpinsWhileStriking(WeaponSkill skill);
+/** @brief Turns a spinning hero to the next facing for the animation frame (see SpinsWhileStriking). */
+void TurnWithSpin(Player &player);
 
 } // namespace devilution

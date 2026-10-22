@@ -34,12 +34,14 @@
 #include "panels/skills_panel.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "plrmsg.h"
 #include "poe2/item_search.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/stacking.hpp"
 #include "qol/stash.h"
 #include "spells.h"
 #include "stores.h"
+#include "utils/format.hpp"
 #include "utils/format_int.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -911,8 +913,6 @@ void PrintWareInfo(int itemIndex)
 		PrintItemComparison(item);
 		CurrentInfoLineStyle = InfoLineStyle::Note;
 		AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
-		CurrentInfoLineStyle = InfoLineStyle::Requirement;
-		AddInfoBoxString(_("Click to pick up, then place it in your inventory to buy; Ctrl+click buys at once"), true);
 		CurrentInfoLineStyle = InfoLineStyle::Default;
 	} else {
 		AddInfoBoxString(StrCat(FormatInteger(price), " Gold"));
@@ -1273,6 +1273,18 @@ bool CanSellToCurrentVendor(const Item &item)
 	}
 	}
 	return false;
+}
+
+void SayVendorWontBuy()
+{
+	std::string_view name;
+	switch (VisualStore.vendor) {
+	case VisualStoreVendor::Smith: name = _("Griswold"); break;
+	case VisualStoreVendor::Witch: name = _("Adria"); break;
+	case VisualStoreVendor::Healer: name = _("Pepin"); break;
+	case VisualStoreVendor::Boy: name = _("Wirt"); break;
+	}
+	EventPlrMsg(FormatRuntime(_("{:s} won't buy that."), name), UiFlags::ColorRed);
 }
 
 void SellItemToVisualStore(int invIndex)

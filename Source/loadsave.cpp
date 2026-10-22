@@ -2592,7 +2592,13 @@ uint8_t ReadPoe2HeroData(Player &player)
 		const uint8_t socket = file.NextLE<uint8_t>();
 		if (action > static_cast<uint8_t>(TrayAction::Last))
 			continue;
-		const TrayBinding binding { static_cast<TrayAction>(action), socket };
+		TrayBinding binding { static_cast<TrayAction>(action), socket };
+		// The old Move/attack and Interact choices become the first weapon set's attack; the readied spell is what an
+		// empty right button does anyway.
+		if (IsAnyOf(binding.action, TrayAction::MoveAndAttack, TrayAction::Interact))
+			binding = { TrayAction::WeaponAttack, 0 };
+		else if (binding.action == TrayAction::ReadiedSpell)
+			continue;
 		const SkillSlot skill = socket < NumSkillSlots ? player.poe2.skillSlots[socket] : SkillSlot {};
 		if (binding.isGem() && (skill.isEmpty() || skill.kind == SkillKind::Persistent))
 			continue;

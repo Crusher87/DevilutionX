@@ -62,6 +62,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
@@ -209,6 +210,25 @@ void ClearStateVariables(Player &player)
 	player.queuedSpell.spellLevel = 0;
 }
 
+/** @brief The attack animation frames the weapon's attack speed skips. */
+int8_t ItemAttackSkippedFrames(const Player &player, bool includesFirstFrame)
+{
+	const auto flags = player._pIFlags;
+	// If the first frame is not included in vanilla, the skip logic for the first frame will not be executed.
+	// This will result in a different and slower attack speed.
+	if (HasAnyOf(flags, ItemSpecialEffect::FastestAttack)) {
+		// If the fastest attack logic is trigger frames in vanilla two frames are skipped, so missing the first frame reduces the skip logic by two frames.
+		return includesFirstFrame ? 4 : 2;
+	}
+	if (HasAnyOf(flags, ItemSpecialEffect::FasterAttack))
+		return includesFirstFrame ? 3 : 2;
+	if (HasAnyOf(flags, ItemSpecialEffect::FastAttack))
+		return includesFirstFrame ? 2 : 1;
+	if (HasAnyOf(flags, ItemSpecialEffect::QuickAttack))
+		return includesFirstFrame ? 1 : 0;
+	return 0;
+}
+
 void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 {
 	if (player._pInvincible && player.hasNoLife() && &player == MyPlayer) {
@@ -216,23 +236,10 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 		return;
 	}
 
-	int8_t skippedAnimationFrames = 0;
-	const auto flags = player._pIFlags;
-
-	// If the first frame is not included in vanilla, the skip logic for the first frame will not be executed.
-	// This will result in a different and slower attack speed.
-	if (HasAnyOf(flags, ItemSpecialEffect::FastestAttack)) {
-		// If the fastest attack logic is trigger frames in vanilla two frames are skipped, so missing the first frame reduces the skip logic by two frames.
-		skippedAnimationFrames = includesFirstFrame ? 4 : 2;
-	} else if (HasAnyOf(flags, ItemSpecialEffect::FasterAttack)) {
-		skippedAnimationFrames = includesFirstFrame ? 3 : 2;
-	} else if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
-		skippedAnimationFrames = includesFirstFrame ? 2 : 1;
-	} else if (HasAnyOf(flags, ItemSpecialEffect::QuickAttack)) {
-		skippedAnimationFrames = includesFirstFrame ? 1 : 0;
-	}
+	int8_t skippedAnimationFrames = ItemAttackSkippedFrames(player, includesFirstFrame);
 
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	player.poe2.flurryStrike = 0;
 	PayMeleeAttackLife(player);
 	skippedAnimationFrames += WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player);
 
@@ -601,11 +608,15 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		hit = 0;
 	}
 
-	hper += player.GetMeleePiercingToHit() - player.CalculateArmorPierce(monster.armorClass, true);
-	// POE2 Mashup: War Banner's accuracy.
-	if (hper > 0)
-		hper = hper * (100 + BannerAccuracyPercent(player)) / 100;
-	hper = std::clamp(hper, 5, 95);
+	if (gbIsPoe2) {
+		// POE2 Mashup: POE2's accuracy against the monster's evasion, and the chance to hit gear adds on top. Melee keeps
+		// all its accuracy up close, so it rarely misses (Curtis 2026-10-21).
+		hper += Poe2HitChance(AccuracyRating(player), MonsterEvasionRating(monster, player.CalculateArmorPierce(monster.armorClass, true))) + player._pIBonusToHit;
+		hper = std::clamp(hper, 5, 100);
+	} else {
+		hper += player.GetMeleePiercingToHit() - player.CalculateArmorPierce(monster.armorClass, true);
+		hper = std::clamp(hper, 5, 95);
+	}
 	// POE2 Mashup: some uniques make attacks unevadable.
 	if (AttacksCannotBeEvaded(player))
 		hper = 100;
@@ -917,10 +928,9 @@ bool DoAttack(Player &player)
 		}
 
 		if (monster != nullptr) {
-			didhit = PlrHitMonst(player, *monster);
-			// POE2 Mashup: Flurry strikes twice.
-			if (player.poe2.activeSkill == WeaponSkill::Flurry && !monster->hasNoLife() && PlrHitMonst(player, *monster))
-				didhit = true;
+			// POE2 Mashup: Flurry's second strike, a backhand, hits harder.
+			const bool backhand = player.poe2.activeSkill == WeaponSkill::Flurry && player.poe2.flurryStrike > 0;
+			didhit = PlrHitMonst(player, *monster, false, backhand ? FlurryBackhandDamagePercent : 100);
 			// POE2 Mashup: Frenzy builds charges, Smite breaks armour and Fists of Thunder builds Combo.
 			if (didhit) {
 				switch (player.poe2.activeSkill) {
@@ -948,19 +958,25 @@ bool DoAttack(Player &player)
 			}
 		}
 
-		// POE2 Mashup: the weapon's swing, in the colour of its strongest element, and sparks where it lands.
-		{
-			vfx::Element look = vfx::Element::Physical;
-			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage))
-				look = vfx::Element::Fire;
-			else if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage))
-				look = vfx::Element::Lightning;
-			const auto holds = [&](ItemType type) { return player.InvBody[INVLOC_HAND_LEFT]._itype == type || player.InvBody[INVLOC_HAND_RIGHT]._itype == type; };
-			const bool heavy = !holds(ItemType::Sword) && (holds(ItemType::Axe) || holds(ItemType::Mace) || holds(ItemType::Staff));
-			vfx::Swing(player.position.tile, player.position.tile + player._pdir, look, player.CanCleave(), heavy);
-			if (didhit)
-				vfx::Cut(player.position.tile + player._pdir, look);
+		// POE2 Mashup: the weapon's swing, in the colour of its strongest element, and sparks where it lands. It
+		// follows the hero's animation: an axe or mace comes down from overhead. Skills with their own swing draw it
+		// with their effects.
+		vfx::Element look = vfx::Element::Physical;
+		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage))
+			look = vfx::Element::Fire;
+		else if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage))
+			look = vfx::Element::Lightning;
+		if (IsNoneOf(player.poe2.activeSkill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::Frenzy, WeaponSkill::FistsOfThunder, WeaponSkill::WhirlingStaff)) {
+			const vfx::SwingStyle style = WeaponSwingStyle(player);
+			if (player.CanCleave() && style == vfx::SwingStyle::Chop)
+				vfx::Cleave(player.position.tile, player.position.tile + player._pdir, look, true);
+			else if (player.CanCleave())
+				vfx::Swing(player.position.tile, player.position.tile + player._pdir, look, true, HoldsHeavyWeapon(player));
+			else
+				vfx::SwingAs(player.position.tile, player.position.tile + player._pdir, look, style, HoldsHeavyWeapon(player));
 		}
+		if (didhit)
+			vfx::Cut(player.position.tile + player._pdir, look);
 
 		// POE2 Mashup: Brutality's price is the weapon's fire and lightning damage.
 		if (!SupportMeleeIsPhysicalOnly(player) && (!gbIsHellfire || !HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage))) {
@@ -982,16 +998,20 @@ bool DoAttack(Player &player)
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
-					if (PlrHitMonst(player, *monster, adjacentDamage))
+					if (PlrHitMonst(player, *monster, adjacentDamage)) {
 						didhit = true;
+						vfx::Cut(position, look);
+					}
 				}
 			}
 			position = player.position.tile + Left(player._pdir);
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
-					if (PlrHitMonst(player, *monster, adjacentDamage))
+					if (PlrHitMonst(player, *monster, adjacentDamage)) {
 						didhit = true;
+						vfx::Cut(position, look);
+					}
 				}
 			}
 		}
@@ -1029,7 +1049,9 @@ bool DoAttack(Player &player)
 
 		if (skill != WeaponSkill::None) {
 			PlaySkillEffects(player, skill, player.position.tile + player._pdir);
-			OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
+			// Flurry's backhand is part of the same use.
+			if (skill != WeaponSkill::Flurry || player.poe2.flurryStrike == 0)
+				OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
 		}
 
 		if (didhit && DamageWeapon(player, 30)) {
@@ -1040,6 +1062,19 @@ bool DoAttack(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
+		// POE2 Mashup: Flurry swings a second time, a backhand, while its target still stands (Curtis 2026-10-21: "the
+		// hero should actually swing twice").
+		if (player.poe2.activeSkill == WeaponSkill::Flurry && player.poe2.flurryStrike == 0) {
+			const Point front = player.position.tile + player._pdir;
+			const Monster *target = FindMonsterAtPosition(front);
+			if (target != nullptr && !CanTalkToMonst(*target) && target->position.old == front && !target->hasNoLife()) {
+				player.poe2.flurryStrike = 1;
+				const auto skipped = static_cast<int8_t>(ItemAttackSkippedFrames(player, true) + WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player) + FlurryBackhandSkippedFrames);
+				const auto flags = static_cast<AnimationDistributionFlags>(AnimationDistributionFlags::ProcessAnimationPending | AnimationDistributionFlags::RepeatedAction);
+				NewPlrAnim(player, player_graphic::Attack, player._pdir, flags, skipped, player._pAFNum);
+				return false;
+			}
+		}
 		StartStand(player, player._pdir);
 		ClearStateVariables(player);
 		return true;
@@ -1261,6 +1296,9 @@ void DamageArmor(Player &player)
 bool DoSkillCast(Player &player)
 {
 	const WeaponSkill skill = player.poe2.castSkill;
+	// Whirlwind turns the hero through every facing as it spins.
+	if (SpinsWhileStriking(skill))
+		TurnWithSpin(player);
 	if (player.AnimInfo.currentFrame == player.poe2.castFrame) {
 		if (IsAnyOf(skill, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge))
 			DashSkillLanding(player, skill);
@@ -1270,6 +1308,8 @@ bool DoSkillCast(Player &player)
 
 	if (player.AnimInfo.isLastFrame()) {
 		player.poe2.castSkill = WeaponSkill::None;
+		if (SpinsWhileStriking(skill))
+			player._pdir = static_cast<Direction>(player.poe2.spinFrom);
 		StartStand(player, player._pdir);
 		ClearStateVariables(player);
 		return true;
@@ -1815,6 +1855,8 @@ bool Player::CanUseItem(const Item &item) const
 {
 	if (!IsItemValid(*this, item))
 		return false;
+	if (gbIsPoe2 && IsSkillGem(item))
+		return MeetsGemAttributeNeeds(*this, SkillGemAttributeNeeds(SkillForGem(item), SkillGemItemLevel(item)));
 
 	return RequirementStrength(*this) >= item._iMinStr
 	    && _pMagic >= item._iMinMag

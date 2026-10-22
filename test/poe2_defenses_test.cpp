@@ -70,6 +70,31 @@ public:
 	}
 };
 
+TEST_F(Poe2DefensesTest, AccuracyFollowsPoe2)
+{
+	// POE2: 125% x accuracy / (accuracy + 0.3 x evasion), from 5% to 100%.
+	EXPECT_EQ(Poe2HitChance(1000, 1000), 96);
+	EXPECT_EQ(Poe2HitChance(1, 100000), 5);
+	EXPECT_EQ(Poe2HitChance(100000, 0), 100);
+	// Arrows lose accuracy past 2 tiles, down to a tenth at 9.
+	EXPECT_EQ(AccuracyAtDistancePercent(1), 100);
+	EXPECT_EQ(AccuracyAtDistancePercent(2), 100);
+	EXPECT_EQ(AccuracyAtDistancePercent(5), 62);
+	EXPECT_EQ(AccuracyAtDistancePercent(9), 10);
+	EXPECT_EQ(AccuracyAtDistancePercent(20), 10);
+
+	// 6 a level and 6 a point of Dexterity; an ordinary hero hits an ordinary monster of their level about 9 in 10.
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(1);
+	player._pDexterity = 20;
+	player._pIBonusToHit = 0;
+	EXPECT_EQ(AccuracyRating(player), 126);
+	EXPECT_EQ(TypicalHitChance(player), 92);
+	player.setCharacterLevel(10);
+	player._pDexterity = 25;
+	EXPECT_EQ(TypicalHitChance(player), 92);
+}
+
 TEST_F(Poe2DefensesTest, BasesGrantTheirOwnDefense)
 {
 	Item item;

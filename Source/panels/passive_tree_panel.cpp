@@ -31,6 +31,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "poe2/weapon_swap.hpp"
+#include "quests.h"
 #include "sound_effect_enums.h"
 #include "tables/playerdat.hpp"
 #include "utils/format.hpp"
@@ -59,8 +60,9 @@ constexpr float SealRadius = 672;
 constexpr float SanctumRadius = 110;
 /** @brief Area names sit just inside the seal, past the outermost nodes. */
 
-constexpr float MinZoom = 1.0F;
 constexpr float MaxZoom = 5.0F;
+/** Tree units of room past the farthest node, for its frame and name. */
+constexpr float NodeMargin = 60;
 constexpr float OpenZoom = 2.25F;
 constexpr float ZoomStep = 1.25F;
 /** Screen pixels the view moves per arrow key press. */
@@ -199,10 +201,27 @@ Point NodeViewPoint(const Layout &layout, const PassiveNode &node)
 	return ViewPoint(layout, static_cast<float>(node.x), static_cast<float>(node.y));
 }
 
+/** @brief Tree units from the centre to the farthest node: the tree outgrew the seal, so the view follows the nodes. */
+float NodeReach()
+{
+	float reach = TreeExtent;
+	for (const PassiveNode &node : PassiveTree())
+		reach = std::max({ reach, std::abs(static_cast<float>(node.x)) + NodeMargin, std::abs(static_cast<float>(node.y)) + NodeMargin });
+	return reach;
+}
+
+/** @brief Zoomed out far enough to show the whole tree at once. */
+float WholeTreeZoom()
+{
+	return std::min(1.0F, TreeExtent / NodeReach());
+}
+
+/** @brief Keeps the view's centre on the tree; any node, the farthest included, can be brought to the middle. */
 void ClampView()
 {
-	ViewX = std::clamp(ViewX, -TreeExtent, TreeExtent);
-	ViewY = std::clamp(ViewY, -TreeExtent, TreeExtent);
+	const float reach = NodeReach() - NodeMargin;
+	ViewX = std::clamp(ViewX, -reach, reach);
+	ViewY = std::clamp(ViewY, -reach, reach);
 }
 
 /** @brief Opens on the player's own area, with the start and the sanctum's edge in sight. */
@@ -234,7 +253,7 @@ void ZoomAt(const Layout &layout, float factor, Point anchor)
 	const Point center = layout.view.Center();
 	const float anchorX = ViewX + ((anchor.x - center.x) / oldScale);
 	const float anchorY = ViewY + ((anchor.y - center.y) / oldScale);
-	Zoom = std::clamp(Zoom * factor, MinZoom, MaxZoom);
+	Zoom = std::clamp(Zoom * factor, WholeTreeZoom(), MaxZoom);
 	const float newScale = Scale(layout);
 	ViewX = anchorX - ((anchor.x - center.x) / newScale);
 	ViewY = anchorY - ((anchor.y - center.y) / newScale);
@@ -1249,7 +1268,7 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 			break;
 		case SDLK_F:
 			// The whole tree at once.
-			Zoom = MinZoom;
+			Zoom = WholeTreeZoom();
 			ViewX = 0;
 			ViewY = 0;
 			break;
@@ -1429,6 +1448,104 @@ void DrawPassiveTree(const Surface &out)
 		DrawAttributePicker(out, layout, PassiveTree()[*PendingAttributeNode]);
 	else if (hovered)
 		DrawTooltip(out, layout, player, PassiveTree()[*hovered], route);
+}
+
+namespace {
+
+/** @brief How long the quest points notice stays up, and the part of it spent fading, in milliseconds. */
+constexpr uint32_t QuestNoticeMs = 7000;
+constexpr uint32_t QuestNoticeFadeMs = 1200;
+
+uint32_t QuestNoticeStart;
+bool QuestNoticeUp;
+int QuestNoticePoints;
+quest_id QuestNoticeQuest = Q_INVALID;
+
+/**
+ * @brief Why a quest gives passive points, in the world, as Cain might say it of the hero (the story thread's lines,
+ * research/quest-points/quest-point-reasons-story.md).
+ */
+const char *QuestPointsReason(quest_id quest)
+{
+	switch (quest) {
+	case Q_ROCK: return N_("The runes on the Magic Rock stay with you after Griswold takes it.");
+	case Q_MUSHROOM: return N_("Adria's brew clears your head, and new paths open on the tree.");
+	case Q_GARBUD: return N_("Gharbad's tricks taught you to watch a foe's hands, not his words.");
+	case Q_ZHAR: return N_("Buried in Zhar's ravings was true lore, and you kept it.");
+	case Q_VEIL: return N_("Lachdanan's peace leaves a knight's discipline with you.");
+	case Q_DIABLO: return N_("What you learned facing the Lord of Terror cannot be unlearned.");
+	case Q_BUTCHER: return N_("You walked out of the Butcher's room. Few have.");
+	case Q_LTBANNER: return N_("Taking back Ogden's sign taught you to fight in close quarters.");
+	case Q_BLIND: return N_("The Halls of the Blind taught you to trust what you cannot see.");
+	case Q_BLOOD: return N_("Arkaine's valor stirs in whoever carries his armour out.");
+	case Q_ANVIL: return N_("Carrying the Anvil of Fury to Griswold taught you its weight.");
+	case Q_WARLORD: return N_("You learned the Warlord's way of war by breaking it.");
+	case Q_SKELKING: return N_("Laying Leoric to rest, you learned what the dead know.");
+	case Q_PWATER: return N_("Cleansing the water steadied your hands and your will.");
+	case Q_SCHAMB: return N_("The tome in the Chamber of Bone held lore you can use.");
+	case Q_BETRAYER: return N_("Lazarus is dead, and the hold his lies had on you dies with him.");
+	case Q_GRAVE: return N_("What waited in the grave was worth the digging.");
+	case Q_FARMER: return N_("Lester's orchard taught you that some fights are won by patience.");
+	case Q_GIRL: return N_("Celia's lost friend reminds you what you fight for.");
+	case Q_TRADER: return N_("The trader's tales carry tricks of the road.");
+	case Q_DEFILER: return N_("Destroying the Defiler cleansed something in you as well.");
+	case Q_NAKRUL: return N_("Na-Krul's fall leaves its power in the air, and some in you.");
+	case Q_CORNSTN: return N_("The Cornerstone of the World hums with knowledge older than Tristram.");
+	default: return N_("Finishing a quest teaches you something new.");
+	}
+}
+
+} // namespace
+
+void ShowQuestPointsNotice(uint32_t quests, int points)
+{
+	if (points <= 0)
+		return;
+	QuestNoticeQuest = Q_INVALID;
+	for (size_t quest = 0; quest < 32; quest++) {
+		if ((quests & (1U << quest)) != 0) {
+			QuestNoticeQuest = static_cast<quest_id>(quest);
+			break;
+		}
+	}
+	QuestNoticePoints = points;
+	QuestNoticeStart = SDL_GetTicks();
+	QuestNoticeUp = true;
+	PlaySFX(SfxID::QuestDone);
+}
+
+void DrawQuestPointsNotice(const Surface &out)
+{
+	if (!QuestNoticeUp)
+		return;
+	const uint32_t elapsed = SDL_GetTicks() - QuestNoticeStart;
+	if (elapsed >= QuestNoticeMs || IsOpen) {
+		QuestNoticeUp = false;
+		return;
+	}
+
+	// A band across the top of the play area, like POE2's reward notice: what was gained, why, and what to do with it.
+	const int width = std::min(640, out.w() - 32);
+	const int height = 112;
+	const int x = (out.w() - width) / 2;
+	const int y = std::max(out.h() / 6, 48);
+	const bool fading = elapsed > QuestNoticeMs - QuestNoticeFadeMs;
+	DrawHalfTransparentRectTo(out, x, y, width, height);
+	if (!fading)
+		DrawHalfTransparentRectTo(out, x, y, width, height);
+	const uint8_t frame = fading ? PAL16_GRAY + 8 : PAL16_YELLOW + 4;
+	DrawHorizontalLine(out, { x, y }, width, frame);
+	DrawHorizontalLine(out, { x, y + height - 1 }, width, frame);
+
+	DrawString(out, FormatRuntime(ngettext("+{:d} Passive Skill Point", "+{:d} Passive Skill Points", QuestNoticePoints), QuestNoticePoints), { { x, y + 10 }, { width, 30 } },
+	    { .flags = UiFlags::FontSize30 | UiFlags::ColorGold | UiFlags::AlignCenter });
+	const std::string questName = QuestNoticeQuest != Q_INVALID ? std::string(_(QuestsData[QuestNoticeQuest]._qlstr)) : std::string();
+	DrawString(out, questName.empty() ? std::string(_("Quest complete")) : FormatRuntime(_("Quest complete: {:s}"), questName), { { x, y + 46 }, { width, 16 } },
+	    { .flags = UiFlags::ColorWhite | UiFlags::AlignCenter });
+	DrawString(out, _(QuestPointsReason(QuestNoticeQuest)), { { x, y + 64 }, { width, 16 } },
+	    { .flags = UiFlags::ColorWhitegold | UiFlags::AlignCenter });
+	DrawString(out, _("Quests give passive points as well as levels. Press P to spend them."), { { x, y + 86 }, { width, 16 } },
+	    { .flags = UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
 }
 
 } // namespace devilution

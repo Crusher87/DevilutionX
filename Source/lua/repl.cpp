@@ -79,21 +79,32 @@ void CreateReplEnvironment()
 		if (MyPlayer == nullptr || !vfx::Enabled())
 			return "Modern Effects are off (Settings > Graphics, needs Upscale).";
 		vfx::Showcase(MyPlayer->position.tile);
+		// The console covers the effects, so it gets out of the way.
+		CloseConsole();
 		return "Playing every effect around you.";
 	};
 	// weather() shows what the sky is doing; weather("rain", 0.8) or weather("snow") forces a look, weather("auto") hands it back.
 	env["weather"] = [](sol::optional<std::string> what, sol::optional<double> strength) {
+		// The console covers the effects while it's open, so it closes to show the change (Curtis 2026-10-21:
+		// weather("rain", 0.9) seemed to do nothing).
+		const auto changed = [](std::string text) {
+			if (weather::Enabled() && weather::Outdoors()) {
+				CloseConsole();
+				text += "\nClosed the console so you can see it.";
+			}
+			return text;
+		};
 		if (what) {
 			if (*what == "auto") {
 				weather::Force(std::nullopt);
-				return std::string("Weather follows its schedule again.\n") + weather::Text();
+				return changed(std::string("Weather follows its schedule again.\n") + weather::Text());
 			}
 			const std::optional<weather::Kind> kind = weather::KindNamed(*what);
 			if (!kind)
 				return std::string("Say weather(\"rain\"), weather(\"snow\"), weather(\"clear\") or weather(\"auto\"), with a strength 0 to 1 after rain or snow.");
 			weather::Force(kind, static_cast<float>(strength.value_or(0.8)));
 			weather::Advance(1);
-			return weather::Text();
+			return changed(weather::Text());
 		}
 		return weather::Text();
 	};

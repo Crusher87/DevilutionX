@@ -110,15 +110,58 @@ TEST_F(Poe2WeatherTest, ASkillCanCallAShowerThatPasses)
 
 TEST_F(Poe2WeatherTest, RainDiesDownBeforeSnowStarts)
 {
-	weather::Force(weather::Kind::Rain, 1);
+	weather::Request(weather::Kind::Rain, 1, 600);
 	Run(40);
 	ASSERT_GT(weather::Current().strength, 0.9F);
-	weather::Force(weather::Kind::Snow, 1);
-	Run(1.5F);
+	weather::Request(weather::Kind::Snow, 1, 600);
+	Run(5);
 	EXPECT_EQ(weather::Current().kind, weather::Kind::Rain);
 	EXPECT_LT(weather::Current().strength, 0.9F);
-	Run(10);
+	Run(60);
 	EXPECT_EQ(weather::Current().kind, weather::Kind::Snow);
+	EXPECT_GT(weather::Current().strength, 0.9F);
+}
+
+TEST_F(Poe2WeatherTest, TheConsolesLookIsThereAtOnce)
+{
+	// Curtis 2026-10-21: weather("rain", 0.9) answered "Dry right now", as the rain was still fading in.
+	weather::Force(weather::Kind::Rain, 0.9F);
+	weather::Advance(1);
+	EXPECT_EQ(weather::Current().kind, weather::Kind::Rain);
+	EXPECT_NEAR(weather::Current().strength, 0.9F, 0.01F);
+	EXPECT_NE(weather::Text().find("Rain at 90%"), std::string::npos) << weather::Text();
+	weather::Force(weather::Kind::Snow, 0.8F);
+	weather::Advance(1);
+	EXPECT_EQ(weather::Current().kind, weather::Kind::Snow);
+	EXPECT_NEAR(weather::Current().strength, 0.8F, 0.01F);
+	weather::Force(weather::Kind::Clear);
+	weather::Advance(1);
+	EXPECT_EQ(weather::Current().strength, 0.F);
+	EXPECT_NE(weather::Text().find("Dry right now"), std::string::npos) << weather::Text();
+}
+
+TEST_F(Poe2WeatherTest, HandingTheConsolesLookBackEasesOff)
+{
+	weather::Force(weather::Kind::Rain, 0.9F);
+	weather::Advance(1);
+	// The schedule opens on a dry spell, so the forced rain eases off rather than stopping or staying.
+	weather::Force(std::nullopt);
+	weather::Advance(1);
+	EXPECT_NE(weather::Text().find("easing off"), std::string::npos) << weather::Text();
+	EXPECT_NE(weather::Text().find("Dry spell"), std::string::npos) << weather::Text();
+	Run(60);
+	EXPECT_LT(weather::Current().strength, 0.9F);
+}
+
+TEST_F(Poe2WeatherTest, TheConsolesLookWaitsForTheSky)
+{
+	leveltype = DTYPE_CATHEDRAL;
+	weather::Force(weather::Kind::Rain, 1);
+	weather::Advance(1);
+	EXPECT_EQ(weather::Current().strength, 0.F);
+	EXPECT_NE(weather::Text().find("No sky here"), std::string::npos) << weather::Text();
+	leveltype = DTYPE_TOWN;
+	Run(5);
 	EXPECT_GT(weather::Current().strength, 0.9F);
 }
 

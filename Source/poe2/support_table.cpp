@@ -30,6 +30,7 @@
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/waystones.hpp"
@@ -2001,7 +2002,11 @@ void TryDropLineageSupport(const Monster &monster, bool sendmsg)
 		return;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		if (SupportGemForItemData(AllItemsList[i]) == drop) {
+			// POE2 drops lineage supports already made: no uncut gem can be cut into one.
+			const int before = ActiveItemCount;
 			SpawnBaseItem(monster.position.tile, static_cast<_item_indexes>(i), sendmsg);
+			if (ActiveItemCount > before)
+				TelemetryItemDropped(Items[ActiveItems[ActiveItemCount - 1]], monster.name());
 			return;
 		}
 	}
