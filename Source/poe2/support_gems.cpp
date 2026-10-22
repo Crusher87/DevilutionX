@@ -275,31 +275,31 @@ std::string_view SupportGemName(SupportGem gem)
 {
 	switch (gem) {
 	case SupportGem::MultipleProjectiles:
-		return _("Multiple Projectiles");
+		return _("Sisters' Spread");
 	case SupportGem::Empower:
-		return _("Empower");
+		return _("Horadric Empowerment");
 	case SupportGem::FasterCasting:
-		return _("Faster Casting");
+		return _("Vizjerei Haste");
 	case SupportGem::Efficiency:
-		return _("Efficiency");
+		return _("Ascetic's Discipline");
 	case SupportGem::Pierce:
-		return _("Pierce");
+		return _("Piercing Attack");
 	case SupportGem::Fork:
-		return _("Fork");
+		return _("Splintering");
 	case SupportGem::Chain:
-		return _("Chain");
+		return _("Arcing");
 	case SupportGem::ConcentratedEffect:
-		return _("Concentrated Effect");
+		return _("Focused Wrath");
 	case SupportGem::FasterProjectiles:
-		return _("Faster Projectiles");
+		return _("Swift Flight");
 	case SupportGem::Brutality:
-		return _("Brutality");
+		return _("Savagery");
 	case SupportGem::MartialTempo:
-		return _("Martial Tempo");
+		return _("Ivgorod Tempo");
 	case SupportGem::Knockback:
-		return _("Knockback");
+		return _("Bash");
 	case SupportGem::BattleRage:
-		return _("Battle Rage");
+		return _("Blood Rage");
 	default:
 		if (const SupportData *data = FindSupportData(gem); data != nullptr)
 			return _(data->name.data());
