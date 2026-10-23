@@ -999,8 +999,8 @@ int SaveItemPower(const Player &player, Item &item, ItemPower &power)
 		item._iFlags |= ItemSpecialEffect::RandomArrowVelocity;
 		break;
 	case IPL_SETDAM:
-		item._iMinDam = power.param1;
-		item._iMaxDam = power.param2;
+		item._iMinDam = static_cast<uint16_t>(std::clamp(power.param1, 0, static_cast<int>(UINT16_MAX)));
+		item._iMaxDam = static_cast<uint16_t>(std::clamp(power.param2, 0, static_cast<int>(UINT16_MAX)));
 		break;
 	case IPL_SETDUR:
 		item._iDurability = power.param1;
@@ -3231,6 +3231,22 @@ int GetBonusAC(const Item &item)
 	return 0;
 }
 
+namespace {
+
+/**
+ * @brief The character level Diablo's hidden level bonuses grow with: Strength (and Dexterity) x level damage, the
+ * Barbarian's Iron Skin, Natural Resistance and Rage, and the Monk's armour.
+ *
+ * POE2 Mashup: 0, so none of them grows with level and _pDamageMod is 0 for every class (decision 10A; Barbarian,
+ * Curtis 2026-10-23).
+ */
+int HiddenBonusLevel(const Player &player)
+{
+	return gbIsPoe2 ? 0 : player.getCharacterLevel();
+}
+
+} // namespace
+
 void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 {
 	const uint8_t playerLevel = player.getCharacterLevel();
@@ -3264,7 +3280,7 @@ void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 
 void CalcPlrPrimaryStats(Player &player, int strength, int &magic, int dexterity, int &vitality)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	if (HasAnyOf(player._pSpellFlags, SpellFlag::RageActive)) {
 		strength += 2 * playerLevel;
@@ -3298,7 +3314,7 @@ void CalcPlrLightRadius(Player &player, int lrad)
 
 void CalcPlrDamageMod(Player &player)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 	const Item &leftHandItem = player.InvBody[INVLOC_HAND_LEFT];
 	const Item &rightHandItem = player.InvBody[INVLOC_HAND_RIGHT];
 	// POE2 Mashup: Paid in Blood counts half of Magic as Strength here too.
@@ -3358,7 +3374,7 @@ void CalcPlrDamageMod(Player &player)
 
 void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int lightning, int magic)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 
@@ -3497,7 +3513,7 @@ PlayerArmorGraphic GetPlrAnimArmorId(Player &player)
 {
 	const Item &chestItem = player.InvBody[INVLOC_CHEST];
 	const bool chestUsable = player.CanUseItem(chestItem);
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	if (chestUsable) {
 		switch (chestItem._itype) {
@@ -7928,12 +7944,12 @@ bool ApplyOilToItem(Item &item, Player &player)
 		}
 		break;
 	case IMISC_OILSHARP:
-		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < 255) {
+		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < UINT16_MAX) {
 			item._iMaxDam = item._iMaxDam + 1;
 		}
 		break;
 	case IMISC_OILDEATH:
-		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < 254) {
+		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < UINT16_MAX - 1) {
 			item._iMinDam = item._iMinDam + 1;
 			item._iMaxDam = item._iMaxDam + 2;
 		}

@@ -327,8 +327,8 @@ struct LevelConversionData {
 	item._iCurs = file.NextLE<int32_t>();
 	item._ivalue = file.NextLE<int32_t>();
 	item._iIvalue = file.NextLE<int32_t>();
-	item._iMinDam = file.NextLE<int32_t>();
-	item._iMaxDam = file.NextLE<int32_t>();
+	item._iMinDam = static_cast<uint16_t>(std::clamp<int32_t>(file.NextLE<int32_t>(), 0, UINT16_MAX));
+	item._iMaxDam = static_cast<uint16_t>(std::clamp<int32_t>(file.NextLE<int32_t>(), 0, UINT16_MAX));
 	item._iAC = file.NextLE<int32_t>();
 	item._iFlags = static_cast<ItemSpecialEffect>(file.NextLE<uint32_t>());
 	item._iMiscId = static_cast<item_misc_id>(file.NextLE<int32_t>());

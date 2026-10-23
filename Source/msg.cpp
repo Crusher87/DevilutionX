@@ -2728,7 +2728,7 @@ void RecreateItem(const Player &player, const TItem &messageItem, Item &item)
 	item._iCharges = std::clamp<int>(messageItem.bCh, 0, item._iMaxCharges);
 	if (gbIsHellfire) {
 		item._iPLToHit = ClampToHit(item, static_cast<uint8_t>(Swap16LE(messageItem.wToHit)));
-		item._iMaxDam = ClampMaxDam(item, static_cast<uint8_t>(Swap16LE(messageItem.wMaxDam)));
+		item._iMaxDam = ClampMaxDam(item, Swap16LE(messageItem.wMaxDam));
 	}
 }
 

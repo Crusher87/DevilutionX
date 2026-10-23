@@ -627,10 +627,11 @@ struct ItemData {
 	std::string iSName;
 	uint8_t iMinMLvl;
 	uint8_t iDurability;
-	uint8_t iMinDam;
-	uint8_t iMaxDam;
-	uint8_t iMinAC;
-	uint8_t iMaxAC;
+	// POE2 Mashup: 16 bits, for POE2-sized bases (damage past 255, armour to about 500).
+	uint16_t iMinDam;
+	uint16_t iMaxDam;
+	uint16_t iMinAC;
+	uint16_t iMaxAC;
 	uint8_t iMinStr;
 	uint8_t iMinMag;
 	uint8_t iMinDex;

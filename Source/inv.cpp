@@ -2128,7 +2128,7 @@ int16_t ClampToHit(const Item &item, int16_t toHit)
 	return toHit;
 }
 
-uint8_t ClampMaxDam(const Item &item, uint8_t maxDam)
+uint16_t ClampMaxDam(const Item &item, uint16_t maxDam)
 {
 	if (maxDam < item._iMaxDam || maxDam - item._iMinDam > 30)
 		return item._iMaxDam;
@@ -2152,7 +2152,7 @@ int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int is
 	item._iCharges = std::clamp<int>(ch, 0, item._iMaxCharges);
 	if (gbIsHellfire) {
 		item._iPLToHit = ClampToHit(item, toHit);
-		item._iMaxDam = ClampMaxDam(item, maxDam);
+		item._iMaxDam = ClampMaxDam(item, static_cast<uint16_t>(std::clamp(maxDam, 0, static_cast<int>(UINT16_MAX))));
 	}
 
 	return PlaceItemInWorld(std::move(item), position);

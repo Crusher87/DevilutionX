@@ -511,7 +511,8 @@ bool Plr2PlrMHit(const Player &player, Player &target, int mindam, int maxdam, i
 		blkper = GenerateRnd(100);
 	}
 
-	int blk = target.GetBlockChance() - (player.getCharacterLevel() * 2);
+	// POE2 Mashup: GetBlockChance has no level term, so the attacker's level doesn't count against it either.
+	int blk = target.GetBlockChance() - (gbIsPoe2 ? 0 : player.getCharacterLevel() * 2);
 	blk = std::clamp(blk, 0, 100);
 
 	int dam;
@@ -2838,7 +2839,9 @@ void AddRage(Missile &missile, AddMissileParameter &parameter)
 		return;
 	}
 
-	missile._midam = player.getCharacterLevel() * 6;
+	// POE2 Mashup: Rage's level growth is off (Curtis 2026-10-23): no Str/Dex/Vit or resistance swing (items.cpp
+	// HiddenBonusLevel), so no closing hit either.
+	missile._midam = gbIsPoe2 ? 0 : player.getCharacterLevel() * 6;
 	missile.duration = 245 + (player.getCharacterLevel() * 2);
 	missile.var1 = missile.duration;
 
@@ -4230,7 +4233,7 @@ void ProcessRage(Missile &missile)
 	RedrawEverything();
 	player.Say(HeroSpeech::HeavyBreathing);
 
-	if (missile._miDelFlag)
+	if (missile._miDelFlag && missile._midam > 0)
 		ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromInt(missile._midam), 1); // Prevent penalty from killing the player
 }
 

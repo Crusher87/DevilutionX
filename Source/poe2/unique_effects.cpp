@@ -521,16 +521,22 @@ void ProcessUniqueRules(Player &player)
 	}
 }
 
+int AttackCritChance(const Player &player)
+{
+	if (!gbIsPoe2) {
+		const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
+		return HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike) ? player.getCharacterLevel() : 0;
+	}
+	int chance = BaseAttackCritPercent;
+	// Third Eye: the next attack's place in the count of three.
+	if (const int more = Rule(player, UniqueRule::ThirdHitCritChance); more > 0)
+		chance += (State(player).attacks + 1) % 3 == 0 ? more : -Rule(player, UniqueRule::OtherHitsLessCrit);
+	return chance;
+}
+
 bool RollAttackCrit(const Player &player)
 {
-	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
-	int chance = HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike) ? player.getCharacterLevel() : 0;
-	if (gbIsPoe2) {
-		chance += BaseAttackCritPercent;
-		// Third Eye: the next attack's place in the count of three.
-		if (const int more = Rule(player, UniqueRule::ThirdHitCritChance); more > 0)
-			chance += (State(player).attacks + 1) % 3 == 0 ? more : -Rule(player, UniqueRule::OtherHitsLessCrit);
-	}
+	const int chance = AttackCritChance(player);
 	if (chance <= 0 || GenerateRnd(100) >= chance)
 		return false;
 	if (gbIsPoe2 && Rule(player, UniqueRule::CritActionSpeed) > 0)
