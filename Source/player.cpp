@@ -840,7 +840,8 @@ bool PlrHitPlr(Player &attacker, Player &target)
 		blk = GenerateRnd(100);
 	}
 
-	int blkper = target.GetBlockChance() - (attacker.getCharacterLevel() * 2);
+	// POE2 Mashup: GetBlockChance has no level term, so the attacker's level doesn't count against it either.
+	int blkper = target.GetBlockChance() - (gbIsPoe2 ? 0 : attacker.getCharacterLevel() * 2);
 	blkper = std::clamp(blkper, 0, 100);
 
 	if (hit >= hper) {
@@ -861,7 +862,8 @@ bool PlrHitPlr(Player &attacker, Player &target)
 
 	const ClassAttributes &classAttributes = GetClassAttributes(attacker._pClass);
 	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike)) {
-		if (GenerateRnd(100) < attacker.getCharacterLevel()) {
+		// POE2 Mashup: no +clvl crit chance (decision 10A); the flat base chance instead.
+		if (GenerateRnd(100) < (gbIsPoe2 ? BaseAttackCritPercent : attacker.getCharacterLevel())) {
 			dam *= 2;
 		}
 	}

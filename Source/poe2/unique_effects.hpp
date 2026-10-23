@@ -46,6 +46,11 @@ constexpr int FarRangeTiles = 3;
 /** @brief Advances the unique rules' counters and timers by one game tick, and casts queued spell repeats. */
 void ProcessUniqueRules(Player &player);
 
+/**
+ * @brief An attack's chance to critically hit, in percent. POE2: the flat base chance and Third Eye, with no +clvl for
+ * the Warrior's class (decision 10A); outside POE2 mode the Warrior's class crits at clvl % and the others never.
+ */
+[[nodiscard]] int AttackCritChance(const Player &player);
 /** @brief Whether an attack critically hits; outside POE2 mode only the Warrior's class crits. */
 [[nodiscard]] bool RollAttackCrit(const Player &player);
 /** @brief The damage of a critical hit in percent of a normal one. */

@@ -3231,6 +3231,22 @@ int GetBonusAC(const Item &item)
 	return 0;
 }
 
+namespace {
+
+/**
+ * @brief The character level Diablo's hidden level bonuses grow with: Strength (and Dexterity) x level damage, the
+ * Barbarian's Iron Skin, Natural Resistance and Rage, and the Monk's armour.
+ *
+ * POE2 Mashup: 0, so none of them grows with level and _pDamageMod is 0 for every class (decision 10A; Barbarian,
+ * Curtis 2026-10-23).
+ */
+int HiddenBonusLevel(const Player &player)
+{
+	return gbIsPoe2 ? 0 : player.getCharacterLevel();
+}
+
+} // namespace
+
 void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 {
 	const uint8_t playerLevel = player.getCharacterLevel();
@@ -3264,7 +3280,7 @@ void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 
 void CalcPlrPrimaryStats(Player &player, int strength, int &magic, int dexterity, int &vitality)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	if (HasAnyOf(player._pSpellFlags, SpellFlag::RageActive)) {
 		strength += 2 * playerLevel;
@@ -3298,7 +3314,7 @@ void CalcPlrLightRadius(Player &player, int lrad)
 
 void CalcPlrDamageMod(Player &player)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 	const Item &leftHandItem = player.InvBody[INVLOC_HAND_LEFT];
 	const Item &rightHandItem = player.InvBody[INVLOC_HAND_RIGHT];
 	// POE2 Mashup: Paid in Blood counts half of Magic as Strength here too.
@@ -3358,7 +3374,7 @@ void CalcPlrDamageMod(Player &player)
 
 void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int lightning, int magic)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 
@@ -3494,7 +3510,7 @@ PlayerArmorGraphic GetPlrAnimArmorId(Player &player)
 {
 	const Item &chestItem = player.InvBody[INVLOC_CHEST];
 	const bool chestUsable = player.CanUseItem(chestItem);
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	if (chestUsable) {
 		switch (chestItem._itype) {
