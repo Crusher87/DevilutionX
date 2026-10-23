@@ -61,7 +61,7 @@ BodyArmourImplicit GetBodyArmourImplicit(const Item &item);
  * multiplied by EnergyShieldPerDefense). Armour gets the rounding remainder.
  */
 void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield);
-/** @brief Armour, evasion and energy shield points (energy shield not yet multiplied by EnergyShieldPerDefense). */
+/** @brief Armour, evasion and energy shield, energy shield as shown (already multiplied by EnergyShieldPerDefense). */
 struct DefensePoints {
 	int armour = 0;
 	int evasion = 0;
@@ -71,7 +71,7 @@ struct DefensePoints {
  * @brief Splits an item's defence like SplitDefense, but the points its flat armour, evasion and energy shield modifiers
  * gave go to their own kind. Identified or not, so identifying an item never changes its defence (Curtis 2026-10-22).
  * @param base The defence from the base and flat modifiers.
- * @param bonus What the item's quality and % increases add to it.
+ * @param bonus What the item's quality and % increases add to it: POE2 multiplies the two, (1 + increased) x (1 + quality).
  */
 void SplitItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonus);
 

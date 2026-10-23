@@ -1053,9 +1053,11 @@ void TalkToTowner(Player &player, int t)
 		return;
 	}
 
-	// POE2 Mashup: Ctrl+click on Cain identifies everything without the talk menu.
+	// POE2 Mashup: Ctrl+click on Cain identifies everything without the talk menu. Like the shops below, he still
+	// greets the hero as a click does (Curtis 2026-10-23).
 	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && towner._ttype == TOWN_STORY) {
 		QuickTradeTowner = -1;
+		TownerTalk(TEXT_STORY1);
 		CainIdentifyAll();
 		return;
 	}
@@ -1064,12 +1066,15 @@ void TalkToTowner(Player &player, int t)
 		QuickTradeTowner = -1;
 		switch (towner._ttype) {
 		case TOWN_SMITH:
+			TownerTalk(TEXT_GRISWOLD1);
 			OpenVisualStore(VisualStoreVendor::Smith);
 			return;
 		case TOWN_WITCH:
+			TownerTalk(TEXT_ADRIA1);
 			OpenVisualStore(VisualStoreVendor::Witch);
 			return;
 		case TOWN_HEALER:
+			TownerTalk(TEXT_PEPIN1);
 			OpenVisualStore(VisualStoreVendor::Healer);
 			return;
 		default:

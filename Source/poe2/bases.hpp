@@ -94,5 +94,15 @@ void SetItemQuality(Item &item, int quality);
 bool IsExceptional(const Item &item);
 /** @brief Whether quality does anything on the item's base. */
 bool HasQuality(const Item &item);
+/**
+ * @brief The quality ApplyBaseProperties added to the item's _iPLAC (QualityKind::Defence) or _iPLDam (Weapon), where
+ * saves keep it with the local % increases; 0 for another kind.
+ */
+int LocalQuality(const Item &item, QualityKind kind);
+/**
+ * @brief A weapon's % increased physical damage: its local % increases and its quality, which POE2 multiplies,
+ * (1 + increased) x (1 + quality). Before identifying, only the quality, which isn't a hidden modifier.
+ */
+int WeaponDamagePercent(const Item &item);
 
 } // namespace devilution

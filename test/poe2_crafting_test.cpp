@@ -417,6 +417,55 @@ TEST_F(Poe2CraftingTest, QualityCurrencyFitsItsKind)
 	EXPECT_EQ(ItemQuality(armour), std::max(quality, MaxCraftedQuality));
 }
 
+TEST_F(Poe2CraftingTest, QualityStaysThroughEveryCraft)
+{
+	// Curtis 2026-10-23: "Why do we keep having issues with quality on items!!!?" Every orb keeps the quality.
+	Item armour = MakeItem("Full Plate Mail", 4, ITEM_QUALITY_NORMAL, 50);
+	for (int i = 0; i < 5; i++)
+		armour = Crafted(CurrencyOrb::Scrap, armour);
+	const int quality = ItemQuality(armour);
+	ASSERT_GE(quality, 10);
+	for (const CurrencyOrb orb : { CurrencyOrb::Transmutation, CurrencyOrb::Augmentation, CurrencyOrb::Regal, CurrencyOrb::Exalted, CurrencyOrb::Chaos, CurrencyOrb::Scouring, CurrencyOrb::Alchemy }) {
+		armour = Crafted(orb, armour);
+		EXPECT_EQ(ItemQuality(armour), quality) << static_cast<int>(orb);
+		EXPECT_GE(armour._iPLAC, quality) << static_cast<int>(orb);
+		EXPECT_EQ(Rebuilt(armour)._iPLAC, armour._iPLAC) << static_cast<int>(orb);
+	}
+
+	// An item from before item levels rerolls without the POE2 tables, and lost its quality doing so.
+	Item old = {};
+	SetLootRarity(old, ITEM_QUALITY_NORMAL);
+	SetRndSeed(5);
+	SetupAllItems(*MyPlayer, old, FindBase("Full Plate Mail"), AdvanceRndSeed(), 30, 1, /*onlygood=*/true, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+	ASSERT_EQ(GetPoe2ItemLevel(old), 0);
+	for (int i = 0; i < 3; i++)
+		old = Crafted(CurrencyOrb::Scrap, old);
+	ASSERT_EQ(ItemQuality(old), 6);
+	old = Crafted(CurrencyOrb::Transmutation, old);
+	EXPECT_EQ(old._iMagical, ITEM_QUALITY_MAGIC);
+	EXPECT_EQ(ItemQuality(old), 6);
+	EXPECT_GE(old._iPLAC, 6);
+}
+
+TEST_F(Poe2CraftingTest, ChanceKeepsQuality)
+{
+	int made = 0;
+	for (uint32_t seed = 1; seed <= 40; seed++) {
+		Item item = MakeItem("Full Plate Mail", seed, ITEM_QUALITY_NORMAL, 70);
+		for (int i = 0; i < 3; i++)
+			item = Crafted(CurrencyOrb::Scrap, item);
+		const int quality = ItemQuality(item);
+		if (!ApplyCurrencyOrb(CurrencyOrb::Chance, *MyPlayer, item))
+			GTEST_SKIP() << "no uniques on this base";
+		if (CurrencyDestroyedItem || item._iMagical != ITEM_QUALITY_UNIQUE)
+			continue;
+		made++;
+		EXPECT_EQ(ItemQuality(item), quality) << item._iIName;
+		EXPECT_EQ(Rebuilt(item)._iPLAC, item._iPLAC) << item._iIName;
+	}
+	EXPECT_GT(made, 0);
+}
+
 TEST_F(Poe2CraftingTest, CraftingKeepsShrineAndOilBonuses)
 {
 	// A Gloomy Shrine's +2 armour and an oil's damage aren't in the item's seed (Curtis 2026-10-19: quality lowered a
