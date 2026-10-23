@@ -1,4 +1,5 @@
 #include <string>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -212,6 +213,32 @@ TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	player.setCharacterLevel(10);
 	player._pDexterity = 40;
 	EXPECT_EQ(LightningArrowDamage(player), (2 * 10) + (40 / 4));
+}
+
+TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
+{
+	// The mana audit's cuts for weapon attacks, at gem level 1.
+	const std::pair<WeaponSkill, int> Costs[] = {
+		{ WeaponSkill::GroundSlam, 6 },
+		{ WeaponSkill::Whirlwind, 8 },
+		{ WeaponSkill::LeapSlam, 8 },
+		{ WeaponSkill::Smite, 4 },
+		{ WeaponSkill::Frenzy, 3 },
+		{ WeaponSkill::ShieldBash, 4 },
+		{ WeaponSkill::ShadowStep, 5 },
+		{ WeaponSkill::Vengeance, 5 },
+		{ WeaponSkill::ViperStrike, 5 },
+		{ WeaponSkill::Zeal, 5 },
+		{ WeaponSkill::FanOfBlades, 5 },
+		{ WeaponSkill::DoubleThrow, 5 },
+		{ WeaponSkill::EscapeShot, 6 },
+		{ WeaponSkill::Multishot, 6 },
+		{ WeaponSkill::GuidedArrow, 5 },
+		{ WeaponSkill::RainOfArrows, 10 },
+		{ WeaponSkill::SevenSidedStrike, 11 },
+	};
+	for (const auto &[skill, cost] : Costs)
+		EXPECT_EQ(WeaponSkillManaCost(skill), cost) << WeaponSkillName(skill);
 }
 
 TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)

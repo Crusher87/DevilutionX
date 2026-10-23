@@ -529,7 +529,7 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::Cleave:
 		return 4;
 	case WeaponSkill::GroundSlam:
-		return 8;
+		return 6;
 	case WeaponSkill::Barrage:
 		return 7;
 	case WeaponSkill::WhirlingStaff:
@@ -537,9 +537,9 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::Flurry:
 		return 4;
 	case WeaponSkill::LeapSlam:
-		return 10;
+		return 8;
 	case WeaponSkill::RainOfArrows:
-		return 12;
+		return 10;
 	case WeaponSkill::ShieldCharge:
 		return 8;
 	case WeaponSkill::BattleCry:
@@ -547,7 +547,7 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::LightningArrow:
 		return 8;
 	case WeaponSkill::EscapeShot:
-		return 9;
+		return 6;
 	case WeaponSkill::EmberFusillade:
 		return 16;
 	case WeaponSkill::Spark:
@@ -559,17 +559,17 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::Riposte:
 		return 5;
 	case WeaponSkill::ShadowStep:
-		return 8;
-	case WeaponSkill::Frenzy:
 		return 5;
+	case WeaponSkill::Frenzy:
+		return 3;
 	case WeaponSkill::Smite:
-		return 7;
+		return 4;
 	case WeaponSkill::FistsOfThunder:
 		return 4;
 	case WeaponSkill::RapidFire:
 		return 8;
 	case WeaponSkill::ShieldBash:
-		return 6;
+		return 4;
 	case WeaponSkill::AmplifyDamage:
 		return 8;
 	default:
