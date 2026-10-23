@@ -244,6 +244,25 @@ TEST_F(Poe2TableSkillsTest, PulsingZonesHitOncePerInterval)
 	leveltype = DTYPE_TOWN;
 }
 
+TEST_F(Poe2TableSkillsTest, WarCryOnlyStuns)
+{
+	// Curtis 2026-10-23: War Cry gave Battle Cry's +50% (with no Battle Cry socketed) and shared its timer. Now it stuns only.
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::South;
+	ExecuteSkillCast(player, WeaponSkill::WarCry, { 41, 40 });
+	EXPECT_EQ(player.poe2.warcryTicks, 0);
+
+	// A Battle Cry already running keeps its own time left.
+	player.poe2.warcryTicks = 37;
+	ExecuteSkillCast(player, WeaponSkill::WarCry, { 41, 40 });
+	EXPECT_EQ(player.poe2.warcryTicks, 37);
+	player.poe2.warcryTicks = 0;
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
 TEST_F(Poe2TableSkillsTest, FistOfTheHeavensBoltsHitForHalfTheSpellBase)
 {
 	leveltype = DTYPE_CATHEDRAL;

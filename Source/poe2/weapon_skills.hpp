@@ -36,6 +36,8 @@ constexpr int WhirlingStaffReach = 2;
 constexpr int WhirlingStaffOuterDamagePercent = 50;
 /** @brief Leap Slam hits everything around where it lands for this percent of a weapon hit. */
 constexpr int LeapSlamDamagePercent = 80;
+/** @brief Lightning Arrow's lightning burst hits the 3x3 tiles where it lands for this percent of the arrow's hit, on average. */
+constexpr int LightningArrowBurstPercent = 60;
 /** @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster. */
 constexpr int FrostNovaShardDamagePercent = 25;
 /** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
@@ -104,7 +106,11 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack);
 /** @brief Extra animation frames skipped by the active skill's attack. */
 int8_t WeaponSkillSkippedFrames(const Player &player);
 
-/** @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile. */
+/**
+ * @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile: the most its burst adds. The burst
+ * rolls half to all of it (ProcessElementalArrow), so it averages LightningArrowBurstPercent of the arrow's average hit
+ * before the gem curve, which scales the arrow and the burst alike.
+ */
 int LightningArrowDamage(const Player &player);
 
 /** @brief Game ticks from a dash skill's landing to its hit: the swing's wind-up is cut to this (see BeginSkillAnimation). */

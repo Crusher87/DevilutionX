@@ -183,6 +183,10 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		break;
 	}
 	if (const TableSkillData *table = FindTableSkill(attack); table != nullptr) {
+		if (table->buff == TableBuff::WarCry) {
+			hit.effect = std::format("Stuns enemies within {:d} tiles", table->radius);
+			return hit;
+		}
 		if (table->shape == TableShape::Buff) {
 			hit.effect = std::format("Buff for {:d} seconds", table->duration / TicksPerSecond);
 			return hit;

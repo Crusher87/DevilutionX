@@ -205,16 +205,30 @@ TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	EXPECT_EQ(LeapSlamDamagePercent, 80);
 	// About two of Frost Nova's shards reach a monster: 2 x 25 = 50.
 	EXPECT_EQ(FrostNovaShardDamagePercent, 25);
-	// Kept at their old values until the shortfall fix (no Act 1 clear otherwise): Whirling Staff's 75 and 50, and the
-	// Lightning Arrow burst with its character level term.
+	// Kept at their old values until the shortfall fix (no Act 1 clear otherwise): Whirling Staff's 75 and 50.
 	EXPECT_EQ(AreaSkillSideDamagePercent, 75);
 	EXPECT_EQ(WhirlingStaffOuterDamagePercent, 50);
+	// Lightning Arrow's burst is 60% of the arrow's hit (Curtis 2026-10-23), no longer 2 x character level + Dexterity / 4.
+	EXPECT_EQ(LightningArrowBurstPercent, 60);
 	Player &player = *MyPlayer;
 	player = {};
 	LoadPlayerDataFiles(); // the level cap comes from the experience table
+	player._pClass = HeroClass::Rogue;
 	player.setCharacterLevel(10);
 	player._pDexterity = 40;
-	EXPECT_EQ(LightningArrowDamage(player), (2 * 10) + (40 / 4));
+	player._pIMinDam = 10;
+	player._pIMaxDam = 20;
+	// An average arrow of 15: the burst rolls 6 to 12, 9 on average, 60% of the arrow.
+	EXPECT_EQ(LightningArrowDamage(player), 12);
+	// The character level and Dexterity no longer add to it on their own.
+	player.setCharacterLevel(40);
+	player._pDexterity = 200;
+	EXPECT_EQ(LightningArrowDamage(player), 12);
+	// Increased and added damage and the attribute bonus raise the arrow and so the burst: (15 + 7 + 3 + 5) x 0.8.
+	player._pIBonusDam = 50;
+	player._pIBonusDamMod = 3;
+	player._pDamageMod = 5;
+	EXPECT_EQ(LightningArrowDamage(player), 24);
 }
 
 TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)

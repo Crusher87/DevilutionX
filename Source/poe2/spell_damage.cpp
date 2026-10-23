@@ -9,6 +9,7 @@
 #include "data/file.hpp"
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
+#include "monster.h"
 #include "player.h"
 #include "poe2/spell_base.hpp"
 #include "utils/log.hpp"
@@ -175,6 +176,14 @@ DamageRange Poe2SpellDamageRange(const Player &player, SpellID spell, int spellL
 {
 	const SpellDamageRow &row = FindSpellRow(spell);
 	return { std::max(Scale(SpellBaseMin(player, spellLevel), row), 1), std::max(Scale(SpellBaseMax(player, spellLevel), row), 1) };
+}
+
+int BoneSpiritDamage(const Monster &monster)
+{
+	// POE2 Mashup: a third of a boss's life broke bosses with 600%+ map life (Curtis 2026-10-23).
+	if (gbIsPoe2 && (monster.isUnique() || monster.type().type == MT_DIABLO))
+		return static_cast<int>(static_cast<int64_t>(monster.hitPoints.raw()) * BoneSpiritUniqueLifePercent / 100 / 64);
+	return (monster.hitPoints / 3).whole();
 }
 
 void LoadSpellDamage()

@@ -376,7 +376,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 
 	int dam;
 	if (t == MissileID::BoneSpirit) {
-		dam = (monster.hitPoints / 3).whole();
+		dam = BoneSpiritDamage(monster);
 	} else {
 		dam = RandomIntBetween(mindam, maxdam);
 	}

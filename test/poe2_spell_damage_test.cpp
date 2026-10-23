@@ -12,6 +12,7 @@
 #include "missiles.h"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/spell_damage.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -226,6 +227,53 @@ TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)
 	}
 	EXPECT_EQ(embers, 1);
 	player.poe2.volleyShotsLeft = 0;
+}
+
+TEST_F(Poe2SpellDamageTest, IceBoltGainsShardsWithItsGem)
+{
+	// Ice Bolt fired one shard at every gem level: its curve had no projectiles, so the loop ran once (Curtis 2026-10-23).
+	const SkillSlot iceBolt = SkillSlot::ForAttack(WeaponSkill::IceBolt);
+	EXPECT_EQ(GemExtraProjectiles(iceBolt, 1), 0);
+	EXPECT_EQ(GemExtraProjectiles(iceBolt, 2), 1);
+	EXPECT_EQ(GemExtraProjectiles(iceBolt, 7), 2);
+	EXPECT_EQ(GemExtraProjectiles(iceBolt, 20), 5);
+
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	const auto shards = [&player](int gemLevel) {
+		SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::IceBolt), gemLevel);
+		Missiles.clear();
+		ExecuteSkillCast(player, WeaponSkill::IceBolt, { 45, 40 });
+		return std::count_if(Missiles.begin(), Missiles.end(), [](const Missile &missile) { return missile._mitype == MissileID::BlueFlare; });
+	};
+	EXPECT_EQ(shards(1), 1);
+	EXPECT_EQ(shards(7), 3);
+	EXPECT_EQ(shards(20), 6);
+}
+
+TEST_F(Poe2SpellDamageTest, BoneSpiritTakesLittleOfABoss)
+{
+	// Curtis 2026-10-23: a third of current life broke bosses with 600%+ map life; uniques and Diablo lose 5%.
+	const _monster_id previousType = LevelMonsterTypes[0].type;
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	Monster monster {};
+	monster.levelType = 0;
+	monster.uniqueType = UniqueMonsterType::None;
+	monster.hitPoints = Fixed26_6::fromInt(3000);
+	EXPECT_EQ(BoneSpiritDamage(monster), 1000);
+	monster.uniqueType = UniqueMonsterType::SkeletonKing;
+	EXPECT_EQ(BoneSpiritDamage(monster), 150);
+	EXPECT_EQ(BoneSpiritUniqueLifePercent, 5);
+	monster.uniqueType = UniqueMonsterType::None;
+	LevelMonsterTypes[0].type = MT_DIABLO;
+	EXPECT_EQ(BoneSpiritDamage(monster), 150);
+
+	// Diablo keeps a third for everyone.
+	gbIsPoe2 = false;
+	monster.uniqueType = UniqueMonsterType::SkeletonKing;
+	EXPECT_EQ(BoneSpiritDamage(monster), 1000);
+	gbIsPoe2 = true;
+	LevelMonsterTypes[0].type = previousType;
 }
 
 TEST_F(Poe2SpellDamageTest, DiabloModeUnchanged)
