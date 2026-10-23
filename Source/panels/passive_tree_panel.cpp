@@ -14,6 +14,7 @@
 #include "control/control.hpp"
 #include "controls/wasd_movement.hpp"
 #include "cursor.h"
+#include "diablo.h"
 #include "engine/dx.h"
 #include "engine/palette.h"
 #include "engine/point.hpp"
@@ -24,6 +25,7 @@
 #include "inv.h"
 #include "items.h"
 #include "multi.h"
+#include "panels/skill_bar.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/jewels.hpp"
@@ -1318,6 +1320,12 @@ void OpenPassiveTree()
 	Pressed = false;
 	Dragging = false;
 	CenterOnStart();
+	// The tree takes the mouse button's release, like the gemcutting panel: forget the click that opened it (reading a
+	// Book with a right-click), or the game waits for a release that never comes and ignores left clicks until the next
+	// right-click (Curtis 2026-10-23).
+	sgbMouseDown = CLICK_NONE;
+	LastPlayerAction = PlayerActionType::None;
+	ReleaseAllTraySlots();
 	ClearWasdMovementKeys();
 }
 
