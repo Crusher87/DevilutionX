@@ -553,7 +553,8 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::Spark:
 		return 10;
 	case WeaponSkill::IceBolt:
-		return 7;
+		// The Sorcerer's starter bolts (Firebolt, Ice Bolt, Holy Bolt, Charged Bolt) all cost 4 at gem level 1.
+		return 4;
 	case WeaponSkill::FrostNova:
 		return 14;
 	case WeaponSkill::Riposte:

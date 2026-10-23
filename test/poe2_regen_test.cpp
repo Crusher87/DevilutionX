@@ -16,6 +16,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
@@ -233,6 +234,22 @@ TEST_F(Poe2RegenTest, SorcererPaysFull)
 	player._pSplLvl[static_cast<int8_t>(SpellID::Firebolt)] = 1;
 	EXPECT_LT(sorcerer, GetManaAmount(player, SpellID::Firebolt));
 	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2RegenTest, SorcererStarterBoltsCostFour)
+{
+	// Curtis 2026-10-23: Firebolt, Ice Bolt, Holy Bolt and Charged Bolt all cost 4 mana at gem level 1.
+	for (const HeroClass heroClass : { HeroClass::Sorcerer, HeroClass::Warrior }) {
+		Player &player = NakedHero(heroClass, 1);
+		SocketSkill(player, 0, SkillSlot::ForSpell(SpellID::Firebolt), 1);
+		SocketSkill(player, 1, SkillSlot::ForSpell(SpellID::HolyBolt), 1);
+		SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::ChargedBolt), 1);
+		SocketSkill(player, 3, SkillSlot::ForAttack(WeaponSkill::IceBolt), 1);
+		EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::HolyBolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::ChargedBolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
+		EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::IceBolt), 4) << static_cast<int>(heroClass);
+	}
 }
 
 TEST_F(Poe2RegenTest, MultiplayerValidationStillPasses)
