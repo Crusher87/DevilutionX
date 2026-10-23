@@ -4485,7 +4485,7 @@ bool IsPoe2UncutGem(item_misc_id miscId)
 bool IsPoe2MiscLoot(const ItemData &data)
 {
 	return data.itype == ItemType::Misc && data.iMiscId != IMISC_BOOK && !IsPoe2FlaskOrCharm(data.iMiscId) && !IsPoe2Orb(data.iMiscId)
-	    && !IsPoe2UncutGem(data.iMiscId) && !IsAnyOf(data.iMiscId, IMISC_WAYSTONE, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY) && SkillForGemData(data).isEmpty();
+	    && !IsPoe2UncutGem(data.iMiscId) && !IsAnyOf(data.iMiscId, IMISC_WAYSTONE, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY, IMISC_JEWEL) && SkillForGemData(data).isEmpty();
 }
 
 bool IsPoe2Equipment(const ItemData &data)

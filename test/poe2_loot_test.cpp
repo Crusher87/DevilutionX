@@ -128,6 +128,9 @@ TEST_F(Poe2LootTest, RarityTablesMatchTheSource)
 }
 
 /** Equipment drops a kill gives on average, and how many of them are of each rarity. */
+/** The weight arrays run normal, magic, rare, unique; item_quality has unique before rare. */
+constexpr size_t RareWeight = 2;
+
 std::array<double, 4> ExpectedEquipment(LootSource source)
 {
 	const auto categories = LootCategoryWeights(source);
@@ -152,25 +155,25 @@ TEST_F(Poe2LootTest, CampaignLootIsMostlyNormalAndMagic)
 	}
 	const double all = std::accumulate(total.begin(), total.end(), 0.0);
 	// Curtis's 2026-10-23 run had 18% rare and 29% magic: about one rare in sixteen now.
-	EXPECT_GT(total[ITEM_QUALITY_RARE] / all, 0.04);
-	EXPECT_LT(total[ITEM_QUALITY_RARE] / all, 0.08);
+	EXPECT_GT(total[RareWeight] / all, 0.04);
+	EXPECT_LT(total[RareWeight] / all, 0.08);
 	EXPECT_GT(total[ITEM_QUALITY_MAGIC] / all, 0.25);
 	EXPECT_LT(total[ITEM_QUALITY_MAGIC] / all, 0.38);
 	// Fewer than a rare per hundred kills.
-	EXPECT_LT(total[ITEM_QUALITY_RARE] * 100, 1.0);
+	EXPECT_LT(total[RareWeight] * 100, 1.0);
 }
 
 TEST_F(Poe2LootTest, BossesDropAHandfulNotAPile)
 {
 	// A quest boss: its rolls plus the guaranteed rare. Snotspill dropped 4 rares on the old numbers (3.75 on average).
 	const std::array<double, 4> boss = ExpectedEquipment(LootSource::Boss);
-	const double rares = boss[ITEM_QUALITY_RARE] + 1;
+	const double rares = boss[RareWeight] + 1;
 	EXPECT_GT(rares, 1.5);
 	EXPECT_LT(rares, 2.0);
 	EXPECT_LT(std::accumulate(boss.begin(), boss.end(), 0.0) + 1, 4.0);
 	// A rare monster: about one and a half rolls, a rare one time in five.
 	const std::array<double, 4> rare = ExpectedEquipment(LootSource::Rare);
-	EXPECT_LT(rare[ITEM_QUALITY_RARE], 0.2);
+	EXPECT_LT(rare[RareWeight], 0.2);
 }
 
 TEST_F(Poe2LootTest, MapBonusesRaiseRarityAndWaystones)
