@@ -154,5 +154,77 @@ TEST_F(Poe2EconomyTest, DisenchantAndSalvageYields)
 	EXPECT_FALSE(GetSalvageYield(ring));
 }
 
+TEST_F(Poe2EconomyTest, AnvilSalvagesUniquesForChanceShards)
+{
+	// Curtis 2026-10-23: uniques go on the anvil for a Chance Shard each, plus what their quality and sockets give.
+	SetRndSeed(11);
+	Item sword;
+	ASSERT_TRUE(MakeGambleItem(*MyPlayer, sword, GambleFamily::Sword, 20));
+	SetItemQuality(sword, 0);
+	sword._iPoe2Craft.sockets = 0;
+	sword._iMagical = ITEM_QUALITY_NORMAL;
+	EXPECT_FALSE(SalvageGivesSomething(sword)) << "a plain item stays off the anvil's list";
+	sword._iMagical = ITEM_QUALITY_MAGIC;
+	EXPECT_FALSE(SalvageGivesSomething(sword));
+
+	// A unique with no quality or sockets is listed all the same.
+	sword._iMagical = ITEM_QUALITY_UNIQUE;
+	EXPECT_TRUE(SalvageGivesSomething(sword));
+	std::optional<SalvageYield> yield = GetSalvageYield(sword);
+	ASSERT_TRUE(yield);
+	EXPECT_EQ(yield->full, 0);
+	EXPECT_EQ(yield->socketShards, 0);
+	EXPECT_EQ(yield->chanceShards, 1);
+	EXPECT_EQ(yield->chanceShards, GetDisenchantYield(sword)->shards) << "the same as disenchanting at Adria";
+	EXPECT_EQ(SalvageYieldText(*yield), "1 Chance Shard");
+
+	// Quality and sockets give their usual share on top.
+	SetItemQuality(sword, 13);
+	sword._iPoe2Craft.sockets = 1;
+	yield = GetSalvageYield(sword);
+	ASSERT_TRUE(yield);
+	EXPECT_EQ(yield->currency, IMISC_ORB_WHETSTONE);
+	EXPECT_EQ(yield->full, (ItemQuality(sword) + 4) / 5);
+	EXPECT_EQ(yield->socketShards, 1);
+	EXPECT_EQ(yield->chanceShards, 1);
+	EXPECT_EQ(SalvageYieldText(SalvageYield { IMISC_ORB_WHETSTONE, 3, 1, 1 }), "3 Blacksmith's Whetstones, 1 Artificer's Shard and 1 Chance Shard");
+	EXPECT_EQ(SalvageYieldText(SalvageYield { IMISC_ORB_WHETSTONE, 0, 2, 1 }), "2 Artificer's Shards and 1 Chance Shard");
+
+	// Unique jewellery, which has no quality currency, and unique flasks.
+	Item ring;
+	ASSERT_TRUE(MakeGambleItem(*MyPlayer, ring, GambleFamily::Ring, 20));
+	ring._iMagical = ITEM_QUALITY_UNIQUE;
+	ASSERT_TRUE(SalvageGivesSomething(ring));
+	EXPECT_EQ(GetSalvageYield(ring)->chanceShards, 1);
+	EXPECT_EQ(GetSalvageYield(ring)->full, 0);
+	Item flask {};
+	flask._itype = ItemType::Misc;
+	flask._iMiscId = IMISC_HEAL;
+	flask._iMagical = ITEM_QUALITY_UNIQUE;
+	ASSERT_TRUE(SalvageGivesSomething(flask));
+	EXPECT_EQ(GetSalvageYield(flask)->chanceShards, 1);
+
+	// Salvaging one adds its shard; ten make an Orb of Chance. Another player, so nothing is sent over the network.
+	Players.resize(2);
+	MyPlayer = &Players[0];
+	Player &player = Players[1];
+	player = {};
+	player.poe2.clear();
+	sword._iMagical = ITEM_QUALITY_UNIQUE;
+	SetItemQuality(sword, 0);
+	sword._iPoe2Craft.sockets = 0;
+	player.InvList[0] = sword;
+	player.InvGrid[0] = 1;
+	player._pNumInv = 1;
+	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] = 8;
+	ASSERT_TRUE(SalvageInvItem(player, 0));
+	EXPECT_EQ(player._pNumInv, 0);
+	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 9);
+	EXPECT_EQ(ShardsPerOrb, 10);
+	EXPECT_EQ(AddShards(player, ShardKind::Chance, 1), 1);
+	EXPECT_EQ(ShardCurrency(ShardKind::Chance), IMISC_ORB_CHANCE);
+	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 0);
+}
+
 } // namespace
 } // namespace devilution
