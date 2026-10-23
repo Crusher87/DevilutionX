@@ -83,14 +83,7 @@ void RemoveRarityStats(Monster &monster, const MonsterAffixes &affixes)
 		lifePercent += ExtraLifePercent;
 	monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * 100 / lifePercent));
 	monster.hitPoints = monster.maxHitPoints;
-
-	if (affixes.has(MonsterMod::HardHitting)) {
-		const auto undo = [](uint8_t &damage) { damage = static_cast<uint8_t>(damage * 100 / (100 + HardHittingPercent)); };
-		undo(monster.minDamage);
-		undo(monster.maxDamage);
-		undo(monster.minDamageSpecial);
-		undo(monster.maxDamageSpecial);
-	}
+	// Hard Hitting lives in MonsterModsDamagePercent, which reads the new rarity, so the damage bytes need nothing.
 }
 
 } // namespace
