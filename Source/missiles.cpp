@@ -3753,6 +3753,10 @@ void ProcessLightningControl(Missile &missile)
 	} else if (missile._micaster == TARGET_MONSTERS && UsesPoe2SpellRule(missile) && !missile.poe2.minionShot) {
 		// POE2 Mashup: Chain Lightning's bolts carry their hit; Lightning rolls its hit each step, as Diablo does.
 		dam = (missile._midam > 0 ? missile._midam : RollPoe2SpellHit(Players[missile._misource], SpellID::Lightning, missile._mispllvl)) << 6;
+	} else if (missile._micaster == TARGET_MONSTERS && missile.poe2.minionShot) {
+		// POE2 Mashup: a minion's lightning carries its hit on the minion tables (MinionShotDamage, plan v2 step 11),
+		// not its owner's character level.
+		dam = std::max<int>(missile._midam, 1) << 6;
 	} else if (missile._micaster == TARGET_MONSTERS) {
 		// BUGFIX: damage of missile should be encoded in missile struct; player can be dead/have left the game before missile arrives.
 		dam = (GenerateRnd(2) + GenerateRnd(Players[missile._misource].getCharacterLevel()) + 2) << 6;

@@ -88,6 +88,21 @@ int ScaleMonsterHit(const Monster &monster, int rolled);
  */
 void RescaleLoadedMonster(Monster &monster);
 
+/**
+ * @brief A player's minion's level on the tables (plan v2 step 11): the minion level of its owner's skill gem
+ * (MinionLevelForGemLevel: a skeleton gem's, Revive's or the active golem skill's); the King's dead, raised by no gem,
+ * are the area's level. 0 outside POE2 mode or without an owner.
+ */
+int Poe2MinionLevel(const Monster &minion);
+/**
+ * @brief A minion's average hit in tenths before its owner's minion damage: the table's hit at @p level times
+ * clamp(its own average / its type's damage ref, 30-250%), the monsters' rule with the minion's own damage as the roll.
+ * @param damageSum Its damage bytes, min + max.
+ */
+int MinionHit10(_monster_id type, int level, int damageSum);
+/** @brief A minion's life in 1/64ths: a white's at its level, times @p percent (100 for now; step 13 refits). */
+int32_t MinionLifeRaw(int level, int percent);
+
 /** @brief The life range a type shows in the monster info panel at an area level, POE2 tables. */
 void Poe2TypeLifeRange(_monster_id type, int areaLevel, int &minLife, int &maxLife);
 

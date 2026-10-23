@@ -15,9 +15,13 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "monster.h"
+#include "player.h"
 #include "poe2/area_levels.hpp"
 #include "poe2/endgame.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/log.hpp"
 
@@ -194,10 +198,30 @@ int64_t TableDamagePermille(const Monster &monster)
 	return static_cast<int64_t>(MonsterLevelDamage10(level)) * ratio * 2 / sum;
 }
 
+/**
+ * A player's minion's scale (plan v2 step 11): its level's table hit times its own damage over its type's ref, over its
+ * own average; then its owner's minion damage, which used to go into the bytes and their 255 cap.
+ */
+int64_t MinionDamagePermille(const Monster &minion)
+{
+	int64_t permille = 1000;
+	const int sum = minion.minDamage + minion.maxDamage;
+	const int level = HasMonsterLevelTable() ? Poe2MinionLevel(minion) : 0;
+	if (level > 0 && sum > 0) {
+		// 1000 x (hit10 / 10) / (sum / 2)
+		permille = static_cast<int64_t>(MinionHit10(minion.type().type, level, sum)) * 200 / sum;
+	}
+	if (static_cast<size_t>(minion.goalVar3) < Players.size())
+		permille = permille * MinionDamagePercent(Players[static_cast<size_t>(minion.goalVar3)]) / 100;
+	return std::clamp<int64_t>(permille, 0, 100000000);
+}
+
 int64_t DamagePermille(const Monster &monster)
 {
-	if (!gbIsPoe2 || monster.isPlayerMinion())
+	if (!gbIsPoe2)
 		return 1000;
+	if (monster.isPlayerMinion())
+		return MinionDamagePermille(monster);
 	int64_t permille = TableDamagePermille(monster);
 	// Hard Hitting and the waystone's monster damage, the map boss and the encounter leaders: once in the bytes.
 	permille = permille * MonsterModsDamagePercent(monster) / 100;
@@ -289,6 +313,42 @@ bool ApplyPoe2MonsterLife(Monster &monster, int roll)
 	monster.hitPoints = monster.maxHitPoints;
 	monster.flags |= MFLAG_POE2_TABLES;
 	return true;
+}
+
+int Poe2MinionLevel(const Monster &minion)
+{
+	if (!gbIsPoe2)
+		return 0;
+	if ((minion.flags & MFLAG_KINGS_DEAD) != 0)
+		return CurrentAreaLevel();
+	if (static_cast<size_t>(minion.goalVar3) >= Players.size())
+		return 0;
+	const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
+	// The skill that keeps it, as support_table's MinionSkillOf finds it.
+	PersistentSkill skill = PersistentSkill::SummonGolem;
+	if (minion.poe2.revived) {
+		skill = PersistentSkill::Revive;
+	} else if (const MinionGemData *gem = FindMinionGemByType(minion.type().type); gem != nullptr) {
+		skill = gem->skill;
+	} else if (const PersistentSkill golem = ActiveGolemSkill(owner); golem != PersistentSkill::None) {
+		skill = golem;
+	}
+	return MinionLevelForGemLevel(std::max(owner.poe2.skillLevel(skill), 1));
+}
+
+int MinionHit10(_monster_id type, int level, int damageSum)
+{
+	const int ref = MonsterTypeRow(type).damageRef10;
+	int64_t ratio = 1000;
+	// (sum / 2) x 10 / ref10, in per mille.
+	if (ref > 0)
+		ratio = std::clamp<int64_t>(static_cast<int64_t>(std::max(damageSum, 0)) * 5000 / ref, MinMonsterTypePercent * 10, MaxMonsterTypePercent * 10);
+	return static_cast<int>(static_cast<int64_t>(MonsterLevelDamage10(level)) * ratio / 1000);
+}
+
+int32_t MinionLifeRaw(int level, int percent)
+{
+	return static_cast<int32_t>(ClampLifeRaw(static_cast<int64_t>(MonsterLevelLife(level)) * 64 * percent / 100));
 }
 
 int Poe2MonsterDamagePercent(const Monster &monster)

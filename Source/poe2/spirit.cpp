@@ -1062,8 +1062,7 @@ void KeepGolemAlive(Player &player)
 		return;
 	SpawnGolem(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(golemSkill), 1)));
 	if (Monster *golem = FindGolemForPlayer(player); golem != nullptr) {
-		golem->minDamage = static_cast<uint8_t>(std::min(golem->minDamage * MinionDamagePercent(player) / 100, 255));
-		golem->maxDamage = static_cast<uint8_t>(std::min(golem->maxDamage * MinionDamagePercent(player) / 100, 255));
+		// Its minion damage applies to each hit (ScaleMonsterHit), with no 255 cap.
 		// The golem skill's supports change its life.
 		if (const int percent = GolemLifePercent(player); percent != 100) {
 			golem->maxHitPoints = Fixed26_6::fromRaw(std::max<int32_t>(golem->maxHitPoints.raw() * percent / 100, 64));

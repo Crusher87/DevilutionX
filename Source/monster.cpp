@@ -1522,7 +1522,8 @@ void FireMinionShot(const Monster &minion, MissileID missileType, int damage)
 /** @brief POE2 Mashup: a skeleton's shot, in percent of its blow, with its owner's uniques and the gem's supports. */
 int MinionShotDamage(const Monster &minion, int percent)
 {
-	int damage = RandomIntBetween(minion.minDamage, minion.maxDamage) * percent / 100;
+	// Its blow on the minion tables (plan v2 step 11), then the shot's share.
+	int damage = ScaleMonsterHit(minion, RandomIntBetween(minion.minDamage, minion.maxDamage)) * percent / 100;
 	if (static_cast<size_t>(minion.goalVar3) < Players.size()) {
 		const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
 		damage = damage * UniqueMinionDamagePercent(owner, minion.hitPoints.raw() * 2 < minion.maxHitPoints.raw()) / 100;
@@ -3510,10 +3511,19 @@ void InitGolem(devilution::Monster &monster, uint8_t golemOwnerPlayerId, int16_t
 	monster.flags |= MFLAG_GOLEM;
 	monster.goalVar3 = static_cast<int8_t>(golemOwnerPlayerId);
 	const Player &player = Players[golemOwnerPlayerId];
-	monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3) * UniqueMinionLifePercent(player) / 100);
+	if (gbIsPoe2 && HasMonsterLevelTable()) {
+		// POE2 Mashup: a minion at its gem's minion level: a white's life there (plan v2 step 11). Its hits are scaled
+		// as they land (ScaleMonsterHit), so the bytes below stay the gem's.
+		const int level = MinionLevelForGemLevel(golemSpellLevel);
+		monster.maxHitPoints = Fixed26_6::fromRaw(MinionLifeRaw(level, UniqueMinionLifePercent(player)));
+		monster.golemToHit = std::min(5 * (golemSpellLevel + 8) + 2 * level, 255);
+	} else {
+		monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3) * UniqueMinionLifePercent(player) / 100);
+		// A save keeps one byte of it.
+		monster.golemToHit = std::min(5 * (golemSpellLevel + 8) + 2 * player.getCharacterLevel(), 255);
+	}
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 25;
-	monster.golemToHit = 5 * (golemSpellLevel + 8) + 2 * player.getCharacterLevel();
 	monster.minDamage = 2 * (golemSpellLevel + 4);
 	monster.maxDamage = 2 * (golemSpellLevel + 8);
 	UpdateEnemy(monster);
@@ -3534,13 +3544,19 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	// The ones that stay back and shoot are frailer than the warriors, the Brutes tougher.
 	const MinionGemData *gem = FindMinionGemByType(monster.type().type);
 	const int lifePercent = gem != nullptr ? gem->lifePercent : 100;
-	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
+	if (HasMonsterLevelTable()) {
+		// On the monster tables: a white's life at the minion's level (plan v2 step 11).
+		monster.maxHitPoints = Fixed26_6::fromRaw(MinionLifeRaw(level, UniqueMinionLifePercent(player) * lifePercent / 100));
+	} else {
+		monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
+	}
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
-	monster.golemToHit = 40 + (2 * level) + (2 * gemLevel);
-	const int damagePercent = MinionDamagePercent(player);
-	monster.minDamage = static_cast<uint8_t>(std::min((2 + (level / 3) + gemLevel) * damagePercent / 100, 255));
-	monster.maxDamage = static_cast<uint8_t>(std::min((5 + (level / 2) + (2 * gemLevel)) * damagePercent / 100, 255));
+	// A save keeps one byte of it.
+	monster.golemToHit = std::min(40 + (2 * level) + (2 * gemLevel), 255);
+	// The gem's blow; its level's table and the owner's minion damage scale each hit (ScaleMonsterHit), past 255.
+	monster.minDamage = static_cast<uint8_t>(std::min(2 + (level / 3) + gemLevel, 255));
+	monster.maxDamage = static_cast<uint8_t>(std::min(5 + (level / 2) + (2 * gemLevel), 255));
 	UpdateEnemy(monster);
 }
 
@@ -5533,10 +5549,11 @@ Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id ty
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = stats.armorClass;
 	monster.resistance = stats.resistance;
-	monster.golemToHit = 40 + (2 * player.getCharacterLevel());
-	const int damagePercent = MinionDamagePercent(player);
-	monster.minDamage = static_cast<uint8_t>(std::min(stats.minDamage * damagePercent / 100, 255));
-	monster.maxDamage = static_cast<uint8_t>(std::min(std::max(stats.maxDamage, stats.minDamage) * damagePercent / 100, 255));
+	monster.golemToHit = std::min(40 + (2 * player.getCharacterLevel()), 255);
+	// The dead monster's own damage, against its type's ref: the minion's level's table and the owner's minion damage
+	// scale each hit (ScaleMonsterHit, plan v2 step 11).
+	monster.minDamage = stats.minDamage;
+	monster.maxDamage = std::max(stats.maxDamage, stats.minDamage);
 	UpdateEnemy(monster);
 	return &monster;
 }
