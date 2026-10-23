@@ -110,7 +110,9 @@ TEST_F(Poe2SkillGemsTest, GemLevelsFollowPoe2)
 	EXPECT_EQ(GemDamagePercent(cleave, 10), 191);
 	EXPECT_EQ(GemDamagePercent(cleave, 15), 244);
 	EXPECT_EQ(GemDamagePercent(cleave, 20), 312);
-	EXPECT_EQ(GemManaPercent(cleave, 20), 500);
+	// Weapon-tab attacks get 4x dearer by level 20 (Elemental and Occult damage skills 5x).
+	EXPECT_EQ(GemManaPercent(cleave, 20), 400);
+	EXPECT_EQ(GemManaPercent(SkillSlot::ForAttack(WeaponSkill::Spark), 20), 500);
 }
 
 TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
@@ -124,7 +126,7 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 	EXPECT_EQ(GemDamagePercent(cleave, 8), 174);
 	EXPECT_EQ(GemDamagePercent(cleave, 9), 182);
 	EXPECT_EQ(GemDamagePercent(cleave, 16), 257);
-	EXPECT_EQ(GemStepText(cleave, 15, 16), "[+5% damage, +8% mana]");
+	EXPECT_EQ(GemStepText(cleave, 15, 16), "[+5% damage, +7% mana]");
 	for (int level = 2; level <= MaxGemLevel; level++)
 		EXPECT_GT(GemDamagePercent(leapSlam, level), GemDamagePercent(leapSlam, level - 1)) << level;
 
@@ -143,8 +145,8 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)
 {
 	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
-	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 6 mana");
-	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 20 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
+	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 5 mana");
+	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 16 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
 	EXPECT_EQ(GemCurveTextByName("nothing"), "No skill gem is called nothing.");
 }
 
@@ -169,7 +171,7 @@ TEST_F(Poe2SkillGemsTest, AttackGemLevelRaisesManaCost)
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 1);
 	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam));
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 20);
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 5);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 4);
 }
 
 TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)

@@ -28,6 +28,29 @@ void Restore(Fixed26_6 &current, Fixed26_6 &base, Fixed26_6 max, int32_t raw)
 
 } // namespace
 
+Fixed26_6 Poe2LevelLife(const Player &player)
+{
+	const int levelsGained = player.getCharacterLevel() - 1;
+	if (!gbIsPoe2 || levelsGained <= 0)
+		return Fixed26_6::fromInt(0);
+	return Fixed26_6::fromInt(Poe2LifePerLevel * levelsGained) - player.getClassAttributes().lvlLife * levelsGained;
+}
+
+Fixed26_6 Poe2LevelMana(const Player &player)
+{
+	if (!gbIsPoe2)
+		return Fixed26_6::fromInt(0);
+	const int pool = Poe2BaseMana + (Poe2ManaPerLevel * player.getCharacterLevel()) + (Poe2ManaPerMagic * std::max(player._pBaseMag, Poe2MinManaMagic));
+	return Fixed26_6::fromInt(pool) - player.calculateBaseMana();
+}
+
+int ManaFromItemMagic(const Player &player, int magic)
+{
+	if (gbIsPoe2)
+		return Poe2ManaPerMagic * magic;
+	return (player.getClassAttributes().itmMana * magic).whole();
+}
+
 void ApplyRegen(Player &player)
 {
 	if (!gbIsPoe2 || player.hasNoLife())

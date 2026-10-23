@@ -6,6 +6,7 @@
 
 #include "missiles.h"
 #include "player.h"
+#include "poe2/gemcutting.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
@@ -45,6 +46,8 @@ constexpr Poe2GemTable Spark { "Spark",
 
 /** @brief Mana grows 5x by level 20: three quarters of POE2's ~6.7x for attacks and half its ~10x for spells, as Diablo's mana pools are smaller. */
 constexpr int16_t ManaAt20 = 500;
+/** @brief Weapon-tab attacks grow 4x: martial heroes get little mana from gear, so their costs grow a little slower than their pool. */
+constexpr int16_t WeaponTabManaAt20 = 400;
 /** @brief Spells without damage (Teleport, Stone Curse...) get dearer more slowly. */
 constexpr int16_t UtilitySpellManaAt20 = 300;
 /** @brief Battle Cry's empowered melee hits deal this much extra damage at gem level 1. */
@@ -160,9 +163,6 @@ GemCurve SpellCurve(SpellID spell)
 	case SpellID::Inferno:
 	case SpellID::Apocalypse:
 		return { &Fireball, 312, ManaAt20, false, "Fireball's steps; Diablo doesn't grow these with spell level" };
-	case SpellID::Healing:
-	case SpellID::HealOther:
-		return { &Fireball, 100, 100, false, "Diablo's healing formula" };
 	default:
 		return { &Fireball, 100, UtilitySpellManaAt20, false, "utility gem, mana follows Fireball" };
 	}
@@ -227,8 +227,13 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 GemCurve GetGemCurve(SkillSlot skill)
 {
 	switch (skill.kind) {
-	case SkillKind::Attack:
-		return AttackCurve(skill.attack());
+	case SkillKind::Attack: {
+		GemCurve curve = AttackCurve(skill.attack());
+		// Attacks on a weapon's gemcutting tab (Mace to Shield) get dearer more slowly than Elemental and Occult skills.
+		if (curve.manaAt20 == ManaAt20 && AttackOnWeaponTab(skill.attack()))
+			curve.manaAt20 = WeaponTabManaAt20;
+		return curve;
+	}
 	case SkillKind::Spell:
 		return SpellCurve(skill.spell());
 	default:
