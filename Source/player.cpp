@@ -4,6 +4,7 @@
  * Implementation of player functionality, leveling, actions, creation, loading, etc.
  */
 #include <algorithm>
+#include <limits>
 #include <cmath>
 #include <cstdint>
 
@@ -1984,6 +1985,9 @@ int Player::GetCurrentAttributeValue(CharacterAttribute attribute) const
 
 int Player::GetMaximumAttributeValue(CharacterAttribute attribute) const
 {
+	// POE2 Mashup: no class ceilings (Curtis 2026-10-23). The hero file keeps each base stat in one byte.
+	if (gbIsPoe2)
+		return std::numeric_limits<uint8_t>::max();
 	const ClassAttributes &attr = getClassAttributes();
 	switch (attribute) {
 	case CharacterAttribute::Strength:
