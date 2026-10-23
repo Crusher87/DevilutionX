@@ -2238,8 +2238,7 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (IsUncutGem(item)) {
-		// Short lines: the info box doesn't wrap, so long ones ran into each other.
-		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
+		// Short lines: the info box doesn't wrap, so long ones ran into each other. The level is in the name.
 		AddItemInfoBoxString(FormatRuntime(_("Cuts a {:s} gem of its tier"), UncutKindName(UncutGemKind(item))));
 		// The gem it cuts can't be above the hero's own gem level limit: say so, instead of a lower gem appearing.
 		if (MyPlayer != nullptr && UncutGemKind(item) != UncutKind::Support) {
@@ -2802,6 +2801,9 @@ StringOrView GetTranslatedItemName(const Item &item)
 	// own full name, such as "Lesser Essence of Clarity".
 	if (gbIsPoe2 && item._iIName[0] != '\0' && (IsCraftingVariantItem(item) || IsWaystone(item) || SupportGemForItem(item) != SupportGem::None))
 		return std::string_view(item._iIName);
+	// POE2 Mashup: an uncut gem names its level, like POE2's "Uncut Skill Gem (Level 6)".
+	if (gbIsPoe2 && IsUncutGem(item))
+		return FormatRuntime(_("{:s} (Level {:d})"), _(baseItemData.iName), UncutGemLevel(item));
 	if (item._iCreateInfo == 0) {
 		return _(baseItemData.iName);
 	}

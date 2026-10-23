@@ -370,6 +370,23 @@ TEST_F(Poe2SkillGemsTest, BindingAGemOnAnotherSlotSwapsThem)
 	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse), (TrayBinding { TrayAction::WeaponAttack, 0 }));
 }
 
+TEST_F(Poe2SkillGemsTest, AWeaponAttackOnTwoKeysClearsFromOne)
+{
+	Player &player = *MyPlayer;
+	// The weapon attack can sit on any number of slots (Curtis 2026-10-23 had it on Q and E).
+	BindTraySlot(player, TraySlot::Key1, { TrayAction::WeaponAttack, 0 });
+	BindTraySlot(player, TraySlot::Key2, { TrayAction::WeaponAttack, 0 });
+	EXPECT_EQ(TrayOf(player, TraySlot::Key1), (TrayBinding { TrayAction::WeaponAttack, 0 }));
+	EXPECT_EQ(TrayOf(player, TraySlot::Key2), (TrayBinding { TrayAction::WeaponAttack, 0 }));
+
+	// The tray popup's empty choice binds nothing, which clears just that slot.
+	BindTraySlot(player, TraySlot::Key2, {});
+	EXPECT_EQ(TrayOf(player, TraySlot::Key2).action, TrayAction::None);
+	EXPECT_EQ(TrayOf(player, TraySlot::Key1), (TrayBinding { TrayAction::WeaponAttack, 0 }));
+	ClearTraySlot(player, TraySlot::Key1);
+	EXPECT_EQ(TrayOf(player, TraySlot::Key1).action, TrayAction::None);
+}
+
 TEST_F(Poe2SkillGemsTest, TakingAGemOutClearsItsTraySlot)
 {
 	Player &player = *MyPlayer;

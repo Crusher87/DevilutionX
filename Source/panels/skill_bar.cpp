@@ -104,6 +104,8 @@ struct PopupLayout {
 	Rectangle title;
 	/** One slot for each weapon set's default attack. */
 	std::array<Rectangle, NumWeaponSets> weaponAttacks;
+	/** The empty choice, which clears the slot. */
+	Rectangle clear;
 	std::array<Rectangle, NumSkillSlots> gems;
 	Rectangle supportsLabel;
 	std::array<Rectangle, MaxSupportSockets> sockets;
@@ -115,6 +117,7 @@ struct PopupHit {
 		None,
 		Box,
 		WeaponAttack,
+		Clear,
 		Gem,
 		Socket,
 		Picker,
@@ -490,6 +493,12 @@ std::vector<OwnedSupport> OwnedSupports(const Player &player)
 	return owned;
 }
 
+/** @brief Whether the popup offers the empty choice: the left and middle buttons always keep an attack. */
+bool PopupCanClear()
+{
+	return DefaultTrayBinding(Popup.slot).action == TrayAction::None;
+}
+
 /** @brief The Skills panel socket of the popup's slot, if it uses a gem that takes supports. */
 std::optional<size_t> PopupSupportsSocket(const Player &player)
 {
@@ -526,6 +535,7 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 	// The weapon sets' attacks, each over its set's numeral, then the skill gems: icons with no words on them.
 	for (size_t set = 0; set < NumWeaponSets; set++)
 		layout.weaponAttacks[set] = { { gridX + (static_cast<int>(set) * (SlotSize.width + SlotGap)), y }, SlotSize };
+	layout.clear = { { gridX + (static_cast<int>(NumWeaponSets) * (SlotSize.width + SlotGap)), y }, SlotSize };
 	y += SlotSize.height + LabelHeight + 4;
 	for (size_t i = 0; i < NumSkillSlots; i++) {
 		const int column = static_cast<int>(i) % GemColumns;
@@ -556,6 +566,7 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 	place(layout.title);
 	for (Rectangle &rect : layout.weaponAttacks)
 		place(rect);
+	place(layout.clear);
 	for (Rectangle &rect : layout.gems)
 		place(rect);
 	place(layout.supportsLabel);
@@ -578,6 +589,8 @@ PopupHit PopupHitAt(const Player &player, const PopupLayout &layout, const std::
 		if (layout.weaponAttacks[set].contains(position))
 			return { PopupHit::Kind::WeaponAttack, set };
 	}
+	if (PopupCanClear() && layout.clear.contains(position))
+		return { PopupHit::Kind::Clear };
 	for (size_t i = 0; i < NumSkillSlots; i++) {
 		if (layout.gems[i].contains(position))
 			return { PopupHit::Kind::Gem, i };
@@ -731,6 +744,10 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 		DrawTooltip(out, bounds, MousePosition, std::string(DefaultAttackName(DefaultAttackForSet(player, set))), UiFlags::ColorWhitegold, lines);
 		return;
 	}
+	case PopupHit::Kind::Clear:
+		lines.emplace_back(FormatRuntime(_("Click to clear {:s}"), TraySlotKeyName(Popup.slot)), UiFlags::ColorButtonpushed);
+		DrawTooltip(out, bounds, MousePosition, std::string(_("None")), UiFlags::ColorWhite, lines);
+		return;
 	case PopupHit::Kind::Gem: {
 		const SkillSlot skill = player.poe2.skillSlots[hover.index];
 		if (skill.isEmpty())
@@ -799,6 +816,16 @@ void DrawPopup(const Surface &out, const Player &player)
 		else if (hover.kind == PopupHit::Kind::WeaponAttack && hover.index == set)
 			DrawSmallSpellIconBorder(out, bottomLeft);
 		DrawString(out, WeaponSetName(static_cast<uint8_t>(set)), LabelRect(cell), { .flags = (current ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) | UiFlags::AlignCenter });
+	}
+	// An empty choice beside them, so a skill can come off a slot without another taking its place (Curtis 2026-10-23).
+	if (PopupCanClear()) {
+		const bool current = binding.action == TrayAction::None;
+		DrawSlot(out, layout.clear, current);
+		if (current)
+			DrawFrame(out, IconRect(layout.clear), BorderColor);
+		else if (hover.kind == PopupHit::Kind::Clear)
+			DrawFrame(out, IconRect(layout.clear), HoverColor);
+		DrawString(out, _("None"), LabelRect(layout.clear), { .flags = (current ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) | UiFlags::AlignCenter | UiFlags::KerningFitSpacing });
 	}
 
 	// No keys or buttons on the gems: the gold frame marks the one this slot uses, the rest is in the tooltips (Curtis 2026-10-22).
@@ -876,6 +903,10 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 	switch (hit.kind) {
 	case PopupHit::Kind::WeaponAttack:
 		BindTraySlot(player, Popup.slot, { TrayAction::WeaponAttack, static_cast<uint8_t>(hit.index) });
+		CloseSkillTrayPopup();
+		return;
+	case PopupHit::Kind::Clear:
+		ClearTraySlot(player, Popup.slot);
 		CloseSkillTrayPopup();
 		return;
 	case PopupHit::Kind::Gem: {
@@ -1194,7 +1225,8 @@ void SetSkillBarInfo()
 		} else {
 			InfoString = FormatRuntime(_("Empty tray slot [{:s}]"), key);
 		}
-		AddInfoBoxString(_("Click to pick a skill"));
+		// Right-click empties the slot, or gives the left and middle buttons back their attack.
+		AddInfoBoxString(binding == DefaultTrayBinding(*slot) ? _("Click to pick a skill") : _("Click to change, right-click to clear"));
 		return;
 	}
 

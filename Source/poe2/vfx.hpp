@@ -122,6 +122,8 @@ void SetCamera(Point viewTile, Displacement offset, bool zoom);
 void ScanMissiles();
 /** @brief Whether the effects draw this missile themselves this frame, so its classic sprite is left out. */
 bool ReplacesSprite(const Missile &missile);
+/** @brief Whether the missile is drawn as Arcing Sparks' small sparks rather than Charged Bolt's bolts: both fly the same missile. */
+bool IsArcingSpark(const Missile &missile);
 /**
  * @brief The frame to draw of a light object: candles hold one frame (their glow sways instead) and torches run at
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.

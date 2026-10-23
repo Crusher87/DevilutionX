@@ -200,6 +200,13 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 	}
 }
 
+TEST_F(Poe2GemcuttingTest, UncutGemsNameTheirLevel)
+{
+	EXPECT_EQ(MakeUncut(IMISC_UNCUT_SKILL, 6).getName().str(), "Uncut Skill Gem (Level 6)");
+	EXPECT_EQ(MakeUncut(IMISC_UNCUT_SUPPORT, 3).getName().str(), "Uncut Support Gem (Level 3)");
+	EXPECT_EQ(MakeUncut(IMISC_UNCUT_SPIRIT, 20).getName().str(), "Uncut Spirit Gem (Level 20)");
+}
+
 TEST_F(Poe2GemcuttingTest, OnlyUncutGemsDrop)
 {
 	for (const GemEntry &gem : GemCatalog())
