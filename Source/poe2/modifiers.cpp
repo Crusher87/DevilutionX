@@ -9,6 +9,7 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/player_data.hpp"
@@ -251,6 +252,8 @@ void LoadModifierData()
 	Families.clear();
 	LoadBaseData();
 	LoadPoe2Uniques();
+	// Clears the table in Diablo mode and never fails there.
+	LoadAreaLevels();
 	if (!gbIsPoe2)
 		return;
 

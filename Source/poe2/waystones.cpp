@@ -13,6 +13,7 @@
 #include "monster.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/endgame.hpp"
@@ -176,8 +177,10 @@ std::vector<std::string> WaystoneText(const Item &item)
 {
 	std::vector<std::string> lines;
 	const int tier = WaystoneTier(item);
-	lines.push_back(FormatRuntime(_("Map tier {:d} (area level {:d})"), tier, MapAreaLevelBase + tier));
-	lines.push_back(FormatRuntime(_("Monsters: {:d}% more life, {:d}% more damage"), tier * MapLifePercentPerTier, tier * MapDamagePercentPerTier));
+	// The area level shown is the monsters' level; the map's loot keeps its own item level.
+	lines.push_back(FormatRuntime(_("Map tier {:d} (area level {:d})"), tier, MapMonsterAreaLevel(tier)));
+	if (tier * MapLifePercentPerTier != 0 || tier * MapDamagePercentPerTier != 0)
+		lines.push_back(FormatRuntime(_("Monsters: {:d}% more life, {:d}% more damage"), tier * MapLifePercentPerTier, tier * MapDamagePercentPerTier));
 	for (const Poe2CraftMod &mod : item._iPoe2Craft.mods) {
 		for (const std::string &line : WaystoneModText(mod))
 			lines.push_back(line);
@@ -299,7 +302,9 @@ int MapLevelForTier(int tier, uint32_t seed)
 
 int ActiveMapTier()
 {
-	if (!gbIsPoe2 || MyPlayer == nullptr || setlevel)
+	// Multiplayer: a hero saved inside a map would see a tier the other peers don't, and monster levels and rarity
+	// follow it, so maps never count there.
+	if (!gbIsPoe2 || gbIsMultiplayer || MyPlayer == nullptr || setlevel)
 		return 0;
 	const Poe2PlayerData &data = MyPlayer->poe2;
 	if (data.mapTier == 0 || currlevel != data.mapLevel)

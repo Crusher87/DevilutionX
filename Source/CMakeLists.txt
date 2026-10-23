@@ -794,6 +794,7 @@ endif()
 add_devilutionx_object_library(libdevilutionx_player
   player.cpp
   poe2/defenses.cpp
+  poe2/area_levels.cpp
   poe2/bases.cpp
   poe2/belt_uniques.cpp
   poe2/boss_loot.cpp

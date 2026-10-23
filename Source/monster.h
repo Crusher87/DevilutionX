@@ -413,11 +413,21 @@ struct Monster { // note: missing field _mAFNum
 
 	/**
 	 * @brief Calculates monster's level.
-	 * Fetches base level value from @p MonstersData array or @p UniqueMonstersData.
+	 * In POE2 mode this is the floor's area level (see poe2/area_levels.hpp), except for the player's golems and
+	 * minions; otherwise it is diabloLevel().
 	 * @param difficulty - difficulty on which calculation is performed
 	 * @return Monster's level, including bonuses from difficulty and monster being unique
 	 */
-	unsigned int level(_difficulty difficulty) const
+	unsigned int level(_difficulty difficulty) const;
+
+	/**
+	 * @brief Calculates monster's level by Diablo's rules.
+	 * Fetches base level value from @p MonstersData array or @p UniqueMonstersData.
+	 * POE2 loot keeps using it until item levels move to area levels.
+	 * @param difficulty - difficulty on which calculation is performed
+	 * @return Monster's level, including bonuses from difficulty and monster being unique
+	 */
+	unsigned int diabloLevel(_difficulty difficulty) const
 	{
 		unsigned int baseLevel = data().level;
 		if (isUnique()) {

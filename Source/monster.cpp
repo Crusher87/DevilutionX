@@ -77,6 +77,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/economy.hpp"
@@ -5737,6 +5738,16 @@ uint16_t Monster::shownResistance() const
 		return resistance;
 	const uint16_t immunes = resistance & (IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
 	return static_cast<uint16_t>((resistance & ~immunes) | (immunes >> 3));
+}
+
+unsigned int Monster::level(_difficulty difficulty) const
+{
+	if (gbIsPoe2) {
+		// POE2 Mashup: monsters are the floor's area level (loot still reads diabloLevel()).
+		if (const int poe2Level = Poe2MonsterLevel(*this, difficulty); poe2Level > 0)
+			return static_cast<unsigned int>(poe2Level);
+	}
+	return diabloLevel(difficulty);
 }
 
 bool Monster::isPlayerMinion() const

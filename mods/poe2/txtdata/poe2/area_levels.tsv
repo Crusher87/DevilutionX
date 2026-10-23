@@ -1,0 +1,25 @@
+floor	areaLevel	act	name
+1	2	1	Cathedral 1
+2	4	1	Cathedral 2
+3	5	1	Cathedral 3
+4	7	1	Cathedral 4
+5	8	1	Catacombs 1
+6	10	1	Catacombs 2
+7	11	1	Catacombs 3
+8	13	1	Catacombs 4
+9	14	2	Caves 1
+10	16	2	Caves 2
+11	17	2	Caves 3
+12	19	2	Caves 4
+17	20	2	Hive 1
+18	22	2	Hive 2
+19	23	2	Hive 3
+20	25	2	Hive 4
+21	26	3	Crypt 1
+22	28	3	Crypt 2
+23	29	3	Crypt 3
+24	31	3	Crypt 4
+13	32	3	Hell 1
+14	34	3	Hell 2
+15	36	3	Hell 3
+16	37	3	Hell 4

@@ -1730,7 +1730,7 @@ _item_indexes RndUItem(Monster *monster)
 {
 	int itemMaxLevel = ItemsGetCurrlevel() * 2;
 	if (monster != nullptr)
-		itemMaxLevel = monster->level(sgGameInitInfo.nDifficulty);
+		itemMaxLevel = monster->diabloLevel(sgGameInitInfo.nDifficulty);
 	return GetItemIndexForDroppableItem(false, [&itemMaxLevel](const ItemData &item) {
 		if (item.itype == ItemType::Misc && item.iMiscId == IMISC_BOOK)
 			return true;
@@ -4782,7 +4782,8 @@ Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 	return {
 		source,
 		std::min<int>(monster.data().level + (gbIsMultiplayer ? 0 : bonus), CF_LEVEL),
-		static_cast<int>(monster.level(sgGameInitInfo.nDifficulty)) + bonus,
+		// Loot keeps Diablo's monster level until item levels move to area levels.
+		static_cast<int>(monster.diabloLevel(sgGameInitInfo.nDifficulty)) + bonus,
 		Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty),
 		monster.name(),
 		/*pregen=*/false,
@@ -5293,7 +5294,7 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 		if (gbIsPoe2 && GenerateRnd(100) < 3)
 			idx = IDI_IDENTIFY;
 		else
-			idx = RndItemForMonsterLevel(static_cast<int8_t>(monster.level(sgGameInitInfo.nDifficulty)));
+			idx = RndItemForMonsterLevel(static_cast<int8_t>(monster.diabloLevel(sgGameInitInfo.nDifficulty)));
 	}
 
 	if (idx == IDI_NONE)
