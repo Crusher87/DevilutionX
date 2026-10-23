@@ -432,8 +432,7 @@ private:
 			const Point centre = spots[random(static_cast<int>(spots.size()))].first;
 			// Packs of 4 to 6; what's left under a pack goes out as stragglers.
 			const int size = left_ >= static_cast<size_t>(PackMin) ? PackMin + random(PackMax - PackMin + 1) : 1;
-			const MonsterRarity leader = size >= PackMin && random(4) == 0 ? MonsterRarity::Magic : MonsterRarity::Normal;
-			if (placePack(centre, size, PackSteps, leader, 1) == 0)
+			if (placePack(centre, size, PackSteps, MonsterRarity::Normal, 1) == 0)
 				return;
 		}
 	}
@@ -511,6 +510,9 @@ private:
 			Monster *monster = AddMonster(chosen[i], static_cast<Direction>(random(8)), type, true);
 			if (monster == nullptr)
 				break;
+			// Rares lead the big fights and guard dead ends; one more rolled at random would add loot on top.
+			if (GetMonsterAffixes(*monster).rarity == MonsterRarity::Rare)
+				DemoteMonsterRarity(*monster);
 			if (first == nullptr && GetMonsterAffixes(*monster).rarity == MonsterRarity::Normal)
 				first = monster;
 			newTiles.push_back(chosen[i]);

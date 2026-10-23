@@ -86,6 +86,8 @@ void ApplyMonsterRarity(Monster &monster);
  * that rarity and adds the rarity's life and damage. Does nothing to a monster that can't roll one or already has one.
  */
 void PromoteMonsterRarity(Monster &monster, MonsterRarity rarity);
+/** @brief Makes a magic or rare monster plain again after it was created: takes off its rarity's life and damage. */
+void DemoteMonsterRarity(Monster &monster);
 
 std::string_view MonsterModName(MonsterMod mod);
 /** @brief Name shown for a rare monster, like POE2's two-word rare names. */
