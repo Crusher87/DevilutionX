@@ -114,27 +114,41 @@ void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int 
 	}
 }
 
+namespace {
+
+/**
+ * @brief One kind of an item's defence after its local % increases and its quality, which POE2 multiplies, rounded
+ * like POE2. As GetBonusAC, any change gives at least a point.
+ */
+int ScaledDefence(int defence, int increased, int quality)
+{
+	if (defence <= 0)
+		return defence;
+	const int scale = (100 + increased) * (100 + quality);
+	const int scaled = std::max((defence * scale + 5000) / 10000, 0);
+	if (scaled == defence && scale != 10000)
+		return scale > 10000 ? defence + 1 : defence - 1;
+	return scaled;
+}
+
+} // namespace
+
 void SplitItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonus)
 {
 	const auto flat = [&](Poe2ItemStat stat) { return std::max<int>(item._iPoe2Stats[static_cast<size_t>(stat)], 0); };
 	DefensePoints flats { flat(Poe2ItemStat::FlatArmour), flat(Poe2ItemStat::FlatEvasion), flat(Poe2ItemStat::FlatEnergyShield) };
 	const int split = std::max(item._iAC - flats.armour - flats.evasion - flats.energyShield, 0);
-	const DefenseType type = ItemDefenseType(item);
-	SplitDefense(type, split, base.armour, base.evasion, base.energyShield);
+	SplitDefense(ItemDefenseType(item), split, base.armour, base.evasion, base.energyShield);
 	base.armour += flats.armour;
 	base.evasion += flats.evasion;
-	base.energyShield += flats.energyShield;
-	bonus = {};
-	if (item._iPLAC == 0)
-		return;
-	// As GetBonusAC: any increase gives at least a point.
-	int splitBonus = split * item._iPLAC / 100;
-	if (splitBonus == 0 && split > 0)
-		splitBonus = item._iPLAC > 0 ? 1 : -1;
-	SplitDefense(type, splitBonus, bonus.armour, bonus.evasion, bonus.energyShield);
-	bonus.armour += flats.armour * item._iPLAC / 100;
-	bonus.evasion += flats.evasion * item._iPLAC / 100;
-	bonus.energyShield += flats.energyShield * item._iPLAC / 100;
+	base.energyShield = (base.energyShield + flats.energyShield) * EnergyShieldPerDefense;
+	// Each kind scales on its own and energy shield in the points shown, so a hybrid's energy shield and a small
+	// robe's go up with quality too (Curtis 2026-10-23: 10% quality left a robe's 45 energy shield at 45).
+	const int quality = LocalQuality(item, QualityKind::Defence);
+	const int increased = item._iPLAC - quality;
+	bonus.armour = ScaledDefence(base.armour, increased, quality) - base.armour;
+	bonus.evasion = ScaledDefence(base.evasion, increased, quality) - base.evasion;
+	bonus.energyShield = ScaledDefence(base.energyShield, increased, quality) - base.energyShield;
 }
 
 int ArmourRating(const Player &player, bool withSpiritBuffs)

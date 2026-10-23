@@ -587,7 +587,8 @@ inline bool IsOneCellCopy(const Item &item)
 bool TakesOneCell(const Item &item);
 /** @brief POE2 Mashup: items saved when they were bigger let go of the inventory cells they no longer cover. */
 void FitOneCellItems(Player &player);
-void InitializeItem(Item &item, _item_indexes itemData);
+/** @param quality POE2 Mashup: the quality the item is made with, as starting gear rebuilt by crafting keeps its quality. */
+void InitializeItem(Item &item, _item_indexes itemData, int quality = 0);
 void GenerateNewSeed(Item &item);
 int GetGoldCursor(int value);
 
@@ -752,7 +753,7 @@ void RestoreRareItemPowers(Item &item);
  * @brief POE2 Mashup: makes one of the bundle's uniques (poe2/uniques.hpp) on its base, the way a drop of it is made.
  * @return false if the uid isn't a bundle unique.
  */
-bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed);
+bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed, int quality = 0);
 
 enum class ChanceResult : uint8_t {
 	/** No unique is made on the base. */

@@ -114,10 +114,11 @@ Item RebuildWithBuff(const Player &player, const Item &item, uint32_t dwBuff)
 	return RebuildWithCraft(player, item, dwBuff, item._iPoe2Craft);
 }
 
-/** @brief A rerolled item keeps the POE2 item level it dropped with. */
+/** @brief A rerolled item keeps the POE2 item level it dropped with, and its quality, even starting gear without a level. */
 uint32_t KeptItemLevelBits(const Item &item)
 {
-	return GetPoe2ItemLevel(item) > 0 ? item.dwBuff & (CF_POE2_ILVL | CF_POE2_MODS | CF_POE2_QUALITY) : 0;
+	const uint32_t quality = ItemQuality(item) > 0 ? item.dwBuff & CF_POE2_QUALITY : 0;
+	return quality | (GetPoe2ItemLevel(item) > 0 ? item.dwBuff & (CF_POE2_ILVL | CF_POE2_MODS) : 0);
 }
 
 int ItemLevel(const Player &player, const Item &item)

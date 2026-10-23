@@ -3029,7 +3029,7 @@ void RestoreRareItemPowers(Item &item)
 	SetRndSeed(currentSeed);
 }
 
-bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed)
+bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed, int quality)
 {
 	const Poe2Unique *unique = Poe2UniqueFor(uid);
 	if (unique == nullptr || !IsItemAvailable(unique->baseItem))
@@ -3040,6 +3040,7 @@ bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed)
 	SetLootRarity(item, ITEM_QUALITY_UNIQUE);
 	SetPoe2ItemLevel(item, unique->dropLevel);
 	item.dwBuff |= ((static_cast<uint32_t>(offset) << 1) & CF_UIDOFFSET) | CF_POE2_BUNDLE_UNIQUE;
+	SetItemQuality(item, quality);
 	SetupAllItems(player, item, static_cast<_item_indexes>(unique->baseItem), seed, std::max<int>(UniqueItems[uid].UIMinLvl, 1), 1, true, false, offset);
 	return item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid == uid;
 }
@@ -3087,12 +3088,14 @@ ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &un
 	const uint32_t seed = (roll * 1103515245U + 12345U) >> 1;
 	const uint32_t rngState = GetLCGEngineState();
 	bool made;
+	// The unique keeps the item's quality, as in POE2.
 	if (chosen.bundle) {
-		made = CreatePoe2Unique(player, unique, chosen.uid, seed);
+		made = CreatePoe2Unique(player, unique, chosen.uid, seed, ItemQuality(item));
 	} else {
 		unique = {};
 		SetLootRarity(unique, ITEM_QUALITY_UNIQUE);
 		SetPoe2ItemLevel(unique, GetPoe2ItemLevel(item));
+		SetItemQuality(unique, ItemQuality(item));
 		unique.dwBuff |= (static_cast<uint32_t>(chosen.offset) << 1) & CF_UIDOFFSET;
 		SetupAllItems(player, unique, static_cast<_item_indexes>(base), seed, level, 1, true, false, chosen.offset);
 		made = unique._iMagical == ITEM_QUALITY_UNIQUE && unique._iUid == chosen.uid;
@@ -3665,7 +3668,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			}
 
 			if (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified) {
-				dam += item._iPLDam;
+				dam += WeaponDamagePercent(item);
 				toHit += item._iPLToHit;
 				bonusAc += GetBonusAC(item);
 				flags |= item._iFlags;
@@ -3694,6 +3697,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 					poe2Stats[stat] += item._iPoe2Stats[stat];
 				AddUniqueRules(item, uniqueRules);
 				AddCraftRules(item, uniqueRules);
+			} else {
+				// POE2 Mashup: a weapon's quality isn't a hidden modifier, so it counts before identifying too.
+				dam += WeaponDamagePercent(item);
 			}
 		}
 	}
@@ -3769,7 +3775,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			DefensePoints bonus;
 			SplitItemDefense(item, base, bonus);
 			evasion += base.evasion + bonus.evasion;
-			energyShield += (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
+			energyShield += base.energyShield + bonus.energyShield;
 			ac -= item._iAC - base.armour;
 			const bool counted = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
 			bonusAc += bonus.armour - (counted ? GetBonusAC(item) : 0);
@@ -3886,7 +3892,7 @@ void CalcPlrInv(Player &player, bool loadgfx)
 	}
 }
 
-void InitializeItem(Item &item, _item_indexes itemData)
+void InitializeItem(Item &item, _item_indexes itemData, int quality)
 {
 	auto &pAllItem = AllItemsList[static_cast<size_t>(itemData)];
 
@@ -3936,6 +3942,8 @@ void InitializeItem(Item &item, _item_indexes itemData)
 		item.dwBuff |= CF_HELLFIRE;
 	if (gbIsPoe2)
 		item.dwBuff |= CF_POE2;
+	if (gbIsPoe2 && quality > 0 && (QualityKindFor(itemData) != QualityKind::None || BaseMetaFor(itemData) != nullptr))
+		SetItemQuality(item, quality);
 	ApplyBaseProperties(item);
 }
 
@@ -5364,7 +5372,8 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 	}
 
 	if (icreateinfo == 0) {
-		InitializeItem(item, idx);
+		// POE2 Mashup: starting gear keeps the quality currency gave it (Curtis 2026-10-23).
+		InitializeItem(item, idx, static_cast<int>((dwBuff & CF_POE2_QUALITY) >> std::countr_zero(static_cast<uint32_t>(CF_POE2_QUALITY))));
 		item._iSeed = iseed;
 		gbIsHellfire = tmpIsHellfire;
 		return;
@@ -6290,7 +6299,7 @@ void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energySh
 		SplitItemDefense(item, base, bonus);
 	armour = base.armour + bonus.armour;
 	evasion = base.evasion + bonus.evasion;
-	energyShield = (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
+	energyShield = base.energyShield + bonus.energyShield;
 }
 
 /** @brief POE2 Mashup: armor pieces show the defense they grant when worn. */
@@ -6483,8 +6492,8 @@ void PrintItemDetails(const Item &item)
 		// POE2 Mashup: the damage shown is the weapon's whole hit, with its increased physical and added elemental damage.
 		int minDamage = item._iMinDam;
 		int maxDamage = item._iMaxDam;
-		const int physicalMin = item._iMinDam * (100 + item._iPLDam) / 100;
-		const int physicalMax = item._iMaxDam * (100 + item._iPLDam) / 100;
+		const int physicalMin = item._iMinDam * (100 + WeaponDamagePercent(item)) / 100;
+		const int physicalMax = item._iMaxDam * (100 + WeaponDamagePercent(item)) / 100;
 		if (gbIsPoe2) {
 			minDamage = physicalMin + item._iFMinDam + item._iLMinDam;
 			maxDamage = physicalMax + item._iFMaxDam + item._iLMaxDam;
@@ -6711,13 +6720,16 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
 		shown++;
 	};
-	// Unidentified weapons only show their base damage; identified ones compare their whole hit, as the tooltip shows it.
-	// Defence counts its modifiers either way.
+	// Unidentified weapons only show their base damage and quality; identified ones compare their whole hit, as the
+	// tooltip shows it. Defence counts its modifiers either way.
 	const auto hitDamage = [](const Item &it, bool max) {
 		const int base = max ? it._iMaxDam : it._iMinDam;
-		if (it.isEmpty() || !it._iIdentified)
+		if (it.isEmpty())
 			return base;
-		return (base * (100 + it._iPLDam) / 100) + (max ? it._iFMaxDam + it._iLMaxDam : it._iFMinDam + it._iLMinDam);
+		const int physical = base * (100 + WeaponDamagePercent(it)) / 100;
+		if (!it._iIdentified)
+			return physical;
+		return physical + (max ? it._iFMaxDam + it._iLMaxDam : it._iFMinDam + it._iLMinDam);
 	};
 	compare(hitDamage(item, false), hitDamage(other, false), _("to minimum Damage"));
 	compare(hitDamage(item, true), hitDamage(other, true), _("to maximum Damage"));
@@ -6744,7 +6756,7 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 			compare((item._iLMinDam + item._iLMaxDam) / 2, (other._iLMinDam + other._iLMaxDam) / 2, _("average Lightning Damage"));
 		}
 		compare(item._iPLToHit, other._iPLToHit, _("Accuracy"), "%");
-		compare(item._iPLAC, other._iPLAC, _("increased Defence"), "%");
+		compare(item._iPLAC - LocalQuality(item, QualityKind::Defence), other._iPLAC - LocalQuality(other, QualityKind::Defence), _("increased Defence"), "%");
 		compare(item._iPLStr, other._iPLStr, _("Strength"));
 		compare(item._iPLDex, other._iPLDex, _("Dexterity"));
 		compare(item._iPLMag, other._iPLMag, _("Intelligence"));
@@ -6777,16 +6789,19 @@ void PrintItemDur(const Item &item)
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	PrintWeaponClass(item);
 	if (item._iClass == ICLASS_WEAPON) {
-		if (item._iMinDam == item._iMaxDam) {
+		// POE2 Mashup: with its quality, which shows before identifying.
+		const int minDamage = item._iMinDam * (100 + WeaponDamagePercent(item)) / 100;
+		const int maxDamage = item._iMaxDam * (100 + WeaponDamagePercent(item)) / 100;
+		if (minDamage == maxDamage) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), item._iMinDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), minDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Dur: {:d}/{:d}"), minDamage, item._iDurability, item._iMaxDur));
 		} else {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), item._iMinDam, item._iMaxDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), minDamage, maxDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iMaxDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
 		}
 		if (item._iMiscId == IMISC_STAFF && item._iMaxCharges > 0) {
 			AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));

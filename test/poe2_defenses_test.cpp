@@ -1,10 +1,14 @@
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
+#include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/bases.hpp"
+#include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/loot.hpp"
 #include "poe2/passive_tree.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
@@ -67,6 +71,17 @@ public:
 	{
 		// Keeps CalcPlrInv from loading art for the new armor graphic.
 		CalcPlrItemVals(player, false);
+	}
+
+	/** Wears a body armour with quality, which ApplyBaseProperties adds as a drop or a rebuild does, and local % increases. */
+	static void WearWithQuality(Player &player, std::string_view baseName, int ac, int quality, int increased = 0)
+	{
+		Wear(player, INVLOC_CHEST, baseName, ac);
+		Item &item = player.InvBody[INVLOC_CHEST];
+		SetItemQuality(item, quality);
+		ApplyBaseProperties(item);
+		item._iPLAC = static_cast<int16_t>(item._iPLAC + increased);
+		Recalculate(player);
 	}
 };
 
@@ -265,12 +280,132 @@ TEST_F(Poe2DefensesTest, IdentifyingNeverChangesDefence)
 	const int armour = ArmourRating(player);
 	const int energyShield = player.poe2.maxEnergyShield;
 	EXPECT_EQ(armour, 7);
-	EXPECT_EQ(energyShield, 4 * EnergyShieldPerDefense);
+	// Its 12 energy shield is raised by the 20% too (Curtis 2026-10-23).
+	EXPECT_EQ(energyShield, 14);
 
 	vestments._iIdentified = true;
 	Recalculate(player);
 	EXPECT_EQ(ArmourRating(player), armour);
 	EXPECT_EQ(player.poe2.maxEnergyShield, energyShield);
+}
+
+TEST_F(Poe2DefensesTest, QualityRaisesEnergyShield)
+{
+	// Curtis 2026-10-23, picture 10: an Armourer's Scrap took a robe to 10% quality and its 45 energy shield stayed 45.
+	// Its 14 points of defence gave 45 energy shield from 2% quality to 14%, a whole point (3 energy shield) at a time.
+	Player &player = *MyPlayer;
+	WearWithQuality(player, "Hexer's Robe", 14, 0);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 42);
+	WearWithQuality(player, "Hexer's Robe", 14, 8);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 45);
+	WearWithQuality(player, "Hexer's Robe", 14, 10);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 46);
+	WearWithQuality(player, "Hexer's Robe", 14, 20);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 50);
+}
+
+TEST_F(Poe2DefensesTest, QualityMultipliesLocalDefence)
+{
+	// POE2: quality and the item's local % increases multiply. 50 with 50% increased and 20% quality is 90, not 85.
+	Player &player = *MyPlayer;
+	WearWithQuality(player, "Full Plate Mail", 50, 20, 50);
+	EXPECT_EQ(ArmourRating(player), 90);
+	WearWithQuality(player, "Leather Armor", 50, 20, 50);
+	EXPECT_EQ(player.poe2.evasion, 90);
+	WearWithQuality(player, "Robe", 10, 20, 50);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 54);
+}
+
+TEST_F(Poe2DefensesTest, QualityRaisesEachDefenceOfAHybrid)
+{
+	// A small increase on a hybrid went all to one kind: 10% quality on 10 points gave the vestments' energy shield nothing.
+	Player &player = *MyPlayer;
+	WearWithQuality(player, "Pilgrim Vestments", 10, 10);
+	EXPECT_EQ(ArmourRating(player), 6);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 17);
+
+	WearWithQuality(player, "Hermit Garb", 10, 10);
+	EXPECT_EQ(player.poe2.evasion, 6);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 17);
+
+	WearWithQuality(player, "Chain Mail Vest", 10, 10);
+	EXPECT_EQ(ArmourRating(player), 6);
+	EXPECT_EQ(player.poe2.evasion, 6);
+
+	WearWithQuality(player, "Grand Regalia", 12, 20);
+	EXPECT_EQ(ArmourRating(player), 5);
+	EXPECT_EQ(player.poe2.evasion, 5);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 14);
+}
+
+TEST_F(Poe2DefensesTest, ArmourersScrapRaisesADropsEnergyShield)
+{
+	// Picture 10 again, the way it happened: a dropped robe of item level 7 with 8% quality, then a scrap.
+	Player &player = *MyPlayer;
+	_item_indexes base = IDI_GOLD;
+	for (size_t i = 0; i < AllItemsList.size() && base == IDI_GOLD; i++) {
+		if (AllItemsList[i].iName == "Hexer's Robe")
+			base = static_cast<_item_indexes>(i);
+	}
+	Item &robe = player.InvBody[INVLOC_CHEST];
+	robe = {};
+	SetLootRarity(robe, ITEM_QUALITY_NORMAL);
+	SetPoe2ItemLevel(robe, 7);
+	SetItemQuality(robe, 8);
+	SetRndSeed(7);
+	SetupAllItems(player, robe, base, AdvanceRndSeed(), 14, 1, /*onlygood=*/true, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+	robe._iStatFlag = true;
+	Recalculate(player);
+	const int before = player.poe2.maxEnergyShield;
+
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Scrap, player, robe));
+	EXPECT_EQ(ItemQuality(robe), 10);
+	robe._iStatFlag = true;
+	Recalculate(player);
+	EXPECT_EQ(player.poe2.maxEnergyShield, (robe._iAC * EnergyShieldPerDefense * 110 + 50) / 100);
+	EXPECT_GT(player.poe2.maxEnergyShield, before);
+}
+
+TEST_F(Poe2DefensesTest, ArmourersScrapOnStartingGear)
+{
+	// Starting gear is rebuilt from its base alone, which dropped the quality an Armourer's Scrap gave it.
+	Player &player = *MyPlayer;
+	Wear(player, INVLOC_CHEST, "Robe", 10);
+	Item &robe = player.InvBody[INVLOC_CHEST];
+	for (int i = 0; i < 5; i++)
+		ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Scrap, player, robe));
+	EXPECT_EQ(ItemQuality(robe), 10);
+	EXPECT_EQ(robe._iAC, 10);
+	robe._iStatFlag = true;
+	Recalculate(player);
+	EXPECT_EQ(player.poe2.maxEnergyShield, 33);
+}
+
+TEST_F(Poe2DefensesTest, WhetstoneQualityRaisesWeaponDamage)
+{
+	// The same for a Blacksmith's Whetstone on a starting weapon.
+	Player &player = *MyPlayer;
+	Wear(player, INVLOC_HAND_LEFT, "Short Sword", 0);
+	Recalculate(player);
+	const int plain = player._pIBonusDam;
+	Item &sword = player.InvBody[INVLOC_HAND_LEFT];
+	for (int i = 0; i < 5; i++)
+		ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Whetstone, player, sword));
+	EXPECT_EQ(ItemQuality(sword), 10);
+	sword._iStatFlag = true;
+	Recalculate(player);
+	EXPECT_EQ(player._pIBonusDam, plain + 10);
+
+	// POE2: quality and local % increases multiply, so 50% increased with 10% quality is 65%, not 60%.
+	sword._iPLDam = static_cast<int16_t>(sword._iPLDam + 50);
+	Recalculate(player);
+	EXPECT_EQ(player._pIBonusDam, plain + 65);
+
+	// Quality isn't a hidden modifier: an unidentified sword has it, though not its hidden 50%.
+	sword._iMagical = ITEM_QUALITY_MAGIC;
+	sword._iIdentified = false;
+	Recalculate(player);
+	EXPECT_EQ(player._pIBonusDam, plain + 10);
 }
 
 TEST_F(Poe2DefensesTest, TopBodyArmourBasesCarryImplicits)

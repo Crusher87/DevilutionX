@@ -246,4 +246,20 @@ bool HasQuality(const Item &item)
 	return ItemQualityKind(item) != QualityKind::None;
 }
 
+int LocalQuality(const Item &item, QualityKind kind)
+{
+	// ApplyBaseProperties only adds it to items made in POE2 mode.
+	if ((item.dwBuff & CF_POE2) == 0 || ItemQualityKind(item) != kind)
+		return 0;
+	return ItemQuality(item);
+}
+
+int WeaponDamagePercent(const Item &item)
+{
+	const int quality = LocalQuality(item, QualityKind::Weapon);
+	const bool identified = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+	const int increased = identified ? item._iPLDam - quality : 0;
+	return ((100 + increased) * (100 + quality) / 100) - 100;
+}
+
 } // namespace devilution
