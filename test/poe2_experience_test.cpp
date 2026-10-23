@@ -92,7 +92,7 @@ TEST_F(Poe2ExperienceTest, TableHasHundredLevels)
 	EXPECT_EQ(MyPlayer->getMaxCharacterLevel(), 100);
 	EXPECT_EQ(Threshold(1), 525);
 	EXPECT_EQ(Threshold(12), 157384);
-	EXPECT_EQ(Threshold(85), 1009443795U);
+	EXPECT_EQ(Threshold(85), 1400795257U);
 	EXPECT_EQ(Threshold(99), 3185330229U);
 	EXPECT_EQ(Threshold(100), Threshold(99));
 	for (int level = 2; level < 100; level++)

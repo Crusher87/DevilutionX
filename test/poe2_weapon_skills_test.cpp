@@ -11,6 +11,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
+#include "tables/playerdat.hpp"
 
 namespace devilution {
 namespace {
@@ -210,6 +211,7 @@ TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	EXPECT_EQ(WhirlingStaffOuterDamagePercent, 50);
 	Player &player = *MyPlayer;
 	player = {};
+	LoadPlayerDataFiles(); // the level cap comes from the experience table
 	player.setCharacterLevel(10);
 	player._pDexterity = 40;
 	EXPECT_EQ(LightningArrowDamage(player), (2 * 10) + (40 / 4));

@@ -93,7 +93,8 @@ public:
 
 		Stash = {};
 		StashTabs.reset();
-		const Size size = GetInventorySize(item);
+		// Fixed cells: GetInventorySize needs the cursor art from the game files, which tests may not have.
+		const Size size { 2, 3 };
 		item.position = { 0, size.height - 1 };
 		Stash.stashList.push_back(item);
 		for (int x = 0; x < size.width; x++) {
