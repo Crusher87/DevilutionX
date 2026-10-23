@@ -45,6 +45,8 @@ struct GemCurve {
 	bool sparkProjectiles;
 	/** Why it follows that gem. */
 	std::string_view note;
+	/** The POE2 gem whose damage steps it follows when they differ from its mana steps; nullptr: the same gem. */
+	const Poe2GemTable *damageSteps = nullptr;
 };
 
 /** @brief The curve of the gem that grants the skill. */

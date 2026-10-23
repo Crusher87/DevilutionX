@@ -34,6 +34,10 @@ constexpr int GroundSlamReach = 3;
 /** @brief Whirling Staff hits two rings around the player; the outer ring for this percent. */
 constexpr int WhirlingStaffReach = 2;
 constexpr int WhirlingStaffOuterDamagePercent = 50;
+/** @brief Leap Slam hits everything around where it lands for this percent of a weapon hit. */
+constexpr int LeapSlamDamagePercent = 80;
+/** @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster. */
+constexpr int FrostNovaShardDamagePercent = 25;
 /** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
 constexpr int FlurryBackhandDamagePercent = 150;
 /** @brief The backhand starts from the end of the first swing, so it skips this many more frames of the animation. */

@@ -134,7 +134,8 @@ GemCurve AttackCurve(WeaponSkill skill)
 GemCurve SpellCurve(SpellID spell)
 {
 	switch (spell) {
-	// Diablo already adds 12.5% damage a spell level to these.
+	// One spell damage rule (poe2/spell_damage.hpp): every damaging spell grows along Fireball's steps to 312%; Diablo's
+	// 12.5% a spell level is gone.
 	case SpellID::Flash:
 	case SpellID::Fireball:
 	case SpellID::Guardian:
@@ -144,25 +145,25 @@ GemCurve SpellCurve(SpellID spell)
 	case SpellID::RuneOfFire:
 	case SpellID::RuneOfNova:
 	case SpellID::RuneOfImmolation:
-		return { &Fireball, 100, ManaAt20, false, "Diablo's spell level already adds 12.5% a level; mana follows Fireball" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell; mana follows Fireball" };
 	case SpellID::Firebolt:
-		return { &Fireball, 250, ManaAt20, false, "Fireball's steps; Diablo adds only 1 damage a spell level" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell" };
 	case SpellID::ChargedBolt:
-		return { &Spark, 200, ManaAt20, false, "Spark's steps; Diablo already adds a bolt every 2 spell levels" };
+		return { &Spark, 100, ManaAt20, false, "no damage steps: Diablo adds a bolt every 2 spell levels" };
 	case SpellID::BloodStar:
-		return { &Fireball, 250, ManaAt20, false, "Fireball's steps; Diablo adds 3 damage a spell level" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell" };
 	case SpellID::Lightning:
 	case SpellID::ChainLightning:
 	case SpellID::HolyBolt:
 	case SpellID::LightningWall:
 	case SpellID::RuneOfLight:
-		return { &Spark, 312, ManaAt20, false, "Spark's steps; Diablo doesn't grow these with spell level" };
+		return { &Spark, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell; mana follows Spark", &Fireball };
 	case SpellID::FireWall:
 	case SpellID::RingOfFire:
 	case SpellID::FlameWave:
 	case SpellID::Inferno:
 	case SpellID::Apocalypse:
-		return { &Fireball, 312, ManaAt20, false, "Fireball's steps; Diablo doesn't grow these with spell level" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell" };
 	default:
 		return { &Fireball, 100, UtilitySpellManaAt20, false, "utility gem, mana follows Fireball" };
 	}
@@ -258,7 +259,8 @@ int GemCurvePercent(const std::array<int16_t, MaxGemLevel> &steps, int endAt20, 
 int GemDamagePercent(SkillSlot skill, int gemLevel)
 {
 	const GemCurve curve = GetGemCurve(skill);
-	return GemCurvePercent(curve.table->damage, curve.damageAt20, gemLevel);
+	const Poe2GemTable *steps = curve.damageSteps != nullptr ? curve.damageSteps : curve.table;
+	return GemCurvePercent(steps->damage, curve.damageAt20, gemLevel);
 }
 
 int GemManaPercent(SkillSlot skill, int gemLevel)

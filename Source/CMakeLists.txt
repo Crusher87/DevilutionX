@@ -33,6 +33,7 @@ set(libdevilutionx_SRCS
   poe2/item_search.cpp
   poe2/meta_gems.cpp
   poe2/skill_details.cpp
+  poe2/spell_damage.cpp
   poe2/crafting_items.cpp
   poe2/desecration.cpp
   poe2/economy.cpp

@@ -130,13 +130,13 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 	for (int level = 2; level <= MaxGemLevel; level++)
 		EXPECT_GT(GemDamagePercent(leapSlam, level), GemDamagePercent(leapSlam, level - 1)) << level;
 
-	// Spark gains projectiles at POE2 Spark's levels; Fireball relies on Diablo's own spell level growth.
+	// Spark gains projectiles at POE2 Spark's levels; Diablo's spells all grow along Fireball's steps to 312%.
 	const SkillSlot spark = SkillSlot::ForAttack(WeaponSkill::Spark);
 	EXPECT_EQ(GemExtraProjectiles(spark, 1), 0);
 	EXPECT_EQ(GemExtraProjectiles(spark, 2), 1);
 	EXPECT_EQ(GemExtraProjectiles(spark, 20), 5);
 	EXPECT_NE(GemStepText(spark, 6, 7).find("+1 projectile, big step"), std::string::npos) << GemStepText(spark, 6, 7);
-	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 100);
+	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 312);
 	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
 	EXPECT_EQ(BattleCryDamagePercent(1), 50);
 	EXPECT_EQ(BattleCryDamagePercent(20), 100);
