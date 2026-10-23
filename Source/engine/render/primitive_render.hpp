@@ -81,6 +81,11 @@ void UnsafeDrawBorder2px(const Surface &out, Rectangle rect, uint8_t color);
  */
 enum class UiCover : uint8_t {
 	None,
+	/**
+	 * @brief A see-through black box darkening the world: the effects show through it darkened as the world is (Curtis
+	 * 2026-10-23: under the quest dialog, a quest marker showed only where the world under it was black).
+	 */
+	Shaded,
 	Solid,
 };
 

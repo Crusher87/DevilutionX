@@ -38,6 +38,7 @@
 #include "poe2/vfx.hpp"
 #include "utils/display.h"
 #include "utils/log.hpp"
+#include "utils/palette_blending.hpp"
 #include "utils/sdl_wrap.h"
 #include "utils/static_vector.hpp"
 
@@ -92,7 +93,10 @@ bool WantsLayeredFrame()
 	return WorldSurface != nullptr && HaveScaledWorld && renderer != nullptr && (vfx::Enabled() || hd::Active());
 }
 
-/** @brief Fills the UI overlay: the UI's own pixels opaque, the ones still showing the world transparent. */
+/**
+ * @brief Fills the UI overlay: the UI's own pixels opaque, the ones still showing the world transparent, and the ones a
+ * see-through box darkens half black.
+ */
 bool UpdateUiOverlay()
 {
 	if (UiOverlay == nullptr || UiOverlayRenderer != renderer || UiOverlayWidth != gnScreenWidth || UiOverlayHeight != gnScreenHeight) {
@@ -131,6 +135,17 @@ bool UpdateUiOverlay()
 			if (uiLine[x] == baseLine[x] && (!covered || coverLine[x] == UiCover::None)) {
 				out[3] = 0;
 				continue;
+			}
+			// A see-through box's darkened world is black laid half over the world and the effects alike, once or twice.
+			if (covered && coverLine[x] == UiCover::Shaded) {
+				const uint8_t once = paletteTransparencyLookup[0][baseLine[x]];
+				if (uiLine[x] == baseLine[x] || uiLine[x] == once || uiLine[x] == paletteTransparencyLookup[0][once]) {
+					out[0] = 0;
+					out[1] = 0;
+					out[2] = 0;
+					out[3] = (uiLine[x] == once || uiLine[x] == baseLine[x]) ? 128 : 192;
+					continue;
+				}
 			}
 			const SDL_Color &color = colors[uiLine[x]];
 			out[0] = color.r;

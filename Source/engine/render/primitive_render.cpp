@@ -191,7 +191,7 @@ void DrawHalfTransparentRectTo(const Surface &out, int sx, int sy, int width, in
 	}
 
 	DrawHalfTransparentBlendedRectTo(out, sx, sy, width, height);
-	CoverUi(out, { { sx, sy }, { width, height } });
+	CoverUi(out, { { sx, sy }, { width, height } }, UiCover::Shaded);
 }
 
 void DrawHalfTransparentRectTo(const Surface &out, int sx, int sy, int width, int height, uint8_t color)
