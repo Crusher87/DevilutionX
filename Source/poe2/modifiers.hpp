@@ -70,7 +70,7 @@ enum class ModEffect : uint8_t {
 	ArmourPercent,
 	EvasionPercent,
 	EnergyShieldPercent,
-	/** Increased rarity of items found, from the Gold Amulet. */
+	/** Increased rarity of items found, from the Gold Amulet and the Magic Find prefix and suffix. */
 	ItemRarity,
 };
 

@@ -4742,7 +4742,7 @@ struct Poe2LootOrigin {
 LootBonus MapLootBonus()
 {
 	LootBonus bonus;
-	// Increased rarity from gear (the Gold Amulet) adds to the map's, as in POE2.
+	// Increased rarity from gear (the Gold Amulet, Magic Find affixes) adds to the map's, as in POE2.
 	const int gearRarity = MyPlayer != nullptr ? MyPlayer->poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ItemRarity)] : 0;
 	if (ActiveMapTier() == 0) {
 		bonus.rarity = std::max(100 + gearRarity, 0);
