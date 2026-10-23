@@ -455,6 +455,9 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
 	const hd::SubFrameScope subFrame(monster.animInfo.getFrameFraction());
+	// POE2 Mashup: a monster in front of a brazier or a portal goes over its effects.
+	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+		vfx::MarkFront(out, targetBufferPosition, sprite);
 
 	if (!IsTileLit(tilePosition)) {
 		// POE2 Mashup: the Maiden's Road, shapes that haven't noticed the hero are drawn dimmer.
@@ -618,7 +621,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
-	if (gbIsPoe2 && vfx::HeroInFrontOfPortal(tilePosition))
+	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
 
 	if (&player == PlayerUnderCursor)

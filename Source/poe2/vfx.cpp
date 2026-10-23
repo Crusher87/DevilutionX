@@ -163,6 +163,8 @@ struct Particle {
 	float alpha = 1;
 	Shape shape = Shape::Dot;
 	bool bounced = false;
+	/** @brief The object whose flame threw it, or -1; it goes under a hero or monster standing in front of the object. */
+	int16_t flame = -1;
 };
 
 /** @brief An expanding ring on the ground (shockwaves, novas) or a glowing disc (flashes, light pools). */
@@ -186,6 +188,8 @@ struct Ring {
 	bool easeOut = true;
 	/** @brief Fades as it spreads, gone by its full size, instead of only near the end of its life. */
 	bool fadeOut = false;
+	/** @brief The object whose flame gives this glow, or -1, as for a particle. */
+	int16_t flame = -1;
 };
 
 struct Bolt {
@@ -460,9 +464,16 @@ struct Emitter {
 	Rgb colour;
 	/** @brief Lava and water: half the patch's width, in world pixels. */
 	float spread = 0;
+	/** @brief An object's flame: the object, or -1. */
+	int16_t object = -1;
 };
 
 std::vector<Emitter> Emitters;
+/**
+ * @brief The flame objects a hero or monster was drawn in front of this frame, by object number: their flames go under
+ * those sprites (Curtis 2026-10-23: a brazier's fire was drawn over the hero standing in front of it).
+ */
+std::array<bool, MAXOBJECTS> FlameBehind {};
 /** @brief Real time the ambient effects have run, for their flicker and pulse. */
 float AmbientTime = 0;
 
@@ -1558,7 +1569,8 @@ Vec WeatherSize;
 void ScanFlames(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
-		const Object &object = Objects[ActiveObjects[i]];
+		const int id = ActiveObjects[i];
+		const Object &object = Objects[id];
 		if (!IsFlameObject(object) || !object._oAnimData || object._oAnimFrame == 0)
 			continue;
 		const ClxSprite sprite = ObjectSprite(object);
@@ -1584,6 +1596,7 @@ void ScanFlames(const View &view)
 			glow.width = 0;
 			glow.disc = true;
 			glow.ground = false;
+			glow.flame = static_cast<int16_t>(id);
 			// A wide warm halo, then a hot core.
 			glow.r0 = glow.r1 = (8 + 3.F * s) * (0.95F + 0.05F * flicker);
 			glow.colour = { 255, 130, 45 };
@@ -1593,7 +1606,7 @@ void ScanFlames(const View &view)
 			glow.colour = { 255, 210, 140 };
 			glow.alpha = 0.4F * flicker;
 			FrameGlows.push_back(glow);
-			Emitters.push_back({ pos, s, Ambient::Flame, { 255, 150, 50 } });
+			Emitters.push_back({ pos, s, Ambient::Flame, { 255, 150, 50 }, 0, static_cast<int16_t>(id) });
 		}
 	}
 }
@@ -2025,6 +2038,7 @@ void EmitAmbient(float ms)
 				p.c0 = { 255, 210, 120 };
 				p.c1 = { 200, 60, 10 };
 				p.alpha = 0.9F;
+				p.flame = emitter.object;
 				AddParticle(p);
 			}
 			for (int i = Occurrences(0.008F * s * s, ms); i > 0; i--) {
@@ -2039,6 +2053,7 @@ void EmitAmbient(float ms)
 				p.c1 = { 22, 20, 19 };
 				p.alpha = 0.13F;
 				p.shape = Shape::Puff;
+				p.flame = emitter.object;
 				AddParticle(p);
 			}
 			break;
@@ -2298,7 +2313,7 @@ SDL_Surface *FloorSurface = nullptr;
 /** @brief Whether FloorSurface holds the floor of the frame about to be shown. */
 bool FloorFresh = false;
 
-/** @brief Solid where a hero standing in front of a portal was drawn this frame, the size of the world. */
+/** @brief Solid where a hero or monster standing in front of a portal or a flame was drawn this frame, the size of the world. */
 SDL_Surface *FrontSurface = nullptr;
 /** @brief Where FrontSurface starts in the surface the world is drawn on. */
 Point FrontOrigin;
@@ -2332,7 +2347,7 @@ Surface FloorCopy()
 	return FloorSurface != nullptr ? Surface(FloorSurface) : Surface();
 }
 
-bool HeroInFrontOfPortal(Point tile)
+bool InFrontOfEffects(Point tile)
 {
 	if (!FrontFresh)
 		return false;
@@ -2340,18 +2355,29 @@ bool HeroInFrontOfPortal(Point tile)
 	const auto inFront = [&](const PortalFx &portal) {
 		return tile.WalkingDistance(portal.tile) <= 2 && tile.x + tile.y >= portal.tile.x + portal.tile.y;
 	};
-	for (const auto &[missile, portal] : Portals) {
-		if (inFront(portal))
-			return true;
+	bool front = std::any_of(ClosingPortals.begin(), ClosingPortals.end(), inFront);
+	for (const auto &[missile, portal] : Portals)
+		front = front || inFront(portal);
+	// A flame's light and embers rise well above its object, so they reach a row further; every flame it stands in
+	// front of is noted, for the flames to go under it.
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const int id = ActiveObjects[i];
+		const Object &object = Objects[id];
+		if (!IsFlameObject(object) || tile.WalkingDistance(object.position) > 3 || tile.x + tile.y <= object.position.x + object.position.y)
+			continue;
+		FlameBehind[id] = true;
+		front = true;
 	}
-	return std::any_of(ClosingPortals.begin(), ClosingPortals.end(), inFront);
+	return front;
 }
 
 void BeginFront(const Surface &world)
 {
 	FrontFresh = false;
 	FrontUsed = false;
-	if (!Enabled() || (Portals.empty() && ClosingPortals.empty()))
+	FlameBehind.fill(false);
+	const bool flames = std::any_of(ActiveObjects, ActiveObjects + ActiveObjectCount, [](int id) { return IsFlameObject(Objects[id]); });
+	if (!Enabled() || (Portals.empty() && ClosingPortals.empty() && !flames))
 		return;
 	if (FrontSurface == nullptr || FrontSurface->w != world.w() || FrontSurface->h != world.h()) {
 		if (FrontSurface != nullptr)
@@ -2406,7 +2432,7 @@ Surface FloorCopy()
 	return {};
 }
 
-bool HeroInFrontOfPortal(Point)
+bool InFrontOfEffects(Point)
 {
 	return false;
 }
@@ -3653,6 +3679,12 @@ float EaseOut(float t)
 	return 1 - (1 - t) * (1 - t) * (1 - t);
 }
 
+/** @brief Whether an object's flame has a hero or monster in front of it this frame, so it goes under them. */
+bool FlameIsBehind(int16_t flame)
+{
+	return flame >= 0 && FrontFresh && FrontUsed && FlameBehind[flame];
+}
+
 void DrawRings()
 {
 	for (const Ring &ring : Rings) {
@@ -3679,8 +3711,10 @@ void DrawRings()
 				SoftRing(batch, ring.pos, radius, ring.width * 4, ring.colour, alpha * 0.25F, ring.jitter, ring.seed);
 		}
 	}
-	for (const Ring &glow : FrameGlows)
-		SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
+	for (const Ring &glow : FrameGlows) {
+		if (!FlameIsBehind(glow.flame))
+			SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
+	}
 }
 
 /**
@@ -3849,9 +3883,14 @@ void DrawComets()
 	}
 }
 
-void DrawParticles()
+/** @brief The particles, or with @p behind only those of the flames with a hero or monster in front of them. */
+void DrawParticles(bool behind = false)
 {
+	// Behind, the smoke goes with the portals' own dark shapes, under the sprites drawn back over them.
+	Batch &dark = behind ? Standing : Dark;
 	for (const Particle &p : Particles) {
+		if (FlameIsBehind(p.flame) != behind)
+			continue;
 		const float t = p.age / p.life;
 		const float size = p.size0 + (p.size1 - p.size0) * t;
 		const Rgb colour = Mix(p.c0, p.c1, t);
@@ -3883,16 +3922,16 @@ void DrawParticles()
 			const Vec c = ToScreen(at);
 			const float h = size * CameraScale;
 			const float alpha = p.alpha * std::min(1.F, (1 - t) * 3);
-			const int a = Dark.add(c + Vec { -h, -h }, colour, alpha);
-			const int b = Dark.add(c + Vec { h, -h * 0.6F }, colour, alpha);
-			const int d = Dark.add(c + Vec { h * 0.7F, h }, colour, alpha);
-			const int e = Dark.add(c + Vec { -h * 0.8F, h * 0.8F }, colour, alpha);
-			Dark.tri(a, b, d);
-			Dark.tri(a, d, e);
+			const int a = dark.add(c + Vec { -h, -h }, colour, alpha);
+			const int b = dark.add(c + Vec { h, -h * 0.6F }, colour, alpha);
+			const int d = dark.add(c + Vec { h * 0.7F, h }, colour, alpha);
+			const int e = dark.add(c + Vec { -h * 0.8F, h * 0.8F }, colour, alpha);
+			dark.tri(a, b, d);
+			dark.tri(a, d, e);
 			break;
 		}
 		case Shape::Puff:
-			SoftDisc(Dark, at, size, colour, p.alpha * std::sin(Pi * t), false, 0);
+			SoftDisc(dark, at, size, colour, p.alpha * std::sin(Pi * t), false, 0);
 			break;
 		}
 	}
@@ -5872,8 +5911,9 @@ void SubmitGlow(SDL_Renderer *renderer, Batch &batch)
 }
 
 /**
- * @brief Draws the heroes standing in front of a portal again, over it: their pixels as the world shows them, wherever
- * their sprites were drawn. Only around the portals, as nothing of them is drawn anywhere else.
+ * @brief Draws the heroes and monsters standing in front of a portal or a flame again, over it: their pixels as the
+ * world shows them, wherever their sprites were drawn. Only around the portals and those flames, as nothing of them is
+ * drawn anywhere else.
  */
 void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 {
@@ -5882,47 +5922,57 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	const Surface world = WorldBackBuffer();
 	if (world.w() != FrontSurface->w || world.h() != FrontSurface->h || world.w() != worldSize.width || world.h() != worldSize.height)
 		return;
-	float x0 = static_cast<float>(worldSize.width);
-	float y0 = static_cast<float>(worldSize.height);
-	float x1 = 0;
-	float y1 = 0;
-	const auto around = [&](const PortalFx &portal) {
-		const Vec at = ToScreen(portal.pos);
-		x0 = std::min(x0, at.x - 120 * CameraScale);
-		x1 = std::max(x1, at.x + 120 * CameraScale);
-		y0 = std::min(y0, at.y - 230 * CameraScale);
-		y1 = std::max(y1, at.y + 80 * CameraScale);
+	// Each area by itself: one box round two heroes at either side of the screen would cover most of it.
+	const auto around = [&](Vec min, Vec max, float side, float up, float down) {
+		const Vec from = ToScreen(min);
+		const Vec to = ToScreen(max);
+		SDL_Rect rect;
+		rect.x = std::clamp(static_cast<int>(from.x - side * CameraScale), 0, worldSize.width);
+		rect.y = std::clamp(static_cast<int>(from.y - up * CameraScale), 0, worldSize.height);
+		rect.w = std::clamp(static_cast<int>(to.x + side * CameraScale) + 1, 0, worldSize.width) - rect.x;
+		rect.h = std::clamp(static_cast<int>(to.y + down * CameraScale) + 1, 0, worldSize.height) - rect.y;
+		if (rect.w <= 0 || rect.h <= 0)
+			return;
+		void *pixels;
+		int pitch;
+		if (SDL_LockTexture(Layer.front, &rect, &pixels, &pitch) != 0)
+			return;
+		for (int y = 0; y < rect.h; y++) {
+			const uint8_t *solid = static_cast<const uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FrontSurface->pitch + rect.x;
+			const uint8_t *shown = world.at(rect.x, rect.y + y);
+			uint8_t *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
+			for (int x = 0; x < rect.w; x++, out += 4) {
+				const SDL_Color &c = system_palette[shown[x]];
+				out[0] = c.r;
+				out[1] = c.g;
+				out[2] = c.b;
+				out[3] = solid[x] != 0 ? 255 : 0;
+			}
+		}
+		SDL_UnlockTexture(Layer.front);
+		const SDL_FRect dest { static_cast<float>(rect.x) * toLogical, static_cast<float>(rect.y) * toLogical, static_cast<float>(rect.w) * toLogical, static_cast<float>(rect.h) * toLogical };
+		SDL_RenderCopyF(renderer, Layer.front, &rect, &dest);
 	};
 	for (const auto &[missile, portal] : Portals)
-		around(portal);
+		around(portal.pos, portal.pos, 120, 230, 80);
 	for (const PortalFx &portal : ClosingPortals)
-		around(portal);
-	SDL_Rect rect;
-	rect.x = std::clamp(static_cast<int>(x0), 0, worldSize.width);
-	rect.y = std::clamp(static_cast<int>(y0), 0, worldSize.height);
-	rect.w = std::clamp(static_cast<int>(x1) + 1, 0, worldSize.width) - rect.x;
-	rect.h = std::clamp(static_cast<int>(y1) + 1, 0, worldSize.height) - rect.y;
-	if (rect.w <= 0 || rect.h <= 0)
-		return;
-	void *pixels;
-	int pitch;
-	if (SDL_LockTexture(Layer.front, &rect, &pixels, &pitch) != 0)
-		return;
-	for (int y = 0; y < rect.h; y++) {
-		const uint8_t *solid = static_cast<const uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FrontSurface->pitch + rect.x;
-		const uint8_t *shown = world.at(rect.x, rect.y + y);
-		uint8_t *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
-		for (int x = 0; x < rect.w; x++, out += 4) {
-			const SDL_Color &c = system_palette[shown[x]];
-			out[0] = c.r;
-			out[1] = c.g;
-			out[2] = c.b;
-			out[3] = solid[x] != 0 ? 255 : 0;
+		around(portal.pos, portal.pos, 120, 230, 80);
+	// Round each object's flames: their glow and bloom, and the embers and smoke rising off them.
+	std::array<bool, MAXOBJECTS> done {};
+	for (const Ring &glow : FrameGlows) {
+		if (!FlameIsBehind(glow.flame) || done[glow.flame])
+			continue;
+		done[glow.flame] = true;
+		Vec min = glow.pos;
+		Vec max = glow.pos;
+		for (const Ring &other : FrameGlows) {
+			if (other.flame != glow.flame)
+				continue;
+			min = { std::min(min.x, other.pos.x), std::min(min.y, other.pos.y) };
+			max = { std::max(max.x, other.pos.x), std::max(max.y, other.pos.y) };
 		}
+		around(min, max, 90, 170, 80);
 	}
-	SDL_UnlockTexture(Layer.front);
-	const SDL_FRect to { static_cast<float>(rect.x) * toLogical, static_cast<float>(rect.y) * toLogical, static_cast<float>(rect.w) * toLogical, static_cast<float>(rect.h) * toLogical };
-	SDL_RenderCopyF(renderer, Layer.front, &rect, &to);
 }
 
 } // namespace
@@ -5942,8 +5992,10 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0)
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+		FrontFresh = false;
 		return;
+	}
 
 	Glowing.clear();
 	Dark.clear();
@@ -5951,9 +6003,15 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	Ground.clear();
 	GroundDark.clear();
 	// The portals' standing shapes go in batches of their own, drawn first, so a hero in front of one can go over it.
+	// So do the flames of the torches and braziers a hero or monster stands in front of.
 	PortalStanding.clear();
 	PortalGlowing.clear();
 	DrawPortals();
+	for (const Ring &glow : FrameGlows) {
+		if (FlameIsBehind(glow.flame))
+			SoftDisc(Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, false);
+	}
+	DrawParticles(true);
 	std::swap(Standing, PortalStanding);
 	std::swap(Glowing, PortalGlowing);
 	DrawHalos();
