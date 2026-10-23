@@ -946,7 +946,7 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		// Shards burst out all around and melt away after a few tiles.
 		for (int i = 0; i < FrostNovaShards; i++) {
 			constexpr int Ring[16][2] = { { 4, 0 }, { 4, 2 }, { 4, 4 }, { 2, 4 }, { 0, 4 }, { -2, 4 }, { -4, 4 }, { -4, 2 }, { -4, 0 }, { -4, -2 }, { -4, -4 }, { -2, -4 }, { 0, -4 }, { 2, -4 }, { 4, -4 }, { 4, -2 } };
-			Missile *shard = FireIceShard(player, skill, player.position.tile, player.position.tile + Displacement { Ring[i][0], Ring[i][1] }, 100);
+			Missile *shard = FireIceShard(player, skill, player.position.tile, player.position.tile + Displacement { Ring[i][0], Ring[i][1] }, FrostNovaShardDamagePercent);
 			if (shard != nullptr)
 				shard->duration = FrostNovaShardTicks;
 		}

@@ -196,7 +196,15 @@ struct TableSkillData {
 	int16_t curveEnd;
 };
 
+/** @brief Freezing Arrow's and Explosive Bolt's landing bursts hit for this percent of a base hit, on top of the arrow. */
+constexpr int FreezingArrowBurstPercent = 40;
+constexpr int ExplosiveBoltBurstPercent = 45;
+/** @brief The bolts a Burst skill sprays out (Fist of the Heavens) hit for this percent of the spell base each. */
+constexpr int BurstBoltDamagePercent = 50;
+
 std::span<const TableSkillData> TableSkills();
+/** @brief A projectile's landing burst in percent of a base hit: Freezing Arrow's and Explosive Bolt's set ones, else two thirds of the skill's percent. */
+[[nodiscard]] int TableLandingBurstPercent(const TableSkillData &data);
 /** @brief The table entry of a skill, or nullptr if it isn't a table skill. */
 const TableSkillData *FindTableSkill(WeaponSkill skill);
 /** @brief The table skill an item grants, from its name ("Zeal Gem"), or nullptr. */

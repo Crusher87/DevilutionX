@@ -164,8 +164,13 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		hit.effect = std::format("Enemies take +{:d}% physical damage", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (level - 1)));
 		return hit;
 	case WeaponSkill::IceBolt:
-	case WeaponSkill::FrostNova:
 		AddSpellBase(hit, player, level, DamageType::Magic, percent);
+		return hit;
+	case WeaponSkill::FrostNova:
+		AddSpellBase(hit, player, level, DamageType::Magic, Scale(percent, FrostNovaShardDamagePercent));
+		return hit;
+	case WeaponSkill::LeapSlam:
+		AddWeaponHit(hit, player, skill, level, Scale(percent, LeapSlamDamagePercent));
 		return hit;
 	case WeaponSkill::EmberFusillade:
 		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.

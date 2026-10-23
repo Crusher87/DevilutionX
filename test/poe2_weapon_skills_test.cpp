@@ -198,6 +198,22 @@ TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
 	EXPECT_EQ(ticksToHit(/*quickStrike=*/true), DashStrikeWindupTicks);
 }
 
+TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
+{
+	EXPECT_EQ(LeapSlamDamagePercent, 80);
+	// About two of Frost Nova's shards reach a monster: 2 x 25 = 50.
+	EXPECT_EQ(FrostNovaShardDamagePercent, 25);
+	// Kept at their old values until the shortfall fix (no Act 1 clear otherwise): Whirling Staff's 75 and 50, and the
+	// Lightning Arrow burst with its character level term.
+	EXPECT_EQ(AreaSkillSideDamagePercent, 75);
+	EXPECT_EQ(WhirlingStaffOuterDamagePercent, 50);
+	Player &player = *MyPlayer;
+	player = {};
+	player.setCharacterLevel(10);
+	player._pDexterity = 40;
+	EXPECT_EQ(LightningArrowDamage(player), (2 * 10) + (40 / 4));
+}
+
 TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)
 {
 	// Facing south (down the screen), the cone covers the tiles ahead and not the ones behind or beside.
