@@ -40,6 +40,7 @@
 #include "monster.h"
 #include "options.h"
 #include "poe2/endgame.hpp"
+#include "poe2/area_levels.hpp"
 #include "poe2/experience.hpp"
 #include "poe2/hd.hpp"
 #include "qol/stash.h"
@@ -2903,7 +2904,7 @@ void OperateShrineSparkling(Player &player, Point spawnPosition)
 		return;
 
 	// POE2 Mashup: ten white kills of the floor's monster level on the levels-100 table (until the shrine rework).
-	player.addExperience(gbIsPoe2 ? Poe2ShrineExperience(CurrentFloorMonsterLevel()) : static_cast<uint32_t>(1000 * currlevel));
+	player.addExperience(gbIsPoe2 ? Poe2ShrineExperience(CurrentAreaLevel() > 0 ? CurrentAreaLevel() : CurrentFloorMonsterLevel()) : static_cast<uint32_t>(1000 * currlevel));
 
 	AddMissile(
 	    spawnPosition,

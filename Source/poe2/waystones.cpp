@@ -435,12 +435,14 @@ void ChooseMapBoss()
 	const int64_t lifePercent = (100 + MapBossLifePercent + (ActiveMapTier() * MapBossLifePercentPerTier)) * bonus / 100;
 	boss.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(boss.maxHitPoints.raw()) * lifePercent / 100, INT32_MAX / 2)));
 	boss.hitPoints = boss.maxHitPoints;
-	const int damagePercent = (100 + MapBossDamagePercent) * static_cast<int>(std::min<int64_t>(bonus, 200)) / 100;
-	const auto scale = [damagePercent](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * damagePercent / 100, 255)); };
-	scale(boss.minDamage);
-	scale(boss.maxDamage);
-	scale(boss.minDamageSpecial);
-	scale(boss.maxDamageSpecial);
+	// Its damage scales each hit (MapBossHitPercent), so the bytes stay its data and nothing caps at 255.
+}
+
+int MapBossHitPercent(const Monster &monster)
+{
+	if (!IsMapBoss(monster))
+		return 100;
+	return (100 + MapBossDamagePercent) * std::min(MapBossLifePercentBonus(), 200) / 100;
 }
 
 bool IsMapBoss(const Monster &monster)

@@ -88,6 +88,7 @@
 #include "poe2/floor_packs.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/profane_roads.hpp"
@@ -141,12 +142,6 @@ int MonsterKillCounts[NUM_MAX_MTYPES];
 bool sgbSaveSoundOn;
 
 namespace {
-
-constexpr int NightmareToHitBonus = 85;
-constexpr int HellToHitBonus = 120;
-
-constexpr int NightmareAcBonus = 50;
-constexpr int HellAcBonus = 80;
 
 /** @brief Reserved some entries in @Monster for golems. For vanilla compatibility, this must remain 4. */
 constexpr int ReservedMonsterSlotsForGolems = 4;
@@ -277,7 +272,13 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 		monster.mode = MonsterMode::SpecialMeleeAttack;
 	}
 
-	if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+	// POE2 Mashup: life comes from the monster level tables at the floor's area level, which carries the difficulty.
+	// The roll above keeps its spread (and its place in the random sequence); the damage bytes stay the data and each
+	// hit is scaled (Poe2MonsterDamagePercent). Hell keeps its immunities.
+	if (ApplyPoe2MonsterLife(monster, maxhp)) {
+		if (sgGameInitInfo.nDifficulty == DIFF_HELL)
+			monster.resistance = monster.data().resistanceHell;
+	} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 		monster.maxHitPoints = 3 * monster.maxHitPoints;
 		if (gbIsHellfire)
 			monster.maxHitPoints += Fixed26_6::fromInt(gbIsMultiplayer ? 100 : 50);
@@ -1180,7 +1181,8 @@ void StartHeal(Monster &monster)
 	monster.animInfo.currentFrame = monster.type().getAnimData(MonsterGraphic::Special).frames - 1;
 	monster.flags |= MFLAG_LOCK_ANIMATION;
 	monster.mode = MonsterMode::Heal;
-	monster.var1 = (monster.maxHitPoints / (16 * (GenerateRnd(5) + 4))).raw();
+	// POE2 Mashup: var1 is 16 bits, and table life can pass 32,767.
+	monster.var1 = static_cast<int16_t>(std::min<int32_t>((monster.maxHitPoints / (16 * (GenerateRnd(5) + 4))).raw(), INT16_MAX));
 }
 
 void SyncLightPosition(Monster &monster)
@@ -1248,6 +1250,8 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 		return;
 
 	int dam = RandomIntBetween(mind, maxd) << 6;
+	// POE2 Mashup: a monster's hit is scaled to its level's table (a berserk one's too; not the player's minions).
+	dam = ScaleMonsterHit(attacker, dam);
 	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
 	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
 		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
@@ -1351,16 +1355,22 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	const bool firstBlow = TakeFirstBlow(monster, player);
 	if (firstBlow)
 		ac = 0;
-	hit += 2 * (monster.level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel())
-	    + 30
-	    - ac;
-	const int minhit = GetMinHit();
-	hit = std::max(hit, minhit);
+	if (UsesPoe2MonsterAccuracy(monster)) {
+		// POE2 Mashup: the monster's accuracy at its level against the hero's evasion; no level gap and no floor but 5%.
+		// The area level carries the difficulty, so Nightmare/Hell's to-hit bonus comes off (plan v2 step 4).
+		hit = MonsterHitChance(monster, hit - MonsterDifficultyToHitBonus(sgGameInitInfo.nDifficulty), ac);
+	} else {
+		hit += 2 * (monster.level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel())
+		    + 30
+		    - ac;
+		const int minhit = GetMinHit();
+		hit = std::max(hit, minhit);
+	}
 	int blkper = 100;
 	if ((player._pmode == PM_STAND || player._pmode == PM_ATTACK) && player._pBlockFlag) {
 		blkper = GenerateRnd(100);
 	}
-	int blk = player.GetBlockChance() - (monster.level(sgGameInitInfo.nDifficulty) * 2);
+	int blk = BlockChanceAgainstMonster(player, &monster, true);
 	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
 	blk = std::clamp(blk, 0, player.GetMaxBlockChance(gbIsPoe2));
 	if (hper >= hit) {
@@ -1372,7 +1382,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		const Direction dir = GetDirection(player.position.tile, monster.position.tile);
 		StartPlrBlock(player, dir);
 		if (&player == MyPlayer && player.wReflections > 0) {
-			Fixed26_6 dam = Fixed26_6::fromRaw(GenerateRnd(((maxDam - minDam) << 6) + 1) + (minDam << 6));
+			Fixed26_6 dam = Fixed26_6::fromRaw(ScaleMonsterHit(monster, GenerateRnd(((maxDam - minDam) << 6) + 1) + (minDam << 6)));
 			dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
 			CheckReflect(monster, player, dam);
 		}
@@ -1383,6 +1393,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 
 	// New method fixes a bug which caused the maximum possible damage value to be 63/64ths too low.
 	Fixed26_6 dam = Fixed26_6::fromRaw(RandomIntBetween(minDam << 6, maxDam << 6));
+	// POE2 Mashup: the hit is scaled to the monster level table; the bytes are the monster's data.
+	dam = Fixed26_6::fromRaw(ScaleMonsterHit(monster, dam.raw()));
 	dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
 	// POE2 Mashup: deep damage logging follows the hit step by step.
 	if (&player == MyPlayer) {
@@ -1424,8 +1436,12 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 			M_StartHit(monster, player, mdam);
 	}
 
-	if ((monster.flags & MFLAG_NOLIFESTEAL) == 0 && monster.type().type == MT_SKING && gbIsMultiplayer)
+	if ((monster.flags & MFLAG_NOLIFESTEAL) == 0 && monster.type().type == MT_SKING && gbIsMultiplayer) {
 		monster.hitPoints += dam;
+		// POE2 Mashup: his hits are table-sized, so he heals only up to his life.
+		if (gbIsPoe2)
+			monster.hitPoints = std::min(monster.hitPoints, monster.maxHitPoints);
+	}
 	// POE2 Mashup: Cast when Hit and the like.
 	if (gbIsPoe2 && &player == MyPlayer && !player.hasNoLife())
 		OnPlayerHitBySupportedMonster(player, monster);
@@ -1506,7 +1522,8 @@ void FireMinionShot(const Monster &minion, MissileID missileType, int damage)
 /** @brief POE2 Mashup: a skeleton's shot, in percent of its blow, with its owner's uniques and the gem's supports. */
 int MinionShotDamage(const Monster &minion, int percent)
 {
-	int damage = RandomIntBetween(minion.minDamage, minion.maxDamage) * percent / 100;
+	// Its blow on the minion tables (plan v2 step 11), then the shot's share.
+	int damage = ScaleMonsterHit(minion, RandomIntBetween(minion.minDamage, minion.maxDamage)) * percent / 100;
 	if (static_cast<size_t>(minion.goalVar3) < Players.size()) {
 		const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
 		damage = damage * UniqueMinionDamagePercent(owner, minion.hitPoints.raw() * 2 < minion.maxHitPoints.raw()) / 100;
@@ -3494,10 +3511,19 @@ void InitGolem(devilution::Monster &monster, uint8_t golemOwnerPlayerId, int16_t
 	monster.flags |= MFLAG_GOLEM;
 	monster.goalVar3 = static_cast<int8_t>(golemOwnerPlayerId);
 	const Player &player = Players[golemOwnerPlayerId];
-	monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3) * UniqueMinionLifePercent(player) / 100);
+	if (gbIsPoe2 && HasMonsterLevelTable()) {
+		// POE2 Mashup: a minion at its gem's minion level: a white's life there (plan v2 step 11). Its hits are scaled
+		// as they land (ScaleMonsterHit), so the bytes below stay the gem's.
+		const int level = MinionLevelForGemLevel(golemSpellLevel);
+		monster.maxHitPoints = Fixed26_6::fromRaw(MinionLifeRaw(level, UniqueMinionLifePercent(player)));
+		monster.golemToHit = std::min(5 * (golemSpellLevel + 8) + 2 * level, 255);
+	} else {
+		monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3) * UniqueMinionLifePercent(player) / 100);
+		// A save keeps one byte of it.
+		monster.golemToHit = std::min(5 * (golemSpellLevel + 8) + 2 * player.getCharacterLevel(), 255);
+	}
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 25;
-	monster.golemToHit = 5 * (golemSpellLevel + 8) + 2 * player.getCharacterLevel();
 	monster.minDamage = 2 * (golemSpellLevel + 4);
 	monster.maxDamage = 2 * (golemSpellLevel + 8);
 	UpdateEnemy(monster);
@@ -3518,13 +3544,19 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	// The ones that stay back and shoot are frailer than the warriors, the Brutes tougher.
 	const MinionGemData *gem = FindMinionGemByType(monster.type().type);
 	const int lifePercent = gem != nullptr ? gem->lifePercent : 100;
-	monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
+	if (HasMonsterLevelTable()) {
+		// On the monster tables: a white's life at the minion's level (plan v2 step 11).
+		monster.maxHitPoints = Fixed26_6::fromRaw(MinionLifeRaw(level, UniqueMinionLifePercent(player) * lifePercent / 100));
+	} else {
+		monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
+	}
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
-	monster.golemToHit = 40 + (2 * level) + (2 * gemLevel);
-	const int damagePercent = MinionDamagePercent(player);
-	monster.minDamage = static_cast<uint8_t>(std::min((2 + (level / 3) + gemLevel) * damagePercent / 100, 255));
-	monster.maxDamage = static_cast<uint8_t>(std::min((5 + (level / 2) + (2 * gemLevel)) * damagePercent / 100, 255));
+	// A save keeps one byte of it.
+	monster.golemToHit = std::min(40 + (2 * level) + (2 * gemLevel), 255);
+	// The gem's blow; its level's table and the owner's minion damage scale each hit (ScaleMonsterHit), past 255.
+	monster.minDamage = static_cast<uint8_t>(std::min(2 + (level / 3) + gemLevel, 255));
+	monster.maxDamage = static_cast<uint8_t>(std::min(5 + (level / 2) + (2 * gemLevel), 255));
 	UpdateEnemy(monster);
 }
 
@@ -3652,7 +3684,12 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 		monster.goal = MonsterGoal::Inquiring;
 	}
 
-	if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+	// POE2 Mashup: a unique has a white's life at the floor's area level times its multiplier (monster_bosses.tsv);
+	// the area level carries the difficulty, and its damage bytes stay its data.
+	const bool onPoe2Tables = ApplyPoe2MonsterLife(monster, uniqueMonsterData.mmaxhp);
+	if (onPoe2Tables) {
+		// Nothing for the difficulty.
+	} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 		monster.maxHitPoints = 3 * monster.maxHitPoints;
 		if (gbIsHellfire)
 			monster.maxHitPoints += Fixed26_6::fromInt(gbIsMultiplayer ? 100 : 50);
@@ -3682,7 +3719,9 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 	if (uniqueMonsterData.customArmorClass != 0) {
 		monster.armorClass = uniqueMonsterData.customArmorClass;
 
-		if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+		if (onPoe2Tables) {
+			// The area level carries the difficulty.
+		} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 			monster.armorClass += NightmareAcBonus;
 		} else if (sgGameInitInfo.nDifficulty == DIFF_HELL) {
 			monster.armorClass += HellAcBonus;
@@ -5066,7 +5105,11 @@ void PrintMonstHistory(int mt)
 	if (MonsterKillCounts[mt] >= 30) {
 		int minHP = MonstersData[mt].hitPointsMinimum;
 		int maxHP = MonstersData[mt].hitPointsMaximum;
-		if (!gbIsMultiplayer) {
+		// POE2 Mashup: the monster level table's life at this floor's area level.
+		const int areaLevel = gbIsPoe2 && HasMonsterLevelTable() ? CurrentAreaLevel() : 0;
+		if (areaLevel > 0) {
+			Poe2TypeLifeRange(static_cast<_monster_id>(mt), areaLevel, minHP, maxHP);
+		} else if (!gbIsMultiplayer) {
 			minHP /= 2;
 			maxHP /= 2;
 		}
@@ -5079,7 +5122,9 @@ void PrintMonstHistory(int mt)
 			hpBonusNightmare = (!gbIsMultiplayer ? 50 : 100);
 			hpBonusHell = (!gbIsMultiplayer ? 100 : 200);
 		}
-		if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+		if (areaLevel > 0) {
+			// The area level carries the difficulty.
+		} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 			minHP = 3 * minHP + hpBonusNightmare;
 			maxHP = 3 * maxHP + hpBonusNightmare;
 		} else if (sgGameInitInfo.nDifficulty == DIFF_HELL) {
@@ -5504,10 +5549,11 @@ Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id ty
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = stats.armorClass;
 	monster.resistance = stats.resistance;
-	monster.golemToHit = 40 + (2 * player.getCharacterLevel());
-	const int damagePercent = MinionDamagePercent(player);
-	monster.minDamage = static_cast<uint8_t>(std::min(stats.minDamage * damagePercent / 100, 255));
-	monster.maxDamage = static_cast<uint8_t>(std::min(std::max(stats.maxDamage, stats.minDamage) * damagePercent / 100, 255));
+	monster.golemToHit = std::min(40 + (2 * player.getCharacterLevel()), 255);
+	// The dead monster's own damage, against its type's ref: the minion's level's table and the owner's minion damage
+	// scale each hit (ScaleMonsterHit, plan v2 step 11).
+	monster.minDamage = stats.minDamage;
+	monster.maxDamage = std::max(stats.maxDamage, stats.minDamage);
 	UpdateEnemy(monster);
 	return &monster;
 }

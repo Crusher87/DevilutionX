@@ -68,16 +68,10 @@ void ApplyRarityStats(Monster &monster, const MonsterAffixes &affixes)
 	int lifePercent = 100 + (affixes.rarity == MonsterRarity::Rare ? RareMonsterLifePercent : MagicMonsterLifePercent);
 	if (affixes.has(MonsterMod::ExtraLife))
 		lifePercent += ExtraLifePercent;
-	monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100));
+	monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100, INT32_MAX / 4)));
 	monster.hitPoints = monster.maxHitPoints;
 
-	if (affixes.has(MonsterMod::HardHitting)) {
-		const auto boost = [](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * (100 + HardHittingPercent) / 100, 255)); };
-		boost(monster.minDamage);
-		boost(monster.maxDamage);
-		boost(monster.minDamageSpecial);
-		boost(monster.maxDamageSpecial);
-	}
+	// MonsterMod::HardHitting scales each hit (MonsterModsDamagePercent), so the damage bytes stay the monster's data.
 	// MonsterMod::Resistant adds to the monster's resistances where they are worked out (monster_resistance.cpp).
 }
 
@@ -143,16 +137,25 @@ void ApplyMonsterRarity(Monster &monster)
 		lifePercent = lifePercent * map[MapAxis::Effectiveness] / 100;
 		monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100, INT32_MAX / 4)));
 		monster.hitPoints = monster.maxHitPoints;
-		const int damagePercent = (100 + (mapTier * MapDamagePercentPerTier)) * (100 + map[MapDanger::MonsterDamage]) / 100;
 		const int defencePercent = 100 + map[MapDanger::MonsterArmour] + map[MapDanger::MonsterEvasion];
 		monster.armorClass = static_cast<uint8_t>(std::min(monster.armorClass * defencePercent / 100, 255));
-		const auto scale = [damagePercent](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * damagePercent / 100, 255)); };
-		scale(monster.minDamage);
-		scale(monster.maxDamage);
-		scale(monster.minDamageSpecial);
-		scale(monster.maxDamageSpecial);
+		// The map's damage scales each hit (MonsterModsDamagePercent), past the old 255 cap of the bytes.
 	}
 	ApplyRarityStats(monster, GetMonsterAffixes(monster));
+}
+
+int MonsterModsDamagePercent(const Monster &monster)
+{
+	if (!gbIsPoe2)
+		return 100;
+	int64_t percent = 100;
+	if (const int mapTier = ActiveMapTier(); mapTier > 0 && CanTakeMapScaling(monster)) {
+		percent = percent * (100 + (mapTier * MapDamagePercentPerTier)) / 100;
+		percent = percent * (100 + ActiveMapEffects()[MapDanger::MonsterDamage]) / 100;
+	}
+	if (GetMonsterAffixes(monster).has(MonsterMod::HardHitting))
+		percent = percent * (100 + HardHittingPercent) / 100;
+	return static_cast<int>(std::clamp<int64_t>(percent, 0, 100000));
 }
 
 void PromoteMonsterRarity(Monster &monster, MonsterRarity rarity)

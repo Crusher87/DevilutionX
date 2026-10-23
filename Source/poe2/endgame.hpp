@@ -177,6 +177,8 @@ int MapRevivesFor(const Player &player, int waystoneRevives);
 void PlaceMapEncounters();
 /** @brief A label for monsters with a role in the map: its boss, an encounter's leader or the pinnacle boss. */
 std::optional<std::string> MapMonsterTitle(const Monster &monster);
+/** @brief Percent an encounter leader's hits are scaled by (its encounter's difficulty); 100 for other monsters. */
+int EncounterLeaderDamagePercent(const Monster &monster);
 /** @brief More life and damage for the map boss: a powerful boss or a pinnacle boss. */
 int MapBossLifePercentBonus();
 /** @brief A monster died in a map: finishes its encounter and drops the encounter's rewards. */

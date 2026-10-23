@@ -811,6 +811,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/level_census.cpp
   poe2/loot.cpp
   poe2/modifiers.cpp
+  poe2/monster_levels.cpp
   poe2/monster_mods.cpp
   poe2/monster_resistance.cpp
   poe2/passive_tree.cpp

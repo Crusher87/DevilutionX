@@ -19,6 +19,7 @@
 #include "levels/gendung.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
@@ -166,11 +167,13 @@ uint32_t MonsterBaseExperience(int monsterLevel)
 	return BaseExperience[static_cast<size_t>(std::clamp(monsterLevel, 1, last) - 1)];
 }
 
-int MonsterTypeExperiencePercent(const Monster & /*monster*/)
+int MonsterTypeExperiencePercent(const Monster &monster)
 {
-	// The monster type table's xpMult (the average of its life and damage ratios, 30-250%) goes here once it exists;
-	// the levelling model assumes an average type, 100%.
-	return 100;
+	// Uniques and bosses (Diablo, Na-Krul) pay by their own multiplier (MonsterBossExperiencePercent) instead.
+	if (monster.isUnique() || MonsterBossRow(monster) != nullptr)
+		return 100;
+	// The type's xpPercent: the average of its life and damage ratios, 30-250% (100% without the table).
+	return MonsterTypeRow(monster.type().type).xpPercent;
 }
 
 int MonsterBossExperiencePercent(const Monster &monster)

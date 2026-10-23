@@ -291,11 +291,7 @@ void BuffLeader(Monster &monster, int difficultyPercent)
 	const int64_t life = static_cast<int64_t>(monster.maxHitPoints.raw()) * difficultyPercent * 3 / 100;
 	monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(life, INT32_MAX / 4)));
 	monster.hitPoints = monster.maxHitPoints;
-	const auto scale = [difficultyPercent](uint8_t &damage) { damage = static_cast<uint8_t>(std::min(damage * difficultyPercent / 100, 255)); };
-	scale(monster.minDamage);
-	scale(monster.maxDamage);
-	scale(monster.minDamageSpecial);
-	scale(monster.maxDamageSpecial);
+	// Their damage scales each hit (EncounterLeaderDamagePercent), so the bytes stay their data, uncapped.
 }
 
 int MapRewardRolls()
@@ -823,6 +819,18 @@ std::optional<std::string> MapMonsterTitle(const Monster &monster)
 			return std::string(Encounters[i].name);
 	}
 	return std::nullopt;
+}
+
+int EncounterLeaderDamagePercent(const Monster &monster)
+{
+	if (ActiveMapTier() == 0 || MyPlayer == nullptr)
+		return 100;
+	const MapRunState &run = MyPlayer->poe2.mapRun;
+	for (size_t i = 0; i < EncounterCount; i++) {
+		if (run.leaders[i] >= 0 && static_cast<size_t>(run.leaders[i]) == monster.getId() && !run.done(static_cast<Encounter>(i)))
+			return Encounters[i].difficultyPercent;
+	}
+	return 100;
 }
 
 int MapBossLifePercentBonus()

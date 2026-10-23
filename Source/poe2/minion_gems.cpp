@@ -14,6 +14,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
@@ -361,8 +362,12 @@ int32_t SwarmBiteRaw(const Player &player, int gemLevel)
 {
 	// A Skeletal Warrior's average blow (InitSkeletonMinion).
 	const int level = MinionLevelForGemLevel(gemLevel);
-	const int blow = (2 + (level / 3) + gemLevel + 5 + (level / 2) + (2 * gemLevel)) / 2;
-	const int64_t raw = static_cast<int64_t>(blow) * 64 * MinionDamagePercent(player) / 100 * SwarmBitePercent / 100;
+	const int damageSum = 2 + (level / 3) + gemLevel + 5 + (level / 2) + (2 * gemLevel);
+	int64_t blow = static_cast<int64_t>(damageSum / 2) * 64;
+	// On the minion tables (plan v2 step 11): the Warrior's blow at its level.
+	if (HasMonsterLevelTable())
+		blow = static_cast<int64_t>(MinionHit10(SkeletonMinionType, level, damageSum)) * 64 / 10;
+	const int64_t raw = blow * MinionDamagePercent(player) / 100 * SwarmBitePercent / 100;
 	return static_cast<int32_t>(std::clamp<int64_t>(raw, 64, INT32_MAX / 2));
 }
 

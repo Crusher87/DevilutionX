@@ -23,9 +23,12 @@ enum class CurrencyOrb : uint8_t;
 constexpr int MaxWaystoneTier = 16;
 /** @brief The item level of a waystone's map: 64 plus its tier (bundle waystone_bases). */
 constexpr int MapAreaLevelBase = 64;
-/** @brief Per tier, map monsters get this much more life and damage, in percent. */
-constexpr int MapLifePercentPerTier = 10;
-constexpr int MapDamagePercentPerTier = 5;
+/**
+ * @brief Per tier, map monsters get this much more life and damage, in percent. 0 since monsters take the map's area
+ * level from the monster level tables (the waystone tooltip hides the line while both are 0).
+ */
+constexpr int MapLifePercentPerTier = 0;
+constexpr int MapDamagePercentPerTier = 0;
 /** @brief Per tier, this many more monsters per thousand are magic, and rare. */
 constexpr int MapMagicPerMillePerTier = 12;
 constexpr int MapRarePerMillePerTier = 6;
@@ -92,6 +95,8 @@ void UpdateActiveMap(Player &player);
 /** @brief Picks the map boss among the monsters of a freshly made map level and makes it stronger. */
 void ChooseMapBoss();
 [[nodiscard]] bool IsMapBoss(const Monster &monster);
+/** @brief Percent the map boss's hits are scaled by (more for a powerful or pinnacle boss); 100 for other monsters. */
+[[nodiscard]] int MapBossHitPercent(const Monster &monster);
 /** @brief The map boss died: the map is complete; drops its waystones. */
 void OnMapBossKilled(const Monster &monster, bool sendmsg);
 /** @brief The local player would die in a map: uses a revive to bring them back at the map's start instead. */

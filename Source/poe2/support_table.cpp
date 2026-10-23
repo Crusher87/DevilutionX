@@ -1265,7 +1265,7 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 				more(Value(player, skill, gem, 0));
 			break;
 		case SG::CoupDeGrace:
-			if (monster.hitPoints.raw() * 100 < monster.maxHitPoints.raw() * Value(player, skill, gem, 1))
+			if (static_cast<int64_t>(monster.hitPoints.raw()) * 100 < static_cast<int64_t>(monster.maxHitPoints.raw()) * Value(player, skill, gem, 1))
 				more(Value(player, skill, gem, 0));
 			break;
 		case SG::Shatter:
@@ -1991,7 +1991,7 @@ void TryDropLineageSupport(const Monster &monster, bool sendmsg)
 	if (IsMapBoss(monster)) {
 		for (const SupportGem gem : { SG::TalRashasPrism, SG::BartucsBloodletting, SG::TragOulsBalance, SG::ImmortalKingsStride, SG::KashyasVolley, SG::AndarielsAnguish })
 			mapPool.push_back(gem);
-		if (MyPlayer->poe2.mapTier >= 10)
+		if (ActiveMapTier() >= 10)
 			mapPool.push_back(SG::BaalsEcho);
 	}
 	SupportGem drop = SupportGem::None;
