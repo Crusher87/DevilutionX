@@ -6,6 +6,8 @@
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "monster.h"
+#include "player.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/waystones.hpp"
@@ -419,6 +421,18 @@ int Poe2ItemLevel(int areaLevel, int bonus)
 int Poe2ItemLevel(const Monster &monster, int difficulty)
 {
 	return Poe2ItemLevel(monster.data().level + (15 * difficulty), LootItemLevelBonus(GetLootSource(monster)));
+}
+
+int VendorAreaLevel(const Player &player, int difficulty)
+{
+	if (AreaLevelForFloor(1) == 0)
+		return 0;
+	int deepest = 1;
+	for (int floor = 1; floor < NUMLEVELS; floor++) {
+		if (player._pLvlVisited[floor])
+			deepest = std::max(deepest, AreaLevelForFloor(floor));
+	}
+	return std::min(deepest + (AreaLevelsPerDifficulty * difficulty) + VendorAreaLevelBonus, MaxPoe2ItemLevel);
 }
 
 int GetPoe2ItemLevel(const Item &item)

@@ -49,6 +49,7 @@ set(tests
   poe2_level_exits_test
   poe2_loot_filter_test
   poe2_loot_test
+  poe2_vendor_items_test
   poe2_modifiers_test
   poe2_crafting_test
   primitive_render_test

@@ -1722,6 +1722,14 @@ _item_indexes GetItemIndexForDroppableItem(bool considerDropRate, tl::function_r
 		cumulativeWeight += weight;
 		ril.push_back({ static_cast<_item_indexes>(i), cumulativeWeight });
 	}
+	if (ril.empty()) {
+		// Nothing fits (a vendor level no base reaches): take the one value a pick takes, so whatever is rolled from
+		// the seed next is the same as for a real pick and a rebuild from the stored base matches it. Diablo never
+		// gets here with its own item table; it keeps its generator untouched.
+		if (gbIsPoe2)
+			DiscardRandomValues(1);
+		return IDI_HEAL;
+	}
 	const auto targetWeight = static_cast<unsigned>(RandomIntLessThan(static_cast<int>(cumulativeWeight)));
 	return std::upper_bound(ril.begin(), ril.end(), targetWeight, [](unsigned target, const WeightedItemIndex &value) { return target < value.cumulativeWeight; })->index;
 }
@@ -2487,11 +2495,24 @@ _item_indexes RndPremiumItem(const Player &player, int minlvl, int maxlvl)
 	return RndVendorItem<PremiumItemOk>(player, minlvl, maxlvl);
 }
 
+/**
+ * @brief The POE2 item level of the town's wares: the vendors' area level (VendorAreaLevel), or without the area level
+ * table the POE2 scale of the Diablo level they stock at. The Diablo level stays in CF_LEVEL.
+ */
+int VendorPoe2ItemLevel(int level)
+{
+	if (MyPlayer != nullptr) {
+		if (const int areaLevel = VendorAreaLevel(*MyPlayer, sgGameInitInfo.nDifficulty); areaLevel > 0)
+			return areaLevel;
+	}
+	return Poe2ItemLevel(level);
+}
+
 /** @brief Shop equipment gets a POE2 item level from the level it was stocked at. */
 void SetVendorPoe2ItemLevel(Item &item, int level)
 {
 	if (gbIsPoe2 && EquipmentClassWeight(item._itype) > 0)
-		SetPoe2ItemLevel(item, Poe2ItemLevel(level));
+		SetPoe2ItemLevel(item, VendorPoe2ItemLevel(level));
 }
 
 void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
@@ -2646,10 +2667,30 @@ _item_indexes RndHealerItem(const Player &player, int lvl)
 	return RndVendorItem<HealerItemOk>(player, 0, lvl);
 }
 
-void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
+/**
+ * @brief POE2 Mashup: whether a ware rebuilds on the base it was stocked with. Its base was picked with the shop's
+ * level, which isn't saved; picking again would give another base once the item table changes.
+ */
+bool RebuildsOnItsBase(_item_indexes idx)
+{
+	return gbIsPoe2 && idx >= 0 && static_cast<size_t>(idx) < AllItemsList.size();
+}
+
+/** @brief The base a ware was stocked with: picked again from the seed, or in POE2 its stored base for the same one value. */
+template <typename Pick>
+_item_indexes VendorItemBase(_item_indexes idx, Pick pick)
+{
+	if (RebuildsOnItsBase(idx)) {
+		DiscardRandomValues(1);
+		return idx;
+	}
+	return pick();
+}
+
+void RecreateSmithItem(const Player &player, Item &item, _item_indexes idx, int lvl, int iseed)
 {
 	SetRndSeed(iseed);
-	const _item_indexes itype = RndSmithItem(player, lvl);
+	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndSmithItem(player, lvl); });
 	GetItemAttrs(item, itype, lvl);
 	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff, or the one crafting gave it; skip the rarity roll and give it its modifiers.
 	if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
@@ -2663,10 +2704,10 @@ void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
 	item._iIdentified = true;
 }
 
-void RecreatePremiumItem(const Player &player, Item &item, int plvl, int iseed)
+void RecreatePremiumItem(const Player &player, Item &item, _item_indexes idx, int plvl, int iseed)
 {
 	SetRndSeed(iseed);
-	const _item_indexes itype = RndPremiumItem(player, plvl / 4, plvl);
+	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndPremiumItem(player, plvl / 4, plvl); });
 	GetItemAttrs(item, itype, plvl);
 	GetItemBonus(player, item, plvl / 2, plvl, true, !gbIsHellfire);
 
@@ -2675,10 +2716,10 @@ void RecreatePremiumItem(const Player &player, Item &item, int plvl, int iseed)
 	item._iIdentified = true;
 }
 
-void RecreateBoyItem(const Player &player, Item &item, int lvl, int iseed)
+void RecreateBoyItem(const Player &player, Item &item, _item_indexes idx, int lvl, int iseed)
 {
 	SetRndSeed(iseed);
-	const _item_indexes itype = RndBoyItem(player, lvl);
+	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndBoyItem(player, lvl); });
 	GetItemAttrs(item, itype, lvl);
 	GetItemBonus(player, item, lvl, 2 * lvl, true, true);
 
@@ -2697,7 +2738,7 @@ void RecreateWitchItem(const Player &player, Item &item, _item_indexes idx, int 
 		GetItemAttrs(item, idx, lvl);
 	} else {
 		SetRndSeed(iseed);
-		const _item_indexes itype = RndWitchItem(player, lvl);
+		const _item_indexes itype = VendorItemBase(idx, [&]() { return RndWitchItem(player, lvl); });
 		GetItemAttrs(item, itype, lvl);
 		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff, or has the one crafting gave it; skip the rarity roll and give it its modifiers.
 		if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity) {
@@ -2728,7 +2769,7 @@ void RecreateHealerItem(const Player &player, Item &item, _item_indexes idx, int
 		GetItemAttrs(item, idx, lvl);
 	} else {
 		SetRndSeed(iseed);
-		const _item_indexes itype = RndHealerItem(player, lvl);
+		const _item_indexes itype = VendorItemBase(idx, [&]() { return RndHealerItem(player, lvl); });
 		GetItemAttrs(item, itype, lvl);
 	}
 
@@ -2740,11 +2781,11 @@ void RecreateHealerItem(const Player &player, Item &item, _item_indexes idx, int
 void RecreateTownItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, int iseed)
 {
 	if ((icreateinfo & CF_SMITH) != 0)
-		RecreateSmithItem(player, item, icreateinfo & CF_LEVEL, iseed);
+		RecreateSmithItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_SMITHPREMIUM) != 0)
-		RecreatePremiumItem(player, item, icreateinfo & CF_LEVEL, iseed);
+		RecreatePremiumItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_BOY) != 0)
-		RecreateBoyItem(player, item, icreateinfo & CF_LEVEL, iseed);
+		RecreateBoyItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_WITCH) != 0)
 		RecreateWitchItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_HEALER) != 0)
@@ -7173,6 +7214,8 @@ static_assert(NumWitchPinnedItems + MaxStockCount(WitchStockQuotas) <= NumWitchI
 
 /** A vendor gives up on a kind of ware it can't find at its level after this many rolls. */
 constexpr int MaxStockRolls = 4000;
+/** POE2 Mashup: a ware over the vendor's price limit is rolled again at most this many times, then kept. */
+constexpr int MaxWareRolls = 200;
 
 /**
  * @brief POE2 Mashup: rolls wares until each kind has its share, so every shop tab fills up.
@@ -7203,6 +7246,7 @@ void FillStockByCategory(Stock &stock, std::span<const VendorStockQuota> quotas,
 Item RollSmithItem(int lvl, int maxValue)
 {
 	Item newItem;
+	int rolls = 0;
 	do {
 		newItem = {};
 		newItem._iSeed = AdvanceRndSeed();
@@ -7216,7 +7260,7 @@ Item RollSmithItem(int lvl, int maxValue)
 			if (GetLootRarity(newItem) != ITEM_QUALITY_NORMAL)
 				GetItemBonus(*MyPlayer, newItem, lvl / 2, lvl, true, false);
 		}
-	} while (newItem._iIvalue > maxValue);
+	} while (newItem._iIvalue > maxValue && (!gbIsPoe2 || ++rolls < MaxWareRolls));
 
 	newItem._iCreateInfo = lvl | CF_SMITH;
 	SetVendorPoe2ItemLevel(newItem, lvl);
@@ -7227,6 +7271,7 @@ Item RollSmithItem(int lvl, int maxValue)
 Item RollWitchItem(int lvl, int maxValue)
 {
 	Item item;
+	int rolls = 0;
 	do {
 		item = {};
 		item._iSeed = AdvanceRndSeed();
@@ -7249,7 +7294,7 @@ Item RollWitchItem(int lvl, int maxValue)
 			if (maxlvl != -1)
 				GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
 		}
-	} while (item._iIvalue > maxValue);
+	} while (item._iIvalue > maxValue && (!gbIsPoe2 || ++rolls < MaxWareRolls));
 
 	item._iCreateInfo = lvl | CF_WITCH;
 	SetVendorPoe2ItemLevel(item, lvl);

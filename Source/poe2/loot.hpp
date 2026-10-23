@@ -16,6 +16,7 @@
 namespace devilution {
 
 struct Monster;
+struct Player;
 
 /** @brief How tough the thing that dropped the loot was. */
 enum class LootSource : uint8_t {
@@ -143,6 +144,16 @@ constexpr int MaxPoe2ItemLevel = 82;
 int Poe2ItemLevel(int areaLevel, int bonus = 0);
 /** @brief The POE2 item level of a monster's drops. */
 int Poe2ItemLevel(const Monster &monster, int difficulty);
+
+/** @brief Town vendors stock wares this far above the deepest area the player has reached. */
+constexpr int VendorAreaLevelBonus = 2;
+
+/**
+ * @brief The area level town vendors stock for: the deepest floor the player has visited (floor 1 before any),
+ * plus 15 per difficulty step, plus VendorAreaLevelBonus, at most MaxPoe2ItemLevel. It sets only the POE2 item
+ * level and the POE2 base of a ware; CF_LEVEL keeps Diablo's vendor level. 0 when the area level table isn't loaded.
+ */
+int VendorAreaLevel(const Player &player, int difficulty);
 
 /** @brief The item's POE2 item level, or 0 if it has none (older items, and anything that isn't equipment). */
 int GetPoe2ItemLevel(const Item &item);
