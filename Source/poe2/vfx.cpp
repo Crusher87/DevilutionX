@@ -99,6 +99,12 @@ Colours ColoursOf(Element element)
 	return { { 255, 255, 255 }, { 200, 200, 200 }, { 100, 100, 100 } };
 }
 
+/** @brief Arcing Sparks' violet, so its sparks never pass for Charged Bolt's blue-white bolts. */
+Colours ArcingSparkColours()
+{
+	return { { 250, 240, 255 }, { 205, 150, 255 }, { 150, 60, 235 } };
+}
+
 /** @brief Effects' own dice: cosmetic, so they never touch the game's seeded RNG. */
 uint32_t Seed = 0x9E3779B9U;
 
@@ -407,6 +413,13 @@ struct Comet {
 	uint32_t seed;
 	/** @brief A charged bolt: drawn as a crackling bolt of electricity along its path instead of a head and a tail. */
 	bool bolt = false;
+	/** @brief An Arcing Sparks spark: the same missile as Charged Bolt, drawn as a small quick spark instead. */
+	bool sparks = false;
+	/** @brief Its colours, tinted by its skill's look. */
+	Colours colours {};
+	/** @brief Its skill look's brightness and speed. */
+	float brightness = 1;
+	float speed = 1;
 	/** @brief Not moving: a bolt standing where it landed or burst. */
 	bool still = false;
 	/** @brief How high its head is above the floor. */
@@ -3145,19 +3158,25 @@ void ScanMissiles()
 			trail.points[0] = head;
 			trail.count = std::min<int>(trail.count + 1, static_cast<int>(trail.points.size()));
 		}
-		const Colours c = ColoursOf(look.element);
 		const bool arrow = missile._miAnimType == MissileGraphicID::Arrow;
 		const bool small = missile.poe2.look == 1;
 		// A charged bolt's light crackles with it rather than glowing steadily round a ball.
 		const bool bolt = missile._miAnimType == MissileGraphicID::ChargedBolt;
+		// Arcing Sparks fires the same missile; it gets its own small, quick, violet sparks (Curtis 2026-10-23).
+		const bool sparks = IsArcingSpark(missile);
+		const Colours c = sparks ? ArcingSparkColours() : ColoursOf(look.element);
 		const uint32_t seed = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4);
-		const float crackle = bolt ? 0.55F + 0.45F * SmoothNoise(seed, AmbientTime * 0.03F) : 1.F;
+		const float crackle = bolt ? 0.55F + 0.45F * SmoothNoise(seed, AmbientTime * (sparks ? 0.08F : 0.03F)) : 1.F;
 		if (!trail.arrow) {
 			const Vec velocity { static_cast<float>(missile.position.velocity.deltaX), static_cast<float>(missile.position.velocity.deltaY) };
 			const float speed = Length(velocity);
 			const Vec dir = speed > 0.001F ? velocity * (1 / speed) : Vec { 1, 0 };
 			Comet &comet = FrameComets.emplace_back(Comet { head, dir, look.element, scale * (styled != nullptr ? styled->size : 1.F), small, seed });
-			comet.bolt = bolt;
+			comet.bolt = bolt && !sparks;
+			comet.sparks = sparks;
+			comet.colours = styled != nullptr ? Tinted(c, *styled) : c;
+			comet.brightness = styled != nullptr ? styled->brightness : 1.F;
+			comet.speed = styled != nullptr ? std::max(styled->speed, 0.1F) : 1.F;
 			comet.still = speed <= 0.001F;
 			comet.lift = missile._miAnimWidth / 2.F - 16;
 			comet.path = trail.points;
@@ -3166,11 +3185,11 @@ void ScanMissiles()
 		const size_t firstGlow = FrameGlows.size();
 		Ring glow;
 		glow.pos = head;
-		glow.r0 = glow.r1 = (arrow ? 6.F : (bolt ? 13.F : 20.F)) * scale;
+		glow.r0 = glow.r1 = (arrow ? 6.F : (sparks ? 8.F : (bolt ? 16.F : 20.F))) * scale;
 		glow.life = 1;
 		glow.width = 0;
 		glow.colour = c.mid;
-		glow.alpha = (arrow ? 0.45F : (bolt ? 0.3F * crackle : 0.7F)) * std::min(scale, 1.F);
+		glow.alpha = (arrow ? 0.45F : (sparks ? 0.25F * crackle : (bolt ? 0.32F * crackle : 0.7F))) * std::min(scale, 1.F);
 		glow.disc = true;
 		glow.ground = false;
 		FrameGlows.push_back(glow);
@@ -3190,7 +3209,7 @@ void ScanMissiles()
 			}
 			// The light the projectile throws on the floor beneath it.
 			glow.pos = MissileCentre(missile) + Vec { 0, missile._miAnimWidth / 2.F - 16 };
-			glow.r0 = glow.r1 = TileRadius * 1.6F;
+			glow.r0 = glow.r1 = TileRadius * (sparks ? 0.9F : 1.6F);
 			glow.colour = c.mid;
 			glow.alpha = 0.22F * crackle;
 			glow.ground = true;
@@ -3221,6 +3240,12 @@ void ScanMissiles()
 		}
 	}
 	std::erase_if(Portals, [](const auto &entry) { return entry.second.frame != ScanFrame; });
+}
+
+bool IsArcingSpark(const Missile &missile)
+{
+	return missile._miAnimType == MissileGraphicID::ChargedBolt
+	    && SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark);
 }
 
 bool ReplacesSprite(const Missile &missile)
@@ -3736,16 +3761,18 @@ std::vector<Vec> Jag(Vec from, Vec to, int steps, float kick, uint32_t &seed)
  * @brief A charged bolt (Curtis 2026-10-22: its round head and tail looked like "little sperms floating around"): a short
  * bolt of jagged lightning along the path it has just flown, evenly bright with no ball at its head, a fainter second
  * strand twisting round it, forks flicking off it and now and then an arc down to the floor. It tears itself up and
- * re-forms every few hundredths of a second. Standing still, it crackles in place.
+ * re-forms every few hundredths of a second. Standing still, it crackles in place. Heavier and steadier than Arcing
+ * Sparks' sparks (DrawArcingSpark), which fly the same missile.
  */
 void DrawLightningBolt(const Comet &comet)
 {
-	const Colours c = ColoursOf(Element::Lightning);
+	const Colours &c = comet.colours;
 	const float s = comet.scale;
-	// A new shape every 35 ms, different for each bolt; its brightness jumps with it.
-	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / 35) * 40503U)) | 1;
+	// A new shape every 45 ms (sooner for a faster look), different for each bolt; its brightness jumps with it.
+	const float interval = std::max(45.F / comet.speed, 15.F);
+	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / interval) * 40503U)) | 1;
 	SeededRandom(seed);
-	const float flash = 0.7F + 0.3F * SeededRandom(seed);
+	const float flash = (0.75F + 0.25F * SeededRandom(seed)) * comet.brightness;
 	if (comet.still) {
 		for (int i = 0; i < 3; i++) {
 			const float angle = SeededRandom(seed) * 2 * Pi;
@@ -3780,9 +3807,9 @@ void DrawLightningBolt(const Comet &comet)
 		const float f = std::clamp((d - segmentStart) / std::max(Length(span), 0.01F), 0.F, 1.F);
 		spine.push_back(path[segment] + span * f);
 	}
-	const std::vector<Vec> body = ZigZag(spine, 6 * s, seed);
-	Filament(body, 1.8F * s, c, 0.75F * flash, flash, 0.2F * flash);
-	Filament(ZigZag(spine, 4.5F * s, seed), 1.1F * s, c, 0.35F * flash, 0.45F * flash, 0);
+	const std::vector<Vec> body = ZigZag(spine, 7 * s, seed);
+	Filament(body, 2.4F * s, c, 0.8F * flash, flash, 0.25F * flash);
+	Filament(ZigZag(spine, 5 * s, seed), 1.4F * s, c, 0.4F * flash, 0.5F * flash, 0);
 
 	// Forks flicking off its joints, never the same two frames running.
 	for (int f = 0; f < 3; f++) {
@@ -3796,22 +3823,85 @@ void DrawLightningBolt(const Comet &comet)
 		Filament(Jag(body[at], end, 3, 3 * s, seed), 1.1F * s, c, 0.8F * flash, 0.5F * flash, 0);
 	}
 	// Now and then it arcs down to the floor beneath it.
-	if (!comet.small && SeededRandom(seed) < 0.3F) {
+	if (!comet.small && SeededRandom(seed) < 0.4F) {
 		const Vec floor = comet.head + Vec { (SeededRandom(seed) - 0.5F) * 16 * s, comet.lift };
 		Filament(Jag(comet.head, floor, 3, 3 * s, seed), 1.1F * s, c, 0.6F * flash, 0.5F * flash, 0.4F * flash);
 		SoftDisc(Glowing, floor, 4 * s, c.mid, 0.4F * flash, true);
 	}
 }
 
+/**
+ * @brief An Arcing Sparks spark (Curtis 2026-10-23: it looked just like Charged Bolt): a small, quick violet spark, a hot
+ * point with a few short spikes flicking off it and a short jittery tail, re-forming twice as often as a charged bolt.
+ * DrawSparkArcs jumps lightning between sparks flying near each other.
+ */
+void DrawArcingSpark(const Comet &comet)
+{
+	const Colours &c = comet.colours;
+	const float s = comet.scale * 0.75F;
+	const float interval = std::max(20.F / comet.speed, 8.F);
+	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / interval) * 40503U)) | 1;
+	SeededRandom(seed);
+	const float flash = (0.6F + 0.4F * SeededRandom(seed)) * comet.brightness;
+	// The hot point it flies on, jittering about its path.
+	const Vec point = comet.head + Vec { SeededRandom(seed) - 0.5F, SeededRandom(seed) - 0.5F } * (3 * s);
+	SoftDisc(Glowing, point, 5 * s, c.mid, 0.45F * flash, false);
+	SoftDisc(Glowing, point, 2 * s, c.core, flash, false);
+	const int spikes = 2 + static_cast<int>(SeededRandom(seed) * 3);
+	for (int i = 0; i < spikes; i++) {
+		const float angle = SeededRandom(seed) * 2 * Pi;
+		const float reach = (4 + 7 * SeededRandom(seed)) * s;
+		Filament(Jag(point, point + Vec { std::cos(angle), std::sin(angle) * 0.7F } * reach, 2, 2 * s, seed), 0.8F * s, c, flash, 0.5F * flash, 0);
+	}
+	if (comet.still)
+		return;
+	const Vec back = comet.pathCount >= 2 ? comet.path[1] - comet.head : comet.dir * -1;
+	const Vec way = back * (1 / std::max(Length(back), 0.01F));
+	Filament(Jag(point, point + way * (14 * s), 3, 3.5F * s, seed), 0.9F * s, c, 0.8F * flash, 0.4F * flash, 0);
+}
+
+/** @brief Arcing Sparks' sparks arc to each other: now and then a thin strand of lightning jumps between two close by. */
+void DrawSparkArcs()
+{
+	const auto window = static_cast<uint32_t>(AmbientTime / 30);
+	for (size_t i = 0; i < FrameComets.size(); i++) {
+		const Comet &a = FrameComets[i];
+		if (!a.sparks)
+			continue;
+		for (size_t j = i + 1; j < FrameComets.size(); j++) {
+			const Comet &b = FrameComets[j];
+			if (!b.sparks)
+				continue;
+			const float distance = Length(b.head - a.head);
+			if (distance < 6 || distance > 70 * a.scale)
+				continue;
+			uint32_t seed = ((a.seed ^ (b.seed * 2654435761U)) + (window * 40503U)) | 1;
+			SeededRandom(seed);
+			if (SeededRandom(seed) > 0.35F)
+				continue;
+			const float flash = (0.5F + 0.4F * SeededRandom(seed)) * a.brightness;
+			const int steps = std::clamp(static_cast<int>(distance / 12), 2, 6);
+			Filament(Jag(a.head, b.head, steps, 5 * a.scale, seed), 0.7F * a.scale, a.colours, flash, 0.8F * flash, flash);
+			// One arc from each spark.
+			break;
+		}
+	}
+}
+
 /** @brief Projectile bodies: a white-hot head and a tail tapering back along the flight, shaped by the element. */
 void DrawComets()
 {
+	DrawSparkArcs();
 	for (const Comet &comet : FrameComets) {
+		if (comet.sparks) {
+			DrawArcingSpark(comet);
+			continue;
+		}
 		if (comet.bolt) {
 			DrawLightningBolt(comet);
 			continue;
 		}
-		const Colours c = ColoursOf(comet.element);
+		const Colours &c = comet.colours;
 		uint32_t seed = comet.seed + static_cast<uint32_t>(AmbientTime * 0.05F);
 		const float s = comet.scale;
 		const Vec back = comet.dir * -1;
