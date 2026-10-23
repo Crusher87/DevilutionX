@@ -252,6 +252,34 @@ TEST_F(Poe2RegenTest, SorcererStarterBoltsCostFour)
 	}
 }
 
+TEST_F(Poe2RegenTest, BarbarianCountsTenMagicForMana)
+{
+	// Curtis 2026-10-23: the Barbarian starts with no Magic but gets the Warrior's mana pool (both count as 10 Magic).
+	ASSERT_EQ(NakedHero(HeroClass::Barbarian, 1)._pBaseMag, 0);
+	ASSERT_EQ(NakedHero(HeroClass::Warrior, 1)._pBaseMag, Poe2MinManaMagic);
+	for (const int level : { 1, 2, 10, 25, 50 }) {
+		const Fixed26_6 warrior = NakedHero(HeroClass::Warrior, level)._pMaxMana;
+		const Fixed26_6 barbarian = NakedHero(HeroClass::Barbarian, level)._pMaxMana;
+		EXPECT_EQ(barbarian, warrior) << level;
+		EXPECT_EQ(barbarian, Fixed26_6::fromInt(Poe2BaseMana + (Poe2ManaPerLevel * level) + (Poe2ManaPerMagic * Poe2MinManaMagic))) << level;
+	}
+	// At the same level and the same Magic, the two pools match too.
+	for (const int level : { 1, 25, 50 }) {
+		Player &player = NakedHero(HeroClass::Warrior, level);
+		player._pBaseMag = player._pMagic = 30;
+		player._pMaxManaBase = player._pManaBase = player.calculateBaseMana();
+		CalcPlrInv(player, false);
+		const Fixed26_6 warrior = player._pMaxMana;
+		NakedHero(HeroClass::Barbarian, level);
+		player._pBaseMag = player._pMagic = 30;
+		player._pMaxManaBase = player._pManaBase = player.calculateBaseMana();
+		CalcPlrInv(player, false);
+		EXPECT_EQ(player._pMaxMana, warrior) << level;
+	}
+	// Magic from gear still adds 2 a point, as for the Warrior.
+	EXPECT_EQ(ManaFromItemMagic(NakedHero(HeroClass::Barbarian, 1), 10), 20);
+}
+
 TEST_F(Poe2RegenTest, MultiplayerValidationStillPasses)
 {
 	Players.resize(2);
