@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 
 #include <gtest/gtest.h>
@@ -1398,9 +1399,15 @@ TEST_F(NetPackTest, UnPackNetPlayer_invalid_townItemLevel)
 			continue;
 		const uint16_t createInfo = item._iCreateInfo;
 		const bool BoyItem = (item._iCreateInfo & CF_BOY) != 0;
+		// Wirt's level is the hero's, clamped to CF_LEVEL's 6 bits: past a level cap of 62 every 6-bit level is valid.
+		const int boyLevel = MyPlayer->getMaxCharacterLevel() + 1;
+		const bool boyLevelFits = boyLevel <= CF_LEVEL;
 		item._iCreateInfo &= ~CF_LEVEL;
-		item._iCreateInfo |= BoyItem ? MyPlayer->getMaxCharacterLevel() + 1 : 31;
-		ASSERT_FALSE(TestNetPackValidation());
+		item._iCreateInfo |= BoyItem ? std::min<int>(boyLevel, CF_LEVEL) : 31;
+		if (BoyItem && !boyLevelFits)
+			ASSERT_TRUE(TestNetPackValidation());
+		else
+			ASSERT_FALSE(TestNetPackValidation());
 		item._iCreateInfo = createInfo;
 
 		size_t &count = BoyItem ? boyCount : otherCount;

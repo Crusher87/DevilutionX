@@ -82,6 +82,7 @@
 #include "poe2/economy.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/endgame.hpp"
+#include "poe2/experience.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/floor_packs.hpp"
 #include "poe2/map_play.hpp"
@@ -4357,8 +4358,11 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	const bool risen = gbIsPoe2 && IsRisen(monster);
 	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0)
 		OnProfaneRoadKill(*MyPlayer, monster);
-	if (!monster.isPlayerMinion() && !risen)
-		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100, monster.whoHit);
+	if (!monster.isPlayerMinion() && !risen) {
+		// POE2 Mashup: experience from the level tables; Poe2MonsterExperience applies rarity and map percent once.
+		const unsigned experience = gbIsPoe2 ? Poe2MonsterExperience(monster) : monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100;
+		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), experience, monster.whoHit);
+	}
 	int goldenDrops = 0;
 	if (gbIsPoe2 && !monster.isPlayerMinion() && !risen && (monster.whoHit & (1 << MyPlayerId)) != 0) {
 		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);

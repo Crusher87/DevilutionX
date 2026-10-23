@@ -56,6 +56,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/experience.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hardcore.hpp"
 #include "poe2/map_play.hpp"
@@ -1753,6 +1754,10 @@ void ValidatePlayer()
 
 	// Player::setCharacterLevel ensures that the player level is within the expected range in case someone has edited their character level in memory
 	myPlayer.setCharacterLevel(myPlayer.getCharacterLevel());
+	// POE2 Mashup: experience saved on the old 50-level table moves onto the levels-100 table, keeping the level and
+	// its fraction. Runs on load, on every level change and after, and does nothing once inside the band.
+	if (CorrectPoe2Experience(myPlayer) && *GetOptions().Gameplay.experienceBar)
+		RedrawEverything();
 	// This lets us catch cases where someone is editing experience directly through memory modification and reset their experience back to the expected cap.
 	if (myPlayer._pExperience > myPlayer.getNextExperienceThreshold()) {
 		myPlayer._pExperience = myPlayer.getNextExperienceThreshold();
@@ -2786,14 +2791,21 @@ void Player::_addExperience(uint32_t experience, int levelDelta)
 		return;
 	}
 
-	// Adjust xp based on difference between the players current level and the target level (usually a monster level)
-	uint32_t clampedExp = static_cast<uint32_t>(std::clamp<int64_t>(static_cast<int64_t>(experience * (1 + levelDelta / 10.0)), 0, std::numeric_limits<uint32_t>::max()));
+	uint32_t clampedExp;
+	if (gbIsPoe2) {
+		// POE2 Mashup: POE2's level-gap rule (full within a safe zone, then falling fast); multiplayer keeps only the
+		// cap at a twentieth of the level's threshold.
+		clampedExp = Poe2ExperienceGain(getCharacterLevel(), experience, getCharacterLevel() + levelDelta, gbIsMultiplayer);
+	} else {
+		// Adjust xp based on difference between the players current level and the target level (usually a monster level)
+		clampedExp = static_cast<uint32_t>(std::clamp<int64_t>(static_cast<int64_t>(experience * (1 + levelDelta / 10.0)), 0, std::numeric_limits<uint32_t>::max()));
 
-	// Prevent power leveling
-	if (gbIsMultiplayer) {
-		// for low level characters experience gain is capped to 1/20 of current levels xp
-		// for high level characters experience gain is capped to 200 * current level - this is a smaller value than 1/20 of the exp needed for the next level after level 5.
-		clampedExp = std::min<uint32_t>({ clampedExp, /* level 1-5: */ getNextExperienceThreshold() / 20U, /* level 6-50: */ 200U * getCharacterLevel() });
+		// Prevent power leveling
+		if (gbIsMultiplayer) {
+			// for low level characters experience gain is capped to 1/20 of current levels xp
+			// for high level characters experience gain is capped to 200 * current level - this is a smaller value than 1/20 of the exp needed for the next level after level 5.
+			clampedExp = std::min<uint32_t>({ clampedExp, /* level 1-5: */ getNextExperienceThreshold() / 20U, /* level 6-50: */ 200U * getCharacterLevel() });
+		}
 	}
 
 	lua::OnPlayerGainExperience(this, clampedExp);
@@ -2801,7 +2813,10 @@ void Player::_addExperience(uint32_t experience, int levelDelta)
 	const uint32_t maxExperience = GetNextExperienceThresholdForLevel(getMaxCharacterLevel());
 
 	// ensure we only add enough experience to reach the max experience cap so we don't overflow
-	_pExperience += std::min(clampedExp, maxExperience - _pExperience);
+	if (gbIsPoe2)
+		_pExperience = static_cast<uint32_t>(std::min<int64_t>(static_cast<int64_t>(_pExperience) + clampedExp, maxExperience));
+	else
+		_pExperience += std::min(clampedExp, maxExperience - _pExperience);
 
 	if (*GetOptions().Gameplay.experienceBar) {
 		RedrawEverything();
@@ -3060,6 +3075,8 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 	}
 
 	if (&player == MyPlayer) {
+		// POE2 Mashup: dying in a map costs experience (a revive costs the same, in TryMapRevive).
+		LoseMapDeathExperience(player);
 		TelemetryPlayerDied(player);
 		NetSendCmdParam1(true, CMD_PLRDEAD, static_cast<uint16_t>(deathReason));
 		gamemenu_off();
