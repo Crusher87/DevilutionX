@@ -8,10 +8,13 @@
  * the same number of monsters; only where they stand changes:
  *  - One or two big fights (12 to 14 monsters led by a rare) in an open room with two or more ways in, about two
  *    thirds and a third of the way from the stairs up to the stairs down.
- *  - Every dead end holds something: a pack at its far end, guarding a new chest there or led by a rare.
+ *  - Every dead end holds something: a chest, shrine or sarcophagus it already had, a new chest at its far end, or a
+ *    pack there led by a rare.
  *  - The rest go out as packs of 4 to 6, each where the floor is furthest from every monster already placed, rooms
  *    with no monsters yet first, so the floor fills evenly and the walk keeps meeting fights.
  *  - Packs mix the floor's monster types and hold at most 3 archers or casters.
+ *  - Rares only lead the big fights and guard dead ends, about as many as the old random roll gave a floor, so the
+ *    loot stays where it was (Curtis, 10-23: level 1 drops felt like a bit much). Magic monsters still roll at random.
  *  - A theme room's monsters (the barrel room's, the library's) stand together as one pack.
  * Cathedral floors only for now. The placement has its own random stream, seeded from the floor's, so the same seed
  * still gives the same floor.

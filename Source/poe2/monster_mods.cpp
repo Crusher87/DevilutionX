@@ -81,6 +81,24 @@ void ApplyRarityStats(Monster &monster, const MonsterAffixes &affixes)
 	// MonsterMod::Resistant adds to the monster's resistances where they are worked out (monster_resistance.cpp).
 }
 
+/** @brief Undoes ApplyRarityStats (to within rounding). */
+void RemoveRarityStats(Monster &monster, const MonsterAffixes &affixes)
+{
+	int lifePercent = 100 + (affixes.rarity == MonsterRarity::Rare ? RareMonsterLifePercent : MagicMonsterLifePercent);
+	if (affixes.has(MonsterMod::ExtraLife))
+		lifePercent += ExtraLifePercent;
+	monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * 100 / lifePercent));
+	monster.hitPoints = monster.maxHitPoints;
+
+	if (affixes.has(MonsterMod::HardHitting)) {
+		const auto undo = [](uint8_t &damage) { damage = static_cast<uint8_t>(damage * 100 / (100 + HardHittingPercent)); };
+		undo(monster.minDamage);
+		undo(monster.maxDamage);
+		undo(monster.minDamageSpecial);
+		undo(monster.maxDamageSpecial);
+	}
+}
+
 } // namespace
 
 MonsterAffixes GetMonsterAffixes(const Monster &monster)
@@ -148,6 +166,22 @@ void PromoteMonsterRarity(Monster &monster, MonsterRarity rarity)
 		const MonsterAffixes affixes = GetMonsterAffixes(monster);
 		if (affixes.rarity == rarity) {
 			ApplyRarityStats(monster, affixes);
+			return;
+		}
+	}
+	monster.rndItemSeed = original;
+}
+
+void DemoteMonsterRarity(Monster &monster)
+{
+	const MonsterAffixes affixes = GetMonsterAffixes(monster);
+	if (affixes.rarity == MonsterRarity::Normal)
+		return;
+	const uint32_t original = monster.rndItemSeed;
+	for (uint32_t step = 1; step < 4000; step++) {
+		monster.rndItemSeed = (original + (step * 7919U)) & 0x7FFFFFFFU;
+		if (GetMonsterAffixes(monster).rarity == MonsterRarity::Normal) {
+			RemoveRarityStats(monster, affixes);
 			return;
 		}
 	}
