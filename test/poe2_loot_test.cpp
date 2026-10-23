@@ -12,6 +12,7 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/loot.hpp"
+#include "poe2/monster_mods.hpp"
 #include "spells.h"
 #include "stores.h"
 #include "utils/is_of.hpp"
@@ -74,8 +75,9 @@ public:
 
 TEST_F(Poe2LootTest, KillsGiveRollsByToughness)
 {
-	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Normal), 180);
-	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Boss), 6000);
+	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Normal), 150);
+	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Rare), 1500);
+	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Boss), 4000);
 
 	constexpr int Trials = 20000;
 	SetRndSeed(7);
@@ -85,8 +87,8 @@ TEST_F(Poe2LootTest, KillsGiveRollsByToughness)
 		normal += RollLootCount(LootSource::Normal);
 		rare += RollLootCount(LootSource::Rare);
 	}
-	EXPECT_NEAR(normal / static_cast<double>(Trials), 0.18, 0.015);
-	EXPECT_EQ(rare, 2 * Trials) << "two whole rolls every time";
+	EXPECT_NEAR(normal / static_cast<double>(Trials), 0.15, 0.015);
+	EXPECT_NEAR(rare / static_cast<double>(Trials), 1.5, 0.03) << "one roll, and a second half the time";
 }
 
 TEST_F(Poe2LootTest, CategoriesFollowTheBible)
@@ -94,8 +96,8 @@ TEST_F(Poe2LootTest, CategoriesFollowTheBible)
 	const auto weights = LootCategoryWeights(LootSource::Normal);
 	EXPECT_EQ(std::accumulate(weights.begin(), weights.end(), 0), 100);
 	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Equipment)], 48);
-	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gold)], 21);
-	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gem)], 4);
+	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gold)], 20);
+	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gem)], 5);
 
 	const auto boss = LootCategoryWeights(LootSource::Boss);
 	EXPECT_EQ(boss[static_cast<size_t>(LootCategory::Equipment)], 96);
@@ -107,16 +109,65 @@ TEST_F(Poe2LootTest, RarityTablesMatchTheSource)
 {
 	constexpr int Trials = 40000;
 	const auto normal = Count(Trials, [] { return RollEquipmentRarity(LootSource::Normal); });
-	EXPECT_NEAR(normal[ITEM_QUALITY_NORMAL] / static_cast<double>(Trials), 0.57, 0.01);
-	EXPECT_NEAR(normal[ITEM_QUALITY_MAGIC] / static_cast<double>(Trials), 0.35, 0.01);
-	EXPECT_NEAR(normal[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.0775, 0.005);
+	EXPECT_NEAR(normal[ITEM_QUALITY_NORMAL] / static_cast<double>(Trials), 0.75, 0.01);
+	EXPECT_NEAR(normal[ITEM_QUALITY_MAGIC] / static_cast<double>(Trials), 0.2275, 0.01);
+	EXPECT_NEAR(normal[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.02, 0.003);
+
+	const auto rare = Count(Trials, [] { return RollEquipmentRarity(LootSource::Rare); });
+	EXPECT_NEAR(rare[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.17, 0.01);
 
 	const auto boss = Count(Trials, [] { return RollEquipmentRarity(LootSource::Boss); });
-	EXPECT_NEAR(boss[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.65, 0.01);
+	EXPECT_NEAR(boss[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.30, 0.01);
 	EXPECT_NEAR(boss[ITEM_QUALITY_UNIQUE] / static_cast<double>(Trials), 0.05, 0.005);
 
 	EXPECT_EQ(LootItemLevelBonus(LootSource::Rare), 1);
 	EXPECT_EQ(LootItemLevelBonus(LootSource::Boss), 2);
+}
+
+/** Equipment drops a kill gives on average, and how many of them are of each rarity. */
+std::array<double, 4> ExpectedEquipment(LootSource source)
+{
+	const auto categories = LootCategoryWeights(source);
+	const double equipment = ExpectedLootRollsPerMille(source) / 1000.0 * categories[static_cast<size_t>(LootCategory::Equipment)]
+	    / std::accumulate(categories.begin(), categories.end(), 0);
+	const std::array<int, 4> rarity = EquipmentRarityWeights(source);
+	std::array<double, 4> result {};
+	for (size_t i = 0; i < result.size(); i++)
+		result[i] = equipment * rarity[i] / 10000.0;
+	return result;
+}
+
+TEST_F(Poe2LootTest, CampaignLootIsMostlyNormalAndMagic)
+{
+	// The campaign's mix of monsters: 3% rare, 12% magic, the rest normal.
+	const double rareMonsters = RareMonsterPerMille / 1000.0;
+	const double magicMonsters = MagicMonsterPerMille / 1000.0;
+	std::array<double, 4> total {};
+	for (size_t i = 0; i < total.size(); i++) {
+		total[i] = (1 - rareMonsters - magicMonsters) * ExpectedEquipment(LootSource::Normal)[i]
+		    + magicMonsters * ExpectedEquipment(LootSource::Magic)[i] + rareMonsters * ExpectedEquipment(LootSource::Rare)[i];
+	}
+	const double all = std::accumulate(total.begin(), total.end(), 0.0);
+	// Curtis's 2026-10-23 run had 18% rare and 29% magic: about one rare in sixteen now.
+	EXPECT_GT(total[ITEM_QUALITY_RARE] / all, 0.04);
+	EXPECT_LT(total[ITEM_QUALITY_RARE] / all, 0.08);
+	EXPECT_GT(total[ITEM_QUALITY_MAGIC] / all, 0.25);
+	EXPECT_LT(total[ITEM_QUALITY_MAGIC] / all, 0.38);
+	// Fewer than a rare per hundred kills.
+	EXPECT_LT(total[ITEM_QUALITY_RARE] * 100, 1.0);
+}
+
+TEST_F(Poe2LootTest, BossesDropAHandfulNotAPile)
+{
+	// A quest boss: its rolls plus the guaranteed rare. Snotspill dropped 4 rares on the old numbers (3.75 on average).
+	const std::array<double, 4> boss = ExpectedEquipment(LootSource::Boss);
+	const double rares = boss[ITEM_QUALITY_RARE] + 1;
+	EXPECT_GT(rares, 1.5);
+	EXPECT_LT(rares, 2.0);
+	EXPECT_LT(std::accumulate(boss.begin(), boss.end(), 0.0) + 1, 4.0);
+	// A rare monster: about one and a half rolls, a rare one time in five.
+	const std::array<double, 4> rare = ExpectedEquipment(LootSource::Rare);
+	EXPECT_LT(rare[ITEM_QUALITY_RARE], 0.2);
 }
 
 TEST_F(Poe2LootTest, MapBonusesRaiseRarityAndWaystones)
@@ -125,10 +176,10 @@ TEST_F(Poe2LootTest, MapBonusesRaiseRarityAndWaystones)
 	bonus.rarity = 200;
 	bonus.waystones = 300;
 	const std::array<int, 4> weights = EquipmentRarityWeights(LootSource::Normal, bonus);
-	EXPECT_EQ(weights[1], 7000);
-	EXPECT_EQ(weights[2], 1550);
+	EXPECT_EQ(weights[1], 4550);
+	EXPECT_EQ(weights[2], 400);
 	EXPECT_EQ(weights[3], 50);
-	EXPECT_EQ(weights[0], 10000 - 7000 - 1550 - 50);
+	EXPECT_EQ(weights[0], 10000 - 4550 - 400 - 50);
 	EXPECT_EQ(EquipmentRarityWeights(LootSource::Normal), EquipmentRarityWeights(LootSource::Normal, {}));
 	const auto categories = LootCategoryWeights(LootSource::Normal, bonus);
 	EXPECT_EQ(categories[static_cast<size_t>(LootCategory::Endgame)], 3 * LootCategoryWeights(LootSource::Normal)[static_cast<size_t>(LootCategory::Endgame)]);

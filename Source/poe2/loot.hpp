@@ -3,7 +3,8 @@
  *
  * POE2 Mashup loot rules from the itemization bible (research/itemization-bundle-v5): a kill gives a number of loot
  * rolls by how tough the monster was, each roll picks a category (equipment, gold, currency, ...), and equipment
- * then rolls its rarity from a table for that kind of monster. The numbers are the bundle's starting defaults.
+ * then rolls its rarity from a table for that kind of monster. The category weights are the bundle's starting
+ * defaults; the roll counts and rarity tables are lower, closer to POE2's campaign (research/loot-2026-10-23).
  */
 #pragma once
 
@@ -67,7 +68,7 @@ struct LootBonus {
 	int unique = 100;
 };
 
-/** @brief Average loot rolls per kill, in thousandths: 0.18 for a normal monster up to 6 for a boss. */
+/** @brief Average loot rolls per kill, in thousandths: 0.15 for a normal monster up to 4 for a boss. */
 int ExpectedLootRollsPerMille(LootSource source);
 /** @brief The whole rolls, plus one more with the chance of the fraction. */
 int RollLootCount(LootSource source, const LootBonus &bonus = {});
