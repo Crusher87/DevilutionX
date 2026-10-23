@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <iterator>
+#include <string>
 #include <string_view>
 
 #include <gtest/gtest.h>
@@ -9,13 +10,19 @@
 #include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
+#include "loadsave.h"
+#include "pfile.h"
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/stash_tabs.hpp"
+#include "qol/stash.h"
 #include "spells.h"
+#include "utils/file_util.h"
+#include "utils/paths.h"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -69,6 +76,45 @@ public:
 	static int Stat(const Item &item, Poe2ItemStat stat)
 	{
 		return item._iPoe2Stats[static_cast<size_t>(stat)];
+	}
+
+	/**
+	 * Saves the item in a single-player stash and loads it back. The stash writes and reads each item with the game
+	 * save's own item record (SaveItem / LoadAndValidateItemData).
+	 */
+	static Item SaveAndLoad(Item item)
+	{
+		const std::string previousPrefPath = paths::PrefPath();
+		const std::string folder = ::testing::TempDir() + "poe2_item_bases_" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + DIRECTORY_SEPARATOR_STR;
+		CreateDir(folder.c_str());
+		for (const std::string &file : ListFiles(folder.c_str()))
+			RemoveFile((folder + file).c_str());
+		paths::SetPrefPath(folder);
+
+		Stash = {};
+		StashTabs.reset();
+		const Size size = GetInventorySize(item);
+		item.position = { 0, size.height - 1 };
+		Stash.stashList.push_back(item);
+		for (int x = 0; x < size.width; x++) {
+			for (int y = 0; y < size.height; y++)
+				Stash.stashGrids[0][x][y] = 1;
+		}
+		Stash.dirty = true;
+		sfile_write_stash();
+
+		Stash = {};
+		StashTabs.reset();
+		LoadStash();
+		Item loaded {};
+		if (Stash.stashList.size() == 1)
+			loaded = Stash.stashList[0];
+		else
+			ADD_FAILURE() << Stash.stashList.size() << " items came back";
+		Stash = {};
+		StashTabs.reset();
+		paths::SetPrefPath(previousPrefPath);
+		return loaded;
 	}
 };
 
@@ -332,6 +378,53 @@ TEST_F(Poe2ItemBasesTest, QuarterstaffsRollWeaponAffixesNotSpells)
 			magic++;
 	}
 	EXPECT_GT(magic, 0);
+}
+
+/** Plan step 9: the bundle's top weapon damage (199-281 on the base, +82 added) passes the old 8-bit fields. */
+TEST_F(Poe2ItemBasesTest, WeaponDamageAbove255Survives)
+{
+	const _item_indexes base = FindBase("Heavy Shortsword");
+	AllItemsList[base].iMinDam = 199;
+	AllItemsList[base].iMaxDam = 281;
+	Item sword = MakeItem("Heavy Shortsword", 1);
+	EXPECT_GE(sword._iMinDam, 199);
+	EXPECT_GE(sword._iMaxDam, 281);
+
+	const int minDamage = sword._iMinDam + 82;
+	const int maxDamage = sword._iMaxDam + 82;
+	ApplyModEffect(sword, ModEffect::AddedPhysical, 82, 82);
+	EXPECT_EQ(sword._iMinDam, minDamage);
+	EXPECT_EQ(sword._iMaxDam, maxDamage);
+
+	const Item loaded = SaveAndLoad(sword);
+	EXPECT_EQ(loaded.IDidx, base);
+	EXPECT_EQ(loaded._iMinDam, minDamage) << "A game save keeps damage past 255";
+	EXPECT_EQ(loaded._iMaxDam, maxDamage);
+
+	// Oil of Sharpness from another player (network and multiplayer hero items) keeps its 16 bits.
+	Item oiled = sword;
+	oiled._iMinDam = 340;
+	oiled._iMaxDam = 363;
+	EXPECT_EQ(ClampMaxDam(oiled, 364), 364);
+	EXPECT_EQ(ClampMaxDam(oiled, 371), 363) << "Still no more than 30 over the minimum";
+
+	// Added damage clamps at the field's top instead of wrapping.
+	ApplyModEffect(sword, ModEffect::AddedPhysical, 70000, 70000);
+	EXPECT_EQ(sword._iMaxDam, UINT16_MAX);
+}
+
+/** Plan step 9: body armour past 255 (the bundle's top is about 496) is built and saved whole. */
+TEST_F(Poe2ItemBasesTest, ArmourAbove255Survives)
+{
+	const _item_indexes base = FindBase("Iron Cuirass");
+	AllItemsList[base].iMinAC = 496;
+	AllItemsList[base].iMaxAC = 496;
+	const Item cuirass = MakeItem("Iron Cuirass", 1);
+	EXPECT_GE(cuirass._iAC, 496);
+
+	const Item loaded = SaveAndLoad(cuirass);
+	EXPECT_EQ(loaded.IDidx, base);
+	EXPECT_EQ(loaded._iAC, cuirass._iAC) << "A game save keeps armour past 255";
 }
 
 } // namespace

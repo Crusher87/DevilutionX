@@ -2336,6 +2336,13 @@ void OperateShrineHidden(DiabloGenerator &rng, Player &player)
 	InitDiabloMsg(EMSG_SHRINE_HIDDEN);
 }
 
+/** Raises a weapon's maximum damage by one, short of the 16-bit field's top. */
+void RaiseMaxDamage(Item &item)
+{
+	if (item._iMaxDam < UINT16_MAX)
+		item._iMaxDam++;
+}
+
 void OperateShrineGloomy(Player &player)
 {
 	if (&player != MyPlayer)
@@ -2349,7 +2356,9 @@ void OperateShrineGloomy(Player &player)
 		case ItemType::Bow:
 		case ItemType::Mace:
 		case ItemType::Staff:
-			item._iMaxDam--;
+			// Never wrapping the unsigned field.
+			if (item._iMaxDam > 0)
+				item._iMaxDam--;
 			if (item._iMaxDam < item._iMinDam)
 				item._iMaxDam = item._iMinDam;
 			break;
@@ -2376,9 +2385,9 @@ void OperateShrineWeird(Player &player)
 		return;
 
 	if (!player.InvBody[INVLOC_HAND_LEFT].isEmpty() && player.InvBody[INVLOC_HAND_LEFT]._itype != ItemType::Shield)
-		player.InvBody[INVLOC_HAND_LEFT]._iMaxDam++;
+		RaiseMaxDamage(player.InvBody[INVLOC_HAND_LEFT]);
 	if (!player.InvBody[INVLOC_HAND_RIGHT].isEmpty() && player.InvBody[INVLOC_HAND_RIGHT]._itype != ItemType::Shield)
-		player.InvBody[INVLOC_HAND_RIGHT]._iMaxDam++;
+		RaiseMaxDamage(player.InvBody[INVLOC_HAND_RIGHT]);
 
 	for (Item &item : InventoryPlayerItemsRange { player }) {
 		switch (item._itype) {
@@ -2387,7 +2396,7 @@ void OperateShrineWeird(Player &player)
 		case ItemType::Bow:
 		case ItemType::Mace:
 		case ItemType::Staff:
-			item._iMaxDam++;
+			RaiseMaxDamage(item);
 			break;
 		default:
 			break;

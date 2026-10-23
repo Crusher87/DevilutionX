@@ -239,9 +239,10 @@ void AddPoe2Stat(Item &item, Poe2ItemStat stat, int value)
 	total = static_cast<int16_t>(std::clamp(total + value, static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
 }
 
-uint8_t AddToByte(uint8_t base, int value)
+/** Adds to an item's 16-bit weapon damage, clamped to the field. */
+uint16_t AddToDamage(uint16_t base, int value)
 {
-	return static_cast<uint8_t>(std::clamp(base + value, 0, static_cast<int>(UINT8_MAX)));
+	return static_cast<uint16_t>(std::clamp(base + value, 0, static_cast<int>(UINT16_MAX)));
 }
 
 } // namespace
@@ -727,8 +728,8 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		AddPoe2Stat(item, Poe2ItemStat::Spirit, v0);
 		break;
 	case ModEffect::AddedPhysical:
-		item._iMinDam = AddToByte(item._iMinDam, v0);
-		item._iMaxDam = AddToByte(item._iMaxDam, v1);
+		item._iMinDam = AddToDamage(item._iMinDam, v0);
+		item._iMaxDam = AddToDamage(item._iMaxDam, v1);
 		break;
 	case ModEffect::PhysicalPercent:
 		item._iPLDam = static_cast<int16_t>(item._iPLDam + v0);

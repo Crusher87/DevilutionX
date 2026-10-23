@@ -999,8 +999,8 @@ int SaveItemPower(const Player &player, Item &item, ItemPower &power)
 		item._iFlags |= ItemSpecialEffect::RandomArrowVelocity;
 		break;
 	case IPL_SETDAM:
-		item._iMinDam = power.param1;
-		item._iMaxDam = power.param2;
+		item._iMinDam = static_cast<uint16_t>(std::clamp(power.param1, 0, static_cast<int>(UINT16_MAX)));
+		item._iMaxDam = static_cast<uint16_t>(std::clamp(power.param2, 0, static_cast<int>(UINT16_MAX)));
 		break;
 	case IPL_SETDUR:
 		item._iDurability = power.param1;
@@ -7938,12 +7938,12 @@ bool ApplyOilToItem(Item &item, Player &player)
 		}
 		break;
 	case IMISC_OILSHARP:
-		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < 255) {
+		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < UINT16_MAX) {
 			item._iMaxDam = item._iMaxDam + 1;
 		}
 		break;
 	case IMISC_OILDEATH:
-		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < 254) {
+		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < UINT16_MAX - 1) {
 			item._iMinDam = item._iMinDam + 1;
 			item._iMaxDam = item._iMaxDam + 2;
 		}
