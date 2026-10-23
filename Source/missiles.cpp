@@ -55,6 +55,7 @@
 #include "poe2/spell_damage.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/spirit_uses.hpp"
@@ -630,7 +631,16 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 			            || (monster.flags & MFLAG_BERSERK) != 0                                  //  or the target is berserked
 			            ))) {
 				// then the missile can potentially hit this target
-				isMonsterHit = MonsterTrapHit(monster, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted);
+				int trapMin = minDamage;
+				int trapMax = maxDamage;
+				// POE2 Mashup: a monster's missile (not a trap's) is scaled to its level's table, like its hits on the
+				// hero. _misource may name a monster that has died since and whose slot was reused, as with the bytes.
+				if (!missile.IsTrap() && missile._micaster == TARGET_PLAYERS) {
+					const Monster &source = Monsters[missile._misource];
+					trapMin = ScaleMonsterHit(source, trapMin);
+					trapMax = ScaleMonsterHit(source, trapMax);
+				}
+				isMonsterHit = MonsterTrapHit(monster, trapMin, trapMax, missile._midist, missile._mitype, damageType, isDamageShifted);
 			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
 				HitTraceRefused(monster, "this projectile already pierced it");
 			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS)) {
@@ -1373,12 +1383,17 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 			if (monster == nullptr)
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::HalfTrapDamage))
 					dam /= 2;
+			// POE2 Mashup: a monster's shot or spell is scaled to its level's table (traps stay Diablo-scale).
+			if (monster != nullptr)
+				dam = ScaleMonsterHit(*monster, dam);
 			dam += player._pIGetHit * 64;
 		} else {
 			dam = RandomIntBetween(mind, maxd);
 			if (monster == nullptr)
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::HalfTrapDamage))
 					dam /= 2;
+			if (monster != nullptr)
+				dam = ScaleMonsterHit(*monster, dam);
 			dam += player._pIGetHit;
 		}
 

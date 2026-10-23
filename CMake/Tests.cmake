@@ -54,6 +54,7 @@ set(tests
   primitive_render_test
   poe2_economy_test
   poe2_endgame_test
+  poe2_monster_levels_test
   poe2_monster_mods_test
   poe2_passive_tree_test
   poe2_weapon_swap_test

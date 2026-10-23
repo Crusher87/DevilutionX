@@ -43,6 +43,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -859,6 +860,9 @@ void LoadMonsters(LoadHelper &file, ankerl::unordered_dense::set<unsigned> &remo
 
 		if (applyLight && monster.isUnique() && monster.lightId != NO_LIGHT)
 			Lights[monster.lightId].isInvalid = false;
+		// POE2 Mashup: a monster saved before the monster level tables (or on a kept floor) moves onto them once,
+		// keeping its life fraction; monsters already on them are left as they are.
+		RescaleLoadedMonster(monster);
 
 		i++;
 	}

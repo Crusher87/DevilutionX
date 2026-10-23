@@ -129,8 +129,11 @@ TEST_F(Poe2MonsterModsTest, ModifiersChangeTheMonster)
 
 	Monster brute = MakeMonster(FindSeed(MonsterRarity::Magic, MonsterMod::HardHitting));
 	ApplyMonsterRarity(brute);
-	EXPECT_EQ(brute.minDamage, 14);
-	EXPECT_EQ(brute.maxDamage, 28);
+	// Hard Hitting scales each hit; the damage bytes stay the monster's own.
+	EXPECT_EQ(brute.minDamage, 10);
+	EXPECT_EQ(brute.maxDamage, 20);
+	EXPECT_EQ(MonsterModsDamagePercent(brute), 100 + HardHittingPercent);
+	EXPECT_EQ(MonsterModsDamagePercent(tough), 100);
 	EXPECT_EQ(brute.maxHitPoints, Fixed26_6::fromInt(100 + MagicMonsterLifePercent));
 
 	Monster resistant = MakeMonster(FindSeed(MonsterRarity::Magic, MonsterMod::Resistant));

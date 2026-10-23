@@ -110,7 +110,8 @@ void DrawMonsterHealthBar(const Surface &out)
 
 	RenderClxSprite(out, (*healthBox)[0], position);
 	DrawHalfTransparentRectTo(out, position.x + border, position.y + border, width - (border * 2), height - (border * 2));
-	const int barProgress = (barWidth * currLife.raw()) / monster.maxHitPoints.raw();
+	// 64 bits: POE2 map bosses carry millions of life.
+	const int barProgress = static_cast<int>((static_cast<int64_t>(barWidth) * currLife.raw()) / monster.maxHitPoints.raw());
 	if (barProgress != 0) {
 		RenderClxSprite(
 		    out.subregion(position.x + border + 1, position.y + border + 1, barProgress, height - (border * 2) - 2),

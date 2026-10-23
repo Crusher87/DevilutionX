@@ -10,6 +10,7 @@
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "monster.h"
+#include "poe2/monster_levels.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/monstdat.h"
 #include "tables/questdat.hpp"
@@ -27,6 +28,8 @@ std::array<uint8_t, NUMLEVELS> AreaByFloor {};
 void LoadAreaLevels()
 {
 	AreaByFloor.fill(0);
+	// The monster tables that go with the area levels; cleared outside POE2 mode too.
+	LoadMonsterLevels();
 	if (!gbIsPoe2)
 		return;
 

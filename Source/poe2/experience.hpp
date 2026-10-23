@@ -26,7 +26,7 @@ void LoadPoe2ExperienceData();
 /** @brief Experience of a white monster of this level (levels past the table repeat its last row). */
 uint32_t MonsterBaseExperience(int monsterLevel);
 
-/** @brief Percent for the monster's type (the type table's xpMult); 100 until that table exists. */
+/** @brief Percent for the monster's type (monster_types.tsv xpPercent); 100 for uniques, bosses and without it. */
 int MonsterTypeExperiencePercent(const Monster &monster);
 
 /** @brief Unique and boss multiplier in percent from experience_bosses.tsv; 100 for other monsters. */

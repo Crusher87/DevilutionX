@@ -88,6 +88,7 @@
 #include "poe2/floor_packs.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/profane_roads.hpp"
@@ -144,9 +145,6 @@ namespace {
 
 constexpr int NightmareToHitBonus = 85;
 constexpr int HellToHitBonus = 120;
-
-constexpr int NightmareAcBonus = 50;
-constexpr int HellAcBonus = 80;
 
 /** @brief Reserved some entries in @Monster for golems. For vanilla compatibility, this must remain 4. */
 constexpr int ReservedMonsterSlotsForGolems = 4;
@@ -277,7 +275,13 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 		monster.mode = MonsterMode::SpecialMeleeAttack;
 	}
 
-	if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+	// POE2 Mashup: life comes from the monster level tables at the floor's area level, which carries the difficulty.
+	// The roll above keeps its spread (and its place in the random sequence); the damage bytes stay the data and each
+	// hit is scaled (Poe2MonsterDamagePercent). Hell keeps its immunities.
+	if (ApplyPoe2MonsterLife(monster, maxhp)) {
+		if (sgGameInitInfo.nDifficulty == DIFF_HELL)
+			monster.resistance = monster.data().resistanceHell;
+	} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 		monster.maxHitPoints = 3 * monster.maxHitPoints;
 		if (gbIsHellfire)
 			monster.maxHitPoints += Fixed26_6::fromInt(gbIsMultiplayer ? 100 : 50);
@@ -1180,7 +1184,8 @@ void StartHeal(Monster &monster)
 	monster.animInfo.currentFrame = monster.type().getAnimData(MonsterGraphic::Special).frames - 1;
 	monster.flags |= MFLAG_LOCK_ANIMATION;
 	monster.mode = MonsterMode::Heal;
-	monster.var1 = (monster.maxHitPoints / (16 * (GenerateRnd(5) + 4))).raw();
+	// POE2 Mashup: var1 is 16 bits, and table life can pass 32,767.
+	monster.var1 = static_cast<int16_t>(std::min<int32_t>((monster.maxHitPoints / (16 * (GenerateRnd(5) + 4))).raw(), INT16_MAX));
 }
 
 void SyncLightPosition(Monster &monster)
@@ -1248,6 +1253,8 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 		return;
 
 	int dam = RandomIntBetween(mind, maxd) << 6;
+	// POE2 Mashup: a monster's hit is scaled to its level's table (a berserk one's too; not the player's minions).
+	dam = ScaleMonsterHit(attacker, dam);
 	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
 	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
 		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
@@ -1372,7 +1379,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		const Direction dir = GetDirection(player.position.tile, monster.position.tile);
 		StartPlrBlock(player, dir);
 		if (&player == MyPlayer && player.wReflections > 0) {
-			Fixed26_6 dam = Fixed26_6::fromRaw(GenerateRnd(((maxDam - minDam) << 6) + 1) + (minDam << 6));
+			Fixed26_6 dam = Fixed26_6::fromRaw(ScaleMonsterHit(monster, GenerateRnd(((maxDam - minDam) << 6) + 1) + (minDam << 6)));
 			dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
 			CheckReflect(monster, player, dam);
 		}
@@ -1383,6 +1390,8 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 
 	// New method fixes a bug which caused the maximum possible damage value to be 63/64ths too low.
 	Fixed26_6 dam = Fixed26_6::fromRaw(RandomIntBetween(minDam << 6, maxDam << 6));
+	// POE2 Mashup: the hit is scaled to the monster level table; the bytes are the monster's data.
+	dam = Fixed26_6::fromRaw(ScaleMonsterHit(monster, dam.raw()));
 	dam = std::max(dam + Fixed26_6::fromInt(player._pIGetHit), Fixed26_6::fromInt(1));
 	// POE2 Mashup: deep damage logging follows the hit step by step.
 	if (&player == MyPlayer) {
@@ -1424,8 +1433,12 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 			M_StartHit(monster, player, mdam);
 	}
 
-	if ((monster.flags & MFLAG_NOLIFESTEAL) == 0 && monster.type().type == MT_SKING && gbIsMultiplayer)
+	if ((monster.flags & MFLAG_NOLIFESTEAL) == 0 && monster.type().type == MT_SKING && gbIsMultiplayer) {
 		monster.hitPoints += dam;
+		// POE2 Mashup: his hits are table-sized, so he heals only up to his life.
+		if (gbIsPoe2)
+			monster.hitPoints = std::min(monster.hitPoints, monster.maxHitPoints);
+	}
 	// POE2 Mashup: Cast when Hit and the like.
 	if (gbIsPoe2 && &player == MyPlayer && !player.hasNoLife())
 		OnPlayerHitBySupportedMonster(player, monster);
@@ -3652,7 +3665,12 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 		monster.goal = MonsterGoal::Inquiring;
 	}
 
-	if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+	// POE2 Mashup: a unique has a white's life at the floor's area level times its multiplier (monster_bosses.tsv);
+	// the area level carries the difficulty, and its damage bytes stay its data.
+	const bool onPoe2Tables = ApplyPoe2MonsterLife(monster, uniqueMonsterData.mmaxhp);
+	if (onPoe2Tables) {
+		// Nothing for the difficulty.
+	} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 		monster.maxHitPoints = 3 * monster.maxHitPoints;
 		if (gbIsHellfire)
 			monster.maxHitPoints += Fixed26_6::fromInt(gbIsMultiplayer ? 100 : 50);
@@ -3682,7 +3700,9 @@ std::expected<void, std::string> PrepareUniqueMonst(Monster &monster, UniqueMons
 	if (uniqueMonsterData.customArmorClass != 0) {
 		monster.armorClass = uniqueMonsterData.customArmorClass;
 
-		if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+		if (onPoe2Tables) {
+			// The area level carries the difficulty.
+		} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 			monster.armorClass += NightmareAcBonus;
 		} else if (sgGameInitInfo.nDifficulty == DIFF_HELL) {
 			monster.armorClass += HellAcBonus;
@@ -5066,7 +5086,11 @@ void PrintMonstHistory(int mt)
 	if (MonsterKillCounts[mt] >= 30) {
 		int minHP = MonstersData[mt].hitPointsMinimum;
 		int maxHP = MonstersData[mt].hitPointsMaximum;
-		if (!gbIsMultiplayer) {
+		// POE2 Mashup: the monster level table's life at this floor's area level.
+		const int areaLevel = gbIsPoe2 && HasMonsterLevelTable() ? CurrentAreaLevel() : 0;
+		if (areaLevel > 0) {
+			Poe2TypeLifeRange(static_cast<_monster_id>(mt), areaLevel, minHP, maxHP);
+		} else if (!gbIsMultiplayer) {
 			minHP /= 2;
 			maxHP /= 2;
 		}
@@ -5079,7 +5103,9 @@ void PrintMonstHistory(int mt)
 			hpBonusNightmare = (!gbIsMultiplayer ? 50 : 100);
 			hpBonusHell = (!gbIsMultiplayer ? 100 : 200);
 		}
-		if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
+		if (areaLevel > 0) {
+			// The area level carries the difficulty.
+		} else if (sgGameInitInfo.nDifficulty == DIFF_NIGHTMARE) {
 			minHP = 3 * minHP + hpBonusNightmare;
 			maxHP = 3 * maxHP + hpBonusNightmare;
 		} else if (sgGameInitInfo.nDifficulty == DIFF_HELL) {

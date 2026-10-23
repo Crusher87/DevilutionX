@@ -135,8 +135,10 @@ TEST_F(Poe2ExperienceTest, BossesUseTheirMultiplier)
 	EXPECT_EQ(MonsterBossExperiencePercent(MakeUnique(UniqueMonsterType::SkeletonKing)), 800);
 	EXPECT_EQ(MonsterBossExperiencePercent(MakeUnique(UniqueMonsterType::Lazarus)), 1000);
 	EXPECT_EQ(MonsterBossExperiencePercent(MakeUnique(UniqueMonsterType::NaKrul)), 1500);
-	// Bonehead Keenaxe: any unique not in the table.
-	EXPECT_EQ(MonsterBossExperiencePercent(MakeUnique(static_cast<UniqueMonsterType>(13))), 450);
+	// Bonehead Keenaxe: other uniques pay for their life multiplier (monster_bosses.tsv, 3-6 x a white), here the top.
+	EXPECT_EQ(MonsterBossExperiencePercent(MakeUnique(static_cast<UniqueMonsterType>(13))), 600);
+	// Madeye the Dead sits inside the band.
+	EXPECT_EQ(MonsterBossExperiencePercent(MakeUnique(static_cast<UniqueMonsterType>(25))), 311);
 	// Diablo isn't a unique; his type carries the multiplier.
 	const Monster diablo = MakeMonster(MonsterRarity::Normal, 1);
 	EXPECT_EQ(MonsterBossExperiencePercent(diablo), 1500);
