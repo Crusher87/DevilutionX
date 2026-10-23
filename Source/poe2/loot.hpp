@@ -106,6 +106,16 @@ int CurrencyDropLevel(item_misc_id miscId);
 /** @brief How often a currency drops compared with the others of its band. */
 int CurrencyBandWeight(item_misc_id miscId);
 
+/**
+ * @brief The POE2 area level an item starts dropping at, for the items whose drop level follows POE2 rather than the
+ * item table, 0 for the rest: jewels 20, the Amethyst Charm 40 and the Golden Charm 50, as in POE2.
+ */
+int Poe2AreaDropLevel(item_misc_id miscId);
+/** @brief Hellfire's thrown trap runes, which never drop in POE2 mode; POE2's socket runes are augments, and still drop. */
+bool IsHellfireRune(item_misc_id miscId);
+/** @brief The area level POE2 drop levels are checked against: the map's inside a map, otherwise the floor's POE2 item level. */
+int LootAreaLevel(int floorItemLevel);
+
 /** @brief Natural rares have 4, 5 or 6 affixes, weighted 8:3:1. */
 int RollNaturalRareAffixCount();
 

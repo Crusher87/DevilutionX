@@ -7,6 +7,7 @@
 #include "game_mode.hpp"
 #include "monster.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/waystones.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -327,6 +328,34 @@ int CurrencyBandWeight(item_misc_id miscId)
 	default:
 		return 150;
 	}
+}
+
+int Poe2AreaDropLevel(item_misc_id miscId)
+{
+	// Curtis 2026-10-23: a Golden Charm, Amethyst Charms and four jewels dropped on Cathedral floors 3 and 4. POE2's own
+	// levels (Path of Building's charm bases; poe2db's jewel bases): the Golden Charm only in the late campaign and maps.
+	switch (miscId) {
+	case IMISC_JEWEL:
+		return 20;
+	case IMISC_CHARM_MAGIC:
+		return 40;
+	case IMISC_CHARM_GOLDEN:
+		return 50;
+	default:
+		return 0;
+	}
+}
+
+bool IsHellfireRune(item_misc_id miscId)
+{
+	return miscId > IMISC_RUNEFIRST && miscId < IMISC_RUNELAST;
+}
+
+int LootAreaLevel(int floorItemLevel)
+{
+	if (const int tier = ActiveMapTier(); tier > 0)
+		return std::max(floorItemLevel, MapAreaLevelBase + tier);
+	return floorItemLevel;
 }
 
 int RollNaturalRareAffixCount()

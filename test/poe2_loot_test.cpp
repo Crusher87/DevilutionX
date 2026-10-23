@@ -13,6 +13,7 @@
 #include "player.h"
 #include "poe2/loot.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/waystones.hpp"
 #include "spells.h"
 #include "stores.h"
 #include "utils/is_of.hpp"
@@ -368,6 +369,84 @@ TEST_F(Poe2LootTest, AdriaOnlySellsCommonCurrency)
 			if (item._itype == ItemType::Staff)
 				EXPECT_EQ(GetPoe2ItemLevel(item), Poe2ItemLevel(16));
 		}
+	}
+}
+
+/** Breaks `count` barrels on a floor and keeps what they drop. */
+std::vector<Item> ContainerDrops(int floor, dungeon_type type, int count, uint32_t firstSeed = 1)
+{
+	currlevel = static_cast<uint8_t>(floor);
+	leveltype = type;
+	std::vector<Item> drops;
+	for (uint32_t seed = firstSeed; seed < firstSeed + static_cast<uint32_t>(count); seed++) {
+		SetRndSeed(seed);
+		ActiveItemCount = 0;
+		for (int i = 0; i < MAXITEMS; i++)
+			ActiveItems[i] = i;
+		CreateRndItem({ 40, 40 }, false, false, false);
+		for (int i = 0; i < ActiveItemCount; i++)
+			drops.push_back(Items[ActiveItems[i]]);
+		for (int x = 0; x < MAXDUNX; x++)
+			for (int y = 0; y < MAXDUNY; y++)
+				dItem[x][y] = 0;
+	}
+	return drops;
+}
+
+size_t CountMisc(const std::vector<Item> &drops, item_misc_id miscId)
+{
+	return std::count_if(drops.begin(), drops.end(), [miscId](const Item &item) { return item._iMiscId == miscId; });
+}
+
+TEST_F(Poe2LootTest, CharmsAndJewelsWaitForPoe2sLevels)
+{
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_JEWEL), 20);
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_MAGIC), 40) << "Amethyst Charm";
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_GOLDEN), 50) << "Golden Charm: the late campaign and maps";
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_FIRE), 0) << "the item table's level";
+
+	// Cathedral floor 4 (area level 10 for a barrel): Curtis found jewels, Amethyst Charms and a Golden Charm there.
+	const std::vector<Item> cathedral = ContainerDrops(4, DTYPE_CATHEDRAL, 4000);
+	EXPECT_EQ(CountMisc(cathedral, IMISC_JEWEL), 0U);
+	EXPECT_EQ(CountMisc(cathedral, IMISC_CHARM_MAGIC), 0U);
+	EXPECT_EQ(CountMisc(cathedral, IMISC_CHARM_GOLDEN), 0U);
+	EXPECT_GT(CountMisc(cathedral, IMISC_CHARM_FIRE) + CountMisc(cathedral, IMISC_CHARM_LIGHTNING), 0U) << "other charms still drop";
+
+	// Hell floor 16 (42): jewels and the Amethyst Charm, still no Golden Charm.
+	const std::vector<Item> hell = ContainerDrops(16, DTYPE_HELL, 4000);
+	EXPECT_GT(CountMisc(hell, IMISC_JEWEL), 0U);
+	EXPECT_GT(CountMisc(hell, IMISC_CHARM_MAGIC), 0U);
+	EXPECT_EQ(CountMisc(hell, IMISC_CHARM_GOLDEN), 0U);
+
+	// Past area level 50 the Golden Charm drops too.
+	sgGameInitInfo.nDifficulty = DIFF_NIGHTMARE;
+	const std::vector<Item> late = ContainerDrops(16, DTYPE_HELL, 4000);
+	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+	EXPECT_GT(CountMisc(late, IMISC_CHARM_GOLDEN), 0U);
+}
+
+TEST_F(Poe2LootTest, MapsCountAsTheirAreaLevel)
+{
+	currlevel = 13;
+	setlevel = false;
+	EXPECT_EQ(LootAreaLevel(30), 30);
+	MyPlayer->poe2.mapTier = 3;
+	MyPlayer->poe2.mapLevel = 13;
+	EXPECT_EQ(LootAreaLevel(30), MapAreaLevelBase + 3);
+	MyPlayer->poe2.mapTier = 0;
+	MyPlayer->poe2.mapLevel = 0;
+}
+
+TEST_F(Poe2LootTest, HellfireRunesNeverDrop)
+{
+	EXPECT_TRUE(IsHellfireRune(IMISC_RUNEF));
+	EXPECT_TRUE(IsHellfireRune(IMISC_GR_RUNEL));
+	EXPECT_TRUE(IsHellfireRune(IMISC_RUNES));
+	EXPECT_FALSE(IsHellfireRune(IMISC_AUGMENT)) << "POE2's socket runes still drop";
+	for (const int floor : { 4, 16 }) {
+		const std::vector<Item> drops = ContainerDrops(floor, floor == 4 ? DTYPE_CATHEDRAL : DTYPE_HELL, 6000);
+		for (const Item &item : drops)
+			EXPECT_FALSE(item.isRune()) << item._iIName;
 	}
 }
 
