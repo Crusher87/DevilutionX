@@ -2919,9 +2919,7 @@ void AddRage(Missile &missile, AddMissileParameter &parameter)
 		return;
 	}
 
-	// POE2 Mashup: Rage's level growth is off (Curtis 2026-10-23): no Str/Dex/Vit or resistance swing (items.cpp
-	// HiddenBonusLevel), so no closing hit either.
-	missile._midam = gbIsPoe2 ? 0 : player.getCharacterLevel() * 6;
+	missile._midam = player.getCharacterLevel() * 6;
 	missile.duration = 245 + (player.getCharacterLevel() * 2);
 	missile.var1 = missile.duration;
 

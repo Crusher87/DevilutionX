@@ -114,11 +114,13 @@ TEST_F(Poe2AttributesTest, ClassicModeKeepsTheClassCeilings)
 	gbIsPoe2 = true;
 }
 
-/** Pick 7 / decision 10A: Diablo's Strength (and Dexterity) x level damage is gone for every class. */
+/** Pick 7 / decision 10A: Diablo's Strength (and Dexterity) x level damage is gone for every class but the Barbarian. */
 TEST_F(Poe2AttributesTest, StrengthDamageDoesNotGrowWithLevel)
 {
 	Player &player = *MyPlayer;
 	for (const HeroClass heroClass : AllClasses) {
+		if (heroClass == HeroClass::Barbarian)
+			continue; // on hold, see BarbarianKeepsHisLevelBonusesForNow
 		for (const int level : { 1, 40 }) {
 			MakeHero(player, heroClass, level);
 			Recalculate(player);
@@ -148,60 +150,25 @@ TEST_F(Poe2AttributesTest, WarriorCritIsFlatFive)
 	EXPECT_EQ(AttackCritChance(player), 0);
 }
 
-/** Curtis 2026-10-23: the Barbarian's Iron Skin (+clvl/4 armour) and Natural Resistance (+clvl) are off. */
-TEST_F(Poe2AttributesTest, BarbarianHasNoLevelArmour)
+/** Curtis 2026-10-23: the Barbarian is on hold, so he keeps Iron Skin, Natural Resistance and Rage's growth. */
+TEST_F(Poe2AttributesTest, BarbarianKeepsHisLevelBonusesForNow)
 {
 	Player &player = *MyPlayer;
 	MakeHero(player, HeroClass::Barbarian, 1);
 	Recalculate(player);
 	const int armour = player._pIAC;
 	const int fire = player._pFireResist;
-	const int lightning = player._pLghtResist;
-	const int magic = player._pMagResist;
 
 	MakeHero(player, HeroClass::Barbarian, 40);
 	Recalculate(player);
-	EXPECT_EQ(player._pIAC, armour);
-	EXPECT_EQ(player._pFireResist, fire);
-	EXPECT_EQ(player._pLghtResist, lightning);
-	EXPECT_EQ(player._pMagResist, magic);
+	EXPECT_EQ(player._pIAC, armour + 40 / 4) << "Iron Skin";
+	EXPECT_EQ(player._pFireResist, fire + 39) << "Natural Resistance";
+	EXPECT_GT(player._pDamageMod, 0);
 
-	gbIsPoe2 = false;
-	MakeHero(player, HeroClass::Barbarian, 1);
-	Recalculate(player);
-	const int diabloArmour = player._pIAC;
-	const int diabloFire = player._pFireResist;
-	MakeHero(player, HeroClass::Barbarian, 40);
-	Recalculate(player);
-	EXPECT_EQ(player._pIAC, diabloArmour + 40 / 4) << "Diablo keeps Iron Skin";
-	EXPECT_EQ(player._pFireResist, diabloFire + 39) << "Diablo keeps Natural Resistance";
-}
-
-/** Curtis 2026-10-23: Rage's +2 x clvl Strength and Vitality (and its cooldown's matching loss) are off. */
-TEST_F(Poe2AttributesTest, RageDoesNotGrowWithLevel)
-{
-	Player &player = *MyPlayer;
-	MakeHero(player, HeroClass::Barbarian, 40);
-	Recalculate(player);
 	const int strength = player._pStrength;
-	const int vitality = player._pVitality;
-	const int fire = player._pFireResist;
-
-	for (const SpellFlag flag : { SpellFlag::RageActive, SpellFlag::RageCooldown }) {
-		player._pSpellFlags = flag;
-		Recalculate(player);
-		EXPECT_EQ(player._pStrength, strength);
-		EXPECT_EQ(player._pVitality, vitality);
-		EXPECT_EQ(player._pFireResist, fire);
-	}
-
-	gbIsPoe2 = false;
-	MakeHero(player, HeroClass::Barbarian, 40);
-	Recalculate(player);
-	const int diabloStrength = player._pStrength;
 	player._pSpellFlags = SpellFlag::RageActive;
 	Recalculate(player);
-	EXPECT_EQ(player._pStrength, diabloStrength + 2 * 40) << "Diablo's Rage still grows";
+	EXPECT_EQ(player._pStrength, strength + 2 * 40) << "Rage still grows";
 }
 
 /** Decision 43A: the Monk's armour from level in light and medium body armour is gone. */

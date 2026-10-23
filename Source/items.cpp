@@ -3237,12 +3237,12 @@ namespace {
  * @brief The character level Diablo's hidden level bonuses grow with: Strength (and Dexterity) x level damage, the
  * Barbarian's Iron Skin, Natural Resistance and Rage, and the Monk's armour.
  *
- * POE2 Mashup: 0, so none of them grows with level and _pDamageMod is 0 for every class (decision 10A; Barbarian,
- * Curtis 2026-10-23).
+ * POE2 Mashup: 0, so none of them grows with level and _pDamageMod is 0 (decision 10A). The Barbarian keeps all of
+ * his for now: Curtis put him on hold (2026-10-23) because Rage does nothing without them.
  */
 int HiddenBonusLevel(const Player &player)
 {
-	return gbIsPoe2 ? 0 : player.getCharacterLevel();
+	return gbIsPoe2 && player._pClass != HeroClass::Barbarian ? 0 : player.getCharacterLevel();
 }
 
 } // namespace
