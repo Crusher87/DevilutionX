@@ -46,6 +46,15 @@ constexpr size_t MinionMonsterSlots = 40;
 /** @brief Armour class Nightmare and Hell add to every monster (Diablo's rules; not on the POE2 tables). */
 constexpr int NightmareAcBonus = 50;
 constexpr int HellAcBonus = 80;
+/** @brief To-hit Nightmare and Hell add to every monster's attacks (Diablo's rules; POE2's accuracy leaves it out). */
+constexpr int NightmareToHitBonus = 85;
+constexpr int HellToHitBonus = 120;
+
+/** @brief The to-hit a difficulty adds to Monster::toHit and toHitSpecial. */
+constexpr int MonsterDifficultyToHitBonus(_difficulty difficulty)
+{
+	return difficulty == DIFF_NIGHTMARE ? NightmareToHitBonus : difficulty == DIFF_HELL ? HellToHitBonus : 0;
+}
 
 enum monster_flag : uint16_t {
 	// clang-format off

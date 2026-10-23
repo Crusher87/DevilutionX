@@ -140,4 +140,28 @@ int Poe2HitChance(int accuracy, int evasion);
  */
 int LightStunChance(int64_t damage, int64_t maxLife);
 
+/**
+ * @brief Whether a monster's attacks on the hero use POE2's accuracy against evasion: in POE2 mode, for monsters on the
+ * monster level tables (not the player's minions). Others keep Diablo's to-hit roll.
+ */
+bool UsesPoe2MonsterAccuracy(const Monster &monster);
+/**
+ * @brief A monster's Accuracy Rating: the monster level table's accuracy at its level times clamp(baseToHit / its type's
+ * to-hit ref, 30-250%) (plan v2 step 4, audit C7/N7).
+ * @param baseToHit Its data or unique to-hit plus the attack's own offset, without the Nightmare/Hell bonus (the area
+ * level carries the difficulty).
+ */
+int MonsterAccuracyRating(const Monster &monster, int baseToHit);
+/**
+ * @brief Chance in percent that a monster's attack hits the hero: POE2's accuracy against evasion, with the attack's
+ * accuracy cut by distance (AccuracyAtDistancePercent for a shot). No character level term and no floor but POE2's 5%.
+ */
+int MonsterHitChance(const Monster &monster, int baseToHit, int evasion, int distancePercent = 100);
+/**
+ * @brief The hero's chance to block a monster's blow (@p melee) or missile, before the cap. In POE2 neither the hero's
+ * nor the monster's level counts; Diablo keeps -2 x monster level on blows and -2 x the level gap on missiles.
+ * @param monster nullptr for a trap's missile.
+ */
+int BlockChanceAgainstMonster(const Player &player, const Monster *monster, bool melee);
+
 } // namespace devilution

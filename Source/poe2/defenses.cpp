@@ -10,10 +10,12 @@
 #include "levels/gendung_defs.hpp"
 #include "monster.h"
 #include "player.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_uses.hpp"
@@ -322,6 +324,43 @@ int Poe2HitChance(int accuracy, int evasion)
 	accuracy = std::max(accuracy, 1);
 	const int64_t chance = int64_t { 125 } * accuracy * 10 / (int64_t { accuracy } * 10 + int64_t { std::max(evasion, 0) } * 3);
 	return std::clamp(static_cast<int>(chance), 5, 100);
+}
+
+bool UsesPoe2MonsterAccuracy(const Monster &monster)
+{
+	return gbIsPoe2 && !monster.isPlayerMinion() && (monster.flags & MFLAG_POE2_TABLES) != 0 && HasMonsterLevelTable()
+	    && Poe2MonsterLevel(monster, sgGameInitInfo.nDifficulty) > 0;
+}
+
+int MonsterAccuracyRating(const Monster &monster, int baseToHit)
+{
+	const int level = Poe2MonsterLevel(monster, sgGameInitInfo.nDifficulty);
+	const int accuracy = MonsterLevelAccuracy(level);
+	const int ref = MonsterTypeRow(monster.type().type).toHitRef10;
+	int64_t permille = 1000;
+	if (ref > 0)
+		permille = std::clamp<int64_t>(int64_t { std::max(baseToHit, 0) } * 10000 / ref, MinMonsterTypePercent * 10, MaxMonsterTypePercent * 10);
+	return std::max(static_cast<int>(accuracy * permille / 1000), 1);
+}
+
+int MonsterHitChance(const Monster &monster, int baseToHit, int evasion, int distancePercent)
+{
+	const int accuracy = static_cast<int>(int64_t { MonsterAccuracyRating(monster, baseToHit) } * std::clamp(distancePercent, 0, 100) / 100);
+	return Poe2HitChance(accuracy, evasion);
+}
+
+int BlockChanceAgainstMonster(const Player &player, const Monster *monster, bool melee)
+{
+	if (melee) {
+		int block = player.GetBlockChance();
+		if (!gbIsPoe2 && monster != nullptr)
+			block -= static_cast<int>(monster->level(sgGameInitInfo.nDifficulty)) * 2;
+		return block;
+	}
+	int block = player.GetBlockChance(false);
+	if (!gbIsPoe2 && monster != nullptr)
+		block -= (static_cast<int>(monster->level(sgGameInitInfo.nDifficulty)) - player.getCharacterLevel()) * 2;
+	return block;
 }
 
 int LightStunChance(int64_t damage, int64_t maxLife)

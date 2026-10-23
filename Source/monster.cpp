@@ -143,9 +143,6 @@ bool sgbSaveSoundOn;
 
 namespace {
 
-constexpr int NightmareToHitBonus = 85;
-constexpr int HellToHitBonus = 120;
-
 /** @brief Reserved some entries in @Monster for golems. For vanilla compatibility, this must remain 4. */
 constexpr int ReservedMonsterSlotsForGolems = 4;
 
@@ -1358,16 +1355,22 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	const bool firstBlow = TakeFirstBlow(monster, player);
 	if (firstBlow)
 		ac = 0;
-	hit += 2 * (monster.level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel())
-	    + 30
-	    - ac;
-	const int minhit = GetMinHit();
-	hit = std::max(hit, minhit);
+	if (UsesPoe2MonsterAccuracy(monster)) {
+		// POE2 Mashup: the monster's accuracy at its level against the hero's evasion; no level gap and no floor but 5%.
+		// The area level carries the difficulty, so Nightmare/Hell's to-hit bonus comes off (plan v2 step 4).
+		hit = MonsterHitChance(monster, hit - MonsterDifficultyToHitBonus(sgGameInitInfo.nDifficulty), ac);
+	} else {
+		hit += 2 * (monster.level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel())
+		    + 30
+		    - ac;
+		const int minhit = GetMinHit();
+		hit = std::max(hit, minhit);
+	}
 	int blkper = 100;
 	if ((player._pmode == PM_STAND || player._pmode == PM_ATTACK) && player._pBlockFlag) {
 		blkper = GenerateRnd(100);
 	}
-	int blk = player.GetBlockChance() - (monster.level(sgGameInitInfo.nDifficulty) * 2);
+	int blk = BlockChanceAgainstMonster(player, &monster, true);
 	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
 	blk = std::clamp(blk, 0, player.GetMaxBlockChance(gbIsPoe2));
 	if (hper >= hit) {

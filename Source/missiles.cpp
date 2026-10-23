@@ -682,7 +682,8 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 					isPlayerHit = Plr2PlrMHit(Players[missile._misource], *player, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted, &blocked);
 			} else {
 				Monster &monster = Monsters[missile._misource];
-				isPlayerHit = PlayerMHit(*player, &monster, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, DeathReason::MonsterOrTrap, &blocked);
+				isPlayerHit = PlayerMHit(*player, &monster, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, DeathReason::MonsterOrTrap, &blocked,
+				    missile.position.start.ApproxDistance(player->position.tile));
 			}
 		} else {
 			const DeathReason deathReason = missile.sourceType() == MissileSource::Player ? DeathReason::Player : DeathReason::MonsterOrTrap;
@@ -1279,7 +1280,7 @@ bool MonsterTrapHit(Monster &monster, int mindam, int maxdam, int dist, MissileI
 	return true;
 }
 
-bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, DeathReason deathReason, bool *blocked)
+bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, DeathReason deathReason, bool *blocked, int shotTiles)
 {
 	*blocked = false;
 
@@ -1310,7 +1311,18 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	// POE2 Mashup: the Maiden's Road pact, with a staff: each monster's first blow can't be evaded and ignores armour.
 	const bool firstBlow = monster != nullptr && TakeFirstBlow(*monster, player);
 	int hper = 40;
-	if (missileData.isArrow()) {
+	const bool poe2Accuracy = monster != nullptr && UsesPoe2MonsterAccuracy(*monster);
+	if (poe2Accuracy && missileData.isArrow()) {
+		// POE2 Mashup: a monster's arrow: its accuracy against evasion, cut by the tiles flown from where it was loosed
+		// (plan v2 step 4, audit C7); no level gap, no Nightmare/Hell to-hit, no floor but 5%.
+		const int tac = firstBlow ? 0 : HitDefense(player);
+		const int tiles = shotTiles >= 0 ? shotTiles : monster->position.tile.ApproxDistance(player.position.tile);
+		const int baseToHit = static_cast<int>(monster->toHit(sgGameInitInfo.nDifficulty)) - MonsterDifficultyToHitBonus(sgGameInitInfo.nDifficulty);
+		hper = MonsterHitChance(*monster, baseToHit, tac, AccuracyAtDistancePercent(tiles));
+	} else if (poe2Accuracy) {
+		// POE2 Mashup: a monster's spell always hits, unless a unique lets evasion avoid spells (decision 39a).
+		hper = firstBlow ? 100 : 100 - SpellEvasion(player);
+	} else if (missileData.isArrow()) {
 		const int tac = firstBlow ? 0 : HitDefense(player);
 		if (monster != nullptr) {
 			hper = monster->toHit(sgGameInitInfo.nDifficulty)
@@ -1327,14 +1339,16 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 			hper -= SpellEvasion(player);
 	}
 
-	int minhit = 10;
-	if (currlevel == 14)
-		minhit = 20;
-	if (currlevel == 15)
-		minhit = 25;
-	if (currlevel == 16)
-		minhit = 30;
-	hper = std::max(hper, minhit);
+	if (!poe2Accuracy) {
+		int minhit = 10;
+		if (currlevel == 14)
+			minhit = 20;
+		if (currlevel == 15)
+			minhit = 25;
+		if (currlevel == 16)
+			minhit = 30;
+		hper = std::max(hper, minhit);
+	}
 
 	int blk = 100;
 	if ((player._pmode == PM_STAND || player._pmode == PM_ATTACK) && player._pBlockFlag) {
@@ -1346,9 +1360,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (mtype == MissileID::AcidPuddle)
 		blk = 100;
 
-	int blkper = player.GetBlockChance(false);
-	if (monster != nullptr)
-		blkper -= (monster->level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel()) * 2;
+	int blkper = BlockChanceAgainstMonster(player, monster, false);
 	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
 	blkper = std::clamp(blkper, 0, player.GetMaxBlockChance(gbIsPoe2));
 

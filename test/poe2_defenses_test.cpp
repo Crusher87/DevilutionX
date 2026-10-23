@@ -4,12 +4,17 @@
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "levels/gendung.h"
+#include "monster.h"
 #include "player.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/unique_effects.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -427,6 +432,168 @@ TEST_F(Poe2DefensesTest, TopBodyArmourBasesCarryImplicits)
 	Wear(player, INVLOC_CHEST, "Armoured Vest", 60);
 	Recalculate(player);
 	EXPECT_EQ(player.poe2.evasion, 60 + 60 * 15 / 100);
+}
+
+/** Monsters' accuracy against the hero (plan v2 step 4): needs the monster and area level tables. */
+class Poe2MonsterAccuracyTest : public Poe2DefensesTest {
+public:
+	void SetUp() override
+	{
+		Poe2DefensesTest::SetUp();
+		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+		LoadMonsterData();
+		// Also loads the monster level tables.
+		LoadAreaLevels();
+		GoTo(19, DTYPE_NEST);
+	}
+
+	void TearDown() override
+	{
+		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+		currlevel = 0;
+		leveltype = DTYPE_TOWN;
+		gbIsPoe2 = false;
+		LoadAreaLevels();
+		Poe2DefensesTest::TearDown();
+	}
+
+	static void GoTo(int floor, dungeon_type type)
+	{
+		setlevel = false;
+		setlvlnum = SL_NONE;
+		currlevel = static_cast<uint8_t>(floor);
+		leveltype = type;
+	}
+
+	/** A monster on the POE2 tables, as InitMonster leaves it. */
+	static Monster MakeMonster(_monster_id type, UniqueMonsterType unique = UniqueMonsterType::None)
+	{
+		LevelMonsterTypes[0].type = type;
+		Monster monster {};
+		monster.levelType = 0;
+		monster.uniqueType = unique;
+		monster.flags = MFLAG_POE2_TABLES;
+		return monster;
+	}
+
+	/** The to-hit whose ratio to the type's ref is 100%. */
+	static int RefToHit(_monster_id type)
+	{
+		return (MonsterTypeRow(type).toHitRef10 + 5) / 10;
+	}
+};
+
+TEST_F(Poe2MonsterAccuracyTest, EvasionMakesMonstersMiss)
+{
+	// Hive 3 on Nightmare: area level 38, accuracy 274 for a type at its ref.
+	sgGameInitInfo.nDifficulty = DIFF_NIGHTMARE;
+	ASSERT_EQ(CurrentAreaLevel(), 38);
+	const Monster monster = MakeMonster(MT_NZOMBIE);
+	ASSERT_TRUE(UsesPoe2MonsterAccuracy(monster));
+	EXPECT_EQ(MonsterLevelAccuracy(38), 274);
+	EXPECT_NEAR(MonsterAccuracyRating(monster, RefToHit(MT_NZOMBIE)), 274, 3);
+	// 274 against an evasion rating of 840: POE2's 125 x acc / (acc + 0.3 x eva) = 65%.
+	EXPECT_NEAR(MonsterHitChance(monster, RefToHit(MT_NZOMBIE), 840), 65, 2);
+	EXPECT_EQ(MonsterHitChance(monster, RefToHit(MT_NZOMBIE), 0), 100);
+	// No floor but POE2's 5%.
+	EXPECT_EQ(MonsterHitChance(monster, RefToHit(MT_NZOMBIE), 1000000), 5);
+}
+
+TEST_F(Poe2MonsterAccuracyTest, HellDoesNotRaiseAccuracy)
+{
+	EXPECT_EQ(MonsterDifficultyToHitBonus(DIFF_NORMAL), 0);
+	EXPECT_EQ(MonsterDifficultyToHitBonus(DIFF_NIGHTMARE), 85);
+	EXPECT_EQ(MonsterDifficultyToHitBonus(DIFF_HELL), 120);
+	sgGameInitInfo.nDifficulty = DIFF_HELL;
+	const Monster monster = MakeMonster(MT_NZOMBIE);
+	// What MonsterAttackPlayer and PlayerMHit pass on: Hell's +120 comes off, the area level carries the difficulty.
+	const int stripped = static_cast<int>(monster.toHit(DIFF_HELL)) - MonsterDifficultyToHitBonus(DIFF_HELL);
+	EXPECT_EQ(stripped, static_cast<int>(monster.toHit(DIFF_NORMAL)));
+	EXPECT_EQ(MonsterAccuracyRating(monster, stripped), MonsterAccuracyRating(monster, static_cast<int>(monster.toHit(DIFF_NORMAL))));
+	// Hell's accuracy is the table's at Hell's area level (23 + 30), times the zombie's own ratio.
+	ASSERT_EQ(CurrentAreaLevel(), 53);
+	const int ref = MonsterTypeRow(MT_NZOMBIE).toHitRef10;
+	const int64_t permille = std::clamp<int64_t>(int64_t { stripped } * 10000 / ref, 300, 2500);
+	EXPECT_EQ(MonsterAccuracyRating(monster, stripped), static_cast<int>(MonsterLevelAccuracy(53) * permille / 1000));
+}
+
+TEST_F(Poe2MonsterAccuracyTest, UniqueToHitRatioClamped)
+{
+	// Bonehead Keenaxe: a custom to-hit of 100 against his type's ref of 25 is 400%, held to 250%.
+	const Monster bonehead = MakeMonster(MT_TSKELAX, static_cast<UniqueMonsterType>(13));
+	ASSERT_EQ(bonehead.toHit(DIFF_NORMAL), 100U);
+	const int level = Poe2MonsterLevel(bonehead, DIFF_NORMAL);
+	EXPECT_EQ(level, CurrentAreaLevel() + 2);
+	EXPECT_EQ(MonsterAccuracyRating(bonehead, 100), MonsterLevelAccuracy(level) * 2500 / 1000);
+	// And no lower than 30%.
+	EXPECT_EQ(MonsterAccuracyRating(bonehead, 0), MonsterLevelAccuracy(level) * 300 / 1000);
+}
+
+TEST_F(Poe2MonsterAccuracyTest, ArrowFalloffUsesTiles)
+{
+	const Monster archer = MakeMonster(MT_NZOMBIE);
+	const int toHit = RefToHit(MT_NZOMBIE);
+	const int point = MonsterHitChance(archer, toHit, 840, AccuracyAtDistancePercent(2));
+	EXPECT_EQ(point, MonsterHitChance(archer, toHit, 840));
+	EXPECT_LT(MonsterHitChance(archer, toHit, 840, AccuracyAtDistancePercent(5)), point);
+	// At 9 tiles the arrow keeps a tenth of its accuracy.
+	const int far = MonsterHitChance(archer, toHit, 840, AccuracyAtDistancePercent(9));
+	EXPECT_EQ(far, Poe2HitChance(MonsterAccuracyRating(archer, toHit) / 10, 840));
+	EXPECT_LT(far, point / 3);
+}
+
+TEST_F(Poe2MonsterAccuracyTest, NoLevelTermInBlock)
+{
+	Player &player = *MyPlayer;
+	player._pBlockFlag = true;
+	player.setCharacterLevel(1);
+	GoTo(1, DTYPE_CATHEDRAL);
+	const Monster weak = MakeMonster(MT_NZOMBIE);
+	const int lowLevel = BlockChanceAgainstMonster(player, &weak, true);
+	EXPECT_EQ(lowLevel, player.GetBlockChance(false));
+	EXPECT_EQ(BlockChanceAgainstMonster(player, &weak, false), lowLevel);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, nullptr, false), lowLevel);
+
+	// Character level 40 against a level 60+ monster: the same block.
+	player.setCharacterLevel(40);
+	sgGameInitInfo.nDifficulty = DIFF_HELL;
+	GoTo(16, DTYPE_HELL);
+	const Monster strong = MakeMonster(MT_NZOMBIE);
+	ASSERT_GE(static_cast<int>(strong.level(DIFF_HELL)), 60);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, &strong, true), lowLevel);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, &strong, false), lowLevel);
+}
+
+TEST_F(Poe2MonsterAccuracyTest, SpellsIgnoreEvasionUnlessUnique)
+{
+	// A monster's spell always hits in POE2 (PlayerMHit: 100 - SpellEvasion); evasion alone takes nothing off it.
+	Player &player = *MyPlayer;
+	player.poe2.evasion = 5000;
+	EXPECT_EQ(SpellEvasion(player), 0);
+}
+
+TEST_F(Poe2MonsterAccuracyTest, MinionsAndOldMonstersKeepDiabloToHit)
+{
+	Monster monster = MakeMonster(MT_NZOMBIE);
+	EXPECT_TRUE(UsesPoe2MonsterAccuracy(monster));
+	monster.flags = 0;
+	EXPECT_FALSE(UsesPoe2MonsterAccuracy(monster));
+	monster.flags = MFLAG_POE2_TABLES | MFLAG_GOLEM;
+	EXPECT_FALSE(UsesPoe2MonsterAccuracy(monster));
+}
+
+TEST_F(Poe2MonsterAccuracyTest, DiabloModeUnchanged)
+{
+	gbIsPoe2 = false;
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(10);
+	const Monster monster = MakeMonster(MT_NZOMBIE);
+	EXPECT_FALSE(UsesPoe2MonsterAccuracy(monster));
+	const int level = static_cast<int>(monster.level(DIFF_NORMAL));
+	EXPECT_EQ(BlockChanceAgainstMonster(player, &monster, true), player.GetBlockChance() - level * 2);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, &monster, false), player.GetBlockChance(false) - (level - 10) * 2);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, nullptr, false), player.GetBlockChance(false));
+	EXPECT_EQ(monster.toHit(DIFF_HELL), monster.toHit(DIFF_NORMAL) + 120);
 }
 
 } // namespace
