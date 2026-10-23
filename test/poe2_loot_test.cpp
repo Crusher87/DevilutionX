@@ -439,6 +439,25 @@ TEST_F(Poe2LootTest, MapsCountAsTheirAreaLevel)
 	MyPlayer->poe2.mapLevel = 0;
 }
 
+TEST_F(Poe2LootTest, LineageSupportsOnlyDropInMaps)
+{
+	EXPECT_FALSE(LineageSupportsDropAt(4)) << "Rathma's Covenant dropped on Cathedral floor 2";
+	EXPECT_FALSE(LineageSupportsDropAt(42)) << "nor anywhere in the campaign";
+	EXPECT_FALSE(LineageSupportsDropAt(MapAreaLevelBase));
+	EXPECT_TRUE(LineageSupportsDropAt(MapAreaLevelBase + 1));
+
+	currlevel = 13;
+	setlevel = false;
+	EXPECT_FALSE(LineageSupportsDropAt(LootAreaLevel(0)));
+	MyPlayer->poe2.mapTier = 1;
+	MyPlayer->poe2.mapLevel = 13;
+	EXPECT_TRUE(LineageSupportsDropAt(LootAreaLevel(0)));
+	MyPlayer->poe2.mapTier = 0;
+	MyPlayer->poe2.mapLevel = 0;
+	// A chase item: about one map in twenty from any monster (500 kills), on top of the map boss's 2%.
+	EXPECT_GE(LineageAnyKillChance, 10000);
+}
+
 TEST_F(Poe2LootTest, HellfireRunesNeverDrop)
 {
 	EXPECT_TRUE(IsHellfireRune(IMISC_RUNEF));

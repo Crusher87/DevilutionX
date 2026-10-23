@@ -116,6 +116,11 @@ bool IsHellfireRune(item_misc_id miscId);
 /** @brief The area level POE2 drop levels are checked against: the map's inside a map, otherwise the floor's POE2 item level. */
 int LootAreaLevel(int floorItemLevel);
 
+/** @brief Lineage supports are POE2's endgame finds: they drop only in maps, area level 65 and up, never in the campaign. */
+bool LineageSupportsDropAt(int areaLevel);
+/** @brief In a map, one kill in this many drops a random lineage support; map bosses and signature bosses have their own 2%. */
+constexpr int LineageAnyKillChance = 10000;
+
 /** @brief Natural rares have 4, 5 or 6 affixes, weighted 8:3:1. */
 int RollNaturalRareAffixCount();
 

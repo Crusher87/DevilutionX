@@ -358,6 +358,11 @@ int LootAreaLevel(int floorItemLevel)
 	return floorItemLevel;
 }
 
+bool LineageSupportsDropAt(int areaLevel)
+{
+	return areaLevel > MapAreaLevelBase;
+}
+
 int RollNaturalRareAffixCount()
 {
 	constexpr std::array<int, 3> Weights { 8, 3, 1 };
