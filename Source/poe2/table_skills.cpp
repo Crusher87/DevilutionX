@@ -83,7 +83,7 @@ const TableSkillData Table[] = {
 	// Axe
 	{ WS::DoubleThrow, "Double Throw", "Hurl two axes, and one more for each Frenzy charge", 7, 5, TW::Axe, 0, Projectiles, 110, 2, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Frenzy, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Telekinesis), TableCurve::LightningArrow, 290 },
 	{ WS::Rend, "Rend", "A tearing sweep that leaves enemies bleeding", 9, 7, TW::Axe, 0, Arc, 100, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
-	{ WS::WarCry, "War Cry", "Stuns enemies around you and empowers melee hits for 8 seconds", 11, 10, TW::None, 1, Buff, Flat, 0, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Axe | TT_Mace | TT_Sword, Icon(SpellIcon::LongHorn), TableCurve::Boneshatter, 200 },
+	{ WS::WarCry, "War Cry", "Stuns enemies around you", 11, 10, TW::None, 1, Buff, Flat, 0, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Axe | TT_Mace | TT_Sword, Icon(SpellIcon::LongHorn), TableCurve::Boneshatter, 200 },
 	{ WS::CallOfTheAncients, "Call of the Ancients", "Spends all Rage: ancestral warriors strike all around, 5% harder per Rage", 13, 12, TW::Axe, 0, CallOfTheAncients, 60, 3, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Rage, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Golem), TableCurve::Boneshatter, 0 },
 	// Mace
 	{ WS::Fissure, "Fissure", "The ground splits open in a line, staggering what it hits", 7, 10, TW::Mace, 0, Line, 65, 6, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Mace, Icon(SpellIcon::PentaStar), TableCurve::Earthquake, 0 },
@@ -796,7 +796,8 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			player.poe2.shieldWallTicks = data.duration;
 			break;
 		case TableBuff::WarCry:
-			player.poe2.warcryTicks = static_cast<uint8_t>(std::min<int>(data.duration, 255));
+			// Stun only (Curtis 2026-10-23): it no longer empowers melee hits, which took Battle Cry's value (+50% with no
+			// Battle Cry socketed) and shared Battle Cry's timer.
 			player.Say(HeroSpeech::TimeToDie);
 			ForEachMonsterNear(tile, data.radius, [&](Monster &monster) {
 				HeavyStunMonster(monster);

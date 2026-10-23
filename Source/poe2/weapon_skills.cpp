@@ -1299,7 +1299,13 @@ int8_t WeaponSkillSkippedFrames(const Player &player)
 
 int LightningArrowDamage(const Player &player)
 {
-	return player.getCharacterLevel() * 2 + player._pDexterity / 4;
+	// The arrow's average hit, worked out as MonsterMHit does an arrow's: the weapon roll, increased and added damage,
+	// and the attribute bonus (a Rogue's in full, other heroes' at least half).
+	const int weapon = (player._pIMinDam + player._pIMaxDam) / 2;
+	int hit = weapon + (weapon * player._pIBonusDam / 100) + player._pIBonusDamMod;
+	hit += player._pClass == HeroClass::Rogue ? player._pDamageMod : player._pDamageMod * std::max(ArrowDamageModPercent(player), 50) / 100;
+	// The burst rolls half to all of this, which averages three quarters of it.
+	return std::max(hit * LightningArrowBurstPercent * 4 / 300, 1);
 }
 
 } // namespace devilution

@@ -3779,8 +3779,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	manaRegen += passive(PassiveStat::ManaRegen);
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
 	// Every 10% increased attack or cast speed from the tree and gear skips one more animation frame.
-	// Heavy and focused bases slow attacks and casts, but only by cancelling speed from elsewhere.
-	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
+	// Reduced attack speed (Heavy bases) adds a frame for every 10% (Curtis 2026-10-23: before, it only cancelled speed
+	// from elsewhere). Focused bases still only cancel cast speed.
+	const int slowestAttackFrames = gbIsPoe2 ? -MaxPassiveSpeedFrames : 0;
+	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed)) / SpeedPercentPerFrame, slowestAttackFrames, static_cast<int>(MaxPassiveSpeedFrames)));
 	player.poe2.passiveCastFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::CastSpeed) + gearStat(Poe2ItemStat::CastSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
 
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.

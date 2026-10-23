@@ -21,6 +21,7 @@
 
 namespace devilution {
 
+struct Monster;
 struct Player;
 
 /** @brief Whether a missile is a hero's in POE2 and so takes the one spell damage rule. */
@@ -41,6 +42,12 @@ int RollPoe2SpellHit(const Player &player, SpellID spell, int spellLevel);
 int RollPoe2SkillSpellHit(const Player &player, WeaponSkill skill, int gemLevel);
 /** @brief The damage a spell shows, before its gem curve and supports. */
 DamageRange Poe2SpellDamageRange(const Player &player, SpellID spell, int spellLevel);
+
+/** @brief Bone Spirit takes a third of a normal monster's life, but only this percent of a unique's or Diablo's. */
+constexpr int BoneSpiritUniqueLifePercent = 5;
+
+/** @brief Bone Spirit's hit on a monster: a third of its current life (5% on uniques and Diablo in POE2), in whole points. */
+int BoneSpiritDamage(const Monster &monster);
 
 /** @brief Loads txtdata/poe2/spell_damage.tsv; in Diablo mode it only forgets what was loaded. */
 void LoadSpellDamage();

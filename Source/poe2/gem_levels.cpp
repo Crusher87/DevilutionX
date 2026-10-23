@@ -103,7 +103,7 @@ GemCurve AttackCurve(WeaponSkill skill)
 	case WeaponSkill::Spark:
 		return { &Spark, 200, ManaAt20, true, "Spark's steps and projectiles, on top of Diablo's Charged Bolt" };
 	case WeaponSkill::IceBolt:
-		return { &Fireball, 250, ManaAt20, false, "Fireball's steps; the shard barely grows on its own" };
+		return { &Fireball, 250, ManaAt20, true, "Fireball's steps and Spark's projectiles, fanned out sideways; the shard barely grows on its own" };
 	case WeaponSkill::FrostNova:
 		return { &Fireball, 280, ManaAt20, false, "Fireball's steps, a little more for the whole ring" };
 	case WeaponSkill::Riposte:
@@ -193,6 +193,8 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 		if (skill.attack() == WeaponSkill::AmplifyDamage)
 			return std::format("+{:d}% physical damage taken", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (gemLevel - 1)));
 		if (const TableSkillData *table = FindTableSkill(skill.attack()); table != nullptr) {
+			if (table->buff == TableBuff::WarCry)
+				return "stuns all around";
 			if (table->shape == TableShape::Buff)
 				return std::format("buff, {:d}s", table->duration / 20);
 			if (table->shape == TableShape::Curse && table->curse != TableCurse::Haunt && table->curse != TableCurse::Locust)

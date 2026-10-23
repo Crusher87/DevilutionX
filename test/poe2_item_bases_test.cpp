@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "engine/animationinfo.h"
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
@@ -21,6 +22,7 @@
 #include "poe2/stash_tabs.hpp"
 #include "qol/stash.h"
 #include "spells.h"
+#include "tables/playerdat.hpp"
 #include "utils/file_util.h"
 #include "utils/paths.h"
 #include "utils/str_cat.hpp"
@@ -304,6 +306,46 @@ TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
 	EXPECT_GT(Stat(quick, Poe2ItemStat::CastSpeed), Stat(focused, Poe2ItemStat::CastSpeed));
 	// One implicit each (Curtis 2026-10-16): the quick staff casts faster, the focused one gives Intelligence.
 	EXPECT_GT(focused._iPLMag, quick._iPLMag);
+}
+
+TEST_F(Poe2ItemBasesTest, HeavyBasesAttackSlower)
+{
+	// Curtis 2026-10-23: a Heavy base's reduced attack speed only cancelled speed from elsewhere, so on its own it was
+	// never slower. Now it adds an animation frame for every 10%.
+	LoadPlayerDataFiles();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(10);
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseVit = player._pVitality = 50;
+	const auto attackFrames = [&player](std::string_view base) {
+		player.InvBody[INVLOC_HAND_LEFT] = MakeItem(base, 1);
+		player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+		CalcPlrInv(player, false);
+		return player.poe2.passiveAttackFrames;
+	};
+	EXPECT_EQ(attackFrames("Heavy Shortsword"), -1);
+	EXPECT_EQ(attackFrames("Shortsword"), 0);
+	EXPECT_EQ(attackFrames("Swift Shortsword"), 1);
+
+	// A negative skip starts the animation before its first frame, so it reaches each frame a game tick later.
+	const auto ticksToFrame = [](int8_t skipped, int8_t frame) {
+		AnimationInfo animation;
+		animation.setNewAnimation(std::nullopt, 16, 1, AnimationDistributionFlags::ProcessAnimationPending, skipped, 9);
+		int ticks = 0;
+		while (animation.currentFrame != frame && ticks < 40) {
+			animation.processAnimation();
+			ticks++;
+		}
+		return ticks;
+	};
+	EXPECT_EQ(ticksToFrame(-1, 8), ticksToFrame(0, 8) + 1);
+	EXPECT_EQ(ticksToFrame(1, 8), ticksToFrame(0, 8) - 1);
+	player.InvBody[INVLOC_HAND_LEFT] = {};
 }
 
 TEST_F(Poe2ItemBasesTest, ImplicitsRollFromTheSeedAndSurviveRebuilding)

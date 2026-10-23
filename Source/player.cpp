@@ -104,7 +104,8 @@ namespace {
 int8_t AttackSpeedFrames(const Player &player)
 {
 	const int frames = player.poe2.passiveAttackFrames + (UniqueAttackSpeedPercent(player) + BannerAttackSpeedPercent(player) + SpiritAuraSpeedPercent(player)) / 10;
-	return static_cast<int8_t>(std::clamp(frames, 0, MaxPassiveSpeedFrames + 1));
+	// Negative adds frames: a Heavy base attacks slower (the animation starts before its first frame, see setNewAnimation).
+	return static_cast<int8_t>(std::clamp(frames, gbIsPoe2 ? -MaxPassiveSpeedFrames : 0, MaxPassiveSpeedFrames + 1));
 }
 
 struct DirectionSettings {
