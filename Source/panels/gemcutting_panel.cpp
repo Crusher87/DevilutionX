@@ -40,6 +40,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/weapon_skills.hpp"
+#include "stores.h"
 #include "utils/display.h"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -528,6 +529,9 @@ void CutGem(const GemEntry &gem)
 		GiveItemToPlayer(player, cut);
 	}
 	CloseGemcutting();
+	// Curtis 2026-10-23: the Skills panel opens once a skill or Spirit gem is cut, ready to socket it; not before.
+	if (gem.support == SupportGem::None && !IsPlayerInStore())
+		OpenSkillsPanel();
 }
 
 bool HandleClick(Point position)
@@ -639,9 +643,8 @@ void OpenGemcutting(bool fromBelt, int index)
 		Category = DefaultSkillCategory(player);
 		break;
 	}
-	// Curtis 2026-10-19: the cut gem goes into the Skills panel, so that opens on the left in place of the stash or
-	// character sheet (the stash's tab list would also take the cutter's clicks).
-	OpenSkillsPanel();
+	// The stash's tab list would take the cutter's clicks. The Skills panel waits until a skill gem is cut (Curtis 2026-10-23).
+	CloseStashForPanel();
 	Open();
 }
 
