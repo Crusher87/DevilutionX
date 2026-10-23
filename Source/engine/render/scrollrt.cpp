@@ -39,6 +39,7 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/dun_render.hpp"
 #include "engine/render/light_render.hpp"
+#include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
 #include "engine/ui_scale.hpp"
@@ -1645,6 +1646,11 @@ void DrawView(const Surface &out, Point startPosition)
 	} else if (IsSkillsPanelOpen()) {
 		DrawSkillsPanel(out);
 	}
+	// POE2 Mashup: the side panels' art hides the effects under it, also where it's the colour of the world under it.
+	if (IsRightPanelOpen())
+		CoverUi(out, GetRightPanel());
+	if (IsLeftPanelOpen())
+		CoverUi(out, GetLeftPanel());
 
 	if (ShowUniqueItemInfoBox) {
 		DrawUniqueInfo(out);
@@ -2107,6 +2113,7 @@ void DrawAndBlit()
 	TelemetryDrawStep("drawing the panels");
 	if (drawCtrlPan) {
 		DrawMainPanel(out);
+		CoverUi(out, GetMainPanel());
 	}
 	if (drawHealth) {
 		DrawLifeFlaskLower(out, !drawCtrlPan);

@@ -72,6 +72,8 @@ namespace {
 SDLSurfaceUniquePtr WorldSurface;
 /** The UI frame as it was before the UI was drawn on it: what's left unchanged shows the full-size world. */
 std::vector<uint8_t> UiBase;
+/** Where the UI drew its panels, boxes and lines over the world, even in the world's own colours. */
+std::vector<UiCover> UiCovered;
 /** For each full-size column and row, the UI column and row it shows. */
 std::vector<uint16_t> UiColumnOf;
 std::vector<uint16_t> UiRowOf;
@@ -113,16 +115,20 @@ bool UpdateUiOverlay()
 		return false;
 	const SDL_Color *colors = Palette->colors;
 	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
+	const bool covers = UiCovered.size() == UiBase.size();
 	for (int y = 0; y < gnScreenHeight; y++) {
 		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * PalSurface->pitch;
 		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(y) * gnScreenWidth;
+		// A panel's pixel in the same colour as the world under it is still the panel's.
+		const UiCover *coverLine = covers ? UiCovered.data() + static_cast<size_t>(y) * gnScreenWidth : nullptr;
+		const bool covered = coverLine != nullptr && std::any_of(coverLine, coverLine + gnScreenWidth, [](UiCover cover) { return cover != UiCover::None; });
 		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
-		if (std::memcmp(uiLine, baseLine, gnScreenWidth) == 0) {
+		if (!covered && std::memcmp(uiLine, baseLine, gnScreenWidth) == 0) {
 			std::memset(out, 0, static_cast<size_t>(gnScreenWidth) * 4);
 			continue;
 		}
 		for (int x = 0; x < gnScreenWidth; x++, out += 4) {
-			if (uiLine[x] == baseLine[x]) {
+			if (uiLine[x] == baseLine[x] && (!covered || coverLine[x] == UiCover::None)) {
 				out[3] = 0;
 				continue;
 			}
@@ -161,7 +167,9 @@ void PresentLayeredFrame(SDL_Surface *surface)
 void CreateWorldSurface()
 {
 	WorldSurface = nullptr;
+	SetUiCoverTarget(nullptr, nullptr);
 	UiBase.clear();
+	UiCovered.clear();
 	HaveScaledWorld = false;
 	if (!IsUiScaled())
 		return;
@@ -173,6 +181,7 @@ void CreateWorldSurface()
 		ErrSdl();
 #endif
 	UiBase.assign(static_cast<size_t>(gnScreenWidth) * gnScreenHeight, 0);
+	UiCovered.assign(UiBase.size(), UiCover::None);
 	UiColumnOf.resize(gnRenderWidth);
 	for (int x = 0; x < gnRenderWidth; x++)
 		UiColumnOf[x] = static_cast<uint16_t>(std::min(x * gnScreenWidth / gnRenderWidth, gnScreenWidth - 1));
@@ -307,11 +316,16 @@ void PrepareScaledUi()
 		std::memcpy(UiBase.data() + static_cast<size_t>(y) * gnScreenWidth, uiLine, gnScreenWidth);
 	}
 	HaveScaledWorld = true;
+	// The UI drawn from here on notes where it covers the world.
+	std::fill(UiCovered.begin(), UiCovered.end(), UiCover::None);
+	const bool fits = PalSurface->w == gnScreenWidth && PalSurface->h == gnScreenHeight && UiCovered.size() == UiBase.size();
+	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr);
 }
 
 void ClearScaledWorld()
 {
 	HaveScaledWorld = false;
+	SetUiCoverTarget(nullptr, nullptr);
 }
 
 void dx_cleanup()
@@ -321,6 +335,7 @@ void dx_cleanup()
 		SDL_HideWindow(ghMainWnd);
 #endif
 
+	SetUiCoverTarget(nullptr, nullptr);
 	PalSurface = nullptr;
 	PinnedPalSurface = nullptr;
 	WorldSurface = nullptr;

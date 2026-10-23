@@ -74,4 +74,20 @@ void SetHalfTransparentPixel(const Surface &out, Point position, uint8_t color);
  */
 void UnsafeDrawBorder2px(const Surface &out, Rectangle rect, uint8_t color);
 
+/**
+ * @brief POE2 Mashup: how a UI shape covers the world under it. The effects go between the world and the UI, and the UI
+ * is told apart from the world by its colours, so a UI pixel the same colour as the world under it let them through
+ * (Curtis 2026-10-23: campfire embers showed through the inventory).
+ */
+enum class UiCover : uint8_t {
+	None,
+	Solid,
+};
+
+/** @brief POE2 Mashup: records where the UI is drawn on @p surface into @p cells, one per pixel; null stops it. */
+void SetUiCoverTarget(SDL_Surface *surface, UiCover *cells);
+
+/** @brief POE2 Mashup: notes that the UI covers this area of @p out, when it's the surface being recorded. */
+void CoverUi(const Surface &out, Rectangle area, UiCover cover = UiCover::Solid);
+
 } // namespace devilution
