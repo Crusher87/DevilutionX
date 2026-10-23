@@ -102,6 +102,7 @@
 #include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
@@ -4629,7 +4630,11 @@ std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLev
 		return PickPoe2Weighted(itemLevel, [areaLevel](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId) && Poe2AreaDropLevel(data.iMiscId) <= areaLevel; });
 	case LootCategory::Gem: {
 		const bool spirit = HeroHasSpirit();
-		return PickPoe2Weighted(itemLevel, [spirit](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT); });
+		// As in POE2, uncut support gems start dropping at area level 4.
+		const bool support = UncutSupportLevelForArea(areaLevel) > 0;
+		return PickPoe2Weighted(itemLevel, [spirit, support](const ItemData &data) {
+			return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT) && (support || data.iMiscId != IMISC_UNCUT_SUPPORT);
+		});
 	}
 	case LootCategory::Endgame:
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });
@@ -4894,8 +4899,12 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
-	if (IsPoe2UncutGem(item._iMiscId))
-		SetUncutGemLevel(item, UncutGemLevelForArea(origin.baseLevel));
+	// Uncut gems take the area's level, not a unique monster's doubled one (Curtis 2026-10-23: Snotspill dropped a level 6
+	// uncut support on floor 4). Supports climb POE2's slower 1-5 ladder: level 1 until area level 16.
+	if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+		SetUncutGemLevel(item, UncutSupportGemLevel(UncutSupportLevelForArea(origin.poe2AreaLevel)));
+	else if (IsPoe2UncutGem(item._iMiscId))
+		SetUncutGemLevel(item, UncutGemLevelForArea(origin.areaLevel));
 	if (IsWaystone(item))
 		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
 	if (IsMapFragment(item))

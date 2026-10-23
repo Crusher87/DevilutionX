@@ -11,8 +11,10 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/gemcutting.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/waystones.hpp"
 #include "spells.h"
 #include "stores.h"
@@ -447,6 +449,30 @@ TEST_F(Poe2LootTest, HellfireRunesNeverDrop)
 		const std::vector<Item> drops = ContainerDrops(floor, floor == 4 ? DTYPE_CATHEDRAL : DTYPE_HELL, 6000);
 		for (const Item &item : drops)
 			EXPECT_FALSE(item.isRune()) << item._iIName;
+	}
+}
+
+TEST_F(Poe2LootTest, UncutGemsTakeTheAreasLevel)
+{
+	// Cathedral floor 1 (a barrel's POE2 area level 3): skill gems, but no uncut support gem yet, as in POE2.
+	const std::vector<Item> first = ContainerDrops(1, DTYPE_CATHEDRAL, 4000);
+	EXPECT_EQ(CountMisc(first, IMISC_UNCUT_SUPPORT), 0U);
+	EXPECT_GT(CountMisc(first, IMISC_UNCUT_SKILL), 0U);
+
+	// Floor 4: level 1 supports only (POE2's next support level waits for area 16), skill gems up to the area's.
+	const std::vector<Item> fourth = ContainerDrops(4, DTYPE_CATHEDRAL, 4000);
+	EXPECT_GT(CountMisc(fourth, IMISC_UNCUT_SUPPORT), 0U);
+	for (const Item &item : fourth) {
+		if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+			EXPECT_EQ(UncutGemLevel(item), 1);
+		if (item._iMiscId == IMISC_UNCUT_SKILL)
+			EXPECT_EQ(UncutGemLevel(item), UncutGemLevelForArea(8));
+	}
+
+	// Hell floor 16 (42): POE2's level 3 support, our gem level 6.
+	for (const Item &item : ContainerDrops(16, DTYPE_HELL, 3000)) {
+		if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+			EXPECT_EQ(UncutGemLevel(item), UncutSupportGemLevel(3));
 	}
 }
 
