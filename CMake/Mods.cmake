@@ -90,6 +90,7 @@ set(poe2_mod
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
   txtdata/missiles/misdat.tsv
+  txtdata/spells/spelldat.tsv
   txtdata/towners/towners.tsv
   txtdata/poe2/area_levels.tsv
   txtdata/poe2/base_meta.tsv

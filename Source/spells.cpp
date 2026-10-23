@@ -137,11 +137,13 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 
 	// POE2 Mashup: a socketed spell gem costs more as it levels up, like POE2's gems, instead of less.
 	const int gemLevel = gbIsPoe2 ? player.poe2.skillLevel(sn) : 0;
+	// Every gem pays base x gem curve, Healing too (its own base on the utility curve, not Diablo's level formula).
+	const bool gemCost = gemLevel > 0 && GetSpellData(sn).sManaCost != 255;
 
-	if (sn == SpellID::Healing || sn == SpellID::HealOther) {
-		ma = (GetSpellData(SpellID::Healing).sManaCost + 2 * player.getCharacterLevel() - adj);
-	} else if (gemLevel > 0 && GetSpellData(sn).sManaCost != 255) {
+	if (gemCost) {
 		ma = GemBaseManaCost(SkillSlot::ForSpell(sn), gemLevel);
+	} else if (sn == SpellID::Healing || sn == SpellID::HealOther) {
+		ma = (GetSpellData(SpellID::Healing).sManaCost + 2 * player.getCharacterLevel() - adj);
 	} else if (GetSpellData(sn).sManaCost == 255) {
 		ma = player._pMaxManaBase.whole() - adj;
 	} else {
@@ -150,10 +152,13 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 
 	Fixed26_6 manaAmount = Fixed26_6::fromInt(std::max(ma, 0));
 
-	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
-	manaAmount = manaAmount * classAttributes.manaCost;
+	// POE2 Mashup: every class pays the same for the same spell, as in POE2, and a gem has no Diablo minimum cost.
+	if (!gbIsPoe2) {
+		const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
+		manaAmount = manaAmount * classAttributes.manaCost;
+	}
 
-	if (GetSpellData(sn).sMinMana > manaAmount.whole()) {
+	if (!gemCost && GetSpellData(sn).sMinMana > manaAmount.whole()) {
 		manaAmount = Fixed26_6::fromInt(GetSpellData(sn).sMinMana);
 	}
 

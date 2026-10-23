@@ -55,6 +55,8 @@ std::string_view GemCategoryName(GemCategory category);
 /** @brief Every skill, Spirit and support gem, by level. */
 const std::vector<GemEntry> &GemCatalog();
 bool GemInCategory(const GemEntry &gem, GemCategory category);
+/** @brief Whether an attack is listed under a weapon's tab (Mace, Axe, Sword, Bow, Staff or Shield). */
+bool AttackOnWeaponTab(WeaponSkill skill);
 std::string GemName(const GemEntry &gem);
 
 /** @brief The tier row a gem is listed in: 1, 3, 5, 7, 9, 11 or 13, like POE2's gem tiers. */

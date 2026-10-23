@@ -3422,17 +3422,20 @@ void CalcPlrLifeMana(Player &player, int vitality, int magic, Fixed26_6 life, Fi
 	if (lessLifePercent > 0)
 		life -= Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>((life + player._pMaxHPBase).raw()) * std::min(lessLifePercent, 90) / 100));
 
-	magic = (playerClassAttributes.itmMana * magic).whole();
+	// POE2 Mashup: Magic on gear and the tree gives 2 mana a point for every class.
+	magic = ManaFromItemMagic(player, magic);
 	mana += Fixed26_6::fromInt(magic);
 
-	player._pMaxHP = std::clamp(life + player._pMaxHPBase, Fixed26_6::fromInt(1), Fixed26_6::fromInt(2000));
+	// POE2 Mashup: life and mana aren't capped at Diablo's 2,000.
+	const Fixed26_6 maxLifeMana = Fixed26_6::fromInt(gbIsPoe2 ? MaxPoe2LifeMana : 2000);
+	player._pMaxHP = std::clamp(life + player._pMaxHPBase, Fixed26_6::fromInt(1), maxLifeMana);
 	player._pHitPoints = std::min(life + player._pHPBase, player._pMaxHP);
 
 	if (&player == MyPlayer && player.hasNoLife()) {
 		SetPlayerHitPoints(player, Fixed26_6::fromInt(0));
 	}
 
-	player._pMaxMana = std::clamp(mana + player._pMaxManaBase, Fixed26_6::fromInt(0), Fixed26_6::fromInt(2000));
+	player._pMaxMana = std::clamp(mana + player._pMaxManaBase, Fixed26_6::fromInt(0), maxLifeMana);
 	player._pMana = std::min(mana + player._pManaBase, player._pMaxMana);
 }
 
@@ -3823,15 +3826,17 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pISplLvlAdd = splLvlAdd;
 	player._pIEnAc = targetAc;
 	CalcPlrResistances(player, flags, fireRes, lightRes, magicRes);
-	if (gbIsPoe2)
-		mana += Fixed26_6::fromInt(Poe2BonusMana(player.getCharacterLevel()));
+	// POE2 Mashup: POE2's +12 life a level and its mana pool rule, on top of the saved Diablo-rule bases.
+	life += Poe2LevelLife(player);
+	mana += Poe2LevelMana(player);
 	if (passive(PassiveStat::LifePercent) != 0 || passive(PassiveStat::ManaPercent) != 0) {
 		// Percent increases apply to everything else that adds life and mana.
 		const ClassAttributes &classAttributes = player.getClassAttributes();
 		const Fixed26_6 baseLife = life + player._pMaxHPBase + Fixed26_6::fromInt((classAttributes.itmLife * vitality).whole());
-		const Fixed26_6 baseMana = mana + player._pMaxManaBase + Fixed26_6::fromInt((classAttributes.itmMana * magic).whole());
-		life += Fixed26_6::fromRaw(baseLife.raw() * passive(PassiveStat::LifePercent) / 100);
-		mana += Fixed26_6::fromRaw(baseMana.raw() * passive(PassiveStat::ManaPercent) / 100);
+		const Fixed26_6 baseMana = mana + player._pMaxManaBase + Fixed26_6::fromInt(ManaFromItemMagic(player, magic));
+		// In 64 bits: POE2 life and mana can pass Diablo's 2,000.
+		life += Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(baseLife.raw()) * passive(PassiveStat::LifePercent) / 100));
+		mana += Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(baseMana.raw()) * passive(PassiveStat::ManaPercent) / 100));
 	}
 	CalcPlrLifeMana(player, vitality, magic, life, mana, uniqueRule(UniqueRule::LessMaxLife));
 	// A share of maximum mana can count as energy shield too.
