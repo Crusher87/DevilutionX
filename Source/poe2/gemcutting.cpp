@@ -273,7 +273,8 @@ bool CreateGemItem(Item &item, const GemEntry &gem, int level)
 
 int UncutGemLevelForArea(int areaLevel)
 {
-	return MaxGemLevelForCharacter(std::max(areaLevel, 1));
+	// POE2's level 2 gem needs character level 3 and first drops at area level 4, level 3 needs 6 and drops at 7, ...
+	return MaxGemLevelForCharacter(std::max(areaLevel - 1, 1));
 }
 
 void SetUncutGemLevel(Item &item, int level)

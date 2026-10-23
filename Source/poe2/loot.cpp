@@ -7,6 +7,7 @@
 #include "game_mode.hpp"
 #include "monster.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/waystones.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -60,17 +61,19 @@ LootSource GetLootSource(const Monster &monster)
 
 int ExpectedLootRollsPerMille(LootSource source)
 {
+	// Below the bundle's 0.18/0.65/2/3.25/6 (Curtis 2026-10-23: too much loot, a quest boss dropped a pile of rares).
+	// POE2 doesn't publish its numbers; these keep its feel of a few items from a rare monster and a handful from a boss.
 	switch (source) {
 	case LootSource::Magic:
-		return 650;
+		return 550;
 	case LootSource::Rare:
-		return 2000;
+		return 1500;
 	case LootSource::Miniboss:
-		return 3250;
+		return 2500;
 	case LootSource::Boss:
-		return 6000;
+		return 4000;
 	default:
-		return 180;
+		return 150;
 	}
 }
 
@@ -87,9 +90,10 @@ int RollLootCount(LootSource source, const LootBonus &bonus)
 std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source, const LootBonus &bonus)
 {
 	// Equipment, gold, currency, flask or charm, gem, endgame, misc, jewel. Augments (4) aren't in the game yet, so
-	// their weight goes to jewels for now. Uncut gems take 4 instead of the bible's 3, from gold, since skills only
-	// level with them (Curtis 2026-10-20: none dropped in a whole Rogue run; 4 to 6 a run feels right).
-	std::array<int, static_cast<size_t>(LootCategory::Count)> weights { 48, 21, 15, 4, 4, 3, 1, 4 };
+	// their weight goes to jewels for now. Uncut gems take 5 instead of the bible's 3, from gold, since skills only
+	// level with them (Curtis 2026-10-20: none dropped in a whole Rogue run; 4 to 6 a run feels right). It was 4
+	// until kills gave fewer rolls (2026-10-23); 5 keeps about as many gems a run.
+	std::array<int, static_cast<size_t>(LootCategory::Count)> weights { 48, 20, 15, 4, 5, 3, 1, 4 };
 	if (IsAnyOf(source, LootSource::Miniboss, LootSource::Boss)) {
 		// Bosses favour equipment and give less of the low-value categories.
 		weights[static_cast<size_t>(LootCategory::Equipment)] *= 2;
@@ -110,17 +114,20 @@ namespace {
 
 std::array<int, 4> BaseRarityWeights(LootSource source)
 {
-	// Normal, magic, rare, unique, in hundredths of a percent.
+	// Normal, magic, rare, unique, in hundredths of a percent. The bundle's tables (57/35/7.75/0.25 for a normal
+	// monster) made about one item in six rare (Curtis 2026-10-23: three rares, two of them rings, in the first two
+	// minutes). POE2 doesn't publish its tables either; these give about one rare in sixteen, mostly from rare monsters
+	// and bosses. Unique chances are unchanged.
 	switch (source) {
 	case LootSource::Magic:
-		return { 3700, 4700, 1550, 50 };
+		return { 5600, 3700, 650, 50 };
 	case LootSource::Rare:
-		return { 1250, 4400, 4200, 150 };
+		return { 3150, 5000, 1700, 150 };
 	case LootSource::Miniboss:
 	case LootSource::Boss:
-		return { 100, 2900, 6500, 500 };
+		return { 1500, 5000, 3000, 500 };
 	default:
-		return { 5700, 3500, 775, 25 };
+		return { 7500, 2275, 200, 25 };
 	}
 }
 
@@ -321,6 +328,39 @@ int CurrencyBandWeight(item_misc_id miscId)
 	default:
 		return 150;
 	}
+}
+
+int Poe2AreaDropLevel(item_misc_id miscId)
+{
+	// Curtis 2026-10-23: a Golden Charm, Amethyst Charms and four jewels dropped on Cathedral floors 3 and 4. POE2's own
+	// levels (Path of Building's charm bases; poe2db's jewel bases): the Golden Charm only in the late campaign and maps.
+	switch (miscId) {
+	case IMISC_JEWEL:
+		return 20;
+	case IMISC_CHARM_MAGIC:
+		return 40;
+	case IMISC_CHARM_GOLDEN:
+		return 50;
+	default:
+		return 0;
+	}
+}
+
+bool IsHellfireRune(item_misc_id miscId)
+{
+	return miscId > IMISC_RUNEFIRST && miscId < IMISC_RUNELAST;
+}
+
+int LootAreaLevel(int floorItemLevel)
+{
+	if (const int tier = ActiveMapTier(); tier > 0)
+		return std::max(floorItemLevel, MapAreaLevelBase + tier);
+	return floorItemLevel;
+}
+
+bool LineageSupportsDropAt(int areaLevel)
+{
+	return areaLevel > MapAreaLevelBase;
 }
 
 int RollNaturalRareAffixCount()

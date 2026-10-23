@@ -669,7 +669,8 @@ void GiveUncutSpiritGem(Player &player)
 			continue;
 		Item gem {};
 		SetupAllItems(player, gem, static_cast<_item_indexes>(i), AdvanceRndSeed(), 1, 1, /*onlygood=*/false, /*pregen=*/false);
-		SetUncutGemLevel(gem, UncutGemLevelForArea(player.getCharacterLevel()));
+		// A reward, so the highest level the hero can use now.
+		SetUncutGemLevel(gem, MaxGemLevelForCharacter(player.getCharacterLevel()));
 		gem._iIdentified = true;
 		SetupItem(gem);
 		if (!AutoPlaceItemInInventory(player, gem, true) && ActiveItemCount < MAXITEMS) {

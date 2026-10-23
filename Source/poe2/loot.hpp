@@ -3,7 +3,8 @@
  *
  * POE2 Mashup loot rules from the itemization bible (research/itemization-bundle-v5): a kill gives a number of loot
  * rolls by how tough the monster was, each roll picks a category (equipment, gold, currency, ...), and equipment
- * then rolls its rarity from a table for that kind of monster. The numbers are the bundle's starting defaults.
+ * then rolls its rarity from a table for that kind of monster. The category weights are the bundle's starting
+ * defaults; the roll counts and rarity tables are lower, closer to POE2's campaign (research/loot-2026-10-23).
  */
 #pragma once
 
@@ -67,7 +68,7 @@ struct LootBonus {
 	int unique = 100;
 };
 
-/** @brief Average loot rolls per kill, in thousandths: 0.18 for a normal monster up to 6 for a boss. */
+/** @brief Average loot rolls per kill, in thousandths: 0.15 for a normal monster up to 4 for a boss. */
 int ExpectedLootRollsPerMille(LootSource source);
 /** @brief The whole rolls, plus one more with the chance of the fraction. */
 int RollLootCount(LootSource source, const LootBonus &bonus = {});
@@ -104,6 +105,21 @@ CurrencyBand OrbCurrencyBand(item_misc_id miscId);
 int CurrencyDropLevel(item_misc_id miscId);
 /** @brief How often a currency drops compared with the others of its band. */
 int CurrencyBandWeight(item_misc_id miscId);
+
+/**
+ * @brief The POE2 area level an item starts dropping at, for the items whose drop level follows POE2 rather than the
+ * item table, 0 for the rest: jewels 20, the Amethyst Charm 40 and the Golden Charm 50, as in POE2.
+ */
+int Poe2AreaDropLevel(item_misc_id miscId);
+/** @brief Hellfire's thrown trap runes, which never drop in POE2 mode; POE2's socket runes are augments, and still drop. */
+bool IsHellfireRune(item_misc_id miscId);
+/** @brief The area level POE2 drop levels are checked against: the map's inside a map, otherwise the floor's POE2 item level. */
+int LootAreaLevel(int floorItemLevel);
+
+/** @brief Lineage supports are POE2's endgame finds: they drop only in maps, area level 65 and up, never in the campaign. */
+bool LineageSupportsDropAt(int areaLevel);
+/** @brief In a map, one kill in this many drops a random lineage support; map bosses and signature bosses have their own 2%. */
+constexpr int LineageAnyKillChance = 10000;
 
 /** @brief Natural rares have 4, 5 or 6 affixes, weighted 8:3:1. */
 int RollNaturalRareAffixCount();

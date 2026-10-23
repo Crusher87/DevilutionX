@@ -102,6 +102,7 @@
 #include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
@@ -4505,6 +4506,9 @@ bool IsPoe2LootCandidate(size_t index, int itemLevel)
 	const ItemData &data = AllItemsList[index];
 	if (data.dropRate == 0 || data.iMinMLvl > itemLevel || IsHeldBackWeaponBase(index))
 		return false;
+	// Hellfire's trap runes share their names with POE2's socket runes (Curtis 2026-10-23: a Rune of Fire still dropped).
+	if (IsHellfireRune(data.iMiscId))
+		return false;
 	return !IsAnyOf(data.iSpell, SpellID::Resurrect, SpellID::HealOther) || gbIsMultiplayer;
 }
 
@@ -4614,7 +4618,8 @@ bool HeroHasSpirit()
 	return MyPlayer != nullptr && MaxSpirit(*MyPlayer) > 0;
 }
 
-std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel, int poe2ItemLevel)
+/** @brief Picks a loot item of the category; `areaLevel` is the POE2 area level some items wait for (Poe2AreaDropLevel). */
+std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel, int poe2ItemLevel, int areaLevel)
 {
 	switch (category) {
 	case LootCategory::Equipment:
@@ -4624,15 +4629,19 @@ std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLev
 	case LootCategory::Currency:
 		return PickPoe2Currency(poe2ItemLevel);
 	case LootCategory::FlaskOrCharm:
-		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId); });
+		return PickPoe2Weighted(itemLevel, [areaLevel](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId) && Poe2AreaDropLevel(data.iMiscId) <= areaLevel; });
 	case LootCategory::Gem: {
 		const bool spirit = HeroHasSpirit();
-		return PickPoe2Weighted(itemLevel, [spirit](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT); });
+		// As in POE2, uncut support gems start dropping at area level 4.
+		const bool support = UncutSupportLevelForArea(areaLevel) > 0;
+		return PickPoe2Weighted(itemLevel, [spirit, support](const ItemData &data) {
+			return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT) && (support || data.iMiscId != IMISC_UNCUT_SUPPORT);
+		});
 	}
 	case LootCategory::Endgame:
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });
 	case LootCategory::Jewel:
-		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_JEWEL; });
+		return PickPoe2Weighted(itemLevel, [areaLevel](const ItemData &data) { return data.iMiscId == IMISC_JEWEL && Poe2AreaDropLevel(data.iMiscId) <= areaLevel; });
 	default:
 		return PickPoe2Weighted(itemLevel, IsPoe2MiscLoot);
 	}
@@ -4715,6 +4724,10 @@ struct Poe2LootOrigin {
 	std::string_view name;
 	/** Generated with the level, so multiplayer rebuilds it the same. */
 	bool pregen = false;
+	/** The floor's own level, on Diablo's scale, without a unique's or a boss's bonus: uncut skill gem levels come from it. */
+	int areaLevel = 1;
+	/** The POE2 area level drop levels are checked against (LootAreaLevel): 65 and up in a map. */
+	int poe2AreaLevel = 1;
 };
 
 /** @brief The open map's item rarity, quantity (from monster effectiveness) and waystone drops, none outside maps, plus the hero's own item rarity. */
@@ -4756,6 +4769,7 @@ Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 {
 	const LootSource source = GetLootSource(monster);
 	const int bonus = LootItemLevelBonus(source);
+	const int areaLevel = monster.data().level + (15 * sgGameInitInfo.nDifficulty);
 	// Multiplayer checks that a dropped item's level is one some monster has, so the bonus only applies in single player.
 	return {
 		source,
@@ -4763,6 +4777,9 @@ Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 		static_cast<int>(monster.level(sgGameInitInfo.nDifficulty)) + bonus,
 		Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty),
 		monster.name(),
+		/*pregen=*/false,
+		areaLevel,
+		LootAreaLevel(Poe2ItemLevel(areaLevel)),
 	};
 }
 
@@ -4770,13 +4787,16 @@ Poe2LootOrigin ContainerLootOrigin(bool pregen)
 {
 	// Chests and barrels drop at twice the dungeon level, as in Diablo.
 	const int level = 2 * ItemsGetCurrlevel();
+	const int areaLevel = level + (15 * sgGameInitInfo.nDifficulty);
 	return {
 		LootSource::Normal,
 		std::min<int>(level, CF_LEVEL),
-		level + (15 * sgGameInitInfo.nDifficulty),
-		Poe2ItemLevel(level + (15 * sgGameInitInfo.nDifficulty)),
+		areaLevel,
+		Poe2ItemLevel(areaLevel),
 		"container",
 		pregen,
+		areaLevel,
+		LootAreaLevel(Poe2ItemLevel(areaLevel)),
 	};
 }
 
@@ -4830,7 +4850,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	const int itemLevel = origin.itemLevel;
 
 	std::optional<_item_indexes> idx = forcedIdx ? forcedIdx : category == LootCategory::Endgame ? PickPoe2EndgameItem(origin)
-	                                                                                             : PickPoe2LootItem(category, origin.baseLevel, origin.poe2ItemLevel);
+	                                                                                             : PickPoe2LootItem(category, origin.baseLevel, origin.poe2ItemLevel, origin.poe2AreaLevel);
 	int uidOffset = 0;
 	bool bundleUnique = false;
 	BeltUniqueId beltUnique = BeltUniqueId::None;
@@ -4881,8 +4901,12 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
-	if (IsPoe2UncutGem(item._iMiscId))
-		SetUncutGemLevel(item, UncutGemLevelForArea(origin.baseLevel));
+	// Uncut gems take the area's level, not a unique monster's doubled one (Curtis 2026-10-23: Snotspill dropped a level 6
+	// uncut support on floor 4). Supports climb POE2's slower 1-5 ladder: level 1 until area level 16.
+	if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+		SetUncutGemLevel(item, UncutSupportGemLevel(UncutSupportLevelForArea(origin.poe2AreaLevel)));
+	else if (IsPoe2UncutGem(item._iMiscId))
+		SetUncutGemLevel(item, UncutGemLevelForArea(origin.areaLevel));
 	if (IsWaystone(item))
 		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
 	if (IsMapFragment(item))
