@@ -17,6 +17,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spell_base.hpp"
+#include "poe2/spell_damage.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -166,16 +167,13 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case WeaponSkill::FrostNova:
 		AddSpellBase(hit, player, level, DamageType::Magic, percent);
 		return hit;
-	case WeaponSkill::EmberFusillade: {
-		const DamageRange range = GetDamageAmt(SpellID::Firebolt, level);
-		hit.parts.push_back({ DamageType::Fire, Scale(range.min, percent), Scale(range.max, percent) });
+	case WeaponSkill::EmberFusillade:
+		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.
+		AddSpellBase(hit, player, level, DamageType::Fire, Scale(percent, SkillSpellDamagePercent(attack)));
 		return hit;
-	}
-	case WeaponSkill::Spark: {
-		const DamageRange range = GetDamageAmt(SpellID::ChargedBolt, level);
-		hit.parts.push_back({ DamageType::Lightning, Scale(range.min, percent), Scale(range.max, percent) });
+	case WeaponSkill::Spark:
+		AddSpellBase(hit, player, level, DamageType::Lightning, Scale(percent, SkillSpellDamagePercent(attack)));
 		return hit;
-	}
 	default:
 		break;
 	}
