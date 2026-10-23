@@ -6,6 +6,7 @@
 #include "headless_mode.hpp"
 #include "levels/gendung.h"
 #include "missiles.h"
+#include "poe2/player_data.hpp"
 #include "poe2/vfx.hpp"
 
 namespace devilution {
@@ -92,6 +93,26 @@ TEST_F(Poe2VfxTest, ATownPortalIsDrawnByTheEffectsWhileItsMissileLives)
 	for (int i = 0; i < 20; i++)
 		vfx::Advance(50);
 	EXPECT_EQ(vfx::PortalCount(), 0U);
+}
+
+TEST_F(Poe2VfxTest, ArcingSparksAndChargedBoltLookApart)
+{
+	// Both fly the Charged Bolt missile; the skill that fired it picks the look (Curtis 2026-10-23).
+	Missile missile;
+	missile._mitype = MissileID::ChargedBolt;
+	missile._miAnimType = MissileGraphicID::ChargedBolt;
+	const SkillSlot spark = SkillSlot::ForAttack(WeaponSkill::Spark);
+	missile.poe2.skillKind = static_cast<uint8_t>(spark.kind);
+	missile.poe2.skillId = spark.id;
+	EXPECT_TRUE(vfx::IsArcingSpark(missile));
+	const SkillSlot chargedBolt = SkillSlot::ForSpell(SpellID::ChargedBolt);
+	missile.poe2.skillKind = static_cast<uint8_t>(chargedBolt.kind);
+	missile.poe2.skillId = chargedBolt.id;
+	EXPECT_FALSE(vfx::IsArcingSpark(missile));
+	// A monster's charged bolt has no skill.
+	missile.poe2.skillKind = 0;
+	missile.poe2.skillId = 0;
+	EXPECT_FALSE(vfx::IsArcingSpark(missile));
 }
 
 /** @brief A screen of the dungeon showing nothing but one palette colour. */

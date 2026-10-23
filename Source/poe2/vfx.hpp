@@ -122,6 +122,8 @@ void SetCamera(Point viewTile, Displacement offset, bool zoom);
 void ScanMissiles();
 /** @brief Whether the effects draw this missile themselves this frame, so its classic sprite is left out. */
 bool ReplacesSprite(const Missile &missile);
+/** @brief Whether the missile is drawn as Arcing Sparks' small sparks rather than Charged Bolt's bolts: both fly the same missile. */
+bool IsArcingSpark(const Missile &missile);
 /**
  * @brief The frame to draw of a light object: candles hold one frame (their glow sways instead) and torches run at
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.
@@ -142,15 +144,16 @@ void CopyFloor(const Surface &world);
 /** @brief The copy of the floor, to zoom it the same way as the world; empty when there's none. */
 Surface FloorCopy();
 /**
- * @brief Whether a hero on this tile stands on or in front of a town portal, so they're drawn over it (Curtis
- * 2026-10-21: arriving in town, the hero was drawn under the portal).
+ * @brief Whether a hero or monster on this tile stands on or in front of a town portal, or in front of a torch, candle
+ * or brazier, so they're drawn over its effects (Curtis 2026-10-21: arriving in town, the hero was drawn under the
+ * portal; 2026-10-23: under a brazier's fire). Notes the flames it stands in front of, which then go under it.
  */
-bool HeroInFrontOfPortal(Point tile);
-/** @brief Starts this frame's record of the heroes drawn over the portals, before the world's sprites are drawn. */
+bool InFrontOfEffects(Point tile);
+/** @brief Starts this frame's record of the sprites drawn over the effects, before the world's sprites are drawn. */
 void BeginFront(const Surface &world);
-/** @brief Records the shape of a hero's sprite as it's drawn into the world, to draw the hero again over the portal. */
+/** @brief Records the shape of a hero's or monster's sprite as it's drawn into the world, to draw it again over the effects. */
 void MarkFront(const Surface &out, Point position, ClxSprite sprite);
-/** @brief The record of the heroes over the portals, to zoom it with the world; empty when there's none. */
+/** @brief The record of the sprites over the effects, to zoom it with the world; empty when there's none. */
 Surface FrontMask();
 /** @brief Moves every effect on by the given time. */
 void Advance(float ms);

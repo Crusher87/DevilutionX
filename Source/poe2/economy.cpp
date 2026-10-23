@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string>
+#include <vector>
 
 #include "engine/random.hpp"
 #include "player.h"
@@ -139,43 +141,68 @@ std::optional<DisenchantYield> GetDisenchantYield(const Item &item)
 	case ITEM_QUALITY_RARE:
 		return DisenchantYield { ShardKind::Regal, RareAffixCount(item) >= 6 ? 2 : 1 };
 	case ITEM_QUALITY_UNIQUE:
-		return DisenchantYield { ShardKind::Chance, 1 };
+		return DisenchantYield { ShardKind::Chance, ChanceShardsPerUnique };
 	default:
 		return std::nullopt;
 	}
 }
 
+namespace {
+
+/** @brief The quality currency salvaging the item gives: weapons, armour, shields, flasks and charms. */
+std::optional<item_misc_id> SalvageCurrency(const Item &item)
+{
+	if (IsFlaskPotion(item) || IsCharm(item))
+		return IMISC_ORB_BAUBLE;
+	switch (item._itype) {
+	case ItemType::Sword:
+	case ItemType::Axe:
+	case ItemType::Mace:
+	case ItemType::Bow:
+		return IMISC_ORB_WHETSTONE;
+	case ItemType::Staff:
+		return IMISC_ORB_ETCHER;
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor:
+	case ItemType::Helm:
+	case ItemType::Shield:
+		return IMISC_ORB_SCRAP;
+	default:
+		return std::nullopt;
+	}
+}
+
+} // namespace
+
 std::optional<SalvageYield> GetSalvageYield(const Item &item)
 {
 	if (item.isEmpty())
 		return std::nullopt;
-	item_misc_id currency;
-	if (IsFlaskPotion(item) || IsCharm(item)) {
-		currency = IMISC_ORB_BAUBLE;
-	} else {
-		switch (item._itype) {
-		case ItemType::Sword:
-		case ItemType::Axe:
-		case ItemType::Mace:
-		case ItemType::Bow:
-			currency = IMISC_ORB_WHETSTONE;
-			break;
-		case ItemType::Staff:
-			currency = IMISC_ORB_ETCHER;
-			break;
-		case ItemType::LightArmor:
-		case ItemType::MediumArmor:
-		case ItemType::HeavyArmor:
-		case ItemType::Helm:
-		case ItemType::Shield:
-			currency = IMISC_ORB_SCRAP;
-			break;
-		default:
+	const std::optional<item_misc_id> currency = SalvageCurrency(item);
+	// Curtis 2026-10-23: the anvil takes uniques too, for the Chance Shards disenchanting gives, on top of what
+	// their quality and sockets give. Unique flasks and charms, which Adria doesn't take, give the same.
+	int chanceShards = 0;
+	if (item._iMagical == ITEM_QUALITY_UNIQUE) {
+		if (const std::optional<DisenchantYield> disenchant = GetDisenchantYield(item); disenchant && disenchant->kind == ShardKind::Chance)
+			chanceShards = disenchant->shards;
+		else if (currency)
+			chanceShards = ChanceShardsPerUnique;
+	}
+	if (!currency) {
+		// Unique jewellery has no quality currency or sockets, only its shards.
+		if (chanceShards == 0)
 			return std::nullopt;
-		}
+		return SalvageYield { IMISC_NONE, 0, 0, chanceShards };
 	}
 	const int quality = ItemQuality(item);
-	return SalvageYield { currency, (quality + 4) / 5, std::min<int>(item._iPoe2Craft.sockets, 3) };
+	return SalvageYield { *currency, (quality + 4) / 5, std::min<int>(item._iPoe2Craft.sockets, 3), chanceShards };
+}
+
+bool SalvageGivesSomething(const Item &item)
+{
+	const std::optional<SalvageYield> yield = GetSalvageYield(item);
+	return yield && (yield->full > 0 || yield->socketShards > 0 || yield->chanceShards > 0);
 }
 
 int AddShards(Player &player, ShardKind kind, int shards)
@@ -231,7 +258,7 @@ bool SalvageInvItem(Player &player, int invIndex)
 	const Item &item = player.InvList[invIndex];
 	const std::optional<SalvageYield> yield = GetSalvageYield(item);
 	if (!yield) {
-		EventPlrMsg(_("Only weapons, armour, shields, flasks and charms can be salvaged."), UiFlags::ColorRed);
+		EventPlrMsg(_("Only weapons, armour, shields, flasks, charms and uniques can be salvaged."), UiFlags::ColorRed);
 		return false;
 	}
 	TelemetryLog("economy", StrCat("salvaged ", item.getName()));
@@ -242,14 +269,16 @@ bool SalvageInvItem(Player &player, int invIndex)
 		EventPlrMsg(SalvageYieldText(SalvageYield { yield->currency, yield->full, 0 }));
 	if (yield->socketShards > 0)
 		GainShards(player, ShardKind::Artificer, yield->socketShards);
-	else if (yield->full == 0)
+	if (yield->chanceShards > 0)
+		GainShards(player, ShardKind::Chance, yield->chanceShards);
+	if (yield->full == 0 && yield->socketShards == 0 && yield->chanceShards == 0)
 		EventPlrMsg(_("Salvaging it gave nothing: it had no quality or sockets."));
 	return true;
 }
 
 std::string SalvageYieldText(const SalvageYield &yield)
 {
-	std::string text;
+	std::vector<std::string> parts;
 	if (yield.full > 0) {
 		std::string_view name = _("currency");
 		for (const ItemData &data : AllItemsList) {
@@ -258,11 +287,18 @@ std::string SalvageYieldText(const SalvageYield &yield)
 				break;
 			}
 		}
-		StrAppend(text, yield.full, " ", name, yield.full == 1 ? "" : "s");
+		parts.push_back(StrCat(yield.full, " ", name, yield.full == 1 ? "" : "s"));
 	}
 	if (yield.socketShards > 0)
-		StrAppend(text, text.empty() ? "" : _(" and "), yield.socketShards, " ", ShardName(ShardKind::Artificer), yield.socketShards == 1 ? "" : "s");
-	return text.empty() ? std::string(_("nothing")) : text;
+		parts.push_back(StrCat(yield.socketShards, " ", ShardName(ShardKind::Artificer), yield.socketShards == 1 ? "" : "s"));
+	if (yield.chanceShards > 0)
+		parts.push_back(StrCat(yield.chanceShards, " ", ShardName(ShardKind::Chance), yield.chanceShards == 1 ? "" : "s"));
+	if (parts.empty())
+		return std::string(_("nothing"));
+	std::string text = parts[0];
+	for (size_t i = 1; i < parts.size(); i++)
+		StrAppend(text, i + 1 == parts.size() ? _(" and ") : ", ", parts[i]);
+	return text;
 }
 
 std::string_view ShardName(ShardKind kind)

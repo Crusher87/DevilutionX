@@ -16,6 +16,7 @@
 #include "poe2/modifiers.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 namespace {
@@ -87,7 +88,7 @@ public:
 TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
-	ASSERT_EQ(families.size(), 93U);
+	ASSERT_EQ(families.size(), 94U);
 	int enabled = 0;
 	for (size_t i = 0; i < families.size(); i++) {
 		const ModFamily &family = families[i];
@@ -106,7 +107,7 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	EXPECT_EQ(enabled, 54);
+	EXPECT_EQ(enabled, 56);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");
@@ -115,7 +116,7 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 	EXPECT_NE(std::find(fireConflicts.begin(), fireConflicts.end(), *allRes), fireConflicts.end());
 }
 
-TEST_F(Poe2ModifiersTest, RaresRollFourToSixLegalModsAndRecreateIdentically)
+TEST_F(Poe2ModifiersTest, RaresRollThreeToSixLegalModsAndRecreateIdentically)
 {
 	std::array<int, 7> counts {};
 	for (const std::string_view baseName : { "Shortsword", "Fine Short Bow", "Full Plate Mail", "Ruby Ring", "Amber Amulet", "Wooden Tower Shield", "Iron Cap", "Leather Armor" }) {
@@ -160,10 +161,41 @@ TEST_F(Poe2ModifiersTest, RaresRollFourToSixLegalModsAndRecreateIdentically)
 			EXPECT_EQ(recreated._iAC, item._iAC);
 		}
 	}
-	// Natural rares have 4, 5 or 6 modifiers, mostly 4; small items can run out of legal modifiers.
+	// Natural rares have 3 to 6 modifiers, mostly 4; small items can run out of legal modifiers.
+	EXPECT_GT(counts[3], 0);
+	EXPECT_GT(counts[4], counts[3]);
 	EXPECT_GT(counts[4], counts[5]);
 	EXPECT_GT(counts[5], counts[6]);
 	EXPECT_GT(counts[6], 0);
+}
+
+TEST_F(Poe2ModifiersTest, NaturalRaresRollThreeModifiersNowAndThen)
+{
+	// Curtis 2026-10-23: 3 to 6 like POE2, mostly 4 or more; one rare in eight has 3.
+	std::array<int, 7> fromRolls {};
+	for (int roll = 0; roll < RareModCountRolls; roll++)
+		fromRolls[RareModCountFromRoll(roll)]++;
+	EXPECT_EQ(fromRolls[3], 3);
+	EXPECT_EQ(fromRolls[4], 13);
+	EXPECT_EQ(fromRolls[5], 6);
+	EXPECT_EQ(fromRolls[6], 2);
+	for (int roll = 0; roll < RareModCountRolls; roll++) {
+		// The old roll was this one modulo 12 (4 below 8, 5 below 11, else 6): rares from before keep 5 or 6, and a 4 stays 3 or 4.
+		const int oldRoll = roll % 12;
+		const int oldCount = oldRoll < 8 ? 4 : oldRoll < 11 ? 5 : 6;
+		if (oldCount == 4)
+			EXPECT_TRUE(IsAnyOf(RareModCountFromRoll(roll), 3, 4)) << roll;
+		else
+			EXPECT_EQ(RareModCountFromRoll(roll), oldCount) << roll;
+	}
+
+	constexpr int Seeds = 24000;
+	std::array<int, 7> counts {};
+	for (uint32_t seed = 1; seed <= Seeds; seed++)
+		counts[RareModCount(seed)]++;
+	EXPECT_NEAR(counts[3] / static_cast<double>(Seeds), 3.0 / 24, 0.01);
+	EXPECT_NEAR(counts[4] / static_cast<double>(Seeds), 13.0 / 24, 0.015);
+	EXPECT_NEAR(counts[6] / static_cast<double>(Seeds), 2.0 / 24, 0.01);
 }
 
 TEST_F(Poe2ModifiersTest, MagicItemsHaveAPrefixOrSuffixAndAName)
@@ -306,6 +338,104 @@ TEST_F(Poe2ModifiersTest, OlderItemsKeepDiablosAffixes)
 	RecreateItem(*MyPlayer, older, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff & ~CF_POE2_MODS);
 	EXPECT_EQ(older._iPoe2Mods[0].family, 0);
 	EXPECT_NE(older._iRarePowers[0], IPL_INVALID);
+}
+
+TEST_F(Poe2ModifiersTest, MagicFindRollsPoe2sRarityTiers)
+{
+	const std::optional<uint8_t> suffix = FindModifierFamily("item_rarity");
+	const std::optional<uint8_t> prefix = FindModifierFamily("item_rarity_prefix");
+	ASSERT_TRUE(suffix && prefix);
+	// Saved crafts name families by row: the suffix keeps its old row and the prefix is the last.
+	EXPECT_EQ(static_cast<size_t>(*prefix) + 1, ModifierFamilies().size());
+	const ModFamily &suffixFamily = ModifierFamilies()[*suffix];
+	const ModFamily &prefixFamily = ModifierFamilies()[*prefix];
+	EXPECT_TRUE(suffixFamily.enabled);
+	EXPECT_TRUE(prefixFamily.enabled);
+	EXPECT_FALSE(suffixFamily.prefix);
+	EXPECT_TRUE(prefixFamily.prefix);
+	EXPECT_EQ(suffixFamily.effect, ModEffect::ItemRarity);
+	EXPECT_EQ(prefixFamily.effect, ModEffect::ItemRarity);
+	// Two groups, so one item can have both, as in POE2.
+	EXPECT_NE(suffixFamily.group, prefixFamily.group);
+
+	const auto bit = [](ModSlot slot) { return 1U << static_cast<uint32_t>(slot); };
+	EXPECT_EQ(suffixFamily.slots, bit(ModSlot::Helmet) | bit(ModSlot::Gloves) | bit(ModSlot::Boots) | bit(ModSlot::Ring) | bit(ModSlot::Amulet));
+	EXPECT_EQ(prefixFamily.slots, bit(ModSlot::Helmet) | bit(ModSlot::Ring) | bit(ModSlot::Amulet));
+
+	// POE2's droppable tiers (item level: value): of Plunder, of Raiding, of Archaeology; Magpie's, Collector's, Hoarder's.
+	struct Expected {
+		int itemLevel;
+		int min;
+		int max;
+	};
+	const auto expectTiers = [](const ModFamily &family, const std::array<Expected, 3> &expected) {
+		ASSERT_EQ(family.tiers.size(), expected.size()) << family.id;
+		for (size_t t = 0; t < expected.size(); t++) {
+			EXPECT_EQ(family.tiers[t].itemLevel, expected[t].itemLevel) << family.id << " T" << t + 1;
+			EXPECT_EQ(family.tiers[t].min[0], expected[t].min) << family.id << " T" << t + 1;
+			EXPECT_EQ(family.tiers[t].max[0], expected[t].max) << family.id << " T" << t + 1;
+		}
+	};
+	expectTiers(suffixFamily, { { { 40, 15, 18 }, { 24, 11, 14 }, { 3, 6, 10 } } });
+	expectTiers(prefixFamily, { { { 47, 16, 19 }, { 29, 12, 15 }, { 10, 8, 11 } } });
+
+	const auto isRarity = [&](const Poe2ItemMod &mod) { return mod.family == *suffix + 1 || mod.family == *prefix + 1; };
+	bool sawSuffix = false;
+	bool sawPrefix = false;
+	bool sawBoth = false;
+	for (uint32_t seed = 1; seed <= 2000; seed++) {
+		// Nothing below item level 3, no prefix below 10, and never on body armour.
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::Ring, 0, 2, 6, MaxRareModsPerSide, seed, seed))
+			EXPECT_FALSE(isRarity(mod)) << seed;
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::Amulet, 0, 9, 6, MaxRareModsPerSide, seed, seed))
+			EXPECT_NE(mod.family, *prefix + 1) << seed;
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::BodyArmour, ModBaseArmour, 82, 6, MaxRareModsPerSide, seed, seed))
+			EXPECT_FALSE(isRarity(mod)) << seed;
+		bool hasSuffix = false;
+		bool hasPrefix = false;
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::Ring, 0, 82, 6, MaxRareModsPerSide, seed, seed)) {
+			if (!isRarity(mod))
+				continue;
+			const ModTier &tier = Family(mod).tiers[mod.tier - 1];
+			EXPECT_GE(mod.values[0], tier.min[0]);
+			EXPECT_LE(mod.values[0], tier.max[0]);
+			(mod.family == *suffix + 1 ? hasSuffix : hasPrefix) = true;
+		}
+		sawSuffix = sawSuffix || hasSuffix;
+		sawPrefix = sawPrefix || hasPrefix;
+		sawBoth = sawBoth || (hasSuffix && hasPrefix);
+	}
+	EXPECT_TRUE(sawSuffix);
+	EXPECT_TRUE(sawPrefix);
+	EXPECT_TRUE(sawBoth);
+
+	// Both add to the gear rarity stat the loot rules read (the Gold Amulet's implicit uses it too).
+	constexpr auto RarityStat = static_cast<size_t>(Poe2ItemStat::ItemRarity);
+	Item ring = {};
+	ApplyItemMod(ring, { static_cast<uint8_t>(*suffix + 1), 2, { 12, 0 } });
+	ApplyItemMod(ring, { static_cast<uint8_t>(*prefix + 1), 1, { 17, 0 } });
+	EXPECT_EQ(ring._iPoe2Stats[RarityStat], 29);
+	const std::vector<std::string> lines = ItemModText({ static_cast<uint8_t>(*suffix + 1), 2, { 12, 0 } });
+	ASSERT_EQ(lines.size(), 1U);
+	EXPECT_EQ(lines[0], "12% increased Rarity of Items found");
+
+	// A dropped helmet that rolls it carries the stat.
+	const _item_indexes cap = FindBase("Iron Cap");
+	ASSERT_NE(cap, IDI_GOLD);
+	int found = 0;
+	for (uint32_t seed = 1; seed <= 600 && found < 3; seed++) {
+		const Item item = MakeItem(cap, seed, ITEM_QUALITY_RARE, 60);
+		int rarity = 0;
+		for (const Poe2ItemMod &mod : Mods(item)) {
+			if (isRarity(mod))
+				rarity += mod.values[0];
+		}
+		if (rarity == 0)
+			continue;
+		EXPECT_EQ(item._iPoe2Stats[RarityStat], rarity) << seed;
+		found++;
+	}
+	EXPECT_GT(found, 0);
 }
 
 } // namespace

@@ -99,6 +99,12 @@ Colours ColoursOf(Element element)
 	return { { 255, 255, 255 }, { 200, 200, 200 }, { 100, 100, 100 } };
 }
 
+/** @brief Arcing Sparks' violet, so its sparks never pass for Charged Bolt's blue-white bolts. */
+Colours ArcingSparkColours()
+{
+	return { { 250, 240, 255 }, { 205, 150, 255 }, { 150, 60, 235 } };
+}
+
 /** @brief Effects' own dice: cosmetic, so they never touch the game's seeded RNG. */
 uint32_t Seed = 0x9E3779B9U;
 
@@ -163,6 +169,8 @@ struct Particle {
 	float alpha = 1;
 	Shape shape = Shape::Dot;
 	bool bounced = false;
+	/** @brief The object whose flame threw it, or -1; it goes under a hero or monster standing in front of the object. */
+	int16_t flame = -1;
 };
 
 /** @brief An expanding ring on the ground (shockwaves, novas) or a glowing disc (flashes, light pools). */
@@ -186,6 +194,8 @@ struct Ring {
 	bool easeOut = true;
 	/** @brief Fades as it spreads, gone by its full size, instead of only near the end of its life. */
 	bool fadeOut = false;
+	/** @brief The object whose flame gives this glow, or -1, as for a particle. */
+	int16_t flame = -1;
 };
 
 struct Bolt {
@@ -407,6 +417,13 @@ struct Comet {
 	uint32_t seed;
 	/** @brief A charged bolt: drawn as a crackling bolt of electricity along its path instead of a head and a tail. */
 	bool bolt = false;
+	/** @brief An Arcing Sparks spark: the same missile as Charged Bolt, drawn as a small quick spark instead. */
+	bool sparks = false;
+	/** @brief Its colours, tinted by its skill's look. */
+	Colours colours {};
+	/** @brief Its skill look's brightness and speed. */
+	float brightness = 1;
+	float speed = 1;
 	/** @brief Not moving: a bolt standing where it landed or burst. */
 	bool still = false;
 	/** @brief How high its head is above the floor. */
@@ -460,9 +477,16 @@ struct Emitter {
 	Rgb colour;
 	/** @brief Lava and water: half the patch's width, in world pixels. */
 	float spread = 0;
+	/** @brief An object's flame: the object, or -1. */
+	int16_t object = -1;
 };
 
 std::vector<Emitter> Emitters;
+/**
+ * @brief The flame objects a hero or monster was drawn in front of this frame, by object number: their flames go under
+ * those sprites (Curtis 2026-10-23: a brazier's fire was drawn over the hero standing in front of it).
+ */
+std::array<bool, MAXOBJECTS> FlameBehind {};
 /** @brief Real time the ambient effects have run, for their flicker and pulse. */
 float AmbientTime = 0;
 
@@ -1558,7 +1582,8 @@ Vec WeatherSize;
 void ScanFlames(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
-		const Object &object = Objects[ActiveObjects[i]];
+		const int id = ActiveObjects[i];
+		const Object &object = Objects[id];
 		if (!IsFlameObject(object) || !object._oAnimData || object._oAnimFrame == 0)
 			continue;
 		const ClxSprite sprite = ObjectSprite(object);
@@ -1584,6 +1609,7 @@ void ScanFlames(const View &view)
 			glow.width = 0;
 			glow.disc = true;
 			glow.ground = false;
+			glow.flame = static_cast<int16_t>(id);
 			// A wide warm halo, then a hot core.
 			glow.r0 = glow.r1 = (8 + 3.F * s) * (0.95F + 0.05F * flicker);
 			glow.colour = { 255, 130, 45 };
@@ -1593,7 +1619,7 @@ void ScanFlames(const View &view)
 			glow.colour = { 255, 210, 140 };
 			glow.alpha = 0.4F * flicker;
 			FrameGlows.push_back(glow);
-			Emitters.push_back({ pos, s, Ambient::Flame, { 255, 150, 50 } });
+			Emitters.push_back({ pos, s, Ambient::Flame, { 255, 150, 50 }, 0, static_cast<int16_t>(id) });
 		}
 	}
 }
@@ -2025,6 +2051,7 @@ void EmitAmbient(float ms)
 				p.c0 = { 255, 210, 120 };
 				p.c1 = { 200, 60, 10 };
 				p.alpha = 0.9F;
+				p.flame = emitter.object;
 				AddParticle(p);
 			}
 			for (int i = Occurrences(0.008F * s * s, ms); i > 0; i--) {
@@ -2039,6 +2066,7 @@ void EmitAmbient(float ms)
 				p.c1 = { 22, 20, 19 };
 				p.alpha = 0.13F;
 				p.shape = Shape::Puff;
+				p.flame = emitter.object;
 				AddParticle(p);
 			}
 			break;
@@ -2298,7 +2326,7 @@ SDL_Surface *FloorSurface = nullptr;
 /** @brief Whether FloorSurface holds the floor of the frame about to be shown. */
 bool FloorFresh = false;
 
-/** @brief Solid where a hero standing in front of a portal was drawn this frame, the size of the world. */
+/** @brief Solid where a hero or monster standing in front of a portal or a flame was drawn this frame, the size of the world. */
 SDL_Surface *FrontSurface = nullptr;
 /** @brief Where FrontSurface starts in the surface the world is drawn on. */
 Point FrontOrigin;
@@ -2332,7 +2360,7 @@ Surface FloorCopy()
 	return FloorSurface != nullptr ? Surface(FloorSurface) : Surface();
 }
 
-bool HeroInFrontOfPortal(Point tile)
+bool InFrontOfEffects(Point tile)
 {
 	if (!FrontFresh)
 		return false;
@@ -2340,18 +2368,29 @@ bool HeroInFrontOfPortal(Point tile)
 	const auto inFront = [&](const PortalFx &portal) {
 		return tile.WalkingDistance(portal.tile) <= 2 && tile.x + tile.y >= portal.tile.x + portal.tile.y;
 	};
-	for (const auto &[missile, portal] : Portals) {
-		if (inFront(portal))
-			return true;
+	bool front = std::any_of(ClosingPortals.begin(), ClosingPortals.end(), inFront);
+	for (const auto &[missile, portal] : Portals)
+		front = front || inFront(portal);
+	// A flame's light and embers rise well above its object, so they reach a row further; every flame it stands in
+	// front of is noted, for the flames to go under it.
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const int id = ActiveObjects[i];
+		const Object &object = Objects[id];
+		if (!IsFlameObject(object) || tile.WalkingDistance(object.position) > 3 || tile.x + tile.y <= object.position.x + object.position.y)
+			continue;
+		FlameBehind[id] = true;
+		front = true;
 	}
-	return std::any_of(ClosingPortals.begin(), ClosingPortals.end(), inFront);
+	return front;
 }
 
 void BeginFront(const Surface &world)
 {
 	FrontFresh = false;
 	FrontUsed = false;
-	if (!Enabled() || (Portals.empty() && ClosingPortals.empty()))
+	FlameBehind.fill(false);
+	const bool flames = std::any_of(ActiveObjects, ActiveObjects + ActiveObjectCount, [](int id) { return IsFlameObject(Objects[id]); });
+	if (!Enabled() || (Portals.empty() && ClosingPortals.empty() && !flames))
 		return;
 	if (FrontSurface == nullptr || FrontSurface->w != world.w() || FrontSurface->h != world.h()) {
 		if (FrontSurface != nullptr)
@@ -2406,7 +2445,7 @@ Surface FloorCopy()
 	return {};
 }
 
-bool HeroInFrontOfPortal(Point)
+bool InFrontOfEffects(Point)
 {
 	return false;
 }
@@ -3145,19 +3184,25 @@ void ScanMissiles()
 			trail.points[0] = head;
 			trail.count = std::min<int>(trail.count + 1, static_cast<int>(trail.points.size()));
 		}
-		const Colours c = ColoursOf(look.element);
 		const bool arrow = missile._miAnimType == MissileGraphicID::Arrow;
 		const bool small = missile.poe2.look == 1;
 		// A charged bolt's light crackles with it rather than glowing steadily round a ball.
 		const bool bolt = missile._miAnimType == MissileGraphicID::ChargedBolt;
+		// Arcing Sparks fires the same missile; it gets its own small, quick, violet sparks (Curtis 2026-10-23).
+		const bool sparks = IsArcingSpark(missile);
+		const Colours c = sparks ? ArcingSparkColours() : ColoursOf(look.element);
 		const uint32_t seed = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&missile) >> 4);
-		const float crackle = bolt ? 0.55F + 0.45F * SmoothNoise(seed, AmbientTime * 0.03F) : 1.F;
+		const float crackle = bolt ? 0.55F + 0.45F * SmoothNoise(seed, AmbientTime * (sparks ? 0.08F : 0.03F)) : 1.F;
 		if (!trail.arrow) {
 			const Vec velocity { static_cast<float>(missile.position.velocity.deltaX), static_cast<float>(missile.position.velocity.deltaY) };
 			const float speed = Length(velocity);
 			const Vec dir = speed > 0.001F ? velocity * (1 / speed) : Vec { 1, 0 };
 			Comet &comet = FrameComets.emplace_back(Comet { head, dir, look.element, scale * (styled != nullptr ? styled->size : 1.F), small, seed });
-			comet.bolt = bolt;
+			comet.bolt = bolt && !sparks;
+			comet.sparks = sparks;
+			comet.colours = styled != nullptr ? Tinted(c, *styled) : c;
+			comet.brightness = styled != nullptr ? styled->brightness : 1.F;
+			comet.speed = styled != nullptr ? std::max(styled->speed, 0.1F) : 1.F;
 			comet.still = speed <= 0.001F;
 			comet.lift = missile._miAnimWidth / 2.F - 16;
 			comet.path = trail.points;
@@ -3166,11 +3211,11 @@ void ScanMissiles()
 		const size_t firstGlow = FrameGlows.size();
 		Ring glow;
 		glow.pos = head;
-		glow.r0 = glow.r1 = (arrow ? 6.F : (bolt ? 13.F : 20.F)) * scale;
+		glow.r0 = glow.r1 = (arrow ? 6.F : (sparks ? 8.F : (bolt ? 16.F : 20.F))) * scale;
 		glow.life = 1;
 		glow.width = 0;
 		glow.colour = c.mid;
-		glow.alpha = (arrow ? 0.45F : (bolt ? 0.3F * crackle : 0.7F)) * std::min(scale, 1.F);
+		glow.alpha = (arrow ? 0.45F : (sparks ? 0.25F * crackle : (bolt ? 0.32F * crackle : 0.7F))) * std::min(scale, 1.F);
 		glow.disc = true;
 		glow.ground = false;
 		FrameGlows.push_back(glow);
@@ -3190,7 +3235,7 @@ void ScanMissiles()
 			}
 			// The light the projectile throws on the floor beneath it.
 			glow.pos = MissileCentre(missile) + Vec { 0, missile._miAnimWidth / 2.F - 16 };
-			glow.r0 = glow.r1 = TileRadius * 1.6F;
+			glow.r0 = glow.r1 = TileRadius * (sparks ? 0.9F : 1.6F);
 			glow.colour = c.mid;
 			glow.alpha = 0.22F * crackle;
 			glow.ground = true;
@@ -3221,6 +3266,12 @@ void ScanMissiles()
 		}
 	}
 	std::erase_if(Portals, [](const auto &entry) { return entry.second.frame != ScanFrame; });
+}
+
+bool IsArcingSpark(const Missile &missile)
+{
+	return missile._miAnimType == MissileGraphicID::ChargedBolt
+	    && SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark);
 }
 
 bool ReplacesSprite(const Missile &missile)
@@ -3653,6 +3704,12 @@ float EaseOut(float t)
 	return 1 - (1 - t) * (1 - t) * (1 - t);
 }
 
+/** @brief Whether an object's flame has a hero or monster in front of it this frame, so it goes under them. */
+bool FlameIsBehind(int16_t flame)
+{
+	return flame >= 0 && FrontFresh && FrontUsed && FlameBehind[flame];
+}
+
 void DrawRings()
 {
 	for (const Ring &ring : Rings) {
@@ -3679,8 +3736,10 @@ void DrawRings()
 				SoftRing(batch, ring.pos, radius, ring.width * 4, ring.colour, alpha * 0.25F, ring.jitter, ring.seed);
 		}
 	}
-	for (const Ring &glow : FrameGlows)
-		SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
+	for (const Ring &glow : FrameGlows) {
+		if (!FlameIsBehind(glow.flame))
+			SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
+	}
 }
 
 /**
@@ -3736,16 +3795,18 @@ std::vector<Vec> Jag(Vec from, Vec to, int steps, float kick, uint32_t &seed)
  * @brief A charged bolt (Curtis 2026-10-22: its round head and tail looked like "little sperms floating around"): a short
  * bolt of jagged lightning along the path it has just flown, evenly bright with no ball at its head, a fainter second
  * strand twisting round it, forks flicking off it and now and then an arc down to the floor. It tears itself up and
- * re-forms every few hundredths of a second. Standing still, it crackles in place.
+ * re-forms every few hundredths of a second. Standing still, it crackles in place. Heavier and steadier than Arcing
+ * Sparks' sparks (DrawArcingSpark), which fly the same missile.
  */
 void DrawLightningBolt(const Comet &comet)
 {
-	const Colours c = ColoursOf(Element::Lightning);
+	const Colours &c = comet.colours;
 	const float s = comet.scale;
-	// A new shape every 35 ms, different for each bolt; its brightness jumps with it.
-	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / 35) * 40503U)) | 1;
+	// A new shape every 45 ms (sooner for a faster look), different for each bolt; its brightness jumps with it.
+	const float interval = std::max(45.F / comet.speed, 15.F);
+	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / interval) * 40503U)) | 1;
 	SeededRandom(seed);
-	const float flash = 0.7F + 0.3F * SeededRandom(seed);
+	const float flash = (0.75F + 0.25F * SeededRandom(seed)) * comet.brightness;
 	if (comet.still) {
 		for (int i = 0; i < 3; i++) {
 			const float angle = SeededRandom(seed) * 2 * Pi;
@@ -3780,9 +3841,9 @@ void DrawLightningBolt(const Comet &comet)
 		const float f = std::clamp((d - segmentStart) / std::max(Length(span), 0.01F), 0.F, 1.F);
 		spine.push_back(path[segment] + span * f);
 	}
-	const std::vector<Vec> body = ZigZag(spine, 6 * s, seed);
-	Filament(body, 1.8F * s, c, 0.75F * flash, flash, 0.2F * flash);
-	Filament(ZigZag(spine, 4.5F * s, seed), 1.1F * s, c, 0.35F * flash, 0.45F * flash, 0);
+	const std::vector<Vec> body = ZigZag(spine, 7 * s, seed);
+	Filament(body, 2.4F * s, c, 0.8F * flash, flash, 0.25F * flash);
+	Filament(ZigZag(spine, 5 * s, seed), 1.4F * s, c, 0.4F * flash, 0.5F * flash, 0);
 
 	// Forks flicking off its joints, never the same two frames running.
 	for (int f = 0; f < 3; f++) {
@@ -3796,22 +3857,85 @@ void DrawLightningBolt(const Comet &comet)
 		Filament(Jag(body[at], end, 3, 3 * s, seed), 1.1F * s, c, 0.8F * flash, 0.5F * flash, 0);
 	}
 	// Now and then it arcs down to the floor beneath it.
-	if (!comet.small && SeededRandom(seed) < 0.3F) {
+	if (!comet.small && SeededRandom(seed) < 0.4F) {
 		const Vec floor = comet.head + Vec { (SeededRandom(seed) - 0.5F) * 16 * s, comet.lift };
 		Filament(Jag(comet.head, floor, 3, 3 * s, seed), 1.1F * s, c, 0.6F * flash, 0.5F * flash, 0.4F * flash);
 		SoftDisc(Glowing, floor, 4 * s, c.mid, 0.4F * flash, true);
 	}
 }
 
+/**
+ * @brief An Arcing Sparks spark (Curtis 2026-10-23: it looked just like Charged Bolt): a small, quick violet spark, a hot
+ * point with a few short spikes flicking off it and a short jittery tail, re-forming twice as often as a charged bolt.
+ * DrawSparkArcs jumps lightning between sparks flying near each other.
+ */
+void DrawArcingSpark(const Comet &comet)
+{
+	const Colours &c = comet.colours;
+	const float s = comet.scale * 0.75F;
+	const float interval = std::max(20.F / comet.speed, 8.F);
+	uint32_t seed = ((comet.seed * 2654435761U) ^ (static_cast<uint32_t>(AmbientTime / interval) * 40503U)) | 1;
+	SeededRandom(seed);
+	const float flash = (0.6F + 0.4F * SeededRandom(seed)) * comet.brightness;
+	// The hot point it flies on, jittering about its path.
+	const Vec point = comet.head + Vec { SeededRandom(seed) - 0.5F, SeededRandom(seed) - 0.5F } * (3 * s);
+	SoftDisc(Glowing, point, 5 * s, c.mid, 0.45F * flash, false);
+	SoftDisc(Glowing, point, 2 * s, c.core, flash, false);
+	const int spikes = 2 + static_cast<int>(SeededRandom(seed) * 3);
+	for (int i = 0; i < spikes; i++) {
+		const float angle = SeededRandom(seed) * 2 * Pi;
+		const float reach = (4 + 7 * SeededRandom(seed)) * s;
+		Filament(Jag(point, point + Vec { std::cos(angle), std::sin(angle) * 0.7F } * reach, 2, 2 * s, seed), 0.8F * s, c, flash, 0.5F * flash, 0);
+	}
+	if (comet.still)
+		return;
+	const Vec back = comet.pathCount >= 2 ? comet.path[1] - comet.head : comet.dir * -1;
+	const Vec way = back * (1 / std::max(Length(back), 0.01F));
+	Filament(Jag(point, point + way * (14 * s), 3, 3.5F * s, seed), 0.9F * s, c, 0.8F * flash, 0.4F * flash, 0);
+}
+
+/** @brief Arcing Sparks' sparks arc to each other: now and then a thin strand of lightning jumps between two close by. */
+void DrawSparkArcs()
+{
+	const auto window = static_cast<uint32_t>(AmbientTime / 30);
+	for (size_t i = 0; i < FrameComets.size(); i++) {
+		const Comet &a = FrameComets[i];
+		if (!a.sparks)
+			continue;
+		for (size_t j = i + 1; j < FrameComets.size(); j++) {
+			const Comet &b = FrameComets[j];
+			if (!b.sparks)
+				continue;
+			const float distance = Length(b.head - a.head);
+			if (distance < 6 || distance > 70 * a.scale)
+				continue;
+			uint32_t seed = ((a.seed ^ (b.seed * 2654435761U)) + (window * 40503U)) | 1;
+			SeededRandom(seed);
+			if (SeededRandom(seed) > 0.35F)
+				continue;
+			const float flash = (0.5F + 0.4F * SeededRandom(seed)) * a.brightness;
+			const int steps = std::clamp(static_cast<int>(distance / 12), 2, 6);
+			Filament(Jag(a.head, b.head, steps, 5 * a.scale, seed), 0.7F * a.scale, a.colours, flash, 0.8F * flash, flash);
+			// One arc from each spark.
+			break;
+		}
+	}
+}
+
 /** @brief Projectile bodies: a white-hot head and a tail tapering back along the flight, shaped by the element. */
 void DrawComets()
 {
+	DrawSparkArcs();
 	for (const Comet &comet : FrameComets) {
+		if (comet.sparks) {
+			DrawArcingSpark(comet);
+			continue;
+		}
 		if (comet.bolt) {
 			DrawLightningBolt(comet);
 			continue;
 		}
-		const Colours c = ColoursOf(comet.element);
+		const Colours &c = comet.colours;
 		uint32_t seed = comet.seed + static_cast<uint32_t>(AmbientTime * 0.05F);
 		const float s = comet.scale;
 		const Vec back = comet.dir * -1;
@@ -3849,9 +3973,14 @@ void DrawComets()
 	}
 }
 
-void DrawParticles()
+/** @brief The particles, or with @p behind only those of the flames with a hero or monster in front of them. */
+void DrawParticles(bool behind = false)
 {
+	// Behind, the smoke goes with the portals' own dark shapes, under the sprites drawn back over them.
+	Batch &dark = behind ? Standing : Dark;
 	for (const Particle &p : Particles) {
+		if (FlameIsBehind(p.flame) != behind)
+			continue;
 		const float t = p.age / p.life;
 		const float size = p.size0 + (p.size1 - p.size0) * t;
 		const Rgb colour = Mix(p.c0, p.c1, t);
@@ -3883,16 +4012,16 @@ void DrawParticles()
 			const Vec c = ToScreen(at);
 			const float h = size * CameraScale;
 			const float alpha = p.alpha * std::min(1.F, (1 - t) * 3);
-			const int a = Dark.add(c + Vec { -h, -h }, colour, alpha);
-			const int b = Dark.add(c + Vec { h, -h * 0.6F }, colour, alpha);
-			const int d = Dark.add(c + Vec { h * 0.7F, h }, colour, alpha);
-			const int e = Dark.add(c + Vec { -h * 0.8F, h * 0.8F }, colour, alpha);
-			Dark.tri(a, b, d);
-			Dark.tri(a, d, e);
+			const int a = dark.add(c + Vec { -h, -h }, colour, alpha);
+			const int b = dark.add(c + Vec { h, -h * 0.6F }, colour, alpha);
+			const int d = dark.add(c + Vec { h * 0.7F, h }, colour, alpha);
+			const int e = dark.add(c + Vec { -h * 0.8F, h * 0.8F }, colour, alpha);
+			dark.tri(a, b, d);
+			dark.tri(a, d, e);
 			break;
 		}
 		case Shape::Puff:
-			SoftDisc(Dark, at, size, colour, p.alpha * std::sin(Pi * t), false, 0);
+			SoftDisc(dark, at, size, colour, p.alpha * std::sin(Pi * t), false, 0);
 			break;
 		}
 	}
@@ -5872,8 +6001,9 @@ void SubmitGlow(SDL_Renderer *renderer, Batch &batch)
 }
 
 /**
- * @brief Draws the heroes standing in front of a portal again, over it: their pixels as the world shows them, wherever
- * their sprites were drawn. Only around the portals, as nothing of them is drawn anywhere else.
+ * @brief Draws the heroes and monsters standing in front of a portal or a flame again, over it: their pixels as the
+ * world shows them, wherever their sprites were drawn. Only around the portals and those flames, as nothing of them is
+ * drawn anywhere else.
  */
 void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 {
@@ -5882,47 +6012,57 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	const Surface world = WorldBackBuffer();
 	if (world.w() != FrontSurface->w || world.h() != FrontSurface->h || world.w() != worldSize.width || world.h() != worldSize.height)
 		return;
-	float x0 = static_cast<float>(worldSize.width);
-	float y0 = static_cast<float>(worldSize.height);
-	float x1 = 0;
-	float y1 = 0;
-	const auto around = [&](const PortalFx &portal) {
-		const Vec at = ToScreen(portal.pos);
-		x0 = std::min(x0, at.x - 120 * CameraScale);
-		x1 = std::max(x1, at.x + 120 * CameraScale);
-		y0 = std::min(y0, at.y - 230 * CameraScale);
-		y1 = std::max(y1, at.y + 80 * CameraScale);
+	// Each area by itself: one box round two heroes at either side of the screen would cover most of it.
+	const auto around = [&](Vec min, Vec max, float side, float up, float down) {
+		const Vec from = ToScreen(min);
+		const Vec to = ToScreen(max);
+		SDL_Rect rect;
+		rect.x = std::clamp(static_cast<int>(from.x - side * CameraScale), 0, worldSize.width);
+		rect.y = std::clamp(static_cast<int>(from.y - up * CameraScale), 0, worldSize.height);
+		rect.w = std::clamp(static_cast<int>(to.x + side * CameraScale) + 1, 0, worldSize.width) - rect.x;
+		rect.h = std::clamp(static_cast<int>(to.y + down * CameraScale) + 1, 0, worldSize.height) - rect.y;
+		if (rect.w <= 0 || rect.h <= 0)
+			return;
+		void *pixels;
+		int pitch;
+		if (SDL_LockTexture(Layer.front, &rect, &pixels, &pitch) != 0)
+			return;
+		for (int y = 0; y < rect.h; y++) {
+			const uint8_t *solid = static_cast<const uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FrontSurface->pitch + rect.x;
+			const uint8_t *shown = world.at(rect.x, rect.y + y);
+			uint8_t *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
+			for (int x = 0; x < rect.w; x++, out += 4) {
+				const SDL_Color &c = system_palette[shown[x]];
+				out[0] = c.r;
+				out[1] = c.g;
+				out[2] = c.b;
+				out[3] = solid[x] != 0 ? 255 : 0;
+			}
+		}
+		SDL_UnlockTexture(Layer.front);
+		const SDL_FRect dest { static_cast<float>(rect.x) * toLogical, static_cast<float>(rect.y) * toLogical, static_cast<float>(rect.w) * toLogical, static_cast<float>(rect.h) * toLogical };
+		SDL_RenderCopyF(renderer, Layer.front, &rect, &dest);
 	};
 	for (const auto &[missile, portal] : Portals)
-		around(portal);
+		around(portal.pos, portal.pos, 120, 230, 80);
 	for (const PortalFx &portal : ClosingPortals)
-		around(portal);
-	SDL_Rect rect;
-	rect.x = std::clamp(static_cast<int>(x0), 0, worldSize.width);
-	rect.y = std::clamp(static_cast<int>(y0), 0, worldSize.height);
-	rect.w = std::clamp(static_cast<int>(x1) + 1, 0, worldSize.width) - rect.x;
-	rect.h = std::clamp(static_cast<int>(y1) + 1, 0, worldSize.height) - rect.y;
-	if (rect.w <= 0 || rect.h <= 0)
-		return;
-	void *pixels;
-	int pitch;
-	if (SDL_LockTexture(Layer.front, &rect, &pixels, &pitch) != 0)
-		return;
-	for (int y = 0; y < rect.h; y++) {
-		const uint8_t *solid = static_cast<const uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FrontSurface->pitch + rect.x;
-		const uint8_t *shown = world.at(rect.x, rect.y + y);
-		uint8_t *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
-		for (int x = 0; x < rect.w; x++, out += 4) {
-			const SDL_Color &c = system_palette[shown[x]];
-			out[0] = c.r;
-			out[1] = c.g;
-			out[2] = c.b;
-			out[3] = solid[x] != 0 ? 255 : 0;
+		around(portal.pos, portal.pos, 120, 230, 80);
+	// Round each object's flames: their glow and bloom, and the embers and smoke rising off them.
+	std::array<bool, MAXOBJECTS> done {};
+	for (const Ring &glow : FrameGlows) {
+		if (!FlameIsBehind(glow.flame) || done[glow.flame])
+			continue;
+		done[glow.flame] = true;
+		Vec min = glow.pos;
+		Vec max = glow.pos;
+		for (const Ring &other : FrameGlows) {
+			if (other.flame != glow.flame)
+				continue;
+			min = { std::min(min.x, other.pos.x), std::min(min.y, other.pos.y) };
+			max = { std::max(max.x, other.pos.x), std::max(max.y, other.pos.y) };
 		}
+		around(min, max, 90, 170, 80);
 	}
-	SDL_UnlockTexture(Layer.front);
-	const SDL_FRect to { static_cast<float>(rect.x) * toLogical, static_cast<float>(rect.y) * toLogical, static_cast<float>(rect.w) * toLogical, static_cast<float>(rect.h) * toLogical };
-	SDL_RenderCopyF(renderer, Layer.front, &rect, &to);
 }
 
 } // namespace
@@ -5942,8 +6082,10 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0)
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+		FrontFresh = false;
 		return;
+	}
 
 	Glowing.clear();
 	Dark.clear();
@@ -5951,9 +6093,15 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	Ground.clear();
 	GroundDark.clear();
 	// The portals' standing shapes go in batches of their own, drawn first, so a hero in front of one can go over it.
+	// So do the flames of the torches and braziers a hero or monster stands in front of.
 	PortalStanding.clear();
 	PortalGlowing.clear();
 	DrawPortals();
+	for (const Ring &glow : FrameGlows) {
+		if (FlameIsBehind(glow.flame))
+			SoftDisc(Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, false);
+	}
+	DrawParticles(true);
 	std::swap(Standing, PortalStanding);
 	std::swap(Glowing, PortalGlowing);
 	DrawHalos();

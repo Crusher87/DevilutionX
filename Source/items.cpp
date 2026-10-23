@@ -102,6 +102,7 @@
 #include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
@@ -1323,7 +1324,7 @@ struct RareAffixRoll {
 std::vector<RareAffixRoll> RollRareAffixes(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
 {
 	const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
-	// Rares from the POE2 loot rules have 4 to 6 affixes, mostly 4; crafted ones 3 to 6.
+	// Rares from the POE2 loot rules have 3 to 6 affixes, mostly 4; crafted ones 3 to 6.
 	const int baseAffixes = GetLootRarity(item) ? RollNaturalRareAffixCount() : 3 + GenerateRnd(4);
 	const int wantedAffixes = std::min<int>(baseAffixes + exalts, static_cast<int>(MaxRareAffixes));
 	int prefixes = 0;
@@ -2238,8 +2239,7 @@ void PrintItemMisc(const Item &item)
 		return;
 	}
 	if (IsUncutGem(item)) {
-		// Short lines: the info box doesn't wrap, so long ones ran into each other.
-		AddItemInfoBoxString(FormatRuntime(_("Level {:d}"), UncutGemLevel(item)));
+		// Short lines: the info box doesn't wrap, so long ones ran into each other. The level is in the name.
 		AddItemInfoBoxString(FormatRuntime(_("Cuts a {:s} gem of its tier"), UncutKindName(UncutGemKind(item))));
 		// The gem it cuts can't be above the hero's own gem level limit: say so, instead of a lower gem appearing.
 		if (MyPlayer != nullptr && UncutGemKind(item) != UncutKind::Support) {
@@ -2802,6 +2802,9 @@ StringOrView GetTranslatedItemName(const Item &item)
 	// own full name, such as "Lesser Essence of Clarity".
 	if (gbIsPoe2 && item._iIName[0] != '\0' && (IsCraftingVariantItem(item) || IsWaystone(item) || SupportGemForItem(item) != SupportGem::None))
 		return std::string_view(item._iIName);
+	// POE2 Mashup: an uncut gem names its level, like POE2's "Uncut Skill Gem (Level 6)".
+	if (gbIsPoe2 && IsUncutGem(item))
+		return FormatRuntime(_("{:s} (Level {:d})"), _(baseItemData.iName), UncutGemLevel(item));
 	if (item._iCreateInfo == 0) {
 		return _(baseItemData.iName);
 	}
@@ -3029,7 +3032,7 @@ void RestoreRareItemPowers(Item &item)
 	SetRndSeed(currentSeed);
 }
 
-bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed)
+bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed, int quality)
 {
 	const Poe2Unique *unique = Poe2UniqueFor(uid);
 	if (unique == nullptr || !IsItemAvailable(unique->baseItem))
@@ -3040,6 +3043,7 @@ bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed)
 	SetLootRarity(item, ITEM_QUALITY_UNIQUE);
 	SetPoe2ItemLevel(item, unique->dropLevel);
 	item.dwBuff |= ((static_cast<uint32_t>(offset) << 1) & CF_UIDOFFSET) | CF_POE2_BUNDLE_UNIQUE;
+	SetItemQuality(item, quality);
 	SetupAllItems(player, item, static_cast<_item_indexes>(unique->baseItem), seed, std::max<int>(UniqueItems[uid].UIMinLvl, 1), 1, true, false, offset);
 	return item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid == uid;
 }
@@ -3087,12 +3091,14 @@ ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &un
 	const uint32_t seed = (roll * 1103515245U + 12345U) >> 1;
 	const uint32_t rngState = GetLCGEngineState();
 	bool made;
+	// The unique keeps the item's quality, as in POE2.
 	if (chosen.bundle) {
-		made = CreatePoe2Unique(player, unique, chosen.uid, seed);
+		made = CreatePoe2Unique(player, unique, chosen.uid, seed, ItemQuality(item));
 	} else {
 		unique = {};
 		SetLootRarity(unique, ITEM_QUALITY_UNIQUE);
 		SetPoe2ItemLevel(unique, GetPoe2ItemLevel(item));
+		SetItemQuality(unique, ItemQuality(item));
 		unique.dwBuff |= (static_cast<uint32_t>(chosen.offset) << 1) & CF_UIDOFFSET;
 		SetupAllItems(player, unique, static_cast<_item_indexes>(base), seed, level, 1, true, false, chosen.offset);
 		made = unique._iMagical == ITEM_QUALITY_UNIQUE && unique._iUid == chosen.uid;
@@ -3665,7 +3671,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			}
 
 			if (item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified) {
-				dam += item._iPLDam;
+				dam += WeaponDamagePercent(item);
 				toHit += item._iPLToHit;
 				bonusAc += GetBonusAC(item);
 				flags |= item._iFlags;
@@ -3694,6 +3700,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 					poe2Stats[stat] += item._iPoe2Stats[stat];
 				AddUniqueRules(item, uniqueRules);
 				AddCraftRules(item, uniqueRules);
+			} else {
+				// POE2 Mashup: a weapon's quality isn't a hidden modifier, so it counts before identifying too.
+				dam += WeaponDamagePercent(item);
 			}
 		}
 	}
@@ -3769,7 +3778,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			DefensePoints bonus;
 			SplitItemDefense(item, base, bonus);
 			evasion += base.evasion + bonus.evasion;
-			energyShield += (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
+			energyShield += base.energyShield + bonus.energyShield;
 			ac -= item._iAC - base.armour;
 			const bool counted = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
 			bonusAc += bonus.armour - (counted ? GetBonusAC(item) : 0);
@@ -3886,7 +3895,7 @@ void CalcPlrInv(Player &player, bool loadgfx)
 	}
 }
 
-void InitializeItem(Item &item, _item_indexes itemData)
+void InitializeItem(Item &item, _item_indexes itemData, int quality)
 {
 	auto &pAllItem = AllItemsList[static_cast<size_t>(itemData)];
 
@@ -3936,6 +3945,8 @@ void InitializeItem(Item &item, _item_indexes itemData)
 		item.dwBuff |= CF_HELLFIRE;
 	if (gbIsPoe2)
 		item.dwBuff |= CF_POE2;
+	if (gbIsPoe2 && quality > 0 && (QualityKindFor(itemData) != QualityKind::None || BaseMetaFor(itemData) != nullptr))
+		SetItemQuality(item, quality);
 	ApplyBaseProperties(item);
 }
 
@@ -4474,7 +4485,7 @@ bool IsPoe2UncutGem(item_misc_id miscId)
 bool IsPoe2MiscLoot(const ItemData &data)
 {
 	return data.itype == ItemType::Misc && data.iMiscId != IMISC_BOOK && !IsPoe2FlaskOrCharm(data.iMiscId) && !IsPoe2Orb(data.iMiscId)
-	    && !IsPoe2UncutGem(data.iMiscId) && !IsAnyOf(data.iMiscId, IMISC_WAYSTONE, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY) && SkillForGemData(data).isEmpty();
+	    && !IsPoe2UncutGem(data.iMiscId) && !IsAnyOf(data.iMiscId, IMISC_WAYSTONE, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY, IMISC_JEWEL) && SkillForGemData(data).isEmpty();
 }
 
 bool IsPoe2Equipment(const ItemData &data)
@@ -4502,6 +4513,9 @@ bool IsPoe2LootCandidate(size_t index, int itemLevel)
 		return false;
 	const ItemData &data = AllItemsList[index];
 	if (data.dropRate == 0 || data.iMinMLvl > itemLevel || IsHeldBackWeaponBase(index))
+		return false;
+	// Hellfire's trap runes share their names with POE2's socket runes (Curtis 2026-10-23: a Rune of Fire still dropped).
+	if (IsHellfireRune(data.iMiscId))
 		return false;
 	return !IsAnyOf(data.iSpell, SpellID::Resurrect, SpellID::HealOther) || gbIsMultiplayer;
 }
@@ -4612,7 +4626,8 @@ bool HeroHasSpirit()
 	return MyPlayer != nullptr && MaxSpirit(*MyPlayer) > 0;
 }
 
-std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel, int poe2ItemLevel)
+/** @brief Picks a loot item of the category; `areaLevel` is the POE2 area level some items wait for (Poe2AreaDropLevel). */
+std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel, int poe2ItemLevel, int areaLevel)
 {
 	switch (category) {
 	case LootCategory::Equipment:
@@ -4622,15 +4637,19 @@ std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLev
 	case LootCategory::Currency:
 		return PickPoe2Currency(poe2ItemLevel);
 	case LootCategory::FlaskOrCharm:
-		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId); });
+		return PickPoe2Weighted(itemLevel, [areaLevel](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId) && Poe2AreaDropLevel(data.iMiscId) <= areaLevel; });
 	case LootCategory::Gem: {
 		const bool spirit = HeroHasSpirit();
-		return PickPoe2Weighted(itemLevel, [spirit](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT); });
+		// As in POE2, uncut support gems start dropping at area level 4.
+		const bool support = UncutSupportLevelForArea(areaLevel) > 0;
+		return PickPoe2Weighted(itemLevel, [spirit, support](const ItemData &data) {
+			return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT) && (support || data.iMiscId != IMISC_UNCUT_SUPPORT);
+		});
 	}
 	case LootCategory::Endgame:
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });
 	case LootCategory::Jewel:
-		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_JEWEL; });
+		return PickPoe2Weighted(itemLevel, [areaLevel](const ItemData &data) { return data.iMiscId == IMISC_JEWEL && Poe2AreaDropLevel(data.iMiscId) <= areaLevel; });
 	default:
 		return PickPoe2Weighted(itemLevel, IsPoe2MiscLoot);
 	}
@@ -4713,13 +4732,17 @@ struct Poe2LootOrigin {
 	std::string_view name;
 	/** Generated with the level, so multiplayer rebuilds it the same. */
 	bool pregen = false;
+	/** The floor's own level, on Diablo's scale, without a unique's or a boss's bonus: uncut skill gem levels come from it. */
+	int areaLevel = 1;
+	/** The POE2 area level drop levels are checked against (LootAreaLevel): 65 and up in a map. */
+	int poe2AreaLevel = 1;
 };
 
 /** @brief The open map's item rarity, quantity (from monster effectiveness) and waystone drops, none outside maps, plus the hero's own item rarity. */
 LootBonus MapLootBonus()
 {
 	LootBonus bonus;
-	// Increased rarity from gear (the Gold Amulet) adds to the map's, as in POE2.
+	// Increased rarity from gear (the Gold Amulet, Magic Find affixes) adds to the map's, as in POE2.
 	const int gearRarity = MyPlayer != nullptr ? MyPlayer->poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ItemRarity)] : 0;
 	if (ActiveMapTier() == 0) {
 		bonus.rarity = std::max(100 + gearRarity, 0);
@@ -4754,6 +4777,7 @@ Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 {
 	const LootSource source = GetLootSource(monster);
 	const int bonus = LootItemLevelBonus(source);
+	const int areaLevel = monster.data().level + (15 * sgGameInitInfo.nDifficulty);
 	// Multiplayer checks that a dropped item's level is one some monster has, so the bonus only applies in single player.
 	return {
 		source,
@@ -4761,6 +4785,9 @@ Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 		static_cast<int>(monster.level(sgGameInitInfo.nDifficulty)) + bonus,
 		Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty),
 		monster.name(),
+		/*pregen=*/false,
+		areaLevel,
+		LootAreaLevel(Poe2ItemLevel(areaLevel)),
 	};
 }
 
@@ -4768,13 +4795,16 @@ Poe2LootOrigin ContainerLootOrigin(bool pregen)
 {
 	// Chests and barrels drop at twice the dungeon level, as in Diablo.
 	const int level = 2 * ItemsGetCurrlevel();
+	const int areaLevel = level + (15 * sgGameInitInfo.nDifficulty);
 	return {
 		LootSource::Normal,
 		std::min<int>(level, CF_LEVEL),
-		level + (15 * sgGameInitInfo.nDifficulty),
-		Poe2ItemLevel(level + (15 * sgGameInitInfo.nDifficulty)),
+		areaLevel,
+		Poe2ItemLevel(areaLevel),
 		"container",
 		pregen,
+		areaLevel,
+		LootAreaLevel(Poe2ItemLevel(areaLevel)),
 	};
 }
 
@@ -4828,7 +4858,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	const int itemLevel = origin.itemLevel;
 
 	std::optional<_item_indexes> idx = forcedIdx ? forcedIdx : category == LootCategory::Endgame ? PickPoe2EndgameItem(origin)
-	                                                                                             : PickPoe2LootItem(category, origin.baseLevel, origin.poe2ItemLevel);
+	                                                                                             : PickPoe2LootItem(category, origin.baseLevel, origin.poe2ItemLevel, origin.poe2AreaLevel);
 	int uidOffset = 0;
 	bool bundleUnique = false;
 	BeltUniqueId beltUnique = BeltUniqueId::None;
@@ -4879,8 +4909,12 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
-	if (IsPoe2UncutGem(item._iMiscId))
-		SetUncutGemLevel(item, UncutGemLevelForArea(origin.baseLevel));
+	// Uncut gems take the area's level, not a unique monster's doubled one (Curtis 2026-10-23: Snotspill dropped a level 6
+	// uncut support on floor 4). Supports climb POE2's slower 1-5 ladder: level 1 until area level 16.
+	if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+		SetUncutGemLevel(item, UncutSupportGemLevel(UncutSupportLevelForArea(origin.poe2AreaLevel)));
+	else if (IsPoe2UncutGem(item._iMiscId))
+		SetUncutGemLevel(item, UncutGemLevelForArea(origin.areaLevel));
 	if (IsWaystone(item))
 		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
 	if (IsMapFragment(item))
@@ -5364,7 +5398,8 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 	}
 
 	if (icreateinfo == 0) {
-		InitializeItem(item, idx);
+		// POE2 Mashup: starting gear keeps the quality currency gave it (Curtis 2026-10-23).
+		InitializeItem(item, idx, static_cast<int>((dwBuff & CF_POE2_QUALITY) >> std::countr_zero(static_cast<uint32_t>(CF_POE2_QUALITY))));
 		item._iSeed = iseed;
 		gbIsHellfire = tmpIsHellfire;
 		return;
@@ -6290,7 +6325,7 @@ void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energySh
 		SplitItemDefense(item, base, bonus);
 	armour = base.armour + bonus.armour;
 	evasion = base.evasion + bonus.evasion;
-	energyShield = (base.energyShield + bonus.energyShield) * EnergyShieldPerDefense;
+	energyShield = base.energyShield + bonus.energyShield;
 }
 
 /** @brief POE2 Mashup: armor pieces show the defense they grant when worn. */
@@ -6483,8 +6518,8 @@ void PrintItemDetails(const Item &item)
 		// POE2 Mashup: the damage shown is the weapon's whole hit, with its increased physical and added elemental damage.
 		int minDamage = item._iMinDam;
 		int maxDamage = item._iMaxDam;
-		const int physicalMin = item._iMinDam * (100 + item._iPLDam) / 100;
-		const int physicalMax = item._iMaxDam * (100 + item._iPLDam) / 100;
+		const int physicalMin = item._iMinDam * (100 + WeaponDamagePercent(item)) / 100;
+		const int physicalMax = item._iMaxDam * (100 + WeaponDamagePercent(item)) / 100;
 		if (gbIsPoe2) {
 			minDamage = physicalMin + item._iFMinDam + item._iLMinDam;
 			maxDamage = physicalMax + item._iFMaxDam + item._iLMaxDam;
@@ -6711,13 +6746,16 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
 		shown++;
 	};
-	// Unidentified weapons only show their base damage; identified ones compare their whole hit, as the tooltip shows it.
-	// Defence counts its modifiers either way.
+	// Unidentified weapons only show their base damage and quality; identified ones compare their whole hit, as the
+	// tooltip shows it. Defence counts its modifiers either way.
 	const auto hitDamage = [](const Item &it, bool max) {
 		const int base = max ? it._iMaxDam : it._iMinDam;
-		if (it.isEmpty() || !it._iIdentified)
+		if (it.isEmpty())
 			return base;
-		return (base * (100 + it._iPLDam) / 100) + (max ? it._iFMaxDam + it._iLMaxDam : it._iFMinDam + it._iLMinDam);
+		const int physical = base * (100 + WeaponDamagePercent(it)) / 100;
+		if (!it._iIdentified)
+			return physical;
+		return physical + (max ? it._iFMaxDam + it._iLMaxDam : it._iFMinDam + it._iLMinDam);
 	};
 	compare(hitDamage(item, false), hitDamage(other, false), _("to minimum Damage"));
 	compare(hitDamage(item, true), hitDamage(other, true), _("to maximum Damage"));
@@ -6744,7 +6782,7 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 			compare((item._iLMinDam + item._iLMaxDam) / 2, (other._iLMinDam + other._iLMaxDam) / 2, _("average Lightning Damage"));
 		}
 		compare(item._iPLToHit, other._iPLToHit, _("Accuracy"), "%");
-		compare(item._iPLAC, other._iPLAC, _("increased Defence"), "%");
+		compare(item._iPLAC - LocalQuality(item, QualityKind::Defence), other._iPLAC - LocalQuality(other, QualityKind::Defence), _("increased Defence"), "%");
 		compare(item._iPLStr, other._iPLStr, _("Strength"));
 		compare(item._iPLDex, other._iPLDex, _("Dexterity"));
 		compare(item._iPLMag, other._iPLMag, _("Intelligence"));
@@ -6777,16 +6815,19 @@ void PrintItemDur(const Item &item)
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	PrintWeaponClass(item);
 	if (item._iClass == ICLASS_WEAPON) {
-		if (item._iMinDam == item._iMaxDam) {
+		// POE2 Mashup: with its quality, which shows before identifying.
+		const int minDamage = item._iMinDam * (100 + WeaponDamagePercent(item)) / 100;
+		const int maxDamage = item._iMaxDam * (100 + WeaponDamagePercent(item)) / 100;
+		if (minDamage == maxDamage) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), item._iMinDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), minDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Dur: {:d}/{:d}"), minDamage, item._iDurability, item._iMaxDur));
 		} else {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), item._iMinDam, item._iMaxDam));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Indestructible"), minDamage, maxDamage));
 			else
-				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Dur: {:d}/{:d}"), item._iMinDam, item._iMaxDam, item._iDurability, item._iMaxDur));
+				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
 		}
 		if (item._iMiscId == IMISC_STAFF && item._iMaxCharges > 0) {
 			AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));

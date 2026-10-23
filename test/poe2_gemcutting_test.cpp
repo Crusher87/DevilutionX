@@ -167,6 +167,31 @@ TEST_F(Poe2GemcuttingTest, TiersGroupLevels)
 	EXPECT_EQ(GemTierNumeral(9), "IX");
 }
 
+TEST_F(Poe2GemcuttingTest, UncutGemLevelsFollowTheArea)
+{
+	// POE2: a gem level first drops one area level above the character level it needs (level 2: needs 3, drops at 4).
+	EXPECT_EQ(UncutGemLevelForArea(1), 1);
+	EXPECT_EQ(UncutGemLevelForArea(CharacterLevelForGemLevel(4)), 3);
+	EXPECT_EQ(UncutGemLevelForArea(CharacterLevelForGemLevel(4) + 1), 4);
+	EXPECT_EQ(UncutGemLevelForArea(7), 4) << "Cathedral floor 4, where Snotspill's gems were level 6";
+	EXPECT_EQ(UncutGemLevelForArea(CharacterLevelForGemLevel(MaxGemLevel) + 1), MaxGemLevel);
+
+	// Uncut supports climb POE2's 1-5 ladder by POE2 area level: none below 4.
+	EXPECT_EQ(UncutSupportLevelForArea(3), 0);
+	EXPECT_EQ(UncutSupportLevelForArea(4), 1);
+	EXPECT_EQ(UncutSupportLevelForArea(15), 1);
+	EXPECT_EQ(UncutSupportLevelForArea(16), 2);
+	EXPECT_EQ(UncutSupportLevelForArea(32), 2);
+	EXPECT_EQ(UncutSupportLevelForArea(33), 3);
+	EXPECT_EQ(UncutSupportLevelForArea(44), 3);
+	EXPECT_EQ(UncutSupportLevelForArea(45), 4);
+	EXPECT_EQ(UncutSupportLevelForArea(55), 5);
+	EXPECT_EQ(UncutSupportLevelForArea(82), MaxUncutSupportLevel);
+	// Our gem level 6 is POE2's uncut support level 3: area level 33, the Crypt, not the Cathedral.
+	EXPECT_EQ(UncutSupportLevelForGemLevel(6), 3);
+	EXPECT_EQ(UncutSupportGemLevel(UncutSupportLevelForArea(9)), 1);
+}
+
 TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 {
 	const Item skillUncut = MakeUncut(IMISC_UNCUT_SKILL, 6);
@@ -198,6 +223,13 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 		if (gem.skill.kind == SkillKind::Spell && gem.skill.spell() == SpellID::Firebolt)
 			EXPECT_TRUE(CanCutGem(firstUncut, gem));
 	}
+}
+
+TEST_F(Poe2GemcuttingTest, UncutGemsNameTheirLevel)
+{
+	EXPECT_EQ(MakeUncut(IMISC_UNCUT_SKILL, 6).getName().str(), "Uncut Skill Gem (Level 6)");
+	EXPECT_EQ(MakeUncut(IMISC_UNCUT_SUPPORT, 3).getName().str(), "Uncut Support Gem (Level 3)");
+	EXPECT_EQ(MakeUncut(IMISC_UNCUT_SPIRIT, 20).getName().str(), "Uncut Spirit Gem (Level 20)");
 }
 
 TEST_F(Poe2GemcuttingTest, OnlyUncutGemsDrop)

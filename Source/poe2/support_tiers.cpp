@@ -206,6 +206,16 @@ int UncutSupportLevelForGemLevel(int gemLevel)
 	return uncut;
 }
 
+int UncutSupportLevelForArea(int areaLevel)
+{
+	// POE2 0.5's Uncut Support Gem drop levels (research/support-tiers).
+	constexpr int AreaLevels[MaxUncutSupportLevel] = { 4, 16, 33, 45, 55 };
+	int level = 0;
+	while (level < MaxUncutSupportLevel && areaLevel >= AreaLevels[level])
+		level++;
+	return level;
+}
+
 int SupportTierGemLevel(SupportGem gem, int tier, int baseLevel)
 {
 	if (const SupportTierData *data = FindSupportTier(gem, tier); data != nullptr)

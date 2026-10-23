@@ -53,7 +53,7 @@ physical_mana_leech	Physical Damage Leeched as Mana		suffix	physical_mana_leech	
 life_on_kill	Life on Kill		suffix	life_on_kill	life,on_kill	helmet,gloves,ring,amulet,one_hand_melee,two_hand_melee,bow,crossbow,spear,quarterstaff,flail,claw,dagger			Gain {0} Life per enemy killed		100	100	false
 mana_on_kill	Mana on Kill		suffix	mana_on_kill	mana,on_kill	helmet,gloves,ring,amulet,one_hand_melee,two_hand_melee,bow,crossbow,spear,quarterstaff,flail,claw,dagger,wand,staff,sceptre,focus			Gain {0} Mana per enemy killed		100	100	false
 reduced_attribute_requirements	Reduced Attribute Requirements	of the Worthy	suffix	reduced_requirements	attribute,requirements	one_hand_melee,two_hand_melee,bow,crossbow,spear,quarterstaff,flail,claw,dagger,wand,staff,sceptre,focus,helmet,body_armour,gloves,boots,shield			{0}% reduced Attribute Requirements	ReducedRequirements	100	100	true
-item_rarity	Item Rarity		suffix	item_rarity	rarity	helmet,gloves,boots,ring,amulet			{0}% increased Rarity of Items found		100	100	false
+item_rarity	Item Rarity	of Plunder	suffix	item_rarity	rarity	helmet,gloves,boots,ring,amulet			{0}% increased Rarity of Items found	ItemRarity	100	100	true
 life_regeneration	Life Regeneration	of the Newt	suffix	life_regeneration	life,recovery	helmet,body_armour,gloves,boots,belt,ring,amulet,shield			Regenerate {0} Life per second	LifeRegeneration	100	100	true
 mana_regeneration	Mana Regeneration	of Excitement	suffix	mana_regeneration	mana,recovery	helmet,body_armour,gloves,boots,belt,ring,amulet,focus,wand,staff,sceptre			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true
 stun_threshold	Stun Threshold		suffix	stun_threshold	defence,stun	helmet,body_armour,belt,shield			{0}% increased Stun Threshold		100	100	false
@@ -92,3 +92,4 @@ emerald_accuracy	Accurate	Accurate	prefix	emerald_accuracy	jewel	emerald			+{0} 
 sapphire_energy_shield	Shimmering	Shimmering	prefix	sapphire_energy_shield	jewel	sapphire			{0}% increased maximum Energy Shield	EnergyShieldPercent	100	100	true
 sapphire_minion_damage	Authoritative	Authoritative	prefix	sapphire_minion_damage	jewel	sapphire			Minions deal {0}% increased Damage	MinionDamage	100	100	true
 sapphire_mana_regeneration	of Energy	of Energy	suffix	sapphire_mana_regeneration	jewel	sapphire			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true
+item_rarity_prefix	Item Rarity	Magpie's	prefix	item_rarity_prefix	rarity	helmet,ring,amulet			{0}% increased Rarity of Items found	ItemRarity	100	100	true

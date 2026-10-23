@@ -11,7 +11,11 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/gemcutting.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/monster_mods.hpp"
+#include "poe2/support_tiers.hpp"
+#include "poe2/waystones.hpp"
 #include "spells.h"
 #include "stores.h"
 #include "utils/is_of.hpp"
@@ -74,8 +78,9 @@ public:
 
 TEST_F(Poe2LootTest, KillsGiveRollsByToughness)
 {
-	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Normal), 180);
-	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Boss), 6000);
+	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Normal), 150);
+	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Rare), 1500);
+	EXPECT_EQ(ExpectedLootRollsPerMille(LootSource::Boss), 4000);
 
 	constexpr int Trials = 20000;
 	SetRndSeed(7);
@@ -85,8 +90,8 @@ TEST_F(Poe2LootTest, KillsGiveRollsByToughness)
 		normal += RollLootCount(LootSource::Normal);
 		rare += RollLootCount(LootSource::Rare);
 	}
-	EXPECT_NEAR(normal / static_cast<double>(Trials), 0.18, 0.015);
-	EXPECT_EQ(rare, 2 * Trials) << "two whole rolls every time";
+	EXPECT_NEAR(normal / static_cast<double>(Trials), 0.15, 0.015);
+	EXPECT_NEAR(rare / static_cast<double>(Trials), 1.5, 0.03) << "one roll, and a second half the time";
 }
 
 TEST_F(Poe2LootTest, CategoriesFollowTheBible)
@@ -94,8 +99,8 @@ TEST_F(Poe2LootTest, CategoriesFollowTheBible)
 	const auto weights = LootCategoryWeights(LootSource::Normal);
 	EXPECT_EQ(std::accumulate(weights.begin(), weights.end(), 0), 100);
 	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Equipment)], 48);
-	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gold)], 21);
-	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gem)], 4);
+	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gold)], 20);
+	EXPECT_EQ(weights[static_cast<size_t>(LootCategory::Gem)], 5);
 
 	const auto boss = LootCategoryWeights(LootSource::Boss);
 	EXPECT_EQ(boss[static_cast<size_t>(LootCategory::Equipment)], 96);
@@ -107,16 +112,68 @@ TEST_F(Poe2LootTest, RarityTablesMatchTheSource)
 {
 	constexpr int Trials = 40000;
 	const auto normal = Count(Trials, [] { return RollEquipmentRarity(LootSource::Normal); });
-	EXPECT_NEAR(normal[ITEM_QUALITY_NORMAL] / static_cast<double>(Trials), 0.57, 0.01);
-	EXPECT_NEAR(normal[ITEM_QUALITY_MAGIC] / static_cast<double>(Trials), 0.35, 0.01);
-	EXPECT_NEAR(normal[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.0775, 0.005);
+	EXPECT_NEAR(normal[ITEM_QUALITY_NORMAL] / static_cast<double>(Trials), 0.75, 0.01);
+	EXPECT_NEAR(normal[ITEM_QUALITY_MAGIC] / static_cast<double>(Trials), 0.2275, 0.01);
+	EXPECT_NEAR(normal[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.02, 0.003);
+
+	const auto rare = Count(Trials, [] { return RollEquipmentRarity(LootSource::Rare); });
+	EXPECT_NEAR(rare[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.17, 0.01);
 
 	const auto boss = Count(Trials, [] { return RollEquipmentRarity(LootSource::Boss); });
-	EXPECT_NEAR(boss[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.65, 0.01);
+	EXPECT_NEAR(boss[ITEM_QUALITY_RARE] / static_cast<double>(Trials), 0.30, 0.01);
 	EXPECT_NEAR(boss[ITEM_QUALITY_UNIQUE] / static_cast<double>(Trials), 0.05, 0.005);
 
 	EXPECT_EQ(LootItemLevelBonus(LootSource::Rare), 1);
 	EXPECT_EQ(LootItemLevelBonus(LootSource::Boss), 2);
+}
+
+/** Equipment drops a kill gives on average, and how many of them are of each rarity. */
+/** The weight arrays run normal, magic, rare, unique; item_quality has unique before rare. */
+constexpr size_t RareWeight = 2;
+
+std::array<double, 4> ExpectedEquipment(LootSource source)
+{
+	const auto categories = LootCategoryWeights(source);
+	const double equipment = ExpectedLootRollsPerMille(source) / 1000.0 * categories[static_cast<size_t>(LootCategory::Equipment)]
+	    / std::accumulate(categories.begin(), categories.end(), 0);
+	const std::array<int, 4> rarity = EquipmentRarityWeights(source);
+	std::array<double, 4> result {};
+	for (size_t i = 0; i < result.size(); i++)
+		result[i] = equipment * rarity[i] / 10000.0;
+	return result;
+}
+
+TEST_F(Poe2LootTest, CampaignLootIsMostlyNormalAndMagic)
+{
+	// The campaign's mix of monsters: 3% rare, 12% magic, the rest normal.
+	const double rareMonsters = RareMonsterPerMille / 1000.0;
+	const double magicMonsters = MagicMonsterPerMille / 1000.0;
+	std::array<double, 4> total {};
+	for (size_t i = 0; i < total.size(); i++) {
+		total[i] = (1 - rareMonsters - magicMonsters) * ExpectedEquipment(LootSource::Normal)[i]
+		    + magicMonsters * ExpectedEquipment(LootSource::Magic)[i] + rareMonsters * ExpectedEquipment(LootSource::Rare)[i];
+	}
+	const double all = std::accumulate(total.begin(), total.end(), 0.0);
+	// Curtis's 2026-10-23 run had 18% rare and 29% magic: about one rare in sixteen now.
+	EXPECT_GT(total[RareWeight] / all, 0.04);
+	EXPECT_LT(total[RareWeight] / all, 0.08);
+	EXPECT_GT(total[ITEM_QUALITY_MAGIC] / all, 0.25);
+	EXPECT_LT(total[ITEM_QUALITY_MAGIC] / all, 0.38);
+	// Fewer than a rare per hundred kills.
+	EXPECT_LT(total[RareWeight] * 100, 1.0);
+}
+
+TEST_F(Poe2LootTest, BossesDropAHandfulNotAPile)
+{
+	// A quest boss: its rolls plus the guaranteed rare. Snotspill dropped 4 rares on the old numbers (3.75 on average).
+	const std::array<double, 4> boss = ExpectedEquipment(LootSource::Boss);
+	const double rares = boss[RareWeight] + 1;
+	EXPECT_GT(rares, 1.5);
+	EXPECT_LT(rares, 2.0);
+	EXPECT_LT(std::accumulate(boss.begin(), boss.end(), 0.0) + 1, 4.0);
+	// A rare monster: about one and a half rolls, a rare one time in five.
+	const std::array<double, 4> rare = ExpectedEquipment(LootSource::Rare);
+	EXPECT_LT(rare[RareWeight], 0.2);
 }
 
 TEST_F(Poe2LootTest, MapBonusesRaiseRarityAndWaystones)
@@ -125,10 +182,10 @@ TEST_F(Poe2LootTest, MapBonusesRaiseRarityAndWaystones)
 	bonus.rarity = 200;
 	bonus.waystones = 300;
 	const std::array<int, 4> weights = EquipmentRarityWeights(LootSource::Normal, bonus);
-	EXPECT_EQ(weights[1], 7000);
-	EXPECT_EQ(weights[2], 1550);
+	EXPECT_EQ(weights[1], 4550);
+	EXPECT_EQ(weights[2], 400);
 	EXPECT_EQ(weights[3], 50);
-	EXPECT_EQ(weights[0], 10000 - 7000 - 1550 - 50);
+	EXPECT_EQ(weights[0], 10000 - 4550 - 400 - 50);
 	EXPECT_EQ(EquipmentRarityWeights(LootSource::Normal), EquipmentRarityWeights(LootSource::Normal, {}));
 	const auto categories = LootCategoryWeights(LootSource::Normal, bonus);
 	EXPECT_EQ(categories[static_cast<size_t>(LootCategory::Endgame)], 3 * LootCategoryWeights(LootSource::Normal)[static_cast<size_t>(LootCategory::Endgame)]);
@@ -153,13 +210,14 @@ TEST_F(Poe2LootTest, UniqueRollsPickATierFirst)
 	EXPECT_EQ(LegacyUniqueTier(20), UniqueTier::Rare);
 }
 
-TEST_F(Poe2LootTest, NaturalRaresHaveFourToSixAffixes)
+TEST_F(Poe2LootTest, NaturalRaresHaveThreeToSixAffixes)
 {
 	constexpr int Trials = 24000;
 	const auto counts = Count(Trials, RollNaturalRareAffixCount);
-	EXPECT_EQ(counts[4] + counts[5] + counts[6], Trials);
-	EXPECT_NEAR(counts[4] / static_cast<double>(Trials), 8.0 / 12, 0.015);
-	EXPECT_NEAR(counts[6] / static_cast<double>(Trials), 1.0 / 12, 0.01);
+	EXPECT_EQ(counts[3] + counts[4] + counts[5] + counts[6], Trials);
+	EXPECT_NEAR(counts[3] / static_cast<double>(Trials), 3.0 / 24, 0.01);
+	EXPECT_NEAR(counts[4] / static_cast<double>(Trials), 13.0 / 24, 0.015);
+	EXPECT_NEAR(counts[6] / static_cast<double>(Trials), 2.0 / 24, 0.01);
 }
 
 TEST_F(Poe2LootTest, OldBasesFadeOut)
@@ -317,6 +375,127 @@ TEST_F(Poe2LootTest, AdriaOnlySellsCommonCurrency)
 			if (item._itype == ItemType::Staff)
 				EXPECT_EQ(GetPoe2ItemLevel(item), Poe2ItemLevel(16));
 		}
+	}
+}
+
+/** Breaks `count` barrels on a floor and keeps what they drop. */
+std::vector<Item> ContainerDrops(int floor, dungeon_type type, int count, uint32_t firstSeed = 1)
+{
+	currlevel = static_cast<uint8_t>(floor);
+	leveltype = type;
+	std::vector<Item> drops;
+	for (uint32_t seed = firstSeed; seed < firstSeed + static_cast<uint32_t>(count); seed++) {
+		SetRndSeed(seed);
+		ActiveItemCount = 0;
+		for (int i = 0; i < MAXITEMS; i++)
+			ActiveItems[i] = i;
+		CreateRndItem({ 40, 40 }, false, false, false);
+		for (int i = 0; i < ActiveItemCount; i++)
+			drops.push_back(Items[ActiveItems[i]]);
+		for (int x = 0; x < MAXDUNX; x++)
+			for (int y = 0; y < MAXDUNY; y++)
+				dItem[x][y] = 0;
+	}
+	return drops;
+}
+
+size_t CountMisc(const std::vector<Item> &drops, item_misc_id miscId)
+{
+	return std::count_if(drops.begin(), drops.end(), [miscId](const Item &item) { return item._iMiscId == miscId; });
+}
+
+TEST_F(Poe2LootTest, CharmsAndJewelsWaitForPoe2sLevels)
+{
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_JEWEL), 20);
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_MAGIC), 40) << "Amethyst Charm";
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_GOLDEN), 50) << "Golden Charm: the late campaign and maps";
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_FIRE), 0) << "the item table's level";
+
+	// Cathedral floor 4 (area level 10 for a barrel): Curtis found jewels, Amethyst Charms and a Golden Charm there.
+	const std::vector<Item> cathedral = ContainerDrops(4, DTYPE_CATHEDRAL, 4000);
+	EXPECT_EQ(CountMisc(cathedral, IMISC_JEWEL), 0U);
+	EXPECT_EQ(CountMisc(cathedral, IMISC_CHARM_MAGIC), 0U);
+	EXPECT_EQ(CountMisc(cathedral, IMISC_CHARM_GOLDEN), 0U);
+	EXPECT_GT(CountMisc(cathedral, IMISC_CHARM_FIRE) + CountMisc(cathedral, IMISC_CHARM_LIGHTNING), 0U) << "other charms still drop";
+
+	// Hell floor 16 (42): jewels and the Amethyst Charm, still no Golden Charm.
+	const std::vector<Item> hell = ContainerDrops(16, DTYPE_HELL, 4000);
+	EXPECT_GT(CountMisc(hell, IMISC_JEWEL), 0U);
+	EXPECT_GT(CountMisc(hell, IMISC_CHARM_MAGIC), 0U);
+	EXPECT_EQ(CountMisc(hell, IMISC_CHARM_GOLDEN), 0U);
+
+	// Past area level 50 the Golden Charm drops too.
+	sgGameInitInfo.nDifficulty = DIFF_NIGHTMARE;
+	const std::vector<Item> late = ContainerDrops(16, DTYPE_HELL, 4000);
+	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+	EXPECT_GT(CountMisc(late, IMISC_CHARM_GOLDEN), 0U);
+}
+
+TEST_F(Poe2LootTest, MapsCountAsTheirAreaLevel)
+{
+	currlevel = 13;
+	setlevel = false;
+	EXPECT_EQ(LootAreaLevel(30), 30);
+	MyPlayer->poe2.mapTier = 3;
+	MyPlayer->poe2.mapLevel = 13;
+	EXPECT_EQ(LootAreaLevel(30), MapAreaLevelBase + 3);
+	MyPlayer->poe2.mapTier = 0;
+	MyPlayer->poe2.mapLevel = 0;
+}
+
+TEST_F(Poe2LootTest, LineageSupportsOnlyDropInMaps)
+{
+	EXPECT_FALSE(LineageSupportsDropAt(4)) << "Rathma's Covenant dropped on Cathedral floor 2";
+	EXPECT_FALSE(LineageSupportsDropAt(42)) << "nor anywhere in the campaign";
+	EXPECT_FALSE(LineageSupportsDropAt(MapAreaLevelBase));
+	EXPECT_TRUE(LineageSupportsDropAt(MapAreaLevelBase + 1));
+
+	currlevel = 13;
+	setlevel = false;
+	EXPECT_FALSE(LineageSupportsDropAt(LootAreaLevel(0)));
+	MyPlayer->poe2.mapTier = 1;
+	MyPlayer->poe2.mapLevel = 13;
+	EXPECT_TRUE(LineageSupportsDropAt(LootAreaLevel(0)));
+	MyPlayer->poe2.mapTier = 0;
+	MyPlayer->poe2.mapLevel = 0;
+	// A chase item: about one map in twenty from any monster (500 kills), on top of the map boss's 2%.
+	EXPECT_GE(LineageAnyKillChance, 10000);
+}
+
+TEST_F(Poe2LootTest, HellfireRunesNeverDrop)
+{
+	EXPECT_TRUE(IsHellfireRune(IMISC_RUNEF));
+	EXPECT_TRUE(IsHellfireRune(IMISC_GR_RUNEL));
+	EXPECT_TRUE(IsHellfireRune(IMISC_RUNES));
+	EXPECT_FALSE(IsHellfireRune(IMISC_AUGMENT)) << "POE2's socket runes still drop";
+	for (const int floor : { 4, 16 }) {
+		const std::vector<Item> drops = ContainerDrops(floor, floor == 4 ? DTYPE_CATHEDRAL : DTYPE_HELL, 6000);
+		for (const Item &item : drops)
+			EXPECT_FALSE(item.isRune()) << item._iIName;
+	}
+}
+
+TEST_F(Poe2LootTest, UncutGemsTakeTheAreasLevel)
+{
+	// Cathedral floor 1 (a barrel's POE2 area level 3): skill gems, but no uncut support gem yet, as in POE2.
+	const std::vector<Item> first = ContainerDrops(1, DTYPE_CATHEDRAL, 4000);
+	EXPECT_EQ(CountMisc(first, IMISC_UNCUT_SUPPORT), 0U);
+	EXPECT_GT(CountMisc(first, IMISC_UNCUT_SKILL), 0U);
+
+	// Floor 4: level 1 supports only (POE2's next support level waits for area 16), skill gems up to the area's.
+	const std::vector<Item> fourth = ContainerDrops(4, DTYPE_CATHEDRAL, 4000);
+	EXPECT_GT(CountMisc(fourth, IMISC_UNCUT_SUPPORT), 0U);
+	for (const Item &item : fourth) {
+		if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+			EXPECT_EQ(UncutGemLevel(item), 1);
+		if (item._iMiscId == IMISC_UNCUT_SKILL)
+			EXPECT_EQ(UncutGemLevel(item), UncutGemLevelForArea(8));
+	}
+
+	// Hell floor 16 (42): POE2's level 3 support, our gem level 6.
+	for (const Item &item : ContainerDrops(16, DTYPE_HELL, 3000)) {
+		if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+			EXPECT_EQ(UncutGemLevel(item), UncutSupportGemLevel(3));
 	}
 }
 

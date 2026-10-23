@@ -1,6 +1,8 @@
 #include "engine/render/primitive_render.hpp"
 
+#include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -11,6 +13,9 @@
 
 namespace devilution {
 namespace {
+
+SDL_Surface *UiCoverSurface = nullptr;
+UiCover *UiCoverCells = nullptr;
 
 void DrawHalfTransparentUnalignedBlendedRectTo(const Surface &out, unsigned sx, unsigned sy, unsigned width, unsigned height, uint8_t color)
 {
@@ -102,6 +107,7 @@ void DrawHorizontalLine(const Surface &out, Point from, int width, std::uint8_t 
 void UnsafeDrawHorizontalLine(const Surface &out, Point from, int width, std::uint8_t colorIndex)
 {
 	std::memset(&out[from], colorIndex, width);
+	CoverUi(out, { from, { width, 1 } });
 }
 
 void DrawVerticalLine(const Surface &out, Point from, int height, std::uint8_t colorIndex)
@@ -119,6 +125,7 @@ void DrawVerticalLine(const Surface &out, Point from, int height, std::uint8_t c
 
 void UnsafeDrawVerticalLine(const Surface &out, Point from, int height, std::uint8_t colorIndex)
 {
+	CoverUi(out, { from, { 1, height } });
 	auto *dst = &out[from];
 	const auto pitch = out.pitch();
 	while (height-- > 0) {
@@ -139,6 +146,7 @@ void DrawHalfTransparentHorizontalLine(const Surface &out, Point from, int width
 	for (int x = x0; x < x1; ++x) {
 		SetHalfTransparentPixel(out, { x, from.y }, colorIndex);
 	}
+	CoverUi(out, { { x0, from.y }, { x1 - x0, 1 } });
 }
 
 // Draw a half-transparent vertical line of `height` pixels starting at `from`.
@@ -154,6 +162,7 @@ void DrawHalfTransparentVerticalLine(const Surface &out, Point from, int height,
 	for (int y = y0; y < y1; ++y) {
 		SetHalfTransparentPixel(out, { from.x, y }, colorIndex);
 	}
+	CoverUi(out, { { from.x, y0 }, { 1, y1 - y0 } });
 }
 
 void DrawHalfTransparentRectTo(const Surface &out, int sx, int sy, int width, int height)
@@ -182,6 +191,7 @@ void DrawHalfTransparentRectTo(const Surface &out, int sx, int sy, int width, in
 	}
 
 	DrawHalfTransparentBlendedRectTo(out, sx, sy, width, height);
+	CoverUi(out, { { sx, sy }, { width, height } }, UiCover::Shaded);
 }
 
 void DrawHalfTransparentRectTo(const Surface &out, int sx, int sy, int width, int height, uint8_t color)
@@ -210,6 +220,7 @@ void DrawHalfTransparentRectTo(const Surface &out, int sx, int sy, int width, in
 	}
 
 	DrawHalfTransparentUnalignedBlendedRectTo(out, sx, sy, width, height, color);
+	CoverUi(out, { { sx, sy }, { width, height } });
 }
 
 void SetHalfTransparentPixel(const Surface &out, Point position, uint8_t color)
@@ -238,6 +249,35 @@ void UnsafeDrawBorder2px(const Surface &out, Rectangle rect, uint8_t color)
 	std::memset(buf, color, width);
 	buf += out.pitch();
 	std::memset(buf, color, width);
+	const int w = rect.size.width;
+	const int h = rect.size.height;
+	CoverUi(out, { rect.position, { w, 2 } });
+	CoverUi(out, { rect.position + Displacement { 0, h - 2 }, { w, 2 } });
+	CoverUi(out, { rect.position + Displacement { 0, 2 }, { 2, h - 4 } });
+	CoverUi(out, { rect.position + Displacement { w - 2, 2 }, { 2, h - 4 } });
+}
+
+void SetUiCoverTarget(SDL_Surface *surface, UiCover *cells)
+{
+	UiCoverSurface = cells != nullptr ? surface : nullptr;
+	UiCoverCells = cells;
+}
+
+void CoverUi(const Surface &out, Rectangle area, UiCover cover)
+{
+	if (UiCoverCells == nullptr || out.surface != UiCoverSurface)
+		return;
+	// Clipped to the surface drawn on, then to the whole one it's part of.
+	const int x0 = std::max(area.position.x, 0) + out.region.x;
+	const int y0 = std::max(area.position.y, 0) + out.region.y;
+	const int x1 = std::min(area.position.x + area.size.width, out.w()) + out.region.x;
+	const int y1 = std::min(area.position.y + area.size.height, out.h()) + out.region.y;
+	const int width = UiCoverSurface->w;
+	for (int y = std::max(y0, 0); y < std::min(y1, UiCoverSurface->h); y++) {
+		UiCover *row = UiCoverCells + static_cast<ptrdiff_t>(y) * width;
+		for (int x = std::max(x0, 0); x < std::min(x1, width); x++)
+			row[x] = std::max(row[x], cover);
+	}
 }
 
 } // namespace devilution

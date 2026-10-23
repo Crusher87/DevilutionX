@@ -20,6 +20,7 @@
 #include "player.h"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/loot.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
@@ -1951,6 +1952,10 @@ void TryDropLineageSupport(const Monster &monster, bool sendmsg)
 {
 	if (!gbIsPoe2 || MyPlayer == nullptr || monster.isPlayerMinion())
 		return;
+	// POE2's lineage supports are endgame finds (Curtis 2026-10-23: Rathma's Covenant dropped from a Corpse Captain on
+	// Cathedral floor 2): only in maps, so a campaign boss never drops its own.
+	if (!LineageSupportsDropAt(LootAreaLevel(0)))
+		return;
 	SupportGem signature = SupportGem::None;
 	if (monster.type().type == MT_DIABLO) {
 		signature = SG::DiablosRedLightning;
@@ -1994,7 +1999,7 @@ void TryDropLineageSupport(const Monster &monster, bool sendmsg)
 		drop = signature;
 	else if (!mapPool.empty() && GenerateRnd(100) < 2)
 		drop = mapPool[static_cast<size_t>(GenerateRnd(static_cast<int>(mapPool.size())))];
-	else if (GenerateRnd(2000) == 0) {
+	else if (GenerateRnd(LineageAnyKillChance) == 0) {
 		std::vector<SupportGem> all;
 		for (const SupportData &data : Table) {
 			if ((data.flags & SF_Lineage) != 0 && data.gem != SG::BaalsEcho)

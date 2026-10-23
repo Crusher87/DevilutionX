@@ -88,8 +88,9 @@ bool CanCutGem(const Item &uncut, const GemEntry &gem);
 bool CreateGemItem(Item &item, const GemEntry &gem, int level = 1);
 
 /**
- * @brief The level of an uncut gem dropping in an area, as in POE2: the highest gem level whose character level
- * requirement the area level meets, so a gem found in an area is always usable by a hero who belongs there.
+ * @brief The level of an uncut skill or Spirit gem dropping in an area, as in POE2: the highest gem level whose
+ * character level requirement is below the area level, so a gem found in an area is usable by a hero who belongs there.
+ * Uncut support gems follow their own ladder (UncutSupportLevelForArea).
  */
 int UncutGemLevelForArea(int areaLevel);
 /** @brief Sets an uncut gem's level. */

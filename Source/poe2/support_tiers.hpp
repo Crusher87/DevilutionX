@@ -47,6 +47,11 @@ int SupportValue(const Poe2PlayerData &data, SkillSlot skill, SupportGem gem, si
 int UncutSupportGemLevel(int uncutLevel);
 /** @brief The POE2 uncut support gem level (1 to 5) of an uncut support gem of our level. */
 int UncutSupportLevelForGemLevel(int gemLevel);
+/**
+ * @brief POE2's uncut support gem level (1 to 5) dropping at a POE2 area level: 1 from 4, 2 from 16, 3 from 33,
+ * 4 from 45 and 5 from 55; 0 below 4, where none drop.
+ */
+int UncutSupportLevelForArea(int areaLevel);
 /** @brief The gem level a tier of the support is cut from; @param baseLevel the level of supports without tier data. */
 int SupportTierGemLevel(SupportGem gem, int tier, int baseLevel);
 
