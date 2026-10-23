@@ -1,5 +1,7 @@
 #include "levels/gendung.h"
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -498,6 +500,153 @@ std::optional<Point> PlaceMiniSet(const Miniset &miniset, int tries, bool drlg1Q
 	}
 
 	return {};
+}
+
+namespace {
+
+/** @brief POE2: the down stairs go at least this share of the farthest walk from the up stairs. */
+constexpr int FarStairsPercent = 75;
+
+/** @brief The piece numbers of closed doors, which the hero walks through by opening them (see the Add*Doors object code). */
+bool IsDoorPiece(uint16_t piece)
+{
+	switch (leveltype) {
+	case DTYPE_CATHEDRAL: return IsAnyOf(piece, 43, 50, 213, 45, 55);
+	case DTYPE_CATACOMBS: return IsAnyOf(piece, 12, 540, 16, 541);
+	case DTYPE_CAVES: return IsAnyOf(piece, 530, 533);
+	case DTYPE_CRYPT: return IsAnyOf(piece, 76, 79);
+	default: return false;
+	}
+}
+
+/** @brief The level as it stands, at world tile size: true where the hero can walk. */
+std::vector<bool> WalkableTiles()
+{
+	constexpr int Width = DMAXX * 2;
+	std::vector<bool> walkable(static_cast<size_t>(Width) * DMAXY * 2, false);
+	for (int j = 0; j < DMAXY; j++) {
+		for (int i = 0; i < DMAXX; i++) {
+			const int tileId = dungeon[i][j] - 1;
+			if (tileId < 0)
+				continue;
+			const MegaTile mega = pMegaTiles[tileId];
+			const std::array<uint16_t, 4> pieces { Swap16LE(mega.micro1), Swap16LE(mega.micro2), Swap16LE(mega.micro3), Swap16LE(mega.micro4) };
+			for (int k = 0; k < 4; k++) {
+				const uint16_t piece = pieces[k];
+				if (piece >= MAXTILES)
+					continue;
+				const bool open = !HasAnyOf(SOLData[piece], TileProperties::Solid) || IsDoorPiece(piece);
+				walkable[(j * 2 + k / 2) * Width + i * 2 + k % 2] = open;
+			}
+		}
+	}
+	return walkable;
+}
+
+/**
+ * @brief Places the miniset in the far part of the floor, by walking steps from the seed tiles (world tile size,
+ * without the 16 tile border).
+ */
+std::optional<Point> PlaceFar(const Miniset &miniset, const std::vector<bool> &walkable, const std::vector<Point> &seeds, bool drlg1Quirk)
+{
+	constexpr int Width = DMAXX * 2;
+	constexpr int Height = DMAXY * 2;
+	const auto isWalkable = [&](int x, int y) {
+		return x >= 0 && y >= 0 && x < Width && y < Height && walkable[y * Width + x];
+	};
+
+	// Walking steps from the seeds to every tile (8 ways, no cutting corners).
+	std::vector<int> steps(static_cast<size_t>(Width) * Height, -1);
+	std::vector<Point> queue;
+	for (const Point seed : seeds) {
+		if (isWalkable(seed.x, seed.y) && steps[seed.y * Width + seed.x] < 0) {
+			steps[seed.y * Width + seed.x] = 0;
+			queue.push_back(seed);
+		}
+	}
+	constexpr std::array<Displacement, 8> Directions { { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } } };
+	for (size_t head = 0; head < queue.size(); head++) {
+		const Point tile = queue[head];
+		for (const Displacement step : Directions) {
+			const Point next = tile + step;
+			if (!isWalkable(next.x, next.y) || steps[next.y * Width + next.x] >= 0)
+				continue;
+			if (step.deltaX != 0 && step.deltaY != 0 && (!isWalkable(tile.x + step.deltaX, tile.y) || !isWalkable(tile.x, tile.y + step.deltaY)))
+				continue;
+			steps[next.y * Width + next.x] = steps[tile.y * Width + tile.x] + 1;
+			queue.push_back(next);
+		}
+	}
+
+	// Every spot the stairs fit, with how far it is to walk there.
+	struct Candidate {
+		Point position;
+		int steps;
+	};
+	std::vector<Candidate> candidates;
+	int farthest = 0;
+	for (int y = 0; y + miniset.size.height <= DMAXY; y++) {
+		for (int x = 0; x + miniset.size.width <= DMAXX; x++) {
+			const Point position { x, y };
+			if (drlg1Quirk && (x <= 12 || y <= 12))
+				continue;
+			if (SetPieceRoom.contains(position) || !miniset.matches(position))
+				continue;
+			int nearest = -1;
+			for (int ty = y * 2; ty < (y + miniset.size.height) * 2; ty++) {
+				for (int tx = x * 2; tx < (x + miniset.size.width) * 2; tx++) {
+					const int distance = steps[ty * Width + tx];
+					if (distance >= 0 && (nearest < 0 || distance < nearest))
+						nearest = distance;
+				}
+			}
+			if (nearest < 0)
+				continue;
+			candidates.push_back({ position, nearest });
+			farthest = std::max(farthest, nearest);
+		}
+	}
+	if (candidates.empty())
+		return PlaceMiniSet(miniset, DMAXX * DMAXY, drlg1Quirk);
+
+	// Any spot in the far part of the floor, so the way between the stairs crosses the level.
+	const int minimum = farthest * FarStairsPercent / 100;
+	std::erase_if(candidates, [&](const Candidate &candidate) { return candidate.steps < minimum; });
+	const Point position = candidates[GenerateRnd(static_cast<int>(candidates.size()))].position;
+	miniset.place(position);
+	return position;
+}
+
+} // namespace
+
+std::optional<Point> PlaceMiniSetFarFrom(const Miniset &miniset, Point from, WorldTileSize fromSize, bool drlg1Quirk)
+{
+	if (pMegaTiles == nullptr)
+		return PlaceMiniSet(miniset, DMAXX * DMAXY, drlg1Quirk);
+	std::vector<Point> seeds;
+	for (int y = (from.y - 1) * 2; y < (from.y + fromSize.height + 1) * 2; y++) {
+		for (int x = (from.x - 1) * 2; x < (from.x + fromSize.width + 1) * 2; x++)
+			seeds.push_back({ x, y });
+	}
+	return PlaceFar(miniset, WalkableTiles(), seeds, drlg1Quirk);
+}
+
+std::optional<Point> PlaceMiniSetAtFloorEnd(const Miniset &miniset, bool drlg1Quirk)
+{
+	if (pMegaTiles == nullptr)
+		return PlaceMiniSet(miniset, DMAXX * DMAXY, drlg1Quirk);
+	// The farthest walk from any tile ends near one end of the floor: start from a random one.
+	const std::vector<bool> walkable = WalkableTiles();
+	std::vector<Point> open;
+	for (int y = 0; y < DMAXY * 2; y++) {
+		for (int x = 0; x < DMAXX * 2; x++) {
+			if (walkable[y * DMAXX * 2 + x])
+				open.push_back({ x, y });
+		}
+	}
+	if (open.empty())
+		return PlaceMiniSet(miniset, DMAXX * DMAXY, drlg1Quirk);
+	return PlaceFar(miniset, walkable, { open[GenerateRnd(static_cast<int>(open.size()))] }, drlg1Quirk);
 }
 
 void PlaceDunTiles(const uint16_t *dunData, Point position, int floorId)

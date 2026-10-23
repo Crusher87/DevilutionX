@@ -85,6 +85,16 @@ void Make_SetPC(WorldTileRectangle area);
  * @param drlg1Quirk Match buggy behaviour of Diablo's Cathedral
  */
 std::optional<Point> PlaceMiniSet(const Miniset &miniset, int tries = 199, bool drlg1Quirk = false);
+/**
+ * @brief POE2: places the miniset in the far part of the floor, by walking steps from another miniset (the up
+ * stairs), so the way from one set of stairs to the other crosses the level: any spot at least FarStairsPercent
+ * of the farthest walk away. Falls back to PlaceMiniSet when the
+ * level's tiles aren't loaded or nothing fits within reach.
+ * @param from Where the other miniset was placed (dungeon tiles), and its size.
+ */
+std::optional<Point> PlaceMiniSetFarFrom(const Miniset &miniset, Point from, WorldTileSize fromSize, bool drlg1Quirk = false);
+/** @brief POE2: places the miniset near one end of the floor (far, by walking, from a random spot), for the up stairs. */
+std::optional<Point> PlaceMiniSetAtFloorEnd(const Miniset &miniset, bool drlg1Quirk = false);
 void PlaceDunTiles(const uint16_t *dunData, Point position, int floorId = 0);
 void DRLG_PlaceThemeRooms(int minSize, int maxSize, int floor, int freq, bool rndSize);
 void DRLG_HoldThemeRooms();

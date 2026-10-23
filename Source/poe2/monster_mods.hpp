@@ -81,6 +81,13 @@ struct MonsterAffixes {
 MonsterAffixes GetMonsterAffixes(const Monster &monster);
 /** @brief Applies life, damage and resistance modifiers once, when the monster is created. */
 void ApplyMonsterRarity(Monster &monster);
+/**
+ * @brief Makes a plain monster magic or rare after it was created, to lead a pack: picks a nearby item seed that rolls
+ * that rarity and adds the rarity's life and damage. Does nothing to a monster that can't roll one or already has one.
+ */
+void PromoteMonsterRarity(Monster &monster, MonsterRarity rarity);
+/** @brief Makes a magic or rare monster plain again after it was created: takes off its rarity's life and damage. */
+void DemoteMonsterRarity(Monster &monster);
 
 std::string_view MonsterModName(MonsterMod mod);
 /** @brief Name shown for a rare monster, like POE2's two-word rare names. */

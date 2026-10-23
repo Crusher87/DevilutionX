@@ -8,6 +8,7 @@
 #include "engine/point.hpp"
 #include "engine/points_in_rectangle_range.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/gendung_defs.hpp"
@@ -1928,14 +1929,16 @@ bool PlaceCaveStairs(lvl_entry entry)
 	std::optional<Point> position;
 
 	// Place stairs up
-	position = PlaceMiniSet(L3UP);
+	// POE2: the way in is at one end of the floor and the way down at the other.
+	position = gbIsPoe2 ? PlaceMiniSetAtFloorEnd(L3UP) : PlaceMiniSet(L3UP);
 	if (!position)
 		return false;
+	const Point upPosition = *position;
 	if (entry == ENTRY_MAIN)
 		ViewPosition = position->megaToWorld() + Displacement { 1, 3 };
 
 	// Place stairs down
-	position = PlaceMiniSet(L3DOWN);
+	position = gbIsPoe2 ? PlaceMiniSetFarFrom(L3DOWN, upPosition, L3UP.size) : PlaceMiniSet(L3DOWN);
 	if (!position)
 		return false;
 	if (entry == ENTRY_PREV)
@@ -1958,15 +1961,17 @@ bool PlaceNestStairs(lvl_entry entry)
 	std::optional<Point> position;
 
 	// Place stairs up
-	position = PlaceMiniSet(currlevel != 17 ? L6UP : L6HOLDWARP);
+	const Miniset &stairsUp = currlevel != 17 ? L6UP : L6HOLDWARP;
+	position = gbIsPoe2 ? PlaceMiniSetAtFloorEnd(stairsUp) : PlaceMiniSet(stairsUp);
 	if (!position)
 		return false;
+	const Point upPosition = *position;
 	if (entry == ENTRY_MAIN || entry == ENTRY_TWARPDN)
 		ViewPosition = position->megaToWorld() + Displacement { 1, 3 };
 
 	// Place stairs down
 	if (currlevel != 20) {
-		position = PlaceMiniSet(L6DOWN);
+		position = gbIsPoe2 ? PlaceMiniSetFarFrom(L6DOWN, upPosition, stairsUp.size) : PlaceMiniSet(L6DOWN);
 		if (!position)
 			return false;
 		if (entry == ENTRY_PREV)
