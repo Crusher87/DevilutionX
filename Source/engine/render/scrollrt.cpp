@@ -39,6 +39,7 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/dun_render.hpp"
 #include "engine/render/light_render.hpp"
+#include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
 #include "engine/ui_scale.hpp"
@@ -454,6 +455,9 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
 	const hd::SubFrameScope subFrame(monster.animInfo.getFrameFraction());
+	// POE2 Mashup: a monster in front of a brazier or a portal goes over its effects.
+	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+		vfx::MarkFront(out, targetBufferPosition, sprite);
 
 	if (!IsTileLit(tilePosition)) {
 		// POE2 Mashup: the Maiden's Road, shapes that haven't noticed the hero are drawn dimmer.
@@ -617,7 +621,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
-	if (gbIsPoe2 && vfx::HeroInFrontOfPortal(tilePosition))
+	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
 
 	if (&player == PlayerUnderCursor)
@@ -1645,6 +1649,11 @@ void DrawView(const Surface &out, Point startPosition)
 	} else if (IsSkillsPanelOpen()) {
 		DrawSkillsPanel(out);
 	}
+	// POE2 Mashup: the side panels' art hides the effects under it, also where it's the colour of the world under it.
+	if (IsRightPanelOpen())
+		CoverUi(out, GetRightPanel());
+	if (IsLeftPanelOpen())
+		CoverUi(out, GetLeftPanel());
 
 	if (ShowUniqueItemInfoBox) {
 		DrawUniqueInfo(out);
@@ -2107,6 +2116,7 @@ void DrawAndBlit()
 	TelemetryDrawStep("drawing the panels");
 	if (drawCtrlPan) {
 		DrawMainPanel(out);
+		CoverUi(out, GetMainPanel());
 	}
 	if (drawHealth) {
 		DrawLifeFlaskLower(out, !drawCtrlPan);
