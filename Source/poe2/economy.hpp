@@ -60,6 +60,9 @@ void OnUniqueMonsterKilledForGamble(Player &player);
 
 // --- Disenchanting and salvaging ---
 
+/** @brief Chance Shards a unique gives, disenchanted or salvaged (bundle salvage_and_disenchant.json); ShardsPerOrb make an Orb of Chance. */
+constexpr int ChanceShardsPerUnique = 1;
+
 struct DisenchantYield {
 	ShardKind kind;
 	int shards;
@@ -69,23 +72,27 @@ struct DisenchantYield {
 std::optional<DisenchantYield> GetDisenchantYield(const Item &item);
 
 struct SalvageYield {
-	/** @brief The quality currency it gives, and how many: one per 5% quality, rounded up, like POE2's salvage bench. */
+	/** @brief The quality currency it gives, and how many: one per 5% quality, rounded up, like POE2's salvage bench. IMISC_NONE for unique jewellery. */
 	item_misc_id currency;
 	int full;
 	/** @brief Artificer shards from its sockets. */
 	int socketShards;
+	/** @brief Chance Shards from a unique, as many as disenchanting gives (Curtis 2026-10-23). */
+	int chanceShards = 0;
 };
 
-/** @brief What salvaging the item gives: weapons, armour, shields, flasks and charms; not jewellery. */
+/** @brief What salvaging the item gives: weapons, armour, shields, flasks and charms, and unique equipment (jewellery too). */
 std::optional<SalvageYield> GetSalvageYield(const Item &item);
+/** @brief Whether salvaging the item gives anything, for the anvil's list: quality, sockets or being unique. */
+bool SalvageGivesSomething(const Item &item);
 /** @brief Adds shards to the hero's; returns how many full currency items they made. */
 int AddShards(Player &player, ShardKind kind, int shards);
 item_misc_id ShardCurrency(ShardKind kind);
 /** @brief Disenchants the inventory item: it's destroyed for shards, and full sets become currency. */
 bool DisenchantInvItem(Player &player, int invIndex);
-/** @brief Salvages the inventory item: it's destroyed for quality currency and socket shards. */
+/** @brief Salvages the inventory item: it's destroyed for quality currency, socket shards and a unique's Chance Shards. */
 bool SalvageInvItem(Player &player, int invIndex);
-/** @brief "3 Blacksmith's Whetstones and 2 Artificer's Shards", or "nothing", for the anvil. */
+/** @brief "3 Blacksmith's Whetstones, 2 Artificer's Shards and 1 Chance Shard", or "nothing", for the anvil. */
 std::string SalvageYieldText(const SalvageYield &yield);
 std::string_view ShardName(ShardKind kind);
 

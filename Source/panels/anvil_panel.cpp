@@ -69,18 +69,12 @@ struct Layout {
 	int contentHeight = 0;
 };
 
-bool GivesSomething(const Item &item)
-{
-	const std::optional<SalvageYield> yield = GetSalvageYield(item);
-	return yield && (yield->full > 0 || yield->socketShards > 0);
-}
-
-/** @brief The inventory items worth salvaging: those with quality or sockets. */
+/** @brief The inventory items worth salvaging: those with quality or sockets, and every unique. */
 std::vector<int> SalvageableItems(const Player &player)
 {
 	std::vector<int> items;
 	for (int i = 0; i < player._pNumInv; i++) {
-		if (GivesSomething(player.InvList[i]))
+		if (SalvageGivesSomething(player.InvList[i]))
 			items.push_back(i);
 	}
 	return items;
@@ -94,7 +88,7 @@ std::optional<int> PickedIndex()
 	if (Picked->invIndex >= player._pNumInv)
 		return std::nullopt;
 	const Item &item = player.InvList[Picked->invIndex];
-	if (static_cast<uint32_t>(item._iSeed) != Picked->seed || !GivesSomething(item))
+	if (static_cast<uint32_t>(item._iSeed) != Picked->seed || !SalvageGivesSomething(item))
 		return std::nullopt;
 	return Picked->invIndex;
 }
@@ -234,7 +228,7 @@ void DrawAnvil(const Surface &out)
 	DrawString(out, _("Anvil"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::AlignCenter | UiFlags::VerticalCenter });
 	DrawString(out, _("Esc to close"), title, { .flags = UiFlags::AlignRight | UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
 	const Rectangle intro { title.position + Displacement { 0, 32 }, { title.size.width, HeaderHeight - 44 } };
-	DrawString(out, WordWrapString(_("Break down weapons, armour, shields, flasks and charms from your inventory. Each 5% quality gives one matching quality currency, rounded up, and each socket gives an Artificer's Shard. Runes in the sockets are lost."), intro.size.width),
+	DrawString(out, WordWrapString(_("Break down weapons, armour, shields, flasks and charms from your inventory. Each 5% quality gives one matching quality currency, rounded up, and each socket gives an Artificer's Shard. Runes in the sockets are lost. Uniques also give a Chance Shard; 10 make an Orb of Chance."), intro.size.width),
 	    intro, { .flags = UiFlags::FontSize12 | UiFlags::ColorWhite, .lineHeight = 15 });
 
 	FillRectangle(out, layout.list, PanelColor);
@@ -253,10 +247,16 @@ void DrawAnvil(const Surface &out)
 		DrawString(list, item.getName().str(), top, { .flags = item.getTextColor() | UiFlags::VerticalCenter });
 		DrawString(list, ItemDetails(item), top, { .flags = UiFlags::FontSize12 | UiFlags::ColorButtonpushed | UiFlags::AlignRight | UiFlags::VerticalCenter });
 		const Rectangle bottom { top.position + Displacement { 0, 18 }, top.size };
-		DrawString(list, StrCat(_("Gives "), SalvageYieldText(*yield)), bottom, { .flags = UiFlags::FontSize12 | UiFlags::ColorWhitegold | UiFlags::VerticalCenter });
+		std::string gives = StrCat(_("Gives "), SalvageYieldText(*yield));
+		if (yield->chanceShards > 0) {
+			// The progress towards the next Orb of Chance shows before the click.
+			const int after = player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] + yield->chanceShards;
+			StrAppend(gives, " (", after >= ShardsPerOrb ? std::string(_("makes an Orb of Chance")) : StrCat(after, "/", ShardsPerOrb), ")");
+		}
+		DrawString(list, gives, bottom, { .flags = UiFlags::FontSize12 | UiFlags::ColorWhitegold | UiFlags::VerticalCenter });
 	}
 	if (layout.rows.empty())
-		DrawString(list, _("Nothing to salvage. Items need quality or sockets."), { { 0, 0 }, { layout.list.size.width - 2, 40 } },
+		DrawString(list, _("Nothing to salvage. Items need quality or sockets, or to be unique."), { { 0, 0 }, { layout.list.size.width - 2, 40 } },
 		    { .flags = UiFlags::ColorButtonpushed | UiFlags::AlignCenter | UiFlags::VerticalCenter });
 
 	const Rectangle footer { { layout.panel.position.x + Padding, layout.button.position.y - 4 }, { layout.button.position.x - layout.panel.position.x - (2 * Padding), ButtonSize.height + 8 } };

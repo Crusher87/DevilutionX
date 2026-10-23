@@ -70,7 +70,7 @@ enum class ModEffect : uint8_t {
 	ArmourPercent,
 	EvasionPercent,
 	EnergyShieldPercent,
-	/** Increased rarity of items found, from the Gold Amulet. */
+	/** Increased rarity of items found, from the Gold Amulet and the Magic Find prefix and suffix. */
 	ItemRarity,
 };
 
@@ -231,7 +231,21 @@ int ModTierItemLevel(uint8_t family, uint8_t tier);
 /** @brief Whether two modifiers are of the same kind (life, defence, damage...). */
 bool ModsShareTag(const Poe2ItemMod &a, const Poe2ItemMod &b);
 
-/** @brief The number of modifiers a natural rare rolls: 4, 5 or 6, weighted 8:3:1. */
+/** @brief The roll RareModCountFromRoll takes is below this. */
+constexpr int RareModCountRolls = 24;
+/**
+ * @brief A natural rare's modifier count from a roll below RareModCountRolls: 3 to 6 as in POE2, weighted 3:13:6:2
+ * so most have 4 or more. The roll modulo 12 is the old 4-to-6 roll (8:3:1), so rares from before keep their 5 or
+ * 6 modifiers and only some of the 4s lose their last one.
+ */
+constexpr int RareModCountFromRoll(int roll)
+{
+	const int oldRoll = roll % 12;
+	if (oldRoll < 8)
+		return roll >= 12 && oldRoll < 3 ? 3 : 4;
+	return oldRoll < 11 ? 5 : 6;
+}
+/** @brief The number of modifiers a natural rare rolls (RareModCountFromRoll). */
 int RareModCount(uint32_t seed);
 /** @brief The number of modifiers a magic item rolls: 1 or 2. */
 int MagicModCount(uint32_t seed);

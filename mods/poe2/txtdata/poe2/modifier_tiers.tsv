@@ -431,14 +431,9 @@ reduced_attribute_requirements	5	36	520	20	23	0	0
 reduced_attribute_requirements	6	24	620	16	19	0	0
 reduced_attribute_requirements	7	12	680	12	15	0	0
 reduced_attribute_requirements	8	1	700	8	11	0	0
-item_rarity	1	82	50	35	40	0	0
-item_rarity	2	72	125	30	34	0	0
-item_rarity	3	60	240	26	29	0	0
-item_rarity	4	48	350	22	25	0	0
-item_rarity	5	36	460	18	21	0	0
-item_rarity	6	24	560	14	17	0	0
-item_rarity	7	12	620	10	13	0	0
-item_rarity	8	1	650	6	9	0	0
+item_rarity	1	40	420	15	18	0	0
+item_rarity	2	24	560	11	14	0	0
+item_rarity	3	3	640	6	10	0	0
 life_regeneration	1	82	100	30	38	0	0
 life_regeneration	2	72	220	23	29	0	0
 life_regeneration	3	60	400	17	22	0	0
@@ -694,3 +689,6 @@ emerald_accuracy	1	1	800	5	10	0	0
 sapphire_energy_shield	1	1	800	10	20	0	0
 sapphire_minion_damage	1	1	800	5	15	0	0
 sapphire_mana_regeneration	1	1	800	5	15	0	0
+item_rarity_prefix	1	47	360	16	19	0	0
+item_rarity_prefix	2	29	520	12	15	0	0
+item_rarity_prefix	3	10	620	8	11	0	0

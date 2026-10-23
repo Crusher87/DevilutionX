@@ -210,13 +210,14 @@ TEST_F(Poe2LootTest, UniqueRollsPickATierFirst)
 	EXPECT_EQ(LegacyUniqueTier(20), UniqueTier::Rare);
 }
 
-TEST_F(Poe2LootTest, NaturalRaresHaveFourToSixAffixes)
+TEST_F(Poe2LootTest, NaturalRaresHaveThreeToSixAffixes)
 {
 	constexpr int Trials = 24000;
 	const auto counts = Count(Trials, RollNaturalRareAffixCount);
-	EXPECT_EQ(counts[4] + counts[5] + counts[6], Trials);
-	EXPECT_NEAR(counts[4] / static_cast<double>(Trials), 8.0 / 12, 0.015);
-	EXPECT_NEAR(counts[6] / static_cast<double>(Trials), 1.0 / 12, 0.01);
+	EXPECT_EQ(counts[3] + counts[4] + counts[5] + counts[6], Trials);
+	EXPECT_NEAR(counts[3] / static_cast<double>(Trials), 3.0 / 24, 0.01);
+	EXPECT_NEAR(counts[4] / static_cast<double>(Trials), 13.0 / 24, 0.015);
+	EXPECT_NEAR(counts[6] / static_cast<double>(Trials), 2.0 / 24, 0.01);
 }
 
 TEST_F(Poe2LootTest, OldBasesFadeOut)
