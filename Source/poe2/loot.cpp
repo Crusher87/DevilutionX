@@ -6,6 +6,7 @@
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "monster.h"
+#include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/is_of.hpp"
@@ -365,8 +366,8 @@ bool LineageSupportsDropAt(int areaLevel)
 
 int RollNaturalRareAffixCount()
 {
-	constexpr std::array<int, 3> Weights { 8, 3, 1 };
-	return 4 + static_cast<int>(RollWeighted(Weights));
+	// POE2's dropped rares can have 3; most still have 4 or more (Curtis 2026-10-23).
+	return RareModCountFromRoll(LootRandom(RareModCountRolls));
 }
 
 int BaseRecencyPercent(int itemLevel, int baseLevel)

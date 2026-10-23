@@ -16,6 +16,7 @@
 #include "poe2/modifiers.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 namespace {
@@ -115,7 +116,7 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 	EXPECT_NE(std::find(fireConflicts.begin(), fireConflicts.end(), *allRes), fireConflicts.end());
 }
 
-TEST_F(Poe2ModifiersTest, RaresRollFourToSixLegalModsAndRecreateIdentically)
+TEST_F(Poe2ModifiersTest, RaresRollThreeToSixLegalModsAndRecreateIdentically)
 {
 	std::array<int, 7> counts {};
 	for (const std::string_view baseName : { "Shortsword", "Fine Short Bow", "Full Plate Mail", "Ruby Ring", "Amber Amulet", "Wooden Tower Shield", "Iron Cap", "Leather Armor" }) {
@@ -160,10 +161,41 @@ TEST_F(Poe2ModifiersTest, RaresRollFourToSixLegalModsAndRecreateIdentically)
 			EXPECT_EQ(recreated._iAC, item._iAC);
 		}
 	}
-	// Natural rares have 4, 5 or 6 modifiers, mostly 4; small items can run out of legal modifiers.
+	// Natural rares have 3 to 6 modifiers, mostly 4; small items can run out of legal modifiers.
+	EXPECT_GT(counts[3], 0);
+	EXPECT_GT(counts[4], counts[3]);
 	EXPECT_GT(counts[4], counts[5]);
 	EXPECT_GT(counts[5], counts[6]);
 	EXPECT_GT(counts[6], 0);
+}
+
+TEST_F(Poe2ModifiersTest, NaturalRaresRollThreeModifiersNowAndThen)
+{
+	// Curtis 2026-10-23: 3 to 6 like POE2, mostly 4 or more; one rare in eight has 3.
+	std::array<int, 7> fromRolls {};
+	for (int roll = 0; roll < RareModCountRolls; roll++)
+		fromRolls[RareModCountFromRoll(roll)]++;
+	EXPECT_EQ(fromRolls[3], 3);
+	EXPECT_EQ(fromRolls[4], 13);
+	EXPECT_EQ(fromRolls[5], 6);
+	EXPECT_EQ(fromRolls[6], 2);
+	for (int roll = 0; roll < RareModCountRolls; roll++) {
+		// The old roll was this one modulo 12 (4 below 8, 5 below 11, else 6): rares from before keep 5 or 6, and a 4 stays 3 or 4.
+		const int oldRoll = roll % 12;
+		const int oldCount = oldRoll < 8 ? 4 : oldRoll < 11 ? 5 : 6;
+		if (oldCount == 4)
+			EXPECT_TRUE(IsAnyOf(RareModCountFromRoll(roll), 3, 4)) << roll;
+		else
+			EXPECT_EQ(RareModCountFromRoll(roll), oldCount) << roll;
+	}
+
+	constexpr int Seeds = 24000;
+	std::array<int, 7> counts {};
+	for (uint32_t seed = 1; seed <= Seeds; seed++)
+		counts[RareModCount(seed)]++;
+	EXPECT_NEAR(counts[3] / static_cast<double>(Seeds), 3.0 / 24, 0.01);
+	EXPECT_NEAR(counts[4] / static_cast<double>(Seeds), 13.0 / 24, 0.015);
+	EXPECT_NEAR(counts[6] / static_cast<double>(Seeds), 2.0 / 24, 0.01);
 }
 
 TEST_F(Poe2ModifiersTest, MagicItemsHaveAPrefixOrSuffixAndAName)

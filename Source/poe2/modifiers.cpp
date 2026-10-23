@@ -668,10 +668,7 @@ int MagicModCount(uint32_t seed)
 int RareModCount(uint32_t seed)
 {
 	ModRandom random { seed ^ 0x52A4E5U };
-	const uint32_t roll = random.below(12);
-	if (roll < 8)
-		return 4;
-	return roll < 11 ? 5 : 6;
+	return RareModCountFromRoll(static_cast<int>(random.below(RareModCountRolls)));
 }
 
 const ModFamily *ItemModFamily(const Poe2ItemMod &mod)

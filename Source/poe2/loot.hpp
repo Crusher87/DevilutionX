@@ -121,7 +121,7 @@ bool LineageSupportsDropAt(int areaLevel);
 /** @brief In a map, one kill in this many drops a random lineage support; map bosses and signature bosses have their own 2%. */
 constexpr int LineageAnyKillChance = 10000;
 
-/** @brief Natural rares have 4, 5 or 6 affixes, weighted 8:3:1. */
+/** @brief Natural rares have 3 to 6 affixes, weighted 3:13:6:2, as RareModCount (poe2/modifiers.hpp). */
 int RollNaturalRareAffixCount();
 
 /**

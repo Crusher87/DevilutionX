@@ -1324,7 +1324,7 @@ struct RareAffixRoll {
 std::vector<RareAffixRoll> RollRareAffixes(const Player &player, Item &item, int minlvl, int maxlvl, AffixItemType flgs)
 {
 	const int exalts = static_cast<int>((item.dwBuff & CF_POE2_EXALTS) >> 6);
-	// Rares from the POE2 loot rules have 4 to 6 affixes, mostly 4; crafted ones 3 to 6.
+	// Rares from the POE2 loot rules have 3 to 6 affixes, mostly 4; crafted ones 3 to 6.
 	const int baseAffixes = GetLootRarity(item) ? RollNaturalRareAffixCount() : 3 + GenerateRnd(4);
 	const int wantedAffixes = std::min<int>(baseAffixes + exalts, static_cast<int>(MaxRareAffixes));
 	int prefixes = 0;
