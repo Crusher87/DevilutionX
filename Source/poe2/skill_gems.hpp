@@ -37,8 +37,8 @@ struct GemAttributeNeeds {
 	int dexterity = 0;
 };
 /**
- * @brief POE2's attribute requirement at a gem level for a gem that puts sharePercent of its requirement on one
- * attribute (100 for a single-attribute gem): 0 at level 1, about 14 at level 3, 65 at level 10, 157 at level 20.
+ * @brief POE2's attribute requirement x 0.75 at a gem level for a gem that puts sharePercent of its requirement on one
+ * attribute (100 for a single-attribute gem): 0 at level 1, 12 at level 3, 50 at level 10, 119 at level 20.
  */
 int GemAttributeRequirement(int gemLevel, int sharePercent);
 /** @brief What the skill's gem needs at a gem level. Like POE2, it grows with the level; the gem's attributes keep their share. */

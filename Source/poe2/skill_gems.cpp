@@ -176,17 +176,24 @@ int ShareFactor(int sharePercent)
 	}
 }
 
+/**
+ * @brief Our gems need this percent of POE2's attributes. Diablo caps each class's base attributes (Bard 120, Monk
+ * Magic 80, Sorcerer Dexterity 85), so POE2's 157 at gem level 20 would lock classes out of their own gems; three
+ * quarters keeps POE2's shape and lets every class level its own gems to 20.
+ */
+constexpr int GemAttributeRequirementPercent = 75;
+
 } // namespace
 
 int GemAttributeRequirement(int gemLevel, int sharePercent)
 {
 	if (sharePercent <= 0)
 		return 0;
-	// Path of Building 2: round((5 + (level - 3) * 1.7) * (share / 100)^0.9) + 4, and none below 8. In tenths, so
-	// every machine gets the same number.
+	// Path of Building 2: round((5 + (level - 3) * 1.7) * (share / 100)^0.9) + 4, and none below 8, with the
+	// first part scaled by GemAttributeRequirementPercent. In tenths and thousandths, so every machine gets the same number.
 	const int level = Poe2GemCharacterLevels[std::clamp(gemLevel, 1, MaxGemLevel) - 1];
 	const int base = 50 + (level - 3) * 17;
-	const int requirement = (base * ShareFactor(sharePercent) + 5000) / 10000 + 4;
+	const int requirement = (base * ShareFactor(sharePercent) * GemAttributeRequirementPercent + 500000) / 1000000 + 4;
 	return requirement < 8 ? 0 : requirement;
 }
 

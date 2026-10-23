@@ -197,31 +197,44 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 
 TEST_F(Poe2SkillGemsTest, GemNeedsGrowWithLevelLikePoe2)
 {
-	// Path of Building 2's numbers for a single-attribute gem.
+	// Path of Building 2's formula x 0.75, for a single-attribute gem.
 	EXPECT_EQ(GemAttributeRequirement(1, 100), 0);
-	EXPECT_EQ(GemAttributeRequirement(2, 100), 9);
-	EXPECT_EQ(GemAttributeRequirement(3, 100), 14);
-	EXPECT_EQ(GemAttributeRequirement(10, 100), 65);
-	EXPECT_EQ(GemAttributeRequirement(20, 100), 157);
-	EXPECT_EQ(GemAttributeRequirement(20, 50), 86);
+	EXPECT_EQ(GemAttributeRequirement(2, 100), 8);
+	EXPECT_EQ(GemAttributeRequirement(3, 100), 12);
+	EXPECT_EQ(GemAttributeRequirement(10, 100), 50);
+	EXPECT_EQ(GemAttributeRequirement(13, 100), 70);
+	EXPECT_EQ(GemAttributeRequirement(20, 100), 119);
 	EXPECT_EQ(GemAttributeRequirement(20, 0), 0);
+	// Hybrid gems: 60/40 and 50/50 shares, and anything under 8 counts as none.
+	EXPECT_EQ(GemAttributeRequirement(3, 60), 9);
+	EXPECT_EQ(GemAttributeRequirement(3, 40), 0);
+	EXPECT_EQ(GemAttributeRequirement(3, 50), 8);
+	EXPECT_EQ(GemAttributeRequirement(20, 60), 76);
+	EXPECT_EQ(GemAttributeRequirement(20, 40), 54);
+	EXPECT_EQ(GemAttributeRequirement(20, 50), 65);
 
 	const GemAttributeNeeds cleave = SkillGemAttributeNeeds(SkillSlot::ForAttack(WeaponSkill::Cleave), 3);
-	EXPECT_EQ(cleave.strength, 14);
+	EXPECT_EQ(cleave.strength, 12);
 	EXPECT_EQ(cleave.magic, 0);
 	EXPECT_EQ(cleave.dexterity, 0);
 	// Whirling Staff is half Strength, half Dexterity.
 	const GemAttributeNeeds whirl = SkillGemAttributeNeeds(SkillSlot::ForAttack(WeaponSkill::WhirlingStaff), 20);
-	EXPECT_EQ(whirl.strength, 86);
-	EXPECT_EQ(whirl.dexterity, 86);
+	EXPECT_EQ(whirl.strength, 65);
+	EXPECT_EQ(whirl.dexterity, 65);
+
+	// Every class can level its own gems to 20 under Diablo's attribute caps: a Bard's 120 covers a single-attribute
+	// gem, a Monk's Magic 80 and a Sorcerer's Dexterity 85 cover a 50/50 one, a Rogue's Strength 55 a 40% share.
+	EXPECT_LE(GemAttributeRequirement(20, 100), 120);
+	EXPECT_LE(GemAttributeRequirement(20, 50), 80);
+	EXPECT_LE(GemAttributeRequirement(20, 40), 55);
 
 	Player &player = *MyPlayer;
 	Item gem;
 	ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForAttack(WeaponSkill::Cleave), 10));
-	EXPECT_EQ(gem._iMinStr, 65);
-	player._pStrength = 64;
+	EXPECT_EQ(gem._iMinStr, 50);
+	player._pStrength = 49;
 	EXPECT_FALSE(player.CanUseItem(gem));
-	player._pStrength = 65;
+	player._pStrength = 50;
 	EXPECT_TRUE(player.CanUseItem(gem));
 }
 

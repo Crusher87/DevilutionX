@@ -67,7 +67,7 @@ namespace {
 /** The lab hero's save slot: one past the hero list, so it never shows there. */
 constexpr uint32_t LabSaveNumber = MAX_CHARACTERS;
 constexpr int LabHeroLevel = 50;
-/** High enough for any gem's attribute needs (157 at gem level 20). */
+/** High enough for any gem's attribute needs (119 at gem level 20). */
 constexpr int LabAttributes = 300;
 /** Life a target gets: no single hit takes it, and it's filled up every tick. */
 constexpr int LabDummyLife = 1000000;
