@@ -96,5 +96,7 @@ void ChooseMapBoss();
 void OnMapBossKilled(const Monster &monster, bool sendmsg);
 /** @brief The local player would die in a map: uses a revive to bring them back at the map's start instead. */
 bool TryMapRevive(Player &player);
+/** @brief A death in a map (revived or not) costs the local player a tenth of the level's experience, never the level. */
+void LoseMapDeathExperience(Player &player);
 
 } // namespace devilution

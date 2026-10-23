@@ -80,6 +80,7 @@ set(tests
   poe2_weather_test
   poe2_uniques_test
   poe2_waystones_test
+  poe2_experience_test
   poe2_weapon_skills_test
   player_test
   quests_test

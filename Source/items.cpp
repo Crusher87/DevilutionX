@@ -7403,6 +7403,9 @@ void SpawnWitch(int lvl)
 
 void SpawnBoy(int lvl)
 {
+	// The level is saved in CF_LEVEL's 6 bits, and RecreateBoyItem rebuilds the ware from it: clamp it before the
+	// base pick and the modifiers use it, so heroes past level 63 get the same item on reload and on every peer.
+	lvl = std::min(lvl, static_cast<int>(CF_LEVEL));
 	int ivalue = 0;
 	bool keepgoing = false;
 	int count = 0;

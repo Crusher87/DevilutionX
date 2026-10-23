@@ -86,6 +86,7 @@ set(poe2_mod
   sfx/poe2/blizzard_shard2.wav
   sfx/poe2/blizzard_shard3.wav
   sfx/poe2/blizzard_shard4.wav
+  txtdata/Experience.tsv
   txtdata/classes/warrior/starting_loadout.tsv
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
@@ -94,6 +95,9 @@ set(poe2_mod
   txtdata/towners/towners.tsv
   txtdata/poe2/area_levels.tsv
   txtdata/poe2/base_meta.tsv
+  txtdata/poe2/experience_bosses.tsv
+  txtdata/poe2/experience_level_gap.tsv
+  txtdata/poe2/monster_experience.tsv
   txtdata/poe2/modifier_families.tsv
   txtdata/poe2/modifier_tiers.tsv
   txtdata/poe2/passive_tree.tsv

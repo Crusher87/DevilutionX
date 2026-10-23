@@ -17,6 +17,7 @@
 #include "poe2/craft_state.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/endgame.hpp"
+#include "poe2/experience.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/map_play.hpp"
@@ -472,6 +473,7 @@ bool TryMapRevive(Player &player)
 {
 	if (&player != MyPlayer || ActiveMapTier() == 0 || player.poe2.mapRevives == 0)
 		return false;
+	LoseMapDeathExperience(player);
 	player.poe2.mapRevives--;
 	SetPlayerHitPoints(player, player._pMaxHP);
 	player._pMana = player._pMaxMana;
@@ -491,6 +493,13 @@ bool TryMapRevive(Player &player)
 	}
 	EventPlrMsg(FormatRuntime(_("Revived at the map's start. Revives left: {:d}"), player.poe2.mapRevives), UiFlags::ColorWhitegold);
 	return true;
+}
+
+void LoseMapDeathExperience(Player &player)
+{
+	if (&player != MyPlayer || ActiveMapTier() == 0)
+		return;
+	player._pExperience = ExperienceAfterMapDeath(player.getCharacterLevel(), player._pExperience);
 }
 
 } // namespace devilution
