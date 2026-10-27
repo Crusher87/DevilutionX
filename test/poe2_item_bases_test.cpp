@@ -744,9 +744,6 @@ TEST_F(Poe2ItemBasesTest, RequirementLineShowsTheLevel)
 	EXPECT_EQ(ItemRequirementText(0, 0, 0, 0), "");
 }
 
-} // namespace
-} // namespace devilution
-
 TEST_F(Poe2ItemBasesTest, NewHeroesStartWithPoe2Bases)
 {
 	LoadPlayerDataFiles();
