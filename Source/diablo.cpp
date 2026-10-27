@@ -471,8 +471,13 @@ void LeftMouseDown(uint16_t modState)
 	}
 
 	if (IsPlayerInStore()) {
-		CheckStoreBtn();
-		return;
+		// POE2 Mashup: a click outside a towner's talk menu closes it and goes on, so the hero walks off at once.
+		if (gbIsPoe2 && !StoreWindowContainsMouse()) {
+			CloseTalkMenu();
+		} else {
+			CheckStoreBtn();
+			return;
+		}
 	}
 
 	const bool isShiftHeld = (modState & SDL_KMOD_SHIFT) != 0;
@@ -705,6 +710,9 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	}
 
 	if (!ChatFlag && WasdMovementKeyPressed(vkey)) {
+		// POE2 Mashup: walking off closes a towner's talk menu, like the stash, and the walk goes on.
+		if (gbIsPoe2 && IsPlayerInStore())
+			CloseTalkMenu();
 		return;
 	}
 
@@ -2303,7 +2311,9 @@ void InitKeymapActions()
 		    if (gbIsPoe2) {
 			    const bool modalShown = SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
 			    if (!modalShown) {
-				    TryDodgeRoll(*MyPlayer);
+				    // Rolling away from a towner closes the talk menu, like walking off does.
+				    if (TryDodgeRoll(*MyPlayer) && IsPlayerInStore())
+					    CloseTalkMenu();
 				    return;
 			    }
 		    }

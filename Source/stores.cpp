@@ -2292,8 +2292,40 @@ namespace {
 /** @brief Tiles the hero can walk from a stash or vendor before its panel closes. */
 constexpr int InteractionReach = 3;
 std::optional<Point> InteractionSpot;
+/** Where the hero stood when a towner's talk menu opened: any step from it closes the menu (POE2). */
+std::optional<Point> TalkSpot;
+
+/** @brief POE2: closes a towner's talk menu once the hero moves, by walking, clicking away or dodge rolling. */
+void CloseTalkMenuWhenMoved()
+{
+	if (!gbIsPoe2 || !IsPlayerInStore() || MyPlayer == nullptr) {
+		TalkSpot = std::nullopt;
+		return;
+	}
+	// The tile the hero is heading to: it changes the moment a walk or a roll starts.
+	const Point spot = MyPlayer->position.future;
+	if (!TalkSpot) {
+		TalkSpot = spot;
+		return;
+	}
+	if (spot != *TalkSpot)
+		CloseTalkMenu();
+}
 
 } // namespace
+
+void CloseTalkMenu()
+{
+	TalkSpot = std::nullopt;
+	if (qtextflag) {
+		qtextflag = false;
+		if (leveltype == DTYPE_TOWN)
+			stream_stop();
+	}
+	// Every level of the menu at once, as a click outside it does, but without passing through the towner's first page.
+	ActiveStore = TalkID::None;
+	ReleaseStoreBtn();
+}
 
 void RememberInteractionSpot()
 {
@@ -2303,6 +2335,7 @@ void RememberInteractionSpot()
 
 void CloseInteractionPanelsWhenAway()
 {
+	CloseTalkMenuWhenMoved();
 	if (!InteractionSpot || MyPlayer == nullptr)
 		return;
 	if (!IsStashOpen && !IsVisualStoreOpen) {
@@ -3099,22 +3132,21 @@ void StoreEnter()
 	}
 }
 
-void CheckStoreBtn()
+bool StoreWindowContainsMouse()
 {
 	const Point uiPosition = GetUIRectangle().position;
 	const Rectangle windowRect { { uiPosition.x + 344, uiPosition.y + PaddingTop - 7 }, { 271, 303 } };
 	const Rectangle windowRectFull { { uiPosition.x + 24, uiPosition.y + PaddingTop - 7 }, { 591, 303 } };
+	return (IsTextFullSize ? windowRectFull : windowRect).contains(MousePosition);
+}
 
-	if (!IsTextFullSize) {
-		if (!windowRect.contains(MousePosition)) {
-			while (IsPlayerInStore())
-				StoreESC();
-		}
-	} else {
-		if (!windowRectFull.contains(MousePosition)) {
-			while (IsPlayerInStore())
-				StoreESC();
-		}
+void CheckStoreBtn()
+{
+	const Point uiPosition = GetUIRectangle().position;
+
+	if (!StoreWindowContainsMouse()) {
+		while (IsPlayerInStore())
+			StoreESC();
 	}
 
 	if (qtextflag) {
