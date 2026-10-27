@@ -984,8 +984,9 @@ void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, Animation
  * coming as far through them as it comes through the animation (see AnimationInfo::setTimedAnimation).
  * @param actionFrame The frame the game logic acts on, like _pAFNum - 1 for an attack or _pSFNum for a spell
  * @param ticks Game ticks from the start to the last frame, when a held attack starts the next one
+ * @param ticksToAction Game ticks from the start to the action frame instead, for a quick strike; 0 for as far through
  */
-void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks);
+void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks, int ticksToAction = 0);
 void SetPlrAnims(Player &player);
 void CreatePlayer(Player &player, HeroClass c);
 int CalcStatDiff(Player &player);

@@ -796,6 +796,8 @@ struct Poe2PlayerData {
 	uint8_t dashSkillTicks = 0;
 	/** @brief Where the current dash ends: the skill lands as soon as the hero stands there (not saved). */
 	Point dashEnd {};
+	/** @brief How far the current dash goes, in percent of the skill's full length, for its added time (not saved). */
+	uint8_t dashDistancePercent = 0;
 	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
 	uint8_t warcryTicks = 0;
 	/** @brief Game ticks Riposte stays ready after a block (not saved). */
@@ -971,6 +973,7 @@ struct Poe2PlayerData {
 		dashSkill = WeaponSkill::None;
 		dashSkillTicks = 0;
 		dashEnd = {};
+		dashDistancePercent = 0;
 		warcryTicks = 0;
 		volleySkill = WeaponSkill::None;
 		volleyShotsLeft = 0;

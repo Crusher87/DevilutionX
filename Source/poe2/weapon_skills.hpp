@@ -135,8 +135,12 @@ constexpr int8_t DashStrikeWindupTicks = 2;
  * @brief Plays a skill's own animation (as PM_SPELL); the skill goes off on its action frame.
  * @param graphic Attack for weapon skills, else one of the spell casting animations.
  * @param quickStrike Cuts the wind-up to DashStrikeWindupTicks, for a dash skill striking as it lands.
+ * @param dashTicks In POE2 Mashup, the game ticks the dash before it took: the animation takes the rest of the use
+ * time (SkillUseTime, with its time for the dash's length). -1 when the skill didn't dash.
  */
-void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike = false);
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike = false, int dashTicks = -1);
+/** @brief A dash skill's dash is over: it lands with its strike (see BeginSkillAnimation). */
+void LandDashSkill(Player &player);
 
 /**
  * @brief Makes a cast skill go off, on the action frame of its animation.

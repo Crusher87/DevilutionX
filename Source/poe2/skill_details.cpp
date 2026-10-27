@@ -263,41 +263,6 @@ bool PlaysCastAnimation(WeaponSkill skill)
 	    || IsAnyOf(skill, WeaponSkill::IceBolt, WeaponSkill::Spark, WeaponSkill::EmberFusillade, WeaponSkill::FrostNova, WeaponSkill::BattleCry, WeaponSkill::AmplifyDamage);
 }
 
-/** @brief Whether a weapon skill dashes and lands with a quick strike (StartDashSkill). */
-bool DashesToStrike(WeaponSkill skill)
-{
-	const TableSkillData *table = FindTableSkill(skill);
-	return (table != nullptr && table->shape == TableShape::Dash) || IsAnyOf(skill, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge);
-}
-
-/** @brief Frames of the skill's animation, from the class's animation data (the hero's own aren't set in town). */
-int AttackFrames(const Player &player, SkillSlot skill)
-{
-	const PlayerAnimData &data = GetPlayerAnimDataForClass(player._pClass);
-	if (skill.kind == SkillKind::Attack && PlaysCastAnimation(skill.attack()))
-		return data.castingFrames;
-	switch (static_cast<PlayerWeaponGraphic>(player._pgfxnum & 0xFU)) {
-	case PlayerWeaponGraphic::UnarmedShield:
-		return data.unarmedShieldFrames;
-	case PlayerWeaponGraphic::Sword:
-		return data.swordFrames;
-	case PlayerWeaponGraphic::SwordShield:
-		return data.swordShieldFrames;
-	case PlayerWeaponGraphic::Bow:
-		return data.bowFrames;
-	case PlayerWeaponGraphic::Axe:
-		return data.axeFrames;
-	case PlayerWeaponGraphic::Mace:
-		return data.maceFrames;
-	case PlayerWeaponGraphic::MaceShield:
-		return data.maceShieldFrames;
-	case PlayerWeaponGraphic::Staff:
-		return data.staffFrames;
-	default:
-		return data.unarmedFrames;
-	}
-}
-
 } // namespace
 
 double UseSeconds(const Player &player, SkillSlot skill)
@@ -311,27 +276,19 @@ double UseSeconds(const Player &player, SkillSlot skill)
 		return ActionSeconds(CastTime(player, skill)) + (recovery / static_cast<double>(TicksPerSecond));
 	}
 	const WeaponSkill attack = skill.kind == SkillKind::Attack ? skill.attack() : WeaponSkill::None;
-	// Double Swing's attack time holds both strikes.
-	if (skill.kind == SkillKind::Default || IsSwingWeaponSkill(attack))
-		return ActionSeconds(AttackTime(player, skill));
-	if (!DashesToStrike(attack))
-		return ActionSeconds(PlaysCastAnimation(attack) ? CastTime(player, skill) : AttackTime(player, skill));
-	// A dash lands with a quick strike: the whole animation, less what speeds attacks up.
-	int skipped = 0;
-	const ItemSpecialEffect flags = player._pIFlags;
-	if (HasAnyOf(flags, ItemSpecialEffect::FastestAttack))
-		skipped = 4;
-	else if (HasAnyOf(flags, ItemSpecialEffect::FasterAttack))
-		skipped = 3;
-	else if (HasAnyOf(flags, ItemSpecialEffect::FastAttack))
-		skipped = 2;
-	else if (HasAnyOf(flags, ItemSpecialEffect::QuickAttack))
-		skipped = 1;
-	skipped += player.poe2.passiveAttackFrames + UniqueAttackSpeedPercent(player) / 10;
-	if (skill.kind == SkillKind::Attack)
-		skipped += SupportAttackSkippedFrames(player, skill.attack());
-	const int frames = AttackFrames(player, skill);
-	return std::max(frames - skipped, 2) / static_cast<double>(TicksPerSecond);
+	if (skill.kind == SkillKind::Default || IsSwingWeaponSkill(attack)) {
+		// A use of Double Swing holds both strikes, each with its own time.
+		if (attack == WeaponSkill::Flurry)
+			return ActionSeconds(SkillUseTime(player, skill, false)) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Backhand));
+		// Fists of Thunder's strikes on average: two plain ones, then the slower finisher.
+		if (attack == WeaponSkill::FistsOfThunder) {
+			const int every = FistsOfThunderBurstEvery;
+			return (((every - 1) * ActionSeconds(SkillUseTime(player, skill, false))) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))) / every;
+		}
+		return ActionSeconds(SkillUseTime(player, skill, false));
+	}
+	// A skill with its own animation; a dash's time counts from its start, for the shortest dash.
+	return ActionSeconds(SkillUseTime(player, skill, PlaysCastAnimation(attack)));
 }
 
 namespace {
@@ -797,6 +754,12 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 	if (usable) {
 		seconds = UseSeconds(player, skill);
 		Value(lines, skill.kind == SkillKind::Spell ? "Cast time" : "Use time", std::format("{:s} ({:.1f} per second)", Seconds(seconds), 1.0 / seconds));
+		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::FistsOfThunder) {
+			Value(lines, "Strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false))));
+			Value(lines, "Bursting strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))));
+		}
+		if (const SkillSpeedRow *row = FindSkillSpeedRow(skill); row != nullptr && row->distanceMs > 0 && skill.kind == SkillKind::Attack)
+			Text(lines, Kind::Note, std::format("A longer leap adds up to {:s}", Seconds(row->distanceMs / 1000.0)));
 	}
 
 	if (!hit.parts.empty()) {

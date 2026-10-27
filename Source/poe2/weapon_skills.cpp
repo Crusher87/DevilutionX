@@ -162,6 +162,7 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	// With no room to dash, such as an enemy right next to you, the skill goes off where you stand (Curtis 2026-10-21:
 	// Whirlwind did nothing when he clicked an enemy in melee).
 	const Point target = SkillTarget(player);
+	const Point start = player.position.future;
 	const std::optional<Point> end = DashTowards(player, target, tiles);
 	if (!end && target != player.position.tile)
 		player._pdir = GetDirection(player.position.tile, target);
@@ -173,6 +174,7 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	player.poe2.dashSkill = skill;
 	player.poe2.dashSkillTicks = DashSkillTimeoutTicks;
 	player.poe2.dashEnd = end.value_or(player.position.future);
+	player.poe2.dashDistancePercent = static_cast<uint8_t>(end ? std::clamp(end->WalkingDistance(start) * 100 / std::max(tiles, 1), 0, 100) : 0);
 	return true;
 }
 
@@ -831,17 +833,20 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player.poe2.activeSkill = skill;
 }
 
-void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike)
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike, int dashTicks)
 {
 	const SkillLookScope skillLook(skill);
 	const Direction dir = target == player.position.tile ? player._pdir : GetDirection(player.position.tile, target);
 	const bool attack = graphic == player_graphic::Attack;
 	const int8_t actionFrame = attack ? player._pAFNum - 1 : player._pSFNum;
-	if (gbIsPoe2 && !quickStrike) {
-		// The skill takes its attack or cast time (poe2/attack_speed.hpp).
+	if (gbIsPoe2) {
+		// The skill takes its attack or cast time (poe2/attack_speed.hpp), with any time it adds; a dash took part of it
+		// already. A quick strike hits DashStrikeWindupTicks in and spends the rest of the time after the hit.
 		const SkillSlot slot = SkillSlot::ForAttack(skill);
-		const uint32_t time = attack ? AttackTime(player, slot) : CastTime(player, slot);
-		NewPlrTimedAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, actionFrame, TakeActionTicks(player, time));
+		uint32_t time = SkillUseTime(player, slot, /*castAnimation=*/!attack, SkillStep::Main, dashTicks >= 0 ? player.poe2.dashDistancePercent : 0);
+		if (dashTicks > 0)
+			time -= std::min(time, static_cast<uint32_t>(dashTicks) * ActionTimeOneTick);
+		NewPlrTimedAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, actionFrame, TakeActionTicks(player, time), quickStrike ? DashStrikeWindupTicks : 0);
 	} else {
 		// A quick strike skips most of the wind-up's game ticks; the skipped frames still show, sped up, before the hit.
 		const auto skippedFrames = static_cast<int8_t>(quickStrike ? std::max(actionFrame - DashStrikeWindupTicks, 0) : 0);
@@ -862,6 +867,16 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 		vfx::Whirl(player.position.tile, table != nullptr ? std::max<int>(table->radius, 1) : 1, vfx::Element::Physical, false, WeaponElementLook(player));
 		PlaySfxLoc(SfxID::Swing2, player.position.tile);
 	}
+}
+
+void LandDashSkill(Player &player)
+{
+	// The dash took the ticks the skill had left to land, of DashSkillTimeoutTicks.
+	const int dashTicks = DashSkillTimeoutTicks - player.poe2.dashSkillTicks;
+	player.poe2.dashSkillTicks = 0;
+	player.poe2.dodgeTicks = 0;
+	const WeaponSkill skill = player.poe2.dashSkill;
+	BeginSkillAnimation(player, skill, player_graphic::Attack, player.position.tile + player._pdir, !SpinsWhileStriking(skill), dashTicks);
 }
 
 bool SpinsWhileStriking(WeaponSkill skill)
