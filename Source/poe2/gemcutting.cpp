@@ -99,8 +99,8 @@ const std::vector<GemEntry> &GemCatalog()
 		GemEntry entry { i, SkillForGemData(data), SupportGemForItemData(data), std::max<int>(data.iMinMLvl, 1) };
 		if (entry.skill.isEmpty() && entry.support == SupportGem::None)
 			continue;
-		// Lineage supports are found, never cut, and the old trigger supports are meta gems now.
-		if (IsLineageSupport(entry.support) || IsRetiredSupport(entry.support))
+		// Lineage supports are found, never cut, the old trigger supports are meta gems now, and the crossbow skills are gone.
+		if (IsLineageSupport(entry.support) || IsRetiredSupport(entry.support) || IsRetiredSkill(entry.skill))
 			continue;
 		if (entry.support != SupportGem::None) {
 			// One entry per tier, each cut from its own uncut support gem level.
@@ -136,6 +136,13 @@ bool GemInCategory(const GemEntry &gem, GemCategory category)
 	default:
 		return false;
 	}
+}
+
+bool IsRetiredSkill(SkillSlot skill)
+{
+	// Rapid Fire, Impale and Ballista Barrage repeat Hail of Arrows, Guided Arrow and Arrow Storm; traps and turrets need no bow.
+	return skill.kind == SkillKind::Attack
+	    && IsAnyOf(skill.attack(), WeaponSkill::RapidFire, WeaponSkill::Impale, WeaponSkill::SpikeTrap, WeaponSkill::Sentry, WeaponSkill::SiegeVolley);
 }
 
 bool AttackOnWeaponTab(WeaponSkill skill)
