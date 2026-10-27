@@ -138,7 +138,7 @@ def main():
 		slots = SLOTS.get(fid, list(dict.fromkeys(family['valid_slots'])))
 		family_rows.append([
 			fid,
-			family['name'],
+			game_text(family['name'], effect),
 			word,
 			family['generation_type'],
 			family['group'],
@@ -146,7 +146,7 @@ def main():
 			','.join(slots),
 			','.join(family['requires_any_base_tags']),
 			','.join(conflicts),
-			game_template(family['display_template']),
+			game_text(game_template(family['display_template']), effect),
 			effect,
 			str(scale1),
 			str(scale2),
@@ -181,6 +181,13 @@ def main():
 	write(os.path.join(OUT_DIR, 'modifier_tiers.tsv'),
 	      ['family', 'tier', 'itemLevel', 'weight', 'min1', 'max1', 'min2', 'max2'],
 	      tier_rows)
+
+
+def game_text(text, effect):
+	"""Names the stat the game gives: POE2's cold resistance is the game's magic resistance, so it reads that way."""
+	if effect == 'MagicResistance':
+		text = text.replace('Cold Resistance', 'Magic Resistance')
+	return text
 
 
 def game_template(template):
