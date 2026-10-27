@@ -19,11 +19,20 @@ constexpr int MapMonsterAreaLevel(int tier)
 	return 38 + ((26 * tier) + 5) / 10;
 }
 
+/** @brief A floor's monster damage percent when its row gives none. */
+constexpr int DefaultAreaMonsterDamagePercent = 100;
+
 /** @brief Reads the area level table; does nothing (and never fails) outside POE2 mode. */
 void LoadAreaLevels();
 
 /** @brief The Normal area level of a raw dungeon level, or 0 when the table has no row for it. */
 int AreaLevelForFloor(int floor);
+
+/**
+ * @brief The percent of their table hit the monsters of a raw dungeon level deal on Normal (the table's
+ * monsterDamagePercent column: 70 in Act 1, plan step 14); 100 without a row.
+ */
+int AreaMonsterDamagePercentForFloor(int floor);
 
 /**
  * @brief The floor whose area level applies here: the quest's floor on a quest level, otherwise the raw dungeon level.
@@ -39,6 +48,13 @@ int AreaFloor();
 int CurrentAreaLevel(int difficulty);
 /** @brief CurrentAreaLevel() at the game's difficulty. */
 int CurrentAreaLevel();
+
+/**
+ * @brief The percent of their hit the monsters here deal: the floor's AreaMonsterDamagePercentForFloor() on Normal
+ * (Act 1's monsters hit 30% softer); 100 in maps, in town, on Nightmare and Hell (whose area levels are past Act 1's)
+ * and outside POE2 mode.
+ */
+int CurrentAreaMonsterDamagePercent();
 
 /**
  * @brief A monster's POE2 level: the area level, +2 for uniques, Diablo and Na-Krul (however they were placed),

@@ -194,8 +194,8 @@ int64_t TableDamagePermille(const Monster &monster)
 		return 1000;
 	const MonsterBossLevelRow *boss = MonsterBossRow(monster);
 	const int ratio = boss != nullptr ? boss->damagePercent : MonsterTypeRow(monster.type().type).damagePercent;
-	// 1000 x (hit10 / 10) x (ratio / 100) / (sum / 2)
-	return static_cast<int64_t>(MonsterLevelDamage10(level)) * ratio * 2 / sum;
+	// 1000 x (hit10 / 10) x (ratio / 100) / (sum / 2), then the area's monster damage (70% in Act 1, plan step 14).
+	return static_cast<int64_t>(MonsterLevelDamage10(level)) * ratio * 2 / sum * CurrentAreaMonsterDamagePercent() / 100;
 }
 
 /**

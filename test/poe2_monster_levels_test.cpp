@@ -239,11 +239,11 @@ TEST_F(Poe2MonsterLevelsTest, UniqueBandThreeToSix)
 
 TEST_F(Poe2MonsterLevelsTest, HitsFollowTheTableAndThe255CapIsGone)
 {
-	// A zombie at area 13 averages the table's hit times its type's damage ratio.
+	// A zombie at area 13 averages the table's hit times its type's damage ratio, and Act 1's 70% (plan step 14).
 	Monster zombie = MakeMonster(MT_NZOMBIE);
 	ASSERT_TRUE(ApplyPoe2MonsterLife(zombie, 5));
 	const int sum = zombie.data().minDamage + zombie.data().maxDamage;
-	const int64_t permille = int64_t { 252 } * MonsterTypeRow(MT_NZOMBIE).damagePercent * 2 / sum;
+	const int64_t permille = int64_t { 252 } * MonsterTypeRow(MT_NZOMBIE).damagePercent * 2 / sum * 70 / 100;
 	EXPECT_EQ(Poe2MonsterDamagePercent(zombie), static_cast<int>((permille + 5) / 10));
 	EXPECT_EQ(ScaleMonsterHit(zombie, 64 * 10), static_cast<int>(64 * 10 * permille / 1000));
 	EXPECT_EQ(zombie.minDamage, zombie.data().minDamage);
@@ -258,6 +258,26 @@ TEST_F(Poe2MonsterLevelsTest, HitsFollowTheTableAndThe255CapIsGone)
 	const int scaled = ScaleMonsterHit(diablo, rolled);
 	EXPECT_EQ(scaled, static_cast<int>(int64_t { rolled } * (int64_t { MonsterLevelDamage10(69) } * 200 * 2 / 90) / 1000));
 	EXPECT_GT(scaled, 255 << 6);
+}
+
+/** Plan step 14 (Curtis 2026-10-27): Act 1's monsters hit 30% softer; the next act's and the minions don't. */
+TEST_F(Poe2MonsterLevelsTest, ActOneMonstersHitThirtyPercentSofter)
+{
+	const auto tableHit = [](Monster &monster) {
+		const int sum = monster.data().minDamage + monster.data().maxDamage;
+		return int64_t { MonsterLevelDamage10(13) } * MonsterTypeRow(monster.type().type).damagePercent * 2 / sum;
+	};
+	// Catacombs 4 (area 13) and Caves 1 (area 14): the same zombie, the table's hit at 70% and at 100%.
+	Monster act1 = MakeMonster(MT_NZOMBIE);
+	ASSERT_TRUE(ApplyPoe2MonsterLife(act1, 5));
+	ASSERT_EQ(act1.level(DIFF_NORMAL), 13U);
+	EXPECT_EQ(ScaleMonsterHit(act1, 1000), static_cast<int>(tableHit(act1) * 70 / 100));
+	GoTo(9, DTYPE_CAVES);
+	Monster act2 = MakeMonster(MT_NZOMBIE);
+	ASSERT_TRUE(ApplyPoe2MonsterLife(act2, 5));
+	ASSERT_EQ(act2.level(DIFF_NORMAL), 14U);
+	const int sum = act2.data().minDamage + act2.data().maxDamage;
+	EXPECT_EQ(ScaleMonsterHit(act2, 1000), static_cast<int>(int64_t { MonsterLevelDamage10(14) } * MonsterTypeRow(MT_NZOMBIE).damagePercent * 2 / sum));
 }
 
 TEST_F(Poe2MonsterLevelsTest, LachdanansNoDamageIsSafe)

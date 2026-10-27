@@ -71,7 +71,8 @@ bool ApplyPoe2MonsterLife(Monster &monster, int roll);
 
 /**
  * @brief Percent a monster's rolled hit is scaled by in POE2 mode: the table's hit at its level times its type's (or
- * unique's) damage ratio over its own data average, then Hard Hitting, the waystone's monster damage, the map boss
+ * unique's) damage ratio over its own data average, times the area's monster damage (CurrentAreaMonsterDamagePercent:
+ * 70% in Act 1), then Hard Hitting, the waystone's monster damage, the map boss
  * and encounter leaders. Its damage bytes stay its data. 100 outside POE2 mode and for the player's minions; a monster
  * whose own data average is 0 (Lachdanan) or that isn't on the tables keeps 100 before the modifiers.
  */

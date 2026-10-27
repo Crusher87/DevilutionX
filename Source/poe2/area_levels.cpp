@@ -1,5 +1,6 @@
 #include "poe2/area_levels.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <string_view>
@@ -22,12 +23,15 @@ namespace {
 
 /** @brief Normal area level by raw dungeon level; 0 where the table has no row. */
 std::array<uint8_t, NUMLEVELS> AreaByFloor {};
+/** @brief Monster damage percent by raw dungeon level (txtdata/poe2/area_levels.tsv monsterDamagePercent). */
+std::array<uint16_t, NUMLEVELS> DamagePercentByFloor {};
 
 } // namespace
 
 void LoadAreaLevels()
 {
 	AreaByFloor.fill(0);
+	DamagePercentByFloor.fill(DefaultAreaMonsterDamagePercent);
 	// The monster tables that go with the area levels; cleared outside POE2 mode too.
 	LoadMonsterLevels();
 	if (!gbIsPoe2)
@@ -45,13 +49,16 @@ void LoadAreaLevels()
 		RecordReader reader { record, Filename };
 		int floor = 0;
 		int areaLevel = 0;
+		int damagePercent = DefaultAreaMonsterDamagePercent;
 		reader.readInt("floor", floor);
 		reader.readInt("areaLevel", areaLevel);
+		reader.readInt("monsterDamagePercent", damagePercent);
 		if (floor < 1 || floor >= NUMLEVELS || areaLevel < 1 || areaLevel > UINT8_MAX) {
 			LogError("Bad area level row in {}: floor {}, area level {}", Filename, floor, areaLevel);
 			continue;
 		}
 		AreaByFloor[static_cast<size_t>(floor)] = static_cast<uint8_t>(areaLevel);
+		DamagePercentByFloor[static_cast<size_t>(floor)] = static_cast<uint16_t>(std::clamp(damagePercent, 1, 1000));
 	}
 }
 
@@ -60,6 +67,13 @@ int AreaLevelForFloor(int floor)
 	if (floor < 1 || floor >= NUMLEVELS)
 		return 0;
 	return AreaByFloor[static_cast<size_t>(floor)];
+}
+
+int AreaMonsterDamagePercentForFloor(int floor)
+{
+	if (floor < 1 || floor >= NUMLEVELS)
+		return DefaultAreaMonsterDamagePercent;
+	return DamagePercentByFloor[static_cast<size_t>(floor)];
 }
 
 int AreaFloor()
@@ -98,6 +112,15 @@ int CurrentAreaLevel(int difficulty)
 int CurrentAreaLevel()
 {
 	return CurrentAreaLevel(sgGameInitInfo.nDifficulty);
+}
+
+int CurrentAreaMonsterDamagePercent()
+{
+	if (!gbIsPoe2 || sgGameInitInfo.nDifficulty != DIFF_NORMAL || ActiveMapTier() > 0)
+		return DefaultAreaMonsterDamagePercent;
+	if (!setlevel && leveltype == DTYPE_TOWN)
+		return DefaultAreaMonsterDamagePercent;
+	return AreaMonsterDamagePercentForFloor(AreaFloor());
 }
 
 int Poe2MonsterLevel(const Monster &monster, int difficulty)

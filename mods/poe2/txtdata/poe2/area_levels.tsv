@@ -1,25 +1,25 @@
-floor	areaLevel	act	name
-1	2	1	Cathedral 1
-2	4	1	Cathedral 2
-3	5	1	Cathedral 3
-4	7	1	Cathedral 4
-5	8	1	Catacombs 1
-6	10	1	Catacombs 2
-7	11	1	Catacombs 3
-8	13	1	Catacombs 4
-9	14	2	Caves 1
-10	16	2	Caves 2
-11	17	2	Caves 3
-12	19	2	Caves 4
-17	20	2	Hive 1
-18	22	2	Hive 2
-19	23	2	Hive 3
-20	25	2	Hive 4
-21	26	3	Crypt 1
-22	28	3	Crypt 2
-23	29	3	Crypt 3
-24	31	3	Crypt 4
-13	32	3	Hell 1
-14	34	3	Hell 2
-15	36	3	Hell 3
-16	37	3	Hell 4
+floor	areaLevel	act	name	monsterDamagePercent
+1	2	1	Cathedral 1	70
+2	4	1	Cathedral 2	70
+3	5	1	Cathedral 3	70
+4	7	1	Cathedral 4	70
+5	8	1	Catacombs 1	70
+6	10	1	Catacombs 2	70
+7	11	1	Catacombs 3	70
+8	13	1	Catacombs 4	70
+9	14	2	Caves 1	100
+10	16	2	Caves 2	100
+11	17	2	Caves 3	100
+12	19	2	Caves 4	100
+17	20	2	Hive 1	100
+18	22	2	Hive 2	100
+19	23	2	Hive 3	100
+20	25	2	Hive 4	100
+21	26	3	Crypt 1	100
+22	28	3	Crypt 2	100
+23	29	3	Crypt 3	100
+24	31	3	Crypt 4	100
+13	32	3	Hell 1	100
+14	34	3	Hell 2	100
+15	36	3	Hell 3	100
+16	37	3	Hell 4	100

@@ -214,6 +214,43 @@ TEST_F(Poe2AreaLevelsTest, MultiplayerIgnoresMapTier)
 	EXPECT_EQ(MakeMonster(MT_BLOODCLW).level(DIFF_NORMAL), 32U);
 }
 
+/** Plan step 14 (Curtis 2026-10-27): Act 1's floors (areas 2-13) hit at 70% on Normal, everything else at 100%. */
+TEST_F(Poe2AreaLevelsTest, ActOneMonstersHitSofter)
+{
+	for (int floor = 1; floor <= 8; floor++)
+		EXPECT_EQ(AreaMonsterDamagePercentForFloor(floor), 70) << floor;
+	for (const int floor : { 9, 12, 13, 16, 17, 20, 21, 24 })
+		EXPECT_EQ(AreaMonsterDamagePercentForFloor(floor), 100) << floor;
+	EXPECT_EQ(AreaMonsterDamagePercentForFloor(0), 100);
+	EXPECT_EQ(AreaMonsterDamagePercentForFloor(99), 100);
+
+	GoTo(1, DTYPE_CATHEDRAL);
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 70);
+	GoTo(8, DTYPE_CATACOMBS);
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 70);
+	GoTo(9, DTYPE_CAVES);
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 100);
+	// The Skeleton King's lair is an Act 1 floor.
+	GoToQuestLevel(SL_SKELKING, Q_SKELKING, 3);
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 70);
+	// Nightmare's Cathedral is area 17, past Act 1.
+	GoTo(1, DTYPE_CATHEDRAL);
+	sgGameInitInfo.nDifficulty = DIFF_NIGHTMARE;
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 100);
+	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+	// Maps and town.
+	MyPlayer->poe2.mapTier = 1;
+	MyPlayer->poe2.mapLevel = 1;
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 100);
+	MyPlayer->poe2.mapTier = 0;
+	GoTo(0, DTYPE_TOWN);
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 100);
+	// Diablo mode.
+	GoTo(1, DTYPE_CATHEDRAL);
+	gbIsPoe2 = false;
+	EXPECT_EQ(CurrentAreaMonsterDamagePercent(), 100);
+}
+
 TEST_F(Poe2AreaLevelsTest, DiabloModeLevelUnchanged)
 {
 	gbIsPoe2 = false;
