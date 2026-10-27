@@ -796,6 +796,8 @@ struct Poe2PlayerData {
 	uint8_t dashSkillTicks = 0;
 	/** @brief Where the current dash ends: the skill lands as soon as the hero stands there (not saved). */
 	Point dashEnd {};
+	/** @brief How far the current dash goes, in percent of the skill's full length, for its added time (not saved). */
+	uint8_t dashDistancePercent = 0;
 	/** @brief Game ticks left of Battle Cry's empowered melee hits (not saved). */
 	uint8_t warcryTicks = 0;
 	/** @brief Game ticks Riposte stays ready after a block (not saved). */
@@ -821,6 +823,8 @@ struct Poe2PlayerData {
 	uint8_t volleyTicks = 0;
 	int16_t volleyTargetX = 0;
 	int16_t volleyTargetY = 0;
+	/** @brief Hits a per-hit skill landed, one a use (PerHitBurst): which side an ember springs from, Seven-Sided Strike's next enemy; see TakePerHitIndex (not saved). */
+	uint16_t perHitCount = 0;
 	/** @brief Game ticks the character stands still after a skill slowed by its supports (not saved). */
 	uint8_t recoveryTicks = 0;
 	/** @brief Skill whose cast animation is playing; it goes off on castFrame (not saved). */
@@ -971,10 +975,12 @@ struct Poe2PlayerData {
 		dashSkill = WeaponSkill::None;
 		dashSkillTicks = 0;
 		dashEnd = {};
+		dashDistancePercent = 0;
 		warcryTicks = 0;
 		volleySkill = WeaponSkill::None;
 		volleyShotsLeft = 0;
 		volleyShotsFired = 0;
+		perHitCount = 0;
 		volleyTicks = 0;
 		recoveryTicks = 0;
 		castSkill = WeaponSkill::None;

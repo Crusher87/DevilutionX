@@ -250,10 +250,9 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 	if (player._pmode == PM_ATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
 	if (gbIsPoe2) {
-		// POE2 Mashup: the swing takes the weapon's attack time (Double Swing's strike, its share of it).
-		uint32_t time = AttackTime(player, AttackSkillSlot(player, player.poe2.activeSkill));
-		if (player.poe2.activeSkill == WeaponSkill::Flurry)
-			time = FlurryStrikeTime(time, player._pAFrames, /*backhand=*/false);
+		// POE2 Mashup: the swing takes the skill's attack time; Fists of Thunder's bursting strike takes its finisher's.
+		const SkillStep step = player.poe2.activeSkill == WeaponSkill::FistsOfThunder && FistsOfThunderNextHitBursts(player) ? SkillStep::Finisher : SkillStep::Main;
+		const uint32_t time = SkillUseTime(player, AttackSkillSlot(player, player.poe2.activeSkill), /*castAnimation=*/false, step);
 		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
 	} else {
 		const int8_t skippedAnimationFrames = MeleeAttackSkippedFrames(player, player.poe2.activeSkill, includesFirstFrame);
@@ -280,8 +279,8 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 	if (player._pmode == PM_RATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
 	if (gbIsPoe2) {
-		// POE2 Mashup: the shot takes the weapon's attack time.
-		const uint32_t time = AttackTime(player, AttackSkillSlot(player, player.poe2.activeSkill));
+		// POE2 Mashup: the shot takes the skill's attack time; the staff bolt is a cast, timed as one.
+		const uint32_t time = SkillUseTime(player, AttackSkillSlot(player, player.poe2.activeSkill), /*castAnimation=*/false);
 		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
 	} else {
 		const int8_t skippedAnimationFrames = RangedAttackSkippedFrames(player, includesFirstFrame);
@@ -1098,8 +1097,8 @@ bool DoAttack(Player &player)
 			if (target != nullptr && !CanTalkToMonst(*target) && target->position.old == front && !target->hasNoLife()) {
 				player.poe2.flurryStrike = 1;
 				const auto flags = static_cast<AnimationDistributionFlags>(AnimationDistributionFlags::ProcessAnimationPending | AnimationDistributionFlags::RepeatedAction);
-				// The rest of the skill's attack time.
-				const uint32_t time = FlurryStrikeTime(AttackTime(player, SkillSlot::ForAttack(WeaponSkill::Flurry)), player._pAFrames, /*backhand=*/true);
+				// The backhand's own attack time.
+				const uint32_t time = SkillUseTime(player, SkillSlot::ForAttack(WeaponSkill::Flurry), /*castAnimation=*/false, SkillStep::Backhand);
 				NewPlrTimedAnim(player, player_graphic::Attack, player._pdir, flags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
 				return false;
 			}
@@ -1321,6 +1320,17 @@ void DamageArmor(Player &player)
 	CalcPlrInv(player, true);
 }
 
+/** @brief The skill's animation is over: the hero stands again, facing where a spin started. */
+void EndSkillCast(Player &player)
+{
+	const WeaponSkill skill = player.poe2.castSkill;
+	player.poe2.castSkill = WeaponSkill::None;
+	if (SpinsWhileStriking(skill))
+		player._pdir = static_cast<Direction>(player.poe2.spinFrom);
+	StartStand(player, player._pdir);
+	ClearStateVariables(player);
+}
+
 /** @brief POE2 Mashup: a skill's own animation, which plays as PM_SPELL (see BeginSkillAnimation). */
 bool DoSkillCast(Player &player)
 {
@@ -1336,11 +1346,7 @@ bool DoSkillCast(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
-		player.poe2.castSkill = WeaponSkill::None;
-		if (SpinsWhileStriking(skill))
-			player._pdir = static_cast<Direction>(player.poe2.spinFrom);
-		StartStand(player, player._pdir);
-		ClearStateVariables(player);
+		EndSkillCast(player);
 		return true;
 	}
 	return false;
@@ -1884,6 +1890,14 @@ void GetPlayerGraphicsPath(std::string_view path, std::string_view prefix, std::
 }
 
 } // namespace
+
+bool FinishSkillCast(Player &player)
+{
+	if (player._pmode != PM_SPELL || player.poe2.castSkill == WeaponSkill::None || !player.AnimInfo.isLastFrame())
+		return false;
+	EndSkillCast(player);
+	return true;
+}
 
 int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame)
 {
@@ -2619,7 +2633,7 @@ void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, Animation
 	player.AnimInfo.setNewAnimation(sprites, numberOfFrames, ticksPerFrame, flags, numSkippedFrames, distributeFramesBeforeFrame, static_cast<uint8_t>(previewShownGameTickFragments));
 }
 
-void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks)
+void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks, int ticksToAction)
 {
 	LoadPlrGFX(player, graphic);
 
@@ -2635,7 +2649,7 @@ void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, Anim
 	int8_t numberOfFrames;
 	int8_t ticksPerFrame;
 	player.getAnimationFramesAndTicksPerFrame(graphic, numberOfFrames, ticksPerFrame);
-	const int toAction = ActionTicksToActionFrame(ticks, actionFrame, numberOfFrames);
+	const int toAction = ticksToAction > 0 ? std::clamp(ticksToAction, 2, std::max(ticks - 1, 2)) : ActionTicksToActionFrame(ticks, actionFrame, numberOfFrames);
 	player.AnimInfo.setTimedAnimation(sprites, numberOfFrames, actionFrame, static_cast<int8_t>(toAction), static_cast<int8_t>(std::max(ticks - toAction, 1)), flags, static_cast<uint8_t>(previewShownGameTickFragments));
 }
 
@@ -3555,11 +3569,9 @@ void ProcessPlayers()
 				// (Curtis 2026-10-22: Dashing Strike stood about a second before it struck).
 				const bool arrived = player.position.tile == player.poe2.dashEnd && player.walkpath[0] == WALK_NONE;
 				if (player._pmode == PM_STAND && (arrived || !player.poe2.isDodging())) {
-					player.poe2.dashSkillTicks = 0;
-					player.poe2.dodgeTicks = 0;
 					// Land with a swing; the skill hits on the swing's hit frame, which comes quickly, as the hero arrives
 					// (a spinning skill still plays its whole spin).
-					BeginSkillAnimation(player, player.poe2.dashSkill, player_graphic::Attack, player.position.tile + player._pdir, !SpinsWhileStriking(player.poe2.dashSkill));
+					LandDashSkill(player);
 				} else if (--player.poe2.dashSkillTicks == 0) {
 					player.poe2.dashSkill = WeaponSkill::None;
 				}

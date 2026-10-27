@@ -50,6 +50,9 @@ DefaultAttack AttackForHands(const Player &player, const Item &left, const Item 
 	case ItemType::Axe:
 		return DefaultAttack::AxeChop;
 	case ItemType::Mace:
+		// POE2 Mashup: a sceptre is a caster's focus, not a club; it channels the staff bolt.
+		if (gbIsPoe2 && ItemGrantsSpirit(*weapon))
+			return DefaultAttack::StaffBolt;
 		return DefaultAttack::MaceSmash;
 	case ItemType::Bow:
 		return DefaultAttack::BowShot;
@@ -114,6 +117,11 @@ bool IsRangedDefaultAttack(DefaultAttack attack)
 bool FiresStaffBolt(const Player &player)
 {
 	return gbIsPoe2 && DefaultAttackFor(player) == DefaultAttack::StaffBolt;
+}
+
+bool AttacksAtRange(const Player &player)
+{
+	return player.UsesRangedWeapon() || FiresStaffBolt(player);
 }
 
 bool FightsWithBareFists(const Player &player)

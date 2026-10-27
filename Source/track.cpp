@@ -21,6 +21,7 @@
 #include "objects.h"
 #include "player.h"
 #include "poe2/aim.hpp"
+#include "poe2/default_attack.hpp"
 #include "stores.h"
 
 namespace devilution {
@@ -154,7 +155,8 @@ void RepeatPlayerAction()
 	if (!myPlayer.CanChangeAction())
 		return;
 
-	const bool rangedAttack = myPlayer.UsesRangedWeapon();
+	// A bow, or the staff bolt of a caster's staff or a sceptre.
+	const bool rangedAttack = AttacksAtRange(myPlayer);
 	switch (LastPlayerAction) {
 	case PlayerActionType::Attack:
 		if (InDungeonBounds(cursPosition)) {

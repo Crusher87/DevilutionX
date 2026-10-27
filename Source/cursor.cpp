@@ -44,6 +44,7 @@
 #include "options.h"
 #include "panels/skills_panel.hpp"
 #include "poe2/aim.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stacking.hpp"
@@ -133,12 +134,12 @@ bool TrySelectMonster(bool flipflag, Point tile, tl::function_ref<bool(const Mon
 }
 
 /**
- * @brief POE2 Mashup: with a bow, a click just beside a monster picks it, so a near miss still shoots it (Curtis 2026-10-20).
+ * @brief POE2 Mashup: with a bow (or the staff bolt), a click just beside a monster picks it, so a near miss still shoots it (Curtis 2026-10-20).
  * The nearest monster whose body (a line from its feet up to its head on screen) is within a short reach of the cursor.
  */
 bool TrySelectMonsterNearCursor()
 {
-	if (!gbIsPoe2 || leveltype == DTYPE_TOWN || pcurs != CURSOR_HAND || MyPlayer == nullptr || !MyPlayer->UsesRangedWeapon())
+	if (!gbIsPoe2 || leveltype == DTYPE_TOWN || pcurs != CURSOR_HAND || MyPlayer == nullptr || !AttacksAtRange(*MyPlayer))
 		return false;
 	float cursorX;
 	float cursorY;

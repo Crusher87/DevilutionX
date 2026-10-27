@@ -49,6 +49,7 @@
 #include "panels/spell_icons.hpp"
 #include "panels/spell_list.hpp"
 #include "panels/ui_panels.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/passive_tree.hpp"
@@ -416,7 +417,7 @@ void FindMeleeTarget()
 
 void CheckMonstersNearby()
 {
-	if (MyPlayer->UsesRangedWeapon() || HasRangedSpell()) {
+	if (AttacksAtRange(*MyPlayer) || HasRangedSpell()) {
 		FindRangedTarget();
 		return;
 	}
@@ -449,7 +450,7 @@ void CheckPlayerNearby()
 		    || (player.hasNoLife() && spl != SpellID::Resurrect))
 			continue;
 
-		if (myPlayer.UsesRangedWeapon() || HasRangedSpell() || spl == SpellID::HealOther) {
+		if (AttacksAtRange(myPlayer) || HasRangedSpell() || spl == SpellID::HealOther) {
 			newDdistance = GetDistanceRanged(player.position.future);
 		} else {
 			newDdistance = GetDistance(player.position.future, distance);
@@ -575,13 +576,13 @@ void Interact()
 			position = Monsters[pcursmonst].position.tile;
 		}
 
-		NetSendCmdLoc(MyPlayerId, true, myPlayer.UsesRangedWeapon() ? CMD_RATTACKXY : CMD_SATTACKXY, position);
+		NetSendCmdLoc(MyPlayerId, true, AttacksAtRange(myPlayer) ? CMD_RATTACKXY : CMD_SATTACKXY, position);
 		LastPlayerAction = PlayerActionType::Attack;
 		return;
 	}
 
 	if (pcursmonst != -1) {
-		if (!myPlayer.UsesRangedWeapon() || CanTalkToMonst(Monsters[pcursmonst])) {
+		if (!AttacksAtRange(myPlayer) || CanTalkToMonst(Monsters[pcursmonst])) {
 			NetSendCmdParam1(true, CMD_ATTACKID, pcursmonst);
 		} else {
 			NetSendCmdParam1(true, CMD_RATTACKID, pcursmonst);
@@ -591,7 +592,7 @@ void Interact()
 	}
 
 	if (leveltype != DTYPE_TOWN && PlayerUnderCursor != nullptr && !PlayerUnderCursor->hasNoLife() && !myPlayer.friendlyMode) {
-		NetSendCmdParam1(true, myPlayer.UsesRangedWeapon() ? CMD_RATTACKPID : CMD_ATTACKPID, PlayerUnderCursor->getId());
+		NetSendCmdParam1(true, AttacksAtRange(myPlayer) ? CMD_RATTACKPID : CMD_ATTACKPID, PlayerUnderCursor->getId());
 		LastPlayerAction = PlayerActionType::AttackPlayerTarget;
 		return;
 	}

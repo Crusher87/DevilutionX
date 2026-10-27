@@ -687,6 +687,8 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	// The cast effects were played by PlaySkillEffects just before.
 	CastResult result;
 	const Point tile = player.position.tile;
+	// A per-hit skill (POE2 Mashup) lands one hit of its burst a use, each for PerHitDamagePercent of a hit.
+	const int perHit = PerHitBurst(data.skill) > 0 ? PerHitDamagePercent(player, data.skill) : 0;
 	switch (data.shape) {
 	case Strike:
 		if (Monster *monster = MonsterInFrontOf(player); monster != nullptr)
@@ -718,6 +720,10 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			Monster *monster = MonsterInFrontOf(player);
 			if (monster == nullptr)
 				break;
+			if (perHit > 0) {
+				WeaponHit(player, *monster, data, data.damagePercent * perHit / 100, result);
+				break;
+			}
 			WeaponHit(player, *monster, data, data.damagePercent, result);
 		}
 		break;
@@ -729,6 +735,12 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		break;
 	}
 	case Stream:
+		if (perHit > 0) {
+			TableSkillData shot = data;
+			shot.damagePercent = static_cast<int16_t>(std::min(data.damagePercent * perHit / 100, static_cast<int>(INT16_MAX)));
+			FireTableShot(player, shot, target, TakePerHitIndex(player));
+			break;
+		}
 		StartSkillVolley(player, data.skill, target, data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill)) + SupportExtraProjectileCount(player, slot));
 		break;
 	case Burst:
@@ -816,6 +828,19 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		});
 		if (targets.size() > data.count)
 			targets.resize(data.count);
+		// Per hit: one strike a use, at the nearest enemies in turn. With fewer of them than the burst, each strike deals
+		// their share of it, so each enemy takes what the whole use dealt it, as often as before.
+		if (perHit > 0 && !targets.empty()) {
+			const int count = static_cast<int>(targets.size());
+			const int index = TakePerHitIndex(player);
+			Monster &monster = *targets[index % count];
+			AddVisualEffect(monster.position.tile, MissileGraphicID::Etherealize, 0);
+			WeaponHit(player, monster, data, data.damagePercent * perHit / 100 * count / std::max<int>(data.count, 1), result);
+			// A full set of strikes builds the combo one use built.
+			if ((index + 1) % std::max<int>(data.count, 1) != 0)
+				data.flags = static_cast<uint16_t>(data.flags & ~TF_Combo);
+			break;
+		}
 		int delay = 0;
 		for (Monster *monster : targets) {
 			AddVisualEffect(monster->position.tile, MissileGraphicID::Etherealize, delay);

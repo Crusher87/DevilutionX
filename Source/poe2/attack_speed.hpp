@@ -15,12 +15,18 @@
  * The tree's and the gear's speed, the uniques', War Banner's and the auras' were percents already.
  *
  * Skills' own speeds and spells' cast times come from txtdata/poe2/skill_speed.tsv (see SkillSpeedKey); a skill with no
- * row attacks at 100% and a spell keeps the time a held cast took before: its animation up to the cast frame.
+ * row attacks at 100% and a spell keeps the time a held cast took before: its animation up to the cast frame. A row
+ * may instead give a fixed attack time (attack_time_s: POE2's shield skills, which ignore the weapon but not increased
+ * attack speed), flat time added after the speed (added_ms: Leap Slam's 650 ms, Comet's 1000), and time added by how
+ * far a dash went (distance_ms, at its full length). A skill in several steps has a row for each step after the first,
+ * keyed "Skill:step" (Double Swing's backhand, Fists of Thunder's finisher; see SkillStep).
  */
 #pragma once
 
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "poe2/player_data.hpp"
 
@@ -53,8 +59,8 @@ constexpr int DefaultOneHandMaceAps = 110;
 constexpr int DefaultTwoHandMaceAps = 95;
 constexpr int DefaultBowAps = 130;
 constexpr int DefaultStaffAps = 135;
-/** @brief Bare hands (and a shield bash): POE2's unarmed attacks. */
-constexpr int UnarmedAps = 140;
+/** @brief Bare hands (and a shield bash): POE2's unarmed attacks, 1.65 a second (PoB2's data.unarmedWeaponData). */
+constexpr int UnarmedAps = 165;
 
 /** @brief The weapon's base attacks per second in hundredths: its POE2 base's, else its kind's default; 0 for anything else. */
 int ItemBaseAttacksPerSecond(const Item &item);
@@ -70,19 +76,57 @@ int IncreasedAttackSpeedPercent(const Player &player, SkillSlot skill);
 /** @brief The hero's increased cast speed for the skill, in percent; a learned spell takes its supports' too. */
 int IncreasedCastSpeedPercent(const Player &player, SkillSlot skill, bool learnedSpell = true);
 
+/** @brief A step of a skill that strikes in steps, each timed by its own row ("Flurry:backhand"); Main is the skill's own row. */
+enum class SkillStep : uint8_t {
+	Main,
+	/** Double Swing's second strike. */
+	Backhand,
+	/** Fists of Thunder's every third strike, the one that bursts with lightning. */
+	Finisher,
+};
+
+/** @brief A row of skill_speed.tsv. */
+struct SkillSpeedRow {
+	/** Uses per second in percent of the weapon's attacks per second. */
+	int attackPercent = 100;
+	/** A cast time in milliseconds, which increased cast speed shortens; 0 for none. */
+	int castMs = 0;
+	/** A fixed attack time in milliseconds instead of the weapon's, which increased attack speed shortens; 0 for none. */
+	int attackMs = 0;
+	/** Milliseconds added after the speed, which no speed shortens. */
+	int addedMs = 0;
+	/** Milliseconds added at a dash's full length, less for a shorter one. */
+	int distanceMs = 0;
+};
+
 /** @brief The skill's attack speed from skill_speed.tsv, in percent of the weapon's (100 without a row). */
-int SkillAttackSpeedPercent(SkillSlot skill);
+int SkillAttackSpeedPercent(SkillSlot skill, SkillStep step = SkillStep::Main);
 /** @brief The skill's base cast time from skill_speed.tsv in milliseconds, or 0 without one. */
 int SkillCastTimeMs(SkillSlot skill);
-/** @brief The skill's key in skill_speed.tsv: Flurry for a weapon skill, Spell Firebolt for a spell, Default BowShot for a default attack. */
-std::string SkillSpeedKey(SkillSlot skill);
+/** @brief The skill's row in skill_speed.tsv (the step's, else the skill's), or nullptr without one. */
+const SkillSpeedRow *FindSkillSpeedRow(SkillSlot skill, SkillStep step = SkillStep::Main);
+/** @brief The skill's key in skill_speed.tsv: Flurry for a weapon skill, Spell Firebolt for a spell, Default BowShot for a default attack; Flurry:backhand for a step. */
+std::string SkillSpeedKey(SkillSlot skill, SkillStep step = SkillStep::Main);
 
-/** @brief One attack of the skill (Double Swing: both strikes), in 1/65536 game ticks. */
-uint32_t AttackTime(const Player &player, SkillSlot skill);
-/** @brief One cast of the skill, in 1/65536 game ticks; it plays the spell casting animation (a spell or a spell-like skill). */
+/** @brief One attack of the skill or of its step, with any added time, in 1/65536 game ticks. */
+uint32_t AttackTime(const Player &player, SkillSlot skill, SkillStep step = SkillStep::Main);
+/** @brief One cast of the skill, with any added time, in 1/65536 game ticks; it plays the spell casting animation (a spell or a spell-like skill). */
 uint32_t CastTime(const Player &player, SkillSlot skill, bool learnedSpell = true);
-/** @brief Double Swing's strike or backhand: their share of the use, by the animation frames each plays. */
-uint32_t FlurryStrikeTime(uint32_t useTime, int attackFrames, bool backhand);
+/**
+ * @brief Whether a use of the skill is timed as a cast (its cast time and cast speed) rather than an attack: as its row
+ * says (a cast time and no fixed attack time), else a spell, else castAnimation (a skill playing a casting animation).
+ */
+bool IsCastTimed(SkillSlot skill, bool castAnimation);
+/**
+ * @brief One use of a weapon skill or default attack, or of its step, as the game times it: AttackTime or CastTime (see
+ * IsCastTimed), with the row's distance time for a dash that went distancePercent of its full length.
+ */
+uint32_t SkillUseTime(const Player &player, SkillSlot skill, bool castAnimation, SkillStep step = SkillStep::Main, int distancePercent = 0);
+/**
+ * @brief How much longer than the skill's own time its use takes because no action is quicker than MinActionTicks, in
+ * percent: 100 unless SkillUseTime was raised to the least.
+ */
+int ShortestActionPercent(const Player &player, SkillSlot skill, bool castAnimation, SkillStep step = SkillStep::Main);
 
 /** @brief The whole game ticks the next attack or cast takes, carrying the fraction left over to the one after. */
 int TakeActionTicks(Player &player, uint32_t time);
@@ -94,5 +138,10 @@ double ActionSeconds(uint32_t time);
 void LoadSkillSpeedData();
 /** @brief Sets a skill's row (by SkillSpeedKey) as if skill_speed.tsv had it, for tests and tools; castMs 0 for the default cast time. */
 void SetSkillSpeed(const std::string &key, int attackPercent, int castMs);
+void SetSkillSpeed(const std::string &key, const SkillSpeedRow &row);
+/** @brief The rows of skill_speed.tsv whose key names no skill or step (logged when it loads); empty when all are known. */
+std::vector<std::string> UnknownSkillSpeedKeys();
+/** @brief Whether a skill_speed.tsv key names a weapon skill, a default attack or a spell, or one's step. */
+bool IsKnownSkillSpeedKey(std::string_view key);
 
 } // namespace devilution

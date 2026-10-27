@@ -45,6 +45,8 @@ int ResourceAttackDamagePercent(const Player &player);
 void GainFrenzyCharge(Player &player);
 /** @brief Adds a point of Combo; returns the new Combo. */
 int AddCombo(Player &player);
+/** @brief Whether the hero's next Fists of Thunder hit is the one that bursts with lightning, its finisher. */
+bool FistsOfThunderNextHitBursts(const Player &player);
 void AddRage(Player &player, int rage);
 /** @brief A melee skill hit a monster: Battle Rage builds Rage. */
 void OnSkillMeleeHit(Player &player);
