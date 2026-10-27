@@ -931,6 +931,14 @@ std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod)
 	return lines;
 }
 
+std::vector<std::string> AffixViewLines(std::string_view side, const std::vector<std::string> &stats, int tier)
+{
+	std::vector<std::string> lines;
+	for (size_t i = 0; i < stats.size(); i++)
+		lines.push_back(StrCat(i == 0 ? side : std::string_view {}, "\t", stats[i], "\t", i + 1 == stats.size() ? StrCat("T", tier) : std::string {}));
+	return lines;
+}
+
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 {
 	const auto stat = [&data](Poe2ItemStat which) { return static_cast<int>(data.itemStats[static_cast<size_t>(which)]); };

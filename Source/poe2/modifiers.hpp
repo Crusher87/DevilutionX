@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace devilution {
@@ -288,6 +289,12 @@ std::vector<std::string> ItemModText(const Poe2ItemMod &mod);
  * "+8(3-10) to Armour". The tooltip adds its side (Prefix or Suffix) and tier beside the lines.
  */
 std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod);
+/**
+ * @brief One affix's lines in the Alt view, "side\tstat\ttier": the side ("Prefix" or "Suffix") once, on its first
+ * line, so the labels count the affixes, and the tier ("T3") once, on its last. A line with no side continues the
+ * affix above it: the tooltip joins a two-part (hybrid) affix's lines with a bracket.
+ */
+std::vector<std::string> AffixViewLines(std::string_view side, const std::vector<std::string> &stats, int tier);
 
 /** @brief The family of a rolled modifier, or nullptr for an empty one. */
 const ModFamily *ItemModFamily(const Poe2ItemMod &mod);

@@ -6694,7 +6694,8 @@ void PrintItemDetails(const Item &item)
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
 	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
 		// Holding Alt shows the prefixes, then the suffixes, each stat with the range it can roll and its tier at the
-		// end of the line, as compact as POE2's (Curtis 2026-10-18).
+		// end of the line, as compact as POE2's (Curtis 2026-10-18). Each affix is labelled once, so the labels count
+		// them, and a two-part affix's lines are bracketed together (Curtis 2026-10-27).
 		const bool advanced = gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0;
 		if (!advanced) {
 			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
@@ -6704,17 +6705,12 @@ void PrintItemDetails(const Item &item)
 		} else {
 			CurrentInfoLineStyle = InfoLineStyle::Affix;
 			for (const bool prefixes : { true, false }) {
-				bool first = true;
 				for (const Poe2ItemMod &mod : item._iPoe2Mods) {
 					const ModFamily *family = ItemModFamily(mod);
 					if (family == nullptr || family->prefix != prefixes)
 						continue;
-					const std::vector<std::string> lines = ItemModAdvancedText(mod);
-					for (size_t i = 0; i < lines.size(); i++) {
-						const std::string_view side = !first ? "" : prefixes ? _("Prefix") : _("Suffix");
-						AddItemInfoBoxString(StrCat(side, "\t", lines[i], "\t", i + 1 == lines.size() ? StrCat("T", mod.tier) : ""));
-						first = false;
-					}
+					for (const std::string &line : AffixViewLines(prefixes ? _("Prefix") : _("Suffix"), ItemModAdvancedText(mod), mod.tier))
+						AddItemInfoBoxString(line);
 				}
 			}
 		}
