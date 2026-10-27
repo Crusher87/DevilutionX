@@ -1,220 +1,220 @@
 name	class	identity	defense	quality	implicits	split	level	block	aps
-Heavy Hatchet	one_hand_axe	heavy		weapon			1		108
-Hatchet	one_hand_axe	balanced		weapon			1		120
-Swift Hatchet	one_hand_axe	swift		weapon			1		134
-Heavy Bearded Axe	one_hand_axe	heavy		weapon			12		108
-Bearded Axe	one_hand_axe	balanced		weapon			12		120
-Swift Bearded Axe	one_hand_axe	swift		weapon			12		134
-Heavy Raider Axe	one_hand_axe	heavy		weapon			24		108
-Raider Axe	one_hand_axe	balanced		weapon			24		120
-Swift Raider Axe	one_hand_axe	swift		weapon			24		134
-Heavy Ironcleaver	one_hand_axe	heavy		weapon			36		108
-Ironcleaver	one_hand_axe	balanced		weapon			36		120
-Swift Ironcleaver	one_hand_axe	swift		weapon			36		134
-Heavy War Axe	one_hand_axe	heavy		weapon			48		108
-War Axe	one_hand_axe	balanced		weapon			48		120
-Swift War Axe	one_hand_axe	swift		weapon			48		134
-Heavy Siege Axe	one_hand_axe	heavy		weapon			60		108
-Siege Axe	one_hand_axe	balanced		weapon			60		120
-Swift Siege Axe	one_hand_axe	swift		weapon			60		134
-Heavy Bloodiron Axe	one_hand_axe	heavy		weapon			70		108
-Bloodiron Axe	one_hand_axe	balanced		weapon			70		120
-Swift Bloodiron Axe	one_hand_axe	swift		weapon			70		134
-Heavy Kingsplitter	one_hand_axe	heavy		weapon			80		108
-Kingsplitter	one_hand_axe	balanced		weapon			80		120
-Swift Kingsplitter	one_hand_axe	swift		weapon			80		134
-Heavy Shortsword	one_hand_sword	heavy		weapon			1		122
-Shortsword	one_hand_sword	balanced		weapon			1		135
-Swift Shortsword	one_hand_sword	swift		weapon			1		151
-Heavy Leafblade	one_hand_sword	heavy		weapon			12		122
-Leafblade	one_hand_sword	balanced		weapon			12		135
-Swift Leafblade	one_hand_sword	swift		weapon			12		151
-Heavy Soldier Sword	one_hand_sword	heavy		weapon			24		122
-Soldier Sword	one_hand_sword	balanced		weapon			24		135
-Swift Soldier Sword	one_hand_sword	swift		weapon			24		151
-Heavy Falchion	one_hand_sword	heavy		weapon			36		122
-Fine Falchion	one_hand_sword	balanced		weapon			36		135
-Swift Falchion	one_hand_sword	swift		weapon			36		151
-Heavy Knightblade	one_hand_sword	heavy		weapon			48		122
-Knightblade	one_hand_sword	balanced		weapon			48		135
-Swift Knightblade	one_hand_sword	swift		weapon			48		151
-Heavy Dueling Sword	one_hand_sword	heavy		weapon			60		122
-Dueling Sword	one_hand_sword	balanced		weapon			60		135
-Swift Dueling Sword	one_hand_sword	swift		weapon			60		151
-Heavy Runed Sabre	one_hand_sword	heavy		weapon			70		122
-Runed Sabre	one_hand_sword	balanced		weapon			70		135
-Swift Runed Sabre	one_hand_sword	swift		weapon			70		151
-Heavy Imperial Edge	one_hand_sword	heavy		weapon			80		122
-Imperial Edge	one_hand_sword	balanced		weapon			80		135
-Swift Imperial Edge	one_hand_sword	swift		weapon			80		151
-Heavy Cudgel	one_hand_mace	heavy		weapon			1		99
-Cudgel	one_hand_mace	balanced		weapon			1		110
-Swift Cudgel	one_hand_mace	swift		weapon			1		123
-Heavy Flanged Mace	one_hand_mace	heavy		weapon			12		99
-Flanged Mace	one_hand_mace	balanced		weapon			12		110
-Swift Flanged Mace	one_hand_mace	swift		weapon			12		123
-Heavy War Club	one_hand_mace	heavy		weapon			24		99
-War Club	one_hand_mace	balanced		weapon			24		110
-Swift War Club	one_hand_mace	swift		weapon			24		123
-Heavy Spiked Mace	one_hand_mace	heavy		weapon			36		99
-Spiked Mace	one_hand_mace	balanced		weapon			36		110
-Swift Spiked Mace	one_hand_mace	swift		weapon			36		123
-Heavy Battle Mace	one_hand_mace	heavy		weapon			48		99
-Battle Mace	one_hand_mace	balanced		weapon			48		110
-Swift Battle Mace	one_hand_mace	swift		weapon			48		123
-Heavy Siege Hammer	one_hand_mace	heavy		weapon			60		99
-Siege Hammer	one_hand_mace	balanced		weapon			60		110
-Swift Siege Hammer	one_hand_mace	swift		weapon			60		123
-Heavy Dread Maul	one_hand_mace	heavy		weapon			70		99
-Dread Maul	one_hand_mace	balanced		weapon			70		110
-Swift Dread Maul	one_hand_mace	swift		weapon			70		123
-Heavy Judicator	one_hand_mace	heavy		weapon			80		99
-Judicator	one_hand_mace	balanced		weapon			80		110
-Swift Judicator	one_hand_mace	swift		weapon			80		123
-Heavy Woodsman's Axe	two_hand_axe	heavy		weapon			1		95
-Woodsman's Axe	two_hand_axe	balanced		weapon			1		105
-Swift Woodsman's Axe	two_hand_axe	swift		weapon			1		118
-Heavy Execution Axe	two_hand_axe	heavy		weapon			12		95
-Execution Axe	two_hand_axe	balanced		weapon			12		105
-Swift Execution Axe	two_hand_axe	swift		weapon			12		118
-Heavy Broad Axe	two_hand_axe	heavy		weapon			24		95
-Fine Broad Axe	two_hand_axe	balanced		weapon			24		105
-Swift Broad Axe	two_hand_axe	swift		weapon			24		118
-Heavy Headsman Axe	two_hand_axe	heavy		weapon			36		95
-Headsman Axe	two_hand_axe	balanced		weapon			36		105
-Swift Headsman Axe	two_hand_axe	swift		weapon			36		118
-Heavy Great Cleaver	two_hand_axe	heavy		weapon			48		95
-Great Cleaver	two_hand_axe	balanced		weapon			48		105
-Swift Great Cleaver	two_hand_axe	swift		weapon			48		118
-Heavy Siegebreaker	two_hand_axe	heavy		weapon			60		95
-Siegebreaker	two_hand_axe	balanced		weapon			60		105
-Swift Siegebreaker	two_hand_axe	swift		weapon			60		118
-Heavy Bloodoak Axe	two_hand_axe	heavy		weapon			70		95
-Bloodoak Axe	two_hand_axe	balanced		weapon			70		105
-Swift Bloodoak Axe	two_hand_axe	swift		weapon			70		118
-Heavy Worldsplitter	two_hand_axe	heavy		weapon			80		95
-Worldsplitter	two_hand_axe	balanced		weapon			80		105
-Swift Worldsplitter	two_hand_axe	swift		weapon			80		118
-Heavy Longsword	two_hand_sword	heavy		weapon			1		103
-Longsword	two_hand_sword	balanced		weapon			1		115
-Swift Longsword	two_hand_sword	swift		weapon			1		129
-Heavy Greatblade	two_hand_sword	heavy		weapon			12		103
-Greatblade	two_hand_sword	balanced		weapon			12		115
-Swift Greatblade	two_hand_sword	swift		weapon			12		129
-Heavy Mercenary Blade	two_hand_sword	heavy		weapon			24		103
-Mercenary Blade	two_hand_sword	balanced		weapon			24		115
-Swift Mercenary Blade	two_hand_sword	swift		weapon			24		129
-Heavy Claymore	two_hand_sword	heavy		weapon			36		103
-Fine Claymore	two_hand_sword	balanced		weapon			36		115
-Swift Claymore	two_hand_sword	swift		weapon			36		129
-Heavy War Greatsword	two_hand_sword	heavy		weapon			48		103
-War Greatsword	two_hand_sword	balanced		weapon			48		115
-Swift War Greatsword	two_hand_sword	swift		weapon			48		129
-Heavy Duelist Greatblade	two_hand_sword	heavy		weapon			60		103
-Duelist Greatblade	two_hand_sword	balanced		weapon			60		115
-Swift Duelist Greatblade	two_hand_sword	swift		weapon			60		129
-Heavy Runed Greatsword	two_hand_sword	heavy		weapon			70		103
-Runed Greatsword	two_hand_sword	balanced		weapon			70		115
-Swift Runed Greatsword	two_hand_sword	swift		weapon			70		129
-Heavy Sovereign Blade	two_hand_sword	heavy		weapon			80		103
-Sovereign Blade	two_hand_sword	balanced		weapon			80		115
-Swift Sovereign Blade	two_hand_sword	swift		weapon			80		129
-Heavy Sledge	two_hand_mace	heavy		weapon			1		85
-Sledge	two_hand_mace	balanced		weapon			1		95
-Swift Sledge	two_hand_mace	swift		weapon			1		106
-Heavy Great Mace	two_hand_mace	heavy		weapon			12		85
-Great Mace	two_hand_mace	balanced		weapon			12		95
-Swift Great Mace	two_hand_mace	swift		weapon			12		106
-Heavy War Mallet	two_hand_mace	heavy		weapon			24		85
-War Mallet	two_hand_mace	balanced		weapon			24		95
-Swift War Mallet	two_hand_mace	swift		weapon			24		106
-Heavy Stonebreaker	two_hand_mace	heavy		weapon			36		85
-Stonebreaker	two_hand_mace	balanced		weapon			36		95
-Swift Stonebreaker	two_hand_mace	swift		weapon			36		106
-Heavy Battle Hammer	two_hand_mace	heavy		weapon			48		85
-Battle Hammer	two_hand_mace	balanced		weapon			48		95
-Swift Battle Hammer	two_hand_mace	swift		weapon			48		106
-Heavy Siege Maul	two_hand_mace	heavy		weapon			60		85
-Siege Maul	two_hand_mace	balanced		weapon			60		95
-Swift Siege Maul	two_hand_mace	swift		weapon			60		106
-Heavy Titan Hammer	two_hand_mace	heavy		weapon			70		85
-Titan Hammer	two_hand_mace	balanced		weapon			70		95
-Swift Titan Hammer	two_hand_mace	swift		weapon			70		106
-Heavy Cataclysm	two_hand_mace	heavy		weapon			80		85
-Cataclysm	two_hand_mace	balanced		weapon			80		95
-Swift Cataclysm	two_hand_mace	swift		weapon			80		106
-Heavy Shiv	dagger	heavy		weapon			1		135
-Shiv	dagger	balanced		weapon			1		150
-Swift Shiv	dagger	swift		weapon			1		168
-Heavy Dirk	dagger	heavy		weapon			12		135
-Dirk	dagger	balanced		weapon			12		150
-Swift Dirk	dagger	swift		weapon			12		168
-Heavy Rondel	dagger	heavy		weapon			24		135
-Rondel	dagger	balanced		weapon			24		150
-Swift Rondel	dagger	swift		weapon			24		168
-Heavy Stiletto	dagger	heavy		weapon			36		135
-Stiletto	dagger	balanced		weapon			36		150
-Swift Stiletto	dagger	swift		weapon			36		168
-Heavy Kris	dagger	heavy		weapon			48		135
-Kris	dagger	balanced		weapon			48		150
-Swift Kris	dagger	swift		weapon			48		168
-Heavy Assassin Dirk	dagger	heavy		weapon			60		135
-Assassin Dirk	dagger	balanced		weapon			60		150
-Swift Assassin Dirk	dagger	swift		weapon			60		168
-Heavy Nightglass Knife	dagger	heavy		weapon			70		135
-Nightglass Knife	dagger	balanced		weapon			70		150
-Swift Nightglass Knife	dagger	swift		weapon			70		168
-Heavy Voidneedle	dagger	heavy		weapon			80		135
-Voidneedle	dagger	balanced		weapon			80		150
-Swift Voidneedle	dagger	swift		weapon			80		168
-Heavy Ash Staff	quarterstaff	heavy		weapon			1		122
-Ash Staff	quarterstaff	balanced		weapon			1		135
-Swift Ash Staff	quarterstaff	swift		weapon			1		151
-Heavy Banded Staff	quarterstaff	heavy		weapon			12		122
-Banded Staff	quarterstaff	balanced		weapon			12		135
-Swift Banded Staff	quarterstaff	swift		weapon			12		151
-Heavy Ironwood Staff	quarterstaff	heavy		weapon			24		122
-Ironwood Staff	quarterstaff	balanced		weapon			24		135
-Swift Ironwood Staff	quarterstaff	swift		weapon			24		151
-Heavy Battle Staff	quarterstaff	heavy		weapon			36		122
-Battle Staff	quarterstaff	balanced		weapon			36		135
-Swift Battle Staff	quarterstaff	swift		weapon			36		151
-Heavy Monk Staff	quarterstaff	heavy		weapon			48		122
-Monk Staff	quarterstaff	balanced		weapon			48		135
-Swift Monk Staff	quarterstaff	swift		weapon			48		151
-Heavy Temple Staff	quarterstaff	heavy		weapon			60		122
-Temple Staff	quarterstaff	balanced		weapon			60		135
-Swift Temple Staff	quarterstaff	swift		weapon			60		151
-Heavy Celestial Staff	quarterstaff	heavy		weapon			70		122
-Celestial Staff	quarterstaff	balanced		weapon			70		135
-Swift Celestial Staff	quarterstaff	swift		weapon			70		151
-Heavy Ascendant Staff	quarterstaff	heavy		weapon			80		122
-Ascendant Staff	quarterstaff	balanced		weapon			80		135
-Swift Ascendant Staff	quarterstaff	swift		weapon			80		151
-Heavy Short Bow	bow	heavy		weapon			1		117
-Fine Short Bow	bow	balanced		weapon			1		130
-Swift Short Bow	bow	swift		weapon			1		146
-Heavy Yew Bow	bow	heavy		weapon			12		117
-Yew Bow	bow	balanced		weapon			12		130
-Swift Yew Bow	bow	swift		weapon			12		146
-Heavy Hunting Bow	bow	heavy		weapon			24		117
-Hunting Bow	bow	balanced		weapon			24		130
-Swift Hunting Bow	bow	swift		weapon			24		146
-Heavy Recurve Bow	bow	heavy		weapon			36		117
-Recurve Bow	bow	balanced		weapon			36		130
-Swift Recurve Bow	bow	swift		weapon			36		146
-Heavy War Bow	bow	heavy		weapon			48		117
-War Bow	bow	balanced		weapon			48		130
-Swift War Bow	bow	swift		weapon			48		146
-Heavy Longbow	bow	heavy		weapon			60		117
-Longbow	bow	balanced		weapon			60		130
-Swift Longbow	bow	swift		weapon			60		146
-Heavy Runewood Bow	bow	heavy		weapon			70		117
-Runewood Bow	bow	balanced		weapon			70		130
-Swift Runewood Bow	bow	swift		weapon			70		146
-Heavy Starbow	bow	heavy		weapon			80		117
-Starbow	bow	balanced		weapon			80		130
-Swift Starbow	bow	swift		weapon			80		146
+Heavy Hatchet	one_hand_axe	heavy		weapon			1		150
+Dull Hatchet	one_hand_axe	balanced		weapon			1		150
+Swift Hatchet	one_hand_axe	swift		weapon			1		150
+Heavy Bearded Axe	one_hand_axe	heavy		weapon			10		145
+Bearded Axe	one_hand_axe	balanced		weapon			10		145
+Swift Bearded Axe	one_hand_axe	swift		weapon			10		145
+Heavy Raider Axe	one_hand_axe	heavy		weapon			26		140
+Crescent Axe	one_hand_axe	balanced		weapon			26		140
+Swift Raider Axe	one_hand_axe	swift		weapon			26		140
+Heavy Ironcleaver	one_hand_axe	heavy		weapon			33		150
+Carving Hatchet	one_hand_axe	balanced		weapon			33		150
+Swift Ironcleaver	one_hand_axe	swift		weapon			33		150
+Heavy War Axe	one_hand_axe	heavy		weapon			45		155
+Boarding Hatchet	one_hand_axe	balanced		weapon			45		155
+Swift War Axe	one_hand_axe	swift		weapon			45		155
+Heavy Siege Axe	one_hand_axe	heavy		weapon			52		150
+Fine Battle Axe	one_hand_axe	balanced		weapon			52		150
+Swift Siege Axe	one_hand_axe	swift		weapon			52		150
+Heavy Bloodiron Axe	one_hand_axe	heavy		weapon			54		150
+Profane Cleaver	one_hand_axe	balanced		weapon			54		150
+Swift Bloodiron Axe	one_hand_axe	swift		weapon			54		150
+Heavy Kingsplitter	one_hand_axe	heavy		weapon			65		150
+Dread Hatchet	one_hand_axe	balanced		weapon			65		150
+Swift Kingsplitter	one_hand_axe	swift		weapon			65		150
+Heavy Shortsword	one_hand_sword	heavy		weapon			1		155
+Shortsword	one_hand_sword	balanced		weapon			1		155
+Swift Shortsword	one_hand_sword	swift		weapon			1		155
+Heavy Leafblade	one_hand_sword	heavy		weapon			11		150
+Vampiric Blade	one_hand_sword	balanced		weapon			11		150
+Swift Leafblade	one_hand_sword	swift		weapon			11		150
+Heavy Soldier Sword	one_hand_sword	heavy		weapon			21		160
+Charred Shortsword	one_hand_sword	balanced		weapon			21		160
+Swift Soldier Sword	one_hand_sword	swift		weapon			21		160
+Heavy Falchion	one_hand_sword	heavy		weapon			33		150
+Fine Falchion	one_hand_sword	balanced		weapon			33		150
+Swift Falchion	one_hand_sword	swift		weapon			33		150
+Heavy Knightblade	one_hand_sword	heavy		weapon			50		165
+Runic Shortsword	one_hand_sword	balanced		weapon			50		165
+Swift Knightblade	one_hand_sword	swift		weapon			50		165
+Heavy Dueling Sword	one_hand_sword	heavy		weapon			52		160
+Messer	one_hand_sword	balanced		weapon			52		160
+Swift Dueling Sword	one_hand_sword	swift		weapon			52		160
+Heavy Runed Sabre	one_hand_sword	heavy		weapon			54		150
+Commander Sword	one_hand_sword	balanced		weapon			54		150
+Swift Runed Sabre	one_hand_sword	swift		weapon			54		150
+Heavy Imperial Edge	one_hand_sword	heavy		weapon			65		155
+Dark Blade	one_hand_sword	balanced		weapon			65		155
+Swift Imperial Edge	one_hand_sword	swift		weapon			65		155
+Heavy Cudgel	one_hand_mace	heavy		weapon			1		145
+Wooden Club	one_hand_mace	balanced		weapon			1		145
+Swift Cudgel	one_hand_mace	swift		weapon			1		145
+Heavy Flanged Mace	one_hand_mace	heavy		weapon			10		155
+Slim Mace	one_hand_mace	balanced		weapon			10		155
+Swift Flanged Mace	one_hand_mace	swift		weapon			10		155
+Heavy War Club	one_hand_mace	heavy		weapon			26		140
+Plated Mace	one_hand_mace	balanced		weapon			26		140
+Swift War Club	one_hand_mace	swift		weapon			26		140
+Heavy Spiked Mace	one_hand_mace	heavy		weapon			33		145
+Brigand Mace	one_hand_mace	balanced		weapon			33		145
+Swift Spiked Mace	one_hand_mace	swift		weapon			33		145
+Heavy Battle Mace	one_hand_mace	heavy		weapon			48		155
+Flared Mace	one_hand_mace	balanced		weapon			48		155
+Swift Battle Mace	one_hand_mace	swift		weapon			48		155
+Heavy Siege Hammer	one_hand_mace	heavy		weapon			59		145
+Bandit Mace	one_hand_mace	balanced		weapon			59		145
+Swift Siege Hammer	one_hand_mace	swift		weapon			59		145
+Heavy Dread Maul	one_hand_mace	heavy		weapon			72		140
+Crown Mace	one_hand_mace	balanced		weapon			72		140
+Swift Dread Maul	one_hand_mace	swift		weapon			72		140
+Heavy Judicator	one_hand_mace	heavy		weapon			77		145
+Marauding Mace	one_hand_mace	balanced		weapon			77		145
+Swift Judicator	one_hand_mace	swift		weapon			77		145
+Heavy Woodsman's Axe	two_hand_axe	heavy		weapon			1		120
+Splitting Greataxe	two_hand_axe	balanced		weapon			1		120
+Swift Woodsman's Axe	two_hand_axe	swift		weapon			1		120
+Heavy Execution Axe	two_hand_axe	heavy		weapon			16		115
+Arched Greataxe	two_hand_axe	balanced		weapon			16		115
+Swift Execution Axe	two_hand_axe	swift		weapon			16		115
+Heavy Broad Axe	two_hand_axe	heavy		weapon			20		120
+Elegant Glaive	two_hand_axe	balanced		weapon			20		120
+Swift Broad Axe	two_hand_axe	swift		weapon			20		120
+Heavy Headsman Axe	two_hand_axe	heavy		weapon			33		120
+Rending Halberd	two_hand_axe	balanced		weapon			33		120
+Swift Headsman Axe	two_hand_axe	swift		weapon			33		120
+Heavy Great Cleaver	two_hand_axe	heavy		weapon			45		120
+Reaver Glaive	two_hand_axe	balanced		weapon			45		120
+Swift Great Cleaver	two_hand_axe	swift		weapon			45		120
+Heavy Siegebreaker	two_hand_axe	heavy		weapon			52		120
+Ceremonial Halberd	two_hand_axe	balanced		weapon			52		120
+Swift Siegebreaker	two_hand_axe	swift		weapon			52		120
+Heavy Bloodoak Axe	two_hand_axe	heavy		weapon			57		120
+Monument Greataxe	two_hand_axe	balanced		weapon			57		120
+Swift Bloodoak Axe	two_hand_axe	swift		weapon			57		120
+Heavy Worldsplitter	two_hand_axe	heavy		weapon			65		120
+Vile Greataxe	two_hand_axe	balanced		weapon			65		120
+Swift Worldsplitter	two_hand_axe	swift		weapon			65		120
+Heavy Longsword	two_hand_sword	heavy		weapon			1		130
+Corroded Longsword	two_hand_sword	balanced		weapon			1		130
+Swift Longsword	two_hand_sword	swift		weapon			1		130
+Heavy Greatblade	two_hand_sword	heavy		weapon			11		130
+Blessed Claymore	two_hand_sword	balanced		weapon			11		130
+Swift Greatblade	two_hand_sword	swift		weapon			11		130
+Heavy Mercenary Blade	two_hand_sword	heavy		weapon			22		130
+Rippled Greatsword	two_hand_sword	balanced		weapon			22		130
+Swift Mercenary Blade	two_hand_sword	swift		weapon			22		130
+Heavy Claymore	two_hand_sword	heavy		weapon			36		125
+Obsidian Greatsword	two_hand_sword	balanced		weapon			36		125
+Swift Claymore	two_hand_sword	swift		weapon			36		125
+Heavy War Greatsword	two_hand_sword	heavy		weapon			49		125
+Ancient Greatblade	two_hand_sword	balanced		weapon			49		125
+Swift War Greatsword	two_hand_sword	swift		weapon			49		125
+Heavy Duelist Greatblade	two_hand_sword	heavy		weapon			52		130
+Flanged Greatblade	two_hand_sword	balanced		weapon			52		130
+Swift Duelist Greatblade	two_hand_sword	swift		weapon			52		130
+Heavy Runed Greatsword	two_hand_sword	heavy		weapon			54		135
+Regalia Longsword	two_hand_sword	balanced		weapon			54		135
+Swift Runed Greatsword	two_hand_sword	swift		weapon			54		135
+Heavy Sovereign Blade	two_hand_sword	heavy		weapon			65		130
+Ultra Greatsword	two_hand_sword	balanced		weapon			65		130
+Swift Sovereign Blade	two_hand_sword	swift		weapon			65		130
+Heavy Sledge	two_hand_mace	heavy		weapon			1		110
+Felled Greatclub	two_hand_mace	balanced		weapon			1		110
+Swift Sledge	two_hand_mace	swift		weapon			1		110
+Heavy Great Mace	two_hand_mace	heavy		weapon			16		110
+Studded Greatclub	two_hand_mace	balanced		weapon			16		110
+Swift Great Mace	two_hand_mace	swift		weapon			16		110
+Heavy War Mallet	two_hand_mace	heavy		weapon			28		120
+Temple Maul	two_hand_mace	balanced		weapon			28		120
+Swift War Mallet	two_hand_mace	swift		weapon			28		120
+Heavy Stonebreaker	two_hand_mace	heavy		weapon			33		110
+Leaden Greathammer	two_hand_mace	balanced		weapon			33		110
+Swift Stonebreaker	two_hand_mace	swift		weapon			33		110
+Heavy Battle Hammer	two_hand_mace	heavy		weapon			45		110
+Pointed Maul	two_hand_mace	balanced		weapon			45		110
+Swift Battle Hammer	two_hand_mace	swift		weapon			45		110
+Heavy Siege Maul	two_hand_mace	heavy		weapon			59		110
+Heavy Greathammer	two_hand_mace	balanced		weapon			59		110
+Swift Siege Maul	two_hand_mace	swift		weapon			59		110
+Heavy Titan Hammer	two_hand_mace	heavy		weapon			72		120
+Sacred Maul	two_hand_mace	balanced		weapon			72		120
+Swift Titan Hammer	two_hand_mace	swift		weapon			72		120
+Heavy Cataclysm	two_hand_mace	heavy		weapon			77		110
+Massive Greathammer	two_hand_mace	balanced		weapon			77		110
+Swift Cataclysm	two_hand_mace	swift		weapon			77		110
+Heavy Shiv	dagger	heavy		weapon			1		155
+Glass Shank	dagger	balanced		weapon			1		155
+Swift Shiv	dagger	swift		weapon			1		155
+Heavy Dirk	dagger	heavy		weapon			12		155
+Simple Dagger	dagger	balanced		weapon			12		155
+Swift Dirk	dagger	swift		weapon			12		155
+Heavy Rondel	dagger	heavy		weapon			27		155
+Engraved Knife	dagger	balanced		weapon			27		155
+Swift Rondel	dagger	swift		weapon			27		155
+Heavy Stiletto	dagger	heavy		weapon			33		155
+Obsidian Dagger	dagger	balanced		weapon			33		155
+Swift Stiletto	dagger	swift		weapon			33		155
+Heavy Kris	dagger	heavy		weapon			49		165
+Kris Knife	dagger	balanced		weapon			49		165
+Swift Kris	dagger	swift		weapon			49		165
+Heavy Assassin Dirk	dagger	heavy		weapon			52		155
+Parrying Dagger	dagger	balanced		weapon			52		155
+Swift Assassin Dirk	dagger	swift		weapon			52		155
+Heavy Nightglass Knife	dagger	heavy		weapon			56		155
+Arcane Dirk	dagger	balanced		weapon			56		155
+Swift Nightglass Knife	dagger	swift		weapon			56		155
+Heavy Voidneedle	dagger	heavy		weapon			65		155
+Cinquedea	dagger	balanced		weapon			65		155
+Swift Voidneedle	dagger	swift		weapon			65		155
+Heavy Ash Staff	quarterstaff	heavy		weapon			1		140
+Fine Wrapped Quarterstaff	quarterstaff	balanced		weapon			1		140
+Swift Ash Staff	quarterstaff	swift		weapon			1		140
+Heavy Banded Staff	quarterstaff	heavy		weapon			11		140
+Fine Gothic Quarterstaff	quarterstaff	balanced		weapon			11		140
+Swift Banded Staff	quarterstaff	swift		weapon			11		140
+Heavy Ironwood Staff	quarterstaff	heavy		weapon			20		150
+Crescent Quarterstaff	quarterstaff	balanced		weapon			20		150
+Swift Ironwood Staff	quarterstaff	swift		weapon			20		150
+Heavy Battle Staff	quarterstaff	heavy		weapon			33		140
+Slicing Quarterstaff	quarterstaff	balanced		weapon			33		140
+Swift Battle Staff	quarterstaff	swift		weapon			33		140
+Heavy Monk Staff	quarterstaff	heavy		weapon			48		140
+Barbarous Quarterstaff	quarterstaff	balanced		weapon			48		140
+Swift Monk Staff	quarterstaff	swift		weapon			48		140
+Heavy Temple Staff	quarterstaff	heavy		weapon			59		140
+Bladed Quarterstaff	quarterstaff	balanced		weapon			59		140
+Swift Temple Staff	quarterstaff	swift		weapon			59		140
+Heavy Celestial Staff	quarterstaff	heavy		weapon			72		150
+Lunar Quarterstaff	quarterstaff	balanced		weapon			72		150
+Swift Celestial Staff	quarterstaff	swift		weapon			72		150
+Heavy Ascendant Staff	quarterstaff	heavy		weapon			78		150
+Dreaming Quarterstaff	quarterstaff	balanced		weapon			78		150
+Swift Ascendant Staff	quarterstaff	swift		weapon			78		150
+Heavy Short Bow	bow	heavy		weapon			1		120
+Crude Bow	bow	balanced		weapon			1		120
+Swift Short Bow	bow	swift		weapon			1		120
+Heavy Yew Bow	bow	heavy		weapon			16		110
+Recurve Bow	bow	balanced		weapon			16		110
+Swift Yew Bow	bow	swift		weapon			16		110
+Heavy Hunting Bow	bow	heavy		weapon			22		120
+Fine Composite Bow	bow	balanced		weapon			22		120
+Swift Hunting Bow	bow	swift		weapon			22		120
+Heavy Recurve Bow	bow	heavy		weapon			39		120
+Zealot Bow	bow	balanced		weapon			39		120
+Swift Recurve Bow	bow	swift		weapon			39		120
+Heavy War Bow	bow	heavy		weapon			50		120
+Tribal Bow	bow	balanced		weapon			50		120
+Swift War Bow	bow	swift		weapon			50		120
+Heavy Longbow	bow	heavy		weapon			62		120
+Militant Bow	bow	balanced		weapon			62		120
+Swift Longbow	bow	swift		weapon			62		120
+Heavy Runewood Bow	bow	heavy		weapon			72		120
+Cavalry Bow	bow	balanced		weapon			72		120
+Swift Runewood Bow	bow	swift		weapon			72		120
+Heavy Starbow	bow	heavy		weapon			77		120
+Warmonger Bow	bow	balanced		weapon			77		120
+Swift Starbow	bow	swift		weapon			77		120
 Heavy Light Crossbow	crossbow	heavy		weapon			1		81
 Light Crossbow	crossbow	balanced		weapon			1		90
 Swift Light Crossbow	crossbow	swift		weapon			1		101

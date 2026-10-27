@@ -14,15 +14,19 @@ dropping (old items keep working), and each new base takes the unique type of th
 base of its kind, so Diablo's uniques keep dropping until the bundle's own uniques replace them.
 
 Levels, damage and defence are POE2's own numbers (harder monsters plan, step 10b): drop levels are
-area levels, weapons hit for the bundle's damage, and a base's defence is its armour plus evasion
+area levels, weapons hit for their base's damage, and a base's defence is its armour plus evasion
 plus a third of its energy shield (the game shows defence points as three energy shield each). The
 body armours, which have no id, are matched by name and take POE2's numbers from
 research/poe2-body-armours.md. base_meta.tsv's split column says how a hybrid's defence divides, and
 its level column the character level a base needs, like POE2's: the bundle's required level, POE2's
 item level for rings and amulets, and the table's level for body armours.
 and its block column is a shield's own chance to block, in percent (empty for everything else).
-Its aps column is a weapon's attacks per second in hundredths (POE2 attack speed): heavy and swift bases carry their
-own, slower or faster, so they have no attack speed implicit on top of it.
+Its aps column is a weapon's attacks per second in hundredths (POE2 attack speed).
+
+Weapons are POE2's own bases (Curtis 2026-10-27), not the bundle's: each balanced bundle weapon becomes the POE2 base of
+its class nearest to it in level (REAL_WEAPON_BASES), with that base's name, level, requirements, damage and attack speed
+from tools/poe2_real_weapons.tsv (Path of Building 2's data). The bundle's heavy and swift variants and all crossbows stop
+dropping; the heavy and swift rows take their balanced sibling's numbers, so saved ones stay sane.
 """
 
 import json
@@ -32,6 +36,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ITEMDAT = os.path.join(ROOT, 'mods', 'poe2', 'txtdata', 'items', 'itemdat.tsv')
 META = os.path.join(ROOT, 'mods', 'poe2', 'txtdata', 'poe2', 'base_meta.tsv')
+REAL_WEAPONS = os.path.join(ROOT, 'tools', 'poe2_real_weapons.tsv')
 ID_PREFIX = 'poe2:'
 
 # Bundle names that clash with Diablo bases or each other.
@@ -54,6 +59,54 @@ RENAMES = {
 	'keen_amulet': 'Stellar Amulet',
 	'sage_amulet': 'Azure Amulet',
 }
+
+# POE2's own weapon bases (Curtis 2026-10-27): each balanced bundle weapon -> the POE2 base of its class nearest to it in
+# level, in order and without repeats (the fewest levels apart over the class, bases without an implicit preferred, since
+# the game has none of POE2's weapon implicits). Every class's first base is POE2's first.
+REAL_WEAPON_BASES = {
+	'one_hand_sword_balanced_shortsword': 'Shortsword', 'one_hand_sword_balanced_leafblade': 'Vampiric Blade',
+	'one_hand_sword_balanced_soldier_sword': 'Charred Shortsword', 'one_hand_sword_balanced_falchion': 'Falchion',
+	'one_hand_sword_balanced_knightblade': 'Runic Shortsword', 'one_hand_sword_balanced_dueling_sword': 'Messer',
+	'one_hand_sword_balanced_runed_sabre': 'Commander Sword', 'one_hand_sword_balanced_imperial_edge': 'Dark Blade',
+	'two_hand_sword_balanced_longsword': 'Corroded Longsword', 'two_hand_sword_balanced_greatblade': 'Blessed Claymore',
+	'two_hand_sword_balanced_mercenary_blade': 'Rippled Greatsword', 'two_hand_sword_balanced_claymore': 'Obsidian Greatsword',
+	'two_hand_sword_balanced_war_greatsword': 'Ancient Greatblade', 'two_hand_sword_balanced_duelist_greatblade': 'Flanged Greatblade',
+	'two_hand_sword_balanced_runed_greatsword': 'Regalia Longsword', 'two_hand_sword_balanced_sovereign_blade': 'Ultra Greatsword',
+	'one_hand_axe_balanced_hatchet': 'Dull Hatchet', 'one_hand_axe_balanced_bearded_axe': 'Bearded Axe',
+	'one_hand_axe_balanced_raider_axe': 'Crescent Axe', 'one_hand_axe_balanced_ironcleaver': 'Carving Hatchet',
+	'one_hand_axe_balanced_war_axe': 'Boarding Hatchet', 'one_hand_axe_balanced_siege_axe': 'Battle Axe',
+	'one_hand_axe_balanced_bloodiron_axe': 'Profane Cleaver', 'one_hand_axe_balanced_kingsplitter': 'Dread Hatchet',
+	'two_hand_axe_balanced_woodsman_s_axe': 'Splitting Greataxe', 'two_hand_axe_balanced_execution_axe': 'Arched Greataxe',
+	'two_hand_axe_balanced_broad_axe': 'Elegant Glaive', 'two_hand_axe_balanced_headsman_axe': 'Rending Halberd',
+	'two_hand_axe_balanced_great_cleaver': 'Reaver Glaive', 'two_hand_axe_balanced_siegebreaker': 'Ceremonial Halberd',
+	'two_hand_axe_balanced_bloodoak_axe': 'Monument Greataxe', 'two_hand_axe_balanced_worldsplitter': 'Vile Greataxe',
+	'one_hand_mace_balanced_cudgel': 'Wooden Club', 'one_hand_mace_balanced_flanged_mace': 'Slim Mace',
+	'one_hand_mace_balanced_war_club': 'Plated Mace', 'one_hand_mace_balanced_spiked_mace': 'Brigand Mace',
+	'one_hand_mace_balanced_battle_mace': 'Flared Mace', 'one_hand_mace_balanced_siege_hammer': 'Bandit Mace',
+	'one_hand_mace_balanced_dread_maul': 'Crown Mace', 'one_hand_mace_balanced_judicator': 'Marauding Mace',
+	'two_hand_mace_balanced_sledge': 'Felled Greatclub', 'two_hand_mace_balanced_great_mace': 'Studded Greatclub',
+	'two_hand_mace_balanced_war_mallet': 'Temple Maul', 'two_hand_mace_balanced_stonebreaker': 'Leaden Greathammer',
+	'two_hand_mace_balanced_battle_hammer': 'Pointed Maul', 'two_hand_mace_balanced_siege_maul': 'Heavy Greathammer',
+	'two_hand_mace_balanced_titan_hammer': 'Sacred Maul', 'two_hand_mace_balanced_cataclysm': 'Massive Greathammer',
+	'dagger_balanced_shiv': 'Glass Shank', 'dagger_balanced_dirk': 'Simple Dagger', 'dagger_balanced_rondel': 'Engraved Knife',
+	'dagger_balanced_stiletto': 'Obsidian Dagger', 'dagger_balanced_kris': 'Kris Knife', 'dagger_balanced_assassin_dirk': 'Parrying Dagger',
+	'dagger_balanced_nightglass_knife': 'Arcane Dirk', 'dagger_balanced_voidneedle': 'Cinquedea',
+	'quarterstaff_balanced_ash_staff': 'Wrapped Quarterstaff', 'quarterstaff_balanced_banded_staff': 'Gothic Quarterstaff',
+	'quarterstaff_balanced_ironwood_staff': 'Crescent Quarterstaff', 'quarterstaff_balanced_battle_staff': 'Slicing Quarterstaff',
+	'quarterstaff_balanced_monk_staff': 'Barbarous Quarterstaff', 'quarterstaff_balanced_temple_staff': 'Bladed Quarterstaff',
+	'quarterstaff_balanced_celestial_staff': 'Lunar Quarterstaff', 'quarterstaff_balanced_ascendant_staff': 'Dreaming Quarterstaff',
+	'bow_balanced_short_bow': 'Crude Bow', 'bow_balanced_yew_bow': 'Recurve Bow', 'bow_balanced_hunting_bow': 'Composite Bow',
+	'bow_balanced_recurve_bow': 'Zealot Bow', 'bow_balanced_war_bow': 'Tribal Bow', 'bow_balanced_longbow': 'Militant Bow',
+	'bow_balanced_runewood_bow': 'Cavalry Bow', 'bow_balanced_starbow': 'Warmonger Bow',
+}
+# POE2 weapon names Diablo's bases already have.
+REAL_WEAPON_RENAMES = {
+	'Falchion': 'Fine Falchion', 'Battle Axe': 'Fine Battle Axe', 'Composite Bow': 'Fine Composite Bow',
+	'Wrapped Quarterstaff': 'Fine Wrapped Quarterstaff', 'Gothic Quarterstaff': 'Fine Gothic Quarterstaff',
+}
+# The bundle's heavy and swift weapons and its crossbows (Diablo has no crossbow animation) no longer drop.
+RETIRED_WEAPON_IDENTITIES = {'heavy', 'swift'}
+RETIRED_WEAPON_CLASSES = {'crossbow'}
 
 # Rings and amulets follow POE2's lineup and drop levels rather than the bundle's: Iron and Lazuli first, then Ruby,
 # Sapphire and Golden Hoop, Topaz, Pearl. POE2 has no Coral Ring, so it only carries its unique. Jewellery levels are
@@ -221,12 +274,13 @@ UNIQUE_TYPE_LEVEL_SCALE = 0.36
 REQUIREMENT_SCALE = 1
 # One defence point is one armour, one evasion or three energy shield (EnergyShieldPerDefense).
 ENERGY_SHIELD_PER_DEFENSE = 3
-# A weapon hits for the bundle's damage.
+# A weapon hits for its base's damage: POE2's own (REAL_WEAPON_BASES), the bundle's for crossbows.
 DAMAGE_SCALE = 1
 DAMAGE_BASE = 0
 # Act 1 shortfall fix (harder monsters plan step 14, Curtis 2026-10-27): the first quarterstaves and bows, the only ones
-# a hero uses up to about level 11 (the Ash Staff and Short Bow families, drop level 1), hit harder than the bundle's,
-# in percent of its damage. The step-13 fight check found the Monk and the Rogue could not clear Act 1 packs with them.
+# a hero uses up to about level 11 (drop level 1: POE2's Wrapped Quarterstaff and Crude Bow since 2026-10-27), hit
+# harder than their base, in percent of its damage. The step-13 fight check found the Monk and the Rogue could not
+# clear Act 1 packs with them.
 EARLY_WEAPON_DAMAGE_PERCENT = {'quarterstaff': 160, 'bow': 140}
 EARLY_WEAPON_MAX_DROP_LEVEL = 1
 
@@ -277,6 +331,25 @@ HEADER = ['id', 'dropRate', 'class', 'equipType', 'cursorGraphic', 'itemType', '
           'minDexterity', 'specialEffects', 'miscId', 'spell', 'usable', 'value']
 
 
+def load_real_weapons():
+	"""POE2's weapon bases by name (tools/poe2_real_weapons.tsv)."""
+	with open(REAL_WEAPONS, encoding='utf-8') as f:
+		lines = [line.rstrip('\n').split('\t') for line in f]
+	return {row[1]: dict(zip(lines[0], row)) for row in lines[1:]}
+
+
+def base_name(b):
+	"""The name a bundle base has in the game: POE2's name for a balanced weapon, the bundle's (or a rename) otherwise."""
+	if b['id'] in REAL_WEAPON_BASES:
+		real = REAL_WEAPON_BASES[b['id']]
+		return REAL_WEAPON_RENAMES.get(real, real)
+	return RENAMES.get(b['id'], b['display_name'])
+
+
+def is_retired_weapon(b):
+	return b['item_class'] in RETIRED_WEAPON_CLASSES or (b.get('design_identity') in RETIRED_WEAPON_IDENTITIES)
+
+
 def d1_level(drop_level):
 	return max(1, round(drop_level * LEVEL_SCALE))
 
@@ -303,7 +376,7 @@ def damage(stats, percent=100):
 
 
 def damage_percent(cls, drop_level):
-	"""The share of the bundle's damage a weapon base hits for: more for the early staves and bows (step 14)."""
+	"""The share of its base's damage a weapon hits for: more for the early staves and bows (step 14)."""
 	return EARLY_WEAPON_DAMAGE_PERCENT.get(cls, 100) if drop_level <= EARLY_WEAPON_MAX_DROP_LEVEL else 100
 
 
@@ -387,13 +460,16 @@ def main():
 		if b.get('design_identity') in ('balanced', 'rapid'):
 			balanced[(b['item_class'], b['progression_tier'])] = b
 
+	real_weapons = load_real_weapons()
+	assert len(set(REAL_WEAPON_BASES.values())) == len(REAL_WEAPON_BASES), 'a POE2 weapon base is used twice'
+
 	meta_rows = []
 	taken = {row[7] for row in rows[1:] if not row[0].startswith(ID_PREFIX)}
 	generated = set()
 	for b in bases:
 		cls = b['item_class']
 		item_class, equip, item_type, short, quality, unique_kind = CLASSES[cls]
-		name = RENAMES.get(b['id'], b['display_name'])
+		name = base_name(b)
 		assert name not in taken and name not in generated, f'{name} clashes with another base; add it to RENAMES'
 		generated.add(name)
 		stats = b['base_stats']
@@ -401,6 +477,12 @@ def main():
 		is_jewellery = cls in ('ring', 'amulet')
 		level = POE2_JEWELLERY_LEVELS.get(b['id'], b['drop_level']) if is_jewellery else d1_level(b['drop_level'])
 		req = b['requirements']
+		# A weapon's POE2 base: its own, or its balanced sibling's for a heavy or swift one.
+		sibling = balanced.get((cls, tier))
+		real = real_weapons[REAL_WEAPON_BASES[sibling['id']]] if sibling is not None and sibling['id'] in REAL_WEAPON_BASES else None
+		if real is not None:
+			level = max(1, int(real['level']))
+			req = {'strength': int(real['str']), 'dexterity': int(real['dex']), 'intelligence': int(real['int'])}
 
 		group = b.get('upgrade_group') or cls
 		if cls in ('ring', 'amulet'):
@@ -417,7 +499,8 @@ def main():
 		min_dam = max_dam = min_ac = max_ac = 0
 		implicits = []
 		if 'physical_damage_min' in stats:
-			min_dam, max_dam = damage(stats, damage_percent(cls, b['drop_level']))
+			weapon = stats if real is None else {'physical_damage_min': int(real['min']), 'physical_damage_max': int(real['max'])}
+			min_dam, max_dam = damage(weapon, damage_percent(cls, b['drop_level']))
 		if 'innate_spell_power' in stats:
 			min_dam, max_dam = caster_damage(stats['innate_spell_power'], cls == 'staff')
 			other = balanced.get((cls, tier))
@@ -437,9 +520,10 @@ def main():
 			implicits = [IMPLICIT_STAND_INS[name]]
 		if name in POE2_AMULET_IMPLICITS:
 			implicits = [POE2_AMULET_IMPLICITS[name]]
-		value = (1000 + level * 50) if cls == 'amulet' else (1000 + b['drop_level'] * 50) if is_jewellery else (100 + b['drop_level'] * 100)
+		value = (1000 + level * 50) if cls == 'amulet' else (1000 + b['drop_level'] * 50) if is_jewellery else (100 + (b['drop_level'] if real is None else level) * 100)
+		retired = b['id'] in RETIRED_BASES or is_retired_weapon(b)
 		row = [
-			ID_PREFIX + b['id'], '0' if b['id'] in RETIRED_BASES else '1', item_class, equip, cursor, item_type, unique, name, short, str(level),
+			ID_PREFIX + b['id'], '0' if retired else '1', item_class, equip, cursor, item_type, unique, name, short, str(level),
 			'0' if is_jewellery else str(30 + tier * 5), str(min_dam), str(max_dam), str(min_ac), str(max_ac),
 			str(round(req['strength'] * REQUIREMENT_SCALE)), str(round(req['intelligence'] * REQUIREMENT_SCALE)),
 			str(round(req['dexterity'] * REQUIREMENT_SCALE)), '', cls.upper() if is_jewellery else 'NONE', 'Null', 'false', str(value),
@@ -453,11 +537,12 @@ def main():
 		defense_line = DEFENSE_LINES.get(b.get('design_identity', ''), '') if min_ac else ''
 		split = defense_split(defense_line, stats.get('armour', 0), stats.get('evasion', 0), stats.get('energy_shield', 0)) if min_ac else ''
 		# The character level the base needs: the bundle's, or for jewellery, which follows POE2's lineup, its level.
-		required_level = level if is_jewellery else b['required_level']
+		required_level = level if is_jewellery or real is not None else b['required_level']
+		aps = int(real['aps']) if real is not None else round(stats['attacks_per_second'] * 100) if 'attacks_per_second' in stats else ''
 		meta_rows.append([
 			name, cls, POE2_AMULET_IDENTITIES.get(name, b.get('design_identity', '')), defense_line, quality if cls != 'focus' else 'defence',
 			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits), split, str(required_level), str(stats.get('block_chance_pct', '')),
-			str(round(stats['attacks_per_second'] * 100)) if 'attacks_per_second' in stats else '',
+			str(aps),
 		])
 
 	for base_id, name, level in POE2_EXTRA_AMULETS:

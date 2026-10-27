@@ -4604,27 +4604,13 @@ bool IsPoe2Equipment(const ItemData &data)
 	return EquipmentClassWeight(data.itype) > 0;
 }
 
-/**
- * @brief Swift and Heavy weapons, with their attack speed implicit, start at the third weapon tier, so the Cathedral
- * drops plain ones (Curtis 2026-10-20: implicits belong on jewellery and higher gear).
- */
-bool IsHeldBackWeaponBase(size_t index)
-{
-	// The third tier's drop level, an area level.
-	constexpr uint8_t ImplicitWeaponLevel = 24;
-	const ItemData &data = AllItemsList[index];
-	if (data.iClass != ICLASS_WEAPON || data.iMinMLvl >= ImplicitWeaponLevel)
-		return false;
-	const BaseMeta *meta = BaseMetaFor(static_cast<int>(index));
-	return meta != nullptr && IsAnyOf(meta->identity, "swift", "heavy");
-}
-
 bool IsPoe2LootCandidate(size_t index, int itemLevel)
 {
 	if (!IsItemAvailable(static_cast<int>(index)))
 		return false;
 	const ItemData &data = AllItemsList[index];
-	if (data.dropRate == 0 || data.iMinMLvl > itemLevel || IsHeldBackWeaponBase(index))
+	// The bundle's swift and heavy weapons and the crossbows have drop rate 0: weapons are POE2's own bases (Curtis 2026-10-27).
+	if (data.dropRate == 0 || data.iMinMLvl > itemLevel)
 		return false;
 	// Hellfire's trap runes share their names with POE2's socket runes (Curtis 2026-10-23: a Rune of Fire still dropped).
 	if (IsHellfireRune(data.iMiscId))

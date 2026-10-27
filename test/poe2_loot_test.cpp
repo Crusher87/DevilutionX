@@ -11,13 +11,16 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/waystones.hpp"
 #include "spells.h"
 #include "stores.h"
+#include "tables/playerdat.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -473,6 +476,64 @@ TEST_F(Poe2LootTest, HellfireRunesNeverDrop)
 		for (const Item &item : drops)
 			EXPECT_FALSE(item.isRune()) << item._iIName;
 	}
+}
+
+/** Whether a base is one of the bundle's heavy or swift weapons or a crossbow, which no longer drop (Curtis 2026-10-27). */
+bool IsRetiredWeaponBase(int index)
+{
+	const BaseMeta *meta = BaseMetaFor(index);
+	return meta != nullptr && (IsAnyOf(meta->identity, "heavy", "swift") || meta->itemClass == "crossbow");
+}
+
+TEST_F(Poe2LootTest, RetiredWeaponBasesNeverDrop)
+{
+	LoadPlayerDataFiles();
+	// Also loads the bases.
+	LoadModifierData();
+	MyPlayer->setCharacterLevel(30);
+	int retired = 0;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (!IsRetiredWeaponBase(static_cast<int>(i)))
+			continue;
+		retired++;
+		EXPECT_EQ(AllItemsList[i].dropRate, 0) << AllItemsList[i].iName;
+	}
+	// 8 tiers of heavy and swift in 9 weapon classes, and 24 crossbows; the rows stay for saved items.
+	EXPECT_EQ(retired, 2 * 8 * 9 + 24);
+
+	int weapons = 0;
+	const auto check = [&weapons](const Item &item) {
+		if (item._iClass != ICLASS_WEAPON)
+			return;
+		weapons++;
+		EXPECT_FALSE(IsRetiredWeaponBase(item.IDidx)) << item._iIName;
+	};
+	// Barrels from the first floor to Hell, and every vendor that sells weapons (Griswold, his premium stock, Wirt).
+	for (const auto &[floor, type] : { std::pair { 2, DTYPE_CATHEDRAL }, std::pair { 8, DTYPE_CATACOMBS }, std::pair { 16, DTYPE_HELL } }) {
+		for (const Item &item : ContainerDrops(floor, type, 2000))
+			check(item);
+	}
+	for (uint32_t seed = 1; seed <= 60; seed++) {
+		SetRndSeed(seed);
+		SpawnSmith(16);
+		for (const Item &item : SmithItems)
+			check(item);
+		PremiumItems.clear();
+		PremiumItemLevel = 1;
+		SpawnPremium(*MyPlayer);
+		for (const Item &item : PremiumItems)
+			check(item);
+		BoyItem = {};
+		BoyItemLevel = 0;
+		SpawnBoy(MyPlayer->getCharacterLevel());
+		check(BoyItem);
+	}
+	EXPECT_GT(weapons, 100);
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	gbIsPoe2 = false;
+	LoadModifierData();
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2LootTest, UncutGemsTakeTheAreasLevel)

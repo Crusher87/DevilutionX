@@ -485,8 +485,8 @@ TEST_F(Poe2UniquesTest, UniquesNeedTheHigherLevel)
 		return item;
 	};
 	// A Diablo unique on a POE2 base takes its table's level when that is higher.
-	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Fine Short Bow", "The Needler")), 2);
-	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Fine Short Bow", "The Rift Bow")), 1);
+	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Crude Bow", "The Needler")), 2);
+	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Crude Bow", "The Rift Bow")), 1);
 	// On an old Diablo base it needs no level.
 	Item cleaver;
 	InitializeItem(cleaver, IDI_CLEAVER);

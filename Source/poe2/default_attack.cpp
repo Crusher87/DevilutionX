@@ -135,12 +135,12 @@ std::pair<int, int> BareFistDamage(int gemLevel)
 		int minDamage;
 		int maxDamage;
 	};
-	// The plain heavy quarterstaffs of the item data, by drop level.
+	// The quarterstaffs that drop, POE2's own bases, by drop level.
 	std::vector<Staff> staffs;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
 		const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
-		if (data.dropRate <= 0 || base == nullptr || base->itemClass != "quarterstaff" || base->identity != "heavy" || data.iMinDam <= 0)
+		if (data.dropRate <= 0 || base == nullptr || base->itemClass != "quarterstaff" || data.iMinDam <= 0)
 			continue;
 		staffs.push_back({ data.iMinMLvl, data.iMinDam, std::max<int>(data.iMaxDam, data.iMinDam) });
 	}

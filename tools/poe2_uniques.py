@@ -20,7 +20,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from poe2_bases import CLASSES, RENAMES, d1_level, unique_type_level  # noqa: E402
+from poe2_bases import CLASSES, base_name as base_name_of, d1_level, unique_type_level  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'mods', 'poe2', 'txtdata', 'poe2', 'uniques.tsv')
@@ -206,7 +206,7 @@ def main():
 			base = max(fits, key=lambda b: (b['drop_level'], b['id']))
 		if base_name is None:
 			assert base['drop_level'] <= level, u['id']
-			base_name = RENAMES.get(base['id'], base['display_name'])
+			base_name = base_name_of(base)
 		effects = []
 		for m in u['fixed_modifiers']:
 			assert m['id'] in EFFECTS, f'{u["id"]}: no effect for {m["id"]}'

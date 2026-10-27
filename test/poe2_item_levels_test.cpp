@@ -119,15 +119,16 @@ public:
 	}
 };
 
-TEST_F(Poe2ItemLevelsTest, TopStaffIs88To124)
+TEST_F(Poe2ItemLevelsTest, TopStaffIsPoe2sDreamingQuarterstaff)
 {
-	const ItemData &staff = AllItemsList[FindBase("Heavy Ascendant Staff")];
-	EXPECT_EQ(staff.iMinDam, 88);
-	EXPECT_EQ(staff.iMaxDam, 124);
-	EXPECT_EQ(staff.iMinMLvl, 80) << "drop levels are POE2's area levels";
-	const Item built = MakeItem("Heavy Ascendant Staff");
-	EXPECT_EQ(built._iMinDam, 88);
-	EXPECT_EQ(built._iMaxDam, 124);
+	// Weapons are POE2's own bases (Curtis 2026-10-27): the last quarterstaff is the Dreaming Quarterstaff, 99-133 at 78.
+	const ItemData &staff = AllItemsList[FindBase("Dreaming Quarterstaff")];
+	EXPECT_EQ(staff.iMinDam, 99);
+	EXPECT_EQ(staff.iMaxDam, 133);
+	EXPECT_EQ(staff.iMinMLvl, 78) << "drop levels are POE2's area levels";
+	const Item built = MakeItem("Dreaming Quarterstaff");
+	EXPECT_EQ(built._iMinDam, 99);
+	EXPECT_EQ(built._iMaxDam, 133);
 
 	// A base's defence is its armour plus its evasion plus a third of its energy shield, and every one rolls exactly that.
 	EXPECT_EQ(AllItemsList[FindBase("Conqueror Plate")].iMinAC, 496);
@@ -138,34 +139,38 @@ TEST_F(Poe2ItemLevelsTest, TopStaffIs88To124)
 	EXPECT_EQ(regalia.iMinMLvl, 65);
 }
 
-TEST_F(Poe2ItemLevelsTest, CataclysmDropsAt80)
+TEST_F(Poe2ItemLevelsTest, TopBasesDropAt80)
 {
-	const ItemData &cataclysm = AllItemsList[FindBase("Heavy Cataclysm")];
-	EXPECT_EQ(cataclysm.iMinMLvl, 80);
-	EXPECT_EQ(cataclysm.iMinDam, 199);
-	EXPECT_EQ(cataclysm.iMaxDam, 281);
+	// The top two-handed mace is POE2's Massive Greathammer; the Titan Crown is among the bases that drop at 80.
+	const ItemData &hammer = AllItemsList[FindBase("Massive Greathammer")];
+	EXPECT_EQ(hammer.iMinMLvl, 77);
+	EXPECT_EQ(hammer.iMinDam, 119);
+	EXPECT_EQ(hammer.iMaxDam, 161);
+	EXPECT_EQ(AllItemsList[FindBase("Titan Crown")].iMinMLvl, 80);
 
 	// Uniques keep their own drop levels and item levels.
-	const auto isCataclysm = [](const Item &item) {
-		return item._iMagical != ITEM_QUALITY_UNIQUE && std::string_view(AllItemsList[static_cast<size_t>(item.IDidx)].iName).find("Cataclysm") != std::string_view::npos;
+	const auto isTopBase = [](const Item &item) {
+		return item._iMagical != ITEM_QUALITY_UNIQUE && AllItemsList[static_cast<size_t>(item.IDidx)].iMinMLvl == 80;
 	};
-	// A tier 15 map is area level 77: no Cataclysm yet.
+	// A tier 15 map is area level 77: no base of drop level 80 yet.
 	ASSERT_EQ(MapMonsterAreaLevel(15), 77);
-	for (const Item &item : MapContainerDrops(15, 3000))
-		EXPECT_FALSE(isCataclysm(item)) << item._iIName;
+	for (const Item &item : MapContainerDrops(15, 3000)) {
+		if (EquipmentClassWeight(item._itype) != 0 && item._iMagical != ITEM_QUALITY_UNIQUE)
+			EXPECT_LE(AllItemsList[static_cast<size_t>(item.IDidx)].iMinMLvl, 77) << item._iIName;
+	}
 
-	// Tier 16 is area level 80: equipment of item level 80, on bases of drop level 80 at most, the Cataclysm among them.
+	// Tier 16 is area level 80: equipment of item level 80, on bases of drop level 80 at most, those of 80 among them.
 	ASSERT_EQ(MapMonsterAreaLevel(16), 80);
-	int cataclysms = 0;
+	int topBases = 0;
 	for (const Item &item : MapContainerDrops(16, 3000)) {
 		if (EquipmentClassWeight(item._itype) == 0 || item._iMagical == ITEM_QUALITY_UNIQUE)
 			continue;
 		EXPECT_EQ(GetPoe2ItemLevel(item), 80) << item._iIName;
 		EXPECT_LE(AllItemsList[static_cast<size_t>(item.IDidx)].iMinMLvl, 80) << item._iIName;
-		if (isCataclysm(item))
-			cataclysms++;
+		if (isTopBase(item))
+			topBases++;
 	}
-	EXPECT_GT(cataclysms, 0);
+	EXPECT_GT(topBases, 0);
 }
 
 TEST_F(Poe2ItemLevelsTest, CurrencyGatesUnchanged)
@@ -197,16 +202,16 @@ TEST_F(Poe2ItemLevelsTest, CurrencyGatesUnchanged)
 	EXPECT_EQ(Poe2ItemLevel(butcher, DIFF_HELL), Poe2CurrencyLevel(butcher, DIFF_HELL));
 }
 
-TEST_F(Poe2ItemLevelsTest, FistsReachTheLevel80Staff)
+TEST_F(Poe2ItemLevelsTest, FistsReachTheTopStaff)
 {
-	const ItemData &top = AllItemsList[FindBase("Heavy Ascendant Staff")];
-	ASSERT_EQ(top.iMinMLvl, 80);
+	const ItemData &top = AllItemsList[FindBase("Dreaming Quarterstaff")];
+	ASSERT_EQ(top.iMinMLvl, 78);
 	const auto share = [](int damage) { return (damage * BareFistStaffPercent + 50) / 100; };
 	const std::pair<int, int> topDamage { share(top.iMinDam), share(top.iMaxDam) };
-	// POE2's character level for gem level 19 is 84 and for 20 is 90, both past the staff; 18's is 78, just short of it.
+	// POE2's character level for gem level 18 is 78, the staff's; 19's is 84 and 20's 90, past it; 17's is 72, short of it.
+	EXPECT_EQ(BareFistDamage(18), topDamage);
 	EXPECT_EQ(BareFistDamage(19), topDamage);
 	EXPECT_EQ(BareFistDamage(MaxGemLevel), topDamage);
-	EXPECT_LE(BareFistDamage(18).second, topDamage.second);
 	EXPECT_LT(BareFistDamage(17).second, topDamage.second);
 	EXPECT_GT(BareFistDamage(18).second, BareFistDamage(10).second);
 }

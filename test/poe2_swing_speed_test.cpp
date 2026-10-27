@@ -262,7 +262,7 @@ TEST_F(Poe2SwingSpeedTest, WeaponBasesSetTheAttackTime)
 	const struct {
 		std::string_view base;
 		double aps;
-	} weapons[] = { { "Shortsword", 1.35 }, { "Longsword", 1.15 }, { "Sledge", 0.95 } };
+	} weapons[] = { { "Shortsword", 1.55 }, { "Corroded Longsword", 1.30 }, { "Felled Greatclub", 1.10 } };
 	for (const auto &[base, aps] : weapons) {
 		SCOPED_TRACE(base);
 		Equip(player, base);
@@ -273,17 +273,17 @@ TEST_F(Poe2SwingSpeedTest, WeaponBasesSetTheAttackTime)
 	}
 
 	// The weapon's own increased attack speed raises its attacks per second, as POE2 shows it; the rest adds to the
-	// hero's increased attack speed: 1.35 x 1.1 (1.485, which the weapon keeps to hundredths: 1.49) x 1.2.
+	// hero's increased attack speed: 1.55 x 1.1 (1.705, which the weapon keeps to hundredths: 1.71) x 1.2.
 	Equip(player, "Shortsword");
 	Item &sword = player.InvBody[INVLOC_HAND_LEFT];
 	ApplyModEffect(sword, ModEffect::AttackSpeed, 10, 0);
-	EXPECT_EQ(ItemBaseAttacksPerSecond(sword), 135);
-	EXPECT_EQ(ItemAttacksPerSecond(sword), 149);
+	EXPECT_EQ(ItemBaseAttacksPerSecond(sword), 155);
+	EXPECT_EQ(ItemAttacksPerSecond(sword), 171);
 	CalcPlrInv(player, false);
 	player.poe2.attackSpeedPercent += 20;
-	EXPECT_EQ(WeaponAttacksPerSecond(player), 149);
+	EXPECT_EQ(WeaponAttacksPerSecond(player), 171);
 	EXPECT_EQ(IncreasedAttackSpeedPercent(player, DefaultSkillSlot(player)), 20);
-	EXPECT_NEAR(UseSeconds(player, DefaultSkillSlot(player)), 1 / (1.49 * 1.2), 0.0001);
+	EXPECT_NEAR(UseSeconds(player, DefaultSkillSlot(player)), 1 / (1.71 * 1.2), 0.0001);
 
 	// A crossbow's free Bow Shot: 0.9 a second.
 	Equip(player, "Light Crossbow");

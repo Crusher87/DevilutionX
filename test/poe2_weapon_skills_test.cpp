@@ -55,20 +55,20 @@ public:
 
 TEST_F(Poe2WeaponSkillsTest, WeaponTypesGrantSkills)
 {
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Shiv")), WeaponSkill::Flurry);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Glass Shank")), WeaponSkill::Flurry);
 	EXPECT_EQ(WeaponSkillForItem(MakeBase("Shortsword")), WeaponSkill::Cleave);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Woodsman's Axe")), WeaponSkill::Cleave);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Sledge")), WeaponSkill::GroundSlam);
-	EXPECT_EQ(WeaponSkillForItem(MakeBase("Yew Bow")), WeaponSkill::Barrage);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Splitting Greataxe")), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Felled Greatclub")), WeaponSkill::GroundSlam);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Recurve Bow")), WeaponSkill::Barrage);
 	EXPECT_EQ(WeaponSkillForItem(MakeBase("Quick Pilgrim Staff")), WeaponSkill::WhirlingStaff);
 	EXPECT_EQ(WeaponSkillForItem(MakeBase("Hide Buckler")), WeaponSkill::None);
 	EXPECT_EQ(WeaponSkillForItem(Item {}), WeaponSkill::None);
 
 	Player &player = *MyPlayer;
 	player = {};
-	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Yew Bow");
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Recurve Bow");
 	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::Barrage);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Felled Greatclub");
 	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::GroundSlam);
 }
 
@@ -82,14 +82,14 @@ TEST_F(Poe2WeaponSkillsTest, EveryWeaponHasAFreeDefaultAttack)
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::ShieldBash);
 	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Shortsword");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::SwordStrike);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Shiv");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Glass Shank");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::DaggerStab);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Woodsman's Axe");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Splitting Greataxe");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::AxeChop);
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Felled Greatclub");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::MaceSmash);
 	player.InvBody[INVLOC_HAND_RIGHT] = {};
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Yew Bow");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Recurve Bow");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::BowShot);
 	EXPECT_TRUE(IsRangedDefaultAttack(DefaultAttack::BowShot));
 	EXPECT_FALSE(FiresStaffBolt(player));

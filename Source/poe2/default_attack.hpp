@@ -47,7 +47,7 @@ std::string_view DefaultAttackName(DefaultAttack attack);
 bool IsRangedDefaultAttack(DefaultAttack attack);
 
 /**
- * @brief A Monk's bare fists hit for this percent of a plain heavy quarterstaff of the attack gem's level: a bit below
+ * @brief A Monk's bare fists hit for this percent of a plain quarterstaff of the attack gem's level: a bit below
  * a real staff, which also rolls modifiers (Curtis 2026-10-19).
  */
 constexpr int BareFistStaffPercent = 85;
@@ -58,8 +58,8 @@ constexpr int BareFistStaffPercent = 85;
  */
 bool FightsWithBareFists(const Player &player);
 /**
- * @brief Bare fists' damage range at a gem level: BareFistStaffPercent of a plain heavy quarterstaff at the character
- * level the gem level needs. Between the item data's heavy quarterstaffs it goes geometrically by their drop levels.
+ * @brief Bare fists' damage range at a gem level: BareFistStaffPercent of a plain quarterstaff at the character level
+ * the gem level needs. Between the quarterstaffs that drop it goes geometrically by their drop levels.
  */
 std::pair<int, int> BareFistDamage(int gemLevel);
 /**
