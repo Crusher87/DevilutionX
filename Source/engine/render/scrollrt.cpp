@@ -72,6 +72,7 @@
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/quest_reward_panel.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
@@ -2158,6 +2159,7 @@ void DrawAndBlit()
 	DrawAnvil(out);
 	DrawDesecrationReveal(out);
 	DrawStackSplit(out);
+	DrawQuestReward(out);
 	DrawAtlas(out);
 	DrawItemSpawner(out);
 	TelemetryDrawStep("drawing the cursor");

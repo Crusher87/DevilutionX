@@ -168,6 +168,7 @@ set(libdevilutionx_SRCS
   panels/skill_bar.cpp
   panels/skills_panel.cpp
   panels/monster_banner.cpp
+  panels/quest_reward_panel.cpp
   panels/stack_split_panel.cpp
   panels/stash_tabs_panel.cpp
   panels/spell_book.cpp

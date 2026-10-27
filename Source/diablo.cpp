@@ -94,6 +94,7 @@
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/quest_reward_panel.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
@@ -917,6 +918,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 	}
 
 	if (StackSplitHandleEvent(event)) {
+		return;
+	}
+
+	if (QuestRewardHandleEvent(event)) {
 		return;
 	}
 
@@ -1820,6 +1825,8 @@ void GameLogic()
 	}
 	ProcessAutosave();
 	CloseInteractionPanelsWhenAway();
+	// POE2 Mashup: a towner's quest reward offers itself once the talk text is gone.
+	UpdateQuestRewardOffer();
 
 	plrctrls_after_game_logic();
 }
@@ -3432,6 +3439,11 @@ bool PressEscKey()
 		rv = true;
 	}
 
+	if (IsQuestRewardOpen()) {
+		CloseQuestReward();
+		rv = true;
+	}
+
 	if (SpellSelectFlag) {
 		SpellSelectFlag = false;
 		rv = true;
@@ -3524,6 +3536,7 @@ void LoadGameLevelFirstFlagEntry()
 		InitHelp();
 	}
 	InitStores();
+	ClearQuestRewards();
 	InitAutomapOnce();
 }
 
