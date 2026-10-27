@@ -41,4 +41,26 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket);
 /** @brief The tags of a skill, like "Spell, Projectile, Fire". */
 std::string SkillTagText(SkillSlot skill);
 
+/** @brief One damage type of a hit: the least, the most and the average it deals, with any fraction the hit keeps. */
+struct DamageEstimate {
+	double min;
+	double max;
+	double average;
+};
+
+/**
+ * @brief A melee weapon hit, as PlrHitMonst rolls it: a whole-point weapon roll, its increased and added damage in
+ * whole points, then the skill's percents in 1/64 points, so a small hit keeps its fraction (85% of 2 is 1.69).
+ */
+DamageEstimate MeleeHitEstimate(int weaponMin, int weaponMax, int increasedPercent, int addedDamage, int percent, int secondPercent = 100);
+
+/**
+ * @brief An arrow, as ProcessArrow and MonsterMHit roll it: the skill's percent cuts the bow's range to whole points
+ * first, then each roll gets the hero's increased and added damage in whole points.
+ */
+DamageEstimate ArrowHitEstimate(int weaponMin, int weaponMax, int increasedPercent, int addedDamage, int percent);
+
+/** @brief A damage number as the details print it: to the nearest whole point. */
+int ShownDamage(double damage);
+
 } // namespace devilution
