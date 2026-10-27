@@ -758,10 +758,10 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Azure Amulet	Amulet
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Guided Arrow Gem	Gem	11	0	0	0	0	0	0	0	51		SKILLGEM_TABLE	Null	true	1880
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Freezing Arrow Gem	Gem	13	0	0	0	0	0	0	0	57		SKILLGEM_TABLE	Null	true	2140
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Impale Gem	Gem	3	0	0	0	0	0	0	0	27		SKILLGEM_TABLE	Null	true	840
-	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Cluster Bolt Gem	Gem	5	0	0	0	0	0	0	0	33		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Fire Arrow Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Spike Trap Gem	Gem	7	0	0	0	0	0	0	0	39		SKILLGEM_TABLE	Null	true	1360
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Sentry Gem	Gem	9	0	0	0	0	0	0	0	45		SKILLGEM_TABLE	Null	true	1620
-	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Explosive Bolt Gem	Gem	11	0	0	0	0	0	0	0	51		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Explosive Arrow Gem	Gem	11	0	0	0	0	0	0	0	51		SKILLGEM_TABLE	Null	true	1880
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Ballista Barrage Gem	Gem	13	0	0	0	0	0	0	0	57		SKILLGEM_TABLE	Null	true	2140
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Holy Shield Gem	Gem	5	0	0	0	0	0	33	0	0		SKILLGEM_TABLE	Null	true	1100
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Blessed Shield Gem	Gem	7	0	0	0	0	0	39	0	0		SKILLGEM_TABLE	Null	true	1360

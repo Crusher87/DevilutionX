@@ -194,7 +194,7 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	EXPECT_EQ(sentinel.duration / sentinel.interval, 5);
 	EXPECT_EQ(sentinel.damagePercent * sentinel.duration / sentinel.interval, 175);
 
-	// Landing bursts: a set share of a base hit on top of the arrow; Cluster Bolt keeps two thirds of its hit.
+	// Landing bursts: a set share of a base hit on top of the arrow; Fire Arrow keeps two thirds of its hit.
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::FreezingArrow)), 40);
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ExplosiveBolt)), 45);
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ClusterBolt)), 66);
