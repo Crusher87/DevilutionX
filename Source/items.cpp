@@ -6638,6 +6638,20 @@ void PrintWeaponClass(const Item &item)
 	CurrentInfoLineStyle = style;
 }
 
+/** @brief POE2 Mashup: a weapon's attacks per second with its own increased attack speed, highlighted when that changed it, as POE2 shows it. */
+void PrintAttacksPerSecond(const Item &item)
+{
+	if (!gbIsPoe2)
+		return;
+	const int aps = ItemAttacksPerSecond(item);
+	if (aps <= 0)
+		return;
+	if (aps != ItemBaseAttacksPerSecond(item))
+		CurrentInfoLineStyle = InfoLineStyle::AugmentedProperty;
+	AddItemInfoBoxString(FormatRuntime(_("Attacks per Second: {:d}.{:02d}"), aps / 100, aps % 100));
+	CurrentInfoLineStyle = InfoLineStyle::Property;
+}
+
 } // namespace
 
 void PrintItemDetails(const Item &item)
@@ -6676,6 +6690,7 @@ void PrintItemDetails(const Item &item)
 				AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
 		}
 		CurrentInfoLineStyle = InfoLineStyle::Property;
+		PrintAttacksPerSecond(item);
 		// Holding Alt splits it by damage type, each in its colour.
 		if (gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0 && (item._iFMaxDam > 0 || item._iLMaxDam > 0 || item._iPLDam != 0)) {
 			CurrentInfoLineStyle = InfoLineStyle::PhysicalDamage;
@@ -6981,6 +6996,7 @@ void PrintItemDur(const Item &item)
 			else
 				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
 		}
+		PrintAttacksPerSecond(item);
 		if (item._iMiscId == IMISC_STAFF && item._iMaxCharges > 0) {
 			AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 		}
