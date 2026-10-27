@@ -323,9 +323,9 @@ struct Item {
 	int _iVMult1 = 0;
 	int _iVAdd2 = 0;
 	int _iVMult2 = 0;
-	int8_t _iMinStr = 0;
+	uint8_t _iMinStr = 0;
 	uint8_t _iMinMag = 0;
-	int8_t _iMinDex = 0;
+	uint8_t _iMinDex = 0;
 	bool _iStatFlag = false;
 	ItemSpecialEffectHf _iDamAcFlags = ItemSpecialEffectHf::None;
 	uint32_t dwBuff = 0;

@@ -821,9 +821,9 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		item._iPLToHit = static_cast<int16_t>(item._iPLToHit + v0);
 		break;
 	case ModEffect::ReducedRequirements:
-		item._iMinStr = static_cast<int8_t>(item._iMinStr - (item._iMinStr * v0 / 100));
+		item._iMinStr = static_cast<uint8_t>(item._iMinStr - (item._iMinStr * v0 / 100));
 		item._iMinMag = static_cast<uint8_t>(item._iMinMag - (item._iMinMag * v0 / 100));
-		item._iMinDex = static_cast<int8_t>(item._iMinDex - (item._iMinDex * v0 / 100));
+		item._iMinDex = static_cast<uint8_t>(item._iMinDex - (item._iMinDex * v0 / 100));
 		break;
 	case ModEffect::LifeRegeneration:
 		item._iPLLifeRegen = static_cast<int16_t>(item._iPLLifeRegen + v0);

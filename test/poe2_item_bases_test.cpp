@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -644,6 +645,40 @@ TEST_F(Poe2ItemBasesTest, OldItemsKeepTheirArmourAndDamage)
 	EXPECT_EQ(base.armour, oldDefence.armour);
 	EXPECT_EQ(base.evasion, oldDefence.evasion);
 	EXPECT_EQ(base.energyShield, 0);
+}
+
+TEST_F(Poe2ItemBasesTest, GearNeedsPoe2sFullAttributes)
+{
+	// Curtis 2026-10-27, after the Warrior playtest: the bases need POE2's own attributes, no longer 55% of them.
+	const auto needs = [](std::string_view name) {
+		const ItemData &data = AllItemsList[FindBase(name)];
+		return std::array<int, 3> { data.iMinStr, data.iMinMag, data.iMinDex };
+	};
+	EXPECT_EQ(needs("Iron Cap"), (std::array<int, 3> { 5, 0, 0 }));
+	EXPECT_EQ(needs("Legion Helm"), (std::array<int, 3> { 78, 0, 0 }));
+	EXPECT_EQ(needs("Titan Crown"), (std::array<int, 3> { 150, 0, 0 }));
+	EXPECT_EQ(needs("Shortsword"), (std::array<int, 3> { 3, 0, 3 }));
+	EXPECT_EQ(needs("Ruby Ring"), (std::array<int, 3> { 0, 0, 0 }));
+	EXPECT_EQ(needs("Crimson Amulet"), (std::array<int, 3> { 0, 0, 0 }));
+	// Diablo's bases keep theirs.
+	EXPECT_EQ(needs("Full Plate Mail"), (std::array<int, 3> { 90, 0, 0 }));
+
+	// A requirement past 127 stays whole on the item and through a save, and is checked.
+	LoadPlayerDataFiles();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(player.getMaxCharacterLevel());
+	player._pBaseMag = player._pMagic = 50;
+	player._pBaseDex = player._pDexterity = 50;
+	const Item crown = MakeItem("Titan Crown", 7);
+	EXPECT_EQ(crown._iMinStr, 150);
+	EXPECT_EQ(SaveAndLoad(crown)._iMinStr, 150);
+	player._pBaseStr = player._pStrength = 149;
+	EXPECT_FALSE(player.CanUseItem(crown));
+	player._pBaseStr = player._pStrength = 150;
+	EXPECT_TRUE(player.CanUseItem(crown));
 }
 
 } // namespace

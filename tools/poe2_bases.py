@@ -212,7 +212,9 @@ LEVEL_SCALE = 1
 # The scale the levels had before, which still picks the Diablo unique type a base carries: saved uniques find
 # themselves by their base's unique type, so it must never change.
 UNIQUE_TYPE_LEVEL_SCALE = 0.36
-REQUIREMENT_SCALE = 0.55
+# Attribute requirements are POE2's own numbers (Curtis 2026-10-27, after the Warrior playtest): Iron Cap 5 Str,
+# Legion Helm 78, Titan Crown 150. They were 55% while levels were scaled down.
+REQUIREMENT_SCALE = 1
 # One defence point is one armour, one evasion or three energy shield (EnergyShieldPerDefense).
 ENERGY_SHIELD_PER_DEFENSE = 3
 # A weapon hits for the bundle's damage.
