@@ -57,6 +57,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/attack_speed.hpp"
 #include "poe2/experience.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hardcore.hpp"
@@ -244,12 +245,20 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
 	player.poe2.flurryStrike = 0;
 	PayMeleeAttackLife(player);
-	const int8_t skippedAnimationFrames = MeleeAttackSkippedFrames(player, player.poe2.activeSkill, includesFirstFrame);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the swing takes the weapon's attack time (Double Swing's strike, its share of it).
+		uint32_t time = AttackTime(player, AttackSkillSlot(player, player.poe2.activeSkill));
+		if (player.poe2.activeSkill == WeaponSkill::Flurry)
+			time = FlurryStrikeTime(time, player._pAFrames, /*backhand=*/false);
+		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
+	} else {
+		const int8_t skippedAnimationFrames = MeleeAttackSkippedFrames(player, player.poe2.activeSkill, includesFirstFrame);
+		NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	}
 	player._pmode = PM_ATTACK;
 	FixPlayerLocation(player, d);
 	SetPlayerOld(player);
@@ -266,12 +275,18 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 	}
 
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
-	const int8_t skippedAnimationFrames = RangedAttackSkippedFrames(player, includesFirstFrame);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the shot takes the weapon's attack time.
+		const uint32_t time = AttackTime(player, AttackSkillSlot(player, player.poe2.activeSkill));
+		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
+	} else {
+		const int8_t skippedAnimationFrames = RangedAttackSkippedFrames(player, includesFirstFrame);
+		NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	}
 
 	player._pmode = PM_RATTACK;
 	FixPlayerLocation(player, d);
@@ -321,9 +336,15 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	if (player._pmode == PM_SPELL)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
 	const bool isLearnedSpell = player.queuedSpell.spellType == SpellType::Spell;
-	// Charge Regulation's cast speed: a frame for every 10%.
-	const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames + (SpiritAuraSpeedPercent(player) / 10);
-	NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the cast takes the spell's cast time.
+		const uint32_t time = CastTime(player, SkillSlot::ForSpell(player.queuedSpell.spellId), isLearnedSpell);
+		NewPlrTimedAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, player._pSFNum, TakeActionTicks(player, time));
+	} else {
+		// Charge Regulation's cast speed: a frame for every 10%.
+		const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames + (SpiritAuraSpeedPercent(player) / 10);
+		NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
+	}
 
 	PlaySfxLoc(GetSpellData(player.queuedSpell.spellId).sSFX, player.position.tile);
 
@@ -1076,9 +1097,10 @@ bool DoAttack(Player &player)
 			const Monster *target = FindMonsterAtPosition(front);
 			if (target != nullptr && !CanTalkToMonst(*target) && target->position.old == front && !target->hasNoLife()) {
 				player.poe2.flurryStrike = 1;
-				const auto skipped = static_cast<int8_t>(MeleeAttackSkippedFrames(player, WeaponSkill::Flurry, true) + FlurryBackhandSkippedFrames);
 				const auto flags = static_cast<AnimationDistributionFlags>(AnimationDistributionFlags::ProcessAnimationPending | AnimationDistributionFlags::RepeatedAction);
-				NewPlrAnim(player, player_graphic::Attack, player._pdir, flags, skipped, player._pAFNum);
+				// The rest of the skill's attack time.
+				const uint32_t time = FlurryStrikeTime(AttackTime(player, SkillSlot::ForAttack(WeaponSkill::Flurry)), player._pAFrames, /*backhand=*/true);
+				NewPlrTimedAnim(player, player_graphic::Attack, player._pdir, flags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
 				return false;
 			}
 		}
@@ -1703,7 +1725,8 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		}
 	}
 
-	if (player._pmode == PM_SPELL && player.AnimInfo.currentFrame >= player._pSFNum && player.poe2.castSkill == WeaponSkill::None) {
+	// POE2 Mashup: a held cast waits for the whole cast time too.
+	if (player._pmode == PM_SPELL && (gbIsPoe2 ? player.AnimInfo.isLastFrame() : player.AnimInfo.currentFrame >= player._pSFNum) && player.poe2.castSkill == WeaponSkill::None) {
 		if (player.destAction == ACTION_SPELL) {
 			d = GetDirection(player.position.tile, { player.destParam1, player.destParam2 });
 			StartSpell(player, d, player.destParam1, player.destParam2);
@@ -2594,6 +2617,26 @@ void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, Animation
 	int8_t ticksPerFrame;
 	player.getAnimationFramesAndTicksPerFrame(graphic, numberOfFrames, ticksPerFrame);
 	player.AnimInfo.setNewAnimation(sprites, numberOfFrames, ticksPerFrame, flags, numSkippedFrames, distributeFramesBeforeFrame, static_cast<uint8_t>(previewShownGameTickFragments));
+}
+
+void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks)
+{
+	LoadPlrGFX(player, graphic);
+
+	OptionalClxSpriteList sprites;
+	int previewShownGameTickFragments = 0;
+	if (!HeadlessMode) {
+		sprites = player.AnimationData[static_cast<size_t>(graphic)].spritesForDirection(dir);
+		if (player.previewCelSprite && (*sprites)[0] == *player.previewCelSprite && !player.isWalking()) {
+			previewShownGameTickFragments = std::clamp<int>(AnimationInfo::baseValueFraction - player.progressToNextGameTickWhenPreviewWasSet, 0, AnimationInfo::baseValueFraction);
+		}
+	}
+
+	int8_t numberOfFrames;
+	int8_t ticksPerFrame;
+	player.getAnimationFramesAndTicksPerFrame(graphic, numberOfFrames, ticksPerFrame);
+	const int toAction = ActionTicksToActionFrame(ticks, actionFrame, numberOfFrames);
+	player.AnimInfo.setTimedAnimation(sprites, numberOfFrames, actionFrame, static_cast<int8_t>(toAction), static_cast<int8_t>(std::max(ticks - toAction, 1)), flags, static_cast<uint8_t>(previewShownGameTickFragments));
 }
 
 void SetPlrAnims(Player &player)

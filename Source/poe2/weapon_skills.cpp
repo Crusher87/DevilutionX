@@ -20,6 +20,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/aim.hpp"
+#include "poe2/attack_speed.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
@@ -836,9 +837,16 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 	const Direction dir = target == player.position.tile ? player._pdir : GetDirection(player.position.tile, target);
 	const bool attack = graphic == player_graphic::Attack;
 	const int8_t actionFrame = attack ? player._pAFNum - 1 : player._pSFNum;
-	// A quick strike skips most of the wind-up's game ticks; the skipped frames still show, sped up, before the hit.
-	const auto skippedFrames = static_cast<int8_t>(quickStrike ? std::max(actionFrame - DashStrikeWindupTicks, 0) : 0);
-	NewPlrAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, skippedFrames, attack ? player._pAFNum : player._pSFNum);
+	if (gbIsPoe2 && !quickStrike) {
+		// The skill takes its attack or cast time (poe2/attack_speed.hpp).
+		const SkillSlot slot = SkillSlot::ForAttack(skill);
+		const uint32_t time = attack ? AttackTime(player, slot) : CastTime(player, slot);
+		NewPlrTimedAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, actionFrame, TakeActionTicks(player, time));
+	} else {
+		// A quick strike skips most of the wind-up's game ticks; the skipped frames still show, sped up, before the hit.
+		const auto skippedFrames = static_cast<int8_t>(quickStrike ? std::max(actionFrame - DashStrikeWindupTicks, 0) : 0);
+		NewPlrAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, skippedFrames, attack ? player._pAFNum : player._pSFNum);
+	}
 	player._pmode = PM_SPELL;
 	FixPlayerLocation(player, dir);
 	FixPlrWalkTags(player);

@@ -848,6 +848,11 @@ struct Poe2PlayerData {
 	/** @brief Animation frames skipped by attacks and casts thanks to passives (not saved; from CalcPlrItemVals). */
 	int8_t passiveAttackFrames = 0;
 	int8_t passiveCastFrames = 0;
+	/** @brief Increased attack and cast speed in percent from the passive tree and gear, for POE2's timing (not saved; from CalcPlrItemVals). */
+	int16_t attackSpeedPercent = 0;
+	int16_t castSpeedPercent = 0;
+	/** @brief The fraction of a game tick, in 1/65536ths, the last attack or cast carried to the next (see TakeActionTicks; not saved). */
+	uint16_t actionTimeRemainder = 0;
 	/** @brief Life regenerated per second from gear (not saved; from CalcPlrItemVals). */
 	int lifeRegen = 0;
 	/** @brief Increased mana regeneration in percent from gear (not saved; from CalcPlrItemVals). */
@@ -985,6 +990,9 @@ struct Poe2PlayerData {
 		questsRewarded = 0;
 		passiveAttackFrames = 0;
 		passiveCastFrames = 0;
+		attackSpeedPercent = 0;
+		castSpeedPercent = 0;
+		actionTimeRemainder = 0;
 		lifeRegen = 0;
 		manaRegenBonus = 0;
 		lifeRegenRemainder = 0;

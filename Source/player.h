@@ -979,6 +979,13 @@ void ResetPlayerGFX(Player &player);
  * @param distributeFramesBeforeFrame Distribute the numSkippedFrames only before this frame
  */
 void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags = AnimationDistributionFlags::None, int8_t numSkippedFrames = 0, int8_t distributeFramesBeforeFrame = 0);
+/**
+ * @brief POE2 Mashup: sets a player animation that takes the given game ticks, its action frame (a hit or a cast)
+ * coming as far through them as it comes through the animation (see AnimationInfo::setTimedAnimation).
+ * @param actionFrame The frame the game logic acts on, like _pAFNum - 1 for an attack or _pSFNum for a spell
+ * @param ticks Game ticks from the start to the last frame, when a held attack starts the next one
+ */
+void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks);
 void SetPlrAnims(Player &player);
 void CreatePlayer(Player &player, HeroClass c);
 int CalcStatDiff(Player &player);
@@ -1011,11 +1018,11 @@ bool PosOkPlayer(const Player &player, Point position);
 /** @brief POE2 Mashup: a skill's melee hit on a monster, for the given share of its damage. */
 bool SkillHitMonster(Player &player, Monster &monster, int damagePercent);
 /**
- * @brief The attack animation frames a melee attack with the skill skips, as StartAttack works them out: the weapon's
- * attack speed, the skill's own and, in POE2 Mashup, the passives', uniques' and auras' (a negative total adds frames).
+ * @brief The attack animation frames a melee attack with the skill skips, as StartAttack works them out outside POE2
+ * Mashup: the weapon's attack speed (a negative total adds frames). POE2 Mashup times attacks with AttackTime instead.
  */
 int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame);
-/** @brief The attack animation frames a ranged attack skips, as StartRangeAttack works them out. */
+/** @brief The attack animation frames a ranged attack skips, as StartRangeAttack works them out outside POE2 Mashup. */
 int8_t RangedAttackSkippedFrames(const Player &player, bool includesFirstFrame);
 /**
  * @brief POE2 Mashup: whether Diablo's rule that a sword deals half to Undead and +50% to Animals, and a mace the

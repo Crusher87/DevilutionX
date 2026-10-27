@@ -6,8 +6,7 @@ Usage: tools/poe2_bases.py path/to/base_items.json
 Adds a row to mods/poe2/txtdata/items/itemdat.tsv for each bundle base of the classes the game
 has (helmets, shields, foci, rings, amulets and the weapon lines Diablo can wield), and writes
 mods/poe2/txtdata/poe2/base_meta.tsv with what the game reads besides itemdat: the defence line,
-how quality works, and the implicits (including the attack or cast speed of heavy, swift, focused
-and quick bases).
+how quality works, and the implicits (including the cast speed of focused and quick bases).
 
 Rows are matched by the id in the first column, so running it again updates them in place and
 never moves a row: saved items refer to bases by their row. The Diablo bases of those classes stop
@@ -22,7 +21,8 @@ research/poe2-body-armours.md. base_meta.tsv's split column says how a hybrid's 
 its level column the character level a base needs, like POE2's: the bundle's required level, POE2's
 item level for rings and amulets, and the table's level for body armours.
 and its block column is a shield's own chance to block, in percent (empty for everything else).
-Its aps column is a weapon's attacks per second in hundredths (POE2 attack speed).
+Its aps column is a weapon's attacks per second in hundredths (POE2 attack speed): heavy and swift bases carry their
+own, slower or faster, so they have no attack speed implicit on top of it.
 """
 
 import json
@@ -418,9 +418,6 @@ def main():
 		implicits = []
 		if 'physical_damage_min' in stats:
 			min_dam, max_dam = damage(stats, damage_percent(cls, b['drop_level']))
-			other = balanced.get((cls, tier))
-			if other is not None and other is not b:
-				implicits.append(speed_implicit(stats['attacks_per_second'], other['base_stats']['attacks_per_second'], 'attacks_per_second', 'Attack Speed'))
 		if 'innate_spell_power' in stats:
 			min_dam, max_dam = caster_damage(stats['innate_spell_power'], cls == 'staff')
 			other = balanced.get((cls, tier))

@@ -39,8 +39,8 @@ struct SkillDetailLine {
 std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket);
 
 /**
- * @brief Seconds one use of the skill takes while it's held. An attack's is the whole swing, from the tick it starts
- * to the tick the next one does, with the same skipped frames as StartAttack; Double Swing's holds both strikes.
+ * @brief Seconds one use of the skill takes while it's held, from the tick it starts to the tick the next one does: the
+ * attack or cast time the game uses (poe2/attack_speed.hpp); Double Swing's holds both strikes.
  */
 double UseSeconds(const Player &player, SkillSlot skill);
 

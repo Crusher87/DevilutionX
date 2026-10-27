@@ -841,6 +841,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/weapon_swap.cpp
   poe2/default_attack.cpp
   poe2/aim.cpp
+  poe2/attack_speed.cpp
   poe2/weapon_skills.cpp
   tables/playerdat.cpp
 )

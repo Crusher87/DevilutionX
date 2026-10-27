@@ -10,6 +10,7 @@
 #include "items.h"
 #include "missiles.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
@@ -254,15 +255,27 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	return hit;
 }
 
+/** @brief Whether a weapon skill plays a spell casting animation, as TryUseWeaponSkill starts it, rather than a swing. */
+bool PlaysCastAnimation(WeaponSkill skill)
+{
+	const TableSkillData *table = FindTableSkill(skill);
+	return (table != nullptr && table->graphic != 0)
+	    || IsAnyOf(skill, WeaponSkill::IceBolt, WeaponSkill::Spark, WeaponSkill::EmberFusillade, WeaponSkill::FrostNova, WeaponSkill::BattleCry, WeaponSkill::AmplifyDamage);
+}
+
+/** @brief Whether a weapon skill dashes and lands with a quick strike (StartDashSkill). */
+bool DashesToStrike(WeaponSkill skill)
+{
+	const TableSkillData *table = FindTableSkill(skill);
+	return (table != nullptr && table->shape == TableShape::Dash) || IsAnyOf(skill, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge);
+}
+
 /** @brief Frames of the skill's animation, from the class's animation data (the hero's own aren't set in town). */
 int AttackFrames(const Player &player, SkillSlot skill)
 {
 	const PlayerAnimData &data = GetPlayerAnimDataForClass(player._pClass);
-	if (skill.kind == SkillKind::Attack) {
-		const TableSkillData *table = FindTableSkill(skill.attack());
-		if ((table != nullptr && table->graphic != 0) || IsAnyOf(skill.attack(), WeaponSkill::IceBolt, WeaponSkill::Spark, WeaponSkill::EmberFusillade, WeaponSkill::FrostNova))
-			return data.castingFrames;
-	}
+	if (skill.kind == SkillKind::Attack && PlaysCastAnimation(skill.attack()))
+		return data.castingFrames;
 	switch (static_cast<PlayerWeaponGraphic>(player._pgfxnum & 0xFU)) {
 	case PlayerWeaponGraphic::UnarmedShield:
 		return data.unarmedShieldFrames;
@@ -289,26 +302,21 @@ int AttackFrames(const Player &player, SkillSlot skill)
 
 double UseSeconds(const Player &player, SkillSlot skill)
 {
+	// The same times StartAttack, StartRangeAttack, StartSpell and BeginSkillAnimation give the animations; a held use
+	// starts the next one on the last frame.
 	if (skill.kind == SkillKind::Spell) {
-		const SpellID spell = skill.spell();
+		// Supports that slow the cast hold the hero still after it (DoSpell).
 		const int frames = std::max<int>(GetPlayerAnimDataForClass(player._pClass).castingFrames, 1);
-		const int skipped = SupportCastSkippedFrames(player, spell) + player.poe2.passiveCastFrames;
-		const int recovery = SupportCastRecoveryTicks(player, spell, frames);
-		return std::max(frames - skipped + recovery, 2) / static_cast<double>(TicksPerSecond);
+		const int recovery = SupportCastRecoveryTicks(player, skill.spell(), frames);
+		return ActionSeconds(CastTime(player, skill)) + (recovery / static_cast<double>(TicksPerSecond));
 	}
 	const WeaponSkill attack = skill.kind == SkillKind::Attack ? skill.attack() : WeaponSkill::None;
-	if (skill.kind == SkillKind::Default || IsSwingWeaponSkill(attack)) {
-		// A held attack starts with StartAttack's skipped frames and the next one starts on its last frame: the first
-		// frame plays on the tick it starts. Double Swing's backhand follows on its last frame.
-		const bool ranged = skill.kind == SkillKind::Default ? IsRangedDefaultAttack(DefaultAttackFor(player)) : IsRangedWeaponSkill(attack);
-		const int frames = AttackFrames(player, skill);
-		const int skipped = ranged ? RangedAttackSkippedFrames(player, true) : MeleeAttackSkippedFrames(player, attack, true);
-		int ticks = std::max(frames - 1 - skipped, 1);
-		if (attack == WeaponSkill::Flurry)
-			ticks += std::max(frames - 1 - skipped - FlurryBackhandSkippedFrames, 1);
-		return ticks / static_cast<double>(TicksPerSecond);
-	}
-	// A skill with an animation of its own: the whole animation, less what speeds attacks up.
+	// Double Swing's attack time holds both strikes.
+	if (skill.kind == SkillKind::Default || IsSwingWeaponSkill(attack))
+		return ActionSeconds(AttackTime(player, skill));
+	if (!DashesToStrike(attack))
+		return ActionSeconds(PlaysCastAnimation(attack) ? CastTime(player, skill) : AttackTime(player, skill));
+	// A dash lands with a quick strike: the whole animation, less what speeds attacks up.
 	int skipped = 0;
 	const ItemSpecialEffect flags = player._pIFlags;
 	if (HasAnyOf(flags, ItemSpecialEffect::FastestAttack))

@@ -74,6 +74,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/area_levels.hpp"
+#include "poe2/attack_speed.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/boss_loot.hpp"
@@ -3866,6 +3867,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	const int slowestAttackFrames = gbIsPoe2 ? -MaxPassiveSpeedFrames : 0;
 	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed)) / SpeedPercentPerFrame, slowestAttackFrames, static_cast<int>(MaxPassiveSpeedFrames)));
 	player.poe2.passiveCastFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::CastSpeed) + gearStat(Poe2ItemStat::CastSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
+	// POE2's timing takes them as percents (poe2/attack_speed.hpp).
+	player.poe2.attackSpeedPercent = static_cast<int16_t>(std::clamp(passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed), -90, 1000));
+	player.poe2.castSpeedPercent = static_cast<int16_t>(std::clamp(passive(PassiveStat::CastSpeed) + gearStat(Poe2ItemStat::CastSpeed), -90, 1000));
 
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
 	int evasion = 0;

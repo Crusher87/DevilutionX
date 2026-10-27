@@ -17,6 +17,7 @@
 #include "loadsave.h"
 #include "pfile.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/default_attack.hpp"
@@ -303,9 +304,12 @@ TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
 	const Item heavy = MakeItem("Heavy Shortsword", 1);
 	const Item balanced = MakeItem("Shortsword", 1);
 	const Item swift = MakeItem("Swift Shortsword", 1);
-	EXPECT_LT(Stat(heavy, Poe2ItemStat::AttackSpeed), 0);
-	EXPECT_EQ(Stat(balanced, Poe2ItemStat::AttackSpeed), 0);
-	EXPECT_GE(Stat(swift, Poe2ItemStat::AttackSpeed), 10);
+	// Their speed is in their attacks per second, not an attack speed implicit on top of it.
+	EXPECT_EQ(Stat(heavy, Poe2ItemStat::AttackSpeed), 0);
+	EXPECT_EQ(Stat(swift, Poe2ItemStat::AttackSpeed), 0);
+	EXPECT_TRUE(ItemImplicitText(heavy).empty());
+	EXPECT_LT(ItemBaseAttacksPerSecond(heavy), ItemBaseAttacksPerSecond(balanced));
+	EXPECT_GT(ItemBaseAttacksPerSecond(swift), ItemBaseAttacksPerSecond(balanced));
 	EXPECT_GT(heavy._iMinDam + heavy._iMaxDam, swift._iMinDam + swift._iMaxDam);
 
 	const Item quick = MakeItem("Quick Pilgrim Staff", 1);
@@ -361,7 +365,7 @@ TEST_F(Poe2ItemBasesTest, ActOneStavesAndBowsHitHarder)
 TEST_F(Poe2ItemBasesTest, HeavyBasesAttackSlower)
 {
 	// Curtis 2026-10-23: a Heavy base's reduced attack speed only cancelled speed from elsewhere, so on its own it was
-	// never slower. Now it adds an animation frame for every 10%.
+	// never slower. Now its own attacks per second set its attack time (1.22 a second against 1.35 and 1.51).
 	LoadPlayerDataFiles();
 	Player &player = *MyPlayer;
 	player = {};
@@ -372,15 +376,15 @@ TEST_F(Poe2ItemBasesTest, HeavyBasesAttackSlower)
 	player._pBaseMag = player._pMagic = 200;
 	player._pBaseDex = player._pDexterity = 200;
 	player._pBaseVit = player._pVitality = 50;
-	const auto attackFrames = [&player](std::string_view base) {
+	const auto attackTime = [&player](std::string_view base) {
 		player.InvBody[INVLOC_HAND_LEFT] = MakeItem(base, 1);
 		player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
 		CalcPlrInv(player, false);
-		return player.poe2.passiveAttackFrames;
+		return ActionSeconds(AttackTime(player, DefaultSkillSlot(player)));
 	};
-	EXPECT_EQ(attackFrames("Heavy Shortsword"), -1);
-	EXPECT_EQ(attackFrames("Shortsword"), 0);
-	EXPECT_EQ(attackFrames("Swift Shortsword"), 1);
+	EXPECT_NEAR(attackTime("Heavy Shortsword"), 1 / 1.22, 0.0001);
+	EXPECT_NEAR(attackTime("Shortsword"), 1 / 1.35, 0.0001);
+	EXPECT_NEAR(attackTime("Swift Shortsword"), 1 / 1.51, 0.0001);
 
 	// A negative skip starts the animation before its first frame, so it reaches each frame a game tick later.
 	const auto ticksToFrame = [](int8_t skipped, int8_t frame) {
