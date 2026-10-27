@@ -792,6 +792,16 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 	return true;
 }
 
+bool IsSwingWeaponSkill(WeaponSkill skill)
+{
+	// The skills TryUseWeaponSkill queues for the next attack rather than starting their own animation.
+	if (skill == WeaponSkill::None || FindTableSkill(skill) != nullptr)
+		return false;
+	return IsNoneOf(skill, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge, WeaponSkill::BattleCry, WeaponSkill::EscapeShot, WeaponSkill::EmberFusillade,
+	    WeaponSkill::Spark, WeaponSkill::IceBolt, WeaponSkill::FrostNova, WeaponSkill::AmplifyDamage, WeaponSkill::Riposte, WeaponSkill::ShadowStep,
+	    WeaponSkill::RapidFire, WeaponSkill::ShieldBash);
+}
+
 void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 {
 	player.poe2.activeSkill = WeaponSkill::None;
@@ -1305,16 +1315,16 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 	}
 }
 
-int8_t WeaponSkillSkippedFrames(const Player &player)
+int8_t WeaponSkillSkippedFrames(const Player &player, WeaponSkill skill)
 {
 	int8_t skillFrames = 0;
-	if (player.poe2.activeSkill == WeaponSkill::Flurry)
+	if (skill == WeaponSkill::Flurry)
 		skillFrames = 3;
-	else if (IsAnyOf(player.poe2.activeSkill, WeaponSkill::Frenzy, WeaponSkill::FistsOfThunder))
+	else if (IsAnyOf(skill, WeaponSkill::Frenzy, WeaponSkill::FistsOfThunder))
 		skillFrames = 2;
 	// Each Frenzy charge makes every attack a little faster.
 	skillFrames = static_cast<int8_t>(skillFrames + player.poe2.frenzyCharges);
-	return static_cast<int8_t>(skillFrames + SupportAttackSkippedFrames(player, player.poe2.activeSkill));
+	return static_cast<int8_t>(skillFrames + SupportAttackSkippedFrames(player, skill));
 }
 
 int LightningArrowDamage(const Player &player)

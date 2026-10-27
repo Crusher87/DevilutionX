@@ -114,8 +114,11 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill);
  */
 void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack);
 
-/** @brief Extra animation frames skipped by the active skill's attack. */
-int8_t WeaponSkillSkippedFrames(const Player &player);
+/** @brief Extra animation frames skipped by an attack with the skill (WeaponSkill::None for a plain attack). */
+int8_t WeaponSkillSkippedFrames(const Player &player, WeaponSkill skill);
+
+/** @brief Whether the skill is used through a plain melee or ranged attack, not an animation of its own (see TryUseWeaponSkill). */
+bool IsSwingWeaponSkill(WeaponSkill skill);
 
 /**
  * @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile: the most its burst adds. The burst

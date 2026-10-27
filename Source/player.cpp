@@ -241,12 +241,10 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 		return;
 	}
 
-	int8_t skippedAnimationFrames = ItemAttackSkippedFrames(player, includesFirstFrame);
-
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
 	player.poe2.flurryStrike = 0;
 	PayMeleeAttackLife(player);
-	skippedAnimationFrames += WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player);
+	const int8_t skippedAnimationFrames = MeleeAttackSkippedFrames(player, player.poe2.activeSkill, includesFirstFrame);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
@@ -267,20 +265,8 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 		return;
 	}
 
-	int8_t skippedAnimationFrames = 0;
-	const auto flags = player._pIFlags;
-
-	if (!gbIsHellfire) {
-		if (includesFirstFrame && HasAnyOf(flags, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack)) {
-			skippedAnimationFrames += 1;
-		}
-		if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
-			skippedAnimationFrames += 1;
-		}
-	}
-
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
-	skippedAnimationFrames += AttackSpeedFrames(player);
+	const int8_t skippedAnimationFrames = RangedAttackSkippedFrames(player, includesFirstFrame);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
@@ -1090,7 +1076,7 @@ bool DoAttack(Player &player)
 			const Monster *target = FindMonsterAtPosition(front);
 			if (target != nullptr && !CanTalkToMonst(*target) && target->position.old == front && !target->hasNoLife()) {
 				player.poe2.flurryStrike = 1;
-				const auto skipped = static_cast<int8_t>(ItemAttackSkippedFrames(player, true) + WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player) + FlurryBackhandSkippedFrames);
+				const auto skipped = static_cast<int8_t>(MeleeAttackSkippedFrames(player, WeaponSkill::Flurry, true) + FlurryBackhandSkippedFrames);
 				const auto flags = static_cast<AnimationDistributionFlags>(AnimationDistributionFlags::ProcessAnimationPending | AnimationDistributionFlags::RepeatedAction);
 				NewPlrAnim(player, player_graphic::Attack, player._pdir, flags, skipped, player._pAFNum);
 				return false;
@@ -1875,6 +1861,28 @@ void GetPlayerGraphicsPath(std::string_view path, std::string_view prefix, std::
 }
 
 } // namespace
+
+int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame)
+{
+	return static_cast<int8_t>(ItemAttackSkippedFrames(player, includesFirstFrame) + WeaponSkillSkippedFrames(player, skill) + AttackSpeedFrames(player));
+}
+
+int8_t RangedAttackSkippedFrames(const Player &player, bool includesFirstFrame)
+{
+	int8_t skippedAnimationFrames = 0;
+	const auto flags = player._pIFlags;
+
+	if (!gbIsHellfire) {
+		if (includesFirstFrame && HasAnyOf(flags, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack)) {
+			skippedAnimationFrames += 1;
+		}
+		if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
+			skippedAnimationFrames += 1;
+		}
+	}
+
+	return static_cast<int8_t>(skippedAnimationFrames + AttackSpeedFrames(player));
+}
 
 void Player::CalcScrolls()
 {

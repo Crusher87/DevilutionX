@@ -285,7 +285,8 @@ int AttackFrames(const Player &player, SkillSlot skill)
 	}
 }
 
-/** @brief Seconds one use takes, from the animation and what speeds it up. */
+} // namespace
+
 double UseSeconds(const Player &player, SkillSlot skill)
 {
 	if (skill.kind == SkillKind::Spell) {
@@ -295,6 +296,19 @@ double UseSeconds(const Player &player, SkillSlot skill)
 		const int recovery = SupportCastRecoveryTicks(player, spell, frames);
 		return std::max(frames - skipped + recovery, 2) / static_cast<double>(TicksPerSecond);
 	}
+	const WeaponSkill attack = skill.kind == SkillKind::Attack ? skill.attack() : WeaponSkill::None;
+	if (skill.kind == SkillKind::Default || IsSwingWeaponSkill(attack)) {
+		// A held attack starts with StartAttack's skipped frames and the next one starts on its last frame: the first
+		// frame plays on the tick it starts. Double Swing's backhand follows on its last frame.
+		const bool ranged = skill.kind == SkillKind::Default ? IsRangedDefaultAttack(DefaultAttackFor(player)) : IsRangedWeaponSkill(attack);
+		const int frames = AttackFrames(player, skill);
+		const int skipped = ranged ? RangedAttackSkippedFrames(player, true) : MeleeAttackSkippedFrames(player, attack, true);
+		int ticks = std::max(frames - 1 - skipped, 1);
+		if (attack == WeaponSkill::Flurry)
+			ticks += std::max(frames - 1 - skipped - FlurryBackhandSkippedFrames, 1);
+		return ticks / static_cast<double>(TicksPerSecond);
+	}
+	// A skill with an animation of its own: the whole animation, less what speeds attacks up.
 	int skipped = 0;
 	const ItemSpecialEffect flags = player._pIFlags;
 	if (HasAnyOf(flags, ItemSpecialEffect::FastestAttack))
@@ -308,11 +322,11 @@ double UseSeconds(const Player &player, SkillSlot skill)
 	skipped += player.poe2.passiveAttackFrames + UniqueAttackSpeedPercent(player) / 10;
 	if (skill.kind == SkillKind::Attack)
 		skipped += SupportAttackSkippedFrames(player, skill.attack());
-	else if (skill.kind == SkillKind::Default)
-		skipped += SupportAttackSkippedFrames(player, WeaponSkill::None);
 	const int frames = AttackFrames(player, skill);
 	return std::max(frames - skipped, 2) / static_cast<double>(TicksPerSecond);
 }
+
+namespace {
 
 std::string_view SpellDescription(SpellID spell)
 {
@@ -789,6 +803,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 			average += part.average;
 		}
 		Value(lines, "Average hit", std::format("{:d}", ShownDamage(average)));
+		// Double Swing's use time holds both strikes, and the backhand hits harder.
+		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::Flurry)
+			average = average * (100 + FlurryBackhandDamagePercent) / 100;
 		if (usable && seconds > 0)
 			Value(lines, "Damage per second", std::format("{:d} (one target)", ShownDamage(average / seconds)));
 		Text(lines, Kind::Note, "Before the enemy's armour and resistances");

@@ -1011,6 +1011,13 @@ bool PosOkPlayer(const Player &player, Point position);
 /** @brief POE2 Mashup: a skill's melee hit on a monster, for the given share of its damage. */
 bool SkillHitMonster(Player &player, Monster &monster, int damagePercent);
 /**
+ * @brief The attack animation frames a melee attack with the skill skips, as StartAttack works them out: the weapon's
+ * attack speed, the skill's own and, in POE2 Mashup, the passives', uniques' and auras' (a negative total adds frames).
+ */
+int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame);
+/** @brief The attack animation frames a ranged attack skips, as StartRangeAttack works them out. */
+int8_t RangedAttackSkippedFrames(const Player &player, bool includesFirstFrame);
+/**
  * @brief POE2 Mashup: whether Diablo's rule that a sword deals half to Undead and +50% to Animals, and a mace the
  * reverse, applies in POE2 mode. Off (plan step 14, Curtis 2026-10-27): it cost a Warrior or Bard about a third more
  * hits in Act 1 and a Warrior twice as many in the Hive.

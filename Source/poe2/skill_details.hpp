@@ -38,6 +38,12 @@ struct SkillDetailLine {
 /** @brief The details of the skill in a Skills panel socket, top to bottom. */
 std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket);
 
+/**
+ * @brief Seconds one use of the skill takes while it's held. An attack's is the whole swing, from the tick it starts
+ * to the tick the next one does, with the same skipped frames as StartAttack; Double Swing's holds both strikes.
+ */
+double UseSeconds(const Player &player, SkillSlot skill);
+
 /** @brief The tags of a skill, like "Spell, Projectile, Fire". */
 std::string SkillTagText(SkillSlot skill);
 
