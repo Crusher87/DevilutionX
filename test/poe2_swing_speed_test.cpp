@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <string_view>
 #include <vector>
 
@@ -498,11 +500,13 @@ TEST_F(Poe2SwingSpeedTest, UseTimeIsTheHeldCycle)
 		}
 	}
 
+	// POE2's speeds (skill_speed.tsv): Cleave 75%; Double Swing's two strikes 240% each; Frenzy 140%. The old rows only
+	// kept Double Swing (75% a use) and Frenzy (115%) at their old frame speeds.
 	player.poe2.attackSpeedPercent = 0;
 	EXPECT_NEAR(UseSeconds(player, DefaultSkillSlot(player)), 1 / 1.35, 0.0001);
-	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 1 / 1.35, 0.0001);
-	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Flurry)), 1 / (1.35 * 0.75), 0.0001);
-	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Frenzy)), 1 / (1.35 * 1.15), 0.0001);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 1 / (1.35 * 0.75), 0.0001);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Flurry)), 2 / (1.35 * 2.4), 0.0001);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Frenzy)), 1 / (1.35 * 1.4), 0.0001);
 }
 
 TEST_F(Poe2SwingSpeedTest, HeldSpellTakesItsCastTime)
@@ -517,7 +521,12 @@ TEST_F(Poe2SwingSpeedTest, HeldSpellTakesItsCastTime)
 	ASSERT_EQ(player._pSFNum, 14);
 	const SkillSlot firebolt = SkillSlot::ForSpell(SpellID::Firebolt);
 
-	// No row: what a held cast took before, its animation up to the cast frame (14 ticks for a Warrior).
+	// Firebolt's own row: POE2's 0.9 seconds.
+	EXPECT_NEAR(UseSeconds(player, firebolt), 0.9, 0.0001);
+
+	// A row without a cast time, as for a spell without a row: what a held cast took before, its animation up to the
+	// cast frame (14 ticks for a Warrior).
+	SetSkillSpeed("Spell Firebolt", 100, 0);
 	const HeldSwings plain = HoldCast(player, SpellID::Firebolt, 600);
 	ASSERT_GE(plain.starts.size(), 10U);
 	EXPECT_EQ(plain.cycle(), 14);
@@ -546,6 +555,102 @@ TEST_F(Poe2SwingSpeedTest, HeldSpellTakesItsCastTime)
 	player.poe2.passiveCastFrames = 0;
 	const HeldSwings diablo = HoldCast(player, SpellID::Firebolt, 300);
 	EXPECT_EQ(diablo.cycle(), 14);
+}
+
+TEST_F(Poe2SwingSpeedTest, EverySkillSpeedRowNamesASkill)
+{
+	// Each key is a weapon skill's, a default attack's or a spell's (or one's step): a typo would quietly leave a skill
+	// at 100%.
+	EXPECT_TRUE(UnknownSkillSpeedKeys().empty());
+	for (const std::string &key : UnknownSkillSpeedKeys())
+		ADD_FAILURE() << key;
+	EXPECT_TRUE(IsKnownSkillSpeedKey("Flurry:backhand"));
+	EXPECT_TRUE(IsKnownSkillSpeedKey("Spell Fireball"));
+	EXPECT_TRUE(IsKnownSkillSpeedKey("Default StaffBolt"));
+	EXPECT_FALSE(IsKnownSkillSpeedKey("Cleave:backhand"));
+	EXPECT_FALSE(IsKnownSkillSpeedKey("Flury"));
+	EXPECT_FALSE(IsKnownSkillSpeedKey("Spell Firebolts"));
+}
+
+TEST_F(Poe2SwingSpeedTest, EveryActiveSkillHasARow)
+{
+	// The crossbow skills move to bows in another change, which gives them their rows.
+	const WeaponSkill crossbow[] = { WeaponSkill::Impale, WeaponSkill::ClusterBolt, WeaponSkill::SpikeTrap, WeaponSkill::Sentry,
+		WeaponSkill::ExplosiveBolt, WeaponSkill::SiegeVolley, WeaponSkill::RapidFire };
+	for (int i = 1; i <= static_cast<int>(WeaponSkill::Last); i++) {
+		const auto skill = static_cast<WeaponSkill>(i);
+		if (std::find(std::begin(crossbow), std::end(crossbow), skill) != std::end(crossbow))
+			continue;
+		EXPECT_NE(FindSkillSpeedRow(SkillSlot::ForAttack(skill)), nullptr) << SkillSpeedKey(SkillSlot::ForAttack(skill));
+	}
+	for (const DefaultAttack attack : { DefaultAttack::Punch, DefaultAttack::SwordStrike, DefaultAttack::DaggerStab, DefaultAttack::AxeChop,
+	         DefaultAttack::MaceSmash, DefaultAttack::StaffStrike, DefaultAttack::StaffBolt, DefaultAttack::BowShot, DefaultAttack::ShieldBash }) {
+		const SkillSlot slot = SkillSlot::ForDefault(static_cast<uint8_t>(attack));
+		EXPECT_NE(FindSkillSpeedRow(slot), nullptr) << SkillSpeedKey(slot);
+	}
+	// Every spell a gem teaches.
+	int spells = 0;
+	for (const ItemData &data : AllItemsList) {
+		if (data.iMiscId != IMISC_SKILLGEM_SPELL || data.iSpell == SpellID::Null)
+			continue;
+		spells++;
+		const SkillSlot slot = SkillSlot::ForSpell(data.iSpell);
+		EXPECT_NE(FindSkillSpeedRow(slot), nullptr) << SkillSpeedKey(slot);
+		EXPECT_TRUE(IsCastTimed(slot, true)) << SkillSpeedKey(slot);
+		EXPECT_GT(SkillCastTimeMs(slot), 0) << SkillSpeedKey(slot);
+	}
+	EXPECT_GE(spells, 30);
+}
+
+TEST_F(Poe2SwingSpeedTest, SkillSpeedsAreThePoe2Research)
+{
+	// A few of the research's numbers (research/attack-speed/skill-speeds.tsv) as the game reads them.
+	const auto attack = [](WeaponSkill skill) { return SkillSlot::ForAttack(skill); };
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::Cleave)), 75);
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::Shockwave)), 40);
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::WaveOfLight)), 120);
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::FistsOfThunder)), 140);
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::FistsOfThunder), SkillStep::Finisher), 91);
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::Flurry), SkillStep::Backhand), 240);
+	EXPECT_EQ(SkillCastTimeMs(attack(WeaponSkill::IceBolt)), 800);
+	EXPECT_EQ(SkillCastTimeMs(SkillSlot::ForSpell(SpellID::Fireball)), 1200);
+	EXPECT_EQ(SkillCastTimeMs(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt))), 900);
+	// The shield skills' fixed attack times.
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::ShieldBash))->attackMs, 550);
+	EXPECT_EQ(FindSkillSpeedRow(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::ShieldBash)))->attackMs, 550);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::ShieldCharge))->attackMs, 600);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::BlessedShield))->attackMs, 800);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::ShieldWall))->attackMs, 1250);
+	EXPECT_FALSE(IsCastTimed(attack(WeaponSkill::ShieldWall), true));
+	// The flat added times.
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::LeapSlam))->addedMs, 650);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::LeapSlam))->distanceMs, 500);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::EscapeShot))->addedMs, 700);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::Whirlwind))->addedMs, 1000);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::FallingSword))->addedMs, 650);
+	EXPECT_EQ(FindSkillSpeedRow(attack(WeaponSkill::Meteor))->addedMs, 1000);
+
+	// Unarmed: POE2's 1.65 a second, and Punch at 100% of it.
+	Player &player = *MyPlayer;
+	player.InvBody[INVLOC_HAND_LEFT] = {};
+	CalcPlrInv(player, false);
+	EXPECT_EQ(WeaponAttacksPerSecond(player), 165);
+	ASSERT_EQ(DefaultAttackFor(player), DefaultAttack::Punch);
+	EXPECT_NEAR(UseSeconds(player, DefaultSkillSlot(player)), 1 / 1.65, 0.0001);
+}
+
+TEST_F(Poe2SwingSpeedTest, DiabloKeepsItsFrames)
+{
+	// Outside POE2 Mashup nothing is loaded and nothing is timed: the 16-frame swing is cut short after the hit.
+	Player &player = *MyPlayer;
+	Equip(player, "Shortsword");
+	gbIsPoe2 = false;
+	LoadSkillSpeedData();
+	EXPECT_EQ(FindSkillSpeedRow(SkillSlot::ForAttack(WeaponSkill::Cleave)), nullptr);
+	player._pmode = PM_STAND;
+	player.destAction = ACTION_NONE;
+	const HeldSwings diablo = HoldAttack(player, WeaponSkill::None, 80, false);
+	EXPECT_EQ(diablo.cycle(), 9);
 }
 
 } // namespace
