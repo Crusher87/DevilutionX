@@ -238,7 +238,8 @@ TEST_F(Poe2VendorItemsTest, TownItemsPassMpValidation)
 				gbIsMultiplayer = true;
 				const Item rebuilt = Rebuild(ware);
 				EXPECT_TRUE(IsItemValid(*MyPlayer, rebuilt)) << ware._iIName << " at hero level " << heroLevel;
-				EXPECT_LE(ware._iCreateInfo & CF_LEVEL, 30) << "Diablo's vendor level stays in CF_LEVEL";
+				if ((ware._iCreateInfo & CF_BOY) == 0) // Wirt's is up to 63, as in Diablo
+					EXPECT_LE(ware._iCreateInfo & CF_LEVEL, 30) << "Diablo's vendor level stays in CF_LEVEL";
 				gbIsMultiplayer = false;
 			}
 		}
@@ -258,9 +259,12 @@ TEST_F(Poe2VendorItemsTest, VendorsStockForTheDeepestAreaVisited)
 	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NORMAL), deepest + VendorAreaLevelBonus);
 	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NIGHTMARE), deepest + AreaLevelsPerDifficulty + VendorAreaLevelBonus);
 
-	for (int floor = 1; floor < NUMLEVELS; floor++)
+	int deepestOfAll = 0;
+	for (int floor = 1; floor < NUMLEVELS; floor++) {
 		MyPlayer->_pLvlVisited[floor] = true;
-	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_HELL), MaxPoe2ItemLevel);
+		deepestOfAll = std::max(deepestOfAll, AreaLevelForFloor(floor));
+	}
+	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_HELL), std::min(deepestOfAll + (2 * AreaLevelsPerDifficulty) + VendorAreaLevelBonus, MaxPoe2ItemLevel));
 
 	// The wares take the area's item level; CF_LEVEL keeps Diablo's vendor level.
 	std::fill(std::begin(MyPlayer->_pLvlVisited), std::end(MyPlayer->_pLvlVisited), false);
@@ -302,7 +306,7 @@ TEST_F(Poe2VendorItemsTest, DiabloWaresStillPickTheirBase)
 	ASSERT_FALSE(SmithItems.empty());
 	for (const Item &ware : SmithItems) {
 		Item rebuilt;
-		RecreateItem(*MyPlayer, rebuilt, IDI_GOLD, ware._iCreateInfo, ware._iSeed, ware._ivalue, ware.dwBuff);
+		RecreateItem(*MyPlayer, rebuilt, IDI_HEAL, ware._iCreateInfo, ware._iSeed, ware._ivalue, ware.dwBuff);
 		EXPECT_EQ(rebuilt.IDidx, ware.IDidx) << "the base comes from the seed, not the index passed in";
 	}
 }

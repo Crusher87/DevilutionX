@@ -440,7 +440,7 @@ int VendorAreaLevel(const Player &player, int difficulty)
 {
 	if (AreaLevelForFloor(1) == 0)
 		return 0;
-	int deepest = 1;
+	int deepest = AreaLevelForFloor(1); // the first floor counts before any floor is visited
 	for (int floor = 1; floor < NUMLEVELS; floor++) {
 		if (player._pLvlVisited[floor])
 			deepest = std::max(deepest, AreaLevelForFloor(floor));

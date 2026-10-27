@@ -2738,6 +2738,7 @@ void RecreatePremiumItem(const Player &player, Item &item, _item_indexes idx, in
 	SetRndSeed(iseed);
 	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndPremiumItem(player, plvl / 4, plvl); });
 	GetItemAttrs(item, itype, plvl);
+	item._iSeed = iseed; // POE2 Mashup: the modifiers roll from it, as when the ware was stocked
 	GetItemBonus(player, item, plvl / 2, plvl, true, !gbIsHellfire);
 
 	item._iSeed = iseed;
@@ -2750,6 +2751,7 @@ void RecreateBoyItem(const Player &player, Item &item, _item_indexes idx, int lv
 	SetRndSeed(iseed);
 	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndBoyItem(player, lvl); });
 	GetItemAttrs(item, itype, lvl);
+	item._iSeed = iseed; // POE2 Mashup: the modifiers roll from it, as when the ware was stocked
 	GetItemBonus(player, item, lvl, 2 * lvl, true, true);
 
 	item._iSeed = iseed;
