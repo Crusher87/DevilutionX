@@ -695,18 +695,8 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 
 	switch (monster.data().monsterClass) {
 	case MonsterClass::Undead:
-		if (phanditype == ItemType::Sword) {
-			dam -= dam / 2;
-		} else if (phanditype == ItemType::Mace) {
-			dam += dam / 2;
-		}
-		break;
 	case MonsterClass::Animal:
-		if (phanditype == ItemType::Mace) {
-			dam -= dam / 2;
-		} else if (phanditype == ItemType::Sword) {
-			dam += dam / 2;
-		}
+		dam = WeaponVsMonsterClassDamage(phanditype, monster.data().monsterClass, dam);
 		break;
 	case MonsterClass::Demon:
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::TripleDemonDamage)) {
@@ -3965,6 +3955,32 @@ bool TestPlayerDoGotHit(Player &player)
 	return DoGotHit(player);
 }
 #endif
+
+int WeaponVsMonsterClassDamage(ItemType handType, MonsterClass monsterClass, int damage)
+{
+	// POE2 Mashup: off unless Poe2WeaponVsMonsterClass (plan step 14): POE2's weapons deal the same to every monster.
+	if (gbIsPoe2 && !Poe2WeaponVsMonsterClass)
+		return damage;
+	switch (monsterClass) {
+	case MonsterClass::Undead:
+		if (handType == ItemType::Sword) {
+			damage -= damage / 2;
+		} else if (handType == ItemType::Mace) {
+			damage += damage / 2;
+		}
+		break;
+	case MonsterClass::Animal:
+		if (handType == ItemType::Mace) {
+			damage -= damage / 2;
+		} else if (handType == ItemType::Sword) {
+			damage += damage / 2;
+		}
+		break;
+	default:
+		break;
+	}
+	return damage;
+}
 
 bool SkillHitMonster(Player &player, Monster &monster, int damagePercent)
 {

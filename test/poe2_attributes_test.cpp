@@ -7,6 +7,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/unique_effects.hpp"
 #include "spells.h"
+#include "tables/monstdat.h"
 #include "storm/storm_net.hpp"
 #include "tables/playerdat.hpp"
 
@@ -211,6 +212,25 @@ TEST_F(Poe2AttributesTest, BlockHasNoLevelTerm)
 
 	gbIsPoe2 = false;
 	EXPECT_EQ(player.GetBlockChance(), player.GetBlockChance(false) + 2 * 40) << "Diablo keeps the level term";
+}
+
+/** Plan step 14 (Curtis 2026-10-27): Diablo's sword and mace rule against Undead and Animals is off in POE2. */
+TEST_F(Poe2AttributesTest, WeaponsDealTheSameToEveryMonsterClass)
+{
+	EXPECT_FALSE(Poe2WeaponVsMonsterClass);
+	for (const ItemType hand : { ItemType::Sword, ItemType::Mace, ItemType::Staff, ItemType::None }) {
+		for (const MonsterClass monsterClass : { MonsterClass::Undead, MonsterClass::Animal, MonsterClass::Demon })
+			EXPECT_EQ(WeaponVsMonsterClassDamage(hand, monsterClass, 101), 101);
+	}
+	// Diablo mode keeps it.
+	gbIsPoe2 = false;
+	EXPECT_EQ(WeaponVsMonsterClassDamage(ItemType::Sword, MonsterClass::Undead, 101), 51);
+	EXPECT_EQ(WeaponVsMonsterClassDamage(ItemType::Mace, MonsterClass::Undead, 101), 151);
+	EXPECT_EQ(WeaponVsMonsterClassDamage(ItemType::Mace, MonsterClass::Animal, 101), 51);
+	EXPECT_EQ(WeaponVsMonsterClassDamage(ItemType::Sword, MonsterClass::Animal, 101), 151);
+	EXPECT_EQ(WeaponVsMonsterClassDamage(ItemType::Staff, MonsterClass::Undead, 101), 101);
+	EXPECT_EQ(WeaponVsMonsterClassDamage(ItemType::Sword, MonsterClass::Demon, 101), 101);
+	gbIsPoe2 = true;
 }
 
 } // namespace

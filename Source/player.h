@@ -38,6 +38,7 @@
 namespace devilution {
 
 struct Monster;
+enum class MonsterClass : uint8_t;
 
 constexpr int InventoryGridCells = 40;
 constexpr int MaxBeltItems = 8;
@@ -1003,6 +1004,14 @@ void ClrPlrPath(Player &player);
 bool PosOkPlayer(const Player &player, Point position);
 /** @brief POE2 Mashup: a skill's melee hit on a monster, for the given share of its damage. */
 bool SkillHitMonster(Player &player, Monster &monster, int damagePercent);
+/**
+ * @brief POE2 Mashup: whether Diablo's rule that a sword deals half to Undead and +50% to Animals, and a mace the
+ * reverse, applies in POE2 mode. Off (plan step 14, Curtis 2026-10-27): it cost a Warrior or Bard about a third more
+ * hits in Act 1 and a Warrior twice as many in the Hive.
+ */
+constexpr bool Poe2WeaponVsMonsterClass = false;
+/** @brief A melee hit's damage after Diablo's sword/mace rule against Undead and Animals (unchanged in POE2 mode). */
+int WeaponVsMonsterClassDamage(ItemType handType, MonsterClass monsterClass, int damage);
 /** @brief POE2 Mashup: moves the player to a tile at once, as Teleport does. */
 void MovePlayerTo(Player &player, Point destination);
 /**
