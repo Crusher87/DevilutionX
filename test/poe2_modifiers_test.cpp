@@ -249,18 +249,51 @@ TEST_F(Poe2ModifiersTest, ModifiersChangeTheItemAndShowTheirTier)
 	EXPECT_EQ(sword._iMaxDam, 14);
 }
 
-TEST_F(Poe2ModifiersTest, FlatArmourIsScaledToDiablo)
+/** Harder monsters plan, step 10b: the bases took POE2's defence and damage, so flat modifiers take POE2's numbers too. */
+TEST_F(Poe2ModifiersTest, FlatModsTakePoe2sNumbers)
 {
-	const std::optional<uint8_t> armour = FindModifierFamily("flat_armour");
-	ASSERT_TRUE(armour);
-	const std::vector<Poe2ItemMod> mods = RollItemMods(ModSlot::BodyArmour, ModBaseArmour, 82, 6, 3, 7, 7);
-	for (const Poe2ItemMod &mod : mods) {
-		if (mod.family != *armour + 1)
-			continue;
-		const ModTier &tier = Family(mod).tiers[mod.tier - 1];
-		EXPECT_GE(mod.values[0], (tier.min[0] * 15) / 100);
-		EXPECT_LE(mod.values[0], ((tier.max[0] * 15) + 99) / 100);
+	const auto family = [](std::string_view id) -> const ModFamily & { return ModifierFamilies()[*FindModifierFamily(id)]; };
+	for (const std::string_view id : { "flat_armour", "flat_evasion", "flat_energy_shield", "local_added_physical", "local_added_fire", "local_added_lightning", "global_added_physical_attacks" })
+		ASSERT_TRUE(FindModifierFamily(id)) << id;
+	EXPECT_EQ(family("flat_armour").scale[0], 100);
+	EXPECT_EQ(family("flat_evasion").scale[0], 100);
+	// Energy shield counts in defence points, a third of what shows (EnergyShieldPerDefense).
+	EXPECT_EQ(family("flat_energy_shield").scale[0], 33);
+	for (const std::string_view id : { "local_added_physical", "local_added_fire", "local_added_lightning", "global_added_physical_attacks" })
+		EXPECT_EQ(family(id).scale, (std::array<int16_t, 2> { 100, 100 })) << id;
+	EXPECT_EQ(family("accuracy_rating").scale[0], 10) << "accuracy keeps its scale";
+
+	// Items saved before then rebuild with the scales they rolled with.
+	EXPECT_EQ(family("flat_armour").legacyScale[0], 15);
+	EXPECT_EQ(family("flat_evasion").legacyScale[0], 15);
+	EXPECT_EQ(family("flat_energy_shield").legacyScale[0], 10);
+	for (const std::string_view id : { "local_added_physical", "local_added_fire", "local_added_lightning", "global_added_physical_attacks" })
+		EXPECT_EQ(family(id).legacyScale, (std::array<int16_t, 2> { 25, 25 })) << id;
+	EXPECT_EQ(family("maximum_life").legacyScale, family("maximum_life").scale);
+
+	const uint8_t armour = *FindModifierFamily("flat_armour") + 1;
+	int seen = 0;
+	for (uint32_t seed = 1; seed <= 40; seed++) {
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::BodyArmour, ModBaseArmour, 82, 6, 3, seed, seed)) {
+			if (mod.family != armour)
+				continue;
+			seen++;
+			const ModTier &tier = Family(mod).tiers[mod.tier - 1];
+			EXPECT_GE(mod.values[0], tier.min[0]);
+			EXPECT_LE(mod.values[0], tier.max[0]);
+		}
+		const LegacyModScales legacy;
+		EXPECT_TRUE(RollingLegacyModScales());
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::BodyArmour, ModBaseArmour, 82, 6, 3, seed, seed)) {
+			if (mod.family != armour)
+				continue;
+			const ModTier &tier = Family(mod).tiers[mod.tier - 1];
+			EXPECT_GE(mod.values[0], (tier.min[0] * 15) / 100);
+			EXPECT_LE(mod.values[0], ((tier.max[0] * 15) + 99) / 100);
+		}
 	}
+	EXPECT_GT(seen, 0);
+	EXPECT_FALSE(RollingLegacyModScales()) << "the guard ends with its scope";
 }
 
 TEST_F(Poe2ModifiersTest, GearSkillLevelsRaiseMatchingSkills)

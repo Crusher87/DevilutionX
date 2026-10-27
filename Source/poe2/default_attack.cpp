@@ -1,6 +1,7 @@
 #include "poe2/default_attack.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -23,6 +24,9 @@
 namespace devilution {
 
 namespace {
+
+/** POE2's character level for each skill gem level, 1 to 20 (research/poe2-gem-levels-and-movement.md; 0 for level 1 read as 1). */
+constexpr std::array<int, 20> Poe2CharacterLevelForGemLevel { 1, 3, 6, 10, 14, 18, 22, 26, 31, 36, 41, 46, 52, 58, 64, 66, 72, 78, 84, 90 };
 
 const Item *MainWeapon(const Item &left, const Item &right)
 {
@@ -144,7 +148,8 @@ std::pair<int, int> BareFistDamage(int gemLevel)
 		return { 1, 1 };
 	std::sort(staffs.begin(), staffs.end(), [](const Staff &a, const Staff &b) { return a.level < b.level; });
 
-	const int level = CharacterLevelForGemLevel(gemLevel);
+	// The staffs' drop levels are area levels, so the gem level maps to POE2's character level for it, not the mod's.
+	const int level = Poe2CharacterLevelForGemLevel[static_cast<size_t>(std::clamp(gemLevel, 1, static_cast<int>(Poe2CharacterLevelForGemLevel.size())) - 1)];
 	const Staff *below = &staffs.front();
 	const Staff *above = &staffs.front();
 	for (const Staff &staff : staffs) {

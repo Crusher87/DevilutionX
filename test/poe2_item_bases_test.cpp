@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -15,6 +16,7 @@
 #include "pfile.h"
 #include "player.h"
 #include "poe2/bases.hpp"
+#include "poe2/craft_state.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
@@ -243,8 +245,8 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			EXPECT_TRUE(meta->defense.has_value()) << data.iName;
 		}
 	}
-	// The bundle's 384, plus POE2's Crimson, Lunar and Gold Amulets.
-	EXPECT_EQ(bases, 387);
+	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, and the 43 body armours of plan step 10.
+	EXPECT_EQ(bases, 430);
 }
 
 TEST_F(Poe2ItemBasesTest, RingsFollowPoe2)
@@ -468,6 +470,154 @@ TEST_F(Poe2ItemBasesTest, ArmourAbove255Survives)
 	const Item loaded = SaveAndLoad(cuirass);
 	EXPECT_EQ(loaded.IDidx, base);
 	EXPECT_EQ(loaded._iAC, cuirass._iAC) << "A game save keeps armour past 255";
+}
+
+
+/** A rare of the base at POE2 item level 60, as a drop builds it. */
+Item MakeRare(_item_indexes base, uint32_t seed)
+{
+	Item item {};
+	SetLootRarity(item, ITEM_QUALITY_RARE);
+	SetPoe2ItemLevel(item, 60);
+	SetRndSeed(seed);
+	SetupAllItems(*MyPlayer, item, base, AdvanceRndSeed(), 30, 1, /*onlygood=*/true, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+	item._iIdentified = true;
+	return item;
+}
+
+bool HasMod(const Item &item, uint8_t family)
+{
+	return std::any_of(item._iPoe2Mods.begin(), item._iPoe2Mods.end(), [family](const Poe2ItemMod &mod) { return mod.family == family; });
+}
+
+void ExpectSameMods(const Item &actual, const Item &expected, std::string_view what)
+{
+	for (size_t i = 0; i < expected._iPoe2Mods.size(); i++) {
+		EXPECT_EQ(actual._iPoe2Mods[i].family, expected._iPoe2Mods[i].family) << what << " mod " << i;
+		EXPECT_EQ(actual._iPoe2Mods[i].tier, expected._iPoe2Mods[i].tier) << what << " mod " << i;
+		EXPECT_EQ(actual._iPoe2Mods[i].values, expected._iPoe2Mods[i].values) << what << " mod " << i;
+	}
+	EXPECT_EQ(actual._iPoe2Stats, expected._iPoe2Stats) << what;
+}
+
+/** The points of an item's defence that come from its base: what its flat modifiers didn't add. */
+int BaseDefence(const Item &item)
+{
+	const auto stat = [&item](Poe2ItemStat s) { return static_cast<int>(item._iPoe2Stats[static_cast<size_t>(s)]); };
+	return item._iAC - stat(Poe2ItemStat::FlatArmour) - stat(Poe2ItemStat::FlatEvasion) - stat(Poe2ItemStat::FlatEnergyShield);
+}
+
+/** The low end of an item's damage that comes from its base: what its added physical damage didn't add. */
+int BaseMinDamage(const Item &item, uint8_t addedPhysical)
+{
+	int damage = item._iMinDam;
+	for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+		if (mod.family == addedPhysical)
+			damage -= mod.values[0];
+	}
+	return damage;
+}
+
+/**
+ * Harder monsters plan v3: an item saved before the bases and flat modifiers took POE2's numbers loads with exactly
+ * the armour and damage it had, its modifiers keep the values they rolled with, and no rebuild takes its base's
+ * share below what it had.
+ */
+TEST_F(Poe2ItemBasesTest, OldItemsKeepTheirArmourAndDamage)
+{
+	const _item_indexes armourBase = FindBase("Rogue Armour");
+	const _item_indexes weaponBase = FindBase("Shortsword");
+	const std::optional<uint8_t> flatArmourFamily = FindModifierFamily("flat_armour");
+	const std::optional<uint8_t> flatEvasionFamily = FindModifierFamily("flat_evasion");
+	const std::optional<uint8_t> addedPhysicalFamily = FindModifierFamily("local_added_physical");
+	ASSERT_TRUE(flatArmourFamily && flatEvasionFamily && addedPhysicalFamily);
+	const auto flatArmour = static_cast<uint8_t>(*flatArmourFamily + 1);
+	const auto flatEvasion = static_cast<uint8_t>(*flatEvasionFamily + 1);
+	const auto addedPhysical = static_cast<uint8_t>(*addedPhysicalFamily + 1);
+
+	// The game before: the item table's old numbers for the two bases, and the modifiers' old scales.
+	AllItemsList[armourBase].iMinAC = 16;
+	AllItemsList[armourBase].iMaxAC = 18;
+	AllItemsList[weaponBase].iMinDam = 2;
+	AllItemsList[weaponBase].iMaxDam = 6;
+	Item armour;
+	Item weapon;
+	{
+		const LegacyModScales legacy;
+		for (uint32_t seed = 1; seed < 2000 && armour.isEmpty(); seed++) {
+			const Item item = MakeRare(armourBase, seed);
+			if (HasMod(item, flatArmour) || HasMod(item, flatEvasion))
+				armour = item;
+		}
+		for (uint32_t seed = 1; seed < 2000 && weapon.isEmpty(); seed++) {
+			const Item item = MakeRare(weaponBase, seed);
+			if (HasMod(item, addedPhysical))
+				weapon = item;
+		}
+	}
+	ASSERT_FALSE(armour.isEmpty()) << "an old Rogue Armour with flat armour or evasion";
+	ASSERT_FALSE(weapon.isEmpty()) << "an old Shortsword with added physical damage";
+	ASSERT_NE(armour.dwBuff & CF_POE2, 0U);
+	const int oldArmourBase = BaseDefence(armour);
+	EXPECT_GE(oldArmourBase, 16);
+	EXPECT_LE(oldArmourBase, 18);
+	EXPECT_EQ(BaseMinDamage(weapon, addedPhysical), 2);
+	// Before, a hybrid's defence split evenly.
+	DefensePoints oldDefence;
+	SplitDefense(ItemDefenseType(armour), oldArmourBase, oldDefence.armour, oldDefence.evasion, oldDefence.energyShield);
+	oldDefence.armour += Stat(armour, Poe2ItemStat::FlatArmour);
+	oldDefence.evasion += Stat(armour, Poe2ItemStat::FlatEvasion);
+
+	// This build's tables.
+	LoadItemData();
+	LoadModifierData();
+	ASSERT_GT(AllItemsList[armourBase].iMinAC, armour._iAC) << "today's base alone has more than the old item";
+	ASSERT_GT(AllItemsList[weaponBase].iMinDam, BaseMinDamage(weapon, addedPhysical));
+
+	// A fresh rebuild has today's numbers, which is how an old item is told apart.
+	Item fresh;
+	RecreateItem(*MyPlayer, fresh, armour.IDidx, armour._iCreateInfo, armour._iSeed, armour._ivalue, armour.dwBuff, armour._iPoe2Craft);
+	EXPECT_GT(fresh._iAC, armour._iAC);
+	EXPECT_TRUE(IsLegacyScaleItem(armour, fresh));
+	EXPECT_FALSE(IsLegacyScaleItem(fresh, fresh)) << "an item of this build never is";
+
+	for (const Item *old : { &armour, &weapon }) {
+		const std::string name = old->_iIName;
+		const Item loaded = SaveAndLoad(*old);
+		EXPECT_EQ(loaded.IDidx, old->IDidx) << name;
+		EXPECT_EQ(loaded._iAC, old->_iAC) << name;
+		EXPECT_EQ(loaded._iMinDam, old->_iMinDam) << name;
+		EXPECT_EQ(loaded._iMaxDam, old->_iMaxDam) << name;
+		ExpectSameMods(loaded, *old, name);
+
+		// Crafting rebuilds it from its seed and keeps all of that.
+		const Item crafted = RebuildWithCraft(*MyPlayer, loaded, loaded.dwBuff, loaded._iPoe2Craft);
+		EXPECT_EQ(crafted._iAC, old->_iAC) << name;
+		EXPECT_EQ(crafted._iMinDam, old->_iMinDam) << name;
+		EXPECT_EQ(crafted._iMaxDam, old->_iMaxDam) << name;
+		ExpectSameMods(crafted, *old, name);
+		EXPECT_FALSE(RollingLegacyModScales());
+
+		// A Divine Orb rerolls the modifiers' values, with their old scales, and leaves the base's share alone.
+		const Item divined = RebuildWithCraft(*MyPlayer, loaded, (loaded.dwBuff & ~CF_POE2_DIVINE) | (1U << 9), loaded._iPoe2Craft);
+		EXPECT_EQ(BaseDefence(divined), BaseDefence(*old)) << name;
+		EXPECT_EQ(BaseMinDamage(divined, addedPhysical), BaseMinDamage(*old, addedPhysical)) << name;
+		for (const Poe2ItemMod &mod : divined._iPoe2Mods) {
+			if (mod.family != flatArmour && mod.family != addedPhysical)
+				continue;
+			const ModFamily &family = *ItemModFamily(mod);
+			const ModTier &tier = family.tiers[mod.tier - 1];
+			EXPECT_LE(mod.values[0], ((tier.max[0] * family.legacyScale[0]) + 99) / 100) << name << ": " << family.id;
+		}
+	}
+
+	// The armour shows what it showed: its defence is below what the base rolls now, so it splits evenly as before.
+	DefensePoints base;
+	DefensePoints bonus;
+	SplitItemDefense(SaveAndLoad(armour), base, bonus);
+	EXPECT_EQ(base.armour, oldDefence.armour);
+	EXPECT_EQ(base.evasion, oldDefence.evasion);
+	EXPECT_EQ(base.energyShield, 0);
 }
 
 } // namespace

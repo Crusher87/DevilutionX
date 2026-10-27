@@ -47,6 +47,8 @@ struct BaseMeta {
 	std::optional<DefenseType> defense;
 	QualityKind quality;
 	std::vector<BaseImplicit> implicits;
+	/** @brief How a hybrid's defence divides between its kinds; none for single-kind bases. */
+	DefenseSplit split;
 };
 
 /** @brief A rolled implicit: its values on this item. */
@@ -80,6 +82,12 @@ uint64_t ImplicitEffectBits(const Item &item);
 void ApplyBaseProperties(Item &item);
 /** @brief The implicits' tooltip lines. */
 std::vector<std::string> ItemImplicitText(const Item &item);
+
+/**
+ * @brief How the item's defence (from its base, without flat modifiers) divides: by its base's split, or evenly for an
+ * item whose defence is below its base's, which was saved before the bases took POE2's numbers and keeps its old split.
+ */
+DefenseSplit ItemDefenseSplit(const Item &item, int defense);
 
 /**
  * @brief What quality does on a base: from its metadata, else from its kind of item, so Diablo's body armours

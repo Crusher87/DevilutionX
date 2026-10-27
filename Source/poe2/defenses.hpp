@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 #include "utils/fixed_point.hpp"
@@ -57,10 +58,20 @@ DefenseType ItemDefenseType(const Item &item);
 /** @brief The implicit of the item's base, all zero for bases without one. */
 BodyArmourImplicit GetBodyArmourImplicit(const Item &item);
 /**
- * @brief Splits an item's defense between armour, evasion and energy shield points (energy shield not yet
- * multiplied by EnergyShieldPerDefense). Armour gets the rounding remainder.
+ * @brief How a hybrid base divides its defence (base_meta.tsv's split column): the percent of each kind of its line
+ * but the last, which takes the rest. None (parts 0) divides it evenly, as items did before the bases took POE2's
+ * numbers.
  */
-void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield);
+struct DefenseSplit {
+	uint8_t parts = 0;
+	std::array<uint8_t, 2> percent {};
+};
+
+/**
+ * @brief Splits an item's defense between armour, evasion and energy shield points (energy shield not yet
+ * multiplied by EnergyShieldPerDefense), evenly or by the base's split. The first kind gets the rounding remainder.
+ */
+void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield, const DefenseSplit &split = {});
 /** @brief Armour, evasion and energy shield, energy shield as shown (already multiplied by EnergyShieldPerDefense). */
 struct DefensePoints {
 	int armour = 0;

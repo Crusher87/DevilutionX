@@ -16,6 +16,7 @@
 namespace devilution {
 
 struct Monster;
+struct Player;
 
 /** @brief How tough the thing that dropped the loot was. */
 enum class LootSource : uint8_t {
@@ -141,8 +142,34 @@ constexpr int MaxPoe2ItemLevel = 82;
  * The area level is Diablo's monster level plus 15 per difficulty, so Normal runs 1-41, Nightmare 21-61 and Hell 40-80.
  */
 int Poe2ItemLevel(int areaLevel, int bonus = 0);
-/** @brief The POE2 item level of a monster's drops. */
+/**
+ * @brief The POE2 item level of a monster's drops: the area level, +1 from rare monsters and +2 from uniques and
+ * bosses (AreaItemLevel); without the area level table, Poe2CurrencyLevel.
+ */
 int Poe2ItemLevel(const Monster &monster, int difficulty);
+/** @brief The item level of loot from an area: its area level plus the source's bonus, from 1 to 82. */
+int AreaItemLevel(int areaLevel, int bonus = 0);
+/**
+ * @brief The POE2 item level a monster's currency drops check against: 1.3 × its Diablo level, as before item levels
+ * moved to area levels, so each orb starts dropping where it did (Chaos at 10 ... Perfect at 58).
+ */
+int Poe2CurrencyLevel(const Monster &monster, int difficulty);
+
+/** @brief Town vendors stock wares this far above the deepest area the player has reached. */
+constexpr int VendorAreaLevelBonus = 2;
+
+/**
+ * @brief The premium stock takes POE2 equipment from this part of the vendors' area level up (Diablo's takes a quarter
+ * of its level up). A sixth, since POE2's bases step from level 1 straight to 11 or 12: a quarter left areas 8-11 none.
+ */
+constexpr int PremiumAreaLevelDivisor = 6;
+
+/**
+ * @brief The area level town vendors stock for: the deepest floor the player has visited (floor 1 before any),
+ * plus 15 per difficulty step, plus VendorAreaLevelBonus, at most MaxPoe2ItemLevel. It sets only the POE2 item
+ * level and the POE2 base of a ware; CF_LEVEL keeps Diablo's vendor level. 0 when the area level table isn't loaded.
+ */
+int VendorAreaLevel(const Player &player, int difficulty);
 
 /** @brief The item's POE2 item level, or 0 if it has none (older items, and anything that isn't equipment). */
 int GetPoe2ItemLevel(const Item &item);
