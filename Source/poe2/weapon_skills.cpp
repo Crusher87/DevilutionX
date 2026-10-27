@@ -1299,6 +1299,8 @@ int8_t WeaponSkillSkippedFrames(const Player &player)
 
 int LightningArrowDamage(const Player &player)
 {
+	if (LightningArrowBurstFromLevel)
+		return (player.getCharacterLevel() * LightningArrowBurstPerLevel) + (player._pDexterity / LightningArrowBurstDexterityDivisor);
 	// The arrow's average hit, worked out as MonsterMHit does an arrow's: the weapon roll, increased and added damage,
 	// and the attribute bonus (a Rogue's in full, other heroes' at least half).
 	const int weapon = (player._pIMinDam + player._pIMaxDam) / 2;

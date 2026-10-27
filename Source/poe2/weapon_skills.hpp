@@ -36,7 +36,15 @@ constexpr int WhirlingStaffReach = 2;
 constexpr int WhirlingStaffOuterDamagePercent = 50;
 /** @brief Leap Slam hits everything around where it lands for this percent of a weapon hit. */
 constexpr int LeapSlamDamagePercent = 80;
-/** @brief Lightning Arrow's lightning burst hits the 3x3 tiles where it lands for this percent of the arrow's hit, on average. */
+/**
+ * @brief Lightning Arrow's burst: true gives it Diablo's 2 x character level + Dexterity / 4 (plan step 14, Curtis
+ * 2026-10-27: the only way the Rogue clears packs); false gives it LightningArrowBurstPercent of the arrow's hit.
+ */
+constexpr bool LightningArrowBurstFromLevel = true;
+/** @brief The burst from the character level and Dexterity: this much a level, plus Dexterity over the divisor. */
+constexpr int LightningArrowBurstPerLevel = 2;
+constexpr int LightningArrowBurstDexterityDivisor = 4;
+/** @brief Without LightningArrowBurstFromLevel: the burst hits the 3x3 tiles where it lands for this percent of the arrow's hit, on average. */
 constexpr int LightningArrowBurstPercent = 60;
 /** @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster. */
 constexpr int FrostNovaShardDamagePercent = 25;
@@ -108,8 +116,9 @@ int8_t WeaponSkillSkippedFrames(const Player &player);
 
 /**
  * @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile: the most its burst adds. The burst
- * rolls half to all of it (ProcessElementalArrow), so it averages LightningArrowBurstPercent of the arrow's average hit
- * before the gem curve, which scales the arrow and the burst alike.
+ * rolls half to all of it (ProcessElementalArrow). With LightningArrowBurstFromLevel it is 2 x character level +
+ * Dexterity / 4; otherwise it averages LightningArrowBurstPercent of the arrow's average hit. The gem curve scales the
+ * arrow and the burst alike.
  */
 int LightningArrowDamage(const Player &player);
 
