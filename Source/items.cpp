@@ -577,7 +577,8 @@ void CalcSelfItems(Player &player)
 
 			if (RequirementStrength(player, currstr, currmag) < equipment._iMinStr
 			    || currmag < equipment._iMinMag
-			    || currdex < equipment._iMinDex)
+			    || currdex < equipment._iMinDex
+			    || !MeetsItemLevelRequirement(player, equipment))
 				isValid = false;
 
 			if (isValid)
@@ -2372,16 +2373,8 @@ void PrintItemInfo(const Item &item)
 		mag = needs.magic;
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Requirement;
-	if (str != 0 || mag != 0 || dex != 0) {
-		std::string text = std::string(_("Required:"));
-		if (str != 0)
-			text.append(FormatRuntime(_(" {:d} Str"), str));
-		if (mag != 0)
-			text.append(FormatRuntime(_(" {:d} Mag"), mag));
-		if (dex != 0)
-			text.append(FormatRuntime(_(" {:d} Dex"), dex));
+	if (const std::string text = ItemRequirementText(ItemRequiredLevel(item), str, mag, dex); !text.empty())
 		AddItemInfoBoxString(text);
-	}
 	if (gbIsPoe2) {
 		if (const int itemLevel = GetPoe2ItemLevel(item); itemLevel > 0) {
 			CurrentInfoLineStyle = InfoLineStyle::Note;
@@ -6932,6 +6925,26 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(_("No differences"), true);
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Default;
+}
+
+std::string ItemRequirementText(int level, int strength, int magic, int dexterity)
+{
+	const bool attributes = strength != 0 || magic != 0 || dexterity != 0;
+	if (level <= 1 && !attributes)
+		return {};
+	std::string text = std::string(_("Required:"));
+	if (level > 1) {
+		text.append(FormatRuntime(_(" Level {:d}"), level));
+		if (attributes)
+			text.append(",");
+	}
+	if (strength != 0)
+		text.append(FormatRuntime(_(" {:d} Str"), strength));
+	if (magic != 0)
+		text.append(FormatRuntime(_(" {:d} Mag"), magic));
+	if (dexterity != 0)
+		text.append(FormatRuntime(_(" {:d} Dex"), dexterity));
+	return text;
 }
 
 void PrintItemDur(const Item &item)

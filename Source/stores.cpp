@@ -32,6 +32,7 @@
 #include "panels/quest_log.hpp"
 #include "panels/skills_panel.hpp"
 #include "plrmsg.h"
+#include "poe2/bases.hpp"
 #include "poe2/economy.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
@@ -432,20 +433,11 @@ void PrintStoreItem(const Item &item, int l, UiFlags flags, bool cursIndent = fa
 			productLine.append(_("Indestructible"));
 	}
 
-	uint8_t str = item._iMinStr;
-	uint8_t mag = item._iMinMag;
-	uint8_t dex = item._iMinDex;
-
-	if (str != 0 || mag != 0 || dex != 0) {
+	// POE2 Mashup: with the character level the item needs, like the tooltip.
+	if (const std::string required = ItemRequirementText(ItemRequiredLevel(item), item._iMinStr, item._iMinMag, item._iMinDex); !required.empty()) {
 		if (!productLine.empty())
 			productLine.append(_(",  "));
-		productLine.append(_("Required:"));
-		if (str != 0)
-			productLine.append(FormatRuntime(_(" {:d} Str"), str));
-		if (mag != 0)
-			productLine.append(FormatRuntime(_(" {:d} Mag"), mag));
-		if (dex != 0)
-			productLine.append(FormatRuntime(_(" {:d} Dex"), dex));
+		productLine.append(required);
 	}
 	AddSText(40, l++, productLine, flags, false, -1, cursIndent);
 }

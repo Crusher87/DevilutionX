@@ -689,6 +689,11 @@ void PrintItemDetails(const Item &item);
  */
 uint8_t AffixTier(const std::vector<PLStruct> &affixes, const PLStruct &affix);
 void PrintItemDur(const Item &item);
+/**
+ * @brief The requirement line, like "Required: Level 48, 78 Str"; empty when nothing is needed. A level of 1 or less
+ * isn't shown, like POE2's starter bases.
+ */
+std::string ItemRequirementText(int level, int strength, int magic, int dexterity);
 /** @brief POE2 Mashup: while Shift is held, lists how the item's stats differ from the equipped one in green and red. */
 void PrintItemComparison(const Item &item);
 void UseItem(Player &player, item_misc_id Mid, SpellID spellID, int spellFrom);
