@@ -1,0 +1,160 @@
+class	name	level	str	dex	int	min	max	aps	crit	implicit
+one_hand_sword	Shortsword	0	0	0	0	6	9	155	50	
+one_hand_sword	Broadsword	6	9	9	0	8	13	160	50	
+one_hand_sword	Vampiric Blade	11	14	14	0	11	20	150	50	
+one_hand_sword	Scimitar	16	19	19	0	14	23	155	50	
+one_hand_sword	Charred Shortsword	21	23	23	0	19	34	160	50	
+one_hand_sword	Sickle Sword	28	29	29	0	18	38	150	50	
+one_hand_sword	Falchion	33	34	34	0	27	37	150	50	
+one_hand_sword	Treasured Blade	40	40	40	0	27	45	155	50	
+one_hand_sword	Cutlass	45	45	45	0	33	49	150	50	
+one_hand_sword	Runic Shortsword	50	49	49	0	26	55	165	50	
+one_hand_sword	Messer	52	51	51	0	30	56	160	50	
+one_hand_sword	Commander Sword	54	53	53	0	36	60	150	50	
+one_hand_sword	Dark Blade	65	63	63	0	43	65	155	50	
+two_hand_sword	Corroded Longsword	0	0	0	0	9	16	130	50	
+two_hand_sword	Iron Greatsword	6	9	9	0	13	23	135	50	
+two_hand_sword	Blessed Claymore	11	14	14	0	19	32	130	50	
+two_hand_sword	Broad Greatsword	16	19	19	0	25	42	125	50	
+two_hand_sword	Rippled Greatsword	22	24	24	0	28	52	130	50	
+two_hand_sword	Arced Longsword	28	29	29	0	31	58	135	50	
+two_hand_sword	Stone Greatsword	33	34	34	0	40	67	130	50	
+two_hand_sword	Obsidian Greatsword	36	37	37	0	49	73	125	50	
+two_hand_sword	Keen Greatsword	45	45	45	0	45	94	130	50	
+two_hand_sword	Ancient Greatblade	49	49	49	0	55	103	125	50	
+two_hand_sword	Flanged Greatblade	52	51	51	0	51	106	130	50	
+two_hand_sword	Regalia Longsword	54	53	53	0	61	92	135	50	
+two_hand_sword	Ultra Greatsword	65	63	63	0	72	119	130	50	
+one_hand_axe	Dull Hatchet	0	0	0	0	4	10	150	50	
+one_hand_axe	Hook Axe	0	9	0	0	5	14	145	50	Grants 1 Rage on Hit
+one_hand_axe	Bearded Axe	10	17	9	0	8	21	145	50	
+one_hand_axe	Extended Cleaver	16	25	12	0	8	25	150	50	Has no Accuracy Penalty from Range
+one_hand_axe	Bandit Hatchet	20	30	14	0	13	31	150	50	
+one_hand_axe	Crescent Axe	26	38	17	0	18	37	140	65	
+one_hand_axe	Carving Hatchet	33	47	20	0	19	44	150	50	
+one_hand_axe	Sacrificial Axe	37	52	22	0	20	42	150	50	Gain (28-35) Mana per enemy killed
+one_hand_axe	Boarding Hatchet	45	63	26	0	24	55	155	50	
+one_hand_axe	Fury Cleaver	48	67	27	0	30	62	155	50	10% increased Damage taken
+one_hand_axe	Battle Axe	52	72	29	0	28	65	150	50	
+one_hand_axe	Profane Cleaver	54	75	30	0	26	69	150	50	
+one_hand_axe	Dread Hatchet	65	89	36	0	34	79	150	50	
+two_hand_axe	Splitting Greataxe	0	0	0	0	8	20	120	50	
+two_hand_axe	Light Halberd	0	9	0	0	10	25	125	50	
+two_hand_axe	Executioner Greataxe	10	17	9	0	10	41	120	50	Culling Strike
+two_hand_axe	Arched Greataxe	16	25	12	0	17	59	115	50	
+two_hand_axe	Elegant Glaive	20	30	14	0	19	64	120	50	
+two_hand_axe	Savage Greataxe	27	39	17	0	23	70	120	50	Gain (34-43) Life per enemy killed
+two_hand_axe	Rending Halberd	33	47	20	0	27	91	120	65	
+two_hand_axe	Jagged Greataxe	40	56	23	0	43	99	115	50	(15-25)% chance to cause Bleeding on Hit
+two_hand_axe	Reaver Glaive	45	63	26	0	43	113	120	50	
+two_hand_axe	Ceremonial Halberd	52	72	29	0	53	123	120	50	Cannot use Projectile Attacks
+two_hand_axe	Monument Greataxe	57	79	32	0	48	143	120	50	
+two_hand_axe	Vile Greataxe	65	89	36	0	59	155	120	50	
+one_hand_mace	Wooden Club	0	0	0	0	6	10	145	50	
+one_hand_mace	Slim Mace	10	21	0	0	11	17	155	50	
+one_hand_mace	Spiked Club	16	31	0	0	15	24	145	50	
+one_hand_mace	Warpick	22	41	0	0	18	24	145	70	+(5-10)% to Critical Damage Bonus
+one_hand_mace	Plated Mace	26	48	0	0	18	38	140	50	
+one_hand_mace	Brigand Mace	33	60	0	0	28	38	145	50	
+one_hand_mace	Construct Hammer	36	65	0	0	31	38	140	50	40% chance to Daze on Hit
+one_hand_mace	Morning Star	45	80	0	0	33	49	145	65	
+one_hand_mace	Flared Mace	48	86	0	0	33	50	155	50	
+one_hand_mace	Jade Club	49	87	0	0	31	51	145	50	Always Hits
+one_hand_mace	Battle Pick	51	91	0	0	35	47	145	70	+(5-10)% to Critical Damage Bonus
+one_hand_mace	Lumen Mace	52	92	0	0	36	60	145	50	
+one_hand_mace	Marching Mace	54	96	0	0	33	69	140	50	
+one_hand_mace	Execratus Hammer	55	97	0	0	40	60	145	50	
+one_hand_mace	Bandit Mace	59	104	0	0	45	61	145	50	
+one_hand_mace	Structured Hammer	62	109	0	0	49	60	140	50	40% chance to Daze on Hit
+one_hand_mace	Torment Club	65	114	0	0	44	73	145	50	
+one_hand_mace	Flanged Mace	67	134	0	0	45	67	155	50	
+one_hand_mace	Crown Mace	72	149	0	0	43	89	140	50	
+one_hand_mace	Marauding Mace	77	163	0	0	51	84	145	50	
+one_hand_mace	Strife Pick	78	163	0	0	49	66	145	70	+(5-10)% to Critical Damage Bonus
+one_hand_mace	Akoyan Club	78	163	0	0	46	76	145	50	Always Hits
+one_hand_mace	Fortified Hammer	79	163	0	0	60	73	140	50	40% chance to Daze on Hit
+two_hand_mace	Felled Greatclub	0	0	0	0	13	18	110	50	
+two_hand_mace	Oak Greathammer	0	11	0	0	16	30	100	50	Causes (20-40)% increased Stun Buildup
+two_hand_mace	Forge Maul	11	23	0	0	26	35	105	50	Crushes Enemies on Hit
+two_hand_mace	Studded Greatclub	16	31	0	0	32	48	110	50	
+two_hand_mace	Cultist Greathammer	22	41	0	0	36	49	105	50	Strikes deal Splash Damage
+two_hand_mace	Temple Maul	28	52	0	0	35	72	120	50	
+two_hand_mace	Leaden Greathammer	33	60	0	0	58	78	110	50	
+two_hand_mace	Crumbling Maul	38	68	0	0	62	75	110	80	Causes Enemies to Explode on Critical kill, for 10% of their Life as Physical Damage
+two_hand_mace	Pointed Maul	45	80	0	0	68	102	110	65	
+two_hand_mace	Snakewood Greathammer	45	80	0	0	62	115	105	50	Causes (20-40)% increased Stun Buildup
+two_hand_mace	Blacksmith Maul	48	86	0	0	75	102	105	50	Crushes Enemies on Hit
+two_hand_mace	Totemic Greatclub	50	89	0	0	77	105	110	50	Warcries Empower an additional Attack
+two_hand_mace	Zealot Greathammer	51	91	0	0	70	95	105	50	Strikes deal Splash Damage
+two_hand_mace	Greatmace	52	92	0	0	74	124	110	50	
+two_hand_mace	Precise Greathammer	54	96	0	0	87	118	110	50	
+two_hand_mace	Solemn Maul	54	96	0	0	59	123	120	50	
+two_hand_mace	Heavy Greathammer	59	104	0	0	94	127	110	50	
+two_hand_mace	Disintegrating Maul	62	109	0	0	92	112	110	80	Causes Enemies to Explode on Critical kill, for 10% of their Life as Physical Damage
+two_hand_mace	Giant Maul	65	114	0	0	96	144	110	50	
+two_hand_mace	Anvil Maul	67	134	0	0	101	136	105	50	Crushes Enemies on Hit
+two_hand_mace	Sacred Maul	72	149	0	0	76	158	120	50	
+two_hand_mace	Ironwood Greathammer	77	163	0	0	105	196	100	50	Causes (30-50)% increased Stun Buildup
+two_hand_mace	Massive Greathammer	77	163	0	0	119	161	110	50	
+two_hand_mace	Fanatic Greathammer	78	163	0	0	101	137	105	50	Strikes deal Splash Damage
+two_hand_mace	Tawhoan Greatclub	78	163	0	0	113	153	110	50	Warcries Empower an additional Attack
+two_hand_mace	Ruination Maul	79	163	0	0	104	127	110	80	Causes Enemies to Explode on Critical kill, for 10% of their Life as Physical Damage
+dagger	Glass Shank	0	0	0	0	3	10	155	150	
+dagger	Crone Knife	6	0	9	9	4	15	155	150	Leeches 4% of Physical Damage as Mana
+dagger	Simple Dagger	12	0	15	15	8	19	155	150	
+dagger	Skinning Knife	16	0	19	19	8	22	165	135	
+dagger	Engraved Knife	27	0	29	29	11	34	155	135	
+dagger	Obsidian Dagger	33	0	34	34	13	39	155	150	
+dagger	Bloodletting Dagger	39	0	39	39	18	42	150	150	25% of Spell Mana Cost Converted to Life Cost
+dagger	Mail Breaker	45	0	45	45	19	44	150	150	Breaks (400-500) Armour on Critical Hit
+dagger	Kris Knife	49	0	49	49	16	48	165	150	
+dagger	Parrying Dagger	52	0	51	51	16	55	155	150	
+dagger	Arcane Dirk	56	0	55	55	22	52	155	150	
+dagger	Cinquedea	65	0	63	63	21	62	155	150	
+quarterstaff	Wrapped Quarterstaff	0	0	0	0	7	12	140	100	
+quarterstaff	Long Quarterstaff	0	0	9	0	9	18	140	100	16% increased Melee Strike Range with this weapon
+quarterstaff	Gothic Quarterstaff	11	0	18	9	16	26	140	120	
+quarterstaff	Crescent Quarterstaff	20	0	30	14	19	39	150	100	
+quarterstaff	Steelpoint Quarterstaff	28	0	41	18	28	51	140	100	
+quarterstaff	Slicing Quarterstaff	33	0	47	20	29	60	140	100	
+quarterstaff	Barrier Quarterstaff	37	0	52	22	35	58	140	100	+(12-18)% to Block chance
+quarterstaff	Hefty Quarterstaff	45	0	63	26	39	81	130	100	(20-50)% chance to Daze on Hit
+quarterstaff	Reaching Quarterstaff	45	0	63	26	35	72	140	100	16% increased Melee Strike Range with this weapon
+quarterstaff	Barbarous Quarterstaff	48	0	67	27	42	71	140	120	
+quarterstaff	Smooth Quarterstaff	49	0	68	28	59	79	150	0	
+quarterstaff	Anima Quarterstaff	52	0	72	29	47	79	140	100	
+quarterstaff	Waxing Quarterstaff	54	0	75	30	39	82	150	100	
+quarterstaff	Graceful Quarterstaff	56	0	77	31	47	87	140	100	
+quarterstaff	Bladed Quarterstaff	59	0	81	33	45	94	140	100	
+quarterstaff	Guardian Quarterstaff	62	0	85	34	52	86	140	100	+(12-18)% to Block chance
+quarterstaff	Wyrm Quarterstaff	65	0	89	36	57	94	140	100	
+quarterstaff	Sinister Quarterstaff	67	0	104	41	55	91	140	120	
+quarterstaff	Lunar Quarterstaff	72	0	115	46	50	103	150	100	
+quarterstaff	Skullcrusher Quarterstaff	75	0	127	50	59	122	130	100	(20-50)% chance to Daze on Hit
+quarterstaff	Striking Quarterstaff	77	0	127	50	53	111	140	100	16% increased Melee Strike Range with this weapon
+quarterstaff	Razor Quarterstaff	77	0	127	50	65	108	140	100	
+quarterstaff	Dreaming Quarterstaff	78	0	127	50	99	133	150	0	
+quarterstaff	Aegis Quarterstaff	79	0	127	50	58	97	140	100	+(12-18)% to Block chance
+bow	Crude Bow	0	0	0	0	6	9	120	50	
+bow	Shortbow	5	0	12	0	7	14	125	50	
+bow	Warden Bow	11	0	23	0	12	20	115	50	(25-35)% chance to Chain an additional time
+bow	Recurve Bow	16	0	31	0	15	31	110	50	
+bow	Composite Bow	22	0	41	0	19	31	120	50	
+bow	Dualstring Bow	28	0	52	0	19	35	115	50	+50% Surpassing chance to fire an additional Arrow
+bow	Zealot Bow	39	0	70	0	31	47	120	50	
+bow	Artillery Bow	45	0	80	0	39	72	110	50	50% reduced Projectile Range
+bow	Snakewood Shortbow	45	0	80	0	29	54	125	50	
+bow	Protector Bow	48	0	86	0	35	53	115	50	(25-35)% chance to Chain an additional time
+bow	Tribal Bow	50	0	89	0	38	57	120	50	
+bow	Rider Bow	51	0	91	0	36	61	120	50	
+bow	Greatbow	52	92	92	0	40	82	115	65	
+bow	Twin Bow	54	0	96	0	32	60	115	50	+50% Surpassing chance to fire an additional Arrow
+bow	Double Limb Bow	56	0	99	0	42	63	120	50	
+bow	Militant Bow	62	0	109	0	46	69	120	50	
+bow	Heavy Bow	65	0	114	0	45	75	120	50	
+bow	Ironwood Shortbow	67	0	134	0	41	76	125	50	
+bow	Cavalry Bow	72	0	149	0	49	82	120	50	
+bow	Guardian Bow	77	0	163	0	53	88	115	50	(25-35)% chance to Chain an additional time
+bow	Warmonger Bow	77	0	163	0	56	84	120	50	
+bow	Gemini Bow	78	0	163	0	39	72	115	50	+50% Surpassing chance to fire an additional Arrow
+bow	Obliterator Bow	78	0	163	0	62	115	110	50	50% reduced Projectile Range
