@@ -1420,6 +1420,17 @@ void TryDisarm(const Player &player, Object &object)
 	}
 }
 
+/**
+ * @brief Whether a queued attack may cut the attack in progress short. Diablo starts it right after the hit;
+ * POE2 Mashup waits for the whole swing, follow-through and all, as POE2's attack time does.
+ */
+bool AttackFollowThroughDone(const Player &player)
+{
+	if (gbIsPoe2)
+		return player.AnimInfo.isLastFrame();
+	return player.AnimInfo.currentFrame >= player._pAFNum;
+}
+
 void CheckNewPath(Player &player, bool pmWillBeCalled)
 {
 	int x = 0;
@@ -1659,7 +1670,7 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		return;
 	}
 
-	if (player._pmode == PM_ATTACK && player.AnimInfo.currentFrame >= player._pAFNum) {
+	if (player._pmode == PM_ATTACK && AttackFollowThroughDone(player)) {
 		if (player.destAction == ACTION_ATTACK) {
 			d = GetDirection(player.position.future, { player.destParam1, player.destParam2 });
 			StartAttack(player, d, pmWillBeCalled);
@@ -1690,7 +1701,7 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		}
 	}
 
-	if (player._pmode == PM_RATTACK && player.AnimInfo.currentFrame >= player._pAFNum) {
+	if (player._pmode == PM_RATTACK && AttackFollowThroughDone(player)) {
 		if (player.destAction == ACTION_RATTACK) {
 			d = GetDirection(player.position.tile, { player.destParam1, player.destParam2 });
 			StartRangeAttack(player, d, player.destParam1, player.destParam2, pmWillBeCalled);
@@ -3389,6 +3400,56 @@ void StartWarpLvl(Player &player, size_t pidx)
 	}
 }
 
+namespace {
+
+/** @brief Runs the player's action for a game tick, starting the queued one when it ends, and moves the animation on. */
+void ProcessPlayerAction(Player &player)
+{
+	bool tplayer = false;
+	do {
+		switch (player._pmode) {
+		case PM_STAND:
+		case PM_NEWLVL:
+		case PM_QUIT:
+			tplayer = false;
+			break;
+		case PM_WALK_NORTHWARDS:
+		case PM_WALK_SOUTHWARDS:
+		case PM_WALK_SIDEWAYS:
+			// POE2 Mashup: uniques that slow movement skip some walking ticks.
+			tplayer = UniqueSlowSkipsWalkTick(player) ? false : DoWalk(player);
+			break;
+		case PM_ATTACK:
+			tplayer = DoAttack(player);
+			break;
+		case PM_RATTACK:
+			tplayer = DoRangeAttack(player);
+			break;
+		case PM_BLOCK:
+			tplayer = DoBlock(player);
+			break;
+		case PM_SPELL:
+			tplayer = DoSpell(player);
+			break;
+		case PM_GOTHIT:
+			tplayer = DoGotHit(player);
+			break;
+		case PM_DEATH:
+			tplayer = DoDeath(player);
+			break;
+		}
+		// POE2 Mashup: a slowed skill holds the character still before the next action.
+		if (player._pmode != PM_STAND || player.poe2.recoveryTicks == 0)
+			CheckNewPath(player, tplayer);
+	} while (tplayer);
+
+	player.previewCelSprite = std::nullopt;
+	if (player._pmode != PM_DEATH || player.AnimInfo.tickCounterOfCurrentFrame != 40)
+		player.AnimInfo.processAnimation();
+}
+
+} // namespace
+
 void ProcessPlayers()
 {
 	assert(MyPlayer != nullptr);
@@ -3478,47 +3539,7 @@ void ProcessPlayers()
 			    && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE && player.CanChangeAction())
 				StartStand(player, player._pdir);
 
-			bool tplayer = false;
-			do {
-				switch (player._pmode) {
-				case PM_STAND:
-				case PM_NEWLVL:
-				case PM_QUIT:
-					tplayer = false;
-					break;
-				case PM_WALK_NORTHWARDS:
-				case PM_WALK_SOUTHWARDS:
-				case PM_WALK_SIDEWAYS:
-					// POE2 Mashup: uniques that slow movement skip some walking ticks.
-					tplayer = UniqueSlowSkipsWalkTick(player) ? false : DoWalk(player);
-					break;
-				case PM_ATTACK:
-					tplayer = DoAttack(player);
-					break;
-				case PM_RATTACK:
-					tplayer = DoRangeAttack(player);
-					break;
-				case PM_BLOCK:
-					tplayer = DoBlock(player);
-					break;
-				case PM_SPELL:
-					tplayer = DoSpell(player);
-					break;
-				case PM_GOTHIT:
-					tplayer = DoGotHit(player);
-					break;
-				case PM_DEATH:
-					tplayer = DoDeath(player);
-					break;
-				}
-				// POE2 Mashup: a slowed skill holds the character still before the next action.
-				if (player._pmode != PM_STAND || player.poe2.recoveryTicks == 0)
-					CheckNewPath(player, tplayer);
-			} while (tplayer);
-
-			player.previewCelSprite = std::nullopt;
-			if (player._pmode != PM_DEATH || player.AnimInfo.tickCounterOfCurrentFrame != 40)
-				player.AnimInfo.processAnimation();
+			ProcessPlayerAction(player);
 		}
 	}
 }
@@ -3957,6 +3978,11 @@ void PlayDungMsgs()
 bool TestPlayerDoGotHit(Player &player)
 {
 	return DoGotHit(player);
+}
+
+void TestPlayerProcessAction(Player &player)
+{
+	ProcessPlayerAction(player);
 }
 #endif
 
