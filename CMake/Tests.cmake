@@ -88,6 +88,7 @@ set(tests
   poe2_waystones_test
   poe2_experience_test
   poe2_weapon_skills_test
+  poe2_swing_speed_test
   player_test
   quests_test
   reencode_dun_cels_test
