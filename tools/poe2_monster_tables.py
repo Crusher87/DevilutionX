@@ -40,6 +40,13 @@ DIALS = {
     25: (1.22, 1.07, 0.81), 38: (1.19, 0.91, 0.77), 50: (0.77, 0.74, 0.84), 63: (0.48, 0.60, 0.86),
     80: (0.26, 0.48, 0.94),
 }
+# Map accuracy (harder monsters plan step 14, Curtis 2026-10-27): the accuracy dials above outgrow the evasion a hero
+# gets from two defence slots (body armour and helmet; Diablo has no gloves or boots), so a self-found evasion build was
+# hit 67% / 69% / 78% at T1 / T8 / T16 (target 65%). Accuracy is multiplied by this, by monster level, geometric between
+# the points, 1 up to 38 and flat past 80. Fitted on the step-13 check's self-found Rogue (evasion 935 / 2,016 / 3,727 at
+# areas 41 / 59 / 80): accuracy for 65% = 0.65 x 0.3 x evasion / (1.25 - 0.65) = 304 / 655 / 1,211, over the table's
+# 321 / 749 / 1,846.
+MAP_ACCURACY = {38: 1.0, 41: 0.947, 59: 0.875, 80: 0.656}
 MAX_LEVEL = 100
 
 # Bosses: life and damage in percent of a white at the floor's area level (plan v2, bosses and uniques).
@@ -86,12 +93,16 @@ def dial(level, column):
     return geometric(DIALS, level, column)
 
 
+def map_accuracy(level):
+    return geometric({k: (v,) for k, v in MAP_ACCURACY.items()}, level, 0)
+
+
 def level_rows():
     rows = []
     for level in range(1, MAX_LEVEL + 1):
         life = poe2(level, 0) * dial(level, 0) * KILL_TARGET / FIT_KILL_TARGET
         rows.append((level, max(1, round(life)), max(1, round(poe2(level, 1) * dial(level, 1) * 10)),
-                     max(1, round(poe2(level, 2) * dial(level, 2))),
+                     max(1, round(poe2(level, 2) * dial(level, 2) * map_accuracy(level))),
                      round(poe2(level, 0)), round(poe2(level, 1) * 10), round(poe2(level, 2))))
     return rows
 

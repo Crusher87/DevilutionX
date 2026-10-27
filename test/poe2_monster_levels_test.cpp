@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string_view>
+#include <utility>
 
 #include "data/file.hpp"
 #include "data/record_reader.hpp"
@@ -12,6 +13,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/area_levels.hpp"
+#include "poe2/defenses.hpp"
 #include "poe2/experience.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
@@ -102,6 +104,23 @@ TEST_F(Poe2MonsterLevelsTest, TableMatchesTheFit)
 	// Past the table's ends.
 	EXPECT_EQ(MonsterLevelLife(0), MonsterLevelLife(1));
 	EXPECT_EQ(MonsterLevelLife(200), MonsterLevelLife(100));
+}
+
+/**
+ * Plan step 14 (Curtis 2026-10-27): map monsters hit the step-13 check's self-found evasion Rogue (935 / 2,016 / 3,727
+ * evasion at areas 41 / 59 / 80) about 65% of the time at every tier; up to area 38 nothing changed.
+ */
+TEST_F(Poe2MonsterLevelsTest, MapMonstersHitEvasionAboutTwoThirds)
+{
+	EXPECT_EQ(MonsterLevelAccuracy(38), 274);
+	EXPECT_EQ(MonsterLevelAccuracy(41), 304);
+	EXPECT_EQ(MonsterLevelAccuracy(59), 655);
+	EXPECT_EQ(MonsterLevelAccuracy(80), 1211);
+	const std::pair<int, int> Tiers[] = { { 41, 935 }, { 59, 2016 }, { 80, 3727 } };
+	for (const auto &[level, evasion] : Tiers)
+		EXPECT_NEAR(Poe2HitChance(MonsterLevelAccuracy(level), evasion), 65, 1) << level;
+	for (int level = 2; level <= 100; level++)
+		EXPECT_GE(MonsterLevelAccuracy(level), MonsterLevelAccuracy(level - 1)) << level;
 }
 
 TEST_F(Poe2MonsterLevelsTest, SmoothedTableMatchesSource)
