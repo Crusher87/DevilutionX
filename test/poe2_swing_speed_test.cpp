@@ -235,12 +235,12 @@ TEST_F(Poe2SwingSpeedTest, HeldAttackWaitsForTheLastFrameInPoe2Only)
 	ASSERT_EQ(player._pAFrames, 16);
 	ASSERT_EQ(player._pAFNum, 9);
 
-	// POE2: the next swing starts on the last frame, a Shortsword's 1 / 1.35 seconds on: 14.8 ticks, so 14 or 15.
+	// POE2: the next swing starts on the last frame, a Shortsword's 1 / 1.55 seconds on: 12.9 ticks, so 12 or 13.
 	const HeldSwings poe2 = HoldAttack(player, WeaponSkill::None, 1500, false);
 	EXPECT_EQ(poe2.starts.front(), 0);
-	EXPECT_NEAR(poe2.averageCycle(), 20 / 1.35, 0.02);
+	EXPECT_NEAR(poe2.averageCycle(), 20 / 1.55, 0.02);
 	for (size_t i = 1; i < poe2.starts.size(); i++)
-		EXPECT_TRUE(poe2.starts[i] - poe2.starts[i - 1] == 14 || poe2.starts[i] - poe2.starts[i - 1] == 15);
+		EXPECT_TRUE(poe2.starts[i] - poe2.starts[i - 1] == 12 || poe2.starts[i] - poe2.starts[i - 1] == 13);
 	// Every swing reaches its hit frame once.
 	EXPECT_NEAR(poe2.hits, static_cast<int>(poe2.starts.size()), 1);
 
@@ -302,20 +302,20 @@ TEST_F(Poe2SwingSpeedTest, AttackSpeedAndSkillSpeedChangeTheTime)
 	Player &player = *MyPlayer;
 	Equip(player, "Shortsword");
 
-	// 20% increased attack speed: 1 / (1.35 x 1.2).
+	// 20% increased attack speed: 1 / (1.55 x 1.2).
 	player.poe2.attackSpeedPercent = 20;
 	const HeldSwings faster = HoldAttack(player, WeaponSkill::None, 2000, false);
-	EXPECT_NEAR(faster.averageCycle() / 20, 1 / (1.35 * 1.2), 0.002);
+	EXPECT_NEAR(faster.averageCycle() / 20, 1 / (1.55 * 1.2), 0.002);
 	player.poe2.attackSpeedPercent = 0;
 
-	// A skill at 80% attack speed: 1 / (1.35 x 0.8).
+	// A skill at 80% attack speed: 1 / (1.55 x 0.8).
 	SetSkillSpeed("Cleave", 80, 0);
 	EXPECT_EQ(SkillAttackSpeedPercent(SkillSlot::ForAttack(WeaponSkill::Cleave)), 80);
 	player._pmode = PM_STAND;
 	player.destAction = ACTION_NONE;
 	const HeldSwings slower = HoldAttack(player, WeaponSkill::Cleave, 2000, false);
-	EXPECT_NEAR(slower.averageCycle() / 20, 1 / (1.35 * 0.8), 0.002);
-	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 1 / (1.35 * 0.8), 0.0001);
+	EXPECT_NEAR(slower.averageCycle() / 20, 1 / (1.55 * 0.8), 0.002);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 1 / (1.55 * 0.8), 0.0001);
 }
 
 TEST_F(Poe2SwingSpeedTest, HeldDoubleSwingStrikesTwice)
@@ -323,11 +323,11 @@ TEST_F(Poe2SwingSpeedTest, HeldDoubleSwingStrikesTwice)
 	Player &player = *MyPlayer;
 	Equip(player, "Shortsword");
 	ASSERT_EQ(SkillAttackSpeedPercent(SkillSlot::ForAttack(WeaponSkill::Flurry)), 75);
-	// One use, both strikes, takes the skill's attack time: 1 / (1.35 x 0.75). The backhand plays before the next one
+	// One use, both strikes, takes the skill's attack time: 1 / (1.55 x 0.75). The backhand plays before the next one
 	// starts, and both strikes reach the hit frame.
 	const HeldSwings swings = HoldAttack(player, WeaponSkill::Flurry, 2000, true);
 	ASSERT_GE(swings.starts.size(), 5U);
-	EXPECT_NEAR(swings.averageCycle() / 20, 1 / (1.35 * 0.75), 0.002);
+	EXPECT_NEAR(swings.averageCycle() / 20, 1 / (1.55 * 0.75), 0.002);
 	EXPECT_NEAR(swings.backhands, static_cast<int>(swings.starts.size()), 1);
 	EXPECT_NEAR(swings.hits, static_cast<int>(swings.starts.size()) + swings.backhands, 1);
 
@@ -335,7 +335,7 @@ TEST_F(Poe2SwingSpeedTest, HeldDoubleSwingStrikesTwice)
 	player._pmode = PM_STAND;
 	player.destAction = ACTION_NONE;
 	const HeldSwings alone = HoldAttack(player, WeaponSkill::Flurry, 2000, false);
-	EXPECT_NEAR(alone.averageCycle() / 20, 15.0 / 26 / (1.35 * 0.75), 0.002);
+	EXPECT_NEAR(alone.averageCycle() / 20, 15.0 / 26 / (1.55 * 0.75), 0.002);
 	EXPECT_EQ(alone.backhands, 0);
 }
 
@@ -363,10 +363,10 @@ TEST_F(Poe2SwingSpeedTest, UseTimeIsTheHeldCycle)
 	}
 
 	player.poe2.attackSpeedPercent = 0;
-	EXPECT_NEAR(UseSeconds(player, DefaultSkillSlot(player)), 1 / 1.35, 0.0001);
-	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 1 / 1.35, 0.0001);
-	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Flurry)), 1 / (1.35 * 0.75), 0.0001);
-	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Frenzy)), 1 / (1.35 * 1.15), 0.0001);
+	EXPECT_NEAR(UseSeconds(player, DefaultSkillSlot(player)), 1 / 1.55, 0.0001);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 1 / 1.55, 0.0001);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Flurry)), 1 / (1.55 * 0.75), 0.0001);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(WeaponSkill::Frenzy)), 1 / (1.55 * 1.15), 0.0001);
 }
 
 TEST_F(Poe2SwingSpeedTest, HeldSpellTakesItsCastTime)
