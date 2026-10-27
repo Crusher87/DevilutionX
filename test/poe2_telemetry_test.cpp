@@ -163,7 +163,8 @@ TEST_F(Poe2TelemetryTest, GemLevelsGoToTheGemLog)
 	contents << stream.rdbuf();
 	const std::string log = contents.str();
 	EXPECT_NE(log.find("Cleave raised from gem level 8 to 9"), std::string::npos) << log;
-	EXPECT_NE(log.find("level 9: 182% weapon damage"), std::string::npos) << log;
+	// Boneshatter's curve at 9 (182%) times Cleave's damage for its speed (134%).
+	EXPECT_NE(log.find("level 9: 243% weapon damage"), std::string::npos) << log;
 }
 
 TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)

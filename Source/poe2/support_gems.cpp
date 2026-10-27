@@ -13,6 +13,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
@@ -705,9 +706,10 @@ int SupportCastRecoveryTicks(const Player &player, SpellID spell, int castFrames
 
 int SupportSpellDamagePercent(const Player &player, SpellID spell)
 {
-	// A socketed spell gem hits harder as it levels up, on top of what Diablo's spell level adds.
+	// A socketed spell gem hits harder as it levels up, on top of what Diablo's spell level adds; a slower spell hits
+	// harder for its cast time either way (SkillSpeedDamagePercent).
 	const int gemLevel = player.poe2.skillLevel(spell);
-	int percent = gemLevel > 0 ? GemDamagePercent(SkillSlot::ForSpell(spell), gemLevel) : 100;
+	int percent = gemLevel > 0 ? GemDamagePercent(SkillSlot::ForSpell(spell), gemLevel) : SkillSpeedDamagePercent(SkillSlot::ForSpell(spell));
 	percent = percent * UniqueSpellDamagePercent(player, spell) / 100;
 	percent = percent * SpiritSpellDamagePercent(player) / 100;
 	const SkillSlot skill = SkillSlot::ForSpell(spell);

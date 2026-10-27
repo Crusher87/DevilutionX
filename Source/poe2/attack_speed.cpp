@@ -128,6 +128,7 @@ void Load()
 		reader.readString("attack_time_s", attackTime);
 		reader.readOptionalInt("added_ms", speed.addedMs);
 		reader.readOptionalInt("distance_ms", speed.distanceMs);
+		reader.readOptionalInt("damage_pct", speed.damagePercent);
 		if (name.empty())
 			continue;
 		speed.attackPercent = std::clamp(speed.attackPercent, 10, 1000);
@@ -135,6 +136,7 @@ void Load()
 		speed.attackMs = ReadSeconds(attackTime, name, "attack time");
 		speed.addedMs = std::clamp(speed.addedMs, 0, MaxAddedMs);
 		speed.distanceMs = std::clamp(speed.distanceMs, 0, MaxAddedMs);
+		speed.damagePercent = std::clamp(speed.damagePercent, 10, 1000);
 		if (!IsKnownSkillSpeedKey(name)) {
 			LogError("{} has a row for {}, which is no skill", Filename, name);
 			UnknownKeys.push_back(name);
@@ -344,6 +346,12 @@ int SkillAttackSpeedPercent(SkillSlot skill, SkillStep step)
 	return speed != nullptr ? speed->attackPercent : 100;
 }
 
+int SkillSpeedDamagePercent(SkillSlot skill)
+{
+	const SkillSpeedRow *speed = FindSkillSpeedRow(skill);
+	return speed != nullptr ? speed->damagePercent : 100;
+}
+
 int SkillCastTimeMs(SkillSlot skill)
 {
 	const SkillSpeedRow *speed = FindSkillSpeedRow(skill);
@@ -443,6 +451,7 @@ void SetSkillSpeed(const std::string &key, const SkillSpeedRow &row)
 	set.attackMs = std::max(row.attackMs, 0);
 	set.addedMs = std::clamp(row.addedMs, 0, MaxAddedMs);
 	set.distanceMs = std::clamp(row.distanceMs, 0, MaxAddedMs);
+	set.damagePercent = std::clamp(row.damagePercent, 10, 1000);
 }
 
 std::vector<std::string> UnknownSkillSpeedKeys()

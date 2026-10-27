@@ -44,6 +44,12 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket);
  */
 double UseSeconds(const Player &player, SkillSlot skill);
 
+/**
+ * @brief The average of one hit of the skill at the level, as the details' "Average hit" works it out before rounding:
+ * every damage type, before the enemy's armour and resistances; a per-hit skill's hit is its share of the old burst.
+ */
+double SkillHitAverage(const Player &player, SkillSlot skill, int level);
+
 /** @brief The tags of a skill, like "Spell, Projectile, Fire". */
 std::string SkillTagText(SkillSlot skill);
 

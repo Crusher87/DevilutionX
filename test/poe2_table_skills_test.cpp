@@ -203,7 +203,7 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 {
 	// Every damaging table spell on Fireball's steps ends at 312% at gem level 20, like the Diablo spells.
-	const int fireball = GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20);
+	const int fireball = GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20);
 	EXPECT_EQ(fireball, 312);
 	int spells = 0;
 	for (const TableSkillData &data : TableSkills()) {
@@ -211,7 +211,7 @@ TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 			continue;
 		spells++;
 		EXPECT_EQ(data.curveEnd, 312) << data.name;
-		EXPECT_EQ(GemDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
+		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
 	}
 	EXPECT_EQ(spells, 12);
 }

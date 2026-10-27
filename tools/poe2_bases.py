@@ -298,8 +298,10 @@ DAMAGE_BASE = 0
 # Act 1 shortfall fix (harder monsters plan step 14, Curtis 2026-10-27): the first quarterstaves and bows, the only ones
 # a hero uses up to about level 11 (drop level 1: POE2's Wrapped Quarterstaff and Crude Bow since 2026-10-27), hit
 # harder than their base, in percent of its damage. The step-13 fight check found the Monk and the Rogue could not
-# clear Act 1 packs with them.
-EARLY_WEAPON_DAMAGE_PERCENT = {'quarterstaff': 160, 'bow': 140}
+# clear Act 1 packs with them. Raised from 160 and 140 when attacks took the bases' real POE2 speeds (research/
+# attack-speed/rebalance): a Crude Bow shot went from 0.40 s to 0.83 s and a staff swing from 0.45 s to 0.71 s, so the
+# Rogue and the Monk kill as much slower than before as the Warrior and the Bard do, whose weapons need nothing extra.
+EARLY_WEAPON_DAMAGE_PERCENT = {'quarterstaff': 200, 'bow': 215}
 EARLY_WEAPON_MAX_DROP_LEVEL = 1
 
 # POE2's body armours (research/poe2-body-armours.md, the normal tier): name -> (level, armour, evasion, energy shield).

@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/skill_gems.hpp"
@@ -37,11 +38,22 @@ public:
 		LoadItemData();
 		LoadSpellData();
 		LoadPlayerDataFiles();
+		LoadSkillSpeedData();
+		// The supports' numbers alone: the skills here hit for no more for their speed (damage_pct in skill_speed.tsv).
+		for (const SkillSlot skill : { SkillSlot::ForSpell(SpellID::Firebolt), SkillSlot::ForSpell(SpellID::ChargedBolt), SkillSlot::ForSpell(SpellID::Lightning),
+		         SkillSlot::ForSpell(SpellID::Fireball), SkillSlot::ForAttack(WeaponSkill::Cleave) }) {
+			if (const SkillSpeedRow *row = FindSkillSpeedRow(skill); row != nullptr) {
+				SkillSpeedRow plain = *row;
+				plain.damagePercent = 100;
+				SetSkillSpeed(SkillSpeedKey(skill), plain);
+			}
+		}
 	}
 
 	void TearDown() override
 	{
 		gbIsPoe2 = false;
+		LoadSkillSpeedData();
 		UnloadModArchives();
 	}
 

@@ -54,7 +54,12 @@ GemCurve GetGemCurve(SkillSlot skill);
 /** @brief Value at a gem level, in percent of level 1, following the POE2 gem's steps to reach endAt20 (0: the POE2 gem's own total). */
 int GemCurvePercent(const std::array<int16_t, MaxGemLevel> &steps, int endAt20, int gemLevel);
 
-/** @brief Damage at a gem level, in percent of the damage at level 1. */
+/** @brief Damage at a gem level, in percent of the damage at level 1: the gem's curve alone. */
+int GemCurveDamagePercent(SkillSlot skill, int gemLevel);
+/**
+ * @brief A use's damage at a gem level, in percent: the gem's curve times the skill's damage for its speed
+ * (SkillSpeedDamagePercent: a slower skill hits harder).
+ */
 int GemDamagePercent(SkillSlot skill, int gemLevel);
 /** @brief Mana cost at a gem level, in percent of the cost at level 1. */
 int GemManaPercent(SkillSlot skill, int gemLevel);

@@ -471,9 +471,9 @@ poe2:dagger_swift_nightglass_knife	0	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	
 poe2:dagger_heavy_voidneedle	0	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Heavy Voidneedle	Dagger	65	70	21	62	0	0	0	63	63		NONE	Null	false	6600
 poe2:dagger_balanced_voidneedle	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Cinquedea	Dagger	65	70	21	62	0	0	0	63	63		NONE	Null	false	6600
 poe2:dagger_swift_voidneedle	0	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Swift Voidneedle	Dagger	65	70	21	62	0	0	0	63	63		NONE	Null	false	6600
-poe2:quarterstaff_heavy_ash_staff	0	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Heavy Ash Staff	Quarterstaff	1	35	11	19	0	0	0	0	0		NONE	Null	false	200
-poe2:quarterstaff_balanced_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Fine Wrapped Quarterstaff	Quarterstaff	1	35	11	19	0	0	0	0	0		NONE	Null	false	200
-poe2:quarterstaff_swift_ash_staff	0	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Swift Ash Staff	Quarterstaff	1	35	11	19	0	0	0	0	0		NONE	Null	false	200
+poe2:quarterstaff_heavy_ash_staff	0	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Heavy Ash Staff	Quarterstaff	1	35	14	24	0	0	0	0	0		NONE	Null	false	200
+poe2:quarterstaff_balanced_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Fine Wrapped Quarterstaff	Quarterstaff	1	35	14	24	0	0	0	0	0		NONE	Null	false	200
+poe2:quarterstaff_swift_ash_staff	0	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Swift Ash Staff	Quarterstaff	1	35	14	24	0	0	0	0	0		NONE	Null	false	200
 poe2:quarterstaff_heavy_banded_staff	0	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Heavy Banded Staff	Quarterstaff	11	40	16	26	0	0	0	9	18		NONE	Null	false	1200
 poe2:quarterstaff_balanced_banded_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Fine Gothic Quarterstaff	Quarterstaff	11	40	16	26	0	0	0	9	18		NONE	Null	false	1200
 poe2:quarterstaff_swift_banded_staff	0	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Swift Banded Staff	Quarterstaff	11	40	16	26	0	0	0	9	18		NONE	Null	false	1200
@@ -495,9 +495,9 @@ poe2:quarterstaff_swift_celestial_staff	0	Weapon	Two-handed	WAR_STAFF	Staff	WARS
 poe2:quarterstaff_heavy_ascendant_staff	0	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Heavy Ascendant Staff	Quarterstaff	78	70	99	133	0	0	0	50	127		NONE	Null	false	7900
 poe2:quarterstaff_balanced_ascendant_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Dreaming Quarterstaff	Quarterstaff	78	70	99	133	0	0	0	50	127		NONE	Null	false	7900
 poe2:quarterstaff_swift_ascendant_staff	0	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Swift Ascendant Staff	Quarterstaff	78	70	99	133	0	0	0	50	127		NONE	Null	false	7900
-poe2:bow_heavy_short_bow	0	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Heavy Short Bow	Bow	1	35	8	13	0	0	0	0	0		NONE	Null	false	200
-poe2:bow_balanced_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Crude Bow	Bow	1	35	8	13	0	0	0	0	0		NONE	Null	false	200
-poe2:bow_swift_short_bow	0	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Swift Short Bow	Bow	1	35	8	13	0	0	0	0	0		NONE	Null	false	200
+poe2:bow_heavy_short_bow	0	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Heavy Short Bow	Bow	1	35	13	19	0	0	0	0	0		NONE	Null	false	200
+poe2:bow_balanced_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Crude Bow	Bow	1	35	13	19	0	0	0	0	0		NONE	Null	false	200
+poe2:bow_swift_short_bow	0	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Swift Short Bow	Bow	1	35	13	19	0	0	0	0	0		NONE	Null	false	200
 poe2:bow_heavy_yew_bow	0	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Heavy Yew Bow	Bow	16	40	15	31	0	0	0	0	31		NONE	Null	false	1700
 poe2:bow_balanced_yew_bow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Recurve Bow	Bow	16	40	15	31	0	0	0	0	31		NONE	Null	false	1700
 poe2:bow_swift_yew_bow	0	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Swift Yew Bow	Bow	16	40	15	31	0	0	0	0	31		NONE	Null	false	1700

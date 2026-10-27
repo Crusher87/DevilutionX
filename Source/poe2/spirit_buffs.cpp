@@ -503,7 +503,7 @@ void OnSpiritMeleeHitTaken(Player &player, Monster &monster)
 	state.arcticStages--;
 	const int level = GemLevel(player, PersistentSkill::ArcticArmour);
 	const int base = 5 + (player._pMagic / 6) + (2 * level);
-	const int64_t raw = static_cast<int64_t>(base) * 64 * GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), level) / 100 * ArcticArmourDamagePercent / 100;
+	const int64_t raw = static_cast<int64_t>(base) * 64 * GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), level) / 100 * ArcticArmourDamagePercent / 100;
 	TelemetryNoteDamageSource("Arctic Armour");
 	AddVisualEffect(monster.position.tile, MissileGraphicID::BlueFlareExplosion);
 	AddVisualEffect(player.position.tile, MissileGraphicID::StoneCurseShatter);

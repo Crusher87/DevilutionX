@@ -91,9 +91,9 @@ public:
 TEST_F(Poe2MonsterLevelsTest, TableMatchesTheFit)
 {
 	ASSERT_TRUE(HasMonsterLevelTable());
-	// POE2's table times the step-1 dials (KILL_TARGET 2).
-	EXPECT_EQ(MonsterLevelLife(2), 29);
-	EXPECT_EQ(MonsterLevelLife(13), 171);
+	// POE2's table times the step-1 dials (KILL_TARGET 2), and up to 15 the attack-speed rebalance's pace (0.875 up to 13).
+	EXPECT_EQ(MonsterLevelLife(2), 26);
+	EXPECT_EQ(MonsterLevelLife(13), 150);
 	EXPECT_EQ(MonsterLevelLife(25), 469);
 	EXPECT_EQ(MonsterLevelLife(37), 1194);
 	EXPECT_EQ(MonsterLevelLife(80), 5169);
@@ -168,7 +168,7 @@ TEST_F(Poe2MonsterLevelsTest, LifeNeverFallsAndStepsAtMostThirtyPercent)
 	}
 }
 
-TEST_F(Poe2MonsterLevelsTest, WhiteAtAreaThirteenHas171Life)
+TEST_F(Poe2MonsterLevelsTest, WhiteAtAreaThirteenHas150Life)
 {
 	// Catacombs 4 is area 13; a zombie keeps its roll's ratio to the floor's average life.
 	Monster zombie = MakeMonster(MT_NZOMBIE);
@@ -176,7 +176,7 @@ TEST_F(Poe2MonsterLevelsTest, WhiteAtAreaThirteenHas171Life)
 	ASSERT_TRUE(ApplyPoe2MonsterLife(zombie, roll));
 	const int permille = MonsterLifeRatioPermille(MT_NZOMBIE, roll);
 	EXPECT_EQ(permille, static_cast<int>(int64_t { roll } * 10000 / MonsterTypeRow(MT_NZOMBIE).lifeRef10));
-	EXPECT_EQ(zombie.maxHitPoints.raw(), LifeRaw(171, permille));
+	EXPECT_EQ(zombie.maxHitPoints.raw(), LifeRaw(150, permille));
 	EXPECT_EQ(zombie.hitPoints, zombie.maxHitPoints);
 	EXPECT_NE(zombie.flags & MFLAG_POE2_TABLES, 0U);
 
@@ -388,8 +388,8 @@ TEST_F(Poe2MonsterLevelsTest, InfoPanelShowsTableLife)
 	int minLife = 0;
 	int maxLife = 0;
 	Poe2TypeLifeRange(MT_NZOMBIE, 13, minLife, maxLife);
-	EXPECT_EQ(minLife, 171 * MonsterLifeRatioPermille(MT_NZOMBIE, MonstersData[MT_NZOMBIE].hitPointsMinimum) / 1000);
-	EXPECT_EQ(maxLife, 171 * MonsterLifeRatioPermille(MT_NZOMBIE, MonstersData[MT_NZOMBIE].hitPointsMaximum) / 1000);
+	EXPECT_EQ(minLife, 150 * MonsterLifeRatioPermille(MT_NZOMBIE, MonstersData[MT_NZOMBIE].hitPointsMinimum) / 1000);
+	EXPECT_EQ(maxLife, 150 * MonsterLifeRatioPermille(MT_NZOMBIE, MonstersData[MT_NZOMBIE].hitPointsMaximum) / 1000);
 	Poe2TypeLifeRange(MT_DIABLO, 37, minLife, maxLife);
 	EXPECT_EQ(minLife, 1194 * 15);
 	EXPECT_EQ(maxLife, 1194 * 15);
