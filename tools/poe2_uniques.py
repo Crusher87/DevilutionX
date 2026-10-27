@@ -20,7 +20,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from poe2_bases import CLASSES, RENAMES, d1_level  # noqa: E402
+from poe2_bases import CLASSES, RENAMES, d1_level, unique_type_level  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'mods', 'poe2', 'txtdata', 'poe2', 'uniques.tsv')
@@ -38,6 +38,9 @@ BODY_LINES = {
 	'tri_body': ['Hermit Garb', 'Waxed Jacket', 'Marabout Garb', 'Wayfarer Jacket', "Scalper's Jacket", 'Monastic Garb', 'Devout Garb'],
 }
 SKIPPED_SOURCES = {'keeper_of_the_deep'}
+# Body armour uniques keep the base they were first made on, from before the body armours took POE2's levels: a saved
+# unique finds itself among its base's uniques.
+BODY_ARMOUR_BASES = {'Ghostweave': 'Cleric Vestments', "Mother's Veil": 'Cleric Vestments'}
 TIER_VALUE = {'common': 2000, 'uncommon': 6000, 'rare': 15000, 'mythic': 40000, 'boss': 25000}
 
 # Bundle modifier id -> (effect, value when the bundle gives none). Effects the modifier engine
@@ -191,7 +194,7 @@ def main():
 		if cls == 'body_armour':
 			line = BODY_LINES[u['base_id'].split('_body_armour_')[0] + '_body']
 			fits = [name for name in line if item_levels[name] <= d1_level(level)] or line[:1]
-			base_name = max(fits, key=lambda name: item_levels[name])
+			base_name = BODY_ARMOUR_BASES.get(u['name']) or max(fits, key=lambda name: item_levels[name])
 		else:
 			base_name = None
 		base = by_id.get(u['base_id']) if base_name is None else None
@@ -219,7 +222,8 @@ def main():
 		assert u['name'] not in names, u['name']
 		names.add(u['name'])
 		rows.append([
-			u['name'], base_name, tier, source, str(d1_level(level)), str(level),
+			# The Diablo level stays on the scale the uniques were made with (UIMinLvl, which rebuilds saved ones).
+			u['name'], base_name, tier, source, str(unique_type_level(level)), str(level),
 			str(TIER_VALUE[tier] + level * 100), ';'.join(effects),
 		])
 
