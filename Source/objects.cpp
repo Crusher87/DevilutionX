@@ -42,6 +42,8 @@
 #include "poe2/endgame.hpp"
 #include "poe2/area_levels.hpp"
 #include "poe2/experience.hpp"
+#include "poe2/floor_chests.hpp"
+#include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
 #include "qol/stash.h"
 #include "stores.h"
@@ -953,6 +955,9 @@ void AddChest(Object &chest)
 		break;
 	}
 	chest._oVar2 = GenerateRnd(8);
+	// POE2 Mashup: a normal chest until the floor's planner makes it another kind (poe2/floor_chests.hpp).
+	chest._oVar5 = 0;
+	chest._oVar6 = 0;
 }
 
 void ObjSetMicro(Point position, int pn)
@@ -2037,6 +2042,8 @@ void OperateChest(const Player &player, Object &chest, bool sendLootMsg)
 	SetRndSeed(chest._oRndSeed);
 	// POE2 Mashup: a map's strongbox or vault drops its reward profile instead.
 	if (OpenMapRewardChest(chest.position, sendLootMsg)) {
+	} else if (OpenFloorChest(player, chest, sendLootMsg)) {
+		// A magic or rare chest or a strongbox.
 	} else if (setlevel) {
 		for (int j = 0; j < chest._oVar1; j++) {
 			CreateRndItem(chest.position, true, sendLootMsg, false);
@@ -3740,6 +3747,13 @@ std::expected<void, std::string> InitObjectGFX()
 			filesWidths[obj.ofindex] = obj.animWidth;
 		}
 	}
+	// POE2 Mashup: a rest room after a big fight has a shrine with candles, as the shrine theme room does.
+	if (UseFloorPacks()) {
+		for (const auto id : { OBJ_SHRINEL, OBJ_SHRINER, OBJ_CANDLE2 }) {
+			const ObjectData &obj = AllObjects[id];
+			filesWidths[obj.ofindex] = obj.animWidth;
+		}
+	}
 
 	for (size_t id = 0, n = AllObjects.size(); id < n; ++id) {
 		const ObjectData &objectData = AllObjects[id];
@@ -4953,6 +4967,7 @@ StringOrView Object::name() const
 void GetObjectStr(const Object &object)
 {
 	InfoString = object.name();
+	DescribeFloorChest(object);
 	const ClassAttributes &classAttributes = GetClassAttributes(MyPlayer->_pClass);
 	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::TrapSense)) {
 		if (object._oTrapFlag) {

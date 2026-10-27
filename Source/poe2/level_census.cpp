@@ -29,6 +29,7 @@
 #include "objects.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/floor_chests.hpp"
 #include "poe2/floor_packs.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/monster_mods.hpp"
@@ -216,6 +217,8 @@ struct Headline {
 	/** Groups of 1, 2-3, 4-6, 7-11 and 12 or more. */
 	std::array<int, 5> groupsBySize {};
 	int chests = 0;
+	/** Of the chests: normal, magic, rare and strongboxes (poe2/floor_chests.hpp). */
+	std::array<int, 4> chestKinds {};
 	int barrels = 0;
 	int shrines = 0;
 	int sarcophagi = 0;
@@ -467,6 +470,8 @@ void CountObjectsAndItems(Census &census)
 		case 'x': room.sarcophagi++; break;
 		default: room.otherObjects++; break;
 		}
+		if (letter == 'c')
+			census.headline.chestKinds[static_cast<size_t>(GetFloorChestKind(object))]++;
 	}
 	for (uint8_t i = 0; i < ActiveItemCount; i++) {
 		const Item &item = Items[ActiveItems[i]];
@@ -685,6 +690,9 @@ void AddHeadline(TelemetryEvent &event, const Headline &headline)
 	    .add("groups", headline.groups)
 	    .addRaw("groupsBySize", groups.str())
 	    .add("chests", headline.chests)
+	    .add("magicChests", headline.chestKinds[1])
+	    .add("rareChests", headline.chestKinds[2])
+	    .add("strongboxes", headline.chestKinds[3])
 	    .add("barrels", headline.barrels)
 	    .add("shrines", headline.shrines)
 	    .add("sarcophagi", headline.sarcophagi)
@@ -872,14 +880,17 @@ std::string BatchText()
 		std::sort(longest.begin(), longest.end());
 		StrAppend(text, text.empty() ? "" : "\n",
 		    std::format("L{:d}, {:d} floors, on average: {:.1f} rooms, {:.1f} empty, {:.1f} with only props, {:.1f} with one monster, {:.1f} empty dead ends, "
-		                "{:.1f} monsters in {:.1f} groups ({:.1f} groups of 4-6), {:.1f} magic, {:.1f} rare, {:.1f} chests; {:.0f}% of the floor far from monsters, "
+		                "{:.1f} monsters in {:.1f} groups ({:.1f} groups of 4-6), {:.1f} magic, {:.1f} rare, {:.1f} chests ({:.1f} magic, {:.1f} rare, {:.2f} strongboxes), {:.1f} shrines; "
+		                "{:.0f}% of the floor far from monsters, "
 		                "stairs to stairs {:.0f} tiles, longest empty stretch {:.0f} tiles (worst {:d})",
 		        level, static_cast<int>(floors.size()), average([](const Headline &h) { return h.rooms; }), average([](const Headline &h) { return h.emptyRooms; }),
 		        average([](const Headline &h) { return h.propsOnly; }), average([](const Headline &h) { return h.singleMonster; }),
 		        average([](const Headline &h) { return h.emptyDeadEnds; }), average([](const Headline &h) { return h.monsters; }),
 		        average([](const Headline &h) { return h.groups; }), average([](const Headline &h) { return h.groupsBySize[2]; }),
 		        average([](const Headline &h) { return h.rarity[1]; }), average([](const Headline &h) { return h.rarity[2]; }),
-		        average([](const Headline &h) { return h.chests; }), average([](const Headline &h) { return h.quietFloorShare; }), average([](const Headline &h) { return h.routeLength; }),
+		        average([](const Headline &h) { return h.chests; }), average([](const Headline &h) { return h.chestKinds[1]; }),
+		        average([](const Headline &h) { return h.chestKinds[2]; }), average([](const Headline &h) { return h.chestKinds[3]; }),
+		        average([](const Headline &h) { return h.shrines; }), average([](const Headline &h) { return h.quietFloorShare; }), average([](const Headline &h) { return h.routeLength; }),
 		        average([](const Headline &h) { return h.longestEmptyWalk; }), longest.back()));
 	}
 	return text;
