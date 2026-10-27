@@ -821,9 +821,9 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		item._iPLToHit = static_cast<int16_t>(item._iPLToHit + v0);
 		break;
 	case ModEffect::ReducedRequirements:
-		item._iMinStr = static_cast<int8_t>(item._iMinStr - (item._iMinStr * v0 / 100));
+		item._iMinStr = static_cast<uint8_t>(item._iMinStr - (item._iMinStr * v0 / 100));
 		item._iMinMag = static_cast<uint8_t>(item._iMinMag - (item._iMinMag * v0 / 100));
-		item._iMinDex = static_cast<int8_t>(item._iMinDex - (item._iMinDex * v0 / 100));
+		item._iMinDex = static_cast<uint8_t>(item._iMinDex - (item._iMinDex * v0 / 100));
 		break;
 	case ModEffect::LifeRegeneration:
 		item._iPLLifeRegen = static_cast<int16_t>(item._iPLLifeRegen + v0);
@@ -928,6 +928,14 @@ std::vector<std::string> ItemModAdvancedText(const Poe2ItemMod &mod)
 			trimmed.remove_prefix(1);
 		lines.emplace_back(trimmed);
 	}
+	return lines;
+}
+
+std::vector<std::string> AffixViewLines(std::string_view side, const std::vector<std::string> &stats, int tier)
+{
+	std::vector<std::string> lines;
+	for (size_t i = 0; i < stats.size(); i++)
+		lines.push_back(StrCat(i == 0 ? side : std::string_view {}, "\t", stats[i], "\t", i + 1 == stats.size() ? StrCat("T", tier) : std::string {}));
 	return lines;
 }
 

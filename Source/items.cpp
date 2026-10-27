@@ -577,7 +577,8 @@ void CalcSelfItems(Player &player)
 
 			if (RequirementStrength(player, currstr, currmag) < equipment._iMinStr
 			    || currmag < equipment._iMinMag
-			    || currdex < equipment._iMinDex)
+			    || currdex < equipment._iMinDex
+			    || !MeetsItemLevelRequirement(player, equipment))
 				isValid = false;
 
 			if (isValid)
@@ -2372,16 +2373,8 @@ void PrintItemInfo(const Item &item)
 		mag = needs.magic;
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Requirement;
-	if (str != 0 || mag != 0 || dex != 0) {
-		std::string text = std::string(_("Required:"));
-		if (str != 0)
-			text.append(FormatRuntime(_(" {:d} Str"), str));
-		if (mag != 0)
-			text.append(FormatRuntime(_(" {:d} Mag"), mag));
-		if (dex != 0)
-			text.append(FormatRuntime(_(" {:d} Dex"), dex));
+	if (const std::string text = ItemRequirementText(ItemRequiredLevel(item), str, mag, dex); !text.empty())
 		AddItemInfoBoxString(text);
-	}
 	if (gbIsPoe2) {
 		if (const int itemLevel = GetPoe2ItemLevel(item); itemLevel > 0) {
 			CurrentInfoLineStyle = InfoLineStyle::Note;
@@ -3841,6 +3834,14 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	lightRadius += passive(PassiveStat::LightRadius);
 	player.poe2.lifeRegenPerMille = passive(PassiveStat::LifeRegenRate);
 	player.poe2.passiveBlockChance = passive(PassiveStat::BlockChance);
+	// POE2 block comes from the shield's base; a shield the hero can't use doesn't block, as in Diablo.
+	player.poe2.shieldBlockChance = 0;
+	if (gbIsPoe2) {
+		for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+			if (player.InvBody[hand]._iStatFlag)
+				player.poe2.shieldBlockChance = std::max(player.poe2.shieldBlockChance, ShieldBlockChance(player.InvBody[hand]));
+		}
+	}
 	strength += passive(PassiveStat::Strength);
 	magic += passive(PassiveStat::Magic);
 	dexterity += passive(PassiveStat::Dexterity);
@@ -4126,7 +4127,8 @@ void CreatePlrItems(Player &player)
 	}
 
 	InitCursor();
-	for (const _item_indexes itemData : loadout.items) {
+	for (size_t slot = 0; slot < loadout.items.size(); slot++) {
+		const _item_indexes itemData = GetStartingLoadoutItem(loadout, slot);
 		if (itemData != _item_indexes::IDI_NONE)
 			CreateStartingItem(player, itemData);
 	}
@@ -6458,6 +6460,9 @@ void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energySh
 /** @brief POE2 Mashup: armor pieces show the defense they grant when worn. */
 void PrintPoe2ItemDefense(const Item &item)
 {
+	// A shield shows its block chance first, as in POE2.
+	if (const int block = ShieldBlockChance(item); block > 0)
+		AddItemInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Block: {:d}%"), block));
 	std::string defense;
 	int armour;
 	int evasion;
@@ -6701,7 +6706,8 @@ void PrintItemDetails(const Item &item)
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
 	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
 		// Holding Alt shows the prefixes, then the suffixes, each stat with the range it can roll and its tier at the
-		// end of the line, as compact as POE2's (Curtis 2026-10-18).
+		// end of the line, as compact as POE2's (Curtis 2026-10-18). Each affix is labelled once, so the labels count
+		// them, and a two-part affix's lines are bracketed together (Curtis 2026-10-27).
 		const bool advanced = gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0;
 		if (!advanced) {
 			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
@@ -6711,17 +6717,12 @@ void PrintItemDetails(const Item &item)
 		} else {
 			CurrentInfoLineStyle = InfoLineStyle::Affix;
 			for (const bool prefixes : { true, false }) {
-				bool first = true;
 				for (const Poe2ItemMod &mod : item._iPoe2Mods) {
 					const ModFamily *family = ItemModFamily(mod);
 					if (family == nullptr || family->prefix != prefixes)
 						continue;
-					const std::vector<std::string> lines = ItemModAdvancedText(mod);
-					for (size_t i = 0; i < lines.size(); i++) {
-						const std::string_view side = !first ? "" : prefixes ? _("Prefix") : _("Suffix");
-						AddItemInfoBoxString(StrCat(side, "\t", lines[i], "\t", i + 1 == lines.size() ? StrCat("T", mod.tier) : ""));
-						first = false;
-					}
+					for (const std::string &line : AffixViewLines(prefixes ? _("Prefix") : _("Suffix"), ItemModAdvancedText(mod), mod.tier))
+						AddItemInfoBoxString(line);
 				}
 			}
 		}
@@ -6932,6 +6933,26 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(_("No differences"), true);
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Default;
+}
+
+std::string ItemRequirementText(int level, int strength, int magic, int dexterity)
+{
+	const bool attributes = strength != 0 || magic != 0 || dexterity != 0;
+	if (level <= 1 && !attributes)
+		return {};
+	std::string text = std::string(_("Required:"));
+	if (level > 1) {
+		text.append(FormatRuntime(_(" Level {:d}"), level));
+		if (attributes)
+			text.append(",");
+	}
+	if (strength != 0)
+		text.append(FormatRuntime(_(" {:d} Str"), strength));
+	if (magic != 0)
+		text.append(FormatRuntime(_(" {:d} Mag"), magic));
+	if (dexterity != 0)
+		text.append(FormatRuntime(_(" {:d} Dex"), dexterity));
+	return text;
 }
 
 void PrintItemDur(const Item &item)

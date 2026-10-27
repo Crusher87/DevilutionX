@@ -73,7 +73,8 @@ enum class InfoLineStyle : uint8_t {
 	Flavour,
 	/**
 	 * A modifier line in the Alt view, laid out like POE2's: "side\tstat\ttier", with the side ("Prefix" or "Suffix",
-	 * only on a group's first line) on the left and the tier ("T3") on the right; either may be empty.
+	 * on each affix's first line) on the left and the tier ("T3", on its last) on the right; either may be empty. A line
+	 * without a side continues the affix above, and a bracket joins them (AffixViewLines).
 	 */
 	Affix,
 	/** A property the item's modifiers raised, in blue like POE2's augmented values. */

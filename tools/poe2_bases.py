@@ -18,7 +18,10 @@ Levels, damage and defence are POE2's own numbers (harder monsters plan, step 10
 area levels, weapons hit for the bundle's damage, and a base's defence is its armour plus evasion
 plus a third of its energy shield (the game shows defence points as three energy shield each). The
 body armours, which have no id, are matched by name and take POE2's numbers from
-research/poe2-body-armours.md. base_meta.tsv's split column says how a hybrid's defence divides.
+research/poe2-body-armours.md. base_meta.tsv's split column says how a hybrid's defence divides, and
+its level column the character level a base needs, like POE2's: the bundle's required level, POE2's
+item level for rings and amulets, and the table's level for body armours.
+and its block column is a shield's own chance to block, in percent (empty for everything else).
 """
 
 import json
@@ -212,7 +215,9 @@ LEVEL_SCALE = 1
 # The scale the levels had before, which still picks the Diablo unique type a base carries: saved uniques find
 # themselves by their base's unique type, so it must never change.
 UNIQUE_TYPE_LEVEL_SCALE = 0.36
-REQUIREMENT_SCALE = 0.55
+# Attribute requirements are POE2's own numbers (Curtis 2026-10-27, after the Warrior playtest): Iron Cap 5 Str,
+# Legion Helm 78, Titan Crown 150. They were 55% while levels were scaled down.
+REQUIREMENT_SCALE = 1
 # One defence point is one armour, one evasion or three energy shield (EnergyShieldPerDefense).
 ENERGY_SHIELD_PER_DEFENSE = 3
 # A weapon hits for the bundle's damage.
@@ -246,6 +251,24 @@ BODY_ARMOURS = {
 	'Wayfarer Jacket': (28, 0, 114, 41), "Scalper's Jacket": (39, 0, 154, 51), 'Monastic Garb': (56, 0, 216, 67),
 	'Devout Garb': (68, 0, 248, 76),
 	'Grand Regalia': (65, 182, 165, 50),
+}
+
+# Their attribute requirements, from the same tables (Curtis 2026-10-27: gear needs POE2's full numbers): the
+# armour part needs Strength, evasion Dexterity and energy shield Intelligence. The starters need none.
+BODY_ARMOUR_ATTRIBUTES = {
+	'Iron Cuirass': 21, 'Maraketh Cuirass': 34, 'Full Plate': 54, 'Juggernaut Plate': 72, 'Champion Cuirass': 92,
+	'Conqueror Plate': 121,
+	'Pathfinder Coat': 21, 'Rhoahide Coat': 37, "Scout's Vest": 54, 'Corsair Vest': 72, 'Hardleather Coat': 89,
+	'Armoured Vest': 121,
+	"Hexer's Robe": 21, 'Silk Robe': 37, 'Votive Raiment': 54, 'Elementalist Robe': 72, 'Plated Raiment': 92,
+	'Enlightened Robe': 121,
+	'Rogue Armour': 13, 'Cloaked Mail': 25, 'Scale Armour': 34, 'Knight Armour': 41, 'Gladiator Armour': 51,
+	'Heroic Armour': 67,
+	'Pelt Mantle': 12, 'Mail Vestments': 17, 'Shaman Mantle': 26, 'Cleric Vestments': 41, 'Revered Vestments': 67,
+	'Corvus Mantle': 67,
+	'Waxed Jacket': 13, 'Marabout Garb': 17, 'Wayfarer Jacket': 26, "Scalper's Jacket": 35, 'Monastic Garb': 50,
+	'Devout Garb': 67,
+	'Grand Regalia': 41,
 }
 
 HEADER = ['id', 'dropRate', 'class', 'equipType', 'cursorGraphic', 'itemType', 'uniqueBaseItem', 'name', 'shortName',
@@ -431,9 +454,11 @@ def main():
 
 		defense_line = DEFENSE_LINES.get(b.get('design_identity', ''), '') if min_ac else ''
 		split = defense_split(defense_line, stats.get('armour', 0), stats.get('evasion', 0), stats.get('energy_shield', 0)) if min_ac else ''
+		# The character level the base needs: the bundle's, or for jewellery, which follows POE2's lineup, its level.
+		required_level = level if is_jewellery else b['required_level']
 		meta_rows.append([
 			name, cls, POE2_AMULET_IDENTITIES.get(name, b.get('design_identity', '')), defense_line, quality if cls != 'focus' else 'defence',
-			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits), split,
+			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits), split, str(required_level), str(stats.get('block_chance_pct', '')),
 		])
 
 	for base_id, name, level in POE2_EXTRA_AMULETS:
@@ -450,9 +475,9 @@ def main():
 			by_id[row[0]] = len(rows)
 			rows.append(row)
 		effect, lo, hi, text = POE2_AMULET_IMPLICITS[name]
-		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', ''])
+		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), ''])
 
-	# The body armours keep their rows, art, durability, requirements and price; they take POE2's level and defence.
+	# The body armours keep their rows, art, durability and price; they take POE2's level, defence and requirements.
 	# Their implicits stay in the game (GetBodyArmourImplicit).
 	found = set()
 	for row in rows[1:]:
@@ -462,8 +487,10 @@ def main():
 		_, total = defense_points(armour, evasion, energy_shield)
 		row[9] = str(level)
 		row[13] = row[14] = str(total)
+		need = BODY_ARMOUR_ATTRIBUTES.get(row[7], 0)
+		row[15], row[16], row[17] = (str(need if part > 0 else 0) for part in (armour, energy_shield, evasion))
 		identity, line = BODY_ARMOUR_LINES[(armour > 0, evasion > 0, energy_shield > 0)]
-		meta_rows.append([row[7], 'body_armour', identity, line, 'defence', '', defense_split(line, armour, evasion, energy_shield)])
+		meta_rows.append([row[7], 'body_armour', identity, line, 'defence', '', defense_split(line, armour, evasion, energy_shield), str(level), ''])
 		found.add(row[7])
 	assert found == set(BODY_ARMOURS), f'body armours not in itemdat.tsv: {sorted(set(BODY_ARMOURS) - found)}'
 
@@ -471,7 +498,7 @@ def main():
 		for row in rows:
 			f.write('\t'.join(row) + '\r\n')
 	with open(META, 'w', encoding='utf-8', newline='') as f:
-		for row in [['name', 'class', 'identity', 'defense', 'quality', 'implicits', 'split']] + meta_rows:
+		for row in [['name', 'class', 'identity', 'defense', 'quality', 'implicits', 'split', 'level', 'block']] + meta_rows:
 			f.write('\t'.join(row) + '\r\n')
 	print(f'{len(meta_rows)} bases')
 

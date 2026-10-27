@@ -1,6 +1,7 @@
 #include "poe2/skill_details.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <format>
 #include <optional>
@@ -41,8 +42,11 @@ constexpr int TicksPerSecond = 20;
 
 struct HitPart {
 	DamageType type;
-	int min;
-	int max;
+	/** The least and the most one hit deals, with any fraction the real hit keeps. */
+	double min;
+	double max;
+	/** What one hit deals on average. */
+	double average;
 };
 
 struct HitEstimate {
@@ -79,46 +83,84 @@ DamageType SpellDamageType(SpellID spell)
 	}
 }
 
-int Scale(int value, int percent)
+/** @brief A percent of a whole number, cut to whole points as the game's integer damage code cuts it. */
+int ScaleWhole(int value, int percent)
 {
 	return static_cast<int>(static_cast<int64_t>(value) * percent / 100);
 }
 
 /**
- * @brief A weapon hit before the skill: the weapon's damage with the hero's bonuses, as the character panel shows it.
- * Bare fists hit at the skill's gem level, the one shown.
+ * @brief Every whole-point roll from low to high, each turned into the damage it deals: the least, the most and the
+ * true average of them. The game rolls each value equally often (RandomIntBetween, GenerateRnd).
  */
-std::pair<int, int> WeaponHit(const Player &player, SkillSlot skill, int level)
+template <typename Damage>
+DamageEstimate EstimateRolls(int low, int high, Damage damage)
 {
-	int damageMod = player._pIBonusDamMod;
-	if (player.InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow && player._pClass != HeroClass::Rogue)
-		damageMod += player._pDamageMod / 2;
-	else
-		damageMod += player._pDamageMod;
-	std::pair<int, int> weapon = AttackWeaponDamage(player, skill);
+	high = std::max(high, low);
+	double total = 0;
+	for (int roll = low; roll <= high; roll++)
+		total += damage(roll);
+	return { damage(low), damage(high), total / (static_cast<double>(high) - low + 1) };
+}
+
+HitPart Part(DamageType type, const DamageEstimate &estimate)
+{
+	return { type, estimate.min, estimate.max, estimate.average };
+}
+
+/** @brief A part that rolls whole points evenly from min to max. */
+HitPart WholePart(DamageType type, int min, int max)
+{
+	return { type, static_cast<double>(min), static_cast<double>(max), (static_cast<double>(min) + max) / 2 };
+}
+
+/** @brief Whether the hero's weapon hits fly as arrows (a bow in the left hand, as the character panel reads it). */
+bool ShootsArrows(const Player &player)
+{
+	return player.InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow;
+}
+
+/** @brief The damage the hero adds to each weapon hit: a bow's arrows get half the attribute damage, but a Rogue's all. */
+int WeaponAddedDamage(const Player &player)
+{
+	if (ShootsArrows(player) && player._pClass != HeroClass::Rogue)
+		return player._pIBonusDamMod + (player._pDamageMod / 2);
+	return player._pIBonusDamMod + player._pDamageMod;
+}
+
+/** @brief The weapon's own roll, before the hero's bonuses. Bare fists hit at the skill's gem level, the one shown. */
+std::pair<int, int> WeaponRoll(const Player &player, SkillSlot skill, int level)
+{
 	if (skill.kind == SkillKind::Attack && level > 0 && FightsWithBareFists(player))
-		weapon = BareFistDamage(level);
-	const auto [weaponMin, weaponMax] = weapon;
-	const int min = weaponMin + (player._pIBonusDam * weaponMin / 100) + damageMod;
-	const int max = weaponMax + (player._pIBonusDam * weaponMax / 100) + damageMod;
-	return { std::max(min, 1), std::max(max, std::max(min, 1)) };
+		return BareFistDamage(level);
+	return AttackWeaponDamage(player, skill);
 }
 
-/** @brief A weapon hit scaled by the skill, with the weapon's own fire and lightning added. */
-void AddWeaponHit(HitEstimate &hit, const Player &player, SkillSlot skill, int level, int percent)
+/**
+ * @brief A weapon hit scaled by the skill (then by secondPercent, as a melee hit applies them one after the other),
+ * with the weapon's own fire and lightning added at elementPercent.
+ */
+void AddWeaponHit(HitEstimate &hit, const Player &player, SkillSlot skill, int level, int percent, int secondPercent = 100, std::optional<int> elementPercent = std::nullopt)
 {
-	const auto [min, max] = WeaponHit(player, skill, level);
-	hit.parts.push_back({ DamageType::Physical, Scale(min, percent), Scale(max, percent) });
+	const auto [weaponMin, weaponMax] = WeaponRoll(player, skill, level);
+	const int added = WeaponAddedDamage(player);
+	if (ShootsArrows(player))
+		hit.parts.push_back(Part(DamageType::Physical, ArrowHitEstimate(weaponMin, weaponMax, player._pIBonusDam, added, ScaleWhole(percent, secondPercent))));
+	else
+		hit.parts.push_back(Part(DamageType::Physical, MeleeHitEstimate(weaponMin, weaponMax, player._pIBonusDam, added, percent, secondPercent)));
+	const int elements = elementPercent.value_or(ScaleWhole(percent, secondPercent));
 	if (player._pIFMaxDam > 0)
-		hit.parts.push_back({ DamageType::Fire, Scale(player._pIFMinDam, percent), Scale(player._pIFMaxDam, percent) });
+		hit.parts.push_back(WholePart(DamageType::Fire, ScaleWhole(player._pIFMinDam, elements), ScaleWhole(player._pIFMaxDam, elements)));
 	if (player._pILMaxDam > 0)
-		hit.parts.push_back({ DamageType::Lightning, Scale(player._pILMinDam, percent), Scale(player._pILMaxDam, percent) });
+		hit.parts.push_back(WholePart(DamageType::Lightning, ScaleWhole(player._pILMinDam, elements), ScaleWhole(player._pILMaxDam, elements)));
 }
 
-/** @brief The base of a spell-like skill, from Magic and the gem level (Ice Bolt, table spells). */
+/** @brief The base of a spell-like skill, from Magic and the gem level (Ice Bolt, table spells), each roll cut to whole points. */
 void AddSpellBase(HitEstimate &hit, const Player &player, int gemLevel, DamageType type, int percent)
 {
-	hit.parts.push_back({ type, Scale(SpellBaseMin(player, gemLevel), percent), Scale(SpellBaseMax(player, gemLevel), percent) });
+	hit.parts.push_back(Part(type, EstimateRolls(SpellBaseMin(player, gemLevel), SpellBaseMax(player, gemLevel), [percent](int base) {
+		return static_cast<double>(ScaleWhole(base, percent));
+	})));
 }
 
 HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
@@ -131,7 +173,7 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		if (range.min < 0)
 			return hit;
 		const int percent = SupportSpellDamagePercent(player, spell);
-		hit.parts.push_back({ SpellDamageType(spell), Scale(range.min, percent), Scale(range.max, percent) });
+		hit.parts.push_back(WholePart(SpellDamageType(spell), ScaleWhole(range.min, percent), ScaleWhole(range.max, percent)));
 		return hit;
 	}
 	case SkillKind::Persistent:
@@ -142,13 +184,15 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		break;
 	case SkillKind::Default:
 		if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt) {
-			// RollStaffBoltDamage: the staff's damage with its bonus, cut down, plus a little of the hero's Magic.
+			// RollStaffBoltDamage: the staff's damage with its bonus, cut down to whole points, plus a little of the hero's Magic.
 			const int magic = player._pMagic * StaffBoltMagicPercent / 100;
-			const int min = player._pIMinDam + (player._pIMinDam * player._pIBonusDam / 100);
-			const int max = player._pIMaxDam + (player._pIMaxDam * player._pIBonusDam / 100);
-			hit.parts.push_back({ DamageType::Fire, std::max(1, Scale(min, StaffBoltDamagePercent) + magic), std::max(1, Scale(max, StaffBoltDamagePercent) + magic) });
+			const int bonus = player._pIBonusDam;
+			hit.parts.push_back(Part(DamageType::Fire, EstimateRolls(player._pIMinDam, player._pIMaxDam, [magic, bonus](int roll) {
+				return static_cast<double>(std::max(1, ScaleWhole(roll + (roll * bonus / 100), StaffBoltDamagePercent) + magic));
+			})));
 		} else {
-			AddWeaponHit(hit, player, skill, level, DefaultAttackDamagePercent);
+			// DoAttack: the weapon's fire and lightning land in full on a hit, outside the attack's percent.
+			AddWeaponHit(hit, player, skill, level, DefaultAttackDamagePercent, 100, ShootsArrows(player) ? std::nullopt : std::optional<int>(100));
 		}
 		return hit;
 	default:
@@ -167,17 +211,17 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		AddSpellBase(hit, player, level, DamageType::Magic, percent);
 		return hit;
 	case WeaponSkill::FrostNova:
-		AddSpellBase(hit, player, level, DamageType::Magic, Scale(percent, FrostNovaShardDamagePercent));
+		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, FrostNovaShardDamagePercent));
 		return hit;
 	case WeaponSkill::LeapSlam:
-		AddWeaponHit(hit, player, skill, level, Scale(percent, LeapSlamDamagePercent));
+		AddWeaponHit(hit, player, skill, level, percent, LeapSlamDamagePercent);
 		return hit;
 	case WeaponSkill::EmberFusillade:
 		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.
-		AddSpellBase(hit, player, level, DamageType::Fire, Scale(percent, SkillSpellDamagePercent(attack)));
+		AddSpellBase(hit, player, level, DamageType::Fire, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
 		return hit;
 	case WeaponSkill::Spark:
-		AddSpellBase(hit, player, level, DamageType::Lightning, Scale(percent, SkillSpellDamagePercent(attack)));
+		AddSpellBase(hit, player, level, DamageType::Lightning, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
 		return hit;
 	default:
 		break;
@@ -199,7 +243,8 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		if ((table->flags & TF_Spell) != 0) {
 			AddSpellBase(hit, player, level, table->type, tablePercent);
 		} else {
-			AddWeaponHit(hit, player, skill, level, tablePercent);
+			// A table skill's weapon hit takes the gem's percent, then its own (SkillHitMonster).
+			AddWeaponHit(hit, player, skill, level, percent, table->damagePercent);
 			if (table->type != DamageType::Physical && !hit.parts.empty())
 				hit.parts.front().type = table->type;
 		}
@@ -570,6 +615,30 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 
 } // namespace
 
+DamageEstimate MeleeHitEstimate(int weaponMin, int weaponMax, int increasedPercent, int addedDamage, int percent, int secondPercent)
+{
+	return EstimateRolls(weaponMin, weaponMax, [=](int roll) {
+		// PlrHitMonst: whole points up to the added damage, then 1/64 points for the percents.
+		int64_t raw = static_cast<int64_t>(std::max(roll + (roll * increasedPercent / 100) + addedDamage, 1)) << 6;
+		raw = raw * percent / 100;
+		raw = raw * secondPercent / 100;
+		return static_cast<double>(raw) / 64;
+	});
+}
+
+DamageEstimate ArrowHitEstimate(int weaponMin, int weaponMax, int increasedPercent, int addedDamage, int percent)
+{
+	// ScaleSupportedMissileDamage cuts the ends of the bow's range before the roll.
+	return EstimateRolls(ScaleWhole(weaponMin, percent), ScaleWhole(weaponMax, percent), [=](int roll) {
+		return static_cast<double>(std::max(roll + (roll * increasedPercent / 100) + addedDamage, 0));
+	});
+}
+
+int ShownDamage(double damage)
+{
+	return static_cast<int>(std::floor(damage + 0.5));
+}
+
 std::string SkillTagText(SkillSlot skill)
 {
 	const uint32_t tags = SkillTags(skill);
@@ -710,19 +779,18 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 
 	if (!hit.parts.empty()) {
 		Heading(lines, "Damage per hit");
-		int totalMin = 0;
-		int totalMax = 0;
+		// The real hits keep fractions of a point, so the numbers round to the nearest point and the average is the
+		// true average of the rolls, not the middle of the rounded ends.
+		double average = 0;
 		for (const HitPart &part : hit.parts) {
 			if (part.max <= 0)
 				continue;
-			Value(lines, std::string(DamageTypeName(part.type)), std::format("{:d}-{:d}", part.min, part.max));
-			totalMin += part.min;
-			totalMax += part.max;
+			Value(lines, std::string(DamageTypeName(part.type)), std::format("{:d}-{:d}", ShownDamage(part.min), ShownDamage(part.max)));
+			average += part.average;
 		}
-		const int average = (totalMin + totalMax) / 2;
-		Value(lines, "Average hit", std::format("{:d}", average));
+		Value(lines, "Average hit", std::format("{:d}", ShownDamage(average)));
 		if (usable && seconds > 0)
-			Value(lines, "Damage per second", std::format("{:d} (one target)", static_cast<int>(average / seconds)));
+			Value(lines, "Damage per second", std::format("{:d} (one target)", ShownDamage(average / seconds)));
 		Text(lines, Kind::Note, "Before the enemy's armour and resistances");
 	} else if (!hit.effect.empty()) {
 		Heading(lines, "Effect");

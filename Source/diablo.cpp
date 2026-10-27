@@ -94,6 +94,7 @@
 #include "panels/partypanel.hpp"
 #include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/quest_reward_panel.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
@@ -471,8 +472,13 @@ void LeftMouseDown(uint16_t modState)
 	}
 
 	if (IsPlayerInStore()) {
-		CheckStoreBtn();
-		return;
+		// POE2 Mashup: a click outside a towner's talk menu closes it and goes on, so the hero walks off at once.
+		if (gbIsPoe2 && !StoreWindowContainsMouse()) {
+			CloseTalkMenu();
+		} else {
+			CheckStoreBtn();
+			return;
+		}
 	}
 
 	const bool isShiftHeld = (modState & SDL_KMOD_SHIFT) != 0;
@@ -705,6 +711,9 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	}
 
 	if (!ChatFlag && WasdMovementKeyPressed(vkey)) {
+		// POE2 Mashup: walking off closes a towner's talk menu, like the stash, and the walk goes on.
+		if (gbIsPoe2 && IsPlayerInStore())
+			CloseTalkMenu();
 		return;
 	}
 
@@ -909,6 +918,10 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 	}
 
 	if (StackSplitHandleEvent(event)) {
+		return;
+	}
+
+	if (QuestRewardHandleEvent(event)) {
 		return;
 	}
 
@@ -1812,6 +1825,8 @@ void GameLogic()
 	}
 	ProcessAutosave();
 	CloseInteractionPanelsWhenAway();
+	// POE2 Mashup: a towner's quest reward offers itself once the talk text is gone.
+	UpdateQuestRewardOffer();
 
 	plrctrls_after_game_logic();
 }
@@ -2303,7 +2318,9 @@ void InitKeymapActions()
 		    if (gbIsPoe2) {
 			    const bool modalShown = SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
 			    if (!modalShown) {
-				    TryDodgeRoll(*MyPlayer);
+				    // Rolling away from a towner closes the talk menu, like walking off does.
+				    if (TryDodgeRoll(*MyPlayer) && IsPlayerInStore())
+					    CloseTalkMenu();
 				    return;
 			    }
 		    }
@@ -3422,6 +3439,11 @@ bool PressEscKey()
 		rv = true;
 	}
 
+	if (IsQuestRewardOpen()) {
+		CloseQuestReward();
+		rv = true;
+	}
+
 	if (SpellSelectFlag) {
 		SpellSelectFlag = false;
 		rv = true;
@@ -3514,6 +3536,7 @@ void LoadGameLevelFirstFlagEntry()
 		InitHelp();
 	}
 	InitStores();
+	ClearQuestRewards();
 	InitAutomapOnce();
 }
 

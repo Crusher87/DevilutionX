@@ -10,7 +10,9 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/uniques.hpp"
 #include "tables/itemdat.h"
 #include "utils/format.hpp"
 #include "utils/log.hpp"
@@ -127,6 +129,10 @@ void LoadBaseData()
 		base.implicits = ParseImplicits(text);
 		reader.readString("split", text);
 		base.split = ParseSplit(text);
+		reader.readInt("level", base.level);
+		int block = 0;
+		reader.readOptionalInt("block", block);
+		base.block = static_cast<uint8_t>(std::clamp(block, 0, 100));
 		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
 		Bases.push_back(std::move(base));
 	}
@@ -148,6 +154,31 @@ const BaseMeta *BaseMetaFor(int itemIndex)
 const BaseMeta *ItemBaseMeta(const Item &item)
 {
 	return item.isEmpty() ? nullptr : BaseMetaFor(item.IDidx);
+}
+
+int ShieldBlockChance(const Item &item)
+{
+	if (item.isEmpty() || item._itype != ItemType::Shield)
+		return 0;
+	// A POE2 base says; a focus has none.
+	if (const BaseMeta *base = ItemBaseMeta(item); base != nullptr)
+		return base->block;
+	// Diablo's shields, by the look of their base (the Warrior's old Buckler has no unique type to go by).
+	const ItemData &data = AllItemsList[item.IDidx];
+	if (data.iSName == "Focus")
+		return 0;
+	switch (data.iCurs) {
+	case ICURS_KITE_SHIELD:
+		return 27;
+	case ICURS_LARGE_SHIELD:
+	case ICURS_TOWER_SHIELD:
+	case ICURS_GOTHIC_SHIELD:
+	case ICURS_BLACKOAK_SHIELD:
+		return 30;
+	default:
+		// Bucklers and small shields.
+		return 25;
+	}
 }
 
 std::vector<ItemImplicit> ItemImplicits(const Item &item)
@@ -209,6 +240,27 @@ std::vector<std::string> ItemImplicitText(const Item &item)
 		lines.push_back(FormatRuntime(implicit.implicit->text, shown, implicit.values[1]));
 	}
 	return lines;
+}
+
+int ItemRequiredLevel(const Item &item)
+{
+	if (!gbIsPoe2)
+		return 0;
+	const BaseMeta *base = ItemBaseMeta(item);
+	if (base == nullptr)
+		return 0;
+	int level = base->level;
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid >= 0 && static_cast<size_t>(item._iUid) < UniqueItems.size()) {
+		// A bundle unique's drop level is its own; a Diablo unique's is its table's level.
+		const Poe2Unique *unique = Poe2UniqueFor(item._iUid);
+		level = std::max(level, unique != nullptr ? unique->dropLevel : static_cast<int>(UniqueItems[static_cast<size_t>(item._iUid)].UIMinLvl));
+	}
+	return level;
+}
+
+bool MeetsItemLevelRequirement(const Player &player, const Item &item)
+{
+	return player.getCharacterLevel() >= ItemRequiredLevel(item);
 }
 
 DefenseSplit ItemDefenseSplit(const Item &item, int defense)

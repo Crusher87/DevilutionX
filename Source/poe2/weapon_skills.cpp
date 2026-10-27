@@ -523,7 +523,10 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	}
 }
 
-int WeaponSkillManaCost(WeaponSkill skill)
+namespace {
+
+/** @brief The listed cost at gem level 1, before the melee cut. */
+int ListedManaCost(WeaponSkill skill)
 {
 	switch (skill) {
 	case WeaponSkill::Cleave:
@@ -578,6 +581,23 @@ int WeaponSkillManaCost(WeaponSkill skill)
 			return table->mana;
 		return 0;
 	}
+}
+
+} // namespace
+
+bool HasMeleeManaCut(WeaponSkill skill)
+{
+	const uint32_t tags = SkillTags(SkillSlot::ForAttack(skill));
+	return (tags & ST_Attack) != 0 && (tags & (ST_Melee | ST_Slam)) != 0 && (tags & (ST_Bow | ST_Spell | ST_Minion)) == 0;
+}
+
+int WeaponSkillManaCost(WeaponSkill skill)
+{
+	const int cost = ListedManaCost(skill);
+	// Casters are the mana classes: melee strikes and slams cost a third less (Curtis, after a Warrior ran dry 42 times in 40 minutes).
+	if (gbIsPoe2 && cost > 0 && HasMeleeManaCut(skill))
+		return std::max(((cost * 2) + 1) / 3, 1);
+	return cost;
 }
 
 int WeaponSkillManaCost(const Player &player, WeaponSkill skill, bool lifeShare)

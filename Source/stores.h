@@ -185,8 +185,14 @@ void CainIdentifyAll();
 /** @brief Remembers where the hero stood when a stash or vendor panel opened, so walking away closes it. */
 void RememberInteractionSpot();
 
-/** @brief Closes the stash and vendor panels once the hero walks more than a few tiles from where they opened. */
+/**
+ * @brief Closes the stash and vendor panels once the hero walks more than a few tiles from where they opened, and in
+ * POE2 a towner's talk menu as soon as the hero moves at all.
+ */
 void CloseInteractionPanelsWhenAway();
+
+/** @brief Closes a towner's talk menu completely, whatever page it is on, and stops the towner's speech. */
+void CloseTalkMenu();
 void DrawSText(const Surface &out);
 void StoreESC();
 void StoreUp();
@@ -195,6 +201,8 @@ void StorePrior();
 void StoreNext();
 void TakePlrsMoney(int cost);
 void StoreEnter();
+/** @brief Whether the mouse is over the talk menu's window. */
+bool StoreWindowContainsMouse();
 void CheckStoreBtn();
 void ReleaseStoreBtn();
 bool IsPlayerInStore();

@@ -430,6 +430,31 @@ int AffixTierWidth()
 	return GetLineWidth("T10", GameFont12, 1) + 8;
 }
 
+/**
+ * @brief Whether the Alt view line continues the affix above it: one with no side ("Prefix"), since every affix's first
+ * line has one (AffixViewLines).
+ */
+bool ContinuesAffix(const std::vector<std::string_view> &lines, const std::vector<InfoLineStyle> &styles, size_t first, size_t i)
+{
+	return i > first && i < lines.size() && styles[i - 1] == InfoLineStyle::Affix && styles[i - 2] == InfoLineStyle::Affix
+	    && SplitAffixLine(lines[i]).side.empty();
+}
+
+/**
+ * @brief A thin bracket in the gap between the side and the stat, joining the lines of one two-part affix: a tick
+ * at its top and bottom, and the line between. The game's font has no box-drawing characters, so it is drawn.
+ */
+void DrawAffixBracket(const Surface &out, Point topLeft, int lineHeight, bool joinedAbove, bool joinedBelow, uint8_t color)
+{
+	const int top = joinedAbove ? 0 : 2;
+	const int bottom = joinedBelow ? lineHeight : lineHeight - 3;
+	DrawVerticalLine(out, topLeft + Displacement { 0, top }, bottom - top, color);
+	if (!joinedAbove)
+		DrawHorizontalLine(out, topLeft + Displacement { 0, top }, 3, color);
+	if (!joinedBelow)
+		DrawHorizontalLine(out, topLeft + Displacement { 0, bottom - 1 }, 3, color);
+}
+
 /** @brief Splits a tooltip's text into its title lines and body, and measures it. */
 TooltipLayout MeasureTooltip(const Surface &out, const std::string &text, const std::vector<InfoLineStyle> &lineStyles)
 {
@@ -516,6 +541,10 @@ void DrawTooltipBox(const Surface &out, const TooltipLayout &layout, int x, int 
 			// Like POE2's Alt view: the side on the left, the stat in the middle, the tier on the right.
 			const AffixLine parts = SplitAffixLine(layout.lines[i]);
 			DrawString(out, parts.side, { { x + TooltipPadding, lineY }, { AffixSideWidth(), TooltipLineHeight } }, { .flags = UiFlags::ColorButtonpushed, .spacing = 1 });
+			const bool joinedAbove = ContinuesAffix(layout.lines, layout.styles, layout.first, i);
+			const bool joinedBelow = ContinuesAffix(layout.lines, layout.styles, layout.first, i + 1);
+			if (joinedAbove || joinedBelow)
+				DrawAffixBracket(out, { x + TooltipPadding + AffixSideWidth() - 4, lineY }, TooltipLineHeight, joinedAbove, joinedBelow, frame);
 			DrawString(out, parts.text, { { x, lineY }, { width, TooltipLineHeight } }, { .flags = TooltipLineColor(style) | UiFlags::AlignCenter, .spacing = 1 });
 			const UiFlags tierColor = parts.tier == "T1" ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed;
 			DrawString(out, parts.tier, { { x + width - TooltipPadding - AffixTierWidth(), lineY }, { AffixTierWidth(), TooltipLineHeight } }, { .flags = tierColor | UiFlags::AlignRight, .spacing = 1 });

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -18,11 +19,14 @@
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/craft_state.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
 #include "spells.h"
 #include "tables/playerdat.hpp"
@@ -644,6 +648,246 @@ TEST_F(Poe2ItemBasesTest, OldItemsKeepTheirArmourAndDamage)
 	EXPECT_EQ(base.armour, oldDefence.armour);
 	EXPECT_EQ(base.evasion, oldDefence.evasion);
 	EXPECT_EQ(base.energyShield, 0);
+}
+
+TEST_F(Poe2ItemBasesTest, GearNeedsPoe2sFullAttributes)
+{
+	// Curtis 2026-10-27, after the Warrior playtest: the bases need POE2's own attributes, no longer 55% of them.
+	const auto needs = [](std::string_view name) {
+		const ItemData &data = AllItemsList[FindBase(name)];
+		return std::array<int, 3> { data.iMinStr, data.iMinMag, data.iMinDex };
+	};
+	EXPECT_EQ(needs("Iron Cap"), (std::array<int, 3> { 5, 0, 0 }));
+	EXPECT_EQ(needs("Legion Helm"), (std::array<int, 3> { 78, 0, 0 }));
+	EXPECT_EQ(needs("Titan Crown"), (std::array<int, 3> { 150, 0, 0 }));
+	EXPECT_EQ(needs("Shortsword"), (std::array<int, 3> { 3, 0, 3 }));
+	EXPECT_EQ(needs("Ruby Ring"), (std::array<int, 3> { 0, 0, 0 }));
+	EXPECT_EQ(needs("Crimson Amulet"), (std::array<int, 3> { 0, 0, 0 }));
+	// Diablo's bases keep theirs.
+	EXPECT_EQ(needs("Full Plate Mail"), (std::array<int, 3> { 90, 0, 0 }));
+
+	// A requirement past 127 stays whole on the item and through a save, and is checked.
+	LoadPlayerDataFiles();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(player.getMaxCharacterLevel());
+	player._pBaseMag = player._pMagic = 50;
+	player._pBaseDex = player._pDexterity = 50;
+	const Item crown = MakeItem("Titan Crown", 7);
+	EXPECT_EQ(crown._iMinStr, 150);
+	EXPECT_EQ(SaveAndLoad(crown)._iMinStr, 150);
+	player._pBaseStr = player._pStrength = 149;
+	EXPECT_FALSE(player.CanUseItem(crown));
+	player._pBaseStr = player._pStrength = 150;
+	EXPECT_TRUE(player.CanUseItem(crown));
+}
+
+TEST_F(Poe2ItemBasesTest, GearNeedsItsCharacterLevel)
+{
+	// Curtis 2026-10-27, after the Warrior playtest: like POE2's, a base needs the character level of its required level.
+	LoadPlayerDataFiles();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseVit = player._pVitality = 50;
+	const Item helm = MakeItem("Legion Helm", 3);
+	ASSERT_EQ(ItemRequiredLevel(helm), 48);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Iron Cap", 3)), 1);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Titan Crown", 3)), 80);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Ruby Ring", 3)), 8);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Gold Amulet", 3)), 35);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Conqueror Plate", 3)), 68);
+	// Diablo's bases need none.
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Full Plate Mail", 3)), 0);
+
+	player.setCharacterLevel(47);
+	EXPECT_FALSE(player.CanUseItem(helm));
+	player.setCharacterLevel(48);
+	EXPECT_TRUE(player.CanUseItem(helm));
+
+	// Worn below its level it gives nothing, like gear that needs more Strength.
+	player.InvBody[INVLOC_HEAD] = helm;
+	player.setCharacterLevel(47);
+	CalcPlrInv(player, false);
+	EXPECT_FALSE(player.InvBody[INVLOC_HEAD]._iStatFlag);
+	const int armourBelow = player._pIAC;
+	player.setCharacterLevel(48);
+	CalcPlrInv(player, false);
+	EXPECT_TRUE(player.InvBody[INVLOC_HEAD]._iStatFlag);
+	EXPECT_GT(player._pIAC, armourBelow);
+	player.InvBody[INVLOC_HEAD] = {};
+
+	// Outside POE2 mode nothing changes.
+	gbIsPoe2 = false;
+	EXPECT_EQ(ItemRequiredLevel(helm), 0);
+	player.setCharacterLevel(1);
+	EXPECT_TRUE(player.CanUseItem(helm));
+	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2ItemBasesTest, RequirementLineShowsTheLevel)
+{
+	EXPECT_EQ(ItemRequirementText(48, 78, 0, 0), "Required: Level 48, 78 Str");
+	EXPECT_EQ(ItemRequirementText(48, 0, 0, 0), "Required: Level 48");
+	EXPECT_EQ(ItemRequirementText(33, 37, 0, 37), "Required: Level 33, 37 Str 37 Dex");
+	// Level 1 isn't a requirement, and Diablo's line is as it was.
+	EXPECT_EQ(ItemRequirementText(1, 5, 0, 0), "Required: 5 Str");
+	EXPECT_EQ(ItemRequirementText(0, 30, 0, 30), "Required: 30 Str 30 Dex");
+	EXPECT_EQ(ItemRequirementText(0, 0, 25, 0), "Required: 25 Mag");
+	EXPECT_EQ(ItemRequirementText(1, 0, 0, 0), "");
+	EXPECT_EQ(ItemRequirementText(0, 0, 0, 0), "");
+}
+
+TEST_F(Poe2ItemBasesTest, NewHeroesStartWithPoe2Bases)
+{
+	LoadPlayerDataFiles();
+	struct Start {
+		HeroClass heroClass;
+		std::string_view weapon;
+		std::string_view offHand;
+		WeaponSkill starterSkill;
+		DefaultAttack attack;
+	};
+	const Start starts[] = {
+		{ HeroClass::Warrior, "Shortsword", "Wooden Tower Shield", WeaponSkill::Cleave, DefaultAttack::SwordStrike },
+		{ HeroClass::Rogue, "Fine Short Bow", "", WeaponSkill::Barrage, DefaultAttack::BowShot },
+		{ HeroClass::Monk, "Ash Staff", "", WeaponSkill::WhirlingStaff, DefaultAttack::StaffStrike },
+		{ HeroClass::Sorcerer, "Focused Pilgrim Staff", "", WeaponSkill::None, DefaultAttack::StaffBolt },
+		{ HeroClass::Bard, "Shortsword", "Shiv", WeaponSkill::Flurry, DefaultAttack::SwordStrike },
+	};
+	for (const Start &start : starts) {
+		const PlayerStartingLoadoutData &loadout = GetPlayerStartingLoadoutForClass(start.heroClass);
+		const _item_indexes weapon = GetStartingLoadoutItem(loadout, 0);
+		ASSERT_NE(weapon, IDI_NONE) << start.weapon;
+		EXPECT_EQ(AllItemsList[weapon].iName, start.weapon);
+		ASSERT_NE(BaseMetaFor(weapon), nullptr) << start.weapon << " is a POE2 base";
+
+		Player &player = *MyPlayer;
+		player = {};
+		player._pClass = start.heroClass;
+		InitializeItem(player.InvBody[INVLOC_HAND_LEFT], weapon);
+		if (!start.offHand.empty()) {
+			const _item_indexes offHand = GetStartingLoadoutItem(loadout, 1);
+			ASSERT_NE(offHand, IDI_NONE) << start.offHand;
+			EXPECT_EQ(AllItemsList[offHand].iName, start.offHand);
+			InitializeItem(player.InvBody[INVLOC_HAND_RIGHT], offHand);
+		}
+		// The starting gem still fits the new weapon, and the free attack is the weapon's own.
+		if (start.starterSkill != WeaponSkill::None)
+			EXPECT_TRUE(WeaponAllowsSkill(player, start.starterSkill)) << start.weapon;
+		EXPECT_EQ(DefaultAttackFor(player), start.attack) << start.weapon;
+	}
+	EXPECT_EQ(AllItemsList[GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Warrior), 1)].itype, ItemType::Shield);
+	// The Barbarian keeps Diablo's start.
+	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Barbarian), 0), IDI_BARBARIAN);
+	// Outside POE2 mode a 'poe2:' id names nothing.
+	gbIsPoe2 = false;
+	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Warrior), 0), IDI_NONE);
+	gbIsPoe2 = true;
+
+	// Diablo's heroes start as before.
+	UnloadModArchives();
+	LoadPlayerDataFiles();
+	LoadItemData();
+	const PlayerStartingLoadoutData &warrior = GetPlayerStartingLoadoutForClass(HeroClass::Warrior);
+	EXPECT_EQ(GetStartingLoadoutItem(warrior, 0), IDI_WARRIOR);
+	EXPECT_EQ(GetStartingLoadoutItem(warrior, 1), IDI_WARRSHLD);
+	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Rogue), 0), IDI_ROGUE);
+	EXPECT_FALSE(FindPoe2ItemId("poe2:one_hand_sword_balanced_shortsword").has_value());
+}
+
+TEST_F(Poe2ItemBasesTest, ShieldsBlockWithTheirBasesOwnChance)
+{
+	LoadPlayerDataFiles();
+	LoadPassiveTreeData();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(1);
+	player._pBaseStr = player._pStrength = 30;
+	player._pBaseMag = player._pMagic = 10;
+	player._pBaseDex = player._pDexterity = 20;
+	player._pBaseVit = player._pVitality = 25;
+	player._pMaxHPBase = player._pHPBase = Fixed26_6::fromInt(100);
+	player._pMaxManaBase = player._pManaBase = Fixed26_6::fromInt(20);
+
+	// No shield, no block.
+	CalcPlrItemVals(player, false);
+	EXPECT_EQ(player.GetBlockChance(), 0);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, nullptr, true), 0);
+
+	// A Warrior with a Wooden Tower Shield and 20 Dexterity blocks 28%, the shield's own chance.
+	Item &shield = player.InvBody[INVLOC_HAND_RIGHT];
+	InitializeItem(shield, FindBase("Wooden Tower Shield"));
+	shield._iStatFlag = true;
+	EXPECT_EQ(ShieldBlockChance(shield), 28);
+	CalcPlrItemVals(player, false);
+	ASSERT_TRUE(player._pBlockFlag);
+	EXPECT_EQ(player.GetBlockChance(), 28);
+	EXPECT_EQ(player.GetBlockChance(false), 28);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, nullptr, true), 28);
+	EXPECT_EQ(BlockChanceAgainstMonster(player, nullptr, false), 28);
+
+	// Dexterity doesn't add to it.
+	player._pBaseDex = player._pDexterity = 60;
+	CalcPlrItemVals(player, false);
+	EXPECT_EQ(player.GetBlockChance(), 28);
+
+	// The tree's block adds on top, and Magma Barrier raises the sum.
+	PassiveNodeId rimAndEdge = 0;
+	for (const PassiveNode &node : PassiveTree()) {
+		if (node.name == "Rim and Edge")
+			rimAndEdge = node.id;
+	}
+	ASSERT_NE(rimAndEdge, 0);
+	player.poe2.passives.set(rimAndEdge);
+	CalcPlrItemVals(player, false);
+	EXPECT_EQ(player.poe2.passiveBlockChance, 3);
+	EXPECT_EQ(player.GetBlockChance(), 31);
+	player.poe2.spiritState.blockPercent = 25;
+	EXPECT_EQ(player.GetBlockChance(), 31 * 125 / 100);
+	player.poe2.spiritState.blockPercent = 0;
+
+	// A shield the hero can't use doesn't block.
+	shield._iStatFlag = false;
+	CalcPlrItemVals(player, false);
+	EXPECT_EQ(player.GetBlockChance(), 0);
+
+	// Each line of POE2 shields, from its first base to its last, and Diablo's shields, which block like POE2's: 25%
+	// for a buckler or small shield up to 30% for a large or tower shield. Foci don't block.
+	const std::pair<std::string_view, int> shields[] = {
+		{ "Wooden Tower Shield", 28 }, { "Titan Tower Shield", 35 },
+		{ "Hide Buckler", 25 }, { "Phantom Buckler", 32 },
+		{ "Round Shield", 26 }, { "Conqueror Shield", 33 },
+		{ "Reliquary Shield", 25 }, { "Seraph Shield", 32 },
+		{ "Wooden Focus", 0 },
+		{ "Small Shield", 25 }, { "Kite Shield", 27 }, { "Large Shield", 30 }, { "Tower Shield", 30 }, { "Gothic Shield", 30 },
+		{ "Twig Focus", 0 },
+	};
+	for (const auto &[name, block] : shields) {
+		Item item;
+		InitializeItem(item, FindBase(name));
+		EXPECT_EQ(ShieldBlockChance(item), block) << name;
+	}
+	// The Warrior's old starting Buckler.
+	Item buckler;
+	InitializeItem(buckler, IDI_WARRSHLD);
+	EXPECT_EQ(ShieldBlockChance(buckler), 25);
+
+	// Diablo keeps Dexterity, the class's base and the level.
+	player.poe2.passives.reset(rimAndEdge);
+	shield._iStatFlag = true;
+	CalcPlrItemVals(player, false);
+	gbIsPoe2 = false;
+	EXPECT_EQ(player.GetBlockChance(), player._pDexterity + player.getBaseToBlock() + 2);
+	gbIsPoe2 = true;
 }
 
 } // namespace

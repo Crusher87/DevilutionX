@@ -17,6 +17,7 @@
 #include "levels/tile_properties.hpp"
 #include "minitext.h"
 #include "panels/anvil_panel.hpp"
+#include "panels/quest_reward_panel.hpp"
 #include "player.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -218,6 +219,28 @@ void TownerTalk(_speech_id message)
 	InitQTextMsg(message);
 }
 
+/**
+ * @brief POE2 Mashup: in single player a quest reward lands at the hero's feet as a normal ground item, and a popup
+ * offers to put it in the bag (panels/quest_reward_panel.hpp). Multiplayer keeps the rewards as they were.
+ */
+bool HandsRewardToHero(const Player &player)
+{
+	return gbIsPoe2 && !gbIsMultiplayer && &player == MyPlayer;
+}
+
+/** @brief Where a quest reward lands: beside the hero when it is handed to them, else beside the towner. */
+Point RewardSpot(const Player &player, Point besideTowner)
+{
+	return HandsRewardToHero(player) ? Point { player.position.tile } : besideTowner;
+}
+
+/** @brief Offers the hero the newest ground item, the reward just made, if one was made. */
+void OfferReward(const Player &player, const Towner &towner, uint8_t itemsBefore)
+{
+	if (HandsRewardToHero(player) && ActiveItemCount > itemsBefore)
+		OfferQuestReward(towner.name, ActiveItems[ActiveItemCount - 1]);
+}
+
 void TalkToBarOwner(Player &player, Towner &barOwner)
 {
 	if (!player._pLvlVisited[0]) {
@@ -270,7 +293,9 @@ void TalkToBarOwner(Player &player, Towner &barOwner)
 				bannerQuest._qactive = QUEST_DONE;
 				bannerQuest._qvar1 = 3;
 				NetSendCmdQuest(true, bannerQuest);
-				SpawnUnique(UITEM_HARCREST, barOwner.position + Direction::SouthWest, bannerQuest._qlevel);
+				const uint8_t itemsBefore = ActiveItemCount;
+				SpawnUnique(UITEM_HARCREST, RewardSpot(player, barOwner.position + Direction::SouthWest), bannerQuest._qlevel);
+				OfferReward(player, barOwner, itemsBefore);
 				InitQTextMsg(TEXT_BANNER3);
 				return;
 			}
@@ -318,7 +343,9 @@ void TalkToBlackSmith(Player &player, Towner &blackSmith)
 			if (Quests[Q_ROCK]._qvar2 == 1 && RemoveInventoryItemById(player, IDI_ROCK)) {
 				Quests[Q_ROCK]._qactive = QUEST_DONE;
 				NetSendCmdQuest(true, Quests[Q_ROCK]);
-				SpawnUnique(UITEM_INFRARING, blackSmith.position + Direction::SouthWest, Quests[Q_ROCK]._qlevel);
+				const uint8_t itemsBefore = ActiveItemCount;
+				SpawnUnique(UITEM_INFRARING, RewardSpot(player, blackSmith.position + Direction::SouthWest), Quests[Q_ROCK]._qlevel);
+				OfferReward(player, blackSmith, itemsBefore);
 				InitQTextMsg(TEXT_INFRA7);
 				return;
 			}
@@ -339,7 +366,9 @@ void TalkToBlackSmith(Player &player, Towner &blackSmith)
 		if (Quests[Q_ANVIL]._qvar2 == 1 && RemoveInventoryItemById(player, IDI_ANVIL)) {
 			Quests[Q_ANVIL]._qactive = QUEST_DONE;
 			NetSendCmdQuest(true, Quests[Q_ANVIL]);
-			SpawnUnique(UITEM_GRISWOLD, blackSmith.position + Direction::SouthWest, Quests[Q_ANVIL]._qlevel);
+			const uint8_t itemsBefore = ActiveItemCount;
+			SpawnUnique(UITEM_GRISWOLD, RewardSpot(player, blackSmith.position + Direction::SouthWest), Quests[Q_ANVIL]._qlevel);
+			OfferReward(player, blackSmith, itemsBefore);
 			InitQTextMsg(TEXT_ANVIL7);
 			return;
 		}
@@ -438,6 +467,14 @@ void TalkToHealer(Player &player, Towner &healer)
 		if (poisonWater._qactive == QUEST_DONE && poisonWater._qvar1 != 2) {
 			poisonWater._qvar1 = 2;
 			InitQTextMsg(TEXT_POISON5);
+			if (HandsRewardToHero(player)) {
+				// Like every quest reward: at the hero's feet, out from under Pepin, with the popup to bag it.
+				const uint8_t itemsBefore = ActiveItemCount;
+				SpawnUnique(UITEM_TRING, RewardSpot(player, healer.position + Direction::SouthWest), poisonWater._qlevel);
+				OfferReward(player, healer, itemsBefore);
+				NetSendCmdQuest(true, poisonWater);
+				return;
+			}
 			Item *ring = SpawnUnique(UITEM_TRING, healer.position + Direction::SouthWest, poisonWater._qlevel, /*sendmsg=*/!gbIsPoe2);
 			// POE2 Mashup (Curtis 2026-10-21): the ring goes straight into the bag, as Pepin stands over where it lands.
 			if (gbIsPoe2 && ring != nullptr) {
@@ -583,7 +620,12 @@ void TalkToFarmer(Player &player, Towner &farmer)
 		break;
 	case QUEST_DONE:
 		InitQTextMsg(TEXT_FARMER4);
-		SpawnRewardItem(IDI_AURIC, farmer.position + Displacement { 1, 0 }, true);
+		{
+			const uint8_t itemsBefore = ActiveItemCount;
+			// The amulet lands on exactly the tile given, so beside the hero it takes the nearest free one.
+			SpawnRewardItem(IDI_AURIC, HandsRewardToHero(player) ? GetSuperItemLoc(player.position.tile) : farmer.position + Displacement { 1, 0 }, true);
+			OfferReward(player, farmer, itemsBefore);
+		}
 		quest._qactive = QUEST_HIVE_DONE;
 		if (gbIsMultiplayer)
 			NetSendCmdQuest(true, quest);
@@ -654,7 +696,9 @@ void TalkToCowFarmer(Player &player, Towner &cowFarmer)
 	auto &quest = Quests[Q_JERSEY];
 
 	if (RemoveInventoryItemById(player, IDI_BROWNSUIT)) {
-		SpawnUnique(UITEM_BOVINE, cowFarmer.position + Direction::SouthEast, quest._qlevel);
+		const uint8_t itemsBefore = ActiveItemCount;
+		SpawnUnique(UITEM_BOVINE, RewardSpot(player, cowFarmer.position + Direction::SouthEast), quest._qlevel);
+		OfferReward(player, cowFarmer, itemsBefore);
 		InitQTextMsg(TEXT_JERSEY8);
 		quest._qactive = QUEST_DONE;
 		UpdateCowFarmerAnimAfterQuestComplete();
@@ -722,7 +766,9 @@ void TalkToGirl(Player &player, Towner &girl)
 
 	if (quest._qactive != QUEST_DONE && RemoveInventoryItemById(player, IDI_THEODORE)) {
 		InitQTextMsg(TEXT_GIRL4);
-		CreateAmulet(girl.position, 13, false, false, true);
+		const uint8_t itemsBefore = ActiveItemCount;
+		CreateAmulet(RewardSpot(player, girl.position), 13, false, false, true);
+		OfferReward(player, girl, itemsBefore);
 		quest._qactive = QUEST_DONE;
 		UpdateGirlAnimAfterQuestComplete();
 		if (gbIsMultiplayer)

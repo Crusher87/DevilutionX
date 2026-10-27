@@ -1098,6 +1098,14 @@ void WriteSettings()
 	    .add("difficulty", static_cast<int>(sgGameInitInfo.nDifficulty));
 }
 
+/** @brief The hero's block chance as a hit meets it, capped; 0 without a shield (or a Monk's staff in Diablo). */
+int LoggedBlockChance(const Player &player)
+{
+	if (!player._pBlockFlag)
+		return 0;
+	return std::clamp(player.GetBlockChance(false), 0, player.GetMaxBlockChance(gbIsPoe2));
+}
+
 /** @brief The build as data: the same as the build line, field by field. */
 void WriteBuildEvent(const Player &player, LogLevel level)
 {
@@ -1148,7 +1156,7 @@ void WriteBuildEvent(const Player &player, LogLevel level)
 	    .add("vit", player._pVitality)
 	    .add("armour", ArmourRating(player, false))
 	    .add("evasion", EvasionRating(player, false))
-	    .add("block", std::clamp(player.GetBlockChance(false), 0, player.GetMaxBlockChance(gbIsPoe2)))
+	    .add("block", LoggedBlockChance(player))
 	    .add("fireRes", player._pFireResist)
 	    .add("lightningRes", player._pLghtResist)
 	    .add("magicRes", player._pMagResist)
@@ -2368,7 +2376,7 @@ std::string TelemetryBuildText(const Player &player)
 	}
 	StrAppend(text, " | passives ", player.poe2.passives.count());
 	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% magic {:d}%, spirit {:d}/{:d}",
-	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, std::clamp(player.GetBlockChance(false), 0, player.GetMaxBlockChance(gbIsPoe2)),
+	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, LoggedBlockChance(player),
 	                    player._pFireResist, player._pLghtResist, player._pMagResist, ReservedSpirit(player), MaxSpirit(player)));
 	StrAppend(text, " | belt:");
 	for (const Item &item : player.SpdList) {

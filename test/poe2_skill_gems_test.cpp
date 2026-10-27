@@ -145,8 +145,8 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)
 {
 	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
-	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 5 mana");
-	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 16 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
+	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 4 mana");
+	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 12 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
 	EXPECT_EQ(GemCurveTextByName("nothing"), "No skill gem is called nothing.");
 }
 

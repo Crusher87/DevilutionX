@@ -19,6 +19,7 @@
 #include "data/file.hpp"
 #include "data/record_reader.hpp"
 #include "data/value_reader.hpp"
+#include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
 #include "poe2/experience.hpp"
@@ -218,7 +219,13 @@ void LoadClassStartingLoadoutData(std::string_view classPath, PlayerStartingLoad
 	reader.read("spell", startingLoadoutData.spell, ParseSpellId);
 	reader.readInt("spellLevel", startingLoadoutData.spellLevel);
 	for (size_t i = 0; i < startingLoadoutData.items.size(); ++i) {
-		reader.read(StrCat("item", i), startingLoadoutData.items[i], ParseItemId);
+		reader.read(StrCat("item", i), startingLoadoutData.items[i], [&](std::string_view value) -> std::expected<_item_indexes, std::string> {
+			if (value.starts_with("poe2:")) {
+				startingLoadoutData.poe2ItemIds[i] = std::string(value);
+				return IDI_NONE;
+			}
+			return ParseItemId(value);
+		});
 	}
 	reader.readInt("gold", startingLoadoutData.gold);
 }
@@ -443,6 +450,15 @@ const PlayerStartingLoadoutData &GetPlayerStartingLoadoutForClass(HeroClass pCla
 	const auto playerClassIndex = static_cast<size_t>(pClass);
 	assert(playerClassIndex < PlayersStartingLoadoutData.size());
 	return PlayersStartingLoadoutData[playerClassIndex];
+}
+
+_item_indexes GetStartingLoadoutItem(const PlayerStartingLoadoutData &loadout, size_t slot)
+{
+	if (loadout.poe2ItemIds[slot].empty())
+		return loadout.items[slot];
+	if (!gbIsPoe2)
+		return IDI_NONE;
+	return FindPoe2ItemId(loadout.poe2ItemIds[slot]).value_or(IDI_NONE);
 }
 
 const PlayerSpriteData &GetPlayerSpriteDataForClass(HeroClass pClass)

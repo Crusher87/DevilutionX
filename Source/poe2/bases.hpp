@@ -18,6 +18,7 @@
 namespace devilution {
 
 struct Item;
+struct Player;
 
 /** @brief What a base's quality improves. */
 enum class QualityKind : uint8_t {
@@ -49,6 +50,10 @@ struct BaseMeta {
 	std::vector<BaseImplicit> implicits;
 	/** @brief How a hybrid's defence divides between its kinds; none for single-kind bases. */
 	DefenseSplit split;
+	/** @brief The character level the base needs, like POE2's required level. */
+	int level = 0;
+	/** @brief A shield's own chance to block, in percent; 0 for every other base. */
+	uint8_t block = 0;
 };
 
 /** @brief A rolled implicit: its values on this item. */
@@ -74,6 +79,11 @@ void LoadBaseData();
 const BaseMeta *BaseMetaFor(int itemIndex);
 /** @brief The base metadata of the item's base, or nullptr for a base without any. */
 const BaseMeta *ItemBaseMeta(const Item &item);
+/**
+ * @brief The shield's own chance to block, in percent: its POE2 base's, or a POE2-like one for Diablo's shields (25% for a
+ * buckler or small shield up to 30% for a large or tower shield). 0 for a focus and anything that isn't a shield.
+ */
+int ShieldBlockChance(const Item &item);
 /** @brief The item's implicits with their values, rolled from its seed and raised by its quality. */
 std::vector<ItemImplicit> ItemImplicits(const Item &item);
 /** @brief The effects the item's implicits raise, as bits of 1 << ModEffect; one that lowers (slower attacks) doesn't count. */
@@ -82,6 +92,15 @@ uint64_t ImplicitEffectBits(const Item &item);
 void ApplyBaseProperties(Item &item);
 /** @brief The implicits' tooltip lines. */
 std::vector<std::string> ItemImplicitText(const Item &item);
+
+/**
+ * @brief The character level the item needs, like POE2's: its base's, and for a unique the higher of that and the
+ * unique's own drop level. 0 outside POE2 mode and for bases without metadata (Diablo's bases and their uniques, gems,
+ * flasks and charms). Worked out from the base row, so nothing is saved.
+ */
+int ItemRequiredLevel(const Item &item);
+/** @brief Whether the hero's level is enough for the item; an item that needs more is unusable, like one that needs more Strength. */
+bool MeetsItemLevelRequirement(const Player &player, const Item &item);
 
 /**
  * @brief How the item's defence (from its base, without flat modifiers) divides: by its base's split, or evenly for an

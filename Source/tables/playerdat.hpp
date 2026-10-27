@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -137,6 +138,9 @@ struct PlayerStartingLoadoutData {
 
 	std::array<_item_indexes, 5> items;
 
+	/* POE2 Mashup: an item named by its 'poe2:' row id instead (items holds IDI_NONE there), found when the hero is made as the item data loads later */
+	std::array<std::string, 5> poe2ItemIds;
+
 	/* Initial gold amount, up to a single stack (5000 gold) */
 	uint16_t gold;
 };
@@ -246,6 +250,8 @@ size_t GetNumPlayerClasses();
 const PlayerData &GetPlayerDataForClass(HeroClass clazz);
 const PlayerCombatData &GetPlayerCombatDataForClass(HeroClass clazz);
 const PlayerStartingLoadoutData &GetPlayerStartingLoadoutForClass(HeroClass clazz);
+/** @brief The loadout's item in this slot; a 'poe2:' row id is looked up in POE2 mode, and is IDI_NONE outside it or when the data has no such row. */
+_item_indexes GetStartingLoadoutItem(const PlayerStartingLoadoutData &loadout, size_t slot);
 const PlayerSpriteData &GetPlayerSpriteDataForClass(HeroClass clazz);
 const PlayerAnimData &GetPlayerAnimDataForClass(HeroClass clazz);
 

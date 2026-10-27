@@ -12,6 +12,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/boss_loot.hpp"
 #include "poe2/charms.hpp"
@@ -55,7 +56,8 @@ public:
 
 		Player &player = *MyPlayer;
 		player._pClass = HeroClass::Warrior;
-		player.setCharacterLevel(50);
+		// High enough for every unique: gear needs its character level, and the latest uniques drop at area level 80.
+		player.setCharacterLevel(80);
 		player._pBaseStr = player._pStrength = 250;
 		player._pBaseMag = player._pMagic = 250;
 		player._pBaseDex = player._pDexterity = 250;
@@ -461,6 +463,36 @@ TEST_F(Poe2UniquesTest, BossTablesPointAtRealBossesAndUniques)
 	ASSERT_NE(BossLootTableFor(butcher), nullptr);
 	EXPECT_EQ(BossLootTableFor(butcher)->id, "saint_of_iron");
 	EXPECT_EQ(BossLootTableFor(MakeMonster()), nullptr);
+}
+
+TEST_F(Poe2UniquesTest, UniquesNeedTheHigherLevel)
+{
+	// A unique on a POE2 base needs the higher of the base's level and its own drop level.
+	EXPECT_EQ(ItemRequiredLevel(Make("Circle of Ash")), 12) << "Sapphire Ring 12, dropping from 8";
+	EXPECT_EQ(ItemRequiredLevel(Make("Astral Debt")), 80) << "Azure Amulet 1, dropping from 80";
+	EXPECT_EQ(ItemRequiredLevel(Make("Red Harvest")), 24);
+
+	const auto diabloUnique = [](std::string_view base, std::string_view name) {
+		Item item = MakeBase(base);
+		for (size_t i = 0; i < UniqueItems.size(); i++) {
+			if (std::string_view(UniqueItems[i].UIName) == name) {
+				item._iMagical = ITEM_QUALITY_UNIQUE;
+				item._iUid = static_cast<int>(i);
+				return item;
+			}
+		}
+		ADD_FAILURE() << name;
+		return item;
+	};
+	// A Diablo unique on a POE2 base takes its table's level when that is higher.
+	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Fine Short Bow", "The Needler")), 2);
+	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Fine Short Bow", "The Rift Bow")), 1);
+	// On an old Diablo base it needs no level.
+	Item cleaver;
+	InitializeItem(cleaver, IDI_CLEAVER);
+	cleaver._iMagical = ITEM_QUALITY_UNIQUE;
+	cleaver._iUid = 0;
+	EXPECT_EQ(ItemRequiredLevel(cleaver), 0);
 }
 
 } // namespace
