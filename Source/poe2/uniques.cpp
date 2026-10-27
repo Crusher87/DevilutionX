@@ -153,13 +153,21 @@ void LoadPoe2Uniques()
 		reader.readInt("value", value);
 		reader.readString("effects", text);
 		unique.effects = ParseEffects(text);
+		std::string savedBaseName;
+		reader.readString("savedBase", savedBaseName);
+		if (savedBaseName.empty())
+			savedBaseName = baseName;
 		// The mapping id follows the row, so a row that can't load doesn't shift the ones after it.
 		const int32_t id = mappingId++;
-		for (size_t i = 0; i < AllItemsList.size() && unique.baseItem < 0; i++) {
-			if (AllItemsList[i].iName == baseName && AllItemsList[i].iMiscId != IMISC_UNIQUE)
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iMiscId == IMISC_UNIQUE)
+				continue;
+			if (unique.baseItem < 0 && AllItemsList[i].iName == baseName)
 				unique.baseItem = static_cast<int>(i);
+			if (unique.savedBaseItem < 0 && AllItemsList[i].iName == savedBaseName)
+				unique.savedBaseItem = static_cast<int>(i);
 		}
-		if (unique.baseItem < 0 || !tier) {
+		if (unique.baseItem < 0 || unique.savedBaseItem < 0 || !tier) {
 			LogError("Unique {} has no base {} or tier {}", unique.name, baseName, text);
 			continue;
 		}
@@ -213,7 +221,11 @@ std::vector<int> Poe2UniquesOnBase(int itemIndex)
 {
 	std::vector<int> uids;
 	for (const Poe2Unique &unique : Uniques) {
-		if (unique.baseItem == itemIndex)
+		if (unique.savedBaseItem == itemIndex)
+			uids.push_back(unique.uid);
+	}
+	for (const Poe2Unique &unique : Uniques) {
+		if (unique.baseItem == itemIndex && unique.savedBaseItem != itemIndex)
 			uids.push_back(unique.uid);
 	}
 	return uids;
