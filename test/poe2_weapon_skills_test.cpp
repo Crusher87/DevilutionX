@@ -9,6 +9,8 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/default_attack.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
@@ -236,28 +238,62 @@ TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 
 TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
 {
-	// The mana audit's cuts for weapon attacks, at gem level 1.
+	// The mana audit's cuts for weapon attacks, at gem level 1; melee attacks then cost a third less (two thirds of
+	// GroundSlam 6, Whirlwind 8, LeapSlam 8, Smite 4, Frenzy 3, ShieldBash 4, ShadowStep 5, Vengeance 5, ViperStrike 5,
+	// Zeal 5 and SevenSidedStrike 11, rounded).
 	const std::pair<WeaponSkill, int> Costs[] = {
-		{ WeaponSkill::GroundSlam, 6 },
-		{ WeaponSkill::Whirlwind, 8 },
-		{ WeaponSkill::LeapSlam, 8 },
-		{ WeaponSkill::Smite, 4 },
-		{ WeaponSkill::Frenzy, 3 },
-		{ WeaponSkill::ShieldBash, 4 },
-		{ WeaponSkill::ShadowStep, 5 },
-		{ WeaponSkill::Vengeance, 5 },
-		{ WeaponSkill::ViperStrike, 5 },
-		{ WeaponSkill::Zeal, 5 },
+		{ WeaponSkill::GroundSlam, 4 },
+		{ WeaponSkill::Whirlwind, 5 },
+		{ WeaponSkill::LeapSlam, 5 },
+		{ WeaponSkill::Smite, 3 },
+		{ WeaponSkill::Frenzy, 2 },
+		{ WeaponSkill::ShieldBash, 3 },
+		{ WeaponSkill::ShadowStep, 3 },
+		{ WeaponSkill::Vengeance, 3 },
+		{ WeaponSkill::ViperStrike, 3 },
+		{ WeaponSkill::Zeal, 3 },
 		{ WeaponSkill::FanOfBlades, 5 },
 		{ WeaponSkill::DoubleThrow, 5 },
 		{ WeaponSkill::EscapeShot, 6 },
 		{ WeaponSkill::Multishot, 6 },
 		{ WeaponSkill::GuidedArrow, 5 },
 		{ WeaponSkill::RainOfArrows, 10 },
-		{ WeaponSkill::SevenSidedStrike, 11 },
+		{ WeaponSkill::SevenSidedStrike, 7 },
 	};
 	for (const auto &[skill, cost] : Costs)
 		EXPECT_EQ(WeaponSkillManaCost(skill), cost) << WeaponSkillName(skill);
+}
+
+TEST_F(Poe2WeaponSkillsTest, MeleeSkillsCostAThirdLessMana)
+{
+	// Casters are the mana classes: Cleave 4, Double Swing 4 and Seismic Slam 6 cost 3, 3 and 4 at gem level 1.
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Cleave), 3);
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Flurry), 3);
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::GroundSlam), 4);
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1), 3);
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	player.poe2.slotLevels[0] = 1;
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), 3);
+	EXPECT_EQ(SkillManaCost(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 3);
+	// The gem's level still raises it along its curve.
+	EXPECT_GT(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 20), 3 * 3);
+
+	// Bow, spell and warcry skills keep their cost.
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::Barrage));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::IceBolt));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::BattleCry));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::Multishot));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::Meteor));
+	EXPECT_TRUE(HasMeleeManaCut(WeaponSkill::Fissure));
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Barrage), 7);
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::IceBolt), 4);
+
+	// Outside POE2 mode the listed cost stands.
+	gbIsPoe2 = false;
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Cleave), 4);
+	gbIsPoe2 = true;
 }
 
 TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)
