@@ -1320,6 +1320,17 @@ void DamageArmor(Player &player)
 	CalcPlrInv(player, true);
 }
 
+/** @brief The skill's animation is over: the hero stands again, facing where a spin started. */
+void EndSkillCast(Player &player)
+{
+	const WeaponSkill skill = player.poe2.castSkill;
+	player.poe2.castSkill = WeaponSkill::None;
+	if (SpinsWhileStriking(skill))
+		player._pdir = static_cast<Direction>(player.poe2.spinFrom);
+	StartStand(player, player._pdir);
+	ClearStateVariables(player);
+}
+
 /** @brief POE2 Mashup: a skill's own animation, which plays as PM_SPELL (see BeginSkillAnimation). */
 bool DoSkillCast(Player &player)
 {
@@ -1335,11 +1346,7 @@ bool DoSkillCast(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
-		player.poe2.castSkill = WeaponSkill::None;
-		if (SpinsWhileStriking(skill))
-			player._pdir = static_cast<Direction>(player.poe2.spinFrom);
-		StartStand(player, player._pdir);
-		ClearStateVariables(player);
+		EndSkillCast(player);
 		return true;
 	}
 	return false;
@@ -1883,6 +1890,14 @@ void GetPlayerGraphicsPath(std::string_view path, std::string_view prefix, std::
 }
 
 } // namespace
+
+bool FinishSkillCast(Player &player)
+{
+	if (player._pmode != PM_SPELL || player.poe2.castSkill == WeaponSkill::None || !player.AnimInfo.isLastFrame())
+		return false;
+	EndSkillCast(player);
+	return true;
+}
 
 int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame)
 {

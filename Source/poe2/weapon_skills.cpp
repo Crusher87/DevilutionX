@@ -238,8 +238,8 @@ Point FarAlong(const Player &player, Point target, int tiles)
 	return FarAlongLine(player.position.tile, target, tiles);
 }
 
-/** @brief Fires one shot of a skill's stream. */
-void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
+/** @brief Fires one shot of a skill's stream; perHitPercent scales a per-hit skill's shot (PerHitDamagePercent). */
+void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index, int perHitPercent = 100)
 {
 	const SkillLookScope skillLook(skill);
 	const Point tile = player.position.tile;
@@ -276,7 +276,7 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 		// Bolts fly dead straight, one after another, harder than Barrage's arrows but fewer.
 		Missile *bolt = AddMissile(tile, target, dir, MissileID::Arrow, TARGET_MONSTERS, player, ElementalArrowBaseDamage, 0);
 		if (bolt != nullptr) {
-			bolt->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+			bolt->poe2.damagePercent = static_cast<int16_t>(std::min(GemDamagePercent(slot, gemLevel) * perHitPercent / 100, static_cast<int>(INT16_MAX)));
 			SetMissileSkill(*bolt, player, slot);
 		}
 		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);
@@ -294,7 +294,7 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 		const int hit = RollPoe2SkillSpellHit(player, skill, std::max(gemLevel, 1));
 		Missile *ember = AddMissile(origin, target, dir, MissileID::Firebolt, TARGET_MONSTERS, player, hit, std::max(gemLevel, 1));
 		if (ember != nullptr) {
-			ember->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+			ember->poe2.damagePercent = static_cast<int16_t>(std::min(GemDamagePercent(slot, gemLevel) * perHitPercent / 100, static_cast<int>(INT16_MAX)));
 			SetMissileSkill(*ember, player, slot);
 			// Molten embers, not firebolts.
 			if (GetMissileSpriteData(MissileGraphicID::MagmaBall).sprites)
@@ -594,12 +594,59 @@ bool HasMeleeManaCut(WeaponSkill skill)
 	return (tags & ST_Attack) != 0 && (tags & (ST_Melee | ST_Slam)) != 0 && (tags & (ST_Bow | ST_Spell | ST_Minion)) == 0;
 }
 
+int PerHitBurst(WeaponSkill skill)
+{
+	if (!gbIsPoe2 || FindSkillSpeedRow(SkillSlot::ForAttack(skill)) == nullptr)
+		return 0;
+	switch (skill) {
+	case WeaponSkill::EmberFusillade:
+		return EmberFusilladeEmbers;
+	case WeaponSkill::RapidFire:
+		return RapidFireBolts;
+	case WeaponSkill::Zeal:
+	case WeaponSkill::BladeFury:
+	case WeaponSkill::SevenSidedStrike:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return std::max<int>(table->count, 1);
+		return 0;
+	default:
+		return 0;
+	}
+}
+
+int PerHitDamagePercent(const Player &player, WeaponSkill skill)
+{
+	const int burst = PerHitBurst(skill);
+	if (burst <= 0)
+		return 100;
+	const SkillSlot slot = SkillSlot::ForAttack(skill);
+	int extra = 0;
+	if (IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::RapidFire, WeaponSkill::BladeFury))
+		extra = GemExtraProjectiles(slot, player.poe2.skillLevel(skill));
+	if (skill == WeaponSkill::BladeFury)
+		extra += SupportExtraProjectileCount(player, slot);
+	const int shortest = ShortestActionPercent(player, slot, skill == WeaponSkill::EmberFusillade);
+	return (burst + extra) * shortest / burst;
+}
+
+int TakePerHitIndex(Player &player)
+{
+	// 840 is a multiple of every burst (4 to 8 hits), so the count wraps at the end of a set.
+	constexpr int Wrap = 840;
+	const int index = player.poe2.perHitCount;
+	player.poe2.perHitCount = static_cast<uint16_t>((index + 1) % Wrap);
+	return index;
+}
+
 int WeaponSkillManaCost(WeaponSkill skill)
 {
-	const int cost = ListedManaCost(skill);
+	int cost = ListedManaCost(skill);
 	// Casters are the mana classes: melee strikes and slams cost a third less (Curtis, after a Warrior ran dry 42 times in 40 minutes).
 	if (gbIsPoe2 && cost > 0 && HasMeleeManaCut(skill))
-		return std::max(((cost * 2) + 1) / 3, 1);
+		cost = std::max(((cost * 2) + 1) / 3, 1);
+	// A per-hit skill's use is one hit of its old burst, for that share of the cost, rounded, at least 1.
+	if (const int burst = PerHitBurst(skill); cost > 0 && burst > 1)
+		cost = std::max((cost + (burst / 2)) / burst, 1);
 	return cost;
 }
 
@@ -729,6 +776,8 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		EventPlrMsg(FormatRuntime(_("Not enough mana for {:s}."), WeaponSkillName(skill)), UiFlags::ColorRed);
 		return false;
 	}
+	// A held skill's next use starts on the last frame of the one before, which is its whole use time.
+	FinishSkillCast(player);
 
 	switch (skill) {
 	case WeaponSkill::LeapSlam:
@@ -980,6 +1029,11 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		}
 		return false;
 	case WeaponSkill::EmberFusillade:
+		// POE2's 0.4 seconds is per ember: one a cast, and holding the button keeps them coming (PerHitBurst).
+		if (PerHitBurst(skill) > 0) {
+			FireVolleyShot(player, skill, target, TakePerHitIndex(player), PerHitDamagePercent(player, skill));
+			return false;
+		}
 		// A stream of molten embers, one after another; they take their damage from Magic and the gem level, like the spells.
 		StartSkillVolley(player, skill, target, EmberFusilladeEmbers + GemExtraProjectiles(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill)));
 		return false;
@@ -1032,6 +1086,11 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		}
 		return false;
 	case WeaponSkill::RapidFire:
+		// One bolt a use once its per-bolt time is in skill_speed.tsv (PerHitBurst).
+		if (PerHitBurst(skill) > 0) {
+			FireVolleyShot(player, skill, target, TakePerHitIndex(player), PerHitDamagePercent(player, skill));
+			return false;
+		}
 		StartSkillVolley(player, skill, target, RapidFireBolts + GemExtraProjectiles(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill)));
 		return false;
 	case WeaponSkill::EscapeShot: {

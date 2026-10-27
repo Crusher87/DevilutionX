@@ -242,7 +242,8 @@ TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
 {
 	// The mana audit's cuts for weapon attacks, at gem level 1; melee attacks then cost a third less (two thirds of
 	// GroundSlam 6, Whirlwind 8, LeapSlam 8, Smite 4, Frenzy 3, ShieldBash 4, ShadowStep 5, Vengeance 5, ViperStrike 5,
-	// Zeal 5 and SevenSidedStrike 11, rounded).
+	// Zeal 5 and SevenSidedStrike 11, rounded). Zeal and Seven-Sided Strike now strike once a use (PerHitBurst), for a
+	// quarter and a seventh of that: 3 / 4 and 7 / 7, rounded.
 	const std::pair<WeaponSkill, int> Costs[] = {
 		{ WeaponSkill::GroundSlam, 4 },
 		{ WeaponSkill::Whirlwind, 5 },
@@ -253,14 +254,14 @@ TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
 		{ WeaponSkill::ShadowStep, 3 },
 		{ WeaponSkill::Vengeance, 3 },
 		{ WeaponSkill::ViperStrike, 3 },
-		{ WeaponSkill::Zeal, 3 },
+		{ WeaponSkill::Zeal, 1 },
 		{ WeaponSkill::FanOfBlades, 5 },
 		{ WeaponSkill::DoubleThrow, 5 },
 		{ WeaponSkill::EscapeShot, 6 },
 		{ WeaponSkill::Multishot, 6 },
 		{ WeaponSkill::GuidedArrow, 5 },
 		{ WeaponSkill::RainOfArrows, 10 },
-		{ WeaponSkill::SevenSidedStrike, 7 },
+		{ WeaponSkill::SevenSidedStrike, 1 },
 	};
 	for (const auto &[skill, cost] : Costs)
 		EXPECT_EQ(WeaponSkillManaCost(skill), cost) << WeaponSkillName(skill);

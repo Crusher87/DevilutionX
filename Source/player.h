@@ -987,6 +987,12 @@ void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, Animation
  * @param ticksToAction Game ticks from the start to the action frame instead, for a quick strike; 0 for as far through
  */
 void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks, int ticksToAction = 0);
+/**
+ * @brief POE2 Mashup: ends a weapon skill's animation that is on its last frame, as DoSkillCast would this tick, so a
+ * held skill starts its next use now, as a held attack does, rather than a tick late.
+ * @return Whether there was such an animation.
+ */
+bool FinishSkillCast(Player &player);
 void SetPlrAnims(Player &player);
 void CreatePlayer(Player &player, HeroClass c);
 int CalcStatDiff(Player &player);

@@ -20,7 +20,7 @@ ShieldCharge			0.6			Shield Charge
 BattleCry		0.8				Infernal Cry
 LightningArrow	90					Lightning Arrow
 EscapeShot	100			700		Escape Shot
-EmberFusillade		0.4				Ember Fusillade
+EmberFusillade		0.4				per ember, one a cast (Ember Fusillade)
 Spark		0.7				Spark
 IceBolt		0.8				Frostbolt
 FrostNova		1.0				Ice Nova
@@ -34,14 +34,14 @@ ShieldBash			0.55			Raise Shield (its Shield Bash)
 AmplifyDamage		0.7				Vulnerability
 Whirlwind	85			1000		none (Whirling Assault)
 Sacrifice	60					none (Boneshatter)
-Zeal	60					none (Rapid Assault per stab)
+Zeal	240					per strike; research 60% a use of 4 strikes (Rapid Assault per stab)
 Vengeance	80					none (Primal Strikes)
 ArkainesWrath	75					none (Storm Wave)
 FanOfBlades	60					none (Lightning Spear)
 ViperStrike	85					none (Fangs of Frost)
 BladeSentinel	60					none (Storm Lance)
 DeathMark		0.5				Sniper's Mark
-BladeFury	69					none (Rapid Shot per bolt)
+BladeFury	550					per dagger; research 69% a use of 8 daggers (Rapid Shot per bolt)
 DoubleThrow	70					none (Spear Throw)
 Rend	90					Rend (Wyvern)
 WarCry		0.8				Seismic Cry
@@ -54,7 +54,7 @@ DashingStrike	75					none (Killing Palm)
 LashingTailKick	70					none (Whirling Slash)
 WaveOfLight	120					none (Tempest Bell)
 CycloneStrike	60					none (Falling Thunder)
-SevenSidedStrike	50					none (Flicker Strike)
+SevenSidedStrike	350					per strike; research 50% a use of up to 7 strikes (Flicker Strike)
 Multishot	80					Bow Shot + Multishot support
 GuidedArrow	70					none (Shockchain Arrow)
 FreezingArrow	90					none (Ice Shot)

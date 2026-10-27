@@ -110,6 +110,7 @@ public:
 	{
 		dMonster[Front().x][Front().y] = 0;
 		Missiles.clear();
+		leveltype = DTYPE_TOWN;
 		gbIsPoe2 = false;
 		LoadModifierData();
 		LoadSkillSpeedData();
@@ -230,6 +231,31 @@ public:
 			casts.starts.push_back(tick);
 		}
 		return casts;
+	}
+
+	/**
+	 * @brief Holds a weapon skill's tray button, as RepeatHeldTraySlot does before the hero's action each tick: the
+	 * ticks each use started on, and in hits the missiles of the type it fired.
+	 */
+	static HeldSwings HoldSkill(Player &player, WeaponSkill skill, int ticks, MissileID missile)
+	{
+		HeldSwings uses;
+		for (int tick = 0; tick < ticks; tick++) {
+			const PLR_MODE modeBefore = player._pmode;
+			const int frameBefore = player.AnimInfo.currentFrame;
+			if (player.destAction == ACTION_NONE && player.CanChangeAction())
+				TryUseWeaponSkill(player, skill);
+			if (player._pmode == PM_SPELL && (modeBefore != PM_SPELL || player.AnimInfo.currentFrame < frameBefore))
+				uses.starts.push_back(tick);
+			TestPlayerProcessAction(player);
+			player.poe2.tick();
+			for (const Missile &fired : Missiles) {
+				if (fired._mitype == missile)
+					uses.hits++;
+			}
+			Missiles.clear();
+		}
+		return uses;
 	}
 };
 
@@ -637,6 +663,78 @@ TEST_F(Poe2SwingSpeedTest, SkillSpeedsAreThePoe2Research)
 	EXPECT_EQ(WeaponAttacksPerSecond(player), 165);
 	ASSERT_EQ(DefaultAttackFor(player), DefaultAttack::Punch);
 	EXPECT_NEAR(UseSeconds(player, DefaultSkillSlot(player)), 1 / 1.65, 0.0001);
+}
+
+TEST_F(Poe2SwingSpeedTest, HellfireDartsFiresOneEmberACast)
+{
+	// POE2's 0.4 seconds is per ember: a held cast conjures one every 8 ticks, where a cast fired five in a stream.
+	Player &player = *MyPlayer;
+	Equip(player, "Shortsword");
+	leveltype = DTYPE_CATHEDRAL;
+	const WeaponSkill darts = WeaponSkill::EmberFusillade;
+	ASSERT_EQ(PerHitBurst(darts), EmberFusilladeEmbers);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(darts)), 0.4, 0.0001);
+	const HeldSwings held = HoldSkill(player, darts, 200, MissileID::Firebolt);
+	EXPECT_EQ(held.starts.front(), 0);
+	EXPECT_EQ(held.cycle(), 8);
+	EXPECT_NEAR(held.hits, static_cast<int>(held.starts.size()), 1);
+	EXPECT_EQ(player.poe2.volleyShotsLeft, 0);
+	// Each ember hits as one of the old five did; the cast costs a fifth of the five's mana (16), rounded.
+	EXPECT_EQ(PerHitDamagePercent(player, darts), 100);
+	EXPECT_EQ(WeaponSkillManaCost(darts), 3);
+
+	// 50% increased cast speed: 0.4 / 1.5, 5.3 ticks.
+	player.poe2.castSpeedPercent = 50;
+	player._pmode = PM_STAND;
+	player.destAction = ACTION_NONE;
+	const HeldSwings faster = HoldSkill(player, darts, 400, MissileID::Firebolt);
+	EXPECT_NEAR(faster.averageCycle() / 20, 0.4 / 1.5, 0.003);
+}
+
+TEST_F(Poe2SwingSpeedTest, HeldPerHitSkillsStrikeAtThePerHitTime)
+{
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+
+	// Zeal: one strike a use at POE2's 240% (the research's 60% a use of four strikes), a quarter of the mana.
+	Equip(player, "Shortsword");
+	const WeaponSkill zeal = WeaponSkill::Zeal;
+	EXPECT_EQ(PerHitBurst(zeal), 4);
+	EXPECT_EQ(SkillAttackSpeedPercent(SkillSlot::ForAttack(zeal)), 240);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(zeal)), 1 / (1.35 * 2.4), 0.0001);
+	const HeldSwings strikes = HoldSkill(player, zeal, 2000, MissileID::Null);
+	EXPECT_EQ(strikes.starts.front(), 0);
+	EXPECT_NEAR(strikes.averageCycle() / 20, 1 / (1.35 * 2.4), 0.002);
+	EXPECT_EQ(PerHitDamagePercent(player, zeal), 100);
+	EXPECT_EQ(WeaponSkillManaCost(zeal), 1);
+
+	// Blade Fury with a Shiv: one dagger a use at 550% of 1.5 a second would be 0.12 seconds; no action is quicker
+	// than 4 ticks, so each dagger hits for what the 0.2 seconds lost (165%).
+	Equip(player, "Shiv");
+	const WeaponSkill fury = WeaponSkill::BladeFury;
+	EXPECT_EQ(PerHitBurst(fury), 8);
+	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(fury)), 0.2, 0.0001);
+	EXPECT_EQ(PerHitDamagePercent(player, fury), 165);
+	const HeldSwings daggers = HoldSkill(player, fury, 200, MissileID::Arrow);
+	EXPECT_EQ(daggers.cycle(), 4);
+	EXPECT_NEAR(daggers.hits, static_cast<int>(daggers.starts.size()), 1);
+	EXPECT_EQ(player.poe2.volleyShotsLeft, 0);
+	EXPECT_EQ(WeaponSkillManaCost(fury), 2);
+
+	// Seven-Sided Strike: 350% a strike (the research's 50% for a use of up to seven), a seventh of the mana.
+	EXPECT_EQ(PerHitBurst(WeaponSkill::SevenSidedStrike), 7);
+	EXPECT_EQ(SkillAttackSpeedPercent(SkillSlot::ForAttack(WeaponSkill::SevenSidedStrike)), 350);
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::SevenSidedStrike), 1);
+
+	// The count of hits wraps at the end of a set of any burst.
+	player.poe2.perHitCount = 839;
+	EXPECT_EQ(TakePerHitIndex(player), 839);
+	EXPECT_EQ(TakePerHitIndex(player), 0);
+
+	// Outside POE2 Mashup a use is the whole burst again.
+	gbIsPoe2 = false;
+	EXPECT_EQ(PerHitBurst(zeal), 0);
+	EXPECT_EQ(PerHitDamagePercent(player, fury), 100);
 }
 
 TEST_F(Poe2SwingSpeedTest, DiabloKeepsItsFrames)

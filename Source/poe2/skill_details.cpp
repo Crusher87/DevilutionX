@@ -748,7 +748,17 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 			Text(lines, Kind::Note, IsInvocationGem(skill) ? "They cast together when you use it from the skill tray, for their mana" : "They cast together when the Energy is full, for their mana");
 	}
 
-	const HitEstimate hit = EstimateHit(player, skill, std::max(skill.kind == SkillKind::Spell ? gemLevel : level, 1));
+	HitEstimate hit = EstimateHit(player, skill, std::max(skill.kind == SkillKind::Spell ? gemLevel : level, 1));
+	// A per-hit skill's use is one hit, for PerHitDamagePercent of one of its old burst.
+	const int perHitBurst = skill.kind == SkillKind::Attack ? PerHitBurst(skill.attack()) : 0;
+	if (perHitBurst > 0) {
+		const double scale = PerHitDamagePercent(player, skill.attack()) / 100.0;
+		for (HitPart &part : hit.parts) {
+			part.min *= scale;
+			part.max *= scale;
+			part.average *= scale;
+		}
+	}
 	const bool usable = skill.kind != SkillKind::Persistent;
 	double seconds = 0;
 	if (usable) {
@@ -760,6 +770,10 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		}
 		if (const SkillSpeedRow *row = FindSkillSpeedRow(skill); row != nullptr && row->distanceMs > 0 && skill.kind == SkillKind::Attack)
 			Text(lines, Kind::Note, std::format("A longer leap adds up to {:s}", Seconds(row->distanceMs / 1000.0)));
+		if (perHitBurst > 0)
+			Text(lines, Kind::Note, "One hit a use: hold it to keep hitting");
+		if (perHitBurst > 0 && skill.attack() == WeaponSkill::SevenSidedStrike)
+			Text(lines, Kind::Note, std::format("Strikes the {:d} nearest enemies in turn; with fewer near, each strike deals their share", perHitBurst));
 	}
 
 	if (!hit.parts.empty()) {
@@ -777,6 +791,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		// Double Swing's use time holds both strikes, and the backhand hits harder.
 		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::Flurry)
 			average = average * (100 + FlurryBackhandDamagePercent) / 100;
+		// Seven-Sided Strike's strikes share the burst among the enemies near: one alone takes its share each time.
+		if (perHitBurst > 0 && skill.attack() == WeaponSkill::SevenSidedStrike)
+			average /= perHitBurst;
 		if (usable && seconds > 0)
 			Value(lines, "Damage per second", std::format("{:d} (one target)", ShownDamage(average / seconds)));
 		Text(lines, Kind::Note, "Before the enemy's armour and resistances");
@@ -793,7 +810,10 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		extraProjectiles += SupportExtraProjectileCount(player, skill);
 	const TableSkillData *table = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
 	std::vector<SkillDetailLine> shape;
-	if (table != nullptr && table->count > 1 && IsAnyOf(table->shape, TableShape::Projectiles, TableShape::Stream))
+	if (perHitBurst > 0) {
+		if (extraProjectiles > 0)
+			Text(shape, Kind::Note, std::format("{:d} extra projectiles add to each hit's damage", extraProjectiles));
+	} else if (table != nullptr && table->count > 1 && IsAnyOf(table->shape, TableShape::Projectiles, TableShape::Stream))
 		Value(shape, "Projectiles", std::format("{:d}", table->count + extraProjectiles));
 	else if (extraProjectiles > 0)
 		Value(shape, "Extra projectiles", std::format("+{:d}", extraProjectiles));
