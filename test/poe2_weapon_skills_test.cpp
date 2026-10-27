@@ -198,8 +198,8 @@ TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
 		player._pmode = PM_STAND;
 		return ticks;
 	};
-	// Without the dash, the swing takes its attack time: bare-handed 1.4 a second, 14 ticks, hitting 7/12 of the way in.
-	EXPECT_EQ(ticksToHit(/*quickStrike=*/false), 8);
+	// Without the dash, the swing takes its attack time: bare-handed 1.65 a second, 12 ticks, hitting 7/12 of the way in.
+	EXPECT_EQ(ticksToHit(/*quickStrike=*/false), 7);
 	EXPECT_EQ(ticksToHit(/*quickStrike=*/true), DashStrikeWindupTicks);
 }
 

@@ -53,8 +53,8 @@ constexpr int DefaultOneHandMaceAps = 110;
 constexpr int DefaultTwoHandMaceAps = 95;
 constexpr int DefaultBowAps = 130;
 constexpr int DefaultStaffAps = 135;
-/** @brief Bare hands (and a shield bash): POE2's unarmed attacks. */
-constexpr int UnarmedAps = 140;
+/** @brief Bare hands (and a shield bash): POE2's unarmed attacks, 1.65 a second (PoB2's data.unarmedWeaponData). */
+constexpr int UnarmedAps = 165;
 
 /** @brief The weapon's base attacks per second in hundredths: its POE2 base's, else its kind's default; 0 for anything else. */
 int ItemBaseAttacksPerSecond(const Item &item);
