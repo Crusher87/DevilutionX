@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -644,6 +645,100 @@ TEST_F(Poe2ItemBasesTest, OldItemsKeepTheirArmourAndDamage)
 	EXPECT_EQ(base.armour, oldDefence.armour);
 	EXPECT_EQ(base.evasion, oldDefence.evasion);
 	EXPECT_EQ(base.energyShield, 0);
+}
+
+TEST_F(Poe2ItemBasesTest, GearNeedsPoe2sFullAttributes)
+{
+	// Curtis 2026-10-27, after the Warrior playtest: the bases need POE2's own attributes, no longer 55% of them.
+	const auto needs = [](std::string_view name) {
+		const ItemData &data = AllItemsList[FindBase(name)];
+		return std::array<int, 3> { data.iMinStr, data.iMinMag, data.iMinDex };
+	};
+	EXPECT_EQ(needs("Iron Cap"), (std::array<int, 3> { 5, 0, 0 }));
+	EXPECT_EQ(needs("Legion Helm"), (std::array<int, 3> { 78, 0, 0 }));
+	EXPECT_EQ(needs("Titan Crown"), (std::array<int, 3> { 150, 0, 0 }));
+	EXPECT_EQ(needs("Shortsword"), (std::array<int, 3> { 3, 0, 3 }));
+	EXPECT_EQ(needs("Ruby Ring"), (std::array<int, 3> { 0, 0, 0 }));
+	EXPECT_EQ(needs("Crimson Amulet"), (std::array<int, 3> { 0, 0, 0 }));
+	// Diablo's bases keep theirs.
+	EXPECT_EQ(needs("Full Plate Mail"), (std::array<int, 3> { 90, 0, 0 }));
+
+	// A requirement past 127 stays whole on the item and through a save, and is checked.
+	LoadPlayerDataFiles();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(player.getMaxCharacterLevel());
+	player._pBaseMag = player._pMagic = 50;
+	player._pBaseDex = player._pDexterity = 50;
+	const Item crown = MakeItem("Titan Crown", 7);
+	EXPECT_EQ(crown._iMinStr, 150);
+	EXPECT_EQ(SaveAndLoad(crown)._iMinStr, 150);
+	player._pBaseStr = player._pStrength = 149;
+	EXPECT_FALSE(player.CanUseItem(crown));
+	player._pBaseStr = player._pStrength = 150;
+	EXPECT_TRUE(player.CanUseItem(crown));
+}
+
+TEST_F(Poe2ItemBasesTest, GearNeedsItsCharacterLevel)
+{
+	// Curtis 2026-10-27, after the Warrior playtest: like POE2's, a base needs the character level of its required level.
+	LoadPlayerDataFiles();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseVit = player._pVitality = 50;
+	const Item helm = MakeItem("Legion Helm", 3);
+	ASSERT_EQ(ItemRequiredLevel(helm), 48);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Iron Cap", 3)), 1);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Titan Crown", 3)), 80);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Ruby Ring", 3)), 8);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Gold Amulet", 3)), 35);
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Conqueror Plate", 3)), 68);
+	// Diablo's bases need none.
+	EXPECT_EQ(ItemRequiredLevel(MakeItem("Full Plate Mail", 3)), 0);
+
+	player.setCharacterLevel(47);
+	EXPECT_FALSE(player.CanUseItem(helm));
+	player.setCharacterLevel(48);
+	EXPECT_TRUE(player.CanUseItem(helm));
+
+	// Worn below its level it gives nothing, like gear that needs more Strength.
+	player.InvBody[INVLOC_HEAD] = helm;
+	player.setCharacterLevel(47);
+	CalcPlrInv(player, false);
+	EXPECT_FALSE(player.InvBody[INVLOC_HEAD]._iStatFlag);
+	const int armourBelow = player._pIAC;
+	player.setCharacterLevel(48);
+	CalcPlrInv(player, false);
+	EXPECT_TRUE(player.InvBody[INVLOC_HEAD]._iStatFlag);
+	EXPECT_GT(player._pIAC, armourBelow);
+	player.InvBody[INVLOC_HEAD] = {};
+
+	// Outside POE2 mode nothing changes.
+	gbIsPoe2 = false;
+	EXPECT_EQ(ItemRequiredLevel(helm), 0);
+	player.setCharacterLevel(1);
+	EXPECT_TRUE(player.CanUseItem(helm));
+	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2ItemBasesTest, RequirementLineShowsTheLevel)
+{
+	EXPECT_EQ(ItemRequirementText(48, 78, 0, 0), "Required: Level 48, 78 Str");
+	EXPECT_EQ(ItemRequirementText(48, 0, 0, 0), "Required: Level 48");
+	EXPECT_EQ(ItemRequirementText(33, 37, 0, 37), "Required: Level 33, 37 Str 37 Dex");
+	// Level 1 isn't a requirement, and Diablo's line is as it was.
+	EXPECT_EQ(ItemRequirementText(1, 5, 0, 0), "Required: 5 Str");
+	EXPECT_EQ(ItemRequirementText(0, 30, 0, 30), "Required: 30 Str 30 Dex");
+	EXPECT_EQ(ItemRequirementText(0, 0, 25, 0), "Required: 25 Mag");
+	EXPECT_EQ(ItemRequirementText(1, 0, 0, 0), "");
+	EXPECT_EQ(ItemRequirementText(0, 0, 0, 0), "");
 }
 
 } // namespace

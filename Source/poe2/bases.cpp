@@ -10,7 +10,9 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/uniques.hpp"
 #include "tables/itemdat.h"
 #include "utils/format.hpp"
 #include "utils/log.hpp"
@@ -127,6 +129,7 @@ void LoadBaseData()
 		base.implicits = ParseImplicits(text);
 		reader.readString("split", text);
 		base.split = ParseSplit(text);
+		reader.readInt("level", base.level);
 		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
 		Bases.push_back(std::move(base));
 	}
@@ -209,6 +212,27 @@ std::vector<std::string> ItemImplicitText(const Item &item)
 		lines.push_back(FormatRuntime(implicit.implicit->text, shown, implicit.values[1]));
 	}
 	return lines;
+}
+
+int ItemRequiredLevel(const Item &item)
+{
+	if (!gbIsPoe2)
+		return 0;
+	const BaseMeta *base = ItemBaseMeta(item);
+	if (base == nullptr)
+		return 0;
+	int level = base->level;
+	if (item._iMagical == ITEM_QUALITY_UNIQUE && item._iUid >= 0 && static_cast<size_t>(item._iUid) < UniqueItems.size()) {
+		// A bundle unique's drop level is its own; a Diablo unique's is its table's level.
+		const Poe2Unique *unique = Poe2UniqueFor(item._iUid);
+		level = std::max(level, unique != nullptr ? unique->dropLevel : static_cast<int>(UniqueItems[static_cast<size_t>(item._iUid)].UIMinLvl));
+	}
+	return level;
+}
+
+bool MeetsItemLevelRequirement(const Player &player, const Item &item)
+{
+	return player.getCharacterLevel() >= ItemRequiredLevel(item);
 }
 
 DefenseSplit ItemDefenseSplit(const Item &item, int defense)

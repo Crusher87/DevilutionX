@@ -537,5 +537,28 @@ TEST_F(Poe2ModifiersTest, MagicFindRollsPoe2sRarityTiers)
 	EXPECT_GT(found, 0);
 }
 
+TEST_F(Poe2ModifiersTest, AltViewLabelsEachAffixOnce)
+{
+	// Curtis 2026-10-27: a two-part affix is one affix, so it gets one side label and one tier, and its lines are
+	// bracketed together; every affix has its label, so they count the prefixes and suffixes.
+	EXPECT_EQ(AffixViewLines("Prefix", { "+12 to maximum Life", "12% increased Evasion" }, 3),
+	    (std::vector<std::string> { "Prefix\t+12 to maximum Life\t", "\t12% increased Evasion\tT3" }));
+	EXPECT_EQ(AffixViewLines("Suffix", { "+8% to Fire Resistance" }, 1), (std::vector<std::string> { "Suffix\t+8% to Fire Resistance\tT1" }));
+	EXPECT_TRUE(AffixViewLines("Prefix", {}, 1).empty());
+
+	// A hybrid family's template splits into its two lines.
+	const std::optional<uint8_t> family = FindModifierFamily("life_evasion_hybrid");
+	ASSERT_TRUE(family.has_value());
+	const Poe2ItemMod mod { static_cast<uint8_t>(*family + 1), 2, { 12, 12 } };
+	const std::vector<std::string> lines = AffixViewLines("Prefix", ItemModAdvancedText(mod), mod.tier);
+	ASSERT_EQ(lines.size(), 2U);
+	EXPECT_EQ(lines[0].rfind("Prefix\t+12", 0), 0U) << lines[0];
+	EXPECT_NE(lines[0].find("maximum Life\t"), std::string::npos) << lines[0];
+	EXPECT_EQ(lines[1].rfind("\t12", 0), 0U) << lines[1];
+	EXPECT_NE(lines[1].find("increased Evasion\tT2"), std::string::npos) << lines[1];
+	// The normal view keeps POE2's two plain lines.
+	EXPECT_EQ(ItemModText(mod), (std::vector<std::string> { "+12 to maximum Life", "12% increased Evasion" }));
+}
+
 } // namespace
 } // namespace devilution

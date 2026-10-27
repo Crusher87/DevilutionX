@@ -382,9 +382,9 @@ struct LevelConversionData {
 	item._iVMult1 = file.NextLE<int32_t>();
 	item._iVAdd2 = file.NextLE<int32_t>();
 	item._iVMult2 = file.NextLE<int32_t>();
-	item._iMinStr = file.NextLE<int8_t>();
+	item._iMinStr = file.NextLE<uint8_t>();
 	item._iMinMag = file.NextLE<uint8_t>();
-	item._iMinDex = file.NextLE<int8_t>();
+	item._iMinDex = file.NextLE<uint8_t>();
 	readCraft(1); // Alignment
 	item._iStatFlag = file.NextBool32();
 
@@ -1303,9 +1303,9 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteLE<int32_t>(item._iVMult1);
 	file.WriteLE<int32_t>(item._iVAdd2);
 	file.WriteLE<int32_t>(item._iVMult2);
-	file.WriteLE<int8_t>(item._iMinStr);
+	file.WriteLE<uint8_t>(item._iMinStr);
 	file.WriteLE<uint8_t>(item._iMinMag);
-	file.WriteLE<int8_t>(item._iMinDex);
+	file.WriteLE<uint8_t>(item._iMinDex);
 	writeCraft(1); // Alignment
 	file.WriteLE<uint32_t>(item._iStatFlag ? 1 : 0);
 	file.WriteLE<int32_t>(idx);

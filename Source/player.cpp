@@ -50,6 +50,7 @@
 #include "player.h"
 #include "poe2/aim.hpp"
 #include "poe2/autosave.hpp"
+#include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
@@ -1881,6 +1882,9 @@ bool Player::CanUseItem(const Item &item) const
 		return false;
 	if (gbIsPoe2 && IsSkillGem(item))
 		return MeetsGemAttributeNeeds(*this, SkillGemAttributeNeeds(SkillForGem(item), SkillGemItemLevel(item)));
+	// POE2 Mashup: gear needs a character level too, like POE2's.
+	if (!MeetsItemLevelRequirement(*this, item))
+		return false;
 
 	return RequirementStrength(*this) >= item._iMinStr
 	    && _pMagic >= item._iMinMag
