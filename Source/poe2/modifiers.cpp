@@ -467,6 +467,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::AddedPhysicalToAttacks:
 	case ModEffect::Accuracy:
 	case ModEffect::DamagePercent:
+	case ModEffect::SpellDamage:
 		return Damage;
 	case ModEffect::Strength:
 	case ModEffect::Dexterity:
@@ -865,6 +866,9 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		break;
 	case ModEffect::ItemRarity:
 		AddPoe2Stat(item, Poe2ItemStat::ItemRarity, v0);
+		break;
+	case ModEffect::SpellDamage:
+		AddPoe2Stat(item, Poe2ItemStat::SpellDamage, v0);
 		break;
 	}
 }

@@ -3815,6 +3815,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	// POE2 Mashup: the passive tree's shrines and rule notables join the gear's unique rules.
 	PassiveTotals passives = GetPassiveTotals(player);
 	AddPassiveRules(passives, uniqueRules);
+	// POE2 Mashup: the gear's increased spell damage (staves) adds to the tree's, which every spell hit takes.
+	uniqueRules[static_cast<size_t>(UniqueRule::SpellDamage)] = static_cast<int16_t>(std::clamp(uniqueRules[static_cast<size_t>(UniqueRule::SpellDamage)] + poe2Stats[static_cast<size_t>(Poe2ItemStat::SpellDamage)], static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
 	player.poe2.uniqueRules = uniqueRules;
 	const auto uniqueRule = [&uniqueRules](UniqueRule rule) { return static_cast<int>(uniqueRules[static_cast<size_t>(rule)]); };
 	// POE2 Mashup: unique rules that work like gear stats.

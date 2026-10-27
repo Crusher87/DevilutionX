@@ -36,6 +36,8 @@ enum class Poe2ItemStat : uint8_t {
 	FlatEnergyShield,
 	/** Increased rarity of items found in percent. */
 	ItemRarity,
+	/** Increased spell damage in percent; every spell hit takes it with the tree's (SpellIncreasedDamage). */
+	SpellDamage,
 	Count,
 };
 

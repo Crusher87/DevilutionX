@@ -67,6 +67,8 @@ FAMILIES = {
 	'melee_skill_levels': ('MeleeSkillLevels', 100, 100, 'of Combat'),
 	'projectile_skill_levels': ('ProjectileSkillLevels', 100, 100, 'of the Archer'),
 	'spell_skill_levels': ('SpellSkillLevels', 100, 100, 'of the Magus'),
+	# Staves roll increased spell damage like POE2's (harder monsters plan step 14): it adds to the tree's spell damage.
+	'spell_damage': ('SpellDamage', 100, 100, "Apprentice's"),
 	'fire_skill_levels': ('FireSkillLevels', 100, 100, 'of Flames'),
 	'lightning_skill_levels': ('LightningSkillLevels', 100, 100, 'of Thunder'),
 	'jewel_maximum_life_pct': ('LifePercent', 100, 100, 'Healthy'),
@@ -105,6 +107,11 @@ JEWEL_WEIGHT = 800
 # The bundle's skill level tiers repeat (+1 four times, +2 twice, then +3 and +4), so they become +1, +2 and +3.
 SKILL_LEVEL_VALUES = [3, 3, 2, 2, 1, 1, 1, 1]
 
+# Families that roll on fewer slots than the bundle gives them. Spell damage only on staves for now (step 14): enabling
+# a family re-rolls the modifiers of saved items of its slots (they rebuild from the seed), so wands, sceptres, foci and
+# amulets wait for their own decision.
+SLOTS = {'spell_damage': ['staff']}
+
 # Fire and lightning added damage share Diablo's one elemental weapon slot, so they can't both roll.
 EXTRA_CONFLICTS = [('local_added_fire', 'local_added_lightning')]
 
@@ -128,7 +135,7 @@ def main():
 				conflicts.append(b)
 			elif fid == b:
 				conflicts.append(a)
-		slots = list(dict.fromkeys(family['valid_slots']))
+		slots = SLOTS.get(fid, list(dict.fromkeys(family['valid_slots'])))
 		family_rows.append([
 			fid,
 			family['name'],

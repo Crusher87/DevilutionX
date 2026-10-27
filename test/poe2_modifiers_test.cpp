@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -12,8 +13,11 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/currency.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/unique_rules.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 #include "utils/is_of.hpp"
@@ -107,7 +111,8 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	EXPECT_EQ(enabled, 56);
+	// 57 with spell damage on staves (plan step 14).
+	EXPECT_EQ(enabled, 57);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");
@@ -313,6 +318,51 @@ TEST_F(Poe2ModifiersTest, GearSkillLevelsRaiseMatchingSkills)
 	EXPECT_EQ(player.poe2.skillLevel(WeaponSkill::Cleave), 8);
 	// The gem itself keeps its own level.
 	EXPECT_EQ(player.poe2.gemLevel(0), 5);
+}
+
+/**
+ * Plan step 14 (Curtis 2026-10-27): staves roll POE2's increased Spell Damage, and it raises every spell hit with the
+ * tree's spell damage. Quarterstaves, wands, sceptres, foci and amulets don't roll it (yet).
+ */
+TEST_F(Poe2ModifiersTest, StavesRollSpellDamage)
+{
+	const std::optional<uint8_t> index = FindModifierFamily("spell_damage");
+	ASSERT_TRUE(index.has_value());
+	const ModFamily &family = ModifierFamilies()[*index];
+	EXPECT_TRUE(family.enabled);
+	EXPECT_EQ(family.effect, ModEffect::SpellDamage);
+	EXPECT_EQ(family.slots, 1U << static_cast<uint32_t>(ModSlot::Staff));
+
+	const _item_indexes base = FindBase("Quick Pilgrim Staff");
+	ASSERT_NE(base, IDI_GOLD);
+	Item staff;
+	int percent = 0;
+	for (uint32_t seed = 1; seed <= 2000 && percent == 0; seed++) {
+		const Item item = MakeItem(base, seed, ITEM_QUALITY_RARE, 40);
+		for (const Poe2ItemMod &mod : Mods(item)) {
+			if (mod.family == *index + 1) {
+				staff = item;
+				percent = mod.values[0];
+			}
+		}
+	}
+	ASSERT_GT(percent, 0) << "a rare staff with increased Spell Damage";
+	EXPECT_EQ(staff._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::SpellDamage)], percent);
+	// Item level 40: tier 5 (40-49%) at best, tier 8 (12-19%) at worst.
+	EXPECT_GE(percent, 12);
+	EXPECT_LE(percent, 49);
+
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Sorcerer;
+	player.setCharacterLevel(40);
+	player._pBaseStr = player._pBaseMag = player._pBaseDex = player._pBaseVit = 250;
+	CalcPlrInv(player, false);
+	EXPECT_EQ(UniqueSpellDamagePercent(player, SpellID::Firebolt), 100);
+	player.InvBody[INVLOC_HAND_LEFT] = staff;
+	CalcPlrInv(player, false);
+	ASSERT_TRUE(player.InvBody[INVLOC_HAND_LEFT]._iStatFlag);
+	EXPECT_EQ(player.poe2.rule(UniqueRule::SpellDamage), percent);
+	EXPECT_EQ(UniqueSpellDamagePercent(player, SpellID::Firebolt), 100 + percent);
 }
 
 TEST_F(Poe2ModifiersTest, DivineOrbRerollsValuesButKeepsTheModifiers)

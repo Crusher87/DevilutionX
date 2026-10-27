@@ -72,6 +72,8 @@ enum class ModEffect : uint8_t {
 	EnergyShieldPercent,
 	/** Increased rarity of items found, from the Gold Amulet and the Magic Find prefix and suffix. */
 	ItemRarity,
+	/** Increased spell damage in percent, from staves (plan step 14); adds to the tree's spell damage. */
+	SpellDamage,
 };
 
 /** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */
@@ -236,7 +238,7 @@ struct ModRollFilter {
 	/** @brief Effects the item already has from its implicits and modifiers, as ModEffectBits; crafting doesn't repeat them. */
 	uint64_t avoidEffects = 0;
 };
-static_assert(static_cast<int>(ModEffect::ItemRarity) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
+static_assert(static_cast<int>(ModEffect::SpellDamage) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
 
 /** @brief The effect as bits of 1 << ModEffect, a hybrid as its two parts; 0 for None. */
 uint64_t ModEffectBits(ModEffect effect);

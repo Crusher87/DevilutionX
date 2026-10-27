@@ -253,7 +253,7 @@ bool CatalystBoosts(Catalyst catalyst, ModEffect effect)
 	case Catalyst::Vital:
 		return IsAnyOf(effect, ModEffect::Life, ModEffect::LifeRegeneration);
 	case Catalyst::Arcane:
-		return IsAnyOf(effect, ModEffect::Mana, ModEffect::ManaRegeneration, ModEffect::CastSpeed, ModEffect::SpellSkillLevels, ModEffect::FireSkillLevels, ModEffect::LightningSkillLevels);
+		return IsAnyOf(effect, ModEffect::Mana, ModEffect::ManaRegeneration, ModEffect::CastSpeed, ModEffect::SpellSkillLevels, ModEffect::FireSkillLevels, ModEffect::LightningSkillLevels, ModEffect::SpellDamage);
 	case Catalyst::Prismatic:
 		return IsAnyOf(effect, ModEffect::FireResistance, ModEffect::MagicResistance, ModEffect::LightningResistance, ModEffect::AllResistances);
 	case Catalyst::Martial:
