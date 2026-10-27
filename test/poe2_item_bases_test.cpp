@@ -390,8 +390,9 @@ TEST_F(Poe2ItemBasesTest, WeaponBasesHaveTheirAttacksPerSecond)
 
 /**
  * Plan step 14 (Curtis 2026-10-27): the first quarterstaff and bow, the only ones a hero uses up to about level 11, hit
- * 60% and 40% harder than their base: POE2's Wrapped Quarterstaff 7-12 and Crude Bow 6-9 (the heavy and swift rows are
- * the same bases). The next ones keep POE2's numbers.
+ * 100% and 115% harder than their base (60% and 40% before attacks took POE2's times; research/attack-speed/rebalance):
+ * POE2's Wrapped Quarterstaff 7-12 and Crude Bow 6-9 (the heavy and swift rows are the same bases). The next ones keep
+ * POE2's numbers.
  */
 TEST_F(Poe2ItemBasesTest, ActOneStavesAndBowsHitHarder)
 {
@@ -399,16 +400,16 @@ TEST_F(Poe2ItemBasesTest, ActOneStavesAndBowsHitHarder)
 		const ItemData &data = AllItemsList[FindBase(name)];
 		return std::make_pair(static_cast<int>(data.iMinDam), static_cast<int>(data.iMaxDam));
 	};
-	EXPECT_EQ(damage("Fine Wrapped Quarterstaff"), std::make_pair(11, 19));
-	EXPECT_EQ(damage("Heavy Ash Staff"), std::make_pair(11, 19));
-	EXPECT_EQ(damage("Crude Bow"), std::make_pair(8, 13));
-	EXPECT_EQ(damage("Swift Short Bow"), std::make_pair(8, 13));
+	EXPECT_EQ(damage("Fine Wrapped Quarterstaff"), std::make_pair(14, 24));
+	EXPECT_EQ(damage("Heavy Ash Staff"), std::make_pair(14, 24));
+	EXPECT_EQ(damage("Crude Bow"), std::make_pair(13, 19));
+	EXPECT_EQ(damage("Swift Short Bow"), std::make_pair(13, 19));
 	EXPECT_EQ(damage("Fine Gothic Quarterstaff"), std::make_pair(16, 26));
 	EXPECT_EQ(damage("Recurve Bow"), std::make_pair(15, 31));
 	// A white staff hits for its base.
 	const Item staff = MakeItem("Fine Wrapped Quarterstaff", 1);
-	EXPECT_EQ(staff._iMinDam, 11);
-	EXPECT_EQ(staff._iMaxDam, 19);
+	EXPECT_EQ(staff._iMinDam, 14);
+	EXPECT_EQ(staff._iMaxDam, 24);
 }
 
 TEST_F(Poe2ItemBasesTest, WeaponsAttackAtTheirBasesSpeed)

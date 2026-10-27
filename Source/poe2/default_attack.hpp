@@ -34,8 +34,12 @@ enum class DefaultAttack : uint8_t {
  * cost no mana (Curtis, 2026-10-16).
  */
 constexpr int DefaultAttackDamagePercent = 85;
-/** @brief The staff bolt's damage is this percent of the staff's attack damage, plus a part of the hero's Magic. */
-constexpr int StaffBoltDamagePercent = 70;
+/**
+ * @brief The staff bolt's damage is this percent of the staff's attack damage, plus a part of the hero's Magic. 80 since
+ * it became a 0.9-second cast (was 70 when a held bolt took 0.6 s): the Sorcerer's free bolt and Firebolt together kill
+ * as much slower than before as the melee classes do (research/attack-speed/rebalance).
+ */
+constexpr int StaffBoltDamagePercent = 80;
 constexpr int StaffBoltMagicPercent = 10;
 
 DefaultAttack DefaultAttackFor(const Player &player);

@@ -47,6 +47,13 @@ DIALS = {
 # areas 41 / 59 / 80): accuracy for 65% = 0.65 x 0.3 x evasion / (1.25 - 0.65) = 304 / 655 / 1,211, over the table's
 # 321 / 749 / 1,846.
 MAP_ACCURACY = {38: 1.0, 41: 0.947, 59: 0.875, 80: 0.656}
+# Pace (research/attack-speed/rebalance, Curtis 2026-10-27: real POE2 speeds and damage, monsters retuned to match):
+# life is multiplied by this, by monster level, geometric between the points, flat outside them. With POE2's attack
+# times and real bases, the Warrior and the Bard (Shortsword, white) took 1.145x as long to kill a white at levels 1-5
+# as before; at 15 (self-found gear, which the fit counts from area 13) they kill as fast as before. So life is 1/1.145
+# up to 13, rising to the full table at 15; it rises over 13-15, whose steps are small, so no step grows past 30%.
+# Monster damage is untouched: a white still hits as hard, so a fresh hardcore hero dies in as many hits.
+LIFE_PACE = {13: 0.875, 15: 1.0}
 MAX_LEVEL = 100
 
 # Bosses: life and damage in percent of a white at the floor's area level (plan v2, bosses and uniques).
@@ -97,10 +104,14 @@ def map_accuracy(level):
     return geometric({k: (v,) for k, v in MAP_ACCURACY.items()}, level, 0)
 
 
+def life_pace(level):
+    return geometric({k: (v,) for k, v in LIFE_PACE.items()}, level, 0)
+
+
 def level_rows():
     rows = []
     for level in range(1, MAX_LEVEL + 1):
-        life = poe2(level, 0) * dial(level, 0) * KILL_TARGET / FIT_KILL_TARGET
+        life = poe2(level, 0) * dial(level, 0) * life_pace(level) * KILL_TARGET / FIT_KILL_TARGET
         rows.append((level, max(1, round(life)), max(1, round(poe2(level, 1) * dial(level, 1) * 10)),
                      max(1, round(poe2(level, 2) * dial(level, 2) * map_accuracy(level))),
                      round(poe2(level, 0)), round(poe2(level, 1) * 10), round(poe2(level, 2))))

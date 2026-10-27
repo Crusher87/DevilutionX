@@ -291,6 +291,19 @@ double UseSeconds(const Player &player, SkillSlot skill)
 	return ActionSeconds(SkillUseTime(player, skill, PlaysCastAnimation(attack)));
 }
 
+double SkillHitAverage(const Player &player, SkillSlot skill, int level)
+{
+	const HitEstimate hit = EstimateHit(player, skill, std::max(level, 1));
+	double average = 0;
+	for (const HitPart &part : hit.parts) {
+		if (part.max > 0)
+			average += part.average;
+	}
+	if (skill.kind == SkillKind::Attack && PerHitBurst(skill.attack()) > 0)
+		average = average * PerHitDamagePercent(player, skill.attack()) / 100.0;
+	return average;
+}
+
 namespace {
 
 std::string_view SpellDescription(SpellID spell)

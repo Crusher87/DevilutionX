@@ -123,14 +123,18 @@ TEST_F(Poe2SpellDamageTest, NoTwelvePointFivePercentStacking)
 {
 	// The gem curve ends at 312% for every damaging spell, Fireball's steps; Diablo's 1.125^level is gone.
 	const SkillSlot fireball = SkillSlot::ForSpell(SpellID::Fireball);
-	EXPECT_EQ(GemDamagePercent(fireball, 1), 100);
-	EXPECT_EQ(GemDamagePercent(fireball, 20), 312);
+	EXPECT_EQ(GemCurveDamagePercent(fireball, 1), 100);
+	EXPECT_EQ(GemCurveDamagePercent(fireball, 20), 312);
 	for (const SpellID spell : { SpellID::Firebolt, SpellID::HolyBolt, SpellID::Lightning, SpellID::Flash, SpellID::Nova, SpellID::Elemental, SpellID::ChainLightning, SpellID::FlameWave, SpellID::Apocalypse, SpellID::BloodStar, SpellID::FireWall, SpellID::Guardian })
-		EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(spell), 20), 312) << static_cast<int>(spell);
+		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(spell), 20), 312) << static_cast<int>(spell);
 	// Lightning takes Fireball's damage steps too, not Spark's.
-	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 10), GemDamagePercent(fireball, 10));
+	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 10), GemCurveDamagePercent(fireball, 10));
 	// Charged Bolt grows by its bolts only.
-	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::ChargedBolt), 20), 100);
+	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::ChargedBolt), 20), 100);
+	// A cast hits for the curve times the spell's damage for its cast time: Fireball's 1.2 s over the 0.40 s a held
+	// cast took before spells had cast times (skill_speed.tsv).
+	EXPECT_EQ(GemDamagePercent(fireball, 1), 300);
+	EXPECT_EQ(GemDamagePercent(fireball, 20), 312 * 3);
 
 	// A level 20 Fireball's missile is the base times 130%, with no 1.125^20 on top.
 	const Player &player = *MyPlayer;
