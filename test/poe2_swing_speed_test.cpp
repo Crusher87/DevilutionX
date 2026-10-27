@@ -600,12 +600,12 @@ TEST_F(Poe2SwingSpeedTest, EverySkillSpeedRowNamesASkill)
 
 TEST_F(Poe2SwingSpeedTest, EveryActiveSkillHasARow)
 {
-	// The crossbow skills move to bows in another change, which gives them their rows.
-	const WeaponSkill crossbow[] = { WeaponSkill::Impale, WeaponSkill::ClusterBolt, WeaponSkill::SpikeTrap, WeaponSkill::Sentry,
-		WeaponSkill::ExplosiveBolt, WeaponSkill::SiegeVolley, WeaponSkill::RapidFire };
+	// The crossbow skills the bow change retired, kept only for saved gems, need no row.
+	const WeaponSkill retired[] = { WeaponSkill::Impale, WeaponSkill::SpikeTrap, WeaponSkill::Sentry, WeaponSkill::SiegeVolley,
+		WeaponSkill::RapidFire };
 	for (int i = 1; i <= static_cast<int>(WeaponSkill::Last); i++) {
 		const auto skill = static_cast<WeaponSkill>(i);
-		if (std::find(std::begin(crossbow), std::end(crossbow), skill) != std::end(crossbow))
+		if (std::find(std::begin(retired), std::end(retired), skill) != std::end(retired))
 			continue;
 		EXPECT_NE(FindSkillSpeedRow(SkillSlot::ForAttack(skill)), nullptr) << SkillSpeedKey(SkillSlot::ForAttack(skill));
 	}
@@ -633,6 +633,10 @@ TEST_F(Poe2SwingSpeedTest, SkillSpeedsAreThePoe2Research)
 	// A few of the research's numbers (research/attack-speed/skill-speeds.tsv) as the game reads them.
 	const auto attack = [](WeaponSkill skill) { return SkillSlot::ForAttack(skill); };
 	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::Cleave)), 75);
+	// The crossbow skills that became bow skills: Fire Arrow and Explosive Arrow.
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::ClusterBolt)), 100);
+	EXPECT_NE(FindSkillSpeedRow(attack(WeaponSkill::ClusterBolt)), nullptr);
+	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::ExplosiveBolt)), 70);
 	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::Shockwave)), 40);
 	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::WaveOfLight)), 120);
 	EXPECT_EQ(SkillAttackSpeedPercent(attack(WeaponSkill::FistsOfThunder)), 140);

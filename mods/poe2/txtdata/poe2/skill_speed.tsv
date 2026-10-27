@@ -58,6 +58,8 @@ SevenSidedStrike	350					per strike; research 50% a use of up to 7 strikes (Flic
 Multishot	80					Bow Shot + Multishot support
 GuidedArrow	70					none (Shockchain Arrow)
 FreezingArrow	90					none (Ice Shot)
+ClusterBolt	100					none (Incendiary Shot)
+ExplosiveBolt	70					none (Explosive Shot)
 HolyShield		0.5				none (Convalescence)
 BlessedShield			0.8			none (Resonating Shield)
 Condemn		1.0				none (Ice Nova)
