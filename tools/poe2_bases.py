@@ -218,6 +218,11 @@ ENERGY_SHIELD_PER_DEFENSE = 3
 # A weapon hits for the bundle's damage.
 DAMAGE_SCALE = 1
 DAMAGE_BASE = 0
+# Act 1 shortfall fix (harder monsters plan step 14, Curtis 2026-10-27): the first quarterstaves and bows, the only ones
+# a hero uses up to about level 11 (the Ash Staff and Short Bow families, drop level 1), hit harder than the bundle's,
+# in percent of its damage. The step-13 fight check found the Monk and the Rogue could not clear Act 1 packs with them.
+EARLY_WEAPON_DAMAGE_PERCENT = {'quarterstaff': 160, 'bow': 140}
+EARLY_WEAPON_MAX_DROP_LEVEL = 1
 
 # POE2's body armours (research/poe2-body-armours.md, the normal tier): name -> (level, armour, evasion, energy shield).
 # The game's names for Chain Mail and Scale Mail differ, since Diablo has bases of those names.
@@ -268,9 +273,14 @@ def unique_source(row):
 	return item_type
 
 
-def damage(stats):
-	lo = max(1, round(stats['physical_damage_min'] * DAMAGE_SCALE + DAMAGE_BASE))
-	return lo, max(lo + 1, round(stats['physical_damage_max'] * DAMAGE_SCALE + DAMAGE_BASE))
+def damage(stats, percent=100):
+	lo = max(1, round((stats['physical_damage_min'] * DAMAGE_SCALE + DAMAGE_BASE) * percent / 100))
+	return lo, max(lo + 1, round((stats['physical_damage_max'] * DAMAGE_SCALE + DAMAGE_BASE) * percent / 100))
+
+
+def damage_percent(cls, drop_level):
+	"""The share of the bundle's damage a weapon base hits for: more for the early staves and bows (step 14)."""
+	return EARLY_WEAPON_DAMAGE_PERCENT.get(cls, 100) if drop_level <= EARLY_WEAPON_MAX_DROP_LEVEL else 100
 
 
 def caster_damage(spell_power, staff):
@@ -383,7 +393,7 @@ def main():
 		min_dam = max_dam = min_ac = max_ac = 0
 		implicits = []
 		if 'physical_damage_min' in stats:
-			min_dam, max_dam = damage(stats)
+			min_dam, max_dam = damage(stats, damage_percent(cls, b['drop_level']))
 			other = balanced.get((cls, tier))
 			if other is not None and other is not b:
 				implicits.append(speed_implicit(stats['attacks_per_second'], other['base_stats']['attacks_per_second'], 'attacks_per_second', 'Attack Speed'))

@@ -147,6 +147,12 @@ std::pair<int, int> BareFistDamage(int gemLevel)
 	if (staffs.empty())
 		return { 1, 1 };
 	std::sort(staffs.begin(), staffs.end(), [](const Staff &a, const Staff &b) { return a.level < b.level; });
+	// The Act 1 staves hit harder than the next ones (plan step 14), so fists keep the best damage reached so far and
+	// never weaken as the gem levels.
+	for (size_t i = 1; i < staffs.size(); i++) {
+		staffs[i].minDamage = std::max(staffs[i].minDamage, staffs[i - 1].minDamage);
+		staffs[i].maxDamage = std::max(staffs[i].maxDamage, staffs[i - 1].maxDamage);
+	}
 
 	// The staffs' drop levels are area levels, so the gem level maps to POE2's character level for it, not the mod's.
 	const int level = Poe2CharacterLevelForGemLevel[static_cast<size_t>(std::clamp(gemLevel, 1, static_cast<int>(Poe2CharacterLevelForGemLevel.size())) - 1)];

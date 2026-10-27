@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -308,6 +309,31 @@ TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
 	EXPECT_GT(Stat(quick, Poe2ItemStat::CastSpeed), Stat(focused, Poe2ItemStat::CastSpeed));
 	// One implicit each (Curtis 2026-10-16): the quick staff casts faster, the focused one gives Intelligence.
 	EXPECT_GT(focused._iPLMag, quick._iPLMag);
+}
+
+/**
+ * Plan step 14 (Curtis 2026-10-27): the Ash Staff and Short Bow families, the only staves and bows a hero uses up to
+ * about level 11, hit 60% and 40% harder than the bundle's 7-10 / 6-9 / 4-6 and 6-9 / 5-7 / 4-5. The next tier keeps
+ * the bundle's numbers.
+ */
+TEST_F(Poe2ItemBasesTest, ActOneStavesAndBowsHitHarder)
+{
+	const auto damage = [](std::string_view name) {
+		const ItemData &data = AllItemsList[FindBase(name)];
+		return std::make_pair(static_cast<int>(data.iMinDam), static_cast<int>(data.iMaxDam));
+	};
+	EXPECT_EQ(damage("Heavy Ash Staff"), std::make_pair(11, 16));
+	EXPECT_EQ(damage("Ash Staff"), std::make_pair(10, 13));
+	EXPECT_EQ(damage("Swift Ash Staff"), std::make_pair(6, 10));
+	EXPECT_EQ(damage("Heavy Short Bow"), std::make_pair(8, 13));
+	EXPECT_EQ(damage("Fine Short Bow"), std::make_pair(7, 10));
+	EXPECT_EQ(damage("Swift Short Bow"), std::make_pair(6, 7));
+	EXPECT_EQ(damage("Heavy Banded Staff"), std::make_pair(10, 15));
+	EXPECT_EQ(damage("Heavy Yew Bow"), std::make_pair(9, 12));
+	// A white staff hits for its base.
+	const Item staff = MakeItem("Heavy Ash Staff", 1);
+	EXPECT_EQ(staff._iMinDam, 11);
+	EXPECT_EQ(staff._iMaxDam, 16);
 }
 
 TEST_F(Poe2ItemBasesTest, HeavyBasesAttackSlower)
