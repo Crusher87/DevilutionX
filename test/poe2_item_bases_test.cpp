@@ -315,6 +315,24 @@ TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
 	EXPECT_GT(focused._iPLMag, quick._iPLMag);
 }
 
+TEST_F(Poe2ItemBasesTest, WeaponBasesHaveTheirAttacksPerSecond)
+{
+	const auto aps = [](std::string_view name) {
+		const BaseMeta *base = BaseMetaFor(FindBase(name));
+		return base != nullptr ? static_cast<int>(base->aps) : -1;
+	};
+	EXPECT_EQ(aps("Shortsword"), 135);
+	EXPECT_EQ(aps("Heavy Shortsword"), 122);
+	EXPECT_EQ(aps("Swift Shortsword"), 151);
+	EXPECT_EQ(aps("Longsword"), 115);
+	EXPECT_EQ(aps("Sledge"), 95);
+	EXPECT_EQ(aps("Light Crossbow"), 90);
+	// Caster weapons, armour and jewellery have none.
+	EXPECT_EQ(aps("Quick Pilgrim Staff"), 0);
+	EXPECT_EQ(aps("Iron Cap"), 0);
+	EXPECT_EQ(aps("Ruby Ring"), 0);
+}
+
 /**
  * Plan step 14 (Curtis 2026-10-27): the Ash Staff and Short Bow families, the only staves and bows a hero uses up to
  * about level 11, hit 60% and 40% harder than the bundle's 7-10 / 6-9 / 4-6 and 6-9 / 5-7 / 4-5. The next tier keeps

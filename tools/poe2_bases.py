@@ -22,6 +22,7 @@ research/poe2-body-armours.md. base_meta.tsv's split column says how a hybrid's 
 its level column the character level a base needs, like POE2's: the bundle's required level, POE2's
 item level for rings and amulets, and the table's level for body armours.
 and its block column is a shield's own chance to block, in percent (empty for everything else).
+Its aps column is a weapon's attacks per second in hundredths (POE2 attack speed).
 """
 
 import json
@@ -459,6 +460,7 @@ def main():
 		meta_rows.append([
 			name, cls, POE2_AMULET_IDENTITIES.get(name, b.get('design_identity', '')), defense_line, quality if cls != 'focus' else 'defence',
 			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits), split, str(required_level), str(stats.get('block_chance_pct', '')),
+			str(round(stats['attacks_per_second'] * 100)) if 'attacks_per_second' in stats else '',
 		])
 
 	for base_id, name, level in POE2_EXTRA_AMULETS:
@@ -475,7 +477,7 @@ def main():
 			by_id[row[0]] = len(rows)
 			rows.append(row)
 		effect, lo, hi, text = POE2_AMULET_IMPLICITS[name]
-		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), ''])
+		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), '', ''])
 
 	# The body armours keep their rows, art, durability and price; they take POE2's level, defence and requirements.
 	# Their implicits stay in the game (GetBodyArmourImplicit).
@@ -490,7 +492,7 @@ def main():
 		need = BODY_ARMOUR_ATTRIBUTES.get(row[7], 0)
 		row[15], row[16], row[17] = (str(need if part > 0 else 0) for part in (armour, energy_shield, evasion))
 		identity, line = BODY_ARMOUR_LINES[(armour > 0, evasion > 0, energy_shield > 0)]
-		meta_rows.append([row[7], 'body_armour', identity, line, 'defence', '', defense_split(line, armour, evasion, energy_shield), str(level), ''])
+		meta_rows.append([row[7], 'body_armour', identity, line, 'defence', '', defense_split(line, armour, evasion, energy_shield), str(level), '', ''])
 		found.add(row[7])
 	assert found == set(BODY_ARMOURS), f'body armours not in itemdat.tsv: {sorted(set(BODY_ARMOURS) - found)}'
 
@@ -498,7 +500,7 @@ def main():
 		for row in rows:
 			f.write('\t'.join(row) + '\r\n')
 	with open(META, 'w', encoding='utf-8', newline='') as f:
-		for row in [['name', 'class', 'identity', 'defense', 'quality', 'implicits', 'split', 'level', 'block']] + meta_rows:
+		for row in [['name', 'class', 'identity', 'defense', 'quality', 'implicits', 'split', 'level', 'block', 'aps']] + meta_rows:
 			f.write('\t'.join(row) + '\r\n')
 	print(f'{len(meta_rows)} bases')
 
