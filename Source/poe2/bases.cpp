@@ -130,6 +130,9 @@ void LoadBaseData()
 		reader.readString("split", text);
 		base.split = ParseSplit(text);
 		reader.readInt("level", base.level);
+		int block = 0;
+		reader.readOptionalInt("block", block);
+		base.block = static_cast<uint8_t>(std::clamp(block, 0, 100));
 		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
 		Bases.push_back(std::move(base));
 	}
@@ -151,6 +154,31 @@ const BaseMeta *BaseMetaFor(int itemIndex)
 const BaseMeta *ItemBaseMeta(const Item &item)
 {
 	return item.isEmpty() ? nullptr : BaseMetaFor(item.IDidx);
+}
+
+int ShieldBlockChance(const Item &item)
+{
+	if (item.isEmpty() || item._itype != ItemType::Shield)
+		return 0;
+	// A POE2 base says; a focus has none.
+	if (const BaseMeta *base = ItemBaseMeta(item); base != nullptr)
+		return base->block;
+	// Diablo's shields, by the look of their base (the Warrior's old Buckler has no unique type to go by).
+	const ItemData &data = AllItemsList[item.IDidx];
+	if (data.iSName == "Focus")
+		return 0;
+	switch (data.iCurs) {
+	case ICURS_KITE_SHIELD:
+		return 27;
+	case ICURS_LARGE_SHIELD:
+	case ICURS_TOWER_SHIELD:
+	case ICURS_GOTHIC_SHIELD:
+	case ICURS_BLACKOAK_SHIELD:
+		return 30;
+	default:
+		// Bucklers and small shields.
+		return 25;
+	}
 }
 
 std::vector<ItemImplicit> ItemImplicits(const Item &item)

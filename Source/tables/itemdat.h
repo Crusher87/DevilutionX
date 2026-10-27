@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -788,6 +789,8 @@ extern DVL_API_FOR_TEST std::vector<UniqueItem> UniqueItems;
 extern ankerl::unordered_dense::map<int32_t, int32_t> UniqueItemMappingIdsToIndices;
 
 std::expected<_item_indexes, std::string> ParseItemId(std::string_view value);
+/** @brief POE2 Mashup: the row of the item data with this 'poe2:' id, if the loaded data has one. */
+std::optional<_item_indexes> FindPoe2ItemId(std::string_view id);
 void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId);
 void LoadUniqueItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId);
 void LoadItemData();

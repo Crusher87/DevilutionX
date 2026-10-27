@@ -84,6 +84,9 @@ WeaponSkill WeaponSkillForItem(const Item &item);
 WeaponSkill WeaponSkillFor(const Player &player);
 std::string_view WeaponSkillName(WeaponSkill skill);
 std::string_view WeaponSkillDescription(WeaponSkill skill);
+/** @brief Whether the skill is a melee attack (a strike or a slam), whose mana cost is a third less than listed. */
+bool HasMeleeManaCut(WeaponSkill skill);
+/** @brief The mana cost at gem level 1, before supports; in POE2 mode a melee attack costs two thirds of its listed cost, rounded, at least 1. */
 int WeaponSkillManaCost(WeaponSkill skill);
 /** @brief The mana cost with the skill's supports. */
 int WeaponSkillManaCost(const Player &player, WeaponSkill skill, bool lifeShare = true);

@@ -31,6 +31,9 @@ ankerl::unordered_dense::map<int32_t, int16_t> ItemMappingIdsToIndices;
 /** Contains the mapping between unique base item ID strings and indices, used for parsing additional item data. */
 ankerl::unordered_dense::map<std::string, int8_t> AdditionalUniqueBaseItemStringsToIndices;
 
+/** POE2 Mashup: the rows of the item data named by a 'poe2:' id, which have no IDI_ name. */
+ankerl::unordered_dense::map<std::string, int16_t> Poe2ItemIdsToIndices;
+
 /** Contains the data related to each unique item ID. */
 std::vector<UniqueItem> UniqueItems;
 
@@ -50,6 +53,14 @@ std::expected<_item_indexes, std::string> ParseItemId(std::string_view value)
 		return enumValueOpt.value();
 	}
 	return std::unexpected("Unknown enum value");
+}
+
+std::optional<_item_indexes> FindPoe2ItemId(std::string_view id)
+{
+	const auto it = Poe2ItemIdsToIndices.find(std::string(id));
+	if (it == Poe2ItemIdsToIndices.end())
+		return std::nullopt;
+	return static_cast<_item_indexes>(it->second);
 }
 
 namespace {
@@ -696,7 +707,10 @@ void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t 
 	for (DataFileRecord record : dataFile) {
 		RecordReader reader { record, filename };
 		ItemData &item = AllItemsList.emplace_back();
-		reader.advance(); // Skip the first column (item ID).
+		std::string id;
+		reader.readString("id", id);
+		if (id.starts_with("poe2:"))
+			Poe2ItemIdsToIndices.emplace(std::move(id), static_cast<int16_t>(AllItemsList.size() - 1));
 		reader.readInt("dropRate", item.dropRate);
 		reader.read("class", item.iClass, ParseItemClass);
 		reader.read("equipType", item.iLoc, ParseItemEquipType);
@@ -743,6 +757,7 @@ void LoadItemDat()
 
 	AllItemsList.clear();
 	AdditionalUniqueBaseItemStringsToIndices.clear();
+	Poe2ItemIdsToIndices.clear();
 	ItemMappingIdsToIndices.clear();
 	LoadItemDatFromFile(dataFile, filename, 0);
 

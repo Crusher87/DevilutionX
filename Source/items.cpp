@@ -3834,6 +3834,14 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	lightRadius += passive(PassiveStat::LightRadius);
 	player.poe2.lifeRegenPerMille = passive(PassiveStat::LifeRegenRate);
 	player.poe2.passiveBlockChance = passive(PassiveStat::BlockChance);
+	// POE2 block comes from the shield's base; a shield the hero can't use doesn't block, as in Diablo.
+	player.poe2.shieldBlockChance = 0;
+	if (gbIsPoe2) {
+		for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+			if (player.InvBody[hand]._iStatFlag)
+				player.poe2.shieldBlockChance = std::max(player.poe2.shieldBlockChance, ShieldBlockChance(player.InvBody[hand]));
+		}
+	}
 	strength += passive(PassiveStat::Strength);
 	magic += passive(PassiveStat::Magic);
 	dexterity += passive(PassiveStat::Dexterity);
@@ -4119,7 +4127,8 @@ void CreatePlrItems(Player &player)
 	}
 
 	InitCursor();
-	for (const _item_indexes itemData : loadout.items) {
+	for (size_t slot = 0; slot < loadout.items.size(); slot++) {
+		const _item_indexes itemData = GetStartingLoadoutItem(loadout, slot);
 		if (itemData != _item_indexes::IDI_NONE)
 			CreateStartingItem(player, itemData);
 	}
@@ -6451,6 +6460,9 @@ void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energySh
 /** @brief POE2 Mashup: armor pieces show the defense they grant when worn. */
 void PrintPoe2ItemDefense(const Item &item)
 {
+	// A shield shows its block chance first, as in POE2.
+	if (const int block = ShieldBlockChance(item); block > 0)
+		AddItemInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Block: {:d}%"), block));
 	std::string defense;
 	int armour;
 	int evasion;

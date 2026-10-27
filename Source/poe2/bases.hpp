@@ -52,6 +52,8 @@ struct BaseMeta {
 	DefenseSplit split;
 	/** @brief The character level the base needs, like POE2's required level. */
 	int level = 0;
+	/** @brief A shield's own chance to block, in percent; 0 for every other base. */
+	uint8_t block = 0;
 };
 
 /** @brief A rolled implicit: its values on this item. */
@@ -77,6 +79,11 @@ void LoadBaseData();
 const BaseMeta *BaseMetaFor(int itemIndex);
 /** @brief The base metadata of the item's base, or nullptr for a base without any. */
 const BaseMeta *ItemBaseMeta(const Item &item);
+/**
+ * @brief The shield's own chance to block, in percent: its POE2 base's, or a POE2-like one for Diablo's shields (25% for a
+ * buckler or small shield up to 30% for a large or tower shield). 0 for a focus and anything that isn't a shield.
+ */
+int ShieldBlockChance(const Item &item);
 /** @brief The item's implicits with their values, rolled from its seed and raised by its quality. */
 std::vector<ItemImplicit> ItemImplicits(const Item &item);
 /** @brief The effects the item's implicits raise, as bits of 1 << ModEffect; one that lowers (slower attacks) doesn't count. */

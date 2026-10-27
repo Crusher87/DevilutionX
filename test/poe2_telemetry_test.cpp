@@ -268,5 +268,22 @@ TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)
 	LoadPassiveTreeData();
 }
 
+TEST_F(Poe2TelemetryTest, BuildLineBlockIsZeroWithoutAShield)
+{
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	player._pDexterity = 50;
+	player._pBlockFlag = false;
+	EXPECT_NE(TelemetryBuildText(player).find("block 0%"), std::string::npos) << TelemetryBuildText(player);
+	// A Monk's staff once let Diablo's block through; in POE2 only a shield blocks.
+	player._pClass = HeroClass::Monk;
+	player._pBlockFlag = true;
+	EXPECT_NE(TelemetryBuildText(player).find("block 0%"), std::string::npos) << TelemetryBuildText(player);
+	// With a shield, its own chance.
+	player._pClass = HeroClass::Warrior;
+	player.poe2.shieldBlockChance = 28;
+	EXPECT_NE(TelemetryBuildText(player).find("block 28%"), std::string::npos) << TelemetryBuildText(player);
+}
+
 } // namespace
 } // namespace devilution
