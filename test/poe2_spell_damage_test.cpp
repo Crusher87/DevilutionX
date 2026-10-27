@@ -82,7 +82,8 @@ public:
 TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 {
 	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 100);
-	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 35);
+	// Plan step 14 (Curtis 2026-10-27): the splash went from 35% to 70% of the hit, so the Sorcerer clears packs.
+	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 70);
 	EXPECT_EQ(SpellDamagePercent(SpellID::HolyBolt), 165);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Lightning), 135);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 50);
