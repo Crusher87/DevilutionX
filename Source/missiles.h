@@ -268,7 +268,11 @@ DamageRange GetDamageAmt(SpellID spell, int spellLevel);
  */
 Direction16 GetDirection16(Point p1, Point p2);
 bool MonsterTrapHit(Monster &monster, int mindam, int maxdam, int dist, MissileID t, DamageType damageType, bool shift);
-bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, DeathReason deathReason, bool *blocked);
+/**
+ * @param shotTiles POE2 Mashup: tiles from where a monster's missile was loosed to the hero, for its arrows' accuracy
+ * falloff; -1 measures from the monster.
+ */
+bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, DeathReason deathReason, bool *blocked, int shotTiles = -1);
 
 /**
  * @brief Could the missile collide with solid objects? (like walls or closed doors)

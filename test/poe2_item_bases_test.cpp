@@ -1,21 +1,33 @@
 #include <algorithm>
 #include <iterator>
+#include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 
 #include <gtest/gtest.h>
 
+#include "engine/animationinfo.h"
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
+#include "loadsave.h"
+#include "pfile.h"
 #include "player.h"
 #include "poe2/bases.hpp"
+#include "poe2/craft_state.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/stash_tabs.hpp"
+#include "qol/stash.h"
 #include "spells.h"
+#include "tables/playerdat.hpp"
+#include "utils/file_util.h"
+#include "utils/paths.h"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -69,6 +81,46 @@ public:
 	static int Stat(const Item &item, Poe2ItemStat stat)
 	{
 		return item._iPoe2Stats[static_cast<size_t>(stat)];
+	}
+
+	/**
+	 * Saves the item in a single-player stash and loads it back. The stash writes and reads each item with the game
+	 * save's own item record (SaveItem / LoadAndValidateItemData).
+	 */
+	static Item SaveAndLoad(Item item)
+	{
+		const std::string previousPrefPath = paths::PrefPath();
+		const std::string folder = ::testing::TempDir() + "poe2_item_bases_" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + DIRECTORY_SEPARATOR_STR;
+		CreateDir(folder.c_str());
+		for (const std::string &file : ListFiles(folder.c_str()))
+			RemoveFile((folder + file).c_str());
+		paths::SetPrefPath(folder);
+
+		Stash = {};
+		StashTabs.reset();
+		// Fixed cells: GetInventorySize needs the cursor art from the game files, which tests may not have.
+		const Size size { 2, 3 };
+		item.position = { 0, size.height - 1 };
+		Stash.stashList.push_back(item);
+		for (int x = 0; x < size.width; x++) {
+			for (int y = 0; y < size.height; y++)
+				Stash.stashGrids[0][x][y] = 1;
+		}
+		Stash.dirty = true;
+		sfile_write_stash();
+
+		Stash = {};
+		StashTabs.reset();
+		LoadStash();
+		Item loaded {};
+		if (Stash.stashList.size() == 1)
+			loaded = Stash.stashList[0];
+		else
+			ADD_FAILURE() << Stash.stashList.size() << " items came back";
+		Stash = {};
+		StashTabs.reset();
+		paths::SetPrefPath(previousPrefPath);
+		return loaded;
 	}
 };
 
@@ -194,8 +246,8 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			EXPECT_TRUE(meta->defense.has_value()) << data.iName;
 		}
 	}
-	// The bundle's 384, plus POE2's Crimson, Lunar and Gold Amulets.
-	EXPECT_EQ(bases, 387);
+	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, and the 43 body armours of plan step 10.
+	EXPECT_EQ(bases, 430);
 }
 
 TEST_F(Poe2ItemBasesTest, RingsFollowPoe2)
@@ -257,6 +309,71 @@ TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
 	EXPECT_GT(Stat(quick, Poe2ItemStat::CastSpeed), Stat(focused, Poe2ItemStat::CastSpeed));
 	// One implicit each (Curtis 2026-10-16): the quick staff casts faster, the focused one gives Intelligence.
 	EXPECT_GT(focused._iPLMag, quick._iPLMag);
+}
+
+/**
+ * Plan step 14 (Curtis 2026-10-27): the Ash Staff and Short Bow families, the only staves and bows a hero uses up to
+ * about level 11, hit 60% and 40% harder than the bundle's 7-10 / 6-9 / 4-6 and 6-9 / 5-7 / 4-5. The next tier keeps
+ * the bundle's numbers.
+ */
+TEST_F(Poe2ItemBasesTest, ActOneStavesAndBowsHitHarder)
+{
+	const auto damage = [](std::string_view name) {
+		const ItemData &data = AllItemsList[FindBase(name)];
+		return std::make_pair(static_cast<int>(data.iMinDam), static_cast<int>(data.iMaxDam));
+	};
+	EXPECT_EQ(damage("Heavy Ash Staff"), std::make_pair(11, 16));
+	EXPECT_EQ(damage("Ash Staff"), std::make_pair(10, 13));
+	EXPECT_EQ(damage("Swift Ash Staff"), std::make_pair(6, 10));
+	EXPECT_EQ(damage("Heavy Short Bow"), std::make_pair(8, 13));
+	EXPECT_EQ(damage("Fine Short Bow"), std::make_pair(7, 10));
+	EXPECT_EQ(damage("Swift Short Bow"), std::make_pair(6, 7));
+	EXPECT_EQ(damage("Heavy Banded Staff"), std::make_pair(10, 15));
+	EXPECT_EQ(damage("Heavy Yew Bow"), std::make_pair(9, 12));
+	// A white staff hits for its base.
+	const Item staff = MakeItem("Heavy Ash Staff", 1);
+	EXPECT_EQ(staff._iMinDam, 11);
+	EXPECT_EQ(staff._iMaxDam, 16);
+}
+
+TEST_F(Poe2ItemBasesTest, HeavyBasesAttackSlower)
+{
+	// Curtis 2026-10-23: a Heavy base's reduced attack speed only cancelled speed from elsewhere, so on its own it was
+	// never slower. Now it adds an animation frame for every 10%.
+	LoadPlayerDataFiles();
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.clear();
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(10);
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseVit = player._pVitality = 50;
+	const auto attackFrames = [&player](std::string_view base) {
+		player.InvBody[INVLOC_HAND_LEFT] = MakeItem(base, 1);
+		player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+		CalcPlrInv(player, false);
+		return player.poe2.passiveAttackFrames;
+	};
+	EXPECT_EQ(attackFrames("Heavy Shortsword"), -1);
+	EXPECT_EQ(attackFrames("Shortsword"), 0);
+	EXPECT_EQ(attackFrames("Swift Shortsword"), 1);
+
+	// A negative skip starts the animation before its first frame, so it reaches each frame a game tick later.
+	const auto ticksToFrame = [](int8_t skipped, int8_t frame) {
+		AnimationInfo animation;
+		animation.setNewAnimation(std::nullopt, 16, 1, AnimationDistributionFlags::ProcessAnimationPending, skipped, 9);
+		int ticks = 0;
+		while (animation.currentFrame != frame && ticks < 40) {
+			animation.processAnimation();
+			ticks++;
+		}
+		return ticks;
+	};
+	EXPECT_EQ(ticksToFrame(-1, 8), ticksToFrame(0, 8) + 1);
+	EXPECT_EQ(ticksToFrame(1, 8), ticksToFrame(0, 8) - 1);
+	player.InvBody[INVLOC_HAND_LEFT] = {};
 }
 
 TEST_F(Poe2ItemBasesTest, ImplicitsRollFromTheSeedAndSurviveRebuilding)
@@ -332,6 +449,201 @@ TEST_F(Poe2ItemBasesTest, QuarterstaffsRollWeaponAffixesNotSpells)
 			magic++;
 	}
 	EXPECT_GT(magic, 0);
+}
+
+/** Plan step 9: the bundle's top weapon damage (199-281 on the base, +82 added) passes the old 8-bit fields. */
+TEST_F(Poe2ItemBasesTest, WeaponDamageAbove255Survives)
+{
+	const _item_indexes base = FindBase("Heavy Shortsword");
+	AllItemsList[base].iMinDam = 199;
+	AllItemsList[base].iMaxDam = 281;
+	Item sword = MakeItem("Heavy Shortsword", 1);
+	EXPECT_GE(sword._iMinDam, 199);
+	EXPECT_GE(sword._iMaxDam, 281);
+
+	const int minDamage = sword._iMinDam + 82;
+	const int maxDamage = sword._iMaxDam + 82;
+	ApplyModEffect(sword, ModEffect::AddedPhysical, 82, 82);
+	EXPECT_EQ(sword._iMinDam, minDamage);
+	EXPECT_EQ(sword._iMaxDam, maxDamage);
+
+	const Item loaded = SaveAndLoad(sword);
+	EXPECT_EQ(loaded.IDidx, base);
+	EXPECT_EQ(loaded._iMinDam, minDamage) << "A game save keeps damage past 255";
+	EXPECT_EQ(loaded._iMaxDam, maxDamage);
+
+	// Oil of Sharpness from another player (network and multiplayer hero items) keeps its 16 bits.
+	Item oiled = sword;
+	oiled._iMinDam = 340;
+	oiled._iMaxDam = 363;
+	EXPECT_EQ(ClampMaxDam(oiled, 364), 364);
+	EXPECT_EQ(ClampMaxDam(oiled, 371), 363) << "Still no more than 30 over the minimum";
+
+	// Added damage clamps at the field's top instead of wrapping.
+	ApplyModEffect(sword, ModEffect::AddedPhysical, 70000, 70000);
+	EXPECT_EQ(sword._iMaxDam, UINT16_MAX);
+}
+
+/** Plan step 9: body armour past 255 (the bundle's top is about 496) is built and saved whole. */
+TEST_F(Poe2ItemBasesTest, ArmourAbove255Survives)
+{
+	const _item_indexes base = FindBase("Iron Cuirass");
+	AllItemsList[base].iMinAC = 496;
+	AllItemsList[base].iMaxAC = 496;
+	const Item cuirass = MakeItem("Iron Cuirass", 1);
+	EXPECT_GE(cuirass._iAC, 496);
+
+	const Item loaded = SaveAndLoad(cuirass);
+	EXPECT_EQ(loaded.IDidx, base);
+	EXPECT_EQ(loaded._iAC, cuirass._iAC) << "A game save keeps armour past 255";
+}
+
+
+/** A rare of the base at POE2 item level 60, as a drop builds it. */
+Item MakeRare(_item_indexes base, uint32_t seed)
+{
+	Item item {};
+	SetLootRarity(item, ITEM_QUALITY_RARE);
+	SetPoe2ItemLevel(item, 60);
+	SetRndSeed(seed);
+	SetupAllItems(*MyPlayer, item, base, AdvanceRndSeed(), 30, 1, /*onlygood=*/true, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+	item._iIdentified = true;
+	return item;
+}
+
+bool HasMod(const Item &item, uint8_t family)
+{
+	return std::any_of(item._iPoe2Mods.begin(), item._iPoe2Mods.end(), [family](const Poe2ItemMod &mod) { return mod.family == family; });
+}
+
+void ExpectSameMods(const Item &actual, const Item &expected, std::string_view what)
+{
+	for (size_t i = 0; i < expected._iPoe2Mods.size(); i++) {
+		EXPECT_EQ(actual._iPoe2Mods[i].family, expected._iPoe2Mods[i].family) << what << " mod " << i;
+		EXPECT_EQ(actual._iPoe2Mods[i].tier, expected._iPoe2Mods[i].tier) << what << " mod " << i;
+		EXPECT_EQ(actual._iPoe2Mods[i].values, expected._iPoe2Mods[i].values) << what << " mod " << i;
+	}
+	EXPECT_EQ(actual._iPoe2Stats, expected._iPoe2Stats) << what;
+}
+
+/** The points of an item's defence that come from its base: what its flat modifiers didn't add. */
+int BaseDefence(const Item &item)
+{
+	const auto stat = [&item](Poe2ItemStat s) { return static_cast<int>(item._iPoe2Stats[static_cast<size_t>(s)]); };
+	return item._iAC - stat(Poe2ItemStat::FlatArmour) - stat(Poe2ItemStat::FlatEvasion) - stat(Poe2ItemStat::FlatEnergyShield);
+}
+
+/** The low end of an item's damage that comes from its base: what its added physical damage didn't add. */
+int BaseMinDamage(const Item &item, uint8_t addedPhysical)
+{
+	int damage = item._iMinDam;
+	for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+		if (mod.family == addedPhysical)
+			damage -= mod.values[0];
+	}
+	return damage;
+}
+
+/**
+ * Harder monsters plan v3: an item saved before the bases and flat modifiers took POE2's numbers loads with exactly
+ * the armour and damage it had, its modifiers keep the values they rolled with, and no rebuild takes its base's
+ * share below what it had.
+ */
+TEST_F(Poe2ItemBasesTest, OldItemsKeepTheirArmourAndDamage)
+{
+	const _item_indexes armourBase = FindBase("Rogue Armour");
+	const _item_indexes weaponBase = FindBase("Shortsword");
+	const std::optional<uint8_t> flatArmourFamily = FindModifierFamily("flat_armour");
+	const std::optional<uint8_t> flatEvasionFamily = FindModifierFamily("flat_evasion");
+	const std::optional<uint8_t> addedPhysicalFamily = FindModifierFamily("local_added_physical");
+	ASSERT_TRUE(flatArmourFamily && flatEvasionFamily && addedPhysicalFamily);
+	const auto flatArmour = static_cast<uint8_t>(*flatArmourFamily + 1);
+	const auto flatEvasion = static_cast<uint8_t>(*flatEvasionFamily + 1);
+	const auto addedPhysical = static_cast<uint8_t>(*addedPhysicalFamily + 1);
+
+	// The game before: the item table's old numbers for the two bases, and the modifiers' old scales.
+	AllItemsList[armourBase].iMinAC = 16;
+	AllItemsList[armourBase].iMaxAC = 18;
+	AllItemsList[weaponBase].iMinDam = 2;
+	AllItemsList[weaponBase].iMaxDam = 6;
+	Item armour;
+	Item weapon;
+	{
+		const LegacyModScales legacy;
+		for (uint32_t seed = 1; seed < 2000 && armour.isEmpty(); seed++) {
+			const Item item = MakeRare(armourBase, seed);
+			if (HasMod(item, flatArmour) || HasMod(item, flatEvasion))
+				armour = item;
+		}
+		for (uint32_t seed = 1; seed < 2000 && weapon.isEmpty(); seed++) {
+			const Item item = MakeRare(weaponBase, seed);
+			if (HasMod(item, addedPhysical))
+				weapon = item;
+		}
+	}
+	ASSERT_FALSE(armour.isEmpty()) << "an old Rogue Armour with flat armour or evasion";
+	ASSERT_FALSE(weapon.isEmpty()) << "an old Shortsword with added physical damage";
+	ASSERT_NE(armour.dwBuff & CF_POE2, 0U);
+	const int oldArmourBase = BaseDefence(armour);
+	EXPECT_GE(oldArmourBase, 16);
+	EXPECT_LE(oldArmourBase, 18);
+	EXPECT_EQ(BaseMinDamage(weapon, addedPhysical), 2);
+	// Before, a hybrid's defence split evenly.
+	DefensePoints oldDefence;
+	SplitDefense(ItemDefenseType(armour), oldArmourBase, oldDefence.armour, oldDefence.evasion, oldDefence.energyShield);
+	oldDefence.armour += Stat(armour, Poe2ItemStat::FlatArmour);
+	oldDefence.evasion += Stat(armour, Poe2ItemStat::FlatEvasion);
+
+	// This build's tables.
+	LoadItemData();
+	LoadModifierData();
+	ASSERT_GT(AllItemsList[armourBase].iMinAC, armour._iAC) << "today's base alone has more than the old item";
+	ASSERT_GT(AllItemsList[weaponBase].iMinDam, BaseMinDamage(weapon, addedPhysical));
+
+	// A fresh rebuild has today's numbers, which is how an old item is told apart.
+	Item fresh;
+	RecreateItem(*MyPlayer, fresh, armour.IDidx, armour._iCreateInfo, armour._iSeed, armour._ivalue, armour.dwBuff, armour._iPoe2Craft);
+	EXPECT_GT(fresh._iAC, armour._iAC);
+	EXPECT_TRUE(IsLegacyScaleItem(armour, fresh));
+	EXPECT_FALSE(IsLegacyScaleItem(fresh, fresh)) << "an item of this build never is";
+
+	for (const Item *old : { &armour, &weapon }) {
+		const std::string name = old->_iIName;
+		const Item loaded = SaveAndLoad(*old);
+		EXPECT_EQ(loaded.IDidx, old->IDidx) << name;
+		EXPECT_EQ(loaded._iAC, old->_iAC) << name;
+		EXPECT_EQ(loaded._iMinDam, old->_iMinDam) << name;
+		EXPECT_EQ(loaded._iMaxDam, old->_iMaxDam) << name;
+		ExpectSameMods(loaded, *old, name);
+
+		// Crafting rebuilds it from its seed and keeps all of that.
+		const Item crafted = RebuildWithCraft(*MyPlayer, loaded, loaded.dwBuff, loaded._iPoe2Craft);
+		EXPECT_EQ(crafted._iAC, old->_iAC) << name;
+		EXPECT_EQ(crafted._iMinDam, old->_iMinDam) << name;
+		EXPECT_EQ(crafted._iMaxDam, old->_iMaxDam) << name;
+		ExpectSameMods(crafted, *old, name);
+		EXPECT_FALSE(RollingLegacyModScales());
+
+		// A Divine Orb rerolls the modifiers' values, with their old scales, and leaves the base's share alone.
+		const Item divined = RebuildWithCraft(*MyPlayer, loaded, (loaded.dwBuff & ~CF_POE2_DIVINE) | (1U << 9), loaded._iPoe2Craft);
+		EXPECT_EQ(BaseDefence(divined), BaseDefence(*old)) << name;
+		EXPECT_EQ(BaseMinDamage(divined, addedPhysical), BaseMinDamage(*old, addedPhysical)) << name;
+		for (const Poe2ItemMod &mod : divined._iPoe2Mods) {
+			if (mod.family != flatArmour && mod.family != addedPhysical)
+				continue;
+			const ModFamily &family = *ItemModFamily(mod);
+			const ModTier &tier = family.tiers[mod.tier - 1];
+			EXPECT_LE(mod.values[0], ((tier.max[0] * family.legacyScale[0]) + 99) / 100) << name << ": " << family.id;
+		}
+	}
+
+	// The armour shows what it showed: its defence is below what the base rolls now, so it splits evenly as before.
+	DefensePoints base;
+	DefensePoints bonus;
+	SplitItemDefense(SaveAndLoad(armour), base, bonus);
+	EXPECT_EQ(base.armour, oldDefence.armour);
+	EXPECT_EQ(base.evasion, oldDefence.evasion);
+	EXPECT_EQ(base.energyShield, 0);
 }
 
 } // namespace

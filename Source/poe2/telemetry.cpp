@@ -32,6 +32,7 @@
 #include "options.h"
 #include "pfile.h"
 #include "player.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/gem_levels.hpp"
@@ -1743,7 +1744,8 @@ void TelemetryLevelEntered()
 	    .add("monsters", CurrentLevel.monstersAtEntry)
 	    .add("monsterLevel", CurrentLevel.monsterLevel)
 	    .add("mapTier", tier)
-	    .add("areaLevel", tier > 0 ? MapAreaLevelBase + tier : 0)
+	    .add("areaLevel", CurrentAreaLevel())
+	    .add("lootLevel", tier > 0 ? MapAreaLevelBase + tier : 0)
 	    .add("dungeonLevel", static_cast<int>(currlevel))
 	    .add("levelType", static_cast<int>(leveltype))
 	    .add("heroLevel", player.getCharacterLevel())

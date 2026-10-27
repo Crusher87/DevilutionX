@@ -72,6 +72,8 @@ enum class ModEffect : uint8_t {
 	EnergyShieldPercent,
 	/** Increased rarity of items found, from the Gold Amulet and the Magic Find prefix and suffix. */
 	ItemRarity,
+	/** Increased spell damage in percent, from staves (plan step 14); adds to the tree's spell damage. */
+	SpellDamage,
 };
 
 /** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */
@@ -146,6 +148,11 @@ struct ModFamily {
 	ModEffect effect;
 	/** @brief Percent of the table's value the game uses, per stat. */
 	std::array<int16_t, 2> scale;
+	/**
+	 * @brief The scale items saved before the bases took POE2's numbers rolled with (harder monsters plan, step 10b),
+	 * so such an item rebuilds with the modifiers it had. The same as scale for most families.
+	 */
+	std::array<int16_t, 2> legacyScale;
 	bool enabled;
 	/** @brief Ordered T1 first. */
 	std::vector<ModTier> tiers;
@@ -159,6 +166,25 @@ constexpr int MaxRareJewelModsPerSide = 2;
 
 /** @brief Loads the modifier tables and the item bases (poe2/bases.hpp) and uniques (poe2/uniques.hpp) from the POE2 Mashup mod, or clears them outside POE2 mode. */
 void LoadModifierData();
+
+/** @brief Whether modifiers roll with the families' legacy scales (LegacyModScales). */
+bool RollingLegacyModScales();
+
+/**
+ * @brief While one exists, modifiers roll with the scales they had before the bases took POE2's numbers, for
+ * rebuilding an item saved before then (RestoreRareItemPowers, RebuildWithCraft). Nests; never touches the game's
+ * random number generator.
+ */
+class LegacyModScales {
+public:
+	explicit LegacyModScales(bool active = true);
+	~LegacyModScales();
+	LegacyModScales(const LegacyModScales &) = delete;
+	LegacyModScales &operator=(const LegacyModScales &) = delete;
+
+private:
+	bool previous_;
+};
 const std::vector<ModFamily> &ModifierFamilies();
 std::optional<uint8_t> FindModifierFamily(std::string_view id);
 
@@ -212,7 +238,7 @@ struct ModRollFilter {
 	/** @brief Effects the item already has from its implicits and modifiers, as ModEffectBits; crafting doesn't repeat them. */
 	uint64_t avoidEffects = 0;
 };
-static_assert(static_cast<int>(ModEffect::ItemRarity) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
+static_assert(static_cast<int>(ModEffect::SpellDamage) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
 
 /** @brief The effect as bits of 1 << ModEffect, a hybrid as its two parts; 0 for None. */
 uint64_t ModEffectBits(ModEffect effect);

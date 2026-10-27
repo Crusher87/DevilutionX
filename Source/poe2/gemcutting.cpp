@@ -52,11 +52,7 @@ bool AttackInCategory(WeaponSkill skill, GemCategory category)
 		return false;
 	if (!IsAnyOf(category, GemCategory::Elemental, GemCategory::Occult))
 		return true;
-	for (int weapon = 0; weapon < static_cast<int>(GemCategory::Elemental); weapon++) {
-		if (AttackInListedCategory(skill, static_cast<GemCategory>(weapon)))
-			return false;
-	}
-	return true;
+	return !AttackOnWeaponTab(skill);
 }
 
 } // namespace
@@ -140,6 +136,15 @@ bool GemInCategory(const GemEntry &gem, GemCategory category)
 	default:
 		return false;
 	}
+}
+
+bool AttackOnWeaponTab(WeaponSkill skill)
+{
+	for (int weapon = 0; weapon < static_cast<int>(GemCategory::Elemental); weapon++) {
+		if (AttackInListedCategory(skill, static_cast<GemCategory>(weapon)))
+			return true;
+	}
+	return false;
 }
 
 std::string GemName(const GemEntry &gem)

@@ -6,6 +6,7 @@
 
 #include "missiles.h"
 #include "player.h"
+#include "poe2/gemcutting.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
@@ -45,6 +46,8 @@ constexpr Poe2GemTable Spark { "Spark",
 
 /** @brief Mana grows 5x by level 20: three quarters of POE2's ~6.7x for attacks and half its ~10x for spells, as Diablo's mana pools are smaller. */
 constexpr int16_t ManaAt20 = 500;
+/** @brief Weapon-tab attacks grow 4x: martial heroes get little mana from gear, so their costs grow a little slower than their pool. */
+constexpr int16_t WeaponTabManaAt20 = 400;
 /** @brief Spells without damage (Teleport, Stone Curse...) get dearer more slowly. */
 constexpr int16_t UtilitySpellManaAt20 = 300;
 /** @brief Battle Cry's empowered melee hits deal this much extra damage at gem level 1. */
@@ -100,7 +103,7 @@ GemCurve AttackCurve(WeaponSkill skill)
 	case WeaponSkill::Spark:
 		return { &Spark, 200, ManaAt20, true, "Spark's steps and projectiles, on top of Diablo's Charged Bolt" };
 	case WeaponSkill::IceBolt:
-		return { &Fireball, 250, ManaAt20, false, "Fireball's steps; the shard barely grows on its own" };
+		return { &Fireball, 250, ManaAt20, true, "Fireball's steps and Spark's projectiles, fanned out sideways; the shard barely grows on its own" };
 	case WeaponSkill::FrostNova:
 		return { &Fireball, 280, ManaAt20, false, "Fireball's steps, a little more for the whole ring" };
 	case WeaponSkill::Riposte:
@@ -131,7 +134,8 @@ GemCurve AttackCurve(WeaponSkill skill)
 GemCurve SpellCurve(SpellID spell)
 {
 	switch (spell) {
-	// Diablo already adds 12.5% damage a spell level to these.
+	// One spell damage rule (poe2/spell_damage.hpp): every damaging spell grows along Fireball's steps to 312%; Diablo's
+	// 12.5% a spell level is gone.
 	case SpellID::Flash:
 	case SpellID::Fireball:
 	case SpellID::Guardian:
@@ -141,28 +145,25 @@ GemCurve SpellCurve(SpellID spell)
 	case SpellID::RuneOfFire:
 	case SpellID::RuneOfNova:
 	case SpellID::RuneOfImmolation:
-		return { &Fireball, 100, ManaAt20, false, "Diablo's spell level already adds 12.5% a level; mana follows Fireball" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell; mana follows Fireball" };
 	case SpellID::Firebolt:
-		return { &Fireball, 250, ManaAt20, false, "Fireball's steps; Diablo adds only 1 damage a spell level" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell" };
 	case SpellID::ChargedBolt:
-		return { &Spark, 200, ManaAt20, false, "Spark's steps; Diablo already adds a bolt every 2 spell levels" };
+		return { &Spark, 100, ManaAt20, false, "no damage steps: Diablo adds a bolt every 2 spell levels" };
 	case SpellID::BloodStar:
-		return { &Fireball, 250, ManaAt20, false, "Fireball's steps; Diablo adds 3 damage a spell level" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell" };
 	case SpellID::Lightning:
 	case SpellID::ChainLightning:
 	case SpellID::HolyBolt:
 	case SpellID::LightningWall:
 	case SpellID::RuneOfLight:
-		return { &Spark, 312, ManaAt20, false, "Spark's steps; Diablo doesn't grow these with spell level" };
+		return { &Spark, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell; mana follows Spark", &Fireball };
 	case SpellID::FireWall:
 	case SpellID::RingOfFire:
 	case SpellID::FlameWave:
 	case SpellID::Inferno:
 	case SpellID::Apocalypse:
-		return { &Fireball, 312, ManaAt20, false, "Fireball's steps; Diablo doesn't grow these with spell level" };
-	case SpellID::Healing:
-	case SpellID::HealOther:
-		return { &Fireball, 100, 100, false, "Diablo's healing formula" };
+		return { &Fireball, 312, ManaAt20, false, "Fireball's steps to 312%, like every spell" };
 	default:
 		return { &Fireball, 100, UtilitySpellManaAt20, false, "utility gem, mana follows Fireball" };
 	}
@@ -192,6 +193,8 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 		if (skill.attack() == WeaponSkill::AmplifyDamage)
 			return std::format("+{:d}% physical damage taken", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (gemLevel - 1)));
 		if (const TableSkillData *table = FindTableSkill(skill.attack()); table != nullptr) {
+			if (table->buff == TableBuff::WarCry)
+				return "stuns all around";
 			if (table->shape == TableShape::Buff)
 				return std::format("buff, {:d}s", table->duration / 20);
 			if (table->shape == TableShape::Curse && table->curse != TableCurse::Haunt && table->curse != TableCurse::Locust)
@@ -227,8 +230,13 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 GemCurve GetGemCurve(SkillSlot skill)
 {
 	switch (skill.kind) {
-	case SkillKind::Attack:
-		return AttackCurve(skill.attack());
+	case SkillKind::Attack: {
+		GemCurve curve = AttackCurve(skill.attack());
+		// Attacks on a weapon's gemcutting tab (Mace to Shield) get dearer more slowly than Elemental and Occult skills.
+		if (curve.manaAt20 == ManaAt20 && AttackOnWeaponTab(skill.attack()))
+			curve.manaAt20 = WeaponTabManaAt20;
+		return curve;
+	}
 	case SkillKind::Spell:
 		return SpellCurve(skill.spell());
 	default:
@@ -253,7 +261,8 @@ int GemCurvePercent(const std::array<int16_t, MaxGemLevel> &steps, int endAt20, 
 int GemDamagePercent(SkillSlot skill, int gemLevel)
 {
 	const GemCurve curve = GetGemCurve(skill);
-	return GemCurvePercent(curve.table->damage, curve.damageAt20, gemLevel);
+	const Poe2GemTable *steps = curve.damageSteps != nullptr ? curve.damageSteps : curve.table;
+	return GemCurvePercent(steps->damage, curve.damageAt20, gemLevel);
 }
 
 int GemManaPercent(SkillSlot skill, int gemLevel)

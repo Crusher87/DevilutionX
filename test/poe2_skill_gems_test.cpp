@@ -110,7 +110,9 @@ TEST_F(Poe2SkillGemsTest, GemLevelsFollowPoe2)
 	EXPECT_EQ(GemDamagePercent(cleave, 10), 191);
 	EXPECT_EQ(GemDamagePercent(cleave, 15), 244);
 	EXPECT_EQ(GemDamagePercent(cleave, 20), 312);
-	EXPECT_EQ(GemManaPercent(cleave, 20), 500);
+	// Weapon-tab attacks get 4x dearer by level 20 (Elemental and Occult damage skills 5x).
+	EXPECT_EQ(GemManaPercent(cleave, 20), 400);
+	EXPECT_EQ(GemManaPercent(SkillSlot::ForAttack(WeaponSkill::Spark), 20), 500);
 }
 
 TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
@@ -124,17 +126,17 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 	EXPECT_EQ(GemDamagePercent(cleave, 8), 174);
 	EXPECT_EQ(GemDamagePercent(cleave, 9), 182);
 	EXPECT_EQ(GemDamagePercent(cleave, 16), 257);
-	EXPECT_EQ(GemStepText(cleave, 15, 16), "[+5% damage, +8% mana]");
+	EXPECT_EQ(GemStepText(cleave, 15, 16), "[+5% damage, +7% mana]");
 	for (int level = 2; level <= MaxGemLevel; level++)
 		EXPECT_GT(GemDamagePercent(leapSlam, level), GemDamagePercent(leapSlam, level - 1)) << level;
 
-	// Spark gains projectiles at POE2 Spark's levels; Fireball relies on Diablo's own spell level growth.
+	// Spark gains projectiles at POE2 Spark's levels; Diablo's spells all grow along Fireball's steps to 312%.
 	const SkillSlot spark = SkillSlot::ForAttack(WeaponSkill::Spark);
 	EXPECT_EQ(GemExtraProjectiles(spark, 1), 0);
 	EXPECT_EQ(GemExtraProjectiles(spark, 2), 1);
 	EXPECT_EQ(GemExtraProjectiles(spark, 20), 5);
 	EXPECT_NE(GemStepText(spark, 6, 7).find("+1 projectile, big step"), std::string::npos) << GemStepText(spark, 6, 7);
-	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 100);
+	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 312);
 	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
 	EXPECT_EQ(BattleCryDamagePercent(1), 50);
 	EXPECT_EQ(BattleCryDamagePercent(20), 100);
@@ -143,8 +145,8 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)
 {
 	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
-	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 6 mana");
-	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 20 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
+	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 5 mana");
+	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 16 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
 	EXPECT_EQ(GemCurveTextByName("nothing"), "No skill gem is called nothing.");
 }
 
@@ -169,7 +171,7 @@ TEST_F(Poe2SkillGemsTest, AttackGemLevelRaisesManaCost)
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 1);
 	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam));
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 20);
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 5);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 4);
 }
 
 TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
@@ -195,31 +197,44 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 
 TEST_F(Poe2SkillGemsTest, GemNeedsGrowWithLevelLikePoe2)
 {
-	// Path of Building 2's numbers for a single-attribute gem.
+	// Path of Building 2's formula x 0.75, for a single-attribute gem.
 	EXPECT_EQ(GemAttributeRequirement(1, 100), 0);
-	EXPECT_EQ(GemAttributeRequirement(2, 100), 9);
-	EXPECT_EQ(GemAttributeRequirement(3, 100), 14);
-	EXPECT_EQ(GemAttributeRequirement(10, 100), 65);
-	EXPECT_EQ(GemAttributeRequirement(20, 100), 157);
-	EXPECT_EQ(GemAttributeRequirement(20, 50), 86);
+	EXPECT_EQ(GemAttributeRequirement(2, 100), 8);
+	EXPECT_EQ(GemAttributeRequirement(3, 100), 12);
+	EXPECT_EQ(GemAttributeRequirement(10, 100), 50);
+	EXPECT_EQ(GemAttributeRequirement(13, 100), 70);
+	EXPECT_EQ(GemAttributeRequirement(20, 100), 119);
 	EXPECT_EQ(GemAttributeRequirement(20, 0), 0);
+	// Hybrid gems: 60/40 and 50/50 shares, and anything under 8 counts as none.
+	EXPECT_EQ(GemAttributeRequirement(3, 60), 9);
+	EXPECT_EQ(GemAttributeRequirement(3, 40), 0);
+	EXPECT_EQ(GemAttributeRequirement(3, 50), 8);
+	EXPECT_EQ(GemAttributeRequirement(20, 60), 76);
+	EXPECT_EQ(GemAttributeRequirement(20, 40), 54);
+	EXPECT_EQ(GemAttributeRequirement(20, 50), 65);
 
 	const GemAttributeNeeds cleave = SkillGemAttributeNeeds(SkillSlot::ForAttack(WeaponSkill::Cleave), 3);
-	EXPECT_EQ(cleave.strength, 14);
+	EXPECT_EQ(cleave.strength, 12);
 	EXPECT_EQ(cleave.magic, 0);
 	EXPECT_EQ(cleave.dexterity, 0);
 	// Whirling Staff is half Strength, half Dexterity.
 	const GemAttributeNeeds whirl = SkillGemAttributeNeeds(SkillSlot::ForAttack(WeaponSkill::WhirlingStaff), 20);
-	EXPECT_EQ(whirl.strength, 86);
-	EXPECT_EQ(whirl.dexterity, 86);
+	EXPECT_EQ(whirl.strength, 65);
+	EXPECT_EQ(whirl.dexterity, 65);
+
+	// Every class can level its own gems to 20 under Diablo's attribute caps: a Bard's 120 covers a single-attribute
+	// gem, a Monk's Magic 80 and a Sorcerer's Dexterity 85 cover a 50/50 one, a Rogue's Strength 55 a 40% share.
+	EXPECT_LE(GemAttributeRequirement(20, 100), 120);
+	EXPECT_LE(GemAttributeRequirement(20, 50), 80);
+	EXPECT_LE(GemAttributeRequirement(20, 40), 55);
 
 	Player &player = *MyPlayer;
 	Item gem;
 	ASSERT_TRUE(CreateSkillGemItem(gem, SkillSlot::ForAttack(WeaponSkill::Cleave), 10));
-	EXPECT_EQ(gem._iMinStr, 65);
-	player._pStrength = 64;
+	EXPECT_EQ(gem._iMinStr, 50);
+	player._pStrength = 49;
 	EXPECT_FALSE(player.CanUseItem(gem));
-	player._pStrength = 65;
+	player._pStrength = 50;
 	EXPECT_TRUE(player.CanUseItem(gem));
 }
 

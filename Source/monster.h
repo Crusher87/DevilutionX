@@ -43,6 +43,18 @@ constexpr size_t MaxMonsters = 200;
 constexpr size_t MaxLvlMTypes = 40;
 /** @brief POE2 Mashup: monster slots kept free for the players' minions, so a crowded level can't stop them rising. */
 constexpr size_t MinionMonsterSlots = 40;
+/** @brief Armour class Nightmare and Hell add to every monster (Diablo's rules; not on the POE2 tables). */
+constexpr int NightmareAcBonus = 50;
+constexpr int HellAcBonus = 80;
+/** @brief To-hit Nightmare and Hell add to every monster's attacks (Diablo's rules; POE2's accuracy leaves it out). */
+constexpr int NightmareToHitBonus = 85;
+constexpr int HellToHitBonus = 120;
+
+/** @brief The to-hit a difficulty adds to Monster::toHit and toHitSpecial. */
+constexpr int MonsterDifficultyToHitBonus(_difficulty difficulty)
+{
+	return difficulty == DIFF_NIGHTMARE ? NightmareToHitBonus : difficulty == DIFF_HELL ? HellToHitBonus : 0;
+}
 
 enum monster_flag : uint16_t {
 	// clang-format off
@@ -62,6 +74,8 @@ enum monster_flag : uint16_t {
 	MFLAG_RISEN           = 1 << 13,
 	/** @brief POE2 Mashup: one of the King's dead (Leoric's Road pact), a minion for a while; not Revive's. */
 	MFLAG_KINGS_DEAD      = 1 << 14,
+	/** @brief POE2 Mashup: life and damage come from the monster level tables (set when made or loaded on them). */
+	MFLAG_POE2_TABLES     = 1 << 15,
 	// clang-format on
 };
 
@@ -413,11 +427,21 @@ struct Monster { // note: missing field _mAFNum
 
 	/**
 	 * @brief Calculates monster's level.
-	 * Fetches base level value from @p MonstersData array or @p UniqueMonstersData.
+	 * In POE2 mode this is the floor's area level (see poe2/area_levels.hpp), except for the player's golems and
+	 * minions; otherwise it is diabloLevel().
 	 * @param difficulty - difficulty on which calculation is performed
 	 * @return Monster's level, including bonuses from difficulty and monster being unique
 	 */
-	unsigned int level(_difficulty difficulty) const
+	unsigned int level(_difficulty difficulty) const;
+
+	/**
+	 * @brief Calculates monster's level by Diablo's rules.
+	 * Fetches base level value from @p MonstersData array or @p UniqueMonstersData.
+	 * POE2 loot keeps using it until item levels move to area levels.
+	 * @param difficulty - difficulty on which calculation is performed
+	 * @return Monster's level, including bonuses from difficulty and monster being unique
+	 */
+	unsigned int diabloLevel(_difficulty difficulty) const
 	{
 		unsigned int baseLevel = data().level;
 		if (isUnique()) {

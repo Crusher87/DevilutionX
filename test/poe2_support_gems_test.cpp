@@ -318,6 +318,8 @@ TEST_F(Poe2SupportGemsTest, SupportsChangeTheSpell)
 	player._pClass = HeroClass::Sorcerer;
 	player._pSplLvl[static_cast<int8_t>(SpellID::Firebolt)] = 5;
 	player._pSplLvl[static_cast<int8_t>(SpellID::Healing)] = 5;
+	// Socketed first: a socketed gem pays its own mana curve, which the supports then multiply.
+	player.poe2.skillSlots[*FirstFreeSkillSlot(player)] = SkillSlot::ForSpell(SpellID::Firebolt);
 
 	const Fixed26_6 baseMana = GetManaAmount(player, SpellID::Firebolt);
 	EXPECT_EQ(SupportExtraProjectiles(player, SpellID::Firebolt), 0);

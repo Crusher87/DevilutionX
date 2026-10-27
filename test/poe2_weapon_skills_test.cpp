@@ -1,4 +1,5 @@
 #include <string>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -10,6 +11,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
+#include "tables/playerdat.hpp"
 
 namespace devilution {
 namespace {
@@ -196,6 +198,66 @@ TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
 	};
 	EXPECT_EQ(ticksToHit(/*quickStrike=*/false), 7);
 	EXPECT_EQ(ticksToHit(/*quickStrike=*/true), DashStrikeWindupTicks);
+}
+
+TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
+{
+	EXPECT_EQ(LeapSlamDamagePercent, 80);
+	// About two of Frost Nova's shards reach a monster: 2 x 25 = 50.
+	EXPECT_EQ(FrostNovaShardDamagePercent, 25);
+	// Kept at their old values until the shortfall fix (no Act 1 clear otherwise): Whirling Staff's 75 and 50.
+	EXPECT_EQ(AreaSkillSideDamagePercent, 75);
+	EXPECT_EQ(WhirlingStaffOuterDamagePercent, 50);
+	// Lightning Arrow's burst is Diablo's 2 x character level + Dexterity / 4 again (plan step 14, Curtis 2026-10-27):
+	// with 60% of the arrow the Rogue could not clear packs.
+	EXPECT_TRUE(LightningArrowBurstFromLevel);
+	EXPECT_EQ(LightningArrowBurstPerLevel, 2);
+	EXPECT_EQ(LightningArrowBurstDexterityDivisor, 4);
+	EXPECT_EQ(LightningArrowBurstPercent, 60);
+	Player &player = *MyPlayer;
+	player = {};
+	LoadPlayerDataFiles(); // the level cap comes from the experience table
+	player._pClass = HeroClass::Rogue;
+	player.setCharacterLevel(10);
+	player._pDexterity = 40;
+	player._pIMinDam = 10;
+	player._pIMaxDam = 20;
+	// 2 x 10 + 40 / 4.
+	EXPECT_EQ(LightningArrowDamage(player), 30);
+	player.setCharacterLevel(40);
+	player._pDexterity = 200;
+	EXPECT_EQ(LightningArrowDamage(player), 130);
+	// The weapon's damage doesn't add to it: the gem curve scales the arrow and the burst alike when they hit.
+	player._pIMinDam = 100;
+	player._pIMaxDam = 200;
+	player._pIBonusDam = 50;
+	EXPECT_EQ(LightningArrowDamage(player), 130);
+}
+
+TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
+{
+	// The mana audit's cuts for weapon attacks, at gem level 1.
+	const std::pair<WeaponSkill, int> Costs[] = {
+		{ WeaponSkill::GroundSlam, 6 },
+		{ WeaponSkill::Whirlwind, 8 },
+		{ WeaponSkill::LeapSlam, 8 },
+		{ WeaponSkill::Smite, 4 },
+		{ WeaponSkill::Frenzy, 3 },
+		{ WeaponSkill::ShieldBash, 4 },
+		{ WeaponSkill::ShadowStep, 5 },
+		{ WeaponSkill::Vengeance, 5 },
+		{ WeaponSkill::ViperStrike, 5 },
+		{ WeaponSkill::Zeal, 5 },
+		{ WeaponSkill::FanOfBlades, 5 },
+		{ WeaponSkill::DoubleThrow, 5 },
+		{ WeaponSkill::EscapeShot, 6 },
+		{ WeaponSkill::Multishot, 6 },
+		{ WeaponSkill::GuidedArrow, 5 },
+		{ WeaponSkill::RainOfArrows, 10 },
+		{ WeaponSkill::SevenSidedStrike, 11 },
+	};
+	for (const auto &[skill, cost] : Costs)
+		EXPECT_EQ(WeaponSkillManaCost(skill), cost) << WeaponSkillName(skill);
 }
 
 TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)

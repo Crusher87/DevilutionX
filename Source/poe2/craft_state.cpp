@@ -181,12 +181,28 @@ std::vector<Poe2ItemMod> ResolveCraftMods(const Item &item, const std::vector<Po
 	return mods;
 }
 
+bool IsLegacyScaleItem(const Item &saved, const Item &rebuilt)
+{
+	if ((saved.dwBuff & CF_POE2) == 0)
+		return false;
+	return saved._iAC < rebuilt._iAC || saved._iMinDam < rebuilt._iMinDam || saved._iPLDamMod < rebuilt._iPLDamMod
+	    || saved._iFMinDam < rebuilt._iFMinDam || saved._iLMinDam < rebuilt._iLMinDam;
+}
+
 Item RebuildWithCraft(const Player &player, const Item &item, uint32_t dwBuff, const Poe2Craft &craft)
 {
 	const uint32_t rngState = GetLCGEngineState();
 	// Shrines, oils and repairs change an item after it drops; the seed doesn't know them, so carry them across.
 	Item seeded;
 	RecreateItem(player, seeded, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
+	// An older item's base keeps its old numbers (the difference is carried like an oil's), and its modifiers, old and
+	// new, roll with the old scales, so crafting never takes it below what it had.
+	const bool legacy = IsLegacyScaleItem(item, seeded);
+	const LegacyModScales legacyScales(legacy);
+	if (legacy) {
+		seeded = {};
+		RecreateItem(player, seeded, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
+	}
 	Item rebuilt;
 	RecreateItem(player, rebuilt, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, dwBuff, craft);
 	SetRndSeed(rngState);

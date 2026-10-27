@@ -152,7 +152,8 @@ void BurnAroundFireGolem(Player &player)
 	if (golem == nullptr || golem->hasNoLife())
 		return;
 	const int level = GemLevel(player, PersistentSkill::FireGolem);
-	const Fixed26_6 damage = Fixed26_6::fromInt((4 + level + (player.getCharacterLevel() / 2)) * MinionDamagePercent(player) / 100);
+	// The golem's minion level, not its owner's character level (plan v2 step 11).
+	const Fixed26_6 damage = Fixed26_6::fromInt((4 + level + (MinionLevelForGemLevel(level) / 2)) * MinionDamagePercent(player) / 100);
 	TelemetryNoteDamageSource("Fire Golem");
 	SkillBurst(player, golem->position.tile, 2, DamageType::Fire, damage, MissileGraphicID::Inferno);
 }

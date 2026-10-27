@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -12,8 +13,11 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/currency.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/unique_rules.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 #include "utils/is_of.hpp"
@@ -107,7 +111,8 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	EXPECT_EQ(enabled, 56);
+	// 57 with spell damage on staves (plan step 14).
+	EXPECT_EQ(enabled, 57);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");
@@ -249,18 +254,51 @@ TEST_F(Poe2ModifiersTest, ModifiersChangeTheItemAndShowTheirTier)
 	EXPECT_EQ(sword._iMaxDam, 14);
 }
 
-TEST_F(Poe2ModifiersTest, FlatArmourIsScaledToDiablo)
+/** Harder monsters plan, step 10b: the bases took POE2's defence and damage, so flat modifiers take POE2's numbers too. */
+TEST_F(Poe2ModifiersTest, FlatModsTakePoe2sNumbers)
 {
-	const std::optional<uint8_t> armour = FindModifierFamily("flat_armour");
-	ASSERT_TRUE(armour);
-	const std::vector<Poe2ItemMod> mods = RollItemMods(ModSlot::BodyArmour, ModBaseArmour, 82, 6, 3, 7, 7);
-	for (const Poe2ItemMod &mod : mods) {
-		if (mod.family != *armour + 1)
-			continue;
-		const ModTier &tier = Family(mod).tiers[mod.tier - 1];
-		EXPECT_GE(mod.values[0], (tier.min[0] * 15) / 100);
-		EXPECT_LE(mod.values[0], ((tier.max[0] * 15) + 99) / 100);
+	const auto family = [](std::string_view id) -> const ModFamily & { return ModifierFamilies()[*FindModifierFamily(id)]; };
+	for (const std::string_view id : { "flat_armour", "flat_evasion", "flat_energy_shield", "local_added_physical", "local_added_fire", "local_added_lightning", "global_added_physical_attacks" })
+		ASSERT_TRUE(FindModifierFamily(id)) << id;
+	EXPECT_EQ(family("flat_armour").scale[0], 100);
+	EXPECT_EQ(family("flat_evasion").scale[0], 100);
+	// Energy shield counts in defence points, a third of what shows (EnergyShieldPerDefense).
+	EXPECT_EQ(family("flat_energy_shield").scale[0], 33);
+	for (const std::string_view id : { "local_added_physical", "local_added_fire", "local_added_lightning", "global_added_physical_attacks" })
+		EXPECT_EQ(family(id).scale, (std::array<int16_t, 2> { 100, 100 })) << id;
+	EXPECT_EQ(family("accuracy_rating").scale[0], 10) << "accuracy keeps its scale";
+
+	// Items saved before then rebuild with the scales they rolled with.
+	EXPECT_EQ(family("flat_armour").legacyScale[0], 15);
+	EXPECT_EQ(family("flat_evasion").legacyScale[0], 15);
+	EXPECT_EQ(family("flat_energy_shield").legacyScale[0], 10);
+	for (const std::string_view id : { "local_added_physical", "local_added_fire", "local_added_lightning", "global_added_physical_attacks" })
+		EXPECT_EQ(family(id).legacyScale, (std::array<int16_t, 2> { 25, 25 })) << id;
+	EXPECT_EQ(family("maximum_life").legacyScale, family("maximum_life").scale);
+
+	const uint8_t armour = *FindModifierFamily("flat_armour") + 1;
+	int seen = 0;
+	for (uint32_t seed = 1; seed <= 40; seed++) {
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::BodyArmour, ModBaseArmour, 82, 6, 3, seed, seed)) {
+			if (mod.family != armour)
+				continue;
+			seen++;
+			const ModTier &tier = Family(mod).tiers[mod.tier - 1];
+			EXPECT_GE(mod.values[0], tier.min[0]);
+			EXPECT_LE(mod.values[0], tier.max[0]);
+		}
+		const LegacyModScales legacy;
+		EXPECT_TRUE(RollingLegacyModScales());
+		for (const Poe2ItemMod &mod : RollItemMods(ModSlot::BodyArmour, ModBaseArmour, 82, 6, 3, seed, seed)) {
+			if (mod.family != armour)
+				continue;
+			const ModTier &tier = Family(mod).tiers[mod.tier - 1];
+			EXPECT_GE(mod.values[0], (tier.min[0] * 15) / 100);
+			EXPECT_LE(mod.values[0], ((tier.max[0] * 15) + 99) / 100);
+		}
 	}
+	EXPECT_GT(seen, 0);
+	EXPECT_FALSE(RollingLegacyModScales()) << "the guard ends with its scope";
 }
 
 TEST_F(Poe2ModifiersTest, GearSkillLevelsRaiseMatchingSkills)
@@ -280,6 +318,51 @@ TEST_F(Poe2ModifiersTest, GearSkillLevelsRaiseMatchingSkills)
 	EXPECT_EQ(player.poe2.skillLevel(WeaponSkill::Cleave), 8);
 	// The gem itself keeps its own level.
 	EXPECT_EQ(player.poe2.gemLevel(0), 5);
+}
+
+/**
+ * Plan step 14 (Curtis 2026-10-27): staves roll POE2's increased Spell Damage, and it raises every spell hit with the
+ * tree's spell damage. Quarterstaves, wands, sceptres, foci and amulets don't roll it (yet).
+ */
+TEST_F(Poe2ModifiersTest, StavesRollSpellDamage)
+{
+	const std::optional<uint8_t> index = FindModifierFamily("spell_damage");
+	ASSERT_TRUE(index.has_value());
+	const ModFamily &family = ModifierFamilies()[*index];
+	EXPECT_TRUE(family.enabled);
+	EXPECT_EQ(family.effect, ModEffect::SpellDamage);
+	EXPECT_EQ(family.slots, 1U << static_cast<uint32_t>(ModSlot::Staff));
+
+	const _item_indexes base = FindBase("Quick Pilgrim Staff");
+	ASSERT_NE(base, IDI_GOLD);
+	Item staff;
+	int percent = 0;
+	for (uint32_t seed = 1; seed <= 2000 && percent == 0; seed++) {
+		const Item item = MakeItem(base, seed, ITEM_QUALITY_RARE, 40);
+		for (const Poe2ItemMod &mod : Mods(item)) {
+			if (mod.family == *index + 1) {
+				staff = item;
+				percent = mod.values[0];
+			}
+		}
+	}
+	ASSERT_GT(percent, 0) << "a rare staff with increased Spell Damage";
+	EXPECT_EQ(staff._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::SpellDamage)], percent);
+	// Item level 40: tier 5 (40-49%) at best, tier 8 (12-19%) at worst.
+	EXPECT_GE(percent, 12);
+	EXPECT_LE(percent, 49);
+
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Sorcerer;
+	player.setCharacterLevel(40);
+	player._pBaseStr = player._pBaseMag = player._pBaseDex = player._pBaseVit = 250;
+	CalcPlrInv(player, false);
+	EXPECT_EQ(UniqueSpellDamagePercent(player, SpellID::Firebolt), 100);
+	player.InvBody[INVLOC_HAND_LEFT] = staff;
+	CalcPlrInv(player, false);
+	ASSERT_TRUE(player.InvBody[INVLOC_HAND_LEFT]._iStatFlag);
+	EXPECT_EQ(player.poe2.rule(UniqueRule::SpellDamage), percent);
+	EXPECT_EQ(UniqueSpellDamagePercent(player, SpellID::Firebolt), 100 + percent);
 }
 
 TEST_F(Poe2ModifiersTest, DivineOrbRerollsValuesButKeepsTheModifiers)

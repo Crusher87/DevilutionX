@@ -21,6 +21,7 @@
 #include "data/value_reader.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/experience.hpp"
 #include "sound_effect_enums.h"
 #include "tables/textdat.h"
 #include "utils/format.hpp"
@@ -390,6 +391,8 @@ const ClassAttributes &GetClassAttributes(HeroClass playerClass)
 void LoadPlayerDataFiles()
 {
 	ReloadExperienceData();
+	// POE2 Mashup: base experience by monster level, the level-gap rule and boss multipliers (POE2 mode only).
+	LoadPoe2ExperienceData();
 	LoadClassDat();
 	LoadClassesAttributes();
 }

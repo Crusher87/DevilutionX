@@ -9,7 +9,9 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
@@ -71,6 +73,10 @@ public:
 		ClearSpiritSkills();
 		gbIsPoe2 = false;
 		leveltype = DTYPE_TOWN;
+		currlevel = 0;
+		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+		// Clears the area and monster level tables some tests load.
+		LoadAreaLevels();
 		UnloadModArchives();
 	}
 
@@ -399,6 +405,120 @@ TEST_F(Poe2MinionGemsTest, BrokenIllusionsLeaveFrenzyRemnants)
 	EXPECT_EQ(player.poe2.frenzyCharges, 1);
 	EXPECT_EQ(FrenzyRemnantCount(), 0U);
 	EXPECT_EQ(illusion.poe2.minionLifeTicks, 19);
+}
+
+/** Hive 3 on Nightmare: area level 38, with the monster level tables loaded. */
+static void GoToAreaThirtyEight()
+{
+	LoadAreaLevels();
+	sgGameInitInfo.nDifficulty = DIFF_NIGHTMARE;
+	setlevel = false;
+	currlevel = 19;
+	leveltype = DTYPE_NEST;
+}
+
+TEST_F(Poe2MinionGemsTest, MinionsKeepUpWithMonsters)
+{
+	GoToAreaThirtyEight();
+	ASSERT_TRUE(HasMonsterLevelTable());
+	ASSERT_EQ(CurrentAreaLevel(), 38);
+	// A character of the area's level with the gem at the right level for them.
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(38);
+	const int gem = MaxGemLevelForCharacter(38);
+	Socket(PersistentSkill::SkeletalWarriors, gem);
+	const int level = MinionLevelForGemLevel(gem);
+	EXPECT_GE(level, 38);
+	Monster &warrior = PlaceMinion(0, { 41, 40 }, PersistentSkill::SkeletalWarriors);
+	// InitSkeletonMinion's blow, without the owner's minion damage (that applies at the hit now).
+	warrior.minDamage = static_cast<uint8_t>(2 + (level / 3) + gem);
+	warrior.maxDamage = static_cast<uint8_t>(5 + (level / 2) + (2 * gem));
+	EXPECT_EQ(Poe2MinionLevel(warrior), level);
+
+	// Its average blow is the table's hit at its level x its blow over its type's ref (held to 250%).
+	const int sum = warrior.minDamage + warrior.maxDamage;
+	const int hit10 = MinionHit10(MT_WSKELAX, level, sum);
+	EXPECT_EQ(hit10, MonsterLevelDamage10(level) * 2500 / 1000);
+	const int blow = ScaleMonsterHit(warrior, sum * 32);
+	EXPECT_NEAR(blow, hit10 * 64 / 10 * MinionDamagePercent(player) / 100, 64);
+
+	// 3-8 blows kill a white monster of the area.
+	const int64_t white = static_cast<int64_t>(MonsterLevelLife(38)) * 64;
+	const int64_t blows = (white + blow - 1) / blow;
+	EXPECT_GE(blows, 3);
+	EXPECT_LE(blows, 8);
+
+	// Its life is a white's at its level (x 100% for a Warrior).
+	EXPECT_EQ(MinionLifeRaw(level, 100), MonsterLevelLife(level) * 64);
+}
+
+TEST_F(Poe2MinionGemsTest, MinionDamagePassesTheOldByteCap)
+{
+	GoToAreaThirtyEight();
+	Socket(PersistentSkill::SkeletalWarriors, 10);
+	Monster &warrior = PlaceMinion(0, { 41, 40 }, PersistentSkill::SkeletalWarriors);
+	warrior.minDamage = 40;
+	warrior.maxDamage = 80;
+	// 120 x 64 x the table scale: far past what a byte held, and no wrap.
+	const int blow = ScaleMonsterHit(warrior, 255 * 64);
+	EXPECT_GT(blow, 255 * 64);
+	EXPECT_GT(ScaleMonsterHit(warrior, 255), 255);
+}
+
+TEST_F(Poe2MinionGemsTest, RevivedAndKingsDeadKeepTheirKindsRatio)
+{
+	GoToAreaThirtyEight();
+	Player &player = *MyPlayer;
+	// Socketed is enough for its level.
+	MyPlayer->poe2.skillSlots[0] = SkillSlot::ForPersistent(PersistentSkill::Revive);
+	MyPlayer->poe2.slotLevels[0] = 5;
+	Monster &zombie = Place(0, { 41, 40 }, 0, 100);
+	zombie.flags |= MFLAG_GOLEM;
+	zombie.goalVar3 = static_cast<int8_t>(MyPlayerId);
+	zombie.poe2.revived = true;
+	// A revived monster keeps its data damage, so its blow is the table's at Revive's minion level x its kind's ratio.
+	zombie.minDamage = zombie.data().minDamage;
+	zombie.maxDamage = zombie.data().maxDamage;
+	EXPECT_EQ(Poe2MinionLevel(zombie), MinionLevelForGemLevel(5));
+	const int sum = zombie.minDamage + zombie.maxDamage;
+	const int ref = MonsterTypeRow(MT_NZOMBIE).damageRef10;
+	ASSERT_GT(ref, 0);
+	const int64_t ratio = std::clamp<int64_t>(static_cast<int64_t>(sum) * 5000 / ref, 300, 2500);
+	EXPECT_EQ(MinionHit10(MT_NZOMBIE, MinionLevelForGemLevel(5), sum), static_cast<int>(MonsterLevelDamage10(MinionLevelForGemLevel(5)) * ratio / 1000));
+	EXPECT_NEAR(ScaleMonsterHit(zombie, sum * 32), MinionHit10(MT_NZOMBIE, MinionLevelForGemLevel(5), sum) * 64 / 10 * MinionDamagePercent(player) / 100, 64);
+
+	// The King's dead come from no gem: the area's level.
+	zombie.poe2.revived = false;
+	zombie.flags |= MFLAG_KINGS_DEAD;
+	EXPECT_EQ(Poe2MinionLevel(zombie), 38);
+}
+
+TEST_F(Poe2MinionGemsTest, LachdanansNoDamageMinionIsSafe)
+{
+	GoToAreaThirtyEight();
+	// Socketed is enough for its level.
+	MyPlayer->poe2.skillSlots[0] = SkillSlot::ForPersistent(PersistentSkill::Revive);
+	MyPlayer->poe2.slotLevels[0] = 5;
+	Monster &minion = Place(0, { 41, 40 }, 0, 100);
+	minion.flags |= MFLAG_GOLEM;
+	minion.goalVar3 = static_cast<int8_t>(MyPlayerId);
+	minion.poe2.revived = true;
+	minion.minDamage = 0;
+	minion.maxDamage = 0;
+	// Nothing to divide by: only the owner's minion damage.
+	EXPECT_EQ(ScaleMonsterHit(minion, 6400), 6400 * MinionDamagePercent(*MyPlayer) / 100);
+}
+
+TEST_F(Poe2MinionGemsTest, DiabloModeMinionsUnscaled)
+{
+	GoToAreaThirtyEight();
+	Socket(PersistentSkill::SkeletalWarriors, 10);
+	Monster &warrior = PlaceMinion(0, { 41, 40 }, PersistentSkill::SkeletalWarriors);
+	warrior.minDamage = 10;
+	warrior.maxDamage = 20;
+	gbIsPoe2 = false;
+	EXPECT_EQ(Poe2MinionLevel(warrior), 0);
+	EXPECT_EQ(ScaleMonsterHit(warrior, 1000), 1000);
 }
 
 } // namespace

@@ -265,8 +265,9 @@ struct Item {
 	uint8_t _iCurs = 0;
 	int _ivalue = 0;
 	int _iIvalue = 0;
-	uint8_t _iMinDam = 0;
-	uint8_t _iMaxDam = 0;
+	/** POE2 Mashup: 16 bits, for POE2-sized weapons; game saves keep 32 bits and the network 16 for the maximum. */
+	uint16_t _iMinDam = 0;
+	uint16_t _iMaxDam = 0;
 	int16_t _iAC = 0;
 	ItemSpecialEffect _iFlags = ItemSpecialEffect::None;
 	item_misc_id _iMiscId = IMISC_NONE;

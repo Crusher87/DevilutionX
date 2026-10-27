@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 #include "utils/fixed_point.hpp"
@@ -57,10 +58,20 @@ DefenseType ItemDefenseType(const Item &item);
 /** @brief The implicit of the item's base, all zero for bases without one. */
 BodyArmourImplicit GetBodyArmourImplicit(const Item &item);
 /**
- * @brief Splits an item's defense between armour, evasion and energy shield points (energy shield not yet
- * multiplied by EnergyShieldPerDefense). Armour gets the rounding remainder.
+ * @brief How a hybrid base divides its defence (base_meta.tsv's split column): the percent of each kind of its line
+ * but the last, which takes the rest. None (parts 0) divides it evenly, as items did before the bases took POE2's
+ * numbers.
  */
-void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield);
+struct DefenseSplit {
+	uint8_t parts = 0;
+	std::array<uint8_t, 2> percent {};
+};
+
+/**
+ * @brief Splits an item's defense between armour, evasion and energy shield points (energy shield not yet
+ * multiplied by EnergyShieldPerDefense), evenly or by the base's split. The first kind gets the rounding remainder.
+ */
+void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield, const DefenseSplit &split = {});
 /** @brief Armour, evasion and energy shield, energy shield as shown (already multiplied by EnergyShieldPerDefense). */
 struct DefensePoints {
 	int armour = 0;
@@ -139,5 +150,29 @@ int Poe2HitChance(int accuracy, int evasion);
  * 100, and none at all when that comes to 20% or less. Both values in the same unit.
  */
 int LightStunChance(int64_t damage, int64_t maxLife);
+
+/**
+ * @brief Whether a monster's attacks on the hero use POE2's accuracy against evasion: in POE2 mode, for monsters on the
+ * monster level tables (not the player's minions). Others keep Diablo's to-hit roll.
+ */
+bool UsesPoe2MonsterAccuracy(const Monster &monster);
+/**
+ * @brief A monster's Accuracy Rating: the monster level table's accuracy at its level times clamp(baseToHit / its type's
+ * to-hit ref, 30-250%) (plan v2 step 4, audit C7/N7).
+ * @param baseToHit Its data or unique to-hit plus the attack's own offset, without the Nightmare/Hell bonus (the area
+ * level carries the difficulty).
+ */
+int MonsterAccuracyRating(const Monster &monster, int baseToHit);
+/**
+ * @brief Chance in percent that a monster's attack hits the hero: POE2's accuracy against evasion, with the attack's
+ * accuracy cut by distance (AccuracyAtDistancePercent for a shot). No character level term and no floor but POE2's 5%.
+ */
+int MonsterHitChance(const Monster &monster, int baseToHit, int evasion, int distancePercent = 100);
+/**
+ * @brief The hero's chance to block a monster's blow (@p melee) or missile, before the cap. In POE2 neither the hero's
+ * nor the monster's level counts; Diablo keeps -2 x monster level on blows and -2 x the level gap on missiles.
+ * @param monster nullptr for a trap's missile.
+ */
+int BlockChanceAgainstMonster(const Player &player, const Monster *monster, bool melee);
 
 } // namespace devilution

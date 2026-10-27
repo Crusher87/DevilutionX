@@ -52,8 +52,10 @@
 #include "poe2/hit_trace.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_looks.hpp"
+#include "poe2/spell_damage.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/spirit_uses.hpp"
@@ -141,6 +143,15 @@ int ScaleSpellEffect(int base, int spellLevel)
 	}
 
 	return base;
+}
+
+/**
+ * @brief POE2 Mashup: the level a hero's wall, ring, Inferno and Guardian formulas read: the spell level in POE2
+ * (one spell damage rule, no character level in spells), the character level in Diablo.
+ */
+int SpellFormulaLevel(const Player &player, int spellLevel)
+{
+	return gbIsPoe2 ? spellLevel : player.getCharacterLevel();
 }
 
 int GenerateRndSum(int range, int iterations)
@@ -366,7 +377,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 
 	int dam;
 	if (t == MissileID::BoneSpirit) {
-		dam = (monster.hitPoints / 3).whole();
+		dam = BoneSpiritDamage(monster);
 	} else {
 		dam = RandomIntBetween(mindam, maxdam);
 	}
@@ -511,7 +522,8 @@ bool Plr2PlrMHit(const Player &player, Player &target, int mindam, int maxdam, i
 		blkper = GenerateRnd(100);
 	}
 
-	int blk = target.GetBlockChance() - (player.getCharacterLevel() * 2);
+	// POE2 Mashup: GetBlockChance has no level term, so the attacker's level doesn't count against it either.
+	int blk = target.GetBlockChance() - (gbIsPoe2 ? 0 : player.getCharacterLevel() * 2);
 	blk = std::clamp(blk, 0, 100);
 
 	int dam;
@@ -592,7 +604,8 @@ void SplashBoltHit(const Missile &missile, const Player &player, const Monster &
 		Monster *beside = FindMonsterAtPosition(target.position.tile + static_cast<Direction>(i));
 		if (beside == nullptr || beside == &target || beside->isPlayerMinion() || beside->hasNoLife())
 			continue;
-		MonsterMHit(player, *beside, minDamage * BoltSplashPercent / 100, maxDamage * BoltSplashPercent / 100, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
+		const int splash = skill == SkillSlot::ForSpell(SpellID::Firebolt) ? SpellSplashPercent(SpellID::Firebolt) : BoltSplashPercent;
+		MonsterMHit(player, *beside, minDamage * splash / 100, maxDamage * splash / 100, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
 	}
 }
 
@@ -618,7 +631,16 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 			            || (monster.flags & MFLAG_BERSERK) != 0                                  //  or the target is berserked
 			            ))) {
 				// then the missile can potentially hit this target
-				isMonsterHit = MonsterTrapHit(monster, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted);
+				int trapMin = minDamage;
+				int trapMax = maxDamage;
+				// POE2 Mashup: a monster's missile (not a trap's) is scaled to its level's table, like its hits on the
+				// hero. _misource may name a monster that has died since and whose slot was reused, as with the bytes.
+				if (!missile.IsTrap() && missile._micaster == TARGET_PLAYERS) {
+					const Monster &source = Monsters[missile._misource];
+					trapMin = ScaleMonsterHit(source, trapMin);
+					trapMax = ScaleMonsterHit(source, trapMax);
+				}
+				isMonsterHit = MonsterTrapHit(monster, trapMin, trapMax, missile._midist, missile._mitype, damageType, isDamageShifted);
 			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
 				HitTraceRefused(monster, "this projectile already pierced it");
 			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS)) {
@@ -660,7 +682,8 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 					isPlayerHit = Plr2PlrMHit(Players[missile._misource], *player, minDamage, maxDamage, missile._midist, missile._mitype, damageType, isDamageShifted, &blocked);
 			} else {
 				Monster &monster = Monsters[missile._misource];
-				isPlayerHit = PlayerMHit(*player, &monster, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, DeathReason::MonsterOrTrap, &blocked);
+				isPlayerHit = PlayerMHit(*player, &monster, missile._midist, minDamage, maxDamage, missile._mitype, damageType, isDamageShifted, DeathReason::MonsterOrTrap, &blocked,
+				    missile.position.start.ApproxDistance(player->position.tile));
 			}
 		} else {
 			const DeathReason deathReason = missile.sourceType() == MissileSource::Player ? DeathReason::Player : DeathReason::MonsterOrTrap;
@@ -880,8 +903,10 @@ bool GuardianTryFireAt(Missile &missile, Point target)
 		return false;
 
 	const Player &player = Players[missile._misource];
-	int dmg = GenerateRnd(10) + (player.getCharacterLevel() / 2) + 1;
-	dmg = ScaleSpellEffect(dmg, missile._mispllvl);
+	int dmg = GenerateRnd(10) + (SpellFormulaLevel(player, missile._mispllvl) / 2) + 1;
+	// POE2 Mashup: no 12.5% a spell level; the gem curve grows it.
+	if (!gbIsPoe2)
+		dmg = ScaleSpellEffect(dmg, missile._mispllvl);
 
 	const Direction dir = GetDirection(position, target);
 	AddMissile(position, target, dir, MissileID::Firebolt, TARGET_MONSTERS, missile._misource, dmg, missile.sourcePlayer()->GetSpellLevel(SpellID::Guardian), &missile);
@@ -1037,6 +1062,40 @@ DamageRange GetDamageAmt(SpellID spell, int spellLevel)
 	assert(spell >= SpellID::FIRST && spell <= SpellID::LAST);
 
 	const Player &myPlayer = *MyPlayer;
+
+	if (gbIsPoe2) {
+		// POE2 Mashup: one spell damage rule, so the damage shown is the spell base times the spell's percent.
+		switch (spell) {
+		case SpellID::Firebolt:
+		case SpellID::HolyBolt:
+		case SpellID::Lightning:
+		case SpellID::ChargedBolt:
+		case SpellID::Flash:
+		case SpellID::Fireball:
+		case SpellID::RuneOfFire:
+		case SpellID::Elemental:
+		case SpellID::ChainLightning:
+		case SpellID::FlameWave:
+		case SpellID::Immolation:
+		case SpellID::RuneOfImmolation:
+		case SpellID::Nova:
+		case SpellID::RuneOfNova:
+		case SpellID::Apocalypse:
+		case SpellID::BloodStar:
+			return Poe2SpellDamageRange(myPlayer, spell, spellLevel);
+		case SpellID::FireWall:
+		case SpellID::LightningWall:
+		case SpellID::RingOfFire:
+		case SpellID::RuneOfLight:
+			return { (2 * spellLevel) + 4, (2 * spellLevel) + 40 };
+		case SpellID::Guardian:
+			return { (spellLevel / 2) + 1, (spellLevel / 2) + 10 };
+		case SpellID::Inferno:
+			return { 3, (spellLevel + 4) + ((spellLevel + 4) / 2) };
+		default:
+			break;
+		}
+	}
 
 	switch (spell) {
 	case SpellID::Firebolt: {
@@ -1221,7 +1280,7 @@ bool MonsterTrapHit(Monster &monster, int mindam, int maxdam, int dist, MissileI
 	return true;
 }
 
-bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, DeathReason deathReason, bool *blocked)
+bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, MissileID mtype, DamageType damageType, bool shift, DeathReason deathReason, bool *blocked, int shotTiles)
 {
 	*blocked = false;
 
@@ -1252,7 +1311,18 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	// POE2 Mashup: the Maiden's Road pact, with a staff: each monster's first blow can't be evaded and ignores armour.
 	const bool firstBlow = monster != nullptr && TakeFirstBlow(*monster, player);
 	int hper = 40;
-	if (missileData.isArrow()) {
+	const bool poe2Accuracy = monster != nullptr && UsesPoe2MonsterAccuracy(*monster);
+	if (poe2Accuracy && missileData.isArrow()) {
+		// POE2 Mashup: a monster's arrow: its accuracy against evasion, cut by the tiles flown from where it was loosed
+		// (plan v2 step 4, audit C7); no level gap, no Nightmare/Hell to-hit, no floor but 5%.
+		const int tac = firstBlow ? 0 : HitDefense(player);
+		const int tiles = shotTiles >= 0 ? shotTiles : monster->position.tile.ApproxDistance(player.position.tile);
+		const int baseToHit = static_cast<int>(monster->toHit(sgGameInitInfo.nDifficulty)) - MonsterDifficultyToHitBonus(sgGameInitInfo.nDifficulty);
+		hper = MonsterHitChance(*monster, baseToHit, tac, AccuracyAtDistancePercent(tiles));
+	} else if (poe2Accuracy) {
+		// POE2 Mashup: a monster's spell always hits, unless a unique lets evasion avoid spells (decision 39a).
+		hper = firstBlow ? 100 : 100 - SpellEvasion(player);
+	} else if (missileData.isArrow()) {
 		const int tac = firstBlow ? 0 : HitDefense(player);
 		if (monster != nullptr) {
 			hper = monster->toHit(sgGameInitInfo.nDifficulty)
@@ -1269,14 +1339,16 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 			hper -= SpellEvasion(player);
 	}
 
-	int minhit = 10;
-	if (currlevel == 14)
-		minhit = 20;
-	if (currlevel == 15)
-		minhit = 25;
-	if (currlevel == 16)
-		minhit = 30;
-	hper = std::max(hper, minhit);
+	if (!poe2Accuracy) {
+		int minhit = 10;
+		if (currlevel == 14)
+			minhit = 20;
+		if (currlevel == 15)
+			minhit = 25;
+		if (currlevel == 16)
+			minhit = 30;
+		hper = std::max(hper, minhit);
+	}
 
 	int blk = 100;
 	if ((player._pmode == PM_STAND || player._pmode == PM_ATTACK) && player._pBlockFlag) {
@@ -1288,9 +1360,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (mtype == MissileID::AcidPuddle)
 		blk = 100;
 
-	int blkper = player.GetBlockChance(false);
-	if (monster != nullptr)
-		blkper -= (monster->level(sgGameInitInfo.nDifficulty) - player.getCharacterLevel()) * 2;
+	int blkper = BlockChanceAgainstMonster(player, monster, false);
 	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
 	blkper = std::clamp(blkper, 0, player.GetMaxBlockChance(gbIsPoe2));
 
@@ -1325,12 +1395,17 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 			if (monster == nullptr)
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::HalfTrapDamage))
 					dam /= 2;
+			// POE2 Mashup: a monster's shot or spell is scaled to its level's table (traps stay Diablo-scale).
+			if (monster != nullptr)
+				dam = ScaleMonsterHit(*monster, dam);
 			dam += player._pIGetHit * 64;
 		} else {
 			dam = RandomIntBetween(mind, maxd);
 			if (monster == nullptr)
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::HalfTrapDamage))
 					dam /= 2;
+			if (monster != nullptr)
+				dam = ScaleMonsterHit(*monster, dam);
 			dam += player._pIGetHit;
 		}
 
@@ -1451,7 +1526,7 @@ void AddRuneOfFire(Missile &missile, AddMissileParameter &parameter)
 
 void AddRuneOfLight(Missile &missile, AddMissileParameter &parameter)
 {
-	const int lvl = (missile.sourceType() == MissileSource::Player) ? missile.sourcePlayer()->getCharacterLevel() : 0;
+	const int lvl = (missile.sourceType() == MissileSource::Player) ? SpellFormulaLevel(*missile.sourcePlayer(), missile._mispllvl) : 0;
 	const int dmg = 16 * (GenerateRndSum(10, 2) + lvl + 2);
 	missile._midam = dmg;
 	AddRune(missile, parameter.dst, MissileID::LightningWall);
@@ -1800,8 +1875,13 @@ void AddLightningWall(Missile &missile, AddMissileParameter &parameter)
 void AddBigExplosion(Missile &missile, AddMissileParameter & /*parameter*/)
 {
 	if (missile.sourceType() == MissileSource::Player) {
-		int dmg = (2 * (missile.sourcePlayer()->getCharacterLevel() + GenerateRndSum(10, 2))) + 4;
-		dmg = ScaleSpellEffect(dmg, missile._mispllvl);
+		int dmg;
+		if (gbIsPoe2) {
+			dmg = RollPoe2SpellHit(*missile.sourcePlayer(), SpellID::RuneOfFire, missile._mispllvl);
+		} else {
+			dmg = (2 * (missile.sourcePlayer()->getCharacterLevel() + GenerateRndSum(10, 2))) + 4;
+			dmg = ScaleSpellEffect(dmg, missile._mispllvl);
+		}
 
 		missile._midam = dmg;
 
@@ -2080,7 +2160,10 @@ void AddFirebolt(Missile &missile, AddMissileParameter &parameter)
 		switch (missile.sourceType()) {
 		case MissileSource::Player: {
 			const Player &player = *missile.sourcePlayer();
-			missile._midam = GenerateRnd(10) + (player._pMagic / 8) + missile._mispllvl + 1;
+			if (gbIsPoe2)
+				missile._midam = RollPoe2SpellHit(player, SpellID::Firebolt, missile._mispllvl);
+			else
+				missile._midam = GenerateRnd(10) + (player._pMagic / 8) + missile._mispllvl + 1;
 		} break;
 
 		case MissileSource::Monster:
@@ -2154,7 +2237,10 @@ void AddNovaBall(Missile &missile, AddMissileParameter &parameter)
 void AddFireWall(Missile &missile, AddMissileParameter &parameter)
 {
 	missile._midam = GenerateRndSum(10, 2) + 2;
-	missile._midam += missile._misource >= 0 ? Players[missile._misource].getCharacterLevel() : currlevel; // BUGFIX: missing parenthesis around ternary (fixed)
+	if (UsesPoe2SpellRule(missile))
+		missile._midam += missile._mispllvl;
+	else
+		missile._midam += missile._misource >= 0 ? Players[missile._misource].getCharacterLevel() : currlevel; // BUGFIX: missing parenthesis around ternary (fixed)
 	missile._midam <<= 3;
 	UpdateMissileVelocity(missile, parameter.dst, 16);
 	const int i = missile._mispllvl;
@@ -2178,8 +2264,12 @@ void AddFireball(Missile &missile, AddMissileParameter &parameter)
 		sp += std::min(missile._mispllvl * 2, 34);
 		const Player &player = Players[missile._misource];
 
-		const int dmg = (2 * (player.getCharacterLevel() + GenerateRndSum(10, 2))) + 4;
-		missile._midam = ScaleSpellEffect(dmg, missile._mispllvl);
+		if (gbIsPoe2) {
+			missile._midam = RollPoe2SpellHit(player, SpellID::Fireball, missile._mispllvl);
+		} else {
+			const int dmg = (2 * (player.getCharacterLevel() + GenerateRndSum(10, 2))) + 4;
+			missile._midam = ScaleSpellEffect(dmg, missile._mispllvl);
+		}
 	}
 	UpdateMissileVelocity(missile, dst, sp);
 	missile.setDirection(GetDirection16(missile.position.start, dst));
@@ -2368,6 +2458,10 @@ void AddFlashBottom(Missile &missile, AddMissileParameter & /*parameter*/)
 	switch (missile.sourceType()) {
 	case MissileSource::Player: {
 		const Player &player = *missile.sourcePlayer();
+		if (gbIsPoe2) {
+			missile._midam = RollPoe2SpellHit(player, SpellID::Flash, missile._mispllvl);
+			break;
+		}
 		const int dmg = GenerateRndSum(20, player.getCharacterLevel() + 1) + player.getCharacterLevel() + 1;
 		missile._midam = ScaleSpellEffect(dmg, missile._mispllvl);
 		missile._midam += missile._midam / 2;
@@ -2386,7 +2480,9 @@ void AddFlashBottom(Missile &missile, AddMissileParameter & /*parameter*/)
 void AddFlashTop(Missile &missile, AddMissileParameter & /*parameter*/)
 {
 	if (missile._micaster == TARGET_MONSTERS) {
-		if (!missile.IsTrap()) {
+		if (!missile.IsTrap() && gbIsPoe2) {
+			missile._midam = RollPoe2SpellHit(Players[missile._misource], SpellID::Flash, missile._mispllvl);
+		} else if (!missile.IsTrap()) {
 			int dmg = Players[missile._misource].getCharacterLevel() + 1;
 			dmg += GenerateRndSum(20, dmg);
 			missile._midam = ScaleSpellEffect(dmg, missile._mispllvl);
@@ -2417,7 +2513,10 @@ void AddManaShield(Missile &missile, AddMissileParameter &parameter)
 
 void AddFlameWave(Missile &missile, AddMissileParameter &parameter)
 {
-	missile._midam = GenerateRnd(10) + Players[missile._misource].getCharacterLevel() + 1;
+	if (gbIsPoe2)
+		missile._midam = RollPoe2SpellHit(Players[missile._misource], SpellID::FlameWave, missile._mispllvl);
+	else
+		missile._midam = GenerateRnd(10) + Players[missile._misource].getCharacterLevel() + 1;
 	UpdateMissileVelocity(missile, parameter.dst, 16);
 	missile.duration = 255;
 
@@ -2560,7 +2659,10 @@ void AddGenericMagicMissile(Missile &missile, AddMissileParameter &parameter)
 		switch (missile.sourceType()) {
 		case MissileSource::Player: {
 			const Player &player = *missile.sourcePlayer();
-			missile._midam = 3 * missile._mispllvl - (player._pMagic / 8) + (player._pMagic / 2);
+			if (gbIsPoe2 && missile._mitype == MissileID::BloodStar)
+				missile._midam = RollPoe2SpellHit(player, SpellID::BloodStar, missile._mispllvl);
+			else
+				missile._midam = 3 * missile._mispllvl - (player._pMagic / 8) + (player._pMagic / 2);
 			break;
 		}
 		case MissileSource::Monster:
@@ -2745,8 +2847,12 @@ void AddElemental(Missile &missile, AddMissileParameter &parameter)
 
 	const Player &player = Players[missile._misource];
 
-	const int dmg = (2 * (player.getCharacterLevel() + GenerateRndSum(10, 2))) + 4;
-	missile._midam = ScaleSpellEffect(dmg, missile._mispllvl) / 2;
+	if (gbIsPoe2) {
+		missile._midam = RollPoe2SpellHit(player, SpellID::Elemental, missile._mispllvl);
+	} else {
+		const int dmg = (2 * (player.getCharacterLevel() + GenerateRndSum(10, 2))) + 4;
+		missile._midam = ScaleSpellEffect(dmg, missile._mispllvl) / 2;
+	}
 
 	UpdateMissileVelocity(missile, dst, 16);
 	missile.setDirection(GetDirection(missile.position.start, dst));
@@ -2817,7 +2923,9 @@ void AddNova(Missile &missile, AddMissileParameter &parameter)
 	missile.var1 = parameter.dst.x;
 	missile.var2 = parameter.dst.y;
 
-	if (!missile.IsTrap()) {
+	if (!missile.IsTrap() && gbIsPoe2) {
+		missile._midam = RollPoe2SpellHit(Players[missile._misource], missile._mitype == MissileID::Immolation ? SpellID::Immolation : SpellID::Nova, missile._mispllvl);
+	} else if (!missile.IsTrap()) {
 		const Player &player = Players[missile._misource];
 		const int dmg = GenerateRndSum(6, 5) + player.getCharacterLevel() + 5;
 		missile._midam = ScaleSpellEffect(dmg / 2, missile._mispllvl);
@@ -2907,8 +3015,12 @@ void AddApocalypse(Missile &missile, AddMissileParameter & /*parameter*/)
 	missile.var4 = std::max(missile.position.start.x - 8, 1);
 	missile.var5 = std::min(missile.position.start.x + 8, MAXDUNX - 1);
 	missile.var6 = missile.var4;
-	const int playerLevel = player.getCharacterLevel();
-	missile._midam = GenerateRndSum(6, playerLevel) + playerLevel;
+	if (gbIsPoe2) {
+		missile._midam = RollPoe2SpellHit(player, SpellID::Apocalypse, missile._mispllvl);
+	} else {
+		const int playerLevel = player.getCharacterLevel();
+		missile._midam = GenerateRndSum(6, playerLevel) + playerLevel;
+	}
 	missile.duration = 255;
 }
 
@@ -2922,7 +3034,7 @@ void AddInferno(Missile &missile, AddMissileParameter &parameter)
 	missile.duration = missile.var2 + 20;
 	missile._mlid = AddLight(missile.position.start, 1);
 	if (missile._micaster == TARGET_MONSTERS) {
-		const int i = GenerateRnd(Players[missile._misource].getCharacterLevel()) + GenerateRnd(2);
+		const int i = GenerateRnd(SpellFormulaLevel(Players[missile._misource], missile._mispllvl)) + GenerateRnd(2);
 		missile._midam = 8 * i + 16 + ((8 * i + 16) / 2);
 	} else {
 		const Monster &monster = Monsters[missile._misource];
@@ -2946,7 +3058,13 @@ void AddChargedBolt(Missile &missile, AddMissileParameter &parameter)
 {
 	WorldTilePosition dst = parameter.dst;
 	missile._mirnd = GenerateRnd(15) + 1;
-	missile._midam = (missile._micaster == TARGET_MONSTERS) ? (GenerateRnd(Players[missile._misource]._pMagic / 4) + 1) : 15;
+	if (UsesPoe2SpellRule(missile)) {
+		// POE2 Mashup: a bolt that came with its damage (Spark's sparks, Fist of the Heavens' bolts, a minion's shot) keeps it.
+		if (missile._midam <= 0)
+			missile._midam = RollPoe2SpellHit(*missile.sourcePlayer(), SpellID::ChargedBolt, missile._mispllvl);
+	} else {
+		missile._midam = (missile._micaster == TARGET_MONSTERS) ? (GenerateRnd(Players[missile._misource]._pMagic / 4) + 1) : 15;
+	}
 
 	if (missile.position.start == dst) {
 		dst += parameter.midir;
@@ -2979,7 +3097,10 @@ void AddHolyBolt(Missile &missile, AddMissileParameter &parameter)
 	missile.var1 = missile.position.start.x;
 	missile.var2 = missile.position.start.y;
 	missile._mlid = AddLight(missile.position.start, 8);
-	missile._midam = GenerateRnd(10) + player.getCharacterLevel() + 9;
+	if (UsesPoe2SpellRule(missile) && missile._mitype == MissileID::HolyBolt)
+		missile._midam = RollPoe2SpellHit(player, SpellID::HolyBolt, missile._mispllvl);
+	else
+		missile._midam = GenerateRnd(10) + player.getCharacterLevel() + 9;
 }
 
 void AddResurrect(Missile &missile, AddMissileParameter & /*parameter*/)
@@ -3505,7 +3626,7 @@ void ProcessRingOfFire(Missile &missile)
 {
 	missile._miDelFlag = true;
 	int8_t src = missile._misource;
-	const uint8_t lvl = missile._micaster == TARGET_MONSTERS ? Players[src].getCharacterLevel() : currlevel;
+	const int lvl = missile._micaster == TARGET_MONSTERS ? SpellFormulaLevel(Players[src], missile._mispllvl) : currlevel;
 	int dmg = 16 * (GenerateRndSum(10, 2) + lvl + 2) / 2;
 
 	if (missile.limitReached)
@@ -3627,6 +3748,13 @@ void ProcessLightningControl(Missile &missile)
 	if (missile.IsTrap()) {
 		// BUGFIX: damage of missile should be encoded in missile struct; monster can be dead before missile arrives.
 		dam = GenerateRnd(currlevel) + 2 * currlevel;
+	} else if (missile._micaster == TARGET_MONSTERS && UsesPoe2SpellRule(missile) && !missile.poe2.minionShot) {
+		// POE2 Mashup: Chain Lightning's bolts carry their hit; Lightning rolls its hit each step, as Diablo does.
+		dam = (missile._midam > 0 ? missile._midam : RollPoe2SpellHit(Players[missile._misource], SpellID::Lightning, missile._mispllvl)) << 6;
+	} else if (missile._micaster == TARGET_MONSTERS && missile.poe2.minionShot) {
+		// POE2 Mashup: a minion's lightning carries its hit on the minion tables (MinionShotDamage, plan v2 step 11),
+		// not its owner's character level.
+		dam = std::max<int>(missile._midam, 1) << 6;
 	} else if (missile._micaster == TARGET_MONSTERS) {
 		// BUGFIX: damage of missile should be encoded in missile struct; player can be dead/have left the game before missile arrives.
 		dam = (GenerateRnd(2) + GenerateRnd(Players[missile._misource].getCharacterLevel()) + 2) << 6;
@@ -3855,13 +3983,24 @@ void ProcessChainLightning(Missile &missile)
 	Point position = missile.position.tile;
 	const Point dst { missile.var1, missile.var2 };
 	Direction dir = GetDirection(position, dst);
-	AddMissile(position, dst, dir, MissileID::LightningControl, TARGET_MONSTERS, id, 1, missile._mispllvl);
+	// POE2 Mashup: each bolt carries a Chain Lightning hit and the cast's gem curve and supports.
+	const bool poe2 = UsesPoe2SpellRule(missile);
+	const auto fire = [&](Point target) {
+		const int damage = poe2 ? RollPoe2SpellHit(Players[id], SpellID::ChainLightning, missile._mispllvl) : 1;
+		Missile *bolt = AddMissile(position, target, dir, MissileID::LightningControl, TARGET_MONSTERS, id, damage, missile._mispllvl);
+		if (poe2 && bolt != nullptr) {
+			bolt->poe2.damagePercent = missile.poe2.damagePercent;
+			bolt->poe2.skillKind = missile.poe2.skillKind;
+			bolt->poe2.skillId = missile.poe2.skillId;
+		}
+	};
+	fire(dst);
 	const int rad = std::min<int>(missile._mispllvl + 3, MaxCrawlRadius);
 	Crawl(1, rad, [&](Displacement displacement) {
 		const Point target = position + displacement;
 		if (InDungeonBounds(target) && dMonster[target.x][target.y] > 0) {
 			dir = GetDirection(position, target);
-			AddMissile(position, target, dir, MissileID::LightningControl, TARGET_MONSTERS, id, 1, missile._mispllvl);
+			fire(target);
 		}
 		return false;
 	});
@@ -4088,7 +4227,7 @@ void ProcessWallControl(Missile &missile)
 		break;
 	case MissileID::LightningWallControl:
 		type = MissileID::LightningWall;
-		lvl = !missile.IsTrap() ? Players[sourceIdx].getCharacterLevel() : 0;
+		lvl = !missile.IsTrap() ? SpellFormulaLevel(Players[sourceIdx], missile._mispllvl) : 0;
 		dmg = 16 * (GenerateRndSum(10, 2) + lvl + 2);
 		break;
 	default:
@@ -4230,7 +4369,7 @@ void ProcessRage(Missile &missile)
 	RedrawEverything();
 	player.Say(HeroSpeech::HeavyBreathing);
 
-	if (missile._miDelFlag)
+	if (missile._miDelFlag && missile._midam > 0)
 		ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromInt(missile._midam), 1); // Prevent penalty from killing the player
 }
 

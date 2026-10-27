@@ -31,6 +31,7 @@ set(tests
   multi_logging_test
   pack_test
   poe2_admin_tools_test
+  poe2_area_levels_test
   poe2_attributes_test
   poe2_bare_fists_test
   poe2_breakables_test
@@ -48,11 +49,14 @@ set(tests
   poe2_level_exits_test
   poe2_loot_filter_test
   poe2_loot_test
+  poe2_vendor_items_test
+  poe2_item_levels_test
   poe2_modifiers_test
   poe2_crafting_test
   primitive_render_test
   poe2_economy_test
   poe2_endgame_test
+  poe2_monster_levels_test
   poe2_monster_mods_test
   poe2_passive_tree_test
   poe2_weapon_swap_test
@@ -62,6 +66,7 @@ set(tests
   poe2_regen_test
   poe2_skill_gems_test
   poe2_skill_resources_test
+  poe2_spell_damage_test
   poe2_table_skills_test
   poe2_support_table_test
   poe2_spirit_skills_test
@@ -79,6 +84,7 @@ set(tests
   poe2_weather_test
   poe2_uniques_test
   poe2_waystones_test
+  poe2_experience_test
   poe2_weapon_skills_test
   player_test
   quests_test

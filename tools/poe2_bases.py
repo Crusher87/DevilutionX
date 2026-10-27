@@ -13,6 +13,12 @@ Rows are matched by the id in the first column, so running it again updates them
 never moves a row: saved items refer to bases by their row. The Diablo bases of those classes stop
 dropping (old items keep working), and each new base takes the unique type of the nearest Diablo
 base of its kind, so Diablo's uniques keep dropping until the bundle's own uniques replace them.
+
+Levels, damage and defence are POE2's own numbers (harder monsters plan, step 10b): drop levels are
+area levels, weapons hit for the bundle's damage, and a base's defence is its armour plus evasion
+plus a third of its energy shield (the game shows defence points as three energy shield each). The
+body armours, which have no id, are matched by name and take POE2's numbers from
+research/poe2-body-armours.md. base_meta.tsv's split column says how a hybrid's defence divides.
 """
 
 import json
@@ -201,15 +207,46 @@ DEFENSE_LINES = {
 	'armour_es': 'ArmourEnergyShield', 'evasion_es': 'EvasionEnergyShield', 'tri': 'All', 'caster_defence': 'EnergyShield',
 }
 
-# Diablo's levels run about a third of POE2's, the way the body armour bases were placed.
-LEVEL_SCALE = 0.36
+# Drop levels are POE2 area levels.
+LEVEL_SCALE = 1
+# The scale the levels had before, which still picks the Diablo unique type a base carries: saved uniques find
+# themselves by their base's unique type, so it must never change.
+UNIQUE_TYPE_LEVEL_SCALE = 0.36
 REQUIREMENT_SCALE = 0.55
-DEFENSE_SCALE = 0.13
-# Energy shield counts about 2.9 times its number, the bundle's armour to energy shield ratio.
-ENERGY_SHIELD_WEIGHT = 2.9
-# A weapon's average damage: a quarter of the bundle's plus 2.5, spread wider like Diablo's weapons.
-DAMAGE_SCALE = 0.25
-DAMAGE_BASE = 2.5
+# One defence point is one armour, one evasion or three energy shield (EnergyShieldPerDefense).
+ENERGY_SHIELD_PER_DEFENSE = 3
+# A weapon hits for the bundle's damage.
+DAMAGE_SCALE = 1
+DAMAGE_BASE = 0
+# Act 1 shortfall fix (harder monsters plan step 14, Curtis 2026-10-27): the first quarterstaves and bows, the only ones
+# a hero uses up to about level 11 (the Ash Staff and Short Bow families, drop level 1), hit harder than the bundle's,
+# in percent of its damage. The step-13 fight check found the Monk and the Rogue could not clear Act 1 packs with them.
+EARLY_WEAPON_DAMAGE_PERCENT = {'quarterstaff': 160, 'bow': 140}
+EARLY_WEAPON_MAX_DROP_LEVEL = 1
+
+# POE2's body armours (research/poe2-body-armours.md, the normal tier): name -> (level, armour, evasion, energy shield).
+# The game's names for Chain Mail and Scale Mail differ, since Diablo has bases of those names.
+BODY_ARMOURS = {
+	'Rusted Cuirass': (1, 45, 0, 0), 'Iron Cuirass': (11, 115, 0, 0), 'Maraketh Cuirass': (20, 178, 0, 0),
+	'Full Plate': (33, 270, 0, 0), 'Juggernaut Plate': (45, 355, 0, 0), 'Champion Cuirass': (58, 446, 0, 0),
+	'Conqueror Plate': (68, 496, 0, 0),
+	'Leather Vest': (1, 0, 30, 0), 'Pathfinder Coat': (11, 0, 96, 0), 'Rhoahide Coat': (22, 0, 168, 0),
+	"Scout's Vest": (33, 0, 240, 0), 'Corsair Vest': (45, 0, 320, 0), 'Hardleather Coat': (56, 0, 392, 0),
+	'Armoured Vest': (73, 0, 451, 0),
+	'Tattered Robe': (1, 0, 0, 28), "Hexer's Robe": (11, 0, 0, 45), 'Silk Robe': (22, 0, 0, 64),
+	'Votive Raiment': (33, 0, 0, 83), 'Elementalist Robe': (45, 0, 0, 103), 'Plated Raiment': (58, 0, 0, 126),
+	'Enlightened Robe': (68, 0, 0, 138),
+	'Chain Mail Vest': (1, 25, 16, 0), 'Rogue Armour': (11, 63, 53, 0), 'Cloaked Mail': (26, 121, 107, 0),
+	'Scale Armour': (37, 164, 147, 0), 'Knight Armour': (45, 195, 176, 0), 'Gladiator Armour': (58, 245, 223, 0),
+	'Heroic Armour': (65, 273, 248, 0),
+	'Pilgrim Vestments': (1, 25, 0, 16), 'Pelt Mantle': (10, 59, 0, 24), 'Mail Vestments': (16, 83, 0, 30),
+	'Shaman Mantle': (28, 129, 0, 41), 'Cleric Vestments': (45, 195, 0, 57), 'Revered Vestments': (65, 273, 0, 76),
+	'Corvus Mantle': (68, 273, 0, 76),
+	'Hermit Garb': (1, 0, 16, 16), 'Waxed Jacket': (11, 0, 53, 25), 'Marabout Garb': (16, 0, 71, 30),
+	'Wayfarer Jacket': (28, 0, 114, 41), "Scalper's Jacket": (39, 0, 154, 51), 'Monastic Garb': (56, 0, 216, 67),
+	'Devout Garb': (68, 0, 248, 76),
+	'Grand Regalia': (65, 182, 165, 50),
+}
 
 HEADER = ['id', 'dropRate', 'class', 'equipType', 'cursorGraphic', 'itemType', 'uniqueBaseItem', 'name', 'shortName',
           'minMonsterLevel', 'durability', 'minDamage', 'maxDamage', 'minArmor', 'maxArmor', 'minStrength', 'minMagic',
@@ -218,6 +255,10 @@ HEADER = ['id', 'dropRate', 'class', 'equipType', 'cursorGraphic', 'itemType', '
 
 def d1_level(drop_level):
 	return max(1, round(drop_level * LEVEL_SCALE))
+
+
+def unique_type_level(drop_level):
+	return max(1, round(drop_level * UNIQUE_TYPE_LEVEL_SCALE))
 
 
 def unique_source(row):
@@ -232,10 +273,14 @@ def unique_source(row):
 	return item_type
 
 
-def damage(stats):
-	avg = (stats['physical_damage_min'] + stats['physical_damage_max']) / 2 * DAMAGE_SCALE + DAMAGE_BASE
-	lo = max(1, round(avg * 0.6))
-	return lo, max(lo + 1, round(avg * 1.4))
+def damage(stats, percent=100):
+	lo = max(1, round((stats['physical_damage_min'] * DAMAGE_SCALE + DAMAGE_BASE) * percent / 100))
+	return lo, max(lo + 1, round((stats['physical_damage_max'] * DAMAGE_SCALE + DAMAGE_BASE) * percent / 100))
+
+
+def damage_percent(cls, drop_level):
+	"""The share of the bundle's damage a weapon base hits for: more for the early staves and bows (step 14)."""
+	return EARLY_WEAPON_DAMAGE_PERCENT.get(cls, 100) if drop_level <= EARLY_WEAPON_MAX_DROP_LEVEL else 100
 
 
 def caster_damage(spell_power, staff):
@@ -246,11 +291,33 @@ def caster_damage(spell_power, staff):
 	return lo, max(lo + 2, round(4 + spell_power * 0.2))
 
 
+def defense_points(armour, evasion, energy_shield):
+	"""Each kind of defence in defence points (energy shield in thirds), and their total, which every base rolls exactly."""
+	points = (armour, evasion, energy_shield / ENERGY_SHIELD_PER_DEFENSE)
+	return points, max(1, round(sum(points)))
+
+
 def defense(stats):
-	total = stats.get('armour', 0) + stats.get('evasion', 0) + stats.get('energy_shield', 0) * ENERGY_SHIELD_WEIGHT
-	ac = total * DEFENSE_SCALE
-	lo = max(1, round(ac * 0.9))
-	return lo, max(lo, round(ac * 1.1))
+	_, total = defense_points(stats.get('armour', 0), stats.get('evasion', 0), stats.get('energy_shield', 0))
+	return total, total
+
+
+def defense_split(line, armour, evasion, energy_shield):
+	"""How a hybrid divides its defence: the percent of each kind of its line but the last, which takes the rest."""
+	points, _ = defense_points(armour, evasion, energy_shield)
+	total = sum(points)
+	kinds = {'ArmourEvasion': (0,), 'ArmourEnergyShield': (0,), 'EvasionEnergyShield': (1,), 'All': (0, 1)}.get(line)
+	if kinds is None or total <= 0:
+		return ''
+	return '/'.join(str(round(100 * points[kind] / total)) for kind in kinds)
+
+
+BODY_ARMOUR_LINES = {
+	(True, False, False): ('armour', 'Armour'), (False, True, False): ('evasion', 'Evasion'),
+	(False, False, True): ('energy_shield', 'EnergyShield'), (True, True, False): ('armour_evasion', 'ArmourEvasion'),
+	(True, False, True): ('armour_es', 'ArmourEnergyShield'), (False, True, True): ('evasion_es', 'EvasionEnergyShield'),
+	(True, True, True): ('tri', 'All'),
+}
 
 
 def speed_implicit(base, balanced, key, word):
@@ -320,12 +387,13 @@ def main():
 
 		unique = 'NONE'
 		if unique_kind and unique_kind in unique_types:
-			unique = min(unique_types[unique_kind], key=lambda t: (abs(t[0] - level), t[0]))[1]
+			unique_level = level if is_jewellery else unique_type_level(b['drop_level'])
+			unique = min(unique_types[unique_kind], key=lambda t: (abs(t[0] - unique_level), t[0]))[1]
 
 		min_dam = max_dam = min_ac = max_ac = 0
 		implicits = []
 		if 'physical_damage_min' in stats:
-			min_dam, max_dam = damage(stats)
+			min_dam, max_dam = damage(stats, damage_percent(cls, b['drop_level']))
 			other = balanced.get((cls, tier))
 			if other is not None and other is not b:
 				implicits.append(speed_implicit(stats['attacks_per_second'], other['base_stats']['attacks_per_second'], 'attacks_per_second', 'Attack Speed'))
@@ -362,9 +430,10 @@ def main():
 			rows.append(row)
 
 		defense_line = DEFENSE_LINES.get(b.get('design_identity', ''), '') if min_ac else ''
+		split = defense_split(defense_line, stats.get('armour', 0), stats.get('evasion', 0), stats.get('energy_shield', 0)) if min_ac else ''
 		meta_rows.append([
 			name, cls, POE2_AMULET_IDENTITIES.get(name, b.get('design_identity', '')), defense_line, quality if cls != 'focus' else 'defence',
-			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits),
+			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits), split,
 		])
 
 	for base_id, name, level in POE2_EXTRA_AMULETS:
@@ -381,13 +450,28 @@ def main():
 			by_id[row[0]] = len(rows)
 			rows.append(row)
 		effect, lo, hi, text = POE2_AMULET_IMPLICITS[name]
-		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}'])
+		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', ''])
+
+	# The body armours keep their rows, art, durability, requirements and price; they take POE2's level and defence.
+	# Their implicits stay in the game (GetBodyArmourImplicit).
+	found = set()
+	for row in rows[1:]:
+		if row[0] != '' or row[2] != 'Armor' or row[5] not in ('LightArmor', 'MediumArmor', 'HeavyArmor') or row[7] not in BODY_ARMOURS:
+			continue
+		level, armour, evasion, energy_shield = BODY_ARMOURS[row[7]]
+		_, total = defense_points(armour, evasion, energy_shield)
+		row[9] = str(level)
+		row[13] = row[14] = str(total)
+		identity, line = BODY_ARMOUR_LINES[(armour > 0, evasion > 0, energy_shield > 0)]
+		meta_rows.append([row[7], 'body_armour', identity, line, 'defence', '', defense_split(line, armour, evasion, energy_shield)])
+		found.add(row[7])
+	assert found == set(BODY_ARMOURS), f'body armours not in itemdat.tsv: {sorted(set(BODY_ARMOURS) - found)}'
 
 	with open(ITEMDAT, 'w', encoding='utf-8', newline='') as f:
 		for row in rows:
 			f.write('\t'.join(row) + '\r\n')
 	with open(META, 'w', encoding='utf-8', newline='') as f:
-		for row in [['name', 'class', 'identity', 'defense', 'quality', 'implicits']] + meta_rows:
+		for row in [['name', 'class', 'identity', 'defense', 'quality', 'implicits', 'split']] + meta_rows:
 			f.write('\t'.join(row) + '\r\n')
 	print(f'{len(meta_rows)} bases')
 

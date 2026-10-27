@@ -43,6 +43,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -327,8 +328,8 @@ struct LevelConversionData {
 	item._iCurs = file.NextLE<int32_t>();
 	item._ivalue = file.NextLE<int32_t>();
 	item._iIvalue = file.NextLE<int32_t>();
-	item._iMinDam = file.NextLE<int32_t>();
-	item._iMaxDam = file.NextLE<int32_t>();
+	item._iMinDam = static_cast<uint16_t>(std::clamp<int32_t>(file.NextLE<int32_t>(), 0, UINT16_MAX));
+	item._iMaxDam = static_cast<uint16_t>(std::clamp<int32_t>(file.NextLE<int32_t>(), 0, UINT16_MAX));
 	item._iAC = file.NextLE<int32_t>();
 	item._iFlags = static_cast<ItemSpecialEffect>(file.NextLE<uint32_t>());
 	item._iMiscId = static_cast<item_misc_id>(file.NextLE<int32_t>());
@@ -859,6 +860,9 @@ void LoadMonsters(LoadHelper &file, ankerl::unordered_dense::set<unsigned> &remo
 
 		if (applyLight && monster.isUnique() && monster.lightId != NO_LIGHT)
 			Lights[monster.lightId].isInvalid = false;
+		// POE2 Mashup: a monster saved before the monster level tables (or on a kept floor) moves onto them once,
+		// keeping its life fraction; monsters already on them are left as they are.
+		RescaleLoadedMonster(monster);
 
 		i++;
 	}

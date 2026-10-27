@@ -33,6 +33,7 @@ set(libdevilutionx_SRCS
   poe2/item_search.cpp
   poe2/meta_gems.cpp
   poe2/skill_details.cpp
+  poe2/spell_damage.cpp
   poe2/crafting_items.cpp
   poe2/desecration.cpp
   poe2/economy.cpp
@@ -794,11 +795,13 @@ endif()
 add_devilutionx_object_library(libdevilutionx_player
   player.cpp
   poe2/defenses.cpp
+  poe2/area_levels.cpp
   poe2/bases.cpp
   poe2/belt_uniques.cpp
   poe2/boss_loot.cpp
   poe2/camera_shake.cpp
   poe2/charms.cpp
+  poe2/experience.cpp
   poe2/flasks.cpp
   poe2/floor_packs.cpp
   poe2/floors.cpp
@@ -808,6 +811,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/level_census.cpp
   poe2/loot.cpp
   poe2/modifiers.cpp
+  poe2/monster_levels.cpp
   poe2/monster_mods.cpp
   poe2/monster_resistance.cpp
   poe2/passive_tree.cpp

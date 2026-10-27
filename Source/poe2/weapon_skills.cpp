@@ -26,6 +26,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/skill_looks.hpp"
 #include "poe2/spell_base.hpp"
+#include "poe2/spell_damage.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -210,7 +211,9 @@ void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID mi
 	for (int i = 0; i < count; i++) {
 		// 0, -1, 1, -2, 2, ...
 		const int offset = (i + 1) / 2 * (i % 2 == 0 ? 1 : -1);
-		Missile *fired = AddMissile(player.position.tile, target + side * offset, dir, missile, TARGET_MONSTERS, player, damage, spellLevel);
+		// Each spark rolls its own hit from Spark's row (poe2/spell_damage.hpp), not Charged Bolt's.
+		const int hit = skill == WeaponSkill::Spark ? RollPoe2SkillSpellHit(player, skill, std::max(gemLevel, 1)) : damage;
+		Missile *fired = AddMissile(player.position.tile, target + side * offset, dir, missile, TARGET_MONSTERS, player, hit, spellLevel);
 		if (fired == nullptr)
 			continue;
 		SetMissileSkill(*fired, player, slot);
@@ -284,7 +287,9 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index)
 		Point origin = tile + side;
 		if (!InDungeonBounds(origin) || IsTileSolid(origin))
 			origin = tile;
-		Missile *ember = AddMissile(origin, target, dir, MissileID::Firebolt, TARGET_MONSTERS, player, 0, std::max(gemLevel, 1));
+		// The ember rolls its own hit from Ember Fusillade's row, so Firebolt's percent and curve never apply to it.
+		const int hit = RollPoe2SkillSpellHit(player, skill, std::max(gemLevel, 1));
+		Missile *ember = AddMissile(origin, target, dir, MissileID::Firebolt, TARGET_MONSTERS, player, hit, std::max(gemLevel, 1));
 		if (ember != nullptr) {
 			ember->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
 			SetMissileSkill(*ember, player, slot);
@@ -524,7 +529,7 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::Cleave:
 		return 4;
 	case WeaponSkill::GroundSlam:
-		return 8;
+		return 6;
 	case WeaponSkill::Barrage:
 		return 7;
 	case WeaponSkill::WhirlingStaff:
@@ -532,9 +537,9 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::Flurry:
 		return 4;
 	case WeaponSkill::LeapSlam:
-		return 10;
+		return 8;
 	case WeaponSkill::RainOfArrows:
-		return 12;
+		return 10;
 	case WeaponSkill::ShieldCharge:
 		return 8;
 	case WeaponSkill::BattleCry:
@@ -542,29 +547,30 @@ int WeaponSkillManaCost(WeaponSkill skill)
 	case WeaponSkill::LightningArrow:
 		return 8;
 	case WeaponSkill::EscapeShot:
-		return 9;
+		return 6;
 	case WeaponSkill::EmberFusillade:
 		return 16;
 	case WeaponSkill::Spark:
 		return 10;
 	case WeaponSkill::IceBolt:
-		return 7;
+		// The Sorcerer's starter bolts (Firebolt, Ice Bolt, Holy Bolt, Charged Bolt) all cost 4 at gem level 1.
+		return 4;
 	case WeaponSkill::FrostNova:
 		return 14;
 	case WeaponSkill::Riposte:
 		return 5;
 	case WeaponSkill::ShadowStep:
-		return 8;
-	case WeaponSkill::Frenzy:
 		return 5;
+	case WeaponSkill::Frenzy:
+		return 3;
 	case WeaponSkill::Smite:
-		return 7;
+		return 4;
 	case WeaponSkill::FistsOfThunder:
 		return 4;
 	case WeaponSkill::RapidFire:
 		return 8;
 	case WeaponSkill::ShieldBash:
-		return 6;
+		return 4;
 	case WeaponSkill::AmplifyDamage:
 		return 8;
 	default:
@@ -925,7 +931,7 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		StartSkillVolley(player, skill, target, EmberFusilladeEmbers + GemExtraProjectiles(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill)));
 		return false;
 	case WeaponSkill::Spark:
-		// A tight cone of crawling sparks that pierce, unlike Charged Bolt's wide random spray.
+		// A tight cone of crawling sparks that pierce, unlike Charged Bolt's wide random spray; FireFan rolls each spark's hit.
 		FireFan(player, skill, FarAlong(player, target, 8), MissileID::ChargedBolt, 6, 0, std::max(player.poe2.skillLevel(skill), 1));
 		return false;
 	case WeaponSkill::IceBolt: {
@@ -941,7 +947,7 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 		// Shards burst out all around and melt away after a few tiles.
 		for (int i = 0; i < FrostNovaShards; i++) {
 			constexpr int Ring[16][2] = { { 4, 0 }, { 4, 2 }, { 4, 4 }, { 2, 4 }, { 0, 4 }, { -2, 4 }, { -4, 4 }, { -4, 2 }, { -4, 0 }, { -4, -2 }, { -4, -4 }, { -2, -4 }, { 0, -4 }, { 2, -4 }, { 4, -4 }, { 4, -2 } };
-			Missile *shard = FireIceShard(player, skill, player.position.tile, player.position.tile + Displacement { Ring[i][0], Ring[i][1] }, 100);
+			Missile *shard = FireIceShard(player, skill, player.position.tile, player.position.tile + Displacement { Ring[i][0], Ring[i][1] }, FrostNovaShardDamagePercent);
 			if (shard != nullptr)
 				shard->duration = FrostNovaShardTicks;
 		}
@@ -1293,7 +1299,15 @@ int8_t WeaponSkillSkippedFrames(const Player &player)
 
 int LightningArrowDamage(const Player &player)
 {
-	return player.getCharacterLevel() * 2 + player._pDexterity / 4;
+	if (LightningArrowBurstFromLevel)
+		return (player.getCharacterLevel() * LightningArrowBurstPerLevel) + (player._pDexterity / LightningArrowBurstDexterityDivisor);
+	// The arrow's average hit, worked out as MonsterMHit does an arrow's: the weapon roll, increased and added damage,
+	// and the attribute bonus (a Rogue's in full, other heroes' at least half).
+	const int weapon = (player._pIMinDam + player._pIMaxDam) / 2;
+	int hit = weapon + (weapon * player._pIBonusDam / 100) + player._pIBonusDamMod;
+	hit += player._pClass == HeroClass::Rogue ? player._pDamageMod : player._pDamageMod * std::max(ArrowDamageModPercent(player), 50) / 100;
+	// The burst rolls half to all of this, which averages three quarters of it.
+	return std::max(hit * LightningArrowBurstPercent * 4 / 300, 1);
 }
 
 } // namespace devilution

@@ -73,6 +73,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/boss_loot.hpp"
@@ -999,8 +1000,8 @@ int SaveItemPower(const Player &player, Item &item, ItemPower &power)
 		item._iFlags |= ItemSpecialEffect::RandomArrowVelocity;
 		break;
 	case IPL_SETDAM:
-		item._iMinDam = power.param1;
-		item._iMaxDam = power.param2;
+		item._iMinDam = static_cast<uint16_t>(std::clamp(power.param1, 0, static_cast<int>(UINT16_MAX)));
+		item._iMaxDam = static_cast<uint16_t>(std::clamp(power.param2, 0, static_cast<int>(UINT16_MAX)));
 		break;
 	case IPL_SETDUR:
 		item._iDurability = power.param1;
@@ -1722,19 +1723,45 @@ _item_indexes GetItemIndexForDroppableItem(bool considerDropRate, tl::function_r
 		cumulativeWeight += weight;
 		ril.push_back({ static_cast<_item_indexes>(i), cumulativeWeight });
 	}
+	if (ril.empty()) {
+		// Nothing fits (a vendor level no base reaches): take the one value a pick takes, so whatever is rolled from
+		// the seed next is the same as for a real pick and a rebuild from the stored base matches it. Diablo never
+		// gets here with its own item table; it keeps its generator untouched.
+		if (gbIsPoe2)
+			DiscardRandomValues(1);
+		return IDI_HEAL;
+	}
 	const auto targetWeight = static_cast<unsigned>(RandomIntLessThan(static_cast<int>(cumulativeWeight)));
 	return std::upper_bound(ril.begin(), ril.end(), targetWeight, [](unsigned target, const WeightedItemIndex &value) { return target < value.cumulativeWeight; })->index;
+}
+
+/** @brief POE2 Mashup: the area level here, which POE2 equipment bases drop by; 0 outside POE2 mode or without the table. */
+int Poe2PickerAreaLevel()
+{
+	return gbIsPoe2 ? CurrentAreaLevel(sgGameInitInfo.nDifficulty) : 0;
+}
+
+/**
+ * @brief The level an item's drop level is checked against when Diablo's pickers choose a base: Diablo's level, or for
+ * POE2 equipment, whose drop levels are area levels, the area level here when that is higher.
+ */
+int PickerMaxLevel(const ItemData &item, int itemMaxLevel, int areaLevel)
+{
+	if (areaLevel > 0 && EquipmentClassWeight(item.itype) > 0)
+		return std::max(itemMaxLevel, areaLevel);
+	return itemMaxLevel;
 }
 
 _item_indexes RndUItem(Monster *monster)
 {
 	int itemMaxLevel = ItemsGetCurrlevel() * 2;
 	if (monster != nullptr)
-		itemMaxLevel = monster->level(sgGameInitInfo.nDifficulty);
-	return GetItemIndexForDroppableItem(false, [&itemMaxLevel](const ItemData &item) {
+		itemMaxLevel = monster->diabloLevel(sgGameInitInfo.nDifficulty);
+	const int areaLevel = Poe2PickerAreaLevel();
+	return GetItemIndexForDroppableItem(false, [&itemMaxLevel, areaLevel](const ItemData &item) {
 		if (item.itype == ItemType::Misc && item.iMiscId == IMISC_BOOK)
 			return true;
-		if (itemMaxLevel < item.iMinMLvl)
+		if (PickerMaxLevel(item, itemMaxLevel, areaLevel) < item.iMinMLvl)
 			return false;
 		if (IsAnyOf(item.itype, ItemType::Gold, ItemType::Misc))
 			return false;
@@ -1748,16 +1775,18 @@ _item_indexes RndAllItems()
 		return IDI_GOLD;
 
 	int itemMaxLevel = ItemsGetCurrlevel() * 2;
-	return GetItemIndexForDroppableItem(false, [&itemMaxLevel](const ItemData &item) {
-		return itemMaxLevel >= item.iMinMLvl;
+	const int areaLevel = Poe2PickerAreaLevel();
+	return GetItemIndexForDroppableItem(false, [&itemMaxLevel, areaLevel](const ItemData &item) {
+		return PickerMaxLevel(item, itemMaxLevel, areaLevel) >= item.iMinMLvl;
 	});
 }
 
 _item_indexes RndTypeItems(ItemType itemType, int imid, int lvl)
 {
 	int itemMaxLevel = lvl * 2;
-	return GetItemIndexForDroppableItem(false, [&itemMaxLevel, &itemType, &imid](const ItemData &item) {
-		if (itemMaxLevel < item.iMinMLvl)
+	const int areaLevel = Poe2PickerAreaLevel();
+	return GetItemIndexForDroppableItem(false, [&itemMaxLevel, &itemType, &imid, areaLevel](const ItemData &item) {
+		if (PickerMaxLevel(item, itemMaxLevel, areaLevel) < item.iMinMLvl)
 			return false;
 		if (item.itype != itemType)
 			return false;
@@ -1863,8 +1892,11 @@ void SetupBaseItem(Point position, _item_indexes idx, bool onlygood, bool sendms
 	GetSuperItemSpace(position, ii);
 	const int curlv = ItemsGetCurrlevel();
 
-	if (gbIsPoe2 && EquipmentClassWeight(AllItemsList[idx].itype) > 0)
-		SetPoe2ItemLevel(item, Poe2ItemLevel((2 * curlv) + (15 * sgGameInitInfo.nDifficulty)));
+	if (gbIsPoe2 && EquipmentClassWeight(AllItemsList[idx].itype) > 0) {
+		// POE2 Mashup: the area's item level, as containers drop (CF_LEVEL keeps Diablo's level).
+		const int areaLevel = Poe2PickerAreaLevel();
+		SetPoe2ItemLevel(item, areaLevel > 0 ? AreaItemLevel(areaLevel) : Poe2ItemLevel((2 * curlv) + (15 * sgGameInitInfo.nDifficulty)));
+	}
 	SetupAllItems(*MyPlayer, item, idx, AdvanceRndSeed(), 2 * curlv, 1, onlygood, delta);
 	TryRandomUniqueItem(item, idx, 2 * curlv, 1, onlygood, delta);
 	SetupItem(item);
@@ -2387,9 +2419,14 @@ bool SmithItemOk(const Player & /*player*/, const ItemData &item)
 template <bool (*Ok)(const Player &, const ItemData &), bool ConsiderDropRate = false>
 _item_indexes RndVendorItem(const Player &player, int minlvl, int maxlvl)
 {
-	return GetItemIndexForDroppableItem(ConsiderDropRate, [&player, &minlvl, &maxlvl](const ItemData &item) {
+	// POE2 Mashup: POE2 equipment drops by area level, so vendors pick it by theirs (the premium stock from a part of
+	// it up, PremiumAreaLevelDivisor); the rest keeps Diablo's vendor level. Only the pick: CF_LEVEL keeps Diablo's level.
+	const int areaLevel = gbIsPoe2 ? VendorAreaLevel(player, sgGameInitInfo.nDifficulty) : 0;
+	return GetItemIndexForDroppableItem(ConsiderDropRate, [&player, &minlvl, &maxlvl, areaLevel](const ItemData &item) {
 		if (!Ok(player, item))
 			return false;
+		if (areaLevel > 0 && EquipmentClassWeight(item.itype) > 0)
+			return item.iMinMLvl >= (minlvl > 0 ? areaLevel / PremiumAreaLevelDivisor : 0) && item.iMinMLvl <= areaLevel;
 		if (item.iMinMLvl < minlvl || item.iMinMLvl > maxlvl)
 			return false;
 		return true;
@@ -2487,11 +2524,24 @@ _item_indexes RndPremiumItem(const Player &player, int minlvl, int maxlvl)
 	return RndVendorItem<PremiumItemOk>(player, minlvl, maxlvl);
 }
 
+/**
+ * @brief The POE2 item level of the town's wares: the vendors' area level (VendorAreaLevel), or without the area level
+ * table the POE2 scale of the Diablo level they stock at. The Diablo level stays in CF_LEVEL.
+ */
+int VendorPoe2ItemLevel(int level)
+{
+	if (MyPlayer != nullptr) {
+		if (const int areaLevel = VendorAreaLevel(*MyPlayer, sgGameInitInfo.nDifficulty); areaLevel > 0)
+			return areaLevel;
+	}
+	return Poe2ItemLevel(level);
+}
+
 /** @brief Shop equipment gets a POE2 item level from the level it was stocked at. */
 void SetVendorPoe2ItemLevel(Item &item, int level)
 {
 	if (gbIsPoe2 && EquipmentClassWeight(item._itype) > 0)
-		SetPoe2ItemLevel(item, Poe2ItemLevel(level));
+		SetPoe2ItemLevel(item, VendorPoe2ItemLevel(level));
 }
 
 void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
@@ -2646,10 +2696,30 @@ _item_indexes RndHealerItem(const Player &player, int lvl)
 	return RndVendorItem<HealerItemOk>(player, 0, lvl);
 }
 
-void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
+/**
+ * @brief POE2 Mashup: whether a ware rebuilds on the base it was stocked with. Its base was picked with the shop's
+ * level, which isn't saved; picking again would give another base once the item table changes.
+ */
+bool RebuildsOnItsBase(_item_indexes idx)
+{
+	return gbIsPoe2 && idx >= 0 && static_cast<size_t>(idx) < AllItemsList.size();
+}
+
+/** @brief The base a ware was stocked with: picked again from the seed, or in POE2 its stored base for the same one value. */
+template <typename Pick>
+_item_indexes VendorItemBase(_item_indexes idx, Pick pick)
+{
+	if (RebuildsOnItsBase(idx)) {
+		DiscardRandomValues(1);
+		return idx;
+	}
+	return pick();
+}
+
+void RecreateSmithItem(const Player &player, Item &item, _item_indexes idx, int lvl, int iseed)
 {
 	SetRndSeed(iseed);
-	const _item_indexes itype = RndSmithItem(player, lvl);
+	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndSmithItem(player, lvl); });
 	GetItemAttrs(item, itype, lvl);
 	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff, or the one crafting gave it; skip the rarity roll and give it its modifiers.
 	if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
@@ -2663,11 +2733,12 @@ void RecreateSmithItem(const Player &player, Item &item, int lvl, int iseed)
 	item._iIdentified = true;
 }
 
-void RecreatePremiumItem(const Player &player, Item &item, int plvl, int iseed)
+void RecreatePremiumItem(const Player &player, Item &item, _item_indexes idx, int plvl, int iseed)
 {
 	SetRndSeed(iseed);
-	const _item_indexes itype = RndPremiumItem(player, plvl / 4, plvl);
+	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndPremiumItem(player, plvl / 4, plvl); });
 	GetItemAttrs(item, itype, plvl);
+	item._iSeed = iseed; // POE2 Mashup: the modifiers roll from it, as when the ware was stocked
 	GetItemBonus(player, item, plvl / 2, plvl, true, !gbIsHellfire);
 
 	item._iSeed = iseed;
@@ -2675,11 +2746,12 @@ void RecreatePremiumItem(const Player &player, Item &item, int plvl, int iseed)
 	item._iIdentified = true;
 }
 
-void RecreateBoyItem(const Player &player, Item &item, int lvl, int iseed)
+void RecreateBoyItem(const Player &player, Item &item, _item_indexes idx, int lvl, int iseed)
 {
 	SetRndSeed(iseed);
-	const _item_indexes itype = RndBoyItem(player, lvl);
+	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndBoyItem(player, lvl); });
 	GetItemAttrs(item, itype, lvl);
+	item._iSeed = iseed; // POE2 Mashup: the modifiers roll from it, as when the ware was stocked
 	GetItemBonus(player, item, lvl, 2 * lvl, true, true);
 
 	item._iSeed = iseed;
@@ -2697,7 +2769,7 @@ void RecreateWitchItem(const Player &player, Item &item, _item_indexes idx, int 
 		GetItemAttrs(item, idx, lvl);
 	} else {
 		SetRndSeed(iseed);
-		const _item_indexes itype = RndWitchItem(player, lvl);
+		const _item_indexes itype = VendorItemBase(idx, [&]() { return RndWitchItem(player, lvl); });
 		GetItemAttrs(item, itype, lvl);
 		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff, or has the one crafting gave it; skip the rarity roll and give it its modifiers.
 		if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity) {
@@ -2728,7 +2800,7 @@ void RecreateHealerItem(const Player &player, Item &item, _item_indexes idx, int
 		GetItemAttrs(item, idx, lvl);
 	} else {
 		SetRndSeed(iseed);
-		const _item_indexes itype = RndHealerItem(player, lvl);
+		const _item_indexes itype = VendorItemBase(idx, [&]() { return RndHealerItem(player, lvl); });
 		GetItemAttrs(item, itype, lvl);
 	}
 
@@ -2740,11 +2812,11 @@ void RecreateHealerItem(const Player &player, Item &item, _item_indexes idx, int
 void RecreateTownItem(const Player &player, Item &item, _item_indexes idx, uint16_t icreateinfo, int iseed)
 {
 	if ((icreateinfo & CF_SMITH) != 0)
-		RecreateSmithItem(player, item, icreateinfo & CF_LEVEL, iseed);
+		RecreateSmithItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_SMITHPREMIUM) != 0)
-		RecreatePremiumItem(player, item, icreateinfo & CF_LEVEL, iseed);
+		RecreatePremiumItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_BOY) != 0)
-		RecreateBoyItem(player, item, icreateinfo & CF_LEVEL, iseed);
+		RecreateBoyItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_WITCH) != 0)
 		RecreateWitchItem(player, item, idx, icreateinfo & CF_LEVEL, iseed);
 	else if ((icreateinfo & CF_HEALER) != 0)
@@ -3021,6 +3093,13 @@ void RestoreRareItemPowers(Item &item)
 	const uint32_t currentSeed = GetLCGEngineState();
 	Item regenerated;
 	RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
+	// POE2 Mashup: an item saved before the bases and flat modifiers took POE2's numbers keeps the defence and damage
+	// it was saved with; its modifiers roll with the scales they had then, so they match those numbers.
+	if (IsLegacyScaleItem(item, regenerated)) {
+		const LegacyModScales legacyScales;
+		regenerated = {};
+		RecreateItem(Players[0], regenerated, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
+	}
 	item._iRarePowers = regenerated._iRarePowers;
 	item._iRareTiers = regenerated._iRareTiers;
 	item._iPreTier = regenerated._iPreTier;
@@ -3231,6 +3310,22 @@ int GetBonusAC(const Item &item)
 	return 0;
 }
 
+namespace {
+
+/**
+ * @brief The character level Diablo's hidden level bonuses grow with: Strength (and Dexterity) x level damage, the
+ * Barbarian's Iron Skin, Natural Resistance and Rage, and the Monk's armour.
+ *
+ * POE2 Mashup: 0, so none of them grows with level and _pDamageMod is 0 (decision 10A). The Barbarian keeps all of
+ * his for now: Curtis put him on hold (2026-10-23) because Rage does nothing without them.
+ */
+int HiddenBonusLevel(const Player &player)
+{
+	return gbIsPoe2 && player._pClass != HeroClass::Barbarian ? 0 : player.getCharacterLevel();
+}
+
+} // namespace
+
 void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 {
 	const uint8_t playerLevel = player.getCharacterLevel();
@@ -3264,7 +3359,7 @@ void CalcPlrDamage(Player &player, int minDamage, int maxDamage)
 
 void CalcPlrPrimaryStats(Player &player, int strength, int &magic, int dexterity, int &vitality)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	if (HasAnyOf(player._pSpellFlags, SpellFlag::RageActive)) {
 		strength += 2 * playerLevel;
@@ -3298,7 +3393,7 @@ void CalcPlrLightRadius(Player &player, int lrad)
 
 void CalcPlrDamageMod(Player &player)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 	const Item &leftHandItem = player.InvBody[INVLOC_HAND_LEFT];
 	const Item &rightHandItem = player.InvBody[INVLOC_HAND_RIGHT];
 	// POE2 Mashup: Paid in Blood counts half of Magic as Strength here too.
@@ -3358,7 +3453,7 @@ void CalcPlrDamageMod(Player &player)
 
 void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int lightning, int magic)
 {
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 
@@ -3422,17 +3517,20 @@ void CalcPlrLifeMana(Player &player, int vitality, int magic, Fixed26_6 life, Fi
 	if (lessLifePercent > 0)
 		life -= Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>((life + player._pMaxHPBase).raw()) * std::min(lessLifePercent, 90) / 100));
 
-	magic = (playerClassAttributes.itmMana * magic).whole();
+	// POE2 Mashup: Magic on gear and the tree gives 2 mana a point for every class.
+	magic = ManaFromItemMagic(player, magic);
 	mana += Fixed26_6::fromInt(magic);
 
-	player._pMaxHP = std::clamp(life + player._pMaxHPBase, Fixed26_6::fromInt(1), Fixed26_6::fromInt(2000));
+	// POE2 Mashup: life and mana aren't capped at Diablo's 2,000.
+	const Fixed26_6 maxLifeMana = Fixed26_6::fromInt(gbIsPoe2 ? MaxPoe2LifeMana : 2000);
+	player._pMaxHP = std::clamp(life + player._pMaxHPBase, Fixed26_6::fromInt(1), maxLifeMana);
 	player._pHitPoints = std::min(life + player._pHPBase, player._pMaxHP);
 
 	if (&player == MyPlayer && player.hasNoLife()) {
 		SetPlayerHitPoints(player, Fixed26_6::fromInt(0));
 	}
 
-	player._pMaxMana = std::clamp(mana + player._pMaxManaBase, Fixed26_6::fromInt(0), Fixed26_6::fromInt(2000));
+	player._pMaxMana = std::clamp(mana + player._pMaxManaBase, Fixed26_6::fromInt(0), maxLifeMana);
 	player._pMana = std::min(mana + player._pManaBase, player._pMaxMana);
 }
 
@@ -3494,7 +3592,7 @@ PlayerArmorGraphic GetPlrAnimArmorId(Player &player)
 {
 	const Item &chestItem = player.InvBody[INVLOC_CHEST];
 	const bool chestUsable = player.CanUseItem(chestItem);
-	const uint8_t playerLevel = player.getCharacterLevel();
+	const int playerLevel = HiddenBonusLevel(player);
 
 	if (chestUsable) {
 		switch (chestItem._itype) {
@@ -3717,6 +3815,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	// POE2 Mashup: the passive tree's shrines and rule notables join the gear's unique rules.
 	PassiveTotals passives = GetPassiveTotals(player);
 	AddPassiveRules(passives, uniqueRules);
+	// POE2 Mashup: the gear's increased spell damage (staves) adds to the tree's, which every spell hit takes.
+	uniqueRules[static_cast<size_t>(UniqueRule::SpellDamage)] = static_cast<int16_t>(std::clamp(uniqueRules[static_cast<size_t>(UniqueRule::SpellDamage)] + poe2Stats[static_cast<size_t>(Poe2ItemStat::SpellDamage)], static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
 	player.poe2.uniqueRules = uniqueRules;
 	const auto uniqueRule = [&uniqueRules](UniqueRule rule) { return static_cast<int>(uniqueRules[static_cast<size_t>(rule)]); };
 	// POE2 Mashup: unique rules that work like gear stats.
@@ -3760,8 +3860,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	manaRegen += passive(PassiveStat::ManaRegen);
 	splLvlAdd += static_cast<int8_t>(passive(PassiveStat::SpellLevels));
 	// Every 10% increased attack or cast speed from the tree and gear skips one more animation frame.
-	// Heavy and focused bases slow attacks and casts, but only by cancelling speed from elsewhere.
-	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
+	// Reduced attack speed (Heavy bases) adds a frame for every 10% (Curtis 2026-10-23: before, it only cancelled speed
+	// from elsewhere). Focused bases still only cancel cast speed.
+	const int slowestAttackFrames = gbIsPoe2 ? -MaxPassiveSpeedFrames : 0;
+	player.poe2.passiveAttackFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::AttackSpeed) + gearStat(Poe2ItemStat::AttackSpeed)) / SpeedPercentPerFrame, slowestAttackFrames, static_cast<int>(MaxPassiveSpeedFrames)));
 	player.poe2.passiveCastFrames = static_cast<int8_t>(std::clamp((passive(PassiveStat::CastSpeed) + gearStat(Poe2ItemStat::CastSpeed)) / SpeedPercentPerFrame, 0, static_cast<int>(MaxPassiveSpeedFrames)));
 
 	// POE2 Mashup: cloth bases give energy shield and leather gives evasion instead of armour.
@@ -3823,15 +3925,17 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pISplLvlAdd = splLvlAdd;
 	player._pIEnAc = targetAc;
 	CalcPlrResistances(player, flags, fireRes, lightRes, magicRes);
-	if (gbIsPoe2)
-		mana += Fixed26_6::fromInt(Poe2BonusMana(player.getCharacterLevel()));
+	// POE2 Mashup: POE2's +12 life a level and its mana pool rule, on top of the saved Diablo-rule bases.
+	life += Poe2LevelLife(player);
+	mana += Poe2LevelMana(player);
 	if (passive(PassiveStat::LifePercent) != 0 || passive(PassiveStat::ManaPercent) != 0) {
 		// Percent increases apply to everything else that adds life and mana.
 		const ClassAttributes &classAttributes = player.getClassAttributes();
 		const Fixed26_6 baseLife = life + player._pMaxHPBase + Fixed26_6::fromInt((classAttributes.itmLife * vitality).whole());
-		const Fixed26_6 baseMana = mana + player._pMaxManaBase + Fixed26_6::fromInt((classAttributes.itmMana * magic).whole());
-		life += Fixed26_6::fromRaw(baseLife.raw() * passive(PassiveStat::LifePercent) / 100);
-		mana += Fixed26_6::fromRaw(baseMana.raw() * passive(PassiveStat::ManaPercent) / 100);
+		const Fixed26_6 baseMana = mana + player._pMaxManaBase + Fixed26_6::fromInt(ManaFromItemMagic(player, magic));
+		// In 64 bits: POE2 life and mana can pass Diablo's 2,000.
+		life += Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(baseLife.raw()) * passive(PassiveStat::LifePercent) / 100));
+		mana += Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(baseMana.raw()) * passive(PassiveStat::ManaPercent) / 100));
 	}
 	CalcPlrLifeMana(player, vitality, magic, life, mana, uniqueRule(UniqueRule::LessMaxLife));
 	// A share of maximum mana can count as energy shield too.
@@ -4269,8 +4373,9 @@ _item_indexes RndItemForMonsterLevel(int8_t monsterLevel)
 	if (GenerateRnd(100) > 25)
 		return IDI_GOLD;
 
-	return GetItemIndexForDroppableItem(true, [&monsterLevel](const ItemData &item) {
-		return item.iMinMLvl <= monsterLevel;
+	const int areaLevel = Poe2PickerAreaLevel();
+	return GetItemIndexForDroppableItem(true, [&monsterLevel, areaLevel](const ItemData &item) {
+		return item.iMinMLvl <= PickerMaxLevel(item, monsterLevel, areaLevel);
 	});
 }
 
@@ -4499,7 +4604,8 @@ bool IsPoe2Equipment(const ItemData &data)
  */
 bool IsHeldBackWeaponBase(size_t index)
 {
-	constexpr uint8_t ImplicitWeaponLevel = 9;
+	// The third tier's drop level, an area level.
+	constexpr uint8_t ImplicitWeaponLevel = 24;
 	const ItemData &data = AllItemsList[index];
 	if (data.iClass != ICLASS_WEAPON || data.iMinMLvl >= ImplicitWeaponLevel)
 		return false;
@@ -4526,7 +4632,7 @@ bool IsPoe2Jewellery(const ItemData &data)
 	return IsAnyOf(data.itype, ItemType::Ring, ItemType::Amulet);
 }
 
-/** @brief The level a base's drop level is checked against: the POE2 item level for jewellery, Diablo's for the rest. */
+/** @brief The level a base's drop level is checked against: the POE2 item level for jewellery, the area level for the rest. */
 int Poe2BaseLevel(const ItemData &data, int itemLevel, int poe2ItemLevel)
 {
 	return IsPoe2Jewellery(data) ? poe2ItemLevel : itemLevel;
@@ -4626,16 +4732,20 @@ bool HeroHasSpirit()
 	return MyPlayer != nullptr && MaxSpirit(*MyPlayer) > 0;
 }
 
-/** @brief Picks a loot item of the category; `areaLevel` is the POE2 area level some items wait for (Poe2AreaDropLevel). */
-std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel, int poe2ItemLevel, int areaLevel)
+/**
+ * @brief Picks a loot item of the category. Equipment goes by `equipmentLevel` (an area level), currency by
+ * `currencyLevel`, the rest by Diablo's `itemLevel`; `areaLevel` is the POE2 area level some items wait for
+ * (Poe2AreaDropLevel).
+ */
+std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLevel, int equipmentLevel, int poe2ItemLevel, int currencyLevel, int areaLevel)
 {
 	switch (category) {
 	case LootCategory::Equipment:
-		return PickPoe2EquipmentBase(itemLevel, poe2ItemLevel);
+		return PickPoe2EquipmentBase(equipmentLevel, poe2ItemLevel);
 	case LootCategory::Gold:
 		return IDI_GOLD;
 	case LootCategory::Currency:
-		return PickPoe2Currency(poe2ItemLevel);
+		return PickPoe2Currency(currencyLevel);
 	case LootCategory::FlaskOrCharm:
 		return PickPoe2Weighted(itemLevel, [areaLevel](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId) && Poe2AreaDropLevel(data.iMiscId) <= areaLevel; });
 	case LootCategory::Gem: {
@@ -4725,7 +4835,7 @@ struct Poe2LootOrigin {
 	LootSource source;
 	/** Diablo's item level, which picks affixes and uniques and is checked in multiplayer. */
 	int itemLevel;
-	/** The level that decides which bases can drop. */
+	/** The level that decides which bases other than equipment can drop (flasks, gems, waystones, jewels), on Diablo's scale. */
 	int baseLevel;
 	/** The POE2 item level stored on equipment. */
 	int poe2ItemLevel;
@@ -4736,6 +4846,10 @@ struct Poe2LootOrigin {
 	int areaLevel = 1;
 	/** The POE2 area level drop levels are checked against (LootAreaLevel): 65 and up in a map. */
 	int poe2AreaLevel = 1;
+	/** The level equipment bases' drop levels, which are area levels, are checked against. */
+	int equipmentLevel = 1;
+	/** The POE2 item level currency drop levels are checked against: the scale before item levels became area levels (C12). */
+	int currencyLevel = 1;
 };
 
 /** @brief The open map's item rarity, quantity (from monster effectiveness) and waystone drops, none outside maps, plus the hero's own item rarity. */
@@ -4778,16 +4892,22 @@ Poe2LootOrigin MonsterLootOrigin(const Monster &monster)
 	const LootSource source = GetLootSource(monster);
 	const int bonus = LootItemLevelBonus(source);
 	const int areaLevel = monster.data().level + (15 * sgGameInitInfo.nDifficulty);
+	const int poe2ItemLevel = Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty);
+	// Equipment drops by the monster's level, the area level (+2 for uniques); without the area level table, by its item level.
+	const int monsterAreaLevel = Poe2MonsterLevel(monster, sgGameInitInfo.nDifficulty);
 	// Multiplayer checks that a dropped item's level is one some monster has, so the bonus only applies in single player.
 	return {
 		source,
 		std::min<int>(monster.data().level + (gbIsMultiplayer ? 0 : bonus), CF_LEVEL),
-		static_cast<int>(monster.level(sgGameInitInfo.nDifficulty)) + bonus,
-		Poe2ItemLevel(monster, sgGameInitInfo.nDifficulty),
+		// Everything but equipment keeps Diablo's monster level.
+		static_cast<int>(monster.diabloLevel(sgGameInitInfo.nDifficulty)) + bonus,
+		poe2ItemLevel,
 		monster.name(),
 		/*pregen=*/false,
 		areaLevel,
 		LootAreaLevel(Poe2ItemLevel(areaLevel)),
+		monsterAreaLevel > 0 ? monsterAreaLevel : poe2ItemLevel,
+		Poe2CurrencyLevel(monster, sgGameInitInfo.nDifficulty),
 	};
 }
 
@@ -4796,15 +4916,20 @@ Poe2LootOrigin ContainerLootOrigin(bool pregen)
 	// Chests and barrels drop at twice the dungeon level, as in Diablo.
 	const int level = 2 * ItemsGetCurrlevel();
 	const int areaLevel = level + (15 * sgGameInitInfo.nDifficulty);
+	// Equipment and its POE2 item level go by the area level; CF_LEVEL and the rest keep Diablo's level (B4).
+	const int poe2AreaLevel = Poe2PickerAreaLevel();
+	const int legacyItemLevel = Poe2ItemLevel(areaLevel);
 	return {
 		LootSource::Normal,
 		std::min<int>(level, CF_LEVEL),
 		areaLevel,
-		Poe2ItemLevel(areaLevel),
+		poe2AreaLevel > 0 ? AreaItemLevel(poe2AreaLevel) : legacyItemLevel,
 		"container",
 		pregen,
 		areaLevel,
-		LootAreaLevel(Poe2ItemLevel(areaLevel)),
+		LootAreaLevel(legacyItemLevel),
+		poe2AreaLevel > 0 ? poe2AreaLevel : legacyItemLevel,
+		legacyItemLevel,
 	};
 }
 
@@ -4858,7 +4983,7 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	const int itemLevel = origin.itemLevel;
 
 	std::optional<_item_indexes> idx = forcedIdx ? forcedIdx : category == LootCategory::Endgame ? PickPoe2EndgameItem(origin)
-	                                                                                             : PickPoe2LootItem(category, origin.baseLevel, origin.poe2ItemLevel, origin.poe2AreaLevel);
+	                                                                                             : PickPoe2LootItem(category, origin.baseLevel, origin.equipmentLevel, origin.poe2ItemLevel, origin.currencyLevel, origin.poe2AreaLevel);
 	int uidOffset = 0;
 	bool bundleUnique = false;
 	BeltUniqueId beltUnique = BeltUniqueId::None;
@@ -5014,8 +5139,10 @@ Poe2LootOrigin MapRewardOrigin()
 {
 	Poe2LootOrigin origin = ContainerLootOrigin(false);
 	origin.source = LootSource::Rare;
-	if (const int tier = ActiveMapTier(); tier > 0)
+	if (const int tier = ActiveMapTier(); tier > 0) {
 		origin.poe2ItemLevel = MapAreaLevelBase + tier;
+		origin.equipmentLevel = origin.poe2ItemLevel;
+	}
 	origin.name = "map reward";
 	return origin;
 }
@@ -5026,10 +5153,10 @@ std::optional<_item_indexes> PickMiscReward(int level, std::initializer_list<ite
 }
 
 /** @brief Equipment of one class: picks bases until one fits. */
-std::optional<_item_indexes> PickEquipmentOfClass(int level, item_class itemClass)
+std::optional<_item_indexes> PickEquipmentOfClass(const Poe2LootOrigin &origin, item_class itemClass)
 {
 	for (int tries = 0; tries < 20; tries++) {
-		const std::optional<_item_indexes> idx = PickPoe2EquipmentBase(level, Poe2ItemLevel(level));
+		const std::optional<_item_indexes> idx = PickPoe2EquipmentBase(origin.equipmentLevel, origin.poe2ItemLevel);
 		if (idx && AllItemsList[*idx].iClass == itemClass)
 			return idx;
 	}
@@ -5065,11 +5192,11 @@ void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBon
 		break;
 	case MapReward::Armour:
 	case MapReward::RareArmour:
-		equipment(reward == MapReward::RareArmour ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(level, ICLASS_ARMOR));
+		equipment(reward == MapReward::RareArmour ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(origin, ICLASS_ARMOR));
 		break;
 	case MapReward::Weapon:
 	case MapReward::RareWeapon:
-		equipment(reward == MapReward::RareWeapon ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(level, ICLASS_WEAPON));
+		equipment(reward == MapReward::RareWeapon ? std::optional<item_quality>(ITEM_QUALITY_RARE) : std::nullopt, PickEquipmentOfClass(origin, ICLASS_WEAPON));
 		break;
 	case MapReward::Currency:
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
@@ -5293,7 +5420,7 @@ void SpawnItem(Monster &monster, Point position, bool sendmsg, bool spawn /*= fa
 		if (gbIsPoe2 && GenerateRnd(100) < 3)
 			idx = IDI_IDENTIFY;
 		else
-			idx = RndItemForMonsterLevel(static_cast<int8_t>(monster.level(sgGameInitInfo.nDifficulty)));
+			idx = RndItemForMonsterLevel(static_cast<int8_t>(monster.diabloLevel(sgGameInitInfo.nDifficulty)));
 	}
 
 	if (idx == IDI_NONE)
@@ -7151,6 +7278,8 @@ static_assert(NumWitchPinnedItems + MaxStockCount(WitchStockQuotas) <= NumWitchI
 
 /** A vendor gives up on a kind of ware it can't find at its level after this many rolls. */
 constexpr int MaxStockRolls = 4000;
+/** POE2 Mashup: a ware over the vendor's price limit is rolled again at most this many times, then kept. */
+constexpr int MaxWareRolls = 200;
 
 /**
  * @brief POE2 Mashup: rolls wares until each kind has its share, so every shop tab fills up.
@@ -7181,6 +7310,7 @@ void FillStockByCategory(Stock &stock, std::span<const VendorStockQuota> quotas,
 Item RollSmithItem(int lvl, int maxValue)
 {
 	Item newItem;
+	int rolls = 0;
 	do {
 		newItem = {};
 		newItem._iSeed = AdvanceRndSeed();
@@ -7194,7 +7324,7 @@ Item RollSmithItem(int lvl, int maxValue)
 			if (GetLootRarity(newItem) != ITEM_QUALITY_NORMAL)
 				GetItemBonus(*MyPlayer, newItem, lvl / 2, lvl, true, false);
 		}
-	} while (newItem._iIvalue > maxValue);
+	} while (newItem._iIvalue > maxValue && (!gbIsPoe2 || ++rolls < MaxWareRolls));
 
 	newItem._iCreateInfo = lvl | CF_SMITH;
 	SetVendorPoe2ItemLevel(newItem, lvl);
@@ -7205,6 +7335,7 @@ Item RollSmithItem(int lvl, int maxValue)
 Item RollWitchItem(int lvl, int maxValue)
 {
 	Item item;
+	int rolls = 0;
 	do {
 		item = {};
 		item._iSeed = AdvanceRndSeed();
@@ -7227,7 +7358,7 @@ Item RollWitchItem(int lvl, int maxValue)
 			if (maxlvl != -1)
 				GetItemBonus(*MyPlayer, item, maxlvl / 2, maxlvl, true, true);
 		}
-	} while (item._iIvalue > maxValue);
+	} while (item._iIvalue > maxValue && (!gbIsPoe2 || ++rolls < MaxWareRolls));
 
 	item._iCreateInfo = lvl | CF_WITCH;
 	SetVendorPoe2ItemLevel(item, lvl);
@@ -7381,6 +7512,9 @@ void SpawnWitch(int lvl)
 
 void SpawnBoy(int lvl)
 {
+	// The level is saved in CF_LEVEL's 6 bits, and RecreateBoyItem rebuilds the ware from it: clamp it before the
+	// base pick and the modifiers use it, so heroes past level 63 get the same item on reload and on every peer.
+	lvl = std::min(lvl, static_cast<int>(CF_LEVEL));
 	int ivalue = 0;
 	bool keepgoing = false;
 	int count = 0;
@@ -7922,12 +8056,12 @@ bool ApplyOilToItem(Item &item, Player &player)
 		}
 		break;
 	case IMISC_OILSHARP:
-		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < 255) {
+		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < UINT16_MAX) {
 			item._iMaxDam = item._iMaxDam + 1;
 		}
 		break;
 	case IMISC_OILDEATH:
-		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < 254) {
+		if (item._iMaxDam - item._iMinDam < 30 && item._iMaxDam < UINT16_MAX - 1) {
 			item._iMinDam = item._iMinDam + 1;
 			item._iMaxDam = item._iMaxDam + 2;
 		}

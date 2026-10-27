@@ -38,6 +38,7 @@
 namespace devilution {
 
 struct Monster;
+enum class MonsterClass : uint8_t;
 
 constexpr int InventoryGridCells = 40;
 constexpr int MaxBeltItems = 8;
@@ -623,20 +624,22 @@ public:
 		return _pMagic + getPlayerCombatData().baseMagicToHit;
 	}
 
-	/**
-	 * @brief Return block chance
-	 * @param useLevel - indicate if player's level should be added to block chance (the only case where it isn't is blocking a trap)
-	 */
 	/** @brief POE2 Mashup: block caps at 50%, raised by the passive tree's block up to 75%, as in POE2. */
 	int GetMaxBlockChance(bool isPoe2) const
 	{
 		return isPoe2 ? std::min(50 + poe2.passiveBlockChance, 75) : 100;
 	}
 
+	/**
+	 * @brief Return block chance
+	 * @param useLevel - indicate if player's level should be added to block chance (the only case where it isn't is blocking a trap)
+	 *
+	 * POE2 Mashup: never adds the level: block doesn't grow with character level (pick 7, audit N8).
+	 */
 	int GetBlockChance(bool useLevel = true) const
 	{
 		int blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
-		if (useLevel)
+		if (useLevel && !gbIsPoe2)
 			blkper += getCharacterLevel() * 2;
 		// POE2 Mashup: Magma Barrier's increased block chance.
 		return blkper * (100 + poe2.spiritState.blockPercent) / 100;
@@ -1001,6 +1004,14 @@ void ClrPlrPath(Player &player);
 bool PosOkPlayer(const Player &player, Point position);
 /** @brief POE2 Mashup: a skill's melee hit on a monster, for the given share of its damage. */
 bool SkillHitMonster(Player &player, Monster &monster, int damagePercent);
+/**
+ * @brief POE2 Mashup: whether Diablo's rule that a sword deals half to Undead and +50% to Animals, and a mace the
+ * reverse, applies in POE2 mode. Off (plan step 14, Curtis 2026-10-27): it cost a Warrior or Bard about a third more
+ * hits in Act 1 and a Warrior twice as many in the Hive.
+ */
+constexpr bool Poe2WeaponVsMonsterClass = false;
+/** @brief A melee hit's damage after Diablo's sword/mace rule against Undead and Animals (unchanged in POE2 mode). */
+int WeaponVsMonsterClassDamage(ItemType handType, MonsterClass monsterClass, int damage);
 /** @brief POE2 Mashup: moves the player to a tile at once, as Teleport does. */
 void MovePlayerTo(Player &player, Point destination);
 /**

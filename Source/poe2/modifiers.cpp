@@ -9,6 +9,7 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/player_data.hpp"
@@ -26,6 +27,9 @@ namespace devilution {
 namespace {
 
 std::vector<ModFamily> Families;
+
+/** Set while an item saved before the bases took POE2's numbers rebuilds (LegacyModScales). */
+bool UseLegacyScales = false;
 
 constexpr std::array<std::string_view, static_cast<size_t>(ModSlot::Count)> SlotNames = {
 	"helmet", "body_armour", "gloves", "boots", "belt", "shield", "focus", "quiver", "ring", "amulet",
@@ -123,6 +127,10 @@ bool LoadFamilies(std::vector<std::vector<std::string>> &conflictIds)
 		family.scale[1] = static_cast<int16_t>(ParseInt(text).value_or(100));
 		reader.readString("enabled", text);
 		family.enabled = text == "true" && family.effect != ModEffect::None;
+		reader.readString("legacyScale1", text);
+		family.legacyScale[0] = static_cast<int16_t>(ParseInt(text).value_or(family.scale[0]));
+		reader.readString("legacyScale2", text);
+		family.legacyScale[1] = static_cast<int16_t>(ParseInt(text).value_or(family.scale[1]));
 		Families.push_back(std::move(family));
 		if (Families.size() > UINT8_MAX) {
 			LogError("Too many modifier families in {}", Filename);
@@ -239,18 +247,37 @@ void AddPoe2Stat(Item &item, Poe2ItemStat stat, int value)
 	total = static_cast<int16_t>(std::clamp(total + value, static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
 }
 
-uint8_t AddToByte(uint8_t base, int value)
+/** Adds to an item's 16-bit weapon damage, clamped to the field. */
+uint16_t AddToDamage(uint16_t base, int value)
 {
-	return static_cast<uint8_t>(std::clamp(base + value, 0, static_cast<int>(UINT8_MAX)));
+	return static_cast<uint16_t>(std::clamp(base + value, 0, static_cast<int>(UINT16_MAX)));
 }
 
 } // namespace
+
+bool RollingLegacyModScales()
+{
+	return UseLegacyScales;
+}
+
+LegacyModScales::LegacyModScales(bool active)
+    : previous_(UseLegacyScales)
+{
+	UseLegacyScales = UseLegacyScales || active;
+}
+
+LegacyModScales::~LegacyModScales()
+{
+	UseLegacyScales = previous_;
+}
 
 void LoadModifierData()
 {
 	Families.clear();
 	LoadBaseData();
 	LoadPoe2Uniques();
+	// Clears the table in Diablo mode and never fails there.
+	LoadAreaLevels();
 	if (!gbIsPoe2)
 		return;
 
@@ -440,6 +467,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::AddedPhysicalToAttacks:
 	case ModEffect::Accuracy:
 	case ModEffect::DamagePercent:
+	case ModEffect::SpellDamage:
 		return Damage;
 	case ModEffect::Strength:
 	case ModEffect::Dexterity:
@@ -557,8 +585,9 @@ const ModCandidate &PickModCandidate(const std::vector<ModCandidate> &candidates
 std::array<int16_t, 2> RollTierValues(const ModFamily &family, const ModTier &tier, ModRandom &values)
 {
 	std::array<int16_t, 2> rolled {};
+	const std::array<int16_t, 2> &scale = UseLegacyScales ? family.legacyScale : family.scale;
 	for (size_t stat = 0; stat < 2; stat++)
-		rolled[stat] = ScaleValue(values.between(tier.min[stat], tier.max[stat]), family.scale[stat]);
+		rolled[stat] = ScaleValue(values.between(tier.min[stat], tier.max[stat]), scale[stat]);
 	// Added damage rolls its low and high end apart; keep them in order.
 	if (IsAnyOf(family.effect, ModEffect::AddedPhysical, ModEffect::AddedFire, ModEffect::AddedLightning, ModEffect::AddedPhysicalToAttacks) && rolled[1] < rolled[0])
 		rolled[1] = rolled[0];
@@ -727,8 +756,8 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		AddPoe2Stat(item, Poe2ItemStat::Spirit, v0);
 		break;
 	case ModEffect::AddedPhysical:
-		item._iMinDam = AddToByte(item._iMinDam, v0);
-		item._iMaxDam = AddToByte(item._iMaxDam, v1);
+		item._iMinDam = AddToDamage(item._iMinDam, v0);
+		item._iMaxDam = AddToDamage(item._iMaxDam, v1);
 		break;
 	case ModEffect::PhysicalPercent:
 		item._iPLDam = static_cast<int16_t>(item._iPLDam + v0);
@@ -837,6 +866,9 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		break;
 	case ModEffect::ItemRarity:
 		AddPoe2Stat(item, Poe2ItemStat::ItemRarity, v0);
+		break;
+	case ModEffect::SpellDamage:
+		AddPoe2Stat(item, Poe2ItemStat::SpellDamage, v0);
 		break;
 	}
 }

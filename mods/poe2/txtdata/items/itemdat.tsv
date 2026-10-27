@@ -257,420 +257,420 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Catacomb Lord's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Cavern Lord's Skull	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
 	0	Misc	Unequippable	BRAIN	Misc	NONE	Skull of the Archbishop	Skull	1	0	0	0	0	0	0	0	0		SPIRIT_SKULL	Null	true	1000
-	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Rusted Cuirass	Plate	1	60	0	0	6	7	0	0	0		NONE	Null	false	690
-	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Iron Cuirass	Plate	4	70	0	0	14	17	12	0	0		NONE	Null	false	1770
-	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Maraketh Cuirass	Plate	8	75	0	0	22	25	22	0	0		NONE	Null	false	2730
-	1	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Full Plate	Plate	13	80	0	0	32	38	37	0	0		NONE	Null	false	4200
-	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Juggernaut Plate	Plate	18	90	0	0	42	49	50	0	0		NONE	Null	false	5490
-	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Champion Cuirass	Plate	23	95	0	0	53	62	65	0	0		NONE	Null	false	6960
-	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Conqueror Plate	Plate	27	100	0	0	58	68	73	0	0	FastHitRecovery	NONE	Null	false	7740
-	1	Armor	Armor	QUILTED_ARMOR	LightArmor	NONE	Leather Vest	Armor	1	30	0	0	6	7	0	0	0		NONE	Null	false	690
-	1	Armor	Armor	LEATHER_ARMOR	LightArmor	NONE	Pathfinder Coat	Armor	4	35	0	0	14	17	0	0	12		NONE	Null	false	1770
-	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Rhoahide Coat	Armor	9	40	0	0	23	27	0	0	25		NONE	Null	false	2970
-	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Scout's Vest	Armor	13	45	0	0	32	38	0	0	37		NONE	Null	false	4200
-	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Corsair Vest	Armor	18	50	0	0	42	49	0	0	50		NONE	Null	false	5490
-	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Hardleather Coat	Armor	22	55	0	0	51	60	0	0	63		NONE	Null	false	6720
-	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Armoured Vest	Armor	29	60	0	0	58	68	0	0	73		NONE	Null	false	7860
-	1	Armor	Armor	RAGS	LightArmor	NONE	Tattered Robe	Armor	1	12	0	0	6	7	0	0	0		NONE	Null	false	690
-	1	Armor	Armor	ROBE	LightArmor	NONE	Hexer's Robe	Armor	4	18	0	0	14	17	0	12	0		NONE	Null	false	1770
-	1	Armor	Armor	CAPE	LightArmor	NONE	Silk Robe	Armor	9	22	0	0	23	27	0	25	0		NONE	Null	false	2970
-	1	Armor	Armor	ROBE	LightArmor	NONE	Votive Raiment	Armor	13	26	0	0	32	38	0	37	0		NONE	Null	false	4200
-	1	Armor	Armor	ROBE	LightArmor	NONE	Elementalist Robe	Armor	18	30	0	0	42	49	0	50	0		NONE	Null	false	5490
-	1	Armor	Armor	ROBE	LightArmor	NONE	Plated Raiment	Armor	23	34	0	0	53	62	0	65	0		NONE	Null	false	6960
-	1	Armor	Armor	ROBE	LightArmor	NONE	Enlightened Robe	Armor	27	38	0	0	58	68	0	73	0		NONE	Null	false	7740
-	1	Armor	Armor	RING_MAIL	MediumArmor	NONE	Chain Mail Vest	Mail	1	45	0	0	7	8	0	0	0		NONE	Null	false	780
-	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Rogue Armour	Mail	4	50	0	0	16	18	7	0	7		NONE	Null	false	1860
-	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Cloaked Mail	Mail	10	55	0	0	29	34	16	0	16		NONE	Null	false	3660
-	1	Armor	Armor	SCALE_MAIL	HeavyArmor	NONE	Scale Armour	Plate	15	60	0	0	39	46	23	0	23		NONE	Null	false	5040
-	1	Armor	Armor	SCALE_MAIL	HeavyArmor	NONE	Knight Armour	Plate	18	65	0	0	46	54	28	0	28		NONE	Null	false	5940
-	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Gladiator Armour	Plate	23	70	0	0	58	68	37	0	37		NONE	Null	false	7500
-	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Heroic Armour	Plate	26	75	0	0	64	75	41	0	41		NONE	Null	false	8310
-	1	Armor	Armor	CAPE	LightArmor	NONE	Pilgrim Vestments	Armor	1	30	0	0	7	8	0	0	0		NONE	Null	false	780
-	1	Armor	Armor	RING_MAIL	MediumArmor	NONE	Pelt Mantle	Mail	4	40	0	0	15	17	6	6	0		NONE	Null	false	1770
-	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Mail Vestments	Mail	6	45	0	0	20	24	10	10	0		NONE	Null	false	2520
-	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Shaman Mantle	Plate	11	50	0	0	31	36	18	18	0		NONE	Null	false	3900
-	1	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Cleric Vestments	Plate	18	60	0	0	46	54	28	28	0		NONE	Null	false	5940
-	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Revered Vestments	Plate	26	70	0	0	64	75	41	41	0		NONE	Null	false	8310
-	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Corvus Mantle	Plate	27	70	0	0	64	75	41	41	0		NONE	Null	false	8370
-	1	Armor	Armor	CLOAK	LightArmor	NONE	Hermit Garb	Armor	1	25	0	0	7	8	0	0	0		NONE	Null	false	780
-	1	Armor	Armor	LEATHER_ARMOR	LightArmor	NONE	Waxed Jacket	Armor	4	30	0	0	16	18	0	7	7		NONE	Null	false	1860
-	1	Armor	Armor	CLOAK	LightArmor	NONE	Marabout Garb	Armor	6	32	0	0	20	24	0	10	10		NONE	Null	false	2520
-	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Wayfarer Jacket	Armor	11	38	0	0	31	36	0	18	18		NONE	Null	false	3900
-	1	Armor	Armor	CLOAK	LightArmor	NONE	Scalper's Jacket	Armor	16	42	0	0	41	48	0	25	25		NONE	Null	false	5280
-	1	Armor	Armor	CLOAK	LightArmor	NONE	Monastic Garb	Armor	22	48	0	0	56	66	0	35	35		NONE	Null	false	7260
-	1	Armor	Armor	CLOAK	LightArmor	NONE	Devout Garb	Armor	27	50	0	0	64	75	0	41	41		NONE	Null	false	8370
-	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Grand Regalia	Plate	26	80	0	0	70	82	29	29	29		NONE	Null	false	8940
+	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Rusted Cuirass	Plate	1	60	0	0	45	45	0	0	0		NONE	Null	false	690
+	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Iron Cuirass	Plate	11	70	0	0	115	115	12	0	0		NONE	Null	false	1770
+	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Maraketh Cuirass	Plate	20	75	0	0	178	178	22	0	0		NONE	Null	false	2730
+	1	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Full Plate	Plate	33	80	0	0	270	270	37	0	0		NONE	Null	false	4200
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Juggernaut Plate	Plate	45	90	0	0	355	355	50	0	0		NONE	Null	false	5490
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Champion Cuirass	Plate	58	95	0	0	446	446	65	0	0		NONE	Null	false	6960
+	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Conqueror Plate	Plate	68	100	0	0	496	496	73	0	0	FastHitRecovery	NONE	Null	false	7740
+	1	Armor	Armor	QUILTED_ARMOR	LightArmor	NONE	Leather Vest	Armor	1	30	0	0	30	30	0	0	0		NONE	Null	false	690
+	1	Armor	Armor	LEATHER_ARMOR	LightArmor	NONE	Pathfinder Coat	Armor	11	35	0	0	96	96	0	0	12		NONE	Null	false	1770
+	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Rhoahide Coat	Armor	22	40	0	0	168	168	0	0	25		NONE	Null	false	2970
+	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Scout's Vest	Armor	33	45	0	0	240	240	0	0	37		NONE	Null	false	4200
+	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Corsair Vest	Armor	45	50	0	0	320	320	0	0	50		NONE	Null	false	5490
+	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Hardleather Coat	Armor	56	55	0	0	392	392	0	0	63		NONE	Null	false	6720
+	1	Armor	Armor	STUDDED_LEATHER_ARMOR	LightArmor	NONE	Armoured Vest	Armor	73	60	0	0	451	451	0	0	73		NONE	Null	false	7860
+	1	Armor	Armor	RAGS	LightArmor	NONE	Tattered Robe	Armor	1	12	0	0	9	9	0	0	0		NONE	Null	false	690
+	1	Armor	Armor	ROBE	LightArmor	NONE	Hexer's Robe	Armor	11	18	0	0	15	15	0	12	0		NONE	Null	false	1770
+	1	Armor	Armor	CAPE	LightArmor	NONE	Silk Robe	Armor	22	22	0	0	21	21	0	25	0		NONE	Null	false	2970
+	1	Armor	Armor	ROBE	LightArmor	NONE	Votive Raiment	Armor	33	26	0	0	28	28	0	37	0		NONE	Null	false	4200
+	1	Armor	Armor	ROBE	LightArmor	NONE	Elementalist Robe	Armor	45	30	0	0	34	34	0	50	0		NONE	Null	false	5490
+	1	Armor	Armor	ROBE	LightArmor	NONE	Plated Raiment	Armor	58	34	0	0	42	42	0	65	0		NONE	Null	false	6960
+	1	Armor	Armor	ROBE	LightArmor	NONE	Enlightened Robe	Armor	68	38	0	0	46	46	0	73	0		NONE	Null	false	7740
+	1	Armor	Armor	RING_MAIL	MediumArmor	NONE	Chain Mail Vest	Mail	1	45	0	0	41	41	0	0	0		NONE	Null	false	780
+	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Rogue Armour	Mail	11	50	0	0	116	116	7	0	7		NONE	Null	false	1860
+	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Cloaked Mail	Mail	26	55	0	0	228	228	16	0	16		NONE	Null	false	3660
+	1	Armor	Armor	SCALE_MAIL	HeavyArmor	NONE	Scale Armour	Plate	37	60	0	0	311	311	23	0	23		NONE	Null	false	5040
+	1	Armor	Armor	SCALE_MAIL	HeavyArmor	NONE	Knight Armour	Plate	45	65	0	0	371	371	28	0	28		NONE	Null	false	5940
+	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Gladiator Armour	Plate	58	70	0	0	468	468	37	0	37		NONE	Null	false	7500
+	1	Armor	Armor	SPLINT_MAIL	HeavyArmor	NONE	Heroic Armour	Plate	65	75	0	0	521	521	41	0	41		NONE	Null	false	8310
+	1	Armor	Armor	CAPE	LightArmor	NONE	Pilgrim Vestments	Armor	1	30	0	0	30	30	0	0	0		NONE	Null	false	780
+	1	Armor	Armor	RING_MAIL	MediumArmor	NONE	Pelt Mantle	Mail	10	40	0	0	67	67	6	6	0		NONE	Null	false	1770
+	1	Armor	Armor	CHAIN_MAIL	MediumArmor	NONE	Mail Vestments	Mail	16	45	0	0	93	93	10	10	0		NONE	Null	false	2520
+	1	Armor	Armor	BREAST_PLATE	HeavyArmor	NONE	Shaman Mantle	Plate	28	50	0	0	143	143	18	18	0		NONE	Null	false	3900
+	1	Armor	Armor	FIELD_PLATE	HeavyArmor	NONE	Cleric Vestments	Plate	45	60	0	0	214	214	28	28	0		NONE	Null	false	5940
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Revered Vestments	Plate	65	70	0	0	298	298	41	41	0		NONE	Null	false	8310
+	1	Armor	Armor	GOTHIC_PLATE	HeavyArmor	NONE	Corvus Mantle	Plate	68	70	0	0	298	298	41	41	0		NONE	Null	false	8370
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Hermit Garb	Armor	1	25	0	0	21	21	0	0	0		NONE	Null	false	780
+	1	Armor	Armor	LEATHER_ARMOR	LightArmor	NONE	Waxed Jacket	Armor	11	30	0	0	61	61	0	7	7		NONE	Null	false	1860
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Marabout Garb	Armor	16	32	0	0	81	81	0	10	10		NONE	Null	false	2520
+	1	Armor	Armor	HARD_LEATHER_ARMOR	LightArmor	NONE	Wayfarer Jacket	Armor	28	38	0	0	128	128	0	18	18		NONE	Null	false	3900
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Scalper's Jacket	Armor	39	42	0	0	171	171	0	25	25		NONE	Null	false	5280
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Monastic Garb	Armor	56	48	0	0	238	238	0	35	35		NONE	Null	false	7260
+	1	Armor	Armor	CLOAK	LightArmor	NONE	Devout Garb	Armor	68	50	0	0	273	273	0	41	41		NONE	Null	false	8370
+	1	Armor	Armor	FULL_PLATE_MAIL	HeavyArmor	NONE	Grand Regalia	Plate	65	80	0	0	364	364	29	29	29		NONE	Null	false	8940
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Ruby	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
 	1	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Emerald	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
 	1	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Sapphire	Jewel	5	0	0	0	0	0	0	0	0		JEWEL	Null	false	1000
-poe2:one_hand_axe_heavy_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Heavy Hatchet	Axe	1	35	3	6	0	0	3	0	0		NONE	Null	false	200
-poe2:one_hand_axe_balanced_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Hatchet	Axe	1	35	3	6	0	0	3	0	0		NONE	Null	false	200
-poe2:one_hand_axe_swift_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Swift Hatchet	Axe	1	35	2	5	0	0	3	0	0		NONE	Null	false	200
-poe2:one_hand_axe_heavy_bearded_axe	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Heavy Bearded Axe	Axe	4	40	3	8	0	0	10	0	0		NONE	Null	false	1300
-poe2:one_hand_axe_balanced_bearded_axe	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Bearded Axe	Axe	4	40	3	7	0	0	10	0	0		NONE	Null	false	1300
-poe2:one_hand_axe_swift_bearded_axe	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Swift Bearded Axe	Axe	4	40	3	6	0	0	9	0	0		NONE	Null	false	1300
-poe2:one_hand_axe_heavy_raider_axe	1	Weapon	One-handed	AXE	Axe	BROADAXE	Heavy Raider Axe	Axe	9	45	4	9	0	0	20	0	0		NONE	Null	false	2500
-poe2:one_hand_axe_balanced_raider_axe	1	Weapon	One-handed	AXE	Axe	BROADAXE	Raider Axe	Axe	9	45	4	8	0	0	19	0	0		NONE	Null	false	2500
-poe2:one_hand_axe_swift_raider_axe	1	Weapon	One-handed	AXE	Axe	BROADAXE	Swift Raider Axe	Axe	9	45	3	7	0	0	19	0	0		NONE	Null	false	2500
-poe2:one_hand_axe_heavy_ironcleaver	1	Weapon	One-handed	AXE	Axe	GREATAXE	Heavy Ironcleaver	Axe	13	50	5	12	0	0	32	0	0		NONE	Null	false	3700
-poe2:one_hand_axe_balanced_ironcleaver	1	Weapon	One-handed	AXE	Axe	GREATAXE	Ironcleaver	Axe	13	50	4	10	0	0	30	0	0		NONE	Null	false	3700
-poe2:one_hand_axe_swift_ironcleaver	1	Weapon	One-handed	AXE	Axe	GREATAXE	Swift Ironcleaver	Axe	13	50	4	9	0	0	29	0	0		NONE	Null	false	3700
-poe2:one_hand_axe_heavy_war_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Heavy War Axe	Axe	17	55	7	16	0	0	46	0	0		NONE	Null	false	4900
-poe2:one_hand_axe_balanced_war_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	War Axe	Axe	17	55	6	13	0	0	43	0	0		NONE	Null	false	4900
-poe2:one_hand_axe_swift_war_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Swift War Axe	Axe	17	55	5	11	0	0	41	0	0		NONE	Null	false	4900
-poe2:one_hand_axe_heavy_siege_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Heavy Siege Axe	Axe	22	60	9	21	0	0	59	0	0		NONE	Null	false	6100
-poe2:one_hand_axe_balanced_siege_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Siege Axe	Axe	22	60	8	18	0	0	56	0	0		NONE	Null	false	6100
-poe2:one_hand_axe_swift_siege_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Swift Siege Axe	Axe	22	60	6	15	0	0	54	0	0		NONE	Null	false	6100
-poe2:one_hand_axe_heavy_bloodiron_axe	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Heavy Bloodiron Axe	Axe	25	65	12	29	0	0	74	0	0		NONE	Null	false	7100
-poe2:one_hand_axe_balanced_bloodiron_axe	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Bloodiron Axe	Axe	25	65	10	23	0	0	69	0	0		NONE	Null	false	7100
-poe2:one_hand_axe_swift_bloodiron_axe	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Swift Bloodiron Axe	Axe	25	65	8	19	0	0	67	0	0		NONE	Null	false	7100
-poe2:one_hand_axe_heavy_kingsplitter	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Heavy Kingsplitter	Axe	29	70	17	40	0	0	87	0	0		NONE	Null	false	8100
-poe2:one_hand_axe_balanced_kingsplitter	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Kingsplitter	Axe	29	70	14	32	0	0	82	0	0		NONE	Null	false	8100
-poe2:one_hand_axe_swift_kingsplitter	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Swift Kingsplitter	Axe	29	70	11	26	0	0	79	0	0		NONE	Null	false	8100
-poe2:one_hand_sword_heavy_shortsword	1	Weapon	One-handed	SHORT_SWORD	Sword	SABRE	Heavy Shortsword	Sword	1	35	3	6	0	0	2	0	2		NONE	Null	false	200
-poe2:one_hand_sword_balanced_shortsword	1	Weapon	One-handed	SHORT_SWORD	Sword	SABRE	Shortsword	Sword	1	35	2	6	0	0	2	0	2		NONE	Null	false	200
-poe2:one_hand_sword_swift_shortsword	1	Weapon	One-handed	SHORT_SWORD	Sword	SABRE	Swift Shortsword	Sword	1	35	2	5	0	0	2	0	2		NONE	Null	false	200
-poe2:one_hand_sword_heavy_leafblade	1	Weapon	One-handed	SABRE	Sword	SCIMITAR	Heavy Leafblade	Sword	4	40	3	7	0	0	7	0	7		NONE	Null	false	1300
-poe2:one_hand_sword_balanced_leafblade	1	Weapon	One-handed	SABRE	Sword	SCIMITAR	Leafblade	Sword	4	40	3	6	0	0	6	0	6		NONE	Null	false	1300
-poe2:one_hand_sword_swift_leafblade	1	Weapon	One-handed	SABRE	Sword	SCIMITAR	Swift Leafblade	Sword	4	40	2	6	0	0	6	0	6		NONE	Null	false	1300
-poe2:one_hand_sword_heavy_soldier_sword	1	Weapon	One-handed	SCIMITAR	Sword	BROADSWR	Heavy Soldier Sword	Sword	9	45	4	9	0	0	12	0	12		NONE	Null	false	2500
-poe2:one_hand_sword_balanced_soldier_sword	1	Weapon	One-handed	SCIMITAR	Sword	BROADSWR	Soldier Sword	Sword	9	45	3	8	0	0	12	0	12		NONE	Null	false	2500
-poe2:one_hand_sword_swift_soldier_sword	1	Weapon	One-handed	SCIMITAR	Sword	BROADSWR	Swift Soldier Sword	Sword	9	45	3	7	0	0	11	0	11		NONE	Null	false	2500
-poe2:one_hand_sword_heavy_falchion	1	Weapon	One-handed	FALCHION	Sword	BASTARDSWR	Heavy Falchion	Sword	13	50	5	11	0	0	19	0	19		NONE	Null	false	3700
-poe2:one_hand_sword_balanced_falchion	1	Weapon	One-handed	FALCHION	Sword	BASTARDSWR	Fine Falchion	Sword	13	50	4	9	0	0	18	0	18		NONE	Null	false	3700
-poe2:one_hand_sword_swift_falchion	1	Weapon	One-handed	FALCHION	Sword	BASTARDSWR	Swift Falchion	Sword	13	50	3	8	0	0	17	0	17		NONE	Null	false	3700
-poe2:one_hand_sword_heavy_knightblade	1	Weapon	One-handed	LONG_SWORD	Sword	BASTARDSWR	Heavy Knightblade	Sword	17	55	6	14	0	0	27	0	27		NONE	Null	false	4900
-poe2:one_hand_sword_balanced_knightblade	1	Weapon	One-handed	LONG_SWORD	Sword	BASTARDSWR	Knightblade	Sword	17	55	5	12	0	0	25	0	25		NONE	Null	false	4900
-poe2:one_hand_sword_swift_knightblade	1	Weapon	One-handed	LONG_SWORD	Sword	BASTARDSWR	Swift Knightblade	Sword	17	55	4	10	0	0	24	0	24		NONE	Null	false	4900
-poe2:one_hand_sword_heavy_dueling_sword	1	Weapon	One-handed	BROAD_SWORD	Sword	BASTARDSWR	Heavy Dueling Sword	Sword	22	60	8	19	0	0	35	0	35		NONE	Null	false	6100
-poe2:one_hand_sword_balanced_dueling_sword	1	Weapon	One-handed	BROAD_SWORD	Sword	BASTARDSWR	Dueling Sword	Sword	22	60	7	15	0	0	33	0	33		NONE	Null	false	6100
-poe2:one_hand_sword_swift_dueling_sword	1	Weapon	One-handed	BROAD_SWORD	Sword	BASTARDSWR	Swift Dueling Sword	Sword	22	60	5	13	0	0	32	0	32		NONE	Null	false	6100
-poe2:one_hand_sword_heavy_runed_sabre	1	Weapon	One-handed	BASTARD_SWORD	Sword	BASTARDSWR	Heavy Runed Sabre	Sword	25	65	11	25	0	0	43	0	43		NONE	Null	false	7100
-poe2:one_hand_sword_balanced_runed_sabre	1	Weapon	One-handed	BASTARD_SWORD	Sword	BASTARDSWR	Runed Sabre	Sword	25	65	9	20	0	0	41	0	41		NONE	Null	false	7100
-poe2:one_hand_sword_swift_runed_sabre	1	Weapon	One-handed	BASTARD_SWORD	Sword	BASTARDSWR	Swift Runed Sabre	Sword	25	65	7	17	0	0	39	0	39		NONE	Null	false	7100
-poe2:one_hand_sword_heavy_imperial_edge	1	Weapon	One-handed	DIAMONDEDGE	Sword	BASTARDSWR	Heavy Imperial Edge	Sword	29	70	15	34	0	0	51	0	51		NONE	Null	false	8100
-poe2:one_hand_sword_balanced_imperial_edge	1	Weapon	One-handed	DIAMONDEDGE	Sword	BASTARDSWR	Imperial Edge	Sword	29	70	12	28	0	0	48	0	48		NONE	Null	false	8100
-poe2:one_hand_sword_swift_imperial_edge	1	Weapon	One-handed	DIAMONDEDGE	Sword	BASTARDSWR	Swift Imperial Edge	Sword	29	70	10	22	0	0	46	0	46		NONE	Null	false	8100
-poe2:one_hand_mace_heavy_cudgel	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Heavy Cudgel	Mace	1	35	3	7	0	0	3	0	0		NONE	Null	false	200
-poe2:one_hand_mace_balanced_cudgel	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Cudgel	Mace	1	35	3	6	0	0	3	0	0		NONE	Null	false	200
-poe2:one_hand_mace_swift_cudgel	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Swift Cudgel	Mace	1	35	2	6	0	0	3	0	0		NONE	Null	false	200
-poe2:one_hand_mace_heavy_flanged_mace	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Heavy Flanged Mace	Mace	4	40	4	8	0	0	10	0	0		NONE	Null	false	1300
-poe2:one_hand_mace_balanced_flanged_mace	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Flanged Mace	Mace	4	40	3	7	0	0	10	0	0		NONE	Null	false	1300
-poe2:one_hand_mace_swift_flanged_mace	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Swift Flanged Mace	Mace	4	40	3	6	0	0	9	0	0		NONE	Null	false	1300
-poe2:one_hand_mace_heavy_war_club	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Heavy War Club	Mace	9	45	4	10	0	0	20	0	0		NONE	Null	false	2500
-poe2:one_hand_mace_balanced_war_club	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	War Club	Mace	9	45	4	9	0	0	19	0	0		NONE	Null	false	2500
-poe2:one_hand_mace_swift_war_club	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Swift War Club	Mace	9	45	3	8	0	0	19	0	0		NONE	Null	false	2500
-poe2:one_hand_mace_heavy_spiked_mace	1	Weapon	One-handed	MACE	Mace	FLAIL	Heavy Spiked Mace	Mace	13	50	6	13	0	0	32	0	0		NONE	Null	false	3700
-poe2:one_hand_mace_balanced_spiked_mace	1	Weapon	One-handed	MACE	Mace	FLAIL	Spiked Mace	Mace	13	50	5	11	0	0	30	0	0		NONE	Null	false	3700
-poe2:one_hand_mace_swift_spiked_mace	1	Weapon	One-handed	MACE	Mace	FLAIL	Swift Spiked Mace	Mace	13	50	4	10	0	0	29	0	0		NONE	Null	false	3700
-poe2:one_hand_mace_heavy_battle_mace	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Heavy Battle Mace	Mace	17	55	8	18	0	0	46	0	0		NONE	Null	false	4900
-poe2:one_hand_mace_balanced_battle_mace	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Battle Mace	Mace	17	55	6	15	0	0	43	0	0		NONE	Null	false	4900
-poe2:one_hand_mace_swift_battle_mace	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Swift Battle Mace	Mace	17	55	5	12	0	0	41	0	0		NONE	Null	false	4900
-poe2:one_hand_mace_heavy_siege_hammer	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Heavy Siege Hammer	Mace	22	60	10	24	0	0	59	0	0		NONE	Null	false	6100
-poe2:one_hand_mace_balanced_siege_hammer	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Siege Hammer	Mace	22	60	8	19	0	0	56	0	0		NONE	Null	false	6100
-poe2:one_hand_mace_swift_siege_hammer	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Swift Siege Hammer	Mace	22	60	7	16	0	0	54	0	0		NONE	Null	false	6100
-poe2:one_hand_mace_heavy_dread_maul	1	Weapon	One-handed	FLAIL	Mace	FLAIL	Heavy Dread Maul	Mace	25	65	14	33	0	0	74	0	0		NONE	Null	false	7100
-poe2:one_hand_mace_balanced_dread_maul	1	Weapon	One-handed	FLAIL	Mace	FLAIL	Dread Maul	Mace	25	65	11	26	0	0	69	0	0		NONE	Null	false	7100
-poe2:one_hand_mace_swift_dread_maul	1	Weapon	One-handed	FLAIL	Mace	FLAIL	Swift Dread Maul	Mace	25	65	9	22	0	0	67	0	0		NONE	Null	false	7100
-poe2:one_hand_mace_heavy_judicator	1	Weapon	One-handed	GRYPHONS_CLAW	Mace	FLAIL	Heavy Judicator	Mace	29	70	19	45	0	0	87	0	0		NONE	Null	false	8100
-poe2:one_hand_mace_balanced_judicator	1	Weapon	One-handed	GRYPHONS_CLAW	Mace	FLAIL	Judicator	Mace	29	70	16	36	0	0	82	0	0		NONE	Null	false	8100
-poe2:one_hand_mace_swift_judicator	1	Weapon	One-handed	GRYPHONS_CLAW	Mace	FLAIL	Swift Judicator	Mace	29	70	13	29	0	0	79	0	0		NONE	Null	false	8100
-poe2:two_hand_axe_heavy_woodsman_s_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Heavy Woodsman's Axe	Axe	1	35	4	9	0	0	3	0	0		NONE	Null	false	200
-poe2:two_hand_axe_balanced_woodsman_s_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Woodsman's Axe	Axe	1	35	3	8	0	0	3	0	0		NONE	Null	false	200
-poe2:two_hand_axe_swift_woodsman_s_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Swift Woodsman's Axe	Axe	1	35	3	7	0	0	3	0	0		NONE	Null	false	200
-poe2:two_hand_axe_heavy_execution_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Heavy Execution Axe	Axe	4	40	5	12	0	0	12	0	0		NONE	Null	false	1300
-poe2:two_hand_axe_balanced_execution_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Execution Axe	Axe	4	40	4	10	0	0	11	0	0		NONE	Null	false	1300
-poe2:two_hand_axe_swift_execution_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Swift Execution Axe	Axe	4	40	4	9	0	0	10	0	0		NONE	Null	false	1300
-poe2:two_hand_axe_heavy_broad_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	BROADAXE	Heavy Broad Axe	Axe	9	45	7	15	0	0	23	0	0		NONE	Null	false	2500
-poe2:two_hand_axe_balanced_broad_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	BROADAXE	Fine Broad Axe	Axe	9	45	5	13	0	0	21	0	0		NONE	Null	false	2500
-poe2:two_hand_axe_swift_broad_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	BROADAXE	Swift Broad Axe	Axe	9	45	5	11	0	0	20	0	0		NONE	Null	false	2500
-poe2:two_hand_axe_heavy_headsman_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	GREATAXE	Heavy Headsman Axe	Axe	13	50	9	21	0	0	36	0	0		NONE	Null	false	3700
-poe2:two_hand_axe_balanced_headsman_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	GREATAXE	Headsman Axe	Axe	13	50	7	17	0	0	34	0	0		NONE	Null	false	3700
-poe2:two_hand_axe_swift_headsman_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	GREATAXE	Swift Headsman Axe	Axe	13	50	6	14	0	0	33	0	0		NONE	Null	false	3700
-poe2:two_hand_axe_heavy_great_cleaver	1	Weapon	Two-handed	BATTLE_AXE	Axe	GREATAXE	Heavy Great Cleaver	Axe	17	55	12	28	0	0	51	0	0		NONE	Null	false	4900
-poe2:two_hand_axe_balanced_great_cleaver	1	Weapon	Two-handed	BATTLE_AXE	Axe	GREATAXE	Great Cleaver	Axe	17	55	10	23	0	0	48	0	0		NONE	Null	false	4900
-poe2:two_hand_axe_swift_great_cleaver	1	Weapon	Two-handed	BATTLE_AXE	Axe	GREATAXE	Swift Great Cleaver	Axe	17	55	8	19	0	0	46	0	0		NONE	Null	false	4900
-poe2:two_hand_axe_heavy_siegebreaker	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Heavy Siegebreaker	Axe	22	60	16	38	0	0	67	0	0		NONE	Null	false	6100
-poe2:two_hand_axe_balanced_siegebreaker	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Siegebreaker	Axe	22	60	13	31	0	0	63	0	0		NONE	Null	false	6100
-poe2:two_hand_axe_swift_siegebreaker	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Swift Siegebreaker	Axe	22	60	11	25	0	0	60	0	0		NONE	Null	false	6100
-poe2:two_hand_axe_heavy_bloodoak_axe	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Heavy Bloodoak Axe	Axe	25	65	23	54	0	0	82	0	0		NONE	Null	false	7100
-poe2:two_hand_axe_balanced_bloodoak_axe	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Bloodoak Axe	Axe	25	65	18	43	0	0	78	0	0		NONE	Null	false	7100
-poe2:two_hand_axe_swift_bloodoak_axe	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Swift Bloodoak Axe	Axe	25	65	15	34	0	0	74	0	0		NONE	Null	false	7100
-poe2:two_hand_axe_heavy_worldsplitter	1	Weapon	Two-handed	STONECLEAVER	Axe	GREATAXE	Heavy Worldsplitter	Axe	29	70	32	75	0	0	98	0	0		NONE	Null	false	8100
-poe2:two_hand_axe_balanced_worldsplitter	1	Weapon	Two-handed	STONECLEAVER	Axe	GREATAXE	Worldsplitter	Axe	29	70	26	60	0	0	92	0	0		NONE	Null	false	8100
-poe2:two_hand_axe_swift_worldsplitter	1	Weapon	Two-handed	STONECLEAVER	Axe	GREATAXE	Swift Worldsplitter	Axe	29	70	20	47	0	0	89	0	0		NONE	Null	false	8100
-poe2:two_hand_sword_heavy_longsword	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Heavy Longsword	Sword	1	35	4	9	0	0	2	0	2		NONE	Null	false	200
-poe2:two_hand_sword_balanced_longsword	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Longsword	Sword	1	35	3	7	0	0	2	0	2		NONE	Null	false	200
-poe2:two_hand_sword_swift_longsword	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Swift Longsword	Sword	1	35	3	6	0	0	2	0	2		NONE	Null	false	200
-poe2:two_hand_sword_heavy_greatblade	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Heavy Greatblade	Sword	4	40	5	11	0	0	7	0	7		NONE	Null	false	1300
-poe2:two_hand_sword_balanced_greatblade	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Greatblade	Sword	4	40	4	9	0	0	7	0	7		NONE	Null	false	1300
-poe2:two_hand_sword_swift_greatblade	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Swift Greatblade	Sword	4	40	3	8	0	0	7	0	7		NONE	Null	false	1300
-poe2:two_hand_sword_heavy_mercenary_blade	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Heavy Mercenary Blade	Sword	9	45	6	14	0	0	13	0	13		NONE	Null	false	2500
-poe2:two_hand_sword_balanced_mercenary_blade	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Mercenary Blade	Sword	9	45	5	12	0	0	13	0	13		NONE	Null	false	2500
-poe2:two_hand_sword_swift_mercenary_blade	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Swift Mercenary Blade	Sword	9	45	4	10	0	0	12	0	12		NONE	Null	false	2500
-poe2:two_hand_sword_heavy_claymore	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Heavy Claymore	Sword	13	50	8	18	0	0	21	0	21		NONE	Null	false	3700
-poe2:two_hand_sword_balanced_claymore	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Fine Claymore	Sword	13	50	6	15	0	0	20	0	20		NONE	Null	false	3700
-poe2:two_hand_sword_swift_claymore	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Swift Claymore	Sword	13	50	5	13	0	0	19	0	19		NONE	Null	false	3700
-poe2:two_hand_sword_heavy_war_greatsword	1	Weapon	Two-handed	TWO_HANDED_SWORD	Sword	GREATSWR	Heavy War Greatsword	Sword	17	55	11	25	0	0	30	0	30		NONE	Null	false	4900
-poe2:two_hand_sword_balanced_war_greatsword	1	Weapon	Two-handed	TWO_HANDED_SWORD	Sword	GREATSWR	War Greatsword	Sword	17	55	9	20	0	0	28	0	28		NONE	Null	false	4900
-poe2:two_hand_sword_swift_war_greatsword	1	Weapon	Two-handed	TWO_HANDED_SWORD	Sword	GREATSWR	Swift War Greatsword	Sword	17	55	7	16	0	0	27	0	27		NONE	Null	false	4900
-poe2:two_hand_sword_heavy_duelist_greatblade	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Heavy Duelist Greatblade	Sword	22	60	15	34	0	0	39	0	39		NONE	Null	false	6100
-poe2:two_hand_sword_balanced_duelist_greatblade	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Duelist Greatblade	Sword	22	60	12	27	0	0	37	0	37		NONE	Null	false	6100
-poe2:two_hand_sword_swift_duelist_greatblade	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Swift Duelist Greatblade	Sword	22	60	9	22	0	0	35	0	35		NONE	Null	false	6100
-poe2:two_hand_sword_heavy_runed_greatsword	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Heavy Runed Greatsword	Sword	25	65	20	47	0	0	48	0	48		NONE	Null	false	7100
-poe2:two_hand_sword_balanced_runed_greatsword	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Runed Greatsword	Sword	25	65	16	37	0	0	45	0	45		NONE	Null	false	7100
-poe2:two_hand_sword_swift_runed_greatsword	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Swift Runed Greatsword	Sword	25	65	13	30	0	0	43	0	43		NONE	Null	false	7100
-poe2:two_hand_sword_heavy_sovereign_blade	1	Weapon	Two-handed	THE_EXECUTIONERS_BLADE	Sword	GREATSWR	Heavy Sovereign Blade	Sword	29	70	28	66	0	0	57	0	57		NONE	Null	false	8100
-poe2:two_hand_sword_balanced_sovereign_blade	1	Weapon	Two-handed	THE_EXECUTIONERS_BLADE	Sword	GREATSWR	Sovereign Blade	Sword	29	70	22	52	0	0	54	0	54		NONE	Null	false	8100
-poe2:two_hand_sword_swift_sovereign_blade	1	Weapon	Two-handed	THE_EXECUTIONERS_BLADE	Sword	GREATSWR	Swift Sovereign Blade	Sword	29	70	18	41	0	0	52	0	52		NONE	Null	false	8100
-poe2:two_hand_mace_heavy_sledge	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Sledge	Maul	1	35	4	10	0	0	3	0	0		NONE	Null	false	200
-poe2:two_hand_mace_balanced_sledge	1	Weapon	Two-handed	MAUL	Mace	MAUL	Sledge	Maul	1	35	4	9	0	0	3	0	0		NONE	Null	false	200
-poe2:two_hand_mace_swift_sledge	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Sledge	Maul	1	35	3	8	0	0	3	0	0		NONE	Null	false	200
-poe2:two_hand_mace_heavy_great_mace	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Great Mace	Maul	4	40	6	13	0	0	12	0	0		NONE	Null	false	1300
-poe2:two_hand_mace_balanced_great_mace	1	Weapon	Two-handed	MAUL	Mace	MAUL	Great Mace	Maul	4	40	5	11	0	0	11	0	0		NONE	Null	false	1300
-poe2:two_hand_mace_swift_great_mace	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Great Mace	Maul	4	40	4	9	0	0	10	0	0		NONE	Null	false	1300
-poe2:two_hand_mace_heavy_war_mallet	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Heavy War Mallet	Maul	9	45	8	18	0	0	23	0	0		NONE	Null	false	2500
-poe2:two_hand_mace_balanced_war_mallet	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	War Mallet	Maul	9	45	6	15	0	0	21	0	0		NONE	Null	false	2500
-poe2:two_hand_mace_swift_war_mallet	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Swift War Mallet	Maul	9	45	5	12	0	0	20	0	0		NONE	Null	false	2500
-poe2:two_hand_mace_heavy_stonebreaker	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Heavy Stonebreaker	Maul	13	50	10	24	0	0	36	0	0		NONE	Null	false	3700
-poe2:two_hand_mace_balanced_stonebreaker	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Stonebreaker	Maul	13	50	8	19	0	0	34	0	0		NONE	Null	false	3700
-poe2:two_hand_mace_swift_stonebreaker	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Swift Stonebreaker	Maul	13	50	7	16	0	0	33	0	0		NONE	Null	false	3700
-poe2:two_hand_mace_heavy_battle_hammer	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Heavy Battle Hammer	Maul	17	55	14	32	0	0	51	0	0		NONE	Null	false	4900
-poe2:two_hand_mace_balanced_battle_hammer	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Battle Hammer	Maul	17	55	11	26	0	0	48	0	0		NONE	Null	false	4900
-poe2:two_hand_mace_swift_battle_hammer	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Swift Battle Hammer	Maul	17	55	9	21	0	0	46	0	0		NONE	Null	false	4900
-poe2:two_hand_mace_heavy_siege_maul	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Heavy Siege Maul	Maul	22	60	19	44	0	0	67	0	0		NONE	Null	false	6100
-poe2:two_hand_mace_balanced_siege_maul	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Siege Maul	Maul	22	60	15	36	0	0	63	0	0		NONE	Null	false	6100
-poe2:two_hand_mace_swift_siege_maul	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Swift Siege Maul	Maul	22	60	12	29	0	0	60	0	0		NONE	Null	false	6100
-poe2:two_hand_mace_heavy_titan_hammer	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Titan Hammer	Maul	25	65	27	62	0	0	82	0	0		NONE	Null	false	7100
-poe2:two_hand_mace_balanced_titan_hammer	1	Weapon	Two-handed	MAUL	Mace	MAUL	Titan Hammer	Maul	25	65	21	49	0	0	78	0	0		NONE	Null	false	7100
-poe2:two_hand_mace_swift_titan_hammer	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Titan Hammer	Maul	25	65	17	39	0	0	74	0	0		NONE	Null	false	7100
-poe2:two_hand_mace_heavy_cataclysm	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Cataclysm	Maul	29	70	38	88	0	0	98	0	0		NONE	Null	false	8100
-poe2:two_hand_mace_balanced_cataclysm	1	Weapon	Two-handed	MAUL	Mace	MAUL	Cataclysm	Maul	29	70	29	69	0	0	92	0	0		NONE	Null	false	8100
-poe2:two_hand_mace_swift_cataclysm	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Cataclysm	Maul	29	70	24	55	0	0	89	0	0		NONE	Null	false	8100
-poe2:dagger_heavy_shiv	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Heavy Shiv	Dagger	1	35	2	5	0	0	0	2	2		NONE	Null	false	200
-poe2:dagger_balanced_shiv	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Shiv	Dagger	1	35	2	5	0	0	0	2	2		NONE	Null	false	200
-poe2:dagger_swift_shiv	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Swift Shiv	Dagger	1	35	2	5	0	0	0	2	2		NONE	Null	false	200
-poe2:dagger_heavy_dirk	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Heavy Dirk	Dagger	4	40	3	6	0	0	0	7	7		NONE	Null	false	1300
-poe2:dagger_balanced_dirk	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Dirk	Dagger	4	40	2	6	0	0	0	6	6		NONE	Null	false	1300
-poe2:dagger_swift_dirk	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Swift Dirk	Dagger	4	40	2	5	0	0	0	6	6		NONE	Null	false	1300
-poe2:dagger_heavy_rondel	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Heavy Rondel	Dagger	9	45	3	7	0	0	0	12	12		NONE	Null	false	2500
-poe2:dagger_balanced_rondel	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Rondel	Dagger	9	45	3	6	0	0	0	12	12		NONE	Null	false	2500
-poe2:dagger_swift_rondel	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Swift Rondel	Dagger	9	45	3	6	0	0	0	11	11		NONE	Null	false	2500
-poe2:dagger_heavy_stiletto	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Heavy Stiletto	Dagger	13	50	4	9	0	0	0	19	19		NONE	Null	false	3700
-poe2:dagger_balanced_stiletto	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Stiletto	Dagger	13	50	3	8	0	0	0	18	18		NONE	Null	false	3700
-poe2:dagger_swift_stiletto	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Swift Stiletto	Dagger	13	50	3	7	0	0	0	17	17		NONE	Null	false	3700
-poe2:dagger_heavy_kris	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Heavy Kris	Dagger	17	55	5	11	0	0	0	27	27		NONE	Null	false	4900
-poe2:dagger_balanced_kris	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Kris	Dagger	17	55	4	10	0	0	0	25	25		NONE	Null	false	4900
-poe2:dagger_swift_kris	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Swift Kris	Dagger	17	55	4	8	0	0	0	24	24		NONE	Null	false	4900
-poe2:dagger_heavy_assassin_dirk	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Heavy Assassin Dirk	Dagger	22	60	6	15	0	0	0	35	35		NONE	Null	false	6100
-poe2:dagger_balanced_assassin_dirk	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Assassin Dirk	Dagger	22	60	5	12	0	0	0	33	33		NONE	Null	false	6100
-poe2:dagger_swift_assassin_dirk	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Swift Assassin Dirk	Dagger	22	60	4	10	0	0	0	32	32		NONE	Null	false	6100
-poe2:dagger_heavy_nightglass_knife	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Heavy Nightglass Knife	Dagger	25	65	8	20	0	0	0	43	43		NONE	Null	false	7100
-poe2:dagger_balanced_nightglass_knife	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Nightglass Knife	Dagger	25	65	7	16	0	0	0	41	41		NONE	Null	false	7100
-poe2:dagger_swift_nightglass_knife	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Swift Nightglass Knife	Dagger	25	65	6	13	0	0	0	39	39		NONE	Null	false	7100
-poe2:dagger_heavy_voidneedle	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Heavy Voidneedle	Dagger	29	70	11	26	0	0	0	51	51		NONE	Null	false	8100
-poe2:dagger_balanced_voidneedle	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Voidneedle	Dagger	29	70	9	22	0	0	0	48	48		NONE	Null	false	8100
-poe2:dagger_swift_voidneedle	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Swift Voidneedle	Dagger	29	70	8	18	0	0	0	46	46		NONE	Null	false	8100
-poe2:quarterstaff_heavy_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Heavy Ash Staff	Quarterstaff	1	35	3	6	0	0	0	2	2		NONE	Null	false	200
-poe2:quarterstaff_balanced_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Ash Staff	Quarterstaff	1	35	3	6	0	0	0	2	2		NONE	Null	false	200
-poe2:quarterstaff_swift_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Swift Ash Staff	Quarterstaff	1	35	2	5	0	0	0	2	2		NONE	Null	false	200
-poe2:quarterstaff_heavy_banded_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Heavy Banded Staff	Quarterstaff	4	40	3	8	0	0	0	7	7		NONE	Null	false	1300
-poe2:quarterstaff_balanced_banded_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Banded Staff	Quarterstaff	4	40	3	7	0	0	0	7	7		NONE	Null	false	1300
-poe2:quarterstaff_swift_banded_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Swift Banded Staff	Quarterstaff	4	40	3	6	0	0	0	7	7		NONE	Null	false	1300
-poe2:quarterstaff_heavy_ironwood_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	QUARSTAFF	Heavy Ironwood Staff	Quarterstaff	9	45	4	10	0	0	0	13	13		NONE	Null	false	2500
-poe2:quarterstaff_balanced_ironwood_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	QUARSTAFF	Ironwood Staff	Quarterstaff	9	45	4	8	0	0	0	13	13		NONE	Null	false	2500
-poe2:quarterstaff_swift_ironwood_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	QUARSTAFF	Swift Ironwood Staff	Quarterstaff	9	45	3	7	0	0	0	12	12		NONE	Null	false	2500
-poe2:quarterstaff_heavy_battle_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	WARSTAFF	Heavy Battle Staff	Quarterstaff	13	50	5	12	0	0	0	21	21		NONE	Null	false	3700
-poe2:quarterstaff_balanced_battle_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	WARSTAFF	Battle Staff	Quarterstaff	13	50	4	10	0	0	0	20	20		NONE	Null	false	3700
-poe2:quarterstaff_swift_battle_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	WARSTAFF	Swift Battle Staff	Quarterstaff	13	50	4	9	0	0	0	19	19		NONE	Null	false	3700
-poe2:quarterstaff_heavy_monk_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Heavy Monk Staff	Quarterstaff	17	55	7	16	0	0	0	30	30		NONE	Null	false	4900
-poe2:quarterstaff_balanced_monk_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Monk Staff	Quarterstaff	17	55	6	13	0	0	0	28	28		NONE	Null	false	4900
-poe2:quarterstaff_swift_monk_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Swift Monk Staff	Quarterstaff	17	55	5	11	0	0	0	27	27		NONE	Null	false	4900
-poe2:quarterstaff_heavy_temple_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Heavy Temple Staff	Quarterstaff	22	60	9	22	0	0	0	39	39		NONE	Null	false	6100
-poe2:quarterstaff_balanced_temple_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Temple Staff	Quarterstaff	22	60	8	18	0	0	0	37	37		NONE	Null	false	6100
-poe2:quarterstaff_swift_temple_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Swift Temple Staff	Quarterstaff	22	60	6	15	0	0	0	35	35		NONE	Null	false	6100
-poe2:quarterstaff_heavy_celestial_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Heavy Celestial Staff	Quarterstaff	25	65	13	30	0	0	0	48	48		NONE	Null	false	7100
-poe2:quarterstaff_balanced_celestial_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Celestial Staff	Quarterstaff	25	65	10	24	0	0	0	45	45		NONE	Null	false	7100
-poe2:quarterstaff_swift_celestial_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Swift Celestial Staff	Quarterstaff	25	65	8	20	0	0	0	43	43		NONE	Null	false	7100
-poe2:quarterstaff_heavy_ascendant_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Heavy Ascendant Staff	Quarterstaff	29	70	17	41	0	0	0	57	57		NONE	Null	false	8100
-poe2:quarterstaff_balanced_ascendant_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Ascendant Staff	Quarterstaff	29	70	14	33	0	0	0	54	54		NONE	Null	false	8100
-poe2:quarterstaff_swift_ascendant_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Swift Ascendant Staff	Quarterstaff	29	70	11	26	0	0	0	52	52		NONE	Null	false	8100
-poe2:bow_heavy_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Heavy Short Bow	Bow	1	35	3	6	0	0	0	0	3		NONE	Null	false	200
-poe2:bow_balanced_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Fine Short Bow	Bow	1	35	2	6	0	0	0	0	3		NONE	Null	false	200
-poe2:bow_swift_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Swift Short Bow	Bow	1	35	2	5	0	0	0	0	3		NONE	Null	false	200
-poe2:bow_heavy_yew_bow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Heavy Yew Bow	Bow	4	40	3	7	0	0	0	0	12		NONE	Null	false	1300
-poe2:bow_balanced_yew_bow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Yew Bow	Bow	4	40	3	6	0	0	0	0	11		NONE	Null	false	1300
-poe2:bow_swift_yew_bow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Swift Yew Bow	Bow	4	40	2	6	0	0	0	0	10		NONE	Null	false	1300
-poe2:bow_heavy_hunting_bow	1	Weapon	Two-handed	COMPOSITE_BOW	Bow	COMPBOW	Heavy Hunting Bow	Bow	9	45	4	9	0	0	0	0	23		NONE	Null	false	2500
-poe2:bow_balanced_hunting_bow	1	Weapon	Two-handed	COMPOSITE_BOW	Bow	COMPBOW	Hunting Bow	Bow	9	45	3	8	0	0	0	0	21		NONE	Null	false	2500
-poe2:bow_swift_hunting_bow	1	Weapon	Two-handed	COMPOSITE_BOW	Bow	COMPBOW	Swift Hunting Bow	Bow	9	45	3	7	0	0	0	0	20		NONE	Null	false	2500
-poe2:bow_heavy_recurve_bow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	BATTLEBOW	Heavy Recurve Bow	Bow	13	50	5	11	0	0	0	0	36		NONE	Null	false	3700
-poe2:bow_balanced_recurve_bow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	BATTLEBOW	Recurve Bow	Bow	13	50	4	9	0	0	0	0	34		NONE	Null	false	3700
-poe2:bow_swift_recurve_bow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	BATTLEBOW	Swift Recurve Bow	Bow	13	50	3	8	0	0	0	0	33		NONE	Null	false	3700
-poe2:bow_heavy_war_bow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	WARBOW	Heavy War Bow	Bow	17	55	6	14	0	0	0	0	51		NONE	Null	false	4900
-poe2:bow_balanced_war_bow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	WARBOW	War Bow	Bow	17	55	5	12	0	0	0	0	48		NONE	Null	false	4900
-poe2:bow_swift_war_bow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	WARBOW	Swift War Bow	Bow	17	55	4	10	0	0	0	0	46		NONE	Null	false	4900
-poe2:bow_heavy_longbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Heavy Longbow	Bow	22	60	8	19	0	0	0	0	67		NONE	Null	false	6100
-poe2:bow_balanced_longbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Longbow	Bow	22	60	7	16	0	0	0	0	63		NONE	Null	false	6100
-poe2:bow_swift_longbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Swift Longbow	Bow	22	60	6	13	0	0	0	0	60		NONE	Null	false	6100
-poe2:bow_heavy_runewood_bow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Heavy Runewood Bow	Bow	25	65	11	26	0	0	0	0	82		NONE	Null	false	7100
-poe2:bow_balanced_runewood_bow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Runewood Bow	Bow	25	65	9	21	0	0	0	0	78		NONE	Null	false	7100
-poe2:bow_swift_runewood_bow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Swift Runewood Bow	Bow	25	65	7	17	0	0	0	0	74		NONE	Null	false	7100
-poe2:bow_heavy_starbow	1	Weapon	Two-handed	WINDFORCE	Bow	WARBOW	Heavy Starbow	Bow	29	70	15	35	0	0	0	0	98		NONE	Null	false	8100
-poe2:bow_balanced_starbow	1	Weapon	Two-handed	WINDFORCE	Bow	WARBOW	Starbow	Bow	29	70	12	28	0	0	0	0	92		NONE	Null	false	8100
-poe2:bow_swift_starbow	1	Weapon	Two-handed	WINDFORCE	Bow	WARBOW	Swift Starbow	Bow	29	70	10	23	0	0	0	0	89		NONE	Null	false	8100
-poe2:crossbow_heavy_light_crossbow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	SHORTBOW	Heavy Light Crossbow	Crossbow	1	35	4	9	0	0	2	0	2		NONE	Null	false	200
-poe2:crossbow_balanced_light_crossbow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	SHORTBOW	Light Crossbow	Crossbow	1	35	3	8	0	0	2	0	2		NONE	Null	false	200
-poe2:crossbow_swift_light_crossbow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	SHORTBOW	Swift Light Crossbow	Crossbow	1	35	3	7	0	0	2	0	2		NONE	Null	false	200
-poe2:crossbow_heavy_arbalest	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	HUNTBOW	Heavy Arbalest	Crossbow	4	40	5	12	0	0	7	0	7		NONE	Null	false	1300
-poe2:crossbow_balanced_arbalest	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	HUNTBOW	Arbalest	Crossbow	4	40	4	10	0	0	7	0	7		NONE	Null	false	1300
-poe2:crossbow_swift_arbalest	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	HUNTBOW	Swift Arbalest	Crossbow	4	40	4	9	0	0	7	0	7		NONE	Null	false	1300
-poe2:crossbow_heavy_soldier_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	COMPBOW	Heavy Soldier Crossbow	Crossbow	9	45	7	15	0	0	13	0	13		NONE	Null	false	2500
-poe2:crossbow_balanced_soldier_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	COMPBOW	Soldier Crossbow	Crossbow	9	45	5	13	0	0	13	0	13		NONE	Null	false	2500
-poe2:crossbow_swift_soldier_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	COMPBOW	Swift Soldier Crossbow	Crossbow	9	45	5	11	0	0	12	0	12		NONE	Null	false	2500
-poe2:crossbow_heavy_crank_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	BATTLEBOW	Heavy Crank Crossbow	Crossbow	13	50	9	20	0	0	21	0	21		NONE	Null	false	3700
-poe2:crossbow_balanced_crank_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	BATTLEBOW	Crank Crossbow	Crossbow	13	50	7	17	0	0	20	0	20		NONE	Null	false	3700
-poe2:crossbow_swift_crank_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	BATTLEBOW	Swift Crank Crossbow	Crossbow	13	50	6	14	0	0	19	0	19		NONE	Null	false	3700
-poe2:crossbow_heavy_war_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Heavy War Crossbow	Crossbow	17	55	12	27	0	0	30	0	30		NONE	Null	false	4900
-poe2:crossbow_balanced_war_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	War Crossbow	Crossbow	17	55	10	22	0	0	28	0	28		NONE	Null	false	4900
-poe2:crossbow_swift_war_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Swift War Crossbow	Crossbow	17	55	8	18	0	0	27	0	27		NONE	Null	false	4900
-poe2:crossbow_heavy_siege_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Heavy Siege Crossbow	Crossbow	22	60	16	38	0	0	39	0	39		NONE	Null	false	6100
-poe2:crossbow_balanced_siege_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Fine Siege Crossbow	Crossbow	22	60	13	30	0	0	37	0	37		NONE	Null	false	6100
-poe2:crossbow_swift_siege_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Swift Siege Crossbow	Crossbow	22	60	10	24	0	0	35	0	35		NONE	Null	false	6100
-poe2:crossbow_heavy_runebolt_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Heavy Runebolt Crossbow	Crossbow	25	65	22	52	0	0	48	0	48		NONE	Null	false	7100
-poe2:crossbow_balanced_runebolt_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Runebolt Crossbow	Crossbow	25	65	18	42	0	0	45	0	45		NONE	Null	false	7100
-poe2:crossbow_swift_runebolt_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Swift Runebolt Crossbow	Crossbow	25	65	14	33	0	0	43	0	43		NONE	Null	false	7100
-poe2:crossbow_heavy_dragonspine_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Heavy Dragonspine Crossbow	Crossbow	29	70	32	74	0	0	57	0	57		NONE	Null	false	8100
-poe2:crossbow_balanced_dragonspine_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Dragonspine Crossbow	Crossbow	29	70	25	58	0	0	54	0	54		NONE	Null	false	8100
-poe2:crossbow_swift_dragonspine_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Swift Dragonspine Crossbow	Crossbow	29	70	20	46	0	0	52	0	52		NONE	Null	false	8100
+poe2:one_hand_axe_heavy_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Heavy Hatchet	Axe	1	35	7	10	0	0	3	0	0		NONE	Null	false	200
+poe2:one_hand_axe_balanced_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Hatchet	Axe	1	35	6	8	0	0	3	0	0		NONE	Null	false	200
+poe2:one_hand_axe_swift_hatchet	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Swift Hatchet	Axe	1	35	4	6	0	0	3	0	0		NONE	Null	false	200
+poe2:one_hand_axe_heavy_bearded_axe	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Heavy Bearded Axe	Axe	12	40	10	14	0	0	10	0	0		NONE	Null	false	1300
+poe2:one_hand_axe_balanced_bearded_axe	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Bearded Axe	Axe	12	40	8	11	0	0	10	0	0		NONE	Null	false	1300
+poe2:one_hand_axe_swift_bearded_axe	1	Weapon	One-handed	SMALL_AXE	Axe	SMALLAXE	Swift Bearded Axe	Axe	12	40	6	9	0	0	9	0	0		NONE	Null	false	1300
+poe2:one_hand_axe_heavy_raider_axe	1	Weapon	One-handed	AXE	Axe	BROADAXE	Heavy Raider Axe	Axe	24	45	14	20	0	0	20	0	0		NONE	Null	false	2500
+poe2:one_hand_axe_balanced_raider_axe	1	Weapon	One-handed	AXE	Axe	BROADAXE	Raider Axe	Axe	24	45	11	16	0	0	19	0	0		NONE	Null	false	2500
+poe2:one_hand_axe_swift_raider_axe	1	Weapon	One-handed	AXE	Axe	BROADAXE	Swift Raider Axe	Axe	24	45	9	13	0	0	19	0	0		NONE	Null	false	2500
+poe2:one_hand_axe_heavy_ironcleaver	1	Weapon	One-handed	AXE	Axe	GREATAXE	Heavy Ironcleaver	Axe	36	50	21	29	0	0	32	0	0		NONE	Null	false	3700
+poe2:one_hand_axe_balanced_ironcleaver	1	Weapon	One-handed	AXE	Axe	GREATAXE	Ironcleaver	Axe	36	50	16	23	0	0	30	0	0		NONE	Null	false	3700
+poe2:one_hand_axe_swift_ironcleaver	1	Weapon	One-handed	AXE	Axe	GREATAXE	Swift Ironcleaver	Axe	36	50	13	18	0	0	29	0	0		NONE	Null	false	3700
+poe2:one_hand_axe_heavy_war_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Heavy War Axe	Axe	48	55	30	42	0	0	46	0	0		NONE	Null	false	4900
+poe2:one_hand_axe_balanced_war_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	War Axe	Axe	48	55	23	33	0	0	43	0	0		NONE	Null	false	4900
+poe2:one_hand_axe_swift_war_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Swift War Axe	Axe	48	55	18	26	0	0	41	0	0		NONE	Null	false	4900
+poe2:one_hand_axe_heavy_siege_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Heavy Siege Axe	Axe	60	60	42	60	0	0	59	0	0		NONE	Null	false	6100
+poe2:one_hand_axe_balanced_siege_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Siege Axe	Axe	60	60	33	47	0	0	56	0	0		NONE	Null	false	6100
+poe2:one_hand_axe_swift_siege_axe	1	Weapon	One-handed	CLEAVER	Axe	GREATAXE	Swift Siege Axe	Axe	60	60	26	37	0	0	54	0	0		NONE	Null	false	6100
+poe2:one_hand_axe_heavy_bloodiron_axe	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Heavy Bloodiron Axe	Axe	70	65	60	85	0	0	74	0	0		NONE	Null	false	7100
+poe2:one_hand_axe_balanced_bloodiron_axe	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Bloodiron Axe	Axe	70	65	47	67	0	0	69	0	0		NONE	Null	false	7100
+poe2:one_hand_axe_swift_bloodiron_axe	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Swift Bloodiron Axe	Axe	70	65	37	53	0	0	67	0	0		NONE	Null	false	7100
+poe2:one_hand_axe_heavy_kingsplitter	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Heavy Kingsplitter	Axe	80	70	86	122	0	0	87	0	0		NONE	Null	false	8100
+poe2:one_hand_axe_balanced_kingsplitter	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Kingsplitter	Axe	80	70	68	95	0	0	82	0	0		NONE	Null	false	8100
+poe2:one_hand_axe_swift_kingsplitter	1	Weapon	One-handed	LARGE_AXE	Axe	GREATAXE	Swift Kingsplitter	Axe	80	70	53	75	0	0	79	0	0		NONE	Null	false	8100
+poe2:one_hand_sword_heavy_shortsword	1	Weapon	One-handed	SHORT_SWORD	Sword	SABRE	Heavy Shortsword	Sword	1	35	6	8	0	0	2	0	2		NONE	Null	false	200
+poe2:one_hand_sword_balanced_shortsword	1	Weapon	One-handed	SHORT_SWORD	Sword	SABRE	Shortsword	Sword	1	35	5	7	0	0	2	0	2		NONE	Null	false	200
+poe2:one_hand_sword_swift_shortsword	1	Weapon	One-handed	SHORT_SWORD	Sword	SABRE	Swift Shortsword	Sword	1	35	4	5	0	0	2	0	2		NONE	Null	false	200
+poe2:one_hand_sword_heavy_leafblade	1	Weapon	One-handed	SABRE	Sword	SCIMITAR	Heavy Leafblade	Sword	12	40	9	12	0	0	7	0	7		NONE	Null	false	1300
+poe2:one_hand_sword_balanced_leafblade	1	Weapon	One-handed	SABRE	Sword	SCIMITAR	Leafblade	Sword	12	40	7	9	0	0	6	0	6		NONE	Null	false	1300
+poe2:one_hand_sword_swift_leafblade	1	Weapon	One-handed	SABRE	Sword	SCIMITAR	Swift Leafblade	Sword	12	40	5	7	0	0	6	0	6		NONE	Null	false	1300
+poe2:one_hand_sword_heavy_soldier_sword	1	Weapon	One-handed	SCIMITAR	Sword	BROADSWR	Heavy Soldier Sword	Sword	24	45	12	17	0	0	12	0	12		NONE	Null	false	2500
+poe2:one_hand_sword_balanced_soldier_sword	1	Weapon	One-handed	SCIMITAR	Sword	BROADSWR	Soldier Sword	Sword	24	45	10	13	0	0	12	0	12		NONE	Null	false	2500
+poe2:one_hand_sword_swift_soldier_sword	1	Weapon	One-handed	SCIMITAR	Sword	BROADSWR	Swift Soldier Sword	Sword	24	45	8	11	0	0	11	0	11		NONE	Null	false	2500
+poe2:one_hand_sword_heavy_falchion	1	Weapon	One-handed	FALCHION	Sword	BASTARDSWR	Heavy Falchion	Sword	36	50	17	25	0	0	19	0	19		NONE	Null	false	3700
+poe2:one_hand_sword_balanced_falchion	1	Weapon	One-handed	FALCHION	Sword	BASTARDSWR	Fine Falchion	Sword	36	50	14	19	0	0	18	0	18		NONE	Null	false	3700
+poe2:one_hand_sword_swift_falchion	1	Weapon	One-handed	FALCHION	Sword	BASTARDSWR	Swift Falchion	Sword	36	50	11	15	0	0	17	0	17		NONE	Null	false	3700
+poe2:one_hand_sword_heavy_knightblade	1	Weapon	One-handed	LONG_SWORD	Sword	BASTARDSWR	Heavy Knightblade	Sword	48	55	25	35	0	0	27	0	27		NONE	Null	false	4900
+poe2:one_hand_sword_balanced_knightblade	1	Weapon	One-handed	LONG_SWORD	Sword	BASTARDSWR	Knightblade	Sword	48	55	20	28	0	0	25	0	25		NONE	Null	false	4900
+poe2:one_hand_sword_swift_knightblade	1	Weapon	One-handed	LONG_SWORD	Sword	BASTARDSWR	Swift Knightblade	Sword	48	55	15	22	0	0	24	0	24		NONE	Null	false	4900
+poe2:one_hand_sword_heavy_dueling_sword	1	Weapon	One-handed	BROAD_SWORD	Sword	BASTARDSWR	Heavy Dueling Sword	Sword	60	60	36	50	0	0	35	0	35		NONE	Null	false	6100
+poe2:one_hand_sword_balanced_dueling_sword	1	Weapon	One-handed	BROAD_SWORD	Sword	BASTARDSWR	Dueling Sword	Sword	60	60	28	39	0	0	33	0	33		NONE	Null	false	6100
+poe2:one_hand_sword_swift_dueling_sword	1	Weapon	One-handed	BROAD_SWORD	Sword	BASTARDSWR	Swift Dueling Sword	Sword	60	60	22	31	0	0	32	0	32		NONE	Null	false	6100
+poe2:one_hand_sword_heavy_runed_sabre	1	Weapon	One-handed	BASTARD_SWORD	Sword	BASTARDSWR	Heavy Runed Sabre	Sword	70	65	51	72	0	0	43	0	43		NONE	Null	false	7100
+poe2:one_hand_sword_balanced_runed_sabre	1	Weapon	One-handed	BASTARD_SWORD	Sword	BASTARDSWR	Runed Sabre	Sword	70	65	40	56	0	0	41	0	41		NONE	Null	false	7100
+poe2:one_hand_sword_swift_runed_sabre	1	Weapon	One-handed	BASTARD_SWORD	Sword	BASTARDSWR	Swift Runed Sabre	Sword	70	65	31	44	0	0	39	0	39		NONE	Null	false	7100
+poe2:one_hand_sword_heavy_imperial_edge	1	Weapon	One-handed	DIAMONDEDGE	Sword	BASTARDSWR	Heavy Imperial Edge	Sword	80	70	73	102	0	0	51	0	51		NONE	Null	false	8100
+poe2:one_hand_sword_balanced_imperial_edge	1	Weapon	One-handed	DIAMONDEDGE	Sword	BASTARDSWR	Imperial Edge	Sword	80	70	57	81	0	0	48	0	48		NONE	Null	false	8100
+poe2:one_hand_sword_swift_imperial_edge	1	Weapon	One-handed	DIAMONDEDGE	Sword	BASTARDSWR	Swift Imperial Edge	Sword	80	70	45	63	0	0	46	0	46		NONE	Null	false	8100
+poe2:one_hand_mace_heavy_cudgel	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Heavy Cudgel	Mace	1	35	8	11	0	0	3	0	0		NONE	Null	false	200
+poe2:one_hand_mace_balanced_cudgel	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Cudgel	Mace	1	35	6	9	0	0	3	0	0		NONE	Null	false	200
+poe2:one_hand_mace_swift_cudgel	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Swift Cudgel	Mace	1	35	5	7	0	0	3	0	0		NONE	Null	false	200
+poe2:one_hand_mace_heavy_flanged_mace	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Heavy Flanged Mace	Mace	12	40	12	16	0	0	10	0	0		NONE	Null	false	1300
+poe2:one_hand_mace_balanced_flanged_mace	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Flanged Mace	Mace	12	40	9	13	0	0	10	0	0		NONE	Null	false	1300
+poe2:one_hand_mace_swift_flanged_mace	1	Weapon	One-handed	CLUB	Mace	SPIKCLUB	Swift Flanged Mace	Mace	12	40	7	10	0	0	9	0	0		NONE	Null	false	1300
+poe2:one_hand_mace_heavy_war_club	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Heavy War Club	Mace	24	45	17	23	0	0	20	0	0		NONE	Null	false	2500
+poe2:one_hand_mace_balanced_war_club	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	War Club	Mace	24	45	13	18	0	0	19	0	0		NONE	Null	false	2500
+poe2:one_hand_mace_swift_war_club	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Swift War Club	Mace	24	45	10	14	0	0	19	0	0		NONE	Null	false	2500
+poe2:one_hand_mace_heavy_spiked_mace	1	Weapon	One-handed	MACE	Mace	FLAIL	Heavy Spiked Mace	Mace	36	50	24	33	0	0	32	0	0		NONE	Null	false	3700
+poe2:one_hand_mace_balanced_spiked_mace	1	Weapon	One-handed	MACE	Mace	FLAIL	Spiked Mace	Mace	36	50	19	26	0	0	30	0	0		NONE	Null	false	3700
+poe2:one_hand_mace_swift_spiked_mace	1	Weapon	One-handed	MACE	Mace	FLAIL	Swift Spiked Mace	Mace	36	50	15	21	0	0	29	0	0		NONE	Null	false	3700
+poe2:one_hand_mace_heavy_battle_mace	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Heavy Battle Mace	Mace	48	55	34	48	0	0	46	0	0		NONE	Null	false	4900
+poe2:one_hand_mace_balanced_battle_mace	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Battle Mace	Mace	48	55	27	37	0	0	43	0	0		NONE	Null	false	4900
+poe2:one_hand_mace_swift_battle_mace	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Swift Battle Mace	Mace	48	55	21	29	0	0	41	0	0		NONE	Null	false	4900
+poe2:one_hand_mace_heavy_siege_hammer	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Heavy Siege Hammer	Mace	60	60	48	68	0	0	59	0	0		NONE	Null	false	6100
+poe2:one_hand_mace_balanced_siege_hammer	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Siege Hammer	Mace	60	60	38	53	0	0	56	0	0		NONE	Null	false	6100
+poe2:one_hand_mace_swift_siege_hammer	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Swift Siege Hammer	Mace	60	60	30	42	0	0	54	0	0		NONE	Null	false	6100
+poe2:one_hand_mace_heavy_dread_maul	1	Weapon	One-handed	FLAIL	Mace	FLAIL	Heavy Dread Maul	Mace	70	65	69	98	0	0	74	0	0		NONE	Null	false	7100
+poe2:one_hand_mace_balanced_dread_maul	1	Weapon	One-handed	FLAIL	Mace	FLAIL	Dread Maul	Mace	70	65	54	76	0	0	69	0	0		NONE	Null	false	7100
+poe2:one_hand_mace_swift_dread_maul	1	Weapon	One-handed	FLAIL	Mace	FLAIL	Swift Dread Maul	Mace	70	65	43	60	0	0	67	0	0		NONE	Null	false	7100
+poe2:one_hand_mace_heavy_judicator	1	Weapon	One-handed	GRYPHONS_CLAW	Mace	FLAIL	Heavy Judicator	Mace	80	70	99	140	0	0	87	0	0		NONE	Null	false	8100
+poe2:one_hand_mace_balanced_judicator	1	Weapon	One-handed	GRYPHONS_CLAW	Mace	FLAIL	Judicator	Mace	80	70	78	109	0	0	82	0	0		NONE	Null	false	8100
+poe2:one_hand_mace_swift_judicator	1	Weapon	One-handed	GRYPHONS_CLAW	Mace	FLAIL	Swift Judicator	Mace	80	70	61	86	0	0	79	0	0		NONE	Null	false	8100
+poe2:two_hand_axe_heavy_woodsman_s_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Heavy Woodsman's Axe	Axe	1	35	14	20	0	0	3	0	0		NONE	Null	false	200
+poe2:two_hand_axe_balanced_woodsman_s_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Woodsman's Axe	Axe	1	35	11	15	0	0	3	0	0		NONE	Null	false	200
+poe2:two_hand_axe_swift_woodsman_s_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Swift Woodsman's Axe	Axe	1	35	9	12	0	0	3	0	0		NONE	Null	false	200
+poe2:two_hand_axe_heavy_execution_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Heavy Execution Axe	Axe	12	40	20	28	0	0	12	0	0		NONE	Null	false	1300
+poe2:two_hand_axe_balanced_execution_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Execution Axe	Axe	12	40	16	22	0	0	11	0	0		NONE	Null	false	1300
+poe2:two_hand_axe_swift_execution_axe	1	Weapon	Two-handed	LARGE_AXE	Axe	SMALLAXE	Swift Execution Axe	Axe	12	40	12	17	0	0	10	0	0		NONE	Null	false	1300
+poe2:two_hand_axe_heavy_broad_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	BROADAXE	Heavy Broad Axe	Axe	24	45	28	40	0	0	23	0	0		NONE	Null	false	2500
+poe2:two_hand_axe_balanced_broad_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	BROADAXE	Fine Broad Axe	Axe	24	45	22	31	0	0	21	0	0		NONE	Null	false	2500
+poe2:two_hand_axe_swift_broad_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	BROADAXE	Swift Broad Axe	Axe	24	45	17	25	0	0	20	0	0		NONE	Null	false	2500
+poe2:two_hand_axe_heavy_headsman_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	GREATAXE	Heavy Headsman Axe	Axe	36	50	41	57	0	0	36	0	0		NONE	Null	false	3700
+poe2:two_hand_axe_balanced_headsman_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	GREATAXE	Headsman Axe	Axe	36	50	32	45	0	0	34	0	0		NONE	Null	false	3700
+poe2:two_hand_axe_swift_headsman_axe	1	Weapon	Two-handed	BROAD_AXE	Axe	GREATAXE	Swift Headsman Axe	Axe	36	50	25	35	0	0	33	0	0		NONE	Null	false	3700
+poe2:two_hand_axe_heavy_great_cleaver	1	Weapon	Two-handed	BATTLE_AXE	Axe	GREATAXE	Heavy Great Cleaver	Axe	48	55	58	82	0	0	51	0	0		NONE	Null	false	4900
+poe2:two_hand_axe_balanced_great_cleaver	1	Weapon	Two-handed	BATTLE_AXE	Axe	GREATAXE	Great Cleaver	Axe	48	55	46	64	0	0	48	0	0		NONE	Null	false	4900
+poe2:two_hand_axe_swift_great_cleaver	1	Weapon	Two-handed	BATTLE_AXE	Axe	GREATAXE	Swift Great Cleaver	Axe	48	55	36	50	0	0	46	0	0		NONE	Null	false	4900
+poe2:two_hand_axe_heavy_siegebreaker	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Heavy Siegebreaker	Axe	60	60	83	117	0	0	67	0	0		NONE	Null	false	6100
+poe2:two_hand_axe_balanced_siegebreaker	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Siegebreaker	Axe	60	60	65	92	0	0	63	0	0		NONE	Null	false	6100
+poe2:two_hand_axe_swift_siegebreaker	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Swift Siegebreaker	Axe	60	60	51	72	0	0	60	0	0		NONE	Null	false	6100
+poe2:two_hand_axe_heavy_bloodoak_axe	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Heavy Bloodoak Axe	Axe	70	65	119	167	0	0	82	0	0		NONE	Null	false	7100
+poe2:two_hand_axe_balanced_bloodoak_axe	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Bloodoak Axe	Axe	70	65	93	131	0	0	78	0	0		NONE	Null	false	7100
+poe2:two_hand_axe_swift_bloodoak_axe	1	Weapon	Two-handed	GREAT_AXE	Axe	GREATAXE	Swift Bloodoak Axe	Axe	70	65	73	103	0	0	74	0	0		NONE	Null	false	7100
+poe2:two_hand_axe_heavy_worldsplitter	1	Weapon	Two-handed	STONECLEAVER	Axe	GREATAXE	Heavy Worldsplitter	Axe	80	70	170	239	0	0	98	0	0		NONE	Null	false	8100
+poe2:two_hand_axe_balanced_worldsplitter	1	Weapon	Two-handed	STONECLEAVER	Axe	GREATAXE	Worldsplitter	Axe	80	70	133	188	0	0	92	0	0		NONE	Null	false	8100
+poe2:two_hand_axe_swift_worldsplitter	1	Weapon	Two-handed	STONECLEAVER	Axe	GREATAXE	Swift Worldsplitter	Axe	80	70	104	147	0	0	89	0	0		NONE	Null	false	8100
+poe2:two_hand_sword_heavy_longsword	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Heavy Longsword	Sword	1	35	12	17	0	0	2	0	2		NONE	Null	false	200
+poe2:two_hand_sword_balanced_longsword	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Longsword	Sword	1	35	9	13	0	0	2	0	2		NONE	Null	false	200
+poe2:two_hand_sword_swift_longsword	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Swift Longsword	Sword	1	35	7	10	0	0	2	0	2		NONE	Null	false	200
+poe2:two_hand_sword_heavy_greatblade	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Heavy Greatblade	Sword	12	40	17	24	0	0	7	0	7		NONE	Null	false	1300
+poe2:two_hand_sword_balanced_greatblade	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Greatblade	Sword	12	40	13	19	0	0	7	0	7		NONE	Null	false	1300
+poe2:two_hand_sword_swift_greatblade	1	Weapon	Two-handed	CLAYMORE	Sword	TWOHANDSWR	Swift Greatblade	Sword	12	40	11	15	0	0	7	0	7		NONE	Null	false	1300
+poe2:two_hand_sword_heavy_mercenary_blade	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Heavy Mercenary Blade	Sword	24	45	25	35	0	0	13	0	13		NONE	Null	false	2500
+poe2:two_hand_sword_balanced_mercenary_blade	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Mercenary Blade	Sword	24	45	19	27	0	0	13	0	13		NONE	Null	false	2500
+poe2:two_hand_sword_swift_mercenary_blade	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Swift Mercenary Blade	Sword	24	45	15	21	0	0	12	0	12		NONE	Null	false	2500
+poe2:two_hand_sword_heavy_claymore	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Heavy Claymore	Sword	36	50	35	50	0	0	21	0	21		NONE	Null	false	3700
+poe2:two_hand_sword_balanced_claymore	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Fine Claymore	Sword	36	50	27	39	0	0	20	0	20		NONE	Null	false	3700
+poe2:two_hand_sword_swift_claymore	1	Weapon	Two-handed	BLADE	Sword	TWOHANDSWR	Swift Claymore	Sword	36	50	22	30	0	0	19	0	19		NONE	Null	false	3700
+poe2:two_hand_sword_heavy_war_greatsword	1	Weapon	Two-handed	TWO_HANDED_SWORD	Sword	GREATSWR	Heavy War Greatsword	Sword	48	55	50	71	0	0	30	0	30		NONE	Null	false	4900
+poe2:two_hand_sword_balanced_war_greatsword	1	Weapon	Two-handed	TWO_HANDED_SWORD	Sword	GREATSWR	War Greatsword	Sword	48	55	39	55	0	0	28	0	28		NONE	Null	false	4900
+poe2:two_hand_sword_swift_war_greatsword	1	Weapon	Two-handed	TWO_HANDED_SWORD	Sword	GREATSWR	Swift War Greatsword	Sword	48	55	31	43	0	0	27	0	27		NONE	Null	false	4900
+poe2:two_hand_sword_heavy_duelist_greatblade	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Heavy Duelist Greatblade	Sword	60	60	72	102	0	0	39	0	39		NONE	Null	false	6100
+poe2:two_hand_sword_balanced_duelist_greatblade	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Duelist Greatblade	Sword	60	60	56	79	0	0	37	0	37		NONE	Null	false	6100
+poe2:two_hand_sword_swift_duelist_greatblade	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Swift Duelist Greatblade	Sword	60	60	44	62	0	0	35	0	35		NONE	Null	false	6100
+poe2:two_hand_sword_heavy_runed_greatsword	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Heavy Runed Greatsword	Sword	70	65	103	145	0	0	48	0	48		NONE	Null	false	7100
+poe2:two_hand_sword_balanced_runed_greatsword	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Runed Greatsword	Sword	70	65	80	113	0	0	45	0	45		NONE	Null	false	7100
+poe2:two_hand_sword_swift_runed_greatsword	1	Weapon	Two-handed	GREAT_SWORD	Sword	GREATSWR	Swift Runed Greatsword	Sword	70	65	63	89	0	0	43	0	43		NONE	Null	false	7100
+poe2:two_hand_sword_heavy_sovereign_blade	1	Weapon	Two-handed	THE_EXECUTIONERS_BLADE	Sword	GREATSWR	Heavy Sovereign Blade	Sword	80	70	147	208	0	0	57	0	57		NONE	Null	false	8100
+poe2:two_hand_sword_balanced_sovereign_blade	1	Weapon	Two-handed	THE_EXECUTIONERS_BLADE	Sword	GREATSWR	Sovereign Blade	Sword	80	70	115	162	0	0	54	0	54		NONE	Null	false	8100
+poe2:two_hand_sword_swift_sovereign_blade	1	Weapon	Two-handed	THE_EXECUTIONERS_BLADE	Sword	GREATSWR	Swift Sovereign Blade	Sword	80	70	90	127	0	0	52	0	52		NONE	Null	false	8100
+poe2:two_hand_mace_heavy_sledge	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Sledge	Maul	1	35	16	23	0	0	3	0	0		NONE	Null	false	200
+poe2:two_hand_mace_balanced_sledge	1	Weapon	Two-handed	MAUL	Mace	MAUL	Sledge	Maul	1	35	13	18	0	0	3	0	0		NONE	Null	false	200
+poe2:two_hand_mace_swift_sledge	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Sledge	Maul	1	35	10	14	0	0	3	0	0		NONE	Null	false	200
+poe2:two_hand_mace_heavy_great_mace	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Great Mace	Maul	12	40	23	33	0	0	12	0	0		NONE	Null	false	1300
+poe2:two_hand_mace_balanced_great_mace	1	Weapon	Two-handed	MAUL	Mace	MAUL	Great Mace	Maul	12	40	18	26	0	0	11	0	0		NONE	Null	false	1300
+poe2:two_hand_mace_swift_great_mace	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Great Mace	Maul	12	40	14	20	0	0	10	0	0		NONE	Null	false	1300
+poe2:two_hand_mace_heavy_war_mallet	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Heavy War Mallet	Maul	24	45	33	47	0	0	23	0	0		NONE	Null	false	2500
+poe2:two_hand_mace_balanced_war_mallet	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	War Mallet	Maul	24	45	26	37	0	0	21	0	0		NONE	Null	false	2500
+poe2:two_hand_mace_swift_war_mallet	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Swift War Mallet	Maul	24	45	20	29	0	0	20	0	0		NONE	Null	false	2500
+poe2:two_hand_mace_heavy_stonebreaker	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Heavy Stonebreaker	Maul	36	50	48	67	0	0	36	0	0		NONE	Null	false	3700
+poe2:two_hand_mace_balanced_stonebreaker	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Stonebreaker	Maul	36	50	37	52	0	0	34	0	0		NONE	Null	false	3700
+poe2:two_hand_mace_swift_stonebreaker	1	Weapon	Two-handed	WAR_HAMMER	Mace	MAUL	Swift Stonebreaker	Maul	36	50	29	41	0	0	33	0	0		NONE	Null	false	3700
+poe2:two_hand_mace_heavy_battle_hammer	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Heavy Battle Hammer	Maul	48	55	68	96	0	0	51	0	0		NONE	Null	false	4900
+poe2:two_hand_mace_balanced_battle_hammer	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Battle Hammer	Maul	48	55	53	75	0	0	48	0	0		NONE	Null	false	4900
+poe2:two_hand_mace_swift_battle_hammer	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Swift Battle Hammer	Maul	48	55	42	59	0	0	46	0	0		NONE	Null	false	4900
+poe2:two_hand_mace_heavy_siege_maul	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Heavy Siege Maul	Maul	60	60	97	137	0	0	67	0	0		NONE	Null	false	6100
+poe2:two_hand_mace_balanced_siege_maul	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Siege Maul	Maul	60	60	76	107	0	0	63	0	0		NONE	Null	false	6100
+poe2:two_hand_mace_swift_siege_maul	1	Weapon	Two-handed	THE_GRANDFATHER	Mace	MAUL	Swift Siege Maul	Maul	60	60	60	84	0	0	60	0	0		NONE	Null	false	6100
+poe2:two_hand_mace_heavy_titan_hammer	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Titan Hammer	Maul	70	65	139	196	0	0	82	0	0		NONE	Null	false	7100
+poe2:two_hand_mace_balanced_titan_hammer	1	Weapon	Two-handed	MAUL	Mace	MAUL	Titan Hammer	Maul	70	65	108	153	0	0	78	0	0		NONE	Null	false	7100
+poe2:two_hand_mace_swift_titan_hammer	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Titan Hammer	Maul	70	65	85	120	0	0	74	0	0		NONE	Null	false	7100
+poe2:two_hand_mace_heavy_cataclysm	1	Weapon	Two-handed	MAUL	Mace	MAUL	Heavy Cataclysm	Maul	80	70	199	281	0	0	98	0	0		NONE	Null	false	8100
+poe2:two_hand_mace_balanced_cataclysm	1	Weapon	Two-handed	MAUL	Mace	MAUL	Cataclysm	Maul	80	70	155	218	0	0	92	0	0		NONE	Null	false	8100
+poe2:two_hand_mace_swift_cataclysm	1	Weapon	Two-handed	MAUL	Mace	MAUL	Swift Cataclysm	Maul	80	70	122	172	0	0	89	0	0		NONE	Null	false	8100
+poe2:dagger_heavy_shiv	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Heavy Shiv	Dagger	1	35	4	6	0	0	0	2	2		NONE	Null	false	200
+poe2:dagger_balanced_shiv	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Shiv	Dagger	1	35	3	5	0	0	0	2	2		NONE	Null	false	200
+poe2:dagger_swift_shiv	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Swift Shiv	Dagger	1	35	3	4	0	0	0	2	2		NONE	Null	false	200
+poe2:dagger_heavy_dirk	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Heavy Dirk	Dagger	12	40	6	9	0	0	0	7	7		NONE	Null	false	1300
+poe2:dagger_balanced_dirk	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Dirk	Dagger	12	40	5	7	0	0	0	6	6		NONE	Null	false	1300
+poe2:dagger_swift_dirk	1	Weapon	One-handed	DAGGER	Sword	DAGGER	Swift Dirk	Dagger	12	40	4	6	0	0	0	6	6		NONE	Null	false	1300
+poe2:dagger_heavy_rondel	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Heavy Rondel	Dagger	24	45	9	13	0	0	0	12	12		NONE	Null	false	2500
+poe2:dagger_balanced_rondel	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Rondel	Dagger	24	45	7	10	0	0	0	12	12		NONE	Null	false	2500
+poe2:dagger_swift_rondel	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Swift Rondel	Dagger	24	45	6	8	0	0	0	11	11		NONE	Null	false	2500
+poe2:dagger_heavy_stiletto	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Heavy Stiletto	Dagger	36	50	13	18	0	0	0	19	19		NONE	Null	false	3700
+poe2:dagger_balanced_stiletto	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Stiletto	Dagger	36	50	10	14	0	0	0	18	18		NONE	Null	false	3700
+poe2:dagger_swift_stiletto	1	Weapon	One-handed	GONNAGALS_DIRK	Sword	DAGGER	Swift Stiletto	Dagger	36	50	8	11	0	0	0	17	17		NONE	Null	false	3700
+poe2:dagger_heavy_kris	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Heavy Kris	Dagger	48	55	19	26	0	0	0	27	27		NONE	Null	false	4900
+poe2:dagger_balanced_kris	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Kris	Dagger	48	55	15	21	0	0	0	25	25		NONE	Null	false	4900
+poe2:dagger_swift_kris	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Swift Kris	Dagger	48	55	11	16	0	0	0	24	24		NONE	Null	false	4900
+poe2:dagger_heavy_assassin_dirk	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Heavy Assassin Dirk	Dagger	60	60	27	38	0	0	0	35	35		NONE	Null	false	6100
+poe2:dagger_balanced_assassin_dirk	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Assassin Dirk	Dagger	60	60	21	29	0	0	0	33	33		NONE	Null	false	6100
+poe2:dagger_swift_assassin_dirk	1	Weapon	One-handed	BLACK_RAZOR	Sword	DAGGER	Swift Assassin Dirk	Dagger	60	60	16	23	0	0	0	32	32		NONE	Null	false	6100
+poe2:dagger_heavy_nightglass_knife	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Heavy Nightglass Knife	Dagger	70	65	38	54	0	0	0	43	43		NONE	Null	false	7100
+poe2:dagger_balanced_nightglass_knife	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Nightglass Knife	Dagger	70	65	30	42	0	0	0	41	41		NONE	Null	false	7100
+poe2:dagger_swift_nightglass_knife	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Swift Nightglass Knife	Dagger	70	65	23	33	0	0	0	39	39		NONE	Null	false	7100
+poe2:dagger_heavy_voidneedle	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Heavy Voidneedle	Dagger	80	70	54	77	0	0	0	51	51		NONE	Null	false	8100
+poe2:dagger_balanced_voidneedle	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Voidneedle	Dagger	80	70	43	60	0	0	0	48	48		NONE	Null	false	8100
+poe2:dagger_swift_voidneedle	1	Weapon	One-handed	WIZARDSPIKE	Sword	DAGGER	Swift Voidneedle	Dagger	80	70	33	47	0	0	0	46	46		NONE	Null	false	8100
+poe2:quarterstaff_heavy_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Heavy Ash Staff	Quarterstaff	1	35	11	16	0	0	0	2	2		NONE	Null	false	200
+poe2:quarterstaff_balanced_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Ash Staff	Quarterstaff	1	35	10	13	0	0	0	2	2		NONE	Null	false	200
+poe2:quarterstaff_swift_ash_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	SHORTSTAFF	Swift Ash Staff	Quarterstaff	1	35	6	10	0	0	0	2	2		NONE	Null	false	200
+poe2:quarterstaff_heavy_banded_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Heavy Banded Staff	Quarterstaff	12	40	10	15	0	0	0	7	7		NONE	Null	false	1300
+poe2:quarterstaff_balanced_banded_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Banded Staff	Quarterstaff	12	40	8	11	0	0	0	7	7		NONE	Null	false	1300
+poe2:quarterstaff_swift_banded_staff	1	Weapon	Two-handed	SHORT_STAFF	Staff	LONGSTAFF	Swift Banded Staff	Quarterstaff	12	40	6	9	0	0	0	7	7		NONE	Null	false	1300
+poe2:quarterstaff_heavy_ironwood_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	QUARSTAFF	Heavy Ironwood Staff	Quarterstaff	24	45	15	21	0	0	0	13	13		NONE	Null	false	2500
+poe2:quarterstaff_balanced_ironwood_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	QUARSTAFF	Ironwood Staff	Quarterstaff	24	45	12	16	0	0	0	13	13		NONE	Null	false	2500
+poe2:quarterstaff_swift_ironwood_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	QUARSTAFF	Swift Ironwood Staff	Quarterstaff	24	45	9	13	0	0	0	12	12		NONE	Null	false	2500
+poe2:quarterstaff_heavy_battle_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	WARSTAFF	Heavy Battle Staff	Quarterstaff	36	50	21	30	0	0	0	21	21		NONE	Null	false	3700
+poe2:quarterstaff_balanced_battle_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	WARSTAFF	Battle Staff	Quarterstaff	36	50	17	23	0	0	0	20	20		NONE	Null	false	3700
+poe2:quarterstaff_swift_battle_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	WARSTAFF	Swift Battle Staff	Quarterstaff	36	50	13	18	0	0	0	19	19		NONE	Null	false	3700
+poe2:quarterstaff_heavy_monk_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Heavy Monk Staff	Quarterstaff	48	55	30	42	0	0	0	30	30		NONE	Null	false	4900
+poe2:quarterstaff_balanced_monk_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Monk Staff	Quarterstaff	48	55	24	33	0	0	0	28	28		NONE	Null	false	4900
+poe2:quarterstaff_swift_monk_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Swift Monk Staff	Quarterstaff	48	55	19	26	0	0	0	27	27		NONE	Null	false	4900
+poe2:quarterstaff_heavy_temple_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Heavy Temple Staff	Quarterstaff	60	60	43	61	0	0	0	39	39		NONE	Null	false	6100
+poe2:quarterstaff_balanced_temple_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Temple Staff	Quarterstaff	60	60	34	48	0	0	0	37	37		NONE	Null	false	6100
+poe2:quarterstaff_swift_temple_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Swift Temple Staff	Quarterstaff	60	60	27	38	0	0	0	35	35		NONE	Null	false	6100
+poe2:quarterstaff_heavy_celestial_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Heavy Celestial Staff	Quarterstaff	70	65	62	87	0	0	0	48	48		NONE	Null	false	7100
+poe2:quarterstaff_balanced_celestial_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Celestial Staff	Quarterstaff	70	65	48	68	0	0	0	45	45		NONE	Null	false	7100
+poe2:quarterstaff_swift_celestial_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Swift Celestial Staff	Quarterstaff	70	65	38	54	0	0	0	43	43		NONE	Null	false	7100
+poe2:quarterstaff_heavy_ascendant_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Heavy Ascendant Staff	Quarterstaff	80	70	88	124	0	0	0	57	57		NONE	Null	false	8100
+poe2:quarterstaff_balanced_ascendant_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Ascendant Staff	Quarterstaff	80	70	69	97	0	0	0	54	54		NONE	Null	false	8100
+poe2:quarterstaff_swift_ascendant_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Swift Ascendant Staff	Quarterstaff	80	70	54	77	0	0	0	52	52		NONE	Null	false	8100
+poe2:bow_heavy_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Heavy Short Bow	Bow	1	35	8	13	0	0	0	0	3		NONE	Null	false	200
+poe2:bow_balanced_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Fine Short Bow	Bow	1	35	7	10	0	0	0	0	3		NONE	Null	false	200
+poe2:bow_swift_short_bow	1	Weapon	Two-handed	SHORT_BOW	Bow	SHORTBOW	Swift Short Bow	Bow	1	35	6	7	0	0	0	0	3		NONE	Null	false	200
+poe2:bow_heavy_yew_bow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Heavy Yew Bow	Bow	12	40	9	12	0	0	0	0	12		NONE	Null	false	1300
+poe2:bow_balanced_yew_bow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Yew Bow	Bow	12	40	7	10	0	0	0	0	11		NONE	Null	false	1300
+poe2:bow_swift_yew_bow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	HUNTBOW	Swift Yew Bow	Bow	12	40	5	8	0	0	0	0	10		NONE	Null	false	1300
+poe2:bow_heavy_hunting_bow	1	Weapon	Two-handed	COMPOSITE_BOW	Bow	COMPBOW	Heavy Hunting Bow	Bow	24	45	13	18	0	0	0	0	23		NONE	Null	false	2500
+poe2:bow_balanced_hunting_bow	1	Weapon	Two-handed	COMPOSITE_BOW	Bow	COMPBOW	Hunting Bow	Bow	24	45	10	14	0	0	0	0	21		NONE	Null	false	2500
+poe2:bow_swift_hunting_bow	1	Weapon	Two-handed	COMPOSITE_BOW	Bow	COMPBOW	Swift Hunting Bow	Bow	24	45	8	11	0	0	0	0	20		NONE	Null	false	2500
+poe2:bow_heavy_recurve_bow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	BATTLEBOW	Heavy Recurve Bow	Bow	36	50	18	25	0	0	0	0	36		NONE	Null	false	3700
+poe2:bow_balanced_recurve_bow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	BATTLEBOW	Recurve Bow	Bow	36	50	14	20	0	0	0	0	34		NONE	Null	false	3700
+poe2:bow_swift_recurve_bow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	BATTLEBOW	Swift Recurve Bow	Bow	36	50	11	15	0	0	0	0	33		NONE	Null	false	3700
+poe2:bow_heavy_war_bow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	WARBOW	Heavy War Bow	Bow	48	55	26	36	0	0	0	0	51		NONE	Null	false	4900
+poe2:bow_balanced_war_bow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	WARBOW	War Bow	Bow	48	55	20	28	0	0	0	0	48		NONE	Null	false	4900
+poe2:bow_swift_war_bow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	WARBOW	Swift War Bow	Bow	48	55	16	22	0	0	0	0	46		NONE	Null	false	4900
+poe2:bow_heavy_longbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Heavy Longbow	Bow	60	60	37	52	0	0	0	0	67		NONE	Null	false	6100
+poe2:bow_balanced_longbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Longbow	Bow	60	60	29	40	0	0	0	0	63		NONE	Null	false	6100
+poe2:bow_swift_longbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Swift Longbow	Bow	60	60	22	32	0	0	0	0	60		NONE	Null	false	6100
+poe2:bow_heavy_runewood_bow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Heavy Runewood Bow	Bow	70	65	52	74	0	0	0	0	82		NONE	Null	false	7100
+poe2:bow_balanced_runewood_bow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Runewood Bow	Bow	70	65	41	58	0	0	0	0	78		NONE	Null	false	7100
+poe2:bow_swift_runewood_bow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Swift Runewood Bow	Bow	70	65	32	45	0	0	0	0	74		NONE	Null	false	7100
+poe2:bow_heavy_starbow	1	Weapon	Two-handed	WINDFORCE	Bow	WARBOW	Heavy Starbow	Bow	80	70	75	105	0	0	0	0	98		NONE	Null	false	8100
+poe2:bow_balanced_starbow	1	Weapon	Two-handed	WINDFORCE	Bow	WARBOW	Starbow	Bow	80	70	59	83	0	0	0	0	92		NONE	Null	false	8100
+poe2:bow_swift_starbow	1	Weapon	Two-handed	WINDFORCE	Bow	WARBOW	Swift Starbow	Bow	80	70	46	65	0	0	0	0	89		NONE	Null	false	8100
+poe2:crossbow_heavy_light_crossbow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	SHORTBOW	Heavy Light Crossbow	Crossbow	1	35	14	19	0	0	2	0	2		NONE	Null	false	200
+poe2:crossbow_balanced_light_crossbow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	SHORTBOW	Light Crossbow	Crossbow	1	35	11	15	0	0	2	0	2		NONE	Null	false	200
+poe2:crossbow_swift_light_crossbow	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	SHORTBOW	Swift Light Crossbow	Crossbow	1	35	8	12	0	0	2	0	2		NONE	Null	false	200
+poe2:crossbow_heavy_arbalest	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	HUNTBOW	Heavy Arbalest	Crossbow	12	40	19	27	0	0	7	0	7		NONE	Null	false	1300
+poe2:crossbow_balanced_arbalest	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	HUNTBOW	Arbalest	Crossbow	12	40	15	21	0	0	7	0	7		NONE	Null	false	1300
+poe2:crossbow_swift_arbalest	1	Weapon	Two-handed	SHORT_BATTLE_BOW	Bow	HUNTBOW	Swift Arbalest	Crossbow	12	40	12	17	0	0	7	0	7		NONE	Null	false	1300
+poe2:crossbow_heavy_soldier_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	COMPBOW	Heavy Soldier Crossbow	Crossbow	24	45	28	39	0	0	13	0	13		NONE	Null	false	2500
+poe2:crossbow_balanced_soldier_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	COMPBOW	Soldier Crossbow	Crossbow	24	45	22	31	0	0	13	0	13		NONE	Null	false	2500
+poe2:crossbow_swift_soldier_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	COMPBOW	Swift Soldier Crossbow	Crossbow	24	45	17	24	0	0	12	0	12		NONE	Null	false	2500
+poe2:crossbow_heavy_crank_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	BATTLEBOW	Heavy Crank Crossbow	Crossbow	36	50	40	56	0	0	21	0	21		NONE	Null	false	3700
+poe2:crossbow_balanced_crank_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	BATTLEBOW	Crank Crossbow	Crossbow	36	50	31	44	0	0	20	0	20		NONE	Null	false	3700
+poe2:crossbow_swift_crank_crossbow	1	Weapon	Two-handed	LONG_BATTLE_BOW	Bow	BATTLEBOW	Swift Crank Crossbow	Crossbow	36	50	24	34	0	0	19	0	19		NONE	Null	false	3700
+poe2:crossbow_heavy_war_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Heavy War Crossbow	Crossbow	48	55	57	80	0	0	30	0	30		NONE	Null	false	4900
+poe2:crossbow_balanced_war_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	War Crossbow	Crossbow	48	55	44	63	0	0	28	0	28		NONE	Null	false	4900
+poe2:crossbow_swift_war_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Swift War Crossbow	Crossbow	48	55	35	49	0	0	27	0	27		NONE	Null	false	4900
+poe2:crossbow_heavy_siege_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Heavy Siege Crossbow	Crossbow	60	60	81	114	0	0	39	0	39		NONE	Null	false	6100
+poe2:crossbow_balanced_siege_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Fine Siege Crossbow	Crossbow	60	60	63	89	0	0	37	0	37		NONE	Null	false	6100
+poe2:crossbow_swift_siege_crossbow	1	Weapon	Two-handed	SHORT_WAR_BOW	Bow	WARBOW	Swift Siege Crossbow	Crossbow	60	60	50	70	0	0	35	0	35		NONE	Null	false	6100
+poe2:crossbow_heavy_runebolt_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Heavy Runebolt Crossbow	Crossbow	70	65	116	163	0	0	48	0	48		NONE	Null	false	7100
+poe2:crossbow_balanced_runebolt_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Runebolt Crossbow	Crossbow	70	65	91	128	0	0	45	0	45		NONE	Null	false	7100
+poe2:crossbow_swift_runebolt_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Swift Runebolt Crossbow	Crossbow	70	65	71	100	0	0	43	0	43		NONE	Null	false	7100
+poe2:crossbow_heavy_dragonspine_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Heavy Dragonspine Crossbow	Crossbow	80	70	166	234	0	0	57	0	57		NONE	Null	false	8100
+poe2:crossbow_balanced_dragonspine_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Dragonspine Crossbow	Crossbow	80	70	130	183	0	0	54	0	54		NONE	Null	false	8100
+poe2:crossbow_swift_dragonspine_crossbow	1	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Swift Dragonspine Crossbow	Crossbow	80	70	102	143	0	0	52	0	52		NONE	Null	false	8100
 poe2:staff_focused_pilgrim_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	SHORTSTAFF	Focused Pilgrim Staff	Staff	1	35	3	6	0	0	0	3	0		NONE	Null	false	200
 poe2:staff_rapid_pilgrim_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	SHORTSTAFF	Quick Pilgrim Staff	Staff	1	35	3	6	0	0	0	3	0		NONE	Null	false	200
-poe2:staff_focused_ashen_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Focused Ashen Staff	Staff	4	40	3	7	0	0	0	11	0		NONE	Null	false	1300
-poe2:staff_rapid_ashen_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Quick Ashen Staff	Staff	4	40	3	6	0	0	0	11	0		NONE	Null	false	1300
-poe2:staff_focused_scholar_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Focused Scholar Staff	Staff	9	45	4	8	0	0	0	21	0		NONE	Null	false	2500
-poe2:staff_rapid_scholar_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Quick Scholar Staff	Staff	9	45	4	8	0	0	0	21	0		NONE	Null	false	2500
-poe2:staff_focused_ritual_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Focused Ritual Staff	Staff	13	50	5	11	0	0	0	34	0		NONE	Null	false	3700
-poe2:staff_rapid_ritual_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Quick Ritual Staff	Staff	13	50	4	9	0	0	0	34	0		NONE	Null	false	3700
-poe2:staff_focused_archmage_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Archmage Staff	Staff	17	55	6	13	0	0	0	48	0		NONE	Null	false	4900
-poe2:staff_rapid_archmage_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Archmage Staff	Staff	17	55	5	11	0	0	0	48	0		NONE	Null	false	4900
-poe2:staff_focused_elder_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Elder Staff	Staff	22	60	7	16	0	0	0	63	0		NONE	Null	false	6100
-poe2:staff_rapid_elder_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Elder Staff	Staff	22	60	6	14	0	0	0	63	0		NONE	Null	false	6100
-poe2:staff_focused_astral_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Astral Staff	Staff	25	65	9	20	0	0	0	78	0		NONE	Null	false	7100
-poe2:staff_rapid_astral_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Astral Staff	Staff	25	65	8	17	0	0	0	78	0		NONE	Null	false	7100
-poe2:staff_focused_worldroot_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Worldroot Staff	Staff	29	70	11	24	0	0	0	92	0		NONE	Null	false	8100
-poe2:staff_rapid_worldroot_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Worldroot Staff	Staff	29	70	9	21	0	0	0	92	0		NONE	Null	false	8100
+poe2:staff_focused_ashen_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Focused Ashen Staff	Staff	12	40	3	7	0	0	0	11	0		NONE	Null	false	1300
+poe2:staff_rapid_ashen_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Quick Ashen Staff	Staff	12	40	3	6	0	0	0	11	0		NONE	Null	false	1300
+poe2:staff_focused_scholar_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Focused Scholar Staff	Staff	24	45	4	8	0	0	0	21	0		NONE	Null	false	2500
+poe2:staff_rapid_scholar_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Quick Scholar Staff	Staff	24	45	4	8	0	0	0	21	0		NONE	Null	false	2500
+poe2:staff_focused_ritual_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Focused Ritual Staff	Staff	36	50	5	11	0	0	0	34	0		NONE	Null	false	3700
+poe2:staff_rapid_ritual_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Quick Ritual Staff	Staff	36	50	4	9	0	0	0	34	0		NONE	Null	false	3700
+poe2:staff_focused_archmage_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Archmage Staff	Staff	48	55	6	13	0	0	0	48	0		NONE	Null	false	4900
+poe2:staff_rapid_archmage_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Archmage Staff	Staff	48	55	5	11	0	0	0	48	0		NONE	Null	false	4900
+poe2:staff_focused_elder_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Elder Staff	Staff	60	60	7	16	0	0	0	63	0		NONE	Null	false	6100
+poe2:staff_rapid_elder_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Elder Staff	Staff	60	60	6	14	0	0	0	63	0		NONE	Null	false	6100
+poe2:staff_focused_astral_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Astral Staff	Staff	70	65	9	20	0	0	0	78	0		NONE	Null	false	7100
+poe2:staff_rapid_astral_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Astral Staff	Staff	70	65	8	17	0	0	0	78	0		NONE	Null	false	7100
+poe2:staff_focused_worldroot_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Worldroot Staff	Staff	80	70	11	24	0	0	0	92	0		NONE	Null	false	8100
+poe2:staff_rapid_worldroot_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Worldroot Staff	Staff	80	70	9	21	0	0	0	92	0		NONE	Null	false	8100
 poe2:sceptre_focused_bone_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Focused Bone Sceptre	Sceptre	1	35	2	5	0	0	2	2	0		NONE	Null	false	200
 poe2:sceptre_rapid_bone_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Quick Bone Sceptre	Sceptre	1	35	2	5	0	0	2	2	0		NONE	Null	false	200
-poe2:sceptre_focused_bronze_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Focused Bronze Sceptre	Sceptre	4	40	2	6	0	0	6	6	0		NONE	Null	false	1300
-poe2:sceptre_rapid_bronze_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Quick Bronze Sceptre	Sceptre	4	40	2	6	0	0	6	6	0		NONE	Null	false	1300
-poe2:sceptre_focused_priest_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Priest Sceptre	Sceptre	9	45	3	7	0	0	12	12	0		NONE	Null	false	2500
-poe2:sceptre_rapid_priest_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Priest Sceptre	Sceptre	9	45	2	7	0	0	12	12	0		NONE	Null	false	2500
-poe2:sceptre_focused_sun_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Sun Sceptre	Sceptre	13	50	4	9	0	0	18	18	0		NONE	Null	false	3700
-poe2:sceptre_rapid_sun_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Sun Sceptre	Sceptre	13	50	3	8	0	0	18	18	0		NONE	Null	false	3700
-poe2:sceptre_focused_templar_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Templar Sceptre	Sceptre	17	55	4	11	0	0	25	25	0		NONE	Null	false	4900
-poe2:sceptre_rapid_templar_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Templar Sceptre	Sceptre	17	55	4	10	0	0	25	25	0		NONE	Null	false	4900
-poe2:sceptre_focused_oracle_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Oracle Sceptre	Sceptre	22	60	6	13	0	0	33	33	0		NONE	Null	false	6100
-poe2:sceptre_rapid_oracle_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Oracle Sceptre	Sceptre	22	60	5	12	0	0	33	33	0		NONE	Null	false	6100
-poe2:sceptre_focused_saint_s_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Saint's Sceptre	Sceptre	25	65	7	16	0	0	41	41	0		NONE	Null	false	7100
-poe2:sceptre_rapid_saint_s_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Saint's Sceptre	Sceptre	25	65	6	14	0	0	41	41	0		NONE	Null	false	7100
-poe2:sceptre_focused_sovereign_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Sovereign Sceptre	Sceptre	29	70	9	19	0	0	48	48	0		NONE	Null	false	8100
-poe2:sceptre_rapid_sovereign_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Sovereign Sceptre	Sceptre	29	70	7	17	0	0	48	48	0		NONE	Null	false	8100
-poe2:armour_helmet_iron_cap	1	Armor	Helm	HELM	Helm	SKULLCAP	Iron Cap	Helm	1	35	0	0	1	2	3	0	0		NONE	Null	false	200
-poe2:armour_helmet_guard_helm	1	Armor	Helm	HELM	Helm	SKULLCAP	Guard Helm	Helm	4	40	0	0	2	3	10	0	0		NONE	Null	false	1300
-poe2:armour_helmet_war_helm	1	Armor	Helm	FULL_HELM	Helm	HELM	War Helm	Helm	9	45	0	0	4	5	19	0	0		NONE	Null	false	2500
-poe2:armour_helmet_closed_helm	1	Armor	Helm	FULL_HELM	Helm	CROWN	Closed Helm	Helm	13	50	0	0	6	7	30	0	0		NONE	Null	false	3700
-poe2:armour_helmet_legion_helm	1	Armor	Helm	GREAT_HELM	Helm	CROWN	Legion Helm	Helm	17	55	0	0	9	11	43	0	0		NONE	Null	false	4900
-poe2:armour_helmet_siege_helm	1	Armor	Helm	GREAT_HELM	Helm	GREATHELM	Siege Helm	Helm	22	60	0	0	12	15	56	0	0		NONE	Null	false	6100
-poe2:armour_helmet_imperial_helm	1	Armor	Helm	OVERLORDS_HELM	Helm	GREATHELM	Imperial Helm	Helm	25	65	0	0	16	19	69	0	0		NONE	Null	false	7100
-poe2:armour_helmet_titan_crown	1	Armor	Helm	OVERLORDS_HELM	Helm	GREATHELM	Titan Crown	Helm	29	70	0	0	21	25	82	0	0		NONE	Null	false	8100
-poe2:evasion_helmet_leather_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Leather Hood	Helm	1	35	0	0	1	2	0	0	3		NONE	Null	false	200
-poe2:evasion_helmet_scout_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Scout Hood	Helm	4	40	0	0	2	3	0	0	10		NONE	Null	false	1300
-poe2:evasion_helmet_hunter_hood	1	Armor	Helm	SKULL_CAP	Helm	HELM	Hunter Hood	Helm	9	45	0	0	4	5	0	0	19		NONE	Null	false	2500
-poe2:evasion_helmet_shadow_hood	1	Armor	Helm	SKULL_CAP	Helm	CROWN	Shadow Hood	Helm	13	50	0	0	6	7	0	0	30		NONE	Null	false	3700
-poe2:evasion_helmet_ranger_hood	1	Armor	Helm	FOOLS_CREST	Helm	CROWN	Ranger Hood	Helm	17	55	0	0	9	11	0	0	43		NONE	Null	false	4900
-poe2:evasion_helmet_night_hood	1	Armor	Helm	FOOLS_CREST	Helm	GREATHELM	Night Hood	Helm	22	60	0	0	12	15	0	0	56		NONE	Null	false	6100
-poe2:evasion_helmet_wind_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Wind Hood	Helm	25	65	0	0	16	19	0	0	69		NONE	Null	false	7100
-poe2:evasion_helmet_phantom_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Phantom Hood	Helm	29	70	0	0	21	25	0	0	82		NONE	Null	false	8100
-poe2:energy_shield_helmet_cloth_circlet	1	Armor	Helm	ROYAL_CIRCLET	Helm	SKULLCAP	Cloth Circlet	Helm	1	35	0	0	1	2	0	3	0		NONE	Null	false	200
-poe2:energy_shield_helmet_scholar_circlet	1	Armor	Helm	ROYAL_CIRCLET	Helm	SKULLCAP	Scholar Circlet	Helm	4	40	0	0	2	3	0	10	0		NONE	Null	false	1300
-poe2:energy_shield_helmet_mystic_crown	1	Armor	Helm	CROWN	Helm	HELM	Mystic Crown	Helm	9	45	0	0	4	5	0	19	0		NONE	Null	false	2500
-poe2:energy_shield_helmet_ritual_crown	1	Armor	Helm	CROWN	Helm	CROWN	Ritual Crown	Helm	13	50	0	0	6	7	0	30	0		NONE	Null	false	3700
-poe2:energy_shield_helmet_sage_crown	1	Armor	Helm	THINKING_CAP	Helm	CROWN	Sage Crown	Helm	17	55	0	0	8	10	0	43	0		NONE	Null	false	4900
-poe2:energy_shield_helmet_occult_crown	1	Armor	Helm	THINKING_CAP	Helm	GREATHELM	Occult Crown	Helm	22	60	0	0	12	15	0	56	0		NONE	Null	false	6100
-poe2:energy_shield_helmet_astral_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Astral Crown	Helm	25	65	0	0	16	19	0	69	0		NONE	Null	false	7100
-poe2:energy_shield_helmet_void_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Void Crown	Helm	29	70	0	0	20	25	0	82	0		NONE	Null	false	8100
-poe2:armour_evasion_helmet_brigand_helm	1	Armor	Helm	SKULL_CAP	Helm	SKULLCAP	Brigand Helm	Helm	1	35	0	0	2	2	2	0	2		NONE	Null	false	200
-poe2:armour_evasion_helmet_skirmish_helm	1	Armor	Helm	SKULL_CAP	Helm	SKULLCAP	Skirmish Helm	Helm	4	40	0	0	3	4	6	0	6		NONE	Null	false	1300
-poe2:armour_evasion_helmet_mercenary_helm	1	Armor	Helm	HELM	Helm	HELM	Mercenary Helm	Helm	9	45	0	0	5	6	12	0	12		NONE	Null	false	2500
-poe2:armour_evasion_helmet_vanguard_helm	1	Armor	Helm	HELM	Helm	CROWN	Vanguard Helm	Helm	13	50	0	0	7	9	18	0	18		NONE	Null	false	3700
-poe2:armour_evasion_helmet_warden_helm	1	Armor	Helm	FULL_HELM	Helm	CROWN	Warden Helm	Helm	17	55	0	0	11	13	25	0	25		NONE	Null	false	4900
-poe2:armour_evasion_helmet_champion_helm	1	Armor	Helm	FULL_HELM	Helm	GREATHELM	Champion Helm	Helm	22	60	0	0	14	17	33	0	33		NONE	Null	false	6100
-poe2:armour_evasion_helmet_paragon_helm	1	Armor	Helm	HELM_OF_SPIRITS	Helm	GREATHELM	Paragon Helm	Helm	25	65	0	0	19	23	41	0	41		NONE	Null	false	7100
-poe2:armour_evasion_helmet_conqueror_helm	1	Armor	Helm	HELM_OF_SPIRITS	Helm	GREATHELM	Conqueror Helm	Helm	29	70	0	0	25	30	48	0	48		NONE	Null	false	8100
-poe2:armour_es_helmet_acolyte_crown	1	Armor	Helm	CROWN	Helm	SKULLCAP	Acolyte Crown	Helm	1	35	0	0	1	2	2	2	0		NONE	Null	false	200
-poe2:armour_es_helmet_zealot_crown	1	Armor	Helm	CROWN	Helm	SKULLCAP	Zealot Crown	Helm	4	40	0	0	3	4	6	6	0		NONE	Null	false	1300
-poe2:armour_es_helmet_templar_crown	1	Armor	Helm	GREAT_HELM	Helm	HELM	Templar Crown	Helm	9	45	0	0	4	5	12	12	0		NONE	Null	false	2500
-poe2:armour_es_helmet_martyr_crown	1	Armor	Helm	GREAT_HELM	Helm	CROWN	Martyr Crown	Helm	13	50	0	0	7	8	18	18	0		NONE	Null	false	3700
-poe2:armour_es_helmet_prelate_crown	1	Armor	Helm	ROYAL_CIRCLET	Helm	CROWN	Prelate Crown	Helm	17	55	0	0	10	12	25	25	0		NONE	Null	false	4900
-poe2:armour_es_helmet_hierophant_crown	1	Armor	Helm	ROYAL_CIRCLET	Helm	GREATHELM	Hierophant Crown	Helm	22	60	0	0	13	16	33	33	0		NONE	Null	false	6100
-poe2:armour_es_helmet_archon_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Archon Crown	Helm	25	65	0	0	18	22	41	41	0		NONE	Null	false	7100
-poe2:armour_es_helmet_seraph_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Seraph Crown	Helm	29	70	0	0	23	28	48	48	0		NONE	Null	false	8100
-poe2:evasion_es_helmet_veiled_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Veiled Hood	Helm	1	35	0	0	1	2	0	2	2		NONE	Null	false	200
-poe2:evasion_es_helmet_whisper_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Whisper Hood	Helm	4	40	0	0	3	4	0	6	6		NONE	Null	false	1300
-poe2:evasion_es_helmet_trickster_hood	1	Armor	Helm	ROYAL_CIRCLET	Helm	HELM	Trickster Hood	Helm	9	45	0	0	4	5	0	12	12		NONE	Null	false	2500
-poe2:evasion_es_helmet_phantom_hood	1	Armor	Helm	ROYAL_CIRCLET	Helm	CROWN	Phantom Cowl	Helm	13	50	0	0	7	8	0	18	18		NONE	Null	false	3700
-poe2:evasion_es_helmet_seer_hood	1	Armor	Helm	THINKING_CAP	Helm	CROWN	Seer Hood	Helm	17	55	0	0	10	12	0	25	25		NONE	Null	false	4900
-poe2:evasion_es_helmet_dream_hood	1	Armor	Helm	THINKING_CAP	Helm	GREATHELM	Dream Hood	Helm	22	60	0	0	13	16	0	33	33		NONE	Null	false	6100
-poe2:evasion_es_helmet_astral_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Astral Hood	Helm	25	65	0	0	18	22	0	41	41		NONE	Null	false	7100
-poe2:evasion_es_helmet_mirage_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Mirage Hood	Helm	29	70	0	0	23	28	0	48	48		NONE	Null	false	8100
-poe2:tri_helmet_pilgrim_mask	1	Armor	Helm	FULL_HELM	Helm	SKULLCAP	Pilgrim Mask	Helm	1	35	0	0	1	2	2	2	2		NONE	Null	false	200
-poe2:tri_helmet_wayfarer_mask	1	Armor	Helm	FULL_HELM	Helm	SKULLCAP	Wayfarer Mask	Helm	4	40	0	0	3	3	4	4	4		NONE	Null	false	1300
-poe2:tri_helmet_concord_mask	1	Armor	Helm	CROWN	Helm	HELM	Concord Mask	Helm	9	45	0	0	4	5	8	8	8		NONE	Null	false	2500
-poe2:tri_helmet_triune_mask	1	Armor	Helm	CROWN	Helm	CROWN	Triune Mask	Helm	13	50	0	0	6	8	13	13	13		NONE	Null	false	3700
-poe2:tri_helmet_harmonist_mask	1	Armor	Helm	HELM_OF_SPIRITS	Helm	CROWN	Harmonist Mask	Helm	17	55	0	0	9	11	18	18	18		NONE	Null	false	4900
-poe2:tri_helmet_ascetic_mask	1	Armor	Helm	HELM_OF_SPIRITS	Helm	GREATHELM	Ascetic Mask	Helm	22	60	0	0	12	15	24	24	24		NONE	Null	false	6100
-poe2:tri_helmet_ascendant_mask	1	Armor	Helm	VEIL_OF_STEEL	Helm	GREATHELM	Ascendant Mask	Helm	25	65	0	0	17	20	29	29	29		NONE	Null	false	7100
-poe2:tri_helmet_eternal_mask	1	Armor	Helm	VEIL_OF_STEEL	Helm	GREATHELM	Eternal Mask	Helm	29	70	0	0	22	26	35	35	35		NONE	Null	false	8100
-poe2:shield_armour_wooden_tower_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	BUCKLER	Wooden Tower Shield	Shield	1	35	0	0	2	2	3	0	0		NONE	Null	false	200
-poe2:shield_armour_iron_tower_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	SMALLSHIELD	Iron Tower Shield	Shield	4	40	0	0	3	4	10	0	0		NONE	Null	false	1300
-poe2:shield_armour_guard_tower_shield	1	Armor	One-handed	TOWER_SHIELD	Shield	LARGESHIELD	Guard Tower Shield	Shield	9	45	0	0	5	6	19	0	0		NONE	Null	false	2500
-poe2:shield_armour_war_tower_shield	1	Armor	One-handed	TOWER_SHIELD	Shield	KITESHIELD	War Tower Shield	Shield	13	50	0	0	7	9	30	0	0		NONE	Null	false	3700
-poe2:shield_armour_knight_tower_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	KITESHIELD	Knight Tower Shield	Shield	17	55	0	0	11	13	43	0	0		NONE	Null	false	4900
-poe2:shield_armour_legion_tower_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	GOTHSHIELD	Legion Tower Shield	Shield	22	60	0	0	15	18	56	0	0		NONE	Null	false	6100
-poe2:shield_armour_imperial_tower_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	GOTHSHIELD	Imperial Tower Shield	Shield	25	65	0	0	20	24	69	0	0		NONE	Null	false	7100
-poe2:shield_armour_titan_tower_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	GOTHSHIELD	Titan Tower Shield	Shield	29	70	0	0	26	31	82	0	0		NONE	Null	false	8100
-poe2:shield_evasion_hide_buckler	1	Armor	One-handed	BUCKLER	Shield	BUCKLER	Hide Buckler	Shield	1	35	0	0	2	2	0	0	3		NONE	Null	false	200
-poe2:shield_evasion_scout_buckler	1	Armor	One-handed	BUCKLER	Shield	SMALLSHIELD	Scout Buckler	Shield	4	40	0	0	3	4	0	0	10		NONE	Null	false	1300
-poe2:shield_evasion_hunter_buckler	1	Armor	One-handed	SMALL_SHIELD	Shield	LARGESHIELD	Hunter Buckler	Shield	9	45	0	0	5	6	0	0	19		NONE	Null	false	2500
-poe2:shield_evasion_duelist_buckler	1	Armor	One-handed	SMALL_SHIELD	Shield	KITESHIELD	Duelist Buckler	Shield	13	50	0	0	7	9	0	0	30		NONE	Null	false	3700
-poe2:shield_evasion_ranger_buckler	1	Armor	One-handed	KITE_SHIELD	Shield	KITESHIELD	Ranger Buckler	Shield	17	55	0	0	11	13	0	0	43		NONE	Null	false	4900
-poe2:shield_evasion_night_buckler	1	Armor	One-handed	KITE_SHIELD	Shield	GOTHSHIELD	Night Buckler	Shield	22	60	0	0	15	18	0	0	56		NONE	Null	false	6100
-poe2:shield_evasion_wind_buckler	1	Armor	One-handed	SPLIT_SKULL_SHIELD	Shield	GOTHSHIELD	Wind Buckler	Shield	25	65	0	0	20	24	0	0	69		NONE	Null	false	7100
-poe2:shield_evasion_phantom_buckler	1	Armor	One-handed	SPLIT_SKULL_SHIELD	Shield	GOTHSHIELD	Phantom Buckler	Shield	29	70	0	0	26	31	0	0	82		NONE	Null	false	8100
-poe2:shield_armour_evasion_round_shield	1	Armor	One-handed	SMALL_SHIELD	Shield	BUCKLER	Round Shield	Shield	1	35	0	0	2	3	2	0	2		NONE	Null	false	200
-poe2:shield_armour_evasion_skirmish_shield	1	Armor	One-handed	SMALL_SHIELD	Shield	SMALLSHIELD	Skirmish Shield	Shield	4	40	0	0	4	4	6	0	6		NONE	Null	false	1300
-poe2:shield_armour_evasion_mercenary_shield	1	Armor	One-handed	KITE_SHIELD	Shield	LARGESHIELD	Mercenary Shield	Shield	9	45	0	0	6	7	12	0	12		NONE	Null	false	2500
-poe2:shield_armour_evasion_vanguard_shield	1	Armor	One-handed	KITE_SHIELD	Shield	KITESHIELD	Vanguard Shield	Shield	13	50	0	0	9	11	18	0	18		NONE	Null	false	3700
-poe2:shield_armour_evasion_warden_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	KITESHIELD	Warden Shield	Shield	17	55	0	0	12	15	25	0	25		NONE	Null	false	4900
-poe2:shield_armour_evasion_champion_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	GOTHSHIELD	Champion Shield	Shield	22	60	0	0	17	21	33	0	33		NONE	Null	false	6100
-poe2:shield_armour_evasion_paragon_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Paragon Shield	Shield	25	65	0	0	23	28	41	0	41		NONE	Null	false	7100
-poe2:shield_armour_evasion_conqueror_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Conqueror Shield	Shield	29	70	0	0	29	36	48	0	48		NONE	Null	false	8100
-poe2:shield_armour_es_reliquary_shield	1	Armor	One-handed	KITE_SHIELD	Shield	BUCKLER	Reliquary Shield	Shield	1	35	0	0	2	3	2	2	0		NONE	Null	false	200
-poe2:shield_armour_es_zealot_shield	1	Armor	One-handed	KITE_SHIELD	Shield	SMALLSHIELD	Zealot Shield	Shield	4	40	0	0	3	4	6	6	0		NONE	Null	false	1300
-poe2:shield_armour_es_templar_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	LARGESHIELD	Templar Shield	Shield	9	45	0	0	5	7	12	12	0		NONE	Null	false	2500
-poe2:shield_armour_es_martyr_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	KITESHIELD	Martyr Shield	Shield	13	50	0	0	8	10	18	18	0		NONE	Null	false	3700
-poe2:shield_armour_es_prelate_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	KITESHIELD	Prelate Shield	Shield	17	55	0	0	12	15	25	25	0		NONE	Null	false	4900
-poe2:shield_armour_es_hierophant_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	GOTHSHIELD	Hierophant Shield	Shield	22	60	0	0	16	19	33	33	0		NONE	Null	false	6100
-poe2:shield_armour_es_archon_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Archon Shield	Shield	25	65	0	0	21	26	41	41	0		NONE	Null	false	7100
-poe2:shield_armour_es_seraph_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Seraph Shield	Shield	29	70	0	0	28	34	48	48	0		NONE	Null	false	8100
+poe2:sceptre_focused_bronze_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Focused Bronze Sceptre	Sceptre	12	40	2	6	0	0	6	6	0		NONE	Null	false	1300
+poe2:sceptre_rapid_bronze_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Quick Bronze Sceptre	Sceptre	12	40	2	6	0	0	6	6	0		NONE	Null	false	1300
+poe2:sceptre_focused_priest_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Priest Sceptre	Sceptre	24	45	3	7	0	0	12	12	0		NONE	Null	false	2500
+poe2:sceptre_rapid_priest_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Priest Sceptre	Sceptre	24	45	2	7	0	0	12	12	0		NONE	Null	false	2500
+poe2:sceptre_focused_sun_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Sun Sceptre	Sceptre	36	50	4	9	0	0	18	18	0		NONE	Null	false	3700
+poe2:sceptre_rapid_sun_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Sun Sceptre	Sceptre	36	50	3	8	0	0	18	18	0		NONE	Null	false	3700
+poe2:sceptre_focused_templar_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Templar Sceptre	Sceptre	48	55	4	11	0	0	25	25	0		NONE	Null	false	4900
+poe2:sceptre_rapid_templar_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Templar Sceptre	Sceptre	48	55	4	10	0	0	25	25	0		NONE	Null	false	4900
+poe2:sceptre_focused_oracle_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Oracle Sceptre	Sceptre	60	60	6	13	0	0	33	33	0		NONE	Null	false	6100
+poe2:sceptre_rapid_oracle_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Oracle Sceptre	Sceptre	60	60	5	12	0	0	33	33	0		NONE	Null	false	6100
+poe2:sceptre_focused_saint_s_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Saint's Sceptre	Sceptre	70	65	7	16	0	0	41	41	0		NONE	Null	false	7100
+poe2:sceptre_rapid_saint_s_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Saint's Sceptre	Sceptre	70	65	6	14	0	0	41	41	0		NONE	Null	false	7100
+poe2:sceptre_focused_sovereign_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Sovereign Sceptre	Sceptre	80	70	9	19	0	0	48	48	0		NONE	Null	false	8100
+poe2:sceptre_rapid_sovereign_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Sovereign Sceptre	Sceptre	80	70	7	17	0	0	48	48	0		NONE	Null	false	8100
+poe2:armour_helmet_iron_cap	1	Armor	Helm	HELM	Helm	SKULLCAP	Iron Cap	Helm	1	35	0	0	12	12	3	0	0		NONE	Null	false	200
+poe2:armour_helmet_guard_helm	1	Armor	Helm	HELM	Helm	SKULLCAP	Guard Helm	Helm	12	40	0	0	21	21	10	0	0		NONE	Null	false	1300
+poe2:armour_helmet_war_helm	1	Armor	Helm	FULL_HELM	Helm	HELM	War Helm	Helm	24	45	0	0	35	35	19	0	0		NONE	Null	false	2500
+poe2:armour_helmet_closed_helm	1	Armor	Helm	FULL_HELM	Helm	CROWN	Closed Helm	Helm	36	50	0	0	52	52	30	0	0		NONE	Null	false	3700
+poe2:armour_helmet_legion_helm	1	Armor	Helm	GREAT_HELM	Helm	CROWN	Legion Helm	Helm	48	55	0	0	74	74	43	0	0		NONE	Null	false	4900
+poe2:armour_helmet_siege_helm	1	Armor	Helm	GREAT_HELM	Helm	GREATHELM	Siege Helm	Helm	60	60	0	0	102	102	56	0	0		NONE	Null	false	6100
+poe2:armour_helmet_imperial_helm	1	Armor	Helm	OVERLORDS_HELM	Helm	GREATHELM	Imperial Helm	Helm	70	65	0	0	135	135	69	0	0		NONE	Null	false	7100
+poe2:armour_helmet_titan_crown	1	Armor	Helm	OVERLORDS_HELM	Helm	GREATHELM	Titan Crown	Helm	80	70	0	0	176	176	82	0	0		NONE	Null	false	8100
+poe2:evasion_helmet_leather_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Leather Hood	Helm	1	35	0	0	12	12	0	0	3		NONE	Null	false	200
+poe2:evasion_helmet_scout_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Scout Hood	Helm	12	40	0	0	21	21	0	0	10		NONE	Null	false	1300
+poe2:evasion_helmet_hunter_hood	1	Armor	Helm	SKULL_CAP	Helm	HELM	Hunter Hood	Helm	24	45	0	0	35	35	0	0	19		NONE	Null	false	2500
+poe2:evasion_helmet_shadow_hood	1	Armor	Helm	SKULL_CAP	Helm	CROWN	Shadow Hood	Helm	36	50	0	0	52	52	0	0	30		NONE	Null	false	3700
+poe2:evasion_helmet_ranger_hood	1	Armor	Helm	FOOLS_CREST	Helm	CROWN	Ranger Hood	Helm	48	55	0	0	74	74	0	0	43		NONE	Null	false	4900
+poe2:evasion_helmet_night_hood	1	Armor	Helm	FOOLS_CREST	Helm	GREATHELM	Night Hood	Helm	60	60	0	0	102	102	0	0	56		NONE	Null	false	6100
+poe2:evasion_helmet_wind_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Wind Hood	Helm	70	65	0	0	135	135	0	0	69		NONE	Null	false	7100
+poe2:evasion_helmet_phantom_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Phantom Hood	Helm	80	70	0	0	176	176	0	0	82		NONE	Null	false	8100
+poe2:energy_shield_helmet_cloth_circlet	1	Armor	Helm	ROYAL_CIRCLET	Helm	SKULLCAP	Cloth Circlet	Helm	1	35	0	0	1	1	0	3	0		NONE	Null	false	200
+poe2:energy_shield_helmet_scholar_circlet	1	Armor	Helm	ROYAL_CIRCLET	Helm	SKULLCAP	Scholar Circlet	Helm	12	40	0	0	2	2	0	10	0		NONE	Null	false	1300
+poe2:energy_shield_helmet_mystic_crown	1	Armor	Helm	CROWN	Helm	HELM	Mystic Crown	Helm	24	45	0	0	4	4	0	19	0		NONE	Null	false	2500
+poe2:energy_shield_helmet_ritual_crown	1	Armor	Helm	CROWN	Helm	CROWN	Ritual Crown	Helm	36	50	0	0	6	6	0	30	0		NONE	Null	false	3700
+poe2:energy_shield_helmet_sage_crown	1	Armor	Helm	THINKING_CAP	Helm	CROWN	Sage Crown	Helm	48	55	0	0	8	8	0	43	0		NONE	Null	false	4900
+poe2:energy_shield_helmet_occult_crown	1	Armor	Helm	THINKING_CAP	Helm	GREATHELM	Occult Crown	Helm	60	60	0	0	12	12	0	56	0		NONE	Null	false	6100
+poe2:energy_shield_helmet_astral_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Astral Crown	Helm	70	65	0	0	15	15	0	69	0		NONE	Null	false	7100
+poe2:energy_shield_helmet_void_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Void Crown	Helm	80	70	0	0	20	20	0	82	0		NONE	Null	false	8100
+poe2:armour_evasion_helmet_brigand_helm	1	Armor	Helm	SKULL_CAP	Helm	SKULLCAP	Brigand Helm	Helm	1	35	0	0	14	14	2	0	2		NONE	Null	false	200
+poe2:armour_evasion_helmet_skirmish_helm	1	Armor	Helm	SKULL_CAP	Helm	SKULLCAP	Skirmish Helm	Helm	12	40	0	0	26	26	6	0	6		NONE	Null	false	1300
+poe2:armour_evasion_helmet_mercenary_helm	1	Armor	Helm	HELM	Helm	HELM	Mercenary Helm	Helm	24	45	0	0	42	42	12	0	12		NONE	Null	false	2500
+poe2:armour_evasion_helmet_vanguard_helm	1	Armor	Helm	HELM	Helm	CROWN	Vanguard Helm	Helm	36	50	0	0	62	62	18	0	18		NONE	Null	false	3700
+poe2:armour_evasion_helmet_warden_helm	1	Armor	Helm	FULL_HELM	Helm	CROWN	Warden Helm	Helm	48	55	0	0	90	90	25	0	25		NONE	Null	false	4900
+poe2:armour_evasion_helmet_champion_helm	1	Armor	Helm	FULL_HELM	Helm	GREATHELM	Champion Helm	Helm	60	60	0	0	122	122	33	0	33		NONE	Null	false	6100
+poe2:armour_evasion_helmet_paragon_helm	1	Armor	Helm	HELM_OF_SPIRITS	Helm	GREATHELM	Paragon Helm	Helm	70	65	0	0	162	162	41	0	41		NONE	Null	false	7100
+poe2:armour_evasion_helmet_conqueror_helm	1	Armor	Helm	HELM_OF_SPIRITS	Helm	GREATHELM	Conqueror Helm	Helm	80	70	0	0	212	212	48	0	48		NONE	Null	false	8100
+poe2:armour_es_helmet_acolyte_crown	1	Armor	Helm	CROWN	Helm	SKULLCAP	Acolyte Crown	Helm	1	35	0	0	8	8	2	2	0		NONE	Null	false	200
+poe2:armour_es_helmet_zealot_crown	1	Armor	Helm	CROWN	Helm	SKULLCAP	Zealot Crown	Helm	12	40	0	0	14	14	6	6	0		NONE	Null	false	1300
+poe2:armour_es_helmet_templar_crown	1	Armor	Helm	GREAT_HELM	Helm	HELM	Templar Crown	Helm	24	45	0	0	23	23	12	12	0		NONE	Null	false	2500
+poe2:armour_es_helmet_martyr_crown	1	Armor	Helm	GREAT_HELM	Helm	CROWN	Martyr Crown	Helm	36	50	0	0	34	34	18	18	0		NONE	Null	false	3700
+poe2:armour_es_helmet_prelate_crown	1	Armor	Helm	ROYAL_CIRCLET	Helm	CROWN	Prelate Crown	Helm	48	55	0	0	49	49	25	25	0		NONE	Null	false	4900
+poe2:armour_es_helmet_hierophant_crown	1	Armor	Helm	ROYAL_CIRCLET	Helm	GREATHELM	Hierophant Crown	Helm	60	60	0	0	67	67	33	33	0		NONE	Null	false	6100
+poe2:armour_es_helmet_archon_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Archon Crown	Helm	70	65	0	0	89	89	41	41	0		NONE	Null	false	7100
+poe2:armour_es_helmet_seraph_crown	1	Armor	Helm	THE_UNDEAD_CROWN	Helm	GREATHELM	Seraph Crown	Helm	80	70	0	0	116	116	48	48	0		NONE	Null	false	8100
+poe2:evasion_es_helmet_veiled_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Veiled Hood	Helm	1	35	0	0	8	8	0	2	2		NONE	Null	false	200
+poe2:evasion_es_helmet_whisper_hood	1	Armor	Helm	CAP	Helm	SKULLCAP	Whisper Hood	Helm	12	40	0	0	14	14	0	6	6		NONE	Null	false	1300
+poe2:evasion_es_helmet_trickster_hood	1	Armor	Helm	ROYAL_CIRCLET	Helm	HELM	Trickster Hood	Helm	24	45	0	0	23	23	0	12	12		NONE	Null	false	2500
+poe2:evasion_es_helmet_phantom_hood	1	Armor	Helm	ROYAL_CIRCLET	Helm	CROWN	Phantom Cowl	Helm	36	50	0	0	34	34	0	18	18		NONE	Null	false	3700
+poe2:evasion_es_helmet_seer_hood	1	Armor	Helm	THINKING_CAP	Helm	CROWN	Seer Hood	Helm	48	55	0	0	49	49	0	25	25		NONE	Null	false	4900
+poe2:evasion_es_helmet_dream_hood	1	Armor	Helm	THINKING_CAP	Helm	GREATHELM	Dream Hood	Helm	60	60	0	0	67	67	0	33	33		NONE	Null	false	6100
+poe2:evasion_es_helmet_astral_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Astral Hood	Helm	70	65	0	0	89	89	0	41	41		NONE	Null	false	7100
+poe2:evasion_es_helmet_mirage_hood	1	Armor	Helm	HARLEQUIN_CREST	Helm	GREATHELM	Mirage Hood	Helm	80	70	0	0	116	116	0	48	48		NONE	Null	false	8100
+poe2:tri_helmet_pilgrim_mask	1	Armor	Helm	FULL_HELM	Helm	SKULLCAP	Pilgrim Mask	Helm	1	35	0	0	8	8	2	2	2		NONE	Null	false	200
+poe2:tri_helmet_wayfarer_mask	1	Armor	Helm	FULL_HELM	Helm	SKULLCAP	Wayfarer Mask	Helm	12	40	0	0	17	17	4	4	4		NONE	Null	false	1300
+poe2:tri_helmet_concord_mask	1	Armor	Helm	CROWN	Helm	HELM	Concord Mask	Helm	24	45	0	0	25	25	8	8	8		NONE	Null	false	2500
+poe2:tri_helmet_triune_mask	1	Armor	Helm	CROWN	Helm	CROWN	Triune Mask	Helm	36	50	0	0	40	40	13	13	13		NONE	Null	false	3700
+poe2:tri_helmet_harmonist_mask	1	Armor	Helm	HELM_OF_SPIRITS	Helm	CROWN	Harmonist Mask	Helm	48	55	0	0	57	57	18	18	18		NONE	Null	false	4900
+poe2:tri_helmet_ascetic_mask	1	Armor	Helm	HELM_OF_SPIRITS	Helm	GREATHELM	Ascetic Mask	Helm	60	60	0	0	78	78	24	24	24		NONE	Null	false	6100
+poe2:tri_helmet_ascendant_mask	1	Armor	Helm	VEIL_OF_STEEL	Helm	GREATHELM	Ascendant Mask	Helm	70	65	0	0	103	103	29	29	29		NONE	Null	false	7100
+poe2:tri_helmet_eternal_mask	1	Armor	Helm	VEIL_OF_STEEL	Helm	GREATHELM	Eternal Mask	Helm	80	70	0	0	133	133	35	35	35		NONE	Null	false	8100
+poe2:shield_armour_wooden_tower_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	BUCKLER	Wooden Tower Shield	Shield	1	35	0	0	15	15	3	0	0		NONE	Null	false	200
+poe2:shield_armour_iron_tower_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	SMALLSHIELD	Iron Tower Shield	Shield	12	40	0	0	26	26	10	0	0		NONE	Null	false	1300
+poe2:shield_armour_guard_tower_shield	1	Armor	One-handed	TOWER_SHIELD	Shield	LARGESHIELD	Guard Tower Shield	Shield	24	45	0	0	43	43	19	0	0		NONE	Null	false	2500
+poe2:shield_armour_war_tower_shield	1	Armor	One-handed	TOWER_SHIELD	Shield	KITESHIELD	War Tower Shield	Shield	36	50	0	0	64	64	30	0	0		NONE	Null	false	3700
+poe2:shield_armour_knight_tower_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	KITESHIELD	Knight Tower Shield	Shield	48	55	0	0	92	92	43	0	0		NONE	Null	false	4900
+poe2:shield_armour_legion_tower_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	GOTHSHIELD	Legion Tower Shield	Shield	60	60	0	0	126	126	56	0	0		NONE	Null	false	6100
+poe2:shield_armour_imperial_tower_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	GOTHSHIELD	Imperial Tower Shield	Shield	70	65	0	0	167	167	69	0	0		NONE	Null	false	7100
+poe2:shield_armour_titan_tower_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	GOTHSHIELD	Titan Tower Shield	Shield	80	70	0	0	218	218	82	0	0		NONE	Null	false	8100
+poe2:shield_evasion_hide_buckler	1	Armor	One-handed	BUCKLER	Shield	BUCKLER	Hide Buckler	Shield	1	35	0	0	15	15	0	0	3		NONE	Null	false	200
+poe2:shield_evasion_scout_buckler	1	Armor	One-handed	BUCKLER	Shield	SMALLSHIELD	Scout Buckler	Shield	12	40	0	0	26	26	0	0	10		NONE	Null	false	1300
+poe2:shield_evasion_hunter_buckler	1	Armor	One-handed	SMALL_SHIELD	Shield	LARGESHIELD	Hunter Buckler	Shield	24	45	0	0	43	43	0	0	19		NONE	Null	false	2500
+poe2:shield_evasion_duelist_buckler	1	Armor	One-handed	SMALL_SHIELD	Shield	KITESHIELD	Duelist Buckler	Shield	36	50	0	0	64	64	0	0	30		NONE	Null	false	3700
+poe2:shield_evasion_ranger_buckler	1	Armor	One-handed	KITE_SHIELD	Shield	KITESHIELD	Ranger Buckler	Shield	48	55	0	0	92	92	0	0	43		NONE	Null	false	4900
+poe2:shield_evasion_night_buckler	1	Armor	One-handed	KITE_SHIELD	Shield	GOTHSHIELD	Night Buckler	Shield	60	60	0	0	126	126	0	0	56		NONE	Null	false	6100
+poe2:shield_evasion_wind_buckler	1	Armor	One-handed	SPLIT_SKULL_SHIELD	Shield	GOTHSHIELD	Wind Buckler	Shield	70	65	0	0	167	167	0	0	69		NONE	Null	false	7100
+poe2:shield_evasion_phantom_buckler	1	Armor	One-handed	SPLIT_SKULL_SHIELD	Shield	GOTHSHIELD	Phantom Buckler	Shield	80	70	0	0	218	218	0	0	82		NONE	Null	false	8100
+poe2:shield_armour_evasion_round_shield	1	Armor	One-handed	SMALL_SHIELD	Shield	BUCKLER	Round Shield	Shield	1	35	0	0	18	18	2	0	2		NONE	Null	false	200
+poe2:shield_armour_evasion_skirmish_shield	1	Armor	One-handed	SMALL_SHIELD	Shield	SMALLSHIELD	Skirmish Shield	Shield	12	40	0	0	30	30	6	0	6		NONE	Null	false	1300
+poe2:shield_armour_evasion_mercenary_shield	1	Armor	One-handed	KITE_SHIELD	Shield	LARGESHIELD	Mercenary Shield	Shield	24	45	0	0	50	50	12	0	12		NONE	Null	false	2500
+poe2:shield_armour_evasion_vanguard_shield	1	Armor	One-handed	KITE_SHIELD	Shield	KITESHIELD	Vanguard Shield	Shield	36	50	0	0	74	74	18	0	18		NONE	Null	false	3700
+poe2:shield_armour_evasion_warden_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	KITESHIELD	Warden Shield	Shield	48	55	0	0	106	106	25	0	25		NONE	Null	false	4900
+poe2:shield_armour_evasion_champion_shield	1	Armor	One-handed	LARGE_SHIELD	Shield	GOTHSHIELD	Champion Shield	Shield	60	60	0	0	146	146	33	0	33		NONE	Null	false	6100
+poe2:shield_armour_evasion_paragon_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Paragon Shield	Shield	70	65	0	0	194	194	41	0	41		NONE	Null	false	7100
+poe2:shield_armour_evasion_conqueror_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Conqueror Shield	Shield	80	70	0	0	252	252	48	0	48		NONE	Null	false	8100
+poe2:shield_armour_es_reliquary_shield	1	Armor	One-handed	KITE_SHIELD	Shield	BUCKLER	Reliquary Shield	Shield	1	35	0	0	10	10	2	2	0		NONE	Null	false	200
+poe2:shield_armour_es_zealot_shield	1	Armor	One-handed	KITE_SHIELD	Shield	SMALLSHIELD	Zealot Shield	Shield	12	40	0	0	17	17	6	6	0		NONE	Null	false	1300
+poe2:shield_armour_es_templar_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	LARGESHIELD	Templar Shield	Shield	24	45	0	0	28	28	12	12	0		NONE	Null	false	2500
+poe2:shield_armour_es_martyr_shield	1	Armor	One-handed	BLACKOAK_SHIELD	Shield	KITESHIELD	Martyr Shield	Shield	36	50	0	0	42	42	18	18	0		NONE	Null	false	3700
+poe2:shield_armour_es_prelate_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	KITESHIELD	Prelate Shield	Shield	48	55	0	0	60	60	25	25	0		NONE	Null	false	4900
+poe2:shield_armour_es_hierophant_shield	1	Armor	One-handed	GOTHIC_SHIELD	Shield	GOTHSHIELD	Hierophant Shield	Shield	60	60	0	0	82	82	33	33	0		NONE	Null	false	6100
+poe2:shield_armour_es_archon_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Archon Shield	Shield	70	65	0	0	109	109	41	41	0		NONE	Null	false	7100
+poe2:shield_armour_es_seraph_shield	1	Armor	One-handed	DRAGONS_BREACH	Shield	GOTHSHIELD	Seraph Shield	Shield	80	70	0	0	143	143	48	48	0		NONE	Null	false	8100
 poe2:focus_wooden_focus	1	Armor	One-handed	BOOK_GREY	Shield	NONE	Wooden Focus	Focus	1	35	0	0	3	3	0	3	0		NONE	Null	false	200
-poe2:focus_carved_focus	1	Armor	One-handed	BOOK_GREY	Shield	NONE	Carved Focus	Focus	4	40	0	0	5	6	0	10	0		NONE	Null	false	1300
-poe2:focus_scholar_focus	1	Armor	One-handed	BOOK_RED	Shield	NONE	Scholar Focus	Focus	9	45	0	0	8	10	0	19	0		NONE	Null	false	2500
-poe2:focus_ritual_focus	1	Armor	One-handed	BOOK_RED	Shield	NONE	Ritual Focus	Focus	13	50	0	0	12	15	0	30	0		NONE	Null	false	3700
-poe2:focus_sage_focus	1	Armor	One-handed	BOOK_BLUE	Shield	NONE	Sage Focus	Focus	17	55	0	0	17	21	0	43	0		NONE	Null	false	4900
-poe2:focus_occult_focus	1	Armor	One-handed	BOOK_BLUE	Shield	NONE	Occult Focus	Focus	22	60	0	0	24	29	0	56	0		NONE	Null	false	6100
-poe2:focus_astral_focus	1	Armor	One-handed	FUNGAL_TOME	Shield	NONE	Astral Focus	Focus	25	65	0	0	32	39	0	69	0		NONE	Null	false	7100
-poe2:focus_void_focus	1	Armor	One-handed	FUNGAL_TOME	Shield	NONE	Void Focus	Focus	29	70	0	0	41	51	0	82	0		NONE	Null	false	8100
+poe2:focus_carved_focus	1	Armor	One-handed	BOOK_GREY	Shield	NONE	Carved Focus	Focus	12	40	0	0	5	5	0	10	0		NONE	Null	false	1300
+poe2:focus_scholar_focus	1	Armor	One-handed	BOOK_RED	Shield	NONE	Scholar Focus	Focus	24	45	0	0	8	8	0	19	0		NONE	Null	false	2500
+poe2:focus_ritual_focus	1	Armor	One-handed	BOOK_RED	Shield	NONE	Ritual Focus	Focus	36	50	0	0	12	12	0	30	0		NONE	Null	false	3700
+poe2:focus_sage_focus	1	Armor	One-handed	BOOK_BLUE	Shield	NONE	Sage Focus	Focus	48	55	0	0	17	17	0	43	0		NONE	Null	false	4900
+poe2:focus_occult_focus	1	Armor	One-handed	BOOK_BLUE	Shield	NONE	Occult Focus	Focus	60	60	0	0	23	23	0	56	0		NONE	Null	false	6100
+poe2:focus_astral_focus	1	Armor	One-handed	FUNGAL_TOME	Shield	NONE	Astral Focus	Focus	70	65	0	0	31	31	0	69	0		NONE	Null	false	7100
+poe2:focus_void_focus	1	Armor	One-handed	FUNGAL_TOME	Shield	NONE	Void Focus	Focus	80	70	0	0	41	41	0	82	0		NONE	Null	false	8100
 poe2:ruby_ring	1	Misc	Ring	RING_OF_MAGMA	Ring	RING	Ruby Ring	Ring	8	0	0	0	0	0	0	0	0		RING	Null	false	1050
 poe2:sapphire_ring	1	Misc	Ring	XORINES_RING	Ring	RING	Sapphire Ring	Ring	12	0	0	0	0	0	0	0	0		RING	Null	false	1400
 poe2:topaz_ring	1	Misc	Ring	RING_OF_THUNDER	Ring	RING	Topaz Ring	Ring	16	0	0	0	0	0	0	0	0		RING	Null	false	1700

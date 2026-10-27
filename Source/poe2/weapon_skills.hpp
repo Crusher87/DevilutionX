@@ -34,6 +34,20 @@ constexpr int GroundSlamReach = 3;
 /** @brief Whirling Staff hits two rings around the player; the outer ring for this percent. */
 constexpr int WhirlingStaffReach = 2;
 constexpr int WhirlingStaffOuterDamagePercent = 50;
+/** @brief Leap Slam hits everything around where it lands for this percent of a weapon hit. */
+constexpr int LeapSlamDamagePercent = 80;
+/**
+ * @brief Lightning Arrow's burst: true gives it Diablo's 2 x character level + Dexterity / 4 (plan step 14, Curtis
+ * 2026-10-27: the only way the Rogue clears packs); false gives it LightningArrowBurstPercent of the arrow's hit.
+ */
+constexpr bool LightningArrowBurstFromLevel = true;
+/** @brief The burst from the character level and Dexterity: this much a level, plus Dexterity over the divisor. */
+constexpr int LightningArrowBurstPerLevel = 2;
+constexpr int LightningArrowBurstDexterityDivisor = 4;
+/** @brief Without LightningArrowBurstFromLevel: the burst hits the 3x3 tiles where it lands for this percent of the arrow's hit, on average. */
+constexpr int LightningArrowBurstPercent = 60;
+/** @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster. */
+constexpr int FrostNovaShardDamagePercent = 25;
 /** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
 constexpr int FlurryBackhandDamagePercent = 150;
 /** @brief The backhand starts from the end of the first swing, so it skips this many more frames of the animation. */
@@ -46,7 +60,7 @@ constexpr int BarrageArrows = 5;
 /** @brief Ember Fusillade's embers before its gem level adds more. */
 constexpr int EmberFusilladeEmbers = 5;
 
-/** @brief Firebolt and Ice Bolt hit the monsters right beside the one they strike for this percent of the damage. */
+/** @brief Ice Bolt hits the monsters right beside the one it strikes for this percent of the damage (Firebolt's splash is in spell_damage.tsv). */
 constexpr int BoltSplashPercent = 35;
 
 /** @brief Fireball travels at this percent of Diablo's speed and Firebolt at this percent, so the heavy orb and the quick bolt feel apart. */
@@ -100,7 +114,12 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack);
 /** @brief Extra animation frames skipped by the active skill's attack. */
 int8_t WeaponSkillSkippedFrames(const Player &player);
 
-/** @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile. */
+/**
+ * @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile: the most its burst adds. The burst
+ * rolls half to all of it (ProcessElementalArrow). With LightningArrowBurstFromLevel it is 2 x character level +
+ * Dexterity / 4; otherwise it averages LightningArrowBurstPercent of the arrow's average hit. The gem curve scales the
+ * arrow and the burst alike.
+ */
 int LightningArrowDamage(const Player &player);
 
 /** @brief Game ticks from a dash skill's landing to its hit: the swing's wind-up is cut to this (see BeginSkillAnimation). */
