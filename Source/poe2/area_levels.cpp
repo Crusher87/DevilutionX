@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 #include "data/file.hpp"
@@ -52,6 +53,11 @@ void LoadAreaLevels()
 		int damagePercent = DefaultAreaMonsterDamagePercent;
 		reader.readInt("floor", floor);
 		reader.readInt("areaLevel", areaLevel);
+		// The reader goes column by column, so the act and name columns are read past.
+		int act = 0;
+		reader.readInt("act", act);
+		std::string name;
+		reader.readString("name", name);
 		reader.readInt("monsterDamagePercent", damagePercent);
 		if (floor < 1 || floor >= NUMLEVELS || areaLevel < 1 || areaLevel > UINT8_MAX) {
 			LogError("Bad area level row in {}: floor {}, area level {}", Filename, floor, areaLevel);
