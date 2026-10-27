@@ -4126,7 +4126,8 @@ void CreatePlrItems(Player &player)
 	}
 
 	InitCursor();
-	for (const _item_indexes itemData : loadout.items) {
+	for (size_t slot = 0; slot < loadout.items.size(); slot++) {
+		const _item_indexes itemData = GetStartingLoadoutItem(loadout, slot);
 		if (itemData != _item_indexes::IDI_NONE)
 			CreateStartingItem(player, itemData);
 	}

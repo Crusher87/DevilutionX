@@ -18,11 +18,13 @@
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/craft_state.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
 #include "spells.h"
 #include "tables/playerdat.hpp"
@@ -644,6 +646,64 @@ TEST_F(Poe2ItemBasesTest, OldItemsKeepTheirArmourAndDamage)
 	EXPECT_EQ(base.armour, oldDefence.armour);
 	EXPECT_EQ(base.evasion, oldDefence.evasion);
 	EXPECT_EQ(base.energyShield, 0);
+}
+
+TEST_F(Poe2ItemBasesTest, NewHeroesStartWithPoe2Bases)
+{
+	LoadPlayerDataFiles();
+	struct Start {
+		HeroClass heroClass;
+		std::string_view weapon;
+		std::string_view offHand;
+		WeaponSkill starterSkill;
+		DefaultAttack attack;
+	};
+	const Start starts[] = {
+		{ HeroClass::Warrior, "Shortsword", "Wooden Tower Shield", WeaponSkill::Cleave, DefaultAttack::SwordStrike },
+		{ HeroClass::Rogue, "Fine Short Bow", "", WeaponSkill::Barrage, DefaultAttack::BowShot },
+		{ HeroClass::Monk, "Ash Staff", "", WeaponSkill::WhirlingStaff, DefaultAttack::StaffStrike },
+		{ HeroClass::Sorcerer, "Focused Pilgrim Staff", "", WeaponSkill::None, DefaultAttack::StaffBolt },
+		{ HeroClass::Bard, "Shortsword", "Shiv", WeaponSkill::Flurry, DefaultAttack::SwordStrike },
+	};
+	for (const Start &start : starts) {
+		const PlayerStartingLoadoutData &loadout = GetPlayerStartingLoadoutForClass(start.heroClass);
+		const _item_indexes weapon = GetStartingLoadoutItem(loadout, 0);
+		ASSERT_NE(weapon, IDI_NONE) << start.weapon;
+		EXPECT_EQ(AllItemsList[weapon].iName, start.weapon);
+		ASSERT_NE(BaseMetaFor(weapon), nullptr) << start.weapon << " is a POE2 base";
+
+		Player &player = *MyPlayer;
+		player = {};
+		player._pClass = start.heroClass;
+		InitializeItem(player.InvBody[INVLOC_HAND_LEFT], weapon);
+		if (!start.offHand.empty()) {
+			const _item_indexes offHand = GetStartingLoadoutItem(loadout, 1);
+			ASSERT_NE(offHand, IDI_NONE) << start.offHand;
+			EXPECT_EQ(AllItemsList[offHand].iName, start.offHand);
+			InitializeItem(player.InvBody[INVLOC_HAND_RIGHT], offHand);
+		}
+		// The starting gem still fits the new weapon, and the free attack is the weapon's own.
+		if (start.starterSkill != WeaponSkill::None)
+			EXPECT_TRUE(WeaponAllowsSkill(player, start.starterSkill)) << start.weapon;
+		EXPECT_EQ(DefaultAttackFor(player), start.attack) << start.weapon;
+	}
+	EXPECT_EQ(AllItemsList[GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Warrior), 1)].itype, ItemType::Shield);
+	// The Barbarian keeps Diablo's start.
+	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Barbarian), 0), IDI_BARBARIAN);
+	// Outside POE2 mode a 'poe2:' id names nothing.
+	gbIsPoe2 = false;
+	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Warrior), 0), IDI_NONE);
+	gbIsPoe2 = true;
+
+	// Diablo's heroes start as before.
+	UnloadModArchives();
+	LoadPlayerDataFiles();
+	LoadItemData();
+	const PlayerStartingLoadoutData &warrior = GetPlayerStartingLoadoutForClass(HeroClass::Warrior);
+	EXPECT_EQ(GetStartingLoadoutItem(warrior, 0), IDI_WARRIOR);
+	EXPECT_EQ(GetStartingLoadoutItem(warrior, 1), IDI_WARRSHLD);
+	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Rogue), 0), IDI_ROGUE);
+	EXPECT_FALSE(FindPoe2ItemId("poe2:one_hand_sword_balanced_shortsword").has_value());
 }
 
 } // namespace

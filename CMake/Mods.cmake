@@ -87,6 +87,10 @@ set(poe2_mod
   sfx/poe2/blizzard_shard3.wav
   sfx/poe2/blizzard_shard4.wav
   txtdata/Experience.tsv
+  txtdata/classes/bard/starting_loadout.tsv
+  txtdata/classes/monk/starting_loadout.tsv
+  txtdata/classes/rogue/starting_loadout.tsv
+  txtdata/classes/sorcerer/starting_loadout.tsv
   txtdata/classes/warrior/starting_loadout.tsv
   txtdata/items/itemdat.tsv
   txtdata/items/item_suffixes.tsv
