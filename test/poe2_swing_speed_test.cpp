@@ -541,7 +541,7 @@ TEST_F(Poe2SwingSpeedTest, SceptreCastsTheStaffBolt)
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::SwordStrike);
 	EXPECT_FALSE(AttacksAtRange(player));
 	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::Cleave);
-	EXPECT_EQ(WeaponAttacksPerSecond(player), 135);
+	EXPECT_EQ(WeaponAttacksPerSecond(player), 155);
 	sword = {};
 
 	// Diablo has no sceptres: a mace there smashes.
@@ -761,13 +761,13 @@ TEST_F(Poe2SwingSpeedTest, HeldPerHitSkillsStrikeAtThePerHitTime)
 	EXPECT_EQ(PerHitDamagePercent(player, zeal), 100);
 	EXPECT_EQ(WeaponSkillManaCost(zeal), 1);
 
-	// Blade Fury with a Glass Shank: one dagger a use at 550% of 1.5 a second would be 0.12 seconds; no action is quicker
-	// than 4 ticks, so each dagger hits for what the 0.2 seconds lost (165%).
+	// Blade Fury with a Glass Shank: one dagger a use at 550% of 1.55 a second would be 0.12 seconds; no action is
+	// quicker than 4 ticks, so each dagger hits for what the 0.2 seconds lost (171%).
 	Equip(player, "Glass Shank");
 	const WeaponSkill fury = WeaponSkill::BladeFury;
 	EXPECT_EQ(PerHitBurst(fury), 8);
 	EXPECT_NEAR(UseSeconds(player, SkillSlot::ForAttack(fury)), 0.2, 0.0001);
-	EXPECT_EQ(PerHitDamagePercent(player, fury), 165);
+	EXPECT_EQ(PerHitDamagePercent(player, fury), 171);
 	const HeldSwings daggers = HoldSkill(player, fury, 200, MissileID::Arrow);
 	EXPECT_EQ(daggers.cycle(), 4);
 	EXPECT_NEAR(daggers.hits, static_cast<int>(daggers.starts.size()), 1);

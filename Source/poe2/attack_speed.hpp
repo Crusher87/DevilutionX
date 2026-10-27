@@ -2,7 +2,7 @@
  * @file poe2/attack_speed.hpp
  *
  * POE2 Mashup attack and cast timing. An attack takes 1 / (weapon attacks per second x (1 + increased attack speed) x
- * the skill's attack speed), as in POE2: the weapon's base sets the pace (a Shortsword's 1.35 a second), and every
+ * the skill's attack speed), as in POE2: the weapon's base sets the pace (a Shortsword's 1.55 a second), and every
  * other speed source adds to one "% increased attack speed". A spell takes its cast time / (1 + increased cast speed).
  * The animation stretches or squeezes to fit (AnimationInfo::setTimedAnimation), its hit landing as far through the time
  * as it lands through the animation.
@@ -47,18 +47,19 @@ constexpr int AttackSpeedPercentPerFrame = 10;
 constexpr int FrenzyChargeAttackSpeedPercent = AttackSpeedPercentPerFrame;
 /**
  * @brief Attacks per second, in hundredths, of Diablo's own weapon bases (no base_meta row: uniques on old bases, the
- * starting gear), from the nearest POE2 base of their kind: Shortsword, Longsword, Shiv, Hatchet, Woodsman's Axe,
- * Cudgel, Sledge, Short Bow and Ash Staff (a POE2 caster staff or sceptre has none of its own and takes these too).
+ * starting gear), from the first real POE2 base of their kind: Shortsword, Corroded Longsword, Glass Shank, Dull Hatchet,
+ * Splitting Greataxe, Wooden Club, Felled Greatclub, Crude Bow and Wrapped Quarterstaff (a POE2 caster staff or sceptre
+ * has none of its own and takes these too).
  */
-constexpr int DefaultOneHandSwordAps = 135;
-constexpr int DefaultTwoHandSwordAps = 115;
-constexpr int DefaultDaggerAps = 150;
-constexpr int DefaultOneHandAxeAps = 120;
-constexpr int DefaultTwoHandAxeAps = 105;
-constexpr int DefaultOneHandMaceAps = 110;
-constexpr int DefaultTwoHandMaceAps = 95;
-constexpr int DefaultBowAps = 130;
-constexpr int DefaultStaffAps = 135;
+constexpr int DefaultOneHandSwordAps = 155;
+constexpr int DefaultTwoHandSwordAps = 130;
+constexpr int DefaultDaggerAps = 155;
+constexpr int DefaultOneHandAxeAps = 150;
+constexpr int DefaultTwoHandAxeAps = 120;
+constexpr int DefaultOneHandMaceAps = 145;
+constexpr int DefaultTwoHandMaceAps = 110;
+constexpr int DefaultBowAps = 120;
+constexpr int DefaultStaffAps = 140;
 /** @brief Bare hands (and a shield bash): POE2's unarmed attacks, 1.65 a second (PoB2's data.unarmedWeaponData). */
 constexpr int UnarmedAps = 165;
 

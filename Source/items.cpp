@@ -4795,11 +4795,19 @@ std::optional<Poe2UniquePick> PickPoe2Unique(int itemLevel, int poe2ItemLevel, L
 		const UniqueItem &unique = UniqueItems[uid];
 		if (unique.UIMinLvl > itemLevel || (UniqueItemFlags[uid] && !gbIsMultiplayer))
 			continue;
+		// A base that still drops (a real POE2 one) before a retired one of the same kind.
 		std::optional<_item_indexes> base;
+		std::optional<_item_indexes> retired;
 		for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
-			if (AllItemsList[i].iItemId == unique.UIItemId && IsItemAvailable(static_cast<int>(i)) && AllItemsList[i].iMiscId != IMISC_UNIQUE && IsPoe2Equipment(AllItemsList[i]))
+			if (AllItemsList[i].iItemId != unique.UIItemId || !IsItemAvailable(static_cast<int>(i)) || AllItemsList[i].iMiscId == IMISC_UNIQUE || !IsPoe2Equipment(AllItemsList[i]))
+				continue;
+			if (AllItemsList[i].dropRate > 0)
 				base = static_cast<_item_indexes>(i);
+			else if (!retired)
+				retired = static_cast<_item_indexes>(i);
 		}
+		if (!base)
+			base = retired;
 		if (!base)
 			continue;
 		const std::vector<uint8_t> valid = GetValidUniques(itemLevel, unique.UIItemId);
