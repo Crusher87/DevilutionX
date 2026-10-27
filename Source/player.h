@@ -634,13 +634,19 @@ public:
 	 * @brief Return block chance
 	 * @param useLevel - indicate if player's level should be added to block chance (the only case where it isn't is blocking a trap)
 	 *
-	 * POE2 Mashup: never adds the level: block doesn't grow with character level (pick 7, audit N8).
+	 * POE2 Mashup: never adds the level: block doesn't grow with character level (pick 7, audit N8). Block is the held
+	 * shield's own chance plus the passive tree's, as in POE2; without a shield it is 0, and Dexterity doesn't count.
 	 */
 	int GetBlockChance(bool useLevel = true) const
 	{
-		int blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
-		if (useLevel && !gbIsPoe2)
-			blkper += getCharacterLevel() * 2;
+		int blkper;
+		if (gbIsPoe2) {
+			blkper = poe2.shieldBlockChance > 0 ? poe2.shieldBlockChance + poe2.passiveBlockChance : 0;
+		} else {
+			blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
+			if (useLevel)
+				blkper += getCharacterLevel() * 2;
+		}
 		// POE2 Mashup: Magma Barrier's increased block chance.
 		return blkper * (100 + poe2.spiritState.blockPercent) / 100;
 	}

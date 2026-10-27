@@ -858,6 +858,8 @@ struct Poe2PlayerData {
 	int lifeRegenPerMille = 0;
 	/** @brief Block chance added by the passive tree, in percent (not saved). */
 	int passiveBlockChance = 0;
+	/** @brief The held shield's own block chance, in percent; 0 without a shield (not saved; from CalcPlrItemVals). */
+	int shieldBlockChance = 0;
 	/** @brief The passive tree's stat totals as of the last CalcPlrItemVals (not saved), indexed by PassiveStat. */
 	std::array<int16_t, MaxPassiveStats> passiveTotals {};
 	int manaRegenRemainder = 0;
@@ -988,6 +990,7 @@ struct Poe2PlayerData {
 		lifeRegenRemainder = 0;
 		lifeRegenPerMille = 0;
 		passiveBlockChance = 0;
+		shieldBlockChance = 0;
 		passiveTotals.fill(0);
 		manaRegenRemainder = 0;
 		evasion = 0;

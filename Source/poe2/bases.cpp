@@ -113,20 +113,24 @@ void LoadBaseData()
 	dataFile->skipHeaderOrDie(Filename);
 	std::unordered_map<std::string, uint16_t> byName;
 	for (DataFileRecord record : *dataFile) {
-		RecordReader reader { record, Filename };
+		// Only shields fill the last column (block), so a row may stop before it.
+		std::vector<std::string_view> columns;
+		for (DataFileField field : record)
+			columns.push_back(field.value());
+		if (columns.size() < 7) {
+			LogError("Bad base row in {}: {}", Filename, columns.empty() ? std::string_view {} : columns[0]);
+			continue;
+		}
 		BaseMeta base {};
-		std::string text;
-		reader.readString("name", base.name);
-		reader.readString("class", base.itemClass);
-		reader.readString("identity", base.identity);
-		reader.readString("defense", text);
-		base.defense = ParseDefense(text);
-		reader.readString("quality", text);
-		base.quality = ParseQuality(text);
-		reader.readString("implicits", text);
-		base.implicits = ParseImplicits(text);
-		reader.readString("split", text);
-		base.split = ParseSplit(text);
+		base.name = std::string(columns[0]);
+		base.itemClass = std::string(columns[1]);
+		base.identity = std::string(columns[2]);
+		base.defense = ParseDefense(columns[3]);
+		base.quality = ParseQuality(columns[4]);
+		base.implicits = ParseImplicits(columns[5]);
+		base.split = ParseSplit(columns[6]);
+		if (columns.size() > 7 && !columns[7].empty())
+			base.block = static_cast<uint8_t>(std::clamp(ParseInt<int>(columns[7]).value_or(0), 0, 100));
 		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
 		Bases.push_back(std::move(base));
 	}
@@ -148,6 +152,31 @@ const BaseMeta *BaseMetaFor(int itemIndex)
 const BaseMeta *ItemBaseMeta(const Item &item)
 {
 	return item.isEmpty() ? nullptr : BaseMetaFor(item.IDidx);
+}
+
+int ShieldBlockChance(const Item &item)
+{
+	if (item.isEmpty() || item._itype != ItemType::Shield)
+		return 0;
+	// A POE2 base says; a focus has none.
+	if (const BaseMeta *base = ItemBaseMeta(item); base != nullptr)
+		return base->block;
+	// Diablo's shields, by the look of their base (the Warrior's old Buckler has no unique type to go by).
+	const ItemData &data = AllItemsList[item.IDidx];
+	if (data.iSName == "Focus")
+		return 0;
+	switch (data.iCurs) {
+	case ICURS_KITE_SHIELD:
+		return 27;
+	case ICURS_LARGE_SHIELD:
+	case ICURS_TOWER_SHIELD:
+	case ICURS_GOTHIC_SHIELD:
+	case ICURS_BLACKOAK_SHIELD:
+		return 30;
+	default:
+		// Bucklers and small shields.
+		return 25;
+	}
 }
 
 std::vector<ItemImplicit> ItemImplicits(const Item &item)

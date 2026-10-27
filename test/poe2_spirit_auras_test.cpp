@@ -107,6 +107,8 @@ public:
 		shield._iStatFlag = true;
 		shield._iAC = armour;
 		MyPlayer->_pBlockFlag = true;
+		// What CalcPlrItemVals finds: in POE2 the shield's own chance is the block.
+		MyPlayer->poe2.shieldBlockChance = 25;
 	}
 };
 
@@ -163,11 +165,13 @@ TEST_F(Poe2SpiritAurasTest, MagmaBarrierRaisesBlockAndAChargedBlockSpraysFireAhe
 {
 	Player &player = *MyPlayer;
 	Socket(PersistentSkill::MagmaBarrier);
-	const int before = player.GetBlockChance(false);
 	Tick(1);
-	// Without a shield it does nothing.
-	EXPECT_EQ(player.GetBlockChance(false), before);
+	// Without a shield there is no block, and it does nothing.
+	EXPECT_EQ(player.GetBlockChance(false), 0);
+	EXPECT_EQ(player.poe2.spiritState.blockPercent, 0);
 	HoldShield(100);
+	const int before = player.GetBlockChance(false);
+	EXPECT_EQ(before, 25);
 	Tick(1);
 	EXPECT_EQ(player.GetBlockChance(false), before * 125 / 100);
 

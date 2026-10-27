@@ -79,6 +79,20 @@ public:
 		}
 		FAIL() << "no body armour of the type";
 	}
+
+	/** Holds Diablo's Large Shield in the right hand. */
+	static void HoldShield(Player &player)
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iName == "Large Shield") {
+				Item &item = player.InvBody[INVLOC_HAND_RIGHT];
+				InitializeItem(item, static_cast<_item_indexes>(i));
+				item._iStatFlag = true;
+				return;
+			}
+		}
+		FAIL() << "no Large Shield";
+	}
 };
 
 constexpr HeroClass AllClasses[] = { HeroClass::Warrior, HeroClass::Rogue, HeroClass::Sorcerer, HeroClass::Monk, HeroClass::Bard, HeroClass::Barbarian };
@@ -203,10 +217,13 @@ TEST_F(Poe2AttributesTest, BlockHasNoLevelTerm)
 {
 	Player &player = *MyPlayer;
 	MakeHero(player, HeroClass::Warrior, 1);
+	HoldShield(player);
 	Recalculate(player);
 	const int atOne = player.GetBlockChance();
+	EXPECT_GT(atOne, 0);
 	EXPECT_EQ(atOne, player.GetBlockChance(false));
 	MakeHero(player, HeroClass::Warrior, 40);
+	HoldShield(player);
 	Recalculate(player);
 	EXPECT_EQ(player.GetBlockChance(), atOne);
 

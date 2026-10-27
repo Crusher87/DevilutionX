@@ -1,4 +1,4 @@
-name	class	identity	defense	quality	implicits	split
+name	class	identity	defense	quality	implicits	split	block
 Heavy Hatchet	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed	
 Hatchet	one_hand_axe	balanced		weapon		
 Swift Hatchet	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed	
@@ -327,38 +327,38 @@ Harmonist Mask	helmet	tri	All	defence		48/48
 Ascetic Mask	helmet	tri	All	defence		48/48
 Ascendant Mask	helmet	tri	All	defence		48/48
 Eternal Mask	helmet	tri	All	defence		47/47
-Wooden Tower Shield	shield	armour	Armour	defence		
-Iron Tower Shield	shield	armour	Armour	defence		
-Guard Tower Shield	shield	armour	Armour	defence		
-War Tower Shield	shield	armour	Armour	defence		
-Knight Tower Shield	shield	armour	Armour	defence		
-Legion Tower Shield	shield	armour	Armour	defence		
-Imperial Tower Shield	shield	armour	Armour	defence		
-Titan Tower Shield	shield	armour	Armour	defence		
-Hide Buckler	shield	evasion	Evasion	defence		
-Scout Buckler	shield	evasion	Evasion	defence		
-Hunter Buckler	shield	evasion	Evasion	defence		
-Duelist Buckler	shield	evasion	Evasion	defence		
-Ranger Buckler	shield	evasion	Evasion	defence		
-Night Buckler	shield	evasion	Evasion	defence		
-Wind Buckler	shield	evasion	Evasion	defence		
-Phantom Buckler	shield	evasion	Evasion	defence		
-Round Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Skirmish Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Mercenary Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Vanguard Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Warden Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Champion Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Paragon Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Conqueror Shield	shield	armour_evasion	ArmourEvasion	defence		50
-Reliquary Shield	shield	armour_es	ArmourEnergyShield	defence		90
-Zealot Shield	shield	armour_es	ArmourEnergyShield	defence		92
-Templar Shield	shield	armour_es	ArmourEnergyShield	defence		92
-Martyr Shield	shield	armour_es	ArmourEnergyShield	defence		91
-Prelate Shield	shield	armour_es	ArmourEnergyShield	defence		91
-Hierophant Shield	shield	armour_es	ArmourEnergyShield	defence		91
-Archon Shield	shield	armour_es	ArmourEnergyShield	defence		91
-Seraph Shield	shield	armour_es	ArmourEnergyShield	defence		91
+Wooden Tower Shield	shield	armour	Armour	defence			28
+Iron Tower Shield	shield	armour	Armour	defence			29
+Guard Tower Shield	shield	armour	Armour	defence			30
+War Tower Shield	shield	armour	Armour	defence			31
+Knight Tower Shield	shield	armour	Armour	defence			32
+Legion Tower Shield	shield	armour	Armour	defence			33
+Imperial Tower Shield	shield	armour	Armour	defence			34
+Titan Tower Shield	shield	armour	Armour	defence			35
+Hide Buckler	shield	evasion	Evasion	defence			25
+Scout Buckler	shield	evasion	Evasion	defence			26
+Hunter Buckler	shield	evasion	Evasion	defence			27
+Duelist Buckler	shield	evasion	Evasion	defence			28
+Ranger Buckler	shield	evasion	Evasion	defence			29
+Night Buckler	shield	evasion	Evasion	defence			30
+Wind Buckler	shield	evasion	Evasion	defence			31
+Phantom Buckler	shield	evasion	Evasion	defence			32
+Round Shield	shield	armour_evasion	ArmourEvasion	defence		50	26
+Skirmish Shield	shield	armour_evasion	ArmourEvasion	defence		50	27
+Mercenary Shield	shield	armour_evasion	ArmourEvasion	defence		50	28
+Vanguard Shield	shield	armour_evasion	ArmourEvasion	defence		50	29
+Warden Shield	shield	armour_evasion	ArmourEvasion	defence		50	30
+Champion Shield	shield	armour_evasion	ArmourEvasion	defence		50	31
+Paragon Shield	shield	armour_evasion	ArmourEvasion	defence		50	32
+Conqueror Shield	shield	armour_evasion	ArmourEvasion	defence		50	33
+Reliquary Shield	shield	armour_es	ArmourEnergyShield	defence		90	25
+Zealot Shield	shield	armour_es	ArmourEnergyShield	defence		92	26
+Templar Shield	shield	armour_es	ArmourEnergyShield	defence		92	27
+Martyr Shield	shield	armour_es	ArmourEnergyShield	defence		91	28
+Prelate Shield	shield	armour_es	ArmourEnergyShield	defence		91	29
+Hierophant Shield	shield	armour_es	ArmourEnergyShield	defence		91	30
+Archon Shield	shield	armour_es	ArmourEnergyShield	defence		91	31
+Seraph Shield	shield	armour_es	ArmourEnergyShield	defence		91	32
 Wooden Focus	focus	caster_defence	EnergyShield	defence		
 Carved Focus	focus	caster_defence	EnergyShield	defence		
 Scholar Focus	focus	caster_defence	EnergyShield	defence		

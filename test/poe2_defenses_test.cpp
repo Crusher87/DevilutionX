@@ -547,10 +547,13 @@ TEST_F(Poe2MonsterAccuracyTest, NoLevelTermInBlock)
 {
 	Player &player = *MyPlayer;
 	player._pBlockFlag = true;
+	// A shield's own block, as CalcPlrItemVals finds it.
+	player.poe2.shieldBlockChance = 28;
 	player.setCharacterLevel(1);
 	GoTo(1, DTYPE_CATHEDRAL);
 	const Monster weak = MakeMonster(MT_NZOMBIE);
 	const int lowLevel = BlockChanceAgainstMonster(player, &weak, true);
+	EXPECT_EQ(lowLevel, 28);
 	EXPECT_EQ(lowLevel, player.GetBlockChance(false));
 	EXPECT_EQ(BlockChanceAgainstMonster(player, &weak, false), lowLevel);
 	EXPECT_EQ(BlockChanceAgainstMonster(player, nullptr, false), lowLevel);
