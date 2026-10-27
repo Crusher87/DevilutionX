@@ -258,8 +258,39 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			EXPECT_TRUE(meta->defense.has_value()) << data.iName;
 		}
 	}
-	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, and the 43 body armours of plan step 10.
-	EXPECT_EQ(bases, 430);
+	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, the 43 body armours of plan step 10 and the 10 POE2
+	// weapons that carry Diablo unique types no other base does.
+	EXPECT_EQ(bases, 440);
+}
+
+TEST_F(Poe2ItemBasesTest, EveryDiabloWeaponUniqueHasABaseThatDrops)
+{
+	// Diablo's weapon bases stopped dropping when the bundle's came in, and each new base carries one Diablo unique type,
+	// so some types were left on no base that drops. A POE2 base of their kind carries each of those.
+	int checked = 0;
+	for (const UniqueItem &unique : UniqueItems) {
+		// The bundle's uniques have no Diablo type; The Butcher's Cleaver and Griswold's Edge have bases of their own.
+		if (IsAnyOf(unique.UIItemId, UITYPE_INVALID, UITYPE_CLEAVER, UITYPE_GRISWOLD))
+			continue;
+		bool weapon = false;
+		bool drops = false;
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			const ItemData &data = AllItemsList[i];
+			if (data.iItemId != unique.UIItemId || data.iMiscId == IMISC_UNIQUE)
+				continue;
+			weapon = weapon || data.iClass == ICLASS_WEAPON;
+			drops = drops || (data.dropRate > 0 && BaseMetaFor(static_cast<int>(i)) != nullptr);
+		}
+		if (!weapon)
+			continue;
+		checked++;
+		EXPECT_TRUE(drops) << unique.UIName;
+	}
+	EXPECT_GE(checked, 60);
+	EXPECT_EQ(AllItemsList[FindBase("Savage Greataxe")].iItemId, UITYPE_BATTLEAXE);
+	EXPECT_EQ(AllItemsList[FindBase("Construct Hammer")].iItemId, UITYPE_WARHAMMER);
+	EXPECT_EQ(AllItemsList[FindBase("Shortbow")].iItemId, UITYPE_LONGBOW);
+	EXPECT_EQ(AllItemsList[FindBase("Shortbow")].iMinMLvl, 5);
 }
 
 TEST_F(Poe2ItemBasesTest, RingsFollowPoe2)

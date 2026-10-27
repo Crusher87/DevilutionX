@@ -386,6 +386,16 @@ Azure Amulet	amulet	mana		none	ManaRegeneration|20|30|{0}% increased Mana Regene
 Crimson Amulet	amulet	life		none	LifeRegeneration|2|4|Regenerate {0} Life per second		1		
 Lunar Amulet	amulet	defence		none	FlatEnergyShield|2|3|+{0} to maximum Energy Shield		14		
 Gold Amulet	amulet	rarity		none	ItemRarity|12|20|{0}% increased Rarity of Items found		35		
+Broadsword	one_hand_sword	balanced		weapon			6		160
+Fine Scimitar	one_hand_sword	balanced		weapon			16		155
+Sickle Sword	one_hand_sword	balanced		weapon			28		150
+Executioner Greataxe	two_hand_axe	balanced		weapon			10		120
+Savage Greataxe	two_hand_axe	balanced		weapon			27		120
+Fine Spiked Club	one_hand_mace	balanced		weapon			16		145
+Warpick	one_hand_mace	balanced		weapon			22		145
+Construct Hammer	one_hand_mace	balanced		weapon			36		140
+Shortbow	bow	balanced		weapon			5		125
+Steelpoint Quarterstaff	quarterstaff	balanced		weapon			28		140
 Rusted Cuirass	body_armour	armour	Armour	defence			1		
 Iron Cuirass	body_armour	armour	Armour	defence			11		
 Maraketh Cuirass	body_armour	armour	Armour	defence			20		

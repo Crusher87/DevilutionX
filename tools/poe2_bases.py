@@ -103,10 +103,28 @@ REAL_WEAPON_BASES = {
 REAL_WEAPON_RENAMES = {
 	'Falchion': 'Fine Falchion', 'Battle Axe': 'Fine Battle Axe', 'Composite Bow': 'Fine Composite Bow',
 	'Wrapped Quarterstaff': 'Fine Wrapped Quarterstaff', 'Gothic Quarterstaff': 'Fine Gothic Quarterstaff',
+	'Scimitar': 'Fine Scimitar', 'Spiked Club': 'Fine Spiked Club',
 }
 # The bundle's heavy and swift weapons and its crossbows (Diablo has no crossbow animation) no longer drop.
 RETIRED_WEAPON_IDENTITIES = {'heavy', 'swift'}
 RETIRED_WEAPON_CLASSES = {'crossbow'}
+# Diablo weapon unique types no base above carries, each on a POE2 base of its kind that none uses, near its uniques'
+# levels: (id, class, POE2 base, unique type). They go after the other rows, with the Diablo base's art, so every
+# Diablo and Hellfire weapon unique has a base that drops.
+DIABLO_UNIQUE_TYPE_BASES = [
+	('one_hand_sword_broadsword', 'one_hand_sword', 'Broadsword', 'FALCHION'),
+	('one_hand_sword_scimitar', 'one_hand_sword', 'Scimitar', 'CLAYMORE'),
+	('one_hand_sword_sickle_sword', 'one_hand_sword', 'Sickle Sword', 'LONGSWR'),
+	('two_hand_axe_executioner_greataxe', 'two_hand_axe', 'Executioner Greataxe', 'LARGEAXE'),
+	('two_hand_axe_savage_greataxe', 'two_hand_axe', 'Savage Greataxe', 'BATTLEAXE'),
+	('one_hand_mace_spiked_club', 'one_hand_mace', 'Spiked Club', 'MACE'),
+	('one_hand_mace_warpick', 'one_hand_mace', 'Warpick', 'MORNSTAR'),
+	('one_hand_mace_construct_hammer', 'one_hand_mace', 'Construct Hammer', 'WARHAMMER'),
+	('bow_shortbow', 'bow', 'Shortbow', 'LONGBOW'),
+	('quarterstaff_steelpoint_quarterstaff', 'quarterstaff', 'Steelpoint Quarterstaff', 'COMPSTAFF'),
+]
+# Diablo unique types with a base of their own: The Butcher's Cleaver and Griswold's Edge.
+OWN_BASE_UNIQUE_TYPES = {'CLEAVER', 'GRISWOLD'}
 
 # Rings and amulets follow POE2's lineup and drop levels rather than the bundle's: Iron and Lazuli first, then Ruby,
 # Sapphire and Golden Hoop, Topaz, Pearl. POE2 has no Coral Ring, so it only carries its unique. Jewellery levels are
@@ -444,10 +462,14 @@ def main():
 	# Diablo's bases of these kinds stop dropping; their unique types move to the new bases.
 	unique_types = {}
 	diablo_types = {'Helm', 'Shield', 'Sword', 'Axe', 'Mace', 'Bow', 'Staff', 'Ring', 'Amulet'}
+	# Each Diablo weapon unique type and the art of its base.
+	diablo_weapon_art = {}
 	for row in rows[1:]:
 		# Unique and starting-gear rows have no short name; bases do.
 		if row[0].startswith(ID_PREFIX) or row[5] not in diablo_types or row[8] == '' or row[19] == 'UNIQUE':
 			continue
+		if row[2] == 'Weapon' and row[6] != 'NONE':
+			diablo_weapon_art.setdefault(row[6], row[4])
 		if row[6] != 'NONE' and row[8] not in ('Focus', 'Quarterstaff', 'Crossbow', 'Sceptre'):
 			unique_types.setdefault(unique_source(row), []).append((int(row[9]), row[6]))
 		row[1] = '0'
@@ -560,6 +582,35 @@ def main():
 			rows.append(row)
 		effect, lo, hi, text = POE2_AMULET_IMPLICITS[name]
 		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), '', ''])
+
+	tier_levels = sorted({b['drop_level'] for b in bases if b['item_class'] == 'one_hand_sword'})
+	for base_id, cls, real_name, unique in DIABLO_UNIQUE_TYPE_BASES:
+		assert real_name not in REAL_WEAPON_BASES.values(), f'{real_name} is already a base'
+		real = real_weapons[real_name]
+		name = REAL_WEAPON_RENAMES.get(real_name, real_name)
+		assert name not in taken and name not in generated, f'{name} clashes with another base; add it to REAL_WEAPON_RENAMES'
+		generated.add(name)
+		item_class, equip, item_type, short, quality, _ = CLASSES[cls]
+		level = max(1, int(real['level']))
+		tier = sum(1 for t in tier_levels if t <= level)
+		min_dam, max_dam = damage({'physical_damage_min': int(real['min']), 'physical_damage_max': int(real['max'])}, damage_percent(cls, level))
+		row = [
+			ID_PREFIX + base_id, '1', item_class, equip, diablo_weapon_art[unique], item_type, unique, name, short, str(level),
+			str(30 + tier * 5), str(min_dam), str(max_dam), '0', '0', str(round(int(real['str']) * REQUIREMENT_SCALE)),
+			str(round(int(real['int']) * REQUIREMENT_SCALE)), str(round(int(real['dex']) * REQUIREMENT_SCALE)), '', 'NONE', 'Null',
+			'false', str(100 + level * 100),
+		]
+		if row[0] in by_id:
+			rows[by_id[row[0]]] = row
+		else:
+			by_id[row[0]] = len(rows)
+			rows.append(row)
+		meta_rows.append([name, cls, 'balanced', '', quality, '', '', str(level), '', real['aps']])
+
+	# Every Diablo weapon unique type is on a base that drops.
+	carried = {row[6] for row in rows[1:] if row[0].startswith(ID_PREFIX) and row[1] != '0' and row[2] == 'Weapon'}
+	missing = set(diablo_weapon_art) - carried - OWN_BASE_UNIQUE_TYPES
+	assert not missing, f'no dropping base carries the Diablo unique types {sorted(missing)}; add them to DIABLO_UNIQUE_TYPE_BASES'
 
 	# The body armours keep their rows, art, durability and price; they take POE2's level, defence and requirements.
 	# Their implicits stay in the game (GetBodyArmourImplicit).

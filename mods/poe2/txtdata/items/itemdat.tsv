@@ -940,3 +940,13 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Azure Amulet	Amulet
 poe2:crimson_amulet	1	Misc	Amulet	AMULET	Amulet	AMULET	Crimson Amulet	Amulet	1	0	0	0	0	0	0	0	0		AMULET	Null	false	1050
 poe2:lunar_amulet	1	Misc	Amulet	OPTIC_AMULET	Amulet	AMULET	Lunar Amulet	Amulet	14	0	0	0	0	0	0	0	0		AMULET	Null	false	1700
 poe2:gold_amulet	1	Misc	Amulet	AURIC_AMULET	Amulet	AMULET	Gold Amulet	Amulet	35	0	0	0	0	0	0	0	0		AMULET	Null	false	2750
+poe2:one_hand_sword_broadsword	1	Weapon	One-handed	FALCHION	Sword	FALCHION	Broadsword	Sword	6	35	8	13	0	0	9	0	9		NONE	Null	false	700
+poe2:one_hand_sword_scimitar	1	Weapon	One-handed	CLAYMORE	Sword	CLAYMORE	Fine Scimitar	Sword	16	40	14	23	0	0	19	0	19		NONE	Null	false	1700
+poe2:one_hand_sword_sickle_sword	1	Weapon	One-handed	LONG_SWORD	Sword	LONGSWR	Sickle Sword	Sword	28	45	18	38	0	0	29	0	29		NONE	Null	false	2900
+poe2:two_hand_axe_executioner_greataxe	1	Weapon	Two-handed	LARGE_AXE	Axe	LARGEAXE	Executioner Greataxe	Axe	10	35	10	41	0	0	17	0	9		NONE	Null	false	1100
+poe2:two_hand_axe_savage_greataxe	1	Weapon	Two-handed	BATTLE_AXE	Axe	BATTLEAXE	Savage Greataxe	Axe	27	45	23	70	0	0	39	0	17		NONE	Null	false	2800
+poe2:one_hand_mace_spiked_club	1	Weapon	One-handed	MACE	Mace	MACE	Fine Spiked Club	Mace	16	40	15	24	0	0	31	0	0		NONE	Null	false	1700
+poe2:one_hand_mace_warpick	1	Weapon	One-handed	MORNING_STAR	Mace	MORNSTAR	Warpick	Mace	22	40	18	24	0	0	41	0	0		NONE	Null	false	2300
+poe2:one_hand_mace_construct_hammer	1	Weapon	One-handed	WAR_HAMMER	Mace	WARHAMMER	Construct Hammer	Mace	36	50	31	38	0	0	65	0	0		NONE	Null	false	3700
+poe2:bow_shortbow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	LONGBOW	Shortbow	Bow	5	35	7	14	0	0	0	0	12		NONE	Null	false	600
+poe2:quarterstaff_steelpoint_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	COMPSTAFF	Steelpoint Quarterstaff	Quarterstaff	28	45	28	51	0	0	0	18	41		NONE	Null	false	2900
