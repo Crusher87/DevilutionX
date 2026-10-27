@@ -394,6 +394,9 @@ WeaponSkill WeaponSkillForItem(const Item &item)
 	case ItemType::Axe:
 		return WeaponSkill::Cleave;
 	case ItemType::Mace:
+		// POE2 Mashup: a sceptre is a caster's focus and grants no mace skill.
+		if (gbIsPoe2 && ItemGrantsSpirit(item))
+			return WeaponSkill::None;
 		return WeaponSkill::GroundSlam;
 	case ItemType::Bow:
 		return WeaponSkill::Barrage;
@@ -672,6 +675,9 @@ bool WeaponSkillNeedsWeapon(WeaponSkill skill)
 bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 {
 	if (item.isEmpty())
+		return false;
+	// POE2 Mashup: a sceptre is a caster's focus, not a mace: no weapon skill uses it.
+	if (gbIsPoe2 && ItemGrantsSpirit(item))
 		return false;
 	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
 		return TableWeaponAllows(item, table->weapon);

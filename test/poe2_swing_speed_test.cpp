@@ -22,6 +22,7 @@
 #include "poe2/player_data.hpp"
 #include "poe2/skill_details.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
@@ -501,6 +502,54 @@ TEST_F(Poe2SwingSpeedTest, StaffBoltIsACast)
 	const HeldSwings bolts = HoldAttack(player, WeaponSkill::None, 400, false, /*ranged=*/true);
 	ASSERT_GE(bolts.starts.size(), 5U);
 	EXPECT_EQ(bolts.cycle(), 12);
+}
+
+TEST_F(Poe2SwingSpeedTest, SceptreCastsTheStaffBolt)
+{
+	// POE2's sceptres are caster foci: no Mace Smash and no mace skills; their default attack is the staff bolt, a
+	// 0.9-second cast, and a click fires it.
+	Player &player = *MyPlayer;
+	Equip(player, "Quick Bone Sceptre");
+	const Item &sceptre = player.InvBody[INVLOC_HAND_LEFT];
+	ASSERT_EQ(sceptre._itype, ItemType::Mace);
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffBolt);
+	EXPECT_TRUE(FiresStaffBolt(player));
+	EXPECT_TRUE(AttacksAtRange(player));
+	EXPECT_EQ(WeaponSkillForItem(sceptre), WeaponSkill::None);
+	for (const WeaponSkill skill : { WeaponSkill::GroundSlam, WeaponSkill::Smite, WeaponSkill::LeapSlam })
+		EXPECT_FALSE(WeaponAllowsSkill(player, skill)) << WeaponSkillName(skill);
+	// No attacks per second of its own: the bolt is timed by its cast.
+	EXPECT_EQ(ItemBaseAttacksPerSecond(sceptre), 0);
+	EXPECT_EQ(WeaponAttacksPerSecond(player), UnarmedAps);
+	const SkillSlot staffBolt = DefaultSkillSlot(player);
+	EXPECT_NEAR(UseSeconds(player, staffBolt), 0.9, 0.0001);
+	player.poe2.castSpeedPercent = 50;
+	EXPECT_NEAR(UseSeconds(player, staffBolt), 0.6, 0.0001);
+	const HeldSwings bolts = HoldAttack(player, WeaponSkill::None, 400, false, /*ranged=*/true);
+	ASSERT_GE(bolts.starts.size(), 5U);
+	EXPECT_EQ(bolts.cycle(), 12);
+	// A cast, like POE2's staff Firebolt: cast supports apply to it, attack supports don't.
+	EXPECT_NE(SkillTags(staffBolt) & ST_Spell, 0U);
+	EXPECT_EQ(SkillTags(staffBolt) & ST_Attack, 0U);
+
+	// Held with a sword, the sword is the weapon: its strike, its skill and its speed.
+	Item &sword = player.InvBody[INVLOC_HAND_RIGHT];
+	sword = {};
+	SetupAllItems(player, sword, FindBase("Shortsword"), AdvanceRndSeed(), 30, 1, /*onlygood=*/false, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+	sword._iStatFlag = true;
+	CalcPlrInv(player, false);
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::SwordStrike);
+	EXPECT_FALSE(AttacksAtRange(player));
+	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponAttacksPerSecond(player), 135);
+	sword = {};
+
+	// Diablo has no sceptres: a mace there smashes.
+	gbIsPoe2 = false;
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::MaceSmash);
+	EXPECT_FALSE(AttacksAtRange(player));
+	EXPECT_EQ(WeaponSkillForItem(sceptre), WeaponSkill::GroundSlam);
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2SwingSpeedTest, UseTimeIsTheHeldCycle)

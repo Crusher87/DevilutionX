@@ -2,8 +2,8 @@
  * @file poe2/default_attack.hpp
  *
  * POE2 Mashup default attacks: every weapon gives a plain attack that costs no mana, so a hero is never stuck when
- * the mana runs dry. Bows shoot, melee weapons strike, and a staff (outside a Monk's hands) fires a bolt scaled to
- * the staff's damage.
+ * the mana runs dry. Bows shoot, melee weapons strike, and a staff (outside a Monk's hands) or a sceptre fires a bolt
+ * scaled to its damage: POE2's caster weapons don't melee.
  */
 #pragma once
 
@@ -70,8 +70,10 @@ int BareFistGemLevel(const Player &player, SkillSlot skill);
 /** @brief The weapon damage an attack of the skill rolls: bare fists' at its gem level, else the weapon's (_pIMinDam to _pIMaxDam). */
 std::pair<int, int> AttackWeaponDamage(const Player &player, SkillSlot skill);
 
-/** @brief Whether the hero's ranged attack is the staff bolt rather than an arrow. */
+/** @brief Whether the hero's ranged attack is the staff bolt rather than an arrow: a caster's staff or a sceptre in POE2 Mashup. */
 bool FiresStaffBolt(const Player &player);
+/** @brief Whether the hero's attack is a ranged one, a bow's arrow or the staff bolt, so a click shoots rather than swings. */
+bool AttacksAtRange(const Player &player);
 /** @brief Damage of one staff bolt, rolled from the staff's damage. */
 int RollStaffBoltDamage(const Player &player);
 

@@ -333,8 +333,10 @@ void LeftMouseCmd(bool bShift)
 	const Player &myPlayer = *MyPlayer;
 	bNear = myPlayer.position.tile.WalkingDistance(cursPosition) < 2;
 	// POE2 Mashup: a bow shoots where it's clicked: a barrel from where the hero stands, and with WASD movement the ground
-	// or the space beside a monster too, instead of doing nothing (Curtis 2026-10-20).
-	const bool shootsWhereClicked = gbIsPoe2 && myPlayer.UsesRangedWeapon();
+	// or the space beside a monster too, instead of doing nothing (Curtis 2026-10-20). A caster's staff or a sceptre fires
+	// its staff bolt the same way: POE2's caster weapons don't melee.
+	const bool rangedAttack = AttacksAtRange(myPlayer);
+	const bool shootsWhereClicked = gbIsPoe2 && rangedAttack;
 	if (pcursitem != -1 && pcurs == CURSOR_HAND && !bShift) {
 		NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
 	} else if (shootsWhereClicked && pcursmonst == -1 && ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled() && ObjectUnderCursor->_oBreak == 1) {
@@ -343,7 +345,7 @@ void LeftMouseCmd(bool bShift)
 	} else if (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled() && (!bShift || (bNear && ObjectUnderCursor->_oBreak == 1))) {
 		LastPlayerAction = PlayerActionType::OperateObject;
 		NetSendCmdLoc(MyPlayerId, true, pcurs == CURSOR_DISARM ? CMD_DISARMXY : CMD_OPOBJXY, cursPosition);
-	} else if (myPlayer.UsesRangedWeapon()) {
+	} else if (rangedAttack) {
 		if (bShift) {
 			LastPlayerAction = PlayerActionType::Attack;
 			NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, cursPosition);

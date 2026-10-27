@@ -88,6 +88,10 @@ TEST_F(Poe2WeaponSkillsTest, EveryWeaponHasAFreeDefaultAttack)
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::AxeChop);
 	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::MaceSmash);
+	// A sceptre is a caster's focus, not a club: it channels the staff bolt.
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Quick Bone Sceptre");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffBolt);
+	EXPECT_TRUE(FiresStaffBolt(player));
 	player.InvBody[INVLOC_HAND_RIGHT] = {};
 	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Yew Bow");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::BowShot);

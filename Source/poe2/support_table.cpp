@@ -873,7 +873,8 @@ uint32_t SkillTags(SkillSlot skill)
 		case DefaultAttack::BowShot:
 			return ST_Attack | ST_Projectile | ST_Bow | ST_Physical | Hit;
 		case DefaultAttack::StaffBolt:
-			return ST_Attack | ST_Projectile | ST_Staff | ST_Physical | Hit;
+			// A cast, like POE2's staff Firebolt: cast speed and spell supports apply to it, attack supports don't.
+			return ST_Spell | ST_Projectile | ST_Staff | ST_Fire | Hit;
 		case DefaultAttack::StaffStrike:
 			return ST_Attack | ST_Melee | ST_Strike | ST_Staff | ST_Physical | Hit;
 		default:

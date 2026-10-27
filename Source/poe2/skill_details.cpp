@@ -688,7 +688,7 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 
 	Heading(lines, isDefault ? "Weapon attack" : "Gem");
 	if (isDefault)
-		Value(lines, "Damage", static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt ? std::format("{:d}% of the staff's, +{:d}% of Magic", StaffBoltDamagePercent, StaffBoltMagicPercent)
+		Value(lines, "Damage", static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt ? std::format("{:d}% of the staff's or sceptre's, +{:d}% of Magic", StaffBoltDamagePercent, StaffBoltMagicPercent)
 		                                                                                      : std::format("{:d}% of the weapon's", DefaultAttackDamagePercent));
 	else
 		Value(lines, "Level", level != gemLevel ? std::format("{:d} (gem {:d}, {:+d} from gear)", level, gemLevel, level - gemLevel) : std::format("{:d}", level));
