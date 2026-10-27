@@ -51,7 +51,20 @@ std::array<int16_t, 2> CraftModValues(const Item &item, const Poe2CraftMod &mod)
  * @param natural The modifiers the item's seed rolls, whose values a modifier with salt 0 keeps.
  */
 std::vector<Poe2ItemMod> ResolveCraftMods(const Item &item, const std::vector<Poe2ItemMod> &natural);
-/** @brief Rebuilds the item from its seed with new crafting bits and state. */
+/**
+ * @brief Rebuilds the item from its seed with new crafting bits and state. An item saved before the bases took POE2's
+ * numbers (IsLegacyScaleItem) keeps its defence and damage, and its modifiers keep their old scales.
+ */
 Item RebuildWithCraft(const Player &player, const Item &item, uint32_t dwBuff, const Poe2Craft &craft);
+
+/**
+ * @brief Whether a POE2 item was saved before its base and flat modifiers took POE2's numbers (harder monsters plan,
+ * step 10b): its saved defence, damage or added damage is below what its seed rolls now. Nothing lowers those once an
+ * item has dropped (Gloomy shrines only lower the top of the damage), and every base now rolls exactly its defence and
+ * damage, so a newer item never has less.
+ * @param saved The item as saved.
+ * @param rebuilt The item rebuilt from its seed with today's tables.
+ */
+[[nodiscard]] bool IsLegacyScaleItem(const Item &saved, const Item &rebuilt);
 
 } // namespace devilution

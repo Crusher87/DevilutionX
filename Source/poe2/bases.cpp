@@ -66,6 +66,23 @@ std::vector<BaseImplicit> ParseImplicits(std::string_view text)
 	return implicits;
 }
 
+/** Percents separated by '/', like 48/48; empty for none. */
+DefenseSplit ParseSplit(std::string_view text)
+{
+	DefenseSplit split;
+	for (const std::string_view part : SplitByChar(text, '/')) {
+		if (part.empty())
+			continue;
+		const int percent = ParseInt<int>(part).value_or(-1);
+		if (percent < 0 || percent > 100 || split.parts >= split.percent.size()) {
+			LogError("Bad defence split: {}", text);
+			return {};
+		}
+		split.percent[split.parts++] = static_cast<uint8_t>(percent);
+	}
+	return split;
+}
+
 /** A value from the item's seed, apart from the game's random number generator. */
 uint32_t ImplicitHash(uint32_t seed, size_t index)
 {
@@ -108,6 +125,8 @@ void LoadBaseData()
 		base.quality = ParseQuality(text);
 		reader.readString("implicits", text);
 		base.implicits = ParseImplicits(text);
+		reader.readString("split", text);
+		base.split = ParseSplit(text);
 		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
 		Bases.push_back(std::move(base));
 	}
@@ -190,6 +209,17 @@ std::vector<std::string> ItemImplicitText(const Item &item)
 		lines.push_back(FormatRuntime(implicit.implicit->text, shown, implicit.values[1]));
 	}
 	return lines;
+}
+
+DefenseSplit ItemDefenseSplit(const Item &item, int defense)
+{
+	const BaseMeta *base = ItemBaseMeta(item);
+	if (base == nullptr || base->split.parts == 0)
+		return {};
+	// Every base now rolls exactly its defence, which only oils raise later; less is an older item's smaller base.
+	if (defense < AllItemsList[static_cast<size_t>(item.IDidx)].iMinAC)
+		return {};
+	return base->split;
 }
 
 QualityKind QualityKindFor(int itemIndex)

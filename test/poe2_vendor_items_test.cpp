@@ -58,6 +58,8 @@ public:
 	{
 		gbIsPoe2 = false;
 		gbIsMultiplayer = false;
+		leveltype = DTYPE_TOWN;
+		currlevel = 0;
 		LoadModifierData();
 		UnloadModArchives();
 	}
@@ -193,7 +195,10 @@ TEST_F(Poe2VendorItemsTest, BoughtWaresComeBackFromTheStash)
 
 TEST_F(Poe2VendorItemsTest, AnEmptyPoolTakesTheOneValueAPickTakes)
 {
-	// No item drops below monster level 0, so the pick after the two percent rolls finds nothing.
+	// No item drops below monster level 0, so the pick after the two percent rolls finds nothing. A floor without an
+	// area level, so POE2 equipment doesn't take the area's level instead (town is area level 1).
+	leveltype = DTYPE_CATHEDRAL;
+	currlevel = 0;
 	uint32_t seed = 1;
 	for (; seed < 10000; seed++) {
 		SetRndSeed(seed);

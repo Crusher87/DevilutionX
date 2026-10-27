@@ -146,6 +146,11 @@ struct ModFamily {
 	ModEffect effect;
 	/** @brief Percent of the table's value the game uses, per stat. */
 	std::array<int16_t, 2> scale;
+	/**
+	 * @brief The scale items saved before the bases took POE2's numbers rolled with (harder monsters plan, step 10b),
+	 * so such an item rebuilds with the modifiers it had. The same as scale for most families.
+	 */
+	std::array<int16_t, 2> legacyScale;
 	bool enabled;
 	/** @brief Ordered T1 first. */
 	std::vector<ModTier> tiers;
@@ -159,6 +164,25 @@ constexpr int MaxRareJewelModsPerSide = 2;
 
 /** @brief Loads the modifier tables and the item bases (poe2/bases.hpp) and uniques (poe2/uniques.hpp) from the POE2 Mashup mod, or clears them outside POE2 mode. */
 void LoadModifierData();
+
+/** @brief Whether modifiers roll with the families' legacy scales (LegacyModScales). */
+bool RollingLegacyModScales();
+
+/**
+ * @brief While one exists, modifiers roll with the scales they had before the bases took POE2's numbers, for
+ * rebuilding an item saved before then (RestoreRareItemPowers, RebuildWithCraft). Nests; never touches the game's
+ * random number generator.
+ */
+class LegacyModScales {
+public:
+	explicit LegacyModScales(bool active = true);
+	~LegacyModScales();
+	LegacyModScales(const LegacyModScales &) = delete;
+	LegacyModScales &operator=(const LegacyModScales &) = delete;
+
+private:
+	bool previous_;
+};
 const std::vector<ModFamily> &ModifierFamilies();
 std::optional<uint8_t> FindModifierFamily(std::string_view id);
 

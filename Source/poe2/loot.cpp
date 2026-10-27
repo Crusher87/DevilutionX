@@ -420,7 +420,20 @@ int Poe2ItemLevel(int areaLevel, int bonus)
 
 int Poe2ItemLevel(const Monster &monster, int difficulty)
 {
+	const int bonus = LootItemLevelBonus(GetLootSource(monster));
+	if (const int areaLevel = gbIsPoe2 ? CurrentAreaLevel(difficulty) : 0; areaLevel > 0)
+		return AreaItemLevel(areaLevel, bonus);
+	return Poe2CurrencyLevel(monster, difficulty);
+}
+
+int Poe2CurrencyLevel(const Monster &monster, int difficulty)
+{
 	return Poe2ItemLevel(monster.data().level + (15 * difficulty), LootItemLevelBonus(GetLootSource(monster)));
+}
+
+int AreaItemLevel(int areaLevel, int bonus)
+{
+	return std::clamp(areaLevel + bonus, 1, MaxPoe2ItemLevel);
 }
 
 int VendorAreaLevel(const Player &player, int difficulty)

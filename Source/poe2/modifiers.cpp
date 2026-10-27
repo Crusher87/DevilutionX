@@ -28,6 +28,9 @@ namespace {
 
 std::vector<ModFamily> Families;
 
+/** Set while an item saved before the bases took POE2's numbers rebuilds (LegacyModScales). */
+bool UseLegacyScales = false;
+
 constexpr std::array<std::string_view, static_cast<size_t>(ModSlot::Count)> SlotNames = {
 	"helmet", "body_armour", "gloves", "boots", "belt", "shield", "focus", "quiver", "ring", "amulet",
 	"one_hand_melee", "two_hand_melee", "bow", "crossbow", "spear", "quarterstaff", "flail", "claw", "dagger",
@@ -124,6 +127,10 @@ bool LoadFamilies(std::vector<std::vector<std::string>> &conflictIds)
 		family.scale[1] = static_cast<int16_t>(ParseInt(text).value_or(100));
 		reader.readString("enabled", text);
 		family.enabled = text == "true" && family.effect != ModEffect::None;
+		reader.readString("legacyScale1", text);
+		family.legacyScale[0] = static_cast<int16_t>(ParseInt(text).value_or(family.scale[0]));
+		reader.readString("legacyScale2", text);
+		family.legacyScale[1] = static_cast<int16_t>(ParseInt(text).value_or(family.scale[1]));
 		Families.push_back(std::move(family));
 		if (Families.size() > UINT8_MAX) {
 			LogError("Too many modifier families in {}", Filename);
@@ -247,6 +254,22 @@ uint16_t AddToDamage(uint16_t base, int value)
 }
 
 } // namespace
+
+bool RollingLegacyModScales()
+{
+	return UseLegacyScales;
+}
+
+LegacyModScales::LegacyModScales(bool active)
+    : previous_(UseLegacyScales)
+{
+	UseLegacyScales = UseLegacyScales || active;
+}
+
+LegacyModScales::~LegacyModScales()
+{
+	UseLegacyScales = previous_;
+}
 
 void LoadModifierData()
 {
@@ -561,8 +584,9 @@ const ModCandidate &PickModCandidate(const std::vector<ModCandidate> &candidates
 std::array<int16_t, 2> RollTierValues(const ModFamily &family, const ModTier &tier, ModRandom &values)
 {
 	std::array<int16_t, 2> rolled {};
+	const std::array<int16_t, 2> &scale = UseLegacyScales ? family.legacyScale : family.scale;
 	for (size_t stat = 0; stat < 2; stat++)
-		rolled[stat] = ScaleValue(values.between(tier.min[stat], tier.max[stat]), family.scale[stat]);
+		rolled[stat] = ScaleValue(values.between(tier.min[stat], tier.max[stat]), scale[stat]);
 	// Added damage rolls its low and high end apart; keep them in order.
 	if (IsAnyOf(family.effect, ModEffect::AddedPhysical, ModEffect::AddedFire, ModEffect::AddedLightning, ModEffect::AddedPhysicalToAttacks) && rolled[1] < rolled[0])
 		rolled[1] = rolled[0];

@@ -6,7 +6,9 @@ Usage: tools/poe2_modifiers.py path/to/modifier_families.json
 Writes mods/poe2/txtdata/poe2/modifier_families.tsv (one row per family) and
 modifier_tiers.tsv (one row per tier, T1 the strongest). The bundle's numbers are
 GAME-DEFAULT tuning, kept as they are; the scale columns say how the game shrinks
-a value to Diablo's scale (100 = unchanged).
+a value to Diablo's scale (100 = unchanged). The legacy scale columns keep the scales
+items had before the bases moved to POE2's numbers (harder monsters plan, step 10b):
+the game rolls an item saved before then with them, so it keeps its numbers.
 """
 
 import json
@@ -22,9 +24,11 @@ OUT_DIR = os.path.join(ROOT, 'mods', 'poe2', 'txtdata', 'poe2')
 FAMILIES = {
 	'maximum_life': ('Life', 100, 100, 'Virile'),
 	'maximum_mana': ('Mana', 100, 100, 'Azure'),
-	'flat_armour': ('FlatDefense', 15, 100, 'Lacquered'),
-	'flat_evasion': ('FlatDefense', 15, 100, "Shade's"),
-	'flat_energy_shield': ('FlatDefense', 10, 100, 'Glimmering'),
+	# Bases have POE2's defence, so flat armour and evasion keep the bundle's numbers; energy shield is in defence
+	# points, three energy shield each.
+	'flat_armour': ('FlatArmour', 100, 100, 'Lacquered'),
+	'flat_evasion': ('FlatEvasion', 100, 100, "Shade's"),
+	'flat_energy_shield': ('FlatEnergyShield', 33, 100, 'Glimmering'),
 	'increased_armour': ('DefensePercent', 100, 100, 'Reinforced'),
 	'increased_evasion': ('DefensePercent', 100, 100, 'Agile'),
 	'increased_energy_shield': ('DefensePercent', 100, 100, 'Protective'),
@@ -36,13 +40,14 @@ FAMILIES = {
 	'life_es_hybrid': ('LifeAndDefensePercent', 100, 100, "Monk's"),
 	'mana_es_hybrid': ('ManaAndDefensePercent', 100, 100, "Seer's"),
 	'spirit_flat': ('Spirit', 500, 100, 'Spirited'),
-	'local_added_physical': ('AddedPhysical', 25, 25, 'Glinting'),
+	# Weapons hit for the bundle's damage, so added damage keeps its numbers too.
+	'local_added_physical': ('AddedPhysical', 100, 100, 'Glinting'),
 	'local_increased_physical': ('PhysicalPercent', 100, 100, 'Heavy'),
 	'physical_accuracy_hybrid': ('PhysicalPercentAndAccuracy', 100, 10, "Squire's"),
-	'local_added_fire': ('AddedFire', 25, 25, 'Heated'),
-	'local_added_lightning': ('AddedLightning', 25, 25, 'Humming'),
+	'local_added_fire': ('AddedFire', 100, 100, 'Heated'),
+	'local_added_lightning': ('AddedLightning', 100, 100, 'Humming'),
 	'minion_damage': ('MinionDamage', 100, 100, "Baron's"),
-	'global_added_physical_attacks': ('AddedPhysicalToAttacks', 25, 25, 'Burnished'),
+	'global_added_physical_attacks': ('AddedPhysicalToAttacks', 100, 100, 'Burnished'),
 	'strength': ('Strength', 40, 100, 'of the Brute'),
 	'dexterity': ('Dexterity', 40, 100, 'of the Mongoose'),
 	'intelligence': ('Intelligence', 40, 100, 'of the Prodigy'),
@@ -54,6 +59,7 @@ FAMILIES = {
 	'all_elemental_resistance': ('AllResistances', 100, 100, 'of the Crystal'),
 	'attack_speed': ('AttackSpeed', 100, 100, 'of Skill'),
 	'cast_speed': ('CastSpeed', 100, 100, 'of Talent'),
+	# Accuracy is Diablo's percent chance to hit, so it stays a tenth.
 	'accuracy_rating': ('Accuracy', 10, 100, 'of Calm'),
 	'reduced_attribute_requirements': ('ReducedRequirements', 100, 100, 'of the Worthy'),
 	'life_regeneration': ('LifeRegeneration', 100, 100, 'of the Newt'),
@@ -68,6 +74,18 @@ FAMILIES = {
 	'jewel_damage_pct': ('DamagePercent', 100, 100, 'Brutal'),
 	'jewel_attack_speed': ('AttackSpeed', 100, 100, 'of Alacrity'),
 	'jewel_cast_speed': ('CastSpeed', 100, 100, 'of Enchanting'),
+}
+
+# The scales before step 10b, for items saved before it: family id -> (scale of the first stat, of the second).
+# Families missing here had the scales they have now.
+LEGACY_SCALES = {
+	'flat_armour': (15, 100),
+	'flat_evasion': (15, 100),
+	'flat_energy_shield': (10, 100),
+	'local_added_physical': (25, 25),
+	'local_added_fire': (25, 25),
+	'local_added_lightning': (25, 25),
+	'global_added_physical_attacks': (25, 25),
 }
 
 # Colour-specific jewel modifiers from POE2's jewel pools (poe2db, research/poe2-jewels.md): one tier each,
@@ -103,6 +121,7 @@ def main():
 	for family in families:
 		fid = family['id']
 		effect, scale1, scale2, word = FAMILIES.get(fid, ('', 100, 100, ''))
+		legacy1, legacy2 = LEGACY_SCALES.get(fid, (scale1, scale2))
 		conflicts = list(family['conflicts'])
 		for a, b in EXTRA_CONFLICTS:
 			if fid == a:
@@ -125,6 +144,8 @@ def main():
 			str(scale1),
 			str(scale2),
 			'true' if effect else 'false',
+			str(legacy1),
+			str(legacy2),
 		])
 		tiers = sorted(family['tiers'], key=lambda t: int(t['tier'][1:]))
 		for tier in tiers:
@@ -144,11 +165,11 @@ def main():
 			tier_rows.append([fid, str(number), str(tier['required_item_level']), str(tier['spawn_weight'])] + values)
 
 	for fid, name, word, side, slots, template, effect, lo, hi in JEWEL_FAMILIES:
-		family_rows.append([fid, name, word, side, fid, 'jewel', slots, '', '', template, effect, '100', '100', 'true'])
+		family_rows.append([fid, name, word, side, fid, 'jewel', slots, '', '', template, effect, '100', '100', 'true', '100', '100'])
 		tier_rows.append([fid, '1', '1', str(JEWEL_WEIGHT), str(lo), str(hi), '0', '0'])
 
 	write(os.path.join(OUT_DIR, 'modifier_families.tsv'),
-	      ['id', 'name', 'word', 'side', 'group', 'tags', 'slots', 'baseTags', 'conflicts', 'template', 'effect', 'scale1', 'scale2', 'enabled'],
+	      ['id', 'name', 'word', 'side', 'group', 'tags', 'slots', 'baseTags', 'conflicts', 'template', 'effect', 'scale1', 'scale2', 'enabled', 'legacyScale1', 'legacyScale2'],
 	      family_rows)
 	write(os.path.join(OUT_DIR, 'modifier_tiers.tsv'),
 	      ['family', 'tier', 'itemLevel', 'weight', 'min1', 'max1', 'min2', 'max2'],

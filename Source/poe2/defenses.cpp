@@ -79,11 +79,14 @@ BodyArmourImplicit GetBodyArmourImplicit(const Item &item)
 	return implicit;
 }
 
-void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield)
+void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int &energyShield, const DefenseSplit &split)
 {
 	armour = 0;
 	evasion = 0;
 	energyShield = 0;
+	// The second kind's share of a hybrid's defence, rounded: the base's split, or half.
+	const auto share = [defense](int percent) { return std::max((defense * percent) + 50, 0) / 100; };
+	const int second = split.parts >= 1 ? share(100 - split.percent[0]) : defense / 2;
 	switch (type) {
 	case DefenseType::Armour:
 		armour = defense;
@@ -95,20 +98,25 @@ void SplitDefense(DefenseType type, int defense, int &armour, int &evasion, int 
 		energyShield = defense;
 		break;
 	case DefenseType::ArmourEvasion:
-		evasion = defense / 2;
+		evasion = second;
 		armour = defense - evasion;
 		break;
 	case DefenseType::ArmourEnergyShield:
-		energyShield = defense / 2;
+		energyShield = second;
 		armour = defense - energyShield;
 		break;
 	case DefenseType::EvasionEnergyShield:
-		energyShield = defense / 2;
+		energyShield = second;
 		evasion = defense - energyShield;
 		break;
 	case DefenseType::All:
-		evasion = defense / 3;
-		energyShield = defense / 3;
+		if (split.parts >= 2) {
+			evasion = share(split.percent[1]);
+			energyShield = share(std::max(100 - split.percent[0] - split.percent[1], 0));
+		} else {
+			evasion = defense / 3;
+			energyShield = defense / 3;
+		}
 		armour = defense - evasion - energyShield;
 		break;
 	}
@@ -138,7 +146,7 @@ void SplitItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonu
 	const auto flat = [&](Poe2ItemStat stat) { return std::max<int>(item._iPoe2Stats[static_cast<size_t>(stat)], 0); };
 	DefensePoints flats { flat(Poe2ItemStat::FlatArmour), flat(Poe2ItemStat::FlatEvasion), flat(Poe2ItemStat::FlatEnergyShield) };
 	const int split = std::max(item._iAC - flats.armour - flats.evasion - flats.energyShield, 0);
-	SplitDefense(ItemDefenseType(item), split, base.armour, base.evasion, base.energyShield);
+	SplitDefense(ItemDefenseType(item), split, base.armour, base.evasion, base.energyShield, ItemDefenseSplit(item, split));
 	base.armour += flats.armour;
 	base.evasion += flats.evasion;
 	base.energyShield = (base.energyShield + flats.energyShield) * EnergyShieldPerDefense;
