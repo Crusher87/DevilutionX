@@ -3555,6 +3555,13 @@ void CalcPlrBlockFlag(Player &player)
 	}
 
 	player._pBlockFlag = player._pBlockFlag || player.isHoldingItem(ItemType::Shield);
+	// POE2 Mashup: a quarterstaff with block lets any class block (caster-weapons-plan-v2.md 6.11).
+	if (gbIsPoe2) {
+		for (const Item *item : { &leftHandItem, &rightHandItem }) {
+			if (!item->isEmpty() && item->_iStatFlag && IsQuarterstaff(*item) && item->_iPoe2Stats[static_cast<size_t>(Poe2ItemStat::BlockChance)] > 0)
+				player._pBlockFlag = true;
+		}
+	}
 }
 
 PlayerWeaponGraphic GetPlrAnimWeaponId(const Player &player)
@@ -3851,6 +3858,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 			if (player.InvBody[hand]._iStatFlag)
 				player.poe2.shieldBlockChance = std::max(player.poe2.shieldBlockChance, ShieldBlockChance(player.InvBody[hand]));
+			// The caster weapons rework's Barrier, Guardian and Aegis quarterstaves block with their implicit.
+			if (player.InvBody[hand]._iStatFlag && IsQuarterstaff(player.InvBody[hand]))
+				player.poe2.shieldBlockChance = std::max<int>(player.poe2.shieldBlockChance, player.InvBody[hand]._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::BlockChance)]);
 		}
 	}
 	strength += passive(PassiveStat::Strength);

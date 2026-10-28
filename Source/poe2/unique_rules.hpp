@@ -244,6 +244,8 @@ struct UniqueRuleState {
 	uint8_t rotationTicks = 0;
 	uint16_t rotationSpell = 0;
 	bool rotationBonus = false;
+	/** @brief The hit being dealt now Dazed its monster: its heavy-stun buildup doubles. */
+	bool dazing = false;
 	/** @brief Ceaseless Hands: stacks from unarmed hits, and game ticks until they all fall off. */
 	uint8_t unarmedStacks = 0;
 	uint8_t unarmedTicks = 0;

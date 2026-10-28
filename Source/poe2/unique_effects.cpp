@@ -12,6 +12,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
@@ -86,6 +87,29 @@ const Item *HeldWeapon(const Player &player)
 			return &item;
 	}
 	return nullptr;
+}
+
+/** @brief The quarterstaff the hero holds and can use, or nullptr. */
+const Item *HeldQuarterstaff(const Player &player)
+{
+	for (const Item &item : { std::cref(player.InvBody[INVLOC_HAND_LEFT]), std::cref(player.InvBody[INVLOC_HAND_RIGHT]) }) {
+		if (!item.isEmpty() && item._iStatFlag && IsQuarterstaff(item))
+			return &item;
+	}
+	return nullptr;
+}
+
+/**
+ * @brief Whether a melee hit Dazes the monster: a Daze quarterstaff's chance (caster-weapons-plan-v2.md 6.11). Unique
+ * monsters are never Dazed, and nothing is rolled without such a staff.
+ */
+bool RollDaze(const Player &player, const Monster &monster)
+{
+	const Item *staff = HeldQuarterstaff(player);
+	if (staff == nullptr || monster.isUnique())
+		return false;
+	const int chance = staff->_iPoe2Stats[static_cast<size_t>(Poe2ItemStat::DazeChance)];
+	return chance > 0 && GenerateRnd(100) < chance;
 }
 
 ItemType HeldWeaponType(const Player &player)
@@ -553,6 +577,12 @@ int AttackCritChance(const Player &player)
 		return HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike) ? player.getCharacterLevel() : 0;
 	}
 	int chance = BaseAttackCritPercent;
+	// The caster weapons rework's quarterstaves have POE2's crit, halved (its base's crit column, in tenths of a percent);
+	// the older ones keep the default.
+	if (const Item *staff = HeldQuarterstaff(player); staff != nullptr) {
+		if (const BaseMeta *base = ItemBaseMeta(*staff); base != nullptr && base->crit >= 0)
+			chance = BaseAttackCritPercent * base->crit / 100;
+	}
 	// Third Eye: the next attack's place in the count of three.
 	if (const int more = Rule(player, UniqueRule::ThirdHitCritChance); more > 0)
 		chance += (State(player).attacks + 1) % 3 == 0 ? more : -Rule(player, UniqueRule::OtherHitsLessCrit);
@@ -697,7 +727,10 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	const int32_t physical = static_cast<int32_t>(packets[0]);
 	// Briarpatch stores part of the physical damage as thorns.
 	OnSpiritPhysicalAttack(player, physical);
+	// A Daze quarterstaff's melee hit may double its heavy-stun buildup.
+	state.dazing = !ranged && physical > 0 && RollDaze(player, monster);
 	Fixed26_6 dealt = DealPacket(player, monster, DamageType::Physical, physical);
+	state.dazing = false;
 	dealt += DealPacket(player, monster, DamageType::Fire, static_cast<int32_t>(packets[1]));
 	dealt += DealPacket(player, monster, DamageType::Lightning, static_cast<int32_t>(packets[2]));
 	dealt += DealPacket(player, monster, DamageType::Magic, static_cast<int32_t>(packets[3]));
@@ -1003,9 +1036,9 @@ int UniqueStunBuildupPercent(const Player &player)
 {
 	const int per = Rule(player, UniqueRule::ArmourStunBuildup);
 	const int passive = PassiveTotal(player, PassiveStat::StunBuildup);
-	if (per <= 0)
-		return std::max(100 + passive, 0);
-	return std::max(100 + passive + Poe2Armour(player) / per, 0);
+	const int percent = per <= 0 ? std::max(100 + passive, 0) : std::max(100 + passive + Poe2Armour(player) / per, 0);
+	// A Dazing hit builds twice the stun.
+	return State(player).dazing ? percent * 2 : percent;
 }
 
 void OnAilmentInflicted(const Player &player, Monster &monster, DamageType type, bool wasShocked)
