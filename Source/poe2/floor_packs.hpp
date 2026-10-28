@@ -19,8 +19,8 @@
  * Step 3, pace and rewards (Curtis's picks, 10-27):
  *  - Packs grow from 4 near the stairs up to 6 near the stairs down, and one last pack of 6 stands as near the stairs
  *    down as their view allows.
- *  - The next room along the way down after a big fight is a rest room: no monsters, and a shrine where its walls
- *    allow one.
+ *  - The next room along the way down after a big fight is a rest room with no monsters. On one floor in three
+ *    the first rest room also has a shrine where its walls allow one (Curtis, 10-28: shrines came up too often).
  *  - One floor in three has a strongbox off the way down; its 4 to 6 guards come out of the floor's monsters.
  *  - About one chest in five is magic and one in twenty rare (poe2/floor_chests.hpp).
  * Cathedral floors only for now. The placement has its own random stream, seeded from the floor's, so the same seed

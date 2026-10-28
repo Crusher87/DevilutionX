@@ -55,6 +55,8 @@ constexpr int EmptyRoomBonus = 10;
 constexpr int RouteBonus = 8;
 /** The floor census counts a tile further than this from every monster as quiet. */
 constexpr int QuietSteps = 8;
+/** One floor in this many has a shrine in a rest room (Curtis, 10-28: shrines came up too often). */
+constexpr int ShrineFloorOneIn = 3;
 /** A floor gets a strongbox one time in this many. */
 constexpr int StrongboxOneIn = 3;
 /** Out of every 100 other chests, this many are rare and this many magic. */
@@ -67,6 +69,8 @@ constexpr int RestRoomMaxTiles = 150;
 constexpr size_t RestRoomSearchSteps = 40;
 /** The last pack stands this many steps further from the stairs down than the nearest spot at most, to find open floor. */
 constexpr int LastPackSlack = 8;
+/** Monster slots left free for monsters that come later: summons, and a strongbox's guards (InitMonsters leaves the same). */
+constexpr size_t SpawnHeadroom = 10;
 /** dTransVal is an int8_t. */
 constexpr int MaxRooms = 256;
 constexpr int16_t Unreached = INT16_MAX;
@@ -237,6 +241,8 @@ private:
 	std::array<RoomFacts, MaxRooms> rooms_ {};
 	bool hasStart_ = false;
 	bool hasEnd_ = false;
+	/** This floor's rest room shrine is still to place. */
+	bool shrineWanted_ = false;
 	Point end_;
 	std::vector<Point> route_;
 
@@ -338,6 +344,7 @@ private:
 		if (route_.empty() || left_ < static_cast<size_t>(BigFightMin + PackMin))
 			return;
 		const int fights = left_ >= SecondBigFightFrom ? 2 : 1;
+		shrineWanted_ = random(ShrineFloorOneIn) == 0;
 		for (int fight = 0; fight < fights && left_ >= static_cast<size_t>(BigFightMin); fight++) {
 			// The first about two thirds of the way down, the second about a third.
 			const int percent = fight == 0 ? 60 + random(21) : 30 + random(16);
@@ -376,8 +383,8 @@ private:
 	}
 
 	/**
-	 * After a big fight, a room stays empty with a shrine in it: the next room along the way down where one fits, or
-	 * else a room off the fight's room.
+	 * After a big fight, a room stays empty: the next room along the way down, or else a room off the fight's room.
+	 * On one floor in ShrineFloorOneIn the first of them has a shrine, in the first room whose walls take one.
 	 */
 	void makeRestRoom(size_t alongIndex, int fightRoom)
 	{
@@ -395,13 +402,19 @@ private:
 			if (rooms_[fightRoom].neighbours.test(r) && canRest(r) && std::find(candidates.begin(), candidates.end(), r) == candidates.end())
 				candidates.push_back(r);
 		}
-		for (const int r : candidates) {
-			if (placeShrine(r)) {
-				rooms_[r].quiet = true;
-				rooms_[r].reward = true;
-				return;
+		if (candidates.empty())
+			return;
+		if (shrineWanted_) {
+			for (const int r : candidates) {
+				if (placeShrine(r)) {
+					shrineWanted_ = false;
+					rooms_[r].quiet = true;
+					rooms_[r].reward = true;
+					return;
+				}
 			}
 		}
+		rooms_[candidates.front()].quiet = true;
 	}
 
 	/** A shrine against a wall of the room, with a candle each side, as the shrine theme room has them. */
@@ -808,6 +821,9 @@ void PlaceThemePack(int8_t room, size_t typeIndex, int frequency)
 	for (size_t head = 0; head < queue.size() && placed < size; head++) {
 		const Point tile = queue[head];
 		if (eligible(tile)) {
+			// The floor's monsters already fill it; leave room for a strongbox's guards.
+			if (ActiveMonsterCount + SpawnHeadroom >= MaxEnemyMonsters())
+				return;
 			if (AddMonster(tile, static_cast<Direction>(GenerateRnd(8)), typeIndex, true) == nullptr)
 				return;
 			placed++;
