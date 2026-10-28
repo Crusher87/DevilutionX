@@ -69,7 +69,8 @@ std::string_view GemCategoryName(GemCategory category)
 	case GemCategory::Bow:
 		return _("Bow");
 	case GemCategory::Staff:
-		return _("Staff");
+		// Its gems need a martial staff since the caster weapons rework (plan 6.15).
+		return _("Quarterstaff");
 	case GemCategory::Shield:
 		return _("Shield");
 	case GemCategory::Elemental:

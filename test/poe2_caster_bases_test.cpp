@@ -15,25 +15,34 @@
 
 #include <gtest/gtest.h>
 
+#include "control/control.hpp"
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "headless_mode.hpp"
 #include "inv.h"
 #include "items.h"
+#include "options.h"
+#include "panels/gemcutting_panel.hpp"
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/desecration.hpp"
+#include "poe2/gemcutting.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_kinds.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "qol/visual_store.h"
 #include "spells.h"
 #include "tables/itemdat.h"
 #include "tables/playerdat.hpp"
+#include "utils/format.hpp"
 
 namespace devilution {
 namespace {
@@ -527,6 +536,156 @@ TEST_F(Poe2CasterBasesTest, EquipMatrix)
 				EXPECT_EQ(AutoEquip(player, *pair.second, /*persistItem=*/false), pair.canHold) << static_cast<int>(heroClass) << " " << pair.first->_iIName << " then " << pair.second->_iIName;
 		}
 	}
+	player.InvBody[INVLOC_HAND_LEFT] = {};
+}
+
+/** @brief The item's tooltip lines, as PrintItemDetails (identified) or PrintItemDur (not) writes them. */
+std::string Tooltip(const Item &item)
+{
+	HeadlessMode = false;
+	FloatingInfoString = std::string_view {};
+	FloatingInfoStyles.clear();
+	if (item._iIdentified)
+		PrintItemDetails(item);
+	else
+		PrintItemDur(item);
+	std::string text(FloatingInfoString.str());
+	FloatingInfoString = std::string_view {};
+	FloatingInfoStyles.clear();
+	return text;
+}
+
+bool Has(const std::string &text, std::string_view line)
+{
+	return text.find(line) != std::string::npos;
+}
+
+TEST_F(Poe2CasterBasesTest, TooltipsShowTheKindTheGrantAndNoDamage)
+{
+	const auto show = [](std::string_view name, bool identified = true) {
+		Item item = Make(Row(name), 7, ITEM_QUALITY_NORMAL, 33);
+		item._iIdentified = identified;
+		return Tooltip(item);
+	};
+	const int level = GrantedGemLevel(33);
+	struct Case {
+		std::string_view base;
+		std::string_view kind;
+		SkillSlot grant;
+	};
+	for (const Case &c : {
+	         Case { "Withered Wand", "One-Handed Wand", SkillSlot::ForAttack(WeaponSkill::WitheringBolt) },
+	         Case { "Fine Rattling Sceptre", "One-Handed Sceptre", SkillSlot::ForPersistent(PersistentSkill::SkeletalWarriors) },
+	         Case { "Gelid Staff", "Two-Handed Staff", SkillSlot::ForAttack(WeaponSkill::FreezingShards) },
+	     }) {
+		for (const bool identified : { true, false }) {
+			const std::string text = show(c.base, identified);
+			EXPECT_TRUE(Has(text, c.kind)) << c.base << "\n" << text;
+			EXPECT_TRUE(Has(text, FormatRuntime("Grants Skill: Level {:d} {:s}", level, SkillName(c.grant)))) << c.base << "\n" << text;
+			// No damage and no attack speed: it hits with its skill.
+			EXPECT_FALSE(Has(text, "damage:")) << c.base << "\n" << text;
+			EXPECT_FALSE(Has(text, "Attacks per Second")) << c.base << "\n" << text;
+			EXPECT_TRUE(Has(text, "Dur: ")) << c.base << "\n" << text;
+		}
+	}
+	// A sceptre's Spirit with its own increase: +100 on a normal one.
+	EXPECT_TRUE(Has(show("Fine Rattling Sceptre"), "implicit: +100 to Spirit"));
+	EXPECT_TRUE(Has(show("Ashen Staff"), FormatRuntime("Grants Skill: Level {:d} {:s}", level, SkillName(Meta("Ashen Staff").grantedSkill))));
+
+	// A quarterstaff hits: its damage, its speed and its own crit.
+	const std::string quarterstaff = show("Fine Long Quarterstaff");
+	EXPECT_TRUE(Has(quarterstaff, "Two-Handed Quarterstaff")) << quarterstaff;
+	EXPECT_TRUE(Has(quarterstaff, "damage:")) << quarterstaff;
+	ASSERT_GE(Meta("Fine Long Quarterstaff").crit, 0);
+	EXPECT_TRUE(Has(quarterstaff, FormatRuntime("Critical Hit Chance: {:d}%", BaseAttackCritPercent * Meta("Fine Long Quarterstaff").crit / 100))) << quarterstaff;
+	EXPECT_FALSE(Has(quarterstaff, "Grants Skill")) << quarterstaff;
+
+	// The older staves and sceptres, and maces, keep their text.
+	const std::string staff = show("Long Staff");
+	EXPECT_TRUE(Has(staff, "Two-Handed Staff")) << staff;
+	EXPECT_TRUE(Has(staff, "damage:")) << staff;
+	EXPECT_FALSE(Has(staff, "Critical Hit Chance")) << staff;
+	const std::string club = show("Wooden Club");
+	EXPECT_TRUE(Has(club, "One-Handed Mace")) << club;
+	EXPECT_TRUE(Has(club, "damage:")) << club;
+}
+
+TEST_F(Poe2CasterBasesTest, OutsidePoe2AStaffAndAMacePrintAsBefore)
+{
+	gbIsPoe2 = false;
+	UnloadModArchives();
+	LoadModArchives({ { "hf" } });
+	LoadItemData();
+	LoadModifierData();
+	GetOptions().Gameplay.floatingInfoBox.SetValue(true);
+	for (const std::string_view name : { "Short Staff", "Mace" }) {
+		Item item {};
+		InitializeItem(item, Row(name));
+		item._iIdentified = true;
+		const std::string text = Tooltip(item);
+		EXPECT_TRUE(Has(text, "damage: ")) << name << "\n" << text;
+		EXPECT_FALSE(Has(text, "-Handed")) << name << "\n" << text;
+		EXPECT_FALSE(Has(text, "Grants Skill")) << name << "\n" << text;
+		EXPECT_FALSE(Has(text, "Critical Hit Chance")) << name << "\n" << text;
+	}
+	GetOptions().Gameplay.floatingInfoBox.SetValue(false);
+}
+
+TEST_F(Poe2CasterBasesTest, NewWandsAndSceptresHaveTheirOwnRareNames)
+{
+	const std::set<std::string_view> wandWords { "Barb", "Charm", "Goad", "Needle", "Quill", "Rod", "Song", "Spike", "Sting", "Thorn", "Twig", "Wand" };
+	const std::set<std::string_view> sceptreWords { "Blow", "Breaker", "Call", "Chime", "Crack", "Crusher", "Gavel", "Hymn", "Knell", "Mace", "Ram", "Roar" };
+	const auto secondWord = [](const Item &item) {
+		const std::string name = GetRareItemName(item);
+		return name.substr(name.find(' ') + 1);
+	};
+	for (uint32_t seed = 1; seed <= 40; seed++) {
+		const Item wand = Make(Row("Withered Wand"), seed, ITEM_QUALITY_RARE, 40);
+		const Item sceptre = Make(Row("Lupine Sceptre"), seed, ITEM_QUALITY_RARE, 40);
+		EXPECT_TRUE(wandWords.contains(secondWord(wand))) << GetRareItemName(wand);
+		EXPECT_TRUE(sceptreWords.contains(secondWord(sceptre))) << GetRareItemName(sceptre);
+		EXPECT_EQ(std::string(wand._iIName), GetRareItemName(wand));
+	}
+	// The older sceptres keep the weapon words (the S0 golden holds their names).
+	EXPECT_EQ(WeaponKindOf(Row("Quick Bone Sceptre")), WeaponKind::LegacySceptre);
+}
+
+TEST_F(Poe2CasterBasesTest, WeaponGemsAndTheGemcuttingTabs)
+{
+	const auto item = [](std::string_view name) {
+		Item made {};
+		InitializeItem(made, Row(name));
+		made._iStatFlag = true;
+		return made;
+	};
+	// Staff gems need a martial staff; caster weapons take no weapon gem.
+	EXPECT_TRUE(ItemAllowsWeaponSkill(item("Fine Long Quarterstaff"), WeaponSkill::WhirlingStaff));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(item("Long Staff"), WeaponSkill::WhirlingStaff));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(item("Gelid Staff"), WeaponSkill::WhirlingStaff));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(item("Gelid Staff"), WeaponSkill::LeapSlam));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(item("Ashen Staff"), WeaponSkill::FistsOfThunder));
+	// Mace gems need a martial mace.
+	EXPECT_TRUE(ItemAllowsWeaponSkill(item("Wooden Club"), WeaponSkill::Smite));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(item("Withered Wand"), WeaponSkill::Smite));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(item("Lupine Sceptre"), WeaponSkill::Smite));
+
+	// The Staff tab is the quarterstaves'.
+	EXPECT_EQ(GemCategoryName(GemCategory::Staff), "Quarterstaff");
+	// An uncut skill gem opens on Elemental for a caster staff or wand, on Spirit for a new sceptre.
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	Equip(player, INVLOC_HAND_LEFT, Row("Wooden Club"));
+	EXPECT_EQ(DefaultSkillCategory(player), GemCategory::Mace);
+	Equip(player, INVLOC_HAND_LEFT, Row("Withered Wand"));
+	EXPECT_EQ(DefaultSkillCategory(player), GemCategory::Elemental);
+	Equip(player, INVLOC_HAND_LEFT, Row("Gelid Staff"));
+	EXPECT_EQ(DefaultSkillCategory(player), GemCategory::Elemental);
+	Equip(player, INVLOC_HAND_LEFT, Row("Lupine Sceptre"));
+	EXPECT_EQ(DefaultSkillCategory(player), GemCategory::Spirit);
+	Equip(player, INVLOC_HAND_LEFT, Row("Fine Long Quarterstaff"));
+	EXPECT_EQ(DefaultSkillCategory(player), GemCategory::Staff);
+	player._pClass = HeroClass::Rogue;
+	EXPECT_EQ(DefaultSkillCategory(player), GemCategory::Bow);
 	player.InvBody[INVLOC_HAND_LEFT] = {};
 }
 

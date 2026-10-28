@@ -106,6 +106,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_kinds.hpp"
@@ -3061,6 +3062,10 @@ std::string GetRareItemName(const Item &item)
 	static constexpr std::array<std::string_view, 12> HelmWords = { "Brow", "Corona", "Cowl", "Crest", "Crown", "Dome", "Glance", "Halo", "Horn", "Peak", "Salvation", "Visor" };
 	static constexpr std::array<std::string_view, 12> RingWords = { "Band", "Circle", "Coil", "Eye", "Finger", "Grasp", "Grip", "Gyre", "Hold", "Knot", "Loop", "Turn" };
 	static constexpr std::array<std::string_view, 12> AmuletWords = { "Beads", "Charm", "Gorget", "Heart", "Locket", "Medallion", "Noose", "Pendant", "Rosary", "Scarab", "Talisman", "Torc" };
+	// POE2 Mashup: the caster weapons rework's wands and sceptres (caster-weapons-plan-v2.md 6.15). Only the new kinds
+	// use them: a legacy sceptre keeps the weapon words, so saved rare names don't change.
+	static constexpr std::array<std::string_view, 12> WandWords = { "Barb", "Charm", "Goad", "Needle", "Quill", "Rod", "Song", "Spike", "Sting", "Thorn", "Twig", "Wand" };
+	static constexpr std::array<std::string_view, 12> SceptreWords = { "Blow", "Breaker", "Call", "Chime", "Crack", "Crusher", "Gavel", "Hymn", "Knell", "Mace", "Ram", "Roar" };
 
 	const std::array<std::string_view, 12> *secondWords;
 	switch (item._itype) {
@@ -3075,6 +3080,10 @@ std::string GetRareItemName(const Item &item)
 	case ItemType::Amulet: secondWords = &AmuletWords; break;
 	default: secondWords = &WeaponWords; break;
 	}
+	if (IsWand(item))
+		secondWords = &WandWords;
+	else if (IsNewSceptre(item))
+		secondWords = &SceptreWords;
 
 	// Mix the seed so that items with nearby seeds get unrelated names.
 	uint32_t hash = item._iSeed;
@@ -6646,8 +6655,9 @@ void PrintItemCorruption(const Item &item)
  */
 void PrintItemImplicits(const Item &item)
 {
+	// With its own increased Spirit, once identified (plan 6.15); a legacy sceptre's is always 100.
 	if (gbIsPoe2 && IsAnySceptre(item))
-		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpiritOf(item)));
 	for (const std::string &line : ItemImplicitText(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), line));
 	if (const int quality = ItemQuality(item); quality > 0 && HasQuality(item))
@@ -6708,12 +6718,53 @@ void PrintWeaponClass(const Item &item)
 		kind = _("Staff");
 		break;
 	default:
-		return;
+		break;
 	}
+	// The caster weapons rework's kinds (caster-weapons-plan-v2.md 6.15); the older staves and sceptres keep their text.
+	switch (WeaponKindOf(item)) {
+	case WeaponKind::Wand:
+		kind = _("Wand");
+		break;
+	case WeaponKind::Sceptre:
+		kind = _("Sceptre");
+		break;
+	case WeaponKind::Quarterstaff:
+		kind = _("Quarterstaff");
+		break;
+	default:
+		break;
+	}
+	if (kind.empty())
+		return;
 	const InfoLineStyle style = CurrentInfoLineStyle;
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	AddItemInfoBoxString(twoHanded ? FormatRuntime(_("Two-Handed {:s}"), kind) : FormatRuntime(_("One-Handed {:s}"), kind));
 	CurrentInfoLineStyle = style;
+}
+
+/**
+ * @brief POE2 Mashup: a caster weapon of the rework has no damage or attack speed to show (caster-weapons-plan-v2.md
+ * 6.15): its durability, and the skill it grants at its item level.
+ */
+void PrintCasterWeaponLines(const Item &item)
+{
+	if (item._iMaxDur == DUR_INDESTRUCTIBLE)
+		AddItemInfoBoxString(_("Indestructible"));
+	else
+		AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "Dur: {:d}/{:d}"), item._iDurability, item._iMaxDur));
+	if (const BaseMeta *base = GrantingBase(item); base != nullptr)
+		AddItemInfoBoxString(FormatRuntime(_("Grants Skill: Level {:d} {:s}"), GrantedGemLevel(GrantingItemLevel(item)), SkillName(base->grantedSkill)));
+}
+
+/** @brief POE2 Mashup: a quarterstaff of the rework shows its own critical hit chance, which its attacks use. */
+void PrintQuarterstaffCrit(const Item &item)
+{
+	if (!gbIsPoe2 || !IsQuarterstaff(item))
+		return;
+	const BaseMeta *base = ItemBaseMeta(item);
+	if (base == nullptr || base->crit < 0)
+		return;
+	AddItemInfoBoxString(FormatRuntime(_("Critical Hit Chance: {:d}%"), BaseAttackCritPercent * base->crit / 100));
 }
 
 /** @brief POE2 Mashup: a weapon's attacks per second with its own increased attack speed, highlighted when that changed it, as POE2 shows it. */
@@ -6742,7 +6793,9 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(std::string_view(item._iName));
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	PrintWeaponClass(item);
-	if (item._iClass == ICLASS_WEAPON) {
+	if (gbIsPoe2 && IsCasterWeapon(item)) {
+		PrintCasterWeaponLines(item);
+	} else if (item._iClass == ICLASS_WEAPON) {
 		// POE2 Mashup: the damage shown is the weapon's whole hit, with its increased physical and added elemental damage.
 		int minDamage = item._iMinDam;
 		int maxDamage = item._iMaxDam;
@@ -6769,6 +6822,7 @@ void PrintItemDetails(const Item &item)
 		}
 		CurrentInfoLineStyle = InfoLineStyle::Property;
 		PrintAttacksPerSecond(item);
+		PrintQuarterstaffCrit(item);
 		// Holding Alt splits it by damage type, each in its colour.
 		if (gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0 && (item._iFMaxDam > 0 || item._iLMaxDam > 0 || item._iPLDam != 0)) {
 			CurrentInfoLineStyle = InfoLineStyle::PhysicalDamage;
@@ -7059,7 +7113,11 @@ void PrintItemDur(const Item &item)
 
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	PrintWeaponClass(item);
-	if (item._iClass == ICLASS_WEAPON) {
+	if (gbIsPoe2 && IsCasterWeapon(item)) {
+		PrintCasterWeaponLines(item);
+		if (item._iMagical != ITEM_QUALITY_NORMAL)
+			AddItemInfoBoxString(_("Not Identified"));
+	} else if (item._iClass == ICLASS_WEAPON) {
 		// POE2 Mashup: with its quality, which shows before identifying.
 		const int minDamage = item._iMinDam * (100 + WeaponDamagePercent(item)) / 100;
 		const int maxDamage = item._iMaxDam * (100 + WeaponDamagePercent(item)) / 100;
@@ -7075,6 +7133,7 @@ void PrintItemDur(const Item &item)
 				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
 		}
 		PrintAttacksPerSecond(item);
+		PrintQuarterstaffCrit(item);
 		if (item._iMiscId == IMISC_STAFF && item._iMaxCharges > 0) {
 			AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 		}

@@ -698,8 +698,9 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 {
 	if (item.isEmpty())
 		return false;
-	// POE2 Mashup: a sceptre is a caster's focus, not a mace: no weapon skill uses it.
-	if (gbIsPoe2 && IsAnySceptre(item))
+	// POE2 Mashup: a sceptre is a caster's focus, not a mace: no weapon skill uses it. Nor do the rework's staves and
+	// wands (caster-weapons-plan-v2.md 6.15): Staff gems need a quarterstaff or an older staff, Mace gems a martial mace.
+	if (gbIsPoe2 && (IsAnySceptre(item) || IsCasterWeapon(item)))
 		return false;
 	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
 		return TableWeaponAllows(item, table->weapon);

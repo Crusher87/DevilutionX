@@ -12,8 +12,11 @@
 #endif
 
 #include "engine/surface.hpp"
+#include "poe2/gemcutting.hpp"
 
 namespace devilution {
+
+struct Player;
 
 bool IsGemcuttingOpen();
 /** @brief Opens the panel to cut the uncut gem at the given inventory or belt index. */
@@ -25,5 +28,7 @@ void CloseGemcutting();
 /** @return true if the event was handled by the panel. */
 bool GemcuttingHandleEvent(const SDL_Event &event);
 void DrawGemcutting(const Surface &out);
+/** @brief The tab an uncut skill gem opens the panel on, for the hero's weapons and class. */
+GemCategory DefaultSkillCategory(const Player &player);
 
 } // namespace devilution
