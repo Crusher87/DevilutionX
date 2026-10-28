@@ -131,7 +131,7 @@ public:
 		SetLootRarity(probe, rarity);
 		SetPoe2ItemLevel(probe, itemLevel);
 		Item ware;
-		RecreateItem(*MyPlayer, ware, FindBase("Ash Staff"), static_cast<uint16_t>(20 | CF_SMITH), seed, 0, probe.dwBuff | CF_POE2 | CF_HELLFIRE, {});
+		RecreateItem(*MyPlayer, ware, FindBase("Fine Wrapped Quarterstaff"), static_cast<uint16_t>(20 | CF_SMITH), seed, 0, probe.dwBuff | CF_POE2 | CF_HELLFIRE, {});
 		return ware;
 	}
 
@@ -249,7 +249,7 @@ TEST_F(Poe2CraftingTest, CraftingNeverRepeatsAStatTheItemHas)
 	ASSERT_TRUE(hybrid && accuracy);
 	const uint8_t weakest = ModifierFamilies()[*hybrid].tiers.back().tier;
 	for (uint32_t seed = 1; seed <= 12; seed++) {
-		Item staff = MakeItem("Ash Staff", seed, ITEM_QUALITY_NORMAL, 70);
+		Item staff = MakeItem("Fine Wrapped Quarterstaff", seed, ITEM_QUALITY_NORMAL, 70);
 		ASSERT_TRUE(CanCraftMods(staff));
 		Poe2Craft craft = CurrentCraft(staff);
 		craft.rarity = ITEM_QUALITY_RARE;
@@ -475,7 +475,7 @@ TEST_F(Poe2CraftingTest, CraftingKeepsShrineAndOilBonuses)
 	const int armourBefore = armour._iAC;
 	armour = Crafted(CurrencyOrb::Scrap, armour);
 	EXPECT_EQ(armour._iAC, armourBefore);
-	Item weapon = MakeItem("Heavy Hatchet", 4, ITEM_QUALITY_NORMAL, 50);
+	Item weapon = MakeItem("Dull Hatchet", 4, ITEM_QUALITY_NORMAL, 50);
 	weapon._iMaxDam += 3;
 	const int maxBefore = weapon._iMaxDam;
 	weapon = Crafted(CurrencyOrb::Transmutation, weapon);
@@ -502,7 +502,7 @@ TEST_F(Poe2CraftingTest, ArtificerAndAugments)
 	EXPECT_EQ(totals[static_cast<size_t>(UniqueRule::DamageVsRareUnique)], 15);
 	EXPECT_EQ(helmet._iPLAC, baseAc);
 
-	Item two = Crafted(CurrencyOrb::Alchemy, MakeItem("Heavy Hatchet", 2, ITEM_QUALITY_NORMAL, 60));
+	Item two = Crafted(CurrencyOrb::Alchemy, MakeItem("Dull Hatchet", 2, ITEM_QUALITY_NORMAL, 60));
 	EXPECT_EQ(MaxAugmentSockets(two), 1);
 
 	Item ring = MakeItem("Ruby Ring", 2, ITEM_QUALITY_NORMAL, 40);

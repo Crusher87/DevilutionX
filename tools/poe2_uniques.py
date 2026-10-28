@@ -12,6 +12,10 @@ Uniques of classes the game has no slot for (gloves, boots, belts, quivers), the
 boss (the game has neither), the endgame mechanic pools and the flasks and charms are left out.
 Claws drop as daggers, spears as quarterstaves, wands as sceptres and flails as one-handed maces.
 The order of the rows decides which unique a saved item is, so new uniques only go at the end.
+
+The bundle's heavy and swift weapons and its crossbows no longer drop (Curtis 2026-10-27: weapons are POE2's own
+bases), so their uniques move to the balanced base of the same class and tier, a crossbow's to the bow of its tier.
+The savedBase column keeps the base a moved unique was on, so items saved on it still find their unique.
 """
 
 import json
@@ -20,7 +24,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from poe2_bases import CLASSES, RENAMES, d1_level  # noqa: E402
+from poe2_bases import CLASSES, base_name as base_name_of, d1_level, is_retired_weapon, unique_type_level  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, 'mods', 'poe2', 'txtdata', 'poe2', 'uniques.tsv')
@@ -38,6 +42,9 @@ BODY_LINES = {
 	'tri_body': ['Hermit Garb', 'Waxed Jacket', 'Marabout Garb', 'Wayfarer Jacket', "Scalper's Jacket", 'Monastic Garb', 'Devout Garb'],
 }
 SKIPPED_SOURCES = {'keeper_of_the_deep'}
+# Body armour uniques keep the base they were first made on, from before the body armours took POE2's levels: a saved
+# unique finds itself among its base's uniques.
+BODY_ARMOUR_BASES = {'Ghostweave': 'Cleric Vestments', "Mother's Veil": 'Cleric Vestments'}
 TIER_VALUE = {'common': 2000, 'uncommon': 6000, 'rare': 15000, 'mythic': 40000, 'boss': 25000}
 
 # Bundle modifier id -> (effect, value when the bundle gives none). Effects the modifier engine
@@ -174,6 +181,7 @@ def main():
 	with open(sys.argv[2], encoding='utf-8') as f:
 		bases = [b for b in json.load(f)['base_items'] if b['item_class'] in CLASSES]
 	by_id = {b['id']: b for b in bases}
+	balanced = {(b['item_class'], b['progression_tier']): b for b in bases if b.get('design_identity') == 'balanced'}
 	with open(ITEMDAT, encoding='utf-8') as f:
 		item_levels = {row[7]: int(row[9]) for row in (line.rstrip('\r\n').split('\t') for line in f) if row[0] == '' and row[3] == 'Armor'}
 
@@ -191,7 +199,7 @@ def main():
 		if cls == 'body_armour':
 			line = BODY_LINES[u['base_id'].split('_body_armour_')[0] + '_body']
 			fits = [name for name in line if item_levels[name] <= d1_level(level)] or line[:1]
-			base_name = max(fits, key=lambda name: item_levels[name])
+			base_name = BODY_ARMOUR_BASES.get(u['name']) or max(fits, key=lambda name: item_levels[name])
 		else:
 			base_name = None
 		base = by_id.get(u['base_id']) if base_name is None else None
@@ -201,9 +209,15 @@ def main():
 			# A remapped class: the strongest base of the new class that drops by the unique's level.
 			fits = [b for b in bases if b['item_class'] == cls and b['drop_level'] <= level]
 			base = max(fits, key=lambda b: (b['drop_level'], b['id']))
+		saved_base = ''
 		if base_name is None:
 			assert base['drop_level'] <= level, u['id']
-			base_name = RENAMES.get(base['id'], base['display_name'])
+			base_name = base_name_of(base)
+			if is_retired_weapon(base):
+				saved_base = base_name
+				base = balanced[('bow' if base['item_class'] == 'crossbow' else base['item_class'], base['progression_tier'])]
+				assert base['drop_level'] <= level, u['id']
+				base_name = base_name_of(base)
 		effects = []
 		for m in u['fixed_modifiers']:
 			assert m['id'] in EFFECTS, f'{u["id"]}: no effect for {m["id"]}'
@@ -219,12 +233,13 @@ def main():
 		assert u['name'] not in names, u['name']
 		names.add(u['name'])
 		rows.append([
-			u['name'], base_name, tier, source, str(d1_level(level)), str(level),
-			str(TIER_VALUE[tier] + level * 100), ';'.join(effects),
+			# The Diablo level stays on the scale the uniques were made with (UIMinLvl, which rebuilds saved ones).
+			u['name'], base_name, tier, source, str(unique_type_level(level)), str(level),
+			str(TIER_VALUE[tier] + level * 100), ';'.join(effects), saved_base,
 		])
 
 	with open(OUT, 'w', encoding='utf-8', newline='') as f:
-		for row in [['name', 'base', 'tier', 'pool', 'minLevel', 'dropLevel', 'value', 'effects']] + rows:
+		for row in [['name', 'base', 'tier', 'pool', 'minLevel', 'dropLevel', 'value', 'effects', 'savedBase']] + rows:
 			f.write('\t'.join(row) + '\r\n')
 	print(f'{len(rows)} uniques')
 

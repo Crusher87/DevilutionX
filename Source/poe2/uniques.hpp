@@ -41,6 +41,11 @@ struct Poe2Unique {
 	std::string name;
 	/** @brief Index of its base in the item data. */
 	int baseItem = -1;
+	/**
+	 * @brief Index of the base its saved items are on: the one it had before it moved (Curtis 2026-10-27: the heavy,
+	 * swift and crossbow bases stopped dropping), else its base.
+	 */
+	int savedBaseItem = -1;
 	UniqueTier tier = UniqueTier::Common;
 	/** @brief "global" for the generic pool, else the boss whose table holds it. */
 	std::string pool;
@@ -59,7 +64,10 @@ const std::vector<Poe2Unique> &Poe2Uniques();
 /** @brief The bundle unique with this unique table index, or nullptr for Diablo's. */
 const Poe2Unique *Poe2UniqueFor(int uid);
 const Poe2Unique *FindPoe2Unique(std::string_view name);
-/** @brief The bundle uniques that drop on the base, in table order; a drop stores its place here as the unique offset. */
+/**
+ * @brief The bundle uniques of the base, whose place here a drop stores as its unique offset: those saved on it in table
+ * order, so saved items keep theirs, then those that moved to it.
+ */
 std::vector<int> Poe2UniquesOnBase(int itemIndex);
 
 /** @brief The unique's effects with their values rolled from the item seed. */

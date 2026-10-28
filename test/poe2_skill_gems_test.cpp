@@ -103,13 +103,16 @@ TEST_F(Poe2SkillGemsTest, GemLevelsFollowPoe2)
 	EXPECT_EQ(MaxGemLevelForCharacter(19), 9);
 	EXPECT_EQ(MaxGemLevelForCharacter(50), 20);
 
-	// Cleave follows Boneshatter: 100%, 142%, 191%, 244%, 312% at levels 1, 5, 10, 15, 20.
+	// Cleave follows Boneshatter: 100%, 142%, 191%, 244%, 312% at levels 1, 5, 10, 15, 20. A use hits for that times
+	// its damage for its speed (Cleave swings at 75%, so 134%).
 	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
-	EXPECT_EQ(GemDamagePercent(cleave, 1), 100);
-	EXPECT_EQ(GemDamagePercent(cleave, 5), 142);
-	EXPECT_EQ(GemDamagePercent(cleave, 10), 191);
-	EXPECT_EQ(GemDamagePercent(cleave, 15), 244);
-	EXPECT_EQ(GemDamagePercent(cleave, 20), 312);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 1), 100);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 5), 142);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 10), 191);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 15), 244);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 20), 312);
+	EXPECT_EQ(GemDamagePercent(cleave, 1), 134);
+	EXPECT_EQ(GemDamagePercent(cleave, 20), 312 * 134 / 100);
 	// Weapon-tab attacks get 4x dearer by level 20 (Elemental and Occult damage skills 5x).
 	EXPECT_EQ(GemManaPercent(cleave, 20), 400);
 	EXPECT_EQ(GemManaPercent(SkillSlot::ForAttack(WeaponSkill::Spark), 20), 500);
@@ -119,13 +122,13 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 {
 	const SkillSlot leapSlam = SkillSlot::ForAttack(WeaponSkill::LeapSlam);
 	const SkillSlot barrage = SkillSlot::ForAttack(WeaponSkill::Barrage);
-	EXPECT_EQ(GemDamagePercent(leapSlam, 20), 408);
-	EXPECT_EQ(GemDamagePercent(barrage, 20), 280);
+	EXPECT_EQ(GemCurveDamagePercent(leapSlam, 20), 408);
+	EXPECT_EQ(GemCurveDamagePercent(barrage, 20), 280);
 	// Steps are uneven like POE2's: Boneshatter's level 9 adds little, level 16 a lot.
 	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
-	EXPECT_EQ(GemDamagePercent(cleave, 8), 174);
-	EXPECT_EQ(GemDamagePercent(cleave, 9), 182);
-	EXPECT_EQ(GemDamagePercent(cleave, 16), 257);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 8), 174);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 9), 182);
+	EXPECT_EQ(GemCurveDamagePercent(cleave, 16), 257);
 	EXPECT_EQ(GemStepText(cleave, 15, 16), "[+5% damage, +7% mana]");
 	for (int level = 2; level <= MaxGemLevel; level++)
 		EXPECT_GT(GemDamagePercent(leapSlam, level), GemDamagePercent(leapSlam, level - 1)) << level;
@@ -136,8 +139,8 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 	EXPECT_EQ(GemExtraProjectiles(spark, 2), 1);
 	EXPECT_EQ(GemExtraProjectiles(spark, 20), 5);
 	EXPECT_NE(GemStepText(spark, 6, 7).find("+1 projectile, big step"), std::string::npos) << GemStepText(spark, 6, 7);
-	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 312);
-	EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
+	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 312);
+	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
 	EXPECT_EQ(BattleCryDamagePercent(1), 50);
 	EXPECT_EQ(BattleCryDamagePercent(20), 100);
 }
@@ -145,8 +148,9 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)
 {
 	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
-	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 142% weapon damage, 4 mana");
-	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 312% weapon damage, 12 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
+	// The gem's curve times Cleave's damage for its speed (134%); its mana x117% for that speed (half as much).
+	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 190% weapon damage, 5 mana");
+	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 418% weapon damage, 14 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
 	EXPECT_EQ(GemCurveTextByName("nothing"), "No skill gem is called nothing.");
 }
 
@@ -168,10 +172,11 @@ TEST_F(Poe2SkillGemsTest, GemItemsKeepTheirLevel)
 TEST_F(Poe2SkillGemsTest, AttackGemLevelRaisesManaCost)
 {
 	Player &player = *MyPlayer;
+	// Leap Slam's listed cost, x151% for its speed (damage_pct 201, mana half as much): 5 -> 7.55, to 8.
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 1);
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam));
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), (WeaponSkillManaCost(WeaponSkill::LeapSlam) * 151 + 50) / 100);
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 20);
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 4);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), (WeaponSkillManaCost(WeaponSkill::LeapSlam) * 4 * 151 + 50) / 100);
 }
 
 TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
@@ -187,7 +192,7 @@ TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)
 	player._pStrength = 60;
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Weapon);
 
-	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Sledge");
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Felled Greatclub");
 	EXPECT_EQ(GetSkillUsability(player, slam), SkillUsability::Ready);
 
 	player._pMana = Fixed26_6::fromInt(1);
@@ -240,20 +245,20 @@ TEST_F(Poe2SkillGemsTest, GemNeedsGrowWithLevelLikePoe2)
 
 TEST_F(Poe2SkillGemsTest, WeaponsAllowMatchingSkills)
 {
-	const Item dagger = MakeBase("Shiv");
+	const Item dagger = MakeBase("Glass Shank");
 	EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Flurry));
 	EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Cleave));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(dagger, WeaponSkill::Barrage));
 
-	const Item axe = MakeBase("Woodsman's Axe");
+	const Item axe = MakeBase("Splitting Greataxe");
 	EXPECT_TRUE(ItemAllowsWeaponSkill(axe, WeaponSkill::Cleave));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(axe, WeaponSkill::Flurry));
 
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::Barrage));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::RainOfArrows));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Sledge"), WeaponSkill::LeapSlam));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Recurve Bow"), WeaponSkill::Barrage));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Recurve Bow"), WeaponSkill::RainOfArrows));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Felled Greatclub"), WeaponSkill::LeapSlam));
 	EXPECT_TRUE(ItemAllowsWeaponSkill(axe, WeaponSkill::LeapSlam));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::LeapSlam));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Recurve Bow"), WeaponSkill::LeapSlam));
 	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::RainOfArrows));
 	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Hide Buckler"), WeaponSkill::Cleave));
 }
@@ -261,9 +266,9 @@ TEST_F(Poe2SkillGemsTest, WeaponsAllowMatchingSkills)
 TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
 {
 	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Hide Buckler"), WeaponSkill::ShieldCharge));
-	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Woodsman's Axe"), WeaponSkill::ShieldCharge));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::LightningArrow));
-	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), WeaponSkill::EscapeShot));
+	EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Splitting Greataxe"), WeaponSkill::ShieldCharge));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Recurve Bow"), WeaponSkill::LightningArrow));
+	EXPECT_TRUE(ItemAllowsWeaponSkill(MakeBase("Recurve Bow"), WeaponSkill::EscapeShot));
 	EXPECT_TRUE(IsRangedWeaponSkill(WeaponSkill::LightningArrow));
 	EXPECT_FALSE(IsRangedWeaponSkill(WeaponSkill::EscapeShot));
 
@@ -272,7 +277,7 @@ TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
 	for (const WeaponSkill skill : { WeaponSkill::BattleCry, WeaponSkill::EmberFusillade, WeaponSkill::Spark }) {
 		EXPECT_FALSE(WeaponSkillNeedsWeapon(skill)) << WeaponSkillName(skill);
 		EXPECT_TRUE(WeaponAllowsSkill(player, skill)) << WeaponSkillName(skill);
-		EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Yew Bow"), skill)) << WeaponSkillName(skill);
+		EXPECT_FALSE(ItemAllowsWeaponSkill(MakeBase("Recurve Bow"), skill)) << WeaponSkillName(skill);
 	}
 	EXPECT_FALSE(WeaponAllowsSkill(player, WeaponSkill::ShieldCharge));
 	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Hide Buckler");

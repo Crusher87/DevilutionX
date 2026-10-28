@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <set>
 #include <string>
 #include <string_view>
@@ -88,6 +89,16 @@ public:
 		EXPECT_TRUE(CreatePoe2Unique(*MyPlayer, item, unique->uid, seed)) << name;
 		item._iIdentified = true;
 		return item;
+	}
+
+	static int FindBase(std::string_view name)
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iName == name && AllItemsList[i].iMiscId != IMISC_UNIQUE)
+				return static_cast<int>(i);
+		}
+		ADD_FAILURE() << name;
+		return -1;
 	}
 
 	static Item MakeBase(std::string_view name)
@@ -183,6 +194,54 @@ TEST_F(Poe2UniquesTest, EveryUniqueBuildsAndRebuildsTheSame)
 		EXPECT_EQ(rebuilt._iPLAC, item._iPLAC) << unique.name;
 		EXPECT_EQ(rebuilt._iPoe2Stats, item._iPoe2Stats) << unique.name;
 		EXPECT_EQ(Poe2UniqueText(rebuilt), Poe2UniqueText(item)) << unique.name;
+	}
+}
+
+TEST_F(Poe2UniquesTest, UniquesOfRetiredBasesMoveAndSavedOnesStay)
+{
+	// Curtis 2026-10-27: the heavy, swift and crossbow bases no longer drop, so their uniques drop on the balanced base of
+	// their class and tier, a crossbow's on the bow of its tier.
+	const auto retired = [](int index) {
+		const BaseMeta *meta = BaseMetaFor(index);
+		return meta != nullptr && (meta->identity == "heavy" || meta->identity == "swift" || meta->itemClass == "crossbow");
+	};
+	int moved = 0;
+	for (const Poe2Unique &unique : Poe2Uniques()) {
+		EXPECT_FALSE(retired(unique.baseItem)) << unique.name;
+		if (unique.savedBaseItem != unique.baseItem) {
+			EXPECT_TRUE(retired(unique.savedBaseItem)) << unique.name;
+			moved++;
+		}
+	}
+	EXPECT_EQ(moved, 61);
+	const Poe2Unique &mercy = *FindPoe2Unique("Mercy's End");
+	EXPECT_EQ(mercy.baseItem, FindBase("Dark Blade"));
+	EXPECT_EQ(mercy.savedBaseItem, FindBase("Heavy Imperial Edge"));
+	EXPECT_EQ(FindPoe2Unique("Dragon's Argument")->baseItem, FindBase("Warmonger Bow"));
+	EXPECT_EQ(FindPoe2Unique("Dragon's Argument")->savedBaseItem, FindBase("Dragonspine Crossbow"));
+
+	for (const Poe2Unique &unique : Poe2Uniques()) {
+		// A base lists the uniques saved on it first, in table order, as before they moved, so saved offsets still hold.
+		std::vector<int> saved;
+		for (const Poe2Unique &other : Poe2Uniques()) {
+			if (other.savedBaseItem == unique.savedBaseItem)
+				saved.push_back(other.uid);
+		}
+		const std::vector<int> onSaved = Poe2UniquesOnBase(unique.savedBaseItem);
+		ASSERT_GE(onSaved.size(), saved.size());
+		EXPECT_TRUE(std::equal(saved.begin(), saved.end(), onSaved.begin())) << unique.name;
+		if (unique.savedBaseItem == unique.baseItem)
+			continue;
+
+		// An item saved on its old base still rebuilds as it.
+		Item item;
+		ASSERT_TRUE(CreatePoe2Unique(*MyPlayer, item, unique.uid, 777)) << unique.name;
+		const int offset = static_cast<int>(std::find(onSaved.begin(), onSaved.end(), unique.uid) - onSaved.begin());
+		Item rebuilt;
+		RecreateItem(*MyPlayer, rebuilt, static_cast<_item_indexes>(unique.savedBaseItem), item._iCreateInfo, item._iSeed, item._ivalue,
+		    (item.dwBuff & ~static_cast<uint32_t>(CF_UIDOFFSET)) | ((static_cast<uint32_t>(offset) << 1) & CF_UIDOFFSET));
+		EXPECT_EQ(rebuilt._iUid, unique.uid) << unique.name;
+		EXPECT_EQ(std::string_view(rebuilt._iIName), unique.name);
 	}
 }
 
@@ -470,7 +529,7 @@ TEST_F(Poe2UniquesTest, UniquesNeedTheHigherLevel)
 	// A unique on a POE2 base needs the higher of the base's level and its own drop level.
 	EXPECT_EQ(ItemRequiredLevel(Make("Circle of Ash")), 12) << "Sapphire Ring 12, dropping from 8";
 	EXPECT_EQ(ItemRequiredLevel(Make("Astral Debt")), 80) << "Azure Amulet 1, dropping from 80";
-	EXPECT_EQ(ItemRequiredLevel(Make("Red Harvest")), 24);
+	EXPECT_EQ(ItemRequiredLevel(Make("Red Harvest")), 26) << "Crescent Axe 26, dropping from 24";
 
 	const auto diabloUnique = [](std::string_view base, std::string_view name) {
 		Item item = MakeBase(base);
@@ -485,8 +544,8 @@ TEST_F(Poe2UniquesTest, UniquesNeedTheHigherLevel)
 		return item;
 	};
 	// A Diablo unique on a POE2 base takes its table's level when that is higher.
-	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Fine Short Bow", "The Needler")), 2);
-	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Fine Short Bow", "The Rift Bow")), 1);
+	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Crude Bow", "The Needler")), 2);
+	EXPECT_EQ(ItemRequiredLevel(diabloUnique("Crude Bow", "The Rift Bow")), 1);
 	// On an old Diablo base it needs no level.
 	Item cleaver;
 	InitializeItem(cleaver, IDI_CLEAVER);

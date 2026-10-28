@@ -2,8 +2,8 @@
  * @file poe2/default_attack.hpp
  *
  * POE2 Mashup default attacks: every weapon gives a plain attack that costs no mana, so a hero is never stuck when
- * the mana runs dry. Bows shoot, melee weapons strike, and a staff (outside a Monk's hands) fires a bolt scaled to
- * the staff's damage.
+ * the mana runs dry. Bows shoot, melee weapons strike, and a staff (outside a Monk's hands) or a sceptre fires a bolt
+ * scaled to its damage: POE2's caster weapons don't melee.
  */
 #pragma once
 
@@ -34,8 +34,12 @@ enum class DefaultAttack : uint8_t {
  * cost no mana (Curtis, 2026-10-16).
  */
 constexpr int DefaultAttackDamagePercent = 85;
-/** @brief The staff bolt's damage is this percent of the staff's attack damage, plus a part of the hero's Magic. */
-constexpr int StaffBoltDamagePercent = 70;
+/**
+ * @brief The staff bolt's damage is this percent of the staff's attack damage, plus a part of the hero's Magic. 80 since
+ * it became a 0.9-second cast (was 70 when a held bolt took 0.6 s): the Sorcerer's free bolt and Firebolt together kill
+ * as much slower than before as the melee classes do (research/attack-speed/rebalance).
+ */
+constexpr int StaffBoltDamagePercent = 80;
 constexpr int StaffBoltMagicPercent = 10;
 
 DefaultAttack DefaultAttackFor(const Player &player);
@@ -47,7 +51,7 @@ std::string_view DefaultAttackName(DefaultAttack attack);
 bool IsRangedDefaultAttack(DefaultAttack attack);
 
 /**
- * @brief A Monk's bare fists hit for this percent of a plain heavy quarterstaff of the attack gem's level: a bit below
+ * @brief A Monk's bare fists hit for this percent of a plain quarterstaff of the attack gem's level: a bit below
  * a real staff, which also rolls modifiers (Curtis 2026-10-19).
  */
 constexpr int BareFistStaffPercent = 85;
@@ -58,8 +62,8 @@ constexpr int BareFistStaffPercent = 85;
  */
 bool FightsWithBareFists(const Player &player);
 /**
- * @brief Bare fists' damage range at a gem level: BareFistStaffPercent of a plain heavy quarterstaff at the character
- * level the gem level needs. Between the item data's heavy quarterstaffs it goes geometrically by their drop levels.
+ * @brief Bare fists' damage range at a gem level: BareFistStaffPercent of a plain quarterstaff at the character level
+ * the gem level needs. Between the quarterstaffs that drop it goes geometrically by their drop levels.
  */
 std::pair<int, int> BareFistDamage(int gemLevel);
 /**
@@ -67,11 +71,25 @@ std::pair<int, int> BareFistDamage(int gemLevel);
  * has no gem, the highest of the hero's socketed attack gems; 1 without any.
  */
 int BareFistGemLevel(const Player &player, SkillSlot skill);
-/** @brief The weapon damage an attack of the skill rolls: bare fists' at its gem level, else the weapon's (_pIMinDam to _pIMaxDam). */
+/**
+ * @brief The weapon damage an attack of the skill rolls: bare fists' at its gem level, else the weapon's (_pIMinDam to
+ * _pIMaxDam); with two weapons, the swinging hand's (see DualWields).
+ */
 std::pair<int, int> AttackWeaponDamage(const Player &player, SkillSlot skill);
+/**
+ * @brief Whether the hero holds two weapons in POE2 Mashup, and so swings them in turn: each swing deals one weapon's
+ * damage, left hand first (Curtis 2026-10-27). _pIMinDam and the fire and lightning are then a swing's average.
+ */
+bool DualWields(const Player &player);
+/** @brief The fire (or lightning) damage the weapons add to this swing: the swinging hand's with two weapons, else all of it. */
+std::pair<int, int> SwingElementDamage(const Player &player, bool lightning);
+/** @brief Ends a swing: a hero with two weapons uses the other one for the next swing. */
+void EndSwing(Player &player);
 
-/** @brief Whether the hero's ranged attack is the staff bolt rather than an arrow. */
+/** @brief Whether the hero's ranged attack is the staff bolt rather than an arrow: a caster's staff or a sceptre in POE2 Mashup. */
 bool FiresStaffBolt(const Player &player);
+/** @brief Whether the hero's attack is a ranged one, a bow's arrow or the staff bolt, so a click shoots rather than swings. */
+bool AttacksAtRange(const Player &player);
 /** @brief Damage of one staff bolt, rolled from the staff's damage. */
 int RollStaffBoltDamage(const Player &player);
 

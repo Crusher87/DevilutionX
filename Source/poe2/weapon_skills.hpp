@@ -73,6 +73,21 @@ void SetSpellMissileSpeed(Missile &missile, SpellID spell);
 void OnFireballDetonated(Missile &missile, Point position);
 /** @brief Whether a tile offset from the player is in Ground Slam's cone (about 70 degrees wide) facing the direction. */
 bool InGroundSlamCone(Direction facing, Displacement offset);
+/**
+ * @brief In POE2 Mashup, how many hits a use of a multi-hit skill landed before it was timed per hit, or 0 for a skill
+ * timed per use. A per-hit skill (Hellfire Darts, Rapid Fire, Zeal, Blade Fury, Seven-Sided Strike) lands one hit a
+ * use, at POE2's per-hit time from its skill_speed.tsv row, and holding it repeats; one without a row keeps its whole
+ * burst, so a skill whose per-hit time isn't known yet doesn't strike once at its per-use rate.
+ */
+int PerHitBurst(WeaponSkill skill);
+/**
+ * @brief A per-hit skill's damage for each hit, in percent of one hit of its old burst (100 for any other skill). The
+ * extra projectiles a use fired (gem level, Blade Fury's supports) add their share, (burst + extra) / burst, and a hit
+ * the shortest action (MinActionTicks) slows adds what it lost; so the damage per second stays the old burst's.
+ */
+int PerHitDamagePercent(const Player &player, WeaponSkill skill);
+/** @brief The number of the per-hit skill's hit this use lands, counting on from the last (it wraps at a multiple of every burst). */
+int TakePerHitIndex(Player &player);
 /** @brief Starts a stream of shots, one every few ticks; the first fires now. */
 void StartSkillVolley(Player &player, WeaponSkill skill, Point target, int shots);
 /** @brief Fires the next shot of a stream when it's due; once per game tick. */
@@ -114,8 +129,11 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill);
  */
 void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack);
 
-/** @brief Extra animation frames skipped by the active skill's attack. */
-int8_t WeaponSkillSkippedFrames(const Player &player);
+/** @brief Extra animation frames skipped by an attack with the skill (WeaponSkill::None for a plain attack). */
+int8_t WeaponSkillSkippedFrames(const Player &player, WeaponSkill skill);
+
+/** @brief Whether the skill is used through a plain melee or ranged attack, not an animation of its own (see TryUseWeaponSkill). */
+bool IsSwingWeaponSkill(WeaponSkill skill);
 
 /**
  * @brief Bonus lightning damage of a Lightning Arrow, carried by the arrow missile: the most its burst adds. The burst
@@ -132,8 +150,12 @@ constexpr int8_t DashStrikeWindupTicks = 2;
  * @brief Plays a skill's own animation (as PM_SPELL); the skill goes off on its action frame.
  * @param graphic Attack for weapon skills, else one of the spell casting animations.
  * @param quickStrike Cuts the wind-up to DashStrikeWindupTicks, for a dash skill striking as it lands.
+ * @param dashTicks In POE2 Mashup, the game ticks the dash before it took: the animation takes the rest of the use
+ * time (SkillUseTime, with its time for the dash's length). -1 when the skill didn't dash.
  */
-void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike = false);
+void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike = false, int dashTicks = -1);
+/** @brief A dash skill's dash is over: it lands with its strike (see BeginSkillAnimation). */
+void LandDashSkill(Player &player);
 
 /**
  * @brief Makes a cast skill go off, on the action frame of its animation.

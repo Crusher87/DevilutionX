@@ -57,6 +57,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/attack_speed.hpp"
 #include "poe2/experience.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hardcore.hpp"
@@ -241,17 +242,22 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 		return;
 	}
 
-	int8_t skippedAnimationFrames = ItemAttackSkippedFrames(player, includesFirstFrame);
-
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
 	player.poe2.flurryStrike = 0;
 	PayMeleeAttackLife(player);
-	skippedAnimationFrames += WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the swing takes the skill's attack time; Fists of Thunder's bursting strike takes its finisher's.
+		const SkillStep step = player.poe2.activeSkill == WeaponSkill::FistsOfThunder && FistsOfThunderNextHitBursts(player) ? SkillStep::Finisher : SkillStep::Main;
+		const uint32_t time = SkillUseTime(player, AttackSkillSlot(player, player.poe2.activeSkill), /*castAnimation=*/false, step);
+		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
+	} else {
+		const int8_t skippedAnimationFrames = MeleeAttackSkippedFrames(player, player.poe2.activeSkill, includesFirstFrame);
+		NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	}
 	player._pmode = PM_ATTACK;
 	FixPlayerLocation(player, d);
 	SetPlayerOld(player);
@@ -267,25 +273,19 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 		return;
 	}
 
-	int8_t skippedAnimationFrames = 0;
-	const auto flags = player._pIFlags;
-
-	if (!gbIsHellfire) {
-		if (includesFirstFrame && HasAnyOf(flags, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack)) {
-			skippedAnimationFrames += 1;
-		}
-		if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
-			skippedAnimationFrames += 1;
-		}
-	}
-
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
-	skippedAnimationFrames += AttackSpeedFrames(player);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the shot takes the skill's attack time; the staff bolt is a cast, timed as one.
+		const uint32_t time = SkillUseTime(player, AttackSkillSlot(player, player.poe2.activeSkill), /*castAnimation=*/false);
+		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
+	} else {
+		const int8_t skippedAnimationFrames = RangedAttackSkippedFrames(player, includesFirstFrame);
+		NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	}
 
 	player._pmode = PM_RATTACK;
 	FixPlayerLocation(player, d);
@@ -335,9 +335,15 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	if (player._pmode == PM_SPELL)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
 	const bool isLearnedSpell = player.queuedSpell.spellType == SpellType::Spell;
-	// Charge Regulation's cast speed: a frame for every 10%.
-	const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames + (SpiritAuraSpeedPercent(player) / 10);
-	NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the cast takes the spell's cast time.
+		const uint32_t time = CastTime(player, SkillSlot::ForSpell(player.queuedSpell.spellId), isLearnedSpell);
+		NewPlrTimedAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, player._pSFNum, TakeActionTicks(player, time));
+	} else {
+		// Charge Regulation's cast speed: a frame for every 10%.
+		const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames + (SpiritAuraSpeedPercent(player) / 10);
+		NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
+	}
 
 	PlaySfxLoc(GetSpellData(player.queuedSpell.spellId).sSFX, player.position.tile);
 
@@ -914,6 +920,7 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 		if (!monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
 			M_GetKnockback(*monster, player.position.tile);
 	}
+	EndSwing(player);
 }
 
 bool DoAttack(Player &player)
@@ -993,11 +1000,13 @@ bool DoAttack(Player &player)
 		// POE2 Mashup: Brutality's price is the weapon's fire and lightning damage.
 		if (!SupportMeleeIsPhysicalOnly(player) && (!gbIsHellfire || !HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage))) {
 			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage)) {
-				int elementalDamage = didhit ? RandomIntBetween(player._pIFMinDam, player._pIFMaxDam) : 0;
+				const auto [minFire, maxFire] = SwingElementDamage(player, false);
+				int elementalDamage = didhit ? RandomIntBetween(minFire, maxFire) : 0;
 				AddMissile(position, { 1, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
 			}
 			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage)) {
-				int elementalDamage = didhit ? RandomIntBetween(player._pILMinDam, player._pILMaxDam) : 0;
+				const auto [minLightning, maxLightning] = SwingElementDamage(player, true);
+				int elementalDamage = didhit ? RandomIntBetween(minLightning, maxLightning) : 0;
 				AddMissile(position, { 2, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
 			}
 		}
@@ -1074,6 +1083,8 @@ bool DoAttack(Player &player)
 			if (skill != WeaponSkill::Flurry || player.poe2.flurryStrike == 0)
 				OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
 		}
+		// POE2 Mashup: with two weapons, the next swing (Double Swing's backhand too) is the other hand's.
+		EndSwing(player);
 
 		if (didhit && DamageWeapon(player, 30)) {
 			StartStand(player, player._pdir);
@@ -1090,9 +1101,10 @@ bool DoAttack(Player &player)
 			const Monster *target = FindMonsterAtPosition(front);
 			if (target != nullptr && !CanTalkToMonst(*target) && target->position.old == front && !target->hasNoLife()) {
 				player.poe2.flurryStrike = 1;
-				const auto skipped = static_cast<int8_t>(ItemAttackSkippedFrames(player, true) + WeaponSkillSkippedFrames(player) + AttackSpeedFrames(player) + FlurryBackhandSkippedFrames);
 				const auto flags = static_cast<AnimationDistributionFlags>(AnimationDistributionFlags::ProcessAnimationPending | AnimationDistributionFlags::RepeatedAction);
-				NewPlrAnim(player, player_graphic::Attack, player._pdir, flags, skipped, player._pAFNum);
+				// The backhand's own attack time.
+				const uint32_t time = SkillUseTime(player, SkillSlot::ForAttack(WeaponSkill::Flurry), /*castAnimation=*/false, SkillStep::Backhand);
+				NewPlrTimedAnim(player, player_graphic::Attack, player._pdir, flags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
 				return false;
 			}
 		}
@@ -1313,6 +1325,17 @@ void DamageArmor(Player &player)
 	CalcPlrInv(player, true);
 }
 
+/** @brief The skill's animation is over: the hero stands again, facing where a spin started. */
+void EndSkillCast(Player &player)
+{
+	const WeaponSkill skill = player.poe2.castSkill;
+	player.poe2.castSkill = WeaponSkill::None;
+	if (SpinsWhileStriking(skill))
+		player._pdir = static_cast<Direction>(player.poe2.spinFrom);
+	StartStand(player, player._pdir);
+	ClearStateVariables(player);
+}
+
 /** @brief POE2 Mashup: a skill's own animation, which plays as PM_SPELL (see BeginSkillAnimation). */
 bool DoSkillCast(Player &player)
 {
@@ -1328,11 +1351,7 @@ bool DoSkillCast(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
-		player.poe2.castSkill = WeaponSkill::None;
-		if (SpinsWhileStriking(skill))
-			player._pdir = static_cast<Direction>(player.poe2.spinFrom);
-		StartStand(player, player._pdir);
-		ClearStateVariables(player);
+		EndSkillCast(player);
 		return true;
 	}
 	return false;
@@ -1418,6 +1437,17 @@ void TryDisarm(const Player &player, Object &object)
 	if (object.IsTrappedChest()) {
 		object._oTrapFlag = false;
 	}
+}
+
+/**
+ * @brief Whether a queued attack may cut the attack in progress short. Diablo starts it right after the hit;
+ * POE2 Mashup waits for the whole swing, follow-through and all, as POE2's attack time does.
+ */
+bool AttackFollowThroughDone(const Player &player)
+{
+	if (gbIsPoe2)
+		return player.AnimInfo.isLastFrame();
+	return player.AnimInfo.currentFrame >= player._pAFNum;
 }
 
 void CheckNewPath(Player &player, bool pmWillBeCalled)
@@ -1659,7 +1689,7 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		return;
 	}
 
-	if (player._pmode == PM_ATTACK && player.AnimInfo.currentFrame >= player._pAFNum) {
+	if (player._pmode == PM_ATTACK && AttackFollowThroughDone(player)) {
 		if (player.destAction == ACTION_ATTACK) {
 			d = GetDirection(player.position.future, { player.destParam1, player.destParam2 });
 			StartAttack(player, d, pmWillBeCalled);
@@ -1690,7 +1720,7 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		}
 	}
 
-	if (player._pmode == PM_RATTACK && player.AnimInfo.currentFrame >= player._pAFNum) {
+	if (player._pmode == PM_RATTACK && AttackFollowThroughDone(player)) {
 		if (player.destAction == ACTION_RATTACK) {
 			d = GetDirection(player.position.tile, { player.destParam1, player.destParam2 });
 			StartRangeAttack(player, d, player.destParam1, player.destParam2, pmWillBeCalled);
@@ -1706,7 +1736,8 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		}
 	}
 
-	if (player._pmode == PM_SPELL && player.AnimInfo.currentFrame >= player._pSFNum && player.poe2.castSkill == WeaponSkill::None) {
+	// POE2 Mashup: a held cast waits for the whole cast time too.
+	if (player._pmode == PM_SPELL && (gbIsPoe2 ? player.AnimInfo.isLastFrame() : player.AnimInfo.currentFrame >= player._pSFNum) && player.poe2.castSkill == WeaponSkill::None) {
 		if (player.destAction == ACTION_SPELL) {
 			d = GetDirection(player.position.tile, { player.destParam1, player.destParam2 });
 			StartSpell(player, d, player.destParam1, player.destParam2);
@@ -1864,6 +1895,36 @@ void GetPlayerGraphicsPath(std::string_view path, std::string_view prefix, std::
 }
 
 } // namespace
+
+bool FinishSkillCast(Player &player)
+{
+	if (player._pmode != PM_SPELL || player.poe2.castSkill == WeaponSkill::None || !player.AnimInfo.isLastFrame())
+		return false;
+	EndSkillCast(player);
+	return true;
+}
+
+int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame)
+{
+	return static_cast<int8_t>(ItemAttackSkippedFrames(player, includesFirstFrame) + WeaponSkillSkippedFrames(player, skill) + AttackSpeedFrames(player));
+}
+
+int8_t RangedAttackSkippedFrames(const Player &player, bool includesFirstFrame)
+{
+	int8_t skippedAnimationFrames = 0;
+	const auto flags = player._pIFlags;
+
+	if (!gbIsHellfire) {
+		if (includesFirstFrame && HasAnyOf(flags, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack)) {
+			skippedAnimationFrames += 1;
+		}
+		if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
+			skippedAnimationFrames += 1;
+		}
+	}
+
+	return static_cast<int8_t>(skippedAnimationFrames + AttackSpeedFrames(player));
+}
 
 void Player::CalcScrolls()
 {
@@ -2575,6 +2636,26 @@ void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, Animation
 	int8_t ticksPerFrame;
 	player.getAnimationFramesAndTicksPerFrame(graphic, numberOfFrames, ticksPerFrame);
 	player.AnimInfo.setNewAnimation(sprites, numberOfFrames, ticksPerFrame, flags, numSkippedFrames, distributeFramesBeforeFrame, static_cast<uint8_t>(previewShownGameTickFragments));
+}
+
+void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks, int ticksToAction)
+{
+	LoadPlrGFX(player, graphic);
+
+	OptionalClxSpriteList sprites;
+	int previewShownGameTickFragments = 0;
+	if (!HeadlessMode) {
+		sprites = player.AnimationData[static_cast<size_t>(graphic)].spritesForDirection(dir);
+		if (player.previewCelSprite && (*sprites)[0] == *player.previewCelSprite && !player.isWalking()) {
+			previewShownGameTickFragments = std::clamp<int>(AnimationInfo::baseValueFraction - player.progressToNextGameTickWhenPreviewWasSet, 0, AnimationInfo::baseValueFraction);
+		}
+	}
+
+	int8_t numberOfFrames;
+	int8_t ticksPerFrame;
+	player.getAnimationFramesAndTicksPerFrame(graphic, numberOfFrames, ticksPerFrame);
+	const int toAction = ticksToAction > 0 ? std::clamp(ticksToAction, 2, std::max(ticks - 1, 2)) : ActionTicksToActionFrame(ticks, actionFrame, numberOfFrames);
+	player.AnimInfo.setTimedAnimation(sprites, numberOfFrames, actionFrame, static_cast<int8_t>(toAction), static_cast<int8_t>(std::max(ticks - toAction, 1)), flags, static_cast<uint8_t>(previewShownGameTickFragments));
 }
 
 void SetPlrAnims(Player &player)
@@ -3389,6 +3470,56 @@ void StartWarpLvl(Player &player, size_t pidx)
 	}
 }
 
+namespace {
+
+/** @brief Runs the player's action for a game tick, starting the queued one when it ends, and moves the animation on. */
+void ProcessPlayerAction(Player &player)
+{
+	bool tplayer = false;
+	do {
+		switch (player._pmode) {
+		case PM_STAND:
+		case PM_NEWLVL:
+		case PM_QUIT:
+			tplayer = false;
+			break;
+		case PM_WALK_NORTHWARDS:
+		case PM_WALK_SOUTHWARDS:
+		case PM_WALK_SIDEWAYS:
+			// POE2 Mashup: uniques that slow movement skip some walking ticks.
+			tplayer = UniqueSlowSkipsWalkTick(player) ? false : DoWalk(player);
+			break;
+		case PM_ATTACK:
+			tplayer = DoAttack(player);
+			break;
+		case PM_RATTACK:
+			tplayer = DoRangeAttack(player);
+			break;
+		case PM_BLOCK:
+			tplayer = DoBlock(player);
+			break;
+		case PM_SPELL:
+			tplayer = DoSpell(player);
+			break;
+		case PM_GOTHIT:
+			tplayer = DoGotHit(player);
+			break;
+		case PM_DEATH:
+			tplayer = DoDeath(player);
+			break;
+		}
+		// POE2 Mashup: a slowed skill holds the character still before the next action.
+		if (player._pmode != PM_STAND || player.poe2.recoveryTicks == 0)
+			CheckNewPath(player, tplayer);
+	} while (tplayer);
+
+	player.previewCelSprite = std::nullopt;
+	if (player._pmode != PM_DEATH || player.AnimInfo.tickCounterOfCurrentFrame != 40)
+		player.AnimInfo.processAnimation();
+}
+
+} // namespace
+
 void ProcessPlayers()
 {
 	assert(MyPlayer != nullptr);
@@ -3443,11 +3574,9 @@ void ProcessPlayers()
 				// (Curtis 2026-10-22: Dashing Strike stood about a second before it struck).
 				const bool arrived = player.position.tile == player.poe2.dashEnd && player.walkpath[0] == WALK_NONE;
 				if (player._pmode == PM_STAND && (arrived || !player.poe2.isDodging())) {
-					player.poe2.dashSkillTicks = 0;
-					player.poe2.dodgeTicks = 0;
 					// Land with a swing; the skill hits on the swing's hit frame, which comes quickly, as the hero arrives
 					// (a spinning skill still plays its whole spin).
-					BeginSkillAnimation(player, player.poe2.dashSkill, player_graphic::Attack, player.position.tile + player._pdir, !SpinsWhileStriking(player.poe2.dashSkill));
+					LandDashSkill(player);
 				} else if (--player.poe2.dashSkillTicks == 0) {
 					player.poe2.dashSkill = WeaponSkill::None;
 				}
@@ -3478,47 +3607,7 @@ void ProcessPlayers()
 			    && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE && player.CanChangeAction())
 				StartStand(player, player._pdir);
 
-			bool tplayer = false;
-			do {
-				switch (player._pmode) {
-				case PM_STAND:
-				case PM_NEWLVL:
-				case PM_QUIT:
-					tplayer = false;
-					break;
-				case PM_WALK_NORTHWARDS:
-				case PM_WALK_SOUTHWARDS:
-				case PM_WALK_SIDEWAYS:
-					// POE2 Mashup: uniques that slow movement skip some walking ticks.
-					tplayer = UniqueSlowSkipsWalkTick(player) ? false : DoWalk(player);
-					break;
-				case PM_ATTACK:
-					tplayer = DoAttack(player);
-					break;
-				case PM_RATTACK:
-					tplayer = DoRangeAttack(player);
-					break;
-				case PM_BLOCK:
-					tplayer = DoBlock(player);
-					break;
-				case PM_SPELL:
-					tplayer = DoSpell(player);
-					break;
-				case PM_GOTHIT:
-					tplayer = DoGotHit(player);
-					break;
-				case PM_DEATH:
-					tplayer = DoDeath(player);
-					break;
-				}
-				// POE2 Mashup: a slowed skill holds the character still before the next action.
-				if (player._pmode != PM_STAND || player.poe2.recoveryTicks == 0)
-					CheckNewPath(player, tplayer);
-			} while (tplayer);
-
-			player.previewCelSprite = std::nullopt;
-			if (player._pmode != PM_DEATH || player.AnimInfo.tickCounterOfCurrentFrame != 40)
-				player.AnimInfo.processAnimation();
+			ProcessPlayerAction(player);
 		}
 	}
 }
@@ -3957,6 +4046,11 @@ void PlayDungMsgs()
 bool TestPlayerDoGotHit(Player &player)
 {
 	return DoGotHit(player);
+}
+
+void TestPlayerProcessAction(Player &player)
+{
+	ProcessPlayerAction(player);
 }
 #endif
 

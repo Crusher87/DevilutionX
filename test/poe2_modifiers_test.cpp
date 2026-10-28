@@ -124,7 +124,7 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 TEST_F(Poe2ModifiersTest, RaresRollThreeToSixLegalModsAndRecreateIdentically)
 {
 	std::array<int, 7> counts {};
-	for (const std::string_view baseName : { "Shortsword", "Fine Short Bow", "Full Plate Mail", "Ruby Ring", "Amber Amulet", "Wooden Tower Shield", "Iron Cap", "Leather Armor" }) {
+	for (const std::string_view baseName : { "Shortsword", "Crude Bow", "Full Plate Mail", "Ruby Ring", "Amber Amulet", "Wooden Tower Shield", "Iron Cap", "Leather Armor" }) {
 		const _item_indexes base = FindBase(baseName);
 		ASSERT_NE(base, IDI_GOLD) << baseName;
 		for (uint32_t seed = 1; seed <= 300; seed++) {

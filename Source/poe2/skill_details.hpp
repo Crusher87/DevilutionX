@@ -38,6 +38,18 @@ struct SkillDetailLine {
 /** @brief The details of the skill in a Skills panel socket, top to bottom. */
 std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket);
 
+/**
+ * @brief Seconds one use of the skill takes while it's held, from the tick it starts to the tick the next one does: the
+ * attack or cast time the game uses (poe2/attack_speed.hpp); Double Swing's holds both strikes.
+ */
+double UseSeconds(const Player &player, SkillSlot skill);
+
+/**
+ * @brief The average of one hit of the skill at the level, as the details' "Average hit" works it out before rounding:
+ * every damage type, before the enemy's armour and resistances; a per-hit skill's hit is its share of the old burst.
+ */
+double SkillHitAverage(const Player &player, SkillSlot skill, int level);
+
 /** @brief The tags of a skill, like "Spell, Projectile, Fire". */
 std::string SkillTagText(SkillSlot skill);
 

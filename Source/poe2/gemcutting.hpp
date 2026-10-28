@@ -55,6 +55,11 @@ std::string_view GemCategoryName(GemCategory category);
 /** @brief Every skill, Spirit and support gem, by level. */
 const std::vector<GemEntry> &GemCatalog();
 bool GemInCategory(const GemEntry &gem, GemCategory category);
+/**
+ * @brief Whether the skill's gem is retired: the crossbow skills that didn't move to bows when crossbows left the game
+ * (Curtis 2026-10-27). Their gems are never cut or found; one a hero already has still loads, sockets and works with a crossbow.
+ */
+bool IsRetiredSkill(SkillSlot skill);
 /** @brief Whether an attack is listed under a weapon's tab (Mace, Axe, Sword, Bow, Staff or Shield). */
 bool AttackOnWeaponTab(WeaponSkill skill);
 std::string GemName(const GemEntry &gem);

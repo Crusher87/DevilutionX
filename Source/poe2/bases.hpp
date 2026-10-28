@@ -54,6 +54,8 @@ struct BaseMeta {
 	int level = 0;
 	/** @brief A shield's own chance to block, in percent; 0 for every other base. */
 	uint8_t block = 0;
+	/** @brief A weapon's attacks per second in hundredths, like POE2's (1.35 is 135); 0 for every other base. */
+	uint16_t aps = 0;
 };
 
 /** @brief A rolled implicit: its values on this item. */

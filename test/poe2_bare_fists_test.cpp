@@ -105,12 +105,13 @@ public:
 	}
 };
 
-TEST_F(Poe2BareFistsTest, FistsHitLikeAPlainHeavyStaffOfTheGemLevel)
+TEST_F(Poe2BareFistsTest, FistsHitLikeAPlainStaffOfTheGemLevel)
 {
-	const ItemData &first = AllItemsList[FindBase("Heavy Ash Staff")];
-	const ItemData &last = AllItemsList[FindBase("Heavy Ascendant Staff")];
+	// The quarterstaffs that drop, POE2's own bases (Curtis 2026-10-27), first and last.
+	const ItemData &first = AllItemsList[FindBase("Fine Wrapped Quarterstaff")];
+	const ItemData &last = AllItemsList[FindBase("Dreaming Quarterstaff")];
 	const auto share = [](int damage) { return static_cast<int>(std::round(static_cast<double>(damage) * BareFistStaffPercent / 100)); };
-	// A level 1 gem needs character level 1: the first heavy staff. Level 20 is past the last one.
+	// A level 1 gem needs character level 1: the first staff. Level 20 is past the last one.
 	EXPECT_EQ(BareFistDamage(1), std::make_pair(share(first.iMinDam), share(first.iMaxDam)));
 	EXPECT_EQ(BareFistDamage(MaxGemLevel), std::make_pair(share(last.iMinDam), share(last.iMaxDam)));
 	for (int gem = 1; gem < MaxGemLevel; gem++) {
@@ -129,7 +130,7 @@ TEST_F(Poe2BareFistsTest, OnlyAMonkWithNoWeaponFightsBareHanded)
 	Player &player = *MyPlayer;
 	EXPECT_TRUE(FightsWithBareFists(player));
 	Item &hand = player.InvBody[INVLOC_HAND_LEFT];
-	InitializeItem(hand, FindBase("Heavy Ash Staff"));
+	InitializeItem(hand, FindBase("Fine Wrapped Quarterstaff"));
 	hand._iStatFlag = true;
 	EXPECT_FALSE(FightsWithBareFists(player)) << "A staff hits with its own damage";
 	hand._iStatFlag = false;

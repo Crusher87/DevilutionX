@@ -6,6 +6,7 @@
 
 #include "missiles.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/skill_gems.hpp"
@@ -258,11 +259,16 @@ int GemCurvePercent(const std::array<int16_t, MaxGemLevel> &steps, int endAt20, 
 	return static_cast<int>(percent + 0.5);
 }
 
-int GemDamagePercent(SkillSlot skill, int gemLevel)
+int GemCurveDamagePercent(SkillSlot skill, int gemLevel)
 {
 	const GemCurve curve = GetGemCurve(skill);
 	const Poe2GemTable *steps = curve.damageSteps != nullptr ? curve.damageSteps : curve.table;
 	return GemCurvePercent(steps->damage, curve.damageAt20, gemLevel);
+}
+
+int GemDamagePercent(SkillSlot skill, int gemLevel)
+{
+	return GemCurveDamagePercent(skill, gemLevel) * SkillSpeedDamagePercent(skill) / 100;
 }
 
 int GemManaPercent(SkillSlot skill, int gemLevel)
@@ -280,12 +286,17 @@ int GemExtraProjectiles(SkillSlot skill, int gemLevel)
 
 int GemBaseManaCost(SkillSlot skill, int gemLevel)
 {
-	return BaseManaCost(skill) * GemManaPercent(skill, gemLevel) / 100;
+	const int speedPercent = SkillSpeedManaPercent(skill);
+	if (speedPercent == 100)
+		return BaseManaCost(skill) * GemManaPercent(skill, gemLevel) / 100;
+	// A skill that hits harder for its speed costs more by half as much (mana_pct), to the nearest point.
+	const int64_t cost = static_cast<int64_t>(BaseManaCost(skill)) * GemManaPercent(skill, gemLevel) * speedPercent;
+	return static_cast<int>((cost + 5000) / 10000);
 }
 
 int BattleCryDamagePercent(int gemLevel)
 {
-	return BattleCryDamagePercentAt1 * GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::BattleCry), gemLevel) / 100;
+	return BattleCryDamagePercentAt1 * GemCurveDamagePercent(SkillSlot::ForAttack(WeaponSkill::BattleCry), gemLevel) / 100;
 }
 
 std::string GemLevelText(SkillSlot skill, int gemLevel)
@@ -319,16 +330,16 @@ std::string GemCurveText(SkillSlot skill)
 
 std::string GemStepText(SkillSlot skill, int fromLevel, int toLevel)
 {
-	const int damageFrom = GemDamagePercent(skill, fromLevel);
+	const int damageFrom = GemCurveDamagePercent(skill, fromLevel);
 	const int manaFrom = GemManaPercent(skill, fromLevel);
-	const int damageStep = damageFrom > 0 ? ((GemDamagePercent(skill, toLevel) * 1000 / damageFrom) - 1000 + 5) / 10 : 0;
+	const int damageStep = damageFrom > 0 ? ((GemCurveDamagePercent(skill, toLevel) * 1000 / damageFrom) - 1000 + 5) / 10 : 0;
 	const int manaStep = manaFrom > 0 ? ((GemManaPercent(skill, toLevel) * 1000 / manaFrom) - 1000 + 5) / 10 : 0;
 	std::string text = std::format("[+{:d}% damage, +{:d}% mana", damageStep, manaStep);
 	const int projectiles = GemExtraProjectiles(skill, toLevel) - GemExtraProjectiles(skill, fromLevel);
 	if (projectiles > 0)
 		StrAppend(text, std::format(", +{:d} projectile", projectiles));
 	// A level that adds clearly more than the curve's average compounding step is one of the gem's payoff levels.
-	const double average = (std::pow(GemDamagePercent(skill, MaxGemLevel) / 100.0, 1.0 / (MaxGemLevel - 1)) - 1.0) * 100.0;
+	const double average = (std::pow(GemCurveDamagePercent(skill, MaxGemLevel) / 100.0, 1.0 / (MaxGemLevel - 1)) - 1.0) * 100.0;
 	if (toLevel == fromLevel + 1 && ((average > 0 && damageStep > average * 1.15) || projectiles > 0))
 		text += ", big step";
 	text += ']';

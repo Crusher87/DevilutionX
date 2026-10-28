@@ -194,7 +194,7 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	EXPECT_EQ(sentinel.duration / sentinel.interval, 5);
 	EXPECT_EQ(sentinel.damagePercent * sentinel.duration / sentinel.interval, 175);
 
-	// Landing bursts: a set share of a base hit on top of the arrow; Cluster Bolt keeps two thirds of its hit.
+	// Landing bursts: a set share of a base hit on top of the arrow; Fire Arrow keeps two thirds of its hit.
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::FreezingArrow)), 40);
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ExplosiveBolt)), 45);
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ClusterBolt)), 66);
@@ -203,7 +203,7 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 {
 	// Every damaging table spell on Fireball's steps ends at 312% at gem level 20, like the Diablo spells.
-	const int fireball = GemDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20);
+	const int fireball = GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20);
 	EXPECT_EQ(fireball, 312);
 	int spells = 0;
 	for (const TableSkillData &data : TableSkills()) {
@@ -211,7 +211,7 @@ TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 			continue;
 		spells++;
 		EXPECT_EQ(data.curveEnd, 312) << data.name;
-		EXPECT_EQ(GemDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
+		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
 	}
 	EXPECT_EQ(spells, 12);
 }

@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <type_traits>
 
@@ -64,7 +65,9 @@ public:
 
 	[[nodiscard]] ClxSprite currentSprite() const
 	{
-		return (*sprites)[getFrameToUseForRendering()];
+		// A timed animation loaded from a save has more logic frames than sprites (see setTimedAnimation): it holds the last.
+		const auto frame = static_cast<uint32_t>(std::max<int8_t>(getFrameToUseForRendering(), 0));
+		return (*sprites)[std::min(frame, sprites->numSprites() - 1)];
 	}
 
 	[[nodiscard]] bool isLastFrame() const
@@ -99,6 +102,23 @@ public:
 	 * @param previewShownGameTickFragments Defines how long (in game ticks fraction) the preview animation was shown
 	 */
 	void setNewAnimation(OptionalClxSpriteList sprites, int8_t numberOfFrames, int8_t ticksPerFrame, AnimationDistributionFlags flags = AnimationDistributionFlags::None, int8_t numSkippedFrames = 0, int8_t distributeFramesBeforeFrame = 0, uint8_t previewShownGameTickFragments = 0);
+
+	/**
+	 * @brief POE2 Mashup: sets an animation that takes a set number of game ticks, however many frames it has. The game
+	 * logic still moves one frame a game tick, so every frame it checks comes exactly once: the animation starts
+	 * ticksToAction frames before the action frame (before the first frame if the wind-up is longer, as a negative
+	 * numSkippedFrames does) and ends ticksAfterAction frames after it, which numberOfFrames counts. Rendering spreads
+	 * the sprites' frames before the action frame over the wind-up, as setNewAnimation does, and the ones after it over
+	 * the follow-through.
+	 * @param sprites Animation sprites
+	 * @param spriteFrames Number of frames the sprites have
+	 * @param actionFrame The frame the action (a hit or a cast) happens on
+	 * @param ticksToAction Game ticks from the start to the action frame, at least 2
+	 * @param ticksAfterAction Game ticks from the action frame to the last frame, at least 1
+	 * @param flags Specifies what special logics are applied to this Animation
+	 * @param previewShownGameTickFragments Defines how long (in game ticks fraction) the preview animation was shown
+	 */
+	void setTimedAnimation(OptionalClxSpriteList sprites, int8_t spriteFrames, int8_t actionFrame, int8_t ticksToAction, int8_t ticksAfterAction, AnimationDistributionFlags flags, uint8_t previewShownGameTickFragments = 0);
 
 	/**
 	 * @brief Changes the Animation Data on-the-fly. This is needed if a animation is currently in progress and the player changes his gear.
@@ -139,6 +159,11 @@ private:
 	[[nodiscard]] FixedPoint<uint8_t, 7> getProgressToNextGameTick() const;
 
 	/**
+	 * @brief The sprite frame shown in a timed animation's follow-through (see setTimedAnimation), in 1/baseValueFraction frames.
+	 */
+	[[nodiscard]] int getFollowThroughSpriteFraction() const;
+
+	/**
 	 * @brief Animation Frames that will be adjusted for the skipped Frames/game ticks
 	 */
 	int8_t relevantFramesForDistributing_;
@@ -154,6 +179,10 @@ private:
 	 * @brief Number of game ticks after the current animation sequence started
 	 */
 	TicksFixed ticksSinceSequenceStarted_;
+	/**
+	 * @brief A timed animation's sprite frames, when they differ from numberOfFrames (see setTimedAnimation); 0 otherwise.
+	 */
+	int8_t spriteFrames_ = 0;
 };
 
 } // namespace devilution

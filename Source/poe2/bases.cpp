@@ -133,6 +133,9 @@ void LoadBaseData()
 		int block = 0;
 		reader.readOptionalInt("block", block);
 		base.block = static_cast<uint8_t>(std::clamp(block, 0, 100));
+		int aps = 0;
+		reader.readOptionalInt("aps", aps);
+		base.aps = static_cast<uint16_t>(std::clamp(aps, 0, 1000));
 		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
 		Bases.push_back(std::move(base));
 	}

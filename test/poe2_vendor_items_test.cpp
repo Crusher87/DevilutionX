@@ -27,6 +27,7 @@
 #include "stores.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
+#include "utils/is_of.hpp"
 #include "utils/paths.h"
 
 namespace devilution {
@@ -309,6 +310,87 @@ TEST_F(Poe2VendorItemsTest, DiabloWaresStillPickTheirBase)
 		RecreateItem(*MyPlayer, rebuilt, IDI_HEAL, ware._iCreateInfo, ware._iSeed, ware._ivalue, ware.dwBuff);
 		EXPECT_EQ(rebuilt.IDidx, ware.IDidx) << "the base comes from the seed, not the index passed in";
 	}
+}
+
+/** @brief Whether the row is a scroll or spell book POE2 mode cut (Curtis 2026-10-27: every scroll but Identify and Phasing, and Diablo's spell books). */
+bool IsCutScrollOrBook(const ItemData &data)
+{
+	if (data.itype != ItemType::Misc)
+		return false;
+	if (data.iMiscId == IMISC_BOOK)
+		return true;
+	return IsAnyOf(data.iMiscId, IMISC_SCROLL, IMISC_SCROLLT) && IsNoneOf(data.iSpell, SpellID::Identify, SpellID::Phasing);
+}
+
+TEST_F(Poe2VendorItemsTest, OnlyIdentifyAndPhasingScrollsDropOrSell)
+{
+	// The rows stay (their index is what a save stores) but never drop: dropRate 0.
+	int cut = 0;
+	bool identify = false;
+	bool phasing = false;
+	for (const ItemData &data : AllItemsList) {
+		if (IsCutScrollOrBook(data)) {
+			EXPECT_EQ(data.dropRate, 0) << data.iName;
+			cut++;
+		}
+		if (data.itype == ItemType::Misc && data.iMiscId == IMISC_SCROLL && data.dropRate > 0) {
+			identify = identify || data.iSpell == SpellID::Identify;
+			phasing = phasing || data.iSpell == SpellID::Phasing;
+		}
+	}
+	EXPECT_EQ(cut, 25);
+	EXPECT_TRUE(identify);
+	EXPECT_TRUE(phasing);
+
+	// No vendor stocks a cut scroll: Pepin's Scroll of Healing and his multiplayer Scroll of Resurrect are gone.
+	gbIsMultiplayer = true;
+	for (uint32_t seed = 1; seed <= 40; seed++) {
+		SetRndSeed(seed);
+		SpawnHealer(16);
+		for (const Item &ware : HealerItems)
+			EXPECT_FALSE(IsCutScrollOrBook(AllItemsList[ware.IDidx])) << ware._iIName << " seed " << seed;
+		SpawnWitch(16);
+		for (const Item &ware : WitchItems)
+			EXPECT_FALSE(IsCutScrollOrBook(AllItemsList[ware.IDidx])) << ware._iIName << " seed " << seed;
+	}
+	gbIsMultiplayer = false;
+
+	// Chests and barrels roll potions instead of a Scroll of Town Portal; one found before the cut rebuilds as itself.
+	int portalsBefore = 0;
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		Item useful;
+		RecreateItem(*MyPlayer, useful, IDI_HEAL, static_cast<uint16_t>(10 | CF_USEFUL), seed, 0, CF_HELLFIRE | CF_POE2);
+		EXPECT_NE(useful.IDidx, IDI_PORTAL) << "seed " << seed;
+		Item old;
+		RecreateItem(*MyPlayer, old, IDI_PORTAL, static_cast<uint16_t>(10 | CF_USEFUL), seed, 0, CF_HELLFIRE | CF_POE2);
+		if (old.IDidx == IDI_PORTAL) {
+			portalsBefore++;
+			EXPECT_TRUE(IsAnyOf(useful.IDidx, IDI_HEAL, IDI_MANA)) << "seed " << seed;
+		}
+	}
+	EXPECT_GT(portalsBefore, 20);
+}
+
+TEST_F(Poe2VendorItemsTest, DiabloKeepsItsScrolls)
+{
+	gbIsPoe2 = false;
+	LoadModifierData();
+	UnloadModArchives();
+	LoadModArchives({ { "hf" } });
+	LoadItemData();
+	int scrolls = 0;
+	for (const ItemData &data : AllItemsList) {
+		if (IsCutScrollOrBook(data) && data.dropRate > 0)
+			scrolls++;
+	}
+	EXPECT_GT(scrolls, 20);
+	int portals = 0;
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		Item useful;
+		RecreateItem(*MyPlayer, useful, IDI_HEAL, static_cast<uint16_t>(10 | CF_USEFUL), seed, 0, CF_HELLFIRE);
+		portals += useful.IDidx == IDI_PORTAL ? 1 : 0;
+	}
+	EXPECT_GT(portals, 20);
 }
 
 } // namespace

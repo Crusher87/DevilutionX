@@ -90,10 +90,10 @@ TEST_F(Poe2ItemSearchTest, TextMustHoldEveryWord)
 
 TEST_F(Poe2ItemSearchTest, ItemsMatchByBaseKindRarityAndTooltip)
 {
-	const Item hatchet = MakeItem("Heavy Hatchet", ITEM_QUALITY_RARE);
+	const Item hatchet = MakeItem("Dull Hatchet", ITEM_QUALITY_RARE);
 	ASSERT_EQ(hatchet._iMagical, ITEM_QUALITY_RARE);
 	const std::string text = ItemSearchText(hatchet);
-	EXPECT_NE(text.find("heavy hatchet"), std::string::npos) << text;
+	EXPECT_NE(text.find("dull hatchet"), std::string::npos) << text;
 	EXPECT_NE(text.find("rare axe weapon"), std::string::npos) << text;
 	EXPECT_NE(text.find("damage"), std::string::npos) << "the tooltip lines are searched too: " << text;
 

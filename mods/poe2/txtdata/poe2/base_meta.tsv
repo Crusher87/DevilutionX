@@ -1,431 +1,441 @@
-name	class	identity	defense	quality	implicits	split	level	block
-Heavy Hatchet	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Hatchet	one_hand_axe	balanced		weapon			1	
-Swift Hatchet	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Bearded Axe	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Bearded Axe	one_hand_axe	balanced		weapon			12	
-Swift Bearded Axe	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Raider Axe	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Raider Axe	one_hand_axe	balanced		weapon			24	
-Swift Raider Axe	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Ironcleaver	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Ironcleaver	one_hand_axe	balanced		weapon			36	
-Swift Ironcleaver	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy War Axe	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-War Axe	one_hand_axe	balanced		weapon			48	
-Swift War Axe	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Siege Axe	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Siege Axe	one_hand_axe	balanced		weapon			60	
-Swift Siege Axe	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Bloodiron Axe	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Bloodiron Axe	one_hand_axe	balanced		weapon			70	
-Swift Bloodiron Axe	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Kingsplitter	one_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Kingsplitter	one_hand_axe	balanced		weapon			80	
-Swift Kingsplitter	one_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Shortsword	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Shortsword	one_hand_sword	balanced		weapon			1	
-Swift Shortsword	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Leafblade	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Leafblade	one_hand_sword	balanced		weapon			12	
-Swift Leafblade	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Soldier Sword	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Soldier Sword	one_hand_sword	balanced		weapon			24	
-Swift Soldier Sword	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Falchion	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Fine Falchion	one_hand_sword	balanced		weapon			36	
-Swift Falchion	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy Knightblade	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-Knightblade	one_hand_sword	balanced		weapon			48	
-Swift Knightblade	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Dueling Sword	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Dueling Sword	one_hand_sword	balanced		weapon			60	
-Swift Dueling Sword	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Runed Sabre	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Runed Sabre	one_hand_sword	balanced		weapon			70	
-Swift Runed Sabre	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Imperial Edge	one_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Imperial Edge	one_hand_sword	balanced		weapon			80	
-Swift Imperial Edge	one_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Cudgel	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Cudgel	one_hand_mace	balanced		weapon			1	
-Swift Cudgel	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Flanged Mace	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Flanged Mace	one_hand_mace	balanced		weapon			12	
-Swift Flanged Mace	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy War Club	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-War Club	one_hand_mace	balanced		weapon			24	
-Swift War Club	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Spiked Mace	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Spiked Mace	one_hand_mace	balanced		weapon			36	
-Swift Spiked Mace	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy Battle Mace	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-Battle Mace	one_hand_mace	balanced		weapon			48	
-Swift Battle Mace	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Siege Hammer	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Siege Hammer	one_hand_mace	balanced		weapon			60	
-Swift Siege Hammer	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Dread Maul	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Dread Maul	one_hand_mace	balanced		weapon			70	
-Swift Dread Maul	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Judicator	one_hand_mace	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Judicator	one_hand_mace	balanced		weapon			80	
-Swift Judicator	one_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Woodsman's Axe	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Woodsman's Axe	two_hand_axe	balanced		weapon			1	
-Swift Woodsman's Axe	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Execution Axe	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Execution Axe	two_hand_axe	balanced		weapon			12	
-Swift Execution Axe	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Broad Axe	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Fine Broad Axe	two_hand_axe	balanced		weapon			24	
-Swift Broad Axe	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Headsman Axe	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Headsman Axe	two_hand_axe	balanced		weapon			36	
-Swift Headsman Axe	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy Great Cleaver	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-Great Cleaver	two_hand_axe	balanced		weapon			48	
-Swift Great Cleaver	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Siegebreaker	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Siegebreaker	two_hand_axe	balanced		weapon			60	
-Swift Siegebreaker	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Bloodoak Axe	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Bloodoak Axe	two_hand_axe	balanced		weapon			70	
-Swift Bloodoak Axe	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Worldsplitter	two_hand_axe	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Worldsplitter	two_hand_axe	balanced		weapon			80	
-Swift Worldsplitter	two_hand_axe	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Longsword	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Longsword	two_hand_sword	balanced		weapon			1	
-Swift Longsword	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Greatblade	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Greatblade	two_hand_sword	balanced		weapon			12	
-Swift Greatblade	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Mercenary Blade	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Mercenary Blade	two_hand_sword	balanced		weapon			24	
-Swift Mercenary Blade	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Claymore	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Fine Claymore	two_hand_sword	balanced		weapon			36	
-Swift Claymore	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy War Greatsword	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-War Greatsword	two_hand_sword	balanced		weapon			48	
-Swift War Greatsword	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Duelist Greatblade	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Duelist Greatblade	two_hand_sword	balanced		weapon			60	
-Swift Duelist Greatblade	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Runed Greatsword	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Runed Greatsword	two_hand_sword	balanced		weapon			70	
-Swift Runed Greatsword	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Sovereign Blade	two_hand_sword	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Sovereign Blade	two_hand_sword	balanced		weapon			80	
-Swift Sovereign Blade	two_hand_sword	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Sledge	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		1	
-Sledge	two_hand_mace	balanced		weapon			1	
-Swift Sledge	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Great Mace	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		12	
-Great Mace	two_hand_mace	balanced		weapon			12	
-Swift Great Mace	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy War Mallet	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		24	
-War Mallet	two_hand_mace	balanced		weapon			24	
-Swift War Mallet	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Stonebreaker	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		36	
-Stonebreaker	two_hand_mace	balanced		weapon			36	
-Swift Stonebreaker	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy Battle Hammer	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		48	
-Battle Hammer	two_hand_mace	balanced		weapon			48	
-Swift Battle Hammer	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Siege Maul	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		60	
-Siege Maul	two_hand_mace	balanced		weapon			60	
-Swift Siege Maul	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Titan Hammer	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		70	
-Titan Hammer	two_hand_mace	balanced		weapon			70	
-Swift Titan Hammer	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Cataclysm	two_hand_mace	heavy		weapon	AttackSpeed|-11|-11|11% reduced Attack Speed		80	
-Cataclysm	two_hand_mace	balanced		weapon			80	
-Swift Cataclysm	two_hand_mace	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Shiv	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Shiv	dagger	balanced		weapon			1	
-Swift Shiv	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Dirk	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Dirk	dagger	balanced		weapon			12	
-Swift Dirk	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Rondel	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Rondel	dagger	balanced		weapon			24	
-Swift Rondel	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Stiletto	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Stiletto	dagger	balanced		weapon			36	
-Swift Stiletto	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy Kris	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-Kris	dagger	balanced		weapon			48	
-Swift Kris	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Assassin Dirk	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Assassin Dirk	dagger	balanced		weapon			60	
-Swift Assassin Dirk	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Nightglass Knife	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Nightglass Knife	dagger	balanced		weapon			70	
-Swift Nightglass Knife	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Voidneedle	dagger	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Voidneedle	dagger	balanced		weapon			80	
-Swift Voidneedle	dagger	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Ash Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Ash Staff	quarterstaff	balanced		weapon			1	
-Swift Ash Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Banded Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Banded Staff	quarterstaff	balanced		weapon			12	
-Swift Banded Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Ironwood Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Ironwood Staff	quarterstaff	balanced		weapon			24	
-Swift Ironwood Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Battle Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Battle Staff	quarterstaff	balanced		weapon			36	
-Swift Battle Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy Monk Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-Monk Staff	quarterstaff	balanced		weapon			48	
-Swift Monk Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Temple Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Temple Staff	quarterstaff	balanced		weapon			60	
-Swift Temple Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Celestial Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Celestial Staff	quarterstaff	balanced		weapon			70	
-Swift Celestial Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Ascendant Staff	quarterstaff	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Ascendant Staff	quarterstaff	balanced		weapon			80	
-Swift Ascendant Staff	quarterstaff	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Short Bow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Fine Short Bow	bow	balanced		weapon			1	
-Swift Short Bow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Yew Bow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Yew Bow	bow	balanced		weapon			12	
-Swift Yew Bow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Hunting Bow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Hunting Bow	bow	balanced		weapon			24	
-Swift Hunting Bow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Recurve Bow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Recurve Bow	bow	balanced		weapon			36	
-Swift Recurve Bow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy War Bow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-War Bow	bow	balanced		weapon			48	
-Swift War Bow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Longbow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Longbow	bow	balanced		weapon			60	
-Swift Longbow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Runewood Bow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Runewood Bow	bow	balanced		weapon			70	
-Swift Runewood Bow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Starbow	bow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Starbow	bow	balanced		weapon			80	
-Swift Starbow	bow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Heavy Light Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		1	
-Light Crossbow	crossbow	balanced		weapon			1	
-Swift Light Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		1	
-Heavy Arbalest	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		12	
-Arbalest	crossbow	balanced		weapon			12	
-Swift Arbalest	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		12	
-Heavy Soldier Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		24	
-Soldier Crossbow	crossbow	balanced		weapon			24	
-Swift Soldier Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		24	
-Heavy Crank Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		36	
-Crank Crossbow	crossbow	balanced		weapon			36	
-Swift Crank Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		36	
-Heavy War Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		48	
-War Crossbow	crossbow	balanced		weapon			48	
-Swift War Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		48	
-Heavy Siege Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		60	
-Fine Siege Crossbow	crossbow	balanced		weapon			60	
-Swift Siege Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		60	
-Heavy Runebolt Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		70	
-Runebolt Crossbow	crossbow	balanced		weapon			70	
-Swift Runebolt Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		70	
-Heavy Dragonspine Crossbow	crossbow	heavy		weapon	AttackSpeed|-10|-10|10% reduced Attack Speed		80	
-Dragonspine Crossbow	crossbow	balanced		weapon			80	
-Swift Dragonspine Crossbow	crossbow	swift		weapon	AttackSpeed|12|12|12% increased Attack Speed		80	
-Focused Pilgrim Staff	staff	focused		caster	Intelligence|5|5|+{0} to Intelligence		1	
-Quick Pilgrim Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		1	
-Focused Ashen Staff	staff	focused		caster	Intelligence|8|8|+{0} to Intelligence		12	
-Quick Ashen Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		12	
-Focused Scholar Staff	staff	focused		caster	Intelligence|13|13|+{0} to Intelligence		24	
-Quick Scholar Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		24	
-Focused Ritual Staff	staff	focused		caster	Intelligence|19|19|+{0} to Intelligence		36	
-Quick Ritual Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		36	
-Focused Archmage Staff	staff	focused		caster	Intelligence|26|26|+{0} to Intelligence		48	
-Quick Archmage Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		48	
-Focused Elder Staff	staff	focused		caster	Intelligence|35|35|+{0} to Intelligence		60	
-Quick Elder Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		60	
-Focused Astral Staff	staff	focused		caster	Intelligence|45|45|+{0} to Intelligence		70	
-Quick Astral Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		70	
-Focused Worldroot Staff	staff	focused		caster	Intelligence|58|58|+{0} to Intelligence		80	
-Quick Worldroot Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		80	
-Focused Bone Sceptre	sceptre	focused		caster	Intelligence|3|3|+{0} to Intelligence		1	
-Quick Bone Sceptre	sceptre	rapid		caster	Intelligence|2|2|+{0} to Intelligence		1	
-Focused Bronze Sceptre	sceptre	focused		caster	Intelligence|4|4|+{0} to Intelligence		12	
-Quick Bronze Sceptre	sceptre	rapid		caster	Intelligence|4|4|+{0} to Intelligence		12	
-Focused Priest Sceptre	sceptre	focused		caster	Intelligence|7|7|+{0} to Intelligence		24	
-Quick Priest Sceptre	sceptre	rapid		caster	Intelligence|6|6|+{0} to Intelligence		24	
-Focused Sun Sceptre	sceptre	focused		caster	Intelligence|10|10|+{0} to Intelligence		36	
-Quick Sun Sceptre	sceptre	rapid		caster	Intelligence|8|8|+{0} to Intelligence		36	
-Focused Templar Sceptre	sceptre	focused		caster	Intelligence|14|14|+{0} to Intelligence		48	
-Quick Templar Sceptre	sceptre	rapid		caster	Intelligence|11|11|+{0} to Intelligence		48	
-Focused Oracle Sceptre	sceptre	focused		caster	Intelligence|18|18|+{0} to Intelligence		60	
-Quick Oracle Sceptre	sceptre	rapid		caster	Intelligence|15|15|+{0} to Intelligence		60	
-Focused Saint's Sceptre	sceptre	focused		caster	Intelligence|24|24|+{0} to Intelligence		70	
-Quick Saint's Sceptre	sceptre	rapid		caster	Intelligence|20|20|+{0} to Intelligence		70	
-Focused Sovereign Sceptre	sceptre	focused		caster	Intelligence|30|30|+{0} to Intelligence		80	
-Quick Sovereign Sceptre	sceptre	rapid		caster	Intelligence|25|25|+{0} to Intelligence		80	
-Iron Cap	helmet	armour	Armour	defence			1	
-Guard Helm	helmet	armour	Armour	defence			12	
-War Helm	helmet	armour	Armour	defence			24	
-Closed Helm	helmet	armour	Armour	defence			36	
-Legion Helm	helmet	armour	Armour	defence			48	
-Siege Helm	helmet	armour	Armour	defence			60	
-Imperial Helm	helmet	armour	Armour	defence			70	
-Titan Crown	helmet	armour	Armour	defence			80	
-Leather Hood	helmet	evasion	Evasion	defence			1	
-Scout Hood	helmet	evasion	Evasion	defence			12	
-Hunter Hood	helmet	evasion	Evasion	defence			24	
-Shadow Hood	helmet	evasion	Evasion	defence			36	
-Ranger Hood	helmet	evasion	Evasion	defence			48	
-Night Hood	helmet	evasion	Evasion	defence			60	
-Wind Hood	helmet	evasion	Evasion	defence			70	
-Phantom Hood	helmet	evasion	Evasion	defence			80	
-Cloth Circlet	helmet	energy_shield	EnergyShield	defence			1	
-Scholar Circlet	helmet	energy_shield	EnergyShield	defence			12	
-Mystic Crown	helmet	energy_shield	EnergyShield	defence			24	
-Ritual Crown	helmet	energy_shield	EnergyShield	defence			36	
-Sage Crown	helmet	energy_shield	EnergyShield	defence			48	
-Occult Crown	helmet	energy_shield	EnergyShield	defence			60	
-Astral Crown	helmet	energy_shield	EnergyShield	defence			70	
-Void Crown	helmet	energy_shield	EnergyShield	defence			80	
-Brigand Helm	helmet	armour_evasion	ArmourEvasion	defence		50	1	
-Skirmish Helm	helmet	armour_evasion	ArmourEvasion	defence		50	12	
-Mercenary Helm	helmet	armour_evasion	ArmourEvasion	defence		50	24	
-Vanguard Helm	helmet	armour_evasion	ArmourEvasion	defence		50	36	
-Warden Helm	helmet	armour_evasion	ArmourEvasion	defence		50	48	
-Champion Helm	helmet	armour_evasion	ArmourEvasion	defence		50	60	
-Paragon Helm	helmet	armour_evasion	ArmourEvasion	defence		50	70	
-Conqueror Helm	helmet	armour_evasion	ArmourEvasion	defence		50	80	
-Acolyte Crown	helmet	armour_es	ArmourEnergyShield	defence		91	1	
-Zealot Crown	helmet	armour_es	ArmourEnergyShield	defence		91	12	
-Templar Crown	helmet	armour_es	ArmourEnergyShield	defence		91	24	
-Martyr Crown	helmet	armour_es	ArmourEnergyShield	defence		91	36	
-Prelate Crown	helmet	armour_es	ArmourEnergyShield	defence		91	48	
-Hierophant Crown	helmet	armour_es	ArmourEnergyShield	defence		91	60	
-Archon Crown	helmet	armour_es	ArmourEnergyShield	defence		91	70	
-Seraph Crown	helmet	armour_es	ArmourEnergyShield	defence		91	80	
-Veiled Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	1	
-Whisper Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	12	
-Trickster Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	24	
-Phantom Cowl	helmet	evasion_es	EvasionEnergyShield	defence		91	36	
-Seer Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	48	
-Dream Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	60	
-Astral Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	70	
-Mirage Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	80	
-Pilgrim Mask	helmet	tri	All	defence		48/48	1	
-Wayfarer Mask	helmet	tri	All	defence		48/48	12	
-Concord Mask	helmet	tri	All	defence		47/47	24	
-Triune Mask	helmet	tri	All	defence		48/48	36	
-Harmonist Mask	helmet	tri	All	defence		48/48	48	
-Ascetic Mask	helmet	tri	All	defence		48/48	60	
-Ascendant Mask	helmet	tri	All	defence		48/48	70	
-Eternal Mask	helmet	tri	All	defence		47/47	80	
-Wooden Tower Shield	shield	armour	Armour	defence			1	28
-Iron Tower Shield	shield	armour	Armour	defence			12	29
-Guard Tower Shield	shield	armour	Armour	defence			24	30
-War Tower Shield	shield	armour	Armour	defence			36	31
-Knight Tower Shield	shield	armour	Armour	defence			48	32
-Legion Tower Shield	shield	armour	Armour	defence			60	33
-Imperial Tower Shield	shield	armour	Armour	defence			70	34
-Titan Tower Shield	shield	armour	Armour	defence			80	35
-Hide Buckler	shield	evasion	Evasion	defence			1	25
-Scout Buckler	shield	evasion	Evasion	defence			12	26
-Hunter Buckler	shield	evasion	Evasion	defence			24	27
-Duelist Buckler	shield	evasion	Evasion	defence			36	28
-Ranger Buckler	shield	evasion	Evasion	defence			48	29
-Night Buckler	shield	evasion	Evasion	defence			60	30
-Wind Buckler	shield	evasion	Evasion	defence			70	31
-Phantom Buckler	shield	evasion	Evasion	defence			80	32
-Round Shield	shield	armour_evasion	ArmourEvasion	defence		50	1	26
-Skirmish Shield	shield	armour_evasion	ArmourEvasion	defence		50	12	27
-Mercenary Shield	shield	armour_evasion	ArmourEvasion	defence		50	24	28
-Vanguard Shield	shield	armour_evasion	ArmourEvasion	defence		50	36	29
-Warden Shield	shield	armour_evasion	ArmourEvasion	defence		50	48	30
-Champion Shield	shield	armour_evasion	ArmourEvasion	defence		50	60	31
-Paragon Shield	shield	armour_evasion	ArmourEvasion	defence		50	70	32
-Conqueror Shield	shield	armour_evasion	ArmourEvasion	defence		50	80	33
-Reliquary Shield	shield	armour_es	ArmourEnergyShield	defence		90	1	25
-Zealot Shield	shield	armour_es	ArmourEnergyShield	defence		92	12	26
-Templar Shield	shield	armour_es	ArmourEnergyShield	defence		92	24	27
-Martyr Shield	shield	armour_es	ArmourEnergyShield	defence		91	36	28
-Prelate Shield	shield	armour_es	ArmourEnergyShield	defence		91	48	29
-Hierophant Shield	shield	armour_es	ArmourEnergyShield	defence		91	60	30
-Archon Shield	shield	armour_es	ArmourEnergyShield	defence		91	70	31
-Seraph Shield	shield	armour_es	ArmourEnergyShield	defence		91	80	32
-Wooden Focus	focus	caster_defence	EnergyShield	defence			1	
-Carved Focus	focus	caster_defence	EnergyShield	defence			12	
-Scholar Focus	focus	caster_defence	EnergyShield	defence			24	
-Ritual Focus	focus	caster_defence	EnergyShield	defence			36	
-Sage Focus	focus	caster_defence	EnergyShield	defence			48	
-Occult Focus	focus	caster_defence	EnergyShield	defence			60	
-Astral Focus	focus	caster_defence	EnergyShield	defence			70	
-Void Focus	focus	caster_defence	EnergyShield	defence			80	
-Ruby Ring	ring	resistance		none	FireResistance|12|16|+{0}% to Fire Resistance		8	
-Sapphire Ring	ring	resistance		none	MagicResistance|12|16|+{0}% to Magic Resistance		12	
-Topaz Ring	ring	resistance		none	LightningResistance|12|16|+{0}% to Lightning Resistance		16	
-Coral Ring	ring	life		none	Life|20|30|+{0} to maximum Life		20	
-Lazuli Ring	ring	mana		none	Mana|18|28|+{0} to maximum Mana		1	
-Iron Ring	ring	attack		none	AddedPhysicalToAttacks|2|4|Adds {0} to {1} Physical Damage to Attacks		1	
-Pearl Ring	ring	caster		none	CastSpeed|7|10|{0}% increased Cast Speed		32	
-Golden Hoop	ring	rarity		none	AllAttributes|3|5|+{0} to all Attributes		12	
-Amber Amulet	amulet	attribute		none	Strength|4|6|+{0} to Strength		8	
-Jade Amulet	amulet	attribute		none	Dexterity|4|6|+{0} to Dexterity		8	
-Lapis Amulet	amulet	attribute		none	Intelligence|4|6|+{0} to Intelligence		8	
-Pearlescent Amulet	amulet	resistance		none	AllResistances|7|10|+{0}% to all Elemental Resistances		30	
-Bloodstone Amulet	amulet	life		none	Life|30|40|+{0} to maximum Life		18	
-Solar Amulet	amulet	spirit		none	Spirit|10|15|+{0} to Spirit		30	
-Stellar Amulet	amulet	attribute		none	AllAttributes|2|3|+{0} to all Attributes		24	
-Azure Amulet	amulet	mana		none	ManaRegeneration|20|30|{0}% increased Mana Regeneration Rate		1	
-Crimson Amulet	amulet	life		none	LifeRegeneration|2|4|Regenerate {0} Life per second		1	
-Lunar Amulet	amulet	defence		none	FlatEnergyShield|2|3|+{0} to maximum Energy Shield		14	
-Gold Amulet	amulet	rarity		none	ItemRarity|12|20|{0}% increased Rarity of Items found		35	
-Rusted Cuirass	body_armour	armour	Armour	defence			1	
-Iron Cuirass	body_armour	armour	Armour	defence			11	
-Maraketh Cuirass	body_armour	armour	Armour	defence			20	
-Full Plate	body_armour	armour	Armour	defence			33	
-Juggernaut Plate	body_armour	armour	Armour	defence			45	
-Champion Cuirass	body_armour	armour	Armour	defence			58	
-Conqueror Plate	body_armour	armour	Armour	defence			68	
-Leather Vest	body_armour	evasion	Evasion	defence			1	
-Pathfinder Coat	body_armour	evasion	Evasion	defence			11	
-Rhoahide Coat	body_armour	evasion	Evasion	defence			22	
-Scout's Vest	body_armour	evasion	Evasion	defence			33	
-Corsair Vest	body_armour	evasion	Evasion	defence			45	
-Hardleather Coat	body_armour	evasion	Evasion	defence			56	
-Armoured Vest	body_armour	evasion	Evasion	defence			73	
-Tattered Robe	body_armour	energy_shield	EnergyShield	defence			1	
-Hexer's Robe	body_armour	energy_shield	EnergyShield	defence			11	
-Silk Robe	body_armour	energy_shield	EnergyShield	defence			22	
-Votive Raiment	body_armour	energy_shield	EnergyShield	defence			33	
-Elementalist Robe	body_armour	energy_shield	EnergyShield	defence			45	
-Plated Raiment	body_armour	energy_shield	EnergyShield	defence			58	
-Enlightened Robe	body_armour	energy_shield	EnergyShield	defence			68	
-Chain Mail Vest	body_armour	armour_evasion	ArmourEvasion	defence		61	1	
-Rogue Armour	body_armour	armour_evasion	ArmourEvasion	defence		54	11	
-Cloaked Mail	body_armour	armour_evasion	ArmourEvasion	defence		53	26	
-Scale Armour	body_armour	armour_evasion	ArmourEvasion	defence		53	37	
-Knight Armour	body_armour	armour_evasion	ArmourEvasion	defence		53	45	
-Gladiator Armour	body_armour	armour_evasion	ArmourEvasion	defence		52	58	
-Heroic Armour	body_armour	armour_evasion	ArmourEvasion	defence		52	65	
-Pilgrim Vestments	body_armour	armour_es	ArmourEnergyShield	defence		82	1	
-Pelt Mantle	body_armour	armour_es	ArmourEnergyShield	defence		88	10	
-Mail Vestments	body_armour	armour_es	ArmourEnergyShield	defence		89	16	
-Shaman Mantle	body_armour	armour_es	ArmourEnergyShield	defence		90	28	
-Cleric Vestments	body_armour	armour_es	ArmourEnergyShield	defence		91	45	
-Revered Vestments	body_armour	armour_es	ArmourEnergyShield	defence		92	65	
-Corvus Mantle	body_armour	armour_es	ArmourEnergyShield	defence		92	68	
-Hermit Garb	body_armour	evasion_es	EvasionEnergyShield	defence		75	1	
-Waxed Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		86	11	
-Marabout Garb	body_armour	evasion_es	EvasionEnergyShield	defence		88	16	
-Wayfarer Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		89	28	
-Scalper's Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		90	39	
-Monastic Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	56	
-Devout Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	68	
-Grand Regalia	body_armour	tri	All	defence		50/45	65	
+name	class	identity	defense	quality	implicits	split	level	block	aps
+Heavy Hatchet	one_hand_axe	heavy		weapon			1		150
+Dull Hatchet	one_hand_axe	balanced		weapon			1		150
+Swift Hatchet	one_hand_axe	swift		weapon			1		150
+Heavy Bearded Axe	one_hand_axe	heavy		weapon			10		145
+Bearded Axe	one_hand_axe	balanced		weapon			10		145
+Swift Bearded Axe	one_hand_axe	swift		weapon			10		145
+Heavy Raider Axe	one_hand_axe	heavy		weapon			26		140
+Crescent Axe	one_hand_axe	balanced		weapon			26		140
+Swift Raider Axe	one_hand_axe	swift		weapon			26		140
+Heavy Ironcleaver	one_hand_axe	heavy		weapon			33		150
+Carving Hatchet	one_hand_axe	balanced		weapon			33		150
+Swift Ironcleaver	one_hand_axe	swift		weapon			33		150
+Heavy War Axe	one_hand_axe	heavy		weapon			45		155
+Boarding Hatchet	one_hand_axe	balanced		weapon			45		155
+Swift War Axe	one_hand_axe	swift		weapon			45		155
+Heavy Siege Axe	one_hand_axe	heavy		weapon			52		150
+Fine Battle Axe	one_hand_axe	balanced		weapon			52		150
+Swift Siege Axe	one_hand_axe	swift		weapon			52		150
+Heavy Bloodiron Axe	one_hand_axe	heavy		weapon			54		150
+Profane Cleaver	one_hand_axe	balanced		weapon			54		150
+Swift Bloodiron Axe	one_hand_axe	swift		weapon			54		150
+Heavy Kingsplitter	one_hand_axe	heavy		weapon			65		150
+Dread Hatchet	one_hand_axe	balanced		weapon			65		150
+Swift Kingsplitter	one_hand_axe	swift		weapon			65		150
+Heavy Shortsword	one_hand_sword	heavy		weapon			1		155
+Shortsword	one_hand_sword	balanced		weapon			1		155
+Swift Shortsword	one_hand_sword	swift		weapon			1		155
+Heavy Leafblade	one_hand_sword	heavy		weapon			11		150
+Vampiric Blade	one_hand_sword	balanced		weapon			11		150
+Swift Leafblade	one_hand_sword	swift		weapon			11		150
+Heavy Soldier Sword	one_hand_sword	heavy		weapon			21		160
+Charred Shortsword	one_hand_sword	balanced		weapon			21		160
+Swift Soldier Sword	one_hand_sword	swift		weapon			21		160
+Heavy Falchion	one_hand_sword	heavy		weapon			33		150
+Fine Falchion	one_hand_sword	balanced		weapon			33		150
+Swift Falchion	one_hand_sword	swift		weapon			33		150
+Heavy Knightblade	one_hand_sword	heavy		weapon			50		165
+Runic Shortsword	one_hand_sword	balanced		weapon			50		165
+Swift Knightblade	one_hand_sword	swift		weapon			50		165
+Heavy Dueling Sword	one_hand_sword	heavy		weapon			52		160
+Messer	one_hand_sword	balanced		weapon			52		160
+Swift Dueling Sword	one_hand_sword	swift		weapon			52		160
+Heavy Runed Sabre	one_hand_sword	heavy		weapon			54		150
+Commander Sword	one_hand_sword	balanced		weapon			54		150
+Swift Runed Sabre	one_hand_sword	swift		weapon			54		150
+Heavy Imperial Edge	one_hand_sword	heavy		weapon			65		155
+Dark Blade	one_hand_sword	balanced		weapon			65		155
+Swift Imperial Edge	one_hand_sword	swift		weapon			65		155
+Heavy Cudgel	one_hand_mace	heavy		weapon			1		145
+Wooden Club	one_hand_mace	balanced		weapon			1		145
+Swift Cudgel	one_hand_mace	swift		weapon			1		145
+Heavy Flanged Mace	one_hand_mace	heavy		weapon			10		155
+Slim Mace	one_hand_mace	balanced		weapon			10		155
+Swift Flanged Mace	one_hand_mace	swift		weapon			10		155
+Heavy War Club	one_hand_mace	heavy		weapon			26		140
+Plated Mace	one_hand_mace	balanced		weapon			26		140
+Swift War Club	one_hand_mace	swift		weapon			26		140
+Heavy Spiked Mace	one_hand_mace	heavy		weapon			33		145
+Brigand Mace	one_hand_mace	balanced		weapon			33		145
+Swift Spiked Mace	one_hand_mace	swift		weapon			33		145
+Heavy Battle Mace	one_hand_mace	heavy		weapon			48		155
+Flared Mace	one_hand_mace	balanced		weapon			48		155
+Swift Battle Mace	one_hand_mace	swift		weapon			48		155
+Heavy Siege Hammer	one_hand_mace	heavy		weapon			59		145
+Bandit Mace	one_hand_mace	balanced		weapon			59		145
+Swift Siege Hammer	one_hand_mace	swift		weapon			59		145
+Heavy Dread Maul	one_hand_mace	heavy		weapon			72		140
+Crown Mace	one_hand_mace	balanced		weapon			72		140
+Swift Dread Maul	one_hand_mace	swift		weapon			72		140
+Heavy Judicator	one_hand_mace	heavy		weapon			77		145
+Marauding Mace	one_hand_mace	balanced		weapon			77		145
+Swift Judicator	one_hand_mace	swift		weapon			77		145
+Heavy Woodsman's Axe	two_hand_axe	heavy		weapon			1		120
+Splitting Greataxe	two_hand_axe	balanced		weapon			1		120
+Swift Woodsman's Axe	two_hand_axe	swift		weapon			1		120
+Heavy Execution Axe	two_hand_axe	heavy		weapon			16		115
+Arched Greataxe	two_hand_axe	balanced		weapon			16		115
+Swift Execution Axe	two_hand_axe	swift		weapon			16		115
+Heavy Broad Axe	two_hand_axe	heavy		weapon			20		120
+Elegant Glaive	two_hand_axe	balanced		weapon			20		120
+Swift Broad Axe	two_hand_axe	swift		weapon			20		120
+Heavy Headsman Axe	two_hand_axe	heavy		weapon			33		120
+Rending Halberd	two_hand_axe	balanced		weapon			33		120
+Swift Headsman Axe	two_hand_axe	swift		weapon			33		120
+Heavy Great Cleaver	two_hand_axe	heavy		weapon			45		120
+Reaver Glaive	two_hand_axe	balanced		weapon			45		120
+Swift Great Cleaver	two_hand_axe	swift		weapon			45		120
+Heavy Siegebreaker	two_hand_axe	heavy		weapon			52		120
+Ceremonial Halberd	two_hand_axe	balanced		weapon			52		120
+Swift Siegebreaker	two_hand_axe	swift		weapon			52		120
+Heavy Bloodoak Axe	two_hand_axe	heavy		weapon			57		120
+Monument Greataxe	two_hand_axe	balanced		weapon			57		120
+Swift Bloodoak Axe	two_hand_axe	swift		weapon			57		120
+Heavy Worldsplitter	two_hand_axe	heavy		weapon			65		120
+Vile Greataxe	two_hand_axe	balanced		weapon			65		120
+Swift Worldsplitter	two_hand_axe	swift		weapon			65		120
+Heavy Longsword	two_hand_sword	heavy		weapon			1		130
+Corroded Longsword	two_hand_sword	balanced		weapon			1		130
+Swift Longsword	two_hand_sword	swift		weapon			1		130
+Heavy Greatblade	two_hand_sword	heavy		weapon			11		130
+Blessed Claymore	two_hand_sword	balanced		weapon			11		130
+Swift Greatblade	two_hand_sword	swift		weapon			11		130
+Heavy Mercenary Blade	two_hand_sword	heavy		weapon			22		130
+Rippled Greatsword	two_hand_sword	balanced		weapon			22		130
+Swift Mercenary Blade	two_hand_sword	swift		weapon			22		130
+Heavy Claymore	two_hand_sword	heavy		weapon			36		125
+Obsidian Greatsword	two_hand_sword	balanced		weapon			36		125
+Swift Claymore	two_hand_sword	swift		weapon			36		125
+Heavy War Greatsword	two_hand_sword	heavy		weapon			49		125
+Ancient Greatblade	two_hand_sword	balanced		weapon			49		125
+Swift War Greatsword	two_hand_sword	swift		weapon			49		125
+Heavy Duelist Greatblade	two_hand_sword	heavy		weapon			52		130
+Flanged Greatblade	two_hand_sword	balanced		weapon			52		130
+Swift Duelist Greatblade	two_hand_sword	swift		weapon			52		130
+Heavy Runed Greatsword	two_hand_sword	heavy		weapon			54		135
+Regalia Longsword	two_hand_sword	balanced		weapon			54		135
+Swift Runed Greatsword	two_hand_sword	swift		weapon			54		135
+Heavy Sovereign Blade	two_hand_sword	heavy		weapon			65		130
+Ultra Greatsword	two_hand_sword	balanced		weapon			65		130
+Swift Sovereign Blade	two_hand_sword	swift		weapon			65		130
+Heavy Sledge	two_hand_mace	heavy		weapon			1		110
+Felled Greatclub	two_hand_mace	balanced		weapon			1		110
+Swift Sledge	two_hand_mace	swift		weapon			1		110
+Heavy Great Mace	two_hand_mace	heavy		weapon			16		110
+Studded Greatclub	two_hand_mace	balanced		weapon			16		110
+Swift Great Mace	two_hand_mace	swift		weapon			16		110
+Heavy War Mallet	two_hand_mace	heavy		weapon			28		120
+Temple Maul	two_hand_mace	balanced		weapon			28		120
+Swift War Mallet	two_hand_mace	swift		weapon			28		120
+Heavy Stonebreaker	two_hand_mace	heavy		weapon			33		110
+Leaden Greathammer	two_hand_mace	balanced		weapon			33		110
+Swift Stonebreaker	two_hand_mace	swift		weapon			33		110
+Heavy Battle Hammer	two_hand_mace	heavy		weapon			45		110
+Pointed Maul	two_hand_mace	balanced		weapon			45		110
+Swift Battle Hammer	two_hand_mace	swift		weapon			45		110
+Heavy Siege Maul	two_hand_mace	heavy		weapon			59		110
+Heavy Greathammer	two_hand_mace	balanced		weapon			59		110
+Swift Siege Maul	two_hand_mace	swift		weapon			59		110
+Heavy Titan Hammer	two_hand_mace	heavy		weapon			72		120
+Sacred Maul	two_hand_mace	balanced		weapon			72		120
+Swift Titan Hammer	two_hand_mace	swift		weapon			72		120
+Heavy Cataclysm	two_hand_mace	heavy		weapon			77		110
+Massive Greathammer	two_hand_mace	balanced		weapon			77		110
+Swift Cataclysm	two_hand_mace	swift		weapon			77		110
+Heavy Shiv	dagger	heavy		weapon			1		155
+Glass Shank	dagger	balanced		weapon			1		155
+Swift Shiv	dagger	swift		weapon			1		155
+Heavy Dirk	dagger	heavy		weapon			12		155
+Simple Dagger	dagger	balanced		weapon			12		155
+Swift Dirk	dagger	swift		weapon			12		155
+Heavy Rondel	dagger	heavy		weapon			27		155
+Engraved Knife	dagger	balanced		weapon			27		155
+Swift Rondel	dagger	swift		weapon			27		155
+Heavy Stiletto	dagger	heavy		weapon			33		155
+Obsidian Dagger	dagger	balanced		weapon			33		155
+Swift Stiletto	dagger	swift		weapon			33		155
+Heavy Kris	dagger	heavy		weapon			49		165
+Kris Knife	dagger	balanced		weapon			49		165
+Swift Kris	dagger	swift		weapon			49		165
+Heavy Assassin Dirk	dagger	heavy		weapon			52		155
+Parrying Dagger	dagger	balanced		weapon			52		155
+Swift Assassin Dirk	dagger	swift		weapon			52		155
+Heavy Nightglass Knife	dagger	heavy		weapon			56		155
+Arcane Dirk	dagger	balanced		weapon			56		155
+Swift Nightglass Knife	dagger	swift		weapon			56		155
+Heavy Voidneedle	dagger	heavy		weapon			65		155
+Cinquedea	dagger	balanced		weapon			65		155
+Swift Voidneedle	dagger	swift		weapon			65		155
+Heavy Ash Staff	quarterstaff	heavy		weapon			1		140
+Fine Wrapped Quarterstaff	quarterstaff	balanced		weapon			1		140
+Swift Ash Staff	quarterstaff	swift		weapon			1		140
+Heavy Banded Staff	quarterstaff	heavy		weapon			11		140
+Fine Gothic Quarterstaff	quarterstaff	balanced		weapon			11		140
+Swift Banded Staff	quarterstaff	swift		weapon			11		140
+Heavy Ironwood Staff	quarterstaff	heavy		weapon			20		150
+Crescent Quarterstaff	quarterstaff	balanced		weapon			20		150
+Swift Ironwood Staff	quarterstaff	swift		weapon			20		150
+Heavy Battle Staff	quarterstaff	heavy		weapon			33		140
+Slicing Quarterstaff	quarterstaff	balanced		weapon			33		140
+Swift Battle Staff	quarterstaff	swift		weapon			33		140
+Heavy Monk Staff	quarterstaff	heavy		weapon			48		140
+Barbarous Quarterstaff	quarterstaff	balanced		weapon			48		140
+Swift Monk Staff	quarterstaff	swift		weapon			48		140
+Heavy Temple Staff	quarterstaff	heavy		weapon			59		140
+Bladed Quarterstaff	quarterstaff	balanced		weapon			59		140
+Swift Temple Staff	quarterstaff	swift		weapon			59		140
+Heavy Celestial Staff	quarterstaff	heavy		weapon			72		150
+Lunar Quarterstaff	quarterstaff	balanced		weapon			72		150
+Swift Celestial Staff	quarterstaff	swift		weapon			72		150
+Heavy Ascendant Staff	quarterstaff	heavy		weapon			78		150
+Dreaming Quarterstaff	quarterstaff	balanced		weapon			78		150
+Swift Ascendant Staff	quarterstaff	swift		weapon			78		150
+Heavy Short Bow	bow	heavy		weapon			1		120
+Crude Bow	bow	balanced		weapon			1		120
+Swift Short Bow	bow	swift		weapon			1		120
+Heavy Yew Bow	bow	heavy		weapon			16		110
+Recurve Bow	bow	balanced		weapon			16		110
+Swift Yew Bow	bow	swift		weapon			16		110
+Heavy Hunting Bow	bow	heavy		weapon			22		120
+Fine Composite Bow	bow	balanced		weapon			22		120
+Swift Hunting Bow	bow	swift		weapon			22		120
+Heavy Recurve Bow	bow	heavy		weapon			39		120
+Zealot Bow	bow	balanced		weapon			39		120
+Swift Recurve Bow	bow	swift		weapon			39		120
+Heavy War Bow	bow	heavy		weapon			50		120
+Tribal Bow	bow	balanced		weapon			50		120
+Swift War Bow	bow	swift		weapon			50		120
+Heavy Longbow	bow	heavy		weapon			62		120
+Militant Bow	bow	balanced		weapon			62		120
+Swift Longbow	bow	swift		weapon			62		120
+Heavy Runewood Bow	bow	heavy		weapon			72		120
+Cavalry Bow	bow	balanced		weapon			72		120
+Swift Runewood Bow	bow	swift		weapon			72		120
+Heavy Starbow	bow	heavy		weapon			77		120
+Warmonger Bow	bow	balanced		weapon			77		120
+Swift Starbow	bow	swift		weapon			77		120
+Heavy Light Crossbow	crossbow	heavy		weapon			1		81
+Light Crossbow	crossbow	balanced		weapon			1		90
+Swift Light Crossbow	crossbow	swift		weapon			1		101
+Heavy Arbalest	crossbow	heavy		weapon			12		81
+Arbalest	crossbow	balanced		weapon			12		90
+Swift Arbalest	crossbow	swift		weapon			12		101
+Heavy Soldier Crossbow	crossbow	heavy		weapon			24		81
+Soldier Crossbow	crossbow	balanced		weapon			24		90
+Swift Soldier Crossbow	crossbow	swift		weapon			24		101
+Heavy Crank Crossbow	crossbow	heavy		weapon			36		81
+Crank Crossbow	crossbow	balanced		weapon			36		90
+Swift Crank Crossbow	crossbow	swift		weapon			36		101
+Heavy War Crossbow	crossbow	heavy		weapon			48		81
+War Crossbow	crossbow	balanced		weapon			48		90
+Swift War Crossbow	crossbow	swift		weapon			48		101
+Heavy Siege Crossbow	crossbow	heavy		weapon			60		81
+Fine Siege Crossbow	crossbow	balanced		weapon			60		90
+Swift Siege Crossbow	crossbow	swift		weapon			60		101
+Heavy Runebolt Crossbow	crossbow	heavy		weapon			70		81
+Runebolt Crossbow	crossbow	balanced		weapon			70		90
+Swift Runebolt Crossbow	crossbow	swift		weapon			70		101
+Heavy Dragonspine Crossbow	crossbow	heavy		weapon			80		81
+Dragonspine Crossbow	crossbow	balanced		weapon			80		90
+Swift Dragonspine Crossbow	crossbow	swift		weapon			80		101
+Focused Pilgrim Staff	staff	focused		caster	Intelligence|5|5|+{0} to Intelligence		1		
+Quick Pilgrim Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		1		
+Focused Ashen Staff	staff	focused		caster	Intelligence|8|8|+{0} to Intelligence		12		
+Quick Ashen Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		12		
+Focused Scholar Staff	staff	focused		caster	Intelligence|13|13|+{0} to Intelligence		24		
+Quick Scholar Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		24		
+Focused Ritual Staff	staff	focused		caster	Intelligence|19|19|+{0} to Intelligence		36		
+Quick Ritual Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		36		
+Focused Archmage Staff	staff	focused		caster	Intelligence|26|26|+{0} to Intelligence		48		
+Quick Archmage Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		48		
+Focused Elder Staff	staff	focused		caster	Intelligence|35|35|+{0} to Intelligence		60		
+Quick Elder Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		60		
+Focused Astral Staff	staff	focused		caster	Intelligence|45|45|+{0} to Intelligence		70		
+Quick Astral Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		70		
+Focused Worldroot Staff	staff	focused		caster	Intelligence|58|58|+{0} to Intelligence		80		
+Quick Worldroot Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		80		
+Focused Bone Sceptre	sceptre	focused		caster	Intelligence|3|3|+{0} to Intelligence		1		
+Quick Bone Sceptre	sceptre	rapid		caster	Intelligence|2|2|+{0} to Intelligence		1		
+Focused Bronze Sceptre	sceptre	focused		caster	Intelligence|4|4|+{0} to Intelligence		12		
+Quick Bronze Sceptre	sceptre	rapid		caster	Intelligence|4|4|+{0} to Intelligence		12		
+Focused Priest Sceptre	sceptre	focused		caster	Intelligence|7|7|+{0} to Intelligence		24		
+Quick Priest Sceptre	sceptre	rapid		caster	Intelligence|6|6|+{0} to Intelligence		24		
+Focused Sun Sceptre	sceptre	focused		caster	Intelligence|10|10|+{0} to Intelligence		36		
+Quick Sun Sceptre	sceptre	rapid		caster	Intelligence|8|8|+{0} to Intelligence		36		
+Focused Templar Sceptre	sceptre	focused		caster	Intelligence|14|14|+{0} to Intelligence		48		
+Quick Templar Sceptre	sceptre	rapid		caster	Intelligence|11|11|+{0} to Intelligence		48		
+Focused Oracle Sceptre	sceptre	focused		caster	Intelligence|18|18|+{0} to Intelligence		60		
+Quick Oracle Sceptre	sceptre	rapid		caster	Intelligence|15|15|+{0} to Intelligence		60		
+Focused Saint's Sceptre	sceptre	focused		caster	Intelligence|24|24|+{0} to Intelligence		70		
+Quick Saint's Sceptre	sceptre	rapid		caster	Intelligence|20|20|+{0} to Intelligence		70		
+Focused Sovereign Sceptre	sceptre	focused		caster	Intelligence|30|30|+{0} to Intelligence		80		
+Quick Sovereign Sceptre	sceptre	rapid		caster	Intelligence|25|25|+{0} to Intelligence		80		
+Iron Cap	helmet	armour	Armour	defence			1		
+Guard Helm	helmet	armour	Armour	defence			12		
+War Helm	helmet	armour	Armour	defence			24		
+Closed Helm	helmet	armour	Armour	defence			36		
+Legion Helm	helmet	armour	Armour	defence			48		
+Siege Helm	helmet	armour	Armour	defence			60		
+Imperial Helm	helmet	armour	Armour	defence			70		
+Titan Crown	helmet	armour	Armour	defence			80		
+Leather Hood	helmet	evasion	Evasion	defence			1		
+Scout Hood	helmet	evasion	Evasion	defence			12		
+Hunter Hood	helmet	evasion	Evasion	defence			24		
+Shadow Hood	helmet	evasion	Evasion	defence			36		
+Ranger Hood	helmet	evasion	Evasion	defence			48		
+Night Hood	helmet	evasion	Evasion	defence			60		
+Wind Hood	helmet	evasion	Evasion	defence			70		
+Phantom Hood	helmet	evasion	Evasion	defence			80		
+Cloth Circlet	helmet	energy_shield	EnergyShield	defence			1		
+Scholar Circlet	helmet	energy_shield	EnergyShield	defence			12		
+Mystic Crown	helmet	energy_shield	EnergyShield	defence			24		
+Ritual Crown	helmet	energy_shield	EnergyShield	defence			36		
+Sage Crown	helmet	energy_shield	EnergyShield	defence			48		
+Occult Crown	helmet	energy_shield	EnergyShield	defence			60		
+Astral Crown	helmet	energy_shield	EnergyShield	defence			70		
+Void Crown	helmet	energy_shield	EnergyShield	defence			80		
+Brigand Helm	helmet	armour_evasion	ArmourEvasion	defence		50	1		
+Skirmish Helm	helmet	armour_evasion	ArmourEvasion	defence		50	12		
+Mercenary Helm	helmet	armour_evasion	ArmourEvasion	defence		50	24		
+Vanguard Helm	helmet	armour_evasion	ArmourEvasion	defence		50	36		
+Warden Helm	helmet	armour_evasion	ArmourEvasion	defence		50	48		
+Champion Helm	helmet	armour_evasion	ArmourEvasion	defence		50	60		
+Paragon Helm	helmet	armour_evasion	ArmourEvasion	defence		50	70		
+Conqueror Helm	helmet	armour_evasion	ArmourEvasion	defence		50	80		
+Acolyte Crown	helmet	armour_es	ArmourEnergyShield	defence		91	1		
+Zealot Crown	helmet	armour_es	ArmourEnergyShield	defence		91	12		
+Templar Crown	helmet	armour_es	ArmourEnergyShield	defence		91	24		
+Martyr Crown	helmet	armour_es	ArmourEnergyShield	defence		91	36		
+Prelate Crown	helmet	armour_es	ArmourEnergyShield	defence		91	48		
+Hierophant Crown	helmet	armour_es	ArmourEnergyShield	defence		91	60		
+Archon Crown	helmet	armour_es	ArmourEnergyShield	defence		91	70		
+Seraph Crown	helmet	armour_es	ArmourEnergyShield	defence		91	80		
+Veiled Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	1		
+Whisper Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	12		
+Trickster Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	24		
+Phantom Cowl	helmet	evasion_es	EvasionEnergyShield	defence		91	36		
+Seer Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	48		
+Dream Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	60		
+Astral Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	70		
+Mirage Hood	helmet	evasion_es	EvasionEnergyShield	defence		91	80		
+Pilgrim Mask	helmet	tri	All	defence		48/48	1		
+Wayfarer Mask	helmet	tri	All	defence		48/48	12		
+Concord Mask	helmet	tri	All	defence		47/47	24		
+Triune Mask	helmet	tri	All	defence		48/48	36		
+Harmonist Mask	helmet	tri	All	defence		48/48	48		
+Ascetic Mask	helmet	tri	All	defence		48/48	60		
+Ascendant Mask	helmet	tri	All	defence		48/48	70		
+Eternal Mask	helmet	tri	All	defence		47/47	80		
+Wooden Tower Shield	shield	armour	Armour	defence			1	28	
+Iron Tower Shield	shield	armour	Armour	defence			12	29	
+Guard Tower Shield	shield	armour	Armour	defence			24	30	
+War Tower Shield	shield	armour	Armour	defence			36	31	
+Knight Tower Shield	shield	armour	Armour	defence			48	32	
+Legion Tower Shield	shield	armour	Armour	defence			60	33	
+Imperial Tower Shield	shield	armour	Armour	defence			70	34	
+Titan Tower Shield	shield	armour	Armour	defence			80	35	
+Hide Buckler	shield	evasion	Evasion	defence			1	25	
+Scout Buckler	shield	evasion	Evasion	defence			12	26	
+Hunter Buckler	shield	evasion	Evasion	defence			24	27	
+Duelist Buckler	shield	evasion	Evasion	defence			36	28	
+Ranger Buckler	shield	evasion	Evasion	defence			48	29	
+Night Buckler	shield	evasion	Evasion	defence			60	30	
+Wind Buckler	shield	evasion	Evasion	defence			70	31	
+Phantom Buckler	shield	evasion	Evasion	defence			80	32	
+Round Shield	shield	armour_evasion	ArmourEvasion	defence		50	1	26	
+Skirmish Shield	shield	armour_evasion	ArmourEvasion	defence		50	12	27	
+Mercenary Shield	shield	armour_evasion	ArmourEvasion	defence		50	24	28	
+Vanguard Shield	shield	armour_evasion	ArmourEvasion	defence		50	36	29	
+Warden Shield	shield	armour_evasion	ArmourEvasion	defence		50	48	30	
+Champion Shield	shield	armour_evasion	ArmourEvasion	defence		50	60	31	
+Paragon Shield	shield	armour_evasion	ArmourEvasion	defence		50	70	32	
+Conqueror Shield	shield	armour_evasion	ArmourEvasion	defence		50	80	33	
+Reliquary Shield	shield	armour_es	ArmourEnergyShield	defence		90	1	25	
+Zealot Shield	shield	armour_es	ArmourEnergyShield	defence		92	12	26	
+Templar Shield	shield	armour_es	ArmourEnergyShield	defence		92	24	27	
+Martyr Shield	shield	armour_es	ArmourEnergyShield	defence		91	36	28	
+Prelate Shield	shield	armour_es	ArmourEnergyShield	defence		91	48	29	
+Hierophant Shield	shield	armour_es	ArmourEnergyShield	defence		91	60	30	
+Archon Shield	shield	armour_es	ArmourEnergyShield	defence		91	70	31	
+Seraph Shield	shield	armour_es	ArmourEnergyShield	defence		91	80	32	
+Wooden Focus	focus	caster_defence	EnergyShield	defence			1		
+Carved Focus	focus	caster_defence	EnergyShield	defence			12		
+Scholar Focus	focus	caster_defence	EnergyShield	defence			24		
+Ritual Focus	focus	caster_defence	EnergyShield	defence			36		
+Sage Focus	focus	caster_defence	EnergyShield	defence			48		
+Occult Focus	focus	caster_defence	EnergyShield	defence			60		
+Astral Focus	focus	caster_defence	EnergyShield	defence			70		
+Void Focus	focus	caster_defence	EnergyShield	defence			80		
+Ruby Ring	ring	resistance		none	FireResistance|12|16|+{0}% to Fire Resistance		8		
+Sapphire Ring	ring	resistance		none	MagicResistance|12|16|+{0}% to Magic Resistance		12		
+Topaz Ring	ring	resistance		none	LightningResistance|12|16|+{0}% to Lightning Resistance		16		
+Coral Ring	ring	life		none	Life|20|30|+{0} to maximum Life		20		
+Lazuli Ring	ring	mana		none	Mana|18|28|+{0} to maximum Mana		1		
+Iron Ring	ring	attack		none	AddedPhysicalToAttacks|2|4|Adds {0} to {1} Physical Damage to Attacks		1		
+Pearl Ring	ring	caster		none	CastSpeed|7|10|{0}% increased Cast Speed		32		
+Golden Hoop	ring	rarity		none	AllAttributes|3|5|+{0} to all Attributes		12		
+Amber Amulet	amulet	attribute		none	Strength|4|6|+{0} to Strength		8		
+Jade Amulet	amulet	attribute		none	Dexterity|4|6|+{0} to Dexterity		8		
+Lapis Amulet	amulet	attribute		none	Intelligence|4|6|+{0} to Intelligence		8		
+Pearlescent Amulet	amulet	resistance		none	AllResistances|7|10|+{0}% to all Elemental Resistances		30		
+Bloodstone Amulet	amulet	life		none	Life|30|40|+{0} to maximum Life		18		
+Solar Amulet	amulet	spirit		none	Spirit|10|15|+{0} to Spirit		30		
+Stellar Amulet	amulet	attribute		none	AllAttributes|2|3|+{0} to all Attributes		24		
+Azure Amulet	amulet	mana		none	ManaRegeneration|20|30|{0}% increased Mana Regeneration Rate		1		
+Crimson Amulet	amulet	life		none	LifeRegeneration|2|4|Regenerate {0} Life per second		1		
+Lunar Amulet	amulet	defence		none	FlatEnergyShield|2|3|+{0} to maximum Energy Shield		14		
+Gold Amulet	amulet	rarity		none	ItemRarity|12|20|{0}% increased Rarity of Items found		35		
+Broadsword	one_hand_sword	balanced		weapon			6		160
+Fine Scimitar	one_hand_sword	balanced		weapon			16		155
+Sickle Sword	one_hand_sword	balanced		weapon			28		150
+Executioner Greataxe	two_hand_axe	balanced		weapon			10		120
+Savage Greataxe	two_hand_axe	balanced		weapon			27		120
+Fine Spiked Club	one_hand_mace	balanced		weapon			16		145
+Warpick	one_hand_mace	balanced		weapon			22		145
+Construct Hammer	one_hand_mace	balanced		weapon			36		140
+Shortbow	bow	balanced		weapon			5		125
+Steelpoint Quarterstaff	quarterstaff	balanced		weapon			28		140
+Rusted Cuirass	body_armour	armour	Armour	defence			1		
+Iron Cuirass	body_armour	armour	Armour	defence			11		
+Maraketh Cuirass	body_armour	armour	Armour	defence			20		
+Full Plate	body_armour	armour	Armour	defence			33		
+Juggernaut Plate	body_armour	armour	Armour	defence			45		
+Champion Cuirass	body_armour	armour	Armour	defence			58		
+Conqueror Plate	body_armour	armour	Armour	defence			68		
+Leather Vest	body_armour	evasion	Evasion	defence			1		
+Pathfinder Coat	body_armour	evasion	Evasion	defence			11		
+Rhoahide Coat	body_armour	evasion	Evasion	defence			22		
+Scout's Vest	body_armour	evasion	Evasion	defence			33		
+Corsair Vest	body_armour	evasion	Evasion	defence			45		
+Hardleather Coat	body_armour	evasion	Evasion	defence			56		
+Armoured Vest	body_armour	evasion	Evasion	defence			73		
+Tattered Robe	body_armour	energy_shield	EnergyShield	defence			1		
+Hexer's Robe	body_armour	energy_shield	EnergyShield	defence			11		
+Silk Robe	body_armour	energy_shield	EnergyShield	defence			22		
+Votive Raiment	body_armour	energy_shield	EnergyShield	defence			33		
+Elementalist Robe	body_armour	energy_shield	EnergyShield	defence			45		
+Plated Raiment	body_armour	energy_shield	EnergyShield	defence			58		
+Enlightened Robe	body_armour	energy_shield	EnergyShield	defence			68		
+Chain Mail Vest	body_armour	armour_evasion	ArmourEvasion	defence		61	1		
+Rogue Armour	body_armour	armour_evasion	ArmourEvasion	defence		54	11		
+Cloaked Mail	body_armour	armour_evasion	ArmourEvasion	defence		53	26		
+Scale Armour	body_armour	armour_evasion	ArmourEvasion	defence		53	37		
+Knight Armour	body_armour	armour_evasion	ArmourEvasion	defence		53	45		
+Gladiator Armour	body_armour	armour_evasion	ArmourEvasion	defence		52	58		
+Heroic Armour	body_armour	armour_evasion	ArmourEvasion	defence		52	65		
+Pilgrim Vestments	body_armour	armour_es	ArmourEnergyShield	defence		82	1		
+Pelt Mantle	body_armour	armour_es	ArmourEnergyShield	defence		88	10		
+Mail Vestments	body_armour	armour_es	ArmourEnergyShield	defence		89	16		
+Shaman Mantle	body_armour	armour_es	ArmourEnergyShield	defence		90	28		
+Cleric Vestments	body_armour	armour_es	ArmourEnergyShield	defence		91	45		
+Revered Vestments	body_armour	armour_es	ArmourEnergyShield	defence		92	65		
+Corvus Mantle	body_armour	armour_es	ArmourEnergyShield	defence		92	68		
+Hermit Garb	body_armour	evasion_es	EvasionEnergyShield	defence		75	1		
+Waxed Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		86	11		
+Marabout Garb	body_armour	evasion_es	EvasionEnergyShield	defence		88	16		
+Wayfarer Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		89	28		
+Scalper's Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		90	39		
+Monastic Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	56		
+Devout Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	68		
+Grand Regalia	body_armour	tri	All	defence		50/45	65		

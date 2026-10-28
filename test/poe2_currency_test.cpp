@@ -124,7 +124,7 @@ TEST_F(Poe2CurrencyTest, AlchemyAndChaosMakeRares)
 
 TEST_F(Poe2CurrencyTest, ScouringMakesNormal)
 {
-	Item item = Make("Fine Short Bow", ITEM_QUALITY_RARE);
+	Item item = Make("Crude Bow", ITEM_QUALITY_RARE);
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Scouring, *MyPlayer, item));
 	EXPECT_EQ(item._iMagical, ITEM_QUALITY_NORMAL);
 	ExpectRecreates(item);
@@ -137,7 +137,7 @@ TEST_F(Poe2CurrencyTest, RejectsWrongItems)
 	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Scouring, *MyPlayer, normal));
 
 	Item unique;
-	ASSERT_TRUE(AdminGenerateItem(*MyPlayer, unique, FindBase("Fine Short Bow"), ITEM_QUALITY_UNIQUE, 30, 99));
+	ASSERT_TRUE(AdminGenerateItem(*MyPlayer, unique, FindBase("Crude Bow"), ITEM_QUALITY_UNIQUE, 30, 99));
 	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Alchemy, *MyPlayer, unique));
 }
 
@@ -198,7 +198,7 @@ TEST_F(Poe2CurrencyTest, RegalKeepsTheMagicAffixes)
 
 TEST_F(Poe2CurrencyTest, ExaltedAddsAnAffixAndKeepsTheRest)
 {
-	Item item = MakeWhere("Fine Short Bow", ITEM_QUALITY_RARE, [](const Item &candidate) {
+	Item item = MakeWhere("Crude Bow", ITEM_QUALITY_RARE, [](const Item &candidate) {
 		return candidate._iMagical == ITEM_QUALITY_RARE && RareAffixCount(candidate) == 3;
 	});
 	const auto before = item._iRarePowers;
@@ -217,7 +217,7 @@ TEST_F(Poe2CurrencyTest, ExaltedAddsAnAffixAndKeepsTheRest)
 
 TEST_F(Poe2CurrencyTest, DivineKeepsTheAffixes)
 {
-	Item item = Make("Fine Short Bow", ITEM_QUALITY_RARE);
+	Item item = Make("Crude Bow", ITEM_QUALITY_RARE);
 	const auto powers = item._iRarePowers;
 	const int seed = item._iSeed;
 	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Divine, *MyPlayer, item));

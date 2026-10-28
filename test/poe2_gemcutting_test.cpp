@@ -1,7 +1,10 @@
 #include <algorithm>
+#include <map>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -16,6 +19,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/support_tiers.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -87,7 +91,8 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	EXPECT_EQ(skills, 181U);
+	// 181 before the five crossbow skills were retired (Curtis 2026-10-27).
+	EXPECT_EQ(skills, 176U);
 	// Lineage supports are found, never cut; the rest have an entry for each tier.
 	size_t tiers = 0;
 	for (size_t i = 1; i < static_cast<size_t>(SupportGem::Count); i++) {
@@ -118,6 +123,80 @@ TEST_F(Poe2GemcuttingTest, CategoriesFollowWeapons)
 	EXPECT_TRUE(GemInCategory(find(SkillSlot::ForSpell(SpellID::BoneSpirit)), GemCategory::Occult));
 	EXPECT_TRUE(GemInCategory(find(SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh)), GemCategory::Spirit));
 	EXPECT_FALSE(GemInCategory(find(SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh)), GemCategory::Support));
+}
+
+TEST_F(Poe2GemcuttingTest, CrossbowSkillsMovedToBowsOrRetired)
+{
+	// Curtis 2026-10-27: crossbows left the game. The crossbow skills that make sense with a bow moved to bows.
+	std::optional<Item> bow;
+	std::optional<Item> crossbow;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		if (data.iClass != ICLASS_WEAPON || data.itype != ItemType::Bow)
+			continue;
+		std::optional<Item> &kind = data.iSName == "Crossbow" ? crossbow : bow;
+		if (kind)
+			continue;
+		kind.emplace();
+		InitializeItem(*kind, static_cast<_item_indexes>(i));
+	}
+	ASSERT_TRUE(bow.has_value());
+	ASSERT_TRUE(crossbow.has_value());
+	const auto inCatalog = [](SkillSlot skill) {
+		return std::any_of(GemCatalog().begin(), GemCatalog().end(), [skill](const GemEntry &gem) { return gem.skill == skill; });
+	};
+
+	const std::pair<WeaponSkill, std::string_view> Moved[] = {
+		{ WeaponSkill::ClusterBolt, "Fire Arrow" },
+		{ WeaponSkill::ExplosiveBolt, "Explosive Arrow" },
+	};
+	for (const auto &[skill, name] : Moved) {
+		const SkillSlot slot = SkillSlot::ForAttack(skill);
+		EXPECT_EQ(WeaponSkillName(skill), name);
+		EXPECT_FALSE(IsRetiredSkill(slot)) << name;
+		EXPECT_TRUE(ItemAllowsWeaponSkill(*bow, skill)) << name;
+		EXPECT_EQ(WeaponSkillWeapons(skill), "bow") << name;
+		EXPECT_TRUE(inCatalog(slot)) << name;
+		// The gem's item is renamed with the skill, so the gem still finds it.
+		const std::optional<size_t> index = SkillGemItemIndex(slot);
+		ASSERT_TRUE(index.has_value()) << name;
+		EXPECT_EQ(std::string_view(AllItemsList[*index].iName), std::string(name) + " Gem");
+	}
+
+	// The rest never drop and are never cut, but a gem a hero already has still loads and works with his crossbow.
+	for (const WeaponSkill skill : { WeaponSkill::RapidFire, WeaponSkill::Impale, WeaponSkill::SpikeTrap, WeaponSkill::Sentry, WeaponSkill::SiegeVolley }) {
+		const SkillSlot slot = SkillSlot::ForAttack(skill);
+		EXPECT_TRUE(IsRetiredSkill(slot)) << WeaponSkillName(skill);
+		EXPECT_FALSE(inCatalog(slot)) << WeaponSkillName(skill);
+		const std::optional<size_t> index = SkillGemItemIndex(slot);
+		ASSERT_TRUE(index.has_value()) << WeaponSkillName(skill);
+		EXPECT_EQ(AllItemsList[*index].dropRate, 0) << WeaponSkillName(skill);
+		EXPECT_TRUE(ItemAllowsWeaponSkill(*crossbow, skill)) << WeaponSkillName(skill);
+	}
+
+	// Every skill on the Bow tab works with a bow.
+	for (const GemEntry &gem : GemCatalog()) {
+		if (GemInCategory(gem, GemCategory::Bow))
+			EXPECT_TRUE(ItemAllowsWeaponSkill(*bow, gem.skill.attack())) << GemName(gem);
+	}
+}
+
+TEST_F(Poe2GemcuttingTest, BowTiersHaveNoTwoSkillsOfOneElement)
+{
+	// The gem plan: no two fire, cold or lightning skills in one tier of a tab.
+	std::map<int, uint32_t> elements;
+	std::map<int, int> skills;
+	for (const GemEntry &gem : GemCatalog()) {
+		if (!GemInCategory(gem, GemCategory::Bow))
+			continue;
+		const int tier = GemTier(gem.level);
+		const uint32_t element = SkillTags(gem.skill) & ST_Elemental;
+		EXPECT_EQ(elements[tier] & element, 0U) << GemName(gem);
+		elements[tier] |= element;
+		skills[tier]++;
+	}
+	// Tier I has more than Hail of Arrows, the Rogue's first gem.
+	EXPECT_GE(skills[1], 2);
 }
 
 TEST_F(Poe2GemcuttingTest, TabsFollowTheUncutGem)

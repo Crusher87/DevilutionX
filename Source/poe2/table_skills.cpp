@@ -71,7 +71,7 @@ const TableSkillData Table[] = {
 	// Sword
 	{ WS::Whirlwind, "Whirlwind", "Spin through the enemies in your path, hitting all around where you stop", 5, 8, TW::AxeOrSword, 0, Dash, 85, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Axe, Icon(SpellIcon::Berserk), TableCurve::Boneshatter, 300 },
 	{ WS::Sacrifice, "Sacrifice", "A brutal strike paid for with 5% of your life", 7, 6, TW::Sword, 0, Strike, 260, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
-	{ WS::Zeal, "Zeal", "Four lightning-fast strikes at the enemy in front", 9, 5, TW::Sword, 0, Flurry, 60, 4, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 290 },
+	{ WS::Zeal, "Zeal", "Four lightning-fast strikes at the enemy in front", 9, 5, TW::Sword, 0, Flurry, 140, 4, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 290 },
 	{ WS::Vengeance, "Vengeance", "A strike that bursts into fire, lightning and cold", 11, 5, TW::Sword, 0, Strike, 130, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Elements, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 0 },
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 13, 14, TW::Sword, 0, Arc, 200, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
@@ -95,17 +95,17 @@ const TableSkillData Table[] = {
 	{ WS::LashingTailKick, "Lashing Tail Kick", "A spinning kick that throws back all around", 7, 7, TW::Staff, 0, Around, 65, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Knockback | TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Search), TableCurve::Boneshatter, 0 },
 	{ WS::WaveOfLight, "Wave of Light", "A wave of holy light bursts out around you", 9, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::FlameWave), TableCurve::Boneshatter, 280 },
 	{ WS::CycloneStrike, "Cyclone Strike", "A storm of strikes all around you, crackling with lightning", 11, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 280 },
-	{ WS::SevenSidedStrike, "Seven-Sided Strike", "Strike up to seven enemies nearby, one after another", 13, 11, TW::Staff, 0, Seven, 90, 7, 4, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Teleport), TableCurve::Boneshatter, 0 },
-	// Bow
+	{ WS::SevenSidedStrike, "Seven-Sided Strike", "Strike up to seven enemies nearby, one after another", 13, 11, TW::Staff, 0, Seven, 200, 7, 4, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Teleport), TableCurve::Boneshatter, 0 },
+	// Bow. Fire Arrow and Explosive Arrow came from the crossbow (dropped 2026-10-27); Fire Arrow is tier I, beside the Rogue's starting Hail of Arrows
+	{ WS::ClusterBolt, "Fire Arrow", "An arrow that bursts into flame where it lands", 1, 8, TW::Bow, 0, Projectiles, 100, 1, 1, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
 	{ WS::Multishot, "Multishot", "A wide fan of seven arrows", 9, 6, TW::Bow, 0, Projectiles, 75, 7, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 280 },
 	{ WS::GuidedArrow, "Guided Arrow", "One heavy arrow that pierces through several enemies", 11, 5, TW::Bow, 0, Projectiles, 220, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Search), TableCurve::LightningArrow, 0 },
 	{ WS::FreezingArrow, "Freezing Arrow", "An arrow that bursts into freezing cold where it lands", 13, 10, TW::Bow, 0, Projectiles, 100, 1, 2, 0, 0, 0, DT::Magic, MissileID::Arrow, MG::BlueFlareExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::LightningArrow, 0 },
-	// Crossbow
+	{ WS::ExplosiveBolt, "Explosive Arrow", "An arrow that explodes where it lands", 11, 9, TW::Bow, 0, Projectiles, 110, 1, 2, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
+	// Crossbow: retired with the crossbows (see IsRetiredSkill); an old gem still loads and works with a crossbow
 	{ WS::Impale, "Impale", "A crossbow bolt that skewers through enemies", 3, 6, TW::Crossbow, 0, Projectiles, 250, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Search), TableCurve::LightningArrow, 0 },
-	{ WS::ClusterBolt, "Cluster Bolt", "A bolt that bursts into flame where it lands", 5, 8, TW::Crossbow, 0, Projectiles, 100, 1, 1, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
 	{ WS::SpikeTrap, "Spike Trap", "Sets a trap that bursts when an enemy steps close", 7, 8, TW::Crossbow, 0, Zone, 75, 0, 1, 200, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun, TableZone::Trap, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::TrapDisarm), TableCurve::LightningArrow, 0 },
 	{ WS::Sentry, "Sentry", "Plants a turret that shoots the nearest enemy for 8 seconds", 9, 12, TW::Crossbow, 0, Zone, 60, 0, 8, 160, 12, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_AtPlayer, TableZone::Turret, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Golem), TableCurve::LightningArrow, 0 },
-	{ WS::ExplosiveBolt, "Explosive Bolt", "A bolt that explodes where it lands", 11, 9, TW::Crossbow, 0, Projectiles, 110, 1, 2, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
 	{ WS::SiegeVolley, "Ballista Barrage", "Bolts rain down on the target area", 13, 14, TW::Crossbow, 0, Zone, 75, 0, 3, 50, 6, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::RandomStrikes, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::RainOfArrows, 0 },
 	// Shield
 	{ WS::HolyShield, "Holy Shield", "Take 15% less damage from melee hits for 10 seconds", 5, 10, TW::Shield, 1, Buff, Flat, 0, 0, 200, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, 0, TableZone::None, TableCurse::None, TableBuff::HolyShield, TT_Shield, Icon(SpellIcon::Pentagram), TableCurve::Boneshatter, 100 },
@@ -373,7 +373,7 @@ void ZoneBurst(const Player &player, const TableSkillData &data, Point center, i
 	});
 }
 
-/** @brief A projectile's landing burst: a set share of a base hit (Freezing Arrow, Explosive Bolt), or two thirds of the projectile's hit. */
+/** @brief A projectile's landing burst: a set share of a base hit (Freezing Arrow, Explosive Arrow), or two thirds of the projectile's hit. */
 Fixed26_6 LandingBurstDamage(const Player &player, const TableSkillData &data)
 {
 	if (IsAnyOf(data.skill, WeaponSkill::FreezingArrow, WeaponSkill::ExplosiveBolt)) {
@@ -610,6 +610,12 @@ int TableCurseStrength(const Monster &monster, TableCurse curse)
 	return (monster.poe2.auraCurses & AuraCurseBit(curse)) != 0 ? monster.poe2.auraCurseStrength : 100;
 }
 
+int SevenSidedStrikeSharePercent(int targets, int burst)
+{
+	const int full = std::clamp(std::min(SevenSidedStrikeFullTargets, burst), 1, 100);
+	return std::clamp(targets, 0, full) * 100 / full;
+}
+
 const TableSkillData *FindTableSkill(WeaponSkill skill)
 {
 	for (const TableSkillData &data : Table) {
@@ -687,6 +693,8 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	// The cast effects were played by PlaySkillEffects just before.
 	CastResult result;
 	const Point tile = player.position.tile;
+	// A per-hit skill (POE2 Mashup) lands one hit of its burst a use, each for PerHitDamagePercent of a hit.
+	const int perHit = PerHitBurst(data.skill) > 0 ? PerHitDamagePercent(player, data.skill) : 0;
 	switch (data.shape) {
 	case Strike:
 		if (Monster *monster = MonsterInFrontOf(player); monster != nullptr)
@@ -718,6 +726,10 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			Monster *monster = MonsterInFrontOf(player);
 			if (monster == nullptr)
 				break;
+			if (perHit > 0) {
+				WeaponHit(player, *monster, data, data.damagePercent * perHit / 100, result);
+				break;
+			}
 			WeaponHit(player, *monster, data, data.damagePercent, result);
 		}
 		break;
@@ -729,6 +741,12 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		break;
 	}
 	case Stream:
+		if (perHit > 0) {
+			TableSkillData shot = data;
+			shot.damagePercent = static_cast<int16_t>(std::min(data.damagePercent * perHit / 100, static_cast<int>(INT16_MAX)));
+			FireTableShot(player, shot, target, TakePerHitIndex(player));
+			break;
+		}
 		StartSkillVolley(player, data.skill, target, data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill)) + SupportExtraProjectileCount(player, slot));
 		break;
 	case Burst:
@@ -816,6 +834,20 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		});
 		if (targets.size() > data.count)
 			targets.resize(data.count);
+		// Per hit: one strike a use, at the nearest enemies in turn. With fewer of them than SevenSidedStrikeFullTargets,
+		// each strike deals their share of that many, so a lone monster takes a third of each (Curtis 2026-10-27, "Raise
+		// each strike"; it was a seventh, the whole burst's share).
+		if (perHit > 0 && !targets.empty()) {
+			const int count = static_cast<int>(targets.size());
+			const int index = TakePerHitIndex(player);
+			Monster &monster = *targets[index % count];
+			AddVisualEffect(monster.position.tile, MissileGraphicID::Etherealize, 0);
+			WeaponHit(player, monster, data, data.damagePercent * perHit / 100 * SevenSidedStrikeSharePercent(count, data.count) / 100, result);
+			// A full set of strikes builds the combo one use built.
+			if ((index + 1) % std::max<int>(data.count, 1) != 0)
+				data.flags = static_cast<uint16_t>(data.flags & ~TF_Combo);
+			break;
+		}
 		int delay = 0;
 		for (Monster *monster : targets) {
 			AddVisualEffect(monster->position.tile, MissileGraphicID::Etherealize, delay);

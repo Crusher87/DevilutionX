@@ -804,6 +804,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/charms.cpp
   poe2/experience.cpp
   poe2/flasks.cpp
+  poe2/floor_chests.cpp
   poe2/floor_packs.cpp
   poe2/floors.cpp
   poe2/gem_levels.cpp
@@ -841,6 +842,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/weapon_swap.cpp
   poe2/default_attack.cpp
   poe2/aim.cpp
+  poe2/attack_speed.cpp
   poe2/weapon_skills.cpp
   tables/playerdat.cpp
 )

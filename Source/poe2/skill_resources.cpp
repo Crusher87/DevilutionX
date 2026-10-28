@@ -41,6 +41,12 @@ int AddCombo(Player &player)
 	return data.combo;
 }
 
+bool FistsOfThunderNextHitBursts(const Player &player)
+{
+	// As DoAttack bursts: when the Combo the hit brings it to is a multiple of FistsOfThunderBurstEvery.
+	return std::min<int>(player.poe2.combo + 1, MaxCombo) % FistsOfThunderBurstEvery == 0;
+}
+
 void AddRage(Player &player, int rage)
 {
 	Poe2PlayerData &data = player.poe2;

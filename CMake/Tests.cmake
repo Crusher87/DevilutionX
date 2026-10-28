@@ -39,6 +39,7 @@ set(tests
   poe2_currency_test
   poe2_defenses_test
   poe2_flasks_test
+  poe2_floor_chests_test
   poe2_floors_test
   poe2_gemcutting_test
   poe2_item_bases_test
@@ -58,6 +59,7 @@ set(tests
   poe2_endgame_test
   poe2_monster_levels_test
   poe2_monster_mods_test
+  poe2_pace_test
   poe2_passive_tree_test
   poe2_weapon_swap_test
   poe2_rare_items_test
@@ -88,6 +90,7 @@ set(tests
   poe2_waystones_test
   poe2_experience_test
   poe2_weapon_skills_test
+  poe2_swing_speed_test
   player_test
   quests_test
   reencode_dun_cels_test

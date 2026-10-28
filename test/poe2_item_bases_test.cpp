@@ -17,6 +17,7 @@
 #include "loadsave.h"
 #include "pfile.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/default_attack.hpp"
@@ -31,6 +32,7 @@
 #include "spells.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
+#include "utils/is_of.hpp"
 #include "utils/paths.h"
 #include "utils/str_cat.hpp"
 
@@ -214,7 +216,7 @@ TEST_F(Poe2ItemBasesTest, OneCellItemsOnTheFloorFitTheirNewPicture)
 
 TEST_F(Poe2ItemBasesTest, BundleBasesReplaceTheOldOnes)
 {
-	for (const std::string_view name : { "Shortsword", "Heavy Imperial Edge", "Ash Staff", "Light Crossbow", "Quick Bone Sceptre", "Wooden Focus", "Iron Cap", "Hide Buckler", "Ruby Ring", "Azure Amulet" }) {
+	for (const std::string_view name : { "Shortsword", "Dark Blade", "Fine Wrapped Quarterstaff", "Crude Bow", "Quick Bone Sceptre", "Wooden Focus", "Iron Cap", "Hide Buckler", "Ruby Ring", "Azure Amulet" }) {
 		const _item_indexes base = FindBase(name);
 		EXPECT_GT(AllItemsList[base].dropRate, 0) << name;
 		EXPECT_TRUE(IsItemAvailable(base)) << name;
@@ -223,11 +225,16 @@ TEST_F(Poe2ItemBasesTest, BundleBasesReplaceTheOldOnes)
 	// The old bases stay for items that already exist, but no longer drop.
 	for (const std::string_view name : { "Long Sword", "Wrapped Quarterstaff", "Siege Crossbow", "Omen Sceptre", "Crystal Focus", "Great Helm", "Ring" })
 		EXPECT_EQ(AllItemsList[FindBase(name)].dropRate, 0) << name;
+	// So do the bundle's heavy and swift weapons and its crossbows (Curtis 2026-10-27: weapons are POE2's own bases).
+	for (const std::string_view name : { "Heavy Imperial Edge", "Swift Shortsword", "Light Crossbow", "Dragonspine Crossbow" }) {
+		EXPECT_EQ(AllItemsList[FindBase(name)].dropRate, 0) << name;
+		EXPECT_NE(BaseMetaFor(FindBase(name)), nullptr) << name;
+	}
 	EXPECT_EQ(AllItemsList[FindBase("Light Crossbow")].itype, ItemType::Bow);
 	EXPECT_EQ(AllItemsList[FindBase("Quick Bone Sceptre")].itype, ItemType::Mace);
 	EXPECT_EQ(AllItemsList[FindBase("Wooden Focus")].itype, ItemType::Shield);
 	// Diablo's uniques keep dropping on the new bases.
-	EXPECT_EQ(AllItemsList[FindBase("Fine Short Bow")].iItemId, UITYPE_SHORTBOW);
+	EXPECT_EQ(AllItemsList[FindBase("Crude Bow")].iItemId, UITYPE_SHORTBOW);
 	EXPECT_EQ(AllItemsList[FindBase("Ruby Ring")].iItemId, UITYPE_RING);
 }
 
@@ -240,8 +247,9 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			continue;
 		bases++;
 		const ItemData &data = AllItemsList[i];
-		// POE2 has no Coral Ring, so it only carries its unique.
-		if (data.iName != "Coral Ring")
+		// POE2 has no Coral Ring, so it only carries its unique; the heavy and swift weapons and the crossbows only
+		// stay for saved items.
+		if (data.iName != "Coral Ring" && !IsAnyOf(meta->identity, "heavy", "swift") && meta->itemClass != "crossbow")
 			EXPECT_GT(data.dropRate, 0) << data.iName;
 		if (data.iClass == ICLASS_WEAPON)
 			EXPECT_GT(data.iMaxDam, data.iMinDam) << data.iName;
@@ -250,8 +258,39 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			EXPECT_TRUE(meta->defense.has_value()) << data.iName;
 		}
 	}
-	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, and the 43 body armours of plan step 10.
-	EXPECT_EQ(bases, 430);
+	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, the 43 body armours of plan step 10 and the 10 POE2
+	// weapons that carry Diablo unique types no other base does.
+	EXPECT_EQ(bases, 440);
+}
+
+TEST_F(Poe2ItemBasesTest, EveryDiabloWeaponUniqueHasABaseThatDrops)
+{
+	// Diablo's weapon bases stopped dropping when the bundle's came in, and each new base carries one Diablo unique type,
+	// so some types were left on no base that drops. A POE2 base of their kind carries each of those.
+	int checked = 0;
+	for (const UniqueItem &unique : UniqueItems) {
+		// The bundle's uniques have no Diablo type; The Butcher's Cleaver and Griswold's Edge have bases of their own.
+		if (IsAnyOf(unique.UIItemId, UITYPE_INVALID, UITYPE_CLEAVER, UITYPE_GRISWOLD))
+			continue;
+		bool weapon = false;
+		bool drops = false;
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			const ItemData &data = AllItemsList[i];
+			if (data.iItemId != unique.UIItemId || data.iMiscId == IMISC_UNIQUE)
+				continue;
+			weapon = weapon || data.iClass == ICLASS_WEAPON;
+			drops = drops || (data.dropRate > 0 && BaseMetaFor(static_cast<int>(i)) != nullptr);
+		}
+		if (!weapon)
+			continue;
+		checked++;
+		EXPECT_TRUE(drops) << unique.UIName;
+	}
+	EXPECT_GE(checked, 60);
+	EXPECT_EQ(AllItemsList[FindBase("Savage Greataxe")].iItemId, UITYPE_BATTLEAXE);
+	EXPECT_EQ(AllItemsList[FindBase("Construct Hammer")].iItemId, UITYPE_WARHAMMER);
+	EXPECT_EQ(AllItemsList[FindBase("Shortbow")].iItemId, UITYPE_LONGBOW);
+	EXPECT_EQ(AllItemsList[FindBase("Shortbow")].iMinMLvl, 5);
 }
 
 TEST_F(Poe2ItemBasesTest, RingsFollowPoe2)
@@ -298,15 +337,25 @@ TEST_F(Poe2ItemBasesTest, AmuletsFollowPoe2)
 	EXPECT_EQ(ItemImplicitText(lunar)[0], StrCat("+", points * EnergyShieldPerDefense, " to maximum Energy Shield"));
 }
 
-TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
+TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesAreTheirSiblingsPoe2Base)
 {
-	const Item heavy = MakeItem("Heavy Shortsword", 1);
-	const Item balanced = MakeItem("Shortsword", 1);
-	const Item swift = MakeItem("Swift Shortsword", 1);
-	EXPECT_LT(Stat(heavy, Poe2ItemStat::AttackSpeed), 0);
-	EXPECT_EQ(Stat(balanced, Poe2ItemStat::AttackSpeed), 0);
-	EXPECT_GE(Stat(swift, Poe2ItemStat::AttackSpeed), 10);
-	EXPECT_GT(heavy._iMinDam + heavy._iMaxDam, swift._iMinDam + swift._iMaxDam);
+	// Curtis 2026-10-27: weapons are POE2's own bases, so a saved heavy or swift weapon is its balanced sibling's base.
+	for (const auto &[old, real] : { std::pair { "Heavy Shortsword", "Shortsword" }, std::pair { "Swift Shortsword", "Shortsword" },
+	         std::pair { "Heavy Imperial Edge", "Dark Blade" }, std::pair { "Swift Starbow", "Warmonger Bow" } }) {
+		const ItemData &data = AllItemsList[FindBase(old)];
+		const ItemData &base = AllItemsList[FindBase(real)];
+		EXPECT_EQ(data.dropRate, 0) << old;
+		EXPECT_EQ(data.iMinMLvl, base.iMinMLvl) << old;
+		EXPECT_EQ(data.iMinDam, base.iMinDam) << old;
+		EXPECT_EQ(data.iMaxDam, base.iMaxDam) << old;
+		EXPECT_EQ(data.iMinStr, base.iMinStr) << old;
+		EXPECT_EQ(data.iMinDex, base.iMinDex) << old;
+		EXPECT_EQ(BaseMetaFor(FindBase(old))->aps, BaseMetaFor(FindBase(real))->aps) << old;
+		EXPECT_EQ(BaseMetaFor(FindBase(old))->level, BaseMetaFor(FindBase(real))->level) << old;
+		const Item item = MakeItem(old, 1);
+		EXPECT_EQ(Stat(item, Poe2ItemStat::AttackSpeed), 0) << old;
+		EXPECT_TRUE(ItemImplicitText(item).empty()) << old;
+	}
 
 	const Item quick = MakeItem("Quick Pilgrim Staff", 1);
 	const Item focused = MakeItem("Focused Pilgrim Staff", 1);
@@ -315,10 +364,35 @@ TEST_F(Poe2ItemBasesTest, HeavyAndSwiftBasesTradeDamageForSpeed)
 	EXPECT_GT(focused._iPLMag, quick._iPLMag);
 }
 
+TEST_F(Poe2ItemBasesTest, WeaponBasesHaveTheirAttacksPerSecond)
+{
+	const auto aps = [](std::string_view name) {
+		const BaseMeta *base = BaseMetaFor(FindBase(name));
+		return base != nullptr ? static_cast<int>(base->aps) : -1;
+	};
+	// POE2's own (Path of Building 2's AttackRateBase).
+	EXPECT_EQ(aps("Shortsword"), 155);
+	EXPECT_EQ(aps("Heavy Shortsword"), 155);
+	EXPECT_EQ(aps("Swift Shortsword"), 155);
+	EXPECT_EQ(aps("Corroded Longsword"), 130);
+	EXPECT_EQ(aps("Felled Greatclub"), 110);
+	EXPECT_EQ(aps("Glass Shank"), 155);
+	EXPECT_EQ(aps("Fine Wrapped Quarterstaff"), 140);
+	EXPECT_EQ(aps("Crude Bow"), 120);
+	EXPECT_EQ(aps("Messer"), 160);
+	// Crossbows no longer drop and keep the bundle's.
+	EXPECT_EQ(aps("Light Crossbow"), 90);
+	// Caster weapons, armour and jewellery have none.
+	EXPECT_EQ(aps("Quick Pilgrim Staff"), 0);
+	EXPECT_EQ(aps("Iron Cap"), 0);
+	EXPECT_EQ(aps("Ruby Ring"), 0);
+}
+
 /**
- * Plan step 14 (Curtis 2026-10-27): the Ash Staff and Short Bow families, the only staves and bows a hero uses up to
- * about level 11, hit 60% and 40% harder than the bundle's 7-10 / 6-9 / 4-6 and 6-9 / 5-7 / 4-5. The next tier keeps
- * the bundle's numbers.
+ * Plan step 14 (Curtis 2026-10-27): the first quarterstaff and bow, the only ones a hero uses up to about level 11, hit
+ * 100% and 115% harder than their base (60% and 40% before attacks took POE2's times; research/attack-speed/rebalance):
+ * POE2's Wrapped Quarterstaff 7-12 and Crude Bow 6-9 (the heavy and swift rows are the same bases). The next ones keep
+ * POE2's numbers.
  */
 TEST_F(Poe2ItemBasesTest, ActOneStavesAndBowsHitHarder)
 {
@@ -326,24 +400,22 @@ TEST_F(Poe2ItemBasesTest, ActOneStavesAndBowsHitHarder)
 		const ItemData &data = AllItemsList[FindBase(name)];
 		return std::make_pair(static_cast<int>(data.iMinDam), static_cast<int>(data.iMaxDam));
 	};
-	EXPECT_EQ(damage("Heavy Ash Staff"), std::make_pair(11, 16));
-	EXPECT_EQ(damage("Ash Staff"), std::make_pair(10, 13));
-	EXPECT_EQ(damage("Swift Ash Staff"), std::make_pair(6, 10));
-	EXPECT_EQ(damage("Heavy Short Bow"), std::make_pair(8, 13));
-	EXPECT_EQ(damage("Fine Short Bow"), std::make_pair(7, 10));
-	EXPECT_EQ(damage("Swift Short Bow"), std::make_pair(6, 7));
-	EXPECT_EQ(damage("Heavy Banded Staff"), std::make_pair(10, 15));
-	EXPECT_EQ(damage("Heavy Yew Bow"), std::make_pair(9, 12));
+	EXPECT_EQ(damage("Fine Wrapped Quarterstaff"), std::make_pair(14, 24));
+	EXPECT_EQ(damage("Heavy Ash Staff"), std::make_pair(14, 24));
+	EXPECT_EQ(damage("Crude Bow"), std::make_pair(13, 19));
+	EXPECT_EQ(damage("Swift Short Bow"), std::make_pair(13, 19));
+	EXPECT_EQ(damage("Fine Gothic Quarterstaff"), std::make_pair(16, 26));
+	EXPECT_EQ(damage("Recurve Bow"), std::make_pair(15, 31));
 	// A white staff hits for its base.
-	const Item staff = MakeItem("Heavy Ash Staff", 1);
-	EXPECT_EQ(staff._iMinDam, 11);
-	EXPECT_EQ(staff._iMaxDam, 16);
+	const Item staff = MakeItem("Fine Wrapped Quarterstaff", 1);
+	EXPECT_EQ(staff._iMinDam, 14);
+	EXPECT_EQ(staff._iMaxDam, 24);
 }
 
-TEST_F(Poe2ItemBasesTest, HeavyBasesAttackSlower)
+TEST_F(Poe2ItemBasesTest, WeaponsAttackAtTheirBasesSpeed)
 {
-	// Curtis 2026-10-23: a Heavy base's reduced attack speed only cancelled speed from elsewhere, so on its own it was
-	// never slower. Now it adds an animation frame for every 10%.
+	// Curtis 2026-10-23: a base's own attacks per second set its attack time. Since 2026-10-27 they are POE2's: the
+	// Shortsword 1.55 a second, the Dull Hatchet 1.5, and a saved Heavy Shortsword is a Shortsword.
 	LoadPlayerDataFiles();
 	Player &player = *MyPlayer;
 	player = {};
@@ -354,15 +426,15 @@ TEST_F(Poe2ItemBasesTest, HeavyBasesAttackSlower)
 	player._pBaseMag = player._pMagic = 200;
 	player._pBaseDex = player._pDexterity = 200;
 	player._pBaseVit = player._pVitality = 50;
-	const auto attackFrames = [&player](std::string_view base) {
+	const auto attackTime = [&player](std::string_view base) {
 		player.InvBody[INVLOC_HAND_LEFT] = MakeItem(base, 1);
 		player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
 		CalcPlrInv(player, false);
-		return player.poe2.passiveAttackFrames;
+		return ActionSeconds(AttackTime(player, DefaultSkillSlot(player)));
 	};
-	EXPECT_EQ(attackFrames("Heavy Shortsword"), -1);
-	EXPECT_EQ(attackFrames("Shortsword"), 0);
-	EXPECT_EQ(attackFrames("Swift Shortsword"), 1);
+	EXPECT_NEAR(attackTime("Shortsword"), 1 / 1.55, 0.0001);
+	EXPECT_NEAR(attackTime("Heavy Shortsword"), 1 / 1.55, 0.0001);
+	EXPECT_NEAR(attackTime("Dull Hatchet"), 1 / 1.5, 0.0001);
 
 	// A negative skip starts the animation before its first frame, so it reaches each frame a game tick later.
 	const auto ticksToFrame = [](int8_t skipped, int8_t frame) {
@@ -411,8 +483,8 @@ TEST_F(Poe2ItemBasesTest, DefenceLinesComeFromTheBase)
 	EXPECT_EQ(ItemDefenseType(MakeItem("Wooden Focus", 1)), DefenseType::EnergyShield);
 	EXPECT_EQ(ItemModBaseTags(MakeItem("Leather Hood", 1)), ModBaseEvasion);
 	EXPECT_EQ(ItemModSlot(MakeItem("Wooden Focus", 1)), ModSlot::Focus);
-	EXPECT_EQ(ItemModSlot(MakeItem("Shiv", 1)), ModSlot::Dagger);
-	EXPECT_EQ(ItemModSlot(MakeItem("Sledge", 1)), ModSlot::TwoHandMelee);
+	EXPECT_EQ(ItemModSlot(MakeItem("Glass Shank", 1)), ModSlot::Dagger);
+	EXPECT_EQ(ItemModSlot(MakeItem("Felled Greatclub", 1)), ModSlot::TwoHandMelee);
 }
 
 TEST_F(Poe2ItemBasesTest, QualityRaisesTheBasesOwnStat)
@@ -440,7 +512,7 @@ TEST_F(Poe2ItemBasesTest, QualityRaisesTheBasesOwnStat)
 
 TEST_F(Poe2ItemBasesTest, QuarterstaffsRollWeaponAffixesNotSpells)
 {
-	const _item_indexes base = FindBase("Ash Staff");
+	const _item_indexes base = FindBase("Fine Wrapped Quarterstaff");
 	int magic = 0;
 	for (uint32_t seed = 1; seed <= 300; seed++) {
 		Item item {};
@@ -660,7 +732,10 @@ TEST_F(Poe2ItemBasesTest, GearNeedsPoe2sFullAttributes)
 	EXPECT_EQ(needs("Iron Cap"), (std::array<int, 3> { 5, 0, 0 }));
 	EXPECT_EQ(needs("Legion Helm"), (std::array<int, 3> { 78, 0, 0 }));
 	EXPECT_EQ(needs("Titan Crown"), (std::array<int, 3> { 150, 0, 0 }));
-	EXPECT_EQ(needs("Shortsword"), (std::array<int, 3> { 3, 0, 3 }));
+	EXPECT_EQ(needs("Shortsword"), (std::array<int, 3> { 0, 0, 0 }));
+	EXPECT_EQ(needs("Vampiric Blade"), (std::array<int, 3> { 14, 0, 14 }));
+	EXPECT_EQ(needs("Dark Blade"), (std::array<int, 3> { 63, 0, 63 }));
+	EXPECT_EQ(needs("Fine Gothic Quarterstaff"), (std::array<int, 3> { 0, 9, 18 }));
 	EXPECT_EQ(needs("Ruby Ring"), (std::array<int, 3> { 0, 0, 0 }));
 	EXPECT_EQ(needs("Crimson Amulet"), (std::array<int, 3> { 0, 0, 0 }));
 	// Diablo's bases keep theirs.
@@ -756,10 +831,10 @@ TEST_F(Poe2ItemBasesTest, NewHeroesStartWithPoe2Bases)
 	};
 	const Start starts[] = {
 		{ HeroClass::Warrior, "Shortsword", "Wooden Tower Shield", WeaponSkill::Cleave, DefaultAttack::SwordStrike },
-		{ HeroClass::Rogue, "Fine Short Bow", "", WeaponSkill::Barrage, DefaultAttack::BowShot },
-		{ HeroClass::Monk, "Ash Staff", "", WeaponSkill::WhirlingStaff, DefaultAttack::StaffStrike },
+		{ HeroClass::Rogue, "Crude Bow", "", WeaponSkill::Barrage, DefaultAttack::BowShot },
+		{ HeroClass::Monk, "Fine Wrapped Quarterstaff", "", WeaponSkill::WhirlingStaff, DefaultAttack::StaffStrike },
 		{ HeroClass::Sorcerer, "Focused Pilgrim Staff", "", WeaponSkill::None, DefaultAttack::StaffBolt },
-		{ HeroClass::Bard, "Shortsword", "Shiv", WeaponSkill::Flurry, DefaultAttack::SwordStrike },
+		{ HeroClass::Bard, "Shortsword", "Glass Shank", WeaponSkill::Flurry, DefaultAttack::SwordStrike },
 	};
 	for (const Start &start : starts) {
 		const PlayerStartingLoadoutData &loadout = GetPlayerStartingLoadoutForClass(start.heroClass);
