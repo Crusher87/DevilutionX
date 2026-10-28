@@ -7,8 +7,10 @@
 #include "engine/render/primitive_render.hpp"
 #include "engine/ui_scale.hpp"
 #include "game_mode.hpp"
+#include "monster.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/monster_mods.hpp"
 #include "utils/clx_decode.hpp"
 #include "utils/ui_fwd.h"
 
@@ -16,12 +18,18 @@ namespace devilution {
 
 namespace {
 
+/** @brief No more than this many bars a frame; a screen rarely holds more monsters. */
+constexpr size_t MaxBars = 200;
+
 enum class BarOwner : uint8_t {
 	Hero,
+	Monster,
 };
 
 struct QueuedBar {
 	BarOwner owner;
+	/** @brief The monster's index; unused for the hero. */
+	size_t index;
 	/** @brief The middle of the bar's bottom edge, in the world drawing's buffer. */
 	Point anchor;
 };
@@ -29,16 +37,22 @@ struct QueuedBar {
 std::vector<QueuedBar> Queue;
 const Player *QueuedHero;
 
-void QueueBar(BarOwner owner, Point anchor)
+void QueueBar(BarOwner owner, size_t index, Point anchor)
 {
 	// The world is drawn once a frame, but a second note of the same character only moves its bar.
 	for (QueuedBar &bar : Queue) {
-		if (bar.owner == owner) {
+		if (bar.owner == owner && bar.index == index) {
 			bar.anchor = anchor;
 			return;
 		}
 	}
-	Queue.push_back({ owner, anchor });
+	if (Queue.size() < MaxBars)
+		Queue.push_back({ owner, index, anchor });
+}
+
+bool IsBigMonster(const Monster &monster)
+{
+	return monster.isUnique() || GetMonsterAffixes(monster).rarity == MonsterRarity::Rare;
 }
 
 /** @brief The anchor over a sprite: the middle of its top, from the solid top of its standing picture. */
@@ -105,6 +119,35 @@ int OverheadBarFill(int64_t current, int64_t maximum, int width)
 	return std::max(1, static_cast<int>((current * width) / maximum));
 }
 
+bool IsHurtEnemyForBar(const Monster &monster)
+{
+	if (monster.isInvalid || monster.isPlayerMinion() || (monster.flags & MFLAG_HIDDEN) != 0)
+		return false;
+	if (monster.mode == MonsterMode::Death || monster.hitPoints <= 0)
+		return false;
+	return monster.hitPoints < monster.maxHitPoints;
+}
+
+uint8_t MonsterBarFrameColor(const Monster &monster)
+{
+	if (monster.isUnique())
+		return UniqueMonsterBarFrameColor;
+	switch (GetMonsterAffixes(monster).rarity) {
+	case MonsterRarity::Rare:
+		return RareMonsterBarFrameColor;
+	case MonsterRarity::Magic:
+		return MagicMonsterBarFrameColor;
+	default:
+		return NormalMonsterBarFrameColor;
+	}
+}
+
+void DrawMonsterBar(const Surface &out, Point topLeft, int width, const OverheadBarValues &values, uint8_t frameColor)
+{
+	DrawFrame(out, topLeft, width, MonsterBarHeight, frameColor);
+	FillRows(out, topLeft + Displacement { 1, 1 }, OverheadBarFill(values.life, values.maxLife, width - 2), MonsterLifeRows, OverheadBarLifeColor);
+}
+
 void DrawHeroBar(const Surface &out, Point topLeft, const OverheadBarValues &values, bool showEnergyShield)
 {
 	const int inner = HeroBarWidth - 2;
@@ -131,7 +174,21 @@ void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite 
 		standTopRow = ClxSolidTopRow(standSprite);
 	}
 	QueuedHero = &player;
-	QueueBar(BarOwner::Hero, AnchorOver(spritePosition, sprite, standHeight, standTopRow));
+	QueueBar(BarOwner::Hero, 0, AnchorOver(spritePosition, sprite, standHeight, standTopRow));
+}
+
+void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSprite sprite)
+{
+	if (!gbIsPoe2 || !*GetOptions().Gameplay.hurtMonsterBars || !IsHurtEnemyForBar(monster))
+		return;
+	// Measured on the standing picture, so the bar doesn't bob as the monster swings.
+	int standHeight = sprite.height();
+	int standTopRow = ClxSolidTopRow(sprite);
+	if (const OptionalClxSpriteList stand = monster.animDataOrWalk(MonsterGraphic::Stand).spritesForDirection(Direction::South); stand) {
+		standHeight = (*stand)[0].height();
+		standTopRow = ClxSolidTopRow((*stand)[0]);
+	}
+	QueueBar(BarOwner::Monster, monster.getId(), AnchorOver(spritePosition, sprite, standHeight, standTopRow));
 }
 
 void DrawOverheadBars(const Surface &out)
@@ -157,7 +214,18 @@ void DrawOverheadBars(const Surface &out)
 			values.mana = noMana ? 0 : player._pMana.raw();
 			values.maxMana = noMana ? 0 : player._pMaxMana.raw();
 			DrawHeroBar(view, anchor - Displacement { HeroBarWidth / 2, HeroBarHeight }, values, *GetOptions().Gameplay.heroMiniBarEnergyShield);
+			continue;
 		}
+		if (bar.owner != BarOwner::Monster || bar.index >= MaxMonsters)
+			continue;
+		const Monster &monster = Monsters[bar.index];
+		if (!IsHurtEnemyForBar(monster))
+			continue;
+		OverheadBarValues values;
+		values.life = monster.hitPoints.raw();
+		values.maxLife = monster.maxHitPoints.raw();
+		const int width = IsBigMonster(monster) ? BigMonsterBarWidth : MonsterBarWidth;
+		DrawMonsterBar(view, anchor - Displacement { width / 2, MonsterBarHeight }, width, values, MonsterBarFrameColor(monster));
 	}
 	ClearOverheadBars();
 }

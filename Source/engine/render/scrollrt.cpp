@@ -953,6 +953,9 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	const Displacement offset = monster.getRenderingOffset(sprite);
 
 	const Point monsterRenderPosition = targetBufferPosition + offset;
+	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
+	if (gbIsPoe2)
+		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
 	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {

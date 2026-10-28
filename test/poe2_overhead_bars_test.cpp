@@ -5,7 +5,11 @@
 
 #include "engine/clx_sprite.hpp"
 #include "engine/surface.hpp"
+#include "game_mode.hpp"
+#include "monster.h"
+#include "poe2/monster_mods.hpp"
 #include "poe2/overhead_bars.hpp"
+#include "tables/monstdat.h"
 
 namespace devilution {
 namespace {
@@ -82,6 +86,99 @@ TEST(Poe2OverheadBarsTest, EnergyShieldGoesOverTheTopOfTheLifeBar)
 	Fill(out, 0);
 	DrawHeroBar(out, { 0, 0 }, values, true);
 	EXPECT_EQ(out[Point(1, 1)], OverheadBarLifeColor) << "no Energy Shield, nothing over the life";
+}
+
+void MakeMonster(Monster &monster, uint32_t seed)
+{
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	monster.levelType = 0;
+	monster.uniqueType = UniqueMonsterType::None;
+	monster.flags = 0;
+	monster.isInvalid = false;
+	monster.mode = MonsterMode::Stand;
+	monster.rndItemSeed = seed;
+	monster.maxHitPoints = Fixed26_6::fromInt(100);
+	monster.hitPoints = monster.maxHitPoints;
+}
+
+MonsterRarity RarityOf(uint32_t seed)
+{
+	Monster monster {};
+	MakeMonster(monster, seed);
+	return GetMonsterAffixes(monster).rarity;
+}
+
+uint8_t FrameColorOf(uint32_t seed, UniqueMonsterType unique = UniqueMonsterType::None)
+{
+	Monster monster {};
+	MakeMonster(monster, seed);
+	monster.uniqueType = unique;
+	return MonsterBarFrameColor(monster);
+}
+
+TEST(Poe2OverheadBarsTest, OnlyHurtEnemiesGetABar)
+{
+	Monster monster {};
+	MakeMonster(monster, 1);
+	EXPECT_FALSE(IsHurtEnemyForBar(monster)) << "not hurt yet";
+	monster.hitPoints = Fixed26_6::fromInt(60);
+	EXPECT_TRUE(IsHurtEnemyForBar(monster));
+
+	monster.mode = MonsterMode::Death;
+	EXPECT_FALSE(IsHurtEnemyForBar(monster));
+	monster.mode = MonsterMode::Stand;
+	monster.hitPoints = Fixed26_6::fromInt(0);
+	EXPECT_FALSE(IsHurtEnemyForBar(monster));
+	monster.hitPoints = Fixed26_6::fromInt(60);
+
+	monster.flags = MFLAG_GOLEM;
+	EXPECT_FALSE(IsHurtEnemyForBar(monster)) << "the hero's own minions are allies";
+	monster.flags = MFLAG_GOLEM | MFLAG_BERSERK;
+	EXPECT_TRUE(IsHurtEnemyForBar(monster)) << "a berserk golem is an enemy";
+
+	monster.flags = MFLAG_HIDDEN;
+	EXPECT_FALSE(IsHurtEnemyForBar(monster));
+}
+
+TEST(Poe2OverheadBarsTest, BarFrameShowsTheRarity)
+{
+	gbIsPoe2 = true;
+	uint32_t rareSeed = 0;
+	uint32_t magicSeed = 0;
+	uint32_t normalSeed = 0;
+	for (uint32_t seed = 1; seed < 100000 && (rareSeed == 0 || magicSeed == 0 || normalSeed == 0); seed++) {
+		switch (RarityOf(seed)) {
+		case MonsterRarity::Rare:
+			rareSeed = rareSeed == 0 ? seed : rareSeed;
+			break;
+		case MonsterRarity::Magic:
+			magicSeed = magicSeed == 0 ? seed : magicSeed;
+			break;
+		default:
+			normalSeed = normalSeed == 0 ? seed : normalSeed;
+			break;
+		}
+	}
+	EXPECT_EQ(FrameColorOf(rareSeed), RareMonsterBarFrameColor);
+	EXPECT_EQ(FrameColorOf(magicSeed), MagicMonsterBarFrameColor);
+	EXPECT_EQ(FrameColorOf(normalSeed), NormalMonsterBarFrameColor);
+	EXPECT_EQ(FrameColorOf(normalSeed, UniqueMonsterType::Garbud), UniqueMonsterBarFrameColor);
+	gbIsPoe2 = false;
+}
+
+TEST(Poe2OverheadBarsTest, MonsterBarShowsItsLifeInsideTheFrame)
+{
+	OwnedSurface out(MonsterBarWidth, MonsterBarHeight);
+	Fill(out, 0);
+	OverheadBarValues values;
+	values.life = 1;
+	values.maxLife = 4;
+	DrawMonsterBar(out, { 0, 0 }, MonsterBarWidth, values, RareMonsterBarFrameColor);
+	EXPECT_EQ(out[Point(0, 0)], RareMonsterBarFrameColor);
+	EXPECT_EQ(out[Point(MonsterBarWidth - 1, MonsterBarHeight - 1)], RareMonsterBarFrameColor);
+	EXPECT_EQ(out[Point(1, 1)], OverheadBarLifeColor);
+	EXPECT_EQ(out[Point(1, MonsterLifeRows)], OverheadBarLifeColor);
+	EXPECT_EQ(out[Point(MonsterBarWidth / 2, 1)], OverheadBarEmptyColor) << "a quarter of the life, a quarter of the bar";
 }
 
 } // namespace

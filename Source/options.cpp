@@ -900,6 +900,7 @@ GameplayOptions::GameplayOptions()
     , showLifeManaLevels("Show Life Mana Levels", OptionEntryFlags::None, N_("Show Life/Mana Levels"), N_("POE2 mode: shows your current and maximum Life and Energy Shield above the life globe, and Mana and Spirit (reserved / total) above the mana globe."), false)
     , heroMiniBar("Mini Life Bar Above You", OptionEntryFlags::None, N_("Mini Life Bar Above You"), N_("POE2 mode: a small life bar with a thin mana bar under it over your hero."), false)
     , heroMiniBarEnergyShield("Mini Bar Shows Energy Shield", OptionEntryFlags::None, N_("Mini Bar Shows Energy Shield"), N_("POE2 mode: the mini bar over your hero shows your Energy Shield over the top of the life bar."), false)
+    , hurtMonsterBars("Life Bars Over Hurt Monsters", OptionEntryFlags::None, N_("Life Bars Over Hurt Monsters"), N_("POE2 mode: a small life bar over every monster that has taken damage, framed in its rarity's colour. The bar at the top of the screen for the monster you point at stays."), false)
     , numHealPotionPickup("Heal Potion Pickup", OptionEntryFlags::None, N_("Heal Potion Pickup"), N_("Number of Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numFullHealPotionPickup("Full Heal Potion Pickup", OptionEntryFlags::None, N_("Full Heal Potion Pickup"), N_("Number of Full Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numManaPotionPickup("Mana Potion Pickup", OptionEntryFlags::None, N_("Mana Potion Pickup"), N_("Number of Mana potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
@@ -943,6 +944,7 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&showLifeManaLevels,
 		&heroMiniBar,
 		&heroMiniBarEnergyShield,
+		&hurtMonsterBars,
 		&autoRefillBelt,
 		&autoEquipWeapons,
 		&autoEquipArmor,

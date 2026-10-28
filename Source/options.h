@@ -671,6 +671,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean heroMiniBar;
 	/** @brief The hero's mini bar shows Energy Shield over the top of the life bar (POE2 Mashup). */
 	OptionEntryBoolean heroMiniBarEnergyShield;
+	/** @brief A small life bar over every monster that has taken damage (POE2 Mashup). */
+	OptionEntryBoolean hurtMonsterBars;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */
