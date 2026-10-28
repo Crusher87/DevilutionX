@@ -132,7 +132,7 @@ bool LoadFamilies(std::vector<std::vector<std::string>> &conflictIds)
 		reader.readString("legacyScale2", text);
 		family.legacyScale[1] = static_cast<int16_t>(ParseInt(text).value_or(family.scale[1]));
 		Families.push_back(std::move(family));
-		if (Families.size() > UINT8_MAX) {
+		if (Families.size() > MaxModFamilies) {
 			LogError("Too many modifier families in {}", Filename);
 			return false;
 		}

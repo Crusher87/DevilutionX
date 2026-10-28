@@ -159,6 +159,14 @@ struct ModFamily {
 	std::vector<ModTier> tiers;
 };
 
+/**
+ * @brief The modifier families before the caster weapons rework, ids 1 to this: the families it appends come after them,
+ * and an item saved before then has only these.
+ */
+constexpr uint8_t LegacyModFamilyCount = 94;
+/** @brief Families in memory stay below the desecrated families' ids (desecration.hpp). */
+constexpr size_t MaxModFamilies = 239;
+
 /** @brief POE2: a magic item has at most one prefix and one suffix, a rare three of each. */
 constexpr int MaxMagicModsPerSide = 1;
 constexpr int MaxRareModsPerSide = 3;

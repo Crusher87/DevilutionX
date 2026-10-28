@@ -123,7 +123,7 @@ std::vector<Offer> OfferPool(const Item &item, bool prefix, uint32_t seed)
 		const std::optional<uint8_t> tier = BestTier(family, itemLevel);
 		if (!tier)
 			continue;
-		const auto salt = static_cast<uint8_t>(1 + (Mix(seed ^ familyId) % MaxCraftSalt));
+		const uint8_t salt = RollCraftSalt(familyId, Mix(seed ^ familyId));
 		pool.push_back({ { familyId, *tier, salt }, profane.weight, false });
 	}
 	for (const DesecratedMod &mod : DesecratedMods) {
@@ -263,7 +263,7 @@ std::vector<Poe2CraftMod> DesecrationOffers(const Item &item, bool kinship)
 		const std::optional<Poe2ItemMod> mod = RollAddedMod(*slot, ItemModBaseTags(item), GetPoe2ItemLevel(item), existing, MaxRareModsPerSide + 1, Mix(seed ^ (0xF111U + attempt)), filter);
 		if (!mod)
 			break;
-		offers.push_back({ mod->family, mod->tier, static_cast<uint8_t>(1 + (Mix(seed ^ attempt) % MaxCraftSalt)) });
+		offers.push_back({ mod->family, mod->tier, RollCraftSalt(mod->family, Mix(seed ^ attempt)) });
 	}
 	return offers;
 }

@@ -560,9 +560,62 @@ TEST_F(Poe2CraftingTest, CraftingItemsGetAKindAndName)
 	}
 }
 
+TEST_F(Poe2CraftingTest, CraftStateWideLayoutRoundTrips)
+{
+	// Every family in memory sits below the desecrated ids, so the save layouts never confuse them.
+	EXPECT_LT(ModifierFamilies().size(), static_cast<size_t>(DesecratedFamilyBase));
+	EXPECT_LE(ModifierFamilies().size(), MaxModFamilies);
+
+	// A wide item's modifiers all come from the new slots' pools, so none has a salt above MaxWideCraftSalt.
+	const auto makeCraft = [](uint8_t family, uint8_t salt) {
+		Poe2Craft craft {};
+		craft.explicitMods = true;
+		craft.rarity = ITEM_QUALITY_RARE;
+		craft.desecrated = true;
+		craft.mods[0] = { 3, 2, std::min<uint8_t>(salt, 17) };
+		craft.mods[1] = { family, 4, salt };
+		craft.mods[2] = { static_cast<uint8_t>(DesecratedFamilyBase + static_cast<uint8_t>(DesecratedModId::ChoirOfTeeth) - 1), 1, 0 };
+		craft.mods[3] = { UnrevealedModFamily, 2, 0 };
+		return craft;
+	};
+
+	// Narrow: old families only, the header's top bit clear and the desecrated and unrevealed ids in their old places.
+	const Poe2Craft narrow = makeCraft(40, 31);
+	const auto narrowBytes = PackCraftState(narrow);
+	EXPECT_EQ(narrowBytes[1] & 0x80, 0);
+	EXPECT_EQ(UnpackCraftState(narrowBytes), narrow);
+	const auto stored = [&narrowBytes](size_t i) { return static_cast<int>((narrowBytes[6 + (i * 2)] | (narrowBytes[7 + (i * 2)] << 8)) & 0x7F); };
+	EXPECT_EQ(stored(2), NarrowDesecratedFamilyBase + static_cast<int>(DesecratedModId::ChoirOfTeeth) - 1);
+	EXPECT_EQ(stored(3), NarrowUnrevealedModFamily);
+
+	// Wide: a family above 112 sets the flag, and everything comes back as it was.
+	for (const uint8_t family : { static_cast<uint8_t>(113), static_cast<uint8_t>(150), static_cast<uint8_t>(MaxModFamilies) }) {
+		const Poe2Craft wide = makeCraft(family, MaxWideCraftSalt);
+		const auto wideBytes = PackCraftState(wide);
+		EXPECT_NE(wideBytes[1] & 0x80, 0) << static_cast<int>(family);
+		EXPECT_EQ(UnpackCraftState(wideBytes), wide) << static_cast<int>(family);
+	}
+	// A family the narrow layout holds stays narrow, even one the rework appended.
+	EXPECT_EQ(PackCraftState(makeCraft(NarrowMaxModFamily, 15))[1] & 0x80, 0);
+
+	// The rework's families take salts the wide layout keeps; the old ones keep theirs.
+	EXPECT_EQ(CraftSaltLimit(LegacyModFamilyCount), MaxCraftSalt);
+	EXPECT_EQ(CraftSaltLimit(LegacyModFamilyCount + 1), MaxWideCraftSalt);
+	EXPECT_EQ(CraftSaltLimit(150), MaxWideCraftSalt);
+	for (uint32_t roll = 0; roll < 200; roll++) {
+		EXPECT_LE(RollCraftSalt(150, roll * 2654435761U), MaxWideCraftSalt);
+		EXPECT_GE(RollCraftSalt(150, roll * 2654435761U), 1);
+		EXPECT_EQ(RollCraftSalt(20, roll * 2654435761U), 1 + ((roll * 2654435761U) % MaxCraftSalt));
+	}
+	Poe2Craft added {};
+	ASSERT_TRUE(AddCraftMod(added, { 150, 1, {} }, 1234));
+	EXPECT_LE(added.mods[0].salt, MaxWideCraftSalt);
+	EXPECT_EQ(UnpackCraftState(PackCraftState(added)), added);
+}
+
 TEST_F(Poe2CraftingTest, DesecrationOffersThreeAndReveals)
 {
-	ASSERT_LT(ModifierFamilies().size(), DesecratedFamilyBase);
+	ASSERT_LT(ModifierFamilies().size(), static_cast<size_t>(DesecratedFamilyBase));
 	for (uint32_t seed = 1; seed <= 6; seed++) {
 		Item item = Crafted(CurrencyOrb::Alchemy, MakeItem("Full Plate Mail", seed, ITEM_QUALITY_NORMAL, 80));
 		item = Crafted(CurrencyOrb::Desecrate, item);

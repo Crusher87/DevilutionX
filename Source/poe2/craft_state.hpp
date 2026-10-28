@@ -20,10 +20,30 @@ struct Player;
 
 /** @brief Bytes the crafting state takes in the spare (alignment) bytes of an item save. */
 constexpr size_t CraftStateSaveSize = 19;
-/** @brief Family id of the placeholder an unrevealed desecrated modifier holds; its tier is 1 for a prefix, 2 for a suffix. */
-constexpr uint8_t UnrevealedModFamily = 127;
+/**
+ * @brief Family id of the placeholder an unrevealed desecrated modifier holds; its tier is 1 for a prefix, 2 for a suffix.
+ * Out of the range of modifier families in memory; the narrow save layout stores it as NarrowUnrevealedModFamily.
+ */
+constexpr uint8_t UnrevealedModFamily = 255;
 /** @brief Highest value salt a crafted modifier can have. */
 constexpr uint8_t MaxCraftSalt = 31;
+/** @brief Highest value salt a modifier of a family appended by the caster weapons rework can have: the wide layout keeps 4 bits. */
+constexpr uint8_t MaxWideCraftSalt = 15;
+
+/**
+ * @brief The craft save's two layouts. The narrow one, every item saved before the caster weapons rework, keeps 7 bits
+ * of family (desecrated families from NarrowDesecratedFamilyBase, the unrevealed one as NarrowUnrevealedModFamily),
+ * 4 of tier and 5 of salt. An item with a family above NarrowMaxModFamily saves wide (a flag in the header byte): 8 bits
+ * of family, 4 of tier and 4 of salt, ids as in memory.
+ */
+constexpr uint8_t NarrowMaxModFamily = 112;
+constexpr uint8_t NarrowDesecratedFamilyBase = 113;
+constexpr uint8_t NarrowUnrevealedModFamily = 127;
+
+/** @brief The highest salt a modifier of the family may have: MaxWideCraftSalt for the families the rework appended, else MaxCraftSalt. */
+[[nodiscard]] uint8_t CraftSaltLimit(uint8_t family);
+/** @brief A salt from 1 to the family's CraftSaltLimit, from a roll. */
+[[nodiscard]] uint8_t RollCraftSalt(uint8_t family, uint32_t roll);
 
 std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft);
 /** @brief Reads crafting state from an item save; zeros from an older save, or bytes that don't check out, give none. */
