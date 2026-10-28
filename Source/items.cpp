@@ -1911,18 +1911,27 @@ void SetupBaseItem(Point position, _item_indexes idx, bool onlygood, bool sendms
 		NetSendCmdPItem(false, CMD_SPAWNITEM, item.position, item);
 }
 
-void SetupAllUseful(Item &item, int iseed, int lvl)
+/**
+ * @brief A chest's or barrel's potion, scroll or oil.
+ * @param recreated The base of the item being rebuilt from its seed, or IDI_NONE for a new one.
+ */
+void SetupAllUseful(Item &item, int iseed, int lvl, _item_indexes recreated = IDI_NONE)
 {
 	item._iSeed = iseed;
 	SetRndSeed(iseed);
 
 	_item_indexes idx;
 
+	// POE2 Mashup: no Scroll of Town Portal (Curtis 2026-10-27: every scroll but Identify and Phasing is cut; the tray
+	// has a free portal button). It rolls the potion it rolls on the first level instead, so the seed still makes the
+	// same pick, and a scroll found before the cut is rebuilt as the scroll it is.
+	const bool noPortal = gbIsPoe2 && recreated != IDI_PORTAL;
+
 	if (gbIsHellfire) {
 		switch (GenerateRnd(7)) {
 		case 0:
 			idx = IDI_PORTAL;
-			if (lvl <= 1)
+			if (lvl <= 1 || noPortal)
 				idx = IDI_HEAL;
 			break;
 		case 1:
@@ -1931,7 +1940,7 @@ void SetupAllUseful(Item &item, int iseed, int lvl)
 			break;
 		case 3:
 			idx = IDI_PORTAL;
-			if (lvl <= 1)
+			if (lvl <= 1 || noPortal)
 				idx = IDI_MANA;
 			break;
 		case 4:
@@ -1945,7 +1954,7 @@ void SetupAllUseful(Item &item, int iseed, int lvl)
 	} else {
 		idx = PickRandomlyAmong({ IDI_MANA, IDI_HEAL });
 
-		if (lvl > 1 && FlipCoin(3))
+		if (lvl > 1 && FlipCoin(3) && !noPortal)
 			idx = IDI_PORTAL;
 	}
 
@@ -3910,6 +3919,42 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		evasion = 0;
 	player.poe2.evasion = evasion;
 
+	// POE2 Mashup: a hero holding two weapons swings them in turn, each swing with one weapon's damage (Curtis
+	// 2026-10-27, POE2's dual wielding), not both on every hit. The panel shows a swing's average.
+	player.poe2.dualWield = false;
+	player.poe2.handDamage = {};
+	if (gbIsPoe2 && offhandSceptre == nullptr) {
+		const Item &left = player.InvBody[INVLOC_HAND_LEFT];
+		const Item &right = player.InvBody[INVLOC_HAND_RIGHT];
+		const auto dealsDamage = [](const Item &hand) { return !hand.isEmpty() && hand._iStatFlag && hand._iClass == ICLASS_WEAPON && hand._iMaxDam > 0; };
+		if (dealsDamage(left) && dealsDamage(right)) {
+			player.poe2.dualWield = true;
+			const auto counted = [](const Item &hand) { return hand._iMagical == ITEM_QUALITY_NORMAL || hand._iIdentified; };
+			const int64_t allIncreased = std::max(100 + dam, 1);
+			for (size_t hand = 0; hand < 2; hand++) {
+				const Item &own = hand == 0 ? left : right;
+				const Item &other = hand == 0 ? right : left;
+				// The other weapon's local increase is in _pIBonusDam, which every hit applies: take it back out.
+				const int64_t ownIncreased = std::max(100 + dam - WeaponDamagePercent(other), 0);
+				Poe2PlayerData::HandDamage &damage = player.poe2.handDamage[hand];
+				damage.minDamage = static_cast<int32_t>(((own._iMinDam * ownIncreased) + (allIncreased / 2)) / allIncreased);
+				damage.maxDamage = std::max(static_cast<int32_t>(((own._iMaxDam * ownIncreased) + (allIncreased / 2)) / allIncreased), damage.minDamage);
+				damage.minFire = minFireDam - (counted(other) ? other._iFMinDam : 0);
+				damage.maxFire = maxFireDam - (counted(other) ? other._iFMaxDam : 0);
+				damage.minLightning = minLightDam - (counted(other) ? other._iLMinDam : 0);
+				damage.maxLightning = maxLightDam - (counted(other) ? other._iLMaxDam : 0);
+			}
+			const Poe2PlayerData::HandDamage &l = player.poe2.handDamage[0];
+			const Poe2PlayerData::HandDamage &r = player.poe2.handDamage[1];
+			minDamage = (l.minDamage + r.minDamage) / 2;
+			maxDamage = (l.maxDamage + r.maxDamage + 1) / 2;
+			minFireDam = (l.minFire + r.minFire) / 2;
+			maxFireDam = (l.maxFire + r.maxFire + 1) / 2;
+			minLightDam = (l.minLightning + r.minLightning) / 2;
+			maxLightDam = (l.maxLightning + r.maxLightning + 1) / 2;
+		}
+	}
+
 	CalcPlrDamage(player, minDamage, maxDamage);
 	CalcPlrPrimaryStats(player, strength, magic, dexterity, vitality);
 	player._pIAC = ac;
@@ -5553,7 +5598,7 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 		}
 
 		if ((icreateinfo & CF_USEFUL) == CF_USEFUL) {
-			SetupAllUseful(item, iseed, icreateinfo & CF_LEVEL);
+			SetupAllUseful(item, iseed, icreateinfo & CF_LEVEL, idx);
 			gbIsHellfire = tmpIsHellfire;
 			return;
 		}
@@ -7684,7 +7729,8 @@ void SpawnHealer(int lvl)
 	for (size_t i = 0; i < itemCount; i++) {
 		Item item = {};
 
-		if (i < PinnedItemCount || (gbIsMultiplayer && i < NumHealerPinnedItemsMp)) {
+		// POE2 Mashup: no pinned Scroll of Resurrect in multiplayer; scrolls but Identify and Phasing are cut (Curtis 2026-10-27).
+		if (i < PinnedItemCount || (gbIsMultiplayer && !gbIsPoe2 && i < NumHealerPinnedItemsMp)) {
 			item._iSeed = AdvanceRndSeed();
 			GetItemAttrs(item, PinnedItemTypes[i], 1);
 			item._iCreateInfo = lvl;

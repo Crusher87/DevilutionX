@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -30,6 +31,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/attack_speed.hpp"
+#include "poe2/bases.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/loot.hpp"
@@ -38,6 +40,8 @@
 #include "poe2/player_data.hpp"
 #include "poe2/skill_details.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/itemdat.h"
@@ -63,18 +67,38 @@ struct PaceClass {
 	bool oneHanded;
 	std::vector<WeaponSkill> skills;
 	SpellID spell = SpellID::Null;
+	/**
+	 * Further skills and spells measured for the record, not in the class's pace: per-strike skills, more bow skills and
+	 * the Sorcerer's later spells. Written with "x:" before their name; timed by UseSeconds, the Skills panel's time.
+	 */
+	std::vector<WeaponSkill> extraSkills = {};
+	std::vector<SpellID> extraSpells = {};
 };
 
 const std::vector<PaceClass> &PaceClasses()
 {
 	static const std::vector<PaceClass> Classes {
-		{ HeroClass::Warrior, "Warrior", "Sword", "", "poe2:shield_armour_wooden_tower_shield", true, { WeaponSkill::GroundSlam, WeaponSkill::Cleave } },
-		{ HeroClass::Rogue, "Rogue", "Bow", "", "", false, { WeaponSkill::Barrage, WeaponSkill::LightningArrow } },
-		{ HeroClass::Sorcerer, "Sorcerer", "Staff", "", "", false, {}, SpellID::Firebolt },
-		{ HeroClass::Monk, "Monk", "Quarterstaff", "", "", false, { WeaponSkill::WhirlingStaff, WeaponSkill::FistsOfThunder } },
-		{ HeroClass::Bard, "Bard", "Sword", "Dagger", "", true, { WeaponSkill::Flurry } },
+		{ HeroClass::Warrior, "Warrior", "Sword", "", "poe2:shield_armour_wooden_tower_shield", true, { WeaponSkill::GroundSlam, WeaponSkill::Cleave }, SpellID::Null, { WeaponSkill::Zeal } },
+		{ HeroClass::Rogue, "Rogue", "Bow", "", "", false, { WeaponSkill::Barrage, WeaponSkill::LightningArrow }, SpellID::Null,
+		    { WeaponSkill::RainOfArrows, WeaponSkill::ClusterBolt, WeaponSkill::Multishot, WeaponSkill::GuidedArrow, WeaponSkill::EscapeShot } },
+		{ HeroClass::Sorcerer, "Sorcerer", "Staff", "", "", false, {}, SpellID::Firebolt, { WeaponSkill::EmberFusillade, WeaponSkill::IceBolt },
+		    { SpellID::ChargedBolt, SpellID::HolyBolt, SpellID::Lightning, SpellID::Flash, SpellID::Fireball, SpellID::ChainLightning, SpellID::Elemental,
+		        SpellID::FlameWave, SpellID::Immolation, SpellID::Nova, SpellID::BloodStar, SpellID::Apocalypse, SpellID::RuneOfFire, SpellID::RuneOfNova } },
+		{ HeroClass::Monk, "Monk", "Quarterstaff", "", "", false, { WeaponSkill::WhirlingStaff, WeaponSkill::FistsOfThunder }, SpellID::Null, { WeaponSkill::SevenSidedStrike } },
+		{ HeroClass::Bard, "Bard", "Sword", "Dagger", "", true, { WeaponSkill::Flurry }, SpellID::Null, { WeaponSkill::Zeal } },
 	};
 	return Classes;
+}
+
+/**
+ * @brief The share of a per-strike skill's strike a lone monster takes, in percent: Seven-Sided Strike spreads its strikes
+ * over the enemies around, so one alone takes a part of each; the others land in full.
+ */
+double LoneTargetStrikePercent(WeaponSkill skill)
+{
+	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr && table->shape == TableShape::Seven)
+		return SevenSidedStrikeSharePercent(1, table->count);
+	return 100.0;
 }
 
 constexpr double TicksPerSecond = 20;
@@ -422,14 +446,35 @@ public:
 		}
 		return rows;
 	}
+
+	/** @brief The class's further skills and spells (PaceClass::extraSkills, extraSpells), one use against a lone target. */
+	static std::vector<Row> MeasureExtras(Player &player, const PaceClass &paceClass, int level)
+	{
+		std::vector<Row> rows;
+		const int gemLevel = MaxGemLevelForCharacter(level);
+		for (const WeaponSkill skill : paceClass.extraSkills) {
+			const SkillSlot slot = SkillSlot::ForAttack(skill);
+			player.poe2.skillSlots[0] = slot;
+			player.poe2.slotLevels[0] = static_cast<uint8_t>(gemLevel);
+			const double damage = SkillHitAverage(player, slot, gemLevel) * LoneTargetStrikePercent(skill) / 100;
+			rows.push_back({ "x:" + std::string(WeaponSkillName(skill)), gemLevel, damage, UseSeconds(player, slot) });
+		}
+		for (const SpellID spell : paceClass.extraSpells) {
+			player._pSplLvl[static_cast<size_t>(spell)] = 1;
+			const double damage = CastDamage(player, spell, gemLevel);
+			rows.push_back({ "x:" + std::string(GetSpellData(spell).sNameText), gemLevel, damage, UseSeconds(player, SkillSlot::ForSpell(spell)) });
+		}
+		return rows;
+	}
 };
 
 /** @brief How much longer than its free use one use of the skill takes, from its skill_speed.tsv row (the tool's rule). */
 double TimeRatio(SkillSlot skill)
 {
 	constexpr double ReferenceAps = 1.55;
+	constexpr double BowAps = DefaultBowAps / 100.0;
 	constexpr double FreeCastSeconds = 0.9;
-	constexpr double OldCastSeconds = 0.40;
+	constexpr double SpellBaselineSeconds = 0.645;
 	const SkillSpeedRow *row = FindSkillSpeedRow(skill);
 	if (row == nullptr)
 		return 1.0;
@@ -437,12 +482,15 @@ double TimeRatio(SkillSlot skill)
 	if (row->attackMs > 0)
 		return (row->attackMs / 1000.0 + added) * ReferenceAps;
 	if (row->castMs > 0) {
-		// Diablo's damage spells against the held cast they were tuned at; the rest against the staff bolt.
+		// Diablo's damage spells against the one spell baseline (a Shortsword swing); the rest against the staff bolt.
 		const bool damageSpell = skill.kind == SkillKind::Spell
 		    && IsAnyOf(skill.spell(), SpellID::Firebolt, SpellID::HolyBolt, SpellID::Lightning, SpellID::ChargedBolt, SpellID::Flash, SpellID::Fireball,
 		        SpellID::Elemental, SpellID::ChainLightning, SpellID::FlameWave, SpellID::Immolation, SpellID::Nova, SpellID::Apocalypse, SpellID::BloodStar);
-		return (row->castMs / 1000.0 + added) / (damageSpell ? OldCastSeconds : FreeCastSeconds);
+		return (row->castMs / 1000.0 + added) / (damageSpell ? SpellBaselineSeconds : FreeCastSeconds);
 	}
+	// Bow skills are weighed against a Shortsword's attacks a second, not the bow's own (Curtis 2026-10-27).
+	if (skill.kind == SkillKind::Attack && (SkillTags(skill) & ST_Bow) != 0)
+		return ((100.0 / row->attackPercent / BowAps) + added) * ReferenceAps;
 	return 100.0 / row->attackPercent + (added * ReferenceAps);
 }
 
@@ -457,9 +505,13 @@ TEST_F(Poe2PaceTest, SlowerSkillsHitHarderByTheirTime)
 		SkillSlot::ForAttack(WeaponSkill::LeapSlam),
 		SkillSlot::ForAttack(WeaponSkill::BlessedShield),
 		SkillSlot::ForAttack(WeaponSkill::Meteor),
+		SkillSlot::ForAttack(WeaponSkill::Barrage),
+		SkillSlot::ForAttack(WeaponSkill::EscapeShot),
+		SkillSlot::ForAttack(WeaponSkill::GuidedArrow),
 		SkillSlot::ForSpell(SpellID::Firebolt),
 		SkillSlot::ForSpell(SpellID::ChargedBolt),
 		SkillSlot::ForSpell(SpellID::Fireball),
+		SkillSlot::ForSpell(SpellID::Apocalypse),
 		SkillSlot::ForSpell(SpellID::FireWall),
 	};
 	for (const SkillSlot skill : slow) {
@@ -471,10 +523,112 @@ TEST_F(Poe2PaceTest, SlowerSkillsHitHarderByTheirTime)
 		EXPECT_EQ(GemDamagePercent(skill, 20), GemCurveDamagePercent(skill, 20) * SkillSpeedDamagePercent(skill) / 100) << SkillSpeedKey(skill);
 	}
 	// As quick as the free use or quicker, or no damage of its own: no more damage.
-	for (const SkillSlot skill : { SkillSlot::ForAttack(WeaponSkill::Flurry), SkillSlot::ForAttack(WeaponSkill::FistsOfThunder), SkillSlot::ForAttack(WeaponSkill::Barrage),
-	         SkillSlot::ForAttack(WeaponSkill::Spark), SkillSlot::ForAttack(WeaponSkill::BattleCry), SkillSlot::ForSpell(SpellID::Healing), SkillSlot::ForSpell(SpellID::Teleport) }) {
+	for (const SkillSlot skill : { SkillSlot::ForAttack(WeaponSkill::Flurry), SkillSlot::ForAttack(WeaponSkill::FistsOfThunder), SkillSlot::ForAttack(WeaponSkill::Spark), SkillSlot::ForAttack(WeaponSkill::BattleCry), SkillSlot::ForSpell(SpellID::Healing), SkillSlot::ForSpell(SpellID::Teleport) }) {
 		EXPECT_EQ(SkillSpeedDamagePercent(skill), 100) << SkillSpeedKey(skill);
 	}
+}
+
+TEST_F(Poe2PaceTest, RoundTwoSpeedRules)
+{
+	// Re-time all spells: Diablo's damage spells are weighed against a 0.645 s Shortsword swing, not the old 0.40 s cast.
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForSpell(SpellID::Firebolt)), 140);
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForSpell(SpellID::Fireball)), 187);
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForSpell(SpellID::Apocalypse)), 218);
+	// Runes, walls and the Elemental and Occult gems' casts stay on the 0.9 s staff bolt.
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForSpell(SpellID::RuneOfFire)), 112);
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForAttack(WeaponSkill::Meteor)), 223);
+	// Bow skills +29%: weighed against 1.55 attacks a second; the free bow shot keeps 100.
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForAttack(WeaponSkill::Barrage)), 130);
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForAttack(WeaponSkill::RainOfArrows)), 162);
+	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::BowShot))), 100);
+	// Half as much: the mana cost rises by half of what the speed adds to the damage, rounded up.
+	for (const SkillSlot skill : { SkillSlot::ForAttack(WeaponSkill::Cleave), SkillSlot::ForAttack(WeaponSkill::Whirlwind), SkillSlot::ForAttack(WeaponSkill::Barrage),
+	         SkillSlot::ForSpell(SpellID::Firebolt), SkillSlot::ForSpell(SpellID::Apocalypse), SkillSlot::ForAttack(WeaponSkill::Flurry), SkillSlot::ForSpell(SpellID::Healing) }) {
+		const int damage = SkillSpeedDamagePercent(skill);
+		EXPECT_EQ(SkillSpeedManaPercent(skill), 100 + ((damage - 100 + 1) / 2)) << SkillSpeedKey(skill);
+	}
+	EXPECT_EQ(SkillSpeedManaPercent(SkillSlot::ForAttack(WeaponSkill::Whirlwind)), 187);
+	// Cleave: 3 mana x 117% = 3.51, to the nearest point.
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1), 4);
+	// Raise each strike: a lone monster takes a third of each Seven-Sided Strike strike (was a seventh); three or more
+	// enemies about take whole strikes.
+	EXPECT_EQ(SevenSidedStrikeSharePercent(1, 7), 33);
+	EXPECT_EQ(SevenSidedStrikeSharePercent(2, 7), 66);
+	EXPECT_EQ(SevenSidedStrikeSharePercent(3, 7), 100);
+	EXPECT_EQ(SevenSidedStrikeSharePercent(7, 7), 100);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::SevenSidedStrike)->damagePercent, 200);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Zeal)->damagePercent, 140);
+}
+
+TEST_F(Poe2PaceTest, TwoWeaponsSwingInTurn)
+{
+	// POE2's dual wielding (Curtis 2026-10-27): each swing uses one weapon's damage, left hand first, then the other's.
+	Player &player = *MyPlayer;
+	MakeHero(player, HeroClass::Bard, 15);
+	const _item_indexes sword = Bases("Sword", 15, true).back();
+	const _item_indexes dagger = Bases("Dagger", 15).front();
+	Hold(player, INVLOC_HAND_LEFT, sword);
+	Hold(player, INVLOC_HAND_RIGHT, dagger);
+	// The sword's local increase counts on its own swings only.
+	ApplyModEffect(player.InvBody[INVLOC_HAND_LEFT], ModEffect::PhysicalPercent, 50, 0);
+	Ready(player);
+	ASSERT_TRUE(DualWields(player));
+	const Item &left = player.InvBody[INVLOC_HAND_LEFT];
+	const Item &right = player.InvBody[INVLOC_HAND_RIGHT];
+	const int increased = player._pIBonusDam;
+	ASSERT_EQ(increased, WeaponDamagePercent(left) + WeaponDamagePercent(right));
+
+	player.poe2.swingHand = 0;
+	const auto [leftMin, leftMax] = AttackWeaponDamage(player, DefaultSkillSlot(player));
+	// What a hit then makes of it (base + base x _pIBonusDam) is the sword's own range with its own increase.
+	EXPECT_NEAR(leftMax * (100.0 + increased) / 100, left._iMaxDam * (100.0 + WeaponDamagePercent(left)) / 100, 1.0);
+	EndSwing(player);
+	EXPECT_EQ(player.poe2.swingHand, 1);
+	const auto [rightMin, rightMax] = AttackWeaponDamage(player, DefaultSkillSlot(player));
+	EXPECT_NEAR(rightMax * (100.0 + increased) / 100, right._iMaxDam * (100.0 + WeaponDamagePercent(right)) / 100, 1.0);
+	EXPECT_NE(leftMax, rightMax);
+	EndSwing(player);
+	EXPECT_EQ(player.poe2.swingHand, 0);
+	// The panel (and _pIMinDam) shows a swing's average, not both weapons together.
+	EXPECT_EQ(player._pIMinDam, (leftMin + rightMin) / 2);
+	EXPECT_EQ(player._pIMaxDam, (leftMax + rightMax + 1) / 2);
+	EXPECT_LT(player._pIMaxDam, left._iMaxDam + right._iMaxDam);
+
+	// A held attack changes hands once a swing: 10 s of 1.55 swings a second.
+	int changes = 0;
+	player.poe2.swingHand = 0;
+	player._pmode = PM_STAND;
+	player.destAction = ACTION_NONE;
+	const Point front = Front();
+	for (int tick = 0; tick < 200; tick++) {
+		if (player.destAction == ACTION_NONE && player.CanChangeAction()) {
+			player.destAction = ACTION_ATTACK;
+			player.destParam1 = front.x;
+			player.destParam2 = front.y;
+		}
+		const uint8_t handBefore = player.poe2.swingHand;
+		TestPlayerProcessAction(player);
+		player.poe2.tick();
+		Missiles.clear();
+		changes += player.poe2.swingHand != handBefore ? 1 : 0;
+	}
+	const double seconds = HeldTicks(player, WeaponSkill::None, false) / TicksPerSecond;
+	ASSERT_GT(seconds, 0);
+	EXPECT_NEAR(changes, 10 / seconds, 2);
+
+	// One weapon (or a weapon and a shield) swings as before; so does Diablo's Bard.
+	MakeHero(player, HeroClass::Bard, 15);
+	Hold(player, INVLOC_HAND_LEFT, sword);
+	Ready(player);
+	EXPECT_FALSE(DualWields(player));
+	gbIsPoe2 = false;
+	MakeHero(player, HeroClass::Bard, 15);
+	Hold(player, INVLOC_HAND_LEFT, sword);
+	Hold(player, INVLOC_HAND_RIGHT, dagger);
+	Ready(player);
+	EXPECT_FALSE(DualWields(player));
+	EXPECT_EQ(player._pIMaxDam, player.InvBody[INVLOC_HAND_LEFT]._iMaxDam + player.InvBody[INVLOC_HAND_RIGHT]._iMaxDam);
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2PaceTest, EarlySkillsBeatTheFreeAttackPerSecond)
@@ -515,7 +669,10 @@ TEST_F(Poe2PaceTest, PrintPace)
 					continue;
 				if (found)
 					Find(player, level);
-				for (const Row &row : Measure(player, paceClass, level)) {
+				std::vector<Row> rows = Measure(player, paceClass, level);
+				for (Row &extra : MeasureExtras(player, paceClass, level))
+					rows.push_back(std::move(extra));
+				for (const Row &row : rows) {
 					std::fprintf(out, "%s\t%d\t%s\t%s\t%s\t%d\t%.4f\t%.4f\t%d\n", std::string(paceClass.name).c_str(), level, gear.c_str(), found ? "found" : "white",
 					    row.what.c_str(), row.gemLevel, row.damage, row.seconds, MonsterLevelLife(level));
 				}

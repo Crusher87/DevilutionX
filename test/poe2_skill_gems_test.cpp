@@ -148,9 +148,9 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)
 {
 	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
-	// The gem's curve times Cleave's damage for its speed (134%).
-	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 190% weapon damage, 4 mana");
-	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 418% weapon damage, 12 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
+	// The gem's curve times Cleave's damage for its speed (134%); its mana x117% for that speed (half as much).
+	EXPECT_EQ(GemLevelText(cleave, 5), "level 5: 190% weapon damage, 5 mana");
+	EXPECT_NE(GemCurveTextByName("cleave").find("level 20: 418% weapon damage, 14 mana (character level 50)"), std::string::npos) << GemCurveTextByName("cleave");
 	EXPECT_EQ(GemCurveTextByName("nothing"), "No skill gem is called nothing.");
 }
 
@@ -172,10 +172,11 @@ TEST_F(Poe2SkillGemsTest, GemItemsKeepTheirLevel)
 TEST_F(Poe2SkillGemsTest, AttackGemLevelRaisesManaCost)
 {
 	Player &player = *MyPlayer;
+	// Leap Slam's listed cost, x151% for its speed (damage_pct 201, mana half as much): 5 -> 7.55, to 8.
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 1);
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam));
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), (WeaponSkillManaCost(WeaponSkill::LeapSlam) * 151 + 50) / 100);
 	SocketSkill(player, 0, SkillSlot::ForAttack(WeaponSkill::LeapSlam), 20);
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), WeaponSkillManaCost(WeaponSkill::LeapSlam) * 4);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::LeapSlam), (WeaponSkillManaCost(WeaponSkill::LeapSlam) * 4 * 151 + 50) / 100);
 }
 
 TEST_F(Poe2SkillGemsTest, UsabilityChecksStatsWeaponAndMana)

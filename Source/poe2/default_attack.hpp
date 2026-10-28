@@ -71,8 +71,20 @@ std::pair<int, int> BareFistDamage(int gemLevel);
  * has no gem, the highest of the hero's socketed attack gems; 1 without any.
  */
 int BareFistGemLevel(const Player &player, SkillSlot skill);
-/** @brief The weapon damage an attack of the skill rolls: bare fists' at its gem level, else the weapon's (_pIMinDam to _pIMaxDam). */
+/**
+ * @brief The weapon damage an attack of the skill rolls: bare fists' at its gem level, else the weapon's (_pIMinDam to
+ * _pIMaxDam); with two weapons, the swinging hand's (see DualWields).
+ */
 std::pair<int, int> AttackWeaponDamage(const Player &player, SkillSlot skill);
+/**
+ * @brief Whether the hero holds two weapons in POE2 Mashup, and so swings them in turn: each swing deals one weapon's
+ * damage, left hand first (Curtis 2026-10-27). _pIMinDam and the fire and lightning are then a swing's average.
+ */
+bool DualWields(const Player &player);
+/** @brief The fire (or lightning) damage the weapons add to this swing: the swinging hand's with two weapons, else all of it. */
+std::pair<int, int> SwingElementDamage(const Player &player, bool lightning);
+/** @brief Ends a swing: a hero with two weapons uses the other one for the next swing. */
+void EndSwing(Player &player);
 
 /** @brief Whether the hero's ranged attack is the staff bolt rather than an arrow: a caster's staff or a sceptre in POE2 Mashup. */
 bool FiresStaffBolt(const Player &player);

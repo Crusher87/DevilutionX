@@ -202,7 +202,31 @@ std::pair<int, int> AttackWeaponDamage(const Player &player, SkillSlot skill)
 {
 	if (FightsWithBareFists(player))
 		return BareFistDamage(BareFistGemLevel(player, skill));
+	if (DualWields(player)) {
+		const Poe2PlayerData::HandDamage &hand = player.poe2.handDamage[player.poe2.swingHand % 2];
+		return { hand.minDamage, hand.maxDamage };
+	}
 	return { player._pIMinDam, player._pIMaxDam };
+}
+
+bool DualWields(const Player &player)
+{
+	return gbIsPoe2 && player.poe2.dualWield;
+}
+
+std::pair<int, int> SwingElementDamage(const Player &player, bool lightning)
+{
+	if (DualWields(player)) {
+		const Poe2PlayerData::HandDamage &hand = player.poe2.handDamage[player.poe2.swingHand % 2];
+		return lightning ? std::pair { hand.minLightning, hand.maxLightning } : std::pair { hand.minFire, hand.maxFire };
+	}
+	return lightning ? std::pair { player._pILMinDam, player._pILMaxDam } : std::pair { player._pIFMinDam, player._pIFMaxDam };
+}
+
+void EndSwing(Player &player)
+{
+	if (DualWields(player))
+		player.poe2.swingHand = static_cast<uint8_t>((player.poe2.swingHand + 1) % 2);
 }
 
 int RollStaffBoltDamage(const Player &player)

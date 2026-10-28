@@ -1,119 +1,119 @@
-name	attack_speed_pct	cast_time_s	attack_time_s	added_ms	distance_ms	damage_pct	note
-Default Punch	100						Punch
-Default SwordStrike	100						none (Mace Strike pattern)
-Default DaggerStab	100						none (Spear Stab pattern)
-Default AxeChop	100						none (Mace Strike pattern)
-Default MaceSmash	100						Mace Strike
-Default StaffStrike	100						Quarterstaff Strike
-Default StaffBolt		0.9					Firebolt granted by Ashen Staff
-Default BowShot	100						Bow Shot / Crossbow Shot
-Default ShieldBash			0.55				Raise Shield (its Shield Bash)
-Cleave	75					134	none (Wind Blast)
-GroundSlam	75					134	none (Earthquake)
-Barrage	100						Barrage
-WhirlingStaff	70					143	none (Whirling Slash)
-Flurry	240						strike; research 120% a use of 2 strikes (Rapid Assault per stab)
-Flurry:backhand	240						backhand, the second strike
-LeapSlam	100			650	500	201	Leap Slam
-RainOfArrows	80					125	Rain of Arrows
-ShieldCharge			0.6				Shield Charge
-BattleCry		0.8					Infernal Cry
-LightningArrow	90					112	Lightning Arrow
-EscapeShot	100			700		209	Escape Shot
-EmberFusillade		0.4					per ember, one a cast (Ember Fusillade)
-Spark		0.7					Spark
-IceBolt		0.8					Frostbolt
-FrostNova		1.0				112	Ice Nova
-Riposte	100						Parry (its counter sweep)
-ShadowStep	75					134	none (Cull the Weak)
-Frenzy	140						none (Ice Strike normal strikes)
-Smite	80					125	Armour Breaker
-FistsOfThunder	140						Tempest Flurry: strikes 1-2
-FistsOfThunder:finisher	91						every third strike, the lightning burst: 140% x 0.65
-ShieldBash			0.55				Raise Shield (its Shield Bash)
-AmplifyDamage		0.7					Vulnerability
-Whirlwind	85			1000		273	none (Whirling Assault)
-Sacrifice	60					167	none (Boneshatter)
-Zeal	240						per strike; research 60% a use of 4 strikes (Rapid Assault per stab)
-Vengeance	80					125	none (Primal Strikes)
-ArkainesWrath	75					134	none (Storm Wave)
-FanOfBlades	60					167	none (Lightning Spear)
-ViperStrike	85					118	none (Fangs of Frost)
-BladeSentinel	60					167	none (Storm Lance)
-DeathMark		0.5					Sniper's Mark
-BladeFury	550						per dagger; research 69% a use of 8 daggers (Rapid Shot per bolt)
-DoubleThrow	70					143	none (Spear Throw)
-Rend	90					112	Rend (Wyvern)
-WarCry		0.8					Seismic Cry
-CallOfTheAncients	50					200	none (Hammer of the Gods)
-Fissure	80					125	none (Earthshatter)
-BlessedHammer		0.8					none (Orb of Storms)
-Shockwave	40					250	none (Sunder)
-FistOfTheHeavens		0.85					none (Lightning Bolt)
-DashingStrike	75					134	none (Killing Palm)
-LashingTailKick	70					143	none (Whirling Slash)
-WaveOfLight	120						none (Tempest Bell)
-CycloneStrike	60					167	none (Falling Thunder)
-SevenSidedStrike	350						per strike; research 50% a use of up to 7 strikes (Flicker Strike)
-Multishot	80					125	Bow Shot + Multishot support
-GuidedArrow	70					143	none (Shockchain Arrow)
-FreezingArrow	90					112	none (Ice Shot)
-ClusterBolt	100						none (Incendiary Shot)
-ExplosiveBolt	70					143	none (Explosive Shot)
-HolyShield		0.5					none (Convalescence)
-BlessedShield			0.8			124	none (Resonating Shield)
-Condemn		1.0				112	none (Ice Nova)
-ShieldWall			1.25				Shield Wall
-FallingSword	100			650		201	none (Leap Slam)
-Meteor		1.0		1000		223	none (Comet)
-Thunderstorm		0.9					Thunderstorm
-GlacialSpike		0.8					none (Frost Bomb)
-FrozenArmor		0.5					none (Convalescence)
-Blizzard		1.2				134	none (Icestorm)
-IceBarrage		0.8					none (Frost Darts)
-FrozenOrb		1.4				156	none (Eye of Winter)
-Haunt		0.8					none (Essence Drain)
-LocustSwarm		1.0				112	none (Contagion)
-CorpseExplosion		0.8					Detonate Dead
-SoulHarvest		1.3					none (Feast of Flesh)
-BonePrison		1.0					none (Bone Cage)
-Weaken		0.7					Enfeeble
-IronMaiden		0.7					none (any POE2 curse)
-Decrepify		0.7					none (Temporal Chains)
-LowerResist		0.7					Elemental Weakness
-Confuse		0.7					none (any POE2 curse)
-Attract		0.7					none (any POE2 curse)
-Spell Firebolt		0.9				225	Firebolt
-Spell ChargedBolt		0.7				175	none (Spark)
-Spell HolyBolt		0.75				188	none (Chaos Bolt)
-Spell Healing		0.5					none (Convalescence)
-Spell Inferno		0.8					none (Incinerate)
-Spell FireWall		1.0				112	Flame Wall
-Spell Lightning		1.1				275	none (Arc)
-Spell Flash		1.0				250	none (Ice Nova)
-Spell ManaShield		0.5					none (Convalescence)
-Spell StoneCurse		0.7					none (Time Freeze)
-Spell Phasing		0.7					none (Blink)
-Spell Fireball		1.2				300	Fireball
-Spell ChainLightning		1.1				275	none (Arc)
-Spell Elemental		1.2				300	none (Fireball)
-Spell FlameWave		1.0				250	none (Flame Wall)
-Spell Guardian		0.5					none (Spell Totem)
-Spell BoneSpirit		0.8					none (Soulrend)
-Spell Golem		0.6					none (Raise Zombie)
-Spell BloodStar		0.8				200	none (Essence Drain)
-Spell Nova		1.0				250	none (Ice Nova)
-Spell Teleport		0.7					none (Blink)
-Spell RingOfFire		1.0				112	none (Flame Wall)
-Spell LightningWall		1.0				112	none (Flame Wall)
-Spell Immolation		1.2				300	none (Fireball)
-Spell Warp		0.7					none (Blink)
-Spell Etherealize		0.5					none (Convalescence)
-Spell Apocalypse		1.4				350	none (Firestorm)
-Spell Berserk		0.7					none (any POE2 curse)
-Spell Reflect		0.5					none (Convalescence)
-Spell RuneOfFire		1.0				112	none (Conductive Runes)
-Spell RuneOfLight		1.0				112	none (Conductive Runes)
-Spell RuneOfStone		1.0				112	none (Conductive Runes)
-Spell RuneOfNova		1.0				112	none (Conductive Runes)
-Spell RuneOfImmolation		1.0				112	none (Conductive Runes)
+name	attack_speed_pct	cast_time_s	attack_time_s	added_ms	distance_ms	damage_pct	mana_pct	note
+Default Punch	100							Punch
+Default SwordStrike	100							none (Mace Strike pattern)
+Default DaggerStab	100							none (Spear Stab pattern)
+Default AxeChop	100							none (Mace Strike pattern)
+Default MaceSmash	100							Mace Strike
+Default StaffStrike	100							Quarterstaff Strike
+Default StaffBolt		0.9						Firebolt granted by Ashen Staff
+Default BowShot	100							Bow Shot / Crossbow Shot
+Default ShieldBash			0.55					Raise Shield (its Shield Bash)
+Cleave	75					134	117	none (Wind Blast)
+GroundSlam	75					134	117	none (Earthquake)
+Barrage	100					130	115	Barrage
+WhirlingStaff	70					143	122	none (Whirling Slash)
+Flurry	240							strike; research 120% a use of 2 strikes (Rapid Assault per stab)
+Flurry:backhand	240							backhand, the second strike
+LeapSlam	100			650	500	201	151	Leap Slam
+RainOfArrows	80					162	131	Rain of Arrows
+ShieldCharge			0.6					Shield Charge
+BattleCry		0.8						Infernal Cry
+LightningArrow	90					144	122	Lightning Arrow
+EscapeShot	100			700		238	169	Escape Shot
+EmberFusillade		0.4						per ember, one a cast (Ember Fusillade)
+Spark		0.7						Spark
+IceBolt		0.8						Frostbolt
+FrostNova		1.0				112	106	Ice Nova
+Riposte	100							Parry (its counter sweep)
+ShadowStep	75					134	117	none (Cull the Weak)
+Frenzy	140							none (Ice Strike normal strikes)
+Smite	80					125	113	Armour Breaker
+FistsOfThunder	140							Tempest Flurry: strikes 1-2
+FistsOfThunder:finisher	91							every third strike, the lightning burst: 140% x 0.65
+ShieldBash			0.55					Raise Shield (its Shield Bash)
+AmplifyDamage		0.7						Vulnerability
+Whirlwind	85			1000		273	187	none (Whirling Assault)
+Sacrifice	60					167	134	none (Boneshatter)
+Zeal	240							per strike; research 60% a use of 4 strikes (Rapid Assault per stab)
+Vengeance	80					125	113	none (Primal Strikes)
+ArkainesWrath	75					134	117	none (Storm Wave)
+FanOfBlades	60					167	134	none (Lightning Spear)
+ViperStrike	85					118	109	none (Fangs of Frost)
+BladeSentinel	60					167	134	none (Storm Lance)
+DeathMark		0.5						Sniper's Mark
+BladeFury	550							per dagger; research 69% a use of 8 daggers (Rapid Shot per bolt)
+DoubleThrow	70					143	122	none (Spear Throw)
+Rend	90					112	106	Rend (Wyvern)
+WarCry		0.8						Seismic Cry
+CallOfTheAncients	50					200	150	none (Hammer of the Gods)
+Fissure	80					125	113	none (Earthshatter)
+BlessedHammer		0.8						none (Orb of Storms)
+Shockwave	40					250	175	none (Sunder)
+FistOfTheHeavens		0.85						none (Lightning Bolt)
+DashingStrike	75					134	117	none (Killing Palm)
+LashingTailKick	70					143	122	none (Whirling Slash)
+WaveOfLight	120							none (Tempest Bell)
+CycloneStrike	60					167	134	none (Falling Thunder)
+SevenSidedStrike	350							per strike; research 50% a use of up to 7 strikes (Flicker Strike)
+Multishot	80					162	131	Bow Shot + Multishot support
+GuidedArrow	70					185	143	none (Shockchain Arrow)
+FreezingArrow	90					144	122	none (Ice Shot)
+ClusterBolt	100					130	115	none (Incendiary Shot)
+ExplosiveBolt	70					185	143	none (Explosive Shot)
+HolyShield		0.5						none (Convalescence)
+BlessedShield			0.8			124	112	none (Resonating Shield)
+Condemn		1.0				112	106	none (Ice Nova)
+ShieldWall			1.25					Shield Wall
+FallingSword	100			650		201	151	none (Leap Slam)
+Meteor		1.0		1000		223	162	none (Comet)
+Thunderstorm		0.9						Thunderstorm
+GlacialSpike		0.8						none (Frost Bomb)
+FrozenArmor		0.5						none (Convalescence)
+Blizzard		1.2				134	117	none (Icestorm)
+IceBarrage		0.8						none (Frost Darts)
+FrozenOrb		1.4				156	128	none (Eye of Winter)
+Haunt		0.8						none (Essence Drain)
+LocustSwarm		1.0				112	106	none (Contagion)
+CorpseExplosion		0.8						Detonate Dead
+SoulHarvest		1.3						none (Feast of Flesh)
+BonePrison		1.0						none (Bone Cage)
+Weaken		0.7						Enfeeble
+IronMaiden		0.7						none (any POE2 curse)
+Decrepify		0.7						none (Temporal Chains)
+LowerResist		0.7						Elemental Weakness
+Confuse		0.7						none (any POE2 curse)
+Attract		0.7						none (any POE2 curse)
+Spell Firebolt		0.9				140	120	Firebolt
+Spell ChargedBolt		0.7				109	105	none (Spark)
+Spell HolyBolt		0.75				117	109	none (Chaos Bolt)
+Spell Healing		0.5						none (Convalescence)
+Spell Inferno		0.8						none (Incinerate)
+Spell FireWall		1.0				112	106	Flame Wall
+Spell Lightning		1.1				171	136	none (Arc)
+Spell Flash		1.0				156	128	none (Ice Nova)
+Spell ManaShield		0.5						none (Convalescence)
+Spell StoneCurse		0.7						none (Time Freeze)
+Spell Phasing		0.7						none (Blink)
+Spell Fireball		1.2				187	144	Fireball
+Spell ChainLightning		1.1				171	136	none (Arc)
+Spell Elemental		1.2				187	144	none (Fireball)
+Spell FlameWave		1.0				156	128	none (Flame Wall)
+Spell Guardian		0.5						none (Spell Totem)
+Spell BoneSpirit		0.8						none (Soulrend)
+Spell Golem		0.6						none (Raise Zombie)
+Spell BloodStar		0.8				125	113	none (Essence Drain)
+Spell Nova		1.0				156	128	none (Ice Nova)
+Spell Teleport		0.7						none (Blink)
+Spell RingOfFire		1.0				112	106	none (Flame Wall)
+Spell LightningWall		1.0				112	106	none (Flame Wall)
+Spell Immolation		1.2				187	144	none (Fireball)
+Spell Warp		0.7						none (Blink)
+Spell Etherealize		0.5						none (Convalescence)
+Spell Apocalypse		1.4				218	159	none (Firestorm)
+Spell Berserk		0.7						none (any POE2 curse)
+Spell Reflect		0.5						none (Convalescence)
+Spell RuneOfFire		1.0				112	106	none (Conductive Runes)
+Spell RuneOfLight		1.0				112	106	none (Conductive Runes)
+Spell RuneOfStone		1.0				112	106	none (Conductive Runes)
+Spell RuneOfNova		1.0				112	106	none (Conductive Runes)
+Spell RuneOfImmolation		1.0				112	106	none (Conductive Runes)

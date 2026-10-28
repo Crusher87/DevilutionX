@@ -81,38 +81,43 @@ public:
 
 TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 {
-	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 100);
-	// Plan step 14 (Curtis 2026-10-27): the splash went from 35% to 70% of the hit, so the Sorcerer clears packs.
-	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 70);
+	// Round 2 (Curtis 2026-10-27): spells re-timed against a 0.645 s swing instead of the old 0.40 s cast. Firebolt's
+	// hit is re-fit so it kills as fast as before (161% x 140% for its speed = the old 100% x 225%), its splash cut to
+	// 25%; the spells still over budget a second were trimmed; Apocalypse to its budget.
+	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 161);
+	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 25);
 	EXPECT_EQ(SpellDamagePercent(SpellID::HolyBolt), 165);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Lightning), 135);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 50);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Flash), 200);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 130);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Flash), 110);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 120);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChainLightning), 400);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Nova), 540);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Elemental), 220);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Immolation), 390);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Nova), 480);
 	EXPECT_EQ(SpellDamageHits(SpellID::Nova), 5);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Apocalypse), 1100);
-	EXPECT_EQ(SpellDamagePercent(SpellID::BloodStar), 1400);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Apocalypse), 130);
+	EXPECT_EQ(SpellDamagePercent(SpellID::BloodStar), 1100);
 	// Runes hit as their spell.
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 130);
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 540);
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 120);
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 480);
 	// A spell with no row keeps the plain base.
 	EXPECT_EQ(SpellDamagePercent(SpellID::Teleport), 100);
 	EXPECT_EQ(SpellDamageHits(SpellID::Teleport), 1);
 	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 35);
-	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::EmberFusillade), 100);
+	// Raise each strike (Curtis 2026-10-27): an ember 100% -> 150%.
+	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::EmberFusillade), 150);
 }
 
-TEST_F(Poe2SpellDamageTest, FireboltIsHundredPercentOfBase)
+TEST_F(Poe2SpellDamageTest, FireboltIsItsPercentOfBase)
 {
 	const Player &player = *MyPlayer;
 	for (uint32_t seed = 1; seed < 60; seed++) {
 		const Missile &bolt = Cast(MissileID::Firebolt, 3, seed);
 		SetRndSeed(seed);
-		EXPECT_EQ(bolt._midam, RollSpellBase(player, 3)) << seed;
-		EXPECT_GE(bolt._midam, SpellBaseMin(player, 3));
-		EXPECT_LE(bolt._midam, SpellBaseMax(player, 3));
+		EXPECT_EQ(bolt._midam, Percent(RollSpellBase(player, 3), 161)) << seed;
+		EXPECT_GE(bolt._midam, Percent(SpellBaseMin(player, 3), 161));
+		EXPECT_LE(bolt._midam, Percent(SpellBaseMax(player, 3), 161));
 	}
 	const Missile &holy = Cast(MissileID::HolyBolt, 3, 7);
 	SetRndSeed(7);
@@ -131,17 +136,17 @@ TEST_F(Poe2SpellDamageTest, NoTwelvePointFivePercentStacking)
 	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 10), GemCurveDamagePercent(fireball, 10));
 	// Charged Bolt grows by its bolts only.
 	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::ChargedBolt), 20), 100);
-	// A cast hits for the curve times the spell's damage for its cast time: Fireball's 1.2 s over the 0.40 s a held
-	// cast took before spells had cast times (skill_speed.tsv).
-	EXPECT_EQ(GemDamagePercent(fireball, 1), 300);
-	EXPECT_EQ(GemDamagePercent(fireball, 20), 312 * 3);
+	// A cast hits for the curve times the spell's damage for its cast time: Fireball's 1.2 s over the 0.645 s spell
+	// baseline, a Shortsword swing (skill_speed.tsv).
+	EXPECT_EQ(GemDamagePercent(fireball, 1), 187);
+	EXPECT_EQ(GemDamagePercent(fireball, 20), 312 * 187 / 100);
 
-	// A level 20 Fireball's missile is the base times 130%, with no 1.125^20 on top.
+	// A level 20 Fireball's missile is the base times 120%, with no 1.125^20 on top.
 	const Player &player = *MyPlayer;
 	for (uint32_t seed = 1; seed < 30; seed++) {
 		const Missile &ball = Cast(MissileID::Fireball, 20, seed);
-		EXPECT_GE(ball._midam, Percent(SpellBaseMin(player, 20), 130));
-		EXPECT_LE(ball._midam, Percent(SpellBaseMax(player, 20), 130));
+		EXPECT_GE(ball._midam, Percent(SpellBaseMin(player, 20), 120));
+		EXPECT_LE(ball._midam, Percent(SpellBaseMax(player, 20), 120));
 	}
 }
 
@@ -226,8 +231,8 @@ TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)
 		if (missile._mitype != MissileID::Firebolt)
 			continue;
 		embers++;
-		EXPECT_GE(missile._midam, SpellBaseMin(player, 1));
-		EXPECT_LE(missile._midam, SpellBaseMax(player, 1));
+		EXPECT_GE(missile._midam, Percent(SpellBaseMin(player, 1), 150));
+		EXPECT_LE(missile._midam, Percent(SpellBaseMax(player, 1), 150));
 		EXPECT_EQ(missile.poe2.damagePercent, GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::EmberFusillade), 1));
 	}
 	EXPECT_EQ(embers, 1);

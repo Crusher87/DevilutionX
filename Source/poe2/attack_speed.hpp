@@ -20,7 +20,7 @@
  * attack speed), flat time added after the speed (added_ms: Leap Slam's 650 ms, Comet's 1000), and time added by how
  * far a dash went (distance_ms, at its full length). A skill in several steps has a row for each step after the first,
  * keyed "Skill:step" (Double Swing's backhand, Fists of Thunder's finisher; see SkillStep). A slower skill hits harder
- * by its row's damage_pct (SkillSpeedDamagePercent).
+ * by its row's damage_pct (SkillSpeedDamagePercent), and costs more by half as much (mana_pct, SkillSpeedManaPercent).
  */
 #pragma once
 
@@ -101,6 +101,8 @@ struct SkillSpeedRow {
 	int distanceMs = 0;
 	/** Damage in percent for how much longer than its free use the skill takes (damage_pct; 100 for none). */
 	int damagePercent = 100;
+	/** Mana cost in percent for that damage: half of what damage_pct adds (mana_pct; 100 for none). */
+	int manaPercent = 100;
 };
 
 /** @brief The skill's attack speed from skill_speed.tsv, in percent of the weapon's (100 without a row). */
@@ -110,6 +112,11 @@ int SkillAttackSpeedPercent(SkillSlot skill, SkillStep step = SkillStep::Main);
  * takes longer hits harder by as much, so it still beats the free attack per second (tools/poe2_skill_speed_damage.py).
  */
 int SkillSpeedDamagePercent(SkillSlot skill);
+/**
+ * @brief The skill's mana cost for its speed, in percent (mana_pct in skill_speed.tsv; 100 without one): a skill that hits
+ * harder for its speed costs more by half as much (Curtis 2026-10-27, "Half as much"), so a slow skill isn't the cheap one.
+ */
+int SkillSpeedManaPercent(SkillSlot skill);
 /** @brief The skill's base cast time from skill_speed.tsv in milliseconds, or 0 without one. */
 int SkillCastTimeMs(SkillSlot skill);
 /** @brief The skill's row in skill_speed.tsv (the step's, else the skill's), or nullptr without one. */

@@ -90,33 +90,33 @@ IDI_GREYSUIT	0	Quest	Unequippable	GREY_SUIT	Misc	NONE	Grey Suit		0	0	0	0	0	0	0	0
 	1	Misc	Unequippable	ELIXIR_OF_MAGIC	Misc	NONE	Elixir of Magic		15	0	0	0	0	0	0	0	0		ELIXMAG	Null	true	5000
 	1	Misc	Unequippable	ELIXIR_OF_DEXTERITY	Misc	NONE	Elixir of Dexterity		15	0	0	0	0	0	0	0	0		ELIXDEX	Null	true	5000
 	1	Misc	Unequippable	ELIXIR_OF_VITALITY	Misc	NONE	Elixir of Vitality		20	0	0	0	0	0	0	0	0		ELIXVIT	Null	true	5000
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Healing		1	0	0	0	0	0	0	0	0		SCROLL	Healing	true	50
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Search		1	0	0	0	0	0	0	0	0		SCROLL	Search	true	50
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Lightning		4	0	0	0	0	0	0	0	0		SCROLLT	Lightning	true	150
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Healing		1	0	0	0	0	0	0	0	0		SCROLL	Healing	true	50
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Search		1	0	0	0	0	0	0	0	0		SCROLL	Search	true	50
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Lightning		4	0	0	0	0	0	0	0	0		SCROLLT	Lightning	true	150
 	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Identify		1	0	0	0	0	0	0	0	0		SCROLL	Identify	true	100
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Resurrect		1	0	0	0	0	0	0	0	0		SCROLLT	Resurrect	true	250
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Fire Wall		4	0	0	0	0	0	0	17	0		SCROLLT	FireWall	true	400
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Inferno		1	0	0	0	0	0	0	19	0		SCROLLT	Inferno	true	100
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Town Portal		4	0	0	0	0	0	0	0	0		SCROLL	TownPortal	true	200
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Flash		6	0	0	0	0	0	0	21	0		SCROLLT	Flash	true	500
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Infravision		8	0	0	0	0	0	0	23	0		SCROLL	Infravision	true	600
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Resurrect		1	0	0	0	0	0	0	0	0		SCROLLT	Resurrect	true	250
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Fire Wall		4	0	0	0	0	0	0	17	0		SCROLLT	FireWall	true	400
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Inferno		1	0	0	0	0	0	0	19	0		SCROLLT	Inferno	true	100
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Town Portal		4	0	0	0	0	0	0	0	0		SCROLL	TownPortal	true	200
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Flash		6	0	0	0	0	0	0	21	0		SCROLLT	Flash	true	500
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Infravision		8	0	0	0	0	0	0	23	0		SCROLL	Infravision	true	600
 	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Phasing		6	0	0	0	0	0	0	25	0		SCROLL	Phasing	true	200
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Mana Shield		8	0	0	0	0	0	0	0	0		SCROLL	ManaShield	true	1200
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Flame Wave		10	0	0	0	0	0	0	29	0		SCROLLT	FlameWave	true	650
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Fireball		8	0	0	0	0	0	0	31	0		SCROLLT	Fireball	true	300
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Stone Curse		6	0	0	0	0	0	0	33	0		SCROLLT	StoneCurse	true	800
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Chain Lightning		10	0	0	0	0	0	0	35	0		SCROLLT	ChainLightning	true	750
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Guardian		12	0	0	0	0	0	0	47	0		SCROLLT	Guardian	true	950
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Mana Shield		8	0	0	0	0	0	0	0	0		SCROLL	ManaShield	true	1200
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Flame Wave		10	0	0	0	0	0	0	29	0		SCROLLT	FlameWave	true	650
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Fireball		8	0	0	0	0	0	0	31	0		SCROLLT	Fireball	true	300
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Stone Curse		6	0	0	0	0	0	0	33	0		SCROLLT	StoneCurse	true	800
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Chain Lightning		10	0	0	0	0	0	0	35	0		SCROLLT	ChainLightning	true	750
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Guardian		12	0	0	0	0	0	0	47	0		SCROLLT	Guardian	true	950
 	0	Misc	Unequippable		Misc	NONE			0	0	0	0	0	0	0	0	0		NONE	Null	false	0
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Nova		14	0	0	0	0	0	0	57	0		SCROLL	Nova	true	1300
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Golem		10	0	0	0	0	0	0	51	0		SCROLLT	Golem	true	1100
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Nova		14	0	0	0	0	0	0	57	0		SCROLL	Nova	true	1300
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Golem		10	0	0	0	0	0	0	51	0		SCROLLT	Golem	true	1100
 	0	Misc	Unequippable		Misc	NONE			0	0	0	0	0	0	0	0	0		NONE	Null	false	0
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Teleport		14	0	0	0	0	0	0	81	0		SCROLL	Teleport	true	3000
-	1	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Apocalypse		22	0	0	0	0	0	0	117	0		SCROLL	Apocalypse	true	2000
-	1	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		2	0	0	0	0	0	0	0	0		BOOK	Null	true	0
-	1	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		8	0	0	0	0	0	0	0	0		BOOK	Null	true	0
-	1	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		14	0	0	0	0	0	0	0	0		BOOK	Null	true	0
-	1	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		20	0	0	0	0	0	0	0	0		BOOK	Null	true	0
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Teleport		14	0	0	0	0	0	0	81	0		SCROLL	Teleport	true	3000
+	0	Misc	Unequippable	SCROLL_OF	Misc	NONE	Scroll of Apocalypse		22	0	0	0	0	0	0	117	0		SCROLL	Apocalypse	true	2000
+	0	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		2	0	0	0	0	0	0	0	0		BOOK	Null	true	0
+	0	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		8	0	0	0	0	0	0	0	0		BOOK	Null	true	0
+	0	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		14	0	0	0	0	0	0	0	0		BOOK	Null	true	0
+	0	Misc	Unequippable	BOOK_BLUE	Misc	NONE	Book of 		20	0	0	0	0	0	0	0	0		BOOK	Null	true	0
 	0	Weapon	One-handed	DAGGER	Sword	DAGGER	Dagger	Dagger	1	16	1	4	0	0	0	0	0	FastAttack	NONE	Null	false	60
 	0	Weapon	One-handed	SHORT_SWORD	Sword	NONE	Short Sword	Sword	1	24	2	6	0	0	18	0	0	QuickAttack	NONE	Null	false	120
 	0	Weapon	One-handed	FALCHION	Sword	FALCHION	Falchion	Sword	2	20	4	8	0	0	30	0	0		NONE	Null	false	250

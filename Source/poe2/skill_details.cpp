@@ -134,6 +134,9 @@ std::pair<int, int> WeaponRoll(const Player &player, SkillSlot skill, int level)
 {
 	if (skill.kind == SkillKind::Attack && level > 0 && FightsWithBareFists(player))
 		return BareFistDamage(level);
+	// Two weapons take turns: a swing's average, not the hand that swings next.
+	if (DualWields(player))
+		return { player._pIMinDam, player._pIMaxDam };
 	return AttackWeaponDamage(player, skill);
 }
 

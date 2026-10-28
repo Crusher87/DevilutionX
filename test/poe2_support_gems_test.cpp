@@ -13,6 +13,7 @@
 #include "poe2/attack_speed.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
@@ -306,7 +307,8 @@ TEST_F(Poe2SupportGemsTest, AttackSupports)
 	EXPECT_EQ(SupportMeleeDamagePercent(player), BrutalityDamagePercent);
 	EXPECT_EQ(SupportAttackSkippedFrames(player, WeaponSkill::Cleave), MartialTempoFrames);
 	EXPECT_FALSE(SupportMeleeKnocksBack(player));
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), WeaponSkillManaCost(WeaponSkill::Cleave) * 120 / 100);
+	// Cleave's gem cost (its listed 3 x117% for its speed, 4) x120% for the support.
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1) * 120 / 100);
 }
 
 TEST_F(Poe2SupportGemsTest, TakingSupportsOut)

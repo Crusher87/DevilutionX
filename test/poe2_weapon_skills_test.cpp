@@ -140,7 +140,9 @@ TEST_F(Poe2WeaponSkillsTest, QueuedSkillPaysManaWhenTheAttackStarts)
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
 	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::Cleave);
 	EXPECT_EQ(player.poe2.pendingSkill, WeaponSkill::None);
-	EXPECT_EQ(player._pMana.whole(), 20 - WeaponSkillManaCost(WeaponSkill::Cleave));
+	// The listed cost, x117% for Cleave's speed (half of its damage_pct 134): 3 -> 3.51, to 4.
+	EXPECT_EQ(player._pMana.whole(), 20 - GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1));
+	EXPECT_EQ(player._pMana.whole(), 16);
 
 	// The next plain attack is normal again.
 	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
@@ -277,13 +279,14 @@ TEST_F(Poe2WeaponSkillsTest, MeleeSkillsCostAThirdLessMana)
 	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Cleave), 3);
 	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Flurry), 3);
 	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::GroundSlam), 4);
-	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1), 3);
+	// Since 2026-10-27 a skill costs more by half of what its speed adds to its damage: Cleave x117%, 3.51, so 4.
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1), 4);
 	Player &player = *MyPlayer;
 	player = {};
 	player.poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::Cleave);
 	player.poe2.slotLevels[0] = 1;
-	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), 3);
-	EXPECT_EQ(SkillManaCost(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 3);
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), 4);
+	EXPECT_EQ(SkillManaCost(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 4);
 	// The gem's level still raises it along its curve.
 	EXPECT_GT(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 20), 3 * 3);
 

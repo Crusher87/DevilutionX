@@ -825,6 +825,27 @@ struct Poe2PlayerData {
 	int16_t volleyTargetY = 0;
 	/** @brief Hits a per-hit skill landed, one a use (PerHitBurst): which side an ember springs from, Seven-Sided Strike's next enemy; see TakePerHitIndex (not saved). */
 	uint16_t perHitCount = 0;
+	/**
+	 * @brief The hand the next swing uses while the hero holds two weapons: 0 the left hand, 1 the right. Every swing (an
+	 * attack, a strike of a skill, a skill use) uses one weapon's damage and the next swing the other's, as in POE2; see
+	 * EndSwing (not saved: it is simulated like perHitCount, and a fresh hero or game starts with the left hand).
+	 */
+	uint8_t swingHand = 0;
+	/**
+	 * @brief Each hand's damage while the hero holds two weapons, worked out by CalcPlrInv (not saved): the weapon's own
+	 * range, in the units the hero's increased damage (_pIBonusDam) scales, so the other weapon's local increase doesn't
+	 * count, and its fire and lightning without the other weapon's. All zero when the hero doesn't hold two weapons.
+	 */
+	struct HandDamage {
+		int32_t minDamage = 0;
+		int32_t maxDamage = 0;
+		int32_t minFire = 0;
+		int32_t maxFire = 0;
+		int32_t minLightning = 0;
+		int32_t maxLightning = 0;
+	};
+	std::array<HandDamage, 2> handDamage {};
+	bool dualWield = false;
 	/** @brief Game ticks the character stands still after a skill slowed by its supports (not saved). */
 	uint8_t recoveryTicks = 0;
 	/** @brief Skill whose cast animation is playing; it goes off on castFrame (not saved). */
@@ -981,6 +1002,9 @@ struct Poe2PlayerData {
 		volleyShotsLeft = 0;
 		volleyShotsFired = 0;
 		perHitCount = 0;
+		swingHand = 0;
+		handDamage = {};
+		dualWield = false;
 		volleyTicks = 0;
 		recoveryTicks = 0;
 		castSkill = WeaponSkill::None;

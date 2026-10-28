@@ -202,6 +202,14 @@ constexpr int ExplosiveBoltBurstPercent = 45;
 /** @brief The bolts a Burst skill sprays out (Fist of the Heavens) hit for this percent of the spell base each. */
 constexpr int BurstBoltDamagePercent = 50;
 
+/**
+ * @brief Seven-Sided Strike's strikes land in full on this many enemies or more; on fewer, each strike deals their share
+ * of it (a lone monster a third of each strike).
+ */
+constexpr int SevenSidedStrikeFullTargets = 3;
+/** @brief The percent of a Seven-Sided Strike strike that lands with this many enemies about, of a burst of `burst`. */
+[[nodiscard]] int SevenSidedStrikeSharePercent(int targets, int burst);
+
 std::span<const TableSkillData> TableSkills();
 /** @brief A projectile's landing burst in percent of a base hit: Freezing Arrow's and Explosive Arrow's set ones, else two thirds of the skill's percent. */
 [[nodiscard]] int TableLandingBurstPercent(const TableSkillData &data);

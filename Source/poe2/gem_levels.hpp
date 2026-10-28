@@ -65,7 +65,10 @@ int GemDamagePercent(SkillSlot skill, int gemLevel);
 int GemManaPercent(SkillSlot skill, int gemLevel);
 /** @brief Projectiles the gem adds at a gem level. */
 int GemExtraProjectiles(SkillSlot skill, int gemLevel);
-/** @brief Mana cost at a gem level before class and support changes. */
+/**
+ * @brief Mana cost at a gem level before class and support changes: the base cost along the gem's curve, times the
+ * skill's mana for its speed (SkillSpeedManaPercent), to the nearest point when that isn't 100.
+ */
 int GemBaseManaCost(SkillSlot skill, int gemLevel);
 /** @brief Extra melee damage while Battle Cry is up, in percent, at a gem level. */
 int BattleCryDamagePercent(int gemLevel);

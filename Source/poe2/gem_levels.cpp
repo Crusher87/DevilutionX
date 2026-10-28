@@ -286,7 +286,12 @@ int GemExtraProjectiles(SkillSlot skill, int gemLevel)
 
 int GemBaseManaCost(SkillSlot skill, int gemLevel)
 {
-	return BaseManaCost(skill) * GemManaPercent(skill, gemLevel) / 100;
+	const int speedPercent = SkillSpeedManaPercent(skill);
+	if (speedPercent == 100)
+		return BaseManaCost(skill) * GemManaPercent(skill, gemLevel) / 100;
+	// A skill that hits harder for its speed costs more by half as much (mana_pct), to the nearest point.
+	const int64_t cost = static_cast<int64_t>(BaseManaCost(skill)) * GemManaPercent(skill, gemLevel) * speedPercent;
+	return static_cast<int>((cost + 5000) / 10000);
 }
 
 int BattleCryDamagePercent(int gemLevel)

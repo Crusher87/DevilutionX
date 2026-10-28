@@ -22,6 +22,7 @@
 #include "poe2/aim.hpp"
 #include "poe2/attack_speed.hpp"
 #include "poe2/camera_shake.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_resources.hpp"
@@ -1018,7 +1019,9 @@ vfx::Element WeaponElementLook(const Player &player)
 	return vfx::Element::Physical;
 }
 
-bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
+namespace {
+
+bool CastSkill(Player &player, WeaponSkill skill, Point target)
 {
 	const SkillLookScope skillLook(skill);
 	PlaySkillLookSound(SkillSlot::ForAttack(skill), target);
@@ -1115,6 +1118,16 @@ bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
 			ExecuteTableSkill(player, *table, target);
 		return false;
 	}
+}
+
+} // namespace
+
+bool ExecuteSkillCast(Player &player, WeaponSkill skill, Point target)
+{
+	const bool dashed = CastSkill(player, skill, target);
+	// A use is one swing: with two weapons, the next one is the other hand's.
+	EndSwing(player);
+	return dashed;
 }
 
 void SetSpellMissileSpeed(Missile &missile, SpellID spell)

@@ -920,6 +920,7 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 		if (!monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
 			M_GetKnockback(*monster, player.position.tile);
 	}
+	EndSwing(player);
 }
 
 bool DoAttack(Player &player)
@@ -999,11 +1000,13 @@ bool DoAttack(Player &player)
 		// POE2 Mashup: Brutality's price is the weapon's fire and lightning damage.
 		if (!SupportMeleeIsPhysicalOnly(player) && (!gbIsHellfire || !HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage))) {
 			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage)) {
-				int elementalDamage = didhit ? RandomIntBetween(player._pIFMinDam, player._pIFMaxDam) : 0;
+				const auto [minFire, maxFire] = SwingElementDamage(player, false);
+				int elementalDamage = didhit ? RandomIntBetween(minFire, maxFire) : 0;
 				AddMissile(position, { 1, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
 			}
 			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage)) {
-				int elementalDamage = didhit ? RandomIntBetween(player._pILMinDam, player._pILMaxDam) : 0;
+				const auto [minLightning, maxLightning] = SwingElementDamage(player, true);
+				int elementalDamage = didhit ? RandomIntBetween(minLightning, maxLightning) : 0;
 				AddMissile(position, { 2, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
 			}
 		}
@@ -1080,6 +1083,8 @@ bool DoAttack(Player &player)
 			if (skill != WeaponSkill::Flurry || player.poe2.flurryStrike == 0)
 				OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
 		}
+		// POE2 Mashup: with two weapons, the next swing (Double Swing's backhand too) is the other hand's.
+		EndSwing(player);
 
 		if (didhit && DamageWeapon(player, 30)) {
 			StartStand(player, player._pdir);

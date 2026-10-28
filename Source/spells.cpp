@@ -22,6 +22,7 @@
 #include "inv.h"
 #include "levels/gendung.h"
 #include "missiles.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_looks.hpp"
 #include "poe2/skill_resources.hpp"
@@ -148,6 +149,9 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 		ma = player._pMaxManaBase.whole() - adj;
 	} else {
 		ma = (GetSpellData(sn).sManaCost - adj);
+		// POE2 Mashup: a spell cast without a gem costs more for its speed too, as its gem would (mana_pct).
+		if (gbIsPoe2)
+			ma = ((ma * SkillSpeedManaPercent(SkillSlot::ForSpell(sn))) + 50) / 100;
 	}
 
 	Fixed26_6 manaAmount = Fixed26_6::fromInt(std::max(ma, 0));
