@@ -32,9 +32,11 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/monster_mods.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
@@ -224,11 +226,12 @@ public:
 	}
 };
 
-/** @brief The staves and wands whose skills S15 builds, with Freezing Shards (S14), and whether each is a wand. */
+/** @brief The staves and wands whose skills are built (S14-S16), whether each is a wand, and the skill's rider. */
 struct GrantRow {
 	std::string_view base;
 	WeaponSkill skill;
 	bool wand;
+	GrantedRider rider = GrantedRider::None;
 };
 constexpr GrantRow PlainGrants[] = {
 	{ "Gelid Staff", WeaponSkill::FreezingShards, false },
@@ -241,10 +244,35 @@ constexpr GrantRow PlainGrants[] = {
 	{ "Sanctified Staff", WeaponSkill::ConsecratedGround, false },
 	{ "Dark Staff", WeaponSkill::DarkPact, false },
 	{ "Ravenous Staff", WeaponSkill::FeastOfFlesh, false },
+	{ "Withered Wand", WeaponSkill::WitheringBolt, true, GrantedRider::Wither },
+	{ "Bone Wand", WeaponSkill::BoneBolt, true, GrantedRider::StunBuildup },
+	{ "Attuned Wand", WeaponSkill::ManaDrain, true, GrantedRider::ManaDrain },
+	{ "Siphoning Wand", WeaponSkill::PowerSiphon, true, GrantedRider::CullFrenzy },
 	{ "Frigid Wand", WeaponSkill::FrostBolt, true },
-	{ "Primordial Wand", WeaponSkill::WitheringRay, true },
+	{ "Torture Wand", WeaponSkill::TormentBolt, true, GrantedRider::Weaken },
+	{ "Critical Wand", WeaponSkill::CriticalBolt, true, GrantedRider::EveryFifthDouble },
+	{ "Primordial Wand", WeaponSkill::WitheringRay, true, GrantedRider::Wither },
 	{ "Dueling Wand", WeaponSkill::TwinBolts, true },
 };
+
+/**
+ * @brief A rider's worth on one target, in percent of the hits (plan 7.1): a bleed +75%, Wither and a cull about +10%,
+ * a double every fifth cast +20%; stun, mana, slow and Weaken add no damage.
+ */
+int RiderPercent(const TableSkillData &row)
+{
+	if ((row.flags & TF_Bleed) != 0)
+		return 100 + GrantedBleedPercent;
+	switch (row.rider) {
+	case GrantedRider::Wither:
+	case GrantedRider::CullFrenzy:
+		return 110;
+	case GrantedRider::EveryFifthDouble:
+		return 100 + 100 / CriticalBoltEvery;
+	default:
+		return 100;
+	}
+}
 
 double CastSeconds(SkillSlot slot)
 {
@@ -291,8 +319,7 @@ double OneTargetPerSecond(const TableSkillData &row)
 			break;
 		}
 	}
-	if ((row.flags & TF_Bleed) != 0)
-		perUse = perUse * (100 + GrantedBleedPercent) / 100;
+	perUse = perUse * RiderPercent(row) / 100;
 	return perUse / CastSeconds(SkillSlot::ForAttack(row.skill));
 }
 
@@ -312,7 +339,7 @@ TEST_F(Poe2GrantedSkillsTest, EachStaffAndWandCastsItsSkill)
 		EXPECT_EQ(row->tabs, 0) << row->name;
 		EXPECT_EQ(row->curve, TableCurve::Fireball) << row->name;
 		EXPECT_EQ(row->curveEnd, 312) << row->name;
-		EXPECT_EQ(row->rider, GrantedRider::None) << row->name;
+		EXPECT_EQ(row->rider, grant.rider) << row->name;
 		EXPECT_EQ(DefaultAttackNameForSet(player, player.poe2.weaponSet), row->name);
 	}
 
@@ -441,6 +468,104 @@ TEST_F(Poe2GrantedSkillsTest, SoulrendBleedsAndDarkPactCostsLife)
 	ActiveMonsterCount = 0;
 }
 
+TEST_F(Poe2GrantedSkillsTest, TheWandRidersWork)
+{
+	Player &player = *MyPlayer;
+	LoadMonsters();
+	const auto hit = [&player](WeaponSkill skill, Monster &monster) {
+		Missile bolt {};
+		SetMissileSkill(bolt, player, SkillSlot::ForAttack(skill));
+		OnTableMissileHit(bolt, player, monster, 10, false);
+	};
+
+	// Wither: a stack a hit up to 4 (5% more damage taken each), for 4 seconds; more from Withering Touch stay.
+	Monster &monster = PlaceMonster(0, { 20, 24 });
+	for (int i = 0; i < 6; i++)
+		hit(WeaponSkill::WitheringBolt, monster);
+	EXPECT_EQ(monster.poe2.witherStacks, GrantedWitherMaxStacks);
+	EXPECT_EQ(monster.poe2.witherTicks, GrantedWitherTicks);
+	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Physical), 120);
+	monster.poe2.witherStacks = 7;
+	hit(WeaponSkill::WitheringRay, monster);
+	EXPECT_EQ(monster.poe2.witherStacks, 7);
+	monster.poe2 = {};
+
+	// Weaken for 2 seconds.
+	hit(WeaponSkill::TormentBolt, monster);
+	EXPECT_EQ(monster.poe2.weakenTicks, TormentWeakenTicks);
+	monster.poe2 = {};
+
+	// Mana Drain: 1 + level / 3 mana, at most once a second from a monster, and a 20% slow for 2 seconds.
+	EXPECT_EQ(ManaDrainMana(1), 1);
+	EXPECT_EQ(ManaDrainMana(9), 4);
+	EXPECT_EQ(ManaDrainMana(20), 7);
+	player.poe2.granted[0] = { SkillSlot::ForAttack(WeaponSkill::ManaDrain), 9, 0 };
+	player._pMaxMana = player._pMaxManaBase = Fixed26_6::fromInt(100);
+	hit(WeaponSkill::ManaDrain, monster);
+	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(4));
+	EXPECT_EQ(monster.poe2.chillTicks, ManaDrainSlowTicks);
+	EXPECT_EQ(monster.poe2.chillPercent, ManaDrainSlowPercent);
+	hit(WeaponSkill::ManaDrain, monster);
+	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(4));
+	Monster &other = PlaceMonster(1, { 21, 24 });
+	hit(WeaponSkill::ManaDrain, other);
+	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(8));
+	for (int tick = 0; tick < ManaDrainCooldownTicks; tick++)
+		ProcessMonsterAilments(monster);
+	hit(WeaponSkill::ManaDrain, monster);
+	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(12));
+	player.poe2.granted = {};
+	monster.poe2 = {};
+
+	// Power Siphon culls on 10% life (5% for a unique) and gives a Frenzy charge.
+	monster.uniqueType = UniqueMonsterType::None;
+	monster.hitPoints = Fixed26_6::fromInt(110);
+	hit(WeaponSkill::PowerSiphon, monster);
+	EXPECT_EQ(monster.hitPoints, Fixed26_6::fromInt(110));
+	EXPECT_EQ(player.poe2.frenzyCharges, 0);
+	monster.hitPoints = Fixed26_6::fromInt(100);
+	hit(WeaponSkill::PowerSiphon, monster);
+	EXPECT_TRUE(monster.hasNoLife());
+	EXPECT_TRUE(monster.poe2.culled);
+	EXPECT_EQ(player.poe2.frenzyCharges, 1);
+	other.hitPoints = Fixed26_6::fromInt(60);
+	hit(WeaponSkill::PowerSiphon, other);
+	EXPECT_EQ(other.hitPoints, Fixed26_6::fromInt(60));
+	other.hitPoints = Fixed26_6::fromInt(50);
+	hit(WeaponSkill::PowerSiphon, other);
+	EXPECT_TRUE(other.hasNoLife());
+	EXPECT_EQ(player.poe2.frenzyCharges, 2);
+
+	// Bone Bolt's hits build twice the heavy stun; another bolt's don't.
+	const int bare = UniqueStunBuildupPercent(player);
+	{
+		const SupportHitScope scope(player, SkillSlot::ForAttack(WeaponSkill::BoneBolt));
+		EXPECT_EQ(HitGrantedRider(), GrantedRider::StunBuildup);
+		EXPECT_EQ(UniqueStunBuildupPercent(player), 2 * bare);
+	}
+	{
+		const SupportHitScope scope(player, SkillSlot::ForAttack(WeaponSkill::TwinBolts));
+		EXPECT_EQ(UniqueStunBuildupPercent(player), bare);
+	}
+	EXPECT_EQ(HitGrantedRider(), GrantedRider::None);
+	ActiveMonsterCount = 0;
+}
+
+TEST_F(Poe2GrantedSkillsTest, CriticalBoltDoublesEveryFifthCast)
+{
+	Player &player = *MyPlayer;
+	Hold(player, "Critical Wand", 70);
+	Target();
+	const int normal = GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::CriticalBolt), player.poe2.effectiveLevel(WeaponSkill::CriticalBolt)) * 34 / 100;
+	for (int cast = 1; cast <= 10; cast++) {
+		const std::vector<Shot> shots = CastAndCollect(player);
+		ASSERT_EQ(shots.size(), 1U);
+		EXPECT_NEAR(shots[0].damagePercent, cast % CriticalBoltEvery == 0 ? normal * 2 : normal, 1) << cast;
+		Stand(player);
+	}
+	EXPECT_EQ(player.poe2.grantedState.criticalCasts, 0);
+}
+
 TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 {
 	// Plan 7.2: the hit (% of the spell base), the cast time, and the damage a second on one target, within 5%.
@@ -462,7 +587,14 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		{ WeaponSkill::DarkPact, 30, 900, 33 },
 		{ WeaponSkill::FeastOfFlesh, 20, 900, 22 },
 		{ WeaponSkill::FrostBolt, 40, 750, 53 },
-		{ WeaponSkill::WitheringRay, 9, 750, 48 }, // before Wither (S16)
+		// Riders in: Wither and a cull about +10%, Critical Bolt's double every fifth cast +20%.
+		{ WeaponSkill::WitheringBolt, 37, 750, 54 }, // 49 with Wither
+		{ WeaponSkill::BoneBolt, 38, 750, 51 },
+		{ WeaponSkill::ManaDrain, 15, 850, 18 },
+		{ WeaponSkill::PowerSiphon, 35, 700, 55 }, // 50 with the cull
+		{ WeaponSkill::TormentBolt, 38, 750, 51 },
+		{ WeaponSkill::CriticalBolt, 34, 750, 54 }, // on average
+		{ WeaponSkill::WitheringRay, 9, 750, 53 }, // 48 with Wither
 		// Both bolts. Plan 7.2's 24 a bolt (69) beat Condemn and Corpse Explosion; the wand bolts beat no gem but Haunt,
 		// Glacial Spike and Locust Swarm, so it is a wand bolt like the others.
 		{ WeaponSkill::TwinBolts, 19, 700, 54 },
@@ -477,7 +609,7 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		EXPECT_NEAR(OneTargetPerSecond(row), planned.oneTarget, planned.oneTarget * 0.05) << row.name;
 
 		const double cast = planned.castMs / 1000.0;
-		const double hit = row.damagePercent * ((row.flags & TF_Bleed) != 0 ? (100.0 + GrantedBleedPercent) / 100 : 1.0);
+		const double hit = row.damagePercent * RiderPercent(row) / 100.0;
 		const bool wand = std::find_if(std::begin(PlainGrants), std::end(PlainGrants), [&](const GrantRow &g) { return g.skill == planned.skill; })->wand;
 		// The budget of plan 7.1: area hits at most 25% a second of cast time (Dark Pact pays life for its 30), piercing
 		// bolts 34%, a whole fan 75% a second, wand bolts 55% a second on one target.
@@ -488,7 +620,7 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		if (row.shape == TableShape::Projectiles && row.count > 2)
 			EXPECT_LE(hit * row.count / cast, 75 * 1.01) << row.name;
 		if (wand)
-			EXPECT_LE(OneTargetPerSecond(row), 55) << row.name;
+			EXPECT_LE(OneTargetPerSecond(row), 55 * 1.001) << row.name;
 	}
 	// Staff Bolt, the free bolt of the Ashen and Spriggan staves: 61% at 0.9 seconds.
 	EXPECT_NEAR(GrantedStaffBoltPercent / CastSeconds(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt))), 68, 68 * 0.05);

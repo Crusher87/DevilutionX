@@ -778,6 +778,21 @@ struct GrantedSkill {
 	uint8_t hand = 0;
 };
 
+/** @brief The granted skills' counters and timers (caster-weapons-plan-v2.md 6.12; not saved). */
+struct GrantedRuntime {
+	/** @brief Critical Bolt's casts since its last double hit. */
+	uint8_t criticalCasts = 0;
+	/** @brief Chiming Bolt's casts since its last Sigil of Power. */
+	uint8_t chimingCasts = 0;
+	/** @brief The Sigil of Power: game ticks left, and the tile it lies on. */
+	uint8_t sigilTicks = 0;
+	uint8_t sigilX = 0;
+	uint8_t sigilY = 0;
+	/** @brief Consecrated Ground's life regeneration: game ticks left, and the raw life still to give. */
+	uint8_t regenTicks = 0;
+	int32_t regenRaw = 0;
+};
+
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
 
@@ -808,6 +823,8 @@ struct Poe2PlayerData {
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
 	/** @brief The skills the held caster weapons grant, at most one a hand (not saved: CalcPlrItemVals fills it). */
 	std::array<GrantedSkill, 2> granted {};
+	/** @brief The granted skills' counters and timers (not saved). */
+	GrantedRuntime grantedState {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
 	std::array<uint8_t, NumSkillSlots> slotLevels {};
 	/**
@@ -1028,6 +1045,7 @@ struct Poe2PlayerData {
 		manaFlaskTicks = 0;
 		skillSlots.fill({});
 		granted = {};
+		grantedState = {};
 		slotLevels.fill(1);
 		for (auto &skills : metaSkills)
 			skills.fill({});

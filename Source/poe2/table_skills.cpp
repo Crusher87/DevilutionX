@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "diablo.h"
+#include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
@@ -147,8 +148,14 @@ const TableSkillData Table[] = {
 	{ WS::ConsecratedGround, "Consecrated Ground", "Holy fire bursts out around you", 0, 0, TW::None, 2, Around, 26, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::HolyBolt), TableCurve::Fireball, 312 },
 	{ WS::DarkPact, "Dark Pact", "A burst of dark power at the target, paid with 5% of your life", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted | TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 	{ WS::FeastOfFlesh, "Feast of Flesh", "Bones burst out around you", 0, 0, TW::None, 1, Around, 20, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::WitheringBolt, "Withering Bolt", "A dark bolt that withers what it hits, so it takes more damage", 0, 0, TW::None, 1, Projectiles, 37, 1, 0, 0, 0, 0, DT::Physical, MissileID::BloodStar, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Wither },
+	{ WS::BoneBolt, "Bone Bolt", "A shard of bone that builds up twice the stun", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
+	{ WS::ManaDrain, "Mana Drain", "A weak bolt that drains mana from what it hits and slows it", 0, 0, TW::None, 1, Projectiles, 15, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare2, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Mana), TableCurve::Fireball, 312, GrantedRider::ManaDrain },
+	{ WS::PowerSiphon, "Power Siphon", "A bolt that kills what it leaves on low life, for a Frenzy charge", 0, 0, TW::None, 1, Projectiles, 35, 1, 0, 0, 0, 0, DT::Physical, MissileID::YellowFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Telekinesis), TableCurve::Fireball, 312, GrantedRider::CullFrenzy },
+	{ WS::TormentBolt, "Torment Bolt", "A bolt that weakens what it hits for 2 seconds", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Reflect), TableCurve::Fireball, 312, GrantedRider::Weaken },
+	{ WS::CriticalBolt, "Critical Bolt", "A bolt whose every fifth cast hits twice as hard", 0, 0, TW::None, 1, Projectiles, 34, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Search), TableCurve::Fireball, 312, GrantedRider::EveryFifthDouble },
 	{ WS::FrostBolt, "Frost Bolt", "A bolt of frost that chills what it hits", 0, 0, TW::None, 1, Projectiles, 40, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
-	{ WS::WitheringRay, "Withering Ray", "A stream of four dark shards", 0, 0, TW::None, 1, Stream, 9, 4, 0, 0, 2, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
+	{ WS::WitheringRay, "Withering Ray", "A stream of four dark shards that wither what they hit", 0, 0, TW::None, 1, Stream, 9, 4, 0, 0, 2, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Wither },
 	{ WS::TwinBolts, "Twin Bolts", "Two bolts at once", 0, 0, TW::None, 1, Projectiles, 19, 2, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 };
 // clang-format on
@@ -766,6 +773,14 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		data.damagePercent = static_cast<int16_t>(std::min(data.damagePercent * (100 + InfusionDamagePercent) / 100, static_cast<int>(INT16_MAX)));
 		SkillBurst(player, target, std::max<int>(data.radius, 2), InfusionDamageType(infusion), Fixed26_6::fromRaw(FixedDamage(player, data).raw() / 2), MissileGraphicID::ApocalypseBoom);
 	}
+	// Critical Bolt: every fifth cast hits for double.
+	if (data.rider == GrantedRider::EveryFifthDouble) {
+		uint8_t &casts = player.poe2.grantedState.criticalCasts;
+		if (++casts >= CriticalBoltEvery) {
+			casts = 0;
+			data.damagePercent = static_cast<int16_t>(std::min(data.damagePercent * 2, static_cast<int>(INT16_MAX)));
+		}
+	}
 	// The cast effects were played by PlaySkillEffects just before.
 	CastResult result;
 	const Point tile = player.position.tile;
@@ -997,7 +1012,16 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	AfterCast(player, data, result);
 }
 
-void OnTableMissileHit(const Missile &missile, const Player &player, Monster &monster, int damage, bool isDamageShifted)
+GrantedRider HitGrantedRider()
+{
+	const SkillSlot skill = SupportHitSkill();
+	if (skill.kind != SkillKind::Attack)
+		return GrantedRider::None;
+	const TableSkillData *data = FindTableSkill(static_cast<WeaponSkill>(skill.id));
+	return data != nullptr && IsGrantedTableSkill(*data) ? data->rider : GrantedRider::None;
+}
+
+void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster, int damage, bool isDamageShifted)
 {
 	if (!gbIsPoe2)
 		return;
@@ -1011,6 +1035,48 @@ void OnTableMissileHit(const Missile &missile, const Player &player, Monster &mo
 	if ((data->flags & TF_Bleed) != 0) {
 		const int64_t raw = isDamageShifted ? damage : static_cast<int64_t>(damage) * 64;
 		InflictTableBleed(player, monster, data->skill, Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw * GrantedBleedPercent / 100, 1, INT32_MAX / 2))), GrantedBleedTicks);
+	}
+	Poe2MonsterState &state = monster.poe2;
+	switch (data->rider) {
+	case GrantedRider::Wither:
+		// A stack a hit up to the rider's cap; stacks from elsewhere (Withering Touch) stay.
+		if (state.witherStacks < GrantedWitherMaxStacks)
+			state.witherStacks++;
+		state.witherTicks = std::max<uint8_t>(state.witherTicks, GrantedWitherTicks);
+		break;
+	case GrantedRider::ManaDrain:
+		if (state.manaDrainTicks == 0) {
+			state.manaDrainTicks = ManaDrainCooldownTicks;
+			const Fixed26_6 mana = Fixed26_6::fromInt(ManaDrainMana(player.poe2.effectiveLevel(data->skill)));
+			player._pMana = std::min(player._pMana + mana, player._pMaxMana);
+			player._pManaBase = std::min(player._pManaBase + mana, player._pMaxManaBase);
+			RedrawComponent(PanelDrawComponent::Mana);
+		}
+		// Its slow is a chill's, as Decrepify's is.
+		state.chillTicks = std::max<uint8_t>(state.chillTicks, ManaDrainSlowTicks);
+		state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, ManaDrainSlowPercent));
+		break;
+	case GrantedRider::CullFrenzy: {
+		if (monster.type().type == MT_DIABLO || monster.isPlayerMinion())
+			break;
+		const int cull = monster.isUnique() ? PowerSiphonUniqueCullPercent : PowerSiphonCullPercent;
+		if (static_cast<int64_t>(monster.hitPoints.raw()) * 100 > static_cast<int64_t>(monster.maxHitPoints.raw()) * cull)
+			break;
+		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+		// Leoric's Road reads it when the monster dies: a culled monster stays dead.
+		state.culled = true;
+		ApplyMonsterDamage(DamageType::Physical, monster, monster.hitPoints);
+		GainFrenzyCharge(player);
+		break;
+	}
+	case GrantedRider::Weaken:
+		// Cast by hand, at full strength, as the Weaken gem's curse.
+		state.auraCurses &= static_cast<uint16_t>(~AuraCurseBit(TableCurse::Weaken));
+		state.weakenTicks = std::max<uint8_t>(state.weakenTicks, TormentWeakenTicks);
+		monster.tag(player);
+		break;
+	default:
+		break;
 	}
 }
 

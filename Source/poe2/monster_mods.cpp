@@ -256,6 +256,8 @@ void ProcessMonsterAilments(Monster &monster)
 		state.shockTicks--;
 	if (state.hinderTicks > 0)
 		state.hinderTicks--;
+	if (state.manaDrainTicks > 0)
+		state.manaDrainTicks--;
 	if (state.chillTicks > 0 && --state.chillTicks == 0) {
 		state.chillPercent = 0;
 		state.chillCarry = 0;

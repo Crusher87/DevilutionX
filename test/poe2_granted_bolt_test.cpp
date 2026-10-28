@@ -126,17 +126,17 @@ TEST_F(Poe2GrantedBoltTest, GrantedGemLevelFollowsPoe2sCharacterLevels)
 TEST_F(Poe2GrantedBoltTest, LeftClickForEachPairOfHands)
 {
 	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Sorcerer, HeroClass::Monk }) {
-		// A new staff or wand casts its Staff Bolt, for a Monk too.
+		// The Ashen and Spriggan staves cast Staff Bolt, for a Monk too.
 		EXPECT_EQ(Click(heroClass, "Ashen Staff"), DefaultAttack::StaffBolt);
 		EXPECT_EQ(Click(heroClass, "Spriggan Staff"), DefaultAttack::StaffBolt);
-		// The Gelid and Voltaic staves cast their own skills since S14 and S15 (poe2_granted_skills_test).
+		// The other staves and the wands cast their own skills since S14-S16 (poe2_granted_skills_test).
 		EXPECT_EQ(Click(heroClass, "Gelid Staff"), DefaultAttack::Granted);
 		EXPECT_EQ(Click(heroClass, "Voltaic Staff"), DefaultAttack::Granted);
-		EXPECT_EQ(Click(heroClass, "Withered Wand"), DefaultAttack::StaffBolt);
-		EXPECT_EQ(Click(heroClass, "Withered Wand", "Wooden Tower Shield"), DefaultAttack::StaffBolt);
+		EXPECT_EQ(Click(heroClass, "Withered Wand"), DefaultAttack::Granted);
+		EXPECT_EQ(Click(heroClass, "Withered Wand", "Wooden Tower Shield"), DefaultAttack::Granted);
 		// A wand beside a sceptre is the main weapon, whichever hand either is in.
-		EXPECT_EQ(Click(heroClass, "Withered Wand", "Fine Rattling Sceptre"), DefaultAttack::StaffBolt);
-		EXPECT_EQ(Click(heroClass, "Fine Rattling Sceptre", "Withered Wand"), DefaultAttack::StaffBolt);
+		EXPECT_EQ(Click(heroClass, "Withered Wand", "Fine Rattling Sceptre"), DefaultAttack::Granted);
+		EXPECT_EQ(Click(heroClass, "Fine Rattling Sceptre", "Withered Wand"), DefaultAttack::Granted);
 		// A new sceptre has no attack: alone, paired or beside a shield the hero punches.
 		EXPECT_EQ(Click(heroClass, "Fine Rattling Sceptre"), DefaultAttack::Punch);
 		EXPECT_EQ(Click(heroClass, "Fine Rattling Sceptre", "Lupine Sceptre"), DefaultAttack::Punch);

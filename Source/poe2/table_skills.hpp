@@ -243,6 +243,28 @@ constexpr int IceSpikeTrackTiles = 4;
 /** @brief Freezing Arrow's and Explosive Arrow's landing bursts hit for this percent of a base hit, on top of the arrow. */
 constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
+/**
+ * @brief Wither from a granted skill (Withering Bolt, Withering Ray): a stack a hit, up to this many, for 4 seconds. Each
+ * stack is the game's Wither (5% more damage taken), so four make the plan's "up to +20%".
+ */
+constexpr int GrantedWitherMaxStacks = 4;
+constexpr int GrantedWitherTicks = 4 * 20;
+/** @brief Mana Drain's mana a hit at a skill level (the skill-balance review: 1 + level / 3), at most once a second a target. */
+constexpr int ManaDrainMana(int level)
+{
+	return 1 + level / 3;
+}
+constexpr int ManaDrainCooldownTicks = 20;
+/** @brief Mana Drain slows what it hits by this much for 2 seconds. */
+constexpr int ManaDrainSlowPercent = 20;
+constexpr int ManaDrainSlowTicks = 2 * 20;
+/** @brief Power Siphon culls a monster its hit leaves on this percent of its life or less (a unique on 5%). */
+constexpr int PowerSiphonCullPercent = 10;
+constexpr int PowerSiphonUniqueCullPercent = 5;
+/** @brief Torment Bolt weakens what it hits for 2 seconds. */
+constexpr int TormentWeakenTicks = 2 * 20;
+/** @brief Critical Bolt's every fifth cast hits for double. */
+constexpr int CriticalBoltEvery = 5;
 /** @brief A granted skill's bleed (Soulrend) deals this percent of its hit over GrantedBleedTicks (plan 7.1: +75% over 5 s). */
 constexpr int GrantedBleedPercent = 75;
 constexpr int GrantedBleedTicks = 5 * 20;
@@ -279,7 +301,9 @@ void FireTableShot(Player &player, const TableSkillData &data, Point target, int
  * @brief A table skill's projectile hit a monster for this much (whole points, or raw when shifted): a granted skill's
  * extras on the hit (Soulrend's bleed; the riders of caster-weapons-plan-v2.md 6.12).
  */
-void OnTableMissileHit(const Missile &missile, const Player &player, Monster &monster, int damage, bool isDamageShifted);
+void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster, int damage, bool isDamageShifted);
+/** @brief The rider of the granted skill whose hit is being dealt now (SupportHitSkill), or None. */
+GrantedRider HitGrantedRider();
 /** @brief Puts a table curse skill's curse on a monster, for the given part of its duration. */
 void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, int durationPercent);
 /**

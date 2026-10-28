@@ -1037,8 +1037,9 @@ int UniqueStunBuildupPercent(const Player &player)
 	const int per = Rule(player, UniqueRule::ArmourStunBuildup);
 	const int passive = PassiveTotal(player, PassiveStat::StunBuildup);
 	const int percent = per <= 0 ? std::max(100 + passive, 0) : std::max(100 + passive + Poe2Armour(player) / per, 0);
-	// A Dazing hit builds twice the stun.
-	return State(player).dazing ? percent * 2 : percent;
+	// A Dazing hit builds twice the stun, and so does Bone Bolt's.
+	const int dazed = State(player).dazing ? percent * 2 : percent;
+	return gbIsPoe2 && HitGrantedRider() == GrantedRider::StunBuildup ? dazed * 2 : dazed;
 }
 
 void OnAilmentInflicted(const Player &player, Monster &monster, DamageType type, bool wasShocked)
