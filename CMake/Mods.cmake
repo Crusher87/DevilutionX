@@ -101,6 +101,7 @@ set(poe2_mod
   txtdata/poe2/base_meta.tsv
   txtdata/poe2/experience_bosses.tsv
   txtdata/poe2/experience_level_gap.tsv
+  txtdata/poe2/map_icons.tsv
   txtdata/poe2/monster_experience.tsv
   txtdata/poe2/monster_bosses.tsv
   txtdata/poe2/monster_levels.tsv

@@ -106,6 +106,7 @@
 #include "poe2/aim.hpp"
 #include "poe2/autosave.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/corner_map.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
@@ -741,6 +742,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_KP_EQUALS:
 		if (AutomapActive) {
 			AutomapZoomIn();
+		} else if (gbIsPoe2) {
+			CornerMapZoomKey(1);
 		}
 		return;
 	case SDLK_MINUS:
@@ -748,6 +751,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_UNDERSCORE:
 		if (AutomapActive) {
 			AutomapZoomOut();
+		} else if (gbIsPoe2) {
+			CornerMapZoomKey(-1);
 		}
 		return;
 #ifdef _DEBUG
