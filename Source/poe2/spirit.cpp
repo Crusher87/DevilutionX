@@ -34,6 +34,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/vfx.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -611,10 +612,7 @@ int GemSpiritCost(const Player &player, PersistentSkill skill)
 
 bool ItemGrantsSpirit(const Item &item)
 {
-	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
-		return false;
-	const std::string_view name = AllItemsList[static_cast<size_t>(item.IDidx)].iName;
-	return name.ends_with("Sceptre");
+	return IsAnySceptre(item);
 }
 
 int MinionDamagePercent(const Player &player)
@@ -755,7 +753,7 @@ int MaxSpirit(const Player &player)
 	int spirit = BaseSpirit + SkullSpirit(player) + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Spirit)] + player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::Spirit)];
 	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 		const Item &item = player.InvBody[hand];
-		if (ItemGrantsSpirit(item) && item._iStatFlag)
+		if (IsAnySceptre(item) && item._iStatFlag)
 			spirit += SceptreSpirit;
 	}
 	const Item &chest = player.InvBody[INVLOC_CHEST];

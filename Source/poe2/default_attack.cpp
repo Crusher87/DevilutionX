@@ -17,6 +17,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "tables/itemdat.h"
 #include "utils/language.h"
@@ -33,7 +34,7 @@ const Item *MainWeapon(const Item &left, const Item &right)
 	const Item *weapon = nullptr;
 	for (const Item *item : { &left, &right }) {
 		// A sceptre held with another weapon isn't the main one.
-		if (!item->isEmpty() && item->_iClass == ICLASS_WEAPON && (weapon == nullptr || ItemGrantsSpirit(*weapon)))
+		if (!item->isEmpty() && item->_iClass == ICLASS_WEAPON && (weapon == nullptr || IsAnySceptre(*weapon)))
 			weapon = item;
 	}
 	return weapon;
@@ -51,7 +52,7 @@ DefaultAttack AttackForHands(const Player &player, const Item &left, const Item 
 		return DefaultAttack::AxeChop;
 	case ItemType::Mace:
 		// POE2 Mashup: a sceptre is a caster's focus, not a club; it channels the staff bolt.
-		if (gbIsPoe2 && ItemGrantsSpirit(*weapon))
+		if (gbIsPoe2 && IsAnySceptre(*weapon))
 			return DefaultAttack::StaffBolt;
 		return DefaultAttack::MaceSmash;
 	case ItemType::Bow:

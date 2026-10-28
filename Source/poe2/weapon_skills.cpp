@@ -36,6 +36,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/vfx.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "tables/misdat.h"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -399,7 +400,7 @@ WeaponSkill WeaponSkillForItem(const Item &item)
 		return WeaponSkill::Cleave;
 	case ItemType::Mace:
 		// POE2 Mashup: a sceptre is a caster's focus and grants no mace skill.
-		if (gbIsPoe2 && ItemGrantsSpirit(item))
+		if (gbIsPoe2 && IsAnySceptre(item))
 			return WeaponSkill::None;
 		return WeaponSkill::GroundSlam;
 	case ItemType::Bow:
@@ -416,7 +417,7 @@ WeaponSkill WeaponSkillFor(const Player &player)
 	const WeaponSkill left = WeaponSkillForItem(player.InvBody[INVLOC_HAND_LEFT]);
 	const WeaponSkill right = WeaponSkillForItem(player.InvBody[INVLOC_HAND_RIGHT]);
 	// A sceptre held with another weapon leaves the skill to that weapon.
-	if (left != WeaponSkill::None && !(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_LEFT]) && right != WeaponSkill::None))
+	if (left != WeaponSkill::None && !(IsAnySceptre(player.InvBody[INVLOC_HAND_LEFT]) && right != WeaponSkill::None))
 		return left;
 	return right;
 }
@@ -681,7 +682,7 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 	if (item.isEmpty())
 		return false;
 	// POE2 Mashup: a sceptre is a caster's focus, not a mace: no weapon skill uses it.
-	if (gbIsPoe2 && ItemGrantsSpirit(item))
+	if (gbIsPoe2 && IsAnySceptre(item))
 		return false;
 	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
 		return TableWeaponAllows(item, table->weapon);

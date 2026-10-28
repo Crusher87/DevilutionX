@@ -259,6 +259,15 @@ std::string SkillLookKey(SkillSlot skill)
 	}
 }
 
+SkillSlot SkillSlotFromEnumName(std::string_view name)
+{
+	if (const std::optional<WeaponSkill> attack = magic_enum::enum_cast<WeaponSkill>(name); attack && *attack != WeaponSkill::None)
+		return SkillSlot::ForAttack(*attack);
+	if (const std::optional<PersistentSkill> persistent = magic_enum::enum_cast<PersistentSkill>(name); persistent && *persistent != PersistentSkill::None)
+		return SkillSlot::ForPersistent(*persistent);
+	return {};
+}
+
 void LoadSkillLooks()
 {
 	Loaded = true;

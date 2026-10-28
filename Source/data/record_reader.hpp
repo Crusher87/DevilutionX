@@ -82,6 +82,18 @@ public:
 		out = (*it_).value();
 	}
 
+	/**
+	 * @brief Reads a column added to the end of a table that older rows may leave out: empty past the end of the record.
+	 */
+	void readTrailingString(std::string_view name, std::string &out)
+	{
+		if (needsIncrement_ && (*it_).endOfRecord()) {
+			out.clear();
+			return;
+		}
+		readString(name, out);
+	}
+
 	template <typename T, typename F>
 	void read(std::string_view name, T &out, F &&parseFn)
 	{

@@ -55,6 +55,8 @@ void PlaySkillLookSound(SkillSlot skill, Point tile);
 
 /** @brief The id a skill's look is stored under, e.g. "Fissure", "Spell Firebolt", "Spirit Blasphemy", "Default". */
 std::string SkillLookKey(SkillSlot skill);
+/** @brief The weapon skill (else the Spirit skill) with this enum name, like "FreezingShards" or "SkeletalWarriors"; empty if none. */
+SkillSlot SkillSlotFromEnumName(std::string_view name);
 
 /** @brief Reads the shipped looks and the player's edits. */
 void LoadSkillLooks();

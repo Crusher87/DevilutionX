@@ -11,8 +11,11 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/skill_looks.hpp"
 #include "poe2/uniques.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "tables/itemdat.h"
 #include "utils/format.hpp"
 #include "utils/log.hpp"
@@ -99,12 +102,42 @@ uint32_t ImplicitHash(uint32_t seed, size_t index)
 
 } // namespace
 
+SkillSlot ParseGrantedSkill(std::string_view key)
+{
+	if (key.empty())
+		return {};
+	// Staff Bolt is the default attack, made spell-based on the new staves; it has no WeaponSkill.
+	if (key == "StaffBolt")
+		return SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt));
+	return SkillSlotFromEnumName(key);
+}
+
+uint16_t ParseElementLock(std::string_view text)
+{
+	uint16_t bits = 0;
+	for (const std::string_view name : SplitByChar(text, ',')) {
+		if (name == "fire")
+			bits |= ModBaseFireSpell;
+		else if (name == "cold")
+			bits |= ModBaseColdSpell;
+		else if (name == "lightning")
+			bits |= ModBaseLightningSpell;
+		else if (name == "physical")
+			bits |= ModBasePhysicalSpell;
+		else if (!name.empty())
+			LogError("Bad base element: {}", name);
+	}
+	return bits;
+}
+
 void LoadBaseData()
 {
 	Bases.clear();
 	BaseOfItem.clear();
-	if (!gbIsPoe2)
+	if (!gbIsPoe2) {
+		LoadWeaponKinds();
 		return;
+	}
 
 	constexpr std::string_view Filename = "txtdata\\poe2\\base_meta.tsv";
 	auto dataFile = DataFile::load(Filename);
@@ -136,6 +169,16 @@ void LoadBaseData()
 		int aps = 0;
 		reader.readOptionalInt("aps", aps);
 		base.aps = static_cast<uint16_t>(std::clamp(aps, 0, 1000));
+		// The caster weapons rework's columns; rows from before it may leave them out.
+		reader.readTrailingString("grants", text);
+		base.grantedSkill = ParseGrantedSkill(text);
+		if (!text.empty() && base.grantedSkill.kind == SkillKind::None)
+			LogError("Base {} grants an unknown skill: {}", base.name, text);
+		reader.readTrailingString("element", text);
+		base.elementLock = ParseElementLock(text);
+		reader.readTrailingString("crit", text);
+		// An empty cell leaves the default crit; "0" is a real 0%.
+		base.crit = text.empty() ? static_cast<int16_t>(-1) : static_cast<int16_t>(std::clamp(ParseInt<int>(text).value_or(-1), -1, 1000));
 		byName[base.name] = static_cast<uint16_t>(Bases.size() + 1);
 		Bases.push_back(std::move(base));
 	}
@@ -144,6 +187,7 @@ void LoadBaseData()
 		if (const auto it = byName.find(AllItemsList[i].iName); it != byName.end())
 			BaseOfItem[i] = it->second;
 	}
+	LoadWeaponKinds();
 }
 
 const BaseMeta *BaseMetaFor(int itemIndex)

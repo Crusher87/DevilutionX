@@ -1,4 +1,4 @@
-name	class	identity	defense	quality	implicits	split	level	block	aps
+name	class	identity	defense	quality	implicits	split	level	block	aps	grants	element	crit
 Heavy Hatchet	one_hand_axe	heavy		weapon			1		150
 Dull Hatchet	one_hand_axe	balanced		weapon			1		150
 Swift Hatchet	one_hand_axe	swift		weapon			1		150
@@ -239,38 +239,38 @@ Swift Runebolt Crossbow	crossbow	swift		weapon			70		101
 Heavy Dragonspine Crossbow	crossbow	heavy		weapon			80		81
 Dragonspine Crossbow	crossbow	balanced		weapon			80		90
 Swift Dragonspine Crossbow	crossbow	swift		weapon			80		101
-Focused Pilgrim Staff	staff	focused		caster	Intelligence|5|5|+{0} to Intelligence		1		
-Quick Pilgrim Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		1		
-Focused Ashen Staff	staff	focused		caster	Intelligence|8|8|+{0} to Intelligence		12		
-Quick Ashen Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		12		
-Focused Scholar Staff	staff	focused		caster	Intelligence|13|13|+{0} to Intelligence		24		
-Quick Scholar Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		24		
-Focused Ritual Staff	staff	focused		caster	Intelligence|19|19|+{0} to Intelligence		36		
-Quick Ritual Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		36		
-Focused Archmage Staff	staff	focused		caster	Intelligence|26|26|+{0} to Intelligence		48		
-Quick Archmage Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		48		
-Focused Elder Staff	staff	focused		caster	Intelligence|35|35|+{0} to Intelligence		60		
-Quick Elder Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		60		
-Focused Astral Staff	staff	focused		caster	Intelligence|45|45|+{0} to Intelligence		70		
-Quick Astral Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		70		
-Focused Worldroot Staff	staff	focused		caster	Intelligence|58|58|+{0} to Intelligence		80		
-Quick Worldroot Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		80		
-Focused Bone Sceptre	sceptre	focused		caster	Intelligence|3|3|+{0} to Intelligence		1		
-Quick Bone Sceptre	sceptre	rapid		caster	Intelligence|2|2|+{0} to Intelligence		1		
-Focused Bronze Sceptre	sceptre	focused		caster	Intelligence|4|4|+{0} to Intelligence		12		
-Quick Bronze Sceptre	sceptre	rapid		caster	Intelligence|4|4|+{0} to Intelligence		12		
-Focused Priest Sceptre	sceptre	focused		caster	Intelligence|7|7|+{0} to Intelligence		24		
-Quick Priest Sceptre	sceptre	rapid		caster	Intelligence|6|6|+{0} to Intelligence		24		
-Focused Sun Sceptre	sceptre	focused		caster	Intelligence|10|10|+{0} to Intelligence		36		
-Quick Sun Sceptre	sceptre	rapid		caster	Intelligence|8|8|+{0} to Intelligence		36		
-Focused Templar Sceptre	sceptre	focused		caster	Intelligence|14|14|+{0} to Intelligence		48		
-Quick Templar Sceptre	sceptre	rapid		caster	Intelligence|11|11|+{0} to Intelligence		48		
-Focused Oracle Sceptre	sceptre	focused		caster	Intelligence|18|18|+{0} to Intelligence		60		
-Quick Oracle Sceptre	sceptre	rapid		caster	Intelligence|15|15|+{0} to Intelligence		60		
-Focused Saint's Sceptre	sceptre	focused		caster	Intelligence|24|24|+{0} to Intelligence		70		
-Quick Saint's Sceptre	sceptre	rapid		caster	Intelligence|20|20|+{0} to Intelligence		70		
-Focused Sovereign Sceptre	sceptre	focused		caster	Intelligence|30|30|+{0} to Intelligence		80		
-Quick Sovereign Sceptre	sceptre	rapid		caster	Intelligence|25|25|+{0} to Intelligence		80		
+Focused Pilgrim Staff	legacy_staff	focused		caster	Intelligence|5|5|+{0} to Intelligence		1		
+Quick Pilgrim Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		1		
+Focused Ashen Staff	legacy_staff	focused		caster	Intelligence|8|8|+{0} to Intelligence		12		
+Quick Ashen Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		12		
+Focused Scholar Staff	legacy_staff	focused		caster	Intelligence|13|13|+{0} to Intelligence		24		
+Quick Scholar Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		24		
+Focused Ritual Staff	legacy_staff	focused		caster	Intelligence|19|19|+{0} to Intelligence		36		
+Quick Ritual Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		36		
+Focused Archmage Staff	legacy_staff	focused		caster	Intelligence|26|26|+{0} to Intelligence		48		
+Quick Archmage Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		48		
+Focused Elder Staff	legacy_staff	focused		caster	Intelligence|35|35|+{0} to Intelligence		60		
+Quick Elder Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		60		
+Focused Astral Staff	legacy_staff	focused		caster	Intelligence|45|45|+{0} to Intelligence		70		
+Quick Astral Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		70		
+Focused Worldroot Staff	legacy_staff	focused		caster	Intelligence|58|58|+{0} to Intelligence		80		
+Quick Worldroot Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		80		
+Focused Bone Sceptre	legacy_sceptre	focused		caster	Intelligence|3|3|+{0} to Intelligence		1		
+Quick Bone Sceptre	legacy_sceptre	rapid		caster	Intelligence|2|2|+{0} to Intelligence		1		
+Focused Bronze Sceptre	legacy_sceptre	focused		caster	Intelligence|4|4|+{0} to Intelligence		12		
+Quick Bronze Sceptre	legacy_sceptre	rapid		caster	Intelligence|4|4|+{0} to Intelligence		12		
+Focused Priest Sceptre	legacy_sceptre	focused		caster	Intelligence|7|7|+{0} to Intelligence		24		
+Quick Priest Sceptre	legacy_sceptre	rapid		caster	Intelligence|6|6|+{0} to Intelligence		24		
+Focused Sun Sceptre	legacy_sceptre	focused		caster	Intelligence|10|10|+{0} to Intelligence		36		
+Quick Sun Sceptre	legacy_sceptre	rapid		caster	Intelligence|8|8|+{0} to Intelligence		36		
+Focused Templar Sceptre	legacy_sceptre	focused		caster	Intelligence|14|14|+{0} to Intelligence		48		
+Quick Templar Sceptre	legacy_sceptre	rapid		caster	Intelligence|11|11|+{0} to Intelligence		48		
+Focused Oracle Sceptre	legacy_sceptre	focused		caster	Intelligence|18|18|+{0} to Intelligence		60		
+Quick Oracle Sceptre	legacy_sceptre	rapid		caster	Intelligence|15|15|+{0} to Intelligence		60		
+Focused Saint's Sceptre	legacy_sceptre	focused		caster	Intelligence|24|24|+{0} to Intelligence		70		
+Quick Saint's Sceptre	legacy_sceptre	rapid		caster	Intelligence|20|20|+{0} to Intelligence		70		
+Focused Sovereign Sceptre	legacy_sceptre	focused		caster	Intelligence|30|30|+{0} to Intelligence		80		
+Quick Sovereign Sceptre	legacy_sceptre	rapid		caster	Intelligence|25|25|+{0} to Intelligence		80		
 Iron Cap	helmet	armour	Armour	defence			1		
 Guard Helm	helmet	armour	Armour	defence			12		
 War Helm	helmet	armour	Armour	defence			24		

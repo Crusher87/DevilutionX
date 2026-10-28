@@ -60,6 +60,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "qol/floatingnumbers.h"
 #include "qol/stash.h"
@@ -251,7 +252,7 @@ bool IsSceptrePair(const Player &player, const Item &first, const Item &second)
 {
 	return gbIsPoe2 && first._iClass == ICLASS_WEAPON && second._iClass == ICLASS_WEAPON
 	    && player.GetItemLocation(first) == ILOC_ONEHAND && player.GetItemLocation(second) == ILOC_ONEHAND
-	    && (ItemGrantsSpirit(first) || ItemGrantsSpirit(second));
+	    && (IsAnySceptre(first) || IsAnySceptre(second));
 }
 
 /**

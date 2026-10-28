@@ -108,6 +108,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "qol/stash.h"
@@ -3570,7 +3571,7 @@ PlayerWeaponGraphic GetPlrAnimWeaponId(const Player &player)
 	}
 
 	// POE2 Mashup: a sceptre held with another weapon doesn't decide how the hero swings.
-	const bool rightIsOffhandSceptre = gbIsPoe2 && ItemGrantsSpirit(rightHandItem) && weaponItemType != ItemType::None && !ItemGrantsSpirit(leftHandItem);
+	const bool rightIsOffhandSceptre = gbIsPoe2 && IsAnySceptre(rightHandItem) && weaponItemType != ItemType::None && !IsAnySceptre(leftHandItem);
 	if (!rightHandItem.isEmpty() && rightHandItem._iClass == ICLASS_WEAPON && rightHandUsable && !rightIsOffhandSceptre) {
 		weaponItemType = rightHandItem._itype;
 	}
@@ -3750,9 +3751,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		const Item &right = player.InvBody[INVLOC_HAND_RIGHT];
 		const auto isWeapon = [](const Item &hand) { return !hand.isEmpty() && hand._iStatFlag && hand._iClass == ICLASS_WEAPON; };
 		if (isWeapon(left) && isWeapon(right)) {
-			if (ItemGrantsSpirit(right))
+			if (IsAnySceptre(right))
 				offhandSceptre = &right;
-			else if (ItemGrantsSpirit(left))
+			else if (IsAnySceptre(left))
 				offhandSceptre = &left;
 		}
 	}
@@ -6627,7 +6628,7 @@ void PrintItemCorruption(const Item &item)
  */
 void PrintItemImplicits(const Item &item)
 {
-	if (gbIsPoe2 && ItemGrantsSpirit(item))
+	if (gbIsPoe2 && IsAnySceptre(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
 	for (const std::string &line : ItemImplicitText(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), line));

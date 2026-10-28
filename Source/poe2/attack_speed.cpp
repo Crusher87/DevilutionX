@@ -23,6 +23,7 @@
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "tables/playerdat.hpp"
 #include "tables/spelldat.h"
@@ -219,7 +220,7 @@ uint64_t RawSkillUseTime(const Player &player, SkillSlot skill, bool castAnimati
 bool IsWeapon(const Item &item)
 {
 	// POE2 Mashup: a sceptre casts the staff bolt and has no attacks per second; held alone it leaves bare hands' rate.
-	if (gbIsPoe2 && ItemGrantsSpirit(item))
+	if (gbIsPoe2 && IsAnySceptre(item))
 		return false;
 	return !item.isEmpty() && IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff);
 }

@@ -122,6 +122,13 @@ enum ModBaseTag : uint8_t {
 	ModBaseEvasionEnergyShield = 1 << 5,
 };
 
+/** @brief Element tags of the caster weapons rework's bases (BaseMeta::elementLock), for their element spell modifiers. */
+constexpr uint16_t ModBaseFireSpell = 1 << 6;
+constexpr uint16_t ModBaseColdSpell = 1 << 7;
+constexpr uint16_t ModBaseLightningSpell = 1 << 8;
+constexpr uint16_t ModBasePhysicalSpell = 1 << 9;
+constexpr uint16_t ModBaseElementSpellBits = ModBaseFireSpell | ModBaseColdSpell | ModBaseLightningSpell | ModBasePhysicalSpell;
+
 struct ModTier {
 	/** @brief 1 is the strongest, 8 the weakest. */
 	uint8_t tier;
