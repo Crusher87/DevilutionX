@@ -28,7 +28,7 @@ bool IsResistedElement(DamageType type)
 
 } // namespace
 
-int ResistanceMarkPercent(uint16_t marks, DamageType type)
+int ResistanceMarkPercent(uint16_t marks, DamageType type, bool undead)
 {
 	switch (type) {
 	case DamageType::Fire:
@@ -36,17 +36,19 @@ int ResistanceMarkPercent(uint16_t marks, DamageType type)
 	case DamageType::Lightning:
 		return (marks & IMMUNE_LIGHTNING) != 0 ? ImmuneMarkPercent : ((marks & RESIST_LIGHTNING) != 0 ? ResistMarkPercent : 0);
 	case DamageType::Magic:
-		return (marks & IMMUNE_MAGIC) != 0 ? MagicImmuneMarkPercent : ((marks & RESIST_MAGIC) != 0 ? MagicResistMarkPercent : 0);
+		if ((marks & IMMUNE_MAGIC) != 0)
+			return undead ? UndeadMagicImmuneMarkPercent : MagicImmuneMarkPercent;
+		return (marks & RESIST_MAGIC) != 0 ? MagicResistMarkPercent : 0;
 	default:
 		return 0;
 	}
 }
 
-std::string ResistanceMarksText(uint16_t marks)
+std::string ResistanceMarksText(uint16_t marks, bool undead)
 {
 	std::string text;
 	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Magic }) {
-		const int percent = ResistanceMarkPercent(marks, type);
+		const int percent = ResistanceMarkPercent(marks, type, undead);
 		if (percent == 0)
 			continue;
 		const std::string_view name = type == DamageType::Fire ? _("Fire") : (type == DamageType::Lightning ? _("Lightning") : _("Magic"));
@@ -73,7 +75,9 @@ int MonsterBaseResistance(const Monster &monster, DamageType type)
 {
 	if (!gbIsPoe2 || !IsResistedElement(type))
 		return 0;
-	int resistance = ResistanceMarkPercent(monster.resistance, type);
+	// Only a magic immune mark asks the monster's kind, which needs its data.
+	const bool undead = type == DamageType::Magic && (monster.resistance & IMMUNE_MAGIC) != 0 && monster.data().monsterClass == MonsterClass::Undead;
+	int resistance = ResistanceMarkPercent(monster.resistance, type, undead);
 	if (GetMonsterAffixes(monster).has(MonsterMod::Resistant))
 		resistance += ResistantModPercent;
 	// Waystones can give map monsters more elemental resistance.

@@ -5142,7 +5142,7 @@ void PrintMonstHistory(int mt)
 		int res = (sgGameInitInfo.nDifficulty != DIFF_HELL) ? MonstersData[mt].resistance : MonstersData[mt].resistanceHell;
 		if (gbIsPoe2) {
 			// POE2 Mashup: resistances are percentages, and no monster is immune.
-			AddInfoBoxString(ResistanceMarksText(static_cast<uint16_t>(res)));
+			AddInfoBoxString(ResistanceMarksText(static_cast<uint16_t>(res), MonstersData[mt].monsterClass == MonsterClass::Undead));
 		} else if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
 			AddInfoBoxString(_("No magic resistance"));
 		} else {
@@ -5178,7 +5178,7 @@ void PrintUniqueHistory()
 	}
 
 	if (gbIsPoe2) {
-		AddInfoBoxString(ResistanceMarksText(monster.resistance));
+		AddInfoBoxString(ResistanceMarksText(monster.resistance, monster.data().monsterClass == MonsterClass::Undead));
 		return;
 	}
 	const int res = monster.shownResistance() & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
