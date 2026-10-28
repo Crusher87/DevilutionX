@@ -109,6 +109,8 @@ const MinionGemData *FindMinionGem(PersistentSkill skill);
 /** @brief The minion gem that raises this monster type, or nullptr. */
 const MinionGemData *FindMinionGemByType(_monster_id type);
 bool IsMinionGemType(_monster_id type);
+/** @brief A Spirit gem that raises minions: the minion gems, the golems, the Guardian and Revive. Their levels take "+N to Level of all Minion Skills". */
+bool IsMinionSkill(PersistentSkill skill);
 /** @brief Every minion gem's data: the skeleton gems in MinionCountSkills order, then Wolf Pack, Raging Spirits and Lingering Illusion. */
 std::span<const MinionGemData> MinionGemTable();
 /**

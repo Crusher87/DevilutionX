@@ -13,6 +13,7 @@
 #include "plrmsg.h"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
@@ -607,12 +608,13 @@ void RecoverOnKill(Player &player)
 {
 	if (player.hasNoLife())
 		return;
-	if (const int life = PassiveTotal(player, PassiveStat::LifeOnKill); life > 0 && !IsRecoveryLocked(player)) {
+	const auto gear = [&player](Poe2ItemStat stat) { return static_cast<int>(player.poe2.itemStats[static_cast<size_t>(stat)]); };
+	if (const int life = PassiveTotal(player, PassiveStat::LifeOnKill) + gear(Poe2ItemStat::LifeOnKill); life > 0 && !IsRecoveryLocked(player)) {
 		const auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(life).raw()) * LifeRecoveryPercent(player, false) / 100);
 		Restore(player._pHitPoints, player._pHPBase, player._pMaxHP, raw);
 		OnLifeRecovered(player, raw);
 	}
-	if (const int mana = PassiveTotal(player, PassiveStat::ManaOnKill); mana > 0 && !HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
+	if (const int mana = PassiveTotal(player, PassiveStat::ManaOnKill) + gear(Poe2ItemStat::ManaOnKill); mana > 0 && !HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
 		const auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(mana).raw()) * ManaRecoveryPercent(player) / 100);
 		Restore(player._pMana, player._pManaBase, player._pMaxMana, raw);
 	}

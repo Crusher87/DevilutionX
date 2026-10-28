@@ -14,6 +14,7 @@
 #include "player.h"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
@@ -278,6 +279,27 @@ int SpellIncreasedDamage(const Player &player)
 		increased += std::max<int32_t>(player._pMaxMana.whole(), 0) * share / 100;
 	return increased;
 }
+
+} // namespace
+
+int GearElementSpellDamage(const Player &player, DamageType type)
+{
+	const auto stat = [&player](Poe2ItemStat which) { return static_cast<int>(player.poe2.itemStats[static_cast<size_t>(which)]); };
+	switch (type) {
+	case DamageType::Fire:
+		return stat(Poe2ItemStat::FireSpellDamage);
+	case DamageType::Lightning:
+		return stat(Poe2ItemStat::LightningSpellDamage);
+	case DamageType::Magic:
+		return stat(Poe2ItemStat::ColdSpellDamage);
+	case DamageType::Physical:
+		return stat(Poe2ItemStat::PhysicalSpellDamage);
+	default:
+		return 0;
+	}
+}
+
+namespace {
 
 /** @brief The rules' "more damage" for every hit, attack or spell, in percent. */
 int GeneralDamagePercent(const Player &player)
@@ -738,7 +760,7 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 	// Element damage adds to the spell's increased damage rather than multiplying it, and so does the Sickness Road's
 	// melee bridge.
 	const int increased = std::max(SpellIncreasedDamage(player), 1);
-	percent = percent * std::max(increased + PassiveElementDamage(player, type) + HiveBridge(player), 0) / increased;
+	percent = percent * std::max(increased + PassiveElementDamage(player, type) + GearElementSpellDamage(player, type) + HiveBridge(player), 0) / increased;
 	if (const int more = Rule(player, UniqueRule::SpellElementCycle); more > 0 && IsElemental(type)) {
 		if (type == CycleElement(state.cycleElement))
 			percent = percent * (100 + more) / 100;
@@ -967,7 +989,7 @@ int UniqueMinionDamagePercent(const Player &owner, bool minionLowLife)
 
 int UniqueMinionLifePercent(const Player &owner)
 {
-	return std::max(100 - Rule(owner, UniqueRule::LessMinionLife) + PassiveTotal(owner, PassiveStat::MinionLife), 10);
+	return std::max(100 - Rule(owner, UniqueRule::LessMinionLife) + PassiveTotal(owner, PassiveStat::MinionLife) + owner.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionLife)], 10);
 }
 
 int UniqueIgniteChancePercent(const Player &player)

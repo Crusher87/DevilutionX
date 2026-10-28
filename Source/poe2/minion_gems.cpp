@@ -23,6 +23,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 
@@ -407,6 +408,12 @@ const MinionGemData *FindMinionGemByType(_monster_id type)
 bool IsMinionGemType(_monster_id type)
 {
 	return FindMinionGemByType(type) != nullptr;
+}
+
+bool IsMinionSkill(PersistentSkill skill)
+{
+	return FindMinionGem(skill) != nullptr
+	    || IsAnyOf(skill, PersistentSkill::SummonGolem, PersistentSkill::BloodGolem, PersistentSkill::FireGolem, PersistentSkill::Guardian, PersistentSkill::Revive);
 }
 
 const MinionGemData *MinionGemOf(const Monster &monster)

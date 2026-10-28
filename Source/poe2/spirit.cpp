@@ -21,6 +21,7 @@
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
@@ -615,6 +616,14 @@ bool ItemGrantsSpirit(const Item &item)
 	return IsAnySceptre(item);
 }
 
+int SceptreSpiritOf(const Item &item)
+{
+	// Its increased Spirit counts once identified, as the gear's other modifiers do; quality doesn't change it.
+	const bool modsCount = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+	const int local = modsCount ? item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::LocalSpiritPercent)] : 0;
+	return std::max(SceptreSpirit * (100 + local) / 100, 0);
+}
+
 int MinionDamagePercent(const Player &player)
 {
 	return 100 + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::MinionDamage)] + player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionDamage)]
@@ -754,7 +763,7 @@ int MaxSpirit(const Player &player)
 	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 		const Item &item = player.InvBody[hand];
 		if (IsAnySceptre(item) && item._iStatFlag)
-			spirit += SceptreSpirit;
+			spirit += SceptreSpiritOf(item);
 	}
 	const Item &chest = player.InvBody[INVLOC_CHEST];
 	if (chest._iStatFlag)

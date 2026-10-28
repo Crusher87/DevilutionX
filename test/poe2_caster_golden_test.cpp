@@ -101,8 +101,14 @@ void AddItem(Fingerprint &print, const Item &item)
 		const ModFamily *family = ItemModFamily(mod);
 		print.add(family != nullptr ? std::string_view(family->id) : std::string_view {}).add(mod.tier).add(mod.values[0]).add(mod.values[1]);
 	}
-	for (const int16_t stat : item._iPoe2Stats)
-		print.add(stat);
+	// The stats from before the rework; the ones it appends must stay 0 on these items.
+	constexpr size_t LegacyStatCount = static_cast<size_t>(Poe2ItemStat::LocalSpiritPercent);
+	for (size_t stat = 0; stat < item._iPoe2Stats.size(); stat++) {
+		if (stat < LegacyStatCount)
+			print.add(item._iPoe2Stats[stat]);
+		else if (item._iPoe2Stats[stat] != 0)
+			print.add(std::string_view { "new stat" });
+	}
 	for (const ItemImplicit &implicit : ItemImplicits(item))
 		print.add(static_cast<int>(implicit.implicit->effect)).add(implicit.values[0]).add(implicit.values[1]);
 	for (const uint8_t b : PackCraftState(item._iPoe2Craft))

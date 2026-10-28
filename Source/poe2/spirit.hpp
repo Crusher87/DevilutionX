@@ -96,6 +96,8 @@ int GemSpiritCost(const Player &player, PersistentSkill skill);
 
 /** @brief Whether the item grants Spirit as an implicit (sceptres). */
 bool ItemGrantsSpirit(const Item &item);
+/** @brief The Spirit a held sceptre grants: its +100, raised by its own increased Spirit (most 203). */
+int SceptreSpiritOf(const Item &item);
 int MaxSpirit(const Player &player);
 /** @brief Spirit from the skulls the character has broken. */
 int SkullSpirit(const Player &player);

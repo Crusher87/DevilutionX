@@ -59,6 +59,7 @@ set(tests
   poe2_crafting_test
   poe2_caster_golden_test
   poe2_weapon_kinds_test
+  poe2_caster_stats_test
   primitive_render_test
   poe2_economy_test
   poe2_endgame_test

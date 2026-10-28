@@ -12,6 +12,7 @@
 #include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/minion_gems.hpp"
 #include "poe2/player_data.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/weapon_kinds.hpp"
@@ -69,9 +70,9 @@ uint32_t ParseSlots(std::string_view text)
 	return slots;
 }
 
-uint8_t ParseBaseTags(std::string_view text)
+uint16_t ParseBaseTags(std::string_view text)
 {
-	uint8_t tags = 0;
+	uint16_t tags = 0;
 	for (const std::string_view name : SplitByChar(text, ',')) {
 		if (name == "armour_base")
 			tags |= ModBaseArmour;
@@ -85,6 +86,14 @@ uint8_t ParseBaseTags(std::string_view text)
 			tags |= ModBaseArmourEnergyShield;
 		else if (name == "evasion_es_base")
 			tags |= ModBaseEvasionEnergyShield;
+		else if (name == "fire_spell")
+			tags |= ModBaseFireSpell;
+		else if (name == "cold_spell")
+			tags |= ModBaseColdSpell;
+		else if (name == "lightning_spell")
+			tags |= ModBaseLightningSpell;
+		else if (name == "physical_spell")
+			tags |= ModBasePhysicalSpell;
 	}
 	return tags;
 }
@@ -392,8 +401,13 @@ std::optional<ModSlot> ItemModSlot(const Item &item)
 	}
 }
 
-uint8_t ItemModBaseTags(const Item &item)
+uint16_t ItemModBaseTags(const Item &item)
 {
+	// A caster weapon of the rework rolls the element modifiers of its element, or of any element.
+	if (IsCasterWeapon(item)) {
+		const BaseMeta *base = ItemBaseMeta(item);
+		return base != nullptr && base->elementLock != 0 ? base->elementLock : ModBaseElementSpellBits;
+	}
 	if (item._iClass != ICLASS_ARMOR)
 		return 0;
 	switch (ItemDefenseType(item)) {
@@ -413,6 +427,18 @@ uint8_t ItemModBaseTags(const Item &item)
 		return ModBaseArmour | ModBaseEvasion | ModBaseEnergyShield | ModBaseArmourEvasion | ModBaseArmourEnergyShield | ModBaseEvasionEnergyShield;
 	}
 	return 0;
+}
+
+uint16_t NarrowedModBaseTags(uint16_t baseTags, const std::vector<Poe2ItemMod> &rolled)
+{
+	if ((baseTags & ModBaseElementSpellBits) == 0)
+		return baseTags;
+	for (const Poe2ItemMod &mod : rolled) {
+		const ModFamily *family = ItemModFamily(mod);
+		if (family != nullptr && (family->baseTags & ModBaseElementSpellBits) != 0)
+			baseTags &= static_cast<uint16_t>(family->baseTags | ~ModBaseElementSpellBits);
+	}
+	return baseTags;
 }
 
 int UnidentifiedTier(uint32_t seed, int itemLevel)
@@ -459,11 +485,17 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::Life:
 	case ModEffect::LifeRegeneration:
 	case ModEffect::LifePercent:
+	case ModEffect::LifeOnKill:
+	case ModEffect::MinionLife:
+	case ModEffect::MinionLifeRegen:
 		return Life;
 	case ModEffect::Mana:
 	case ModEffect::ManaRegeneration:
 	case ModEffect::ManaPercent:
 	case ModEffect::Spirit:
+	case ModEffect::LocalSpiritPercent:
+	case ModEffect::SpiritAndMana:
+	case ModEffect::ManaOnKill:
 		return Mana;
 	case ModEffect::FlatDefense:
 	case ModEffect::FlatArmour:
@@ -473,6 +505,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ArmourPercent:
 	case ModEffect::EvasionPercent:
 	case ModEffect::EnergyShieldPercent:
+	case ModEffect::BlockChance:
 		return Defence;
 	case ModEffect::LifeAndDefensePercent:
 		return Life | Defence;
@@ -488,7 +521,15 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::Accuracy:
 	case ModEffect::DamagePercent:
 	case ModEffect::SpellDamage:
+	case ModEffect::FireSpellDamage:
+	case ModEffect::ColdSpellDamage:
+	case ModEffect::LightningSpellDamage:
+	case ModEffect::PhysicalSpellDamage:
+	case ModEffect::DazeChance:
+	case ModEffect::MinionAddedDamage:
 		return Damage;
+	case ModEffect::SpellDamageAndMana:
+		return Damage | Mana;
 	case ModEffect::Strength:
 	case ModEffect::Dexterity:
 	case ModEffect::Intelligence:
@@ -499,6 +540,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::MagicResistance:
 	case ModEffect::LightningResistance:
 	case ModEffect::AllResistances:
+	case ModEffect::MinionResistances:
 		return Resistance;
 	case ModEffect::AttackSpeed:
 	case ModEffect::CastSpeed:
@@ -508,6 +550,9 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::SpellSkillLevels:
 	case ModEffect::FireSkillLevels:
 	case ModEffect::LightningSkillLevels:
+	case ModEffect::ColdSkillLevels:
+	case ModEffect::PhysicalSkillLevels:
+	case ModEffect::MinionSkillLevels:
 		return Skill;
 	default:
 		return 0;
@@ -525,10 +570,12 @@ uint8_t ModsTags(const std::vector<Poe2ItemMod> &mods)
 }
 
 /** @brief Every legal tier of every legal family the next modifier can take, by weight. */
-uint32_t CollectModCandidates(std::vector<ModCandidate> &candidates, uint32_t slotBit, uint8_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &rolled, int perSide,
+uint32_t CollectModCandidates(std::vector<ModCandidate> &candidates, uint32_t slotBit, uint16_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &rolled, int perSide,
     int magicCull, int rareMinLevel, const ModRollFilter *filter)
 {
 	candidates.clear();
+	// First-element exclusivity: no random number, and nothing changes for a base without element tags.
+	baseTags = NarrowedModBaseTags(baseTags, rolled);
 	int prefixes = 0;
 	int suffixes = 0;
 	for (const Poe2ItemMod &mod : rolled) {
@@ -616,7 +663,7 @@ std::array<int16_t, 2> RollTierValues(const ModFamily &family, const ModTier &ti
 
 } // namespace
 
-std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier)
+std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint16_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier)
 {
 	std::vector<Poe2ItemMod> rolled;
 	ModRandom picks { seed };
@@ -652,6 +699,10 @@ uint64_t ModEffectBits(ModEffect effect)
 		return bit(ModEffect::Life) | bit(ModEffect::DefensePercent);
 	case ModEffect::ManaAndDefensePercent:
 		return bit(ModEffect::Mana) | bit(ModEffect::DefensePercent);
+	case ModEffect::SpiritAndMana:
+		return bit(ModEffect::LocalSpiritPercent) | bit(ModEffect::Mana);
+	case ModEffect::SpellDamageAndMana:
+		return bit(ModEffect::SpellDamage) | bit(ModEffect::Mana);
 	default:
 		return bit(effect);
 	}
@@ -667,7 +718,7 @@ uint64_t ModsEffectBits(const std::vector<Poe2ItemMod> &mods)
 	return bits;
 }
 
-std::optional<Poe2ItemMod> RollAddedMod(ModSlot slot, uint8_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &existing, int perSide, uint32_t seed, const ModRollFilter &filter)
+std::optional<Poe2ItemMod> RollAddedMod(ModSlot slot, uint16_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &existing, int perSide, uint32_t seed, const ModRollFilter &filter)
 {
 	std::vector<ModCandidate> candidates;
 	const uint32_t totalWeight = CollectModCandidates(candidates, ModSlotBit(slot), baseTags, itemLevel, existing, perSide, 0, 0, &filter);
@@ -890,6 +941,63 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	case ModEffect::SpellDamage:
 		AddPoe2Stat(item, Poe2ItemStat::SpellDamage, v0);
 		break;
+	case ModEffect::LocalSpiritPercent:
+		AddPoe2Stat(item, Poe2ItemStat::LocalSpiritPercent, v0);
+		break;
+	case ModEffect::SpiritAndMana:
+		AddPoe2Stat(item, Poe2ItemStat::LocalSpiritPercent, v0);
+		item._iPLMana += Fixed10_6::fromInt(v1);
+		break;
+	case ModEffect::SpellDamageAndMana:
+		AddPoe2Stat(item, Poe2ItemStat::SpellDamage, v0);
+		item._iPLMana += Fixed10_6::fromInt(v1);
+		break;
+	case ModEffect::FireSpellDamage:
+		AddPoe2Stat(item, Poe2ItemStat::FireSpellDamage, v0);
+		break;
+	case ModEffect::ColdSpellDamage:
+		AddPoe2Stat(item, Poe2ItemStat::ColdSpellDamage, v0);
+		break;
+	case ModEffect::LightningSpellDamage:
+		AddPoe2Stat(item, Poe2ItemStat::LightningSpellDamage, v0);
+		break;
+	case ModEffect::PhysicalSpellDamage:
+		AddPoe2Stat(item, Poe2ItemStat::PhysicalSpellDamage, v0);
+		break;
+	case ModEffect::ColdSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::ColdSkillLevels, v0);
+		break;
+	case ModEffect::PhysicalSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::PhysicalSkillLevels, v0);
+		break;
+	case ModEffect::MinionSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::MinionSkillLevels, v0);
+		break;
+	case ModEffect::MinionLife:
+		AddPoe2Stat(item, Poe2ItemStat::MinionLife, v0);
+		break;
+	case ModEffect::MinionResistances:
+		AddPoe2Stat(item, Poe2ItemStat::MinionResistances, v0);
+		break;
+	case ModEffect::LifeOnKill:
+		AddPoe2Stat(item, Poe2ItemStat::LifeOnKill, v0);
+		break;
+	case ModEffect::ManaOnKill:
+		AddPoe2Stat(item, Poe2ItemStat::ManaOnKill, v0);
+		break;
+	case ModEffect::BlockChance:
+		AddPoe2Stat(item, Poe2ItemStat::BlockChance, v0);
+		break;
+	case ModEffect::DazeChance:
+		AddPoe2Stat(item, Poe2ItemStat::DazeChance, v0);
+		break;
+	case ModEffect::MinionAddedDamage:
+		AddPoe2Stat(item, Poe2ItemStat::MinionAddedDamageMin, v0);
+		AddPoe2Stat(item, Poe2ItemStat::MinionAddedDamageMax, std::max(v0, v1));
+		break;
+	case ModEffect::MinionLifeRegen:
+		AddPoe2Stat(item, Poe2ItemStat::MinionLifeRegen, v0);
+		break;
 	}
 }
 
@@ -971,14 +1079,24 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 		int bonus = stat(Poe2ItemStat::SpellSkillLevels);
 		const SpellID spell = skill.spell();
 		if (static_cast<size_t>(spell) < SpellsData.size()) {
-			const MagicType type = GetSpellData(spell).type();
-			if (type == MagicType::Fire)
+			// The spell's element as its damage has it (skill_details): fire, lightning, or cold (magic).
+			switch (GetSpellData(spell).type()) {
+			case MagicType::Fire:
 				bonus += stat(Poe2ItemStat::FireSkillLevels);
-			else if (type == MagicType::Lightning)
+				break;
+			case MagicType::Lightning:
 				bonus += stat(Poe2ItemStat::LightningSkillLevels);
+				break;
+			default:
+				bonus += stat(Poe2ItemStat::ColdSkillLevels);
+				break;
+			}
 		}
 		return lowLife + bonus;
 	}
+	case SkillKind::Persistent:
+		// A sceptre's levels of the minion gems.
+		return lowLife + (IsMinionSkill(skill.persistent()) ? stat(Poe2ItemStat::MinionSkillLevels) : 0);
 	default:
 		return lowLife;
 	}

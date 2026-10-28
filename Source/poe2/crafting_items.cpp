@@ -253,7 +253,9 @@ bool CatalystBoosts(Catalyst catalyst, ModEffect effect)
 	case Catalyst::Vital:
 		return IsAnyOf(effect, ModEffect::Life, ModEffect::LifeRegeneration);
 	case Catalyst::Arcane:
-		return IsAnyOf(effect, ModEffect::Mana, ModEffect::ManaRegeneration, ModEffect::CastSpeed, ModEffect::SpellSkillLevels, ModEffect::FireSkillLevels, ModEffect::LightningSkillLevels, ModEffect::SpellDamage);
+		return IsAnyOf(effect, ModEffect::Mana, ModEffect::ManaRegeneration, ModEffect::CastSpeed, ModEffect::SpellSkillLevels, ModEffect::FireSkillLevels, ModEffect::LightningSkillLevels, ModEffect::SpellDamage,
+		    ModEffect::SpellDamageAndMana, ModEffect::FireSpellDamage, ModEffect::ColdSpellDamage, ModEffect::LightningSpellDamage, ModEffect::PhysicalSpellDamage, ModEffect::ColdSkillLevels,
+		    ModEffect::PhysicalSkillLevels, ModEffect::ManaOnKill);
 	case Catalyst::Prismatic:
 		return IsAnyOf(effect, ModEffect::FireResistance, ModEffect::MagicResistance, ModEffect::LightningResistance, ModEffect::AllResistances);
 	case Catalyst::Martial:
@@ -265,7 +267,8 @@ bool CatalystBoosts(Catalyst catalyst, ModEffect effect)
 	case Catalyst::Attribute:
 		return IsAnyOf(effect, ModEffect::Strength, ModEffect::Dexterity, ModEffect::Intelligence, ModEffect::AllAttributes);
 	case Catalyst::Spiritual:
-		return IsAnyOf(effect, ModEffect::Spirit, ModEffect::MinionDamage);
+		return IsAnyOf(effect, ModEffect::Spirit, ModEffect::MinionDamage, ModEffect::LocalSpiritPercent, ModEffect::SpiritAndMana, ModEffect::MinionSkillLevels, ModEffect::MinionLife,
+		    ModEffect::MinionResistances, ModEffect::MinionAddedDamage, ModEffect::MinionLifeRegen);
 	default:
 		return false;
 	}
