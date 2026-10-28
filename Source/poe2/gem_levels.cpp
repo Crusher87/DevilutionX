@@ -51,8 +51,11 @@ constexpr int16_t ManaAt20 = 500;
 constexpr int16_t WeaponTabManaAt20 = 400;
 /** @brief Spells without damage (Teleport, Stone Curse...) get dearer more slowly. */
 constexpr int16_t UtilitySpellManaAt20 = 300;
-/** @brief Battle Cry's empowered melee hits deal this much extra damage at gem level 1. */
-constexpr int BattleCryDamagePercentAt1 = 50;
+/**
+ * @brief Battle Cry's empowered melee hits deal this much extra damage at gem level 1 (Curtis 2026-10-28: 50 to 30, 60
+ * at gem 20; faster skills fit more hits in its 8 seconds).
+ */
+constexpr int BattleCryDamagePercentAt1 = 30;
 
 const Poe2GemTable *TableCurveGem(TableCurve curve)
 {

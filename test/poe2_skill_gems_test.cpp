@@ -141,8 +141,9 @@ TEST_F(Poe2SkillGemsTest, EachGemHasItsOwnCurve)
 	EXPECT_NE(GemStepText(spark, 6, 7).find("+1 projectile, big step"), std::string::npos) << GemStepText(spark, 6, 7);
 	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20), 312);
 	EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Lightning), 20), 312);
-	EXPECT_EQ(BattleCryDamagePercent(1), 50);
-	EXPECT_EQ(BattleCryDamagePercent(20), 100);
+	// Curtis 2026-10-28: Battle Cry +50% to +30% (60% at gem 20).
+	EXPECT_EQ(BattleCryDamagePercent(1), 30);
+	EXPECT_EQ(BattleCryDamagePercent(20), 60);
 }
 
 TEST_F(Poe2SkillGemsTest, GemTextShowsTheNumbers)

@@ -27,13 +27,20 @@ enum class SwingStyle : uint8_t;
 /** @brief Where the arrows of Rain of Arrows come down, around the target. */
 constexpr std::array<Displacement, 9> RainOfArrowsVolley = { { { 0, 0 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 2 }, { -2, -2 }, { 2, -2 }, { -2, 2 } } };
 
-/** @brief Ground Slam and Whirling Staff deal full damage to the target and this much to the other tiles around you. */
-constexpr int AreaSkillSideDamagePercent = 75;
+/**
+ * @brief Ground Slam (Seismic Slam) deals full damage to the target and this much to the rest of its cone (Curtis
+ * 2026-10-28: 75 to 50; audit-damage-v2.md section 7, 1.7 to 1.3 times the budget).
+ */
+constexpr int GroundSlamConeDamagePercent = 50;
 /** @brief Ground Slam's shockwave runs this many tiles out in a cone in front of the player. */
 constexpr int GroundSlamReach = 3;
-/** @brief Whirling Staff hits two rings around the player; the outer ring for this percent. */
+/**
+ * @brief Whirling Staff (Sweeping Wind) hits the target in full and two rings around the player: the inner ring for
+ * this percent, the outer for that (Curtis 2026-10-28: 75 and 50 to 55 and 25).
+ */
 constexpr int WhirlingStaffReach = 2;
-constexpr int WhirlingStaffOuterDamagePercent = 50;
+constexpr int WhirlingStaffInnerDamagePercent = 55;
+constexpr int WhirlingStaffOuterDamagePercent = 25;
 /** @brief Leap Slam hits everything around where it lands for this percent of a weapon hit. */
 constexpr int LeapSlamDamagePercent = 80;
 /**
@@ -50,6 +57,27 @@ constexpr int LightningArrowBurstPercent = 60;
 constexpr int FrostNovaShardDamagePercent = 25;
 /** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
 constexpr int FlurryBackhandDamagePercent = 150;
+/**
+ * @brief Smite's and Frenzy's swing hits for this percent of a weapon hit, before the gem curve (Curtis 2026-10-28:
+ * 100 to 300 and 200; they were far under the budget as single-target skills).
+ */
+constexpr int SmiteDamagePercent = 300;
+constexpr int FrenzyDamagePercent = 200;
+/** @brief Shield Bash hits this hard before the gem curve (Curtis 2026-10-28: 120 to 200). */
+constexpr int ShieldBashDamagePercent = 200;
+
+/** @brief A swing skill's own percent of a weapon hit (Smite, Frenzy), 100 for the others and a plain attack. */
+[[nodiscard]] constexpr int SwingSkillDamagePercent(WeaponSkill skill)
+{
+	switch (skill) {
+	case WeaponSkill::Smite:
+		return SmiteDamagePercent;
+	case WeaponSkill::Frenzy:
+		return FrenzyDamagePercent;
+	default:
+		return 100;
+	}
+}
 /** @brief The backhand starts from the end of the first swing, so it skips this many more frames of the animation. */
 constexpr int8_t FlurryBackhandSkippedFrames = 4;
 /** @brief Ticks between Barrage's arrows and between Ember Fusillade's embers. */

@@ -61,9 +61,8 @@ constexpr int RapidFireShotTicks = 3;
 /** Frost Nova's shards fly this many ticks, about 4 tiles. */
 constexpr int FrostNovaShardTicks = 9;
 constexpr int FrostNovaShards = 16;
-/** Riposte and Shield Bash hit this hard before the gem curve. */
+/** Riposte hits this hard before the gem curve (Shield Bash's is in the header). */
 constexpr int RiposteDamagePercent = 180;
-constexpr int ShieldBashDamagePercent = 120;
 constexpr int ShadowStepDamagePercent = 150;
 
 bool IsDagger(const Item &item)
@@ -188,6 +187,7 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	player.poe2.dashSkill = skill;
 	player.poe2.dashSkillTicks = DashSkillTimeoutTicks;
 	player.poe2.dashEnd = end.value_or(player.position.future);
+	player.poe2.dashStart = start;
 	player.poe2.dashDistancePercent = static_cast<uint8_t>(end ? std::clamp(end->WalkingDistance(start) * 100 / std::max(tiles, 1), 0, 100) : 0);
 	return true;
 }
@@ -510,7 +510,7 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::ShieldCharge:
 		return _("Charge in, bash and knock back");
 	case WeaponSkill::BattleCry:
-		return _("Knock back foes, +50% melee damage");
+		return _("Knock back foes, +30% melee damage");
 	case WeaponSkill::LightningArrow:
 		return _("Arrow bursts into lightning");
 	case WeaponSkill::EscapeShot:

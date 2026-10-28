@@ -1,3 +1,4 @@
+#include <array>
 #include <set>
 #include <string_view>
 #include <utility>
@@ -54,6 +55,51 @@ public:
 		ClearSkillZones();
 		gbIsPoe2 = false;
 		UnloadModArchives();
+	}
+
+	/** @brief A hero who hits often, in a dungeon with monsters' data loaded and the network up for their hits. */
+	static Player &SetUpFight()
+	{
+		leveltype = DTYPE_CATHEDRAL;
+		LoadMonsterData();
+		LevelMonsterTypes[0].type = MT_NZOMBIE;
+		MyPlayerId = 0;
+		SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+		Player &player = *MyPlayer;
+		player.setCharacterLevel(30);
+		player._pBaseDex = player._pDexterity = 200;
+		player._pBaseStr = player._pStrength = 100;
+		player._pIMinDam = 20;
+		player._pIMaxDam = 30;
+		player.position.tile = { 40, 40 };
+		player._pdir = Direction::East;
+		return player;
+	}
+
+	/** @brief A normal monster standing on the tile, with plenty of life. */
+	static Monster &PlaceMonster(size_t slot, Point tile)
+	{
+		Monster &monster = Monsters[slot];
+		monster = {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = tile;
+		dMonster[tile.x][tile.y] = static_cast<int16_t>(slot + 1);
+		ActiveMonsters[ActiveMonsterCount] = static_cast<unsigned>(slot);
+		ActiveMonsterCount++;
+		return monster;
+	}
+
+	static void ClearMonsters()
+	{
+		for (int x = 30; x < 50; x++) {
+			for (int y = 30; y < 50; y++)
+				dMonster[x][y] = 0;
+		}
+		ActiveMonsterCount = 0;
 	}
 };
 
@@ -210,8 +256,8 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 		{ WeaponSkill::SiegeVolley, 75 },
 		{ WeaponSkill::FreezingArrow, 100 },
 		{ WeaponSkill::ExplosiveBolt, 110 },
-		// Kept at its old value until the shortfall fix: the Monk has no Act 1 clear without it.
-		{ WeaponSkill::DashingStrike, 150 },
+		// Each monster on the dash (Curtis 2026-10-28; it was 150% around where it landed).
+		{ WeaponSkill::DashingStrike, 80 },
 	};
 	for (const auto &[skill, percent] : Percents) {
 		const TableSkillData *data = FindTableSkill(skill);
@@ -432,40 +478,11 @@ TEST_F(Poe2TableSkillsTest, HauntIsASpiritThatJumps)
 TEST_F(Poe2TableSkillsTest, CycloneStrikePullsWhatItHitsIn)
 {
 	// Curtis 2026-10-28, "Cyclone pulls": it was a copy of Wave of Light (radius 3 around the hero).
-	leveltype = DTYPE_CATHEDRAL;
-	LoadMonsterData();
-	LevelMonsterTypes[0].type = MT_NZOMBIE;
-	MyPlayerId = 0;
-	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
-	Player &player = *MyPlayer;
-	player.setCharacterLevel(30);
-	player._pBaseDex = player._pDexterity = 200;
-	player._pBaseStr = player._pStrength = 100;
-	player.position.tile = { 40, 40 };
-	player._pdir = Direction::East;
-	const auto place = [](size_t slot, Point tile) -> Monster & {
-		Monster &monster = Monsters[slot];
-		monster = {};
-		monster.levelType = 0;
-		monster.uniqueType = UniqueMonsterType::None;
-		monster.talkMsg = TEXT_NONE;
-		monster.lightId = NO_LIGHT;
-		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
-		monster.position.tile = monster.position.old = monster.position.future = tile;
-		dMonster[tile.x][tile.y] = static_cast<int16_t>(slot + 1);
-		ActiveMonsters[ActiveMonsterCount] = static_cast<unsigned>(slot);
-		ActiveMonsterCount++;
-		return monster;
-	};
-	const auto clearTiles = []() {
-		for (int x = 30; x < 50; x++) {
-			for (int y = 30; y < 50; y++)
-				dMonster[x][y] = 0;
-		}
-	};
+	Player &player = SetUpFight();
+	const auto place = PlaceMonster;
+	const auto clearTiles = ClearMonsters;
 	const auto cast = [&](WeaponSkill skill, uint32_t seed, bool &farWasHit) {
 		clearTiles();
-		ActiveMonsterCount = 0;
 		Monster &far = place(0, { 43, 40 });
 		Monster &beside = place(1, { 41, 41 });
 		SetRndSeed(seed);
@@ -491,7 +508,77 @@ TEST_F(Poe2TableSkillsTest, CycloneStrikePullsWhatItHitsIn)
 		EXPECT_EQ(cast(WeaponSkill::WaveOfLight, seed, hit), Point(43, 40)) << seed;
 	}
 	clearTiles();
-	ActiveMonsterCount = 0;
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, DashingStrikeHitsEachMonsterOnItsPathOnce)
+{
+	// Curtis 2026-10-28: 150% around where it landed, now 80% to each monster along the dash.
+	Player &player = SetUpFight();
+	const TableSkillData &dash = *FindTableSkill(WeaponSkill::DashingStrike);
+	EXPECT_EQ(dash.damagePercent, 80);
+	ASSERT_EQ(dash.radius, 1);
+	const auto strike = [&](bool dashed, uint32_t seed, std::array<bool, 4> &hit) {
+		ClearMonsters();
+		// The hero dashed from (40, 40) east to (44, 40).
+		player.position.tile = { 44, 40 };
+		player.poe2.dashStart = dashed ? Point(40, 40) : Point();
+		const std::array<Monster *, 4> monsters {
+			&PlaceMonster(0, { 41, 41 }), // beside the start of the path
+			&PlaceMonster(1, { 42, 39 }), // beside its middle, and beside three of its tiles
+			&PlaceMonster(2, { 45, 41 }), // beside where it landed
+			&PlaceMonster(3, { 38, 40 }), // behind where it started: out of reach
+		};
+		const std::array<Fixed26_6, 4> before { monsters[0]->hitPoints, monsters[1]->hitPoints, monsters[2]->hitPoints, monsters[3]->hitPoints };
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::DashingStrike, { 46, 40 });
+		for (size_t i = 0; i < monsters.size(); i++)
+			hit[i] = monsters[i]->hitPoints < before[i];
+		// The start is used once.
+		EXPECT_EQ(player.poe2.dashStart, Point());
+	};
+	std::array<int, 4> hits {};
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		std::array<bool, 4> hit {};
+		strike(true, seed, hit);
+		for (size_t i = 0; i < hit.size(); i++)
+			hits[i] += hit[i] ? 1 : 0;
+		// Without a dash, only around where the hero stands.
+		strike(false, seed, hit);
+		EXPECT_FALSE(hit[0]) << seed;
+		EXPECT_FALSE(hit[1]) << seed;
+		EXPECT_FALSE(hit[3]) << seed;
+	}
+	EXPECT_GT(hits[0], 0);
+	EXPECT_GT(hits[1], 0);
+	EXPECT_GT(hits[2], 0);
+	EXPECT_EQ(hits[3], 0);
+	ClearMonsters();
+	ClearSkillZones();
+	player.poe2.dashStart = {};
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, StackingZonesAreOneCastAtATime)
+{
+	// Curtis 2026-10-28: Thunderstorm stacked to 11 at once. Thunderstorm, Blessed Hammer and Blizzard are one cast at a
+	// time and a recast replaces it; traps and sentries keep their 3.
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::South;
+	for (const WeaponSkill skill : { WeaponSkill::Thunderstorm, WeaponSkill::BlessedHammer, WeaponSkill::Blizzard }) {
+		ClearSkillZones();
+		for (int cast = 0; cast < 4; cast++)
+			ExecuteSkillCast(player, skill, { 43, 40 });
+		EXPECT_EQ(SkillZoneCount(), 1U) << FindTableSkill(skill)->name;
+	}
+	ClearSkillZones();
+	for (int cast = 0; cast < 5; cast++)
+		ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 43, 40 });
+	EXPECT_EQ(SkillZoneCount(), 3U);
 	ClearSkillZones();
 	leveltype = DTYPE_TOWN;
 }
