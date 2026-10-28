@@ -126,6 +126,86 @@ DIABLO_UNIQUE_TYPE_BASES = [
 # Diablo unique types with a base of their own: The Butcher's Cleaver and Griswold's Edge.
 OWN_BASE_UNIQUE_TYPES = {'CLEAVER', 'GRISWOLD'}
 
+# The caster weapons rework (research/sorc-run2/caster-weapons-plan-v2.md section 3): the bundle's Focused and Quick
+# staves and sceptres stop dropping and take these classes, so saved ones keep working as before.
+LEGACY_CASTER_CLASSES = {'staff': 'legacy_staff', 'sceptre': 'legacy_sceptre'}
+
+# The rework's bases, POE2's own (Path of Building 2, caster-weapons-sources-v1.md sections 3 and 4), after every other
+# row: (class, id, art, unique type, name, level, durability, str, int, dex, min damage, max damage, grants, element,
+# aps, crit, implicit). Sceptres, staves and wands hit for nothing; each grants a skill, and staves and wands lock their
+# element spell modifiers to an element. Quarterstaves take the early-weapon damage rule; crit is POE2's in tenths of a
+# percent (the game halves it), set only here. The new ones are identity poe2, so bare fists keep following the
+# bundle's nine.
+CASTER_BASES = [
+	('sceptre', 'sceptre_rattling_sceptre', 'MACE', 'NONE', 'Fine Rattling Sceptre', 1, 35, 0, 0, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('sceptre', 'sceptre_stoic_sceptre', 'MACE', 'NONE', 'Fine Stoic Sceptre', 6, 40, 0, 12, 0, 0, 0, 'ManaShield', '', '', '', ''),
+	('sceptre', 'sceptre_lupine_sceptre', 'MACE', 'NONE', 'Lupine Sceptre', 12, 40, 0, 24, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('sceptre', 'sceptre_omen_sceptre', 'MORNING_STAR', 'NONE', 'Fine Omen Sceptre', 16, 45, 12, 25, 0, 0, 0, 'OverwhelmingPresence', '', '', '', ''),
+	('sceptre', 'sceptre_ochre_sceptre', 'MORNING_STAR', 'NONE', 'Ochre Sceptre', 21, 45, 0, 40, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('sceptre', 'sceptre_shrine_sceptre', 'MORNING_STAR', 'NONE', 'Shrine Sceptre', 26, 50, 17, 38, 0, 0, 0, 'PurityOfElements', '', '', '', ''),
+	('sceptre', 'sceptre_devouring_sceptre', 'MORNING_STAR', 'NONE', 'Devouring Sceptre', 33, 50, 0, 60, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('sceptre', 'sceptre_clasped_sceptre', 'WAR_HAMMER', 'NONE', 'Clasped Sceptre', 36, 50, 0, 65, 0, 0, 0, 'HeraldOfFrost', '', '', '', ''),
+	('sceptre', 'sceptre_devotional_sceptre', 'WAR_HAMMER', 'NONE', 'Devotional Sceptre', 45, 55, 26, 63, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('sceptre', 'sceptre_wrath_sceptre', 'WAR_HAMMER', 'NONE', 'Wrath Sceptre', 49, 55, 0, 87, 0, 0, 0, 'HeraldOfThunder', '', '', '', ''),
+	('sceptre', 'sceptre_aromatic_sceptre', 'SPIKED_CLUB', 'NONE', 'Aromatic Sceptre', 52, 55, 0, 92, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('sceptre', 'sceptre_pious_sceptre', 'SPIKED_CLUB', 'NONE', 'Pious Sceptre', 58, 60, 0, 102, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('sceptre', 'sceptre_hallowed_sceptre', 'SPIKED_CLUB', 'NONE', 'Hallowed Sceptre', 65, 65, 0, 114, 0, 0, 0, 'SkeletalWarriors', '', '', '', ''),
+	('staff', 'staff_ashen_staff', 'LONG_STAFF', 'SHORTSTAFF', 'Ashen Staff', 1, 35, 0, 0, 0, 0, 0, 'StaffBolt', 'fire', '', '', ''),
+	('staff', 'staff_gelid_staff', 'LONG_STAFF', 'NONE', 'Gelid Staff', 1, 35, 0, 0, 0, 0, 0, 'FreezingShards', 'cold', '', '', ''),
+	('staff', 'staff_voltaic_staff', 'LONG_STAFF', 'NONE', 'Voltaic Staff', 1, 35, 0, 0, 0, 0, 0, 'LightningBolt', 'lightning', '', '', ''),
+	('staff', 'staff_spriggan_staff', 'LONG_STAFF', 'QUARSTAFF', 'Spriggan Staff', 11, 40, 0, 23, 0, 0, 0, 'StaffBolt', '', '', '', ''),
+	('staff', 'staff_pyrophyte_staff', 'COMPOSITE_STAFF', 'LONGSTAFF', 'Pyrophyte Staff', 16, 45, 0, 31, 0, 0, 0, 'SolarOrb', 'fire', '', '', ''),
+	('staff', 'staff_chiming_staff', 'COMPOSITE_STAFF', 'NONE', 'Chiming Staff', 25, 45, 0, 46, 0, 0, 0, 'ChimingBolt', '', '', '', ''),
+	('staff', 'staff_rending_staff', 'COMPOSITE_STAFF', 'NONE', 'Rending Staff', 33, 50, 0, 60, 0, 0, 0, 'Soulrend', 'physical', '', '', ''),
+	('staff', 'staff_reaping_staff', 'COMPOSITE_STAFF', 'NONE', 'Reaping Staff', 38, 50, 0, 68, 0, 0, 0, 'Reap', 'physical', '', '', ''),
+	('staff', 'staff_icicle_staff', 'WAR_STAFF', 'NONE', 'Icicle Staff', 45, 55, 0, 80, 0, 0, 0, 'FrostLance', 'cold', '', '', ''),
+	('staff', 'staff_roaring_staff', 'WAR_STAFF', 'NONE', 'Roaring Staff', 49, 55, 0, 87, 0, 0, 0, 'EchoingBlast', '', '', '', ''),
+	('staff', 'staff_paralysing_staff', 'WAR_STAFF', 'NONE', 'Paralysing Staff', 52, 55, 0, 92, 0, 0, 0, 'EnervatingNova', 'lightning', '', '', ''),
+	('staff', 'staff_sanctified_staff', 'WAR_STAFF', 'NONE', 'Sanctified Staff', 56, 60, 0, 99, 0, 0, 0, 'ConsecratedGround', '', '', '', ''),
+	('staff', 'staff_dark_staff', 'STAFF_OF_LAZARUS', 'NONE', 'Dark Staff', 65, 65, 0, 114, 0, 0, 0, 'DarkPact', '', '', '', ''),
+	('staff', 'staff_ravenous_staff', 'STAFF_OF_LAZARUS', 'NONE', 'Ravenous Staff', 65, 65, 0, 114, 0, 0, 0, 'FeastOfFlesh', '', '', '', ''),
+	('wand', 'wand_withered_wand', 'CLUB', 'NONE', 'Withered Wand', 1, 35, 0, 0, 0, 0, 0, 'WitheringBolt', 'physical', '', '', ''),
+	('wand', 'wand_bone_wand', 'CLUB', 'NONE', 'Bone Wand', 1, 35, 0, 0, 0, 0, 0, 'BoneBolt', 'physical', '', '', ''),
+	('wand', 'wand_attuned_wand', 'CLUB', 'NONE', 'Attuned Wand', 1, 35, 0, 0, 0, 0, 0, 'ManaDrain', '', '', '', ''),
+	('wand', 'wand_siphoning_wand', 'CLUB', 'NONE', 'Siphoning Wand', 11, 40, 0, 23, 0, 0, 0, 'PowerSiphon', '', '', '', ''),
+	('wand', 'wand_volatile_wand', 'CLUB', 'NONE', 'Volatile Wand', 16, 45, 0, 31, 0, 0, 0, 'VolatileBolt', 'fire', '', '', ''),
+	('wand', 'wand_galvanic_wand', 'CLUB', 'NONE', 'Galvanic Wand', 25, 45, 0, 46, 0, 0, 0, 'GalvanicBolt', 'lightning', '', '', ''),
+	('wand', 'wand_acrid_wand', 'CLUB', 'NONE', 'Acrid Wand', 33, 50, 0, 60, 0, 0, 0, 'Decompose', '', '', '', ''),
+	('wand', 'wand_offering_wand', 'CLUB', 'NONE', 'Offering Wand', 38, 50, 0, 68, 0, 0, 0, 'Exsanguinate', 'physical', '', '', ''),
+	('wand', 'wand_frigid_wand', 'CLUB', 'NONE', 'Frigid Wand', 45, 55, 0, 80, 0, 0, 0, 'FrostBolt', 'cold', '', '', ''),
+	('wand', 'wand_torture_wand', 'CLUB', 'NONE', 'Torture Wand', 49, 55, 0, 87, 0, 0, 0, 'TormentBolt', '', '', '', ''),
+	('wand', 'wand_critical_wand', 'CLUB', 'NONE', 'Critical Wand', 52, 55, 0, 92, 0, 0, 0, 'CriticalBolt', '', '', '', ''),
+	('wand', 'wand_primordial_wand', 'CLUB', 'NONE', 'Primordial Wand', 56, 60, 0, 99, 0, 0, 0, 'WitheringRay', 'physical', '', '', ''),
+	('wand', 'wand_dueling_wand', 'CLUB', 'NONE', 'Dueling Wand', 65, 65, 0, 114, 0, 0, 0, 'TwinBolts', '', '', '', ''),
+	('quarterstaff', 'quarterstaff_long_quarterstaff', 'SHORT_STAFF', 'NONE', 'Fine Long Quarterstaff', 1, 35, 0, 0, 9, 9, 18, '', '', 140, 100, ''),
+	('quarterstaff', 'quarterstaff_barrier_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Barrier Quarterstaff', 37, 50, 0, 22, 52, 35, 58, '', '', 140, 100, 'BlockChance|12|18|+{0}% to Block chance'),
+	('quarterstaff', 'quarterstaff_hefty_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Hefty Quarterstaff', 45, 55, 0, 26, 63, 39, 81, '', '', 130, 100, 'DazeChance|20|50|{0}% chance to Daze on Hit'),
+	('quarterstaff', 'quarterstaff_reaching_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Reaching Quarterstaff', 45, 55, 0, 26, 63, 35, 72, '', '', 140, 100, ''),
+	('quarterstaff', 'quarterstaff_anima_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Anima Quarterstaff', 52, 55, 0, 29, 72, 47, 79, '', '', 140, 100, ''),
+	('quarterstaff', 'quarterstaff_waxing_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Waxing Quarterstaff', 54, 60, 0, 30, 75, 39, 82, '', '', 150, 100, ''),
+	('quarterstaff', 'quarterstaff_graceful_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Graceful Quarterstaff', 56, 60, 0, 31, 77, 47, 87, '', '', 140, 100, ''),
+	('quarterstaff', 'quarterstaff_guardian_quarterstaff', 'WAR_STAFF', 'NONE', 'Guardian Quarterstaff', 62, 65, 0, 34, 85, 52, 86, '', '', 140, 100, 'BlockChance|12|18|+{0}% to Block chance'),
+	('quarterstaff', 'quarterstaff_wyrm_quarterstaff', 'WAR_STAFF', 'NONE', 'Wyrm Quarterstaff', 65, 65, 0, 36, 89, 57, 94, '', '', 140, 100, ''),
+	('quarterstaff', 'quarterstaff_sinister_quarterstaff', 'WAR_STAFF', 'NONE', 'Sinister Quarterstaff', 67, 65, 0, 41, 104, 55, 91, '', '', 140, 120, ''),
+	('quarterstaff', 'quarterstaff_skullcrusher_quarterstaff', 'WAR_STAFF', 'NONE', 'Skullcrusher Quarterstaff', 75, 65, 0, 50, 127, 59, 122, '', '', 130, 100, 'DazeChance|20|50|{0}% chance to Daze on Hit'),
+	('quarterstaff', 'quarterstaff_striking_quarterstaff', 'WAR_STAFF', 'NONE', 'Striking Quarterstaff', 77, 65, 0, 50, 127, 53, 111, '', '', 140, 100, ''),
+	('quarterstaff', 'quarterstaff_razor_quarterstaff', 'WAR_STAFF', 'NONE', 'Razor Quarterstaff', 77, 65, 0, 50, 127, 65, 108, '', '', 140, 100, ''),
+	('quarterstaff', 'quarterstaff_aegis_quarterstaff', 'WAR_STAFF', 'NONE', 'Fine Aegis Quarterstaff', 79, 65, 0, 50, 127, 58, 97, '', '', 140, 100, 'BlockChance|12|18|+{0}% to Block chance'),
+]
+# Granted skills not built yet: their bases grant nothing until the skill exists (an unknown key is an error).
+PENDING_GRANTS = {
+	'FreezingShards', 'LightningBolt', 'SolarOrb', 'ChimingBolt', 'Soulrend', 'Reap', 'FrostLance', 'EchoingBlast',
+	'EnervatingNova', 'ConsecratedGround', 'DarkPact', 'FeastOfFlesh', 'WitheringBolt', 'BoneBolt', 'ManaDrain',
+	'PowerSiphon', 'VolatileBolt', 'GalvanicBolt', 'Decompose', 'Exsanguinate', 'FrostBolt', 'TormentBolt', 'CriticalBolt',
+	'WitheringRay', 'TwinBolts',
+}
+CASTER_CLASSES = {
+	'staff': ('Weapon', 'Two-handed', 'Staff', 'Staff'),
+	'wand': ('Weapon', 'One-handed', 'Mace', 'Wand'),
+	'sceptre': ('Weapon', 'One-handed', 'Mace', 'Sceptre'),
+	'quarterstaff': ('Weapon', 'Two-handed', 'Staff', 'Quarterstaff'),
+}
+
 # Rings and amulets follow POE2's lineup and drop levels rather than the bundle's: Iron and Lazuli first, then Ruby,
 # Sapphire and Golden Hoop, Topaz, Pearl. POE2 has no Coral Ring, so it only carries its unique. Jewellery levels are
 # POE2 item levels, not scaled to Diablo's (the game checks them against those).
@@ -545,7 +625,7 @@ def main():
 		if name in POE2_AMULET_IMPLICITS:
 			implicits = [POE2_AMULET_IMPLICITS[name]]
 		value = (1000 + level * 50) if cls == 'amulet' else (1000 + b['drop_level'] * 50) if is_jewellery else (100 + (b['drop_level'] if real is None else level) * 100)
-		retired = b['id'] in RETIRED_BASES or is_retired_weapon(b)
+		retired = b['id'] in RETIRED_BASES or is_retired_weapon(b) or cls in LEGACY_CASTER_CLASSES
 		row = [
 			ID_PREFIX + b['id'], '0' if retired else '1', item_class, equip, cursor, item_type, unique, name, short, str(level),
 			'0' if is_jewellery else str(30 + tier * 5), str(min_dam), str(max_dam), str(min_ac), str(max_ac),
@@ -564,7 +644,7 @@ def main():
 		required_level = level if is_jewellery or real is not None else b['required_level']
 		aps = int(real['aps']) if real is not None else round(stats['attacks_per_second'] * 100) if 'attacks_per_second' in stats else ''
 		meta_rows.append([
-			name, cls, POE2_AMULET_IDENTITIES.get(name, b.get('design_identity', '')), defense_line, quality if cls != 'focus' else 'defence',
+			name, LEGACY_CASTER_CLASSES.get(cls, cls), POE2_AMULET_IDENTITIES.get(name, b.get('design_identity', '')), defense_line, quality if cls != 'focus' else 'defence',
 			';'.join(f'{e}|{lo}|{hi}|{text}' for e, lo, hi, text in implicits), split, str(required_level), str(stats.get('block_chance_pct', '')),
 			str(aps),
 		])
@@ -609,6 +689,29 @@ def main():
 			rows.append(row)
 		meta_rows.append([name, cls, 'balanced', '', quality, '', '', str(level), '', real['aps']])
 
+	caster_meta = []
+	for (cls, base_id, cursor, unique, name, level, durability, strength, intelligence, dexterity, lo, hi, grants, element,
+	     aps, crit, implicit) in CASTER_BASES:
+		assert name not in taken and name not in generated, f'{name} clashes with another base'
+		generated.add(name)
+		item_class, equip, item_type, short = CASTER_CLASSES[cls]
+		if hi > 0:
+			lo, hi = damage({'physical_damage_min': lo, 'physical_damage_max': hi}, damage_percent(cls, level))
+		row = [
+			ID_PREFIX + base_id, '1', item_class, equip, cursor, item_type, unique, name, short, str(level), str(durability),
+			str(lo), str(hi), '0', '0', str(strength), str(intelligence), str(dexterity), '', 'NONE', 'Null', 'false',
+			str(100 + level * 100),
+		]
+		if row[0] in by_id:
+			rows[by_id[row[0]]] = row
+		else:
+			by_id[row[0]] = len(rows)
+			rows.append(row)
+		caster_meta.append([
+			name, cls, 'poe2', '', 'weapon' if cls == 'quarterstaff' else '', implicit, '', str(level), '', str(aps),
+			'' if grants in PENDING_GRANTS else grants, element, str(crit),
+		])
+
 	# Every Diablo weapon unique type is on a base that drops.
 	carried = {row[6] for row in rows[1:] if row[0].startswith(ID_PREFIX) and row[1] != '0' and row[2] == 'Weapon'}
 	missing = set(diablo_weapon_art) - carried - OWN_BASE_UNIQUE_TYPES
@@ -635,9 +738,11 @@ def main():
 		for row in rows:
 			f.write('\t'.join(row) + '\r\n')
 	with open(META, 'w', encoding='utf-8', newline='') as f:
-		for row in [['name', 'class', 'identity', 'defense', 'quality', 'implicits', 'split', 'level', 'block', 'aps']] + meta_rows:
+		# Rows from before the caster weapons rework leave out its columns.
+		header = ['name', 'class', 'identity', 'defense', 'quality', 'implicits', 'split', 'level', 'block', 'aps', 'grants', 'element', 'crit']
+		for row in [header] + meta_rows + caster_meta:
 			f.write('\t'.join(row) + '\r\n')
-	print(f'{len(meta_rows)} bases')
+	print(f'{len(meta_rows) + len(caster_meta)} bases')
 
 
 if __name__ == '__main__':

@@ -439,3 +439,57 @@ Scalper's Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		90	39
 Monastic Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	56		
 Devout Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	68		
 Grand Regalia	body_armour	tri	All	defence		50/45	65		
+Fine Rattling Sceptre	sceptre	poe2					1			SkeletalWarriors		
+Fine Stoic Sceptre	sceptre	poe2					6			ManaShield		
+Lupine Sceptre	sceptre	poe2					12			SkeletalWarriors		
+Fine Omen Sceptre	sceptre	poe2					16			OverwhelmingPresence		
+Ochre Sceptre	sceptre	poe2					21			SkeletalWarriors		
+Shrine Sceptre	sceptre	poe2					26			PurityOfElements		
+Devouring Sceptre	sceptre	poe2					33			SkeletalWarriors		
+Clasped Sceptre	sceptre	poe2					36			HeraldOfFrost		
+Devotional Sceptre	sceptre	poe2					45			SkeletalWarriors		
+Wrath Sceptre	sceptre	poe2					49			HeraldOfThunder		
+Aromatic Sceptre	sceptre	poe2					52			SkeletalWarriors		
+Pious Sceptre	sceptre	poe2					58			SkeletalWarriors		
+Hallowed Sceptre	sceptre	poe2					65			SkeletalWarriors		
+Ashen Staff	staff	poe2					1			StaffBolt	fire	
+Gelid Staff	staff	poe2					1				cold	
+Voltaic Staff	staff	poe2					1				lightning	
+Spriggan Staff	staff	poe2					11			StaffBolt		
+Pyrophyte Staff	staff	poe2					16				fire	
+Chiming Staff	staff	poe2					25					
+Rending Staff	staff	poe2					33				physical	
+Reaping Staff	staff	poe2					38				physical	
+Icicle Staff	staff	poe2					45				cold	
+Roaring Staff	staff	poe2					49					
+Paralysing Staff	staff	poe2					52				lightning	
+Sanctified Staff	staff	poe2					56					
+Dark Staff	staff	poe2					65					
+Ravenous Staff	staff	poe2					65					
+Withered Wand	wand	poe2					1				physical	
+Bone Wand	wand	poe2					1				physical	
+Attuned Wand	wand	poe2					1					
+Siphoning Wand	wand	poe2					11					
+Volatile Wand	wand	poe2					16				fire	
+Galvanic Wand	wand	poe2					25				lightning	
+Acrid Wand	wand	poe2					33					
+Offering Wand	wand	poe2					38				physical	
+Frigid Wand	wand	poe2					45				cold	
+Torture Wand	wand	poe2					49					
+Critical Wand	wand	poe2					52					
+Primordial Wand	wand	poe2					56				physical	
+Dueling Wand	wand	poe2					65					
+Fine Long Quarterstaff	quarterstaff	poe2		weapon			1		140			100
+Barrier Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		37		140			100
+Hefty Quarterstaff	quarterstaff	poe2		weapon	DazeChance|20|50|{0}% chance to Daze on Hit		45		130			100
+Reaching Quarterstaff	quarterstaff	poe2		weapon			45		140			100
+Anima Quarterstaff	quarterstaff	poe2		weapon			52		140			100
+Waxing Quarterstaff	quarterstaff	poe2		weapon			54		150			100
+Graceful Quarterstaff	quarterstaff	poe2		weapon			56		140			100
+Guardian Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		62		140			100
+Wyrm Quarterstaff	quarterstaff	poe2		weapon			65		140			100
+Sinister Quarterstaff	quarterstaff	poe2		weapon			67		140			120
+Skullcrusher Quarterstaff	quarterstaff	poe2		weapon	DazeChance|20|50|{0}% chance to Daze on Hit		75		130			100
+Striking Quarterstaff	quarterstaff	poe2		weapon			77		140			100
+Razor Quarterstaff	quarterstaff	poe2		weapon			77		140			100
+Fine Aegis Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		79		140			100

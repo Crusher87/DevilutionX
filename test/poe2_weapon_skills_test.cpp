@@ -8,6 +8,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
@@ -42,11 +43,15 @@ public:
 
 	static Item MakeBase(std::string_view name)
 	{
-		for (size_t i = 0; i < AllItemsList.size(); i++) {
-			if (AllItemsList[i].iName == name && AllItemsList[i].dropRate > 0) {
-				Item item;
-				InitializeItem(item, static_cast<_item_indexes>(i));
-				return item;
+		// The row that drops, else the one of that name (the Focused and Quick staves and sceptres no longer drop; saved
+		// ones still exist).
+		for (const bool dropping : { true, false }) {
+			for (size_t i = 0; i < AllItemsList.size(); i++) {
+				if (AllItemsList[i].iName == name && (!dropping || AllItemsList[i].dropRate > 0)) {
+					Item item;
+					InitializeItem(item, static_cast<_item_indexes>(i));
+					return item;
+				}
 			}
 		}
 		return {};

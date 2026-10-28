@@ -12,6 +12,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
@@ -68,6 +69,11 @@ public:
 	{
 		for (size_t i = 0; i < AllItemsList.size(); i++) {
 			if (AllItemsList[i].iName == name && AllItemsList[i].dropRate > 0)
+				return static_cast<_item_indexes>(i);
+		}
+		// A POE2 base that no longer drops (the Focused and Quick staves and sceptres): saved ones still exist.
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iName == name && BaseMetaFor(static_cast<int>(i)) != nullptr)
 				return static_cast<_item_indexes>(i);
 		}
 		return IDI_GOLD;

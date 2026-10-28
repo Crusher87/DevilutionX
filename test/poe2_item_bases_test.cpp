@@ -27,6 +27,7 @@
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
 #include "spells.h"
@@ -216,7 +217,7 @@ TEST_F(Poe2ItemBasesTest, OneCellItemsOnTheFloorFitTheirNewPicture)
 
 TEST_F(Poe2ItemBasesTest, BundleBasesReplaceTheOldOnes)
 {
-	for (const std::string_view name : { "Shortsword", "Dark Blade", "Fine Wrapped Quarterstaff", "Crude Bow", "Quick Bone Sceptre", "Wooden Focus", "Iron Cap", "Hide Buckler", "Ruby Ring", "Azure Amulet" }) {
+	for (const std::string_view name : { "Shortsword", "Dark Blade", "Fine Wrapped Quarterstaff", "Crude Bow", "Fine Rattling Sceptre", "Ashen Staff", "Withered Wand", "Wooden Focus", "Iron Cap", "Hide Buckler", "Ruby Ring", "Azure Amulet" }) {
 		const _item_indexes base = FindBase(name);
 		EXPECT_GT(AllItemsList[base].dropRate, 0) << name;
 		EXPECT_TRUE(IsItemAvailable(base)) << name;
@@ -227,6 +228,11 @@ TEST_F(Poe2ItemBasesTest, BundleBasesReplaceTheOldOnes)
 		EXPECT_EQ(AllItemsList[FindBase(name)].dropRate, 0) << name;
 	// So do the bundle's heavy and swift weapons and its crossbows (Curtis 2026-10-27: weapons are POE2's own bases).
 	for (const std::string_view name : { "Heavy Imperial Edge", "Swift Shortsword", "Light Crossbow", "Dragonspine Crossbow" }) {
+		EXPECT_EQ(AllItemsList[FindBase(name)].dropRate, 0) << name;
+		EXPECT_NE(BaseMetaFor(FindBase(name)), nullptr) << name;
+	}
+	// The bundle's Focused and Quick staves and sceptres too, since the caster weapons rework's bases came in.
+	for (const std::string_view name : { "Quick Bone Sceptre", "Focused Pilgrim Staff", "Quick Worldroot Staff", "Focused Sovereign Sceptre" }) {
 		EXPECT_EQ(AllItemsList[FindBase(name)].dropRate, 0) << name;
 		EXPECT_NE(BaseMetaFor(FindBase(name)), nullptr) << name;
 	}
@@ -247,20 +253,23 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 			continue;
 		bases++;
 		const ItemData &data = AllItemsList[i];
-		// POE2 has no Coral Ring, so it only carries its unique; the heavy and swift weapons and the crossbows only
-		// stay for saved items.
-		if (data.iName != "Coral Ring" && !IsAnyOf(meta->identity, "heavy", "swift") && meta->itemClass != "crossbow")
+		// POE2 has no Coral Ring, so it only carries its unique; the heavy and swift weapons, the crossbows and the
+		// Focused and Quick staves and sceptres only stay for saved items.
+		if (data.iName != "Coral Ring" && !IsAnyOf(meta->identity, "heavy", "swift") && !IsAnyOf(meta->itemClass, "crossbow", "legacy_staff", "legacy_sceptre"))
 			EXPECT_GT(data.dropRate, 0) << data.iName;
-		if (data.iClass == ICLASS_WEAPON)
+		// The caster weapons rework's staves, wands and sceptres hit for nothing: they cast.
+		if (data.iClass == ICLASS_WEAPON && IsCasterWeapon(static_cast<int>(i)))
+			EXPECT_EQ(data.iMaxDam, 0) << data.iName;
+		else if (data.iClass == ICLASS_WEAPON)
 			EXPECT_GT(data.iMaxDam, data.iMinDam) << data.iName;
 		if (data.iClass == ICLASS_ARMOR) {
 			EXPECT_GT(data.iMinAC, 0) << data.iName;
 			EXPECT_TRUE(meta->defense.has_value()) << data.iName;
 		}
 	}
-	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, the 43 body armours of plan step 10 and the 10 POE2
-	// weapons that carry Diablo unique types no other base does.
-	EXPECT_EQ(bases, 440);
+	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, the 43 body armours of plan step 10, the 10 POE2
+	// weapons that carry Diablo unique types no other base does and the caster weapons rework's 54.
+	EXPECT_EQ(bases, 494);
 }
 
 TEST_F(Poe2ItemBasesTest, EveryDiabloWeaponUniqueHasABaseThatDrops)

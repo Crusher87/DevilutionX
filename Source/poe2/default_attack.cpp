@@ -133,6 +133,9 @@ bool FightsWithBareFists(const Player &player)
 	for (const Item &item : player.InvBody) {
 		if (!item.isEmpty() && item._iStatFlag && (item._iMinDam != 0 || item._iMaxDam != 0))
 			return false;
+		// A new staff or wand hits for nothing but casts its own skill; a new sceptre leaves his fists free.
+		if (!item.isEmpty() && item._iStatFlag && (IsCasterStaff(item) || IsWand(item)))
+			return false;
 	}
 	return true;
 }
@@ -144,12 +147,13 @@ std::pair<int, int> BareFistDamage(int gemLevel)
 		int minDamage;
 		int maxDamage;
 	};
-	// The quarterstaffs that drop, POE2's own bases, by drop level.
+	// The quarterstaffs that drop, POE2's own bases, by drop level: the bundle's, not the caster weapons rework's
+	// (identity poe2), so fists hit as they did.
 	std::vector<Staff> staffs;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
 		const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
-		if (data.dropRate <= 0 || base == nullptr || base->itemClass != "quarterstaff" || data.iMinDam <= 0)
+		if (data.dropRate <= 0 || base == nullptr || base->itemClass != "quarterstaff" || base->identity == "poe2" || data.iMinDam <= 0)
 			continue;
 		staffs.push_back({ data.iMinMLvl, data.iMinDam, std::max<int>(data.iMaxDam, data.iMinDam) });
 	}

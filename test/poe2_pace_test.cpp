@@ -231,7 +231,10 @@ public:
 		std::vector<_item_indexes> bases;
 		for (size_t i = 0; i < AllItemsList.size(); i++) {
 			const ItemData &data = AllItemsList[i];
-			if (data.dropRate > 0 && data.iClass == ICLASS_WEAPON && data.iSName == kind && data.iMinMLvl <= areaLevel && (!oneHanded || data.iLoc == ILOC_ONEHAND))
+			// The Sorcerer's staves are the Focused and Quick ones, pinned by kind (they no longer drop): the caster
+			// weapons rework's staves have no damage and cast their own skills, measured by the caster pace case.
+			const bool available = kind == "Staff" ? WeaponKindOf(static_cast<int>(i)) == WeaponKind::LegacyStaff && BaseMetaFor(static_cast<int>(i)) != nullptr : data.dropRate > 0;
+			if (available && data.iClass == ICLASS_WEAPON && data.iSName == kind && data.iMinMLvl <= areaLevel && (!oneHanded || data.iLoc == ILOC_ONEHAND))
 				bases.push_back(static_cast<_item_indexes>(i));
 		}
 		return bases;
@@ -766,15 +769,18 @@ TEST_F(Poe2PaceTest, RareCasterStaffAtDepthStaysNearTodaysBest)
 			const Item staff = player.InvBody[INVLOC_HAND_LEFT];
 			today = std::max(today, best(staff, ModSlot::LegacyStaff, level, magic));
 		}
-		// The rework's staves have no implicit and no damage: only their modifiers count.
-		Item newStaff {};
-		newStaff._itype = ItemType::Staff;
-		newStaff._iClass = ICLASS_WEAPON;
-		newStaff._iLoc = ILOC_TWOHAND;
-		newStaff._iStatFlag = true;
+		// The rework's staves have no implicit and no damage: only their modifiers count. The Ashen Staff, pinned by
+		// its id: its fire lock leaves Firebolt every modifier it wants.
+		const std::optional<_item_indexes> ashen = FindPoe2ItemId("poe2:staff_ashen_staff");
+		ASSERT_TRUE(ashen.has_value());
+		ASSERT_EQ(WeaponKindOf(*ashen), WeaponKind::CasterStaff);
+		MakeHero(player, HeroClass::Sorcerer, level);
+		Hold(player, INVLOC_HAND_LEFT, *ashen);
+		Item newStaff = player.InvBody[INVLOC_HAND_LEFT];
+		ASSERT_EQ(newStaff._iMaxDam, 0);
+		ASSERT_TRUE(ItemImplicits(newStaff).empty());
 		newStaff._iIdentified = true;
 		newStaff._iMagical = ITEM_QUALITY_RARE;
-		newStaff.IDidx = static_cast<_item_indexes>(FirstLegacyStaff);
 		const double rework = best(newStaff, ModSlot::Staff, level, magic);
 		ASSERT_GT(today, 0) << level;
 		const double ratio = rework / today;

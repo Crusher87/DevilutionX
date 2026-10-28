@@ -210,11 +210,14 @@ public:
 		return rebuilt;
 	}
 
+	/** The item rows from before the rework; its bases come after them. */
+	static constexpr size_t RowsBeforeTheRework = 951;
+
 	/** Every staff and sceptre row of the bundle today, the Diablo staff rows and every quarterstaff. */
 	static std::vector<_item_indexes> LegacyRows()
 	{
 		std::vector<_item_indexes> rows;
-		for (size_t i = 0; i < AllItemsList.size(); i++) {
+		for (size_t i = 0; i < std::min(AllItemsList.size(), RowsBeforeTheRework); i++) {
 			const ItemData &data = AllItemsList[i];
 			if (data.itype == ItemType::Staff || data.iSName == "Sceptre")
 				rows.push_back(static_cast<_item_indexes>(i));
@@ -300,7 +303,10 @@ TEST_F(Poe2CasterGoldenTest, CraftBytesStay)
 TEST_F(Poe2CasterGoldenTest, DesecrationOffersOnLegacyStavesAndSceptresStay)
 {
 	for (const _item_indexes row : LegacyRows()) {
-		if (AllItemsList[row].dropRate == 0)
+		// The rows that dropped before the rework, its retired Focused and Quick staves and sceptres among them.
+		const BaseMeta *base = BaseMetaFor(row);
+		const bool retired = base != nullptr && (base->itemClass == "legacy_staff" || base->itemClass == "legacy_sceptre");
+		if (AllItemsList[row].dropRate == 0 && !retired)
 			continue;
 		Fingerprint print;
 		int desecrated = 0;

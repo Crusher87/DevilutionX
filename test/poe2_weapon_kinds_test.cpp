@@ -50,6 +50,9 @@ public:
 		return 0;
 	}
 
+	/** The item rows from before the caster weapons rework; its bases come after them. */
+	static constexpr size_t RowsBeforeTheRework = 951;
+
 	static Item ItemOf(int row)
 	{
 		Item item {};
@@ -77,9 +80,11 @@ TEST_F(Poe2WeaponKindsTest, ExistingRowsHaveTheirLegacyKinds)
 	EXPECT_EQ(WeaponKindOf(FindRow("Iron Cap")), WeaponKind::None);
 	EXPECT_EQ(WeaponKindOf(-1), WeaponKind::None);
 
-	for (size_t i = 0; i < AllItemsList.size(); i++) {
+	ASSERT_GT(AllItemsList.size(), RowsBeforeTheRework);
+	EXPECT_EQ(AllItemsList[RowsBeforeTheRework].iName, "Fine Rattling Sceptre");
+	for (size_t i = 0; i < RowsBeforeTheRework; i++) {
 		const Item item = ItemOf(static_cast<int>(i));
-		// Nothing is a new caster weapon until the new bases exist.
+		// No row from before the rework is one of its caster weapons.
 		EXPECT_FALSE(IsCasterWeapon(item)) << AllItemsList[i].iName;
 		EXPECT_EQ(GrantingBase(item), nullptr);
 		// A sceptre is what ItemGrantsSpirit always called one.
@@ -101,8 +106,9 @@ TEST_F(Poe2WeaponKindsTest, ReclassedBaseNamesMapOnlyToTheOldCasterRows)
 			EXPECT_LE(i, 575U) << base->name;
 			(base->itemClass == "legacy_staff" ? staves : sceptres)++;
 		}
-		EXPECT_NE(base->itemClass, "staff") << base->name;
-		EXPECT_NE(base->itemClass, "sceptre") << base->name;
+		// The rework's classes are its own rows only, after every older one.
+		if (base->itemClass == "staff" || base->itemClass == "sceptre" || base->itemClass == "wand")
+			EXPECT_GE(i, RowsBeforeTheRework) << base->name;
 	}
 	EXPECT_EQ(staves, 16);
 	EXPECT_EQ(sceptres, 16);
@@ -111,7 +117,7 @@ TEST_F(Poe2WeaponKindsTest, ReclassedBaseNamesMapOnlyToTheOldCasterRows)
 TEST_F(Poe2WeaponKindsTest, NewBaseColumnsParse)
 {
 	// Rows from before the rework leave the new columns empty.
-	for (size_t i = 0; i < AllItemsList.size(); i++) {
+	for (size_t i = 0; i < RowsBeforeTheRework; i++) {
 		const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
 		if (base == nullptr)
 			continue;
@@ -137,7 +143,7 @@ TEST_F(Poe2WeaponKindsTest, RoutedSitesAnswerAsBeforeForTheOldRows)
 	Players.resize(1);
 	Player &player = Players[0];
 	player = {};
-	for (size_t i = 0; i < AllItemsList.size(); i++) {
+	for (size_t i = 0; i < RowsBeforeTheRework; i++) {
 		const ItemData &data = AllItemsList[i];
 		EXPECT_EQ(GambleFamilyHas(GambleFamily::Mace, static_cast<int>(i)), data.itype == ItemType::Mace) << data.iName;
 		EXPECT_EQ(GambleFamilyHas(GambleFamily::Staff, static_cast<int>(i)), data.itype == ItemType::Staff) << data.iName;
