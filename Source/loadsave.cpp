@@ -2474,6 +2474,11 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * Jeweller's Orbs opened on each Skills panel row. Version 25 adds the skills inside meta gems.
  */
 constexpr uint8_t Poe2HeroDataVersion = 25;
+/**
+ * @brief The socket byte saved with an emptied middle mouse button. Heroes from before default attacks saved the
+ * button empty with socket 0, and get the attack on loading; one the player emptied stays empty.
+ */
+constexpr uint8_t EmptiedMiddleButtonMark = 0xFF;
 /** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
 constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
 
@@ -2615,10 +2620,11 @@ uint8_t ReadPoe2HeroData(Player &player)
 			continue;
 		player.poe2.tray[slot] = binding;
 	}
-	// Heroes from before default attacks get theirs on the middle mouse button if it was free.
+	// Heroes from before default attacks get theirs on the middle mouse button if it was free, unless the player
+	// emptied it.
 	TrayBinding &middle = player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)];
 	if (middle.action == TrayAction::None)
-		middle = DefaultTrayBinding(TraySlot::MiddleMouse);
+		middle = middle.socket == EmptiedMiddleButtonMark ? TrayBinding {} : DefaultTrayBinding(TraySlot::MiddleMouse);
 
 	// The fifth flask slot came in version 9; older heroes start it full.
 	if (version < 9 || !file.IsValid(NumFlasks - OldNumFlasks))
@@ -2950,9 +2956,11 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	// Version 8: the Skills panel's other 6 sockets and the skill tray.
 	writeSockets(OldNumSkillSlots, NumSkillSlots);
 	writeSupports(OldNumSkillSlots, NumSkillSlots);
-	for (const TrayBinding &binding : player.poe2.tray) {
+	for (size_t slot = 0; slot < NumTraySlots; slot++) {
+		const TrayBinding &binding = player.poe2.tray[slot];
 		file.WriteLE<uint8_t>(static_cast<uint8_t>(binding.action));
-		file.WriteLE<uint8_t>(binding.socket);
+		const bool emptiedMiddle = static_cast<TraySlot>(slot) == TraySlot::MiddleMouse && binding.action == TrayAction::None;
+		file.WriteLE<uint8_t>(emptiedMiddle ? EmptiedMiddleButtonMark : binding.socket);
 	}
 	// Version 9: the fifth flask slot.
 	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
