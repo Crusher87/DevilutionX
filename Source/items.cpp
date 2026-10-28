@@ -2406,9 +2406,26 @@ void PrintItemInfo(const Item &item)
 	}
 }
 
+/** @brief The weapon kind of a row the vendors look at; None for an item that isn't a row of the item table. */
+WeaponKind VendorWeaponKind(const ItemData &item)
+{
+	if (AllItemsList.empty() || &item < AllItemsList.data() || &item >= AllItemsList.data() + AllItemsList.size())
+		return WeaponKind::None;
+	return WeaponKindOf(static_cast<int>(&item - AllItemsList.data()));
+}
+
+/** @brief A caster staff, wand or new sceptre of the rework: Adria's, not Griswold's (caster-weapons-plan-v2.md 6.13). */
+bool IsVendorCasterWeapon(const ItemData &item)
+{
+	return gbIsPoe2 && IsAnyOf(VendorWeaponKind(item), WeaponKind::CasterStaff, WeaponKind::Wand, WeaponKind::Sceptre);
+}
+
 bool SmithItemOk(const Player & /*player*/, const ItemData &item)
 {
 	if (item.itype == ItemType::Misc)
+		return false;
+	// POE2 Mashup: the caster staves, wands and sceptres are Adria's; quarterstaves stay here.
+	if (IsVendorCasterWeapon(item))
 		return false;
 	if (item.itype == ItemType::Gold)
 		return false;
@@ -2446,6 +2463,11 @@ _item_indexes RndSmithItem(const Player &player, int lvl)
 /** POE2 Mashup: merchants list weapons, then off-hands, armour by slot, jewellery, then the rest. */
 int VendorTypeRank(const Item &item)
 {
+	// The caster weapons rework's wands and sceptres, after the staves and bows (plan 6.13).
+	if (IsWand(item))
+		return 8;
+	if (IsNewSceptre(item))
+		return 9;
 	switch (item._itype) {
 	case ItemType::Sword: return item._iLoc == ILOC_TWOHAND ? 1 : 0;
 	case ItemType::Axe: return item._iLoc == ILOC_TWOHAND ? 3 : 2;
@@ -2627,13 +2649,17 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 
 bool WitchItemOk(const Player & /*player*/, const ItemData &item)
 {
+	// POE2 Mashup: the caster weapons rework's staves, wands and sceptres (plan 6.13); quarterstaves and the older
+	// staves are Griswold's.
+	if (IsVendorCasterWeapon(item))
+		return true;
 	if (IsNoneOf(item.itype, ItemType::Misc, ItemType::Staff))
 		return false;
-	// POE2 Mashup (Curtis 2026-10-16): Adria sells staves, elixirs and Scrolls of Identify; no currency, jewels,
+	// POE2 Mashup (Curtis 2026-10-16): Adria sells caster weapons, elixirs and Scrolls of Identify; no currency, jewels,
 	// books, other scrolls or gems.
 	if (gbIsPoe2) {
 		if (item.itype == ItemType::Staff)
-			return SkillForGemData(item).isEmpty();
+			return false;
 		// Scrolls of Identify only as her pinned ware, which never sells out (Curtis 2026-10-16).
 		return item.iMiscId >= IMISC_ELIXSTR && item.iMiscId <= IMISC_ELIXVIT;
 	}
@@ -7437,9 +7463,13 @@ constexpr VendorStockQuota SmithStockQuotas[] = {
 	{ VendorCategory::Jewelry, 5, 7 },
 };
 
-/** Adria's stock besides her pinned wares: a tab of staves, and a few more scrolls and elixirs. */
+/**
+ * Adria's stock besides her pinned wares: a tab of caster staves, wands and sceptres (caster-weapons-plan-v2.md 6.13;
+ * as many as her staves were), and a few more scrolls and elixirs.
+ */
 constexpr VendorStockQuota WitchStockQuotas[] = {
-	{ VendorCategory::TwoHanded, 15, 20 },
+	{ VendorCategory::TwoHanded, 7, 9 },
+	{ VendorCategory::OneHanded, 8, 11 },
 	{ VendorCategory::Supplies, 3, 6 },
 };
 
@@ -7777,7 +7807,8 @@ void SpawnBoy(int lvl)
 					ivalue = INT_MAX;
 				break;
 			case HeroClass::Sorcerer:
-				if (IsAnyOf(itemType, ItemType::Staff, ItemType::Axe, ItemType::Bow, ItemType::Mace))
+				// POE2 Mashup: a caster staff, wand or sceptre is a Sorcerer's weapon (plan 6.13).
+				if (IsAnyOf(itemType, ItemType::Staff, ItemType::Axe, ItemType::Bow, ItemType::Mace) && !(gbIsPoe2 && IsCasterWeapon(BoyItem)))
 					ivalue = INT_MAX;
 				break;
 			case HeroClass::Monk:
