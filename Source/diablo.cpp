@@ -264,6 +264,9 @@ bool ProcessInput()
 	plrctrls_every_frame();
 
 	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen() || IsAtlasOpen() || IsAnvilOpen())) {
+		// POE2 Mashup: the item or monster hovered when the panel opened isn't hovered under it.
+		if (gbIsPoe2 && !gmenu_is_active())
+			CheckCursMove();
 		RedrawViewport();
 		return false;
 	}

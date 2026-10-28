@@ -3124,12 +3124,17 @@ void StoreEnter()
 	}
 }
 
-bool StoreWindowContainsMouse()
+bool StoreWindowContains(Point position)
 {
 	const Point uiPosition = GetUIRectangle().position;
 	const Rectangle windowRect { { uiPosition.x + 344, uiPosition.y + PaddingTop - 7 }, { 271, 303 } };
 	const Rectangle windowRectFull { { uiPosition.x + 24, uiPosition.y + PaddingTop - 7 }, { 591, 303 } };
-	return (IsTextFullSize ? windowRectFull : windowRect).contains(MousePosition);
+	return (IsTextFullSize ? windowRectFull : windowRect).contains(position);
+}
+
+bool StoreWindowContainsMouse()
+{
+	return StoreWindowContains(MousePosition);
 }
 
 void CheckStoreBtn()

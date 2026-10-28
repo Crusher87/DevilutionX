@@ -1435,6 +1435,11 @@ bool IsStashTabPopupOpen()
 	return OpenPopup != Popup::None;
 }
 
+bool StashDrawerContains(Point position)
+{
+	return gbIsPoe2 && IsStashOpen && DrawerOpen && DrawerRect().contains(position);
+}
+
 void CloseStashTabPopups()
 {
 	StopEditingName();

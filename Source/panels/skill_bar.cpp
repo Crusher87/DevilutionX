@@ -1120,9 +1120,14 @@ bool IsSkillBarShown()
 
 bool IsSkillBarHovered()
 {
-	if (!IsSkillBarVisible() || ControlMode != ControlTypes::KeyboardAndMouse)
+	return ControlMode == ControlTypes::KeyboardAndMouse && SkillBarContains(MousePosition);
+}
+
+bool SkillBarContains(Point position)
+{
+	if (!IsSkillBarVisible())
 		return false;
-	return TrayRect().contains(MousePosition) || IsOverPopup(MousePosition);
+	return TrayRect().contains(position) || IsOverPopup(position);
 }
 
 std::optional<Rectangle> SkillTrayRect()

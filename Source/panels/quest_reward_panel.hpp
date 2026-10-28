@@ -17,6 +17,7 @@
 #include <SDL.h>
 #endif
 
+#include "engine/point.hpp"
 #include "engine/surface.hpp"
 
 namespace devilution {
@@ -59,6 +60,8 @@ void UpdateQuestRewardOffer();
 bool QuestRewardHeldBack();
 
 bool IsQuestRewardOpen();
+/** @brief Whether the open popup is at that point. */
+bool QuestRewardPanelContains(Point position);
 /** @brief How many rewards wait for their popup, not counting an open one. */
 size_t PendingQuestRewardCount();
 /** @brief Closes the popup; the item stays on the ground. */
