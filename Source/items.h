@@ -781,6 +781,11 @@ enum class ChanceResult : uint8_t {
  * @param unique Receives the unique when one is made.
  */
 ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &unique, uint32_t roll);
+/**
+ * @brief POE2 Mashup: the base a Diablo unique drops on: the first that still drops of its type (a retired one if none
+ * does), a staff unique's only of its home's kind (caster-weapons-plan-v2.md 6.14). Nothing if no base fits.
+ */
+std::optional<_item_indexes> Poe2DiabloUniqueBase(int uid);
 
 /* data */
 

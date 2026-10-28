@@ -1831,6 +1831,10 @@ _unique_items CheckUnique(Item &item, int lvl, int uper, int uidOffset = 0)
 	}
 
 	const uint8_t selectedUniqueIndex = validUniques[validUniques.size() - 1 - uidOffset];
+	// POE2 Mashup: a new caster staff turns away a quarterstaff's Diablo unique (caster-weapons-plan-v2.md 6.14), after
+	// the same random numbers; every older row takes what it did.
+	if (!DiabloUniqueFitsRow(selectedUniqueIndex, item.IDidx))
+		return UITEM_INVALID;
 
 	return static_cast<_unique_items>(selectedUniqueIndex);
 }
@@ -3186,7 +3190,7 @@ ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &un
 	const std::vector<uint8_t> valid = GetValidUniques(level, AllItemsList[base].iItemId);
 	for (size_t i = 0; i < valid.size(); i++) {
 		const int offset = static_cast<int>(valid.size() - 1 - i);
-		if (offset <= static_cast<int>(CF_UIDOFFSET >> 1) && Poe2UniqueFor(valid[i]) == nullptr)
+		if (offset <= static_cast<int>(CF_UIDOFFSET >> 1) && Poe2UniqueFor(valid[i]) == nullptr && DiabloUniqueFitsRow(valid[i], base))
 			byTier[static_cast<size_t>(LegacyUniqueTier(UniqueItems[valid[i]].UIMinLvl))].push_back({ valid[i], offset, false });
 	}
 	if (std::all_of(byTier.begin(), byTier.end(), [](const std::vector<Candidate> &pool) { return pool.empty(); }))
@@ -4878,6 +4882,33 @@ struct Poe2UniquePick {
 	BeltUniqueId belt = BeltUniqueId::None;
 };
 
+} // namespace
+
+std::optional<_item_indexes> Poe2DiabloUniqueBase(int uid)
+{
+	if (uid < 0 || static_cast<size_t>(uid) >= UniqueItems.size())
+		return std::nullopt;
+	const UniqueItem &unique = UniqueItems[static_cast<size_t>(uid)];
+	// A base that still drops (a real POE2 one) before a retired one of the same kind; a staff unique only on a staff of
+	// its home's kind (caster-weapons-plan-v2.md 6.14).
+	const WeaponKind home = DiabloUniqueHome(uid);
+	std::optional<_item_indexes> base;
+	std::optional<_item_indexes> retired;
+	for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+		if (AllItemsList[i].iItemId != unique.UIItemId || !IsItemAvailable(static_cast<int>(i)) || AllItemsList[i].iMiscId == IMISC_UNIQUE || !IsPoe2Equipment(AllItemsList[i]))
+			continue;
+		if (home != WeaponKind::None && WeaponKindOf(static_cast<int>(i)) != home)
+			continue;
+		if (AllItemsList[i].dropRate > 0)
+			base = static_cast<_item_indexes>(i);
+		else if (!retired)
+			retired = static_cast<_item_indexes>(i);
+	}
+	return base ? base : retired;
+}
+
+namespace {
+
 /**
  * @brief Turns a unique roll into a unique with the base it belongs on: one of the bundle's, or one of Diablo's the hero
  * hasn't found yet. The tier is rolled first, as in POE2, and a tier with nothing left falls back to the next lower one.
@@ -4907,19 +4938,8 @@ std::optional<Poe2UniquePick> PickPoe2Unique(int itemLevel, int poe2ItemLevel, L
 		const UniqueItem &unique = UniqueItems[uid];
 		if (unique.UIMinLvl > itemLevel || (UniqueItemFlags[uid] && !gbIsMultiplayer))
 			continue;
-		// A base that still drops (a real POE2 one) before a retired one of the same kind.
-		std::optional<_item_indexes> base;
-		std::optional<_item_indexes> retired;
-		for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
-			if (AllItemsList[i].iItemId != unique.UIItemId || !IsItemAvailable(static_cast<int>(i)) || AllItemsList[i].iMiscId == IMISC_UNIQUE || !IsPoe2Equipment(AllItemsList[i]))
-				continue;
-			if (AllItemsList[i].dropRate > 0)
-				base = static_cast<_item_indexes>(i);
-			else if (!retired)
-				retired = static_cast<_item_indexes>(i);
-		}
-		if (!base)
-			base = retired;
+		// The offset below still counts every unique of the type.
+		const std::optional<_item_indexes> base = Poe2DiabloUniqueBase(static_cast<int>(uid));
 		if (!base)
 			continue;
 		const std::vector<uint8_t> valid = GetValidUniques(itemLevel, unique.UIItemId);

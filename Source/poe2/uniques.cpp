@@ -11,8 +11,10 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "poe2/belt_uniques.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "tables/itemdat.h"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 #include "utils/log.hpp"
 #include "utils/parse_int.hpp"
 #include "utils/str_split.hpp"
@@ -24,6 +26,33 @@ namespace {
 std::vector<Poe2Unique> Uniques;
 /** Each unique's flavour text by name, sorted for lookup. */
 std::vector<std::pair<std::string, std::vector<std::string>>> Lore;
+/** The Diablo staff uniques' homes by name (diablo_unique_homes.tsv). */
+std::vector<std::pair<std::string, WeaponKind>> DiabloHomes;
+
+void LoadDiabloUniqueHomes()
+{
+	DiabloHomes.clear();
+	constexpr std::string_view Filename = "txtdata\\poe2\\diablo_unique_homes.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the Diablo unique homes: {}", Filename);
+		return;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		std::string name;
+		std::string home;
+		reader.readString("name", name);
+		reader.readString("home", home);
+		const std::optional<WeaponKind> kind = magic_enum::enum_cast<WeaponKind>(home);
+		if (name.empty() || !kind || IsNoneOf(*kind, WeaponKind::CasterStaff, WeaponKind::Quarterstaff)) {
+			LogError("Bad Diablo unique home: {} {}", name, home);
+			continue;
+		}
+		DiabloHomes.emplace_back(std::move(name), *kind);
+	}
+}
 
 void LoadUniqueLore()
 {
@@ -124,9 +153,11 @@ void LoadPoe2Uniques()
 {
 	RemoveLoadedUniques();
 	Lore.clear();
+	DiabloHomes.clear();
 	if (!gbIsPoe2)
 		return;
 	LoadUniqueLore();
+	LoadDiabloUniqueHomes();
 
 	constexpr std::string_view Filename = "txtdata\\poe2\\uniques.tsv";
 	auto dataFile = DataFile::load(Filename);
@@ -215,6 +246,26 @@ const Poe2Unique *FindPoe2Unique(std::string_view name)
 			return &unique;
 	}
 	return nullptr;
+}
+
+WeaponKind DiabloUniqueHome(int uid)
+{
+	if (!gbIsPoe2 || uid < 0 || static_cast<size_t>(uid) >= UniqueItems.size())
+		return WeaponKind::None;
+	const std::string_view name = UniqueItems[static_cast<size_t>(uid)].UIName;
+	for (const auto &[home, kind] : DiabloHomes) {
+		if (home == name)
+			return kind;
+	}
+	return WeaponKind::None;
+}
+
+bool DiabloUniqueFitsRow(int uid, int itemIndex)
+{
+	if (!gbIsPoe2 || !IsCasterWeapon(itemIndex))
+		return true;
+	const WeaponKind home = DiabloUniqueHome(uid);
+	return home == WeaponKind::None || home == WeaponKindOf(itemIndex);
 }
 
 std::vector<int> Poe2UniquesOnBase(int itemIndex)

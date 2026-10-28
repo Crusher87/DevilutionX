@@ -17,6 +17,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/unique_rules.hpp"
+#include "poe2/weapon_kinds.hpp"
 
 namespace devilution {
 
@@ -64,6 +65,17 @@ const std::vector<Poe2Unique> &Poe2Uniques();
 /** @brief The bundle unique with this unique table index, or nullptr for Diablo's. */
 const Poe2Unique *Poe2UniqueFor(int uid);
 const Poe2Unique *FindPoe2Unique(std::string_view name);
+/**
+ * @brief The weapon kind a Diablo staff unique belongs on in POE2 Mashup (diablo_unique_homes.tsv, caster-weapons-plan-v2.md
+ * 6.14): a caster staff or a quarterstaff; None for every other unique, and outside POE2 mode.
+ */
+WeaponKind DiabloUniqueHome(int uid);
+/**
+ * @brief Whether a Diablo unique can be made on the item row. Only a new caster row (a caster staff, wand or sceptre of
+ * the rework) turns away a unique whose home is another kind; legacy rows, Diablo's staves and quarterstaves take every
+ * one they did, so saved uniques rebuild as before.
+ */
+bool DiabloUniqueFitsRow(int uid, int itemIndex);
 /**
  * @brief The bundle uniques of the base, whose place here a drop stores as its unique offset: those saved on it in table
  * order, so saved items keep theirs, then those that moved to it.
