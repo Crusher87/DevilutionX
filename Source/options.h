@@ -665,6 +665,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean wasdMovement;
 	/** @brief Hides low quality gear on the ground (POE2 Mashup). */
 	OptionEntryEnum<LootFilter> lootFilter;
+	/** @brief Current / max numbers above the life and mana globes, with Energy Shield and Spirit (POE2 Mashup). */
+	OptionEntryBoolean showLifeManaLevels;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */

@@ -2139,9 +2139,13 @@ void DrawAndBlit()
 	DrawXPBar(out);
 	if (gbIsPoe2)
 		DrawPoe2GlobeValues(out);
-	if (*GetOptions().Gameplay.showHealthValues || (gbIsPoe2 && IsHoveringLifeGlobe()))
+	// POE2 Mashup: "Show Life/Mana Levels" puts the numbers above the globes, so hovering a globe adds nothing.
+	const bool globeHoverValues = gbIsPoe2 && !ShowingGlobeLevels();
+	if (ShowingGlobeLevels())
+		DrawPoe2GlobeLevels(out);
+	if (*GetOptions().Gameplay.showHealthValues || (globeHoverValues && IsHoveringLifeGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
-	if (*GetOptions().Gameplay.showManaValues || (gbIsPoe2 && IsHoveringManaGlobe()))
+	if (*GetOptions().Gameplay.showManaValues || (globeHoverValues && IsHoveringManaGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
 		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());

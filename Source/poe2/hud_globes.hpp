@@ -8,12 +8,17 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <vector>
 
+#include "DiabloUI/ui_flags.hpp"
 #include "engine/clx_sprite.hpp"
 #include "engine/point.hpp"
 #include "engine/surface.hpp"
 
 namespace devilution {
+
+struct Player;
 
 /** @brief Where the life and mana globes' art starts in the main panel. */
 constexpr int LifeGlobeX = 96;
@@ -95,6 +100,44 @@ void DrawPoe2LifeGlobe(const Surface &out, bool dome);
 void DrawPoe2ManaGlobe(const Surface &out, bool dome);
 /** @brief Energy shield and Spirit numbers, shown with the life/mana values or while hovering a globe. */
 void DrawPoe2GlobeValues(const Surface &out);
+/** @brief The numbers "Show Life/Mana Levels" prints above the globes. */
+struct GlobeLevels {
+	int life = 0;
+	int maxLife = 0;
+	int energyShield = 0;
+	int maxEnergyShield = 0;
+	int mana = 0;
+	int maxMana = 0;
+	int reservedSpirit = 0;
+	int maxSpirit = 0;
+};
+
+/** @brief One line of numbers above a globe. */
+struct GlobeLevelLine {
+	std::string text;
+	UiFlags color;
+};
+
+/** @brief Height of one line of numbers above a globe. */
+constexpr int GlobeLevelLineHeight = 12;
+/**
+ * @brief Lines the space above a globe is laid out for: Life or Mana, then Energy Shield or Spirit, and one more kept
+ * free for a Rage number over the life globe later on.
+ */
+constexpr int GlobeLevelLineSlots = 3;
+/** @brief Gap between the top of a globe's dome and the lowest line above it. */
+constexpr int GlobeLevelGap = 2;
+
+GlobeLevels ReadGlobeLevels(const Player &player);
+/** @brief Lines over the life globe, the lowest first: Life, then Energy Shield when the hero has any. */
+std::vector<GlobeLevelLine> LifeGlobeLevelLines(const GlobeLevels &levels);
+/** @brief Lines over the mana globe, the lowest first: Mana, then Spirit (reserved / total) when the hero has any. */
+std::vector<GlobeLevelLine> ManaGlobeLevelLines(const GlobeLevels &levels);
+/** @brief Whether the "Show Life/Mana Levels" numbers are drawn (POE2 mode and the option on). */
+bool ShowingGlobeLevels();
+/** @brief Draws the "Show Life/Mana Levels" numbers above both globes. */
+void DrawPoe2GlobeLevels(const Surface &out);
+
 /** @brief Whether the mouse is over the life or mana globe, which then shows its current / max value. */
 bool IsHoveringLifeGlobe();
 bool IsHoveringManaGlobe();

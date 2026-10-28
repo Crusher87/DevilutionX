@@ -144,5 +144,54 @@ TEST(Poe2HudGlobesTest, ArcLightsSegmentsFromItsEnd)
 	EXPECT_TRUE(IsRamp(out[topEnd], PAL16_BLUE));
 }
 
+TEST(Poe2HudGlobesTest, LifeLevelsShowEnergyShieldOnlyWhenTheHeroHasSome)
+{
+	GlobeLevels levels;
+	levels.life = 120;
+	levels.maxLife = 150;
+	std::vector<GlobeLevelLine> lines = LifeGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 1U);
+	EXPECT_EQ(lines[0].text, "Life 120/150");
+
+	levels.energyShield = 30;
+	levels.maxEnergyShield = 40;
+	lines = LifeGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 2U);
+	EXPECT_EQ(lines[0].text, "Life 120/150") << "life stays next to the globe";
+	EXPECT_EQ(lines[1].text, "ES 30/40");
+	EXPECT_EQ(lines[1].color, UiFlags::ColorBlue);
+
+	levels.life = -3;
+	EXPECT_EQ(LifeGlobeLevelLines(levels)[0].text, "Life 0/150") << "a dying hero never shows less than nothing";
+}
+
+TEST(Poe2HudGlobesTest, ManaLevelsShowReservedSpiritOutOfTheTotal)
+{
+	GlobeLevels levels;
+	levels.mana = 45;
+	levels.maxMana = 80;
+	std::vector<GlobeLevelLine> lines = ManaGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 1U);
+	EXPECT_EQ(lines[0].text, "Mana 45/80");
+
+	levels.reservedSpirit = 30;
+	levels.maxSpirit = 100;
+	lines = ManaGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 2U);
+	EXPECT_EQ(lines[1].text, "Spirit 30/100");
+	EXPECT_EQ(lines[1].color, UiFlags::ColorGold);
+}
+
+TEST(Poe2HudGlobesTest, LevelLinesLeaveASlotForRage)
+{
+	GlobeLevels levels;
+	levels.maxLife = 1;
+	levels.maxEnergyShield = 1;
+	levels.maxMana = 1;
+	levels.maxSpirit = 1;
+	EXPECT_LT(LifeGlobeLevelLines(levels).size(), static_cast<size_t>(GlobeLevelLineSlots));
+	EXPECT_LT(ManaGlobeLevelLines(levels).size(), static_cast<size_t>(GlobeLevelLineSlots));
+}
+
 } // namespace
 } // namespace devilution
