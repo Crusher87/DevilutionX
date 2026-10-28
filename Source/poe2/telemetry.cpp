@@ -181,6 +181,11 @@ uint32_t LastStallLogMs = 0;
 /** The longest wait between drawn frames since the last game tick, to tell a freeze from a pause. */
 uint32_t FrameGapSinceTick = 0;
 uint32_t LastFrameMs = 0;
+/** A level change, game start or save load under way (TelemetryLoadingStarted): what it is, and when each step began. */
+std::string LoadingWhat;
+uint32_t LoadingStartMs = 0;
+uint32_t LoadingFadedOutMs = 0;
+uint32_t LoadingFadingInMs = 0;
 
 std::string PendingAttacker;
 /** Energy shield soaked from the hit being applied (raw), added to it when it's counted. */
@@ -2307,6 +2312,44 @@ void TelemetryFrameDrawn()
 			counts.slowFrames++;
 		counts.worstFrameMs = std::max(counts.worstFrameMs, gap);
 	});
+}
+
+void TelemetryLoadingStarted(std::string_view what)
+{
+	if (LogFile == nullptr || GameStartMs == 0)
+		return;
+	LoadingWhat = what;
+	LoadingStartMs = LoadingFadedOutMs = LoadingFadingInMs = Now();
+}
+
+void TelemetryLoadingFadedOut()
+{
+	if (LoadingStartMs != 0)
+		LoadingFadedOutMs = LoadingFadingInMs = Now();
+}
+
+void TelemetryLoadingFadingIn()
+{
+	if (LoadingStartMs != 0)
+		LoadingFadingInMs = Now();
+}
+
+void TelemetryLoadingDone()
+{
+	if (LoadingStartMs == 0)
+		return;
+	const uint32_t start = std::exchange(LoadingStartMs, 0);
+	if (LogFile == nullptr || GameStartMs == 0)
+		return;
+	const uint32_t now = Now();
+	// The game didn't tick or draw while loading: the stall clock starts again from here.
+	LastTickMs = LastFrameMs = now;
+	FrameGapSinceTick = 0;
+	const uint32_t fadeOut = LoadingFadedOutMs - start;
+	const uint32_t loading = LoadingFadingInMs - LoadingFadedOutMs;
+	const uint32_t fadeIn = now - LoadingFadingInMs;
+	WriteText("load", std::format("{:s} took {:d} ms: fade out {:d} ms, loading {:d} ms, fade in {:d} ms", LoadingWhat, now - start, fadeOut, loading, fadeIn));
+	Event(LogChannel::Perf, LogLevel::Normal, "loading").add("what", LoadingWhat).add("ms", now - start).add("fadeOut", fadeOut).add("loading", loading).add("fadeIn", fadeIn);
 }
 
 void TelemetryTick()

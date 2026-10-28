@@ -152,6 +152,18 @@ void TelemetryMark(std::string_view text);
 void TelemetryTick();
 /** @brief Once per drawn frame: the frame rate and slow frames for the stats line. */
 void TelemetryFrameDrawn();
+/**
+ * @brief Notes the start of a level change, a game's start or a save being loaded (`what`), with its fades. The game
+ * doesn't tick meanwhile, so TelemetryLoadingDone writes how long it took and starts the stall clock afresh: a level
+ * change is loading time, not a freeze in play.
+ */
+void TelemetryLoadingStarted(std::string_view what);
+/** @brief The screen has faded out and loading begins. */
+void TelemetryLoadingFadedOut();
+/** @brief Loading is done and the screen starts fading in. */
+void TelemetryLoadingFadingIn();
+/** @brief The game is back: writes the load line and restarts the stall clock. */
+void TelemetryLoadingDone();
 /** @brief Writes the error that is about to close the game, then the latest detailed events. */
 void TelemetryFatal(std::string_view message);
 /** @brief Notes what is being drawn (a fixed text, or nullptr when done), so a crash while drawing names it. */

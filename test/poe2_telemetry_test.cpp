@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
@@ -301,6 +302,32 @@ TEST_F(Poe2TelemetryTest, HauntsBleedingIsCreditedToHaunt)
 	TelemetryGameEnded();
 	const std::string events = ReadLatestEvents();
 	EXPECT_NE(events.find("\"source\":\"Haunt\",\"monster\""), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, ALevelChangeIsLoadingTimeNotAStall)
+{
+	// Curtis 2026-10-28: "game froze for 591 ms (140 monsters, 0 missiles)" on entering the first floor, and 556 ms on
+	// coming into town. The game doesn't tick through a level change's fades and loading: that's loading time.
+	using namespace std::chrono_literals;
+	TelemetryFrameDrawn();
+	TelemetryTick();
+	TelemetryLoadingStarted("level change");
+	std::this_thread::sleep_for(100ms);
+	TelemetryLoadingFadedOut();
+	std::this_thread::sleep_for(100ms);
+	TelemetryLoadingFadingIn();
+	std::this_thread::sleep_for(100ms);
+	TelemetryLoadingDone();
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find("stalls 0"), std::string::npos) << TelemetryStatsText();
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[load] level change took "), std::string::npos) << log;
+	EXPECT_NE(log.find(" ms: fade out "), std::string::npos) << log;
+
+	// The same wait in play, with no frame drawn, is a freeze.
+	std::this_thread::sleep_for(300ms);
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find("stalls 1"), std::string::npos) << TelemetryStatsText();
 }
 
 TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)

@@ -1054,15 +1054,19 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 			if (gbIsMultiplayer)
 				pfile_write_hero();
 			nthread_ignore_mutex(true);
+			TelemetryLoadingStarted("level change");
 			// POE2 Mashup: quick fades between levels, and no loading screen when the level loads quickly.
 			PaletteFadeOut(LevelChangeFadeSpeed());
+			TelemetryLoadingFadedOut();
 			sound_stop();
 			ShowProgress(GetCustomEvent(event));
 
 			PrepareForFadeIn();
 			LoadPWaterPalette();
+			TelemetryLoadingFadingIn();
 			if (gbRunGame)
 				PaletteFadeIn(LevelChangeFadeSpeed());
+			TelemetryLoadingDone();
 			nthread_ignore_mutex(false);
 			gbGameLoopStartup = true;
 			return;
@@ -1079,6 +1083,7 @@ void RunGameLoop(interface_mode uMsg)
 	nthread_ignore_mutex(true);
 	StartGame(uMsg);
 	TelemetryGameStarted(*MyPlayer, uMsg == WM_DIABLOADGAME);
+	TelemetryLoadingStarted("game start");
 	assert(HeadlessMode || ghMainWnd);
 	EventHandler previousHandler = SetEventHandler(GameEventHandler);
 	run_delta_info();
@@ -1088,7 +1093,9 @@ void RunGameLoop(interface_mode uMsg)
 
 	PrepareForFadeIn();
 	LoadPWaterPalette();
+	TelemetryLoadingFadingIn();
 	PaletteFadeIn(8);
+	TelemetryLoadingDone();
 	InitBackbufferState();
 	RedrawEverything();
 	gbGameLoopStartup = true;

@@ -32,6 +32,7 @@
 #include "options.h"
 #include "pfile.h"
 #include "poe2/autosave.hpp"
+#include "poe2/telemetry.hpp"
 #include "qol/floatingnumbers.h"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -449,6 +450,7 @@ void gamemenu_load_game(bool /*bActivate*/)
 	DrawAndBlit();
 
 	const std::array<SDL_Color, 256> prevPalette = logical_palette;
+	TelemetryLoadingStarted("loading a save");
 #ifndef USE_SDL1
 	DeactivateVirtualGamepad();
 	FreeVirtualGamepadTextures();
@@ -470,7 +472,9 @@ void gamemenu_load_game(bool /*bActivate*/)
 	MyPlayerIsDead = false;
 	RedrawEverything();
 	DrawAndBlit();
+	TelemetryLoadingFadingIn();
 	PaletteFadeIn(8);
+	TelemetryLoadingDone();
 	NewCursor(CURSOR_HAND);
 	interface_msg_pump();
 	SetEventHandler(saveProc);
