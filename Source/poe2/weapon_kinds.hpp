@@ -64,4 +64,12 @@ void LoadWeaponKinds();
 /** @brief The base metadata of a caster weapon that grants a skill, or nullptr. */
 [[nodiscard]] const BaseMeta *GrantingBase(const Item &item);
 
+/** @brief The item level a caster weapon grants its skill at: its POE2 item level, or its base's drop level without one. */
+[[nodiscard]] int GrantingItemLevel(const Item &item);
+/**
+ * @brief Fills player.poe2.granted from the caster weapons in the hero's hands that the hero can use (CalcPlrItemVals
+ * calls it). A weapon whose grant isn't built yet still gets an entry, for its Staff Bolt's level.
+ */
+void CacheGrantedSkills(Player &player);
+
 } // namespace devilution

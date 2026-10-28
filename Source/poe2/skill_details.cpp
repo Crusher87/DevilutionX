@@ -187,7 +187,11 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case SkillKind::Attack:
 		break;
 	case SkillKind::Default:
-		if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt) {
+		if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt && FiresGrantedBolt(player)) {
+			// RollGrantedBoltDamage: the spell base at the weapon's grant level, at GrantedBoltPercent.
+			const int boltLevel = std::max(GrantedBoltLevel(player), 1);
+			AddSpellBase(hit, player, boltLevel, DamageType::Fire, GrantedBoltPercent(player, boltLevel));
+		} else if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt) {
 			// RollStaffBoltDamage: the staff's damage with its bonus, cut down to whole points, plus a little of the hero's Magic.
 			const int magic = player._pMagic * StaffBoltMagicPercent / 100;
 			const int bonus = player._pIBonusDam;

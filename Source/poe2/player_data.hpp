@@ -730,6 +730,16 @@ struct MinionRevives {
 
 struct Poe2PlayerData;
 
+/**
+ * @brief A skill a held caster weapon grants (caster-weapons-plan-v2.md 6.8): its skill (empty while the base's grant
+ * isn't built yet), the level the weapon's item level gives, and the hand (0 left, 1 right).
+ */
+struct GrantedSkill {
+	SkillSlot skill {};
+	uint8_t baseLevel = 0;
+	uint8_t hand = 0;
+};
+
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
 
@@ -758,6 +768,8 @@ struct Poe2PlayerData {
 	uint8_t liftedFlaskCharges = 0;
 	/** @brief Skill gems socketed in the Skills panel. */
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
+	/** @brief The skills the held caster weapons grant, at most one a hand (not saved: CalcPlrItemVals fills it). */
+	std::array<GrantedSkill, 2> granted {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
 	std::array<uint8_t, NumSkillSlots> slotLevels {};
 	/**
@@ -977,6 +989,7 @@ struct Poe2PlayerData {
 		manaFlaskRaw = 0;
 		manaFlaskTicks = 0;
 		skillSlots.fill({});
+		granted = {};
 		slotLevels.fill(1);
 		for (auto &skills : metaSkills)
 			skills.fill({});
@@ -1192,6 +1205,30 @@ struct Poe2PlayerData {
 	[[nodiscard]] int skillLevel(SpellID spell) const { return skillLevel(SkillSlot::ForSpell(spell)); }
 	[[nodiscard]] int skillLevel(WeaponSkill skill) const { return skillLevel(SkillSlot::ForAttack(skill)); }
 	[[nodiscard]] int skillLevel(PersistentSkill skill) const { return skillLevel(SkillSlot::ForPersistent(skill)); }
+
+	/**
+	 * @brief Level a held caster weapon grants the skill at: its item level's gem level plus what gear adds; 0 if no held
+	 * weapon grants it.
+	 */
+	[[nodiscard]] int grantedLevel(SkillSlot skill) const
+	{
+		if (skill.isEmpty())
+			return 0;
+		for (const GrantedSkill &entry : granted) {
+			if (entry.baseLevel > 0 && entry.skill == skill)
+				return std::clamp(entry.baseLevel + ItemSkillLevelBonus(*this, skill), 1, static_cast<int>(MaxGemLevel));
+		}
+		return 0;
+	}
+
+	/** @brief Level the skill is used at: the socketed gem's (skillLevel) if there is one, else a held weapon's grant. */
+	[[nodiscard]] int effectiveLevel(SkillSlot skill) const
+	{
+		const int socketed = skillLevel(skill);
+		return socketed > 0 ? socketed : grantedLevel(skill);
+	}
+	[[nodiscard]] int effectiveLevel(WeaponSkill skill) const { return effectiveLevel(SkillSlot::ForAttack(skill)); }
+	[[nodiscard]] int effectiveLevel(PersistentSkill skill) const { return effectiveLevel(SkillSlot::ForPersistent(skill)); }
 };
 
 } // namespace devilution

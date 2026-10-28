@@ -8,6 +8,8 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/bases.hpp"
+#include "poe2/default_attack.hpp"
+#include "poe2/loot.hpp"
 #include "tables/itemdat.h"
 #include "utils/is_of.hpp"
 
@@ -150,6 +152,31 @@ const BaseMeta *GrantingBase(const Item &item)
 	if (base == nullptr || base->grantedSkill.kind == SkillKind::None)
 		return nullptr;
 	return base;
+}
+
+int GrantingItemLevel(const Item &item)
+{
+	if (const int level = GetPoe2ItemLevel(item); level > 0)
+		return level;
+	return item.IDidx >= 0 && static_cast<size_t>(item.IDidx) < AllItemsList.size() ? AllItemsList[item.IDidx].iMinMLvl : 1;
+}
+
+void CacheGrantedSkills(Player &player)
+{
+	player.poe2.granted = {};
+	if (!gbIsPoe2)
+		return;
+	size_t next = 0;
+	for (const int hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+		const Item &item = player.InvBody[hand];
+		if (item.isEmpty() || !item._iStatFlag || !IsCasterWeapon(item))
+			continue;
+		const BaseMeta *base = ItemBaseMeta(item);
+		GrantedSkill &entry = player.poe2.granted[next++];
+		entry.skill = base != nullptr ? base->grantedSkill : SkillSlot {};
+		entry.baseLevel = static_cast<uint8_t>(GrantedGemLevel(GrantingItemLevel(item)));
+		entry.hand = static_cast<uint8_t>(hand == INVLOC_HAND_LEFT ? 0 : 1);
+	}
 }
 
 } // namespace devilution

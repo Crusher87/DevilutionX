@@ -99,7 +99,7 @@ constexpr uint8_t IllusionDelayTicks = 3;
 
 int GemLevel(const Player &player, PersistentSkill skill)
 {
-	return std::max(player.poe2.skillLevel(skill), 1);
+	return std::max(player.poe2.effectiveLevel(skill), 1);
 }
 
 bool On(const Player &player, PersistentSkill skill)

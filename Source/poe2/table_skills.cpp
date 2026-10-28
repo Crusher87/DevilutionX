@@ -172,12 +172,12 @@ std::vector<SkillZone> Zones;
 
 int GemLevel(const Player &player, WeaponSkill skill)
 {
-	return std::max(player.poe2.skillLevel(skill), 1);
+	return std::max(player.poe2.effectiveLevel(skill), 1);
 }
 
 int CurvePercent(const Player &player, WeaponSkill skill)
 {
-	return GemDamagePercent(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill));
+	return GemDamagePercent(SkillSlot::ForAttack(skill), player.poe2.effectiveLevel(skill));
 }
 
 bool CanHit(const Monster &monster)

@@ -45,7 +45,7 @@ bool OnForMe(const Player &player, PersistentSkill skill)
 
 int GemLevel(const Player &player, PersistentSkill skill)
 {
-	return std::max(player.poe2.skillLevel(skill), 1);
+	return std::max(player.poe2.effectiveLevel(skill), 1);
 }
 
 bool CanHit(const Monster &monster)

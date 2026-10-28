@@ -11,6 +11,7 @@
 #include "items.h"
 #include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/player_data.hpp"
@@ -1118,6 +1119,12 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 	case SkillKind::Persistent:
 		// A sceptre's levels of the minion gems.
 		return lowLife + (IsMinionSkill(skill.persistent()) ? stat(Poe2ItemStat::MinionSkillLevels) : 0);
+	case SkillKind::Default:
+		// The caster weapons' Staff Bolt is a fire spell (caster-weapons-plan-v2.md 6.10); the other default attacks have
+		// no level.
+		if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt)
+			return lowLife + stat(Poe2ItemStat::SpellSkillLevels) + stat(Poe2ItemStat::FireSkillLevels);
+		return lowLife;
 	default:
 		return lowLife;
 	}

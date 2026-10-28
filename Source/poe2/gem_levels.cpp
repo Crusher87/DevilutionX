@@ -259,6 +259,11 @@ int GemCurvePercent(const std::array<int16_t, MaxGemLevel> &steps, int endAt20, 
 	return static_cast<int>(percent + 0.5);
 }
 
+int FireballCurvePercent(int endAt20, int gemLevel)
+{
+	return GemCurvePercent(Fireball.damage, endAt20, gemLevel);
+}
+
 int GemCurveDamagePercent(SkillSlot skill, int gemLevel)
 {
 	const GemCurve curve = GetGemCurve(skill);

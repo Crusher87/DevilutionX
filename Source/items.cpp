@@ -4006,6 +4006,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pIFMaxDam = maxFireDam;
 	player._pILMinDam = minLightDam;
 	player._pILMaxDam = maxLightDam;
+	// POE2 Mashup: the skills the held caster weapons grant, and their levels.
+	CacheGrantedSkills(player);
 
 	CalcPlrBlockFlag(player);
 

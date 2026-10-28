@@ -842,7 +842,7 @@ TEST_F(Poe2ItemBasesTest, NewHeroesStartWithPoe2Bases)
 		{ HeroClass::Warrior, "Shortsword", "Wooden Tower Shield", WeaponSkill::Cleave, DefaultAttack::SwordStrike },
 		{ HeroClass::Rogue, "Crude Bow", "", WeaponSkill::Barrage, DefaultAttack::BowShot },
 		{ HeroClass::Monk, "Fine Wrapped Quarterstaff", "", WeaponSkill::WhirlingStaff, DefaultAttack::StaffStrike },
-		{ HeroClass::Sorcerer, "Focused Pilgrim Staff", "", WeaponSkill::None, DefaultAttack::StaffBolt },
+		{ HeroClass::Sorcerer, "Ashen Staff", "", WeaponSkill::None, DefaultAttack::StaffBolt },
 		{ HeroClass::Bard, "Shortsword", "Glass Shank", WeaponSkill::Flurry, DefaultAttack::SwordStrike },
 	};
 	for (const Start &start : starts) {

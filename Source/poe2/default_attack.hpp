@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string_view>
 #include <utility>
@@ -41,6 +42,24 @@ constexpr int DefaultAttackDamagePercent = 85;
  */
 constexpr int StaffBoltDamagePercent = 80;
 constexpr int StaffBoltMagicPercent = 10;
+
+/**
+ * @brief The caster weapons rework's Staff Bolt (from a new staff or wand, which hit for nothing) is a spell: this
+ * percent of the spell base, as today's bolt is about (caster-weapons-plan-v2.md 6.10 and 7.1), along the table spells'
+ * Fireball curve.
+ */
+constexpr int GrantedStaffBoltPercent = 61;
+/** @brief The granted skills' damage at gem level 20, in percent of level 1: the table spells' Fireball curve. */
+constexpr int GrantedCurveEndAt20 = 312;
+
+/** POE2's character level for each skill gem level, 1 to 20 (research/poe2-gem-levels-and-movement.md; 0 for level 1 read as 1). */
+constexpr std::array<int, 20> Poe2CharacterLevelForGemLevel { 1, 3, 6, 10, 14, 18, 22, 26, 31, 36, 41, 46, 52, 58, 64, 66, 72, 78, 84, 90 };
+
+/**
+ * @brief The gem level a caster weapon grants its skill at, from its item level: how many of POE2's gem levels a hero
+ * of that level could use (1 at item level 1, 4 at 11, 9 at 33, 15 at 65, 18 at 82).
+ */
+[[nodiscard]] int GrantedGemLevel(int itemLevel);
 
 DefaultAttack DefaultAttackFor(const Player &player);
 /** @brief The default attack of a weapon set (0 or 1), whether or not it's the one out. */
@@ -92,6 +111,14 @@ bool FiresStaffBolt(const Player &player);
 bool AttacksAtRange(const Player &player);
 /** @brief Damage of one staff bolt, rolled from the staff's damage. */
 int RollStaffBoltDamage(const Player &player);
+/** @brief Whether the hero's Staff Bolt is the spell of a new staff or wand rather than a legacy staff's or sceptre's. */
+bool FiresGrantedBolt(const Player &player);
+/** @brief The granted Staff Bolt's level: the main caster weapon's grant level, plus gear's spell and fire levels; 0 without one. */
+int GrantedBoltLevel(const Player &player);
+/** @brief The granted Staff Bolt's damage in percent of the spell base at a level: its 61%, the curve and spell damage. */
+int GrantedBoltPercent(const Player &player, int level);
+/** @brief Damage of one granted Staff Bolt: the spell base at its level times GrantedBoltPercent, at least 1. */
+int RollGrantedBoltDamage(const Player &player);
 
 /**
  * @brief Swaps to a weapon set unless it's already out.

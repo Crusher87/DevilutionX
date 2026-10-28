@@ -54,6 +54,8 @@ GemCurve GetGemCurve(SkillSlot skill);
 /** @brief Value at a gem level, in percent of level 1, following the POE2 gem's steps to reach endAt20 (0: the POE2 gem's own total). */
 int GemCurvePercent(const std::array<int16_t, MaxGemLevel> &steps, int endAt20, int gemLevel);
 
+/** @brief Damage at a gem level along POE2's Fireball steps, scaled to reach endAt20 at level 20 (the table spells' curve). */
+int FireballCurvePercent(int endAt20, int gemLevel);
 /** @brief Damage at a gem level, in percent of the damage at level 1: the gem's curve alone. */
 int GemCurveDamagePercent(SkillSlot skill, int gemLevel);
 /**

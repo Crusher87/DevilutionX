@@ -1141,14 +1141,16 @@ bool DoRangeAttack(Player &player)
 	// POE2 Mashup: the weapon's free default attack takes supports, like a skill: extra projectiles fan out.
 	const SkillSlot defaultSkill = player.poe2.activeSkill == WeaponSkill::None ? DefaultSkillSlot(player) : SkillSlot {};
 	const int defaultExtra = !defaultSkill.isEmpty() && arrows == 1 ? SupportExtraProjectileCount(player, defaultSkill) : 0;
-	// POE2 Mashup: a staff's ranged attack is its free Staff Bolt, a fire bolt rolled from the staff's damage.
+	// POE2 Mashup: a staff's ranged attack is its free Staff Bolt, a fire bolt rolled from the staff's damage; a new
+	// staff's or wand's is a spell rolled from Magic and the weapon's grant level.
 	if (FiresStaffBolt(player)) {
+		const bool granted = FiresGrantedBolt(player);
 		if (arrows == 1) {
 			const Direction dir = GetDirection(player.position.tile, player.position.temp);
 			for (int i = 0; i <= defaultExtra; i++) {
 				// 0, -1, 1, -2, 2, ... tiles to the side at the target.
 				const int side = ((i + 1) / 2) * (i % 2 == 0 ? 1 : -1);
-				Missile *bolt = AddMissile(player.position.tile, player.position.temp + Displacement { Left(Left(dir)) } * side, player._pdir, MissileID::Firebolt, TARGET_MONSTERS, player, RollStaffBoltDamage(player), 0);
+				Missile *bolt = AddMissile(player.position.tile, player.position.temp + Displacement { Left(Left(dir)) } * side, player._pdir, MissileID::Firebolt, TARGET_MONSTERS, player, granted ? RollGrantedBoltDamage(player) : RollStaffBoltDamage(player), 0);
 				if (bolt == nullptr)
 					continue;
 				// Drawn as the staff's own small ember, not a Firebolt.

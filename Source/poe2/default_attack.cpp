@@ -15,8 +15,12 @@
 #include "player.h"
 #include "poe2/aim.hpp"
 #include "poe2/bases.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/spell_base.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "tables/itemdat.h"
@@ -26,14 +30,11 @@ namespace devilution {
 
 namespace {
 
-/** POE2's character level for each skill gem level, 1 to 20 (research/poe2-gem-levels-and-movement.md; 0 for level 1 read as 1). */
-constexpr std::array<int, 20> Poe2CharacterLevelForGemLevel { 1, 3, 6, 10, 14, 18, 22, 26, 31, 36, 41, 46, 52, 58, 64, 66, 72, 78, 84, 90 };
-
 const Item *MainWeapon(const Item &left, const Item &right)
 {
 	const Item *weapon = nullptr;
 	for (const Item *item : { &left, &right }) {
-		// A sceptre held with another weapon isn't the main one.
+		// A sceptre held with another weapon isn't the main one: a wand beside a sceptre is.
 		if (!item->isEmpty() && item->_iClass == ICLASS_WEAPON && (weapon == nullptr || IsAnySceptre(*weapon)))
 			weapon = item;
 	}
@@ -45,6 +46,14 @@ DefaultAttack AttackForHands(const Player &player, const Item &left, const Item 
 	const Item *weapon = MainWeapon(left, right);
 	if (weapon == nullptr)
 		return left._itype == ItemType::Shield || right._itype == ItemType::Shield ? DefaultAttack::ShieldBash : DefaultAttack::Punch;
+	// The caster weapons rework (caster-weapons-plan-v2.md 6.6): a new staff or wand casts its Staff Bolt; a new sceptre
+	// has no attack, so the hero punches (beside a shield or focus too); a quarterstaff strikes for every class.
+	if (IsCasterStaff(*weapon) || IsWand(*weapon))
+		return DefaultAttack::StaffBolt;
+	if (IsNewSceptre(*weapon))
+		return DefaultAttack::Punch;
+	if (IsQuarterstaff(*weapon))
+		return DefaultAttack::StaffStrike;
 	switch (weapon->_itype) {
 	case ItemType::Sword:
 		return AllItemsList[weapon->IDidx].iItemId == UITYPE_DAGGER ? DefaultAttack::DaggerStab : DefaultAttack::SwordStrike;
@@ -66,6 +75,16 @@ DefaultAttack AttackForHands(const Player &player, const Item &left, const Item 
 }
 
 } // namespace
+
+int GrantedGemLevel(int itemLevel)
+{
+	int level = 0;
+	for (const int needed : Poe2CharacterLevelForGemLevel) {
+		if (needed <= itemLevel)
+			level++;
+	}
+	return std::max(level, 1);
+}
 
 DefaultAttack DefaultAttackFor(const Player &player)
 {
@@ -239,6 +258,46 @@ int RollStaffBoltDamage(const Player &player)
 	const int base = RandomIntBetween(player._pIMinDam, std::max(player._pIMinDam, player._pIMaxDam));
 	const int bonus = (base * player._pIBonusDam) / 100;
 	return std::max(1, ((base + bonus) * StaffBoltDamagePercent / 100) + (player._pMagic * StaffBoltMagicPercent / 100));
+}
+
+bool FiresGrantedBolt(const Player &player)
+{
+	if (!FiresStaffBolt(player))
+		return false;
+	const Item *weapon = MainWeapon(player.InvBody[INVLOC_HAND_LEFT], player.InvBody[INVLOC_HAND_RIGHT]);
+	return weapon != nullptr && IsCasterWeapon(*weapon);
+}
+
+int GrantedBoltLevel(const Player &player)
+{
+	const Item *weapon = MainWeapon(player.InvBody[INVLOC_HAND_LEFT], player.InvBody[INVLOC_HAND_RIGHT]);
+	if (weapon == nullptr || !IsCasterWeapon(*weapon))
+		return 0;
+	const uint8_t hand = weapon == &player.InvBody[INVLOC_HAND_LEFT] ? 0 : 1;
+	for (const GrantedSkill &entry : player.poe2.granted) {
+		if (entry.baseLevel > 0 && entry.hand == hand) {
+			const int bonus = ItemSkillLevelBonus(player.poe2, SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt)));
+			return std::clamp(entry.baseLevel + bonus, 1, static_cast<int>(MaxGemLevel));
+		}
+	}
+	// A weapon the hero can't use grants nothing; its bolt is level 1.
+	return 1;
+}
+
+int GrantedBoltPercent(const Player &player, int level)
+{
+	// As a Firebolt gem's: the curve, then the spell damage of gear, the tree and Spirit skills. The element's own
+	// damage comes on the hit (UniqueSpellHitPercent), as for every spell.
+	int percent = GrantedStaffBoltPercent * FireballCurvePercent(GrantedCurveEndAt20, level) / 100;
+	percent = percent * UniqueSpellDamagePercent(player, SpellID::Firebolt) / 100;
+	percent = percent * SpiritSpellDamagePercent(player) / 100;
+	return std::max(percent, 1);
+}
+
+int RollGrantedBoltDamage(const Player &player)
+{
+	const int level = std::max(GrantedBoltLevel(player), 1);
+	return std::max(1, RollSpellBase(player, level) * GrantedBoltPercent(player, level) / 100);
 }
 
 bool ReadyWeaponSet(Player &player, uint8_t set)
