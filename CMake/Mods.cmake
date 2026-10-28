@@ -87,6 +87,7 @@ set(poe2_mod
   sfx/poe2/blizzard_shard3.wav
   sfx/poe2/blizzard_shard4.wav
   txtdata/Experience.tsv
+  txtdata/classes/barbarian/starting_loadout.tsv
   txtdata/classes/bard/starting_loadout.tsv
   txtdata/classes/monk/starting_loadout.tsv
   txtdata/classes/rogue/starting_loadout.tsv

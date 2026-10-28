@@ -5,6 +5,6 @@ spellLevel	0
 item0	poe2:one_hand_sword_balanced_shortsword
 item1	poe2:shield_armour_wooden_tower_shield
 item2	IDI_HEAL
-item3	IDI_HEAL
+item3	IDI_MANA
 item4	IDI_NONE
 gold	100

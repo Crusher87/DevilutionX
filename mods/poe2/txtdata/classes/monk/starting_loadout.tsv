@@ -4,7 +4,7 @@ spell	Null
 spellLevel	0
 item0	poe2:quarterstaff_balanced_ash_staff
 item1	IDI_HEAL
-item2	IDI_HEAL
+item2	IDI_MANA
 item3	IDI_NONE
 item4	IDI_NONE
 gold	100
