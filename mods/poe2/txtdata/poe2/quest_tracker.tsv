@@ -1,0 +1,33 @@
+quest	state	stage	title	step
+Q_BUTCHER	active		The Butcher	kill him on {level}
+Q_PWATER	active		Poisoned Water	cleanse the cave off {level}
+Q_PWATER	done	0	Poisoned Water	see Pepin for your reward
+Q_SKELKING	active		King Leoric	find his tomb off {level}
+Q_LTBANNER	active	2	Ogden's Sign	bring the sign to Ogden
+Q_LTBANNER	active		Ogden's Sign	find Snotspill on {level}
+Q_ROCK	active		Magic Rock	find it on {level} for Griswold
+Q_GARBUD	active		Gharbad	deal with him on {level}
+Q_MUSHROOM	active	4	Black Mushroom	take the mushroom to Adria
+Q_MUSHROOM	active	5	Black Mushroom	get a demon brain for Pepin
+Q_MUSHROOM	active	6	Black Mushroom	take the brain to Pepin
+Q_MUSHROOM	active	7	Black Mushroom	take the elixir to Adria
+Q_MUSHROOM	active		Black Mushroom	find a black mushroom on {level}
+Q_BLOOD	active		Valor	place the blood stones on {level}
+Q_SCHAMB	active		Chamber of Bone	explore it off {level}
+Q_BLIND	active		Halls of the Blind	search the halls on {level}
+Q_ZHAR	active		Zhar the Mad	defeat him on {level}
+Q_ANVIL	active		Anvil of Fury	find it on {level} for Griswold
+Q_WARLORD	active		Warlord of Blood	slay him on {level}
+Q_VEIL	active		Lachdanan	bring him the Golden Elixir
+Q_BETRAYER	active	2	Lazarus	take the red portal on {level}
+Q_BETRAYER	active	3	Lazarus	take the red portal on {level}
+Q_BETRAYER	active		Lazarus	slay him
+Q_BETRAYER	done	7	Lazarus	tell Cain he is dead
+Q_DIABLO	active		Diablo	slay him on level 16
+Q_FARMER	active		Farmer's Orchard	use the rune bomb on the hive
+Q_JERSEY	active		Jersey's Jersey	use the rune bomb on the hive
+Q_GIRL	active		Little Girl	find Theodore in {level}
+Q_DEFILER	active		The Defiler	slay her in {level}
+Q_GRAVE	active		Grave Matters	use the map at the graves
+Q_CORNSTN	active		Cornerstone	find it in {level}
+Q_NAKRUL	active		Na-Krul	defeat him in {level}

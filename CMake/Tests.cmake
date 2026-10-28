@@ -47,6 +47,7 @@ set(tests
   poe2_hud_globes_test
   poe2_overhead_bars_test
   poe2_corner_map_test
+  poe2_quest_tracker_test
   poe2_jewels_test
   poe2_level_census_test
   poe2_level_exits_test

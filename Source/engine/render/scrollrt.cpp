@@ -86,6 +86,7 @@
 #include "poe2/hud_minions.hpp"
 #include "poe2/corner_map.hpp"
 #include "poe2/overhead_bars.hpp"
+#include "poe2/quest_tracker.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
@@ -1630,6 +1631,8 @@ void DrawView(const Surface &out, Point startPosition)
 	// POE2 Mashup: the corner map, under the open windows.
 	if (gbIsPoe2)
 		DrawPoe2CornerMap(out.subregionY(0, gnViewportHeight));
+	if (gbIsPoe2)
+		DrawPoe2QuestTracker(out.subregionY(0, gnViewportHeight));
 	// POE2 Mashup: the effects layer lines up with this frame's view.
 	TelemetryDrawStep("finding effects to draw");
 	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);

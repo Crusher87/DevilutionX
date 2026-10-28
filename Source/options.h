@@ -694,6 +694,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryInt<int> mapZoom;
 	/** @brief Names next to the map's markers (POE2 Mashup). */
 	OptionEntryBoolean mapPoiNames;
+	/** @brief Active quests and their next steps under the corner map (POE2 Mashup). */
+	OptionEntryBoolean enableQuestTracking;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */

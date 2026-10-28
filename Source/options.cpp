@@ -913,6 +913,7 @@ GameplayOptions::GameplayOptions()
     , landscapeTransparency("Landscape Transparency", OptionEntryFlags::None, N_("Landscape Transparency"), N_("POE2 mode: how see-through the explored floor under the map's lines is, in percent. 100 hides it. Also used by the Tab map."), 50, { 0, 25, 50, 75, 100 })
     , mapZoom("Map Zoom", OptionEntryFlags::None, N_("Map Zoom"), N_("POE2 mode: how close the corner map is. + and - change it while the Tab map is closed."), 1, { 1, 2, 3, 4 })
     , mapPoiNames("Point of Interest Names", OptionEntryFlags::None, N_("Point of Interest Names"), N_("POE2 mode: names next to the map's markers for stairs, portals, shrines, strongboxes and unique monsters."), true)
+    , enableQuestTracking("Enable Quest Tracking", OptionEntryFlags::None, N_("Enable Quest Tracking"), N_("POE2 mode: your quests under way, each with its next step, in a short list under the corner map. Hidden with the corner map."), true)
     , numHealPotionPickup("Heal Potion Pickup", OptionEntryFlags::None, N_("Heal Potion Pickup"), N_("Number of Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numFullHealPotionPickup("Full Heal Potion Pickup", OptionEntryFlags::None, N_("Full Heal Potion Pickup"), N_("Number of Full Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numManaPotionPickup("Mana Potion Pickup", OptionEntryFlags::None, N_("Mana Potion Pickup"), N_("Number of Mana potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
@@ -964,6 +965,7 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&landscapeTransparency,
 		&mapZoom,
 		&mapPoiNames,
+		&enableQuestTracking,
 		&autoRefillBelt,
 		&autoEquipWeapons,
 		&autoEquipArmor,
