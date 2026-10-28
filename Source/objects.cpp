@@ -4303,6 +4303,9 @@ void ProcessObjects()
 		default:
 			break;
 		}
+		// POE2 Mashup: an open strongbox's guards step out one at a time.
+		if (object.IsChest())
+			UpdateFloorChest(object);
 		if (!object._oAnimFlag)
 			continue;
 

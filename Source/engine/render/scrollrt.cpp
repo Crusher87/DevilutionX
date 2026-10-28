@@ -80,6 +80,7 @@
 #include "plrmsg.h"
 #include "engine/palette.h"
 #include "poe2/camera_shake.hpp"
+#include "poe2/floor_chests.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/hud_minions.hpp"
@@ -691,10 +692,14 @@ void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePositi
 
 	const Point screenPosition = targetBufferPosition + objectToDraw.getRenderingOffset(sprite, tilePosition);
 
+	// POE2 Mashup: a strongbox stands out, drawn bright even in the dark with a gold edge.
+	const bool strongbox = IsClosedStrongbox(objectToDraw);
 	if (&objectToDraw == ObjectUnderCursor) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsObject, screenPosition, sprite);
+	} else if (strongbox) {
+		ClxDrawOutlineSkipColorZero(out, PAL16_ORANGE + 2, screenPosition, sprite);
 	}
-	if (objectToDraw.applyLighting) {
+	if (objectToDraw.applyLighting && !strongbox) {
 		ClxDrawLight(out, screenPosition, sprite, lightTableIndex);
 	} else {
 		ClxDraw(out, screenPosition, sprite);

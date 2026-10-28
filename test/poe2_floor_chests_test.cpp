@@ -38,6 +38,7 @@ TEST_F(Poe2FloorChestsTest, KindRoundTrips)
 	SetFloorChestKind(chest_, FloorChestKind::Strongbox, 5);
 	EXPECT_EQ(GetFloorChestKind(chest_), FloorChestKind::Strongbox);
 	EXPECT_EQ(chest_._oVar6, 5);
+	EXPECT_EQ(chest_._oVar3, 0);
 }
 
 TEST_F(Poe2FloorChestsTest, LeftoverValuesAreNotAKind)
@@ -69,8 +70,27 @@ TEST_F(Poe2FloorChestsTest, NamesShowTheirRarity)
 	InfoString = std::string_view("Chest");
 	SetFloorChestKind(chest_, FloorChestKind::Strongbox, 4);
 	DescribeFloorChest(chest_);
-	EXPECT_EQ(InfoColor, UiFlags::ColorWhite);
+	EXPECT_EQ(InfoColor, UiFlags::ColorGold);
 	EXPECT_EQ(InfoString.str(), "Strongbox");
+}
+
+TEST_F(Poe2FloorChestsTest, ClosedStrongboxStandsOut)
+{
+	chest_.selectionRegion = SelectionRegion::Bottom;
+	EXPECT_FALSE(IsClosedStrongbox(chest_));
+	SetFloorChestKind(chest_, FloorChestKind::Strongbox, 4);
+	EXPECT_TRUE(IsClosedStrongbox(chest_));
+	chest_.selectionRegion = SelectionRegion::None;
+	EXPECT_FALSE(IsClosedStrongbox(chest_));
+}
+
+TEST_F(Poe2FloorChestsTest, ClosedStrongboxBringsNoGuards)
+{
+	SetFloorChestKind(chest_, FloorChestKind::Strongbox, 4);
+	for (int tick = 0; tick < 100; tick++)
+		UpdateFloorChest(chest_);
+	EXPECT_EQ(chest_._oVar6, 4);
+	EXPECT_EQ(chest_._oVar3, 0);
 }
 
 TEST_F(Poe2FloorChestsTest, DiabloModeLeavesChestsAlone)
