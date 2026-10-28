@@ -249,7 +249,7 @@ void SpellHitMonster(const Player &player, Monster &monster, DamageType type, Fi
 		M_StartHit(monster, player, dealt.raw());
 }
 
-void InflictTableBleed(const Player &player, Monster &monster, Fixed26_6 total, int ticks)
+void InflictTableBleed(const Player &player, Monster &monster, WeaponSkill skill, Fixed26_6 total, int ticks)
 {
 	Poe2MonsterState &state = monster.poe2;
 	ticks = std::clamp(ticks, 1, 255);
@@ -257,6 +257,7 @@ void InflictTableBleed(const Player &player, Monster &monster, Fixed26_6 total, 
 	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
+		state.bleedSkill = skill;
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(ticks, state.bleedTicks));
 }
@@ -279,7 +280,7 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 	if ((data.flags & TF_ArmourBreak) != 0 && alive)
 		BreakMonsterArmour(monster, &player);
 	if ((data.flags & TF_Bleed) != 0 && alive)
-		InflictTableBleed(player, monster, FixedDamage(player, data), 80);
+		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), 80);
 	if (!alive)
 		return;
 	// Elemental attacks: part of the hit lands again as the skill's element.
@@ -558,11 +559,11 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		break;
 	case TableCurse::Haunt:
 		state.hauntTicks = ticks;
-		InflictTableBleed(player, monster, FixedDamage(player, data), ticks);
+		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), ticks);
 		break;
 	case TableCurse::Locust:
 		state.locustTicks = ticks;
-		InflictTableBleed(player, monster, FixedDamage(player, data), ticks);
+		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), ticks);
 		break;
 	default:
 		break;
@@ -1258,6 +1259,7 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 		target.bleedTicks = std::max(target.bleedTicks, ticks);
 		target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick);
 		target.bleedSource = state.bleedSource;
+		target.bleedSkill = state.bleedSkill;
 		other->tag(player);
 		AddVisualEffect(other->position.tile, MissileGraphicID::BloodHit);
 	}

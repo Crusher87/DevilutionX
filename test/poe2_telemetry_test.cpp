@@ -8,12 +8,16 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tree_telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "spells.h"
+#include "storm/storm_net.hpp"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
 #include "utils/paths.h"
@@ -225,6 +229,78 @@ TEST_F(Poe2TelemetryTest, GameEndWritesSummaryAndHistory)
 TEST_F(Poe2TelemetryTest, SkillDamageStartsEmpty)
 {
 	EXPECT_EQ(TelemetrySkillDamageText(), "damage by skill: none yet");
+}
+
+/** @brief A zombie in the first monster slot, with this much life. */
+Monster &TestMonster(int life)
+{
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	Monster &monster = Monsters[0];
+	monster = {};
+	monster.levelType = 0;
+	monster.uniqueType = UniqueMonsterType::None;
+	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(life);
+	return monster;
+}
+
+TEST_F(Poe2TelemetryTest, SkillsAreCreditedWithEachHitsFullDamage)
+{
+	// Curtis 2026-10-28: overkill hid how hard Firebolt and Holy Bolt hit; the life taken is counted beside it.
+	const Monster &monster = TestMonster(10);
+	TelemetrySkillUsed(*MyPlayer, "Firebolt", 5, 2);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(30), Fixed26_6::fromInt(10));
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(10), Fixed26_6::fromInt(40));
+	const std::string text = TelemetrySkillDamageText();
+	EXPECT_NE(text.find("Firebolt gem 2 40 (2 hits, 20 average, 0 kills, 20 life removed"), std::string::npos) << text;
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"skill\":\"Firebolt gem 2\",\"damage\":40,\"lifeRemoved\":20"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, RunesAndCursesAreCreditedToTheirOwnSkill)
+{
+	const Monster &monster = TestMonster(100);
+	TelemetrySkillUsed(*MyPlayer, "Spark", 5, 1);
+	{
+		// A rune that goes off long after it was laid, while the last skill used was another.
+		const TelemetrySkillCreditScope rune("Rune of Fire", 3);
+		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(20), Fixed26_6::fromInt(100));
+		// A source named for the hit still comes first.
+		TelemetryNoteDamageSource("minions");
+		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(1), Fixed26_6::fromInt(80));
+	}
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(7), Fixed26_6::fromInt(79));
+	const std::string text = TelemetrySkillDamageText();
+	EXPECT_NE(text.find("Rune of Fire gem 3 20 (1 hits"), std::string::npos) << text;
+	EXPECT_NE(text.find("minions 1 (1 hits"), std::string::npos) << text;
+	EXPECT_NE(text.find("Spark gem 1 7 (1 hits"), std::string::npos) << text;
+}
+
+TEST_F(Poe2TelemetryTest, HauntsBleedingIsCreditedToHaunt)
+{
+	// Curtis 2026-10-28: Haunt's and Locust Swarm's damage over time was logged as "bleeding".
+	Monster &monster = TestMonster(100);
+	MyPlayerId = 0;
+	// The bleeding's damage is sent to the game.
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	monster.poe2.bleedSource = 0;
+	monster.poe2.bleedSkill = WeaponSkill::Haunt;
+	monster.poe2.bleedDamagePerTick = Fixed26_6::fromInt(2).raw();
+	monster.poe2.bleedTicks = 8;
+	for (int i = 0; i < 3; i++)
+		ProcessUniqueMonsterAilments(monster);
+	// A bleed from anything else is still bleeding.
+	monster.poe2.bleedSkill = WeaponSkill::None;
+	ProcessUniqueMonsterAilments(monster);
+	const std::string text = TelemetrySkillDamageText();
+	EXPECT_EQ(text.find("bleeding 6"), std::string::npos) << text;
+	EXPECT_NE(text.find("Haunt 6 (3 hits"), std::string::npos) << text;
+	EXPECT_NE(text.find("bleeding 2 (1 hits"), std::string::npos) << text;
+	// Summed as damage over time, not a line per tick.
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"source\":\"Haunt\",\"monster\""), std::string::npos) << events;
 }
 
 TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)

@@ -104,6 +104,27 @@ void TelemetryHeroAttackRoll(const Player &player, int hitChance, bool hit);
 void TelemetryMonsterHitByHero(const Player &player, bool lightStunned);
 /** @brief Names what is about to damage a monster (minions, ignite, a herald); otherwise the last skill gets the credit. */
 void TelemetryNoteDamageSource(std::string_view source);
+/**
+ * @brief While one is alive, damage to monsters that no source was named for (TelemetryNoteDamageSource) goes to this
+ * skill at this gem level, rather than to the last skill used: a rune that went off long after it was laid, or a curse's
+ * damage over time. With overTime set, the damage is summed as damage over time, like an ignite.
+ */
+class TelemetrySkillCreditScope {
+public:
+	TelemetrySkillCreditScope(std::string_view skill, int gemLevel, bool overTime = false);
+	~TelemetrySkillCreditScope();
+	TelemetrySkillCreditScope(const TelemetrySkillCreditScope &) = delete;
+	TelemetrySkillCreditScope &operator=(const TelemetrySkillCreditScope &) = delete;
+
+private:
+	bool active_ = false;
+	std::string previous_;
+	bool previousOverTime_ = false;
+};
+/**
+ * @brief A hit or tick of damage on a monster. The full damage is what the hit was worth; the life it took away (no
+ * more than lifeBefore) is counted on its own, so overkill doesn't hide how hard a skill hits.
+ */
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);
 void TelemetryMonsterKilled(const Monster &monster);
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);

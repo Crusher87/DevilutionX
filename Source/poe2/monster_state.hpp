@@ -9,6 +9,8 @@
 
 namespace devilution {
 
+enum class WeaponSkill : uint8_t;
+
 struct Poe2MonsterState {
 	uint8_t igniteTicks = 0;
 	int8_t igniteSource = -1;
@@ -34,6 +36,8 @@ struct Poe2MonsterState {
 	uint8_t bleedTicks = 0;
 	int8_t bleedSource = -1;
 	int32_t bleedDamagePerTick = 0;
+	/** @brief The table skill that caused the bleeding (Haunt, Locust Swarm...), or None, for the play log's credit only. */
+	WeaponSkill bleedSkill {};
 	/** @brief Exposure: takes more damage of one element (a DamageType). */
 	uint8_t exposureTicks = 0;
 	uint8_t exposureElement = 0;

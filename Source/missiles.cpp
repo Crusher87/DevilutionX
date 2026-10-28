@@ -651,6 +651,9 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 				MinionShotHits = missile.poe2.minionShot;
 				if (MinionShotHits)
 					TelemetryNoteDamageSource("minions");
+				std::optional<TelemetrySkillCreditScope> credit;
+				if (missile.poe2.creditSpell != SpellID::Invalid && missile.sourcePlayer() == MyPlayer)
+					credit.emplace(GetSpellData(missile.poe2.creditSpell).sNameText, MyPlayer->poe2.skillLevel(missile.poe2.creditSpell));
 				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, supportedMin, supportedMax, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
 				if (MinionShotHits)
 					TelemetryNoteDamageSource({});
@@ -844,6 +847,28 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 
 	// remember what target CheckMissileCol was checked against
 	missile.lastCollisionTargetHash = tileTargetHash;
+}
+
+/** @brief The spell the hits of a missile being added are credited to in the play log (see Poe2MissileData::creditSpell). */
+SpellID NewMissileCreditSpell = SpellID::Invalid;
+
+/** @brief The spell that lays a rune missile. */
+SpellID RuneSpell(MissileID rune)
+{
+	switch (rune) {
+	case MissileID::RuneOfFire:
+		return SpellID::RuneOfFire;
+	case MissileID::RuneOfLight:
+		return SpellID::RuneOfLight;
+	case MissileID::RuneOfNova:
+		return SpellID::RuneOfNova;
+	case MissileID::RuneOfImmolation:
+		return SpellID::RuneOfImmolation;
+	case MissileID::RuneOfStone:
+		return SpellID::RuneOfStone;
+	default:
+		return SpellID::Invalid;
+	}
 }
 
 void AddRune(Missile &missile, Point dst, MissileID missileID)
@@ -3192,6 +3217,8 @@ Missile *AddMissile(WorldTilePosition src, WorldTilePosition dst, Direction midi
 	missile._miDrawFlag = missileData.isDrawn();
 	missile._mlid = NO_LIGHT;
 	missile.lastCollisionTargetHash = 0;
+	// Set before the missile's add function, as some (a rune's fire burst) hit as they're added.
+	missile.poe2.creditSpell = NewMissileCreditSpell;
 
 	if (!missile.IsTrap() && micaster == TARGET_PLAYERS) {
 		const Monster &monster = Monsters[id];
@@ -3586,7 +3613,10 @@ void ProcessRune(Missile &missile)
 		missile._miDelFlag = true;
 		AddUnLight(missile._mlid);
 
+		// The burst's hits are the rune's, not those of whatever was used last (the play log's credit).
+		NewMissileCreditSpell = missile.IsTrap() ? SpellID::Invalid : RuneSpell(missile._mitype);
 		AddMissile(position, position, dir, static_cast<MissileID>(missile.var1), TARGET_BOTH, missile._misource, missile._midam, missile._mispllvl);
+		NewMissileCreditSpell = SpellID::Invalid;
 	}
 
 	PutMissile(missile);
@@ -3679,12 +3709,15 @@ void ProcessNovaCommon(Missile &missile, MissileID projectileType)
 	}
 
 	constexpr std::array<WorldTileDisplacement, 9> quarterRadius = { { { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 }, { 3, 4 }, { 2, 4 }, { 1, 4 }, { 0, 4 } } };
+	// A rune's nova passes the rune's credit on to its projectiles.
+	NewMissileCreditSpell = missile.poe2.creditSpell;
 	for (const WorldTileDisplacement quarterOffset : quarterRadius) {
 		// This ends up with two missiles targeting offsets 4,0, 0,4, -4,0, 0,-4.
 		const std::array<WorldTileDisplacement, 4> offsets { quarterOffset, quarterOffset.flipXY(), quarterOffset.flipX(), quarterOffset.flipY() };
 		for (const WorldTileDisplacement offset : offsets)
 			AddMissile(src, src + offset, dir, projectileType, en, id, dam, missile._mispllvl);
 	}
+	NewMissileCreditSpell = SpellID::Invalid;
 	missile.duration--;
 	if (missile.duration == 0)
 		missile._miDelFlag = true;

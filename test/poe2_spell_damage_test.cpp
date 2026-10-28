@@ -9,6 +9,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "levels/gendung.h"
+#include "lighting.h"
 #include "missiles.h"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
@@ -245,6 +246,47 @@ TEST_F(Poe2SpellDamageTest, ArcingSparksBesideAWallTurnAlongIt)
 			dPiece[x][y] = 0;
 	}
 	SOLData[1] = TileProperties::None;
+}
+
+TEST_F(Poe2SpellDamageTest, ARunesBurstIsCreditedToTheRune)
+{
+	// Play log 2026-10-28: a rune that went off after 3 s was credited to whatever was cast last.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	Missiles.clear();
+	Missile &rune = Missiles.emplace_back();
+	rune._mitype = MissileID::RuneOfNova;
+	rune._micaster = TARGET_MONSTERS;
+	rune._misource = player.getId();
+	rune._mispllvl = 1;
+	rune._mlid = NO_LIGHT;
+	rune.var1 = static_cast<int>(MissileID::Nova);
+	rune.position.tile = player.position.tile;
+	// The hero steps on it.
+	dPlayer[player.position.tile.x][player.position.tile.y] = static_cast<int8_t>(player.getId() + 1);
+	ProcessRune(rune);
+	dPlayer[player.position.tile.x][player.position.tile.y] = 0;
+	ASSERT_TRUE(rune._miDelFlag);
+	ASSERT_EQ(Missiles.size(), 2U);
+	Missile &nova = Missiles.back();
+	ASSERT_EQ(nova._mitype, MissileID::Nova);
+	EXPECT_EQ(nova.poe2.creditSpell, SpellID::RuneOfNova);
+	// The play log's credit only: the burst gets none of the rune's supports.
+	EXPECT_EQ(nova.poe2.skillKind, 0);
+	// The nova's bolts carry it on.
+	ProcessNova(nova);
+	int bolts = 0;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype != MissileID::NovaBall)
+			continue;
+		bolts++;
+		EXPECT_EQ(missile.poe2.creditSpell, SpellID::RuneOfNova);
+	}
+	EXPECT_GT(bolts, 0);
+	// A missile cast the usual way has none.
+	const Missile *cast = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::NovaBall, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(cast, nullptr);
+	EXPECT_EQ(cast->poe2.creditSpell, SpellID::Invalid);
 }
 
 TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)
