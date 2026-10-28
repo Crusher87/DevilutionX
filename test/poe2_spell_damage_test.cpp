@@ -206,6 +206,47 @@ TEST_F(Poe2SpellDamageTest, ChainLightningBoltsCarryTheirHitAndCurve)
 	EXPECT_EQ(bolts, 1);
 }
 
+TEST_F(Poe2SpellDamageTest, ArcingSparksBesideAWallTurnAlongIt)
+{
+	// Play log 2026-10-28: cast beside a wall, most sparks went one tile into it and were gone.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	SOLData[0] = TileProperties::None;
+	SOLData[1] = TileProperties::Solid | TileProperties::BlockLight | TileProperties::BlockMissile;
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	// A wall along the hero's side: the spark's aim, east, is open; its turns to the north-east are not.
+	const Point hero = player.position.tile;
+	const Direction aim = GetDirection(hero, { 45, 40 });
+	for (int step = -6; step <= 6; step++) {
+		dPiece[(hero + Left(aim)).x + step][(hero + Left(aim)).y - step] = 1;
+		dPiece[(hero + Left(aim) + Left(aim)).x + step][(hero + Left(aim) + Left(aim)).y - step] = 1;
+	}
+	ASSERT_TRUE(IsMissileBlockedByTile(hero + Left(aim)));
+	ASSERT_FALSE(IsMissileBlockedByTile(hero + aim));
+
+	Missiles.clear();
+	SetRndSeed(7);
+	ExecuteSkillCast(player, WeaponSkill::Spark, { 45, 40 });
+	int sparks = 0;
+	for (Missile &missile : Missiles) {
+		if (missile._mitype != MissileID::ChargedBolt)
+			continue;
+		sparks++;
+		for (int tick = 0; tick < 24 && !missile._miDelFlag; tick++)
+			ProcessChargedBolt(missile);
+		EXPECT_FALSE(missile._miDelFlag) << "spark " << sparks << " went into the wall at " << static_cast<int>(missile.position.tile.x) << "," << static_cast<int>(missile.position.tile.y);
+	}
+	EXPECT_GE(sparks, 6);
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	SOLData[1] = TileProperties::None;
+}
+
 TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)
 {
 	// Audit B6: the weapon skills that fire Charged Bolt and Firebolt missiles keep their own percent and curve.

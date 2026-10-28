@@ -4442,6 +4442,18 @@ void ProcessChargedBolt(Missile &missile)
 				break;
 			}
 
+			// POE2 Mashup: a hero's bolt that would turn straight into a wall turns along the open tiles instead (Arcing
+			// Sparks cast beside a wall lost most of its sparks on their first step).
+			if (UsesPoe2SpellRule(missile) && IsMissileBlockedByTile(missile.position.tile + md)) {
+				const auto aim = static_cast<Direction>(missile.var2);
+				for (const Direction open : { aim, Left(aim), Right(aim) }) {
+					if (!IsMissileBlockedByTile(missile.position.tile + open)) {
+						md = open;
+						break;
+					}
+				}
+			}
+
 			missile._mirnd = (missile._mirnd + 1) & 0xF;
 			UpdateMissileVelocity(missile, missile.position.tile + md, 8);
 			missile.var3 = 16;
