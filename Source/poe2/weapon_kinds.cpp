@@ -1,12 +1,15 @@
 #include "poe2/weapon_kinds.hpp"
 
+#include <functional>
 #include <string_view>
 #include <vector>
 
 #include "game_mode.hpp"
 #include "items.h"
+#include "player.h"
 #include "poe2/bases.hpp"
 #include "tables/itemdat.h"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 
@@ -72,6 +75,12 @@ WeaponKind WeaponKindOf(const Item &item)
 {
 	if (item.isEmpty())
 		return WeaponKind::None;
+	if (item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size()) {
+		// An item without a row (made by hand): its type says what it was before the rework.
+		if (item._itype == ItemType::Staff)
+			return WeaponKind::LegacyStaff;
+		return IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow) ? WeaponKind::Martial : WeaponKind::None;
+	}
 	return WeaponKindOf(item.IDidx);
 }
 
@@ -122,6 +131,15 @@ bool IsMartialStaff(const Item &item)
 {
 	const WeaponKind kind = WeaponKindOf(item);
 	return kind == WeaponKind::Quarterstaff || kind == WeaponKind::LegacyStaff;
+}
+
+bool HoldsMartialStaff(const Player &player)
+{
+	for (const Item &item : { std::cref(player.InvBody[INVLOC_HAND_LEFT]), std::cref(player.InvBody[INVLOC_HAND_RIGHT]) }) {
+		if (item._iStatFlag && IsMartialStaff(item))
+			return true;
+	}
+	return false;
 }
 
 const BaseMeta *GrantingBase(const Item &item)

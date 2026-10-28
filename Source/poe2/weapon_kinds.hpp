@@ -16,6 +16,7 @@ namespace devilution {
 
 struct Item;
 struct BaseMeta;
+struct Player;
 
 enum class WeaponKind : uint8_t {
 	/** Not a weapon. */
@@ -56,6 +57,9 @@ void LoadWeaponKinds();
 [[nodiscard]] bool IsLegacyCaster(const Item &item);
 /** @brief A staff that fights: a quarterstaff or a legacy staff. */
 [[nodiscard]] bool IsMartialStaff(const Item &item);
+
+/** @brief Whether the hero holds a martial staff they can use, as isHoldingItem(ItemType::Staff) asked before the rework. */
+[[nodiscard]] bool HoldsMartialStaff(const Player &player);
 
 /** @brief The base metadata of a caster weapon that grants a skill, or nullptr. */
 [[nodiscard]] const BaseMeta *GrantingBase(const Item &item);

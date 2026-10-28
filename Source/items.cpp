@@ -3411,7 +3411,7 @@ void CalcPlrDamageMod(Player &player)
 		break;
 	case HeroClass::Monk:
 		// POE2 Mashup: The Sisters' Gift lets the bow take the staff's bonus.
-		if (player.isHoldingItem(ItemType::Staff) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())
+		if (HoldsMartialStaff(player) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())
 		    || (gbIsPoe2 && player.isHoldingItem(ItemType::Bow) && PassiveTotal(player, PassiveStat::StaffAppliesToBow) > 0)) {
 			player._pDamageMod = strDexMod / 150;
 		} else {
@@ -3546,7 +3546,7 @@ void CalcPlrBlockFlag(Player &player)
 	player._pBlockFlag = false;
 
 	if (player._pClass == HeroClass::Monk) {
-		if (player.isHoldingItem(ItemType::Staff)) {
+		if (HoldsMartialStaff(player)) {
 			player._pBlockFlag = true;
 			player._pIFlags |= ItemSpecialEffect::FastBlock;
 		} else if ((leftHandItem.isEmpty() && rightHandItem.isEmpty()) || (leftHandItem._iClass == ICLASS_WEAPON && leftHandItem._iLoc != ILOC_TWOHAND && rightHandItem.isEmpty()) || (rightHandItem._iClass == ICLASS_WEAPON && rightHandItem._iLoc != ILOC_TWOHAND && leftHandItem.isEmpty())) {
@@ -5325,7 +5325,7 @@ bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int a
 			const std::optional<Poe2UniquePick> unique = PickPoe2Unique(itemLevel, poe2ItemLevel, LootSource::Rare);
 			if (!unique)
 				break;
-			if (unique->belt != BeltUniqueId::None || !GambleFamilyHas(family, AllItemsList[unique->base].itype))
+			if (unique->belt != BeltUniqueId::None || !GambleFamilyHas(family, unique->base))
 				continue;
 			idx = unique->base;
 			uidOffset = unique->offset;
@@ -5335,7 +5335,7 @@ bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int a
 			rarity = ITEM_QUALITY_RARE;
 	}
 	if (!idx)
-		idx = PickPoe2Weighted(areaLevel, [family](const ItemData &data) { return IsPoe2Equipment(data) && GambleFamilyHas(family, data.itype); });
+		idx = PickPoe2Weighted(areaLevel, [family](const ItemData &data) { return IsPoe2Equipment(data) && GambleFamilyHas(family, static_cast<int>(&data - AllItemsList.data())); });
 	if (!idx)
 		return false;
 	item = {};

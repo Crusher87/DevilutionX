@@ -86,7 +86,7 @@ TEST_F(Poe2EconomyTest, GamblesGiveItemsOfTheFamily)
 		for (int tries = 0; tries < 20; tries++) {
 			Item item;
 			ASSERT_TRUE(MakeGambleItem(*MyPlayer, item, family, 20)) << GambleFamilyName(family);
-			EXPECT_TRUE(GambleFamilyHas(family, item._itype)) << GambleFamilyName(family) << ": " << item.getName().str();
+			EXPECT_TRUE(GambleFamilyHas(family, item.IDidx)) << GambleFamilyName(family) << ": " << item.getName().str();
 			EXPECT_TRUE(item._iIdentified);
 		}
 	}

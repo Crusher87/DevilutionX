@@ -220,7 +220,8 @@ uint64_t RawSkillUseTime(const Player &player, SkillSlot skill, bool castAnimati
 bool IsWeapon(const Item &item)
 {
 	// POE2 Mashup: a sceptre casts the staff bolt and has no attacks per second; held alone it leaves bare hands' rate.
-	if (gbIsPoe2 && IsAnySceptre(item))
+	// A caster weapon of the rework casts its granted skill instead of attacking.
+	if (gbIsPoe2 && (IsAnySceptre(item) || IsCasterWeapon(item)))
 		return false;
 	return !item.isEmpty() && IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff);
 }

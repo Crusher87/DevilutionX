@@ -30,6 +30,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "utils/is_of.hpp"
@@ -92,11 +93,11 @@ ItemType HeldWeaponType(const Player &player)
 	return weapon != nullptr ? weapon->_itype : ItemType::None;
 }
 
-/** @brief Two-handed melee weapons, staves included (they take the tree's two-handed damage too). */
+/** @brief Two-handed melee weapons, martial staves included (they take the tree's two-handed damage too); a caster staff isn't one. */
 bool HoldsTwoHandMelee(const Player &player)
 {
 	const Item *weapon = HeldWeapon(player);
-	return weapon != nullptr && weapon->_iLoc == ILOC_TWOHAND && weapon->_itype != ItemType::Bow;
+	return weapon != nullptr && weapon->_iLoc == ILOC_TWOHAND && weapon->_itype != ItemType::Bow && !IsCasterStaff(*weapon);
 }
 
 /** @brief A Frenzy Charge from a passive rule: up to two, for 4 seconds, keeping a longer one from a skill. */
@@ -178,9 +179,9 @@ int HiveBridge(const Player &player)
 	int melee;
 	if (weapon == nullptr)
 		melee = passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage);
-	else if (weapon->_itype == ItemType::Bow)
+	else if (weapon->_itype == ItemType::Bow || IsCasterWeapon(*weapon))
 		melee = 0;
-	else if (weapon->_itype == ItemType::Staff)
+	else if (IsMartialStaff(*weapon))
 		melee = passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage) + passive(PassiveStat::TwoHandDamage);
 	else
 		melee = passive(PassiveStat::MeleeDamage) + passive(weapon->_iLoc == ILOC_TWOHAND ? PassiveStat::TwoHandDamage : PassiveStat::OneHandDamage);
@@ -592,8 +593,8 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	if (TryPutDownRisen(player, monster))
 		return damage;
 	state.attacks++;
-	const ItemType weapon = HeldWeaponType(player);
-	const bool staffHit = !ranged && weapon == ItemType::Staff;
+	const Item *heldWeapon = HeldWeapon(player);
+	const bool staffHit = !ranged && heldWeapon != nullptr && IsMartialStaff(*heldWeapon);
 	const bool wasShocked = monster.poe2.shockTicks > 0;
 
 	const int generalPercent = GeneralDamagePercent(player);
@@ -630,7 +631,7 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		raw = raw * (100 + more) / 100;
 		state.swapStrikes--;
 	}
-	if (const int seconds = Rule(player, UniqueRule::UnarmedHitStacks); seconds > 0 && !ranged && weapon == ItemType::None) {
+	if (const int seconds = Rule(player, UniqueRule::UnarmedHitStacks); seconds > 0 && !ranged && heldWeapon == nullptr) {
 		state.unarmedStacks = static_cast<uint8_t>(std::min<int>(state.unarmedStacks + 1, MaxUnarmedStacks));
 		state.unarmedTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
 	}

@@ -8,6 +8,7 @@
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/economy.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/weapon_kinds.hpp"
@@ -128,6 +129,28 @@ TEST_F(Poe2WeaponKindsTest, NewBaseColumnsParse)
 	EXPECT_EQ(ParseElementLock("cold,lightning"), ModBaseColdSpell | ModBaseLightningSpell);
 	EXPECT_EQ(ParseElementLock("physical"), ModBasePhysicalSpell);
 	EXPECT_EQ(ParseElementLock(""), 0);
+}
+
+TEST_F(Poe2WeaponKindsTest, RoutedSitesAnswerAsBeforeForTheOldRows)
+{
+	// Until the new bases exist, deciding by kind gives what deciding by item type gave.
+	Players.resize(1);
+	Player &player = Players[0];
+	player = {};
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		EXPECT_EQ(GambleFamilyHas(GambleFamily::Mace, static_cast<int>(i)), data.itype == ItemType::Mace) << data.iName;
+		EXPECT_EQ(GambleFamilyHas(GambleFamily::Staff, static_cast<int>(i)), data.itype == ItemType::Staff) << data.iName;
+		if (data.iClass != ICLASS_WEAPON)
+			continue;
+		player.InvBody[INVLOC_HAND_LEFT] = ItemOf(static_cast<int>(i));
+		player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+		EXPECT_EQ(HoldsMartialStaff(player), player.isHoldingItem(ItemType::Staff)) << data.iName;
+	}
+	// A hand-built item without a row keeps its type's answer.
+	Item staff {};
+	staff._itype = ItemType::Staff;
+	EXPECT_TRUE(IsMartialStaff(staff));
 }
 
 TEST_F(Poe2WeaponKindsTest, OutsidePoe2EveryHelperGivesTheLegacyAnswer)

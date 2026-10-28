@@ -16,6 +16,7 @@
 #else
 #include <SDL.h>
 
+#include "poe2/weapon_kinds.hpp"
 #include "utils/sdl_compat.h"
 #endif
 
@@ -241,6 +242,18 @@ std::string KitName(const ItemData &data)
 	if (name.find("Crossbow") != std::string_view::npos)
 		return std::string(_("Crossbow"));
 	std::string_view type;
+	// The caster weapons rework's kinds each get a kit of their own.
+	switch (WeaponKindOf(static_cast<int>(&data - AllItemsList.data()))) {
+	case WeaponKind::Wand:
+		return std::string(_("Wand"));
+	case WeaponKind::Sceptre:
+	case WeaponKind::LegacySceptre:
+		return std::string(_("Sceptre"));
+	case WeaponKind::Quarterstaff:
+		return std::string(_("Quarterstaff"));
+	default:
+		break;
+	}
 	switch (data.itype) {
 	case ItemType::Sword:
 		type = _("Sword");

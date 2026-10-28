@@ -13,6 +13,7 @@
 #include "msg.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/weapon_kinds.hpp"
 #include "quests.h"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -57,7 +58,8 @@ bool SwapWeapons(Player &player)
 	// The weapon type held before, for Knife in the Dark (a shield or empty hands hold none).
 	ItemType before = ItemType::None;
 	for (const Item *item : { &player.InvBody[INVLOC_HAND_RIGHT], &player.InvBody[INVLOC_HAND_LEFT] }) {
-		if (!item->isEmpty() && IsAnyOf(item->_itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff))
+		// A caster weapon of the rework doesn't strike, so it counts as no weapon.
+		if (!item->isEmpty() && IsAnyOf(item->_itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff) && !IsCasterWeapon(*item))
 			before = item->_itype;
 	}
 	for (const size_t hand : { static_cast<size_t>(INVLOC_HAND_LEFT), static_cast<size_t>(INVLOC_HAND_RIGHT) })

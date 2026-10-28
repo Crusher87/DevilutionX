@@ -19,6 +19,7 @@
 #include "poe2/spirit_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -280,7 +281,8 @@ namespace {
 bool WieldsStaff(const Player &player)
 {
 	for (const Item &item : { std::cref(player.InvBody[INVLOC_HAND_LEFT]), std::cref(player.InvBody[INVLOC_HAND_RIGHT]) }) {
-		if (!item.isEmpty() && item._iStatFlag && item._itype == ItemType::Staff)
+		// Any staff: a caster staff, a quarterstaff or one from before the caster weapons rework.
+		if (!item.isEmpty() && item._iStatFlag && IsAnyOf(WeaponKindOf(item), WeaponKind::CasterStaff, WeaponKind::Quarterstaff, WeaponKind::LegacyStaff))
 			return true;
 	}
 	return false;
