@@ -165,8 +165,11 @@ constexpr uint16_t ModBaseLightningSpell = 1 << 8;
 constexpr uint16_t ModBasePhysicalSpell = 1 << 9;
 constexpr uint16_t ModBaseElementSpellBits = ModBaseFireSpell | ModBaseColdSpell | ModBaseLightningSpell | ModBasePhysicalSpell;
 
+/** @brief The weakest tier a family can have: POE2's caster families go to T11, and a craft keeps a tier in 4 bits. */
+constexpr int MaxModTier = 15;
+
 struct ModTier {
-	/** @brief 1 is the strongest, 8 the weakest. */
+	/** @brief 1 is the strongest; the bundle's families go to 8, POE2's caster families further (MaxModTier). */
 	uint8_t tier;
 	uint8_t itemLevel;
 	uint16_t weight;

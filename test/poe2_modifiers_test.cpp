@@ -92,7 +92,9 @@ public:
 TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
-	ASSERT_EQ(families.size(), 94U);
+	// The 94 from before the caster weapons rework, then its 76 (tools/poe2_caster_affixes.tsv).
+	ASSERT_EQ(families.size(), 170U);
+	ASSERT_EQ(LegacyModFamilyCount, 94);
 	int enabled = 0;
 	for (size_t i = 0; i < families.size(); i++) {
 		const ModFamily &family = families[i];
@@ -111,8 +113,8 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	// 57 with spell damage on staves (plan step 14).
-	EXPECT_EQ(enabled, 57);
+	// 57 with spell damage on staves (plan step 14), and the rework's 52 (18 staff, 18 wand, 16 sceptre).
+	EXPECT_EQ(enabled, 57 + 52);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");
@@ -445,8 +447,9 @@ TEST_F(Poe2ModifiersTest, MagicFindRollsPoe2sRarityTiers)
 	const std::optional<uint8_t> suffix = FindModifierFamily("item_rarity");
 	const std::optional<uint8_t> prefix = FindModifierFamily("item_rarity_prefix");
 	ASSERT_TRUE(suffix && prefix);
-	// Saved crafts name families by row: the suffix keeps its old row and the prefix is the last.
-	EXPECT_EQ(static_cast<size_t>(*prefix) + 1, ModifierFamilies().size());
+	// Saved crafts name families by row: the suffix keeps its old row and the prefix is the last from before the caster
+	// weapons rework, whose families come after it.
+	EXPECT_EQ(static_cast<size_t>(*prefix) + 1, LegacyModFamilyCount);
 	const ModFamily &suffixFamily = ModifierFamilies()[*suffix];
 	const ModFamily &prefixFamily = ModifierFamilies()[*prefix];
 	EXPECT_TRUE(suffixFamily.enabled);

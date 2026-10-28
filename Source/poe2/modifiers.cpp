@@ -174,7 +174,7 @@ bool LoadTiers()
 			reader.readString(field, text);
 			return ParseInt(text).value_or(0);
 		};
-		tier.tier = static_cast<uint8_t>(std::clamp(readInt("tier"), 1, 8));
+		tier.tier = static_cast<uint8_t>(std::clamp(readInt("tier"), 1, MaxModTier));
 		tier.itemLevel = static_cast<uint8_t>(std::clamp(readInt("itemLevel"), 1, 100));
 		tier.weight = static_cast<uint16_t>(std::clamp(readInt("weight"), 0, static_cast<int>(UINT16_MAX)));
 		tier.min[0] = static_cast<int16_t>(readInt("min1"));

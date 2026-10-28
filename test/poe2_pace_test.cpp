@@ -10,10 +10,12 @@
  * solve_pace.py (research/attack-speed/rebalance).
  */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -34,6 +36,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_levels.hpp"
@@ -42,6 +45,8 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/itemdat.h"
@@ -650,6 +655,133 @@ TEST_F(Poe2PaceTest, EarlySkillsBeatTheFreeAttackPerSecond)
 				EXPECT_GT(rows[i].damage / rows[i].seconds, free) << paceClass.name << " level " << level << ' ' << rows[i].what;
 			}
 		}
+	}
+}
+
+/** @brief A modifier forced onto a staff for the caster pace case: a family's best tier at an item level, rolled high. */
+struct ForcedMod {
+	const ModFamily *family;
+	std::array<int, 2> values;
+};
+
+/** @brief The game's value of a table value at a scale, as modifiers.cpp rounds it. */
+int ScaledModValue(int value, int scale)
+{
+	if (scale == 100 || value == 0)
+		return value;
+	const int scaled = ((value * scale) + (value > 0 ? 50 : -50)) / 100;
+	return scaled == 0 ? (value > 0 ? 1 : -1) : scaled;
+}
+
+/** @brief The enabled families of a slot that raise Firebolt's damage per second, each at its best tier for the item level. */
+std::vector<ForcedMod> FireboltMods(ModSlot slot, int itemLevel)
+{
+	std::vector<ForcedMod> mods;
+	for (const ModFamily &family : ModifierFamilies()) {
+		if (!family.enabled || (family.slots & (1U << static_cast<uint32_t>(slot))) == 0)
+			continue;
+		if (!IsAnyOf(family.effect, ModEffect::SpellDamage, ModEffect::SpellDamageAndMana, ModEffect::FireSpellDamage, ModEffect::CastSpeed, ModEffect::SpellSkillLevels,
+		        ModEffect::FireSkillLevels, ModEffect::Intelligence))
+			continue;
+		for (const ModTier &tier : family.tiers) {
+			if (tier.itemLevel > itemLevel || tier.weight == 0)
+				continue;
+			mods.push_back({ &family, { ScaledModValue(std::max(tier.min[0], tier.max[0]), family.scale[0]), ScaledModValue(std::max(tier.min[1], tier.max[1]), family.scale[1]) } });
+			break;
+		}
+	}
+	return mods;
+}
+
+/** @brief Whether a rare can carry these together: three prefixes and three suffixes at most, one of each group, no conflicts. */
+bool RareCanCarry(const std::vector<const ForcedMod *> &mods)
+{
+	int prefixes = 0;
+	int suffixes = 0;
+	for (size_t i = 0; i < mods.size(); i++) {
+		(mods[i]->family->prefix ? prefixes : suffixes)++;
+		for (size_t j = 0; j < i; j++) {
+			if (mods[i]->family->group == mods[j]->family->group)
+				return false;
+		}
+	}
+	return prefixes <= MaxRareModsPerSide && suffixes <= MaxRareModsPerSide;
+}
+
+TEST_F(Poe2PaceTest, RareCasterStaffAtDepthStaysNearTodaysBest)
+{
+	// caster-weapons-plan-v2.md 5.2 and 9: a rare staff of the rework at the depth's item level, with the best legal
+	// modifiers for Firebolt, against the best staff of today (the Focused and Quick staves, pinned by row) with the best of
+	// theirs. The Sorcerer's Firebolt per second may grow by at most half.
+	constexpr int FirstLegacyStaff = 544;
+	constexpr int LastLegacyStaff = 559;
+	Player &player = *MyPlayer;
+	std::map<int, double> secondsBySpeed;
+	const auto dps = [&](Item staff, const std::vector<const ForcedMod *> &mods, int level, int magic) {
+		for (const ForcedMod *mod : mods)
+			ApplyModEffect(staff, mod->family->effect, mod->values[0], mod->values[1]);
+		MakeHero(player, HeroClass::Sorcerer, level);
+		player._pBaseMag = player._pMagic = magic;
+		player.InvBody[INVLOC_HAND_LEFT] = staff;
+		Ready(player);
+		player._pSplLvl[static_cast<size_t>(SpellID::Firebolt)] = 1;
+		const double hit = CastDamage(player, SpellID::Firebolt, 1);
+		// The gear's fire spell damage adds to the spell's increased damage as the hit lands (UniqueSpellHitPercent).
+		const int increased = std::max(UniqueSpellDamagePercent(player, SpellID::Firebolt), 1);
+		const double fire = hit * (increased + GearElementSpellDamage(player, DamageType::Fire)) / increased;
+		const int speed = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::CastSpeed)];
+		if (!secondsBySpeed.contains(speed))
+			secondsBySpeed[speed] = HeldCastTicks(player, SpellID::Firebolt) / TicksPerSecond;
+		return fire / secondsBySpeed[speed];
+	};
+	const auto best = [&](const Item &staff, ModSlot slot, int level, int magic) {
+		const std::vector<ForcedMod> pool = FireboltMods(slot, level);
+		double top = 0;
+		for (uint32_t mask = 0; mask < (1U << pool.size()); mask++) {
+			std::vector<const ForcedMod *> mods;
+			for (size_t i = 0; i < pool.size(); i++) {
+				if ((mask & (1U << i)) != 0)
+					mods.push_back(&pool[i]);
+			}
+			if (RareCanCarry(mods))
+				top = std::max(top, dps(staff, mods, level, magic));
+		}
+		return top;
+	};
+
+	for (const int level : { 9, 17, 33, 48 }) {
+		// The same Magic for both, enough for any of today's staves at this depth.
+		int magic = GetClassAttributes(HeroClass::Sorcerer).baseMag;
+		for (int row = FirstLegacyStaff; row <= LastLegacyStaff; row++) {
+			ASSERT_EQ(WeaponKindOf(row), WeaponKind::LegacyStaff) << AllItemsList[row].iName;
+			if (AllItemsList[row].iMinMLvl <= level)
+				magic = std::max<int>(magic, AllItemsList[row].iMinMag);
+		}
+		double today = 0;
+		for (int row = FirstLegacyStaff; row <= LastLegacyStaff; row++) {
+			if (AllItemsList[row].iMinMLvl > level)
+				continue;
+			MakeHero(player, HeroClass::Sorcerer, level);
+			Hold(player, INVLOC_HAND_LEFT, static_cast<_item_indexes>(row));
+			const Item staff = player.InvBody[INVLOC_HAND_LEFT];
+			today = std::max(today, best(staff, ModSlot::LegacyStaff, level, magic));
+		}
+		// The rework's staves have no implicit and no damage: only their modifiers count.
+		Item newStaff {};
+		newStaff._itype = ItemType::Staff;
+		newStaff._iClass = ICLASS_WEAPON;
+		newStaff._iLoc = ILOC_TWOHAND;
+		newStaff._iStatFlag = true;
+		newStaff._iIdentified = true;
+		newStaff._iMagical = ITEM_QUALITY_RARE;
+		newStaff.IDidx = static_cast<_item_indexes>(FirstLegacyStaff);
+		const double rework = best(newStaff, ModSlot::Staff, level, magic);
+		ASSERT_GT(today, 0) << level;
+		const double ratio = rework / today;
+		std::printf("[pace] item level %d: rare caster staff %.2f, today's best %.2f Firebolt/s damage: %.3fx\n", level, rework, today, ratio);
+		RecordProperty("CasterStaffPace" + std::to_string(level), std::to_string(ratio));
+		EXPECT_LE(ratio, 1.5) << "item level " << level;
+		EXPECT_GE(ratio, 1.0) << "item level " << level << ": the new staff shouldn't lose to today's";
 	}
 }
 
