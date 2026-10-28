@@ -104,6 +104,27 @@ void TelemetryHeroAttackRoll(const Player &player, int hitChance, bool hit);
 void TelemetryMonsterHitByHero(const Player &player, bool lightStunned);
 /** @brief Names what is about to damage a monster (minions, ignite, a herald); otherwise the last skill gets the credit. */
 void TelemetryNoteDamageSource(std::string_view source);
+/**
+ * @brief While one is alive, damage to monsters that no source was named for (TelemetryNoteDamageSource) goes to this
+ * skill at this gem level, rather than to the last skill used: a rune that went off long after it was laid, or a curse's
+ * damage over time. With overTime set, the damage is summed as damage over time, like an ignite.
+ */
+class TelemetrySkillCreditScope {
+public:
+	TelemetrySkillCreditScope(std::string_view skill, int gemLevel, bool overTime = false);
+	~TelemetrySkillCreditScope();
+	TelemetrySkillCreditScope(const TelemetrySkillCreditScope &) = delete;
+	TelemetrySkillCreditScope &operator=(const TelemetrySkillCreditScope &) = delete;
+
+private:
+	bool active_ = false;
+	std::string previous_;
+	bool previousOverTime_ = false;
+};
+/**
+ * @brief A hit or tick of damage on a monster. The full damage is what the hit was worth; the life it took away (no
+ * more than lifeBefore) is counted on its own, so overkill doesn't hide how hard a skill hits.
+ */
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);
 void TelemetryMonsterKilled(const Monster &monster);
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);
@@ -131,6 +152,18 @@ void TelemetryMark(std::string_view text);
 void TelemetryTick();
 /** @brief Once per drawn frame: the frame rate and slow frames for the stats line. */
 void TelemetryFrameDrawn();
+/**
+ * @brief Notes the start of a level change, a game's start or a save being loaded (`what`), with its fades. The game
+ * doesn't tick meanwhile, so TelemetryLoadingDone writes how long it took and starts the stall clock afresh: a level
+ * change is loading time, not a freeze in play.
+ */
+void TelemetryLoadingStarted(std::string_view what);
+/** @brief The screen has faded out and loading begins. */
+void TelemetryLoadingFadedOut();
+/** @brief Loading is done and the screen starts fading in. */
+void TelemetryLoadingFadingIn();
+/** @brief The game is back: writes the load line and restarts the stall clock. */
+void TelemetryLoadingDone();
 /** @brief Writes the error that is about to close the game, then the latest detailed events. */
 void TelemetryFatal(std::string_view message);
 /** @brief Notes what is being drawn (a fixed text, or nullptr when done), so a crash while drawing names it. */

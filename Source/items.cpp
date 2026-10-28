@@ -4715,15 +4715,22 @@ std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLe
 	return bases.back().first;
 }
 
-std::optional<_item_indexes> PickPoe2Weighted(int itemLevel, tl::function_ref<bool(const ItemData &)> isOkay)
+/**
+ * @brief Picks among the loot candidates `isOkay` takes, by their drop rates; `weightPercent`, when given, scales each
+ * one's weight in percent. The roll is one LootRandom call either way.
+ */
+std::optional<_item_indexes> PickPoe2Weighted(int itemLevel, tl::function_ref<bool(const ItemData &)> isOkay, tl::function_ref<int(const ItemData &)> weightPercent)
 {
 	std::vector<std::pair<_item_indexes, int>> items;
 	int total = 0;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		if (!IsPoe2LootCandidate(i, itemLevel) || !isOkay(AllItemsList[i]))
 			continue;
-		items.emplace_back(static_cast<_item_indexes>(i), AllItemsList[i].dropRate);
-		total += AllItemsList[i].dropRate;
+		const int weight = AllItemsList[i].dropRate * weightPercent(AllItemsList[i]);
+		if (weight <= 0)
+			continue;
+		items.emplace_back(static_cast<_item_indexes>(i), weight);
+		total += weight;
 	}
 	if (total == 0)
 		return std::nullopt;
@@ -4734,6 +4741,11 @@ std::optional<_item_indexes> PickPoe2Weighted(int itemLevel, tl::function_ref<bo
 		roll -= weight;
 	}
 	return items.back().first;
+}
+
+std::optional<_item_indexes> PickPoe2Weighted(int itemLevel, tl::function_ref<bool(const ItemData &)> isOkay)
+{
+	return PickPoe2Weighted(itemLevel, isOkay, [](const ItemData &) { return 1; });
 }
 
 /** @brief A currency by its band, then by the band's weights, among those dropping by the POE2 item level. */
@@ -4787,11 +4799,12 @@ std::optional<_item_indexes> PickPoe2LootItem(LootCategory category, int itemLev
 		return PickPoe2Weighted(itemLevel, [areaLevel](const ItemData &data) { return IsPoe2FlaskOrCharm(data.iMiscId) && Poe2AreaDropLevel(data.iMiscId) <= areaLevel; });
 	case LootCategory::Gem: {
 		const bool spirit = HeroHasSpirit();
-		// As in POE2, uncut support gems start dropping at area level 4.
-		const bool support = UncutSupportLevelForArea(areaLevel) > 0;
-		return PickPoe2Weighted(itemLevel, [spirit, support](const ItemData &data) {
-			return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT) && (support || data.iMiscId != IMISC_UNCUT_SUPPORT);
-		});
+		// Uncut support gems drop from the first floor (POE2 waits for area level 4), but scarce at first, so the first
+		// few are a choice that matters (Curtis 2026-10-28: none in 51 minutes).
+		const int supportPercent = UncutSupportWeightPercent(areaLevel);
+		return PickPoe2Weighted(
+		    itemLevel, [spirit](const ItemData &data) { return IsPoe2UncutGem(data.iMiscId) && (spirit || data.iMiscId != IMISC_UNCUT_SPIRIT); },
+		    [supportPercent](const ItemData &data) { return data.iMiscId == IMISC_UNCUT_SUPPORT ? supportPercent : 100; });
 	}
 	case LootCategory::Endgame:
 		return PickPoe2Weighted(itemLevel, [](const ItemData &data) { return data.iMiscId == IMISC_WAYSTONE; });

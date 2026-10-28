@@ -315,6 +315,14 @@ bool IsQuestRewardOpen()
 	return Open.has_value();
 }
 
+bool QuestRewardPanelContains(Point position)
+{
+	if (!Open)
+		return false;
+	const std::optional<std::pair<Layout, bool>> layout = ScreenLayout();
+	return layout && layout->first.panel.contains(position);
+}
+
 size_t PendingQuestRewardCount()
 {
 	return Pending.size();

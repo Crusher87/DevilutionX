@@ -301,5 +301,29 @@ TEST_F(Poe2MonsterModsTest, PhysicalHitsBuildUpHeavyStun)
 	EXPECT_EQ(MonsterBuildupPercent(unique), UniqueBuildupPercent);
 }
 
+TEST_F(Poe2MonsterModsTest, BlackDeathTakesNoMaxLife)
+{
+	ASSERT_GT(MonstersData[MT_YZOMBIE].reducePlayerMaxHP, 0) << "Diablo's Black Death drains max life";
+	Players.resize(1);
+	MyPlayerId = 0;
+	MyPlayer = &Players[0];
+	Player &player = *MyPlayer;
+	player = {};
+	player._pMaxHPBase = player._pMaxHP = player._pHPBase = player._pHitPoints = Fixed26_6::fromInt(100);
+	Monster monster = MakeMonster(1);
+	monster.reducePlayerMaxHP = MonstersData[MT_YZOMBIE].reducePlayerMaxHP;
+
+	// POE2 (Curtis 2026-10-28): Black Death just deals its damage.
+	MonsterReducePlayerAttribute(monster, player);
+	EXPECT_EQ(player._pMaxHPBase, Fixed26_6::fromInt(100));
+	EXPECT_EQ(player._pMaxHP, Fixed26_6::fromInt(100));
+
+	// Diablo keeps the drain.
+	gbIsPoe2 = false;
+	MonsterReducePlayerAttribute(monster, player);
+	gbIsPoe2 = true;
+	EXPECT_LT(player._pMaxHPBase, Fixed26_6::fromInt(100));
+}
+
 } // namespace
 } // namespace devilution

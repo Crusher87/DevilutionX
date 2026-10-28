@@ -857,7 +857,11 @@ TEST_F(Poe2ItemBasesTest, NewHeroesStartWithPoe2Bases)
 		if (start.starterSkill != WeaponSkill::None)
 			EXPECT_TRUE(WeaponAllowsSkill(player, start.starterSkill)) << start.weapon;
 		EXPECT_EQ(DefaultAttackFor(player), start.attack) << start.weapon;
+		// One healing flask and one mana flask go in the belt's two flask slots (Curtis 2026-10-28).
+		EXPECT_EQ(std::count(loadout.items.begin(), loadout.items.end(), IDI_HEAL), 1) << start.weapon;
+		EXPECT_EQ(std::count(loadout.items.begin(), loadout.items.end(), IDI_MANA), 1) << start.weapon;
 	}
+	EXPECT_EQ(std::count(GetPlayerStartingLoadoutForClass(HeroClass::Barbarian).items.begin(), GetPlayerStartingLoadoutForClass(HeroClass::Barbarian).items.end(), IDI_MANA), 1);
 	EXPECT_EQ(AllItemsList[GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Warrior), 1)].itype, ItemType::Shield);
 	// The Barbarian keeps Diablo's start.
 	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Barbarian), 0), IDI_BARBARIAN);
@@ -873,6 +877,7 @@ TEST_F(Poe2ItemBasesTest, NewHeroesStartWithPoe2Bases)
 	const PlayerStartingLoadoutData &warrior = GetPlayerStartingLoadoutForClass(HeroClass::Warrior);
 	EXPECT_EQ(GetStartingLoadoutItem(warrior, 0), IDI_WARRIOR);
 	EXPECT_EQ(GetStartingLoadoutItem(warrior, 1), IDI_WARRSHLD);
+	EXPECT_EQ(std::count(warrior.items.begin(), warrior.items.end(), IDI_HEAL), 2);
 	EXPECT_EQ(GetStartingLoadoutItem(GetPlayerStartingLoadoutForClass(HeroClass::Rogue), 0), IDI_ROGUE);
 	EXPECT_FALSE(FindPoe2ItemId("poe2:one_hand_sword_balanced_shortsword").has_value());
 }

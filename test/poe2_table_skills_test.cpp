@@ -14,8 +14,10 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 
 namespace devilution {
@@ -309,6 +311,86 @@ TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForAQuarter)
 	EXPECT_GT(shards, 0);
 	EXPECT_EQ(FrostNovaShardDamagePercent, 25);
 	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, GlacialSpikeLeadsAWalkingMonster)
+{
+	// Curtis 2026-10-28: the spike came up behind moving enemies. It erupts where the monster will be.
+	Monster monster {};
+	monster.mode = MonsterMode::MoveSideways;
+	monster.position.tile = { 10, 10 };
+	monster.position.future = { 11, 10 };
+	monster.var1 = 1;
+	monster.var2 = 0;
+	monster.animInfo.numberOfFrames = 8;
+	monster.animInfo.ticksPerFrame = 1;
+	monster.animInfo.currentFrame = 2;
+	monster.animInfo.tickCounterOfCurrentFrame = 0;
+	// 6 ticks are left of this step, then 8 a tile.
+	EXPECT_EQ(PredictMonsterTile(monster, 0), Point(10, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 5), Point(10, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 6), Point(11, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 13), Point(11, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 14), Point(12, 10));
+	// A very fast monster outruns the lead.
+	EXPECT_EQ(PredictMonsterTile(monster, 200), Point(10 + MaxPredictedSteps, 10));
+	// One standing still is hit where it stands.
+	monster.mode = MonsterMode::Stand;
+	EXPECT_EQ(PredictMonsterTile(monster, 14), Point(10, 10));
+	// Glacial Spike's delay is short; the lead covers it.
+	EXPECT_LT(FindTableSkill(WeaponSkill::GlacialSpike)->delay, 8);
+}
+
+/** @brief The visual effects with this look that are waiting or playing. */
+int VisualEffectsShowing(MissileGraphicID look)
+{
+	int count = 0;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype == MissileID::VisualEffect && static_cast<MissileGraphicID>(missile._mispllvl & 0xFF) == look)
+			count++;
+	}
+	return count;
+}
+
+TEST_F(Poe2TableSkillsTest, HauntIsASpiritThatJumps)
+{
+	// Curtis 2026-10-28: "is it a bleed skill, or a ghost that finds a monster then jumps?"
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::Haunt), "A spirit drains the enemy over time. When it dies, the spirit jumps to the nearest enemy.");
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->effect, MissileGraphicID::BoneSpirit);
+
+	leveltype = DTYPE_CATHEDRAL;
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	ActiveMonsterCount = 2;
+	for (size_t i = 0; i < 2; i++) {
+		Monster &monster = Monsters[i];
+		monster = {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100);
+		monster.position.tile = { static_cast<WorldTileCoord>(40 + (3 * i)), 40 };
+		monster.talkMsg = TEXT_NONE;
+		ActiveMonsters[i] = static_cast<unsigned>(i);
+	}
+	Monster &haunted = Monsters[0];
+	haunted.poe2.hauntTicks = 100;
+	haunted.poe2.bleedTicks = 11;
+	haunted.poe2.bleedSource = -1;
+	// The spirit shows on the monster it drains, not a wound.
+	ProcessUniqueMonsterAilments(haunted);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BoneSpirit), 1);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::RedFlareExplosion), 0);
+
+	// When it dies, the spirit leaves it and shows up on the next one.
+	Missiles.clear();
+	haunted.poe2.bleedSource = 0;
+	haunted.poe2.bleedSkill = WeaponSkill::Haunt;
+	OnTableCursedMonsterKilled(haunted);
+	EXPECT_EQ(Monsters[1].poe2.hauntTicks, 100);
+	EXPECT_EQ(Monsters[1].poe2.bleedSkill, WeaponSkill::Haunt);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BoneSpirit), 2);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BloodStarRedExplosion), 0);
+	ActiveMonsterCount = 0;
 }
 
 } // namespace

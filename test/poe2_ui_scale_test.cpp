@@ -3,9 +3,12 @@
 #include <gtest/gtest.h>
 
 #include "control/control.hpp"
+#include "cursor.h"
 #include "diablo.h"
 #include "engine/ui_scale.hpp"
 #include "inv.h"
+#include "minitext.h"
+#include "player.h"
 #include "panels/skill_bar.hpp"
 #include "poe2/hud_globes.hpp"
 #include "utils/ui_fwd.h"
@@ -118,6 +121,50 @@ TEST_F(Poe2UiScaleTest, SkillTraySitsBesideTheManaGlobe)
 			}
 		}
 	}
+}
+
+TEST_F(Poe2UiScaleTest, NothingInTheWorldIsHoveredThroughTheUi)
+{
+	// Curtis 2026-10-28: a ground potion's tooltip showed through the open skill tray popup.
+	Apply({ 640, 480 }, 100);
+	CalculatePanelAreas();
+	Players.resize(1);
+	MyPlayerId = 0;
+	MyPlayer = &Players[0];
+	*MyPlayer = {};
+	gbIsPoe2 = true;
+	invflag = false;
+	CharFlag = false;
+	const std::optional<Rectangle> tray = SkillTrayRect();
+	ASSERT_TRUE(tray.has_value());
+	const Point world { 320, 60 };
+	EXPECT_FALSE(IsCursorOverUi(world));
+	EXPECT_TRUE(IsCursorOverUi(tray->Center()));
+	EXPECT_TRUE(IsCursorOverUi(GetMainPanel().Center()));
+
+	// The tray popup covers the world above the tray.
+	for (int y = tray->position.y; y < tray->position.y + tray->size.height && !IsSkillTrayPopupOpen(); y += 4) {
+		for (int x = tray->position.x; x < tray->position.x + tray->size.width && !IsSkillTrayPopupOpen(); x += 4)
+			HandleSkillBarClick({ x, y });
+	}
+	ASSERT_TRUE(IsSkillTrayPopupOpen());
+	const Point abovePopupSlot { tray->Center().x, tray->position.y - 12 };
+	EXPECT_TRUE(IsCursorOverUi(abovePopupSlot));
+	CloseSkillTrayPopup();
+	EXPECT_FALSE(IsCursorOverUi(abovePopupSlot));
+
+	// Side panels, and talk text over the whole screen.
+	invflag = true;
+	EXPECT_TRUE(IsCursorOverUi(GetRightPanel().Center()));
+	invflag = false;
+	qtextflag = true;
+	EXPECT_TRUE(IsCursorOverUi(world));
+	qtextflag = false;
+
+	// Diablo's own check is as it was: the tray isn't there.
+	gbIsPoe2 = false;
+	EXPECT_FALSE(IsCursorOverUi(tray->Center()));
+	EXPECT_TRUE(IsCursorOverUi(GetMainPanel().Center()));
 }
 
 } // namespace

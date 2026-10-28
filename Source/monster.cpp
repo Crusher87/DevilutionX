@@ -4300,7 +4300,8 @@ void MonsterReducePlayerAttribute(Monster &monster, Player &player)
 	if (monster.reducePlayerVitality > 0) {
 		ModifyPlrVit(player, -static_cast<int>(monster.reducePlayerVitality));
 	}
-	if (monster.reducePlayerMaxHP > 0) {
+	// POE2: no permanent max life loss on hit (Black Death just deals its damage).
+	if (monster.reducePlayerMaxHP > 0 && !gbIsPoe2) {
 		const Fixed26_6 reduceAmount = std::min(player._pMaxHPBase - Fixed26_6::fromInt(1), Fixed26_6::fromInt(monster.reducePlayerMaxHP));
 		player._pMaxHP = std::max(Fixed26_6::fromInt(1), player._pMaxHP - reduceAmount);
 		player._pHitPoints = std::min(player._pHitPoints, player._pMaxHP);

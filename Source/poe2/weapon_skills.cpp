@@ -197,6 +197,9 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 	if (pcursmonst == -1 && &player == MyPlayer && IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt))
 		target = AimAlongCursor(player, AimTiles);
 	BeginSkillAnimation(player, skill, graphic, target);
+	// Glacial Spike erupts where this monster will be (see ExecuteTableSkill).
+	if (pcursmonst != -1 && &player == MyPlayer)
+		player.poe2.castTargetMonster = static_cast<int16_t>(pcursmonst);
 	return true;
 }
 
@@ -916,6 +919,7 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 	player.position.temp = target;
 	player.poe2.castSkill = skill;
 	player.poe2.castFrame = actionFrame;
+	player.poe2.castTargetMonster = -1;
 	player.poe2.castGraphic = static_cast<uint8_t>(graphic);
 	if (SpinsWhileStriking(skill)) {
 		player.poe2.spinFrom = static_cast<uint8_t>(dir);

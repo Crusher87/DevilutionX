@@ -123,7 +123,7 @@ const TableSkillData Table[] = {
 	{ WS::IceBarrage, "Ray of Frost", "A rapid stream of ice shards", 11, 14, TW::None, 1, Stream, 70, 8, 0, 0, 2, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::FrozenOrb, "Frozen Orb", "An orb of frost bursts at the target into a ring of shards", 13, 22, TW::None, 1, Zone, 70, 16, 0, 0, 0, 15, DT::Magic, MissileID::BlueFlare, MG::BlueFlareExplosion, TF_Spell, TableZone::ShardRing, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
 	// Arcane
-	{ WS::Haunt, "Haunt", "A spirit drains an enemy and moves on to the next when it dies", 3, 8, TW::None, 1, Curse, 150, 0, 0, 100, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::Haunt, "Haunt", "A spirit drains the enemy over time. When it dies, the spirit jumps to the nearest enemy.", 3, 8, TW::None, 1, Curse, 150, 0, 0, 100, 0, 0, DT::Physical, MissileID::Null, MG::BoneSpirit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	{ WS::LocustSwarm, "Locust Swarm", "A plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 120, 0, 1, 100, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
 	{ WS::CorpseExplosion, "Corpse Explosion", "Blows up a corpse near the target, burning everything around it", 9, 10, TW::None, 1, CorpseBurst, 50, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::SoulHarvest, "Soul Harvest", "Takes the souls of nearby corpses: 3% more damage each, up to 10, for 10 seconds", 11, 10, TW::None, 1, SoulHarvest, Flat, 10, 4, 200, 0, 0, DT::Physical, MissileID::Null, MG::Resurrect, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Resurrect), TableCurve::Boneshatter, 100 },
@@ -249,7 +249,7 @@ void SpellHitMonster(const Player &player, Monster &monster, DamageType type, Fi
 		M_StartHit(monster, player, dealt.raw());
 }
 
-void InflictTableBleed(const Player &player, Monster &monster, Fixed26_6 total, int ticks)
+void InflictTableBleed(const Player &player, Monster &monster, WeaponSkill skill, Fixed26_6 total, int ticks)
 {
 	Poe2MonsterState &state = monster.poe2;
 	ticks = std::clamp(ticks, 1, 255);
@@ -257,6 +257,7 @@ void InflictTableBleed(const Player &player, Monster &monster, Fixed26_6 total, 
 	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
+		state.bleedSkill = skill;
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(ticks, state.bleedTicks));
 }
@@ -279,7 +280,7 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 	if ((data.flags & TF_ArmourBreak) != 0 && alive)
 		BreakMonsterArmour(monster, &player);
 	if ((data.flags & TF_Bleed) != 0 && alive)
-		InflictTableBleed(player, monster, FixedDamage(player, data), 80);
+		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), 80);
 	if (!alive)
 		return;
 	// Elemental attacks: part of the hit lands again as the skill's element.
@@ -304,6 +305,34 @@ void AfterCast(Player &player, const TableSkillData &data, const CastResult &res
 	if ((data.flags & TF_Frenzy) != 0)
 		GainFrenzyCharge(player);
 }
+
+} // namespace
+
+Point PredictMonsterTile(const Monster &monster, int ticks)
+{
+	if (IsNoneOf(monster.mode, MonsterMode::MoveNorthwards, MonsterMode::MoveSouthwards, MonsterMode::MoveSideways))
+		return monster.position.tile;
+	// A walking monster's tile is the one it left until the step ends; then it takes another step the same way each
+	// walk, as long as the way is open.
+	const int ticksPerFrame = std::max<int>(monster.animInfo.ticksPerFrame, 1);
+	const int ticksPerTile = std::max(monster.animInfo.numberOfFrames * ticksPerFrame, 1);
+	const int elapsed = (monster.animInfo.currentFrame * ticksPerFrame) + monster.animInfo.tickCounterOfCurrentFrame;
+	const int remaining = std::max(ticksPerTile - elapsed, 1);
+	if (ticks < remaining)
+		return monster.position.tile;
+	const int steps = std::min(1 + ((ticks - remaining) / ticksPerTile), MaxPredictedSteps);
+	Point at = monster.position.future;
+	const Displacement step { monster.var1, monster.var2 };
+	for (int i = 1; i < steps; i++) {
+		const Point next = at + step;
+		if (!InDungeonBounds(next) || IsTileSolid(next))
+			break;
+		at = next;
+	}
+	return at;
+}
+
+namespace {
 
 Monster *TargetMonsterNear(Point target, int radius)
 {
@@ -336,6 +365,23 @@ vfx::Element LookOf(const TableSkillData &data)
 /** @brief Game ticks between Blizzard shard sounds, across every Blizzard at once. */
 constexpr int ShardSoundGap = 9;
 int ShardSoundCooldown = 0;
+
+/**
+ * @brief Where Glacial Spike erupts: under the monster it was cast at, where that monster will stand when the spike comes
+ * up, rather than where it stood when the cast began (Curtis 2026-10-28: it came up behind moving enemies).
+ */
+Point IceSpikeCenter(const Player &player, const TableSkillData &data, Point target)
+{
+	const int id = player.poe2.castTargetMonster;
+	if (player.poe2.castSkill != data.skill || id < 0 || static_cast<size_t>(id) >= MaxMonsters)
+		return target;
+	const Monster &monster = Monsters[id];
+	// One that died, or that a trigger or repeat isn't aimed at, keeps the spike on the target.
+	if (!CanHit(monster) || monster.position.tile.WalkingDistance(target) > IceSpikeTrackTiles)
+		return target;
+	// The zone bursts on its delay's last tick, after the one it's made on.
+	return PredictMonsterTile(monster, data.delay + 1);
+}
 
 void AddZone(const Player &player, const TableSkillData &data, Point center, int delay)
 {
@@ -513,11 +559,11 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		break;
 	case TableCurse::Haunt:
 		state.hauntTicks = ticks;
-		InflictTableBleed(player, monster, FixedDamage(player, data), ticks);
+		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), ticks);
 		break;
 	case TableCurse::Locust:
 		state.locustTicks = ticks;
-		InflictTableBleed(player, monster, FixedDamage(player, data), ticks);
+		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), ticks);
 		break;
 	default:
 		break;
@@ -792,6 +838,8 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		break;
 	}
 	case Zone:
+		if (data.zone == TableZone::IceSpike)
+			target = IceSpikeCenter(player, data, target);
 		AddZone(player, data, (data.flags & TF_AtPlayer) != 0 ? tile : target, data.delay);
 		break;
 	case Curse:
@@ -1205,14 +1253,20 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 	if (next.size() > jumps)
 		next.resize(jumps);
 	const uint8_t ticks = haunt ? state.hauntTicks : state.locustTicks;
+	// Haunt is a spirit, not a wound (Curtis 2026-10-28: "is it a bleed skill, or a ghost?"): it leaves the body and
+	// shows up on the next one.
+	const MissileGraphicID look = haunt ? MissileGraphicID::BoneSpirit : MissileGraphicID::BloodHit;
+	if (haunt && !next.empty())
+		AddVisualEffect(from, look);
 	for (Monster *other : next) {
 		Poe2MonsterState &target = other->poe2;
 		(haunt ? target.hauntTicks : target.locustTicks) = ticks;
 		target.bleedTicks = std::max(target.bleedTicks, ticks);
 		target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick);
 		target.bleedSource = state.bleedSource;
+		target.bleedSkill = state.bleedSkill;
 		other->tag(player);
-		AddVisualEffect(other->position.tile, MissileGraphicID::BloodHit);
+		AddVisualEffect(other->position.tile, look, haunt ? 2 : 0);
 	}
 }
 

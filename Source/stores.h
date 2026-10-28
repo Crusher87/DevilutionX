@@ -203,6 +203,8 @@ void TakePlrsMoney(int cost);
 void StoreEnter();
 /** @brief Whether the mouse is over the talk menu's window. */
 bool StoreWindowContainsMouse();
+/** @brief Whether the talk menu's window is at that point. */
+bool StoreWindowContains(Point position);
 void CheckStoreBtn();
 void ReleaseStoreBtn();
 bool IsPlayerInStore();

@@ -40,9 +40,21 @@
 #include "hwcursor.hpp"
 #include "inv.h"
 #include "levels/trigs.h"
+#include "minitext.h"
 #include "missiles.h"
 #include "options.h"
+#include "panels/anvil_panel.hpp"
+#include "panels/atlas_panel.hpp"
+#include "panels/desecration_panel.hpp"
+#include "panels/gemcutting_panel.hpp"
+#include "panels/item_spawner.hpp"
+#include "panels/partypanel.hpp"
+#include "panels/passive_tree_panel.hpp"
+#include "panels/quest_reward_panel.hpp"
+#include "panels/skill_bar.hpp"
 #include "panels/skills_panel.hpp"
+#include "panels/stack_split_panel.hpp"
+#include "panels/stash_tabs_panel.hpp"
 #include "poe2/aim.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/loot_filter.hpp"
@@ -1011,7 +1023,8 @@ bool CheckPanelsAndFlags(Rectangle mainPanel)
 	}
 	if (SkillsPanelContains(MousePosition))
 		return true;
-	return false;
+	// POE2 Mashup: nothing in the world is hovered through any other panel or popup either (Curtis 2026-10-28).
+	return IsCursorOverUi(MousePosition);
 }
 
 bool CheckCursorActions(const Point currentTile, bool flipflag)
@@ -1060,6 +1073,28 @@ bool CheckCursorActions(const Point currentTile, bool flipflag)
 	    || TrySelectObject(flipflag, currentTile)
 	    || TrySelectItem(flipflag, currentTile)
 	    || TrySelectMonsterNearCursor();
+}
+
+bool IsCursorOverUi(Point position)
+{
+	if (GetMainPanel().contains(position))
+		return true;
+	if (IsLeftPanelOpen() && GetLeftPanel().contains(position))
+		return true;
+	if (IsRightPanelOpen() && GetRightPanel().contains(position))
+		return true;
+	if (!gbIsPoe2)
+		return false;
+	// These take every click while they're open, so the whole screen is theirs.
+	if (IsPassiveTreeOpen() || IsGemcuttingOpen() || IsAnvilOpen() || IsAtlasOpen() || IsDesecrationRevealOpen() || IsItemSpawnerOpen()
+	    || IsStackSplitOpen() || IsStashTabPopupOpen() || qtextflag || DoomFlag)
+		return true;
+	return SkillsPanelContains(position)
+	    || SkillBarContains(position)
+	    || StashDrawerContains(position)
+	    || QuestRewardPanelContains(position)
+	    || (IsPlayerInStore() && StoreWindowContains(position))
+	    || PortraitIdUnderCursor != -1;
 }
 
 /**

@@ -196,6 +196,17 @@ struct TableSkillData {
 	int16_t curveEnd;
 };
 
+/**
+ * @brief The tile a monster will be on, as hits see it, after this many game ticks: a walking monster keeps walking the
+ * same way at its walk's speed, up to MaxPredictedSteps tiles; any other stays where it is. It reads only the monster's
+ * position, walk and animation state, so every game in a party works it out the same.
+ */
+Point PredictMonsterTile(const Monster &monster, int ticks);
+/** @brief The most tiles PredictMonsterTile leads a monster by: a very fast one outruns it. */
+constexpr int MaxPredictedSteps = 2;
+/** @brief Glacial Spike follows the monster it was cast at only while it's within this many tiles of the target. */
+constexpr int IceSpikeTrackTiles = 4;
+
 /** @brief Freezing Arrow's and Explosive Arrow's landing bursts hit for this percent of a base hit, on top of the arrow. */
 constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;

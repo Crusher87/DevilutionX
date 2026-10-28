@@ -21,6 +21,8 @@
 namespace devilution {
 
 bool IsStashTabPopupOpen();
+/** @brief Whether the open stash's tab list drawer, beside the stash, is at that point. */
+bool StashDrawerContains(Point position);
 void CloseStashTabPopups();
 /** @brief Draws the POE2 stash's frame and tab strip (no gold box), and a blank tab's header. */
 void DrawPoe2StashFrame(const Surface &out);

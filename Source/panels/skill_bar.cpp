@@ -493,10 +493,10 @@ std::vector<OwnedSupport> OwnedSupports(const Player &player)
 	return owned;
 }
 
-/** @brief Whether the popup offers the empty choice: the left and middle buttons always keep an attack. */
+/** @brief Whether the popup offers the empty choice: only the left button always keeps an attack (Curtis 2026-10-28). */
 bool PopupCanClear()
 {
-	return DefaultTrayBinding(Popup.slot).action == TrayAction::None;
+	return Popup.slot != TraySlot::LeftMouse;
 }
 
 /** @brief The Skills panel socket of the popup's slot, if it uses a gem that takes supports. */
@@ -906,7 +906,7 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 		CloseSkillTrayPopup();
 		return;
 	case PopupHit::Kind::Clear:
-		ClearTraySlot(player, Popup.slot);
+		BindTraySlot(player, Popup.slot, {});
 		CloseSkillTrayPopup();
 		return;
 	case PopupHit::Kind::Gem: {
@@ -1120,9 +1120,14 @@ bool IsSkillBarShown()
 
 bool IsSkillBarHovered()
 {
-	if (!IsSkillBarVisible() || ControlMode != ControlTypes::KeyboardAndMouse)
+	return ControlMode == ControlTypes::KeyboardAndMouse && SkillBarContains(MousePosition);
+}
+
+bool SkillBarContains(Point position)
+{
+	if (!IsSkillBarVisible())
 		return false;
-	return TrayRect().contains(MousePosition) || IsOverPopup(MousePosition);
+	return TrayRect().contains(position) || IsOverPopup(position);
 }
 
 std::optional<Rectangle> SkillTrayRect()
@@ -1226,7 +1231,12 @@ void SetSkillBarInfo()
 			InfoString = FormatRuntime(_("Empty tray slot [{:s}]"), key);
 		}
 		// Right-click empties the slot, or gives the left and middle buttons back their attack.
-		AddInfoBoxString(binding == DefaultTrayBinding(*slot) ? _("Click to pick a skill") : _("Click to change, right-click to clear"));
+		if (binding == DefaultTrayBinding(*slot))
+			AddInfoBoxString(_("Click to pick a skill"));
+		else if (binding.action == TrayAction::None)
+			AddInfoBoxString(_("Click to pick a skill, right-click for the weapon attack"));
+		else
+			AddInfoBoxString(_("Click to change, right-click to clear"));
 		return;
 	}
 

@@ -89,7 +89,8 @@ SkillSlot TraySkill(const Player &player, TraySlot slot);
 /**
  * @brief Sets what a tray slot does.
  *
- * Picking a gem that's on another slot swaps the two slots, like POE2.
+ * Picking a gem that's on another slot swaps the two slots, like POE2. Binding nothing empties the slot (the middle
+ * button too); the left button gets its weapon attack back instead.
  */
 void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding);
 /** @brief Puts a tray slot back to its default: move and attack on the left button, the readied spell on the right, else nothing. */

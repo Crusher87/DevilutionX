@@ -126,6 +126,8 @@ class Run:
                 s = self.skills[e['skill']]
                 for key in ('damage', 'hits', 'kills', 'uses', 'mana'):
                     s[key] += e.get(key, 0)
+                # 'damage' is each hit's full damage; older logs counted only the life it took away, as lifeRemoved now does.
+                s['lifeRemoved'] += e.get('lifeRemoved', e.get('damage', 0))
                 s['killSecondsSum'] += e.get('killSeconds', 0) * e.get('kills', 0)
             elif k == 'attacker_summary':
                 a = self.attackers[e['attacker']]
@@ -319,9 +321,9 @@ def report(run):
     parts.append('<h2>Skills</h2>')
     skill_rows = []
     for name, s in sorted(run.skills.items(), key=lambda kv: -kv[1]['damage']):
-        skill_rows.append([esc(name), s['damage'], s['hits'], s['kills'], num(s['killSecondsSum'] / s['kills']) if s['kills'] else '',
+        skill_rows.append([esc(name), s['damage'], s['lifeRemoved'], s['hits'], s['kills'], num(s['killSecondsSum'] / s['kills']) if s['kills'] else '',
                            s['uses'], s['mana'], num(s['damage'] / s['mana']) if s['mana'] else ''])
-    parts.append(table(['Skill', 'Damage', 'Hits', 'Kills', 's to kill', 'Uses', 'Mana', 'Dmg per mana'], skill_rows))
+    parts.append(table(['Skill', 'Damage', 'Life removed', 'Hits', 'Kills', 's to kill', 'Uses', 'Mana', 'Dmg per mana'], skill_rows))
 
     parts.append('<h2>What hurt you</h2>')
     parts.append(table(['Attacker', 'Damage', 'Hits', 'Biggest'],

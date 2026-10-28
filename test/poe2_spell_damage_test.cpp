@@ -9,7 +9,9 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "levels/gendung.h"
+#include "lighting.h"
 #include "missiles.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
@@ -204,6 +206,121 @@ TEST_F(Poe2SpellDamageTest, ChainLightningBoltsCarryTheirHitAndCurve)
 		EXPECT_EQ(missile.poe2.damagePercent, 150);
 	}
 	EXPECT_EQ(bolts, 1);
+}
+
+TEST_F(Poe2SpellDamageTest, ArcingSparksBesideAWallTurnAlongIt)
+{
+	// Play log 2026-10-28: cast beside a wall, most sparks went one tile into it and were gone.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	SOLData[0] = TileProperties::None;
+	SOLData[1] = TileProperties::Solid | TileProperties::BlockLight | TileProperties::BlockMissile;
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	// A wall along the hero's side: the spark's aim, east, is open; its turns to the north-east are not.
+	const Point hero = player.position.tile;
+	const Direction aim = GetDirection(hero, { 45, 40 });
+	for (int step = -6; step <= 6; step++) {
+		dPiece[(hero + Left(aim)).x + step][(hero + Left(aim)).y - step] = 1;
+		dPiece[(hero + Left(aim) + Left(aim)).x + step][(hero + Left(aim) + Left(aim)).y - step] = 1;
+	}
+	ASSERT_TRUE(IsMissileBlockedByTile(hero + Left(aim)));
+	ASSERT_FALSE(IsMissileBlockedByTile(hero + aim));
+
+	Missiles.clear();
+	SetRndSeed(7);
+	ExecuteSkillCast(player, WeaponSkill::Spark, { 45, 40 });
+	int sparks = 0;
+	for (Missile &missile : Missiles) {
+		if (missile._mitype != MissileID::ChargedBolt)
+			continue;
+		sparks++;
+		for (int tick = 0; tick < 24 && !missile._miDelFlag; tick++)
+			ProcessChargedBolt(missile);
+		EXPECT_FALSE(missile._miDelFlag) << "spark " << sparks << " went into the wall at " << static_cast<int>(missile.position.tile.x) << "," << static_cast<int>(missile.position.tile.y);
+	}
+	EXPECT_GE(sparks, 6);
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	SOLData[1] = TileProperties::None;
+}
+
+TEST_F(Poe2SpellDamageTest, ARunesBurstIsCreditedToTheRune)
+{
+	// Play log 2026-10-28: a rune that went off after 3 s was credited to whatever was cast last.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	Missiles.clear();
+	Missile &rune = Missiles.emplace_back();
+	rune._mitype = MissileID::RuneOfNova;
+	rune._micaster = TARGET_MONSTERS;
+	rune._misource = player.getId();
+	rune._mispllvl = 1;
+	rune._mlid = NO_LIGHT;
+	rune.var1 = static_cast<int>(MissileID::Nova);
+	const Point tile { 44, 44 };
+	rune.position.tile = tile;
+	// A monster steps on it.
+	Monsters[0] = {};
+	Monsters[0].position.tile = tile;
+	dMonster[tile.x][tile.y] = 1;
+	ProcessRune(rune);
+	dMonster[tile.x][tile.y] = 0;
+	ASSERT_TRUE(rune._miDelFlag);
+	ASSERT_EQ(Missiles.size(), 2U);
+	Missile &nova = Missiles.back();
+	ASSERT_EQ(nova._mitype, MissileID::Nova);
+	EXPECT_EQ(nova.poe2.creditSpell, SpellID::RuneOfNova);
+	// The play log's credit only: the burst gets none of the rune's supports.
+	EXPECT_EQ(nova.poe2.skillKind, 0);
+	// The nova's bolts carry it on.
+	ProcessNova(nova);
+	int bolts = 0;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype != MissileID::NovaBall)
+			continue;
+		bolts++;
+		EXPECT_EQ(missile.poe2.creditSpell, SpellID::RuneOfNova);
+	}
+	EXPECT_GT(bolts, 0);
+	// A missile cast the usual way has none.
+	const Missile *cast = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::NovaBall, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(cast, nullptr);
+	EXPECT_EQ(cast->poe2.creditSpell, SpellID::Invalid);
+}
+
+TEST_F(Poe2SpellDamageTest, TheHerosOwnRunesNeverHurtTheHero)
+{
+	// Curtis 2026-10-28: his own Rune of Fire went off under him three times, down to 7 life ("from a trap").
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	const Point tile = player.position.tile;
+	dPlayer[tile.x][tile.y] = static_cast<int8_t>(player.getId() + 1);
+	Missiles.clear();
+	// The hero walks over the rune: it waits for an enemy.
+	Missile &rune = Missiles.emplace_back();
+	rune._mitype = MissileID::RuneOfFire;
+	rune._micaster = TARGET_MONSTERS;
+	rune._misource = player.getId();
+	rune._mispllvl = 1;
+	rune._mlid = NO_LIGHT;
+	rune.var1 = static_cast<int>(MissileID::BigExplosion);
+	rune.position.tile = tile;
+	ProcessRune(rune);
+	EXPECT_FALSE(rune._miDelFlag);
+	EXPECT_EQ(Missiles.size(), 1U);
+
+	// A burst that goes off beside the hero (a monster set it off) spares them.
+	for (int i = 0; i < 10; i++) {
+		SetRndSeed(i);
+		ASSERT_NE(AddMissile(tile, tile, Direction::South, MissileID::BigExplosion, TARGET_BOTH, player, 0, 1), nullptr);
+	}
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(100));
+	dPlayer[tile.x][tile.y] = 0;
 }
 
 TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)

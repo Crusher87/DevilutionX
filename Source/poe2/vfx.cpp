@@ -36,6 +36,7 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/camera_shake.hpp"
+#include "poe2/floor_chests.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_looks.hpp"
@@ -1736,6 +1737,35 @@ bool BehindWall(Point tile)
  * @brief Puts a marker over each towner in town who has quest news, and over each monster in the dungeon who will talk
  * (Gharbad, Zhar, Lachdanan, Snotspill), with a few motes rising off it.
  */
+/** @brief A strongbox not opened yet: a slow gold glow on the floor under it and gold sparks rising off it. */
+void ScanStrongboxes(const View &view)
+{
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const Object &object = Objects[ActiveObjects[i]];
+		if (!IsClosedStrongbox(object) || BehindWall(object.position))
+			continue;
+		const Vec feet = TileCentre(object.position);
+		if (!view.contains(feet, 120))
+			continue;
+		const float pulse = 0.5F + 0.5F * std::sin(AmbientTime * 0.0025F + static_cast<float>(object.position.x));
+		Ring glow;
+		glow.pos = feet;
+		glow.life = 1;
+		glow.width = 0;
+		glow.disc = true;
+		glow.ground = true;
+		glow.r0 = glow.r1 = 30 + 4 * pulse;
+		glow.colour = { 255, 180, 60 };
+		glow.alpha = 0.16F + 0.1F * pulse;
+		FrameGlows.push_back(glow);
+		glow.r0 = glow.r1 = 14;
+		glow.colour = { 255, 225, 150 };
+		glow.alpha = 0.18F + 0.08F * pulse;
+		FrameGlows.push_back(glow);
+		Emitters.push_back({ feet - Vec { 0, 12 }, 3, Ambient::Motes, { 255, 190, 70 }, 16 });
+	}
+}
+
 void ScanTowners(const View &view)
 {
 	if (MyPlayer == nullptr) {
@@ -3318,6 +3348,7 @@ void ScanWorld(const Surface &world)
 		return;
 	const View view { CameraOrigin, CameraOrigin + Vec { static_cast<float>(world.w()), static_cast<float>(world.h()) } * (1 / CameraScale) };
 	ScanFlames(view);
+	ScanStrongboxes(view);
 	ScanFluids(world, view);
 	ScanMonsters(view);
 	ScanTowners(view);

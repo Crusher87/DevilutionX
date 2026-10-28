@@ -52,6 +52,15 @@ int UncutSupportLevelForGemLevel(int gemLevel);
  * 4 from 45 and 5 from 55; 0 below 4, where none drop.
  */
 int UncutSupportLevelForArea(int areaLevel);
+/**
+ * @brief How likely an uncut support gem is among the gems dropping at this POE2 area level, in percent of its full
+ * weight: from area level 1 (level 1 supports, before POE2's area level 4), scarce at first and full from
+ * UncutSupportFullWeightArea (Curtis 2026-10-28: "difficult to find early and slowly ease off").
+ */
+int UncutSupportWeightPercent(int areaLevel);
+/** @brief The first and lowest weight of UncutSupportWeightPercent, and the area level it's full at. */
+constexpr int UncutSupportFirstWeightPercent = 40;
+constexpr int UncutSupportFullWeightArea = 10;
 /** @brief The gem level a tier of the support is cut from; @param baseLevel the level of supports without tier data. */
 int SupportTierGemLevel(SupportGem gem, int tier, int baseLevel);
 

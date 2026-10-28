@@ -405,6 +405,15 @@ TEST_F(Poe2SkillGemsTest, AWeaponAttackOnTwoKeysClearsFromOne)
 	EXPECT_EQ(TrayOf(player, TraySlot::Key1), (TrayBinding { TrayAction::WeaponAttack, 0 }));
 	ClearTraySlot(player, TraySlot::Key1);
 	EXPECT_EQ(TrayOf(player, TraySlot::Key1).action, TrayAction::None);
+
+	// The middle button can be emptied too (Curtis 2026-10-28); the left button keeps its attack.
+	BindTraySlot(player, TraySlot::MiddleMouse, {});
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse), TrayBinding {});
+	BindTraySlot(player, TraySlot::LeftMouse, {});
+	EXPECT_EQ(TrayOf(player, TraySlot::LeftMouse), (TrayBinding { TrayAction::WeaponAttack, 0 }));
+	// Right-click (clearing) gives the middle button its attack back.
+	ClearTraySlot(player, TraySlot::MiddleMouse);
+	EXPECT_EQ(TrayOf(player, TraySlot::MiddleMouse), (TrayBinding { TrayAction::WeaponAttack, 0 }));
 }
 
 TEST_F(Poe2SkillGemsTest, TakingAGemOutClearsItsTraySlot)

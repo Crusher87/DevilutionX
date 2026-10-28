@@ -87,6 +87,7 @@ set(poe2_mod
   sfx/poe2/blizzard_shard3.wav
   sfx/poe2/blizzard_shard4.wav
   txtdata/Experience.tsv
+  txtdata/classes/barbarian/starting_loadout.tsv
   txtdata/classes/bard/starting_loadout.tsv
   txtdata/classes/monk/starting_loadout.tsv
   txtdata/classes/rogue/starting_loadout.tsv
@@ -101,6 +102,7 @@ set(poe2_mod
   txtdata/poe2/base_meta.tsv
   txtdata/poe2/experience_bosses.tsv
   txtdata/poe2/experience_level_gap.tsv
+  txtdata/poe2/map_icons.tsv
   txtdata/poe2/monster_experience.tsv
   txtdata/poe2/monster_bosses.tsv
   txtdata/poe2/monster_levels.tsv
@@ -108,6 +110,7 @@ set(poe2_mod
   txtdata/poe2/modifier_families.tsv
   txtdata/poe2/modifier_tiers.tsv
   txtdata/poe2/passive_tree.tsv
+  txtdata/poe2/quest_tracker.tsv
   txtdata/poe2/skill_looks.tsv
   txtdata/poe2/skill_speed.tsv
   txtdata/poe2/spell_damage.tsv

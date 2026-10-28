@@ -155,6 +155,7 @@ void BurstBlood(const HeraldTrigger &trigger)
 		if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 			state.bleedDamagePerTick = perTick;
 			state.bleedSource = static_cast<int8_t>(MyPlayerId);
+			state.bleedSkill = WeaponSkill::None;
 		}
 		state.bleedTicks = std::max<uint8_t>(state.bleedTicks, BleedTicks);
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);

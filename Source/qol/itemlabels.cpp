@@ -144,14 +144,7 @@ void AddItemToLabelQueue(int id, Point position)
 
 bool IsMouseOverGameArea()
 {
-	if ((IsRightPanelOpen()) && GetRightPanel().contains(MousePosition))
-		return false;
-	if ((IsLeftPanelOpen()) && GetLeftPanel().contains(MousePosition))
-		return false;
-	if (GetMainPanel().contains(MousePosition))
-		return false;
-
-	return true;
+	return !IsCursorOverUi(MousePosition);
 }
 
 void DrawItemNameLabels(const Surface &out)

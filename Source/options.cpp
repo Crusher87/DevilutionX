@@ -897,6 +897,23 @@ GameplayOptions::GameplayOptions()
               { LootFilter::HideNormal, N_("Hide normal gear") },
               { LootFilter::HideNormalAndMagic, N_("Hide normal and magic gear") },
           })
+    , showLifeManaLevels("Show Life Mana Levels", OptionEntryFlags::None, N_("Show Life/Mana Levels"), N_("POE2 mode: shows your current and maximum Life and Energy Shield above the life globe, and Mana and Spirit (reserved / total) above the mana globe."), false)
+    , heroMiniBar("Mini Life Bar Above You", OptionEntryFlags::None, N_("Mini Life Bar Above You"), N_("POE2 mode: a small life bar with a thin mana bar under it over your hero."), false)
+    , heroMiniBarEnergyShield("Mini Bar Shows Energy Shield", OptionEntryFlags::None, N_("Mini Bar Shows Energy Shield"), N_("POE2 mode: the mini bar over your hero shows your Energy Shield over the top of the life bar."), false)
+    , hurtMonsterBars("Life Bars Over Hurt Monsters", OptionEntryFlags::None, N_("Life Bars Over Hurt Monsters"), N_("POE2 mode: a small life bar over every monster that has taken damage, framed in its rarity's colour. The bar at the top of the screen for the monster you point at stays."), false)
+    , showCornerMap("Show Corner Map", OptionEntryFlags::None, N_("Show Corner Map"), N_("POE2 mode: a small map in the top right corner. The Tab map still opens over the whole screen."), true)
+    , cornerMapSize("Corner Map Size", OptionEntryFlags::None, N_("Corner Map Size"), N_("POE2 mode: how wide the corner map is."), CornerMapSize::Medium,
+          {
+              { CornerMapSize::Small, N_("Small") },
+              { CornerMapSize::Medium, N_("Medium") },
+              { CornerMapSize::Large, N_("Large") },
+          })
+    , autoCentreMap("Auto-Centre Map", OptionEntryFlags::None, N_("Auto-Centre Map"), N_("POE2 mode: on, the corner map keeps you in its middle. Off, it stays put until you near its edge."), true)
+    , mapTransparency("Map Transparency", OptionEntryFlags::None, N_("Map Transparency"), N_("POE2 mode: how see-through the map's lines and markers are, in percent. Also used by the Tab map."), 25, { 0, 25, 50, 75 })
+    , landscapeTransparency("Landscape Transparency", OptionEntryFlags::None, N_("Landscape Transparency"), N_("POE2 mode: how see-through the explored floor under the map's lines is, in percent. 100 hides it. Also used by the Tab map."), 50, { 0, 25, 50, 75, 100 })
+    , mapZoom("Map Zoom", OptionEntryFlags::None, N_("Map Zoom"), N_("POE2 mode: how close the corner map is. + and - change it while the Tab map is closed."), 1, { 1, 2, 3, 4 })
+    , mapPoiNames("Point of Interest Names", OptionEntryFlags::None, N_("Point of Interest Names"), N_("POE2 mode: names next to the map's markers for stairs, portals, shrines, strongboxes and unique monsters."), true)
+    , enableQuestTracking("Enable Quest Tracking", OptionEntryFlags::None, N_("Enable Quest Tracking"), N_("POE2 mode: your quests under way, each with its next step, in a short list under the corner map. Hidden with the corner map."), true)
     , numHealPotionPickup("Heal Potion Pickup", OptionEntryFlags::None, N_("Heal Potion Pickup"), N_("Number of Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numFullHealPotionPickup("Full Heal Potion Pickup", OptionEntryFlags::None, N_("Full Heal Potion Pickup"), N_("Number of Full Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numManaPotionPickup("Mana Potion Pickup", OptionEntryFlags::None, N_("Mana Potion Pickup"), N_("Number of Mana potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
@@ -937,6 +954,18 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&showMonsterType,
 		&showItemLabels,
 		&lootFilter,
+		&showLifeManaLevels,
+		&heroMiniBar,
+		&heroMiniBarEnergyShield,
+		&hurtMonsterBars,
+		&showCornerMap,
+		&cornerMapSize,
+		&autoCentreMap,
+		&mapTransparency,
+		&landscapeTransparency,
+		&mapZoom,
+		&mapPoiNames,
+		&enableQuestTracking,
 		&autoRefillBelt,
 		&autoEquipWeapons,
 		&autoEquipArmor,

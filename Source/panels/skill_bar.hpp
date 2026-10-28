@@ -25,6 +25,8 @@ struct Player;
 bool IsSkillBarShown();
 /** @brief Whether the mouse is over the tray or its popup. */
 bool IsSkillBarHovered();
+/** @brief Whether the shown tray or its open popup is at that point. */
+bool SkillBarContains(Point position);
 /**
  * @brief Where the tray is on the screen: beside the mana globe, or where the open side panels leave room for it;
  * empty when they cover every place it can go.

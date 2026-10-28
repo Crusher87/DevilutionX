@@ -384,7 +384,11 @@ SkillSlot TraySkill(const Player &player, TraySlot slot)
 void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding)
 {
 	if (binding.action == TrayAction::None) {
-		ClearTraySlot(player, slot);
+		// The left button always keeps an attack; any other slot, the middle button too, can be left empty.
+		if (slot == TraySlot::LeftMouse)
+			ClearTraySlot(player, slot);
+		else
+			player.poe2.tray[static_cast<size_t>(slot)] = {};
 		return;
 	}
 	if (!TrayBindingFits(binding, slot))

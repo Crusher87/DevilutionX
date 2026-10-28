@@ -4,7 +4,7 @@ spell	Firebolt
 spellLevel	2
 item0	poe2:staff_focused_pilgrim_staff
 item1	IDI_HEAL
-item2	IDI_HEAL
+item2	IDI_MANA
 item3	IDI_NONE
 item4	IDI_NONE
 gold	100

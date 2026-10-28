@@ -651,6 +651,9 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 				MinionShotHits = missile.poe2.minionShot;
 				if (MinionShotHits)
 					TelemetryNoteDamageSource("minions");
+				std::optional<TelemetrySkillCreditScope> credit;
+				if (missile.poe2.creditSpell != SpellID::Invalid && missile.sourcePlayer() == MyPlayer)
+					credit.emplace(GetSpellData(missile.poe2.creditSpell).sNameText, MyPlayer->poe2.skillLevel(missile.poe2.creditSpell));
 				isMonsterHit = MonsterMHit(*missile.sourcePlayer(), monster, supportedMin, supportedMax, missile._midist, missile._mitype, missile.position.start, damageType, isDamageShifted);
 				if (MinionShotHits)
 					TelemetryNoteDamageSource({});
@@ -674,7 +677,10 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 
 	bool isPlayerHit = false;
 	bool blocked = false;
-	Player *player = PlayerAtPosition(position, !onlyHitWalking.has_value());
+	// POE2 Mashup: what the hero lays on the ground (runes and their bursts, walls, rings of fire) never hurts the hero or
+	// another player (Curtis 2026-10-28: his own Rune of Fire took him to 7 life, logged as "a trap").
+	const bool sparesPlayers = gbIsPoe2 && missile._micaster == TARGET_BOTH && missile.sourceType() == MissileSource::Player;
+	Player *player = sparesPlayers ? nullptr : PlayerAtPosition(position, !onlyHitWalking.has_value());
 	if (player != nullptr && (onlyHitWalking.has_value() ? (player->isWalking() && CheckCanHitOnlyWalking(missile, player->position, *onlyHitWalking)) : true)) {
 		if (missile._micaster != TARGET_BOTH && !missile.IsTrap()) {
 			if (missile._micaster == TARGET_MONSTERS) {
@@ -844,6 +850,28 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 
 	// remember what target CheckMissileCol was checked against
 	missile.lastCollisionTargetHash = tileTargetHash;
+}
+
+/** @brief The spell the hits of a missile being added are credited to in the play log (see Poe2MissileData::creditSpell). */
+SpellID NewMissileCreditSpell = SpellID::Invalid;
+
+/** @brief The spell that lays a rune missile. */
+SpellID RuneSpell(MissileID rune)
+{
+	switch (rune) {
+	case MissileID::RuneOfFire:
+		return SpellID::RuneOfFire;
+	case MissileID::RuneOfLight:
+		return SpellID::RuneOfLight;
+	case MissileID::RuneOfNova:
+		return SpellID::RuneOfNova;
+	case MissileID::RuneOfImmolation:
+		return SpellID::RuneOfImmolation;
+	case MissileID::RuneOfStone:
+		return SpellID::RuneOfStone;
+	default:
+		return SpellID::Invalid;
+	}
 }
 
 void AddRune(Missile &missile, Point dst, MissileID missileID)
@@ -3192,6 +3220,8 @@ Missile *AddMissile(WorldTilePosition src, WorldTilePosition dst, Direction midi
 	missile._miDrawFlag = missileData.isDrawn();
 	missile._mlid = NO_LIGHT;
 	missile.lastCollisionTargetHash = 0;
+	// Set before the missile's add function, as some (a rune's fire burst) hit as they're added.
+	missile.poe2.creditSpell = NewMissileCreditSpell;
 
 	if (!missile.IsTrap() && micaster == TARGET_PLAYERS) {
 		const Monster &monster = Monsters[id];
@@ -3577,8 +3607,14 @@ void ProcessHorkSpawn(Missile &missile)
 void ProcessRune(Missile &missile)
 {
 	const Point position = missile.position.tile;
-	const int mid = dMonster[position.x][position.y];
+	int mid = dMonster[position.x][position.y];
 	Player *player = PlayerAtPosition(position);
+	// POE2 Mashup: the hero's rune waits for an enemy: the hero and their minions walk over it.
+	if (gbIsPoe2 && missile.sourceType() == MissileSource::Player) {
+		player = nullptr;
+		if (mid != 0 && Monsters[std::abs(mid) - 1].isPlayerMinion())
+			mid = 0;
+	}
 	if (mid != 0 || player != nullptr) {
 		const Point targetPosition = mid != 0 ? Monsters[std::abs(mid) - 1].position.tile : player->position.tile;
 		const Direction dir = GetDirection(position, targetPosition);
@@ -3586,7 +3622,10 @@ void ProcessRune(Missile &missile)
 		missile._miDelFlag = true;
 		AddUnLight(missile._mlid);
 
+		// The burst's hits are the rune's, not those of whatever was used last (the play log's credit).
+		NewMissileCreditSpell = missile.IsTrap() ? SpellID::Invalid : RuneSpell(missile._mitype);
 		AddMissile(position, position, dir, static_cast<MissileID>(missile.var1), TARGET_BOTH, missile._misource, missile._midam, missile._mispllvl);
+		NewMissileCreditSpell = SpellID::Invalid;
 	}
 
 	PutMissile(missile);
@@ -3679,12 +3718,15 @@ void ProcessNovaCommon(Missile &missile, MissileID projectileType)
 	}
 
 	constexpr std::array<WorldTileDisplacement, 9> quarterRadius = { { { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 }, { 3, 4 }, { 2, 4 }, { 1, 4 }, { 0, 4 } } };
+	// A rune's nova passes the rune's credit on to its projectiles.
+	NewMissileCreditSpell = missile.poe2.creditSpell;
 	for (const WorldTileDisplacement quarterOffset : quarterRadius) {
 		// This ends up with two missiles targeting offsets 4,0, 0,4, -4,0, 0,-4.
 		const std::array<WorldTileDisplacement, 4> offsets { quarterOffset, quarterOffset.flipXY(), quarterOffset.flipX(), quarterOffset.flipY() };
 		for (const WorldTileDisplacement offset : offsets)
 			AddMissile(src, src + offset, dir, projectileType, en, id, dam, missile._mispllvl);
 	}
+	NewMissileCreditSpell = SpellID::Invalid;
 	missile.duration--;
 	if (missile.duration == 0)
 		missile._miDelFlag = true;
@@ -4440,6 +4482,18 @@ void ProcessChargedBolt(Missile &missile)
 			case 1:
 				md = Right(md);
 				break;
+			}
+
+			// POE2 Mashup: a hero's bolt that would turn straight into a wall turns along the open tiles instead (Arcing
+			// Sparks cast beside a wall lost most of its sparks on their first step).
+			if (UsesPoe2SpellRule(missile) && IsMissileBlockedByTile(missile.position.tile + md)) {
+				const auto aim = static_cast<Direction>(missile.var2);
+				for (const Direction open : { aim, Left(aim), Right(aim) }) {
+					if (!IsMissileBlockedByTile(missile.position.tile + open)) {
+						md = open;
+						break;
+					}
+				}
 			}
 
 			missile._mirnd = (missile._mirnd + 1) & 0xF;

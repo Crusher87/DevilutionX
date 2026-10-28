@@ -12,6 +12,7 @@
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "game_mode.hpp"
 #include "options.h"
 #include "player.h"
 #include "poe2/spirit.hpp"
@@ -285,16 +286,74 @@ bool IsHoveringManaGlobe()
 	return IsHoveringGlobe(ManaGlobeX);
 }
 
+GlobeLevels ReadGlobeLevels(const Player &player)
+{
+	GlobeLevels levels;
+	levels.life = player._pHitPoints.whole();
+	levels.maxLife = player._pMaxHP.whole();
+	levels.energyShield = player.poe2.energyShield / 64;
+	levels.maxEnergyShield = player.poe2.maxEnergyShield;
+	const bool noMana = HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana);
+	levels.mana = noMana || player.hasNoMana() ? 0 : player._pMana.whole();
+	levels.maxMana = noMana ? 0 : player._pMaxMana.whole();
+	levels.maxSpirit = MaxSpirit(player);
+	levels.reservedSpirit = levels.maxSpirit > 0 ? ReservedSpirit(player) : 0;
+	return levels;
+}
+
+std::vector<GlobeLevelLine> LifeGlobeLevelLines(const GlobeLevels &levels)
+{
+	std::vector<GlobeLevelLine> lines;
+	lines.push_back({ StrCat("Life ", std::max(levels.life, 0), "/", levels.maxLife), UiFlags::ColorWhite });
+	if (levels.maxEnergyShield > 0)
+		lines.push_back({ StrCat("ES ", std::max(levels.energyShield, 0), "/", levels.maxEnergyShield), UiFlags::ColorBlue });
+	return lines;
+}
+
+std::vector<GlobeLevelLine> ManaGlobeLevelLines(const GlobeLevels &levels)
+{
+	std::vector<GlobeLevelLine> lines;
+	lines.push_back({ StrCat("Mana ", std::max(levels.mana, 0), "/", levels.maxMana), UiFlags::ColorWhite });
+	// Like POE2's mana globe: the Spirit the hero's skills reserve, out of all of it.
+	if (levels.maxSpirit > 0)
+		lines.push_back({ StrCat("Spirit ", levels.reservedSpirit, "/", levels.maxSpirit), UiFlags::ColorGold });
+	return lines;
+}
+
+bool ShowingGlobeLevels()
+{
+	return gbIsPoe2 && *GetOptions().Gameplay.showLifeManaLevels;
+}
+
+void DrawPoe2GlobeLevels(const Surface &out)
+{
+	const GlobeLevels levels = ReadGlobeLevels(*MyPlayer);
+	const Point panel = GetMainPanel().position;
+	// The lowest line sits just over the top of the globe's dome, which sticks out above the panel.
+	const int lowestTop = panel.y + GlobeTopRow - GlobePanelTopRow - GlobeLevelGap - GlobeLevelLineHeight;
+	const auto drawLines = [&](int globeX, const std::vector<GlobeLevelLine> &lines) {
+		int top = lowestTop;
+		for (const GlobeLevelLine &line : lines) {
+			DrawShadowedValue(out, line.text, { panel.x + globeX + (GlobeArtSize / 2), top }, line.color);
+			top -= GlobeLevelLineHeight;
+		}
+	};
+	drawLines(LifeGlobeX, LifeGlobeLevelLines(levels));
+	drawLines(ManaGlobeX, ManaGlobeLevelLines(levels));
+}
+
 void DrawPoe2GlobeValues(const Surface &out)
 {
 	const Player &player = *MyPlayer;
 	const Point panel = GetMainPanel().position;
-	if (player.poe2.maxEnergyShield > 0 && (*GetOptions().Gameplay.showHealthValues || IsHoveringGlobe(LifeGlobeX))) {
+	// With the levels shown above the globes, hovering a globe has nothing more to tell.
+	const bool hoverShows = !ShowingGlobeLevels();
+	if (player.poe2.maxEnergyShield > 0 && (*GetOptions().Gameplay.showHealthValues || (hoverShows && IsHoveringGlobe(LifeGlobeX)))) {
 		DrawShadowedValue(out, StrCat("ES ", player.poe2.energyShield / 64, "/", player.poe2.maxEnergyShield),
 		    panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 44 }, UiFlags::ColorBlue);
 	}
 	const int maxSpirit = MaxSpirit(player);
-	if (maxSpirit > 0 && (*GetOptions().Gameplay.showManaValues || IsHoveringGlobe(ManaGlobeX))) {
+	if (maxSpirit > 0 && (*GetOptions().Gameplay.showManaValues || (hoverShows && IsHoveringGlobe(ManaGlobeX)))) {
 		// Like POE2, the Spirit not reserved yet.
 		DrawShadowedValue(out, StrCat("Spirit ", AvailableSpirit(player), "/", maxSpirit),
 		    panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 44 }, UiFlags::ColorGold);

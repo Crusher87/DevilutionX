@@ -141,9 +141,10 @@ struct TelemetryCounts {
 	int goldSpent = 0;
 };
 
-/** @brief Damage a skill dealt this game. */
+/** @brief Damage a skill dealt this game: each hit's full damage, and the life it took away (less, by the overkill). */
 struct SkillDamage {
 	int64_t raw = 0;
+	int64_t lifeRaw = 0;
 	int hits = 0;
 	int kills = 0;
 	/** Time from the first hit to the kill, summed over the kills. */
@@ -180,6 +181,11 @@ uint32_t LastStallLogMs = 0;
 /** The longest wait between drawn frames since the last game tick, to tell a freeze from a pause. */
 uint32_t FrameGapSinceTick = 0;
 uint32_t LastFrameMs = 0;
+/** A level change, game start or save load under way (TelemetryLoadingStarted): what it is, and when each step began. */
+std::string LoadingWhat;
+uint32_t LoadingStartMs = 0;
+uint32_t LoadingFadedOutMs = 0;
+uint32_t LoadingFadingInMs = 0;
 
 std::string PendingAttacker;
 /** Energy shield soaked from the hit being applied (raw), added to it when it's counted. */
@@ -187,6 +193,9 @@ int32_t PendingShieldRaw = 0;
 /** The last hit the hero took, for the death line. */
 std::string LastHitText;
 std::string PendingDamageSource;
+/** The skill a TelemetrySkillCreditScope gives the credit to, and whether its damage is over time. */
+std::string SkillCredit;
+bool SkillCreditOverTime = false;
 std::string LastSkill;
 uint32_t LastSkillMs = 0;
 std::vector<std::pair<std::string, SkillDamage>> DamageBySkill;
@@ -1033,6 +1042,8 @@ std::string SkillDamageLine(std::string_view name, const SkillDamage &damage)
 {
 	const int average = damage.hits > 0 ? Whole(damage.raw) / damage.hits : 0;
 	std::string text = std::format("{:s} {:d} ({:d} hits, {:d} average, {:d} kills", name, Whole(damage.raw), damage.hits, average, damage.kills);
+	if (damage.lifeRaw != damage.raw)
+		StrAppend(text, std::format(", {:d} life removed", Whole(damage.lifeRaw)));
 	if (damage.kills > 0)
 		StrAppend(text, std::format(", {:.1f} s to kill", damage.killMs / 1000.0 / damage.kills));
 	if (damage.uses > 0)
@@ -1074,11 +1085,19 @@ SkillDamage &DamageFor(std::string_view source)
 	return DamageBySkill.emplace_back(std::string(source), SkillDamage {}).second;
 }
 
+/** @brief A skill's name in the damage stats: each gem level on its own, so the stats show what a level is worth. */
+std::string SkillCreditName(std::string_view skill, int gemLevel)
+{
+	return gemLevel > 0 ? std::format("{:s} gem {:d}", skill, gemLevel) : std::string(skill);
+}
+
 /** @brief What gets the credit for damage to a monster right now. */
 std::string CurrentDamageSource()
 {
 	if (!PendingDamageSource.empty())
 		return std::exchange(PendingDamageSource, {});
+	if (!SkillCredit.empty())
+		return SkillCredit;
 	if (!LastSkill.empty() && Now() - LastSkillMs <= TelemetrySkillCreditMs)
 		return LastSkill;
 	return "basic attack";
@@ -1426,6 +1445,7 @@ struct Burn {
 	uint32_t firstMs = 0;
 	uint32_t lastMs = 0;
 	int64_t raw = 0;
+	int64_t lifeRaw = 0;
 	int ticks = 0;
 };
 ankerl::unordered_dense::map<std::string, Burn> Burns;
@@ -1451,6 +1471,7 @@ void FlushBurns(uint32_t now, bool all)
 		    .add("source", burn.source)
 		    .add("monster", burn.monster)
 		    .add("damage", Whole(burn.raw))
+		    .add("lifeRemoved", Whole(burn.lifeRaw))
 		    .add("seconds", seconds)
 		    .add("ticks", burn.ticks);
 		it = Burns.erase(it);
@@ -1679,6 +1700,7 @@ void WriteSummaryEvents(double minutes)
 		Event(LogChannel::Session, LogLevel::Always, "skill_summary")
 		    .add("skill", name)
 		    .add("damage", Whole(damage.raw))
+		    .add("lifeRemoved", Whole(damage.lifeRaw))
 		    .add("hits", damage.hits)
 		    .add("kills", damage.kills)
 		    .add("killSeconds", damage.kills > 0 ? damage.killMs / 1000.0 / damage.kills : 0.0)
@@ -1774,18 +1796,40 @@ void TelemetryNoteDamageSource(std::string_view source)
 	PendingDamageSource = source;
 }
 
+TelemetrySkillCreditScope::TelemetrySkillCreditScope(std::string_view skill, int gemLevel, bool overTime)
+{
+	if (LogFile == nullptr)
+		return;
+	active_ = true;
+	previous_ = std::exchange(SkillCredit, SkillCreditName(skill, gemLevel));
+	previousOverTime_ = std::exchange(SkillCreditOverTime, overTime);
+}
+
+TelemetrySkillCreditScope::~TelemetrySkillCreditScope()
+{
+	if (!active_)
+		return;
+	SkillCredit = std::move(previous_);
+	SkillCreditOverTime = previousOverTime_;
+}
+
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore)
 {
-	if (LogFile == nullptr || damage <= 0 || lifeBefore <= 0)
+	if (LogFile == nullptr || damage <= 0 || lifeBefore <= 0) {
+		// A source named for a hit that did nothing mustn't take the credit for the next one.
+		PendingDamageSource.clear();
 		return;
+	}
 	// Damage a source was named for (minions, ignite, heralds) isn't the hit being broken down.
 	const bool namedSource = !PendingDamageSource.empty();
+	const bool overTime = !namedSource && !SkillCredit.empty() && SkillCreditOverTime;
 	const std::string source = CurrentDamageSource();
-	// Only the damage that took life away counts; the rest is overkill.
+	// A skill is credited with each hit's full damage, and the life it took away; the difference is overkill.
 	const int64_t dealt = std::min(damage.raw(), lifeBefore.raw());
 	Count([&](TelemetryCounts &counts) { counts.damageDealtRaw += dealt; });
 	SkillDamage &skill = DamageFor(source);
-	skill.raw += dealt;
+	skill.raw += damage.raw();
+	skill.lifeRaw += dealt;
 	skill.hits++;
 
 	const uint32_t now = Now();
@@ -1798,7 +1842,7 @@ void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6
 		engagement.overkill = Whole(damage.raw() - lifeBefore.raw());
 
 	// Damage over time ticks many times a second: it's summed into one line per burn.
-	if (IsDamageOverTime(source)) {
+	if (overTime || IsDamageOverTime(source)) {
 		Burn &burn = Burns[StrCat(monster.getId(), " ", source)];
 		if (burn.ticks == 0) {
 			burn.monster = monster.name();
@@ -1806,7 +1850,8 @@ void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6
 			burn.firstMs = now;
 		}
 		burn.lastMs = now;
-		burn.raw += dealt;
+		burn.raw += damage.raw();
+		burn.lifeRaw += dealt;
 		burn.ticks++;
 		return;
 	}
@@ -1826,6 +1871,7 @@ void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6
 	    .add("rarity", RarityNames[MonsterRarityIndex(monster)])
 	    .add("monsterLevel", monster.level(sgGameInitInfo.nDifficulty))
 	    .add("damage", damage.raw() / 64.0)
+	    .add("lifeRemoved", dealt / 64.0)
 	    .add("lifeBefore", lifeBefore.whole())
 	    .add("lifeLeft", lifeLeft);
 	if (HitBreakdown *breakdown = CurrentBreakdown(false); breakdown != nullptr) {
@@ -2094,8 +2140,7 @@ void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCo
 {
 	if (&player != MyPlayer)
 		return;
-	// Each gem level is tracked on its own, so the stats show what a level is worth.
-	LastSkill = gemLevel > 0 ? std::format("{:s} gem {:d}", skill, gemLevel) : std::string(skill);
+	LastSkill = SkillCreditName(skill, gemLevel);
 	LastSkillMs = Now();
 	Count([&](TelemetryCounts &counts) {
 		counts.skillUses++;
@@ -2267,6 +2312,44 @@ void TelemetryFrameDrawn()
 			counts.slowFrames++;
 		counts.worstFrameMs = std::max(counts.worstFrameMs, gap);
 	});
+}
+
+void TelemetryLoadingStarted(std::string_view what)
+{
+	if (LogFile == nullptr || GameStartMs == 0)
+		return;
+	LoadingWhat = what;
+	LoadingStartMs = LoadingFadedOutMs = LoadingFadingInMs = Now();
+}
+
+void TelemetryLoadingFadedOut()
+{
+	if (LoadingStartMs != 0)
+		LoadingFadedOutMs = LoadingFadingInMs = Now();
+}
+
+void TelemetryLoadingFadingIn()
+{
+	if (LoadingStartMs != 0)
+		LoadingFadingInMs = Now();
+}
+
+void TelemetryLoadingDone()
+{
+	if (LoadingStartMs == 0)
+		return;
+	const uint32_t start = std::exchange(LoadingStartMs, 0);
+	if (LogFile == nullptr || GameStartMs == 0)
+		return;
+	const uint32_t now = Now();
+	// The game didn't tick or draw while loading: the stall clock starts again from here.
+	LastTickMs = LastFrameMs = now;
+	FrameGapSinceTick = 0;
+	const uint32_t fadeOut = LoadingFadedOutMs - start;
+	const uint32_t loading = LoadingFadingInMs - LoadingFadedOutMs;
+	const uint32_t fadeIn = now - LoadingFadingInMs;
+	WriteText("load", std::format("{:s} took {:d} ms: fade out {:d} ms, loading {:d} ms, fade in {:d} ms", LoadingWhat, now - start, fadeOut, loading, fadeIn));
+	Event(LogChannel::Perf, LogLevel::Normal, "loading").add("what", LoadingWhat).add("ms", now - start).add("fadeOut", fadeOut).add("loading", loading).add("fadeIn", fadeIn);
 }
 
 void TelemetryTick()

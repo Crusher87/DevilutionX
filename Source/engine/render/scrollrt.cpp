@@ -81,9 +81,13 @@
 #include "plrmsg.h"
 #include "engine/palette.h"
 #include "poe2/camera_shake.hpp"
+#include "poe2/floor_chests.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/hud_minions.hpp"
+#include "poe2/corner_map.hpp"
+#include "poe2/overhead_bars.hpp"
+#include "poe2/quest_tracker.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
@@ -621,6 +625,9 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const ClxSprite sprite = player.currentSprite();
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
+	// POE2 Mashup: the mini life bar over the hero is drawn later, with the UI.
+	if (gbIsPoe2 && &player == MyPlayer)
+		QueueHeroOverheadBar(player, spriteBufferPosition, sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
 	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
@@ -692,10 +699,14 @@ void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePositi
 
 	const Point screenPosition = targetBufferPosition + objectToDraw.getRenderingOffset(sprite, tilePosition);
 
+	// POE2 Mashup: a strongbox stands out, drawn bright even in the dark with a gold edge.
+	const bool strongbox = IsClosedStrongbox(objectToDraw);
 	if (&objectToDraw == ObjectUnderCursor) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsObject, screenPosition, sprite);
+	} else if (strongbox) {
+		ClxDrawOutlineSkipColorZero(out, PAL16_ORANGE + 2, screenPosition, sprite);
 	}
-	if (objectToDraw.applyLighting) {
+	if (objectToDraw.applyLighting && !strongbox) {
 		ClxDrawLight(out, screenPosition, sprite, lightTableIndex);
 	} else {
 		ClxDraw(out, screenPosition, sprite);
@@ -949,6 +960,9 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	const Displacement offset = monster.getRenderingOffset(sprite);
 
 	const Point monsterRenderPosition = targetBufferPosition + offset;
+	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
+	if (gbIsPoe2)
+		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
 	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {
@@ -1613,10 +1627,17 @@ void DrawView(const Surface &out, Point startPosition)
 #endif
 	DrawItemNameLabels(out);
 	if (gbIsPoe2)
+		DrawOverheadBars(out);
+	if (gbIsPoe2)
 		DrawMonsterBanner(out);
 	else
 		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
+	// POE2 Mashup: the corner map, under the open windows.
+	if (gbIsPoe2)
+		DrawPoe2CornerMap(out.subregionY(0, gnViewportHeight));
+	if (gbIsPoe2)
+		DrawPoe2QuestTracker(out.subregionY(0, gnViewportHeight));
 	// POE2 Mashup: the effects layer lines up with this frame's view.
 	TelemetryDrawStep("finding effects to draw");
 	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
@@ -2139,9 +2160,13 @@ void DrawAndBlit()
 	DrawXPBar(out);
 	if (gbIsPoe2)
 		DrawPoe2GlobeValues(out);
-	if (*GetOptions().Gameplay.showHealthValues || (gbIsPoe2 && IsHoveringLifeGlobe()))
+	// POE2 Mashup: "Show Life/Mana Levels" puts the numbers above the globes, so hovering a globe adds nothing.
+	const bool globeHoverValues = gbIsPoe2 && !ShowingGlobeLevels();
+	if (ShowingGlobeLevels())
+		DrawPoe2GlobeLevels(out);
+	if (*GetOptions().Gameplay.showHealthValues || (globeHoverValues && IsHoveringLifeGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
-	if (*GetOptions().Gameplay.showManaValues || (gbIsPoe2 && IsHoveringManaGlobe()))
+	if (*GetOptions().Gameplay.showManaValues || (globeHoverValues && IsHoveringManaGlobe()))
 		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
 		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());

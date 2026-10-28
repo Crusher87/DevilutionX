@@ -106,6 +106,7 @@
 #include "poe2/aim.hpp"
 #include "poe2/autosave.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/corner_map.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
@@ -264,6 +265,9 @@ bool ProcessInput()
 	plrctrls_every_frame();
 
 	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen() || IsAtlasOpen() || IsAnvilOpen())) {
+		// POE2 Mashup: the item or monster hovered when the panel opened isn't hovered under it.
+		if (gbIsPoe2 && !gmenu_is_active())
+			CheckCursMove();
 		RedrawViewport();
 		return false;
 	}
@@ -741,6 +745,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_KP_EQUALS:
 		if (AutomapActive) {
 			AutomapZoomIn();
+		} else if (gbIsPoe2) {
+			CornerMapZoomKey(1);
 		}
 		return;
 	case SDLK_MINUS:
@@ -748,6 +754,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_UNDERSCORE:
 		if (AutomapActive) {
 			AutomapZoomOut();
+		} else if (gbIsPoe2) {
+			CornerMapZoomKey(-1);
 		}
 		return;
 #ifdef _DEBUG
@@ -1051,15 +1059,19 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 			if (gbIsMultiplayer)
 				pfile_write_hero();
 			nthread_ignore_mutex(true);
+			TelemetryLoadingStarted("level change");
 			// POE2 Mashup: quick fades between levels, and no loading screen when the level loads quickly.
 			PaletteFadeOut(LevelChangeFadeSpeed());
+			TelemetryLoadingFadedOut();
 			sound_stop();
 			ShowProgress(GetCustomEvent(event));
 
 			PrepareForFadeIn();
 			LoadPWaterPalette();
+			TelemetryLoadingFadingIn();
 			if (gbRunGame)
 				PaletteFadeIn(LevelChangeFadeSpeed());
+			TelemetryLoadingDone();
 			nthread_ignore_mutex(false);
 			gbGameLoopStartup = true;
 			return;
@@ -1076,6 +1088,7 @@ void RunGameLoop(interface_mode uMsg)
 	nthread_ignore_mutex(true);
 	StartGame(uMsg);
 	TelemetryGameStarted(*MyPlayer, uMsg == WM_DIABLOADGAME);
+	TelemetryLoadingStarted("game start");
 	assert(HeadlessMode || ghMainWnd);
 	EventHandler previousHandler = SetEventHandler(GameEventHandler);
 	run_delta_info();
@@ -1085,7 +1098,9 @@ void RunGameLoop(interface_mode uMsg)
 
 	PrepareForFadeIn();
 	LoadPWaterPalette();
+	TelemetryLoadingFadingIn();
 	PaletteFadeIn(8);
+	TelemetryLoadingDone();
 	InitBackbufferState();
 	RedrawEverything();
 	gbGameLoopStartup = true;

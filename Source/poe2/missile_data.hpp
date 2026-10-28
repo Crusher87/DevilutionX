@@ -35,6 +35,11 @@ struct Poe2MissileData {
 	bool minionShot = false;
 	/** @brief How the effects draw it: 0 by its graphic, 1 the staff's own small bolt. */
 	uint8_t look = 0;
+	/**
+	 * @brief The spell the play log credits this missile's hits to, when it isn't the last skill used: a rune's burst
+	 * and what it throws out, however long after it was laid. For the log only: no supports or damage come of it.
+	 */
+	SpellID creditSpell = SpellID::Invalid;
 };
 
 } // namespace devilution

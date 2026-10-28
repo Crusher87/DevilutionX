@@ -216,6 +216,13 @@ int UncutSupportLevelForArea(int areaLevel)
 	return level;
 }
 
+int UncutSupportWeightPercent(int areaLevel)
+{
+	// A straight climb from the first weight at area level 1 to full weight.
+	const int area = std::clamp(areaLevel, 1, UncutSupportFullWeightArea);
+	return UncutSupportFirstWeightPercent + ((100 - UncutSupportFirstWeightPercent) * (area - 1) / (UncutSupportFullWeightArea - 1));
+}
+
 int SupportTierGemLevel(SupportGem gem, int tier, int baseLevel)
 {
 	if (const SupportTierData *data = FindSupportTier(gem, tier); data != nullptr)

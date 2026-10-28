@@ -457,6 +457,7 @@ void InflictSupportBleed(const Player &player, Monster &monster, int32_t physica
 	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
+		state.bleedSkill = WeaponSkill::None;
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(state.bleedTicks, Ticks));
 }
@@ -612,6 +613,7 @@ void PassDamageOverTime(const Player &player, const Monster &from)
 			target.bleedTicks = std::max(target.bleedTicks, state.bleedTicks);
 			target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick * 4 / 5);
 			target.bleedSource = static_cast<int8_t>(player.getId());
+			target.bleedSkill = state.bleedSkill;
 		}
 		if (state.poisonTicks > 0) {
 			target.poisonTicks = std::max(target.poisonTicks, state.poisonTicks);

@@ -13,6 +13,7 @@
 #include "player.h"
 #include "poe2/hardcore.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "spells.h"
@@ -116,6 +117,12 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	Player &player = *MyPlayer;
 	EXPECT_TRUE(player.poe2.hardcore);
 	EXPECT_TRUE(IsHardcoreHero(player));
+	// A new hero's belt has a healing flask and a mana flask (Curtis 2026-10-28).
+	EXPECT_EQ(player.SpdList[0].IDidx, IDI_HEAL);
+	EXPECT_EQ(player.SpdList[1].IDidx, IDI_MANA);
+	// The middle mouse button starts with the weapon attack, and stays empty once emptied.
+	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)].action, TrayAction::WeaponAttack);
+	BindTraySlot(player, TraySlot::MiddleMouse, {});
 	player.setCharacterLevel(10);
 	player.poe2.specBooks = 0b101;
 	player.poe2.weaponSet = 1;
@@ -156,6 +163,8 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	EXPECT_EQ(player.poe2.metaSkills[5][1], SkillSlot::ForSpell(SpellID::Fireball));
 	EXPECT_EQ(player.poe2.metaSkillLevels[5][1], 4);
 	EXPECT_TRUE(player.poe2.metaSkills[5][0].isEmpty());
+	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)], TrayBinding {});
+	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::LeftMouse)].action, TrayAction::WeaponAttack);
 	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalMages), StartingMinionCount(PersistentSkill::SkeletalMages));
 
 	// The hero list reads the league on its own.
