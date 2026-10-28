@@ -55,11 +55,14 @@ constexpr int LightningArrowBurstDexterityDivisor = 4;
 constexpr int LightningArrowBurstPercent = 60;
 /**
  * @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster (Curtis
- * 2026-10-28: 25 to 100, at 10 mana; audit-casters-v3.md).
+ * 2026-10-28: 25 to 100, at 10 mana; audit-casters-v3.md; then 50 with Firebolt, Q27).
  */
-constexpr int FrostNovaShardDamagePercent = 100;
-/** @brief Each of Ice Bolt's shards hits for this percent of the spell base (Curtis 2026-10-28: 100 to 160). */
-constexpr int IceBoltShardDamagePercent = 160;
+constexpr int FrostNovaShardDamagePercent = 50;
+/**
+ * @brief Each of Ice Bolt's shards hits for this percent of the spell base (Curtis 2026-10-28: 100 to 160, then 85 with
+ * the early Sorcerer spells, Q27).
+ */
+constexpr int IceBoltShardDamagePercent = 85;
 /** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
 constexpr int FlurryBackhandDamagePercent = 150;
 /**
@@ -70,6 +73,12 @@ constexpr int SmiteDamagePercent = 300;
 constexpr int FrenzyDamagePercent = 200;
 /** @brief Shield Bash hits this hard before the gem curve (Curtis 2026-10-28: 120 to 200). */
 constexpr int ShieldBashDamagePercent = 200;
+/** @brief Shield Charge hits the 3 tiles in front of its landing this hard (Curtis 2026-10-28, Q28: 100 to 150). */
+constexpr int ShieldChargeDamagePercent = 150;
+/** @brief Shadow Lunge's strike from behind (Curtis 2026-10-28, Q28: 150 to 220). */
+constexpr int ShadowStepDamagePercent = 220;
+/** @brief Each of Vault Shot's arrows hits for this percent of a bow shot (Curtis 2026-10-28, Q28: 100 to 140). */
+constexpr int VaultShotArrowDamagePercent = 140;
 
 /** @brief A swing skill's own percent of a weapon hit (Smite, Frenzy), 100 for the others and a plain attack. */
 [[nodiscard]] constexpr int SwingSkillDamagePercent(WeaponSkill skill)

@@ -63,7 +63,6 @@ constexpr int FrostNovaShardTicks = 9;
 constexpr int FrostNovaShards = 16;
 /** Riposte hits this hard before the gem curve (Shield Bash's is in the header). */
 constexpr int RiposteDamagePercent = 180;
-constexpr int ShadowStepDamagePercent = 150;
 
 bool IsDagger(const Item &item)
 {
@@ -225,7 +224,9 @@ void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID mi
 	const SkillSlot slot = SkillSlot::ForAttack(skill);
 	const int gemLevel = player.poe2.skillLevel(skill);
 	count += GemExtraProjectiles(slot, gemLevel) + SupportExtraProjectileCount(player, slot);
-	const int damagePercent = GemDamagePercent(slot, gemLevel);
+	int damagePercent = GemDamagePercent(slot, gemLevel);
+	if (skill == WeaponSkill::EscapeShot)
+		damagePercent = damagePercent * VaultShotArrowDamagePercent / 100;
 	const Direction dir = GetDirection(player.position.tile, target);
 	const Displacement side { Left(Left(dir)) };
 	for (int i = 0; i < count; i++) {

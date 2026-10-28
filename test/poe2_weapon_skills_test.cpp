@@ -219,9 +219,10 @@ TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
 TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 {
 	EXPECT_EQ(LeapSlamDamagePercent, 80);
-	// About two of Frost Nova's shards reach a monster: 2 x 100 = 200 (Curtis 2026-10-28: 25 -> 100 a shard).
-	EXPECT_EQ(FrostNovaShardDamagePercent, 100);
-	EXPECT_EQ(IceBoltShardDamagePercent, 160);
+	// About two of Frost Nova's shards reach a monster: 2 x 50 = 100 (Curtis 2026-10-28: 25 -> 100 a shard, then 50
+	// with Firebolt, Q27). Ice Bolt's shards 100 -> 160 -> 85.
+	EXPECT_EQ(FrostNovaShardDamagePercent, 50);
+	EXPECT_EQ(IceBoltShardDamagePercent, 85);
 	// Curtis 2026-10-28: Seismic Slam's cone 75 to 50, Sweeping Wind's rings 75 and 50 to 55 and 25.
 	EXPECT_EQ(GroundSlamConeDamagePercent, 50);
 	EXPECT_EQ(WhirlingStaffInnerDamagePercent, 55);
@@ -338,6 +339,18 @@ TEST(Poe2WeaponSkills, SingleTargetMeleeSkillsHitHarder)
 	// Double Throw and Vengeance are table rows.
 	EXPECT_EQ(FindTableSkill(WeaponSkill::DoubleThrow)->damagePercent, 230);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Vengeance)->damagePercent, 260);
+	// Q28 (Curtis 2026-10-28, audit-damage-v3.md): the 7 weak skills raised.
+	EXPECT_EQ(ShieldChargeDamagePercent, 150);
+	EXPECT_EQ(ShadowStepDamagePercent, 220);
+	EXPECT_EQ(VaultShotArrowDamagePercent, 140);
+	// Cobra Strike's bleed is its hit again: 200% + 200%.
+	EXPECT_EQ(FindTableSkill(WeaponSkill::ViperStrike)->damagePercent, 200);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Sacrifice)->damagePercent, 330);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->damagePercent, 95);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->count, 7);
+	// Locust Swarm: 120% over 5 s -> 130% over 2 s (40 game ticks).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->damagePercent, 130);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->duration, 40);
 	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::BattleCry), "Knock back foes, +30% melee damage");
 }
 

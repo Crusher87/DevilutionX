@@ -1001,7 +1001,7 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	// skills on one target; their numbers are for Curtis (the gems keep their numbers for now). Condemn and Corpse
 	// Explosion lose bare only to Staff Bolt, the free bolt every staff has cast since before the rework. Glacial Spike
 	// (400%) came off the list with round 3 (Curtis 2026-10-28); Haunt (350%) now beats every free skill bare and loses
-	// only to a supported Staff Bolt.
+	// only to a supported Staff Bolt, and so does Locust Swarm since Q28 (130% over 2 s instead of 120% over 5 s).
 	enum class Excused : uint8_t {
 		/** Against every free skill. */
 		Everything,
@@ -1018,7 +1018,7 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 		std::string_view reason;
 	} AllowList[] = {
 		{ WeaponSkill::Haunt, Excused::SupportedStaffBolt, "a physical damage over time (70% a second on one), which can't take Prismatic Focus as Staff Bolt can" },
-		{ WeaponSkill::LocustSwarm, Excused::Everything, "like Haunt, a curse's damage over time, which spreads on death (about 27% a second)" },
+		{ WeaponSkill::LocustSwarm, Excused::SupportedStaffBolt, "like Haunt, a physical curse's damage over time (about 73% a second on one), which can't take Prismatic Focus" },
 		{ WeaponSkill::Condemn, Excused::StaffBoltAndSupported, "a delayed burst all around the hero (about 56% a second on one); a shield spell, it can't take Measured Ritual" },
 		{ WeaponSkill::CorpseExplosion, Excused::StaffBolt, "an area burst for each corpse, which it needs (about 62% a second on one)" },
 	};

@@ -916,7 +916,7 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 		Monster *monster = FindMonsterAtPosition(position);
 		if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
 			continue;
-		PlrHitMonst(player, *monster, false, skill == WeaponSkill::LeapSlam ? LeapSlamDamagePercent : 100);
+		PlrHitMonst(player, *monster, false, skill == WeaponSkill::LeapSlam ? LeapSlamDamagePercent : ShieldChargeDamagePercent);
 		if (!monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
 			M_GetKnockback(*monster, player.position.tile);
 	}

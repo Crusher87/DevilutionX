@@ -245,8 +245,8 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 		{ WeaponSkill::BlessedShield, 70 },
 		{ WeaponSkill::FistOfTheHeavens, 110 },
 		{ WeaponSkill::CorpseExplosion, 50 },
-		// Curtis 2026-10-28: 35 -> 400, a tier V area spike (audit-casters-v3.md).
-		{ WeaponSkill::GlacialSpike, 400 },
+		// Curtis 2026-10-28: 35 -> 400, a tier V area spike (audit-casters-v3.md); then 200 with Firebolt (Q27).
+		{ WeaponSkill::GlacialSpike, 200 },
 		{ WeaponSkill::Blizzard, 21 },
 		{ WeaponSkill::FrozenOrb, 70 },
 		{ WeaponSkill::Meteor, 150 },
@@ -392,7 +392,8 @@ TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForTheSpellBase)
 		EXPECT_EQ(missile.poe2.damagePercent, curve * FrostNovaShardDamagePercent / 100);
 	}
 	EXPECT_GT(shards, 0);
-	EXPECT_EQ(FrostNovaShardDamagePercent, 100);
+	// 25 -> 100 a shard, then 50 with Firebolt (Curtis 2026-10-28, Q27).
+	EXPECT_EQ(FrostNovaShardDamagePercent, 50);
 	// Its mana 14 -> 10, and Arcing Sparks' 10 -> 6, at gem level 1 (Curtis 2026-10-28).
 	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::FrostNova), 1), 10);
 	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Spark), 1), 6);

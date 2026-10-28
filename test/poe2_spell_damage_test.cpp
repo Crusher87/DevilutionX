@@ -90,13 +90,15 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 {
 	// Round 2 (Curtis 2026-10-27): spells re-timed against a 0.645 s swing instead of the old 0.40 s cast. Firebolt's
 	// hit is re-fit so it kills as fast as before (161% x 140% for its speed = the old 100% x 225%), its splash cut to
-	// 25%; the spells still over budget a second were trimmed; Apocalypse to its budget.
-	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 161);
+	// 25%; the spells still over budget a second were trimmed; Apocalypse to its budget. Q27 (Curtis 2026-10-28) put the
+	// early Sorcerer spells on the shared bar: Firebolt 161 -> 80 (splash still 25% of the hit, 4 mana).
+	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 80);
 	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 25);
 	EXPECT_EQ(SpellDamagePercent(SpellID::HolyBolt), 165);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Lightning), 135);
-	// Curtis 2026-10-28 (audit-casters-v3.md): Charged Bolt 50 -> 120 a bolt, as only about 1.4 of its bolts land.
-	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 120);
+	// Curtis 2026-10-28 (audit-casters-v3.md): Charged Bolt 50 -> 120 a bolt, as only about 1.4 of its bolts land;
+	// then 70 with Firebolt (Q27).
+	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 70);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Flash), 110);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 120);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChainLightning), 400);
@@ -107,16 +109,16 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 	EXPECT_EQ(SpellDamagePercent(SpellID::Apocalypse), 130);
 	EXPECT_EQ(SpellDamagePercent(SpellID::BloodStar), 1100);
 	// Runes hit as their spell, but Rune of Fire, Rune of Nova and Rune of Immolation have their own rows (Curtis
-	// 2026-10-28: Rune of Fire got Fireball's 120%; Q26 cut Nova 480 -> 200, Immolation 390 -> 160 and gave their runes
-	// 110% and 150%).
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 280);
+	// 2026-10-28: Rune of Fire got 280%, then 140% with Firebolt (Q27); Q26 cut Nova 480 -> 200, Immolation 390 -> 160
+	// and gave their runes 110% and 150%).
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 140);
 	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 110);
 	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfImmolation), 150);
 	// A spell with no row keeps the plain base.
 	EXPECT_EQ(SpellDamagePercent(SpellID::Teleport), 100);
 	EXPECT_EQ(SpellDamageHits(SpellID::Teleport), 1);
-	// Arcing Sparks 35 -> 90 a spark (Curtis 2026-10-28), at 6 mana.
-	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 90);
+	// Arcing Sparks 35 -> 90 a spark (Curtis 2026-10-28), at 6 mana; then 60 with Firebolt (Q27).
+	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 60);
 	// Raise each strike (Curtis 2026-10-27): an ember 100% -> 150%.
 	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::EmberFusillade), 150);
 }
@@ -127,9 +129,9 @@ TEST_F(Poe2SpellDamageTest, FireboltIsItsPercentOfBase)
 	for (uint32_t seed = 1; seed < 60; seed++) {
 		const Missile &bolt = Cast(MissileID::Firebolt, 3, seed);
 		SetRndSeed(seed);
-		EXPECT_EQ(bolt._midam, Percent(RollSpellBase(player, 3), 161)) << seed;
-		EXPECT_GE(bolt._midam, Percent(SpellBaseMin(player, 3), 161));
-		EXPECT_LE(bolt._midam, Percent(SpellBaseMax(player, 3), 161));
+		EXPECT_EQ(bolt._midam, Percent(RollSpellBase(player, 3), 80)) << seed;
+		EXPECT_GE(bolt._midam, Percent(SpellBaseMin(player, 3), 80));
+		EXPECT_LE(bolt._midam, Percent(SpellBaseMax(player, 3), 80));
 	}
 	const Missile &holy = Cast(MissileID::HolyBolt, 3, 7);
 	SetRndSeed(7);
@@ -581,8 +583,8 @@ TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)
 		if (missile._mitype != MissileID::ChargedBolt)
 			continue;
 		sparks++;
-		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, 1), 90), 1));
-		EXPECT_LE(missile._midam, Percent(SpellBaseMax(player, 1), 90));
+		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, 1), 60), 1));
+		EXPECT_LE(missile._midam, Percent(SpellBaseMax(player, 1), 60));
 		EXPECT_EQ(missile.poe2.damagePercent, GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::Spark), 1));
 	}
 	EXPECT_GE(sparks, 6);
@@ -623,8 +625,9 @@ TEST_F(Poe2SpellDamageTest, IceBoltGainsShardsWithItsGem)
 	EXPECT_EQ(shards(7), 3);
 	EXPECT_EQ(shards(20), 6);
 
-	// Each shard hits for 160% of the spell base (Curtis 2026-10-28: 100 -> 160), then the gem curve.
-	EXPECT_EQ(IceBoltShardDamagePercent, 160);
+	// Each shard hits for 85% of the spell base (Curtis 2026-10-28: 100 -> 160, then 85 with Firebolt, Q27), then the
+	// gem curve.
+	EXPECT_EQ(IceBoltShardDamagePercent, 85);
 	shards(1);
 	for (const Missile &missile : Missiles) {
 		if (missile._mitype == MissileID::BlueFlare)
