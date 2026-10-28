@@ -5,13 +5,17 @@
  */
 #include "engine/render/automap_render.hpp"
 
+#include <algorithm>
 #include <cstdint>
 
 #include "automap.h"
 #include "engine/render/primitive_render.hpp"
+#include "utils/palette_blending.hpp"
 
 namespace devilution {
 namespace {
+
+int MapLineOpacity = 100;
 
 enum class DirectionX : int8_t {
 	EAST = 1,
@@ -170,9 +174,38 @@ void SetMapPixel(const Surface &out, Point position, uint8_t color)
 
 	if (GetAutomapType() == AutomapType::Transparent) {
 		SetHalfTransparentPixel(out, position, color);
+	} else if (MapLineOpacity < 100) {
+		if (out.InBounds(position)) {
+			uint8_t &pixel = *out.at(position.x, position.y);
+			pixel = BlendMapColor(color, pixel, MapLineOpacity);
+		}
 	} else {
 		out.SetPixel(position, color);
 	}
+}
+
+void SetMapLineOpacity(int percent)
+{
+	MapLineOpacity = std::clamp(percent, 0, 100);
+}
+
+int GetMapLineOpacity()
+{
+	return MapLineOpacity;
+}
+
+uint8_t BlendMapColor(uint8_t color, uint8_t under, int opacityPercent)
+{
+	if (opacityPercent >= 88)
+		return color;
+	const uint8_t half = paletteTransparencyLookup[color][under];
+	if (opacityPercent >= 63)
+		return paletteTransparencyLookup[color][half];
+	if (opacityPercent >= 38)
+		return half;
+	if (opacityPercent >= 13)
+		return paletteTransparencyLookup[under][half];
+	return under;
 }
 
 } // namespace devilution

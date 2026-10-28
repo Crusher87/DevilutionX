@@ -45,6 +45,9 @@ set(libdevilutionx_SRCS
   poe2/dodge_roll.cpp
   poe2/hud_globes.cpp
   poe2/hud_minions.cpp
+  poe2/overhead_bars.cpp
+  poe2/corner_map.cpp
+  poe2/quest_tracker.cpp
   poe2/skill_lab.cpp
   poe2/skill_lab_notes.cpp
   poe2/skill_looks.cpp

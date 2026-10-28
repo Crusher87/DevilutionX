@@ -108,6 +108,13 @@ enum class LootFilter : uint8_t {
 	HideNormalAndMagic = 2,
 };
 
+/** @brief POE2 Mashup: how wide the corner map is. */
+enum class CornerMapSize : uint8_t {
+	Small = 0,
+	Medium = 1,
+	Large = 2,
+};
+
 enum class PartyPortraits : uint8_t {
 	/** @brief No party portraits. */
 	Disabled = 0,
@@ -665,6 +672,30 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean wasdMovement;
 	/** @brief Hides low quality gear on the ground (POE2 Mashup). */
 	OptionEntryEnum<LootFilter> lootFilter;
+	/** @brief Current / max numbers above the life and mana globes, with Energy Shield and Spirit (POE2 Mashup). */
+	OptionEntryBoolean showLifeManaLevels;
+	/** @brief A small life bar with a thin mana bar under it over the hero (POE2 Mashup). */
+	OptionEntryBoolean heroMiniBar;
+	/** @brief The hero's mini bar shows Energy Shield over the top of the life bar (POE2 Mashup). */
+	OptionEntryBoolean heroMiniBarEnergyShield;
+	/** @brief A small life bar over every monster that has taken damage (POE2 Mashup). */
+	OptionEntryBoolean hurtMonsterBars;
+	/** @brief The small always-on map in the top right corner (POE2 Mashup). */
+	OptionEntryBoolean showCornerMap;
+	/** @brief How wide the corner map is (POE2 Mashup). */
+	OptionEntryEnum<CornerMapSize> cornerMapSize;
+	/** @brief The corner map keeps the hero in its middle; off, it moves only when the hero nears its edge (POE2 Mashup). */
+	OptionEntryBoolean autoCentreMap;
+	/** @brief How see-through the map's lines and markers are, in percent (POE2 Mashup). */
+	OptionEntryInt<int> mapTransparency;
+	/** @brief How see-through the explored floor under the map's lines is, in percent; 100 hides it (POE2 Mashup). */
+	OptionEntryInt<int> landscapeTransparency;
+	/** @brief The corner map's zoom level, 1 to 4 (POE2 Mashup). */
+	OptionEntryInt<int> mapZoom;
+	/** @brief Names next to the map's markers (POE2 Mashup). */
+	OptionEntryBoolean mapPoiNames;
+	/** @brief Active quests and their next steps under the corner map (POE2 Mashup). */
+	OptionEntryBoolean enableQuestTracking;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */
