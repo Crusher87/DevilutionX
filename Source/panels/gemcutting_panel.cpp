@@ -69,6 +69,7 @@ constexpr uint8_t TabColor = PAL16_GRAY + 13;
 constexpr uint8_t TabActiveColor = PAL16_YELLOW + 11;
 constexpr uint8_t TierColor = PAL16_GRAY + 12;
 constexpr uint8_t FieldColor = PAL16_GRAY + 14;
+constexpr uint8_t SocketedMarkColor = PAL16_YELLOW + 2;
 
 bool IsOpen;
 /** Where the uncut gem being cut is; empty while just browsing. */
@@ -383,11 +384,11 @@ void DrawCell(const Surface &out, const Player &player, const Cell &cell, bool h
 		nameColor = UiFlags::ColorButtonpushed;
 	// Long names squeeze their letters together rather than run into the next cell.
 	DrawString(out, GemName(gem), { rect.position + Displacement { 2, 40 }, { rect.size.width - 4, 14 } }, { .flags = nameColor | UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::KerningFitSpacing });
-	const std::optional<int> socketedLevel = SocketedGemLevel(player, gem);
+	// A gem the hero already has gets a small mark on its icon (the tooltip gives its level), not a text line.
+	if (SocketedGemLevel(player, gem))
+		FillRectangle(out, { icon.position + Displacement { icon.size.width - 6, 2 }, { 4, 4 } }, SocketedMarkColor);
 	std::string detail;
-	if (socketedLevel)
-		detail = FormatRuntime(_("Socketed, gem level {:d}"), *socketedLevel);
-	else if (gem.support != SupportGem::None && IsLinkedToSupportedSkill(player, gem.support, gem.tier))
+	if (gem.support != SupportGem::None && IsLinkedToSupportedSkill(player, gem.support, gem.tier))
 		detail = _("Already linked");
 	else
 		detail = FormatRuntime(_("Tier level {:d}"), gem.level);
@@ -430,6 +431,8 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 			lines.emplace_back(_("You can cut it, but can't use it until you meet this"), UiFlags::ColorRed);
 	}
 
+	if (socketedLevel)
+		lines.emplace_back(FormatRuntime(_("You have it at gem level {:d}"), *socketedLevel), UiFlags::ColorWhitegold);
 	if (uncut == nullptr) {
 		lines.emplace_back(FormatRuntime(_("Use an uncut {:s} gem to cut or level this"), UncutKindName(GemUncutKind(gem))), UiFlags::ColorButtonpushed);
 	} else if (CanCutGem(*uncut, gem)) {
