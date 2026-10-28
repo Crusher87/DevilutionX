@@ -18,6 +18,7 @@
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "player.h"
 #include "poe2/bases.hpp"
@@ -459,6 +460,102 @@ TEST_F(Poe2CasterBasesTest, DropBucketsByKind)
 		const double want = 100.0 * EquipmentBucketWeight(b) / total;
 		EXPECT_NEAR(share, want, 2.0) << "bucket " << b;
 	}
+}
+
+TEST_F(Poe2CasterBasesTest, EquipMatrix)
+{
+	const auto item = [](std::string_view name) {
+		Item made {};
+		InitializeItem(made, Row(name));
+		made._iStatFlag = true;
+		return made;
+	};
+	const Item wand = item("Attuned Wand");
+	const Item otherWand = item("Bone Wand");
+	const Item sceptre = item("Lupine Sceptre");
+	const Item oldSceptre = item("Quick Bone Sceptre");
+	const Item shield = item("Hide Buckler");
+	const Item focus = item("Wooden Focus");
+	const Item sword = item("Shortsword");
+	const Item mace = item("Construct Hammer");
+	const Item dagger = item("Glass Shank");
+	const Item staff = item("Gelid Staff");
+	const Item quarterstaff = item("Fine Wrapped Quarterstaff");
+	ASSERT_TRUE(IsWand(wand));
+	ASSERT_EQ(mace._iLoc, ILOC_ONEHAND);
+
+	Player &player = *MyPlayer;
+	for (const HeroClass heroClass : { HeroClass::Warrior, HeroClass::Bard, HeroClass::Sorcerer }) {
+		player._pClass = heroClass;
+		const bool bard = heroClass == HeroClass::Bard;
+		struct Pair {
+			const Item *first;
+			const Item *second;
+			bool canHold;
+		};
+		const Pair pairs[] = {
+			// A wand goes with a shield, a focus or a sceptre, never another wand or a martial weapon, even for the Bard.
+			{ &wand, &shield, true },
+			{ &wand, &focus, true },
+			{ &wand, &sceptre, true },
+			{ &wand, &oldSceptre, true },
+			{ &wand, &otherWand, false },
+			{ &wand, &sword, false },
+			{ &wand, &mace, false },
+			{ &wand, &dagger, false },
+			{ &wand, &staff, false },
+			// A sceptre goes with any one-hander.
+			{ &sceptre, &sword, true },
+			{ &sceptre, &oldSceptre, true },
+			{ &sceptre, &sceptre, true },
+			{ &sceptre, &focus, true },
+			// As before: a weapon and a shield; two weapons only for the Bard; nothing beside a two-hander.
+			{ &sword, &shield, true },
+			{ &sword, &mace, bard },
+			{ &sword, &sword, bard },
+			{ &staff, &focus, false },
+			{ &quarterstaff, &shield, false },
+			{ &shield, &focus, false },
+		};
+		for (const Pair &pair : pairs) {
+			EXPECT_EQ(HandsCanHold(player, *pair.first, *pair.second), pair.canHold) << static_cast<int>(heroClass) << " " << pair.first->_iIName << " + " << pair.second->_iIName;
+			EXPECT_EQ(HandsCanHold(player, *pair.second, *pair.first), pair.canHold) << static_cast<int>(heroClass) << " " << pair.second->_iIName << " + " << pair.first->_iIName;
+			// Equipping the second beside the first.
+			player.InvBody[INVLOC_HAND_LEFT] = *pair.first;
+			player.InvBody[INVLOC_HAND_RIGHT] = {};
+			if (pair.second->_iLoc == ILOC_ONEHAND && pair.first->_iLoc == ILOC_ONEHAND)
+				EXPECT_EQ(AutoEquip(player, *pair.second, /*persistItem=*/false), pair.canHold) << static_cast<int>(heroClass) << " " << pair.first->_iIName << " then " << pair.second->_iIName;
+		}
+	}
+	player.InvBody[INVLOC_HAND_LEFT] = {};
+}
+
+TEST_F(Poe2CasterBasesTest, OutsidePoe2HandsHoldAsBefore)
+{
+	gbIsPoe2 = false;
+	UnloadModArchives();
+	LoadModArchives({ { "hf" } });
+	LoadItemData();
+	LoadModifierData();
+	const auto item = [](std::string_view name) {
+		Item made {};
+		InitializeItem(made, Row(name));
+		made._iStatFlag = true;
+		return made;
+	};
+	const Item sword = item("Short Sword");
+	const Item mace = item("Mace");
+	const Item shield = item("Buckler");
+	const Item staff = item("Short Staff");
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	EXPECT_TRUE(HandsCanHold(player, sword, shield));
+	EXPECT_FALSE(HandsCanHold(player, sword, mace));
+	EXPECT_FALSE(HandsCanHold(player, staff, shield));
+	player._pClass = HeroClass::Bard;
+	EXPECT_TRUE(HandsCanHold(player, sword, mace));
+	EXPECT_TRUE(HandsCanHold(player, sword, shield));
+	EXPECT_FALSE(HandsCanHold(player, staff, sword));
 }
 
 } // namespace

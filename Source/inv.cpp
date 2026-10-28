@@ -255,6 +255,36 @@ bool IsSceptrePair(const Player &player, const Item &first, const Item &second)
 	    && (IsAnySceptre(first) || IsAnySceptre(second));
 }
 
+} // namespace
+
+bool HandsCanHold(const Player &player, const Item &first, const Item &second)
+{
+	if (player.GetItemLocation(first) != ILOC_ONEHAND || player.GetItemLocation(second) != ILOC_ONEHAND)
+		return false;
+	// POE2 Mashup: a wand goes with a shield, a focus or a sceptre, never another wand or a martial weapon
+	// (caster-weapons-plan-v2.md, S12).
+	if (gbIsPoe2 && (IsWand(first) || IsWand(second))) {
+		const Item &other = IsWand(first) ? second : first;
+		return !IsWand(other) && (other._iClass != ICLASS_WEAPON || IsAnySceptre(other));
+	}
+	if (IsSceptrePair(player, first, second))
+		return true;
+	// Bard can dual wield swords and maces, so she can hold one-handed weapons of those kinds together.
+	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
+	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield)
+	    && IsAnyOf(first._itype, ItemType::Sword, ItemType::Mace) && IsAnyOf(second._itype, ItemType::Sword, ItemType::Mace))
+		return true;
+	return first._iClass != second._iClass;
+}
+
+namespace {
+
+/** @brief POE2 Mashup: a wand beside a weapon it can't be held with (HandsCanHold): another wand or a martial weapon. */
+bool WandClash(const Player &player, const Item &first, const Item &second)
+{
+	return gbIsPoe2 && !first.isEmpty() && !second.isEmpty() && (IsWand(first) || IsWand(second)) && !HandsCanHold(player, first, second);
+}
+
 /**
  * @brief A specialized version of 'CanEquip(int, Item&, int)' that specifically checks whether the item can be equipped
  * in one/both of the player's hands.
@@ -280,25 +310,7 @@ bool CanWield(Player &player, const Item &item)
 	}
 
 	const Item &occupiedHand = !leftHandItem.isEmpty() ? leftHandItem : rightHandItem;
-
-	// Bard can dual wield swords and maces, so we allow equiping one-handed weapons in her free slot as long as her occupied
-	// slot is another one-handed weapon.
-	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
-	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield)) {
-		const bool occupiedHandIsOneHandedSwordOrMace = player.GetItemLocation(occupiedHand) == ILOC_ONEHAND
-		    && IsAnyOf(occupiedHand._itype, ItemType::Sword, ItemType::Mace);
-
-		const bool weaponToEquipIsOneHandedSwordOrMace = player.GetItemLocation(item) == ILOC_ONEHAND
-		    && IsAnyOf(item._itype, ItemType::Sword, ItemType::Mace);
-
-		if (occupiedHandIsOneHandedSwordOrMace && weaponToEquipIsOneHandedSwordOrMace) {
-			return true;
-		}
-	}
-
-	return player.GetItemLocation(item) == ILOC_ONEHAND
-	    && player.GetItemLocation(occupiedHand) == ILOC_ONEHAND
-	    && (item._iClass != occupiedHand._iClass || IsSceptrePair(player, item, occupiedHand));
+	return HandsCanHold(player, item, occupiedHand);
 }
 
 /**
@@ -437,9 +449,11 @@ void ChangeEquippedItem(Player &player, uint8_t slot)
 
 	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 
-	const bool pasteIntoSelectedHand = (player.InvBody[otherHand].isEmpty() || player.InvBody[otherHand]._iClass != player.HoldItem._iClass)
-	    || (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield) && player.InvBody[otherHand]._iClass == ICLASS_WEAPON && player.HoldItem._iClass == ICLASS_WEAPON)
-	    || IsSceptrePair(player, player.InvBody[otherHand], player.HoldItem);
+	// POE2 Mashup: a wand never goes beside another wand or a martial weapon; it takes that weapon's place.
+	const bool pasteIntoSelectedHand = !WandClash(player, player.InvBody[otherHand], player.HoldItem)
+	    && ((player.InvBody[otherHand].isEmpty() || player.InvBody[otherHand]._iClass != player.HoldItem._iClass)
+	        || (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::DualWield) && player.InvBody[otherHand]._iClass == ICLASS_WEAPON && player.HoldItem._iClass == ICLASS_WEAPON)
+	        || IsSceptrePair(player, player.InvBody[otherHand], player.HoldItem));
 
 	const bool dequipTwoHandedWeapon = (!player.InvBody[otherHand].isEmpty() && player.GetItemLocation(player.InvBody[otherHand]) == ILOC_TWOHAND);
 
@@ -914,6 +928,7 @@ void CheckInvCut(Player &player, Point cursorPosition, bool automaticMove, bool 
 						invloc = INVLOC_AMULET;
 						break;
 					case ILOC_ONEHAND:
+						// (A wand beside a weapon is always the same class and never a sceptre pair, so it replaces it here too.)
 						if (!player.InvBody[INVLOC_HAND_LEFT].isEmpty()
 						    && ((player.InvList[iv]._iClass == player.InvBody[INVLOC_HAND_LEFT]._iClass && !IsSceptrePair(player, player.InvList[iv], player.InvBody[INVLOC_HAND_LEFT]))
 						        || player.GetItemLocation(player.InvBody[INVLOC_HAND_LEFT]) == ILOC_TWOHAND)) {
