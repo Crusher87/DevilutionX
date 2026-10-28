@@ -173,12 +173,12 @@ public:
 	}
 
 	/** @brief A monster in the level that spells can hurt: unique, so a hit never knocks it back (that needs graphics). */
-	static Monster &PlaceMonster(size_t slot, Point tile)
+	static Monster &PlaceMonster(size_t slot, Point tile, bool unique = true)
 	{
 		Monster &monster = Monsters[slot];
 		monster = {};
 		monster.levelType = 0;
-		monster.uniqueType = UniqueMonsterType::Garbud;
+		monster.uniqueType = unique ? UniqueMonsterType::Garbud : UniqueMonsterType::None;
 		monster.flags = 0;
 		monster.rndItemSeed = 1;
 		monster.talkMsg = TEXT_NONE;
@@ -241,9 +241,14 @@ constexpr GrantRow PlainGrants[] = {
 	{ "Reaping Staff", WeaponSkill::Reap, false },
 	{ "Icicle Staff", WeaponSkill::FrostLance, false },
 	{ "Paralysing Staff", WeaponSkill::EnervatingNova, false },
-	{ "Sanctified Staff", WeaponSkill::ConsecratedGround, false },
+	{ "Roaring Staff", WeaponSkill::EchoingBlast, false, GrantedRider::Echo },
+	{ "Sanctified Staff", WeaponSkill::ConsecratedGround, false, GrantedRider::RegenBuff },
 	{ "Dark Staff", WeaponSkill::DarkPact, false },
-	{ "Ravenous Staff", WeaponSkill::FeastOfFlesh, false },
+	{ "Ravenous Staff", WeaponSkill::FeastOfFlesh, false, GrantedRider::KillRestoreBoth },
+	{ "Volatile Wand", WeaponSkill::VolatileBolt, true, GrantedRider::BurstOnKill },
+	{ "Galvanic Wand", WeaponSkill::GalvanicBolt, true, GrantedRider::ChainOnce },
+	{ "Acrid Wand", WeaponSkill::Decompose, true, GrantedRider::Plague },
+	{ "Offering Wand", WeaponSkill::Exsanguinate, true, GrantedRider::KillRestoreLife },
 	{ "Withered Wand", WeaponSkill::WitheringBolt, true, GrantedRider::Wither },
 	{ "Bone Wand", WeaponSkill::BoneBolt, true, GrantedRider::StunBuildup },
 	{ "Attuned Wand", WeaponSkill::ManaDrain, true, GrantedRider::ManaDrain },
@@ -257,7 +262,8 @@ constexpr GrantRow PlainGrants[] = {
 
 /**
  * @brief A rider's worth on one target, in percent of the hits (plan 7.1): a bleed +75%, Wither and a cull about +10%,
- * a double every fifth cast +20%; stun, mana, slow and Weaken add no damage.
+ * a double every fifth cast +20%, an echo +60%, Decompose's plague the hit again; stun, mana, slow, Weaken, healing and
+ * what lands on other monsters (a burst on a kill, a chain) add nothing on one target.
  */
 int RiderPercent(const TableSkillData &row)
 {
@@ -269,6 +275,10 @@ int RiderPercent(const TableSkillData &row)
 		return 110;
 	case GrantedRider::EveryFifthDouble:
 		return 100 + 100 / CriticalBoltEvery;
+	case GrantedRider::Echo:
+		return 100 + EchoPercent;
+	case GrantedRider::Plague:
+		return 200;
 	default:
 		return 100;
 	}
@@ -382,6 +392,10 @@ TEST_F(Poe2GrantedSkillsTest, BoltsFlyWithTheirOwnElement)
 		{ "Frigid Wand", MissileID::BlueFlare, DamageType::Magic, 1, false },
 		{ "Primordial Wand", MissileID::RedFlare, DamageType::Physical, 4, false },
 		{ "Dueling Wand", MissileID::OrangeFlare, DamageType::Physical, 2, false },
+		{ "Volatile Wand", MissileID::OrangeFlare, DamageType::Fire, 1, false },
+		{ "Galvanic Wand", MissileID::YellowFlare, DamageType::Lightning, 1, false },
+		{ "Acrid Wand", MissileID::BloodStar, DamageType::Physical, 1, false },
+		{ "Offering Wand", MissileID::RedFlare, DamageType::Physical, 1, false },
 	};
 	for (const auto &bolt : Bolts) {
 		Hold(player, bolt.base, 70);
@@ -551,6 +565,116 @@ TEST_F(Poe2GrantedSkillsTest, TheWandRidersWork)
 	ActiveMonsterCount = 0;
 }
 
+TEST_F(Poe2GrantedSkillsTest, TheKillAndSpreadRidersWork)
+{
+	Player &player = *MyPlayer;
+	LoadMonsters();
+	const auto hit = [&player](WeaponSkill skill, Monster &monster) {
+		Missile bolt {};
+		SetMissileSkill(bolt, player, SkillSlot::ForAttack(skill));
+		OnTableMissileHit(bolt, player, monster, 40, false);
+	};
+	Monster &first = PlaceMonster(0, { 20, 24 }, false);
+	Monster &near = PlaceMonster(1, { 21, 24 }, false);
+	Monster &twoAway = PlaceMonster(2, { 20, 26 }, false);
+	Monster &threeAway = PlaceMonster(3, { 23, 24 }, false);
+
+	// Galvanic Bolt: the nearest other monster within 2 tiles takes half the hit.
+	hit(WeaponSkill::GalvanicBolt, first);
+	EXPECT_EQ(first.hitPoints, first.maxHitPoints);
+	EXPECT_LT(near.hitPoints, near.maxHitPoints);
+	EXPECT_GE(near.hitPoints, near.maxHitPoints - Fixed26_6::fromInt(20));
+	EXPECT_EQ(twoAway.hitPoints, twoAway.maxHitPoints);
+	near.hitPoints = near.maxHitPoints;
+
+	// Volatile Bolt: a monster it kills bursts for half the hit on what stands next to it.
+	first.hitPoints = Fixed26_6::fromInt(0);
+	hit(WeaponSkill::VolatileBolt, first);
+	EXPECT_LT(near.hitPoints, near.maxHitPoints);
+	EXPECT_GE(near.hitPoints, near.maxHitPoints - Fixed26_6::fromInt(20));
+	EXPECT_EQ(twoAway.hitPoints, twoAway.maxHitPoints);
+	near.hitPoints = near.maxHitPoints;
+
+	// Exsanguinate bleeds; a kill on a bleeding monster restores 1% of life, on another nothing.
+	first.hitPoints = first.maxHitPoints;
+	hit(WeaponSkill::Exsanguinate, first);
+	EXPECT_EQ(first.poe2.bleedTicks, GrantedBleedTicks);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+	first.hitPoints = Fixed26_6::fromInt(0);
+	hit(WeaponSkill::Exsanguinate, first);
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(102));
+	first.poe2 = {};
+	hit(WeaponSkill::Exsanguinate, first);
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(102));
+
+	// Decompose: the hit again over 4 seconds; when the monster dies the plague passes to the one nearest monster.
+	first.hitPoints = first.maxHitPoints;
+	hit(WeaponSkill::Decompose, first);
+	EXPECT_EQ(first.poe2.plagueTicks, PlagueTicks);
+	EXPECT_EQ(first.poe2.bleedTicks, PlagueTicks);
+	EXPECT_EQ(first.poe2.bleedSkill, WeaponSkill::Decompose);
+	EXPECT_EQ(first.poe2.bleedDamagePerTick, 40 * 64 / PlagueTicks);
+	OnTableCursedMonsterKilled(first);
+	EXPECT_EQ(near.poe2.plagueTicks, PlagueTicks);
+	EXPECT_EQ(near.poe2.bleedSkill, WeaponSkill::Decompose);
+	EXPECT_EQ(twoAway.poe2.plagueTicks, 0);
+	EXPECT_EQ(threeAway.poe2.plagueTicks, 0);
+	// Its time runs down with the curses'.
+	ProcessTableCurses(near);
+	EXPECT_EQ(near.poe2.plagueTicks, PlagueTicks - 1);
+	ActiveMonsterCount = 0;
+}
+
+TEST_F(Poe2GrantedSkillsTest, TheStaffRidersWork)
+{
+	Player &player = *MyPlayer;
+	LoadMonsters();
+
+	// Feast of Flesh: what it kills restores 2% of life and of mana.
+	Hold(player, "Ravenous Staff", 70);
+	player._pMaxMana = player._pMaxManaBase = Fixed26_6::fromInt(100);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+	Monster &weak = PlaceMonster(0, { 21, 21 }, false);
+	weak.hitPoints = Fixed26_6::fromInt(1);
+	pcursmonst = -1;
+	CastAndCollect(player);
+	EXPECT_TRUE(weak.hasNoLife());
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(104));
+	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(2));
+	ActiveMonsterCount = 0;
+
+	// Consecrated Ground: then 1% of maximum life a second for 4 seconds; a second cast starts it over.
+	Stand(player);
+	Hold(player, "Sanctified Staff", 70);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+	CastAndCollect(player);
+	Stand(player);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+	CastAndCollect(player);
+	EXPECT_EQ(player.poe2.grantedState.regenRaw, Fixed26_6::fromInt(8).raw());
+	EXPECT_EQ(player.poe2.grantedState.regenTicks, ConsecrateRegenTicks);
+	for (int tick = 0; tick < ConsecrateRegenTicks; tick++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(player.poe2.grantedState.regenTicks, 0);
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(108));
+
+	// Echoing Blast goes off again a quarter second later for 60% of the hit.
+	Stand(player);
+	Hold(player, "Roaring Staff", 70);
+	Monster &target = PlaceMonster(0, { 20, 24 }, false);
+	pcursmonst = 0;
+	CastAndCollect(player);
+	const Fixed26_6 first = target.maxHitPoints - target.hitPoints;
+	EXPECT_GT(first, Fixed26_6::fromInt(0));
+	EXPECT_EQ(SkillZoneCount(), 1U);
+	for (int tick = 0; tick <= EchoDelayTicks; tick++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 0U);
+	const Fixed26_6 second = target.maxHitPoints - target.hitPoints - first;
+	EXPECT_NEAR(second.raw(), first.raw() * EchoPercent / 100, 64);
+	ActiveMonsterCount = 0;
+}
+
 TEST_F(Poe2GrantedSkillsTest, CriticalBoltDoublesEveryFifthCast)
 {
 	Player &player = *MyPlayer;
@@ -595,6 +719,11 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		{ WeaponSkill::TormentBolt, 38, 750, 51 },
 		{ WeaponSkill::CriticalBolt, 34, 750, 54 }, // on average
 		{ WeaponSkill::WitheringRay, 9, 750, 53 }, // 48 with Wither
+		{ WeaponSkill::EchoingBlast, 14, 900, 25 }, // with the echo's 60%
+		{ WeaponSkill::VolatileBolt, 40, 800, 50 },
+		{ WeaponSkill::GalvanicBolt, 34, 650, 52 },
+		{ WeaponSkill::Decompose, 22, 800, 55 }, // the hit, then as much again over 4 seconds
+		{ WeaponSkill::Exsanguinate, 24, 800, 52 }, // with the bleed
 		// Both bolts. Plan 7.2's 24 a bolt (69) beat Condemn and Corpse Explosion; the wand bolts beat no gem but Haunt,
 		// Glacial Spike and Locust Swarm, so it is a wand bolt like the others.
 		{ WeaponSkill::TwinBolts, 19, 700, 54 },

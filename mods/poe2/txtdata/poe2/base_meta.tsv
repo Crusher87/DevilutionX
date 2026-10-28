@@ -461,7 +461,7 @@ Chiming Staff	staff	poe2					25			ChimingBolt
 Rending Staff	staff	poe2					33			Soulrend	physical	
 Reaping Staff	staff	poe2					38			Reap	physical	
 Icicle Staff	staff	poe2					45			FrostLance	cold	
-Roaring Staff	staff	poe2					49					
+Roaring Staff	staff	poe2					49			EchoingBlast		
 Paralysing Staff	staff	poe2					52			EnervatingNova	lightning	
 Sanctified Staff	staff	poe2					56			ConsecratedGround		
 Dark Staff	staff	poe2					65			DarkPact		
@@ -470,10 +470,10 @@ Withered Wand	wand	poe2					1			WitheringBolt	physical
 Bone Wand	wand	poe2					1			BoneBolt	physical	
 Attuned Wand	wand	poe2					1			ManaDrain		
 Siphoning Wand	wand	poe2					11			PowerSiphon		
-Volatile Wand	wand	poe2					16				fire	
-Galvanic Wand	wand	poe2					25				lightning	
-Acrid Wand	wand	poe2					33					
-Offering Wand	wand	poe2					38				physical	
+Volatile Wand	wand	poe2					16			VolatileBolt	fire	
+Galvanic Wand	wand	poe2					25			GalvanicBolt	lightning	
+Acrid Wand	wand	poe2					33			Decompose		
+Offering Wand	wand	poe2					38			Exsanguinate	physical	
 Frigid Wand	wand	poe2					45			FrostBolt	cold	
 Torture Wand	wand	poe2					49			TormentBolt		
 Critical Wand	wand	poe2					52			CriticalBolt		

@@ -265,6 +265,24 @@ constexpr int PowerSiphonUniqueCullPercent = 5;
 constexpr int TormentWeakenTicks = 2 * 20;
 /** @brief Critical Bolt's every fifth cast hits for double. */
 constexpr int CriticalBoltEvery = 5;
+/** @brief Volatile Bolt: a monster it kills bursts for this percent of the hit, radius 1. */
+constexpr int VolatileBurstPercent = 50;
+/** @brief Galvanic Bolt zaps one more enemy within this many tiles for this percent of the hit. */
+constexpr int GalvanicChainTiles = 2;
+constexpr int GalvanicChainPercent = 50;
+/** @brief Decompose's plague deals its hit again over 4 seconds; a monster that dies with it passes it to the nearest one. */
+constexpr int PlagueTicks = 4 * 20;
+constexpr int PlagueSpreadTiles = 3;
+/** @brief Exsanguinate: a kill on a bleeding enemy restores this percent of maximum life. */
+constexpr int ExsanguinateLifePercent = 1;
+/** @brief Feast of Flesh: a kill restores this percent of maximum life and of maximum mana. */
+constexpr int FeastRestorePercent = 2;
+/** @brief Echoing Blast goes off again this many ticks later, for this percent of the hit. */
+constexpr int EchoDelayTicks = 5;
+constexpr int EchoPercent = 60;
+/** @brief Consecrated Ground: 1% of maximum life a second for 4 seconds; a new cast starts it over, it doesn't stack. */
+constexpr int ConsecrateRegenPercentPerSecond = 1;
+constexpr int ConsecrateRegenTicks = 4 * 20;
 /** @brief A granted skill's bleed (Soulrend) deals this percent of its hit over GrantedBleedTicks (plan 7.1: +75% over 5 s). */
 constexpr int GrantedBleedPercent = 75;
 constexpr int GrantedBleedTicks = 5 * 20;

@@ -145,15 +145,20 @@ const TableSkillData Table[] = {
 	{ WS::Reap, "Reap", "A bloody scythe sweeps the target and everything next to it", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::FrostLance, "Frost Lance", "A lance of ice that pierces through enemies and chills them", 0, 0, TW::None, 1, Projectiles, 30, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Elemental), TableCurve::Fireball, 312 },
 	{ WS::EnervatingNova, "Enervating Nova", "A ring of lightning bursts out around you", 0, 0, TW::None, 3, Around, 25, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
-	{ WS::ConsecratedGround, "Consecrated Ground", "Holy fire bursts out around you", 0, 0, TW::None, 2, Around, 26, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::HolyBolt), TableCurve::Fireball, 312 },
+	{ WS::ConsecratedGround, "Consecrated Ground", "Holy fire bursts out around you, then heals you for 4 seconds", 0, 0, TW::None, 2, Around, 26, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::HolyBolt), TableCurve::Fireball, 312, GrantedRider::RegenBuff },
 	{ WS::DarkPact, "Dark Pact", "A burst of dark power at the target, paid with 5% of your life", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted | TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
-	{ WS::FeastOfFlesh, "Feast of Flesh", "Bones burst out around you", 0, 0, TW::None, 1, Around, 20, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::FeastOfFlesh, "Feast of Flesh", "Bones burst out around you; what they kill feeds you life and mana", 0, 0, TW::None, 1, Around, 20, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::KillRestoreBoth },
 	{ WS::WitheringBolt, "Withering Bolt", "A dark bolt that withers what it hits, so it takes more damage", 0, 0, TW::None, 1, Projectiles, 37, 1, 0, 0, 0, 0, DT::Physical, MissileID::BloodStar, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Wither },
 	{ WS::BoneBolt, "Bone Bolt", "A shard of bone that builds up twice the stun", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
 	{ WS::ManaDrain, "Mana Drain", "A weak bolt that drains mana from what it hits and slows it", 0, 0, TW::None, 1, Projectiles, 15, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare2, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Mana), TableCurve::Fireball, 312, GrantedRider::ManaDrain },
 	{ WS::PowerSiphon, "Power Siphon", "A bolt that kills what it leaves on low life, for a Frenzy charge", 0, 0, TW::None, 1, Projectiles, 35, 1, 0, 0, 0, 0, DT::Physical, MissileID::YellowFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Telekinesis), TableCurve::Fireball, 312, GrantedRider::CullFrenzy },
 	{ WS::TormentBolt, "Torment Bolt", "A bolt that weakens what it hits for 2 seconds", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Reflect), TableCurve::Fireball, 312, GrantedRider::Weaken },
 	{ WS::CriticalBolt, "Critical Bolt", "A bolt whose every fifth cast hits twice as hard", 0, 0, TW::None, 1, Projectiles, 34, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Search), TableCurve::Fireball, 312, GrantedRider::EveryFifthDouble },
+	{ WS::EchoingBlast, "Echoing Blast", "A blast of fire at the target that goes off again a moment later", 0, 0, TW::None, 2, Burst, 14, 0, 1, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Inferno), TableCurve::Fireball, 312, GrantedRider::Echo },
+	{ WS::VolatileBolt, "Volatile Bolt", "A fire bolt; what it kills bursts into flame", 0, 0, TW::None, 2, Projectiles, 40, 1, 0, 0, 0, 0, DT::Fire, MissileID::OrangeFlare, MG::FireArrowExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Fireball), TableCurve::Fireball, 312, GrantedRider::BurstOnKill },
+	{ WS::GalvanicBolt, "Galvanic Bolt", "A bolt of lightning that zaps one more enemy nearby", 0, 0, TW::None, 3, Projectiles, 34, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChainLightning), TableCurve::Fireball, 312, GrantedRider::ChainOnce },
+	{ WS::Decompose, "Decompose", "A rotting bolt whose plague passes on when its victim dies", 0, 0, TW::None, 1, Projectiles, 22, 1, 0, 0, 0, 0, DT::Physical, MissileID::BloodStar, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Plague },
+	{ WS::Exsanguinate, "Exsanguinate", "A blood bolt that bleeds; killing a bleeding enemy heals you", 0, 0, TW::None, 1, Projectiles, 24, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312, GrantedRider::KillRestoreLife },
 	{ WS::FrostBolt, "Frost Bolt", "A bolt of frost that chills what it hits", 0, 0, TW::None, 1, Projectiles, 40, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::WitheringRay, "Withering Ray", "A stream of four dark shards that wither what they hit", 0, 0, TW::None, 1, Stream, 9, 4, 0, 0, 2, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Wither },
 	{ WS::TwinBolts, "Twin Bolts", "Two bolts at once", 0, 0, TW::None, 1, Projectiles, 19, 2, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
@@ -442,12 +447,64 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 }
 
 /** @brief A burst of a zone or a landing: hits everything within the radius. */
+/** @brief Heals the hero by a percent of maximum life and of maximum mana. */
+void RestorePercent(const Player &hero, int lifePercent, int manaPercent)
+{
+	Player &player = Players[hero.getId()];
+	if (player.hasNoLife())
+		return;
+	if (lifePercent > 0) {
+		const Fixed26_6 life = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(player._pMaxHP.raw()) * lifePercent / 100));
+		player._pHitPoints = std::min(player._pHitPoints + life, player._pMaxHP);
+		player._pHPBase = std::min(player._pHPBase + life, player._pMaxHPBase);
+		RedrawComponent(PanelDrawComponent::Health);
+	}
+	if (manaPercent > 0) {
+		const Fixed26_6 mana = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(player._pMaxMana.raw()) * manaPercent / 100));
+		player._pMana = std::min(player._pMana + mana, player._pMaxMana);
+		player._pManaBase = std::min(player._pManaBase + mana, player._pMaxManaBase);
+		RedrawComponent(PanelDrawComponent::Mana);
+	}
+}
+
+/** @brief A granted skill's riders on a monster its hit (of this much) just killed. */
+void OnGrantedKill(const Player &player, const Monster &monster, const TableSkillData &data, Fixed26_6 hit)
+{
+	switch (data.rider) {
+	case GrantedRider::BurstOnKill: {
+		// Volatile Bolt: the body bursts for half the hit around it.
+		const Fixed26_6 burst = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(hit.raw()) * VolatileBurstPercent / 100));
+		AddVisualEffect(monster.position.tile, data.effect, 0, 4);
+		std::vector<Monster *> around;
+		ForEachMonsterNear(monster.position.tile, 1, [&](Monster &other) {
+			if (&other != &monster)
+				around.push_back(&other);
+		});
+		for (Monster *other : around)
+			SpellHitMonster(player, *other, data.type, burst, SourceOf(data));
+		break;
+	}
+	case GrantedRider::KillRestoreLife:
+		// Exsanguinate: only a bleeding enemy feeds the hero.
+		if (monster.poe2.bleedTicks > 0)
+			RestorePercent(player, ExsanguinateLifePercent, 0);
+		break;
+	case GrantedRider::KillRestoreBoth:
+		RestorePercent(player, FeastRestorePercent, FeastRestorePercent);
+		break;
+	default:
+		break;
+	}
+}
+
 void ZoneBurst(const Player &player, const TableSkillData &data, Point center, int radius, Fixed26_6 damage)
 {
 	AddVisualEffect(center, data.effect, 0, 4);
 	BreakObjectsInArea(player, center, radius);
 	ForEachMonsterNear(center, radius, [&](Monster &monster) {
 		SpellHitMonster(player, monster, data.type, damage, SourceOf(data));
+		if (IsGrantedTableSkill(data) && monster.hasNoLife())
+			OnGrantedKill(player, monster, data, damage);
 		if ((data.flags & TF_Stun) != 0 && !monster.hasNoLife())
 			HeavyStunMonster(monster);
 	});
@@ -807,6 +864,12 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			// A nova around the hero (the caster weapons' granted skills): it hits like a burst, with the spell base.
 			EffectRingAround(tile, std::max<int>(data.radius, 1), data.effect, 0);
 			ZoneBurst(player, data, tile, std::max<int>(data.radius, 1), FixedDamage(player, data));
+			// Consecrated Ground: then 1% of maximum life a second for 4 seconds, started over by each cast.
+			if (data.rider == GrantedRider::RegenBuff) {
+				GrantedRuntime &state = player.poe2.grantedState;
+				state.regenTicks = static_cast<uint8_t>(ConsecrateRegenTicks);
+				state.regenRaw = static_cast<int32_t>(static_cast<int64_t>(player._pMaxHP.raw()) * ConsecrateRegenPercentPerSecond * ConsecrateRegenTicks / 20 / 100);
+			}
 			break;
 		}
 		[[fallthrough]];
@@ -849,7 +912,13 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		break;
 	case Burst:
 		if ((data.flags & TF_Spell) != 0) {
-			ZoneBurst(player, data, target, data.radius, FixedDamage(player, data));
+			const Fixed26_6 damage = FixedDamage(player, data);
+			ZoneBurst(player, data, target, data.radius, damage);
+			// Echoing Blast goes off again where it landed, a moment later and weaker.
+			if (data.rider == GrantedRider::Echo) {
+				const Fixed26_6 echo = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * EchoPercent / 100));
+				Zones.push_back({ data.skill, target, 1, static_cast<int16_t>(EchoDelayTicks), 0, echo, static_cast<int8_t>(std::min<int>(data.radius, INT8_MAX)) });
+			}
 		} else {
 			BreakObjectsInArea(player, target, data.radius);
 			std::vector<Monster *> targets;
@@ -1029,13 +1098,18 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 	if (skill.kind != SkillKind::Attack)
 		return;
 	const TableSkillData *data = FindTableSkill(static_cast<WeaponSkill>(skill.id));
-	if (data == nullptr || !IsGrantedTableSkill(*data) || monster.hasNoLife() || monster.mode == MonsterMode::Death)
+	if (data == nullptr || !IsGrantedTableSkill(*data))
 		return;
-	// Soulrend: the hit bleeds for GrantedBleedPercent of itself over 5 seconds.
-	if ((data->flags & TF_Bleed) != 0) {
-		const int64_t raw = isDamageShifted ? damage : static_cast<int64_t>(damage) * 64;
-		InflictTableBleed(player, monster, data->skill, Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw * GrantedBleedPercent / 100, 1, INT32_MAX / 2))), GrantedBleedTicks);
+	const int64_t raw = isDamageShifted ? damage : static_cast<int64_t>(damage) * 64;
+	const Fixed26_6 hit = Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 1, INT32_MAX / 2)));
+	const auto share = [&hit](int percent) { return Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(hit.raw()) * percent / 100)); };
+	if (monster.hasNoLife() || monster.mode == MonsterMode::Death) {
+		OnGrantedKill(player, monster, *data, hit);
+		return;
 	}
+	// Soulrend and Exsanguinate: the hit bleeds for GrantedBleedPercent of itself over 5 seconds.
+	if ((data->flags & TF_Bleed) != 0)
+		InflictTableBleed(player, monster, data->skill, share(GrantedBleedPercent), GrantedBleedTicks);
 	Poe2MonsterState &state = monster.poe2;
 	switch (data->rider) {
 	case GrantedRider::Wither:
@@ -1069,6 +1143,29 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 		GainFrenzyCharge(player);
 		break;
 	}
+	case GrantedRider::ChainOnce: {
+		// Galvanic Bolt: the nearest other enemy within reach takes half the hit.
+		Monster *next = nullptr;
+		int best = GalvanicChainTiles + 1;
+		ForEachMonsterNear(monster.position.tile, GalvanicChainTiles, [&](Monster &other) {
+			const int distance = monster.position.tile.WalkingDistance(other.position.tile);
+			if (&other != &monster && distance < best) {
+				best = distance;
+				next = &other;
+			}
+		});
+		if (next != nullptr) {
+			AddVisualEffect(next->position.tile, MissileGraphicID::ThinLightning, 0, 4);
+			SpellHitMonster(player, *next, data->type, share(GalvanicChainPercent), SourceOf(*data));
+		}
+		break;
+	}
+	case GrantedRider::Plague:
+		// Decompose: the hit again over 4 seconds, passed on when the monster dies (OnTableCursedMonsterKilled).
+		InflictTableBleed(player, monster, data->skill, hit, PlagueTicks);
+		state.plagueTicks = static_cast<uint8_t>(PlagueTicks);
+		monster.tag(player);
+		break;
 	case GrantedRider::Weaken:
 		// Cast by hand, at full strength, as the Weaken gem's curse.
 		state.auraCurses &= static_cast<uint16_t>(~AuraCurseBit(TableCurse::Weaken));
@@ -1192,6 +1289,21 @@ void ProcessSkillZones(Player &player)
 {
 	if (ShardSoundCooldown > 0)
 		ShardSoundCooldown--;
+	// Consecrated Ground's life, a tick's share at a time.
+	GrantedRuntime &granted = player.poe2.grantedState;
+	if (granted.regenTicks > 0) {
+		if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
+			granted.regenTicks = 0;
+			granted.regenRaw = 0;
+		} else {
+			const Fixed26_6 life = Fixed26_6::fromRaw(granted.regenRaw / granted.regenTicks);
+			granted.regenRaw -= life.raw();
+			granted.regenTicks--;
+			player._pHitPoints = std::min(player._pHitPoints + life, player._pMaxHP);
+			player._pHPBase = std::min(player._pHPBase + life, player._pMaxHPBase);
+			RedrawComponent(PanelDrawComponent::Health);
+		}
+	}
 	if (Zones.empty())
 		return;
 	if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
@@ -1210,8 +1322,8 @@ void ProcessSkillZones(Player &player)
 		if (!done && zone.delay > 0) {
 			zone.delay--;
 		} else if (!done) {
-			// Landing bursts of projectiles, and Delayed zones, go off once.
-			if ((data->flags & TF_LandingBurst) != 0 || IsAnyOf(data->zone, TableZone::Delayed, TableZone::IceSpike)) {
+			// Landing bursts of projectiles, Delayed zones and a granted skill's echo go off once.
+			if ((data->flags & TF_LandingBurst) != 0 || IsAnyOf(data->zone, TableZone::Delayed, TableZone::IceSpike) || data->rider == GrantedRider::Echo) {
 				ZoneBurst(player, *data, zone.center, std::max(radius, 1), zone.damage);
 				if (data->zone == TableZone::Delayed) {
 					PlaySfxLoc(SfxID::BigExplosion, zone.center);
@@ -1332,7 +1444,7 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 void ProcessTableCurses(Monster &monster)
 {
 	Poe2MonsterState &state = monster.poe2;
-	for (uint8_t *ticks : { &state.weakenTicks, &state.decrepifyTicks, &state.ironMaidenTicks, &state.lowerResistTicks, &state.deathMarkTicks, &state.hauntTicks, &state.locustTicks }) {
+	for (uint8_t *ticks : { &state.weakenTicks, &state.decrepifyTicks, &state.ironMaidenTicks, &state.lowerResistTicks, &state.deathMarkTicks, &state.hauntTicks, &state.locustTicks, &state.plagueTicks }) {
 		if (*ticks > 0)
 			(*ticks)--;
 	}
@@ -1355,12 +1467,14 @@ int TableCurseDamageTakenPercent(const Monster &monster, DamageType type)
 void OnTableCursedMonsterKilled(const Monster &monster)
 {
 	const Poe2MonsterState &state = monster.poe2;
-	if ((state.hauntTicks == 0 && state.locustTicks == 0) || state.bleedSource < 0 || static_cast<size_t>(state.bleedSource) >= Players.size())
+	if ((state.hauntTicks == 0 && state.locustTicks == 0 && state.plagueTicks == 0) || state.bleedSource < 0 || static_cast<size_t>(state.bleedSource) >= Players.size())
 		return;
 	const Player &player = Players[state.bleedSource];
 	const Point from = monster.position.tile;
 	const bool haunt = state.hauntTicks > 0;
-	const int range = haunt ? HauntJumpTiles : LocustSpreadTiles;
+	// Decompose's plague passes to the one nearest monster, as a weaker Locust Swarm.
+	const bool plague = !haunt && state.locustTicks == 0;
+	const int range = haunt ? HauntJumpTiles : (plague ? PlagueSpreadTiles : LocustSpreadTiles);
 	std::vector<Monster *> next;
 	ForEachMonsterNear(from, range, [&](Monster &other) {
 		if (&other != &monster)
@@ -1369,10 +1483,10 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 	std::sort(next.begin(), next.end(), [&](const Monster *a, const Monster *b) {
 		return from.WalkingDistance(a->position.tile) < from.WalkingDistance(b->position.tile);
 	});
-	const size_t jumps = haunt ? 1 : LocustSpreads;
+	const size_t jumps = haunt || plague ? 1 : LocustSpreads;
 	if (next.size() > jumps)
 		next.resize(jumps);
-	const uint8_t ticks = haunt ? state.hauntTicks : state.locustTicks;
+	const uint8_t ticks = haunt ? state.hauntTicks : (plague ? static_cast<uint8_t>(PlagueTicks) : state.locustTicks);
 	// Haunt is a spirit, not a wound (Curtis 2026-10-28: "is it a bleed skill, or a ghost?"): it leaves the body and
 	// shows up on the next one.
 	const MissileGraphicID look = haunt ? MissileGraphicID::BoneSpirit : MissileGraphicID::BloodHit;
@@ -1380,7 +1494,7 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 		AddVisualEffect(from, look);
 	for (Monster *other : next) {
 		Poe2MonsterState &target = other->poe2;
-		(haunt ? target.hauntTicks : target.locustTicks) = ticks;
+		(haunt ? target.hauntTicks : (plague ? target.plagueTicks : target.locustTicks)) = ticks;
 		target.bleedTicks = std::max(target.bleedTicks, ticks);
 		target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick);
 		target.bleedSource = state.bleedSource;

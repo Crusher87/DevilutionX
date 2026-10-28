@@ -194,7 +194,7 @@ CASTER_BASES = [
 ]
 # Granted skills not built yet: their bases grant nothing until the skill exists (an unknown key is an error).
 PENDING_GRANTS = {
-	'SolarOrb', 'EchoingBlast', 'VolatileBolt', 'GalvanicBolt', 'Decompose', 'Exsanguinate',
+	'SolarOrb',
 }
 CASTER_CLASSES = {
 	'staff': ('Weapon', 'Two-handed', 'Staff', 'Staff'),
