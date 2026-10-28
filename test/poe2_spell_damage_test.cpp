@@ -11,6 +11,7 @@
 #include "levels/gendung.h"
 #include "lighting.h"
 #include "missiles.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
@@ -261,11 +262,14 @@ TEST_F(Poe2SpellDamageTest, ARunesBurstIsCreditedToTheRune)
 	rune._mispllvl = 1;
 	rune._mlid = NO_LIGHT;
 	rune.var1 = static_cast<int>(MissileID::Nova);
-	rune.position.tile = player.position.tile;
-	// The hero steps on it.
-	dPlayer[player.position.tile.x][player.position.tile.y] = static_cast<int8_t>(player.getId() + 1);
+	const Point tile { 44, 44 };
+	rune.position.tile = tile;
+	// A monster steps on it.
+	Monsters[0] = {};
+	Monsters[0].position.tile = tile;
+	dMonster[tile.x][tile.y] = 1;
 	ProcessRune(rune);
-	dPlayer[player.position.tile.x][player.position.tile.y] = 0;
+	dMonster[tile.x][tile.y] = 0;
 	ASSERT_TRUE(rune._miDelFlag);
 	ASSERT_EQ(Missiles.size(), 2U);
 	Missile &nova = Missiles.back();
@@ -287,6 +291,36 @@ TEST_F(Poe2SpellDamageTest, ARunesBurstIsCreditedToTheRune)
 	const Missile *cast = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::NovaBall, TARGET_MONSTERS, player, 0, 1);
 	ASSERT_NE(cast, nullptr);
 	EXPECT_EQ(cast->poe2.creditSpell, SpellID::Invalid);
+}
+
+TEST_F(Poe2SpellDamageTest, TheHerosOwnRunesNeverHurtTheHero)
+{
+	// Curtis 2026-10-28: his own Rune of Fire went off under him three times, down to 7 life ("from a trap").
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	const Point tile = player.position.tile;
+	dPlayer[tile.x][tile.y] = static_cast<int8_t>(player.getId() + 1);
+	Missiles.clear();
+	// The hero walks over the rune: it waits for an enemy.
+	Missile &rune = Missiles.emplace_back();
+	rune._mitype = MissileID::RuneOfFire;
+	rune._micaster = TARGET_MONSTERS;
+	rune._misource = player.getId();
+	rune._mispllvl = 1;
+	rune._mlid = NO_LIGHT;
+	rune.var1 = static_cast<int>(MissileID::BigExplosion);
+	rune.position.tile = tile;
+	ProcessRune(rune);
+	EXPECT_FALSE(rune._miDelFlag);
+	EXPECT_EQ(Missiles.size(), 1U);
+
+	// A burst that goes off beside the hero (a monster set it off) spares them.
+	for (int i = 0; i < 10; i++) {
+		SetRndSeed(i);
+		ASSERT_NE(AddMissile(tile, tile, Direction::South, MissileID::BigExplosion, TARGET_BOTH, player, 0, 1), nullptr);
+	}
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(100));
+	dPlayer[tile.x][tile.y] = 0;
 }
 
 TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)

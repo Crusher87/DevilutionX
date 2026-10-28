@@ -677,7 +677,10 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 
 	bool isPlayerHit = false;
 	bool blocked = false;
-	Player *player = PlayerAtPosition(position, !onlyHitWalking.has_value());
+	// POE2 Mashup: what the hero lays on the ground (runes and their bursts, walls, rings of fire) never hurts the hero or
+	// another player (Curtis 2026-10-28: his own Rune of Fire took him to 7 life, logged as "a trap").
+	const bool sparesPlayers = gbIsPoe2 && missile._micaster == TARGET_BOTH && missile.sourceType() == MissileSource::Player;
+	Player *player = sparesPlayers ? nullptr : PlayerAtPosition(position, !onlyHitWalking.has_value());
 	if (player != nullptr && (onlyHitWalking.has_value() ? (player->isWalking() && CheckCanHitOnlyWalking(missile, player->position, *onlyHitWalking)) : true)) {
 		if (missile._micaster != TARGET_BOTH && !missile.IsTrap()) {
 			if (missile._micaster == TARGET_MONSTERS) {
@@ -3604,8 +3607,14 @@ void ProcessHorkSpawn(Missile &missile)
 void ProcessRune(Missile &missile)
 {
 	const Point position = missile.position.tile;
-	const int mid = dMonster[position.x][position.y];
+	int mid = dMonster[position.x][position.y];
 	Player *player = PlayerAtPosition(position);
+	// POE2 Mashup: the hero's rune waits for an enemy: the hero and their minions walk over it.
+	if (gbIsPoe2 && missile.sourceType() == MissileSource::Player) {
+		player = nullptr;
+		if (mid != 0 && Monsters[std::abs(mid) - 1].isPlayerMinion())
+			mid = 0;
+	}
 	if (mid != 0 || player != nullptr) {
 		const Point targetPosition = mid != 0 ? Monsters[std::abs(mid) - 1].position.tile : player->position.tile;
 		const Direction dir = GetDirection(position, targetPosition);
