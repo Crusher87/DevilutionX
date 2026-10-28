@@ -97,10 +97,16 @@ def damage_percent(row):
 	return str(math.ceil(round(100 * ratio, 6)))
 
 
-def mana_percent(damage):
+# Bolts keep the flat 4 mana Curtis set in round 1 ("all bolts cost 4"), whatever their speed adds.
+MANA_KEPT = { 'Spell Firebolt' }
+
+
+def mana_percent(name, damage):
 	"""Half of the damage the speed adds, rounded up; none for a skill with no damage_pct."""
 	if not damage:
 		return ''
+	if name in MANA_KEPT:
+		return '100'
 	return str(100 + math.ceil((int(damage) - 100) / 2))
 
 
@@ -116,7 +122,7 @@ def main():
 	changed = 0
 	for row in rows:
 		value = damage_percent(row)
-		mana = mana_percent(value)
+		mana = mana_percent(row['name'], value)
 		changed += row.get(COLUMN, '') != value or row.get(MANA_COLUMN, '') != mana
 		row[COLUMN] = value
 		row[MANA_COLUMN] = mana

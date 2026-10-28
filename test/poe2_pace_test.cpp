@@ -543,11 +543,13 @@ TEST_F(Poe2PaceTest, RoundTwoSpeedRules)
 	EXPECT_EQ(SkillSpeedDamagePercent(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::BowShot))), 100);
 	// Half as much: the mana cost rises by half of what the speed adds to the damage, rounded up.
 	for (const SkillSlot skill : { SkillSlot::ForAttack(WeaponSkill::Cleave), SkillSlot::ForAttack(WeaponSkill::Whirlwind), SkillSlot::ForAttack(WeaponSkill::Barrage),
-	         SkillSlot::ForSpell(SpellID::Firebolt), SkillSlot::ForSpell(SpellID::Apocalypse), SkillSlot::ForAttack(WeaponSkill::Flurry), SkillSlot::ForSpell(SpellID::Healing) }) {
+	         SkillSlot::ForSpell(SpellID::Apocalypse), SkillSlot::ForAttack(WeaponSkill::Flurry), SkillSlot::ForSpell(SpellID::Healing) }) {
 		const int damage = SkillSpeedDamagePercent(skill);
 		EXPECT_EQ(SkillSpeedManaPercent(skill), 100 + ((damage - 100 + 1) / 2)) << SkillSpeedKey(skill);
 	}
 	EXPECT_EQ(SkillSpeedManaPercent(SkillSlot::ForAttack(WeaponSkill::Whirlwind)), 187);
+	// Firebolt keeps the bolts' flat 4 mana (Curtis 2026-10-23) though it hits harder for its speed.
+	EXPECT_EQ(SkillSpeedManaPercent(SkillSlot::ForSpell(SpellID::Firebolt)), 100);
 	// Cleave: 3 mana x 117% = 3.51, to the nearest point.
 	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1), 4);
 	// Raise each strike: a lone monster takes a third of each Seven-Sided Strike strike (was a seventh); three or more
