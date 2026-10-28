@@ -3022,7 +3022,11 @@ void AddNova(Missile &missile, AddMissileParameter &parameter)
 	missile.var2 = parameter.dst.y;
 
 	if (!missile.IsTrap() && gbIsPoe2) {
-		missile._midam = RollPoe2SpellHit(Players[missile._misource], missile._mitype == MissileID::Immolation ? SpellID::Immolation : SpellID::Nova, missile._mispllvl);
+		SpellID spell = missile._mitype == MissileID::Immolation ? SpellID::Immolation : SpellID::Nova;
+		// A rune's burst rolls on the rune's own row (Curtis 2026-10-28: Rune of Nova 110%, Rune of Immolation 150%).
+		if (IsAnyOf(missile.poe2.creditSpell, SpellID::RuneOfNova, SpellID::RuneOfImmolation))
+			spell = missile.poe2.creditSpell;
+		missile._midam = RollPoe2SpellHit(Players[missile._misource], spell, missile._mispllvl);
 	} else if (!missile.IsTrap()) {
 		const Player &player = Players[missile._misource];
 		const int dmg = GenerateRndSum(6, 5) + player.getCharacterLevel() + 5;

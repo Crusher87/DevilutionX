@@ -431,17 +431,36 @@ TEST_F(Poe2SpellDamageTest, NovaBallsHitForTheTooltipsPercent)
 		EXPECT_EQ(ballRoll(SpellBaseMin(player, c.gemLevel)) * c.gemPercent / 100, c.minHit) << label;
 		EXPECT_EQ(ballRoll(SpellBaseMax(player, c.gemLevel)) * c.gemPercent / 100, c.maxHit) << label;
 		for (uint32_t seed = 1; seed < 6; seed++) {
-			// The nova, as CastSpell makes it for a cast from the bar, or as a rune's burst carries the rune's.
-			Missile &nova = Cast(c.cast, c.gemLevel, seed);
-			if (c.spell == SpellID::RuneOfNova || c.spell == SpellID::RuneOfImmolation) {
-				Missile rune {};
+			// The nova, as CastSpell makes it for a cast from the bar, or as a rune's burst makes it when a monster steps
+			// on the rune (rolled on the rune's own row, carrying the rune's percent).
+			const bool isRune = c.spell == SpellID::RuneOfNova || c.spell == SpellID::RuneOfImmolation;
+			Missile *burst = nullptr;
+			if (isRune) {
+				Missiles.clear();
+				SetRndSeed(seed);
+				Missile &rune = Missiles.emplace_back();
+				rune._mitype = c.spell == SpellID::RuneOfNova ? MissileID::RuneOfNova : MissileID::RuneOfImmolation;
+				rune._micaster = TARGET_MONSTERS;
+				rune._misource = player.getId();
+				rune._mispllvl = c.gemLevel;
+				rune._mlid = NO_LIGHT;
+				rune.var1 = static_cast<int>(c.cast);
 				ApplySupportsToMissile(rune, player, c.spell);
-				nova.poe2.damagePercent = rune.poe2.damagePercent;
-				nova.poe2.skillKind = rune.poe2.skillKind;
-				nova.poe2.skillId = rune.poe2.skillId;
+				const Point tile { 44, 44 };
+				rune.position.tile = tile;
+				Monsters[0] = {};
+				Monsters[0].position.tile = tile;
+				dMonster[tile.x][tile.y] = 1;
+				ProcessRune(rune);
+				dMonster[tile.x][tile.y] = 0;
+				ASSERT_EQ(Missiles.size(), 2U) << label;
+				burst = &Missiles.back();
+				ASSERT_EQ(burst->_mitype, c.cast) << label;
 			} else {
-				ApplySupportsToMissile(nova, player, c.spell);
+				burst = &Cast(c.cast, c.gemLevel, seed);
+				ApplySupportsToMissile(*burst, player, c.spell);
 			}
+			Missile &nova = *burst;
 			EXPECT_EQ(nova.poe2.damagePercent, percent) << label;
 			const int roll = nova._midam;
 			EXPECT_GE(roll, ballRoll(SpellBaseMin(player, c.gemLevel))) << label;
