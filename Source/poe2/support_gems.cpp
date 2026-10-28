@@ -167,7 +167,8 @@ SupportSockets Poe2PlayerData::supportsFor(SkillSlot skill) const
 {
 	if (skill.isEmpty())
 		return {};
-	if (skill.kind == SkillKind::Default) {
+	// A caster weapon's granted skill is its default attack too.
+	if (skill.kind == SkillKind::Default || takesDefaultSupports(skill)) {
 		// The default attack keeps its supports when the weapon changes; only the ones that fit the new attack work.
 		SupportSockets fitting {};
 		for (size_t i = 0; i < MaxSupportSockets; i++)
@@ -196,7 +197,7 @@ int Poe2PlayerData::supportTier(SkillSlot skill, SupportGem gem) const
 {
 	if (gem == SupportGem::None || skill.isEmpty())
 		return 0;
-	if (skill.kind == SkillKind::Default) {
+	if (skill.kind == SkillKind::Default || takesDefaultSupports(skill)) {
 		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
 			if (defaultSupports[socket] == gem)
 				return socketTier(DefaultAttackRow, socket);

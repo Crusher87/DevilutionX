@@ -34,7 +34,9 @@
 #include "items.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/modifiers.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -1017,6 +1019,8 @@ protected:
 		gbIsPoe2 = true;
 		LoadModArchives({ { "hf", "poe2" } });
 		LoadItemData();
+		// The bases too, as the game loads them: Adria's caster weapons are known by their base.
+		LoadModifierData();
 		InitStores();
 	}
 
@@ -1028,6 +1032,7 @@ protected:
 			gbIsPoe2 = false;
 			gbIsHellfire = false;
 			gbIsMultiplayer = false;
+			LoadModifierData();
 			UnloadModArchives();
 			LoadItemData();
 			InitStores();
@@ -1144,7 +1149,7 @@ TEST_F(Poe2ShopTabsTest, WitchStavesAreMostlyNormalSomeMagicFewRareNeverUnique)
 		SpawnWitch(16);
 		for (size_t i = NumWitchPinnedItems; i < WitchItems.size(); i++) {
 			const Item &ware = WitchItems[i];
-			if (ware._itype != ItemType::Staff)
+			if (!IsCasterWeapon(ware))
 				continue;
 			counts[ware._iMagical]++;
 			total++;
@@ -1153,7 +1158,7 @@ TEST_F(Poe2ShopTabsTest, WitchStavesAreMostlyNormalSomeMagicFewRareNeverUnique)
 	ASSERT_GT(total, 0);
 	EXPECT_GT(counts[ITEM_QUALITY_NORMAL], counts[ITEM_QUALITY_MAGIC]);
 	EXPECT_GT(counts[ITEM_QUALITY_MAGIC], counts[ITEM_QUALITY_RARE]);
-	EXPECT_GT(counts[ITEM_QUALITY_RARE], 0) << "Adria's staves roll rare like Griswold's wares";
+	EXPECT_GT(counts[ITEM_QUALITY_RARE], 0) << "Adria's caster weapons roll rare like Griswold's wares";
 	EXPECT_EQ(counts[ITEM_QUALITY_UNIQUE], 0);
 	EXPECT_NEAR(counts[ITEM_QUALITY_NORMAL] * 100 / total, 75, 8);
 }
@@ -1188,8 +1193,11 @@ TEST_F(Poe2ShopTabsTest, WitchStocksStavesAndSupplies)
 		EXPECT_EQ(WitchItems[1].IDidx, IDI_FULLMANA);
 		EXPECT_EQ(WitchItems[2].IDidx, IDI_IDENTIFY);
 		const CategoryCounts counts = CountCategories(WitchItems, NumWitchPinnedItems);
-		EXPECT_GE(Count(counts, VendorCategory::TwoHanded), 15);
-		EXPECT_LE(Count(counts, VendorCategory::TwoHanded), 20);
+		// Caster staves, then wands and sceptres (caster-weapons-plan-v2.md 6.13): as many as her staves were.
+		EXPECT_GE(Count(counts, VendorCategory::TwoHanded), 7);
+		EXPECT_LE(Count(counts, VendorCategory::TwoHanded), 9);
+		EXPECT_GE(Count(counts, VendorCategory::OneHanded), 8);
+		EXPECT_LE(Count(counts, VendorCategory::OneHanded), 11);
 		EXPECT_GE(Count(counts, VendorCategory::Supplies), 3);
 		EXPECT_LE(Count(counts, VendorCategory::Supplies), 6);
 		for (size_t i = NumWitchPinnedItems; i < WitchItems.size(); i++) {
@@ -1198,7 +1206,10 @@ TEST_F(Poe2ShopTabsTest, WitchStocksStavesAndSupplies)
 		for (const Item &item : WitchItems) {
 			if (GetVendorCategory(item) == VendorCategory::TwoHanded) {
 				EXPECT_EQ(item._itype, ItemType::Staff) << item._iIName;
+				EXPECT_TRUE(IsCasterStaff(item)) << item._iIName;
 			}
+			if (GetVendorCategory(item) == VendorCategory::OneHanded)
+				EXPECT_TRUE(IsWand(item) || IsNewSceptre(item)) << item._iIName;
 		}
 	}
 }

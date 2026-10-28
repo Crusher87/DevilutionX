@@ -19,6 +19,7 @@
 namespace devilution {
 
 struct ItemData;
+struct Missile;
 struct Monster;
 struct Player;
 
@@ -148,6 +149,36 @@ enum TableFlag : uint16_t {
 	TF_AtPlayer = 1 << 12,
 	/** The projectiles burst where they land after a short delay. */
 	TF_LandingBurst = 1 << 13,
+	/**
+	 * A caster weapon grants it (caster-weapons-plan-v2.md 6.12): it has no gem, no mana cost of its own and no gemcutting
+	 * tab, and is cast with a left click at the weapon's grant level.
+	 */
+	TF_Granted = 1 << 14,
+	/**
+	 * A staff's granted skill priced per target: the first monster it hits (the nearest the aim, for an area) takes the
+	 * full hit, every other one at most ExtraTargetPercentPerSecond of the spell base for each second of the cast, and a
+	 * cast's projectiles hit each monster once.
+	 */
+	TF_PerTarget = 1 << 15,
+};
+
+/** @brief What a granted skill's hits do besides damage (caster-weapons-plan-v2.md 6.12). */
+enum class GrantedRider : uint8_t {
+	None,
+	Wither,
+	StunBuildup,
+	ManaDrain,
+	CullFrenzy,
+	BurstOnKill,
+	ChainOnce,
+	Plague,
+	KillRestoreLife,
+	Weaken,
+	EveryFifthDouble,
+	Echo,
+	SigilEveryFourth,
+	RegenBuff,
+	KillRestoreBoth,
 };
 
 /** @brief Gemcutting tabs a table skill shows under, as bits of GemCategory. */
@@ -194,7 +225,21 @@ struct TableSkillData {
 	TableCurve curve;
 	/** The damage at gem level 20 in percent of level 1, along the curve; 0 to copy the curve exactly. */
 	int16_t curveEnd;
+	/** A granted skill's rider. */
+	GrantedRider rider = GrantedRider::None;
 };
+
+/**
+ * @brief What a per-target granted skill (TF_PerTarget) deals each monster but its first: this percent of the spell base
+ * a second of its cast (the coordinator's per-target rule after the plan's value model, 10-28).
+ */
+constexpr int ExtraTargetPercentPerSecond = 25;
+
+/** @brief Whether the table row is a skill a caster weapon grants. */
+[[nodiscard]] inline bool IsGrantedTableSkill(const TableSkillData &data)
+{
+	return (data.flags & TF_Granted) != 0;
+}
 
 /**
  * @brief The tile a monster will be on, as hits see it, after this many game ticks: a walking monster keeps walking the
@@ -210,6 +255,54 @@ constexpr int IceSpikeTrackTiles = 4;
 /** @brief Freezing Arrow's and Explosive Arrow's landing bursts hit for this percent of a base hit, on top of the arrow. */
 constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
+/**
+ * @brief Wither from a granted skill (Withering Bolt, Withering Ray): a stack a hit, up to this many, for 4 seconds. Each
+ * stack is the game's Wither (5% more damage taken), so four make the plan's "up to +20%".
+ */
+constexpr int GrantedWitherMaxStacks = 4;
+constexpr int GrantedWitherTicks = 4 * 20;
+/** @brief Mana Drain's mana a hit at a skill level (the skill-balance review: 1 + level / 3), at most once a second a target. */
+constexpr int ManaDrainMana(int level)
+{
+	return 1 + level / 3;
+}
+constexpr int ManaDrainCooldownTicks = 20;
+/** @brief Mana Drain slows what it hits by this much for 2 seconds. */
+constexpr int ManaDrainSlowPercent = 20;
+constexpr int ManaDrainSlowTicks = 2 * 20;
+/** @brief Power Siphon culls a monster its hit leaves on this percent of its life or less (a unique on 5%). */
+constexpr int PowerSiphonCullPercent = 10;
+constexpr int PowerSiphonUniqueCullPercent = 5;
+/** @brief Torment Bolt weakens what it hits for 2 seconds. */
+constexpr int TormentWeakenTicks = 2 * 20;
+/** @brief Critical Bolt's every fifth cast hits for double. */
+constexpr int CriticalBoltEvery = 5;
+/** @brief Volatile Bolt: a monster it kills bursts for this percent of the hit, radius 1. */
+constexpr int VolatileBurstPercent = 50;
+/** @brief Galvanic Bolt zaps one more enemy within this many tiles for this percent of the hit. */
+constexpr int GalvanicChainTiles = 2;
+constexpr int GalvanicChainPercent = 50;
+/** @brief Decompose's plague deals its hit again over 4 seconds; a monster that dies with it passes it to the nearest one. */
+constexpr int PlagueTicks = 4 * 20;
+constexpr int PlagueSpreadTiles = 3;
+/** @brief Exsanguinate: a kill on a bleeding enemy restores this percent of maximum life. */
+constexpr int ExsanguinateLifePercent = 1;
+/** @brief Feast of Flesh: a kill restores this percent of maximum life and of maximum mana. */
+constexpr int FeastRestorePercent = 2;
+/** @brief Echoing Blast goes off again this many ticks later, for this percent of the hit. */
+constexpr int EchoDelayTicks = 5;
+constexpr int EchoPercent = 60;
+/** @brief Chiming Bolt's every fourth cast leaves a Sigil of Power under the hero: 4 seconds, +20% spell damage inside. */
+constexpr int SigilEvery = 4;
+constexpr int SigilTicks = 4 * 20;
+constexpr int SigilRadius = 2;
+constexpr int SigilSpellDamagePercentInside = 120;
+/** @brief Consecrated Ground: 1% of maximum life a second for 4 seconds; a new cast starts it over, it doesn't stack. */
+constexpr int ConsecrateRegenPercentPerSecond = 1;
+constexpr int ConsecrateRegenTicks = 4 * 20;
+/** @brief A granted skill's bleed (Soulrend) deals this percent of its hit over GrantedBleedTicks (plan 7.1: +75% over 5 s). */
+constexpr int GrantedBleedPercent = 75;
+constexpr int GrantedBleedTicks = 5 * 20;
 /** @brief The bolts a Burst skill sprays out (Fist of the Heavens) hit for this percent of the spell base each. */
 constexpr int BurstBoltDamagePercent = 50;
 
@@ -239,6 +332,28 @@ bool StartTableSkill(Player &player, const TableSkillData &data);
 void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target);
 /** @brief Fires one shot of a Stream skill. */
 void FireTableShot(Player &player, const TableSkillData &data, Point target, int index);
+/**
+ * @brief A table skill's projectile hit a monster for this much (whole points, or raw when shifted): a granted skill's
+ * extras on the hit (Soulrend's bleed; the riders of caster-weapons-plan-v2.md 6.12).
+ */
+void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster, int damage, bool isDamageShifted);
+/**
+ * @brief The percent of its hit a per-target granted skill deals each monster but the first a cast hits: its extra-target
+ * budget (ExtraTargetPercentPerSecond for each second of its cast, or of its pulse; its bleed and echo count) over its
+ * hit. 100 for every other skill.
+ */
+[[nodiscard]] int GrantedExtraTargetPercent(const TableSkillData &data);
+/** @brief Whether the projectile's cast already hit the monster: a per-target skill's projectiles hit each one once. */
+[[nodiscard]] bool GrantedMissileSkipsMonster(const Missile &missile, const Monster &monster);
+/**
+ * @brief The percent of its damage a per-target skill's projectile deals the monster it is hitting now: 100 for its
+ * cast's first, GrantedExtraTargetPercent for the rest; 100 for every other projectile. Marks the monster hit.
+ */
+int GrantedMissileTargetPercent(const Missile &missile, Player &player, Monster &monster);
+/** @brief The rider of the granted skill whose hit is being dealt now (SupportHitSkill), or None. */
+GrantedRider HitGrantedRider();
+/** @brief The hero's spell hits in percent: SigilSpellDamagePercentInside while they stand in their Sigil of Power, else 100. */
+int SigilSpellDamagePercent(const Player &player);
 /** @brief Puts a table curse skill's curse on a monster, for the given part of its duration. */
 void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, int durationPercent);
 /**

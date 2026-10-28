@@ -25,7 +25,8 @@ constexpr uint32_t SlotBit(ModSlot slot)
 
 constexpr uint32_t MartialSlots = SlotBit(ModSlot::OneHandMelee) | SlotBit(ModSlot::TwoHandMelee) | SlotBit(ModSlot::Bow) | SlotBit(ModSlot::Crossbow)
     | SlotBit(ModSlot::Spear) | SlotBit(ModSlot::Quarterstaff) | SlotBit(ModSlot::Flail) | SlotBit(ModSlot::Claw) | SlotBit(ModSlot::Dagger);
-constexpr uint32_t CasterSlots = SlotBit(ModSlot::Wand) | SlotBit(ModSlot::Staff) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::Focus);
+constexpr uint32_t CasterSlots = SlotBit(ModSlot::Wand) | SlotBit(ModSlot::Staff) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::Focus)
+    | SlotBit(ModSlot::LegacyStaff) | SlotBit(ModSlot::LegacySceptre);
 constexpr uint32_t ArmourSlots = SlotBit(ModSlot::Helmet) | SlotBit(ModSlot::BodyArmour) | SlotBit(ModSlot::Gloves) | SlotBit(ModSlot::Boots) | SlotBit(ModSlot::Shield) | SlotBit(ModSlot::Focus);
 
 // Bundle desecration_rules: the modifiers only desecration gives.
@@ -41,7 +42,7 @@ const std::array<DesecratedMod, static_cast<size_t>(DesecratedModId::Count)> Des
 	    { { { UniqueRule::ThirdHitCritChance, 50 }, { UniqueRule::OtherHitsLessCrit, 15 } } }, "Every third hit has +50% critical hit chance\nOther hits have -15% critical hit chance" },
 	{ DesecratedModId::RedPursuit, "Red Pursuit", false, SlotBit(ModSlot::Boots) | SlotBit(ModSlot::Gloves) | MartialSlots, 65, 20,
 	    { { { UniqueRule::BleedMovingDamage, 20 }, { UniqueRule::BleedStationaryLess, 10 } } }, "20% more damage against bleeding enemies while moving\n10% less while standing still" },
-	{ DesecratedModId::ChoirOfTeeth, "Choir of Teeth", true, SlotBit(ModSlot::Helmet) | SlotBit(ModSlot::BodyArmour) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::Focus) | SlotBit(ModSlot::Amulet), 65, 18,
+	{ DesecratedModId::ChoirOfTeeth, "Choir of Teeth", true, SlotBit(ModSlot::Helmet) | SlotBit(ModSlot::BodyArmour) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::LegacySceptre) | SlotBit(ModSlot::Focus) | SlotBit(ModSlot::Amulet), 65, 18,
 	    { { { UniqueRule::MinionLowLifeDamage, 25 }, { UniqueRule::LessMinionLife, 20 } } }, "Minions deal 25% more damage while below half life\nMinions have 20% less maximum life" },
 	{ DesecratedModId::HollowSaint, "Hollow Saint", true, ArmourSlots | MartialSlots | CasterSlots, 72, 14,
 	    { { { UniqueRule::None, 0 }, { UniqueRule::None, 0 } } }, "Augments in this item have 35% increased effect\nThis item has room for one modifier fewer" },
@@ -113,7 +114,7 @@ std::vector<Offer> OfferPool(const Item &item, bool prefix, uint32_t seed)
 	const int itemLevel = GetPoe2ItemLevel(item);
 	const Poe2Craft &craft = item._iPoe2Craft;
 	for (const ProfaneMod &profane : ProfaneMods) {
-		const std::optional<uint8_t> index = FindModifierFamily(profane.family);
+		const std::optional<uint8_t> index = FindFamilyForItem(profane.family, *slot);
 		if (!index || itemLevel < profane.minItemLevel)
 			continue;
 		const ModFamily &family = ModifierFamilies()[*index];
@@ -123,7 +124,7 @@ std::vector<Offer> OfferPool(const Item &item, bool prefix, uint32_t seed)
 		const std::optional<uint8_t> tier = BestTier(family, itemLevel);
 		if (!tier)
 			continue;
-		const auto salt = static_cast<uint8_t>(1 + (Mix(seed ^ familyId) % MaxCraftSalt));
+		const uint8_t salt = RollCraftSalt(familyId, Mix(seed ^ familyId));
 		pool.push_back({ { familyId, *tier, salt }, profane.weight, false });
 	}
 	for (const DesecratedMod &mod : DesecratedMods) {
@@ -263,7 +264,7 @@ std::vector<Poe2CraftMod> DesecrationOffers(const Item &item, bool kinship)
 		const std::optional<Poe2ItemMod> mod = RollAddedMod(*slot, ItemModBaseTags(item), GetPoe2ItemLevel(item), existing, MaxRareModsPerSide + 1, Mix(seed ^ (0xF111U + attempt)), filter);
 		if (!mod)
 			break;
-		offers.push_back({ mod->family, mod->tier, static_cast<uint8_t>(1 + (Mix(seed ^ attempt) % MaxCraftSalt)) });
+		offers.push_back({ mod->family, mod->tier, RollCraftSalt(mod->family, Mix(seed ^ attempt)) });
 	}
 	return offers;
 }

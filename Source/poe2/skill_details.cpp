@@ -187,7 +187,11 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case SkillKind::Attack:
 		break;
 	case SkillKind::Default:
-		if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt) {
+		if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt && FiresGrantedBolt(player)) {
+			// RollGrantedBoltDamage: the spell base at the weapon's grant level, at GrantedBoltPercent.
+			const int boltLevel = std::max(GrantedBoltLevel(player), 1);
+			AddSpellBase(hit, player, boltLevel, DamageType::Fire, GrantedBoltPercent(player, boltLevel));
+		} else if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt) {
 			// RollStaffBoltDamage: the staff's damage with its bonus, cut down to whole points, plus a little of the hero's Magic.
 			const int magic = player._pMagic * StaffBoltMagicPercent / 100;
 			const int bonus = player._pIBonusDam;
@@ -693,9 +697,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		return lines;
 	const bool isDefault = socket == DefaultAttackRow;
 
-	// The default attack has no gem: it is level 1 and stays so.
+	// The default attack has no gem: it is level 1 and stays so. A caster weapon's granted skill there is at its grant level.
 	const int gemLevel = isDefault ? MaxGemLevel : player.poe2.gemLevel(socket);
-	const int level = isDefault ? 1 : skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : player.poe2.skillLevel(skill);
+	const int level = isDefault && skill.kind == SkillKind::Default ? 1 : skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : player.poe2.effectiveLevel(skill);
 	const std::string tags = SkillTagText(skill);
 	if (!tags.empty())
 		Text(lines, Kind::Note, tags);

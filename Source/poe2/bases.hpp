@@ -14,6 +14,7 @@
 
 #include "poe2/defenses.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/player_data.hpp"
 
 namespace devilution {
 
@@ -56,6 +57,12 @@ struct BaseMeta {
 	uint8_t block = 0;
 	/** @brief A weapon's attacks per second in hundredths, like POE2's (1.35 is 135); 0 for every other base. */
 	uint16_t aps = 0;
+	/** @brief The skill a caster weapon of the rework grants (column `grants`); empty for every other base. */
+	SkillSlot grantedSkill {};
+	/** @brief The element spell modifiers the base is locked to, as ModBaseTag element bits (column `element`); 0 for none. */
+	uint16_t elementLock = 0;
+	/** @brief POE2's critical hit chance in tenths of a percent (column `crit`); -1 when the cell is empty (the default). */
+	int16_t crit = -1;
 };
 
 /** @brief A rolled implicit: its values on this item. */
@@ -77,6 +84,10 @@ constexpr int MaxDropQuality = 10;
 
 /** @brief Loads the base metadata of the POE2 Mashup mod, or clears it outside POE2 mode. Needs the item data. */
 void LoadBaseData();
+/** @brief The skill a `grants` key names: "StaffBolt" (the default attack), a WeaponSkill or a PersistentSkill; empty if none. */
+SkillSlot ParseGrantedSkill(std::string_view key);
+/** @brief The element bits an `element` cell names (fire, cold, lightning, physical, comma separated); 0 for none. */
+uint16_t ParseElementLock(std::string_view text);
 /** @brief The base metadata of a row of the item data, or nullptr for a base without any. */
 const BaseMeta *BaseMetaFor(int itemIndex);
 /** @brief The base metadata of the item's base, or nullptr for a base without any. */

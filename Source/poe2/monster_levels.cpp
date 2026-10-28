@@ -333,7 +333,8 @@ int Poe2MinionLevel(const Monster &minion)
 	} else if (const PersistentSkill golem = ActiveGolemSkill(owner); golem != PersistentSkill::None) {
 		skill = golem;
 	}
-	return MinionLevelForGemLevel(std::max(owner.poe2.skillLevel(skill), 1));
+	// A sceptre's granted Skeleton Warriors fight at the level it grants.
+	return MinionLevelForGemLevel(std::max(owner.poe2.effectiveLevel(skill), 1));
 }
 
 int MinionHit10(_monster_id type, int level, int damageSum)

@@ -182,7 +182,8 @@ std::string_view Poe2ShopTabName(Poe2ShopTab tab)
 	case Poe2ShopTab::Jewelry:
 		return _("Jewelry");
 	case Poe2ShopTab::Staves:
-		return _("Staves");
+		// Adria's caster staves, wands and sceptres (caster-weapons-plan-v2.md 6.13): not only staves any more.
+		return _("Weapons");
 	case Poe2ShopTab::Supplies:
 		return _("Supplies");
 	case Poe2ShopTab::Items:

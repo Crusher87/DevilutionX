@@ -24,9 +24,11 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/uniques.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "spells.h"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 namespace {
@@ -200,9 +202,12 @@ TEST_F(Poe2UniquesTest, EveryUniqueBuildsAndRebuildsTheSame)
 TEST_F(Poe2UniquesTest, UniquesOfRetiredBasesMoveAndSavedOnesStay)
 {
 	// Curtis 2026-10-27: the heavy, swift and crossbow bases no longer drop, so their uniques drop on the balanced base of
-	// their class and tier, a crossbow's on the bow of its tier.
+	// their class and tier, a crossbow's on the bow of its tier. The caster weapons rework retired the Focused and Quick
+	// staves and sceptres too: their uniques went to the new staves, wands and sceptres (plan 4.3).
 	const auto retired = [](int index) {
 		const BaseMeta *meta = BaseMetaFor(index);
+		if (IsAnyOf(WeaponKindOf(index), WeaponKind::LegacyStaff, WeaponKind::LegacySceptre) && AllItemsList[index].dropRate == 0)
+			return true;
 		return meta != nullptr && (meta->identity == "heavy" || meta->identity == "swift" || meta->itemClass == "crossbow");
 	};
 	int moved = 0;
@@ -213,7 +218,7 @@ TEST_F(Poe2UniquesTest, UniquesOfRetiredBasesMoveAndSavedOnesStay)
 			moved++;
 		}
 	}
-	EXPECT_EQ(moved, 61);
+	EXPECT_EQ(moved, 61 + 22);
 	const Poe2Unique &mercy = *FindPoe2Unique("Mercy's End");
 	EXPECT_EQ(mercy.baseItem, FindBase("Dark Blade"));
 	EXPECT_EQ(mercy.savedBaseItem, FindBase("Heavy Imperial Edge"));
@@ -243,6 +248,122 @@ TEST_F(Poe2UniquesTest, UniquesOfRetiredBasesMoveAndSavedOnesStay)
 		EXPECT_EQ(rebuilt._iUid, unique.uid) << unique.name;
 		EXPECT_EQ(std::string_view(rebuilt._iIName), unique.name);
 	}
+}
+
+TEST_F(Poe2UniquesTest, CasterUniquesMovedToTheNewCasterWeapons)
+{
+	struct Move {
+		std::string_view unique;
+		std::string_view base;
+		std::string_view saved;
+	};
+	// Plan 4.3: the Quick sceptres' uniques are spell items and go to wands, the Focused ones to sceptres.
+	constexpr Move Moves[] = {
+		{ "Worldroot", "Spriggan Staff", "Focused Ashen Staff" },
+		{ "Glass Thesis", "Roaring Staff", "Focused Worldroot Staff" },
+		{ "Glass Thought", "Siphoning Wand", "Quick Bronze Sceptre" },
+		{ "The Empty Word", "Dueling Wand", "Quick Sovereign Sceptre" },
+		{ "Saint's Debt", "Lupine Sceptre", "Focused Bronze Sceptre" },
+		{ "Bone Choir", "Devotional Sceptre", "Focused Saint's Sceptre" },
+		{ "Tyrant's Spark", "Wrath Sceptre", "Quick Saint's Sceptre" },
+	};
+	for (const Move &move : Moves) {
+		const Poe2Unique *unique = FindPoe2Unique(move.unique);
+		ASSERT_NE(unique, nullptr) << move.unique;
+		EXPECT_EQ(unique->baseItem, FindBase(move.base)) << move.unique;
+		EXPECT_EQ(unique->savedBaseItem, FindBase(move.saved)) << move.unique;
+	}
+	int onCasterWeapons = 0;
+	for (const Poe2Unique &unique : Poe2Uniques()) {
+		EXPECT_FALSE(IsLegacyCaster(MakeBase(AllItemsList[unique.baseItem].iName))) << unique.name << " still on a retired base";
+		onCasterWeapons += IsCasterWeapon(unique.baseItem) ? 1 : 0;
+	}
+	EXPECT_EQ(onCasterWeapons, 22);
+	// Two on one new base list in table order.
+	const std::vector<int> hallowed = Poe2UniquesOnBase(FindBase("Hallowed Sceptre"));
+	ASSERT_EQ(hallowed.size(), 2U);
+	EXPECT_EQ(hallowed[0], FindPoe2Unique("Sunbound")->uid);
+	EXPECT_EQ(hallowed[1], FindPoe2Unique("Reliquary of Breath")->uid);
+}
+
+/** @brief The unique table index of a Diablo unique. */
+int DiabloUid(std::string_view name)
+{
+	for (size_t i = 0; i < UniqueItems.size(); i++) {
+		if (std::string_view(UniqueItems[i].UIName) == name)
+			return static_cast<int>(i);
+	}
+	ADD_FAILURE() << name;
+	return -1;
+}
+
+TEST_F(Poe2UniquesTest, DiabloStaffUniquesKeepToTheirHomes)
+{
+	const int gleamsong = DiabloUid("Gleamsong");
+	const int protector = DiabloUid("The Protector");
+	EXPECT_EQ(DiabloUniqueHome(gleamsong), WeaponKind::CasterStaff);
+	EXPECT_EQ(DiabloUniqueHome(DiabloUid("Naj's Puzzler")), WeaponKind::CasterStaff);
+	EXPECT_EQ(DiabloUniqueHome(DiabloUid("Mindcry")), WeaponKind::CasterStaff);
+	for (const std::string_view name : { "Rod of Onan", "Staff of Shadows", "Immolator", "Storm Spire", "The Protector", "Thundercall" })
+		EXPECT_EQ(DiabloUniqueHome(DiabloUid(name)), WeaponKind::Quarterstaff) << name;
+	EXPECT_EQ(DiabloUniqueHome(0), WeaponKind::None) << "The Butcher's Cleaver";
+
+	// Only a new caster row turns one away; legacy rows, Diablo's staves and quarterstaves never do.
+	const int ashen = FindBase("Ashen Staff");
+	const int wrapped = FindBase("Fine Wrapped Quarterstaff");
+	EXPECT_FALSE(DiabloUniqueFitsRow(protector, ashen));
+	EXPECT_TRUE(DiabloUniqueFitsRow(gleamsong, ashen));
+	EXPECT_TRUE(DiabloUniqueFitsRow(protector, wrapped));
+	EXPECT_TRUE(DiabloUniqueFitsRow(gleamsong, wrapped));
+	EXPECT_TRUE(DiabloUniqueFitsRow(protector, FindBase("Focused Pilgrim Staff")));
+	EXPECT_TRUE(DiabloUniqueFitsRow(protector, FindBase("Short Staff")));
+
+	// A drop picks a base of its home's kind: the caster ones a caster staff, the others a quarterstaff, as before.
+	EXPECT_EQ(Poe2DiabloUniqueBase(gleamsong), static_cast<_item_indexes>(ashen));
+	EXPECT_EQ(Poe2DiabloUniqueBase(DiabloUid("Naj's Puzzler")), static_cast<_item_indexes>(FindBase("Pyrophyte Staff")));
+	EXPECT_EQ(Poe2DiabloUniqueBase(DiabloUid("Mindcry")), static_cast<_item_indexes>(FindBase("Spriggan Staff")));
+	EXPECT_EQ(Poe2DiabloUniqueBase(protector), static_cast<_item_indexes>(wrapped));
+	EXPECT_EQ(Poe2DiabloUniqueBase(DiabloUid("Thundercall")), static_cast<_item_indexes>(FindBase("Steelpoint Quarterstaff")));
+	EXPECT_EQ(Poe2DiabloUniqueBase(DiabloUid("Rod of Onan")), static_cast<_item_indexes>(FindBase("Slicing Quarterstaff")));
+
+	// Rolled on an Ashen Staff, a unique is never The Protector; on a quarterstaff of the type it can be.
+	const auto rollUniques = [](int base) {
+		std::set<int> uids;
+		for (int level = 8; level <= 30; level++) {
+			for (uint32_t seed = 1; seed <= 80; seed++) {
+				Item item = {};
+				SetRndSeed(seed * 2654435761U + static_cast<uint32_t>(level));
+				SetupAllItems(*MyPlayer, item, static_cast<_item_indexes>(base), AdvanceRndSeed(), level, 15, /*onlygood=*/true, /*pregen=*/false);
+				if (item._iMagical == ITEM_QUALITY_UNIQUE)
+					uids.insert(item._iUid);
+			}
+		}
+		return uids;
+	};
+	const std::set<int> onAshen = rollUniques(ashen);
+	EXPECT_TRUE(onAshen.contains(gleamsong));
+	EXPECT_FALSE(onAshen.contains(protector));
+	const std::set<int> onWrapped = rollUniques(wrapped);
+	EXPECT_TRUE(onWrapped.contains(gleamsong));
+	EXPECT_TRUE(onWrapped.contains(protector));
+
+	// An Orb of Chance on an Ashen Staff makes no quarterstaff unique either.
+	Item staff = MakeBase("Ashen Staff");
+	int gleamsongs = 0;
+	for (uint32_t roll = 0; roll < 3000; roll += 7) {
+		Item unique;
+		if (CreateChanceUnique(*MyPlayer, staff, unique, roll * 2654435761U) != ChanceResult::Made)
+			continue;
+		EXPECT_NE(unique._iUid, protector);
+		gleamsongs += unique._iUid == gleamsong ? 1 : 0;
+	}
+	EXPECT_GT(gleamsongs, 0);
+
+	// Outside POE2 there are no homes.
+	gbIsPoe2 = false;
+	EXPECT_EQ(DiabloUniqueHome(protector), WeaponKind::None);
+	EXPECT_TRUE(DiabloUniqueFitsRow(protector, ashen));
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2UniquesTest, ValuesRollInTheirRangesFromTheSeed)

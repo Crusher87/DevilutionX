@@ -18,6 +18,7 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/jewels.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tree_telemetry.hpp"
@@ -1140,7 +1141,8 @@ int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives)
 	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
 	const Item *weapon = nullptr;
 	for (const Item &item : { std::cref(player.InvBody[INVLOC_HAND_LEFT]), std::cref(player.InvBody[INVLOC_HAND_RIGHT]) }) {
-		if (!item.isEmpty() && item._iStatFlag && IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff)) {
+		// A caster weapon of the rework has no attack: the default attack beside it is bare hands'.
+		if (!item.isEmpty() && item._iStatFlag && IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Bow, ItemType::Staff) && !IsCasterWeapon(item)) {
 			weapon = &item;
 			break;
 		}
@@ -1149,15 +1151,16 @@ int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives)
 	if (weapon == nullptr)
 		return passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage);
 	// A bridge copies only the other weapon's own stat, never its total, so no bridge feeds another (design v8 §1.6).
+	if (IsMartialStaff(*weapon)) {
+		// Like POE2's quarterstaves: a two-handed melee weapon with nodes of its own. The Maiden's pact adds bow training.
+		return passive(PassiveStat::StaffDamage) + passive(PassiveStat::MeleeDamage) + passive(PassiveStat::TwoHandDamage)
+		    + (passive(PassiveStat::OutOfDarkness) > 0 ? passive(PassiveStat::BowDamage) : 0);
+	}
 	switch (weapon->_itype) {
 	case ItemType::Bow:
 		// The Sisters' Gift: staff training carries over to the bow. Leoric's pact: two-handed training does too.
 		return passive(PassiveStat::BowDamage) + (passive(PassiveStat::StaffAppliesToBow) > 0 ? passive(PassiveStat::StaffDamage) : 0)
 		    + (passive(PassiveStat::KingsDeadPact) > 0 ? passive(PassiveStat::TwoHandDamage) : 0);
-	case ItemType::Staff:
-		// Like POE2's quarterstaves: a two-handed melee weapon with nodes of its own. The Maiden's pact adds bow training.
-		return passive(PassiveStat::StaffDamage) + passive(PassiveStat::MeleeDamage) + passive(PassiveStat::TwoHandDamage)
-		    + (passive(PassiveStat::OutOfDarkness) > 0 ? passive(PassiveStat::BowDamage) : 0);
 	default:
 		return passive(PassiveStat::MeleeDamage) + passive(weapon->_iLoc == ILOC_TWOHAND ? PassiveStat::TwoHandDamage : PassiveStat::OneHandDamage);
 	}

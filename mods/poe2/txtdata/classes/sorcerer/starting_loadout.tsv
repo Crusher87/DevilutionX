@@ -2,7 +2,7 @@ Variable	Value
 skill	StaffRecharge
 spell	Firebolt
 spellLevel	2
-item0	poe2:staff_focused_pilgrim_staff
+item0	poe2:staff_ashen_staff
 item1	IDI_HEAL
 item2	IDI_MANA
 item3	IDI_NONE

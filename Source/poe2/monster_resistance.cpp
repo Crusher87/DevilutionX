@@ -5,6 +5,8 @@
 
 #include "game_mode.hpp"
 #include "monster.h"
+#include "player.h"
+#include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/table_skills.hpp"
@@ -77,6 +79,8 @@ int MonsterBaseResistance(const Monster &monster, DamageType type)
 	// Waystones can give map monsters more elemental resistance.
 	if (!monster.isPlayerMinion())
 		resistance += MapMonsterResistance();
+	else if (monster.goalVar3 >= 0 && static_cast<size_t>(monster.goalVar3) < Players.size())
+		resistance += Players[static_cast<size_t>(monster.goalVar3)].poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionResistances)];
 	return resistance;
 }
 

@@ -22,7 +22,9 @@
 #include "player.h"
 #include "poe2/aim.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "stores.h"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 
@@ -154,6 +156,12 @@ void RepeatPlayerAction()
 		return;
 	if (!myPlayer.CanChangeAction())
 		return;
+
+	// POE2 Mashup: held, a caster weapon's granted skill keeps casting at the cursor.
+	if (UsesGrantedSkill(myPlayer) && IsAnyOf(LastPlayerAction, PlayerActionType::Attack, PlayerActionType::AttackMonsterTarget)) {
+		TryUseGrantedSkill(myPlayer);
+		return;
+	}
 
 	// A bow, or the staff bolt of a caster's staff or a sceptre.
 	const bool rangedAttack = AttacksAtRange(myPlayer);

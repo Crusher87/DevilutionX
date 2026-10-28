@@ -76,6 +76,11 @@ void OnPlayerBlocked(const Player &player);
 void OnWeaponsSwapped(const Player &player, ItemType before);
 /** @brief The hero drank a flask (Gharbad's Bargain). */
 void OnFlaskDrunk(Player &player);
+/**
+ * @brief The gear's increased spell damage of the hit's element (caster weapons), in percent: it adds to the spell's
+ * increased damage as the tree's element damage does. Cold is magic.
+ */
+[[nodiscard]] int GearElementSpellDamage(const Player &player, DamageType type);
 /** @brief Na-Krul's Jailer: minions' increased damage from the hero's spell damage, in percent. */
 [[nodiscard]] int MinionSpellDamageBonus(const Player &player);
 /** @brief Ceaseless Hands: more evasion from unarmed hit stacks, in percent. */

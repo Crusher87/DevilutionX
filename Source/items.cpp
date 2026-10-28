@@ -106,8 +106,10 @@
 #include "poe2/support_table.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "qol/stash.h"
@@ -1829,6 +1831,10 @@ _unique_items CheckUnique(Item &item, int lvl, int uper, int uidOffset = 0)
 	}
 
 	const uint8_t selectedUniqueIndex = validUniques[validUniques.size() - 1 - uidOffset];
+	// POE2 Mashup: a new caster staff turns away a quarterstaff's Diablo unique (caster-weapons-plan-v2.md 6.14), after
+	// the same random numbers; every older row takes what it did.
+	if (!DiabloUniqueFitsRow(selectedUniqueIndex, item.IDidx))
+		return UITEM_INVALID;
 
 	return static_cast<_unique_items>(selectedUniqueIndex);
 }
@@ -2404,9 +2410,26 @@ void PrintItemInfo(const Item &item)
 	}
 }
 
+/** @brief The weapon kind of a row the vendors look at; None for an item that isn't a row of the item table. */
+WeaponKind VendorWeaponKind(const ItemData &item)
+{
+	if (AllItemsList.empty() || &item < AllItemsList.data() || &item >= AllItemsList.data() + AllItemsList.size())
+		return WeaponKind::None;
+	return WeaponKindOf(static_cast<int>(&item - AllItemsList.data()));
+}
+
+/** @brief A caster staff, wand or new sceptre of the rework: Adria's, not Griswold's (caster-weapons-plan-v2.md 6.13). */
+bool IsVendorCasterWeapon(const ItemData &item)
+{
+	return gbIsPoe2 && IsAnyOf(VendorWeaponKind(item), WeaponKind::CasterStaff, WeaponKind::Wand, WeaponKind::Sceptre);
+}
+
 bool SmithItemOk(const Player & /*player*/, const ItemData &item)
 {
 	if (item.itype == ItemType::Misc)
+		return false;
+	// POE2 Mashup: the caster staves, wands and sceptres are Adria's; quarterstaves stay here.
+	if (IsVendorCasterWeapon(item))
 		return false;
 	if (item.itype == ItemType::Gold)
 		return false;
@@ -2444,6 +2467,11 @@ _item_indexes RndSmithItem(const Player &player, int lvl)
 /** POE2 Mashup: merchants list weapons, then off-hands, armour by slot, jewellery, then the rest. */
 int VendorTypeRank(const Item &item)
 {
+	// The caster weapons rework's wands and sceptres, after the staves and bows (plan 6.13).
+	if (IsWand(item))
+		return 8;
+	if (IsNewSceptre(item))
+		return 9;
 	switch (item._itype) {
 	case ItemType::Sword: return item._iLoc == ILOC_TWOHAND ? 1 : 0;
 	case ItemType::Axe: return item._iLoc == ILOC_TWOHAND ? 3 : 2;
@@ -2625,13 +2653,17 @@ void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
 
 bool WitchItemOk(const Player & /*player*/, const ItemData &item)
 {
+	// POE2 Mashup: the caster weapons rework's staves, wands and sceptres (plan 6.13); quarterstaves and the older
+	// staves are Griswold's.
+	if (IsVendorCasterWeapon(item))
+		return true;
 	if (IsNoneOf(item.itype, ItemType::Misc, ItemType::Staff))
 		return false;
-	// POE2 Mashup (Curtis 2026-10-16): Adria sells staves, elixirs and Scrolls of Identify; no currency, jewels,
+	// POE2 Mashup (Curtis 2026-10-16): Adria sells caster weapons, elixirs and Scrolls of Identify; no currency, jewels,
 	// books, other scrolls or gems.
 	if (gbIsPoe2) {
 		if (item.itype == ItemType::Staff)
-			return SkillForGemData(item).isEmpty();
+			return false;
 		// Scrolls of Identify only as her pinned ware, which never sells out (Curtis 2026-10-16).
 		return item.iMiscId >= IMISC_ELIXSTR && item.iMiscId <= IMISC_ELIXVIT;
 	}
@@ -3060,6 +3092,10 @@ std::string GetRareItemName(const Item &item)
 	static constexpr std::array<std::string_view, 12> HelmWords = { "Brow", "Corona", "Cowl", "Crest", "Crown", "Dome", "Glance", "Halo", "Horn", "Peak", "Salvation", "Visor" };
 	static constexpr std::array<std::string_view, 12> RingWords = { "Band", "Circle", "Coil", "Eye", "Finger", "Grasp", "Grip", "Gyre", "Hold", "Knot", "Loop", "Turn" };
 	static constexpr std::array<std::string_view, 12> AmuletWords = { "Beads", "Charm", "Gorget", "Heart", "Locket", "Medallion", "Noose", "Pendant", "Rosary", "Scarab", "Talisman", "Torc" };
+	// POE2 Mashup: the caster weapons rework's wands and sceptres (caster-weapons-plan-v2.md 6.15). Only the new kinds
+	// use them: a legacy sceptre keeps the weapon words, so saved rare names don't change.
+	static constexpr std::array<std::string_view, 12> WandWords = { "Barb", "Charm", "Goad", "Needle", "Quill", "Rod", "Song", "Spike", "Sting", "Thorn", "Twig", "Wand" };
+	static constexpr std::array<std::string_view, 12> SceptreWords = { "Blow", "Breaker", "Call", "Chime", "Crack", "Crusher", "Gavel", "Hymn", "Knell", "Mace", "Ram", "Roar" };
 
 	const std::array<std::string_view, 12> *secondWords;
 	switch (item._itype) {
@@ -3074,6 +3110,10 @@ std::string GetRareItemName(const Item &item)
 	case ItemType::Amulet: secondWords = &AmuletWords; break;
 	default: secondWords = &WeaponWords; break;
 	}
+	if (IsWand(item))
+		secondWords = &WandWords;
+	else if (IsNewSceptre(item))
+		secondWords = &SceptreWords;
 
 	// Mix the seed so that items with nearby seeds get unrelated names.
 	uint32_t hash = item._iSeed;
@@ -3150,7 +3190,7 @@ ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &un
 	const std::vector<uint8_t> valid = GetValidUniques(level, AllItemsList[base].iItemId);
 	for (size_t i = 0; i < valid.size(); i++) {
 		const int offset = static_cast<int>(valid.size() - 1 - i);
-		if (offset <= static_cast<int>(CF_UIDOFFSET >> 1) && Poe2UniqueFor(valid[i]) == nullptr)
+		if (offset <= static_cast<int>(CF_UIDOFFSET >> 1) && Poe2UniqueFor(valid[i]) == nullptr && DiabloUniqueFitsRow(valid[i], base))
 			byTier[static_cast<size_t>(LegacyUniqueTier(UniqueItems[valid[i]].UIMinLvl))].push_back({ valid[i], offset, false });
 	}
 	if (std::all_of(byTier.begin(), byTier.end(), [](const std::vector<Candidate> &pool) { return pool.empty(); }))
@@ -3410,7 +3450,7 @@ void CalcPlrDamageMod(Player &player)
 		break;
 	case HeroClass::Monk:
 		// POE2 Mashup: The Sisters' Gift lets the bow take the staff's bonus.
-		if (player.isHoldingItem(ItemType::Staff) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())
+		if (HoldsMartialStaff(player) || (leftHandItem.isEmpty() && rightHandItem.isEmpty())
 		    || (gbIsPoe2 && player.isHoldingItem(ItemType::Bow) && PassiveTotal(player, PassiveStat::StaffAppliesToBow) > 0)) {
 			player._pDamageMod = strDexMod / 150;
 		} else {
@@ -3545,7 +3585,7 @@ void CalcPlrBlockFlag(Player &player)
 	player._pBlockFlag = false;
 
 	if (player._pClass == HeroClass::Monk) {
-		if (player.isHoldingItem(ItemType::Staff)) {
+		if (HoldsMartialStaff(player)) {
 			player._pBlockFlag = true;
 			player._pIFlags |= ItemSpecialEffect::FastBlock;
 		} else if ((leftHandItem.isEmpty() && rightHandItem.isEmpty()) || (leftHandItem._iClass == ICLASS_WEAPON && leftHandItem._iLoc != ILOC_TWOHAND && rightHandItem.isEmpty()) || (rightHandItem._iClass == ICLASS_WEAPON && rightHandItem._iLoc != ILOC_TWOHAND && leftHandItem.isEmpty())) {
@@ -3554,6 +3594,13 @@ void CalcPlrBlockFlag(Player &player)
 	}
 
 	player._pBlockFlag = player._pBlockFlag || player.isHoldingItem(ItemType::Shield);
+	// POE2 Mashup: a quarterstaff with block lets any class block (caster-weapons-plan-v2.md 6.11).
+	if (gbIsPoe2) {
+		for (const Item *item : { &leftHandItem, &rightHandItem }) {
+			if (!item->isEmpty() && item->_iStatFlag && IsQuarterstaff(*item) && item->_iPoe2Stats[static_cast<size_t>(Poe2ItemStat::BlockChance)] > 0)
+				player._pBlockFlag = true;
+		}
+	}
 }
 
 PlayerWeaponGraphic GetPlrAnimWeaponId(const Player &player)
@@ -3570,7 +3617,7 @@ PlayerWeaponGraphic GetPlrAnimWeaponId(const Player &player)
 	}
 
 	// POE2 Mashup: a sceptre held with another weapon doesn't decide how the hero swings.
-	const bool rightIsOffhandSceptre = gbIsPoe2 && ItemGrantsSpirit(rightHandItem) && weaponItemType != ItemType::None && !ItemGrantsSpirit(leftHandItem);
+	const bool rightIsOffhandSceptre = gbIsPoe2 && IsAnySceptre(rightHandItem) && weaponItemType != ItemType::None && !IsAnySceptre(leftHandItem);
 	if (!rightHandItem.isEmpty() && rightHandItem._iClass == ICLASS_WEAPON && rightHandUsable && !rightIsOffhandSceptre) {
 		weaponItemType = rightHandItem._itype;
 	}
@@ -3750,9 +3797,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		const Item &right = player.InvBody[INVLOC_HAND_RIGHT];
 		const auto isWeapon = [](const Item &hand) { return !hand.isEmpty() && hand._iStatFlag && hand._iClass == ICLASS_WEAPON; };
 		if (isWeapon(left) && isWeapon(right)) {
-			if (ItemGrantsSpirit(right))
+			if (IsAnySceptre(right))
 				offhandSceptre = &right;
-			else if (ItemGrantsSpirit(left))
+			else if (IsAnySceptre(left))
 				offhandSceptre = &left;
 		}
 	}
@@ -3850,6 +3897,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 			if (player.InvBody[hand]._iStatFlag)
 				player.poe2.shieldBlockChance = std::max(player.poe2.shieldBlockChance, ShieldBlockChance(player.InvBody[hand]));
+			// The caster weapons rework's Barrier, Guardian and Aegis quarterstaves block with their implicit.
+			if (player.InvBody[hand]._iStatFlag && IsQuarterstaff(player.InvBody[hand]))
+				player.poe2.shieldBlockChance = std::max<int>(player.poe2.shieldBlockChance, player.InvBody[hand]._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::BlockChance)]);
 		}
 	}
 	strength += passive(PassiveStat::Strength);
@@ -3995,6 +4045,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player._pIFMaxDam = maxFireDam;
 	player._pILMinDam = minLightDam;
 	player._pILMaxDam = maxLightDam;
+	// POE2 Mashup: the skills the held caster weapons grant, and their levels.
+	CacheGrantedSkills(player);
 
 	CalcPlrBlockFlag(player);
 
@@ -4675,15 +4727,19 @@ int Poe2BaseLevel(const ItemData &data, int itemLevel, int poe2ItemLevel)
 	return IsPoe2Jewellery(data) ? poe2ItemLevel : itemLevel;
 }
 
-/** @brief Picks a kind of equipment by its class weight, then one of its bases, favouring bases near the item level. */
+} // namespace
+
 std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLevel)
 {
-	// ItemType::None is -1, so the last real type sets the size.
-	std::array<int, static_cast<size_t>(ItemType::Amulet) + 1> classWeights {};
+	// A bucket per item type, then the caster weapons rework's kinds (EquipmentBucketOf); still one roll for the bucket
+	// and one for the base.
+	std::array<int, EquipmentBucketCount> classWeights {};
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
-		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, Poe2BaseLevel(data, itemLevel, poe2ItemLevel)))
-			classWeights[static_cast<size_t>(data.itype)] = EquipmentClassWeight(data.itype);
+		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, Poe2BaseLevel(data, itemLevel, poe2ItemLevel))) {
+			const size_t bucket = EquipmentBucketOf(static_cast<int>(i));
+			classWeights[bucket] = EquipmentBucketWeight(bucket);
+		}
 	}
 	const int classTotal = std::accumulate(classWeights.begin(), classWeights.end(), 0);
 	if (classTotal == 0)
@@ -4700,7 +4756,7 @@ std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLe
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
 		const int level = Poe2BaseLevel(data, itemLevel, poe2ItemLevel);
-		if (static_cast<size_t>(data.itype) != type || !IsPoe2LootCandidate(i, level))
+		if (!IsPoe2Equipment(data) || !IsPoe2LootCandidate(i, level) || EquipmentBucketOf(static_cast<int>(i)) != type)
 			continue;
 		const int weight = data.dropRate * BaseRecencyPercent(level, data.iMinMLvl);
 		bases.emplace_back(static_cast<_item_indexes>(i), weight);
@@ -4714,6 +4770,8 @@ std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLe
 	}
 	return bases.back().first;
 }
+
+namespace {
 
 /**
  * @brief Picks among the loot candidates `isOkay` takes, by their drop rates; `weightPercent`, when given, scales each
@@ -4824,6 +4882,33 @@ struct Poe2UniquePick {
 	BeltUniqueId belt = BeltUniqueId::None;
 };
 
+} // namespace
+
+std::optional<_item_indexes> Poe2DiabloUniqueBase(int uid)
+{
+	if (uid < 0 || static_cast<size_t>(uid) >= UniqueItems.size())
+		return std::nullopt;
+	const UniqueItem &unique = UniqueItems[static_cast<size_t>(uid)];
+	// A base that still drops (a real POE2 one) before a retired one of the same kind; a staff unique only on a staff of
+	// its home's kind (caster-weapons-plan-v2.md 6.14).
+	const WeaponKind home = DiabloUniqueHome(uid);
+	std::optional<_item_indexes> base;
+	std::optional<_item_indexes> retired;
+	for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+		if (AllItemsList[i].iItemId != unique.UIItemId || !IsItemAvailable(static_cast<int>(i)) || AllItemsList[i].iMiscId == IMISC_UNIQUE || !IsPoe2Equipment(AllItemsList[i]))
+			continue;
+		if (home != WeaponKind::None && WeaponKindOf(static_cast<int>(i)) != home)
+			continue;
+		if (AllItemsList[i].dropRate > 0)
+			base = static_cast<_item_indexes>(i);
+		else if (!retired)
+			retired = static_cast<_item_indexes>(i);
+	}
+	return base ? base : retired;
+}
+
+namespace {
+
 /**
  * @brief Turns a unique roll into a unique with the base it belongs on: one of the bundle's, or one of Diablo's the hero
  * hasn't found yet. The tier is rolled first, as in POE2, and a tier with nothing left falls back to the next lower one.
@@ -4853,19 +4938,8 @@ std::optional<Poe2UniquePick> PickPoe2Unique(int itemLevel, int poe2ItemLevel, L
 		const UniqueItem &unique = UniqueItems[uid];
 		if (unique.UIMinLvl > itemLevel || (UniqueItemFlags[uid] && !gbIsMultiplayer))
 			continue;
-		// A base that still drops (a real POE2 one) before a retired one of the same kind.
-		std::optional<_item_indexes> base;
-		std::optional<_item_indexes> retired;
-		for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
-			if (AllItemsList[i].iItemId != unique.UIItemId || !IsItemAvailable(static_cast<int>(i)) || AllItemsList[i].iMiscId == IMISC_UNIQUE || !IsPoe2Equipment(AllItemsList[i]))
-				continue;
-			if (AllItemsList[i].dropRate > 0)
-				base = static_cast<_item_indexes>(i);
-			else if (!retired)
-				retired = static_cast<_item_indexes>(i);
-		}
-		if (!base)
-			base = retired;
+		// The offset below still counts every unique of the type.
+		const std::optional<_item_indexes> base = Poe2DiabloUniqueBase(static_cast<int>(uid));
 		if (!base)
 			continue;
 		const std::vector<uint8_t> valid = GetValidUniques(itemLevel, unique.UIItemId);
@@ -5324,7 +5398,7 @@ bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int a
 			const std::optional<Poe2UniquePick> unique = PickPoe2Unique(itemLevel, poe2ItemLevel, LootSource::Rare);
 			if (!unique)
 				break;
-			if (unique->belt != BeltUniqueId::None || !GambleFamilyHas(family, AllItemsList[unique->base].itype))
+			if (unique->belt != BeltUniqueId::None || !GambleFamilyHas(family, unique->base))
 				continue;
 			idx = unique->base;
 			uidOffset = unique->offset;
@@ -5334,7 +5408,7 @@ bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int a
 			rarity = ITEM_QUALITY_RARE;
 	}
 	if (!idx)
-		idx = PickPoe2Weighted(areaLevel, [family](const ItemData &data) { return IsPoe2Equipment(data) && GambleFamilyHas(family, data.itype); });
+		idx = PickPoe2Weighted(areaLevel, [family](const ItemData &data) { return IsPoe2Equipment(data) && GambleFamilyHas(family, static_cast<int>(&data - AllItemsList.data())); });
 	if (!idx)
 		return false;
 	item = {};
@@ -6627,8 +6701,9 @@ void PrintItemCorruption(const Item &item)
  */
 void PrintItemImplicits(const Item &item)
 {
-	if (gbIsPoe2 && ItemGrantsSpirit(item))
-		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpirit));
+	// With its own increased Spirit, once identified (plan 6.15); a legacy sceptre's is always 100.
+	if (gbIsPoe2 && IsAnySceptre(item))
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpiritOf(item)));
 	for (const std::string &line : ItemImplicitText(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:s}"), line));
 	if (const int quality = ItemQuality(item); quality > 0 && HasQuality(item))
@@ -6689,12 +6764,53 @@ void PrintWeaponClass(const Item &item)
 		kind = _("Staff");
 		break;
 	default:
-		return;
+		break;
 	}
+	// The caster weapons rework's kinds (caster-weapons-plan-v2.md 6.15); the older staves and sceptres keep their text.
+	switch (WeaponKindOf(item)) {
+	case WeaponKind::Wand:
+		kind = _("Wand");
+		break;
+	case WeaponKind::Sceptre:
+		kind = _("Sceptre");
+		break;
+	case WeaponKind::Quarterstaff:
+		kind = _("Quarterstaff");
+		break;
+	default:
+		break;
+	}
+	if (kind.empty())
+		return;
 	const InfoLineStyle style = CurrentInfoLineStyle;
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	AddItemInfoBoxString(twoHanded ? FormatRuntime(_("Two-Handed {:s}"), kind) : FormatRuntime(_("One-Handed {:s}"), kind));
 	CurrentInfoLineStyle = style;
+}
+
+/**
+ * @brief POE2 Mashup: a caster weapon of the rework has no damage or attack speed to show (caster-weapons-plan-v2.md
+ * 6.15): its durability, and the skill it grants at its item level.
+ */
+void PrintCasterWeaponLines(const Item &item)
+{
+	if (item._iMaxDur == DUR_INDESTRUCTIBLE)
+		AddItemInfoBoxString(_("Indestructible"));
+	else
+		AddItemInfoBoxString(FormatRuntime(_(/* TRANSLATORS: Dur: is durability */ "Dur: {:d}/{:d}"), item._iDurability, item._iMaxDur));
+	if (const BaseMeta *base = GrantingBase(item); base != nullptr)
+		AddItemInfoBoxString(FormatRuntime(_("Grants Skill: Level {:d} {:s}"), GrantedGemLevel(GrantingItemLevel(item)), SkillName(base->grantedSkill)));
+}
+
+/** @brief POE2 Mashup: a quarterstaff of the rework shows its own critical hit chance, which its attacks use. */
+void PrintQuarterstaffCrit(const Item &item)
+{
+	if (!gbIsPoe2 || !IsQuarterstaff(item))
+		return;
+	const BaseMeta *base = ItemBaseMeta(item);
+	if (base == nullptr || base->crit < 0)
+		return;
+	AddItemInfoBoxString(FormatRuntime(_("Critical Hit Chance: {:d}%"), BaseAttackCritPercent * base->crit / 100));
 }
 
 /** @brief POE2 Mashup: a weapon's attacks per second with its own increased attack speed, highlighted when that changed it, as POE2 shows it. */
@@ -6723,7 +6839,9 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(std::string_view(item._iName));
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	PrintWeaponClass(item);
-	if (item._iClass == ICLASS_WEAPON) {
+	if (gbIsPoe2 && IsCasterWeapon(item)) {
+		PrintCasterWeaponLines(item);
+	} else if (item._iClass == ICLASS_WEAPON) {
 		// POE2 Mashup: the damage shown is the weapon's whole hit, with its increased physical and added elemental damage.
 		int minDamage = item._iMinDam;
 		int maxDamage = item._iMaxDam;
@@ -6750,6 +6868,7 @@ void PrintItemDetails(const Item &item)
 		}
 		CurrentInfoLineStyle = InfoLineStyle::Property;
 		PrintAttacksPerSecond(item);
+		PrintQuarterstaffCrit(item);
 		// Holding Alt splits it by damage type, each in its colour.
 		if (gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0 && (item._iFMaxDam > 0 || item._iLMaxDam > 0 || item._iPLDam != 0)) {
 			CurrentInfoLineStyle = InfoLineStyle::PhysicalDamage;
@@ -7040,7 +7159,11 @@ void PrintItemDur(const Item &item)
 
 	CurrentInfoLineStyle = InfoLineStyle::Property;
 	PrintWeaponClass(item);
-	if (item._iClass == ICLASS_WEAPON) {
+	if (gbIsPoe2 && IsCasterWeapon(item)) {
+		PrintCasterWeaponLines(item);
+		if (item._iMagical != ITEM_QUALITY_NORMAL)
+			AddItemInfoBoxString(_("Not Identified"));
+	} else if (item._iClass == ICLASS_WEAPON) {
 		// POE2 Mashup: with its quality, which shows before identifying.
 		const int minDamage = item._iMinDam * (100 + WeaponDamagePercent(item)) / 100;
 		const int maxDamage = item._iMaxDam * (100 + WeaponDamagePercent(item)) / 100;
@@ -7056,6 +7179,7 @@ void PrintItemDur(const Item &item)
 				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}-{:d}  Dur: {:d}/{:d}"), minDamage, maxDamage, item._iDurability, item._iMaxDur));
 		}
 		PrintAttacksPerSecond(item);
+		PrintQuarterstaffCrit(item);
 		if (item._iMiscId == IMISC_STAFF && item._iMaxCharges > 0) {
 			AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 		}
@@ -7359,9 +7483,13 @@ constexpr VendorStockQuota SmithStockQuotas[] = {
 	{ VendorCategory::Jewelry, 5, 7 },
 };
 
-/** Adria's stock besides her pinned wares: a tab of staves, and a few more scrolls and elixirs. */
+/**
+ * Adria's stock besides her pinned wares: a tab of caster staves, wands and sceptres (caster-weapons-plan-v2.md 6.13;
+ * as many as her staves were), and a few more scrolls and elixirs.
+ */
 constexpr VendorStockQuota WitchStockQuotas[] = {
-	{ VendorCategory::TwoHanded, 15, 20 },
+	{ VendorCategory::TwoHanded, 7, 9 },
+	{ VendorCategory::OneHanded, 8, 11 },
 	{ VendorCategory::Supplies, 3, 6 },
 };
 
@@ -7699,7 +7827,8 @@ void SpawnBoy(int lvl)
 					ivalue = INT_MAX;
 				break;
 			case HeroClass::Sorcerer:
-				if (IsAnyOf(itemType, ItemType::Staff, ItemType::Axe, ItemType::Bow, ItemType::Mace))
+				// POE2 Mashup: a caster staff, wand or sceptre is a Sorcerer's weapon (plan 6.13).
+				if (IsAnyOf(itemType, ItemType::Staff, ItemType::Axe, ItemType::Bow, ItemType::Mace) && !(gbIsPoe2 && IsCasterWeapon(BoyItem)))
 					ivalue = INT_MAX;
 				break;
 			case HeroClass::Monk:

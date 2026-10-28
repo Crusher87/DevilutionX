@@ -22,6 +22,7 @@
 #include "engine/render/text_render.hpp"
 #include "items.h"
 #include "panels/poe2_widgets.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "tables/itemdat.h"
 #include "utils/display.h"
 #include "utils/language.h"
@@ -46,9 +47,17 @@ std::string_view RarityWord(item_quality quality)
 	}
 }
 
-std::string_view KindWords(ItemType type)
+std::string_view KindWords(const Item &item)
 {
-	switch (type) {
+	// The caster weapons rework's kinds have words of their own; "mace" means a martial one.
+	switch (WeaponKindOf(item)) {
+	case WeaponKind::Wand: return "wand weapon";
+	case WeaponKind::Sceptre:
+	case WeaponKind::LegacySceptre: return "sceptre weapon";
+	case WeaponKind::Quarterstaff: return "quarterstaff staff weapon";
+	default: break;
+	}
+	switch (item._itype) {
 	case ItemType::Sword: return "sword weapon";
 	case ItemType::Axe: return "axe weapon";
 	case ItemType::Bow: return "bow weapon";
@@ -161,7 +170,7 @@ bool ItemSearchTextMatches(std::string_view text, const std::vector<ItemSearchTe
 
 std::string ItemSearchText(const Item &item)
 {
-	std::string text = StrCat(item.getName().str(), "\n", item._iName, "\n", AllItemsList[item.IDidx].iName, "\n", RarityWord(item._iMagical), " ", KindWords(item._itype));
+	std::string text = StrCat(item.getName().str(), "\n", item._iName, "\n", AllItemsList[item.IDidx].iName, "\n", RarityWord(item._iMagical), " ", KindWords(item));
 	if (!item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL)
 		StrAppend(text, " unidentified");
 

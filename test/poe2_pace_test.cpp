@@ -10,10 +10,12 @@
  * solve_pace.py (research/attack-speed/rebalance).
  */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -34,6 +36,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_levels.hpp"
@@ -42,6 +45,8 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/itemdat.h"
@@ -226,7 +231,10 @@ public:
 		std::vector<_item_indexes> bases;
 		for (size_t i = 0; i < AllItemsList.size(); i++) {
 			const ItemData &data = AllItemsList[i];
-			if (data.dropRate > 0 && data.iClass == ICLASS_WEAPON && data.iSName == kind && data.iMinMLvl <= areaLevel && (!oneHanded || data.iLoc == ILOC_ONEHAND))
+			// The Sorcerer's staves are the Focused and Quick ones, pinned by kind (they no longer drop): the caster
+			// weapons rework's staves have no damage and cast their own skills, measured by the caster pace case.
+			const bool available = kind == "Staff" ? WeaponKindOf(static_cast<int>(i)) == WeaponKind::LegacyStaff && BaseMetaFor(static_cast<int>(i)) != nullptr : data.dropRate > 0;
+			if (available && data.iClass == ICLASS_WEAPON && data.iSName == kind && data.iMinMLvl <= areaLevel && (!oneHanded || data.iLoc == ILOC_ONEHAND))
 				bases.push_back(static_cast<_item_indexes>(i));
 		}
 		return bases;
@@ -650,6 +658,330 @@ TEST_F(Poe2PaceTest, EarlySkillsBeatTheFreeAttackPerSecond)
 				EXPECT_GT(rows[i].damage / rows[i].seconds, free) << paceClass.name << " level " << level << ' ' << rows[i].what;
 			}
 		}
+	}
+}
+
+/** @brief A modifier forced onto a staff for the caster pace case: a family's best tier at an item level, rolled high. */
+struct ForcedMod {
+	const ModFamily *family;
+	std::array<int, 2> values;
+};
+
+/** @brief The game's value of a table value at a scale, as modifiers.cpp rounds it. */
+int ScaledModValue(int value, int scale)
+{
+	if (scale == 100 || value == 0)
+		return value;
+	const int scaled = ((value * scale) + (value > 0 ? 50 : -50)) / 100;
+	return scaled == 0 ? (value > 0 ? 1 : -1) : scaled;
+}
+
+/** @brief The enabled families of a slot that raise Firebolt's damage per second, each at its best tier for the item level. */
+std::vector<ForcedMod> FireboltMods(ModSlot slot, int itemLevel)
+{
+	std::vector<ForcedMod> mods;
+	for (const ModFamily &family : ModifierFamilies()) {
+		if (!family.enabled || (family.slots & (1U << static_cast<uint32_t>(slot))) == 0)
+			continue;
+		if (!IsAnyOf(family.effect, ModEffect::SpellDamage, ModEffect::SpellDamageAndMana, ModEffect::FireSpellDamage, ModEffect::CastSpeed, ModEffect::SpellSkillLevels,
+		        ModEffect::FireSkillLevels, ModEffect::Intelligence))
+			continue;
+		for (const ModTier &tier : family.tiers) {
+			if (tier.itemLevel > itemLevel || tier.weight == 0)
+				continue;
+			mods.push_back({ &family, { ScaledModValue(std::max(tier.min[0], tier.max[0]), family.scale[0]), ScaledModValue(std::max(tier.min[1], tier.max[1]), family.scale[1]) } });
+			break;
+		}
+	}
+	return mods;
+}
+
+/** @brief Whether a rare can carry these together: three prefixes and three suffixes at most, one of each group, no conflicts. */
+bool RareCanCarry(const std::vector<const ForcedMod *> &mods)
+{
+	int prefixes = 0;
+	int suffixes = 0;
+	for (size_t i = 0; i < mods.size(); i++) {
+		(mods[i]->family->prefix ? prefixes : suffixes)++;
+		for (size_t j = 0; j < i; j++) {
+			if (mods[i]->family->group == mods[j]->family->group)
+				return false;
+		}
+	}
+	return prefixes <= MaxRareModsPerSide && suffixes <= MaxRareModsPerSide;
+}
+
+TEST_F(Poe2PaceTest, RareCasterStaffAtDepthStaysNearTodaysBest)
+{
+	// caster-weapons-plan-v2.md 5.2 and 9: a rare staff of the rework at the depth's item level, with the best legal
+	// modifiers for Firebolt, against the best staff of today (the Focused and Quick staves, pinned by row) with the best of
+	// theirs. The Sorcerer's Firebolt per second may grow by at most half.
+	constexpr int FirstLegacyStaff = 544;
+	constexpr int LastLegacyStaff = 559;
+	Player &player = *MyPlayer;
+	std::map<int, double> secondsBySpeed;
+	const auto dps = [&](Item staff, const std::vector<const ForcedMod *> &mods, int level, int magic) {
+		for (const ForcedMod *mod : mods)
+			ApplyModEffect(staff, mod->family->effect, mod->values[0], mod->values[1]);
+		MakeHero(player, HeroClass::Sorcerer, level);
+		player._pBaseMag = player._pMagic = magic;
+		player.InvBody[INVLOC_HAND_LEFT] = staff;
+		Ready(player);
+		player._pSplLvl[static_cast<size_t>(SpellID::Firebolt)] = 1;
+		const double hit = CastDamage(player, SpellID::Firebolt, 1);
+		// The gear's fire spell damage adds to the spell's increased damage as the hit lands (UniqueSpellHitPercent).
+		const int increased = std::max(UniqueSpellDamagePercent(player, SpellID::Firebolt), 1);
+		const double fire = hit * (increased + GearElementSpellDamage(player, DamageType::Fire)) / increased;
+		const int speed = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::CastSpeed)];
+		if (!secondsBySpeed.contains(speed))
+			secondsBySpeed[speed] = HeldCastTicks(player, SpellID::Firebolt) / TicksPerSecond;
+		return fire / secondsBySpeed[speed];
+	};
+	const auto best = [&](const Item &staff, ModSlot slot, int level, int magic) {
+		const std::vector<ForcedMod> pool = FireboltMods(slot, level);
+		double top = 0;
+		for (uint32_t mask = 0; mask < (1U << pool.size()); mask++) {
+			std::vector<const ForcedMod *> mods;
+			for (size_t i = 0; i < pool.size(); i++) {
+				if ((mask & (1U << i)) != 0)
+					mods.push_back(&pool[i]);
+			}
+			if (RareCanCarry(mods))
+				top = std::max(top, dps(staff, mods, level, magic));
+		}
+		return top;
+	};
+
+	for (const int level : { 9, 17, 33, 48 }) {
+		// The same Magic for both, enough for any of today's staves at this depth.
+		int magic = GetClassAttributes(HeroClass::Sorcerer).baseMag;
+		for (int row = FirstLegacyStaff; row <= LastLegacyStaff; row++) {
+			ASSERT_EQ(WeaponKindOf(row), WeaponKind::LegacyStaff) << AllItemsList[row].iName;
+			if (AllItemsList[row].iMinMLvl <= level)
+				magic = std::max<int>(magic, AllItemsList[row].iMinMag);
+		}
+		double today = 0;
+		for (int row = FirstLegacyStaff; row <= LastLegacyStaff; row++) {
+			if (AllItemsList[row].iMinMLvl > level)
+				continue;
+			MakeHero(player, HeroClass::Sorcerer, level);
+			Hold(player, INVLOC_HAND_LEFT, static_cast<_item_indexes>(row));
+			const Item staff = player.InvBody[INVLOC_HAND_LEFT];
+			today = std::max(today, best(staff, ModSlot::LegacyStaff, level, magic));
+		}
+		// The rework's staves have no implicit and no damage: only their modifiers count. The Ashen Staff, pinned by
+		// its id: its fire lock leaves Firebolt every modifier it wants.
+		const std::optional<_item_indexes> ashen = FindPoe2ItemId("poe2:staff_ashen_staff");
+		ASSERT_TRUE(ashen.has_value());
+		ASSERT_EQ(WeaponKindOf(*ashen), WeaponKind::CasterStaff);
+		MakeHero(player, HeroClass::Sorcerer, level);
+		Hold(player, INVLOC_HAND_LEFT, *ashen);
+		Item newStaff = player.InvBody[INVLOC_HAND_LEFT];
+		ASSERT_EQ(newStaff._iMaxDam, 0);
+		ASSERT_TRUE(ItemImplicits(newStaff).empty());
+		newStaff._iIdentified = true;
+		newStaff._iMagical = ITEM_QUALITY_RARE;
+		const double rework = best(newStaff, ModSlot::Staff, level, magic);
+		ASSERT_GT(today, 0) << level;
+		const double ratio = rework / today;
+		std::printf("[pace] item level %d: rare caster staff %.2f, today's best %.2f Firebolt/s damage: %.3fx\n", level, rework, today, ratio);
+		RecordProperty("CasterStaffPace" + std::to_string(level), std::to_string(ratio));
+		EXPECT_LE(ratio, 1.5) << "item level " << level;
+		EXPECT_GE(ratio, 1.0) << "item level " << level << ": the new staff shouldn't lose to today's";
+	}
+}
+
+/** @brief An item row by its name. */
+_item_indexes RowNamed(std::string_view name)
+{
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iName == name)
+			return static_cast<_item_indexes>(i);
+	}
+	ADD_FAILURE() << name;
+	return IDI_NONE;
+}
+
+/** @brief Act 1's floors as area_levels.tsv has them: Cathedral 1-4, then the Catacombs. */
+struct PaceFloor {
+	std::string_view name;
+	int areaLevel;
+};
+constexpr PaceFloor ActOneFloors[] = {
+	{ "Cathedral 1", 2 },
+	{ "Cathedral 2", 4 },
+	{ "Cathedral 3", 5 },
+	{ "Cathedral 4", 7 },
+	{ "Catacombs 1", 8 },
+	{ "Catacombs 2", 10 },
+	{ "Catacombs 3", 11 },
+	{ "Catacombs 4", 13 },
+};
+
+TEST_F(Poe2PaceTest, CasterWeaponsPaceThroughActOne)
+{
+	// Plan S24: seconds to kill a white monster of the area's level on every floor of Act 1, the hero at the area's level
+	// with gems at the most that level allows: the Sorcerer with a rare staff of today (the Focused and Quick rows, pinned)
+	// and of the rework, a wand beside a sceptre, and the Monk with the new Fine Long Quarterstaff against the best
+	// quarterstaff of before. Rare weapons are the average of ten rolls at the area's item level. One target, before its
+	// defences; riders (Wither, bleeds) and minions are not counted.
+	constexpr uint32_t Rolls = 10;
+	constexpr int FirstLegacyStaff = 544;
+	constexpr int LastLegacyStaff = 559;
+	Player &player = *MyPlayer;
+
+	const auto holdRare = [&](inv_body_loc hand, _item_indexes base, uint32_t seed, int itemLevel) {
+		Item &item = player.InvBody[hand];
+		item = {};
+		SetLootRarity(item, ITEM_QUALITY_RARE);
+		SetPoe2ItemLevel(item, itemLevel);
+		SetRndSeed(seed * 7919U + static_cast<uint32_t>(itemLevel));
+		SetupAllItems(player, item, base, AdvanceRndSeed(), 30, 1, /*onlygood=*/true, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+		item._iIdentified = true;
+		item._iStatFlag = true;
+		player._pBaseMag = player._pMagic = std::max<int>(player._pBaseMag, item._iMinMag);
+		player._pBaseStr = player._pStrength = std::max<int>(player._pBaseStr, item._iMinStr);
+		player._pBaseDex = player._pDexterity = std::max<int>(player._pBaseDex, item._iMinDex);
+	};
+	// A spell hit with the gear's element damage, which joins the spell's increased damage as it lands.
+	const auto withElement = [&](double hit, DamageType type) {
+		const int increased = std::max(UniqueSpellDamagePercent(player, SpellID::Firebolt), 1);
+		return hit * (increased + GearElementSpellDamage(player, type)) / increased;
+	};
+	const auto fireboltPerSecond = [&](int gemLevel) {
+		player._pSplLvl[static_cast<size_t>(SpellID::Firebolt)] = 2;
+		const double hit = withElement(CastDamage(player, SpellID::Firebolt, gemLevel), DamageType::Fire);
+		const double seconds = HeldCastTicks(player, SpellID::Firebolt) / TicksPerSecond;
+		return seconds > 0 ? hit / seconds : 0;
+	};
+	// The left click: a granted skill or the granted Staff Bolt, at the weapon's grant level.
+	const auto leftClickPerSecond = [&]() {
+		const SkillSlot slot = DefaultSkillSlot(player);
+		double hit = 0;
+		DamageType type = DamageType::Fire;
+		if (slot.kind == SkillKind::Attack) {
+			hit = SkillHitAverage(player, slot, player.poe2.effectiveLevel(slot));
+			type = FindTableSkill(static_cast<WeaponSkill>(slot.id))->type;
+		} else {
+			hit = SkillHitAverage(player, slot, 1);
+		}
+		const double seconds = UseSeconds(player, slot);
+		return seconds > 0 ? withElement(hit, type) / seconds : 0;
+	};
+	const auto seconds = [](int life, double perSecond) { return perSecond > 0 ? life / perSecond : 999.0; };
+
+	std::printf("[pace] floor (area level), white monster life: seconds to kill\n");
+	for (const PaceFloor &floor : ActOneFloors) {
+		const int level = floor.areaLevel;
+		const int life = MonsterLevelLife(level);
+		const int gemLevel = MaxGemLevelForCharacter(level);
+
+		// Today: the best rare Focused or Quick staff of the depth, Firebolt, and its Staff Bolt.
+		double today = 0;
+		double todayBolt = 0;
+		std::string todayStaff;
+		for (int row = FirstLegacyStaff; row <= LastLegacyStaff; row++) {
+			if (AllItemsList[row].iMinMLvl > level)
+				continue;
+			double sum = 0;
+			double bolt = 0;
+			for (uint32_t seed = 1; seed <= Rolls; seed++) {
+				MakeHero(player, HeroClass::Sorcerer, level);
+				holdRare(INVLOC_HAND_LEFT, static_cast<_item_indexes>(row), seed, level);
+				Ready(player);
+				sum += fireboltPerSecond(gemLevel);
+				bolt += leftClickPerSecond();
+			}
+			if (sum / Rolls > today) {
+				today = sum / Rolls;
+				todayBolt = bolt / Rolls;
+				todayStaff = AllItemsList[row].iName;
+			}
+		}
+
+		// The rework's staves: Firebolt with the staff, and its own left click.
+		const auto staffRow = [&](std::string_view name) {
+			double firebolt = 0;
+			double click = 0;
+			for (uint32_t seed = 1; seed <= Rolls; seed++) {
+				MakeHero(player, HeroClass::Sorcerer, level);
+				holdRare(INVLOC_HAND_LEFT, RowNamed(name), seed, level);
+				Ready(player);
+				firebolt += fireboltPerSecond(gemLevel);
+				click += leftClickPerSecond();
+			}
+			return std::pair { firebolt / Rolls, click / Rolls };
+		};
+		const auto [ashenFirebolt, ashenBolt] = staffRow("Ashen Staff");
+		const auto [voltaicFirebolt, voltaicBolt] = staffRow("Voltaic Staff");
+
+		// A wand beside a sceptre: the wand's bolt and Firebolt.
+		const std::string_view sceptre = level >= 12 ? "Lupine Sceptre" : (level >= 6 ? "Fine Stoic Sceptre" : "Fine Rattling Sceptre");
+		double wandFirebolt = 0;
+		double boneBolt = 0;
+		for (uint32_t seed = 1; seed <= Rolls; seed++) {
+			MakeHero(player, HeroClass::Sorcerer, level);
+			holdRare(INVLOC_HAND_LEFT, RowNamed("Bone Wand"), seed, level);
+			holdRare(INVLOC_HAND_RIGHT, RowNamed(sceptre), seed + 100, level);
+			Ready(player);
+			EXPECT_EQ(GrantedAttackSkill(player), WeaponSkill::BoneBolt);
+			wandFirebolt += fireboltPerSecond(gemLevel);
+			boneBolt += leftClickPerSecond();
+		}
+		wandFirebolt /= Rolls;
+		boneBolt /= Rolls;
+
+		// The Monk: the best white quarterstaff of before against the new Fine Long Quarterstaff.
+		const PaceClass &monk = PaceClasses()[3];
+		ASSERT_EQ(monk.heroClass, HeroClass::Monk);
+		const auto monkRows = [&](_item_indexes base) {
+			MakeHero(player, HeroClass::Monk, level);
+			Hold(player, INVLOC_HAND_LEFT, base);
+			Ready(player);
+			return Measure(player, monk, level);
+		};
+		const auto freePerSecond = [](const std::vector<Row> &rows) { return rows[0].seconds > 0 ? rows[0].damage / rows[0].seconds : 0; };
+		_item_indexes bestOld = IDI_NONE;
+		double bestOldFree = 0;
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (WeaponKindOf(static_cast<int>(i)) != WeaponKind::Quarterstaff || IsCasterWeapon(static_cast<int>(i)) || AllItemsList[i].dropRate == 0
+			    || AllItemsList[i].iMinMLvl > level || AllItemsList[i].iName == "Fine Long Quarterstaff")
+				continue;
+			const double free = freePerSecond(monkRows(static_cast<_item_indexes>(i)));
+			if (free > bestOldFree) {
+				bestOldFree = free;
+				bestOld = static_cast<_item_indexes>(i);
+			}
+		}
+		ASSERT_NE(bestOld, IDI_NONE) << floor.name;
+		const std::vector<Row> oldMonk = monkRows(bestOld);
+		const std::vector<Row> newMonk = monkRows(RowNamed("Fine Long Quarterstaff"));
+		ASSERT_EQ(oldMonk.size(), 3U);
+		ASSERT_EQ(newMonk.size(), 3U);
+
+		std::printf("[pace] %s (%d), life %d, gem level %d:\n", std::string(floor.name).c_str(), level, life, gemLevel);
+		std::printf("[pace]   Sorcerer, rare %s (today): Firebolt %.1f s, Staff Bolt %.1f s\n", todayStaff.c_str(), seconds(life, today), seconds(life, todayBolt));
+		std::printf("[pace]   Sorcerer, rare Ashen Staff: Firebolt %.1f s, Staff Bolt %.1f s\n", seconds(life, ashenFirebolt), seconds(life, ashenBolt));
+		std::printf("[pace]   Sorcerer, rare Voltaic Staff: Firebolt %.1f s, Lightning Bolt %.1f s\n", seconds(life, voltaicFirebolt), seconds(life, voltaicBolt));
+		std::printf("[pace]   Sorcerer, rare Bone Wand + %s: Firebolt %.1f s, Bone Bolt %.1f s\n", std::string(sceptre).c_str(), seconds(life, wandFirebolt), seconds(life, boneBolt));
+		for (size_t r = 0; r < 3; r++) {
+			std::printf("[pace]   Monk %s: %s %.1f s, Fine Long Quarterstaff %.1f s\n", oldMonk[r].what.c_str(), AllItemsList[bestOld].iName.c_str(),
+			    seconds(life, oldMonk[r].damage / oldMonk[r].seconds), seconds(life, newMonk[r].damage / newMonk[r].seconds));
+		}
+		RecordProperty("ActOnePace" + std::to_string(level), std::to_string(seconds(life, ashenFirebolt) / seconds(life, today)));
+
+		// Every scenario kills; the new staff's Firebolt stays within the S7 budget of today's (at most half again).
+		EXPECT_GT(today, 0) << floor.name;
+		EXPECT_GT(ashenBolt, 0) << floor.name;
+		EXPECT_GT(voltaicBolt, 0) << floor.name;
+		EXPECT_GT(boneBolt, 0) << floor.name;
+		EXPECT_LE(ashenFirebolt, today * 1.5) << floor.name;
+		// The free left click never outpaces the Firebolt gem on the same staff.
+		EXPECT_LE(ashenBolt, ashenFirebolt * 1.01) << floor.name;
+		// Every staff is worth holding (the coordinator, 10-28): a Voltaic Staff's Lightning Bolt, priced at 75% of Staff
+		// Bolt on one target, kills a lone monster in at most twice an Ashen Staff's time (it took four times before).
+		EXPECT_GE(voltaicBolt, ashenBolt / 2) << floor.name;
+		EXPECT_GE(freePerSecond(newMonk), freePerSecond(oldMonk)) << floor.name << ": the new quarterstaff replaces the old on the first drop";
 	}
 }
 

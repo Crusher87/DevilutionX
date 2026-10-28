@@ -155,6 +155,13 @@ bool AutoEquipEnabled(const Player &player, const Item &item);
 bool AutoEquip(Player &player, const Item &item, bool persistItem = true, bool sendNetworkMessage = false);
 
 /**
+ * @brief Whether the two items can be held together, one in each hand: one-handed both, and a weapon with a shield (or a
+ * focus), a Bard's swords and maces, and in POE2 a sceptre with any one-hander. A POE2 wand goes only with a shield,
+ * focus or sceptre.
+ */
+bool HandsCanHold(const Player &player, const Item &first, const Item &second);
+
+/**
  * @brief Checks whether the given item can be placed on the specified player's inventory.
  * @param player The player whose inventory will be checked.
  * @param item The item to be checked.

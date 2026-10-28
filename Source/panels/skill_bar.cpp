@@ -290,6 +290,9 @@ SpellIcon DefaultAttackIcon(DefaultAttack attack)
 /** @brief A weapon set's default attack, as a skill for its icon. */
 SkillSlot WeaponAttackSkill(const Player &player, uint8_t set)
 {
+	// A caster weapon's granted skill shows as itself.
+	if (const SkillSlot slot = DefaultSkillSlotForSet(player, set); slot.kind == SkillKind::Attack)
+		return slot;
 	return SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttackForSet(player, set)));
 }
 
@@ -741,7 +744,7 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 		const auto set = static_cast<uint8_t>(hover.index);
 		lines.emplace_back(FormatRuntime(_("Weapon set {:s} attack, no mana cost"), WeaponSetName(set)), UiFlags::ColorWhite);
 		lines.emplace_back(FormatRuntime(_("Click to use it with {:s}"), TraySlotKeyName(Popup.slot)), UiFlags::ColorButtonpushed);
-		DrawTooltip(out, bounds, MousePosition, std::string(DefaultAttackName(DefaultAttackForSet(player, set))), UiFlags::ColorWhitegold, lines);
+		DrawTooltip(out, bounds, MousePosition, std::string(DefaultAttackNameForSet(player, set)), UiFlags::ColorWhitegold, lines);
 		return;
 	}
 	case PopupHit::Kind::Clear:
@@ -1225,7 +1228,7 @@ void SetSkillBarInfo()
 		InfoColor = UiFlags::ColorWhite;
 		if (binding.action == TrayAction::WeaponAttack) {
 			const uint8_t set = BindingWeaponSet(binding);
-			InfoString = FormatRuntime("{:s} [{:s}]", DefaultAttackName(DefaultAttackForSet(player, set)), key);
+			InfoString = FormatRuntime("{:s} [{:s}]", DefaultAttackNameForSet(player, set), key);
 			AddInfoBoxString(FormatRuntime(_("Weapon set {:s} attack, no mana cost"), WeaponSetName(set)));
 		} else {
 			InfoString = FormatRuntime(_("Empty tray slot [{:s}]"), key);

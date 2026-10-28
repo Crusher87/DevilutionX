@@ -11,6 +11,8 @@
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_kinds.hpp"
+#include "tables/itemdat.h"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -408,6 +410,45 @@ int EquipmentClassWeight(ItemType type)
 		return 5;
 	case ItemType::Amulet:
 		return 4;
+	default:
+		return 0;
+	}
+}
+
+size_t EquipmentBucketOf(int itemIndex)
+{
+	const ItemData &data = AllItemsList[static_cast<size_t>(itemIndex)];
+	if (IsAnyOf(data.itype, ItemType::Mace, ItemType::Staff)) {
+		switch (WeaponKindOf(itemIndex)) {
+		case WeaponKind::Wand:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::Wand);
+		case WeaponKind::Sceptre:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::Sceptre);
+		case WeaponKind::CasterStaff:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::CasterStaff);
+		case WeaponKind::Quarterstaff:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::Quarterstaff);
+		default:
+			break;
+		}
+	}
+	return static_cast<size_t>(data.itype);
+}
+
+int EquipmentBucketWeight(size_t bucket)
+{
+	if (bucket < FirstKindBucket)
+		return EquipmentClassWeight(static_cast<ItemType>(bucket));
+	switch (static_cast<KindBucket>(bucket - FirstKindBucket)) {
+	case KindBucket::Wand:
+		return 4;
+	case KindBucket::Sceptre:
+		return 3;
+	case KindBucket::CasterStaff:
+		return 4;
+	case KindBucket::Quarterstaff:
+		// The Staff type's weight, which the quarterstaves had to themselves.
+		return EquipmentClassWeight(ItemType::Staff);
 	default:
 		return 0;
 	}

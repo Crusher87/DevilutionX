@@ -12,8 +12,10 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
@@ -30,6 +32,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "utils/is_of.hpp"
@@ -86,17 +89,40 @@ const Item *HeldWeapon(const Player &player)
 	return nullptr;
 }
 
+/** @brief The quarterstaff the hero holds and can use, or nullptr. */
+const Item *HeldQuarterstaff(const Player &player)
+{
+	for (const Item &item : { std::cref(player.InvBody[INVLOC_HAND_LEFT]), std::cref(player.InvBody[INVLOC_HAND_RIGHT]) }) {
+		if (!item.isEmpty() && item._iStatFlag && IsQuarterstaff(item))
+			return &item;
+	}
+	return nullptr;
+}
+
+/**
+ * @brief Whether a melee hit Dazes the monster: a Daze quarterstaff's chance (caster-weapons-plan-v2.md 6.11). Unique
+ * monsters are never Dazed, and nothing is rolled without such a staff.
+ */
+bool RollDaze(const Player &player, const Monster &monster)
+{
+	const Item *staff = HeldQuarterstaff(player);
+	if (staff == nullptr || monster.isUnique())
+		return false;
+	const int chance = staff->_iPoe2Stats[static_cast<size_t>(Poe2ItemStat::DazeChance)];
+	return chance > 0 && GenerateRnd(100) < chance;
+}
+
 ItemType HeldWeaponType(const Player &player)
 {
 	const Item *weapon = HeldWeapon(player);
 	return weapon != nullptr ? weapon->_itype : ItemType::None;
 }
 
-/** @brief Two-handed melee weapons, staves included (they take the tree's two-handed damage too). */
+/** @brief Two-handed melee weapons, martial staves included (they take the tree's two-handed damage too); a caster staff isn't one. */
 bool HoldsTwoHandMelee(const Player &player)
 {
 	const Item *weapon = HeldWeapon(player);
-	return weapon != nullptr && weapon->_iLoc == ILOC_TWOHAND && weapon->_itype != ItemType::Bow;
+	return weapon != nullptr && weapon->_iLoc == ILOC_TWOHAND && weapon->_itype != ItemType::Bow && !IsCasterStaff(*weapon);
 }
 
 /** @brief A Frenzy Charge from a passive rule: up to two, for 4 seconds, keeping a longer one from a skill. */
@@ -178,9 +204,9 @@ int HiveBridge(const Player &player)
 	int melee;
 	if (weapon == nullptr)
 		melee = passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage);
-	else if (weapon->_itype == ItemType::Bow)
+	else if (weapon->_itype == ItemType::Bow || IsCasterWeapon(*weapon))
 		melee = 0;
-	else if (weapon->_itype == ItemType::Staff)
+	else if (IsMartialStaff(*weapon))
 		melee = passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage) + passive(PassiveStat::TwoHandDamage);
 	else
 		melee = passive(PassiveStat::MeleeDamage) + passive(weapon->_iLoc == ILOC_TWOHAND ? PassiveStat::TwoHandDamage : PassiveStat::OneHandDamage);
@@ -277,6 +303,27 @@ int SpellIncreasedDamage(const Player &player)
 		increased += std::max<int32_t>(player._pMaxMana.whole(), 0) * share / 100;
 	return increased;
 }
+
+} // namespace
+
+int GearElementSpellDamage(const Player &player, DamageType type)
+{
+	const auto stat = [&player](Poe2ItemStat which) { return static_cast<int>(player.poe2.itemStats[static_cast<size_t>(which)]); };
+	switch (type) {
+	case DamageType::Fire:
+		return stat(Poe2ItemStat::FireSpellDamage);
+	case DamageType::Lightning:
+		return stat(Poe2ItemStat::LightningSpellDamage);
+	case DamageType::Magic:
+		return stat(Poe2ItemStat::ColdSpellDamage);
+	case DamageType::Physical:
+		return stat(Poe2ItemStat::PhysicalSpellDamage);
+	default:
+		return 0;
+	}
+}
+
+namespace {
 
 /** @brief The rules' "more damage" for every hit, attack or spell, in percent. */
 int GeneralDamagePercent(const Player &player)
@@ -530,6 +577,12 @@ int AttackCritChance(const Player &player)
 		return HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike) ? player.getCharacterLevel() : 0;
 	}
 	int chance = BaseAttackCritPercent;
+	// The caster weapons rework's quarterstaves have POE2's crit, halved (its base's crit column, in tenths of a percent);
+	// the older ones keep the default.
+	if (const Item *staff = HeldQuarterstaff(player); staff != nullptr) {
+		if (const BaseMeta *base = ItemBaseMeta(*staff); base != nullptr && base->crit >= 0)
+			chance = BaseAttackCritPercent * base->crit / 100;
+	}
 	// Third Eye: the next attack's place in the count of three.
 	if (const int more = Rule(player, UniqueRule::ThirdHitCritChance); more > 0)
 		chance += (State(player).attacks + 1) % 3 == 0 ? more : -Rule(player, UniqueRule::OtherHitsLessCrit);
@@ -592,8 +645,8 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	if (TryPutDownRisen(player, monster))
 		return damage;
 	state.attacks++;
-	const ItemType weapon = HeldWeaponType(player);
-	const bool staffHit = !ranged && weapon == ItemType::Staff;
+	const Item *heldWeapon = HeldWeapon(player);
+	const bool staffHit = !ranged && heldWeapon != nullptr && IsMartialStaff(*heldWeapon);
 	const bool wasShocked = monster.poe2.shockTicks > 0;
 
 	const int generalPercent = GeneralDamagePercent(player);
@@ -630,7 +683,7 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		raw = raw * (100 + more) / 100;
 		state.swapStrikes--;
 	}
-	if (const int seconds = Rule(player, UniqueRule::UnarmedHitStacks); seconds > 0 && !ranged && weapon == ItemType::None) {
+	if (const int seconds = Rule(player, UniqueRule::UnarmedHitStacks); seconds > 0 && !ranged && heldWeapon == nullptr) {
 		state.unarmedStacks = static_cast<uint8_t>(std::min<int>(state.unarmedStacks + 1, MaxUnarmedStacks));
 		state.unarmedTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
 	}
@@ -674,7 +727,10 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	const int32_t physical = static_cast<int32_t>(packets[0]);
 	// Briarpatch stores part of the physical damage as thorns.
 	OnSpiritPhysicalAttack(player, physical);
+	// A Daze quarterstaff's melee hit may double its heavy-stun buildup.
+	state.dazing = !ranged && physical > 0 && RollDaze(player, monster);
 	Fixed26_6 dealt = DealPacket(player, monster, DamageType::Physical, physical);
+	state.dazing = false;
 	dealt += DealPacket(player, monster, DamageType::Fire, static_cast<int32_t>(packets[1]));
 	dealt += DealPacket(player, monster, DamageType::Lightning, static_cast<int32_t>(packets[2]));
 	dealt += DealPacket(player, monster, DamageType::Magic, static_cast<int32_t>(packets[3]));
@@ -737,7 +793,7 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 	// Element damage adds to the spell's increased damage rather than multiplying it, and so does the Sickness Road's
 	// melee bridge.
 	const int increased = std::max(SpellIncreasedDamage(player), 1);
-	percent = percent * std::max(increased + PassiveElementDamage(player, type) + HiveBridge(player), 0) / increased;
+	percent = percent * std::max(increased + PassiveElementDamage(player, type) + GearElementSpellDamage(player, type) + HiveBridge(player), 0) / increased;
 	if (const int more = Rule(player, UniqueRule::SpellElementCycle); more > 0 && IsElemental(type)) {
 		if (type == CycleElement(state.cycleElement))
 			percent = percent * (100 + more) / 100;
@@ -764,6 +820,8 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
 		state.bossEchoTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
 	}
+	// Chiming Bolt's Sigil of Power: +20% while the hero stands in it.
+	percent = percent * SigilSpellDamagePercent(player) / 100;
 	return percent * HiveHealthyPercent(player, monster) / 100;
 }
 
@@ -966,7 +1024,7 @@ int UniqueMinionDamagePercent(const Player &owner, bool minionLowLife)
 
 int UniqueMinionLifePercent(const Player &owner)
 {
-	return std::max(100 - Rule(owner, UniqueRule::LessMinionLife) + PassiveTotal(owner, PassiveStat::MinionLife), 10);
+	return std::max(100 - Rule(owner, UniqueRule::LessMinionLife) + PassiveTotal(owner, PassiveStat::MinionLife) + owner.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionLife)], 10);
 }
 
 int UniqueIgniteChancePercent(const Player &player)
@@ -980,9 +1038,10 @@ int UniqueStunBuildupPercent(const Player &player)
 {
 	const int per = Rule(player, UniqueRule::ArmourStunBuildup);
 	const int passive = PassiveTotal(player, PassiveStat::StunBuildup);
-	if (per <= 0)
-		return std::max(100 + passive, 0);
-	return std::max(100 + passive + Poe2Armour(player) / per, 0);
+	const int percent = per <= 0 ? std::max(100 + passive, 0) : std::max(100 + passive + Poe2Armour(player) / per, 0);
+	// A Dazing hit builds twice the stun, and so does Bone Bolt's.
+	const int dazed = State(player).dazing ? percent * 2 : percent;
+	return gbIsPoe2 && HitGrantedRider() == GrantedRider::StunBuildup ? dazed * 2 : dazed;
 }
 
 void OnAilmentInflicted(const Player &player, Monster &monster, DamageType type, bool wasShocked)

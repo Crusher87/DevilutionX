@@ -9,10 +9,14 @@ GAME-DEFAULT tuning, kept as they are; the scale columns say how the game shrink
 a value to Diablo's scale (100 = unchanged). The legacy scale columns keep the scales
 items had before the bases moved to POE2's numbers (harder monsters plan, step 10b):
 the game rolls an item saved before then with them, so it keeps its numbers.
+
+The caster weapons rework's families come after all of them, from tools/poe2_caster_affixes.tsv (POE2's own rows),
+moved onto the game's item levels and scales (caster_affixes below).
 """
 
 import json
 import os
+from fractions import Fraction
 import re
 import sys
 
@@ -76,7 +80,34 @@ FAMILIES = {
 	'jewel_damage_pct': ('DamagePercent', 100, 100, 'Brutal'),
 	'jewel_attack_speed': ('AttackSpeed', 100, 100, 'of Alacrity'),
 	'jewel_cast_speed': ('CastSpeed', 100, 100, 'of Enchanting'),
+	'item_rarity': ('ItemRarity', 100, 100, 'of Plunder'),
 }
+
+# Tiers the game sets apart from the bundle's: family id -> [(tier, item level, weight, min1, max1, min2, max2)].
+TIER_OVERRIDES = {
+	# The Magic Find suffix: three tiers that start low (loot plan).
+	'item_rarity': [(1, 40, 420, 15, 18, 0, 0), (2, 24, 560, 11, 14, 0, 0), (3, 3, 640, 6, 10, 0, 0)],
+}
+
+# Families the bundle doesn't have, after the jewel families: the family row and its tiers.
+EXTRA_FAMILIES = [
+	(['item_rarity_prefix', 'Item Rarity', "Magpie's", 'prefix', 'item_rarity_prefix', 'rarity', 'helmet,ring,amulet', '', '',
+	  '{0}% increased Rarity of Items found', 'ItemRarity', '100', '100', 'true', '100', '100'],
+	 [(1, 47, 360, 16, 19, 0, 0), (2, 29, 520, 12, 15, 0, 0), (3, 10, 620, 8, 11, 0, 0)]),
+]
+
+# The caster weapons rework: the slots staff and sceptre now mean its new bases, which roll families of their own.
+# Every family from before keeps the staves and sceptres saved before it (the legacy slots), and none rolls on a wand.
+LEGACY_SLOTS = {'staff': 'legacy_staff', 'sceptre': 'legacy_sceptre', 'wand': None}
+
+
+def legacy_slots(slots):
+	out = []
+	for slot in slots:
+		mapped = LEGACY_SLOTS.get(slot, slot)
+		if mapped is not None:
+			out.append(mapped)
+	return out
 
 # The scales before step 10b, for items saved before it: family id -> (scale of the first stat, of the second).
 # Families missing here had the scales they have now.
@@ -115,6 +146,14 @@ SLOTS = {'spell_damage': ['staff']}
 # Fire and lightning added damage share Diablo's one elemental weapon slot, so they can't both roll.
 EXTRA_CONFLICTS = [('local_added_fire', 'local_added_lightning')]
 
+# The caster weapons rework's families, appended after every family above (caster-weapons-plan-v2.md 5.2): POE2's rows,
+# their item levels moved to our curve, the +level families from item level 20, and the offensive staff and wand
+# families and every +level family at half size.
+CASTER_AFFIXES = os.path.join(ROOT, 'tools', 'poe2_caster_affixes.tsv')
+CASTER_MAX_ITEM_LEVEL = 82
+CASTER_SKILL_LEVEL_FLOOR = 20
+CASTER_HALF_SCALE = 50
+
 
 def main():
 	if len(sys.argv) != 2:
@@ -135,7 +174,7 @@ def main():
 				conflicts.append(b)
 			elif fid == b:
 				conflicts.append(a)
-		slots = SLOTS.get(fid, list(dict.fromkeys(family['valid_slots'])))
+		slots = legacy_slots(SLOTS.get(fid, list(dict.fromkeys(family['valid_slots']))))
 		family_rows.append([
 			fid,
 			game_text(family['name'], effect),
@@ -154,6 +193,10 @@ def main():
 			str(legacy1),
 			str(legacy2),
 		])
+		if fid in TIER_OVERRIDES:
+			for row in TIER_OVERRIDES[fid]:
+				tier_rows.append([fid] + [str(v) for v in row])
+			continue
 		tiers = sorted(family['tiers'], key=lambda t: int(t['tier'][1:]))
 		for tier in tiers:
 			number = int(tier['tier'][1:])
@@ -175,12 +218,88 @@ def main():
 		family_rows.append([fid, name, word, side, fid, 'jewel', slots, '', '', template, effect, '100', '100', 'true', '100', '100'])
 		tier_rows.append([fid, '1', '1', str(JEWEL_WEIGHT), str(lo), str(hi), '0', '0'])
 
+	for row, tiers in EXTRA_FAMILIES:
+		family_rows.append(row)
+		for tier in tiers:
+			tier_rows.append([row[0]] + [str(v) for v in tier])
+
+	caster_families, caster_tiers = caster_affixes()
+	family_rows += caster_families
+	tier_rows += caster_tiers
+
 	write(os.path.join(OUT_DIR, 'modifier_families.tsv'),
 	      ['id', 'name', 'word', 'side', 'group', 'tags', 'slots', 'baseTags', 'conflicts', 'template', 'effect', 'scale1', 'scale2', 'enabled', 'legacyScale1', 'legacyScale2'],
 	      family_rows)
 	write(os.path.join(OUT_DIR, 'modifier_tiers.tsv'),
 	      ['family', 'tier', 'itemLevel', 'weight', 'min1', 'max1', 'min2', 'max2'],
 	      tier_rows)
+
+
+def caster_damage_group(fid):
+	"""A staff or wand carries one damage prefix, as Diablo's prefix does: its spell, hybrid and element damage share a group."""
+	match = re.fullmatch(r'(staff|wand)_(spell_damage|spell_damage_mana|(fire|cold|lightning|physical)_spell_damage)', fid)
+	return f'{match.group(1)}_spell_damage' if match else None
+
+
+def caster_half_scale(fid):
+	"""The offensive staff and wand families and every +level family roll at half POE2's size (the pace knob, plan 5.2)."""
+	if fid.endswith('_skill_levels'):
+		return True
+	return re.fullmatch(r'(staff|wand)_(maximum_mana|spell_damage|spell_damage_mana|(fire|cold|lightning|physical)_spell_damage|cast_speed)', fid) is not None
+
+
+def caster_item_level(poe2_level, rank, skill_levels):
+	"""POE2's area level on our item level curve (x1.3, loot.cpp), held below 83 - rank so T1 stays reachable at 82."""
+	level = min(round(Fraction(13 * poe2_level, 10)), CASTER_MAX_ITEM_LEVEL + 1 - rank)
+	if skill_levels:
+		# +Levels start where today's spell_skill_levels does.
+		level = max(level, CASTER_SKILL_LEVEL_FLOOR)
+	return level
+
+
+def caster_fixes(row):
+	"""The plan's changes to the POE2 rows (caster-weapons-plan-v2.md 4.6)."""
+	fid = row[0]
+	if fid.endswith('_light_mana_regeneration'):
+		# The 18-22 is the mana regeneration, the 5-15 the light radius.
+		row[9] = '{0}% increased Mana Regeneration Rate; {1}% increased Light Radius'
+	if fid.endswith('_ignite_magnitude'):
+		row[1] = 'Flammability Magnitude'
+		row[9] = '{0}% increased Flammability Magnitude'
+	if re.fullmatch(r'sceptre_ally_added_(physical|fire|cold|lightning)', fid):
+		row[10] = 'MinionAddedDamage'
+		row[13] = 'true'
+	if fid == 'sceptre_ally_life_regeneration':
+		row[10] = 'MinionLifeRegen'
+		row[13] = 'true'
+		# Its values are tenths of a point a second: as many points every 10 seconds.
+		row[9] = 'Minions regenerate {0} Life every 10 seconds'
+	return row
+
+
+def caster_affixes():
+	"""The caster weapons rework's families and tiers: tools/poe2_caster_affixes.tsv with the plan's transform (5.2)."""
+	families = []
+	tiers = []
+	with open(CASTER_AFFIXES, encoding='utf-8') as f:
+		for line in f:
+			line = line.rstrip('\r\n')
+			if not line or line.startswith('#'):
+				continue
+			kind, *fields = line.split('\t')
+			if kind == 'family':
+				row = caster_fixes(fields)
+				fid = row[0]
+				row[4] = caster_damage_group(fid) or row[4]
+				if caster_half_scale(fid):
+					row[11] = row[14] = str(CASTER_HALF_SCALE)
+				families.append(row)
+			elif kind == 'tier':
+				fid, tier, level, *rest = fields
+				tiers.append([fid, tier, str(caster_item_level(int(level), int(tier), fid.endswith('_skill_levels')))] + rest)
+			else:
+				sys.exit(f'{CASTER_AFFIXES}: unknown row kind {kind}')
+	return families, tiers
 
 
 def game_text(text, effect):

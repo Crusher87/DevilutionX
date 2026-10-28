@@ -21,6 +21,7 @@
 #include "plrmsg.h"
 #include "poe2/defenses.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
@@ -34,6 +35,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/vfx.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -611,10 +613,15 @@ int GemSpiritCost(const Player &player, PersistentSkill skill)
 
 bool ItemGrantsSpirit(const Item &item)
 {
-	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
-		return false;
-	const std::string_view name = AllItemsList[static_cast<size_t>(item.IDidx)].iName;
-	return name.ends_with("Sceptre");
+	return IsAnySceptre(item);
+}
+
+int SceptreSpiritOf(const Item &item)
+{
+	// Its increased Spirit counts once identified, as the gear's other modifiers do; quality doesn't change it.
+	const bool modsCount = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+	const int local = modsCount ? item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::LocalSpiritPercent)] : 0;
+	return std::max(SceptreSpirit * (100 + local) / 100, 0);
 }
 
 int MinionDamagePercent(const Player &player)
@@ -755,8 +762,8 @@ int MaxSpirit(const Player &player)
 	int spirit = BaseSpirit + SkullSpirit(player) + GetPassiveTotals(player)[static_cast<size_t>(PassiveStat::Spirit)] + player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::Spirit)];
 	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
 		const Item &item = player.InvBody[hand];
-		if (ItemGrantsSpirit(item) && item._iStatFlag)
-			spirit += SceptreSpirit;
+		if (IsAnySceptre(item) && item._iStatFlag)
+			spirit += SceptreSpiritOf(item);
 	}
 	const Item &chest = player.InvBody[INVLOC_CHEST];
 	if (chest._iStatFlag)
@@ -812,7 +819,7 @@ int BaseSpiritPerMinion(PersistentSkill skill, int gemLevel)
 
 int SpiritPerMinion(const Player &player, PersistentSkill skill)
 {
-	const int base = BaseSpiritPerMinion(skill, player.poe2.skillLevel(skill));
+	const int base = BaseSpiritPerMinion(skill, player.poe2.effectiveLevel(skill));
 	// POE2 Mashup: some uniques raise every reservation.
 	return std::max(base * (100 + player.poe2.rule(UniqueRule::MoreSpiritReservation)) / 100, 1);
 }
@@ -856,6 +863,12 @@ int MinionLevelForGemLevel(int gemLevel)
 
 namespace {
 
+/** @brief The Spirit skill a held weapon's grant is, or None: a sceptre's; a staff's or wand's is an attack. */
+PersistentSkill GrantedPersistentSkill(const GrantedSkill &entry)
+{
+	return entry.baseLevel > 0 ? entry.skill.persistent() : PersistentSkill::None;
+}
+
 struct GemReservation {
 	PersistentSkill skill;
 	/** Minions the gem keeps, or 1 for a gem without a count; 0 when it's inactive. */
@@ -874,15 +887,11 @@ int ReserveSpirit(const Player &player, F &&onGem)
 {
 	const int max = MaxSpirit(player);
 	int reserved = 0;
-	for (size_t socket = 0; socket < player.poe2.skillSlots.size(); socket++) {
-		const PersistentSkill skill = player.poe2.skillSlots[socket].persistent();
-		if (skill == PersistentSkill::None || !MeetsGemRequirements(player, skill))
-			continue;
+	const auto reserve = [&](PersistentSkill skill, bool on) {
 		const int spiritLeft = max - reserved;
-		// A gem switched off in the Skills panel reserves nothing and does nothing; a totem is never switched off.
-		if (!player.poe2.spiritGemOn(socket) && IsSpiritGemSwitchable(skill)) {
+		if (!on) {
 			onGem(GemReservation { skill, 0, 0, spiritLeft });
-			continue;
+			return;
 		}
 		if (IsMinionCountSkill(skill)) {
 			const int chosen = ChosenMinionCount(player, skill);
@@ -891,19 +900,42 @@ int ReserveSpirit(const Player &player, F &&onGem)
 			const int paid = std::min(chosen - free, std::max(spiritLeft, 0) / perMinion);
 			reserved += paid * perMinion;
 			onGem(GemReservation { skill, free + paid, paid * perMinion, spiritLeft });
-			continue;
+			return;
 		}
 		const int cost = GemSpiritCost(player, skill);
 		if (cost > spiritLeft) {
 			onGem(GemReservation { skill, 0, 0, spiritLeft });
-			continue;
+			return;
 		}
 		reserved += cost;
 		onGem(GemReservation { skill, 1, cost, spiritLeft });
+	};
+	for (size_t socket = 0; socket < player.poe2.skillSlots.size(); socket++) {
+		const PersistentSkill skill = player.poe2.skillSlots[socket].persistent();
+		if (skill == PersistentSkill::None || !MeetsGemRequirements(player, skill))
+			continue;
+		// A gem switched off in the Skills panel reserves nothing and does nothing; a totem is never switched off.
+		reserve(skill, player.poe2.spiritGemOn(socket) || !IsSpiritGemSwitchable(skill));
+	}
+	// Then the Spirit skills held sceptres grant (caster-weapons-plan-v2.md 6.9), each once: a gem of it in the Skills
+	// panel wins, and two sceptres that grant the same one reserve for it once, on while either hand's is on.
+	for (size_t i = 0; i < player.poe2.granted.size(); i++) {
+		const PersistentSkill skill = GrantedPersistentSkill(player.poe2.granted[i]);
+		if (skill == PersistentSkill::None || player.poe2.skillLevel(skill) > 0)
+			continue;
+		if (i > 0 && GrantedPersistentSkill(player.poe2.granted[0]) == skill)
+			continue;
+		bool on = false;
+		for (const GrantedSkill &entry : player.poe2.granted) {
+			if (GrantedPersistentSkill(entry) == skill && !player.poe2.grantedOff(entry.hand))
+				on = true;
+		}
+		reserve(skill, on);
 	}
 	return reserved;
 }
 
+/** @brief Its granted skills reserve after the gems: one a gem of its own already reserves for isn't here twice. */
 std::optional<GemReservation> FindGemReservation(const Player &player, PersistentSkill skill)
 {
 	std::optional<GemReservation> found;
@@ -931,6 +963,29 @@ bool ToggleSpiritGem(Player &player, size_t socket)
 	player.poe2.spiritGemsOn ^= static_cast<uint16_t>(1U << socket);
 	TelemetryLog("spirit", StrCat(PersistentSkillName(skill), player.poe2.spiritGemOn(socket) ? " switched on" : " switched off"));
 	// Spirit gems can change stats, like Purity of Elements' resistances.
+	CalcPlrInv(player, false);
+	return true;
+}
+
+PersistentSkill GrantedSpiritSkill(const Player &player, int hand)
+{
+	if (!gbIsPoe2)
+		return PersistentSkill::None;
+	for (const GrantedSkill &entry : player.poe2.granted) {
+		if (entry.hand == hand && GrantedPersistentSkill(entry) != PersistentSkill::None)
+			return GrantedPersistentSkill(entry);
+	}
+	return PersistentSkill::None;
+}
+
+bool ToggleGrantedSpiritSkill(Player &player, int hand)
+{
+	const PersistentSkill skill = GrantedSpiritSkill(player, hand);
+	if (skill == PersistentSkill::None || !IsSpiritGemSwitchable(skill))
+		return false;
+	player.poe2.toggleGranted(hand);
+	TelemetryLog("spirit", StrCat(PersistentSkillName(skill), player.poe2.grantedOff(hand) ? " (sceptre) switched off" : " (sceptre) switched on"));
+	// Like a gem's switch: Salvation's resistances and the rest change with it.
 	CalcPlrInv(player, false);
 	return true;
 }
@@ -1176,7 +1231,7 @@ void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type,
 	// Without the type on the level, the spawn would fail every tick.
 	if ((ready || raiseNew) && MonsterTypeOnLevel(type)) {
 		const std::optional<Point> position = FindMinionSpawnPosition(player);
-		if (position && SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.skillLevel(skill), 1)), type)) {
+		if (position && SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.effectiveLevel(skill), 1)), type)) {
 			AddVisualEffect(*position, MissileGraphicID::Resurrect);
 			alive++;
 			if (ready)

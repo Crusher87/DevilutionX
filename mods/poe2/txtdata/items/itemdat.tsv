@@ -543,38 +543,38 @@ poe2:crossbow_swift_runebolt_crossbow	0	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBO
 poe2:crossbow_heavy_dragonspine_crossbow	0	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Heavy Dragonspine Crossbow	Crossbow	80	70	166	234	0	0	104	0	104		NONE	Null	false	8100
 poe2:crossbow_balanced_dragonspine_crossbow	0	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Dragonspine Crossbow	Crossbow	80	70	130	183	0	0	98	0	98		NONE	Null	false	8100
 poe2:crossbow_swift_dragonspine_crossbow	0	Weapon	Two-handed	LONG_WAR_BOW	Bow	WARBOW	Swift Dragonspine Crossbow	Crossbow	80	70	102	143	0	0	94	0	94		NONE	Null	false	8100
-poe2:staff_focused_pilgrim_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	SHORTSTAFF	Focused Pilgrim Staff	Staff	1	35	3	6	0	0	0	6	0		NONE	Null	false	200
-poe2:staff_rapid_pilgrim_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	SHORTSTAFF	Quick Pilgrim Staff	Staff	1	35	3	6	0	0	0	6	0		NONE	Null	false	200
-poe2:staff_focused_ashen_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Focused Ashen Staff	Staff	12	40	3	7	0	0	0	20	0		NONE	Null	false	1300
-poe2:staff_rapid_ashen_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Quick Ashen Staff	Staff	12	40	3	6	0	0	0	20	0		NONE	Null	false	1300
-poe2:staff_focused_scholar_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Focused Scholar Staff	Staff	24	45	4	8	0	0	0	39	0		NONE	Null	false	2500
-poe2:staff_rapid_scholar_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Quick Scholar Staff	Staff	24	45	4	8	0	0	0	39	0		NONE	Null	false	2500
-poe2:staff_focused_ritual_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Focused Ritual Staff	Staff	36	50	5	11	0	0	0	62	0		NONE	Null	false	3700
-poe2:staff_rapid_ritual_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Quick Ritual Staff	Staff	36	50	4	9	0	0	0	62	0		NONE	Null	false	3700
-poe2:staff_focused_archmage_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Archmage Staff	Staff	48	55	6	13	0	0	0	87	0		NONE	Null	false	4900
-poe2:staff_rapid_archmage_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Archmage Staff	Staff	48	55	5	11	0	0	0	87	0		NONE	Null	false	4900
-poe2:staff_focused_elder_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Elder Staff	Staff	60	60	7	16	0	0	0	114	0		NONE	Null	false	6100
-poe2:staff_rapid_elder_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Elder Staff	Staff	60	60	6	14	0	0	0	114	0		NONE	Null	false	6100
-poe2:staff_focused_astral_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Astral Staff	Staff	70	65	9	20	0	0	0	141	0		NONE	Null	false	7100
-poe2:staff_rapid_astral_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Astral Staff	Staff	70	65	8	17	0	0	0	141	0		NONE	Null	false	7100
-poe2:staff_focused_worldroot_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Worldroot Staff	Staff	80	70	11	24	0	0	0	168	0		NONE	Null	false	8100
-poe2:staff_rapid_worldroot_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Worldroot Staff	Staff	80	70	9	21	0	0	0	168	0		NONE	Null	false	8100
-poe2:sceptre_focused_bone_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Focused Bone Sceptre	Sceptre	1	35	2	5	0	0	3	3	0		NONE	Null	false	200
-poe2:sceptre_rapid_bone_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Quick Bone Sceptre	Sceptre	1	35	2	5	0	0	3	3	0		NONE	Null	false	200
-poe2:sceptre_focused_bronze_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Focused Bronze Sceptre	Sceptre	12	40	2	6	0	0	11	11	0		NONE	Null	false	1300
-poe2:sceptre_rapid_bronze_sceptre	1	Weapon	One-handed	MACE	Mace	SPIKCLUB	Quick Bronze Sceptre	Sceptre	12	40	2	6	0	0	11	11	0		NONE	Null	false	1300
-poe2:sceptre_focused_priest_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Priest Sceptre	Sceptre	24	45	3	7	0	0	21	21	0		NONE	Null	false	2500
-poe2:sceptre_rapid_priest_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Priest Sceptre	Sceptre	24	45	2	7	0	0	21	21	0		NONE	Null	false	2500
-poe2:sceptre_focused_sun_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Sun Sceptre	Sceptre	36	50	4	9	0	0	32	32	0		NONE	Null	false	3700
-poe2:sceptre_rapid_sun_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Sun Sceptre	Sceptre	36	50	3	8	0	0	32	32	0		NONE	Null	false	3700
-poe2:sceptre_focused_templar_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Templar Sceptre	Sceptre	48	55	4	11	0	0	46	46	0		NONE	Null	false	4900
-poe2:sceptre_rapid_templar_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Templar Sceptre	Sceptre	48	55	4	10	0	0	46	46	0		NONE	Null	false	4900
-poe2:sceptre_focused_oracle_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Oracle Sceptre	Sceptre	60	60	6	13	0	0	60	60	0		NONE	Null	false	6100
-poe2:sceptre_rapid_oracle_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Oracle Sceptre	Sceptre	60	60	5	12	0	0	60	60	0		NONE	Null	false	6100
-poe2:sceptre_focused_saint_s_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Saint's Sceptre	Sceptre	70	65	7	16	0	0	74	74	0		NONE	Null	false	7100
-poe2:sceptre_rapid_saint_s_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Saint's Sceptre	Sceptre	70	65	6	14	0	0	74	74	0		NONE	Null	false	7100
-poe2:sceptre_focused_sovereign_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Sovereign Sceptre	Sceptre	80	70	9	19	0	0	87	87	0		NONE	Null	false	8100
-poe2:sceptre_rapid_sovereign_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Sovereign Sceptre	Sceptre	80	70	7	17	0	0	87	87	0		NONE	Null	false	8100
+poe2:staff_focused_pilgrim_staff	0	Weapon	Two-handed	LONG_STAFF	Staff	SHORTSTAFF	Focused Pilgrim Staff	Staff	1	35	3	6	0	0	0	6	0		NONE	Null	false	200
+poe2:staff_rapid_pilgrim_staff	0	Weapon	Two-handed	LONG_STAFF	Staff	SHORTSTAFF	Quick Pilgrim Staff	Staff	1	35	3	6	0	0	0	6	0		NONE	Null	false	200
+poe2:staff_focused_ashen_staff	0	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Focused Ashen Staff	Staff	12	40	3	7	0	0	0	20	0		NONE	Null	false	1300
+poe2:staff_rapid_ashen_staff	0	Weapon	Two-handed	LONG_STAFF	Staff	LONGSTAFF	Quick Ashen Staff	Staff	12	40	3	6	0	0	0	20	0		NONE	Null	false	1300
+poe2:staff_focused_scholar_staff	0	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Focused Scholar Staff	Staff	24	45	4	8	0	0	0	39	0		NONE	Null	false	2500
+poe2:staff_rapid_scholar_staff	0	Weapon	Two-handed	COMPOSITE_STAFF	Staff	QUARSTAFF	Quick Scholar Staff	Staff	24	45	4	8	0	0	0	39	0		NONE	Null	false	2500
+poe2:staff_focused_ritual_staff	0	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Focused Ritual Staff	Staff	36	50	5	11	0	0	0	62	0		NONE	Null	false	3700
+poe2:staff_rapid_ritual_staff	0	Weapon	Two-handed	COMPOSITE_STAFF	Staff	WARSTAFF	Quick Ritual Staff	Staff	36	50	4	9	0	0	0	62	0		NONE	Null	false	3700
+poe2:staff_focused_archmage_staff	0	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Archmage Staff	Staff	48	55	6	13	0	0	0	87	0		NONE	Null	false	4900
+poe2:staff_rapid_archmage_staff	0	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Archmage Staff	Staff	48	55	5	11	0	0	0	87	0		NONE	Null	false	4900
+poe2:staff_focused_elder_staff	0	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Focused Elder Staff	Staff	60	60	7	16	0	0	0	114	0		NONE	Null	false	6100
+poe2:staff_rapid_elder_staff	0	Weapon	Two-handed	WAR_STAFF	Staff	WARSTAFF	Quick Elder Staff	Staff	60	60	6	14	0	0	0	114	0		NONE	Null	false	6100
+poe2:staff_focused_astral_staff	0	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Astral Staff	Staff	70	65	9	20	0	0	0	141	0		NONE	Null	false	7100
+poe2:staff_rapid_astral_staff	0	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Astral Staff	Staff	70	65	8	17	0	0	0	141	0		NONE	Null	false	7100
+poe2:staff_focused_worldroot_staff	0	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Focused Worldroot Staff	Staff	80	70	11	24	0	0	0	168	0		NONE	Null	false	8100
+poe2:staff_rapid_worldroot_staff	0	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	WARSTAFF	Quick Worldroot Staff	Staff	80	70	9	21	0	0	0	168	0		NONE	Null	false	8100
+poe2:sceptre_focused_bone_sceptre	0	Weapon	One-handed	MACE	Mace	SPIKCLUB	Focused Bone Sceptre	Sceptre	1	35	2	5	0	0	3	3	0		NONE	Null	false	200
+poe2:sceptre_rapid_bone_sceptre	0	Weapon	One-handed	MACE	Mace	SPIKCLUB	Quick Bone Sceptre	Sceptre	1	35	2	5	0	0	3	3	0		NONE	Null	false	200
+poe2:sceptre_focused_bronze_sceptre	0	Weapon	One-handed	MACE	Mace	SPIKCLUB	Focused Bronze Sceptre	Sceptre	12	40	2	6	0	0	11	11	0		NONE	Null	false	1300
+poe2:sceptre_rapid_bronze_sceptre	0	Weapon	One-handed	MACE	Mace	SPIKCLUB	Quick Bronze Sceptre	Sceptre	12	40	2	6	0	0	11	11	0		NONE	Null	false	1300
+poe2:sceptre_focused_priest_sceptre	0	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Priest Sceptre	Sceptre	24	45	3	7	0	0	21	21	0		NONE	Null	false	2500
+poe2:sceptre_rapid_priest_sceptre	0	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Priest Sceptre	Sceptre	24	45	2	7	0	0	21	21	0		NONE	Null	false	2500
+poe2:sceptre_focused_sun_sceptre	0	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Focused Sun Sceptre	Sceptre	36	50	4	9	0	0	32	32	0		NONE	Null	false	3700
+poe2:sceptre_rapid_sun_sceptre	0	Weapon	One-handed	MORNING_STAR	Mace	FLAIL	Quick Sun Sceptre	Sceptre	36	50	3	8	0	0	32	32	0		NONE	Null	false	3700
+poe2:sceptre_focused_templar_sceptre	0	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Templar Sceptre	Sceptre	48	55	4	11	0	0	46	46	0		NONE	Null	false	4900
+poe2:sceptre_rapid_templar_sceptre	0	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Templar Sceptre	Sceptre	48	55	4	10	0	0	46	46	0		NONE	Null	false	4900
+poe2:sceptre_focused_oracle_sceptre	0	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Focused Oracle Sceptre	Sceptre	60	60	6	13	0	0	60	60	0		NONE	Null	false	6100
+poe2:sceptre_rapid_oracle_sceptre	0	Weapon	One-handed	WAR_HAMMER	Mace	FLAIL	Quick Oracle Sceptre	Sceptre	60	60	5	12	0	0	60	60	0		NONE	Null	false	6100
+poe2:sceptre_focused_saint_s_sceptre	0	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Saint's Sceptre	Sceptre	70	65	7	16	0	0	74	74	0		NONE	Null	false	7100
+poe2:sceptre_rapid_saint_s_sceptre	0	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Saint's Sceptre	Sceptre	70	65	6	14	0	0	74	74	0		NONE	Null	false	7100
+poe2:sceptre_focused_sovereign_sceptre	0	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Focused Sovereign Sceptre	Sceptre	80	70	9	19	0	0	87	87	0		NONE	Null	false	8100
+poe2:sceptre_rapid_sovereign_sceptre	0	Weapon	One-handed	SPIKED_CLUB	Mace	FLAIL	Quick Sovereign Sceptre	Sceptre	80	70	7	17	0	0	87	87	0		NONE	Null	false	8100
 poe2:armour_helmet_iron_cap	1	Armor	Helm	HELM	Helm	SKULLCAP	Iron Cap	Helm	1	35	0	0	12	12	5	0	0		NONE	Null	false	200
 poe2:armour_helmet_guard_helm	1	Armor	Helm	HELM	Helm	SKULLCAP	Guard Helm	Helm	12	40	0	0	21	21	18	0	0		NONE	Null	false	1300
 poe2:armour_helmet_war_helm	1	Armor	Helm	FULL_HELM	Helm	HELM	War Helm	Helm	24	45	0	0	35	35	35	0	0		NONE	Null	false	2500
@@ -950,3 +950,57 @@ poe2:one_hand_mace_warpick	1	Weapon	One-handed	MORNING_STAR	Mace	MORNSTAR	Warpic
 poe2:one_hand_mace_construct_hammer	1	Weapon	One-handed	WAR_HAMMER	Mace	WARHAMMER	Construct Hammer	Mace	36	50	31	38	0	0	65	0	0		NONE	Null	false	3700
 poe2:bow_shortbow	1	Weapon	Two-handed	HUNTERS_BOW	Bow	LONGBOW	Shortbow	Bow	5	35	7	14	0	0	0	0	12		NONE	Null	false	600
 poe2:quarterstaff_steelpoint_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	COMPSTAFF	Steelpoint Quarterstaff	Quarterstaff	28	45	28	51	0	0	0	18	41		NONE	Null	false	2900
+poe2:sceptre_rattling_sceptre	1	Weapon	One-handed	MACE	Mace	NONE	Fine Rattling Sceptre	Sceptre	1	35	0	0	0	0	0	0	0		NONE	Null	false	200
+poe2:sceptre_stoic_sceptre	1	Weapon	One-handed	MACE	Mace	NONE	Fine Stoic Sceptre	Sceptre	6	40	0	0	0	0	0	12	0		NONE	Null	false	700
+poe2:sceptre_lupine_sceptre	1	Weapon	One-handed	MACE	Mace	NONE	Lupine Sceptre	Sceptre	12	40	0	0	0	0	0	24	0		NONE	Null	false	1300
+poe2:sceptre_omen_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	NONE	Fine Omen Sceptre	Sceptre	16	45	0	0	0	0	12	25	0		NONE	Null	false	1700
+poe2:sceptre_ochre_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	NONE	Ochre Sceptre	Sceptre	21	45	0	0	0	0	0	40	0		NONE	Null	false	2200
+poe2:sceptre_shrine_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	NONE	Shrine Sceptre	Sceptre	26	50	0	0	0	0	17	38	0		NONE	Null	false	2700
+poe2:sceptre_devouring_sceptre	1	Weapon	One-handed	MORNING_STAR	Mace	NONE	Devouring Sceptre	Sceptre	33	50	0	0	0	0	0	60	0		NONE	Null	false	3400
+poe2:sceptre_clasped_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	NONE	Clasped Sceptre	Sceptre	36	50	0	0	0	0	0	65	0		NONE	Null	false	3700
+poe2:sceptre_devotional_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	NONE	Devotional Sceptre	Sceptre	45	55	0	0	0	0	26	63	0		NONE	Null	false	4600
+poe2:sceptre_wrath_sceptre	1	Weapon	One-handed	WAR_HAMMER	Mace	NONE	Wrath Sceptre	Sceptre	49	55	0	0	0	0	0	87	0		NONE	Null	false	5000
+poe2:sceptre_aromatic_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	NONE	Aromatic Sceptre	Sceptre	52	55	0	0	0	0	0	92	0		NONE	Null	false	5300
+poe2:sceptre_pious_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	NONE	Pious Sceptre	Sceptre	58	60	0	0	0	0	0	102	0		NONE	Null	false	5900
+poe2:sceptre_hallowed_sceptre	1	Weapon	One-handed	SPIKED_CLUB	Mace	NONE	Hallowed Sceptre	Sceptre	65	65	0	0	0	0	0	114	0		NONE	Null	false	6600
+poe2:staff_ashen_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	SHORTSTAFF	Ashen Staff	Staff	1	35	0	0	0	0	0	0	0		NONE	Null	false	200
+poe2:staff_gelid_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	NONE	Gelid Staff	Staff	1	35	0	0	0	0	0	0	0		NONE	Null	false	200
+poe2:staff_voltaic_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	NONE	Voltaic Staff	Staff	1	35	0	0	0	0	0	0	0		NONE	Null	false	200
+poe2:staff_spriggan_staff	1	Weapon	Two-handed	LONG_STAFF	Staff	QUARSTAFF	Spriggan Staff	Staff	11	40	0	0	0	0	0	23	0		NONE	Null	false	1200
+poe2:staff_pyrophyte_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	LONGSTAFF	Pyrophyte Staff	Staff	16	45	0	0	0	0	0	31	0		NONE	Null	false	1700
+poe2:staff_chiming_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Chiming Staff	Staff	25	45	0	0	0	0	0	46	0		NONE	Null	false	2600
+poe2:staff_rending_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Rending Staff	Staff	33	50	0	0	0	0	0	60	0		NONE	Null	false	3400
+poe2:staff_reaping_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Reaping Staff	Staff	38	50	0	0	0	0	0	68	0		NONE	Null	false	3900
+poe2:staff_icicle_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Icicle Staff	Staff	45	55	0	0	0	0	0	80	0		NONE	Null	false	4600
+poe2:staff_roaring_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Roaring Staff	Staff	49	55	0	0	0	0	0	87	0		NONE	Null	false	5000
+poe2:staff_paralysing_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Paralysing Staff	Staff	52	55	0	0	0	0	0	92	0		NONE	Null	false	5300
+poe2:staff_sanctified_staff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Sanctified Staff	Staff	56	60	0	0	0	0	0	99	0		NONE	Null	false	5700
+poe2:staff_dark_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Dark Staff	Staff	65	65	0	0	0	0	0	114	0		NONE	Null	false	6600
+poe2:staff_ravenous_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Ravenous Staff	Staff	65	65	0	0	0	0	0	114	0		NONE	Null	false	6600
+poe2:wand_withered_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Withered Wand	Wand	1	35	0	0	0	0	0	0	0		NONE	Null	false	200
+poe2:wand_bone_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Bone Wand	Wand	1	35	0	0	0	0	0	0	0		NONE	Null	false	200
+poe2:wand_attuned_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Attuned Wand	Wand	1	35	0	0	0	0	0	0	0		NONE	Null	false	200
+poe2:wand_siphoning_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Siphoning Wand	Wand	11	40	0	0	0	0	0	23	0		NONE	Null	false	1200
+poe2:wand_volatile_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Volatile Wand	Wand	16	45	0	0	0	0	0	31	0		NONE	Null	false	1700
+poe2:wand_galvanic_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Galvanic Wand	Wand	25	45	0	0	0	0	0	46	0		NONE	Null	false	2600
+poe2:wand_acrid_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Acrid Wand	Wand	33	50	0	0	0	0	0	60	0		NONE	Null	false	3400
+poe2:wand_offering_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Offering Wand	Wand	38	50	0	0	0	0	0	68	0		NONE	Null	false	3900
+poe2:wand_frigid_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Frigid Wand	Wand	45	55	0	0	0	0	0	80	0		NONE	Null	false	4600
+poe2:wand_torture_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Torture Wand	Wand	49	55	0	0	0	0	0	87	0		NONE	Null	false	5000
+poe2:wand_critical_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Critical Wand	Wand	52	55	0	0	0	0	0	92	0		NONE	Null	false	5300
+poe2:wand_primordial_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Primordial Wand	Wand	56	60	0	0	0	0	0	99	0		NONE	Null	false	5700
+poe2:wand_dueling_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Dueling Wand	Wand	65	65	0	0	0	0	0	114	0		NONE	Null	false	6600
+poe2:quarterstaff_long_quarterstaff	1	Weapon	Two-handed	SHORT_STAFF	Staff	NONE	Fine Long Quarterstaff	Quarterstaff	1	35	18	36	0	0	0	0	9		NONE	Null	false	200
+poe2:quarterstaff_barrier_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Barrier Quarterstaff	Quarterstaff	37	50	35	58	0	0	0	22	52		NONE	Null	false	3800
+poe2:quarterstaff_hefty_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Hefty Quarterstaff	Quarterstaff	45	55	39	81	0	0	0	26	63		NONE	Null	false	4600
+poe2:quarterstaff_reaching_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Reaching Quarterstaff	Quarterstaff	45	55	35	72	0	0	0	26	63		NONE	Null	false	4600
+poe2:quarterstaff_anima_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Anima Quarterstaff	Quarterstaff	52	55	47	79	0	0	0	29	72		NONE	Null	false	5300
+poe2:quarterstaff_waxing_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Waxing Quarterstaff	Quarterstaff	54	60	39	82	0	0	0	30	75		NONE	Null	false	5500
+poe2:quarterstaff_graceful_quarterstaff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Graceful Quarterstaff	Quarterstaff	56	60	47	87	0	0	0	31	77		NONE	Null	false	5700
+poe2:quarterstaff_guardian_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Guardian Quarterstaff	Quarterstaff	62	65	52	86	0	0	0	34	85		NONE	Null	false	6300
+poe2:quarterstaff_wyrm_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Wyrm Quarterstaff	Quarterstaff	65	65	57	94	0	0	0	36	89		NONE	Null	false	6600
+poe2:quarterstaff_sinister_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Sinister Quarterstaff	Quarterstaff	67	65	55	91	0	0	0	41	104		NONE	Null	false	6800
+poe2:quarterstaff_skullcrusher_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Skullcrusher Quarterstaff	Quarterstaff	75	65	59	122	0	0	0	50	127		NONE	Null	false	7600
+poe2:quarterstaff_striking_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Striking Quarterstaff	Quarterstaff	77	65	53	111	0	0	0	50	127		NONE	Null	false	7800
+poe2:quarterstaff_razor_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Razor Quarterstaff	Quarterstaff	77	65	65	108	0	0	0	50	127		NONE	Null	false	7800
+poe2:quarterstaff_aegis_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Fine Aegis Quarterstaff	Quarterstaff	79	65	58	97	0	0	0	50	127		NONE	Null	false	8000

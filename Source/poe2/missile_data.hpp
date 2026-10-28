@@ -40,6 +40,10 @@ struct Poe2MissileData {
 	 * and what it throws out, however long after it was laid. For the log only: no supports or damage come of it.
 	 */
 	SpellID creditSpell = SpellID::Invalid;
+	/** @brief The DamageType its hits deal instead of its graphic's (a granted skill's bolt on a flare), or -1 for the graphic's. */
+	int8_t damageType = -1;
+	/** @brief A per-target granted skill's cast this projectile belongs to (GrantedRuntime::castSerial), or 0. */
+	uint16_t grantedCast = 0;
 };
 
 } // namespace devilution

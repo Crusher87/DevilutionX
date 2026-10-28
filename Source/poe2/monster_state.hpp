@@ -109,6 +109,12 @@ struct Poe2MonsterState {
 	uint8_t minionLifeTicks = 0;
 	/** @brief Lingering Illusion's illusion of the hero, which draws enemies near it (not saved). */
 	bool decoy = false;
+	/** @brief Game ticks before Mana Drain can take mana from this monster again (not saved). */
+	uint8_t manaDrainTicks = 0;
+	/** @brief Decompose's plague: game ticks left; a monster that dies with it passes it on (not saved). */
+	uint8_t plagueTicks = 0;
+	/** @brief The per-target granted cast whose projectile last hit it, which hits it once (not saved). */
+	uint16_t grantedCastHit = 0;
 };
 
 } // namespace devilution

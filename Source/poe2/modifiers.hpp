@@ -75,6 +75,36 @@ enum class ModEffect : uint8_t {
 	ItemRarity,
 	/** Increased spell damage in percent, from staves (plan step 14); adds to the tree's spell damage. */
 	SpellDamage,
+	// The caster weapons rework's effects.
+	/** Increased Spirit of the sceptre itself, in percent of its +100: MaxSpirit reads it per hand. */
+	LocalSpiritPercent,
+	/** LocalSpiritPercent and maximum mana. */
+	SpiritAndMana,
+	/** SpellDamage and maximum mana. */
+	SpellDamageAndMana,
+	/** Increased spell damage of one element, in percent; it adds to the spell's increased damage as the tree's element damage does. Cold is magic. */
+	FireSpellDamage,
+	ColdSpellDamage,
+	LightningSpellDamage,
+	PhysicalSpellDamage,
+	ColdSkillLevels,
+	PhysicalSkillLevels,
+	/** Levels of the minion Spirit gems. */
+	MinionSkillLevels,
+	/** Increased maximum life of minions, in percent. */
+	MinionLife,
+	/** Added to minions' fire, lightning and magic resistances. */
+	MinionResistances,
+	LifeOnKill,
+	ManaOnKill,
+	/** A quarterstaff's block chance, in percent. */
+	BlockChance,
+	/** A quarterstaff's chance to Daze, in percent: the hit's stun buildup doubles. */
+	DazeChance,
+	/** Flat damage added to minions' blows, a range. */
+	MinionAddedDamage,
+	/** Minions' life regeneration, in tenths of a point a second. */
+	MinionLifeRegen,
 };
 
 /** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */
@@ -109,11 +139,17 @@ enum class ModSlot : uint8_t {
 	Ruby,
 	Emerald,
 	Sapphire,
+	/**
+	 * The staves and sceptres from before the caster weapons rework (and Diablo's staves): every family they rolled
+	 * before lists these, so they keep their pools. Staff, Wand and Sceptre mean the rework's new bases.
+	 */
+	LegacyStaff,
+	LegacySceptre,
 	Count,
 };
 
-/** @brief Defence tags of armour bases that some families need. */
-enum ModBaseTag : uint8_t {
+/** @brief Defence tags of armour bases that some families need (and the element tags below, of caster weapons). */
+enum ModBaseTag : uint16_t {
 	ModBaseArmour = 1 << 0,
 	ModBaseEvasion = 1 << 1,
 	ModBaseEnergyShield = 1 << 2,
@@ -122,8 +158,18 @@ enum ModBaseTag : uint8_t {
 	ModBaseEvasionEnergyShield = 1 << 5,
 };
 
+/** @brief Element tags of the caster weapons rework's bases (BaseMeta::elementLock), for their element spell modifiers. */
+constexpr uint16_t ModBaseFireSpell = 1 << 6;
+constexpr uint16_t ModBaseColdSpell = 1 << 7;
+constexpr uint16_t ModBaseLightningSpell = 1 << 8;
+constexpr uint16_t ModBasePhysicalSpell = 1 << 9;
+constexpr uint16_t ModBaseElementSpellBits = ModBaseFireSpell | ModBaseColdSpell | ModBaseLightningSpell | ModBasePhysicalSpell;
+
+/** @brief The weakest tier a family can have: POE2's caster families go to T11, and a craft keeps a tier in 4 bits. */
+constexpr int MaxModTier = 15;
+
 struct ModTier {
-	/** @brief 1 is the strongest, 8 the weakest. */
+	/** @brief 1 is the strongest; the bundle's families go to 8, POE2's caster families further (MaxModTier). */
 	uint8_t tier;
 	uint8_t itemLevel;
 	uint16_t weight;
@@ -141,7 +187,7 @@ struct ModFamily {
 	std::string group;
 	uint32_t slots;
 	/** @brief The base needs one of these tags; 0 for any base. */
-	uint8_t baseTags;
+	uint16_t baseTags;
 	/** @brief Families that can't be on the same item, both ways. */
 	std::vector<uint8_t> conflicts;
 	/** @brief Tooltip text, with {0} and {1} for the values. */
@@ -158,6 +204,14 @@ struct ModFamily {
 	/** @brief Ordered T1 first. */
 	std::vector<ModTier> tiers;
 };
+
+/**
+ * @brief The modifier families before the caster weapons rework, ids 1 to this: the families it appends come after them,
+ * and an item saved before then has only these.
+ */
+constexpr uint8_t LegacyModFamilyCount = 94;
+/** @brief Families in memory stay below the desecrated families' ids (desecration.hpp). */
+constexpr size_t MaxModFamilies = 239;
 
 /** @brief POE2: a magic item has at most one prefix and one suffix, a rare three of each. */
 constexpr int MaxMagicModsPerSide = 1;
@@ -188,14 +242,29 @@ private:
 };
 const std::vector<ModFamily> &ModifierFamilies();
 std::optional<uint8_t> FindModifierFamily(std::string_view id);
+/**
+ * @brief The family an essence or a Profane modifier naming @p id gives an item of the slot: that family when it lists
+ * the slot (every item from before the caster weapons rework), else the rework's first family of the same effect that
+ * does (cast_speed on a wand: wand_cast_speed). With neither, the named family, which the slot can't take, as before.
+ */
+std::optional<uint8_t> FindFamilyForItem(std::string_view id, ModSlot slot);
+std::optional<uint8_t> FindFamilyForItem(std::string_view id, const Item &item);
 
 /** @brief Whether the item is a POE2 jewel, for the passive tree's jewel sockets. */
 bool IsJewel(const Item &item);
 
 /** @brief The slot of the itemization tables an item fills, if it has one. */
 std::optional<ModSlot> ItemModSlot(const Item &item);
-/** @brief The defence tags of an armour base; 0 for other items. */
-uint8_t ItemModBaseTags(const Item &item);
+/**
+ * @brief The defence tags of an armour base; a caster weapon of the rework's element tags (its lock, or all four);
+ * 0 for other items.
+ */
+uint16_t ItemModBaseTags(const Item &item);
+/**
+ * @brief The base tags left for the next modifier once these are rolled: the first element modifier closes the other
+ * elements (first-element exclusivity). The same tags when there are no element tags.
+ */
+uint16_t NarrowedModBaseTags(uint16_t baseTags, const std::vector<Poe2ItemMod> &rolled);
 
 /** @brief Unidentified quality tiers: ground drops can roll a hidden tier 2 to 5 that culls weak modifiers, unlocked at these item levels. */
 constexpr std::array<int, 5> UnidentifiedTierItemLevels = { 1, 20, 34, 52, 65 };
@@ -213,7 +282,7 @@ int UnidentifiedTier(uint32_t seed, int itemLevel);
  * @param valueSeed Seeds the value rolls apart from the picks, so a Divine Orb can reroll values only.
  * @param unidentifiedTier 1 for the full pool; higher tiers cull weak modifiers (see UnidentifiedTier).
  */
-std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint8_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier = 1);
+std::vector<Poe2ItemMod> RollItemMods(ModSlot slot, uint16_t baseTags, int itemLevel, int count, int perSide, uint32_t seed, uint32_t valueSeed, int unidentifiedTier = 1);
 
 enum class ModSide : uint8_t {
 	Any,
@@ -239,7 +308,7 @@ struct ModRollFilter {
 	/** @brief Effects the item already has from its implicits and modifiers, as ModEffectBits; crafting doesn't repeat them. */
 	uint64_t avoidEffects = 0;
 };
-static_assert(static_cast<int>(ModEffect::SpellDamage) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
+static_assert(static_cast<int>(ModEffect::MinionLifeRegen) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
 
 /** @brief The effect as bits of 1 << ModEffect, a hybrid as its two parts; 0 for None. */
 uint64_t ModEffectBits(ModEffect effect);
@@ -250,7 +319,7 @@ uint64_t ModsEffectBits(const std::vector<Poe2ItemMod> &mods);
  * @brief Picks one more modifier for an item that has these, like an Exalted Orb; its values are left at 0.
  * @param seed Seeds the pick, without touching the game's random number generator.
  */
-std::optional<Poe2ItemMod> RollAddedMod(ModSlot slot, uint8_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &existing, int perSide, uint32_t seed, const ModRollFilter &filter);
+std::optional<Poe2ItemMod> RollAddedMod(ModSlot slot, uint16_t baseTags, int itemLevel, const std::vector<Poe2ItemMod> &existing, int perSide, uint32_t seed, const ModRollFilter &filter);
 /** @brief Rolls the values of a modifier's tier from a seed of its own. */
 std::array<int16_t, 2> RollModValues(uint8_t family, uint8_t tier, uint32_t valueSeed);
 /** @brief The item level a modifier's tier needs; 0 if there is no such tier. */

@@ -36,6 +36,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/vfx.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "tables/misdat.h"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -150,10 +151,22 @@ void PaySkillMana(Player &player, WeaponSkill skill)
 		PaySupportLifeCost(player, SkillSlot::ForAttack(skill), WeaponSkillManaCost(player, skill, false));
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
-	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));
+	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.effectiveLevel(skill));
+	// POE2 Mashup: a held caster weapon's skill, with no gem of its own, is logged with the level the weapon grants.
+	if (IsGrantedSkill(skill) && player.poe2.skillLevel(skill) == 0 && player.poe2.grants(SkillSlot::ForAttack(skill)))
+		TelemetryGrantedSkillUsed(player, WeaponSkillName(skill), player.poe2.effectiveLevel(skill), cost.whole());
 }
 
 bool CanStartSkill(const Player &player);
+
+/** @brief Whether a granted skill's projectiles fly exactly where the cursor points, as a bolt's do. */
+bool GrantedSkillAimsAlongCursor(WeaponSkill skill)
+{
+	if (!IsGrantedSkill(skill))
+		return false;
+	const TableSkillData *table = FindTableSkill(skill);
+	return table != nullptr && IsAnyOf(table->shape, TableShape::Projectiles, TableShape::Stream);
+}
 
 /** @brief Dashes at the target; the skill hits when the dash lands (see ProcessPlayers). */
 bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
@@ -194,7 +207,7 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 		PayMeleeAttackLife(player);
 	Point target = SkillTarget(player);
 	// Projectiles with nothing under the cursor fly exactly where it points, at any angle.
-	if (pcursmonst == -1 && &player == MyPlayer && IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt))
+	if (pcursmonst == -1 && &player == MyPlayer && (IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt) || GrantedSkillAimsAlongCursor(skill)))
 		target = AimAlongCursor(player, AimTiles);
 	BeginSkillAnimation(player, skill, graphic, target);
 	// Glacial Spike erupts where this monster will be (see ExecuteTableSkill).
@@ -399,7 +412,7 @@ WeaponSkill WeaponSkillForItem(const Item &item)
 		return WeaponSkill::Cleave;
 	case ItemType::Mace:
 		// POE2 Mashup: a sceptre is a caster's focus and grants no mace skill.
-		if (gbIsPoe2 && ItemGrantsSpirit(item))
+		if (gbIsPoe2 && IsAnySceptre(item))
 			return WeaponSkill::None;
 		return WeaponSkill::GroundSlam;
 	case ItemType::Bow:
@@ -416,7 +429,7 @@ WeaponSkill WeaponSkillFor(const Player &player)
 	const WeaponSkill left = WeaponSkillForItem(player.InvBody[INVLOC_HAND_LEFT]);
 	const WeaponSkill right = WeaponSkillForItem(player.InvBody[INVLOC_HAND_RIGHT]);
 	// A sceptre held with another weapon leaves the skill to that weapon.
-	if (left != WeaponSkill::None && !(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_LEFT]) && right != WeaponSkill::None))
+	if (left != WeaponSkill::None && !(IsAnySceptre(player.InvBody[INVLOC_HAND_LEFT]) && right != WeaponSkill::None))
 		return left;
 	return right;
 }
@@ -659,6 +672,14 @@ int WeaponSkillManaCost(WeaponSkill skill)
 
 int WeaponSkillManaCost(const Player &player, WeaponSkill skill, bool lifeShare)
 {
+	if (IsGrantedSkill(skill)) {
+		// Free while bare; with supports on the default row, a small base the supports' multipliers act on.
+		const SkillSlot slot = SkillSlot::ForAttack(skill);
+		const SupportSockets supports = player.poe2.supportsFor(slot);
+		if (std::all_of(supports.begin(), supports.end(), [](SupportGem gem) { return gem == SupportGem::None; }))
+			return 0;
+		return GrantedSupportedManaCost * SupportManaCostPercent(player, slot, lifeShare) / 100;
+	}
 	const int cost = GemBaseManaCost(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill));
 	return cost * SupportManaCostPercent(player, SkillSlot::ForAttack(skill), lifeShare) / 100;
 }
@@ -680,8 +701,9 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 {
 	if (item.isEmpty())
 		return false;
-	// POE2 Mashup: a sceptre is a caster's focus, not a mace: no weapon skill uses it.
-	if (gbIsPoe2 && ItemGrantsSpirit(item))
+	// POE2 Mashup: a sceptre is a caster's focus, not a mace: no weapon skill uses it. Nor do the rework's staves and
+	// wands (caster-weapons-plan-v2.md 6.15): Staff gems need a quarterstaff or an older staff, Mace gems a martial mace.
+	if (gbIsPoe2 && (IsAnySceptre(item) || IsCasterWeapon(item)))
 		return false;
 	if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
 		return TableWeaponAllows(item, table->weapon);
@@ -852,6 +874,32 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 		target = AimAlongCursor(player, AimTiles);
 	NetSendCmdLoc(player.getId(), true, ranged ? CMD_RATTACKXY : CMD_SATTACKXY, target);
 	return true;
+}
+
+bool TryUseGrantedSkill(Player &player)
+{
+	// Like weapon skills, granted skills aren't sent over the network yet; multiplayer casts Staff Bolt instead.
+	const WeaponSkill skill = GrantedAttackSkill(player);
+	if (!gbIsPoe2 || gbIsMultiplayer || skill == WeaponSkill::None)
+		return false;
+	if (player.hasNoLife() || player._pInvincible || leveltype == DTYPE_TOWN)
+		return false;
+	const TableSkillData *table = FindTableSkill(skill);
+	if (table == nullptr)
+		return false;
+	if (&player == MyPlayer)
+		LastPlayerAction = pcursmonst != -1 ? PlayerActionType::AttackMonsterTarget : PlayerActionType::Attack;
+	if (player._pMana < Fixed26_6::fromInt(WeaponSkillManaCost(player, skill))) {
+		TelemetrySkillFailed(player, WeaponSkillName(skill), "not enough mana");
+		EventPlrMsg(FormatRuntime(_("Not enough mana for {:s}."), WeaponSkillName(skill)), UiFlags::ColorRed);
+		return false;
+	}
+	// A held cast's next use starts on the last frame of the one before, which is its whole use time.
+	FinishSkillCast(player);
+	if (!CanStartSkill(player) || !StartTableSkill(player, *table))
+		return false;
+	constexpr player_graphic Graphics[] = { player_graphic::Attack, player_graphic::Magic, player_graphic::Fire, player_graphic::Lightning };
+	return StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]);
 }
 
 bool IsSwingWeaponSkill(WeaponSkill skill)

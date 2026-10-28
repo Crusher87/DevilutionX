@@ -20,8 +20,11 @@ namespace devilution {
 
 struct Player;
 
-/** @brief Crafted modifier families from here up to the unrevealed placeholder are modifiers only desecration gives. */
-constexpr uint8_t DesecratedFamilyBase = 113;
+/**
+ * @brief Crafted modifier families from here up are modifiers only desecration gives: above every modifier family in
+ * memory. The narrow craft save layout stores them from NarrowDesecratedFamilyBase (craft_state.hpp).
+ */
+constexpr uint8_t DesecratedFamilyBase = 240;
 
 enum class DesecratedModId : uint8_t {
 	None,

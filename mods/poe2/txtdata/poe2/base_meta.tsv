@@ -1,4 +1,4 @@
-name	class	identity	defense	quality	implicits	split	level	block	aps
+name	class	identity	defense	quality	implicits	split	level	block	aps	grants	element	crit
 Heavy Hatchet	one_hand_axe	heavy		weapon			1		150
 Dull Hatchet	one_hand_axe	balanced		weapon			1		150
 Swift Hatchet	one_hand_axe	swift		weapon			1		150
@@ -239,38 +239,38 @@ Swift Runebolt Crossbow	crossbow	swift		weapon			70		101
 Heavy Dragonspine Crossbow	crossbow	heavy		weapon			80		81
 Dragonspine Crossbow	crossbow	balanced		weapon			80		90
 Swift Dragonspine Crossbow	crossbow	swift		weapon			80		101
-Focused Pilgrim Staff	staff	focused		caster	Intelligence|5|5|+{0} to Intelligence		1		
-Quick Pilgrim Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		1		
-Focused Ashen Staff	staff	focused		caster	Intelligence|8|8|+{0} to Intelligence		12		
-Quick Ashen Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		12		
-Focused Scholar Staff	staff	focused		caster	Intelligence|13|13|+{0} to Intelligence		24		
-Quick Scholar Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		24		
-Focused Ritual Staff	staff	focused		caster	Intelligence|19|19|+{0} to Intelligence		36		
-Quick Ritual Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		36		
-Focused Archmage Staff	staff	focused		caster	Intelligence|26|26|+{0} to Intelligence		48		
-Quick Archmage Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		48		
-Focused Elder Staff	staff	focused		caster	Intelligence|35|35|+{0} to Intelligence		60		
-Quick Elder Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		60		
-Focused Astral Staff	staff	focused		caster	Intelligence|45|45|+{0} to Intelligence		70		
-Quick Astral Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		70		
-Focused Worldroot Staff	staff	focused		caster	Intelligence|58|58|+{0} to Intelligence		80		
-Quick Worldroot Staff	staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		80		
-Focused Bone Sceptre	sceptre	focused		caster	Intelligence|3|3|+{0} to Intelligence		1		
-Quick Bone Sceptre	sceptre	rapid		caster	Intelligence|2|2|+{0} to Intelligence		1		
-Focused Bronze Sceptre	sceptre	focused		caster	Intelligence|4|4|+{0} to Intelligence		12		
-Quick Bronze Sceptre	sceptre	rapid		caster	Intelligence|4|4|+{0} to Intelligence		12		
-Focused Priest Sceptre	sceptre	focused		caster	Intelligence|7|7|+{0} to Intelligence		24		
-Quick Priest Sceptre	sceptre	rapid		caster	Intelligence|6|6|+{0} to Intelligence		24		
-Focused Sun Sceptre	sceptre	focused		caster	Intelligence|10|10|+{0} to Intelligence		36		
-Quick Sun Sceptre	sceptre	rapid		caster	Intelligence|8|8|+{0} to Intelligence		36		
-Focused Templar Sceptre	sceptre	focused		caster	Intelligence|14|14|+{0} to Intelligence		48		
-Quick Templar Sceptre	sceptre	rapid		caster	Intelligence|11|11|+{0} to Intelligence		48		
-Focused Oracle Sceptre	sceptre	focused		caster	Intelligence|18|18|+{0} to Intelligence		60		
-Quick Oracle Sceptre	sceptre	rapid		caster	Intelligence|15|15|+{0} to Intelligence		60		
-Focused Saint's Sceptre	sceptre	focused		caster	Intelligence|24|24|+{0} to Intelligence		70		
-Quick Saint's Sceptre	sceptre	rapid		caster	Intelligence|20|20|+{0} to Intelligence		70		
-Focused Sovereign Sceptre	sceptre	focused		caster	Intelligence|30|30|+{0} to Intelligence		80		
-Quick Sovereign Sceptre	sceptre	rapid		caster	Intelligence|25|25|+{0} to Intelligence		80		
+Focused Pilgrim Staff	legacy_staff	focused		caster	Intelligence|5|5|+{0} to Intelligence		1		
+Quick Pilgrim Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		1		
+Focused Ashen Staff	legacy_staff	focused		caster	Intelligence|8|8|+{0} to Intelligence		12		
+Quick Ashen Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		12		
+Focused Scholar Staff	legacy_staff	focused		caster	Intelligence|13|13|+{0} to Intelligence		24		
+Quick Scholar Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		24		
+Focused Ritual Staff	legacy_staff	focused		caster	Intelligence|19|19|+{0} to Intelligence		36		
+Quick Ritual Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		36		
+Focused Archmage Staff	legacy_staff	focused		caster	Intelligence|26|26|+{0} to Intelligence		48		
+Quick Archmage Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		48		
+Focused Elder Staff	legacy_staff	focused		caster	Intelligence|35|35|+{0} to Intelligence		60		
+Quick Elder Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		60		
+Focused Astral Staff	legacy_staff	focused		caster	Intelligence|45|45|+{0} to Intelligence		70		
+Quick Astral Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		70		
+Focused Worldroot Staff	legacy_staff	focused		caster	Intelligence|58|58|+{0} to Intelligence		80		
+Quick Worldroot Staff	legacy_staff	rapid		caster	CastSpeed|8|8|8% increased Cast Speed		80		
+Focused Bone Sceptre	legacy_sceptre	focused		caster	Intelligence|3|3|+{0} to Intelligence		1		
+Quick Bone Sceptre	legacy_sceptre	rapid		caster	Intelligence|2|2|+{0} to Intelligence		1		
+Focused Bronze Sceptre	legacy_sceptre	focused		caster	Intelligence|4|4|+{0} to Intelligence		12		
+Quick Bronze Sceptre	legacy_sceptre	rapid		caster	Intelligence|4|4|+{0} to Intelligence		12		
+Focused Priest Sceptre	legacy_sceptre	focused		caster	Intelligence|7|7|+{0} to Intelligence		24		
+Quick Priest Sceptre	legacy_sceptre	rapid		caster	Intelligence|6|6|+{0} to Intelligence		24		
+Focused Sun Sceptre	legacy_sceptre	focused		caster	Intelligence|10|10|+{0} to Intelligence		36		
+Quick Sun Sceptre	legacy_sceptre	rapid		caster	Intelligence|8|8|+{0} to Intelligence		36		
+Focused Templar Sceptre	legacy_sceptre	focused		caster	Intelligence|14|14|+{0} to Intelligence		48		
+Quick Templar Sceptre	legacy_sceptre	rapid		caster	Intelligence|11|11|+{0} to Intelligence		48		
+Focused Oracle Sceptre	legacy_sceptre	focused		caster	Intelligence|18|18|+{0} to Intelligence		60		
+Quick Oracle Sceptre	legacy_sceptre	rapid		caster	Intelligence|15|15|+{0} to Intelligence		60		
+Focused Saint's Sceptre	legacy_sceptre	focused		caster	Intelligence|24|24|+{0} to Intelligence		70		
+Quick Saint's Sceptre	legacy_sceptre	rapid		caster	Intelligence|20|20|+{0} to Intelligence		70		
+Focused Sovereign Sceptre	legacy_sceptre	focused		caster	Intelligence|30|30|+{0} to Intelligence		80		
+Quick Sovereign Sceptre	legacy_sceptre	rapid		caster	Intelligence|25|25|+{0} to Intelligence		80		
 Iron Cap	helmet	armour	Armour	defence			1		
 Guard Helm	helmet	armour	Armour	defence			12		
 War Helm	helmet	armour	Armour	defence			24		
@@ -439,3 +439,57 @@ Scalper's Jacket	body_armour	evasion_es	EvasionEnergyShield	defence		90	39
 Monastic Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	56		
 Devout Garb	body_armour	evasion_es	EvasionEnergyShield	defence		91	68		
 Grand Regalia	body_armour	tri	All	defence		50/45	65		
+Fine Rattling Sceptre	sceptre	poe2					1			SkeletalWarriors		
+Fine Stoic Sceptre	sceptre	poe2					6			ManaShield		
+Lupine Sceptre	sceptre	poe2					12			SkeletalWarriors		
+Fine Omen Sceptre	sceptre	poe2					16			OverwhelmingPresence		
+Ochre Sceptre	sceptre	poe2					21			SkeletalWarriors		
+Shrine Sceptre	sceptre	poe2					26			PurityOfElements		
+Devouring Sceptre	sceptre	poe2					33			SkeletalWarriors		
+Clasped Sceptre	sceptre	poe2					36			HeraldOfFrost		
+Devotional Sceptre	sceptre	poe2					45			SkeletalWarriors		
+Wrath Sceptre	sceptre	poe2					49			HeraldOfThunder		
+Aromatic Sceptre	sceptre	poe2					52			SkeletalWarriors		
+Pious Sceptre	sceptre	poe2					58			SkeletalWarriors		
+Hallowed Sceptre	sceptre	poe2					65			SkeletalWarriors		
+Ashen Staff	staff	poe2					1			StaffBolt	fire	
+Gelid Staff	staff	poe2					1			FreezingShards	cold	
+Voltaic Staff	staff	poe2					1			LightningBolt	lightning	
+Spriggan Staff	staff	poe2					11			StaffBolt		
+Pyrophyte Staff	staff	poe2					16			SolarOrb	fire	
+Chiming Staff	staff	poe2					25			ChimingBolt		
+Rending Staff	staff	poe2					33			Soulrend	physical	
+Reaping Staff	staff	poe2					38			Reap	physical	
+Icicle Staff	staff	poe2					45			FrostLance	cold	
+Roaring Staff	staff	poe2					49			EchoingBlast		
+Paralysing Staff	staff	poe2					52			EnervatingNova	lightning	
+Sanctified Staff	staff	poe2					56			ConsecratedGround		
+Dark Staff	staff	poe2					65			DarkPact		
+Ravenous Staff	staff	poe2					65			FeastOfFlesh		
+Withered Wand	wand	poe2					1			WitheringBolt	physical	
+Bone Wand	wand	poe2					1			BoneBolt	physical	
+Attuned Wand	wand	poe2					1			ManaDrain		
+Siphoning Wand	wand	poe2					11			PowerSiphon		
+Volatile Wand	wand	poe2					16			VolatileBolt	fire	
+Galvanic Wand	wand	poe2					25			GalvanicBolt	lightning	
+Acrid Wand	wand	poe2					33			Decompose		
+Offering Wand	wand	poe2					38			Exsanguinate	physical	
+Frigid Wand	wand	poe2					45			FrostBolt	cold	
+Torture Wand	wand	poe2					49			TormentBolt		
+Critical Wand	wand	poe2					52			CriticalBolt		
+Primordial Wand	wand	poe2					56			WitheringRay	physical	
+Dueling Wand	wand	poe2					65			TwinBolts		
+Fine Long Quarterstaff	quarterstaff	poe2		weapon			1		140			100
+Barrier Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		37		140			100
+Hefty Quarterstaff	quarterstaff	poe2		weapon	DazeChance|20|50|{0}% chance to Daze on Hit		45		130			100
+Reaching Quarterstaff	quarterstaff	poe2		weapon			45		140			100
+Anima Quarterstaff	quarterstaff	poe2		weapon			52		140			100
+Waxing Quarterstaff	quarterstaff	poe2		weapon			54		150			100
+Graceful Quarterstaff	quarterstaff	poe2		weapon			56		140			100
+Guardian Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		62		140			100
+Wyrm Quarterstaff	quarterstaff	poe2		weapon			65		140			100
+Sinister Quarterstaff	quarterstaff	poe2		weapon			67		140			120
+Skullcrusher Quarterstaff	quarterstaff	poe2		weapon	DazeChance|20|50|{0}% chance to Daze on Hit		75		130			100
+Striking Quarterstaff	quarterstaff	poe2		weapon			77		140			100
+Razor Quarterstaff	quarterstaff	poe2		weapon			77		140			100
+Fine Aegis Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		79		140			100

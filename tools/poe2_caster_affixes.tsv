@@ -1,0 +1,575 @@
+# The caster weapons rework's modifier families and tiers as POE2 has them (PoB-PoE2 data, research/sorc-run2/
+# caster-weapons-sources-v1.md sections 5 and 6): item levels and values unscaled, scale 100. tools/poe2_modifiers.py
+# appends them to the modifier tables with the plan's changes (caster-weapons-plan-v2.md 4.6 and 5.2).
+# A "family" row: id name word side group tags slots baseTags conflicts template effect scale1 scale2 enabled legacyScale1 legacyScale2
+# A "tier" row: family tier itemLevel weight min1 max1 min2 max2
+family	staff_maximum_mana	Increased Mana	Beryl	prefix	staff_maximum_mana	caster	staff			+{0} to maximum Mana	Mana	100	100	true	100	100
+family	staff_spell_damage	Weapon Spell Damage	Apprentice's	prefix	staff_spell_damage	caster	staff			{0}% increased Spell Damage	SpellDamage	100	100	true	100	100
+family	staff_spell_damage_mana	Weapon Spell Damage And Mana	Caster's	prefix	staff_spell_damage_mana	caster	staff			{0}% increased Spell Damage; +{1} to maximum Mana	SpellDamageAndMana	100	100	true	100	100
+family	staff_fire_spell_damage	Fire Damage Weapon Prefix	Searing	prefix	staff_fire_spell_damage	caster	staff	fire_spell		{0}% increased Fire Spell Damage	FireSpellDamage	100	100	true	100	100
+family	staff_cold_spell_damage	Cold Damage Weapon Prefix	Bitter	prefix	staff_cold_spell_damage	caster	staff	cold_spell		{0}% increased Cold Spell Damage	ColdSpellDamage	100	100	true	100	100
+family	staff_lightning_spell_damage	Lightning Damage Weapon Prefix	Charged	prefix	staff_lightning_spell_damage	caster	staff	lightning_spell		{0}% increased Lightning Spell Damage	LightningSpellDamage	100	100	true	100	100
+family	staff_physical_spell_damage	Physical Spell Damage Weapon Prefix	Punishing	prefix	staff_physical_spell_damage	caster	staff	physical_spell		{0}% increased Physical Spell Damage	PhysicalSpellDamage	100	100	true	100	100
+family	staff_gain_as_fire	Damage Gained As Fire	Fervent	prefix	staff_gain_as_fire	caster	staff			Gain {0}% of Damage as Extra Fire Damage		100	100	false	100	100
+family	staff_gain_as_cold	Damage Gained As Cold	Malignant	prefix	staff_gain_as_cold	caster	staff			Gain {0}% of Damage as Extra Cold Damage		100	100	false	100	100
+family	staff_gain_as_lightning	Damage Gained As Lightning	Deadly	prefix	staff_gain_as_lightning	caster	staff			Gain {0}% of Damage as Extra Lightning Damage		100	100	false	100	100
+family	staff_intelligence	Intelligence	of the Pupil	suffix	staff_intelligence	caster	staff			+{0} to Intelligence	Intelligence	100	100	true	100	100
+family	staff_reduced_requirements	Attribute Requirements	of the Worthy	suffix	staff_reduced_requirements	caster	staff			{0}% reduced Attribute Requirements	ReducedRequirements	100	100	true	100	100
+family	staff_spell_skill_levels	Spell Skill Levels	of the Mage	suffix	staff_spell_skill_levels	caster	staff			+{0} to Level of all Spell Skills	SpellSkillLevels	100	100	true	100	100
+family	staff_fire_skill_levels	Fire Spell Skill Levels	of Coals	suffix	staff_fire_skill_levels	caster	staff	fire_spell		+{0} to Level of all Fire Spell Skills	FireSkillLevels	100	100	true	100	100
+family	staff_cold_skill_levels	Cold Spell Skill Levels	of Snow	suffix	staff_cold_skill_levels	caster	staff	cold_spell		+{0} to Level of all Cold Spell Skills	ColdSkillLevels	100	100	true	100	100
+family	staff_lightning_skill_levels	Lightning Spell Skill Levels	of Sparks	suffix	staff_lightning_skill_levels	caster	staff	lightning_spell		+{0} to Level of all Lightning Spell Skills	LightningSkillLevels	100	100	true	100	100
+family	staff_physical_skill_levels	Physical Spell Skill Levels	of Agony	suffix	staff_physical_skill_levels	caster	staff	physical_spell		+{0} to Level of all Physical Spell Skills	PhysicalSkillLevels	100	100	true	100	100
+family	staff_mana_regeneration	Mana Regeneration	of Excitement	suffix	staff_mana_regeneration	caster	staff			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true	100	100
+family	staff_life_on_kill	Life Gained From Enemy Death	of Success	suffix	staff_life_on_kill	caster	staff			Gain {0} Life per enemy killed	LifeOnKill	100	100	true	100	100
+family	staff_mana_on_kill	Mana Gained From Enemy Death	of Absorption	suffix	staff_mana_on_kill	caster	staff			Gain {0} Mana per enemy killed	ManaOnKill	100	100	true	100	100
+family	staff_cast_speed	Increased Cast Speed	of Talent	suffix	staff_cast_speed	caster	staff			{0}% increased Cast Speed	CastSpeed	100	100	true	100	100
+family	staff_spell_crit_chance	Spell Critical Strike Chance	of Menace	suffix	staff_spell_crit_chance	caster	staff			{0}% increased Critical Hit Chance for Spells		100	100	false	100	100
+family	staff_spell_crit_damage	Spell Critical Strike Multiplier	of Ire	suffix	staff_spell_crit_damage	caster	staff			{0}% increased Critical Spell Damage Bonus		100	100	false	100	100
+family	staff_light_mana_regeneration	Light Radius And Mana Regeneration	of Warmth	suffix	staff_light_mana_regeneration	caster	staff			{0}% increased Light Radius; {1}% increased Mana Regeneration Rate		100	100	false	100	100
+family	staff_ignite_magnitude	Ignite Chance Increase	of Ignition	suffix	staff_ignite_magnitude	caster	staff	fire_spell		{0}% increased Ignite Magnitude		100	100	false	100	100
+family	staff_freeze_buildup	Freeze Damage Increase	of Freezing	suffix	staff_freeze_buildup	caster	staff	cold_spell		{0}% increased Freeze Buildup		100	100	false	100	100
+family	staff_shock_chance	Shock Chance Increase	of Shocking	suffix	staff_shock_chance	caster	staff	lightning_spell		{0}% increased chance to Shock		100	100	false	100	100
+family	wand_maximum_mana	Increased Mana	Beryl	prefix	wand_maximum_mana	caster	wand			+{0} to maximum Mana	Mana	100	100	true	100	100
+family	wand_spell_damage	Weapon Spell Damage	Apprentice's	prefix	wand_spell_damage	caster	wand			{0}% increased Spell Damage	SpellDamage	100	100	true	100	100
+family	wand_spell_damage_mana	Weapon Spell Damage And Mana	Caster's	prefix	wand_spell_damage_mana	caster	wand			{0}% increased Spell Damage; +{1} to maximum Mana	SpellDamageAndMana	100	100	true	100	100
+family	wand_fire_spell_damage	Fire Damage Weapon Prefix	Searing	prefix	wand_fire_spell_damage	caster	wand	fire_spell		{0}% increased Fire Spell Damage	FireSpellDamage	100	100	true	100	100
+family	wand_cold_spell_damage	Cold Damage Weapon Prefix	Bitter	prefix	wand_cold_spell_damage	caster	wand	cold_spell		{0}% increased Cold Spell Damage	ColdSpellDamage	100	100	true	100	100
+family	wand_lightning_spell_damage	Lightning Damage Weapon Prefix	Charged	prefix	wand_lightning_spell_damage	caster	wand	lightning_spell		{0}% increased Lightning Spell Damage	LightningSpellDamage	100	100	true	100	100
+family	wand_physical_spell_damage	Physical Spell Damage Weapon Prefix	Punishing	prefix	wand_physical_spell_damage	caster	wand	physical_spell		{0}% increased Physical Spell Damage	PhysicalSpellDamage	100	100	true	100	100
+family	wand_gain_as_fire	Damage Gained As Fire	Fervent	prefix	wand_gain_as_fire	caster	wand			Gain {0}% of Damage as Extra Fire Damage		100	100	false	100	100
+family	wand_gain_as_cold	Damage Gained As Cold	Malignant	prefix	wand_gain_as_cold	caster	wand			Gain {0}% of Damage as Extra Cold Damage		100	100	false	100	100
+family	wand_gain_as_lightning	Damage Gained As Lightning	Deadly	prefix	wand_gain_as_lightning	caster	wand			Gain {0}% of Damage as Extra Lightning Damage		100	100	false	100	100
+family	wand_intelligence	Intelligence	of the Pupil	suffix	wand_intelligence	caster	wand			+{0} to Intelligence	Intelligence	100	100	true	100	100
+family	wand_reduced_requirements	Attribute Requirements	of the Worthy	suffix	wand_reduced_requirements	caster	wand			{0}% reduced Attribute Requirements	ReducedRequirements	100	100	true	100	100
+family	wand_spell_skill_levels	Spell Skill Levels	of the Mage	suffix	wand_spell_skill_levels	caster	wand			+{0} to Level of all Spell Skills	SpellSkillLevels	100	100	true	100	100
+family	wand_fire_skill_levels	Fire Spell Skill Levels	of Coals	suffix	wand_fire_skill_levels	caster	wand	fire_spell		+{0} to Level of all Fire Spell Skills	FireSkillLevels	100	100	true	100	100
+family	wand_cold_skill_levels	Cold Spell Skill Levels	of Snow	suffix	wand_cold_skill_levels	caster	wand	cold_spell		+{0} to Level of all Cold Spell Skills	ColdSkillLevels	100	100	true	100	100
+family	wand_lightning_skill_levels	Lightning Spell Skill Levels	of Sparks	suffix	wand_lightning_skill_levels	caster	wand	lightning_spell		+{0} to Level of all Lightning Spell Skills	LightningSkillLevels	100	100	true	100	100
+family	wand_physical_skill_levels	Physical Spell Skill Levels	of Agony	suffix	wand_physical_skill_levels	caster	wand	physical_spell		+{0} to Level of all Physical Spell Skills	PhysicalSkillLevels	100	100	true	100	100
+family	wand_mana_regeneration	Mana Regeneration	of Excitement	suffix	wand_mana_regeneration	caster	wand			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true	100	100
+family	wand_life_on_kill	Life Gained From Enemy Death	of Success	suffix	wand_life_on_kill	caster	wand			Gain {0} Life per enemy killed	LifeOnKill	100	100	true	100	100
+family	wand_mana_on_kill	Mana Gained From Enemy Death	of Absorption	suffix	wand_mana_on_kill	caster	wand			Gain {0} Mana per enemy killed	ManaOnKill	100	100	true	100	100
+family	wand_cast_speed	Increased Cast Speed	of Talent	suffix	wand_cast_speed	caster	wand			{0}% increased Cast Speed	CastSpeed	100	100	true	100	100
+family	wand_spell_crit_chance	Spell Critical Strike Chance	of Menace	suffix	wand_spell_crit_chance	caster	wand			{0}% increased Critical Hit Chance for Spells		100	100	false	100	100
+family	wand_spell_crit_damage	Spell Critical Strike Multiplier	of Ire	suffix	wand_spell_crit_damage	caster	wand			{0}% increased Critical Spell Damage Bonus		100	100	false	100	100
+family	wand_light_mana_regeneration	Light Radius And Mana Regeneration	of Warmth	suffix	wand_light_mana_regeneration	caster	wand			{0}% increased Light Radius; {1}% increased Mana Regeneration Rate		100	100	false	100	100
+family	wand_ignite_magnitude	Ignite Chance Increase	of Ignition	suffix	wand_ignite_magnitude	caster	wand	fire_spell		{0}% increased Ignite Magnitude		100	100	false	100	100
+family	wand_freeze_buildup	Freeze Damage Increase	of Freezing	suffix	wand_freeze_buildup	caster	wand	cold_spell		{0}% increased Freeze Buildup		100	100	false	100	100
+family	wand_shock_chance	Shock Chance Increase	of Shocking	suffix	wand_shock_chance	caster	wand	lightning_spell		{0}% increased chance to Shock		100	100	false	100	100
+family	sceptre_spirit_percent	Increased Spirit Percent	Lord's	prefix	sceptre_spirit_percent	caster	sceptre			{0}% increased Spirit	LocalSpiritPercent	100	100	true	100	100
+family	sceptre_spirit_mana	Increased Spirit And Mana	Advisor's	prefix	sceptre_spirit_mana	caster	sceptre			{0}% increased Spirit; +{1} to maximum Mana	SpiritAndMana	100	100	true	100	100
+family	sceptre_maximum_mana	Increased Mana	Beryl	prefix	sceptre_maximum_mana	caster	sceptre			+{0} to maximum Mana	Mana	100	100	true	100	100
+family	sceptre_ally_damage	Allies In Presence All Damage	Coercive	prefix	sceptre_ally_damage	caster	sceptre			Minions deal {0}% increased Damage	MinionDamage	100	100	true	100	100
+family	sceptre_ally_added_physical	Allies In Presence Added Physical Damage	Glinting	prefix	sceptre_ally_added_physical	caster	sceptre			Minions add {0} to {1} Physical Damage to Attacks		100	100	false	100	100
+family	sceptre_ally_added_fire	Allies In Presence Added Fire Damage	Heated	prefix	sceptre_ally_added_fire	caster	sceptre			Minions add {0} to {1} Fire Damage to Attacks		100	100	false	100	100
+family	sceptre_ally_added_cold	Allies In Presence Added Cold Damage	Frosted	prefix	sceptre_ally_added_cold	caster	sceptre			Minions add {0} to {1} Cold Damage to Attacks		100	100	false	100	100
+family	sceptre_ally_added_lightning	Allies In Presence Added Lightning Damage	Humming	prefix	sceptre_ally_added_lightning	caster	sceptre			Minions add {0} to {1} Lightning Damage to Attacks		100	100	false	100	100
+family	sceptre_strength	Strength	of the Brute	suffix	sceptre_strength	caster	sceptre			+{0} to Strength	Strength	100	100	true	100	100
+family	sceptre_intelligence	Intelligence	of the Pupil	suffix	sceptre_intelligence	caster	sceptre			+{0} to Intelligence	Intelligence	100	100	true	100	100
+family	sceptre_ally_resistances	Allies In Presence All Resistances	of Adjustment	suffix	sceptre_ally_resistances	caster	sceptre			Minions have +{0}% to all Elemental Resistances	MinionResistances	100	100	true	100	100
+family	sceptre_reduced_requirements	Attribute Requirements	of the Worthy	suffix	sceptre_reduced_requirements	caster	sceptre			{0}% reduced Attribute Requirements	ReducedRequirements	100	100	true	100	100
+family	sceptre_minion_skill_levels	Minion Spell Skill Levels	of the Taskmaster	suffix	sceptre_minion_skill_levels	caster	sceptre			+{0} to Level of all Minion Skills	MinionSkillLevels	100	100	true	100	100
+family	sceptre_ally_life_regeneration	Allies In Presence Life Regeneration	of the Newt	suffix	sceptre_ally_life_regeneration	caster	sceptre			Minions regenerate {0} Life per second (values in tenths)		100	100	false	100	100
+family	sceptre_mana_regeneration	Mana Regeneration	of Excitement	suffix	sceptre_mana_regeneration	caster	sceptre			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true	100	100
+family	sceptre_ally_attack_speed	Allies In Presence Increased Attack Speed	of Skill	suffix	sceptre_ally_attack_speed	caster	sceptre			Minions have {0}% increased Attack Speed		100	100	false	100	100
+family	sceptre_ally_cast_speed	Allies In Presence Increased Cast Speed	of Talent	suffix	sceptre_ally_cast_speed	caster	sceptre			Minions have {0}% increased Cast Speed		100	100	false	100	100
+family	sceptre_ally_crit_chance	Allies In Presence Critical Strike Chance	of Menace	suffix	sceptre_ally_crit_chance	caster	sceptre			Minions have {0}% increased Critical Hit Chance		100	100	false	100	100
+family	sceptre_ally_crit_damage	Allies In Presence Critical Strike Multiplier	of Ire	suffix	sceptre_ally_crit_damage	caster	sceptre			Minions have {0}% increased Critical Damage Bonus		100	100	false	100	100
+family	sceptre_light_mana_regeneration	Light Radius And Mana Regeneration	of Warmth	suffix	sceptre_light_mana_regeneration	caster	sceptre			{0}% increased Light Radius; {1}% increased Mana Regeneration Rate		100	100	false	100	100
+family	sceptre_presence_radius	Presence Radius	of Direction	suffix	sceptre_presence_radius	caster	sceptre			{0}% increased Presence Area of Effect		100	100	false	100	100
+family	sceptre_minion_life	Minion Life	of the Mentor	suffix	sceptre_minion_life	caster	sceptre			Minions have {0}% increased maximum Life	MinionLife	100	100	true	100	100
+tier	staff_maximum_mana	1	70	100	299	328	0	0
+tier	staff_maximum_mana	2	65	220	249	298	0	0
+tier	staff_maximum_mana	3	60	400	209	248	0	0
+tier	staff_maximum_mana	4	54	600	179	208	0	0
+tier	staff_maximum_mana	5	46	800	159	178	0	0
+tier	staff_maximum_mana	6	38	1000	129	158	0	0
+tier	staff_maximum_mana	7	33	1200	109	128	0	0
+tier	staff_maximum_mana	8	25	1200	69	108	0	0
+tier	staff_maximum_mana	9	16	1200	49	68	0	0
+tier	staff_maximum_mana	10	6	1200	29	48	0	0
+tier	staff_maximum_mana	11	1	1200	20	28	0	0
+tier	staff_spell_damage	1	80	100	209	238	0	0
+tier	staff_spell_damage	2	70	220	189	208	0	0
+tier	staff_spell_damage	3	60	400	149	188	0	0
+tier	staff_spell_damage	4	46	600	129	148	0	0
+tier	staff_spell_damage	5	33	800	109	128	0	0
+tier	staff_spell_damage	6	16	1000	89	108	0	0
+tier	staff_spell_damage	7	8	1200	69	88	0	0
+tier	staff_spell_damage	8	1	1200	50	68	0	0
+tier	staff_spell_damage_mana	1	79	100	89	98	83	90
+tier	staff_spell_damage_mana	2	63	400	79	88	75	82
+tier	staff_spell_damage_mana	3	48	600	69	78	67	74
+tier	staff_spell_damage_mana	4	38	800	59	68	57	66
+tier	staff_spell_damage_mana	5	23	1000	49	58	49	56
+tier	staff_spell_damage_mana	6	11	1200	39	48	41	48
+tier	staff_spell_damage_mana	7	2	1200	30	38	34	40
+tier	staff_fire_spell_damage	1	81	100	209	238	0	0
+tier	staff_fire_spell_damage	2	70	220	189	208	0	0
+tier	staff_fire_spell_damage	3	60	400	149	188	0	0
+tier	staff_fire_spell_damage	4	46	600	129	148	0	0
+tier	staff_fire_spell_damage	5	33	800	109	128	0	0
+tier	staff_fire_spell_damage	6	16	1000	89	108	0	0
+tier	staff_fire_spell_damage	7	8	1200	69	88	0	0
+tier	staff_fire_spell_damage	8	2	1200	50	68	0	0
+tier	staff_cold_spell_damage	1	81	100	209	238	0	0
+tier	staff_cold_spell_damage	2	70	220	189	208	0	0
+tier	staff_cold_spell_damage	3	60	400	149	188	0	0
+tier	staff_cold_spell_damage	4	46	600	129	148	0	0
+tier	staff_cold_spell_damage	5	33	800	109	128	0	0
+tier	staff_cold_spell_damage	6	16	1000	89	108	0	0
+tier	staff_cold_spell_damage	7	8	1200	69	88	0	0
+tier	staff_cold_spell_damage	8	2	1200	50	68	0	0
+tier	staff_lightning_spell_damage	1	81	100	209	238	0	0
+tier	staff_lightning_spell_damage	2	70	220	189	208	0	0
+tier	staff_lightning_spell_damage	3	60	400	149	188	0	0
+tier	staff_lightning_spell_damage	4	46	600	129	148	0	0
+tier	staff_lightning_spell_damage	5	33	800	109	128	0	0
+tier	staff_lightning_spell_damage	6	16	1000	89	108	0	0
+tier	staff_lightning_spell_damage	7	8	1200	69	88	0	0
+tier	staff_lightning_spell_damage	8	2	1200	50	68	0	0
+tier	staff_physical_spell_damage	1	81	100	209	238	0	0
+tier	staff_physical_spell_damage	2	70	220	189	208	0	0
+tier	staff_physical_spell_damage	3	60	400	149	188	0	0
+tier	staff_physical_spell_damage	4	46	600	129	148	0	0
+tier	staff_physical_spell_damage	5	33	800	109	128	0	0
+tier	staff_physical_spell_damage	6	16	1000	89	108	0	0
+tier	staff_physical_spell_damage	7	8	1200	69	88	0	0
+tier	staff_physical_spell_damage	8	2	1200	50	68	0	0
+tier	staff_gain_as_fire	1	80	100	55	60	0	0
+tier	staff_gain_as_fire	2	60	600	49	54	0	0
+tier	staff_gain_as_fire	3	46	800	43	48	0	0
+tier	staff_gain_as_fire	4	33	1000	37	42	0	0
+tier	staff_gain_as_fire	5	16	1200	31	36	0	0
+tier	staff_gain_as_fire	6	5	1200	26	30	0	0
+tier	staff_gain_as_cold	1	80	100	55	60	0	0
+tier	staff_gain_as_cold	2	60	600	49	54	0	0
+tier	staff_gain_as_cold	3	46	800	43	48	0	0
+tier	staff_gain_as_cold	4	33	1000	37	42	0	0
+tier	staff_gain_as_cold	5	16	1200	31	36	0	0
+tier	staff_gain_as_cold	6	5	1200	26	30	0	0
+tier	staff_gain_as_lightning	1	80	100	55	60	0	0
+tier	staff_gain_as_lightning	2	60	600	49	54	0	0
+tier	staff_gain_as_lightning	3	46	800	43	48	0	0
+tier	staff_gain_as_lightning	4	33	1000	37	42	0	0
+tier	staff_gain_as_lightning	5	16	1200	31	36	0	0
+tier	staff_gain_as_lightning	6	5	1200	26	30	0	0
+tier	staff_intelligence	1	74	100	31	33	0	0
+tier	staff_intelligence	2	66	220	28	30	0	0
+tier	staff_intelligence	3	55	400	25	27	0	0
+tier	staff_intelligence	4	44	600	21	24	0	0
+tier	staff_intelligence	5	33	800	17	20	0	0
+tier	staff_intelligence	6	22	1000	13	16	0	0
+tier	staff_intelligence	7	11	1200	9	12	0	0
+tier	staff_intelligence	8	1	1200	5	8	0	0
+tier	staff_reduced_requirements	1	60	100	35	35	0	0
+tier	staff_reduced_requirements	2	52	800	30	30	0	0
+tier	staff_reduced_requirements	3	40	1000	25	25	0	0
+tier	staff_reduced_requirements	4	32	1200	20	20	0	0
+tier	staff_reduced_requirements	5	24	1200	15	15	0	0
+tier	staff_spell_skill_levels	1	78	100	5	6	0	0
+tier	staff_spell_skill_levels	2	55	1000	4	4	0	0
+tier	staff_spell_skill_levels	3	25	1200	3	3	0	0
+tier	staff_spell_skill_levels	4	5	1200	2	2	0	0
+tier	staff_fire_skill_levels	1	81	100	7	7	0	0
+tier	staff_fire_skill_levels	2	55	800	5	6	0	0
+tier	staff_fire_skill_levels	3	36	1000	3	4	0	0
+tier	staff_fire_skill_levels	4	18	1200	2	2	0	0
+tier	staff_fire_skill_levels	5	2	1200	1	1	0	0
+tier	staff_cold_skill_levels	1	81	100	7	7	0	0
+tier	staff_cold_skill_levels	2	55	800	5	6	0	0
+tier	staff_cold_skill_levels	3	36	1000	3	4	0	0
+tier	staff_cold_skill_levels	4	18	1200	2	2	0	0
+tier	staff_cold_skill_levels	5	2	1200	1	1	0	0
+tier	staff_lightning_skill_levels	1	81	100	7	7	0	0
+tier	staff_lightning_skill_levels	2	55	800	5	6	0	0
+tier	staff_lightning_skill_levels	3	36	1000	3	4	0	0
+tier	staff_lightning_skill_levels	4	18	1200	2	2	0	0
+tier	staff_lightning_skill_levels	5	2	1200	1	1	0	0
+tier	staff_physical_skill_levels	1	81	100	7	7	0	0
+tier	staff_physical_skill_levels	2	55	800	5	6	0	0
+tier	staff_physical_skill_levels	3	36	1000	3	4	0	0
+tier	staff_physical_skill_levels	4	18	1200	2	2	0	0
+tier	staff_physical_skill_levels	5	2	1200	1	1	0	0
+tier	staff_mana_regeneration	1	79	100	90	104	0	0
+tier	staff_mana_regeneration	2	55	600	75	89	0	0
+tier	staff_mana_regeneration	3	42	800	60	74	0	0
+tier	staff_mana_regeneration	4	29	1000	45	59	0	0
+tier	staff_mana_regeneration	5	18	1200	30	44	0	0
+tier	staff_mana_regeneration	6	1	1200	15	29	0	0
+tier	staff_life_on_kill	1	77	100	69	84	0	0
+tier	staff_life_on_kill	2	66	220	54	68	0	0
+tier	staff_life_on_kill	3	55	400	41	53	0	0
+tier	staff_life_on_kill	4	44	600	29	40	0	0
+tier	staff_life_on_kill	5	33	800	19	28	0	0
+tier	staff_life_on_kill	6	22	1000	10	18	0	0
+tier	staff_life_on_kill	7	11	1200	7	9	0	0
+tier	staff_life_on_kill	8	1	1200	4	6	0	0
+tier	staff_mana_on_kill	1	78	100	36	45	0	0
+tier	staff_mana_on_kill	2	67	220	28	35	0	0
+tier	staff_mana_on_kill	3	56	400	21	27	0	0
+tier	staff_mana_on_kill	4	45	600	15	20	0	0
+tier	staff_mana_on_kill	5	34	800	10	14	0	0
+tier	staff_mana_on_kill	6	23	1000	6	9	0	0
+tier	staff_mana_on_kill	7	12	1200	4	5	0	0
+tier	staff_mana_on_kill	8	1	1200	2	3	0	0
+tier	staff_cast_speed	1	80	100	50	52	0	0
+tier	staff_cast_speed	2	70	400	44	49	0	0
+tier	staff_cast_speed	3	60	600	38	43	0	0
+tier	staff_cast_speed	4	45	800	32	37	0	0
+tier	staff_cast_speed	5	30	1000	26	31	0	0
+tier	staff_cast_speed	6	15	1200	20	25	0	0
+tier	staff_cast_speed	7	1	1200	14	19	0	0
+tier	staff_spell_crit_chance	1	76	100	90	109	0	0
+tier	staff_spell_crit_chance	2	59	600	80	89	0	0
+tier	staff_spell_crit_chance	3	41	800	70	79	0	0
+tier	staff_spell_crit_chance	4	28	1000	60	69	0	0
+tier	staff_spell_crit_chance	5	21	1200	50	59	0	0
+tier	staff_spell_crit_chance	6	11	1200	40	49	0	0
+tier	staff_spell_crit_damage	1	73	100	53	59	0	0
+tier	staff_spell_crit_damage	2	59	600	45	51	0	0
+tier	staff_spell_crit_damage	3	44	800	38	44	0	0
+tier	staff_spell_crit_damage	4	30	1000	30	36	0	0
+tier	staff_spell_crit_damage	5	21	1200	23	29	0	0
+tier	staff_spell_crit_damage	6	8	1200	15	21	0	0
+tier	staff_light_mana_regeneration	1	30	100	18	22	15	15
+tier	staff_light_mana_regeneration	2	15	1200	13	17	10	10
+tier	staff_light_mana_regeneration	3	8	1200	8	12	5	5
+tier	staff_ignite_magnitude	1	75	100	91	100	0	0
+tier	staff_ignite_magnitude	2	60	800	81	90	0	0
+tier	staff_ignite_magnitude	3	45	1000	71	80	0	0
+tier	staff_ignite_magnitude	4	30	1200	61	70	0	0
+tier	staff_ignite_magnitude	5	15	1200	51	60	0	0
+tier	staff_freeze_buildup	1	75	100	71	80	0	0
+tier	staff_freeze_buildup	2	60	800	61	70	0	0
+tier	staff_freeze_buildup	3	45	1000	51	60	0	0
+tier	staff_freeze_buildup	4	30	1200	41	50	0	0
+tier	staff_freeze_buildup	5	15	1200	31	40	0	0
+tier	staff_shock_chance	1	75	100	91	100	0	0
+tier	staff_shock_chance	2	60	800	81	90	0	0
+tier	staff_shock_chance	3	45	1000	71	80	0	0
+tier	staff_shock_chance	4	30	1200	61	70	0	0
+tier	staff_shock_chance	5	15	1200	51	60	0	0
+tier	wand_maximum_mana	1	70	100	150	164	0	0
+tier	wand_maximum_mana	2	65	220	125	149	0	0
+tier	wand_maximum_mana	3	60	400	105	124	0	0
+tier	wand_maximum_mana	4	54	600	90	104	0	0
+tier	wand_maximum_mana	5	46	800	80	89	0	0
+tier	wand_maximum_mana	6	38	1000	65	79	0	0
+tier	wand_maximum_mana	7	33	1200	55	64	0	0
+tier	wand_maximum_mana	8	25	1200	35	54	0	0
+tier	wand_maximum_mana	9	16	1200	25	34	0	0
+tier	wand_maximum_mana	10	6	1200	15	24	0	0
+tier	wand_maximum_mana	11	1	1200	10	14	0	0
+tier	wand_spell_damage	1	80	100	105	119	0	0
+tier	wand_spell_damage	2	70	220	90	104	0	0
+tier	wand_spell_damage	3	60	400	75	89	0	0
+tier	wand_spell_damage	4	46	600	65	74	0	0
+tier	wand_spell_damage	5	33	800	55	64	0	0
+tier	wand_spell_damage	6	16	1000	45	54	0	0
+tier	wand_spell_damage	7	8	1200	35	44	0	0
+tier	wand_spell_damage	8	1	1200	25	34	0	0
+tier	wand_spell_damage_mana	1	80	100	45	49	42	45
+tier	wand_spell_damage_mana	2	60	400	40	44	38	41
+tier	wand_spell_damage_mana	3	46	600	35	39	34	37
+tier	wand_spell_damage_mana	4	38	800	30	34	29	33
+tier	wand_spell_damage_mana	5	23	1000	25	29	25	28
+tier	wand_spell_damage_mana	6	11	1200	20	24	21	24
+tier	wand_spell_damage_mana	7	2	1200	15	19	17	20
+tier	wand_fire_spell_damage	1	81	100	105	119	0	0
+tier	wand_fire_spell_damage	2	70	220	90	104	0	0
+tier	wand_fire_spell_damage	3	60	400	75	89	0	0
+tier	wand_fire_spell_damage	4	46	600	65	74	0	0
+tier	wand_fire_spell_damage	5	33	800	55	64	0	0
+tier	wand_fire_spell_damage	6	16	1000	45	54	0	0
+tier	wand_fire_spell_damage	7	8	1200	35	44	0	0
+tier	wand_fire_spell_damage	8	2	1200	25	34	0	0
+tier	wand_cold_spell_damage	1	81	100	105	119	0	0
+tier	wand_cold_spell_damage	2	70	220	90	104	0	0
+tier	wand_cold_spell_damage	3	60	400	75	89	0	0
+tier	wand_cold_spell_damage	4	46	600	65	74	0	0
+tier	wand_cold_spell_damage	5	33	800	55	64	0	0
+tier	wand_cold_spell_damage	6	16	1000	45	54	0	0
+tier	wand_cold_spell_damage	7	8	1200	35	44	0	0
+tier	wand_cold_spell_damage	8	2	1200	25	34	0	0
+tier	wand_lightning_spell_damage	1	81	100	105	119	0	0
+tier	wand_lightning_spell_damage	2	70	220	90	104	0	0
+tier	wand_lightning_spell_damage	3	60	400	75	89	0	0
+tier	wand_lightning_spell_damage	4	46	600	65	74	0	0
+tier	wand_lightning_spell_damage	5	33	800	55	64	0	0
+tier	wand_lightning_spell_damage	6	16	1000	45	54	0	0
+tier	wand_lightning_spell_damage	7	8	1200	35	44	0	0
+tier	wand_lightning_spell_damage	8	2	1200	25	34	0	0
+tier	wand_physical_spell_damage	1	81	100	105	119	0	0
+tier	wand_physical_spell_damage	2	70	220	90	104	0	0
+tier	wand_physical_spell_damage	3	60	400	75	89	0	0
+tier	wand_physical_spell_damage	4	46	600	65	74	0	0
+tier	wand_physical_spell_damage	5	33	800	55	64	0	0
+tier	wand_physical_spell_damage	6	16	1000	45	54	0	0
+tier	wand_physical_spell_damage	7	8	1200	35	44	0	0
+tier	wand_physical_spell_damage	8	2	1200	25	34	0	0
+tier	wand_gain_as_fire	1	80	100	28	30	0	0
+tier	wand_gain_as_fire	2	60	600	25	27	0	0
+tier	wand_gain_as_fire	3	46	800	22	24	0	0
+tier	wand_gain_as_fire	4	33	1000	19	21	0	0
+tier	wand_gain_as_fire	5	16	1200	16	18	0	0
+tier	wand_gain_as_fire	6	5	1200	13	15	0	0
+tier	wand_gain_as_cold	1	80	100	28	30	0	0
+tier	wand_gain_as_cold	2	60	600	25	27	0	0
+tier	wand_gain_as_cold	3	46	800	22	24	0	0
+tier	wand_gain_as_cold	4	33	1000	19	21	0	0
+tier	wand_gain_as_cold	5	16	1200	16	18	0	0
+tier	wand_gain_as_cold	6	5	1200	13	15	0	0
+tier	wand_gain_as_lightning	1	80	100	28	30	0	0
+tier	wand_gain_as_lightning	2	60	600	25	27	0	0
+tier	wand_gain_as_lightning	3	46	800	22	24	0	0
+tier	wand_gain_as_lightning	4	33	1000	19	21	0	0
+tier	wand_gain_as_lightning	5	16	1200	16	18	0	0
+tier	wand_gain_as_lightning	6	5	1200	13	15	0	0
+tier	wand_intelligence	1	74	100	31	33	0	0
+tier	wand_intelligence	2	66	220	28	30	0	0
+tier	wand_intelligence	3	55	400	25	27	0	0
+tier	wand_intelligence	4	44	600	21	24	0	0
+tier	wand_intelligence	5	33	800	17	20	0	0
+tier	wand_intelligence	6	22	1000	13	16	0	0
+tier	wand_intelligence	7	11	1200	9	12	0	0
+tier	wand_intelligence	8	1	1200	5	8	0	0
+tier	wand_reduced_requirements	1	60	100	35	35	0	0
+tier	wand_reduced_requirements	2	52	800	30	30	0	0
+tier	wand_reduced_requirements	3	40	1000	25	25	0	0
+tier	wand_reduced_requirements	4	32	1200	20	20	0	0
+tier	wand_reduced_requirements	5	24	1200	15	15	0	0
+tier	wand_spell_skill_levels	1	78	100	4	4	0	0
+tier	wand_spell_skill_levels	2	55	1000	3	3	0	0
+tier	wand_spell_skill_levels	3	25	1200	2	2	0	0
+tier	wand_spell_skill_levels	4	5	1200	1	1	0	0
+tier	wand_fire_skill_levels	1	81	100	5	5	0	0
+tier	wand_fire_skill_levels	2	55	800	4	4	0	0
+tier	wand_fire_skill_levels	3	36	1000	3	3	0	0
+tier	wand_fire_skill_levels	4	18	1200	2	2	0	0
+tier	wand_fire_skill_levels	5	2	1200	1	1	0	0
+tier	wand_cold_skill_levels	1	81	100	5	5	0	0
+tier	wand_cold_skill_levels	2	55	800	4	4	0	0
+tier	wand_cold_skill_levels	3	36	1000	3	3	0	0
+tier	wand_cold_skill_levels	4	18	1200	2	2	0	0
+tier	wand_cold_skill_levels	5	2	1200	1	1	0	0
+tier	wand_lightning_skill_levels	1	81	100	5	5	0	0
+tier	wand_lightning_skill_levels	2	55	800	4	4	0	0
+tier	wand_lightning_skill_levels	3	36	1000	3	3	0	0
+tier	wand_lightning_skill_levels	4	18	1200	2	2	0	0
+tier	wand_lightning_skill_levels	5	2	1200	1	1	0	0
+tier	wand_physical_skill_levels	1	81	100	5	5	0	0
+tier	wand_physical_skill_levels	2	55	800	4	4	0	0
+tier	wand_physical_skill_levels	3	36	1000	3	3	0	0
+tier	wand_physical_skill_levels	4	18	1200	2	2	0	0
+tier	wand_physical_skill_levels	5	2	1200	1	1	0	0
+tier	wand_mana_regeneration	1	79	100	60	69	0	0
+tier	wand_mana_regeneration	2	55	600	50	59	0	0
+tier	wand_mana_regeneration	3	42	800	40	49	0	0
+tier	wand_mana_regeneration	4	29	1000	30	39	0	0
+tier	wand_mana_regeneration	5	18	1200	20	29	0	0
+tier	wand_mana_regeneration	6	1	1200	10	19	0	0
+tier	wand_life_on_kill	1	77	100	69	84	0	0
+tier	wand_life_on_kill	2	66	220	54	68	0	0
+tier	wand_life_on_kill	3	55	400	41	53	0	0
+tier	wand_life_on_kill	4	44	600	29	40	0	0
+tier	wand_life_on_kill	5	33	800	19	28	0	0
+tier	wand_life_on_kill	6	22	1000	10	18	0	0
+tier	wand_life_on_kill	7	11	1200	7	9	0	0
+tier	wand_life_on_kill	8	1	1200	4	6	0	0
+tier	wand_mana_on_kill	1	78	100	36	45	0	0
+tier	wand_mana_on_kill	2	67	220	28	35	0	0
+tier	wand_mana_on_kill	3	56	400	21	27	0	0
+tier	wand_mana_on_kill	4	45	600	15	20	0	0
+tier	wand_mana_on_kill	5	34	800	10	14	0	0
+tier	wand_mana_on_kill	6	23	1000	6	9	0	0
+tier	wand_mana_on_kill	7	12	1200	4	5	0	0
+tier	wand_mana_on_kill	8	1	1200	2	3	0	0
+tier	wand_cast_speed	1	80	100	33	35	0	0
+tier	wand_cast_speed	2	70	400	29	32	0	0
+tier	wand_cast_speed	3	60	600	25	28	0	0
+tier	wand_cast_speed	4	45	800	21	24	0	0
+tier	wand_cast_speed	5	30	1000	17	20	0	0
+tier	wand_cast_speed	6	15	1200	13	16	0	0
+tier	wand_cast_speed	7	1	1200	9	12	0	0
+tier	wand_spell_crit_chance	1	76	100	60	73	0	0
+tier	wand_spell_crit_chance	2	59	600	54	59	0	0
+tier	wand_spell_crit_chance	3	41	800	47	53	0	0
+tier	wand_spell_crit_chance	4	28	1000	40	46	0	0
+tier	wand_spell_crit_chance	5	21	1200	34	39	0	0
+tier	wand_spell_crit_chance	6	11	1200	27	33	0	0
+tier	wand_spell_crit_damage	1	73	100	35	39	0	0
+tier	wand_spell_crit_damage	2	59	600	30	34	0	0
+tier	wand_spell_crit_damage	3	44	800	25	29	0	0
+tier	wand_spell_crit_damage	4	30	1000	20	24	0	0
+tier	wand_spell_crit_damage	5	21	1200	15	19	0	0
+tier	wand_spell_crit_damage	6	8	1200	10	14	0	0
+tier	wand_light_mana_regeneration	1	30	100	18	22	15	15
+tier	wand_light_mana_regeneration	2	15	1200	13	17	10	10
+tier	wand_light_mana_regeneration	3	8	1200	8	12	5	5
+tier	wand_ignite_magnitude	1	75	100	91	100	0	0
+tier	wand_ignite_magnitude	2	60	800	81	90	0	0
+tier	wand_ignite_magnitude	3	45	1000	71	80	0	0
+tier	wand_ignite_magnitude	4	30	1200	61	70	0	0
+tier	wand_ignite_magnitude	5	15	1200	51	60	0	0
+tier	wand_freeze_buildup	1	75	100	71	80	0	0
+tier	wand_freeze_buildup	2	60	800	61	70	0	0
+tier	wand_freeze_buildup	3	45	1000	51	60	0	0
+tier	wand_freeze_buildup	4	30	1200	41	50	0	0
+tier	wand_freeze_buildup	5	15	1200	31	40	0	0
+tier	wand_shock_chance	1	75	100	91	100	0	0
+tier	wand_shock_chance	2	60	800	81	90	0	0
+tier	wand_shock_chance	3	45	1000	71	80	0	0
+tier	wand_shock_chance	4	30	1200	61	70	0	0
+tier	wand_shock_chance	5	15	1200	51	60	0	0
+tier	sceptre_spirit_percent	1	82	100	61	65	0	0
+tier	sceptre_spirit_percent	2	75	220	56	60	0	0
+tier	sceptre_spirit_percent	3	60	400	51	55	0	0
+tier	sceptre_spirit_percent	4	46	600	45	50	0	0
+tier	sceptre_spirit_percent	5	33	800	39	44	0	0
+tier	sceptre_spirit_percent	6	16	1000	33	38	0	0
+tier	sceptre_spirit_percent	7	8	1200	27	32	0	0
+tier	sceptre_spirit_percent	8	1	1200	20	26	0	0
+tier	sceptre_spirit_mana	1	70	100	35	38	42	45
+tier	sceptre_spirit_mana	2	58	400	31	34	38	41
+tier	sceptre_spirit_mana	3	48	600	27	30	34	37
+tier	sceptre_spirit_mana	4	36	800	23	26	29	33
+tier	sceptre_spirit_mana	5	26	1000	19	22	25	28
+tier	sceptre_spirit_mana	6	11	1200	15	18	21	24
+tier	sceptre_spirit_mana	7	2	1200	10	14	17	20
+tier	sceptre_maximum_mana	1	70	100	150	164	0	0
+tier	sceptre_maximum_mana	2	65	220	125	149	0	0
+tier	sceptre_maximum_mana	3	60	400	105	124	0	0
+tier	sceptre_maximum_mana	4	54	600	90	104	0	0
+tier	sceptre_maximum_mana	5	46	800	80	89	0	0
+tier	sceptre_maximum_mana	6	38	1000	65	79	0	0
+tier	sceptre_maximum_mana	7	33	1200	55	64	0	0
+tier	sceptre_maximum_mana	8	25	1200	35	54	0	0
+tier	sceptre_maximum_mana	9	16	1200	25	34	0	0
+tier	sceptre_maximum_mana	10	6	1200	15	24	0	0
+tier	sceptre_maximum_mana	11	1	1200	10	14	0	0
+tier	sceptre_ally_damage	1	82	100	105	119	0	0
+tier	sceptre_ally_damage	2	70	220	90	104	0	0
+tier	sceptre_ally_damage	3	60	400	75	89	0	0
+tier	sceptre_ally_damage	4	46	600	65	74	0	0
+tier	sceptre_ally_damage	5	33	800	55	64	0	0
+tier	sceptre_ally_damage	6	16	1000	45	54	0	0
+tier	sceptre_ally_damage	7	8	1200	35	44	0	0
+tier	sceptre_ally_damage	8	1	1200	25	34	0	0
+tier	sceptre_ally_added_physical	1	75	100	12	19	22	32
+tier	sceptre_ally_added_physical	2	65	220	10	15	18	26
+tier	sceptre_ally_added_physical	3	60	400	7	11	14	20
+tier	sceptre_ally_added_physical	4	54	600	6	10	12	17
+tier	sceptre_ally_added_physical	5	46	800	5	7	9	13
+tier	sceptre_ally_added_physical	6	33	1000	4	6	8	11
+tier	sceptre_ally_added_physical	7	16	1200	2	4	5	8
+tier	sceptre_ally_added_physical	8	8	1200	2	3	4	6
+tier	sceptre_ally_added_physical	9	1	1200	1	2	3	4
+tier	sceptre_ally_added_fire	1	75	100	25	29	39	45
+tier	sceptre_ally_added_fire	2	65	220	20	24	31	38
+tier	sceptre_ally_added_fire	3	60	400	17	19	27	30
+tier	sceptre_ally_added_fire	4	54	600	14	16	21	26
+tier	sceptre_ally_added_fire	5	46	800	12	13	18	20
+tier	sceptre_ally_added_fire	6	33	1000	9	11	14	17
+tier	sceptre_ally_added_fire	7	16	1200	6	8	10	13
+tier	sceptre_ally_added_fire	8	8	1200	3	5	6	9
+tier	sceptre_ally_added_fire	9	1	1200	1	2	3	4
+tier	sceptre_ally_added_cold	1	75	100	21	24	32	37
+tier	sceptre_ally_added_cold	2	65	220	16	20	25	31
+tier	sceptre_ally_added_cold	3	60	400	14	15	22	24
+tier	sceptre_ally_added_cold	4	54	600	11	13	18	21
+tier	sceptre_ally_added_cold	5	46	800	9	10	15	17
+tier	sceptre_ally_added_cold	6	33	1000	7	8	12	14
+tier	sceptre_ally_added_cold	7	16	1200	5	6	9	11
+tier	sceptre_ally_added_cold	8	8	1200	3	4	5	8
+tier	sceptre_ally_added_cold	9	1	1200	1	2	3	4
+tier	sceptre_ally_added_lightning	1	75	100	1	4	60	71
+tier	sceptre_ally_added_lightning	2	65	220	1	3	48	59
+tier	sceptre_ally_added_lightning	3	60	400	1	2	41	47
+tier	sceptre_ally_added_lightning	4	54	600	1	2	33	40
+tier	sceptre_ally_added_lightning	5	46	800	1	1	28	32
+tier	sceptre_ally_added_lightning	6	33	1000	1	1	23	27
+tier	sceptre_ally_added_lightning	7	16	1200	1	1	16	22
+tier	sceptre_ally_added_lightning	8	8	1200	1	1	10	15
+tier	sceptre_ally_added_lightning	9	1	1200	1	1	5	7
+tier	sceptre_strength	1	74	100	31	33	0	0
+tier	sceptre_strength	2	66	220	28	30	0	0
+tier	sceptre_strength	3	55	400	25	27	0	0
+tier	sceptre_strength	4	44	600	21	24	0	0
+tier	sceptre_strength	5	33	800	17	20	0	0
+tier	sceptre_strength	6	22	1000	13	16	0	0
+tier	sceptre_strength	7	11	1200	9	12	0	0
+tier	sceptre_strength	8	1	1200	5	8	0	0
+tier	sceptre_intelligence	1	74	100	31	33	0	0
+tier	sceptre_intelligence	2	66	220	28	30	0	0
+tier	sceptre_intelligence	3	55	400	25	27	0	0
+tier	sceptre_intelligence	4	44	600	21	24	0	0
+tier	sceptre_intelligence	5	33	800	17	20	0	0
+tier	sceptre_intelligence	6	22	1000	13	16	0	0
+tier	sceptre_intelligence	7	11	1200	9	12	0	0
+tier	sceptre_intelligence	8	1	1200	5	8	0	0
+tier	sceptre_ally_resistances	1	80	100	17	18	0	0
+tier	sceptre_ally_resistances	2	68	600	15	16	0	0
+tier	sceptre_ally_resistances	3	54	800	12	14	0	0
+tier	sceptre_ally_resistances	4	40	1000	9	11	0	0
+tier	sceptre_ally_resistances	5	26	1200	6	8	0	0
+tier	sceptre_ally_resistances	6	12	1200	3	5	0	0
+tier	sceptre_reduced_requirements	1	60	100	35	35	0	0
+tier	sceptre_reduced_requirements	2	52	800	30	30	0	0
+tier	sceptre_reduced_requirements	3	40	1000	25	25	0	0
+tier	sceptre_reduced_requirements	4	32	1200	20	20	0	0
+tier	sceptre_reduced_requirements	5	24	1200	15	15	0	0
+tier	sceptre_minion_skill_levels	1	78	100	4	4	0	0
+tier	sceptre_minion_skill_levels	2	55	1000	3	3	0	0
+tier	sceptre_minion_skill_levels	3	25	1200	2	2	0	0
+tier	sceptre_minion_skill_levels	4	2	1200	1	1	0	0
+tier	sceptre_ally_life_regeneration	1	75	100	291	330	0	0
+tier	sceptre_ally_life_regeneration	2	68	220	231	290	0	0
+tier	sceptre_ally_life_regeneration	3	58	400	181	230	0	0
+tier	sceptre_ally_life_regeneration	4	47	600	131	180	0	0
+tier	sceptre_ally_life_regeneration	5	35	800	91	130	0	0
+tier	sceptre_ally_life_regeneration	6	26	1000	61	90	0	0
+tier	sceptre_ally_life_regeneration	7	17	1200	41	60	0	0
+tier	sceptre_ally_life_regeneration	8	11	1200	31	40	0	0
+tier	sceptre_ally_life_regeneration	9	5	1200	21	30	0	0
+tier	sceptre_ally_life_regeneration	10	1	1200	10	20	0	0
+tier	sceptre_mana_regeneration	1	79	100	60	69	0	0
+tier	sceptre_mana_regeneration	2	55	600	50	59	0	0
+tier	sceptre_mana_regeneration	3	42	800	40	49	0	0
+tier	sceptre_mana_regeneration	4	29	1000	30	39	0	0
+tier	sceptre_mana_regeneration	5	18	1200	20	29	0	0
+tier	sceptre_mana_regeneration	6	1	1200	10	19	0	0
+tier	sceptre_ally_attack_speed	1	55	100	14	16	0	0
+tier	sceptre_ally_attack_speed	2	35	1000	11	13	0	0
+tier	sceptre_ally_attack_speed	3	20	1200	8	10	0	0
+tier	sceptre_ally_attack_speed	4	5	1200	5	7	0	0
+tier	sceptre_ally_cast_speed	1	56	100	17	20	0	0
+tier	sceptre_ally_cast_speed	2	36	1000	13	16	0	0
+tier	sceptre_ally_cast_speed	3	21	1200	9	12	0	0
+tier	sceptre_ally_cast_speed	4	6	1200	5	8	0	0
+tier	sceptre_ally_crit_chance	1	76	100	35	38	0	0
+tier	sceptre_ally_crit_chance	2	59	600	30	34	0	0
+tier	sceptre_ally_crit_chance	3	41	800	25	29	0	0
+tier	sceptre_ally_crit_chance	4	28	1000	20	24	0	0
+tier	sceptre_ally_crit_chance	5	21	1200	15	19	0	0
+tier	sceptre_ally_crit_chance	6	11	1200	10	14	0	0
+tier	sceptre_ally_crit_damage	1	73	100	35	39	0	0
+tier	sceptre_ally_crit_damage	2	59	600	30	34	0	0
+tier	sceptre_ally_crit_damage	3	44	800	25	29	0	0
+tier	sceptre_ally_crit_damage	4	30	1000	20	24	0	0
+tier	sceptre_ally_crit_damage	5	21	1200	15	19	0	0
+tier	sceptre_ally_crit_damage	6	8	1200	10	14	0	0
+tier	sceptre_light_mana_regeneration	1	30	100	18	22	15	15
+tier	sceptre_light_mana_regeneration	2	15	1200	13	17	10	10
+tier	sceptre_light_mana_regeneration	3	8	1200	8	12	5	5
+tier	sceptre_presence_radius	1	72	100	66	80	0	0
+tier	sceptre_presence_radius	2	56	1000	56	65	0	0
+tier	sceptre_presence_radius	3	40	1200	46	55	0	0
+tier	sceptre_presence_radius	4	23	1200	36	45	0	0
+tier	sceptre_minion_life	1	80	100	46	50	0	0
+tier	sceptre_minion_life	2	64	600	41	45	0	0
+tier	sceptre_minion_life	3	48	800	36	40	0	0
+tier	sceptre_minion_life	4	32	1000	31	35	0	0
+tier	sceptre_minion_life	5	16	1200	26	30	0	0
+tier	sceptre_minion_life	6	2	1200	21	25	0	0

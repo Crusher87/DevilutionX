@@ -134,6 +134,24 @@ int BaseRecencyPercent(int itemLevel, int baseLevel);
 /** @brief How often each kind of equipment drops, before its bases are picked. */
 int EquipmentClassWeight(ItemType type);
 
+/**
+ * @brief Equipment drops by bucket: its item type, except that the caster weapons rework's wands, sceptres and staves
+ * and the quarterstaves have buckets of their own after the types (caster-weapons-plan-v2.md 6.5).
+ */
+enum class KindBucket : uint8_t {
+	Wand,
+	Sceptre,
+	CasterStaff,
+	Quarterstaff,
+	Count,
+};
+constexpr size_t FirstKindBucket = static_cast<size_t>(ItemType::Amulet) + 1;
+constexpr size_t EquipmentBucketCount = FirstKindBucket + static_cast<size_t>(KindBucket::Count);
+/** @brief The drop bucket of an item row. */
+size_t EquipmentBucketOf(int itemIndex);
+/** @brief How often a bucket drops: its type's EquipmentClassWeight, or the kind's own weight. */
+int EquipmentBucketWeight(size_t bucket);
+
 /** @brief The highest POE2 item level, where the top modifier tier unlocks. */
 constexpr int MaxPoe2ItemLevel = 82;
 

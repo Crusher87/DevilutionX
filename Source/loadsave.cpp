@@ -410,6 +410,8 @@ struct LevelConversionData {
 	UpdateHellfireFlag(item, item._iIName);
 	item._iPoe2Craft = (item.dwBuff & CF_POE2) != 0 ? UnpackCraftState(craftBytes) : Poe2Craft {};
 	RestoreRareItemPowers(item);
+	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
+	LockCasterWeaponMods(item);
 	FinishFlask(item);
 
 	return true;
@@ -1228,7 +1230,7 @@ void SaveItem(SaveHelper &file, const Item &item)
 	}
 
 	// POE2 Mashup: crafting state goes in the alignment bytes.
-	const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(item._iPoe2Craft);
+	const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(SavedCraftState(item));
 	size_t craftWritten = 0;
 	const auto writeCraft = [&](size_t size) {
 		file.WriteBytes(&craftBytes[craftWritten], size);

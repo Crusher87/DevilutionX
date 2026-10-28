@@ -15,6 +15,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -34,7 +35,7 @@ constexpr std::array<GambleFamilyData, GambleFamilyCount> GambleFamilies { {
 	{ N_("Axe"), 100 },
 	{ N_("Mace"), 100 },
 	{ N_("Bow"), 100 },
-	{ N_("Staff"), 100 },
+	{ N_("Staves and Wands"), 100 },
 	{ N_("Shield"), 90 },
 	{ N_("Helmet"), 85 },
 	{ N_("Body Armour"), 85 },
@@ -54,19 +55,24 @@ std::string_view GambleFamilyName(GambleFamily family)
 	return _(GambleFamilies[static_cast<size_t>(family)].name.data());
 }
 
-bool GambleFamilyHas(GambleFamily family, ItemType type)
+bool GambleFamilyHas(GambleFamily family, int itemIndex)
 {
+	if (itemIndex < 0 || static_cast<size_t>(itemIndex) >= AllItemsList.size())
+		return false;
+	const ItemType type = AllItemsList[static_cast<size_t>(itemIndex)].itype;
+	// The caster weapons of the rework (wands and sceptres are maces underneath) gamble with the staves.
+	const bool caster = IsCasterWeapon(itemIndex);
 	switch (family) {
 	case GambleFamily::Sword:
 		return type == ItemType::Sword;
 	case GambleFamily::Axe:
 		return type == ItemType::Axe;
 	case GambleFamily::Mace:
-		return type == ItemType::Mace;
+		return type == ItemType::Mace && !caster;
 	case GambleFamily::Bow:
 		return type == ItemType::Bow;
 	case GambleFamily::Staff:
-		return type == ItemType::Staff;
+		return type == ItemType::Staff || caster;
 	case GambleFamily::Shield:
 		return type == ItemType::Shield;
 	case GambleFamily::Helmet:

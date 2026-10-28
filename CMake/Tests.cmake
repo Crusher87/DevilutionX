@@ -57,6 +57,14 @@ set(tests
   poe2_item_levels_test
   poe2_modifiers_test
   poe2_crafting_test
+  poe2_caster_golden_test
+  poe2_weapon_kinds_test
+  poe2_caster_stats_test
+  poe2_caster_affixes_test
+  poe2_caster_bases_test
+  poe2_quarterstaves_test
+  poe2_granted_bolt_test
+  poe2_granted_skills_test
   primitive_render_test
   poe2_economy_test
   poe2_endgame_test

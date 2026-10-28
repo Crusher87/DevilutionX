@@ -632,6 +632,11 @@ void GiveCurrencyItem(Player &player, item_misc_id miscId);
 void DropBossUnique(Monster &monster, bool sendmsg);
 /** @brief POE2 Mashup: drops a kill's loot by the POE2 rules: a number of rolls by how tough the monster was, and a boss's extras. */
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);
+/**
+ * @brief POE2 Mashup: picks a kind of equipment by its bucket's weight (EquipmentBucketWeight), then one of its bases,
+ * favouring bases near the item level.
+ */
+std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLevel);
 /** @brief POE2 Mashup: drops this many extra loot rolls, e.g. from a Golden Charm. */
 void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int rolls);
 /** @brief POE2 Mashup: a magic or rare chest's or a strongbox's sure item: equipment of that rarity. */
@@ -776,6 +781,11 @@ enum class ChanceResult : uint8_t {
  * @param unique Receives the unique when one is made.
  */
 ChanceResult CreateChanceUnique(const Player &player, const Item &item, Item &unique, uint32_t roll);
+/**
+ * @brief POE2 Mashup: the base a Diablo unique drops on: the first that still drops of its type (a retired one if none
+ * does), a staff unique's only of its home's kind (caster-weapons-plan-v2.md 6.14). Nothing if no base fits.
+ */
+std::optional<_item_indexes> Poe2DiabloUniqueBase(int uid);
 
 /* data */
 

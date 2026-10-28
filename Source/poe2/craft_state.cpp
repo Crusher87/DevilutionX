@@ -5,10 +5,12 @@
 #include <type_traits>
 
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/weapon_kinds.hpp"
 
 namespace devilution {
 
@@ -24,7 +26,51 @@ uint8_t Checksum(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 	return static_cast<uint8_t>((sum ^ (sum >> 8) ^ 0xA5U) & 0xFFU);
 }
 
+/** Byte 1's top bit, unused before the wide layout: set, the modifiers are packed wide. */
+constexpr uint8_t WideLayoutBit = 1 << 7;
+
+static_assert(DesecratedFamilyBase + static_cast<int>(DesecratedModId::Count) - 1 <= UnrevealedModFamily, "desecrated families fit below the unrevealed placeholder");
+static_assert(NarrowDesecratedFamilyBase + static_cast<int>(DesecratedModId::Count) - 1 <= NarrowUnrevealedModFamily, "desecrated families fit the narrow layout");
+
+/** A family id as the narrow layout stores it. */
+uint8_t NarrowFamily(uint8_t family)
+{
+	if (family == UnrevealedModFamily)
+		return NarrowUnrevealedModFamily;
+	if (family >= DesecratedFamilyBase)
+		return static_cast<uint8_t>(family - DesecratedFamilyBase + NarrowDesecratedFamilyBase);
+	return family;
+}
+
+/** A family id the narrow layout stored, as it is in memory. */
+uint8_t MemoryFamily(uint8_t stored)
+{
+	if (stored == NarrowUnrevealedModFamily)
+		return UnrevealedModFamily;
+	if (stored >= NarrowDesecratedFamilyBase)
+		return static_cast<uint8_t>(stored - NarrowDesecratedFamilyBase + DesecratedFamilyBase);
+	return stored;
+}
+
+/** Whether a modifier's family needs the wide layout: a real family the narrow one can't hold. */
+bool IsWideCraft(const Poe2Craft &craft)
+{
+	return std::any_of(craft.mods.begin(), craft.mods.end(), [](const Poe2CraftMod &mod) {
+		return mod.family > NarrowMaxModFamily && mod.family < DesecratedFamilyBase;
+	});
+}
+
 } // namespace
+
+uint8_t CraftSaltLimit(uint8_t family)
+{
+	return family > LegacyModFamilyCount && family < DesecratedFamilyBase ? MaxWideCraftSalt : MaxCraftSalt;
+}
+
+uint8_t RollCraftSalt(uint8_t family, uint32_t roll)
+{
+	return static_cast<uint8_t>(1 + (roll % CraftSaltLimit(family)));
+}
 
 std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft)
 {
@@ -37,9 +83,14 @@ std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft)
 	bytes[3] = static_cast<uint8_t>(craft.magnitude);
 	bytes[4] = static_cast<uint8_t>((craft.augments[0] & 0xF) | ((craft.augments[1] & 0xF) << 4));
 	bytes[5] = static_cast<uint8_t>((craft.augments[2] & 0xF) | ((craft.catalyst & 0xF) << 4));
+	const bool wide = IsWideCraft(craft);
+	if (wide)
+		bytes[1] |= WideLayoutBit;
 	for (size_t i = 0; i < MaxRareAffixes; i++) {
 		const Poe2CraftMod &mod = craft.mods[i];
-		const auto packed = static_cast<uint16_t>((mod.family & 0x7F) | ((mod.tier & 0xF) << 7) | ((mod.salt & 0x1F) << 11));
+		const auto packed = wide
+		    ? static_cast<uint16_t>(mod.family | ((mod.tier & 0xF) << 8) | ((mod.salt & 0xF) << 12))
+		    : static_cast<uint16_t>((NarrowFamily(mod.family) & 0x7F) | ((mod.tier & 0xF) << 7) | ((mod.salt & 0x1F) << 11));
 		bytes[6 + (i * 2)] = static_cast<uint8_t>(packed & 0xFF);
 		bytes[7 + (i * 2)] = static_cast<uint8_t>(packed >> 8);
 	}
@@ -57,6 +108,7 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 	craft.rolledMagic = ((bytes[1] >> 3) & 1) != 0;
 	craft.sockets = (bytes[1] >> 4) & 3;
 	craft.desecrated = ((bytes[1] >> 6) & 1) != 0;
+	const bool wide = (bytes[1] & WideLayoutBit) != 0;
 	craft.enchant = bytes[2] & 0x1F;
 	craft.enchantRoll = bytes[2] >> 5;
 	craft.magnitude = static_cast<int8_t>(bytes[3]);
@@ -66,7 +118,10 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 	craft.catalyst = bytes[5] >> 4;
 	for (size_t i = 0; i < MaxRareAffixes; i++) {
 		const auto packed = static_cast<uint16_t>(bytes[6 + (i * 2)] | (bytes[7 + (i * 2)] << 8));
-		craft.mods[i] = { static_cast<uint8_t>(packed & 0x7F), static_cast<uint8_t>((packed >> 7) & 0xF), static_cast<uint8_t>(packed >> 11) };
+		if (wide)
+			craft.mods[i] = { static_cast<uint8_t>(packed & 0xFF), static_cast<uint8_t>((packed >> 8) & 0xF), static_cast<uint8_t>(packed >> 12) };
+		else
+			craft.mods[i] = { MemoryFamily(static_cast<uint8_t>(packed & 0x7F)), static_cast<uint8_t>((packed >> 7) & 0xF), static_cast<uint8_t>(packed >> 11) };
 	}
 	return craft;
 }
@@ -93,6 +148,22 @@ Poe2Craft CurrentCraft(const Item &item)
 			craft.mods[count++] = { mod.family, mod.tier, 0 };
 	}
 	return craft;
+}
+
+bool LocksCasterWeaponMods(const Item &item)
+{
+	return gbIsPoe2 && !item._iPoe2Craft.explicitMods && IsCasterWeapon(item) && item._iPoe2Mods[0].family != 0 && CanCraftMods(item);
+}
+
+Poe2Craft SavedCraftState(const Item &item)
+{
+	return LocksCasterWeaponMods(item) ? CurrentCraft(item) : item._iPoe2Craft;
+}
+
+void LockCasterWeaponMods(Item &item)
+{
+	if (LocksCasterWeaponMods(item))
+		item._iPoe2Craft = CurrentCraft(item);
 }
 
 std::vector<Poe2ItemMod> CraftModList(const Poe2Craft &craft)
@@ -131,7 +202,7 @@ bool AddCraftMod(Poe2Craft &craft, const Poe2ItemMod &mod, uint32_t saltSeed)
 	const int count = CraftModCount(craft);
 	if (count >= static_cast<int>(craft.mods.size()))
 		return false;
-	const auto salt = static_cast<uint8_t>(1 + (Mix(saltSeed) % MaxCraftSalt));
+	const uint8_t salt = RollCraftSalt(mod.family, Mix(saltSeed));
 	craft.mods[static_cast<size_t>(count)] = { mod.family, mod.tier, mod.family == UnrevealedModFamily ? static_cast<uint8_t>(0) : salt };
 	// Like POE2, prefixes are listed before suffixes.
 	std::stable_partition(craft.mods.begin(), craft.mods.begin() + count + 1, [](const Poe2CraftMod &other) { return IsCraftPrefix(other); });

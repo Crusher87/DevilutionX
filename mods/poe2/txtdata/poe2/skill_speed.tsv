@@ -117,3 +117,28 @@ Spell RuneOfLight		1.0				112	106	none (Conductive Runes)
 Spell RuneOfStone		1.0				112	106	none (Conductive Runes)
 Spell RuneOfNova		1.0				112	106	none (Conductive Runes)
 Spell RuneOfImmolation		1.0				112	106	none (Conductive Runes)
+FreezingShards		1.2						granted: Gelid Staff
+LightningBolt		0.9						granted: Voltaic Staff
+SolarOrb		0.9						granted: Pyrophyte Staff
+ChimingBolt		0.9						granted: Sigil of Power (Chiming Staff)
+Soulrend		0.9						granted: Rending Staff
+Reap		1.2						granted: Reaping Staff
+FrostLance		0.9						granted: Icicle Staff
+EchoingBlast		0.9						granted: Unleash (Roaring Staff)
+EnervatingNova		1.0						granted: Paralysing Staff
+ConsecratedGround		1.25						granted: Consecrate (Sanctified Staff)
+DarkPact		0.9						granted: Dark Staff
+FeastOfFlesh		0.9						granted: Ravenous Staff
+WitheringBolt		0.75						granted: Chaos Bolt (Withered Wand)
+BoneBolt		0.75						granted: Bone Blast (Bone Wand)
+ManaDrain		0.85						granted: Attuned Wand
+PowerSiphon		0.7						granted: Siphoning Wand
+VolatileBolt		0.8						granted: Volatile Dead (Volatile Wand)
+GalvanicBolt		0.65						granted: Galvanic Field (Galvanic Wand)
+Decompose		0.8						granted: Acrid Wand
+Exsanguinate		0.8						granted: Offering Wand
+FrostBolt		0.75						granted: Frigid Wand
+TormentBolt		0.75						granted: Chaos Bolt (Torture Wand)
+CriticalBolt		0.75						granted: Chaos Bolt (Critical Wand)
+WitheringRay		0.75						granted: Wither (Primordial Wand)
+TwinBolts		0.7						granted: Spellslinger stand-in (Dueling Wand)

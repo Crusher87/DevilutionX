@@ -472,7 +472,7 @@ std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8
 			Poe2CraftMod &mod = craft.mods[i];
 			if (mod.family == 0 || mod.family == UnrevealedModFamily)
 				continue;
-			const auto salt = static_cast<uint8_t>(1 + (Mix(seed ^ static_cast<uint32_t>(i)) % (MaxCraftSalt - 1)));
+			const auto salt = static_cast<uint8_t>(1 + (Mix(seed ^ static_cast<uint32_t>(i)) % (CraftSaltLimit(mod.family) - 1)));
 			mod.salt = salt >= mod.salt ? static_cast<uint8_t>(salt + 1) : salt;
 		}
 		break;
@@ -494,7 +494,8 @@ std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8
 	case CurrencyOrb::Essence: {
 		const EssenceTier tier = static_cast<EssenceTier>((variant >> 4) & 3);
 		const Essence &essence = GetEssence(static_cast<EssenceKind>(variant & 0xF));
-		const std::optional<uint8_t> family = FindModifierFamily(essence.family);
+		// On the caster weapons rework's bases, the essence gives their family of the same effect.
+		const std::optional<uint8_t> family = FindFamilyForItem(essence.family, item);
 		if (!family) {
 			Fizzle(_("This essence does nothing."));
 			return false;
@@ -733,7 +734,7 @@ bool CorruptV2(Player &player, Item &item, CraftOmens &omens)
 			const int tier = mod.tier + step;
 			if (mod.family != UnrevealedModFamily && tier >= 1 && ModTierItemLevel(mod.family, static_cast<uint8_t>(tier)) > 0) {
 				mod.tier = static_cast<uint8_t>(tier);
-				mod.salt = static_cast<uint8_t>(1 + (detail % MaxCraftSalt));
+				mod.salt = RollCraftSalt(mod.family, detail);
 			}
 			message = step > 0 ? _("Corrupted. A modifier weakens a tier.") : _("Corrupted. A modifier strengthens a tier.");
 		}

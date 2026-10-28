@@ -39,6 +39,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "stores.h"
 #include "utils/display.h"
@@ -586,11 +587,19 @@ bool IsGemcuttingOpen()
 	return IsOpen;
 }
 
-namespace {
-
-/** @brief The tab a skill gem opens on: the class's own line (Sorcerer elemental, Rogue bows, Monk staves), the Warrior's by weapon. */
+/**
+ * @brief The tab a skill gem opens on: a caster staff or wand's Elemental and a new sceptre's Spirit (plan 6.15), else
+ * the class's own line (Sorcerer elemental, Rogue bows, Monk staves), the Warrior's by weapon.
+ */
 GemCategory DefaultSkillCategory(const Player &player)
 {
+	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+		const Item &item = player.InvBody[hand];
+		if (IsCasterStaff(item) || IsWand(item))
+			return GemCategory::Elemental;
+		if (IsNewSceptre(item))
+			return GemCategory::Spirit;
+	}
 	switch (player._pClass) {
 	case HeroClass::Sorcerer:
 		return GemCategory::Elemental;
@@ -619,8 +628,6 @@ GemCategory DefaultSkillCategory(const Player &player)
 	}
 	return GemCategory::Mace;
 }
-
-} // namespace
 
 void OpenGemcutting(bool fromBelt, int index)
 {

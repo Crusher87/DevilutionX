@@ -43,7 +43,8 @@ constexpr size_t GambleFamilyCount = static_cast<size_t>(GambleFamily::Count);
 
 std::string_view GambleFamilyName(GambleFamily family);
 /** @brief Whether bases of the item type belong to the family. */
-bool GambleFamilyHas(GambleFamily family, ItemType type);
+/** @brief Whether a row of the item data belongs to the gamble family. */
+bool GambleFamilyHas(GambleFamily family, int itemIndex);
 /** @brief The gambler's price: round(class base * (1 + 0.045 * item level)^1.22). */
 int GamblePrice(GambleFamily family, int poe2ItemLevel);
 /** @brief Rolls the rarity of a gamble: normal 52%, magic 36%, rare 12%; never unique (Curtis 2026-10-16). */

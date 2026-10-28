@@ -3,6 +3,8 @@
  * reached, keep Diablo's vendor level in CF_LEVEL, and a bought ware rebuilds on the base it was stocked with.
  */
 #include <algorithm>
+#include <array>
+#include <cstdio>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -22,6 +24,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "qol/stash.h"
 #include "spells.h"
 #include "stores.h"
@@ -369,6 +372,91 @@ TEST_F(Poe2VendorItemsTest, OnlyIdentifyAndPhasingScrollsDropOrSell)
 		}
 	}
 	EXPECT_GT(portalsBefore, 20);
+}
+
+/** @brief Where a vendor's caster weapons sort: staves, then wands, then sceptres (plan 6.13). */
+int CasterOrder(const Item &item)
+{
+	switch (WeaponKindOf(item)) {
+	case WeaponKind::CasterStaff: return 0;
+	case WeaponKind::Wand: return 1;
+	case WeaponKind::Sceptre: return 2;
+	default: return -1;
+	}
+}
+
+TEST_F(Poe2VendorItemsTest, AdriaSellsTheCasterWeaponsAndGriswoldTheQuarterstaves)
+{
+	std::array<int, 3> adria {};
+	int quarterstaves = 0;
+	for (uint32_t seed = 1; seed <= 60; seed++) {
+		SetRndSeed(seed);
+		SpawnSmith(16);
+		for (const Item &ware : SmithItems) {
+			EXPECT_FALSE(IsCasterWeapon(ware)) << ware._iIName << " seed " << seed;
+			quarterstaves += IsQuarterstaff(ware) ? 1 : 0;
+		}
+		SpawnWitch(16);
+		int last = -1;
+		for (const Item &ware : WitchItems) {
+			if (ware._iClass != ICLASS_WEAPON)
+				continue;
+			// Only the caster weapons: no quarterstaff and no older staff.
+			const int order = CasterOrder(ware);
+			ASSERT_GE(order, 0) << ware._iIName << " seed " << seed;
+			adria[static_cast<size_t>(order)]++;
+			EXPECT_GE(order, last) << ware._iIName << " sorts after the staves and wands before it, seed " << seed;
+			last = order;
+		}
+	}
+	EXPECT_GT(adria[0], 0) << "caster staves";
+	EXPECT_GT(adria[1], 0) << "wands";
+	EXPECT_GT(adria[2], 0) << "sceptres";
+	EXPECT_GT(quarterstaves, 0);
+}
+
+TEST_F(Poe2VendorItemsTest, WirtOffersASorcererCasterWeapons)
+{
+	// His Staff and Mace exclusion for a Sorcerer passes over the caster weapons (plan 6.13).
+	MyPlayer->_pClass = HeroClass::Sorcerer;
+	int casters = 0;
+	int martialStaves = 0;
+	for (uint32_t seed = 1; seed <= 150; seed++) {
+		SetRndSeed(seed);
+		BoyItem = {};
+		BoyItemLevel = 0;
+		SpawnBoy(MyPlayer->getCharacterLevel());
+		casters += IsCasterWeapon(BoyItem) ? 1 : 0;
+		martialStaves += IsMartialStaff(BoyItem) ? 1 : 0;
+	}
+	EXPECT_GT(casters, 0);
+	std::printf("Wirt, 150 seeds: %d caster weapons, %d martial staves\n", casters, martialStaves);
+	BoyItem = {};
+}
+
+TEST_F(Poe2VendorItemsTest, HellfireVendorsStockAsBefore)
+{
+	gbIsPoe2 = false;
+	LoadModifierData();
+	UnloadModArchives();
+	LoadModArchives({ { "hf" } });
+	LoadItemData();
+	int staves = 0;
+	for (uint32_t seed = 1; seed <= 40; seed++) {
+		SetRndSeed(seed);
+		SpawnWitch(16);
+		for (const Item &ware : WitchItems) {
+			EXPECT_TRUE(IsAnyOf(ware._itype, ItemType::Misc, ItemType::Staff)) << ware._iIName;
+			EXPECT_FALSE(IsCasterWeapon(ware)) << ware._iIName;
+			staves += ware._itype == ItemType::Staff ? 1 : 0;
+		}
+		SpawnSmith(16);
+		for (const Item &ware : SmithItems) {
+			EXPECT_FALSE(IsCasterWeapon(ware)) << ware._iIName;
+			EXPECT_FALSE(ware._itype == ItemType::Staff && IsValidSpell(ware._iSpell)) << ware._iIName;
+		}
+	}
+	EXPECT_GT(staves, 0) << "Adria's staves of spells stay";
 }
 
 TEST_F(Poe2VendorItemsTest, DiabloKeepsItsScrolls)

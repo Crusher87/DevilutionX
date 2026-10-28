@@ -38,6 +38,27 @@ enum class Poe2ItemStat : uint8_t {
 	ItemRarity,
 	/** Increased spell damage in percent; every spell hit takes it with the tree's (SpellIncreasedDamage). */
 	SpellDamage,
+	// The caster weapons rework's stats (ModEffect has their meanings).
+	/** A sceptre's increased Spirit, of the sceptre's own; MaxSpirit reads it on each hand's item. */
+	LocalSpiritPercent,
+	FireSpellDamage,
+	ColdSpellDamage,
+	LightningSpellDamage,
+	PhysicalSpellDamage,
+	ColdSkillLevels,
+	PhysicalSkillLevels,
+	MinionSkillLevels,
+	MinionLife,
+	MinionResistances,
+	LifeOnKill,
+	ManaOnKill,
+	BlockChance,
+	DazeChance,
+	/** Flat damage added to minions' blows. */
+	MinionAddedDamageMin,
+	MinionAddedDamageMax,
+	/** Tenths of a point of life a second. */
+	MinionLifeRegen,
 	Count,
 };
 

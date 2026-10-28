@@ -132,8 +132,46 @@ enum class WeaponSkill : uint8_t {
 	LowerResist,
 	Confuse,
 	Attract,
-	Last = Attract,
+	/**
+	 * The skills the caster weapons rework's staves and wands grant (caster-weapons-plan-v2.md 6.12): table skills with
+	 * TF_Granted, cast with a left click, with no gem of their own.
+	 */
+	FreezingShards,
+	LightningBolt,
+	SolarOrb,
+	ChimingBolt,
+	Soulrend,
+	Reap,
+	FrostLance,
+	EchoingBlast,
+	EnervatingNova,
+	ConsecratedGround,
+	DarkPact,
+	FeastOfFlesh,
+	WitheringBolt,
+	BoneBolt,
+	ManaDrain,
+	PowerSiphon,
+	VolatileBolt,
+	GalvanicBolt,
+	Decompose,
+	Exsanguinate,
+	FrostBolt,
+	TormentBolt,
+	CriticalBolt,
+	WitheringRay,
+	TwinBolts,
+	Last = TwinBolts,
 };
+
+/** @brief The first skill a caster weapon grants; every one after it is granted too. */
+constexpr WeaponSkill FirstGrantedSkill = WeaponSkill::FreezingShards;
+
+/** @brief Whether the skill is one a caster weapon grants rather than a gem. */
+constexpr bool IsGrantedSkill(WeaponSkill skill)
+{
+	return skill >= FirstGrantedSkill && skill <= WeaponSkill::Last;
+}
 
 enum class SupportGem : uint8_t {
 	None,
@@ -424,6 +462,15 @@ constexpr size_t NumSkillSlots = 12;
 constexpr size_t OldNumSkillSlots = 6;
 /** @brief The Skills panel row of the weapon's default attack, after the gem sockets: it takes supports like a gem. */
 constexpr size_t DefaultAttackRow = NumSkillSlots;
+/**
+ * @brief The Skills panel rows of the Spirit skills held sceptres grant, main hand then off hand, under the default
+ * attack's row (caster-weapons-plan-v2.md 6.9). They have no support sockets and aren't gem sockets: nothing indexes a
+ * socket array with them.
+ */
+constexpr size_t GrantedRowMain = DefaultAttackRow + 1;
+constexpr size_t GrantedRowOff = DefaultAttackRow + 2;
+/** @brief The spiritGemsOn bit of the main hand's granted Spirit skill; the off hand's is the next. Set means off. */
+constexpr size_t GrantedSpiritOffBit = NumSkillSlots;
 
 /** @brief Slots of the skill tray: the three mouse buttons, then six keys (Q, E, R, T, F and G by default). */
 enum class TraySlot : uint8_t {
@@ -730,6 +777,35 @@ struct MinionRevives {
 
 struct Poe2PlayerData;
 
+/**
+ * @brief A skill a held caster weapon grants (caster-weapons-plan-v2.md 6.8): its skill (empty while the base's grant
+ * isn't built yet), the level the weapon's item level gives, and the hand (0 left, 1 right).
+ */
+struct GrantedSkill {
+	SkillSlot skill {};
+	uint8_t baseLevel = 0;
+	uint8_t hand = 0;
+};
+
+/** @brief The granted skills' counters and timers (caster-weapons-plan-v2.md 6.12; not saved). */
+struct GrantedRuntime {
+	/** @brief Critical Bolt's casts since its last double hit. */
+	uint8_t criticalCasts = 0;
+	/** @brief Chiming Bolt's casts since its last Sigil of Power. */
+	uint8_t chimingCasts = 0;
+	/** @brief The Sigil of Power: game ticks left, and the tile it lies on. */
+	uint8_t sigilTicks = 0;
+	uint8_t sigilX = 0;
+	uint8_t sigilY = 0;
+	/** @brief Consecrated Ground's life regeneration: game ticks left, and the raw life still to give. */
+	uint8_t regenTicks = 0;
+	int32_t regenRaw = 0;
+	/** @brief The per-target granted skills' casts, counted from 1, and each recent cast's first monster hit. */
+	uint16_t castSerial = 0;
+	std::array<uint16_t, 4> castFirstSerial {};
+	std::array<int16_t, 4> castFirst {};
+};
+
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
 
@@ -758,6 +834,10 @@ struct Poe2PlayerData {
 	uint8_t liftedFlaskCharges = 0;
 	/** @brief Skill gems socketed in the Skills panel. */
 	std::array<SkillSlot, NumSkillSlots> skillSlots {};
+	/** @brief The skills the held caster weapons grant, at most one a hand (not saved: CalcPlrItemVals fills it). */
+	std::array<GrantedSkill, 2> granted {};
+	/** @brief The granted skills' counters and timers (not saved). */
+	GrantedRuntime grantedState {};
 	/** @brief Level of the gem in each Skills panel socket, 1 to 20. */
 	std::array<uint8_t, NumSkillSlots> slotLevels {};
 	/**
@@ -766,7 +846,11 @@ struct Poe2PlayerData {
 	 */
 	std::array<std::array<SkillSlot, MaxSupportSockets>, NumSkillSlots> metaSkills {};
 	std::array<std::array<uint8_t, MaxSupportSockets>, NumSkillSlots> metaSkillLevels {};
-	/** @brief Spirit gems switched on with a right-click in the Skills panel, one bit per socket; an off gem reserves nothing. */
+	/**
+	 * @brief Spirit gems switched on with a right-click in the Skills panel, one bit per socket; an off gem reserves
+	 * nothing. Bits 12 and 13 are the other way round: set, the main or off hand's granted Spirit skill is off
+	 * (grantedOff), so every hero saved before it starts with them on.
+	 */
 	uint16_t spiritGemsOn = 0;
 	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
 	uint8_t spiritSkulls = 0;
@@ -977,6 +1061,8 @@ struct Poe2PlayerData {
 		manaFlaskRaw = 0;
 		manaFlaskTicks = 0;
 		skillSlots.fill({});
+		granted = {};
+		grantedState = {};
 		slotLevels.fill(1);
 		for (auto &skills : metaSkills)
 			skills.fill({});
@@ -1163,6 +1249,19 @@ struct Poe2PlayerData {
 		return socket < NumSkillSlots && ((spiritGemsOn >> socket) & 1U) != 0;
 	}
 
+	/** @brief Whether the Spirit skill the sceptre in a hand (0 main, 1 off) grants is switched off in the Skills panel. */
+	[[nodiscard]] bool grantedOff(int hand) const
+	{
+		return hand >= 0 && hand < 2 && ((spiritGemsOn >> (GrantedSpiritOffBit + static_cast<size_t>(hand))) & 1U) != 0;
+	}
+
+	/** @brief Switches the Spirit skill the sceptre in a hand grants off, or back on. */
+	void toggleGranted(int hand)
+	{
+		if (hand >= 0 && hand < 2)
+			spiritGemsOn ^= static_cast<uint16_t>(1U << (GrantedSpiritOffBit + static_cast<size_t>(hand)));
+	}
+
 	/** @brief The Skills panel row and socket of the meta gem the skill is inside, if it is. */
 	[[nodiscard]] std::optional<std::pair<size_t, size_t>> metaSocketOf(SkillSlot skill) const
 	{
@@ -1192,6 +1291,57 @@ struct Poe2PlayerData {
 	[[nodiscard]] int skillLevel(SpellID spell) const { return skillLevel(SkillSlot::ForSpell(spell)); }
 	[[nodiscard]] int skillLevel(WeaponSkill skill) const { return skillLevel(SkillSlot::ForAttack(skill)); }
 	[[nodiscard]] int skillLevel(PersistentSkill skill) const { return skillLevel(SkillSlot::ForPersistent(skill)); }
+
+	/**
+	 * @brief Level a held caster weapon grants the skill at: its item level's gem level plus what gear adds; 0 if no held
+	 * weapon grants it.
+	 */
+	[[nodiscard]] int grantedLevel(SkillSlot skill) const
+	{
+		if (skill.isEmpty())
+			return 0;
+		for (const GrantedSkill &entry : granted) {
+			if (entry.baseLevel > 0 && entry.skill == skill)
+				return std::clamp(entry.baseLevel + ItemSkillLevelBonus(*this, skill), 1, static_cast<int>(MaxGemLevel));
+		}
+		return 0;
+	}
+
+	/** @brief Whether a held caster weapon grants the skill. */
+	[[nodiscard]] bool grants(SkillSlot skill) const
+	{
+		if (skill.isEmpty())
+			return false;
+		for (const GrantedSkill &entry : granted) {
+			if (entry.baseLevel > 0 && entry.skill == skill)
+				return true;
+		}
+		return false;
+	}
+
+	/**
+	 * @brief Whether the skill is a held weapon's granted attack with no gem of its own in the Skills panel: it takes the
+	 * default attack row's supports, as the left click it is (caster-weapons-plan-v2.md 6.7).
+	 */
+	[[nodiscard]] bool takesDefaultSupports(SkillSlot skill) const
+	{
+		if (skill.kind != SkillKind::Attack || !grants(skill))
+			return false;
+		for (const SkillSlot &socketed : skillSlots) {
+			if (socketed == skill)
+				return false;
+		}
+		return !metaSocketOf(skill);
+	}
+
+	/** @brief Level the skill is used at: the socketed gem's (skillLevel) if there is one, else a held weapon's grant. */
+	[[nodiscard]] int effectiveLevel(SkillSlot skill) const
+	{
+		const int socketed = skillLevel(skill);
+		return socketed > 0 ? socketed : grantedLevel(skill);
+	}
+	[[nodiscard]] int effectiveLevel(WeaponSkill skill) const { return effectiveLevel(SkillSlot::ForAttack(skill)); }
+	[[nodiscard]] int effectiveLevel(PersistentSkill skill) const { return effectiveLevel(SkillSlot::ForPersistent(skill)); }
 };
 
 } // namespace devilution
