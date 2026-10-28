@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
+#include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
 #include "missiles.h"
@@ -50,6 +51,7 @@ public:
 		LoadMissileData();
 	}
 
+public:
 	static Item &PutInBelt(Player &player, size_t slot, std::string_view name)
 	{
 		for (size_t i = 0; i < AllItemsList.size(); i++) {
@@ -198,6 +200,67 @@ TEST_F(Poe2CharmsTest, StoneCharmBreaksAStun)
 	EXPECT_EQ(charm._iCharges, 0);
 	player.poe2.stunImmuneTicks = 0;
 	EXPECT_FALSE(CharmPreventsStun(player));
+}
+
+/**
+ * @brief Puts a charm in the belt as the hero would (it starts empty), then fills it the way play does: from kills,
+ * with the belt checked every tick in between.
+ */
+Item &FillFromKills(Player &player, size_t slot, std::string_view name)
+{
+	ProcessFlaskRecovery(player);
+	Item &charm = Poe2CharmsTest::PutInBelt(player, slot, name);
+	ProcessFlaskRecovery(player);
+	EXPECT_EQ(charm._iCharges, 0) << name;
+	for (int kill = 0; kill < 10; kill++) {
+		GainFlaskCharges(player, 2);
+		ProcessFlaskRecovery(player);
+	}
+	EXPECT_EQ(charm._iCharges, 20) << name;
+	return charm;
+}
+
+TEST_F(Poe2CharmsTest, StoneCharmBreaksAStunInPlay)
+{
+	// Curtis 2026-10-28: Stone, Topaz and Bloodstone Charms in the belt, "charms 0" all run.
+	Player &player = *MyPlayer;
+	MyPlayerId = 0;
+	Item &charm = FillFromKills(player, 4, "Stone Charm");
+	// A hit for most of the hero's life stuns them nearly always: the charm breaks it.
+	for (int i = 0; i < 20 && charm._iCharges > 0; i++) {
+		SetRndSeed(i);
+		StartPlrHit(player, Fixed26_6::fromInt(90), false);
+	}
+	EXPECT_EQ(charm._iCharges, 0);
+	EXPECT_GT(player.poe2.stunImmuneTicks, 0);
+	EXPECT_NE(player._pmode, PM_GOTHIT);
+}
+
+TEST_F(Poe2CharmsTest, TopazCharmAnswersALightningHitInPlay)
+{
+	Player &player = *MyPlayer;
+	MyPlayerId = 0;
+	Item &charm = FillFromKills(player, 4, "Topaz Charm");
+	bool blocked = false;
+	for (int i = 0; i < 20 && charm._iCharges > 0; i++) {
+		SetRndSeed(i);
+		player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+		PlayerMHit(player, nullptr, 0, 5, 5, MissileID::LightningBow, DamageType::Lightning, false, DeathReason::MonsterOrTrap, &blocked);
+	}
+	EXPECT_EQ(charm._iCharges, 0);
+	EXPECT_GT(player.poe2.resistCharmTicks[1], 0);
+}
+
+TEST_F(Poe2CharmsTest, BloodstoneCharmCatchesLowLifeInPlay)
+{
+	Player &player = *MyPlayer;
+	MyPlayerId = 0;
+	Item &charm = FillFromKills(player, 4, "Bloodstone Charm");
+	ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromInt(77));
+	ASSERT_EQ(player._pHitPoints.whole(), 23);
+	ProcessCharms(player);
+	EXPECT_EQ(charm._iCharges, 0);
+	EXPECT_EQ(player._pHitPoints.whole(), 53);
 }
 
 TEST_F(Poe2CharmsTest, GoldenCharmSpendsAllItsCharges)
