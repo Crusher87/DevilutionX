@@ -123,7 +123,7 @@ const TableSkillData Table[] = {
 	{ WS::IceBarrage, "Ray of Frost", "A rapid stream of ice shards", 11, 14, TW::None, 1, Stream, 70, 8, 0, 0, 2, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::FrozenOrb, "Frozen Orb", "An orb of frost bursts at the target into a ring of shards", 13, 22, TW::None, 1, Zone, 70, 16, 0, 0, 0, 15, DT::Magic, MissileID::BlueFlare, MG::BlueFlareExplosion, TF_Spell, TableZone::ShardRing, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
 	// Arcane
-	{ WS::Haunt, "Haunt", "A spirit drains an enemy and moves on to the next when it dies", 3, 8, TW::None, 1, Curse, 150, 0, 0, 100, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::Haunt, "Haunt", "A spirit drains the enemy over time. When it dies, the spirit jumps to the nearest enemy.", 3, 8, TW::None, 1, Curse, 150, 0, 0, 100, 0, 0, DT::Physical, MissileID::Null, MG::BoneSpirit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	{ WS::LocustSwarm, "Locust Swarm", "A plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 120, 0, 1, 100, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
 	{ WS::CorpseExplosion, "Corpse Explosion", "Blows up a corpse near the target, burning everything around it", 9, 10, TW::None, 1, CorpseBurst, 50, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::SoulHarvest, "Soul Harvest", "Takes the souls of nearby corpses: 3% more damage each, up to 10, for 10 seconds", 11, 10, TW::None, 1, SoulHarvest, Flat, 10, 4, 200, 0, 0, DT::Physical, MissileID::Null, MG::Resurrect, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Resurrect), TableCurve::Boneshatter, 100 },
@@ -1253,6 +1253,11 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 	if (next.size() > jumps)
 		next.resize(jumps);
 	const uint8_t ticks = haunt ? state.hauntTicks : state.locustTicks;
+	// Haunt is a spirit, not a wound (Curtis 2026-10-28: "is it a bleed skill, or a ghost?"): it leaves the body and
+	// shows up on the next one.
+	const MissileGraphicID look = haunt ? MissileGraphicID::BoneSpirit : MissileGraphicID::BloodHit;
+	if (haunt && !next.empty())
+		AddVisualEffect(from, look);
 	for (Monster *other : next) {
 		Poe2MonsterState &target = other->poe2;
 		(haunt ? target.hauntTicks : target.locustTicks) = ticks;
@@ -1261,7 +1266,7 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 		target.bleedSource = state.bleedSource;
 		target.bleedSkill = state.bleedSkill;
 		other->tag(player);
-		AddVisualEffect(other->position.tile, MissileGraphicID::BloodHit);
+		AddVisualEffect(other->position.tile, look, haunt ? 2 : 0);
 	}
 }
 

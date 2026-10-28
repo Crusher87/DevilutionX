@@ -1023,8 +1023,9 @@ void ProcessUniqueMonsterAilments(Monster &monster)
 		SpreadIgnite(monster);
 	if (state.bleedTicks > 0) {
 		state.bleedTicks--;
+		// A haunted monster shows its spirit, not a wound.
 		if (state.bleedTicks % 10 == 0)
-			AddVisualEffect(monster.position.tile, MissileGraphicID::RedFlareExplosion);
+			AddVisualEffect(monster.position.tile, state.hauntTicks > 0 ? MissileGraphicID::BoneSpirit : MissileGraphicID::RedFlareExplosion);
 		// Only the player who caused the bleeding applies its damage, which the game then syncs.
 		if (state.bleedSource >= 0 && state.bleedSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
 			// Haunt's and Locust Swarm's bleeding is their own damage: the play log credits it to them.
