@@ -109,6 +109,12 @@ enum class ModSlot : uint8_t {
 	Ruby,
 	Emerald,
 	Sapphire,
+	/**
+	 * The staves and sceptres from before the caster weapons rework (and Diablo's staves): every family they rolled
+	 * before lists these, so they keep their pools. Staff, Wand and Sceptre mean the rework's new bases.
+	 */
+	LegacyStaff,
+	LegacySceptre,
 	Count,
 };
 

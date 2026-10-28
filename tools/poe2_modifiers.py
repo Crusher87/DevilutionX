@@ -76,7 +76,34 @@ FAMILIES = {
 	'jewel_damage_pct': ('DamagePercent', 100, 100, 'Brutal'),
 	'jewel_attack_speed': ('AttackSpeed', 100, 100, 'of Alacrity'),
 	'jewel_cast_speed': ('CastSpeed', 100, 100, 'of Enchanting'),
+	'item_rarity': ('ItemRarity', 100, 100, 'of Plunder'),
 }
+
+# Tiers the game sets apart from the bundle's: family id -> [(tier, item level, weight, min1, max1, min2, max2)].
+TIER_OVERRIDES = {
+	# The Magic Find suffix: three tiers that start low (loot plan).
+	'item_rarity': [(1, 40, 420, 15, 18, 0, 0), (2, 24, 560, 11, 14, 0, 0), (3, 3, 640, 6, 10, 0, 0)],
+}
+
+# Families the bundle doesn't have, after the jewel families: the family row and its tiers.
+EXTRA_FAMILIES = [
+	(['item_rarity_prefix', 'Item Rarity', "Magpie's", 'prefix', 'item_rarity_prefix', 'rarity', 'helmet,ring,amulet', '', '',
+	  '{0}% increased Rarity of Items found', 'ItemRarity', '100', '100', 'true', '100', '100'],
+	 [(1, 47, 360, 16, 19, 0, 0), (2, 29, 520, 12, 15, 0, 0), (3, 10, 620, 8, 11, 0, 0)]),
+]
+
+# The caster weapons rework: the slots staff and sceptre now mean its new bases, which roll families of their own.
+# Every family from before keeps the staves and sceptres saved before it (the legacy slots), and none rolls on a wand.
+LEGACY_SLOTS = {'staff': 'legacy_staff', 'sceptre': 'legacy_sceptre', 'wand': None}
+
+
+def legacy_slots(slots):
+	out = []
+	for slot in slots:
+		mapped = LEGACY_SLOTS.get(slot, slot)
+		if mapped is not None:
+			out.append(mapped)
+	return out
 
 # The scales before step 10b, for items saved before it: family id -> (scale of the first stat, of the second).
 # Families missing here had the scales they have now.
@@ -135,7 +162,7 @@ def main():
 				conflicts.append(b)
 			elif fid == b:
 				conflicts.append(a)
-		slots = SLOTS.get(fid, list(dict.fromkeys(family['valid_slots'])))
+		slots = legacy_slots(SLOTS.get(fid, list(dict.fromkeys(family['valid_slots']))))
 		family_rows.append([
 			fid,
 			game_text(family['name'], effect),
@@ -154,6 +181,10 @@ def main():
 			str(legacy1),
 			str(legacy2),
 		])
+		if fid in TIER_OVERRIDES:
+			for row in TIER_OVERRIDES[fid]:
+				tier_rows.append([fid] + [str(v) for v in row])
+			continue
 		tiers = sorted(family['tiers'], key=lambda t: int(t['tier'][1:]))
 		for tier in tiers:
 			number = int(tier['tier'][1:])
@@ -174,6 +205,11 @@ def main():
 	for fid, name, word, side, slots, template, effect, lo, hi in JEWEL_FAMILIES:
 		family_rows.append([fid, name, word, side, fid, 'jewel', slots, '', '', template, effect, '100', '100', 'true', '100', '100'])
 		tier_rows.append([fid, '1', '1', str(JEWEL_WEIGHT), str(lo), str(hi), '0', '0'])
+
+	for row, tiers in EXTRA_FAMILIES:
+		family_rows.append(row)
+		for tier in tiers:
+			tier_rows.append([row[0]] + [str(v) for v in tier])
 
 	write(os.path.join(OUT_DIR, 'modifier_families.tsv'),
 	      ['id', 'name', 'word', 'side', 'group', 'tags', 'slots', 'baseTags', 'conflicts', 'template', 'effect', 'scale1', 'scale2', 'enabled', 'legacyScale1', 'legacyScale2'],

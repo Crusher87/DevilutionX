@@ -347,7 +347,8 @@ TEST_F(Poe2ModifiersTest, StavesRollSpellDamage)
 	const ModFamily &family = ModifierFamilies()[*index];
 	EXPECT_TRUE(family.enabled);
 	EXPECT_EQ(family.effect, ModEffect::SpellDamage);
-	EXPECT_EQ(family.slots, 1U << static_cast<uint32_t>(ModSlot::Staff));
+	// The staves from before the caster weapons rework (its new staves roll families of their own).
+	EXPECT_EQ(family.slots, 1U << static_cast<uint32_t>(ModSlot::LegacyStaff));
 
 	const _item_indexes base = FindBase("Quick Pilgrim Staff");
 	ASSERT_NE(base, IDI_GOLD);

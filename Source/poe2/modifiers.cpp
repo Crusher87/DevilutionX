@@ -14,6 +14,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/player_data.hpp"
 #include "poe2/uniques.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "tables/spelldat.h"
 #include "utils/format.hpp"
@@ -34,7 +35,8 @@ bool UseLegacyScales = false;
 constexpr std::array<std::string_view, static_cast<size_t>(ModSlot::Count)> SlotNames = {
 	"helmet", "body_armour", "gloves", "boots", "belt", "shield", "focus", "quiver", "ring", "amulet",
 	"one_hand_melee", "two_hand_melee", "bow", "crossbow", "spear", "quarterstaff", "flail", "claw", "dagger",
-	"wand", "staff", "sceptre", "jewel", "life_flask", "mana_flask", "charm", "ruby", "emerald", "sapphire"
+	"wand", "staff", "sceptre", "jewel", "life_flask", "mana_flask", "charm", "ruby", "emerald", "sapphire",
+	"legacy_staff", "legacy_sceptre"
 };
 
 std::optional<int> ParseInt(std::string_view text)
@@ -356,10 +358,28 @@ std::optional<ModSlot> ItemModSlot(const Item &item)
 	case ItemType::Bow:
 		return shortName == "Crossbow" ? ModSlot::Crossbow : ModSlot::Bow;
 	case ItemType::Staff:
-		return shortName == "Quarterstaff" ? ModSlot::Quarterstaff : ModSlot::Staff;
 	case ItemType::Mace:
-		if (shortName == "Sceptre")
+		// The caster weapons rework's kinds: its new bases roll their own pools, the older staves and sceptres theirs.
+		switch (WeaponKindOf(item)) {
+		case WeaponKind::Quarterstaff:
+			return ModSlot::Quarterstaff;
+		case WeaponKind::CasterStaff:
+			return ModSlot::Staff;
+		case WeaponKind::Wand:
+			return ModSlot::Wand;
+		case WeaponKind::Sceptre:
 			return ModSlot::Sceptre;
+		case WeaponKind::LegacyStaff:
+			return ModSlot::LegacyStaff;
+		case WeaponKind::LegacySceptre:
+			return ModSlot::LegacySceptre;
+		default:
+			break;
+		}
+		if (item._itype == ItemType::Staff)
+			return shortName == "Quarterstaff" ? ModSlot::Quarterstaff : ModSlot::LegacyStaff;
+		if (shortName == "Sceptre")
+			return ModSlot::LegacySceptre;
 		return twoHanded ? ModSlot::TwoHandMelee : ModSlot::OneHandMelee;
 	case ItemType::Sword:
 		if (shortName == "Dagger")

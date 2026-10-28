@@ -25,7 +25,8 @@ constexpr uint32_t SlotBit(ModSlot slot)
 
 constexpr uint32_t MartialSlots = SlotBit(ModSlot::OneHandMelee) | SlotBit(ModSlot::TwoHandMelee) | SlotBit(ModSlot::Bow) | SlotBit(ModSlot::Crossbow)
     | SlotBit(ModSlot::Spear) | SlotBit(ModSlot::Quarterstaff) | SlotBit(ModSlot::Flail) | SlotBit(ModSlot::Claw) | SlotBit(ModSlot::Dagger);
-constexpr uint32_t CasterSlots = SlotBit(ModSlot::Wand) | SlotBit(ModSlot::Staff) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::Focus);
+constexpr uint32_t CasterSlots = SlotBit(ModSlot::Wand) | SlotBit(ModSlot::Staff) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::Focus)
+    | SlotBit(ModSlot::LegacyStaff) | SlotBit(ModSlot::LegacySceptre);
 constexpr uint32_t ArmourSlots = SlotBit(ModSlot::Helmet) | SlotBit(ModSlot::BodyArmour) | SlotBit(ModSlot::Gloves) | SlotBit(ModSlot::Boots) | SlotBit(ModSlot::Shield) | SlotBit(ModSlot::Focus);
 
 // Bundle desecration_rules: the modifiers only desecration gives.
@@ -41,7 +42,7 @@ const std::array<DesecratedMod, static_cast<size_t>(DesecratedModId::Count)> Des
 	    { { { UniqueRule::ThirdHitCritChance, 50 }, { UniqueRule::OtherHitsLessCrit, 15 } } }, "Every third hit has +50% critical hit chance\nOther hits have -15% critical hit chance" },
 	{ DesecratedModId::RedPursuit, "Red Pursuit", false, SlotBit(ModSlot::Boots) | SlotBit(ModSlot::Gloves) | MartialSlots, 65, 20,
 	    { { { UniqueRule::BleedMovingDamage, 20 }, { UniqueRule::BleedStationaryLess, 10 } } }, "20% more damage against bleeding enemies while moving\n10% less while standing still" },
-	{ DesecratedModId::ChoirOfTeeth, "Choir of Teeth", true, SlotBit(ModSlot::Helmet) | SlotBit(ModSlot::BodyArmour) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::Focus) | SlotBit(ModSlot::Amulet), 65, 18,
+	{ DesecratedModId::ChoirOfTeeth, "Choir of Teeth", true, SlotBit(ModSlot::Helmet) | SlotBit(ModSlot::BodyArmour) | SlotBit(ModSlot::Sceptre) | SlotBit(ModSlot::LegacySceptre) | SlotBit(ModSlot::Focus) | SlotBit(ModSlot::Amulet), 65, 18,
 	    { { { UniqueRule::MinionLowLifeDamage, 25 }, { UniqueRule::LessMinionLife, 20 } } }, "Minions deal 25% more damage while below half life\nMinions have 20% less maximum life" },
 	{ DesecratedModId::HollowSaint, "Hollow Saint", true, ArmourSlots | MartialSlots | CasterSlots, 72, 14,
 	    { { { UniqueRule::None, 0 }, { UniqueRule::None, 0 } } }, "Augments in this item have 35% increased effect\nThis item has room for one modifier fewer" },
