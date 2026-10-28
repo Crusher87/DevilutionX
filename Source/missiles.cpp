@@ -916,8 +916,8 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 /** @brief The spell the hits of a missile being added are credited to in the play log (see Poe2MissileData::creditSpell). */
 SpellID NewMissileCreditSpell = SpellID::Invalid;
 /**
- * @brief POE2 Mashup: the rune whose damage percent and supports a missile being added keeps (Rune of Fire's burst,
- * see ProcessRune), or none.
+ * @brief POE2 Mashup: the missile whose damage percent and supports a missile being added keeps (a rune's burst, see
+ * ProcessRune, and a nova's balls, see ProcessNovaCommon), or none.
  */
 std::optional<Poe2MissileData> NewMissileInherit;
 
@@ -3702,9 +3702,10 @@ void ProcessRune(Missile &missile)
 
 		// The burst's hits are the rune's, not those of whatever was used last (the play log's credit).
 		NewMissileCreditSpell = missile.IsTrap() ? SpellID::Invalid : RuneSpell(missile._mitype);
-		// POE2 Mashup: Rune of Fire's burst keeps the rune's damage percent (its speed factor, gem curve and supports)
-		// and its supports (Curtis 2026-10-28). Rune of Nova's and Rune of Immolation's bursts still lose theirs.
-		if (gbIsPoe2 && !missile.IsTrap() && missile.sourceType() == MissileSource::Player && missile._mitype == MissileID::RuneOfFire)
+		// POE2 Mashup: the burst keeps the rune's damage percent (its speed factor, gem curve and supports) and its
+		// supports (Curtis 2026-10-28: Rune of Fire; Rune of Nova and Rune of Immolation as a bug fix, so the hits
+		// match the tooltip). Their novas pass them on to their balls (ProcessNovaCommon).
+		if (gbIsPoe2 && !missile.IsTrap() && missile.sourceType() == MissileSource::Player && IsAnyOf(missile._mitype, MissileID::RuneOfFire, MissileID::RuneOfNova, MissileID::RuneOfImmolation))
 			NewMissileInherit = missile.poe2;
 		AddMissile(position, position, dir, static_cast<MissileID>(missile.var1), TARGET_BOTH, missile._misource, missile._midam, missile._mispllvl);
 		NewMissileCreditSpell = SpellID::Invalid;
@@ -3803,6 +3804,10 @@ void ProcessNovaCommon(Missile &missile, MissileID projectileType)
 	constexpr std::array<WorldTileDisplacement, 9> quarterRadius = { { { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 }, { 3, 4 }, { 2, 4 }, { 1, 4 }, { 0, 4 } } };
 	// A rune's nova passes the rune's credit on to its projectiles.
 	NewMissileCreditSpell = missile.poe2.creditSpell;
+	// POE2 Mashup: the balls keep the cast's (or the rune's) damage percent and supports, as the tooltip counts them;
+	// they started at 100%.
+	if (gbIsPoe2 && !missile.IsTrap() && missile.sourceType() == MissileSource::Player)
+		NewMissileInherit = missile.poe2;
 	for (const WorldTileDisplacement quarterOffset : quarterRadius) {
 		// This ends up with two missiles targeting offsets 4,0, 0,4, -4,0, 0,-4.
 		const std::array<WorldTileDisplacement, 4> offsets { quarterOffset, quarterOffset.flipXY(), quarterOffset.flipX(), quarterOffset.flipY() };
@@ -3810,6 +3815,7 @@ void ProcessNovaCommon(Missile &missile, MissileID projectileType)
 			AddMissile(src, src + offset, dir, projectileType, en, id, dam, missile._mispllvl);
 	}
 	NewMissileCreditSpell = SpellID::Invalid;
+	NewMissileInherit = std::nullopt;
 	missile.duration--;
 	if (missile.duration == 0)
 		missile._miDelFlag = true;
