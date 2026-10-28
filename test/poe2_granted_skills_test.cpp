@@ -236,7 +236,8 @@ struct GrantRow {
 constexpr GrantRow PlainGrants[] = {
 	{ "Gelid Staff", WeaponSkill::FreezingShards, false },
 	{ "Voltaic Staff", WeaponSkill::LightningBolt, false },
-	{ "Chiming Staff", WeaponSkill::ChimingBolt, false },
+	{ "Pyrophyte Staff", WeaponSkill::SolarOrb, false },
+	{ "Chiming Staff", WeaponSkill::ChimingBolt, false, GrantedRider::SigilEveryFourth },
 	{ "Rending Staff", WeaponSkill::Soulrend, false },
 	{ "Reaping Staff", WeaponSkill::Reap, false },
 	{ "Icicle Staff", WeaponSkill::FrostLance, false },
@@ -303,8 +304,8 @@ int HitsOnOneTarget(const TableSkillData &row)
 /**
  * @brief The skill's damage a second on one target that stays put, in percent of the spell base before its curve
  * (plan 7.1 and 7.3): a use's hits on it, with a bleed's extra, over the use's time. Zones count what lands on the one
- * target; a curse's damage over time, which doesn't stack on one target, and a storm that follows the hero count by
- * their own time.
+ * target; a curse's damage over time, which doesn't stack on one target, a storm that follows the hero and a granted
+ * zone, one at a time (Solar Orb), count by their own time.
  */
 double OneTargetPerSecond(const TableSkillData &row)
 {
@@ -315,6 +316,8 @@ double OneTargetPerSecond(const TableSkillData &row)
 		const int strikes = row.duration / std::max<int>(row.interval, 1);
 		switch (row.zone) {
 		case TableZone::Pulse:
+			if (IsGrantedTableSkill(row))
+				return row.damagePercent * 20.0 / std::max<int>(row.interval, 1);
 			perUse *= strikes;
 			break;
 		case TableZone::RandomStrikes: {
@@ -675,6 +678,104 @@ TEST_F(Poe2GrantedSkillsTest, TheStaffRidersWork)
 	ActiveMonsterCount = 0;
 }
 
+TEST_F(Poe2GrantedSkillsTest, SolarOrbIsOneAtATime)
+{
+	Player &player = *MyPlayer;
+	Hold(player, "Pyrophyte Staff", 70);
+	Target();
+	const TableSkillData &row = *FindTableSkill(WeaponSkill::SolarOrb);
+	EXPECT_EQ(row.shape, TableShape::Zone);
+	EXPECT_EQ(row.zone, TableZone::Pulse);
+	EXPECT_EQ(row.radius, 1);
+	EXPECT_EQ(row.interval, 28);
+	EXPECT_EQ(row.duration, 200);
+	EXPECT_EQ(row.type, DamageType::Fire);
+	EXPECT_TRUE(IsRangedGrantedSkill(WeaponSkill::SolarOrb));
+	CastAndCollect(player);
+	EXPECT_EQ(SkillZoneCount(), 1U);
+	// A second orb replaces the first, even with Legion, which adds a zone to other skills.
+	player.poe2.defaultSupports[0] = SupportGem::Legion;
+	player._pMana = player._pManaBase = Fixed26_6::fromInt(100);
+	Stand(player);
+	player._pMana = player._pManaBase = Fixed26_6::fromInt(100);
+	CastAndCollect(player);
+	EXPECT_EQ(SkillZoneCount(), 1U);
+	player.poe2.defaultSupports.fill(SupportGem::None);
+	// It pulses every 1.4 seconds for its 10: 8 pulses.
+	int pulses = 0;
+	for (int tick = 0; tick < 400 && SkillZoneCount() > 0; tick++) {
+		const size_t before = Missiles.size();
+		ProcessSkillZones(player);
+		if (Missiles.size() > before)
+			pulses++;
+	}
+	EXPECT_EQ(pulses, 8);
+}
+
+TEST_F(Poe2GrantedSkillsTest, ChimingBoltLeavesASigilEveryFourthCast)
+{
+	Player &player = *MyPlayer;
+	LoadMonsters();
+	Hold(player, "Chiming Staff", 70);
+	Target();
+	Monster &monster = PlaceMonster(1, { 25, 25 }, false);
+	const int outside = UniqueSpellHitPercent(player, monster, DamageType::Lightning);
+	for (int cast = 1; cast < SigilEvery; cast++) {
+		CastAndCollect(player);
+		Stand(player);
+		EXPECT_EQ(player.poe2.grantedState.sigilTicks, 0);
+	}
+	CastAndCollect(player);
+	EXPECT_EQ(player.poe2.grantedState.sigilTicks, SigilTicks);
+	EXPECT_EQ(player.poe2.grantedState.chimingCasts, 0);
+	EXPECT_EQ(player.poe2.grantedState.sigilX, player.position.tile.x);
+	EXPECT_EQ(player.poe2.grantedState.sigilY, player.position.tile.y);
+	// +20% spell damage while the hero stands in it: bolts (the spell hit rules) and bursts (table spell hits).
+	EXPECT_EQ(SigilSpellDamagePercent(player), SigilSpellDamagePercentInside);
+	EXPECT_EQ(SigilSpellDamagePercentInside, 120);
+	EXPECT_EQ(UniqueSpellHitPercent(player, monster, DamageType::Lightning), outside * 120 / 100);
+	player.position.tile = { 20 + SigilRadius + 1, 20 };
+	EXPECT_EQ(SigilSpellDamagePercent(player), 100);
+	player.position.tile = { 20 + SigilRadius, 20 };
+	EXPECT_EQ(SigilSpellDamagePercent(player), SigilSpellDamagePercentInside);
+	// It lasts 4 seconds, and stays behind on a new level.
+	for (int tick = 0; tick < SigilTicks; tick++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(SigilSpellDamagePercent(player), 100);
+	player.poe2.grantedState.sigilTicks = SigilTicks;
+	ClearSkillZones();
+	EXPECT_EQ(player.poe2.grantedState.sigilTicks, 0);
+	ActiveMonsterCount = 0;
+}
+
+TEST_F(Poe2GrantedSkillsTest, AreaSupportsWidenTheNovasByATile)
+{
+	// The skill-balance review: Feast of Flesh's 2% life and mana a kill is fine at radius 2; these are the widest
+	// radii the best pair of supports gives each nova.
+	Player &player = *MyPlayer;
+	for (const WeaponSkill skill : { WeaponSkill::FeastOfFlesh, WeaponSkill::ConsecratedGround, WeaponSkill::EnervatingNova }) {
+		const SkillSlot slot = SkillSlot::ForAttack(skill);
+		player.poe2.granted[0] = { slot, 1, 0 };
+		const int radius = FindTableSkill(skill)->radius;
+		int widest = radius;
+		for (int a = 1; a < static_cast<int>(SupportGem::Count); a++) {
+			for (int b = a + 1; b < static_cast<int>(SupportGem::Count); b++) {
+				const auto first = static_cast<SupportGem>(a);
+				const auto second = static_cast<SupportGem>(b);
+				if (!SupportGemCanSupport(first, slot) || !SupportGemCanSupport(second, slot) || SupportsConflict(first, second))
+					continue;
+				player.poe2.defaultSupports[0] = first;
+				player.poe2.defaultSupports[1] = second;
+				widest = std::max(widest, SupportAreaRadius(player, slot, radius));
+			}
+		}
+		player.poe2.defaultSupports.fill(SupportGem::None);
+		std::printf("%s: radius %d, %d with supports\n", std::string(WeaponSkillName(skill)).c_str(), radius, widest);
+		EXPECT_LE(widest, radius + 1) << WeaponSkillName(skill);
+	}
+	player.poe2.granted = {};
+}
+
 TEST_F(Poe2GrantedSkillsTest, CriticalBoltDoublesEveryFifthCast)
 {
 	Player &player = *MyPlayer;
@@ -720,6 +821,7 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		{ WeaponSkill::CriticalBolt, 34, 750, 54 }, // on average
 		{ WeaponSkill::WitheringRay, 9, 750, 53 }, // 48 with Wither
 		{ WeaponSkill::EchoingBlast, 14, 900, 25 }, // with the echo's 60%
+		{ WeaponSkill::SolarOrb, 25, 900, 18 }, // a pulse every 1.4 seconds, one orb at a time
 		{ WeaponSkill::VolatileBolt, 40, 800, 50 },
 		{ WeaponSkill::GalvanicBolt, 34, 650, 52 },
 		{ WeaponSkill::Decompose, 22, 800, 55 }, // the hit, then as much again over 4 seconds
@@ -921,9 +1023,7 @@ TEST_F(Poe2GrantedSkillsTest, TheGelidStaffGrantsFreezingShards)
 	EXPECT_FALSE(TryUseGrantedSkill(player));
 	gbIsMultiplayer = false;
 
-	// Staves whose skill isn't in yet, the Ashen Staff's Staff Bolt and a staff the hero can't use cast Staff Bolt.
-	Hold(player, "Pyrophyte Staff");
-	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffBolt);
+	// The Ashen Staff's Staff Bolt and a staff the hero can't use cast Staff Bolt.
 	Hold(player, "Ashen Staff");
 	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffBolt);
 	EXPECT_EQ(GrantedAttackSkill(player), WeaponSkill::None);

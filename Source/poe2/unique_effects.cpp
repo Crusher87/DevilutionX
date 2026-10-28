@@ -820,6 +820,8 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
 		state.bossEchoTicks = static_cast<uint8_t>(std::min(seconds * TicksPerSecond, 255));
 	}
+	// Chiming Bolt's Sigil of Power: +20% while the hero stands in it.
+	percent = percent * SigilSpellDamagePercent(player) / 100;
 	return percent * HiveHealthyPercent(player, monster) / 100;
 }
 

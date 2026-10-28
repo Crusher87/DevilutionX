@@ -280,6 +280,11 @@ constexpr int FeastRestorePercent = 2;
 /** @brief Echoing Blast goes off again this many ticks later, for this percent of the hit. */
 constexpr int EchoDelayTicks = 5;
 constexpr int EchoPercent = 60;
+/** @brief Chiming Bolt's every fourth cast leaves a Sigil of Power under the hero: 4 seconds, +20% spell damage inside. */
+constexpr int SigilEvery = 4;
+constexpr int SigilTicks = 4 * 20;
+constexpr int SigilRadius = 2;
+constexpr int SigilSpellDamagePercentInside = 120;
 /** @brief Consecrated Ground: 1% of maximum life a second for 4 seconds; a new cast starts it over, it doesn't stack. */
 constexpr int ConsecrateRegenPercentPerSecond = 1;
 constexpr int ConsecrateRegenTicks = 4 * 20;
@@ -322,6 +327,8 @@ void FireTableShot(Player &player, const TableSkillData &data, Point target, int
 void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster, int damage, bool isDamageShifted);
 /** @brief The rider of the granted skill whose hit is being dealt now (SupportHitSkill), or None. */
 GrantedRider HitGrantedRider();
+/** @brief The hero's spell hits in percent: SigilSpellDamagePercentInside while they stand in their Sigil of Power, else 100. */
+int SigilSpellDamagePercent(const Player &player);
 /** @brief Puts a table curse skill's curse on a monster, for the given part of its duration. */
 void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, int durationPercent);
 /**

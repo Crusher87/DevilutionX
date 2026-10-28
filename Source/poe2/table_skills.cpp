@@ -140,7 +140,8 @@ const TableSkillData Table[] = {
 	// tab; each hit is set for its cast time (skill_speed.tsv), so the rows take no damage_pct.
 	{ WS::FreezingShards, "Freezing Shards", "A fan of five shards of ice that chill what they hit", 0, 0, TW::None, 1, Projectiles, 18, 5, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::LightningBolt, "Lightning Bolt", "Lightning strikes the target and everything next to it", 0, 0, TW::None, 3, Burst, 22, 0, 1, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Lightning), TableCurve::Fireball, 312 },
-	{ WS::ChimingBolt, "Chiming Bolt", "A ringing bolt of lightning that pierces through enemies", 0, 0, TW::None, 3, Projectiles, 28, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChargedBolt), TableCurve::Fireball, 312 },
+	{ WS::ChimingBolt, "Chiming Bolt", "A ringing bolt of lightning that pierces through enemies; every fourth cast leaves a Sigil of Power under you", 0, 0, TW::None, 3, Projectiles, 28, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChargedBolt), TableCurve::Fireball, 312, GrantedRider::SigilEveryFourth },
+	{ WS::SolarOrb, "Solar Orb", "An orb of fire at the target that burns what's near it for 10 seconds; one at a time", 0, 0, TW::None, 2, Zone, 25, 0, 1, 200, 28, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell | TF_Granted, TableZone::Pulse, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Fireball), TableCurve::Fireball, 312 },
 	{ WS::Soulrend, "Soulrend", "A bolt that tears through enemies and leaves them bleeding", 0, 0, TW::None, 1, Projectiles, 17, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted | TF_Pierce | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 	{ WS::Reap, "Reap", "A bloody scythe sweeps the target and everything next to it", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::FrostLance, "Frost Lance", "A lance of ice that pierces through enemies and chills them", 0, 0, TW::None, 1, Projectiles, 30, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Elemental), TableCurve::Fireball, 312 },
@@ -269,9 +270,10 @@ void SpellHitMonster(const Player &player, Monster &monster, DamageType type, Fi
 {
 	if (&player != MyPlayer || !CanHit(monster) || damage <= 0)
 		return;
-	// The Sickness Road pact reaches table spells too: its melee bridge, and less against a healthy monster.
+	// The Sickness Road pact reaches table spells too: its melee bridge, and less against a healthy monster. So does
+	// the Sigil of Power's +20%.
 	if (source == AilmentSource::Spell)
-		damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * SicknessSpellHitPercent(player, monster) / 100, INT32_MAX / 2)));
+		damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * SicknessSpellHitPercent(player, monster) / 100 * SigilSpellDamagePercent(player) / 100, INT32_MAX / 2)));
 	// Leoric's Road: a hit puts a monster still rising down for good.
 	if (TryPutDownRisen(player, monster)) {
 		monster.tag(player);
@@ -432,6 +434,9 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 	zone.counter = 0;
 	zone.damage = FixedDamage(player, data);
 	zone.radius = static_cast<int8_t>(std::min<int>(data.radius, INT8_MAX));
+	// A granted skill's zone (Solar Orb) is one at a time: a new one replaces the old.
+	if (IsGrantedTableSkill(data))
+		Zones.erase(std::remove_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }), Zones.end());
 	// Traps and sentries: only a few of each can be out at once; the oldest goes.
 	if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret)) {
 		const int limit = SupportZoneLimit(player, SkillSlot::ForAttack(data.skill), MaxPlacedZones);
@@ -829,6 +834,17 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	if (const uint8_t infusion = TakeInfusion(player, slot); infusion != 0) {
 		data.damagePercent = static_cast<int16_t>(std::min(data.damagePercent * (100 + InfusionDamagePercent) / 100, static_cast<int>(INT16_MAX)));
 		SkillBurst(player, target, std::max<int>(data.radius, 2), InfusionDamageType(infusion), Fixed26_6::fromRaw(FixedDamage(player, data).raw() / 2), MissileGraphicID::ApocalypseBoom);
+	}
+	// Chiming Bolt: every fourth cast leaves a Sigil of Power under the hero.
+	if (data.rider == GrantedRider::SigilEveryFourth) {
+		GrantedRuntime &state = player.poe2.grantedState;
+		if (++state.chimingCasts >= SigilEvery) {
+			state.chimingCasts = 0;
+			state.sigilTicks = static_cast<uint8_t>(SigilTicks);
+			state.sigilX = static_cast<uint8_t>(player.position.tile.x);
+			state.sigilY = static_cast<uint8_t>(player.position.tile.y);
+			vfx::Sigil(player.position.tile, SigilRadius, SigilTicks * gnTickDelay, LookOf(data));
+		}
 	}
 	// Critical Bolt: every fifth cast hits for double.
 	if (data.rider == GrantedRider::EveryFifthDouble) {
@@ -1289,8 +1305,10 @@ void ProcessSkillZones(Player &player)
 {
 	if (ShardSoundCooldown > 0)
 		ShardSoundCooldown--;
-	// Consecrated Ground's life, a tick's share at a time.
+	// Consecrated Ground's life, a tick's share at a time, and the Sigil of Power's time.
 	GrantedRuntime &granted = player.poe2.grantedState;
+	if (granted.sigilTicks > 0)
+		granted.sigilTicks = player.hasNoLife() || leveltype == DTYPE_TOWN ? 0 : granted.sigilTicks - 1;
 	if (granted.regenTicks > 0) {
 		if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
 			granted.regenTicks = 0;
@@ -1403,6 +1421,17 @@ void ProcessSkillZones(Player &player)
 void ClearSkillZones()
 {
 	Zones.clear();
+	// A new level: the Sigil of Power stays behind.
+	if (MyPlayer != nullptr)
+		MyPlayer->poe2.grantedState.sigilTicks = 0;
+}
+
+int SigilSpellDamagePercent(const Player &player)
+{
+	const GrantedRuntime &state = player.poe2.grantedState;
+	if (!gbIsPoe2 || state.sigilTicks == 0)
+		return 100;
+	return player.position.tile.ExactDistance(Point { state.sigilX, state.sigilY }) <= SigilRadius ? SigilSpellDamagePercentInside : 100;
 }
 
 size_t SkillZoneCount()

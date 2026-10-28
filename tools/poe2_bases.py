@@ -193,9 +193,7 @@ CASTER_BASES = [
 	('quarterstaff', 'quarterstaff_aegis_quarterstaff', 'WAR_STAFF', 'NONE', 'Fine Aegis Quarterstaff', 79, 65, 0, 50, 127, 58, 97, '', '', 140, 100, 'BlockChance|12|18|+{0}% to Block chance'),
 ]
 # Granted skills not built yet: their bases grant nothing until the skill exists (an unknown key is an error).
-PENDING_GRANTS = {
-	'SolarOrb',
-}
+PENDING_GRANTS = set()
 CASTER_CLASSES = {
 	'staff': ('Weapon', 'Two-handed', 'Staff', 'Staff'),
 	'wand': ('Weapon', 'One-handed', 'Mace', 'Wand'),
