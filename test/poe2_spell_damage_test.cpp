@@ -101,15 +101,17 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 120);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChainLightning), 400);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Elemental), 220);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Immolation), 390);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Nova), 480);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Immolation), 160);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Nova), 200);
 	EXPECT_EQ(SpellDamageHits(SpellID::Nova), 5);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Apocalypse), 130);
 	EXPECT_EQ(SpellDamagePercent(SpellID::BloodStar), 1100);
-	// Runes hit as their spell, but Rune of Fire has its own row (Curtis 2026-10-28: it got Fireball's 120%).
+	// Runes hit as their spell, but Rune of Fire, Rune of Nova and Rune of Immolation have their own rows (Curtis
+	// 2026-10-28: Rune of Fire got Fireball's 120%; Q26 cut Nova 480 -> 200, Immolation 390 -> 160 and gave their runes
+	// 110% and 150%).
 	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 280);
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 480);
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfImmolation), 390);
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 110);
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfImmolation), 150);
 	// A spell with no row keeps the plain base.
 	EXPECT_EQ(SpellDamagePercent(SpellID::Teleport), 100);
 	EXPECT_EQ(SpellDamageHits(SpellID::Teleport), 1);
@@ -405,16 +407,16 @@ TEST_F(Poe2SpellDamageTest, NovaBallsHitForTheTooltipsPercent)
 	};
 	// The gem's percent is its curve (100% at gem 1, 312% at gem 20) times its damage_pct (Nova 156, Immolation 187,
 	// runes 112). A ball's roll is a fifth of the spell base (Magic 80: 13-22 at gem 1, 32-41 at gem 20) times the row
-	// (Nova 480%, Immolation 390%; runes read their spell's), then the gem's percent.
+	// (Nova 200%, Immolation 160%, Rune of Nova 110%, Rune of Immolation 150%), then the gem's percent.
 	constexpr Case Cases[] = {
-		{ SpellID::Nova, MissileID::Nova, MissileID::NovaBall, 1, 156, 18, 32 },
-		{ SpellID::Nova, MissileID::Nova, MissileID::NovaBall, 20, 486, 145, 189 },
-		{ SpellID::Immolation, MissileID::Immolation, MissileID::FireballBow, 1, 187, 18, 31 },
-		{ SpellID::Immolation, MissileID::Immolation, MissileID::FireballBow, 20, 583, 139, 180 },
-		{ SpellID::RuneOfNova, MissileID::Nova, MissileID::NovaBall, 1, 112, 13, 23 },
-		{ SpellID::RuneOfNova, MissileID::Nova, MissileID::NovaBall, 20, 349, 104, 136 },
-		{ SpellID::RuneOfImmolation, MissileID::Immolation, MissileID::FireballBow, 1, 112, 11, 19 },
-		{ SpellID::RuneOfImmolation, MissileID::Immolation, MissileID::FireballBow, 20, 349, 83, 108 },
+		{ SpellID::Nova, MissileID::Nova, MissileID::NovaBall, 1, 156, 7, 12 },
+		{ SpellID::Nova, MissileID::Nova, MissileID::NovaBall, 20, 486, 58, 77 },
+		{ SpellID::Immolation, MissileID::Immolation, MissileID::FireballBow, 1, 187, 7, 13 },
+		{ SpellID::Immolation, MissileID::Immolation, MissileID::FireballBow, 20, 583, 58, 75 },
+		{ SpellID::RuneOfNova, MissileID::Nova, MissileID::NovaBall, 1, 112, 2, 4 },
+		{ SpellID::RuneOfNova, MissileID::Nova, MissileID::NovaBall, 20, 349, 24, 31 },
+		{ SpellID::RuneOfImmolation, MissileID::Immolation, MissileID::FireballBow, 1, 112, 3, 6 },
+		{ SpellID::RuneOfImmolation, MissileID::Immolation, MissileID::FireballBow, 20, 349, 31, 41 },
 	};
 	for (const Case &c : Cases) {
 		const std::string label = "spell " + std::to_string(static_cast<int>(c.spell)) + " gem " + std::to_string(c.gemLevel);

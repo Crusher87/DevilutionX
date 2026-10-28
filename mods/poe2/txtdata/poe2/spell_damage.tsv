@@ -6,11 +6,13 @@ spell	ChargedBolt	120	1	0
 spell	Flash	110	1	0
 spell	Fireball	120	1	0
 spell	RuneOfFire	280	1	0
+spell	RuneOfNova	110	5	0
+spell	RuneOfImmolation	150	5	0
 spell	Elemental	220	2	0
 spell	ChainLightning	400	2	0
 spell	FlameWave	280	6	0
-spell	Immolation	390	5	0
-spell	Nova	480	5	0
+spell	Immolation	160	5	0
+spell	Nova	200	5	0
 spell	Apocalypse	130	1	0
 spell	BloodStar	1100	1	0
 attack	Spark	90	1	0
