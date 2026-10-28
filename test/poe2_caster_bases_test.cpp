@@ -5,6 +5,7 @@
  * the quarterstaves the bundle lacked, appended to the item table after every older row, and the Focused and Quick staves
  * and sceptres retired. The new staves, wands and sceptres hit for nothing.
  */
+#include <array>
 #include <bit>
 #include <optional>
 #include <set>
@@ -410,6 +411,53 @@ TEST_F(Poe2CasterBasesTest, EssencesAndProfaneModifiersOnRealNewWeapons)
 		EXPECT_TRUE(offered.contains(kind + "_maximum_mana")) << name;
 		if (slot != ModSlot::Sceptre)
 			EXPECT_TRUE(offered.contains(kind + "_cast_speed")) << name;
+	}
+}
+
+TEST_F(Poe2CasterBasesTest, DropBucketsByKind)
+{
+	const auto bucket = [](std::string_view name) { return EquipmentBucketOf(Row(name)); };
+	const auto kindBucket = [](KindBucket kind) { return FirstKindBucket + static_cast<size_t>(kind); };
+	EXPECT_EQ(bucket("Attuned Wand"), kindBucket(KindBucket::Wand));
+	EXPECT_EQ(bucket("Lupine Sceptre"), kindBucket(KindBucket::Sceptre));
+	EXPECT_EQ(bucket("Gelid Staff"), kindBucket(KindBucket::CasterStaff));
+	EXPECT_EQ(bucket("Fine Wrapped Quarterstaff"), kindBucket(KindBucket::Quarterstaff));
+	EXPECT_EQ(bucket("Wyrm Quarterstaff"), kindBucket(KindBucket::Quarterstaff));
+	EXPECT_EQ(bucket("Felled Greatclub"), static_cast<size_t>(ItemType::Mace));
+	EXPECT_EQ(bucket("Quick Bone Sceptre"), static_cast<size_t>(ItemType::Mace));
+	EXPECT_EQ(bucket("Focused Pilgrim Staff"), static_cast<size_t>(ItemType::Staff));
+	EXPECT_EQ(bucket("Shortsword"), static_cast<size_t>(ItemType::Sword));
+	EXPECT_EQ(EquipmentBucketWeight(static_cast<size_t>(ItemType::Mace)), 6);
+	EXPECT_EQ(EquipmentBucketWeight(kindBucket(KindBucket::Quarterstaff)), 6);
+	EXPECT_EQ(EquipmentBucketWeight(kindBucket(KindBucket::Wand)), 4);
+	EXPECT_EQ(EquipmentBucketWeight(kindBucket(KindBucket::Sceptre)), 3);
+	EXPECT_EQ(EquipmentBucketWeight(kindBucket(KindBucket::CasterStaff)), 4);
+
+	// 10,000 drops at area level 40: each bucket's share is its weight's share, within 2 points.
+	constexpr int Rolls = 10000;
+	std::array<int, EquipmentBucketCount> counts {};
+	SetRndSeed(12345);
+	for (int i = 0; i < Rolls; i++) {
+		const std::optional<_item_indexes> base = PickPoe2EquipmentBase(40, Poe2ItemLevel(40, 0));
+		ASSERT_TRUE(base.has_value());
+		counts[EquipmentBucketOf(*base)]++;
+	}
+	int total = 0;
+	for (size_t b = 0; b < counts.size(); b++) {
+		if (counts[b] > 0)
+			total += EquipmentBucketWeight(b);
+	}
+	for (const KindBucket kind : { KindBucket::Wand, KindBucket::Sceptre, KindBucket::CasterStaff, KindBucket::Quarterstaff })
+		EXPECT_GT(counts[kindBucket(kind)], 0) << static_cast<int>(kind);
+	EXPECT_GT(counts[static_cast<size_t>(ItemType::Mace)], 0);
+	// The retired Focused and Quick staves leave the Staff type nothing that drops.
+	EXPECT_EQ(counts[static_cast<size_t>(ItemType::Staff)], 0);
+	for (size_t b = 0; b < counts.size(); b++) {
+		if (counts[b] == 0)
+			continue;
+		const double share = 100.0 * counts[b] / Rolls;
+		const double want = 100.0 * EquipmentBucketWeight(b) / total;
+		EXPECT_NEAR(share, want, 2.0) << "bucket " << b;
 	}
 }
 

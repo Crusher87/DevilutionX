@@ -4676,15 +4676,19 @@ int Poe2BaseLevel(const ItemData &data, int itemLevel, int poe2ItemLevel)
 	return IsPoe2Jewellery(data) ? poe2ItemLevel : itemLevel;
 }
 
-/** @brief Picks a kind of equipment by its class weight, then one of its bases, favouring bases near the item level. */
+} // namespace
+
 std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLevel)
 {
-	// ItemType::None is -1, so the last real type sets the size.
-	std::array<int, static_cast<size_t>(ItemType::Amulet) + 1> classWeights {};
+	// A bucket per item type, then the caster weapons rework's kinds (EquipmentBucketOf); still one roll for the bucket
+	// and one for the base.
+	std::array<int, EquipmentBucketCount> classWeights {};
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
-		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, Poe2BaseLevel(data, itemLevel, poe2ItemLevel)))
-			classWeights[static_cast<size_t>(data.itype)] = EquipmentClassWeight(data.itype);
+		if (IsPoe2Equipment(data) && IsPoe2LootCandidate(i, Poe2BaseLevel(data, itemLevel, poe2ItemLevel))) {
+			const size_t bucket = EquipmentBucketOf(static_cast<int>(i));
+			classWeights[bucket] = EquipmentBucketWeight(bucket);
+		}
 	}
 	const int classTotal = std::accumulate(classWeights.begin(), classWeights.end(), 0);
 	if (classTotal == 0)
@@ -4701,7 +4705,7 @@ std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLe
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
 		const int level = Poe2BaseLevel(data, itemLevel, poe2ItemLevel);
-		if (static_cast<size_t>(data.itype) != type || !IsPoe2LootCandidate(i, level))
+		if (!IsPoe2Equipment(data) || !IsPoe2LootCandidate(i, level) || EquipmentBucketOf(static_cast<int>(i)) != type)
 			continue;
 		const int weight = data.dropRate * BaseRecencyPercent(level, data.iMinMLvl);
 		bases.emplace_back(static_cast<_item_indexes>(i), weight);
@@ -4715,6 +4719,8 @@ std::optional<_item_indexes> PickPoe2EquipmentBase(int itemLevel, int poe2ItemLe
 	}
 	return bases.back().first;
 }
+
+namespace {
 
 /**
  * @brief Picks among the loot candidates `isOkay` takes, by their drop rates; `weightPercent`, when given, scales each
