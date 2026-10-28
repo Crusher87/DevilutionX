@@ -667,6 +667,10 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryEnum<LootFilter> lootFilter;
 	/** @brief Current / max numbers above the life and mana globes, with Energy Shield and Spirit (POE2 Mashup). */
 	OptionEntryBoolean showLifeManaLevels;
+	/** @brief A small life bar with a thin mana bar under it over the hero (POE2 Mashup). */
+	OptionEntryBoolean heroMiniBar;
+	/** @brief The hero's mini bar shows Energy Shield over the top of the life bar (POE2 Mashup). */
+	OptionEntryBoolean heroMiniBarEnergyShield;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */

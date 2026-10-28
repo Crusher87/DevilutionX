@@ -84,6 +84,7 @@
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/hud_minions.hpp"
+#include "poe2/overhead_bars.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
@@ -621,6 +622,9 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const ClxSprite sprite = player.currentSprite();
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
+	// POE2 Mashup: the mini life bar over the hero is drawn later, with the UI.
+	if (gbIsPoe2 && &player == MyPlayer)
+		QueueHeroOverheadBar(player, spriteBufferPosition, sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
 	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
@@ -1612,6 +1616,8 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 #endif
 	DrawItemNameLabels(out);
+	if (gbIsPoe2)
+		DrawOverheadBars(out);
 	if (gbIsPoe2)
 		DrawMonsterBanner(out);
 	else
