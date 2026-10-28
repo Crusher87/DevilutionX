@@ -3812,11 +3812,22 @@ void ProcessNovaCommon(Missile &missile, MissileID projectileType)
 	// they started at 100%.
 	if (gbIsPoe2 && !missile.IsTrap() && missile.sourceType() == MissileSource::Player)
 		NewMissileInherit = missile.poe2;
+	// POE2 Mashup: a rune goes off under the monster that stepped on it, where all 36 balls start, and each ball hit it
+	// once before leaving the tile (36 hits; a cast's balls start under the hero). Only the tooltip's count of them do.
+	int startTileHits = 36;
+	if (gbIsPoe2 && IsAnyOf(missile.poe2.creditSpell, SpellID::RuneOfNova, SpellID::RuneOfImmolation))
+		startTileHits = SpellDamageHits(missile.poe2.creditSpell);
+	const int16_t startTileTargets = dMonster[src.x][src.y] ^ dPlayer[src.x][src.y];
+	int balls = 0;
 	for (const WorldTileDisplacement quarterOffset : quarterRadius) {
 		// This ends up with two missiles targeting offsets 4,0, 0,4, -4,0, 0,-4.
 		const std::array<WorldTileDisplacement, 4> offsets { quarterOffset, quarterOffset.flipXY(), quarterOffset.flipX(), quarterOffset.flipY() };
-		for (const WorldTileDisplacement offset : offsets)
-			AddMissile(src, src + offset, dir, projectileType, en, id, dam, missile._mispllvl);
+		for (const WorldTileDisplacement offset : offsets) {
+			Missile *ball = AddMissile(src, src + offset, dir, projectileType, en, id, dam, missile._mispllvl);
+			// Counts as already checked against what stands on the start tile (MoveMissileAndCheckMissileCol).
+			if (ball != nullptr && balls++ >= startTileHits)
+				ball->lastCollisionTargetHash = startTileTargets;
+		}
 	}
 	NewMissileCreditSpell = SpellID::Invalid;
 	NewMissileInherit = std::nullopt;

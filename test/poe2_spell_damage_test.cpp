@@ -739,5 +739,88 @@ TEST_F(Poe2SpellDamageTest, ElementalIsASlowHomingBlast)
 	Monsters[0] = {};
 }
 
+TEST_F(Poe2SpellDamageTest, ARunesNovaHitsTheMonsterOnItForTheTooltipsBalls)
+{
+	// Balance thread 2026-10-28: a rune goes off under the monster that stepped on it, where all 36 balls start, and
+	// each ball hit it once before leaving the tile: 36 hits where the tooltip counts 5. A cast's balls start under the
+	// hero, so they hit a monster only as they pass it.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	// How many balls hit a monster standing on monsterTile, from a rune under it or a cast from the hero.
+	const auto hitsOn = [&](bool rune, Point monsterTile, MissileID novaType) {
+		Missiles.clear();
+		SetRndSeed(3);
+		Monster &monster = Monsters[0];
+		monster = {};
+		monster.levelType = 0;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.mode = MonsterMode::Stand;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = monsterTile;
+		dMonster[monsterTile.x][monsterTile.y] = 1;
+		Missile *nova;
+		if (rune) {
+			Missile &r = Missiles.emplace_back();
+			r._mitype = novaType == MissileID::Nova ? MissileID::RuneOfNova : MissileID::RuneOfImmolation;
+			r._micaster = TARGET_MONSTERS;
+			r._misource = player.getId();
+			r._mispllvl = 1;
+			r._mlid = NO_LIGHT;
+			r.var1 = static_cast<int>(novaType);
+			r.position.tile = monsterTile;
+			ProcessRune(r);
+			nova = &Missiles.back();
+		} else {
+			nova = AddMissile(player.position.tile, monsterTile, Direction::South, novaType, TARGET_MONSTERS, player, 0, 1);
+		}
+		if (novaType == MissileID::Nova)
+			ProcessNova(*nova);
+		else
+			ProcessImmolation(*nova);
+		int hits = 0;
+		for (int tick = 0; tick < 100; tick++) {
+			for (Missile &ball : Missiles) {
+				if (ball._miDelFlag || IsNoneOf(ball._mitype, MissileID::NovaBall, MissileID::FireballBow))
+					continue;
+				// The test's map is open floor: a ball that leaves it is gone.
+				if (ball.position.tile.x < 31 || ball.position.tile.x > 58 || ball.position.tile.y < 31 || ball.position.tile.y > 58) {
+					ball._miDelFlag = true;
+					continue;
+				}
+				const Fixed26_6 before = monster.hitPoints;
+				if (ball._mitype == MissileID::NovaBall)
+					ProcessNovaBall(ball);
+				else
+					ProcessFireball(ball);
+				if (monster.hitPoints < before)
+					hits++;
+			}
+			monster.mode = MonsterMode::Stand;
+		}
+		dMonster[monsterTile.x][monsterTile.y] = 0;
+		return hits;
+	};
+	for (const MissileID novaType : { MissileID::Nova, MissileID::Immolation }) {
+		const std::string label = novaType == MissileID::Nova ? "Nova" : "Immolation";
+		// The rune's monster takes the tooltip's 5 balls (it took 36).
+		EXPECT_EQ(hitsOn(true, { 44, 44 }, novaType), 5) << label;
+		// A cast's balls are unchanged: more beside the hero, fewer further out.
+		EXPECT_EQ(hitsOn(false, { 41, 40 }, novaType), 8) << label;
+		EXPECT_EQ(hitsOn(false, { 41, 41 }, novaType), 5) << label;
+		EXPECT_EQ(hitsOn(false, { 42, 40 }, novaType), 4) << label;
+		EXPECT_EQ(hitsOn(false, { 44, 40 }, novaType), 2) << label;
+	}
+	Monsters[0] = {};
+	Missiles.clear();
+}
+
 } // namespace
 } // namespace devilution
