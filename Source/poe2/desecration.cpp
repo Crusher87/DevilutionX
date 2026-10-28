@@ -114,7 +114,7 @@ std::vector<Offer> OfferPool(const Item &item, bool prefix, uint32_t seed)
 	const int itemLevel = GetPoe2ItemLevel(item);
 	const Poe2Craft &craft = item._iPoe2Craft;
 	for (const ProfaneMod &profane : ProfaneMods) {
-		const std::optional<uint8_t> index = FindModifierFamily(profane.family);
+		const std::optional<uint8_t> index = FindFamilyForItem(profane.family, *slot);
 		if (!index || itemLevel < profane.minItemLevel)
 			continue;
 		const ModFamily &family = ModifierFamilies()[*index];

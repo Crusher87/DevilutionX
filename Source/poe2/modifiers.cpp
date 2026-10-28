@@ -329,6 +329,27 @@ std::optional<uint8_t> FindModifierFamily(std::string_view id)
 	return std::nullopt;
 }
 
+std::optional<uint8_t> FindFamilyForItem(std::string_view id, ModSlot slot)
+{
+	const std::optional<uint8_t> named = FindModifierFamily(id);
+	const uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
+	if (!named || (Families[*named].slots & slotBit) != 0)
+		return named;
+	// Only the rework's families stand in, and they list only its new slots, so no older item's result changes.
+	const ModEffect effect = Families[*named].effect;
+	for (size_t i = LegacyModFamilyCount; i < Families.size(); i++) {
+		if (Families[i].effect == effect && effect != ModEffect::None && (Families[i].slots & slotBit) != 0)
+			return static_cast<uint8_t>(i);
+	}
+	return named;
+}
+
+std::optional<uint8_t> FindFamilyForItem(std::string_view id, const Item &item)
+{
+	const std::optional<ModSlot> slot = ItemModSlot(item);
+	return slot ? FindFamilyForItem(id, *slot) : FindModifierFamily(id);
+}
+
 bool IsJewel(const Item &item)
 {
 	return !item.isEmpty() && item._iMiscId == IMISC_JEWEL;

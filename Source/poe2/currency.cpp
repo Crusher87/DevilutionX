@@ -494,7 +494,8 @@ std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8
 	case CurrencyOrb::Essence: {
 		const EssenceTier tier = static_cast<EssenceTier>((variant >> 4) & 3);
 		const Essence &essence = GetEssence(static_cast<EssenceKind>(variant & 0xF));
-		const std::optional<uint8_t> family = FindModifierFamily(essence.family);
+		// On the caster weapons rework's bases, the essence gives their family of the same effect.
+		const std::optional<uint8_t> family = FindFamilyForItem(essence.family, item);
 		if (!family) {
 			Fizzle(_("This essence does nothing."));
 			return false;

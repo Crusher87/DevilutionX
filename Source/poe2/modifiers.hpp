@@ -242,6 +242,13 @@ private:
 };
 const std::vector<ModFamily> &ModifierFamilies();
 std::optional<uint8_t> FindModifierFamily(std::string_view id);
+/**
+ * @brief The family an essence or a Profane modifier naming @p id gives an item of the slot: that family when it lists
+ * the slot (every item from before the caster weapons rework), else the rework's first family of the same effect that
+ * does (cast_speed on a wand: wand_cast_speed). With neither, the named family, which the slot can't take, as before.
+ */
+std::optional<uint8_t> FindFamilyForItem(std::string_view id, ModSlot slot);
+std::optional<uint8_t> FindFamilyForItem(std::string_view id, const Item &item);
 
 /** @brief Whether the item is a POE2 jewel, for the passive tree's jewel sockets. */
 bool IsJewel(const Item &item);

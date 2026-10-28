@@ -18,8 +18,10 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/crafting_items.hpp"
 #include "poe2/modifiers.hpp"
 #include "spells.h"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 namespace {
@@ -239,6 +241,63 @@ TEST_F(Poe2CasterAffixesTest, LegacyAndOtherPoolsDontChange)
 		for (const ModSlot slot : { ModSlot::Staff, ModSlot::Wand, ModSlot::Sceptre }) {
 			for (const Poe2ItemMod &mod : RollItemMods(slot, ModBaseElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed))
 				EXPECT_GT(mod.family, LegacyModFamilyCount) << seed;
+		}
+	}
+}
+
+std::string FamilyIdFor(std::string_view id, ModSlot slot)
+{
+	const std::optional<uint8_t> family = FindFamilyForItem(id, slot);
+	if (!family)
+		return "(none)";
+	const ModFamily &found = ModifierFamilies()[*family];
+	// The named family the slot can't take: the essence or Profane modifier can't go on such an item.
+	if ((found.slots & (1U << static_cast<uint32_t>(slot))) == 0)
+		return "(not this slot)";
+	return found.id;
+}
+
+TEST_F(Poe2CasterAffixesTest, EssencesAndProfaneModifiersFindTheNewSlotsFamilies)
+{
+	// The essences' families, then the Profane modifiers' (desecration.cpp ProfaneMods).
+	struct Case {
+		std::string_view id;
+		std::string_view staff;
+		std::string_view wand;
+		std::string_view sceptre;
+	};
+	const Case cases[] = {
+		{ "maximum_life", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "maximum_mana", "staff_maximum_mana", "wand_maximum_mana", "sceptre_maximum_mana" },
+		{ "fire_resistance", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "cold_resistance", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "lightning_resistance", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "local_increased_physical", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "attack_speed", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "cast_speed", "staff_cast_speed", "wand_cast_speed", "(not this slot)" },
+		{ "accuracy_rating", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "all_elemental_resistance", "(not this slot)", "(not this slot)", "(not this slot)" },
+		// A new sceptre has its own % Spirit instead (plan 6.4).
+		{ "spirit_flat", "(not this slot)", "(not this slot)", "(not this slot)" },
+		{ "minion_damage", "(not this slot)", "(not this slot)", "sceptre_ally_damage" },
+	};
+	for (const Case &c : cases) {
+		EXPECT_EQ(FamilyIdFor(c.id, ModSlot::Staff), c.staff) << c.id;
+		EXPECT_EQ(FamilyIdFor(c.id, ModSlot::Wand), c.wand) << c.id;
+		EXPECT_EQ(FamilyIdFor(c.id, ModSlot::Sceptre), c.sceptre) << c.id;
+	}
+	EXPECT_EQ(FamilyIdFor("movement_speed", ModSlot::Wand), "(not this slot)");
+	EXPECT_EQ(FindFamilyForItem("no_such_family", ModSlot::Wand), std::nullopt);
+
+	// Every essence names a family, and every item from before the rework gets exactly that family.
+	std::vector<std::string_view> ids { "movement_speed" };
+	for (int kind = 1; kind < static_cast<int>(EssenceKind::Count); kind++)
+		ids.push_back(GetEssence(static_cast<EssenceKind>(kind)).family);
+	for (const std::string_view id : ids) {
+		for (int slot = 0; slot < static_cast<int>(ModSlot::Count); slot++) {
+			if (IsAnyOf(static_cast<ModSlot>(slot), ModSlot::Staff, ModSlot::Wand, ModSlot::Sceptre))
+				continue;
+			EXPECT_EQ(FindFamilyForItem(id, static_cast<ModSlot>(slot)), FindModifierFamily(id)) << id << " slot " << slot;
 		}
 	}
 }
