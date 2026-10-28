@@ -577,12 +577,14 @@ int ListedManaCost(WeaponSkill skill)
 	case WeaponSkill::EmberFusillade:
 		return 16;
 	case WeaponSkill::Spark:
-		return 10;
+		// Curtis 2026-10-28: 10 to 6, a shotgun needs cheap casts (audit-casters-v3.md).
+		return 6;
 	case WeaponSkill::IceBolt:
 		// The Sorcerer's starter bolts (Firebolt, Ice Bolt, Holy Bolt, Charged Bolt) all cost 4 at gem level 1.
 		return 4;
 	case WeaponSkill::FrostNova:
-		return 14;
+		// Curtis 2026-10-28: 14 to 10 (audit-casters-v3.md); its skill_speed.tsv row keeps mana_pct 100.
+		return 10;
 	case WeaponSkill::Riposte:
 		return 5;
 	case WeaponSkill::ShadowStep:
@@ -1107,7 +1109,7 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 		const Direction dir = GetDirection(player.position.tile, target);
 		for (int i = 0; i <= extra; i++) {
 			const int offset = (i + 1) / 2 * (i % 2 == 0 ? 1 : -1);
-			FireIceShard(player, skill, player.position.tile, FarAlong(player, target, 8) + Displacement { Left(Left(dir)) } * offset, 100);
+			FireIceShard(player, skill, player.position.tile, FarAlong(player, target, 8) + Displacement { Left(Left(dir)) } * offset, IceBoltShardDamagePercent);
 		}
 		return false;
 	}

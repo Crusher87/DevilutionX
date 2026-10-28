@@ -20,6 +20,8 @@
 #include "poe2/spell_damage.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
+#include "storm/storm_net.hpp"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 
 namespace devilution {
@@ -91,7 +93,8 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 25);
 	EXPECT_EQ(SpellDamagePercent(SpellID::HolyBolt), 165);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Lightning), 135);
-	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 50);
+	// Curtis 2026-10-28 (audit-casters-v3.md): Charged Bolt 50 -> 120 a bolt, as only about 1.4 of its bolts land.
+	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 120);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Flash), 110);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 120);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChainLightning), 400);
@@ -101,13 +104,15 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 	EXPECT_EQ(SpellDamageHits(SpellID::Nova), 5);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Apocalypse), 130);
 	EXPECT_EQ(SpellDamagePercent(SpellID::BloodStar), 1100);
-	// Runes hit as their spell.
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 120);
+	// Runes hit as their spell, but Rune of Fire has its own row (Curtis 2026-10-28: it got Fireball's 120%).
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 280);
 	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 480);
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfImmolation), 390);
 	// A spell with no row keeps the plain base.
 	EXPECT_EQ(SpellDamagePercent(SpellID::Teleport), 100);
 	EXPECT_EQ(SpellDamageHits(SpellID::Teleport), 1);
-	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 35);
+	// Arcing Sparks 35 -> 90 a spark (Curtis 2026-10-28), at 6 mana.
+	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 90);
 	// Raise each strike (Curtis 2026-10-27): an ember 100% -> 150%.
 	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::EmberFusillade), 150);
 }
@@ -294,6 +299,63 @@ TEST_F(Poe2SpellDamageTest, ARunesBurstIsCreditedToTheRune)
 	EXPECT_EQ(cast->poe2.creditSpell, SpellID::Invalid);
 }
 
+TEST_F(Poe2SpellDamageTest, RuneOfFiresBurstKeepsTheRunesPercentAndSupports)
+{
+	// Curtis 2026-10-28: the burst was a new missile at 100%, losing the rune's speed factor, gem curve and supports.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	const Point tile { 44, 44 };
+	const auto burst = [&](MissileID runeType, MissileID burstType) -> const Missile & {
+		Missiles.clear();
+		Missile &rune = Missiles.emplace_back();
+		rune._mitype = runeType;
+		rune._micaster = TARGET_MONSTERS;
+		rune._misource = player.getId();
+		rune._mispllvl = 1;
+		rune._mlid = NO_LIGHT;
+		rune.var1 = static_cast<int>(burstType);
+		rune.position.tile = tile;
+		rune.poe2.damagePercent = 250;
+		rune.poe2.spell = SpellID::RuneOfFire;
+		rune.poe2.skillKind = static_cast<uint8_t>(SkillKind::Spell);
+		rune.poe2.skillId = static_cast<uint8_t>(SpellID::RuneOfFire);
+		// A monster steps on it.
+		Monster &monster = Monsters[0];
+		monster = {};
+		monster.levelType = 0;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = tile;
+		dMonster[tile.x][tile.y] = 1;
+		ProcessRune(rune);
+		dMonster[tile.x][tile.y] = 0;
+		EXPECT_TRUE(rune._miDelFlag);
+		EXPECT_EQ(Missiles.size(), 2U);
+		return Missiles.back();
+	};
+	const Missile &fire = burst(MissileID::RuneOfFire, MissileID::BigExplosion);
+	ASSERT_EQ(fire._mitype, MissileID::BigExplosion);
+	EXPECT_EQ(fire.poe2.damagePercent, 250);
+	EXPECT_EQ(fire.poe2.spell, SpellID::RuneOfFire);
+	EXPECT_EQ(fire.poe2.skillKind, static_cast<uint8_t>(SkillKind::Spell));
+	EXPECT_EQ(fire.poe2.skillId, static_cast<uint8_t>(SpellID::RuneOfFire));
+	EXPECT_EQ(fire.poe2.creditSpell, SpellID::RuneOfFire);
+	// Rune of Nova's burst still starts afresh (not asked for yet).
+	const Missile &nova = burst(MissileID::RuneOfNova, MissileID::Nova);
+	EXPECT_EQ(nova.poe2.damagePercent, 100);
+	EXPECT_EQ(nova.poe2.skillKind, 0);
+	// A missile added after it keeps nothing.
+	const Missile *cast = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::Firebolt, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(cast, nullptr);
+	EXPECT_EQ(cast->poe2.damagePercent, 100);
+	Monsters[0] = {};
+	Missiles.clear();
+}
+
 TEST_F(Poe2SpellDamageTest, TheHerosOwnRunesNeverHurtTheHero)
 {
 	// Curtis 2026-10-28: his own Rune of Fire went off under him three times, down to 7 life ("from a trap").
@@ -336,8 +398,8 @@ TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)
 		if (missile._mitype != MissileID::ChargedBolt)
 			continue;
 		sparks++;
-		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, 1), 35), 1));
-		EXPECT_LE(missile._midam, Percent(SpellBaseMax(player, 1), 35));
+		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, 1), 90), 1));
+		EXPECT_LE(missile._midam, Percent(SpellBaseMax(player, 1), 90));
 		EXPECT_EQ(missile.poe2.damagePercent, GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::Spark), 1));
 	}
 	EXPECT_GE(sparks, 6);
@@ -377,6 +439,14 @@ TEST_F(Poe2SpellDamageTest, IceBoltGainsShardsWithItsGem)
 	EXPECT_EQ(shards(1), 1);
 	EXPECT_EQ(shards(7), 3);
 	EXPECT_EQ(shards(20), 6);
+
+	// Each shard hits for 160% of the spell base (Curtis 2026-10-28: 100 -> 160), then the gem curve.
+	EXPECT_EQ(IceBoltShardDamagePercent, 160);
+	shards(1);
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype == MissileID::BlueFlare)
+			EXPECT_EQ(missile.poe2.damagePercent, GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::IceBolt), 1) * IceBoltShardDamagePercent / 100);
+	}
 }
 
 TEST_F(Poe2SpellDamageTest, BoneSpiritTakesLittleOfABoss)

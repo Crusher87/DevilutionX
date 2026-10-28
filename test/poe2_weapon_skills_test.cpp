@@ -219,8 +219,9 @@ TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
 TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 {
 	EXPECT_EQ(LeapSlamDamagePercent, 80);
-	// About two of Frost Nova's shards reach a monster: 2 x 25 = 50.
-	EXPECT_EQ(FrostNovaShardDamagePercent, 25);
+	// About two of Frost Nova's shards reach a monster: 2 x 100 = 200 (Curtis 2026-10-28: 25 -> 100 a shard).
+	EXPECT_EQ(FrostNovaShardDamagePercent, 100);
+	EXPECT_EQ(IceBoltShardDamagePercent, 160);
 	// Curtis 2026-10-28: Seismic Slam's cone 75 to 50, Sweeping Wind's rings 75 and 50 to 55 and 25.
 	EXPECT_EQ(GroundSlamConeDamagePercent, 50);
 	EXPECT_EQ(WhirlingStaffInnerDamagePercent, 55);

@@ -216,7 +216,7 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		hit.effect = std::format("Enemies take +{:d}% physical damage", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (level - 1)));
 		return hit;
 	case WeaponSkill::IceBolt:
-		AddSpellBase(hit, player, level, DamageType::Magic, percent);
+		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, IceBoltShardDamagePercent));
 		return hit;
 	case WeaponSkill::FrostNova:
 		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, FrostNovaShardDamagePercent));

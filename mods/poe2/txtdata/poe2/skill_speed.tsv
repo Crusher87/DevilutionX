@@ -23,7 +23,7 @@ EscapeShot	100			700		238	169	Escape Shot
 EmberFusillade		0.4						per ember, one a cast (Ember Fusillade)
 Spark		0.7						Spark
 IceBolt		0.8						Frostbolt
-FrostNova		1.0				112	106	Ice Nova
+FrostNova		1.0				112	100	Ice Nova
 Riposte	100							Parry (its counter sweep)
 ShadowStep	75					134	117	none (Cull the Weak)
 Frenzy	140							none (Ice Strike normal strikes)

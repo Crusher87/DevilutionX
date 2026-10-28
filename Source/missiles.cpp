@@ -915,6 +915,11 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 
 /** @brief The spell the hits of a missile being added are credited to in the play log (see Poe2MissileData::creditSpell). */
 SpellID NewMissileCreditSpell = SpellID::Invalid;
+/**
+ * @brief POE2 Mashup: the rune whose damage percent and supports a missile being added keeps (Rune of Fire's burst,
+ * see ProcessRune), or none.
+ */
+std::optional<Poe2MissileData> NewMissileInherit;
 
 /** @brief The spell that lays a rune missile. */
 SpellID RuneSpell(MissileID rune)
@@ -3287,6 +3292,12 @@ Missile *AddMissile(WorldTilePosition src, WorldTilePosition dst, Direction midi
 	missile.lastCollisionTargetHash = 0;
 	// Set before the missile's add function, as some (a rune's fire burst) hit as they're added.
 	missile.poe2.creditSpell = NewMissileCreditSpell;
+	if (NewMissileInherit) {
+		missile.poe2.damagePercent = NewMissileInherit->damagePercent;
+		missile.poe2.spell = NewMissileInherit->spell;
+		missile.poe2.skillKind = NewMissileInherit->skillKind;
+		missile.poe2.skillId = NewMissileInherit->skillId;
+	}
 
 	if (!missile.IsTrap() && micaster == TARGET_PLAYERS) {
 		const Monster &monster = Monsters[id];
@@ -3691,8 +3702,13 @@ void ProcessRune(Missile &missile)
 
 		// The burst's hits are the rune's, not those of whatever was used last (the play log's credit).
 		NewMissileCreditSpell = missile.IsTrap() ? SpellID::Invalid : RuneSpell(missile._mitype);
+		// POE2 Mashup: Rune of Fire's burst keeps the rune's damage percent (its speed factor, gem curve and supports)
+		// and its supports (Curtis 2026-10-28). Rune of Nova's and Rune of Immolation's bursts still lose theirs.
+		if (gbIsPoe2 && !missile.IsTrap() && missile.sourceType() == MissileSource::Player && missile._mitype == MissileID::RuneOfFire)
+			NewMissileInherit = missile.poe2;
 		AddMissile(position, position, dir, static_cast<MissileID>(missile.var1), TARGET_BOTH, missile._misource, missile._midam, missile._mispllvl);
 		NewMissileCreditSpell = SpellID::Invalid;
+		NewMissileInherit = std::nullopt;
 	}
 
 	PutMissile(missile);

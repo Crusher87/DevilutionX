@@ -53,8 +53,13 @@ constexpr int LightningArrowBurstPerLevel = 2;
 constexpr int LightningArrowBurstDexterityDivisor = 4;
 /** @brief Without LightningArrowBurstFromLevel: the burst hits the 3x3 tiles where it lands for this percent of the arrow's hit, on average. */
 constexpr int LightningArrowBurstPercent = 60;
-/** @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster. */
-constexpr int FrostNovaShardDamagePercent = 25;
+/**
+ * @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster (Curtis
+ * 2026-10-28: 25 to 100, at 10 mana; audit-casters-v3.md).
+ */
+constexpr int FrostNovaShardDamagePercent = 100;
+/** @brief Each of Ice Bolt's shards hits for this percent of the spell base (Curtis 2026-10-28: 100 to 160). */
+constexpr int IceBoltShardDamagePercent = 160;
 /** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
 constexpr int FlurryBackhandDamagePercent = 150;
 /**

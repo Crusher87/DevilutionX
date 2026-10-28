@@ -245,7 +245,8 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 		{ WeaponSkill::BlessedShield, 70 },
 		{ WeaponSkill::FistOfTheHeavens, 110 },
 		{ WeaponSkill::CorpseExplosion, 50 },
-		{ WeaponSkill::GlacialSpike, 35 },
+		// Curtis 2026-10-28: 35 -> 400, a tier V area spike (audit-casters-v3.md).
+		{ WeaponSkill::GlacialSpike, 400 },
 		{ WeaponSkill::Blizzard, 21 },
 		{ WeaponSkill::FrozenOrb, 70 },
 		{ WeaponSkill::Meteor, 150 },
@@ -372,9 +373,9 @@ TEST_F(Poe2TableSkillsTest, FistOfTheHeavensBoltsHitForHalfTheSpellBase)
 	leveltype = DTYPE_TOWN;
 }
 
-TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForAQuarter)
+TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForTheSpellBase)
 {
-	// About two shards reach a monster: 2 x 25 = 50% of the spell base.
+	// About two shards reach a monster: 2 x 100 = 200% of the spell base (Curtis 2026-10-28: 25 -> 100 a shard).
 	leveltype = DTYPE_CATHEDRAL;
 	Player &player = *MyPlayer;
 	player._pMagic = 80;
@@ -391,7 +392,13 @@ TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForAQuarter)
 		EXPECT_EQ(missile.poe2.damagePercent, curve * FrostNovaShardDamagePercent / 100);
 	}
 	EXPECT_GT(shards, 0);
-	EXPECT_EQ(FrostNovaShardDamagePercent, 25);
+	EXPECT_EQ(FrostNovaShardDamagePercent, 100);
+	// Its mana 14 -> 10, and Arcing Sparks' 10 -> 6, at gem level 1 (Curtis 2026-10-28).
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::FrostNova), 1), 10);
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Spark), 1), 6);
+	// Haunt: 150 -> 350 over its 5 seconds (Curtis 2026-10-28).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->damagePercent, 350);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->duration, 100); // 5 seconds of 20 ticks
 	leveltype = DTYPE_TOWN;
 }
 
