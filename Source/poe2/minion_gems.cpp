@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/item_stats.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/profane_roads.hpp"
@@ -454,6 +456,45 @@ MissileID MinionShotMissile(MinionShot shot)
 	default:
 		return MissileID::Firebolt;
 	}
+}
+
+namespace {
+
+/** @brief The owner of a POE2 player's minion, or nullptr. */
+const Player *GearOwner(const Monster &minion)
+{
+	if (!gbIsPoe2 || !minion.isPlayerMinion() || minion.goalVar3 < 0 || static_cast<size_t>(minion.goalVar3) >= Players.size())
+		return nullptr;
+	return &Players[static_cast<size_t>(minion.goalVar3)];
+}
+
+int GearStat(const Player &owner, Poe2ItemStat stat)
+{
+	return owner.poe2.itemStats[static_cast<size_t>(stat)];
+}
+
+} // namespace
+
+int MinionBlowWithGearDamage(const Monster &attacker, int dam)
+{
+	const Player *owner = GearOwner(attacker);
+	if (owner == nullptr)
+		return dam;
+	const int sum = std::max(GearStat(*owner, Poe2ItemStat::MinionAddedDamageMin), 0) + std::max(GearStat(*owner, Poe2ItemStat::MinionAddedDamageMax), 0);
+	if (sum == 0)
+		return dam;
+	const int64_t added = static_cast<int64_t>(sum) * 32 * MinionDamagePercent(*owner) / 100;
+	return static_cast<int>(std::clamp<int64_t>(dam + added, 0, std::numeric_limits<int32_t>::max() / 4));
+}
+
+int32_t MinionGearRegenRaw(const Monster &minion)
+{
+	const Player *owner = GearOwner(minion);
+	if (owner == nullptr)
+		return 0;
+	// Tenths of a point a second, over 20 ticks a second, rounded to the nearest 1/64.
+	const int tenths = std::max(GearStat(*owner, Poe2ItemStat::MinionLifeRegen), 0);
+	return (tenths * 64 + 100) / 200;
 }
 
 void OnMinionGemHit(const Player &owner, Monster &minion, Monster &target, Fixed26_6 damage)

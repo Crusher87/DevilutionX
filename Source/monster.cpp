@@ -1252,6 +1252,8 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 	int dam = RandomIntBetween(mind, maxd) << 6;
 	// POE2 Mashup: a monster's hit is scaled to its level's table (a berserk one's too; not the player's minions).
 	dam = ScaleMonsterHit(attacker, dam);
+	// POE2 Mashup: a minion's blow takes its owner's sceptre's added damage.
+	dam = MinionBlowWithGearDamage(attacker, dam);
 	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
 	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
 		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
@@ -4888,6 +4890,8 @@ void ProcessMonsters()
 			} else {
 				monster.hitPoints += Fixed26_6::fromRaw(monster.level(sgGameInitInfo.nDifficulty));
 			}
+			// POE2 Mashup: a minion regenerates its owner's sceptre's life regeneration too.
+			monster.hitPoints += Fixed26_6::fromRaw(MinionGearRegenRaw(monster));
 			monster.hitPoints = std::min(monster.hitPoints, monster.maxHitPoints); // prevent going over max HP with part of a single regen tick
 		}
 		ProcessMonsterAilments(monster);

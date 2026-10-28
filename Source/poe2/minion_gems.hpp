@@ -128,6 +128,14 @@ MissileID MinionShotMissile(MinionShot shot);
 /** @brief The share of the minion's blows that is fire: a raging spirit's 70%, else 0. */
 int MinionGemFirePercent(const Monster &minion);
 
+/**
+ * @brief A minion's blow with its owner's gear's added damage (a sceptre's ally added damage), in 1/64 points: the
+ * range's middle, as monster-on-monster hits carry one damage number and roll no more, raised by the owner's minion
+ * damage as the blow is. @p dam is unchanged for anything but a POE2 player's minion.
+ */
+[[nodiscard]] int MinionBlowWithGearDamage(const Monster &attacker, int dam);
+/** @brief A POE2 player's minion's life regeneration from its owner's gear, in 1/64 points a game tick; 0 for anything else. */
+[[nodiscard]] int32_t MinionGearRegenRaw(const Monster &minion);
 /** @brief A skeleton's blow landed: a Reaver gains Rage, a Brute builds heavy stun. */
 void OnMinionGemHit(const Player &owner, Monster &minion, Monster &target, Fixed26_6 damage);
 /** @brief One of the hero's minions died: an illusion destroyed by an enemy leaves Frenzy remnants. */

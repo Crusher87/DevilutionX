@@ -521,5 +521,39 @@ TEST_F(Poe2MinionGemsTest, DiabloModeMinionsUnscaled)
 	EXPECT_EQ(ScaleMonsterHit(warrior, 1000), 1000);
 }
 
+TEST_F(Poe2MinionGemsTest, SceptreAllyDamageAndRegenReachTheWarriors)
+{
+	Player &player = *MyPlayer;
+	Socket(PersistentSkill::SkeletalWarriors, 5);
+	Monster &warrior = PlaceMinion(0, { 41, 40 }, PersistentSkill::SkeletalWarriors);
+	Monster &enemy = Place(1, { 42, 40 }, 0, 1000);
+	const auto setStat = [&player](Poe2ItemStat stat, int value) { player.poe2.itemStats[static_cast<size_t>(stat)] = static_cast<int16_t>(value); };
+
+	// Without the stats nothing changes.
+	EXPECT_EQ(MinionBlowWithGearDamage(warrior, 640), 640);
+	EXPECT_EQ(MinionGearRegenRaw(warrior), 0);
+
+	// The four ally added-damage families' sum: the middle of the range, raised by the minion damage.
+	setStat(Poe2ItemStat::MinionAddedDamageMin, 10);
+	setStat(Poe2ItemStat::MinionAddedDamageMax, 20);
+	const int added = 15 * 64 * MinionDamagePercent(player) / 100;
+	EXPECT_EQ(MinionBlowWithGearDamage(warrior, 640), 640 + added);
+	EXPECT_GE(added, 15 * 64);
+	// An enemy's blow, or one outside POE2, takes none of it.
+	EXPECT_EQ(MinionBlowWithGearDamage(enemy, 640), 640);
+	gbIsPoe2 = false;
+	EXPECT_EQ(MinionBlowWithGearDamage(warrior, 640), 640);
+	gbIsPoe2 = true;
+
+	// Regeneration in tenths of a point a second: 30 tenths is 3 life a second, 9.6/64 a tick.
+	setStat(Poe2ItemStat::MinionLifeRegen, 30);
+	EXPECT_EQ(MinionGearRegenRaw(warrior), 10);
+	EXPECT_EQ(MinionGearRegenRaw(enemy), 0);
+	setStat(Poe2ItemStat::MinionLifeRegen, 330);
+	EXPECT_EQ(MinionGearRegenRaw(warrior), 106);
+	// Over a second (20 ticks) that is about the stat's life.
+	EXPECT_NEAR(MinionGearRegenRaw(warrior) * 20 / 64.0, 33.0, 0.5);
+}
+
 } // namespace
 } // namespace devilution
