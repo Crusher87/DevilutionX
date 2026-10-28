@@ -7,6 +7,8 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "levels/gendung.h"
+#include "lighting.h"
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
@@ -18,6 +20,7 @@
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
+#include "storm/storm_net.hpp"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 
@@ -424,6 +427,73 @@ TEST_F(Poe2TableSkillsTest, HauntIsASpiritThatJumps)
 	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BoneSpirit), 2);
 	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BloodStarRedExplosion), 0);
 	ActiveMonsterCount = 0;
+}
+
+TEST_F(Poe2TableSkillsTest, CycloneStrikePullsWhatItHitsIn)
+{
+	// Curtis 2026-10-28, "Cyclone pulls": it was a copy of Wave of Light (radius 3 around the hero).
+	leveltype = DTYPE_CATHEDRAL;
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	MyPlayerId = 0;
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(30);
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseStr = player._pStrength = 100;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::East;
+	const auto place = [](size_t slot, Point tile) -> Monster & {
+		Monster &monster = Monsters[slot];
+		monster = {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = tile;
+		dMonster[tile.x][tile.y] = static_cast<int16_t>(slot + 1);
+		ActiveMonsters[ActiveMonsterCount] = static_cast<unsigned>(slot);
+		ActiveMonsterCount++;
+		return monster;
+	};
+	const auto clearTiles = []() {
+		for (int x = 30; x < 50; x++) {
+			for (int y = 30; y < 50; y++)
+				dMonster[x][y] = 0;
+		}
+	};
+	const auto cast = [&](WeaponSkill skill, uint32_t seed, bool &farWasHit) {
+		clearTiles();
+		ActiveMonsterCount = 0;
+		Monster &far = place(0, { 43, 40 });
+		Monster &beside = place(1, { 41, 41 });
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, skill, { 43, 40 });
+		farWasHit = far.hitPoints < far.maxHitPoints;
+		// One beside the hero stays where it is.
+		EXPECT_EQ(beside.position.tile, Point(41, 41));
+		return Point(far.position.tile);
+	};
+	int pulled = 0;
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		bool hit = false;
+		const Point after = cast(WeaponSkill::CycloneStrike, seed, hit);
+		// A monster it hits comes a step in; one it misses stays.
+		EXPECT_EQ(after, hit ? Point(42, 40) : Point(43, 40)) << seed;
+		if (hit)
+			pulled++;
+	}
+	EXPECT_GT(pulled, 0);
+	// Wave of Light only hits.
+	for (uint32_t seed = 1; seed <= 3; seed++) {
+		bool hit = false;
+		EXPECT_EQ(cast(WeaponSkill::WaveOfLight, seed, hit), Point(43, 40)) << seed;
+	}
+	clearTiles();
+	ActiveMonsterCount = 0;
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
 }
 
 } // namespace

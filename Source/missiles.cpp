@@ -215,6 +215,58 @@ void UpdateMissileVelocity(Missile &missile, WorldTilePosition destination, int 
 }
 
 /**
+ * @brief POE2 Mashup: a monster a player's Elemental may home on: alive, in sight of the blast and not one of the
+ * heroes' minions.
+ */
+bool IsElementalTarget(Point source, const Monster &monster)
+{
+	return !monster.isPlayerMinion() && !monster.hasNoLife() && monster.mode != MonsterMode::Death && monster.talkMsg == TEXT_NONE
+	    && !CheckBlock(source, monster.position.tile);
+}
+
+/** @brief The nearest monster a player's Elemental may home on (IsElementalTarget), or nullptr. */
+Monster *FindElementalTarget(Point source, int rad)
+{
+	std::optional<Point> monsterPosition = FindClosestValidPosition(
+	    [&source](Point target) {
+		    return InDungeonBounds(target) && dMonster[target.x][target.y] > 0 && IsElementalTarget(source, Monsters[dMonster[target.x][target.y] - 1]);
+	    },
+	    source, 1, rad);
+	if (monsterPosition)
+		return &Monsters[dMonster[monsterPosition->x][monsterPosition->y] - 1];
+	return nullptr;
+}
+
+/**
+ * @brief POE2 Mashup: a player's Elemental turns towards its target every ElementalHomingTicks ticks: the monster it
+ * was cast at (var6, its id + 1) while that one lives and is near, else the nearest within ElementalHomingTiles of the
+ * blast, which it then keeps. With no target it flies straight on. Its blast is then seen from where it last turned
+ * (var3 2, var4 and var5), as Diablo's retarget is.
+ */
+void HomeElemental(Missile &missile, Point position)
+{
+	if (missile.duration % ElementalHomingTicks != 0)
+		return;
+	Monster *target = nullptr;
+	if (missile.var6 > 0 && static_cast<size_t>(missile.var6) <= MaxMonsters) {
+		Monster &locked = Monsters[missile.var6 - 1];
+		if (IsElementalTarget(position, locked) && position.WalkingDistance(locked.position.tile) <= 2 * ElementalHomingTiles)
+			target = &locked;
+	}
+	if (target == nullptr) {
+		target = FindElementalTarget(position, ElementalHomingTiles);
+		missile.var6 = target != nullptr ? static_cast<int>(target->getId()) + 1 : 0;
+	}
+	if (target == nullptr || target->position.tile == position)
+		return;
+	missile.setDirection(GetDirection(position, target->position.tile));
+	UpdateMissileVelocity(missile, target->position.tile, 16 * ElementalSpeedPercent / 100 * missile.poe2.speedPercent / 100);
+	missile.var3 = 2;
+	missile.var4 = position.x;
+	missile.var5 = position.y;
+}
+
+/**
  * @brief Add the missile to the lookup tables
  * @param missile The missile to add
  */
@@ -2898,6 +2950,10 @@ void AddElemental(Missile &missile, AddMissileParameter &parameter)
 	missile.var2 = missile.position.start.y;
 	missile.var4 = dst.x;
 	missile.var5 = dst.y;
+	// POE2 Mashup: a player's Elemental homes on the monster it was cast at (see HomeElemental).
+	missile.var6 = 0;
+	if (gbIsPoe2 && missile._micaster == TARGET_MONSTERS && InDungeonBounds(parameter.dst) && dMonster[parameter.dst.x][parameter.dst.y] != 0)
+		missile.var6 = std::abs(dMonster[parameter.dst.x][parameter.dst.y]);
 	missile._mlid = AddLight(missile.position.start, 8);
 }
 
@@ -4590,8 +4646,13 @@ void ProcessElemental(Missile &missile)
 		}
 	} else {
 		MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), dam, dam, false, false);
-		if (missile.var3 == 0 && missilePosition == Point { missile.var4, missile.var5 })
+		if (gbIsPoe2 && missile._micaster == TARGET_MONSTERS) {
+			// POE2 Mashup: a player's Elemental is a slow homing blast, not a second Fireball (Curtis 2026-10-28).
+			if (missile.duration > 0)
+				HomeElemental(missile, missile.position.tile);
+		} else if (missile.var3 == 0 && missilePosition == Point { missile.var4, missile.var5 }) {
 			missile.var3 = 1;
+		}
 		if (missile.var3 == 1) {
 			missile.var3 = 2;
 			missile.duration = 255;

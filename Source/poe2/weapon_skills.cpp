@@ -1189,6 +1189,8 @@ void SetSpellMissileSpeed(Missile &missile, SpellID spell)
 		percent = FireballSpeedPercent;
 	else if (spell == SpellID::Firebolt)
 		percent = FireboltSpeedPercent;
+	else if (spell == SpellID::Elemental)
+		percent = ElementalSpeedPercent;
 	if (percent == 100)
 		return;
 	missile.position.velocity = { missile.position.velocity.deltaX * percent / 100, missile.position.velocity.deltaY * percent / 100 };

@@ -75,8 +75,16 @@ constexpr int BoltSplashPercent = 35;
 /** @brief Fireball travels at this percent of Diablo's speed and Firebolt at this percent, so the heavy orb and the quick bolt feel apart. */
 constexpr int FireballSpeedPercent = 75;
 constexpr int FireboltSpeedPercent = 140;
+/**
+ * @brief A player's Elemental is a slow homing blast, no longer a second Fireball (Curtis 2026-10-28, "Elemental
+ * homes"): it flies at this percent of Diablo's speed and turns every ElementalHomingTicks game ticks towards the
+ * monster it was cast at, or the nearest within ElementalHomingTiles of it.
+ */
+constexpr int ElementalSpeedPercent = 50;
+constexpr int ElementalHomingTicks = 3;
+constexpr int ElementalHomingTiles = 6;
 
-/** @brief Sets a player spell's missile speed: Fireball slower, Firebolt faster; other spells keep theirs. */
+/** @brief Sets a player spell's missile speed: Fireball and Elemental slower, Firebolt faster; other spells keep theirs. */
 void SetSpellMissileSpeed(Missile &missile, SpellID spell);
 /** @brief A player's Fireball exploded: throws back the enemies around it, with a ring of flame and a jolt. */
 void OnFireballDetonated(Missile &missile, Point position);

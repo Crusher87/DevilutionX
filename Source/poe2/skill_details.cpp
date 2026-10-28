@@ -349,7 +349,7 @@ std::string_view SpellDescription(SpellID spell)
 	case SpellID::BloodStar:
 		return "A star of blood that pays for itself with life when mana runs low";
 	case SpellID::Elemental:
-		return "A fire elemental that seeks out the nearest enemy and explodes";
+		return "A slow fire elemental that hunts down its target, or the nearest enemy, and explodes";
 	case SpellID::Apocalypse:
 		return "Fire rains on every enemy in sight";
 	case SpellID::StoneCurse:

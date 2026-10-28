@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdlib>
 #include <iterator>
 #include <vector>
 
@@ -424,6 +425,65 @@ TEST_F(Poe2SpellDamageTest, DiabloModeUnchanged)
 			expected += expected / 8;
 		EXPECT_EQ(ball._midam, expected);
 	}
+}
+
+TEST_F(Poe2SpellDamageTest, ElementalIsASlowHomingBlast)
+{
+	// Curtis 2026-10-28, "Elemental homes": it was a second Fireball.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	SOLData[0] = TileProperties::None;
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	// A cast flies at half Diablo's speed, slower than Fireball.
+	Missile &plain = Cast(MissileID::Elemental, 1, 1);
+	const Displacement diablo = plain.position.velocity;
+	SetSpellMissileSpeed(plain, SpellID::Elemental);
+	EXPECT_EQ(plain.position.velocity.deltaX, diablo.deltaX * ElementalSpeedPercent / 100);
+	EXPECT_EQ(plain.position.velocity.deltaY, diablo.deltaY * ElementalSpeedPercent / 100);
+	EXPECT_LT(ElementalSpeedPercent, FireballSpeedPercent);
+
+	// A monster off to the side of the aim.
+	const Point side { 41, 45 };
+	Monsters[0] = {};
+	Monsters[0].position.tile = side;
+	Monsters[0].maxHitPoints = Monsters[0].hitPoints = Fixed26_6::fromInt(100);
+	Monsters[0].talkMsg = TEXT_NONE;
+	dMonster[side.x][side.y] = 1;
+	// Cast at it, the blast keeps it as its target.
+	Missiles.clear();
+	Missile *aimed = AddMissile(player.position.tile, side, Direction::South, MissileID::Elemental, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(aimed, nullptr);
+	SetSpellMissileSpeed(*aimed, SpellID::Elemental);
+	EXPECT_EQ(aimed->var6, 1);
+	const Displacement towards = aimed->position.velocity;
+
+	// Cast past it, the blast turns towards it on its first tick.
+	Missiles.clear();
+	Missile *missile = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::Elemental, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(missile, nullptr);
+	SetSpellMissileSpeed(*missile, SpellID::Elemental);
+	EXPECT_EQ(missile->var6, 0);
+	const Displacement straight = missile->position.velocity;
+	ProcessElemental(*missile);
+	EXPECT_EQ(missile->var6, 1);
+	EXPECT_NE(missile->position.velocity, straight);
+	EXPECT_NEAR(missile->position.velocity.deltaX, towards.deltaX, std::abs(towards.deltaX) / 50 + 2);
+	EXPECT_NEAR(missile->position.velocity.deltaY, towards.deltaY, std::abs(towards.deltaY) / 50 + 2);
+
+	// Diablo's Elemental flies to where it was cast first.
+	gbIsPoe2 = false;
+	Missiles.clear();
+	missile = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::Elemental, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(missile, nullptr);
+	const Displacement diabloStraight = missile->position.velocity;
+	ProcessElemental(*missile);
+	EXPECT_EQ(missile->position.velocity, diabloStraight);
+	gbIsPoe2 = true;
+	dMonster[side.x][side.y] = 0;
+	Monsters[0] = {};
 }
 
 } // namespace

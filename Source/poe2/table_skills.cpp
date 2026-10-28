@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <limits>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "diablo.h"
@@ -97,7 +98,7 @@ const TableSkillData Table[] = {
 	{ WS::DashingStrike, "Dashing Strike", "Dash through the enemies and strike where you land", 5, 7, TW::Staff, 0, Dash, 150, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Phasing), TableCurve::LeapSlam, 320 },
 	{ WS::LashingTailKick, "Lashing Tail Kick", "A spinning kick that throws back all around", 7, 7, TW::Staff, 0, Around, 65, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Knockback | TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Search), TableCurve::Boneshatter, 0 },
 	{ WS::WaveOfLight, "Wave of Light", "A wave of holy light bursts out around you", 9, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::FlameWave), TableCurve::Boneshatter, 280 },
-	{ WS::CycloneStrike, "Cyclone Strike", "A storm of strikes all around you, crackling with lightning", 11, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 280 },
+	{ WS::CycloneStrike, "Cyclone Strike", "A storm of strikes all around you that drags enemies in, crackling with lightning", 11, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 280 },
 	{ WS::SevenSidedStrike, "Seven-Sided Strike", "Strike up to seven enemies nearby, one after another", 13, 11, TW::Staff, 0, Seven, 200, 7, 4, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Teleport), TableCurve::Boneshatter, 0 },
 	// Bow. Fire Arrow and Explosive Arrow came from the crossbow (dropped 2026-10-27); Fire Arrow is tier I, beside the Rogue's starting Hail of Arrows
 	{ WS::ClusterBolt, "Fire Arrow", "An arrow that bursts into flame where it lands", 1, 8, TW::Bow, 0, Projectiles, 100, 1, 1, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
@@ -308,6 +309,26 @@ void InflictTableBleed(const Player &player, Monster &monster, WeaponSkill skill
 struct CastResult {
 	bool hit = false;
 };
+
+/**
+ * @brief Cyclone Strike drags what it hits a step in towards the hero, so it gathers a pack where Wave of Light only
+ * hits it (Curtis 2026-10-28, "Cyclone pulls"). The nearest go first, so the inner ring makes room for the next.
+ */
+void PullTowards(Point center, std::vector<Monster *> monsters)
+{
+	std::stable_sort(monsters.begin(), monsters.end(), [center](const Monster *a, const Monster *b) {
+		return center.WalkingDistance(a->position.tile) < center.WalkingDistance(b->position.tile);
+	});
+	for (Monster *monster : monsters) {
+		if (monster->hasNoLife() || monster->mode == MonsterMode::Death || monster->mode == MonsterMode::Petrified || monster->isUnique())
+			continue;
+		const Point tile = monster->position.tile;
+		if (center.WalkingDistance(tile) <= 1)
+			continue;
+		// A knockback from beyond the monster moves it towards the hero.
+		M_GetKnockback(*monster, tile + (tile - center));
+	}
+}
 
 /** @brief A weapon hit from a table skill, with the skill's extras. */
 void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int damagePercent, CastResult &result)
@@ -918,8 +939,17 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		BreakObjectsInArea(player, tile, std::max<int>(data.radius, 1));
 		std::vector<Monster *> targets;
 		ForEachMonsterNear(tile, std::max<int>(data.radius, 1), [&](Monster &monster) { targets.push_back(&monster); });
-		for (Monster *monster : targets)
-			WeaponHit(player, *monster, data, data.damagePercent, result);
+		std::vector<Monster *> hits;
+		for (Monster *monster : targets) {
+			CastResult one;
+			WeaponHit(player, *monster, data, data.damagePercent, one);
+			if (one.hit) {
+				result.hit = true;
+				hits.push_back(monster);
+			}
+		}
+		if (data.skill == WeaponSkill::CycloneStrike)
+			PullTowards(tile, std::move(hits));
 		break;
 	}
 	case Flurry:
