@@ -800,6 +800,10 @@ struct GrantedRuntime {
 	/** @brief Consecrated Ground's life regeneration: game ticks left, and the raw life still to give. */
 	uint8_t regenTicks = 0;
 	int32_t regenRaw = 0;
+	/** @brief The per-target granted skills' casts, counted from 1, and each recent cast's first monster hit. */
+	uint16_t castSerial = 0;
+	std::array<uint16_t, 4> castFirstSerial {};
+	std::array<int16_t, 4> castFirst {};
 };
 
 /** @brief Levels gear adds to the skill, like "+1 to Level of all Melee Skills"; in poe2/modifiers.cpp. */

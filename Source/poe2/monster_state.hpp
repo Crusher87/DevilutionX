@@ -113,6 +113,8 @@ struct Poe2MonsterState {
 	uint8_t manaDrainTicks = 0;
 	/** @brief Decompose's plague: game ticks left; a monster that dies with it passes it on (not saved). */
 	uint8_t plagueTicks = 0;
+	/** @brief The per-target granted cast whose projectile last hit it, which hits it once (not saved). */
+	uint16_t grantedCastHit = 0;
 };
 
 } // namespace devilution

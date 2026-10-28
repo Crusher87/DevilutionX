@@ -154,6 +154,12 @@ enum TableFlag : uint16_t {
 	 * tab, and is cast with a left click at the weapon's grant level.
 	 */
 	TF_Granted = 1 << 14,
+	/**
+	 * A staff's granted skill priced per target: the first monster it hits (the nearest the aim, for an area) takes the
+	 * full hit, every other one at most ExtraTargetPercentPerSecond of the spell base for each second of the cast, and a
+	 * cast's projectiles hit each monster once.
+	 */
+	TF_PerTarget = 1 << 15,
 };
 
 /** @brief What a granted skill's hits do besides damage (caster-weapons-plan-v2.md 6.12). */
@@ -222,6 +228,12 @@ struct TableSkillData {
 	/** A granted skill's rider. */
 	GrantedRider rider = GrantedRider::None;
 };
+
+/**
+ * @brief What a per-target granted skill (TF_PerTarget) deals each monster but its first: this percent of the spell base
+ * a second of its cast (the coordinator's per-target rule after the plan's value model, 10-28).
+ */
+constexpr int ExtraTargetPercentPerSecond = 25;
 
 /** @brief Whether the table row is a skill a caster weapon grants. */
 [[nodiscard]] inline bool IsGrantedTableSkill(const TableSkillData &data)
@@ -325,6 +337,19 @@ void FireTableShot(Player &player, const TableSkillData &data, Point target, int
  * extras on the hit (Soulrend's bleed; the riders of caster-weapons-plan-v2.md 6.12).
  */
 void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster, int damage, bool isDamageShifted);
+/**
+ * @brief The percent of its hit a per-target granted skill deals each monster but the first a cast hits: its extra-target
+ * budget (ExtraTargetPercentPerSecond for each second of its cast, or of its pulse; its bleed and echo count) over its
+ * hit. 100 for every other skill.
+ */
+[[nodiscard]] int GrantedExtraTargetPercent(const TableSkillData &data);
+/** @brief Whether the projectile's cast already hit the monster: a per-target skill's projectiles hit each one once. */
+[[nodiscard]] bool GrantedMissileSkipsMonster(const Missile &missile, const Monster &monster);
+/**
+ * @brief The percent of its damage a per-target skill's projectile deals the monster it is hitting now: 100 for its
+ * cast's first, GrantedExtraTargetPercent for the rest; 100 for every other projectile. Marks the monster hit.
+ */
+int GrantedMissileTargetPercent(const Missile &missile, Player &player, Monster &monster);
 /** @brief The rider of the granted skill whose hit is being dealt now (SupportHitSkill), or None. */
 GrantedRider HitGrantedRider();
 /** @brief The hero's spell hits in percent: SigilSpellDamagePercentInside while they stand in their Sigil of Power, else 100. */

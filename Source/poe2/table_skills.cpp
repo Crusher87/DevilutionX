@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/camera_shake.hpp"
+#include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/minion_gems.hpp"
@@ -138,24 +140,24 @@ const TableSkillData Table[] = {
 	{ WS::Attract, "Attract", "Turns a whole pack on each other for 3 seconds", 13, 14, TW::None, 1, Curse, Flat, 0, 5, 60, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Attract, TableBuff::None, TT_Occult, Icon(SpellIcon::Telekinesis), TableCurve::Boneshatter, 100 },
 	// Granted by the caster weapons rework's staves and wands (caster-weapons-plan-v2.md 6.12 and 7.2): no gem, no mana, no
 	// tab; each hit is set for its cast time (skill_speed.tsv), so the rows take no damage_pct.
-	{ WS::FreezingShards, "Freezing Shards", "A fan of five shards of ice that chill what they hit", 0, 0, TW::None, 1, Projectiles, 18, 5, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
-	{ WS::LightningBolt, "Lightning Bolt", "Lightning strikes the target and everything next to it", 0, 0, TW::None, 3, Burst, 22, 0, 1, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Lightning), TableCurve::Fireball, 312 },
-	{ WS::ChimingBolt, "Chiming Bolt", "A ringing bolt of lightning that pierces through enemies; every fourth cast leaves a Sigil of Power under you", 0, 0, TW::None, 3, Projectiles, 28, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChargedBolt), TableCurve::Fireball, 312, GrantedRider::SigilEveryFourth },
-	{ WS::SolarOrb, "Solar Orb", "An orb of fire at the target that burns what's near it for 10 seconds; one at a time", 0, 0, TW::None, 2, Zone, 25, 0, 1, 200, 28, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell | TF_Granted, TableZone::Pulse, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Fireball), TableCurve::Fireball, 312 },
-	{ WS::Soulrend, "Soulrend", "A bolt that tears through enemies and leaves them bleeding", 0, 0, TW::None, 1, Projectiles, 17, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted | TF_Pierce | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
-	{ WS::Reap, "Reap", "A bloody scythe sweeps the target and everything next to it", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
-	{ WS::FrostLance, "Frost Lance", "A lance of ice that pierces through enemies and chills them", 0, 0, TW::None, 1, Projectiles, 30, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Elemental), TableCurve::Fireball, 312 },
-	{ WS::EnervatingNova, "Enervating Nova", "A ring of lightning bursts out around you", 0, 0, TW::None, 3, Around, 25, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
-	{ WS::ConsecratedGround, "Consecrated Ground", "Holy fire bursts out around you, then heals you for 4 seconds", 0, 0, TW::None, 2, Around, 26, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::HolyBolt), TableCurve::Fireball, 312, GrantedRider::RegenBuff },
-	{ WS::DarkPact, "Dark Pact", "A burst of dark power at the target, paid with 5% of your life", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted | TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
-	{ WS::FeastOfFlesh, "Feast of Flesh", "Bones burst out around you; what they kill feeds you life and mana", 0, 0, TW::None, 1, Around, 20, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::KillRestoreBoth },
+	{ WS::FreezingShards, "Freezing Shards", "A fan of five shards of ice that chill what they hit", 0, 0, TW::None, 1, Projectiles, 64, 5, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
+	{ WS::LightningBolt, "Lightning Bolt", "Lightning strikes the target and everything next to it", 0, 0, TW::None, 3, Burst, 46, 0, 1, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Lightning), TableCurve::Fireball, 312 },
+	{ WS::ChimingBolt, "Chiming Bolt", "A ringing bolt of lightning that pierces through enemies; every fourth cast leaves a Sigil of Power under you", 0, 0, TW::None, 3, Projectiles, 46, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted | TF_Pierce | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChargedBolt), TableCurve::Fireball, 312, GrantedRider::SigilEveryFourth },
+	{ WS::SolarOrb, "Solar Orb", "An orb of fire at the target that burns what's near it for 10 seconds; one at a time", 0, 0, TW::None, 2, Zone, 71, 0, 1, 200, 28, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell | TF_Granted | TF_PerTarget, TableZone::Pulse, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Fireball), TableCurve::Fireball, 312 },
+	{ WS::Soulrend, "Soulrend", "A bolt that tears through enemies and leaves them bleeding", 0, 0, TW::None, 1, Projectiles, 28, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted | TF_Pierce | TF_Bleed | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
+	{ WS::Reap, "Reap", "A bloody scythe sweeps the target and everything next to it", 0, 0, TW::None, 1, Burst, 64, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
+	{ WS::FrostLance, "Frost Lance", "A lance of ice that pierces through enemies and chills them", 0, 0, TW::None, 1, Projectiles, 48, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_Pierce | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Elemental), TableCurve::Fireball, 312 },
+	{ WS::EnervatingNova, "Enervating Nova", "A ring of lightning bursts out around you", 0, 0, TW::None, 3, Around, 48, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
+	{ WS::ConsecratedGround, "Consecrated Ground", "Holy fire bursts out around you, then heals you for 4 seconds", 0, 0, TW::None, 2, Around, 63, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::HolyBolt), TableCurve::Fireball, 312, GrantedRider::RegenBuff },
+	{ WS::DarkPact, "Dark Pact", "A burst of dark power at the target, paid with 5% of your life", 0, 0, TW::None, 1, Burst, 50, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted | TF_LifeCost | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
+	{ WS::FeastOfFlesh, "Feast of Flesh", "Bones burst out around you; what they kill feeds you life and mana", 0, 0, TW::None, 1, Around, 45, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::KillRestoreBoth },
 	{ WS::WitheringBolt, "Withering Bolt", "A dark bolt that withers what it hits, so it takes more damage", 0, 0, TW::None, 1, Projectiles, 37, 1, 0, 0, 0, 0, DT::Physical, MissileID::BloodStar, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Wither },
 	{ WS::BoneBolt, "Bone Bolt", "A shard of bone that builds up twice the stun", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
 	{ WS::ManaDrain, "Mana Drain", "A weak bolt that drains mana from what it hits and slows it", 0, 0, TW::None, 1, Projectiles, 15, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare2, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Mana), TableCurve::Fireball, 312, GrantedRider::ManaDrain },
 	{ WS::PowerSiphon, "Power Siphon", "A bolt that kills what it leaves on low life, for a Frenzy charge", 0, 0, TW::None, 1, Projectiles, 35, 1, 0, 0, 0, 0, DT::Physical, MissileID::YellowFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Telekinesis), TableCurve::Fireball, 312, GrantedRider::CullFrenzy },
 	{ WS::TormentBolt, "Torment Bolt", "A bolt that weakens what it hits for 2 seconds", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Reflect), TableCurve::Fireball, 312, GrantedRider::Weaken },
 	{ WS::CriticalBolt, "Critical Bolt", "A bolt whose every fifth cast hits twice as hard", 0, 0, TW::None, 1, Projectiles, 34, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Search), TableCurve::Fireball, 312, GrantedRider::EveryFifthDouble },
-	{ WS::EchoingBlast, "Echoing Blast", "A blast of fire at the target that goes off again a moment later", 0, 0, TW::None, 2, Burst, 14, 0, 1, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Inferno), TableCurve::Fireball, 312, GrantedRider::Echo },
+	{ WS::EchoingBlast, "Echoing Blast", "A blast of fire at the target that goes off again a moment later", 0, 0, TW::None, 2, Burst, 31, 0, 1, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Inferno), TableCurve::Fireball, 312, GrantedRider::Echo },
 	{ WS::VolatileBolt, "Volatile Bolt", "A fire bolt; what it kills bursts into flame", 0, 0, TW::None, 2, Projectiles, 40, 1, 0, 0, 0, 0, DT::Fire, MissileID::OrangeFlare, MG::FireArrowExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Fireball), TableCurve::Fireball, 312, GrantedRider::BurstOnKill },
 	{ WS::GalvanicBolt, "Galvanic Bolt", "A bolt of lightning that zaps one more enemy nearby", 0, 0, TW::None, 3, Projectiles, 34, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChainLightning), TableCurve::Fireball, 312, GrantedRider::ChainOnce },
 	{ WS::Decompose, "Decompose", "A rotting bolt whose plague passes on when its victim dies", 0, 0, TW::None, 1, Projectiles, 22, 1, 0, 0, 0, 0, DT::Physical, MissileID::BloodStar, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Plague },
@@ -502,14 +504,34 @@ void OnGrantedKill(const Player &player, const Monster &monster, const TableSkil
 	}
 }
 
-void ZoneBurst(const Player &player, const TableSkillData &data, Point center, int radius, Fixed26_6 damage)
+/**
+ * @brief A burst of a zone, a landing or an area spell: hits everything within the radius. A staff's granted skill priced
+ * per target (TF_PerTarget) hits the monster nearest the aim in full and the others for GrantedExtraTargetPercent.
+ */
+void ZoneBurst(const Player &player, const TableSkillData &data, Point center, int radius, Fixed26_6 damage, std::optional<Point> aim = std::nullopt)
 {
 	AddVisualEffect(center, data.effect, 0, 4);
 	BreakObjectsInArea(player, center, radius);
+	const int extraPercent = GrantedExtraTargetPercent(data);
+	const Monster *primary = nullptr;
+	if (extraPercent < 100) {
+		const Point from = aim.value_or(center);
+		int nearest = std::numeric_limits<int>::max();
+		ForEachMonsterNear(center, radius, [&](Monster &monster) {
+			const Displacement offset = static_cast<Point>(monster.position.tile) - from;
+			const int distance = (offset.deltaX * offset.deltaX) + (offset.deltaY * offset.deltaY);
+			if (distance < nearest) {
+				nearest = distance;
+				primary = &monster;
+			}
+		});
+	}
+	const Fixed26_6 extra = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * extraPercent / 100), 1));
 	ForEachMonsterNear(center, radius, [&](Monster &monster) {
-		SpellHitMonster(player, monster, data.type, damage, SourceOf(data));
+		const Fixed26_6 hit = extraPercent < 100 && &monster != primary ? extra : damage;
+		SpellHitMonster(player, monster, data.type, hit, SourceOf(data));
 		if (IsGrantedTableSkill(data) && monster.hasNoLife())
-			OnGrantedKill(player, monster, data, damage);
+			OnGrantedKill(player, monster, data, hit);
 		if ((data.flags & TF_Stun) != 0 && !monster.hasNoLife())
 			HeavyStunMonster(monster);
 	});
@@ -540,6 +562,9 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	// A granted bolt borrows a flare's look but keeps its own element.
 	if (IsGrantedTableSkill(data))
 		missile->poe2.damageType = static_cast<int8_t>(data.type);
+	// A per-target skill's projectiles hit each monster once a cast, the first in full (GrantedMissileTargetPercent).
+	if ((data.flags & TF_PerTarget) != 0)
+		missile->poe2.grantedCast = player.poe2.grantedState.castSerial;
 	// Souls add to weapon projectiles through the weapon hit (see ResourceAttackDamagePercent).
 	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
 	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * GrantedSpellDamagePercent(player, data) / 100 * (100 + souls) / 100, INT16_MAX));
@@ -879,7 +904,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		if ((data.flags & TF_Spell) != 0) {
 			// A nova around the hero (the caster weapons' granted skills): it hits like a burst, with the spell base.
 			EffectRingAround(tile, std::max<int>(data.radius, 1), data.effect, 0);
-			ZoneBurst(player, data, tile, std::max<int>(data.radius, 1), FixedDamage(player, data));
+			ZoneBurst(player, data, tile, std::max<int>(data.radius, 1), FixedDamage(player, data), target);
 			// Consecrated Ground: then 1% of maximum life a second for 4 seconds, started over by each cast.
 			if (data.rider == GrantedRider::RegenBuff) {
 				GrantedRuntime &state = player.poe2.grantedState;
@@ -914,6 +939,10 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		int count = data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.effectiveLevel(data.skill)) + SupportExtraProjectileCount(player, slot);
 		if ((data.flags & TF_Frenzy) != 0)
 			count += player.poe2.frenzyCharges;
+		if ((data.flags & TF_PerTarget) != 0) {
+			uint16_t &serial = player.poe2.grantedState.castSerial;
+			serial = static_cast<uint16_t>(serial == UINT16_MAX ? 1 : serial + 1);
+		}
 		FireFanOf(player, data, target, count);
 		break;
 	}
@@ -1095,6 +1124,56 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	}
 	}
 	AfterCast(player, data, result);
+}
+
+int GrantedExtraTargetPercent(const TableSkillData &data)
+{
+	if ((data.flags & TF_PerTarget) == 0 || data.damagePercent <= 0)
+		return 100;
+	// What one hit may deal each extra target: ExtraTargetPercentPerSecond of the spell base for each second of the cast,
+	// or of the pulse for a zone, its bleed and echo included.
+	int windowMs = 0;
+	if (data.shape == TableShape::Zone) {
+		windowMs = data.interval * 50;
+	} else if (const SkillSpeedRow *speed = FindSkillSpeedRow(SkillSlot::ForAttack(data.skill)); speed != nullptr) {
+		windowMs = speed->castMs + speed->addedMs;
+	}
+	if (windowMs <= 0)
+		windowMs = 1000;
+	int rider = 100;
+	if ((data.flags & TF_Bleed) != 0)
+		rider += GrantedBleedPercent;
+	if (data.rider == GrantedRider::Echo)
+		rider += EchoPercent;
+	const int64_t cap = static_cast<int64_t>(ExtraTargetPercentPerSecond) * windowMs * 100 * 100 / 1000;
+	return static_cast<int>(std::clamp<int64_t>(cap / (static_cast<int64_t>(data.damagePercent) * rider), 1, 100));
+}
+
+bool GrantedMissileSkipsMonster(const Missile &missile, const Monster &monster)
+{
+	return gbIsPoe2 && missile.poe2.grantedCast != 0 && monster.poe2.grantedCastHit == missile.poe2.grantedCast;
+}
+
+int GrantedMissileTargetPercent(const Missile &missile, Player &player, Monster &monster)
+{
+	const uint16_t serial = missile.poe2.grantedCast;
+	if (!gbIsPoe2 || serial == 0)
+		return 100;
+	const SkillSlot skill = MissileSkill(missile);
+	const TableSkillData *data = skill.kind == SkillKind::Attack ? FindTableSkill(static_cast<WeaponSkill>(skill.id)) : nullptr;
+	if (data == nullptr)
+		return 100;
+	monster.poe2.grantedCastHit = serial;
+	// The cast's first monster takes the hit in full; the casts in flight each keep their own first.
+	GrantedRuntime &state = player.poe2.grantedState;
+	const size_t slot = serial % state.castFirst.size();
+	const auto id = static_cast<int16_t>(monster.getId());
+	if (state.castFirstSerial[slot] != serial) {
+		state.castFirstSerial[slot] = serial;
+		state.castFirst[slot] = id;
+		return 100;
+	}
+	return state.castFirst[slot] == id ? 100 : GrantedExtraTargetPercent(*data);
 }
 
 GrantedRider HitGrantedRider()

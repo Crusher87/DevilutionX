@@ -644,10 +644,17 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 				isMonsterHit = MonsterTrapHit(monster, trapMin, trapMax, missile._midist, missile._mitype, damageType, isDamageShifted);
 			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && SupportedMissileIgnoresMonster(missile, static_cast<int>(monster.getId()))) {
 				HitTraceRefused(monster, "this projectile already pierced it");
+			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS) && GrantedMissileSkipsMonster(missile, monster)) {
+				HitTraceRefused(monster, "this cast already hit it");
 			} else if (IsAnyOf(missile._micaster, TARGET_BOTH, TARGET_MONSTERS)) {
 				int supportedMin = minDamage;
 				int supportedMax = maxDamage;
 				ScaleSupportedMissileDamage(missile, supportedMin, supportedMax);
+				// POE2 Mashup: a per-target granted skill hits its cast's first monster in full, the others for less.
+				if (const int share = GrantedMissileTargetPercent(missile, *missile.sourcePlayer(), monster); share < 100) {
+					supportedMin = std::max(supportedMin * share / 100, 1);
+					supportedMax = std::max(supportedMax * share / 100, supportedMin);
+				}
 				const SupportHitScope supportScope(*missile.sourcePlayer(), MissileSkill(missile));
 				MinionShotHits = missile.poe2.minionShot;
 				if (MinionShotHits)

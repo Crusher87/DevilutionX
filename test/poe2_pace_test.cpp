@@ -978,6 +978,9 @@ TEST_F(Poe2PaceTest, CasterWeaponsPaceThroughActOne)
 		EXPECT_LE(ashenFirebolt, today * 1.5) << floor.name;
 		// The free left click never outpaces the Firebolt gem on the same staff.
 		EXPECT_LE(ashenBolt, ashenFirebolt * 1.01) << floor.name;
+		// Every staff is worth holding (the coordinator, 10-28): a Voltaic Staff's Lightning Bolt, priced at 75% of Staff
+		// Bolt on one target, kills a lone monster in at most twice an Ashen Staff's time (it took four times before).
+		EXPECT_GE(voltaicBolt, ashenBolt / 2) << floor.name;
 		EXPECT_GE(freePerSecond(newMonk), freePerSecond(oldMonk)) << floor.name << ": the new quarterstaff replaces the old on the first drop";
 	}
 }

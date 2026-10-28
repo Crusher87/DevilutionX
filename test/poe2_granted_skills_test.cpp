@@ -441,6 +441,11 @@ TEST_F(Poe2GrantedSkillsTest, BurstsHitAroundTheTargetAndNovasAroundTheHero)
 	EXPECT_LT(target.hitPoints, target.maxHitPoints);
 	EXPECT_LT(beside.hitPoints, beside.maxHitPoints);
 	EXPECT_EQ(apart.hitPoints, apart.maxHitPoints);
+	// The target takes the whole hit; the one beside it its per-target share.
+	const auto taken = [](const Monster &monster) { return (monster.maxHitPoints - monster.hitPoints).raw(); };
+	const int share = GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::LightningBolt));
+	EXPECT_EQ(share, 48);
+	EXPECT_NEAR(taken(beside), taken(target) * share / 100, 2);
 
 	// Enervating Nova: everything within 3 tiles of the hero, wherever the cursor is.
 	Stand(player);
@@ -454,6 +459,72 @@ TEST_F(Poe2GrantedSkillsTest, BurstsHitAroundTheTargetAndNovasAroundTheHero)
 	EXPECT_LT(close.hitPoints, close.maxHitPoints);
 	EXPECT_LT(edge.hitPoints, edge.maxHitPoints);
 	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
+	// The one nearest the aim (the cursor's monster beyond the nova) takes it in full, the other its share.
+	EXPECT_NEAR(taken(close), taken(edge) * GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::EnervatingNova)) / 100, 2);
+	ActiveMonsterCount = 0;
+}
+
+TEST_F(Poe2GrantedSkillsTest, AStaffsProjectilesHitTheFirstInFullAndEachOnce)
+{
+	Player &player = *MyPlayer;
+	LoadMonsters();
+	Monster &first = PlaceMonster(0, { 20, 24 });
+	Monster &second = PlaceMonster(1, { 21, 25 });
+	Missile shard {};
+	SetMissileSkill(shard, player, SkillSlot::ForAttack(WeaponSkill::FreezingShards));
+	shard.poe2.grantedCast = 7;
+	// The cast's first monster: in full, and no shard of the cast hits it again.
+	EXPECT_FALSE(GrantedMissileSkipsMonster(shard, first));
+	EXPECT_EQ(GrantedMissileTargetPercent(shard, player, first), 100);
+	EXPECT_TRUE(GrantedMissileSkipsMonster(shard, first));
+	// Another: its per-target share (30% of the spell base for a 1.2 second cast, of a 64% shard).
+	const int share = GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::FreezingShards));
+	EXPECT_EQ(share, 46);
+	EXPECT_EQ(GrantedMissileTargetPercent(shard, player, second), share);
+	EXPECT_TRUE(GrantedMissileSkipsMonster(shard, second));
+	// The next cast starts over, while the one before keeps its first.
+	Missile next = shard;
+	next.poe2.grantedCast = 8;
+	EXPECT_FALSE(GrantedMissileSkipsMonster(next, first));
+	EXPECT_EQ(GrantedMissileTargetPercent(next, player, second), 100);
+	EXPECT_EQ(GrantedMissileTargetPercent(next, player, first), share);
+	Monster &third = PlaceMonster(2, { 22, 25 });
+	EXPECT_EQ(GrantedMissileTargetPercent(shard, player, third), share);
+
+	// A piercing bolt's line: the first in full, the ones behind for their share, the bleed included.
+	EXPECT_EQ(GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::Soulrend)), 45);
+	EXPECT_EQ(GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::FrostLance)), 46);
+	EXPECT_EQ(GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::ChimingBolt)), 48);
+	// Solar Orb's pulse: 25% a second of its 1.4 second pulse; Echoing Blast's echo counts.
+	EXPECT_EQ(GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::SolarOrb)), 49);
+	EXPECT_EQ(GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::EchoingBlast)), 45);
+
+	// Wand bolts, a cast without a serial, and anything outside POE2 hit in full.
+	Missile bolt {};
+	SetMissileSkill(bolt, player, SkillSlot::ForAttack(WeaponSkill::TwinBolts));
+	EXPECT_FALSE(GrantedMissileSkipsMonster(bolt, first));
+	EXPECT_EQ(GrantedMissileTargetPercent(bolt, player, first), 100);
+	EXPECT_EQ(GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::TwinBolts)), 100);
+	EXPECT_EQ(GrantedExtraTargetPercent(*FindTableSkill(WeaponSkill::Blizzard)), 100);
+	gbIsPoe2 = false;
+	EXPECT_FALSE(GrantedMissileSkipsMonster(shard, first));
+	EXPECT_EQ(GrantedMissileTargetPercent(shard, player, third), 100);
+	gbIsPoe2 = true;
+
+	// A cast of a staff's projectiles takes the next serial and gives it to its shards.
+	Hold(player, "Gelid Staff", 70);
+	Target();
+	const uint16_t before = player.poe2.grantedState.castSerial;
+	ASSERT_TRUE(TryUseGrantedSkill(player));
+	uint16_t carried = 0;
+	for (int tick = 0; tick < 60 && carried == 0; tick++) {
+		TestPlayerProcessAction(player);
+		for (const Missile &missile : Missiles)
+			carried = std::max(carried, missile.poe2.grantedCast);
+	}
+	Missiles.clear();
+	EXPECT_EQ(player.poe2.grantedState.castSerial, before + 1);
+	EXPECT_EQ(carried, before + 1);
 	ActiveMonsterCount = 0;
 }
 
@@ -802,24 +873,26 @@ TEST_F(Poe2GrantedSkillsTest, CriticalBoltDoublesEveryFifthCast)
 
 TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 {
-	// Plan 7.2: the hit (% of the spell base), the cast time, and the damage a second on one target, within 5%.
+	// Plan 7.2: the hit (% of the spell base), the cast time, and the damage a second on one target, within 5%. The
+	// staves' skills are priced per target (the coordinator, 10-28): 70-85% of Staff Bolt's on one target, and every other
+	// monster a cast hits takes at most 25% of the spell base a second of the cast.
 	const struct {
 		WeaponSkill skill;
 		int hit;
 		int castMs;
 		int oneTarget;
 	} Planned[] = {
-		{ WeaponSkill::FreezingShards, 18, 1200, 15 }, // one shard of the fan
-		{ WeaponSkill::LightningBolt, 22, 900, 24 },
-		{ WeaponSkill::ChimingBolt, 28, 900, 31 },
-		{ WeaponSkill::Soulrend, 17, 900, 33 }, // with the bleed
-		{ WeaponSkill::Reap, 30, 1200, 25 },
-		{ WeaponSkill::FrostLance, 30, 900, 33 },
-		{ WeaponSkill::EnervatingNova, 25, 1000, 25 },
-		{ WeaponSkill::ConsecratedGround, 26, 1250, 21 },
-		// The skill-balance review raised Dark Pact's hit from 23 to 30, keeping its 5% life cost.
-		{ WeaponSkill::DarkPact, 30, 900, 33 },
-		{ WeaponSkill::FeastOfFlesh, 20, 900, 22 },
+		{ WeaponSkill::FreezingShards, 64, 1200, 53 }, // one shard a monster a cast
+		{ WeaponSkill::LightningBolt, 46, 900, 51 },
+		{ WeaponSkill::ChimingBolt, 46, 900, 51 },
+		{ WeaponSkill::Soulrend, 28, 900, 54 }, // with the bleed
+		{ WeaponSkill::Reap, 64, 1200, 53 },
+		{ WeaponSkill::FrostLance, 48, 900, 53 },
+		{ WeaponSkill::EnervatingNova, 48, 1000, 48 },
+		{ WeaponSkill::ConsecratedGround, 63, 1250, 50 },
+		// Dark Pact keeps the most of the staves for its 5% life cost (the skill-balance review).
+		{ WeaponSkill::DarkPact, 50, 900, 56 },
+		{ WeaponSkill::FeastOfFlesh, 45, 900, 50 },
 		{ WeaponSkill::FrostBolt, 40, 750, 53 },
 		// Riders in: Wither and a cull about +10%, Critical Bolt's double every fifth cast +20%.
 		{ WeaponSkill::WitheringBolt, 37, 750, 54 }, // 49 with Wither
@@ -829,8 +902,8 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		{ WeaponSkill::TormentBolt, 38, 750, 51 },
 		{ WeaponSkill::CriticalBolt, 34, 750, 54 }, // on average
 		{ WeaponSkill::WitheringRay, 9, 750, 53 }, // 48 with Wither
-		{ WeaponSkill::EchoingBlast, 14, 900, 25 }, // with the echo's 60%
-		{ WeaponSkill::SolarOrb, 25, 900, 18 }, // a pulse every 1.4 seconds, one orb at a time
+		{ WeaponSkill::EchoingBlast, 31, 900, 55 }, // with the echo's 60%
+		{ WeaponSkill::SolarOrb, 71, 900, 51 }, // a pulse every 1.4 seconds, one orb at a time
 		{ WeaponSkill::VolatileBolt, 40, 800, 50 },
 		{ WeaponSkill::GalvanicBolt, 34, 650, 52 },
 		{ WeaponSkill::Decompose, 22, 800, 55 }, // the hit, then as much again over 4 seconds
@@ -851,16 +924,28 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		const double cast = planned.castMs / 1000.0;
 		const double hit = row.damagePercent * RiderPercent(row) / 100.0;
 		const bool wand = std::find_if(std::begin(PlainGrants), std::end(PlainGrants), [&](const GrantRow &g) { return g.skill == planned.skill; })->wand;
-		// The budget of plan 7.1: area hits at most 25% a second of cast time (Dark Pact pays life for its 30), piercing
-		// bolts 34%, a whole fan 75% a second, wand bolts 55% a second on one target.
-		if (IsAnyOf(row.shape, TableShape::Burst, TableShape::Around) && planned.skill != WeaponSkill::DarkPact)
-			EXPECT_LE(hit, 25 * cast * 1.01) << row.name;
-		if ((row.flags & TF_Pierce) != 0)
-			EXPECT_LE(hit, 34 * cast * 1.01) << row.name;
-		if (row.shape == TableShape::Projectiles && row.count > 2)
-			EXPECT_LE(hit * row.count / cast, 75 * 1.01) << row.name;
-		if (wand)
+		if (wand) {
+			// Wand bolts: 55% a second on one target (plan 7.1), and every monster they hit takes the whole hit.
 			EXPECT_LE(OneTargetPerSecond(row), 55 * 1.001) << row.name;
+			EXPECT_EQ(row.flags & TF_PerTarget, 0) << row.name;
+			EXPECT_EQ(GrantedExtraTargetPercent(row), 100) << row.name;
+			continue;
+		}
+		// Staves: one target at 70-85% of Staff Bolt's, under Condemn's 56 (the cheapest gem that isn't excused against
+		// them); every other monster a cast hits takes at most 25% of the spell base a second of the cast, or of a zone's
+		// pulse, its bleed and echo included.
+		const double staffBolt = GrantedStaffBoltPercent / CastSeconds(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt)));
+		EXPECT_GE(OneTargetPerSecond(row), staffBolt * 0.70) << row.name;
+		EXPECT_LE(OneTargetPerSecond(row), staffBolt * 0.85) << row.name;
+		EXPECT_LT(OneTargetPerSecond(row), 56.0) << row.name;
+		EXPECT_NE(row.flags & TF_PerTarget, 0) << row.name;
+		const double window = row.shape == TableShape::Zone ? row.interval / 20.0 : cast;
+		EXPECT_LT(GrantedExtraTargetPercent(row), 100) << row.name;
+		EXPECT_LE(hit * GrantedExtraTargetPercent(row) / 100.0, ExtraTargetPercentPerSecond * window * 1.01) << row.name;
+		// Not so far under that the area gives nothing: within a tenth of the budget.
+		EXPECT_GE(hit * GrantedExtraTargetPercent(row) / 100.0, ExtraTargetPercentPerSecond * window * 0.9) << row.name;
+		std::printf("%-18s one target %5.1f%% a second (%2.0f%% of Staff Bolt), each other %4.1f%% (%d%% of the hit)\n", std::string(row.name).c_str(),
+		    OneTargetPerSecond(row), OneTargetPerSecond(row) * 100 / staffBolt, hit * GrantedExtraTargetPercent(row) / 100.0 / window, GrantedExtraTargetPercent(row));
 	}
 	// Staff Bolt, the free bolt of the Ashen and Spriggan staves: 61% at 0.9 seconds.
 	EXPECT_NEAR(GrantedStaffBoltPercent / CastSeconds(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt))), 68, 68 * 0.05);
@@ -1055,7 +1140,7 @@ TEST_F(Poe2GrantedSkillsTest, ACastFiresFiveChillingShards)
 	EXPECT_EQ(LastPlayerAction, PlayerActionType::AttackMonsterTarget);
 	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(0)) << "free with no mana at all";
 
-	// Each shard hits for 18% of the spell base along the Fireball curve at the grant level (9).
+	// Each shard hits for 64% of the spell base along the Fireball curve at the grant level (9); a monster takes one a cast.
 	int shards = 0;
 	int damagePercent = 0;
 	for (int tick = 0; tick < 60 && player._pmode == PM_SPELL; tick++) {
@@ -1069,7 +1154,7 @@ TEST_F(Poe2GrantedSkillsTest, ACastFiresFiveChillingShards)
 		Missiles.clear();
 	}
 	EXPECT_EQ(shards, 5);
-	EXPECT_EQ(damagePercent, GemDamagePercent(Shards, 9) * 18 / 100);
+	EXPECT_EQ(damagePercent, GemDamagePercent(Shards, 9) * 64 / 100);
 	EXPECT_EQ(GemDamagePercent(Shards, 9), FireballCurvePercent(GrantedCurveEndAt20, 9));
 }
 
