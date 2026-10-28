@@ -538,10 +538,21 @@ TEST_F(Poe2LootTest, RetiredWeaponBasesNeverDrop)
 
 TEST_F(Poe2LootTest, UncutGemsTakeTheAreasLevel)
 {
-	// Cathedral floor 1 (a barrel's POE2 area level 3): skill gems, but no uncut support gem yet, as in POE2.
+	// Cathedral floor 1 (a barrel's POE2 area level 3): skill gems, and now and then a level 1 support (Curtis
+	// 2026-10-28: POE2 waits for area level 4, but he found none in 51 minutes).
 	const std::vector<Item> first = ContainerDrops(1, DTYPE_CATHEDRAL, 4000);
-	EXPECT_EQ(CountMisc(first, IMISC_UNCUT_SUPPORT), 0U);
+	EXPECT_GT(CountMisc(first, IMISC_UNCUT_SUPPORT), 0U);
+	EXPECT_LT(CountMisc(first, IMISC_UNCUT_SUPPORT), CountMisc(first, IMISC_UNCUT_SKILL) / 3) << "scarce at first";
 	EXPECT_GT(CountMisc(first, IMISC_UNCUT_SKILL), 0U);
+	for (const Item &item : first) {
+		if (item._iMiscId == IMISC_UNCUT_SUPPORT)
+			EXPECT_EQ(UncutGemLevel(item), 1);
+	}
+	// Scarce early, full weight from area level 10.
+	EXPECT_EQ(UncutSupportWeightPercent(1), UncutSupportFirstWeightPercent);
+	EXPECT_LT(UncutSupportWeightPercent(4), UncutSupportWeightPercent(7));
+	EXPECT_EQ(UncutSupportWeightPercent(UncutSupportFullWeightArea), 100);
+	EXPECT_EQ(UncutSupportWeightPercent(60), 100);
 
 	// Floor 4: level 1 supports only (POE2's next support level waits for area 16), skill gems up to the area's.
 	const std::vector<Item> fourth = ContainerDrops(4, DTYPE_CATHEDRAL, 4000);
@@ -579,6 +590,8 @@ TEST_F(Poe2LootTest, ContainerDropsOnTheFirstFloor)
 				dItem[x][y] = 0;
 	}
 }
+
+
 
 } // namespace
 
