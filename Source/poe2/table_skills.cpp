@@ -305,6 +305,34 @@ void AfterCast(Player &player, const TableSkillData &data, const CastResult &res
 		GainFrenzyCharge(player);
 }
 
+} // namespace
+
+Point PredictMonsterTile(const Monster &monster, int ticks)
+{
+	if (IsNoneOf(monster.mode, MonsterMode::MoveNorthwards, MonsterMode::MoveSouthwards, MonsterMode::MoveSideways))
+		return monster.position.tile;
+	// A walking monster's tile is the one it left until the step ends; then it takes another step the same way each
+	// walk, as long as the way is open.
+	const int ticksPerFrame = std::max<int>(monster.animInfo.ticksPerFrame, 1);
+	const int ticksPerTile = std::max(monster.animInfo.numberOfFrames * ticksPerFrame, 1);
+	const int elapsed = (monster.animInfo.currentFrame * ticksPerFrame) + monster.animInfo.tickCounterOfCurrentFrame;
+	const int remaining = std::max(ticksPerTile - elapsed, 1);
+	if (ticks < remaining)
+		return monster.position.tile;
+	const int steps = std::min(1 + ((ticks - remaining) / ticksPerTile), MaxPredictedSteps);
+	Point at = monster.position.future;
+	const Displacement step { monster.var1, monster.var2 };
+	for (int i = 1; i < steps; i++) {
+		const Point next = at + step;
+		if (!InDungeonBounds(next) || IsTileSolid(next))
+			break;
+		at = next;
+	}
+	return at;
+}
+
+namespace {
+
 Monster *TargetMonsterNear(Point target, int radius)
 {
 	Monster *best = nullptr;
@@ -336,6 +364,23 @@ vfx::Element LookOf(const TableSkillData &data)
 /** @brief Game ticks between Blizzard shard sounds, across every Blizzard at once. */
 constexpr int ShardSoundGap = 9;
 int ShardSoundCooldown = 0;
+
+/**
+ * @brief Where Glacial Spike erupts: under the monster it was cast at, where that monster will stand when the spike comes
+ * up, rather than where it stood when the cast began (Curtis 2026-10-28: it came up behind moving enemies).
+ */
+Point IceSpikeCenter(const Player &player, const TableSkillData &data, Point target)
+{
+	const int id = player.poe2.castTargetMonster;
+	if (player.poe2.castSkill != data.skill || id < 0 || static_cast<size_t>(id) >= MaxMonsters)
+		return target;
+	const Monster &monster = Monsters[id];
+	// One that died, or that a trigger or repeat isn't aimed at, keeps the spike on the target.
+	if (!CanHit(monster) || monster.position.tile.WalkingDistance(target) > IceSpikeTrackTiles)
+		return target;
+	// The zone bursts on its delay's last tick, after the one it's made on.
+	return PredictMonsterTile(monster, data.delay + 1);
+}
 
 void AddZone(const Player &player, const TableSkillData &data, Point center, int delay)
 {
@@ -792,6 +837,8 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		break;
 	}
 	case Zone:
+		if (data.zone == TableZone::IceSpike)
+			target = IceSpikeCenter(player, data, target);
 		AddZone(player, data, (data.flags & TF_AtPlayer) != 0 ? tile : target, data.delay);
 		break;
 	case Curse:

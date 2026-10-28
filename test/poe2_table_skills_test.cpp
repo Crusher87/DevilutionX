@@ -311,5 +311,33 @@ TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForAQuarter)
 	leveltype = DTYPE_TOWN;
 }
 
+TEST_F(Poe2TableSkillsTest, GlacialSpikeLeadsAWalkingMonster)
+{
+	// Curtis 2026-10-28: the spike came up behind moving enemies. It erupts where the monster will be.
+	Monster monster {};
+	monster.mode = MonsterMode::MoveSideways;
+	monster.position.tile = { 10, 10 };
+	monster.position.future = { 11, 10 };
+	monster.var1 = 1;
+	monster.var2 = 0;
+	monster.animInfo.numberOfFrames = 8;
+	monster.animInfo.ticksPerFrame = 1;
+	monster.animInfo.currentFrame = 2;
+	monster.animInfo.tickCounterOfCurrentFrame = 0;
+	// 6 ticks are left of this step, then 8 a tile.
+	EXPECT_EQ(PredictMonsterTile(monster, 0), Point(10, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 5), Point(10, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 6), Point(11, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 13), Point(11, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 14), Point(12, 10));
+	// A very fast monster outruns the lead.
+	EXPECT_EQ(PredictMonsterTile(monster, 200), Point(10 + MaxPredictedSteps, 10));
+	// One standing still is hit where it stands.
+	monster.mode = MonsterMode::Stand;
+	EXPECT_EQ(PredictMonsterTile(monster, 14), Point(10, 10));
+	// Glacial Spike's delay is short; the lead covers it.
+	EXPECT_LT(FindTableSkill(WeaponSkill::GlacialSpike)->delay, 8);
+}
+
 } // namespace
 } // namespace devilution
