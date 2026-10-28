@@ -1179,9 +1179,9 @@ void BuildUniquesView(TabView &view, unsigned page)
 
 void BuildBlankView(TabView &view, unsigned page)
 {
-	const std::string affinities = StashTabs.affinityText(page);
-	view.labels.push_back({ At(10, HeaderY + 2, 190, 14), affinities.empty() ? std::string(_("Takes anything")) : StrCat(_("Takes: "), affinities),
-	    UiFlags::ColorButtonpushed });
+	// A main tab (no affinities) takes anything; it says nothing about it.
+	if (const std::string affinities = StashTabs.affinityText(page); !affinities.empty())
+		view.labels.push_back({ At(10, HeaderY + 2, 190, 14), StrCat(_("Takes: "), affinities), UiFlags::ColorButtonpushed });
 	AddSettingsButton(view, HeaderY, 220);
 	view.buttons.push_back({ .rect = At(266, HeaderY, 46, 18), .text = std::string(_("Sort")), .onClick = [] {
 		                        if (!MyPlayer->HoldItem.isEmpty())
