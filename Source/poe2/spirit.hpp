@@ -115,6 +115,13 @@ int MinionDamagePercent(const Player &player);
 int ReservedSpirit(const Player &player);
 /** @brief Right-click in the Skills panel: switches the Spirit gem in a socket on or off. @return false if it holds no Spirit gem. */
 bool ToggleSpiritGem(Player &player, size_t socket);
+/** @brief The Spirit skill the sceptre in a hand (0 main, 1 off) grants, or None (caster-weapons-plan-v2.md 6.9). */
+PersistentSkill GrantedSpiritSkill(const Player &player, int hand);
+/**
+ * @brief Right-click on a granted Spirit skill's row: switches it off or back on (Poe2PlayerData::grantedOff).
+ * @return false if the hand's weapon grants no Spirit skill.
+ */
+bool ToggleGrantedSpiritSkill(Player &player, int hand);
 /** @brief Spirit not reserved, which POE2's globe shows lit. */
 inline int AvailableSpirit(const Player &player) { return MaxSpirit(player) - ReservedSpirit(player); }
 /**

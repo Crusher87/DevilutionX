@@ -1,5 +1,6 @@
 #include "panels/skills_panel.hpp"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <string>
@@ -81,11 +82,51 @@ struct Hit {
 	size_t socket = 0;
 };
 
+bool IsGrantedRow(size_t slot)
+{
+	return slot == GrantedRowMain || slot == GrantedRowOff;
+}
+
+int GrantedRowHand(size_t slot)
+{
+	return static_cast<int>(slot - GrantedRowMain);
+}
+
+/** @brief The Spirit skill a granted row shows: the one its hand's sceptre grants (caster-weapons-plan-v2.md 6.9). */
+PersistentSkill GrantedRowSkill(const Player &player, size_t slot)
+{
+	return IsGrantedRow(slot) ? GrantedSpiritSkill(player, GrantedRowHand(slot)) : PersistentSkill::None;
+}
+
+/** @brief The granted Spirit skills' rows shown, main hand first: one for each held sceptre. */
+std::vector<size_t> GrantedRows()
+{
+	std::vector<size_t> rows;
+	if (MyPlayer == nullptr)
+		return rows;
+	for (const size_t slot : { GrantedRowMain, GrantedRowOff }) {
+		if (GrantedRowSkill(*MyPlayer, slot) != PersistentSkill::None)
+			rows.push_back(slot);
+	}
+	return rows;
+}
+
+/** @brief The skill of any row: a gem socket's, the default attack's, or a held sceptre's granted Spirit skill. */
+SkillSlot PanelRowSkill(const Player &player, size_t slot)
+{
+	if (IsGrantedRow(slot)) {
+		const PersistentSkill skill = GrantedRowSkill(player, slot);
+		return skill == PersistentSkill::None ? SkillSlot {} : SkillSlot::ForPersistent(skill);
+	}
+	return RowSkill(player, slot);
+}
+
 Rectangle PanelRect()
 {
-	// One row taller than the other left panels, for the weapon's default attack; up a little if the screen is short.
+	// One row taller than the other left panels, for the weapon's default attack, and one more for each held sceptre's
+	// Spirit skill; up a little if the screen is short.
 	const Rectangle left = GetLeftPanel();
-	const int height = left.size.height + RowHeight + RowGap;
+	const int height = left.size.height + ((RowHeight + RowGap) * (1 + static_cast<int>(GrantedRows().size())));
 	const int top = std::max(0, std::min(left.position.y, GetMainPanel().position.y - height));
 	return { { left.position.x, top }, { left.size.width, height } };
 }
@@ -105,8 +146,13 @@ Rectangle PageTabRect(size_t page)
 Rectangle RowRect(size_t slot)
 {
 	const Rectangle panel = PanelRect();
-	// The default attack's row is first; the page of gem sockets follows.
-	const int row = slot == DefaultAttackRow ? 0 : static_cast<int>(slot % RowsPerPage) + 1;
+	// The default attack's row is first, then the sceptres' granted Spirit skills; the page of gem sockets follows.
+	const std::vector<size_t> granted = GrantedRows();
+	int row = static_cast<int>(slot % RowsPerPage) + 1 + static_cast<int>(granted.size());
+	if (slot == DefaultAttackRow)
+		row = 0;
+	else if (IsGrantedRow(slot))
+		row = 1 + static_cast<int>(std::find(granted.begin(), granted.end(), slot) - granted.begin());
 	return { panel.position + Displacement { 6, HeaderHeight + (row * (RowHeight + RowGap)) }, { panel.size.width - 12, RowHeight } };
 }
 
@@ -131,7 +177,7 @@ Rectangle CountButtonRect(size_t slot, bool plus)
 
 bool RowHasMinionCount(const Player &player, size_t slot)
 {
-	return slot != DefaultAttackRow && IsMinionCountSkill(RowSkill(player, slot).persistent());
+	return slot != DefaultAttackRow && IsMinionCountSkill(PanelRowSkill(player, slot).persistent());
 }
 
 bool IsMetaRow(const Player &player, size_t slot)
@@ -151,13 +197,14 @@ bool HeldSpellFitsMeta(const Player &player, size_t slot)
 	return IsMetaRow(player, slot) && IsSkillGem(player.HoldItem) && CanGoInMetaGem(RowSkill(player, slot).persistent(), SkillForGem(player.HoldItem));
 }
 
-/** @brief The rows shown: the default attack's, then the current page of gem sockets. */
-std::array<size_t, RowsPerPage + 1> VisibleRows()
+/** @brief The rows shown: the default attack's, the sceptres' granted Spirit skills, then the current page of gem sockets. */
+std::vector<size_t> VisibleRows()
 {
-	std::array<size_t, RowsPerPage + 1> rows {};
-	rows[0] = DefaultAttackRow;
+	std::vector<size_t> rows { DefaultAttackRow };
+	for (const size_t slot : GrantedRows())
+		rows.push_back(slot);
 	for (size_t i = 0; i < RowsPerPage; i++)
-		rows[i + 1] = (Page * RowsPerPage) + i;
+		rows.push_back((Page * RowsPerPage) + i);
 	return rows;
 }
 
@@ -174,6 +221,16 @@ Hit HitAt(Point position)
 			continue;
 		if (IconRect(slot).contains(position))
 			return { Hit::Kind::Skill, slot };
+		// A granted row has no support sockets.
+		if (IsGrantedRow(slot)) {
+			if (MyPlayer != nullptr && RowHasMinionCount(*MyPlayer, slot)) {
+				if (CountButtonRect(slot, false).contains(position))
+					return { Hit::Kind::CountMinus, slot };
+				if (CountButtonRect(slot, true).contains(position))
+					return { Hit::Kind::CountPlus, slot };
+			}
+			return { Hit::Kind::Row, slot };
+		}
 		if (MyPlayer != nullptr && RowHasMinionCount(*MyPlayer, slot)) {
 			if (CountButtonRect(slot, false).contains(position))
 				return { Hit::Kind::CountMinus, slot };
@@ -283,7 +340,7 @@ void DrawHeader(const Surface &out, const Player &player, const Hit &hover)
 
 void DrawMinionCount(const Surface &out, const Player &player, size_t slot, const Hit &hover)
 {
-	const PersistentSkill skill = RowSkill(player, slot).persistent();
+	const PersistentSkill skill = PanelRowSkill(player, slot).persistent();
 	const int chosen = ChosenMinionCount(player, skill);
 	const int active = ActiveMinionCount(player, skill);
 	const int affordable = AffordableMinionCount(player, skill);
@@ -300,8 +357,60 @@ void DrawMinionCount(const Surface &out, const Player &player, size_t slot, cons
 	DrawString(out, StrCat(std::min(active, chosen)), number, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (active < chosen ? UiFlags::ColorRed : UiFlags::ColorWhite) });
 }
 
+/** @brief Whether a granted row's skill gives way: to a gem of it in the Skills panel, or to the main hand's grant of it. */
+bool GrantedRowGivesWay(const Player &player, size_t slot)
+{
+	const PersistentSkill skill = GrantedRowSkill(player, slot);
+	return player.poe2.skillLevel(skill) > 0 || (slot == GrantedRowOff && GrantedRowSkill(player, GrantedRowMain) == skill);
+}
+
+/** @brief A held sceptre's granted Spirit skill: its icon, name, level and Spirit, and its switch; no support sockets. */
+void DrawGrantedRow(const Surface &out, const Player &player, size_t slot, const Hit &hover)
+{
+	const Rectangle row = RowRect(slot);
+	const SkillSlot skill = PanelRowSkill(player, slot);
+	const PersistentSkill persistent = skill.persistent();
+	const bool on = !player.poe2.grantedOff(GrantedRowHand(slot));
+	const bool active = on && IsPersistentSkillActive(player, persistent) && !GrantedRowGivesWay(player, slot);
+	FillRectangle(out, row, hover.kind != Hit::Kind::None && hover.slot == slot ? RowHoverColor : RowColor);
+	DrawFrame(out, row, InnerBorderColor);
+
+	const Rectangle icon = IconRect(slot);
+	DrawHalfTransparentRectTo(out, icon.position.x, icon.position.y, icon.size.width, icon.size.height);
+	const Point iconBottomLeft { icon.position.x, icon.position.y + icon.size.height - 1 };
+	DrawSkillIcon(out, iconBottomLeft, skill, active);
+	if (on) {
+		DrawFrame(out, icon, SpiritOnColor);
+		DrawFrame(out, { icon.position + Displacement { 1, 1 }, { icon.size.width - 2, icon.size.height - 2 } }, SpiritOnColor);
+	}
+	if (hover.kind == Hit::Kind::Skill && hover.slot == slot)
+		DrawSmallSpellIconBorder(out, iconBottomLeft);
+
+	const Rectangle title { row.position + Displacement { 48, 2 }, { row.size.width - 52, 14 } };
+	DrawString(out, SkillName(skill), title, { .flags = UiFlags::ColorWhitegold | UiFlags::VerticalCenter });
+	if (RowHasMinionCount(player, slot) && !GrantedRowGivesWay(player, slot)) {
+		DrawMinionCount(out, player, slot, hover);
+	} else {
+		const int spirit = IsMinionCountSkill(persistent) ? GemSpiritReservation(player, persistent) : GemSpiritCost(player, persistent);
+		const std::string right = FormatRuntime(_("Level {:d}   Spirit {:d}"), player.poe2.grantedLevel(skill), spirit);
+		DrawString(out, right, title, { .flags = UiFlags::AlignRight | UiFlags::ColorWhite | UiFlags::VerticalCenter });
+	}
+	std::string state;
+	if (player.poe2.skillLevel(persistent) > 0)
+		state = _("Granted: your gem of it is used instead");
+	else if (slot == GrantedRowOff && GrantedRowSkill(player, GrantedRowMain) == persistent)
+		state = on ? _("Granted by both sceptres (right-click: off)") : _("Granted by both sceptres (right-click: on)");
+	else
+		state = on ? _("Granted: on (right-click: off)") : _("Granted: off (right-click: on)");
+	DrawString(out, state, { row.position + Displacement { 48, 20 }, { row.size.width - 52, 24 } }, { .flags = (on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
+}
+
 void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &hover)
 {
+	if (IsGrantedRow(slot)) {
+		DrawGrantedRow(out, player, slot, hover);
+		return;
+	}
 	const Rectangle row = RowRect(slot);
 	const SkillSlot skill = RowSkill(player, slot);
 	const bool isDefault = slot == DefaultAttackRow;
@@ -413,7 +522,22 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 	}
 	if (hover.kind == Hit::Kind::PageTab || hover.kind == Hit::Kind::Row)
 		return;
-	const SkillSlot skill = RowSkill(player, hover.slot);
+	const SkillSlot skill = PanelRowSkill(player, hover.slot);
+	if (hover.kind == Hit::Kind::Skill && IsGrantedRow(hover.slot)) {
+		const PersistentSkill persistent = skill.persistent();
+		lines.emplace_back(std::string(PersistentSkillDescription(persistent)), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(_("Granted by your {:s} at level {:d}: it needs no gem, and takes no supports."),
+		                       hover.slot == GrantedRowMain ? _("main hand sceptre") : _("off hand sceptre"), player.poe2.grantedLevel(skill)),
+		    UiFlags::ColorWhite);
+		if (player.poe2.skillLevel(persistent) > 0)
+			lines.emplace_back(_("A gem of it is in your Skills panel: the gem's row is used instead."), UiFlags::ColorBlue);
+		if (player.poe2.grantedOff(GrantedRowHand(hover.slot)))
+			lines.emplace_back(_("Off: it reserves no Spirit. Right-click to switch it on"), UiFlags::ColorRed);
+		else
+			lines.emplace_back(_("On. Right-click to switch it off"), UiFlags::ColorWhite);
+		DrawTooltip(out, bounds, MousePosition, std::string(SkillName(skill)), UiFlags::ColorWhitegold, lines);
+		return;
+	}
 	if (IsAnyOf(hover.kind, Hit::Kind::CountMinus, Hit::Kind::CountPlus)) {
 		const PersistentSkill persistent = skill.persistent();
 		const int chosen = ChosenMinionCount(player, persistent);
@@ -423,7 +547,7 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 			lines.emplace_back(FormatRuntime(_("The first {:d} reserve no Spirit; each one more reserves {:d}."), free, perMinion), UiFlags::ColorWhite);
 		else
 			lines.emplace_back(FormatRuntime(_("Each one reserves {:d} Spirit."), perMinion), UiFlags::ColorWhite);
-		lines.emplace_back(FormatRuntime(_("Gem level {:d}: minions fight at level {:d}."), player.poe2.skillLevel(persistent), MinionLevelForGemLevel(player.poe2.skillLevel(persistent))), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(_("Gem level {:d}: minions fight at level {:d}."), player.poe2.effectiveLevel(persistent), MinionLevelForGemLevel(player.poe2.effectiveLevel(persistent))), UiFlags::ColorWhite);
 		lines.emplace_back(FormatRuntime(_("Reserving {:d} Spirit; {:d} of {:d} left."), GemSpiritReservation(player, persistent), AvailableSpirit(player), MaxSpirit(player)), UiFlags::ColorWhite);
 		if (active < chosen)
 			lines.emplace_back(FormatRuntime(_("Not enough Spirit for {:d}: raising {:d}."), chosen, active), UiFlags::ColorRed);
@@ -777,18 +901,32 @@ void DrawSkillsPanel(const Surface &out)
 		DrawHoverTooltip(out, player, hover);
 }
 
+bool RightClickSkillsPanelRow(Player &player, size_t row)
+{
+	// A held sceptre's granted Spirit skill: its own switch, never a socket's bit.
+	if (IsGrantedRow(row)) {
+		const int hand = GrantedRowHand(row);
+		if (!ToggleGrantedSpiritSkill(player, hand))
+			return false;
+		PlaySFX(player.poe2.grantedOff(hand) ? SfxID::SpellEnd : SfxID::SpellManaShield);
+		return true;
+	}
+	if (row >= NumSkillSlots)
+		return false;
+	if (!ToggleSpiritGem(player, row))
+		return false;
+	PlaySFX(player.poe2.spiritGemOn(row) ? SfxID::SpellManaShield : SfxID::SpellEnd);
+	return true;
+}
+
 bool HandleSkillsPanelRightClick(Point mousePosition)
 {
 	if (!IsOpen || MyPlayer == nullptr || !PanelRect().contains(mousePosition))
 		return false;
 	const Hit hit = HitAt(mousePosition);
-	if (IsNoneOf(hit.kind, Hit::Kind::Skill, Hit::Kind::Row) || hit.slot >= NumSkillSlots)
+	if (IsNoneOf(hit.kind, Hit::Kind::Skill, Hit::Kind::Row))
 		return false;
-	Player &player = *MyPlayer;
-	if (!ToggleSpiritGem(player, hit.slot))
-		return false;
-	PlaySFX(player.poe2.spiritGemOn(hit.slot) ? SfxID::SpellManaShield : SfxID::SpellEnd);
-	return true;
+	return RightClickSkillsPanelRow(*MyPlayer, hit.slot);
 }
 
 bool UseJewellerOnSkillsPanel(Player &player, Point mousePosition)
@@ -796,7 +934,7 @@ bool UseJewellerOnSkillsPanel(Player &player, Point mousePosition)
 	if (!IsOpen || !PanelRect().contains(mousePosition))
 		return false;
 	const Hit hit = HitAt(mousePosition);
-	if (IsNoneOf(hit.kind, Hit::Kind::Row, Hit::Kind::Skill, Hit::Kind::Socket))
+	if (IsNoneOf(hit.kind, Hit::Kind::Row, Hit::Kind::Skill, Hit::Kind::Socket) || IsGrantedRow(hit.slot))
 		return false;
 	return ApplyJewellerOrb(CurrencyOrbForMiscId(player._pOilType), player, hit.slot);
 }
@@ -821,7 +959,8 @@ void HandleSkillsPanelClick(Point mousePosition)
 	const Hit hit = HitAt(mousePosition);
 	switch (hit.kind) {
 	case Hit::Kind::Row:
-		if (DetailsSlot == hit.slot || RowSkill(player, hit.slot).isEmpty())
+		// A granted row has no details pane (it isn't a gem socket).
+		if (DetailsSlot == hit.slot || IsGrantedRow(hit.slot) || RowSkill(player, hit.slot).isEmpty())
 			DetailsSlot = std::nullopt;
 		else
 			DetailsSlot = hit.slot;
@@ -833,16 +972,17 @@ void HandleSkillsPanelClick(Point mousePosition)
 		Page = hit.slot;
 		break;
 	case Hit::Kind::Skill:
-		if (hit.slot != DefaultAttackRow)
+		// The granted rows aren't sockets: nothing goes in or comes out.
+		if (hit.slot < NumSkillSlots)
 			ClickSkillSlot(player, hit.slot, /*canTakeOut=*/true);
 		break;
 	case Hit::Kind::Socket:
-		if (hit.socket < SupportSocketCount(player, hit.slot) && SkillTakesSupports(RowSkill(player, hit.slot)))
+		if (hit.slot <= DefaultAttackRow && hit.socket < SupportSocketCount(player, hit.slot) && SkillTakesSupports(RowSkill(player, hit.slot)))
 			ClickSocket(player, hit.slot, hit.socket);
 		break;
 	case Hit::Kind::CountMinus:
 	case Hit::Kind::CountPlus:
-		ChangeMinionCount(player, RowSkill(player, hit.slot).persistent(), hit.kind == Hit::Kind::CountPlus);
+		ChangeMinionCount(player, PanelRowSkill(player, hit.slot).persistent(), hit.kind == Hit::Kind::CountPlus);
 		break;
 	default:
 		break;

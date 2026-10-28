@@ -32,6 +32,11 @@ bool SkillsPanelContains(Point position);
 void HandleSkillsPanelClick(Point mousePosition);
 /** @brief Right-click on a Spirit gem switches it on or off. @return true if the click was used. */
 bool HandleSkillsPanelRightClick(Point mousePosition);
+/**
+ * @brief A right-click on a row: a socket's Spirit gem, or a held sceptre's granted Spirit skill (GrantedRowMain,
+ * GrantedRowOff), switches on or off; the default attack's row and other gems do nothing. @return true if it was used.
+ */
+bool RightClickSkillsPanelRow(Player &player, size_t row);
 /** @brief Uses the Jeweller's Orb on the cursor on the skill under the mouse; true if it opened a socket. */
 bool UseJewellerOnSkillsPanel(Player &player, Point mousePosition);
 /** @brief The tooltip line on a locked support socket: which Jeweller's Orb opens it. */

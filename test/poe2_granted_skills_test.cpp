@@ -26,6 +26,7 @@
 #include "levels/gendung.h"
 #include "missiles.h"
 #include "monster.h"
+#include "panels/skills_panel.hpp"
 #include "player.h"
 #include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
@@ -33,6 +34,8 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -1134,6 +1137,99 @@ TEST_F(Poe2GrantedSkillsTest, TheDefaultRowsSupportsApply)
 	Hold(player, "Ashen Staff");
 	EXPECT_FALSE(player.poe2.takesDefaultSupports(Shards));
 	EXPECT_FALSE(player.poe2.hasSupport(Shards, SupportGem::Volley));
+}
+
+TEST_F(Poe2GrantedSkillsTest, ASceptresSpiritSkillReservesAndSwitchesOnItsOwnRow)
+{
+	Player &player = *MyPlayer;
+	const PersistentSkill ward = PersistentSkill::ManaShield;
+	Hold(player, "Fine Stoic Sceptre", 33);
+	ASSERT_EQ(GrantedSpiritSkill(player, 0), ward);
+	EXPECT_EQ(GrantedSpiritSkill(player, 1), PersistentSkill::None);
+	EXPECT_EQ(player.poe2.skillLevel(ward), 0) << "No gem of it";
+	EXPECT_EQ(player.poe2.effectiveLevel(ward), GrantedGemLevel(33));
+	// On from the start, as in every hero saved before it: it reserves its Spirit, after the gems.
+	EXPECT_EQ(player.poe2.spiritGemsOn, 0);
+	EXPECT_FALSE(player.poe2.grantedOff(0));
+	EXPECT_TRUE(IsPersistentSkillActive(player, ward));
+	const int cost = GemSpiritCost(player, ward);
+	EXPECT_GT(cost, 0);
+	EXPECT_EQ(ReservedSpirit(player), cost);
+	EXPECT_EQ(GemSpiritReservation(player, ward), cost);
+	EXPECT_EQ(MaxSpirit(player), BaseSpirit + SceptreSpirit);
+
+	// The default attack's row does what it did: nothing.
+	EXPECT_FALSE(RightClickSkillsPanelRow(player, DefaultAttackRow));
+	EXPECT_EQ(player.poe2.spiritGemsOn, 0);
+	// The granted row flips bit 12, and only it: no socket's gem is switched.
+	EXPECT_EQ(GrantedRowMain, 13U);
+	EXPECT_EQ(GrantedRowOff, 14U);
+	ASSERT_TRUE(RightClickSkillsPanelRow(player, GrantedRowMain));
+	EXPECT_EQ(player.poe2.spiritGemsOn, 1U << 12);
+	EXPECT_TRUE(player.poe2.grantedOff(0));
+	EXPECT_FALSE(player.poe2.grantedOff(1));
+	for (size_t socket = 0; socket < NumSkillSlots; socket++)
+		EXPECT_FALSE(player.poe2.spiritGemOn(socket)) << socket;
+	EXPECT_FALSE(IsPersistentSkillActive(player, ward));
+	EXPECT_EQ(ReservedSpirit(player), 0);
+	// Nothing grants in the off hand: its row does nothing.
+	EXPECT_FALSE(RightClickSkillsPanelRow(player, GrantedRowOff));
+	EXPECT_EQ(player.poe2.spiritGemsOn, 1U << 12);
+	ASSERT_TRUE(RightClickSkillsPanelRow(player, GrantedRowMain));
+	EXPECT_EQ(player.poe2.spiritGemsOn, 0);
+	EXPECT_TRUE(IsPersistentSkillActive(player, ward));
+	// The gem's own bits never reach the granted rows.
+	EXPECT_FALSE(ToggleSpiritGem(player, GrantedSpiritOffBit));
+	EXPECT_FALSE(ToggleSpiritGem(player, GrantedSpiritOffBit + 1));
+	EXPECT_EQ(player.poe2.spiritGemsOn, 0);
+
+	// A gem of it in the Skills panel wins: it reserves once, and switched off, the sceptre doesn't fill in.
+	SocketSkill(player, 0, SkillSlot::ForPersistent(ward));
+	ASSERT_TRUE(ToggleSpiritGem(player, 0));
+	EXPECT_EQ(ReservedSpirit(player), cost);
+	ASSERT_TRUE(ToggleSpiritGem(player, 0));
+	EXPECT_FALSE(IsPersistentSkillActive(player, ward));
+	EXPECT_EQ(ReservedSpirit(player), 0);
+	SocketSkill(player, 0, SkillSlot {});
+	EXPECT_TRUE(IsPersistentSkillActive(player, ward));
+
+	// Two sceptres that grant it reserve once, on while either hand's is; the off hand's row flips bit 13 only.
+	Item &right = player.InvBody[INVLOC_HAND_RIGHT];
+	right = player.InvBody[INVLOC_HAND_LEFT];
+	CalcPlrInv(player, false);
+	ASSERT_EQ(GrantedSpiritSkill(player, 1), ward);
+	EXPECT_EQ(MaxSpirit(player), BaseSpirit + (2 * SceptreSpirit));
+	EXPECT_EQ(ReservedSpirit(player), cost);
+	ASSERT_TRUE(RightClickSkillsPanelRow(player, GrantedRowOff));
+	EXPECT_EQ(player.poe2.spiritGemsOn, 1U << 13);
+	EXPECT_TRUE(IsPersistentSkillActive(player, ward));
+	EXPECT_EQ(ReservedSpirit(player), cost);
+	ASSERT_TRUE(RightClickSkillsPanelRow(player, GrantedRowMain));
+	EXPECT_FALSE(IsPersistentSkillActive(player, ward));
+	EXPECT_EQ(ReservedSpirit(player), 0);
+	player.poe2.spiritGemsOn = 0;
+	right = {};
+
+	// Skeleton Warriors from a sceptre: minions as for a gem, at the level it grants.
+	Hold(player, "Fine Rattling Sceptre", 65);
+	const PersistentSkill warriors = PersistentSkill::SkeletalWarriors;
+	ASSERT_EQ(GrantedSpiritSkill(player, 0), warriors);
+	EXPECT_EQ(player.poe2.effectiveLevel(warriors), GrantedGemLevel(65));
+	EXPECT_EQ(ActiveMinionCount(player, warriors), StartingMinionCount(warriors));
+	EXPECT_EQ(SpiritPerMinion(player, warriors), BaseSpiritPerMinion(warriors, GrantedGemLevel(65)));
+	ASSERT_TRUE(RightClickSkillsPanelRow(player, GrantedRowMain));
+	EXPECT_EQ(ActiveMinionCount(player, warriors), 0);
+	player.poe2.spiritGemsOn = 0;
+
+	// A staff's or wand's grant is an attack, with no Spirit row; outside POE2 nothing is granted.
+	Hold(player, "Gelid Staff");
+	EXPECT_EQ(GrantedSpiritSkill(player, 0), PersistentSkill::None);
+	EXPECT_FALSE(RightClickSkillsPanelRow(player, GrantedRowMain));
+	Hold(player, "Fine Stoic Sceptre", 33);
+	gbIsPoe2 = false;
+	EXPECT_EQ(GrantedSpiritSkill(player, 0), PersistentSkill::None);
+	EXPECT_FALSE(IsPersistentSkillActive(player, ward));
+	EXPECT_EQ(player.poe2.spiritGemsOn, 0);
 }
 
 TEST_F(Poe2GrantedSkillsTest, OutsidePoe2NothingIsGranted)

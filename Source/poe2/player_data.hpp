@@ -462,6 +462,15 @@ constexpr size_t NumSkillSlots = 12;
 constexpr size_t OldNumSkillSlots = 6;
 /** @brief The Skills panel row of the weapon's default attack, after the gem sockets: it takes supports like a gem. */
 constexpr size_t DefaultAttackRow = NumSkillSlots;
+/**
+ * @brief The Skills panel rows of the Spirit skills held sceptres grant, main hand then off hand, under the default
+ * attack's row (caster-weapons-plan-v2.md 6.9). They have no support sockets and aren't gem sockets: nothing indexes a
+ * socket array with them.
+ */
+constexpr size_t GrantedRowMain = DefaultAttackRow + 1;
+constexpr size_t GrantedRowOff = DefaultAttackRow + 2;
+/** @brief The spiritGemsOn bit of the main hand's granted Spirit skill; the off hand's is the next. Set means off. */
+constexpr size_t GrantedSpiritOffBit = NumSkillSlots;
 
 /** @brief Slots of the skill tray: the three mouse buttons, then six keys (Q, E, R, T, F and G by default). */
 enum class TraySlot : uint8_t {
@@ -833,7 +842,11 @@ struct Poe2PlayerData {
 	 */
 	std::array<std::array<SkillSlot, MaxSupportSockets>, NumSkillSlots> metaSkills {};
 	std::array<std::array<uint8_t, MaxSupportSockets>, NumSkillSlots> metaSkillLevels {};
-	/** @brief Spirit gems switched on with a right-click in the Skills panel, one bit per socket; an off gem reserves nothing. */
+	/**
+	 * @brief Spirit gems switched on with a right-click in the Skills panel, one bit per socket; an off gem reserves
+	 * nothing. Bits 12 and 13 are the other way round: set, the main or off hand's granted Spirit skill is off
+	 * (grantedOff), so every hero saved before it starts with them on.
+	 */
 	uint16_t spiritGemsOn = 0;
 	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
 	uint8_t spiritSkulls = 0;
@@ -1230,6 +1243,19 @@ struct Poe2PlayerData {
 	[[nodiscard]] bool spiritGemOn(size_t socket) const
 	{
 		return socket < NumSkillSlots && ((spiritGemsOn >> socket) & 1U) != 0;
+	}
+
+	/** @brief Whether the Spirit skill the sceptre in a hand (0 main, 1 off) grants is switched off in the Skills panel. */
+	[[nodiscard]] bool grantedOff(int hand) const
+	{
+		return hand >= 0 && hand < 2 && ((spiritGemsOn >> (GrantedSpiritOffBit + static_cast<size_t>(hand))) & 1U) != 0;
+	}
+
+	/** @brief Switches the Spirit skill the sceptre in a hand grants off, or back on. */
+	void toggleGranted(int hand)
+	{
+		if (hand >= 0 && hand < 2)
+			spiritGemsOn ^= static_cast<uint16_t>(1U << (GrantedSpiritOffBit + static_cast<size_t>(hand)));
 	}
 
 	/** @brief The Skills panel row and socket of the meta gem the skill is inside, if it is. */
