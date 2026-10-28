@@ -135,6 +135,9 @@ const TableSkillData Table[] = {
 	{ WS::LowerResist, "Lower Resist", "Curses enemies with -30% to fire, lightning and magic resistance", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::LowerResist, TableBuff::None, TT_Occult | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 100 },
 	{ WS::Confuse, "Confuse", "Curses enemies to attack each other for 6 seconds", 11, 12, TW::None, 1, Curse, Flat, 0, 2, 120, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Confuse, TableBuff::None, TT_Occult, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 100 },
 	{ WS::Attract, "Attract", "Turns a whole pack on each other for 3 seconds", 13, 14, TW::None, 1, Curse, Flat, 0, 5, 60, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Attract, TableBuff::None, TT_Occult, Icon(SpellIcon::Telekinesis), TableCurve::Boneshatter, 100 },
+	// Granted by the caster weapons rework's staves and wands (caster-weapons-plan-v2.md 6.12 and 7.2): no gem, no mana, no
+	// tab; each hit is set for its cast time (skill_speed.tsv), so the rows take no damage_pct.
+	{ WS::FreezingShards, "Freezing Shards", "A fan of five shards of ice that chill what they hit", 0, 0, TW::None, 1, Projectiles, 18, 5, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 };
 // clang-format on
 
@@ -173,6 +176,17 @@ std::vector<SkillZone> Zones;
 int GemLevel(const Player &player, WeaponSkill skill)
 {
 	return std::max(player.poe2.effectiveLevel(skill), 1);
+}
+
+/**
+ * @brief A granted skill takes the spell damage of gear, the tree and Spirit skills, as Staff Bolt and the gem spells do
+ * (UniqueSpellDamagePercent); the element's own damage comes on the hit. 100 for every other row.
+ */
+int GrantedSpellDamagePercent(const Player &player, const TableSkillData &data)
+{
+	if (!IsGrantedTableSkill(data))
+		return 100;
+	return UniqueSpellDamagePercent(player, SpellID::Firebolt) * SpiritSpellDamagePercent(player) / 100;
 }
 
 int CurvePercent(const Player &player, WeaponSkill skill)
@@ -215,6 +229,7 @@ Fixed26_6 FixedDamage(const Player &player, const TableSkillData &data)
 	int64_t raw = static_cast<int64_t>(std::max(base, 1)) * 64;
 	raw = raw * CurvePercent(player, data.skill) / 100;
 	raw = raw * data.damagePercent / 100;
+	raw = raw * GrantedSpellDamagePercent(player, data) / 100;
 	raw = raw * (100 + SoulHarvestDamagePercent(player)) / 100;
 	return Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 64, INT32_MAX / 2)));
 }
@@ -443,7 +458,7 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	SetMissileSkill(*missile, player, SkillSlot::ForAttack(data.skill));
 	// Souls add to weapon projectiles through the weapon hit (see ResourceAttackDamagePercent).
 	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
-	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * (100 + souls) / 100, INT16_MAX));
+	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * GrantedSpellDamagePercent(player, data) / 100 * (100 + souls) / 100, INT16_MAX));
 	if ((data.flags & TF_Pierce) != 0)
 		missile->poe2.piercesLeft = static_cast<int8_t>(missile->poe2.piercesLeft + 3);
 	if ((data.flags & TF_LandingBurst) != 0) {
@@ -780,7 +795,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		}
 		break;
 	case Projectiles: {
-		int count = data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill)) + SupportExtraProjectileCount(player, slot);
+		int count = data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.effectiveLevel(data.skill)) + SupportExtraProjectileCount(player, slot);
 		if ((data.flags & TF_Frenzy) != 0)
 			count += player.poe2.frenzyCharges;
 		FireFanOf(player, data, target, count);
@@ -793,7 +808,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			FireTableShot(player, shot, target, TakePerHitIndex(player));
 			break;
 		}
-		StartSkillVolley(player, data.skill, target, data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.skillLevel(data.skill)) + SupportExtraProjectileCount(player, slot));
+		StartSkillVolley(player, data.skill, target, data.count + GemExtraProjectiles(SkillSlot::ForAttack(data.skill), player.poe2.effectiveLevel(data.skill)) + SupportExtraProjectileCount(player, slot));
 		break;
 	case Burst:
 		if ((data.flags & TF_Spell) != 0) {

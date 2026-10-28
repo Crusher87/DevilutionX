@@ -123,6 +123,19 @@ std::string_view WeaponSkillWeapons(WeaponSkill skill);
  * @return true if the skill was queued.
  */
 bool TryUseWeaponSkill(Player &player, WeaponSkill skill);
+/**
+ * @brief Casts the main caster weapon's granted skill at the cursor (caster-weapons-plan-v2.md 6.6): the left click and its
+ * hold-to-repeat, the controller's attack and the skill bar's weapon attack. It needs no gem or weapon check, and costs
+ * no mana unless supports sit on the default attack row (GrantedSupportedManaCost). Single player only. Sets
+ * LastPlayerAction for the local hero.
+ * @return true if the cast started.
+ */
+bool TryUseGrantedSkill(Player &player);
+/**
+ * @brief A granted skill's mana cost before supports, once any support sits on the default attack row: the supports'
+ * cost multipliers then apply to it. A bare granted skill is free (skill-balance review of plan v2, change 2).
+ */
+constexpr int GrantedSupportedManaCost = 2;
 
 /**
  * @brief Called when an attack starts: turns a queued skill into the active one and pays its mana.

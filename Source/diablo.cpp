@@ -121,6 +121,7 @@
 #include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "portal.h"
 #include "qol/chatlog.h"
@@ -341,8 +342,14 @@ void LeftMouseCmd(bool bShift)
 	// its staff bolt the same way: POE2's caster weapons don't melee.
 	const bool rangedAttack = AttacksAtRange(myPlayer);
 	const bool shootsWhereClicked = gbIsPoe2 && rangedAttack;
+	// POE2 Mashup: a caster weapon's granted skill is its left click (caster-weapons-plan-v2.md 6.6); doors, chests and
+	// people to talk to still work as before, and barrels are blasted like monsters.
+	const bool grantedSkill = UsesGrantedSkill(myPlayer) && (ObjectUnderCursor == nullptr || ObjectUnderCursor->IsDisabled() || ObjectUnderCursor->_oBreak == 1)
+	    && (pcursmonst == -1 || !CanTalkToMonst(Monsters[pcursmonst]));
 	if (pcursitem != -1 && pcurs == CURSOR_HAND && !bShift) {
 		NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
+	} else if (grantedSkill) {
+		TryUseGrantedSkill(*MyPlayer);
 	} else if (shootsWhereClicked && pcursmonst == -1 && ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled() && ObjectUnderCursor->_oBreak == 1) {
 		LastPlayerAction = PlayerActionType::Attack;
 		NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));

@@ -54,6 +54,7 @@
 #include "poe2/loot_filter.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "portal.h"
 #include "qol/chatlog.h"
 #include "qol/stash.h"
@@ -562,6 +563,12 @@ void Interact()
 	}
 
 	const Player &myPlayer = *MyPlayer;
+
+	// POE2 Mashup: a caster weapon's granted skill is its attack, at the target or, standing ground, straight ahead.
+	if (leveltype != DTYPE_TOWN && UsesGrantedSkill(myPlayer) && (IsStandingGround() || (pcursmonst != -1 && !CanTalkToMonst(Monsters[pcursmonst])))) {
+		TryUseGrantedSkill(*MyPlayer);
+		return;
+	}
 
 	if (leveltype != DTYPE_TOWN && IsStandingGround()) {
 		Direction pdir = myPlayer._pdir;

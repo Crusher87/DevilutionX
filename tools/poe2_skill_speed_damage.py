@@ -58,6 +58,15 @@ NO_DAMAGE = {
 	'Spell Etherealize', 'Spell Berserk', 'Spell Reflect',
 }
 
+# The skills the caster weapons rework's staves and wands grant (caster-weapons-plan-v2.md 7.2 and 7.4): each hit is set
+# in the table for its cast time against the free budget, so they take no damage_pct of their own.
+GRANTED = {
+	'FreezingShards', 'LightningBolt', 'SolarOrb', 'ChimingBolt', 'Soulrend', 'Reap', 'FrostLance', 'EchoingBlast',
+	'EnervatingNova', 'ConsecratedGround', 'DarkPact', 'FeastOfFlesh', 'WitheringBolt', 'BoneBolt', 'ManaDrain',
+	'PowerSiphon', 'VolatileBolt', 'GalvanicBolt', 'Decompose', 'Exsanguinate', 'FrostBolt', 'TormentBolt', 'CriticalBolt',
+	'WitheringRay', 'TwinBolts',
+}
+
 
 def number(text):
 	return float(text) if text.strip() else 0.0
@@ -75,7 +84,7 @@ DAMAGE_SPELLS = damage_spells()
 def time_ratio(row):
 	"""How much longer than its free use one use of the row takes; None when it is no skill of its own."""
 	name = row['name']
-	if name.startswith('Default ') or ':' in name or name in NO_DAMAGE:
+	if name.startswith('Default ') or ':' in name or name in NO_DAMAGE or name in GRANTED:
 		return None
 	added = number(row['added_ms']) / 1000
 	if row['attack_time_s'].strip():

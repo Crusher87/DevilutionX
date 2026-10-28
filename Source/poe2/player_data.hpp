@@ -132,8 +132,46 @@ enum class WeaponSkill : uint8_t {
 	LowerResist,
 	Confuse,
 	Attract,
-	Last = Attract,
+	/**
+	 * The skills the caster weapons rework's staves and wands grant (caster-weapons-plan-v2.md 6.12): table skills with
+	 * TF_Granted, cast with a left click, with no gem of their own.
+	 */
+	FreezingShards,
+	LightningBolt,
+	SolarOrb,
+	ChimingBolt,
+	Soulrend,
+	Reap,
+	FrostLance,
+	EchoingBlast,
+	EnervatingNova,
+	ConsecratedGround,
+	DarkPact,
+	FeastOfFlesh,
+	WitheringBolt,
+	BoneBolt,
+	ManaDrain,
+	PowerSiphon,
+	VolatileBolt,
+	GalvanicBolt,
+	Decompose,
+	Exsanguinate,
+	FrostBolt,
+	TormentBolt,
+	CriticalBolt,
+	WitheringRay,
+	TwinBolts,
+	Last = TwinBolts,
 };
+
+/** @brief The first skill a caster weapon grants; every one after it is granted too. */
+constexpr WeaponSkill FirstGrantedSkill = WeaponSkill::FreezingShards;
+
+/** @brief Whether the skill is one a caster weapon grants rather than a gem. */
+constexpr bool IsGrantedSkill(WeaponSkill skill)
+{
+	return skill >= FirstGrantedSkill && skill <= WeaponSkill::Last;
+}
 
 enum class SupportGem : uint8_t {
 	None,
@@ -1219,6 +1257,33 @@ struct Poe2PlayerData {
 				return std::clamp(entry.baseLevel + ItemSkillLevelBonus(*this, skill), 1, static_cast<int>(MaxGemLevel));
 		}
 		return 0;
+	}
+
+	/** @brief Whether a held caster weapon grants the skill. */
+	[[nodiscard]] bool grants(SkillSlot skill) const
+	{
+		if (skill.isEmpty())
+			return false;
+		for (const GrantedSkill &entry : granted) {
+			if (entry.baseLevel > 0 && entry.skill == skill)
+				return true;
+		}
+		return false;
+	}
+
+	/**
+	 * @brief Whether the skill is a held weapon's granted attack with no gem of its own in the Skills panel: it takes the
+	 * default attack row's supports, as the left click it is (caster-weapons-plan-v2.md 6.7).
+	 */
+	[[nodiscard]] bool takesDefaultSupports(SkillSlot skill) const
+	{
+		if (skill.kind != SkillKind::Attack || !grants(skill))
+			return false;
+		for (const SkillSlot &socketed : skillSlots) {
+			if (socketed == skill)
+				return false;
+		}
+		return !metaSocketOf(skill);
 	}
 
 	/** @brief Level the skill is used at: the socketed gem's (skillLevel) if there is one, else a held weapon's grant. */

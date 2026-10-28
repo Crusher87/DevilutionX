@@ -148,6 +148,30 @@ enum TableFlag : uint16_t {
 	TF_AtPlayer = 1 << 12,
 	/** The projectiles burst where they land after a short delay. */
 	TF_LandingBurst = 1 << 13,
+	/**
+	 * A caster weapon grants it (caster-weapons-plan-v2.md 6.12): it has no gem, no mana cost of its own and no gemcutting
+	 * tab, and is cast with a left click at the weapon's grant level.
+	 */
+	TF_Granted = 1 << 14,
+};
+
+/** @brief What a granted skill's hits do besides damage (caster-weapons-plan-v2.md 6.12). */
+enum class GrantedRider : uint8_t {
+	None,
+	Wither,
+	StunBuildup,
+	ManaDrain,
+	CullFrenzy,
+	BurstOnKill,
+	ChainOnce,
+	Plague,
+	KillRestoreLife,
+	Weaken,
+	EveryFifthDouble,
+	Echo,
+	SigilEveryFourth,
+	RegenBuff,
+	KillRestoreBoth,
 };
 
 /** @brief Gemcutting tabs a table skill shows under, as bits of GemCategory. */
@@ -194,7 +218,15 @@ struct TableSkillData {
 	TableCurve curve;
 	/** The damage at gem level 20 in percent of level 1, along the curve; 0 to copy the curve exactly. */
 	int16_t curveEnd;
+	/** A granted skill's rider. */
+	GrantedRider rider = GrantedRider::None;
 };
+
+/** @brief Whether the table row is a skill a caster weapon grants. */
+[[nodiscard]] inline bool IsGrantedTableSkill(const TableSkillData &data)
+{
+	return (data.flags & TF_Granted) != 0;
+}
 
 /**
  * @brief The tile a monster will be on, as hits see it, after this many game ticks: a walking monster keeps walking the

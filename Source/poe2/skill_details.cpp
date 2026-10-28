@@ -697,9 +697,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		return lines;
 	const bool isDefault = socket == DefaultAttackRow;
 
-	// The default attack has no gem: it is level 1 and stays so.
+	// The default attack has no gem: it is level 1 and stays so. A caster weapon's granted skill there is at its grant level.
 	const int gemLevel = isDefault ? MaxGemLevel : player.poe2.gemLevel(socket);
-	const int level = isDefault ? 1 : skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : player.poe2.skillLevel(skill);
+	const int level = isDefault && skill.kind == SkillKind::Default ? 1 : skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : player.poe2.effectiveLevel(skill);
 	const std::string tags = SkillTagText(skill);
 	if (!tags.empty())
 		Text(lines, Kind::Note, tags);

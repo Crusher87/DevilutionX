@@ -129,7 +129,9 @@ TEST_F(Poe2GrantedBoltTest, LeftClickForEachPairOfHands)
 		// A new staff or wand casts its Staff Bolt, for a Monk too.
 		EXPECT_EQ(Click(heroClass, "Ashen Staff"), DefaultAttack::StaffBolt);
 		EXPECT_EQ(Click(heroClass, "Spriggan Staff"), DefaultAttack::StaffBolt);
-		EXPECT_EQ(Click(heroClass, "Gelid Staff"), DefaultAttack::StaffBolt);
+		// The Gelid Staff casts its own skill since S14 (poe2_granted_skills_test).
+		EXPECT_EQ(Click(heroClass, "Gelid Staff"), DefaultAttack::Granted);
+		EXPECT_EQ(Click(heroClass, "Voltaic Staff"), DefaultAttack::StaffBolt);
 		EXPECT_EQ(Click(heroClass, "Withered Wand"), DefaultAttack::StaffBolt);
 		EXPECT_EQ(Click(heroClass, "Withered Wand", "Wooden Tower Shield"), DefaultAttack::StaffBolt);
 		// A wand beside a sceptre is the main weapon, whichever hand either is in.

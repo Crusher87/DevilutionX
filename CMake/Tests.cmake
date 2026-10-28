@@ -64,6 +64,7 @@ set(tests
   poe2_caster_bases_test
   poe2_quarterstaves_test
   poe2_granted_bolt_test
+  poe2_granted_skills_test
   primitive_render_test
   poe2_economy_test
   poe2_endgame_test

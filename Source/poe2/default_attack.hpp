@@ -28,6 +28,8 @@ enum class DefaultAttack : uint8_t {
 	StaffBolt,
 	BowShot,
 	ShieldBash,
+	/** A caster weapon's granted skill (caster-weapons-plan-v2.md 6.6): cast with a left click, in single player. */
+	Granted,
 };
 
 /**
@@ -64,10 +66,28 @@ constexpr std::array<int, 20> Poe2CharacterLevelForGemLevel { 1, 3, 6, 10, 14, 1
 DefaultAttack DefaultAttackFor(const Player &player);
 /** @brief The default attack of a weapon set (0 or 1), whether or not it's the one out. */
 DefaultAttack DefaultAttackForSet(const Player &player, uint8_t set);
-/** @brief The hero's default attack as a skill, for its supports; empty outside POE2 Mashup. */
+/** @brief The hero's default attack as a skill, for its supports; empty outside POE2 Mashup. A granted skill's own slot. */
 SkillSlot DefaultSkillSlot(const Player &player);
+/** @brief A weapon set's default attack as a skill, whether or not the set is out. */
+SkillSlot DefaultSkillSlotForSet(const Player &player, uint8_t set);
 std::string_view DefaultAttackName(DefaultAttack attack);
+/** @brief A weapon set's default attack's name: the granted skill's for a caster weapon that grants one. */
+std::string_view DefaultAttackNameForSet(const Player &player, uint8_t set);
 bool IsRangedDefaultAttack(DefaultAttack attack);
+/** @brief Whether the hero's default attack is ranged: an arrow, the staff bolt, or a granted skill cast at a distance. */
+bool IsRangedDefaultAttack(const Player &player);
+
+/**
+ * @brief The skill the hero's main caster weapon grants and a left click casts: a staff's or wand's granted table skill
+ * the hero can use; None otherwise (and for Staff Bolt, which isn't a WeaponSkill).
+ */
+WeaponSkill GrantedAttackSkill(const Player &player);
+/** @brief The skill a weapon set's main caster weapon grants, as GrantedAttackSkill. */
+WeaponSkill GrantedAttackSkillForSet(const Player &player, uint8_t set);
+/** @brief Whether the hero's left click casts a granted skill: POE2 Mashup, single player, a caster weapon that grants one. */
+bool UsesGrantedSkill(const Player &player);
+/** @brief Whether a granted skill is cast at a distance (projectiles, bursts and zones at the target), not around the hero. */
+bool IsRangedGrantedSkill(WeaponSkill skill);
 
 /**
  * @brief A Monk's bare fists hit for this percent of a plain quarterstaff of the attack gem's level: a bit below

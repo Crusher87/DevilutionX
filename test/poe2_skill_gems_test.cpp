@@ -286,6 +286,9 @@ TEST_F(Poe2SkillGemsTest, ClassSkillsNeedTheirGear)
 	// Every skill has a name, a description and a gem with a stat requirement.
 	for (uint8_t i = 1; i <= static_cast<uint8_t>(WeaponSkill::Last); i++) {
 		const auto skill = static_cast<WeaponSkill>(i);
+		// A caster weapon's granted skills have no gem or cost of their own (caster-weapons-plan-v2.md 9.1).
+		if (IsGrantedSkill(skill))
+			continue;
 		EXPECT_FALSE(WeaponSkillName(skill).empty());
 		EXPECT_FALSE(WeaponSkillDescription(skill).empty()) << WeaponSkillName(skill);
 		EXPECT_GT(WeaponSkillManaCost(skill), 0) << WeaponSkillName(skill);

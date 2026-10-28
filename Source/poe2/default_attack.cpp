@@ -20,10 +20,13 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_kinds.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "tables/itemdat.h"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 
 namespace devilution {
@@ -41,6 +44,18 @@ const Item *MainWeapon(const Item &left, const Item &right)
 	return weapon;
 }
 
+/** @brief The granted table skill a staff or wand the hero can use grants, or None. */
+WeaponSkill GrantOf(const Item *weapon)
+{
+	if (weapon == nullptr || !weapon->_iStatFlag || !(IsCasterStaff(*weapon) || IsWand(*weapon)))
+		return WeaponSkill::None;
+	const BaseMeta *base = GrantingBase(*weapon);
+	if (base == nullptr || base->grantedSkill.kind != SkillKind::Attack)
+		return WeaponSkill::None;
+	const TableSkillData *table = FindTableSkill(base->grantedSkill.attack());
+	return table != nullptr && IsGrantedTableSkill(*table) ? table->skill : WeaponSkill::None;
+}
+
 DefaultAttack AttackForHands(const Player &player, const Item &left, const Item &right)
 {
 	const Item *weapon = MainWeapon(left, right);
@@ -48,8 +63,10 @@ DefaultAttack AttackForHands(const Player &player, const Item &left, const Item 
 		return left._itype == ItemType::Shield || right._itype == ItemType::Shield ? DefaultAttack::ShieldBash : DefaultAttack::Punch;
 	// The caster weapons rework (caster-weapons-plan-v2.md 6.6): a new staff or wand casts its Staff Bolt; a new sceptre
 	// has no attack, so the hero punches (beside a shield or focus too); a quarterstaff strikes for every class.
-	if (IsCasterStaff(*weapon) || IsWand(*weapon))
-		return DefaultAttack::StaffBolt;
+	if (IsCasterStaff(*weapon) || IsWand(*weapon)) {
+		// Granted skills aren't sent over the network yet: in multiplayer every caster weapon casts Staff Bolt (6.10).
+		return GrantOf(weapon) != WeaponSkill::None && !gbIsMultiplayer ? DefaultAttack::Granted : DefaultAttack::StaffBolt;
+	}
 	if (IsNewSceptre(*weapon))
 		return DefaultAttack::Punch;
 	if (IsQuarterstaff(*weapon))
@@ -102,7 +119,43 @@ SkillSlot DefaultSkillSlot(const Player &player)
 {
 	if (!gbIsPoe2)
 		return {};
-	return SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttackFor(player)));
+	return DefaultSkillSlotForSet(player, player.poe2.weaponSet);
+}
+
+SkillSlot DefaultSkillSlotForSet(const Player &player, uint8_t set)
+{
+	const DefaultAttack attack = DefaultAttackForSet(player, set);
+	if (attack == DefaultAttack::Granted)
+		return SkillSlot::ForAttack(GrantedAttackSkillForSet(player, set));
+	return SkillSlot::ForDefault(static_cast<uint8_t>(attack));
+}
+
+WeaponSkill GrantedAttackSkill(const Player &player)
+{
+	if (!gbIsPoe2)
+		return WeaponSkill::None;
+	return GrantOf(MainWeapon(player.InvBody[INVLOC_HAND_LEFT], player.InvBody[INVLOC_HAND_RIGHT]));
+}
+
+WeaponSkill GrantedAttackSkillForSet(const Player &player, uint8_t set)
+{
+	if (set == player.poe2.weaponSet)
+		return GrantedAttackSkill(player);
+	if (!gbIsPoe2)
+		return WeaponSkill::None;
+	return GrantOf(MainWeapon(InactiveHand(player, INVLOC_HAND_LEFT), InactiveHand(player, INVLOC_HAND_RIGHT)));
+}
+
+bool UsesGrantedSkill(const Player &player)
+{
+	return gbIsPoe2 && DefaultAttackFor(player) == DefaultAttack::Granted;
+}
+
+bool IsRangedGrantedSkill(WeaponSkill skill)
+{
+	const TableSkillData *table = FindTableSkill(skill);
+	return table != nullptr && IsAnyOf(table->shape, TableShape::Projectiles, TableShape::Stream, TableShape::Burst, TableShape::Zone, TableShape::Curse)
+	    && (table->flags & TF_AtPlayer) == 0;
 }
 
 std::string_view DefaultAttackName(DefaultAttack attack)
@@ -124,14 +177,32 @@ std::string_view DefaultAttackName(DefaultAttack attack)
 		return _("Bow Shot");
 	case DefaultAttack::ShieldBash:
 		return _("Shield Bash");
+	case DefaultAttack::Granted:
+		return _("Weapon Skill");
 	default:
 		return _("Punch");
 	}
 }
 
+std::string_view DefaultAttackNameForSet(const Player &player, uint8_t set)
+{
+	const DefaultAttack attack = DefaultAttackForSet(player, set);
+	if (attack == DefaultAttack::Granted)
+		return WeaponSkillName(GrantedAttackSkillForSet(player, set));
+	return DefaultAttackName(attack);
+}
+
 bool IsRangedDefaultAttack(DefaultAttack attack)
 {
 	return attack == DefaultAttack::BowShot || attack == DefaultAttack::StaffBolt;
+}
+
+bool IsRangedDefaultAttack(const Player &player)
+{
+	const DefaultAttack attack = DefaultAttackFor(player);
+	if (attack == DefaultAttack::Granted)
+		return IsRangedGrantedSkill(GrantedAttackSkill(player));
+	return IsRangedDefaultAttack(attack);
 }
 
 bool FiresStaffBolt(const Player &player)
@@ -141,7 +212,7 @@ bool FiresStaffBolt(const Player &player)
 
 bool AttacksAtRange(const Player &player)
 {
-	return player.UsesRangedWeapon() || FiresStaffBolt(player);
+	return player.UsesRangedWeapon() || FiresStaffBolt(player) || (UsesGrantedSkill(player) && IsRangedGrantedSkill(GrantedAttackSkill(player)));
 }
 
 bool FightsWithBareFists(const Player &player)
@@ -316,6 +387,9 @@ bool UseDefaultAttack(Player &player, uint8_t set)
 	// Like POE2, the attack of the other weapon set swaps to it first.
 	if (!ReadyWeaponSet(player, set))
 		return false;
+	// A caster weapon's granted skill goes through the skill path, as a left click does.
+	if (UsesGrantedSkill(player))
+		return TryUseGrantedSkill(player);
 	const bool ranged = IsRangedDefaultAttack(DefaultAttackFor(player));
 	if (pcursmonst != -1 && !CanTalkToMonst(Monsters[pcursmonst])) {
 		LastPlayerAction = PlayerActionType::AttackMonsterTarget;

@@ -453,7 +453,7 @@ Aromatic Sceptre	sceptre	poe2					52			SkeletalWarriors
 Pious Sceptre	sceptre	poe2					58			SkeletalWarriors		
 Hallowed Sceptre	sceptre	poe2					65			SkeletalWarriors		
 Ashen Staff	staff	poe2					1			StaffBolt	fire	
-Gelid Staff	staff	poe2					1				cold	
+Gelid Staff	staff	poe2					1			FreezingShards	cold	
 Voltaic Staff	staff	poe2					1				lightning	
 Spriggan Staff	staff	poe2					11			StaffBolt		
 Pyrophyte Staff	staff	poe2					16				fire	

@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/bases.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spell_base.hpp"
@@ -72,29 +73,59 @@ TEST_F(Poe2TableSkillsTest, SpellBaseRollMatchesTheTooltipRange)
 TEST_F(Poe2TableSkillsTest, EveryTableSkillHasAGem)
 {
 	std::set<WeaponSkill> seen;
+	size_t gems = 0;
 	for (const TableSkillData &data : TableSkills()) {
 		EXPECT_TRUE(seen.insert(data.skill).second) << data.name;
 		EXPECT_EQ(FindTableSkill(data.skill), &data);
+		// A caster weapon's granted skills have no gem (caster-weapons-plan-v2.md 9.1).
+		if (IsGrantedTableSkill(data)) {
+			EXPECT_FALSE(SkillGemItemIndex(SkillSlot::ForAttack(data.skill)).has_value()) << data.name;
+			continue;
+		}
+		gems++;
 		const std::optional<size_t> index = SkillGemItemIndex(SkillSlot::ForAttack(data.skill));
 		ASSERT_TRUE(index.has_value()) << data.name;
 		EXPECT_EQ(AllItemsList[*index].iMinMLvl, data.level) << data.name;
 	}
-	EXPECT_EQ(TableSkills().size(), 55U);
+	EXPECT_EQ(gems, 55U);
 }
 
 TEST_F(Poe2TableSkillsTest, TheTableCoversTheRestOfTheRoster)
 {
-	for (int i = static_cast<int>(WeaponSkill::Whirlwind); i <= static_cast<int>(WeaponSkill::Last); i++)
+	for (int i = static_cast<int>(WeaponSkill::Whirlwind); i < static_cast<int>(FirstGrantedSkill); i++)
 		EXPECT_NE(FindTableSkill(static_cast<WeaponSkill>(i)), nullptr) << i;
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Cleave), nullptr);
+	// The granted skills come in as they are built; those that are in are granted rows, and only they are.
+	for (int i = static_cast<int>(WeaponSkill::Whirlwind); i <= static_cast<int>(WeaponSkill::Last); i++) {
+		const auto skill = static_cast<WeaponSkill>(i);
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			EXPECT_EQ(IsGrantedTableSkill(*table), IsGrantedSkill(skill)) << table->name;
+	}
+	EXPECT_NE(FindTableSkill(WeaponSkill::FreezingShards), nullptr);
 }
 
 TEST_F(Poe2TableSkillsTest, TableSkillsHaveNamesCostsAndCurves)
 {
+	LoadBaseData();
 	for (const TableSkillData &data : TableSkills()) {
 		EXPECT_EQ(WeaponSkillName(data.skill), data.name);
 		EXPECT_FALSE(WeaponSkillDescription(data.skill).empty()) << data.name;
-		EXPECT_GT(WeaponSkillManaCost(data.skill), 0) << data.name;
+		if (IsGrantedTableSkill(data)) {
+			// A granted skill has no gem tier, cost or gemcutting tab, and a base grants it (caster-weapons-plan-v2.md 9.1).
+			EXPECT_EQ(data.level, 0) << data.name;
+			EXPECT_EQ(data.mana, 0) << data.name;
+			EXPECT_EQ(data.tabs, 0) << data.name;
+			EXPECT_EQ(WeaponSkillManaCost(data.skill), 0) << data.name;
+			EXPECT_NE(data.flags & TF_Spell, 0) << data.name;
+			bool granted = false;
+			for (size_t i = 0; i < AllItemsList.size(); i++) {
+				const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
+				granted = granted || (base != nullptr && base->grantedSkill == SkillSlot::ForAttack(data.skill));
+			}
+			EXPECT_TRUE(granted) << data.name;
+		} else {
+			EXPECT_GT(WeaponSkillManaCost(data.skill), 0) << data.name;
+		}
 		EXPECT_EQ(WeaponSkillNeedsWeapon(data.skill), data.weapon != TableWeapon::None) << data.name;
 		if (data.weapon != TableWeapon::None)
 			EXPECT_FALSE(WeaponSkillWeapons(data.skill).empty()) << data.name;
@@ -211,7 +242,9 @@ TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 	for (const TableSkillData &data : TableSkills()) {
 		if ((data.flags & TF_Spell) == 0 || data.curve != TableCurve::Fireball)
 			continue;
-		spells++;
+		// The caster weapons' granted skills follow the same curve; the count is of the gems'.
+		if (!IsGrantedTableSkill(data))
+			spells++;
 		EXPECT_EQ(data.curveEnd, 312) << data.name;
 		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
 	}
