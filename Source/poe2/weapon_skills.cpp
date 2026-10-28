@@ -61,10 +61,8 @@ constexpr int RapidFireShotTicks = 3;
 /** Frost Nova's shards fly this many ticks, about 4 tiles. */
 constexpr int FrostNovaShardTicks = 9;
 constexpr int FrostNovaShards = 16;
-/** Riposte and Shield Bash hit this hard before the gem curve. */
+/** Riposte hits this hard before the gem curve (Shield Bash's is in the header). */
 constexpr int RiposteDamagePercent = 180;
-constexpr int ShieldBashDamagePercent = 120;
-constexpr int ShadowStepDamagePercent = 150;
 
 bool IsDagger(const Item &item)
 {
@@ -188,6 +186,7 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	player.poe2.dashSkill = skill;
 	player.poe2.dashSkillTicks = DashSkillTimeoutTicks;
 	player.poe2.dashEnd = end.value_or(player.position.future);
+	player.poe2.dashStart = start;
 	player.poe2.dashDistancePercent = static_cast<uint8_t>(end ? std::clamp(end->WalkingDistance(start) * 100 / std::max(tiles, 1), 0, 100) : 0);
 	return true;
 }
@@ -225,7 +224,9 @@ void FireFan(const Player &player, WeaponSkill skill, Point target, MissileID mi
 	const SkillSlot slot = SkillSlot::ForAttack(skill);
 	const int gemLevel = player.poe2.skillLevel(skill);
 	count += GemExtraProjectiles(slot, gemLevel) + SupportExtraProjectileCount(player, slot);
-	const int damagePercent = GemDamagePercent(slot, gemLevel);
+	int damagePercent = GemDamagePercent(slot, gemLevel);
+	if (skill == WeaponSkill::EscapeShot)
+		damagePercent = damagePercent * VaultShotArrowDamagePercent / 100;
 	const Direction dir = GetDirection(player.position.tile, target);
 	const Displacement side { Left(Left(dir)) };
 	for (int i = 0; i < count; i++) {
@@ -510,7 +511,7 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::ShieldCharge:
 		return _("Charge in, bash and knock back");
 	case WeaponSkill::BattleCry:
-		return _("Knock back foes, +50% melee damage");
+		return _("Knock back foes, +30% melee damage");
 	case WeaponSkill::LightningArrow:
 		return _("Arrow bursts into lightning");
 	case WeaponSkill::EscapeShot:
@@ -530,7 +531,7 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::Frenzy:
 		return _("Fast strike, builds Frenzy charges");
 	case WeaponSkill::Smite:
-		return _("Crushing blow that breaks armour");
+		return _("Lightning blow that breaks armour");
 	case WeaponSkill::FistsOfThunder:
 		return _("Fast strikes; every third: lightning");
 	case WeaponSkill::RapidFire:
@@ -577,12 +578,14 @@ int ListedManaCost(WeaponSkill skill)
 	case WeaponSkill::EmberFusillade:
 		return 16;
 	case WeaponSkill::Spark:
-		return 10;
+		// Curtis 2026-10-28: 10 to 6, a shotgun needs cheap casts (audit-casters-v3.md).
+		return 6;
 	case WeaponSkill::IceBolt:
 		// The Sorcerer's starter bolts (Firebolt, Ice Bolt, Holy Bolt, Charged Bolt) all cost 4 at gem level 1.
 		return 4;
 	case WeaponSkill::FrostNova:
-		return 14;
+		// Curtis 2026-10-28: 14 to 10 (audit-casters-v3.md); its skill_speed.tsv row keeps mana_pct 100.
+		return 10;
 	case WeaponSkill::Riposte:
 		return 5;
 	case WeaponSkill::ShadowStep:
@@ -1107,7 +1110,7 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 		const Direction dir = GetDirection(player.position.tile, target);
 		for (int i = 0; i <= extra; i++) {
 			const int offset = (i + 1) / 2 * (i % 2 == 0 ? 1 : -1);
-			FireIceShard(player, skill, player.position.tile, FarAlong(player, target, 8) + Displacement { Left(Left(dir)) } * offset, 100);
+			FireIceShard(player, skill, player.position.tile, FarAlong(player, target, 8) + Displacement { Left(Left(dir)) } * offset, IceBoltShardDamagePercent);
 		}
 		return false;
 	}
@@ -1189,6 +1192,8 @@ void SetSpellMissileSpeed(Missile &missile, SpellID spell)
 		percent = FireballSpeedPercent;
 	else if (spell == SpellID::Firebolt)
 		percent = FireboltSpeedPercent;
+	else if (spell == SpellID::Elemental)
+		percent = ElementalSpeedPercent;
 	if (percent == 100)
 		return;
 	missile.position.velocity = { missile.position.velocity.deltaX * percent / 100, missile.position.velocity.deltaY * percent / 100 };
@@ -1427,11 +1432,11 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 2, 3);
 		break;
 	case WeaponSkill::Smite:
-		vfx::SkyStrike(target, vfx::Element::Holy);
-		vfx::Slam(target, 1, vfx::Element::Holy);
-		// The blow lands like a falling hammer.
+		// A lightning blow, like POE2's Smite (Curtis 2026-10-28): the hammer falls with a bolt from the sky.
+		vfx::SkyStrike(target, vfx::Element::Lightning);
+		vfx::Slam(target, 1, vfx::Element::Lightning);
 		AddVisualEffect(target, MissileGraphicID::StoneCurseShatter, 0, 6);
-		AddVisualEffect(target, MissileGraphicID::HolyBoltExplosion, 1, 6);
+		AddVisualEffect(target, MissileGraphicID::Lightning, 1, 6);
 		PlaySfxLoc(SfxID::SpellStoneCurse, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Medium, 6);

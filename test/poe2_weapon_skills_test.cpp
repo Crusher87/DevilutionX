@@ -12,6 +12,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
@@ -218,11 +219,14 @@ TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
 TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 {
 	EXPECT_EQ(LeapSlamDamagePercent, 80);
-	// About two of Frost Nova's shards reach a monster: 2 x 25 = 50.
-	EXPECT_EQ(FrostNovaShardDamagePercent, 25);
-	// Kept at their old values until the shortfall fix (no Act 1 clear otherwise): Whirling Staff's 75 and 50.
-	EXPECT_EQ(AreaSkillSideDamagePercent, 75);
-	EXPECT_EQ(WhirlingStaffOuterDamagePercent, 50);
+	// About two of Frost Nova's shards reach a monster: 2 x 50 = 100 (Curtis 2026-10-28: 25 -> 100 a shard, then 50
+	// with Firebolt, Q27). Ice Bolt's shards 100 -> 160 -> 85.
+	EXPECT_EQ(FrostNovaShardDamagePercent, 50);
+	EXPECT_EQ(IceBoltShardDamagePercent, 85);
+	// Curtis 2026-10-28: Seismic Slam's cone 75 to 50, Sweeping Wind's rings 75 and 50 to 55 and 25.
+	EXPECT_EQ(GroundSlamConeDamagePercent, 50);
+	EXPECT_EQ(WhirlingStaffInnerDamagePercent, 55);
+	EXPECT_EQ(WhirlingStaffOuterDamagePercent, 25);
 	// Lightning Arrow's burst is Diablo's 2 x character level + Dexterity / 4 again (plan step 14, Curtis 2026-10-27):
 	// with 60% of the arrow the Rogue could not clear packs.
 	EXPECT_TRUE(LightningArrowBurstFromLevel);
@@ -320,6 +324,34 @@ TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)
 	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { -1, -1 }));
 	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { 1, -1 }));
 	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { 3, 0 }));
+}
+
+TEST(Poe2WeaponSkills, SingleTargetMeleeSkillsHitHarder)
+{
+	// Curtis 2026-10-28: Smite 100 to 300, Frenzy 100 to 200, Shield Bash 120 to 200 (audit-damage-v2.md section 7).
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Smite), 300);
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Frenzy), 200);
+	EXPECT_EQ(ShieldBashDamagePercent, 200);
+	// A plain swing (and every swing outside POE2 Mashup, which has no active skill) keeps its weapon hit.
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::None), 100);
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Flurry), 100);
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::GroundSlam), 100);
+	// Double Throw and Vengeance are table rows.
+	EXPECT_EQ(FindTableSkill(WeaponSkill::DoubleThrow)->damagePercent, 230);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Vengeance)->damagePercent, 260);
+	// Q28 (Curtis 2026-10-28, audit-damage-v3.md): the 7 weak skills raised.
+	EXPECT_EQ(ShieldChargeDamagePercent, 150);
+	EXPECT_EQ(ShadowStepDamagePercent, 220);
+	EXPECT_EQ(VaultShotArrowDamagePercent, 140);
+	// Cobra Strike's bleed is its hit again: 200% + 200%.
+	EXPECT_EQ(FindTableSkill(WeaponSkill::ViperStrike)->damagePercent, 200);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Sacrifice)->damagePercent, 330);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->damagePercent, 95);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->count, 7);
+	// Locust Swarm: 120% over 5 s -> 130% over 2 s (40 game ticks).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->damagePercent, 130);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->duration, 40);
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::BattleCry), "Knock back foes, +30% melee damage");
 }
 
 TEST(Poe2WeaponSkills, FireballIsSlowAndFireboltIsFast)

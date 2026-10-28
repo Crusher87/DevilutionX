@@ -916,7 +916,7 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 		Monster *monster = FindMonsterAtPosition(position);
 		if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
 			continue;
-		PlrHitMonst(player, *monster, false, skill == WeaponSkill::LeapSlam ? LeapSlamDamagePercent : 100);
+		PlrHitMonst(player, *monster, false, skill == WeaponSkill::LeapSlam ? LeapSlamDamagePercent : ShieldChargeDamagePercent);
 		if (!monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
 			M_GetKnockback(*monster, player.position.tile);
 	}
@@ -950,9 +950,9 @@ bool DoAttack(Player &player)
 		}
 
 		if (monster != nullptr) {
-			// POE2 Mashup: Flurry's second strike, a backhand, hits harder.
+			// POE2 Mashup: Flurry's second strike, a backhand, hits harder; Smite and Frenzy hit for their own percent.
 			const bool backhand = player.poe2.activeSkill == WeaponSkill::Flurry && player.poe2.flurryStrike > 0;
-			didhit = PlrHitMonst(player, *monster, false, backhand ? FlurryBackhandDamagePercent : 100);
+			didhit = PlrHitMonst(player, *monster, false, backhand ? FlurryBackhandDamagePercent : SwingSkillDamagePercent(player.poe2.activeSkill));
 			// POE2 Mashup: Frenzy builds charges, Smite breaks armour and Fists of Thunder builds Combo.
 			if (didhit) {
 				switch (player.poe2.activeSkill) {
@@ -1060,7 +1060,9 @@ bool DoAttack(Player &player)
 					monster = FindMonsterAtPosition(position);
 					if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
 						continue;
-					const int damagePercent = distance > 1 && skill == WeaponSkill::WhirlingStaff ? WhirlingStaffOuterDamagePercent : AreaSkillSideDamagePercent;
+					int damagePercent = GroundSlamConeDamagePercent;
+					if (skill == WeaponSkill::WhirlingStaff)
+						damagePercent = distance > 1 ? WhirlingStaffOuterDamagePercent : WhirlingStaffInnerDamagePercent;
 					if (PlrHitMonst(player, *monster, false, damagePercent)) {
 						didhit = true;
 						// The spinning staff bites into each enemy it hits, as Whirlwind's blades do.

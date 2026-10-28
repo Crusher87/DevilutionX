@@ -216,7 +216,7 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		hit.effect = std::format("Enemies take +{:d}% physical damage", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (level - 1)));
 		return hit;
 	case WeaponSkill::IceBolt:
-		AddSpellBase(hit, player, level, DamageType::Magic, percent);
+		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, IceBoltShardDamagePercent));
 		return hit;
 	case WeaponSkill::FrostNova:
 		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, FrostNovaShardDamagePercent));
@@ -224,12 +224,34 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case WeaponSkill::LeapSlam:
 		AddWeaponHit(hit, player, skill, level, percent, LeapSlamDamagePercent);
 		return hit;
+	case WeaponSkill::ShieldCharge:
+		AddWeaponHit(hit, player, skill, level, percent, ShieldChargeDamagePercent);
+		return hit;
+	case WeaponSkill::ShadowStep:
+		AddWeaponHit(hit, player, skill, level, percent, ShadowStepDamagePercent);
+		return hit;
+	case WeaponSkill::EscapeShot:
+		AddWeaponHit(hit, player, skill, level, percent, VaultShotArrowDamagePercent);
+		return hit;
 	case WeaponSkill::EmberFusillade:
 		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.
 		AddSpellBase(hit, player, level, DamageType::Fire, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
 		return hit;
 	case WeaponSkill::Spark:
 		AddSpellBase(hit, player, level, DamageType::Lightning, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
+		return hit;
+	case WeaponSkill::Smite:
+		// The weapon hit lands as lightning (ApplyPlayerAttackDamage) at Smite's percent (DoAttack); the weapon's own fire
+		// and lightning stay as they were.
+		AddWeaponHit(hit, player, skill, level, percent, SmiteDamagePercent, percent);
+		if (!hit.parts.empty())
+			hit.parts.front().type = DamageType::Lightning;
+		return hit;
+	case WeaponSkill::Frenzy:
+		AddWeaponHit(hit, player, skill, level, percent, FrenzyDamagePercent, percent);
+		return hit;
+	case WeaponSkill::ShieldBash:
+		AddWeaponHit(hit, player, skill, level, percent, ShieldBashDamagePercent);
 		return hit;
 	default:
 		break;
@@ -343,7 +365,7 @@ std::string_view SpellDescription(SpellID spell)
 	case SpellID::BloodStar:
 		return "A star of blood that pays for itself with life when mana runs low";
 	case SpellID::Elemental:
-		return "A fire elemental that seeks out the nearest enemy and explodes";
+		return "A slow fire elemental that hunts down its target, or the nearest enemy, and explodes";
 	case SpellID::Apocalypse:
 		return "Fire rains on every enemy in sight";
 	case SpellID::StoneCurse:

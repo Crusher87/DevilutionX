@@ -331,9 +331,9 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 329		Small		831	529	LifePercent=3	60,327	Khanduras Muster		lattice	329	831	529	-1			
 330		Small		766	435	AllResist=2	61,328	Khanduras Muster		lattice	330	766	435	-1			
 331		Small		965	-100	LifePercent=3	25,335	Warrior		shrine-spur	331	965	-100	0	-159		
-332	Lachdanan's Oath	Notable		396	-60	MeleeDamage=12,LifeOnKill=6	333,337	Warrior	Lachdanan, captain of Leoric's knights, fought the king's curse with all the honour he had left.	opening	332	396	-60	0	+2311,-98		
-333		Attribute		355	-55	AnyAttribute=5	332,334	Warrior		opening	333	355	-55	0	+2268		
-334		Small		314	-52	StunBuildup=10	333,336	Warrior		opening	334	314	-52	0	+2266		
+332	Lachdanan's Oath	Notable		396	-60	MeleeDamage=12,AttackSpeed=3	333,337	Warrior	Lachdanan, captain of Leoric's knights, fought the king's curse with all the honour he had left.	opening	332	396	-60	0	+2311,-98		
+333		Small		355	-55	ToHit=5	332,334	Warrior		opening	333	355	-55	0	+2268		
+334		Small		314	-52	Strength=7	333,336	Warrior		opening	334	314	-52	0	+2266		
 335		Small		972	-165	LifePercent=3	31,331	Warrior		shrine-spur	335	972	-165	0			
 336		Small		273	-48	MeleeDamage=5	16,334	Warrior		opening	336	273	-48	0			
 337		Small		440	-137	MeleeDamage=5	332,339,485	Warrior		opening	337	440	-137	0	-295,+63		
@@ -474,17 +474,17 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 472		Small		623	-35	MeleeDamage=5	448,473	Warrior		cluster	472	589	-54	2	-38	Stub	
 473		Small		614	-81	MeleeDamage=5	472,474	Warrior		cluster	472	589	-54	2	-39	Stub	
 474	Drums of Westmarch	Notable		571	-92	AttackSpeed=8,MeleeDamage=8	473	Warrior	Leoric marched on Westmarch to the drums. His veterans still swing in time.	cluster	472	589	-54	2		Stub	
-475		Small		518	-44	LifeRegenRate=2	477,478,480	Warrior		cluster	475	525	-39	0	+51,-203,-60	Horns	
-476	Eater of Souls	Notable		592	-53	LifeOnKill=10,LifePercent=4	477	Warrior	A great sword that steals life from all it cuts.	cluster	475	525	-39	4	+40	Horns	
-477		Small		550	-66	MeleeDamage=4	475,476	Warrior		cluster	475	525	-39	2		Horns	
-478		Small		484	-66	MeleeDamage=4	475,482	Warrior		cluster	475	525	-39	3	-43	Horns	
-479	Rim and Edge	Notable		550	39	OneHandDamage=12,BlockChance=3	480	Warrior	The palace knights were never handed a sword without a shield to go with it.	cluster	475	525	-39	4	-44	Horns	
-480		Small		519	2	MeleeDamage=4	475,479	Warrior		cluster	475	525	-39	2		Horns	
-481	Cleaving Blow	Notable		469	-43	TwoHandDamage=15,StunBuildup=15	482	Warrior	A great swing that staggers whatever it does not cut.	style	481	469	-95	3	-31	Short Horns	
-482		Small		453	-73	TwoHandDamage=6	478,481,485	Warrior		style	481	469	-95	1	+49	Short Horns	
-483	Executioner	Notable		521	-95	TwoHandDamage=15,MoreVsStunned=10	484	Warrior	The headsman's axe of Leoric's court fell slowly, and only on men already brought to their knees.	style	481	469	-95	3	+31	Short Horns	
-484		Small		492	-111	TwoHandDamage=6	483,485	Warrior		style	481	469	-95	1	-49	Short Horns	
-485		Small		455	-110	TwoHandDamage=6	337,482,484	Warrior		style	481	469	-95	1		Short Horns	
+475		Small		518	-44	AttackSpeed=3	477,478,480	Warrior		cluster	475	525	-39	0	+51,-203,-60	Horns	
+476	Eater of Souls	Notable		592	-53	LifeOnKill=10,MeleeDamage=6	477	Warrior	A great sword that steals life from all it cuts.	cluster	475	525	-39	4	+40	Horns	
+477		Small		550	-66	LifePercent=3	475,476	Warrior		cluster	475	525	-39	2		Horns	
+478		Small		488	-77	MeleeDamage=5	475,485	Warrior		cluster	475	525	-39	3		Horns	
+479	Rim and Edge	Notable		550	39	BlockChance=3,ToHit=10	480	Warrior	A Westmarch footman learns to guard first and strike where the guard leaves a gap.	cluster	475	525	-39	4	-44	Horns	
+480		Small		519	2	ArmorPercent=9	475,479	Warrior		cluster	475	525	-39	2		Horns	
+481	Cleaving Blow	Notable		469	-43	TwoHandDamage=18,AttackSpeed=2	482	Warrior	A great swing that staggers whatever it does not cut.	style	481	469	-95	3	-31	Short Horns	
+482		Small		453	-73	TwoHandDamage=6	481,485	Warrior		style	481	469	-95	1	+49	Short Horns	
+483	Sword of Justice	Notable		521	-95	OneHandDamage=12,AttackSpeed=5	484	Warrior	A blade of the old kingdom, light enough to strike twice before the Butcher's cleaver falls once.	style	481	469	-95	3	+31	Short Horns	
+484		Small		492	-111	OneHandDamage=6	483,485	Warrior		style	481	469	-95	1	-49	Short Horns	
+485		Small		455	-110	MeleeDamage=5	337,478,482,484	Warrior		style	481	469	-95	1		Short Horns	
 486		Small		793	-114	MeleeDamage=5	28,487	Warrior		cluster	486	768	-142	2	-38	Spur Arc	
 487		Small		807	-142	MeleeDamage=5	486,488	Warrior		cluster	486	768	-142	2	-36	Spur Arc	
 488		Small		784	-171	MeleeDamage=5	487,489	Warrior		cluster	486	768	-142	2	-35	Spur Arc	

@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <cstdlib>
 #include <iterator>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -17,8 +19,11 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/spell_damage.hpp"
+#include "poe2/support_gems.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
+#include "storm/storm_net.hpp"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 
 namespace devilution {
@@ -85,28 +90,35 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 {
 	// Round 2 (Curtis 2026-10-27): spells re-timed against a 0.645 s swing instead of the old 0.40 s cast. Firebolt's
 	// hit is re-fit so it kills as fast as before (161% x 140% for its speed = the old 100% x 225%), its splash cut to
-	// 25%; the spells still over budget a second were trimmed; Apocalypse to its budget.
-	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 161);
+	// 25%; the spells still over budget a second were trimmed; Apocalypse to its budget. Q27 (Curtis 2026-10-28) put the
+	// early Sorcerer spells on the shared bar: Firebolt 161 -> 80 (splash still 25% of the hit, 4 mana).
+	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 80);
 	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 25);
 	EXPECT_EQ(SpellDamagePercent(SpellID::HolyBolt), 165);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Lightning), 135);
-	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 50);
+	// Curtis 2026-10-28 (audit-casters-v3.md): Charged Bolt 50 -> 120 a bolt, as only about 1.4 of its bolts land;
+	// then 70 with Firebolt (Q27).
+	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 70);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Flash), 110);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 120);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChainLightning), 400);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Elemental), 220);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Immolation), 390);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Nova), 480);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Immolation), 160);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Nova), 200);
 	EXPECT_EQ(SpellDamageHits(SpellID::Nova), 5);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Apocalypse), 130);
 	EXPECT_EQ(SpellDamagePercent(SpellID::BloodStar), 1100);
-	// Runes hit as their spell.
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 120);
-	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 480);
+	// Runes hit as their spell, but Rune of Fire, Rune of Nova and Rune of Immolation have their own rows (Curtis
+	// 2026-10-28: Rune of Fire got 280%, then 140% with Firebolt (Q27); Q26 cut Nova 480 -> 200, Immolation 390 -> 160
+	// and gave their runes 110% and 150%).
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfFire), 140);
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfNova), 110);
+	EXPECT_EQ(SpellDamagePercent(SpellID::RuneOfImmolation), 150);
 	// A spell with no row keeps the plain base.
 	EXPECT_EQ(SpellDamagePercent(SpellID::Teleport), 100);
 	EXPECT_EQ(SpellDamageHits(SpellID::Teleport), 1);
-	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 35);
+	// Arcing Sparks 35 -> 90 a spark (Curtis 2026-10-28), at 6 mana; then 60 with Firebolt (Q27).
+	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 60);
 	// Raise each strike (Curtis 2026-10-27): an ember 100% -> 150%.
 	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::EmberFusillade), 150);
 }
@@ -117,9 +129,9 @@ TEST_F(Poe2SpellDamageTest, FireboltIsItsPercentOfBase)
 	for (uint32_t seed = 1; seed < 60; seed++) {
 		const Missile &bolt = Cast(MissileID::Firebolt, 3, seed);
 		SetRndSeed(seed);
-		EXPECT_EQ(bolt._midam, Percent(RollSpellBase(player, 3), 161)) << seed;
-		EXPECT_GE(bolt._midam, Percent(SpellBaseMin(player, 3), 161));
-		EXPECT_LE(bolt._midam, Percent(SpellBaseMax(player, 3), 161));
+		EXPECT_EQ(bolt._midam, Percent(RollSpellBase(player, 3), 80)) << seed;
+		EXPECT_GE(bolt._midam, Percent(SpellBaseMin(player, 3), 80));
+		EXPECT_LE(bolt._midam, Percent(SpellBaseMax(player, 3), 80));
 	}
 	const Missile &holy = Cast(MissileID::HolyBolt, 3, 7);
 	SetRndSeed(7);
@@ -275,7 +287,8 @@ TEST_F(Poe2SpellDamageTest, ARunesBurstIsCreditedToTheRune)
 	Missile &nova = Missiles.back();
 	ASSERT_EQ(nova._mitype, MissileID::Nova);
 	EXPECT_EQ(nova.poe2.creditSpell, SpellID::RuneOfNova);
-	// The play log's credit only: the burst gets none of the rune's supports.
+	// The credit gives no supports: this rune has none, so neither has its burst (one with them passes them on, see
+	// RuneOfFiresBurstKeepsTheRunesPercentAndSupports).
 	EXPECT_EQ(nova.poe2.skillKind, 0);
 	// The nova's bolts carry it on.
 	ProcessNova(nova);
@@ -291,6 +304,241 @@ TEST_F(Poe2SpellDamageTest, ARunesBurstIsCreditedToTheRune)
 	const Missile *cast = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::NovaBall, TARGET_MONSTERS, player, 0, 1);
 	ASSERT_NE(cast, nullptr);
 	EXPECT_EQ(cast->poe2.creditSpell, SpellID::Invalid);
+}
+
+TEST_F(Poe2SpellDamageTest, RuneOfFiresBurstKeepsTheRunesPercentAndSupports)
+{
+	// Curtis 2026-10-28: the burst was a new missile at 100%, losing the rune's speed factor, gem curve and supports.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	const Point tile { 44, 44 };
+	const auto burst = [&](MissileID runeType, MissileID burstType, SpellID runeSpell) -> Missile & {
+		Missiles.clear();
+		Missile &rune = Missiles.emplace_back();
+		rune._mitype = runeType;
+		rune._micaster = TARGET_MONSTERS;
+		rune._misource = player.getId();
+		rune._mispllvl = 1;
+		rune._mlid = NO_LIGHT;
+		rune.var1 = static_cast<int>(burstType);
+		rune.position.tile = tile;
+		rune.poe2.damagePercent = 250;
+		rune.poe2.spell = runeSpell;
+		rune.poe2.skillKind = static_cast<uint8_t>(SkillKind::Spell);
+		rune.poe2.skillId = static_cast<uint8_t>(runeSpell);
+		// A monster steps on it.
+		Monster &monster = Monsters[0];
+		monster = {};
+		monster.levelType = 0;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = tile;
+		dMonster[tile.x][tile.y] = 1;
+		ProcessRune(rune);
+		dMonster[tile.x][tile.y] = 0;
+		EXPECT_TRUE(rune._miDelFlag);
+		EXPECT_EQ(Missiles.size(), 2U);
+		return Missiles.back();
+	};
+	const Missile &fire = burst(MissileID::RuneOfFire, MissileID::BigExplosion, SpellID::RuneOfFire);
+	ASSERT_EQ(fire._mitype, MissileID::BigExplosion);
+	EXPECT_EQ(fire.poe2.damagePercent, 250);
+	EXPECT_EQ(fire.poe2.spell, SpellID::RuneOfFire);
+	EXPECT_EQ(fire.poe2.skillKind, static_cast<uint8_t>(SkillKind::Spell));
+	EXPECT_EQ(fire.poe2.skillId, static_cast<uint8_t>(SpellID::RuneOfFire));
+	EXPECT_EQ(fire.poe2.creditSpell, SpellID::RuneOfFire);
+	// Rune of Nova's and Rune of Immolation's novas keep them too (they started afresh at 100%), and so do their balls.
+	struct NovaRune {
+		MissileID rune;
+		MissileID nova;
+		SpellID spell;
+		MissileID ball;
+	};
+	for (const NovaRune &nr : { NovaRune { MissileID::RuneOfNova, MissileID::Nova, SpellID::RuneOfNova, MissileID::NovaBall },
+	         NovaRune { MissileID::RuneOfImmolation, MissileID::Immolation, SpellID::RuneOfImmolation, MissileID::FireballBow } }) {
+		Missile &nova = burst(nr.rune, nr.nova, nr.spell);
+		ASSERT_EQ(nova._mitype, nr.nova);
+		EXPECT_EQ(nova.poe2.damagePercent, 250);
+		EXPECT_EQ(nova.poe2.spell, nr.spell);
+		EXPECT_EQ(nova.poe2.skillKind, static_cast<uint8_t>(SkillKind::Spell));
+		EXPECT_EQ(nova.poe2.skillId, static_cast<uint8_t>(nr.spell));
+		EXPECT_EQ(nova.poe2.creditSpell, nr.spell);
+		if (nr.nova == MissileID::Nova)
+			ProcessNova(nova);
+		else
+			ProcessImmolation(nova);
+		int balls = 0;
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype != nr.ball)
+				continue;
+			balls++;
+			EXPECT_EQ(missile.poe2.damagePercent, 250);
+			EXPECT_EQ(missile.poe2.spell, nr.spell);
+			EXPECT_EQ(missile.poe2.skillKind, static_cast<uint8_t>(SkillKind::Spell));
+			EXPECT_EQ(missile.poe2.skillId, static_cast<uint8_t>(nr.spell));
+			EXPECT_EQ(missile.poe2.creditSpell, nr.spell);
+		}
+		EXPECT_EQ(balls, 36);
+	}
+	// A missile added after it keeps nothing.
+	const Missile *cast = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::Firebolt, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(cast, nullptr);
+	EXPECT_EQ(cast->poe2.damagePercent, 100);
+	Monsters[0] = {};
+	Missiles.clear();
+}
+
+TEST_F(Poe2SpellDamageTest, NovaBallsHitForTheTooltipsPercent)
+{
+	// The balls of a Nova or an Immolation, cast or from a rune, started at 100%: the gem's speed factor, curve and
+	// supports reached the tooltip but not the hits (round3-built.md, approved as a bug fix).
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	struct Case {
+		SpellID spell;
+		MissileID cast;
+		MissileID ball;
+		int gemLevel;
+		int gemPercent;
+		int minHit;
+		int maxHit;
+	};
+	// The gem's percent is its curve (100% at gem 1, 312% at gem 20) times its damage_pct (Nova 156, Immolation 187,
+	// runes 112). A ball's roll is a fifth of the spell base (Magic 80: 13-22 at gem 1, 32-41 at gem 20) times the row
+	// (Nova 200%, Immolation 160%, Rune of Nova 110%, Rune of Immolation 150%), then the gem's percent.
+	constexpr Case Cases[] = {
+		{ SpellID::Nova, MissileID::Nova, MissileID::NovaBall, 1, 156, 7, 12 },
+		{ SpellID::Nova, MissileID::Nova, MissileID::NovaBall, 20, 486, 58, 77 },
+		{ SpellID::Immolation, MissileID::Immolation, MissileID::FireballBow, 1, 187, 7, 13 },
+		{ SpellID::Immolation, MissileID::Immolation, MissileID::FireballBow, 20, 583, 58, 75 },
+		{ SpellID::RuneOfNova, MissileID::Nova, MissileID::NovaBall, 1, 112, 2, 4 },
+		{ SpellID::RuneOfNova, MissileID::Nova, MissileID::NovaBall, 20, 349, 24, 31 },
+		{ SpellID::RuneOfImmolation, MissileID::Immolation, MissileID::FireballBow, 1, 112, 3, 6 },
+		{ SpellID::RuneOfImmolation, MissileID::Immolation, MissileID::FireballBow, 20, 349, 31, 41 },
+	};
+	for (const Case &c : Cases) {
+		const std::string label = "spell " + std::to_string(static_cast<int>(c.spell)) + " gem " + std::to_string(c.gemLevel);
+		player.poe2.clear();
+		SocketSkill(player, 0, SkillSlot::ForSpell(c.spell), c.gemLevel);
+		EXPECT_EQ(GemDamagePercent(SkillSlot::ForSpell(c.spell), c.gemLevel), c.gemPercent) << label;
+		// What the tooltip multiplies by (EstimateHit, DamageText): a bare hero's is the gem's.
+		const int percent = SupportSpellDamagePercent(player, c.spell);
+		EXPECT_EQ(percent, c.gemPercent) << label;
+		const int row = SpellDamagePercent(c.spell);
+		const auto ballRoll = [row](int base) { return std::max(base * row / 100 / 5, 1); };
+		EXPECT_EQ(ballRoll(SpellBaseMin(player, c.gemLevel)) * c.gemPercent / 100, c.minHit) << label;
+		EXPECT_EQ(ballRoll(SpellBaseMax(player, c.gemLevel)) * c.gemPercent / 100, c.maxHit) << label;
+		for (uint32_t seed = 1; seed < 6; seed++) {
+			// The nova, as CastSpell makes it for a cast from the bar, or as a rune's burst makes it when a monster steps
+			// on the rune (rolled on the rune's own row, carrying the rune's percent).
+			const bool isRune = c.spell == SpellID::RuneOfNova || c.spell == SpellID::RuneOfImmolation;
+			Missile *burst = nullptr;
+			if (isRune) {
+				Missiles.clear();
+				SetRndSeed(seed);
+				Missile &rune = Missiles.emplace_back();
+				rune._mitype = c.spell == SpellID::RuneOfNova ? MissileID::RuneOfNova : MissileID::RuneOfImmolation;
+				rune._micaster = TARGET_MONSTERS;
+				rune._misource = player.getId();
+				rune._mispllvl = c.gemLevel;
+				rune._mlid = NO_LIGHT;
+				rune.var1 = static_cast<int>(c.cast);
+				ApplySupportsToMissile(rune, player, c.spell);
+				const Point tile { 44, 44 };
+				rune.position.tile = tile;
+				Monsters[0] = {};
+				Monsters[0].position.tile = tile;
+				dMonster[tile.x][tile.y] = 1;
+				ProcessRune(rune);
+				dMonster[tile.x][tile.y] = 0;
+				ASSERT_EQ(Missiles.size(), 2U) << label;
+				burst = &Missiles.back();
+				ASSERT_EQ(burst->_mitype, c.cast) << label;
+			} else {
+				burst = &Cast(c.cast, c.gemLevel, seed);
+				ApplySupportsToMissile(*burst, player, c.spell);
+			}
+			Missile &nova = *burst;
+			EXPECT_EQ(nova.poe2.damagePercent, percent) << label;
+			const int roll = nova._midam;
+			EXPECT_GE(roll, ballRoll(SpellBaseMin(player, c.gemLevel))) << label;
+			EXPECT_LE(roll, ballRoll(SpellBaseMax(player, c.gemLevel))) << label;
+			if (c.cast == MissileID::Nova)
+				ProcessNova(nova);
+			else
+				ProcessImmolation(nova);
+			int balls = 0;
+			for (const Missile &missile : Missiles) {
+				if (missile._mitype != c.ball)
+					continue;
+				balls++;
+				EXPECT_EQ(missile.poe2.damagePercent, percent) << label;
+				EXPECT_EQ(missile.poe2.skillKind, static_cast<uint8_t>(SkillKind::Spell)) << label;
+				EXPECT_EQ(missile.poe2.skillId, static_cast<uint8_t>(c.spell)) << label;
+				// A ball's hit on a monster, as CheckMissileCol scales it: the roll times the gem's percent (it was the roll).
+				int minHit = missile._midam;
+				int maxHit = missile._midam;
+				ScaleSupportedMissileDamage(missile, minHit, maxHit);
+				EXPECT_EQ(minHit, roll * percent / 100) << label;
+				EXPECT_EQ(maxHit, roll * percent / 100) << label;
+				EXPECT_GE(minHit, c.minHit) << label;
+				EXPECT_LE(maxHit, c.maxHit) << label;
+			}
+			EXPECT_EQ(balls, 36) << label;
+			// Five balls are what the tooltip counts: they come to at most the tooltip's top.
+			const DamageRange shown = GetDamageAmt(c.spell, c.gemLevel);
+			EXPECT_LE(roll * percent / 100 * 5, shown.max * percent / 100) << label;
+		}
+	}
+}
+
+TEST_F(Poe2SpellDamageTest, NovaBallsOfTrapsAndDiabloStayAtTheirRoll)
+{
+	leveltype = DTYPE_CATHEDRAL;
+	// A trap's nova (a nova trap or shrine) has no caster's percent to pass on.
+	Missiles.clear();
+	SetRndSeed(4);
+	Missile *trap = AddMissile({ 40, 40 }, { 40, 41 }, Direction::South, MissileID::Nova, TARGET_PLAYERS, -1, 0, 1);
+	ASSERT_NE(trap, nullptr);
+	trap->poe2.damagePercent = 250;
+	ProcessNova(*trap);
+	int balls = 0;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype != MissileID::NovaBall)
+			continue;
+		balls++;
+		EXPECT_EQ(missile.poe2.damagePercent, 100);
+		EXPECT_EQ(missile.poe2.skillKind, 0);
+	}
+	EXPECT_EQ(balls, 36);
+
+	// Diablo and Hellfire: the balls start afresh, as before.
+	gbIsPoe2 = false;
+	for (const MissileID type : { MissileID::Nova, MissileID::Immolation }) {
+		Missile &nova = Cast(type, 3, 4);
+		nova.poe2.damagePercent = 250;
+		nova.poe2.skillKind = static_cast<uint8_t>(SkillKind::Spell);
+		nova.poe2.skillId = static_cast<uint8_t>(SpellID::Nova);
+		if (type == MissileID::Nova)
+			ProcessNova(nova);
+		else
+			ProcessImmolation(nova);
+		const MissileID ballType = type == MissileID::Nova ? MissileID::NovaBall : MissileID::FireballBow;
+		balls = 0;
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype != ballType)
+				continue;
+			balls++;
+			EXPECT_EQ(missile.poe2.damagePercent, 100);
+			EXPECT_EQ(missile.poe2.skillKind, 0);
+		}
+		EXPECT_EQ(balls, 36);
+	}
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2SpellDamageTest, TheHerosOwnRunesNeverHurtTheHero)
@@ -335,8 +583,8 @@ TEST_F(Poe2SpellDamageTest, SparkAndEmberRollTheirOwnRows)
 		if (missile._mitype != MissileID::ChargedBolt)
 			continue;
 		sparks++;
-		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, 1), 35), 1));
-		EXPECT_LE(missile._midam, Percent(SpellBaseMax(player, 1), 35));
+		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, 1), 60), 1));
+		EXPECT_LE(missile._midam, Percent(SpellBaseMax(player, 1), 60));
 		EXPECT_EQ(missile.poe2.damagePercent, GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::Spark), 1));
 	}
 	EXPECT_GE(sparks, 6);
@@ -376,6 +624,15 @@ TEST_F(Poe2SpellDamageTest, IceBoltGainsShardsWithItsGem)
 	EXPECT_EQ(shards(1), 1);
 	EXPECT_EQ(shards(7), 3);
 	EXPECT_EQ(shards(20), 6);
+
+	// Each shard hits for 85% of the spell base (Curtis 2026-10-28: 100 -> 160, then 85 with Firebolt, Q27), then the
+	// gem curve.
+	EXPECT_EQ(IceBoltShardDamagePercent, 85);
+	shards(1);
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype == MissileID::BlueFlare)
+			EXPECT_EQ(missile.poe2.damagePercent, GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::IceBolt), 1) * IceBoltShardDamagePercent / 100);
+	}
 }
 
 TEST_F(Poe2SpellDamageTest, BoneSpiritTakesLittleOfABoss)
@@ -424,6 +681,148 @@ TEST_F(Poe2SpellDamageTest, DiabloModeUnchanged)
 			expected += expected / 8;
 		EXPECT_EQ(ball._midam, expected);
 	}
+}
+
+TEST_F(Poe2SpellDamageTest, ElementalIsASlowHomingBlast)
+{
+	// Curtis 2026-10-28, "Elemental homes": it was a second Fireball.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	SOLData[0] = TileProperties::None;
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	// A cast flies at half Diablo's speed, slower than Fireball.
+	Missile &plain = Cast(MissileID::Elemental, 1, 1);
+	const Displacement diablo = plain.position.velocity;
+	SetSpellMissileSpeed(plain, SpellID::Elemental);
+	EXPECT_EQ(plain.position.velocity.deltaX, diablo.deltaX * ElementalSpeedPercent / 100);
+	EXPECT_EQ(plain.position.velocity.deltaY, diablo.deltaY * ElementalSpeedPercent / 100);
+	EXPECT_LT(ElementalSpeedPercent, FireballSpeedPercent);
+
+	// A monster off to the side of the aim.
+	const Point side { 41, 45 };
+	Monsters[0] = {};
+	Monsters[0].position.tile = side;
+	Monsters[0].maxHitPoints = Monsters[0].hitPoints = Fixed26_6::fromInt(100);
+	Monsters[0].talkMsg = TEXT_NONE;
+	dMonster[side.x][side.y] = 1;
+	// Cast at it, the blast keeps it as its target.
+	Missiles.clear();
+	Missile *aimed = AddMissile(player.position.tile, side, Direction::South, MissileID::Elemental, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(aimed, nullptr);
+	SetSpellMissileSpeed(*aimed, SpellID::Elemental);
+	EXPECT_EQ(aimed->var6, 1);
+	const Displacement towards = aimed->position.velocity;
+
+	// Cast past it, the blast turns towards it on its first tick.
+	Missiles.clear();
+	Missile *missile = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::Elemental, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(missile, nullptr);
+	SetSpellMissileSpeed(*missile, SpellID::Elemental);
+	EXPECT_EQ(missile->var6, 0);
+	const Displacement straight = missile->position.velocity;
+	ProcessElemental(*missile);
+	EXPECT_EQ(missile->var6, 1);
+	EXPECT_NE(missile->position.velocity, straight);
+	EXPECT_NEAR(missile->position.velocity.deltaX, towards.deltaX, std::abs(towards.deltaX) / 50 + 2);
+	EXPECT_NEAR(missile->position.velocity.deltaY, towards.deltaY, std::abs(towards.deltaY) / 50 + 2);
+
+	// Diablo's Elemental flies to where it was cast first.
+	gbIsPoe2 = false;
+	Missiles.clear();
+	missile = AddMissile(player.position.tile, { 45, 40 }, Direction::South, MissileID::Elemental, TARGET_MONSTERS, player, 0, 1);
+	ASSERT_NE(missile, nullptr);
+	const Displacement diabloStraight = missile->position.velocity;
+	ProcessElemental(*missile);
+	EXPECT_EQ(missile->position.velocity, diabloStraight);
+	gbIsPoe2 = true;
+	dMonster[side.x][side.y] = 0;
+	Monsters[0] = {};
+}
+
+TEST_F(Poe2SpellDamageTest, ARunesNovaHitsTheMonsterOnItForTheTooltipsBalls)
+{
+	// Balance thread 2026-10-28: a rune goes off under the monster that stepped on it, where all 36 balls start, and
+	// each ball hit it once before leaving the tile: 36 hits where the tooltip counts 5. A cast's balls start under the
+	// hero, so they hit a monster only as they pass it.
+	Player &player = *MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	// How many balls hit a monster standing on monsterTile, from a rune under it or a cast from the hero.
+	const auto hitsOn = [&](bool rune, Point monsterTile, MissileID novaType) {
+		Missiles.clear();
+		SetRndSeed(3);
+		Monster &monster = Monsters[0];
+		monster = {};
+		monster.levelType = 0;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.mode = MonsterMode::Stand;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = monsterTile;
+		dMonster[monsterTile.x][monsterTile.y] = 1;
+		Missile *nova;
+		if (rune) {
+			Missile &r = Missiles.emplace_back();
+			r._mitype = novaType == MissileID::Nova ? MissileID::RuneOfNova : MissileID::RuneOfImmolation;
+			r._micaster = TARGET_MONSTERS;
+			r._misource = player.getId();
+			r._mispllvl = 1;
+			r._mlid = NO_LIGHT;
+			r.var1 = static_cast<int>(novaType);
+			r.position.tile = monsterTile;
+			ProcessRune(r);
+			nova = &Missiles.back();
+		} else {
+			nova = AddMissile(player.position.tile, monsterTile, Direction::South, novaType, TARGET_MONSTERS, player, 0, 1);
+		}
+		if (novaType == MissileID::Nova)
+			ProcessNova(*nova);
+		else
+			ProcessImmolation(*nova);
+		int hits = 0;
+		for (int tick = 0; tick < 100; tick++) {
+			for (Missile &ball : Missiles) {
+				if (ball._miDelFlag || IsNoneOf(ball._mitype, MissileID::NovaBall, MissileID::FireballBow))
+					continue;
+				// The test's map is open floor: a ball that leaves it is gone.
+				if (ball.position.tile.x < 31 || ball.position.tile.x > 58 || ball.position.tile.y < 31 || ball.position.tile.y > 58) {
+					ball._miDelFlag = true;
+					continue;
+				}
+				const Fixed26_6 before = monster.hitPoints;
+				if (ball._mitype == MissileID::NovaBall)
+					ProcessNovaBall(ball);
+				else
+					ProcessFireball(ball);
+				if (monster.hitPoints < before)
+					hits++;
+			}
+			monster.mode = MonsterMode::Stand;
+		}
+		dMonster[monsterTile.x][monsterTile.y] = 0;
+		return hits;
+	};
+	for (const MissileID novaType : { MissileID::Nova, MissileID::Immolation }) {
+		const std::string label = novaType == MissileID::Nova ? "Nova" : "Immolation";
+		// The rune's monster takes the tooltip's 5 balls (it took 36).
+		EXPECT_EQ(hitsOn(true, { 44, 44 }, novaType), 5) << label;
+		// A cast's balls are unchanged: more beside the hero, fewer further out.
+		EXPECT_EQ(hitsOn(false, { 41, 40 }, novaType), 8) << label;
+		EXPECT_EQ(hitsOn(false, { 41, 41 }, novaType), 5) << label;
+		EXPECT_EQ(hitsOn(false, { 42, 40 }, novaType), 4) << label;
+		EXPECT_EQ(hitsOn(false, { 44, 40 }, novaType), 2) << label;
+	}
+	Monsters[0] = {};
+	Missiles.clear();
 }
 
 } // namespace

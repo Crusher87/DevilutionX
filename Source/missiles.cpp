@@ -215,6 +215,58 @@ void UpdateMissileVelocity(Missile &missile, WorldTilePosition destination, int 
 }
 
 /**
+ * @brief POE2 Mashup: a monster a player's Elemental may home on: alive, in sight of the blast and not one of the
+ * heroes' minions.
+ */
+bool IsElementalTarget(Point source, const Monster &monster)
+{
+	return !monster.isPlayerMinion() && !monster.hasNoLife() && monster.mode != MonsterMode::Death && monster.talkMsg == TEXT_NONE
+	    && !CheckBlock(source, monster.position.tile);
+}
+
+/** @brief The nearest monster a player's Elemental may home on (IsElementalTarget), or nullptr. */
+Monster *FindElementalTarget(Point source, int rad)
+{
+	std::optional<Point> monsterPosition = FindClosestValidPosition(
+	    [&source](Point target) {
+		    return InDungeonBounds(target) && dMonster[target.x][target.y] > 0 && IsElementalTarget(source, Monsters[dMonster[target.x][target.y] - 1]);
+	    },
+	    source, 1, rad);
+	if (monsterPosition)
+		return &Monsters[dMonster[monsterPosition->x][monsterPosition->y] - 1];
+	return nullptr;
+}
+
+/**
+ * @brief POE2 Mashup: a player's Elemental turns towards its target every ElementalHomingTicks ticks: the monster it
+ * was cast at (var6, its id + 1) while that one lives and is near, else the nearest within ElementalHomingTiles of the
+ * blast, which it then keeps. With no target it flies straight on. Its blast is then seen from where it last turned
+ * (var3 2, var4 and var5), as Diablo's retarget is.
+ */
+void HomeElemental(Missile &missile, Point position)
+{
+	if (missile.duration % ElementalHomingTicks != 0)
+		return;
+	Monster *target = nullptr;
+	if (missile.var6 > 0 && static_cast<size_t>(missile.var6) <= MaxMonsters) {
+		Monster &locked = Monsters[missile.var6 - 1];
+		if (IsElementalTarget(position, locked) && position.WalkingDistance(locked.position.tile) <= 2 * ElementalHomingTiles)
+			target = &locked;
+	}
+	if (target == nullptr) {
+		target = FindElementalTarget(position, ElementalHomingTiles);
+		missile.var6 = target != nullptr ? static_cast<int>(target->getId()) + 1 : 0;
+	}
+	if (target == nullptr || target->position.tile == position)
+		return;
+	missile.setDirection(GetDirection(position, target->position.tile));
+	UpdateMissileVelocity(missile, target->position.tile, 16 * ElementalSpeedPercent / 100 * missile.poe2.speedPercent / 100);
+	missile.var3 = 2;
+	missile.var4 = position.x;
+	missile.var5 = position.y;
+}
+
+/**
  * @brief Add the missile to the lookup tables
  * @param missile The missile to add
  */
@@ -863,6 +915,11 @@ void MoveMissileAndCheckMissileCol(Missile &missile, DamageType damageType, int 
 
 /** @brief The spell the hits of a missile being added are credited to in the play log (see Poe2MissileData::creditSpell). */
 SpellID NewMissileCreditSpell = SpellID::Invalid;
+/**
+ * @brief POE2 Mashup: the missile whose damage percent and supports a missile being added keeps (a rune's burst, see
+ * ProcessRune, and a nova's balls, see ProcessNovaCommon), or none.
+ */
+std::optional<Poe2MissileData> NewMissileInherit;
 
 /** @brief The spell that lays a rune missile. */
 SpellID RuneSpell(MissileID rune)
@@ -2898,6 +2955,10 @@ void AddElemental(Missile &missile, AddMissileParameter &parameter)
 	missile.var2 = missile.position.start.y;
 	missile.var4 = dst.x;
 	missile.var5 = dst.y;
+	// POE2 Mashup: a player's Elemental homes on the monster it was cast at (see HomeElemental).
+	missile.var6 = 0;
+	if (gbIsPoe2 && missile._micaster == TARGET_MONSTERS && InDungeonBounds(parameter.dst) && dMonster[parameter.dst.x][parameter.dst.y] != 0)
+		missile.var6 = std::abs(dMonster[parameter.dst.x][parameter.dst.y]);
 	missile._mlid = AddLight(missile.position.start, 8);
 }
 
@@ -2961,7 +3022,11 @@ void AddNova(Missile &missile, AddMissileParameter &parameter)
 	missile.var2 = parameter.dst.y;
 
 	if (!missile.IsTrap() && gbIsPoe2) {
-		missile._midam = RollPoe2SpellHit(Players[missile._misource], missile._mitype == MissileID::Immolation ? SpellID::Immolation : SpellID::Nova, missile._mispllvl);
+		SpellID spell = missile._mitype == MissileID::Immolation ? SpellID::Immolation : SpellID::Nova;
+		// A rune's burst rolls on the rune's own row (Curtis 2026-10-28: Rune of Nova 110%, Rune of Immolation 150%).
+		if (IsAnyOf(missile.poe2.creditSpell, SpellID::RuneOfNova, SpellID::RuneOfImmolation))
+			spell = missile.poe2.creditSpell;
+		missile._midam = RollPoe2SpellHit(Players[missile._misource], spell, missile._mispllvl);
 	} else if (!missile.IsTrap()) {
 		const Player &player = Players[missile._misource];
 		const int dmg = GenerateRndSum(6, 5) + player.getCharacterLevel() + 5;
@@ -3231,6 +3296,12 @@ Missile *AddMissile(WorldTilePosition src, WorldTilePosition dst, Direction midi
 	missile.lastCollisionTargetHash = 0;
 	// Set before the missile's add function, as some (a rune's fire burst) hit as they're added.
 	missile.poe2.creditSpell = NewMissileCreditSpell;
+	if (NewMissileInherit) {
+		missile.poe2.damagePercent = NewMissileInherit->damagePercent;
+		missile.poe2.spell = NewMissileInherit->spell;
+		missile.poe2.skillKind = NewMissileInherit->skillKind;
+		missile.poe2.skillId = NewMissileInherit->skillId;
+	}
 
 	if (!missile.IsTrap() && micaster == TARGET_PLAYERS) {
 		const Monster &monster = Monsters[id];
@@ -3635,8 +3706,14 @@ void ProcessRune(Missile &missile)
 
 		// The burst's hits are the rune's, not those of whatever was used last (the play log's credit).
 		NewMissileCreditSpell = missile.IsTrap() ? SpellID::Invalid : RuneSpell(missile._mitype);
+		// POE2 Mashup: the burst keeps the rune's damage percent (its speed factor, gem curve and supports) and its
+		// supports (Curtis 2026-10-28: Rune of Fire; Rune of Nova and Rune of Immolation as a bug fix, so the hits
+		// match the tooltip). Their novas pass them on to their balls (ProcessNovaCommon).
+		if (gbIsPoe2 && !missile.IsTrap() && missile.sourceType() == MissileSource::Player && IsAnyOf(missile._mitype, MissileID::RuneOfFire, MissileID::RuneOfNova, MissileID::RuneOfImmolation))
+			NewMissileInherit = missile.poe2;
 		AddMissile(position, position, dir, static_cast<MissileID>(missile.var1), TARGET_BOTH, missile._misource, missile._midam, missile._mispllvl);
 		NewMissileCreditSpell = SpellID::Invalid;
+		NewMissileInherit = std::nullopt;
 	}
 
 	PutMissile(missile);
@@ -3731,13 +3808,29 @@ void ProcessNovaCommon(Missile &missile, MissileID projectileType)
 	constexpr std::array<WorldTileDisplacement, 9> quarterRadius = { { { 4, 0 }, { 4, 1 }, { 4, 2 }, { 4, 3 }, { 4, 4 }, { 3, 4 }, { 2, 4 }, { 1, 4 }, { 0, 4 } } };
 	// A rune's nova passes the rune's credit on to its projectiles.
 	NewMissileCreditSpell = missile.poe2.creditSpell;
+	// POE2 Mashup: the balls keep the cast's (or the rune's) damage percent and supports, as the tooltip counts them;
+	// they started at 100%.
+	if (gbIsPoe2 && !missile.IsTrap() && missile.sourceType() == MissileSource::Player)
+		NewMissileInherit = missile.poe2;
+	// POE2 Mashup: a rune goes off under the monster that stepped on it, where all 36 balls start, and each ball hit it
+	// once before leaving the tile (36 hits; a cast's balls start under the hero). Only the tooltip's count of them do.
+	int startTileHits = 36;
+	if (gbIsPoe2 && IsAnyOf(missile.poe2.creditSpell, SpellID::RuneOfNova, SpellID::RuneOfImmolation))
+		startTileHits = SpellDamageHits(missile.poe2.creditSpell);
+	const int16_t startTileTargets = dMonster[src.x][src.y] ^ dPlayer[src.x][src.y];
+	int balls = 0;
 	for (const WorldTileDisplacement quarterOffset : quarterRadius) {
 		// This ends up with two missiles targeting offsets 4,0, 0,4, -4,0, 0,-4.
 		const std::array<WorldTileDisplacement, 4> offsets { quarterOffset, quarterOffset.flipXY(), quarterOffset.flipX(), quarterOffset.flipY() };
-		for (const WorldTileDisplacement offset : offsets)
-			AddMissile(src, src + offset, dir, projectileType, en, id, dam, missile._mispllvl);
+		for (const WorldTileDisplacement offset : offsets) {
+			Missile *ball = AddMissile(src, src + offset, dir, projectileType, en, id, dam, missile._mispllvl);
+			// Counts as already checked against what stands on the start tile (MoveMissileAndCheckMissileCol).
+			if (ball != nullptr && balls++ >= startTileHits)
+				ball->lastCollisionTargetHash = startTileTargets;
+		}
 	}
 	NewMissileCreditSpell = SpellID::Invalid;
+	NewMissileInherit = std::nullopt;
 	missile.duration--;
 	if (missile.duration == 0)
 		missile._miDelFlag = true;
@@ -4590,8 +4683,13 @@ void ProcessElemental(Missile &missile)
 		}
 	} else {
 		MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), dam, dam, false, false);
-		if (missile.var3 == 0 && missilePosition == Point { missile.var4, missile.var5 })
+		if (gbIsPoe2 && missile._micaster == TARGET_MONSTERS) {
+			// POE2 Mashup: a player's Elemental is a slow homing blast, not a second Fireball (Curtis 2026-10-28).
+			if (missile.duration > 0)
+				HomeElemental(missile, missile.position.tile);
+		} else if (missile.var3 == 0 && missilePosition == Point { missile.var4, missile.var5 }) {
 			missile.var3 = 1;
+		}
 		if (missile.var3 == 1) {
 			missile.var3 = 2;
 			missile.duration = 255;

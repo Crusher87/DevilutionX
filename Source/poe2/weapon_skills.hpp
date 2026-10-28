@@ -27,13 +27,20 @@ enum class SwingStyle : uint8_t;
 /** @brief Where the arrows of Rain of Arrows come down, around the target. */
 constexpr std::array<Displacement, 9> RainOfArrowsVolley = { { { 0, 0 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 2 }, { -2, -2 }, { 2, -2 }, { -2, 2 } } };
 
-/** @brief Ground Slam and Whirling Staff deal full damage to the target and this much to the other tiles around you. */
-constexpr int AreaSkillSideDamagePercent = 75;
+/**
+ * @brief Ground Slam (Seismic Slam) deals full damage to the target and this much to the rest of its cone (Curtis
+ * 2026-10-28: 75 to 50; audit-damage-v2.md section 7, 1.7 to 1.3 times the budget).
+ */
+constexpr int GroundSlamConeDamagePercent = 50;
 /** @brief Ground Slam's shockwave runs this many tiles out in a cone in front of the player. */
 constexpr int GroundSlamReach = 3;
-/** @brief Whirling Staff hits two rings around the player; the outer ring for this percent. */
+/**
+ * @brief Whirling Staff (Sweeping Wind) hits the target in full and two rings around the player: the inner ring for
+ * this percent, the outer for that (Curtis 2026-10-28: 75 and 50 to 55 and 25).
+ */
 constexpr int WhirlingStaffReach = 2;
-constexpr int WhirlingStaffOuterDamagePercent = 50;
+constexpr int WhirlingStaffInnerDamagePercent = 55;
+constexpr int WhirlingStaffOuterDamagePercent = 25;
 /** @brief Leap Slam hits everything around where it lands for this percent of a weapon hit. */
 constexpr int LeapSlamDamagePercent = 80;
 /**
@@ -46,10 +53,45 @@ constexpr int LightningArrowBurstPerLevel = 2;
 constexpr int LightningArrowBurstDexterityDivisor = 4;
 /** @brief Without LightningArrowBurstFromLevel: the burst hits the 3x3 tiles where it lands for this percent of the arrow's hit, on average. */
 constexpr int LightningArrowBurstPercent = 60;
-/** @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster. */
-constexpr int FrostNovaShardDamagePercent = 25;
+/**
+ * @brief Each of Frost Nova's shards hits for this percent of the spell base; about two reach a monster (Curtis
+ * 2026-10-28: 25 to 100, at 10 mana; audit-casters-v3.md; then 50 with Firebolt, Q27).
+ */
+constexpr int FrostNovaShardDamagePercent = 50;
+/**
+ * @brief Each of Ice Bolt's shards hits for this percent of the spell base (Curtis 2026-10-28: 100 to 160, then 85 with
+ * the early Sorcerer spells, Q27).
+ */
+constexpr int IceBoltShardDamagePercent = 85;
 /** @brief Flurry's second strike, a backhand, hits this much harder than its first. */
 constexpr int FlurryBackhandDamagePercent = 150;
+/**
+ * @brief Smite's and Frenzy's swing hits for this percent of a weapon hit, before the gem curve (Curtis 2026-10-28:
+ * 100 to 300 and 200; they were far under the budget as single-target skills).
+ */
+constexpr int SmiteDamagePercent = 300;
+constexpr int FrenzyDamagePercent = 200;
+/** @brief Shield Bash hits this hard before the gem curve (Curtis 2026-10-28: 120 to 200). */
+constexpr int ShieldBashDamagePercent = 200;
+/** @brief Shield Charge hits the 3 tiles in front of its landing this hard (Curtis 2026-10-28, Q28: 100 to 150). */
+constexpr int ShieldChargeDamagePercent = 150;
+/** @brief Shadow Lunge's strike from behind (Curtis 2026-10-28, Q28: 150 to 220). */
+constexpr int ShadowStepDamagePercent = 220;
+/** @brief Each of Vault Shot's arrows hits for this percent of a bow shot (Curtis 2026-10-28, Q28: 100 to 140). */
+constexpr int VaultShotArrowDamagePercent = 140;
+
+/** @brief A swing skill's own percent of a weapon hit (Smite, Frenzy), 100 for the others and a plain attack. */
+[[nodiscard]] constexpr int SwingSkillDamagePercent(WeaponSkill skill)
+{
+	switch (skill) {
+	case WeaponSkill::Smite:
+		return SmiteDamagePercent;
+	case WeaponSkill::Frenzy:
+		return FrenzyDamagePercent;
+	default:
+		return 100;
+	}
+}
 /** @brief The backhand starts from the end of the first swing, so it skips this many more frames of the animation. */
 constexpr int8_t FlurryBackhandSkippedFrames = 4;
 /** @brief Ticks between Barrage's arrows and between Ember Fusillade's embers. */
@@ -60,14 +102,31 @@ constexpr int BarrageArrows = 5;
 /** @brief Ember Fusillade's embers before its gem level adds more. */
 constexpr int EmberFusilladeEmbers = 5;
 
+/**
+ * @brief Whether a swing skill's hit is lightning rather than physical: Smite, like POE2's (Curtis 2026-10-28, "Smite
+ * lightning"). Only POE2 Mashup has weapon skills.
+ */
+[[nodiscard]] constexpr bool IsLightningAttackSkill(WeaponSkill skill)
+{
+	return skill == WeaponSkill::Smite;
+}
+
 /** @brief Ice Bolt hits the monsters right beside the one it strikes for this percent of the damage (Firebolt's splash is in spell_damage.tsv). */
 constexpr int BoltSplashPercent = 35;
 
 /** @brief Fireball travels at this percent of Diablo's speed and Firebolt at this percent, so the heavy orb and the quick bolt feel apart. */
 constexpr int FireballSpeedPercent = 75;
 constexpr int FireboltSpeedPercent = 140;
+/**
+ * @brief A player's Elemental is a slow homing blast, no longer a second Fireball (Curtis 2026-10-28, "Elemental
+ * homes"): it flies at this percent of Diablo's speed and turns every ElementalHomingTicks game ticks towards the
+ * monster it was cast at, or the nearest within ElementalHomingTiles of it.
+ */
+constexpr int ElementalSpeedPercent = 50;
+constexpr int ElementalHomingTicks = 3;
+constexpr int ElementalHomingTiles = 6;
 
-/** @brief Sets a player spell's missile speed: Fireball slower, Firebolt faster; other spells keep theirs. */
+/** @brief Sets a player spell's missile speed: Fireball and Elemental slower, Firebolt faster; other spells keep theirs. */
 void SetSpellMissileSpeed(Missile &missile, SpellID spell);
 /** @brief A player's Fireball exploded: throws back the enemies around it, with a ring of flame and a jolt. */
 void OnFireballDetonated(Missile &missile, Point position);

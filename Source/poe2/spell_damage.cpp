@@ -92,7 +92,7 @@ void EnsureLoaded()
 		Load();
 }
 
-/** @brief Runes deal their spell's damage. */
+/** @brief Runes deal their spell's damage, unless they have a row of their own (Rune of Fire, Curtis 2026-10-28). */
 SpellID DamageSpell(SpellID spell)
 {
 	switch (spell) {
@@ -110,10 +110,11 @@ SpellID DamageSpell(SpellID spell)
 const SpellDamageRow &FindSpellRow(SpellID spell)
 {
 	EnsureLoaded();
-	spell = DamageSpell(spell);
-	for (const SpellDamageRow &row : Rows) {
-		if (row.isSpell && row.spell == spell)
-			return row;
+	for (const SpellID wanted : { spell, DamageSpell(spell) }) {
+		for (const SpellDamageRow &row : Rows) {
+			if (row.isSpell && row.spell == wanted)
+				return row;
+		}
 	}
 	return MissingRow;
 }

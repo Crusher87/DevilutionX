@@ -151,14 +151,28 @@ TEST_F(Poe2MonsterModsTest, DiablosMarksArePercentages)
 	ASSERT_EQ(GetMonsterAffixes(zombie).rarity, MonsterRarity::Normal);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), ResistMarkPercent);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Lightning), 0);
-	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), MagicImmuneMarkPercent);
+	// A zombie is undead: its magic (cold) immune mark is 20%, not 40% (Curtis 2026-10-28).
+	ASSERT_EQ(zombie.data().monsterClass, MonsterClass::Undead);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), UndeadMagicImmuneMarkPercent);
+	EXPECT_EQ(UndeadMagicImmuneMarkPercent, 20);
 	EXPECT_EQ(ResistanceMarkPercent(IMMUNE_FIRE, DamageType::Fire), ImmuneMarkPercent);
 	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Magic), MagicResistMarkPercent);
+	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Magic, /*undead=*/true), MagicResistMarkPercent);
 	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE), "Resistances: Fire 30%, Magic 40%");
+	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE, /*undead=*/true), "Resistances: Fire 30%, Magic 20%");
 	EXPECT_EQ(ResistanceMarksText(0), "No resistances");
 
-	// A magic-immune zombie takes 60% of Ice Bolt's damage rather than none.
-	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - MagicImmuneMarkPercent);
+	// A magic-immune zombie takes 80% of Ice Bolt's damage rather than none.
+	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - UndeadMagicImmuneMarkPercent);
+
+	// A demon with the same mark keeps 40%.
+	LevelMonsterTypes[1].type = MT_TOAD;
+	Monster demon = MakeMonster(1);
+	demon.levelType = 1;
+	demon.resistance = IMMUNE_MAGIC;
+	ASSERT_EQ(demon.data().monsterClass, MonsterClass::Demon);
+	EXPECT_EQ(MonsterResistance(demon, DamageType::Magic), MagicImmuneMarkPercent);
+	EXPECT_EQ(MagicImmuneMarkPercent, 40);
 
 	gbIsPoe2 = false;
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), 0);
@@ -167,17 +181,18 @@ TEST_F(Poe2MonsterModsTest, DiablosMarksArePercentages)
 
 TEST_F(Poe2MonsterModsTest, CursesAndExposureLowerResistance)
 {
+	// A zombie is undead, so its magic immune mark is UndeadMagicImmuneMarkPercent (Curtis 2026-10-28).
 	Monster zombie = MakeMonster(1);
 	zombie.resistance = IMMUNE_MAGIC;
 	zombie.poe2.lowerResistTicks = 10;
-	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), MagicImmuneMarkPercent - LowerResistCursePercent);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), UndeadMagicImmuneMarkPercent - LowerResistCursePercent);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), -LowerResistCursePercent);
 	zombie.poe2.exposureTicks = 10;
 	zombie.poe2.exposureElement = static_cast<uint8_t>(DamageType::Magic);
-	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), MagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), UndeadMagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), -LowerResistCursePercent);
 	// Below zero the monster takes more damage.
-	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - (MagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent));
+	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - (UndeadMagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent));
 
 	// Rare and unique monsters shrug off part of it.
 	Monster rare = MakeMonster(FindSeed(MonsterRarity::Rare, MonsterMod::ExtraLife));

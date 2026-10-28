@@ -72,10 +72,15 @@ def number(text):
 	return float(text) if text.strip() else 0.0
 
 
+# Runes keep the staff bolt's ratio even with a spell_damage.tsv row of their own (Rune of Fire's 280%, Curtis
+# 2026-10-28, was set for its 1.12 speed factor).
+RUNES = {'Spell RuneOfFire', 'Spell RuneOfLight', 'Spell RuneOfNova', 'Spell RuneOfImmolation', 'Spell RuneOfStone'}
+
+
 def damage_spells():
-	"""The skill_speed.tsv keys of the spells spell_damage.tsv gives a damage per cast."""
+	"""The skill_speed.tsv keys of the spells spell_damage.tsv gives a damage per cast (runes aside)."""
 	with open(SPELL_DAMAGE_TSV, newline='') as f:
-		return {'Spell ' + r['name'] for r in csv.DictReader(f, delimiter='\t') if r['kind'] == 'spell'}
+		return {'Spell ' + r['name'] for r in csv.DictReader(f, delimiter='\t') if r['kind'] == 'spell'} - RUNES
 
 
 DAMAGE_SPELLS = damage_spells()
@@ -106,8 +111,9 @@ def damage_percent(row):
 	return str(math.ceil(round(100 * ratio, 6)))
 
 
-# Bolts keep the flat 4 mana Curtis set in round 1 ("all bolts cost 4"), whatever their speed adds.
-MANA_KEPT = { 'Spell Firebolt' }
+# Bolts keep the flat 4 mana Curtis set in round 1 ("all bolts cost 4"), whatever their speed adds; Frost Nova costs the
+# 10 mana Curtis set on 2026-10-28.
+MANA_KEPT = { 'Spell Firebolt', 'FrostNova' }
 
 
 def mana_percent(name, damage):

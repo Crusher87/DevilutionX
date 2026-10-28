@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <limits>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "diablo.h"
@@ -73,18 +74,18 @@ constexpr int16_t Flat = 100;
 const TableSkillData Table[] = {
 	// Sword
 	{ WS::Whirlwind, "Whirlwind", "Spin through the enemies in your path, hitting all around where you stop", 5, 8, TW::AxeOrSword, 0, Dash, 85, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Axe, Icon(SpellIcon::Berserk), TableCurve::Boneshatter, 300 },
-	{ WS::Sacrifice, "Sacrifice", "A brutal strike paid for with 5% of your life", 7, 6, TW::Sword, 0, Strike, 260, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
+	{ WS::Sacrifice, "Sacrifice", "A brutal strike paid for with 5% of your life", 7, 6, TW::Sword, 0, Strike, 330, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
 	{ WS::Zeal, "Zeal", "Four lightning-fast strikes at the enemy in front", 9, 5, TW::Sword, 0, Flurry, 140, 4, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 290 },
-	{ WS::Vengeance, "Vengeance", "A strike that bursts into fire, lightning and cold", 11, 5, TW::Sword, 0, Strike, 130, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Elements, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 0 },
+	{ WS::Vengeance, "Vengeance", "A strike that bursts into fire, lightning and cold", 11, 5, TW::Sword, 0, Strike, 260, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Elements, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 0 },
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 13, 14, TW::Sword, 0, Arc, 200, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
 	{ WS::FanOfBlades, "Fan of Blades", "Throw daggers in every direction", 5, 5, TW::Dagger, 0, Projectiles, 70, 8, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 280 },
-	{ WS::ViperStrike, "Cobra Strike", "A poisoned stab that keeps hurting", 7, 5, TW::Dagger, 0, Strike, 130, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0 },
+	{ WS::ViperStrike, "Cobra Strike", "A poisoned stab that keeps hurting", 7, 5, TW::Dagger, 0, Strike, 200, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0 },
 	{ WS::BladeSentinel, "Blade Sentinel", "A whirling blade that guards the target spot for 5 seconds", 9, 12, TW::Dagger, 0, Zone, 35, 0, 1, 100, 20, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::Pulse, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 260 },
 	{ WS::DeathMark, "Death Mark", "Marks an enemy to take 25% more damage", 11, 9, TW::Dagger, 1, Curse, Flat, 0, 0, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::DeathMark, TableBuff::None, TT_Sword | TT_Occult, Icon(SpellIcon::RedSkull), TableCurve::Boneshatter, 100 },
 	{ WS::BladeFury, "Blade Fury", "A rapid stream of thrown daggers", 13, 12, TW::Dagger, 0, Stream, 70, 8, 0, 0, 2, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 290 },
 	// Axe
-	{ WS::DoubleThrow, "Double Throw", "Hurl two axes, and one more for each Frenzy charge", 7, 5, TW::Axe, 0, Projectiles, 110, 2, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Frenzy, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Telekinesis), TableCurve::LightningArrow, 290 },
+	{ WS::DoubleThrow, "Double Throw", "Hurl two axes, and one more for each Frenzy charge", 7, 5, TW::Axe, 0, Projectiles, 230, 2, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Frenzy, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Telekinesis), TableCurve::LightningArrow, 290 },
 	{ WS::Rend, "Rend", "A tearing sweep that leaves enemies bleeding", 9, 7, TW::Axe, 0, Arc, 100, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
 	{ WS::WarCry, "War Cry", "Stuns enemies around you", 11, 10, TW::None, 1, Buff, Flat, 0, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Axe | TT_Mace | TT_Sword, Icon(SpellIcon::LongHorn), TableCurve::Boneshatter, 200 },
 	{ WS::CallOfTheAncients, "Call of the Ancients", "Spends all Rage: ancestral warriors strike all around, 5% harder per Rage", 13, 12, TW::Axe, 0, CallOfTheAncients, 60, 3, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Rage, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Golem), TableCurve::Boneshatter, 0 },
@@ -94,14 +95,14 @@ const TableSkillData Table[] = {
 	{ WS::Shockwave, "Shockwave", "A slam whose shockwave runs far ahead and stuns", 11, 10, TW::Mace, 0, Line, 70, 5, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun | TF_Knockback, TableZone::None, TableCurse::None, TableBuff::None, TT_Mace, Icon(SpellIcon::Nova), TableCurve::Earthquake, 0 },
 	{ WS::FistOfTheHeavens, "Fist of the Heavens", "Lightning strikes the target and sprays bolts all around", 13, 16, TW::None, 3, Burst, 110, 6, 1, 0, 0, 0, DT::Lightning, MissileID::ChargedBolt, MG::Lightning, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Mace | TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Fireball, 312 },
 	// Quarterstaff
-	{ WS::DashingStrike, "Dashing Strike", "Dash through the enemies and strike where you land", 5, 7, TW::Staff, 0, Dash, 150, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Phasing), TableCurve::LeapSlam, 320 },
+	{ WS::DashingStrike, "Dashing Strike", "Dash through the enemies, striking each one on the way", 5, 7, TW::Staff, 0, Dash, 80, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Phasing), TableCurve::LeapSlam, 320 },
 	{ WS::LashingTailKick, "Lashing Tail Kick", "A spinning kick that throws back all around", 7, 7, TW::Staff, 0, Around, 65, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Knockback | TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Search), TableCurve::Boneshatter, 0 },
 	{ WS::WaveOfLight, "Wave of Light", "A wave of holy light bursts out around you", 9, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::FlameWave), TableCurve::Boneshatter, 280 },
-	{ WS::CycloneStrike, "Cyclone Strike", "A storm of strikes all around you, crackling with lightning", 11, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 280 },
+	{ WS::CycloneStrike, "Cyclone Strike", "A storm of strikes all around you that drags enemies in, crackling with lightning", 11, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 280 },
 	{ WS::SevenSidedStrike, "Seven-Sided Strike", "Strike up to seven enemies nearby, one after another", 13, 11, TW::Staff, 0, Seven, 200, 7, 4, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Teleport), TableCurve::Boneshatter, 0 },
 	// Bow. Fire Arrow and Explosive Arrow came from the crossbow (dropped 2026-10-27); Fire Arrow is tier I, beside the Rogue's starting Hail of Arrows
 	{ WS::ClusterBolt, "Fire Arrow", "An arrow that bursts into flame where it lands", 1, 8, TW::Bow, 0, Projectiles, 100, 1, 1, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
-	{ WS::Multishot, "Multishot", "A wide fan of seven arrows", 9, 6, TW::Bow, 0, Projectiles, 75, 7, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 280 },
+	{ WS::Multishot, "Multishot", "A wide fan of seven arrows", 9, 6, TW::Bow, 0, Projectiles, 95, 7, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 280 },
 	{ WS::GuidedArrow, "Guided Arrow", "One heavy arrow that pierces through several enemies", 11, 5, TW::Bow, 0, Projectiles, 220, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Search), TableCurve::LightningArrow, 0 },
 	{ WS::FreezingArrow, "Freezing Arrow", "An arrow that bursts into freezing cold where it lands", 13, 10, TW::Bow, 0, Projectiles, 100, 1, 2, 0, 0, 0, DT::Magic, MissileID::Arrow, MG::BlueFlareExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::LightningArrow, 0 },
 	{ WS::ExplosiveBolt, "Explosive Arrow", "An arrow that explodes where it lands", 11, 9, TW::Bow, 0, Projectiles, 110, 1, 2, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
@@ -120,14 +121,14 @@ const TableSkillData Table[] = {
 	{ WS::Meteor, "Meteor", "After a moment, a meteor crashes down on the target", 13, 25, TW::None, 2, Zone, 150, 0, 2, 0, 0, 30, DT::Fire, MissileID::Null, MG::ApocalypseBoom, TF_Spell, TableZone::Delayed, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::FireCloud), TableCurve::Fireball, 312 },
 	{ WS::Thunderstorm, "Thunderstorm", "A storm follows you for 10 seconds, striking the nearest enemy", 13, 20, TW::None, 3, Zone, 100, 0, 6, 200, 20, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_FollowPlayer | TF_AtPlayer, TableZone::NearestStrike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Fireball, 312 },
 	// Frost
-	{ WS::GlacialSpike, "Glacial Spike", "A great spike of ice bursts out of the ground under the target, then shatters", 5, 10, TW::None, 1, Zone, 35, 0, 1, 0, 0, 3, DT::Magic, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
+	{ WS::GlacialSpike, "Glacial Spike", "A great spike of ice bursts out of the ground under the target, then shatters", 5, 10, TW::None, 1, Zone, 200, 0, 1, 0, 0, 3, DT::Magic, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::FrozenArmor, "Frozen Armor", "For 15 seconds, take 20% less damage from melee hits and chill those who strike you", 7, 12, TW::None, 1, Buff, Flat, 0, 0, 300, 0, 0, DT::Magic, MissileID::Null, MG::StoneCurseShatter, 0, TableZone::None, TableCurse::None, TableBuff::FrozenArmor, TT_Elemental, Icon(SpellIcon::ManaShield), TableCurve::Boneshatter, 100 },
 	{ WS::Blizzard, "Blizzard", "Ice shards rain on the target area for 4 seconds", 9, 16, TW::None, 1, Zone, 21, 0, 3, 80, 4, 0, DT::Magic, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::RandomStrikes, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Fireball, 312 },
 	{ WS::IceBarrage, "Ray of Frost", "A rapid stream of ice shards", 11, 14, TW::None, 1, Stream, 70, 8, 0, 0, 2, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::FrozenOrb, "Frozen Orb", "An orb of frost bursts at the target into a ring of shards", 13, 22, TW::None, 1, Zone, 70, 16, 0, 0, 0, 15, DT::Magic, MissileID::BlueFlare, MG::BlueFlareExplosion, TF_Spell, TableZone::ShardRing, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
 	// Arcane
-	{ WS::Haunt, "Haunt", "A spirit drains the enemy over time. When it dies, the spirit jumps to the nearest enemy.", 3, 8, TW::None, 1, Curse, 150, 0, 0, 100, 0, 0, DT::Physical, MissileID::Null, MG::BoneSpirit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
-	{ WS::LocustSwarm, "Locust Swarm", "A plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 120, 0, 1, 100, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
+	{ WS::Haunt, "Haunt", "A spirit drains the enemy over time. When it dies, the spirit jumps to the nearest enemy.", 3, 8, TW::None, 1, Curse, 350, 0, 0, 100, 0, 0, DT::Physical, MissileID::Null, MG::BoneSpirit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::LocustSwarm, "Locust Swarm", "A plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 130, 0, 1, 40, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
 	{ WS::CorpseExplosion, "Corpse Explosion", "Blows up a corpse near the target, burning everything around it", 9, 10, TW::None, 1, CorpseBurst, 50, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::SoulHarvest, "Soul Harvest", "Takes the souls of nearby corpses: 3% more damage each, up to 10, for 10 seconds", 11, 10, TW::None, 1, SoulHarvest, Flat, 10, 4, 200, 0, 0, DT::Physical, MissileID::Null, MG::Resurrect, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Resurrect), TableCurve::Boneshatter, 100 },
 	{ WS::BonePrison, "Bone Prison", "Bones trap the enemies around the target for 3 seconds", 11, 10, TW::None, 1, Curse, Flat, 0, 1, 60, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell, TableZone::None, TableCurse::BonePrison, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Boneshatter, 100 },
@@ -175,6 +176,11 @@ constexpr int FrozenArmorPercent = 20;
 constexpr int HolyShieldPercent = 15;
 /** Traps and sentries out at once, per skill. */
 constexpr int MaxPlacedZones = 3;
+/**
+ * Thunderstorm, Blessed Hammer and Blizzard out at once: one cast, and a recast replaces it (Curtis 2026-10-28; recast
+ * as their cast time allowed, Thunderstorm reached 11 at once).
+ */
+constexpr int MaxStackingZones = 1;
 constexpr int ShieldWallPercent = 40;
 constexpr int DeathMarkPercent = 25;
 /** Decrepify chills the cursed monster this much, in percent. */
@@ -309,6 +315,45 @@ struct CastResult {
 	bool hit = false;
 };
 
+/**
+ * @brief The tiles Dashing Strike's dash crossed, from where it started to where the hero landed; only where he stands
+ * when he didn't dash (no start, or one further off than the dash goes).
+ */
+std::vector<Point> DashPath(const Player &player, int tiles)
+{
+	std::vector<Point> path;
+	const Point end = player.position.tile;
+	Point step = player.poe2.dashStart;
+	if (step != Point {} && step.WalkingDistance(end) <= tiles + 1) {
+		while (step != end) {
+			path.push_back(step);
+			step = step + GetDirection(step, end);
+		}
+	}
+	path.push_back(end);
+	return path;
+}
+
+/**
+ * @brief Cyclone Strike drags what it hits a step in towards the hero, so it gathers a pack where Wave of Light only
+ * hits it (Curtis 2026-10-28, "Cyclone pulls"). The nearest go first, so the inner ring makes room for the next.
+ */
+void PullTowards(Point center, std::vector<Monster *> monsters)
+{
+	std::stable_sort(monsters.begin(), monsters.end(), [center](const Monster *a, const Monster *b) {
+		return center.WalkingDistance(a->position.tile) < center.WalkingDistance(b->position.tile);
+	});
+	for (Monster *monster : monsters) {
+		if (monster->hasNoLife() || monster->mode == MonsterMode::Death || monster->mode == MonsterMode::Petrified || monster->isUnique())
+			continue;
+		const Point tile = monster->position.tile;
+		if (center.WalkingDistance(tile) <= 1)
+			continue;
+		// A knockback from beyond the monster moves it towards the hero.
+		M_GetKnockback(*monster, tile + (tile - center));
+	}
+}
+
 /** @brief A weapon hit from a table skill, with the skill's extras. */
 void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int damagePercent, CastResult &result)
 {
@@ -439,9 +484,14 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 	// A granted skill's zone (Solar Orb) is one at a time: a new one replaces the old.
 	if (IsGrantedTableSkill(data))
 		Zones.erase(std::remove_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }), Zones.end());
-	// Traps and sentries: only a few of each can be out at once; the oldest goes.
-	if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret)) {
-		const int limit = SupportZoneLimit(player, SkillSlot::ForAttack(data.skill), MaxPlacedZones);
+	// Traps and sentries: only a few of each can be out at once; Thunderstorm, Blessed Hammer and Blizzard one. The oldest goes.
+	int cap = 0;
+	if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret))
+		cap = MaxPlacedZones;
+	else if (IsAnyOf(data.skill, WeaponSkill::Thunderstorm, WeaponSkill::BlessedHammer, WeaponSkill::Blizzard))
+		cap = MaxStackingZones;
+	if (cap > 0) {
+		const int limit = SupportZoneLimit(player, SkillSlot::ForAttack(data.skill), cap);
 		while (std::count_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }) >= limit)
 			Zones.erase(std::find_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }));
 	}
@@ -915,11 +965,30 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		}
 		[[fallthrough]];
 	case Dash: {
-		BreakObjectsInArea(player, tile, std::max<int>(data.radius, 1));
+		const int radius = std::max<int>(data.radius, 1);
 		std::vector<Monster *> targets;
-		ForEachMonsterNear(tile, std::max<int>(data.radius, 1), [&](Monster &monster) { targets.push_back(&monster); });
-		for (Monster *monster : targets)
-			WeaponHit(player, *monster, data, data.damagePercent, result);
+		// Dashing Strike hits each monster along its dash once, not only those where it lands (Curtis 2026-10-28).
+		const std::vector<Point> centers = data.skill == WeaponSkill::DashingStrike ? DashPath(player, data.count) : std::vector<Point> { tile };
+		if (data.skill == WeaponSkill::DashingStrike)
+			player.poe2.dashStart = {};
+		for (const Point center : centers) {
+			BreakObjectsInArea(player, center, radius);
+			ForEachMonsterNear(center, radius, [&](Monster &monster) {
+				if (std::find(targets.begin(), targets.end(), &monster) == targets.end())
+					targets.push_back(&monster);
+			});
+		}
+		std::vector<Monster *> hits;
+		for (Monster *monster : targets) {
+			CastResult one;
+			WeaponHit(player, *monster, data, data.damagePercent, one);
+			if (one.hit) {
+				result.hit = true;
+				hits.push_back(monster);
+			}
+		}
+		if (data.skill == WeaponSkill::CycloneStrike)
+			PullTowards(tile, std::move(hits));
 		break;
 	}
 	case Flurry:

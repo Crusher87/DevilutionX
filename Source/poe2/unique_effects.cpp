@@ -705,9 +705,12 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	} else if (third > 0) {
 		packets[0] = packets[0] * (100 - Rule(player, UniqueRule::OtherAttacksLessPhysical)) / 100;
 	}
-	// Fire converts first; a staff's lightning (Staff of the Storm Gods) takes what is left.
+	// Fire converts first; a staff's lightning (Staff of the Storm Gods) takes what is left. Smite's blow is lightning,
+	// like POE2's (Curtis 2026-10-28): all of what the fire leaves.
 	const int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100);
-	const int toLightning = staffHit ? std::clamp(Rule(player, UniqueRule::StaffToLightning), 0, 100 - toFire) : 0;
+	int toLightning = staffHit ? std::clamp(Rule(player, UniqueRule::StaffToLightning), 0, 100 - toFire) : 0;
+	if (!ranged && IsLightningAttackSkill(player.poe2.activeSkill))
+		toLightning = 100 - toFire;
 	if (toFire > 0 || toLightning > 0) {
 		const int64_t fire = packets[0] * toFire / 100;
 		const int64_t lightning = packets[0] * toLightning / 100;
