@@ -924,7 +924,8 @@ uint32_t SkillTags(SkillSlot skill)
 	case WeaponSkill::ShadowStep:
 		return ST_Attack | ST_Melee | ST_Movement | ST_Strike | ST_Physical | Hit;
 	case WeaponSkill::Smite:
-		return ST_Attack | ST_Melee | ST_Slam | ST_Area | ST_Physical | ST_Lightning | Hit;
+		// One lightning blow (its hit converts to lightning in ApplyPlayerAttackDamage): a strike, no area, no physical.
+		return ST_Attack | ST_Melee | ST_Strike | ST_Lightning | Hit;
 	case WeaponSkill::FistsOfThunder:
 		return ST_Attack | ST_Melee | ST_Staff | ST_Strike | ST_Lightning | Hit;
 	case WeaponSkill::RapidFire:

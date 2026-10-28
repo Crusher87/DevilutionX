@@ -20,8 +20,11 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
 #include "tables/monstdat.h"
@@ -211,6 +214,49 @@ TEST_F(Poe2QuarterstavesTest, DazeDoublesStunBuildupButNotOnUniques)
 	Monster &monster = PlaceMonster(0, { 41, 40 });
 	ApplyPlayerAttackDamage(player, monster, hit, false, true);
 	EXPECT_EQ(monster.poe2.stunBuildup, plain);
+}
+
+// Smite's blow is lightning, like POE2's (Curtis 2026-10-28): lightning resistance cuts it and not Frenzy's.
+TEST_F(Poe2QuarterstavesTest, SmiteHitsAsLightning)
+{
+	Player &player = *MyPlayer;
+	const Fixed26_6 hit = Fixed26_6::fromInt(500);
+	const auto dealt = [&](WeaponSkill skill, uint16_t marks, bool ranged = false) {
+		player.poe2.activeSkill = skill;
+		ActiveMonsterCount = 0;
+		Monster &monster = PlaceMonster(0, { 41, 40 });
+		monster.resistance = marks;
+		const Fixed26_6 done = ApplyPlayerAttackDamage(player, monster, hit, false, ranged);
+		player.poe2.activeSkill = WeaponSkill::None;
+		return done.raw();
+	};
+	const int32_t smite = dealt(WeaponSkill::Smite, 0);
+	const int32_t frenzy = dealt(WeaponSkill::Frenzy, 0);
+	ASSERT_GT(smite, 0);
+	ASSERT_GT(frenzy, 0);
+	EXPECT_NEAR(dealt(WeaponSkill::Smite, IMMUNE_LIGHTNING), smite * (100 - ImmuneMarkPercent) / 100, smite / 100 + 1);
+	EXPECT_EQ(dealt(WeaponSkill::Frenzy, IMMUNE_LIGHTNING), frenzy);
+	// A ranged hit while Smite is the active skill stays physical.
+	EXPECT_EQ(dealt(WeaponSkill::Smite, IMMUNE_LIGHTNING, true), dealt(WeaponSkill::Frenzy, IMMUNE_LIGHTNING, true));
+
+	// Its tags follow: a lightning strike, no longer a physical area slam.
+	const uint32_t tags = SkillTags(SkillSlot::ForAttack(WeaponSkill::Smite));
+	EXPECT_NE(tags & ST_Lightning, 0U);
+	EXPECT_NE(tags & ST_Strike, 0U);
+	EXPECT_NE(tags & ST_Melee, 0U);
+	EXPECT_EQ(tags & ST_Physical, 0U);
+	EXPECT_EQ(tags & ST_Slam, 0U);
+	EXPECT_EQ(tags & ST_Area, 0U);
+
+	// Diablo's hit is untouched.
+	gbIsPoe2 = false;
+	player.poe2.activeSkill = WeaponSkill::Smite;
+	ActiveMonsterCount = 0;
+	Monster &monster = PlaceMonster(0, { 41, 40 });
+	monster.resistance = IMMUNE_LIGHTNING;
+	EXPECT_EQ(ApplyPlayerAttackDamage(player, monster, hit, false, false).raw(), hit.raw());
+	player.poe2.activeSkill = WeaponSkill::None;
+	gbIsPoe2 = true;
 }
 
 } // namespace

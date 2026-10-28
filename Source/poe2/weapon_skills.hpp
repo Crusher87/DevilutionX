@@ -60,6 +60,15 @@ constexpr int BarrageArrows = 5;
 /** @brief Ember Fusillade's embers before its gem level adds more. */
 constexpr int EmberFusilladeEmbers = 5;
 
+/**
+ * @brief Whether a swing skill's hit is lightning rather than physical: Smite, like POE2's (Curtis 2026-10-28, "Smite
+ * lightning"). Only POE2 Mashup has weapon skills.
+ */
+[[nodiscard]] constexpr bool IsLightningAttackSkill(WeaponSkill skill)
+{
+	return skill == WeaponSkill::Smite;
+}
+
 /** @brief Ice Bolt hits the monsters right beside the one it strikes for this percent of the damage (Firebolt's splash is in spell_damage.tsv). */
 constexpr int BoltSplashPercent = 35;
 

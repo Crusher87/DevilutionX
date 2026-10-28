@@ -530,7 +530,7 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::Frenzy:
 		return _("Fast strike, builds Frenzy charges");
 	case WeaponSkill::Smite:
-		return _("Crushing blow that breaks armour");
+		return _("Lightning blow that breaks armour");
 	case WeaponSkill::FistsOfThunder:
 		return _("Fast strikes; every third: lightning");
 	case WeaponSkill::RapidFire:
@@ -1427,11 +1427,11 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 2, 3);
 		break;
 	case WeaponSkill::Smite:
-		vfx::SkyStrike(target, vfx::Element::Holy);
-		vfx::Slam(target, 1, vfx::Element::Holy);
-		// The blow lands like a falling hammer.
+		// A lightning blow, like POE2's Smite (Curtis 2026-10-28): the hammer falls with a bolt from the sky.
+		vfx::SkyStrike(target, vfx::Element::Lightning);
+		vfx::Slam(target, 1, vfx::Element::Lightning);
 		AddVisualEffect(target, MissileGraphicID::StoneCurseShatter, 0, 6);
-		AddVisualEffect(target, MissileGraphicID::HolyBoltExplosion, 1, 6);
+		AddVisualEffect(target, MissileGraphicID::Lightning, 1, 6);
 		PlaySfxLoc(SfxID::SpellStoneCurse, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Medium, 6);

@@ -231,6 +231,12 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case WeaponSkill::Spark:
 		AddSpellBase(hit, player, level, DamageType::Lightning, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
 		return hit;
+	case WeaponSkill::Smite:
+		// The weapon hit lands as lightning (ApplyPlayerAttackDamage); the weapon's own fire and lightning stay as they are.
+		AddWeaponHit(hit, player, skill, level, percent);
+		if (!hit.parts.empty())
+			hit.parts.front().type = DamageType::Lightning;
+		return hit;
 	default:
 		break;
 	}
