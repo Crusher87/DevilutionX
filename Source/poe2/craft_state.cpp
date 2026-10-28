@@ -5,10 +5,12 @@
 #include <type_traits>
 
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/weapon_kinds.hpp"
 
 namespace devilution {
 
@@ -146,6 +148,22 @@ Poe2Craft CurrentCraft(const Item &item)
 			craft.mods[count++] = { mod.family, mod.tier, 0 };
 	}
 	return craft;
+}
+
+bool LocksCasterWeaponMods(const Item &item)
+{
+	return gbIsPoe2 && !item._iPoe2Craft.explicitMods && IsCasterWeapon(item) && item._iPoe2Mods[0].family != 0 && CanCraftMods(item);
+}
+
+Poe2Craft SavedCraftState(const Item &item)
+{
+	return LocksCasterWeaponMods(item) ? CurrentCraft(item) : item._iPoe2Craft;
+}
+
+void LockCasterWeaponMods(Item &item)
+{
+	if (LocksCasterWeaponMods(item))
+		item._iPoe2Craft = CurrentCraft(item);
 }
 
 std::vector<Poe2ItemMod> CraftModList(const Poe2Craft &craft)

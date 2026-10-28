@@ -53,6 +53,19 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 [[nodiscard]] bool CanCraftMods(const Item &item);
 /** @brief The item's crafting state with its current modifiers written out, ready to edit. */
 Poe2Craft CurrentCraft(const Item &item);
+/**
+ * @brief Whether the item is a caster staff, wand or sceptre of the rework whose modifiers still roll from its seed and
+ * today's pools: the ones the lock-in writes out (caster-weapons-plan-v2.md 5.4).
+ */
+[[nodiscard]] bool LocksCasterWeaponMods(const Item &item);
+/**
+ * @brief The crafting state an item saves with. A caster weapon of the rework saves its rolled modifiers written out
+ * (CurrentCraft, salt 0, so they keep their values), so switching on a family of its pool later never re-rolls it;
+ * every other item saves what it has.
+ */
+[[nodiscard]] Poe2Craft SavedCraftState(const Item &item);
+/** @brief Writes a caster weapon's rolled modifiers into its crafting state, as SavedCraftState does; on load. */
+void LockCasterWeaponMods(Item &item);
 /** @brief The crafted modifiers, without values. */
 std::vector<Poe2ItemMod> CraftModList(const Poe2Craft &craft);
 /** @brief Number of crafted modifiers, the unrevealed one included. */

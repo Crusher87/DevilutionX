@@ -26,6 +26,7 @@
 #include "panels/gemcutting_panel.hpp"
 #include "player.h"
 #include "poe2/bases.hpp"
+#include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
@@ -296,6 +297,85 @@ TEST_F(Poe2CasterBasesTest, NewItemsRollAndRebuild)
 	EXPECT_EQ(ItemModSlot(Make(Row("Bone Wand"), 1, ITEM_QUALITY_NORMAL, 1)), ModSlot::Wand);
 	EXPECT_EQ(ItemModSlot(Make(Row("Ochre Sceptre"), 1, ITEM_QUALITY_NORMAL, 1)), ModSlot::Sceptre);
 	EXPECT_EQ(ItemModSlot(Make(Row("Wyrm Quarterstaff"), 1, ITEM_QUALITY_NORMAL, 1)), ItemModSlot(Make(Row("Lunar Quarterstaff"), 1, ITEM_QUALITY_NORMAL, 1)));
+}
+
+TEST_F(Poe2CasterBasesTest, CasterWeaponsLockTheirModifiersIn)
+{
+	// Plan 5.4: a new caster weapon saves its rolled modifiers written out (salt 0), so a family switched on in its pool
+	// later can't re-roll it. Loading writes them in as well.
+	int locked = 0;
+	for (const std::string_view name : { "Gelid Staff", "Spriggan Staff", "Bone Wand", "Withered Wand", "Ochre Sceptre", "Lupine Sceptre" }) {
+		for (const item_quality rarity : { ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE }) {
+			for (uint32_t seed = 1; seed <= 15; seed++) {
+				const Item item = Make(Row(name), seed * 7919U, rarity, 60);
+				ASSERT_FALSE(item._iPoe2Craft.explicitMods) << name;
+				if (item._iPoe2Mods[0].family == 0)
+					continue;
+				ASSERT_TRUE(LocksCasterWeaponMods(item)) << name;
+				const Poe2Craft saved = SavedCraftState(item);
+				EXPECT_TRUE(saved.explicitMods);
+				EXPECT_EQ(saved.rarity, item._iMagical);
+				Item loaded = item;
+				LockCasterWeaponMods(loaded);
+				EXPECT_EQ(loaded._iPoe2Craft, saved) << name;
+				EXPECT_FALSE(LocksCasterWeaponMods(loaded)) << "Once is enough";
+				EXPECT_EQ(SavedCraftState(loaded), saved);
+				// The save bytes carry it (the wide layout), and the item rebuilds from them as it was.
+				EXPECT_EQ(UnpackCraftState(PackCraftState(saved)), saved) << name;
+				Item rebuilt;
+				RecreateItem(*MyPlayer, rebuilt, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, saved);
+				rebuilt._iIdentified = true;
+				EXPECT_EQ(std::string_view(rebuilt._iIName), std::string_view(item._iIName)) << name;
+				EXPECT_EQ(rebuilt._iMagical, item._iMagical) << name;
+				EXPECT_EQ(rebuilt._iPoe2Stats, item._iPoe2Stats) << name;
+				EXPECT_EQ(rebuilt._iVAdd1, item._iVAdd1) << name;
+				EXPECT_EQ(rebuilt._iMinMag, item._iMinMag) << name;
+				for (size_t m = 0; m < item._iPoe2Mods.size(); m++) {
+					EXPECT_EQ(rebuilt._iPoe2Mods[m].family, item._iPoe2Mods[m].family) << name;
+					EXPECT_EQ(rebuilt._iPoe2Mods[m].tier, item._iPoe2Mods[m].tier) << name;
+					EXPECT_EQ(rebuilt._iPoe2Mods[m].values, item._iPoe2Mods[m].values) << name;
+				}
+				// The families and tiers now come from the craft state, not the pool.
+				const std::vector<Poe2ItemMod> written = CraftModList(saved);
+				size_t count = 0;
+				for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+					if (mod.family == 0)
+						continue;
+					ASSERT_LT(count, written.size());
+					EXPECT_TRUE(std::any_of(written.begin(), written.end(), [&mod](const Poe2ItemMod &w) { return w.family == mod.family && w.tier == mod.tier; })) << name;
+					count++;
+				}
+				EXPECT_EQ(count, written.size()) << name;
+				locked++;
+			}
+		}
+	}
+	EXPECT_GT(locked, 100);
+
+	// Nothing else locks: normal items, quarterstaves, the retired staves and sceptres, uniques, crafted items, and
+	// nothing outside POE2.
+	const Item normal = Make(Row("Gelid Staff"), 11, ITEM_QUALITY_NORMAL, 60);
+	EXPECT_FALSE(LocksCasterWeaponMods(normal));
+	EXPECT_EQ(SavedCraftState(normal), normal._iPoe2Craft);
+	for (const std::string_view name : { "Wyrm Quarterstaff", "Focused Ashen Staff", "Quick Bronze Sceptre" }) {
+		const Item other = Make(Row(name), 11, ITEM_QUALITY_RARE, 60);
+		ASSERT_NE(other._iPoe2Mods[0].family, 0) << name;
+		EXPECT_FALSE(LocksCasterWeaponMods(other)) << name;
+		EXPECT_EQ(SavedCraftState(other), other._iPoe2Craft) << name;
+	}
+	Item unique = Make(Row("Bone Wand"), 11, ITEM_QUALITY_RARE, 60);
+	unique._iMagical = ITEM_QUALITY_UNIQUE;
+	EXPECT_FALSE(LocksCasterWeaponMods(unique));
+	Item crafted = Make(Row("Bone Wand"), 11, ITEM_QUALITY_RARE, 60);
+	crafted._iPoe2Craft = CurrentCraft(crafted);
+	crafted._iPoe2Craft.mods[0].salt = 3;
+	EXPECT_EQ(SavedCraftState(crafted), crafted._iPoe2Craft);
+	Item outside = Make(Row("Bone Wand"), 11, ITEM_QUALITY_RARE, 60);
+	gbIsPoe2 = false;
+	EXPECT_FALSE(LocksCasterWeaponMods(outside));
+	LockCasterWeaponMods(outside);
+	EXPECT_FALSE(outside._iPoe2Craft.explicitMods);
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2CasterBasesTest, WeaponsWithoutDamage)
