@@ -134,6 +134,11 @@ void TelemetryLevelUp(const Player &player);
 void TelemetryGemLevelChanged(const Player &player, SkillSlot skill, int fromLevel, int toLevel);
 /** @brief A skill was used; gemLevel (when the skill comes from a socketed gem) keeps each gem level's stats apart. */
 void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCost, int gemLevel = 0);
+/**
+ * @brief A skill a held caster weapon grants was used, at the level the weapon grants it (caster-weapons-plan-v2.md S24):
+ * the balance pass counts how often each one is cast, and at what level.
+ */
+void TelemetryGrantedSkillUsed(const Player &player, std::string_view skill, int level, int manaCost);
 /** @brief A skill or spell that couldn't be used, and why. */
 void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason);
 /**

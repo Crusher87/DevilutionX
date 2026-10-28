@@ -185,6 +185,13 @@ TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)
 	EXPECT_NE(events.find("\"attacker\":\"Hidden\",\"type\":\"lightning\",\"damage\":5.00"), std::string::npos) << events;
 }
 
+TEST_F(Poe2TelemetryTest, GrantedSkillsAreLoggedWithTheirLevel)
+{
+	TelemetryGrantedSkillUsed(*MyPlayer, "Frost Bolt", 7, 0);
+	EXPECT_NE(ReadLatestLog().find("[granted skill used] Frost Bolt at level 7, 0 mana"), std::string::npos);
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"granted_skill\",\"area\":\"town\",\"p\":0,\"skill\":\"Frost Bolt\",\"level\":7,\"mana\":0"), std::string::npos);
+}
+
 TEST_F(Poe2TelemetryTest, ChannelsSwitchFromTheConsole)
 {
 	EXPECT_NE(TelemetryLogLevelsText("", "").find("skills: normal"), std::string::npos);

@@ -2168,6 +2168,18 @@ void TelemetrySkillUsed(const Player &player, std::string_view skill, int manaCo
 	    .add("maxMana", player._pMaxMana.whole());
 }
 
+void TelemetryGrantedSkillUsed(const Player &player, std::string_view skill, int level, int manaCost)
+{
+	if (&player != MyPlayer)
+		return;
+	WriteText("granted skill used", std::format("{:s} at level {:d}, {:d} mana", skill, level, manaCost));
+	Event(LogChannel::Skills, LogLevel::Normal, "granted_skill")
+	    .add("p", player.getId())
+	    .add("skill", skill)
+	    .add("level", level)
+	    .add("mana", manaCost);
+}
+
 void TelemetrySkillFailed(const Player &player, std::string_view skill, std::string_view reason)
 {
 	if (&player != MyPlayer)

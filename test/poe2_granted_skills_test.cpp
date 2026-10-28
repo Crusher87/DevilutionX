@@ -7,7 +7,10 @@
  * Shards (S14); the plain rows follow (S15), with the numbers of plan 7.2 and the gem comparison of 7.3.
  */
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -39,6 +42,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -46,6 +50,8 @@
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "track.h"
+#include "utils/file_util.h"
+#include "utils/paths.h"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -1065,6 +1071,34 @@ TEST_F(Poe2GrantedSkillsTest, ACastFiresFiveChillingShards)
 	EXPECT_EQ(shards, 5);
 	EXPECT_EQ(damagePercent, GemDamagePercent(Shards, 9) * 18 / 100);
 	EXPECT_EQ(GemDamagePercent(Shards, 9), FireballCurvePercent(GrantedCurveEndAt20, 9));
+}
+
+TEST_F(Poe2GrantedSkillsTest, ACastIsLoggedWithTheGrantLevel)
+{
+	// Plan S24: the balance pass reads which granted skills are cast, and at what level, from the play log.
+	paths::SetPrefPath(::testing::TempDir() + "poe2_granted_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + DIRECTORY_SEPARATOR_STR);
+	TelemetryInit();
+	ASSERT_TRUE(TelemetryEnabled());
+	Player &player = *MyPlayer;
+	Hold(player, "Gelid Staff", 33);
+	Target();
+	ASSERT_TRUE(TryUseGrantedSkill(player));
+	for (int tick = 0; tick < 60 && player._pmode == PM_SPELL; tick++)
+		TestPlayerProcessAction(player);
+	TelemetryFlush();
+	const std::string folder = paths::PrefPath() + "poe2_logs" + DIRECTORY_SEPARATOR_STR;
+	std::string log;
+	for (const std::string &file : ListFiles(folder.c_str())) {
+		if (!file.ends_with(".log") || file.rfind("session_", 0) != 0)
+			continue;
+		std::ifstream stream(folder + file);
+		std::stringstream contents;
+		contents << stream.rdbuf();
+		log += contents.str();
+	}
+	EXPECT_NE(log.find("[granted skill used] Freezing Shards at level 9, 0 mana"), std::string::npos) << log;
+	// The skill line carries the level too, so each grant level's damage is kept apart.
+	EXPECT_NE(log.find("[skill] Freezing Shards"), std::string::npos) << log;
 }
 
 TEST_F(Poe2GrantedSkillsTest, HoldControllerAndSkillBarCastIt)

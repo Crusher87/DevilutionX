@@ -151,7 +151,10 @@ void PaySkillMana(Player &player, WeaponSkill skill)
 		PaySupportLifeCost(player, SkillSlot::ForAttack(skill), WeaponSkillManaCost(player, skill, false));
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Mana);
-	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.skillLevel(skill));
+	TelemetrySkillUsed(player, WeaponSkillName(skill), cost.whole(), player.poe2.effectiveLevel(skill));
+	// POE2 Mashup: a held caster weapon's skill, with no gem of its own, is logged with the level the weapon grants.
+	if (IsGrantedSkill(skill) && player.poe2.skillLevel(skill) == 0 && player.poe2.grants(SkillSlot::ForAttack(skill)))
+		TelemetryGrantedSkillUsed(player, WeaponSkillName(skill), player.poe2.effectiveLevel(skill), cost.whole());
 }
 
 bool CanStartSkill(const Player &player);
