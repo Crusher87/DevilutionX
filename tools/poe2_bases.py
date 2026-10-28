@@ -194,10 +194,8 @@ CASTER_BASES = [
 ]
 # Granted skills not built yet: their bases grant nothing until the skill exists (an unknown key is an error).
 PENDING_GRANTS = {
-	'LightningBolt', 'SolarOrb', 'ChimingBolt', 'Soulrend', 'Reap', 'FrostLance', 'EchoingBlast',
-	'EnervatingNova', 'ConsecratedGround', 'DarkPact', 'FeastOfFlesh', 'WitheringBolt', 'BoneBolt', 'ManaDrain',
-	'PowerSiphon', 'VolatileBolt', 'GalvanicBolt', 'Decompose', 'Exsanguinate', 'FrostBolt', 'TormentBolt', 'CriticalBolt',
-	'WitheringRay', 'TwinBolts',
+	'SolarOrb', 'EchoingBlast', 'WitheringBolt', 'BoneBolt', 'ManaDrain', 'PowerSiphon', 'VolatileBolt', 'GalvanicBolt',
+	'Decompose', 'Exsanguinate', 'TormentBolt', 'CriticalBolt',
 }
 CASTER_CLASSES = {
 	'staff': ('Weapon', 'Two-handed', 'Staff', 'Staff'),

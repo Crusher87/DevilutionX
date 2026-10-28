@@ -19,6 +19,7 @@
 namespace devilution {
 
 struct ItemData;
+struct Missile;
 struct Monster;
 struct Player;
 
@@ -242,6 +243,9 @@ constexpr int IceSpikeTrackTiles = 4;
 /** @brief Freezing Arrow's and Explosive Arrow's landing bursts hit for this percent of a base hit, on top of the arrow. */
 constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
+/** @brief A granted skill's bleed (Soulrend) deals this percent of its hit over GrantedBleedTicks (plan 7.1: +75% over 5 s). */
+constexpr int GrantedBleedPercent = 75;
+constexpr int GrantedBleedTicks = 5 * 20;
 /** @brief The bolts a Burst skill sprays out (Fist of the Heavens) hit for this percent of the spell base each. */
 constexpr int BurstBoltDamagePercent = 50;
 
@@ -271,6 +275,11 @@ bool StartTableSkill(Player &player, const TableSkillData &data);
 void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target);
 /** @brief Fires one shot of a Stream skill. */
 void FireTableShot(Player &player, const TableSkillData &data, Point target, int index);
+/**
+ * @brief A table skill's projectile hit a monster for this much (whole points, or raw when shifted): a granted skill's
+ * extras on the hit (Soulrend's bleed; the riders of caster-weapons-plan-v2.md 6.12).
+ */
+void OnTableMissileHit(const Missile &missile, const Player &player, Monster &monster, int damage, bool isDamageShifted);
 /** @brief Puts a table curse skill's curse on a monster, for the given part of its duration. */
 void ApplyTableCurse(const Player &player, Monster &monster, WeaponSkill skill, int durationPercent);
 /**

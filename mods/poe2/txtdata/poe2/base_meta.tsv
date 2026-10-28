@@ -454,18 +454,18 @@ Pious Sceptre	sceptre	poe2					58			SkeletalWarriors
 Hallowed Sceptre	sceptre	poe2					65			SkeletalWarriors		
 Ashen Staff	staff	poe2					1			StaffBolt	fire	
 Gelid Staff	staff	poe2					1			FreezingShards	cold	
-Voltaic Staff	staff	poe2					1				lightning	
+Voltaic Staff	staff	poe2					1			LightningBolt	lightning	
 Spriggan Staff	staff	poe2					11			StaffBolt		
 Pyrophyte Staff	staff	poe2					16				fire	
-Chiming Staff	staff	poe2					25					
-Rending Staff	staff	poe2					33				physical	
-Reaping Staff	staff	poe2					38				physical	
-Icicle Staff	staff	poe2					45				cold	
+Chiming Staff	staff	poe2					25			ChimingBolt		
+Rending Staff	staff	poe2					33			Soulrend	physical	
+Reaping Staff	staff	poe2					38			Reap	physical	
+Icicle Staff	staff	poe2					45			FrostLance	cold	
 Roaring Staff	staff	poe2					49					
-Paralysing Staff	staff	poe2					52				lightning	
-Sanctified Staff	staff	poe2					56					
-Dark Staff	staff	poe2					65					
-Ravenous Staff	staff	poe2					65					
+Paralysing Staff	staff	poe2					52			EnervatingNova	lightning	
+Sanctified Staff	staff	poe2					56			ConsecratedGround		
+Dark Staff	staff	poe2					65			DarkPact		
+Ravenous Staff	staff	poe2					65			FeastOfFlesh		
 Withered Wand	wand	poe2					1				physical	
 Bone Wand	wand	poe2					1				physical	
 Attuned Wand	wand	poe2					1					
@@ -474,11 +474,11 @@ Volatile Wand	wand	poe2					16				fire
 Galvanic Wand	wand	poe2					25				lightning	
 Acrid Wand	wand	poe2					33					
 Offering Wand	wand	poe2					38				physical	
-Frigid Wand	wand	poe2					45				cold	
+Frigid Wand	wand	poe2					45			FrostBolt	cold	
 Torture Wand	wand	poe2					49					
 Critical Wand	wand	poe2					52					
-Primordial Wand	wand	poe2					56				physical	
-Dueling Wand	wand	poe2					65					
+Primordial Wand	wand	poe2					56			WitheringRay	physical	
+Dueling Wand	wand	poe2					65			TwinBolts		
 Fine Long Quarterstaff	quarterstaff	poe2		weapon			1		140			100
 Barrier Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		37		140			100
 Hefty Quarterstaff	quarterstaff	poe2		weapon	DazeChance|20|50|{0}% chance to Daze on Hit		45		130			100

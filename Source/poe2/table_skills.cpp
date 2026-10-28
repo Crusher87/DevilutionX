@@ -138,6 +138,18 @@ const TableSkillData Table[] = {
 	// Granted by the caster weapons rework's staves and wands (caster-weapons-plan-v2.md 6.12 and 7.2): no gem, no mana, no
 	// tab; each hit is set for its cast time (skill_speed.tsv), so the rows take no damage_pct.
 	{ WS::FreezingShards, "Freezing Shards", "A fan of five shards of ice that chill what they hit", 0, 0, TW::None, 1, Projectiles, 18, 5, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
+	{ WS::LightningBolt, "Lightning Bolt", "Lightning strikes the target and everything next to it", 0, 0, TW::None, 3, Burst, 22, 0, 1, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Lightning), TableCurve::Fireball, 312 },
+	{ WS::ChimingBolt, "Chiming Bolt", "A ringing bolt of lightning that pierces through enemies", 0, 0, TW::None, 3, Projectiles, 28, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChargedBolt), TableCurve::Fireball, 312 },
+	{ WS::Soulrend, "Soulrend", "A bolt that tears through enemies and leaves them bleeding", 0, 0, TW::None, 1, Projectiles, 17, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted | TF_Pierce | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
+	{ WS::Reap, "Reap", "A bloody scythe sweeps the target and everything next to it", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
+	{ WS::FrostLance, "Frost Lance", "A lance of ice that pierces through enemies and chills them", 0, 0, TW::None, 1, Projectiles, 30, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Elemental), TableCurve::Fireball, 312 },
+	{ WS::EnervatingNova, "Enervating Nova", "A ring of lightning bursts out around you", 0, 0, TW::None, 3, Around, 25, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
+	{ WS::ConsecratedGround, "Consecrated Ground", "Holy fire bursts out around you", 0, 0, TW::None, 2, Around, 26, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::HolyBolt), TableCurve::Fireball, 312 },
+	{ WS::DarkPact, "Dark Pact", "A burst of dark power at the target, paid with 5% of your life", 0, 0, TW::None, 1, Burst, 30, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_Granted | TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
+	{ WS::FeastOfFlesh, "Feast of Flesh", "Bones burst out around you", 0, 0, TW::None, 1, Around, 20, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::FrostBolt, "Frost Bolt", "A bolt of frost that chills what it hits", 0, 0, TW::None, 1, Projectiles, 40, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
+	{ WS::WitheringRay, "Withering Ray", "A stream of four dark shards", 0, 0, TW::None, 1, Stream, 9, 4, 0, 0, 2, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
+	{ WS::TwinBolts, "Twin Bolts", "Two bolts at once", 0, 0, TW::None, 1, Projectiles, 19, 2, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 };
 // clang-format on
 
@@ -456,6 +468,9 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	if (missile == nullptr)
 		return nullptr;
 	SetMissileSkill(*missile, player, SkillSlot::ForAttack(data.skill));
+	// A granted bolt borrows a flare's look but keeps its own element.
+	if (IsGrantedTableSkill(data))
+		missile->poe2.damageType = static_cast<int8_t>(data.type);
 	// Souls add to weapon projectiles through the weapon hit (see ResourceAttackDamagePercent).
 	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
 	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * GrantedSpellDamagePercent(player, data) / 100 * (100 + souls) / 100, INT16_MAX));
@@ -773,6 +788,13 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		}
 		break;
 	case Around:
+		if ((data.flags & TF_Spell) != 0) {
+			// A nova around the hero (the caster weapons' granted skills): it hits like a burst, with the spell base.
+			EffectRingAround(tile, std::max<int>(data.radius, 1), data.effect, 0);
+			ZoneBurst(player, data, tile, std::max<int>(data.radius, 1), FixedDamage(player, data));
+			break;
+		}
+		[[fallthrough]];
 	case Dash: {
 		BreakObjectsInArea(player, tile, std::max<int>(data.radius, 1));
 		std::vector<Monster *> targets;
@@ -973,6 +995,23 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	}
 	}
 	AfterCast(player, data, result);
+}
+
+void OnTableMissileHit(const Missile &missile, const Player &player, Monster &monster, int damage, bool isDamageShifted)
+{
+	if (!gbIsPoe2)
+		return;
+	const SkillSlot skill = MissileSkill(missile);
+	if (skill.kind != SkillKind::Attack)
+		return;
+	const TableSkillData *data = FindTableSkill(static_cast<WeaponSkill>(skill.id));
+	if (data == nullptr || !IsGrantedTableSkill(*data) || monster.hasNoLife() || monster.mode == MonsterMode::Death)
+		return;
+	// Soulrend: the hit bleeds for GrantedBleedPercent of itself over 5 seconds.
+	if ((data->flags & TF_Bleed) != 0) {
+		const int64_t raw = isDamageShifted ? damage : static_cast<int64_t>(damage) * 64;
+		InflictTableBleed(player, monster, data->skill, Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw * GrantedBleedPercent / 100, 1, INT32_MAX / 2))), GrantedBleedTicks);
+	}
 }
 
 void FireTableShot(Player &player, const TableSkillData &data, Point target, int index)

@@ -46,6 +46,7 @@
 #include "multi.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/table_skills.hpp"
 #include "portal.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
@@ -660,6 +661,7 @@ void CheckMissileCol(Missile &missile, DamageType damageType, int minDamage, int
 				MinionShotHits = false;
 				// POE2 Mashup: only a projectile's direct hit pierces, forks or chains, not its explosion.
 				if (isMonsterHit && !dontDeleteOnCollision) {
+					OnTableMissileHit(missile, *missile.sourcePlayer(), monster, supportedMin, isDamageShifted);
 					SplashBoltHit(missile, *missile.sourcePlayer(), monster, supportedMin, supportedMax, damageType, isDamageShifted);
 					keepFlying = OnSupportedMissileHit(missile, monster);
 				}
@@ -3388,7 +3390,9 @@ void ProcessGenericProjectile(Missile &missile)
 {
 	missile.duration--;
 
-	MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), missile._midam, missile._midam, true, true);
+	// POE2 Mashup: a granted skill's bolt keeps its own element on a flare's look.
+	const DamageType damageType = missile.poe2.damageType >= 0 ? static_cast<DamageType>(missile.poe2.damageType) : GetMissileData(missile._mitype).damageType();
+	MoveMissileAndCheckMissileCol(missile, damageType, missile._midam, missile._midam, true, true);
 	if (missile.duration == 0) {
 		missile._miDelFlag = true;
 		const Point dst = { 0, 0 };
