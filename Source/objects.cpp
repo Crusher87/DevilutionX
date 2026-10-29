@@ -3262,7 +3262,8 @@ bool OperateFountains(Player &player, Object &fountain)
 			PlaySfxLoc(SfxID::OperateFountain, fountain.position);
 			player._pHitPoints += Fixed26_6::fromInt(1);
 			player._pHPBase += Fixed26_6::fromInt(1);
-			if (player._pHitPoints > player._pMaxHP) {
+			// POE2: one drink fills life to the top.
+			if (gbIsPoe2 || player._pHitPoints > player._pMaxHP) {
 				player._pHitPoints = player._pMaxHP;
 				player._pHPBase = player._pMaxHPBase;
 			}
@@ -3279,7 +3280,8 @@ bool OperateFountains(Player &player, Object &fountain)
 
 			player._pMana += Fixed26_6::fromInt(1);
 			player._pManaBase += Fixed26_6::fromInt(1);
-			if (player._pMana > player._pMaxMana) {
+			// POE2: one drink fills mana to the top.
+			if (gbIsPoe2 || player._pMana > player._pMaxMana) {
 				player._pMana = player._pMaxMana;
 				player._pManaBase = player._pMaxManaBase;
 			}
