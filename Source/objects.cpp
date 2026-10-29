@@ -45,6 +45,7 @@
 #include "poe2/floor_chests.hpp"
 #include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
+#include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/objdat.h"
@@ -3311,6 +3312,13 @@ bool OperateFountains(Player &player, Object &fountain)
 	case OBJ_TEARFTN: {
 		if (!fountain.canInteractWith())
 			break;
+		// POE2: the hero picks the trade in a small window, and the fountain is used up only
+		// when they make one (FinishTearsFountain). Other clients wait for that message.
+		if (gbIsPoe2) {
+			if (&player == MyPlayer)
+				OpenTearsFountain(fountain);
+			return false;
+		}
 		PlaySfxLoc(SfxID::OperateFountain, fountain.position);
 		fountain.selectionRegion = SelectionRegion::None;
 		if (&player != MyPlayer)
@@ -4702,8 +4710,14 @@ void SyncOpObject(Player &player, int cmd, Object &object)
 		OperateCauldron(player, object, SfxID::OperateCaldron);
 		break;
 	case OBJ_MURKYFTN:
-	case OBJ_TEARFTN:
 		OperateFountains(player, object);
+		break;
+	case OBJ_TEARFTN:
+		// POE2: this message means a trade was made, so the fountain is used up.
+		if (gbIsPoe2)
+			object.selectionRegion = SelectionRegion::None;
+		else
+			OperateFountains(player, object);
 		break;
 	case OBJ_STORYBOOK:
 	case OBJ_L5BOOKS:
