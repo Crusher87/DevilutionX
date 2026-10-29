@@ -260,15 +260,19 @@ private:
 	{
 		Clear(FromStart);
 		Point start;
+		// The way down starts at the stairs up; a floor's town warp (Catacombs level 5) only when it has none.
+		bool startIsStairs = false;
 		for (int i = 0; i < numtrigs; i++) {
 			const interface_mode message = trigs[i]._tmsg;
 			Point tile;
 			if (!NearestWalkable(trigs[i].position, tile))
 				continue;
 			rooms_[RoomAt(tile)].stairs = true;
-			if (!hasStart_ && IsAnyOf(message, WM_DIABPREVLVL, WM_DIABTWARPUP, WM_DIABRTNLVL)) {
-				start = tile;
+			if (!startIsStairs && IsAnyOf(message, WM_DIABPREVLVL, WM_DIABTWARPUP, WM_DIABRTNLVL)) {
+				if (message == WM_DIABPREVLVL || !hasStart_)
+					start = tile;
 				hasStart_ = true;
+				startIsStairs = message == WM_DIABPREVLVL;
 			} else if (!hasEnd_ && message == WM_DIABNEXTLVL) {
 				end_ = tile;
 				hasEnd_ = true;
@@ -768,7 +772,7 @@ bool IsRangedMonsterAi(MonsterAIID ai)
 
 bool UseFloorPacks()
 {
-	return gbIsPoe2 && !setlevel && leveltype == DTYPE_CATHEDRAL;
+	return gbIsPoe2 && !setlevel && IsAnyOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CATACOMBS);
 }
 
 size_t PlaceFloorPacks(size_t count, std::span<const size_t> scatterTypes)
