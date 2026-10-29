@@ -41,6 +41,7 @@ set(tests
   poe2_flasks_test
   poe2_floor_chests_test
   poe2_floor_rooms_test
+  poe2_tears_test
   poe2_floors_test
   poe2_gemcutting_test
   poe2_item_bases_test
