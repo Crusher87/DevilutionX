@@ -940,12 +940,47 @@ SpellID RuneSpell(MissileID rune)
 	}
 }
 
+/**
+ * @brief POE2 Mashup: a hero's runes of a kind out at once: MaxPlacedTraps, more with Endless Horde. A new rune takes
+ * away the oldest past that (Curtis 2026-10-29: he spammed runes and killed the Butcher in 9 seconds).
+ */
+void LimitHeroRunes(Missile &rune)
+{
+	const Player &player = *rune.sourcePlayer();
+	const SpellID spell = RuneSpell(rune._mitype);
+	if (spell == SpellID::Invalid)
+		return;
+	const auto isSame = [&rune](Missile &other) {
+		return &other != &rune && !other._miDelFlag && other._mitype == rune._mitype && other.sourceType() == MissileSource::Player && other._misource == rune._misource;
+	};
+	int out = static_cast<int>(std::count_if(Missiles.begin(), Missiles.end(), isSame));
+	const int limit = SupportTrapLimit(player, SkillSlot::ForSpell(spell));
+	// The list is in the order they were placed: the oldest go first.
+	for (Missile &other : Missiles) {
+		if (out < limit)
+			break;
+		if (!isSame(other))
+			continue;
+		other._miDelFlag = true;
+		AddUnLight(other._mlid);
+		out--;
+	}
+}
+
 void AddRune(Missile &missile, Point dst, MissileID missileID)
 {
+	// POE2 Mashup: the hero's rune goes where the hero can see, never past a wall or a closed door (LastTileInSight).
+	const bool heroRune = gbIsPoe2 && missile.sourceType() == MissileSource::Player;
+	const Point start = missile.position.start;
+	if (heroRune)
+		dst = LastTileInSight(start, dst);
 	if (LineClearMissile(missile.position.start, dst)) {
 		std::optional<Point> runePosition = FindClosestValidPosition(
-		    [](Point target) {
+		    [heroRune, start](Point target) {
 			    if (!InDungeonBounds(target)) {
+				    return false;
+			    }
+			    if (heroRune && (IsMissileBlockedByTile(target) || !LineClearMovingMissile(start, target))) {
 				    return false;
 			    }
 			    if (IsObjectAtPosition(target)) {
@@ -965,6 +1000,8 @@ void AddRune(Missile &missile, Point dst, MissileID missileID)
 			missile.position.tile = *runePosition;
 			missile.var1 = static_cast<int8_t>(missileID);
 			missile._mlid = AddLight(missile.position.tile, 8);
+			if (heroRune)
+				LimitHeroRunes(missile);
 			return;
 		}
 	}
@@ -1148,6 +1185,28 @@ bool IsMissileBlockedByTile(Point tile)
 	Object *object = FindObjectAtPosition(tile);
 	// _oMissFlag is true if the object allows missiles to pass through so we need to invert the check here...
 	return object != nullptr && !object->_oMissFlag;
+}
+
+Point LastTileInSight(Point from, Point target)
+{
+	if (!IsMissileBlockedByTile(target) && LineClearMovingMissile(from, target))
+		return target;
+	// Step along the line to the target, rounding each step to the nearest tile by hand (no std::lround on Amiga).
+	const int dx = target.x - from.x;
+	const int dy = target.y - from.y;
+	const int steps = std::max(std::abs(dx), std::abs(dy));
+	const auto share = [steps](int delta, int step) {
+		const int twice = 2 * delta * step;
+		return (twice >= 0 ? twice + steps : twice - steps) / (2 * steps);
+	};
+	Point last = from;
+	for (int step = 1; step <= steps; step++) {
+		const Point tile = from + Displacement { share(dx, step), share(dy, step) };
+		if (IsMissileBlockedByTile(tile) || !LineClearMovingMissile(from, tile))
+			break;
+		last = tile;
+	}
+	return last;
 }
 
 DamageRange GetDamageAmt(SpellID spell, int spellLevel)

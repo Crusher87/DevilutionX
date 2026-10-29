@@ -13,6 +13,7 @@
 #include "pack.h"
 #include "pfile.h"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
 #include "poe2/skill_gems.hpp"
@@ -206,25 +207,27 @@ TEST_F(Poe2RegenTest, SorcererPaysFull)
 		SocketSkill(player, 3, SkillSlot::ForSpell(SpellID::Healing), 1);
 		SocketSkill(player, 4, SkillSlot::ForSpell(SpellID::RuneOfFire), 1);
 		// Every class pays the same: no class discount, and no Diablo minimum (Charged Bolt's 6, Mana Shield's 33).
-		// Firebolt keeps the bolts' flat 4 (Curtis 2026-10-23) though its speed adds to its damage.
-		EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
-		EXPECT_EQ(GetManaAmount(player, SpellID::ChargedBolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
-		EXPECT_EQ(GetManaAmount(player, SpellID::ManaShield), Fixed26_6::fromInt(15)) << static_cast<int>(heroClass);
-		EXPECT_EQ(GetManaAmount(player, SpellID::Healing), Fixed26_6::fromInt(8)) << static_cast<int>(heroClass);
+		// Firebolt keeps the bolts' flat 4 (Curtis 2026-10-23) though its speed adds to its damage; every spell then costs
+		// a third more, to the nearest point (SpellManaCostPercent, Curtis 2026-10-29): 4 to 5, 15 to 20, 8 to 11.
+		EXPECT_EQ(SpellManaCostPercent, 133);
+		EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt), Fixed26_6::fromInt(5)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::ChargedBolt), Fixed26_6::fromInt(5)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::ManaShield), Fixed26_6::fromInt(20)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::Healing), Fixed26_6::fromInt(11)) << static_cast<int>(heroClass);
 		// A rune costs its own base, not the whole base pool.
-		EXPECT_EQ(GetManaAmount(player, SpellID::RuneOfFire), Fixed26_6::fromInt(8)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::RuneOfFire), Fixed26_6::fromInt(11)) << static_cast<int>(heroClass);
 
-		// Damage spells get 5x dearer by gem level 20, Healing 3x like other utility gems.
+		// Damage spells get 5x dearer by gem level 20, Healing 3x like other utility gems: 20 and 24, a third more.
 		SocketSkill(player, 0, SkillSlot::ForSpell(SpellID::Firebolt), 20);
 		SocketSkill(player, 3, SkillSlot::ForSpell(SpellID::Healing), 20);
-		EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt), Fixed26_6::fromInt(20)) << static_cast<int>(heroClass);
-		EXPECT_EQ(GetManaAmount(player, SpellID::Healing), Fixed26_6::fromInt(24)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt), Fixed26_6::fromInt(27)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::Healing), Fixed26_6::fromInt(32)) << static_cast<int>(heroClass);
 	}
 
 	// Healing no longer gets dearer with the character's level.
 	Player &player = NakedHero(HeroClass::Warrior, 50);
 	SocketSkill(player, 3, SkillSlot::ForSpell(SpellID::Healing), 1);
-	EXPECT_EQ(GetManaAmount(player, SpellID::Healing), Fixed26_6::fromInt(8));
+	EXPECT_EQ(GetManaAmount(player, SpellID::Healing), Fixed26_6::fromInt(11));
 
 	// Diablo keeps the Sorcerer's discount.
 	gbIsPoe2 = false;
@@ -241,17 +244,18 @@ TEST_F(Poe2RegenTest, SorcererStarterBoltsCostFour)
 {
 	// Curtis 2026-10-23: Firebolt, Ice Bolt, Holy Bolt and Charged Bolt all cost 4 mana at gem level 1. Since 2026-10-27
 	// a skill costs more by half of what its speed adds to its damage, but Firebolt (140%) keeps 4 on purpose; Holy Bolt
-	// (117%) 4.36 and Charged Bolt (109%) 4.2 round to 4.
+	// (117%) 4.36 and Charged Bolt (109%) 4.2 round to 4. Since 2026-10-29 every spell costs a third more after that
+	// rounding: all four cost 5.
 	for (const HeroClass heroClass : { HeroClass::Sorcerer, HeroClass::Warrior }) {
 		Player &player = NakedHero(heroClass, 1);
 		SocketSkill(player, 0, SkillSlot::ForSpell(SpellID::Firebolt), 1);
 		SocketSkill(player, 1, SkillSlot::ForSpell(SpellID::HolyBolt), 1);
 		SocketSkill(player, 2, SkillSlot::ForSpell(SpellID::ChargedBolt), 1);
 		SocketSkill(player, 3, SkillSlot::ForAttack(WeaponSkill::IceBolt), 1);
-		EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
-		EXPECT_EQ(GetManaAmount(player, SpellID::HolyBolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
-		EXPECT_EQ(GetManaAmount(player, SpellID::ChargedBolt), Fixed26_6::fromInt(4)) << static_cast<int>(heroClass);
-		EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::IceBolt), 4) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::Firebolt), Fixed26_6::fromInt(5)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::HolyBolt), Fixed26_6::fromInt(5)) << static_cast<int>(heroClass);
+		EXPECT_EQ(GetManaAmount(player, SpellID::ChargedBolt), Fixed26_6::fromInt(5)) << static_cast<int>(heroClass);
+		EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::IceBolt), 5) << static_cast<int>(heroClass);
 	}
 }
 

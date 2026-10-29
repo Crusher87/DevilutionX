@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <array>
+#include <optional>
 #include <set>
 #include <string_view>
 #include <utility>
@@ -8,15 +10,18 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "lighting.h"
 #include "missiles.h"
 #include "monster.h"
+#include "objects.h"
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spell_base.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -394,9 +399,10 @@ TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForTheSpellBase)
 	EXPECT_GT(shards, 0);
 	// 25 -> 100 a shard, then 50 with Firebolt (Curtis 2026-10-28, Q27).
 	EXPECT_EQ(FrostNovaShardDamagePercent, 50);
-	// Its mana 14 -> 10, and Arcing Sparks' 10 -> 6, at gem level 1 (Curtis 2026-10-28).
-	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::FrostNova), 1), 10);
-	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Spark), 1), 6);
+	// Its mana 14 -> 10, and Arcing Sparks' 10 -> 6, at gem level 1 (Curtis 2026-10-28); then a third more as spells,
+	// 13 and 8 (Curtis 2026-10-29).
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::FrostNova), 1), 13);
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Spark), 1), 8);
 	// Haunt: 150 -> 350 over its 5 seconds (Curtis 2026-10-28).
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->damagePercent, 350);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->duration, 100); // 5 seconds of 20 ticks
@@ -588,6 +594,170 @@ TEST_F(Poe2TableSkillsTest, StackingZonesAreOneCastAtATime)
 		ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 43, 40 });
 	EXPECT_EQ(SkillZoneCount(), 3U);
 	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+/** @brief Open floor around the hero at 40,40, with no objects or missiles on it. */
+void ClearFloor()
+{
+	SOLData[0] = TileProperties::None;
+	SOLData[1] = TileProperties::None;
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++) {
+			dPiece[x][y] = 0;
+			dObject[x][y] = 0;
+			dFlags[x][y] = {};
+		}
+	}
+}
+
+/** @brief Lays one of the hero's runes aimed at the target, as a cast does: the rune, or nullptr if none went down. */
+Missile *LayRune(Player &player, MissileID rune, Point target)
+{
+	Missile *missile = AddMissile(player.position.tile, target, GetDirection(player.position.tile, target), rune, TARGET_MONSTERS, player, 0, 1);
+	return missile != nullptr && !missile->_miDelFlag ? missile : nullptr;
+}
+
+int LiveRunes(MissileID rune)
+{
+	return static_cast<int>(std::count_if(Missiles.begin(), Missiles.end(), [rune](const Missile &missile) { return missile._mitype == rune && !missile._miDelFlag; }));
+}
+
+TEST_F(Poe2TableSkillsTest, TrapsAndRunesAreThreeAtATimeAndEndlessHordeAddsTwo)
+{
+	// Curtis 2026-10-29: he spammed runes and killed the Butcher in 9 seconds. Three of each trap or rune at once, the
+	// fourth takes away the oldest, as in POE2; Endless Horde makes it five.
+	EXPECT_EQ(MaxPlacedTraps, 3);
+	EXPECT_EQ(LegionExtraTraps, 2);
+	leveltype = DTYPE_CATHEDRAL;
+	ClearFloor();
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::East;
+
+	// Spike Trap, a table skill's trap.
+	ClearSkillZones();
+	for (int cast = 0; cast < 5; cast++)
+		ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 43, 36 + (2 * cast) });
+	ASSERT_EQ(SkillZoneCount(), 3U);
+	// The two oldest went: the ones left are the last three, oldest first.
+	EXPECT_EQ(SkillZoneCenter(0), std::optional<Point>(Point { 43, 40 }));
+	EXPECT_EQ(SkillZoneCenter(2), std::optional<Point>(Point { 43, 44 }));
+	player.poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::SpikeTrap);
+	player.poe2.slotSupports[0][0] = SupportGem::Legion;
+	EXPECT_EQ(SupportTrapLimit(player, SkillSlot::ForAttack(WeaponSkill::SpikeTrap)), 5);
+	for (int cast = 0; cast < 7; cast++)
+		ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 44, 36 + cast });
+	EXPECT_EQ(SkillZoneCount(), 5U);
+	ClearSkillZones();
+	player.poe2.skillSlots[0] = {};
+	player.poe2.slotSupports[0] = {};
+
+	// Rune of Fire, the Sorcerer's rune: the fourth takes away the first.
+	Missiles.clear();
+	Missile *first = LayRune(player, MissileID::RuneOfFire, { 43, 37 });
+	ASSERT_NE(first, nullptr);
+	for (int y = 39; y <= 43; y += 2)
+		ASSERT_NE(LayRune(player, MissileID::RuneOfFire, { 43, y }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 3);
+	EXPECT_TRUE(first->_miDelFlag) << "the oldest rune goes";
+	// Each kind of rune counts on its own.
+	ASSERT_NE(LayRune(player, MissileID::RuneOfLight, { 45, 40 }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 3);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfLight), 1);
+	// Endless Horde on the rune's gem: five.
+	player.poe2.skillSlots[0] = SkillSlot::ForSpell(SpellID::RuneOfFire);
+	player.poe2.slotSupports[0][0] = SupportGem::Legion;
+	for (int y = 36; y <= 44; y += 2)
+		ASSERT_NE(LayRune(player, MissileID::RuneOfFire, { 46, y }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 5);
+	player.poe2.skillSlots[0] = {};
+	player.poe2.slotSupports[0] = {};
+
+	// Outside POE2 mode runes have no limit.
+	gbIsPoe2 = false;
+	Missiles.clear();
+	for (int y = 36; y <= 44; y += 2)
+		ASSERT_NE(LayRune(player, MissileID::RuneOfFire, { 43, y }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 5);
+	gbIsPoe2 = true;
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, RunesAndTrapsGoOnlyWhereTheHeroCanSee)
+{
+	// Curtis 2026-10-29: he laid runes "inside the Butcher's room", behind its closed door. A rune or trap aimed past a
+	// wall or a closed door lands on the last tile in sight on the way, as a projectile stops at the wall.
+	leveltype = DTYPE_CATHEDRAL;
+	ClearFloor();
+	SOLData[1] = TileProperties::Solid | TileProperties::BlockLight | TileProperties::BlockMissile;
+	// A wall down x = 44 with a closed door in it at 44,40.
+	for (int y = 30; y < 60; y++)
+		dPiece[44][y] = 1;
+	dPiece[44][40] = 0;
+	Object &door = Objects[0];
+	door = {};
+	door._otype = OBJ_L1LDOOR;
+	door.position = { 44, 40 };
+	door._oSolidFlag = true;
+	door._oMissFlag = false;
+	dObject[44][40] = 1;
+	const Point hero { 40, 40 };
+	ASSERT_TRUE(IsMissileBlockedByTile({ 44, 40 }));
+
+	// Through the closed door: the tile before it. Past the wall: the last tile before it on the line.
+	EXPECT_EQ(LastTileInSight(hero, { 47, 40 }), Point(43, 40));
+	EXPECT_EQ(LastTileInSight(hero, { 47, 42 }), Point(43, 41));
+	// In sight: the target itself.
+	EXPECT_EQ(LastTileInSight(hero, { 42, 38 }), Point(42, 38));
+	EXPECT_EQ(LastTileInSight(hero, hero), hero);
+	// The door open, the room is in sight.
+	door._oMissFlag = true;
+	EXPECT_EQ(LastTileInSight(hero, { 47, 40 }), Point(47, 40));
+	door._oMissFlag = false;
+
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = hero;
+	player._pdir = Direction::East;
+
+	// A rune aimed into the room goes down in front of the door, in sight.
+	Missiles.clear();
+	Missile *rune = LayRune(player, MissileID::RuneOfFire, { 47, 40 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_EQ(rune->position.tile, Point(43, 40));
+	EXPECT_TRUE(LineClearMovingMissile(hero, rune->position.tile));
+	// One aimed past the wall stays on the hero's side of it.
+	rune = LayRune(player, MissileID::RuneOfNova, { 50, 44 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_LT(rune->position.tile.x, 44);
+	EXPECT_TRUE(LineClearMovingMissile(hero, rune->position.tile));
+	// With the door open, the room.
+	door._oMissFlag = true;
+	rune = LayRune(player, MissileID::RuneOfLight, { 47, 40 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_EQ(rune->position.tile, Point(47, 40));
+	door._oMissFlag = false;
+
+	// Spike Trap, the same.
+	ClearSkillZones();
+	ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 47, 40 });
+	EXPECT_EQ(SkillZoneCenter(0), std::optional<Point>(Point { 43, 40 }));
+	ClearSkillZones();
+
+	// Diablo's runes are as they were: its line check passes doors.
+	gbIsPoe2 = false;
+	Missiles.clear();
+	rune = LayRune(player, MissileID::RuneOfFire, { 47, 40 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_EQ(rune->position.tile, Point(47, 40));
+	gbIsPoe2 = true;
+
+	Missiles.clear();
+	door = {};
+	ClearFloor();
 	leveltype = DTYPE_TOWN;
 }
 

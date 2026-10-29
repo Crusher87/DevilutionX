@@ -423,6 +423,8 @@ void ProcessSkillZones(Player &player);
 void ClearSkillZones();
 /** @brief How many zones are on the ground. */
 size_t SkillZoneCount();
+/** @brief Where a zone on the ground is, oldest first; nullopt past the last. */
+std::optional<Point> SkillZoneCenter(size_t index);
 
 /** @brief A monster's melee hit on the player, after curses and the player's defensive skills. */
 Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 damage);

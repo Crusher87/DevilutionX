@@ -178,8 +178,17 @@ int SupportNovaExtraProjectiles(const Player &player, SkillSlot skill);
 void NoteRecentSpell(SupportRuntime &state, uint8_t spell);
 /** @brief How many different spells were cast lately (Faster Casting III). */
 int RecentSpellCount(const SupportRuntime &state);
-/** @brief How many zones of a skill can be out at once. */
+/** @brief How many zones of a skill can be out at once: the limit, 1 more with Endless Horde (totems, storms). */
 int SupportZoneLimit(const Player &player, SkillSlot skill, int limit);
+/**
+ * @brief POE2 Mashup: traps, runes and sentries out at once, per skill; placing another takes away the oldest, as in POE2
+ * (Curtis 2026-10-29: he spammed runes and killed the Butcher in 9 seconds).
+ */
+constexpr int MaxPlacedTraps = 3;
+/** @brief Endless Horde adds this many to MaxPlacedTraps (Curtis 2026-10-29); to other limits 1. */
+constexpr int LegionExtraTraps = 2;
+/** @brief How many traps, runes or sentries of a skill can be out at once: MaxPlacedTraps, more with Endless Horde. */
+int SupportTrapLimit(const Player &player, SkillSlot skill);
 /** @brief Cast speed the skill's supports take away, in percent. */
 int SupportCastSlowPercent(const Player &player, SkillSlot skill);
 /** @brief Attack animation frames skipped (or added, if negative) by the skill's supports. */

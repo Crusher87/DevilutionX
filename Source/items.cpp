@@ -2321,7 +2321,7 @@ void PrintItemMisc(const Item &item)
 			if (WeaponSkillNeedsWeapon(skill.attack()))
 				AddItemInfoBoxString(FormatRuntime(_("Attack skill, needs a {:s}"), WeaponSkillWeapons(skill.attack())));
 			else
-				AddItemInfoBoxString(FormatRuntime(_("Skill, {:d} mana"), WeaponSkillManaCost(skill.attack())));
+				AddItemInfoBoxString(FormatRuntime(_("Skill, {:d} mana"), GemBaseManaCost(skill, gemLevel)));
 		}
 		AddItemInfoBoxString(_("Use to socket in the Skills panel"));
 		return;

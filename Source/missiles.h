@@ -279,6 +279,14 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
  */
 bool IsMissileBlockedByTile(Point tile);
 
+/**
+ * @brief POE2 Mashup: where something the hero places (a rune, a trap, a sentry) may go when aimed at the target: the
+ * target itself while it is in the hero's sight (no wall or closed door between, LineClearMovingMissile, and none on it),
+ * else the last tile in sight on the way there, as a projectile would stop at the wall (Curtis 2026-10-29: runes went
+ * down inside the Butcher's room behind its closed door).
+ */
+Point LastTileInSight(Point from, Point target);
+
 void InitMissiles();
 
 struct AddMissileParameter {

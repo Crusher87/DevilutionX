@@ -142,7 +142,8 @@ const TableSkillData Table[] = {
 	{ WS::Attract, "Attract", "Turns a whole pack on each other for 3 seconds", 13, 14, TW::None, 1, Curse, Flat, 0, 5, 60, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Attract, TableBuff::None, TT_Occult, Icon(SpellIcon::Telekinesis), TableCurve::Boneshatter, 100 },
 	// Granted by the caster weapons rework's staves and wands (caster-weapons-plan-v2.md 6.12 and 7.2): no gem, no mana, no
 	// tab; each hit is set for its cast time (skill_speed.tsv), so the rows take no damage_pct.
-	{ WS::FreezingShards, "Freezing Shards", "A fan of five shards of ice that chill what they hit", 0, 0, TW::None, 1, Projectiles, 64, 5, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
+	// POE2 Mashup: three shards a cast, not five; each keeps its hit (Curtis 2026-10-29).
+	{ WS::FreezingShards, "Freezing Shards", "A fan of three shards of ice that chill what they hit", 0, 0, TW::None, 1, Projectiles, 64, 3, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::LightningBolt, "Lightning Bolt", "Lightning strikes the target and everything next to it", 0, 0, TW::None, 3, Burst, 46, 0, 1, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Lightning), TableCurve::Fireball, 312 },
 	{ WS::ChimingBolt, "Chiming Bolt", "A ringing bolt of lightning that pierces through enemies; every fourth cast leaves a Sigil of Power under you", 0, 0, TW::None, 3, Projectiles, 46, 1, 0, 0, 0, 0, DT::Lightning, MissileID::YellowFlare, MG::Lightning, TF_Spell | TF_Granted | TF_Pierce | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::ChargedBolt), TableCurve::Fireball, 312, GrantedRider::SigilEveryFourth },
 	{ WS::SolarOrb, "Solar Orb", "An orb of fire at the target that burns what's near it for 10 seconds; one at a time", 0, 0, TW::None, 2, Zone, 71, 0, 1, 200, 28, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell | TF_Granted | TF_PerTarget, TableZone::Pulse, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Fireball), TableCurve::Fireball, 312 },
@@ -155,7 +156,8 @@ const TableSkillData Table[] = {
 	{ WS::FeastOfFlesh, "Feast of Flesh", "Bones burst out around you; what they kill feeds you life and mana", 0, 0, TW::None, 1, Around, 45, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Granted | TF_PerTarget, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::KillRestoreBoth },
 	{ WS::WitheringBolt, "Withering Bolt", "A dark bolt that withers what it hits, so it takes more damage", 0, 0, TW::None, 1, Projectiles, 37, 1, 0, 0, 0, 0, DT::Physical, MissileID::BloodStar, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Wither },
 	{ WS::BoneBolt, "Bone Bolt", "A shard of bone that builds up twice the stun", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
-	{ WS::ManaDrain, "Mana Drain", "A weak bolt that drains mana from what it hits and slows it", 0, 0, TW::None, 1, Projectiles, 15, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare2, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Mana), TableCurve::Fireball, 312, GrantedRider::ManaDrain },
+	// POE2 Mashup: no damage, as its name says: it only drains mana and slows (Curtis 2026-10-29; was 15%).
+	{ WS::ManaDrain, "Mana Drain", "A bolt that deals no damage, but drains mana and slows", 0, 0, TW::None, 1, Projectiles, 0, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare2, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Mana), TableCurve::Fireball, 312, GrantedRider::ManaDrain },
 	{ WS::PowerSiphon, "Power Siphon", "A bolt that kills what it leaves on low life, for a Frenzy charge", 0, 0, TW::None, 1, Projectiles, 35, 1, 0, 0, 0, 0, DT::Physical, MissileID::YellowFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Telekinesis), TableCurve::Fireball, 312, GrantedRider::CullFrenzy },
 	{ WS::TormentBolt, "Torment Bolt", "A bolt that weakens what it hits for 2 seconds", 0, 0, TW::None, 1, Projectiles, 38, 1, 0, 0, 0, 0, DT::Physical, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Reflect), TableCurve::Fireball, 312, GrantedRider::Weaken },
 	{ WS::CriticalBolt, "Critical Bolt", "A bolt whose every fifth cast hits twice as hard", 0, 0, TW::None, 1, Projectiles, 34, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::Search), TableCurve::Fireball, 312, GrantedRider::EveryFifthDouble },
@@ -175,8 +177,6 @@ constexpr int WeakenPercent = 30;
 constexpr int DecrepifyPercent = 25;
 constexpr int FrozenArmorPercent = 20;
 constexpr int HolyShieldPercent = 15;
-/** Traps and sentries out at once, per skill. */
-constexpr int MaxPlacedZones = 3;
 /**
  * Thunderstorm, Blessed Hammer and Blizzard out at once: one cast, and a recast replaces it (Curtis 2026-10-28; recast
  * as their cast time allowed, Thunderstorm reached 11 at once).
@@ -593,14 +593,14 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 	// A granted skill's zone (Solar Orb) is one at a time: a new one replaces the old.
 	if (IsGrantedTableSkill(data))
 		Zones.erase(std::remove_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }), Zones.end());
-	// Traps and sentries: only a few of each can be out at once; Thunderstorm, Blessed Hammer and Blizzard one. The oldest goes.
-	int cap = 0;
+	// Traps and sentries: only a few of each can be out at once (MaxPlacedTraps, 2 more with Endless Horde, Curtis
+	// 2026-10-29); Thunderstorm, Blessed Hammer and Blizzard one. The oldest goes.
+	int limit = 0;
 	if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret))
-		cap = MaxPlacedZones;
+		limit = SupportTrapLimit(player, SkillSlot::ForAttack(data.skill));
 	else if (IsAnyOf(data.skill, WeaponSkill::Thunderstorm, WeaponSkill::BlessedHammer, WeaponSkill::Blizzard))
-		cap = MaxStackingZones;
-	if (cap > 0) {
-		const int limit = SupportZoneLimit(player, SkillSlot::ForAttack(data.skill), cap);
+		limit = SupportZoneLimit(player, SkillSlot::ForAttack(data.skill), MaxStackingZones);
+	if (limit > 0) {
 		while (std::count_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }) >= limit)
 			Zones.erase(std::find_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }));
 	}
@@ -1185,6 +1185,9 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	case Zone:
 		if (data.zone == TableZone::IceSpike)
 			target = IceSpikeCenter(player, data, target);
+		// POE2 Mashup: a trap or sentry goes where the hero can see, never past a wall or a closed door (Curtis 2026-10-29).
+		if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret) && (data.flags & TF_AtPlayer) == 0)
+			target = LastTileInSight(tile, target);
 		AddZone(player, data, (data.flags & TF_AtPlayer) != 0 ? tile : target, data.delay);
 		break;
 	case Curse:
@@ -1918,6 +1921,13 @@ int SigilSpellDamagePercent(const Player &player)
 size_t SkillZoneCount()
 {
 	return Zones.size();
+}
+
+std::optional<Point> SkillZoneCenter(size_t index)
+{
+	if (index >= Zones.size())
+		return std::nullopt;
+	return Zones[index].center;
 }
 
 Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 damage)

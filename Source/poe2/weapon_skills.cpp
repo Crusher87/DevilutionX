@@ -683,7 +683,8 @@ int WeaponSkillManaCost(const Player &player, WeaponSkill skill, bool lifeShare)
 		const SupportSockets supports = player.poe2.supportsFor(slot);
 		if (std::all_of(supports.begin(), supports.end(), [](SupportGem gem) { return gem == SupportGem::None; }))
 			return 0;
-		return GrantedSupportedManaCost * SupportManaCostPercent(player, slot, lifeShare) / 100;
+		// POE2 Mashup: they're all spells, so the base is a third dearer, 2 to 3 (SpellManaCostPercent, Curtis 2026-10-29).
+		return ApplySkillKindManaPercent(slot, GrantedSupportedManaCost) * SupportManaCostPercent(player, slot, lifeShare) / 100;
 	}
 	const int cost = GemBaseManaCost(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill));
 	return cost * SupportManaCostPercent(player, SkillSlot::ForAttack(skill), lifeShare) / 100;

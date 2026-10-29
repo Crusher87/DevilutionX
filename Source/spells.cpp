@@ -146,13 +146,16 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 		ma = GemBaseManaCost(SkillSlot::ForSpell(sn), gemLevel);
 	} else if (sn == SpellID::Healing || sn == SpellID::HealOther) {
 		ma = (GetSpellData(SpellID::Healing).sManaCost + 2 * player.getCharacterLevel() - adj);
+		// POE2 Mashup: spells cost a third more (SpellManaCostPercent, Curtis 2026-10-29).
+		ma = ApplySkillKindManaPercent(SkillSlot::ForSpell(sn), ma);
 	} else if (GetSpellData(sn).sManaCost == 255) {
 		ma = player._pMaxManaBase.whole() - adj;
 	} else {
 		ma = (GetSpellData(sn).sManaCost - adj);
-		// POE2 Mashup: a spell cast without a gem costs more for its speed too, as its gem would (mana_pct).
+		// POE2 Mashup: a spell cast without a gem costs more for its speed too, as its gem would (mana_pct), then a
+		// third more for being a spell (SpellManaCostPercent, Curtis 2026-10-29).
 		if (gbIsPoe2)
-			ma = ((ma * SkillSpeedManaPercent(SkillSlot::ForSpell(sn))) + 50) / 100;
+			ma = ApplySkillKindManaPercent(SkillSlot::ForSpell(sn), ((ma * SkillSpeedManaPercent(SkillSlot::ForSpell(sn))) + 50) / 100);
 	}
 
 	Fixed26_6 manaAmount = Fixed26_6::fromInt(std::max(ma, 0));

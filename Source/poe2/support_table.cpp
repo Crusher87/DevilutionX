@@ -121,7 +121,7 @@ const SupportData Table[] = {
 	{ SG::ComboFinisher, "Exploding Palm", "Spends all Combo for 3% more damage a\npoint. Mana +10%", "Needs a quarterstaff attack", GC::Dexterity, 6, 110, 0, ST_Staff | ST_Damage, 0, 0, NoFamily },
 	{ SG::HoradricTotem, "Horadric Totem", "Retired: it's the Horadric Totem Spirit\ngem now, which holds the spells", "Retired", GC::Magic, 9, 120, 0, ST_Spell | ST_Damage, ST_Channelling | ST_Movement, 0, NoFamily },
 	{ SG::Decoy, "Sigil of the Decoy", "Retired: it's the Phantom Archer Spirit\ngem now", "Retired", GC::Dexterity, 8, 130, 0, ST_Bow, 0, 0, NoFamily },
-	{ SG::Legion, "Endless Horde", "1 more out at a time, 50% shorter.\nMana +10%", "Needs walls, runes, sentries or totems", GC::Strength, 7, 110, 0, ST_Placed, 0, 0, NoFamily },
+	{ SG::Legion, "Endless Horde", "2 more traps, runes or sentries out at once,\n1 more totem; 50% shorter. Mana +10%", "Needs walls, runes, sentries or totems", GC::Strength, 7, 110, 0, ST_Placed, 0, 0, NoFamily },
 	{ SG::MixedHost, "Mixed Horde", "Minions deal 7% more damage for each\nkind of minion you have", "Needs a minion skill", GC::Magic, 7, 100, 0, ST_Minion, 0, 0, NoFamily },
 	// Lineage supports.
 	{ SG::ButchersHook, "The Butcher's Hook", "Hits drag the monster to you and make it\nbleed; 15% slower attacks", "Needs a melee attack", GC::Strength, 0, 110, 0, ST_Melee, 0, SF_Lineage, NoFamily },
@@ -1765,6 +1765,11 @@ int RecentSpellCount(const SupportRuntime &state)
 int SupportZoneLimit(const Player &player, SkillSlot skill, int limit)
 {
 	return Has(player, skill, SG::Legion) ? limit + 1 : limit;
+}
+
+int SupportTrapLimit(const Player &player, SkillSlot skill)
+{
+	return Has(player, skill, SG::Legion) ? MaxPlacedTraps + LegionExtraTraps : MaxPlacedTraps;
 }
 
 int SupportCastSlowPercent(const Player &player, SkillSlot skill)

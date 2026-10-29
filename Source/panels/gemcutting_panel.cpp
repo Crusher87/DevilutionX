@@ -411,7 +411,8 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 		lines.emplace_back(std::string(WeaponSkillDescription(gem.skill.attack())), UiFlags::ColorWhite);
 		if (WeaponSkillNeedsWeapon(gem.skill.attack()))
 			lines.emplace_back(FormatRuntime(_("Needs a {:s}"), WeaponSkillWeapons(gem.skill.attack())), UiFlags::ColorWhite);
-		lines.emplace_back(FormatRuntime(_("{:d} mana"), WeaponSkillManaCost(gem.skill.attack())), UiFlags::ColorWhite);
+		// POE2 Mashup: the level 1 gem's cost as paid, with a spell's third more (Curtis 2026-10-29).
+		lines.emplace_back(FormatRuntime(_("{:d} mana"), GemBaseManaCost(gem.skill, 1)), UiFlags::ColorWhite);
 	} else if (gem.skill.kind == SkillKind::Persistent) {
 		lines.emplace_back(std::string(PersistentSkillDescription(gem.skill.persistent())), UiFlags::ColorWhite);
 		lines.emplace_back(SpiritCostText(gem.skill.persistent(), 1), UiFlags::ColorWhite);
