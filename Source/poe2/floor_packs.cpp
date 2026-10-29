@@ -21,7 +21,9 @@
 #include "monster.h"
 #include "objects.h"
 #include "poe2/floor_chests.hpp"
+#include "poe2/floor_rooms.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/waystones.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -71,8 +73,7 @@ constexpr size_t RestRoomSearchSteps = 40;
 constexpr int LastPackSlack = 8;
 /** Monster slots left free for monsters that come later: summons, and a strongbox's guards (InitMonsters leaves the same). */
 constexpr size_t SpawnHeadroom = 10;
-/** dTransVal is an int8_t. */
-constexpr int MaxRooms = 256;
+constexpr int MaxRooms = MaxFloorRooms;
 constexpr int16_t Unreached = INT16_MAX;
 
 constexpr std::array<Displacement, 8> Steps { { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } } };
@@ -89,7 +90,7 @@ int16_t FromEnd[MAXDUNX][MAXDUNY];
 
 int RoomAt(Point tile)
 {
-	return static_cast<uint8_t>(dTransVal[tile.x][tile.y]);
+	return FloorRoomAt(tile);
 }
 
 /** Floor a monster can walk on; a closed door counts. */
@@ -123,7 +124,8 @@ bool CanHoldChest(Point tile)
 			if (!InDungeonBounds(p) || dMonster[p.x][p.y] != 0 || dPlayer[p.x][p.y] != 0 || IsObjectAtPosition(p)
 			    || TileContainsSetPiece(p) || TileHasAny(p, TileProperties::Solid))
 				return false;
-			if (dPiece[p.x][p.y] > 125 && dPiece[p.x][p.y] < 143)
+			// The Cathedral's (and Crypt's) arch pieces, as chests already skip them.
+			if (IsAnyOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CRYPT) && dPiece[p.x][p.y] > 125 && dPiece[p.x][p.y] < 143)
 				return false;
 		}
 	}
@@ -258,6 +260,7 @@ private:
 
 	void studyFloor()
 	{
+		BuildFloorRooms();
 		Clear(FromStart);
 		Point start;
 		// The way down starts at the stairs up; a floor's town warp (Catacombs level 5) only when it has none.
@@ -724,8 +727,9 @@ private:
 			Monster *monster = AddMonster(chosen[i], static_cast<Direction>(random(8)), type, true);
 			if (monster == nullptr)
 				break;
-			// Rares lead the big fights and guard dead ends; one more rolled at random would add loot on top.
-			if (GetMonsterAffixes(*monster).rarity == MonsterRarity::Rare)
+			// Rares lead the big fights and guard dead ends; one more rolled at random would add loot on top. A map's
+			// tier rolls more rares on purpose, so they stay there.
+			if (GetMonsterAffixes(*monster).rarity == MonsterRarity::Rare && ActiveMapTier() == 0)
 				DemoteMonsterRarity(*monster);
 			if (first == nullptr && GetMonsterAffixes(*monster).rarity == MonsterRarity::Normal)
 				first = monster;
@@ -772,7 +776,8 @@ bool IsRangedMonsterAi(MonsterAIID ai)
 
 bool UseFloorPacks()
 {
-	return gbIsPoe2 && !setlevel && IsAnyOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CATACOMBS);
+	// Diablo's own floor keeps its fight as Diablo set it.
+	return gbIsPoe2 && !setlevel && leveltype != DTYPE_TOWN && currlevel != 16;
 }
 
 size_t PlaceFloorPacks(size_t count, std::span<const size_t> scatterTypes)

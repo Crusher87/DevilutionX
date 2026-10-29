@@ -805,6 +805,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/flasks.cpp
   poe2/floor_chests.cpp
   poe2/floor_packs.cpp
+  poe2/floor_rooms.cpp
   poe2/floors.cpp
   poe2/gem_levels.cpp
   poe2/gemcutting.cpp
