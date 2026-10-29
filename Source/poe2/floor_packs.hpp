@@ -23,7 +23,8 @@
  *    the first rest room also has a shrine where its walls allow one (Curtis, 10-28: shrines came up too often).
  *  - One floor in three has a strongbox off the way down; its 4 to 6 guards come out of the floor's monsters.
  *  - About one chest in five is magic and one in twenty rare (poe2/floor_chests.hpp).
- * Cathedral and Catacombs floors (Catacombs from 10-29). The placement has its own random stream, seeded from the floor's, so the same seed
+ * Every dungeon floor but Diablo's own (level 16) and quest floors; the Caves and the Nest by chambers
+ * (poe2/floor_rooms.hpp). The placement has its own random stream, seeded from the floor's, so the same seed
  * still gives the same floor.
  */
 #pragma once
@@ -39,7 +40,7 @@ namespace devilution {
 /** @brief Monsters that mostly fight from a distance: archers, casters and spitters. */
 bool IsRangedMonsterAi(MonsterAIID ai);
 
-/** @brief Whether this floor's monsters are placed in packs: POE2, a Cathedral or Catacombs floor, not a quest floor. */
+/** @brief Whether this floor's monsters are placed in packs: POE2, a dungeon floor, not a quest floor or Diablo's. */
 bool UseFloorPacks();
 
 /**
