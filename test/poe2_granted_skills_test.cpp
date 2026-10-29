@@ -1271,7 +1271,7 @@ TEST_F(Poe2GrantedSkillsTest, HoldControllerAndSkillBarCastIt)
 	RepeatPlayerAction();
 	EXPECT_EQ(player._pmode, PM_SPELL);
 	EXPECT_EQ(player.poe2.castSkill, WeaponSkill::FreezingShards);
-	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 5);
+	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 3);
 	sgbMouseDown = CLICK_NONE;
 
 	// The controller's attack button at a monster.
@@ -1280,13 +1280,13 @@ TEST_F(Poe2GrantedSkillsTest, HoldControllerAndSkillBarCastIt)
 	PerformPrimaryAction();
 	EXPECT_EQ(player._pmode, PM_SPELL);
 	EXPECT_EQ(player.poe2.castSkill, WeaponSkill::FreezingShards);
-	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 5);
+	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 3);
 
 	// The skill bar's weapon attack (the left mouse button's tray binding).
 	Stand(player);
 	ASSERT_TRUE(UseDefaultAttack(player, player.poe2.weaponSet));
 	EXPECT_EQ(player.poe2.castSkill, WeaponSkill::FreezingShards);
-	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 5);
+	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 3);
 
 	// Never in town.
 	Stand(player);

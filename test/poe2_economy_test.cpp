@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include "cursor.h"
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
@@ -43,7 +44,21 @@ public:
 		gbIsPoe2 = false;
 		UnloadModArchives();
 	}
+
+	/** Shards go in the bag, and placing an item there needs the cursor graphics from the game's MPQ. */
+	static void SetUpTestSuite()
+	{
+		LoadCoreArchives();
+		LoadGameArchives();
+		haveCursors_ = HaveMainData();
+		if (haveCursors_)
+			InitCursor();
+	}
+
+	static bool haveCursors_;
 };
+
+bool Poe2EconomyTest::haveCursors_ = false;
 
 TEST_F(Poe2EconomyTest, GamblePricesFollowTheFormula)
 {
@@ -165,6 +180,8 @@ TEST_F(Poe2EconomyTest, ShardsAreItemsAtTheEndOfTheItemTable)
 
 TEST_F(Poe2EconomyTest, ShardsGoInTheBagAndTenMakeAnOrb)
 {
+	if (!haveCursors_)
+		GTEST_SKIP() << "needs the cursor graphics from spawn.mpq or DIABDAT.MPQ";
 	Player &player = OtherHero();
 	EXPECT_EQ(GainShards(player, ShardKind::Regal, 9), 0);
 	EXPECT_EQ(player._pNumInv, 1);
@@ -191,6 +208,8 @@ TEST_F(Poe2EconomyTest, ShardsGoInTheBagAndTenMakeAnOrb)
 
 TEST_F(Poe2EconomyTest, CountedShardsBecomeItemsOnce)
 {
+	if (!haveCursors_)
+		GTEST_SKIP() << "needs the cursor graphics from spawn.mpq or DIABDAT.MPQ";
 	// Heroes from before shards were items had them counted; they go in the bag and the count empties.
 	Player &player = OtherHero();
 	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] = 3;
@@ -239,6 +258,8 @@ TEST_F(Poe2EconomyTest, DisenchantAndSalvageYields)
 
 TEST_F(Poe2EconomyTest, AnvilSalvagesUniquesForChanceShards)
 {
+	if (!haveCursors_)
+		GTEST_SKIP() << "needs the cursor graphics from spawn.mpq or DIABDAT.MPQ";
 	// Curtis 2026-10-23: uniques go on the anvil for a Chance Shard each, plus what their quality and sockets give.
 	SetRndSeed(11);
 	Item sword;

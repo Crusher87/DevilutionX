@@ -121,7 +121,8 @@ public:
 
 TEST_F(Poe2CasterBasesTest, NewRowsComeAfterTheOldOnesInThePlansOrder)
 {
-	ASSERT_EQ(AllItemsList.size(), FirstNewRow + NewRows);
+	// Later rows (shards, 2026-10-29) come after these.
+	ASSERT_GE(AllItemsList.size(), FirstNewRow + NewRows);
 	const auto kindsFrom = [](size_t first, size_t count, WeaponKind kind) {
 		for (size_t i = first; i < first + count; i++)
 			EXPECT_EQ(WeaponKindOf(static_cast<int>(i)), kind) << AllItemsList[i].iName;
@@ -131,7 +132,7 @@ TEST_F(Poe2CasterBasesTest, NewRowsComeAfterTheOldOnesInThePlansOrder)
 	kindsFrom(FirstNewRow + 13, 14, WeaponKind::CasterStaff);
 	kindsFrom(FirstNewRow + 27, 13, WeaponKind::Wand);
 	kindsFrom(FirstNewRow + 40, 14, WeaponKind::Quarterstaff);
-	for (size_t i = FirstNewRow; i < AllItemsList.size(); i++) {
+	for (size_t i = FirstNewRow; i < FirstNewRow + NewRows; i++) {
 		const ItemData &data = AllItemsList[i];
 		const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
 		ASSERT_NE(base, nullptr) << data.iName;
@@ -165,7 +166,7 @@ TEST_F(Poe2CasterBasesTest, NewRowsComeAfterTheOldOnesInThePlansOrder)
 TEST_F(Poe2CasterBasesTest, EveryNewNameIsItsOwn)
 {
 	// Bases are found by name (LoadBaseData, LoadPoe2Uniques): no new name may be any other row's.
-	for (size_t i = FirstNewRow; i < AllItemsList.size(); i++) {
+	for (size_t i = FirstNewRow; i < FirstNewRow + NewRows; i++) {
 		for (size_t j = 0; j < AllItemsList.size(); j++) {
 			if (j != i)
 				EXPECT_NE(AllItemsList[j].iName, AllItemsList[i].iName) << i << " " << j;
@@ -190,7 +191,7 @@ TEST_F(Poe2CasterBasesTest, BaseColumns)
 	const SkillSlot staffBolt = SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt));
 	EXPECT_EQ(Meta("Ashen Staff").grantedSkill, staffBolt);
 	EXPECT_EQ(Meta("Spriggan Staff").grantedSkill, staffBolt);
-	for (size_t i = FirstNewRow; i < AllItemsList.size(); i++) {
+	for (size_t i = FirstNewRow; i < FirstNewRow + NewRows; i++) {
 		const BaseMeta &base = *BaseMetaFor(static_cast<int>(i));
 		const WeaponKind kind = WeaponKindOf(static_cast<int>(i));
 		if (kind == WeaponKind::Sceptre)
@@ -240,7 +241,7 @@ TEST_F(Poe2CasterBasesTest, BaseColumns)
 	EXPECT_EQ(AllItemsList[Row("Ashen Staff")].iItemId, UITYPE_SHORTSTAFF);
 	EXPECT_EQ(AllItemsList[Row("Spriggan Staff")].iItemId, UITYPE_QUARSTAFF);
 	EXPECT_EQ(AllItemsList[Row("Pyrophyte Staff")].iItemId, UITYPE_LONGSTAFF);
-	for (size_t i = FirstNewRow; i < AllItemsList.size(); i++) {
+	for (size_t i = FirstNewRow; i < FirstNewRow + NewRows; i++) {
 		const std::string_view name = AllItemsList[i].iName;
 		if (name != "Ashen Staff" && name != "Spriggan Staff" && name != "Pyrophyte Staff")
 			EXPECT_EQ(AllItemsList[i].iItemId, UITYPE_NONE) << AllItemsList[i].iName;
@@ -250,7 +251,7 @@ TEST_F(Poe2CasterBasesTest, BaseColumns)
 TEST_F(Poe2CasterBasesTest, NewItemsRollAndRebuild)
 {
 	int rolled = 0;
-	for (size_t i = FirstNewRow; i < AllItemsList.size(); i++) {
+	for (size_t i = FirstNewRow; i < FirstNewRow + NewRows; i++) {
 		const auto row = static_cast<_item_indexes>(i);
 		const BaseMeta &base = *BaseMetaFor(row);
 		for (const int itemLevel : { 1, 45, 82 }) {
