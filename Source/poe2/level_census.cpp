@@ -5,6 +5,7 @@
 #include <bitset>
 #include <cstdint>
 #include <numeric>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,7 @@
 #include "plrmsg.h"
 #include "poe2/floor_chests.hpp"
 #include "poe2/floor_packs.hpp"
+#include "poe2/floor_rooms.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
@@ -43,8 +45,7 @@ namespace devilution {
 
 namespace {
 
-/** dTransVal is an int8_t, so a floor has at most this many room numbers. */
-constexpr int MaxRooms = 128;
+constexpr int MaxRooms = MaxFloorRooms;
 /** Rooms smaller than this are corners and door gaps, left out of the headline counts. */
 constexpr int NookTiles = 6;
 /** Monsters this close to the hero count as "near" (the same distance as the fight log uses). */
@@ -68,7 +69,7 @@ uint32_t Now()
 
 int RoomAt(Point tile)
 {
-	return static_cast<uint8_t>(dTransVal[tile.x][tile.y]) % MaxRooms;
+	return FloorRoomAt(tile);
 }
 
 /** Floor the hero can walk on; a closed door counts, as the hero opens it by walking into it. */
@@ -945,6 +946,7 @@ void LevelCensusEntered()
 			FloorBatch = {};
 		return;
 	}
+	BuildFloorRooms();
 	TakeCensus(Current);
 	CurrentVisit.startMs = CurrentVisit.lastMs = Now();
 	WriteCensus(Current);
@@ -1088,7 +1090,9 @@ std::string LevelCensusText()
 {
 	if (!OnDungeonFloor())
 		return "rooms() counts dungeon floors: go down the stairs first.";
-	Census census;
+	// On the heap: with a byte's worth of rooms it's too big for a small stack.
+	const auto owned = std::make_unique<Census>();
+	Census &census = *owned;
 	TakeCensus(census);
 	std::string text = StrCat("Floor ", FloorName(), " now: ", HeadlineText(census.headline));
 	if (MyPlayer != nullptr && InDungeonBounds(MyPlayer->position.tile)) {
