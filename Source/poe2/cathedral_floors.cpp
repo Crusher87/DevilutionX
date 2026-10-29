@@ -885,7 +885,7 @@ private:
 			const Side side = static_cast<Side>(GenerateRnd(4));
 			const bool alongX = side == North || side == South;
 			const int bodyLength = alongX ? w : h;
-			const int length = std::min(bodyLength, 2 + GenerateRnd(std::max(1, bodyLength - 1)));
+			const int length = std::min<int>(bodyLength, 2 + GenerateRnd(std::max(1, bodyLength - 1)));
 			const int start = GenerateRnd(bodyLength - length + 1);
 			int room = 0;
 			switch (side) {
