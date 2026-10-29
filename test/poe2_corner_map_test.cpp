@@ -239,7 +239,17 @@ TEST_F(Poe2CornerMapTest, IconTableLoadsFromThePoe2Mod)
 	UnloadModArchives();
 }
 
-TEST_F(Poe2CornerMapTest, ExitsShowOnceSeenAndAlwaysInTown)
+TEST_F(Poe2CornerMapTest, MarkersShowOnlyAboutAScreenFromTheHero)
+{
+	EXPECT_EQ(MapMarkerRange, 15);
+	EXPECT_TRUE(IsInMapMarkerRange({ 50, 50 }, { 50, 50 }));
+	EXPECT_TRUE(IsInMapMarkerRange({ 50, 50 }, { 65, 50 }));
+	EXPECT_FALSE(IsInMapMarkerRange({ 50, 50 }, { 66, 50 }));
+	EXPECT_TRUE(IsInMapMarkerRange({ 50, 50 }, { 40, 39 })) << "10 and 11 steps is under 15 in a straight line";
+	EXPECT_FALSE(IsInMapMarkerRange({ 50, 50 }, { 61, 61 })) << "11 steps each way is over 15 in a straight line";
+}
+
+TEST_F(Poe2CornerMapTest, ExitsShowOnceSeenAndOnlyNearTheHero)
 {
 	Missiles.clear();
 	ActiveObjectCount = 0;
@@ -249,25 +259,55 @@ TEST_F(Poe2CornerMapTest, ExitsShowOnceSeenAndAlwaysInTown)
 	trigs[1] = { { 60, 30 }, WM_DIABPREVLVL, 0 };
 
 	leveltype = DTYPE_TOWN;
-	std::vector<MapMarker> markers = CollectMapMarkers();
-	ASSERT_EQ(markers.size(), 2u);
+	EXPECT_TRUE(CollectMapMarkers({ 80, 80 }).empty()) << "town's exits are far away too";
+	std::vector<MapMarker> markers = CollectMapMarkers({ 50, 40 });
+	ASSERT_EQ(markers.size(), 2u) << "town needs no exploring";
 	EXPECT_EQ(markers[0].icon, MapIcon::StairsDown);
 	EXPECT_EQ(markers[0].tile, Point(40, 50));
 	EXPECT_EQ(markers[1].icon, MapIcon::Town) << "stairs up to level 0 lead to town";
-
-	leveltype = DTYPE_CATHEDRAL;
-	currlevel = 1;
-	EXPECT_TRUE(CollectMapMarkers().empty()) << "not seen yet";
-	AutomapView[(40 - 16) / 2][(50 - 16) / 2] = MAP_EXP_SELF;
-	markers = CollectMapMarkers();
+	markers = CollectMapMarkers({ 40, 60 });
 	ASSERT_EQ(markers.size(), 1u);
 	EXPECT_EQ(markers[0].icon, MapIcon::StairsDown);
 
+	leveltype = DTYPE_CATHEDRAL;
+	currlevel = 1;
+	EXPECT_TRUE(CollectMapMarkers({ 50, 40 }).empty()) << "not seen yet";
+	AutomapView[(40 - 16) / 2][(50 - 16) / 2] = MAP_EXP_SELF;
 	trigs[1]._tlvl = 1;
 	AutomapView[(60 - 16) / 2][(30 - 16) / 2] = MAP_EXP_SHRINE;
-	markers = CollectMapMarkers();
+	markers = CollectMapMarkers({ 50, 40 });
 	ASSERT_EQ(markers.size(), 2u);
 	EXPECT_EQ(markers[1].icon, MapIcon::StairsUp);
+	markers = CollectMapMarkers({ 40, 64 });
+	ASSERT_EQ(markers.size(), 1u) << "seen, but the hero has walked away";
+	EXPECT_EQ(markers[0].icon, MapIcon::StairsDown);
+	EXPECT_TRUE(CollectMapMarkers({ 20, 90 }).empty());
+}
+
+TEST_F(Poe2CornerMapTest, YourOwnTownPortalShowsFromAnywhere)
+{
+	numtrigs = 0;
+	ActiveObjectCount = 0;
+	ActiveMonsterCount = 0;
+	Missiles.clear();
+	Missile &mine = Missiles.emplace_back();
+	mine._mitype = MissileID::TownPortal;
+	mine._misource = MyPlayerId;
+	mine.position.tile = { 30, 30 };
+	Missile &theirs = Missiles.emplace_back();
+	theirs._mitype = MissileID::TownPortal;
+	theirs._misource = MyPlayerId + 1;
+	theirs.position.tile = { 70, 70 };
+
+	std::vector<MapMarker> markers = CollectMapMarkers({ 70, 75 });
+	ASSERT_EQ(markers.size(), 2u);
+	EXPECT_EQ(markers[0].tile, Point(30, 30)) << "your own, far away";
+	EXPECT_EQ(markers[1].tile, Point(70, 70));
+	markers = CollectMapMarkers({ 30, 35 });
+	ASSERT_EQ(markers.size(), 1u) << "another hero's portal only up close";
+	EXPECT_EQ(markers[0].icon, MapIcon::Portal);
+	EXPECT_EQ(markers[0].tile, Point(30, 30));
+	Missiles.clear();
 }
 
 } // namespace

@@ -8,7 +8,8 @@
  *    map is closed) and Point of Interest names, as POE2's Options > UI > Map has them. Transparency, landscape and
  *    the markers apply to the Tab map too; zoom and auto-centre are the corner map's.
  *  - Markers for stairs and other exits, town portals, shrines, strongboxes and rare and unique monsters. Their
- *    shapes, colours and names come from txtdata/poe2/map_icons.tsv.
+ *    shapes, colours and names come from txtdata/poe2/map_icons.tsv. They show only within MapMarkerRange of the hero,
+ *    on both maps; the hero's own town portal always shows (Curtis 2026-10-29).
  */
 #pragma once
 
@@ -73,6 +74,11 @@ struct MapMarker {
 
 /** @brief Gap between the corner map and the screen's top and right edges, in UI pixels. */
 constexpr int CornerMapMargin = 8;
+/**
+ * @brief POE2 Mashup: how near, in tiles, the hero must be for a marker to show on either map: about a screen away
+ * (Curtis 2026-10-29: "icons on the minimap shouldn't show up until I am right close to them").
+ */
+constexpr int MapMarkerRange = 15;
 
 /** @brief The corner map's width in percent of the screen's for each Corner Map Size. */
 int CornerMapWidthPercent(CornerMapSize size);
@@ -108,8 +114,13 @@ bool IsInMapIconShape(MapIconShape shape, int dx, int dy, int radius);
 /** @brief Marker radius in pixels for a map scale. */
 int MapIconRadius(int scale);
 
-/** @brief The markers on the current level: exits, portals, unused shrines and strongboxes the hero has seen, and every live rare and unique monster. */
-std::vector<MapMarker> CollectMapMarkers();
+/** @brief Whether a marker on @p tile shows to a hero on @p hero: no more than MapMarkerRange tiles away in a straight line. */
+bool IsInMapMarkerRange(Point hero, Point tile);
+/**
+ * @brief The markers on the current level near the hero on @p hero: exits, portals, unused shrines and strongboxes the
+ * hero has seen, and live rare and unique monsters. The hero's own town portal shows from anywhere.
+ */
+std::vector<MapMarker> CollectMapMarkers(Point hero);
 /** @brief Draws one marker: its shape in its colour with a dark outline, at the map's line opacity. */
 void DrawMapIcon(const Surface &out, Point middle, const MapIconStyle &style, int radius, const Rectangle &clip);
 /** @brief Draws the level's markers on a map, and their names when Point of Interest names is on. */

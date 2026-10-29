@@ -1456,7 +1456,8 @@ Point TileToAutomapScreen(Point tile, Displacement myPlayerOffset)
 
 /**
  * @brief POE2 Mashup: shades the explored floor under the map lines, as POE2's map shows its terrain. Each pixel is
- * shaded once, so the tiles meet without seams.
+ * shaded once, so the tiles meet without seams. On the Tab map it is one even tint laid over the world with real alpha
+ * where the screen allows (SetMapTintsUi), not blended into the 8-bit world, so it doesn't shimmer while walking.
  */
 void DrawMapLandscape(const Surface &out, Displacement myPlayerOffset, int cells, int opacity)
 {
@@ -1509,8 +1510,7 @@ void DrawMapLandscape(const Surface &out, Displacement myPlayerOffset, int cells
 		for (int x = 0; x < width; x++) {
 			if (!floor[(static_cast<size_t>(y) * width) + x])
 				continue;
-			uint8_t &pixel = *out.at(clipLeft + x, clipTop + y);
-			pixel = BlendMapColor(MapLandscapeColor, pixel, opacity);
+			PutMapPixel(out, { clipLeft + x, clipTop + y }, MapLandscapeColor, opacity);
 		}
 	}
 }
@@ -1882,8 +1882,13 @@ void DrawAutomap(const Surface &out)
 
 	// POE2 Mashup: Map Transparency, and the floor under the lines (Landscape Transparency).
 	const int savedLineOpacity = GetMapLineOpacity();
-	if (gbIsPoe2)
+	const bool savedTints = GetMapTintsUi();
+	if (gbIsPoe2) {
 		SetMapLineOpacity(MapOpacityPercent());
+		// POE2 Mashup: the Tab map goes over the world with real alpha, so it holds steady while walking; the corner map
+		// keeps its solid backdrop (Curtis 2026-10-29).
+		SetMapTintsUi(CornerView == nullptr && GetAutomapType() != AutomapType::Minimap);
+	}
 
 	if (GetAutomapType() == AutomapType::Minimap) {
 		// Background fill
@@ -1988,6 +1993,7 @@ void DrawAutomap(const Surface &out)
 		DrawMapMarkers(out, clip, scale, [&](Point tile) { return TileToAutomapScreen(tile, myPlayerOffset); });
 	}
 	SetMapLineOpacity(savedLineOpacity);
+	SetMapTintsUi(savedTints);
 
 	if (CornerView == nullptr)
 		DrawAutomapText(out);

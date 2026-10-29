@@ -320,35 +320,49 @@ int MapIconRadius(int scale)
 	return std::clamp((scale / 25) + 1, 2, 5);
 }
 
-std::vector<MapMarker> CollectMapMarkers()
+bool IsInMapMarkerRange(Point hero, Point tile)
 {
+	// A circle on the ground, so an oval on the screen, about as wide as it is high.
+	const int dx = tile.x - hero.x;
+	const int dy = tile.y - hero.y;
+	return (dx * dx) + (dy * dy) <= MapMarkerRange * MapMarkerRange;
+}
+
+std::vector<MapMarker> CollectMapMarkers(Point hero)
+{
+	// POE2 Mashup: everything is marked only while the hero is near it; your own town portal always is (Curtis 2026-10-29).
 	std::vector<MapMarker> markers;
 	const bool town = leveltype == DTYPE_TOWN;
 	for (int i = 0; i < numtrigs; i++) {
 		const std::optional<MapIcon> icon = TriggerIcon(trigs[i]);
-		if (icon && (town || IsExplored(trigs[i].position)))
+		if (icon && (town || IsExplored(trigs[i].position)) && IsInMapMarkerRange(hero, trigs[i].position))
 			markers.push_back({ *icon, trigs[i].position, {} });
 	}
 	for (const Missile &missile : Missiles) {
-		if (missile._mitype == MissileID::TownPortal)
-			markers.push_back({ MapIcon::Portal, missile.position.tile, {} });
-		else if (missile._mitype == MissileID::RedPortal)
-			markers.push_back({ MapIcon::RedPortal, missile.position.tile, {} });
+		const Point tile = missile.position.tile;
+		if (missile._mitype == MissileID::TownPortal) {
+			if (missile._misource == MyPlayerId || IsInMapMarkerRange(hero, tile))
+				markers.push_back({ MapIcon::Portal, tile, {} });
+		} else if (missile._mitype == MissileID::RedPortal && IsInMapMarkerRange(hero, tile)) {
+			markers.push_back({ MapIcon::RedPortal, tile, {} });
+		}
 	}
 	for (int i = 0; i < ActiveObjectCount; i++) {
 		const Object &object = Objects[ActiveObjects[i]];
 		// Used shrines and opened strongboxes can't be clicked any more.
-		if (object.selectionRegion == SelectionRegion::None || !IsExplored(object.position))
+		if (object.selectionRegion == SelectionRegion::None || !IsExplored(object.position) || !IsInMapMarkerRange(hero, object.position))
 			continue;
 		if (object.IsShrine())
 			markers.push_back({ MapIcon::Shrine, object.position, std::string(object.name().str()) });
 		else if (object.IsChest() && GetFloorChestKind(object) == FloorChestKind::Strongbox)
 			markers.push_back({ MapIcon::Strongbox, object.position, {} });
 	}
-	// Like POE2 since 0.2.0e, rare and unique monsters always show.
+	// Rare and unique monsters keep to the same distance as everything else (Curtis 2026-10-29).
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (monster.isInvalid || monster.isPlayerMinion() || (monster.flags & MFLAG_HIDDEN) != 0 || monster.mode == MonsterMode::Death || monster.hitPoints <= 0)
+			continue;
+		if (!IsInMapMarkerRange(hero, monster.position.tile))
 			continue;
 		if (monster.isUnique())
 			markers.push_back({ MapIcon::UniqueMonster, monster.position.tile, std::string(monster.name()) });
@@ -379,15 +393,16 @@ void DrawMapIcon(const Surface &out, Point middle, const MapIconStyle &style, in
 			} else {
 				continue;
 			}
-			uint8_t &pixel = *out.at(x, y);
-			pixel = BlendMapColor(color, pixel, opacity);
+			PutMapPixel(out, { x, y }, color, opacity);
 		}
 	}
 }
 
 void DrawMapMarkers(const Surface &out, const Rectangle &clip, int scale, tl::function_ref<Point(Point)> tileToScreen)
 {
-	const std::vector<MapMarker> markers = CollectMapMarkers();
+	if (MyPlayer == nullptr)
+		return;
+	const std::vector<MapMarker> markers = CollectMapMarkers(MyPlayer->position.tile);
 	if (markers.empty())
 		return;
 	const int radius = MapIconRadius(scale);
