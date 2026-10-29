@@ -41,10 +41,12 @@
 #include "options.h"
 #include "poe2/endgame.hpp"
 #include "poe2/area_levels.hpp"
+#include "poe2/cathedral_floors.hpp"
 #include "poe2/experience.hpp"
 #include "poe2/floor_chests.hpp"
 #include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
+#include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/objdat.h"
@@ -117,8 +119,9 @@ enum {
 
 int trapid;
 int trapdir;
-OptionalOwnedClxSpriteList pObjCels[40];
-object_graphic_id ObjFileList[40];
+// POE2: room for the designed rooms' props on top of a floor's usual objects (Diablo had 40).
+OptionalOwnedClxSpriteList pObjCels[64];
+object_graphic_id ObjFileList[64];
 /** Specifies the number of active objects. */
 int leverid;
 int numobjfiles;
@@ -250,6 +253,9 @@ bool RndLocOk(Point p)
 	if (IsObjectAtPosition(p))
 		return false;
 	if (TileContainsSetPiece(p))
+		return false;
+	// POE2: the designed rooms of the new Cathedral floors bring their own props.
+	if (IsCathedralDesignedTile(p))
 		return false;
 	if (TileHasAny(p, TileProperties::Solid))
 		return false;
@@ -3262,7 +3268,8 @@ bool OperateFountains(Player &player, Object &fountain)
 			PlaySfxLoc(SfxID::OperateFountain, fountain.position);
 			player._pHitPoints += Fixed26_6::fromInt(1);
 			player._pHPBase += Fixed26_6::fromInt(1);
-			if (player._pHitPoints > player._pMaxHP) {
+			// POE2: one drink fills life to the top.
+			if (gbIsPoe2 || player._pHitPoints > player._pMaxHP) {
 				player._pHitPoints = player._pMaxHP;
 				player._pHPBase = player._pMaxHPBase;
 			}
@@ -3279,7 +3286,8 @@ bool OperateFountains(Player &player, Object &fountain)
 
 			player._pMana += Fixed26_6::fromInt(1);
 			player._pManaBase += Fixed26_6::fromInt(1);
-			if (player._pMana > player._pMaxMana) {
+			// POE2: one drink fills mana to the top.
+			if (gbIsPoe2 || player._pMana > player._pMaxMana) {
 				player._pMana = player._pMaxMana;
 				player._pManaBase = player._pMaxManaBase;
 			}
@@ -3309,6 +3317,13 @@ bool OperateFountains(Player &player, Object &fountain)
 	case OBJ_TEARFTN: {
 		if (!fountain.canInteractWith())
 			break;
+		// POE2: the hero picks the trade in a small window, and the fountain is used up only
+		// when they make one (FinishTearsFountain). Other clients wait for that message.
+		if (gbIsPoe2) {
+			if (&player == MyPlayer)
+				OpenTearsFountain(fountain);
+			return false;
+		}
 		PlaySfxLoc(SfxID::OperateFountain, fountain.position);
 		fountain.selectionRegion = SelectionRegion::None;
 		if (&player != MyPlayer)
@@ -3726,6 +3741,10 @@ std::expected<void, std::string> LoadLevelObjects(uint16_t filesWidths[65])
 		if (filesWidths[i] == 0) {
 			continue;
 		}
+		if (numobjfiles >= static_cast<int>(std::size(ObjFileList))) {
+			LogError("Too many object graphics for one floor; {} is left out", ObjMasterLoadList[i]);
+			continue;
+		}
 
 		ObjFileList[numobjfiles] = static_cast<object_graphic_id>(i);
 		char filestr[32];
@@ -3754,6 +3773,7 @@ std::expected<void, std::string> InitObjectGFX()
 			filesWidths[obj.ofindex] = obj.animWidth;
 		}
 	}
+	MarkCathedralObjectGraphics(filesWidths);
 
 	for (size_t id = 0, n = AllObjects.size(); id < n; ++id) {
 		const ObjectData &objectData = AllObjects[id];
@@ -3876,13 +3896,17 @@ void InitObjects()
 			AddNakrulGate();
 		}
 		if (leveltype == DTYPE_CATHEDRAL) {
+			// POE2: the designed rooms' props go first, so nothing random lands on them.
+			AddCathedralRoomObjects();
 			if (Quests[Q_BUTCHER].IsAvailable())
 				AddTortures();
 			if (Quests[Q_PWATER].IsAvailable())
 				AddCandles();
 			if (Quests[Q_LTBANNER].IsAvailable())
 				AddObject(OBJ_SIGNCHEST, SetPiece.position.megaToWorld() + Displacement { 10, 3 });
-			InitRndLocBigObj(10, 15, OBJ_SARC);
+			// The designed rooms' sarcophagi come out of the floor's usual 10 to 15.
+			const int designedSarcophagi = CathedralDesignedSarcophagi();
+			InitRndLocBigObj(std::max(0, 10 - designedSarcophagi), std::max(1, 15 - designedSarcophagi), OBJ_SARC);
 			AddL1Objs(0, 0, MAXDUNX, MAXDUNY);
 			InitRndBarrels();
 		}
@@ -4700,8 +4724,14 @@ void SyncOpObject(Player &player, int cmd, Object &object)
 		OperateCauldron(player, object, SfxID::OperateCaldron);
 		break;
 	case OBJ_MURKYFTN:
-	case OBJ_TEARFTN:
 		OperateFountains(player, object);
+		break;
+	case OBJ_TEARFTN:
+		// POE2: this message means a trade was made, so the fountain is used up.
+		if (gbIsPoe2)
+			object.selectionRegion = SelectionRegion::None;
+		else
+			OperateFountains(player, object);
 		break;
 	case OBJ_STORYBOOK:
 	case OBJ_L5BOOKS:

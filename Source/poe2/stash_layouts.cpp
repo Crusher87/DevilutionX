@@ -53,6 +53,11 @@ constexpr item_misc_id OrbSlots[] = {
 	IMISC_ORB_LESSER_JEWELLER,
 	IMISC_ORB_GREATER_JEWELLER,
 	IMISC_ORB_PERFECT_JEWELLER,
+	// POE2 Mashup: shards, which turn into their orbs here at ten (Curtis 2026-10-29).
+	IMISC_SHARD_TRANSMUTE,
+	IMISC_SHARD_REGAL,
+	IMISC_SHARD_CHANCE,
+	IMISC_SHARD_ARTIFICER,
 };
 
 constexpr unsigned EssenceTiers = static_cast<unsigned>(EssenceTier::Count);
@@ -191,7 +196,7 @@ void SetStoredStackCount(Item &item, int count)
 {
 	if (!IsStackable(item))
 		return;
-	item._iMaxCharges = CurrencyStackMax;
+	item._iMaxCharges = StackMax(item);
 	item._iCharges = std::clamp(count, 1, CurrencyTabStackMax);
 }
 

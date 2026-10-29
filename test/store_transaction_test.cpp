@@ -30,6 +30,7 @@
 
 #include "control/control.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
 #include "minitext.h"
@@ -287,6 +288,28 @@ TEST_F(StoreTransactionTest, WitchWillBuy_RejectsSword)
 	InitializeItem(sword, IDI_BARDSWORD);
 	sword._iIdentified = true;
 	EXPECT_FALSE(WitchWillBuy(sword));
+}
+
+TEST_F(StoreTransactionTest, Poe2ShopsBuyQuestRewardsButNotQuestItems)
+{
+	// POE2 Mashup (Curtis 2026-10-29): the Butcher's Cleaver is a unique, so it sells; quest items still don't.
+	Item cleaver {};
+	InitializeItem(cleaver, IDI_CLEAVER);
+	cleaver._iIdentified = true;
+	Item rock {};
+	InitializeItem(rock, IDI_ROCK);
+	Item elixir {};
+	InitializeItem(elixir, IDI_GLDNELIX);
+
+	gbIsPoe2 = true;
+	const bool cleaverSells = SmithWillBuy(cleaver);
+	const bool rockSells = SmithWillBuy(rock);
+	const bool elixirSells = WitchWillBuy(elixir);
+	gbIsPoe2 = false;
+
+	EXPECT_TRUE(cleaverSells);
+	EXPECT_FALSE(rockSells);
+	EXPECT_FALSE(elixirSells);
 }
 
 // ===========================================================================

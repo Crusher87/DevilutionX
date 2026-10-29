@@ -1595,6 +1595,9 @@ void RepeatHeldTraySlot()
 	Player &player = *MyPlayer;
 	if (player.destAction != ACTION_NONE || player._pInvincible || !player.CanChangeAction())
 		return;
+	// POE2 Mashup: a held skill waits for a dodge roll to finish, rather than cutting it short (Curtis 2026-10-29).
+	if (player.poe2.isDodging())
+		return;
 	const TrayBinding &binding = Binding(player, *HeldTraySlot);
 	if (binding.action == TrayAction::WeaponAttack) {
 		UseDefaultAttack(player, BindingWeaponSet(binding));

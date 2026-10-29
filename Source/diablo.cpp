@@ -111,11 +111,13 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/cathedral_floors.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/hardcore.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/economy.hpp"
 #include "poe2/level_census.hpp"
+#include "poe2/minion_travel.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_lab.hpp"
@@ -636,6 +638,12 @@ void RightMouseDown(bool isShiftHeld)
 void ReleaseKey(SDL_Keycode vkey)
 {
 	remap_keyboard_key(&vkey);
+	// POE2 Mashup: letting go of Shift ends Shift+click currency use straight away, so the normal cursor comes back
+	// (Curtis 2026-10-29). Currency is only spent on use, so nothing is lost.
+	if (gbIsPoe2 && IsAnyOf(vkey, SDLK_LSHIFT, SDLK_RSHIFT) && IsAnyOf(pcurs, CURSOR_IDENTIFY, CURSOR_OIL) && StickyItemUseActive()) {
+		SetStickyItemUse(false);
+		NewCursor(CURSOR_HAND);
+	}
 	if (sgnTimeoutCurs != CURSOR_NONE)
 		return;
 	if (WasdMovementKeyReleased(vkey))
@@ -3928,6 +3936,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	// POE2 Mashup: a floor left alone long enough is built fresh instead of loaded from the save.
 	Poe2BeginFloorVisit(firstflag, lvldir);
+	SetCathedralFunnelFloor(false);
 
 	if (setlevel) {
 		RETURN_IF_ERROR(LoadGameLevelSetLevel(firstflag, lvldir, myPlayer));
@@ -3938,6 +3947,8 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	TelemetryStep("portals");
 	SyncPortals();
 	LoadGameLevelSyncPlayerEntry(lvldir);
+	// POE2 Mashup: the hero's minions arrive beside them; in town they wait for the next dungeon level (Curtis 2026-10-29).
+	BringMinionsAlong(*MyPlayer);
 
 	IncProgress();
 	IncProgress();

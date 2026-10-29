@@ -4,6 +4,7 @@
 #include <cmath>
 #include <format>
 
+#include "game_mode.hpp"
 #include "missiles.h"
 #include "player.h"
 #include "poe2/attack_speed.hpp"
@@ -12,6 +13,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/is_of.hpp"
@@ -203,6 +205,9 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 				return std::format("buff, {:d}s", table->duration / 20);
 			if (table->shape == TableShape::Curse && table->curse != TableCurse::Haunt && table->curse != TableCurse::Locust)
 				return std::format("curse, {:d}s", table->duration / 20);
+			// POE2 Mashup: Mana Drain deals none (Curtis 2026-10-29).
+			if (table->damagePercent <= 0)
+				return "no damage";
 			if ((table->flags & TF_Spell) != 0)
 				return std::format("{:d}% spell damage", percent * table->damagePercent / 100);
 			return std::format("{:d}% weapon damage", percent * table->damagePercent / 100);
@@ -292,14 +297,34 @@ int GemExtraProjectiles(SkillSlot skill, int gemLevel)
 	return static_cast<int>(std::count_if(SparkProjectileLevels.begin(), SparkProjectileLevels.end(), [gemLevel](uint8_t level) { return level <= gemLevel; }));
 }
 
+int SkillKindManaPercent(SkillSlot skill)
+{
+	if (!gbIsPoe2 || (SkillTags(skill) & ST_Spell) == 0)
+		return 100;
+	return SpellManaCostPercent;
+}
+
+int ApplySkillKindManaPercent(SkillSlot skill, int cost)
+{
+	const int percent = SkillKindManaPercent(skill);
+	if (percent == 100)
+		return cost;
+	return static_cast<int>(((static_cast<int64_t>(cost) * percent) + 50) / 100);
+}
+
 int GemBaseManaCost(SkillSlot skill, int gemLevel)
 {
 	const int speedPercent = SkillSpeedManaPercent(skill);
-	if (speedPercent == 100)
-		return BaseManaCost(skill) * GemManaPercent(skill, gemLevel) / 100;
-	// A skill that hits harder for its speed costs more by half as much (mana_pct), to the nearest point.
-	const int64_t cost = static_cast<int64_t>(BaseManaCost(skill)) * GemManaPercent(skill, gemLevel) * speedPercent;
-	return static_cast<int>((cost + 5000) / 10000);
+	int cost;
+	if (speedPercent == 100) {
+		cost = BaseManaCost(skill) * GemManaPercent(skill, gemLevel) / 100;
+	} else {
+		// A skill that hits harder for its speed costs more by half as much (mana_pct), to the nearest point.
+		const int64_t raw = static_cast<int64_t>(BaseManaCost(skill)) * GemManaPercent(skill, gemLevel) * speedPercent;
+		cost = static_cast<int>((raw + 5000) / 10000);
+	}
+	// POE2 Mashup: then a spell a third more, to the nearest point (Curtis 2026-10-29).
+	return ApplySkillKindManaPercent(skill, cost);
 }
 
 int BattleCryDamagePercent(int gemLevel)

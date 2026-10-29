@@ -195,7 +195,7 @@ bool OpenStackSplit(StackSplitSource source, uint16_t index)
 	split.idx = item->IDidx;
 	split.seed = static_cast<uint32_t>(item->_iSeed);
 	// At most an inventory stack goes on the cursor, and at least one stays behind.
-	split.max = std::min(count - 1, CurrencyStackMax);
+	split.max = std::min(count - 1, StackMax(*item));
 	split.amount = std::clamp(count / 2, 1, split.max);
 	split.anchor = MousePosition;
 	Open = split;

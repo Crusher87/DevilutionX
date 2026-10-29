@@ -68,8 +68,18 @@ int GemManaPercent(SkillSlot skill, int gemLevel);
 /** @brief Projectiles the gem adds at a gem level. */
 int GemExtraProjectiles(SkillSlot skill, int gemLevel);
 /**
+ * @brief POE2 Mashup: spells cost this much of their listed mana, in percent; attacks, swings and bow shots pay theirs
+ * (Curtis 2026-10-29: "a little more, so I have to watch it"; his mana never fell below a quarter).
+ */
+constexpr int SpellManaCostPercent = 133;
+/** @brief SpellManaCostPercent for a spell (a skill tagged ST_Spell), 100 for anything else and outside POE2 mode. */
+int SkillKindManaPercent(SkillSlot skill);
+/** @brief A cost in whole mana times SkillKindManaPercent, to the nearest point: a spell's a third more. */
+int ApplySkillKindManaPercent(SkillSlot skill, int cost);
+/**
  * @brief Mana cost at a gem level before class and support changes: the base cost along the gem's curve, times the
- * skill's mana for its speed (SkillSpeedManaPercent), to the nearest point when that isn't 100.
+ * skill's mana for its speed (SkillSpeedManaPercent), to the nearest point when that isn't 100, then a spell's a third
+ * more (ApplySkillKindManaPercent).
  */
 int GemBaseManaCost(SkillSlot skill, int gemLevel);
 /** @brief Extra melee damage while Battle Cry is up, in percent, at a gem level. */

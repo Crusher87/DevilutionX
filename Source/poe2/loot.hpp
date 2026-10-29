@@ -122,6 +122,23 @@ bool LineageSupportsDropAt(int areaLevel);
 /** @brief In a map, one kill in this many drops a random lineage support; map bosses and signature bosses have their own 2%. */
 constexpr int LineageAnyKillChance = 10000;
 
+// --- The first support gem ---
+// POE2 Mashup: at least one support gem by dungeon level 2 (Curtis 2026-10-29: none dropped in his first two floors).
+
+/** @brief The first support gem's chance per kill on dungeon levels 1 and 2, per mille, and what each kill without one adds. */
+constexpr int FirstSupportStartPerMille = 5;
+constexpr int FirstSupportClimbPerMille = 1;
+/** @brief The last dungeon level of the climbing chance; its first rare or unique monster, or quest boss, drops one for sure. */
+constexpr int FirstSupportLastLevel = 2;
+/**
+ * @brief The chance this kill drops the hero's first support gem, per mille: 0 once one has dropped and off dungeon levels
+ * 1 and 2 (0 is town, quest levels and maps), 1000 for a rare or unique monster or a boss on level 2, otherwise the
+ * start plus the climb for each kill there without one.
+ */
+int FirstSupportChancePerMille(const Player &player, LootSource source, int dungeonLevel);
+/** @brief Rolls the first support gem's chance with the game's generator; a kill without one makes the next likelier. */
+bool RollFirstSupportDrop(Player &player, LootSource source, int dungeonLevel);
+
 /** @brief Natural rares have 3 to 6 affixes, weighted 3:13:6:2, as RareModCount (poe2/modifiers.hpp). */
 int RollNaturalRareAffixCount();
 

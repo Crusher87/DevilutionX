@@ -269,6 +269,14 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 			hit.effect = std::format("Curse for {:d} seconds", table->duration / TicksPerSecond);
 			return hit;
 		}
+		// POE2 Mashup: Mana Drain deals no damage, so it shows what it does instead (Curtis 2026-10-29).
+		if (table->damagePercent <= 0) {
+			if (table->rider == GrantedRider::ManaDrain)
+				hit.effect = std::format("No damage: each hit gives you {:d} mana (once a second an enemy) and slows the enemy {:d}% for {:d} seconds", ManaDrainMana(level), ManaDrainSlowPercent, ManaDrainSlowTicks / TicksPerSecond);
+			else
+				hit.effect = "No damage";
+			return hit;
+		}
 		const int tablePercent = percent * table->damagePercent / 100;
 		if ((table->flags & TF_Spell) != 0) {
 			AddSpellBase(hit, player, level, table->type, tablePercent);
@@ -729,10 +737,12 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Text(lines, Kind::Text, std::string(description));
 
 	Heading(lines, isDefault ? "Weapon attack" : "Gem");
-	if (isDefault)
+	// POE2 Mashup: a granted skill that deals no damage (Mana Drain) has no damage line (Curtis 2026-10-29).
+	const TableSkillData *grantedRow = isDefault && skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+	if (isDefault && (grantedRow == nullptr || grantedRow->damagePercent > 0))
 		Value(lines, "Damage", static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt ? std::format("{:d}% of the staff's or sceptre's, +{:d}% of Magic", StaffBoltDamagePercent, StaffBoltMagicPercent)
 		                                                                                      : std::format("{:d}% of the weapon's", DefaultAttackDamagePercent));
-	else
+	else if (!isDefault)
 		Value(lines, "Level", level != gemLevel ? std::format("{:d} (gem {:d}, {:+d} from gear)", level, gemLevel, level - gemLevel) : std::format("{:d}", level));
 	if (skill.kind == SkillKind::Persistent && IsMinionCountSkill(skill.persistent())) {
 		const PersistentSkill persistent = skill.persistent();

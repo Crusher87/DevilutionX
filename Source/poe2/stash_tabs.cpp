@@ -38,7 +38,7 @@ bool IsSupportGem(const Item &item)
 
 bool IsCurrency(const Item &item)
 {
-	if (IsCurrencyMiscId(item._iMiscId))
+	if (IsCurrencyMiscId(item._iMiscId) || IsShard(item))
 		return true;
 	if (item._iMiscId > IMISC_OILFIRST && item._iMiscId < IMISC_OILLAST)
 		return true;

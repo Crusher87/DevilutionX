@@ -40,6 +40,9 @@ set(tests
   poe2_defenses_test
   poe2_flasks_test
   poe2_floor_chests_test
+  poe2_floor_rooms_test
+  poe2_tears_test
+  poe2_cathedral_floors_test
   poe2_floors_test
   poe2_gemcutting_test
   poe2_item_bases_test
@@ -89,6 +92,8 @@ set(tests
   poe2_spirit_uses_test
   poe2_spirit_auras_test
   poe2_minion_gems_test
+  poe2_minion_travel_test
+  poe2_dodge_cancel_test
   poe2_stacking_test
   poe2_support_gems_test
   poe2_item_search_test

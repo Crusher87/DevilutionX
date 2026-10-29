@@ -36,12 +36,14 @@
 #include "poe2/economy.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "tables/townerdat.hpp"
 #include "towners.h"
 #include "utils/format.hpp"
 #include "utils/format_int.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
@@ -518,6 +520,67 @@ void RefreshVendorStock(int level)
 	SpawnSmith(level);
 	SpawnWitch(level);
 	SpawnHealer(level);
+}
+
+/** The Fountain of Tears window: pick the stat that gives a point, then the one that gets it. */
+constexpr int TearsFirstLine = 8;
+constexpr int TearsLeaveLine = 18;
+std::optional<CharacterAttribute> TearsGiver;
+
+std::string_view TearsAttributeName(CharacterAttribute attribute)
+{
+	switch (attribute) {
+	case CharacterAttribute::Strength: return _("Strength");
+	case CharacterAttribute::Magic: return _("Magic");
+	case CharacterAttribute::Dexterity: return _("Dexterity");
+	case CharacterAttribute::Vitality: return _("Vitality");
+	}
+	return {};
+}
+
+void StartTears()
+{
+	IsTextFullSize = false;
+	HasScrollbar = false;
+	const Player &player = *MyPlayer;
+	AddSText(0, 2, _("Fountain of Tears"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	AddSText(0, 5, TearsGiver ? _("Give it to:") : _("Take one point from:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	for (size_t i = 0; i < std::size(TearsAttributes); i++) {
+		const CharacterAttribute attribute = TearsAttributes[i];
+		const bool usable = TearsGiver ? (attribute != *TearsGiver && TearsCanTake(player, attribute)) : TearsCanGive(player, attribute);
+		const std::string line = StrCat(TearsAttributeName(attribute), " (", player.GetBaseAttributeValue(attribute), ")");
+		AddSText(0, TearsFirstLine + 2 * i, line, (usable ? UiFlags::ColorWhite : UiFlags::ColorBlack) | UiFlags::AlignCenter, usable);
+	}
+	AddSText(0, TearsLeaveLine, TearsGiver ? _("Back") : _("Walk away"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	AddSLine(4);
+	CurrentItemIndex = 20;
+}
+
+void TearsEnter()
+{
+	if (CurrentTextLine == TearsLeaveLine) {
+		if (!TearsGiver) {
+			ActiveStore = TalkID::None;
+			return;
+		}
+		TearsGiver = std::nullopt;
+		StartStore(TalkID::Tears);
+		return;
+	}
+	const int index = (CurrentTextLine - TearsFirstLine) / 2;
+	if (index < 0 || index >= static_cast<int>(std::size(TearsAttributes)))
+		return;
+	const CharacterAttribute picked = TearsAttributes[index];
+	if (!TearsGiver) {
+		TearsGiver = picked;
+		StartStore(TalkID::Tears);
+		CurrentTextLine = TearsLeaveLine;
+		return;
+	}
+	if (FinishTearsFountain(*TearsGiver, picked))
+		EventPlrMsg(StrCat(_("Your tears move a point from "), TearsAttributeName(*TearsGiver), _(" to "), TearsAttributeName(picked), "."), UiFlags::ColorWhite);
+	TearsGiver = std::nullopt;
+	ActiveStore = TalkID::None;
 }
 
 constexpr int GambleFirstLine = 5;
@@ -2728,6 +2791,9 @@ void StartStore(TalkID s)
 	case TalkID::Gamble:
 		StartGamble();
 		break;
+	case TalkID::Tears:
+		StartTears();
+		break;
 	case TalkID::None:
 		break;
 	}
@@ -2851,6 +2917,14 @@ void StoreESC()
 	case TalkID::Gamble:
 		StartStore(TalkID::Boy);
 		CurrentTextLine = BoyGambleLine();
+		break;
+	case TalkID::Tears:
+		if (TearsGiver) {
+			TearsGiver = std::nullopt;
+			StartStore(TalkID::Tears);
+		} else {
+			ActiveStore = TalkID::None;
+		}
 		break;
 	case TalkID::SmithBuy:
 		StartStore(TalkID::Smith);
@@ -3119,6 +3193,9 @@ void StoreEnter()
 	case TalkID::Gamble:
 		GambleEnter();
 		break;
+	case TalkID::Tears:
+		TearsEnter();
+		break;
 	case TalkID::None:
 		break;
 	}
@@ -3221,12 +3298,15 @@ bool PlayerCanAfford(int price)
 
 namespace {
 
-/** @brief POE2 Mashup (Curtis 2026-10-22): like POE2's vendors, a shop buys anything with a sell price but quest items. */
+/**
+ * @brief POE2 Mashup (Curtis 2026-10-22): like POE2's vendors, a shop buys anything with a sell price but quest items.
+ * Quest rewards like the Butcher's Cleaver or the Harlequin Crest are uniques, so they sell (Curtis 2026-10-29).
+ */
 bool Poe2ShopWillBuy(const Item &item)
 {
 	if (item._itype == ItemType::Gold || item._iClass == ICLASS_QUEST || item._iMiscId == IMISC_EAR)
 		return false;
-	if ((item.IDidx >= IDI_FIRSTQUEST && item.IDidx <= IDI_LASTQUEST) || item.IDidx == IDI_LAZSTAFF)
+	if (IsAnyOf(item.IDidx, IDI_LAZSTAFF, IDI_GLDNELIX))
 		return false;
 	return std::max(item._ivalue, item._iIvalue) > 0;
 }

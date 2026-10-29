@@ -27,6 +27,7 @@
 
 #include "controls/control_mode.hpp"
 #include "controls/plrctrls.h"
+#include "engine/render/automap_render.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "engine/ui_scale.hpp"
 #include "headless_mode.hpp"
@@ -75,6 +76,8 @@ SDLSurfaceUniquePtr WorldSurface;
 std::vector<uint8_t> UiBase;
 /** Where the UI drew its panels, boxes and lines over the world, even in the world's own colours. */
 std::vector<UiCover> UiCovered;
+/** POE2 Mashup: UI pixels laid over the world with real alpha, such as the Tab map's floor (Curtis 2026-10-29). */
+std::vector<UiTint> UiTinted;
 /** For each full-size column and row, the UI column and row it shows. */
 std::vector<uint16_t> UiColumnOf;
 std::vector<uint16_t> UiRowOf;
@@ -94,8 +97,8 @@ bool WantsLayeredFrame()
 }
 
 /**
- * @brief Fills the UI overlay: the UI's own pixels opaque, the ones still showing the world transparent, and the ones a
- * see-through box darkens half black.
+ * @brief Fills the UI overlay: the UI's own pixels opaque, the ones still showing the world transparent, the ones a
+ * see-through box darkens half black, and tinted ones (TintUiPixel) in their colour at their own alpha.
  */
 bool UpdateUiOverlay()
 {
@@ -120,18 +123,31 @@ bool UpdateUiOverlay()
 	const SDL_Color *colors = Palette->colors;
 	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
 	const bool covers = UiCovered.size() == UiBase.size();
+	const bool tints = UiTinted.size() == UiBase.size();
 	for (int y = 0; y < gnScreenHeight; y++) {
 		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * PalSurface->pitch;
 		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(y) * gnScreenWidth;
 		// A panel's pixel in the same colour as the world under it is still the panel's.
 		const UiCover *coverLine = covers ? UiCovered.data() + static_cast<size_t>(y) * gnScreenWidth : nullptr;
 		const bool covered = coverLine != nullptr && std::any_of(coverLine, coverLine + gnScreenWidth, [](UiCover cover) { return cover != UiCover::None; });
+		const UiTint *tintLine = tints ? UiTinted.data() + static_cast<size_t>(y) * gnScreenWidth : nullptr;
+		const bool tinted = tintLine != nullptr && std::any_of(tintLine, tintLine + gnScreenWidth, [](UiTint tint) { return tint.alpha != 0; });
 		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
-		if (!covered && std::memcmp(uiLine, baseLine, gnScreenWidth) == 0) {
+		if (!covered && !tinted && std::memcmp(uiLine, baseLine, gnScreenWidth) == 0) {
 			std::memset(out, 0, static_cast<size_t>(gnScreenWidth) * 4);
 			continue;
 		}
 		for (int x = 0; x < gnScreenWidth; x++, out += 4) {
+			// POE2 Mashup: a tint nothing has been drawn over since lies over the HD world at its own alpha, the same
+			// whatever the 8-bit world under it, so it holds steady while the world scrolls (Curtis 2026-10-29).
+			if (tinted && tintLine[x].alpha != 0 && tintLine[x].color == uiLine[x] && (!covered || coverLine[x] != UiCover::Solid)) {
+				const SDL_Color &color = colors[uiLine[x]];
+				out[0] = color.r;
+				out[1] = color.g;
+				out[2] = color.b;
+				out[3] = tintLine[x].alpha;
+				continue;
+			}
 			if (uiLine[x] == baseLine[x] && (!covered || coverLine[x] == UiCover::None)) {
 				out[3] = 0;
 				continue;
@@ -185,6 +201,7 @@ void CreateWorldSurface()
 	SetUiCoverTarget(nullptr, nullptr);
 	UiBase.clear();
 	UiCovered.clear();
+	UiTinted.clear();
 	HaveScaledWorld = false;
 	if (!IsUiScaled())
 		return;
@@ -197,6 +214,7 @@ void CreateWorldSurface()
 #endif
 	UiBase.assign(static_cast<size_t>(gnScreenWidth) * gnScreenHeight, 0);
 	UiCovered.assign(UiBase.size(), UiCover::None);
+	UiTinted.assign(UiBase.size(), UiTint {});
 	UiColumnOf.resize(gnRenderWidth);
 	for (int x = 0; x < gnRenderWidth; x++)
 		UiColumnOf[x] = static_cast<uint16_t>(std::min(x * gnScreenWidth / gnRenderWidth, gnScreenWidth - 1));
@@ -222,11 +240,19 @@ void ComposeScaledFrame()
 			continue;
 		}
 		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(uiRow) * gnScreenWidth;
-		if (std::memcmp(uiLine, baseLine, gnScreenWidth) == 0)
+		const UiTint *tintLine = UiTinted.size() == UiBase.size() ? UiTinted.data() + static_cast<size_t>(uiRow) * gnScreenWidth : nullptr;
+		const bool tinted = tintLine != nullptr && std::any_of(tintLine, tintLine + gnScreenWidth, [](UiTint tint) { return tint.alpha != 0; });
+		if (!tinted && std::memcmp(uiLine, baseLine, gnScreenWidth) == 0)
 			continue;
 		for (int x = 0; x < gnRenderWidth; x++) {
-			const uint8_t color = uiLine[UiColumnOf[x]];
-			if (color != baseLine[UiColumnOf[x]])
+			const uint16_t column = UiColumnOf[x];
+			const uint8_t color = uiLine[column];
+			// POE2 Mashup: a tint is blended into the full-size world, not the shrunk copy of it under the UI.
+			if (tinted && tintLine[column].alpha != 0 && tintLine[column].color == color) {
+				frameLine[x] = BlendMapColor(color, frameLine[x], tintLine[column].alpha * 100 / 255);
+				continue;
+			}
+			if (color != baseLine[column])
 				frameLine[x] = color;
 		}
 	}
@@ -333,8 +359,10 @@ void PrepareScaledUi()
 	HaveScaledWorld = true;
 	// The UI drawn from here on notes where it covers the world.
 	std::fill(UiCovered.begin(), UiCovered.end(), UiCover::None);
+	std::fill(UiTinted.begin(), UiTinted.end(), UiTint {});
 	const bool fits = PalSurface->w == gnScreenWidth && PalSurface->h == gnScreenHeight && UiCovered.size() == UiBase.size();
-	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr);
+	const bool tintFits = fits && UiTinted.size() == UiBase.size();
+	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr, tintFits ? UiTinted.data() : nullptr);
 }
 
 void ClearScaledWorld()

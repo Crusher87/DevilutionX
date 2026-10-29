@@ -11,6 +11,7 @@
 #include "menu.h"
 #include "pfile.h"
 #include "player.h"
+#include "poe2/economy.hpp"
 #include "poe2/hardcore.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -144,6 +145,11 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	player.poe2.skillSlots[5] = SkillSlot::ForPersistent(PersistentSkill::CastOnDodge);
 	player.poe2.metaSkills[5][1] = SkillSlot::ForSpell(SpellID::Fireball);
 	player.poe2.metaSkillLevels[5][1] = 4;
+	// The first support gem's flag and drought (version 26), and shards counted the old way, which become items.
+	player.poe2.economy.supportGemDropped = true;
+	player.poe2.economy.supportDroughtKills = 7;
+	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] = 4;
+	const int chanceShardsBefore = ShardsInBag(player, ShardKind::Chance);
 	pfile_write_hero(/*writeGameData=*/false);
 
 	player.poe2.clear();
@@ -166,6 +172,10 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)], TrayBinding {});
 	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::LeftMouse)].action, TrayAction::WeaponAttack);
 	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalMages), StartingMinionCount(PersistentSkill::SkeletalMages));
+	EXPECT_TRUE(player.poe2.economy.supportGemDropped);
+	EXPECT_EQ(player.poe2.economy.supportDroughtKills, 7);
+	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 0);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), chanceShardsBefore + 4) << "counted shards are items in the bag now";
 
 	// The hero list reads the league on its own.
 	HardcoreListed = false;

@@ -627,8 +627,18 @@ void DropWaystone(Point position, int tier, bool sendmsg);
 void DropMapReward(Point position, MapReward reward, bool sendmsg, int rarityBonus = 0);
 /** @brief POE2 Mashup: makes the gambler's item of the family, its rarity rolled as the gambler's. */
 bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int areaLevel);
-/** @brief POE2 Mashup: puts a currency item in the hero's inventory, or at their feet if it's full. */
-void GiveCurrencyItem(Player &player, item_misc_id miscId);
+/** @brief POE2 Mashup: where GiveCurrencyItem put the item. */
+enum class GivenItemPlace : uint8_t {
+	Bag,
+	Floor,
+	Lost,
+};
+/** @brief POE2 Mashup: makes a stack of `count` of a currency (or shards), as the anvil and Adria give them; false if there's no such item. */
+bool MakeCurrencyItem(const Player &player, Item &item, item_misc_id miscId, int count = 1);
+/** @brief POE2 Mashup: puts `count` of a currency item in the hero's inventory, or at their feet if it's full. */
+GivenItemPlace GiveCurrencyItem(Player &player, item_misc_id miscId, int count = 1);
+/** @brief POE2 Mashup: puts an item in the hero's inventory (joining its stacks), or at their feet if it's full. */
+GivenItemPlace GiveItemToPlayer(Player &player, const Item &item);
 void DropBossUnique(Monster &monster, bool sendmsg);
 /** @brief POE2 Mashup: drops a kill's loot by the POE2 rules: a number of rolls by how tough the monster was, and a boss's extras. */
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);
@@ -684,6 +694,8 @@ void SpendHeldCurrency(Player &player);
 /** @brief POE2 Mashup: whether the item was picked up with Shift+right-click, to use it again and again (Shift held when using it counts too). */
 void SetStickyItemUse(bool sticky);
 [[nodiscard]] bool WantsStickyItemUse();
+/** @brief Whether the last currency or scroll was picked up with Shift, whether or not Shift is still down. */
+[[nodiscard]] bool StickyItemUseActive();
 /** @brief After currency was used with Shift: puts the next one of its kind on the cursor; false if there's none or no Shift. */
 bool KeepCurrencyOnCursor(Player &player);
 [[nodiscard]] bool HasIdentifyScroll(const Player &player);

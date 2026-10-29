@@ -614,6 +614,11 @@ enum item_misc_id : int16_t {
 	IMISC_ORB_LESSER_JEWELLER,
 	IMISC_ORB_GREATER_JEWELLER,
 	IMISC_ORB_PERFECT_JEWELLER,
+	/** POE2 Mashup: shards stack like currency, and a stack of ten becomes their orb (Curtis 2026-10-29). */
+	IMISC_SHARD_TRANSMUTE,
+	IMISC_SHARD_REGAL,
+	IMISC_SHARD_CHANCE,
+	IMISC_SHARD_ARTIFICER,
 	IMISC_INVALID = -1,
 };
 

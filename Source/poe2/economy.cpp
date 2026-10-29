@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "engine/random.hpp"
+#include "inv.h"
+#include "msg.h"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/bases.hpp"
@@ -14,6 +16,7 @@
 #include "poe2/currency.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/stacking.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "utils/is_of.hpp"
@@ -211,14 +214,6 @@ bool SalvageGivesSomething(const Item &item)
 	return yield && (yield->full > 0 || yield->socketShards > 0 || yield->chanceShards > 0);
 }
 
-int AddShards(Player &player, ShardKind kind, int shards)
-{
-	uint8_t &held = player.poe2.economy.shards[static_cast<size_t>(kind)];
-	const int total = held + std::max(shards, 0);
-	held = static_cast<uint8_t>(total % ShardsPerOrb);
-	return total / ShardsPerOrb;
-}
-
 item_misc_id ShardCurrency(ShardKind kind)
 {
 	switch (kind) {
@@ -233,17 +228,155 @@ item_misc_id ShardCurrency(ShardKind kind)
 	}
 }
 
+item_misc_id ShardMiscId(ShardKind kind)
+{
+	switch (kind) {
+	case ShardKind::Regal:
+		return IMISC_SHARD_REGAL;
+	case ShardKind::Chance:
+		return IMISC_SHARD_CHANCE;
+	case ShardKind::Artificer:
+		return IMISC_SHARD_ARTIFICER;
+	default:
+		return IMISC_SHARD_TRANSMUTE;
+	}
+}
+
+std::optional<ShardKind> ShardKindForMiscId(int miscId)
+{
+	switch (miscId) {
+	case IMISC_SHARD_TRANSMUTE:
+		return ShardKind::Transmutation;
+	case IMISC_SHARD_REGAL:
+		return ShardKind::Regal;
+	case IMISC_SHARD_CHANCE:
+		return ShardKind::Chance;
+	case IMISC_SHARD_ARTIFICER:
+		return ShardKind::Artificer;
+	default:
+		return std::nullopt;
+	}
+}
+
 namespace {
 
-void GainShards(Player &player, ShardKind kind, int shards)
+bool IsShardOf(const Item &item, ShardKind kind)
 {
-	const int orbs = AddShards(player, kind, shards);
-	for (int i = 0; i < orbs; i++)
-		GiveCurrencyItem(player, ShardCurrency(kind));
-	EventPlrMsg(StrCat(shards, " ", ShardName(kind), shards == 1 ? "" : "s", " (", player.poe2.economy.shards[static_cast<size_t>(kind)], "/", ShardsPerOrb, ")"));
+	return item._iMiscId == ShardMiscId(kind) && IsShard(item);
+}
+
+/** @brief The bag index of the biggest stack of the kind's shards. */
+std::optional<int> FullestShardStackIndex(const Player &player, ShardKind kind)
+{
+	std::optional<int> fullest;
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (IsShardOf(player.InvList[i], kind) && (!fullest || StackCount(player.InvList[i]) > StackCount(player.InvList[*fullest])))
+			fullest = i;
+	}
+	return fullest;
+}
+
+std::string_view CurrencyName(item_misc_id currency)
+{
+	for (const ItemData &data : AllItemsList) {
+		if (data.iMiscId == currency)
+			return _(data.iName);
+	}
+	return _("currency");
+}
+
+std::string_view Article(std::string_view name)
+{
+	return name.find_first_of("AEIOU") == 0 ? "an " : "a ";
 }
 
 } // namespace
+
+int ShardsInBag(const Player &player, ShardKind kind)
+{
+	int shards = 0;
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (IsShardOf(player.InvList[i], kind))
+			shards += StackCount(player.InvList[i]);
+	}
+	return shards;
+}
+
+int FullestShardStack(const Player &player, ShardKind kind)
+{
+	const std::optional<int> fullest = FullestShardStackIndex(player, kind);
+	return fullest ? StackCount(player.InvList[*fullest]) : 0;
+}
+
+int GainShards(Player &player, ShardKind kind, int shards)
+{
+	if (shards <= 0)
+		return 0;
+	// POE2 Mashup: shards are items in the bag, like POE2's, and ten in a stack become the orb (Curtis 2026-10-29: told
+	// he got a Chance Shard, he couldn't find it). Whole orbs come as orbs; the rest tops up the fullest stack first.
+	int orbs = shards / ShardsPerOrb;
+	for (int i = 0; i < orbs; i++)
+		GiveCurrencyItem(player, ShardCurrency(kind));
+	Item rest;
+	GivenItemPlace place = GivenItemPlace::Bag;
+	if (shards % ShardsPerOrb > 0 && MakeCurrencyItem(player, rest, ShardMiscId(kind), shards % ShardsPerOrb)) {
+		while (!rest.isEmpty()) {
+			const std::optional<int> stack = FullestShardStackIndex(player, kind);
+			if (!stack || StackRoom(player.InvList[*stack]) <= 0) {
+				place = GiveItemToPlayer(player, rest);
+				break;
+			}
+			Item &target = player.InvList[*stack];
+			const int had = StackCount(rest);
+			MergeStack(target, rest);
+			if (!IsShard(target))
+				orbs++;
+			if (&player == MyPlayer)
+				NetSyncInvItem(player, *stack);
+			// A stack that wouldn't take them (it never should) leaves them their own cell.
+			if (!rest.isEmpty() && StackCount(rest) == had) {
+				place = GiveItemToPlayer(player, rest);
+				break;
+			}
+		}
+	}
+
+	if (place == GivenItemPlace::Lost)
+		return orbs;
+	const std::string_view orbName = CurrencyName(ShardCurrency(kind));
+	std::string text = StrCat(shards, " ", ShardName(kind), shards == 1 ? "" : "s");
+	if (place == GivenItemPlace::Floor)
+		StrAppend(text, _(" at your feet: your bag is full"));
+	else if (orbs == 1)
+		StrAppend(text, ": ", ShardsPerOrb, _(" in a stack became "), Article(orbName), orbName);
+	else if (orbs > 1)
+		StrAppend(text, ": ", orbs * ShardsPerOrb, _(" became "), orbs, " ", orbName, "s");
+	else
+		StrAppend(text, _(" in your bag: "), FullestShardStack(player, kind), _(" of "), ShardsPerOrb, _(" make "), Article(orbName), orbName);
+	EventPlrMsg(text);
+	return orbs;
+}
+
+void ConvertCountedShards(Player &player)
+{
+	for (size_t i = 0; i < ShardKindCount; i++) {
+		uint8_t &counted = player.poe2.economy.shards[i];
+		if (counted == 0)
+			continue;
+		Item shards;
+		if (!MakeCurrencyItem(player, shards, ShardMiscId(static_cast<ShardKind>(i)), std::min<int>(counted, ShardsPerOrb - 1)))
+			continue;
+		// A full bag keeps them counted until there's room.
+		if (AutoPlaceItemInInventory(player, shards))
+			counted = 0;
+	}
+}
+
+std::string ShardStackText(ShardKind kind)
+{
+	const std::string_view orbName = CurrencyName(ShardCurrency(kind));
+	return StrCat(_("A stack of "), ShardsPerOrb, _(" shards becomes "), Article(orbName), orbName);
+}
 
 bool DisenchantInvItem(Player &player, int invIndex)
 {
@@ -286,14 +419,7 @@ std::string SalvageYieldText(const SalvageYield &yield)
 {
 	std::vector<std::string> parts;
 	if (yield.full > 0) {
-		std::string_view name = _("currency");
-		for (const ItemData &data : AllItemsList) {
-			if (data.iMiscId == yield.currency) {
-				name = _(data.iName);
-				break;
-			}
-		}
-		parts.push_back(StrCat(yield.full, " ", name, yield.full == 1 ? "" : "s"));
+		parts.push_back(StrCat(yield.full, " ", CurrencyName(yield.currency), yield.full == 1 ? "" : "s"));
 	}
 	if (yield.socketShards > 0)
 		parts.push_back(StrCat(yield.socketShards, " ", ShardName(ShardKind::Artificer), yield.socketShards == 1 ? "" : "s"));

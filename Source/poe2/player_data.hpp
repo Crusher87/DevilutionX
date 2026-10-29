@@ -775,6 +775,35 @@ struct MinionRevives {
 	int16_t level = -1;
 };
 
+/** @brief POE2 Mashup: what a minion that goes with the hero to the next level is (see poe2/minion_travel.hpp). */
+enum class MinionTravelKind : uint8_t {
+	/** A skeleton (or wolf) of a skeleton gem or a sceptre's granted skill. */
+	Gem,
+	Golem,
+	/** A monster raised by Revive. */
+	Revived,
+};
+
+/**
+ * @brief POE2 Mashup: one of the hero's minions going with the hero to the next level, or waiting while the hero is in
+ * town, where the game keeps no monsters (Curtis 2026-10-29: "they should follow me like POE2").
+ */
+struct TravellingMinion {
+	MinionTravelKind kind = MinionTravelKind::Gem;
+	/** Its _monster_id. */
+	uint16_t type = 0;
+	/** Its life and maximum life, as raw Fixed26_6 values. */
+	int32_t life = 0;
+	int32_t maxLife = 0;
+	/** A revived monster's own stats; the others take theirs from the gem again. */
+	uint8_t minDamage = 0;
+	uint8_t maxDamage = 0;
+	uint8_t armorClass = 0;
+	uint16_t resistance = 0;
+};
+/** @brief Most minions that can go with the hero at once. */
+constexpr size_t MaxTravellingMinions = 48;
+
 struct Poe2PlayerData;
 
 /**
@@ -941,6 +970,20 @@ struct Poe2PlayerData {
 	uint8_t castGraphic = 0;
 	/** @brief The monster the cast skill was aimed at, or -1 (not saved). */
 	int16_t castTargetMonster = -1;
+	/**
+	 * @brief POE2 Mashup: what the attack or cast under way paid as it started, as raw mana and life, and whether it took
+	 * Deep Well's free skill; a dodge roll that breaks it off before it goes off gives it all back (not saved; see
+	 * ActionPaymentScope) (Curtis 2026-10-29).
+	 */
+	int32_t actionPaidMana = 0;
+	int32_t actionPaidLife = 0;
+	bool actionTookFreeSkill = false;
+	void forgetActionPaid()
+	{
+		actionPaidMana = 0;
+		actionPaidLife = 0;
+		actionTookFreeSkill = false;
+	}
 	/** @brief Allocated passive tree nodes, by node id; the class start node isn't stored. */
 	std::bitset<MaxPassiveNodes> passives;
 	/** @brief The attribute picked on each allocated "+5 to any Attribute" node, as a PassiveAttribute. */
@@ -1003,6 +1046,12 @@ struct Poe2PlayerData {
 	uint8_t golemCooldown = 0;
 	/** @brief Revive timers of the RevivingMinionSkills' minions (not saved). */
 	std::array<MinionRevives, RevivingMinionSkills.size()> minionRevives {};
+	/**
+	 * @brief POE2 Mashup: the minions going with the hero to the next level; while the hero is in town they wait here
+	 * for the next dungeon level (saved; see poe2/minion_travel.hpp) (Curtis 2026-10-29).
+	 */
+	std::array<TravellingMinion, MaxTravellingMinions> travellingMinions {};
+	uint8_t travellingMinionCount = 0;
 	/** @brief Support gem timers and counters; mutable so hits can count (not saved). */
 	mutable SupportRuntime supportState {};
 	/** @brief Spirit skill timers and the element infusions carried (not saved). */
@@ -1101,6 +1150,7 @@ struct Poe2PlayerData {
 		castSkill = WeaponSkill::None;
 		castFrame = 0;
 		castTargetMonster = -1;
+		forgetActionPaid();
 		passives.reset();
 		passiveAttributes.fill(0);
 		for (auto &nodes : setPassives)
@@ -1135,6 +1185,8 @@ struct Poe2PlayerData {
 		energyShieldRemainder = 0;
 		golemCooldown = 0;
 		minionRevives = {};
+		travellingMinions = {};
+		travellingMinionCount = 0;
 		supportState = {};
 		spiritState = {};
 		frozenArmorTicks = 0;

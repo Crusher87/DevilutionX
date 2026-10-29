@@ -228,7 +228,7 @@ void DrawAnvil(const Surface &out)
 	DrawString(out, _("Anvil"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::AlignCenter | UiFlags::VerticalCenter });
 	DrawString(out, _("Esc to close"), title, { .flags = UiFlags::AlignRight | UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
 	const Rectangle intro { title.position + Displacement { 0, 32 }, { title.size.width, HeaderHeight - 44 } };
-	DrawString(out, WordWrapString(_("Break down weapons, armour, shields, flasks and charms from your inventory. Each 5% quality gives one matching quality currency, rounded up, and each socket gives an Artificer's Shard. Runes in the sockets are lost. Uniques also give a Chance Shard; 10 make an Orb of Chance."), intro.size.width),
+	DrawString(out, WordWrapString(_("Break down weapons, armour, shields, flasks and charms from your inventory. Each 5% quality gives one matching quality currency, rounded up, and each socket gives an Artificer's Shard. Runes in the sockets are lost. Uniques also give a Chance Shard. Shards go in your bag, and a stack of 10 becomes its orb."), intro.size.width),
 	    intro, { .flags = UiFlags::FontSize12 | UiFlags::ColorWhite, .lineHeight = 15 });
 
 	FillRectangle(out, layout.list, PanelColor);
@@ -249,9 +249,10 @@ void DrawAnvil(const Surface &out)
 		const Rectangle bottom { top.position + Displacement { 0, 18 }, top.size };
 		std::string gives = StrCat(_("Gives "), SalvageYieldText(*yield));
 		if (yield->chanceShards > 0) {
-			// The progress towards the next Orb of Chance shows before the click.
-			const int after = player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] + yield->chanceShards;
-			StrAppend(gives, " (", after >= ShardsPerOrb ? std::string(_("makes an Orb of Chance")) : StrCat(after, "/", ShardsPerOrb), ")");
+			// The progress towards the next Orb of Chance shows before the click: the fullest stack in the bag, which
+			// becomes the orb at ten (Curtis 2026-10-29).
+			const int after = FullestShardStack(player, ShardKind::Chance) + yield->chanceShards;
+			StrAppend(gives, " (", after >= ShardsPerOrb ? std::string(_("makes an Orb of Chance")) : StrCat(after, "/", ShardsPerOrb, _(" in your bag")), ")");
 		}
 		DrawString(list, gives, bottom, { .flags = UiFlags::FontSize12 | UiFlags::ColorWhitegold | UiFlags::VerticalCenter });
 	}

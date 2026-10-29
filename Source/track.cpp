@@ -156,6 +156,9 @@ void RepeatPlayerAction()
 		return;
 	if (!myPlayer.CanChangeAction())
 		return;
+	// POE2 Mashup: a held attack or spell waits for a dodge roll to finish, rather than cutting it short (Curtis 2026-10-29).
+	if (gbIsPoe2 && myPlayer.poe2.isDodging())
+		return;
 
 	// POE2 Mashup: held, a caster weapon's granted skill keeps casting at the cursor.
 	if (UsesGrantedSkill(myPlayer) && IsAnyOf(LastPlayerAction, PlayerActionType::Attack, PlayerActionType::AttackMonsterTarget)) {

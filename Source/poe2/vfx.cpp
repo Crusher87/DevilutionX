@@ -467,6 +467,8 @@ enum class Ambient : uint8_t {
 	Motes,
 	/** @brief Sparks flying off a hard-hitting monster. */
 	Embers,
+	/** @brief POE2 Mashup: a burning stake's big fire: a column of slow embers and soft smoke (Curtis 2026-10-29). */
+	Bonfire,
 };
 
 /** @brief A flame or a patch of lava or water on screen, found anew each frame. */
@@ -480,6 +482,8 @@ struct Emitter {
 	float spread = 0;
 	/** @brief An object's flame: the object, or -1. */
 	int16_t object = -1;
+	/** @brief A bonfire: how tall its flames stand, in world pixels. */
+	float height = 0;
 };
 
 std::vector<Emitter> Emitters;
@@ -1580,6 +1584,73 @@ View WeatherView;
 /** @brief The world's size on screen, for the weather's dim and lightning over all of it. */
 Vec WeatherSize;
 
+/** @brief POE2 Mashup: the big fires round a stake (burncros), in the burning cross rooms and set levels. */
+bool IsBonfire(const Object &object)
+{
+	return IsAnyOf(object._otype, OBJ_BCROSS, OBJ_TBCROSS);
+}
+
+/**
+ * @brief POE2 Mashup: a stake's fire as one bonfire rather than a torch's glow on every lick of its flames: a big warm
+ * glow low in the fire with a hot heart, firelight on the floor round it, and a column of slow embers and soft smoke.
+ * It breathes slowly, as a big fire does, without a torch's flutter (Curtis 2026-10-29).
+ */
+void AddBonfire(const Object &object, int16_t id, Vec corner, const std::vector<HotSpot> &spots, uint32_t seed)
+{
+	// Where the flames sit across the whole animation: their middle, foot, top and width.
+	float area = 0;
+	float sumX = 0;
+	float bottom = spots.front().offset.y;
+	float top = bottom;
+	float left = spots.front().offset.x;
+	float right = left;
+	for (const HotSpot &spot : spots) {
+		const float weight = spot.size * spot.size;
+		area += weight;
+		sumX += spot.offset.x * weight;
+		bottom = std::max(bottom, spot.offset.y + spot.size * 0.5F);
+		top = std::min(top, spot.offset.y - spot.size * 0.5F);
+		left = std::min(left, spot.offset.x - spot.size * 0.5F);
+		right = std::max(right, spot.offset.x + spot.size * 0.5F);
+	}
+	if (area <= 0)
+		return;
+	const Vec base = corner + Vec { sumX / area, bottom };
+	const float height = std::clamp(bottom - top, 24.F, 140.F);
+	const float halfWidth = std::clamp((right - left) * 0.5F, 10.F, 45.F);
+	const float phase = static_cast<float>(seed % 628) / 100.F;
+	const float breathe = 0.92F + 0.05F * std::sin(AmbientTime * 0.0011F + phase) + 0.07F * (SmoothNoise(seed, AmbientTime * 0.0035F) - 0.5F);
+
+	Ring glow;
+	glow.life = 1;
+	glow.width = 0;
+	glow.disc = true;
+	glow.ground = false;
+	glow.flame = id;
+	glow.pos = base - Vec { 0, height * 0.3F };
+	glow.r0 = glow.r1 = std::clamp((0.55F * height) + (0.8F * halfWidth), 40.F, 90.F) * (0.97F + 0.03F * breathe);
+	glow.colour = { 255, 125, 40 };
+	glow.alpha = 0.32F * breathe;
+	FrameGlows.push_back(glow);
+	glow.pos = base - Vec { 0, height * 0.15F };
+	glow.r0 = glow.r1 = std::clamp(0.4F * halfWidth + 0.12F * height, 10.F, 26.F);
+	glow.colour = { 255, 205, 130 };
+	glow.alpha = 0.45F * breathe;
+	FrameGlows.push_back(glow);
+	// The firelight lies on the floor, so it stays under whoever stands by the fire.
+	glow.pos = TileCentre(object.position);
+	glow.ground = true;
+	glow.flame = -1;
+	glow.r0 = glow.r1 = TileRadius * 2.2F;
+	glow.colour = { 255, 140, 50 };
+	glow.alpha = 0.16F * breathe;
+	FrameGlows.push_back(glow);
+
+	Emitter emitter { base, std::sqrt(area), Ambient::Bonfire, { 255, 150, 50 }, halfWidth, id };
+	emitter.height = height;
+	Emitters.push_back(emitter);
+}
+
 void ScanFlames(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
@@ -1596,6 +1667,11 @@ void ScanFlames(const View &view)
 		uint32_t seed = (static_cast<uint32_t>(object.position.x) * 73856093U) ^ (static_cast<uint32_t>(object.position.y) * 19349663U);
 		// The grate's fire comes and goes with its frames; the lights keep their flames where the whole animation has them.
 		const std::vector<HotSpot> &spots = object._otype == OBJ_FLAMEHOLE ? FlameSpots(sprite) : SteadyFlameSpots(object);
+		if (IsBonfire(object)) {
+			if (!spots.empty())
+				AddBonfire(object, static_cast<int16_t>(id), corner, spots, seed);
+			continue;
+		}
 		for (const HotSpot &spot : spots) {
 			seed = seed * 1664525U + 1013904223U;
 			Vec pos = corner + spot.offset;
@@ -1742,7 +1818,7 @@ void ScanStrongboxes(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
 		const Object &object = Objects[ActiveObjects[i]];
-		if (!IsClosedStrongbox(object) || BehindWall(object.position))
+		if (!StrongboxStandsOut(object) || BehindWall(object.position))
 			continue;
 		const Vec feet = TileCentre(object.position);
 		if (!view.contains(feet, 120))
@@ -2268,6 +2344,47 @@ void EmitAmbient(float ms)
 			for (int i = Occurrences(3, ms); i > 0; i--)
 				Spray(emitter.pos + Vec { Random(-10, 10), Random(-10, 10) }, 2, 40, 110, 150, 300, Shape::Streak, { 255, 230, 160 }, { 220, 90, 20 }, 1.3F, 0.4F, 20, 90, 300, 1.5F, 1);
 			break;
+		case Ambient::Bonfire: {
+			// POE2 Mashup: more embers than a torch's, bigger and slower, drifting up in a tall column, with soft
+			// smoke rolling off the top of the flames (Curtis 2026-10-29).
+			const float spread = emitter.spread;
+			const float height = emitter.height;
+			for (int i = Occurrences(18, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-0.7F, 0.7F) * spread, Random(-3, 3) };
+				p.z = Random(0, 0.4F * height);
+				p.vel = { Random(-7, 7), Random(-2, 2) };
+				p.vz = Random(28, 52);
+				p.gravity = -6;
+				p.drag = 0.35F;
+				p.life = Random(1800, 3400);
+				p.size0 = Random(1.8F, 2.8F);
+				p.size1 = 0.5F;
+				p.c0 = { 255, 215, 130 };
+				p.c1 = { 210, 70, 15 };
+				p.alpha = 0.95F;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(2.2F, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-0.4F, 0.4F) * spread, 0 };
+				p.z = Random(0.7F, 0.95F) * height;
+				p.vel = { Random(-3, 6), 0 };
+				p.vz = Random(12, 20);
+				p.drag = 0.1F;
+				p.life = Random(3200, 4800);
+				p.size0 = 6;
+				p.size1 = Random(26, 36);
+				p.c0 = { 40, 34, 30 };
+				p.c1 = { 18, 16, 15 };
+				p.alpha = 0.17F;
+				p.shape = Shape::Puff;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			break;
+		}
 		}
 	}
 }

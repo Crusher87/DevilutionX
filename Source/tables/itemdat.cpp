@@ -569,6 +569,10 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "SUPPORT_BATTLERAGE") return IMISC_SUPPORT_BATTLERAGE;
 	if (value == "OMEN") return IMISC_OMEN;
 	if (value == "AUGMENT") return IMISC_AUGMENT;
+	if (value == "SHARD_TRANSMUTE") return IMISC_SHARD_TRANSMUTE;
+	if (value == "SHARD_REGAL") return IMISC_SHARD_REGAL;
+	if (value == "SHARD_CHANCE") return IMISC_SHARD_CHANCE;
+	if (value == "SHARD_ARTIFICER") return IMISC_SHARD_ARTIFICER;
 	return std::unexpected("Unknown enum value");
 }
 

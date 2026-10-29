@@ -1004,3 +1004,7 @@ poe2:quarterstaff_skullcrusher_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	
 poe2:quarterstaff_striking_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Striking Quarterstaff	Quarterstaff	77	65	53	111	0	0	0	50	127		NONE	Null	false	7800
 poe2:quarterstaff_razor_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Razor Quarterstaff	Quarterstaff	77	65	65	108	0	0	0	50	127		NONE	Null	false	7800
 poe2:quarterstaff_aegis_quarterstaff	1	Weapon	Two-handed	WAR_STAFF	Staff	NONE	Fine Aegis Quarterstaff	Quarterstaff	79	65	58	97	0	0	0	50	127		NONE	Null	false	8000
+poe2:shard_transmutation	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Transmutation Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_TRANSMUTE	Null	false	20
+poe2:shard_regal	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Regal Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_REGAL	Null	false	150
+poe2:shard_chance	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Chance Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_CHANCE	Null	false	150
+poe2:shard_artificer	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Artificer's Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_ARTIFICER	Null	false	200

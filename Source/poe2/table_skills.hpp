@@ -8,11 +8,13 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
 #include "engine/point.hpp"
 #include "poe2/player_data.hpp"
+#include "sound_effect_enums.h"
 #include "tables/misdat.h"
 #include "utils/fixed_point.hpp"
 
@@ -365,11 +367,64 @@ void ApplyAuraCurse(const Player &player, Monster &monster, WeaponSkill skill, i
 /** @brief The cast effects of a table skill. */
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target);
 
+/** @brief POE2 Mashup: a sound a skill makes, one of Diablo's or one of the mod's own files. */
+struct SkillSound {
+	SfxID sfx = SfxID::None;
+	/** A mod sound's path (PlayModSfxLoc), when sfx is None. */
+	std::string_view mod = {};
+
+	[[nodiscard]] bool empty() const
+	{
+		return sfx == SfxID::None && mod.empty();
+	}
+};
+
+/**
+ * @brief POE2 Mashup: what a table skill sounds like, so every skill is heard as it is cast and as it goes off (Curtis
+ * 2026-10-29: Freezing Shards, Lightning Bolt, Withering Bolt and Mana Drain made no sound). Each is the closest of
+ * Diablo's sounds for the skill's element, shape and look, or one of the mod's frost sounds.
+ */
+struct SkillSounds {
+	/**
+	 * The hero casting it: a spell's incantation as its cast animation starts (as Diablo's spells do), an attack's
+	 * swing, throw or shot as it lands.
+	 */
+	SkillSound cast;
+	/**
+	 * The skill going off, once a cast: its projectiles leaving, its blast, strike, curse or buff, its zone appearing;
+	 * a Stream's with each shot, and a zone that bursts later (Meteor, Condemn, Glacial Spike, Frozen Orb) as it bursts.
+	 */
+	SkillSound spell;
+	/**
+	 * Its projectiles, landing bursts and zone strikes hitting, at most one each HitSoundGapTicks for the skill, so a
+	 * fan of shards doesn't stack into noise; empty when its hits make no sound of their own (arrows, blades, blows).
+	 */
+	SkillSound hit;
+};
+
+/** @brief Game ticks between two hit sounds of one skill. */
+constexpr int HitSoundGapTicks = 9;
+
+/** @brief A table skill's sounds (see SkillSounds). */
+[[nodiscard]] SkillSounds TableSkillSounds(const TableSkillData &data);
+/** @brief Plays a skill's sound at a tile, nothing for an empty one; an ice shard is one of the four in turn. */
+void PlaySkillSound(const SkillSound &sound, Point tile);
+/** @brief Plays a table skill's hit sound at a tile, unless the skill's last one played under HitSoundGapTicks ago. */
+void PlayTableSkillHitSound(const TableSkillData &data, Point tile);
+/**
+ * @brief A projectile is landing (its explosion is being added): plays its skill's hit sound, at most so often, and
+ * returns the sound its explosion makes instead of its own, SfxID::None; nullopt keeps the explosion's own sound, for
+ * every projectile that isn't a skill's.
+ */
+std::optional<SfxID> SkillMissileLandSound(const Missile &missile);
+
 /** @brief Runs the zones on the ground; once per game tick for the local player. */
 void ProcessSkillZones(Player &player);
 void ClearSkillZones();
 /** @brief How many zones are on the ground. */
 size_t SkillZoneCount();
+/** @brief Where a zone on the ground is, oldest first; nullopt past the last. */
+std::optional<Point> SkillZoneCenter(size_t index);
 
 /** @brief A monster's melee hit on the player, after curses and the player's defensive skills. */
 Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 damage);

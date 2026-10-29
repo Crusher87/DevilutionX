@@ -37,6 +37,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
@@ -871,6 +872,68 @@ TEST_F(Poe2GrantedSkillsTest, CriticalBoltDoublesEveryFifthCast)
 	EXPECT_EQ(player.poe2.grantedState.criticalCasts, 0);
 }
 
+TEST_F(Poe2GrantedSkillsTest, ManaDrainDealsNoDamageButDrainsAndSlows)
+{
+	// Curtis 2026-10-29: "it says Mana Drain, so it should just drain mana from enemies". Its bolt flies and hits as
+	// before, for nothing, and the hit still gives the hero mana and slows the enemy.
+	Player &player = *MyPlayer;
+	LoadMonsters();
+	// Open floor for the bolt.
+	SOLData[0] = TileProperties::None;
+	for (int x = 10; x < 40; x++) {
+		for (int y = 10; y < 40; y++) {
+			dPiece[x][y] = 0;
+			dObject[x][y] = 0;
+			dMonster[x][y] = 0;
+		}
+	}
+	const TableSkillData &row = *FindTableSkill(WeaponSkill::ManaDrain);
+	EXPECT_EQ(row.damagePercent, 0);
+	EXPECT_EQ(row.rider, GrantedRider::ManaDrain);
+	// No longer a damage skill: no damage tag, so no damage supports, and its details show its effect, not a hit.
+	EXPECT_EQ(SkillTags(SkillSlot::ForAttack(WeaponSkill::ManaDrain)) & ST_Damage, 0U);
+	EXPECT_EQ(SkillHitAverage(player, SkillSlot::ForAttack(WeaponSkill::ManaDrain), 9), 0.0);
+
+	Hold(player, "Attuned Wand", 70);
+	ASSERT_EQ(GrantedAttackSkill(player), WeaponSkill::ManaDrain);
+	bool damageLines = false;
+	bool effectLine = false;
+	for (const SkillDetailLine &line : SkillDetails(player, DefaultAttackRow)) {
+		damageLines = damageLines || line.label == "Damage" || line.label == "Damage per hit" || line.label == "Average hit";
+		effectLine = effectLine || line.label.starts_with("No damage");
+	}
+	EXPECT_FALSE(damageLines);
+	EXPECT_TRUE(effectLine);
+	Monster &monster = PlaceMonster(0, { 20, 24 });
+	dMonster[20][24] = 1;
+	pcursmonst = 0;
+	player._pMaxMana = player._pMaxManaBase = Fixed26_6::fromInt(100);
+	ASSERT_TRUE(TryUseGrantedSkill(player));
+	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(0)) << "free with no supports";
+	for (int tick = 0; tick < 60 && player._pmode == PM_SPELL; tick++) {
+		TestPlayerProcessAction(player);
+		player.poe2.tick();
+	}
+	Missile *bolt = nullptr;
+	for (Missile &missile : Missiles) {
+		if (missile._mitype == MissileID::BlueFlare2)
+			bolt = &missile;
+	}
+	ASSERT_NE(bolt, nullptr);
+	EXPECT_EQ(bolt->poe2.damagePercent, 0);
+	const Fixed26_6 manaBefore = player._pMana;
+	for (int tick = 0; tick < 60 && !bolt->_miDelFlag; tick++)
+		GetMissileData(bolt->_mitype).processFn(*bolt);
+	EXPECT_TRUE(bolt->_miDelFlag) << "the bolt reached the monster";
+	EXPECT_EQ(monster.hitPoints, monster.maxHitPoints) << "no damage";
+	EXPECT_GT(ManaDrainMana(player.poe2.effectiveLevel(WeaponSkill::ManaDrain)), 0);
+	EXPECT_EQ(player._pMana, manaBefore + Fixed26_6::fromInt(ManaDrainMana(player.poe2.effectiveLevel(WeaponSkill::ManaDrain))));
+	EXPECT_EQ(monster.poe2.chillTicks, ManaDrainSlowTicks);
+	EXPECT_EQ(monster.poe2.chillPercent, ManaDrainSlowPercent);
+	dMonster[20][24] = 0;
+	ActiveMonsterCount = 0;
+}
+
 TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 {
 	// Plan 7.2: the hit (% of the spell base), the cast time, and the damage a second on one target, within 5%. The
@@ -897,7 +960,7 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		// Riders in: Wither and a cull about +10%, Critical Bolt's double every fifth cast +20%.
 		{ WeaponSkill::WitheringBolt, 37, 750, 54 }, // 49 with Wither
 		{ WeaponSkill::BoneBolt, 38, 750, 51 },
-		{ WeaponSkill::ManaDrain, 15, 850, 18 },
+		{ WeaponSkill::ManaDrain, 0, 850, 0 }, // no damage, only mana and a slow (Curtis 2026-10-29)
 		{ WeaponSkill::PowerSiphon, 35, 700, 55 }, // 50 with the cull
 		{ WeaponSkill::TormentBolt, 38, 750, 51 },
 		{ WeaponSkill::CriticalBolt, 34, 750, 54 }, // on average
@@ -1142,7 +1205,8 @@ TEST_F(Poe2GrantedSkillsTest, ACastFiresFiveChillingShards)
 	Hold(player, "Gelid Staff", 33);
 	Target();
 	const TableSkillData &row = *FindTableSkill(WeaponSkill::FreezingShards);
-	EXPECT_EQ(row.count, 5);
+	// Curtis 2026-10-29: three shards a cast, not five.
+	EXPECT_EQ(row.count, 3);
 	EXPECT_EQ(row.type, DamageType::Magic);
 	ASSERT_TRUE(TryUseGrantedSkill(player));
 	EXPECT_EQ(player._pmode, PM_SPELL);
@@ -1163,7 +1227,7 @@ TEST_F(Poe2GrantedSkillsTest, ACastFiresFiveChillingShards)
 		}
 		Missiles.clear();
 	}
-	EXPECT_EQ(shards, 5);
+	EXPECT_EQ(shards, 3);
 	EXPECT_EQ(damagePercent, GemDamagePercent(Shards, 9) * 64 / 100);
 	EXPECT_EQ(GemDamagePercent(Shards, 9), FireballCurvePercent(GrantedCurveEndAt20, 9));
 }
@@ -1207,7 +1271,7 @@ TEST_F(Poe2GrantedSkillsTest, HoldControllerAndSkillBarCastIt)
 	RepeatPlayerAction();
 	EXPECT_EQ(player._pmode, PM_SPELL);
 	EXPECT_EQ(player.poe2.castSkill, WeaponSkill::FreezingShards);
-	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 5);
+	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 3);
 	sgbMouseDown = CLICK_NONE;
 
 	// The controller's attack button at a monster.
@@ -1216,13 +1280,13 @@ TEST_F(Poe2GrantedSkillsTest, HoldControllerAndSkillBarCastIt)
 	PerformPrimaryAction();
 	EXPECT_EQ(player._pmode, PM_SPELL);
 	EXPECT_EQ(player.poe2.castSkill, WeaponSkill::FreezingShards);
-	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 5);
+	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 3);
 
 	// The skill bar's weapon attack (the left mouse button's tray binding).
 	Stand(player);
 	ASSERT_TRUE(UseDefaultAttack(player, player.poe2.weaponSet));
 	EXPECT_EQ(player.poe2.castSkill, WeaponSkill::FreezingShards);
-	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 5);
+	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 3);
 
 	// Never in town.
 	Stand(player);
@@ -1245,9 +1309,11 @@ TEST_F(Poe2GrantedSkillsTest, TheDefaultRowsSupportsApply)
 	EXPECT_FALSE(player.poe2.hasSupport(Shards, SupportGem::Brutality));
 	EXPECT_EQ(player.poe2.supportTier(Shards, SupportGem::Volley), player.poe2.socketTier(DefaultAttackRow, 0));
 
-	// Supported, it costs its base of 2 times the supports' multiplier, and can't be cast without the mana.
+	// Supported, it costs its base of 2, a third dearer for a spell (3, Curtis 2026-10-29), times the supports'
+	// multiplier, and can't be cast without the mana.
+	EXPECT_EQ(ApplySkillKindManaPercent(Shards, GrantedSupportedManaCost), 3);
 	const int cost = WeaponSkillManaCost(player, WeaponSkill::FreezingShards);
-	EXPECT_EQ(cost, GrantedSupportedManaCost * SupportManaCostPercent(player, Shards, true) / 100);
+	EXPECT_EQ(cost, 3 * SupportManaCostPercent(player, Shards, true) / 100);
 	EXPECT_GT(cost, 0);
 	EXPECT_FALSE(TryUseGrantedSkill(player));
 	EXPECT_EQ(player._pmode, PM_STAND);
@@ -1255,7 +1321,7 @@ TEST_F(Poe2GrantedSkillsTest, TheDefaultRowsSupportsApply)
 	player._pMana = player._pManaBase = Fixed26_6::fromInt(100);
 	ASSERT_TRUE(TryUseGrantedSkill(player));
 	EXPECT_EQ(player._pMana, Fixed26_6::fromInt(100 - cost));
-	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 5 + SupportExtraProjectileCount(player, Shards));
+	EXPECT_EQ(FinishCast(player, MissileID::BlueFlare), 3 + SupportExtraProjectileCount(player, Shards));
 	EXPECT_GT(SupportExtraProjectileCount(player, Shards), 0);
 
 	// Bare again, it's free.

@@ -13,6 +13,7 @@
 #ifdef _DEBUG
 #include "debug.h"
 #endif
+#include "effects.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/point.hpp"
 #include "engine/random.hpp"
@@ -145,13 +146,16 @@ Fixed26_6 GetManaAmount(const Player &player, SpellID sn, bool lifeShare)
 		ma = GemBaseManaCost(SkillSlot::ForSpell(sn), gemLevel);
 	} else if (sn == SpellID::Healing || sn == SpellID::HealOther) {
 		ma = (GetSpellData(SpellID::Healing).sManaCost + 2 * player.getCharacterLevel() - adj);
+		// POE2 Mashup: spells cost a third more (SpellManaCostPercent, Curtis 2026-10-29).
+		ma = ApplySkillKindManaPercent(SkillSlot::ForSpell(sn), ma);
 	} else if (GetSpellData(sn).sManaCost == 255) {
 		ma = player._pMaxManaBase.whole() - adj;
 	} else {
 		ma = (GetSpellData(sn).sManaCost - adj);
-		// POE2 Mashup: a spell cast without a gem costs more for its speed too, as its gem would (mana_pct).
+		// POE2 Mashup: a spell cast without a gem costs more for its speed too, as its gem would (mana_pct), then a
+		// third more for being a spell (SpellManaCostPercent, Curtis 2026-10-29).
 		if (gbIsPoe2)
-			ma = ((ma * SkillSpeedManaPercent(SkillSlot::ForSpell(sn))) + 50) / 100;
+			ma = ApplySkillKindManaPercent(SkillSlot::ForSpell(sn), ((ma * SkillSpeedManaPercent(SkillSlot::ForSpell(sn))) + 50) / 100);
 	}
 
 	Fixed26_6 manaAmount = Fixed26_6::fromInt(std::max(ma, 0));
@@ -260,6 +264,10 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 	// POE2 Mashup: the extra sound of the spell's look (poe2/skill_looks.hpp).
 	if (supported)
 		PlaySkillLookSound(SkillSlot::ForSpell(spl), dst);
+	// POE2 Mashup: Blood Star's bolt leaves with Diablo's Blood Star sound, once a cast (its missile, the Succubi's too,
+	// has none); it lands with its impact (SkillMissileLandSound).
+	if (gbIsPoe2 && spl == SpellID::BloodStar)
+		PlaySfxLoc(SfxID::SpellBloodStar, src);
 	// POE2 Mashup: Apocalypse eats an element infusion for a much bigger cast.
 	const uint8_t infusion = supported ? TakeInfusion(player, SkillSlot::ForSpell(spl)) : 0;
 	const auto spawnMissiles = [&](WorldTilePosition target) {

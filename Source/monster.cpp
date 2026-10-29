@@ -4885,10 +4885,10 @@ void ProcessMonsters()
 			monster.aiSeed = AdvanceRndSeed();
 		}
 		if (monster.hitPoints < monster.maxHitPoints && !monster.hasNoLife()) {
-			if (monster.level(sgGameInitInfo.nDifficulty) > 1) {
-				monster.hitPoints += Fixed26_6::fromRaw(monster.level(sgGameInitInfo.nDifficulty) / 2);
-			} else {
-				monster.hitPoints += Fixed26_6::fromRaw(monster.level(sgGameInitInfo.nDifficulty));
+			// POE2 Mashup: monsters don't heal on their own; only the Regenerating affix (monster_mods.cpp) heals them.
+			if (!gbIsPoe2) {
+				const int level = monster.level(sgGameInitInfo.nDifficulty);
+				monster.hitPoints += Fixed26_6::fromRaw(level > 1 ? level / 2 : level);
 			}
 			// POE2 Mashup: a minion regenerates its owner's sceptre's life regeneration too.
 			monster.hitPoints += Fixed26_6::fromRaw(MinionGearRegenRaw(monster));
@@ -5607,6 +5607,33 @@ void RemoveMonsterQuietly(size_t activeIndex)
 	if (pcursmonst == static_cast<int>(ActiveMonsters[activeIndex]))
 		pcursmonst = -1;
 	DeleteMonster(activeIndex);
+}
+
+void TakeMinionOffLevel(Monster &minion)
+{
+	const size_t id = minion.getId();
+	if (id < ReservedMonsterSlotsForGolems) {
+		M_ClearSquares(minion);
+		dMonster[minion.position.tile.x][minion.position.tile.y] = 0;
+		minion.position.tile = GolemHoldingCell;
+		minion.position.future = { 0, 0 };
+		minion.position.old = { 0, 0 };
+		if (pcursmonst == static_cast<int>(id))
+			pcursmonst = -1;
+		// Nothing goes on fighting it, as DeleteMonster sees to for the others.
+		for (size_t i = 0; i < ActiveMonsterCount; i++) {
+			Monster &other = Monsters[ActiveMonsters[i]];
+			if ((other.flags & MFLAG_TARGETS_MONSTER) != 0 && other.enemy == id)
+				other.flags |= MFLAG_NO_ENEMY;
+		}
+		return;
+	}
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		if (ActiveMonsters[i] == id) {
+			RemoveMonsterQuietly(i);
+			return;
+		}
+	}
 }
 
 namespace {

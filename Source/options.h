@@ -696,6 +696,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean mapPoiNames;
 	/** @brief Active quests and their next steps under the corner map (POE2 Mashup). */
 	OptionEntryBoolean enableQuestTracking;
+	/** @brief Cathedral floors built as a winding main way of rooms with side areas (POE2 Mashup). */
+	OptionEntryBoolean newCathedralFloors;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */

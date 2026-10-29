@@ -122,6 +122,8 @@ bool ShadowStepBehind(Player &player)
 	if (!destination)
 		return false;
 	AddVisualEffect(player.position.tile, MissileGraphicID::Etherealize);
+	// POE2 Mashup: the step through the shadows is its cast sound.
+	PlaySfxLoc(SfxID::SpellEtherealize, player.position.tile);
 	MovePlayerTo(player, *destination);
 	player._pdir = GetDirection(player.position.tile, monster.position.tile);
 	AddVisualEffect(player.position.tile, MissileGraphicID::BoneHit);
@@ -201,9 +203,13 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 {
 	if (!CanStartSkill(player))
 		return false;
-	PaySkillMana(player, skill);
-	if (graphic == player_graphic::Attack && !player.UsesRangedWeapon())
-		PayMeleeAttackLife(player);
+	{
+		// POE2 Mashup: a dodge roll before the skill goes off gives this back (Curtis 2026-10-29).
+		const ActionPaymentScope price(player);
+		PaySkillMana(player, skill);
+		if (graphic == player_graphic::Attack && !player.UsesRangedWeapon())
+			PayMeleeAttackLife(player);
+	}
 	Point target = SkillTarget(player);
 	// Projectiles with nothing under the cursor fly exactly where it points, at any angle.
 	if (pcursmonst == -1 && &player == MyPlayer && (IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt) || GrantedSkillAimsAlongCursor(skill)))
@@ -681,7 +687,8 @@ int WeaponSkillManaCost(const Player &player, WeaponSkill skill, bool lifeShare)
 		const SupportSockets supports = player.poe2.supportsFor(slot);
 		if (std::all_of(supports.begin(), supports.end(), [](SupportGem gem) { return gem == SupportGem::None; }))
 			return 0;
-		return GrantedSupportedManaCost * SupportManaCostPercent(player, slot, lifeShare) / 100;
+		// POE2 Mashup: they're all spells, so the base is a third dearer, 2 to 3 (SpellManaCostPercent, Curtis 2026-10-29).
+		return ApplySkillKindManaPercent(slot, GrantedSupportedManaCost) * SupportManaCostPercent(player, slot, lifeShare) / 100;
 	}
 	const int cost = GemBaseManaCost(SkillSlot::ForAttack(skill), player.poe2.skillLevel(skill));
 	return cost * SupportManaCostPercent(player, SkillSlot::ForAttack(skill), lifeShare) / 100;
@@ -943,6 +950,32 @@ void ActivateQueuedWeaponSkill(Player &player, bool isRangedAttack)
 	player.poe2.activeSkill = skill;
 }
 
+namespace {
+
+/** @brief POE2 Mashup: the incantation of a skill cast with a spell's animation (see SkillSounds::cast). */
+SkillSound SkillIncantation(WeaponSkill skill)
+{
+	switch (skill) {
+	case WeaponSkill::EmberFusillade:
+		return { SfxID::CastFire };
+	case WeaponSkill::Spark:
+		return { SfxID::CastLightning };
+	case WeaponSkill::IceBolt:
+	case WeaponSkill::FrostNova:
+	case WeaponSkill::AmplifyDamage:
+		return { SfxID::CastSkill };
+	case WeaponSkill::BattleCry:
+		// A shout: the hero's own war cry is its cast.
+		return {};
+	default:
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			return TableSkillSounds(*table).cast;
+		return {};
+	}
+}
+
+} // namespace
+
 void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graphic, Point target, bool quickStrike, int dashTicks)
 {
 	const SkillLookScope skillLook(skill);
@@ -972,6 +1005,11 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 	player.poe2.castFrame = actionFrame;
 	player.poe2.castTargetMonster = -1;
 	player.poe2.castGraphic = static_cast<uint8_t>(graphic);
+	// POE2 Mashup: a spell's incantation as its cast animation starts, as Diablo's spells do (Curtis 2026-10-29: the
+	// Sorcerer's granted skills had none); an attack's swing sounds as it lands (PlaySkillEffects), and a dash's landing
+	// is no new cast.
+	if (!attack && dashTicks < 0)
+		PlaySkillSound(SkillIncantation(skill), player.position.tile);
 	if (SpinsWhileStriking(skill)) {
 		player.poe2.spinFrom = static_cast<uint8_t>(dir);
 		const TableSkillData *table = FindTableSkill(skill);
@@ -1370,17 +1408,23 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		// Arrowheads spark as the volley comes down.
 		for (size_t i = 0; i < RainOfArrowsVolley.size(); i++)
 			AddVisualEffect(target + RainOfArrowsVolley[i], MissileGraphicID::MetalHit, 6 + static_cast<int>(i), i == 0 ? 4 : 0);
+		// POE2 Mashup: the volley is heard coming down on the target, after the bow's shot (DoRangeAttack).
+		PlaySfxLoc(SfxID::ShootBow, target);
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 4);
 		break;
 	case WeaponSkill::LightningArrow:
 		vfx::Sparks(tile + dir, vfx::Element::Lightning, 0.8F);
+		// POE2 Mashup: the arrow crackles with Charged Bolt's sound as it leaves the bow.
+		PlaySfxLoc(SfxID::SpellChargedBolt, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 3);
 		break;
 	case WeaponSkill::EscapeShot:
 		vfx::Impact(tile, vfx::Element::Cold, 0.8F);
 		AddVisualEffect(tile, MissileGraphicID::BoneHit, 0, 3);
+		// POE2 Mashup: the leap back, beside the arrows' twang.
+		PlaySfxLoc(SfxID::Swing, tile);
 		break;
 	case WeaponSkill::EmberFusillade:
 		vfx::Impact(tile, vfx::Element::Fire, 0.7F);
@@ -1415,6 +1459,8 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		AddVisualEffect(tile + Right(dir), MissileGraphicID::MetalHit, 0, 4);
 		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 1, 6);
 		AddVisualEffect(tile + Left(dir), MissileGraphicID::MetalHit, 2, 4);
+		// POE2 Mashup: the swing, then the ring of steel.
+		PlaySfxLoc(SfxID::Swing, tile);
 		PlaySfxLoc(SfxID::ItemSword, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 4);
@@ -1424,12 +1470,17 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		vfx::SwingAs(tile, target, vfx::Element::Chaos, WeaponSwingStyle(player), false);
 		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 1, 4);
+		// POE2 Mashup: the stab from behind (its cast was the step, see ShadowStepBehind).
+		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
 	case WeaponSkill::Frenzy:
 		vfx::SwingAs(tile, target, vfx::Element::Blood, WeaponSwingStyle(player), HoldsHeavyWeapon(player));
 		vfx::Sparks(target, vfx::Element::Blood, 0.9F);
 		AddVisualEffect(target, MissileGraphicID::BloodHit, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::MetalHit, 2, 3);
+		// POE2 Mashup: a quick attack can skip the swing's own sound (DoAttack), so it swings here, and draws blood.
+		PlaySfxLoc(SfxID::Swing2, tile);
+		PlaySfxLoc(SfxID::SpellBloodStarHit, target);
 		break;
 	case WeaponSkill::Smite:
 		// A lightning blow, like POE2's Smite (Curtis 2026-10-28): the hammer falls with a bolt from the sky.
@@ -1446,15 +1497,22 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 		vfx::Arc(tile, target, vfx::Element::Lightning);
 		AddVisualEffect(target, MissileGraphicID::ThinLightning, 0, 4);
 		AddVisualEffect(target, MissileGraphicID::Lightning, 1);
+		// POE2 Mashup: the staff's swing (a quick attack can skip DoAttack's), and the thunder where it lands.
+		PlaySfxLoc(SfxID::Swing2, tile);
+		PlaySfxLoc(SfxID::SpellLightningHit, target);
 		break;
 	case WeaponSkill::RapidFire:
 		vfx::Volley(tile, target, 1, true);
+		// POE2 Mashup: the crossbow's twang; each bolt then leaves with its own shot (FireVolleyShot).
+		PlaySfxLoc(SfxID::ShootBow2, tile);
 		break;
 	case WeaponSkill::ShieldBash:
 		vfx::Swing(tile, tile + dir, vfx::Element::Physical, false);
 		vfx::Impact(tile + dir, vfx::Element::Physical, 0.9F);
 		AddVisualEffect(tile + dir, MissileGraphicID::HolyBoltExplosion, 0, 6);
 		AddVisualEffect(tile + dir, MissileGraphicID::BoneHit, 1);
+		// POE2 Mashup: the swing, then the shield's crash.
+		PlaySfxLoc(SfxID::Swing, tile);
 		PlaySfxLoc(SfxID::ItemShield, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Medium, 5);

@@ -31,6 +31,7 @@
 #include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
+#include "poe2/economy_state.hpp"
 #include "poe2/item_search.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
@@ -1096,9 +1097,9 @@ void PlaceRepairedItem(Item item, unsigned page)
 	}
 	while (!item.isEmpty()) {
 		Item part = item;
-		if (IsStackable(item) && StoredStackCount(item) > CurrencyStackMax) {
-			SetStackCount(part, CurrencyStackMax);
-			SetStoredStackCount(item, StoredStackCount(item) - CurrencyStackMax);
+		if (IsStackable(item) && StoredStackCount(item) > StackMax(item)) {
+			SetStackCount(part, StackMax(item));
+			SetStoredStackCount(item, StoredStackCount(item) - StackMax(item));
 		} else {
 			if (IsStackable(part))
 				SetStackCount(part, StoredStackCount(part));
@@ -1193,6 +1194,38 @@ bool PremadeTabHasRoom(unsigned page, const Item &item)
 	return placement->stacks && room >= StoredStackCount(item);
 }
 
+namespace {
+
+/** POE2 Mashup: a Currency tab's shards become their orbs, in the orb's slot, ten at a time (Curtis 2026-10-29). */
+void CombineStoredShards(unsigned page, unsigned slot)
+{
+	const StashStruct::StashCell index = StashTabSlotItem(page, slot);
+	if (index == StashStruct::EmptyCell || !IsShard(Stash.stashList[index]))
+		return;
+	const int orbs = StoredStackCount(Stash.stashList[index]) / ShardsPerOrb;
+	if (orbs == 0)
+		return;
+	Item orb = Stash.stashList[index];
+	SetStackCount(orb, ShardsPerOrb);
+	if (!CombineShardStack(orb))
+		return;
+	GenerateNewSeed(orb);
+	SetStoredStackCount(orb, orbs);
+	StoreInPremadeTab(page, orb);
+	// A full orb slot leaves the rest as shards.
+	const int made = orbs - (orb.isEmpty() ? 0 : StoredStackCount(orb));
+	if (made <= 0)
+		return;
+	const int left = StoredStackCount(Stash.stashList[index]) - (made * ShardsPerOrb);
+	if (left > 0)
+		SetStoredStackCount(Stash.stashList[index], left);
+	else
+		Stash.RemoveStashItem(index);
+	Stash.dirty = true;
+}
+
+} // namespace
+
 bool StoreInPremadeTab(unsigned page, Item &item)
 {
 	const StashTabKind kind = StashTabs.kind(page);
@@ -1201,12 +1234,16 @@ bool StoreInPremadeTab(unsigned page, Item &item)
 		return false;
 	if (placement->fixedSlot) {
 		const StashStruct::StashCell index = StashTabSlotItem(page, *placement->fixedSlot);
+		bool stored = false;
 		if (index == StashStruct::EmptyCell) {
 			PutInSlot(page, *placement->fixedSlot, item);
 			item.clear();
-			return true;
+			stored = true;
+		} else {
+			stored = IsStackable(item) && MergeStored(Stash.stashList[index], item);
 		}
-		return IsStackable(item) && MergeStored(Stash.stashList[index], item);
+		CombineStoredShards(page, *placement->fixedSlot);
+		return stored;
 	}
 	const unsigned capacity = PremadeTabCapacity(kind);
 	if (placement->stacks) {
@@ -1230,7 +1267,7 @@ Item PeekStashTake(uint16_t index)
 		return {};
 	Item taken = Stash.stashList[index];
 	if (IsStackable(taken))
-		SetStackCount(taken, std::min(StoredStackCount(taken), CurrencyStackMax));
+		SetStackCount(taken, std::min(StoredStackCount(taken), StackMax(taken)));
 	return taken;
 }
 
@@ -1240,8 +1277,8 @@ Item TakeFromStash(uint16_t index)
 		return {};
 	Item taken = PeekStashTake(index);
 	Item &stored = Stash.stashList[index];
-	if (IsStackable(stored) && StoredStackCount(stored) > CurrencyStackMax) {
-		SetStoredStackCount(stored, StoredStackCount(stored) - CurrencyStackMax);
+	if (IsStackable(stored) && StoredStackCount(stored) > StackMax(stored)) {
+		SetStoredStackCount(stored, StoredStackCount(stored) - StackMax(stored));
 		Stash.dirty = true;
 	} else {
 		Stash.RemoveStashItem(index);
@@ -1255,7 +1292,7 @@ Item TakeFromStash(uint16_t index, int count)
 		return {};
 	Item &stored = Stash.stashList[index];
 	const int have = StoredStackCount(stored);
-	count = std::min(count, CurrencyStackMax);
+	count = std::min(count, StackMax(stored));
 	if (!IsStackable(stored) || count >= have)
 		return TakeFromStash(index);
 	Item taken = stored;
@@ -1344,9 +1381,9 @@ bool PlaceOnKeptTabs(Item &item, unsigned surplusPage)
 	// A blank tab holds stacks of an inventory stack's size at most.
 	while (!item.isEmpty()) {
 		Item part = item;
-		const bool split = IsStackable(item) && StoredStackCount(item) > CurrencyStackMax;
+		const bool split = IsStackable(item) && StoredStackCount(item) > StackMax(item);
 		if (IsStackable(part))
-			SetStackCount(part, std::min(StoredStackCount(item), CurrencyStackMax));
+			SetStackCount(part, std::min(StoredStackCount(item), StackMax(item)));
 		bool placed = false;
 		for (unsigned page = 0; page < StashTabs.count() && !placed; page++) {
 			if (page != surplusPage && StashTabs.kind(page) == StashTabKind::Blank && !IsSurplusStashTab(page))
@@ -1355,7 +1392,7 @@ bool PlaceOnKeptTabs(Item &item, unsigned surplusPage)
 		if (!placed)
 			return false;
 		if (split)
-			SetStoredStackCount(item, StoredStackCount(item) - CurrencyStackMax);
+			SetStoredStackCount(item, StoredStackCount(item) - StackMax(item));
 		else
 			item.clear();
 	}

@@ -61,6 +61,8 @@ enum monster_flag : uint16_t {
 	MFLAG_HIDDEN          = 1 << 0,
 	MFLAG_LOCK_ANIMATION  = 1 << 1,
 	MFLAG_ALLOW_SPECIAL   = 1 << 2,
+	/** @brief POE2 Mashup: came out of a strongbox; its loot waits until every guard is dead. */
+	MFLAG_STRONGBOX_GUARD = 1 << 3,
 	MFLAG_TARGETS_MONSTER = 1 << 4,
 	MFLAG_GOLEM           = 1 << 5,
 	MFLAG_QUEST_COMPLETE  = 1 << 6,
@@ -668,6 +670,11 @@ std::optional<size_t> RandomLevelSkeletonType();
 bool IsTileFreeForMonster(Point position);
 /** @brief Takes a monster off the level at once, without a death or a body. @param activeIndex its index in ActiveMonsters. */
 void RemoveMonsterQuietly(size_t activeIndex);
+/**
+ * @brief POE2 Mashup: takes one of a hero's minions off the level at once, alive, to go with the hero to the next level
+ * (poe2/minion_travel.hpp). A golem's own slot stays, empty, as one that died leaves it.
+ */
+void TakeMinionOffLevel(Monster &minion);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);
