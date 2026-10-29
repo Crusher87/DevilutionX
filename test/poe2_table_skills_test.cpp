@@ -591,5 +591,35 @@ TEST_F(Poe2TableSkillsTest, StackingZonesAreOneCastAtATime)
 	leveltype = DTYPE_TOWN;
 }
 
+TEST_F(Poe2TableSkillsTest, EverySkillHasACastAndASpellSound)
+{
+	// Curtis 2026-10-29: Freezing Shards, Lightning Bolt, Withering Bolt and Mana Drain made no sound, cast or spell.
+	// Every row is heard as it is cast and as it goes off, and a spell's bolts as they land.
+	for (const TableSkillData &data : TableSkills()) {
+		const SkillSounds sounds = TableSkillSounds(data);
+		EXPECT_FALSE(sounds.cast.empty()) << data.name << " has no cast sound";
+		EXPECT_FALSE(sounds.spell.empty()) << data.name << " has no spell sound";
+		if ((data.flags & TF_Spell) != 0 && (data.shape == TableShape::Projectiles || data.shape == TableShape::Stream)) {
+			EXPECT_FALSE(sounds.hit.empty()) << data.name << "'s bolts land without a sound";
+		}
+	}
+	const auto soundsOf = [](WeaponSkill skill) { return TableSkillSounds(*FindTableSkill(skill)); };
+	// The ones Curtis named, each by its element.
+	EXPECT_EQ(soundsOf(WeaponSkill::FreezingShards).cast.sfx, SfxID::CastSkill);
+	EXPECT_EQ(soundsOf(WeaponSkill::FreezingShards).spell.sfx, SfxID::SpellHolyBolt);
+	EXPECT_EQ(soundsOf(WeaponSkill::FreezingShards).hit.mod, "sfx\\poe2\\blizzard_shard1.wav");
+	EXPECT_EQ(soundsOf(WeaponSkill::LightningBolt).cast.sfx, SfxID::CastLightning);
+	EXPECT_EQ(soundsOf(WeaponSkill::LightningBolt).spell.sfx, SfxID::SpellLightning);
+	EXPECT_EQ(soundsOf(WeaponSkill::WitheringBolt).cast.sfx, SfxID::CastSkill);
+	EXPECT_EQ(soundsOf(WeaponSkill::WitheringBolt).spell.sfx, SfxID::SpellBloodStar);
+	EXPECT_EQ(soundsOf(WeaponSkill::WitheringBolt).hit.sfx, SfxID::SpellBloodStarHit);
+	EXPECT_EQ(soundsOf(WeaponSkill::ManaDrain).cast.sfx, SfxID::CastSkill);
+	EXPECT_EQ(soundsOf(WeaponSkill::ManaDrain).hit.sfx, SfxID::SpellEnd);
+	// An attack is heard as it swings or shoots; Blizzard keeps its own sounds.
+	EXPECT_EQ(soundsOf(WeaponSkill::Multishot).cast.sfx, SfxID::ShootBow2);
+	EXPECT_EQ(soundsOf(WeaponSkill::Sacrifice).cast.sfx, SfxID::Swing);
+	EXPECT_EQ(soundsOf(WeaponSkill::Blizzard).spell.mod, "sfx\\poe2\\blizzard_cast.wav");
+}
+
 } // namespace
 } // namespace devilution

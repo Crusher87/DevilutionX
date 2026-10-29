@@ -13,6 +13,7 @@
 #ifdef _DEBUG
 #include "debug.h"
 #endif
+#include "effects.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/point.hpp"
 #include "engine/random.hpp"
@@ -260,6 +261,10 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 	// POE2 Mashup: the extra sound of the spell's look (poe2/skill_looks.hpp).
 	if (supported)
 		PlaySkillLookSound(SkillSlot::ForSpell(spl), dst);
+	// POE2 Mashup: Blood Star's bolt leaves with Diablo's Blood Star sound, once a cast (its missile, the Succubi's too,
+	// has none); it lands with its impact (SkillMissileLandSound).
+	if (gbIsPoe2 && spl == SpellID::BloodStar)
+		PlaySfxLoc(SfxID::SpellBloodStar, src);
 	// POE2 Mashup: Apocalypse eats an element infusion for a much bigger cast.
 	const uint8_t infusion = supported ? TakeInfusion(player, SkillSlot::ForSpell(spl)) : 0;
 	const auto spawnMissiles = [&](WorldTilePosition target) {

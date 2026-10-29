@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "diablo.h"
+#include "effects.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
@@ -450,9 +451,117 @@ vfx::Element LookOf(const TableSkillData &data)
 	return vfx::ElementOf(data.type, (data.flags & TF_Spell) != 0);
 }
 
-/** @brief Game ticks between Blizzard shard sounds, across every Blizzard at once. */
-constexpr int ShardSoundGap = 9;
-int ShardSoundCooldown = 0;
+// POE2 Mashup: the skills' sounds (see SkillSounds).
+constexpr std::string_view BlizzardCastSound = "sfx\\poe2\\blizzard_cast.wav";
+constexpr std::string_view GlacialSpikeSound = "sfx\\poe2\\glacial_spike.wav";
+/** @brief An ice shard: Blizzard's four, played in turn so a run of them doesn't drone. */
+constexpr std::string_view ShardSounds[] = { "sfx\\poe2\\blizzard_shard1.wav", "sfx\\poe2\\blizzard_shard2.wav", "sfx\\poe2\\blizzard_shard3.wav", "sfx\\poe2\\blizzard_shard4.wav" };
+size_t NextShardSound = 0;
+/** @brief Game ticks until each skill's next hit sound may play (HitSoundGapTicks), by WeaponSkill. */
+std::array<uint8_t, 256> HitSoundCooldown {};
+/** @brief The same for the Blood Star gem spell's bolts, which are no table skill's. */
+uint8_t BloodStarHitCooldown = 0;
+
+constexpr SkillSound Sfx(SfxID sfx)
+{
+	return SkillSound { sfx, {} };
+}
+
+constexpr SkillSound ModSound(std::string_view path)
+{
+	return SkillSound { SfxID::None, path };
+}
+
+bool IsBowSkill(const TableSkillData &data)
+{
+	return IsAnyOf(data.weapon, TableWeapon::Bow, TableWeapon::Crossbow);
+}
+
+/** @brief A spell's incantation, by its element: Diablo's cast2 for fire, cast4 for lightning, cast6 for the rest. */
+SkillSound IncantationOf(const TableSkillData &data)
+{
+	if (data.shape == Buff)
+		return Sfx(SfxID::CastHealing);
+	switch (data.type) {
+	case DamageType::Fire:
+		return Sfx(SfxID::CastFire);
+	case DamageType::Lightning:
+		return Sfx(SfxID::CastLightning);
+	default:
+		return Sfx(SfxID::CastSkill);
+	}
+}
+
+/** @brief A spell's bolt leaving the hero's hand, by its element and look. */
+SkillSound BoltLaunchOf(const TableSkillData &data)
+{
+	switch (data.type) {
+	case DamageType::Fire:
+		return Sfx(SfxID::SpellFirebolt);
+	case DamageType::Lightning:
+		return Sfx(SfxID::SpellChargedBolt);
+	case DamageType::Magic:
+		// Cold: Ice Bolt's bright crystal zing (Curtis 2026-10-16: the Stone Curse thud was dull).
+		return Sfx(SfxID::SpellHolyBolt);
+	default:
+		break;
+	}
+	switch (data.effect) {
+	case MissileGraphicID::BloodHit:
+		return Sfx(SfxID::SpellBloodStar);
+	case MissileGraphicID::BoneHit:
+	case MissileGraphicID::BoneSpirit:
+		return Sfx(SfxID::SpellBoneSpirit);
+	case MissileGraphicID::HolyBoltExplosion:
+		return Sfx(SfxID::SpellHolyBolt);
+	default:
+		return Sfx(SfxID::SpellElemental);
+	}
+}
+
+/** @brief What the skill's hits sound like where they land, by its element and look. */
+SkillSound ImpactOf(const TableSkillData &data)
+{
+	// Cold shatters like Blizzard's shards.
+	if (data.type == DamageType::Magic)
+		return ModSound(ShardSounds[0]);
+	switch (data.effect) {
+	case MissileGraphicID::Lightning:
+	case MissileGraphicID::ThinLightning:
+	case MissileGraphicID::HolyBoltExplosion:
+		// Holy Bolt lands with Diablo's lightning crack too.
+		return Sfx(SfxID::SpellLightningHit);
+	case MissileGraphicID::FireArrowExplosion:
+	case MissileGraphicID::Inferno:
+	case MissileGraphicID::MagmaBallExplosion:
+	case MissileGraphicID::ApocalypseBoom:
+		return Sfx(SfxID::SpellFireHit);
+	case MissileGraphicID::StoneCurseShatter:
+		return Sfx(SfxID::SpellStoneCurse);
+	case MissileGraphicID::BloodHit:
+		return Sfx(SfxID::SpellBloodStarHit);
+	case MissileGraphicID::BoneHit:
+	case MissileGraphicID::BoneSpirit:
+		return Sfx(SfxID::SpellBoneSpiritHit);
+	default:
+		break;
+	}
+	switch (data.type) {
+	case DamageType::Fire:
+		return Sfx(SfxID::SpellFireHit);
+	case DamageType::Lightning:
+		return Sfx(SfxID::SpellLightningHit);
+	default:
+		// A spell's plain bolt lands with Blood Star's thud; a blade bites with the heavy swing.
+		return Sfx((data.flags & TF_Spell) != 0 ? SfxID::SpellBloodStarHit : SfxID::Swing2);
+	}
+}
+
+/** @brief Whether a zone's spell sound waits for its burst (see SkillSounds::spell). */
+bool ZoneSoundsAtBurst(const TableSkillData &data)
+{
+	return data.shape == Zone && IsAnyOf(data.zone, TableZone::Delayed, TableZone::IceSpike, TableZone::ShardRing);
+}
 
 /**
  * @brief Where Glacial Spike erupts: under the monster it was cast at, where that monster will stand when the spike comes
@@ -605,7 +714,8 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	const MissileID type = data.missile == MissileID::Null ? MissileID::Arrow : data.missile;
 	// Weapon projectiles take their damage from the weapon when they hit, like arrows.
 	const int damage = spell ? SpellBase(player, gemLevel) : ElementalArrowBaseDamage;
-	Missile *missile = AddMissile(from, target, GetDirection(from, target), type, TARGET_MONSTERS, player, damage, spell ? gemLevel : 0);
+	// POE2 Mashup: silent as it leaves; the skill's launch sounds once a cast or shot (SkillSounds), not once a projectile.
+	Missile *missile = AddMissile(from, target, GetDirection(from, target), type, TARGET_MONSTERS, player, damage, spell ? gemLevel : 0, nullptr, SfxID::None);
 	if (missile == nullptr)
 		return nullptr;
 	SetMissileSkill(*missile, player, SkillSlot::ForAttack(data.skill));
@@ -1143,12 +1253,12 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		if (const std::optional<Point> corpse = CorpseNear(target, data.radius); corpse) {
 			dCorpse[corpse->x][corpse->y] = 0;
 			ZoneBurst(player, data, *corpse, data.radius, FixedDamage(player, data));
-			PlaySfxLoc(SfxID::BigExplosion, *corpse);
+			PlaySkillSound(TableSkillSounds(data).spell, *corpse);
 		} else if (Monster *skeleton = SacrificeMinionNear(player, target, data.radius); skeleton != nullptr) {
 			const Point at = skeleton->position.tile;
 			SacrificeMinion(*skeleton);
 			ZoneBurst(player, data, at, data.radius, FixedDamage(player, data));
-			PlaySfxLoc(SfxID::BigExplosion, at);
+			PlaySkillSound(TableSkillSounds(data).spell, at);
 		}
 		break;
 	case SoulHarvest: {
@@ -1348,7 +1458,8 @@ void FireTableShot(Player &player, const TableSkillData &data, Point target, int
 	const Direction dir = GetDirection(tile, target);
 	constexpr int Wobble[] = { 0, 1, -1, 0, -1, 1 };
 	FireTableMissile(player, data, tile, Along(tile, target, 8) + Displacement { Left(Left(dir)) } * Wobble[index % 6]);
-	PlaySfxLoc((data.flags & TF_Spell) != 0 ? SfxID::SpellStoneCurse : SfxID::ShootBow, tile);
+	// POE2 Mashup: each shot of a stream sounds as it leaves (see SkillSounds::spell).
+	PlaySkillSound(TableSkillSounds(data).spell, tile);
 }
 
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target)
@@ -1375,12 +1486,21 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		break;
 	}
 	AddVisualEffect(tile + dir, flash, 0, 3);
+	// POE2 Mashup: every skill is heard. An attack's swing, throw or shot sounds as it lands (a spell's incantation
+	// began with its animation, see BeginSkillAnimation), then the skill going off: a Stream's with each shot
+	// (FireTableShot), a corpse's blast only if it finds one, a zone that bursts later as it bursts.
+	const SkillSounds sounds = TableSkillSounds(data);
+	if (data.graphic == 0)
+		PlaySkillSound(sounds.cast, tile);
+	if (IsNoneOf(data.shape, Stream, CorpseBurst) && !ZoneSoundsAtBurst(data)) {
+		const bool atTarget = IsAnyOf(data.shape, Burst, Curse) || (data.shape == Zone && (data.flags & TF_AtPlayer) == 0);
+		PlaySkillSound(sounds.spell, atTarget ? target : tile);
+	}
 	switch (data.shape) {
 	case Strike:
 	case Flurry:
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
 		vfx::SwingAs(tile, tile + dir, LookOf(data), WeaponSwingStyle(player), HoldsHeavyWeapon(player), WeaponElementLook(player));
-		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
 	case Arc:
 		if (WeaponSwingStyle(player) == vfx::SwingStyle::Chop)
@@ -1391,7 +1511,6 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		AddVisualEffect(tile + Right(dir), data.effect, 0);
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
 		AddVisualEffect(tile + Left(dir), data.effect, 2);
-		PlaySfxLoc(SfxID::Swing2, tile);
 		break;
 	case Dash:
 		// Whirlwind's spin and its funnel of wind started with its animation (see BeginSkillAnimation); here its blades
@@ -1399,7 +1518,6 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		if (SpinsWhileStriking(data.skill)) {
 			EffectRingAround(tile, 1, data.effect, 0);
 			vfx::Sparks(tile, LookOf(data), 1.3F);
-			PlaySfxLoc(SfxID::Swing, tile);
 			if (mine)
 				ShakeCamera(ShakeStrength::Light, 4);
 			break;
@@ -1414,7 +1532,6 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 			vfx::Impact(tile, LookOf(data), 1.2F);
 		else
 			vfx::Slam(tile, std::max<int>(data.radius, 1), LookOf(data));
-		PlaySfxLoc(SfxID::Swing, tile);
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 4);
 		break;
@@ -1431,28 +1548,239 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		break;
 	case Curse:
 		EffectRingAround(target, std::max<int>(data.radius, 1), data.effect, 0);
-		PlaySfxLoc(SfxID::SpellBloodStar, target);
 		break;
 	case Buff:
 		EffectRingAround(tile, 1, data.effect, 0);
-		PlaySfxLoc(SfxID::SpellManaShield, tile);
 		break;
 	case SoulHarvest:
 		EffectRingAround(tile, 2, MissileGraphicID::BloodHit, 0);
-		break;
-	case Zone:
-		if (data.skill == WeaponSkill::Blizzard)
-			PlayModSfxLoc("sfx\\poe2\\blizzard_cast.wav", target);
 		break;
 	default:
 		break;
 	}
 }
 
+SkillSounds TableSkillSounds(const TableSkillData &data)
+{
+	SkillSounds sounds;
+	const bool spell = (data.flags & TF_Spell) != 0;
+	const bool bow = IsBowSkill(data);
+	// The cast: a spell's incantation, or the hero's swing, throw or shot.
+	if (data.graphic != 0)
+		sounds.cast = IncantationOf(data);
+	else if (bow && (IsAnyOf(data.shape, Projectiles, Stream) || data.zone == TableZone::RandomStrikes))
+		sounds.cast = Sfx(SfxID::ShootBow2);
+	else if (data.weapon == TableWeapon::Shield)
+		sounds.cast = Sfx(SfxID::ItemShield);
+	else
+		sounds.cast = Sfx(SfxID::Swing);
+	// The skill going off, and its hits.
+	switch (data.shape) {
+	case Projectiles:
+	case Stream:
+		// A bow's arrows leave with its shot, thrown blades and axes with the heavy swing's whoosh.
+		if (spell)
+			sounds.spell = BoltLaunchOf(data);
+		else
+			sounds.spell = Sfx(bow ? SfxID::ShootBow : SfxID::Swing2);
+		// Arrows and thrown blades land with the monster's own cry; bolts and landing bursts with their element.
+		if (spell || (data.flags & TF_LandingBurst) != 0)
+			sounds.hit = ImpactOf(data);
+		break;
+	case Burst:
+		// Lightning comes down from the sky, as Diablo's Lightning spell; the rest lands with its element.
+		sounds.spell = data.type == DamageType::Lightning ? Sfx(SfxID::SpellLightning) : ImpactOf(data);
+		sounds.hit = ImpactOf(data);
+		break;
+	case Around:
+		// A spell's ring bursts out like Diablo's Nova; a blow lands with its look.
+		sounds.spell = spell && data.type == DamageType::Lightning ? Sfx(SfxID::SpellNova) : ImpactOf(data);
+		break;
+	case Zone:
+		switch (data.zone) {
+		case TableZone::Pulse:
+			sounds.spell = spell ? BoltLaunchOf(data) : Sfx(SfxID::Swing2);
+			sounds.hit = spell ? ImpactOf(data) : Sfx(SfxID::Swing);
+			break;
+		case TableZone::RandomStrikes:
+			sounds.spell = spell ? BoltLaunchOf(data) : Sfx(bow ? SfxID::ShootBow : SfxID::Swing2);
+			sounds.hit = ImpactOf(data);
+			break;
+		case TableZone::NearestStrike:
+			sounds.spell = Sfx(SfxID::SpellLightningWall);
+			sounds.hit = Sfx(SfxID::SpellLightning);
+			break;
+		case TableZone::Trap:
+			sounds.spell = Sfx(SfxID::SpellTrapDisarm);
+			sounds.hit = Sfx(SfxID::TriggerTrap);
+			break;
+		case TableZone::Turret:
+			sounds.spell = Sfx(SfxID::OperateLever);
+			sounds.hit = Sfx(SfxID::ShootBow);
+			break;
+		case TableZone::Delayed:
+			sounds.spell = Sfx(SfxID::BigExplosion);
+			break;
+		case TableZone::IceSpike:
+			sounds.spell = ModSound(GlacialSpikeSound);
+			break;
+		case TableZone::ShardRing:
+			// The ring of shards bursts out like Frost Nova's, and each shard shatters as it lands.
+			sounds.spell = Sfx(SfxID::SpellNova);
+			sounds.hit = ImpactOf(data);
+			break;
+		default:
+			sounds.spell = ImpactOf(data);
+			break;
+		}
+		break;
+	case Curse:
+		switch (data.effect) {
+		case MissileGraphicID::BoneSpirit:
+			sounds.spell = Sfx(SfxID::SpellBoneSpirit);
+			break;
+		case MissileGraphicID::BoneHit:
+			sounds.spell = Sfx(SfxID::SpellBoneSpiritHit);
+			break;
+		default:
+			sounds.spell = Sfx(SfxID::SpellBloodStar);
+			break;
+		}
+		break;
+	case Buff:
+		sounds.spell = Sfx(SfxID::SpellManaShield);
+		break;
+	case CorpseBurst:
+		sounds.spell = Sfx(SfxID::BigExplosion);
+		break;
+	case SoulHarvest:
+		// The souls rise out of the corpses as Diablo's Resurrect raises one.
+		sounds.spell = Sfx(SfxID::SpellResurrect);
+		break;
+	case CallOfTheAncients:
+		// The ancestors come as Diablo's Golem does.
+		sounds.spell = Sfx(SfxID::SpellGolem);
+		break;
+	case Seven:
+		// The hero flickers from one enemy to the next.
+		sounds.spell = Sfx(SfxID::SpellEtherealize);
+		break;
+	default:
+		// Strikes, flurries, arcs, dashes and lines land with their look.
+		sounds.spell = ImpactOf(data);
+		break;
+	}
+	// The skills whose own sounds the shape and look don't give.
+	switch (data.skill) {
+	case WeaponSkill::Blizzard:
+		// Its own cast, as the storm gathers over the target; each shard that strikes shatters.
+		sounds.spell = ModSound(BlizzardCastSound);
+		break;
+	case WeaponSkill::FrozenOrb:
+		sounds.cast = ModSound(BlizzardCastSound);
+		break;
+	case WeaponSkill::SolarOrb:
+		sounds.spell = Sfx(SfxID::SpellInferno);
+		break;
+	case WeaponSkill::ExplosiveBolt:
+		sounds.hit = Sfx(SfxID::BigExplosion);
+		break;
+	case WeaponSkill::ManaDrain:
+		// Diablo's own mana theft.
+		sounds.hit = Sfx(SfxID::SpellEnd);
+		break;
+	case WeaponSkill::LocustSwarm:
+		sounds.spell = Sfx(SfxID::SpellDoomSerpents);
+		break;
+	case WeaponSkill::WarCry:
+		// A shout that stuns, not a ward.
+		sounds.cast = Sfx(SfxID::CastSkill);
+		sounds.spell = Sfx(SfxID::SpellStoneCurse);
+		break;
+	case WeaponSkill::SpikeTrap:
+	case WeaponSkill::Sentry:
+		// Set down by hand, not shot.
+		sounds.cast = Sfx(SfxID::Swing);
+		break;
+	default:
+		break;
+	}
+	return sounds;
+}
+
+void PlaySkillSound(const SkillSound &sound, Point tile)
+{
+	if (sound.sfx != SfxID::None) {
+		PlaySfxLoc(sound.sfx, tile);
+		return;
+	}
+	if (sound.mod.empty())
+		return;
+	if (sound.mod == ShardSounds[0]) {
+		PlayModSfxLoc(ShardSounds[NextShardSound++ % std::size(ShardSounds)], tile);
+		return;
+	}
+	PlayModSfxLoc(sound.mod, tile);
+}
+
+void PlayTableSkillHitSound(const TableSkillData &data, Point tile)
+{
+	uint8_t &cooldown = HitSoundCooldown[static_cast<size_t>(data.skill)];
+	if (cooldown > 0)
+		return;
+	const SkillSound sound = TableSkillSounds(data).hit;
+	if (sound.empty())
+		return;
+	cooldown = static_cast<uint8_t>(HitSoundGapTicks);
+	PlaySkillSound(sound, tile);
+}
+
+std::optional<SfxID> SkillMissileLandSound(const Missile &missile)
+{
+	// Only the hero's (Missile::sourceType, which isn't const).
+	if (!gbIsPoe2 || missile._misource == -1 || missile._micaster == TARGET_PLAYERS)
+		return std::nullopt;
+	const SkillSlot skill = MissileSkill(missile);
+	if (skill.kind == SkillKind::Attack) {
+		const auto weaponSkill = static_cast<WeaponSkill>(skill.id);
+		// Only the skill's own projectiles: a granted skill's name also rides on the weapon's default bolt.
+		const TableSkillData *data = FindTableSkill(weaponSkill);
+		if (data != nullptr && missile._mitype == (data->missile == MissileID::Null ? MissileID::Arrow : data->missile)) {
+			PlayTableSkillHitSound(*data, missile.position.tile);
+			return SfxID::None;
+		}
+		// Ice Bolt's and Frost Nova's shards shatter as ice, not as the flare's fire, and a nova of them as one.
+		if (IsAnyOf(weaponSkill, WeaponSkill::IceBolt, WeaponSkill::FrostNova)) {
+			uint8_t &cooldown = HitSoundCooldown[static_cast<size_t>(weaponSkill)];
+			if (cooldown == 0) {
+				cooldown = static_cast<uint8_t>(HitSoundGapTicks);
+				PlaySkillSound(ModSound(ShardSounds[0]), missile.position.tile);
+			}
+			return SfxID::None;
+		}
+		return std::nullopt;
+	}
+	// The Blood Star gem spell's bolt bursts with Diablo's Blood Star impact (its missile has none of its own, which the
+	// Succubi's share).
+	if (missile._mitype == MissileID::BloodStar) {
+		if (BloodStarHitCooldown == 0) {
+			BloodStarHitCooldown = static_cast<uint8_t>(HitSoundGapTicks);
+			PlaySfxLoc(SfxID::SpellBloodStarHit, missile.position.tile);
+		}
+		return SfxID::None;
+	}
+	return std::nullopt;
+}
+
 void ProcessSkillZones(Player &player)
 {
-	if (ShardSoundCooldown > 0)
-		ShardSoundCooldown--;
+	// The skills' hit sounds come round again (see PlayTableSkillHitSound).
+	for (uint8_t &cooldown : HitSoundCooldown) {
+		if (cooldown > 0)
+			cooldown--;
+	}
+	if (BloodStarHitCooldown > 0)
+		BloodStarHitCooldown--;
 	// Consecrated Ground's life, a tick's share at a time, and the Sigil of Power's time.
 	GrantedRuntime &granted = player.poe2.grantedState;
 	if (granted.sigilTicks > 0)
@@ -1492,15 +1820,20 @@ void ProcessSkillZones(Player &player)
 			if ((data->flags & TF_LandingBurst) != 0 || IsAnyOf(data->zone, TableZone::Delayed, TableZone::IceSpike) || data->rider == GrantedRider::Echo) {
 				ZoneBurst(player, *data, zone.center, std::max(radius, 1), zone.damage);
 				if (data->zone == TableZone::Delayed) {
-					PlaySfxLoc(SfxID::BigExplosion, zone.center);
+					PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
 					ShakeCamera(ShakeStrength::Medium, 6);
 				} else if (data->zone == TableZone::IceSpike) {
-					PlayModSfxLoc("sfx\\poe2\\glacial_spike.wav", zone.center);
+					PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
 					ShakeCamera(ShakeStrength::Medium, 5);
+				} else {
+					// POE2 Mashup: a projectile's landing burst and Echoing Blast's echo are heard too.
+					PlayTableSkillHitSound(*data, zone.center);
 				}
 				done = true;
 			} else if (data->zone == TableZone::ShardRing) {
 				AddVisualEffect(zone.center, data->effect, 0, 6);
+				// POE2 Mashup: the orb bursts with a sound (see SkillSounds::spell).
+				PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
 				for (int s = 0; s < data->count; s++) {
 					constexpr int Ring[16][2] = { { 4, 0 }, { 4, 2 }, { 4, 4 }, { 2, 4 }, { 0, 4 }, { -2, 4 }, { -4, 4 }, { -4, 2 }, { -4, 0 }, { -4, -2 }, { -4, -4 }, { -2, -4 }, { 0, -4 }, { 2, -4 }, { 4, -4 }, { 4, -2 } };
 					if (Missile *shard = FireTableMissile(player, *data, zone.center, zone.center + Displacement { Ring[s % 16][0], Ring[s % 16][1] }); shard != nullptr)
@@ -1512,6 +1845,8 @@ void ProcessSkillZones(Player &player)
 				if (victim != nullptr) {
 					ZoneBurst(player, *data, zone.center, radius, zone.damage);
 					EffectRingAround(zone.center, 1, data->effect, 1);
+					// POE2 Mashup: the trap springs with Diablo's trap sound.
+					PlayTableSkillHitSound(*data, zone.center);
 					done = true;
 				} else if (zone.counter % 20 == 0) {
 					AddVisualEffect(zone.center, MissileGraphicID::MetalHit);
@@ -1520,17 +1855,15 @@ void ProcessSkillZones(Player &player)
 				switch (data->zone) {
 				case TableZone::Pulse:
 					ZoneBurst(player, *data, zone.center, radius, zone.damage);
+					// POE2 Mashup: each pulse is heard (Blade Sentinel, Blessed Hammer, Solar Orb).
+					PlayTableSkillHitSound(*data, zone.center);
 					break;
 				case TableZone::RandomStrikes: {
 					const Point at = zone.center + Displacement { GenerateRnd(2 * radius + 1) - radius, GenerateRnd(2 * radius + 1) - radius };
 					if (InDungeonBounds(at)) {
 						ZoneBurst(player, *data, at, 1, zone.damage);
 						// A Blizzard drops a lot of these, so only some make a sound: soft, short and one of four.
-						if (data->skill == WeaponSkill::Blizzard && ShardSoundCooldown <= 0) {
-							constexpr std::string_view Shards[] = { "sfx\\poe2\\blizzard_shard1.wav", "sfx\\poe2\\blizzard_shard2.wav", "sfx\\poe2\\blizzard_shard3.wav", "sfx\\poe2\\blizzard_shard4.wav" };
-							PlayModSfxLoc(Shards[static_cast<size_t>(zone.counter + at.x + at.y) % 4], at);
-							ShardSoundCooldown = ShardSoundGap;
-						}
+						PlayTableSkillHitSound(*data, at);
 					}
 					break;
 				}
@@ -1539,14 +1872,14 @@ void ProcessSkillZones(Player &player)
 						AddVisualEffect(monster->position.tile, MissileGraphicID::ThinLightning, 0, 6);
 						AddVisualEffect(monster->position.tile, data->effect);
 						SpellHitMonster(player, *monster, data->type, zone.damage, SourceOf(*data));
-						PlaySfxLoc(SfxID::SpellLightning, monster->position.tile);
+						PlayTableSkillHitSound(*data, monster->position.tile);
 					}
 					break;
 				case TableZone::Turret:
 					if (Monster *monster = TargetMonsterNear(zone.center, radius); monster != nullptr) {
 						FireTableMissile(player, *data, zone.center, monster->position.tile);
 						AddVisualEffect(zone.center, MissileGraphicID::MetalHit);
-						PlaySfxLoc(SfxID::ShootBow, zone.center);
+						PlayTableSkillHitSound(*data, zone.center);
 					}
 					break;
 				default:
