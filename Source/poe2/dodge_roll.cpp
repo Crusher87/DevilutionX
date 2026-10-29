@@ -110,7 +110,7 @@ void GiveBackActionPrice(Player &player)
 		player._pMana = std::min(player._pMana + mana, player._pMaxMana);
 		player._pManaBase = std::min(player._pManaBase + mana, player._pMaxManaBase);
 		// Nor does it count as spent for the uniques that grow with what is spent.
-		data.uniqueState.resourcesSpent = std::max(data.uniqueState.resourcesSpent - data.actionPaidMana, 0);
+		data.uniqueState.resourcesSpent = std::max<int32_t>(data.uniqueState.resourcesSpent - data.actionPaidMana, 0);
 		if (&player == MyPlayer)
 			RedrawComponent(PanelDrawComponent::Mana);
 	}
@@ -140,8 +140,8 @@ ActionPaymentScope::ActionPaymentScope(Player &player)
 ActionPaymentScope::~ActionPaymentScope()
 {
 	Poe2PlayerData &data = player_.poe2;
-	data.actionPaidMana += std::max(mana_ - player_._pMana.raw(), 0);
-	data.actionPaidLife += std::max(life_ - player_._pHitPoints.raw(), 0);
+	data.actionPaidMana += std::max<int32_t>(mana_ - player_._pMana.raw(), 0);
+	data.actionPaidLife += std::max<int32_t>(life_ - player_._pHitPoints.raw(), 0);
 	data.actionTookFreeSkill = data.actionTookFreeSkill || (freeSkill_ && !data.uniqueState.freeSkill);
 }
 

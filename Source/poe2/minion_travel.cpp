@@ -93,14 +93,14 @@ Monster *PlaceMinion(Player &player, const TravellingMinion &minion, Point tile)
 		break;
 	}
 	case MinionTravelKind::Revived: {
-		const RevivedStats stats { Fixed26_6::fromRaw(std::max(minion.maxLife, 64)), minion.minDamage, minion.maxDamage, minion.armorClass, minion.resistance };
+		const RevivedStats stats { Fixed26_6::fromRaw(std::max<int32_t>(minion.maxLife, 64)), minion.minDamage, minion.maxDamage, minion.armorClass, minion.resistance };
 		placed = SpawnRevivedMinion(player, tile, type, stats);
 		break;
 	}
 	}
 	if (placed == nullptr)
 		return nullptr;
-	placed->hitPoints = Fixed26_6::fromRaw(std::clamp(minion.life, 64, std::max(placed->maxHitPoints.raw(), 64)));
+	placed->hitPoints = Fixed26_6::fromRaw(std::clamp<int32_t>(minion.life, 64, std::max<int32_t>(placed->maxHitPoints.raw(), 64)));
 	return placed;
 }
 
