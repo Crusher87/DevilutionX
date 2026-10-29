@@ -26,6 +26,7 @@
 #include "poe2/camera_shake.hpp"
 #include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/dodge_roll.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
@@ -999,6 +1000,8 @@ bool StartTableSkill(Player &player, const TableSkillData &data)
 		const Fixed26_6 cost = Fixed26_6::fromRaw(player._pHitPoints.raw() / 20);
 		if (player._pHitPoints - cost < Fixed26_6::fromInt(1))
 			return false;
+		// POE2 Mashup: a dodge roll before the skill goes off gives this back (Curtis 2026-10-29).
+		const ActionPaymentScope price(player);
 		player._pHitPoints -= cost;
 		player._pHPBase -= cost;
 	}

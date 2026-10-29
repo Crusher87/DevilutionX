@@ -668,6 +668,11 @@ std::optional<size_t> RandomLevelSkeletonType();
 bool IsTileFreeForMonster(Point position);
 /** @brief Takes a monster off the level at once, without a death or a body. @param activeIndex its index in ActiveMonsters. */
 void RemoveMonsterQuietly(size_t activeIndex);
+/**
+ * @brief POE2 Mashup: takes one of a hero's minions off the level at once, alive, to go with the hero to the next level
+ * (poe2/minion_travel.hpp). A golem's own slot stays, empty, as one that died leaves it.
+ */
+void TakeMinionOffLevel(Monster &minion);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

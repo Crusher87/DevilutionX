@@ -5,6 +5,7 @@
 
 #include "controls/wasd_movement.hpp"
 #include "cursor.h"
+#include "engine/backbuffer_state.hpp"
 #include "engine/direction.hpp"
 #include "engine/point.hpp"
 #include "game_mode.hpp"
@@ -89,6 +90,7 @@ bool Blink(Player &player, Direction dir)
 	}
 	if (to == from)
 		return false;
+	BreakOffActionForDodge(player);
 	ClrPlrPath(player);
 	StartStand(player, dir);
 	AddVisualEffect(player.position.tile, MissileGraphicID::BlueFlareExplosion2);
@@ -99,7 +101,91 @@ bool Blink(Player &player, Direction dir)
 	return true;
 }
 
+/** @brief Gives back what the action under way paid as it started (see ActionPaymentScope). */
+void GiveBackActionPrice(Player &player)
+{
+	Poe2PlayerData &data = player.poe2;
+	if (data.actionPaidMana > 0) {
+		const Fixed26_6 mana = Fixed26_6::fromRaw(data.actionPaidMana);
+		player._pMana = std::min(player._pMana + mana, player._pMaxMana);
+		player._pManaBase = std::min(player._pManaBase + mana, player._pMaxManaBase);
+		// Nor does it count as spent for the uniques that grow with what is spent.
+		data.uniqueState.resourcesSpent = std::max(data.uniqueState.resourcesSpent - data.actionPaidMana, 0);
+		if (&player == MyPlayer)
+			RedrawComponent(PanelDrawComponent::Mana);
+	}
+	if (data.actionPaidLife > 0) {
+		const Fixed26_6 life = Fixed26_6::fromRaw(data.actionPaidLife);
+		player._pHitPoints = std::min(player._pHitPoints + life, player._pMaxHP);
+		player._pHPBase = std::min(player._pHPBase + life, player._pMaxHPBase);
+		if (&player == MyPlayer)
+			RedrawComponent(PanelDrawComponent::Health);
+	}
+	// Deep Well's free skill waits for the next one.
+	if (data.actionTookFreeSkill)
+		data.uniqueState.freeSkill = true;
+	data.forgetActionPaid();
+}
+
 } // namespace
+
+ActionPaymentScope::ActionPaymentScope(Player &player)
+    : player_(player)
+    , mana_(player._pMana.raw())
+    , life_(player._pHitPoints.raw())
+    , freeSkill_(player.poe2.uniqueState.freeSkill)
+{
+}
+
+ActionPaymentScope::~ActionPaymentScope()
+{
+	Poe2PlayerData &data = player_.poe2;
+	data.actionPaidMana += std::max(mana_ - player_._pMana.raw(), 0);
+	data.actionPaidLife += std::max(life_ - player_._pHitPoints.raw(), 0);
+	data.actionTookFreeSkill = data.actionTookFreeSkill || (freeSkill_ && !data.uniqueState.freeSkill);
+}
+
+bool ActionHasGoneOff(const Player &player)
+{
+	// The action frame's work runs on the game tick that shows it, so while that frame is current it hasn't happened yet.
+	switch (player._pmode) {
+	case PM_ATTACK:
+	case PM_RATTACK:
+		return player.AnimInfo.currentFrame > player._pAFNum - 1;
+	case PM_SPELL:
+		return player.AnimInfo.currentFrame > (player.poe2.castSkill != WeaponSkill::None ? player.poe2.castFrame : player._pSFNum);
+	default:
+		return true;
+	}
+}
+
+void BreakOffActionForDodge(Player &player)
+{
+	if (IsNoneOf(player._pmode, PM_ATTACK, PM_RATTACK, PM_SPELL))
+		return;
+	Poe2PlayerData &data = player.poe2;
+	if (!ActionHasGoneOff(player)) {
+		GiveBackActionPrice(player);
+		// The swing's skill never landed.
+		data.activeSkill = WeaponSkill::None;
+		data.flurryStrike = 0;
+		TelemetryLog("dodge", "rolled out of an attack or cast before it went off");
+	}
+	// Missiles, volleys and zones it already set going carry on; a Whirlwind's spin effect fades on its own.
+	data.forgetActionPaid();
+	data.castSkill = WeaponSkill::None;
+	data.castTargetMonster = -1;
+	data.pendingSkill = WeaponSkill::None;
+	data.pendingSkillTicks = 0;
+	data.recoveryTicks = 0;
+	player.destAction = ACTION_NONE;
+	ClrPlrPath(player);
+	StartStand(player, player._pdir);
+	// As an action's end does (ClearStateVariables).
+	player.position.temp = { 0, 0 };
+	player.tempDirection = Direction::South;
+	player.queuedSpell.spellLevel = 0;
+}
 
 bool TryDodgeRoll(Player &player)
 {
@@ -108,7 +194,8 @@ bool TryDodgeRoll(Player &player)
 		return false;
 	if (player.poe2.dodgeCooldown > 0 || player.hasNoLife() || player._pInvincible)
 		return false;
-	if (IsNoneOf(player._pmode, PM_STAND, PM_WALK_NORTHWARDS, PM_WALK_SOUTHWARDS, PM_WALK_SIDEWAYS))
+	// POE2 Mashup: the roll also breaks off an attack or cast (Curtis 2026-10-29).
+	if (IsNoneOf(player._pmode, PM_STAND, PM_WALK_NORTHWARDS, PM_WALK_SOUTHWARDS, PM_WALK_SIDEWAYS, PM_ATTACK, PM_RATTACK, PM_SPELL))
 		return false;
 
 	const AxisDirection wasd = GetWasdMovementDirection();
@@ -133,6 +220,9 @@ bool TryDodgeRoll(Player &player)
 	if (tiles == 0)
 		return false;
 
+	BreakOffActionForDodge(player);
+	// It cuts short the stand a slowed skill holds the hero in, too, so the roll goes at once.
+	player.poe2.recoveryTicks = 0;
 	player.poe2.dodgeTicks = static_cast<uint8_t>((tiles * DodgeTicksPerTile) + DodgeGraceTicks);
 	player.poe2.dodgeCooldown = DodgeCooldownTicks;
 	player.poe2.untouchableTicks = DodgeUntouchableTicks;

@@ -5609,6 +5609,33 @@ void RemoveMonsterQuietly(size_t activeIndex)
 	DeleteMonster(activeIndex);
 }
 
+void TakeMinionOffLevel(Monster &minion)
+{
+	const size_t id = minion.getId();
+	if (id < ReservedMonsterSlotsForGolems) {
+		M_ClearSquares(minion);
+		dMonster[minion.position.tile.x][minion.position.tile.y] = 0;
+		minion.position.tile = GolemHoldingCell;
+		minion.position.future = { 0, 0 };
+		minion.position.old = { 0, 0 };
+		if (pcursmonst == static_cast<int>(id))
+			pcursmonst = -1;
+		// Nothing goes on fighting it, as DeleteMonster sees to for the others.
+		for (size_t i = 0; i < ActiveMonsterCount; i++) {
+			Monster &other = Monsters[ActiveMonsters[i]];
+			if ((other.flags & MFLAG_TARGETS_MONSTER) != 0 && other.enemy == id)
+				other.flags |= MFLAG_NO_ENEMY;
+		}
+		return;
+	}
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		if (ActiveMonsters[i] == id) {
+			RemoveMonsterQuietly(i);
+			return;
+		}
+	}
+}
+
 namespace {
 
 constexpr size_t RisenMinionRoom = 4;

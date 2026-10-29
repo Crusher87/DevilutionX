@@ -203,9 +203,13 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 {
 	if (!CanStartSkill(player))
 		return false;
-	PaySkillMana(player, skill);
-	if (graphic == player_graphic::Attack && !player.UsesRangedWeapon())
-		PayMeleeAttackLife(player);
+	{
+		// POE2 Mashup: a dodge roll before the skill goes off gives this back (Curtis 2026-10-29).
+		const ActionPaymentScope price(player);
+		PaySkillMana(player, skill);
+		if (graphic == player_graphic::Attack && !player.UsesRangedWeapon())
+			PayMeleeAttackLife(player);
+	}
 	Point target = SkillTarget(player);
 	// Projectiles with nothing under the cursor fly exactly where it points, at any angle.
 	if (pcursmonst == -1 && &player == MyPlayer && (IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt) || GrantedSkillAimsAlongCursor(skill)))

@@ -116,6 +116,7 @@
 #include "poe2/hd.hpp"
 #include "poe2/economy.hpp"
 #include "poe2/level_census.hpp"
+#include "poe2/minion_travel.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_lab.hpp"
@@ -3944,6 +3945,8 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	TelemetryStep("portals");
 	SyncPortals();
 	LoadGameLevelSyncPlayerEntry(lvldir);
+	// POE2 Mashup: the hero's minions arrive beside them; in town they wait for the next dungeon level (Curtis 2026-10-29).
+	BringMinionsAlong(*MyPlayer);
 
 	IncProgress();
 	IncProgress();

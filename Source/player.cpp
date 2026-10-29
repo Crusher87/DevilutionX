@@ -63,6 +63,7 @@
 #include "poe2/hardcore.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/minion_travel.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -242,9 +243,14 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 		return;
 	}
 
-	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	// POE2 Mashup: what the swing pays is noted, so a dodge roll before it lands gives it back (Curtis 2026-10-29).
+	player.poe2.forgetActionPaid();
+	{
+		const ActionPaymentScope price(player);
+		ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+		PayMeleeAttackLife(player);
+	}
 	player.poe2.flurryStrike = 0;
-	PayMeleeAttackLife(player);
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
@@ -273,7 +279,11 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 		return;
 	}
 
-	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
+	player.poe2.forgetActionPaid();
+	{
+		const ActionPaymentScope price(player);
+		ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
+	}
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
@@ -331,6 +341,8 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	if (!isValid)
 		return;
 
+	// A Diablo spell pays as it goes off (ConsumeSpell), so a roll before then costs nothing.
+	player.poe2.forgetActionPaid();
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_SPELL)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
@@ -438,6 +450,8 @@ void InitLevelChange(Player &player)
 	const Player &myPlayer = *MyPlayer;
 
 	RemoveEnemyReferences(player);
+	// POE2 Mashup: the hero's minions go along instead of dying where they stand (Curtis 2026-10-29).
+	TakeMinionsAlong(player);
 	RemovePlrMissiles(player);
 	player.pManaShield = false;
 	player.wReflections = 0;
@@ -936,6 +950,8 @@ bool DoAttack(Player &player)
 	bool didhit = false;
 
 	if (player.AnimInfo.currentFrame == player._pAFNum - 1) {
+		// POE2 Mashup: it has landed, so a dodge roll no longer gives back its price.
+		player.poe2.forgetActionPaid();
 		// POE2 Mashup: the swing and its sparks take the attack skill's look.
 		const SkillLookScope skillLook(CurrentAttackSkill(player));
 		PlaySkillLookSound(CurrentAttackSkill(player), player.position.tile);
@@ -1123,6 +1139,7 @@ bool DoRangeAttack(Player &player)
 	int arrows = 0;
 	if (player.AnimInfo.currentFrame == player._pAFNum - 1) {
 		arrows = 1;
+		player.poe2.forgetActionPaid();
 	}
 
 	if (HasAnyOf(player._pIFlags, ItemSpecialEffect::MultipleArrows) && player.AnimInfo.currentFrame == player._pAFNum + 1) {
@@ -1348,6 +1365,7 @@ bool DoSkillCast(Player &player)
 	if (SpinsWhileStriking(skill))
 		TurnWithSpin(player);
 	if (player.AnimInfo.currentFrame == player.poe2.castFrame) {
+		player.poe2.forgetActionPaid();
 		if (IsAnyOf(skill, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge))
 			DashSkillLanding(player, skill);
 		else if (ExecuteSkillCast(player, skill, player.position.temp))
@@ -1367,6 +1385,7 @@ bool DoSpell(Player &player)
 		return DoSkillCast(player);
 
 	if (player.AnimInfo.currentFrame == player._pSFNum) {
+		player.poe2.forgetActionPaid();
 		CastSpell(
 		    player,
 		    player.executedSpell.spellId,
@@ -3047,6 +3066,8 @@ void StartStand(Player &player, Direction dir)
 
 	NewPlrAnim(player, player_graphic::Stand, dir);
 	player._pmode = PM_STAND;
+	// POE2 Mashup: no action is under way to give back a price for.
+	player.poe2.forgetActionPaid();
 	FixPlayerLocation(player, dir);
 	FixPlrWalkTags(player);
 	player.occupyTile(player.position.tile, false);

@@ -834,6 +834,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/spirit_uses.cpp
   poe2/spirit_auras.cpp
   poe2/minion_gems.cpp
+  poe2/minion_travel.cpp
   poe2/support_gems.cpp
   poe2/telemetry.cpp
   poe2/telemetry_events.cpp

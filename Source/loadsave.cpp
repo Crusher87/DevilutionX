@@ -44,6 +44,8 @@
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/minion_gems.hpp"
+#include "poe2/minion_travel.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -863,6 +865,10 @@ void LoadMonsters(LoadHelper &file, ankerl::unordered_dense::set<unsigned> &remo
 
 		if (applyLight && monster.isUnique() && monster.lightId != NO_LIGHT)
 			Lights[monster.lightId].isInvalid = false;
+		// POE2 Mashup: a hero's minion that is no golem, gem minion or one of the King's dead was raised by Revive, so it
+		// still counts as Revive's and goes along with the hero (Curtis 2026-10-29).
+		if (gbIsPoe2 && monster.isPlayerMinion() && (monster.flags & MFLAG_KINGS_DEAD) == 0 && monster.type().type != MT_GOLEM && !IsMinionGemType(monster.type().type))
+			monster.poe2.revived = true;
 		// POE2 Mashup: a monster saved before the monster level tables (or on a kept floor) moves onto them once,
 		// keeping its life fraction; monsters already on them are left as they are.
 		RescaleLoadedMonster(monster);
@@ -2476,9 +2482,10 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * tree the hero's points were spent on and the quests that gave passive points. Version 22 adds the support sockets
  * Jeweller's Orbs opened on each Skills panel row. Version 25 adds the skills inside meta gems. Version 26 adds whether a
  * support gem has dropped for the hero and the kills without one; shards became items then, and an older hero's counted
- * shards turn into shard items when they load.
+ * shards turn into shard items when they load. Version 27 adds the minions waiting in town to go with the hero to the next dungeon
+ * level.
  */
-constexpr uint8_t Poe2HeroDataVersion = 26;
+constexpr uint8_t Poe2HeroDataVersion = 27;
 /**
  * @brief The socket byte saved with an emptied middle mouse button. Heroes from before default attacks saved the
  * button empty with socket 0, and get the attack on loading; one the player emptied stays empty.
@@ -2832,6 +2839,18 @@ uint8_t ReadPoe2HeroData(Player &player)
 		return version;
 	player.poe2.economy.supportGemDropped = file.NextLE<uint8_t>() != 0;
 	player.poe2.economy.supportDroughtKills = file.NextLE<uint8_t>();
+
+	// Version 27: the minions waiting in town to go with the hero (poe2/minion_travel.hpp).
+	if (version < 27 || !file.IsValid(1))
+		return version;
+	const uint8_t travellingMinions = file.NextLE<uint8_t>();
+	if (!file.IsValid(travellingMinions * TravellingMinionSaveSize))
+		return version;
+	std::vector<uint8_t> minionBytes(1 + (travellingMinions * TravellingMinionSaveSize));
+	minionBytes[0] = travellingMinions;
+	for (size_t i = 1; i < minionBytes.size(); i++)
+		minionBytes[i] = file.NextLE<uint8_t>();
+	UnpackTravellingMinions(player.poe2, minionBytes);
 	return version;
 }
 
@@ -2946,8 +2965,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 			swapItemCount++;
 	}
 	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
+	const std::vector<uint8_t> travellingMinions = PackTravellingMinions(player.poe2);
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2) + sizeof(uint16_t) + (NumSkillSlots * MaxSupportSockets * 3) + SupportDropSaveSize);
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2) + sizeof(uint16_t) + (NumSkillSlots * MaxSupportSockets * 3) + SupportDropSaveSize + travellingMinions.size());
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -3102,6 +3122,8 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	// Version 26: whether a support gem has dropped for the hero, and the kills without one.
 	file.WriteLE<uint8_t>(player.poe2.economy.supportGemDropped ? 1 : 0);
 	file.WriteLE<uint8_t>(player.poe2.economy.supportDroughtKills);
+	// Version 27: the minions waiting in town to go with the hero.
+	file.WriteBytes(travellingMinions.data(), travellingMinions.size());
 }
 
 void LoadHeroItems(Player &player)
