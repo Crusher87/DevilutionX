@@ -1818,7 +1818,7 @@ void ScanStrongboxes(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
 		const Object &object = Objects[ActiveObjects[i]];
-		if (!IsClosedStrongbox(object) || BehindWall(object.position))
+		if (!StrongboxStandsOut(object) || BehindWall(object.position))
 			continue;
 		const Vec feet = TileCentre(object.position);
 		if (!view.contains(feet, 120))

@@ -9,7 +9,8 @@
  *    with a gold edge and a gold name (and a glow and rising sparks with Modern Effects). Opening it brings out its
  *    guards: 4 to 6 of the floor's own kinds led by a magic one, taken out of the floor's monsters when it was made.
  *    The one exception to "no monsters from nowhere", so they come with a warning (Curtis, 10-28: "0-100 with no
- *    warning"): a summoning sound, a shake, and red runes where each will stand, then one at a time.
+ *    warning"): a summoning sound, a shake, and red runes where each will stand, then one at a time. Its loot drops
+ *    only when every guard is dead (Curtis, 10-29).
  *  - Normal chests keep Diablo's rule and can be empty; the other kinds never are.
  * The kind is kept in the chest's _oVar5 (saved with the level), a strongbox's guards in _oVar3, _oVar4 and _oVar6.
  */
@@ -42,10 +43,10 @@ void SetFloorChestKind(Object &chest, FloorChestKind kind, int guards = 0);
  */
 bool OpenFloorChest(const Player &player, Object &chest, bool sendmsg);
 
-/** @brief A strongbox not opened yet, drawn so it stands out. */
-bool IsClosedStrongbox(const Object &object);
+/** @brief A strongbox not opened yet, or holding its loot until its guards are dead: drawn so it stands out. */
+bool StrongboxStandsOut(const Object &object);
 
-/** @brief Each game tick: an open strongbox's guards step out one at a time. */
+/** @brief Each game tick: an open strongbox's guards step out one at a time, and its loot drops once they are dead. */
 void UpdateFloorChest(Object &chest);
 
 /** @brief The console's strongbox(): puts a strongbox with 5 guards next to the hero, to try one. */

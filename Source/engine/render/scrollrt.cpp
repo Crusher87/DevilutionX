@@ -700,7 +700,7 @@ void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePositi
 	const Point screenPosition = targetBufferPosition + objectToDraw.getRenderingOffset(sprite, tilePosition);
 
 	// POE2 Mashup: a strongbox stands out, drawn bright even in the dark with a gold edge.
-	const bool strongbox = IsClosedStrongbox(objectToDraw);
+	const bool strongbox = StrongboxStandsOut(objectToDraw);
 	if (&objectToDraw == ObjectUnderCursor) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsObject, screenPosition, sprite);
 	} else if (strongbox) {

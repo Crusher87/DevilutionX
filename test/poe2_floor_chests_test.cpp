@@ -77,11 +77,14 @@ TEST_F(Poe2FloorChestsTest, NamesShowTheirRarity)
 TEST_F(Poe2FloorChestsTest, ClosedStrongboxStandsOut)
 {
 	chest_.selectionRegion = SelectionRegion::Bottom;
-	EXPECT_FALSE(IsClosedStrongbox(chest_));
+	EXPECT_FALSE(StrongboxStandsOut(chest_));
 	SetFloorChestKind(chest_, FloorChestKind::Strongbox, 4);
-	EXPECT_TRUE(IsClosedStrongbox(chest_));
+	EXPECT_TRUE(StrongboxStandsOut(chest_));
 	chest_.selectionRegion = SelectionRegion::None;
-	EXPECT_FALSE(IsClosedStrongbox(chest_));
+	EXPECT_FALSE(StrongboxStandsOut(chest_));
+	// Opened, but its loot still waits for the guards to die.
+	chest_._oVar6 |= 1 << 16;
+	EXPECT_TRUE(StrongboxStandsOut(chest_));
 }
 
 TEST_F(Poe2FloorChestsTest, ClosedStrongboxBringsNoGuards)

@@ -36,7 +36,8 @@ constexpr int GuardGapMs = 500;
 
 /*
  * A strongbox keeps its guards in its object, so a save in the middle of them coming keeps the rest coming:
- * _oVar6: how many guards it has (bits 0-7) and how many are still to come (bits 8-15).
+ * _oVar6: how many guards it has (bits 0-7), how many are still to come (bits 8-15), and whether its loot is still
+ * waiting for them all to die (bit 16).
  * _oVar4: the guards' two kinds once it's open (bits 0-7 and 8-15); a strongbox is never trapped.
  * _oVar3: game ticks until the next guard steps out.
  */
@@ -50,9 +51,39 @@ int GuardsToCome(const Object &chest)
 	return (chest._oVar6 >> 8) & 0xFF;
 }
 
+constexpr int LootWaiting = 1 << 16;
+
 void SetGuardsToCome(Object &chest, int count)
 {
-	chest._oVar6 = GuardsTotal(chest) | (count << 8);
+	chest._oVar6 = (chest._oVar6 & ~0xFF00) | (count << 8);
+}
+
+bool IsLootWaiting(const Object &chest)
+{
+	return (chest._oVar6 & LootWaiting) != 0;
+}
+
+/** Whether any strongbox guard on the floor is still alive. */
+bool GuardsAlive()
+{
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if ((monster.flags & MFLAG_STRONGBOX_GUARD) != 0 && monster.mode != MonsterMode::Death && monster.hitPoints > 0)
+			return true;
+	}
+	return false;
+}
+
+/** The sure rare and the box's own rolls (at least one), dropped where it stands. */
+void DropStrongboxLoot(Object &chest, bool sendmsg)
+{
+	DropPoe2ChestItem(chest.position, ITEM_QUALITY_RARE, sendmsg, "strongbox");
+	for (int j = 0; j < std::max(chest._oVar1, 1); j++) {
+		if (chest._oVar2 != 0)
+			CreateRndItem(chest.position, false, sendmsg, false);
+		else
+			CreateRndUseful(chest.position, sendmsg);
+	}
 }
 
 int Ticks(int ms)
@@ -110,6 +141,7 @@ void WarnOfGuards(Object &chest)
 	const size_t other = types[GenerateRnd(static_cast<int>(types.size()))];
 	chest._oVar4 = static_cast<int>(main | (other << 8));
 	SetGuardsToCome(chest, GuardsTotal(chest));
+	chest._oVar6 |= LootWaiting;
 	chest._oVar3 = Ticks(WarningMs);
 	PlaySfxLoc(SfxID::SpellGolem, chest.position, false);
 	ShakeCamera(ShakeStrength::Light, Ticks(WarningMs / 2));
@@ -141,6 +173,7 @@ void BringOutGuard(Object &chest)
 		return;
 	vfx::Impact(*at, vfx::Element::Blood, 1.2F);
 	Monster &monster = Monsters[ActiveMonsters[ActiveMonsterCount - 1]];
+	monster.flags |= MFLAG_STRONGBOX_GUARD;
 	if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
 		DemoteMonsterRarity(monster);
 	if (index == 0)
@@ -168,9 +201,9 @@ void SetFloorChestKind(Object &chest, FloorChestKind kind, int guards)
 	chest._oVar3 = 0;
 }
 
-bool IsClosedStrongbox(const Object &object)
+bool StrongboxStandsOut(const Object &object)
 {
-	return gbIsPoe2 && GetFloorChestKind(object) == FloorChestKind::Strongbox && object.canInteractWith();
+	return gbIsPoe2 && GetFloorChestKind(object) == FloorChestKind::Strongbox && (object.canInteractWith() || IsLootWaiting(object));
 }
 
 bool OpenFloorChest(const Player &player, Object &chest, bool sendmsg)
@@ -178,39 +211,43 @@ bool OpenFloorChest(const Player &player, Object &chest, bool sendmsg)
 	const FloorChestKind kind = GetFloorChestKind(chest);
 	if (!gbIsPoe2 || setlevel || kind == FloorChestKind::Normal)
 		return false;
-	// The sure item, then the chest's own rolls; a magic or rare chest's sure item counts as one of them.
-	int rolls = std::max(chest._oVar1, 1);
-	switch (kind) {
-	case FloorChestKind::Magic:
-		DropPoe2ChestItem(chest.position, ITEM_QUALITY_MAGIC, sendmsg, "magic chest");
-		rolls--;
-		break;
-	case FloorChestKind::Rare:
-		DropPoe2ChestItem(chest.position, ITEM_QUALITY_RARE, sendmsg, "rare chest");
-		rolls--;
-		break;
-	default:
-		DropPoe2ChestItem(chest.position, ITEM_QUALITY_RARE, sendmsg, "strongbox");
-		break;
+	if (kind == FloorChestKind::Strongbox) {
+		// Its loot waits until every guard is dead (Curtis, 10-29); with no guards it drops now.
+		if (sendmsg && &player == MyPlayer)
+			WarnOfGuards(chest);
+		if (!IsLootWaiting(chest))
+			DropStrongboxLoot(chest, sendmsg);
+		return true;
 	}
-	for (int j = 0; j < rolls; j++) {
+	// The sure item, then the chest's own rolls, of which the sure item counts as one.
+	const bool magic = kind == FloorChestKind::Magic;
+	DropPoe2ChestItem(chest.position, magic ? ITEM_QUALITY_MAGIC : ITEM_QUALITY_RARE, sendmsg, magic ? "magic chest" : "rare chest");
+	for (int j = 1; j < std::max(chest._oVar1, 1); j++) {
 		if (chest._oVar2 != 0)
 			CreateRndItem(chest.position, false, sendmsg, false);
 		else
 			CreateRndUseful(chest.position, sendmsg);
 	}
-	if (kind == FloorChestKind::Strongbox && sendmsg && &player == MyPlayer)
-		WarnOfGuards(chest);
 	return true;
 }
 
 void UpdateFloorChest(Object &chest)
 {
-	if (!gbIsPoe2 || GetFloorChestKind(chest) != FloorChestKind::Strongbox || GuardsToCome(chest) <= 0)
+	if (!gbIsPoe2 || GetFloorChestKind(chest) != FloorChestKind::Strongbox || !IsLootWaiting(chest))
 		return;
-	if (--chest._oVar3 > 0)
+	if (GuardsToCome(chest) > 0) {
+		if (--chest._oVar3 <= 0)
+			BringOutGuard(chest);
 		return;
-	BringOutGuard(chest);
+	}
+	if (GuardsAlive())
+		return;
+	// The last guard is dead: the strongbox gives up its loot.
+	chest._oVar6 &= ~LootWaiting;
+	SetRndSeed(chest._oRndSeed);
+	PlaySfxLoc(SfxID::ChestOpen, chest.position, false);
+	vfx::Impact(chest.position, vfx::Element::Holy, 1.5F);
+	DropStrongboxLoot(chest, true);
 }
 
 std::string PlaceTestStrongbox()
