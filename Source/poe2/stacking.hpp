@@ -21,6 +21,15 @@ constexpr int CurrencyStackMax = 40;
 bool IsIdentifyScroll(const Item &item);
 /** @brief Currency and Scrolls of Identify stack; everything else is one item per cell. */
 bool IsStackable(const Item &item);
+/** @brief POE2 Mashup: a shard item, which stacks like currency up to ShardsPerOrb (Curtis 2026-10-29). */
+bool IsShard(const Item &item);
+/** @brief The most of the item one inventory cell holds: ShardsPerOrb for shards, CurrencyStackMax for other currency. */
+int StackMax(const Item &item);
+/**
+ * @brief A stack of ShardsPerOrb shards becomes one of their orb in its place, like POE2's, keeping its seed.
+ * @return true if it did.
+ */
+bool CombineShardStack(Item &stack);
 /** @brief The number of items in the stack; 1 for anything that doesn't stack. */
 int StackCount(const Item &item);
 void SetStackCount(Item &item, int count);
@@ -29,7 +38,7 @@ bool CanStackWith(const Item &stack, const Item &item);
 /** @brief How many more fit on the stack. */
 int StackRoom(const Item &stack);
 /**
- * @brief Moves as much of the item onto the stack as fits.
+ * @brief Moves as much of the item onto the stack as fits; shards that fill the stack become their orb there.
  * @return true if all of it fit, and the item is now empty.
  */
 bool MergeStack(Item &stack, Item &item);

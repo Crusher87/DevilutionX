@@ -7,6 +7,7 @@
 #include "items.h"
 #include "player.h"
 #include "poe2/crafting_items.hpp"
+#include "poe2/economy_state.hpp"
 #include "poe2/stacking.hpp"
 #include "spells.h"
 
@@ -166,6 +167,63 @@ TEST_F(Poe2StackingTest, PickupJoinsTheInventoryStack)
 	SetStackCount(player.InvList[0], CurrencyStackMax);
 	EXPECT_FALSE(InventoryStacksHaveRoom(player, Make("Chaos Orb")));
 	EXPECT_FALSE(MergeIntoInventoryStacks(player, Make("Chaos Orb"), false));
+}
+
+TEST_F(Poe2StackingTest, TenShardsInAStackBecomeTheirOrb)
+{
+	// Curtis 2026-10-29: shards are items in the bag, like POE2's; a stack of ten becomes the orb in its place.
+	Item stack = Make("Chance Shard");
+	ASSERT_TRUE(IsShard(stack));
+	EXPECT_TRUE(IsStackable(stack));
+	EXPECT_EQ(StackMax(stack), ShardsPerOrb);
+	EXPECT_EQ(stack._iMaxCharges, ShardsPerOrb);
+	EXPECT_FALSE(IsShard(Make("Orb of Chance")));
+	EXPECT_EQ(StackMax(Make("Orb of Chance")), CurrencyStackMax);
+	EXPECT_FALSE(CanStackWith(stack, Make("Regal Shard"))) << "each kind stacks on its own";
+
+	SetStackCount(stack, 6);
+	stack.position = { 3, 2 };
+	const uint32_t seed = stack._iSeed;
+	Item more = Make("Chance Shard");
+	more._iSeed = seed + 1;
+	SetStackCount(more, 3);
+	EXPECT_TRUE(MergeStack(stack, more));
+	EXPECT_EQ(StackCount(stack), 9);
+	EXPECT_TRUE(IsShard(stack)) << "nine is still shards";
+
+	more = Make("Chance Shard");
+	SetStackCount(more, 5);
+	EXPECT_FALSE(MergeStack(stack, more)) << "one fills the stack, four are left";
+	EXPECT_EQ(StackCount(more), 4);
+	EXPECT_FALSE(IsShard(stack));
+	EXPECT_EQ(stack._iMiscId, IMISC_ORB_CHANCE);
+	EXPECT_EQ(StackCount(stack), 1);
+	EXPECT_EQ(stack._iSeed, seed);
+	EXPECT_EQ(stack.position, Point(3, 2)) << "the orb takes the shards' place";
+	EXPECT_TRUE(stack._iIdentified);
+	EXPECT_EQ(stack._iCreateInfo, 0) << "rebuilt from its base and seed like a starting item";
+	EXPECT_FALSE(CanStackWith(stack, more));
+
+	// Fewer than ten never combine; a stack that somehow holds ten does.
+	Item nine = Make("Artificer's Shard");
+	SetStackCount(nine, 9);
+	EXPECT_FALSE(CombineShardStack(nine));
+	nine._iCharges = ShardsPerOrb;
+	EXPECT_TRUE(CombineShardStack(nine));
+	EXPECT_EQ(nine._iMiscId, IMISC_ORB_ARTIFICER);
+}
+
+TEST_F(Poe2StackingTest, PickedUpShardsFillTheStackIntoAnOrb)
+{
+	Player &player = *MyPlayer;
+	player.InvList[0] = Make("Regal Shard");
+	SetStackCount(player.InvList[0], 9);
+	player._pNumInv = 1;
+	ASSERT_TRUE(MergeIntoInventoryStacks(player, Make("Regal Shard"), false));
+	EXPECT_EQ(player._pNumInv, 1);
+	EXPECT_EQ(player.InvList[0]._iMiscId, IMISC_ORB_REGAL);
+	// The orb is no shard stack, so the next shard needs a cell of its own.
+	EXPECT_FALSE(InventoryStacksHaveRoom(player, Make("Regal Shard")));
 }
 
 } // namespace

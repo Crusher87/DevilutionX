@@ -7,6 +7,7 @@
 #include "player.h"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/economy.hpp"
 
 namespace devilution {
 
@@ -15,22 +16,56 @@ bool IsIdentifyScroll(const Item &item)
 	return !item.isEmpty() && item._iMiscId == IMISC_SCROLL && item._iSpell == SpellID::Identify;
 }
 
+bool IsShard(const Item &item)
+{
+	return gbIsPoe2 && !item.isEmpty() && item._iClass == ICLASS_MISC && ShardKindForMiscId(item._iMiscId).has_value();
+}
+
 bool IsStackable(const Item &item)
 {
-	return gbIsPoe2 && !item.isEmpty() && item._iClass == ICLASS_MISC && (IsCurrencyMiscId(item._iMiscId) || IsIdentifyScroll(item));
+	return gbIsPoe2 && !item.isEmpty() && item._iClass == ICLASS_MISC && (IsCurrencyMiscId(item._iMiscId) || IsIdentifyScroll(item) || IsShard(item));
+}
+
+int StackMax(const Item &item)
+{
+	return IsShard(item) ? ShardsPerOrb : CurrencyStackMax;
+}
+
+bool CombineShardStack(Item &stack)
+{
+	const std::optional<ShardKind> kind = IsShard(stack) ? ShardKindForMiscId(stack._iMiscId) : std::nullopt;
+	if (!kind || StackCount(stack) < ShardsPerOrb)
+		return false;
+	const item_misc_id orb = ShardCurrency(*kind);
+	std::optional<_item_indexes> base;
+	for (size_t i = 0; i < AllItemsList.size() && !base; i++) {
+		if (AllItemsList[i].iMiscId == orb && IsItemAvailable(static_cast<int>(i)))
+			base = static_cast<_item_indexes>(i);
+	}
+	if (!base)
+		return false;
+	// Made like a starting item (no creation info), so it rebuilds the same from its base and seed.
+	const Point position = stack.position;
+	const uint32_t seed = stack._iSeed;
+	InitializeItem(stack, *base);
+	stack._iSeed = seed;
+	stack._iIdentified = true;
+	stack._iStatFlag = true;
+	stack.position = position;
+	return true;
 }
 
 int StackCount(const Item &item)
 {
 	if (!IsStackable(item))
 		return 1;
-	return std::clamp(item._iCharges, 1, CurrencyStackMax);
+	return std::clamp(item._iCharges, 1, StackMax(item));
 }
 
 void SetStackCount(Item &item, int count)
 {
-	item._iMaxCharges = CurrencyStackMax;
-	item._iCharges = std::clamp(count, 1, CurrencyStackMax);
+	item._iMaxCharges = StackMax(item);
+	item._iCharges = std::clamp(count, 1, StackMax(item));
 }
 
 bool CanStackWith(const Item &stack, const Item &item)
@@ -45,7 +80,7 @@ bool CanStackWith(const Item &stack, const Item &item)
 
 int StackRoom(const Item &stack)
 {
-	return IsStackable(stack) ? CurrencyStackMax - StackCount(stack) : 0;
+	return IsStackable(stack) ? StackMax(stack) - StackCount(stack) : 0;
 }
 
 bool MergeStack(Item &stack, Item &item)
@@ -56,6 +91,8 @@ bool MergeStack(Item &stack, Item &item)
 	if (moved <= 0)
 		return false;
 	SetStackCount(stack, StackCount(stack) + moved);
+	// POE2 Mashup: ten shards in a stack become their orb (Curtis 2026-10-29).
+	CombineShardStack(stack);
 	const int left = StackCount(item) - moved;
 	if (left <= 0) {
 		item.clear();

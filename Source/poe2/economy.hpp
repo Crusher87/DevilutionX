@@ -86,10 +86,27 @@ struct SalvageYield {
 std::optional<SalvageYield> GetSalvageYield(const Item &item);
 /** @brief Whether salvaging the item gives anything, for the anvil's list: quality, sockets or being unique. */
 bool SalvageGivesSomething(const Item &item);
-/** @brief Adds shards to the hero's; returns how many full currency items they made. */
-int AddShards(Player &player, ShardKind kind, int shards);
+/** @brief The orb ShardsPerOrb shards of the kind make. */
 item_misc_id ShardCurrency(ShardKind kind);
-/** @brief Disenchants the inventory item: it's destroyed for shards, and full sets become currency. */
+/** @brief POE2 Mashup: the shard item of the kind (Curtis 2026-10-29: shards are items in the bag, like POE2's). */
+item_misc_id ShardMiscId(ShardKind kind);
+/** @brief The kind of shard an item of this misc id is, if it is a shard. */
+std::optional<ShardKind> ShardKindForMiscId(int miscId);
+/** @brief Shards of the kind in the hero's bag, all stacks together. */
+int ShardsInBag(const Player &player, ShardKind kind);
+/** @brief The biggest stack of the kind's shards in the hero's bag, 0 if none; it becomes an orb at ShardsPerOrb. */
+int FullestShardStack(const Player &player, ShardKind kind);
+/**
+ * @brief Puts shard items in the hero's bag (at their feet when it's full), with a message saying where they are; a stack
+ * that reaches ShardsPerOrb becomes an orb.
+ * @return How many orbs they made.
+ */
+int GainShards(Player &player, ShardKind kind, int shards);
+/** @brief Turns the shards an older hero had counted into shard items in their bag; a kind that doesn't fit stays counted. */
+void ConvertCountedShards(Player &player);
+/** @brief The shard's tooltip line, like POE2's: "A stack of 10 shards becomes an Orb of Chance". */
+std::string ShardStackText(ShardKind kind);
+/** @brief Disenchants the inventory item: it's destroyed for shard items, and a full stack becomes its orb. */
 bool DisenchantInvItem(Player &player, int invIndex);
 /** @brief Salvages the inventory item: it's destroyed for quality currency, socket shards and a unique's Chance Shards. */
 bool SalvageInvItem(Player &player, int invIndex);

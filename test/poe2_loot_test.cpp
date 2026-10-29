@@ -571,6 +571,88 @@ TEST_F(Poe2LootTest, UncutGemsTakeTheAreasLevel)
 	}
 }
 
+TEST_F(Poe2LootTest, AFirstSupportGemByDungeonLevelTwo)
+{
+	// Curtis 2026-10-29: "I want at least one by level 2"; no support gem dropped in his first two floors.
+	Player &player = *MyPlayer;
+	player.poe2.clear();
+	// Levels 1 and 2: a small chance per kill that climbs with each kill without one.
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Normal, 1), FirstSupportStartPerMille);
+	player.poe2.economy.supportDroughtKills = 50;
+	const int climbed = FirstSupportStartPerMille + (50 * FirstSupportClimbPerMille);
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Normal, 1), climbed);
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Rare, 1), climbed) << "level 1's rares only climb";
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Magic, 2), climbed);
+	// Level 2: the first rare or unique monster, or the quest boss (the Butcher), drops one for sure.
+	for (const LootSource source : { LootSource::Rare, LootSource::Miniboss, LootSource::Boss })
+		EXPECT_EQ(FirstSupportChancePerMille(player, source, FirstSupportLastLevel), 1000);
+	EXPECT_EQ(FirstSupportLastLevel, 2);
+	// Not in town, on quest levels or in maps (0), nor deeper.
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Boss, 0), 0);
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Boss, 3), 0);
+	// Diablo's own mode has no such rule.
+	gbIsPoe2 = false;
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Boss, 2), 0);
+	gbIsPoe2 = true;
+	// Once one has dropped, never again.
+	player.poe2.economy.supportGemDropped = true;
+	EXPECT_EQ(FirstSupportChancePerMille(player, LootSource::Boss, 2), 0);
+	EXPECT_FALSE(RollFirstSupportDrop(player, LootSource::Boss, 2));
+
+	// A sure drop takes no number from the game's generator; a miss counts the kill.
+	player.poe2.clear();
+	SetRndSeed(5);
+	const uint32_t state = GetLCGEngineState();
+	EXPECT_TRUE(RollFirstSupportDrop(player, LootSource::Rare, 2));
+	EXPECT_EQ(GetLCGEngineState(), state);
+	EXPECT_EQ(player.poe2.economy.supportDroughtKills, 0);
+
+	// Level 1's monsters: one usually comes within a few dozen kills, and nearly always within 100.
+	int without = 0;
+	int dropped = 0;
+	int killsToDrop = 0;
+	for (uint32_t seed = 1; seed <= 400; seed++) {
+		player.poe2.clear();
+		SetRndSeed(seed);
+		int kills = 0;
+		bool drop = false;
+		while (kills < 100 && !drop) {
+			drop = RollFirstSupportDrop(player, LootSource::Normal, 1);
+			kills++;
+		}
+		if (!drop) {
+			without++;
+			continue;
+		}
+		dropped++;
+		killsToDrop += kills;
+		EXPECT_EQ(player.poe2.economy.supportDroughtKills, kills - 1);
+	}
+	EXPECT_LE(without, 8);
+	ASSERT_GT(dropped, 0);
+	EXPECT_GT(killsToDrop / dropped, 15) << "not handed out on the first kills";
+	EXPECT_LT(killsToDrop / dropped, 60);
+}
+
+TEST_F(Poe2LootTest, AnySupportGemDropSpendsTheFirstOnesGuarantee)
+{
+	// A support from a barrel counts as the hero's first, so the guarantee is spent.
+	MyPlayer->poe2.clear();
+	bool found = false;
+	for (uint32_t seed = 1; seed < 6000 && !found; seed++) {
+		const std::vector<Item> drops = ContainerDrops(1, DTYPE_CATHEDRAL, 1, seed);
+		found = CountMisc(drops, IMISC_UNCUT_SUPPORT) > 0;
+		if (!found) {
+			ASSERT_FALSE(MyPlayer->poe2.economy.supportGemDropped) << "seed " << seed;
+		}
+	}
+	ASSERT_TRUE(found);
+	EXPECT_TRUE(MyPlayer->poe2.economy.supportGemDropped);
+	MyPlayer->poe2.clear();
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+}
+
 /** Chests and theme rooms on the first floor once crashed: the equipment class table had no room. */
 TEST_F(Poe2LootTest, ContainerDropsOnTheFirstFloor)
 {

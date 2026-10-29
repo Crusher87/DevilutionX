@@ -368,6 +368,29 @@ bool LineageSupportsDropAt(int areaLevel)
 	return areaLevel > MapAreaLevelBase;
 }
 
+int FirstSupportChancePerMille(const Player &player, LootSource source, int dungeonLevel)
+{
+	if (!gbIsPoe2 || player.poe2.economy.supportGemDropped || dungeonLevel < 1 || dungeonLevel > FirstSupportLastLevel)
+		return 0;
+	if (dungeonLevel == FirstSupportLastLevel && IsAnyOf(source, LootSource::Rare, LootSource::Miniboss, LootSource::Boss))
+		return 1000;
+	return std::min<int>(FirstSupportStartPerMille + (FirstSupportClimbPerMille * player.poe2.economy.supportDroughtKills), 1000);
+}
+
+bool RollFirstSupportDrop(Player &player, LootSource source, int dungeonLevel)
+{
+	const int chance = FirstSupportChancePerMille(player, source, dungeonLevel);
+	if (chance <= 0)
+		return false;
+	if (chance >= 1000)
+		return true;
+	if (LootRandom(1000) < chance)
+		return true;
+	uint8_t &kills = player.poe2.economy.supportDroughtKills;
+	kills = static_cast<uint8_t>(std::min<int>(kills + 1, UINT8_MAX));
+	return false;
+}
+
 int RollNaturalRareAffixCount()
 {
 	// POE2's dropped rares can have 3; most still have 4 or more (Curtis 2026-10-23).

@@ -2331,6 +2331,11 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(CurrencyOrbDescription(orb));
 		return;
 	}
+	// POE2 Mashup: a shard says what its stack becomes, like POE2's (Curtis 2026-10-29).
+	if (const std::optional<ShardKind> shard = ShardKindForMiscId(item._iMiscId); gbIsPoe2 && shard) {
+		AddItemInfoBoxString(ShardStackText(*shard));
+		return;
+	}
 	if (gbIsPoe2 && IsFlaskPotion(item)) {
 		AddItemInfoBoxString(FlaskDescription(item));
 		for (const std::string &line : FlaskModLines(item))
@@ -5178,6 +5183,9 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		RollFragmentSet(item, origin.poe2ItemLevel);
 	SetupItem(item);
 	TelemetryItemDropped(item, origin.name);
+	// POE2 Mashup: the hero has had a support gem drop, so the first one's guarantee is spent (Curtis 2026-10-29).
+	if (MyPlayer != nullptr && (item._iMiscId == IMISC_UNCUT_SUPPORT || SupportGemForItem(item) != SupportGem::None))
+		MyPlayer->poe2.economy.supportGemDropped = true;
 	if (sendmsg)
 		NetSendCmdPItem(false, CMD_DROPITEM, item.position, item);
 	if (origin.pregen)
@@ -5227,10 +5235,28 @@ void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int roll
 		DropPoe2LootItem(origin, position, sendmsg, RollLootCategory(origin.source, MapLootBonus()));
 }
 
+namespace {
+
+/** @brief The dungeon level the first support gem's rules go by: 0 in town, on quest levels and in maps. */
+int FirstSupportDungeonLevel()
+{
+	if (leveltype == DTYPE_TOWN || setlevel || ActiveMapTier() > 0)
+		return 0;
+	return currlevel;
+}
+
+} // namespace
+
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 {
 	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
 	SpawnPoe2LootRolls(monster, position, sendmsg, RollLootCount(origin.source, MapLootBonus()));
+	// POE2 Mashup: at least one support gem by dungeon level 2 (Curtis 2026-10-29: none in his first two floors).
+	if (MyPlayer != nullptr && RollFirstSupportDrop(*MyPlayer, origin.source, FirstSupportDungeonLevel())) {
+		const std::optional<_item_indexes> gem = PickPoe2Weighted(origin.baseLevel, [](const ItemData &data) { return data.iMiscId == IMISC_UNCUT_SUPPORT; });
+		if (gem)
+			DropPoe2LootItem(origin, position, sendmsg, LootCategory::Gem, std::nullopt, gem);
+	}
 	if (origin.source != LootSource::Boss)
 		return;
 	// Bosses always drop a rare, often some currency and now and then a unique on top of their rolls.
@@ -5428,7 +5454,7 @@ bool MakeGambleItem(const Player &player, Item &item, GambleFamily family, int a
 	return true;
 }
 
-void GiveCurrencyItem(Player &player, item_misc_id miscId)
+bool MakeCurrencyItem(const Player &player, Item &item, item_misc_id miscId, int count)
 {
 	std::optional<_item_indexes> idx;
 	for (size_t i = 0; i < AllItemsList.size() && !idx; i++) {
@@ -5436,26 +5462,45 @@ void GiveCurrencyItem(Player &player, item_misc_id miscId)
 			idx = static_cast<_item_indexes>(i);
 	}
 	if (!idx)
-		return;
-	Item item {};
+		return false;
+	item = {};
 	SetupAllItems(player, item, *idx, AdvanceRndSeed(), 1, 1, /*onlygood=*/false, /*pregen=*/false);
 	item._iIdentified = true;
+	item._iStatFlag = true;
+	if (count > 1 && IsStackable(item))
+		SetStackCount(item, count);
+	return true;
+}
+
+GivenItemPlace GiveCurrencyItem(Player &player, item_misc_id miscId, int count)
+{
+	Item item;
+	if (!MakeCurrencyItem(player, item, miscId, count))
+		return GivenItemPlace::Lost;
 	TelemetryItemDropped(item, "salvage");
+	return GiveItemToPlayer(player, item);
+}
+
+GivenItemPlace GiveItemToPlayer(Player &player, const Item &item)
+{
 	if (AutoPlaceItemInInventory(player, item))
-		return;
+		return GivenItemPlace::Bag;
 	// No room: it lands at the hero's feet.
 	if (ActiveItemCount < MAXITEMS) {
 		const int ii = AllocateItem();
 		Items[ii] = item;
 		if (GetSuperItemSpace(player.position.tile, ii)) {
 			SetupItem(Items[ii]);
-			return;
+			// POE2 Mashup: identified, so the stack shows its name and count on the floor (Curtis 2026-10-29).
+			Items[ii]._iIdentified = true;
+			return GivenItemPlace::Floor;
 		}
 		// POE2 Mashup: no floor tile either: free the slot instead of leaving an invisible item.
 		DeleteItem(ActiveItemCount - 1);
 	}
 	if (&player == MyPlayer)
 		EventPlrMsg(_("No room for the item: it was lost."), UiFlags::ColorRed);
+	return GivenItemPlace::Lost;
 }
 
 void DropBossUnique(Monster &monster, bool sendmsg)

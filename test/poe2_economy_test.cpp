@@ -1,3 +1,6 @@
+#include <array>
+#include <string_view>
+
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
@@ -8,6 +11,8 @@
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/economy.hpp"
+#include "poe2/loot.hpp"
+#include "poe2/stacking.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -113,14 +118,92 @@ TEST_F(Poe2EconomyTest, GambleChargesInTheCampaignOnly)
 	EXPECT_TRUE(CanGamble(player));
 }
 
-TEST_F(Poe2EconomyTest, ShardsMakeCurrencyAtTen)
+/** A hero who isn't MyPlayer, so nothing is sent over the network. */
+Player &OtherHero()
 {
-	Player &player = *MyPlayer;
-	EXPECT_EQ(AddShards(player, ShardKind::Regal, 9), 0);
-	EXPECT_EQ(AddShards(player, ShardKind::Regal, 2), 1);
-	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Regal)], 1);
-	EXPECT_EQ(AddShards(player, ShardKind::Chance, 25), 2);
+	Players.resize(2);
+	MyPlayer = &Players[0];
+	Player &player = Players[1];
+	player = {};
+	player.poe2.clear();
+	return player;
+}
+
+int CountInBag(const Player &player, item_misc_id miscId)
+{
+	int count = 0;
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (player.InvList[i]._iMiscId == miscId)
+			count += StackCount(player.InvList[i]);
+	}
+	return count;
+}
+
+TEST_F(Poe2EconomyTest, ShardsAreItemsAtTheEndOfTheItemTable)
+{
+	// Curtis 2026-10-29: shards are real items, like POE2's; their rows come after every older row, which saves keep.
+	const std::array<ShardKind, 4> kinds { ShardKind::Transmutation, ShardKind::Regal, ShardKind::Chance, ShardKind::Artificer };
+	const std::array<std::string_view, 4> names { "Transmutation Shard", "Regal Shard", "Chance Shard", "Artificer's Shard" };
+	// The item table had 1005 rows before the shards; saves store the row.
+	constexpr size_t FirstShardRow = 1005;
+	for (size_t k = 0; k < kinds.size(); k++) {
+		const item_misc_id miscId = ShardMiscId(kinds[k]);
+		ASSERT_TRUE(ShardKindForMiscId(miscId));
+		EXPECT_EQ(*ShardKindForMiscId(miscId), kinds[k]);
+		const size_t row = FirstShardRow + k;
+		ASSERT_LT(row, AllItemsList.size());
+		EXPECT_EQ(AllItemsList[row].iMiscId, miscId) << names[k];
+		EXPECT_EQ(AllItemsList[row].iName, names[k]);
+		EXPECT_EQ(AllItemsList[row].dropRate, 0) << "only disenchanting and salvaging give shards";
+		EXPECT_FALSE(AllItemsList[row].iUsable);
+	}
+	EXPECT_FALSE(ShardKindForMiscId(IMISC_ORB_CHANCE));
 	EXPECT_EQ(ShardCurrency(ShardKind::Artificer), IMISC_ORB_ARTIFICER);
+	EXPECT_EQ(ShardStackText(ShardKind::Chance), "A stack of 10 shards becomes an Orb of Chance");
+	EXPECT_EQ(ShardStackText(ShardKind::Regal), "A stack of 10 shards becomes a Regal Orb");
+}
+
+TEST_F(Poe2EconomyTest, ShardsGoInTheBagAndTenMakeAnOrb)
+{
+	Player &player = OtherHero();
+	EXPECT_EQ(GainShards(player, ShardKind::Regal, 9), 0);
+	EXPECT_EQ(player._pNumInv, 1);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Regal), 9);
+	EXPECT_EQ(FullestShardStack(player, ShardKind::Regal), 9);
+	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Regal)], 0) << "no hidden count any more";
+
+	// Two more: one fills the stack, which becomes a Regal Orb, and one starts a new stack.
+	EXPECT_EQ(GainShards(player, ShardKind::Regal, 2), 1);
+	EXPECT_EQ(CountInBag(player, IMISC_ORB_REGAL), 1);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Regal), 1);
+
+	// 25 at once: two orbs and a stack of five.
+	EXPECT_EQ(GainShards(player, ShardKind::Chance, 25), 2);
+	EXPECT_EQ(CountInBag(player, IMISC_ORB_CHANCE), 2);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), 5);
+
+	// The fullest stack fills first.
+	EXPECT_EQ(GainShards(player, ShardKind::Artificer, 3), 0);
+	EXPECT_EQ(GainShards(player, ShardKind::Artificer, 8), 1);
+	EXPECT_EQ(CountInBag(player, IMISC_ORB_ARTIFICER), 1);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Artificer), 1);
+}
+
+TEST_F(Poe2EconomyTest, CountedShardsBecomeItemsOnce)
+{
+	// Heroes from before shards were items had them counted; they go in the bag and the count empties.
+	Player &player = OtherHero();
+	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] = 3;
+	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Transmutation)] = 9;
+	ConvertCountedShards(player);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), 3);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Transmutation), 9);
+	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 0);
+	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Transmutation)], 0);
+	const int items = player._pNumInv;
+	ConvertCountedShards(player);
+	EXPECT_EQ(player._pNumInv, items) << "only once";
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), 3);
 }
 
 TEST_F(Poe2EconomyTest, DisenchantAndSalvageYields)
@@ -204,26 +287,29 @@ TEST_F(Poe2EconomyTest, AnvilSalvagesUniquesForChanceShards)
 	ASSERT_TRUE(SalvageGivesSomething(flask));
 	EXPECT_EQ(GetSalvageYield(flask)->chanceShards, 1);
 
-	// Salvaging one adds its shard; ten make an Orb of Chance. Another player, so nothing is sent over the network.
-	Players.resize(2);
-	MyPlayer = &Players[0];
-	Player &player = Players[1];
-	player = {};
-	player.poe2.clear();
+	// Salvaging one puts its shard in the bag; a stack of ten becomes an Orb of Chance (Curtis 2026-10-29: told he got a
+	// Chance Shard from the Butcher's Cleaver, he couldn't find it).
+	Player &player = OtherHero();
 	sword._iMagical = ITEM_QUALITY_UNIQUE;
 	SetItemQuality(sword, 0);
 	sword._iPoe2Craft.sockets = 0;
 	player.InvList[0] = sword;
 	player.InvGrid[0] = 1;
 	player._pNumInv = 1;
-	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] = 8;
 	ASSERT_TRUE(SalvageInvItem(player, 0));
-	EXPECT_EQ(player._pNumInv, 0);
-	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 9);
+	EXPECT_EQ(player._pNumInv, 1) << "the sword went, its shard came";
+	EXPECT_EQ(player.InvList[0]._iMiscId, IMISC_SHARD_CHANCE);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), 1);
 	EXPECT_EQ(ShardsPerOrb, 10);
-	EXPECT_EQ(AddShards(player, ShardKind::Chance, 1), 1);
+	EXPECT_EQ(GainShards(player, ShardKind::Chance, 8), 0);
+	EXPECT_EQ(FullestShardStack(player, ShardKind::Chance), 9);
+	player.InvList[1] = sword;
+	player.InvGrid[1] = 2;
+	player._pNumInv = 2;
+	ASSERT_TRUE(SalvageInvItem(player, 1));
 	EXPECT_EQ(ShardCurrency(ShardKind::Chance), IMISC_ORB_CHANCE);
-	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 0);
+	EXPECT_EQ(CountInBag(player, IMISC_ORB_CHANCE), 1);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), 0);
 }
 
 } // namespace
