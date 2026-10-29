@@ -68,6 +68,23 @@ void Poe2FloorsAfterLoadGame();
 /** @brief The hero's town portal closed; the timer on its floor starts now. */
 void Poe2PortalClosed(int level, bool isSetLevel);
 
+/** @brief How a floor's current build is made. */
+struct Poe2FloorBuild {
+	/** The new Cathedral builder (poe2/cathedral_floors.hpp) rather than Diablo's. */
+	bool cathedralFunnel = false;
+	/** Designed rooms this build leaves out (bit per room). */
+	uint64_t avoidRooms = 0;
+};
+
+/**
+ * @brief The builder and rooms for a floor's current build. The first call for a build settles them from the
+ * New Cathedral Floors setting and the room history; later calls (the same floor built again from its seed) get the
+ * same answer, so a kept floor comes back as it was.
+ */
+Poe2FloorBuild Poe2FloorBuildFor(int level);
+/** @brief The designed rooms a new Cathedral floor used, for the room history (once per build). */
+void Poe2NoteFloorRooms(int level, uint64_t rooms);
+
 /** @brief Packs the floor records for the save file. */
 std::vector<uint8_t> Poe2PackFloors();
 /** @brief Unpacks the floor records from the save file. Returns false if the data is unreadable. */

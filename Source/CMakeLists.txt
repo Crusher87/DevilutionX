@@ -805,6 +805,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/belt_uniques.cpp
   poe2/boss_loot.cpp
   poe2/camera_shake.cpp
+  poe2/cathedral_floors.cpp
   poe2/charms.cpp
   poe2/experience.cpp
   poe2/flasks.cpp

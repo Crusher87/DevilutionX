@@ -111,6 +111,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/cathedral_floors.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/hardcore.hpp"
 #include "poe2/hd.hpp"
@@ -3935,6 +3936,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	// POE2 Mashup: a floor left alone long enough is built fresh instead of loaded from the save.
 	Poe2BeginFloorVisit(firstflag, lvldir);
+	SetCathedralFunnelFloor(false);
 
 	if (setlevel) {
 		RETURN_IF_ERROR(LoadGameLevelSetLevel(firstflag, lvldir, myPlayer));
