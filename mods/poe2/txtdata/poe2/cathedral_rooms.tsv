@@ -1,0 +1,39 @@
+id	family	roles	memorable	pillarsBehind	reward	options	grid
+nave	hall	big,main	0	0		1b.	__........./_.O..O1.O../c........../A.........E/c........../_.O1.O..O../__....E....
+pillars	hall	big,main	0	0		1O.	__.......__/_L.......L_/..O..O..O../.........../E.........E/..O..1..O../E.........E/.........../..O..O..O../_L.......L_/__...E...__
+cloister	hall	big,main	1	0		1F.	E.........E/..L.....L../..aaaaaaa../..a.....a../..a.....a../E.a..1..a.E/..a.....a../..a.....a../..aaaaaaa../..L.....L../E.........E
+crossing	hall	big,main	0	0		1Ac	___c1c.E___/___.....___/___.....___/...O...O.../E.........E/.........../E.........E/...O...O.../___.....___/___.....___/___..E..___
+ossuary	hall	big,main	1	0		1L.	X..P...P..X/.........../E.S..O..S.E/.........../..O.....O../.........../E.S..O..S.E/.........../P.1P...P1.P
+twin	hall	big,main	0	0		1L.	E....a....E/..O..a..O../.....a...../.L...a...1./E....a....E/.....a...../.1...a...L./..O..a..O../E....a....E
+chamber	hall	big,main	0	0			........../E........E/........../...O..O.../........../........../...O..O.../........../E........E/..........
+round	hall	big,main	0	0			___..E..___/__.......__/_..L...L.._/.........../....###..../E...###...E/....###..../.........../_..L...L.._/__.......__/___..E..___
+gallery	hall	big,main	0	0		1b.	S.c_c1c_c.S/..._..._.../aaaaaaaaaaa/.........../E....L....E/.........../aaaaaaaaaaa/..._..._.../r.._..._..r
+arrival	stairs	main	0	0			L...UUUU..L/.........../..O.....O../.........../E....E....E
+waydown	stairs	main	0	0			L..VVVV...L/...VVVV..../..O.....O../.........../E....E....E
+smallchapel	chapel	main,quiet	0	0			c.A.c/O...O/E...E/...../..E..
+arched	chapel	main,quiet	0	0			__c.cAc.c__/_........._/aaaaa.aaaaa/.........../E....E....E
+sidechapels	chapel	main	0	0		1Ac	c.c_c1c_c.c/..._..._.../.........../E.........E/...........
+vault	crypt	side	0	0		1S.	.........../.S.S.1.S.S./E....*....E/.S.S...S.S./...........
+sunken	crypt	side	0	0			.........../...=====.../E..=S*.=..E/...==.==.../L....E....L
+catacomb	crypt	main,side	0	0			E.P__..S..P/...__.....E/_..__..____/_......____/_S...._____
+library	library	side,main	1	0			KKK.k.KKK.c/.........../E.KK...KK.E/.........../c....*....c
+scriptorium	library	side,quiet	0	0		1c.	c..k...k..c/.O.......O./E....1....E/.O.......O./....E......
+nook	library	side	0	0			KKcKK/...../E.k.E/...../..*..
+shrineroom	shrine	quiet,side	0	0			__c.cAc.c__/_.O.....O._/E.........E/_.O.....O._/__...E...__
+pilgrim	shrine	side,quiet	0	0		1L.	_cAc_/...../L...L/...../c...c/...../L...L/...../c.1.c/...../..E..
+fountain	shrine	quiet,main	0	0			_..L...L.._/...O...O.../E....F....E/...O...O.../_..L.E.L.._
+goat	shrine	side	1	0			_P.x...x.P_/.........../E....G....E/.........../_P.L.E.L.P_
+gatehouse	gate	main	0	0		1d#	.....#...../.....#...../E....d....E/.....#...../.....1.....
+guard	gate	main,side	0	0		1r.	r.........r/..O.....O../E....L....E/..O.....O../rr..1E....r
+colonnade	gate	main	0	0			.........../aaaaaaaaaaa/E.........E/aaaaaaaaaaa/...........
+ring	cells	side	0	1	strongbox		.........../...O.O.O.../E..O.*.s..E/...s.s.s.../.....E.....
+prison	cells	side	1	0			T.#.r#..#.*/..#..#..#../=d#=d#d=#d=/.........../E.........E
+torture	cells	side	1	0	raremonster	1*.	T.T.TxT.T.T/..Y.....Y../E.s..1..s.E/...Y...P.../P.D.E...Y.P
+treasury	vault	side	0	0			*.L.*/.O.O./...../.O.O./..E..
+reliquary	vault	side	0	0			c.*.c/...../aa.aa/...../..E..
+barrels	vault	side	0	0		1r.	r.r.r/...../r.1.r/...../..E..
+broken	ruin	big,main	0	0		1R.	_........._/...RR....../E..R....O../......1..../..O......../E.....RR..E/........O../...R......./..R1....R../.........../_...E....._
+forest	ruin	big,main	0	0		1O.	_...E....._/..O....O.../....O....../.O.....O.O./E...O....../......O...E/..O.......O/......1..../.O..O...O../.........../_.....E..._
+crossroads	junction	junction,main	0	0		1OL	_.E._/...../E.1.E/...../_.E._
+fork	junction	junction,main	0	0		1b.	E.........E/.........../..O..L..O../___..1..___/____.E.____
+bend	junction	junction,main	0	0			E..../.O..E/...__/...__/.E.__

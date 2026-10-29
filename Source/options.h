@@ -665,6 +665,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean wasdMovement;
 	/** @brief Hides low quality gear on the ground (POE2 Mashup). */
 	OptionEntryEnum<LootFilter> lootFilter;
+	/** @brief Cathedral floors built as a winding main way of rooms with side areas (POE2 Mashup). */
+	OptionEntryBoolean newCathedralFloors;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */

@@ -897,6 +897,7 @@ GameplayOptions::GameplayOptions()
               { LootFilter::HideNormal, N_("Hide normal gear") },
               { LootFilter::HideNormalAndMagic, N_("Hide normal and magic gear") },
           })
+    , newCathedralFloors("New Cathedral Floors", OptionEntryFlags::None, N_("New Cathedral Floors"), N_("On: Cathedral floors are a winding main way of rooms with side areas, like Path of Exile 2. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , numHealPotionPickup("Heal Potion Pickup", OptionEntryFlags::None, N_("Heal Potion Pickup"), N_("Number of Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numFullHealPotionPickup("Full Heal Potion Pickup", OptionEntryFlags::None, N_("Full Heal Potion Pickup"), N_("Number of Full Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numManaPotionPickup("Mana Potion Pickup", OptionEntryFlags::None, N_("Mana Potion Pickup"), N_("Number of Mana potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
@@ -937,6 +938,7 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&showMonsterType,
 		&showItemLabels,
 		&lootFilter,
+		&newCathedralFloors,
 		&autoRefillBelt,
 		&autoEquipWeapons,
 		&autoEquipArmor,
