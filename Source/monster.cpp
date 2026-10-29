@@ -4885,10 +4885,10 @@ void ProcessMonsters()
 			monster.aiSeed = AdvanceRndSeed();
 		}
 		if (monster.hitPoints < monster.maxHitPoints && !monster.hasNoLife()) {
-			if (monster.level(sgGameInitInfo.nDifficulty) > 1) {
-				monster.hitPoints += Fixed26_6::fromRaw(monster.level(sgGameInitInfo.nDifficulty) / 2);
-			} else {
-				monster.hitPoints += Fixed26_6::fromRaw(monster.level(sgGameInitInfo.nDifficulty));
+			// POE2 Mashup: monsters don't heal on their own; only the Regenerating affix (monster_mods.cpp) heals them.
+			if (!gbIsPoe2) {
+				const int level = monster.level(sgGameInitInfo.nDifficulty);
+				monster.hitPoints += Fixed26_6::fromRaw(level > 1 ? level / 2 : level);
 			}
 			// POE2 Mashup: a minion regenerates its owner's sceptre's life regeneration too.
 			monster.hitPoints += Fixed26_6::fromRaw(MinionGearRegenRaw(monster));

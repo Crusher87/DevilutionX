@@ -636,6 +636,12 @@ void RightMouseDown(bool isShiftHeld)
 void ReleaseKey(SDL_Keycode vkey)
 {
 	remap_keyboard_key(&vkey);
+	// POE2 Mashup: letting go of Shift ends Shift+click currency use straight away, so the normal cursor comes back
+	// (Curtis 2026-10-29). Currency is only spent on use, so nothing is lost.
+	if (gbIsPoe2 && IsAnyOf(vkey, SDLK_LSHIFT, SDLK_RSHIFT) && IsAnyOf(pcurs, CURSOR_IDENTIFY, CURSOR_OIL) && StickyItemUseActive()) {
+		SetStickyItemUse(false);
+		NewCursor(CURSOR_HAND);
+	}
 	if (sgnTimeoutCurs != CURSOR_NONE)
 		return;
 	if (WasdMovementKeyReleased(vkey))

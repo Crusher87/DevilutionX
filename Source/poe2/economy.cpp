@@ -235,12 +235,29 @@ item_misc_id ShardCurrency(ShardKind kind)
 
 namespace {
 
+std::string_view CurrencyName(item_misc_id currency)
+{
+	for (const ItemData &data : AllItemsList) {
+		if (data.iMiscId == currency)
+			return _(data.iName);
+	}
+	return _("currency");
+}
+
 void GainShards(Player &player, ShardKind kind, int shards)
 {
 	const int orbs = AddShards(player, kind, shards);
 	for (int i = 0; i < orbs; i++)
 		GiveCurrencyItem(player, ShardCurrency(kind));
-	EventPlrMsg(StrCat(shards, " ", ShardName(kind), shards == 1 ? "" : "s", " (", player.poe2.economy.shards[static_cast<size_t>(kind)], "/", ShardsPerOrb, ")"));
+	// Shards are a count, not an item, so the message says where they went (Curtis 2026-10-29 couldn't find his).
+	const std::string_view orbName = CurrencyName(ShardCurrency(kind));
+	const std::string_view article = orbName.find_first_of("AEIOU") == 0 ? "an " : "a ";
+	std::string text = StrCat(shards, " ", ShardName(kind), shards == 1 ? "" : "s");
+	if (orbs > 0)
+		StrAppend(text, ": ", ShardsPerOrb, _(" shards became "), article, orbName);
+	else
+		StrAppend(text, ": ", player.poe2.economy.shards[static_cast<size_t>(kind)], _(" of "), ShardsPerOrb, _(" make "), article, orbName);
+	EventPlrMsg(text);
 }
 
 } // namespace
@@ -286,14 +303,7 @@ std::string SalvageYieldText(const SalvageYield &yield)
 {
 	std::vector<std::string> parts;
 	if (yield.full > 0) {
-		std::string_view name = _("currency");
-		for (const ItemData &data : AllItemsList) {
-			if (data.iMiscId == yield.currency) {
-				name = _(data.iName);
-				break;
-			}
-		}
-		parts.push_back(StrCat(yield.full, " ", name, yield.full == 1 ? "" : "s"));
+		parts.push_back(StrCat(yield.full, " ", CurrencyName(yield.currency), yield.full == 1 ? "" : "s"));
 	}
 	if (yield.socketShards > 0)
 		parts.push_back(StrCat(yield.socketShards, " ", ShardName(ShardKind::Artificer), yield.socketShards == 1 ? "" : "s"));

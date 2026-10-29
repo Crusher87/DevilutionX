@@ -1887,7 +1887,12 @@ void DrawAutomap(const Surface &out)
 
 	if (GetAutomapType() == AutomapType::Minimap) {
 		// Background fill
-		DrawHalfTransparentRectTo(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height);
+		// POE2 Mashup: the corner map gets a solid backdrop. Seen through, the world scrolling under it kept changing its
+		// shade while walking (Curtis 2026-10-29).
+		if (gbIsPoe2 && CornerView != nullptr)
+			FillRect(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height, 0);
+		else
+			DrawHalfTransparentRectTo(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height);
 
 		const uint8_t frameShadowColor = PAL16_YELLOW + 12;
 

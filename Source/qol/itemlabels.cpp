@@ -193,12 +193,14 @@ void DrawItemNameLabels(const Surface &out)
 
 		if (MousePosition.x >= label.pos.x && MousePosition.x < label.pos.x + label.width
 		    && MousePosition.y >= label.pos.y && MousePosition.y < label.pos.y + labelHeight) {
+			// POE2 Mashup: a skill cast from a key leaves LastPlayerAction set until the next mouse release, which hid
+			// ground labels from the mouse; only a held mouse button should (Curtis 2026-10-29).
 			if (!gmenu_is_active()
 			    && PauseMode == 0
 			    && !MyPlayerIsDead
 			    && !IsPlayerInStore()
 			    && IsMouseOverGameArea()
-			    && LastPlayerAction == PlayerActionType::None) {
+			    && (gbIsPoe2 ? sgbMouseDown == CLICK_NONE : LastPlayerAction == PlayerActionType::None)) {
 				isLabelHighlighted = true;
 				cursPosition = item.position;
 				pcursitem = label.id;

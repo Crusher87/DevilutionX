@@ -6128,6 +6128,11 @@ void SetStickyItemUse(bool sticky)
 	StickyUse = sticky;
 }
 
+bool StickyItemUseActive()
+{
+	return StickyUse;
+}
+
 bool WantsStickyItemUse()
 {
 	// As in POE2, the item stays on the cursor only while Shift is held: letting go of Shift ends it, so the cursor

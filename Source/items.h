@@ -684,6 +684,8 @@ void SpendHeldCurrency(Player &player);
 /** @brief POE2 Mashup: whether the item was picked up with Shift+right-click, to use it again and again (Shift held when using it counts too). */
 void SetStickyItemUse(bool sticky);
 [[nodiscard]] bool WantsStickyItemUse();
+/** @brief Whether the last currency or scroll was picked up with Shift, whether or not Shift is still down. */
+[[nodiscard]] bool StickyItemUseActive();
 /** @brief After currency was used with Shift: puts the next one of its kind on the cursor; false if there's none or no Shift. */
 bool KeepCurrencyOnCursor(Player &player);
 [[nodiscard]] bool HasIdentifyScroll(const Player &player);

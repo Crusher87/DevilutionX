@@ -42,6 +42,7 @@
 #include "towners.h"
 #include "utils/format.hpp"
 #include "utils/format_int.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
@@ -3221,12 +3222,15 @@ bool PlayerCanAfford(int price)
 
 namespace {
 
-/** @brief POE2 Mashup (Curtis 2026-10-22): like POE2's vendors, a shop buys anything with a sell price but quest items. */
+/**
+ * @brief POE2 Mashup (Curtis 2026-10-22): like POE2's vendors, a shop buys anything with a sell price but quest items.
+ * Quest rewards like the Butcher's Cleaver or the Harlequin Crest are uniques, so they sell (Curtis 2026-10-29).
+ */
 bool Poe2ShopWillBuy(const Item &item)
 {
 	if (item._itype == ItemType::Gold || item._iClass == ICLASS_QUEST || item._iMiscId == IMISC_EAR)
 		return false;
-	if ((item.IDidx >= IDI_FIRSTQUEST && item.IDidx <= IDI_LASTQUEST) || item.IDidx == IDI_LAZSTAFF)
+	if (IsAnyOf(item.IDidx, IDI_LAZSTAFF, IDI_GLDNELIX))
 		return false;
 	return std::max(item._ivalue, item._iIvalue) > 0;
 }
