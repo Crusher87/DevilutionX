@@ -15,6 +15,10 @@
 
 #include <magic_enum/magic_enum.hpp>
 
+#ifndef USE_SDL3
+#include <Aulib/Stream.h>
+#endif
+
 #include "data/file.hpp"
 #include "data/iterators.hpp"
 #include "data/record_reader.hpp"
