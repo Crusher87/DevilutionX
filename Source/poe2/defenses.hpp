@@ -15,6 +15,8 @@ namespace devilution {
 struct Item;
 struct Monster;
 struct Player;
+enum class DamageType : uint8_t;
+enum class MissileID : int8_t;
 
 enum class DefenseType : uint8_t {
 	Armour,
@@ -100,9 +102,28 @@ Fixed26_6 ApplyArmour(const Player &player, Fixed26_6 damage);
 
 /**
  * @brief Takes damage from energy shield first and restarts the recharge delay.
+ *
+ * Chaos damage drains the shield twice as fast, like POE2: each point the shield stops costs it two.
  * @return The damage left over for life.
  */
+Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage, DamageType type);
 Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage);
+
+/** @brief What a hit has left for life after the shield: its chaos part apart from the rest. */
+struct ShieldLeftover {
+	Fixed26_6 damage;
+	Fixed26_6 chaos;
+};
+/** @brief The same for a hit with a chaos part (a Profane map's extra chaos): the shield sees one hit. */
+ShieldLeftover AbsorbHitWithEnergyShield(Player &player, Fixed26_6 damage, Fixed26_6 chaos);
+
+/** @brief The hero's resistance to chaos: its own stat in POE2 mode, magic resistance outside it. */
+int PlayerChaosResistance(const Player &player);
+/**
+ * @brief The type a monster's hit on the hero lands as. In POE2 mode Hellfire's liches and Diablo's Apocalypse deal
+ * chaos (Curtis 2026-10-30); everything else keeps its own type.
+ */
+DamageType MonsterHitDamageType(const Monster *monster, MissileID missile, DamageType type);
 /** @brief Advances energy shield recharge by one game tick. */
 void RechargeEnergyShield(Player &player);
 

@@ -1416,9 +1416,15 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		dam = ApplyArmour(player, dam);
 		TelemetryHitStep(true, "after armour", dam.raw());
 	}
+	// A Profane map's extra chaos stays apart from the physical hit: it meets chaos resistance and the shield as chaos.
+	Fixed26_6 extraChaos = Fixed26_6::fromInt(0);
 	if (&player == MyPlayer) {
-		dam = ApplyMapMonsterHit(player, dam);
+		const MapMonsterHit mapHit = ApplyMapMonsterHit(player, dam);
+		dam = mapHit.physical;
+		extraChaos = mapHit.chaos;
 		TelemetryHitStep(true, "after map modifiers", dam.raw());
+		if (extraChaos > 0)
+			TelemetryHitStep(true, "extra chaos after resistance", extraChaos.raw());
 	}
 	if (gbIsPoe2 && &player == MyPlayer) {
 		dam = ApplyTableSkillDefences(monster, player, dam);
@@ -1432,7 +1438,12 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		}
 		TelemetryMeleeSwing(player, SwingOutcome::Landed);
 		TelemetryNoteAttacker(monster.name());
-		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, dam, DamageType::Physical)));
+		const Fixed26_6 physical = ApplyUniqueHitTaken(player, dam, DamageType::Physical);
+		const Fixed26_6 chaos = extraChaos > 0 ? ApplyUniqueHitTaken(player, extraChaos, DamageType::Chaos) : extraChaos;
+		const ShieldLeftover left = AbsorbHitWithEnergyShield(player, physical, chaos);
+		ApplyPlrDamage(DamageType::Physical, player, left.damage);
+		if (chaos > 0)
+			ApplyPlrDamage(DamageType::Chaos, player, left.chaos);
 		ReflectMeleeHit(player, monster, dam);
 	}
 

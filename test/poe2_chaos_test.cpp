@@ -13,10 +13,16 @@
 #include "poe2/item_stats.hpp"
 #include "engine/random.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/map_mods.hpp"
+#include "poe2/map_play.hpp"
+#include "poe2/waystones.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
+#include "missiles.h"
+#include "monster.h"
 #include "spells.h"
+#include "tables/misdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
 #include "utils/paths.h"
@@ -42,6 +48,7 @@ public:
 		LoadModArchives({ { "hf", "poe2" } });
 		LoadItemData();
 		LoadSpellData();
+		LoadMissileData();
 		LoadPlayerDataFiles();
 		LoadPassiveTreeData();
 		LoadModifierData();
@@ -87,6 +94,55 @@ public:
 	static void Recalculate(Player &player)
 	{
 		CalcPlrItemVals(player, false);
+	}
+
+	/** @brief Life the hero loses to a trap's 100 point hit of this type and missile (traps always hit for that much). */
+	static int HitTaken(Player &player, DamageType type, MissileID missile = MissileID::Acid)
+	{
+		MyPlayerId = 0;
+		player._pMaxHP = player._pMaxHPBase = Fixed26_6::fromInt(1000);
+		for (uint32_t seed = 1; seed <= 400; seed++) {
+			player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(1000);
+			SetRndSeed(seed);
+			bool blocked = false;
+			if (PlayerMHit(player, nullptr, 0, 100 * 64, 100 * 64, missile, type, true, DeathReason::MonsterOrTrap, &blocked))
+				return 1000 - player._pHitPoints.whole();
+		}
+		ADD_FAILURE() << "never hit";
+		return 0;
+	}
+
+	/** @brief Opens a map of tier 1 in the dungeon level the hero is on, with this one waystone modifier. */
+	static void OpenMapWith(Player &player, MapDanger danger)
+	{
+		uint8_t family = 0;
+		for (uint8_t id = 1; id <= WaystoneModIds; id++) {
+			if (GetWaystoneMod(id).danger == danger)
+				family = id;
+		}
+		ASSERT_NE(family, 0);
+		currlevel = 21;
+		leveltype = DTYPE_HELL;
+		setlevel = false;
+		player.poe2.mapTier = 1;
+		player.poe2.mapLevel = currlevel;
+		player.poe2.mapWaystone = {};
+		player.poe2.mapWaystone.mods[0] = { family, 1, 0 };
+		RefreshMapEffects(player);
+		ClearMapPlay();
+		ASSERT_GT(ActiveMapTier(), 0);
+		ASSERT_GT(ActiveMapEffects()[danger], 0);
+	}
+
+	static void CloseMap(Player &player)
+	{
+		player.poe2.mapTier = 0;
+		player.poe2.mapLevel = 0;
+		player.poe2.mapWaystone = {};
+		RefreshMapEffects(player);
+		ClearMapPlay();
+		currlevel = 0;
+		leveltype = DTYPE_TOWN;
 	}
 };
 
@@ -220,6 +276,123 @@ TEST_F(Poe2ChaosTest, AmethystRingCarriesChaosResistance)
 		EXPECT_GE(chaos, 7) << seed;
 		EXPECT_LE(chaos, 13) << seed;
 	}
+}
+
+TEST_F(Poe2ChaosTest, AcidMeetsChaosResistance)
+{
+	// Chaos plan step 6: the acid beasts' spit, splash and puddles are chaos.
+	for (const MissileID missile : { MissileID::Acid, MissileID::AcidSplat, MissileID::AcidPuddle })
+		EXPECT_EQ(GetMissileData(missile).damageType(), DamageType::Chaos) << static_cast<int>(missile);
+	Player &player = *MyPlayer;
+	player._pMagResist = 40;
+	player.poe2.chaosResistance = 0;
+	EXPECT_EQ(HitTaken(player, DamageType::Chaos), 100);
+	player.poe2.chaosResistance = 30;
+	EXPECT_EQ(HitTaken(player, DamageType::Chaos), 70);
+	player.poe2.chaosResistance = 75;
+	EXPECT_EQ(HitTaken(player, DamageType::Chaos), 25);
+	player.poe2.chaosResistance = -60;
+	EXPECT_EQ(HitTaken(player, DamageType::Chaos), 160);
+	// Magic still meets magic resistance.
+	EXPECT_EQ(HitTaken(player, DamageType::Magic), 60);
+
+	// Outside POE2 mode chaos meets magic resistance, as acid always did.
+	gbIsPoe2 = false;
+	EXPECT_EQ(PlayerChaosResistance(player), 40);
+	EXPECT_EQ(HitTaken(player, DamageType::Chaos), 60);
+}
+
+TEST_F(Poe2ChaosTest, LichesAndDiablosApocalypseDealChaos)
+{
+	Monster monster {};
+	monster.ai = MonsterAIID::Lich;
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::OrangeFlare, DamageType::Magic), DamageType::Chaos);
+	monster.ai = MonsterAIID::ArchLich;
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::YellowFlare, DamageType::Magic), DamageType::Chaos);
+	monster.ai = MonsterAIID::Diablo;
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::DiabloApocalypseBoom, DamageType::Physical), DamageType::Chaos);
+	// Diablo's melee and the Succubi's Blood Star keep their types.
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::Null, DamageType::Physical), DamageType::Physical);
+	monster.ai = MonsterAIID::Succubus;
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::BloodStar, DamageType::Magic), DamageType::Magic);
+	// Traps and the hero's own skills on the same missiles too.
+	EXPECT_EQ(MonsterHitDamageType(nullptr, MissileID::OrangeFlare, DamageType::Fire), DamageType::Fire);
+	// Only in POE2 mode.
+	gbIsPoe2 = false;
+	monster.ai = MonsterAIID::Lich;
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::OrangeFlare, DamageType::Magic), DamageType::Magic);
+}
+
+TEST_F(Poe2ChaosTest, ChaosDrainsEnergyShieldTwiceAsFast)
+{
+	Player &player = *MyPlayer;
+	player.poe2.maxEnergyShield = 100;
+	player.poe2.energyShield = 100 * 64;
+	EXPECT_EQ(AbsorbWithEnergyShield(player, Fixed26_6::fromInt(30), DamageType::Chaos), Fixed26_6::fromInt(0));
+	EXPECT_EQ(player.poe2.energyShield, 40 * 64);
+	// A shield smaller than twice the hit stops half of what it has.
+	EXPECT_EQ(AbsorbWithEnergyShield(player, Fixed26_6::fromInt(30), DamageType::Chaos), Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.energyShield, 0);
+	// An odd shield rounds the damage stopped up.
+	player.poe2.energyShield = 5;
+	EXPECT_EQ(AbsorbWithEnergyShield(player, Fixed26_6::fromInt(1), DamageType::Chaos).raw(), 64 - 3);
+	EXPECT_EQ(player.poe2.energyShield, 0);
+	// Other damage costs the shield what it stops.
+	player.poe2.energyShield = 100 * 64;
+	EXPECT_EQ(AbsorbWithEnergyShield(player, Fixed26_6::fromInt(30), DamageType::Fire), Fixed26_6::fromInt(0));
+	EXPECT_EQ(player.poe2.energyShield, 70 * 64);
+	// One hit with both: the chaos part costs double, the rest single.
+	player.poe2.energyShield = 50 * 64;
+	const ShieldLeftover left = AbsorbHitWithEnergyShield(player, Fixed26_6::fromInt(20), Fixed26_6::fromInt(20));
+	EXPECT_EQ(left.chaos, Fixed26_6::fromInt(0));
+	EXPECT_EQ(left.damage, Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.energyShield, 0);
+}
+
+TEST_F(Poe2ChaosTest, AcidPuddlesDrainEnergyShieldTwiceAsFast)
+{
+	// Puddles hit like the spit does, so they take the double drain too (plan v2: no puddle exception).
+	Player &player = *MyPlayer;
+	player.poe2.maxEnergyShield = 500;
+	player.poe2.energyShield = 500 * 64;
+	EXPECT_EQ(HitTaken(player, DamageType::Chaos, MissileID::AcidPuddle), 0);
+	EXPECT_EQ(player.poe2.energyShield, 300 * 64);
+}
+
+TEST_F(Poe2ChaosTest, ProfaneExtraChaosStaysChaos)
+{
+	Player &player = *MyPlayer;
+	OpenMapWith(player, MapDanger::ExtraChaos);
+	const int extra = ActiveMapEffects()[MapDanger::ExtraChaos];
+	player.poe2.chaosResistance = 50;
+	const MapMonsterHit hit = ApplyMapMonsterHit(player, Fixed26_6::fromInt(100));
+	EXPECT_EQ(hit.physical, Fixed26_6::fromInt(100));
+	EXPECT_EQ(hit.chaos.raw(), 100 * 64 * extra / 100 * 50 / 100);
+	CloseMap(player);
+}
+
+TEST_F(Poe2ChaosTest, VenomousPoisonIsChaosAndGoesAroundEnergyShield)
+{
+	Player &player = *MyPlayer;
+	MyPlayerId = 0;
+	OpenMapWith(player, MapDanger::PoisonChance);
+	for (uint32_t seed = 1; seed <= 200 && MapPoisonTicksLeft() == 0; seed++) {
+		SetRndSeed(seed);
+		OnMapMonsterSpellHit(player, Fixed26_6::fromInt(100));
+	}
+	ASSERT_EQ(MapPoisonTicksLeft(), MapPoisonTicks);
+	player._pMaxHP = player._pMaxHPBase = Fixed26_6::fromInt(1000);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(1000);
+	player.poe2.maxEnergyShield = 100;
+	player.poe2.energyShield = 100 * 64;
+	player.poe2.chaosResistance = 50;
+	for (int i = 0; i < MapPoisonTicks; i++)
+		ProcessMapPlayer(player);
+	// 20% of the hit a second for two seconds, halved by chaos resistance; the shield never sees it.
+	EXPECT_EQ(player._pHitPoints.whole(), 1000 - (100 * MapPoisonPercentPerSecond / 100 * 2 / 2));
+	EXPECT_EQ(player.poe2.energyShield, 100 * 64);
+	EXPECT_EQ(MapPoisonTicksLeft(), 0);
+	CloseMap(player);
 }
 
 TEST_F(Poe2ChaosTest, TelemetryLogsChaosResistance)

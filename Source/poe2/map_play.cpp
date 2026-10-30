@@ -68,6 +68,9 @@ int Resistance(const Player &player, DamageType type)
 	case DamageType::Magic:
 		resistance = player._pMagResist;
 		break;
+	case DamageType::Chaos:
+		// Penetration is elemental, as in POE2; chaos resistance has its own cap already.
+		return player.poe2.chaosResistance;
 	default:
 		return 0;
 	}
@@ -136,10 +139,10 @@ void DrawPatches(const Player &player)
 
 } // namespace
 
-Fixed26_6 ApplyMapMonsterHit(Player &player, Fixed26_6 physical)
+MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical)
 {
 	if (!InMap() || physical <= 0)
-		return physical;
+		return { physical, Fixed26_6::fromInt(0) };
 	const int64_t raw = physical.raw();
 	int64_t total = raw;
 	// Armour break: the hit's armour-broken share lands as if the hero had none.
@@ -147,9 +150,9 @@ Fixed26_6 ApplyMapMonsterHit(Player &player, Fixed26_6 physical)
 	total += AfterResistance(player, DamageType::Fire, raw * Danger(MapDanger::ExtraFire) / 100);
 	total += AfterResistance(player, DamageType::Magic, raw * Danger(MapDanger::ExtraCold) / 100);
 	total += AfterResistance(player, DamageType::Lightning, raw * Danger(MapDanger::ExtraLightning) / 100);
-	total += raw * Danger(MapDanger::ExtraChaos) / 100;
+	const int64_t chaos = AfterResistance(player, DamageType::Chaos, raw * Danger(MapDanger::ExtraChaos) / 100);
 	TryAilments(player, static_cast<int32_t>(raw));
-	return Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(total, INT32_MAX / 2)));
+	return { Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(total, INT32_MAX / 2))), Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(chaos, 0, INT32_MAX / 2))) };
 }
 
 void OnMapMonsterSpellHit(Player &player, Fixed26_6 damage)
@@ -279,21 +282,20 @@ void ProcessMapPlayer(Player &player)
 	if (player.hasNoLife())
 		return;
 	DrawPatches(player);
-	int64_t raw = 0;
+	// Poison is chaos damage over time: it meets chaos resistance and, like all damage over time, goes around energy
+	// shield. Bleeding stays physical.
 	if (State.poisonTicks > 0) {
 		State.poisonTicks--;
-		raw += State.poisonPerTick;
+		DamageOverTime(player, DamageType::Chaos, AfterResistance(player, DamageType::Chaos, State.poisonPerTick), "poison");
 		if (State.poisonTicks == 0)
 			State.poisonPerTick = 0;
 	}
 	if (State.bleedTicks > 0) {
 		State.bleedTicks--;
-		raw += State.bleedPerTick;
+		DamageOverTime(player, DamageType::Physical, State.bleedPerTick, "bleeding");
 		if (State.bleedTicks == 0)
 			State.bleedPerTick = 0;
 	}
-	if (raw > 0)
-		DamageOverTime(player, DamageType::Physical, raw, "poison or bleeding");
 	if (const GroundPatch *patch = PatchAt(player.position.tile); patch != nullptr && patch->kind == MapDanger::BurningGround && State.tick % 5 == 0) {
 		const int64_t burn = static_cast<int64_t>(player._pMaxHP.raw()) * BurningGroundLifePerMillePerSecond / 1000 / 4;
 		DamageOverTime(player, DamageType::Fire, AfterResistance(player, DamageType::Fire, burn), "burning ground");
@@ -333,6 +335,11 @@ void OnMapMonsterDeath(const Monster &monster)
 	const int64_t capped = std::min<int64_t>(blast, static_cast<int64_t>(player._pMaxHP.raw()) * DeathExplosionMaxPlayerLifePercent / 100);
 	TelemetryNoteAttacker("a death explosion");
 	ApplyPlrDamage(DamageType::Fire, player, Fixed26_6::fromRaw(AfterResistance(player, DamageType::Fire, capped)));
+}
+
+int MapPoisonTicksLeft()
+{
+	return State.poisonTicks;
 }
 
 void ClearMapPlay()

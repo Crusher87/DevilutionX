@@ -31,7 +31,8 @@ enum class CharmEffect : uint8_t {
 	Fire,
 	/** Raises lightning resistance when a lightning hit lands. */
 	Lightning,
-	/** Raises magic resistance when a magic hit lands. */
+	/** The Amethyst Charm: raises chaos resistance when a chaos hit lands (it answered magic before chaos damage; the
+	 * name stays so saves and tables keep their meaning). */
 	Magic,
 	/** Breaks a stun and keeps you from being stunned for a moment. */
 	Stun,
@@ -41,7 +42,7 @@ enum class CharmEffect : uint8_t {
 
 constexpr int MaxCharmCharges = 40;
 constexpr int CharmChargesPerUse = 20;
-/** @brief Ruby, Topaz and Amethyst charms: +25% resistance to that element for 4 seconds. */
+/** @brief Ruby, Topaz and Amethyst charms: +25% fire, lightning or chaos resistance for 4 seconds. */
 constexpr int ResistCharmBonus = 25;
 constexpr int ResistCharmTicks = 4 * 20;
 /** @brief Stone Charm: breaks a stun and keeps you from being stunned for 3 seconds. */

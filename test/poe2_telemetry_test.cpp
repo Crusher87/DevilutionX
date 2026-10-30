@@ -185,6 +185,14 @@ TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)
 	EXPECT_NE(events.find("\"attacker\":\"Hidden\",\"type\":\"lightning\",\"damage\":5.00"), std::string::npos) << events;
 }
 
+TEST_F(Poe2TelemetryTest, ChaosDamageTakenIsLoggedAsChaos)
+{
+	TelemetryNoteAttacker("Acid Beast");
+	TelemetryPlayerDamaged(*MyPlayer, DamageType::Chaos, Fixed26_6::fromInt(7));
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"attacker\":\"Acid Beast\",\"type\":\"chaos\",\"damage\":7.00"), std::string::npos) << events;
+}
+
 TEST_F(Poe2TelemetryTest, GrantedSkillsAreLoggedWithTheirLevel)
 {
 	TelemetryGrantedSkillUsed(*MyPlayer, "Frost Bolt", 7, 0);

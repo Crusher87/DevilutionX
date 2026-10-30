@@ -36,11 +36,17 @@ constexpr int ShockedGroundDamageTakenPercent = 20;
 constexpr int DeathExplosionLifePercent = 4;
 constexpr int DeathExplosionMaxPlayerLifePercent = 25;
 
+/** @brief A monster's melee hit after the map's modifiers: the extra chaos (Profane) apart from the rest. */
+struct MapMonsterHit {
+	Fixed26_6 physical;
+	Fixed26_6 chaos;
+};
 /**
- * @brief Adds the map's extra elemental damage and armour break to a monster's melee hit on the hero (after
- * the hero's armour; the extra damage meets the hero's resistances), and may poison or make the hero bleed.
+ * @brief Adds the map's extra elemental and chaos damage and armour break to a monster's melee hit on the hero (after
+ * the hero's armour; the extra damage meets the hero's resistances), and may poison or make the hero bleed. The extra
+ * chaos is kept apart: it meets energy shield as chaos does.
  */
-Fixed26_6 ApplyMapMonsterHit(Player &player, Fixed26_6 physical);
+MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical);
 /** @brief A monster's missile or spell hit the hero in a map: may poison or make the hero bleed. */
 void OnMapMonsterSpellHit(Player &player, Fixed26_6 damage);
 /** @brief How much of the hero's resistances map monsters' hits ignore. */
@@ -77,5 +83,7 @@ void PlaceMapGroundPatches(uint32_t seed, Point entrance);
 void OnMapMonsterDeath(const Monster &monster);
 /** @brief Forgets the hero's map ailments and patches, leaving the map. */
 void ClearMapPlay();
+/** @brief Game ticks left of the local hero's poison from a Venomous map's monsters (0 when not poisoned). */
+[[nodiscard]] int MapPoisonTicksLeft();
 
 } // namespace devilution

@@ -16,6 +16,7 @@
 #include "game_mode.hpp"
 #include "options.h"
 #include "player.h"
+#include "poe2/map_play.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/str_cat.hpp"
@@ -375,6 +376,9 @@ void DrawPoe2GlobeValues(const Surface &out)
 			backlashY += 14;
 		}
 	}
+	// A Venomous map's poison: chaos damage over time that goes around energy shield.
+	if (const int ticks = MapPoisonTicksLeft(); ticks > 0)
+		DrawShadowedValue(out, StrCat("Poisoned ", (ticks + 19) / 20, "s"), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), backlashY }, UiFlags::ColorWhite);
 }
 
 void DrawFlaskLiquidLevel(const Surface &out, Point position, ClxSprite sprite, int charges, int maxCharges)

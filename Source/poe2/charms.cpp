@@ -79,7 +79,7 @@ int ResistCharmIndex(DamageType damageType)
 		return 0;
 	case DamageType::Lightning:
 		return 1;
-	case DamageType::Magic:
+	// The Amethyst Charm answers chaos, as in POE2 (Curtis 2026-10-30); magic hits have no charm of their own.
 	case DamageType::Chaos:
 		return 2;
 	default:
@@ -139,7 +139,7 @@ std::string_view CharmDescription(CharmEffect effect)
 	case CharmEffect::Lightning:
 		return _("A lightning hit lands: +25% lightning resistance for 4 seconds");
 	case CharmEffect::Magic:
-		return _("A magic hit lands: +25% magic resistance for 4 seconds");
+		return _("A chaos hit lands: +25% chaos resistance for 4 seconds");
 	case CharmEffect::Stun:
 		return _("You're stunned: break free and can't be stunned for 3 seconds");
 	case CharmEffect::Golden:
