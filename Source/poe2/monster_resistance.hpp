@@ -3,6 +3,10 @@
  *
  * POE2 Mashup: monster resistances as percentages, like POE2's (Curtis 2026-10-18). No monster is immune: Diablo's
  * resist and immune marks become percentages, curses and exposure lower them, and penetration gets past them.
+ *
+ * Chaos resistance comes from the monster's kind alone (monster_chaos_resistance.tsv, Curtis 2026-10-30): acid beasts,
+ * spiders and other poison creatures 30%, demons 20%, Diablo 25%, everything else 0. Nothing else raises or lowers it
+ * except Despair: not the Elemental Resistance modifier, waystones, minion gear, Lower Resist or exposure.
  */
 #pragma once
 
@@ -39,8 +43,15 @@ constexpr int FlinchProofResistance = 60;
  * @param undead Whether the monster is undead, whose magic immune mark is lower (UndeadMagicImmuneMarkPercent).
  */
 [[nodiscard]] int ResistanceMarkPercent(uint16_t marks, DamageType type, bool undead = false);
-/** @brief "Resistances: Fire 30%, Magic 40%", or "No resistances", from the marks (see ResistanceMarkPercent). */
-[[nodiscard]] std::string ResistanceMarksText(uint16_t marks, bool undead = false);
+/**
+ * @brief "Resistances: Fire 30%, Magic 40%, Chaos 20%", or "No resistances", from the marks (see
+ * ResistanceMarkPercent) and the kind's chaos resistance.
+ */
+[[nodiscard]] std::string ResistanceMarksText(uint16_t marks, bool undead = false, int chaos = 0);
+/** @brief Reads monster_chaos_resistance.tsv in POE2 mode; clears the table outside it. */
+void LoadMonsterChaosResistances();
+/** @brief A monster kind's chaos resistance (a _monster_id), 0 when the table doesn't list it or outside POE2 mode. */
+[[nodiscard]] int MonsterTypeChaosResistance(int monsterType);
 /** @brief How much of a curse or exposure takes hold, in percent: magic monsters shrug off 15%, rare 30%, unique 50%. */
 [[nodiscard]] int CurseEffectPercent(const Monster &monster);
 /** @brief The resistance from the monster's kind and modifiers and the map, before curses and exposure. */

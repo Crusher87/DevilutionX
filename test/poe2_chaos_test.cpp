@@ -17,12 +17,15 @@
 #include "poe2/map_play.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/monster_resistance.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
 #include "missiles.h"
 #include "monster.h"
 #include "spells.h"
 #include "tables/misdat.h"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
 #include "utils/paths.h"
@@ -418,6 +421,79 @@ TEST_F(Poe2ChaosTest, TelemetryLogsChaosResistance)
 	std::stringstream events;
 	events << stream.rdbuf();
 	EXPECT_NE(events.str().find("\"chaosRes\":17,\"maxChaosRes\":75"), std::string::npos) << events.str();
+}
+
+/** @brief A monster of this kind in the level's first slot, with no modifiers. */
+Monster MonsterOfKind(_monster_id kind)
+{
+	LevelMonsterTypes[0].type = kind;
+	Monster monster {};
+	monster.levelType = 0;
+	monster.uniqueType = UniqueMonsterType::None;
+	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100);
+	return monster;
+}
+
+TEST_F(Poe2ChaosTest, MonstersResistChaosByTheirKind)
+{
+	// Acid beasts, spiders and other poison creatures 30%, demons 20%, Diablo 25%, the rest 0 (Curtis 2026-10-30).
+	const struct {
+		_monster_id kind;
+		int chaos;
+	} Kinds[] = {
+		{ MT_NACID, 30 }, { MT_XACID, 30 }, { MT_SPIDLORD, 30 }, { MT_ARACHNON, 30 }, { MT_VENMTAIL, 30 }, { MT_DEFILER, 30 },
+		{ MT_SUCCUBUS, 20 }, { MT_BALROG, 20 }, { MT_NBLACK, 20 }, { MT_STALKER, 20 }, { MT_NAKRUL, 20 },
+		{ MT_DIABLO, 25 },
+		{ MT_NZOMBIE, 0 }, { MT_WSKELAX, 0 }, { MT_RFALLSP, 0 }, { MT_NGOATMC, 0 }, { MT_COUNSLR, 0 }, { MT_LICH, 0 },
+		{ MT_CLEAVER, 0 }, { MT_SKING, 0 }, { MT_HORNED, 0 }, { MT_GOLEM, 0 },
+	};
+	for (const auto &kind : Kinds) {
+		EXPECT_EQ(MonsterTypeChaosResistance(kind.kind), kind.chaos) << kind.kind;
+		const Monster monster = MonsterOfKind(kind.kind);
+		EXPECT_EQ(MonsterResistance(monster, DamageType::Chaos), kind.chaos) << kind.kind;
+		EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Chaos), 100 - kind.chaos) << kind.kind;
+	}
+	EXPECT_EQ(ResistanceMarksText(0, false, 20), "Resistances: Chaos 20%");
+	EXPECT_EQ(ResistanceMarksText(RESIST_FIRE, false, 30), "Resistances: Fire 30%, Chaos 30%");
+
+	// Not outside POE2 mode.
+	gbIsPoe2 = false;
+	EXPECT_EQ(MonsterResistance(MonsterOfKind(MT_NACID), DamageType::Chaos), 0);
+	LoadMonsterChaosResistances();
+	gbIsPoe2 = true;
+	EXPECT_EQ(MonsterTypeChaosResistance(MT_NACID), 0);
+	LoadMonsterChaosResistances();
+	EXPECT_EQ(MonsterTypeChaosResistance(MT_NACID), 30);
+}
+
+TEST_F(Poe2ChaosTest, WaystonesAndMinionGearLeaveChaosResistanceAlone)
+{
+	Player &player = *MyPlayer;
+	Monster demon = MonsterOfKind(MT_SUCCUBUS);
+	OpenMapWith(player, MapDanger::MonsterResistance);
+	EXPECT_GT(MonsterResistance(demon, DamageType::Fire), 0);
+	EXPECT_EQ(MonsterResistance(demon, DamageType::Chaos), 20);
+	CloseMap(player);
+
+	// A raised minion keeps its kind's chaos resistance, and the owner's minion resistances don't add to it.
+	demon.flags = MFLAG_GOLEM;
+	demon.goalVar3 = 0;
+	const int fire = MonsterBaseResistance(demon, DamageType::Fire);
+	player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionResistances)] = 30;
+	EXPECT_EQ(MonsterBaseResistance(demon, DamageType::Fire), fire + 30);
+	EXPECT_EQ(MonsterResistance(demon, DamageType::Chaos), 20);
+}
+
+TEST_F(Poe2ChaosTest, LowerResistAndExposureLeaveChaosResistanceAlone)
+{
+	Monster spider = MonsterOfKind(MT_SPIDLORD);
+	spider.poe2.lowerResistTicks = 10;
+	spider.poe2.exposureTicks = 10;
+	spider.poe2.exposureElement = static_cast<uint8_t>(DamageType::Chaos);
+	EXPECT_EQ(MonsterResistanceLowered(spider, DamageType::Chaos), 0);
+	EXPECT_EQ(MonsterResistance(spider, DamageType::Chaos), 30);
+	EXPECT_EQ(MonsterResistance(spider, DamageType::Fire), -LowerResistCursePercent);
+	EXPECT_EQ(MonsterHitResistance(spider, DamageType::Chaos, 0), 30);
 }
 
 } // namespace

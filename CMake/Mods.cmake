@@ -109,6 +109,7 @@ set(poe2_mod
   txtdata/poe2/map_icons.tsv
   txtdata/poe2/monster_experience.tsv
   txtdata/poe2/monster_bosses.tsv
+  txtdata/poe2/monster_chaos_resistance.tsv
   txtdata/poe2/monster_levels.tsv
   txtdata/poe2/monster_types.tsv
   txtdata/poe2/modifier_families.tsv

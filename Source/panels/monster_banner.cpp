@@ -254,6 +254,7 @@ std::string ResistanceText(const Monster &monster)
 			{ DamageType::Fire, N_("Fire") },
 			{ DamageType::Lightning, N_("Lightning") },
 			{ DamageType::Magic, N_("Magic") },
+			{ DamageType::Chaos, N_("Chaos") },
 		};
 		std::string text;
 		for (const auto &element : Poe2Elements) {
