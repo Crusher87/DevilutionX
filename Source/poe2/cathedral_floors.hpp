@@ -197,6 +197,14 @@ bool IsCathedralThemeRoom(int8_t tv);
 int CathedralRoomAt(Point tile);
 /** @brief The big-fight halls along the main way, each with the quiet room after it (rooms as CathedralRoomAt; 0: none). */
 std::vector<std::pair<int, int>> CathedralBigFights();
+/** A designed room's reward spot that holds more than a chest (the reward column of the rooms list). */
+struct CathedralReward {
+	Point tile;
+	/** A strongbox stands there; otherwise a pack led by a rare monster is to stand there. */
+	bool strongbox = false;
+};
+/** @brief The reward spots AddCathedralRoomObjects set out on this floor, for the pack planner. */
+const std::vector<CathedralReward> &CathedralRewards();
 /** @brief The designed rooms' sarcophagi, taken from the floor's usual 10 to 15. */
 int CathedralDesignedSarcophagi();
 /** @brief Marks the object art the designed rooms use, for InitObjectGFX. */

@@ -228,6 +228,7 @@ public:
 			return 0;
 		studyFloor();
 		placeBigFights();
+		placeRoomRewards();
 		guardTheWayDown();
 		placeStrongbox();
 		guardDeadEnds();
@@ -246,6 +247,8 @@ private:
 	bool hasEnd_ = false;
 	/** This floor's rest room shrine is still to place. */
 	bool shrineWanted_ = false;
+	/** A designed room's strongbox got its guards, so no other strongbox on this floor. */
+	bool strongboxPlaced_ = false;
 	Point end_;
 	std::vector<Point> route_;
 
@@ -544,12 +547,39 @@ private:
 	}
 
 	/**
+	 * The reward spots of a new Cathedral floor's designed rooms: a strongbox there gets its guards (and is the floor's
+	 * strongbox), and a rare leads a pack at the other kind.
+	 */
+	void placeRoomRewards()
+	{
+		if (!IsCathedralFunnelFloor())
+			return;
+		for (const CathedralReward &reward : CathedralRewards()) {
+			if (!reward.strongbox) {
+				placePack(reward.tile, packSize(reward.tile), PackSteps, MonsterRarity::Rare, 1);
+				continue;
+			}
+			Object *strongbox = FindObjectAtPosition(reward.tile);
+			const int guards = PackMin + random(PackMax - PackMin + 1);
+			// Without monsters to spare for its guards, it stays a chest.
+			if (strongbox == nullptr || strongboxPlaced_ || left_ < static_cast<size_t>(guards + PackMin))
+				continue;
+			SetFloorChestKind(*strongbox, FloorChestKind::Strongbox, guards);
+			RoomFacts &room = rooms_[RoomAt(reward.tile)];
+			room.reward = true;
+			room.quiet = true;
+			left_ -= static_cast<size_t>(guards);
+			strongboxPlaced_ = true;
+		}
+	}
+
+	/**
 	 * Now and then a strongbox, off the way down: in a dead end where there is one, or else the room furthest from
 	 * the way. Its guards come out of the floor's monsters.
 	 */
 	void placeStrongbox()
 	{
-		if (random(StrongboxOneIn) != 0)
+		if (strongboxPlaced_ || random(StrongboxOneIn) != 0)
 			return;
 		const int guards = PackMin + random(PackMax - PackMin + 1);
 		if (left_ < static_cast<size_t>(guards + PackMin))
