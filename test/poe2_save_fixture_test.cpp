@@ -1,0 +1,465 @@
+/**
+ * Golden save (chaos damage plan, step 0): a POE2 hero saved on the build before chaos damage, with every kind of item
+ * a save holds, and what each item rebuilt to when it loaded then: its base, rarity, name, modifiers by family id with
+ * tiers and values, implicits, POE2 stats and crafting bytes. Every later step must load it the same, so no saved item
+ * changes.
+ *
+ * The fixture is test/fixtures/poe2_save/: hero.sv (the hero, its bag, belt, jewels, weapon set and a town floor with
+ * items on it), stash.sv and snapshot.txt. Remake it (only when a change is meant to move it) with
+ * POE2_SAVE_FIXTURE_OUT=<folder> set; the test then builds the hero, saves it and writes the three files there.
+ *
+ * Vendor stock is in the stash (two of Griswold's premium wares): the game data file that holds the vendors' own lists
+ * goes through the same item record, but needs a whole game to load. The snapshot records what loading did on the day
+ * it was made, quirks too: the socketed jewel's increased damage comes back doubled (pl 32 for its 16%), while the
+ * same kind of jewel in the bag keeps its own.
+ */
+#include <array>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "DiabloUI/diabloui.h"
+#include "cursor.h"
+#include "engine/assets.hpp"
+#include "engine/random.hpp"
+#include "game_mode.hpp"
+#include "init.hpp"
+#include "inv.h"
+#include "items.h"
+#include "levels/gendung.h"
+#include "loadsave.h"
+#include "menu.h"
+#include "pfile.h"
+#include "player.h"
+#include "poe2/bases.hpp"
+#include "poe2/belt_uniques.hpp"
+#include "poe2/craft_state.hpp"
+#include "poe2/loot.hpp"
+#include "poe2/modifiers.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/stash_tabs.hpp"
+#include "poe2/uniques.hpp"
+#include "poe2/waystones.hpp"
+#include "qol/stash.h"
+#include "spells.h"
+#include "stores.h"
+#include "tables/monstdat.h"
+#include "tables/playerdat.hpp"
+#include "utils/file_util.h"
+#include "utils/paths.h"
+
+namespace devilution {
+namespace {
+
+constexpr std::string_view FixtureFolder = "test/fixtures/poe2_save/";
+
+class Poe2SaveFixtureTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		LoadCoreArchives();
+		LoadGameArchives();
+		haveMainData_ = HaveMainData();
+		Players.resize(1);
+		MyPlayerId = 0;
+		MyPlayer = &Players[0];
+		*MyPlayer = {};
+		gbVanilla = false;
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsHellfireSaveGame = true;
+		gbIsPoe2 = true;
+		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadSpellData();
+		LoadPlayerDataFiles();
+		LoadMonsterData();
+		LoadModifierData();
+		LoadPassiveTreeData();
+		previousPrefPath_ = paths::PrefPath();
+		// A folder of its own: other tests save heroes in the build folder at the same time.
+		folder_ = ::testing::TempDir() + "poe2_save_fixture_" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + DIRECTORY_SEPARATOR_STR;
+		CreateDir(folder_.c_str());
+		for (const std::string &file : ListFiles(folder_.c_str()))
+			RemoveFile((folder_ + file).c_str());
+		paths::SetPrefPath(folder_);
+		gSaveNumber = 0;
+	}
+
+	void TearDown() override
+	{
+		Stash = {};
+		StashTabs.reset();
+		ActiveItemCount = 0;
+		memset(dItem, 0, sizeof(dItem));
+		paths::SetPrefPath(previousPrefPath_);
+		gbIsPoe2 = false;
+		gbIsHellfire = false;
+		gbIsHellfireSaveGame = false;
+		leveltype = DTYPE_TOWN;
+		currlevel = 0;
+		LoadPassiveTreeData();
+		LoadModifierData();
+		UnloadModArchives();
+	}
+
+	static _item_indexes Row(std::string_view name)
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iName == name && AllItemsList[i].iMiscId != IMISC_UNIQUE)
+				return static_cast<_item_indexes>(i);
+		}
+		ADD_FAILURE() << name;
+		return IDI_GOLD;
+	}
+
+	/** An item of the base as a drop makes it. */
+	static Item Make(std::string_view base, uint32_t seed, item_quality rarity, int itemLevel)
+	{
+		Item item = {};
+		SetLootRarity(item, rarity);
+		SetPoe2ItemLevel(item, itemLevel);
+		SetRndSeed(seed);
+		SetupAllItems(*MyPlayer, item, Row(base), AdvanceRndSeed(), 30, 1, /*onlygood=*/true, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+		item._iIdentified = true;
+		EXPECT_FALSE(item.isEmpty()) << base;
+		return item;
+	}
+
+	static Item MakeBundleUnique(std::string_view name, uint32_t seed)
+	{
+		Item item;
+		const Poe2Unique *unique = FindPoe2Unique(name);
+		if (unique == nullptr || !CreatePoe2Unique(*MyPlayer, item, unique->uid, seed)) {
+			ADD_FAILURE() << name;
+			return item;
+		}
+		item._iIdentified = true;
+		return item;
+	}
+
+	/** The first Diablo unique a staff's home row rolls, the way a unique monster's drop makes it. */
+	static Item MakeDiabloUnique()
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iItemId != UITYPE_LONGSTAFF || AllItemsList[i].dropRate == 0)
+				continue;
+			for (uint32_t seed = 1; seed <= 600; seed++) {
+				Item item = {};
+				SetRndSeed(seed * 2654435761U);
+				SetupAllItems(*MyPlayer, item, static_cast<_item_indexes>(i), AdvanceRndSeed(), 20, 15, /*onlygood=*/true, /*pregen=*/false);
+				if (item._iMagical == ITEM_QUALITY_UNIQUE) {
+					item._iIdentified = true;
+					return item;
+				}
+			}
+			break;
+		}
+		ADD_FAILURE() << "no Diablo unique";
+		return {};
+	}
+
+	static Item MakeWaystone(uint32_t seed, int tier)
+	{
+		Item item = {};
+		item.dwBuff |= CF_POE2;
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iMiscId != IMISC_WAYSTONE)
+				continue;
+			SetRndSeed(seed);
+			SetupAllItems(*MyPlayer, item, static_cast<_item_indexes>(i), AdvanceRndSeed(), 30, 1, /*onlygood=*/false, /*pregen=*/false);
+			RollWaystone(item, tier);
+			return item;
+		}
+		ADD_FAILURE() << "no waystone";
+		return item;
+	}
+
+	static Item MakeBeltUnique(BeltUniqueId id, uint32_t seed)
+	{
+		const BeltUnique *unique = GetBeltUnique(id);
+		Item item {};
+		if (unique == nullptr || !BeltUniqueBase(*unique)) {
+			ADD_FAILURE();
+			return item;
+		}
+		InitializeItem(item, static_cast<_item_indexes>(*BeltUniqueBase(*unique)));
+		item._iSeed = seed;
+		item.dwBuff |= CF_POE2;
+		devilution::MakeBeltUnique(item, id);
+		return item;
+	}
+
+	static Item MakeBase(std::string_view name)
+	{
+		Item item {};
+		InitializeItem(item, Row(name));
+		return item;
+	}
+
+	/** Makes the hero with every kind of item and saves it, its stash and a town floor with items on it. */
+	void BuildAndSave()
+	{
+		_uiheroinfo info {};
+		info.heroclass = HeroClass::Sorcerer;
+		CopyUtf8(info.name, "Golden", sizeof(info.name));
+		ASSERT_TRUE(pfile_ui_save_create(&info));
+		pfile_read_player_from_save(0, *MyPlayer);
+		LoadPoe2HeroData(*MyPlayer);
+		Player &player = *MyPlayer;
+		player.setCharacterLevel(60);
+		player._pgfxnum = 0;
+		// Placing items in the bag and the stash needs the cursor graphics (a new hero's starting items free them).
+		InitCursor();
+
+		// Worn: rares, a normal ring with its implicit, a quest unique, a bundle unique and a locked caster wand.
+		player.InvBody[INVLOC_HEAD] = Make("Iron Cap", 101, ITEM_QUALITY_RARE, 60);
+		player.InvBody[INVLOC_CHEST] = Make("Full Plate", 102, ITEM_QUALITY_RARE, 70);
+		player.InvBody[INVLOC_RING_LEFT] = Make("Ruby Ring", 103, ITEM_QUALITY_NORMAL, 40);
+		player.InvBody[INVLOC_RING_RIGHT] = Make("Sapphire Ring", 104, ITEM_QUALITY_RARE, 75);
+		MakeFixedUnique(player, player.InvBody[INVLOC_AMULET], IDI_OPTAMULET, 16, UITEM_OPTAMULET);
+		player.InvBody[INVLOC_HAND_LEFT] = Make("Bone Wand", 106, ITEM_QUALITY_RARE, 65);
+		player.InvBody[INVLOC_HAND_RIGHT] = MakeBundleUnique("Eye of the Deep", 107);
+
+		// The bag, after the starting items: a locked caster staff, a magic wand, jewels, a normal ring with its
+		// implicit, a waystone, a rare amulet, a magic focus and a Diablo unique.
+		const std::vector<Item> bag = {
+			Make("Gelid Staff", 201, ITEM_QUALITY_RARE, 80),
+			Make("Withered Wand", 202, ITEM_QUALITY_MAGIC, 30),
+			Make("Ruby", 205, ITEM_QUALITY_RARE, 50),
+			Make("Emerald", 206, ITEM_QUALITY_MAGIC, 30),
+			Make("Golden Hoop", 207, ITEM_QUALITY_NORMAL, 20),
+			Make("Jade Amulet", 213, ITEM_QUALITY_RARE, 50),
+			Make("Carved Focus", 212, ITEM_QUALITY_MAGIC, 45),
+			MakeWaystone(209, 7),
+			MakeDiabloUnique(),
+		};
+		for (const Item &item : bag)
+			ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+
+		// A charm and a belt unique beside the starting flasks.
+		player.SpdList[4] = MakeBase("Ruby Charm");
+		player.SpdList[2] = MakeBeltUnique(BeltUniqueId::RedMercy, 4321);
+
+		// A jewel in the tree and a staff in the other weapon set.
+		player.jewels[0] = Make("Sapphire", 301, ITEM_QUALITY_RARE, 60);
+		player.swapHands[0] = Make("Voltaic Staff", 302, ITEM_QUALITY_RARE, 70);
+
+		// The stash: a quarterstaff, a staff from before the caster weapons rework, bundle uniques, magic and rare armour,
+		// and two of Griswold's premium wares.
+		Stash = {};
+		StashTabs.reset();
+		const std::vector<Item> stash = {
+			Make("Heavy Ash Staff", 203, ITEM_QUALITY_RARE, 55),
+			Make("Focused Ashen Staff", 204, ITEM_QUALITY_RARE, 60),
+			Make("Hide Buckler", 208, ITEM_QUALITY_MAGIC, 25),
+			Make("Leather Vest", 401, ITEM_QUALITY_RARE, 50),
+			MakeBundleUnique("Ashen Covenant", 210),
+			MakeBundleUnique("Wolfsplitter", 211),
+		};
+		for (const Item &item : stash)
+			ASSERT_TRUE(AutoPlaceItemInStash(item, true)) << item._iIName;
+		SetRndSeed(402);
+		PremiumItems.clear();
+		PremiumItemLevel = 1;
+		SpawnPremium(player);
+		ASSERT_GE(PremiumItems.size(), 2U);
+		for (size_t i = 0; i < 2; i++)
+			ASSERT_TRUE(AutoPlaceItemInStash(PremiumItems[i], true));
+		Stash.dirty = true;
+
+		// The town floor, with items lying on it.
+		leveltype = DTYPE_TOWN;
+		currlevel = 0;
+		setlevel = false;
+		player.setLevel(0);
+		memset(dItem, 0, sizeof(dItem));
+		ActiveItemCount = 0;
+		const std::vector<Item> ground = {
+			Make("Iron Cap", 501, ITEM_QUALITY_MAGIC, 20),
+			Make("Ochre Sceptre", 502, ITEM_QUALITY_RARE, 60),
+			MakeBundleUnique("Red Harvest", 503),
+		};
+		for (const Item &item : ground) {
+			const int ii = ActiveItemCount;
+			ActiveItems[ii] = static_cast<uint8_t>(ii);
+			Items[ii] = item;
+			Items[ii].position = { 60 + ii, 70 };
+			dItem[60 + ii][70] = static_cast<int8_t>(ii + 1);
+			ActiveItemCount++;
+		}
+
+		FreeCursor();
+		pfile_write_hero(/*writeGameData=*/false);
+		sfile_write_stash();
+		pfile_save_level();
+	}
+
+	/** Loads the hero, the stash and the town floor from the saves in the folder. */
+	static void Load()
+	{
+		*MyPlayer = {};
+		Stash = {};
+		StashTabs.reset();
+		pfile_read_player_from_save(0, *MyPlayer);
+		LoadPoe2HeroData(*MyPlayer);
+		LoadStash();
+		leveltype = DTYPE_TOWN;
+		currlevel = 0;
+		setlevel = false;
+		MyPlayer->plractive = false;
+		ASSERT_TRUE(LoadLevel().has_value());
+	}
+
+	static void AddItem(std::ostringstream &out, std::string_view where, const Item &item)
+	{
+		if (item.isEmpty())
+			return;
+		out << where << ": " << AllItemsList[item.IDidx].iName << " (row " << static_cast<int>(item.IDidx) << ") rarity " << static_cast<int>(item._iMagical)
+		    << " level " << GetPoe2ItemLevel(item) << " \"" << item._iIName << "\"";
+		const BeltUnique *beltUnique = GetBeltUnique(item);
+		if (beltUnique != nullptr)
+			out << " belt unique " << beltUnique->name << " effect " << BeltUniqueEffect(item);
+		else if (item._iMagical == ITEM_QUALITY_UNIQUE)
+			out << " unique " << UniqueItems[item._iUid].UIName;
+		out << "\n";
+		// The Diablo stats the save holds and the rebuild may change.
+		out << "  base ac " << item._iAC << " dam " << item._iMinDam << "-" << item._iMaxDam << " pl " << item._iPLDam << " " << item._iPLToHit << " "
+		    << item._iPLAC << " attr " << item._iPLStr << " " << item._iPLMag << " " << item._iPLDex << " " << item._iPLVit << " res " << item._iPLFR << " "
+		    << item._iPLLR << " " << item._iPLMR << " hp " << item._iPLHP.raw() << " mana " << item._iPLMana.raw() << " flags " << static_cast<uint32_t>(item._iFlags)
+		    << " req " << static_cast<int>(item._iMinStr) << " " << static_cast<int>(item._iMinMag) << " " << static_cast<int>(item._iMinDex) << "\n";
+		if (item._iMagical == ITEM_QUALITY_UNIQUE && beltUnique == nullptr) {
+			for (const auto &[effect, value] : RollUniqueEffects(item))
+				out << "  unique effect " << static_cast<int>(effect->mod) << " " << static_cast<int>(effect->rule) << " " << value << "\n";
+		}
+		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+			const ModFamily *family = ItemModFamily(mod);
+			if (family == nullptr)
+				continue;
+			out << "  mod " << family->id << " T" << static_cast<int>(mod.tier) << " " << mod.values[0] << " " << mod.values[1] << "\n";
+		}
+		for (const ItemImplicit &implicit : ItemImplicits(item))
+			out << "  implicit " << static_cast<int>(implicit.implicit->effect) << " " << implicit.values[0] << " " << implicit.values[1] << "\n";
+		bool any = false;
+		for (size_t stat = 0; stat < item._iPoe2Stats.size(); stat++) {
+			if (item._iPoe2Stats[stat] == 0)
+				continue;
+			out << (any ? " " : "  stats ") << stat << "=" << item._iPoe2Stats[stat];
+			any = true;
+		}
+		if (any)
+			out << "\n";
+		out << "  craft";
+		char hex[3];
+		for (const uint8_t b : PackCraftState(item._iPoe2Craft)) {
+			snprintf(hex, sizeof(hex), "%02x", b);
+			out << hex;
+		}
+		out << "\n";
+	}
+
+	/** Every item of the loaded hero, stash and floor, as it rebuilt. */
+	static std::string Snapshot()
+	{
+		std::ostringstream out;
+		const Player &player = *MyPlayer;
+		for (int slot = 0; slot < NUM_INVLOC; slot++)
+			AddItem(out, "body " + std::to_string(slot), player.InvBody[slot]);
+		for (int i = 0; i < player._pNumInv; i++)
+			AddItem(out, "bag " + std::to_string(i), player.InvList[i]);
+		for (int i = 0; i < MaxBeltItems; i++)
+			AddItem(out, "belt " + std::to_string(i), player.SpdList[i]);
+		for (size_t i = 0; i < player.jewels.size(); i++)
+			AddItem(out, "jewel " + std::to_string(i), player.jewels[i]);
+		for (size_t i = 0; i < player.swapHands.size(); i++)
+			AddItem(out, "swap " + std::to_string(i), player.swapHands[i]);
+		for (size_t i = 0; i < Stash.stashList.size(); i++)
+			AddItem(out, "stash " + std::to_string(i), Stash.stashList[i]);
+		for (int i = 0; i < ActiveItemCount; i++)
+			AddItem(out, "ground " + std::to_string(i), Items[ActiveItems[i]]);
+		return out.str();
+	}
+
+	static bool CopyFile(const std::string &from, const std::string &to)
+	{
+		std::ifstream in(from, std::ios::binary);
+		if (!in)
+			return false;
+		std::ofstream out(to, std::ios::binary | std::ios::trunc);
+		out << in.rdbuf();
+		return static_cast<bool>(out);
+	}
+
+	static std::string ReadText(const std::string &path)
+	{
+		std::ifstream in(path, std::ios::binary);
+		std::ostringstream text;
+		text << in.rdbuf();
+		return text.str();
+	}
+
+	static std::vector<std::string> Lines(const std::string &text)
+	{
+		std::vector<std::string> lines;
+		std::istringstream in(text);
+		for (std::string line; std::getline(in, line);)
+			lines.push_back(line);
+		return lines;
+	}
+
+	bool haveMainData_ = false;
+	std::string previousPrefPath_;
+	std::string folder_;
+};
+
+TEST_F(Poe2SaveFixtureTest, GoldenSaveLoadsAsRecorded)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	const char *out = std::getenv("POE2_SAVE_FIXTURE_OUT");
+	if (out != nullptr) {
+		BuildAndSave();
+		ASSERT_FALSE(HasFatalFailure());
+		const std::string target = std::string(out) + DIRECTORY_SEPARATOR_STR;
+		ASSERT_TRUE(CopyFile(pfile_hero_save_path(), target + "hero.sv"));
+		ASSERT_TRUE(CopyFile(pfile_stash_save_path(), target + "stash.sv"));
+		Load();
+		std::ofstream(target + "snapshot.txt", std::ios::binary) << Snapshot();
+		return;
+	}
+
+	const std::string fixtures = paths::BasePath() + std::string(FixtureFolder);
+	ASSERT_TRUE(CopyFile(fixtures + "hero.sv", pfile_hero_save_path()));
+	ASSERT_TRUE(CopyFile(fixtures + "stash.sv", pfile_stash_save_path()));
+	Load();
+
+	const std::vector<std::string> expected = Lines(ReadText(fixtures + "snapshot.txt"));
+	const std::vector<std::string> actual = Lines(Snapshot());
+	ASSERT_GT(expected.size(), 50U);
+	for (size_t i = 0; i < std::max<size_t>(expected.size(), actual.size()); i++) {
+		const std::string_view want = i < expected.size() ? std::string_view(expected[i]) : std::string_view("(nothing)");
+		const std::string_view got = i < actual.size() ? std::string_view(actual[i]) : std::string_view("(nothing)");
+		EXPECT_EQ(want, got) << "line " << i + 1 << " of snapshot.txt";
+		if (want != got)
+			break;
+	}
+	// Every kind of item the fixture holds came back.
+	const std::string snapshot = Snapshot();
+	for (const std::string_view kind : { "body ", "bag ", "belt ", "jewel ", "swap ", "stash ", "ground " })
+		EXPECT_NE(snapshot.find(kind), std::string::npos) << kind;
+}
+
+} // namespace
+} // namespace devilution
