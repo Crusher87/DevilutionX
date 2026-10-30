@@ -2451,7 +2451,7 @@ Element ElementOf(DamageType type, bool spell)
 	case DamageType::Fire: return Element::Fire;
 	case DamageType::Lightning: return Element::Lightning;
 	case DamageType::Magic: return Element::Cold;
-	case DamageType::Acid: return Element::Chaos;
+	case DamageType::Chaos: return Element::Chaos;
 	case DamageType::Physical: return spell ? Element::Holy : Element::Physical;
 	}
 	return Element::Physical;

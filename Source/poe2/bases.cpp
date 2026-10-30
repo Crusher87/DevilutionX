@@ -252,9 +252,9 @@ std::vector<ItemImplicit> ItemImplicits(const Item &item)
 	return implicits;
 }
 
-uint64_t ImplicitEffectBits(const Item &item)
+ModEffectMask ImplicitEffectBits(const Item &item)
 {
-	uint64_t bits = 0;
+	ModEffectMask bits;
 	for (const ItemImplicit &rolled : ItemImplicits(item)) {
 		if (rolled.values[0] > 0 || rolled.values[1] > 0)
 			bits |= ModEffectBits(rolled.implicit->effect);

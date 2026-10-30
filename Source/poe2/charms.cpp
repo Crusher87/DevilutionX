@@ -80,7 +80,7 @@ int ResistCharmIndex(DamageType damageType)
 	case DamageType::Lightning:
 		return 1;
 	case DamageType::Magic:
-	case DamageType::Acid:
+	case DamageType::Chaos:
 		return 2;
 	default:
 		return -1;

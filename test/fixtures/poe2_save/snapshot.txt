@@ -1,0 +1,208 @@
+body 0: Iron Cap (row 576) rarity 3 level 60 "Kraken Peak"
+  base ac 33 dam 0-0 pl 0 12 0 attr 0 0 3 0 res 0 34 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod flat_armour T8 21 0
+  mod lightning_resistance T3 34 0
+  mod accuracy_rating T4 12 0
+  mod dexterity T8 3 0
+  stats 14=21
+  craft00000000000000000000000000000000000000
+body 1: Ruby Ring (row 672) rarity 0 level 40 "Ruby Ring"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 15 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  implicit 22 15 0
+  craft00000000000000000000000000000000000000
+body 2: Sapphire Ring (row 673) rarity 3 level 75 "Gloom Finger"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 24 0 res 15 0 16 hp 0 mana 0 flags 0 req 0 0 0
+  mod item_rarity_prefix T2 13 0
+  mod global_added_physical_attacks T5 6 11
+  mod mana_regeneration T7 17 0
+  mod fire_resistance T7 15 0
+  mod dexterity T2 24 0
+  implicit 23 16 0
+  stats 17=13
+  craft00000000000000000000000000000000000000
+body 3: Optic Amulet (row 10) rarity 2 level 0 "Optic Amulet" unique Optic Amulet
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 5 0 0 res 0 20 0 hp 0 mana 0 flags 0 req 0 0 0
+  craft00000000000000000000000000000000000000
+body 4: Bone Wand (row 979) rarity 3 level 65 "Empyrean Thorn"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 7 0 0 res 0 0 0 hp 0 mana 2944 flags 0 req 0 0 0
+  mod wand_maximum_mana T10 11 0
+  mod wand_spell_damage_mana T3 19 35
+  mod wand_reduced_requirements T5 15 0
+  mod wand_intelligence T8 7 0
+  stats 18=19
+  craftc287000000007a0a7c03850584080000000092
+body 5: Carved Focus (row 665) rarity 2 level 12 "Eye of the Deep" unique Eye of the Deep
+  base ac 5 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 2240 flags 0 req 0 18 0
+  unique effect 44 0 19
+  unique effect 2 0 35
+  unique effect 0 20 20
+  unique effect 0 21 25
+  stats 18=19
+  craft00000000000000000000000000000000000000
+body 6: Full Plate (row 261) rarity 3 level 70 "Carrion Veil"
+  base ac 293 dam 0-0 pl 0 0 0 attr 3 3 3 0 res 34 0 0 hp 768 mana 0 flags 0 req 54 0 0
+  mod maximum_life T8 12 0
+  mod flat_armour T8 23 0
+  mod all_attributes T7 3 0
+  mod fire_resistance T3 34 0
+  stats 14=23
+  craft00000000000000000000000000000000000000
+bag 0: Gold (row 0) rarity 0 level 0 "Gold"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  craft00000000000000000000000000000000000000
+bag 1: Gelid Staff (row 965) rarity 3 level 80 "Blight Branch"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 4096 flags 0 req 0 0 0
+  mod staff_spell_damage_mana T5 28 50
+  mod staff_maximum_mana T11 14 0
+  mod staff_cold_skill_levels T5 1 0
+  mod staff_mana_on_kill T8 2 0
+  stats 18=28 24=1 30=2
+  craftc2870000000061055f0b6d057208000000000c
+bag 2: Withered Wand (row 978) rarity 1 level 30 "Apprentice's Wand of Success"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod wand_spell_damage T8 14 0
+  mod wand_life_on_kill T8 6 0
+  stats 18=14 29=6
+  craftc28b000000007b088c08000000000000000052
+bag 3: Ruby (row 301) rarity 3 level 50 "Behemoth Scratch"
+  base ac 0 dam 0-0 pl 18 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod jewel_maximum_mana_pct T5 5 0
+  mod jewel_damage_pct T5 18 0
+  mod jewel_cast_speed T5 4 0
+  mod jewel_attack_speed T4 4 0
+  stats 0=4 1=4 10=5
+  craft00000000000000000000000000000000000000
+bag 4: Emerald (row 302) rarity 1 level 30 "Brutal Emerald of Alacrity"
+  base ac 0 dam 0-0 pl 12 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod jewel_damage_pct T7 12 0
+  mod jewel_attack_speed T7 3 0
+  stats 0=3
+  craft00000000000000000000000000000000000000
+bag 5: Golden Hoop (row 679) rarity 0 level 20 "Golden Hoop"
+  base ac 0 dam 0-0 pl 0 0 0 attr 5 5 5 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  implicit 21 5 0
+  craft00000000000000000000000000000000000000
+bag 6: Jade Amulet (row 681) rarity 3 level 50 "Damnation Noose"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 6 0 res 0 11 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod global_added_physical_attacks T5 6 11
+  mod minion_damage T8 19 0
+  mod life_regeneration T6 5 0
+  mod lightning_resistance T8 11 0
+  implicit 19 6 0
+  stats 3=19
+  craft00000000000000000000000000000000000000
+bag 7: Carved Focus (row 665) rarity 1 level 45 "Seer's Carved Focus"
+  base ac 5 dam 0-0 pl 0 0 25 attr 0 0 0 0 res 0 0 0 hp 0 mana 1984 flags 0 req 0 18 0
+  mod mana_es_hybrid T5 31 25
+  craft00000000000000000000000000000000000000
+bag 8: Waystone (row 247) rarity 1 level 0 "Waystone (Tier 7) of Hexwarding"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  craftc20300000060156100000000000000000000d9
+bag 9: Fine Gothic Quarterstaff (row 476) rarity 2 level 0 "Naj's Puzzler" unique Naj's Puzzler
+  base ac 0 dam 16-26 pl 0 0 0 attr 0 20 10 0 res 20 20 20 hp -1600 mana 0 flags 0 req 0 9 18
+  craft00000000000000000000000000000000000000
+belt 0: Potion of Healing (row 24) rarity 0 level 0 "Lesser Healing Flask"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  craft00000000000000000000000000000000000000
+belt 1: Potion of Mana (row 25) rarity 0 level 0 "Lesser Mana Flask"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  craft00000000000000000000000000000000000000
+belt 2: Potion of Healing (row 77) rarity 2 level 0 "Red Mercy" belt unique Red Mercy effect 11
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  craft00000000000000000000000000000000000000
+belt 4: Ruby Charm (row 248) rarity 0 level 0 "Ruby Charm"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  craft00000000000000000000000000000000000000
+jewel 0: Sapphire (row 303) rarity 3 level 60 "Torment Razor"
+  base ac 0 dam 0-0 pl 16 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod jewel_maximum_life_pct T6 4 0
+  mod jewel_damage_pct T6 16 0
+  mod jewel_attack_speed T6 3 0
+  mod jewel_cast_speed T7 2 0
+  stats 0=3 1=2 9=4
+  craft00000000000000000000000000000000000000
+swap 0: Voltaic Staff (row 966) rarity 3 level 70 "Damnation Chant"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 17 0 0 res 0 0 0 hp 0 mana 3968 flags 0 req 0 0 0
+  mod staff_spell_damage_mana T4 32 62
+  mod staff_intelligence T5 17 0
+  mod staff_reduced_requirements T2 30 0
+  stats 18=32
+  craftc207000000006102e9026a010000000000006d
+stash 0: Heavy Ash Staff (row 472) rarity 3 level 55 "Brimstone Cry"
+  base ac 0 dam 14-24 pl 28 5 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 16 req 0 0 0
+  mod physical_accuracy_hybrid T7 28 5
+  mod local_added_fire T8 4 7
+  mod reduced_attribute_requirements T6 17 0
+  craft00000000000000000000000000000000000000
+stash 1: Focused Ashen Staff (row 546) rarity 3 level 60 "Phoenix Chant"
+  base ac 0 dam 3-7 pl 0 0 0 attr 0 8 0 0 res 0 0 0 hp 0 mana 1152 flags 0 req 0 16 0
+  mod maximum_mana T7 18 0
+  mod spell_damage T5 40 0
+  mod minion_damage T8 12 0
+  mod reduced_attribute_requirements T5 20 0
+  mod mana_regeneration T7 15 0
+  implicit 20 8 0
+  stats 3=12 18=40
+  craft00000000000000000000000000000000000000
+stash 2: Hide Buckler (row 640) rarity 1 level 25 "Hide Buckler of the Prodigy"
+  base ac 15 dam 0-0 pl 0 0 0 attr 0 6 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod intelligence T7 6 0
+  craft00000000000000000000000000000000000000
+stash 3: Leather Vest (row 265) rarity 3 level 50 "Rune Shelter"
+  base ac 30 dam 0-0 pl 0 0 0 attr 0 0 10 0 res 0 0 0 hp 0 mana 2112 flags 0 req 0 0 0
+  mod maximum_mana T6 33 0
+  mod mana_regeneration T6 25 0
+  mod dexterity T5 10 0
+  mod life_regeneration T5 8 0
+  craft00000000000000000000000000000000000000
+stash 4: Bearded Axe (row 308) rarity 2 level 12 "Ashen Covenant" unique Ashen Covenant
+  base ac 0 dam 8-21 pl 25 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 17 0 9
+  unique effect 12 0 25
+  unique effect 26 0 7
+  unique effect 0 4 50
+  unique effect 0 5 59
+  unique effect 0 6 1
+  stats 0=7
+  craft00000000000000000000000000000000000000
+stash 5: Carving Hatchet (row 314) rarity 2 level 36 "Wolfsplitter" unique Wolfsplitter
+  base ac 0 dam 19-44 pl 26 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 47 0 20
+  unique effect 12 0 26
+  unique effect 26 0 10
+  unique effect 0 10 80
+  unique effect 0 11 29
+  unique effect 0 12 15
+  stats 0=10
+  craft00000000000000000000000000000000000000
+stash 6: Shortsword (row 329) rarity 1 level 4 "Shortsword of Calm"
+  base ac 0 dam 6-9 pl 0 4 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod accuracy_rating T8 4 0
+  craft00000000000000000000000000000000000000
+stash 7: Shortsword (row 329) rarity 3 level 4 "Beast Scratch"
+  base ac 0 dam 9-15 pl 19 6 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  mod local_added_physical T8 3 6
+  mod physical_accuracy_hybrid T8 19 3
+  mod accuracy_rating T8 3 0
+  mod reduced_attribute_requirements T8 10 0
+  mod attack_speed T8 4 0
+  stats 0=4
+  craft00000000000000000000000000000000000000
+ground 0: Iron Cap (row 576) rarity 1 level 20 "Azure Helm of the Worthy"
+  base ac 12 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 832 flags 0 req 0 0 0
+  mod maximum_mana T8 13 0
+  mod reduced_attribute_requirements T7 13 0
+  craft00000000000000000000000000000000000000
+ground 1: Ochre Sceptre (row 955) rarity 3 level 60 "Rune Roar"
+  base ac 0 dam 0-0 pl 0 0 0 attr 0 6 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 40 0
+  mod sceptre_ally_added_physical T8 2 4
+  mod sceptre_spirit_percent T7 29 0
+  mod sceptre_intelligence T8 6 0
+  mod sceptre_mana_regeneration T3 49 0
+  stats 19=29 33=2 34=4
+  craftc28700000000990895079e08a303000000008c
+ground 2: Crescent Axe (row 311) rarity 2 level 24 "Red Harvest" unique Red Harvest
+  base ac 0 dam 18-37 pl 17 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 38 0 17
+  unique effect 12 0 17
+  unique effect 0 7 20
+  unique effect 0 8 1
+  unique effect 0 9 25
+  craft00000000000000000000000000000000000000

@@ -241,9 +241,9 @@ TEST_F(Poe2CraftingTest, ShopWaresCraftOneModifierAtATime)
 TEST_F(Poe2CraftingTest, CraftingNeverRepeatsAStatTheItemHas)
 {
 	// Curtis 2026-10-22: a staff with the Physical Damage and Accuracy hybrid had a second "+ to Accuracy Rating".
-	EXPECT_EQ(ModEffectBits(ModEffect::None), 0U);
-	EXPECT_NE(ModEffectBits(ModEffect::PhysicalPercentAndAccuracy) & ModEffectBits(ModEffect::Accuracy), 0U);
-	EXPECT_NE(ModEffectBits(ModEffect::LifeAndDefensePercent) & ModEffectBits(ModEffect::DefensePercent), 0U);
+	EXPECT_TRUE(ModEffectBits(ModEffect::None).none());
+	EXPECT_TRUE((ModEffectBits(ModEffect::PhysicalPercentAndAccuracy) & ModEffectBits(ModEffect::Accuracy)).any());
+	EXPECT_TRUE((ModEffectBits(ModEffect::LifeAndDefensePercent) & ModEffectBits(ModEffect::DefensePercent)).any());
 	const std::optional<uint8_t> hybrid = FindModifierFamily("physical_accuracy_hybrid");
 	const std::optional<uint8_t> accuracy = FindModifierFamily("accuracy_rating");
 	ASSERT_TRUE(hybrid && accuracy);
@@ -262,6 +262,55 @@ TEST_F(Poe2CraftingTest, CraftingNeverRepeatsAStatTheItemHas)
 		for (const Poe2ItemMod &mod : mods)
 			EXPECT_NE(mod.family, *accuracy + 1) << seed;
 	}
+}
+
+TEST_F(Poe2CraftingTest, EveryEffectHasItsOwnBit)
+{
+	// Chaos plan step 1: the mask had 64 bits for 63 effects, and a 65th would have shifted past them.
+	ModEffectMask seen;
+	for (size_t i = 1; i < static_cast<size_t>(ModEffect::Count); i++) {
+		const auto effect = static_cast<ModEffect>(i);
+		const ModEffectMask bits = ModEffectBits(effect);
+		EXPECT_TRUE(bits.any()) << i;
+		// A hybrid is its two parts, which have their own bits; every other effect is the one bit of its own.
+		if (bits.count() == 1) {
+			EXPECT_TRUE(bits.test(i)) << i;
+			EXPECT_FALSE((seen & bits).any()) << i;
+			seen |= bits;
+		}
+	}
+	EXPECT_TRUE(ModEffectBits(ModEffect::Count).none());
+	// Effects past 63 get their own bits, not those of the effects 64 below them.
+	for (size_t i = 64; i < MaxModEffects; i++) {
+		const ModEffectMask bits = ModEffectBits(static_cast<ModEffect>(i));
+		EXPECT_EQ(bits.count(), 1U) << i;
+		EXPECT_TRUE(bits.test(i)) << i;
+	}
+}
+
+TEST_F(Poe2CraftingTest, AvoidingAnEffectPast63LeavesTheOthers)
+{
+	const Item cap = MakeItem("Iron Cap", 3, ITEM_QUALITY_NORMAL, 80);
+	const std::optional<ModSlot> slot = ItemModSlot(cap);
+	ASSERT_TRUE(slot);
+	const auto lifeRolls = [&](const ModRollFilter &filter) {
+		int life = 0;
+		for (uint32_t seed = 1; seed <= 400; seed++) {
+			const std::optional<Poe2ItemMod> mod = RollAddedMod(*slot, ItemModBaseTags(cap), 80, {}, MaxRareModsPerSide, seed, filter);
+			if (mod && ItemModFamily(*mod)->effect == ModEffect::Life)
+				life++;
+		}
+		return life;
+	};
+	ModRollFilter none;
+	ASSERT_GT(lifeRolls(none), 0);
+	ModRollFilter avoidLife;
+	avoidLife.avoidEffects = ModEffectBits(ModEffect::Life);
+	EXPECT_EQ(lifeRolls(avoidLife), 0);
+	// The bit 64 above Life is another effect's: it mustn't hide Life.
+	ModRollFilter avoidHigh;
+	avoidHigh.avoidEffects.set(64 + static_cast<size_t>(ModEffect::Life));
+	EXPECT_EQ(lifeRolls(avoidHigh), lifeRolls(none));
 }
 
 TEST_F(Poe2CraftingTest, AlchemyGivesExactlyFourModifiers)

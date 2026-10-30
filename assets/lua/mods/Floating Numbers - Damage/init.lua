@@ -9,7 +9,7 @@ local DAMAGE_TYPE = {
     FIRE = 1,
     LIGHTNING = 2,
     MAGIC = 3,
-    ACID = 4,
+    CHAOS = 4,
 }
 
 local function get_damage_style(damage_val, damage_type)
@@ -29,7 +29,7 @@ local function get_damage_style(damage_val, damage_type)
         [DAMAGE_TYPE.FIRE] = render.UiFlags.ColorUiSilver, -- shows as DarkRed in game
         [DAMAGE_TYPE.LIGHTNING] = render.UiFlags.ColorBlue,
         [DAMAGE_TYPE.MAGIC] = render.UiFlags.ColorOrange,
-        [DAMAGE_TYPE.ACID] = render.UiFlags.ColorYellow,
+        [DAMAGE_TYPE.CHAOS] = render.UiFlags.ColorYellow,
     }
 
     local type_style = damage_type_styles[damage_type]

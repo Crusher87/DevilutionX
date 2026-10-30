@@ -121,8 +121,8 @@ TEST_F(Poe2CasterStatsTest, HybridsAvoidBothParts)
 {
 	EXPECT_EQ(ModEffectBits(ModEffect::SpiritAndMana), ModEffectBits(ModEffect::LocalSpiritPercent) | ModEffectBits(ModEffect::Mana));
 	EXPECT_EQ(ModEffectBits(ModEffect::SpellDamageAndMana), ModEffectBits(ModEffect::SpellDamage) | ModEffectBits(ModEffect::Mana));
-	EXPECT_NE(ModEffectBits(ModEffect::MinionLifeRegen), 0U);
-	EXPECT_LT(static_cast<int>(ModEffect::MinionLifeRegen), 64);
+	EXPECT_TRUE(ModEffectBits(ModEffect::MinionLifeRegen).any());
+	EXPECT_LT(static_cast<size_t>(ModEffect::MinionLifeRegen), MaxModEffects);
 }
 
 TEST_F(Poe2CasterStatsTest, ElementLevelsGoToTheSpellsOfTheirElement)
@@ -182,7 +182,7 @@ TEST_F(Poe2CasterStatsTest, ElementSpellDamageByHitType)
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Magic), 20);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Lightning), 30);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Physical), 40);
-	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Acid), 0);
+	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Chaos), 0);
 }
 
 TEST_F(Poe2CasterStatsTest, SceptreSpiritTakesItsOwnIncrease)

@@ -172,7 +172,8 @@ std::expected<MissileDataFlags, std::string> ParseMissileDataFlag(std::string_vi
 	if (value == "Fire") return MissileDataFlags::Fire;
 	if (value == "Lightning") return MissileDataFlags::Lightning;
 	if (value == "Magic") return MissileDataFlags::Magic;
-	if (value == "Acid") return MissileDataFlags::Acid;
+	// The missile tables call it Acid, Diablo's name; Chaos reads the same.
+	if (value == "Acid" || value == "Chaos") return MissileDataFlags::Chaos;
 	if (value == "Arrow") return MissileDataFlags::Arrow;
 	if (value == "Invisible") return MissileDataFlags::Invisible;
 	return std::unexpected("Unknown enum value");

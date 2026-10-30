@@ -29,7 +29,8 @@ enum class DamageType : uint8_t {
 	Fire,
 	Lightning,
 	Magic,
-	Acid,
+	/** Diablo's acid, POE2's chaos. Still 4, the value network messages carry. */
+	Chaos,
 };
 
 enum class MissileGraphicID : uint8_t {
@@ -122,7 +123,7 @@ enum class MissileDataFlags : uint8_t {
 	Fire = static_cast<uint8_t>(DamageType::Fire),
 	Lightning = static_cast<uint8_t>(DamageType::Lightning),
 	Magic = static_cast<uint8_t>(DamageType::Magic),
-	Acid = static_cast<uint8_t>(DamageType::Acid),
+	Chaos = static_cast<uint8_t>(DamageType::Chaos),
 	Arrow = 1 << 4,
 	Invisible = 1 << 5,
 };
