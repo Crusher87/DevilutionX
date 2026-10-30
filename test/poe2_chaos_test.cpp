@@ -21,6 +21,8 @@
 #include "poe2/unique_effects.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "missiles.h"
 #include "monster.h"
@@ -592,6 +594,59 @@ TEST_F(Poe2ChaosTest, MonsterPoisonIsTheStrongestOfPhysicalAndChaosHits)
 		ProcessMapPlayer(player);
 	EXPECT_LE(1000 - player._pHitPoints.whole(), 100 * MapPoisonPercentPerSecond / 100 * 2);
 	CloseMap(player);
+}
+
+TEST_F(Poe2ChaosTest, WandAndStaffSkillsDealChaos)
+{
+	for (const WeaponSkill skill : { WeaponSkill::Soulrend, WeaponSkill::DarkPact, WeaponSkill::WitheringBolt, WeaponSkill::Decompose, WeaponSkill::WitheringRay }) {
+		const TableSkillData &row = *FindTableSkill(skill);
+		EXPECT_EQ(row.type, DamageType::Chaos) << row.name;
+		EXPECT_NE(std::string_view(row.description).find("chaos"), std::string_view::npos) << row.name;
+		const SkillSlot slot = SkillSlot::ForAttack(skill);
+		const uint32_t tags = SkillTags(slot);
+		EXPECT_NE(tags & ST_Chaos, 0U) << row.name;
+		EXPECT_EQ(tags & ST_Physical, 0U) << row.name;
+		EXPECT_EQ(tags & ST_Elemental, 0U) << row.name;
+		// Venom fits chaos skills; the physical-only supports no longer do.
+		EXPECT_TRUE(SupportGemCanSupport(SupportGem::Envenom, slot)) << row.name;
+		EXPECT_FALSE(SupportGemCanSupport(SupportGem::InfusedFlames, slot)) << row.name;
+		EXPECT_FALSE(SupportGemCanSupport(SupportGem::SerratedEdge, slot)) << row.name;
+	}
+	// Cobra Strike, Reap and Bone Bolt stay physical.
+	for (const WeaponSkill skill : { WeaponSkill::ViperStrike, WeaponSkill::Reap, WeaponSkill::BoneBolt })
+		EXPECT_EQ(FindTableSkill(skill)->type, DamageType::Physical) << FindTableSkill(skill)->name;
+	EXPECT_NE(SkillTags(SkillSlot::ForAttack(WeaponSkill::ViperStrike)) & ST_Physical, 0U);
+}
+
+TEST_F(Poe2ChaosTest, WitheredRaisesChaosDamageOnly)
+{
+	Monster monster = MonsterOfKind(MT_NZOMBIE);
+	monster.poe2.witherStacks = 10;
+	monster.poe2.witherTicks = 40;
+	EXPECT_EQ(WitheredDamageTakenPercent(monster, DamageType::Chaos), 50);
+	for (const DamageType type : { DamageType::Physical, DamageType::Fire, DamageType::Lightning, DamageType::Magic }) {
+		EXPECT_EQ(WitheredDamageTakenPercent(monster, type), 0);
+		EXPECT_EQ(SupportHitDamagePercent(monster, type), 100);
+		EXPECT_EQ(MonsterDamageTakenPercent(monster, type), 100);
+	}
+	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 150);
+	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Chaos), 150);
+	// Poison ticks too, before chaos resistance.
+	EXPECT_EQ(PoisonTickDamage(monster, 1000), 1500);
+	Monster beast = MonsterOfKind(MT_NACID);
+	beast.poe2.witherStacks = 4;
+	EXPECT_EQ(PoisonTickDamage(beast, 1000), 1000 * 120 / 100 * 70 / 100);
+}
+
+TEST_F(Poe2ChaosTest, PhysicalOnlyRulesSkipChaosHits)
+{
+	// Amplify Damage and armour break raise physical damage only.
+	Monster monster = MonsterOfKind(MT_NZOMBIE);
+	monster.poe2.amplifyTicks = 40;
+	monster.poe2.amplifyPercent = 30;
+	monster.poe2.armourBreakTicks = 40;
+	EXPECT_GT(MonsterDamageTakenPercent(monster, DamageType::Physical), 100);
+	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Chaos), 100);
 }
 
 } // namespace

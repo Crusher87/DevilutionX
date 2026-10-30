@@ -78,7 +78,7 @@ const SupportData Table[] = {
 	{ SG::BurningGround, "Scorched Earth", "Hits leave burning ground. 20% less\ndamage with hits. Mana +30%", "Needs a fire, area or projectile skill", GC::Strength, 6, 130, ST_Fire | ST_Area | ST_Projectile, ST_Damage, 0, 0, NoFamily },
 	{ SG::Overcharge, "Overload", "Shocks twice as often. 25% less\ndamage with hits. Mana +10%", "Needs a lightning skill", GC::Dexterity, 4, 110, 0, ST_Lightning, 0, 0, NoFamily },
 	{ SG::DeepFreeze, "Winter's Grip", "Freezes sooner. 20% less damage\nwith hits. Mana +10%", "Needs a cold skill", GC::Magic, 4, 110, 0, ST_Frost, 0, 0, NoFamily },
-	{ SG::WitheringTouch, "Decaying Touch", "Hits wither: 3% more damage taken\na stack, up to 10. 15% less damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
+	{ SG::WitheringTouch, "Decaying Touch", "Hits wither: 5% more chaos damage taken\na stack, up to 10. 15% less damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::CastOnKill, "Sigil of Slaughter", "Retired: it's the Reaper's Call Spirit\ngem now, which holds the spells", "Retired", GC::Magic, 6, 120, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastWhenHit, "Sigil of Reprisal", "Retired: it's the Sigil of Retribution\nSpirit gem now, which holds the spells", "Retired", GC::Strength, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastOnDodge, "Sigil of Evasion", "Retired: it's the Sigil of Evasion\nSpirit gem now, which holds the spells", "Retired", GC::Dexterity, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
@@ -166,8 +166,8 @@ constexpr int StoredVolleySealTicks = 20;
 constexpr int MultistrikePercent = 75;
 /** Immortal King's Stride's aftershocks hit for 40% less. */
 constexpr int AftershockPercent = 60;
-/** Withered: smaller steps, more stacks (Curtis 2026-10-30), until chaos damage gives it its POE2 meaning. */
-constexpr int WitherPercentPerStack = 3;
+/** Withered: POE2's 5% more chaos damage taken a stack, up to 10 (Curtis 2026-10-30), from hits and chaos over time. */
+constexpr int WitherPercentPerStack = 5;
 constexpr int TicksPerSecond = 20;
 /** Life Leech III keeps leech for 2 seconds at full life. */
 constexpr int LeechPoolTicks = 2 * TicksPerSecond;
@@ -825,9 +825,10 @@ int32_t PoisonTickDamage(const Monster &monster, int32_t perTick)
 {
 	if (!gbIsPoe2)
 		return perTick;
-	// Poison is chaos damage over time: it meets the monster's chaos resistance on every tick.
+	// Poison is chaos damage over time: Withered raises it, and it meets the monster's chaos resistance on every tick.
 	const int resistance = MonsterResistance(monster, DamageType::Chaos);
-	return std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(perTick) * (100 - resistance) / 100), perTick > 0 ? 1 : 0);
+	const int64_t withered = static_cast<int64_t>(perTick) * (100 + WitheredDamageTakenPercent(monster, DamageType::Chaos)) / 100;
+	return std::max<int32_t>(static_cast<int32_t>(std::min<int64_t>(withered * (100 - resistance) / 100, INT32_MAX)), perTick > 0 ? 1 : 0);
 }
 
 uint32_t SkillTags(SkillSlot skill)
@@ -1261,14 +1262,17 @@ int SupportHitPenetration(DamageType type)
 	}
 }
 
-int WitheredDamageTakenPercent(const Monster &monster)
+int WitheredDamageTakenPercent(const Monster &monster, DamageType type)
 {
+	// Withered raises chaos damage only, as in POE2.
+	if (type != DamageType::Chaos)
+		return 0;
 	return monster.poe2.witherStacks * WitherPercentPerStack;
 }
 
 int SupportHitDamagePercent(const Monster &monster, DamageType type)
 {
-	int percent = 100 + WitheredDamageTakenPercent(monster);
+	int percent = 100 + WitheredDamageTakenPercent(monster, type);
 	if (Hit.depth == 0 || Hit.finishing || Hit.player == nullptr)
 		return percent;
 	const Player &player = *Hit.player;

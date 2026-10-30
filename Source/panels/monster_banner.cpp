@@ -126,7 +126,7 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 	if (state.bleedTicks > 0)
 		add(SpellIcon::BloodStar, SpellType::Skill, Physical, DamageOverTimeText(monster, state.bleedDamagePerTick));
 	if (state.witherStacks > 0)
-		add(SpellIcon::Apocalypse, SpellType::Invalid, Curse, PercentText(WitheredDamageTakenPercent(monster) * 10));
+		add(SpellIcon::Apocalypse, SpellType::Invalid, Curse, PercentText(WitheredDamageTakenPercent(monster, DamageType::Chaos) * 10));
 	if (state.heavyStunTicks > 0)
 		add(SpellIcon::Flash, SpellType::Invalid, Other, SecondsText(state.heavyStunTicks));
 	if (state.hinderTicks > 0)

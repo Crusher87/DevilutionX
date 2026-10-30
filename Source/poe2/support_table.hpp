@@ -155,12 +155,12 @@ constexpr int PoisonTicks = 2 * 20;
  * only the strongest poison counts: a weaker one is lost, a stronger one takes over. More stacks add up to that many.
  */
 void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1);
-/** @brief What one poison tick deals the monster, after its chaos resistance, as a raw Fixed26_6. */
+/** @brief What one poison tick deals the monster, after Withered and its chaos resistance, as a raw Fixed26_6. */
 [[nodiscard]] int32_t PoisonTickDamage(const Monster &monster, int32_t perTick);
 /** @brief More or less damage from the supports of the hit in progress, and from wither, in percent. */
 int SupportHitDamagePercent(const Monster &monster, DamageType type);
-/** @brief How much more damage a monster's Withered stacks make it take, in percent. */
-[[nodiscard]] int WitheredDamageTakenPercent(const Monster &monster);
+/** @brief How much more damage of this type a monster's Withered stacks make it take, in percent: chaos only. */
+[[nodiscard]] int WitheredDamageTakenPercent(const Monster &monster, DamageType type);
 /** @brief The penetration supports of the hit in progress, against the damage type's resistance. */
 int SupportHitPenetration(DamageType type);
 /** @brief Ailment chance of the hit in progress, in percent of normal. */
