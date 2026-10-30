@@ -101,6 +101,11 @@ int Poe2MinionLevel(const Monster &minion);
  * @param damageSum Its damage bytes, min + max.
  */
 int MinionHit10(_monster_id type, int level, int damageSum);
+/**
+ * @brief The per mille a player's minion's rolled hit is scaled by: MinionHit10 over its own average at @p level (on
+ * the tables; 1000 off them), then @p ownerMinionDamagePercent, its owner's minion damage.
+ */
+int64_t MinionDamageScalePermille(_monster_id type, int level, int damageSum, int ownerMinionDamagePercent);
 /** @brief A minion's life in 1/64ths: a white's at its level, times @p percent (100 for now; step 13 refits). */
 int32_t MinionLifeRaw(int level, int percent);
 

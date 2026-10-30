@@ -204,16 +204,9 @@ int64_t TableDamagePermille(const Monster &monster)
  */
 int64_t MinionDamagePermille(const Monster &minion)
 {
-	int64_t permille = 1000;
-	const int sum = minion.minDamage + minion.maxDamage;
 	const int level = HasMonsterLevelTable() ? Poe2MinionLevel(minion) : 0;
-	if (level > 0 && sum > 0) {
-		// 1000 x (hit10 / 10) / (sum / 2)
-		permille = static_cast<int64_t>(MinionHit10(minion.type().type, level, sum)) * 200 / sum;
-	}
-	if (static_cast<size_t>(minion.goalVar3) < Players.size())
-		permille = permille * MinionDamagePercent(Players[static_cast<size_t>(minion.goalVar3)]) / 100;
-	return std::clamp<int64_t>(permille, 0, 100000000);
+	const int ownerPercent = static_cast<size_t>(minion.goalVar3) < Players.size() ? MinionDamagePercent(Players[static_cast<size_t>(minion.goalVar3)]) : 100;
+	return MinionDamageScalePermille(minion.type().type, level, minion.minDamage + minion.maxDamage, ownerPercent);
 }
 
 int64_t DamagePermille(const Monster &monster)
@@ -345,6 +338,17 @@ int MinionHit10(_monster_id type, int level, int damageSum)
 	if (ref > 0)
 		ratio = std::clamp<int64_t>(static_cast<int64_t>(std::max(damageSum, 0)) * 5000 / ref, MinMonsterTypePercent * 10, MaxMonsterTypePercent * 10);
 	return static_cast<int>(static_cast<int64_t>(MonsterLevelDamage10(level)) * ratio / 1000);
+}
+
+int64_t MinionDamageScalePermille(_monster_id type, int level, int damageSum, int ownerMinionDamagePercent)
+{
+	int64_t permille = 1000;
+	if (HasMonsterLevelTable() && level > 0 && damageSum > 0) {
+		// 1000 x (hit10 / 10) / (sum / 2)
+		permille = static_cast<int64_t>(MinionHit10(type, level, damageSum)) * 200 / damageSum;
+	}
+	permille = permille * ownerMinionDamagePercent / 100;
+	return std::clamp<int64_t>(permille, 0, 100000000);
 }
 
 int32_t MinionLifeRaw(int level, int percent)

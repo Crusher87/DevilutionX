@@ -113,8 +113,17 @@ void DropSpiritSkull(const Monster &monster, bool sendmsg);
 int MinionDamagePercent(const Player &player);
 /** @brief Spirit reserved by the active Spirit gems. */
 int ReservedSpirit(const Player &player);
-/** @brief Right-click in the Skills panel: switches the Spirit gem in a socket on or off. @return false if it holds no Spirit gem. */
+/**
+ * @brief Right-click in the Skills panel: switches the Spirit gem in a socket on or off. It goes on only if the Spirit
+ * not reserved covers it; otherwise the player is told what it needs and it stays off.
+ * @return false if it holds no Spirit gem.
+ */
 bool ToggleSpiritGem(Player &player, size_t socket);
+/**
+ * @brief A socket's gem changes: a Spirit gem leaving it switched on is remembered, and comes back on (with its place
+ * among the gems switched on) when it is socketed again, so moving a gem to another socket keeps it on.
+ */
+void CarrySpiritGemSwitch(Player &player, size_t socket, SkillSlot previous, SkillSlot skill);
 /** @brief The Spirit skill the sceptre in a hand (0 main, 1 off) grants, or None (caster-weapons-plan-v2.md 6.9). */
 PersistentSkill GrantedSpiritSkill(const Player &player, int hand);
 /**
@@ -125,10 +134,12 @@ bool ToggleGrantedSpiritSkill(Player &player, int hand);
 /** @brief Spirit not reserved, which POE2's globe shows lit. */
 inline int AvailableSpirit(const Player &player) { return MaxSpirit(player) - ReservedSpirit(player); }
 /**
- * @brief Whether a socketed Spirit gem is active. Gems reserve Spirit from the first skill slot on;
- * a gem the character can't use, or that doesn't fit in the Spirit left, stays inactive.
+ * @brief Whether a socketed Spirit gem is active. Gems switched on reserve Spirit, oldest switched on first; short of
+ * Spirit, the newest wait (IsSpiritSkillWaiting). A gem the character can't use stays inactive too.
  */
 bool IsPersistentSkillActive(const Player &player, PersistentSkill skill);
+/** @brief Whether the Spirit skill is switched on but off for lack of Spirit; it comes back on by itself when Spirit is free. */
+bool IsSpiritSkillWaiting(const Player &player, PersistentSkill skill);
 
 /** @brief Remembers a kill so the heralds can go off on the next game tick. */
 void QueueHeraldTriggers(const Player &player, const Monster &monster);

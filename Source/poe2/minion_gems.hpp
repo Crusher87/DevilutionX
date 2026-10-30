@@ -119,6 +119,17 @@ std::span<const MinionGemData> MinionGemTable();
  */
 const MinionGemData *MinionGemOf(const Monster &monster);
 
+/** @brief A minion's life, in 1/64 points, and its blow's damage bytes as it rises, before its skill's supports. */
+struct MinionRiseStats {
+	int32_t lifeRaw;
+	int minDamage;
+	int maxDamage;
+};
+/** @brief A skeleton gem's (or Wolf Pack's, Raging Spirits') minion of the type at the gem level, with its owner's uniques' minion life. */
+MinionRiseStats SkeletonMinionRiseStats(const Player &owner, _monster_id type, int gemLevel);
+/** @brief A golem at the golem skill's or Golem spell's level, with its owner's uniques' minion life. */
+MinionRiseStats GolemRiseStats(const Player &owner, int spellLevel);
+
 /** @brief A Skeletal Cleric's heal, in percent of the minion's life. */
 int ClericHealPercent(int gemLevel);
 /** @brief The damage of a skeleton's blows from its kind and its Rage, in percent. */
@@ -134,6 +145,8 @@ int MinionGemFirePercent(const Monster &minion);
  * damage as the blow is. @p dam is unchanged for anything but a POE2 player's minion.
  */
 [[nodiscard]] int MinionBlowWithGearDamage(const Monster &attacker, int dam);
+/** @brief What the owner's gear adds to each of their minions' blows, in 1/64 points (see MinionBlowWithGearDamage). */
+[[nodiscard]] int32_t MinionGearAddedRaw(const Player &owner);
 /** @brief A POE2 player's minion's life regeneration from its owner's gear, in 1/64 points a game tick; 0 for anything else. */
 [[nodiscard]] int32_t MinionGearRegenRaw(const Monster &minion);
 /** @brief A skeleton's blow landed: a Reaver gains Rage, a Brute builds heavy stun. */

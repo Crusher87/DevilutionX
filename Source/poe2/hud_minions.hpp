@@ -5,9 +5,33 @@
  */
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "engine/surface.hpp"
+#include "poe2/player_data.hpp"
 
 namespace devilution {
+
+struct Player;
+
+/** @brief One minion portrait: whose minions, how many are up of how many, and the soonest to rise again. */
+struct MinionPortrait {
+	SkillSlot icon;
+	std::string name;
+	int alive;
+	int target;
+	int pending;
+	/** @brief Game ticks until the soonest rises, of reviveTicks. */
+	int ticksLeft;
+	int reviveTicks;
+};
+
+/**
+ * @brief The minion portraits, left to right: the golem, the minion gems' and the sceptre's skeletons and Wolf Pack,
+ * Revive's minions and the King's dead.
+ */
+std::vector<MinionPortrait> MinionHudPortraits(const Player &player);
 
 void DrawMinionHud(const Surface &out);
 
