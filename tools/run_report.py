@@ -181,6 +181,7 @@ class Run:
         pressures = [f.get('pressure', 0) for f in self.fights]
         rarity = collections.Counter(d.get('rarity') for d in self.drops)
         xp = sum(s.get('xp', 0) for s in self.summaries)
+        chaos = self.chaos_totals()
         return collections.OrderedDict([
             ('Minutes played', minutes),
             ('Deaths', len(self.deaths)),
@@ -193,6 +194,14 @@ class Run:
             ('Fights low on mana %', pct(low_mana, fights)),
             ('Flasks per fight', len([f for f in self.flasks if f.get('inFight')]) / fights if fights else 0),
             ('Hits taken per minute', len(self.hits_taken) / minutes if minutes else 0),
+            ('Chaos damage dealt', chaos['dealt']),
+            ('Chaos share of damage dealt %', pct(chaos['dealt'], chaos['allDealt'])),
+            ('Poison share of damage dealt %', pct(chaos['poisonDealt'], chaos['allDealt'])),
+            ('Chaos damage taken (life)', chaos['taken']),
+            ('Energy shield lost to chaos', chaos['shield']),
+            ('Chaos share of damage taken %', pct(chaos['taken'] + chaos['shield'], chaos['allTaken'])),
+            ('Poison damage taken', chaos['poisonTaken']),
+            ('Deaths to chaos', sum(1 for d in self.deaths if re.search(r' (chaos|acid) damage from ', d.get('lastHit', '')))),
             ('Seconds per kill (median)', statistics.median([k.get('seconds', 0) for k in self.kills if k.get('hits')]) if any(k.get('hits') for k in self.kills) else 0),
             ('XP per hour', xp / hours if hours else 0),
             ('Magic drops per hour', rarity['magic'] / hours if hours else 0),
@@ -201,6 +210,30 @@ class Run:
             ('Crashes', len(self.crashes)),
         ])
 
+    def chaos_totals(self):
+        """Chaos damage dealt and taken (chaos damage plan step 16). A session from a build before the summary had chaos
+        fields falls back on its hits taken (chaos was called acid before that) and counts nothing dealt."""
+        t = collections.Counter()
+        counted = set()
+        for s in self.summaries:
+            t['allDealt'] += s.get('damageDealt', 0)
+            t['allTaken'] += s.get('damageTaken', 0) + s.get('shieldTaken', 0)
+            t['dealt'] += s.get('chaosDealt', 0)
+            t['taken'] += s.get('chaosTaken', 0)
+            t['shield'] += s.get('chaosShieldTaken', 0)
+            t['poisonTaken'] += s.get('poisonTaken', 0)
+            if 'chaosTaken' in s:
+                counted.add(s['session'])
+        for e in self.hits_taken:
+            if e['session'] not in counted:
+                if e.get('type') in ('chaos', 'acid'):
+                    t['taken'] += e.get('damage', 0) - e.get('toShield', 0)
+                    t['shield'] += e.get('toShield', 0)
+                if e.get('attacker') == 'poison':
+                    t['poisonTaken'] += e.get('damage', 0)
+        t['poisonDealt'] = self.skills['poison']['lifeRemoved'] if 'poison' in self.skills else 0
+        return t
+
     def per_area(self):
         """Per area label, in the order first visited."""
         rows = collections.OrderedDict()
@@ -208,7 +241,7 @@ class Run:
         def row(label):
             if label not in rows:
                 rows[label] = {'visits': 0, 'seconds': 0, 'monsterLevels': [], 'heroLevels': [], 'kills': 0, 'oneHit': 0,
-                               'fights': 0, 'hard': 0, 'pressure': [], 'deaths': 0, 'damage': 0, 'drops': 0}
+                               'fights': 0, 'hard': 0, 'pressure': [], 'deaths': 0, 'damage': 0, 'chaos': 0, 'drops': 0}
             return rows[label]
         for a in self.areas:
             r = row(a['area'])
@@ -220,6 +253,7 @@ class Run:
             r = row(a['area'])
             r['seconds'] += a.get('seconds', 0)
             r['damage'] += a.get('damageTaken', 0) + a.get('shieldTaken', 0)
+            r['chaos'] += a.get('chaosTaken', 0) + a.get('chaosShieldTaken', 0)
             r['drops'] += a.get('drops', 0)
         for k in self.kills:
             r = row(k['area'])
@@ -313,8 +347,8 @@ def report(run):
     for label, r in run.per_area():
         rows.append([esc(label), r['visits'], num(r['seconds'] / 60), statistics.median(r['monsterLevels']) if r['monsterLevels'] else '',
                      min(r['heroLevels']) if r['heroLevels'] else '', r['kills'], num(pct(r['oneHit'], r['kills']), 0), r['fights'], r['hard'],
-                     num(statistics.mean(r['pressure']), 0) if r['pressure'] else '', r['deaths'], r['damage'], r['drops']])
-    parts.append(table(['Area', 'Visits', 'Minutes', 'Monster lvl', 'Hero lvl', 'Kills', 'One-hit %', 'Fights', 'Under half', 'Pressure', 'Deaths', 'Damage taken', 'Drops'], rows))
+                     num(statistics.mean(r['pressure']), 0) if r['pressure'] else '', r['deaths'], r['damage'], r['chaos'], r['drops']])
+    parts.append(table(['Area', 'Visits', 'Minutes', 'Monster lvl', 'Hero lvl', 'Kills', 'One-hit %', 'Fights', 'Under half', 'Pressure', 'Deaths', 'Damage taken', 'Chaos taken', 'Drops'], rows))
 
     parts.append('<h2>Hardest fights</h2>')
     hardest = sorted(run.fights, key=lambda f: -f.get('pressure', 0))[:12]

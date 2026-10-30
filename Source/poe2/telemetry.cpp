@@ -91,6 +91,11 @@ struct TelemetryCounts {
 	int closeCalls = 0;
 	/** Damage energy shield soaked; damageTakenRaw is what reached life. */
 	int64_t shieldTakenRaw = 0;
+	/** Chaos damage (chaos damage plan step 16): what hit the hero's life and energy shield, what poison took, and the life it took from monsters. */
+	int64_t chaosTakenRaw = 0;
+	int64_t chaosShieldTakenRaw = 0;
+	int64_t poisonTakenRaw = 0;
+	int64_t chaosDealtRaw = 0;
 	/** The lowest life the hero fell to, in percent of maximum life. */
 	int lowestLifePercent = 100;
 	int swings = 0;
@@ -212,6 +217,8 @@ struct LevelVisit {
 	int drops = 0;
 	int64_t damageTakenRaw = 0;
 	int64_t shieldTakenRaw = 0;
+	int64_t chaosTakenRaw = 0;
+	int64_t chaosShieldTakenRaw = 0;
 	int monstersAtEntry = 0;
 	/** The middle level of the monsters there at entry: campaign floors have no area level, so this stands in for it. */
 	int monsterLevel = 0;
@@ -1036,6 +1043,8 @@ void EndLevelVisit(std::string_view how)
 	    .add("drops", CurrentLevel.drops)
 	    .add("damageTaken", Whole(CurrentLevel.damageTakenRaw))
 	    .add("shieldTaken", Whole(CurrentLevel.shieldTakenRaw))
+	    .add("chaosTaken", Whole(CurrentLevel.chaosTakenRaw))
+	    .add("chaosShieldTaken", Whole(CurrentLevel.chaosShieldTakenRaw))
 	    .add("fights", CurrentLevel.fights)
 	    .add("hardFights", CurrentLevel.hardFights)
 	    .add("leftNormal", left[0])
@@ -1677,6 +1686,10 @@ void WriteSummaryEvents(double minutes)
 	    .add("closeCalls", t.closeCalls)
 	    .add("damageTaken", Whole(t.damageTakenRaw))
 	    .add("shieldTaken", Whole(t.shieldTakenRaw))
+	    .add("chaosDealt", Whole(t.chaosDealtRaw))
+	    .add("chaosTaken", Whole(t.chaosTakenRaw))
+	    .add("chaosShieldTaken", Whole(t.chaosShieldTakenRaw))
+	    .add("poisonTaken", Whole(t.poisonTakenRaw))
 	    .add("lowestLife", t.lowestLifePercent)
 	    .add("swings", t.swings)
 	    .add("evaded", t.evaded)
@@ -1823,7 +1836,7 @@ TelemetrySkillCreditScope::~TelemetrySkillCreditScope()
 	SkillCreditOverTime = previousOverTime_;
 }
 
-void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore)
+void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore, DamageType damageType)
 {
 	if (LogFile == nullptr || damage <= 0 || lifeBefore <= 0) {
 		// A source named for a hit that did nothing mustn't take the credit for the next one.
@@ -1836,7 +1849,11 @@ void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6
 	const std::string source = CurrentDamageSource();
 	// A skill is credited with each hit's full damage, and the life it took away; the difference is overkill.
 	const int64_t dealt = std::min(damage.raw(), lifeBefore.raw());
-	Count([&](TelemetryCounts &counts) { counts.damageDealtRaw += dealt; });
+	Count([&](TelemetryCounts &counts) {
+		counts.damageDealtRaw += dealt;
+		if (damageType == DamageType::Chaos)
+			counts.chaosDealtRaw += dealt;
+	});
 	SkillDamage &skill = DamageFor(source);
 	skill.raw += damage.raw();
 	skill.lifeRaw += dealt;
@@ -2024,6 +2041,12 @@ void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26
 		counts.hitsTaken++;
 		counts.damageTakenRaw += damage.raw();
 		counts.shieldTakenRaw += shield;
+		if (damageType == DamageType::Chaos) {
+			counts.chaosTakenRaw += damage.raw();
+			counts.chaosShieldTakenRaw += shield;
+		}
+		if (attacker == "poison")
+			counts.poisonTakenRaw += total;
 		counts.lowestLifePercent = std::min(counts.lowestLifePercent, lifePercent);
 		if (big)
 			counts.bigHits++;
@@ -2032,6 +2055,10 @@ void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26
 	});
 	CurrentLevel.damageTakenRaw += damage.raw();
 	CurrentLevel.shieldTakenRaw += shield;
+	if (damageType == DamageType::Chaos) {
+		CurrentLevel.chaosTakenRaw += damage.raw();
+		CurrentLevel.chaosShieldTakenRaw += shield;
+	}
 	if (Fight &fight = CurrentFight; fight.active) {
 		fight.hits++;
 		fight.lifeLostRaw += damage.raw();

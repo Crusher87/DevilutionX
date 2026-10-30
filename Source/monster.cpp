@@ -4281,7 +4281,7 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 	// POE2 Mashup: the Skill Lab's targets never die.
 	if (IsLabDummy(monster) && monster.hitPoints < Fixed26_6::fromInt(1))
 		monster.hitPoints = Fixed26_6::fromInt(1);
-	TelemetryMonsterDamaged(monster, damage, lifeBefore);
+	TelemetryMonsterDamaged(monster, damage, lifeBefore, damageType);
 	NoteSupportedDamage(monster, damageType, damage);
 
 	if (monster.hasNoLife()) {

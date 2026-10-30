@@ -125,7 +125,7 @@ private:
  * @brief A hit or tick of damage on a monster. The full damage is what the hit was worth; the life it took away (no
  * more than lifeBefore) is counted on its own, so overkill doesn't hide how hard a skill hits.
  */
-void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore);
+void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore, DamageType damageType);
 void TelemetryMonsterKilled(const Monster &monster);
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);
 void TelemetryPlayerDied(const Player &player);

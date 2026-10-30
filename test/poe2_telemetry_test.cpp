@@ -265,8 +265,8 @@ TEST_F(Poe2TelemetryTest, SkillsAreCreditedWithEachHitsFullDamage)
 	// Curtis 2026-10-28: overkill hid how hard Firebolt and Holy Bolt hit; the life taken is counted beside it.
 	const Monster &monster = TestMonster(10);
 	TelemetrySkillUsed(*MyPlayer, "Firebolt", 5, 2);
-	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(30), Fixed26_6::fromInt(10));
-	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(10), Fixed26_6::fromInt(40));
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(30), Fixed26_6::fromInt(10), DamageType::Physical);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(10), Fixed26_6::fromInt(40), DamageType::Physical);
 	const std::string text = TelemetrySkillDamageText();
 	EXPECT_NE(text.find("Firebolt gem 2 40 (2 hits, 20 average, 0 kills, 20 life removed"), std::string::npos) << text;
 	TelemetryGameEnded();
@@ -281,16 +281,40 @@ TEST_F(Poe2TelemetryTest, RunesAndCursesAreCreditedToTheirOwnSkill)
 	{
 		// A rune that goes off long after it was laid, while the last skill used was another.
 		const TelemetrySkillCreditScope rune("Rune of Fire", 3);
-		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(20), Fixed26_6::fromInt(100));
+		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(20), Fixed26_6::fromInt(100), DamageType::Physical);
 		// A source named for the hit still comes first.
 		TelemetryNoteDamageSource("minions");
-		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(1), Fixed26_6::fromInt(80));
+		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(1), Fixed26_6::fromInt(80), DamageType::Physical);
 	}
-	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(7), Fixed26_6::fromInt(79));
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(7), Fixed26_6::fromInt(79), DamageType::Physical);
 	const std::string text = TelemetrySkillDamageText();
 	EXPECT_NE(text.find("Rune of Fire gem 3 20 (1 hits"), std::string::npos) << text;
 	EXPECT_NE(text.find("minions 1 (1 hits"), std::string::npos) << text;
 	EXPECT_NE(text.find("Spark gem 1 7 (1 hits"), std::string::npos) << text;
+}
+
+TEST_F(Poe2TelemetryTest, SummaryCountsChaosDealtAndTaken)
+{
+	// Chaos damage plan step 16: the totals tools/run_report.py shows.
+	Player &player = *MyPlayer;
+	const Monster &monster = TestMonster(100);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(12), Fixed26_6::fromInt(100), DamageType::Chaos);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(30), Fixed26_6::fromInt(88), DamageType::Fire);
+	// Only the life it took counts, not the overkill.
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(50), Fixed26_6::fromInt(5), DamageType::Chaos);
+	TelemetryNoteAttacker("Acid Beast");
+	TelemetryPlayerDamaged(player, DamageType::Chaos, Fixed26_6::fromInt(7));
+	TelemetryNoteAttacker("poison");
+	TelemetryPlayerDamaged(player, DamageType::Chaos, Fixed26_6::fromInt(3));
+	TelemetryNoteAttacker("Goatman");
+	TelemetryPlayerDamaged(player, DamageType::Physical, Fixed26_6::fromInt(9));
+	// Chaos costs energy shield double: 20 chaos takes 40 shield.
+	SetMaxEnergyShield(player, 50);
+	TelemetryNoteAttacker("Acid Beast");
+	ApplyPlrDamage(DamageType::Chaos, player, AbsorbWithEnergyShield(player, Fixed26_6::fromInt(20), DamageType::Chaos));
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"chaosDealt\":17,\"chaosTaken\":10,\"chaosShieldTaken\":40,\"poisonTaken\":3,"), std::string::npos) << events;
 }
 
 TEST_F(Poe2TelemetryTest, HauntsDrainIsCreditedToHaunt)
