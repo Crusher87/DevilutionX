@@ -465,7 +465,7 @@ TEST_F(Poe2CasterBasesTest, EssencesAndProfaneModifiersOnRealNewWeapons)
 			// It fails only where the item already has that family, or its effect in another (a hybrid; currency never repeats one).
 			bool had = false;
 			for (const Poe2ItemMod &mod : item._iPoe2Mods)
-				had = had || (mod.family != 0 && (ModEffectBits(ItemModFamily(mod)->effect) & ModEffectBits(ModifierFamilies()[family - 1].effect)) != 0);
+				had = had || (mod.family != 0 && (ModEffectBits(ItemModFamily(mod)->effect) & ModEffectBits(ModifierFamilies()[family - 1].effect)).any());
 			if (!ApplyCurrencyOrb(CurrencyOrb::Essence, player, item, EssenceVariant(c.essence, EssenceTier::Normal))) {
 				EXPECT_TRUE(had) << c.base << " " << c.family << " seed " << seed;
 				continue;

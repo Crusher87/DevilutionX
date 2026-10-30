@@ -7,6 +7,8 @@
 #pragma once
 
 #include <array>
+#include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -106,7 +108,15 @@ enum class ModEffect : uint8_t {
 	MinionAddedDamage,
 	/** Minions' life regeneration, in tenths of a point a second. */
 	MinionLifeRegen,
+	/** Not an effect: the number of them. New effects go before it. */
+	Count,
 };
+
+/** @brief Room for one bit per ModEffect in a ModEffectMask. */
+constexpr size_t MaxModEffects = 128;
+/** @brief A set of effects, one bit per ModEffect (ModEffectBits). */
+using ModEffectMask = std::bitset<MaxModEffects>;
+static_assert(static_cast<size_t>(ModEffect::Count) <= MaxModEffects, "ModEffectMask holds one bit per effect");
 
 /** @brief The equipment slots of the itemization tables; not all of them exist in the game yet. */
 enum class ModSlot : uint8_t {
@@ -307,14 +317,13 @@ struct ModRollFilter {
 	uint8_t family = 0;
 	ModTagRule tags = ModTagRule::Any;
 	/** @brief Effects the item already has from its implicits and modifiers, as ModEffectBits; crafting doesn't repeat them. */
-	uint64_t avoidEffects = 0;
+	ModEffectMask avoidEffects;
 };
-static_assert(static_cast<int>(ModEffect::MinionLifeRegen) < 64, "ModRollFilter::avoidEffects holds one bit per effect");
 
-/** @brief The effect as bits of 1 << ModEffect, a hybrid as its two parts; 0 for None. */
-uint64_t ModEffectBits(ModEffect effect);
+/** @brief The effect as its bit of a ModEffectMask, a hybrid as its two parts; none for None. */
+ModEffectMask ModEffectBits(ModEffect effect);
 /** @brief The ModEffectBits of every one of the modifiers. */
-uint64_t ModsEffectBits(const std::vector<Poe2ItemMod> &mods);
+ModEffectMask ModsEffectBits(const std::vector<Poe2ItemMod> &mods);
 
 /**
  * @brief Picks one more modifier for an item that has these, like an Exalted Orb; its values are left at 0.

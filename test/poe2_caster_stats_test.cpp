@@ -121,8 +121,8 @@ TEST_F(Poe2CasterStatsTest, HybridsAvoidBothParts)
 {
 	EXPECT_EQ(ModEffectBits(ModEffect::SpiritAndMana), ModEffectBits(ModEffect::LocalSpiritPercent) | ModEffectBits(ModEffect::Mana));
 	EXPECT_EQ(ModEffectBits(ModEffect::SpellDamageAndMana), ModEffectBits(ModEffect::SpellDamage) | ModEffectBits(ModEffect::Mana));
-	EXPECT_NE(ModEffectBits(ModEffect::MinionLifeRegen), 0U);
-	EXPECT_LT(static_cast<int>(ModEffect::MinionLifeRegen), 64);
+	EXPECT_TRUE(ModEffectBits(ModEffect::MinionLifeRegen).any());
+	EXPECT_LT(static_cast<size_t>(ModEffect::MinionLifeRegen), MaxModEffects);
 }
 
 TEST_F(Poe2CasterStatsTest, ElementLevelsGoToTheSpellsOfTheirElement)
