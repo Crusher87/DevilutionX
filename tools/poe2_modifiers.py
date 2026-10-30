@@ -148,7 +148,7 @@ EXTRA_CONFLICTS = [('local_added_fire', 'local_added_lightning')]
 
 # The caster weapons rework's families, appended after every family above (caster-weapons-plan-v2.md 5.2): POE2's rows,
 # their item levels moved to our curve, the +level families from item level 20, and the offensive staff and wand
-# families and every +level family at half size.
+# families and the sceptre's +level family at half size (caster_half_scale).
 CASTER_AFFIXES = os.path.join(ROOT, 'tools', 'poe2_caster_affixes.tsv')
 CASTER_MAX_ITEM_LEVEL = 82
 CASTER_SKILL_LEVEL_FLOOR = 20
@@ -242,7 +242,11 @@ def caster_damage_group(fid):
 
 
 def caster_half_scale(fid):
-	"""The offensive staff and wand families and every +level family roll at half POE2's size (the pace knob, plan 5.2)."""
+	"""The offensive staff and wand families and the sceptre's +level family roll at half POE2's size (the pace knob,
+	plan 5.2). The staff and wand +spell levels keep POE2's numbers, so a two-handed staff rolls up to +6 and a wand +4
+	(Curtis 2026-10-30)."""
+	if re.fullmatch(r'(staff|wand)_\w+_skill_levels', fid):
+		return False
 	if fid.endswith('_skill_levels'):
 		return True
 	return re.fullmatch(r'(staff|wand)_(maximum_mana|spell_damage|spell_damage_mana|(fire|cold|lightning|physical)_spell_damage|cast_speed)', fid) is not None

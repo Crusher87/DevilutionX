@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -353,6 +354,12 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1);
 
 /** @brief The modifier's tooltip lines; its tier shows only in the Alt view. */
 std::vector<std::string> ItemModText(const Poe2ItemMod &mod);
+/**
+ * @brief The tooltip lines of all the item's modifiers. Like POE2, a stat more than one modifier gives shows once with
+ * the values added up: a hybrid's "12% increased Energy Shield" and a plain "29% increased Energy Shield" read
+ * "41% increased Energy Shield". The Alt view keeps them apart, by affix.
+ */
+std::vector<std::string> CombinedItemModText(std::span<const Poe2ItemMod> mods);
 /**
  * @brief The modifier's stats as POE2 shows them with Alt held: the tier's range after the rolled value, like
  * "+8(3-10) to Armour". The tooltip adds its side (Prefix or Suffix) and tier beside the lines.

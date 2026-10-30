@@ -78,7 +78,7 @@ struct BeltUnique {
 	BeltUniqueKind kind;
 	/** @brief For charms: which charm base it is on. */
 	CharmEffect charm;
-	/** @brief For flasks: its flask tier, from its POE2 base (small to eternal). */
+	/** @brief For flasks: its flask tier, the one a plain flask of its drop level has (FlaskTierForLevel). */
 	uint8_t flaskTier;
 	UniqueTier tier;
 	/** @brief POE2 drop level. */

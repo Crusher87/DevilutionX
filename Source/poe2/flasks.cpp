@@ -29,9 +29,30 @@
 
 namespace devilution {
 
+namespace {
+
+bool IsFlaskMiscId(item_misc_id miscId)
+{
+	return IsAnyOf(miscId, IMISC_HEAL, IMISC_FULLHEAL, IMISC_MANA, IMISC_FULLMANA, IMISC_REJUV, IMISC_FULLREJUV);
+}
+
+} // namespace
+
 bool IsFlaskPotion(const Item &item)
 {
-	return !item.isEmpty() && IsAnyOf(item._iMiscId, IMISC_HEAL, IMISC_FULLHEAL, IMISC_MANA, IMISC_FULLMANA, IMISC_REJUV, IMISC_FULLREJUV);
+	return !item.isEmpty() && IsFlaskMiscId(item._iMiscId);
+}
+
+bool IsFlaskBase(int itemIndex)
+{
+	return itemIndex >= 0 && static_cast<size_t>(itemIndex) < AllItemsList.size() && IsFlaskMiscId(AllItemsList[static_cast<size_t>(itemIndex)].iMiscId);
+}
+
+int FlaskDropLevel(int areaLevel, int itemLevel)
+{
+	if (gbIsMultiplayer)
+		return itemLevel;
+	return std::clamp<int>(areaLevel, 1, CF_LEVEL);
 }
 
 bool IsFlaskSlot(const Player &player, size_t beltSlot)
@@ -103,7 +124,8 @@ void HealNearbyMinions(const Player &player, int32_t raw)
 	}
 }
 
-constexpr const char *TierNames[NumFlaskTiers] = { N_("Minor"), N_("Light"), "", N_("Greater"), N_("Superior"), N_("Full") };
+/** @brief POE2's flask names, Lesser to Ultimate. */
+constexpr const char *TierNames[NumFlaskTiers] = { N_("Lesser"), N_("Medium"), N_("Greater"), N_("Grand"), N_("Giant"), N_("Colossal"), N_("Gargantuan"), N_("Transcendent"), N_("Ultimate") };
 
 std::string_view PrefixName(FlaskPrefix prefix)
 {
@@ -231,10 +253,7 @@ void NameFlask(Item &item)
 	std::string name;
 	if (prefix != FlaskPrefix::None)
 		StrAppend(name, PrefixName(prefix), " ");
-	const char *tierName = TierNames[GetFlaskTier(item)];
-	if (*tierName != '\0')
-		StrAppend(name, _(tierName), " ");
-	StrAppend(name, kind);
+	StrAppend(name, _(TierNames[GetFlaskTier(item)]), " ", kind);
 	if (suffix != FlaskSuffix::None)
 		StrAppend(name, " ", SuffixName(suffix));
 	CopyUtf8(item._iIName, name, ItemNameLength);
@@ -265,16 +284,21 @@ void FinishFlask(Item &item)
 	SetFlaskMods(item, prefix, suffix, 0);
 }
 
-size_t GetFlaskTier(const Item &item)
+size_t FlaskTierForLevel(int itemLevel)
 {
-	const int itemLevel = item._iCreateInfo & CF_LEVEL;
 	size_t tier = 0;
 	for (size_t i = 0; i < NumFlaskTiers; i++) {
 		if (itemLevel >= FlaskTiers[i].level)
 			tier = i;
 	}
+	return tier;
+}
+
+size_t GetFlaskTier(const Item &item)
+{
 	if (const BeltUnique *unique = GetBeltUnique(item); unique != nullptr)
-		return unique->flaskTier;
+		return std::min<size_t>(unique->flaskTier, NumFlaskTiers - 1);
+	size_t tier = FlaskTierForLevel(item._iCreateInfo & CF_LEVEL);
 	if (IsAnyOf(item._iMiscId, IMISC_FULLHEAL, IMISC_FULLMANA, IMISC_FULLREJUV))
 		tier += FullFlaskTierBonus;
 	return std::min(tier, NumFlaskTiers - 1);

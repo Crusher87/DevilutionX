@@ -135,26 +135,32 @@ TEST_F(Poe2CasterAffixesTest, TransformMatchesThePlansTable)
 	ExpectTiers(Family("staff_spell_damage"), { { 82, 105, 119 }, { 81, 95, 104 }, { 78, 75, 94 }, { 60, 65, 74 }, { 43, 55, 64 }, { 21, 45, 54 }, { 10, 35, 44 }, { 1, 25, 34 } });
 	ExpectTiers(Family("staff_spell_damage_mana"), { { 82, 45, 49, 83, 90 }, { 3, 15, 19, 34, 40 } }, true);
 	ExpectTiers(Family("staff_cast_speed"), { { 82, 25, 26 }, { 81, 22, 25 }, { 78, 19, 22 }, { 58, 16, 19 }, { 39, 13, 16 }, { 20, 10, 13 }, { 1, 7, 10 } });
-	ExpectTiers(Family("staff_spell_skill_levels"), { { 82, 3, 3 }, { 72, 2, 2 }, { 32, 2, 2 }, { 20, 1, 1 } });
-	for (const std::string_view element : { "fire", "cold", "lightning", "physical" })
-		ExpectTiers(Family(std::string("staff_") + std::string(element) + "_skill_levels"), { { 82, 4, 4 }, { 72, 3, 3 }, { 47, 2, 2 }, { 23, 1, 1 }, { 20, 1, 1 } });
+	// The +spell levels are POE2's own: a two-handed staff to +6 (+7 to one element), a wand to +4 (+5).
+	ExpectTiers(Family("staff_spell_skill_levels"), { { 82, 5, 6 }, { 72, 4, 4 }, { 32, 3, 3 }, { 20, 2, 2 } });
+	for (const std::string_view element : { "fire", "cold", "lightning", "physical" }) {
+		ExpectTiers(Family(std::string("staff_") + std::string(element) + "_skill_levels"), { { 82, 7, 7 }, { 72, 5, 6 }, { 47, 3, 4 }, { 23, 2, 2 }, { 20, 1, 1 } });
+		ExpectTiers(Family(std::string("wand_") + std::string(element) + "_skill_levels"), { { 82, 5, 5 }, { 72, 4, 4 }, { 47, 3, 3 }, { 23, 2, 2 }, { 20, 1, 1 } });
+	}
 	ExpectTiers(Family("staff_maximum_mana"), { { 82, 150, 164 }, { 1, 10, 14 } }, true);
 	EXPECT_EQ(Family("staff_maximum_mana").tiers[9].itemLevel, 8);
 	ExpectTiers(Family("wand_spell_damage"), { { 82, 53, 60 }, { 1, 13, 17 } }, true);
 	EXPECT_EQ(Family("wand_spell_damage").tiers[6].itemLevel, 10);
 	ExpectTiers(Family("wand_cast_speed"), { { 82, 17, 18 }, { 1, 5, 6 } }, true);
-	ExpectTiers(Family("wand_spell_skill_levels"), { { 82, 2, 2 }, { 72, 2, 2 }, { 32, 1, 1 }, { 20, 1, 1 } });
+	ExpectTiers(Family("wand_spell_skill_levels"), { { 82, 4, 4 }, { 72, 3, 3 }, { 32, 2, 2 }, { 20, 1, 1 } });
 	ExpectTiers(Family("sceptre_spirit_percent"), { { 82, 61, 65 }, { 81, 56, 60 }, { 78, 51, 55 }, { 60, 45, 50 }, { 43, 39, 44 }, { 21, 33, 38 }, { 10, 27, 32 }, { 1, 20, 26 } });
 	ExpectTiers(Family("sceptre_spirit_mana"), { { 82, 35, 38, 42, 45 }, { 3, 10, 14, 17, 20 } }, true);
 	ExpectTiers(Family("sceptre_minion_skill_levels"), { { 82, 2, 2 }, { 72, 2, 2 }, { 32, 1, 1 }, { 20, 1, 1 } });
 
-	// Half size on the offensive staff and wand families and every +level family; the rest, sceptre Spirit included, full.
+	// Half size on the offensive staff and wand families and the sceptre's +minion levels; the rest, sceptre Spirit and
+	// the staff and wand +spell levels included, full.
 	EXPECT_EQ(Family("staff_spell_damage_mana").scale[1], 100);
 	EXPECT_EQ(Family("staff_intelligence").scale[0], 100);
 	EXPECT_EQ(Family("wand_maximum_mana").scale[0], 50);
 	EXPECT_EQ(Family("sceptre_maximum_mana").scale[0], 100);
 	EXPECT_EQ(Family("sceptre_spirit_percent").scale[0], 100);
 	EXPECT_EQ(Family("sceptre_minion_skill_levels").scale[0], 50);
+	EXPECT_EQ(Family("staff_spell_skill_levels").scale[0], 100);
+	EXPECT_EQ(Family("wand_fire_skill_levels").scale[0], 100);
 	// A sceptre's Spirit tops out at 203.
 	EXPECT_EQ(100 + Family("sceptre_spirit_percent").tiers[0].max[0] + Family("sceptre_spirit_mana").tiers[0].max[0], 203);
 }
@@ -300,6 +306,37 @@ TEST_F(Poe2CasterAffixesTest, EssencesAndProfaneModifiersFindTheNewSlotsFamilies
 			EXPECT_EQ(FindFamilyForItem(id, static_cast<ModSlot>(slot)), FindModifierFamily(id)) << id << " slot " << slot;
 		}
 	}
+}
+
+/** The highest value each kind of +level the slot rolled at item level 82 over many seeds: all spells, then one element. */
+std::array<int, 2> HighestSpellLevels(ModSlot slot)
+{
+	std::array<int, 2> highest {};
+	for (uint32_t seed = 1; seed <= 3000; seed++) {
+		for (const Poe2ItemMod &mod : RollItemMods(slot, ModBaseElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed * 7919)) {
+			const ModFamily &family = *ItemModFamily(mod);
+			if (family.effect == ModEffect::SpellSkillLevels)
+				highest[0] = std::max<int>(highest[0], mod.values[0]);
+			else if (IsAnyOf(family.effect, ModEffect::FireSkillLevels, ModEffect::ColdSkillLevels, ModEffect::LightningSkillLevels, ModEffect::PhysicalSkillLevels))
+				highest[1] = std::max<int>(highest[1], mod.values[0]);
+		}
+	}
+	return highest;
+}
+
+TEST_F(Poe2CasterAffixesTest, TwoHandedStavesRollHigherSpellLevelsThanWands)
+{
+	// Curtis 2026-10-30: a staff's +levels go to +6 and a wand's to +4, as in POE2 (Path of Building's PoE2 data: a staff's
+	// "+(5-6) to Level of all Spell Skills" and "+7 to Level of all Fire Spell Skills", a wand's +4 and +5).
+	const std::array<int, 2> staff = HighestSpellLevels(ModSlot::Staff);
+	const std::array<int, 2> wand = HighestSpellLevels(ModSlot::Wand);
+	EXPECT_EQ(staff[0], 6);
+	EXPECT_EQ(staff[1], 7);
+	EXPECT_EQ(wand[0], 4);
+	EXPECT_EQ(wand[1], 5);
+	// The lowest tiers too: a staff's least is a wand's second.
+	EXPECT_EQ(Family("staff_spell_skill_levels").tiers.back().min[0], 2);
+	EXPECT_EQ(Family("wand_spell_skill_levels").tiers.back().min[0], 1);
 }
 
 } // namespace

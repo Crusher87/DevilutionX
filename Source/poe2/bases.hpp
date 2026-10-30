@@ -116,6 +116,16 @@ int ItemRequiredLevel(const Item &item);
 bool MeetsItemLevelRequirement(const Player &player, const Item &item);
 
 /**
+ * @brief Like POE2, the first base of each line needs no attributes, and the needs grow with the base's level from
+ * there: a base of this level or below needs none (Curtis 2026-10-30: "5 Mag" and "3 Mag, 3 Dex" on starter gear).
+ */
+constexpr int MaxStarterBaseLevel = 1;
+/** @brief Whether the item is on a POE2 base of MaxStarterBaseLevel or below, which needs no attributes. */
+bool IsStarterBase(const Item &item);
+/** @brief Clears an item's attribute needs if it is on a starter base, for items saved while those bases still had a few points. */
+void ClearStarterBaseRequirements(Item &item);
+
+/**
  * @brief How the item's defence (from its base, without flat modifiers) divides: by its base's split, or evenly for an
  * item whose defence is below its base's, which was saved before the bases took POE2's numbers and keeps its old split.
  */
