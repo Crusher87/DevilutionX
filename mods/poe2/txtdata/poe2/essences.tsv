@@ -1,13 +1,25 @@
-id	name	family
-Vigor	Vigor	maximum_life
-Clarity	Clarity	maximum_mana
-Ember	Ember	fire_resistance
-Frost	Frost	cold_resistance
-Storm	Storm	lightning_resistance
-Might	Might	local_increased_physical
-Celerity	Celerity	attack_speed
-Sorcery	Sorcery	cast_speed
-Precision	Precision	accuracy_rating
-Warding	Warding	all_elemental_resistance
-Spirit	Spirit	spirit_flat
-Summoning	Summoning	minion_damage
+id	name	family	becomes
+Vigor	Vigor	maximum_life	Body
+Clarity	Clarity	maximum_mana	Mind
+Ember	Ember	fire_resistance	Insulation
+Frost	Frost	cold_resistance	Thawing
+Storm	Storm	lightning_resistance	Grounding
+Might	Might	local_increased_physical	Abrasion
+Celerity	Celerity	attack_speed	Haste
+Sorcery	Sorcery	cast_speed	Alacrity
+Precision	Precision	accuracy_rating	Battle
+Warding	Warding	all_elemental_resistance	Enhancement
+Spirit	Spirit	spirit_flat	Infinite
+Summoning	Summoning	minion_damage	Command
+Body	Vigor	maximum_life	
+Mind	Clarity	maximum_mana	
+Insulation	Ember	fire_resistance	
+Thawing	Frost	cold_resistance	
+Grounding	Storm	lightning_resistance	
+Abrasion	Might	local_increased_physical	
+Haste	Celerity	attack_speed	
+Alacrity	Sorcery	cast_speed	
+Battle	Precision	accuracy_rating	
+Enhancement	Warding	all_elemental_resistance	
+Infinite	Spirit	spirit_flat	
+Command	Summoning	minion_damage	

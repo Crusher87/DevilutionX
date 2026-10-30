@@ -59,6 +59,34 @@ bool HasEveryRow(std::string_view filename, size_t rows, Id count)
 	return false;
 }
 
+/** A becomes column: empty for a row of today, else the id of today a legacy row's items get on load. */
+template <typename Id>
+std::expected<Id, std::string> ParseBecomes(std::string_view text)
+{
+	if (text.empty())
+		return Id::None;
+	if (const std::optional<Id> id = magic_enum::enum_cast<Id>(text); id && *id != Id::Count)
+		return *id;
+	return std::unexpected("unknown id");
+}
+
+/** Whether every legacy row becomes a row of today, so a converted item never needs converting again. */
+template <typename Row, typename Id>
+bool BecomesRowsOfToday(std::string_view filename, const std::vector<Row> &rows, Id Row::*becomes)
+{
+	for (const Row &row : rows) {
+		const Id target = row.*becomes;
+		if (target == Id::None)
+			continue;
+		const auto index = static_cast<size_t>(target);
+		if (index >= rows.size() || rows[index].*becomes != Id::None) {
+			LogError("{}: a row becomes {}, which isn't a row of today", filename, magic_enum::enum_name(target));
+			return false;
+		}
+	}
+	return true;
+}
+
 /** An effect column; empty for none. */
 std::expected<ModEffect, std::string> ParseEffect(std::string_view text)
 {
@@ -102,11 +130,12 @@ bool LoadEssences()
 			return false;
 		reader.readString("name", essence.name);
 		// The game has no spell damage, critical chance or chaos resistance modifiers, so Sorcery, Precision and
-		// Warding guarantee the nearest ones.
+		// Warding, and the kinds they became, guarantee the nearest ones.
 		reader.readString("family", essence.family);
+		reader.read("becomes", essence.becomes, ParseBecomes<EssenceKind>);
 		Essences.push_back(std::move(essence));
 	}
-	return HasEveryRow(Filename, Essences.size(), EssenceKind::Count);
+	return HasEveryRow(Filename, Essences.size(), EssenceKind::Count) && BecomesRowsOfToday(Filename, Essences, &Essence::becomes);
 }
 
 bool LoadOmens()
@@ -166,9 +195,10 @@ bool LoadAugments()
 		reader.readString("weaponText", augment.weaponText);
 		reader.readString("staffText", augment.staffText);
 		reader.readString("armourText", augment.armourText);
+		reader.read("becomes", augment.becomes, ParseBecomes<AugmentId>);
 		Augments.push_back(std::move(augment));
 	}
-	return HasEveryRow(Filename, Augments.size(), AugmentId::Count);
+	return HasEveryRow(Filename, Augments.size(), AugmentId::Count) && BecomesRowsOfToday(Filename, Augments, &Augment::becomes);
 }
 
 /** @brief Picks one of the weighted choices with the roll. */
@@ -205,6 +235,9 @@ uint8_t RollVariant(const Item &item)
 	case IMISC_ESSENCE: {
 		std::vector<std::pair<uint8_t, int>> choices;
 		for (size_t kind = 1; kind < Essences.size(); kind++) {
+			// Legacy kinds never drop; the kinds they became do, in their places.
+			if (Essences[kind].becomes != EssenceKind::None)
+				continue;
 			for (size_t tier = 0; tier < EssenceDropLevels.size(); tier++) {
 				// Lesser essences drop anywhere; better ones need their level.
 				if (tier == 0 || EssenceDropLevels[tier] <= level)
@@ -224,7 +257,7 @@ uint8_t RollVariant(const Item &item)
 	case IMISC_AUGMENT: {
 		std::vector<std::pair<uint8_t, int>> choices;
 		for (const Augment &augment : Augments) {
-			if (augment.id != AugmentId::None && (augment.tier == 1 || augment.dropLevel <= level))
+			if (augment.id != AugmentId::None && augment.becomes == AugmentId::None && (augment.tier == 1 || augment.dropLevel <= level))
 				choices.emplace_back(static_cast<uint8_t>(augment.id), 4 - augment.tier);
 		}
 		return PickWeighted(choices, roll);
@@ -290,20 +323,37 @@ const Essence &GetEssence(EssenceKind kind)
 
 uint8_t EssenceVariant(EssenceKind kind, EssenceTier tier)
 {
-	return static_cast<uint8_t>(static_cast<uint8_t>(kind) | (static_cast<uint8_t>(tier) << 4));
+	const auto k = static_cast<uint8_t>(kind);
+	return static_cast<uint8_t>((k & 0xF) | (static_cast<uint8_t>(tier) << 4) | ((k & 0x10) << 2));
+}
+
+EssenceKind EssenceVariantKind(uint8_t variant)
+{
+	const auto kind = static_cast<uint8_t>((variant & 0xF) | ((variant >> 2) & 0x10));
+	return kind < static_cast<uint8_t>(EssenceKind::Count) ? static_cast<EssenceKind>(kind) : EssenceKind::None;
+}
+
+EssenceTier EssenceVariantTier(uint8_t variant)
+{
+	return static_cast<EssenceTier>((variant >> 4) & 3);
 }
 
 EssenceKind GetEssenceKind(const Item &item)
 {
 	if (item.isEmpty() || item._iMiscId != IMISC_ESSENCE)
 		return EssenceKind::None;
-	const uint8_t kind = CraftingItemVariant(item) & 0xF;
-	return kind < static_cast<uint8_t>(EssenceKind::Count) ? static_cast<EssenceKind>(kind) : EssenceKind::None;
+	return EssenceVariantKind(CraftingItemVariant(item));
 }
 
 EssenceTier GetEssenceTier(const Item &item)
 {
-	return static_cast<EssenceTier>((CraftingItemVariant(item) >> 4) & 3);
+	return EssenceVariantTier(CraftingItemVariant(item));
+}
+
+EssenceKind CurrentEssenceKind(EssenceKind kind)
+{
+	const EssenceKind becomes = GetEssence(kind).becomes;
+	return becomes != EssenceKind::None ? becomes : kind;
 }
 
 const Omen &GetOmen(OmenId id)
@@ -332,6 +382,39 @@ AugmentId GetAugmentId(const Item &item)
 		return AugmentId::None;
 	const uint8_t id = CraftingItemVariant(item);
 	return id < static_cast<uint8_t>(AugmentId::Count) ? static_cast<AugmentId>(id) : AugmentId::None;
+}
+
+AugmentId CurrentAugmentId(AugmentId id)
+{
+	const AugmentId becomes = GetAugment(id).becomes;
+	return becomes != AugmentId::None ? becomes : id;
+}
+
+bool ConvertLegacyCraftingIds(Item &item)
+{
+	if (item.isEmpty())
+		return false;
+	bool renamed = false;
+	if (const AugmentId id = GetAugmentId(item); id != CurrentAugmentId(id)) {
+		SetCraftingItemVariant(item, static_cast<uint8_t>(CurrentAugmentId(id)));
+		renamed = true;
+	}
+	if (const EssenceKind kind = GetEssenceKind(item); kind != CurrentEssenceKind(kind)) {
+		SetCraftingItemVariant(item, EssenceVariant(CurrentEssenceKind(kind), GetEssenceTier(item)));
+		renamed = true;
+	}
+	if (renamed)
+		FinishCraftingItem(item);
+	bool socketed = false;
+	Poe2Craft &craft = item._iPoe2Craft;
+	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
+		const auto current = static_cast<uint8_t>(CurrentAugmentId(static_cast<AugmentId>(craft.augments[i])));
+		if (current != craft.augments[i]) {
+			craft.augments[i] = current;
+			socketed = true;
+		}
+	}
+	return renamed || socketed;
 }
 
 std::string_view CatalystName(Catalyst catalyst)

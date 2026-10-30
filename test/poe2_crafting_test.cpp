@@ -17,6 +17,7 @@
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/stash_layouts.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -65,6 +66,15 @@ public:
 	{
 		for (size_t i = 0; i < AllItemsList.size(); i++) {
 			if (AllItemsList[i].iName == name && AllItemsList[i].dropRate > 0)
+				return static_cast<_item_indexes>(i);
+		}
+		return IDI_GOLD;
+	}
+
+	static _item_indexes FindMiscBase(item_misc_id miscId)
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iMiscId == miscId && AllItemsList[i].dropRate > 0)
 				return static_cast<_item_indexes>(i);
 		}
 		return IDI_GOLD;
@@ -631,12 +641,17 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 		{ EssenceKind::Spirit, "Spirit", "spirit_flat" },
 		{ EssenceKind::Summoning, "Summoning", "minion_damage" },
 	};
-	ASSERT_EQ(std::size(essences), static_cast<size_t>(EssenceKind::Count) - 1);
+	ASSERT_EQ(std::size(essences), static_cast<size_t>(LegacyEssenceKindCount));
 	for (const OldEssence &old : essences) {
 		const Essence &essence = GetEssence(old.kind);
 		EXPECT_EQ(essence.kind, old.kind);
 		EXPECT_EQ(essence.name, old.name);
 		EXPECT_EQ(essence.family, old.family);
+		// The kind it became does the same until the runes rework gives it its own numbers.
+		const Essence &current = GetEssence(CurrentEssenceKind(old.kind));
+		EXPECT_NE(current.kind, old.kind);
+		EXPECT_EQ(current.name, old.name);
+		EXPECT_EQ(current.family, old.family);
 	}
 
 	struct OldOmen {
@@ -707,26 +722,232 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 		{ AugmentId::HunterTalisman, "Hunter's Talisman", 3, 45, ModEffect::None, {}, ModEffect::None, {}, UniqueRule::DamageVsRareUnique, 15, "15% more damage against rare and unique monsters", "15% more damage against rare and unique monsters" },
 		{ AugmentId::GuardianTalisman, "Guardian's Talisman", 3, 45, ModEffect::None, {}, ModEffect::None, {}, UniqueRule::LessHitDamage, 6, "6% less damage taken from hits", "6% less damage taken from hits" },
 	};
-	ASSERT_EQ(std::size(augments), static_cast<size_t>(AugmentId::Count) - 1);
+	ASSERT_EQ(std::size(augments), static_cast<size_t>(LegacyAugmentCount));
 	for (const OldAugment &old : augments) {
-		const Augment &augment = GetAugment(old.id);
-		EXPECT_EQ(augment.id, old.id);
-		EXPECT_EQ(augment.name, old.name);
-		EXPECT_EQ(augment.tier, old.tier) << old.name;
-		EXPECT_EQ(augment.dropLevel, old.dropLevel) << old.name;
-		EXPECT_EQ(augment.weaponEffect, old.weaponEffect) << old.name;
-		EXPECT_EQ(augment.weaponValues, old.weaponValues) << old.name;
-		// Caster weapons took the weapon column until the staff column was split off.
-		EXPECT_EQ(augment.staffEffect, old.weaponEffect) << old.name;
-		EXPECT_EQ(augment.staffValues, old.weaponValues) << old.name;
-		EXPECT_EQ(augment.staffText, old.weaponText);
-		EXPECT_EQ(augment.armourEffect, old.armourEffect) << old.name;
-		EXPECT_EQ(augment.armourValues, old.armourValues) << old.name;
-		EXPECT_EQ(augment.rule, old.rule) << old.name;
-		EXPECT_EQ(augment.ruleValue, old.ruleValue) << old.name;
-		EXPECT_EQ(augment.weaponText, old.weaponText);
-		EXPECT_EQ(augment.armourText, old.armourText);
+		// The id it became does the same until the runes rework gives it its own numbers.
+		ASSERT_NE(CurrentAugmentId(old.id), old.id);
+		for (const AugmentId id : { old.id, CurrentAugmentId(old.id) }) {
+			const Augment &augment = GetAugment(id);
+			EXPECT_EQ(augment.id, id);
+			EXPECT_EQ(augment.name, old.name);
+			EXPECT_EQ(augment.tier, old.tier) << old.name;
+			EXPECT_EQ(augment.dropLevel, old.dropLevel) << old.name;
+			EXPECT_EQ(augment.weaponEffect, old.weaponEffect) << old.name;
+			EXPECT_EQ(augment.weaponValues, old.weaponValues) << old.name;
+			// Caster weapons took the weapon column until the staff column was split off.
+			EXPECT_EQ(augment.staffEffect, old.weaponEffect) << old.name;
+			EXPECT_EQ(augment.staffValues, old.weaponValues) << old.name;
+			EXPECT_EQ(augment.staffText, old.weaponText);
+			EXPECT_EQ(augment.armourEffect, old.armourEffect) << old.name;
+			EXPECT_EQ(augment.armourValues, old.armourValues) << old.name;
+			EXPECT_EQ(augment.rule, old.rule) << old.name;
+			EXPECT_EQ(augment.ruleValue, old.ruleValue) << old.name;
+			EXPECT_EQ(augment.weaponText, old.weaponText);
+			EXPECT_EQ(augment.armourText, old.armourText);
+		}
 	}
+}
+
+TEST_F(Poe2CraftingTest, LegacyIdsBecomeTheRunesReworkOnes)
+{
+	// Runes rework build spec, step 2.
+	const std::pair<AugmentId, AugmentId> augments[] = {
+		{ AugmentId::EmberRune, AugmentId::LesserRal },
+		{ AugmentId::FrostRune, AugmentId::LesserThul },
+		{ AugmentId::StormRune, AugmentId::LesserOrt },
+		{ AugmentId::IronRune, AugmentId::LesserOhm },
+		{ AugmentId::WindRune, AugmentId::LesserShael },
+		{ AugmentId::HeartCore, AugmentId::LordOfThePit },
+		{ AugmentId::MindCore, AugmentId::TheDefiler },
+		{ AugmentId::KeenCore, AugmentId::StareyeTheWitch },
+		{ AugmentId::HunterTalisman, AugmentId::RelicOfRakkis },
+		{ AugmentId::GuardianTalisman, AugmentId::RelicOfAkarat },
+	};
+	for (const auto &[legacy, current] : augments) {
+		EXPECT_EQ(CurrentAugmentId(legacy), current) << static_cast<int>(legacy);
+		EXPECT_EQ(CurrentAugmentId(current), current) << static_cast<int>(current);
+	}
+	const std::pair<EssenceKind, EssenceKind> essences[] = {
+		{ EssenceKind::Vigor, EssenceKind::Body },
+		{ EssenceKind::Clarity, EssenceKind::Mind },
+		{ EssenceKind::Ember, EssenceKind::Insulation },
+		{ EssenceKind::Frost, EssenceKind::Thawing },
+		{ EssenceKind::Storm, EssenceKind::Grounding },
+		{ EssenceKind::Might, EssenceKind::Abrasion },
+		{ EssenceKind::Celerity, EssenceKind::Haste },
+		{ EssenceKind::Sorcery, EssenceKind::Alacrity },
+		{ EssenceKind::Precision, EssenceKind::Battle },
+		{ EssenceKind::Warding, EssenceKind::Enhancement },
+		{ EssenceKind::Spirit, EssenceKind::Infinite },
+		{ EssenceKind::Summoning, EssenceKind::Command },
+	};
+	for (const auto &[legacy, current] : essences) {
+		EXPECT_EQ(CurrentEssenceKind(legacy), current) << static_cast<int>(legacy);
+		EXPECT_EQ(CurrentEssenceKind(current), current) << static_cast<int>(current);
+	}
+	EXPECT_EQ(CurrentAugmentId(AugmentId::None), AugmentId::None);
+	EXPECT_EQ(CurrentEssenceKind(EssenceKind::None), EssenceKind::None);
+
+	// New drops are only ids of today.
+	const _item_indexes augmentBase = FindMiscBase(IMISC_AUGMENT);
+	const _item_indexes essenceBase = FindMiscBase(IMISC_ESSENCE);
+	ASSERT_NE(augmentBase, IDI_GOLD);
+	ASSERT_NE(essenceBase, IDI_GOLD);
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		for (const _item_indexes base : { augmentBase, essenceBase }) {
+			Item item = {};
+			SetPoe2ItemLevel(item, 80);
+			SetRndSeed(seed);
+			SetupAllItems(*MyPlayer, item, base, AdvanceRndSeed(), 60, 1, true, false, 0, true);
+			EXPECT_EQ(CurrentAugmentId(GetAugmentId(item)), GetAugmentId(item)) << seed;
+			EXPECT_EQ(CurrentEssenceKind(GetEssenceKind(item)), GetEssenceKind(item)) << seed;
+			EXPECT_FALSE(ConvertLegacyCraftingIds(item)) << seed;
+		}
+	}
+}
+
+TEST_F(Poe2CraftingTest, EssenceVariantsKeepTheirMeaning)
+{
+	for (int kind = 1; kind < static_cast<int>(EssenceKind::Count); kind++) {
+		for (int tier = 0; tier < static_cast<int>(EssenceTier::Count); tier++) {
+			const uint8_t variant = EssenceVariant(static_cast<EssenceKind>(kind), static_cast<EssenceTier>(tier));
+			EXPECT_EQ(EssenceVariantKind(variant), static_cast<EssenceKind>(kind));
+			EXPECT_EQ(EssenceVariantTier(variant), static_cast<EssenceTier>(tier));
+			EXPECT_EQ(variant & 0x80, 0);
+			// The kinds saved before the runes rework keep their old variants.
+			if (kind <= LegacyEssenceKindCount) {
+				EXPECT_EQ(variant, kind | (tier << 4));
+			}
+		}
+	}
+	EXPECT_EQ(EssenceVariant(EssenceKind::Command, EssenceTier::Perfect), (24 & 0xF) | (3 << 4) | 0x40);
+	EXPECT_EQ(EssenceVariantKind(0x4F), EssenceKind::None);
+}
+
+TEST_F(Poe2CraftingTest, CraftStateWideAugmentsRoundTrip)
+{
+	// Ids up to 15 save as before the runes rework: three 4-bit sockets and the catalyst.
+	Poe2Craft narrow;
+	narrow.sockets = 2;
+	narrow.augments = { 3, 9, 0 };
+	narrow.catalyst = 4;
+	narrow.mods[0] = { 12, 3, 5 };
+	const auto narrowBytes = PackCraftState(narrow);
+	EXPECT_EQ(narrowBytes[0], 0xC2);
+	EXPECT_EQ(narrowBytes[4], 0x93);
+	EXPECT_EQ(narrowBytes[5], 0x40);
+	EXPECT_EQ(UnpackCraftState(narrowBytes), narrow);
+
+	// Above 15, the two sockets take a byte each.
+	Poe2Craft wide;
+	wide.explicitMods = true;
+	wide.rarity = ITEM_QUALITY_RARE;
+	wide.sockets = 2;
+	wide.augments = { static_cast<uint8_t>(AugmentId::LesserRal), static_cast<uint8_t>(AugmentId::RelicOfAkarat), 0 };
+	wide.mods[0] = { 12, 3, 5 };
+	wide.mods[1] = { 40, 1, 7 };
+	wide.enchant = 7;
+	wide.enchantRoll = 5;
+	wide.magnitude = -14;
+	wide.desecrated = true;
+	const auto wideBytes = PackCraftState(wide);
+	EXPECT_EQ(wideBytes[0], 0xC3);
+	EXPECT_EQ(wideBytes[4], static_cast<uint8_t>(AugmentId::LesserRal));
+	EXPECT_EQ(wideBytes[5], static_cast<uint8_t>(AugmentId::RelicOfAkarat));
+	EXPECT_EQ(UnpackCraftState(wideBytes), wide);
+	// One wide socket and an empty one; the highest id the layout keeps for runes.
+	wide.augments = { 0, 127, 0 };
+	EXPECT_EQ(UnpackCraftState(PackCraftState(wide)), wide);
+	// A wide craft with the modifiers' wide layout too.
+	wide.mods[2] = { NarrowMaxModFamily + 5, 2, 9 };
+	EXPECT_EQ(UnpackCraftState(PackCraftState(wide)), wide);
+	auto broken = PackCraftState(wide);
+	broken[4] ^= 1;
+	EXPECT_TRUE(UnpackCraftState(broken).isEmpty());
+}
+
+TEST_F(Poe2CraftingTest, CraftExtensionRoundTrips)
+{
+	Poe2Craft craft;
+	EXPECT_FALSE(PackCraftExtension(craft).has_value());
+	craft.extension = { 1, 0, 0xFF, 7, 0, 0x80 };
+	const std::optional<std::array<uint8_t, CraftExtensionSaveSize>> bytes = PackCraftExtension(craft);
+	ASSERT_TRUE(bytes.has_value());
+	Poe2Craft loaded;
+	UnpackCraftExtension(*bytes, loaded);
+	EXPECT_EQ(loaded.extension, craft.extension);
+	// The extension doesn't go in the craft bytes, which stay as they were.
+	EXPECT_EQ(PackCraftState(craft)[4], 0);
+
+	// What every item save held there before: Diablo's anim widths, 96 and 16.
+	Poe2Craft old;
+	UnpackCraftExtension({ 0x60, 0, 0, 0, 0x10, 0, 0, 0 }, old);
+	EXPECT_TRUE(old.isEmpty());
+	auto broken = *bytes;
+	broken[3] ^= 1;
+	UnpackCraftExtension(broken, old);
+	EXPECT_TRUE(old.isEmpty());
+}
+
+TEST_F(Poe2CraftingTest, LegacyCraftingItemsConvertAndKeepTheirPlaces)
+{
+	// Runes, soul cores, talismans and essences as a save from before the runes rework holds them.
+	const _item_indexes augmentBase = FindMiscBase(IMISC_AUGMENT);
+	const _item_indexes essenceBase = FindMiscBase(IMISC_ESSENCE);
+	ASSERT_NE(augmentBase, IDI_GOLD);
+	ASSERT_NE(essenceBase, IDI_GOLD);
+	const auto legacyItem = [](_item_indexes base, uint8_t variant) {
+		Item item = {};
+		InitializeItem(item, base);
+		SetCraftingItemVariant(item, variant);
+		FinishCraftingItem(item);
+		return item;
+	};
+	for (int legacy = 1; legacy <= LegacyAugmentCount; legacy++) {
+		Item item = legacyItem(augmentBase, static_cast<uint8_t>(legacy));
+		const std::string name = item._iIName;
+		const std::optional<unsigned> slot = CurrencyFixedSlot(item);
+		ASSERT_TRUE(slot.has_value());
+		EXPECT_TRUE(ConvertLegacyCraftingIds(item));
+		EXPECT_EQ(GetAugmentId(item), CurrentAugmentId(static_cast<AugmentId>(legacy)));
+		EXPECT_EQ(std::string(item._iIName), name);
+		EXPECT_EQ(CurrencyFixedSlot(item), slot);
+		EXPECT_EQ(GetCurrencySlotKind(*slot).variant, CraftingItemVariant(item));
+		EXPECT_FALSE(ConvertLegacyCraftingIds(item));
+	}
+	for (int legacy = 1; legacy <= LegacyEssenceKindCount; legacy++) {
+		Item item = legacyItem(essenceBase, EssenceVariant(static_cast<EssenceKind>(legacy), EssenceTier::Greater));
+		const std::string name = item._iIName;
+		const std::optional<unsigned> slot = CurrencyFixedSlot(item);
+		ASSERT_TRUE(slot.has_value());
+		EXPECT_TRUE(ConvertLegacyCraftingIds(item));
+		EXPECT_EQ(GetEssenceKind(item), CurrentEssenceKind(static_cast<EssenceKind>(legacy)));
+		EXPECT_EQ(GetEssenceTier(item), EssenceTier::Greater);
+		EXPECT_EQ(std::string(item._iIName), name);
+		EXPECT_EQ(CurrencyFixedSlot(item), slot);
+		EXPECT_EQ(GetCurrencySlotKind(*slot).variant, CraftingItemVariant(item));
+	}
+
+	// Socketed augments become today's ids and do the same.
+	Item armour = Crafted(CurrencyOrb::Alchemy, MakeItem("Full Plate", 13, ITEM_QUALITY_NORMAL, 60));
+	armour = Crafted(CurrencyOrb::Artificer, armour);
+	armour = Crafted(CurrencyOrb::Artificer, armour);
+	armour = Crafted(CurrencyOrb::Augment, armour, static_cast<uint8_t>(AugmentId::IronRune));
+	armour = Crafted(CurrencyOrb::Augment, armour, static_cast<uint8_t>(AugmentId::GuardianTalisman));
+	ASSERT_EQ(armour._iPoe2Craft.sockets, 2);
+	Item converted = armour;
+	EXPECT_TRUE(ConvertLegacyCraftingIds(converted));
+	EXPECT_EQ(converted._iPoe2Craft.augments[0], static_cast<uint8_t>(AugmentId::LesserOhm));
+	EXPECT_EQ(converted._iPoe2Craft.augments[1], static_cast<uint8_t>(AugmentId::RelicOfAkarat));
+	const Item rebuilt = Rebuilt(converted);
+	EXPECT_EQ(rebuilt._iPLAC, armour._iPLAC);
+	ExpectSameMods(rebuilt, armour);
+	UniqueRuleTotals before {};
+	UniqueRuleTotals after {};
+	AddCraftRules(armour, before);
+	AddCraftRules(converted, after);
+	EXPECT_EQ(before, after);
+	EXPECT_EQ(UnpackCraftState(PackCraftState(converted._iPoe2Craft)), converted._iPoe2Craft);
 }
 
 TEST_F(Poe2CraftingTest, CraftStateWideLayoutRoundTrips)

@@ -6,6 +6,7 @@
 
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
@@ -17,8 +18,16 @@ namespace devilution {
 namespace {
 
 constexpr uint8_t CraftStateMarker = 0xC2;
+/** The marker of the wide socket layout: bytes 4 and 5 are the two sockets' augment ids. */
+constexpr uint8_t WideAugmentsMarker = 0xC3;
+/** The crafting extension's marker; Diablo's anim width constant puts 0x60 there. */
+constexpr uint8_t CraftExtensionMarker = 0xC4;
 
-uint8_t Checksum(const std::array<uint8_t, CraftStateSaveSize> &bytes)
+static_assert(static_cast<int>(CorruptionEnchant::Count) <= 16, "the enchant byte's 0x10 bit stays free for the Essence of Hatred");
+
+/** Over every byte but the last, which holds it. */
+template <size_t N>
+uint8_t Checksum(const std::array<uint8_t, N> &bytes)
 {
 	uint32_t sum = 0;
 	for (size_t i = 0; i + 1 < bytes.size(); i++)
@@ -52,6 +61,12 @@ uint8_t MemoryFamily(uint8_t stored)
 	return stored;
 }
 
+/** Whether an augment in a socket needs the wide socket layout. */
+bool HasWideAugments(const Poe2Craft &craft)
+{
+	return std::any_of(craft.augments.begin(), craft.augments.end(), [](uint8_t augment) { return augment > NarrowMaxAugmentId; });
+}
+
 /** Whether a modifier's family needs the wide layout: a real family the narrow one can't hold. */
 bool IsWideCraft(const Poe2Craft &craft)
 {
@@ -77,12 +92,18 @@ std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft)
 	std::array<uint8_t, CraftStateSaveSize> bytes {};
 	if (craft.isEmpty())
 		return bytes;
-	bytes[0] = CraftStateMarker;
+	const bool wideAugments = HasWideAugments(craft);
+	bytes[0] = wideAugments ? WideAugmentsMarker : CraftStateMarker;
 	bytes[1] = static_cast<uint8_t>((craft.explicitMods ? 1 : 0) | ((craft.rarity & 3) << 1) | ((craft.rolledMagic ? 1 : 0) << 3) | ((craft.sockets & 3) << 4) | ((craft.desecrated ? 1 : 0) << 6));
 	bytes[2] = static_cast<uint8_t>((craft.enchant & 0x1F) | ((craft.enchantRoll & 7) << 5));
 	bytes[3] = static_cast<uint8_t>(craft.magnitude);
-	bytes[4] = static_cast<uint8_t>((craft.augments[0] & 0xF) | ((craft.augments[1] & 0xF) << 4));
-	bytes[5] = static_cast<uint8_t>((craft.augments[2] & 0xF) | ((craft.catalyst & 0xF) << 4));
+	if (wideAugments) {
+		bytes[4] = craft.augments[0];
+		bytes[5] = craft.augments[1];
+	} else {
+		bytes[4] = static_cast<uint8_t>((craft.augments[0] & 0xF) | ((craft.augments[1] & 0xF) << 4));
+		bytes[5] = static_cast<uint8_t>((craft.augments[2] & 0xF) | ((craft.catalyst & 0xF) << 4));
+	}
 	const bool wide = IsWideCraft(craft);
 	if (wide)
 		bytes[1] |= WideLayoutBit;
@@ -101,7 +122,7 @@ std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft)
 Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 {
 	Poe2Craft craft;
-	if (bytes[0] != CraftStateMarker || bytes[CraftStateSaveSize - 1] != Checksum(bytes))
+	if ((bytes[0] != CraftStateMarker && bytes[0] != WideAugmentsMarker) || bytes[CraftStateSaveSize - 1] != Checksum(bytes))
 		return craft;
 	craft.explicitMods = (bytes[1] & 1) != 0;
 	craft.rarity = (bytes[1] >> 1) & 3;
@@ -112,10 +133,15 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 	craft.enchant = bytes[2] & 0x1F;
 	craft.enchantRoll = bytes[2] >> 5;
 	craft.magnitude = static_cast<int8_t>(bytes[3]);
-	craft.augments[0] = bytes[4] & 0xF;
-	craft.augments[1] = bytes[4] >> 4;
-	craft.augments[2] = bytes[5] & 0xF;
-	craft.catalyst = bytes[5] >> 4;
+	if (bytes[0] == WideAugmentsMarker) {
+		craft.augments[0] = bytes[4];
+		craft.augments[1] = bytes[5];
+	} else {
+		craft.augments[0] = bytes[4] & 0xF;
+		craft.augments[1] = bytes[4] >> 4;
+		craft.augments[2] = bytes[5] & 0xF;
+		craft.catalyst = bytes[5] >> 4;
+	}
 	for (size_t i = 0; i < MaxRareAffixes; i++) {
 		const auto packed = static_cast<uint16_t>(bytes[6 + (i * 2)] | (bytes[7 + (i * 2)] << 8));
 		if (wide)
@@ -124,6 +150,25 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 			craft.mods[i] = { MemoryFamily(static_cast<uint8_t>(packed & 0x7F)), static_cast<uint8_t>((packed >> 7) & 0xF), static_cast<uint8_t>(packed >> 11) };
 	}
 	return craft;
+}
+
+std::optional<std::array<uint8_t, CraftExtensionSaveSize>> PackCraftExtension(const Poe2Craft &craft)
+{
+	if (std::all_of(craft.extension.begin(), craft.extension.end(), [](uint8_t b) { return b == 0; }))
+		return std::nullopt;
+	std::array<uint8_t, CraftExtensionSaveSize> bytes {};
+	bytes[0] = CraftExtensionMarker;
+	std::copy(craft.extension.begin(), craft.extension.end(), bytes.begin() + 1);
+	bytes[CraftExtensionSaveSize - 1] = Checksum(bytes);
+	return bytes;
+}
+
+void UnpackCraftExtension(const std::array<uint8_t, CraftExtensionSaveSize> &bytes, Poe2Craft &craft)
+{
+	static_assert(CraftExtensionSize + 2 == CraftExtensionSaveSize);
+	if (bytes[0] != CraftExtensionMarker || bytes[CraftExtensionSaveSize - 1] != Checksum(bytes))
+		return;
+	std::copy(bytes.begin() + 1, bytes.end() - 1, craft.extension.begin());
 }
 
 bool CanCraftMods(const Item &item)

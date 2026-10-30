@@ -13,6 +13,8 @@ namespace devilution {
 
 /** @brief Crafted modifiers an item holds: up to three prefixes and three suffixes. */
 constexpr size_t MaxCraftMods = 6;
+/** @brief Bytes of crafting state the craft save has no room for (poe2/craft_state.hpp, PackCraftExtension). */
+constexpr size_t CraftExtensionSize = 6;
 
 /** POE2 Mashup: a crafted modifier, rebuilt from its family, tier and a salt for its values. */
 struct Poe2CraftMod {
@@ -34,7 +36,7 @@ struct Poe2Craft {
 	/** Whether the seed rolled the item magic rather than rare, so a modifier with salt 0 finds its rolled values. */
 	bool rolledMagic = false;
 	std::array<Poe2CraftMod, MaxCraftMods> mods {};
-	/** Augment sockets (0 to 3) and what is in each (an Augment id; 0 for empty). */
+	/** Augment sockets (0 to 2) and what is in each (an Augment id; 0 for empty). */
 	uint8_t sockets = 0;
 	std::array<uint8_t, 3> augments {};
 	/** Jewellery: the catalyst its quality boosts (a Catalyst id; 0 for none). A waystone: its tier less one. */
@@ -46,6 +48,8 @@ struct Poe2Craft {
 	int8_t magnitude = 0;
 	/** The item was desecrated, which only happens once. */
 	bool desecrated = false;
+	/** Room for crafting state the craft save can't hold, for the runes rework's Essences of Destruction and Sin. Unused yet. */
+	std::array<uint8_t, CraftExtensionSize> extension {};
 
 	[[nodiscard]] bool isEmpty() const { return *this == Poe2Craft {}; }
 	bool operator==(const Poe2Craft &other) const = default;

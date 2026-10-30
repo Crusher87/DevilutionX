@@ -49,8 +49,28 @@ enum class EssenceKind : uint8_t {
 	Warding,
 	Spirit,
 	Summoning,
+	// The runes rework's kinds. The twelve above are legacy: an item that has one gets the kind essences.tsv's
+	// becomes column names when it loads (ConvertLegacyCraftingIds). Until the rework gives these their own names and
+	// modifiers, each has those of the legacy kind that becomes it.
+	Body,
+	Mind,
+	Insulation,
+	Thawing,
+	Grounding,
+	Abrasion,
+	Haste,
+	Alacrity,
+	Battle,
+	Enhancement,
+	Infinite,
+	Command,
 	Count,
 };
+
+/** @brief The essence kinds before the runes rework: the currency stash keeps a slot for each, holding what it became. */
+constexpr int LegacyEssenceKindCount = static_cast<int>(EssenceKind::Summoning);
+/** @brief An essence's variant: the kind's low 4 bits, the tier in bits 4-5 and the kind's 5th bit in bit 6, so 31 kinds fit and older variants read the same. */
+static_assert(static_cast<int>(EssenceKind::Count) <= 32);
 
 enum class EssenceTier : uint8_t {
 	Lesser,
@@ -65,6 +85,8 @@ struct Essence {
 	std::string name;
 	/** @brief The modifier family it guarantees. */
 	std::string family;
+	/** @brief A legacy kind: the kind it becomes when an item that has it loads. None for a kind of today. */
+	EssenceKind becomes = EssenceKind::None;
 };
 
 /** @brief POE2 drop level of each essence tier, its weight, and the lowest modifier level it adds. */
@@ -76,6 +98,11 @@ const Essence &GetEssence(EssenceKind kind);
 EssenceKind GetEssenceKind(const Item &item);
 EssenceTier GetEssenceTier(const Item &item);
 uint8_t EssenceVariant(EssenceKind kind, EssenceTier tier);
+/** @brief The kind an essence variant holds; None for one out of range. */
+EssenceKind EssenceVariantKind(uint8_t variant);
+EssenceTier EssenceVariantTier(uint8_t variant);
+/** @brief The kind of today a kind stands for: what a legacy kind becomes, else the kind itself. */
+EssenceKind CurrentEssenceKind(EssenceKind kind);
 
 enum class OmenId : uint8_t {
 	None,
@@ -138,8 +165,26 @@ enum class AugmentId : uint8_t {
 	KeenCore,
 	HunterTalisman,
 	GuardianTalisman,
+	// The runes rework's ids. The ten above are legacy: a socket or an item that has one gets the id augments.tsv's
+	// becomes column names when it loads (ConvertLegacyCraftingIds). Until the rework gives these their own names and
+	// numbers, each has those of the legacy id that becomes it.
+	LesserRal,
+	LesserThul,
+	LesserOrt,
+	LesserOhm,
+	LesserShael,
+	LordOfThePit,
+	TheDefiler,
+	StareyeTheWitch,
+	RelicOfRakkis,
+	RelicOfAkarat,
 	Count,
 };
+
+/** @brief The augment ids before the runes rework: the currency stash keeps a slot for each, holding what it became. */
+constexpr int LegacyAugmentCount = static_cast<int>(AugmentId::GuardianTalisman);
+/** @brief A socket of the wide craft layout keeps 8 bits, the top one spare for a Zod Rune, so ids stay below 128. */
+static_assert(static_cast<int>(AugmentId::Count) <= 128);
 
 struct Augment {
 	AugmentId id = AugmentId::None;
@@ -160,10 +205,20 @@ struct Augment {
 	std::string weaponText;
 	std::string staffText;
 	std::string armourText;
+	/** @brief A legacy id: the id it becomes when an item that has it loads. None for an id of today. */
+	AugmentId becomes = AugmentId::None;
 };
 
 const Augment &GetAugment(AugmentId id);
 AugmentId GetAugmentId(const Item &item);
+/** @brief The id of today an id stands for: what a legacy id becomes, else the id itself. */
+AugmentId CurrentAugmentId(AugmentId id);
+/**
+ * @brief Gives a loading item the ids of today in place of legacy ones (an augment or essence it is, and the augments
+ * in its sockets), and renames a crafting item it changed. Saves from before the runes rework hold only legacy ids.
+ * @return Whether it changed the item.
+ */
+bool ConvertLegacyCraftingIds(Item &item);
 /** @brief Most augment sockets the item can have: 2 on body armour and two-handed weapons, 1 on other weapons and armour, 0 on jewellery. */
 int MaxAugmentSockets(const Item &item);
 /** @brief Gives the item what its socketed augments do. */

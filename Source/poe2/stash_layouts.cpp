@@ -23,7 +23,7 @@ constexpr std::array<CurrencySectionRange, static_cast<size_t>(CurrencySection::
     { 30, 10 },  // Catalysts
     { 40, 10 },  // Augments
     { 50, 20 },  // Other
-    { 70, 50 },  // Essences: 12 kinds of 4 tiers
+    { 70, 50 },  // Essences: 12 kinds of 4 tiers (the legacy kinds' places, holding what they became)
     { 120, 30 }, // Omens
 } };
 
@@ -64,8 +64,8 @@ constexpr unsigned EssenceTiers = static_cast<unsigned>(EssenceTier::Count);
 
 static_assert(std::size(OrbSlots) <= 30);
 static_assert(static_cast<unsigned>(Catalyst::Count) - 1 <= 10);
-static_assert(static_cast<unsigned>(AugmentId::Count) - 1 <= 10);
-static_assert((static_cast<unsigned>(EssenceKind::Count) - 1) * EssenceTiers <= 50);
+static_assert(LegacyAugmentCount <= 10);
+static_assert(LegacyEssenceKindCount * EssenceTiers <= 50);
 static_assert(static_cast<unsigned>(OmenId::Count) - 1 <= 30);
 
 std::optional<size_t> ItemIndexForMiscId(item_misc_id miscId)
@@ -73,6 +73,28 @@ std::optional<size_t> ItemIndexForMiscId(item_misc_id miscId)
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		if (AllItemsList[i].iMiscId == miscId)
 			return i;
+	}
+	return std::nullopt;
+}
+
+/** The augment section's place of the item's augment: the place of the legacy id it is, or that became it. */
+std::optional<unsigned> AugmentPlace(AugmentId id)
+{
+	for (int legacy = 1; legacy <= LegacyAugmentCount; legacy++) {
+		const auto legacyId = static_cast<AugmentId>(legacy);
+		if (id == legacyId || id == CurrentAugmentId(legacyId))
+			return static_cast<unsigned>(legacy - 1);
+	}
+	return std::nullopt;
+}
+
+/** The same for the essence sections' kinds. */
+std::optional<unsigned> EssencePlace(EssenceKind kind)
+{
+	for (int legacy = 1; legacy <= LegacyEssenceKindCount; legacy++) {
+		const auto legacyKind = static_cast<EssenceKind>(legacy);
+		if (kind == legacyKind || kind == CurrentEssenceKind(legacyKind))
+			return static_cast<unsigned>(legacy - 1);
 	}
 	return std::nullopt;
 }
@@ -116,10 +138,10 @@ CurrencySlotKind GetCurrencySlotKind(unsigned slot)
 		return { OrbSlots[*i], 0 };
 	if (const auto i = inSection(CurrencySection::Catalysts); i && *i + 1 < static_cast<unsigned>(Catalyst::Count))
 		return { IMISC_ORB_CATALYST, static_cast<uint8_t>(*i + 1) };
-	if (const auto i = inSection(CurrencySection::Augments); i && *i + 1 < static_cast<unsigned>(AugmentId::Count))
-		return { IMISC_AUGMENT, static_cast<uint8_t>(*i + 1) };
-	if (const auto i = inSection(CurrencySection::Essences); i && *i / EssenceTiers + 1 < static_cast<unsigned>(EssenceKind::Count)) {
-		const auto kind = static_cast<EssenceKind>((*i / EssenceTiers) + 1);
+	if (const auto i = inSection(CurrencySection::Augments); i && *i < static_cast<unsigned>(LegacyAugmentCount))
+		return { IMISC_AUGMENT, static_cast<uint8_t>(CurrentAugmentId(static_cast<AugmentId>(*i + 1))) };
+	if (const auto i = inSection(CurrencySection::Essences); i && *i / EssenceTiers < static_cast<unsigned>(LegacyEssenceKindCount)) {
+		const EssenceKind kind = CurrentEssenceKind(static_cast<EssenceKind>((*i / EssenceTiers) + 1));
 		const auto tier = static_cast<EssenceTier>(*i % EssenceTiers);
 		return { IMISC_ESSENCE, EssenceVariant(kind, tier) };
 	}
@@ -141,16 +163,16 @@ std::optional<unsigned> CurrencyFixedSlot(const Item &item)
 		return section(CurrencySection::Catalysts) + catalyst - 1;
 	}
 	case IMISC_AUGMENT: {
-		const auto id = static_cast<unsigned>(GetAugmentId(item));
-		if (id == 0)
+		const std::optional<unsigned> place = AugmentPlace(GetAugmentId(item));
+		if (!place)
 			return std::nullopt;
-		return section(CurrencySection::Augments) + id - 1;
+		return section(CurrencySection::Augments) + *place;
 	}
 	case IMISC_ESSENCE: {
-		const auto kind = static_cast<unsigned>(GetEssenceKind(item));
-		if (kind == 0)
+		const std::optional<unsigned> place = EssencePlace(GetEssenceKind(item));
+		if (!place)
 			return std::nullopt;
-		return section(CurrencySection::Essences) + ((kind - 1) * EssenceTiers) + static_cast<unsigned>(GetEssenceTier(item));
+		return section(CurrencySection::Essences) + (*place * EssenceTiers) + static_cast<unsigned>(GetEssenceTier(item));
 	}
 	case IMISC_OMEN: {
 		const auto id = static_cast<unsigned>(GetOmenId(item));
