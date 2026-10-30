@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "items.h"
@@ -45,9 +46,28 @@ constexpr uint8_t NarrowUnrevealedModFamily = 127;
 /** @brief A salt from 1 to the family's CraftSaltLimit, from a roll. */
 [[nodiscard]] uint8_t RollCraftSalt(uint8_t family, uint32_t roll);
 
+/**
+ * @brief The craft save's two socket layouts. The narrow one, every item saved before the runes rework, keeps three
+ * augment ids of 4 bits and the catalyst's 4. An item with an augment id above NarrowMaxAugmentId saves wide (its own
+ * marker byte): one byte for each of the two sockets, and no third socket or catalyst, which only jewellery and
+ * waystones have, and they have no sockets. Ids keep below 128 there: the top bit is kept for a Zod Rune.
+ */
+constexpr uint8_t NarrowMaxAugmentId = 15;
+
 std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft);
 /** @brief Reads crafting state from an item save; zeros from an older save, or bytes that don't check out, give none. */
 Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes);
+
+/** @brief Bytes the crafting extension takes in an item save: a marker, Poe2Craft::extension and a checksum. */
+constexpr size_t CraftExtensionSaveSize = 8;
+/**
+ * @brief The item save's 8 bytes of anim widths, which loading skips and saving fills with Diablo's constants, hold
+ * the crafting extension when it isn't all zero.
+ * @return The bytes, or nothing when the extension is empty and the constants go there as before.
+ */
+std::optional<std::array<uint8_t, CraftExtensionSaveSize>> PackCraftExtension(const Poe2Craft &craft);
+/** @brief Reads the crafting extension into the craft; Diablo's constants, or bytes that don't check out, give none. */
+void UnpackCraftExtension(const std::array<uint8_t, CraftExtensionSaveSize> &bytes, Poe2Craft &craft);
 
 /** @brief Whether crafting can work on the item's modifiers one by one: it rolls them from the POE2 tables. */
 [[nodiscard]] bool CanCraftMods(const Item &item);

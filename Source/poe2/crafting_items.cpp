@@ -1,14 +1,23 @@
 #include "poe2/crafting_items.hpp"
 
 #include <algorithm>
+#include <expected>
+#include <optional>
 
+#include <magic_enum/magic_enum.hpp>
+
+#include "data/file.hpp"
+#include "data/record_reader.hpp"
+#include "game_mode.hpp"
 #include "items.h"
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
+#include "poe2/weapon_kinds.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
+#include "utils/log.hpp"
 #include "utils/str_cat.hpp"
 #include "utils/utf8.hpp"
 
@@ -16,66 +25,188 @@ namespace devilution {
 
 namespace {
 
-const std::array<Essence, static_cast<size_t>(EssenceKind::Count)> Essences { {
-	{ EssenceKind::None, "", "" },
-	{ EssenceKind::Vigor, "Vigor", "maximum_life" },
-	{ EssenceKind::Clarity, "Clarity", "maximum_mana" },
-	{ EssenceKind::Ember, "Ember", "fire_resistance" },
-	{ EssenceKind::Frost, "Frost", "cold_resistance" },
-	{ EssenceKind::Storm, "Storm", "lightning_resistance" },
-	{ EssenceKind::Might, "Might", "local_increased_physical" },
-	{ EssenceKind::Celerity, "Celerity", "attack_speed" },
-	// The game has no spell damage, critical chance or chaos resistance modifiers, so these guarantee the nearest ones.
-	{ EssenceKind::Sorcery, "Sorcery", "cast_speed" },
-	{ EssenceKind::Precision, "Precision", "accuracy_rating" },
-	{ EssenceKind::Warding, "Warding", "all_elemental_resistance" },
-	{ EssenceKind::Spirit, "Spirit", "spirit_flat" },
-	{ EssenceKind::Summoning, "Summoning", "minion_damage" },
-} };
+std::vector<Essence> Essences;
+std::vector<Omen> Omens;
+std::vector<Augment> Augments;
 
-const std::array<Omen, static_cast<size_t>(OmenId::Count)> Omens { {
-	{ OmenId::None, "", OmenTrigger::Exalt, 0, 0, "" },
-	{ OmenId::SinistralExaltation, "Omen of Sinistral Exaltation", OmenTrigger::Exalt, 40, 100, "Your next Exalted Orb adds only a prefix" },
-	{ OmenId::DextralExaltation, "Omen of Dextral Exaltation", OmenTrigger::Exalt, 40, 100, "Your next Exalted Orb adds only a suffix" },
-	{ OmenId::GreaterExaltation, "Omen of Greater Exaltation", OmenTrigger::Exalt, 65, 25, "Your next Exalted Orb adds two modifiers" },
-	{ OmenId::HomogenisingExaltation, "Omen of Homogenising Exaltation", OmenTrigger::Exalt, 70, 18, "Your next Exalted Orb adds a modifier of a kind the item already has" },
-	{ OmenId::DiscordantExaltation, "Omen of Discordant Exaltation", OmenTrigger::Exalt, 70, 18, "Your next Exalted Orb adds a modifier of a kind the item doesn't have" },
-	{ OmenId::SinistralAnnulment, "Omen of Sinistral Annulment", OmenTrigger::Annul, 45, 85, "Your next Orb of Annulment removes only a prefix" },
-	{ OmenId::DextralAnnulment, "Omen of Dextral Annulment", OmenTrigger::Annul, 45, 85, "Your next Orb of Annulment removes only a suffix" },
-	{ OmenId::Whittling, "Omen of Whittling", OmenTrigger::Annul, 58, 45, "Your next Orb of Annulment removes the lowest level modifier" },
-	{ OmenId::SinistralErasure, "Omen of Sinistral Erasure", OmenTrigger::Chaos, 50, 70, "Your next Chaos Orb removes only a prefix" },
-	{ OmenId::DextralErasure, "Omen of Dextral Erasure", OmenTrigger::Chaos, 50, 70, "Your next Chaos Orb removes only a suffix" },
-	{ OmenId::SinistralPreservation, "Omen of Sinistral Preservation", OmenTrigger::Chaos, 68, 25, "Your next Chaos Orb never removes a prefix" },
-	{ OmenId::DextralPreservation, "Omen of Dextral Preservation", OmenTrigger::Chaos, 68, 25, "Your next Chaos Orb never removes a suffix" },
-	{ OmenId::SinistralCrystallisation, "Omen of Sinistral Crystallisation", OmenTrigger::PerfectEssence, 68, 30, "Your next Perfect Essence removes only a prefix" },
-	{ OmenId::DextralCrystallisation, "Omen of Dextral Crystallisation", OmenTrigger::PerfectEssence, 68, 30, "Your next Perfect Essence removes only a suffix" },
-	{ OmenId::Severance, "Omen of Severance", OmenTrigger::PerfectEssence, 74, 14, "Your next Perfect Essence removes the highest level modifier" },
-	{ OmenId::Mercy, "Omen of Mercy", OmenTrigger::Chance, 75, 8, "Your next failed Orb of Chance leaves the item whole" },
-	{ OmenId::Corruption, "Omen of Corruption", OmenTrigger::Corrupt, 72, 12, "Your next Vaal Orb always changes the item" },
-	{ OmenId::Artificer, "Omen of the Artificer", OmenTrigger::Corrupt, 78, 6, "Your next Vaal Orb favours adding a socket" },
-	{ OmenId::SinistralNecromancy, "Omen of Sinistral Necromancy", OmenTrigger::Desecrate, 65, 20, "Your next desecration reveals a prefix" },
-	{ OmenId::DextralNecromancy, "Omen of Dextral Necromancy", OmenTrigger::Desecrate, 65, 20, "Your next desecration reveals a suffix" },
-	{ OmenId::Kinship, "Omen of Kinship", OmenTrigger::Desecrate, 75, 10, "One revealed choice shares a kind with the item's modifiers" },
-} };
+/** What a table without a row for the id gives: the None row. */
+const Essence NoEssence {};
+const Omen NoOmen {};
+const Augment NoAugment {};
 
-const std::array<Augment, static_cast<size_t>(AugmentId::Count)> Augments { {
-	{ AugmentId::None, "", 0, 0, ModEffect::None, {}, ModEffect::None, {}, UniqueRule::None, 0, "", "" },
-	{ AugmentId::EmberRune, "Ember Rune", 1, 10, ModEffect::AddedFire, { 4, 9 }, ModEffect::FireResistance, { 12, 0 }, UniqueRule::None, 0, "Adds 4 to 9 fire damage", "+12% to fire resistance" },
-	{ AugmentId::FrostRune, "Frost Rune", 1, 10, ModEffect::MagicResistance, { 12, 0 }, ModEffect::MagicResistance, { 12, 0 }, UniqueRule::None, 0, "+12% to magic resistance", "+12% to magic resistance" },
-	{ AugmentId::StormRune, "Storm Rune", 1, 10, ModEffect::AddedLightning, { 1, 14 }, ModEffect::LightningResistance, { 12, 0 }, UniqueRule::None, 0, "Adds 1 to 14 lightning damage", "+12% to lightning resistance" },
-	{ AugmentId::IronRune, "Iron Rune", 1, 10, ModEffect::PhysicalPercent, { 18, 0 }, ModEffect::DefensePercent, { 18, 0 }, UniqueRule::None, 0, "18% increased physical damage", "18% increased armour, evasion and energy shield" },
-	{ AugmentId::WindRune, "Wind Rune", 1, 15, ModEffect::AttackSpeed, { 5, 0 }, ModEffect::Dexterity, { 8, 0 }, UniqueRule::None, 0, "5% increased attack speed", "+8 to dexterity" },
-	{ AugmentId::HeartCore, "Soul Core of Heart", 2, 30, ModEffect::Life, { 30, 0 }, ModEffect::Life, { 30, 0 }, UniqueRule::None, 0, "+30 to maximum life", "+30 to maximum life" },
-	{ AugmentId::MindCore, "Soul Core of Mind", 2, 30, ModEffect::Mana, { 30, 0 }, ModEffect::Mana, { 30, 0 }, UniqueRule::None, 0, "+30 to maximum mana", "+30 to maximum mana" },
-	{ AugmentId::KeenCore, "Soul Core of Keenness", 2, 30, ModEffect::Accuracy, { 12, 0 }, ModEffect::Accuracy, { 8, 0 }, UniqueRule::None, 0, "+12% chance to hit", "+8% chance to hit" },
-	{ AugmentId::HunterTalisman, "Hunter's Talisman", 3, 45, ModEffect::None, {}, ModEffect::None, {}, UniqueRule::DamageVsRareUnique, 15, "15% more damage against rare and unique monsters", "15% more damage against rare and unique monsters" },
-	{ AugmentId::GuardianTalisman, "Guardian's Talisman", 3, 45, ModEffect::None, {}, ModEffect::None, {}, UniqueRule::LessHitDamage, 6, "6% less damage taken from hits", "6% less damage taken from hits" },
-} };
+/** A table's id column: the name of the id it is the row of, which must be the next id, as rows are in id order. */
+template <typename Id>
+bool ReadRowId(RecordReader &reader, std::string_view filename, size_t rows, Id &id)
+{
+	std::string text;
+	reader.readString("id", text);
+	const std::optional<Id> parsed = magic_enum::enum_cast<Id>(text);
+	if (!parsed || static_cast<size_t>(*parsed) != rows || *parsed == Id::Count) {
+		LogError("{}: \"{}\" is not the next id, {}", filename, text, magic_enum::enum_name(static_cast<Id>(rows)));
+		return false;
+	}
+	id = *parsed;
+	return true;
+}
+
+/** Whether the table, with its None row, has a row for every id. */
+template <typename Id>
+bool HasEveryRow(std::string_view filename, size_t rows, Id count)
+{
+	if (rows == static_cast<size_t>(count))
+		return true;
+	LogError("{}: rows for {} of the {} ids", filename, rows - 1, static_cast<size_t>(count) - 1);
+	return false;
+}
+
+/** A becomes column: empty for a row of today, else the id of today a legacy row's items get on load. */
+template <typename Id>
+std::expected<Id, std::string> ParseBecomes(std::string_view text)
+{
+	if (text.empty())
+		return Id::None;
+	if (const std::optional<Id> id = magic_enum::enum_cast<Id>(text); id && *id != Id::Count)
+		return *id;
+	return std::unexpected("unknown id");
+}
+
+/** Whether every legacy row becomes a row of today, so a converted item never needs converting again. */
+template <typename Row, typename Id>
+bool BecomesRowsOfToday(std::string_view filename, const std::vector<Row> &rows, Id Row::*becomes)
+{
+	for (const Row &row : rows) {
+		const Id target = row.*becomes;
+		if (target == Id::None)
+			continue;
+		const auto index = static_cast<size_t>(target);
+		if (index >= rows.size() || rows[index].*becomes != Id::None) {
+			LogError("{}: a row becomes {}, which isn't a row of today", filename, magic_enum::enum_name(target));
+			return false;
+		}
+	}
+	return true;
+}
+
+/** An effect column; empty for none. */
+std::expected<ModEffect, std::string> ParseEffect(std::string_view text)
+{
+	if (text.empty())
+		return ModEffect::None;
+	if (const std::optional<ModEffect> effect = magic_enum::enum_cast<ModEffect>(text))
+		return *effect;
+	return std::unexpected("unknown effect");
+}
+
+std::expected<UniqueRule, std::string> ParseRule(std::string_view text)
+{
+	if (text.empty())
+		return UniqueRule::None;
+	if (const std::optional<UniqueRule> rule = magic_enum::enum_cast<UniqueRule>(text))
+		return *rule;
+	return std::unexpected("unknown rule");
+}
+
+std::expected<OmenTrigger, std::string> ParseTrigger(std::string_view text)
+{
+	if (const std::optional<OmenTrigger> trigger = magic_enum::enum_cast<OmenTrigger>(text))
+		return *trigger;
+	return std::unexpected("unknown omen trigger");
+}
+
+bool LoadEssences()
+{
+	constexpr std::string_view Filename = "txtdata\\poe2\\essences.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the essences: {}", Filename);
+		return false;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	Essences.emplace_back();
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		Essence essence;
+		if (!ReadRowId(reader, Filename, Essences.size(), essence.kind))
+			return false;
+		reader.readString("name", essence.name);
+		// The game has no spell damage, critical chance or chaos resistance modifiers, so Sorcery, Precision and
+		// Warding, and the kinds they became, guarantee the nearest ones.
+		reader.readString("family", essence.family);
+		reader.read("becomes", essence.becomes, ParseBecomes<EssenceKind>);
+		Essences.push_back(std::move(essence));
+	}
+	return HasEveryRow(Filename, Essences.size(), EssenceKind::Count) && BecomesRowsOfToday(Filename, Essences, &Essence::becomes);
+}
+
+bool LoadOmens()
+{
+	constexpr std::string_view Filename = "txtdata\\poe2\\omens.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the omens: {}", Filename);
+		return false;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	Omens.emplace_back();
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		Omen omen;
+		if (!ReadRowId(reader, Filename, Omens.size(), omen.id))
+			return false;
+		reader.readString("name", omen.name);
+		reader.read("trigger", omen.trigger, ParseTrigger);
+		reader.readInt("dropLevel", omen.dropLevel);
+		reader.readInt("weight", omen.weight);
+		reader.readString("description", omen.description);
+		Omens.push_back(std::move(omen));
+	}
+	return HasEveryRow(Filename, Omens.size(), OmenId::Count);
+}
+
+bool LoadAugments()
+{
+	constexpr std::string_view Filename = "txtdata\\poe2\\augments.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the augments: {}", Filename);
+		return false;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	Augments.emplace_back();
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		Augment augment;
+		if (!ReadRowId(reader, Filename, Augments.size(), augment.id))
+			return false;
+		reader.readString("name", augment.name);
+		reader.readInt("tier", augment.tier);
+		reader.readInt("dropLevel", augment.dropLevel);
+		// An effect column, then its two values.
+		const auto readEffect = [&reader](std::string_view column, ModEffect &effect, std::array<int16_t, 2> &values) {
+			reader.read(StrCat(column, "Effect"), effect, ParseEffect);
+			reader.readInt(StrCat(column, "Value1"), values[0]);
+			reader.readInt(StrCat(column, "Value2"), values[1]);
+		};
+		readEffect("weapon", augment.weaponEffect, augment.weaponValues);
+		readEffect("staff", augment.staffEffect, augment.staffValues);
+		readEffect("armour", augment.armourEffect, augment.armourValues);
+		reader.read("rule", augment.rule, ParseRule);
+		reader.readInt("ruleValue", augment.ruleValue);
+		reader.readString("weaponText", augment.weaponText);
+		reader.readString("staffText", augment.staffText);
+		reader.readString("armourText", augment.armourText);
+		reader.read("becomes", augment.becomes, ParseBecomes<AugmentId>);
+		Augments.push_back(std::move(augment));
+	}
+	return HasEveryRow(Filename, Augments.size(), AugmentId::Count) && BecomesRowsOfToday(Filename, Augments, &Augment::becomes);
+}
 
 /** @brief Picks one of the weighted choices with the roll. */
 template <typename T>
 T PickWeighted(const std::vector<std::pair<T, int>> &choices, uint32_t roll)
 {
+	if (choices.empty())
+		return {};
 	int total = 0;
 	for (const auto &[choice, weight] : choices)
 		total += weight;
@@ -104,6 +235,9 @@ uint8_t RollVariant(const Item &item)
 	case IMISC_ESSENCE: {
 		std::vector<std::pair<uint8_t, int>> choices;
 		for (size_t kind = 1; kind < Essences.size(); kind++) {
+			// Legacy kinds never drop; the kinds they became do, in their places.
+			if (Essences[kind].becomes != EssenceKind::None)
+				continue;
 			for (size_t tier = 0; tier < EssenceDropLevels.size(); tier++) {
 				// Lesser essences drop anywhere; better ones need their level.
 				if (tier == 0 || EssenceDropLevels[tier] <= level)
@@ -123,7 +257,7 @@ uint8_t RollVariant(const Item &item)
 	case IMISC_AUGMENT: {
 		std::vector<std::pair<uint8_t, int>> choices;
 		for (const Augment &augment : Augments) {
-			if (augment.id != AugmentId::None && (augment.tier == 1 || augment.dropLevel <= level))
+			if (augment.id != AugmentId::None && augment.becomes == AugmentId::None && (augment.tier == 1 || augment.dropLevel <= level))
 				choices.emplace_back(static_cast<uint8_t>(augment.id), 4 - augment.tier);
 		}
 		return PickWeighted(choices, roll);
@@ -166,32 +300,66 @@ bool IsCraftingVariantItem(const Item &item)
 	return !item.isEmpty() && IsAnyOf(item._iMiscId, IMISC_ESSENCE, IMISC_OMEN, IMISC_AUGMENT, IMISC_ORB_CATALYST);
 }
 
+void LoadCraftingItemData()
+{
+	Essences.clear();
+	Omens.clear();
+	Augments.clear();
+	if (!gbIsPoe2)
+		return;
+	if (!LoadEssences())
+		Essences.clear();
+	if (!LoadOmens())
+		Omens.clear();
+	if (!LoadAugments())
+		Augments.clear();
+}
+
 const Essence &GetEssence(EssenceKind kind)
 {
-	return Essences[std::min(static_cast<size_t>(kind), Essences.size() - 1)];
+	const auto index = static_cast<size_t>(kind);
+	return index < Essences.size() ? Essences[index] : NoEssence;
 }
 
 uint8_t EssenceVariant(EssenceKind kind, EssenceTier tier)
 {
-	return static_cast<uint8_t>(static_cast<uint8_t>(kind) | (static_cast<uint8_t>(tier) << 4));
+	const auto k = static_cast<uint8_t>(kind);
+	return static_cast<uint8_t>((k & 0xF) | (static_cast<uint8_t>(tier) << 4) | ((k & 0x10) << 2));
+}
+
+EssenceKind EssenceVariantKind(uint8_t variant)
+{
+	const auto kind = static_cast<uint8_t>((variant & 0xF) | ((variant >> 2) & 0x10));
+	return kind < static_cast<uint8_t>(EssenceKind::Count) ? static_cast<EssenceKind>(kind) : EssenceKind::None;
+}
+
+EssenceTier EssenceVariantTier(uint8_t variant)
+{
+	return static_cast<EssenceTier>((variant >> 4) & 3);
 }
 
 EssenceKind GetEssenceKind(const Item &item)
 {
 	if (item.isEmpty() || item._iMiscId != IMISC_ESSENCE)
 		return EssenceKind::None;
-	const uint8_t kind = CraftingItemVariant(item) & 0xF;
-	return kind < static_cast<uint8_t>(EssenceKind::Count) ? static_cast<EssenceKind>(kind) : EssenceKind::None;
+	return EssenceVariantKind(CraftingItemVariant(item));
 }
 
 EssenceTier GetEssenceTier(const Item &item)
 {
-	return static_cast<EssenceTier>((CraftingItemVariant(item) >> 4) & 3);
+	return EssenceVariantTier(CraftingItemVariant(item));
+}
+
+EssenceKind CurrentEssenceKind(EssenceKind kind)
+{
+	const EssenceKind becomes = GetEssence(kind).becomes;
+	return becomes != EssenceKind::None ? becomes : kind;
 }
 
 const Omen &GetOmen(OmenId id)
 {
-	return Omens[std::min(static_cast<size_t>(id), Omens.size() - 1)];
+	const auto index = static_cast<size_t>(id);
+	return index < Omens.size() ? Omens[index] : NoOmen;
 }
 
 OmenId GetOmenId(const Item &item)
@@ -204,7 +372,8 @@ OmenId GetOmenId(const Item &item)
 
 const Augment &GetAugment(AugmentId id)
 {
-	return Augments[std::min(static_cast<size_t>(id), Augments.size() - 1)];
+	const auto index = static_cast<size_t>(id);
+	return index < Augments.size() ? Augments[index] : NoAugment;
 }
 
 AugmentId GetAugmentId(const Item &item)
@@ -213,6 +382,39 @@ AugmentId GetAugmentId(const Item &item)
 		return AugmentId::None;
 	const uint8_t id = CraftingItemVariant(item);
 	return id < static_cast<uint8_t>(AugmentId::Count) ? static_cast<AugmentId>(id) : AugmentId::None;
+}
+
+AugmentId CurrentAugmentId(AugmentId id)
+{
+	const AugmentId becomes = GetAugment(id).becomes;
+	return becomes != AugmentId::None ? becomes : id;
+}
+
+bool ConvertLegacyCraftingIds(Item &item)
+{
+	if (item.isEmpty())
+		return false;
+	bool renamed = false;
+	if (const AugmentId id = GetAugmentId(item); id != CurrentAugmentId(id)) {
+		SetCraftingItemVariant(item, static_cast<uint8_t>(CurrentAugmentId(id)));
+		renamed = true;
+	}
+	if (const EssenceKind kind = GetEssenceKind(item); kind != CurrentEssenceKind(kind)) {
+		SetCraftingItemVariant(item, EssenceVariant(CurrentEssenceKind(kind), GetEssenceTier(item)));
+		renamed = true;
+	}
+	if (renamed)
+		FinishCraftingItem(item);
+	bool socketed = false;
+	Poe2Craft &craft = item._iPoe2Craft;
+	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
+		const auto current = static_cast<uint8_t>(CurrentAugmentId(static_cast<AugmentId>(craft.augments[i])));
+		if (current != craft.augments[i]) {
+			craft.augments[i] = current;
+			socketed = true;
+		}
+	}
+	return renamed || socketed;
 }
 
 std::string_view CatalystName(Catalyst catalyst)
@@ -291,10 +493,12 @@ void ApplyAugments(Item &item)
 	const int percent = HasDesecratedMod(item, DesecratedModId::HollowSaint) ? HollowSaintAugmentPercent : 100;
 	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
 		const Augment &augment = GetAugment(static_cast<AugmentId>(craft.augments[i]));
-		if (item._iClass == ICLASS_WEAPON)
-			ApplyModEffect(item, augment.weaponEffect, augment.weaponValues[0] * percent / 100, augment.weaponValues[1] * percent / 100);
-		else
+		if (item._iClass != ICLASS_WEAPON)
 			ApplyModEffect(item, augment.armourEffect, augment.armourValues[0] * percent / 100, augment.armourValues[1] * percent / 100);
+		else if (IsCasterWeapon(item))
+			ApplyModEffect(item, augment.staffEffect, augment.staffValues[0] * percent / 100, augment.staffValues[1] * percent / 100);
+		else
+			ApplyModEffect(item, augment.weaponEffect, augment.weaponValues[0] * percent / 100, augment.weaponValues[1] * percent / 100);
 	}
 }
 
@@ -308,7 +512,8 @@ std::vector<std::string> AugmentSocketText(const Item &item)
 			lines.emplace_back(_("Empty augment socket"));
 			continue;
 		}
-		lines.push_back(StrCat(augment.name, ": ", item._iClass == ICLASS_WEAPON ? augment.weaponText : augment.armourText));
+		const std::string &text = item._iClass != ICLASS_WEAPON ? augment.armourText : (IsCasterWeapon(item) ? augment.staffText : augment.weaponText);
+		lines.push_back(StrCat(augment.name, ": ", text));
 	}
 	return lines;
 }
@@ -467,10 +672,12 @@ std::vector<std::string> CraftingItemText(const Item &item)
 		break;
 	case IMISC_AUGMENT: {
 		const Augment &augment = GetAugment(GetAugmentId(item));
-		if (augment.weaponText == augment.armourText) {
+		if (augment.weaponText == augment.armourText && augment.weaponText == augment.staffText) {
 			lines.emplace_back(augment.weaponText);
 		} else {
 			lines.push_back(StrCat(_("Weapon: "), augment.weaponText));
+			if (augment.staffText != augment.weaponText)
+				lines.push_back(StrCat(_("Staff, wand or sceptre: "), augment.staffText));
 			lines.push_back(StrCat(_("Armour: "), augment.armourText));
 		}
 		lines.emplace_back(_("Goes in an empty augment socket"));

@@ -99,8 +99,10 @@ set(poe2_mod
   txtdata/spells/spelldat.tsv
   txtdata/towners/towners.tsv
   txtdata/poe2/area_levels.tsv
+  txtdata/poe2/augments.tsv
   txtdata/poe2/base_meta.tsv
   txtdata/poe2/diablo_unique_homes.tsv
+  txtdata/poe2/essences.tsv
   txtdata/poe2/cathedral_rooms.tsv
   txtdata/poe2/experience_bosses.tsv
   txtdata/poe2/experience_level_gap.tsv
@@ -111,6 +113,7 @@ set(poe2_mod
   txtdata/poe2/monster_types.tsv
   txtdata/poe2/modifier_families.tsv
   txtdata/poe2/modifier_tiers.tsv
+  txtdata/poe2/omens.tsv
   txtdata/poe2/passive_tree.tsv
   txtdata/poe2/quest_tracker.tsv
   txtdata/poe2/skill_looks.tsv

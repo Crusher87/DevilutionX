@@ -41,6 +41,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/craft_state.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/economy.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
@@ -312,7 +313,9 @@ struct LevelConversionData {
 	item.AnimInfo = {};
 	item.AnimInfo.numberOfFrames = file.NextLENarrow<int32_t, int8_t>();
 	item.AnimInfo.currentFrame = file.NextLENarrow<int32_t, int8_t>(-1);
-	file.Skip(8); // Skip _iAnimWidth and _iAnimWidth2
+	// _iAnimWidth and _iAnimWidth2, or a POE2 item's crafting extension.
+	std::array<uint8_t, CraftExtensionSaveSize> extensionBytes {};
+	file.NextBytes(extensionBytes.data(), extensionBytes.size());
 	readCraft(4); // Unused since 1.02
 	item.selectionRegion = static_cast<SelectionRegion>(file.NextLE<uint8_t>());
 	readCraft(3); // Alignment
@@ -413,6 +416,11 @@ struct LevelConversionData {
 		item._iDamAcFlags = ItemSpecialEffectHf::None;
 	UpdateHellfireFlag(item, item._iIName);
 	item._iPoe2Craft = (item.dwBuff & CF_POE2) != 0 ? UnpackCraftState(craftBytes) : Poe2Craft {};
+	if ((item.dwBuff & CF_POE2) != 0)
+		UnpackCraftExtension(extensionBytes, item._iPoe2Craft);
+	// POE2 Mashup: an item saved before the runes rework gets today's augment and essence ids.
+	if (gbIsPoe2)
+		ConvertLegacyCraftingIds(item);
 	RestoreRareItemPowers(item);
 	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
 	LockCasterWeaponMods(item);
@@ -1239,7 +1247,8 @@ void SaveItem(SaveHelper &file, const Item &item)
 	}
 
 	// POE2 Mashup: crafting state goes in the alignment bytes.
-	const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(SavedCraftState(item));
+	const Poe2Craft savedCraft = SavedCraftState(item);
+	const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(savedCraft);
 	size_t craftWritten = 0;
 	const auto writeCraft = [&](size_t size) {
 		file.WriteBytes(&craftBytes[craftWritten], size);
@@ -1255,10 +1264,15 @@ void SaveItem(SaveHelper &file, const Item &item)
 	writeCraft(4); // Skip pointer _iAnimData
 	file.WriteLE<int32_t>(item.AnimInfo.numberOfFrames);
 	file.WriteLE<int32_t>(item.AnimInfo.currentFrame + 1);
-	// write _iAnimWidth for vanilla compatibility
-	file.WriteLE<int32_t>(ItemAnimWidth);
-	// write _iAnimWidth2 for vanilla compatibility
-	file.WriteLE<int32_t>(CalculateSpriteTileCenterX(ItemAnimWidth));
+	// POE2 Mashup: a POE2 item's crafting extension, when it has one, goes where the anim widths are.
+	if (const auto extension = (item.dwBuff & CF_POE2) != 0 ? PackCraftExtension(savedCraft) : std::nullopt) {
+		file.WriteBytes(extension->data(), extension->size());
+	} else {
+		// write _iAnimWidth for vanilla compatibility
+		file.WriteLE<int32_t>(ItemAnimWidth);
+		// write _iAnimWidth2 for vanilla compatibility
+		file.WriteLE<int32_t>(CalculateSpriteTileCenterX(ItemAnimWidth));
+	}
 	writeCraft(4); // _delFlag, unused since 1.02
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(item.selectionRegion));
 	writeCraft(3); // Alignment

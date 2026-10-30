@@ -13,12 +13,15 @@
  * it was made, quirks too: the socketed jewel's increased damage comes back doubled (pl 32 for its 16%), while the
  * same kind of jewel in the bag keeps its own.
  */
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <initializer_list>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -42,9 +45,12 @@
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/craft_state.hpp"
+#include "poe2/crafting_items.hpp"
+#include "poe2/currency.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
@@ -199,6 +205,53 @@ public:
 		item.dwBuff |= CF_POE2;
 		devilution::MakeBeltUnique(item, id);
 		return item;
+	}
+
+	/** An essence, rune, soul core or talisman with the variant, as a save from before the runes rework holds it. */
+	static Item MakeCraftingItem(item_misc_id miscId, uint8_t variant)
+	{
+		Item item {};
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iMiscId == miscId && AllItemsList[i].dropRate > 0) {
+				InitializeItem(item, static_cast<_item_indexes>(i));
+				break;
+			}
+		}
+		EXPECT_FALSE(item.isEmpty()) << static_cast<int>(miscId);
+		item.dwBuff |= CF_POE2;
+		SetCraftingItemVariant(item, variant);
+		FinishCraftingItem(item);
+		return item;
+	}
+
+	/** The item with an augment in each of its sockets, the way the Artificer's Orb and the augment put them there. */
+	static Item Socketed(Item item, std::initializer_list<AugmentId> augments)
+	{
+		for (const AugmentId augment : augments) {
+			EXPECT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Artificer, *MyPlayer, item));
+			EXPECT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Augment, *MyPlayer, item, static_cast<uint8_t>(augment)));
+		}
+		return item;
+	}
+
+	/** Saves the loaded hero, stash and town floor again, with today's code. */
+	static void SaveAgain()
+	{
+		pfile_write_hero(/*writeGameData=*/false);
+		Stash.dirty = true;
+		sfile_write_stash();
+		pfile_save_level();
+	}
+
+	/** The snapshot without its crafting bytes, which change when ids convert. */
+	static std::string WithoutCraftBytes(const std::string &snapshot)
+	{
+		std::string out;
+		for (const std::string &line : Lines(snapshot)) {
+			if (line.rfind("  craft", 0) != 0)
+				out += line + "\n";
+		}
+		return out;
 	}
 
 	static Item MakeBase(std::string_view name)
@@ -459,6 +512,171 @@ TEST_F(Poe2SaveFixtureTest, GoldenSaveLoadsAsRecorded)
 	const std::string snapshot = Snapshot();
 	for (const std::string_view kind : { "body ", "bag ", "belt ", "jewel ", "swap ", "stash ", "ground " })
 		EXPECT_NE(snapshot.find(kind), std::string::npos) << kind;
+}
+
+TEST_F(Poe2SaveFixtureTest, GoldenSaveSavedAgainLoadsTheSame)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	const std::string fixtures = paths::BasePath() + std::string(FixtureFolder);
+	ASSERT_TRUE(CopyFile(fixtures + "hero.sv", pfile_hero_save_path()));
+	ASSERT_TRUE(CopyFile(fixtures + "stash.sv", pfile_stash_save_path()));
+	Load();
+	const std::string first = Snapshot();
+	SaveAgain();
+	Load();
+	const std::vector<std::string> expected = Lines(first);
+	const std::vector<std::string> actual = Lines(Snapshot());
+	ASSERT_EQ(expected.size(), actual.size());
+	for (size_t i = 0; i < expected.size(); i++) {
+		EXPECT_EQ(expected[i], actual[i]) << "line " << i + 1;
+		if (expected[i] != actual[i])
+			break;
+	}
+}
+
+/**
+ * Runes rework, step 2: a save from before it holds only the legacy augment and essence ids, packed narrow. Today's
+ * code writes such an item exactly as the old code did (the narrow layout is unchanged), so a hero saved with them
+ * stands for an old save. Loading gives every place a save holds items (bag, worn gear, stash, floor) today's ids,
+ * with the same stats; saving that writes the wide layout, which loads the same again.
+ */
+TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Sorcerer;
+	CopyUtf8(info.name, "Runes", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	player._pgfxnum = 0;
+	InitCursor();
+
+	// Worn: body armour with a rune and a soul core, and a caster staff with a rune and a talisman.
+	player.InvBody[INVLOC_CHEST] = Socketed(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::WindRune, AugmentId::HeartCore });
+	player.InvBody[INVLOC_HAND_LEFT] = Socketed(Make("Gelid Staff", 201, ITEM_QUALITY_RARE, 80), { AugmentId::EmberRune, AugmentId::HunterTalisman });
+	for (const int slot : { INVLOC_CHEST, INVLOC_HAND_LEFT }) {
+		ASSERT_EQ(player.InvBody[slot]._iPoe2Craft.sockets, 2);
+		ASSERT_EQ(PackCraftState(player.InvBody[slot]._iPoe2Craft)[0], 0xC2) << "packed as before the runes rework";
+	}
+	// The bag: a helmet with a soul core, runes and essences of the first and the last legacy kinds.
+	const std::vector<Item> bag = {
+		Socketed(Make("Iron Cap", 101, ITEM_QUALITY_RARE, 60), { AugmentId::KeenCore }),
+		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::IronRune)),
+		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::GuardianTalisman)),
+		MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Vigor, EssenceTier::Lesser)),
+		MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Summoning, EssenceTier::Perfect)),
+	};
+	for (const Item &item : bag)
+		ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+	// The stash: a rune and an essence in the currency tab, and armour with a soul core.
+	Stash = {};
+	StashTabs.reset();
+	const std::vector<Item> stash = {
+		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::StormRune)),
+		MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Warding, EssenceTier::Greater)),
+		Socketed(Make("Leather Vest", 401, ITEM_QUALITY_RARE, 50), { AugmentId::MindCore }),
+	};
+	for (const Item &item : stash)
+		ASSERT_TRUE(AutoPlaceItemInStash(item, true)) << item._iIName;
+	Stash.dirty = true;
+	// The town floor: a rune and a sword with one.
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	const std::vector<Item> ground = {
+		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::FrostRune)),
+		Socketed(Make("Shortsword", 502, ITEM_QUALITY_RARE, 40), { AugmentId::IronRune }),
+	};
+	for (const Item &item : ground) {
+		const int ii = ActiveItemCount;
+		ActiveItems[ii] = static_cast<uint8_t>(ii);
+		Items[ii] = item;
+		Items[ii].position = { 60 + ii, 70 };
+		dItem[60 + ii][70] = static_cast<int8_t>(ii + 1);
+		ActiveItemCount++;
+	}
+	FreeCursor();
+	const std::string saved = Snapshot();
+	std::vector<std::optional<unsigned>> stashSlots;
+	for (const Item &item : Stash.stashList)
+		stashSlots.push_back(CurrencyFixedSlot(item));
+	pfile_write_hero(/*writeGameData=*/false);
+	sfile_write_stash();
+	pfile_save_level();
+
+	Load();
+	const std::string loaded = Snapshot();
+	// Every item came back with the same stats and names.
+	EXPECT_EQ(WithoutCraftBytes(loaded), WithoutCraftBytes(saved));
+	// And today's ids.
+	const auto expectSockets = [](const Item &item, std::initializer_list<AugmentId> augments) {
+		ASSERT_EQ(item._iPoe2Craft.sockets, augments.size()) << item._iIName;
+		size_t i = 0;
+		bool wide = false;
+		for (const AugmentId augment : augments) {
+			EXPECT_EQ(item._iPoe2Craft.augments[i++], static_cast<uint8_t>(augment)) << item._iIName;
+			wide = wide || static_cast<uint8_t>(augment) > NarrowMaxAugmentId;
+		}
+		// Ids up to 15 still pack narrow.
+		EXPECT_EQ(PackCraftState(item._iPoe2Craft)[0], wide ? 0xC3 : 0xC2) << item._iIName;
+	};
+	expectSockets(player.InvBody[INVLOC_CHEST], { AugmentId::LesserShael, AugmentId::LordOfThePit });
+	expectSockets(player.InvBody[INVLOC_HAND_LEFT], { AugmentId::LesserRal, AugmentId::RelicOfRakkis });
+	std::vector<AugmentId> augments;
+	std::vector<uint8_t> essences;
+	bool sawHelmet = false;
+	for (int i = 0; i < player._pNumInv; i++) {
+		const Item &item = player.InvList[i];
+		if (item._iMiscId == IMISC_AUGMENT)
+			augments.push_back(GetAugmentId(item));
+		else if (item._iMiscId == IMISC_ESSENCE)
+			essences.push_back(CraftingItemVariant(item));
+		else if (item._iPoe2Craft.sockets == 1 && item._itype == ItemType::Helm) {
+			expectSockets(item, { AugmentId::StareyeTheWitch });
+			sawHelmet = true;
+		}
+	}
+	EXPECT_TRUE(sawHelmet);
+	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::LesserOhm), augments.end());
+	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::RelicOfAkarat), augments.end());
+	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Body, EssenceTier::Lesser)), essences.end());
+	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Command, EssenceTier::Perfect)), essences.end());
+	ASSERT_EQ(Stash.stashList.size(), stashSlots.size());
+	for (size_t i = 0; i < Stash.stashList.size(); i++) {
+		const Item &item = Stash.stashList[i];
+		EXPECT_EQ(CurrentAugmentId(GetAugmentId(item)), GetAugmentId(item));
+		EXPECT_EQ(CurrentEssenceKind(GetEssenceKind(item)), GetEssenceKind(item));
+		// The currency tab keeps them in the places they had.
+		EXPECT_EQ(CurrencyFixedSlot(item), stashSlots[i]) << item._iIName;
+		if (item._iClass == ICLASS_ARMOR)
+			expectSockets(item, { AugmentId::TheDefiler });
+	}
+	ASSERT_EQ(ActiveItemCount, 2);
+	EXPECT_EQ(GetAugmentId(Items[ActiveItems[0]]), AugmentId::LesserThul);
+	expectSockets(Items[ActiveItems[1]], { AugmentId::LesserOhm });
+
+	// Saved in the wide layout, it loads the same again.
+	SaveAgain();
+	Load();
+	EXPECT_EQ(Snapshot(), loaded);
+
+	// The crafting extension rides in the item save's anim widths.
+	const std::array<uint8_t, CraftExtensionSize> extension { 9, 0, 0x80, 0, 0xFF, 1 };
+	MyPlayer->InvBody[INVLOC_CHEST]._iPoe2Craft.extension = extension;
+	SaveAgain();
+	Load();
+	EXPECT_EQ(MyPlayer->InvBody[INVLOC_CHEST]._iPoe2Craft.extension, extension);
+	EXPECT_EQ(Snapshot(), loaded);
 }
 
 } // namespace

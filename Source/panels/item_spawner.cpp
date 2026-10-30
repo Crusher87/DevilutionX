@@ -560,6 +560,9 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 			switch (data.iMiscId) {
 			case IMISC_ESSENCE:
 				for (uint8_t kind = 1; kind < static_cast<uint8_t>(EssenceKind::Count); kind++) {
+					// A legacy kind is listed as the kind it became.
+					if (CurrentEssenceKind(static_cast<EssenceKind>(kind)) != static_cast<EssenceKind>(kind))
+						continue;
 					for (uint8_t tier = 0; tier < static_cast<uint8_t>(EssenceTier::Count); tier++)
 						addVariant(EssenceVariant(static_cast<EssenceKind>(kind), static_cast<EssenceTier>(tier)));
 				}
@@ -569,8 +572,10 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 					addVariant(omen);
 				break;
 			case IMISC_AUGMENT:
-				for (uint8_t augment = 1; augment < static_cast<uint8_t>(AugmentId::Count); augment++)
-					addVariant(augment);
+				for (uint8_t augment = 1; augment < static_cast<uint8_t>(AugmentId::Count); augment++) {
+					if (CurrentAugmentId(static_cast<AugmentId>(augment)) == static_cast<AugmentId>(augment))
+						addVariant(augment);
+				}
 				break;
 			default:
 				for (uint8_t catalyst = 1; catalyst < static_cast<uint8_t>(Catalyst::Count); catalyst++)

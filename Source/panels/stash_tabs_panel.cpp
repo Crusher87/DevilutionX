@@ -906,7 +906,8 @@ void BuildCurrencyView(TabView &view, unsigned page)
 		const CurrencySectionRange range = GetCurrencySection(CurrencySection::Essences);
 		constexpr const char *TierNames[] = { N_("Lesser"), N_("Normal"), N_("Greater"), N_("Perfect") };
 		constexpr unsigned Tiers = std::size(TierNames);
-		const unsigned kinds = static_cast<unsigned>(EssenceKind::Count) - 1;
+		// The legacy kinds' places, which hold the kinds they became.
+		const auto kinds = static_cast<unsigned>(LegacyEssenceKindCount);
 		for (unsigned block = 0; block * 6 < kinds; block++) {
 			const int top = 50 + (static_cast<int>(block) * 134);
 			view.labels.push_back({ At(15, top, 290, 12), block == 0 ? std::string(_("Essences")) : std::string(_("Essences, continued")) });
