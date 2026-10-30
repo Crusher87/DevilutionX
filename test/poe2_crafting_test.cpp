@@ -609,6 +609,126 @@ TEST_F(Poe2CraftingTest, CraftingItemsGetAKindAndName)
 	}
 }
 
+TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
+{
+	// The rows crafting_items.cpp held before they moved to essences.tsv, omens.tsv and augments.tsv.
+	struct OldEssence {
+		EssenceKind kind;
+		std::string_view name;
+		std::string_view family;
+	};
+	const OldEssence essences[] = {
+		{ EssenceKind::Vigor, "Vigor", "maximum_life" },
+		{ EssenceKind::Clarity, "Clarity", "maximum_mana" },
+		{ EssenceKind::Ember, "Ember", "fire_resistance" },
+		{ EssenceKind::Frost, "Frost", "cold_resistance" },
+		{ EssenceKind::Storm, "Storm", "lightning_resistance" },
+		{ EssenceKind::Might, "Might", "local_increased_physical" },
+		{ EssenceKind::Celerity, "Celerity", "attack_speed" },
+		{ EssenceKind::Sorcery, "Sorcery", "cast_speed" },
+		{ EssenceKind::Precision, "Precision", "accuracy_rating" },
+		{ EssenceKind::Warding, "Warding", "all_elemental_resistance" },
+		{ EssenceKind::Spirit, "Spirit", "spirit_flat" },
+		{ EssenceKind::Summoning, "Summoning", "minion_damage" },
+	};
+	ASSERT_EQ(std::size(essences), static_cast<size_t>(EssenceKind::Count) - 1);
+	for (const OldEssence &old : essences) {
+		const Essence &essence = GetEssence(old.kind);
+		EXPECT_EQ(essence.kind, old.kind);
+		EXPECT_EQ(essence.name, old.name);
+		EXPECT_EQ(essence.family, old.family);
+	}
+
+	struct OldOmen {
+		OmenId id;
+		std::string_view name;
+		OmenTrigger trigger;
+		int dropLevel;
+		int weight;
+		std::string_view description;
+	};
+	const OldOmen omens[] = {
+		{ OmenId::SinistralExaltation, "Omen of Sinistral Exaltation", OmenTrigger::Exalt, 40, 100, "Your next Exalted Orb adds only a prefix" },
+		{ OmenId::DextralExaltation, "Omen of Dextral Exaltation", OmenTrigger::Exalt, 40, 100, "Your next Exalted Orb adds only a suffix" },
+		{ OmenId::GreaterExaltation, "Omen of Greater Exaltation", OmenTrigger::Exalt, 65, 25, "Your next Exalted Orb adds two modifiers" },
+		{ OmenId::HomogenisingExaltation, "Omen of Homogenising Exaltation", OmenTrigger::Exalt, 70, 18, "Your next Exalted Orb adds a modifier of a kind the item already has" },
+		{ OmenId::DiscordantExaltation, "Omen of Discordant Exaltation", OmenTrigger::Exalt, 70, 18, "Your next Exalted Orb adds a modifier of a kind the item doesn't have" },
+		{ OmenId::SinistralAnnulment, "Omen of Sinistral Annulment", OmenTrigger::Annul, 45, 85, "Your next Orb of Annulment removes only a prefix" },
+		{ OmenId::DextralAnnulment, "Omen of Dextral Annulment", OmenTrigger::Annul, 45, 85, "Your next Orb of Annulment removes only a suffix" },
+		{ OmenId::Whittling, "Omen of Whittling", OmenTrigger::Annul, 58, 45, "Your next Orb of Annulment removes the lowest level modifier" },
+		{ OmenId::SinistralErasure, "Omen of Sinistral Erasure", OmenTrigger::Chaos, 50, 70, "Your next Chaos Orb removes only a prefix" },
+		{ OmenId::DextralErasure, "Omen of Dextral Erasure", OmenTrigger::Chaos, 50, 70, "Your next Chaos Orb removes only a suffix" },
+		{ OmenId::SinistralPreservation, "Omen of Sinistral Preservation", OmenTrigger::Chaos, 68, 25, "Your next Chaos Orb never removes a prefix" },
+		{ OmenId::DextralPreservation, "Omen of Dextral Preservation", OmenTrigger::Chaos, 68, 25, "Your next Chaos Orb never removes a suffix" },
+		{ OmenId::SinistralCrystallisation, "Omen of Sinistral Crystallisation", OmenTrigger::PerfectEssence, 68, 30, "Your next Perfect Essence removes only a prefix" },
+		{ OmenId::DextralCrystallisation, "Omen of Dextral Crystallisation", OmenTrigger::PerfectEssence, 68, 30, "Your next Perfect Essence removes only a suffix" },
+		{ OmenId::Severance, "Omen of Severance", OmenTrigger::PerfectEssence, 74, 14, "Your next Perfect Essence removes the highest level modifier" },
+		{ OmenId::Mercy, "Omen of Mercy", OmenTrigger::Chance, 75, 8, "Your next failed Orb of Chance leaves the item whole" },
+		{ OmenId::Corruption, "Omen of Corruption", OmenTrigger::Corrupt, 72, 12, "Your next Vaal Orb always changes the item" },
+		{ OmenId::Artificer, "Omen of the Artificer", OmenTrigger::Corrupt, 78, 6, "Your next Vaal Orb favours adding a socket" },
+		{ OmenId::SinistralNecromancy, "Omen of Sinistral Necromancy", OmenTrigger::Desecrate, 65, 20, "Your next desecration reveals a prefix" },
+		{ OmenId::DextralNecromancy, "Omen of Dextral Necromancy", OmenTrigger::Desecrate, 65, 20, "Your next desecration reveals a suffix" },
+		{ OmenId::Kinship, "Omen of Kinship", OmenTrigger::Desecrate, 75, 10, "One revealed choice shares a kind with the item's modifiers" },
+	};
+	ASSERT_EQ(std::size(omens), static_cast<size_t>(OmenId::Count) - 1);
+	for (const OldOmen &old : omens) {
+		const Omen &omen = GetOmen(old.id);
+		EXPECT_EQ(omen.id, old.id);
+		EXPECT_EQ(omen.name, old.name);
+		EXPECT_EQ(omen.trigger, old.trigger) << old.name;
+		EXPECT_EQ(omen.dropLevel, old.dropLevel) << old.name;
+		EXPECT_EQ(omen.weight, old.weight) << old.name;
+		EXPECT_EQ(omen.description, old.description);
+	}
+
+	struct OldAugment {
+		AugmentId id;
+		std::string_view name;
+		int tier;
+		int dropLevel;
+		ModEffect weaponEffect;
+		std::array<int16_t, 2> weaponValues;
+		ModEffect armourEffect;
+		std::array<int16_t, 2> armourValues;
+		UniqueRule rule;
+		int16_t ruleValue;
+		std::string_view weaponText;
+		std::string_view armourText;
+	};
+	const OldAugment augments[] = {
+		{ AugmentId::EmberRune, "Ember Rune", 1, 10, ModEffect::AddedFire, { 4, 9 }, ModEffect::FireResistance, { 12, 0 }, UniqueRule::None, 0, "Adds 4 to 9 fire damage", "+12% to fire resistance" },
+		{ AugmentId::FrostRune, "Frost Rune", 1, 10, ModEffect::MagicResistance, { 12, 0 }, ModEffect::MagicResistance, { 12, 0 }, UniqueRule::None, 0, "+12% to magic resistance", "+12% to magic resistance" },
+		{ AugmentId::StormRune, "Storm Rune", 1, 10, ModEffect::AddedLightning, { 1, 14 }, ModEffect::LightningResistance, { 12, 0 }, UniqueRule::None, 0, "Adds 1 to 14 lightning damage", "+12% to lightning resistance" },
+		{ AugmentId::IronRune, "Iron Rune", 1, 10, ModEffect::PhysicalPercent, { 18, 0 }, ModEffect::DefensePercent, { 18, 0 }, UniqueRule::None, 0, "18% increased physical damage", "18% increased armour, evasion and energy shield" },
+		{ AugmentId::WindRune, "Wind Rune", 1, 15, ModEffect::AttackSpeed, { 5, 0 }, ModEffect::Dexterity, { 8, 0 }, UniqueRule::None, 0, "5% increased attack speed", "+8 to dexterity" },
+		{ AugmentId::HeartCore, "Soul Core of Heart", 2, 30, ModEffect::Life, { 30, 0 }, ModEffect::Life, { 30, 0 }, UniqueRule::None, 0, "+30 to maximum life", "+30 to maximum life" },
+		{ AugmentId::MindCore, "Soul Core of Mind", 2, 30, ModEffect::Mana, { 30, 0 }, ModEffect::Mana, { 30, 0 }, UniqueRule::None, 0, "+30 to maximum mana", "+30 to maximum mana" },
+		{ AugmentId::KeenCore, "Soul Core of Keenness", 2, 30, ModEffect::Accuracy, { 12, 0 }, ModEffect::Accuracy, { 8, 0 }, UniqueRule::None, 0, "+12% chance to hit", "+8% chance to hit" },
+		{ AugmentId::HunterTalisman, "Hunter's Talisman", 3, 45, ModEffect::None, {}, ModEffect::None, {}, UniqueRule::DamageVsRareUnique, 15, "15% more damage against rare and unique monsters", "15% more damage against rare and unique monsters" },
+		{ AugmentId::GuardianTalisman, "Guardian's Talisman", 3, 45, ModEffect::None, {}, ModEffect::None, {}, UniqueRule::LessHitDamage, 6, "6% less damage taken from hits", "6% less damage taken from hits" },
+	};
+	ASSERT_EQ(std::size(augments), static_cast<size_t>(AugmentId::Count) - 1);
+	for (const OldAugment &old : augments) {
+		const Augment &augment = GetAugment(old.id);
+		EXPECT_EQ(augment.id, old.id);
+		EXPECT_EQ(augment.name, old.name);
+		EXPECT_EQ(augment.tier, old.tier) << old.name;
+		EXPECT_EQ(augment.dropLevel, old.dropLevel) << old.name;
+		EXPECT_EQ(augment.weaponEffect, old.weaponEffect) << old.name;
+		EXPECT_EQ(augment.weaponValues, old.weaponValues) << old.name;
+		// Caster weapons took the weapon column until the staff column was split off.
+		EXPECT_EQ(augment.staffEffect, old.weaponEffect) << old.name;
+		EXPECT_EQ(augment.staffValues, old.weaponValues) << old.name;
+		EXPECT_EQ(augment.staffText, old.weaponText);
+		EXPECT_EQ(augment.armourEffect, old.armourEffect) << old.name;
+		EXPECT_EQ(augment.armourValues, old.armourValues) << old.name;
+		EXPECT_EQ(augment.rule, old.rule) << old.name;
+		EXPECT_EQ(augment.ruleValue, old.ruleValue) << old.name;
+		EXPECT_EQ(augment.weaponText, old.weaponText);
+		EXPECT_EQ(augment.armourText, old.armourText);
+	}
+}
+
 TEST_F(Poe2CraftingTest, CraftStateWideLayoutRoundTrips)
 {
 	// Every family in memory sits below the desecrated ids, so the save layouts never confuse them.

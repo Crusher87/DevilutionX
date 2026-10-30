@@ -1,0 +1,13 @@
+id	name	family
+Vigor	Vigor	maximum_life
+Clarity	Clarity	maximum_mana
+Ember	Ember	fire_resistance
+Frost	Frost	cold_resistance
+Storm	Storm	lightning_resistance
+Might	Might	local_increased_physical
+Celerity	Celerity	attack_speed
+Sorcery	Sorcery	cast_speed
+Precision	Precision	accuracy_rating
+Warding	Warding	all_elemental_resistance
+Spirit	Spirit	spirit_flat
+Summoning	Summoning	minion_damage

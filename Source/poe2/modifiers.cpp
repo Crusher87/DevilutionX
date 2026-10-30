@@ -11,6 +11,7 @@
 #include "items.h"
 #include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/minion_gems.hpp"
@@ -293,6 +294,8 @@ void LoadModifierData()
 	LoadPoe2Uniques();
 	// Clears the table in Diablo mode and never fails there.
 	LoadAreaLevels();
+	// The same.
+	LoadCraftingItemData();
 	if (!gbIsPoe2)
 		return;
 

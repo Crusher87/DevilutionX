@@ -2,7 +2,8 @@
  * @file poe2/crafting_items.hpp
  *
  * POE2 Mashup crafting items that come in kinds: essences, omens, augments (runes, soul cores and talismans)
- * and catalysts. Each kind shares one item base and keeps which one it is in its create flags.
+ * and catalysts. Each kind shares one item base and keeps which one it is in its create flags. The essences, omens
+ * and augments come from txtdata/poe2/essences.tsv, omens.tsv and augments.tsv, one row per id in id order.
  */
 #pragma once
 
@@ -31,6 +32,8 @@ void SetCraftingItemVariant(Item &item, uint8_t variant);
 void FinishCraftingItem(Item &item);
 /** @brief Tooltip lines saying what the essence, omen, augment or catalyst does. */
 std::vector<std::string> CraftingItemText(const Item &item);
+/** @brief Reads the essence, omen and augment tables; LoadModifierData calls it. They are empty outside POE2 mode. */
+void LoadCraftingItemData();
 
 enum class EssenceKind : uint8_t {
 	None,
@@ -58,10 +61,10 @@ enum class EssenceTier : uint8_t {
 };
 
 struct Essence {
-	EssenceKind kind;
-	std::string_view name;
+	EssenceKind kind = EssenceKind::None;
+	std::string name;
 	/** @brief The modifier family it guarantees. */
-	std::string_view family;
+	std::string family;
 };
 
 /** @brief POE2 drop level of each essence tier, its weight, and the lowest modifier level it adds. */
@@ -112,12 +115,12 @@ enum class OmenTrigger : uint8_t {
 };
 
 struct Omen {
-	OmenId id;
-	std::string_view name;
-	OmenTrigger trigger;
-	int dropLevel;
-	int weight;
-	std::string_view description;
+	OmenId id = OmenId::None;
+	std::string name;
+	OmenTrigger trigger = OmenTrigger::Exalt;
+	int dropLevel = 0;
+	int weight = 0;
+	std::string description;
 };
 
 const Omen &GetOmen(OmenId id);
@@ -139,21 +142,24 @@ enum class AugmentId : uint8_t {
 };
 
 struct Augment {
-	AugmentId id;
-	std::string_view name;
+	AugmentId id = AugmentId::None;
+	std::string name;
 	/** @brief 1 for runes, 2 for soul cores, 3 for talismans; an item takes one talisman. */
-	int tier;
-	int dropLevel;
-	/** @brief What it does in a weapon, and in armour. */
-	ModEffect weaponEffect;
-	std::array<int16_t, 2> weaponValues;
-	ModEffect armourEffect;
-	std::array<int16_t, 2> armourValues;
+	int tier = 0;
+	int dropLevel = 0;
+	/** @brief What it does in a martial weapon, in a caster weapon (a staff, wand or sceptre of the rework), and in armour. */
+	ModEffect weaponEffect = ModEffect::None;
+	std::array<int16_t, 2> weaponValues {};
+	ModEffect staffEffect = ModEffect::None;
+	std::array<int16_t, 2> staffValues {};
+	ModEffect armourEffect = ModEffect::None;
+	std::array<int16_t, 2> armourValues {};
 	/** @brief A rule it adds anywhere instead, for talismans. */
-	UniqueRule rule;
-	int16_t ruleValue;
-	std::string_view weaponText;
-	std::string_view armourText;
+	UniqueRule rule = UniqueRule::None;
+	int16_t ruleValue = 0;
+	std::string weaponText;
+	std::string staffText;
+	std::string armourText;
 };
 
 const Augment &GetAugment(AugmentId id);
