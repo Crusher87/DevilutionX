@@ -16,7 +16,6 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
-#include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
@@ -181,8 +180,6 @@ void KeepRevivedAlive(Player &player)
 	Candidate.valid = false;
 	if (!position)
 		return;
-	// Leoric's Road: Revive comes first under the cap it shares with the King's dead.
-	MakeRoomForRevive(player, revived, limit);
 	RevivedStats stats = Candidate.stats;
 	const int lifePercent = SupportMinionLifePercent(player, PersistentSkill::Revive) * (100 + (5 * GemLevel(player, PersistentSkill::Revive))) / 100;
 	stats.life = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(stats.life.raw()) * lifePercent / 100, INT32_MAX / 4)));

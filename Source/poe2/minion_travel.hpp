@@ -5,8 +5,8 @@
  * "they should follow me like POE2"). Skeletons and wolves of the skeleton gems and a sceptre's granted skill, golems and
  * Revive's monsters come off the level alive as the hero leaves and stand beside the hero on arrival, with the life they
  * had. The game keeps no monsters in town (they aren't drawn, moved or let past there), so while the hero is in town
- * they wait with the hero, in the hero's save too, and come back on the next dungeon level. Raging spirits, illusions
- * and the King's dead last a few seconds or belong to their road, so they don't come. Single player for now: the
+ * they wait with the hero, in the hero's save too, and come back on the next dungeon level. Raging spirits and illusions
+ * last a few seconds, so they don't come. Single player for now: the
  * spawns go out over the network, but Revive's don't, and the removal from the old level isn't sent.
  */
 #pragma once

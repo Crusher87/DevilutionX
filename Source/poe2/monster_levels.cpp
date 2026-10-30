@@ -314,8 +314,6 @@ int Poe2MinionLevel(const Monster &minion)
 {
 	if (!gbIsPoe2)
 		return 0;
-	if ((minion.flags & MFLAG_KINGS_DEAD) != 0)
-		return CurrentAreaLevel();
 	if (static_cast<size_t>(minion.goalVar3) >= Players.size())
 		return 0;
 	const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];

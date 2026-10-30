@@ -104,7 +104,7 @@ struct RoadEnds {
 };
 std::array<std::optional<RoadEnds>, static_cast<size_t>(ProfaneRoad::Count)> Roads;
 
-/** @brief Reads a node's road column: "leoric:3" is the third node from Leoric's Road's door. */
+/** @brief Reads a node's road column: "leoric:3" is the third node from the Butcher's Road's door. */
 void ParseRoad(std::string_view text, PassiveNode &node)
 {
 	const size_t colon = text.find(':');
@@ -113,7 +113,7 @@ void ParseRoad(std::string_view text, PassiveNode &node)
 	const std::string_view name = text.substr(0, colon);
 	const std::optional<int> step = ParseInt(text.substr(colon + 1));
 	std::optional<ProfaneRoad> road;
-	if (name == "leoric")
+	if (name == "leoric" || name == "butcher")
 		road = ProfaneRoad::Leoric;
 	else if (name == "bartuc")
 		road = ProfaneRoad::Bartuc;
@@ -1099,7 +1099,7 @@ constexpr RuleCap RuleCaps[] {
 	{ UniqueRule::StaffToLightning, INT16_MIN, 100 },
 	{ UniqueRule::Cull, INT16_MIN, 20 },
 	{ UniqueRule::ArrowPierce, INT16_MIN, 5 },
-	// Iron Draw and the Black Curse together: arrows can't take more than the whole bonus.
+	// Iron Draw and the Larder together: arrows can't take more than the whole bonus.
 	{ UniqueRule::ArrowDamageMod, INT16_MIN, 100 },
 };
 
@@ -1158,7 +1158,7 @@ int PassiveWeaponDamage(const Player &player, const PassiveTotals &passives)
 	}
 	switch (weapon->_itype) {
 	case ItemType::Bow:
-		// The Sisters' Gift: staff training carries over to the bow. Leoric's pact: two-handed training does too.
+		// The Sisters' Gift: staff training carries over to the bow. The Larder: two-handed training does too.
 		return passive(PassiveStat::BowDamage) + (passive(PassiveStat::StaffAppliesToBow) > 0 ? passive(PassiveStat::StaffDamage) : 0)
 		    + (passive(PassiveStat::KingsDeadPact) > 0 ? passive(PassiveStat::TwoHandDamage) : 0);
 	default:
@@ -1384,12 +1384,13 @@ std::vector<PassiveStatLine> PassiveStatLines(PassiveStat stat, int value)
 	const auto line = [](std::string_view text, bool price = false) { return PassiveStatLine { std::string(text), price }; };
 	switch (stat) {
 	case PassiveStat::DeadDoNotRest:
-		return { line(_("The dead do not rest: 1 in 4 of your kills rise again as a skeleton, hostile, at half Life"), true),
-			line(_("Culled monsters stay dead, and any hit in a rising skeleton's first second puts it down for good")) };
+		return { line(_("When you Cull an enemy, a chained hook flies from it to the nearest other enemy within 6 tiles that you can see, and pulls it to you")),
+			line(_("Normal and Magic monsters are dragged to your side. Rare monsters are pulled 1 tile and slowed by 30% for 1.5 seconds. Unique monsters don't move, but flinch and can't attack for 0.5 seconds")),
+			line(_("Fresh meat draws a crowd: each Cull lets out the Butcher's cry, and every enemy within 8 tiles of you hunts you, even through walls"), true) };
 	case PassiveStat::KingsDeadPact:
 		return { line(_("Increases to Two Handed Damage also apply to Bows, and Fresh Meat works with Bow kills")),
-			line(_("The King's dead: monsters you Cull, and skeletons you put down, rise for you for 12 seconds")),
-			line(_("1 in 3 of your other kills rise against you instead, at full Life"), true) };
+			line(_("When your arrow Culls an enemy, the hook takes the nearest enemy behind it along the arrow's path first")),
+			line(_("The call gets louder: the cry reaches 16 tiles, and each enemy that answers it or is caught on the hook is enraged for 3 seconds, moving and attacking 20% faster"), true) };
 	case PassiveStat::BartucsHunger:
 		return { line(_("A quarter of your skills' Mana costs is paid in Life"), true) };
 	case PassiveStat::PaidInBlood:

@@ -13,6 +13,7 @@
 #include "poe2/meta_gems.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/profane_roads.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -39,10 +40,10 @@ bool CanTakeMapScaling(const Monster &monster)
 	return type != MT_GOLEM && type != MT_DIABLO && type != MT_NAKRUL;
 }
 
-/** @brief The magic and rare roll: a monster risen on Leoric's Road never rolls one. */
+/** @brief The magic and rare roll. */
 bool CanRollRarity(const Monster &monster)
 {
-	return CanTakeMapScaling(monster) && (monster.flags & MFLAG_RISEN) == 0;
+	return CanTakeMapScaling(monster);
 }
 
 uint8_t ChooseMods(uint32_t hash, int count)
@@ -331,16 +332,11 @@ bool MonsterSkipsTick(Monster &monster)
 	if (!gbIsPoe2 || monster.hasNoLife())
 		return false;
 	Poe2MonsterState &state = monster.poe2;
-	// Leoric's Road: a risen monster can't act in its first second; a skeleton's rising animation plays meanwhile.
-	if (state.risingTicks > 0) {
-		state.risingTicks--;
-		if (monster.mode != MonsterMode::SpecialStand)
-			return true;
-	}
-	if (IsMonsterImmobilized(monster))
+	// The Butcher's Road: a monster on the hook can't act while it is dragged in.
+	if (IsMonsterImmobilized(monster) || IsHooked(monster))
 		return true;
-	// Bleeding from some uniques hinders, slowing like a chill; the stronger slow counts.
-	const int slow = std::max<int>(state.chillTicks > 0 ? state.chillPercent : 0, MonsterHinderPercent(monster));
+	// Bleeding from some uniques hinders, slowing like a chill, and so does the hook on a rare; the strongest slow counts.
+	const int slow = std::max({ state.chillTicks > 0 ? static_cast<int>(state.chillPercent) : 0, MonsterHinderPercent(monster), HookSlowPercent(monster) });
 	if (slow == 0)
 		return false;
 	state.chillCarry = static_cast<uint8_t>(state.chillCarry + slow);

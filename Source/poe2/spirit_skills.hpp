@@ -61,7 +61,7 @@ void OnMinionHitMonster(Player &owner, const Monster &minion, Monster &target, F
 bool ShadowWarriorActive(const Player &player);
 /** @brief A monster the local player hit died; Revive may raise it. */
 void OnReviveCandidateKilled(const Player &player, const Monster &monster);
-/** @brief How many minions Revive keeps up (0 when it isn't up); the King's dead share the larger of this and 3. */
+/** @brief How many minions Revive keeps up (0 when it isn't up). */
 int ReviveMinionLimit(const Player &player);
 /** @brief How many Revive keeps up when it is on: 1, one more each 15 character levels up to 4, and what supports add. */
 int ReviveMinionCount(const Player &player);

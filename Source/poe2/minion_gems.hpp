@@ -114,8 +114,8 @@ bool IsMinionSkill(PersistentSkill skill);
 /** @brief Every minion gem's data: the skeleton gems in MinionCountSkills order, then Wolf Pack, Raging Spirits and Lingering Illusion. */
 std::span<const MinionGemData> MinionGemTable();
 /**
- * @brief The gem of a hero's skeleton: a minion raised by a skeleton gem, not one brought back by Revive or one of the
- * King's dead; nullptr for anything else.
+ * @brief The gem of a hero's skeleton: a minion raised by a skeleton gem, not one brought back by Revive; nullptr for
+ * anything else.
  */
 const MinionGemData *MinionGemOf(const Monster &monster);
 

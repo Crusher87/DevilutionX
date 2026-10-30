@@ -210,7 +210,7 @@ void InitMonsterTRN(CMonster &monst)
 	}
 }
 
-void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point position, bool risen = false)
+void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point position)
 {
 	monster.direction = rd;
 	monster.position.tile = position;
@@ -260,9 +260,6 @@ void InitMonster(Monster &monster, Direction rd, size_t typeIndex, Point positio
 	monster.leader = Monster::NoLeader;
 	monster.leaderRelation = LeaderRelation::None;
 	monster.flags = monster.data().abilityFlags;
-	// POE2 Mashup: set before the rarity below, which a risen monster never rolls.
-	if (risen)
-		monster.flags |= MFLAG_RISEN;
 	monster.talkMsg = TEXT_NONE;
 
 	if (monster.ai == MonsterAIID::Gargoyle) {
@@ -904,6 +901,9 @@ void WalkInDirection(Monster &monster, Direction endDir)
 
 void StartAttack(Monster &monster)
 {
+	// POE2 Mashup: the Butcher's Road hook made it flinch; it stands its ground a moment.
+	if (IsFlinching(monster))
+		return;
 	const Direction md = GetMonsterDirection(monster);
 	NewMonsterAnim(monster, MonsterGraphic::Attack, md, AnimationDistributionFlags::ProcessAnimationPending);
 	monster.mode = MonsterMode::MeleeAttack;
@@ -928,7 +928,7 @@ bool OutOfMindRefuses(Monster &monster, MissileID missileType)
 
 void StartRangedAttack(Monster &monster, MissileID missileType, int dam)
 {
-	if (OutOfMindRefuses(monster, missileType))
+	if (IsFlinching(monster) || OutOfMindRefuses(monster, missileType))
 		return;
 	const Direction md = GetMonsterDirection(monster);
 	NewMonsterAnim(monster, MonsterGraphic::Attack, md, AnimationDistributionFlags::ProcessAnimationPending);
@@ -941,7 +941,7 @@ void StartRangedAttack(Monster &monster, MissileID missileType, int dam)
 
 void StartRangedSpecialAttack(Monster &monster, MissileID missileType, int dam)
 {
-	if (OutOfMindRefuses(monster, missileType))
+	if (IsFlinching(monster) || OutOfMindRefuses(monster, missileType))
 		return;
 	const Direction md = GetMonsterDirection(monster);
 	int8_t distributeFramesBeforeFrame = 0;
@@ -958,6 +958,8 @@ void StartRangedSpecialAttack(Monster &monster, MissileID missileType, int dam)
 
 void StartSpecialAttack(Monster &monster)
 {
+	if (IsFlinching(monster))
+		return;
 	const Direction md = GetMonsterDirection(monster);
 	NewMonsterAnim(monster, MonsterGraphic::Special, md);
 	monster.mode = MonsterMode::SpecialMeleeAttack;
@@ -3761,7 +3763,6 @@ void InitLevelMonsters()
 	ClearSupportEffects();
 	ClearSpiritSkills();
 	ClearMinionGems();
-	ClearPendingRises();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -4221,7 +4222,7 @@ void LoadDeltaSpawnedMonster(size_t typeIndex, size_t monsterId, uint32_t seed, 
 	}
 }
 
-void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel, bool risen)
+void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel)
 {
 	SetRndSeed(seed);
 	EnsureMonsterIndexIsActive(monsterId);
@@ -4242,7 +4243,7 @@ void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, s
 	position = freePosition.value_or(position);
 
 	monster.occupyTile(position, false);
-	InitMonster(monster, dir, typeIndex, position, risen);
+	InitMonster(monster, dir, typeIndex, position);
 
 	if (monster.type().type == MT_GOLEM) {
 		InitGolem(monster, golemOwnerPlayerId, golemSpellLevel);
@@ -4363,6 +4364,13 @@ void M_ClearSquares(const Monster &monster)
 	MarkWalkabilityChanged();
 }
 
+void M_StartFlinch(Monster &monster)
+{
+	if (IsAnyOf(monster.mode, MonsterMode::Petrified, MonsterMode::Death) || monster.hasNoLife())
+		return;
+	StartMonsterGotHit(monster);
+}
+
 void M_GetKnockback(Monster &monster, WorldTilePosition attackerStartPos)
 {
 	const Direction dir = GetDirection(attackerStartPos, monster.position.tile);
@@ -4407,18 +4415,16 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		monster.hitPoints = monster.maxHitPoints;
 		return;
 	}
-	// POE2 Mashup: Leoric's Road. A kill may rise again (before the other on-kill effects); a risen monster gives no
-	// reward and runs no on-kill effect, only its death.
-	const bool risen = gbIsPoe2 && IsRisen(monster);
+	// POE2 Mashup: the Butcher's Road, a Cull throws the hook (before the other on-kill effects).
 	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0)
 		OnProfaneRoadKill(*MyPlayer, monster);
-	if (!monster.isPlayerMinion() && !risen) {
+	if (!monster.isPlayerMinion()) {
 		// POE2 Mashup: experience from the level tables; Poe2MonsterExperience applies rarity and map percent once.
 		const unsigned experience = gbIsPoe2 ? Poe2MonsterExperience(monster) : monster.exp(sgGameInitInfo.nDifficulty) * MonsterExperiencePercent(monster) / 100;
 		AddPlrMonstExper(monster.level(sgGameInitInfo.nDifficulty), experience, monster.whoHit);
 	}
 	int goldenDrops = 0;
-	if (gbIsPoe2 && !monster.isPlayerMinion() && !risen && (monster.whoHit & (1 << MyPlayerId)) != 0) {
+	if (gbIsPoe2 && !monster.isPlayerMinion() && (monster.whoHit & (1 << MyPlayerId)) != 0) {
 		goldenDrops = GoldenCharmExtraDrops(*MyPlayer, monster);
 		GainFlaskCharges(*MyPlayer, FlaskChargesForKill(monster));
 		RecoverOnKill(*MyPlayer);
@@ -4445,18 +4451,16 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 	monster.flags &= ~MFLAG_HIDDEN;
 	SetRndSeed(monster.rndItemSeed);
 
-	if (!risen) {
-		SpawnLoot(monster, sendmsg);
-		// POE2 Mashup: in maps, magic and rare monsters may explode, and the map boss completes the map.
-		OnMapMonsterDeath(monster);
-		OnEndgameMonsterKilled(monster, sendmsg);
-		OnMapBossKilled(monster, sendmsg);
-	}
+	SpawnLoot(monster, sendmsg);
+	// POE2 Mashup: in maps, magic and rare monsters may explode, and the map boss completes the map.
+	OnMapMonsterDeath(monster);
+	OnEndgameMonsterKilled(monster, sendmsg);
+	OnMapBossKilled(monster, sendmsg);
 	// POE2 Mashup: each unique monster slain gives the gambler another purchase.
 	if (gbIsPoe2 && monster.isUnique() && !monster.isPlayerMinion() && MyPlayer != nullptr)
 		OnUniqueMonsterKilledForGamble(*MyPlayer);
 	// POE2 Mashup: magic and rare monsters drop more.
-	if (!monster.isPlayerMinion() && !risen) {
+	if (!monster.isPlayerMinion()) {
 		if (gbIsPoe2)
 			SpawnPoe2LootRolls(monster, monster.position.tile, sendmsg, goldenDrops);
 		else
@@ -4902,7 +4906,7 @@ void ProcessMonsters()
 {
 	DeleteMonsterList();
 	ProcessHeralds();
-	// POE2 Mashup: Leoric's Road, the dead rising and the King's dead leaving.
+	// POE2 Mashup: the Butcher's Road, the hook dragging its catch in.
 	ProcessProfaneRoads();
 
 	assert(ActiveMonsterCount <= MaxMonsters);
@@ -4989,7 +4993,8 @@ void ProcessMonsters()
 				monster.animInfo.processAnimation((monster.flags & MFLAG_LOCK_ANIMATION) != 0);
 			}
 			// And a minion left behind hurries after its owner.
-			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster)))
+			// And the Butcher's Road pact's rage hurries it.
+			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster) || EnragedExtraTick(monster)))
 				break;
 		}
 	}
@@ -5524,8 +5529,7 @@ size_t CountSkeletonMinions(const Player &player, _monster_id type)
 	size_t count = 0;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived
-		    && !IsKingsDead(monster))
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived)
 			count++;
 	}
 	return count;
@@ -5535,8 +5539,7 @@ void KillSkeletonMinions(const Player &player, _monster_id type)
 {
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived
-		    && !IsKingsDead(monster))
+		if (monster.type().type == type && monster.isPlayerMinion() && monster.goalVar3 == player.getId() && !monster.hasNoLife() && !monster.poe2.revived)
 			KillGolem(monster);
 	}
 }
@@ -5663,36 +5666,6 @@ void TakeMinionOffLevel(Monster &minion)
 			return;
 		}
 	}
-}
-
-namespace {
-
-constexpr size_t RisenMinionRoom = 4;
-
-} // namespace
-
-Monster *SpawnRisenMonster(Point position, size_t typeIndex)
-{
-	// A rise takes the slot its dead monster just left, so it isn't held to the enemy limit (dense levels pass it), only
-	// to a few slots kept free for the hero's minions.
-	if (ActiveMonsterCount + RisenMinionRoom >= MaxMonsters || typeIndex >= LevelMonsterTypeCount || !MyPlayer->isLevelOwnedByLocalClient())
-		return nullptr;
-	const size_t monsterIndex = ActiveMonsters[ActiveMonsterCount];
-	ActiveMonsterCount += 1;
-	// Single player only: the rise isn't sent to other players.
-	InitializeSpawnedMonster(position, Direction::South, typeIndex, monsterIndex, GetLCGEngineState(), 0, 0, /*risen=*/true);
-	Monster &monster = Monsters[monsterIndex];
-	// Awake and hunting its killer, so it never counts as unaware.
-	monster.activeForTicks = UINT8_MAX;
-	monster.enemy = static_cast<uint8_t>(MyPlayerId);
-	monster.enemyPosition = MyPlayer->position.future;
-	monster.position.last = MyPlayer->position.future;
-	return &monster;
-}
-
-std::optional<size_t> RandomLevelSkeletonType()
-{
-	return GetRandomSkeletonTypeIndex();
 }
 
 bool IsTileFreeForMonster(Point position)

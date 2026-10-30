@@ -147,6 +147,26 @@ namespace {
 
 constexpr auto RightFrameDisplacement = Displacement { DunFrameWidth, 0 };
 
+/** @brief POE2 Mashup: a palette remap that tints every colour, rebuilt when the palette shown changes. */
+struct PaletteTint {
+	std::array<uint8_t, 256> trn;
+	std::array<SDL_Color, 256> builtFor;
+	bool built = false;
+};
+
+/**
+ * @brief Builds the tint (or reuses it while the palette is the same): per channel, its share of the original colour in
+ * percent and what it adds (red, green, blue), matched to the nearest colour of the palette shown now.
+ */
+const uint8_t *TintTRN(PaletteTint &tint, const std::array<int, 6> &mix);
+
+/** @brief POE2 Mashup: the Butcher's Road pact's rage, a deep red on the monster. */
+const uint8_t *EnrageTRN()
+{
+	static PaletteTint tint;
+	return TintTRN(tint, { 100, 60, 40, 0, 40, 0 });
+}
+
 /**
  * @brief POE2 Mashup: magic, rare and unique monsters get a thin outline in their rank's colour.
  *
@@ -158,13 +178,8 @@ std::optional<uint8_t> RankOutlineColor(const Monster &monster, int lightTableIn
 	if (!gbIsPoe2 || lightTableIndex >= LightsMax - 2)
 		return std::nullopt;
 	uint8_t base;
-	// Leoric's Road: the King's dead in a pale bone colour, and the hostile risen in red.
-	if (IsKingsDead(monster)) {
-		base = PAL16_BEIGE;
-	} else if (monster.isPlayerMinion()) {
+	if (monster.isPlayerMinion()) {
 		return std::nullopt;
-	} else if (IsRisen(monster)) {
-		base = PAL16_RED;
 	} else if (monster.isUnique()) {
 		base = PAL16_ORANGE;
 	} else {
@@ -484,6 +499,16 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 		trn = GetStoneTRN();
 	if (HasInfravision(*MyPlayer) && lightTableIndex > 8)
 		trn = GetInfravisionTRN();
+	// POE2 Mashup: the Butcher's Road pact, an enraged monster is drawn red over its own colours, in the light it stands in.
+	if (IsEnraged(monster) && monster.mode != MonsterMode::Petrified && trn != GetInfravisionTRN()) {
+		std::array<uint8_t, 256> enraged;
+		const uint8_t *red = EnrageTRN();
+		const size_t light = std::min<size_t>(static_cast<size_t>(std::max(lightTableIndex, 0)), LightTables.size() - 1);
+		for (size_t i = 0; i < enraged.size(); i++)
+			enraged[i] = trn != nullptr ? red[trn[i]] : LightTables[light][red[i]];
+		ClxDrawTRN(out, targetBufferPosition, sprite, enraged.data());
+		return;
+	}
 	if (trn != nullptr)
 		ClxDrawTRN(out, targetBufferPosition, sprite, trn);
 	else
@@ -557,25 +582,23 @@ uint8_t GetPlayerOutlineColor(int id)
  */
 const uint8_t *BacklashTRN(DamageType element)
 {
-	struct Tint {
-		std::array<uint8_t, 256> trn;
-		std::array<SDL_Color, 256> builtFor;
-		bool built = false;
-	};
-	static std::array<Tint, 3> tints;
+	static std::array<PaletteTint, 3> tints;
 	const size_t index = element == DamageType::Fire ? 0 : element == DamageType::Magic ? 1 : 2;
-	Tint &tint = tints[index];
-	if (tint.built && std::memcmp(tint.builtFor.data(), logical_palette.data(), sizeof(tint.builtFor)) == 0)
-		return tint.trn.data();
-	tint.builtFor = logical_palette;
-	tint.built = true;
 	// Per element: each channel's share of the original, in percent, and what it adds.
 	constexpr std::array<std::array<int, 6>, 3> Mix { {
 		{ 95, 40, 55, 30, 30, 0 },
 		{ 45, 0, 75, 20, 95, 50 },
 		{ 90, 30, 90, 30, 40, 0 },
 	} };
-	const std::array<int, 6> &mix = Mix[index];
+	return TintTRN(tints[index], Mix[index]);
+}
+
+const uint8_t *TintTRN(PaletteTint &tint, const std::array<int, 6> &mix)
+{
+	if (tint.built && std::memcmp(tint.builtFor.data(), logical_palette.data(), sizeof(tint.builtFor)) == 0)
+		return tint.trn.data();
+	tint.builtFor = logical_palette;
+	tint.built = true;
 	for (size_t i = 0; i < tint.trn.size(); i++) {
 		const SDL_Color colour = logical_palette[i];
 		const int r = std::min(colour.r * mix[0] / 100 + mix[1], 255);
@@ -969,7 +992,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	}
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
-	const Displacement offset = monster.getRenderingOffset(sprite);
+	// POE2 Mashup: the Butcher's Road hook drags a monster smoothly between game ticks.
+	const Displacement offset = monster.getRenderingOffset(sprite) + HookDrawOffset(monster);
 
 	const Point monsterRenderPosition = targetBufferPosition + offset;
 	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.

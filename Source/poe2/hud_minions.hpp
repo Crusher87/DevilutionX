@@ -29,7 +29,7 @@ struct MinionPortrait {
 
 /**
  * @brief The minion portraits, left to right: the golem, the minion gems' and the sceptre's skeletons and Wolf Pack,
- * Revive's minions and the King's dead.
+ * and Revive's minions.
  */
 std::vector<MinionPortrait> MinionHudPortraits(const Player &player);
 

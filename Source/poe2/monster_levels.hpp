@@ -91,8 +91,8 @@ void RescaleLoadedMonster(Monster &monster);
 
 /**
  * @brief A player's minion's level on the tables (plan v2 step 11): the minion level of its owner's skill gem
- * (MinionLevelForGemLevel: a skeleton gem's, Revive's or the active golem skill's); the King's dead, raised by no gem,
- * are the area's level. 0 outside POE2 mode or without an owner.
+ * (MinionLevelForGemLevel: a skeleton gem's, Revive's or the active golem skill's). 0 outside POE2 mode or without an
+ * owner.
  */
 int Poe2MinionLevel(const Monster &minion);
 /**

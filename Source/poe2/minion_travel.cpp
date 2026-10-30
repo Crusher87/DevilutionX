@@ -13,7 +13,6 @@
 #include "player.h"
 #include "poe2/minion_gems.hpp"
 #include "poe2/player_data.hpp"
-#include "poe2/profane_roads.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
@@ -29,8 +28,8 @@ std::optional<MinionTravelKind> TravelKindOf(const Monster &minion, const Player
 {
 	if (minion.isInvalid || !IsMinionOf(minion, player) || minion.position.tile == GolemHoldingCell || minion.mode == MonsterMode::Death)
 		return std::nullopt;
-	// Raging spirits and illusions last a few seconds, and the King's dead belong to their road.
-	if (minion.poe2.minionLifeTicks > 0 || minion.poe2.decoy || IsKingsDead(minion))
+	// Raging spirits and illusions last a few seconds.
+	if (minion.poe2.minionLifeTicks > 0 || minion.poe2.decoy)
 		return std::nullopt;
 	if (minion.type().type == MT_GOLEM)
 		return MinionTravelKind::Golem;

@@ -143,9 +143,11 @@ enum class PassiveStat : uint8_t {
 	FlaskFrenzy,
 	MoreVsStunned,
 	// The Profane Roads' rules (design v8, Curtis 2026-10-18): flags with the value 1, read as held or not, never summed.
-	/** Leoric's toll: 1 in 4 kills rise as hostile skeletons; Culled monsters stay dead. */
+	/** The Butcher's Road's toll, The Butcher's Hook (old name kept for the tree data): a Cull throws a chained hook
+	 * that drags the nearest enemy in; each Cull's cry wakes every enemy within 8 tiles. */
 	DeadDoNotRest,
-	/** Leoric's pact: two-handed passives and Fresh Meat reach bows; Culled and put-down dead rise for you; 1 in 3 other kills rise at full life. */
+	/** The Butcher's Road's pact, The Larder (old name kept for the tree data): two-handed passives and Fresh Meat reach
+	 * bows; arrow Culls hook along the arrow's line; the cry reaches 16 tiles and enrages. */
 	KingsDeadPact,
 	/** Bartuc's toll: a quarter of mana costs is paid in life. */
 	BartucsHunger,
@@ -169,7 +171,8 @@ enum class PassiveStat : uint8_t {
 
 /** @brief The four Profane Roads of design v8, each one-way from its door. */
 enum class ProfaneRoad : uint8_t {
-	/** The Warrior's, into the Rogue's bow side: The King's Dead. */
+	/** The Warrior's, into the Rogue's bow side: the Butcher's Road (Leoric's Road before 10-30; its tree data key
+	 * stays "leoric"). */
 	Leoric,
 	/** The Sorcerer's, into the Warrior's two-hand side. */
 	Bartuc,

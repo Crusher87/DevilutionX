@@ -500,7 +500,7 @@ const Monster *MinionOfSkillUp(const Player &player, SkillSlot skill)
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (!monster.isPlayerMinion() || monster.hasNoLife() || static_cast<size_t>(monster.goalVar3) != player.getId() || monster.position.tile == GolemHoldingCell
-		    || monster.poe2.revived || (monster.flags & MFLAG_KINGS_DEAD) != 0)
+		    || monster.poe2.revived)
 			continue;
 		const MinionGemData *gem = FindMinionGemByType(monster.type().type);
 		if (IsGolemSkill(skill) ? monster.type().type == MT_GOLEM : gem != nullptr && gem->skill == skill.persistent())
