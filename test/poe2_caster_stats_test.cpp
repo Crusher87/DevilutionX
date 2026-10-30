@@ -182,7 +182,7 @@ TEST_F(Poe2CasterStatsTest, ElementSpellDamageByHitType)
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Magic), 20);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Lightning), 30);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Physical), 40);
-	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Acid), 0);
+	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Chaos), 0);
 }
 
 TEST_F(Poe2CasterStatsTest, SceptreSpiritTakesItsOwnIncrease)

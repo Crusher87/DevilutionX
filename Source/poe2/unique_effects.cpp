@@ -448,7 +448,7 @@ const char *DamageTypePacketName(DamageType type)
 	case DamageType::Fire: return "fire part";
 	case DamageType::Lightning: return "lightning part";
 	case DamageType::Magic: return "magic part";
-	case DamageType::Acid: return "acid part";
+	case DamageType::Chaos: return "chaos part";
 	default: return "physical part";
 	}
 }

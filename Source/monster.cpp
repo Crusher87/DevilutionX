@@ -5809,7 +5809,7 @@ bool Monster::isImmune(MissileID missileType, DamageType missileElement) const
 	if (!gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
 	    || ((resistance & IMMUNE_FIRE) != 0 && missileElement == DamageType::Fire)
 	    || ((resistance & IMMUNE_LIGHTNING) != 0 && missileElement == DamageType::Lightning)
-	    || ((resistance & IMMUNE_ACID) != 0 && missileElement == DamageType::Acid)))
+	    || ((resistance & IMMUNE_ACID) != 0 && missileElement == DamageType::Chaos)))
 		return true;
 	if (missileType == MissileID::HolyBolt && type().type != MT_DIABLO && data().monsterClass != MonsterClass::Undead)
 		return true;
