@@ -129,6 +129,69 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 	EXPECT_NE(std::find(fireConflicts.begin(), fireConflicts.end(), *allRes), fireConflicts.end());
 }
 
+TEST_F(Poe2ModifiersTest, FamiliesRollNaturallyAsTheGeneratorSays)
+{
+	// Chaos plan step 2: tools/poe2_modifiers.py writes the natural column; today every enabled family rolls naturally
+	// and no other one does.
+	for (const ModFamily &family : ModifierFamilies())
+		EXPECT_EQ(family.natural, family.enabled) << family.id;
+	for (const std::string_view id : { "chaos_resistance", "chaos_spell_damage", "chaos_skill_levels" }) {
+		const std::optional<uint8_t> family = FindModifierFamily(id);
+		ASSERT_TRUE(family) << id;
+		EXPECT_FALSE(ModifierFamilies()[*family].natural) << id;
+	}
+}
+
+TEST_F(Poe2ModifiersTest, ChaosResistanceNeverRollsNaturally)
+{
+	const std::optional<uint8_t> chaos = FindModifierFamily("chaos_resistance");
+	ASSERT_TRUE(chaos);
+	const auto chaosId = static_cast<uint8_t>(*chaos + 1);
+	int rolled = 0;
+	for (size_t slot = 0; slot < static_cast<size_t>(ModSlot::Count); slot++) {
+		if ((ModifierFamilies()[*chaos].slots & (1U << slot)) == 0)
+			continue;
+		for (uint32_t seed = 1; seed <= 200; seed++) {
+			for (const Poe2ItemMod &mod : RollItemMods(static_cast<ModSlot>(slot), 0xFFFF, 82, 6, MaxRareModsPerSide, seed, seed * 31U)) {
+				EXPECT_NE(mod.family, chaosId) << slot;
+				rolled++;
+			}
+			const std::optional<Poe2ItemMod> added = RollAddedMod(static_cast<ModSlot>(slot), 0xFFFF, 82, {}, MaxRareModsPerSide, seed, ModRollFilter {});
+			if (added)
+				EXPECT_NE(added->family, chaosId) << slot;
+		}
+	}
+	EXPECT_GT(rolled, 1000);
+}
+
+TEST_F(Poe2ModifiersTest, AFamilyThatIsntNaturalComesOnlyFromAnEssence)
+{
+	const std::optional<uint8_t> life = FindModifierFamily("maximum_life");
+	ASSERT_TRUE(life);
+	const auto lifeId = static_cast<uint8_t>(*life + 1);
+	const auto lifeRolls = [lifeId]() {
+		int found = 0;
+		for (uint32_t seed = 1; seed <= 300; seed++) {
+			for (const Poe2ItemMod &mod : RollItemMods(ModSlot::Helmet, 0xFFFF, 82, 6, MaxRareModsPerSide, seed, seed))
+				found += mod.family == lifeId ? 1 : 0;
+			const std::optional<Poe2ItemMod> added = RollAddedMod(ModSlot::Helmet, 0xFFFF, 82, {}, MaxRareModsPerSide, seed, ModRollFilter {});
+			found += added && added->family == lifeId ? 1 : 0;
+		}
+		return found;
+	};
+	ModRollFilter essence;
+	essence.family = lifeId;
+	ASSERT_GT(lifeRolls(), 0);
+	ASSERT_TRUE(RollAddedMod(ModSlot::Helmet, 0xFFFF, 82, {}, MaxRareModsPerSide, 1, essence));
+
+	// The table as a later step will have it: life enabled, but not natural. TearDown loads the tables again.
+	const_cast<ModFamily &>(ModifierFamilies()[*life]).natural = false;
+	EXPECT_EQ(lifeRolls(), 0);
+	const std::optional<Poe2ItemMod> fromEssence = RollAddedMod(ModSlot::Helmet, 0xFFFF, 82, {}, MaxRareModsPerSide, 1, essence);
+	ASSERT_TRUE(fromEssence);
+	EXPECT_EQ(fromEssence->family, lifeId);
+}
+
 TEST_F(Poe2ModifiersTest, RaresRollThreeToSixLegalModsAndRecreateIdentically)
 {
 	std::array<int, 7> counts {};

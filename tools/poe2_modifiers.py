@@ -23,64 +23,67 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, 'mods', 'poe2', 'txtdata', 'poe2')
 
-# family id -> (effect, scale of the first stat, scale of the second stat, name word)
-# Families missing here have no effect in the game yet and load disabled.
+# family id -> (effect, scale of the first stat, scale of the second stat, name word, enabled, natural)
+# enabled loads the family; natural lets it roll on drops, vendor items and currency that adds a random modifier. A family
+# that isn't natural comes only from what names it (an essence, a unique, an implicit, a rune). Both are set here on
+# purpose, never from the effect: items rebuild their modifiers from the seed, so a family that starts to roll naturally
+# re-rolls saved items of its slots. Families missing here have no effect in the game yet and load disabled.
 FAMILIES = {
-	'maximum_life': ('Life', 100, 100, 'Virile'),
-	'maximum_mana': ('Mana', 100, 100, 'Azure'),
+	'maximum_life': ('Life', 100, 100, 'Virile', True, True),
+	'maximum_mana': ('Mana', 100, 100, 'Azure', True, True),
 	# Bases have POE2's defence, so flat armour and evasion keep the bundle's numbers; energy shield is in defence
 	# points, three energy shield each.
-	'flat_armour': ('FlatArmour', 100, 100, 'Lacquered'),
-	'flat_evasion': ('FlatEvasion', 100, 100, "Shade's"),
-	'flat_energy_shield': ('FlatEnergyShield', 33, 100, 'Glimmering'),
-	'increased_armour': ('DefensePercent', 100, 100, 'Reinforced'),
-	'increased_evasion': ('DefensePercent', 100, 100, 'Agile'),
-	'increased_energy_shield': ('DefensePercent', 100, 100, 'Protective'),
-	'hybrid_armour_evasion': ('DefensePercent', 100, 100, "Scrapper's"),
-	'hybrid_armour_es': ('DefensePercent', 100, 100, 'Infixed'),
-	'hybrid_evasion_es': ('DefensePercent', 100, 100, 'Shadowy'),
-	'life_armour_hybrid': ('LifeAndDefensePercent', 100, 100, "Rhino's"),
-	'life_evasion_hybrid': ('LifeAndDefensePercent', 100, 100, "Fawn's"),
-	'life_es_hybrid': ('LifeAndDefensePercent', 100, 100, "Monk's"),
-	'mana_es_hybrid': ('ManaAndDefensePercent', 100, 100, "Seer's"),
-	'spirit_flat': ('Spirit', 500, 100, 'Spirited'),
+	'flat_armour': ('FlatArmour', 100, 100, 'Lacquered', True, True),
+	'flat_evasion': ('FlatEvasion', 100, 100, "Shade's", True, True),
+	'flat_energy_shield': ('FlatEnergyShield', 33, 100, 'Glimmering', True, True),
+	'increased_armour': ('DefensePercent', 100, 100, 'Reinforced', True, True),
+	'increased_evasion': ('DefensePercent', 100, 100, 'Agile', True, True),
+	'increased_energy_shield': ('DefensePercent', 100, 100, 'Protective', True, True),
+	'hybrid_armour_evasion': ('DefensePercent', 100, 100, "Scrapper's", True, True),
+	'hybrid_armour_es': ('DefensePercent', 100, 100, 'Infixed', True, True),
+	'hybrid_evasion_es': ('DefensePercent', 100, 100, 'Shadowy', True, True),
+	'life_armour_hybrid': ('LifeAndDefensePercent', 100, 100, "Rhino's", True, True),
+	'life_evasion_hybrid': ('LifeAndDefensePercent', 100, 100, "Fawn's", True, True),
+	'life_es_hybrid': ('LifeAndDefensePercent', 100, 100, "Monk's", True, True),
+	'mana_es_hybrid': ('ManaAndDefensePercent', 100, 100, "Seer's", True, True),
+	'spirit_flat': ('Spirit', 500, 100, 'Spirited', True, True),
 	# Weapons hit for the bundle's damage, so added damage keeps its numbers too.
-	'local_added_physical': ('AddedPhysical', 100, 100, 'Glinting'),
-	'local_increased_physical': ('PhysicalPercent', 100, 100, 'Heavy'),
-	'physical_accuracy_hybrid': ('PhysicalPercentAndAccuracy', 100, 10, "Squire's"),
-	'local_added_fire': ('AddedFire', 100, 100, 'Heated'),
-	'local_added_lightning': ('AddedLightning', 100, 100, 'Humming'),
-	'minion_damage': ('MinionDamage', 100, 100, "Baron's"),
-	'global_added_physical_attacks': ('AddedPhysicalToAttacks', 100, 100, 'Burnished'),
-	'strength': ('Strength', 40, 100, 'of the Brute'),
-	'dexterity': ('Dexterity', 40, 100, 'of the Mongoose'),
-	'intelligence': ('Intelligence', 40, 100, 'of the Prodigy'),
-	'all_attributes': ('AllAttributes', 40, 100, 'of the Clouds'),
-	'fire_resistance': ('FireResistance', 100, 100, 'of the Whelpling'),
+	'local_added_physical': ('AddedPhysical', 100, 100, 'Glinting', True, True),
+	'local_increased_physical': ('PhysicalPercent', 100, 100, 'Heavy', True, True),
+	'physical_accuracy_hybrid': ('PhysicalPercentAndAccuracy', 100, 10, "Squire's", True, True),
+	'local_added_fire': ('AddedFire', 100, 100, 'Heated', True, True),
+	'local_added_lightning': ('AddedLightning', 100, 100, 'Humming', True, True),
+	'minion_damage': ('MinionDamage', 100, 100, "Baron's", True, True),
+	'global_added_physical_attacks': ('AddedPhysicalToAttacks', 100, 100, 'Burnished', True, True),
+	'strength': ('Strength', 40, 100, 'of the Brute', True, True),
+	'dexterity': ('Dexterity', 40, 100, 'of the Mongoose', True, True),
+	'intelligence': ('Intelligence', 40, 100, 'of the Prodigy', True, True),
+	'all_attributes': ('AllAttributes', 40, 100, 'of the Clouds', True, True),
+	'fire_resistance': ('FireResistance', 100, 100, 'of the Whelpling', True, True),
 	# Diablo has no cold damage, so cold resistance guards against magic, its third element.
-	'cold_resistance': ('MagicResistance', 100, 100, 'of the Penguin'),
-	'lightning_resistance': ('LightningResistance', 100, 100, 'of the Squall'),
-	'all_elemental_resistance': ('AllResistances', 100, 100, 'of the Crystal'),
-	'attack_speed': ('AttackSpeed', 100, 100, 'of Skill'),
-	'cast_speed': ('CastSpeed', 100, 100, 'of Talent'),
+	'cold_resistance': ('MagicResistance', 100, 100, 'of the Penguin', True, True),
+	'lightning_resistance': ('LightningResistance', 100, 100, 'of the Squall', True, True),
+	'all_elemental_resistance': ('AllResistances', 100, 100, 'of the Crystal', True, True),
+	'attack_speed': ('AttackSpeed', 100, 100, 'of Skill', True, True),
+	'cast_speed': ('CastSpeed', 100, 100, 'of Talent', True, True),
 	# Accuracy is Diablo's percent chance to hit, so it stays a tenth.
-	'accuracy_rating': ('Accuracy', 10, 100, 'of Calm'),
-	'reduced_attribute_requirements': ('ReducedRequirements', 100, 100, 'of the Worthy'),
-	'life_regeneration': ('LifeRegeneration', 100, 100, 'of the Newt'),
-	'mana_regeneration': ('ManaRegeneration', 100, 100, 'of Excitement'),
-	'melee_skill_levels': ('MeleeSkillLevels', 100, 100, 'of Combat'),
-	'projectile_skill_levels': ('ProjectileSkillLevels', 100, 100, 'of the Archer'),
-	'spell_skill_levels': ('SpellSkillLevels', 100, 100, 'of the Magus'),
+	'accuracy_rating': ('Accuracy', 10, 100, 'of Calm', True, True),
+	'reduced_attribute_requirements': ('ReducedRequirements', 100, 100, 'of the Worthy', True, True),
+	'life_regeneration': ('LifeRegeneration', 100, 100, 'of the Newt', True, True),
+	'mana_regeneration': ('ManaRegeneration', 100, 100, 'of Excitement', True, True),
+	'melee_skill_levels': ('MeleeSkillLevels', 100, 100, 'of Combat', True, True),
+	'projectile_skill_levels': ('ProjectileSkillLevels', 100, 100, 'of the Archer', True, True),
+	'spell_skill_levels': ('SpellSkillLevels', 100, 100, 'of the Magus', True, True),
 	# Staves roll increased spell damage like POE2's (harder monsters plan step 14): it adds to the tree's spell damage.
-	'spell_damage': ('SpellDamage', 100, 100, "Apprentice's"),
-	'fire_skill_levels': ('FireSkillLevels', 100, 100, 'of Flames'),
-	'lightning_skill_levels': ('LightningSkillLevels', 100, 100, 'of Thunder'),
-	'jewel_maximum_life_pct': ('LifePercent', 100, 100, 'Healthy'),
-	'jewel_maximum_mana_pct': ('ManaPercent', 100, 100, 'Wise'),
-	'jewel_damage_pct': ('DamagePercent', 100, 100, 'Brutal'),
-	'jewel_attack_speed': ('AttackSpeed', 100, 100, 'of Alacrity'),
-	'jewel_cast_speed': ('CastSpeed', 100, 100, 'of Enchanting'),
-	'item_rarity': ('ItemRarity', 100, 100, 'of Plunder'),
+	'spell_damage': ('SpellDamage', 100, 100, "Apprentice's", True, True),
+	'fire_skill_levels': ('FireSkillLevels', 100, 100, 'of Flames', True, True),
+	'lightning_skill_levels': ('LightningSkillLevels', 100, 100, 'of Thunder', True, True),
+	'jewel_maximum_life_pct': ('LifePercent', 100, 100, 'Healthy', True, True),
+	'jewel_maximum_mana_pct': ('ManaPercent', 100, 100, 'Wise', True, True),
+	'jewel_damage_pct': ('DamagePercent', 100, 100, 'Brutal', True, True),
+	'jewel_attack_speed': ('AttackSpeed', 100, 100, 'of Alacrity', True, True),
+	'jewel_cast_speed': ('CastSpeed', 100, 100, 'of Enchanting', True, True),
+	'item_rarity': ('ItemRarity', 100, 100, 'of Plunder', True, True),
 }
 
 # Tiers the game sets apart from the bundle's: family id -> [(tier, item level, weight, min1, max1, min2, max2)].
@@ -92,7 +95,7 @@ TIER_OVERRIDES = {
 # Families the bundle doesn't have, after the jewel families: the family row and its tiers.
 EXTRA_FAMILIES = [
 	(['item_rarity_prefix', 'Item Rarity', "Magpie's", 'prefix', 'item_rarity_prefix', 'rarity', 'helmet,ring,amulet', '', '',
-	  '{0}% increased Rarity of Items found', 'ItemRarity', '100', '100', 'true', '100', '100'],
+	  '{0}% increased Rarity of Items found', 'ItemRarity', '100', '100', 'true', '100', '100', 'true'],
 	 [(1, 47, 360, 16, 19, 0, 0), (2, 29, 520, 12, 15, 0, 0), (3, 10, 620, 8, 11, 0, 0)]),
 ]
 
@@ -153,6 +156,8 @@ CASTER_AFFIXES = os.path.join(ROOT, 'tools', 'poe2_caster_affixes.tsv')
 CASTER_MAX_ITEM_LEVEL = 82
 CASTER_SKILL_LEVEL_FLOOR = 20
 CASTER_HALF_SCALE = 50
+# The rework's families whose natural column isn't their enabled one ('true' or 'false'): none yet.
+CASTER_NATURAL = {}
 
 
 def main():
@@ -166,7 +171,9 @@ def main():
 	tier_rows = []
 	for family in families:
 		fid = family['id']
-		effect, scale1, scale2, word = FAMILIES.get(fid, ('', 100, 100, ''))
+		effect, scale1, scale2, word, enabled, natural = FAMILIES.get(fid, ('', 100, 100, '', False, False))
+		if enabled and not effect:
+			sys.exit(f'{fid}: enabled without an effect')
 		legacy1, legacy2 = LEGACY_SCALES.get(fid, (scale1, scale2))
 		conflicts = list(family['conflicts'])
 		for a, b in EXTRA_CONFLICTS:
@@ -189,9 +196,10 @@ def main():
 			effect,
 			str(scale1),
 			str(scale2),
-			'true' if effect else 'false',
+			'true' if enabled else 'false',
 			str(legacy1),
 			str(legacy2),
+			'true' if natural else 'false',
 		])
 		if fid in TIER_OVERRIDES:
 			for row in TIER_OVERRIDES[fid]:
@@ -215,7 +223,7 @@ def main():
 			tier_rows.append([fid, str(number), str(tier['required_item_level']), str(tier['spawn_weight'])] + values)
 
 	for fid, name, word, side, slots, template, effect, lo, hi in JEWEL_FAMILIES:
-		family_rows.append([fid, name, word, side, fid, 'jewel', slots, '', '', template, effect, '100', '100', 'true', '100', '100'])
+		family_rows.append([fid, name, word, side, fid, 'jewel', slots, '', '', template, effect, '100', '100', 'true', '100', '100', 'true'])
 		tier_rows.append([fid, '1', '1', str(JEWEL_WEIGHT), str(lo), str(hi), '0', '0'])
 
 	for row, tiers in EXTRA_FAMILIES:
@@ -228,7 +236,7 @@ def main():
 	tier_rows += caster_tiers
 
 	write(os.path.join(OUT_DIR, 'modifier_families.tsv'),
-	      ['id', 'name', 'word', 'side', 'group', 'tags', 'slots', 'baseTags', 'conflicts', 'template', 'effect', 'scale1', 'scale2', 'enabled', 'legacyScale1', 'legacyScale2'],
+	      ['id', 'name', 'word', 'side', 'group', 'tags', 'slots', 'baseTags', 'conflicts', 'template', 'effect', 'scale1', 'scale2', 'enabled', 'legacyScale1', 'legacyScale2', 'natural'],
 	      family_rows)
 	write(os.path.join(OUT_DIR, 'modifier_tiers.tsv'),
 	      ['family', 'tier', 'itemLevel', 'weight', 'min1', 'max1', 'min2', 'max2'],
@@ -297,6 +305,8 @@ def caster_affixes():
 				row[4] = caster_damage_group(fid) or row[4]
 				if caster_half_scale(fid):
 					row[11] = row[14] = str(CASTER_HALF_SCALE)
+				# Every family of the rework that is enabled rolls naturally; the others don't roll at all.
+				row.append(CASTER_NATURAL.get(fid, row[13]))
 				families.append(row)
 			elif kind == 'tier':
 				fid, tier, level, *rest = fields

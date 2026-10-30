@@ -212,6 +212,12 @@ struct ModFamily {
 	 */
 	std::array<int16_t, 2> legacyScale;
 	bool enabled;
+	/**
+	 * @brief Whether the family rolls naturally: on drops, vendor items and currency that adds a random modifier. A
+	 * family that doesn't comes only from what names it: an essence, a unique, an implicit or a rune. Items rebuild
+	 * their modifiers from the seed, so switching a family to natural re-rolls saved items of its slots.
+	 */
+	bool natural;
 	/** @brief Ordered T1 first. */
 	std::vector<ModTier> tiers;
 };

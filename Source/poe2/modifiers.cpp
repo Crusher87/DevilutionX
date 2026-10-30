@@ -144,6 +144,8 @@ bool LoadFamilies(std::vector<std::vector<std::string>> &conflictIds)
 		family.legacyScale[0] = static_cast<int16_t>(ParseInt(text).value_or(family.scale[0]));
 		reader.readString("legacyScale2", text);
 		family.legacyScale[1] = static_cast<int16_t>(ParseInt(text).value_or(family.scale[1]));
+		reader.readString("natural", text);
+		family.natural = text == "true";
 		Families.push_back(std::move(family));
 		if (Families.size() > MaxModFamilies) {
 			LogError("Too many modifier families in {}", Filename);
@@ -611,6 +613,10 @@ uint32_t CollectModCandidates(std::vector<ModCandidate> &candidates, uint32_t sl
 	for (size_t f = 0; f < Families.size(); f++) {
 		const ModFamily &family = Families[f];
 		if (!family.enabled || (family.slots & slotBit) == 0)
+			continue;
+		// A family that doesn't roll naturally comes only from an essence that names it, never from a seed or from
+		// currency that adds a random modifier.
+		if (!family.natural && (filter == nullptr || filter->family == 0))
 			continue;
 		if (family.baseTags != 0 && (family.baseTags & baseTags) == 0)
 			continue;
