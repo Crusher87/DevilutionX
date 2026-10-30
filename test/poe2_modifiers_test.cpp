@@ -119,8 +119,8 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	// 57 with spell damage on staves (plan step 14), and the rework's 52 (18 staff, 18 wand, 16 sceptre).
-	EXPECT_EQ(enabled, 57 + 52);
+	// 57 with spell damage on staves (plan step 14), the rework's 52 (18 staff, 18 wand, 16 sceptre) and chaos resistance.
+	EXPECT_EQ(enabled, 57 + 52 + 1);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");
@@ -131,10 +131,10 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 
 TEST_F(Poe2ModifiersTest, FamiliesRollNaturallyAsTheGeneratorSays)
 {
-	// Chaos plan step 2: tools/poe2_modifiers.py writes the natural column; today every enabled family rolls naturally
-	// and no other one does.
+	// Chaos plan step 2: tools/poe2_modifiers.py writes the natural column; every enabled family rolls naturally and no
+	// other one does, except chaos resistance (step 4), which only what names it gives.
 	for (const ModFamily &family : ModifierFamilies())
-		EXPECT_EQ(family.natural, family.enabled) << family.id;
+		EXPECT_EQ(family.natural, family.enabled && family.id != "chaos_resistance") << family.id;
 	for (const std::string_view id : { "chaos_resistance", "chaos_spell_damage", "chaos_skill_levels" }) {
 		const std::optional<uint8_t> family = FindModifierFamily(id);
 		ASSERT_TRUE(family) << id;

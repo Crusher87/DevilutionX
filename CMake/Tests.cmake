@@ -35,6 +35,7 @@ set(tests
   poe2_attributes_test
   poe2_bare_fists_test
   poe2_breakables_test
+  poe2_chaos_test
   poe2_charms_test
   poe2_currency_test
   poe2_defenses_test

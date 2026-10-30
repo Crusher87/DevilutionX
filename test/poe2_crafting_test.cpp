@@ -291,7 +291,7 @@ TEST_F(Poe2CraftingTest, EveryEffectHasItsOwnBit)
 	}
 	EXPECT_TRUE(ModEffectBits(ModEffect::Count).none());
 	// Effects past 63 get their own bits, not those of the effects 64 below them.
-	for (size_t i = 64; i < MaxModEffects; i++) {
+	for (size_t i = std::max<size_t>(64, static_cast<size_t>(ModEffect::Count) + 1); i < MaxModEffects; i++) {
 		const ModEffectMask bits = ModEffectBits(static_cast<ModEffect>(i));
 		EXPECT_EQ(bits.count(), 1U) << i;
 		EXPECT_TRUE(bits.test(i)) << i;

@@ -112,6 +112,8 @@ constexpr int ResistancePenaltyPerArea = 10;
 constexpr int ResistancePenaltyPerDifficulty = 15;
 /** @brief The lowest a resistance can go with the penalty, so monsters deal at most 60% more. */
 constexpr int MinPoe2Resistance = -60;
+/** @brief No maximum resistance goes past this, whatever raises it (chaos resistance's, so far). */
+constexpr int HardMaxResistance = 90;
 
 /** @brief The deepest dungeon level the character has reached (0 in town before ever leaving it). */
 int DeepestDungeonLevel(const Player &player);

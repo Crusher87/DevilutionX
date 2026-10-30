@@ -108,6 +108,9 @@ enum class ModEffect : uint8_t {
 	MinionAddedDamage,
 	/** Minions' life regeneration, in tenths of a point a second. */
 	MinionLifeRegen,
+	/** Chaos resistance, and its maximum; never part of "all resistances", which are elemental. */
+	ChaosResistance,
+	MaxChaosResistance,
 	/** Not an effect: the number of them. New effects go before it. */
 	Count,
 };

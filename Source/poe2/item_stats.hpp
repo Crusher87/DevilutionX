@@ -59,6 +59,9 @@ enum class Poe2ItemStat : uint8_t {
 	MinionAddedDamageMax,
 	/** Tenths of a point of life a second. */
 	MinionLifeRegen,
+	/** Added to chaos resistance and to its maximum, in percent. */
+	ChaosResistance,
+	MaxChaosResistance,
 	Count,
 };
 

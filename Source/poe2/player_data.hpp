@@ -1046,6 +1046,11 @@ struct Poe2PlayerData {
 	/** @brief Fire, lightning and magic resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
 	std::array<int16_t, 3> uncappedResistances {};
 	std::array<int16_t, 3> maxResistances {};
+	/** @brief Chaos resistance, before its cap, and its cap (not saved; from CalcPlrItemVals). Kept apart from the
+	 * elements' arrays above, which unique rules treat as "the elemental resistances". */
+	int16_t chaosResistance = 0;
+	int16_t uncappedChaosResistance = 0;
+	int16_t maxChaosResistance = 0;
 	/** @brief Maximum energy shield from gear (not saved; from CalcPlrItemVals). */
 	int maxEnergyShield = 0;
 	/** @brief Current energy shield as a raw Fixed26_6 value (not saved; refills when loaded). */
@@ -1194,6 +1199,9 @@ struct Poe2PlayerData {
 		uniqueState = {};
 		uncappedResistances.fill(0);
 		maxResistances.fill(0);
+		chaosResistance = 0;
+		uncappedChaosResistance = 0;
+		maxChaosResistance = 0;
 		maxEnergyShield = 0;
 		energyShield = 0;
 		energyShieldRechargeTicks = 0;

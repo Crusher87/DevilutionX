@@ -1187,6 +1187,8 @@ void WriteBuildEvent(const Player &player, LogLevel level)
 	    .add("fireRes", player._pFireResist)
 	    .add("lightningRes", player._pLghtResist)
 	    .add("magicRes", player._pMagResist)
+	    .add("chaosRes", player.poe2.chaosResistance)
+	    .add("maxChaosRes", player.poe2.maxChaosResistance)
 	    .add("spirit", ReservedSpirit(player))
 	    .add("maxSpirit", MaxSpirit(player))
 	    .add("passives", player.poe2.passives.count())
@@ -2478,9 +2480,9 @@ std::string TelemetryBuildText(const Player &player)
 		StrAppend(text, ";");
 	}
 	StrAppend(text, " | passives ", player.poe2.passives.count());
-	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% magic {:d}%, spirit {:d}/{:d}",
+	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% magic {:d}% chaos {:d}% (max {:d}%), spirit {:d}/{:d}",
 	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, LoggedBlockChance(player),
-	                    player._pFireResist, player._pLghtResist, player._pMagResist, ReservedSpirit(player), MaxSpirit(player)));
+	                    player._pFireResist, player._pLghtResist, player._pMagResist, player.poe2.chaosResistance, player.poe2.maxChaosResistance, ReservedSpirit(player), MaxSpirit(player)));
 	StrAppend(text, " | belt:");
 	for (const Item &item : player.SpdList) {
 		if (!item.isEmpty())

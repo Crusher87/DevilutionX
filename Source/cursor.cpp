@@ -45,6 +45,7 @@
 #include "options.h"
 #include "panels/anvil_panel.hpp"
 #include "panels/atlas_panel.hpp"
+#include "panels/charpanel.hpp"
 #include "panels/desecration_panel.hpp"
 #include "panels/gemcutting_panel.hpp"
 #include "panels/item_spawner.hpp"
@@ -1019,6 +1020,7 @@ bool CheckPanelsAndFlags(Rectangle mainPanel)
 		return true;
 	}
 	if (IsLeftPanelOpen() && GetLeftPanel().contains(MousePosition)) {
+		CheckCharPanelInfo();
 		return true;
 	}
 	if (SkillsPanelContains(MousePosition))

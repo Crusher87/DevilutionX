@@ -64,6 +64,8 @@ FAMILIES = {
 	'cold_resistance': ('MagicResistance', 100, 100, 'of the Penguin', True, True),
 	'lightning_resistance': ('LightningResistance', 100, 100, 'of the Squall', True, True),
 	'all_elemental_resistance': ('AllResistances', 100, 100, 'of the Crystal', True, True),
+	# Chaos resistance (chaos damage plan step 4) comes only from what names it until drops may roll it.
+	'chaos_resistance': ('ChaosResistance', 100, 100, 'of the Lost', True, False),
 	'attack_speed': ('AttackSpeed', 100, 100, 'of Skill', True, True),
 	'cast_speed': ('CastSpeed', 100, 100, 'of Talent', True, True),
 	# Accuracy is Diablo's percent chance to hit, so it stays a tenth.

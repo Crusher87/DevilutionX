@@ -569,6 +569,8 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::LightningResistance:
 	case ModEffect::AllResistances:
 	case ModEffect::MinionResistances:
+	case ModEffect::ChaosResistance:
+	case ModEffect::MaxChaosResistance:
 		return Resistance;
 	case ModEffect::AttackSpeed:
 	case ModEffect::CastSpeed:
@@ -1031,6 +1033,12 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		break;
 	case ModEffect::MinionLifeRegen:
 		AddPoe2Stat(item, Poe2ItemStat::MinionLifeRegen, v0);
+		break;
+	case ModEffect::ChaosResistance:
+		AddPoe2Stat(item, Poe2ItemStat::ChaosResistance, v0);
+		break;
+	case ModEffect::MaxChaosResistance:
+		AddPoe2Stat(item, Poe2ItemStat::MaxChaosResistance, v0);
 		break;
 	}
 }
