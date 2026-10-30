@@ -283,7 +283,7 @@ void SpellHitMonster(const Player &player, Monster &monster, DamageType type, Fi
 	// The Sickness Road pact reaches table spells too: its melee bridge, and less against a healthy monster. So does
 	// the Sigil of Power's +20%.
 	if (source == AilmentSource::Spell)
-		damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * SicknessSpellHitPercent(player, monster) / 100 * SigilSpellDamagePercent(player) / 100, INT32_MAX / 2)));
+		damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * VizjereiSpellHitPercent(player, monster) / 100 * SigilSpellDamagePercent(player) / 100, INT32_MAX / 2)));
 	// Leoric's Road: a hit puts a monster still rising down for good.
 	if (TryPutDownRisen(player, monster)) {
 		monster.tag(player);

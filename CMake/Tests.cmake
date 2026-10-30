@@ -91,6 +91,7 @@ set(tests
   poe2_spirit_buffs_test
   poe2_spirit_uses_test
   poe2_spirit_auras_test
+  poe2_vizjerei_road_test
   poe2_minion_gems_test
   poe2_minion_travel_test
   poe2_dodge_cancel_test

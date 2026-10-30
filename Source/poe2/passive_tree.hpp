@@ -151,9 +151,11 @@ enum class PassiveStat : uint8_t {
 	BartucsHunger,
 	/** Bartuc's pact: half your Magic counts as Strength; each melee attack costs 1% of maximum life. */
 	PaidInBlood,
-	/** The Sickness's toll: Kill Burst only from ailing monsters, and it passes their ailments on; then a short fever. */
+	/** The Vizjerei Road's toll, Stolen Elements (old name kept for the tree data): Kill Burst only from a burning,
+	 * chilled, frozen or shocked monster, as an elemental blast; each blast's element bites the hero back. */
 	DarkSickness,
-	/** The Sickness's pact: melee passives reach spell hits; every death spreads ailments; spells can't inflict them. */
+	/** The Vizjerei Pact (old name kept for the tree data): melee passives reach spell hits; spell kills blast too;
+	 * spells can't inflict ailments. */
 	HiveBreath,
 	/** The Maiden's toll: infravision and more damage against unaware monsters; light capped at 7, and monsters wake at 10 tiles. */
 	EyesInTheDark,
@@ -168,7 +170,8 @@ enum class ProfaneRoad : uint8_t {
 	Leoric,
 	/** The Sorcerer's, into the Warrior's two-hand side. */
 	Bartuc,
-	/** The Monk's, into the Sorcerer's elemental side: The Carrier. */
+	/** The Monk's, into the Sorcerer's elemental side: the Vizjerei Road (the Sickness Road before 10-30; its tree
+	 * data key stays "sickness"). */
 	Sickness,
 	/** The Rogue's, into the Monk's staff side: Out of Darkness. */
 	Maiden,

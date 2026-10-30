@@ -1281,10 +1281,10 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 1279		Small		280	-735	SpellDamage=5	92,1278	Sorcerer		profane	1272	576	-623	6			bartuc:1
 1280		Small		-216	-1109	EnergyShieldPercent=12	108,1281	Monk		profane	1280	-390	-856	6			sickness:8
 1281		Small		-286	-1069	SpellDamage=8	1280,1282	Monk		profane	1280	-390	-856	6			sickness:7
-1282	Breath of the Hive	Notable		-346	-1009	HiveBreath=1	1281,1283	Monk	Beneath the farmer's field, the brother swore it was the same sickness he had followed west.	profane	1280	-390	-856	6			sickness:6
+1282	The Vizjerei Pact	Notable		-346	-1009	HiveBreath=1	1281,1283	Monk	The Vizjerei warned that mortal hands that hold raw elements are burned by them. He held them anyway.	profane	1280	-390	-856	6			sickness:6
 1283		Small		-376	-899	SpellDamage=5	1282,1284	Monk		profane	1280	-390	-856	2			sickness:5
 1284		Small		-406	-819	FireDamage=4,ColdDamage=4,LightningDamage=4	1283,1285	Monk		profane	1280	-390	-856	2			sickness:4
-1285	The Dark Sickness	Notable		-446	-709	MeleeDamage=12,KillBurst=10,DarkSickness=1	1284,1286	Monk	Lone brothers said a dark sickness had struck the Brotherhood's homeland, and went west looking for its like.	profane	1280	-390	-856	6			sickness:3
+1285	Stolen Elements	Notable		-446	-709	MeleeDamage=12,KillBurst=10,DarkSickness=1	1284,1286	Monk	In the Horadric Archive, a brother found Vizjerei scrolls on raw elements. His order forbade him to read them.	profane	1280	-390	-856	6			sickness:3
 1286		Small		-496	-649	IgniteChance=5,ShockChance=5,FreezeBuildup=5	1285,1287	Monk		profane	1280	-390	-856	6			sickness:2
 1287		Small		-546	-589	MeleeDamage=5	1148,1286	Monk		profane	1280	-390	-856	6			sickness:1
 1288		Small		-965	482	StaffDamage=9	167,1289	Rogue		profane	1288	-583	635	6			maiden:8

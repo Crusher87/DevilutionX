@@ -117,7 +117,7 @@ void ParseRoad(std::string_view text, PassiveNode &node)
 		road = ProfaneRoad::Leoric;
 	else if (name == "bartuc")
 		road = ProfaneRoad::Bartuc;
-	else if (name == "sickness")
+	else if (name == "sickness" || name == "vizjerei")
 		road = ProfaneRoad::Sickness;
 	else if (name == "maiden")
 		road = ProfaneRoad::Maiden;
@@ -1392,12 +1392,13 @@ std::vector<PassiveStatLine> PassiveStatLines(PassiveStat stat, int value)
 		return { line(_("Half your Magic counts as Strength, for damage and item requirements")),
 			line(_("Each melee attack costs 1% of your maximum Life"), true) };
 	case PassiveStat::DarkSickness:
-		return { line(_("Your Kill Burst needs a monster carrying an ailment, and passes its ignite, shock, chill and poison on")),
-			line(_("You carry it: each time your Kill Burst passes an ailment on, you catch the fever. For 2 seconds you can't ignite, shock, chill, freeze or poison anything, but the sickness keeps spreading without you"), true) };
+		return { line(_("Your Kill Burst only comes from a burning, chilled, frozen or shocked enemy, as one blast of that element")),
+			line(_("Fire bursts in a ring that ignites the enemies beside it. Cold shatters, chilling them. Lightning arcs to 3 enemies nearby and shocks them")),
+			line(_("The elements bite back: each blast hits you for 2 seconds. Fire burns 1.5% of your maximum Life a second, cold slows you by 20%, lightning makes you take 15% more Damage"), true) };
 	case PassiveStat::HiveBreath:
 		return { line(_("75% of your increased Melee Damage also applies to your Spell hits")),
-			line(_("Every death spreads it: a monster that dies carrying an ailment passes it to the enemies beside it")),
-			line(_("Your spells, Aspects and curses can't freeze, ignite, shock, chill or poison, and deal 20% less to anything not already sick"), true) };
+			line(_("Your spell kills blast too")),
+			line(_("Your spells, Aspects and curses can't ignite, chill, freeze or shock, and deal 20% less to an enemy that isn't burning, chilled, frozen or shocked"), true) };
 	case PassiveStat::EyesInTheDark:
 		return { line(_("Eyes in the dark: you see monsters past your light as shapes. Hold Shift to shoot at shapes in the dark")),
 			line(_("Your first hit on a monster that hasn't noticed you deals 40% more Damage again")),
@@ -1421,7 +1422,7 @@ std::vector<PassiveStatLine> ProfaneRoadEndLines(PassiveNodeId node)
 		if (ends->door == node) {
 			lines.push_back({ std::string(_("The door of a Profane Road: it is walked one way, from here")), true });
 			if (static_cast<ProfaneRoad>(road) == ProfaneRoad::Sickness)
-				lines.push_back({ std::string(_("This road's pact stops your spells, Aspects and curses from inflicting ailments, and weakens them against healthy enemies")), true });
+				lines.push_back({ std::string(_("This road's pact stops your spells, Aspects and curses from inflicting ailments, and weakens them against enemies that aren't burning, chilled, frozen or shocked")), true });
 		}
 		if (ends->farGate == node)
 			lines.push_back({ std::string(_("The far end of a Profane Road: the road can't be entered from here")), false });

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "engine/point.hpp"
 #include "engine/world_tile.hpp"
@@ -126,19 +127,22 @@ void OnMinionDied(Player &owner);
 [[nodiscard]] int UniqueStunBuildupPercent(const Player &player);
 enum class AilmentSource : uint8_t;
 /**
- * @brief The Sickness Road's ailment gate: whether the player's hit of this kind may inflict ailments now. The toll's
- * fever stops his strikes and spells; the pact stops his spells. Ailments passed on always pass.
+ * @brief The Vizjerei Pact's ailment gate: whether the player's hit of this kind may inflict ailments now. The pact stops
+ * his spells, Aspects and curses; blast and spread ailments always pass.
  */
 [[nodiscard]] bool AilmentAllowed(const Player &player, AilmentSource source);
-/** @brief The Sickness Road toll's fever: game ticks left in which the player's own hits inflict no ailment. */
-[[nodiscard]] int SicknessFeverTicks(const Player &player);
 /**
- * @brief The Sickness Road pact on a spell hit that doesn't go through UniqueSpellHitPercent (table spells): its
- * melee bridge and 20% less damage to a monster carrying no ailment, in percent.
+ * @brief The Vizjerei Road toll's backlash of an element (Fire, Magic for cold, Lightning): game ticks left in which
+ * it burns, slows or weakens the hero.
  */
-[[nodiscard]] int SicknessSpellHitPercent(const Player &player, const Monster &monster);
-/** @brief Whether Kill Burst's contagion already passed this monster's ailments on as it died; forgets it. */
-bool TakeBurstSpread(const Monster &monster);
+[[nodiscard]] int VizjereiBacklashTicks(const Player &player, DamageType element);
+/** @brief The element of the hero's most recent backlash while it still runs, for his tint. */
+[[nodiscard]] std::optional<DamageType> VizjereiLastBacklash(const Player &player);
+/**
+ * @brief The Vizjerei Pact on a spell hit that doesn't go through UniqueSpellHitPercent (table spells): its melee
+ * bridge and 20% less damage to a monster not burning, chilled, frozen or shocked, in percent.
+ */
+[[nodiscard]] int VizjereiSpellHitPercent(const Player &player, const Monster &monster);
 /** @brief Called when the player shocks, ignites or chills a monster. */
 void OnAilmentInflicted(const Player &player, Monster &monster, DamageType type, bool wasShocked);
 void OnMonsterFrozen(const Player &player);

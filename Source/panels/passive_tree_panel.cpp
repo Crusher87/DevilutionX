@@ -875,7 +875,7 @@ std::string ProfaneRoadStepText(const PassiveNode &node)
 		road = _("Bartuc's Road");
 		break;
 	case ProfaneRoad::Sickness:
-		road = _("The Sickness Road");
+		road = _("The Vizjerei Road");
 		break;
 	default:
 		road = _("The Maiden's Road");

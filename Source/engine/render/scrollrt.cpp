@@ -552,23 +552,35 @@ uint8_t GetPlayerOutlineColor(int id)
 }
 
 /**
- * @brief POE2 Mashup: the Sickness Road's fever tints the hero a sickly green, in the colours of the palette shown now
- * (rebuilt when the palette changes).
+ * @brief POE2 Mashup: the Vizjerei Road's backlash tints the hero in its element (fire red-orange, cold icy blue,
+ * lightning pale yellow), in the colours of the palette shown now (rebuilt when the palette changes).
  */
-const uint8_t *FeverTRN()
+const uint8_t *BacklashTRN(DamageType element)
 {
-	static std::array<uint8_t, 256> trn;
-	static std::array<SDL_Color, 256> builtFor;
-	static bool built = false;
-	if (built && std::memcmp(builtFor.data(), logical_palette.data(), sizeof(builtFor)) == 0)
-		return trn.data();
-	builtFor = logical_palette;
-	built = true;
-	for (size_t i = 0; i < trn.size(); i++) {
+	struct Tint {
+		std::array<uint8_t, 256> trn;
+		std::array<SDL_Color, 256> builtFor;
+		bool built = false;
+	};
+	static std::array<Tint, 3> tints;
+	const size_t index = element == DamageType::Fire ? 0 : element == DamageType::Magic ? 1 : 2;
+	Tint &tint = tints[index];
+	if (tint.built && std::memcmp(tint.builtFor.data(), logical_palette.data(), sizeof(tint.builtFor)) == 0)
+		return tint.trn.data();
+	tint.builtFor = logical_palette;
+	tint.built = true;
+	// Per element: each channel's share of the original, in percent, and what it adds.
+	constexpr std::array<std::array<int, 6>, 3> Mix { {
+		{ 95, 40, 55, 30, 30, 0 },
+		{ 45, 0, 75, 20, 95, 50 },
+		{ 90, 30, 90, 30, 40, 0 },
+	} };
+	const std::array<int, 6> &mix = Mix[index];
+	for (size_t i = 0; i < tint.trn.size(); i++) {
 		const SDL_Color colour = logical_palette[i];
-		const int r = colour.r * 60 / 100;
-		const int g = std::min(colour.g * 90 / 100 + 28, 255);
-		const int b = colour.b * 45 / 100;
+		const int r = std::min(colour.r * mix[0] / 100 + mix[1], 255);
+		const int g = std::min(colour.g * mix[2] / 100 + mix[3], 255);
+		const int b = std::min(colour.b * mix[4] / 100 + mix[5], 255);
 		size_t best = i;
 		int bestDistance = 3 * 256 * 256;
 		for (size_t j = 0; j < logical_palette.size(); j++) {
@@ -581,9 +593,9 @@ const uint8_t *FeverTRN()
 				best = j;
 			}
 		}
-		trn[i] = static_cast<uint8_t>(best);
+		tint.trn[i] = static_cast<uint8_t>(best);
 	}
-	return trn.data();
+	return tint.trn.data();
 }
 
 /**
@@ -635,10 +647,10 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
 
-	const bool fever = &player == MyPlayer && SicknessFeverTicks(player) > 0;
+	const std::optional<DamageType> backlash = &player == MyPlayer ? VizjereiLastBacklash(player) : std::nullopt;
 	if (&player == MyPlayer && IsNoneOf(leveltype, DTYPE_NEST, DTYPE_CRYPT)) {
-		if (fever)
-			ClxDrawTRN(out, spriteBufferPosition, sprite, FeverTRN());
+		if (backlash)
+			ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
 		else
 			ClxDraw(out, spriteBufferPosition, sprite);
 		DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);
@@ -652,8 +664,8 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	}
 
 	lightTableIndex = std::max(lightTableIndex - 5, 0);
-	if (fever)
-		ClxDrawTRN(out, spriteBufferPosition, sprite, FeverTRN());
+	if (backlash)
+		ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
 	else
 		ClxDrawLight(out, spriteBufferPosition, sprite, lightTableIndex);
 	DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);

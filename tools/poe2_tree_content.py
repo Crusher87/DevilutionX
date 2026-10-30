@@ -686,15 +686,17 @@ ROADS = {
         [('TwoHandDamage', 9)],
         [('LifePercent', 5)],
     ]),
+    # The Vizjerei Road (the Sickness Road until 2026-10-30; the key and the DarkSickness/HiveBreath flags keep their
+    # old names so saved trees load unchanged). research/tree-rework/profane-road/sickness-rework/spec-v1.md.
     'sickness': dict(owner='Monk', nodes=[
         [('MeleeDamage', 5)],
         [('IgniteChance', 5), ('ShockChance', 5), ('FreezeBuildup', 5)],
-        ('The Dark Sickness', [('MeleeDamage', 12), ('KillBurst', 10), ('DarkSickness', 1)],
-         "Lone brothers said a dark sickness had struck the Brotherhood's homeland, and went west looking for its like."),
+        ('Stolen Elements', [('MeleeDamage', 12), ('KillBurst', 10), ('DarkSickness', 1)],
+         'In the Horadric Archive, a brother found Vizjerei scrolls on raw elements. His order forbade him to read them.'),
         [('FireDamage', 4), ('ColdDamage', 4), ('LightningDamage', 4)],
         [('SpellDamage', 5)],
-        ('Breath of the Hive', [('HiveBreath', 1)],
-         "Beneath the farmer's field, the brother swore it was the same sickness he had followed west."),
+        ('The Vizjerei Pact', [('HiveBreath', 1)],
+         'The Vizjerei warned that mortal hands that hold raw elements are burned by them. He held them anyway.'),
         [('SpellDamage', 8)],
         [('EnergyShieldPercent', 12)],
     ]),
