@@ -386,6 +386,7 @@ Azure Amulet	amulet	mana		none	ManaRegeneration|20|30|{0}% increased Mana Regene
 Crimson Amulet	amulet	life		none	LifeRegeneration|2|4|Regenerate {0} Life per second		1		
 Lunar Amulet	amulet	defence		none	FlatEnergyShield|2|3|+{0} to maximum Energy Shield		14		
 Gold Amulet	amulet	rarity		none	ItemRarity|12|20|{0}% increased Rarity of Items found		35		
+Amethyst Ring	ring	resistance		none	ChaosResistance|7|13|+{0}% to Chaos Resistance		30		
 Broadsword	one_hand_sword	balanced		weapon			6		160
 Fine Scimitar	one_hand_sword	balanced		weapon			16		155
 Sickle Sword	one_hand_sword	balanced		weapon			28		150

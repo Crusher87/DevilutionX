@@ -1213,6 +1213,10 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Magic Resistance"), value);
 	case PassiveStat::AllResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to all Elemental Resistances"), value);
+	case PassiveStat::ChaosResist:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Chaos Resistance"), value);
+	case PassiveStat::MaxChaosResist:
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Chaos Resistance"), value);
 	case PassiveStat::LifeRegen:
 		return FormatRuntime(_("Regenerate {:d} Life per second"), value);
 	case PassiveStat::ManaRegen:

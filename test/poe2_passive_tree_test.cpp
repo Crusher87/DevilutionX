@@ -661,7 +661,8 @@ TEST_F(Poe2PassiveTreeTest, CapstoneRulesHaveTextAndReachTheRules)
 
 TEST_F(Poe2PassiveTreeTest, ProfaneRoadFlagsHaveTextAndAPriceLine)
 {
-	for (size_t stat = static_cast<size_t>(PassiveStat::DeadDoNotRest); stat < static_cast<size_t>(PassiveStat::Count); stat++) {
+	// The chaos resistance stats come after the flags.
+	for (size_t stat = static_cast<size_t>(PassiveStat::DeadDoNotRest); stat <= static_cast<size_t>(PassiveStat::OutOfDarkness); stat++) {
 		const std::vector<PassiveStatLine> lines = PassiveStatLines(static_cast<PassiveStat>(stat), 1);
 		ASSERT_FALSE(lines.empty()) << stat;
 		EXPECT_TRUE(std::any_of(lines.begin(), lines.end(), [](const PassiveStatLine &line) { return line.price; })) << stat;

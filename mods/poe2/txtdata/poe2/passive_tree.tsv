@@ -788,7 +788,7 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 786		Small		-458	-138	EvasionPercent=12,EnergyShieldPercent=11	392,787,788	Monk		defence	786	-450	-113	1	+36,-36	Lens	
 787		Small		-431	-119	EvasionPercent=12,EnergyShieldPercent=11	786,789,809	Monk		defence	786	-450	-113	1	+37,+49	Lens	
 788		Small		-470	-107	EvasionPercent=12,EnergyShieldPercent=11	786,789	Monk		defence	786	-450	-113	1	-36	Lens	
-789	Perfect Harmony	Notable		-443	-87	EvasionPercent=29,AllResist=4	787,788	Monk	Order and Chaos, held level, as the Patriarchs hold them.	defence	786	-450	-113	1		Lens	
+789	Perfect Harmony	Notable		-443	-87	EvasionPercent=29,ChaosResist=7	787,788	Monk	Order and Chaos, held level, as the Patriarchs hold them.	defence	786	-450	-113	1		Lens	
 790		Small		-957	-227	Vitality=7	148,792	Monk		cluster	790	-990	-235	2	+33	Spur Arc	
 791	Will of the Bough	Notable		-1024	-241	StaffDamage=10,Vitality=8	793	Monk	A bough that bends in the storm is still on the tree in the morning.	cluster	790	-990	-235	2	-35	Spur Arc	
 792		Small		-983	-205	Vitality=7	790,793	Monk		cluster	790	-990	-235	1	+34	Spur Arc	
@@ -951,7 +951,7 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 949	The Palisade Watch	Notable		-253	765	BowDamage=10,Vitality=8	950	Rogue	The Sisters keep a watch on the palisade every night, and every night the moor tests it.	cluster	949	-190	813	4	-71	Fork	
 950		Small		-229	799	EvasionPercent=12	949,951	Rogue		cluster	949	-190	813	2	-73	Fork	
 951		Small		-191	818	EvasionPercent=12	950,952,953	Rogue		cluster	949	-190	813	0	-71,+201	Fork	
-952	Poisoned Water	Notable		-166	785	AllResist=8,EvasionPercent=12	951	Rogue	Something fouled Tristram's water at its source. Pepin begged someone to go down and look.	cluster	949	-190	813	2		Fork	
+952	Poisoned Water	Notable		-166	785	ChaosResist=12,EvasionPercent=12	951	Rogue	Something fouled Tristram's water at its source. Pepin begged someone to go down and look.	cluster	949	-190	813	2		Fork	
 953		Small		-176	855	EvasionPercent=12	203,951	Rogue		cluster	949	-190	813	2		Fork	
 954		Small		-297	1001	EvasionPercent=12	15,955	Rogue		sweep	954	-235	1050	4	o	Bridge Arc	
 955		Small		-270	979	EvasionPercent=12	954,956	Rogue		sweep	954	-235	1050	4	o	Bridge Arc	
@@ -1166,7 +1166,7 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 1164		Small		-831	-419	ColdDamage=4,StaffDamage=3	1165,1166	Horadric Archive		cluster	1163	-860	-424	1	-52,+52	Fork	
 1165		Small		-860	-428	ColdDamage=4,StaffDamage=3	1163,1164,1167	Horadric Archive		cluster	1163	-860	-424	0	-61	Fork	
 1166	Tyrael's Counsel	Notable		-813	-395	ManaCost=-8,Spirit=8	1164	Horadric Archive	Tyrael gathered the best of the mage clans and named them Horadrim.	cluster	1163	-860	-424	3		Fork	
-1167	Soulstone Ward	Notable		-877	-397	EnergyShieldPercent=17,MaxMagicResist=1	1165	Horadric Archive	Soulstones held two Prime Evils for centuries.	cluster	1163	-860	-424	1		Fork	
+1167	Soulstone Ward	Notable		-877	-397	EnergyShieldPercent=17,ChaosResist=8	1165	Horadric Archive	Soulstones held two Prime Evils for centuries.	cluster	1163	-860	-424	1		Fork	
 1168	Mountain Thunder	Notable		-754	497	LightningDamage=12,StaffDamage=10	1169	Sightless Eye	Up in the passes you hear the storm in your teeth.	cluster	1168	-701	508	3	o	Stub	
 1169		Small		-747	536	LightningDamage=5	1168,1170	Sightless Eye		cluster	1168	-701	508	3	o	Stub	
 1170		Small		-724	557	LightningDamage=5	286,1169	Sightless Eye		cluster	1168	-701	508	3		Stub	
@@ -1222,7 +1222,7 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 1220		Small		579	962	BowDamage=5,EvasionPercent=6	313,1221,1222	Khanduras Muster		cluster	1220	609	967	1	-40,+39	Lens	
 1221		Small		606	987	BowDamage=5,EvasionPercent=6	1220,1223	Khanduras Muster		cluster	1220	609	967	1	-40	Lens	
 1222		Small		612	947	BowDamage=5,EvasionPercent=6	1220,1223	Khanduras Muster		cluster	1220	609	967	1	+40	Lens	
-1223	Grave Matters	Notable		640	972	AllResist=6,LifePercent=4	1221,1222	Khanduras Muster	'I'd keep my mind on what lies below the cathedral and not what lies below our topsoil.'	cluster	1220	609	967	1		Lens	
+1223	Grave Matters	Notable		640	972	ChaosResist=10,LifePercent=4	1221,1222	Khanduras Muster	'I'd keep my mind on what lies below the cathedral and not what lies below our topsoil.'	cluster	1220	609	967	1		Lens	
 1224	Poachers of Khanduras	Notable		557	835	BowDamage=12,LifeOnKill=6	1225	Khanduras Muster	The king's foresters hanged poachers. In the war they made them archers.	cluster	1224	581	798	2	-45	Stub	
 1225		Small		610	831	BowDamage=5,EvasionPercent=6	1224,1226	Khanduras Muster		cluster	1224	581	798	2	-44	Stub	
 1226		Small		623	784	BowDamage=5,EvasionPercent=6	320,1225	Khanduras Muster		cluster	1224	581	798	2		Stub	

@@ -3938,8 +3938,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
 	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
 	// Chaos resistance comes only from what names it, never from "all resistances", which are elemental.
-	const int chaosRes = gearStat(Poe2ItemStat::ChaosResistance);
-	const int maxChaosRes = gearStat(Poe2ItemStat::MaxChaosResistance);
+	const int chaosRes = gearStat(Poe2ItemStat::ChaosResistance) + passive(PassiveStat::ChaosResist);
+	const int maxChaosRes = gearStat(Poe2ItemStat::MaxChaosResistance) + passive(PassiveStat::MaxChaosResist);
 	if (IsPersistentSkillActive(player, PersistentSkill::PurityOfElements)) {
 		const int purity = PurityResistance * MapAuraPercent() / 100;
 		fireRes += purity;

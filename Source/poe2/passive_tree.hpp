@@ -161,6 +161,9 @@ enum class PassiveStat : uint8_t {
 	EyesInTheDark,
 	/** The Maiden's pact: bow passives reach staves; with a staff nothing shoots from beyond 5 tiles until it has struck; light capped at 4. */
 	OutOfDarkness,
+	/** Chaos resistance and its maximum (chaos damage plan step 5); never part of AllResist, which is elemental. */
+	ChaosResist,
+	MaxChaosResist,
 	Count,
 };
 

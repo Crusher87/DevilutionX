@@ -11,6 +11,8 @@
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
+#include "engine/random.hpp"
+#include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/telemetry.hpp"
@@ -170,6 +172,54 @@ TEST_F(Poe2ChaosTest, ChaosResistanceHasAFloorButNoDepthPenalty)
 	EXPECT_EQ(player.poe2.uncappedChaosResistance, -200);
 	EXPECT_EQ(player.poe2.chaosResistance, MinPoe2Resistance);
 	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+}
+
+TEST_F(Poe2ChaosTest, TreeNodesGiveChaosResistance)
+{
+	// Chaos plan step 5: four notables trade their all resistances for chaos resistance.
+	const std::pair<std::string_view, int> nodes[] = { { "Poisoned Water", 12 }, { "Perfect Harmony", 7 }, { "Grave Matters", 10 }, { "Soulstone Ward", 8 } };
+	for (const auto &[name, chaos] : nodes) {
+		Player &player = *MyPlayer;
+		player.poe2.passives.reset();
+		const PassiveNode *found = nullptr;
+		for (const PassiveNode &node : PassiveTree()) {
+			if (node.name == name)
+				found = &node;
+		}
+		ASSERT_NE(found, nullptr) << name;
+		player.poe2.passives.set(found->id);
+		Recalculate(player);
+		EXPECT_EQ(player.poe2.chaosResistance, chaos) << name;
+		EXPECT_EQ(player._pFireResist, 0) << name;
+	}
+	EXPECT_EQ(PassiveStatText(PassiveStat::ChaosResist, 12), "+12% to Chaos Resistance");
+	EXPECT_EQ(PassiveStatText(PassiveStat::MaxChaosResist, 2), "+2% to maximum Chaos Resistance");
+	EXPECT_EQ(PassiveStatText(PassiveStat::AllResist, 5), "+5% to all Elemental Resistances");
+}
+
+TEST_F(Poe2ChaosTest, AmethystRingCarriesChaosResistance)
+{
+	Player &player = *MyPlayer;
+	std::optional<size_t> row;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iName == std::string_view("Amethyst Ring"))
+			row = i;
+	}
+	ASSERT_TRUE(row);
+	EXPECT_GT(AllItemsList[*row].dropRate, 0);
+	for (uint32_t seed = 1; seed <= 20; seed++) {
+		Item &ring = player.InvBody[INVLOC_RING_LEFT];
+		ring = {};
+		SetPoe2ItemLevel(ring, 40);
+		SetRndSeed(seed);
+		SetupAllItems(player, ring, static_cast<_item_indexes>(*row), AdvanceRndSeed(), 40, 1, /*onlygood=*/false, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+		ring._iStatFlag = true;
+		ring._iIdentified = true;
+		Recalculate(player);
+		const int chaos = player.poe2.chaosResistance;
+		EXPECT_GE(chaos, 7) << seed;
+		EXPECT_LE(chaos, 13) << seed;
+	}
 }
 
 TEST_F(Poe2ChaosTest, TelemetryLogsChaosResistance)

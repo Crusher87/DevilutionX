@@ -1008,3 +1008,4 @@ poe2:shard_transmutation	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Transmut
 poe2:shard_regal	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Regal Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_REGAL	Null	false	150
 poe2:shard_chance	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Chance Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_CHANCE	Null	false	150
 poe2:shard_artificer	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Artificer's Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_ARTIFICER	Null	false	200
+poe2:amethyst_ring	1	Misc	Ring	CONSTRICTING_RING	Ring	RING	Amethyst Ring	Ring	30	0	0	0	0	0	0	0	0		RING	Null	false	2500

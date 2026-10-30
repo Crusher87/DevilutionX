@@ -129,8 +129,9 @@ bool LoadEssences()
 		if (!ReadRowId(reader, Filename, Essences.size(), essence.kind))
 			return false;
 		reader.readString("name", essence.name);
-		// The game has no spell damage, critical chance or chaos resistance modifiers, so Sorcery, Precision and
-		// Warding, and the kinds they became, guarantee the nearest ones.
+		// The game has no spell damage or critical chance modifiers, so Sorcery and Precision, and the kinds they became,
+		// guarantee the nearest ones. Warding keeps all elemental resistances; Ruin gives chaos resistance, which only
+		// what names it gives (its family isn't natural), so it reaches the family through the roll filter.
 		reader.readString("family", essence.family);
 		reader.read("becomes", essence.becomes, ParseBecomes<EssenceKind>);
 		Essences.push_back(std::move(essence));

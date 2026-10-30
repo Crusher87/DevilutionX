@@ -219,6 +219,12 @@ POE2_EXTRA_AMULETS = [
 	('gold_amulet', 'Gold Amulet', 35),
 ]
 
+# POE2 rings the bundle lacks, added after its bases: (id, name, level, implicit). The Amethyst Ring is the chaos
+# resistance ring (chaos damage plan step 5).
+POE2_EXTRA_RINGS = [
+	('amethyst_ring', 'Amethyst Ring', 30, 'ring_chaos'),
+]
+
 # bundle class -> (itemdat class, equip type, item type, short name, quality, unique-type source)
 CLASSES = {
 	'helmet': ('Armor', 'Helm', 'Helm', 'Helm', 'defence', 'Helm'),
@@ -270,7 +276,7 @@ CURSORS = {
 RING_CURSORS = {
 	'Ruby Ring': 'RING_OF_MAGMA', 'Sapphire Ring': 'XORINES_RING', 'Topaz Ring': 'RING_OF_THUNDER',
 	'Coral Ring': 'RING_OF_REGHA', 'Lapis Ring': 'RING_OF_THE_MYSTICS', 'Iron Ring': 'GIANTS_KNUCKLE',
-	'Opal Ring': 'MERCURIAL_RING', 'Gold Ring': 'RING_OF_ENGAGEMENT',
+	'Opal Ring': 'MERCURIAL_RING', 'Gold Ring': 'RING_OF_ENGAGEMENT', 'Amethyst Ring': 'CONSTRICTING_RING',
 	'Amber Amulet': 'AMULET', 'Jade Amulet': 'OPTIC_AMULET', 'Azure Amulet': 'AMULET_OF_WARDING',
 	'Prismatic Amulet': 'AURIC_AMULET', 'Vital Amulet': 'ACOLYTES_AMULET', 'Spirit Amulet': 'OPTIC_AMULET',
 	'Keen Amulet': 'AMULET_OF_WARDING', 'Sage Amulet': 'ACOLYTES_AMULET',
@@ -286,6 +292,7 @@ IMPLICITS = {
 	'ring_life': ('Life', 20, 30, '+{0} to maximum Life'),
 	'ring_mana': ('Mana', 18, 28, '+{0} to maximum Mana'),
 	'ring_attack': ('AddedPhysicalToAttacks', 2, 4, 'Adds {0} to {1} Physical Damage to Attacks'),
+	'ring_chaos': ('ChaosResistance', 7, 13, '+{0}% to Chaos Resistance'),
 	'amber_amulet': ('Strength', 6, 9, '+{0} to Strength'),
 	'jade_amulet': ('Dexterity', 6, 9, '+{0} to Dexterity'),
 	'azure_amulet': ('Intelligence', 6, 9, '+{0} to Intelligence'),
@@ -662,6 +669,22 @@ def main():
 			rows.append(row)
 		effect, lo, hi, text = POE2_AMULET_IMPLICITS[name]
 		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), '', ''])
+
+	for base_id, name, level, implicit in POE2_EXTRA_RINGS:
+		assert name not in taken and name not in generated, f'{name} clashes with another base'
+		generated.add(name)
+		unique = min(unique_types['Ring'], key=lambda t: (abs(t[0] - level), t[0]))[1] if 'Ring' in unique_types else 'NONE'
+		row = [
+			ID_PREFIX + base_id, '1', 'Misc', 'Ring', RING_CURSORS[name], 'Ring', unique, name, 'Ring', str(level),
+			'0', '0', '0', '0', '0', '0', '0', '0', '', 'RING', 'Null', 'false', str(1000 + level * 50),
+		]
+		if row[0] in by_id:
+			rows[by_id[row[0]]] = row
+		else:
+			by_id[row[0]] = len(rows)
+			rows.append(row)
+		effect, lo, hi, text = IMPLICITS[implicit]
+		meta_rows.append([name, 'ring', 'resistance', '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), '', ''])
 
 	tier_levels = sorted({b['drop_level'] for b in bases if b['item_class'] == 'one_hand_sword'})
 	for base_id, cls, real_name, unique in DIABLO_UNIQUE_TYPE_BASES:
