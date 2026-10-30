@@ -114,7 +114,7 @@ belt 4: Ruby Charm (row 248) rarity 0 level 0 "Ruby Charm"
   base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
   craft00000000000000000000000000000000000000
 jewel 0: Sapphire (row 303) rarity 3 level 60 "Torment Razor"
-  base ac 0 dam 0-0 pl 32 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
+  base ac 0 dam 0-0 pl 16 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
   mod jewel_maximum_life_pct T6 4 0
   mod jewel_damage_pct T6 16 0
   mod jewel_attack_speed T6 3 0

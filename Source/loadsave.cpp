@@ -2684,6 +2684,8 @@ uint8_t ReadPoe2HeroData(Player &player)
 		if (socket >= MaxJewelSockets || idx < 0 || static_cast<size_t>(idx) >= AllItemsList.size() || AllItemsList[idx].iMiscId != IMISC_JEWEL)
 			continue;
 		Item &jewel = player.jewels[socket];
+		// Item::clear() keeps the old stats, and rebuilding adds to them, so start from an empty item.
+		jewel = {};
 		RecreateItem(player, jewel, idx, createInfo, seed, 0, dwBuff, UnpackCraftState(craftBytes));
 		jewel._iIdentified = identified;
 		jewel._iStatFlag = true;
