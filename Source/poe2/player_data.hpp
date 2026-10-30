@@ -161,16 +161,19 @@ enum class WeaponSkill : uint8_t {
 	CriticalBolt,
 	WitheringRay,
 	TwinBolts,
-	Last = TwinBolts,
+	/** Gem skills appended after the granted ones (saved by value, so only ever appended). */
+	Despair,
+	Last = Despair,
 };
 
-/** @brief The first skill a caster weapon grants; every one after it is granted too. */
+/** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
 constexpr WeaponSkill FirstGrantedSkill = WeaponSkill::FreezingShards;
+constexpr WeaponSkill LastGrantedSkill = WeaponSkill::TwinBolts;
 
 /** @brief Whether the skill is one a caster weapon grants rather than a gem. */
 constexpr bool IsGrantedSkill(WeaponSkill skill)
 {
-	return skill >= FirstGrantedSkill && skill <= WeaponSkill::Last;
+	return skill >= FirstGrantedSkill && skill <= LastGrantedSkill;
 }
 
 enum class SupportGem : uint8_t {
@@ -1046,6 +1049,11 @@ struct Poe2PlayerData {
 	/** @brief Fire, lightning and magic resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
 	std::array<int16_t, 3> uncappedResistances {};
 	std::array<int16_t, 3> maxResistances {};
+	/** @brief Chaos resistance, before its cap, and its cap (not saved; from CalcPlrItemVals). Kept apart from the
+	 * elements' arrays above, which unique rules treat as "the elemental resistances". */
+	int16_t chaosResistance = 0;
+	int16_t uncappedChaosResistance = 0;
+	int16_t maxChaosResistance = 0;
 	/** @brief Maximum energy shield from gear (not saved; from CalcPlrItemVals). */
 	int maxEnergyShield = 0;
 	/** @brief Current energy shield as a raw Fixed26_6 value (not saved; refills when loaded). */
@@ -1096,7 +1104,7 @@ struct Poe2PlayerData {
 	uint8_t charmCooldown = 0;
 	/** @brief Which essence, augment or catalyst is on the cursor waiting to be used (not saved). */
 	uint8_t currencyVariant = 0;
-	/** @brief Game ticks left of the fire, lightning and magic resistance from Ruby, Topaz and Amethyst charms (not saved). */
+	/** @brief Game ticks left of the fire, lightning and chaos resistance from Ruby, Topaz and Amethyst charms (not saved). */
 	std::array<uint8_t, 3> resistCharmTicks {};
 	/** @brief Game ticks left of stun immunity from a Stone Charm (not saved). */
 	uint8_t stunImmuneTicks = 0;
@@ -1194,6 +1202,9 @@ struct Poe2PlayerData {
 		uniqueState = {};
 		uncappedResistances.fill(0);
 		maxResistances.fill(0);
+		chaosResistance = 0;
+		uncappedChaosResistance = 0;
+		maxChaosResistance = 0;
 		maxEnergyShield = 0;
 		energyShield = 0;
 		energyShieldRechargeTicks = 0;

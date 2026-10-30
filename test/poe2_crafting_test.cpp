@@ -291,7 +291,7 @@ TEST_F(Poe2CraftingTest, EveryEffectHasItsOwnBit)
 	}
 	EXPECT_TRUE(ModEffectBits(ModEffect::Count).none());
 	// Effects past 63 get their own bits, not those of the effects 64 below them.
-	for (size_t i = 64; i < MaxModEffects; i++) {
+	for (size_t i = std::max<size_t>(64, static_cast<size_t>(ModEffect::Count) + 1); i < MaxModEffects; i++) {
 		const ModEffectMask bits = ModEffectBits(static_cast<ModEffect>(i));
 		EXPECT_EQ(bits.count(), 1U) << i;
 		EXPECT_TRUE(bits.test(i)) << i;
@@ -462,6 +462,39 @@ TEST_F(Poe2CraftingTest, EssencesGuaranteeTheirModifier)
 	Item rare = Crafted(CurrencyOrb::Alchemy, normal);
 	rare = Crafted(CurrencyOrb::Essence, rare, EssenceVariant(EssenceKind::Vigor, EssenceTier::Perfect));
 	EXPECT_EQ(Mods(rare).size(), 4U);
+}
+
+TEST_F(Poe2CraftingTest, EssenceOfRuinGivesChaosResistance)
+{
+	// Chaos plan step 5: the essence that names chaos resistance finds it (it also rolls naturally since step 14).
+	const std::optional<uint8_t> chaos = FindModifierFamily("chaos_resistance");
+	ASSERT_TRUE(chaos);
+	EXPECT_EQ(GetEssence(EssenceKind::Ruin).family, "chaos_resistance");
+	EXPECT_EQ(GetEssence(EssenceKind::Ruin).becomes, EssenceKind::None);
+	for (const std::string_view base : { "Iron Cap", "Full Plate Mail" }) {
+		Item item = Crafted(CurrencyOrb::Transmutation, MakeItem(base, 9, ITEM_QUALITY_NORMAL, 70));
+		item = Crafted(CurrencyOrb::Essence, item, EssenceVariant(EssenceKind::Ruin, EssenceTier::Normal));
+		const std::vector<Poe2ItemMod> mods = Mods(item);
+		EXPECT_NE(std::find_if(mods.begin(), mods.end(), [&](const Poe2ItemMod &mod) { return mod.family == *chaos + 1; }), mods.end()) << base;
+		EXPECT_GT(item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::ChaosResistance)], 0) << base;
+	}
+	// The Prismatic catalyst boosts the elements only.
+	EXPECT_TRUE(CatalystBoosts(Catalyst::Prismatic, ModEffect::FireResistance));
+	EXPECT_FALSE(CatalystBoosts(Catalyst::Prismatic, ModEffect::ChaosResistance));
+}
+
+TEST_F(Poe2CraftingTest, VenomRuneGivesChaosResistance)
+{
+	const Augment &rune = GetAugment(AugmentId::VenomRune);
+	EXPECT_EQ(rune.name, "Venom Rune");
+	EXPECT_EQ(rune.becomes, AugmentId::None);
+	EXPECT_EQ(rune.weaponEffect, ModEffect::ChaosResistance);
+	EXPECT_EQ(rune.armourEffect, ModEffect::ChaosResistance);
+	Item item = MakeItem("Full Plate Mail", 9, ITEM_QUALITY_RARE, 70);
+	const int before = item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::ChaosResistance)];
+	item = Crafted(CurrencyOrb::Artificer, item);
+	item = Crafted(CurrencyOrb::Augment, item, static_cast<uint8_t>(AugmentId::VenomRune));
+	EXPECT_EQ(item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::ChaosResistance)], before + 10);
 }
 
 TEST_F(Poe2CraftingTest, QualityCurrencyFitsItsKind)

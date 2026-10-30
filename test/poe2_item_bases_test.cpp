@@ -272,8 +272,9 @@ TEST_F(Poe2ItemBasesTest, EveryBundleBaseIsUsable)
 		}
 	}
 	// The bundle's 384, POE2's Crimson, Lunar and Gold Amulets, the 43 body armours of plan step 10, the 10 POE2
-	// weapons that carry Diablo unique types no other base does and the caster weapons rework's 54.
-	EXPECT_EQ(bases, 494);
+	// weapons that carry Diablo unique types no other base does, the caster weapons rework's 54, the Amethyst Ring and the
+	// 5 chaos wands and staves.
+	EXPECT_EQ(bases, 500);
 }
 
 TEST_F(Poe2ItemBasesTest, EveryDiabloWeaponUniqueHasABaseThatDrops)

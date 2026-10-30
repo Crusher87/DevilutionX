@@ -1412,13 +1412,20 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		TelemetryHitStart(true, monster.name());
 		TelemetryHitStep(true, "rolled", dam.raw());
 	}
+	const Fixed26_6 beforeArmour = dam;
 	if (!firstBlow) {
 		dam = ApplyArmour(player, dam);
 		TelemetryHitStep(true, "after armour", dam.raw());
 	}
+	// A Profane map's extra chaos stays apart from the physical hit: it meets chaos resistance and the shield as chaos.
+	Fixed26_6 extraChaos = Fixed26_6::fromInt(0);
 	if (&player == MyPlayer) {
-		dam = ApplyMapMonsterHit(player, dam);
+		const MapMonsterHit mapHit = ApplyMapMonsterHit(player, dam, beforeArmour);
+		dam = mapHit.physical;
+		extraChaos = mapHit.chaos;
 		TelemetryHitStep(true, "after map modifiers", dam.raw());
+		if (extraChaos > 0)
+			TelemetryHitStep(true, "extra chaos after resistance", extraChaos.raw());
 	}
 	if (gbIsPoe2 && &player == MyPlayer) {
 		dam = ApplyTableSkillDefences(monster, player, dam);
@@ -1432,7 +1439,12 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		}
 		TelemetryMeleeSwing(player, SwingOutcome::Landed);
 		TelemetryNoteAttacker(monster.name());
-		ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, dam, DamageType::Physical)));
+		const Fixed26_6 physical = ApplyUniqueHitTaken(player, dam, DamageType::Physical);
+		const Fixed26_6 chaos = extraChaos > 0 ? ApplyUniqueHitTaken(player, extraChaos, DamageType::Chaos) : extraChaos;
+		const ShieldLeftover left = AbsorbHitWithEnergyShield(player, physical, chaos);
+		ApplyPlrDamage(DamageType::Physical, player, left.damage);
+		if (chaos > 0)
+			ApplyPlrDamage(DamageType::Chaos, player, left.chaos);
 		ReflectMeleeHit(player, monster, dam);
 	}
 
@@ -4269,7 +4281,7 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 	// POE2 Mashup: the Skill Lab's targets never die.
 	if (IsLabDummy(monster) && monster.hitPoints < Fixed26_6::fromInt(1))
 		monster.hitPoints = Fixed26_6::fromInt(1);
-	TelemetryMonsterDamaged(monster, damage, lifeBefore);
+	TelemetryMonsterDamaged(monster, damage, lifeBefore, damageType);
 	NoteSupportedDamage(monster, damageType, damage);
 
 	if (monster.hasNoLife()) {
@@ -5159,7 +5171,7 @@ void PrintMonstHistory(int mt)
 		int res = (sgGameInitInfo.nDifficulty != DIFF_HELL) ? MonstersData[mt].resistance : MonstersData[mt].resistanceHell;
 		if (gbIsPoe2) {
 			// POE2 Mashup: resistances are percentages, and no monster is immune.
-			AddInfoBoxString(ResistanceMarksText(static_cast<uint16_t>(res), MonstersData[mt].monsterClass == MonsterClass::Undead));
+			AddInfoBoxString(ResistanceMarksText(static_cast<uint16_t>(res), MonstersData[mt].monsterClass == MonsterClass::Undead, MonsterTypeChaosResistance(mt)));
 		} else if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
 			AddInfoBoxString(_("No magic resistance"));
 		} else {
@@ -5195,7 +5207,7 @@ void PrintUniqueHistory()
 	}
 
 	if (gbIsPoe2) {
-		AddInfoBoxString(ResistanceMarksText(monster.resistance, monster.data().monsterClass == MonsterClass::Undead));
+		AddInfoBoxString(ResistanceMarksText(monster.resistance, monster.data().monsterClass == MonsterClass::Undead, MonsterResistance(monster, DamageType::Chaos)));
 		return;
 	}
 	const int res = monster.shownResistance() & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);

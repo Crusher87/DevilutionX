@@ -83,6 +83,7 @@ Decrepify		0.7						none (Temporal Chains)
 LowerResist		0.7						Elemental Weakness
 Confuse		0.7						none (any POE2 curse)
 Attract		0.7						none (any POE2 curse)
+Despair		0.7						Despair
 Spell Firebolt		0.9				140	100	Firebolt
 Spell ChargedBolt		0.7				109	105	none (Spark)
 Spell HolyBolt		0.75				117	109	none (Chaos Bolt)

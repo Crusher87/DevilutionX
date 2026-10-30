@@ -276,7 +276,7 @@ CLUSTERS = {
             ('The Protector', [('StaffDamage', 12), ('EvasionPercent', 15)], 'A staff held across the body turns as many blows as it gives.'),
         ]},
         {'key': 'm_harmony', 'band': 'outer', 'title': 'Harmony', 'small': [('EvasionPercent', 10), ('EnergyShieldPercent', 10)], 'notables': [
-            ('Perfect Harmony', [('EvasionPercent', 25), ('AllResist', 4)], 'Order and Chaos, held level, as the Patriarchs hold them.'),
+            ('Perfect Harmony', [('EvasionPercent', 25), ('ChaosResist', 7)], 'Order and Chaos, held level, as the Patriarchs hold them.'),
             ('The Quiet Cell', [('LifeRegenRate', 6), ('ManaRegen', 15)], 'A night in a quiet cell mends what a day of fighting broke.'),
             ('Unseen Hand', [('EvasionVsSpells', 5), ('Dexterity', 10)], 'Spells pass where you no longer stand.'),
         ]},
@@ -363,7 +363,7 @@ BORDER_CLUSTERS = {
         {'key': 'h_archive', 'band': 'mid', 'title': 'Horadric Magic', 'small': [('ColdDamage', 4), ('StaffDamage', 3)], 'notables': [
             ('Frost of the Archive', [('ColdDamage', 16), ('FreezeBuildup', 12)], 'The Horadrim fought demons with pure arcane force.'),
             ('Horadric Staff', [('SpellDamage', 16), ('CastSpeed', 5)], "Staff and amulet joined, the key the Horadrim left to Tal Rasha's tomb."),
-            ('Soulstone Ward', [('EnergyShieldPercent', 15), ('MaxMagicResist', 1)], 'Soulstones held two Prime Evils for centuries.'),
+            ('Soulstone Ward', [('EnergyShieldPercent', 15), ('ChaosResist', 8)], 'Soulstones held two Prime Evils for centuries.'),
             ("Tyrael's Counsel", [('ManaCost', -8), ('Spirit', 8)], 'Tyrael gathered the best of the mage clans and named them Horadrim.'),
         ]},
         {'key': 'h_forbidden', 'band': 'mid', 'title': 'Forbidden Lore', 'small': [('SpellDamage', 4)], 'notables': [
@@ -878,7 +878,7 @@ CONTENT_PASS = {
             ('Stony Field', [('StunThreshold', 15), ('LifePercent', 4)], 'The Sisters train on the Stony Field, where any step can turn an ankle.'),
             ("Hunter's Rest", [('EvasionPercent', 12), ('LifeRegenRate', 6)], 'Sleep light, heal fast, move at dawn.'),
             ('Field Rations', [('FlaskRecovery', 15), ('LifeOnKill', 6)], "Bread, salt and one of the priestess's draughts. Save the draught for last."),
-            ('Poisoned Water', [('AllResist', 8), ('EvasionPercent', 10)], "Something fouled Tristram's water at its source. Pepin begged someone to go down and look."),
+            ('Poisoned Water', [('ChaosResist', 12), ('EvasionPercent', 10)], "Something fouled Tristram's water at its source. Pepin begged someone to go down and look."),
             ('Spare Frame', [('Dexterity', 10), ('LifePercent', 4)], "A Sister carries her own weight and her bow's, and nothing else."),
             ('Slip Away', [('ManaOnKill', 4), ('EvasionPercent', 12)], 'Leave nothing behind but the body.'),
             ('The Palisade Watch', [('BowDamage', 10), ('Vitality', 8)], 'The Sisters keep a watch on the palisade every night, and every night the moor tests it.'),
@@ -931,7 +931,7 @@ CONTENT_PASS = {
         {'key': 'k_woods', 'side': 1, 'band': 'mid', 'title': 'Woods of Khanduras', 'small': [('BowDamage', 5), ('EvasionPercent', 5)], 'notables': [
             ('Poachers of Khanduras', [('BowDamage', 12), ('LifeOnKill', 6)], "The king's foresters hanged poachers. In the war they made them archers."),
             ("Wirt's Wares", [('EvasionPercent', 15), ('FlaskRecovery', 12)], 'Wirt asks a fortune and will not say where any of it came from.'),
-            ('Grave Matters', [('AllResist', 6), ('LifePercent', 4)], "'I'd keep my mind on what lies below the cathedral and not what lies below our topsoil.'"),
+            ('Grave Matters', [('ChaosResist', 10), ('LifePercent', 4)], "'I'd keep my mind on what lies below the cathedral and not what lies below our topsoil.'"),
         ]},
     ],
     'Sightless Eye': [

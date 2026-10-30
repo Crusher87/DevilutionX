@@ -915,6 +915,7 @@ GameplayOptions::GameplayOptions()
     , mapPoiNames("Point of Interest Names", OptionEntryFlags::None, N_("Point of Interest Names"), N_("POE2 mode: names next to the map's markers for stairs, portals, shrines, strongboxes and unique monsters."), true)
     , enableQuestTracking("Enable Quest Tracking", OptionEntryFlags::None, N_("Enable Quest Tracking"), N_("POE2 mode: your quests under way, each with its next step, in a short list under the corner map. Hidden with the corner map."), true)
     , newCathedralFloors("New Cathedral Floors", OptionEntryFlags::None, N_("New Cathedral Floors"), N_("On: Cathedral floors are a winding main way of rooms with side areas, like Path of Exile 2. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
+    , newCatacombsFloors("New Catacombs Floors", OptionEntryFlags::None, N_("New Catacombs Floors"), N_("On: Catacombs floors are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , numHealPotionPickup("Heal Potion Pickup", OptionEntryFlags::None, N_("Heal Potion Pickup"), N_("Number of Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numFullHealPotionPickup("Full Heal Potion Pickup", OptionEntryFlags::None, N_("Full Heal Potion Pickup"), N_("Number of Full Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numManaPotionPickup("Mana Potion Pickup", OptionEntryFlags::None, N_("Mana Potion Pickup"), N_("Number of Mana potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
@@ -968,6 +969,7 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&mapPoiNames,
 		&enableQuestTracking,
 		&newCathedralFloors,
+		&newCatacombsFloors,
 		&autoRefillBelt,
 		&autoEquipWeapons,
 		&autoEquipArmor,

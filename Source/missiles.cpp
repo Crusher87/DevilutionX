@@ -543,8 +543,11 @@ bool Plr2PlrMHit(const Player &player, Player &target, int mindam, int maxdam, i
 		resper = target._pLghtResist;
 		break;
 	case DamageType::Magic:
-	case DamageType::Chaos:
 		resper = target._pMagResist;
+		break;
+	case DamageType::Chaos:
+		// POE2 Mashup: chaos meets chaos resistance (magic resistance outside POE2 mode).
+		resper = static_cast<int8_t>(PlayerChaosResistance(target));
 		break;
 	default:
 		resper = 0;
@@ -1517,6 +1520,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	// POE2 Mashup: block chance caps at 50%, or up to 75% with the passive tree's block, as in POE2.
 	blkper = std::clamp(blkper, 0, player.GetMaxBlockChance(gbIsPoe2));
 
+	// POE2 Mashup: Hellfire's liches and Diablo's Apocalypse hit with chaos.
+	damageType = MonsterHitDamageType(monster, mtype, damageType);
 	int8_t resper;
 	switch (damageType) {
 	case DamageType::Fire:
@@ -1526,8 +1531,11 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		resper = player._pLghtResist;
 		break;
 	case DamageType::Magic:
-	case DamageType::Chaos:
 		resper = player._pMagResist;
+		break;
+	case DamageType::Chaos:
+		// POE2 Mashup: chaos meets chaos resistance (magic resistance outside POE2 mode).
+		resper = static_cast<int8_t>(PlayerChaosResistance(player));
 		break;
 	default:
 		resper = 0;
@@ -1586,11 +1594,11 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 	// POE2 Mashup: a Ruby, Topaz or Amethyst charm answers the hit landing.
 	resper = static_cast<int8_t>(ResistanceAgainstHit(player, damageType, resper));
-	// Map monsters' hits can penetrate resistances, and poison or make the hero bleed.
-	if (monster != nullptr && damageType != DamageType::Physical)
+	// Map monsters' hits can penetrate resistances, and poison or make the hero bleed. Penetration is elemental, as in POE2.
+	if (monster != nullptr && damageType != DamageType::Physical && damageType != DamageType::Chaos)
 		resper = static_cast<int8_t>(resper - MapPenetration());
 	if (monster != nullptr && &player == MyPlayer)
-		OnMapMonsterSpellHit(player, damage);
+		OnMapMonsterSpellHit(player, damage, damageType);
 
 	if (monster != nullptr) {
 		MonsterReducePlayerAttribute(*monster, player);
@@ -1606,7 +1614,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		TelemetryHitStep(true, "resistance", resper, true);
 		TelemetryHitStep(true, "after resistance", damage.raw());
 		if (&player == MyPlayer) {
-			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType)), 0, deathReason);
+			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType), damageType), 0, deathReason);
 		}
 
 		if (!player.hasNoLife()) {
@@ -1616,7 +1624,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	}
 
 	if (&player == MyPlayer) {
-		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType)), 0, deathReason);
+		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType), damageType), 0, deathReason);
 	}
 
 	if (!player.hasNoLife()) {

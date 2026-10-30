@@ -3514,7 +3514,7 @@ void CalcPlrDamageMod(Player &player)
 	}
 }
 
-void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int lightning, int magic)
+void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int lightning, int magic, int chaos, int maxChaosBonus)
 {
 	const int playerLevel = HiddenBonusLevel(player);
 
@@ -3537,6 +3537,8 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 		magic = 0;
 		fire = 0;
 		lightning = 0;
+		// "All Resistance equals 0" takes chaos with it; Natural Resistance and Rage name only Diablo's three.
+		chaos = 0;
 	}
 
 	if (gbIsPoe2) {
@@ -3564,6 +3566,10 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 		player._pFireResist = Poe2Resistance(uncapped[0], 0, data.maxResistances[0]);
 		player._pLghtResist = Poe2Resistance(uncapped[1], 0, data.maxResistances[1]);
 		player._pMagResist = Poe2Resistance(uncapped[2], 0, data.maxResistances[2]);
+		// Chaos resistance starts at 0 and takes no depth or difficulty penalty, like POE2's.
+		data.maxChaosResistance = static_cast<int16_t>(std::min<int>(MaxResistance + maxChaosBonus, HardMaxResistance));
+		data.uncappedChaosResistance = static_cast<int16_t>(std::clamp<int>(chaos, -1000, 1000));
+		data.chaosResistance = static_cast<int16_t>(Poe2Resistance(chaos, 0, data.maxChaosResistance));
 		return;
 	}
 	player._pMagResist = std::clamp(magic, 0, MaxResistance);
@@ -3931,6 +3937,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	fireRes += passive(PassiveStat::FireResist) + passive(PassiveStat::AllResist);
 	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
 	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
+	// Chaos resistance comes only from what names it, never from "all resistances", which are elemental.
+	const int chaosRes = gearStat(Poe2ItemStat::ChaosResistance) + passive(PassiveStat::ChaosResist);
+	const int maxChaosRes = gearStat(Poe2ItemStat::MaxChaosResistance) + passive(PassiveStat::MaxChaosResist);
 	if (IsPersistentSkillActive(player, PersistentSkill::PurityOfElements)) {
 		const int purity = PurityResistance * MapAuraPercent() / 100;
 		fireRes += purity;
@@ -4044,7 +4053,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	EnsureValidReadiedSpell(player);
 	player._pISplLvlAdd = splLvlAdd;
 	player._pIEnAc = targetAc;
-	CalcPlrResistances(player, flags, fireRes, lightRes, magicRes);
+	CalcPlrResistances(player, flags, fireRes, lightRes, magicRes, chaosRes, maxChaosRes);
 	// POE2 Mashup: POE2's +12 life a level and its mana pool rule, on top of the saved Diablo-rule bases.
 	life += Poe2LevelLife(player);
 	mana += Poe2LevelMana(player);

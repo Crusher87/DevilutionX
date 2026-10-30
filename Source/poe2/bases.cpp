@@ -124,6 +124,8 @@ uint16_t ParseElementLock(std::string_view text)
 			bits |= ModBaseLightningSpell;
 		else if (name == "physical")
 			bits |= ModBasePhysicalSpell;
+		else if (name == "chaos")
+			bits |= ModBaseChaosSpell;
 		else if (!name.empty())
 			LogError("Bad base element: {}", name);
 	}

@@ -400,14 +400,14 @@ TEST_F(Poe2GrantedSkillsTest, BoltsFlyWithTheirOwnElement)
 		bool pierce;
 	} Bolts[] = {
 		{ "Chiming Staff", MissileID::YellowFlare, DamageType::Lightning, 1, true },
-		{ "Rending Staff", MissileID::RedFlare, DamageType::Physical, 1, true },
+		{ "Rending Staff", MissileID::RedFlare, DamageType::Chaos, 1, true },
 		{ "Icicle Staff", MissileID::BlueFlare, DamageType::Magic, 1, true },
 		{ "Frigid Wand", MissileID::BlueFlare, DamageType::Magic, 1, false },
-		{ "Primordial Wand", MissileID::RedFlare, DamageType::Physical, 4, false },
+		{ "Primordial Wand", MissileID::RedFlare, DamageType::Chaos, 4, false },
 		{ "Dueling Wand", MissileID::OrangeFlare, DamageType::Physical, 2, false },
 		{ "Volatile Wand", MissileID::OrangeFlare, DamageType::Fire, 1, false },
 		{ "Galvanic Wand", MissileID::YellowFlare, DamageType::Lightning, 1, false },
-		{ "Acrid Wand", MissileID::BloodStar, DamageType::Physical, 1, false },
+		{ "Acrid Wand", MissileID::BloodStar, DamageType::Chaos, 1, false },
 		{ "Offering Wand", MissileID::RedFlare, DamageType::Physical, 1, false },
 	};
 	for (const auto &bolt : Bolts) {
@@ -576,13 +576,14 @@ TEST_F(Poe2GrantedSkillsTest, TheWandRidersWork)
 		OnTableMissileHit(bolt, player, monster, 10, false);
 	};
 
-	// Wither: a stack a hit up to 10 (3% more damage taken each), for 4 seconds; more from Withering Touch stay.
+	// Wither: a stack a hit up to 10 (5% more chaos damage taken each), for 4 seconds; more from Withering Touch stay.
 	Monster &monster = PlaceMonster(0, { 20, 24 });
 	for (int i = 0; i < 12; i++)
 		hit(WeaponSkill::WitheringBolt, monster);
 	EXPECT_EQ(monster.poe2.witherStacks, GrantedWitherMaxStacks);
 	EXPECT_EQ(monster.poe2.witherTicks, GrantedWitherTicks);
-	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Physical), 130);
+	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 150);
+	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Physical), 100);
 	monster.poe2.witherStacks = 12;
 	hit(WeaponSkill::WitheringRay, monster);
 	EXPECT_EQ(monster.poe2.witherStacks, 12);
@@ -691,16 +692,17 @@ TEST_F(Poe2GrantedSkillsTest, TheKillAndSpreadRidersWork)
 	hit(WeaponSkill::Exsanguinate, first);
 	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(102));
 
-	// Decompose: the hit again over 4 seconds; when the monster dies the plague passes to the one nearest monster.
+	// Decompose: the hit again as chaos over 4 seconds; when the monster dies the plague passes to the one nearest monster.
 	first.hitPoints = first.maxHitPoints;
 	hit(WeaponSkill::Decompose, first);
 	EXPECT_EQ(first.poe2.plagueTicks, PlagueTicks);
-	EXPECT_EQ(first.poe2.bleedTicks, PlagueTicks);
-	EXPECT_EQ(first.poe2.bleedSkill, WeaponSkill::Decompose);
-	EXPECT_EQ(first.poe2.bleedDamagePerTick, 40 * 64 / PlagueTicks);
+	EXPECT_EQ(first.poe2.chaosTicks, PlagueTicks);
+	EXPECT_EQ(first.poe2.chaosSkill, WeaponSkill::Decompose);
+	EXPECT_EQ(first.poe2.chaosDamagePerTick, 40 * 64 / PlagueTicks);
+	EXPECT_EQ(first.poe2.bleedTicks, 0);
 	OnTableCursedMonsterKilled(first);
 	EXPECT_EQ(near.poe2.plagueTicks, PlagueTicks);
-	EXPECT_EQ(near.poe2.bleedSkill, WeaponSkill::Decompose);
+	EXPECT_EQ(near.poe2.chaosSkill, WeaponSkill::Decompose);
 	EXPECT_EQ(twoAway.poe2.plagueTicks, 0);
 	EXPECT_EQ(threeAway.poe2.plagueTicks, 0);
 	// Its time runs down with the curses'.

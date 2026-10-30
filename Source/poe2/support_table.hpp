@@ -59,6 +59,8 @@ enum SkillTag : uint32_t {
 	ST_Strike = 1U << 23,
 	/** A herald: its explosions hit for it, and only supports that change those fit. */
 	ST_Herald = 1U << 24,
+	/** The skill deals chaos damage. Not elemental. */
+	ST_Chaos = 1U << 25,
 	ST_Elemental = ST_Fire | ST_Lightning | ST_Frost,
 };
 
@@ -136,10 +138,32 @@ void SetMissileSkill(Missile &missile, const Player &player, SkillSlot skill);
 
 /** @brief Damage applied to a monster; counted for the hit in progress. */
 void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage);
+/**
+ * @brief The share of a hit's damage of this type that got through to the monster, in percent of what the hit had
+ * before the monster's resistance and damage taken (MonsterDamageTakenPercent); poison counts the hit from before them.
+ */
+void NoteHitDamageTakenPercent(const Monster &monster, DamageType type, int percent);
+/**
+ * POE2's poison (Curtis 2026-10-30): each second for 2 seconds it deals 20% of the hit's physical and chaos damage, as
+ * counted before the monster's resistance. Only the strongest poison on a monster deals damage, unless the skill or
+ * support says its poisons stack.
+ */
+constexpr int PoisonPercentPerSecond = 20;
+constexpr int PoisonTicks = 2 * 20;
+/**
+ * @brief Poisons a monster: total is the poison's whole damage, as a raw Fixed26_6, spread over ticks. With maxStacks 1
+ * only the strongest poison counts: a weaker one is lost, a stronger one takes over. More stacks add up to that many.
+ */
+void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1);
+/**
+ * @brief What one tick of poison or other chaos damage over time deals the monster, after Withered and its chaos
+ * resistance, as a raw Fixed26_6.
+ */
+[[nodiscard]] int32_t ChaosTickDamage(const Monster &monster, int32_t perTick);
 /** @brief More or less damage from the supports of the hit in progress, and from wither, in percent. */
 int SupportHitDamagePercent(const Monster &monster, DamageType type);
-/** @brief How much more damage a monster's Withered stacks make it take, in percent. */
-[[nodiscard]] int WitheredDamageTakenPercent(const Monster &monster);
+/** @brief How much more damage of this type a monster's Withered stacks make it take, in percent: chaos only. */
+[[nodiscard]] int WitheredDamageTakenPercent(const Monster &monster, DamageType type);
 /** @brief The penetration supports of the hit in progress, against the damage type's resistance. */
 int SupportHitPenetration(DamageType type);
 /** @brief Ailment chance of the hit in progress, in percent of normal. */

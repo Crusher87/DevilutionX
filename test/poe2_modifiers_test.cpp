@@ -98,8 +98,9 @@ public:
 TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
-	// The 94 from before the caster weapons rework, then its 76 (tools/poe2_caster_affixes.tsv).
-	ASSERT_EQ(families.size(), 170U);
+	// The 94 from before the caster weapons rework, then its 76 (tools/poe2_caster_affixes.tsv), then the 4 chaos spell
+	// families of the chaos wands and staves.
+	ASSERT_EQ(families.size(), 174U);
 	ASSERT_EQ(LegacyModFamilyCount, 94);
 	int enabled = 0;
 	for (size_t i = 0; i < families.size(); i++) {
@@ -119,8 +120,9 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	// 57 with spell damage on staves (plan step 14), and the rework's 52 (18 staff, 18 wand, 16 sceptre).
-	EXPECT_EQ(enabled, 57 + 52);
+	// 57 with spell damage on staves (plan step 14), the rework's 52 (18 staff, 18 wand, 16 sceptre), chaos resistance and
+	// the chaos wands' and staves' 4.
+	EXPECT_EQ(enabled, 57 + 52 + 1 + 4);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");
@@ -131,19 +133,21 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 
 TEST_F(Poe2ModifiersTest, FamiliesRollNaturallyAsTheGeneratorSays)
 {
-	// Chaos plan step 2: tools/poe2_modifiers.py writes the natural column; today every enabled family rolls naturally
-	// and no other one does.
+	// Chaos plan step 2: tools/poe2_modifiers.py writes the natural column; every enabled family rolls naturally and no
+	// other one does. Chaos resistance joined them in step 14; the old chaos spell families stay off.
 	for (const ModFamily &family : ModifierFamilies())
 		EXPECT_EQ(family.natural, family.enabled) << family.id;
-	for (const std::string_view id : { "chaos_resistance", "chaos_spell_damage", "chaos_skill_levels" }) {
+	EXPECT_TRUE(ModifierFamilies()[*FindModifierFamily("chaos_resistance")].natural);
+	for (const std::string_view id : { "chaos_spell_damage", "chaos_skill_levels" }) {
 		const std::optional<uint8_t> family = FindModifierFamily(id);
 		ASSERT_TRUE(family) << id;
 		EXPECT_FALSE(ModifierFamilies()[*family].natural) << id;
 	}
 }
 
-TEST_F(Poe2ModifiersTest, ChaosResistanceNeverRollsNaturally)
+TEST_F(Poe2ModifiersTest, ChaosResistanceRollsNaturallyOnItsSlots)
 {
+	// Chaos plan step 14: drops, vendor items and currency that adds a random modifier roll it on its slots, and only there.
 	const std::optional<uint8_t> chaos = FindModifierFamily("chaos_resistance");
 	ASSERT_TRUE(chaos);
 	const auto chaosId = static_cast<uint8_t>(*chaos + 1);
@@ -151,17 +155,24 @@ TEST_F(Poe2ModifiersTest, ChaosResistanceNeverRollsNaturally)
 	for (size_t slot = 0; slot < static_cast<size_t>(ModSlot::Count); slot++) {
 		if ((ModifierFamilies()[*chaos].slots & (1U << slot)) == 0)
 			continue;
+		int found = 0;
 		for (uint32_t seed = 1; seed <= 200; seed++) {
-			for (const Poe2ItemMod &mod : RollItemMods(static_cast<ModSlot>(slot), 0xFFFF, 82, 6, MaxRareModsPerSide, seed, seed * 31U)) {
-				EXPECT_NE(mod.family, chaosId) << slot;
-				rolled++;
-			}
+			for (const Poe2ItemMod &mod : RollItemMods(static_cast<ModSlot>(slot), 0xFFFF, 82, 6, MaxRareModsPerSide, seed, seed * 31U))
+				found += mod.family == chaosId ? 1 : 0;
 			const std::optional<Poe2ItemMod> added = RollAddedMod(static_cast<ModSlot>(slot), 0xFFFF, 82, {}, MaxRareModsPerSide, seed, ModRollFilter {});
-			if (added)
-				EXPECT_NE(added->family, chaosId) << slot;
+			found += added && added->family == chaosId ? 1 : 0;
+		}
+		EXPECT_GT(found, 0) << slot;
+		rolled += found;
+	}
+	EXPECT_GT(rolled, 100);
+	// Weapons don't roll it.
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		for (const ModSlot slot : { ModSlot::OneHandMelee, ModSlot::TwoHandMelee, ModSlot::Bow }) {
+			for (const Poe2ItemMod &mod : RollItemMods(slot, 0xFFFF, 82, 6, MaxRareModsPerSide, seed, seed * 31U))
+				EXPECT_NE(mod.family, chaosId) << static_cast<int>(slot);
 		}
 	}
-	EXPECT_GT(rolled, 1000);
 }
 
 TEST_F(Poe2ModifiersTest, AFamilyThatIsntNaturalComesOnlyFromAnEssence)

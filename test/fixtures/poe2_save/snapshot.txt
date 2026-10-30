@@ -1,24 +1,23 @@
 body 0: Iron Cap (row 576) rarity 3 level 60 "Kraken Peak"
-  base ac 33 dam 0-0 pl 0 12 0 attr 0 0 3 0 res 0 34 0 hp 0 mana 0 flags 0 req 0 0 0
-  mod flat_armour T8 21 0
-  mod lightning_resistance T3 34 0
-  mod accuracy_rating T4 12 0
-  mod dexterity T8 3 0
-  stats 14=21
+  base ac 90 dam 0-0 pl 0 0 0 attr 8 0 14 0 res 0 0 0 hp 2112 mana 0 flags 0 req 0 0 0
+  mod maximum_life T6 33 0
+  mod flat_armour T5 78 0
+  mod dexterity T4 14 0
+  mod strength T6 8 0
+  stats 14=78
   craft00000000000000000000000000000000000000
 body 1: Ruby Ring (row 672) rarity 0 level 40 "Ruby Ring"
   base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 15 0 0 hp 0 mana 0 flags 0 req 0 0 0
   implicit 22 15 0
   craft00000000000000000000000000000000000000
 body 2: Sapphire Ring (row 673) rarity 3 level 75 "Gloom Finger"
-  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 24 0 res 15 0 16 hp 0 mana 0 flags 0 req 0 0 0
-  mod item_rarity_prefix T2 13 0
-  mod global_added_physical_attacks T5 6 11
-  mod mana_regeneration T7 17 0
-  mod fire_resistance T7 15 0
-  mod dexterity T2 24 0
+  base ac 0 dam 0-0 pl 0 18 0 attr 17 0 0 0 res 0 0 16 hp 1088 mana 2176 flags 0 req 0 0 0
+  mod maximum_life T8 17 0
+  mod maximum_mana T6 34 0
+  mod accuracy_rating T3 18 0
+  mod mana_regeneration T7 14 0
+  mod strength T4 17 0
   implicit 23 16 0
-  stats 17=13
   craft00000000000000000000000000000000000000
 body 3: Optic Amulet (row 10) rarity 2 level 0 "Optic Amulet" unique Optic Amulet
   base ac 0 dam 0-0 pl 0 0 0 attr 0 5 0 0 res 0 20 0 hp 0 mana 0 flags 0 req 0 0 0
@@ -40,12 +39,12 @@ body 5: Carved Focus (row 665) rarity 2 level 12 "Eye of the Deep" unique Eye of
   stats 18=19
   craft00000000000000000000000000000000000000
 body 6: Full Plate (row 261) rarity 3 level 70 "Carrion Veil"
-  base ac 293 dam 0-0 pl 0 0 0 attr 3 3 3 0 res 34 0 0 hp 768 mana 0 flags 0 req 54 0 0
-  mod maximum_life T8 12 0
-  mod flat_armour T8 23 0
-  mod all_attributes T7 3 0
-  mod fire_resistance T3 34 0
-  stats 14=23
+  base ac 270 dam 0-0 pl 0 0 39 attr 6 0 0 0 res 21 0 0 hp 3648 mana 0 flags 0 req 54 0 0
+  mod life_armour_hybrid T3 57 39
+  mod strength T7 6 0
+  mod chaos_resistance T8 7 0
+  mod fire_resistance T6 21 0
+  stats 36=7
   craft00000000000000000000000000000000000000
 bag 0: Gold (row 0) rarity 0 level 0 "Gold"
   base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
@@ -83,17 +82,17 @@ bag 5: Golden Hoop (row 679) rarity 0 level 20 "Golden Hoop"
   implicit 21 5 0
   craft00000000000000000000000000000000000000
 bag 6: Jade Amulet (row 681) rarity 3 level 50 "Damnation Noose"
-  base ac 0 dam 0-0 pl 0 0 0 attr 0 0 6 0 res 0 11 0 hp 0 mana 0 flags 0 req 0 0 0
-  mod global_added_physical_attacks T5 6 11
-  mod minion_damage T8 19 0
-  mod life_regeneration T6 5 0
-  mod lightning_resistance T8 11 0
+  base ac 0 dam 0-0 pl 0 8 0 attr 0 0 6 0 res 0 0 0 hp 0 mana 1088 flags 0 req 0 0 0
+  mod maximum_mana T7 17 0
+  mod spirit_flat T6 40 0
+  mod accuracy_rating T6 8 0
+  mod cast_speed T7 8 0
   implicit 19 6 0
-  stats 3=19
+  stats 1=8 2=40
   craft00000000000000000000000000000000000000
-bag 7: Carved Focus (row 665) rarity 1 level 45 "Seer's Carved Focus"
-  base ac 5 dam 0-0 pl 0 0 25 attr 0 0 0 0 res 0 0 0 hp 0 mana 1984 flags 0 req 0 18 0
-  mod mana_es_hybrid T5 31 25
+bag 7: Carved Focus (row 665) rarity 1 level 45 "Carved Focus of Excitement"
+  base ac 5 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 18 0
+  mod mana_regeneration T8 10 0
   craft00000000000000000000000000000000000000
 bag 8: Waystone (row 247) rarity 1 level 0 "Waystone (Tier 7) of Hexwarding"
   base ac 0 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
@@ -144,16 +143,16 @@ stash 1: Focused Ashen Staff (row 546) rarity 3 level 60 "Phoenix Chant"
   implicit 20 8 0
   stats 3=12 18=40
   craft00000000000000000000000000000000000000
-stash 2: Hide Buckler (row 640) rarity 1 level 25 "Hide Buckler of the Prodigy"
-  base ac 15 dam 0-0 pl 0 0 0 attr 0 6 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
-  mod intelligence T7 6 0
+stash 2: Hide Buckler (row 640) rarity 1 level 25 "Hide Buckler of the Crystal"
+  base ac 15 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 8 8 8 hp 0 mana 0 flags 0 req 0 0 0
+  mod all_elemental_resistance T7 8 0
   craft00000000000000000000000000000000000000
 stash 3: Leather Vest (row 265) rarity 3 level 50 "Rune Shelter"
-  base ac 30 dam 0-0 pl 0 0 0 attr 0 0 10 0 res 0 0 0 hp 0 mana 2112 flags 0 req 0 0 0
+  base ac 30 dam 0-0 pl 0 0 0 attr 10 9 0 0 res 0 0 0 hp 0 mana 2112 flags 0 req 0 0 0
   mod maximum_mana T6 33 0
-  mod mana_regeneration T6 25 0
-  mod dexterity T5 10 0
-  mod life_regeneration T5 8 0
+  mod mana_regeneration T8 8 0
+  mod strength T5 10 0
+  mod intelligence T6 9 0
   craft00000000000000000000000000000000000000
 stash 4: Bearded Axe (row 308) rarity 2 level 12 "Ashen Covenant" unique Ashen Covenant
   base ac 0 dam 8-21 pl 25 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 17 0 9
@@ -173,11 +172,7 @@ stash 5: Carving Hatchet (row 314) rarity 2 level 36 "Wolfsplitter" unique Wolfs
   unique effect 0 12 15
   stats 0=10
   craft00000000000000000000000000000000000000
-stash 6: Shortsword (row 329) rarity 1 level 4 "Shortsword of Calm"
-  base ac 0 dam 6-9 pl 0 4 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
-  mod accuracy_rating T8 4 0
-  craft00000000000000000000000000000000000000
-stash 7: Shortsword (row 329) rarity 3 level 4 "Beast Scratch"
+stash 6: Shortsword (row 329) rarity 3 level 4 "Beast Scratch"
   base ac 0 dam 9-15 pl 19 6 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 0 0
   mod local_added_physical T8 3 6
   mod physical_accuracy_hybrid T8 19 3
@@ -186,10 +181,20 @@ stash 7: Shortsword (row 329) rarity 3 level 4 "Beast Scratch"
   mod attack_speed T8 4 0
   stats 0=4
   craft00000000000000000000000000000000000000
-ground 0: Iron Cap (row 576) rarity 1 level 20 "Azure Helm of the Worthy"
-  base ac 12 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 832 flags 0 req 0 0 0
+stash 7: Shortsword (row 329) rarity 3 level 4 "Eagle Thirst"
+  base ac 0 dam 9-13 pl 25 4 0 attr 0 0 0 0 res 0 0 0 hp 0 mana 0 flags 32 req 0 0 0
+  mod local_added_lightning T8 1 12
+  mod local_increased_physical T8 25 0
+  mod local_added_physical T8 3 4
+  mod accuracy_rating T8 4 0
+  mod reduced_attribute_requirements T8 10 0
+  mod attack_speed T8 4 0
+  stats 0=4
+  craft00000000000000000000000000000000000000
+ground 0: Iron Cap (row 576) rarity 1 level 20 "Azure Helm of the Penguin"
+  base ac 12 dam 0-0 pl 0 0 0 attr 0 0 0 0 res 0 0 9 hp 0 mana 832 flags 0 req 0 0 0
   mod maximum_mana T8 13 0
-  mod reduced_attribute_requirements T7 13 0
+  mod cold_resistance T8 9 0
   craft00000000000000000000000000000000000000
 ground 1: Ochre Sceptre (row 955) rarity 3 level 60 "Rune Roar"
   base ac 0 dam 0-0 pl 0 0 0 attr 0 6 0 0 res 0 0 0 hp 0 mana 0 flags 0 req 0 40 0

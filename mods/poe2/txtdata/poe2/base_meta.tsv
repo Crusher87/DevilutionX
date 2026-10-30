@@ -386,6 +386,7 @@ Azure Amulet	amulet	mana		none	ManaRegeneration|20|30|{0}% increased Mana Regene
 Crimson Amulet	amulet	life		none	LifeRegeneration|2|4|Regenerate {0} Life per second		1		
 Lunar Amulet	amulet	defence		none	FlatEnergyShield|2|3|+{0} to maximum Energy Shield		14		
 Gold Amulet	amulet	rarity		none	ItemRarity|12|20|{0}% increased Rarity of Items found		35		
+Amethyst Ring	ring	resistance		none	ChaosResistance|7|13|+{0}% to Chaos Resistance		30		
 Broadsword	one_hand_sword	balanced		weapon			6		160
 Fine Scimitar	one_hand_sword	balanced		weapon			16		155
 Sickle Sword	one_hand_sword	balanced		weapon			28		150
@@ -479,6 +480,11 @@ Torture Wand	wand	poe2					49			TormentBolt
 Critical Wand	wand	poe2					52			CriticalBolt		
 Primordial Wand	wand	poe2					56			WitheringRay	physical	
 Dueling Wand	wand	poe2					65			TwinBolts		
+Blighted Wand	wand	poe2					20			WitheringBolt	chaos	
+Rotting Wand	wand	poe2					42			Decompose	chaos	
+Gloom Wand	wand	poe2					60			WitheringRay	chaos	
+Hollow Staff	staff	poe2					41			Soulrend	chaos	
+Void Staff	staff	poe2					60			DarkPact	chaos	
 Fine Long Quarterstaff	quarterstaff	poe2		weapon			1		140			100
 Barrier Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		37		140			100
 Hefty Quarterstaff	quarterstaff	poe2		weapon	DazeChance|20|50|{0}% chance to Daze on Hit		45		130			100

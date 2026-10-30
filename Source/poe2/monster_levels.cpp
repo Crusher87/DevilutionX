@@ -20,6 +20,7 @@
 #include "poe2/endgame.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/waystones.hpp"
@@ -232,6 +233,7 @@ void LoadMonsterLevels()
 	UniqueRows.clear();
 	TypeBossRows.clear();
 	OtherUniqueRow = { 450, 150 };
+	LoadMonsterChaosResistances();
 	if (!gbIsPoe2)
 		return;
 	LoadLevelRows();

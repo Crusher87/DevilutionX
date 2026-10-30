@@ -44,6 +44,7 @@
 #include "tables/itemdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 namespace {
@@ -377,6 +378,50 @@ TEST_F(Poe2CasterBasesTest, CasterWeaponsLockTheirModifiersIn)
 	LockCasterWeaponMods(outside);
 	EXPECT_FALSE(outside._iPoe2Craft.explicitMods);
 	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2CasterBasesTest, ChaosWandsAndStavesRollChaosModifiersAndNoOtherBaseDoes)
+{
+	// Chaos damage plan step 13: five new bases, locked to chaos, grant the chaos skills.
+	struct Chaos {
+		std::string_view name;
+		WeaponSkill grant;
+	};
+	for (const Chaos &c : { Chaos { "Blighted Wand", WeaponSkill::WitheringBolt }, Chaos { "Rotting Wand", WeaponSkill::Decompose }, Chaos { "Gloom Wand", WeaponSkill::WitheringRay },
+	         Chaos { "Hollow Staff", WeaponSkill::Soulrend }, Chaos { "Void Staff", WeaponSkill::DarkPact } }) {
+		EXPECT_EQ(Meta(c.name).elementLock, ModBaseChaosSpell) << c.name;
+		EXPECT_EQ(Meta(c.name).grantedSkill, SkillSlot::ForAttack(c.grant)) << c.name;
+		EXPECT_GT(static_cast<size_t>(Row(c.name)), FirstNewRow + NewRows) << c.name;
+		EXPECT_EQ(ItemModBaseTags(Make(Row(c.name), 1, ITEM_QUALITY_NORMAL, 1)), ModBaseChaosSpell) << c.name;
+	}
+	// Only they roll the chaos modifiers: a base without a lock rolls any element but chaos.
+	EXPECT_EQ(ItemModBaseTags(Make(Row("Spriggan Staff"), 1, ITEM_QUALITY_NORMAL, 1)), ModBaseUnlockedElementSpellBits);
+	EXPECT_EQ(ItemModBaseTags(Make(Row("Siphoning Wand"), 1, ITEM_QUALITY_NORMAL, 1)), ModBaseUnlockedElementSpellBits);
+	const auto isChaos = [](const Poe2ItemMod &mod) {
+		const ModFamily *family = ItemModFamily(mod);
+		return family != nullptr && IsAnyOf(family->effect, ModEffect::ChaosSpellDamage, ModEffect::ChaosSkillLevels);
+	};
+	int chaosRolled = 0;
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		for (const std::string_view name : { "Void Staff", "Gloom Wand" }) {
+			const Item item = Make(Row(name), seed * 7919U, ITEM_QUALITY_RARE, 82);
+			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+				if (mod.family == 0)
+					continue;
+				EXPECT_EQ(ItemModFamily(mod)->baseTags & ModBaseElementSpellBits & ~ModBaseChaosSpell, 0) << name;
+				if (isChaos(mod))
+					chaosRolled++;
+			}
+		}
+		for (const std::string_view name : { "Spriggan Staff", "Siphoning Wand", "Dueling Wand", "Gelid Staff" }) {
+			const Item item = Make(Row(name), seed * 7919U, ITEM_QUALITY_RARE, 82);
+			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+				if (mod.family != 0)
+					EXPECT_FALSE(isChaos(mod)) << name << " " << seed;
+			}
+		}
+	}
+	EXPECT_GT(chaosRolled, 20);
 }
 
 TEST_F(Poe2CasterBasesTest, WeaponsWithoutDamage)

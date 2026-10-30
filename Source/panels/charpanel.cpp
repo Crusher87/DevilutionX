@@ -9,6 +9,7 @@
 #include <function_ref.hpp>
 
 #include "control/control.hpp"
+#include "diablo.h"
 #include "engine/load_clx.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/text_render.hpp"
@@ -20,6 +21,7 @@
 #include "utils/algorithm/container.hpp"
 #include "utils/display.h"
 #include "utils/enum_traits.h"
+#include "utils/format.hpp"
 #include "utils/format_int.hpp"
 #include "utils/language.h"
 #include "utils/status_macros.hpp"
@@ -101,15 +103,20 @@ std::pair<int, int> GetDamage()
 	return { mindam, maxdam };
 }
 
+UiFlags GetResistColor(int resist, int maxResist)
+{
+	if (resist == 0)
+		return UiFlags::ColorWhite;
+	if (resist < 0)
+		return UiFlags::ColorRed;
+	if (resist >= maxResist)
+		return UiFlags::ColorWhitegold;
+	return UiFlags::ColorBlue;
+}
+
 StyledText GetResistInfo(int8_t resist)
 {
-	UiFlags style = UiFlags::ColorBlue;
-	if (resist == 0)
-		style = UiFlags::ColorWhite;
-	else if (resist < 0)
-		style = UiFlags::ColorRed;
-	else if (resist >= MaxResistance)
-		style = UiFlags::ColorWhitegold;
+	const UiFlags style = GetResistColor(resist, MaxResistance);
 
 	return { style, StrCat(resist, "%") };
 }
@@ -120,6 +127,9 @@ constexpr int RightColumnLabelX = 253;
 
 constexpr int LeftColumnLabelWidth = 76;
 constexpr int RightColumnLabelWidth = 68;
+
+/** @brief The three resistance boxes and their labels, from the top of the first box to the bottom of the last. */
+constexpr Rectangle ResistanceBoxesRect { { RightColumnLabelX - RightColumnLabelWidth, 256 }, { RightColumnLabelWidth + 57, 313 + 24 - 256 } };
 
 // Indices in `panelEntries`.
 constexpr unsigned AttributeHeaderEntryIndices[2] = { 5, 6 };
@@ -316,6 +326,22 @@ std::expected<void, std::string> LoadCharPanel()
 void FreeCharPanel()
 {
 	Panel = std::nullopt;
+}
+
+void CheckCharPanelInfo()
+{
+	// The panel has room for three resistance boxes only, so chaos shows here (Curtis 2026-10-30: fourth row if it fits, else a tooltip).
+	if (!gbIsPoe2 || !CharFlag)
+		return;
+	const Point origin = GetPanelPosition(UiPanels::Character, { 0, 0 });
+	const Rectangle boxes { origin + Displacement { ResistanceBoxesRect.position.x, ResistanceBoxesRect.position.y }, ResistanceBoxesRect.size };
+	if (!boxes.contains(MousePosition))
+		return;
+	const Poe2PlayerData &data = InspectPlayer->poe2;
+	InfoString = FormatRuntime(_(/*xgettext:no-c-format*/ "Chaos Resistance: {:d}%"), data.chaosResistance);
+	AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Maximum Chaos Resistance: {:d}%"), data.maxChaosResistance));
+	InfoColor = GetResistColor(data.chaosResistance, data.maxChaosResistance);
+	MainPanelFlag = true;
 }
 
 void DrawChr(const Surface &out)

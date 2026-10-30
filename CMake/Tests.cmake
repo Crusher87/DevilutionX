@@ -35,6 +35,7 @@ set(tests
   poe2_attributes_test
   poe2_bare_fists_test
   poe2_breakables_test
+  poe2_chaos_test
   poe2_charms_test
   poe2_currency_test
   poe2_defenses_test
@@ -42,6 +43,7 @@ set(tests
   poe2_floor_chests_test
   poe2_floor_rooms_test
   poe2_tears_test
+  poe2_catacombs_floors_test
   poe2_cathedral_floors_test
   poe2_floors_test
   poe2_gemcutting_test

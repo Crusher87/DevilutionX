@@ -122,11 +122,13 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 	if (state.electrocuteTicks > 0)
 		add(SpellIcon::Lightning, SpellType::Skill, Lightning, SecondsText(state.electrocuteTicks));
 	if (state.poisonTicks > 0)
-		add(SpellIcon::DoomSerpents, SpellType::Invalid, Poison, DamageOverTimeText(monster, state.poisonDamagePerTick));
+		add(SpellIcon::DoomSerpents, SpellType::Invalid, Poison, DamageOverTimeText(monster, ChaosTickDamage(monster, state.poisonDamagePerTick)));
+	if (state.chaosTicks > 0)
+		add(state.hauntTicks > 0 ? SpellIcon::BoneSpirit : SpellIcon::DoomSerpents, SpellType::Invalid, Poison, DamageOverTimeText(monster, ChaosTickDamage(monster, state.chaosDamagePerTick)));
 	if (state.bleedTicks > 0)
 		add(SpellIcon::BloodStar, SpellType::Skill, Physical, DamageOverTimeText(monster, state.bleedDamagePerTick));
 	if (state.witherStacks > 0)
-		add(SpellIcon::Apocalypse, SpellType::Invalid, Curse, PercentText(WitheredDamageTakenPercent(monster) * 10));
+		add(SpellIcon::Apocalypse, SpellType::Invalid, Curse, PercentText(WitheredDamageTakenPercent(monster, DamageType::Chaos) * 10));
 	if (state.heavyStunTicks > 0)
 		add(SpellIcon::Flash, SpellType::Invalid, Other, SecondsText(state.heavyStunTicks));
 	if (state.hinderTicks > 0)
@@ -140,6 +142,8 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 		add(SpellIcon::PentaStar, SpellType::Skill, Curse, PercentText(state.amplifyPercent * 10));
 	if (state.lowerResistTicks > 0)
 		add(SpellIcon::Pentagram, SpellType::Skill, Curse, PercentText(-LowerResistCursePercent * TableCurseStrength(monster, TableCurse::LowerResist) / 100 * CurseEffectPercent(monster) / 10));
+	if (state.despairTicks > 0)
+		add(SpellIcon::Apocalypse, SpellType::Skill, Curse, PercentText(-DespairCursePercent * TableCurseStrength(monster, TableCurse::Despair) / 100 * CurseEffectPercent(monster) / 10));
 	if (const int weaken = TableCurseShownPercent(monster, TableCurse::Weaken); weaken > 0)
 		add(SpellIcon::LongHorn, SpellType::Skill, Curse, PercentText(-weaken * 10));
 	if (const int decrepify = TableCurseShownPercent(monster, TableCurse::Decrepify); decrepify > 0)
@@ -254,6 +258,7 @@ std::string ResistanceText(const Monster &monster)
 			{ DamageType::Fire, N_("Fire") },
 			{ DamageType::Lightning, N_("Lightning") },
 			{ DamageType::Magic, N_("Magic") },
+			{ DamageType::Chaos, N_("Chaos") },
 		};
 		std::string text;
 		for (const auto &element : Poe2Elements) {

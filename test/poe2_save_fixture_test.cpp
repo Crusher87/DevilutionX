@@ -679,5 +679,62 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	EXPECT_EQ(Snapshot(), loaded);
 }
 
+TEST_F(Poe2SaveFixtureTest, ChaosResistanceSourcesSurviveASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	// Chaos damage plan step 5: the Amethyst Ring, a Venom Rune in armour, an essence of Ruin and its crafted modifier.
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Sorcerer;
+	CopyUtf8(info.name, "Amethyst", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	// Strong enough to wear the plate after the load too.
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pgfxnum = 0;
+	InitCursor();
+
+	player.InvBody[INVLOC_RING_LEFT] = Make("Amethyst Ring", 301, ITEM_QUALITY_NORMAL, 40);
+	player.InvBody[INVLOC_CHEST] = Socketed(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::VenomRune });
+	Item helmet = Make("Iron Cap", 101, ITEM_QUALITY_MAGIC, 60);
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Essence, player, helmet, EssenceVariant(EssenceKind::Ruin, EssenceTier::Greater)));
+	player.InvBody[INVLOC_HEAD] = helmet;
+	for (const Item &item : { MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Ruin, EssenceTier::Perfect)), MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::VenomRune)) })
+		ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+	for (Item &item : player.InvBody)
+		item._iStatFlag = !item.isEmpty();
+	CalcPlrItemVals(player, false);
+	const int chaos = player.poe2.chaosResistance;
+	EXPECT_GE(chaos, 7 + 10 + 1);
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	const std::string saved = Snapshot();
+	SaveAgain();
+
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
+	CalcPlrItemVals(*MyPlayer, false);
+	EXPECT_EQ(MyPlayer->poe2.chaosResistance, chaos);
+	std::vector<uint8_t> variants;
+	for (int i = 0; i < MyPlayer->_pNumInv; i++)
+		variants.push_back(CraftingItemVariant(MyPlayer->InvList[i]));
+	EXPECT_NE(std::find(variants.begin(), variants.end(), EssenceVariant(EssenceKind::Ruin, EssenceTier::Perfect)), variants.end());
+	EXPECT_NE(std::find(variants.begin(), variants.end(), static_cast<uint8_t>(AugmentId::VenomRune)), variants.end());
+}
+
 } // namespace
 } // namespace devilution

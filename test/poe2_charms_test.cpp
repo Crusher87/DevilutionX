@@ -180,7 +180,10 @@ TEST_F(Poe2CharmsTest, TopazAndAmethystCharmsAnswerTheirElements)
 	PutInBelt(player, 5, "Amethyst Charm");
 	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Fire, 0), 0);
 	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Lightning, 0), ResistCharmBonus);
-	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Magic, -20), -20 + ResistCharmBonus);
+	// The Amethyst Charm answers chaos, as in POE2 (chaos damage plan); magic hits leave it alone.
+	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Magic, 10), 10);
+	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Chaos, -20), -20 + ResistCharmBonus);
+	EXPECT_EQ(CharmDescription(CharmEffect::Magic), "A chaos hit lands: +25% chaos resistance for 4 seconds");
 }
 
 TEST_F(Poe2CharmsTest, StoneCharmBreaksAStun)

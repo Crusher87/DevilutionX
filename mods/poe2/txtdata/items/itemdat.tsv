@@ -1008,3 +1008,10 @@ poe2:shard_transmutation	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Transmut
 poe2:shard_regal	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Regal Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_REGAL	Null	false	150
 poe2:shard_chance	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Chance Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_CHANCE	Null	false	150
 poe2:shard_artificer	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Artificer's Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_ARTIFICER	Null	false	200
+poe2:amethyst_ring	1	Misc	Ring	CONSTRICTING_RING	Ring	RING	Amethyst Ring	Ring	30	0	0	0	0	0	0	0	0		RING	Null	false	2500
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Despair Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
+poe2:wand_blighted_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Blighted Wand	Wand	20	45	0	0	0	0	0	38	0		NONE	Null	false	2100
+poe2:wand_rotting_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Rotting Wand	Wand	42	50	0	0	0	0	0	75	0		NONE	Null	false	4300
+poe2:wand_gloom_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Gloom Wand	Wand	60	60	0	0	0	0	0	106	0		NONE	Null	false	6100
+poe2:staff_hollow_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Hollow Staff	Staff	41	50	0	0	0	0	0	73	0		NONE	Null	false	4200
+poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff	Staff	60	60	0	0	0	0	0	106	0		NONE	Null	false	6100

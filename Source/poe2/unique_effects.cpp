@@ -414,6 +414,8 @@ int GearElementSpellDamage(const Player &player, DamageType type)
 		return stat(Poe2ItemStat::ColdSpellDamage);
 	case DamageType::Physical:
 		return stat(Poe2ItemStat::PhysicalSpellDamage);
+	case DamageType::Chaos:
+		return stat(Poe2ItemStat::ChaosSpellDamage);
 	default:
 		return 0;
 	}
@@ -1194,12 +1196,11 @@ void ProcessUniqueMonsterAilments(Monster &monster)
 		SpreadIgnite(monster);
 	if (state.bleedTicks > 0) {
 		state.bleedTicks--;
-		// A haunted monster shows its spirit, not a wound.
 		if (state.bleedTicks % 10 == 0)
-			AddVisualEffect(monster.position.tile, state.hauntTicks > 0 ? MissileGraphicID::BoneSpirit : MissileGraphicID::RedFlareExplosion);
+			AddVisualEffect(monster.position.tile, MissileGraphicID::RedFlareExplosion);
 		// Only the player who caused the bleeding applies its damage, which the game then syncs.
 		if (state.bleedSource >= 0 && state.bleedSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
-			// Haunt's and Locust Swarm's bleeding is their own damage: the play log credits it to them.
+			// A skill's own bleeding (Soulrend, Rend) is its damage: the play log credits it to the skill.
 			std::optional<TelemetrySkillCreditScope> credit;
 			if (state.bleedSkill != WeaponSkill::None)
 				credit.emplace(WeaponSkillName(state.bleedSkill), MyPlayer->poe2.skillLevel(state.bleedSkill), true);
@@ -1209,6 +1210,23 @@ void ProcessUniqueMonsterAilments(Monster &monster)
 			if (monster.hasNoLife())
 				M_StartKill(monster, *MyPlayer);
 		}
+	}
+	if (state.chaosTicks > 0 && !monster.hasNoLife()) {
+		state.chaosTicks--;
+		// A haunted monster shows its spirit; a plague its rot.
+		if (state.chaosTicks % 10 == 0)
+			AddVisualEffect(monster.position.tile, state.hauntTicks > 0 ? MissileGraphicID::BoneSpirit : MissileGraphicID::AcidSplat);
+		// Haunt's, Locust Swarm's and Decompose's chaos damage over time: Withered raises it, chaos resistance lowers it.
+		if (state.chaosSource >= 0 && state.chaosSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
+			std::optional<TelemetrySkillCreditScope> credit;
+			if (state.chaosSkill != WeaponSkill::None)
+				credit.emplace(WeaponSkillName(state.chaosSkill), MyPlayer->poe2.skillLevel(state.chaosSkill), true);
+			ApplyMonsterDamage(DamageType::Chaos, monster, Fixed26_6::fromRaw(ChaosTickDamage(monster, state.chaosDamagePerTick)));
+			if (monster.hasNoLife())
+				M_StartKill(monster, *MyPlayer);
+		}
+		if (state.chaosTicks == 0)
+			state.chaosDamagePerTick = 0;
 	}
 }
 
@@ -1253,6 +1271,8 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		TelemetryHitStep(false, "monster resistance after penetration", resistance, true, true);
 		TelemetryHitStep(false, "damage taken in all", std::max(percent, 0), true, true);
 	}
+	// Poison counts the hit from before all this.
+	NoteHitDamageTakenPercent(monster, type, std::max(percent, 0));
 	return std::max(percent, 0);
 }
 

@@ -60,12 +60,23 @@ struct Poe2MonsterState {
 	uint8_t ironMaidenTicks = 0;
 	uint8_t lowerResistTicks = 0;
 	uint8_t deathMarkTicks = 0;
+	/** @brief Despair: -30% chaos resistance (not saved, like the other curses). */
+	uint8_t despairTicks = 0;
 	uint8_t confuseTicks = 0;
 	/** @brief Confuse made the monster turn on its kind, so its flags go back when the curse ends. */
 	bool confusedByCurse = false;
 	/** @brief Haunt and Locust Swarm drain the monster and move on to another when it dies. */
 	uint8_t hauntTicks = 0;
 	uint8_t locustTicks = 0;
+	/**
+	 * @brief Chaos damage over time from Haunt, Locust Swarm and Decompose's plague, as a raw Fixed26_6 value per tick before
+	 * Withered and chaos resistance. Its own slot, so a bleed and a chaos drain don't overwrite each other (not saved).
+	 */
+	uint8_t chaosTicks = 0;
+	int8_t chaosSource = -1;
+	int32_t chaosDamagePerTick = 0;
+	/** @brief The table skill that put it there: the play log credits it the damage. */
+	WeaponSkill chaosSkill {};
 	/** @brief Curses Blasphemy put on, one bit for each TableCurse, and how strong they are in percent (not saved, like the curses). */
 	uint16_t auraCurses = 0;
 	uint8_t auraCurseStrength = 100;
@@ -76,7 +87,10 @@ struct Poe2MonsterState {
 	/** @brief Withered by Withering Touch: takes more damage per stack. */
 	uint8_t witherStacks = 0;
 	uint8_t witherTicks = 0;
-	/** @brief Poison from Envenom and Andariel's Anguish: stacks add up, as a raw Fixed26_6 value per tick. */
+	/**
+	 * @brief Poison, chaos damage over time, as a raw Fixed26_6 value per tick before the monster's chaos resistance. Venom's
+	 * is POE2's, the strongest only; Andariel's Anguish and Ravenous Swarm stack theirs (InflictPoison).
+	 */
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;

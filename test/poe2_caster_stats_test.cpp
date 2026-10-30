@@ -91,7 +91,8 @@ TEST_F(Poe2CasterStatsTest, NewEffectsGiveTheirStats)
 	         Case { ModEffect::MinionLife, Poe2ItemStat::MinionLife }, Case { ModEffect::MinionResistances, Poe2ItemStat::MinionResistances },
 	         Case { ModEffect::LifeOnKill, Poe2ItemStat::LifeOnKill }, Case { ModEffect::ManaOnKill, Poe2ItemStat::ManaOnKill },
 	         Case { ModEffect::BlockChance, Poe2ItemStat::BlockChance }, Case { ModEffect::DazeChance, Poe2ItemStat::DazeChance },
-	         Case { ModEffect::MinionLifeRegen, Poe2ItemStat::MinionLifeRegen } }) {
+	         Case { ModEffect::MinionLifeRegen, Poe2ItemStat::MinionLifeRegen }, Case { ModEffect::ChaosSpellDamage, Poe2ItemStat::ChaosSpellDamage },
+	         Case { ModEffect::ChaosSkillLevels, Poe2ItemStat::ChaosSkillLevels } }) {
 		Item item {};
 		ApplyModEffect(item, c.effect, 7, 0);
 		ApplyModEffect(item, c.effect, 5, 0);
@@ -178,11 +179,22 @@ TEST_F(Poe2CasterStatsTest, ElementSpellDamageByHitType)
 	SetGearStat(player, Poe2ItemStat::ColdSpellDamage, 20);
 	SetGearStat(player, Poe2ItemStat::LightningSpellDamage, 30);
 	SetGearStat(player, Poe2ItemStat::PhysicalSpellDamage, 40);
+	SetGearStat(player, Poe2ItemStat::ChaosSpellDamage, 50);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Fire), 10);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Magic), 20);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Lightning), 30);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Physical), 40);
-	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Chaos), 0);
+	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Chaos), 50);
+}
+
+TEST_F(Poe2CasterStatsTest, ChaosLevelsGoToTheChaosSkillsOnly)
+{
+	Player &player = *MyPlayer;
+	SetGearStat(player, Poe2ItemStat::ChaosSkillLevels, 3);
+	for (const WeaponSkill skill : { WeaponSkill::Haunt, WeaponSkill::LocustSwarm, WeaponSkill::WitheringBolt, WeaponSkill::Decompose, WeaponSkill::WitheringRay, WeaponSkill::Soulrend, WeaponSkill::DarkPact })
+		EXPECT_EQ(ItemSkillLevelBonus(player.poe2, SkillSlot::ForAttack(skill)), 3) << static_cast<int>(skill);
+	EXPECT_EQ(ItemSkillLevelBonus(player.poe2, SkillSlot::ForAttack(WeaponSkill::Cleave)), 0);
+	EXPECT_EQ(ItemSkillLevelBonus(player.poe2, SkillSlot::ForSpell(SpellID::Firebolt)), 0);
 }
 
 TEST_F(Poe2CasterStatsTest, SceptreSpiritTakesItsOwnIncrease)

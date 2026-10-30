@@ -64,6 +64,8 @@ FAMILIES = {
 	'cold_resistance': ('MagicResistance', 100, 100, 'of the Penguin', True, True),
 	'lightning_resistance': ('LightningResistance', 100, 100, 'of the Squall', True, True),
 	'all_elemental_resistance': ('AllResistances', 100, 100, 'of the Crystal', True, True),
+	# Chaos resistance (chaos damage plan step 4) rolls on drops since step 14; items saved before that re-roll.
+	'chaos_resistance': ('ChaosResistance', 100, 100, 'of the Lost', True, True),
 	'attack_speed': ('AttackSpeed', 100, 100, 'of Skill', True, True),
 	'cast_speed': ('CastSpeed', 100, 100, 'of Talent', True, True),
 	# Accuracy is Diablo's percent chance to hit, so it stays a tenth.
@@ -245,7 +247,7 @@ def main():
 
 def caster_damage_group(fid):
 	"""A staff or wand carries one damage prefix, as Diablo's prefix does: its spell, hybrid and element damage share a group."""
-	match = re.fullmatch(r'(staff|wand)_(spell_damage|spell_damage_mana|(fire|cold|lightning|physical)_spell_damage)', fid)
+	match = re.fullmatch(r'(staff|wand)_(spell_damage|spell_damage_mana|(fire|cold|lightning|physical|chaos)_spell_damage)', fid)
 	return f'{match.group(1)}_spell_damage' if match else None
 
 
@@ -257,7 +259,7 @@ def caster_half_scale(fid):
 		return False
 	if fid.endswith('_skill_levels'):
 		return True
-	return re.fullmatch(r'(staff|wand)_(maximum_mana|spell_damage|spell_damage_mana|(fire|cold|lightning|physical)_spell_damage|cast_speed)', fid) is not None
+	return re.fullmatch(r'(staff|wand)_(maximum_mana|spell_damage|spell_damage_mana|(fire|cold|lightning|physical|chaos)_spell_damage|cast_speed)', fid) is not None
 
 
 def caster_item_level(poe2_level, rank, skill_levels):

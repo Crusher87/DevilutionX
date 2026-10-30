@@ -64,6 +64,8 @@ enum class EssenceKind : uint8_t {
 	Enhancement,
 	Infinite,
 	Command,
+	/** Chaos resistance, from armour, belts, jewellery, shields and foci (chaos damage plan step 5). */
+	Ruin,
 	Count,
 };
 
@@ -178,6 +180,8 @@ enum class AugmentId : uint8_t {
 	StareyeTheWitch,
 	RelicOfRakkis,
 	RelicOfAkarat,
+	/** Chaos resistance in every slot (chaos damage plan step 5). */
+	VenomRune,
 	Count,
 };
 

@@ -22,6 +22,11 @@
  *    seed comes out the same.
  *
  * Old floors stay one option away (Gameplay > New Cathedral Floors). A floor keeps the builder it was made with.
+ *
+ * The Catacombs (levels 5 to 8) are built the same way from their own collection (catacombs_rooms.tsv, picked by
+ * Curtis on 2026-10-30), on Diablo's Catacombs tiles: walls there are blocks of their own, so the rooms' inner walls,
+ * doors, archways and pillars are drawn straight onto the floor (drlg_l2.cpp). Their setting is Gameplay > New
+ * Catacombs Floors.
  */
 #pragma once
 
@@ -52,6 +57,9 @@ enum CathedralRoomRole : uint8_t {
 
 /**
  * @brief One designed room, drawn on the block grid.
+ * In the Catacombs: 'O' a pillar, 'C' a broken pillar, 'R' a 2 x 2 block of fallen stone, 'U' 'V' and 'Z' (the
+ * stairs to town, level 5 only) 2 x 2 stairs standing free, 't' a torch on the wall behind, 'W' weapon rack,
+ * 'M' armor stand, 'u' cauldron, '~' blood on the floor.
  * ' ' rock, '.' floor, 'E' where a doorway may open, 'O' pillar, 'U' stairs up, 'V' stairs down, '*' a reward,
  * and props: c candles, L brazier, S sarcophagus, K bookshelf, k book stand, A shrine spot, F fountain, G goat shrine,
  * X crucified skeleton, x burning cross, T man or woman in chains, Y body on a stake, D headless body, P and s skulls,
@@ -80,6 +88,10 @@ const std::vector<CathedralRoomDef> &GetCathedralRooms();
 
 /** @brief Replaces the room collection (tests); an empty list reads the file again on next use. */
 void SetCathedralRooms(std::vector<CathedralRoomDef> rooms);
+
+/** @brief The Catacombs room collection, read from catacombs_rooms.tsv on first use. */
+const std::vector<CathedralRoomDef> &GetCatacombsRooms();
+void SetCatacombsRooms(std::vector<CathedralRoomDef> rooms);
 
 /** @brief A grid turned: turn & 3 quarter turns clockwise, then mirrored left to right when turn & 4. */
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn);
@@ -136,6 +148,8 @@ struct CathedralProp {
 };
 
 struct CathedralPlan {
+	/** Built from the Catacombs rooms, on Catacombs tiles. */
+	bool catacombs = false;
 	std::vector<CathedralArea> areas;
 	std::vector<CathedralDoor> doors;
 	std::vector<CathedralProp> props;
@@ -149,6 +163,8 @@ struct CathedralPlan {
 	std::optional<Point> stairsUp;
 	/** The north-west 'V' block. */
 	std::optional<Point> stairsDown;
+	/** Catacombs, level 5: the north-west 'Z' block, the stairs back to town. */
+	std::optional<Point> townStairs;
 	/** Where the quest's set piece goes. */
 	std::optional<Point> questPiece;
 	/** The north-west block of the Poisoned Water entrance (6 x 6). */
@@ -158,13 +174,22 @@ struct CathedralPlan {
 };
 
 struct CathedralRequest {
+	/** The Catacombs rooms and rules rather than the Cathedral's. */
+	bool catacombs = false;
 	/** Bit i: room i of the collection may not be used. */
 	uint64_t forbidden = 0;
 	bool questPiece = false;
+	/** The slots the quest's room takes (Arkaine's Valor and the Halls of the Blind need 3 x 3). */
+	Size questSlots { 2, 2 };
+	/** Catacombs: the arrival room also holds the stairs back to town. */
+	bool townStairs = false;
 	/** Ogden's sign: the set piece holds the stairs down, so it ends the main way. */
 	bool questPieceIsWayDown = false;
 	bool water = false;
 };
+
+/** @brief The collection a plan's rooms come from. */
+const std::vector<CathedralRoomDef> &RoomsOfPlan(const CathedralPlan &plan);
 
 /**
  * @brief Plans a floor with the level's random numbers (GenerateRnd).
@@ -175,8 +200,17 @@ bool PlanCathedralFloor(const CathedralRequest &request, CathedralPlan &plan);
 /** @brief One line for the play log: each room of the plan, its kind, slots and design, and where the stairs are. */
 std::string DescribeCathedralPlan(const CathedralPlan &plan);
 
-/** @brief Which rooms a new floor may not use, from the rooms the last five floors built used (newest first). */
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent);
+/**
+ * @brief Marks a Catacombs floor in the room history, so its rooms are kept apart from the Cathedral's (whose numbers
+ * mean other rooms). Room 63 can't be used.
+ */
+constexpr uint64_t CatacombsRoomsMark = uint64_t { 1 } << 63;
+
+/**
+ * @brief Which rooms a new floor may not use, from the rooms the last five floors built used (newest first).
+ * Only the floors built from the same collection count.
+ */
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false);
 
 /** @brief Whether the floor being played was made by this builder. */
 bool IsCathedralFunnelFloor();
@@ -211,5 +245,10 @@ int CathedralDesignedSarcophagi();
 void MarkCathedralObjectGraphics(uint16_t filesWidths[65]);
 /** @brief Puts the designed rooms' props on the floor (InitObjects, before any random object). */
 void AddCathedralRoomObjects();
+/**
+ * @brief The plain side rooms of a new Catacombs floor, in blocks (their floor), for Diablo's theme rooms: on these
+ * floors the theme rooms are those rooms rather than walled boxes cut into big halls.
+ */
+std::vector<Rectangle> CatacombsThemeRooms();
 
 } // namespace devilution

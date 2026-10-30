@@ -177,6 +177,13 @@ CASTER_BASES = [
 	('wand', 'wand_critical_wand', 'CLUB', 'NONE', 'Critical Wand', 52, 55, 0, 92, 0, 0, 0, 'CriticalBolt', '', '', '', ''),
 	('wand', 'wand_primordial_wand', 'CLUB', 'NONE', 'Primordial Wand', 56, 60, 0, 99, 0, 0, 0, 'WitheringRay', 'physical', '', '', ''),
 	('wand', 'wand_dueling_wand', 'CLUB', 'NONE', 'Dueling Wand', 65, 65, 0, 114, 0, 0, 0, 'TwinBolts', '', '', '', ''),
+	# Chaos damage plan step 13: chaos wands and staves, new bases with the chaos element, so they roll the chaos spell
+	# families; the older bases granting these skills keep their element and pools.
+	('wand', 'wand_blighted_wand', 'CLUB', 'NONE', 'Blighted Wand', 20, 45, 0, 38, 0, 0, 0, 'WitheringBolt', 'chaos', '', '', ''),
+	('wand', 'wand_rotting_wand', 'CLUB', 'NONE', 'Rotting Wand', 42, 50, 0, 75, 0, 0, 0, 'Decompose', 'chaos', '', '', ''),
+	('wand', 'wand_gloom_wand', 'CLUB', 'NONE', 'Gloom Wand', 60, 60, 0, 106, 0, 0, 0, 'WitheringRay', 'chaos', '', '', ''),
+	('staff', 'staff_hollow_staff', 'COMPOSITE_STAFF', 'NONE', 'Hollow Staff', 41, 50, 0, 73, 0, 0, 0, 'Soulrend', 'chaos', '', '', ''),
+	('staff', 'staff_void_staff', 'STAFF_OF_LAZARUS', 'NONE', 'Void Staff', 60, 60, 0, 106, 0, 0, 0, 'DarkPact', 'chaos', '', '', ''),
 	('quarterstaff', 'quarterstaff_long_quarterstaff', 'SHORT_STAFF', 'NONE', 'Fine Long Quarterstaff', 1, 35, 0, 0, 9, 9, 18, '', '', 140, 100, ''),
 	('quarterstaff', 'quarterstaff_barrier_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Barrier Quarterstaff', 37, 50, 0, 22, 52, 35, 58, '', '', 140, 100, 'BlockChance|12|18|+{0}% to Block chance'),
 	('quarterstaff', 'quarterstaff_hefty_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Hefty Quarterstaff', 45, 55, 0, 26, 63, 39, 81, '', '', 130, 100, 'DazeChance|20|50|{0}% chance to Daze on Hit'),
@@ -217,6 +224,12 @@ POE2_EXTRA_AMULETS = [
 	('crimson_amulet', 'Crimson Amulet', 1),
 	('lunar_amulet', 'Lunar Amulet', 14),
 	('gold_amulet', 'Gold Amulet', 35),
+]
+
+# POE2 rings the bundle lacks, added after its bases: (id, name, level, implicit). The Amethyst Ring is the chaos
+# resistance ring (chaos damage plan step 5).
+POE2_EXTRA_RINGS = [
+	('amethyst_ring', 'Amethyst Ring', 30, 'ring_chaos'),
 ]
 
 # bundle class -> (itemdat class, equip type, item type, short name, quality, unique-type source)
@@ -270,7 +283,7 @@ CURSORS = {
 RING_CURSORS = {
 	'Ruby Ring': 'RING_OF_MAGMA', 'Sapphire Ring': 'XORINES_RING', 'Topaz Ring': 'RING_OF_THUNDER',
 	'Coral Ring': 'RING_OF_REGHA', 'Lapis Ring': 'RING_OF_THE_MYSTICS', 'Iron Ring': 'GIANTS_KNUCKLE',
-	'Opal Ring': 'MERCURIAL_RING', 'Gold Ring': 'RING_OF_ENGAGEMENT',
+	'Opal Ring': 'MERCURIAL_RING', 'Gold Ring': 'RING_OF_ENGAGEMENT', 'Amethyst Ring': 'CONSTRICTING_RING',
 	'Amber Amulet': 'AMULET', 'Jade Amulet': 'OPTIC_AMULET', 'Azure Amulet': 'AMULET_OF_WARDING',
 	'Prismatic Amulet': 'AURIC_AMULET', 'Vital Amulet': 'ACOLYTES_AMULET', 'Spirit Amulet': 'OPTIC_AMULET',
 	'Keen Amulet': 'AMULET_OF_WARDING', 'Sage Amulet': 'ACOLYTES_AMULET',
@@ -286,6 +299,7 @@ IMPLICITS = {
 	'ring_life': ('Life', 20, 30, '+{0} to maximum Life'),
 	'ring_mana': ('Mana', 18, 28, '+{0} to maximum Mana'),
 	'ring_attack': ('AddedPhysicalToAttacks', 2, 4, 'Adds {0} to {1} Physical Damage to Attacks'),
+	'ring_chaos': ('ChaosResistance', 7, 13, '+{0}% to Chaos Resistance'),
 	'amber_amulet': ('Strength', 6, 9, '+{0} to Strength'),
 	'jade_amulet': ('Dexterity', 6, 9, '+{0} to Dexterity'),
 	'azure_amulet': ('Intelligence', 6, 9, '+{0} to Intelligence'),
@@ -662,6 +676,22 @@ def main():
 			rows.append(row)
 		effect, lo, hi, text = POE2_AMULET_IMPLICITS[name]
 		meta_rows.append([name, 'amulet', POE2_AMULET_IDENTITIES[name], '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), '', ''])
+
+	for base_id, name, level, implicit in POE2_EXTRA_RINGS:
+		assert name not in taken and name not in generated, f'{name} clashes with another base'
+		generated.add(name)
+		unique = min(unique_types['Ring'], key=lambda t: (abs(t[0] - level), t[0]))[1] if 'Ring' in unique_types else 'NONE'
+		row = [
+			ID_PREFIX + base_id, '1', 'Misc', 'Ring', RING_CURSORS[name], 'Ring', unique, name, 'Ring', str(level),
+			'0', '0', '0', '0', '0', '0', '0', '0', '', 'RING', 'Null', 'false', str(1000 + level * 50),
+		]
+		if row[0] in by_id:
+			rows[by_id[row[0]]] = row
+		else:
+			by_id[row[0]] = len(rows)
+			rows.append(row)
+		effect, lo, hi, text = IMPLICITS[implicit]
+		meta_rows.append([name, 'ring', 'resistance', '', 'none', f'{effect}|{lo}|{hi}|{text}', '', str(level), '', ''])
 
 	tier_levels = sorted({b['drop_level'] for b in bases if b['item_class'] == 'one_hand_sword'})
 	for base_id, cls, real_name, unique in DIABLO_UNIQUE_TYPE_BASES:

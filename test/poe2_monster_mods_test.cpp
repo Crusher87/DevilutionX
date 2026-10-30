@@ -218,6 +218,17 @@ TEST_F(Poe2MonsterModsTest, ResistanceIsCappedAndPenetrationStopsAtZero)
 	EXPECT_EQ(MonsterHitResistance(cursed, DamageType::Fire, 25), -LowerResistCursePercent);
 }
 
+TEST_F(Poe2MonsterModsTest, ElementalResistanceModLeavesChaosAlone)
+{
+	LoadMonsterChaosResistances();
+	LevelMonsterTypes[0].type = MT_NACID;
+	Monster beast = MakeMonster(FindSeed(MonsterRarity::Rare, MonsterMod::Resistant));
+	EXPECT_EQ(MonsterResistance(beast, DamageType::Fire), ResistantModPercent);
+	EXPECT_EQ(MonsterResistance(beast, DamageType::Chaos), 30);
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	EXPECT_EQ(MonsterResistance(beast, DamageType::Chaos), 0);
+}
+
 TEST_F(Poe2MonsterModsTest, RegeneratingMonstersHeal)
 {
 	Monster monster = MakeMonster(FindSeed(MonsterRarity::Magic, MonsterMod::Regenerating));

@@ -21,6 +21,7 @@
 #include "poe2/spirit_uses.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "tables/misdat.h"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -202,30 +203,78 @@ Fixed26_6 ApplyArmour(const Player &player, Fixed26_6 damage)
 	return Fixed26_6::fromRaw(damage.raw() - stopped.raw());
 }
 
-Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
+ShieldLeftover AbsorbHitWithEnergyShield(Player &player, Fixed26_6 damage, Fixed26_6 chaos)
 {
-	if (!gbIsPoe2 || damage <= 0)
-		return damage;
-	TelemetryHitStep(true, "after unique effects", damage.raw());
+	damage = std::max(damage, Fixed26_6::fromInt(0));
+	chaos = std::max(chaos, Fixed26_6::fromInt(0));
+	if (!gbIsPoe2 || (damage <= 0 && chaos <= 0))
+		return { damage, chaos };
+	TelemetryHitStep(true, "after unique effects", damage.raw() + chaos.raw());
 	damage = ApplyGuard(player, damage);
-	TelemetryHitStep(true, "after guard", damage.raw());
+	chaos = ApplyGuard(player, chaos);
+	TelemetryHitStep(true, "after guard", damage.raw() + chaos.raw());
 	Poe2PlayerData &data = player.poe2;
 	// Convalescence keeps hits from stopping the recharge for a while.
 	if (!RechargeCantBeInterrupted(player))
 		data.energyShieldRechargeTicks = 0;
 	data.energyShieldRemainder = 0;
-	const int32_t absorbed = std::min(data.energyShield, damage.raw());
-	// Every hit that lands comes through here: Wind Dancer, Ghost Dance and Barkskin.
-	OnSpiritHitTaken(player, Fixed26_6::fromRaw(std::max<int32_t>(absorbed, 0)));
-	if (absorbed <= 0)
-		return damage;
-	data.energyShield -= absorbed;
-	TelemetryShieldAbsorbed(player, Fixed26_6::fromRaw(absorbed));
-	OnMetaShieldLost(player, Fixed26_6::fromRaw(absorbed));
+	// The chaos part goes first: the shield it costs is the shield the rest no longer meets.
+	const int32_t chaosLost = std::clamp<int32_t>(static_cast<int32_t>(std::min<int64_t>(2 * static_cast<int64_t>(chaos.raw()), INT32_MAX)), 0, std::max<int32_t>(data.energyShield, 0));
+	const int32_t chaosStopped = (chaosLost + 1) / 2;
+	const int32_t otherLost = std::clamp<int32_t>(damage.raw(), 0, std::max<int32_t>(data.energyShield - chaosLost, 0));
+	const int32_t lost = chaosLost + otherLost;
+	const int32_t stopped = chaosStopped + otherLost;
+	// Every hit that lands comes through here: Wind Dancer, Ghost Dance and Barkskin. They see the damage the shield
+	// stopped; what feeds on the shield lost sees the shield lost.
+	OnSpiritHitTaken(player, Fixed26_6::fromRaw(stopped));
+	if (lost <= 0)
+		return { damage, chaos };
+	data.energyShield -= lost;
+	TelemetryShieldAbsorbed(player, Fixed26_6::fromRaw(lost));
+	OnMetaShieldLost(player, Fixed26_6::fromRaw(lost));
 	if (&player == MyPlayer)
 		RedrawComponent(PanelDrawComponent::Health);
-	TelemetryHitStep(true, "after energy shield", damage.raw() - absorbed);
-	return Fixed26_6::fromRaw(damage.raw() - absorbed);
+	if (chaosLost > 0) {
+		TelemetryHitStep(true, "energy shield lost to chaos", chaosLost);
+		TelemetryHitStep(true, "chaos stopped by energy shield", chaosStopped);
+	}
+	const ShieldLeftover left { Fixed26_6::fromRaw(damage.raw() - otherLost), Fixed26_6::fromRaw(std::max<int32_t>(chaos.raw() - chaosStopped, 0)) };
+	TelemetryHitStep(true, "after energy shield", left.damage.raw() + left.chaos.raw());
+	return left;
+}
+
+Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage, DamageType type)
+{
+	if (!gbIsPoe2 || damage <= 0)
+		return damage;
+	if (type == DamageType::Chaos)
+		return AbsorbHitWithEnergyShield(player, Fixed26_6::fromInt(0), damage).chaos;
+	return AbsorbHitWithEnergyShield(player, damage, Fixed26_6::fromInt(0)).damage;
+}
+
+Fixed26_6 AbsorbWithEnergyShield(Player &player, Fixed26_6 damage)
+{
+	return AbsorbWithEnergyShield(player, damage, DamageType::Physical);
+}
+
+int PlayerChaosResistance(const Player &player)
+{
+	return gbIsPoe2 ? player.poe2.chaosResistance : player._pMagResist;
+}
+
+DamageType MonsterHitDamageType(const Monster *monster, MissileID missile, DamageType type)
+{
+	if (!gbIsPoe2 || monster == nullptr)
+		return type;
+	switch (monster->ai) {
+	case MonsterAIID::Lich:
+	case MonsterAIID::ArchLich:
+		return IsAnyOf(missile, MissileID::OrangeFlare, MissileID::YellowFlare) ? DamageType::Chaos : type;
+	case MonsterAIID::Diablo:
+		return IsAnyOf(missile, MissileID::DiabloApocalypse, MissileID::DiabloApocalypseBoom) ? DamageType::Chaos : type;
+	default:
+		return type;
+	}
 }
 
 void RechargeEnergyShield(Player &player)

@@ -1042,7 +1042,7 @@ def content_check(T):
 USEFUL_STATS = {
     'all': {'Strength', 'Dexterity', 'Magic', 'Vitality', 'LifePercent', 'AllResist', 'FireResist', 'LightningResist', 'MagicResist',
             'LifeRegenRate', 'LifeRegen', 'LifeOnKill', 'FlaskRecovery', 'FlaskCharges', 'StunThreshold', 'MaxElementalResist',
-            'MaxMagicResist', 'Spirit', 'DamageVsRareUnique', 'LightRadius'},
+            'MaxMagicResist', 'ChaosResist', 'MaxChaosResist', 'Spirit', 'DamageVsRareUnique', 'LightRadius'},
     'Warrior': {'Damage', 'MeleeDamage', 'TwoHandDamage', 'OneHandDamage', 'BowDamage', 'ArmorPercent', 'BlockChance', 'StunBuildup',
                 'AttackSpeed', 'ToHit', 'FireDamage', 'ArmourVsElements', 'MinionDamage', 'MinionLife'},
     'Sorcerer': {'SpellDamage', 'FireDamage', 'LightningDamage', 'ColdDamage', 'CastSpeed', 'EnergyShieldPercent', 'EnergyShieldRecharge',

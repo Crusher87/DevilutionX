@@ -178,7 +178,7 @@ bool IsBlasphemyCurse(SkillSlot skill)
 		return true;
 	const TableSkillData *data = FindTableSkill(skill.attack());
 	// Curses that take control of an enemy would never let go of it, and Haunt and Locust Swarm are damage, not hexes.
-	return data != nullptr && IsAnyOf(data->curse, TableCurse::Weaken, TableCurse::IronMaiden, TableCurse::Decrepify, TableCurse::LowerResist, TableCurse::DeathMark);
+	return data != nullptr && IsAnyOf(data->curse, TableCurse::Weaken, TableCurse::IronMaiden, TableCurse::Decrepify, TableCurse::LowerResist, TableCurse::DeathMark, TableCurse::Despair);
 }
 
 /** @brief Blasphemy: every half second the curses inside reach the enemies around you, at part strength. */
