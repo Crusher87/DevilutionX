@@ -45,6 +45,7 @@ bool RoomsLoaded = false;
 
 bool FunnelFloor = false;
 CathedralPlan CurrentPlan;
+std::vector<CathedralReward> Rewards;
 
 enum Side : uint8_t {
 	North,
@@ -1252,8 +1253,10 @@ bool IsCathedralFunnelFloor()
 void SetCathedralFunnelFloor(bool active)
 {
 	FunnelFloor = active;
-	if (!active)
+	if (!active) {
 		CurrentPlan = {};
+		Rewards.clear();
+	}
 }
 
 CathedralPlan &CurrentCathedralPlan()
@@ -1358,6 +1361,7 @@ void MarkCathedralObjectGraphics(uint16_t filesWidths[65])
 
 void AddCathedralRoomObjects()
 {
+	Rewards.clear();
 	if (!FunnelFloor)
 		return;
 	// On one floor in three the shrine spots hold a shrine; on the others, candles.
@@ -1403,10 +1407,25 @@ void AddCathedralRoomObjects()
 		case 's': AddObject(OBJ_SKPILE, *spot); break;
 		case 'b': AddObject(PickOne(Banners), *spot); break;
 		case 'r': AddObject(FlipCoin(4) ? OBJ_BARRELEX : OBJ_BARREL, *spot); break;
-		case '*': AddObject(PickOne(Chests), *spot); break;
+		case '*': {
+			// A room's reward column can make its spot a strongbox (its guards come with the packs) or a rare's pack.
+			const std::string &reward = GetCathedralRooms()[CurrentPlan.areas[prop.area].design].reward;
+			if (reward == "raremonster")
+				Rewards.push_back({ *spot, false });
+			else if (reward != "strongbox")
+				AddObject(PickOne(Chests), *spot);
+			else if (AddObject(OBJ_CHEST3, *spot) != nullptr)
+				Rewards.push_back({ *spot, true });
+			break;
+		}
 		default: break;
 		}
 	}
+}
+
+const std::vector<CathedralReward> &CathedralRewards()
+{
+	return Rewards;
 }
 
 } // namespace devilution
