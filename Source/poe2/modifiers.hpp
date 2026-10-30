@@ -111,6 +111,9 @@ enum class ModEffect : uint8_t {
 	/** Chaos resistance, and its maximum; never part of "all resistances", which are elemental. */
 	ChaosResistance,
 	MaxChaosResistance,
+	/** Increased chaos spell damage, and levels of chaos skills: on the chaos wands and staves only (ModBaseChaosSpell). */
+	ChaosSpellDamage,
+	ChaosSkillLevels,
 	/** Not an effect: the number of them. New effects go before it. */
 	Count,
 };
@@ -177,7 +180,11 @@ constexpr uint16_t ModBaseFireSpell = 1 << 6;
 constexpr uint16_t ModBaseColdSpell = 1 << 7;
 constexpr uint16_t ModBaseLightningSpell = 1 << 8;
 constexpr uint16_t ModBasePhysicalSpell = 1 << 9;
-constexpr uint16_t ModBaseElementSpellBits = ModBaseFireSpell | ModBaseColdSpell | ModBaseLightningSpell | ModBasePhysicalSpell;
+/** The chaos wands and staves (chaos damage plan step 13): new bases, so no older item's pool changes. */
+constexpr uint16_t ModBaseChaosSpell = 1 << 10;
+constexpr uint16_t ModBaseElementSpellBits = ModBaseFireSpell | ModBaseColdSpell | ModBaseLightningSpell | ModBasePhysicalSpell | ModBaseChaosSpell;
+/** @brief What a caster base without an element lock rolls: any element but chaos, which stays on the chaos bases. */
+constexpr uint16_t ModBaseUnlockedElementSpellBits = ModBaseFireSpell | ModBaseColdSpell | ModBaseLightningSpell | ModBasePhysicalSpell;
 
 /** @brief The weakest tier a family can have: POE2's caster families go to T11, and a craft keeps a tier in 4 bits. */
 constexpr int MaxModTier = 15;

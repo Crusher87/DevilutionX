@@ -79,6 +79,12 @@ family	sceptre_ally_crit_damage	Allies In Presence Critical Strike Multiplier	of
 family	sceptre_light_mana_regeneration	Light Radius And Mana Regeneration	of Warmth	suffix	sceptre_light_mana_regeneration	caster	sceptre			{0}% increased Light Radius; {1}% increased Mana Regeneration Rate		100	100	false	100	100
 family	sceptre_presence_radius	Presence Radius	of Direction	suffix	sceptre_presence_radius	caster	sceptre			{0}% increased Presence Area of Effect		100	100	false	100	100
 family	sceptre_minion_life	Minion Life	of the Mentor	suffix	sceptre_minion_life	caster	sceptre			Minions have {0}% increased maximum Life	MinionLife	100	100	true	100	100
+# Chaos damage plan step 13: chaos spell families for the new chaos bases only (base tag chaos_spell), appended last
+# so no older item's pool or family numbers change. Their tiers are the physical ones'.
+family	staff_chaos_spell_damage	Chaos Spell Damage Weapon Prefix	Malevolent	prefix	staff_chaos_spell_damage	caster	staff	chaos_spell		{0}% increased Chaos Spell Damage	ChaosSpellDamage	100	100	true	100	100
+family	staff_chaos_skill_levels	Chaos Spell Skill Levels	of the Void	suffix	staff_chaos_skill_levels	caster	staff	chaos_spell		+{0} to Level of all Chaos Spell Skills	ChaosSkillLevels	100	100	true	100	100
+family	wand_chaos_spell_damage	Chaos Spell Damage Weapon Prefix	Malevolent	prefix	wand_chaos_spell_damage	caster	wand	chaos_spell		{0}% increased Chaos Spell Damage	ChaosSpellDamage	100	100	true	100	100
+family	wand_chaos_skill_levels	Chaos Spell Skill Levels	of the Void	suffix	wand_chaos_skill_levels	caster	wand	chaos_spell		+{0} to Level of all Chaos Spell Skills	ChaosSkillLevels	100	100	true	100	100
 tier	staff_maximum_mana	1	70	100	299	328	0	0
 tier	staff_maximum_mana	2	65	220	249	298	0	0
 tier	staff_maximum_mana	3	60	400	209	248	0	0
@@ -573,3 +579,29 @@ tier	sceptre_minion_life	3	48	800	36	40	0	0
 tier	sceptre_minion_life	4	32	1000	31	35	0	0
 tier	sceptre_minion_life	5	16	1200	26	30	0	0
 tier	sceptre_minion_life	6	2	1200	21	25	0	0
+tier	staff_chaos_spell_damage	1	81	100	209	238	0	0
+tier	staff_chaos_spell_damage	2	70	220	189	208	0	0
+tier	staff_chaos_spell_damage	3	60	400	149	188	0	0
+tier	staff_chaos_spell_damage	4	46	600	129	148	0	0
+tier	staff_chaos_spell_damage	5	33	800	109	128	0	0
+tier	staff_chaos_spell_damage	6	16	1000	89	108	0	0
+tier	staff_chaos_spell_damage	7	8	1200	69	88	0	0
+tier	staff_chaos_spell_damage	8	2	1200	50	68	0	0
+tier	staff_chaos_skill_levels	1	81	100	7	7	0	0
+tier	staff_chaos_skill_levels	2	55	800	5	6	0	0
+tier	staff_chaos_skill_levels	3	36	1000	3	4	0	0
+tier	staff_chaos_skill_levels	4	18	1200	2	2	0	0
+tier	staff_chaos_skill_levels	5	2	1200	1	1	0	0
+tier	wand_chaos_spell_damage	1	81	100	105	119	0	0
+tier	wand_chaos_spell_damage	2	70	220	90	104	0	0
+tier	wand_chaos_spell_damage	3	60	400	75	89	0	0
+tier	wand_chaos_spell_damage	4	46	600	65	74	0	0
+tier	wand_chaos_spell_damage	5	33	800	55	64	0	0
+tier	wand_chaos_spell_damage	6	16	1000	45	54	0	0
+tier	wand_chaos_spell_damage	7	8	1200	35	44	0	0
+tier	wand_chaos_spell_damage	8	2	1200	25	34	0	0
+tier	wand_chaos_skill_levels	1	81	100	5	5	0	0
+tier	wand_chaos_skill_levels	2	55	800	4	4	0	0
+tier	wand_chaos_skill_levels	3	36	1000	3	3	0	0
+tier	wand_chaos_skill_levels	4	18	1200	2	2	0	0
+tier	wand_chaos_skill_levels	5	2	1200	1	1	0	0

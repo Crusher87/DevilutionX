@@ -169,3 +169,7 @@ sceptre_ally_crit_damage	Allies In Presence Critical Strike Multiplier	of Ire	su
 sceptre_light_mana_regeneration	Light Radius And Mana Regeneration	of Warmth	suffix	sceptre_light_mana_regeneration	caster	sceptre			{0}% increased Mana Regeneration Rate; {1}% increased Light Radius		100	100	false	100	100	false
 sceptre_presence_radius	Presence Radius	of Direction	suffix	sceptre_presence_radius	caster	sceptre			{0}% increased Presence Area of Effect		100	100	false	100	100	false
 sceptre_minion_life	Minion Life	of the Mentor	suffix	sceptre_minion_life	caster	sceptre			Minions have {0}% increased maximum Life	MinionLife	100	100	true	100	100	true
+staff_chaos_spell_damage	Chaos Spell Damage Weapon Prefix	Malevolent	prefix	staff_spell_damage	caster	staff	chaos_spell		{0}% increased Chaos Spell Damage	ChaosSpellDamage	50	100	true	50	100	true
+staff_chaos_skill_levels	Chaos Spell Skill Levels	of the Void	suffix	staff_chaos_skill_levels	caster	staff	chaos_spell		+{0} to Level of all Chaos Spell Skills	ChaosSkillLevels	100	100	true	100	100	true
+wand_chaos_spell_damage	Chaos Spell Damage Weapon Prefix	Malevolent	prefix	wand_spell_damage	caster	wand	chaos_spell		{0}% increased Chaos Spell Damage	ChaosSpellDamage	50	100	true	50	100	true
+wand_chaos_skill_levels	Chaos Spell Skill Levels	of the Void	suffix	wand_chaos_skill_levels	caster	wand	chaos_spell		+{0} to Level of all Chaos Spell Skills	ChaosSkillLevels	100	100	true	100	100	true

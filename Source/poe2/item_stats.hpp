@@ -62,6 +62,8 @@ enum class Poe2ItemStat : uint8_t {
 	/** Added to chaos resistance and to its maximum, in percent. */
 	ChaosResistance,
 	MaxChaosResistance,
+	ChaosSpellDamage,
+	ChaosSkillLevels,
 	Count,
 };
 

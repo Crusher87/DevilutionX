@@ -98,8 +98,9 @@ public:
 TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
-	// The 94 from before the caster weapons rework, then its 76 (tools/poe2_caster_affixes.tsv).
-	ASSERT_EQ(families.size(), 170U);
+	// The 94 from before the caster weapons rework, then its 76 (tools/poe2_caster_affixes.tsv), then the 4 chaos spell
+	// families of the chaos wands and staves.
+	ASSERT_EQ(families.size(), 174U);
 	ASSERT_EQ(LegacyModFamilyCount, 94);
 	int enabled = 0;
 	for (size_t i = 0; i < families.size(); i++) {
@@ -119,8 +120,9 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 			EXPECT_NE(std::find(back.begin(), back.end(), static_cast<uint8_t>(i)), back.end()) << family.id << " and " << families[other].id;
 		}
 	}
-	// 57 with spell damage on staves (plan step 14), the rework's 52 (18 staff, 18 wand, 16 sceptre) and chaos resistance.
-	EXPECT_EQ(enabled, 57 + 52 + 1);
+	// 57 with spell damage on staves (plan step 14), the rework's 52 (18 staff, 18 wand, 16 sceptre), chaos resistance and
+	// the chaos wands' and staves' 4.
+	EXPECT_EQ(enabled, 57 + 52 + 1 + 4);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");

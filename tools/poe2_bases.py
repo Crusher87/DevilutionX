@@ -177,6 +177,13 @@ CASTER_BASES = [
 	('wand', 'wand_critical_wand', 'CLUB', 'NONE', 'Critical Wand', 52, 55, 0, 92, 0, 0, 0, 'CriticalBolt', '', '', '', ''),
 	('wand', 'wand_primordial_wand', 'CLUB', 'NONE', 'Primordial Wand', 56, 60, 0, 99, 0, 0, 0, 'WitheringRay', 'physical', '', '', ''),
 	('wand', 'wand_dueling_wand', 'CLUB', 'NONE', 'Dueling Wand', 65, 65, 0, 114, 0, 0, 0, 'TwinBolts', '', '', '', ''),
+	# Chaos damage plan step 13: chaos wands and staves, new bases with the chaos element, so they roll the chaos spell
+	# families; the older bases granting these skills keep their element and pools.
+	('wand', 'wand_blighted_wand', 'CLUB', 'NONE', 'Blighted Wand', 20, 45, 0, 38, 0, 0, 0, 'WitheringBolt', 'chaos', '', '', ''),
+	('wand', 'wand_rotting_wand', 'CLUB', 'NONE', 'Rotting Wand', 42, 50, 0, 75, 0, 0, 0, 'Decompose', 'chaos', '', '', ''),
+	('wand', 'wand_gloom_wand', 'CLUB', 'NONE', 'Gloom Wand', 60, 60, 0, 106, 0, 0, 0, 'WitheringRay', 'chaos', '', '', ''),
+	('staff', 'staff_hollow_staff', 'COMPOSITE_STAFF', 'NONE', 'Hollow Staff', 41, 50, 0, 73, 0, 0, 0, 'Soulrend', 'chaos', '', '', ''),
+	('staff', 'staff_void_staff', 'STAFF_OF_LAZARUS', 'NONE', 'Void Staff', 60, 60, 0, 106, 0, 0, 0, 'DarkPact', 'chaos', '', '', ''),
 	('quarterstaff', 'quarterstaff_long_quarterstaff', 'SHORT_STAFF', 'NONE', 'Fine Long Quarterstaff', 1, 35, 0, 0, 9, 9, 18, '', '', 140, 100, ''),
 	('quarterstaff', 'quarterstaff_barrier_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Barrier Quarterstaff', 37, 50, 0, 22, 52, 35, 58, '', '', 140, 100, 'BlockChance|12|18|+{0}% to Block chance'),
 	('quarterstaff', 'quarterstaff_hefty_quarterstaff', 'COMPOSITE_STAFF', 'NONE', 'Hefty Quarterstaff', 45, 55, 0, 26, 63, 39, 81, '', '', 130, 100, 'DazeChance|20|50|{0}% chance to Daze on Hit'),

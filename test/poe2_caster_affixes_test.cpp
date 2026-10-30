@@ -103,7 +103,8 @@ void ExpectTiers(const ModFamily &family, const std::vector<ShownTier> &expected
 TEST_F(Poe2CasterAffixesTest, FamiliesComeAfterTheOldOnesOnTheNewSlotsOnly)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
-	ASSERT_EQ(families.size(), LegacyModFamilyCount + 76U);
+	// 76, then the chaos wands' and staves' 4 (chaos damage plan step 13).
+	ASSERT_EQ(families.size(), LegacyModFamilyCount + 80U);
 	constexpr uint32_t NewSlots = (1U << static_cast<uint32_t>(ModSlot::Staff)) | (1U << static_cast<uint32_t>(ModSlot::Wand)) | (1U << static_cast<uint32_t>(ModSlot::Sceptre));
 	constexpr uint32_t LegacySlots = (1U << static_cast<uint32_t>(ModSlot::LegacyStaff)) | (1U << static_cast<uint32_t>(ModSlot::LegacySceptre));
 	size_t tiers = 0;
@@ -127,7 +128,7 @@ TEST_F(Poe2CasterAffixesTest, FamiliesComeAfterTheOldOnesOnTheNewSlotsOnly)
 				EXPECT_GE(family.tiers[t].itemLevel, 20) << family.id << " T" << t + 1;
 		}
 	}
-	EXPECT_EQ(tiers, 494U);
+	EXPECT_EQ(tiers, 520U);
 }
 
 TEST_F(Poe2CasterAffixesTest, TransformMatchesThePlansTable)
@@ -209,7 +210,7 @@ TEST_F(Poe2CasterAffixesTest, OneDamagePrefixAndOneElement)
 	for (uint32_t seed = 1; seed <= 2000; seed++) {
 		for (const ModSlot slot : { ModSlot::Staff, ModSlot::Wand }) {
 			// A staff without an element lock (Spriggan) can roll any element, but only one.
-			const std::vector<Poe2ItemMod> mods = RollItemMods(slot, ModBaseElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed);
+			const std::vector<Poe2ItemMod> mods = RollItemMods(slot, ModBaseUnlockedElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed);
 			const int damage = static_cast<int>(std::count_if(mods.begin(), mods.end(), [](const Poe2ItemMod &mod) { return ItemModFamily(mod)->group.ends_with("_spell_damage"); }));
 			EXPECT_LE(damage, 1) << seed;
 			const uint16_t elements = ElementsOf(mods);
@@ -225,9 +226,9 @@ TEST_F(Poe2CasterAffixesTest, OneDamagePrefixAndOneElement)
 
 	// Crafting keeps the lock: an Exalted Orb's added modifier never brings a second element.
 	for (uint32_t seed = 1; seed <= 500; seed++) {
-		std::vector<Poe2ItemMod> mods = RollItemMods(ModSlot::Staff, ModBaseElementSpellBits, 82, 2, MaxRareModsPerSide, seed, seed);
+		std::vector<Poe2ItemMod> mods = RollItemMods(ModSlot::Staff, ModBaseUnlockedElementSpellBits, 82, 2, MaxRareModsPerSide, seed, seed);
 		for (uint32_t extra = 0; extra < 4; extra++) {
-			const std::optional<Poe2ItemMod> added = RollAddedMod(ModSlot::Staff, ModBaseElementSpellBits, 82, mods, MaxRareModsPerSide, seed * 31 + extra, ModRollFilter {});
+			const std::optional<Poe2ItemMod> added = RollAddedMod(ModSlot::Staff, ModBaseUnlockedElementSpellBits, 82, mods, MaxRareModsPerSide, seed * 31 + extra, ModRollFilter {});
 			if (!added)
 				break;
 			mods.push_back(*added);
@@ -245,7 +246,7 @@ TEST_F(Poe2CasterAffixesTest, LegacyAndOtherPoolsDontChange)
 				EXPECT_LE(mod.family, LegacyModFamilyCount) << seed;
 		}
 		for (const ModSlot slot : { ModSlot::Staff, ModSlot::Wand, ModSlot::Sceptre }) {
-			for (const Poe2ItemMod &mod : RollItemMods(slot, ModBaseElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed))
+			for (const Poe2ItemMod &mod : RollItemMods(slot, ModBaseUnlockedElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed))
 				EXPECT_GT(mod.family, LegacyModFamilyCount) << seed;
 		}
 	}
@@ -313,7 +314,7 @@ std::array<int, 2> HighestSpellLevels(ModSlot slot)
 {
 	std::array<int, 2> highest {};
 	for (uint32_t seed = 1; seed <= 3000; seed++) {
-		for (const Poe2ItemMod &mod : RollItemMods(slot, ModBaseElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed * 7919)) {
+		for (const Poe2ItemMod &mod : RollItemMods(slot, ModBaseUnlockedElementSpellBits, 82, 6, MaxRareModsPerSide, seed, seed * 7919)) {
 			const ModFamily &family = *ItemModFamily(mod);
 			if (family.effect == ModEffect::SpellSkillLevels)
 				highest[0] = std::max<int>(highest[0], mod.values[0]);

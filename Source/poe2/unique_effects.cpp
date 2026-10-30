@@ -414,6 +414,8 @@ int GearElementSpellDamage(const Player &player, DamageType type)
 		return stat(Poe2ItemStat::ColdSpellDamage);
 	case DamageType::Physical:
 		return stat(Poe2ItemStat::PhysicalSpellDamage);
+	case DamageType::Chaos:
+		return stat(Poe2ItemStat::ChaosSpellDamage);
 	default:
 		return 0;
 	}

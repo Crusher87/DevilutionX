@@ -480,6 +480,11 @@ Torture Wand	wand	poe2					49			TormentBolt
 Critical Wand	wand	poe2					52			CriticalBolt		
 Primordial Wand	wand	poe2					56			WitheringRay	physical	
 Dueling Wand	wand	poe2					65			TwinBolts		
+Blighted Wand	wand	poe2					20			WitheringBolt	chaos	
+Rotting Wand	wand	poe2					42			Decompose	chaos	
+Gloom Wand	wand	poe2					60			WitheringRay	chaos	
+Hollow Staff	staff	poe2					41			Soulrend	chaos	
+Void Staff	staff	poe2					60			DarkPact	chaos	
 Fine Long Quarterstaff	quarterstaff	poe2		weapon			1		140			100
 Barrier Quarterstaff	quarterstaff	poe2		weapon	BlockChance|12|18|+{0}% to Block chance		37		140			100
 Hefty Quarterstaff	quarterstaff	poe2		weapon	DazeChance|20|50|{0}% chance to Daze on Hit		45		130			100

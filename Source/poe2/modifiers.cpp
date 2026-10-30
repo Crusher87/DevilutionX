@@ -16,9 +16,11 @@
 #include "poe2/defenses.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
+#include "tables/misdat.h"
 #include "tables/spelldat.h"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -97,6 +99,8 @@ uint16_t ParseBaseTags(std::string_view text)
 			tags |= ModBaseLightningSpell;
 		else if (name == "physical_spell")
 			tags |= ModBasePhysicalSpell;
+		else if (name == "chaos_spell")
+			tags |= ModBaseChaosSpell;
 	}
 	return tags;
 }
@@ -431,10 +435,10 @@ std::optional<ModSlot> ItemModSlot(const Item &item)
 
 uint16_t ItemModBaseTags(const Item &item)
 {
-	// A caster weapon of the rework rolls the element modifiers of its element, or of any element.
+	// A caster weapon of the rework rolls the element modifiers of its element, or of any element but chaos.
 	if (IsCasterWeapon(item)) {
 		const BaseMeta *base = ItemBaseMeta(item);
-		return base != nullptr && base->elementLock != 0 ? base->elementLock : ModBaseElementSpellBits;
+		return base != nullptr && base->elementLock != 0 ? base->elementLock : ModBaseUnlockedElementSpellBits;
 	}
 	if (item._iClass != ICLASS_ARMOR)
 		return 0;
@@ -553,6 +557,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ColdSpellDamage:
 	case ModEffect::LightningSpellDamage:
 	case ModEffect::PhysicalSpellDamage:
+	case ModEffect::ChaosSpellDamage:
 	case ModEffect::DazeChance:
 	case ModEffect::MinionAddedDamage:
 		return Damage;
@@ -582,6 +587,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::LightningSkillLevels:
 	case ModEffect::ColdSkillLevels:
 	case ModEffect::PhysicalSkillLevels:
+	case ModEffect::ChaosSkillLevels:
 	case ModEffect::MinionSkillLevels:
 		return Skill;
 	default:
@@ -1006,6 +1012,12 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	case ModEffect::PhysicalSkillLevels:
 		AddPoe2Stat(item, Poe2ItemStat::PhysicalSkillLevels, v0);
 		break;
+	case ModEffect::ChaosSpellDamage:
+		AddPoe2Stat(item, Poe2ItemStat::ChaosSpellDamage, v0);
+		break;
+	case ModEffect::ChaosSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::ChaosSkillLevels, v0);
+		break;
 	case ModEffect::MinionSkillLevels:
 		AddPoe2Stat(item, Poe2ItemStat::MinionSkillLevels, v0);
 		break;
@@ -1160,8 +1172,13 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 	// Some uniques add levels to every skill while on Low Life.
 	const int lowLife = skill.kind != SkillKind::None && data.uniqueState.lowLife ? data.rule(UniqueRule::LowLifeSkillLevels) : 0;
 	switch (skill.kind) {
-	case SkillKind::Attack:
-		return lowLife + stat(IsRangedWeaponSkill(skill.attack()) ? Poe2ItemStat::ProjectileSkillLevels : Poe2ItemStat::MeleeSkillLevels);
+	case SkillKind::Attack: {
+		int bonus = stat(IsRangedWeaponSkill(skill.attack()) ? Poe2ItemStat::ProjectileSkillLevels : Poe2ItemStat::MeleeSkillLevels);
+		// The chaos skills (Haunt, Locust Swarm and the chaos wand and staff skills) take the chaos levels.
+		if (const TableSkillData *table = FindTableSkill(skill.attack()); table != nullptr && table->type == DamageType::Chaos)
+			bonus += stat(Poe2ItemStat::ChaosSkillLevels);
+		return lowLife + bonus;
+	}
 	case SkillKind::Spell: {
 		int bonus = stat(Poe2ItemStat::SpellSkillLevels);
 		const SpellID spell = skill.spell();
