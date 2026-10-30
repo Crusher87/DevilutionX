@@ -137,13 +137,15 @@ int FindRoom(std::string_view id)
 	return -1;
 }
 
-bool UsesLines(const std::vector<std::string> &grid)
+bool IsLine(char c)
 {
-	for (const std::string &row : grid) {
-		if (row.find_first_of("#a=dR") != std::string::npos)
-			return true;
-	}
-	return false;
+	return c == '#' || c == 'a' || c == '=' || c == 'd' || c == 'R';
+}
+
+/** Arches, doors and broken walls can be walked through; walls and fences can't. */
+bool LineIsOpen(char c)
+{
+	return c == 'a' || c == 'd' || c == 'R';
 }
 
 char At(const std::vector<std::string> &grid, int x, int y)
@@ -543,8 +545,11 @@ private:
 		return static_cast<int>(h % familyCount_.size());
 	}
 
-	/** Where the doorways of a designed room placed in an area can open, per side. */
-	static std::array<std::vector<int>, 4> Reach(const std::vector<std::string> &grid, Rectangle interior, Point offset)
+	/**
+	 * Where the doorways of a designed room placed in an area can open, per side.
+	 * Normally only at its 'E' marks; with anyFloor, at any plain floor facing that side.
+	 */
+	static std::array<std::vector<int>, 4> Reach(const std::vector<std::string> &grid, Rectangle interior, Point offset, bool anyFloor)
 	{
 		std::array<std::vector<int>, 4> reach;
 		const int gw = static_cast<int>(grid[0].size());
@@ -553,7 +558,7 @@ private:
 		const int h = interior.size.height;
 		for (int y = 0; y < gh; y++) {
 			for (int x = 0; x < gw; x++) {
-				if (grid[y][x] != 'E')
+				if (grid[y][x] != 'E' && (!anyFloor || grid[y][x] != '.'))
 					continue;
 				for (int s = 0; s < 4; s++) {
 					const Displacement step = SideStep[s];
@@ -592,40 +597,46 @@ private:
 				std::replace(row.begin(), row.end(), option[0], use);
 		}
 
-		std::array<int, 8> turns { 0, 1, 2, 3, 4, 5, 6, 7 };
-		for (int i = 7; i > 0; i--)
-			std::swap(turns[i], turns[GenerateRnd(i + 1)]);
-		for (const int turn : turns) {
-			std::vector<std::string> grid = TurnCathedralGrid(base, turn);
-			const int gw = static_cast<int>(grid[0].size());
-			const int gh = static_cast<int>(grid.size());
-			if (gw > interior.size.width || gh > interior.size.height)
-				continue;
-			if (!BackedOk(grid) || !StairsDownOk(grid) || (room.pillarsBehind && !PillarsBehindOk(grid)))
-				continue;
-			std::vector<Point> offsets;
-			for (int oy = 0; oy <= interior.size.height - gh; oy++) {
-				for (int ox = 0; ox <= interior.size.width - gw; ox++)
-					offsets.push_back({ ox, oy });
-			}
-			if (!anyOffset)
-				offsets.erase(std::remove_if(offsets.begin(), offsets.end(), [](Point o) { return o.y != 0; }), offsets.end());
-			for (size_t i = offsets.size(); i > 1; i--)
-				std::swap(offsets[i - 1], offsets[GenerateRnd(static_cast<int>(i))]);
-			for (const Point offset : offsets) {
-				std::array<std::vector<int>, 4> reach = Reach(grid, interior, offset);
-				bool fits = true;
-				for (const auto &[linkIndex, side] : links) {
-					const auto [lo, hi] = overlap(links_[linkIndex]);
-					const std::vector<int> &at = reach[side];
-					if (std::none_of(at.begin(), at.end(), [lo, hi](int v) { return v >= lo && v <= hi; })) {
-						fits = false;
-						break;
-					}
-				}
-				if (!fits)
+		// The marked entries come first. A room whose marks can't meet this area's neighbours may open
+		// at its plain floor instead, so rooms with a single entry per side still get their turn.
+		for (const bool anyFloor : { false, true }) {
+			if (anyFloor && !anyOffset)
+				break;
+			std::array<int, 8> turns { 0, 1, 2, 3, 4, 5, 6, 7 };
+			for (int i = 7; i > 0; i--)
+				std::swap(turns[i], turns[GenerateRnd(i + 1)]);
+			for (const int turn : turns) {
+				std::vector<std::string> grid = TurnCathedralGrid(base, turn);
+				const int gw = static_cast<int>(grid[0].size());
+				const int gh = static_cast<int>(grid.size());
+				if (gw > interior.size.width || gh > interior.size.height)
 					continue;
-				return Placement { design, turn, std::move(grid), offset, std::move(reach) };
+				if (!BackedOk(grid) || !StairsDownOk(grid) || (room.pillarsBehind && !PillarsBehindOk(grid)))
+					continue;
+				std::vector<Point> offsets;
+				for (int oy = 0; oy <= interior.size.height - gh; oy++) {
+					for (int ox = 0; ox <= interior.size.width - gw; ox++)
+						offsets.push_back({ ox, oy });
+				}
+				if (!anyOffset)
+					offsets.erase(std::remove_if(offsets.begin(), offsets.end(), [](Point o) { return o.y != 0; }), offsets.end());
+				for (size_t i = offsets.size(); i > 1; i--)
+					std::swap(offsets[i - 1], offsets[GenerateRnd(static_cast<int>(i))]);
+				for (const Point offset : offsets) {
+					std::array<std::vector<int>, 4> reach = Reach(grid, interior, offset, anyFloor);
+					bool fits = true;
+					for (const auto &[linkIndex, side] : links) {
+						const auto [lo, hi] = overlap(links_[linkIndex]);
+						const std::vector<int> &at = reach[side];
+						if (std::none_of(at.begin(), at.end(), [lo, hi](int v) { return v >= lo && v <= hi; })) {
+							fits = false;
+							break;
+						}
+					}
+					if (!fits)
+						continue;
+					return Placement { design, turn, std::move(grid), offset, std::move(reach) };
+				}
 			}
 		}
 		return std::nullopt;
@@ -648,7 +659,7 @@ private:
 			std::vector<int> candidates;
 			for (size_t r = 0; r < rooms.size(); r++) {
 				const CathedralRoomDef &room = rooms[r];
-				if (!RoleFits(room, area.kind) || UsesLines(room.grid))
+				if (!RoleFits(room, area.kind))
 					continue;
 				if (((request_.forbidden | plan_.usedRooms) >> r) & 1)
 					continue;
@@ -799,6 +810,10 @@ private:
 				if (c == ' ')
 					continue;
 				const Point block = area.origin + Displacement { x, y };
+				if (IsLine(c)) {
+					plan_.lines.push_back({ block, c });
+					continue;
+				}
 				carve(block);
 				if (c == 'O')
 					plan_.pillars.push_back(block);
@@ -982,6 +997,10 @@ private:
 		Bitset2d<DMAXX, DMAXY> open = plan_.mask;
 		for (const CathedralDoor &door : plan_.doors)
 			open.set(door.block.x, door.block.y);
+		for (const CathedralLine &line : plan_.lines) {
+			if (LineIsOpen(line.kind))
+				open.set(line.block.x, line.block.y);
+		}
 		Bitset2d<DMAXX, DMAXY> seen;
 		std::deque<Point> queue { *plan_.stairsUp };
 		seen.set(plan_.stairsUp->x, plan_.stairsUp->y);
@@ -1279,6 +1298,43 @@ bool IsCathedralThemeRoom(int8_t tv)
 			return true;
 	}
 	return false;
+}
+
+int CathedralRoomAt(Point tile)
+{
+	if (!FunnelFloor)
+		return 0;
+	// The floor half of a wall block belongs to the room south or east of the wall.
+	for (const Displacement shift : { Displacement { 0, 0 }, Displacement { 0, 1 }, Displacement { 1, 0 } }) {
+		const Point t = tile + shift;
+		if (t.x < 16 || t.y < 16)
+			continue;
+		const Point block { (t.x - 16) / 2, (t.y - 16) / 2 };
+		for (size_t i = 0; i < CurrentPlan.areas.size(); i++) {
+			if (CurrentPlan.areas[i].interior().contains(block))
+				return static_cast<int>(i) + 1;
+		}
+	}
+	return 0;
+}
+
+std::vector<std::pair<int, int>> CathedralBigFights()
+{
+	std::vector<std::pair<int, int>> fights;
+	if (!FunnelFloor)
+		return fights;
+	const std::vector<CathedralArea> &areas = CurrentPlan.areas;
+	for (size_t i = 0; i < areas.size(); i++) {
+		if (areas[i].kind != CathedralAreaKind::BigFight)
+			continue;
+		int quiet = 0;
+		for (size_t j = 0; j < areas.size(); j++) {
+			if (areas[j].kind == CathedralAreaKind::Quiet && areas[j].step == areas[i].step + 1)
+				quiet = static_cast<int>(j) + 1;
+		}
+		fights.emplace_back(static_cast<int>(i) + 1, quiet);
+	}
+	return fights;
 }
 
 int CathedralDesignedSarcophagi()

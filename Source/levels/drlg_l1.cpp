@@ -1257,6 +1257,50 @@ bool StampCathedralDoorways(const CathedralPlan &plan)
 	return true;
 }
 
+/** POE2: the lines inside designed rooms were rock in the mask; their wall tiles become arches, fences or doors. */
+void StampCathedralLines(const CathedralPlan &plan)
+{
+	for (const CathedralLine &line : plan.lines) {
+		uint8_t &tile = dungeon[line.block.x][line.block.y];
+		switch (line.kind) {
+		case 'a':
+			if (tile == VWall) {
+				tile = VArch;
+			} else if (tile == HWall) {
+				tile = HArch;
+			} else if (tile == DWall) {
+				tile = DArch;
+			} else if (tile == VWallEnd) {
+				tile = VArchEnd;
+			} else if (tile == HWallEnd) {
+				tile = HArchEnd;
+			}
+			break;
+		case '=':
+			if (tile == VWall) {
+				tile = VFence;
+			} else if (tile == HWall) {
+				tile = HFence;
+			} else if (tile == DWall) {
+				tile = DFence;
+			} else if (tile == VWallEnd) {
+				tile = VFenceEnd;
+			}
+			break;
+		case 'd':
+			if (tile == VWall || tile == VFence) {
+				tile = VDoor;
+			} else if (tile == HWall || tile == HFence) {
+				tile = HDoor;
+			}
+			Protected.set(line.block.x, line.block.y);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 /** POE2: the stairs and the Poisoned Water entrance go where the plan put them. */
 bool PlaceCathedralFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
 {
@@ -1325,6 +1369,7 @@ void GenerateCathedralFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
 		FixTilesPatterns();
 		if (!StampCathedralDoorways(plan))
 			continue;
+		StampCathedralLines(plan);
 		FloodTransparencyValues(13);
 		if (PlaceCathedralFunnelStairs(plan, entry))
 			break;
