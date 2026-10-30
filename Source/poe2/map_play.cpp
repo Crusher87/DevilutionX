@@ -15,6 +15,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "tables/misdat.h"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 
@@ -92,15 +93,18 @@ const GroundPatch *PatchAt(Point position)
 	return nullptr;
 }
 
-void TryAilments(Player &player, int32_t hitRaw)
+/** @param poisonRaw The hit's physical and chaos damage before armour and resistance; 0 when it can't poison. */
+void TryAilments(Player &player, int32_t hitRaw, int32_t poisonRaw)
 {
 	if (hitRaw <= 0)
 		return;
-	if (const int chance = Danger(MapDanger::PoisonChance); chance > 0 && GenerateRnd(100) < chance) {
-		// Poison stacks: each one adds its damage, up to three hits' worth.
-		const int32_t perTick = std::max<int32_t>(hitRaw * MapPoisonPercentPerSecond / 100 / TicksPerSecond, 1);
-		State.poisonPerTick = std::min(State.poisonPerTick + perTick, perTick * 3);
-		State.poisonTicks = MapPoisonTicks;
+	if (const int chance = Danger(MapDanger::PoisonChance); chance > 0 && poisonRaw > 0 && GenerateRnd(100) < chance) {
+		// POE2: only the strongest poison deals damage. A weaker one is lost; one as strong or stronger takes over.
+		const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(poisonRaw) * MapPoisonPercentPerSecond / 100 / TicksPerSecond), 1);
+		if (State.poisonTicks == 0 || perTick >= State.poisonPerTick) {
+			State.poisonTicks = perTick == State.poisonPerTick ? std::max(State.poisonTicks, MapPoisonTicks) : MapPoisonTicks;
+			State.poisonPerTick = perTick;
+		}
 	}
 	if (const int chance = Danger(MapDanger::BleedChance); chance > 0 && GenerateRnd(100) < chance) {
 		const int32_t perTick = std::max<int32_t>(hitRaw * MapBleedPercentPerSecond / 100 / TicksPerSecond, 1);
@@ -139,7 +143,7 @@ void DrawPatches(const Player &player)
 
 } // namespace
 
-MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical)
+MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical, Fixed26_6 beforeArmour)
 {
 	if (!InMap() || physical <= 0)
 		return { physical, Fixed26_6::fromInt(0) };
@@ -151,14 +155,16 @@ MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical)
 	total += AfterResistance(player, DamageType::Magic, raw * Danger(MapDanger::ExtraCold) / 100);
 	total += AfterResistance(player, DamageType::Lightning, raw * Danger(MapDanger::ExtraLightning) / 100);
 	const int64_t chaos = AfterResistance(player, DamageType::Chaos, raw * Danger(MapDanger::ExtraChaos) / 100);
-	TryAilments(player, static_cast<int32_t>(raw));
+	// Poison counts the hit's physical and extra chaos from before armour and resistance.
+	const int64_t poisonRaw = std::max<int64_t>(beforeArmour > 0 ? beforeArmour.raw() : raw, raw);
+	TryAilments(player, static_cast<int32_t>(raw), static_cast<int32_t>(std::min<int64_t>(poisonRaw * (100 + Danger(MapDanger::ExtraChaos)) / 100, INT32_MAX / 2)));
 	return { Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(total, INT32_MAX / 2))), Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(chaos, 0, INT32_MAX / 2))) };
 }
 
-void OnMapMonsterSpellHit(Player &player, Fixed26_6 damage)
+void OnMapMonsterSpellHit(Player &player, Fixed26_6 damage, DamageType type)
 {
 	if (InMap())
-		TryAilments(player, damage.raw());
+		TryAilments(player, damage.raw(), IsAnyOf(type, DamageType::Physical, DamageType::Chaos) ? damage.raw() : 0);
 }
 
 int MapPenetration()

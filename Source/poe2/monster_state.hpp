@@ -76,7 +76,10 @@ struct Poe2MonsterState {
 	/** @brief Withered by Withering Touch: takes more damage per stack. */
 	uint8_t witherStacks = 0;
 	uint8_t witherTicks = 0;
-	/** @brief Poison from Envenom and Andariel's Anguish: stacks add up, as a raw Fixed26_6 value per tick. */
+	/**
+	 * @brief Poison, chaos damage over time, as a raw Fixed26_6 value per tick before the monster's chaos resistance. Venom's
+	 * is POE2's, the strongest only; Andariel's Anguish and Ravenous Swarm stack theirs (InflictPoison).
+	 */
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;

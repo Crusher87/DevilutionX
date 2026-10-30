@@ -1598,7 +1598,7 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 	if (monster != nullptr && damageType != DamageType::Physical && damageType != DamageType::Chaos)
 		resper = static_cast<int8_t>(resper - MapPenetration());
 	if (monster != nullptr && &player == MyPlayer)
-		OnMapMonsterSpellHit(player, damage);
+		OnMapMonsterSpellHit(player, damage, damageType);
 
 	if (monster != nullptr) {
 		MonsterReducePlayerAttribute(*monster, player);

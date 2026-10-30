@@ -122,7 +122,7 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 	if (state.electrocuteTicks > 0)
 		add(SpellIcon::Lightning, SpellType::Skill, Lightning, SecondsText(state.electrocuteTicks));
 	if (state.poisonTicks > 0)
-		add(SpellIcon::DoomSerpents, SpellType::Invalid, Poison, DamageOverTimeText(monster, state.poisonDamagePerTick));
+		add(SpellIcon::DoomSerpents, SpellType::Invalid, Poison, DamageOverTimeText(monster, PoisonTickDamage(monster, state.poisonDamagePerTick)));
 	if (state.bleedTicks > 0)
 		add(SpellIcon::BloodStar, SpellType::Skill, Physical, DamageOverTimeText(monster, state.bleedDamagePerTick));
 	if (state.witherStacks > 0)

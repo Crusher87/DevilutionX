@@ -833,6 +833,8 @@ std::string SkillTagText(SkillSlot skill)
 		add("Cold");
 	if ((tags & ST_Physical) != 0)
 		add("Physical");
+	if ((tags & ST_Chaos) != 0)
+		add("Chaos");
 	return text;
 }
 

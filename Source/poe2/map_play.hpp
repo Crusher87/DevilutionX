@@ -18,7 +18,10 @@ struct Monster;
 struct Player;
 enum class DamageType : uint8_t;
 
-/** @brief Map poison deals this much of the hit per second for 2 seconds; bleeding this much for 4 seconds. */
+/**
+ * @brief Map poison deals this much of the hit's physical and chaos damage (before armour and resistance) per second for 2
+ * seconds, POE2's numbers: only the strongest poison counts. Bleeding deals this much of the hit for 4 seconds.
+ */
 constexpr int MapPoisonPercentPerSecond = 20;
 constexpr int MapPoisonTicks = 2 * 20;
 constexpr int MapBleedPercentPerSecond = 15;
@@ -46,9 +49,12 @@ struct MapMonsterHit {
  * the hero's armour; the extra damage meets the hero's resistances), and may poison or make the hero bleed. The extra
  * chaos is kept apart: it meets energy shield as chaos does.
  */
-MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical);
-/** @brief A monster's missile or spell hit the hero in a map: may poison or make the hero bleed. */
-void OnMapMonsterSpellHit(Player &player, Fixed26_6 damage);
+MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical, Fixed26_6 beforeArmour = Fixed26_6::fromInt(0));
+/**
+ * @brief A monster's missile or spell hit the hero in a map: may make the hero bleed, and a physical or chaos one may
+ * poison. damage is before resistance.
+ */
+void OnMapMonsterSpellHit(Player &player, Fixed26_6 damage, DamageType type);
 /** @brief How much of the hero's resistances map monsters' hits ignore. */
 [[nodiscard]] int MapPenetration();
 

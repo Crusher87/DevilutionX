@@ -1412,6 +1412,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		TelemetryHitStart(true, monster.name());
 		TelemetryHitStep(true, "rolled", dam.raw());
 	}
+	const Fixed26_6 beforeArmour = dam;
 	if (!firstBlow) {
 		dam = ApplyArmour(player, dam);
 		TelemetryHitStep(true, "after armour", dam.raw());
@@ -1419,7 +1420,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 	// A Profane map's extra chaos stays apart from the physical hit: it meets chaos resistance and the shield as chaos.
 	Fixed26_6 extraChaos = Fixed26_6::fromInt(0);
 	if (&player == MyPlayer) {
-		const MapMonsterHit mapHit = ApplyMapMonsterHit(player, dam);
+		const MapMonsterHit mapHit = ApplyMapMonsterHit(player, dam, beforeArmour);
 		dam = mapHit.physical;
 		extraChaos = mapHit.chaos;
 		TelemetryHitStep(true, "after map modifiers", dam.raw());

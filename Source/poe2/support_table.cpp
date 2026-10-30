@@ -25,6 +25,7 @@
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
@@ -104,7 +105,7 @@ const SupportData Table[] = {
 	{ SG::Frostbite, "Chilling Touch", "Freezing a monster gives your hits 25%\nextra cold for 5 seconds. Mana +10%", "Needs a cold skill", GC::Magic, 5, 110, 0, ST_Frost, 0, 0, NoFamily },
 	{ SG::Conductor, "Lightning Rod", "Hits on shocked monsters arc to one\nmore; can't shock. Mana +20%", "Needs a lightning skill", GC::Dexterity, 6, 120, 0, ST_Lightning, 0, 0, NoFamily },
 	{ SG::SerratedEdge, "Open Wounds", "Hits have a 25% chance to make\nmonsters bleed. Mana +10%", "Needs a physical attack", GC::Dexterity, 3, 110, 0, ST_Attack | PhysicalHit, 0, 0, NoFamily },
-	{ SG::Envenom, "Venom", "Hits poison for 30% of their damage over\n2 seconds; stacks. 15% less damage. Mana +10%", "Needs a physical skill", GC::Dexterity, 5, 110, 0, PhysicalHit, 0, 0, NoFamily },
+	{ SG::Envenom, "Venom", "Hits poison for 20% of physical and chaos\na second for 2s. 15% less damage. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 5, 110, PhysicalHit | ST_Chaos, 0, 0, 0, NoFamily },
 	{ SG::Bloodlust, "Bloodthirst", "30% more physical damage against\nbleeding monsters. Mana +10%", "Needs a melee attack", GC::Strength, 5, 110, 0, ST_Melee, 0, 0, NoFamily },
 	{ SG::SunderArmour, "Crack Armor", "Hits break armour: 20% more physical\ndamage taken for 6 seconds. Mana +10%", "Needs a physical attack", GC::Strength, 4, 110, 0, ST_Attack | PhysicalHit, 0, 0, NoFamily },
 	{ SG::Pestilence, "Pestilence", "A monster dying with your bleed, poison or\nignite on it passes it to 2 more. Mana +30%", "Needs a damaging skill", GC::Magic, 8, 130, 0, DamageSkill, 0, 0, NoFamily },
@@ -230,6 +231,12 @@ struct HitState {
 	Monster *monster = nullptr;
 	int64_t physical = 0;
 	int64_t total = 0;
+	/** The hit's physical and chaos damage before the monster's resistance and damage taken: poison's base. */
+	int64_t poisonBase = 0;
+	/** What MonsterDamageTakenPercent let through of the hit's physical and chaos damage, on this monster. */
+	const Monster *takenMonster = nullptr;
+	int physicalTakenPercent = 0;
+	int chaosTakenPercent = 0;
 	DamageType lastType = DamageType::Physical;
 	bool wirt = false;
 };
@@ -465,17 +472,6 @@ bool AnyMinionSkillHas(const Player &player, SupportGem gem)
 	return false;
 }
 
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks)
-{
-	if (!AilmentAllowed(player, HitSource()))
-		return;
-	Poe2MonsterState &state = monster.poe2;
-	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
-	const int32_t cap = perTick * maxStacks;
-	state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
-	state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
-	state.poisonSource = static_cast<int8_t>(player.getId());
-}
 
 void InflictSupportBleed(const Player &player, Monster &monster, int32_t physical)
 {
@@ -522,6 +518,7 @@ void FinishHit()
 	const SkillSlot skill = Hit.skill;
 	const int32_t total = static_cast<int32_t>(std::min<int64_t>(Hit.total, INT32_MAX));
 	const int32_t physical = static_cast<int32_t>(std::min<int64_t>(Hit.physical, INT32_MAX));
+	const int32_t poisonBase = static_cast<int32_t>(std::min<int64_t>(Hit.poisonBase, INT32_MAX));
 	monster.poe2.lastHitSkillKind = static_cast<uint8_t>(skill.kind);
 	monster.poe2.lastHitSkillId = skill.id;
 	monster.poe2.lastHitPlayer = static_cast<int8_t>(player.getId());
@@ -555,8 +552,10 @@ void FinishHit()
 		}
 		if (Has(player, skill, SG::SerratedEdge) && physical > 0 && GenerateRnd(100) < Value(player, skill, SG::SerratedEdge, 0))
 			InflictSupportBleed(player, monster, physical);
-		if (Has(player, skill, SG::Envenom) && physical > 0 && GenerateRnd(100) < Value(player, skill, SG::Envenom, 0))
-			InflictPoison(player, monster, physical * 30 / 100, 40, 20);
+		// POE2's poison: 20% of the hit's physical and chaos damage a second for 2 seconds, the strongest only.
+		if (Has(player, skill, SG::Envenom) && poisonBase > 0 && GenerateRnd(100) < Value(player, skill, SG::Envenom, 0))
+			InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(poisonBase) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
+		// Anguish is a lineage's own poison, and says it stacks: up to 5.
 		if (Has(player, skill, SG::AndarielsAnguish))
 			InflictPoison(player, monster, total * 10 / 100 * 4, 80, 5);
 		if (Has(player, skill, SG::SunderArmour) && physical > 0) {
@@ -800,6 +799,37 @@ int CountStands(bool decoy)
 
 } // namespace
 
+void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks)
+{
+	if (!AilmentAllowed(player, HitSource()))
+		return;
+	Poe2MonsterState &state = monster.poe2;
+	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
+	if (maxStacks <= 1) {
+		// POE2: only the strongest poison deals damage. A weaker one is lost (there's one poison a monster at a time
+		// here, so it doesn't wait for the stronger one to run out); one as strong or stronger takes over.
+		if (state.poisonTicks > 0 && perTick < state.poisonDamagePerTick)
+			return;
+		state.poisonTicks = static_cast<uint8_t>(perTick == state.poisonDamagePerTick ? std::max<int>(state.poisonTicks, ticks) : ticks);
+		state.poisonDamagePerTick = perTick;
+		state.poisonSource = static_cast<int8_t>(player.getId());
+		return;
+	}
+	const int32_t cap = perTick * maxStacks;
+	state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
+	state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
+	state.poisonSource = static_cast<int8_t>(player.getId());
+}
+
+int32_t PoisonTickDamage(const Monster &monster, int32_t perTick)
+{
+	if (!gbIsPoe2)
+		return perTick;
+	// Poison is chaos damage over time: it meets the monster's chaos resistance on every tick.
+	const int resistance = MonsterResistance(monster, DamageType::Chaos);
+	return std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(perTick) * (100 - resistance) / 100), perTick > 0 ? 1 : 0);
+}
+
 uint32_t SkillTags(SkillSlot skill)
 {
 	constexpr uint32_t Hit = ST_Damage;
@@ -829,8 +859,9 @@ uint32_t SkillTags(SkillSlot skill)
 			return ST_Herald | ST_Area | ST_Lightning | Hit;
 		case PersistentSkill::HeraldOfFrost:
 			return ST_Herald | ST_Area | ST_Frost | Hit;
+		// Its spread poison is chaos damage over time.
 		case PersistentSkill::HeraldOfPlague:
-			return ST_Herald | ST_Area | ST_Physical | ST_DamageOverTime;
+			return ST_Herald | ST_Area | ST_Chaos | ST_DamageOverTime;
 		case PersistentSkill::HeraldOfBlood:
 			return ST_Herald | ST_Area | ST_Physical | Hit;
 		default:
@@ -1028,6 +1059,9 @@ uint32_t SkillTags(SkillSlot skill)
 		case DamageType::Magic:
 			tags |= ST_Frost;
 			break;
+		case DamageType::Chaos:
+			tags |= ST_Chaos;
+			break;
 		default:
 			tags |= ST_Physical;
 			break;
@@ -1143,6 +1177,8 @@ SupportHitScope::SupportHitScope(const Player &player, SkillSlot skill)
 	Hit.monster = nullptr;
 	Hit.physical = 0;
 	Hit.total = 0;
+	Hit.poisonBase = 0;
+	Hit.takenMonster = nullptr;
 	Hit.finishing = false;
 	Hit.wirt = Has(player, skill, SG::WirtsLeg) && GenerateRnd(100) < 10;
 }
@@ -1179,6 +1215,7 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 		FinishHit();
 		Hit.physical = 0;
 		Hit.total = 0;
+		Hit.poisonBase = 0;
 	}
 	Hit.monster = &monster;
 	Hit.total += damage.raw();
@@ -1189,6 +1226,23 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 	OnRagingSpiritsHit(*MyPlayer, Hit.skill, monster, type);
 	if (type == DamageType::Physical)
 		Hit.physical += damage.raw();
+	if (IsAnyOf(type, DamageType::Physical, DamageType::Chaos)) {
+		// Poison counts the hit as it was before the monster's resistance and damage taken, as in POE2.
+		const int taken = Hit.takenMonster == &monster ? (type == DamageType::Physical ? Hit.physicalTakenPercent : Hit.chaosTakenPercent) : 0;
+		Hit.poisonBase += taken > 0 ? damage.raw() * 100 / taken : damage.raw();
+	}
+}
+
+void NoteHitDamageTakenPercent(const Monster &monster, DamageType type, int percent)
+{
+	if (Hit.depth == 0 || Hit.finishing || Hit.player == nullptr || !IsAnyOf(type, DamageType::Physical, DamageType::Chaos))
+		return;
+	if (Hit.takenMonster != &monster) {
+		Hit.takenMonster = &monster;
+		Hit.physicalTakenPercent = 0;
+		Hit.chaosTakenPercent = 0;
+	}
+	(type == DamageType::Physical ? Hit.physicalTakenPercent : Hit.chaosTakenPercent) = percent;
 }
 
 int SupportHitPenetration(DamageType type)
@@ -1654,8 +1708,11 @@ void ProcessSupportMonsterEffects(Monster &monster)
 		if (state.poisonTicks % 10 == 0)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
 		if (state.poisonSource >= 0 && state.poisonSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr && !monster.hasNoLife()) {
-			ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(state.poisonDamagePerTick));
-			OnSpiritPoisonDealt(*MyPlayer, Fixed26_6::fromRaw(state.poisonDamagePerTick));
+			// Poison is chaos damage over time.
+			const Fixed26_6 tick = Fixed26_6::fromRaw(PoisonTickDamage(monster, state.poisonDamagePerTick));
+			TelemetryNoteDamageSource("poison");
+			ApplyMonsterDamage(DamageType::Chaos, monster, tick);
+			OnSpiritPoisonDealt(*MyPlayer, tick);
 			if (monster.hasNoLife())
 				M_StartKill(monster, *MyPlayer);
 		}

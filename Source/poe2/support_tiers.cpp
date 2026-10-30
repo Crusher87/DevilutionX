@@ -105,9 +105,9 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::SerratedEdge, 2, 3, 110, { 50, 0, 0 }, "Hits have a 50% chance to make\nmonsters bleed. Mana +10%" },
 	{ SG::SerratedEdge, 3, 5, 100, { 100, 0, 0 }, "Hits always make monsters bleed" },
 	// Poison I-III: chance to poison (I and III estimated).
-	{ SG::Envenom, 1, 1, 110, { 40, 0, 0 }, "Hits have a 40% chance to poison for\n30% of their damage over 2 seconds;\nstacks. 15% less damage. Mana +10%" },
-	{ SG::Envenom, 2, 3, 120, { 60, 0, 0 }, "Hits have a 60% chance to poison for\n30% of their damage over 2 seconds;\nstacks. 15% less damage. Mana +20%" },
-	{ SG::Envenom, 3, 5, 120, { 100, 0, 0 }, "Hits poison for 30% of their damage\nover 2 seconds; stacks. 15% less\ndamage. Mana +20%" },
+	{ SG::Envenom, 1, 1, 110, { 40, 0, 0 }, "Hits have a 40% chance to poison for\n20% of physical and chaos a second for\n2 seconds. 15% less damage. Mana +10%" },
+	{ SG::Envenom, 2, 3, 120, { 60, 0, 0 }, "Hits have a 60% chance to poison for\n20% of physical and chaos a second for\n2 seconds. 15% less damage. Mana +20%" },
+	{ SG::Envenom, 3, 5, 120, { 100, 0, 0 }, "Hits poison for 20% of physical and chaos\na second for 2 seconds. 15% less\ndamage. Mana +20%" },
 	// Armour Break I-III: seconds the armour stays broken.
 	{ SG::SunderArmour, 1, 2, 100, { 6, 0, 0 }, "Hits break armour: 25% more physical\ndamage taken for 6 seconds" },
 	{ SG::SunderArmour, 2, 3, 100, { 7, 0, 0 }, "Hits break armour: 25% more physical\ndamage taken for 7 seconds" },

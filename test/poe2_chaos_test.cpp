@@ -20,6 +20,7 @@
 #include "poe2/monster_resistance.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "missiles.h"
 #include "monster.h"
@@ -381,7 +382,7 @@ TEST_F(Poe2ChaosTest, VenomousPoisonIsChaosAndGoesAroundEnergyShield)
 	OpenMapWith(player, MapDanger::PoisonChance);
 	for (uint32_t seed = 1; seed <= 200 && MapPoisonTicksLeft() == 0; seed++) {
 		SetRndSeed(seed);
-		OnMapMonsterSpellHit(player, Fixed26_6::fromInt(100));
+		OnMapMonsterSpellHit(player, Fixed26_6::fromInt(100), DamageType::Chaos);
 	}
 	ASSERT_EQ(MapPoisonTicksLeft(), MapPoisonTicks);
 	player._pMaxHP = player._pMaxHPBase = Fixed26_6::fromInt(1000);
@@ -430,6 +431,7 @@ Monster MonsterOfKind(_monster_id kind)
 	Monster monster {};
 	monster.levelType = 0;
 	monster.uniqueType = UniqueMonsterType::None;
+	monster.talkMsg = TEXT_NONE;
 	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100);
 	return monster;
 }
@@ -494,6 +496,102 @@ TEST_F(Poe2ChaosTest, LowerResistAndExposureLeaveChaosResistanceAlone)
 	EXPECT_EQ(MonsterResistance(spider, DamageType::Chaos), 30);
 	EXPECT_EQ(MonsterResistance(spider, DamageType::Fire), -LowerResistCursePercent);
 	EXPECT_EQ(MonsterHitResistance(spider, DamageType::Chaos, 0), 30);
+}
+
+TEST_F(Poe2ChaosTest, PoisonTicksMeetChaosResistance)
+{
+	EXPECT_EQ(PoisonTickDamage(MonsterOfKind(MT_NZOMBIE), 1000), 1000);
+	EXPECT_EQ(PoisonTickDamage(MonsterOfKind(MT_NACID), 1000), 700);
+	EXPECT_EQ(PoisonTickDamage(MonsterOfKind(MT_SUCCUBUS), 1000), 800);
+	// Lower Resist leaves it alone; a tick always does something.
+	Monster spider = MonsterOfKind(MT_SPIDLORD);
+	spider.poe2.lowerResistTicks = 10;
+	EXPECT_EQ(PoisonTickDamage(spider, 1000), 700);
+	EXPECT_EQ(PoisonTickDamage(spider, 1), 1);
+}
+
+TEST_F(Poe2ChaosTest, OnlyTheStrongestPoisonCounts)
+{
+	Player &player = *MyPlayer;
+	Monster monster = MonsterOfKind(MT_NZOMBIE);
+	InflictPoison(player, monster, 40 * 100, PoisonTicks);
+	EXPECT_EQ(monster.poe2.poisonDamagePerTick, 100);
+	EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks);
+	// A weaker poison is lost, not added.
+	monster.poe2.poisonTicks = 10;
+	InflictPoison(player, monster, 40 * 50, PoisonTicks);
+	EXPECT_EQ(monster.poe2.poisonDamagePerTick, 100);
+	EXPECT_EQ(monster.poe2.poisonTicks, 10);
+	// A stronger one takes over, with its own duration.
+	InflictPoison(player, monster, 40 * 150, PoisonTicks);
+	EXPECT_EQ(monster.poe2.poisonDamagePerTick, 150);
+	EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks);
+	// A poison that says it stacks adds up, to its limit.
+	Monster other = MonsterOfKind(MT_NZOMBIE);
+	for (int i = 0; i < 7; i++)
+		InflictPoison(player, other, 80 * 10, 80, 5);
+	EXPECT_EQ(other.poe2.poisonDamagePerTick, 50);
+}
+
+TEST_F(Poe2ChaosTest, VenomCountsPhysicalAndChaosBeforeResistance)
+{
+	Player &player = *MyPlayer;
+	MyPlayerId = 0;
+	const SkillSlot skill = SkillSlot::ForAttack(WeaponSkill::Impale);
+	ASSERT_NE(SkillTags(skill) & ST_Physical, 0U);
+	player.poe2.skillSlots[0] = skill;
+	player.poe2.slotSupports[0] = {};
+	player.poe2.slotSupports[0][0] = SupportGem::Envenom;
+	player.poe2.slotSupportTiers[0] = {};
+	player.poe2.slotSupportTiers[0][0] = 3;
+	ASSERT_EQ(player.poe2.supportTier(skill, SupportGem::Envenom), 3);
+
+	Monster &monster = Monsters[0];
+	monster = MonsterOfKind(MT_NACID);
+	monster.mode = MonsterMode::Stand;
+	{
+		const SupportHitScope scope(player, skill);
+		// 50 physical got through at 50% (an Acid Beast's own numbers don't matter here), 70 chaos at 70%.
+		NoteHitDamageTakenPercent(monster, DamageType::Physical, 50);
+		NoteSupportedDamage(monster, DamageType::Physical, Fixed26_6::fromInt(50));
+		NoteHitDamageTakenPercent(monster, DamageType::Chaos, 70);
+		NoteSupportedDamage(monster, DamageType::Chaos, Fixed26_6::fromInt(70));
+		// Fire doesn't poison.
+		NoteSupportedDamage(monster, DamageType::Fire, Fixed26_6::fromInt(500));
+	}
+	// 100 physical and 100 chaos before resistance: 20% of 200 a second for 2 seconds is 80, or 2 a tick.
+	EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks);
+	EXPECT_EQ(monster.poe2.poisonDamagePerTick, Fixed26_6::fromInt(80).raw() / PoisonTicks);
+	// Each tick then meets the Acid Beast's 30% chaos resistance.
+	EXPECT_EQ(PoisonTickDamage(monster, monster.poe2.poisonDamagePerTick), Fixed26_6::fromInt(2).raw() * 70 / 100);
+	monster = {};
+	player.poe2.slotSupports[0] = {};
+	player.poe2.skillSlots[0] = {};
+}
+
+TEST_F(Poe2ChaosTest, MonsterPoisonIsTheStrongestOfPhysicalAndChaosHits)
+{
+	Player &player = *MyPlayer;
+	MyPlayerId = 0;
+	OpenMapWith(player, MapDanger::PoisonChance);
+	// Fire and lightning hits never poison.
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		SetRndSeed(seed);
+		OnMapMonsterSpellHit(player, Fixed26_6::fromInt(100), DamageType::Fire);
+	}
+	EXPECT_EQ(MapPoisonTicksLeft(), 0);
+	// Many physical hits don't add up: the poison is one hit's worth, the strongest.
+	player._pMaxHP = player._pMaxHPBase = Fixed26_6::fromInt(1000);
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(1000);
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		SetRndSeed(seed);
+		OnMapMonsterSpellHit(player, Fixed26_6::fromInt(100), DamageType::Physical);
+	}
+	ASSERT_GT(MapPoisonTicksLeft(), 0);
+	while (MapPoisonTicksLeft() > 0)
+		ProcessMapPlayer(player);
+	EXPECT_LE(1000 - player._pHitPoints.whole(), 100 * MapPoisonPercentPerSecond / 100 * 2);
+	CloseMap(player);
 }
 
 } // namespace

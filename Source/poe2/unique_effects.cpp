@@ -1253,6 +1253,8 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 		TelemetryHitStep(false, "monster resistance after penetration", resistance, true, true);
 		TelemetryHitStep(false, "damage taken in all", std::max(percent, 0), true, true);
 	}
+	// Poison counts the hit from before all this.
+	NoteHitDamageTakenPercent(monster, type, std::max(percent, 0));
 	return std::max(percent, 0);
 }
 
