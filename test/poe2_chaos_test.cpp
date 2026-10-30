@@ -155,14 +155,14 @@ public:
 	}
 };
 
-TEST_F(Poe2ChaosTest, ChaosResistanceFamilyComesOnlyFromWhatNamesIt)
+TEST_F(Poe2ChaosTest, ChaosResistanceFamilyRollsNaturally)
 {
 	const std::optional<uint8_t> family = FindModifierFamily("chaos_resistance");
 	ASSERT_TRUE(family.has_value());
 	const ModFamily &chaos = ModifierFamilies()[*family];
 	EXPECT_EQ(chaos.effect, ModEffect::ChaosResistance);
 	EXPECT_TRUE(chaos.enabled);
-	EXPECT_FALSE(chaos.natural);
+	EXPECT_TRUE(chaos.natural);
 }
 
 TEST_F(Poe2ChaosTest, ChaosResistanceStartsAtZero)
@@ -275,6 +275,8 @@ TEST_F(Poe2ChaosTest, AmethystRingCarriesChaosResistance)
 	for (uint32_t seed = 1; seed <= 20; seed++) {
 		Item &ring = player.InvBody[INVLOC_RING_LEFT];
 		ring = {};
+		// A normal ring, so only the implicit counts (rare rings roll chaos resistance too since step 14).
+		SetLootRarity(ring, ITEM_QUALITY_NORMAL);
 		SetPoe2ItemLevel(ring, 40);
 		SetRndSeed(seed);
 		SetupAllItems(player, ring, static_cast<_item_indexes>(*row), AdvanceRndSeed(), 40, 1, /*onlygood=*/false, /*pregen=*/false, 0, /*forceNotUnique=*/true);

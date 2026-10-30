@@ -466,10 +466,9 @@ TEST_F(Poe2CraftingTest, EssencesGuaranteeTheirModifier)
 
 TEST_F(Poe2CraftingTest, EssenceOfRuinGivesChaosResistance)
 {
-	// Chaos plan step 5: chaos resistance never rolls naturally, but the essence that names it still finds it.
+	// Chaos plan step 5: the essence that names chaos resistance finds it (it also rolls naturally since step 14).
 	const std::optional<uint8_t> chaos = FindModifierFamily("chaos_resistance");
 	ASSERT_TRUE(chaos);
-	EXPECT_FALSE(ModifierFamilies()[*chaos].natural);
 	EXPECT_EQ(GetEssence(EssenceKind::Ruin).family, "chaos_resistance");
 	EXPECT_EQ(GetEssence(EssenceKind::Ruin).becomes, EssenceKind::None);
 	for (const std::string_view base : { "Iron Cap", "Full Plate Mail" }) {
