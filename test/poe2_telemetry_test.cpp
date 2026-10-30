@@ -293,21 +293,24 @@ TEST_F(Poe2TelemetryTest, RunesAndCursesAreCreditedToTheirOwnSkill)
 	EXPECT_NE(text.find("Spark gem 1 7 (1 hits"), std::string::npos) << text;
 }
 
-TEST_F(Poe2TelemetryTest, HauntsBleedingIsCreditedToHaunt)
+TEST_F(Poe2TelemetryTest, HauntsDrainIsCreditedToHaunt)
 {
-	// Curtis 2026-10-28: Haunt's and Locust Swarm's damage over time was logged as "bleeding".
+	// Curtis 2026-10-28: Haunt's and Locust Swarm's damage over time was logged as "bleeding". It is chaos now, in its own slot.
 	Monster &monster = TestMonster(100);
 	MyPlayerId = 0;
-	// The bleeding's damage is sent to the game.
+	// The damage over time is sent to the game.
 	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
-	monster.poe2.bleedSource = 0;
-	monster.poe2.bleedSkill = WeaponSkill::Haunt;
-	monster.poe2.bleedDamagePerTick = Fixed26_6::fromInt(2).raw();
-	monster.poe2.bleedTicks = 8;
+	monster.poe2.chaosSource = 0;
+	monster.poe2.chaosSkill = WeaponSkill::Haunt;
+	monster.poe2.chaosDamagePerTick = Fixed26_6::fromInt(2).raw();
+	monster.poe2.chaosTicks = 3;
 	for (int i = 0; i < 3; i++)
 		ProcessUniqueMonsterAilments(monster);
-	// A bleed from anything else is still bleeding.
+	// A bleed from anything but a skill is still bleeding.
+	monster.poe2.bleedSource = 0;
 	monster.poe2.bleedSkill = WeaponSkill::None;
+	monster.poe2.bleedDamagePerTick = Fixed26_6::fromInt(2).raw();
+	monster.poe2.bleedTicks = 8;
 	ProcessUniqueMonsterAilments(monster);
 	const std::string text = TelemetrySkillDamageText();
 	EXPECT_EQ(text.find("bleeding 6"), std::string::npos) << text;

@@ -130,7 +130,7 @@ enum class TableCurve : uint8_t {
 };
 
 /** @brief Things a table skill's hits do besides damage. */
-enum TableFlag : uint16_t {
+enum TableFlag : uint32_t {
 	TF_Stun = 1 << 0,
 	TF_Knockback = 1 << 1,
 	TF_ArmourBreak = 1 << 2,
@@ -162,6 +162,8 @@ enum TableFlag : uint16_t {
 	 * cast's projectiles hit each monster once.
 	 */
 	TF_PerTarget = 1 << 15,
+	/** The skill's hits poison: POE2's poison, 20% of the hit a second for 2 seconds, the strongest only. */
+	TF_Poison = 1 << 16,
 };
 
 /** @brief What a granted skill's hits do besides damage (caster-weapons-plan-v2.md 6.12). */
@@ -217,7 +219,7 @@ struct TableSkillData {
 	DamageType type;
 	MissileID missile;
 	MissileGraphicID effect;
-	uint16_t flags;
+	uint32_t flags;
 	TableZone zone;
 	TableCurse curse;
 	TableBuff buff;

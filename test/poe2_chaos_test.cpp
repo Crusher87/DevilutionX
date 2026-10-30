@@ -27,6 +27,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "spells.h"
+#include "storm/storm_net.hpp"
 #include "tables/misdat.h"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
@@ -502,14 +503,14 @@ TEST_F(Poe2ChaosTest, LowerResistAndExposureLeaveChaosResistanceAlone)
 
 TEST_F(Poe2ChaosTest, PoisonTicksMeetChaosResistance)
 {
-	EXPECT_EQ(PoisonTickDamage(MonsterOfKind(MT_NZOMBIE), 1000), 1000);
-	EXPECT_EQ(PoisonTickDamage(MonsterOfKind(MT_NACID), 1000), 700);
-	EXPECT_EQ(PoisonTickDamage(MonsterOfKind(MT_SUCCUBUS), 1000), 800);
+	EXPECT_EQ(ChaosTickDamage(MonsterOfKind(MT_NZOMBIE), 1000), 1000);
+	EXPECT_EQ(ChaosTickDamage(MonsterOfKind(MT_NACID), 1000), 700);
+	EXPECT_EQ(ChaosTickDamage(MonsterOfKind(MT_SUCCUBUS), 1000), 800);
 	// Lower Resist leaves it alone; a tick always does something.
 	Monster spider = MonsterOfKind(MT_SPIDLORD);
 	spider.poe2.lowerResistTicks = 10;
-	EXPECT_EQ(PoisonTickDamage(spider, 1000), 700);
-	EXPECT_EQ(PoisonTickDamage(spider, 1), 1);
+	EXPECT_EQ(ChaosTickDamage(spider, 1000), 700);
+	EXPECT_EQ(ChaosTickDamage(spider, 1), 1);
 }
 
 TEST_F(Poe2ChaosTest, OnlyTheStrongestPoisonCounts)
@@ -565,7 +566,7 @@ TEST_F(Poe2ChaosTest, VenomCountsPhysicalAndChaosBeforeResistance)
 	EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks);
 	EXPECT_EQ(monster.poe2.poisonDamagePerTick, Fixed26_6::fromInt(80).raw() / PoisonTicks);
 	// Each tick then meets the Acid Beast's 30% chaos resistance.
-	EXPECT_EQ(PoisonTickDamage(monster, monster.poe2.poisonDamagePerTick), Fixed26_6::fromInt(2).raw() * 70 / 100);
+	EXPECT_EQ(ChaosTickDamage(monster, monster.poe2.poisonDamagePerTick), Fixed26_6::fromInt(2).raw() * 70 / 100);
 	monster = {};
 	player.poe2.slotSupports[0] = {};
 	player.poe2.skillSlots[0] = {};
@@ -632,10 +633,10 @@ TEST_F(Poe2ChaosTest, WitheredRaisesChaosDamageOnly)
 	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 150);
 	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Chaos), 150);
 	// Poison ticks too, before chaos resistance.
-	EXPECT_EQ(PoisonTickDamage(monster, 1000), 1500);
+	EXPECT_EQ(ChaosTickDamage(monster, 1000), 1500);
 	Monster beast = MonsterOfKind(MT_NACID);
 	beast.poe2.witherStacks = 4;
-	EXPECT_EQ(PoisonTickDamage(beast, 1000), 1000 * 120 / 100 * 70 / 100);
+	EXPECT_EQ(ChaosTickDamage(beast, 1000), 1000 * 120 / 100 * 70 / 100);
 }
 
 TEST_F(Poe2ChaosTest, PhysicalOnlyRulesSkipChaosHits)
@@ -647,6 +648,54 @@ TEST_F(Poe2ChaosTest, PhysicalOnlyRulesSkipChaosHits)
 	monster.poe2.armourBreakTicks = 40;
 	EXPECT_GT(MonsterDamageTakenPercent(monster, DamageType::Physical), 100);
 	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Chaos), 100);
+}
+
+TEST_F(Poe2ChaosTest, HauntAndLocustSwarmDrainWithChaos)
+{
+	for (const WeaponSkill skill : { WeaponSkill::Haunt, WeaponSkill::LocustSwarm }) {
+		const TableSkillData &row = *FindTableSkill(skill);
+		EXPECT_EQ(row.type, DamageType::Chaos) << row.name;
+		const uint32_t tags = SkillTags(SkillSlot::ForAttack(skill));
+		EXPECT_NE(tags & ST_Chaos, 0U) << row.name;
+		EXPECT_NE(tags & ST_DamageOverTime, 0U) << row.name;
+		EXPECT_EQ(tags & ST_Physical, 0U) << row.name;
+	}
+	// Cobra Strike stays a physical stab, and poisons instead of bleeding.
+	const TableSkillData &cobra = *FindTableSkill(WeaponSkill::ViperStrike);
+	EXPECT_EQ(cobra.type, DamageType::Physical);
+	EXPECT_NE(cobra.flags & TF_Poison, 0U);
+	EXPECT_EQ(cobra.flags & TF_Bleed, 0U);
+	const uint32_t cobraTags = SkillTags(SkillSlot::ForAttack(WeaponSkill::ViperStrike));
+	EXPECT_NE(cobraTags & ST_Physical, 0U);
+	EXPECT_NE(cobraTags & ST_DamageOverTime, 0U);
+}
+
+TEST_F(Poe2ChaosTest, ChaosDrainMeetsResistanceAndWitheredBesideABleed)
+{
+	MyPlayerId = 0;
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	Missiles.clear();
+	Monster &monster = Monsters[0];
+	monster = MonsterOfKind(MT_NACID);
+	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(1000);
+	monster.poe2.witherStacks = 4;
+	monster.poe2.witherTicks = 40;
+	monster.poe2.chaosSource = 0;
+	monster.poe2.chaosSkill = WeaponSkill::LocustSwarm;
+	monster.poe2.chaosDamagePerTick = 1000;
+	monster.poe2.chaosTicks = 5;
+	// A bleed at the same time keeps its own damage.
+	monster.poe2.bleedSource = 0;
+	monster.poe2.bleedDamagePerTick = 64;
+	monster.poe2.bleedTicks = 5;
+	const int32_t before = monster.hitPoints.raw();
+	ProcessUniqueMonsterAilments(monster);
+	// 20% more from 4 Withered stacks, 30% less from the Acid Beast's chaos resistance.
+	EXPECT_EQ(before - monster.hitPoints.raw(), 1000 * 120 / 100 * 70 / 100 + 64);
+	EXPECT_EQ(monster.poe2.chaosTicks, 4);
+	EXPECT_EQ(monster.poe2.bleedTicks, 4);
+	monster = {};
+	Missiles.clear();
 }
 
 } // namespace

@@ -821,7 +821,7 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 	state.poisonSource = static_cast<int8_t>(player.getId());
 }
 
-int32_t PoisonTickDamage(const Monster &monster, int32_t perTick)
+int32_t ChaosTickDamage(const Monster &monster, int32_t perTick)
 {
 	if (!gbIsPoe2)
 		return perTick;
@@ -1069,7 +1069,7 @@ uint32_t SkillTags(SkillSlot skill)
 		}
 		if ((table->flags & TF_Elements) != 0)
 			tags |= ST_Elemental;
-		if ((table->flags & TF_Bleed) != 0 || table->shape == TableShape::Curse)
+		if ((table->flags & (TF_Bleed | TF_Poison)) != 0 || table->shape == TableShape::Curse)
 			tags |= ST_DamageOverTime;
 	}
 	return tags;
@@ -1713,7 +1713,7 @@ void ProcessSupportMonsterEffects(Monster &monster)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
 		if (state.poisonSource >= 0 && state.poisonSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr && !monster.hasNoLife()) {
 			// Poison is chaos damage over time.
-			const Fixed26_6 tick = Fixed26_6::fromRaw(PoisonTickDamage(monster, state.poisonDamagePerTick));
+			const Fixed26_6 tick = Fixed26_6::fromRaw(ChaosTickDamage(monster, state.poisonDamagePerTick));
 			TelemetryNoteDamageSource("poison");
 			ApplyMonsterDamage(DamageType::Chaos, monster, tick);
 			OnSpiritPoisonDealt(*MyPlayer, tick);

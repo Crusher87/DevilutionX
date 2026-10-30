@@ -451,7 +451,7 @@ int VisualEffectsShowing(MissileGraphicID look)
 TEST_F(Poe2TableSkillsTest, HauntIsASpiritThatJumps)
 {
 	// Curtis 2026-10-28: "is it a bleed skill, or a ghost that finds a monster then jumps?"
-	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::Haunt), "A spirit drains the enemy over time. When it dies, the spirit jumps to the nearest enemy.");
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::Haunt), "A spirit drains the enemy with chaos over time. When it dies, the spirit jumps to the nearest enemy.");
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->effect, MissileGraphicID::BoneSpirit);
 
 	leveltype = DTYPE_CATHEDRAL;
@@ -470,8 +470,8 @@ TEST_F(Poe2TableSkillsTest, HauntIsASpiritThatJumps)
 	}
 	Monster &haunted = Monsters[0];
 	haunted.poe2.hauntTicks = 100;
-	haunted.poe2.bleedTicks = 11;
-	haunted.poe2.bleedSource = -1;
+	haunted.poe2.chaosTicks = 11;
+	haunted.poe2.chaosSource = -1;
 	// The spirit shows on the monster it drains, not a wound.
 	ProcessUniqueMonsterAilments(haunted);
 	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BoneSpirit), 1);
@@ -479,11 +479,12 @@ TEST_F(Poe2TableSkillsTest, HauntIsASpiritThatJumps)
 
 	// When it dies, the spirit leaves it and shows up on the next one.
 	Missiles.clear();
-	haunted.poe2.bleedSource = 0;
-	haunted.poe2.bleedSkill = WeaponSkill::Haunt;
+	haunted.poe2.chaosSource = 0;
+	haunted.poe2.chaosSkill = WeaponSkill::Haunt;
 	OnTableCursedMonsterKilled(haunted);
 	EXPECT_EQ(Monsters[1].poe2.hauntTicks, 100);
-	EXPECT_EQ(Monsters[1].poe2.bleedSkill, WeaponSkill::Haunt);
+	EXPECT_EQ(Monsters[1].poe2.chaosSkill, WeaponSkill::Haunt);
+	EXPECT_EQ(Monsters[1].poe2.bleedTicks, 0);
 	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BoneSpirit), 2);
 	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BloodStarRedExplosion), 0);
 	ActiveMonsterCount = 0;

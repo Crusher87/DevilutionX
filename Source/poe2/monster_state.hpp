@@ -66,6 +66,15 @@ struct Poe2MonsterState {
 	/** @brief Haunt and Locust Swarm drain the monster and move on to another when it dies. */
 	uint8_t hauntTicks = 0;
 	uint8_t locustTicks = 0;
+	/**
+	 * @brief Chaos damage over time from Haunt, Locust Swarm and Decompose's plague, as a raw Fixed26_6 value per tick before
+	 * Withered and chaos resistance. Its own slot, so a bleed and a chaos drain don't overwrite each other (not saved).
+	 */
+	uint8_t chaosTicks = 0;
+	int8_t chaosSource = -1;
+	int32_t chaosDamagePerTick = 0;
+	/** @brief The table skill that put it there: the play log credits it the damage. */
+	WeaponSkill chaosSkill {};
 	/** @brief Curses Blasphemy put on, one bit for each TableCurse, and how strong they are in percent (not saved, like the curses). */
 	uint16_t auraCurses = 0;
 	uint8_t auraCurseStrength = 100;

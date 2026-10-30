@@ -82,7 +82,7 @@ const TableSkillData Table[] = {
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 13, 14, TW::Sword, 0, Arc, 200, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
 	{ WS::FanOfBlades, "Fan of Blades", "Throw daggers in every direction", 5, 5, TW::Dagger, 0, Projectiles, 70, 8, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 280 },
-	{ WS::ViperStrike, "Cobra Strike", "A poisoned stab that keeps hurting", 7, 5, TW::Dagger, 0, Strike, 200, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0 },
+	{ WS::ViperStrike, "Cobra Strike", "A poisoned stab: the poison deals chaos damage over time", 7, 5, TW::Dagger, 0, Strike, 200, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0 },
 	{ WS::BladeSentinel, "Blade Sentinel", "A whirling blade that guards the target spot for 5 seconds", 9, 12, TW::Dagger, 0, Zone, 35, 0, 1, 100, 20, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::Pulse, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 260 },
 	{ WS::DeathMark, "Death Mark", "Marks an enemy to take 25% more damage", 11, 9, TW::Dagger, 1, Curse, Flat, 0, 0, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::DeathMark, TableBuff::None, TT_Sword | TT_Occult, Icon(SpellIcon::RedSkull), TableCurve::Boneshatter, 100 },
 	{ WS::BladeFury, "Blade Fury", "A rapid stream of thrown daggers", 13, 12, TW::Dagger, 0, Stream, 70, 8, 0, 0, 2, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 290 },
@@ -129,8 +129,8 @@ const TableSkillData Table[] = {
 	{ WS::IceBarrage, "Ray of Frost", "A rapid stream of ice shards", 11, 14, TW::None, 1, Stream, 70, 8, 0, 0, 2, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::FrozenOrb, "Frozen Orb", "An orb of frost bursts at the target into a ring of shards", 13, 22, TW::None, 1, Zone, 70, 16, 0, 0, 0, 15, DT::Magic, MissileID::BlueFlare, MG::BlueFlareExplosion, TF_Spell, TableZone::ShardRing, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
 	// Arcane
-	{ WS::Haunt, "Haunt", "A spirit drains the enemy over time. When it dies, the spirit jumps to the nearest enemy.", 3, 8, TW::None, 1, Curse, 350, 0, 0, 100, 0, 0, DT::Physical, MissileID::Null, MG::BoneSpirit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
-	{ WS::LocustSwarm, "Locust Swarm", "A plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 130, 0, 1, 40, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
+	{ WS::Haunt, "Haunt", "A spirit drains the enemy with chaos over time. When it dies, the spirit jumps to the nearest enemy.", 3, 8, TW::None, 1, Curse, 350, 0, 0, 100, 0, 0, DT::Chaos, MissileID::Null, MG::BoneSpirit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::LocustSwarm, "Locust Swarm", "A chaos plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 130, 0, 1, 40, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
 	{ WS::CorpseExplosion, "Corpse Explosion", "Blows up a corpse near the target, burning everything around it", 9, 10, TW::None, 1, CorpseBurst, 50, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::SoulHarvest, "Soul Harvest", "Takes the souls of nearby corpses: 3% more damage each, up to 10, for 10 seconds", 11, 10, TW::None, 1, SoulHarvest, Flat, 10, 4, 200, 0, 0, DT::Physical, MissileID::Null, MG::Resurrect, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Resurrect), TableCurve::Boneshatter, 100 },
 	{ WS::BonePrison, "Bone Prison", "Bones trap the enemies around the target for 3 seconds", 11, 10, TW::None, 1, Curse, Flat, 0, 1, 60, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell, TableZone::None, TableCurse::BonePrison, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Boneshatter, 100 },
@@ -313,6 +313,20 @@ void InflictTableBleed(const Player &player, Monster &monster, WeaponSkill skill
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(ticks, state.bleedTicks));
 }
 
+/** @brief Haunt's, Locust Swarm's and Decompose's chaos damage over time: the strongest counts. */
+void InflictTableChaos(const Player &player, Monster &monster, WeaponSkill skill, Fixed26_6 total, int ticks)
+{
+	Poe2MonsterState &state = monster.poe2;
+	ticks = std::clamp(ticks, 1, 255);
+	const int32_t perTick = std::max<int32_t>(total.raw() / ticks, 1);
+	if (state.chaosTicks == 0 || perTick >= state.chaosDamagePerTick) {
+		state.chaosDamagePerTick = perTick;
+		state.chaosSource = static_cast<int8_t>(player.getId());
+		state.chaosSkill = skill;
+	}
+	state.chaosTicks = static_cast<uint8_t>(std::max<int>(ticks, state.chaosTicks));
+}
+
 struct CastResult {
 	bool hit = false;
 };
@@ -371,6 +385,9 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 		BreakMonsterArmour(monster, &player);
 	if ((data.flags & TF_Bleed) != 0 && alive)
 		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), 80);
+	// Cobra Strike: POE2's poison, 20% of the hit a second for 2 seconds.
+	if ((data.flags & TF_Poison) != 0 && alive)
+		InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(FixedDamage(player, data).raw()) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
 	if (!alive)
 		return;
 	// Elemental attacks: part of the hit lands again as the skill's element.
@@ -844,11 +861,11 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		break;
 	case TableCurse::Haunt:
 		state.hauntTicks = ticks;
-		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), ticks);
+		InflictTableChaos(player, monster, data.skill, FixedDamage(player, data), ticks);
 		break;
 	case TableCurse::Locust:
 		state.locustTicks = ticks;
-		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), ticks);
+		InflictTableChaos(player, monster, data.skill, FixedDamage(player, data), ticks);
 		break;
 	default:
 		break;
@@ -1244,7 +1261,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			WeaponHit(player, monster, data, data.damagePercent * perHit / 100 * SevenSidedStrikeSharePercent(count, data.count) / 100, result);
 			// A full set of strikes builds the combo one use built.
 			if ((index + 1) % std::max<int>(data.count, 1) != 0)
-				data.flags = static_cast<uint16_t>(data.flags & ~TF_Combo);
+				data.flags = static_cast<uint32_t>(data.flags & ~TF_Combo);
 			break;
 		}
 		int delay = 0;
@@ -1441,8 +1458,8 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 		break;
 	}
 	case GrantedRider::Plague:
-		// Decompose: the hit again over 4 seconds, passed on when the monster dies (OnTableCursedMonsterKilled).
-		InflictTableBleed(player, monster, data->skill, hit, PlagueTicks);
+		// Decompose: the hit again as chaos over 4 seconds, passed on when the monster dies (OnTableCursedMonsterKilled).
+		InflictTableChaos(player, monster, data->skill, hit, PlagueTicks);
 		state.plagueTicks = static_cast<uint8_t>(PlagueTicks);
 		monster.tag(player);
 		break;
@@ -2007,9 +2024,9 @@ int TableCurseShownPercent(const Monster &monster, TableCurse curse)
 void OnTableCursedMonsterKilled(const Monster &monster)
 {
 	const Poe2MonsterState &state = monster.poe2;
-	if ((state.hauntTicks == 0 && state.locustTicks == 0 && state.plagueTicks == 0) || state.bleedSource < 0 || static_cast<size_t>(state.bleedSource) >= Players.size())
+	if ((state.hauntTicks == 0 && state.locustTicks == 0 && state.plagueTicks == 0) || state.chaosSource < 0 || static_cast<size_t>(state.chaosSource) >= Players.size())
 		return;
-	const Player &player = Players[state.bleedSource];
+	const Player &player = Players[state.chaosSource];
 	const Point from = monster.position.tile;
 	const bool haunt = state.hauntTicks > 0;
 	// Decompose's plague passes to the one nearest monster, as a weaker Locust Swarm.
@@ -2035,10 +2052,10 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 	for (Monster *other : next) {
 		Poe2MonsterState &target = other->poe2;
 		(haunt ? target.hauntTicks : (plague ? target.plagueTicks : target.locustTicks)) = ticks;
-		target.bleedTicks = std::max(target.bleedTicks, ticks);
-		target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick);
-		target.bleedSource = state.bleedSource;
-		target.bleedSkill = state.bleedSkill;
+		target.chaosTicks = std::max(target.chaosTicks, ticks);
+		target.chaosDamagePerTick = std::max(target.chaosDamagePerTick, state.chaosDamagePerTick);
+		target.chaosSource = state.chaosSource;
+		target.chaosSkill = state.chaosSkill;
 		other->tag(player);
 		AddVisualEffect(other->position.tile, look, haunt ? 2 : 0);
 	}

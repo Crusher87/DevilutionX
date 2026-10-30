@@ -692,16 +692,17 @@ TEST_F(Poe2GrantedSkillsTest, TheKillAndSpreadRidersWork)
 	hit(WeaponSkill::Exsanguinate, first);
 	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(102));
 
-	// Decompose: the hit again over 4 seconds; when the monster dies the plague passes to the one nearest monster.
+	// Decompose: the hit again as chaos over 4 seconds; when the monster dies the plague passes to the one nearest monster.
 	first.hitPoints = first.maxHitPoints;
 	hit(WeaponSkill::Decompose, first);
 	EXPECT_EQ(first.poe2.plagueTicks, PlagueTicks);
-	EXPECT_EQ(first.poe2.bleedTicks, PlagueTicks);
-	EXPECT_EQ(first.poe2.bleedSkill, WeaponSkill::Decompose);
-	EXPECT_EQ(first.poe2.bleedDamagePerTick, 40 * 64 / PlagueTicks);
+	EXPECT_EQ(first.poe2.chaosTicks, PlagueTicks);
+	EXPECT_EQ(first.poe2.chaosSkill, WeaponSkill::Decompose);
+	EXPECT_EQ(first.poe2.chaosDamagePerTick, 40 * 64 / PlagueTicks);
+	EXPECT_EQ(first.poe2.bleedTicks, 0);
 	OnTableCursedMonsterKilled(first);
 	EXPECT_EQ(near.poe2.plagueTicks, PlagueTicks);
-	EXPECT_EQ(near.poe2.bleedSkill, WeaponSkill::Decompose);
+	EXPECT_EQ(near.poe2.chaosSkill, WeaponSkill::Decompose);
 	EXPECT_EQ(twoAway.poe2.plagueTicks, 0);
 	EXPECT_EQ(threeAway.poe2.plagueTicks, 0);
 	// Its time runs down with the curses'.
