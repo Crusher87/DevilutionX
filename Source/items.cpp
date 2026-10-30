@@ -5163,7 +5163,9 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	}
 	if (category == LootCategory::Equipment && *rarity != ITEM_QUALITY_UNIQUE)
 		SetItemQuality(item, RollDropQuality(*idx, *rarity, origin.poe2ItemLevel));
-	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
+	// A flask's tier comes from its item level: the area's, like POE2's flasks, so the higher tiers drop in the endgame.
+	const int createLevel = IsFlaskBase(*idx) ? FlaskDropLevel(origin.equipmentLevel, itemLevel) : itemLevel;
+	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), createLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
 	// Diablo's uniques drop once per game; the bundle's, like POE2's, can drop again.
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
 		UniqueItemFlags[item._iUid] = true;
@@ -6957,10 +6959,10 @@ void PrintItemDetails(const Item &item)
 		// them, and a two-part affix's lines are bracketed together (Curtis 2026-10-27).
 		const bool advanced = gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0;
 		if (!advanced) {
-			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
-				for (const std::string &line : ItemModText(mod))
-					AddItemInfoBoxString(line);
-			}
+			// A stat several modifiers give shows once, added up, as in POE2 (Curtis 2026-10-30: a rare showed
+			// "12% increased Energy Shield" twice and "29% increased Energy Shield" from two hybrids and a plain one).
+			for (const std::string &line : CombinedItemModText(item._iPoe2Mods))
+				AddItemInfoBoxString(line);
 		} else {
 			CurrentInfoLineStyle = InfoLineStyle::Affix;
 			for (const bool prefixes : { true, false }) {
@@ -8130,7 +8132,10 @@ StringOrView Item::getName() const
 	if (_iMagical == ITEM_QUALITY_RARE) {
 		return GetRareItemName(*this);
 	}
-	if (_iPoe2Mods[0].family != 0) {
+	// POE2 Mashup: a POE2 item's magic name is the one it was given. Rebuilding it from the seed replays Diablo's rolls,
+	// which POE2's vendor wares and quarterstaffs don't follow: Griswold's magic "Staff of magic" replayed as a spell
+	// staff with no spell, and logged a warning every frame it was drawn (Curtis 2026-10-30).
+	if (_iPoe2Mods[0].family != 0 || (dwBuff & CF_POE2) != 0) {
 		return std::string_view(_iIName);
 	}
 	return GetTranslatedItemNameMagical(*this, dwBuff & CF_HELLFIRE, true, std::nullopt);

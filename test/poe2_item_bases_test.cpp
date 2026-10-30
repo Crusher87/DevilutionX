@@ -1,10 +1,13 @@
 #include <algorithm>
 #include <array>
 #include <iterator>
+#include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -36,6 +39,7 @@
 #include "utils/is_of.hpp"
 #include "utils/paths.h"
 #include "utils/str_cat.hpp"
+#include "utils/utf8.hpp"
 
 namespace devilution {
 namespace {
@@ -738,7 +742,8 @@ TEST_F(Poe2ItemBasesTest, GearNeedsPoe2sFullAttributes)
 		const ItemData &data = AllItemsList[FindBase(name)];
 		return std::array<int, 3> { data.iMinStr, data.iMinMag, data.iMinDex };
 	};
-	EXPECT_EQ(needs("Iron Cap"), (std::array<int, 3> { 5, 0, 0 }));
+	// The starter bases need none (Curtis 2026-10-30).
+	EXPECT_EQ(needs("Iron Cap"), (std::array<int, 3> { 0, 0, 0 }));
 	EXPECT_EQ(needs("Legion Helm"), (std::array<int, 3> { 78, 0, 0 }));
 	EXPECT_EQ(needs("Titan Crown"), (std::array<int, 3> { 150, 0, 0 }));
 	EXPECT_EQ(needs("Shortsword"), (std::array<int, 3> { 0, 0, 0 }));
@@ -766,6 +771,44 @@ TEST_F(Poe2ItemBasesTest, GearNeedsPoe2sFullAttributes)
 	EXPECT_FALSE(player.CanUseItem(crown));
 	player._pBaseStr = player._pStrength = 150;
 	EXPECT_TRUE(player.CanUseItem(crown));
+}
+
+TEST_F(Poe2ItemBasesTest, StarterBasesNeedNoAttributesAndNeedsGrowWithLevel)
+{
+	// Curtis 2026-10-30, after the Sorcerer playtest: "5 Mag? 3 Mag 3 Dex? ... If items are that low it shouldn't say
+	// anything". Like POE2, the first base of each line needs no attributes, and the needs grow with the base's level.
+	std::map<std::pair<std::string, int>, std::vector<std::pair<int, int>>> lines;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
+		if (base == nullptr)
+			continue;
+		const ItemData &data = AllItemsList[i];
+		const int total = data.iMinStr + data.iMinMag + data.iMinDex;
+		if (base->level <= MaxStarterBaseLevel)
+			EXPECT_EQ(total, 0) << data.iName;
+		// Past the start, gear needs some attribute; jewellery never does.
+		if (base->level >= 10 && IsNoneOf(base->itemClass, "ring", "amulet"))
+			EXPECT_GT(total, 0) << data.iName;
+		const int mix = (data.iMinStr > 0 ? 1 : 0) | (data.iMinMag > 0 ? 2 : 0) | (data.iMinDex > 0 ? 4 : 0);
+		lines[{ base->itemClass, mix }].emplace_back(base->level, total);
+	}
+	// Within a class and mix of attributes, a higher base never needs less.
+	for (auto &[line, bases] : lines) {
+		std::sort(bases.begin(), bases.end());
+		for (size_t i = 1; i < bases.size(); i++)
+			EXPECT_GE(bases[i].second, bases[i - 1].second) << line.first << " at level " << bases[i].first;
+	}
+	// A Sorcerer's starter circlet shows no requirement line.
+	Item circlet = MakeItem("Cloth Circlet", 3);
+	EXPECT_EQ(ItemRequirementText(ItemRequiredLevel(circlet), circlet._iMinStr, circlet._iMinMag, circlet._iMinDex), "");
+
+	// A starter item saved while it still needed a few points loads needing none; other gear keeps its needs.
+	circlet._iMinMag = 5;
+	EXPECT_TRUE(IsStarterBase(circlet));
+	EXPECT_EQ(SaveAndLoad(circlet)._iMinMag, 0);
+	const Item crown = MakeItem("Titan Crown", 3);
+	EXPECT_FALSE(IsStarterBase(crown));
+	EXPECT_EQ(SaveAndLoad(crown)._iMinStr, 150);
 }
 
 TEST_F(Poe2ItemBasesTest, GearNeedsItsCharacterLevel)
@@ -977,6 +1020,58 @@ TEST_F(Poe2ItemBasesTest, ShieldsBlockWithTheirBasesOwnChance)
 	gbIsPoe2 = false;
 	EXPECT_EQ(player.GetBlockChance(), player._pDexterity + player.getBaseToBlock() + 2);
 	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2ItemBasesTest, TheTooltipAddsUpAStatSeveralModifiersGive)
+{
+	// Curtis 2026-10-30: a rare body armour read "12% increased Energy Shield" twice and "29% increased Energy Shield":
+	// a life hybrid's, a mana hybrid's and a plain modifier's, each of its own group. POE2 shows one line, added up.
+	const auto mod = [](std::string_view id, int v0, int v1) {
+		const std::optional<uint8_t> family = FindModifierFamily(id);
+		EXPECT_TRUE(family.has_value()) << id;
+		return Poe2ItemMod { static_cast<uint8_t>(family.value_or(0) + 1), 8, { static_cast<int16_t>(v0), static_cast<int16_t>(v1) } };
+	};
+	const std::array<Poe2ItemMod, MaxRareAffixes> mods {
+		mod("life_es_hybrid", 12, 12),
+		mod("mana_es_hybrid", 11, 12),
+		mod("increased_energy_shield", 29, 0),
+		mod("fire_resistance", 11, 0),
+	};
+	// Each family's group is its own, so the item is legal: one modifier per group, as in POE2.
+	EXPECT_NE(ItemModFamily(mods[0])->group, ItemModFamily(mods[2])->group);
+	EXPECT_NE(ItemModFamily(mods[1])->group, ItemModFamily(mods[2])->group);
+	const std::vector<std::string> lines = CombinedItemModText(mods);
+	const std::vector<std::string> expected { "+12 to maximum Life", "53% increased Energy Shield", "+11 to maximum Mana", "+11% to Fire Resistance" };
+	EXPECT_EQ(lines, expected);
+	// One modifier on its own reads as it always has.
+	EXPECT_EQ(CombinedItemModText(std::span(mods).first(1)), ItemModText(mods[0]));
+}
+
+TEST_F(Poe2ItemBasesTest, MagicStavesKeepTheNameTheyWereGiven)
+{
+	// Curtis 2026-10-30: "GetTranslatedItemNameMagical failed for item 'Staff of magic'" 9,252 times. Griswold's magic
+	// staves roll POE2's way (weapon or staff affixes, never a spell); rebuilding the name with Diablo's rolls found a
+	// spell staff with no spell on every frame. A POE2 item's name is the one it was given.
+	Item rarity {};
+	SetLootRarity(rarity, ITEM_QUALITY_MAGIC);
+	int checked = 0;
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		Item item {};
+		RecreateItem(*MyPlayer, item, IDI_SHORTSTAFF, static_cast<uint16_t>(16 | CF_SMITH), seed, 0, rarity.dwBuff | CF_POE2 | CF_HELLFIRE);
+		if (item._iMagical != ITEM_QUALITY_MAGIC || item._iPoe2Mods[0].family != 0)
+			continue;
+		EXPECT_EQ(item._iSpell, SpellID::Null);
+		EXPECT_EQ(item.getName().str(), std::string_view(item._iIName)) << seed;
+		checked++;
+	}
+	EXPECT_GT(checked, 0);
+
+	// Its name is what it was named, whatever the seed would replay.
+	Item item {};
+	RecreateItem(*MyPlayer, item, IDI_SHORTSTAFF, static_cast<uint16_t>(16 | CF_SMITH), 7, 0, rarity.dwBuff | CF_POE2 | CF_HELLFIRE);
+	item._iMagical = ITEM_QUALITY_MAGIC;
+	CopyUtf8(item._iIName, "Spider's Short Staff of magic", ItemNameLength);
+	EXPECT_EQ(item.getName().str(), "Spider's Short Staff of magic");
 }
 
 } // namespace

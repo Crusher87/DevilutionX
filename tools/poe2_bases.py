@@ -362,9 +362,12 @@ LEVEL_SCALE = 1
 # The scale the levels had before, which still picks the Diablo unique type a base carries: saved uniques find
 # themselves by their base's unique type, so it must never change.
 UNIQUE_TYPE_LEVEL_SCALE = 0.36
-# Attribute requirements are POE2's own numbers (Curtis 2026-10-27, after the Warrior playtest): Iron Cap 5 Str,
-# Legion Helm 78, Titan Crown 150. They were 55% while levels were scaled down.
+# Attribute requirements are POE2's own numbers (Curtis 2026-10-27, after the Warrior playtest): Legion Helm 78 Str,
+# Titan Crown 150. They were 55% while levels were scaled down.
 REQUIREMENT_SCALE = 1
+# Like POE2, the first base of each line needs no attributes (Curtis 2026-10-30: "5 Mag" and "3 Mag, 3 Dex" on starter
+# gear); the needs start with the next base. The game's MaxStarterBaseLevel.
+STARTER_BASE_LEVEL = 1
 # One defence point is one armour, one evasion or three energy shield (EnergyShieldPerDefense).
 ENERGY_SHIELD_PER_DEFENSE = 3
 # A weapon hits for its base's damage: POE2's own (REAL_WEAPON_BASES), the bundle's for crossbows.
@@ -728,6 +731,11 @@ def main():
 		meta_rows.append([row[7], 'body_armour', identity, line, 'defence', '', defense_split(line, armour, evasion, energy_shield), str(level), '', ''])
 		found.add(row[7])
 	assert found == set(BODY_ARMOURS), f'body armours not in itemdat.tsv: {sorted(set(BODY_ARMOURS) - found)}'
+
+	starters = {meta[0] for meta in meta_rows + caster_meta if int(meta[7] or 0) <= STARTER_BASE_LEVEL}
+	for row in rows[1:]:
+		if row[7] in starters:
+			row[15] = row[16] = row[17] = '0'
 
 	with open(ITEMDAT, 'w', encoding='utf-8', newline='') as f:
 		for row in rows:
