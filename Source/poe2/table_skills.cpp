@@ -1987,6 +1987,23 @@ int TableCurseDamageTakenPercent(const Monster &monster, DamageType type)
 	return percent;
 }
 
+int TableCurseShownPercent(const Monster &monster, TableCurse curse)
+{
+	const Poe2MonsterState &state = monster.poe2;
+	switch (curse) {
+	case TableCurse::Weaken:
+		return state.weakenTicks > 0 ? WeakenPercent * TableCurseStrength(monster, curse) / 100 : 0;
+	case TableCurse::Decrepify:
+		return state.decrepifyTicks > 0 ? DecrepifyPercent * TableCurseStrength(monster, curse) / 100 : 0;
+	case TableCurse::DeathMark:
+		return state.deathMarkTicks > 0 ? DeathMarkPercent * TableCurseStrength(monster, curse) / 100 : 0;
+	case TableCurse::IronMaiden:
+		return state.ironMaidenTicks > 0 ? TableCurseStrength(monster, curse) : 0;
+	default:
+		return 0;
+	}
+}
+
 void OnTableCursedMonsterKilled(const Monster &monster)
 {
 	const Poe2MonsterState &state = monster.poe2;

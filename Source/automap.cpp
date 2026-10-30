@@ -1894,9 +1894,12 @@ void DrawAutomap(const Surface &out)
 		// Background fill
 		// POE2 Mashup: the corner map gets a solid backdrop. Seen through, the world scrolling under it kept changing its
 		// shade while walking (Curtis 2026-10-29).
-		if (gbIsPoe2 && CornerView != nullptr)
+		if (gbIsPoe2 && CornerView != nullptr) {
 			FillRect(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height, 0);
-		else
+			// The whole corner map is a solid panel: no part of the world or the effects layer shows through where its black
+			// happens to match the world's (Curtis 2026-10-30: it still darkened while walking).
+			CoverUi(out, { MinimapRect.position - Displacement { 2, 2 }, Size { MinimapRect.size.width + 4, MinimapRect.size.height + 4 } });
+		} else
 			DrawHalfTransparentRectTo(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height);
 
 		const uint8_t frameShadowColor = PAL16_YELLOW + 12;

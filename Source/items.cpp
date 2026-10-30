@@ -2236,6 +2236,21 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
 		if (IsLineageSupport(gem))
 			AddItemInfoBoxString(_("Lineage support: a rare find that can't be cut"));
+		// Like POE2's Supportable Skills box: which of the hero's skills it would work on (Curtis 2026-10-30).
+		if (MyPlayer != nullptr) {
+			std::vector<SkillSlot> skills(MyPlayer->poe2.skillSlots.begin(), MyPlayer->poe2.skillSlots.end());
+			skills.push_back(DefaultSkillSlot(*MyPlayer));
+			std::string names;
+			for (const SkillSlot &skill : skills) {
+				if (skill.isEmpty() || !SupportGemCanSupport(gem, skill))
+					continue;
+				const std::string_view name = SkillName(skill);
+				if (name.empty() || names.find(name) != std::string::npos)
+					continue;
+				StrAppend(names, names.empty() ? "" : ", ", name);
+			}
+			AddItemInfoBoxString(names.empty() ? std::string(_("Supports none of your skills")) : FormatRuntime(_("Supports your {:s}"), names));
+		}
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
 		return;
 	}
@@ -5171,12 +5186,14 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
-	// Uncut gems take the area's level, not a unique monster's doubled one (Curtis 2026-10-23: Snotspill dropped a level 6
-	// uncut support on floor 4). Supports climb POE2's slower 1-5 ladder: level 1 until area level 16.
+	// Uncut gems take the floor's area level, not the monster's own (Curtis 2026-10-23: Snotspill dropped a level 6 uncut
+	// support on floor 4; 2026-10-30: every skill gem was level 1, and a deep monster's Spirit gem level 4 on floor 1), so
+	// gem levels rise smoothly, at most a level ahead of the hero as in POE2. Supports climb POE2's slower 1-5 ladder.
+	const int gemAreaLevel = Poe2PickerAreaLevel();
 	if (item._iMiscId == IMISC_UNCUT_SUPPORT)
-		SetUncutGemLevel(item, UncutSupportGemLevel(UncutSupportLevelForArea(origin.poe2AreaLevel)));
+		SetUncutGemLevel(item, UncutSupportGemLevel(UncutSupportLevelForArea(gemAreaLevel > 0 ? gemAreaLevel : origin.poe2AreaLevel)));
 	else if (IsPoe2UncutGem(item._iMiscId))
-		SetUncutGemLevel(item, UncutGemLevelForArea(origin.areaLevel));
+		SetUncutGemLevel(item, UncutGemLevelForArea(gemAreaLevel > 0 ? gemAreaLevel : origin.areaLevel));
 	if (IsWaystone(item))
 		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
 	if (IsMapFragment(item))

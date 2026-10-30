@@ -593,9 +593,9 @@ constexpr size_t MaxJewelSockets = 12;
 
 /** @brief Timers and counters of the support gems, per character (not saved; see poe2/support_table.cpp). */
 struct SupportRuntime {
-	/** Seals stored by Horadric Seals and Stored Volley, and the ticks towards the next one. */
-	std::array<uint8_t, NumSkillSlots> seals {};
-	std::array<uint8_t, NumSkillSlots> sealTicks {};
+	/** Seals stored by Horadric Seals and Stored Volley, and the ticks towards the next one, per Skills panel row (the last is the default attack's). */
+	std::array<uint8_t, NumSkillSlots + 1> seals {};
+	std::array<uint8_t, NumSkillSlots + 1> sealTicks {};
 	/** Warlord's Blood Pact: attack speed stacks from kills. */
 	uint8_t warlordStacks = 0;
 	/** Frostbite: hits gain extra cold damage after a freeze. */
@@ -624,7 +624,7 @@ struct SupportRuntime {
 	int32_t leechPool = 0;
 	uint8_t leechPoolTicks = 0;
 	/** Nova Projectiles II: ticks before each Skills panel socket's skill can fire another nova. */
-	std::array<uint8_t, NumSkillSlots> novaCooldown {};
+	std::array<uint8_t, NumSkillSlots + 1> novaCooldown {};
 	/** Energy of the meta gem in each Skills panel socket, in hundredths (see poe2/meta_gems.hpp), and the events since it last cast. */
 	std::array<uint16_t, NumSkillSlots> metaEnergy {};
 	std::array<uint8_t, NumSkillSlots> metaEvents {};

@@ -273,8 +273,13 @@ std::string LocalStamp()
 	return stamp;
 }
 
+/** @brief While a level visit is being closed, the label of the level being left (the next one is loaded by then). */
+std::string LeavingLabel;
+
 std::string LevelLabel()
 {
+	if (!LeavingLabel.empty())
+		return LeavingLabel;
 	if (leveltype == DTYPE_TOWN && !setlevel)
 		return "town";
 	if (setlevel)
@@ -1016,7 +1021,9 @@ void EndLevelVisit(std::string_view how)
 	    std::format("{:.1f} s: {:d} kills of {:d} monsters ({:d}% cleared), {:d} drops, {:d} damage taken, {:d} to energy shield, {:d} fights ({:d} under half life), items left {:s}", seconds, CurrentLevel.kills,
 	        CurrentLevel.monstersAtEntry, cleared, CurrentLevel.drops, Whole(CurrentLevel.damageTakenRaw), Whole(CurrentLevel.shieldTakenRaw),
 	        CurrentLevel.fights, CurrentLevel.hardFights, CountsByRarity(left))));
-	// Stamped with the level being left, not the one being loaded.
+	// Stamped with the level being left, not the one being loaded: the floor's pacing too (run_report.py read the first
+	// floor's time as the second's, 2026-10-30).
+	LeavingLabel = CurrentLevel.label;
 	if (LogLevelOn(LogChannel::Progress, LogLevel::Always))
 		SetTelemetryEventClock(Now() - SessionStartMs, CurrentLevel.label);
 	LevelCensusLeft(how);
@@ -1035,6 +1042,7 @@ void EndLevelVisit(std::string_view how)
 	    .add("leftMagic", left[1])
 	    .add("leftRare", left[2])
 	    .add("leftUnique", left[3]);
+	LeavingLabel.clear();
 	CurrentLevel = {};
 }
 

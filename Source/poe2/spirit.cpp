@@ -460,7 +460,7 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 	case PersistentSkill::ChargeRegulation:
 		return _("Spends your Frenzy charges on speed: each one gives 8 seconds of 20% more attack and cast speed, taken as the last runs low");
 	case PersistentSkill::WitheringPresence:
-		return _("Aura: enemies near you wither, taking 5% more damage a stack, up to 5 stacks");
+		return _("Aura: enemies near you wither, taking 3% more damage a stack, up to 10 stacks");
 	case PersistentSkill::Trinity:
 		return _("Fire, lightning and cold hits build Resonance of their element and take some from the other two. Every 30 Resonance in all gives more elemental damage, so mixing elements pays");
 	case PersistentSkill::SiphonElements:

@@ -593,5 +593,39 @@ TEST_F(Poe2MetaGemsTest, CurseOnHitAndHoradricTotemSupportsBecomeSpiritGems)
 	EXPECT_FALSE(SupportGemCanSupport(SupportGem::CurseOnHit, SkillSlot::ForAttack(WeaponSkill::Cleave)));
 }
 
+TEST_F(Poe2MetaGemsTest, HoradricSealsWaitTheFullTimeAfterACast)
+{
+	// Curtis 2026-10-30: after a cast, the first new seal came almost at once. It takes the full 1.5 seconds, and the
+	// skill's button shows the seals and how far along the next one is.
+	Player &player = *MyPlayer;
+	player.poe2.skillSlots[0] = Firebolt;
+	player.poe2.slotSupports[0][0] = SupportGem::HoradricSeals;
+	const auto ticksToNextSeal = [&]() {
+		const int before = player.poe2.supportState.seals[0];
+		for (int tick = 1; tick <= 100; tick++) {
+			ProcessSupportEffects(player);
+			if (player.poe2.supportState.seals[0] != before)
+				return tick;
+		}
+		return 0;
+	};
+	EXPECT_EQ(ticksToNextSeal(), 30);
+	std::optional<SealDisplay> shown = SkillSealDisplay(player, Firebolt);
+	ASSERT_TRUE(shown.has_value());
+	EXPECT_EQ(shown->seals, 1);
+	EXPECT_EQ(shown->maxSeals, 2);
+	EXPECT_EQ(shown->progressPercent, 0);
+	for (int tick = 0; tick < 15; tick++)
+		ProcessSupportEffects(player);
+	EXPECT_EQ(SkillSealDisplay(player, Firebolt)->progressPercent, 50);
+	OnSkillUsed(player, Firebolt, player.position.tile + Displacement { 3, 0 });
+	ClearSupportEffects();
+	EXPECT_EQ(player.poe2.supportState.seals[0], 0);
+	EXPECT_EQ(ticksToNextSeal(), 30);
+	// A skill without the support shows none.
+	player.poe2.slotSupports[0][0] = SupportGem::None;
+	EXPECT_FALSE(SkillSealDisplay(player, Firebolt).has_value());
+}
+
 } // namespace
 } // namespace devilution

@@ -75,7 +75,7 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::BurningGround, 3, 5, 100, { 6, 2, 0 }, "Hits leave wide burning ground that\nlasts 50% longer. 20% less damage\nwith hits" },
 	{ SG::Overcharge, 1, 4, 100, {}, "Shocks twice as often. 25% less\ndamage with hits" },
 	{ SG::DeepFreeze, 1, 1, 120, {}, "Freezes sooner. 20% less damage\nwith hits. Mana +20%" },
-	{ SG::WitheringTouch, 1, 1, 100, {}, "Hits wither: 5% more damage taken\na stack, up to 10. 15% less damage" },
+	{ SG::WitheringTouch, 1, 1, 100, {}, "Hits wither: 3% more damage taken\na stack, up to 10. 15% less damage" },
 	{ SG::EchoingShout, 1, 4, 150, {}, "The warcry repeats twice, each echo\n50% weaker. Mana +50%" },
 	// Feeding Frenzy I-II: more minion damage, more damage taken.
 	{ SG::FeedingFrenzy, 1, 3, 100, { 30, 20, 0 }, "Minions deal 30% more damage, but\ntake 20% more" },

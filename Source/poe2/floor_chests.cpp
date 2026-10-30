@@ -30,9 +30,13 @@ namespace {
 /** _oVar5 holds the kind as KindMark plus the kind, so a value left in a reused object slot never reads as one. */
 constexpr int KindMark = 100;
 constexpr int GuardRadius = 6;
-/** The red runes show where the guards will stand this long before the first steps out, and then one comes every GuardGapMs. */
-constexpr int WarningMs = 1500;
+/**
+ * The red runes show where the guards will stand this long before the first wave steps out, and then a wave of up to
+ * GuardsPerWave comes every GuardGapMs (Curtis 2026-10-30: quick waves, about half a second apart).
+ */
+constexpr int WarningMs = 1000;
 constexpr int GuardGapMs = 500;
+constexpr int GuardsPerWave = 3;
 
 /*
  * A strongbox keeps its guards in its object, so a save in the middle of them coming keeps the rest coming:
@@ -147,7 +151,7 @@ void WarnOfGuards(Object &chest)
 	ShakeCamera(ShakeStrength::Light, Ticks(WarningMs / 2));
 	const std::vector<Point> tiles = GuardTiles(chest, GuardsTotal(chest));
 	for (size_t i = 0; i < tiles.size(); i++)
-		vfx::Sigil(tiles[i], 1, WarningMs + (static_cast<int>(i) * GuardGapMs), vfx::Element::Blood);
+		vfx::Sigil(tiles[i], 1, WarningMs + (static_cast<int>(i) / GuardsPerWave * GuardGapMs), vfx::Element::Blood);
 }
 
 /**
@@ -236,8 +240,10 @@ void UpdateFloorChest(Object &chest)
 	if (!gbIsPoe2 || GetFloorChestKind(chest) != FloorChestKind::Strongbox || !IsLootWaiting(chest))
 		return;
 	if (GuardsToCome(chest) > 0) {
-		if (--chest._oVar3 <= 0)
-			BringOutGuard(chest);
+		if (--chest._oVar3 <= 0) {
+			for (int i = 0; i < GuardsPerWave && GuardsToCome(chest) > 0; i++)
+				BringOutGuard(chest);
+		}
 		return;
 	}
 	if (GuardsAlive())
