@@ -31,6 +31,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "engine/point.hpp"
@@ -54,8 +55,8 @@ enum CathedralRoomRole : uint8_t {
  * ' ' rock, '.' floor, 'E' where a doorway may open, 'O' pillar, 'U' stairs up, 'V' stairs down, '*' a reward,
  * and props: c candles, L brazier, S sarcophagus, K bookshelf, k book stand, A shrine spot, F fountain, G goat shrine,
  * X crucified skeleton, x burning cross, T man or woman in chains, Y body on a stake, D headless body, P and s skulls,
- * b banner, r barrels. Inner walls ('#'), arches ('a'), fences ('='), inner doors ('d') and broken walls ('R') are
- * left for a later step: rooms with them are not used yet.
+ * b banner, r barrels, and lines inside the room: '#' wall, 'a' arches, '=' fence, 'd' a door in a wall or fence line,
+ * 'R' broken wall.
  */
 struct CathedralRoomDef {
 	std::string id;
@@ -122,6 +123,12 @@ struct CathedralDoor {
 	bool door = false;
 };
 
+/** A block of a wall, arch, fence, door or broken-wall line inside a designed room ('#', 'a', '=', 'd', 'R'). */
+struct CathedralLine {
+	Point block;
+	char kind = '#';
+};
+
 struct CathedralProp {
 	Point block;
 	char kind = '.';
@@ -133,6 +140,8 @@ struct CathedralPlan {
 	std::vector<CathedralDoor> doors;
 	std::vector<CathedralProp> props;
 	std::vector<Point> pillars;
+	/** Lines inside designed rooms: rock in the mask, turned into their tiles once the walls are in. */
+	std::vector<CathedralLine> lines;
 	Bitset2d<DMAXX, DMAXY> mask;
 	/** Blocks of designed rooms, kept free of random objects and theme rooms. */
 	Bitset2d<DMAXX, DMAXY> designed;
@@ -181,6 +190,21 @@ bool IsCathedralDesignedTile(Point tile);
  * theme rooms (library, fountain, goat shrine, ...); the designed rooms, the main way and the winding passages don't.
  */
 bool IsCathedralThemeRoom(int8_t tv);
+/**
+ * @brief The room of a new Cathedral floor a tile is in (1 + its area), for the pack planner and the floor census; 0 off
+ * every room. A room cut up by lines of arches or walls is still one room.
+ */
+int CathedralRoomAt(Point tile);
+/** @brief The big-fight halls along the main way, each with the quiet room after it (rooms as CathedralRoomAt; 0: none). */
+std::vector<std::pair<int, int>> CathedralBigFights();
+/** A designed room's reward spot that holds more than a chest (the reward column of the rooms list). */
+struct CathedralReward {
+	Point tile;
+	/** A strongbox stands there; otherwise a pack led by a rare monster is to stand there. */
+	bool strongbox = false;
+};
+/** @brief The reward spots AddCathedralRoomObjects set out on this floor, for the pack planner. */
+const std::vector<CathedralReward> &CathedralRewards();
 /** @brief The designed rooms' sarcophagi, taken from the floor's usual 10 to 15. */
 int CathedralDesignedSarcophagi();
 /** @brief Marks the object art the designed rooms use, for InitObjectGFX. */

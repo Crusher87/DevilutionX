@@ -20,6 +20,7 @@
 #include "poe2/weapon_skills.hpp"
 #include "tables/spelldat.h"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
@@ -1047,6 +1048,51 @@ std::vector<std::string> ItemModText(const Poe2ItemMod &mod)
 			trimmed.remove_prefix(1);
 		lines.emplace_back(trimmed);
 	}
+	return lines;
+}
+
+std::vector<std::string> CombinedItemModText(std::span<const Poe2ItemMod> mods)
+{
+	struct StatLine {
+		/** The stat's text with its values as {0} and {1}, numbered in the order they appear. */
+		std::string text;
+		std::array<int, 2> values;
+	};
+	std::vector<StatLine> stats;
+	for (const Poe2ItemMod &mod : mods) {
+		const ModFamily *family = ItemModFamily(mod);
+		if (family == nullptr)
+			continue;
+		for (std::string_view part : SplitByChar(family->text, ';')) {
+			while (!part.empty() && part.front() == ' ')
+				part.remove_prefix(1);
+			// Numbered by position, a hybrid's second stat ("{1}% increased Energy Shield") matches a plain modifier's first.
+			StatLine line { {}, {} };
+			size_t count = 0;
+			for (size_t i = 0; i < part.size(); i++) {
+				if (count < 2 && part[i] == '{' && i + 2 < part.size() && IsAnyOf(part[i + 1], '0', '1') && part[i + 2] == '}') {
+					const size_t stat = static_cast<size_t>(part[i + 1] - '0');
+					line.values[count] = ShownModValue(*family, stat, mod.values[stat]);
+					line.text += count == 0 ? "{0}" : "{1}";
+					count++;
+					i += 2;
+				} else {
+					line.text += part[i];
+				}
+			}
+			const auto same = std::find_if(stats.begin(), stats.end(), [&line](const StatLine &other) { return other.text == line.text; });
+			if (same == stats.end()) {
+				stats.push_back(std::move(line));
+				continue;
+			}
+			same->values[0] += line.values[0];
+			same->values[1] += line.values[1];
+		}
+	}
+	std::vector<std::string> lines;
+	lines.reserve(stats.size());
+	for (const StatLine &stat : stats)
+		lines.push_back(FormatRuntime(stat.text, stat.values[0], stat.values[1]));
 	return lines;
 }
 

@@ -252,7 +252,7 @@ TEST_F(Poe2SpiritAurasTest, ChargeRegulationSpendsFrenzyChargesOnSpeed)
 	EXPECT_EQ(SpiritAuraSpeedPercent(player), 0);
 }
 
-TEST_F(Poe2SpiritAurasTest, WitheringPresenceWithersMonstersNearbyUpToFiveStacks)
+TEST_F(Poe2SpiritAurasTest, WitheringPresenceWithersMonstersNearbyUpToTenStacks)
 {
 	Socket(PersistentSkill::WitheringPresence);
 	Monster &near = PlaceMonster(0, { 42, 40 });
@@ -260,7 +260,7 @@ TEST_F(Poe2SpiritAurasTest, WitheringPresenceWithersMonstersNearbyUpToFiveStacks
 	Tick(1);
 	EXPECT_EQ(near.poe2.witherStacks, 1);
 	EXPECT_EQ(far.poe2.witherStacks, 0);
-	Tick(WitheringPresencePulseTicks(1) * 10);
+	Tick(WitheringPresencePulseTicks(1) * 20);
 	EXPECT_EQ(near.poe2.witherStacks, WitheringPresenceMaxStacks);
 	EXPECT_GT(near.poe2.witherTicks, 0);
 }

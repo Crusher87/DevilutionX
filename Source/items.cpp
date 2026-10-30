@@ -2236,6 +2236,21 @@ void PrintItemMisc(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("{:s} support gem"), GemColorName(SupportGemColor(gem))));
 		if (IsLineageSupport(gem))
 			AddItemInfoBoxString(_("Lineage support: a rare find that can't be cut"));
+		// Like POE2's Supportable Skills box: which of the hero's skills it would work on (Curtis 2026-10-30).
+		if (MyPlayer != nullptr) {
+			std::vector<SkillSlot> skills(MyPlayer->poe2.skillSlots.begin(), MyPlayer->poe2.skillSlots.end());
+			skills.push_back(DefaultSkillSlot(*MyPlayer));
+			std::string names;
+			for (const SkillSlot &skill : skills) {
+				if (skill.isEmpty() || !SupportGemCanSupport(gem, skill))
+					continue;
+				const std::string_view name = SkillName(skill);
+				if (name.empty() || names.find(name) != std::string::npos)
+					continue;
+				StrAppend(names, names.empty() ? "" : ", ", name);
+			}
+			AddItemInfoBoxString(names.empty() ? std::string(_("Supports none of your skills")) : FormatRuntime(_("Supports your {:s}"), names));
+		}
 		AddItemInfoBoxString(_("Use to socket in a skill (K: skills)"));
 		return;
 	}
@@ -5163,7 +5178,9 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	}
 	if (category == LootCategory::Equipment && *rarity != ITEM_QUALITY_UNIQUE)
 		SetItemQuality(item, RollDropQuality(*idx, *rarity, origin.poe2ItemLevel));
-	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), itemLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
+	// A flask's tier comes from its item level: the area's, like POE2's flasks, so the higher tiers drop in the endgame.
+	const int createLevel = IsFlaskBase(*idx) ? FlaskDropLevel(origin.equipmentLevel, itemLevel) : itemLevel;
+	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), createLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
 	// Diablo's uniques drop once per game; the bundle's, like POE2's, can drop again.
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
 		UniqueItemFlags[item._iUid] = true;
@@ -5171,12 +5188,14 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
-	// Uncut gems take the area's level, not a unique monster's doubled one (Curtis 2026-10-23: Snotspill dropped a level 6
-	// uncut support on floor 4). Supports climb POE2's slower 1-5 ladder: level 1 until area level 16.
+	// Uncut gems take the floor's area level, not the monster's own (Curtis 2026-10-23: Snotspill dropped a level 6 uncut
+	// support on floor 4; 2026-10-30: every skill gem was level 1, and a deep monster's Spirit gem level 4 on floor 1), so
+	// gem levels rise smoothly, at most a level ahead of the hero as in POE2. Supports climb POE2's slower 1-5 ladder.
+	const int gemAreaLevel = Poe2PickerAreaLevel();
 	if (item._iMiscId == IMISC_UNCUT_SUPPORT)
-		SetUncutGemLevel(item, UncutSupportGemLevel(UncutSupportLevelForArea(origin.poe2AreaLevel)));
+		SetUncutGemLevel(item, UncutSupportGemLevel(UncutSupportLevelForArea(gemAreaLevel > 0 ? gemAreaLevel : origin.poe2AreaLevel)));
 	else if (IsPoe2UncutGem(item._iMiscId))
-		SetUncutGemLevel(item, UncutGemLevelForArea(origin.areaLevel));
+		SetUncutGemLevel(item, UncutGemLevelForArea(gemAreaLevel > 0 ? gemAreaLevel : origin.areaLevel));
 	if (IsWaystone(item))
 		RollWaystone(item, DropWaystoneTier(origin.poe2ItemLevel));
 	if (IsMapFragment(item))
@@ -6957,10 +6976,10 @@ void PrintItemDetails(const Item &item)
 		// them, and a two-part affix's lines are bracketed together (Curtis 2026-10-27).
 		const bool advanced = gbIsPoe2 && (SDL_GetModState() & SDL_KMOD_ALT) != 0;
 		if (!advanced) {
-			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
-				for (const std::string &line : ItemModText(mod))
-					AddItemInfoBoxString(line);
-			}
+			// A stat several modifiers give shows once, added up, as in POE2 (Curtis 2026-10-30: a rare showed
+			// "12% increased Energy Shield" twice and "29% increased Energy Shield" from two hybrids and a plain one).
+			for (const std::string &line : CombinedItemModText(item._iPoe2Mods))
+				AddItemInfoBoxString(line);
 		} else {
 			CurrentInfoLineStyle = InfoLineStyle::Affix;
 			for (const bool prefixes : { true, false }) {
@@ -8130,7 +8149,10 @@ StringOrView Item::getName() const
 	if (_iMagical == ITEM_QUALITY_RARE) {
 		return GetRareItemName(*this);
 	}
-	if (_iPoe2Mods[0].family != 0) {
+	// POE2 Mashup: a POE2 item's magic name is the one it was given. Rebuilding it from the seed replays Diablo's rolls,
+	// which POE2's vendor wares and quarterstaffs don't follow: Griswold's magic "Staff of magic" replayed as a spell
+	// staff with no spell, and logged a warning every frame it was drawn (Curtis 2026-10-30).
+	if (_iPoe2Mods[0].family != 0 || (dwBuff & CF_POE2) != 0) {
 		return std::string_view(_iIName);
 	}
 	return GetTranslatedItemNameMagical(*this, dwBuff & CF_HELLFIRE, true, std::nullopt);

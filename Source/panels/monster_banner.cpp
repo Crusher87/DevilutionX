@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "control/control.hpp"
@@ -14,9 +15,15 @@
 #include "levels/gendung.h"
 #include "monster.h"
 #include "panels/poe2_widgets.hpp"
+#include "panels/spell_icons.hpp"
 #include "poe2/endgame.hpp"
+#include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -47,6 +54,125 @@ int ShownMonster = -1;
 int Linger = 0;
 /** Life shown by the trailing "damage taken" chunk, in thousandths of the bar. */
 int TrailPerMille = 1000;
+
+/** The enemy debuff icons under the banner (Curtis 2026-10-30): Diablo's small spell icons, each with its strength under it. */
+constexpr int IconWidth = 37;
+constexpr int IconHeight = 38;
+constexpr int IconGap = 4;
+constexpr int IconNumberHeight = 13;
+constexpr int TicksPerSecond = 20;
+
+struct Debuff {
+	SpellIcon icon;
+	/** The icon's colours, as the spell book recolours its icons. */
+	SpellType colours;
+	/** The frame's colour: the element of an ailment, or the curse colour. */
+	uint8_t frame;
+	std::string number;
+};
+
+/** @brief A strength in percent, or in tenths of a percent below 10%, as POE2 shows it (2.9%, 17%). */
+std::string PercentText(int perMille)
+{
+	const int sign = perMille < 0 ? -1 : 1;
+	const int size = std::abs(perMille);
+	if (size < 100 && size % 10 != 0)
+		return StrCat(sign < 0 ? "-" : "", size / 10, ".", size % 10, "%");
+	return StrCat(sign * (size / 10), "%");
+}
+
+/** @brief Time left for an effect that has no strength to show, such as a freeze or a stun. */
+std::string SecondsText(int ticks)
+{
+	const int tenths = (std::max(ticks, 0) * 10 + TicksPerSecond - 1) / TicksPerSecond;
+	return StrCat(tenths / 10, ".", tenths % 10, "s");
+}
+
+/** @brief Damage over time as the share of the monster's life it takes a second. */
+std::string DamageOverTimeText(const Monster &monster, int32_t perTickRaw)
+{
+	const int64_t maxLife = std::max<int64_t>(monster.maxHitPoints.raw(), 1);
+	const int64_t perMille = static_cast<int64_t>(std::max<int32_t>(perTickRaw, 0)) * TicksPerSecond * 1000 / maxLife;
+	return PercentText(static_cast<int>(std::clamp<int64_t>(std::max<int64_t>(perMille, 1), 1, 9990)));
+}
+
+/** @brief Every ailment, curse and debuff on the monster, ailments first, with how strong each one is. */
+std::vector<Debuff> MonsterDebuffs(const Monster &monster)
+{
+	constexpr uint8_t Fire = PAL16_ORANGE + 2;
+	constexpr uint8_t Cold = PAL16_BLUE + 2;
+	constexpr uint8_t Lightning = PAL16_YELLOW + 2;
+	constexpr uint8_t Physical = PAL16_RED + 4;
+	constexpr uint8_t Poison = PAL16_BEIGE + 6;
+	constexpr uint8_t Curse = PAL16_RED + 10;
+	constexpr uint8_t Other = PAL16_GRAY + 4;
+	const Poe2MonsterState &state = monster.poe2;
+	std::vector<Debuff> debuffs;
+	const auto add = [&](SpellIcon icon, SpellType colours, uint8_t frame, std::string number) { debuffs.push_back({ icon, colours, frame, std::move(number) }); };
+	// Diablo's icons, recoloured by element: orange for fire, blue for cold, gold for lightning, grey for the rest.
+	// The red ones (bleeding, curses) are red already.
+	if (state.igniteTicks > 0)
+		add(SpellIcon::Inferno, SpellType::Charges, Fire, DamageOverTimeText(monster, state.igniteDamagePerTick));
+	if (state.freezeTicks > 0)
+		add(SpellIcon::StoneCurse, SpellType::Spell, Cold, SecondsText(state.freezeTicks));
+	else if (state.chillTicks > 0)
+		add(SpellIcon::Nova, SpellType::Spell, Cold, PercentText(state.chillPercent * 10));
+	if (state.shockTicks > 0)
+		add(SpellIcon::ChargedBolt, SpellType::Skill, Lightning, PercentText(ShockDamagePercent * MapExposurePercent() / 10));
+	if (state.electrocuteTicks > 0)
+		add(SpellIcon::Lightning, SpellType::Skill, Lightning, SecondsText(state.electrocuteTicks));
+	if (state.poisonTicks > 0)
+		add(SpellIcon::DoomSerpents, SpellType::Invalid, Poison, DamageOverTimeText(monster, state.poisonDamagePerTick));
+	if (state.bleedTicks > 0)
+		add(SpellIcon::BloodStar, SpellType::Skill, Physical, DamageOverTimeText(monster, state.bleedDamagePerTick));
+	if (state.witherStacks > 0)
+		add(SpellIcon::Apocalypse, SpellType::Invalid, Curse, PercentText(WitheredDamageTakenPercent(monster) * 10));
+	if (state.heavyStunTicks > 0)
+		add(SpellIcon::Flash, SpellType::Invalid, Other, SecondsText(state.heavyStunTicks));
+	if (state.hinderTicks > 0)
+		add(SpellIcon::Etherealize, SpellType::Invalid, Other, PercentText(MonsterHinderPercent(monster) * 10));
+	if (state.armourBreakTicks > 0)
+		add(SpellIcon::ItemRepair, SpellType::Invalid, Physical, PercentText(ArmourBreakDamagePercent * 10));
+	if (state.exposureTicks > 0)
+		add(SpellIcon::Elemental, SpellType::Spell, Curse, PercentText(-ExposurePercent * MapExposurePercent() / 100 * CurseEffectPercent(monster) / 10));
+	// Curses.
+	if (state.amplifyTicks > 0)
+		add(SpellIcon::PentaStar, SpellType::Skill, Curse, PercentText(state.amplifyPercent * 10));
+	if (state.lowerResistTicks > 0)
+		add(SpellIcon::Pentagram, SpellType::Skill, Curse, PercentText(-LowerResistCursePercent * TableCurseStrength(monster, TableCurse::LowerResist) / 100 * CurseEffectPercent(monster) / 10));
+	if (const int weaken = TableCurseShownPercent(monster, TableCurse::Weaken); weaken > 0)
+		add(SpellIcon::LongHorn, SpellType::Skill, Curse, PercentText(-weaken * 10));
+	if (const int decrepify = TableCurseShownPercent(monster, TableCurse::Decrepify); decrepify > 0)
+		add(SpellIcon::RedSkull, SpellType::Skill, Curse, PercentText(decrepify * 10));
+	if (const int deathMark = TableCurseShownPercent(monster, TableCurse::DeathMark); deathMark > 0)
+		add(SpellIcon::BoneSpirit, SpellType::Skill, Curse, PercentText(deathMark * 10));
+	if (const int ironMaiden = TableCurseShownPercent(monster, TableCurse::IronMaiden); ironMaiden > 0)
+		add(SpellIcon::FireCloud, SpellType::Skill, Curse, PercentText(ironMaiden * 10));
+	if (state.confuseTicks > 0)
+		add(SpellIcon::Jester, SpellType::Skill, Curse, SecondsText(state.confuseTicks));
+	return debuffs;
+}
+
+/** @brief The debuff icons in a row, centred on @p centerX, each framed in its colour with its strength in a box under it. */
+void DrawDebuffIcons(const Surface &out, int centerX, int y, const std::vector<Debuff> &debuffs)
+{
+	if (debuffs.empty())
+		return;
+	const int count = static_cast<int>(debuffs.size());
+	int x = centerX - ((count * IconWidth) + ((count - 1) * IconGap)) / 2;
+	for (const Debuff &debuff : debuffs) {
+		SetSpellTrans(debuff.colours);
+		FillRectangle(out, { { x - 2, y - 2 }, { IconWidth + 4, IconHeight + IconNumberHeight + 5 } }, FrameDark);
+		DrawSmallSpellIcon(out, { x, y + IconHeight - 1 }, debuff.icon);
+		const Rectangle frame { { x - 1, y - 1 }, { IconWidth + 2, IconHeight + 2 } };
+		DrawHorizontalLine(out, frame.position, frame.size.width, debuff.frame);
+		DrawHorizontalLine(out, frame.position + Displacement { 0, frame.size.height - 1 }, frame.size.width, debuff.frame);
+		DrawVerticalLine(out, frame.position, frame.size.height, debuff.frame);
+		DrawVerticalLine(out, frame.position + Displacement { frame.size.width - 1, 0 }, frame.size.height, debuff.frame);
+		DrawString(out, debuff.number, { { x - 2, y + IconHeight + 2 }, { IconWidth + 4, IconNumberHeight } }, { .flags = UiFlags::ColorWhite | UiFlags::FontSize12 | UiFlags::AlignCenter | UiFlags::VerticalCenter });
+		x += IconWidth + IconGap;
+	}
+}
 
 /** @brief A small gold diamond with a red gem, Diablo-style, capping each end of the bar. */
 void DrawEndGem(const Surface &out, Point center, int radius)
@@ -214,21 +340,7 @@ void DrawMonsterBanner(const Surface &out)
 			StrAppend(mods, mods.empty() ? "" : ", ", MonsterModName(static_cast<MonsterMod>(mod)));
 	}
 
-	struct Tag {
-		std::string_view text;
-		UiFlags color;
-	};
-	std::vector<Tag> ailments;
-	if (monster.poe2.igniteTicks > 0)
-		ailments.push_back({ _("Ignited"), UiFlags::ColorOrange });
-	if (monster.poe2.shockTicks > 0)
-		ailments.push_back({ _("Shocked"), UiFlags::ColorYellow });
-	if (monster.poe2.freezeTicks > 0)
-		ailments.push_back({ _("Frozen"), UiFlags::ColorBlue });
-	else if (monster.poe2.chillTicks > 0)
-		ailments.push_back({ _("Chilled"), UiFlags::ColorBlue });
-	if (monster.poe2.heavyStunTicks > 0)
-		ailments.push_back({ _("Heavy Stunned"), UiFlags::ColorWhite });
+	const std::vector<Debuff> debuffs = MonsterDebuffs(monster);
 	const std::string resistances = ResistanceText(monster);
 
 	const int width = std::min(MaxWidth, out.w() - 60);
@@ -243,8 +355,9 @@ void DrawMonsterBanner(const Surface &out)
 	int lines = 0;
 	lines += subtitle.empty() ? 0 : 1;
 	lines += mods.empty() ? 0 : 1;
-	lines += (ailments.empty() && resistances.empty()) ? 0 : 1;
-	const int height = 6 + NameHeight + barHeight + 10 + (lines * LineHeight);
+	lines += resistances.empty() ? 0 : 1;
+	const int iconsHeight = debuffs.empty() ? 0 : IconHeight + IconNumberHeight + 8;
+	const int height = 6 + NameHeight + barHeight + 10 + (lines * LineHeight) + iconsHeight;
 
 	// A soft dark backing so the text reads over any floor.
 	DrawHalfTransparentRectTo(out, x - 24, Top - 4, width + 48, height);
@@ -262,24 +375,11 @@ void DrawMonsterBanner(const Surface &out)
 		DrawShadowedText(out, mods, { { x, y }, { width, LineHeight } }, (affixes.rarity == MonsterRarity::Rare ? UiFlags::ColorYellow : UiFlags::ColorBlue) | UiFlags::FontSize12 | UiFlags::AlignCenter);
 		y += LineHeight;
 	}
-	if (!ailments.empty() || !resistances.empty()) {
-		// Ailments in their element's colour, then what the monster resists in grey.
-		int lineWidth = 0;
-		constexpr int Gap = 10;
-		for (const Tag &tag : ailments)
-			lineWidth += GetLineWidth(tag.text, GameFont12) + Gap;
-		if (!resistances.empty())
-			lineWidth += GetLineWidth(resistances, GameFont12);
-		else
-			lineWidth -= Gap;
-		int tx = x + (width - lineWidth) / 2;
-		for (const Tag &tag : ailments) {
-			DrawShadowedText(out, tag.text, { { tx, y }, { width, LineHeight } }, tag.color | UiFlags::FontSize12);
-			tx += GetLineWidth(tag.text, GameFont12) + Gap;
-		}
-		if (!resistances.empty())
-			DrawShadowedText(out, resistances, { { tx, y }, { width, LineHeight } }, UiFlags::ColorButtonpushed | UiFlags::FontSize12);
+	if (!resistances.empty()) {
+		DrawShadowedText(out, resistances, { { x, y }, { width, LineHeight } }, UiFlags::ColorButtonpushed | UiFlags::FontSize12 | UiFlags::AlignCenter);
+		y += LineHeight;
 	}
+	DrawDebuffIcons(out, x + (width / 2), y + 4, debuffs);
 }
 
 } // namespace devilution

@@ -310,6 +310,21 @@ bool MeetsItemLevelRequirement(const Player &player, const Item &item)
 	return player.getCharacterLevel() >= ItemRequiredLevel(item);
 }
 
+bool IsStarterBase(const Item &item)
+{
+	const BaseMeta *base = ItemBaseMeta(item);
+	return base != nullptr && base->level <= MaxStarterBaseLevel;
+}
+
+void ClearStarterBaseRequirements(Item &item)
+{
+	if (!IsStarterBase(item))
+		return;
+	item._iMinStr = 0;
+	item._iMinMag = 0;
+	item._iMinDex = 0;
+}
+
 DefenseSplit ItemDefenseSplit(const Item &item, int defense)
 {
 	const BaseMeta *base = ItemBaseMeta(item);

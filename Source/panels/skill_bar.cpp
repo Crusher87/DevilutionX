@@ -37,6 +37,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "poe2/weapon_swap.hpp"
@@ -69,6 +70,9 @@ constexpr int TrayHeight = TrayPadding + (TrayRows * (SlotSize.height + LabelHei
 constexpr int GlobeRise = 20;
 constexpr uint8_t MouseGlyphColor = PAL16_GRAY + 3;
 constexpr uint8_t MouseButtonColor = PAL16_YELLOW + 3;
+/** @brief Horadric Seals' ring round a skill button, filling towards the next seal, and brighter when all are stored. */
+constexpr uint8_t SealRingColor = PAL16_YELLOW + 6;
+constexpr uint8_t SealRingFullColor = PAL16_YELLOW + 1;
 constexpr int PortalCell = 0;
 /** @brief The tray cell of each slot, in TraySlot order: the mouse buttons and G on the top row after the Town Portal button, Q to F below. */
 constexpr std::array<int, NumTraySlots> SlotCells { 1, 2, 3, 5, 6, 7, 8, 9, 4 };
@@ -669,6 +673,40 @@ void DrawTrayLabel(const Surface &out, const Rectangle &slot, TraySlot traySlot)
 	DrawString(out, key, label, { .flags = UiFlags::ColorWhite | UiFlags::AlignCenter | UiFlags::KerningFitSpacing });
 }
 
+/**
+ * @brief A thin ring round a skill's icon that fills clockwise from the top left towards its next seal, and the seals
+ * stored in the top right corner (Curtis 2026-10-30), so the icon itself stays clear.
+ */
+void DrawSeals(const Surface &out, const Rectangle &icon, const SealDisplay &seals)
+{
+	const int width = icon.size.width;
+	const int height = icon.size.height;
+	const int perimeter = 2 * (width + height);
+	int length = perimeter * std::clamp(seals.progressPercent, 0, 100) / 100;
+	const uint8_t color = seals.seals >= seals.maxSeals ? SealRingFullColor : SealRingColor;
+	const Point topLeft = icon.position;
+	// Top, right, bottom (right to left), then left (bottom to top).
+	const int top = std::min(length, width);
+	if (top > 0)
+		DrawHorizontalLine(out, topLeft, top, color);
+	length -= top;
+	const int right = std::min(length, height);
+	if (right > 0)
+		DrawVerticalLine(out, topLeft + Displacement { width - 1, 0 }, right, color);
+	length -= right;
+	const int bottom = std::min(length, width);
+	if (bottom > 0)
+		DrawHorizontalLine(out, topLeft + Displacement { width - bottom, height - 1 }, bottom, color);
+	length -= bottom;
+	const int left = std::min(length, height);
+	if (left > 0)
+		DrawVerticalLine(out, topLeft + Displacement { 0, height - left }, left, color);
+	if (seals.seals > 0) {
+		const Rectangle corner { topLeft + Displacement { width - 12, 1 }, Size { 11, 11 } };
+		DrawString(out, std::to_string(seals.seals), corner, { .flags = UiFlags::ColorWhitegold | UiFlags::AlignRight | UiFlags::KerningFitSpacing });
+	}
+}
+
 /** @brief A slot's dark square and thin frame, gold for the skill picked; the icon goes inside. */
 void DrawSlot(const Surface &out, const Rectangle &slot, bool picked = false)
 {
@@ -1188,11 +1226,20 @@ void DrawSkillBar(const Surface &out)
 			// A Spirit gem used from the tray greys out until using it would do something.
 			const bool spiritUse = skill.kind == SkillKind::Persistent && IsSpiritUseGem(skill.persistent());
 			DrawSkillIcon(out, bottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready && (!spiritUse || SpiritGemReady(player, skill.persistent())));
+			if (const std::optional<SealDisplay> seals = SkillSealDisplay(player, skill); seals)
+				DrawSeals(out, IconRect(rect), *seals);
 			break;
 		}
-		case TrayAction::WeaponAttack:
-			DrawSkillIcon(out, bottomLeft, WeaponAttackSkill(player, BindingWeaponSet(binding)), true);
+		case TrayAction::WeaponAttack: {
+			const SkillSlot attack = WeaponAttackSkill(player, BindingWeaponSet(binding));
+			DrawSkillIcon(out, bottomLeft, attack, true);
+			// Only the held set's attack stores seals.
+			if (BindingWeaponSet(binding) == player.poe2.weaponSet) {
+				if (const std::optional<SealDisplay> seals = SkillSealDisplay(player, attack); seals)
+					DrawSeals(out, IconRect(rect), *seals);
+			}
 			break;
+		}
 		default:
 			break;
 		}

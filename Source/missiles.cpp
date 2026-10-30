@@ -3752,11 +3752,29 @@ void ProcessRune(Missile &missile)
 	const Point position = missile.position.tile;
 	int mid = dMonster[position.x][position.y];
 	Player *player = PlayerAtPosition(position);
-	// POE2 Mashup: the hero's rune waits for an enemy: the hero and their minions walk over it.
+	// POE2 Mashup: the hero's rune waits for an enemy: the hero and their minions walk over it. It springs on an enemy
+	// on its tile or the tiles next to it (Curtis 2026-10-30), the nearest first.
 	if (gbIsPoe2 && missile.sourceType() == MissileSource::Player) {
 		player = nullptr;
-		if (mid != 0 && Monsters[std::abs(mid) - 1].isPlayerMinion())
-			mid = 0;
+		mid = 0;
+		for (int ring = 0; ring <= 1 && mid == 0; ring++) {
+			for (int dx = -ring; dx <= ring && mid == 0; dx++) {
+				for (int dy = -ring; dy <= ring && mid == 0; dy++) {
+					if (std::max<int>(std::abs(dx), std::abs(dy)) != ring)
+						continue;
+					const Point tile = position + Displacement { dx, dy };
+					if (!InDungeonBounds(tile))
+						continue;
+					const int id = dMonster[tile.x][tile.y];
+					if (id == 0)
+						continue;
+					const Monster &monster = Monsters[std::abs(id) - 1];
+					if (monster.isPlayerMinion() || monster.mode == MonsterMode::Death)
+						continue;
+					mid = id;
+				}
+			}
+		}
 	}
 	if (mid != 0 || player != nullptr) {
 		const Point targetPosition = mid != 0 ? Monsters[std::abs(mid) - 1].position.tile : player->position.tile;
@@ -4632,6 +4650,9 @@ void ProcessInfernoControl(Missile &missile)
 		missile._miDelFlag = true;
 }
 
+/** @brief POE2 Mashup: how many times a hero's Charged Bolt bounces off walls before it fades. */
+constexpr int ChargedBoltWallBounces = 2;
+
 void ProcessChargedBolt(Missile &missile)
 {
 	missile.duration--;
@@ -4667,7 +4688,26 @@ void ProcessChargedBolt(Missile &missile)
 		} else {
 			missile.var3--;
 		}
+		const MissilePosition before = missile.position;
 		MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), missile._midam, missile._midam, false, false);
+		// POE2 Mashup: a hero's bolt bounces off a wall a couple of times before it fades, like POE2's Spark (Curtis
+		// 2026-10-30). It goes back the way it came, or along the wall, and keeps wandering from there.
+		if (missile._miHitFlag && UsesPoe2SpellRule(missile) && missile.var4 < ChargedBoltWallBounces && IsMissileBlockedByTile(missile.position.tile)) {
+			missile.position = before;
+			missile._miHitFlag = false;
+			missile.var4++;
+			const auto aim = static_cast<Direction>(missile.var2);
+			const Direction back = Opposite(aim);
+			const bool leftFirst = (missile._mirnd & 1) != 0;
+			for (const Direction bounce : { back, leftFirst ? Left(back) : Right(back), leftFirst ? Right(back) : Left(back), Left(Left(aim)), Right(Right(aim)) }) {
+				if (!IsMissileBlockedByTile(missile.position.tile + bounce)) {
+					missile.var2 = static_cast<int>(bounce);
+					break;
+				}
+			}
+			UpdateMissileVelocity(missile, missile.position.tile + static_cast<Direction>(missile.var2), 8);
+			missile.var3 = 16;
+		}
 		if (missile._miHitFlag) {
 			missile.var1 = 8;
 			missile.setDefaultFrameGroup();

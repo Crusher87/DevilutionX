@@ -715,7 +715,7 @@ TEST_F(Poe2PaceTest, RareCasterStaffAtDepthStaysNearTodaysBest)
 {
 	// caster-weapons-plan-v2.md 5.2 and 9: a rare staff of the rework at the depth's item level, with the best legal
 	// modifiers for Firebolt, against the best staff of today (the Focused and Quick staves, pinned by row) with the best of
-	// theirs. The Sorcerer's Firebolt per second may grow by at most half.
+	// theirs. The Sorcerer's Firebolt per second may grow by at most 60%.
 	constexpr int FirstLegacyStaff = 544;
 	constexpr int LastLegacyStaff = 559;
 	Player &player = *MyPlayer;
@@ -786,7 +786,9 @@ TEST_F(Poe2PaceTest, RareCasterStaffAtDepthStaysNearTodaysBest)
 		const double ratio = rework / today;
 		std::printf("[pace] item level %d: rare caster staff %.2f, today's best %.2f Firebolt/s damage: %.3fx\n", level, rework, today, ratio);
 		RecordProperty("CasterStaffPace" + std::to_string(level), std::to_string(ratio));
-		EXPECT_LE(ratio, 1.5) << "item level " << level;
+		// Curtis 2026-10-30: a staff's "+N to level of all fire spell skills" rolls POE2's full numbers (no longer half),
+		// which lifts the deep rows to about 1.53x and 1.57x; the ceiling allows that, and not much more.
+		EXPECT_LE(ratio, 1.6) << "item level " << level;
 		EXPECT_GE(ratio, 1.0) << "item level " << level << ": the new staff shouldn't lose to today's";
 	}
 }

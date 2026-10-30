@@ -38,6 +38,7 @@
 #include "panels/passive_tree_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/economy.hpp"
@@ -416,6 +417,7 @@ struct LevelConversionData {
 	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
 	LockCasterWeaponMods(item);
 	FinishFlask(item);
+	ClearStarterBaseRequirements(item);
 
 	return true;
 }

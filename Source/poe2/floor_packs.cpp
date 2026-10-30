@@ -20,6 +20,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "objects.h"
+#include "poe2/cathedral_floors.hpp"
 #include "poe2/floor_chests.hpp"
 #include "poe2/floor_rooms.hpp"
 #include "poe2/monster_mods.hpp"
@@ -227,6 +228,7 @@ public:
 			return 0;
 		studyFloor();
 		placeBigFights();
+		placeRoomRewards();
 		guardTheWayDown();
 		placeStrongbox();
 		guardDeadEnds();
@@ -245,6 +247,8 @@ private:
 	bool hasEnd_ = false;
 	/** This floor's rest room shrine is still to place. */
 	bool shrineWanted_ = false;
+	/** A designed room's strongbox got its guards, so no other strongbox on this floor. */
+	bool strongboxPlaced_ = false;
 	Point end_;
 	std::vector<Point> route_;
 
@@ -350,8 +354,13 @@ private:
 	{
 		if (route_.empty() || left_ < static_cast<size_t>(BigFightMin + PackMin))
 			return;
-		const int fights = left_ >= SecondBigFightFrom ? 2 : 1;
 		shrineWanted_ = random(ShrineFloorOneIn) == 0;
+		// The new Cathedral floors have their big-fight halls, each with a quiet room after it (poe2/cathedral_floors.hpp).
+		if (IsCathedralFunnelFloor()) {
+			placePlannedBigFights();
+			return;
+		}
+		const int fights = left_ >= SecondBigFightFrom ? 2 : 1;
 		for (int fight = 0; fight < fights && left_ >= static_cast<size_t>(BigFightMin); fight++) {
 			// The first about two thirds of the way down, the second about a third.
 			const int percent = fight == 0 ? 60 + random(21) : 30 + random(16);
@@ -389,6 +398,36 @@ private:
 		}
 	}
 
+	void placePlannedBigFights()
+	{
+		for (const auto &[hall, quiet] : CathedralBigFights()) {
+			if (left_ < static_cast<size_t>(BigFightMin))
+				return;
+			int best = -1;
+			std::vector<Point> centres;
+			for (int y = 0; y < MAXDUNY; y++) {
+				for (int x = 0; x < MAXDUNX; x++) {
+					const Point tile { x, y };
+					if (RoomAt(tile) != hall || !CanHold(tile) || Reach[x][y] < BigFightSteps * 2)
+						continue;
+					const int open = openness(tile);
+					if (open > best) {
+						best = open;
+						centres.clear();
+					}
+					if (open == best)
+						centres.push_back(tile);
+				}
+			}
+			if (centres.empty())
+				continue;
+			const Point centre = centres[random(static_cast<int>(centres.size()))];
+			placePack(centre, BigFightMin + random(BigFightMax - BigFightMin + 1), BigFightSteps, MonsterRarity::Rare, 2);
+			if (quiet > 0 && !rooms_[quiet].stairs && !rooms_[quiet].theme)
+				settleRestRoom({ quiet });
+		}
+	}
+
 	/**
 	 * After a big fight, a room stays empty: the next room along the way down, or else a room off the fight's room.
 	 * On one floor in ShrineFloorOneIn the first of them has a shrine, in the first room whose walls take one.
@@ -409,6 +448,12 @@ private:
 			if (rooms_[fightRoom].neighbours.test(r) && canRest(r) && std::find(candidates.begin(), candidates.end(), r) == candidates.end())
 				candidates.push_back(r);
 		}
+		settleRestRoom(candidates);
+	}
+
+	/** The first of the candidates becomes the rest room; the first whose walls take a shrine gets it on a shrine floor. */
+	void settleRestRoom(const std::vector<int> &candidates)
+	{
 		if (candidates.empty())
 			return;
 		if (shrineWanted_) {
@@ -502,12 +547,39 @@ private:
 	}
 
 	/**
+	 * The reward spots of a new Cathedral floor's designed rooms: a strongbox there gets its guards (and is the floor's
+	 * strongbox), and a rare leads a pack at the other kind.
+	 */
+	void placeRoomRewards()
+	{
+		if (!IsCathedralFunnelFloor())
+			return;
+		for (const CathedralReward &reward : CathedralRewards()) {
+			if (!reward.strongbox) {
+				placePack(reward.tile, packSize(reward.tile), PackSteps, MonsterRarity::Rare, 1);
+				continue;
+			}
+			Object *strongbox = FindObjectAtPosition(reward.tile);
+			const int guards = PackMin + random(PackMax - PackMin + 1);
+			// Without monsters to spare for its guards, it stays a chest.
+			if (strongbox == nullptr || strongboxPlaced_ || left_ < static_cast<size_t>(guards + PackMin))
+				continue;
+			SetFloorChestKind(*strongbox, FloorChestKind::Strongbox, guards);
+			RoomFacts &room = rooms_[RoomAt(reward.tile)];
+			room.reward = true;
+			room.quiet = true;
+			left_ -= static_cast<size_t>(guards);
+			strongboxPlaced_ = true;
+		}
+	}
+
+	/**
 	 * Now and then a strongbox, off the way down: in a dead end where there is one, or else the room furthest from
 	 * the way. Its guards come out of the floor's monsters.
 	 */
 	void placeStrongbox()
 	{
-		if (random(StrongboxOneIn) != 0)
+		if (strongboxPlaced_ || random(StrongboxOneIn) != 0)
 			return;
 		const int guards = PackMin + random(PackMax - PackMin + 1);
 		if (left_ < static_cast<size_t>(guards + PackMin))

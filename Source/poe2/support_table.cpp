@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "engine/backbuffer_state.hpp"
@@ -76,7 +77,7 @@ const SupportData Table[] = {
 	{ SG::BurningGround, "Scorched Earth", "Hits leave burning ground. 20% less\ndamage with hits. Mana +30%", "Needs a fire, area or projectile skill", GC::Strength, 6, 130, ST_Fire | ST_Area | ST_Projectile, ST_Damage, 0, 0, NoFamily },
 	{ SG::Overcharge, "Overload", "Shocks twice as often. 25% less\ndamage with hits. Mana +10%", "Needs a lightning skill", GC::Dexterity, 4, 110, 0, ST_Lightning, 0, 0, NoFamily },
 	{ SG::DeepFreeze, "Winter's Grip", "Freezes sooner. 20% less damage\nwith hits. Mana +10%", "Needs a cold skill", GC::Magic, 4, 110, 0, ST_Frost, 0, 0, NoFamily },
-	{ SG::WitheringTouch, "Decaying Touch", "Hits wither: 5% more damage taken\na stack, up to 10. 15% less damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
+	{ SG::WitheringTouch, "Decaying Touch", "Hits wither: 3% more damage taken\na stack, up to 10. 15% less damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::CastOnKill, "Sigil of Slaughter", "Retired: it's the Reaper's Call Spirit\ngem now, which holds the spells", "Retired", GC::Magic, 6, 120, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastWhenHit, "Sigil of Reprisal", "Retired: it's the Sigil of Retribution\nSpirit gem now, which holds the spells", "Retired", GC::Strength, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastOnDodge, "Sigil of Evasion", "Retired: it's the Sigil of Evasion\nSpirit gem now, which holds the spells", "Retired", GC::Dexterity, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
@@ -164,7 +165,8 @@ constexpr int StoredVolleySealTicks = 20;
 constexpr int MultistrikePercent = 75;
 /** Immortal King's Stride's aftershocks hit for 40% less. */
 constexpr int AftershockPercent = 60;
-constexpr int WitherPercentPerStack = 5;
+/** Withered: smaller steps, more stacks (Curtis 2026-10-30), until chaos damage gives it its POE2 meaning. */
+constexpr int WitherPercentPerStack = 3;
 constexpr int TicksPerSecond = 20;
 /** Life Leech III keeps leech for 2 seconds at full life. */
 constexpr int LeechPoolTicks = 2 * TicksPerSecond;
@@ -374,6 +376,32 @@ std::optional<size_t> SlotOf(const Player &player, SkillSlot skill)
 			return slot;
 	}
 	return std::nullopt;
+}
+
+/** @brief The Skills panel row whose supports the skill uses: its gem's socket, or the default attack's row for the weapon's attack or granted skill. */
+std::optional<size_t> SupportRowOf(const Player &player, SkillSlot skill)
+{
+	if (const std::optional<size_t> slot = SlotOf(player, skill); slot)
+		return slot;
+	if (!skill.isEmpty() && (skill.kind == SkillKind::Default || player.poe2.takesDefaultSupports(skill)))
+		return DefaultAttackRow;
+	return std::nullopt;
+}
+
+/** @brief The most seals a skill's support stores and the ticks between them; 0 seals for none. */
+std::pair<int, int> SealRule(const Player &player, SkillSlot skill)
+{
+	if (Has(player, skill, SG::HoradricSeals))
+		return { MaxHoradricSeals, HoradricSealTicks };
+	if (Has(player, skill, SG::StoredVolley))
+		return { MaxStoredVolleySeals, StoredVolleySealTicks };
+	return { 0, 0 };
+}
+
+/** @brief The skill of a Skills panel row: its gem, or for the default attack's row the attack the held weapons give now. */
+SkillSlot SkillOfSupportRow(const Player &player, size_t row)
+{
+	return row < NumSkillSlots ? player.poe2.skillSlots[row] : DefaultSkillSlot(player);
 }
 
 Point NearestTarget(const Player &player, Point from, int range)
@@ -1179,11 +1207,14 @@ int SupportHitPenetration(DamageType type)
 	}
 }
 
+int WitheredDamageTakenPercent(const Monster &monster)
+{
+	return monster.poe2.witherStacks * WitherPercentPerStack;
+}
+
 int SupportHitDamagePercent(const Monster &monster, DamageType type)
 {
-	int percent = 100;
-	if (monster.poe2.witherStacks > 0)
-		percent += monster.poe2.witherStacks * WitherPercentPerStack;
+	int percent = 100 + WitheredDamageTakenPercent(monster);
 	if (Hit.depth == 0 || Hit.finishing || Hit.player == nullptr)
 		return percent;
 	const Player &player = *Hit.player;
@@ -1342,7 +1373,7 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 	}
 	SupportRuntime &state = player.poe2.supportState;
 	const uint32_t tags = SkillTags(skill);
-	const std::optional<size_t> slot = SlotOf(player, skill);
+	const std::optional<size_t> row = SupportRowOf(player, skill);
 	const Point tile = player.position.tile;
 	state.spentBonusTicks = 0;
 	if (skill.kind == SkillKind::Spell)
@@ -1356,11 +1387,12 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			QueueUse(skill, target, 6, 100);
 			break;
 		case SG::HoradricSeals:
-			if (slot) {
-				for (int i = 0; i < state.seals[*slot]; i++)
+			if (row) {
+				for (int i = 0; i < state.seals[*row]; i++)
 					QueueUse(skill, target, 6 * (i + 1), 50);
-				state.seals[*slot] = 0;
-				state.sealTicks[*slot] = HoradricSealTicks;
+				// The next seal takes the full 1.5 seconds again (Curtis 2026-10-30: the first came almost at once).
+				state.seals[*row] = 0;
+				state.sealTicks[*row] = 0;
 			}
 			break;
 		case SG::BaalsEcho:
@@ -1549,17 +1581,8 @@ void ProcessSupportEffects(Player &player)
 	SupportRuntime &state = player.poe2.supportState;
 	if (state.mirageCooldown > 0)
 		state.mirageCooldown--;
-	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
-		const SkillSlot skill = player.poe2.skillSlots[slot];
-		int maxSeals = 0;
-		int every = 0;
-		if (Has(player, skill, SG::HoradricSeals)) {
-			maxSeals = MaxHoradricSeals;
-			every = HoradricSealTicks;
-		} else if (Has(player, skill, SG::StoredVolley)) {
-			maxSeals = MaxStoredVolleySeals;
-			every = StoredVolleySealTicks;
-		}
+	for (size_t slot = 0; slot <= DefaultAttackRow; slot++) {
+		const auto [maxSeals, every] = SealRule(player, SkillOfSupportRow(player, slot));
 		if (maxSeals == 0) {
 			state.seals[slot] = 0;
 			continue;
@@ -1703,13 +1726,24 @@ int SupportDurationTicks(const Player &player, SkillSlot skill, int ticks)
 	return std::max(ticks * percent / 100, 1);
 }
 
+std::optional<SealDisplay> SkillSealDisplay(const Player &player, SkillSlot skill)
+{
+	const auto [maxSeals, every] = SealRule(player, skill);
+	const std::optional<size_t> row = SupportRowOf(player, skill);
+	if (maxSeals == 0 || !row)
+		return std::nullopt;
+	const SupportRuntime &state = player.poe2.supportState;
+	const int seals = state.seals[*row];
+	return SealDisplay { seals, maxSeals, seals >= maxSeals ? 100 : state.sealTicks[*row] * 100 / std::max(every, 1) };
+}
+
 int SupportExtraProjectileCount(const Player &player, SkillSlot skill)
 {
 	int extra = 0;
 	if (Has(player, skill, SG::Volley))
 		extra += VolleyExtra;
 	if (Has(player, skill, SG::StoredVolley)) {
-		if (const std::optional<size_t> slot = SlotOf(player, skill); slot) {
+		if (const std::optional<size_t> slot = SupportRowOf(player, skill); slot) {
 			extra += player.poe2.supportState.seals[*slot];
 			player.poe2.supportState.seals[*slot] = 0;
 			player.poe2.supportState.sealTicks[*slot] = 0;
@@ -1724,7 +1758,7 @@ bool SupportFiresNova(const Player &player, SkillSlot skill)
 		return false;
 	// Nova Projectiles II: at most one nova every few seconds; the skill fires normally in between.
 	if (const int seconds = Value(player, skill, SG::NovaProjectiles, 2); seconds > 0) {
-		const std::optional<size_t> slot = SlotOf(player, skill);
+		const std::optional<size_t> slot = SupportRowOf(player, skill);
 		if (!slot)
 			return false;
 		uint8_t &wait = player.poe2.supportState.novaCooldown[*slot];

@@ -259,9 +259,9 @@ constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
 /**
  * @brief Wither from a granted skill (Withering Bolt, Withering Ray): a stack a hit, up to this many, for 4 seconds. Each
- * stack is the game's Wither (5% more damage taken), so four make the plan's "up to +20%".
+ * stack is the game's Wither (3% more damage taken), so ten make up to +30% (Curtis 2026-10-30: smaller steps, more stacks).
  */
-constexpr int GrantedWitherMaxStacks = 4;
+constexpr int GrantedWitherMaxStacks = 10;
 constexpr int GrantedWitherTicks = 4 * 20;
 /** @brief Mana Drain's mana a hit at a skill level (the skill-balance review: 1 + level / 3), at most once a second a target. */
 constexpr int ManaDrainMana(int level)
@@ -432,6 +432,12 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 void ProcessTableCurses(Monster &monster);
 /** @brief More damage taken by a monster from table curses, in percent. */
 int TableCurseDamageTakenPercent(const Monster &monster, DamageType type);
+/**
+ * @brief POE2 Mashup: how strong a table curse on a monster is, as the enemy debuff icons show it (Curtis 2026-10-30):
+ * how much softer it hits for Weaken and Decrepify, how much more damage it takes for Death Mark and Decrepify, how
+ * much of its hit Iron Maiden turns back. 0 when the curse isn't on it or has no strength to show.
+ */
+[[nodiscard]] int TableCurseShownPercent(const Monster &monster, TableCurse curse);
 /** @brief A monster died: Haunt and Locust Swarm move on to the next. */
 void OnTableCursedMonsterKilled(const Monster &monster);
 /** @brief More damage from Soul Harvest's souls, in percent. */

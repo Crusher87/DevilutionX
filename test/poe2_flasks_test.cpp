@@ -1,3 +1,6 @@
+#include <string_view>
+#include <utility>
+
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
@@ -131,7 +134,73 @@ TEST_F(Poe2FlasksTest, TierComesFromItemLevelAndFullPotionsAreHigher)
 	InitializeItem(full, IDI_FULLHEAL);
 	full._iCreateInfo = 18;
 	EXPECT_EQ(GetFlaskTier(full), 5U);
-	EXPECT_EQ(FlaskDescription(flask), "Recovers 450 life over 3.0 seconds");
+	EXPECT_EQ(FlaskDescription(flask), "Recovers 920 life over 3.0 seconds");
+}
+
+TEST_F(Poe2FlasksTest, PoE2sLadderReachesTheEndgame)
+{
+	// POE2's nine bases, Lesser at level 1 to Ultimate at 60 (Curtis 2026-10-30: "More, like POE2").
+	EXPECT_EQ(NumFlaskTiers, 9U);
+	EXPECT_EQ(FlaskTiers[0].level, 1);
+	EXPECT_EQ(FlaskTiers[NumFlaskTiers - 1].level, 60);
+	EXPECT_EQ(FlaskTiers[NumFlaskTiers - 1].life, 920);
+	EXPECT_EQ(FlaskTiers[NumFlaskTiers - 1].mana, 310);
+	for (size_t i = 1; i < NumFlaskTiers; i++) {
+		EXPECT_GT(FlaskTiers[i].level, FlaskTiers[i - 1].level) << i;
+		EXPECT_GT(FlaskTiers[i].life, FlaskTiers[i - 1].life) << i;
+		EXPECT_GE(FlaskTiers[i].mana, FlaskTiers[i - 1].mana) << i;
+	}
+	// A hero gains 12 life a level as in POE2, so a flask of the hero's level recovers about a hero's base life:
+	// Lesser 50 at level 1, Colossal 450 at 30, Ultimate 920 at 60.
+	EXPECT_EQ(FlaskTiers[FlaskTierForLevel(30)].life, 450);
+
+	Item flask {};
+	InitializeItem(flask, IDI_MANA);
+	const std::pair<int, std::string_view> names[] = {
+		{ 1, "Lesser Mana Flask" }, { 4, "Medium Mana Flask" }, { 10, "Greater Mana Flask" }, { 16, "Grand Mana Flask" }, { 23, "Giant Mana Flask" },
+		{ 30, "Colossal Mana Flask" }, { 40, "Gargantuan Mana Flask" }, { 50, "Transcendent Mana Flask" }, { 63, "Ultimate Mana Flask" },
+	};
+	for (const auto &[level, name] : names) {
+		flask._iCreateInfo = static_cast<uint16_t>(level);
+		NameFlask(flask);
+		EXPECT_EQ(std::string_view(flask._iIName), name) << level;
+	}
+}
+
+TEST_F(Poe2FlasksTest, FlasksSavedBeforeTheLadderKeepAboutTheirAmounts)
+{
+	// Saved flasks have Diablo's monster level, 1 to 32 (the old ladder's Minor at 1 to Full at 32: 60 to 450 life).
+	constexpr std::pair<int, int> OldLifeAtLevel[] = { { 1, 60 }, { 6, 110 }, { 12, 170 }, { 18, 240 }, { 25, 330 }, { 32, 450 } };
+	Item flask {};
+	InitializeItem(flask, IDI_HEAL);
+	for (const auto &[level, oldLife] : OldLifeAtLevel) {
+		flask._iCreateInfo = static_cast<uint16_t>(level);
+		const int life = FlaskTiers[GetFlaskTier(flask)].life;
+		EXPECT_GE(life * 100, oldLife * 80) << level;
+		EXPECT_LE(life * 100, oldLife * 140) << level;
+	}
+}
+
+TEST_F(Poe2FlasksTest, DroppedFlasksTakeTheAreaLevel)
+{
+	EXPECT_TRUE(IsFlaskBase(IDI_HEAL));
+	EXPECT_TRUE(IsFlaskBase(IDI_FULLMANA));
+	EXPECT_FALSE(IsFlaskBase(IDI_GOLD));
+	EXPECT_FALSE(IsFlaskBase(-1));
+	// The area level, within CF_LEVEL's 6 bits; multiplayer keeps Diablo's level, which item checks go by there.
+	EXPECT_EQ(FlaskDropLevel(55, 30), 55);
+	EXPECT_EQ(FlaskDropLevel(80, 30), 63);
+	EXPECT_EQ(FlaskDropLevel(0, 30), 1);
+	gbIsMultiplayer = true;
+	EXPECT_EQ(FlaskDropLevel(55, 30), 30);
+	gbIsMultiplayer = false;
+
+	Item flask {};
+	SetupAllItems(*MyPlayer, flask, IDI_HEAL, 1234, FlaskDropLevel(62, 30), 1, false, false);
+	EXPECT_EQ(GetFlaskTier(flask), NumFlaskTiers - 1);
+	Item rebuilt;
+	RecreateItem(*MyPlayer, rebuilt, flask.IDidx, flask._iCreateInfo, flask._iSeed, flask._ivalue, flask.dwBuff);
+	EXPECT_EQ(GetFlaskTier(rebuilt), NumFlaskTiers - 1);
 }
 
 TEST_F(Poe2FlasksTest, LifeComesBackOverTime)
@@ -195,11 +264,11 @@ TEST_F(Poe2FlasksTest, FlasksAreNamedByTierAndMods)
 	InitializeItem(flask, IDI_HEAL);
 	flask._iCreateInfo = 18;
 	NameFlask(flask);
-	EXPECT_STREQ(flask._iIName, "Greater Healing Flask");
+	EXPECT_STREQ(flask._iIName, "Grand Healing Flask");
 	EXPECT_EQ(flask._iMagical, ITEM_QUALITY_NORMAL);
 
 	SetFlaskMods(flask, FlaskPrefix::Concentrated, FlaskSuffix::Ox, 0);
-	EXPECT_STREQ(flask._iIName, "Concentrated Greater Healing Flask of the Ox");
+	EXPECT_STREQ(flask._iIName, "Concentrated Grand Healing Flask of the Ox");
 	EXPECT_EQ(flask._iMagical, ITEM_QUALITY_MAGIC);
 	EXPECT_EQ(GetFlaskPrefix(flask), FlaskPrefix::Concentrated);
 	EXPECT_EQ(GetFlaskSuffix(flask), FlaskSuffix::Ox);

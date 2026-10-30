@@ -105,11 +105,11 @@ staff_gain_as_cold	Damage Gained As Cold	Malignant	prefix	staff_gain_as_cold	cas
 staff_gain_as_lightning	Damage Gained As Lightning	Deadly	prefix	staff_gain_as_lightning	caster	staff			Gain {0}% of Damage as Extra Lightning Damage		100	100	false	100	100
 staff_intelligence	Intelligence	of the Pupil	suffix	staff_intelligence	caster	staff			+{0} to Intelligence	Intelligence	100	100	true	100	100
 staff_reduced_requirements	Attribute Requirements	of the Worthy	suffix	staff_reduced_requirements	caster	staff			{0}% reduced Attribute Requirements	ReducedRequirements	100	100	true	100	100
-staff_spell_skill_levels	Spell Skill Levels	of the Mage	suffix	staff_spell_skill_levels	caster	staff			+{0} to Level of all Spell Skills	SpellSkillLevels	50	100	true	50	100
-staff_fire_skill_levels	Fire Spell Skill Levels	of Coals	suffix	staff_fire_skill_levels	caster	staff	fire_spell		+{0} to Level of all Fire Spell Skills	FireSkillLevels	50	100	true	50	100
-staff_cold_skill_levels	Cold Spell Skill Levels	of Snow	suffix	staff_cold_skill_levels	caster	staff	cold_spell		+{0} to Level of all Cold Spell Skills	ColdSkillLevels	50	100	true	50	100
-staff_lightning_skill_levels	Lightning Spell Skill Levels	of Sparks	suffix	staff_lightning_skill_levels	caster	staff	lightning_spell		+{0} to Level of all Lightning Spell Skills	LightningSkillLevels	50	100	true	50	100
-staff_physical_skill_levels	Physical Spell Skill Levels	of Agony	suffix	staff_physical_skill_levels	caster	staff	physical_spell		+{0} to Level of all Physical Spell Skills	PhysicalSkillLevels	50	100	true	50	100
+staff_spell_skill_levels	Spell Skill Levels	of the Mage	suffix	staff_spell_skill_levels	caster	staff			+{0} to Level of all Spell Skills	SpellSkillLevels	100	100	true	100	100
+staff_fire_skill_levels	Fire Spell Skill Levels	of Coals	suffix	staff_fire_skill_levels	caster	staff	fire_spell		+{0} to Level of all Fire Spell Skills	FireSkillLevels	100	100	true	100	100
+staff_cold_skill_levels	Cold Spell Skill Levels	of Snow	suffix	staff_cold_skill_levels	caster	staff	cold_spell		+{0} to Level of all Cold Spell Skills	ColdSkillLevels	100	100	true	100	100
+staff_lightning_skill_levels	Lightning Spell Skill Levels	of Sparks	suffix	staff_lightning_skill_levels	caster	staff	lightning_spell		+{0} to Level of all Lightning Spell Skills	LightningSkillLevels	100	100	true	100	100
+staff_physical_skill_levels	Physical Spell Skill Levels	of Agony	suffix	staff_physical_skill_levels	caster	staff	physical_spell		+{0} to Level of all Physical Spell Skills	PhysicalSkillLevels	100	100	true	100	100
 staff_mana_regeneration	Mana Regeneration	of Excitement	suffix	staff_mana_regeneration	caster	staff			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true	100	100
 staff_life_on_kill	Life Gained From Enemy Death	of Success	suffix	staff_life_on_kill	caster	staff			Gain {0} Life per enemy killed	LifeOnKill	100	100	true	100	100
 staff_mana_on_kill	Mana Gained From Enemy Death	of Absorption	suffix	staff_mana_on_kill	caster	staff			Gain {0} Mana per enemy killed	ManaOnKill	100	100	true	100	100
@@ -132,11 +132,11 @@ wand_gain_as_cold	Damage Gained As Cold	Malignant	prefix	wand_gain_as_cold	caste
 wand_gain_as_lightning	Damage Gained As Lightning	Deadly	prefix	wand_gain_as_lightning	caster	wand			Gain {0}% of Damage as Extra Lightning Damage		100	100	false	100	100
 wand_intelligence	Intelligence	of the Pupil	suffix	wand_intelligence	caster	wand			+{0} to Intelligence	Intelligence	100	100	true	100	100
 wand_reduced_requirements	Attribute Requirements	of the Worthy	suffix	wand_reduced_requirements	caster	wand			{0}% reduced Attribute Requirements	ReducedRequirements	100	100	true	100	100
-wand_spell_skill_levels	Spell Skill Levels	of the Mage	suffix	wand_spell_skill_levels	caster	wand			+{0} to Level of all Spell Skills	SpellSkillLevels	50	100	true	50	100
-wand_fire_skill_levels	Fire Spell Skill Levels	of Coals	suffix	wand_fire_skill_levels	caster	wand	fire_spell		+{0} to Level of all Fire Spell Skills	FireSkillLevels	50	100	true	50	100
-wand_cold_skill_levels	Cold Spell Skill Levels	of Snow	suffix	wand_cold_skill_levels	caster	wand	cold_spell		+{0} to Level of all Cold Spell Skills	ColdSkillLevels	50	100	true	50	100
-wand_lightning_skill_levels	Lightning Spell Skill Levels	of Sparks	suffix	wand_lightning_skill_levels	caster	wand	lightning_spell		+{0} to Level of all Lightning Spell Skills	LightningSkillLevels	50	100	true	50	100
-wand_physical_skill_levels	Physical Spell Skill Levels	of Agony	suffix	wand_physical_skill_levels	caster	wand	physical_spell		+{0} to Level of all Physical Spell Skills	PhysicalSkillLevels	50	100	true	50	100
+wand_spell_skill_levels	Spell Skill Levels	of the Mage	suffix	wand_spell_skill_levels	caster	wand			+{0} to Level of all Spell Skills	SpellSkillLevels	100	100	true	100	100
+wand_fire_skill_levels	Fire Spell Skill Levels	of Coals	suffix	wand_fire_skill_levels	caster	wand	fire_spell		+{0} to Level of all Fire Spell Skills	FireSkillLevels	100	100	true	100	100
+wand_cold_skill_levels	Cold Spell Skill Levels	of Snow	suffix	wand_cold_skill_levels	caster	wand	cold_spell		+{0} to Level of all Cold Spell Skills	ColdSkillLevels	100	100	true	100	100
+wand_lightning_skill_levels	Lightning Spell Skill Levels	of Sparks	suffix	wand_lightning_skill_levels	caster	wand	lightning_spell		+{0} to Level of all Lightning Spell Skills	LightningSkillLevels	100	100	true	100	100
+wand_physical_skill_levels	Physical Spell Skill Levels	of Agony	suffix	wand_physical_skill_levels	caster	wand	physical_spell		+{0} to Level of all Physical Spell Skills	PhysicalSkillLevels	100	100	true	100	100
 wand_mana_regeneration	Mana Regeneration	of Excitement	suffix	wand_mana_regeneration	caster	wand			{0}% increased Mana Regeneration Rate	ManaRegeneration	100	100	true	100	100
 wand_life_on_kill	Life Gained From Enemy Death	of Success	suffix	wand_life_on_kill	caster	wand			Gain {0} Life per enemy killed	LifeOnKill	100	100	true	100	100
 wand_mana_on_kill	Mana Gained From Enemy Death	of Absorption	suffix	wand_mana_on_kill	caster	wand			Gain {0} Mana per enemy killed	ManaOnKill	100	100	true	100	100

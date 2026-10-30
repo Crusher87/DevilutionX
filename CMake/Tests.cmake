@@ -79,6 +79,7 @@ set(tests
   poe2_rare_items_test
   poe2_skill_effects_test
   poe2_spirit_test
+  poe2_spirit_order_test
   poe2_regen_test
   poe2_skill_gems_test
   poe2_skill_resources_test

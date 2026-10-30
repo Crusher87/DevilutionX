@@ -39,7 +39,7 @@ constexpr int ScavengedPlatingArmourPerStack = 4;
 /** @brief Charge Regulation: a Frenzy charge buys this much speed, and it takes the next when this little is left. */
 constexpr int ChargeRegulationTicksPerCharge = 8 * 20;
 constexpr int ChargeRegulationRefillTicks = 2 * 20;
-constexpr int WitheringPresenceMaxStacks = 5;
+constexpr int WitheringPresenceMaxStacks = 10;
 constexpr int WitheringPresenceTicks = 6 * 20;
 constexpr int TrinityMaxResonance = 100;
 /** @brief Trinity: an elemental hit takes this much Resonance from each of the other two elements. */

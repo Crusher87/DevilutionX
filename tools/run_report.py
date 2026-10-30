@@ -98,6 +98,7 @@ class Run:
             return
         name = os.path.basename(path)
         current_hero = None
+        current_area = None
         session = {'name': name, 'build': events[0].get('build', ''), 'started': events[0].get('started', '')}
         self.sessions.append(session)
         for e in events:
@@ -116,7 +117,11 @@ class Run:
                 self.kills.append(e)
             elif k == 'area':
                 self.areas.append(e)
+                current_area = e.get('area')
             elif k == 'area_left':
+                # Builds before 2026-10-30 stamped this with the area being entered; the area being left is the last one entered.
+                if current_area:
+                    e['area'] = current_area
                 self.area_left.append(e)
             elif k == 'levelup':
                 self.levelups.append(e)

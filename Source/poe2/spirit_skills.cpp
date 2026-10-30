@@ -233,6 +233,11 @@ int ReviveMinionLimit(const Player &player)
 {
 	if (!Active(player, PersistentSkill::Revive))
 		return 0;
+	return ReviveMinionCount(player);
+}
+
+int ReviveMinionCount(const Player &player)
+{
 	return std::min(1 + (player.getCharacterLevel() / 15), 4) + SupportExtraMinions(player, PersistentSkill::Revive);
 }
 
@@ -250,7 +255,11 @@ PersistentSkill ActiveGolemSkill(const Player &player)
 
 int GolemLifePercent(const Player &player)
 {
-	const PersistentSkill skill = ActiveGolemSkill(player);
+	return GolemSkillLifePercent(player, ActiveGolemSkill(player));
+}
+
+int GolemSkillLifePercent(const Player &player, PersistentSkill skill)
+{
 	const int percent = skill == PersistentSkill::BloodGolem ? BloodGolemLifePercent : 100;
 	return skill == PersistentSkill::None ? percent : percent * SupportMinionLifePercent(player, skill) / 100;
 }

@@ -564,7 +564,12 @@ TEST_F(Poe2UniquesTest, UniqueFlasks)
 	const Item deepWell = MakeBelt(BeltUniqueId::DeepWell);
 	EXPECT_EQ(FlaskChargesPerUseFor(deepWell), FlaskChargesPerUse * 3 / 2);
 	EXPECT_EQ(GetFlaskTier(MakeBelt(BeltUniqueId::Heartglass)), NumFlaskTiers - 1);
-	EXPECT_EQ(GetFlaskTier(MakeBelt(BeltUniqueId::RedMercy)), 0U);
+	EXPECT_EQ(GetFlaskTier(MakeBelt(BeltUniqueId::RedMercy)), 2U);
+	// A unique flask is on the base a plain flask of its drop level has.
+	for (const BeltUnique &unique : BeltUniques()) {
+		if (unique.kind != BeltUniqueKind::Charm)
+			EXPECT_EQ(unique.flaskTier, FlaskTierForLevel(unique.dropLevel)) << unique.name;
+	}
 
 	// Heartglass saves the hero once while it's at least 80% full.
 	player.SpdList[0] = MakeBelt(BeltUniqueId::Heartglass);

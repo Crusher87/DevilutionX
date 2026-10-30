@@ -68,8 +68,8 @@ enum class FlaskSuffix : uint8_t {
 	Guarding,
 	Count,
 };
-/** @brief Flasks come in 6 tiers by item level; "Full" potions are 2 tiers higher. */
-constexpr size_t NumFlaskTiers = 6;
+/** @brief Flasks come in 9 tiers by item level, like POE2's Lesser to Ultimate; "Full" potions are 2 tiers higher. */
+constexpr size_t NumFlaskTiers = 9;
 constexpr int FullFlaskTierBonus = 2;
 
 struct FlaskTier {
@@ -82,18 +82,38 @@ struct FlaskTier {
 	int manaTicks;
 };
 
-/** @brief POE2's flask bases from poe2db, scaled to Diablo's smaller life pools. */
+/**
+ * @brief POE2's life and mana flask bases (Path of Building's PoE2 data), at their required levels, which are area
+ * levels here: a hero gains 12 life a level as in POE2 (Poe2LifePerLevel), so the amounts stay POE2's. The last tiers
+ * drop in Nightmare, Hell and maps (Curtis 2026-10-30). Flasks saved before the ladder have Diablo's monster level,
+ * 1 to 32, which lands on the first six tiers with about their old amounts.
+ */
 constexpr FlaskTier FlaskTiers[NumFlaskTiers] = {
-	{ 1, 60, 3 * 20, 50, 2 * 20 },
-	{ 6, 110, 4 * 20, 70, 3 * 20 },
-	{ 12, 170, 4 * 20, 90, 50 },
-	{ 18, 240, 4 * 20, 120, 50 },
-	{ 25, 330, 4 * 20, 160, 3 * 20 },
-	{ 32, 450, 3 * 20, 210, 50 },
+	{ 1, 50, 3 * 20, 50, 2 * 20 },     // Lesser
+	{ 4, 90, 5 * 20, 70, 3 * 20 },     // Medium
+	{ 10, 150, 4 * 20, 90, 50 },       // Greater
+	{ 16, 260, 5 * 20, 110, 50 },      // Grand
+	{ 23, 340, 4 * 20, 165, 70 },      // Giant
+	{ 30, 450, 4 * 20, 165, 50 },      // Colossal
+	{ 40, 710, 5 * 20, 185, 2 * 20 },  // Gargantuan
+	{ 50, 840, 4 * 20, 285, 70 },      // Transcendent
+	{ 60, 920, 3 * 20, 310, 3 * 20 },  // Ultimate
 };
+static_assert(FlaskTiers[NumFlaskTiers - 1].level <= 63, "an item level is 6 bits (CF_LEVEL)");
+
+/** @brief The tier a plain flask of the item level has, from 0 to NumFlaskTiers - 1. */
+size_t FlaskTierForLevel(int itemLevel);
 
 /** @brief Potions that work as flasks: healing, mana and rejuvenation. */
 bool IsFlaskPotion(const Item &item);
+/** @brief Whether an item base is a flask potion. */
+bool IsFlaskBase(int itemIndex);
+/**
+ * @brief The item level a flask dropped where equipment is `areaLevel` is made at, which sets its tier: the area
+ * level, as POE2's flasks go, within the 6 bits of CF_LEVEL. In multiplayer, Diablo's `itemLevel`, as items are
+ * checked against monster levels there.
+ */
+int FlaskDropLevel(int areaLevel, int itemLevel);
 
 /** @brief Whether the belt slot holds a flask (POE2 mode only). */
 bool IsFlaskSlot(const Player &player, size_t beltSlot);

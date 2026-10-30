@@ -576,16 +576,16 @@ TEST_F(Poe2GrantedSkillsTest, TheWandRidersWork)
 		OnTableMissileHit(bolt, player, monster, 10, false);
 	};
 
-	// Wither: a stack a hit up to 4 (5% more damage taken each), for 4 seconds; more from Withering Touch stay.
+	// Wither: a stack a hit up to 10 (3% more damage taken each), for 4 seconds; more from Withering Touch stay.
 	Monster &monster = PlaceMonster(0, { 20, 24 });
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < 12; i++)
 		hit(WeaponSkill::WitheringBolt, monster);
 	EXPECT_EQ(monster.poe2.witherStacks, GrantedWitherMaxStacks);
 	EXPECT_EQ(monster.poe2.witherTicks, GrantedWitherTicks);
-	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Physical), 120);
-	monster.poe2.witherStacks = 7;
+	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Physical), 130);
+	monster.poe2.witherStacks = 12;
 	hit(WeaponSkill::WitheringRay, monster);
-	EXPECT_EQ(monster.poe2.witherStacks, 7);
+	EXPECT_EQ(monster.poe2.witherStacks, 12);
 	monster.poe2 = {};
 
 	// Weaken for 2 seconds.

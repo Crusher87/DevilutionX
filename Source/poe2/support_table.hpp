@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -137,6 +138,8 @@ void SetMissileSkill(Missile &missile, const Player &player, SkillSlot skill);
 void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage);
 /** @brief More or less damage from the supports of the hit in progress, and from wither, in percent. */
 int SupportHitDamagePercent(const Monster &monster, DamageType type);
+/** @brief How much more damage a monster's Withered stacks make it take, in percent. */
+[[nodiscard]] int WitheredDamageTakenPercent(const Monster &monster);
 /** @brief The penetration supports of the hit in progress, against the damage type's resistance. */
 int SupportHitPenetration(DamageType type);
 /** @brief Ailment chance of the hit in progress, in percent of normal. */
@@ -210,6 +213,15 @@ int SupportMinionDamageTakenPercent(const Player &owner, const Monster &minion);
 int SupportMinionLifePercent(const Player &owner, PersistentSkill skill);
 int SupportExtraMinions(const Player &owner, PersistentSkill skill);
 void OnSupportedMinionDied(Player &owner, Monster &minion);
+
+/** @brief Seals a skill's Horadric Seals or Stored Volley holds, for its skill bar button. */
+struct SealDisplay {
+	int seals;
+	int maxSeals;
+	/** How far towards the next seal, 0 to 100; 100 once all are stored. */
+	int progressPercent;
+};
+std::optional<SealDisplay> SkillSealDisplay(const Player &player, SkillSlot skill);
 
 /** @brief Ricochet: a projectile hit a wall. @return true if it bounced. */
 bool OnSupportedMissileHitWall(Missile &missile, Point wall);

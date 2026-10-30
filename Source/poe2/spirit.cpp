@@ -1,6 +1,7 @@
 #include "poe2/spirit.hpp"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <optional>
 #include <vector>
@@ -460,7 +461,7 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 	case PersistentSkill::ChargeRegulation:
 		return _("Spends your Frenzy charges on speed: each one gives 8 seconds of 20% more attack and cast speed, taken as the last runs low");
 	case PersistentSkill::WitheringPresence:
-		return _("Aura: enemies near you wither, taking 5% more damage a stack, up to 5 stacks");
+		return _("Aura: enemies near you wither, taking 3% more damage a stack, up to 10 stacks");
 	case PersistentSkill::Trinity:
 		return _("Fire, lightning and cold hits build Resonance of their element and take some from the other two. Every 30 Resonance in all gives more elemental damage, so mixing elements pays");
 	case PersistentSkill::SiphonElements:
@@ -871,51 +872,43 @@ PersistentSkill GrantedPersistentSkill(const GrantedSkill &entry)
 
 struct GemReservation {
 	PersistentSkill skill;
+	/** The socket, or GrantedSpiritOffBit and the hand for a granted Spirit skill: its spiritOrder index. */
+	size_t index;
+	/** Switched on in the Skills panel (a totem always is). */
+	bool on;
+	/** Switched on, but off until there's Spirit for it: the newest switch off first when Spirit runs short. */
+	bool waiting;
 	/** Minions the gem keeps, or 1 for a gem without a count; 0 when it's inactive. */
 	int count;
 	int spirit;
-	/** Spirit the gems before this one left. */
+	/** Spirit the gems before this one left; for a gem switched off, the Spirit not reserved. */
 	int spiritLeft;
 };
 
+struct SpiritEntry {
+	PersistentSkill skill;
+	size_t index;
+	bool on;
+	uint8_t order;
+};
+
 /**
- * @brief Walks the Skills panel in order, reserving Spirit for each usable Spirit gem that fits.
- * A minion gem reserves Spirit for each minion past its free ones and, like POE2, keeps as many as the Spirit left fits.
+ * @brief Reserves Spirit for the usable Spirit gems that are switched on, oldest switched on first. When they need more
+ * than there is, the newest switch off until the rest fit (Curtis 2026-10-30): a minion gem keeps as many minions as fit
+ * (its free ones always), and once one falls short every newer gem that reserves Spirit waits. Waiting gems come back on
+ * their own when Spirit is free again; a gem that reserves nothing never waits.
  */
 template <typename F>
 int ReserveSpirit(const Player &player, F &&onGem)
 {
-	const int max = MaxSpirit(player);
-	int reserved = 0;
-	const auto reserve = [&](PersistentSkill skill, bool on) {
-		const int spiritLeft = max - reserved;
-		if (!on) {
-			onGem(GemReservation { skill, 0, 0, spiritLeft });
-			return;
-		}
-		if (IsMinionCountSkill(skill)) {
-			const int chosen = ChosenMinionCount(player, skill);
-			const int free = std::min(chosen, FreeMinions(skill));
-			const int perMinion = SpiritPerMinion(player, skill);
-			const int paid = std::min(chosen - free, std::max(spiritLeft, 0) / perMinion);
-			reserved += paid * perMinion;
-			onGem(GemReservation { skill, free + paid, paid * perMinion, spiritLeft });
-			return;
-		}
-		const int cost = GemSpiritCost(player, skill);
-		if (cost > spiritLeft) {
-			onGem(GemReservation { skill, 0, 0, spiritLeft });
-			return;
-		}
-		reserved += cost;
-		onGem(GemReservation { skill, 1, cost, spiritLeft });
-	};
+	std::array<SpiritEntry, NumSkillSlots + 2> entries {};
+	size_t count = 0;
 	for (size_t socket = 0; socket < player.poe2.skillSlots.size(); socket++) {
 		const PersistentSkill skill = player.poe2.skillSlots[socket].persistent();
 		if (skill == PersistentSkill::None || !MeetsGemRequirements(player, skill))
 			continue;
 		// A gem switched off in the Skills panel reserves nothing and does nothing; a totem is never switched off.
-		reserve(skill, player.poe2.spiritGemOn(socket) || !IsSpiritGemSwitchable(skill));
+		entries[count++] = { skill, socket, player.poe2.spiritGemOn(socket) || !IsSpiritGemSwitchable(skill), player.poe2.spiritOrder[socket] };
 	}
 	// Then the Spirit skills held sceptres grant (caster-weapons-plan-v2.md 6.9), each once: a gem of it in the Skills
 	// panel wins, and two sceptres that grant the same one reserve for it once, on while either hand's is on.
@@ -925,12 +918,50 @@ int ReserveSpirit(const Player &player, F &&onGem)
 			continue;
 		if (i > 0 && GrantedPersistentSkill(player.poe2.granted[0]) == skill)
 			continue;
-		bool on = false;
-		for (const GrantedSkill &entry : player.poe2.granted) {
-			if (GrantedPersistentSkill(entry) == skill && !player.poe2.grantedOff(entry.hand))
-				on = true;
+		SpiritEntry entry { skill, GrantedSpiritOffBit + i, false, 0 };
+		for (const GrantedSkill &granted : player.poe2.granted) {
+			if (GrantedPersistentSkill(granted) != skill || player.poe2.grantedOff(granted.hand))
+				continue;
+			entry.on = true;
+			entry.order = std::max(entry.order, player.poe2.spiritOrder[GrantedSpiritOffBit + granted.hand]);
 		}
-		reserve(skill, on);
+		entries[count++] = entry;
+	}
+	// Oldest first; ones switched on together (a loaded hero's) go in the Skills panel's order.
+	std::stable_sort(entries.begin(), entries.begin() + static_cast<std::ptrdiff_t>(count), [](const SpiritEntry &a, const SpiritEntry &b) { return a.order < b.order; });
+
+	const int max = MaxSpirit(player);
+	int reserved = 0;
+	bool shortOfSpirit = false;
+	for (size_t i = 0; i < count; i++) {
+		const SpiritEntry &entry = entries[i];
+		if (!entry.on)
+			continue;
+		const int spiritLeft = max - reserved;
+		if (IsMinionCountSkill(entry.skill)) {
+			const int chosen = ChosenMinionCount(player, entry.skill);
+			const int free = std::min(chosen, FreeMinions(entry.skill));
+			const int perMinion = SpiritPerMinion(player, entry.skill);
+			const int paid = shortOfSpirit ? 0 : std::min(chosen - free, std::max(spiritLeft, 0) / perMinion);
+			if (paid < chosen - free)
+				shortOfSpirit = true;
+			reserved += paid * perMinion;
+			onGem(GemReservation { entry.skill, entry.index, true, chosen > 0 && free + paid == 0, free + paid, paid * perMinion, spiritLeft });
+			continue;
+		}
+		const int cost = GemSpiritCost(player, entry.skill);
+		if (cost > 0 && (shortOfSpirit || cost > spiritLeft)) {
+			shortOfSpirit = true;
+			onGem(GemReservation { entry.skill, entry.index, true, true, 0, 0, spiritLeft });
+			continue;
+		}
+		reserved += cost;
+		onGem(GemReservation { entry.skill, entry.index, true, false, 1, cost, spiritLeft });
+	}
+	// A gem switched on goes in as the newest, with what the others leave.
+	for (size_t i = 0; i < count; i++) {
+		if (!entries[i].on)
+			onGem(GemReservation { entries[i].skill, entries[i].index, false, false, 0, 0, max - reserved });
 	}
 	return reserved;
 }
@@ -944,6 +975,93 @@ std::optional<GemReservation> FindGemReservation(const Player &player, Persisten
 			found = gem;
 	});
 	return found;
+}
+
+/** @brief Spirit the skill needs free to be switched on: a minion gem's first minion, unless it has free ones or none are chosen. */
+int SpiritToSwitchOn(const Player &player, PersistentSkill skill)
+{
+	if (!IsMinionCountSkill(skill))
+		return GemSpiritCost(player, skill);
+	if (ChosenMinionCount(player, skill) == 0 || FreeMinions(skill) > 0)
+		return 0;
+	return SpiritPerMinion(player, skill);
+}
+
+/**
+ * @brief Before a Spirit skill is switched on: whether the Spirit not reserved covers it (else the player is told what
+ * it needs), and if so its place as the newest of the ones running, ahead of any waiting for Spirit.
+ */
+bool MakeRoomToSwitchOn(Player &player, PersistentSkill skill, size_t index)
+{
+	const int needed = SpiritToSwitchOn(player, skill);
+	const int available = AvailableSpirit(player);
+	if (needed > available) {
+		if (&player == MyPlayer)
+			EventPlrMsg(FormatRuntime(_("Not enough Spirit: {:s} needs {:d}, and {:d} is free."), PersistentSkillName(skill), needed, std::max(available, 0)), UiFlags::ColorRed);
+		TelemetryLog("spirit", FormatRuntime("{:s} not switched on: needs {:d} Spirit, {:d} free", PersistentSkillName(skill), needed, available));
+		return false;
+	}
+	std::array<size_t, NumSkillSlots + 2> running {};
+	std::array<size_t, NumSkillSlots + 2> waiting {};
+	size_t runningCount = 0;
+	size_t waitingCount = 0;
+	ReserveSpirit(player, [&](const GemReservation &gem) {
+		if (!gem.on || gem.index == index)
+			return;
+		if (gem.waiting)
+			waiting[waitingCount++] = gem.index;
+		else
+			running[runningCount++] = gem.index;
+	});
+	std::array<uint8_t, NumSkillSlots + 2> &order = player.poe2.spiritOrder;
+	order.fill(0);
+	uint8_t next = 1;
+	for (size_t i = 0; i < runningCount; i++)
+		order[running[i]] = next++;
+	order[index] = next++;
+	for (size_t i = 0; i < waitingCount; i++)
+		order[waiting[i]] = next++;
+	return true;
+}
+
+/** @brief The Spirit skill at a spiritOrder index: a socket's gem, or a hand's granted skill. */
+PersistentSkill SpiritSkillAt(const Player &player, size_t index)
+{
+	if (index < NumSkillSlots)
+		return player.poe2.skillSlots[index].persistent();
+	return GrantedSpiritSkill(player, static_cast<int>(index - GrantedSpiritOffBit));
+}
+
+/** @brief Tells the player when Spirit gems switch off for lack of Spirit, and when they come back on. */
+void NoteWaitingSpiritGems(Player &player)
+{
+	uint16_t waiting = 0;
+	uint16_t running = 0;
+	ReserveSpirit(player, [&](const GemReservation &gem) {
+		if (gem.waiting)
+			waiting |= static_cast<uint16_t>(1U << gem.index);
+		else if (gem.on)
+			running |= static_cast<uint16_t>(1U << gem.index);
+	});
+	const uint16_t changed = waiting ^ player.poe2.spiritWaiting;
+	if (changed == 0)
+		return;
+	player.poe2.spiritWaiting = waiting;
+	for (size_t index = 0; index < NumSkillSlots + 2; index++) {
+		const auto bit = static_cast<uint16_t>(1U << index);
+		if ((changed & bit) == 0)
+			continue;
+		const std::string_view name = PersistentSkillName(SpiritSkillAt(player, index));
+		if ((waiting & bit) != 0) {
+			EventPlrMsg(FormatRuntime(_("{:s} is off: not enough Spirit. It comes back on when there is."), name), UiFlags::ColorRed);
+			TelemetryLog("spirit", FormatRuntime("{:s} switched off: not enough Spirit ({:d}/{:d})", name, ReservedSpirit(player), MaxSpirit(player)));
+		} else if ((running & bit) != 0) {
+			EventPlrMsg(FormatRuntime(_("{:s} is back on."), name));
+			TelemetryLog("spirit", FormatRuntime("{:s} back on: Spirit for it again ({:d}/{:d})", name, ReservedSpirit(player), MaxSpirit(player)));
+		}
+	}
+	// Spirit gems can change stats, like Purity of Elements' resistances.
+	CalcPlrInv(player, false);
 }
 
 } // namespace
@@ -960,11 +1078,34 @@ bool ToggleSpiritGem(Player &player, size_t socket)
 	const PersistentSkill skill = player.poe2.skillSlots[socket].persistent();
 	if (skill == PersistentSkill::None || !IsSpiritGemSwitchable(skill))
 		return false;
+	// A gem goes on only with the Spirit for it (Curtis 2026-10-30).
+	if (!player.poe2.spiritGemOn(socket) && !MakeRoomToSwitchOn(player, skill, socket))
+		return true;
 	player.poe2.spiritGemsOn ^= static_cast<uint16_t>(1U << socket);
 	TelemetryLog("spirit", StrCat(PersistentSkillName(skill), player.poe2.spiritGemOn(socket) ? " switched on" : " switched off"));
 	// Spirit gems can change stats, like Purity of Elements' resistances.
 	CalcPlrInv(player, false);
 	return true;
+}
+
+void CarrySpiritGemSwitch(Player &player, size_t socket, SkillSlot previous, SkillSlot skill)
+{
+	Poe2PlayerData &data = player.poe2;
+	if (socket >= NumSkillSlots || previous == skill)
+		return;
+	const auto bit = static_cast<uint16_t>(1U << socket);
+	const bool wasOn = previous.kind == SkillKind::Persistent && (data.spiritGemsOn & bit) != 0;
+	const uint8_t wasOrder = data.spiritOrder[socket];
+	data.spiritGemsOn &= static_cast<uint16_t>(~bit);
+	if (skill.persistent() != PersistentSkill::None && skill.persistent() == data.liftedSpiritGem) {
+		data.spiritGemsOn |= bit;
+		data.spiritOrder[socket] = data.liftedSpiritOrder;
+		data.liftedSpiritGem = PersistentSkill::None;
+	}
+	if (wasOn) {
+		data.liftedSpiritGem = previous.persistent();
+		data.liftedSpiritOrder = wasOrder;
+	}
 }
 
 PersistentSkill GrantedSpiritSkill(const Player &player, int hand)
@@ -983,6 +1124,10 @@ bool ToggleGrantedSpiritSkill(Player &player, int hand)
 	const PersistentSkill skill = GrantedSpiritSkill(player, hand);
 	if (skill == PersistentSkill::None || !IsSpiritGemSwitchable(skill))
 		return false;
+	// Like a gem, it goes on only with the Spirit for it, unless a gem of it or the other sceptre's grant already reserves.
+	const bool reservedElsewhere = player.poe2.skillLevel(skill) > 0 || (GrantedSpiritSkill(player, 1 - hand) == skill && !player.poe2.grantedOff(1 - hand));
+	if (player.poe2.grantedOff(hand) && !reservedElsewhere && !MakeRoomToSwitchOn(player, skill, GrantedSpiritOffBit + static_cast<size_t>(hand)))
+		return true;
 	player.poe2.toggleGranted(hand);
 	TelemetryLog("spirit", StrCat(PersistentSkillName(skill), player.poe2.grantedOff(hand) ? " (sceptre) switched off" : " (sceptre) switched on"));
 	// Like a gem's switch: Salvation's resistances and the rest change with it.
@@ -996,6 +1141,14 @@ bool IsPersistentSkillActive(const Player &player, PersistentSkill skill)
 		return false;
 	const std::optional<GemReservation> gem = FindGemReservation(player, skill);
 	return gem && gem->count > 0;
+}
+
+bool IsSpiritSkillWaiting(const Player &player, PersistentSkill skill)
+{
+	if (!gbIsPoe2 || skill == PersistentSkill::None)
+		return false;
+	const std::optional<GemReservation> gem = FindGemReservation(player, skill);
+	return gem && gem->waiting;
 }
 
 int ActiveMinionCount(const Player &player, PersistentSkill skill)
@@ -1103,6 +1256,10 @@ void KeepGolemAlive(Player &player)
 	const PersistentSkill golemSkill = ActiveGolemSkill(player);
 	if (golemSkill == PersistentSkill::None) {
 		player.poe2.golemCooldown = 0;
+		// A golem gem switched off, taken out or short of Spirit takes its golem with it, as the skeleton gems do theirs;
+		// the Golem spell's golem stays (Curtis 2026-10-30).
+		if (golem != nullptr && !FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Golem)))
+			KillGolem(*golem);
 		return;
 	}
 	if (golem != nullptr || !CanRaiseMinions(player)) {
@@ -1285,6 +1442,7 @@ void ProcessPersistentSkills(Player &player)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || player.hasNoLife())
 		return;
+	NoteWaitingSpiritGems(player);
 	KeepGolemAlive(player);
 	const bool clericStands = ClericStands(player);
 	for (size_t i = 0; i < RevivingMinionSkills.size(); i++) {
