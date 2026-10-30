@@ -142,6 +142,8 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 		add(SpellIcon::PentaStar, SpellType::Skill, Curse, PercentText(state.amplifyPercent * 10));
 	if (state.lowerResistTicks > 0)
 		add(SpellIcon::Pentagram, SpellType::Skill, Curse, PercentText(-LowerResistCursePercent * TableCurseStrength(monster, TableCurse::LowerResist) / 100 * CurseEffectPercent(monster) / 10));
+	if (state.despairTicks > 0)
+		add(SpellIcon::Apocalypse, SpellType::Skill, Curse, PercentText(-DespairCursePercent * TableCurseStrength(monster, TableCurse::Despair) / 100 * CurseEffectPercent(monster) / 10));
 	if (const int weaken = TableCurseShownPercent(monster, TableCurse::Weaken); weaken > 0)
 		add(SpellIcon::LongHorn, SpellType::Skill, Curse, PercentText(-weaken * 10));
 	if (const int decrepify = TableCurseShownPercent(monster, TableCurse::Decrepify); decrepify > 0)

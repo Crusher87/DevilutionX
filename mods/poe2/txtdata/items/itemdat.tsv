@@ -1009,3 +1009,4 @@ poe2:shard_regal	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Regal Shard	Shar
 poe2:shard_chance	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Chance Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_CHANCE	Null	false	150
 poe2:shard_artificer	0	Misc	Unequippable	MAGIC_ROCK_SMALL	Misc	NONE	Artificer's Shard	Shard	1	0	0	0	0	0	0	0	0		SHARD_ARTIFICER	Null	false	200
 poe2:amethyst_ring	1	Misc	Ring	CONSTRICTING_RING	Ring	RING	Amethyst Ring	Ring	30	0	0	0	0	0	0	0	0		RING	Null	false	2500
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Despair Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620

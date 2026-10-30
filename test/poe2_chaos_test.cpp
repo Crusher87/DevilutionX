@@ -23,6 +23,8 @@
 #include "poe2/support_table.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "missiles.h"
 #include "monster.h"
@@ -696,6 +698,55 @@ TEST_F(Poe2ChaosTest, ChaosDrainMeetsResistanceAndWitheredBesideABleed)
 	EXPECT_EQ(monster.poe2.bleedTicks, 4);
 	monster = {};
 	Missiles.clear();
+}
+
+TEST_F(Poe2ChaosTest, DespairIsAGemCurseNotAGrantedSkill)
+{
+	EXPECT_TRUE(IsGrantedSkill(WeaponSkill::TwinBolts));
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::Despair));
+	EXPECT_EQ(LastGrantedSkill, WeaponSkill::TwinBolts);
+	const TableSkillData &despair = *FindTableSkill(WeaponSkill::Despair);
+	EXPECT_FALSE(IsGrantedTableSkill(despair));
+	EXPECT_EQ(despair.curse, TableCurse::Despair);
+	EXPECT_EQ(despair.level, 9);
+	const std::optional<size_t> gem = SkillGemItemIndex(SkillSlot::ForAttack(WeaponSkill::Despair));
+	ASSERT_TRUE(gem.has_value());
+	EXPECT_EQ(std::string_view(AllItemsList[*gem].iName), "Despair Gem");
+	// A gem skill costs mana, unlike a granted one with no supports.
+	EXPECT_GT(WeaponSkillManaCost(WeaponSkill::Despair), 0);
+	const uint32_t tags = SkillTags(SkillSlot::ForAttack(WeaponSkill::Despair));
+	EXPECT_NE(tags & ST_Curse, 0U);
+	EXPECT_EQ(tags & ST_Damage, 0U);
+}
+
+TEST_F(Poe2ChaosTest, DespairLowersChaosResistanceOnly)
+{
+	Monster beast = MonsterOfKind(MT_NACID);
+	beast.poe2.despairTicks = 40;
+	EXPECT_EQ(MonsterResistanceLowered(beast, DamageType::Chaos), DespairCursePercent);
+	EXPECT_EQ(MonsterResistance(beast, DamageType::Chaos), 30 - DespairCursePercent);
+	EXPECT_EQ(MonsterResistanceLowered(beast, DamageType::Fire), 0);
+	Monster zombie = MonsterOfKind(MT_NZOMBIE);
+	zombie.poe2.despairTicks = 40;
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Chaos), -DespairCursePercent);
+	EXPECT_EQ(ChaosTickDamage(zombie, 1000), 1000 * (100 + DespairCursePercent) / 100);
+	// Unique monsters shrug off half, as they do Lower Resist.
+	Monster unique = MonsterOfKind(MT_NZOMBIE);
+	unique.uniqueType = UniqueMonsterType::Garbud;
+	unique.poe2.despairTicks = 40;
+	EXPECT_EQ(MonsterResistance(unique, DamageType::Chaos), -DespairCursePercent / 2);
+	// Lower Resist leaves chaos alone, and Despair the elements.
+	Monster cursed = MonsterOfKind(MT_NZOMBIE);
+	cursed.poe2.lowerResistTicks = 40;
+	EXPECT_EQ(MonsterResistance(cursed, DamageType::Chaos), 0);
+	cursed.poe2.lowerResistTicks = 0;
+	cursed.poe2.despairTicks = 40;
+	EXPECT_EQ(MonsterResistance(cursed, DamageType::Fire), 0);
+	// It runs out with the other curses.
+	cursed.poe2.despairTicks = 1;
+	ProcessTableCurses(cursed);
+	EXPECT_EQ(cursed.poe2.despairTicks, 0);
+	EXPECT_EQ(MonsterResistance(cursed, DamageType::Chaos), 0);
 }
 
 } // namespace

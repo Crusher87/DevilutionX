@@ -161,16 +161,19 @@ enum class WeaponSkill : uint8_t {
 	CriticalBolt,
 	WitheringRay,
 	TwinBolts,
-	Last = TwinBolts,
+	/** Gem skills appended after the granted ones (saved by value, so only ever appended). */
+	Despair,
+	Last = Despair,
 };
 
-/** @brief The first skill a caster weapon grants; every one after it is granted too. */
+/** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
 constexpr WeaponSkill FirstGrantedSkill = WeaponSkill::FreezingShards;
+constexpr WeaponSkill LastGrantedSkill = WeaponSkill::TwinBolts;
 
 /** @brief Whether the skill is one a caster weapon grants rather than a gem. */
 constexpr bool IsGrantedSkill(WeaponSkill skill)
 {
-	return skill >= FirstGrantedSkill && skill <= WeaponSkill::Last;
+	return skill >= FirstGrantedSkill && skill <= LastGrantedSkill;
 }
 
 enum class SupportGem : uint8_t {

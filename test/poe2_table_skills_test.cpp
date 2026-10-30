@@ -141,7 +141,8 @@ TEST_F(Poe2TableSkillsTest, EveryTableSkillHasAGem)
 		ASSERT_TRUE(index.has_value()) << data.name;
 		EXPECT_EQ(AllItemsList[*index].iMinMLvl, data.level) << data.name;
 	}
-	EXPECT_EQ(gems, 55U);
+	// 55, then Despair (chaos damage plan step 11).
+	EXPECT_EQ(gems, 56U);
 }
 
 TEST_F(Poe2TableSkillsTest, TheTableCoversTheRestOfTheRoster)

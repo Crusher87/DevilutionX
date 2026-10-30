@@ -108,6 +108,8 @@ enum class TableCurse : uint8_t {
 	BonePrison,
 	Haunt,
 	Locust,
+	/** -30% chaos resistance (chaos damage plan step 11). */
+	Despair,
 };
 
 enum class TableBuff : uint8_t {

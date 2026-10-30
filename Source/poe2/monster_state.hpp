@@ -60,6 +60,8 @@ struct Poe2MonsterState {
 	uint8_t ironMaidenTicks = 0;
 	uint8_t lowerResistTicks = 0;
 	uint8_t deathMarkTicks = 0;
+	/** @brief Despair: -30% chaos resistance (not saved, like the other curses). */
+	uint8_t despairTicks = 0;
 	uint8_t confuseTicks = 0;
 	/** @brief Confuse made the monster turn on its kind, so its flags go back when the curse ends. */
 	bool confusedByCurse = false;

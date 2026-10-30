@@ -6,7 +6,7 @@
  *
  * Chaos resistance comes from the monster's kind alone (monster_chaos_resistance.tsv, Curtis 2026-10-30): acid beasts,
  * spiders and other poison creatures 30%, demons 20%, Diablo 25%, everything else 0. Nothing else raises or lowers it
- * except Despair: not the Elemental Resistance modifier, waystones, minion gear, Lower Resist or exposure.
+ * except the Despair curse: not the Elemental Resistance modifier, waystones, minion gear, Lower Resist or exposure.
  */
 #pragma once
 
@@ -35,6 +35,8 @@ constexpr int MaxMonsterResistance = 75;
 constexpr int MinMonsterResistance = -100;
 /** Lower Resist: to fire, lightning and magic. */
 constexpr int LowerResistCursePercent = 30;
+/** Despair: to chaos (Curtis 2026-10-30; POE2's is 35% at level 1). */
+constexpr int DespairCursePercent = 30;
 /** A monster this resistant to a hit doesn't flinch from it. */
 constexpr int FlinchProofResistance = 60;
 

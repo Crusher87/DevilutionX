@@ -170,6 +170,8 @@ const TableSkillData Table[] = {
 	{ WS::FrostBolt, "Frost Bolt", "A bolt of frost that chills what it hits", 0, 0, TW::None, 1, Projectiles, 40, 1, 0, 0, 0, 0, DT::Magic, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::WitheringRay, "Withering Ray", "A stream of four chaos shards that wither what they hit", 0, 0, TW::None, 1, Stream, 9, 4, 0, 0, 2, 0, DT::Chaos, MissileID::RedFlare, MG::BloodHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312, GrantedRider::Wither },
 	{ WS::TwinBolts, "Twin Bolts", "Two bolts at once", 0, 0, TW::None, 1, Projectiles, 19, 2, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
+	// Gem skills appended after the granted ones.
+	{ WS::Despair, "Despair", "Curses enemies with -30% to chaos resistance", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Despair, TableBuff::None, TT_Occult, Icon(SpellIcon::Apocalypse), TableCurve::Boneshatter, 100 },
 };
 // clang-format on
 
@@ -811,6 +813,8 @@ uint8_t *CurseTicks(Poe2MonsterState &state, TableCurse curse)
 		return &state.lowerResistTicks;
 	case TableCurse::DeathMark:
 		return &state.deathMarkTicks;
+	case TableCurse::Despair:
+		return &state.despairTicks;
 	default:
 		return nullptr;
 	}
@@ -842,6 +846,9 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		break;
 	case TableCurse::DeathMark:
 		state.deathMarkTicks = ticks;
+		break;
+	case TableCurse::Despair:
+		state.despairTicks = ticks;
 		break;
 	case TableCurse::Confuse:
 	case TableCurse::Attract:
@@ -1984,7 +1991,7 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 void ProcessTableCurses(Monster &monster)
 {
 	Poe2MonsterState &state = monster.poe2;
-	for (uint8_t *ticks : { &state.weakenTicks, &state.decrepifyTicks, &state.ironMaidenTicks, &state.lowerResistTicks, &state.deathMarkTicks, &state.hauntTicks, &state.locustTicks, &state.plagueTicks }) {
+	for (uint8_t *ticks : { &state.weakenTicks, &state.decrepifyTicks, &state.ironMaidenTicks, &state.lowerResistTicks, &state.deathMarkTicks, &state.despairTicks, &state.hauntTicks, &state.locustTicks, &state.plagueTicks }) {
 		if (*ticks > 0)
 			(*ticks)--;
 	}

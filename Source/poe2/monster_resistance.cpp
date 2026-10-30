@@ -148,8 +148,15 @@ int MonsterBaseResistance(const Monster &monster, DamageType type)
 
 int MonsterResistanceLowered(const Monster &monster, DamageType type)
 {
+	if (!gbIsPoe2)
+		return 0;
+	// Despair lowers chaos resistance, scaled down on magic, rare and unique monsters like Lower Resist.
+	if (type == DamageType::Chaos) {
+		const int lowered = monster.poe2.despairTicks > 0 ? DespairCursePercent * TableCurseStrength(monster, TableCurse::Despair) / 100 : 0;
+		return lowered * CurseEffectPercent(monster) / 100;
+	}
 	// Lower Resist and exposure are elemental: they leave chaos resistance alone.
-	if (!gbIsPoe2 || !IsResistedElement(type))
+	if (!IsResistedElement(type))
 		return 0;
 	int lowered = 0;
 	if (monster.poe2.lowerResistTicks > 0)
