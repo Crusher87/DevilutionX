@@ -57,8 +57,9 @@ size_t Page;
 std::optional<size_t> DetailsSlot;
 constexpr int DetailsWidth = 340;
 constexpr int DetailsLineHeight = 16;
-/** The frame of a Spirit gem that is switched on. */
+/** The frame of a Spirit gem that is switched on, and of one switched on but waiting for Spirit. */
 constexpr uint8_t SpiritOnColor = PAL16_ORANGE + 2;
+constexpr uint8_t SpiritWaitingColor = PAL16_RED + 4;
 /** The rim of a meta gem's socket with a spell inside, and its Energy bar. */
 constexpr uint8_t MetaSpellRimColor = PAL16_BLUE + 3;
 constexpr uint8_t EnergyColor = PAL16_BLUE + 2;
@@ -338,6 +339,27 @@ void DrawHeader(const Surface &out, const Player &player, const Hit &hover)
 	DrawString(out, _("Gemcutting"), button, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhitegold });
 }
 
+/** @brief The arrow that opens the row's details, as in POE2's Skills panel. @return Where its text starts. */
+int DrawDetailsArrow(const Surface &out, size_t slot, const Hit &hover)
+{
+	const Rectangle row = RowRect(slot);
+	const bool showing = DetailsSlot == slot;
+	const Rectangle arrow { row.position + Displacement { row.size.width - 52, 20 }, { 48, 24 } };
+	const std::string_view detailsText = showing ? _("Details <") : _("Details >");
+	DrawString(out, detailsText, arrow,
+	    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (showing || (hover.kind == Hit::Kind::Row && hover.slot == slot) ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed) });
+	return arrow.position.x + arrow.size.width - static_cast<int>(GetLineWidth(detailsText));
+}
+
+/** @brief The bright frame of a Spirit skill that is switched on: red while it waits for Spirit. */
+void DrawSpiritOnFrame(const Surface &out, size_t slot, bool waiting)
+{
+	const Rectangle icon = IconRect(slot);
+	const uint8_t color = waiting ? SpiritWaitingColor : SpiritOnColor;
+	DrawFrame(out, icon, color);
+	DrawFrame(out, { icon.position + Displacement { 1, 1 }, { icon.size.width - 2, icon.size.height - 2 } }, color);
+}
+
 void DrawMinionCount(const Surface &out, const Player &player, size_t slot, const Hit &hover)
 {
 	const PersistentSkill skill = PanelRowSkill(player, slot).persistent();
@@ -371,7 +393,9 @@ void DrawGrantedRow(const Surface &out, const Player &player, size_t slot, const
 	const SkillSlot skill = PanelRowSkill(player, slot);
 	const PersistentSkill persistent = skill.persistent();
 	const bool on = !player.poe2.grantedOff(GrantedRowHand(slot));
-	const bool active = on && IsPersistentSkillActive(player, persistent) && !GrantedRowGivesWay(player, slot);
+	const bool givesWay = GrantedRowGivesWay(player, slot);
+	const bool active = on && IsPersistentSkillActive(player, persistent) && !givesWay;
+	const bool waiting = on && !givesWay && IsSpiritSkillWaiting(player, persistent);
 	FillRectangle(out, row, hover.kind != Hit::Kind::None && hover.slot == slot ? RowHoverColor : RowColor);
 	DrawFrame(out, row, InnerBorderColor);
 
@@ -379,10 +403,8 @@ void DrawGrantedRow(const Surface &out, const Player &player, size_t slot, const
 	DrawHalfTransparentRectTo(out, icon.position.x, icon.position.y, icon.size.width, icon.size.height);
 	const Point iconBottomLeft { icon.position.x, icon.position.y + icon.size.height - 1 };
 	DrawSkillIcon(out, iconBottomLeft, skill, active);
-	if (on) {
-		DrawFrame(out, icon, SpiritOnColor);
-		DrawFrame(out, { icon.position + Displacement { 1, 1 }, { icon.size.width - 2, icon.size.height - 2 } }, SpiritOnColor);
-	}
+	if (on)
+		DrawSpiritOnFrame(out, slot, waiting);
 	if (hover.kind == Hit::Kind::Skill && hover.slot == slot)
 		DrawSmallSpellIconBorder(out, iconBottomLeft);
 
@@ -395,14 +417,22 @@ void DrawGrantedRow(const Surface &out, const Player &player, size_t slot, const
 		const std::string right = FormatRuntime(_("Level {:d}   Spirit {:d}"), player.poe2.grantedLevel(skill), spirit);
 		DrawString(out, right, title, { .flags = UiFlags::AlignRight | UiFlags::ColorWhite | UiFlags::VerticalCenter });
 	}
-	std::string state;
+	// Its details, like a gem's; the second line says no more than how it differs from a gem that is on (Curtis
+	// 2026-10-30: no "Granted: on (right-click: off)"). The tooltip has the switch.
+	const int detailsLeft = DrawDetailsArrow(out, slot, hover);
+	std::string_view state;
 	if (player.poe2.skillLevel(persistent) > 0)
-		state = _("Granted: your gem of it is used instead");
+		state = _("Your gem of it is used instead");
 	else if (slot == GrantedRowOff && GrantedRowSkill(player, GrantedRowMain) == persistent)
-		state = on ? _("Granted by both sceptres (right-click: off)") : _("Granted by both sceptres (right-click: on)");
-	else
-		state = on ? _("Granted: on (right-click: off)") : _("Granted: off (right-click: on)");
-	DrawString(out, state, { row.position + Displacement { 48, 20 }, { row.size.width - 52, 24 } }, { .flags = (on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
+		state = _("Granted by both sceptres");
+	else if (waiting)
+		state = _("Waiting for Spirit");
+	else if (!on)
+		state = _("Off");
+	if (!state.empty()) {
+		DrawString(out, state, { row.position + Displacement { 48, 20 }, { detailsLeft - row.position.x - 48 - 8, 24 } },
+		    { .flags = (waiting ? UiFlags::ColorRed : on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
+	}
 }
 
 void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &hover)
@@ -428,11 +458,9 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		const bool switchable = skill.kind == SkillKind::Persistent && IsSpiritGemSwitchable(skill.persistent());
 		const bool spiritOff = switchable && !player.poe2.spiritGemOn(slot);
 		DrawSkillIcon(out, iconBottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready && !spiritOff);
-		// A Spirit gem that is switched on wears a bright frame.
-		if (switchable && !spiritOff) {
-			DrawFrame(out, icon, SpiritOnColor);
-			DrawFrame(out, { icon.position + Displacement { 1, 1 }, { icon.size.width - 2, icon.size.height - 2 } }, SpiritOnColor);
-		}
+		// A Spirit gem that is switched on wears a bright frame, red while it waits for Spirit.
+		if (switchable && !spiritOff)
+			DrawSpiritOnFrame(out, slot, IsSpiritSkillWaiting(player, skill.persistent()));
 	}
 	if (hover.kind == Hit::Kind::Skill && hover.slot == slot)
 		DrawSmallSpellIconBorder(out, iconBottomLeft);
@@ -456,18 +484,15 @@ void DrawRow(const Surface &out, const Player &player, size_t slot, const Hit &h
 		DrawString(out, right, title, { .flags = UiFlags::AlignRight | UiFlags::ColorWhite | UiFlags::VerticalCenter });
 	}
 	// The arrow that opens the skill's details, as in POE2's Skills panel.
-	const bool showing = DetailsSlot == slot;
-	const Rectangle arrow { row.position + Displacement { row.size.width - 52, 20 }, { 48, 24 } };
-	const std::string_view detailsText = showing ? _("Details <") : _("Details >");
-	DrawString(out, detailsText, arrow,
-	    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | (showing || (hover.kind == Hit::Kind::Row && hover.slot == slot) ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed) });
+	const int detailsLeft = DrawDetailsArrow(out, slot, hover);
 
 	if (!SkillTakesSupports(skill)) {
 		const bool on = skill.kind == SkillKind::Persistent && player.poe2.spiritGemOn(slot);
+		const bool waiting = on && IsSpiritSkillWaiting(player, skill.persistent());
 		// Stops short of the Details arrow, whose text reaches left past its box.
-		const int detailsLeft = arrow.position.x + arrow.size.width - static_cast<int>(GetLineWidth(detailsText));
-		DrawString(out, on ? _("On (right-click: off)") : _("Off (right-click: on)"), { row.position + Displacement { 48, 20 }, { detailsLeft - row.position.x - 48 - 8, 24 } },
-		    { .flags = (on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
+		DrawString(out, waiting ? _("Waiting for Spirit (right-click: off)") : on ? _("On (right-click: off)") : _("Off (right-click: on)"),
+		    { row.position + Displacement { 48, 20 }, { detailsLeft - row.position.x - 48 - 8, 24 } },
+		    { .flags = (waiting ? UiFlags::ColorRed : on ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) | UiFlags::VerticalCenter });
 		if (skill.kind == SkillKind::Persistent && IsSpiritUseGem(skill.persistent()))
 			DrawStoreBar(out, player, slot, skill.persistent());
 		return;
@@ -533,6 +558,8 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 			lines.emplace_back(_("A gem of it is in your Skills panel: the gem's row is used instead."), UiFlags::ColorBlue);
 		if (player.poe2.grantedOff(GrantedRowHand(hover.slot)))
 			lines.emplace_back(_("Off: it reserves no Spirit. Right-click to switch it on"), UiFlags::ColorRed);
+		else if (player.poe2.skillLevel(persistent) <= 0 && IsSpiritSkillWaiting(player, persistent))
+			lines.emplace_back(FormatRuntime(_("Waiting for Spirit: the skills switched on before it use it all. It comes back on by itself when {:d} Spirit is free. Right-click to switch it off"), GemSpiritCost(player, persistent)), UiFlags::ColorRed);
 		else
 			lines.emplace_back(_("On. Right-click to switch it off"), UiFlags::ColorWhite);
 		DrawTooltip(out, bounds, MousePosition, std::string(SkillName(skill)), UiFlags::ColorWhitegold, lines);
@@ -606,10 +633,15 @@ void DrawHoverTooltip(const Surface &out, const Player &player, const Hit &hover
 		if (skill.kind == SkillKind::Persistent && !IsSpiritGemSwitchable(skill.persistent())) {
 			lines.emplace_back(FormatRuntime(_("Use it from the skill tray: it costs {:d} mana, not Spirit"), HoradricTotemManaCost(player.poe2.gemLevel(hover.slot))), UiFlags::ColorWhite);
 		} else if (skill.kind == SkillKind::Persistent) {
-			if (player.poe2.spiritGemOn(hover.slot))
+			const PersistentSkill persistent = skill.persistent();
+			if (player.poe2.spiritGemOn(hover.slot) && IsSpiritSkillWaiting(player, persistent)) {
+				const int needs = IsMinionCountSkill(persistent) ? SpiritPerMinion(player, persistent) : GemSpiritCost(player, persistent);
+				lines.emplace_back(FormatRuntime(_("Waiting for Spirit: the skills switched on before it use it all. It comes back on by itself when {:d} Spirit is free. Right-click to switch it off"), needs), UiFlags::ColorRed);
+			} else if (player.poe2.spiritGemOn(hover.slot)) {
 				lines.emplace_back(_("On. Right-click to switch it off"), UiFlags::ColorWhite);
-			else
+			} else {
 				lines.emplace_back(_("Off: it reserves no Spirit. Right-click to switch it on"), UiFlags::ColorRed);
+			}
 		}
 		lines.emplace_back(IsMetaGem(skill) && MetaSkillCount(player.poe2, hover.slot) > 0 ? _("Click to take the gem out, with the gems inside") : _("Click to take the gem out"), UiFlags::ColorButtonpushed);
 		DrawTooltip(out, bounds, MousePosition, key.empty() ? std::string(SkillName(skill)) : FormatRuntime("{:s} [{:s}]", SkillName(skill), key), UiFlags::ColorWhitegold, lines);
@@ -703,12 +735,12 @@ std::vector<SkillDetailLine> WrappedDetails(const Player &player, size_t slot)
 
 void DrawDetailsPane(const Surface &out, const Player &player)
 {
-	if (!DetailsSlot || *DetailsSlot > DefaultAttackRow || RowSkill(player, *DetailsSlot).isEmpty()) {
+	if (!DetailsSlot || PanelRowSkill(player, *DetailsSlot).isEmpty()) {
 		DetailsSlot = std::nullopt;
 		return;
 	}
 	const size_t slot = *DetailsSlot;
-	const SkillSlot skill = RowSkill(player, slot);
+	const SkillSlot skill = PanelRowSkill(player, slot);
 	const std::vector<SkillDetailLine> lines = WrappedDetails(player, slot);
 	const Rectangle pane = DetailsRect(lines);
 	DrawPanel(out, pane);
@@ -959,8 +991,8 @@ void HandleSkillsPanelClick(Point mousePosition)
 	const Hit hit = HitAt(mousePosition);
 	switch (hit.kind) {
 	case Hit::Kind::Row:
-		// A granted row has no details pane (it isn't a gem socket).
-		if (DetailsSlot == hit.slot || IsGrantedRow(hit.slot) || RowSkill(player, hit.slot).isEmpty())
+		// A granted row's details are its skill's at the level the sceptre grants (Curtis 2026-10-30).
+		if (DetailsSlot == hit.slot || PanelRowSkill(player, hit.slot).isEmpty())
 			DetailsSlot = std::nullopt;
 		else
 			DetailsSlot = hit.slot;

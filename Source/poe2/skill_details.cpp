@@ -4,17 +4,22 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <limits>
 #include <optional>
 #include <string_view>
 
+#include "game_mode.hpp"
 #include "items.h"
 #include "missiles.h"
+#include "monster.h"
 #include "player.h"
 #include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_levels.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/player_data.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
@@ -23,6 +28,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
+#include "poe2/spirit_skills.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -30,6 +36,7 @@
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "tables/misdat.h"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "tables/spelldat.h"
 #include "utils/is_of.hpp"
@@ -451,28 +458,137 @@ std::string Seconds(double seconds)
 	return std::format("{:.2f}s", seconds);
 }
 
-/** @brief The numbers of POE2's buff Spirit gems at the gem's level (poe2/spirit_buffs.hpp). */
-/** @brief How a skeleton gem's minions fight, against a Skeletal Warrior. */
-void MinionGemDetails(std::vector<SkillDetailLine> &lines, const MinionGemData &gem)
+/** @brief What one minion of a minion skill is, as it rises: its monster, level, life and blow, and how its kind fights. */
+struct MinionKind {
+	_monster_id type;
+	int level;
+	MinionRiseStats stats;
+	/** Its supports' life, and a Blood Golem's more, in percent. */
+	int lifePercent;
+	/** The share of its blow its kind deals (a Brute's more, a Cleric's none), in percent. */
+	int damagePercent;
+	MinionShot shot;
+	int shotPercent;
+	int range;
+	/** Game ticks from one attack to the next for the slow ones; 0 attacks as fast as its swing. */
+	int attackTicks;
+};
+
+bool IsGolemSkill(SkillSlot skill)
 {
-	if (gem.skill == PersistentSkill::SkeletalWarriors || gem.skill == PersistentSkill::LingeringIllusion)
-		return;
-	Value(lines, "Life", std::format("{:d}% of a Skeleton Warrior's", gem.lifePercent));
-	if (gem.damagePercent > 0)
-		Value(lines, "Blows", std::format("{:d}% of a Skeleton Warrior's", gem.damagePercent));
-	if (gem.shot != MinionShot::None) {
-		const std::string_view shot = gem.shot == MinionShot::Arrow ? "Arrows" : gem.shot == MinionShot::FrostBolt ? "Frost bolts" : gem.shot == MinionShot::ChargedBolts ? "Two charged bolts" : "Firebolts";
-		Value(lines, std::string(shot), std::format("{:d}% of a blow each, from up to {:d} tiles", gem.shotPercent, gem.range));
+	return skill == SkillSlot::ForSpell(SpellID::Golem) || IsAnyOf(skill.persistent(), PersistentSkill::SummonGolem, PersistentSkill::BloodGolem, PersistentSkill::FireGolem);
+}
+
+/** @brief The minion the skill raises at the level; none for a skill without minions, or whose minions are other monsters (Revive). */
+std::optional<MinionKind> MinionKindOf(const Player &player, SkillSlot skill, int level)
+{
+	if (IsGolemSkill(skill)) {
+		const int lifePercent = skill.kind == SkillKind::Persistent ? GolemSkillLifePercent(player, skill.persistent()) : 100;
+		return MinionKind { MT_GOLEM, MinionLevelForGemLevel(level), GolemRiseStats(player, level), lifePercent, 100, MinionShot::None, 0, 0, 0 };
 	}
-	if (gem.attackTicks > 0)
-		Value(lines, "Attacks every", Seconds(gem.attackTicks / 20.0));
+	const MinionGemData *gem = FindMinionGem(skill.persistent());
+	// An illusion doesn't fight; its own lines say what it is.
+	if (gem == nullptr || gem->skill == PersistentSkill::LingeringIllusion)
+		return std::nullopt;
+	return MinionKind { gem->type, MinionLevelForGemLevel(level), SkeletonMinionRiseStats(player, gem->type, level), SupportMinionLifePercent(player, gem->skill),
+		gem->damagePercent, gem->shot, gem->shotPercent, gem->range, gem->attackTicks };
+}
+
+/** @brief One of the hero's minions of the skill standing on this level, whose supports' damage the details can ask; nullptr if none. */
+const Monster *MinionOfSkillUp(const Player &player, SkillSlot skill)
+{
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (!monster.isPlayerMinion() || monster.hasNoLife() || static_cast<size_t>(monster.goalVar3) != player.getId() || monster.position.tile == GolemHoldingCell
+		    || monster.poe2.revived || (monster.flags & MFLAG_KINGS_DEAD) != 0)
+			continue;
+		const MinionGemData *gem = FindMinionGemByType(monster.type().type);
+		if (IsGolemSkill(skill) ? monster.type().type == MT_GOLEM : gem != nullptr && gem->skill == skill.persistent())
+			return &monster;
+	}
+	return nullptr;
+}
+
+/** @brief Every minion skill's numbers, as POE2's summon skills show them: life, damage, attack time and resistances. */
+void MinionDetails(std::vector<SkillDetailLine> &lines, const Player &player, SkillSlot skill, int level)
+{
+	const std::optional<MinionKind> kind = MinionKindOf(player, skill, level);
+	if (!kind)
+		return;
+	Heading(lines, "Each minion");
+	if (IsGolemSkill(skill)) {
+		// KeepGolemAlive raises it a quarter of GolemReviveTicks after it is gone.
+		Value(lines, "Minions", std::format("1, rising again {:s} after it falls", Seconds((GolemReviveTicks / 4) / static_cast<double>(TicksPerSecond))));
+		Value(lines, "Minion level", std::format("{:d}", kind->level));
+	}
+	const int32_t lifeRaw = static_cast<int32_t>(std::max<int64_t>(static_cast<int64_t>(kind->stats.lifeRaw) * kind->lifePercent / 100, 64));
+	Value(lines, "Life", std::format("{:d}", ShownDamage(lifeRaw / 64.0)));
+
+	// The blow as MonsterAttackMonster deals it: the roll on the minion tables with the owner's minion damage, the
+	// owner's gear's added damage, uniques, supports (asked of one that is up) and its kind's share.
+	const Monster *up = MinionOfSkillUp(player, skill);
+	const int supportPercent = up != nullptr ? SupportMinionDamagePercent(player, *up) : 100;
+	const int uniquePercent = UniqueMinionDamagePercent(player);
+	const int64_t permille = MinionDamageScalePermille(kind->type, kind->level, kind->stats.minDamage + kind->stats.maxDamage, MinionDamagePercent(player));
+	const int32_t gearRaw = MinionGearAddedRaw(player);
+	constexpr int64_t Limit = std::numeric_limits<int32_t>::max() / 4;
+	if (kind->damagePercent <= 0) {
+		Value(lines, "Damage", "None: it doesn't fight");
+	} else {
+		const DamageEstimate blow = EstimateRolls(kind->stats.minDamage, kind->stats.maxDamage, [&](int roll) {
+			int64_t dam = std::clamp<int64_t>((static_cast<int64_t>(roll) << 6) * permille / 1000, -Limit, Limit);
+			dam = std::clamp<int64_t>(dam + gearRaw, 0, Limit);
+			dam = dam * uniquePercent / 100;
+			dam = dam * supportPercent / 100 * kind->damagePercent / 100;
+			return static_cast<double>(dam) / 64;
+		});
+		Value(lines, "Damage per blow", std::format("{:d}-{:d} (average {:d})", ShownDamage(blow.min), ShownDamage(blow.max), ShownDamage(blow.average)));
+		if (skill.persistent() == PersistentSkill::RagingSpirits)
+			Text(lines, SkillDetailLine::Kind::Note, std::format("{:d}% of it is fire", RagingSpiritFirePercent));
+	}
+	if (kind->shot != MinionShot::None) {
+		// MinionShotDamage: the roll on the tables, the shot's share, then uniques and supports, in whole points.
+		const DamageEstimate shot = EstimateRolls(kind->stats.minDamage, kind->stats.maxDamage, [&](int roll) {
+			int64_t damage = std::clamp<int64_t>(static_cast<int64_t>(roll) * permille / 1000, -Limit, Limit) * kind->shotPercent / 100;
+			damage = damage * uniquePercent / 100;
+			damage = damage * supportPercent / 100;
+			return static_cast<double>(std::clamp<int64_t>(damage, 1, INT16_MAX));
+		});
+		const std::string_view name = kind->shot == MinionShot::Arrow ? "Arrows" : kind->shot == MinionShot::FrostBolt ? "Frost bolts" : kind->shot == MinionShot::ChargedBolts ? "Charged bolts (two)" : "Firebolts";
+		Value(lines, std::string(name), std::format("{:d}-{:d} each, from 2 to {:d} tiles", ShownDamage(shot.min), ShownDamage(shot.max), kind->range));
+	}
+	if (kind->damagePercent > 0) {
+		// A swing is its attack animation; the slow kinds wait longer between attacks.
+		const MonsterData &data = MonstersData[static_cast<size_t>(kind->type)];
+		const auto attack = static_cast<size_t>(MonsterGraphic::Attack);
+		const int ticks = std::max(std::max<int>(data.frames[attack], 1) * std::max<int>(data.rate[attack], 1), kind->attackTicks);
+		Value(lines, "Attack time", std::format("{:s} ({:.1f} per second)", Seconds(ticks / static_cast<double>(TicksPerSecond)), static_cast<double>(TicksPerSecond) / ticks));
+	}
+	// Its kind's resistances, and those the owner's gear gives minions.
+	const MonsterData &data = MonstersData[static_cast<size_t>(kind->type)];
+	const uint8_t marks = sgGameInitInfo.nDifficulty == DIFF_HELL ? data.resistanceHell : data.resistance;
+	const bool undead = data.monsterClass == MonsterClass::Undead;
+	const int gear = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionResistances)];
+	const auto resistance = [&](DamageType type) { return std::clamp(ResistanceMarkPercent(marks, type, undead) + gear, MinMonsterResistance, MaxMonsterResistance); };
+	Value(lines, "Resistances", std::format("Fire {:d}%, Lightning {:d}%, Cold {:d}%", resistance(DamageType::Fire), resistance(DamageType::Lightning), resistance(DamageType::Magic)));
+	if (up == nullptr && kind->damagePercent > 0)
+		Text(lines, SkillDetailLine::Kind::Note, "Supports that change minion damage count once one is up");
+}
+
+/** @brief Revive's minions are the monsters it raises, so it shows what it does to them. */
+void ReviveDetails(std::vector<SkillDetailLine> &lines, const Player &player, int level)
+{
+	Heading(lines, "Each minion");
+	Value(lines, "Minions", std::format("up to {:d}, the strongest monster you kill", ReviveMinionCount(player)));
+	Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+	Value(lines, "Life", std::format("{:d}% of the monster's", SupportMinionLifePercent(player, PersistentSkill::Revive) * (100 + (5 * level)) / 100));
+	Value(lines, "Damage", "the monster's own, at the minion level");
+	Value(lines, "Resistances", "the monster's own");
 }
 
 void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skill, int level)
 {
 	const auto ticks = [](int gameTicks) { return Seconds(gameTicks / 20.0); };
-	if (const MinionGemData *gem = FindMinionGem(skill); gem != nullptr)
-		MinionGemDetails(lines, *gem);
 	switch (skill) {
 	case PersistentSkill::WindDancer:
 		Value(lines, "A stage every", ticks(WindDancerStageTicks(level)));
@@ -632,6 +748,10 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 		Value(lines, "Corpses", "your skeletons, for Corpse Explosion and Soul Harvest");
 		Value(lines, "Minions rise again after", std::format("{:.1f} seconds", SkeletonReviveTicks * SacrificeRevivePercent(level) / 100 / 20.0));
 		break;
+	case PersistentSkill::Guardian:
+		Value(lines, "Rises every", ticks(GuardianCooldownTicks));
+		Value(lines, "When an enemy is within", std::format("{:d} tiles", GuardianRange));
+		break;
 	case PersistentSkill::LingeringIllusion:
 		Value(lines, "Illusion", std::format("{:d} seconds, 1% of your life, draws enemies within {:d} tiles", IllusionTicks / 20, IllusionDrawTiles));
 		Value(lines, "Broken by an enemy", std::format("a Frenzy remnant for {:d} seconds", IllusionRemnantTicks / 20));
@@ -720,15 +840,21 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 {
 	using Kind = SkillDetailLine::Kind;
 	std::vector<SkillDetailLine> lines;
-	if (socket > DefaultAttackRow)
+	// A held sceptre's granted Spirit skill has a row of its own, without a gem (Curtis 2026-10-30).
+	const bool isGranted = socket == GrantedRowMain || socket == GrantedRowOff;
+	if (socket > DefaultAttackRow && !isGranted)
 		return lines;
-	const SkillSlot skill = RowSkill(player, socket);
+	SkillSlot skill = RowSkill(player, socket);
+	if (isGranted) {
+		const PersistentSkill granted = GrantedSpiritSkill(player, static_cast<int>(socket - GrantedRowMain));
+		skill = granted != PersistentSkill::None ? SkillSlot::ForPersistent(granted) : SkillSlot {};
+	}
 	if (skill.isEmpty())
 		return lines;
 	const bool isDefault = socket == DefaultAttackRow;
 
 	// The default attack has no gem: it is level 1 and stays so. A caster weapon's granted skill there is at its grant level.
-	const int gemLevel = isDefault ? MaxGemLevel : player.poe2.gemLevel(socket);
+	const int gemLevel = isDefault ? MaxGemLevel : isGranted ? std::max(player.poe2.grantedLevel(skill), 1) : player.poe2.gemLevel(socket);
 	const int level = isDefault && skill.kind == SkillKind::Default ? 1 : skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : player.poe2.effectiveLevel(skill);
 	const std::string tags = SkillTagText(skill);
 	if (!tags.empty())
@@ -736,12 +862,14 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 	if (const std::string_view description = SkillDescription(skill); !description.empty())
 		Text(lines, Kind::Text, std::string(description));
 
-	Heading(lines, isDefault ? "Weapon attack" : "Gem");
+	Heading(lines, isDefault ? "Weapon attack" : isGranted ? "Granted by your sceptre" : "Gem");
 	// POE2 Mashup: a granted skill that deals no damage (Mana Drain) has no damage line (Curtis 2026-10-29).
 	const TableSkillData *grantedRow = isDefault && skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
 	if (isDefault && (grantedRow == nullptr || grantedRow->damagePercent > 0))
 		Value(lines, "Damage", static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt ? std::format("{:d}% of the staff's or sceptre's, +{:d}% of Magic", StaffBoltDamagePercent, StaffBoltMagicPercent)
 		                                                                                      : std::format("{:d}% of the weapon's", DefaultAttackDamagePercent));
+	else if (isGranted)
+		Value(lines, "Level", player.poe2.skillLevel(skill) > 0 ? std::format("{:d} (your gem of it is used instead)", level) : std::format("{:d}", level));
 	else if (!isDefault)
 		Value(lines, "Level", level != gemLevel ? std::format("{:d} (gem {:d}, {:+d} from gear)", level, gemLevel, level - gemLevel) : std::format("{:d}", level));
 	if (skill.kind == SkillKind::Persistent && IsMinionCountSkill(skill.persistent())) {
@@ -752,6 +880,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(lines, "Reserves", std::format("{:d} Spirit", GemSpiritReservation(player, persistent)));
 		const int free = FreeMinions(persistent);
 		Value(lines, "Spirit per minion", free > 0 ? std::format("{:d}, first {:d} free", SpiritPerMinion(player, persistent), free) : std::format("{:d}", SpiritPerMinion(player, persistent)));
+		if (const int extra = SupportExtraMinions(player, persistent); extra > 0)
+			Value(lines, "From supports", std::format("+{:d} minions", extra));
+		Value(lines, "Most minions", std::format("{:d}, as Spirit allows", static_cast<int>(MaxMinionsPerGem)));
 		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
 		Value(lines, "Revives after", std::format("{:.1f} seconds", MinionReviveTicks(player) / 20.0));
 	} else if (skill.persistent() == PersistentSkill::HoradricTotem && skill.kind == SkillKind::Persistent)
@@ -765,8 +896,13 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 
 	if (skill.kind == SkillKind::Persistent && !isDefault)
 		SpiritBuffDetails(lines, skill.persistent(), std::max(level, 1));
+	// Minion skills show their minions, as POE2's do: the Spirit gems' and the Golem spell's.
+	const int minionLevel = std::max(skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : level, 1);
+	MinionDetails(lines, player, skill, minionLevel);
+	if (skill.persistent() == PersistentSkill::Revive)
+		ReviveDetails(lines, player, minionLevel);
 
-	if (IsMetaGem(skill) && !isDefault) {
+	if (IsMetaGem(skill) && !isDefault && !isGranted) {
 		const PersistentSkill meta = skill.persistent();
 		if (UsesMetaEnergy(skill)) {
 			Value(lines, "Energy", std::format("{:d} of {:d}", MetaEnergy(player, socket), MetaEnergyCap(player.poe2, socket)));
@@ -849,7 +985,7 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		if (usable && seconds > 0)
 			Value(lines, "Damage per second", std::format("{:d} (one target)", ShownDamage(average / seconds)));
 		Text(lines, Kind::Note, "Before the enemy's armour and resistances");
-	} else if (!hit.effect.empty()) {
+	} else if (!hit.effect.empty() && (SkillTags(skill) & ST_Minion) == 0) {
 		Heading(lines, "Effect");
 		Text(lines, Kind::Text, hit.effect);
 	}
@@ -886,7 +1022,7 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 			Text(lines, Kind::Text, line);
 	}
 
-	if (SkillTakesSupports(skill)) {
+	if (SkillTakesSupports(skill) && !isGranted) {
 		Heading(lines, "Supports");
 		bool any = false;
 		for (size_t i = 0; i < MaxSupportSockets; i++) {
@@ -905,7 +1041,7 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 			Text(lines, Kind::Note, "No supports yet: drop a support gem in a socket");
 	}
 
-	if (gemLevel < MaxGemLevel) {
+	if (gemLevel < MaxGemLevel && !isGranted) {
 		Heading(lines, "Next gem level");
 		Value(lines, "Needs", std::format("character level {:d}", CharacterLevelForGemLevel(gemLevel + 1)));
 		Text(lines, Kind::Note, GemLevelText(skill, gemLevel + 1));

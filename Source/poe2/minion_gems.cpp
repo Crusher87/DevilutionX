@@ -24,6 +24,7 @@
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/is_of.hpp"
 
@@ -425,6 +426,41 @@ const MinionGemData *MinionGemOf(const Monster &monster)
 	return FindMinionGemByType(monster.type().type);
 }
 
+MinionRiseStats SkeletonMinionRiseStats(const Player &owner, _monster_id type, int gemLevel)
+{
+	// Like POE2, the gem's level makes the minions stronger: a gem at the right level for its owner fights at the owner's level.
+	const int level = MinionLevelForGemLevel(gemLevel);
+	// The ones that stay back and shoot are frailer than the warriors, the Brutes tougher.
+	const MinionGemData *gem = FindMinionGemByType(type);
+	const int lifePercent = gem != nullptr ? gem->lifePercent : 100;
+	MinionRiseStats stats {};
+	if (HasMonsterLevelTable()) {
+		// On the monster tables: a white's life at the minion's level (plan v2 step 11).
+		stats.lifeRaw = MinionLifeRaw(level, UniqueMinionLifePercent(owner) * lifePercent / 100);
+	} else {
+		stats.lifeRaw = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(owner) / 100 * lifePercent / 100).raw();
+	}
+	// The gem's blow; its level's table and the owner's minion damage scale each hit (ScaleMonsterHit), past 255.
+	stats.minDamage = std::min(2 + (level / 3) + gemLevel, 255);
+	stats.maxDamage = std::min(5 + (level / 2) + (2 * gemLevel), 255);
+	return stats;
+}
+
+MinionRiseStats GolemRiseStats(const Player &owner, int spellLevel)
+{
+	MinionRiseStats stats {};
+	if (gbIsPoe2 && HasMonsterLevelTable()) {
+		// POE2 Mashup: a minion at its gem's minion level: a white's life there (plan v2 step 11). Its hits are scaled
+		// as they land (ScaleMonsterHit), so the bytes below stay the gem's.
+		stats.lifeRaw = MinionLifeRaw(MinionLevelForGemLevel(spellLevel), UniqueMinionLifePercent(owner));
+	} else {
+		stats.lifeRaw = 2 * (320 * spellLevel + owner._pMaxMana.raw() / 3) * UniqueMinionLifePercent(owner) / 100;
+	}
+	stats.minDamage = 2 * (spellLevel + 4);
+	stats.maxDamage = 2 * (spellLevel + 8);
+	return stats;
+}
+
 int ClericHealPercent(int gemLevel)
 {
 	return AtLevel(gemLevel, 20, 35);
@@ -475,16 +511,23 @@ int GearStat(const Player &owner, Poe2ItemStat stat)
 
 } // namespace
 
+int32_t MinionGearAddedRaw(const Player &owner)
+{
+	const int sum = std::max(GearStat(owner, Poe2ItemStat::MinionAddedDamageMin), 0) + std::max(GearStat(owner, Poe2ItemStat::MinionAddedDamageMax), 0);
+	if (sum == 0)
+		return 0;
+	return static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(sum) * 32 * MinionDamagePercent(owner) / 100, std::numeric_limits<int32_t>::max() / 4));
+}
+
 int MinionBlowWithGearDamage(const Monster &attacker, int dam)
 {
 	const Player *owner = GearOwner(attacker);
 	if (owner == nullptr)
 		return dam;
-	const int sum = std::max(GearStat(*owner, Poe2ItemStat::MinionAddedDamageMin), 0) + std::max(GearStat(*owner, Poe2ItemStat::MinionAddedDamageMax), 0);
-	if (sum == 0)
+	const int32_t added = MinionGearAddedRaw(*owner);
+	if (added == 0)
 		return dam;
-	const int64_t added = static_cast<int64_t>(sum) * 32 * MinionDamagePercent(*owner) / 100;
-	return static_cast<int>(std::clamp<int64_t>(dam + added, 0, std::numeric_limits<int32_t>::max() / 4));
+	return static_cast<int>(std::clamp<int64_t>(static_cast<int64_t>(dam) + added, 0, std::numeric_limits<int32_t>::max() / 4));
 }
 
 int32_t MinionGearRegenRaw(const Monster &minion)

@@ -706,11 +706,14 @@ DVL_ALWAYS_INLINE bool IsRanged(Monster &monster)
 	return IsAnyOf(monster.ai, MonsterAIID::SkeletonRanged, MonsterAIID::GoatRanged, MonsterAIID::Succubus, MonsterAIID::LazarusSuccubus);
 }
 
-/** POE2 Mashup: minions stay near their owner, like POE2's. They fight what comes close to the owner, come back when
- * the owner moves on, hurry when they fall behind and appear beside the owner when left far behind. */
+/** POE2 Mashup: minions stay near their owner, like POE2's. They fight what comes close to the owner or to them, come
+ * back when the owner moves on, hurry when they fall behind and appear beside the owner when left far behind. */
 constexpr int MinionFollowRadius = 3;
-constexpr int MinionEngageRadius = 6;
-constexpr int MinionLeashRadius = 9;
+/** Most of what the hero sees: at 6 they stood by with monsters near (Curtis 2026-10-30). */
+constexpr int MinionEngageRadius = 8;
+/** What comes this close to a minion is fought too, unless the fight would take it past the leash. */
+constexpr int MinionAggroRadius = 4;
+constexpr int MinionLeashRadius = 11;
 constexpr int MinionCatchUpRadius = 5;
 constexpr int MinionTeleportRadius = 14;
 
@@ -731,8 +734,11 @@ bool MinionMayEngage(const Monster &minion, const Monster &enemy)
 	const Player *owner = MinionLeader(minion);
 	if (owner == nullptr)
 		return true;
-	return enemy.position.tile.WalkingDistance(owner->position.tile) <= MinionEngageRadius
-	    || enemy.position.tile.WalkingDistance(minion.position.tile) <= 1;
+	const int fromOwner = enemy.position.tile.WalkingDistance(owner->position.tile);
+	const int fromMinion = enemy.position.tile.WalkingDistance(minion.position.tile);
+	return fromOwner <= MinionEngageRadius
+	    || (fromMinion <= MinionAggroRadius && fromOwner < MinionLeashRadius)
+	    || fromMinion <= 1;
 }
 
 void UpdateEnemy(Monster &monster)
@@ -779,6 +785,9 @@ void UpdateEnemy(Monster &monster)
 		if (isPlayerMinion && otherMonster.isPlayerMinion()) // prevent golems from fighting each other
 			continue;
 		if (isPlayerMinion && !MinionMayEngage(monster, otherMonster))
+			continue;
+		// POE2 Mashup: nor one it can't hurt now (a Counselor gone off, one charging): it stood waiting for it.
+		if (isPlayerMinion && gbIsPoe2 && !otherMonster.isPossibleToHit())
 			continue;
 
 		const int dist = otherMonster.position.tile.WalkingDistance(position);
@@ -3513,21 +3522,18 @@ void InitGolem(devilution::Monster &monster, uint8_t golemOwnerPlayerId, int16_t
 	monster.flags |= MFLAG_GOLEM;
 	monster.goalVar3 = static_cast<int8_t>(golemOwnerPlayerId);
 	const Player &player = Players[golemOwnerPlayerId];
-	if (gbIsPoe2 && HasMonsterLevelTable()) {
-		// POE2 Mashup: a minion at its gem's minion level: a white's life there (plan v2 step 11). Its hits are scaled
-		// as they land (ScaleMonsterHit), so the bytes below stay the gem's.
-		const int level = MinionLevelForGemLevel(golemSpellLevel);
-		monster.maxHitPoints = Fixed26_6::fromRaw(MinionLifeRaw(level, UniqueMinionLifePercent(player)));
-		monster.golemToHit = std::min(5 * (golemSpellLevel + 8) + 2 * level, 255);
-	} else {
-		monster.maxHitPoints = Fixed26_6::fromRaw(2 * (320 * golemSpellLevel + player._pMaxMana.raw() / 3) * UniqueMinionLifePercent(player) / 100);
-		// A save keeps one byte of it.
+	// POE2 Mashup: its life and blow come from GolemRiseStats, which the Skills panel's details show too.
+	const MinionRiseStats stats = GolemRiseStats(player, golemSpellLevel);
+	monster.maxHitPoints = Fixed26_6::fromRaw(stats.lifeRaw);
+	// A save keeps one byte of it.
+	if (gbIsPoe2 && HasMonsterLevelTable())
+		monster.golemToHit = std::min(5 * (golemSpellLevel + 8) + 2 * MinionLevelForGemLevel(golemSpellLevel), 255);
+	else
 		monster.golemToHit = std::min(5 * (golemSpellLevel + 8) + 2 * player.getCharacterLevel(), 255);
-	}
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 25;
-	monster.minDamage = 2 * (golemSpellLevel + 4);
-	monster.maxDamage = 2 * (golemSpellLevel + 8);
+	monster.minDamage = static_cast<uint8_t>(stats.minDamage);
+	monster.maxDamage = static_cast<uint8_t>(stats.maxDamage);
 	UpdateEnemy(monster);
 }
 
@@ -3543,22 +3549,15 @@ void InitSkeletonMinion(Monster &monster, uint8_t ownerPlayerId, int16_t gemLeve
 	const Player &player = Players[ownerPlayerId];
 	// Like POE2, the gem's level makes the minions stronger: a gem at the right level for its owner fights at the owner's level.
 	const int level = MinionLevelForGemLevel(gemLevel);
-	// The ones that stay back and shoot are frailer than the warriors, the Brutes tougher.
-	const MinionGemData *gem = FindMinionGemByType(monster.type().type);
-	const int lifePercent = gem != nullptr ? gem->lifePercent : 100;
-	if (HasMonsterLevelTable()) {
-		// On the monster tables: a white's life at the minion's level (plan v2 step 11).
-		monster.maxHitPoints = Fixed26_6::fromRaw(MinionLifeRaw(level, UniqueMinionLifePercent(player) * lifePercent / 100));
-	} else {
-		monster.maxHitPoints = Fixed26_6::fromInt((30 + (8 * level) + (4 * gemLevel)) * UniqueMinionLifePercent(player) / 100 * lifePercent / 100);
-	}
+	// Its life and blow (SkeletonMinionRiseStats), which the Skills panel's details show too.
+	const MinionRiseStats stats = SkeletonMinionRiseStats(player, monster.type().type, gemLevel);
+	monster.maxHitPoints = Fixed26_6::fromRaw(stats.lifeRaw);
 	monster.hitPoints = monster.maxHitPoints;
 	monster.armorClass = 10 + level;
 	// A save keeps one byte of it.
 	monster.golemToHit = std::min(40 + (2 * level) + (2 * gemLevel), 255);
-	// The gem's blow; its level's table and the owner's minion damage scale each hit (ScaleMonsterHit), past 255.
-	monster.minDamage = static_cast<uint8_t>(std::min(2 + (level / 3) + gemLevel, 255));
-	monster.maxDamage = static_cast<uint8_t>(std::min(5 + (level / 2) + (2 * gemLevel), 255));
+	monster.minDamage = static_cast<uint8_t>(stats.minDamage);
+	monster.maxDamage = static_cast<uint8_t>(stats.maxDamage);
 	UpdateEnemy(monster);
 }
 
@@ -4709,6 +4708,16 @@ bool FollowOwner(Monster &minion)
 	return true;
 }
 
+/** @brief A POE2 minion not yet at grips with its enemy looks again, for a nearer one or one that came at it. */
+bool MinionLooksAgain(const Monster &minion)
+{
+	if (MinionLeader(minion) == nullptr || (minion.flags & MFLAG_NO_ENEMY) != 0 || (minion.flags & MFLAG_TARGETS_MONSTER) == 0)
+		return false;
+	if (IsAnyOf(minion.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack))
+		return false;
+	return minion.position.tile.WalkingDistance(Monsters[minion.enemy].position.tile) > 1;
+}
+
 } // namespace
 
 bool IsMinionOf(const Monster &monster, const Player &player)
@@ -4753,7 +4762,7 @@ void GolumAi(Monster &golem)
 	if (IsNoneOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack) && LeashMinion(golem))
 		return;
 
-	if ((golem.flags & MFLAG_TARGETS_MONSTER) == 0)
+	if ((golem.flags & MFLAG_TARGETS_MONSTER) == 0 || MinionLooksAgain(golem))
 		UpdateEnemy(golem);
 
 	if (IsAnyOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack)) {
@@ -4803,8 +4812,19 @@ void GolumAi(Monster &golem)
 			StartAttack(golem);
 			return;
 		}
-		if (AiPlanPath(golem))
+		if (MinionLeader(golem) != nullptr) {
+			// POE2 Mashup: AiPlanPath walks only round walls, and only on the turns pathCount allows, which FollowOwner
+			// never let come: the minions stood by their owner with an enemy in sight (Curtis 2026-10-30). They go
+			// at it now; one they have no way to is let go, so they pick another.
+			golem.enemyPosition = enemy.position.tile;
+			if (AiPlanWalk(golem)) {
+				golem.poe2.minionStuck = 0;
+				return;
+			}
+			DropMinionTarget(golem);
+		} else if (AiPlanPath(golem)) {
 			return;
+		}
 	}
 
 	if (FollowOwner(golem))

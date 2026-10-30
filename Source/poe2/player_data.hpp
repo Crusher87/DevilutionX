@@ -881,6 +881,17 @@ struct Poe2PlayerData {
 	 * (grantedOff), so every hero saved before it starts with them on.
 	 */
 	uint16_t spiritGemsOn = 0;
+	/**
+	 * @brief When the Spirit gem in each socket, then each hand's granted Spirit skill, was last switched on, higher for
+	 * newer: short of Spirit, the newest switch off first (Curtis 2026-10-30). Not saved: a hero loads with the Skills
+	 * panel's order.
+	 */
+	std::array<uint8_t, NumSkillSlots + 2> spiritOrder {};
+	/** @brief The switched-on Spirit gems that are off for lack of Spirit, as last seen, by spiritOrder index (not saved). */
+	uint16_t spiritWaiting = 0;
+	/** @brief A switched-on Spirit gem taken out of its socket, and its spiritOrder, so it is still on when socketed again (not saved). */
+	PersistentSkill liftedSpiritGem = PersistentSkill::None;
+	uint8_t liftedSpiritOrder = 0;
 	/** @brief Spirit skulls broken, one bit per skull (see SpiritSkullSpirit). */
 	uint8_t spiritSkulls = 0;
 	/** @brief How many minions each of the MinionCountSkills keeps, or DefaultMinionCount. */
@@ -1120,6 +1131,10 @@ struct Poe2PlayerData {
 		for (auto &levels : metaSkillLevels)
 			levels.fill(1);
 		spiritGemsOn = 0;
+		spiritOrder.fill(0);
+		spiritWaiting = 0;
+		liftedSpiritGem = PersistentSkill::None;
+		liftedSpiritOrder = 0;
 		spiritSkulls = 0;
 		minionCounts.fill(DefaultMinionCount);
 		for (size_t slot = 0; slot < NumTraySlots; slot++)

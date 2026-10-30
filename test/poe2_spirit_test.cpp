@@ -161,15 +161,21 @@ TEST_F(Poe2SpiritTest, SkeletalMagesHaveNoFreeMinions)
 	Player &player = *MyPlayer;
 	constexpr PersistentSkill Mages = PersistentSkill::SkeletalMages;
 	player.poe2.spiritSkulls = 1;
-	SocketOn(player, 0, Mages);
+	SocketSkill(player, 0, SkillSlot::ForPersistent(Mages));
 	player.poe2.slotLevels[0] = 4;
 	EXPECT_EQ(ChosenMinionCount(player, Mages), 1);
 	EXPECT_EQ(SpiritPerMinion(player, Mages), 47);
-	EXPECT_FALSE(IsPersistentSkillActive(player, Mages));
-	EXPECT_EQ(GetSkillUsability(player, SkillSlot::ForPersistent(Mages)), SkillUsability::Spirit);
+	// Its one minion needs 47 Spirit, so it doesn't go on with 30.
+	EXPECT_TRUE(ToggleSpiritGem(player, 0));
+	EXPECT_FALSE(player.poe2.spiritGemOn(0));
 	player.poe2.spiritSkulls = AllSpiritSkulls;
+	EXPECT_TRUE(ToggleSpiritGem(player, 0));
 	EXPECT_EQ(ActiveMinionCount(player, Mages), 1);
 	EXPECT_EQ(ReservedSpirit(player), 47);
+	// With less Spirit later it waits, with none of its minions up.
+	player.poe2.spiritSkulls = 1;
+	EXPECT_FALSE(IsPersistentSkillActive(player, Mages));
+	EXPECT_EQ(GetSkillUsability(player, SkillSlot::ForPersistent(Mages)), SkillUsability::Spirit);
 }
 
 TEST_F(Poe2SpiritTest, MinionsFightAtTheirGemsLevel)
@@ -227,8 +233,9 @@ TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 	SocketOn(player, 0, PersistentSkill::HeraldOfAsh);
 	SocketOn(player, 1, PersistentSkill::HeraldOfThunder);
 	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfAsh));
+	// Without the Spirit for it, Thunder doesn't go on (Curtis 2026-10-30).
+	EXPECT_FALSE(player.poe2.spiritGemOn(1));
 	EXPECT_FALSE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder));
-	EXPECT_EQ(GetSkillUsability(player, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder)), SkillUsability::Spirit);
 	EXPECT_EQ(ReservedSpirit(player), 30);
 
 	// A sceptre's Spirit makes room for both.
@@ -236,8 +243,16 @@ TEST_F(Poe2SpiritTest, GemsReserveSpiritInSlotOrder)
 	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
 	EXPECT_TRUE(ItemGrantsSpirit(player.InvBody[INVLOC_HAND_LEFT]));
 	EXPECT_EQ(MaxSpirit(player), 30 + SceptreSpirit);
+	EXPECT_TRUE(ToggleSpiritGem(player, 1));
 	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder));
 	EXPECT_EQ(ReservedSpirit(player), 60);
+
+	// Without the sceptre the newer one waits for Spirit again, still switched on.
+	player.InvBody[INVLOC_HAND_LEFT].clear();
+	EXPECT_TRUE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfAsh));
+	EXPECT_FALSE(IsPersistentSkillActive(player, PersistentSkill::HeraldOfThunder));
+	EXPECT_TRUE(player.poe2.spiritGemOn(1));
+	EXPECT_EQ(GetSkillUsability(player, SkillSlot::ForPersistent(PersistentSkill::HeraldOfThunder)), SkillUsability::Spirit);
 }
 
 TEST_F(Poe2SpiritTest, SpiritGemsStartOffUntilSwitchedOn)

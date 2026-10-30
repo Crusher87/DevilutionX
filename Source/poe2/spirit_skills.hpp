@@ -53,6 +53,8 @@ enum InfusionElement : uint8_t {
 PersistentSkill ActiveGolemSkill(const Player &player);
 /** @brief The golem's life in percent of Summon Golem's. */
 int GolemLifePercent(const Player &player);
+/** @brief The same for a golem of the golem skill, active or not: Blood Golem's is higher, and supports change it. */
+int GolemSkillLifePercent(const Player &player, PersistentSkill skill);
 /** @brief A minion of the player hit a monster for the damage. */
 void OnMinionHitMonster(Player &owner, const Monster &minion, Monster &target, Fixed26_6 damage);
 
@@ -61,6 +63,8 @@ bool ShadowWarriorActive(const Player &player);
 void OnReviveCandidateKilled(const Player &player, const Monster &monster);
 /** @brief How many minions Revive keeps up (0 when it isn't up); the King's dead share the larger of this and 3. */
 int ReviveMinionLimit(const Player &player);
+/** @brief How many Revive keeps up when it is on: 1, one more each 15 character levels up to 4, and what supports add. */
+int ReviveMinionCount(const Player &player);
 
 /** @brief Berserk's more damage taken and Mana Shield's share from mana. */
 Fixed26_6 ApplySpiritHitTaken(Player &player, Fixed26_6 damage);
