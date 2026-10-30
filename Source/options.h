@@ -667,6 +667,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryEnum<LootFilter> lootFilter;
 	/** @brief Cathedral floors built as a winding main way of rooms with side areas (POE2 Mashup). */
 	OptionEntryBoolean newCathedralFloors;
+	/** @brief Catacombs floors built the same way, from their own rooms (POE2 Mashup). */
+	OptionEntryBoolean newCatacombsFloors;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */

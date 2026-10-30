@@ -460,6 +460,9 @@ void InitRndBarrels()
 	}
 }
 
+/** The tiles a wall torch lights: the room east or south of a wall block, and the room west or north of a lip. */
+constexpr Displacement NearDesigned[] { { 2, 0 }, { 0, 2 }, { -2, 0 }, { 0, -2 }, { 2, 2 } };
+
 void AddL2Torches()
 {
 	for (int j = 0; j < MAXDUNY; j++) {
@@ -469,6 +472,9 @@ void AddL2Torches()
 				continue;
 
 			const int pn = dPiece[i][j];
+			// POE2: the designed rooms of the new Catacombs floors hang their own torches.
+			if (IsAnyOf(pn, 0, 4, 36, 40) && std::any_of(std::begin(NearDesigned), std::end(NearDesigned), [&testPosition](Displacement d) { return IsCathedralDesignedTile(testPosition + d); }))
+				continue;
 			if (pn == 0 && FlipCoin(3)) {
 				AddObject(OBJ_TORCHL2, testPosition);
 			}
@@ -3911,6 +3917,8 @@ void InitObjects()
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CATACOMBS) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			if (Quests[Q_ROCK].IsAvailable())
 				InitRndLocObj5x5(1, 1, OBJ_STAND);
 			if (Quests[Q_SCHAMB].IsAvailable())
