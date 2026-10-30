@@ -3,8 +3,9 @@
  *
  * POE2 Mashup: the rules of the Profane Roads that act in the dungeon (design-v8, research/tree-rework/profane-road).
  * Leoric's Road: the dead do not rest (a kill may rise again as a hostile skeleton, which a hit puts down in its first
- * second) and the King's dead (with the pact, culled monsters rise for the hero for a while). The Sickness Road: every
- * death spreads it (the pact). The Maiden's Road: eyes in the dark and the light caps, and out of mind with a staff.
+ * second) and the King's dead (with the pact, culled monsters rise for the hero for a while). The Maiden's Road: eyes
+ * in the dark and the light caps, and out of mind with a staff. The Vizjerei Road's blasts live with Kill Burst
+ * (poe2/unique_effects.cpp).
  */
 #pragma once
 
@@ -47,11 +48,6 @@ void OnProfaneRoadKill(const Player &player, const Monster &monster);
  * @return true if it did: the monster has no life left and the hit deals nothing else.
  */
 bool TryPutDownRisen(const Player &player, Monster &monster);
-/**
- * @brief Any monster died (called from MonsterDeath after the on-kill effects, never for the risen): the Sickness Road
- * pact passes the ailments it carried to the enemies beside it, unless Kill Burst's contagion already did.
- */
-void OnProfaneRoadDeath(const Monster &monster);
 /** @brief Per game tick: rises whose corpse is down stand up, and the King's dead count down and leave. */
 void ProcessProfaneRoads();
 /** @brief Forgets the rises still waiting (a new level). */

@@ -477,49 +477,49 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	}
 }
 
-bool CarriesAilment(const Monster &monster)
+std::optional<DamageType> ElementalAilmentOf(const Monster &monster)
 {
 	const Poe2MonsterState &state = monster.poe2;
-	return state.igniteTicks > 0 || state.shockTicks > 0 || state.chillTicks > 0 || state.poisonTicks > 0;
+	const int cold = std::max(state.chillTicks, state.freezeTicks);
+	std::optional<DamageType> element;
+	int most = 0;
+	for (const auto &[type, ticks] : { std::pair { DamageType::Fire, static_cast<int>(state.igniteTicks) }, std::pair { DamageType::Magic, cold },
+	         std::pair { DamageType::Lightning, static_cast<int>(state.shockTicks) } }) {
+		if (ticks > most) {
+			most = ticks;
+			element = type;
+		}
+	}
+	return element;
 }
 
-bool CopyAilments(const Monster &from, Monster &to, const Player &player, bool withIgnite)
+void InflictBlastAilment(Monster &monster, const Player &player, DamageType element, Fixed26_6 damage)
 {
-	if (&from == &to || to.hasNoLife() || to.isPlayerMinion())
-		return false;
-	const Poe2MonsterState &source = from.poe2;
-	Poe2MonsterState &target = to.poe2;
-	// A copy replaces only a weaker ailment, or as strong a one with less time left.
-	const auto better = [](int32_t strength, uint8_t ticks, int32_t theirStrength, uint8_t theirTicks) {
-		return theirTicks == 0 || strength > theirStrength || (strength == theirStrength && ticks > theirTicks);
-	};
-	bool passed = false;
-	if (withIgnite && source.igniteTicks > 0 && better(source.igniteDamagePerTick, source.igniteTicks, target.igniteDamagePerTick, target.igniteTicks)) {
-		target.igniteTicks = source.igniteTicks;
-		target.igniteDamagePerTick = source.igniteDamagePerTick;
-		target.igniteSource = static_cast<int8_t>(player.getId());
-		passed = true;
+	if (!gbIsPoe2 || monster.hasNoLife() || monster.isPlayerMinion() || damage <= 0)
+		return;
+	Poe2MonsterState &state = monster.poe2;
+	switch (element) {
+	case DamageType::Fire: {
+		const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * IgnitePercentPerSecond / 100 / TicksPerSecond), 1);
+		// A new ignite only replaces a weaker one, like POE2.
+		if (state.igniteTicks == 0 || perTick >= state.igniteDamagePerTick) {
+			state.igniteDamagePerTick = perTick;
+			state.igniteSource = static_cast<int8_t>(player.getId());
+		}
+		state.igniteTicks = IgniteTicks;
+		break;
 	}
-	if (source.shockTicks > target.shockTicks) {
-		if (target.shockTicks == 0)
-			AddVisualEffect(to.position.tile, MissileGraphicID::BlueFlareExplosion);
-		target.shockTicks = source.shockTicks;
-		passed = true;
+	case DamageType::Lightning:
+		state.shockTicks = ShockTicks;
+		break;
+	case DamageType::Magic:
+		if (InflictCold(monster, damage))
+			OnMonsterFrozen(player);
+		break;
+	default:
+		return;
 	}
-	if (source.chillTicks > 0 && better(source.chillPercent, source.chillTicks, target.chillPercent, target.chillTicks)) {
-		target.chillTicks = source.chillTicks;
-		target.chillPercent = source.chillPercent;
-		passed = true;
-	}
-	if (source.poisonTicks > 0 && better(source.poisonDamagePerTick, source.poisonTicks, target.poisonDamagePerTick, target.poisonTicks)) {
-		target.poisonTicks = source.poisonTicks;
-		target.poisonDamagePerTick = source.poisonDamagePerTick;
-		target.poisonSource = static_cast<int8_t>(player.getId());
-		passed = true;
-	}
-	if (passed)
-		to.tag(player);
-	return passed;
+	monster.tag(player);
 }
 
 } // namespace devilution

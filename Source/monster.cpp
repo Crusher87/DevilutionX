@@ -4419,9 +4419,6 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		OnReviveCandidateKilled(*MyPlayer, monster);
 		TryDropInfusion(monster);
 	}
-	// POE2 Mashup: the Sickness Road pact, every death passes its ailments on.
-	if (gbIsPoe2 && !risen)
-		OnProfaneRoadDeath(monster);
 	// POE2 Mashup: a minion's death can frenzy its owner's other minions.
 	if (gbIsPoe2 && monster.isPlayerMinion() && static_cast<size_t>(monster.goalVar3) < Players.size()) {
 		OnMinionDied(Players[static_cast<size_t>(monster.goalVar3)]);

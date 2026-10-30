@@ -6,6 +6,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -128,14 +129,16 @@ enum class AilmentSource : uint8_t {
  * magic (cold) hits chill and build up freeze; physical hits build up heavy stun.
  */
 void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage, AilmentSource source = AilmentSource::Strike);
-/** @brief Whether the monster is ignited, shocked, chilled or poisoned. */
-bool CarriesAilment(const Monster &monster);
 /**
- * @brief Passes a monster's ignite, shock, chill and poison to another, each replacing only a weaker or shorter one
- * (the Sickness Road's contagion). Never onto a player's minion.
- * @return Whether anything passed.
+ * @brief The element of the monster's ignite, chill or freeze, or shock, whichever has the most time left: Fire, Magic
+ * (cold) or Lightning. None if it carries none of them (poison doesn't count). For the Vizjerei Road's blast.
  */
-bool CopyAilments(const Monster &from, Monster &to, const Player &player, bool withIgnite = true);
+std::optional<DamageType> ElementalAilmentOf(const Monster &monster);
+/**
+ * @brief The Vizjerei Road's blast inflicts a fresh ailment of its element from its damage, never by chance: fire
+ * ignites, lightning shocks, cold (Magic) chills and builds up freeze. Passed as a spread ailment, so no gate stops it.
+ */
+void InflictBlastAilment(Monster &monster, const Player &player, DamageType element, Fixed26_6 damage);
 /**
  * @brief Chance in per mille that a hit inflicts an ailment, like POE2: 1% per 5% of the monster's ailment threshold
  * dealt as fire (its Flammability), 1% per 4% as lightning. Unique monsters' threshold is half their life.

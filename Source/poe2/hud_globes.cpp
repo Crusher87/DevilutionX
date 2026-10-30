@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <string>
+#include <tuple>
 
 #include "control/control.hpp"
 #include "control/control_flasks.hpp"
@@ -365,9 +366,15 @@ void DrawPoe2GlobeValues(const Surface &out)
 		DrawShadowedValue(out, StrCat("Combo ", player.poe2.combo), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorWhite);
 	if (player.poe2.frenzyCharges > 0)
 		DrawShadowedValue(out, StrCat("Frenzy ", player.poe2.frenzyCharges), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorOrange);
-	// The Sickness Road toll's fever, while it keeps the hero's own hits from inflicting ailments.
-	if (const int fever = SicknessFeverTicks(player); fever > 0)
-		DrawShadowedValue(out, StrCat("Fever ", (fever + 19) / 20, "s"), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorYellow);
+	// The Vizjerei Road toll's backlash: one line per element still biting, with its seconds left.
+	int backlashY = 58;
+	for (const auto &[element, name, colour] : { std::tuple { DamageType::Fire, "Burning", UiFlags::ColorOrange }, std::tuple { DamageType::Magic, "Chilled", UiFlags::ColorBlue },
+	         std::tuple { DamageType::Lightning, "Shocked", UiFlags::ColorYellow } }) {
+		if (const int ticks = VizjereiBacklashTicks(player, element); ticks > 0) {
+			DrawShadowedValue(out, StrCat(name, " ", (ticks + 19) / 20, "s"), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), backlashY }, colour);
+			backlashY += 14;
+		}
+	}
 }
 
 void DrawFlaskLiquidLevel(const Surface &out, Point position, ClxSprite sprite, int charges, int maxCharges)

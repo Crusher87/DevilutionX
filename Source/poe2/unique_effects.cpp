@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <functional>
 #include <optional>
+#include <vector>
 
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
@@ -33,6 +34,7 @@
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/weapon_kinds.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "utils/is_of.hpp"
@@ -171,33 +173,42 @@ int HitConditionPercent(const Player &player, const Monster &monster)
 
 Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, int32_t raw);
 
-/** @brief The Sickness Road toll's fever: 2 seconds in which the hero's own hits inflict no ailment. */
-constexpr uint8_t FeverTicks = 2 * TicksPerSecond;
-/** @brief The Sickness Road pact: this share of the tree's own melee damage also applies to spell hits. */
-constexpr int HiveBridgePercent = 75;
-/** @brief The Sickness Road pact: spell hits on a monster carrying no ailment deal this much less. */
-constexpr int HiveHealthyLessPercent = 20;
+/** @brief The Vizjerei Road toll's backlash: each blast's element bites the hero back for 2 seconds. */
+constexpr uint8_t BacklashTicks = 2 * TicksPerSecond;
+/** @brief Fire backlash: the hero burns for 1.5% of maximum life per second, in a pulse every half second. */
+constexpr int BacklashBurnPerMille = 15;
+constexpr int BacklashBurnPulseTicks = TicksPerSecond / 2;
+/** @brief Cold backlash: the hero moves and attacks this much slower. */
+constexpr int BacklashSlowPercent = 20;
+/** @brief Lightning backlash: the hero takes this much more damage from everything. */
+constexpr int BacklashDamageTakenPercent = 15;
+/** @brief The Vizjerei Road's lightning blast: arcs to this many monsters, the nearest first, within this many tiles. */
+constexpr size_t BlastArcTargets = 3;
+constexpr int BlastArcTiles = 4;
+/** @brief The Vizjerei Pact: this share of the tree's own melee damage also applies to spell hits. */
+constexpr int PactBridgePercent = 75;
+/** @brief The Vizjerei Pact: spell hits on a monster not burning, chilled, frozen or shocked deal this much less. */
+constexpr int PactUnafflictedLessPercent = 20;
 
-/** @brief The monster whose ailments Kill Burst's contagion passed on as it died (the pact's death spread skips it). */
-std::optional<size_t> BurstSpreadMonster;
-
-bool HasDarkSickness(const Player &player)
+/** @brief The Vizjerei Road toll, Stolen Elements (the stat keeps its old name, DarkSickness, in the tree data). */
+bool HasStolenElements(const Player &player)
 {
 	return PassiveTotal(player, PassiveStat::DarkSickness) > 0;
 }
 
-bool HasHiveBreath(const Player &player)
+/** @brief The Vizjerei Pact (the stat keeps its old name, HiveBreath, in the tree data). */
+bool HasVizjereiPact(const Player &player)
 {
 	return PassiveTotal(player, PassiveStat::HiveBreath) > 0;
 }
 
 /**
- * @brief The Sickness Road pact's bridge: 75% of the tree's own increased melee damage for the weapon in hand, never a
+ * @brief The Vizjerei Pact's bridge: 75% of the tree's own increased melee damage for the weapon in hand, never a
  * bridged stat (design v8 §5, S6). Nothing with a bow.
  */
-int HiveBridge(const Player &player)
+int PactBridge(const Player &player)
 {
-	if (!HasHiveBreath(player))
+	if (!HasVizjereiPact(player))
 		return 0;
 	const auto passive = [&player](PassiveStat stat) { return PassiveTotal(player, stat); };
 	const Item *weapon = HeldWeapon(player);
@@ -210,18 +221,107 @@ int HiveBridge(const Player &player)
 		melee = passive(PassiveStat::MeleeDamage) + passive(PassiveStat::StaffDamage) + passive(PassiveStat::TwoHandDamage);
 	else
 		melee = passive(PassiveStat::MeleeDamage) + passive(weapon->_iLoc == ILOC_TWOHAND ? PassiveStat::TwoHandDamage : PassiveStat::OneHandDamage);
-	return std::max(melee, 0) * HiveBridgePercent / 100;
+	return std::max(melee, 0) * PactBridgePercent / 100;
 }
 
-/** @brief The Sickness Road pact's price on a spell hit: less damage to a monster carrying no ailment, in percent. */
-int HiveHealthyPercent(const Player &player, const Monster &monster)
+/** @brief The Vizjerei Pact's price on a spell hit: less damage to a monster not burning, chilled, frozen or shocked, in percent. */
+int PactUnafflictedPercent(const Player &player, const Monster &monster)
 {
-	return HasHiveBreath(player) && !CarriesAilment(monster) ? 100 - HiveHealthyLessPercent : 100;
+	return HasVizjereiPact(player) && !ElementalAilmentOf(monster) ? 100 - PactUnafflictedLessPercent : 100;
+}
+
+int BacklashIndex(DamageType element)
+{
+	switch (element) {
+	case DamageType::Fire:
+		return 0;
+	case DamageType::Magic:
+		return 1;
+	default:
+		return 2;
+	}
+}
+
+/** @brief The elements bite back: a new blast sets its element's backlash to its full time, never longer. */
+void StartBacklash(const Player &player, DamageType element)
+{
+	UniqueRuleState &state = State(player);
+	state.backlashTicks[static_cast<size_t>(BacklashIndex(element))] = BacklashTicks;
+	state.lastBacklash = static_cast<uint8_t>(BacklashIndex(element) + 1);
+}
+
+bool HasBacklash(const Player &player, DamageType element)
+{
+	return gbIsPoe2 && State(player).backlashTicks[static_cast<size_t>(BacklashIndex(element))] > 0;
+}
+
+int TileDistance(Point a, Point b)
+{
+	return std::max(std::abs(a.x - b.x), std::abs(a.y - b.y));
+}
+
+bool BlastCanHit(const Monster &monster, const Monster &corpse)
+{
+	return &monster != &corpse && !monster.hasNoLife() && !monster.isPlayerMinion();
+}
+
+/** @brief One blast hit: the element's damage, then its fresh ailment on a monster that lives through it. */
+void BlastHit(const Player &player, Monster &monster, DamageType element, int32_t raw)
+{
+	const Fixed26_6 damage = DealPacket(player, monster, element, raw);
+	if (monster.hasNoLife()) {
+		M_StartKill(monster, player);
+		return;
+	}
+	InflictBlastAilment(monster, player, element, damage);
+}
+
+/**
+ * @brief The Vizjerei Road's elemental blast from a corpse that was burning, chilled, frozen or shocked: fire is a ring
+ * that ignites the enemies beside it, cold an ice shatter that chills them and builds up freeze, lightning arcs that
+ * shock up to 3 enemies within 4 tiles. Then the element bites the hero back.
+ */
+void ElementalBlast(const Player &player, const Monster &corpse, DamageType element, int32_t raw)
+{
+	const Point centre = corpse.position.tile;
+	if (element == DamageType::Lightning) {
+		AddVisualEffect(centre, MissileGraphicID::BlueFlareExplosion2);
+		vfx::Impact(centre, vfx::Element::Lightning, 2.F);
+		std::vector<Monster *> targets;
+		for (size_t i = 0; i < ActiveMonsterCount; i++) {
+			Monster &monster = Monsters[ActiveMonsters[i]];
+			if (BlastCanHit(monster, corpse) && TileDistance(monster.position.tile, centre) <= BlastArcTiles)
+				targets.push_back(&monster);
+		}
+		std::stable_sort(targets.begin(), targets.end(), [&centre](const Monster *a, const Monster *b) {
+			return TileDistance(a->position.tile, centre) < TileDistance(b->position.tile, centre);
+		});
+		if (targets.size() > BlastArcTargets)
+			targets.resize(BlastArcTargets);
+		for (Monster *monster : targets) {
+			vfx::Arc(centre, monster->position.tile, vfx::Element::Lightning);
+			AddVisualEffect(monster->position.tile, MissileGraphicID::Lightning);
+			BlastHit(player, *monster, element, raw);
+		}
+	} else {
+		const bool fire = element == DamageType::Fire;
+		AddVisualEffect(centre, fire ? MissileGraphicID::BigExplosion : MissileGraphicID::StoneCurseShatter);
+		vfx::Slam(centre, 1, fire ? vfx::Element::Fire : vfx::Element::Cold);
+		if (!fire)
+			vfx::IceSpike(centre, 0, 1.5F);
+		for (size_t i = 0; i < ActiveMonsterCount; i++) {
+			Monster &monster = Monsters[ActiveMonsters[i]];
+			if (!BlastCanHit(monster, corpse) || TileDistance(monster.position.tile, centre) > 1)
+				continue;
+			BlastHit(player, monster, element, raw);
+		}
+	}
+	StartBacklash(player, element);
 }
 
 /**
  * @brief Kill Burst: a monster killed in melee bursts and hurts the enemies beside it. Its kills don't burst. With the
- * Sickness Road toll, the enemies it hits catch the corpse's ignite, shock, chill and poison, and the hero the fever.
+ * Vizjerei Road toll it bursts only while burning, chilled, frozen or shocked, as one blast of that element.
  */
 void BurstCorpse(const Player &player, const Monster &corpse, int percent)
 {
@@ -229,30 +329,26 @@ void BurstCorpse(const Player &player, const Monster &corpse, int percent)
 	const int32_t raw = Percent(corpse.maxHitPoints.raw(), percent);
 	if (bursting || raw <= 0)
 		return;
+	std::optional<DamageType> element;
+	if (HasStolenElements(player)) {
+		element = ElementalAilmentOf(corpse);
+		if (!element)
+			return;
+	}
 	bursting = true;
-	const bool contagion = HasDarkSickness(player);
-	bool passed = false;
-	AddVisualEffect(corpse.position.tile, contagion ? MissileGraphicID::AcidSplat : MissileGraphicID::BloodStarExplosion);
+	if (element) {
+		ElementalBlast(player, corpse, *element, raw);
+		bursting = false;
+		return;
+	}
+	AddVisualEffect(corpse.position.tile, MissileGraphicID::BloodStarExplosion);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (&monster == &corpse || monster.hasNoLife() || monster.isPlayerMinion())
+		if (!BlastCanHit(monster, corpse) || TileDistance(monster.position.tile, corpse.position.tile) > 1)
 			continue;
-		if (std::max(std::abs(monster.position.tile.x - corpse.position.tile.x), std::abs(monster.position.tile.y - corpse.position.tile.y)) > 1)
-			continue;
-		// It catches the sickness before the blow lands, so a monster the burst kills dies carrying it.
-		if (contagion && CopyAilments(corpse, monster, player)) {
-			passed = true;
-			AddVisualEffect(monster.position.tile, MissileGraphicID::AcidSplat);
-		}
 		DealPacket(player, monster, DamageType::Physical, raw);
 		if (monster.hasNoLife())
 			M_StartKill(monster, player);
-	}
-	if (contagion) {
-		BurstSpreadMonster = corpse.getId();
-		// You carry it: a new burst sets the fever back to its full time, never longer.
-		if (passed)
-			State(player).feverTicks = FeverTicks;
 	}
 	bursting = false;
 }
@@ -509,9 +605,17 @@ void ProcessUniqueRules(Player &player)
 	countDown(state.moonwaterTicks);
 	countDown(state.blockRiposteTicks);
 	countDown(state.rotationTicks);
-	// The fever shows: the hero coughs up a sickly green splash now and then while it runs.
-	if (state.feverTicks > 0 && --state.feverTicks % 10 == 9 && &player == MyPlayer)
-		AddVisualEffect(player.position.tile, MissileGraphicID::AcidSplat);
+	// The Vizjerei Road's backlash: the fire burns the hero in pulses; cold and lightning only count down.
+	for (size_t element = 0; element < state.backlashTicks.size(); element++) {
+		if (state.backlashTicks[element] == 0)
+			continue;
+		state.backlashTicks[element]--;
+		if (element == 0 && state.backlashTicks[element] % BacklashBurnPulseTicks == 0 && &player == MyPlayer && !player.hasNoLife()) {
+			TelemetryNoteAttacker("own Vizjerei backlash");
+			ApplyPlrDamage(DamageType::Fire, player, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(player._pMaxHP.raw()) * BacklashBurnPerMille * BacklashBurnPulseTicks / TicksPerSecond / 1000)));
+			AddVisualEffect(player.position.tile, MissileGraphicID::FireArrowExplosion);
+		}
+	}
 	countDown(state.swapStrikeCooldown);
 	if (state.swapStrikeTicks > 0 && --state.swapStrikeTicks == 0)
 		state.swapStrikes = 0;
@@ -627,6 +731,8 @@ int UniqueAttackSpeedPercent(const Player &player)
 	// Ceaseless Hands: an attack frame faster per 5 stacks.
 	if (Rule(player, UniqueRule::UnarmedHitStacks) > 0 && HeldWeapon(player) == nullptr)
 		percent += State(player).unarmedStacks / 5 * 10;
+	if (HasBacklash(player, DamageType::Magic))
+		percent -= BacklashSlowPercent;
 	return percent;
 }
 
@@ -793,10 +899,10 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 	UniqueRuleState &state = State(player);
 	state.lastHitBySpell = true;
 	int percent = GeneralDamagePercent(player);
-	// Element damage adds to the spell's increased damage rather than multiplying it, and so does the Sickness Road's
+	// Element damage adds to the spell's increased damage rather than multiplying it, and so does the Vizjerei Pact's
 	// melee bridge.
 	const int increased = std::max(SpellIncreasedDamage(player), 1);
-	percent = percent * std::max(increased + PassiveElementDamage(player, type) + GearElementSpellDamage(player, type) + HiveBridge(player), 0) / increased;
+	percent = percent * std::max(increased + PassiveElementDamage(player, type) + GearElementSpellDamage(player, type) + PactBridge(player), 0) / increased;
 	if (const int more = Rule(player, UniqueRule::SpellElementCycle); more > 0 && IsElemental(type)) {
 		if (type == CycleElement(state.cycleElement))
 			percent = percent * (100 + more) / 100;
@@ -825,37 +931,38 @@ int UniqueSpellHitPercent(const Player &player, const Monster &monster, DamageTy
 	}
 	// Chiming Bolt's Sigil of Power: +20% while the hero stands in it.
 	percent = percent * SigilSpellDamagePercent(player) / 100;
-	return percent * HiveHealthyPercent(player, monster) / 100;
+	return percent * PactUnafflictedPercent(player, monster) / 100;
 }
 
-int SicknessSpellHitPercent(const Player &player, const Monster &monster)
+int VizjereiSpellHitPercent(const Player &player, const Monster &monster)
 {
-	if (!gbIsPoe2 || !HasHiveBreath(player))
+	if (!gbIsPoe2 || !HasVizjereiPact(player))
 		return 100;
 	const int increased = std::max(SpellIncreasedDamage(player), 1);
-	return (increased + HiveBridge(player)) * HiveHealthyPercent(player, monster) / increased;
+	return (increased + PactBridge(player)) * PactUnafflictedPercent(player, monster) / increased;
 }
 
 bool AilmentAllowed(const Player &player, AilmentSource source)
 {
 	if (!gbIsPoe2 || source == AilmentSource::Spread)
 		return true;
-	if (State(player).feverTicks > 0)
-		return false;
-	return source != AilmentSource::Spell || !HasHiveBreath(player);
+	return source != AilmentSource::Spell || !HasVizjereiPact(player);
 }
 
-int SicknessFeverTicks(const Player &player)
+int VizjereiBacklashTicks(const Player &player, DamageType element)
 {
-	return gbIsPoe2 ? State(player).feverTicks : 0;
+	return gbIsPoe2 ? State(player).backlashTicks[static_cast<size_t>(BacklashIndex(element))] : 0;
 }
 
-bool TakeBurstSpread(const Monster &monster)
+std::optional<DamageType> VizjereiLastBacklash(const Player &player)
 {
-	if (BurstSpreadMonster != monster.getId())
-		return false;
-	BurstSpreadMonster = std::nullopt;
-	return true;
+	if (!gbIsPoe2)
+		return std::nullopt;
+	const UniqueRuleState &state = State(player);
+	if (state.lastBacklash == 0 || state.backlashTicks[state.lastBacklash - 1U] == 0)
+		return std::nullopt;
+	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Magic, DamageType::Lightning };
+	return Elements[state.lastBacklash - 1U];
 }
 
 void OnSpellCast(const Player &player, SpellID spell, WorldTilePosition target, int spellLevel)
@@ -960,6 +1067,8 @@ int UniqueMovementSlowPercent(const Player &player)
 	if (const int heavy = Rule(player, UniqueRule::HeavyArmourSlow); heavy > 0 && Poe2Armour(player) > HeavyArmour)
 		slow += heavy;
 	slow += MapPlayerSlowPercent(player);
+	if (HasBacklash(player, DamageType::Magic))
+		slow += BacklashSlowPercent;
 	return std::clamp(slow, 0, 90);
 }
 
@@ -987,8 +1096,8 @@ void OnMonsterKilled(Player &player, const Monster &monster)
 	    && PassiveTotal(player, PassiveStat::KingsDeadPact) > 0;
 	if (Rule(player, UniqueRule::TwoHandKillFrenzy) > 0 && ((meleeKill && HoldsTwoHandMelee(player)) || bowKill))
 		GainRuleFrenzyCharge(player);
-	// The Sickness Road toll: Kill Burst needs a monster carrying an ailment.
-	if (const int burst = Rule(player, UniqueRule::KillBurst); burst > 0 && meleeKill && (!HasDarkSickness(player) || CarriesAilment(monster)))
+	// Kill Burst; on the Vizjerei Road a blast, and with its pact spell kills blast too.
+	if (const int burst = Rule(player, UniqueRule::KillBurst); burst > 0 && (meleeKill || (state.lastHitBySpell && HasVizjereiPact(player))))
 		BurstCorpse(player, monster, burst);
 	if (Rule(player, UniqueRule::SpellEchoes) > 0 && state.lastHitBySpell)
 		state.echoes = static_cast<uint8_t>(std::min(state.echoes + 1, 255));
@@ -1201,6 +1310,8 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 		return damage;
 	UniqueRuleState &state = State(player);
 	int64_t raw = damage.raw() * MapDamageTakenPercent(player) / 100;
+	if (HasBacklash(player, DamageType::Lightning))
+		raw = raw * (100 + BacklashDamageTakenPercent) / 100;
 	if (const int more = Rule(player, UniqueRule::MovingVulnerability); more > 0 && state.sinceMovedTicks < TicksPerSecond)
 		raw = raw * (100 + more) / 100;
 	if (const int cap = Rule(player, UniqueRule::OvercapResistGuard); cap > 0) {

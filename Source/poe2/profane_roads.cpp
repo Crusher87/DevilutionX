@@ -243,29 +243,6 @@ void ProcessProfaneRoads()
 	CountDownKingsDead();
 }
 
-void OnProfaneRoadDeath(const Monster &monster)
-{
-	if (!gbIsPoe2 || gbIsMultiplayer || MyPlayer == nullptr || monster.isPlayerMinion())
-		return;
-	// A death that Kill Burst's contagion already spread doesn't spread again.
-	if (TakeBurstSpread(monster))
-		return;
-	const Player &player = *MyPlayer;
-	if (PassiveTotal(player, PassiveStat::HiveBreath) <= 0 || !CarriesAilment(monster))
-		return;
-	// An ignite Warden of Embers already spread stays where it is.
-	const bool withIgnite = !monster.poe2.igniteSpread;
-	for (size_t i = 0; i < ActiveMonsterCount; i++) {
-		Monster &other = Monsters[ActiveMonsters[i]];
-		if (&other == &monster || other.hasNoLife() || other.isPlayerMinion())
-			continue;
-		if (std::max(std::abs(other.position.tile.x - monster.position.tile.x), std::abs(other.position.tile.y - monster.position.tile.y)) > 1)
-			continue;
-		if (CopyAilments(monster, other, player, withIgnite))
-			AddVisualEffect(other.position.tile, MissileGraphicID::AcidSplat);
-	}
-}
-
 void ClearPendingRises()
 {
 	PendingRises.clear();
