@@ -9,6 +9,7 @@
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
 #include "objects.h"
+#include "poe2/cathedral_floors.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -158,6 +159,8 @@ void BuildFloorRooms()
 
 int FloorRoomAt(Point tile)
 {
+	if (IsCathedralFunnelFloor())
+		return CathedralRoomAt(tile);
 	if (!UsesChambers())
 		return static_cast<uint8_t>(dTransVal[tile.x][tile.y]);
 	return Chambers[static_cast<size_t>(tile.x) * MAXDUNY + static_cast<size_t>(tile.y)];
