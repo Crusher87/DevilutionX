@@ -19,6 +19,7 @@
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/camera_shake.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/loot.hpp"
@@ -105,10 +106,10 @@ const SupportData Table[] = {
 	{ SG::FuelThePyre, "Pyre's Hunger", "30% of hits as extra fire against\nburning monsters; can't ignite. Mana +20%", "Needs a damaging skill", GC::Strength, 7, 120, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::Frostbite, "Chilling Touch", "Freezing a monster gives your hits 25%\nextra cold for 5 seconds. Mana +10%", "Needs a cold skill", GC::Magic, 5, 110, 0, ST_Frost, 0, 0, NoFamily },
 	{ SG::Conductor, "Lightning Rod", "Hits on shocked monsters arc to one\nmore; can't shock. Mana +20%", "Needs a lightning skill", GC::Dexterity, 6, 120, 0, ST_Lightning, 0, 0, NoFamily },
-	{ SG::SerratedEdge, "Open Wounds", "Hits have a 25% chance to make\nmonsters bleed. Mana +10%", "Needs a physical attack", GC::Dexterity, 3, 110, 0, ST_Attack | PhysicalHit, 0, 0, NoFamily },
+	{ SG::SerratedEdge, "Open Wounds", "Hits have a 25% chance to make\nmonsters bleed. Mana +10%", "Needs a physical skill", GC::Dexterity, 3, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
 	{ SG::Envenom, "Venom", "Hits poison for 20% of physical and chaos\na second for 2s. 15% less damage. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 5, 110, PhysicalHit | ST_Chaos, 0, 0, 0, NoFamily },
 	{ SG::Bloodlust, "Bloodthirst", "30% more physical damage against\nbleeding monsters. Mana +10%", "Needs a melee attack", GC::Strength, 5, 110, 0, ST_Melee, 0, 0, NoFamily },
-	{ SG::SunderArmour, "Crack Armor", "Hits break armour: 20% more physical\ndamage taken for 6 seconds. Mana +10%", "Needs a physical attack", GC::Strength, 4, 110, 0, ST_Attack | PhysicalHit, 0, 0, NoFamily },
+	{ SG::SunderArmour, "Crack Armor", "Hits break armour: 20% more physical\ndamage taken for 6 seconds. Mana +10%", "Needs a physical skill", GC::Strength, 4, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
 	{ SG::Pestilence, "Pestilence", "A monster dying with your bleed, poison or\nignite on it passes it to 2 more. Mana +30%", "Needs a damaging skill", GC::Magic, 8, 130, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::HoradricSeals, "Horadric Seals", "Stores a seal every 1.5s, up to 2; the next\ncast repeats once per seal at 50%. Mana +50%", "Needs a spell", GC::Magic, 9, 150, 0, ST_Spell, ST_Channelling | ST_Movement, 0, Repeat },
 	{ SG::StoredVolley, "Held Volley", "Stores a seal every second, up to 6; the\nnext use fires 1 more projectile each. Mana +20%", "Needs a projectile skill", GC::Dexterity, 7, 120, 0, ST_Projectile, 0, 0, MoreProjectiles },
@@ -159,6 +160,9 @@ const SupportData Table[] = {
 	{ SG::PlagueBurst, "Plague Burst", "Its poisons build plague that bursts\nwhen the enemy dies. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
 	{ SG::GraveProfanity, "Grave Profanity", "Takes a corpse near you on use for 30%\nmore chaos damage. Mana +10%", "Needs a damaging skill", GC::Magic, 1, 110, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::BloodSacrifice, "Blood Sacrifice", "Pays 10% of your life on use; hits gain\n35% of damage as chaos", "Needs a damaging skill", GC::Magic, 6, 100, 0, DamageSkill, 0, 0, NoFamily },
+	// Physical spells plan (Curtis 2026-10-31): POE2's Brutality (here Savagery is the melee one) and Bone Shrapnel.
+	{ SG::Might, "Might", "Power: 30% more physical damage, but no\nfire, cold, lightning or chaos. Mana +20%", "Needs a physical skill", GC::Strength, 3, 120, 0, PhysicalHit, ST_Herald | ST_Minion, SF_Power, NoFamily },
+	{ SG::BoneSplinters, "Bone Splinters", "Enemies killed while trapped or heavily\nstunned burst for 25% of their life. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
 };
 // clang-format on
 
@@ -349,6 +353,9 @@ AilmentSource HitSource()
 void DealExtra(const Player &player, Monster &monster, DamageType type, Fixed26_6 damage)
 {
 	if (damage <= 0 || !CanHit(monster) || &player != MyPlayer)
+		return;
+	// Might: the skill's hits deal nothing but physical damage, what they add on top included.
+	if (type != DamageType::Physical && (Hit.depth > 0 || Hit.finishing) && Hit.player == &player && HitHas(SG::Might))
 		return;
 	const Fixed26_6 dealt = Fixed26_6::fromRaw(Percent(damage.raw(), MonsterDamageTakenPercent(monster, type)));
 	ApplyMonsterDamage(type, monster, dealt);
@@ -1227,7 +1234,11 @@ bool SupportsConflict(SupportGem a, SupportGem b)
 		return true;
 	// Infusions turn physical damage into an element, which Brutality forbids.
 	const auto infusion = [](SupportGem gem) { return IsAnyOf(gem, SG::InfusedFlames, SG::InfusedStorm, SG::InfusedFrost, SG::HolyInfusion); };
-	return (infusion(a) && b == SupportGem::Brutality) || (infusion(b) && a == SupportGem::Brutality);
+	if ((infusion(a) && b == SupportGem::Brutality) || (infusion(b) && a == SupportGem::Brutality))
+		return true;
+	// Might deals no damage but physical: it won't go with a support that adds another type.
+	const auto adds = [&infusion](SupportGem gem) { return infusion(gem) || IsAnyOf(gem, SG::DarkEnchant, SG::BloodSacrifice); };
+	return (adds(a) && b == SG::Might) || (adds(b) && a == SG::Might);
 }
 
 bool LineageSupportInUse(const Poe2PlayerData &data, SupportGem gem, size_t slot, size_t socket)
@@ -1375,6 +1386,13 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 		}
 		case SG::MartialTempo:
 			more(-Value(player, skill, gem, 1));
+			break;
+		case SG::Might:
+			// POE2's Brutality: more physical damage, and none of any other type.
+			if (type == DamageType::Physical)
+				more(Value(player, skill, gem, 0));
+			else
+				percent = 0;
 			break;
 		case SG::Brutality:
 			// Brutality III: some hits ignore armour, as if it were broken.
@@ -1694,6 +1712,13 @@ void OnSupportedKill(Monster &monster)
 		return;
 	const SkillSlot skill { static_cast<SkillKind>(monster.poe2.lastHitSkillKind), monster.poe2.lastHitSkillId };
 	SupportRuntime &state = player.poe2.supportState;
+	// Bone Splinters (POE2's Bone Shrapnel): one killed while trapped or heavily stunned bursts in bone for a share of its life.
+	if (Has(player, skill, SG::BoneSplinters) && monster.poe2.heavyStunTicks > 0) {
+		const Fixed26_6 burst = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * Value(player, skill, SG::BoneSplinters, 0) / 100, INT32_MAX / 2)));
+		AddBurst(monster.position.tile, BoneSplintersRadius, 0, DamageType::Physical, MissileGraphicID::BoneHit, burst);
+		vfx::Impact(monster.position.tile, vfx::Element::Bone, 1.4F);
+		ShakeCamera(ShakeStrength::Light, 4);
+	}
 	if (Has(player, skill, SG::Pestilence) && (monster.poe2.bleedTicks > 0 || monster.poe2.poisonTicks > 0 || monster.poe2.igniteTicks > 0))
 		PassDamageOverTime(player, monster);
 	if (Has(player, skill, SG::WarlordsBloodPact))

@@ -774,7 +774,8 @@ bool SupportMeleeKnocksBack(const Player &player)
 
 bool SupportMeleeIsPhysicalOnly(const Player &player)
 {
-	return player.poe2.hasSupport(CurrentAttackSkill(player), SupportGem::Brutality);
+	const SkillSlot skill = CurrentAttackSkill(player);
+	return player.poe2.hasSupport(skill, SupportGem::Brutality) || player.poe2.hasSupport(skill, SupportGem::Might);
 }
 
 int8_t SupportAttackSkippedFrames(const Player &player, WeaponSkill skill)

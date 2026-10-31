@@ -168,6 +168,10 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::GraveProfanity, 2, 5, 110, { 40, 0, 0 }, "Takes a corpse near you on use for 40%\nmore chaos damage. Mana +10%" },
 	// Extraction: 10% of life paid on use, 35% of the hit gained as chaos.
 	{ SG::BloodSacrifice, 1, 3, 100, { 35, 10, 0 }, "Pays 10% of your life on use; hits gain\n35% of damage as chaos" },
+	// Brutality: more physical damage, no other type (POE2 Brutality II's 30%).
+	{ SG::Might, 1, 2, 120, { 30, 0, 0 }, "Power: 30% more physical damage, but no\nfire, cold, lightning or chaos. Mana +20%" },
+	// Bone Shrapnel: a pinned enemy's death bursts for 25% of its life as physical (radius 20, about 2 tiles).
+	{ SG::BoneSplinters, 1, 3, 120, { 25, 0, 0 }, "Enemies killed while trapped or heavily\nstunned burst for 25% of their life. Mana +20%" },
 };
 
 } // namespace

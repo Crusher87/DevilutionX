@@ -78,6 +78,8 @@ constexpr int DarkArtsLevels = 1;
 /** @brief Plague Burst: the plague a monster stores is at most this share of its life, in percent, and bursts this far. */
 constexpr int PlagueBurstMaxLifePercent = 20;
 constexpr int PlagueBurstRadius = 2;
+/** @brief Bone Splinters: a monster killed while trapped or heavily stunned bursts within this many tiles. */
+constexpr int BoneSplintersRadius = 2;
 /** @brief Grave Profanity takes a corpse within this many tiles of the hero. */
 constexpr int GraveProfanityTiles = 5;
 

@@ -425,5 +425,161 @@ TEST_F(Poe2PhysicalSpellsTest, BloodNovaBleedsTheRingForLife)
 	EXPECT_EQ(far.poe2.bleedTicks, 0);
 }
 
+// Open Wounds and Crack Armor fit physical spells now, not only attacks.
+TEST_F(Poe2PhysicalSpellsTest, OpenWoundsAndCrackArmorWorkForSpells)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SkillSlot spikes = SkillSlot::ForAttack(WeaponSkill::BoneSpikes);
+	for (const SupportGem gem : { SupportGem::SerratedEdge, SupportGem::SunderArmour }) {
+		for (const WeaponSkill skill : { WeaponSkill::BoneSpikes, WeaponSkill::BoneSpear, WeaponSkill::BloodNova, WeaponSkill::BonePrison, WeaponSkill::Cleave })
+			EXPECT_TRUE(SupportGemCanSupport(gem, SkillSlot::ForAttack(skill))) << SupportGemName(gem) << " " << Row(skill).name;
+		EXPECT_FALSE(SupportGemCanSupport(gem, SkillSlot::ForSpell(SpellID::Fireball))) << SupportGemName(gem);
+		EXPECT_FALSE(SupportGemCanSupport(gem, SkillSlot::ForAttack(WeaponSkill::GlacialSpike))) << SupportGemName(gem);
+	}
+
+	// Open Wounds III always bleeds.
+	Supported(spikes, SupportGem::SerratedEdge, 3);
+	Monster &cut = PlaceMonster(0, { 41, 40 });
+	{
+		const SupportHitScope scope(player, spikes);
+		ExecuteTableSkill(player, Row(WeaponSkill::BoneSpikes), { 46, 40 });
+	}
+	EXPECT_GT(cut.poe2.bleedTicks, 0);
+	ClearMonsters();
+
+	Supported(spikes, SupportGem::SunderArmour);
+	Monster &cracked = PlaceMonster(0, { 41, 40 });
+	{
+		const SupportHitScope scope(player, spikes);
+		ExecuteTableSkill(player, Row(WeaponSkill::BoneSpikes), { 46, 40 });
+	}
+	EXPECT_GT(cracked.poe2.armourBreakTicks, 0);
+}
+
+// Might (POE2's Brutality): 30% more physical damage, and none of any other type.
+TEST_F(Poe2PhysicalSpellsTest, MightIsPhysicalOnly)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SupportData *data = FindSupportData(SupportGem::Might);
+	ASSERT_NE(data, nullptr);
+	EXPECT_EQ(data->name, "Might");
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::Might, 1, 0), 3);
+	const SkillSlot spikes = SkillSlot::ForAttack(WeaponSkill::BoneSpikes);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::Might, spikes));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::Might, SkillSlot::ForAttack(WeaponSkill::Cleave)));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::Might, SkillSlot::ForSpell(SpellID::Fireball)));
+	for (const SupportGem other : { SupportGem::InfusedFlames, SupportGem::InfusedStorm, SupportGem::InfusedFrost, SupportGem::HolyInfusion, SupportGem::DarkEnchant, SupportGem::BloodSacrifice })
+		EXPECT_TRUE(SupportsConflict(SupportGem::Might, other)) << SupportGemName(other);
+	EXPECT_FALSE(SupportsConflict(SupportGem::Might, SupportGem::SerratedEdge));
+
+	Supported(spikes, SupportGem::Might);
+	Monster &hit = PlaceMonster(0, { 45, 45 });
+	{
+		const SupportHitScope scope(player, spikes);
+		EXPECT_EQ(SupportHitDamagePercent(hit, DamageType::Physical), 130);
+		EXPECT_EQ(SupportHitDamagePercent(hit, DamageType::Fire), 0);
+		EXPECT_EQ(SupportHitDamagePercent(hit, DamageType::Chaos), 0);
+	}
+	// What a support adds on top is gone too: Fire Enchant's fire never lands.
+	player.poe2.slotSupports[0][1] = SupportGem::InfusedFlames;
+	player.poe2.slotSupportTiers[0][1] = 1;
+	{
+		const SupportHitScope scope(player, spikes);
+		NoteSupportedDamage(hit, DamageType::Physical, Fixed26_6::fromInt(50));
+	}
+	EXPECT_EQ(hit.hitPoints, hit.maxHitPoints);
+	Supported(spikes, SupportGem::InfusedFlames);
+	Monster &burnt = PlaceMonster(1, { 46, 45 });
+	{
+		const SupportHitScope scope(player, spikes);
+		NoteSupportedDamage(burnt, DamageType::Physical, Fixed26_6::fromInt(50));
+	}
+	EXPECT_LT(burnt.hitPoints, burnt.maxHitPoints);
+
+	// A cast hits 30% harder.
+	ClearMonsters();
+	Supported(spikes);
+	Monster &plain = PlaceMonster(0, { 41, 40 });
+	SetRndSeed(7);
+	{
+		const SupportHitScope scope(player, spikes);
+		ExecuteTableSkill(player, Row(WeaponSkill::BoneSpikes), { 46, 40 });
+	}
+	const int64_t base = (plain.maxHitPoints - plain.hitPoints).raw();
+	ClearMonsters();
+	Supported(spikes, SupportGem::Might);
+	Monster &mighty = PlaceMonster(0, { 41, 40 });
+	SetRndSeed(7);
+	{
+		const SupportHitScope scope(player, spikes);
+		ExecuteTableSkill(player, Row(WeaponSkill::BoneSpikes), { 46, 40 });
+	}
+	const int64_t more = (mighty.maxHitPoints - mighty.hitPoints).raw();
+	ASSERT_GT(base, 0);
+	EXPECT_NEAR(static_cast<double>(more), static_cast<double>(base) * 1.3, static_cast<double>(base) * 0.02 + 2);
+}
+
+// Bone Splinters (POE2's Bone Shrapnel): a monster killed while trapped or heavily stunned bursts for 25% of its life.
+TEST_F(Poe2PhysicalSpellsTest, BoneSplintersBurstTrappedKills)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SupportData *data = FindSupportData(SupportGem::BoneSplinters);
+	ASSERT_NE(data, nullptr);
+	EXPECT_EQ(data->name, "Bone Splinters");
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::BoneSplinters, 1, 0), 6);
+	const SkillSlot spikes = SkillSlot::ForAttack(WeaponSkill::BoneSpikes);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::BoneSplinters, spikes));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::BoneSplinters, SkillSlot::ForSpell(SpellID::Fireball)));
+	Supported(spikes, SupportGem::BoneSplinters);
+
+	const auto killedBy = [&](Monster &monster, SkillSlot skill) {
+		monster.poe2.lastHitPlayer = 0;
+		monster.poe2.lastHitSkillKind = static_cast<uint8_t>(skill.kind);
+		monster.poe2.lastHitSkillId = skill.id;
+		monster.hitPoints = Fixed26_6::fromInt(0);
+		monster.mode = MonsterMode::Death;
+		OnSupportedKill(monster);
+		for (int i = 0; i < 3; i++)
+			ProcessSupportEffects(player);
+	};
+	// Trapped: it bursts on the monsters around it, not further.
+	Monster &trapped = PlaceMonster(0, { 45, 45 });
+	trapped.maxHitPoints = Fixed26_6::fromInt(1000);
+	trapped.poe2.heavyStunTicks = 30;
+	Monster &beside = PlaceMonster(1, { 46, 45 });
+	Monster &far = PlaceMonster(2, { 49, 45 });
+	ASSERT_EQ(MonsterDamageTakenPercent(beside, DamageType::Physical), 100);
+	killedBy(trapped, spikes);
+	EXPECT_EQ(beside.hitPoints, beside.maxHitPoints - Fixed26_6::fromInt(250));
+	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
+
+	// Not trapped, or killed by another skill: nothing.
+	beside.hitPoints = beside.maxHitPoints;
+	Monster &free = PlaceMonster(3, { 45, 44 });
+	free.maxHitPoints = Fixed26_6::fromInt(1000);
+	killedBy(free, spikes);
+	Monster &other = PlaceMonster(4, { 44, 45 });
+	other.maxHitPoints = Fixed26_6::fromInt(1000);
+	other.poe2.heavyStunTicks = 30;
+	killedBy(other, SkillSlot::ForAttack(WeaponSkill::BoneSpear));
+	EXPECT_EQ(beside.hitPoints, beside.maxHitPoints);
+}
+
+TEST_F(Poe2PhysicalSpellsTest, PhysicalSupportsHaveItems)
+{
+	for (const SupportGem gem : { SupportGem::Might, SupportGem::BoneSplinters }) {
+		const SupportData *data = FindSupportData(gem);
+		ASSERT_NE(data, nullptr);
+		EXPECT_GT(static_cast<int>(gem), static_cast<int>(SupportGem::BloodSacrifice));
+		Item item;
+		ASSERT_TRUE(CreateSupportGemItem(item, gem)) << data->name;
+		EXPECT_EQ(SupportGemForItem(item), gem) << data->name;
+		EXPECT_FALSE(IsLineageSupport(gem)) << data->name;
+	}
+}
+
 } // namespace
 } // namespace devilution

@@ -301,6 +301,9 @@ enum class SupportGem : uint8_t {
 	PlagueBurst,
 	GraveProfanity,
 	BloodSacrifice,
+	/** Physical spells plan: POE2's Brutality and Bone Shrapnel. */
+	Might,
+	BoneSplinters,
 	Count,
 };
 
