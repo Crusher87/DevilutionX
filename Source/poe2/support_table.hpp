@@ -154,6 +154,16 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage);
  */
 void NoteHitDamageTakenPercent(const Monster &monster, DamageType type, int percent);
 /**
+ * @brief The monster armour reduction of the physical packet about to be dealt, in percent (MonsterHitDamage): poison,
+ * bleeds and the supports' extra damage count the hit from before it, as in POE2.
+ */
+void NoteHitArmourPercent(const Monster &monster, int percent);
+/**
+ * @brief Whether Brutality III's roll for the physical packet in progress (made in SupportHitDamagePercent) said to
+ * ignore armour; clears it, so it never carries over to another packet.
+ */
+[[nodiscard]] bool TakeHitIgnoresArmour();
+/**
  * POE2's poison (Curtis 2026-10-30): each second for 2 seconds it deals 20% of the hit's physical and chaos damage, as
  * counted before the monster's resistance. Only the strongest poison on a monster deals damage, unless the skill or
  * support says its poisons stack.

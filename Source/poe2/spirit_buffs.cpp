@@ -18,6 +18,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
@@ -89,9 +90,9 @@ Fixed26_6 WeaponHit(const Player &player, int percent)
 }
 
 /** @brief Deals the damage to the monster for the local hero; whether it lives. */
-bool HitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent = 100)
+bool HitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent = 100, bool ignoreArmour = false)
 {
-	const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * MonsterDamageTakenPercent(monster, type) / 100));
+	const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(MonsterHitDamage(player, monster, type, damage.raw(), ignoreArmour ? ArmourHit::Ignore : ArmourHit::Hit)));
 	ApplyMonsterDamage(type, monster, dealt);
 	monster.tag(player);
 	TryInflictAilment(monster, player, type, Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(dealt.raw()) * ailmentPercent / 100, INT32_MAX / 2))), AilmentSource::Spell);
@@ -586,9 +587,9 @@ int FlaskMinionHealPercent(const Player &player)
 	return On(player, PersistentSkill::AlchemistsBoon) ? AlchemistMinionHealPercent(GemLevel(player, PersistentSkill::AlchemistsBoon)) : 0;
 }
 
-bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent)
+bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent, bool ignoreArmour)
 {
-	return HitMonster(player, monster, type, damage, ailmentPercent);
+	return HitMonster(player, monster, type, damage, ailmentPercent, ignoreArmour);
 }
 
 bool BlinkReplacesDodge(const Player &player)

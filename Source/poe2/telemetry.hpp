@@ -127,6 +127,11 @@ private:
  */
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore, DamageType damageType);
 void TelemetryMonsterKilled(const Monster &monster);
+/**
+ * @brief Physical damage of the local hero's hit that the monster's armour stopped, a raw Fixed26_6 after its damage
+ * taken: credited to the skill the damage that follows goes to, for the "armour stopped" part of the skill damage.
+ */
+void TelemetryArmourStopped(const Monster &monster, int64_t stoppedRaw);
 void TelemetryPlayerDamaged(const Player &player, DamageType damageType, Fixed26_6 damage);
 void TelemetryPlayerDied(const Player &player);
 void TelemetryLevelUp(const Player &player);

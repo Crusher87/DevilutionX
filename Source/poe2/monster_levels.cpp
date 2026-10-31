@@ -19,6 +19,7 @@
 #include "poe2/area_levels.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/spirit.hpp"
@@ -247,6 +248,7 @@ void LoadMonsterLevels()
 	OtherUniqueRow = { 450, 150 };
 	LoadMonsterChaosResistances();
 	LoadMonsterColdResistances();
+	LoadMonsterArmour();
 	if (!gbIsPoe2)
 		return;
 	LoadLevelRows();

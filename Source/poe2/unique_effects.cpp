@@ -18,6 +18,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
@@ -466,7 +467,8 @@ Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, in
 		raw = static_cast<int32_t>(static_cast<int64_t>(raw) * std::max<int64_t>(increased + element, 0) / increased);
 	}
 	TelemetryHitStep(false, DamageTypePacketName(type), raw, false, true);
-	raw = Percent(raw, MonsterDamageTakenPercent(monster, type));
+	// The monster's damage taken, then its armour against a physical packet (Brutality's roll comes first).
+	raw = static_cast<int32_t>(MonsterHitDamage(player, monster, type, raw));
 	const Fixed26_6 damage = ApplyShock(monster, Fixed26_6::fromRaw(raw));
 	ApplyMonsterDamage(type, monster, damage);
 	TryInflictAilment(monster, player, type, damage);
@@ -1230,9 +1232,16 @@ void ProcessUniqueMonsterAilments(Monster &monster)
 
 int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 {
+	return MonsterDamageTakenParts(monster, type).percent;
+}
+
+MonsterDamageTaken MonsterDamageTakenParts(const Monster &monster, DamageType type)
+{
 	if (!gbIsPoe2)
-		return 100;
+		return {};
 	int percent = 100;
+	// The attacker's own more and less, which monster armour counts the hit after (POE2).
+	int rulePercent = 0;
 	// Amplify Damage and Smite's armour break.
 	if (type == DamageType::Physical) {
 		if (monster.poe2.amplifyTicks > 0)
@@ -1248,9 +1257,10 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 	// Talismans and desecrated modifiers that favour hunting rare and unique monsters.
 	if (MyPlayer != nullptr) {
 		if (monster.isUnique() || GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
-			percent += Rule(*MyPlayer, UniqueRule::DamageVsRareUnique);
+			rulePercent = Rule(*MyPlayer, UniqueRule::DamageVsRareUnique);
 		else
-			percent -= Rule(*MyPlayer, UniqueRule::LessDamageVsNormal);
+			rulePercent = -Rule(*MyPlayer, UniqueRule::LessDamageVsNormal);
+		percent += rulePercent;
 	}
 	if (deep)
 		TelemetryHitStep(false, "curses, armour break and rules against this monster", percent, true, true);
@@ -1271,7 +1281,9 @@ int MonsterDamageTakenPercent(const Monster &monster, DamageType type)
 	}
 	// Poison counts the hit from before all this.
 	NoteHitDamageTakenPercent(monster, type, std::max(percent, 0));
-	return std::max(percent, 0);
+	// Withered is the monster's (chaos only); the rest of the supports' and spirit buffs' percent is the attacker's.
+	const int attacker = std::max(100 + rulePercent, 0) * (supportPercent * 100 / std::max(100 + WitheredDamageTakenPercent(monster, type), 1)) / 100 * spiritPercent / 100;
+	return { std::max(percent, 0), std::max(attacker, 0) };
 }
 
 int HitPenetration(DamageType type)

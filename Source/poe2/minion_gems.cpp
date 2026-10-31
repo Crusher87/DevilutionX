@@ -251,7 +251,8 @@ void SwarmBite(Player &player, Monster &monster, int gemLevel)
 	AddVisualEffect(monster.position.tile, MissileGraphicID::AcidSplat);
 	vfx::Sparks(monster.position.tile, vfx::Element::Chaos, 0.5F);
 	TelemetryNoteDamageSource("Ravenous Swarm");
-	if (!SpiritHitMonster(player, monster, DamageType::Physical, Fixed26_6::fromRaw(bite)))
+	// Minion damage: monster armour leaves it alone for now (Curtis), like the skeletons' and golems' blows.
+	if (!SpiritHitMonster(player, monster, DamageType::Physical, Fixed26_6::fromRaw(bite), 100, true))
 		return;
 	// Each bite adds a poison of its own, up to a few at once.
 	Poe2MonsterState &target = monster.poe2;

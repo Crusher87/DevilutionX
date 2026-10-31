@@ -151,6 +151,15 @@ void ProcessUniqueMonsterAilments(Monster &monster);
 /** @brief More damage the monster takes from exposure and electrocution, in percent. */
 /** @brief Damage the monster takes in percent: its resistance, curses, exposure, supports and more. */
 [[nodiscard]] int MonsterDamageTakenPercent(const Monster &monster, DamageType type);
+/** @brief MonsterDamageTakenPercent, and the share of it that is the attacker's own more and less. */
+struct MonsterDamageTaken {
+	/** All of it, as MonsterDamageTakenPercent. */
+	int percent = 100;
+	/** The attacker's part: the supports of the hit, spirit buffs and the rules against rare and normal monsters. */
+	int attackerPercent = 100;
+};
+/** @brief MonsterDamageTakenPercent with its attacker's part (for monster armour), in one call: one Brutality roll. */
+[[nodiscard]] MonsterDamageTaken MonsterDamageTakenParts(const Monster &monster, DamageType type);
 /** @brief The local player's penetration for the hit in progress: its supports' and the uniques'. */
 [[nodiscard]] int HitPenetration(DamageType type);
 [[nodiscard]] bool IsMonsterElectrocuted(const Monster &monster);
