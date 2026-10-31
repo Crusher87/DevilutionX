@@ -16,6 +16,8 @@
 #include "poe2/defenses.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/skill_details.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_rules.hpp"
 #include "poe2/uniques.hpp"
@@ -1201,13 +1203,27 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 		int bonus = stat(Poe2ItemStat::SpellSkillLevels);
 		const SpellID spell = skill.spell();
 		if (static_cast<size_t>(spell) < SpellsData.size()) {
-			// The spell's element as its damage has it (skill_details): fire, lightning, or cold (magic).
-			switch (GetSpellData(spell).type()) {
-			case MagicType::Fire:
+			// A damaging spell's element is the type its hits deal (skill_details): Nova is lightning, Holy Bolt fire,
+			// Blood Star physical and Bone Spirit chaos. A spell without damage keeps its school's: fire, lightning or cold.
+			DamageType type = DamageType::Cold;
+			if ((SkillTags(skill) & ST_Damage) != 0)
+				type = SpellDamageType(spell);
+			else if (GetSpellData(spell).type() == MagicType::Fire)
+				type = DamageType::Fire;
+			else if (GetSpellData(spell).type() == MagicType::Lightning)
+				type = DamageType::Lightning;
+			switch (type) {
+			case DamageType::Fire:
 				bonus += stat(Poe2ItemStat::FireSkillLevels);
 				break;
-			case MagicType::Lightning:
+			case DamageType::Lightning:
 				bonus += stat(Poe2ItemStat::LightningSkillLevels);
+				break;
+			case DamageType::Physical:
+				bonus += stat(Poe2ItemStat::PhysicalSkillLevels);
+				break;
+			case DamageType::Chaos:
+				bonus += stat(Poe2ItemStat::ChaosSkillLevels);
 				break;
 			default:
 				bonus += stat(Poe2ItemStat::ColdSkillLevels);

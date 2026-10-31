@@ -271,6 +271,9 @@ DamageType MonsterHitDamageType(const Monster *monster, MissileID missile, Damag
 {
 	if (!gbIsPoe2 || monster == nullptr)
 		return type;
+	// A Snow Witch's star is blue and icy: it stays cold though Blood Star is physical (Curtis 2026-10-31: blood).
+	if (missile == MissileID::BloodStar && monster->type().type == MT_SNOWWICH)
+		return DamageType::Cold;
 	switch (monster->ai) {
 	case MonsterAIID::Lich:
 	case MonsterAIID::ArchLich:

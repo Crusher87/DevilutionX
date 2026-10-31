@@ -84,7 +84,7 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::GravePact, 1, 1, 100, { 100, 0, 0 }, "Dying minions explode. Minions have\n20% less life" },
 	{ SG::GravePact, 2, 4, 100, { 150, 0, 0 }, "Dying minions explode 50% harder.\nMinions have 20% less life" },
 	{ SG::CurseMastery, 1, 1, 140, {}, "Larger, longer curses. Mana +40%" },
-	{ SG::Sanctify, 1, 5, 100, {}, "Each heal pulses arcane damage around\nyou" },
+	{ SG::Sanctify, 1, 5, 100, {}, "Each heal pulses holy fire around\nyou" },
 	// Life Leech I-III: life per 100 damage, and leech kept while at full life.
 	{ SG::LifeLeech, 1, 2, 100, { 3, 0, 0 }, "Leeches 3% of damage as life. 10% less\ndamage" },
 	{ SG::LifeLeech, 2, 3, 100, { 4, 0, 0 }, "Leeches 4% of damage as life. 10% less\ndamage" },

@@ -245,6 +245,8 @@ struct MissileFileData {
 };
 
 const MissileData &GetMissileData(MissileID missileId);
+/** @brief Whether the loaded missile table has this missile's row. */
+bool HasMissileData(MissileID missileId);
 /** @brief A missile flag from the missile table; the damage type reads under Diablo's names (Magic, Acid) or POE2's (Cold, Chaos). */
 std::expected<MissileDataFlags, std::string> ParseMissileDataFlag(std::string_view value);
 MissileFileData &GetMissileSpriteData(MissileGraphicID graphicId);

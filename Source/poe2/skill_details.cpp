@@ -83,6 +83,19 @@ std::string_view DamageTypeName(DamageType type)
 
 DamageType SpellDamageType(SpellID spell)
 {
+	const auto schoolType = [spell]() {
+		switch (GetSpellData(spell).type()) {
+		case MagicType::Fire:
+			return DamageType::Fire;
+		case MagicType::Lightning:
+			return DamageType::Lightning;
+		default:
+			return DamageType::Cold;
+		}
+	};
+	// Without the missile table (some tests) the spell school is all there is.
+	if (!HasMissileData(MissileID::ApocalypseBoom))
+		return schoolType();
 	// A few spells hit with a missile other than their first: Apocalypse's control missile drops the booms, Guardian
 	// shoots firebolts, and a rune bursts into the missile it holds.
 	switch (spell) {
@@ -103,16 +116,9 @@ DamageType SpellDamageType(SpellID spell)
 	}
 	// The type its hits deal, from its first missile: Nova shows lightning though Diablo files it under magic.
 	const MissileID missile = GetSpellData(spell).sMissiles[0];
-	if (missile != MissileID::Null)
+	if (missile != MissileID::Null && HasMissileData(missile))
 		return GetMissileData(missile).damageType();
-	switch (GetSpellData(spell).type()) {
-	case MagicType::Fire:
-		return DamageType::Fire;
-	case MagicType::Lightning:
-		return DamageType::Lightning;
-	default:
-		return DamageType::Cold;
-	}
+	return schoolType();
 }
 
 namespace {
