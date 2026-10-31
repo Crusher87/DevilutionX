@@ -173,6 +173,7 @@ const TableSkillData Table[] = {
 	{ WS::Despair, "Despair", "Curses enemies with -30% to chaos resistance", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Despair, TableBuff::None, TT_Occult, Icon(SpellIcon::Apocalypse), TableCurve::Boneshatter, 100 },
 	{ WS::PlagueArrow, "Plague Arrow", "An arrow that bursts into poison on the first enemy it hits", 1, 8, TW::Bow, 0, Projectiles, 90, 1, 1, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_PoisonBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::DoomSerpents), TableCurve::LightningArrow, 0 },
 	{ WS::HexRupture, "Hex Rupture", "Bursts the curses half run out on enemies around the target", 11, 12, TW::None, 1, HexBurst, 160, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
+	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a line ahead of you, staggering what they hit", 3, 8, TW::None, 1, Line, 107, 5, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 };
 // clang-format on
 
@@ -689,6 +690,23 @@ void OnGrantedKill(const Player &player, const Monster &monster, const TableSkil
 	}
 }
 
+/** @brief One monster in a spell's area takes its hit (of this much), with the skill's stun, trap and bleed. */
+void AreaSpellHit(const Player &player, const TableSkillData &data, Monster &monster, Fixed26_6 hit)
+{
+	SpellHitMonster(player, monster, data.type, hit, SourceOf(data));
+	if (IsGrantedTableSkill(data) && monster.hasNoLife())
+		OnGrantedKill(player, monster, data, hit);
+	if (monster.hasNoLife())
+		return;
+	if ((data.flags & TF_Stun) != 0)
+		HeavyStunMonster(monster);
+	if ((data.flags & TF_Pin) != 0)
+		PinMonster(monster, data.duration);
+	// Blood Nova: the hit bleeds for GrantedBleedPercent of itself over 5 seconds, as the granted blood bolts do.
+	if ((data.flags & TF_Bleed) != 0)
+		InflictTableBleed(player, monster, data.skill, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(hit.raw()) * GrantedBleedPercent / 100)), GrantedBleedTicks);
+}
+
 /**
  * @brief A burst of a zone, a landing or an area spell: hits everything within the radius. A staff's granted skill priced
  * per target (TF_PerTarget) hits the monster nearest the aim in full and the others for GrantedExtraTargetPercent.
@@ -713,14 +731,7 @@ void ZoneBurst(const Player &player, const TableSkillData &data, Point center, i
 	}
 	const Fixed26_6 extra = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * extraPercent / 100), 1));
 	ForEachMonsterNear(center, radius, [&](Monster &monster) {
-		const Fixed26_6 hit = extraPercent < 100 && &monster != primary ? extra : damage;
-		SpellHitMonster(player, monster, data.type, hit, SourceOf(data));
-		if (IsGrantedTableSkill(data) && monster.hasNoLife())
-			OnGrantedKill(player, monster, data, hit);
-		if ((data.flags & TF_Stun) != 0 && !monster.hasNoLife())
-			HeavyStunMonster(monster);
-		if ((data.flags & TF_Pin) != 0)
-			PinMonster(monster, data.duration);
+		AreaSpellHit(player, data, monster, extraPercent < 100 && &monster != primary ? extra : damage);
 	});
 }
 
@@ -1282,6 +1293,19 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		}
 		if (end != tile)
 			vfx::Fissure(tile, end, LookOf(data));
+		if ((data.flags & TF_Spell) != 0) {
+			// Bone Spikes: a clump of bone bursts up on each step as the line rolls out, and each enemy on it takes the spell's hit once.
+			for (int step = 1; step <= tile.WalkingDistance(end); step++)
+				vfx::BoneSpikes(tile + Displacement { dir } * step, step * 2 * gnTickDelay, 0.55F + 0.05F * static_cast<float>(step));
+			if (end != tile)
+				ShakeCamera(ShakeStrength::Light, 4);
+			const Fixed26_6 damage = FixedDamage(player, data);
+			for (Monster *monster : hit) {
+				AreaSpellHit(player, data, *monster, damage);
+				result.hit = true;
+			}
+			break;
+		}
 		for (Monster *monster : hit)
 			WeaponHit(player, *monster, data, data.damagePercent, result);
 		break;

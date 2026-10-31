@@ -280,5 +280,49 @@ TEST_F(Poe2PhysicalSpellsTest, BonePrisonHitsAndTraps)
 	EXPECT_EQ(outside.poe2.heavyStunTicks, 0);
 }
 
+// Bone Spikes (POE2's Unearth, its damage half): bones burst up in a line ahead, hitting and staggering what's on it once.
+TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData &data = Row(WeaponSkill::BoneSpikes);
+	EXPECT_EQ(data.level, 3);
+	EXPECT_EQ(data.mana, 8);
+	EXPECT_EQ(data.shape, TableShape::Line);
+	EXPECT_EQ(data.count, 5);
+	EXPECT_EQ(data.radius, 1);
+	EXPECT_EQ(data.type, DamageType::Physical);
+	EXPECT_EQ(data.curve, TableCurve::Fireball);
+	EXPECT_EQ(data.curveEnd, 312);
+	EXPECT_NE(data.flags & TF_Spell, 0U);
+	EXPECT_NE(data.flags & TF_Stun, 0U);
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::BoneSpikes));
+	EXPECT_EQ(TableSkillLook(data), vfx::Element::Bone);
+	const SkillSlot spikes = SkillSlot::ForAttack(WeaponSkill::BoneSpikes);
+	EXPECT_NE(SkillTags(spikes) & ST_Spell, 0U);
+	EXPECT_NE(SkillTags(spikes) & ST_Physical, 0U);
+	EXPECT_NE(SkillTags(spikes) & ST_Area, 0U);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, spikes, 1));
+	EXPECT_EQ(SkillForGem(gem), spikes);
+
+	Supported(spikes);
+	Monster &near = PlaceMonster(0, { 41, 40 });
+	Monster &far = PlaceMonster(1, { 45, 40 });
+	Monster &beside = PlaceMonster(2, { 43, 41 });
+	Monster &past = PlaceMonster(3, { 47, 40 });
+	Monster &behind = PlaceMonster(4, { 38, 40 });
+	ExecuteTableSkill(player, data, { 46, 40 });
+	for (const Monster *monster : { &near, &far, &beside }) {
+		EXPECT_LT(monster->hitPoints, monster->maxHitPoints);
+		EXPECT_EQ(monster->maxHitPoints - monster->hitPoints, near.maxHitPoints - near.hitPoints);
+		EXPECT_EQ(monster->poe2.heavyStunTicks, HeavyStunTicks);
+	}
+	for (const Monster *monster : { &past, &behind }) {
+		EXPECT_EQ(monster->hitPoints, monster->maxHitPoints);
+		EXPECT_EQ(monster->poe2.heavyStunTicks, 0);
+	}
+}
+
 } // namespace
 } // namespace devilution

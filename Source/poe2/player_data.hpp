@@ -167,7 +167,9 @@ enum class WeaponSkill : uint8_t {
 	PlagueArrow,
 	/** Chaos gems addendum G5: POE2's Hexblast. */
 	HexRupture,
-	Last = HexRupture,
+	/** Physical spells plan 3.1: POE2's Unearth, its damage half. */
+	BoneSpikes,
+	Last = BoneSpikes,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
