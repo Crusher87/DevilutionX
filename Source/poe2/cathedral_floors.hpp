@@ -33,6 +33,12 @@
  * (drlg_l3.cpp). There a room's mouths are three points wide, and lava pools, lava streams with their bridges, wooden
  * fences with gates and stalagmites are stamped onto the floor once the walls are made. Their setting is Gameplay >
  * New Caves Floors.
+ *
+ * Hell (levels 13 to 15) is built from hell_rooms.tsv (picked by Curtis on 2026-10-31) on Diablo's Hell tiles
+ * (drlg_l4.cpp), where a wall is a tile of its own: the rooms' inner walls and pillars are rock in the floor's mask and
+ * Diablo's own Hell passes draw them, the archways are stamped in afterwards, and the stairs stand free in the room.
+ * The Warlord of Blood's chamber (level 13) and the pentagram (level 15) each end the main way in a hall of their own.
+ * Diablo's floor (level 16) stays as it is. Their setting is Gameplay > New Hell Floors.
  */
 #pragma once
 
@@ -109,6 +115,15 @@ void SetCatacombsRooms(std::vector<CathedralRoomDef> rooms);
 const std::vector<CathedralRoomDef> &GetCavesRooms();
 void SetCavesRooms(std::vector<CathedralRoomDef> rooms);
 
+/**
+ * @brief The Hell room collection, read from hell_rooms.tsv on first use. On the block grid like the Catacombs: '#'
+ * a wall (one tile thick, ends may stand free), 'a' an archway with a wall post on each side, 'O' a pillar, 'U' and
+ * 'Z' (the stairs to town, level 13 only) 4 x 3 stairs with a floor row north and south, 'V' 3 x 3 stairs with floor
+ * all round. Props as in the Cathedral; 'Y' bodies on stakes can be walked past.
+ */
+const std::vector<CathedralRoomDef> &GetHellRooms();
+void SetHellRooms(std::vector<CathedralRoomDef> rooms);
+
 /** @brief A grid turned: turn & 3 quarter turns clockwise, then mirrored left to right when turn & 4. */
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn);
 /**
@@ -176,6 +191,8 @@ struct CathedralPlan {
 	bool catacombs = false;
 	/** Built from the Caves rooms, on the Caves corner grid. */
 	bool caves = false;
+	/** Built from the Hell rooms, on Hell tiles. */
+	bool hell = false;
 	std::vector<CathedralArea> areas;
 	std::vector<CathedralDoor> doors;
 	std::vector<CathedralProp> props;
@@ -185,13 +202,15 @@ struct CathedralPlan {
 	Bitset2d<DMAXX, DMAXY> mask;
 	/** Blocks of designed rooms, kept free of random objects and theme rooms. */
 	Bitset2d<DMAXX, DMAXY> designed;
-	/** The first of the four 'U' blocks; the stairs go in the wall north of them. Caves: the west one of three. */
+	/** The first of the four 'U' blocks; the stairs go in the wall north of them. Caves: the west one of three. Hell: the
+	 * north-west 'U' block. */
 	std::optional<Point> stairsUp;
 	/** The north-west 'V' block. Caves: the north one of three, the stairs in the wall west of them. */
 	std::optional<Point> stairsDown;
 	/** Catacombs, level 5 (Caves, level 9): the north-west 'Z' block, the stairs back to town. */
 	std::optional<Point> townStairs;
-	/** Where the quest's set piece goes. Caves: the north-west tile of the Anvil of Fury's 11 x 11 tiles. */
+	/** Where the quest's set piece goes. Caves: the north-west tile of the Anvil of Fury's 11 x 11 tiles. Hell: the
+	 * Warlord's chamber, or the north-west tile of the pentagram's 5 x 5 tiles. */
 	std::optional<Point> questPiece;
 	/** The north-west block of the Poisoned Water entrance (6 x 6). */
 	std::optional<Point> water;
@@ -204,12 +223,14 @@ struct CathedralRequest {
 	bool catacombs = false;
 	/** The Caves rooms and rules. */
 	bool caves = false;
+	/** The Hell rooms and rules. */
+	bool hell = false;
 	/** Bit i: room i of the collection may not be used. */
 	uint64_t forbidden = 0;
 	bool questPiece = false;
 	/** The slots the quest's room takes (Arkaine's Valor, the Halls of the Blind and the Anvil of Fury need 3 x 3). */
 	Size questSlots { 2, 2 };
-	/** Catacombs and Caves: the arrival room also holds the stairs back to town. */
+	/** Catacombs, Caves and Hell: the arrival room also holds the stairs back to town. */
 	bool townStairs = false;
 	/** Ogden's sign: the set piece holds the stairs down, so it ends the main way. */
 	bool questPieceIsWayDown = false;
@@ -230,17 +251,19 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan);
 
 /**
  * @brief Marks a Catacombs floor in the room history, so its rooms are kept apart from the Cathedral's (whose numbers
- * mean other rooms). Rooms 62 and 63 can't be used.
+ * mean other rooms). Rooms 61 to 63 can't be used.
  */
 constexpr uint64_t CatacombsRoomsMark = uint64_t { 1 } << 63;
 /** @brief Marks a Caves floor in the room history. */
 constexpr uint64_t CavesRoomsMark = uint64_t { 1 } << 62;
+/** @brief Marks a Hell floor in the room history. */
+constexpr uint64_t HellRoomsMark = uint64_t { 1 } << 61;
 
 /**
  * @brief Which rooms a new floor may not use, from the rooms the last five floors built used (newest first).
  * Only the floors built from the same collection count.
  */
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false);
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false, bool hell = false);
 
 /** @brief Whether the floor being played was made by this builder. */
 bool IsCathedralFunnelFloor();

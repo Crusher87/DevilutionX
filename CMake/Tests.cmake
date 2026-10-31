@@ -44,6 +44,7 @@ set(tests
   poe2_tears_test
   poe2_catacombs_floors_test
   poe2_caves_floors_test
+  poe2_hell_floors_test
   poe2_cathedral_floors_test
   poe2_floors_test
   poe2_gemcutting_test
