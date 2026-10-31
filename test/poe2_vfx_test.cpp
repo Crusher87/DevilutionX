@@ -159,6 +159,33 @@ TEST_F(Poe2VfxTest, ATownPortalIsDrawnByTheEffectsWhileItsMissileLives)
 	EXPECT_EQ(vfx::PortalCount(), 0U);
 }
 
+TEST_F(Poe2VfxTest, LazarusRedPortalIsAHellgateOfItsOwn)
+{
+	Missiles.clear();
+	Missile &portal = Missiles.emplace_back();
+	portal._mitype = MissileID::RedPortal;
+	portal._miAnimType = MissileGraphicID::None;
+	portal.position.tile = { 40, 40 };
+	portal._miDrawFlag = true;
+	portal._miDelFlag = false;
+	portal.setFrameGroup<RedPortalFrame>(RedPortalFrame::Start);
+	vfx::ScanMissiles();
+	EXPECT_EQ(vfx::PortalCount(), 1U);
+	// Its seal burns in, throwing sparks and smoke, then it tears open and stands, breathing embers and ash.
+	for (int i = 0; i < 60; i++)
+		vfx::Advance(50);
+	EXPECT_GT(vfx::ParticleCount(), 0U);
+	// Heavier than the town portal, it gutters out more slowly: still there when a town portal would be gone.
+	Missiles.clear();
+	vfx::ScanMissiles();
+	for (int i = 0; i < 8; i++)
+		vfx::Advance(50);
+	EXPECT_EQ(vfx::PortalCount(), 1U);
+	for (int i = 0; i < 8; i++)
+		vfx::Advance(50);
+	EXPECT_EQ(vfx::PortalCount(), 0U);
+}
+
 TEST_F(Poe2VfxTest, ArcingSparksAndChargedBoltLookApart)
 {
 	// Both fly the Charged Bolt missile; the skill that fired it picks the look (Curtis 2026-10-23).

@@ -575,6 +575,24 @@ constexpr float PortalRy = 52;
 constexpr float PortalSealRadius = TileRadius * 1.8F;
 constexpr int PortalRunes = 12;
 
+// Lazarus's red portal: a hellgate of its own, larger, heavier and slower than the town portal (Curtis 2026-10-31).
+constexpr float RedPortalSealMs = 1150;
+constexpr float RedPortalTearStart = 1250;
+constexpr float RedPortalOpenMs = 1950;
+constexpr float RedPortalCloseMs = 600;
+/** @brief Ms between the red portal's slow throbs; a ripple runs out over the floor with every other one. */
+constexpr float RedPortalPulseMs = 2800;
+constexpr float RedPortalLift = 64;
+constexpr float RedPortalRx = 35;
+constexpr float RedPortalRy = 65;
+constexpr float RedPortalSealRadius = TileRadius * 2.05F;
+/** @brief How long a tongue of flame licking up off the red portal's rim lasts. */
+constexpr float RedPortalLickMs = 700;
+/** @brief Hellfire's white-hot heart, its ember orange and the black of what it has burnt. */
+constexpr Rgb HellFlame { 255, 224, 150 };
+constexpr Rgb HellEmber { 255, 104, 22 };
+constexpr Rgb HellChar { 7, 2, 2 };
+
 /**
  * @brief A town portal (or Lazarus's red portal), drawn by code in place of its classic swirl: a seal that writes
  * itself into the floor, a seam of light the portal tears open from, then a turning vortex that stands on the tile,
@@ -603,7 +621,32 @@ struct PortalFx {
 	/** @brief The seal under it: 0 the Horadric symbol, 1 the Horadrim circle. */
 	uint8_t style = 0;
 	Point tile;
+	/** @brief The red portal: ms since a tongue of flame licked up off its rim (negative while none), where, and ms to the next. */
+	float lick = -1;
+	float lickAngle = 0;
+	float nextLick = 1500;
+	/** @brief The red portal: the cracks its heat breaks in the floor round the seal, offsets from its tile's centre. */
+	std::vector<std::array<Vec, 2>> cracks;
 };
+
+/** @brief A portal's size and timeline: the town portal's, or the red portal's larger and slower one. */
+struct PortalMetrics {
+	float lift;
+	float rx;
+	float ry;
+	float seal;
+	float sealMs;
+	float tearStart;
+	float openMs;
+	float closeMs;
+};
+
+PortalMetrics MetricsOf(const PortalFx &portal)
+{
+	if (portal.red)
+		return { RedPortalLift, RedPortalRx, RedPortalRy, RedPortalSealRadius, RedPortalSealMs, RedPortalTearStart, RedPortalOpenMs, RedPortalCloseMs };
+	return { PortalLift, PortalRx, PortalRy, PortalSealRadius, PortalSealMs, PortalTearStart, PortalOpenMs, PortalCloseMs };
+}
 
 std::unordered_map<const Missile *, PortalFx> Portals;
 /** @brief Portals whose missile has gone, folding shut. */
@@ -2607,7 +2650,7 @@ bool InFrontOfEffects(Point tile)
 		return false;
 	// In front: nearer the camera than the portal's own tile (or on it), and close enough to overlap it on screen.
 	const auto inFront = [&](const PortalFx &portal) {
-		return tile.WalkingDistance(portal.tile) <= 2 && tile.x + tile.y >= portal.tile.x + portal.tile.y;
+		return tile.WalkingDistance(portal.tile) <= (portal.red ? 3 : 2) && tile.x + tile.y >= portal.tile.x + portal.tile.y;
 	};
 	bool front = std::any_of(ClosingPortals.begin(), ClosingPortals.end(), inFront);
 	for (const auto &[missile, portal] : Portals)
@@ -3492,6 +3535,33 @@ bool HeroSteppingOn(Point tile)
 	return false;
 }
 
+/** @brief The cracks the red portal's heat breaks in the floor: jagged lines running out from under its seal, now and then splitting. */
+std::vector<std::array<Vec, 2>> RedPortalCracks()
+{
+	std::vector<std::array<Vec, 2>> segments;
+	constexpr int Count = 9;
+	for (int b = 0; b < Count; b++) {
+		const float heading = 2 * Pi * (static_cast<float>(b) + Random(0.2F, 0.8F)) / Count;
+		float angle = heading;
+		Vec at = Vec { std::cos(angle), std::sin(angle) * 0.5F } * (RedPortalSealRadius * 0.6F);
+		float remaining = RedPortalSealRadius * Random(0.8F, 1.5F);
+		while (remaining > 0) {
+			const float step = Random(7, 13);
+			// Wandering, but pulled back toward running straight out.
+			angle += Random(-0.5F, 0.5F) + (heading - angle) * 0.35F;
+			const Vec next = at + Vec { std::cos(angle) * step, std::sin(angle) * step * 0.5F };
+			segments.push_back({ at, next });
+			if (Random(0, 1) < 0.18F) {
+				const float side = angle + (Random(0, 1) < 0.5F ? 0.85F : -0.85F);
+				segments.push_back({ next, next + Vec { std::cos(side) * step * 1.3F, std::sin(side) * step * 0.65F } });
+			}
+			at = next;
+			remaining -= step;
+		}
+	}
+	return segments;
+}
+
 /** @brief Follows a town portal missile from frame to frame: starts its effect when it appears, notes a hero stepping in. */
 void TrackPortal(const Missile &missile, bool newLevel)
 {
@@ -3507,10 +3577,14 @@ void TrackPortal(const Missile &missile, bool newLevel)
 		for (uint8_t &rune : portal.runes)
 			rune = static_cast<uint8_t>(NextRandom() % RuneCount);
 		portal.style = static_cast<uint8_t>(NextRandom() % 2);
+		if (portal.red) {
+			portal.cracks = RedPortalCracks();
+			portal.beat = RedPortalPulseMs * 2;
+		}
 		// Frame group 0 is the classic swirl opening: a portal cast just now. Any other was already open (synced
 		// from another level, loaded with a game), so it stands open from the start.
 		const bool opening = missile.getFrameGroupRaw() == 0;
-		portal.age = opening ? 0 : PortalOpenMs;
+		portal.age = opening ? 0 : MetricsOf(portal).openMs;
 		portal.torn = !opening;
 		// A portal already open when the level appears, with the hero beside it: they just came through it.
 		if (!opening && newLevel && MyPlayer != nullptr && MyPlayer->position.tile.WalkingDistance(tile) <= 2)
@@ -3738,8 +3812,9 @@ void ScanWorld(const Surface &world)
 
 Colours PortalColours(const PortalFx &portal)
 {
+	// The red portal: ember orange, hellfire crimson, and a red so dark it is nearly black.
 	if (portal.red)
-		return { { 255, 236, 210 }, { 255, 90, 40 }, { 160, 12, 16 } };
+		return { { 255, 160, 58 }, { 210, 26, 10 }, { 88, 3, 5 } };
 	return { { 240, 248, 255 }, { 90, 160, 255 }, { 40, 40, 215 } };
 }
 
@@ -3775,7 +3850,7 @@ void PortalTear(const PortalFx &portal)
 void PortalArrival(const PortalFx &portal)
 {
 	const Colours c = PortalColours(portal);
-	const Vec centre = portal.pos - Vec { 0, PortalLift };
+	const Vec centre = portal.pos - Vec { 0, MetricsOf(portal).lift };
 	AddRing(centre, 20, 130, 320, 0, c.core, 0.8F, true, false);
 	AddRing(portal.pos, 0, TileRadius * 4, 600, 6, c.mid, 0.9F, false, true, false, 0.02F);
 	AddRing(portal.pos, 0, TileRadius * 2.6F, 800, 16, c.edge, 0.4F, false, true);
@@ -3886,22 +3961,257 @@ void PortalBreathe(PortalFx &portal, float ms)
 	}
 }
 
+/** @brief The red portal's summons: no light from above, but the floor splitting and hellfire welling up out of it. */
+void RedPortalSummons(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	AddRing(portal.pos, 0, RedPortalSealRadius * 1.4F, 650, 5, c.mid, 0.8F, false, true, false, 0.05F);
+	AddRing(portal.pos, 0, RedPortalSealRadius * 0.9F, 1000, 0, c.edge, 0.5F, true, true);
+	AddCracks(portal.pos, RedPortalSealRadius * 0.8F, 5, HellEmber, 1800);
+	Spray(portal.pos, Scaled(40), 30, 140, 700, 1300, Shape::Dot, HellFlame, c.mid, 2.2F, 0.4F, 80, 220, 60, 0.8F, 1);
+	Spray(portal.pos, Scaled(14), 10, 50, 1400, 2400, Shape::Puff, { 30, 12, 10 }, { 8, 4, 4 }, 10, 34, 20, 60, -5, 0.6F, 0.55F);
+	ShakeCamera(ShakeStrength::Medium, 6);
+}
+
+/** @brief The red portal tearing open: a blast of hellfire, the floor cracking and scorching round it, black smoke and embers. */
+void RedPortalTear(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, RedPortalLift };
+	AddRing(centre, 0, 125, 260, 0, HellEmber, 0.8F, true, false);
+	AddRing(centre, 20, 200, 560, 0, c.mid, 0.4F, true, false);
+	AddRing(portal.pos, 0, TileRadius * 6, 800, 9, c.mid, 1, false, true, false, 0.04F);
+	AddRing(portal.pos, 0, TileRadius * 4, 1100, 24, c.edge, 0.6F, false, true);
+	AddRing(portal.pos, TileRadius * 2.4F, TileRadius * 2.4F, 6000, 0, { 0, 0, 0 }, 0.45F, true, true, true, 0.3F);
+	AddCracks(portal.pos, TileRadius * 2.4F, 9, HellEmber, 2600);
+	Spray(centre, Scaled(130), 140, 480, 500, 1200, Shape::Streak, HellFlame, c.mid, 2.8F, 0.6F, -120, 260, 260, 1.1F, 1);
+	Spray(portal.pos, Scaled(70), 100, 340, 500, 1100, Shape::Streak, c.core, c.edge, 2.2F, 0.4F, 60, 220, 300, 1.3F, 1);
+	Spray(portal.pos, Scaled(24), 20, 90, 1600, 2800, Shape::Puff, { 34, 14, 10 }, { 6, 3, 3 }, 14, 46, 30, 80, -8, 0.6F, 0.6F);
+	Spray(portal.pos, Scaled(50), 10, 60, 1600, 2800, Shape::Dot, c.core, c.mid, 2.2F, 0.3F, 40, 120, -10, 0.5F, 0.9F);
+	ShakeCamera(ShakeStrength::Heavy, 9);
+}
+
+/** @brief The red portal guttering out: its fire sucked in, a last gout of smoke and a few falling embers. */
+void RedPortalCollapse(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, RedPortalLift };
+	AddRing(centre, 90, 0, 340, 0, HellFlame, 0.6F, true, false);
+	AddRing(portal.pos, RedPortalSealRadius * 1.3F, 0, 520, 6, c.mid, 0.8F, false, true);
+	Spray(centre, Scaled(40), 80, 280, 400, 900, Shape::Streak, c.core, c.edge, 2, 0.3F, -80, 140, 240, 1.3F, 1);
+	Spray(portal.pos, Scaled(16), 15, 60, 1500, 2600, Shape::Puff, { 30, 12, 10 }, { 6, 3, 3 }, 14, 44, 30, 70, -6, 0.6F, 0.55F);
+}
+
+/** @brief The red portal's heavy beat, with every other throb: a crimson ripple over the floor and a gust of embers. */
+void RedPortalBeat(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, RedPortalLift };
+	AddRing(portal.pos, RedPortalSealRadius * 0.5F, RedPortalSealRadius * 1.9F, 1500, 6, c.mid, 0.55F + 0.3F * portal.pull, false, true, false, 0.03F);
+	Rings.back().fadeOut = true;
+	AddRing(centre, RedPortalRx * 0.8F, RedPortalRx * 2.4F, 650, 0, c.mid, 0.3F, true, false);
+	Spray(portal.pos, Scaled(12), 10, 50, 1200, 2200, Shape::Dot, c.core, c.mid, 2, 0.3F, 50, 130, -10, 0.5F, 0.8F);
+}
+
+/** @brief A particle rising off the red portal: from the seal on the floor, or from a point on its rim. */
+Particle RisingFromRedPortal(const PortalFx &portal, bool rim)
+{
+	Particle p;
+	const float a = Random(0, 2 * Pi);
+	if (rim) {
+		p.pos = portal.pos + Vec { std::cos(a) * RedPortalRx, Random(-4, 4) };
+		p.z = RedPortalLift - std::sin(a) * RedPortalRy;
+	} else {
+		const float r = Random(0.55F, 1.2F) * RedPortalSealRadius;
+		p.pos = portal.pos + Vec { std::cos(a) * r, std::sin(a) * r * 0.5F };
+	}
+	return p;
+}
+
+/** @brief What the standing red portal gives off: embers and ash rising, black smoke rolling off it, sparks spat out, and now and then a tongue of flame. */
+void RedPortalBreathe(PortalFx &portal, float ms)
+{
+	const Colours c = PortalColours(portal);
+	const Vec centre = portal.pos - Vec { 0, RedPortalLift };
+	const float pull = portal.pull;
+	// Embers rising off the seal and the rim, drifting as they go.
+	for (int n = Occurrences((26 + 30 * pull) * Intensity(), ms); n > 0; n--) {
+		Particle p = RisingFromRedPortal(portal, NextRandom() % 3 == 0);
+		p.vel = { Random(-18, 18), Random(-5, 5) };
+		p.vz = Random(35, 110);
+		p.drag = 0.35F;
+		p.life = Random(1300, 2600);
+		p.size0 = Random(1.4F, 2.4F);
+		p.size1 = 0.2F;
+		p.c0 = c.core;
+		p.c1 = c.mid;
+		AddParticle(p);
+	}
+	// Ash: dark flakes drifting up, slower.
+	for (int n = Occurrences(10 * Intensity(), ms); n > 0; n--) {
+		Particle p = RisingFromRedPortal(portal, false);
+		p.vel = { Random(-12, 12), Random(-4, 4) };
+		p.vz = Random(20, 55);
+		p.drag = 0.2F;
+		p.life = Random(2200, 3600);
+		p.size0 = 1.4F;
+		p.size1 = 0.8F;
+		p.c0 = { 52, 44, 40 };
+		p.c1 = { 22, 20, 20 };
+		p.alpha = 0.75F;
+		p.shape = Shape::Chunk;
+		AddParticle(p);
+	}
+	// Black smoke rolling off the top of it.
+	for (int n = Occurrences(5 * Intensity(), ms); n > 0; n--) {
+		Particle p;
+		p.pos = portal.pos + Vec { Random(-RedPortalRx * 0.8F, RedPortalRx * 0.8F), Random(-4, 4) };
+		p.z = RedPortalLift + RedPortalRy * Random(0.5F, 0.95F);
+		p.vel = { Random(-10, 10), 0 };
+		p.vz = Random(18, 40);
+		p.life = Random(2400, 3800);
+		p.size0 = 12;
+		p.size1 = 38;
+		p.c0 = { 26, 10, 8 };
+		p.c1 = { 6, 3, 3 };
+		p.alpha = 0.45F;
+		p.shape = Shape::Puff;
+		AddParticle(p);
+	}
+	// Sparks spat out of its mouth, arcing down.
+	for (int n = Occurrences(3 + 20 * pull, ms); n > 0; n--) {
+		const float a = Random(0, 2 * Pi);
+		const float speed = Random(60, 160);
+		Particle p;
+		p.pos = portal.pos + Vec { std::cos(a) * RedPortalRx * 0.5F, Random(-3, 3) };
+		p.z = RedPortalLift - std::sin(a) * RedPortalRy * 0.5F;
+		p.vel = { std::cos(a) * speed, Random(-10, 10) };
+		p.vz = -std::sin(a) * speed + 60;
+		p.gravity = 220;
+		p.life = Random(400, 800);
+		p.size0 = 1.6F;
+		p.size1 = 0.4F;
+		p.c0 = HellFlame;
+		p.c1 = c.mid;
+		p.shape = Shape::Streak;
+		AddParticle(p);
+	}
+	// A hero stepping in: the floor at their feet streams up into it.
+	if (pull > 0.05F) {
+		for (int n = Occurrences(90 * pull * Intensity(), ms); n > 0; n--) {
+			Particle p;
+			p.life = Random(300, 520);
+			p.pos = portal.pos + Vec { Random(-TileRadius * 1.4F, TileRadius * 1.4F), Random(-TileRadius * 0.7F, TileRadius * 0.7F) };
+			p.vel = { -(p.pos.x - portal.pos.x) / p.life * 1000, -(p.pos.y - portal.pos.y) / p.life * 1000 };
+			p.vz = RedPortalLift / p.life * 1000;
+			p.size0 = 1.6F;
+			p.size1 = 2.8F;
+			p.c0 = c.mid;
+			p.c1 = c.core;
+			p.shape = Shape::Streak;
+			AddParticle(p);
+		}
+	}
+	// Now and then a tongue of flame licks up off the top of the rim, throwing sparks.
+	if (portal.lick >= 0) {
+		portal.lick += ms;
+		if (portal.lick >= RedPortalLickMs)
+			portal.lick = -1;
+	}
+	portal.nextLick -= ms * (1 + pull);
+	if (portal.nextLick <= 0) {
+		portal.nextLick = Random(1100, 3200);
+		portal.lick = 0;
+		portal.lickAngle = Random(Pi * 1.1F, Pi * 1.9F);
+		const Vec at = centre + Vec { std::cos(portal.lickAngle) * RedPortalRx, std::sin(portal.lickAngle) * RedPortalRy };
+		for (int n = Scaled(16); n > 0; n--) {
+			Particle p;
+			p.pos = { at.x + Random(-6, 6), portal.pos.y + Random(-3, 3) };
+			p.z = portal.pos.y - at.y;
+			p.vel = { std::cos(portal.lickAngle) * Random(20, 90), 0 };
+			p.vz = Random(120, 280);
+			p.gravity = 140;
+			p.life = Random(500, 1000);
+			p.size0 = 1.8F;
+			p.size1 = 0.3F;
+			p.c0 = HellFlame;
+			p.c1 = HellEmber;
+			p.shape = Shape::Streak;
+			AddParticle(p);
+		}
+	}
+	portal.beat -= ms * (1 + pull);
+	if (portal.beat <= 0) {
+		portal.beat = RedPortalPulseMs * 2;
+		RedPortalBeat(portal);
+	}
+}
+
+/** @brief While the red portal's seal burns in: sparks jumping off it and smoke curling up. */
+void RedPortalKindles(const PortalFx &portal, float ms)
+{
+	const Colours c = PortalColours(portal);
+	for (int n = Occurrences(70 * Intensity(), ms); n > 0; n--) {
+		const float a = Random(0, 2 * Pi);
+		const float r = Random(0.3F, 1.15F) * RedPortalSealRadius;
+		Particle p;
+		p.pos = portal.pos + Vec { std::cos(a) * r, std::sin(a) * r * 0.5F };
+		p.vel = { Random(-30, 30), Random(-12, 12) };
+		p.vz = Random(60, 170);
+		p.gravity = 120;
+		p.drag = 0.4F;
+		p.life = Random(500, 1100);
+		p.size0 = 1.8F;
+		p.size1 = 0.3F;
+		p.c0 = HellFlame;
+		p.c1 = c.mid;
+		AddParticle(p);
+	}
+	for (int n = Occurrences(9 * Intensity(), ms); n > 0; n--) {
+		Particle p = RisingFromRedPortal(portal, false);
+		p.vz = Random(20, 45);
+		p.life = Random(1600, 2600);
+		p.size0 = 8;
+		p.size1 = 26;
+		p.c0 = { 30, 12, 10 };
+		p.c1 = { 8, 4, 4 };
+		p.alpha = 0.4F;
+		p.shape = Shape::Puff;
+		AddParticle(p);
+	}
+}
+
 void AdvancePortals(float ms)
 {
 	for (auto &[missile, portal] : Portals) {
+		const PortalMetrics m = MetricsOf(portal);
 		const float before = portal.age;
-		if (before == 0 && !portal.torn)
-			PortalSummons(portal);
+		if (before == 0 && !portal.torn) {
+			if (portal.red)
+				RedPortalSummons(portal);
+			else
+				PortalSummons(portal);
+		}
 		portal.age += ms;
 		portal.pull += std::clamp(portal.pullTarget - portal.pull, -ms / 180, ms / 180);
-		if (!portal.torn && before < PortalTearStart && portal.age >= PortalTearStart) {
+		if (!portal.torn && before < m.tearStart && portal.age >= m.tearStart) {
 			portal.torn = true;
-			PortalTear(portal);
+			if (portal.red)
+				RedPortalTear(portal);
+			else
+				PortalTear(portal);
 		}
 		if (portal.arrived == 0)
 			PortalArrival(portal);
 		if (portal.arrived >= 0)
 			portal.arrived += ms;
+		if (portal.red) {
+			if (portal.age < m.tearStart)
+				RedPortalKindles(portal, ms);
+			else if (portal.age >= m.openMs)
+				RedPortalBreathe(portal, ms);
+			continue;
+		}
 		// Motes converging on the seal while it is written.
 		if (portal.age < PortalTearStart) {
 			const Colours c = PortalColours(portal);
@@ -3924,11 +4234,15 @@ void AdvancePortals(float ms)
 		}
 	}
 	for (PortalFx &portal : ClosingPortals) {
-		if (portal.closing == 0)
-			PortalCollapse(portal);
+		if (portal.closing == 0) {
+			if (portal.red)
+				RedPortalCollapse(portal);
+			else
+				PortalCollapse(portal);
+		}
 		portal.closing += ms;
 	}
-	std::erase_if(ClosingPortals, [](const PortalFx &portal) { return portal.closing >= PortalCloseMs; });
+	std::erase_if(ClosingPortals, [](const PortalFx &portal) { return portal.closing >= MetricsOf(portal).closeMs; });
 }
 
 void Advance(float ms)
@@ -5952,6 +6266,106 @@ const std::vector<Polyline> &HoradrimCircle()
 	return strokes;
 }
 
+/** @brief A line of the red portal's seal, with when in its burning (0 to 1) the fire catches at its start and reaches its end. */
+struct BurnStroke {
+	Polyline line;
+	float from;
+	float to;
+};
+
+/** @brief Where the red portal's star has its points, in the seal's unit coordinates: the lone point toward the camera. */
+Vec InfernalTip(int k, float r)
+{
+	const float a = Pi / 2 + 2 * Pi * static_cast<float>(k) / 5;
+	return { std::cos(a) * r, std::sin(a) * r };
+}
+
+/**
+ * @brief The red portal's seal: a pentagram, its lone point toward the camera, inside a ring and a toothed ring, with
+ * a thorn out of each point. The star catches first, along all five lines at once; the fire runs both ways round the
+ * rings from its points, and the thorns flare last.
+ */
+const std::vector<BurnStroke> &InfernalSeal()
+{
+	static const std::vector<BurnStroke> strokes = [] {
+		std::vector<BurnStroke> lines;
+		for (int k = 0; k < 5; k++)
+			lines.push_back({ { InfernalTip(k, 0.9F), InfernalTip(k + 2, 0.9F) }, 0.F, 0.36F });
+		for (int k = 0; k < 5; k++) {
+			const float a0 = Pi / 2 + 2 * Pi * static_cast<float>(k) / 5;
+			for (const float way : { 1.F, -1.F }) {
+				Polyline inner;
+				for (int i = 0; i <= 12; i++) {
+					const float a = a0 + way * (Pi / 5) * static_cast<float>(i) / 12;
+					inner.push_back({ std::cos(a) * 0.9F, std::sin(a) * 0.9F });
+				}
+				Polyline teeth;
+				for (int i = 0; i <= 8; i++) {
+					const float a = a0 + way * (Pi / 5) * static_cast<float>(i) / 8;
+					const float r = i % 2 == 1 ? 1.15F : 1.F;
+					teeth.push_back({ std::cos(a) * r, std::sin(a) * r });
+				}
+				lines.push_back({ inner, 0.3F, 0.6F });
+				lines.push_back({ teeth, 0.42F, 0.8F });
+			}
+		}
+		for (int k = 0; k < 5; k++) {
+			const float a = Pi / 2 + 2 * Pi * static_cast<float>(k) / 5;
+			lines.push_back({ { { std::cos(a - 0.07F), std::sin(a - 0.07F) }, { std::cos(a) * 1.36F, std::sin(a) * 1.36F }, { std::cos(a + 0.07F), std::sin(a + 0.07F) } }, 0.66F, 0.86F });
+		}
+		return lines;
+	}();
+	return strokes;
+}
+
+/**
+ * @brief The red portal's seal burnt into the floor as far as @p burn (0 to 1): a charred scorch under each line, white
+ * hot where the fire has just reached and cooling to a crimson glow that swells with @p glow. The points the fire is
+ * running along go in @p fronts.
+ */
+void BurnStrokes(Vec pos, float radius, float burn, float width, const Colours &c, float alpha, float glow, std::vector<Vec> &fronts)
+{
+	for (const BurnStroke &stroke : InfernalSeal()) {
+		if (burn <= stroke.from)
+			continue;
+		const Polyline &line = stroke.line;
+		float total = 0;
+		for (size_t k = 1; k < line.size(); k++)
+			total += Length(line[k] - line[k - 1]);
+		const float span = stroke.to - stroke.from;
+		const float reached = std::min(1.F, (burn - stroke.from) / span) * total;
+		float walked = 0;
+		for (size_t k = 1; k < line.size() && walked < reached; k++) {
+			const Vec a = line[k - 1];
+			const Vec b = line[k];
+			const float len = Length(b - a);
+			const int pieces = std::max(1, static_cast<int>(len * radius / 9));
+			for (int i = 0; i < pieces; i++) {
+				const float s0 = walked + len * static_cast<float>(i) / static_cast<float>(pieces);
+				if (s0 >= reached)
+					break;
+				const float s1 = std::min(walked + len * static_cast<float>(i + 1) / static_cast<float>(pieces), reached);
+				const Vec u0 = a + (b - a) * ((s0 - walked) / len);
+				const Vec u1 = a + (b - a) * ((s1 - walked) / len);
+				const Vec p0 = SealPoint(pos, radius, u0.x, u0.y);
+				const Vec p1 = SealPoint(pos, radius, u1.x, u1.y);
+				// How long ago, in the burning, the fire passed here: white hot at first, then cooling.
+				const float since = burn - (stroke.from + span * s1 / total);
+				const float heat = std::clamp(1 - since / 0.2F, 0.F, 1.F);
+				const Rgb colour = Mix(Mix(c.mid, HellEmber, 0.35F + 0.65F * heat), HellFlame, heat * heat);
+				const float bright = alpha * std::min(1.F, 0.6F + 0.35F * glow + 0.4F * heat);
+				SoftLine(GroundDark, p0, p1, width * 2.8F, HellChar, HellChar, 0.8F * alpha, 0.8F * alpha);
+				SoftLine(Ground, p0, p1, width, colour, colour, bright, bright);
+				SoftLine(Ground, p0, p1, width * 4.5F, c.mid, c.mid, (0.16F + 0.12F * glow + 0.2F * heat) * alpha, (0.16F + 0.12F * glow + 0.2F * heat) * alpha);
+				SoftLine(Ground, p0, p1, width * 0.4F, c.core, c.core, (0.3F + 0.7F * heat) * alpha, (0.3F + 0.7F * heat) * alpha);
+				if (s1 >= reached && reached < total)
+					fronts.push_back(p1);
+			}
+			walked += len;
+		}
+	}
+}
+
 /** @brief The seal under the portal: the Horadric symbol or the Horadrim circle, written into the floor as the portal is cast. */
 void PortalSeal(const PortalFx &portal, const Colours &c, float laid, float alpha, float spin)
 {
@@ -6102,12 +6516,169 @@ void DrawPortal(const PortalFx &portal)
 	}
 }
 
+/** @brief The red portal's slow throb, 0 to 1: a heavy beat, a softer one after it, then a long quiet; in time with its ripples. */
+float RedPortalThrob(const PortalFx &portal)
+{
+	const float x = std::fmod(std::max(0.F, RedPortalPulseMs * 2 - portal.beat), RedPortalPulseMs) / RedPortalPulseMs;
+	const auto bump = [](float d, float w) { return std::exp(-(d * d) / (w * w)); };
+	const float swell = 0.2F * (0.5F + 0.5F * std::cos(2 * Pi * x));
+	return std::min(1.F, bump(x, 0.07F) + bump(x - 1, 0.07F) + 0.55F * bump(x - 0.17F, 0.06F) + swell);
+}
+
+/** @brief The cracks the red portal's heat has broken in the floor: charred, and glowing with lava that pulses out along them. */
+void RedPortalFloorCracks(const PortalFx &portal, const Colours &c, float reveal, float glow, float throb, float fade)
+{
+	const float reach = 0.55F + 1.9F * reveal;
+	for (const std::array<Vec, 2> &segment : portal.cracks) {
+		const Vec mid = (segment[0] + segment[1]) * 0.5F;
+		const float d = Length(Vec { mid.x, mid.y * 2 }) / RedPortalSealRadius;
+		if (d > reach)
+			continue;
+		const Vec a = portal.pos + segment[0];
+		const Vec b = portal.pos + segment[1];
+		SoftLine(GroundDark, a, b, 6, HellChar, HellChar, 0.9F * fade, 0.9F * fade);
+		// The heat runs out along them with each throb, and dims toward their ends.
+		const float pump = 0.5F + 0.5F * std::cos(2 * Pi * (1 - throb) * 0.5F + d * 2.2F - AmbientTime * 0.0012F);
+		const float heat = 1.4F * glow * fade * std::max(0.F, 1.15F - 0.4F * d) * (0.55F + 0.45F * pump) * (0.75F + 0.5F * throb);
+		const Rgb colour = Mix(c.mid, HellEmber, 0.3F + 0.5F * pump * throb);
+		SoftLine(Ground, a, b, 2.4F, colour, colour, std::min(1.F, heat), std::min(1.F, heat));
+		SoftLine(Ground, a, b, 10, c.mid, c.mid, 0.3F * heat, 0.3F * heat);
+	}
+}
+
+/**
+ * @brief Lazarus's red portal: a hellgate, not a tinted town portal. Its seal, a toothed pentagram, burns into the floor
+ * and the floor cracks and glows round it; a fissure of fire tears open into a black-hearted vortex of crimson and ember
+ * fire, larger than the town portal, turning the other way and slower, that throbs like a heart, licks flame and
+ * breathes embers, ash and black smoke (Curtis 2026-10-31).
+ */
+void DrawRedPortal(const PortalFx &portal)
+{
+	const Colours c = PortalColours(portal);
+	const PortalMetrics m = MetricsOf(portal);
+	const Vec centre = portal.pos - Vec { 0, m.lift };
+	const float t = AmbientTime;
+	const float phase = static_cast<float>(portal.seed % 89);
+	const float pull = portal.pull;
+	const float burn = std::clamp(portal.age / m.sealMs, 0.F, 1.F);
+	const float seam = EaseOut((portal.age - (m.tearStart - 380)) / 380);
+	float open = portal.age < m.tearStart ? 0.F : EaseOutBack((portal.age - m.tearStart) / (m.openMs - m.tearStart));
+	float fade = 1;
+	if (portal.closing >= 0) {
+		const float shut = std::clamp(portal.closing / m.closeMs, 0.F, 1.F);
+		open = 1 - shut * shut;
+		fade = 1 - shut * 0.6F;
+	}
+	// The throb comes in once the portal stands.
+	const float settled = std::clamp((portal.age - m.tearStart) / 900, 0.F, 1.F);
+	const float throb = RedPortalThrob(portal) * settled;
+	const float heave = 0.8F + 0.35F * throb + 0.3F * pull;
+	const float spin = -(t * (0.0016F + 0.0026F * pull) + phase);
+
+	// The floor: scorched black under it, cracked and glowing round it, and the seal burnt in.
+	SoftDisc(GroundDark, portal.pos, m.seal * (0.5F + 0.8F * EaseOut(burn)), HellChar, 0.6F * fade, true);
+	if (portal.age >= m.tearStart - 150)
+		RedPortalFloorCracks(portal, c, EaseOut((portal.age - m.tearStart + 150) / 700), 0.6F + 0.4F * pull, throb, fade);
+	std::vector<Vec> fronts;
+	const float sealAlpha = (portal.age >= m.openMs ? 0.6F + 0.2F * pull : 1.F) * fade;
+	BurnStrokes(portal.pos, m.seal, burn, 3.F, c, sealAlpha, throb, fronts);
+	for (const Vec &front : fronts) {
+		SoftDisc(Ground, front, 9, HellFlame, 0.9F, true);
+		DrawFire({ { front, { 0, 0 }, 1.F, 0.8F }, { front, { 0, 0 }, 1.F, 0.8F } }, 9, 0.9F, portal.seed + static_cast<uint32_t>(front.x * 7 + front.y * 13), HellFlame, HellEmber, c.mid, 2.F);
+	}
+	if (open > 0) {
+		SoftDisc(Ground, portal.pos, m.seal * (1.05F + 0.3F * pull) * std::min(open, 1.F), c.mid, (0.18F + 0.14F * throb + 0.12F * pull) * fade, true);
+		SoftDisc(Ground, portal.pos, TileRadius * 1.1F * open, HellEmber, (0.16F + 0.12F * throb) * fade, true);
+	}
+	// Flames standing up from the star's points as it opens, and again when a hero arrives.
+	const float raysAge = portal.arrived >= 0 && portal.arrived < PortalRaysMs ? portal.arrived : portal.age - m.tearStart;
+	if (raysAge >= 0 && raysAge < PortalRaysMs && portal.closing < 0) {
+		const float k = raysAge / PortalRaysMs;
+		const Colours flame { HellFlame, HellEmber, c.mid };
+		PortalRays(portal.pos, m.seal * 0.9F, 5, 170 * EaseOut(k * 3) * (1 - k * k), flame, 1 - k, Pi / 2);
+		PortalRays(portal.pos, m.seal * 1.15F, 10, 90 * EaseOut(k * 3) * (1 - k * k), c, 0.7F * (1 - k), Pi / 2 + Pi / 10);
+	}
+
+	// The seam: a fissure of fire standing on the tile, which the portal tears open from.
+	if (seam > 0 && open < 1) {
+		const float height = 2 * m.ry * seam;
+		const Vec foot = portal.pos - Vec { 0, m.lift - m.ry };
+		const Vec top = foot - Vec { 0, height };
+		const float bright = std::clamp(seam * (1 - open), 0.F, 1.F);
+		SoftLine(Glowing, foot, top, 3 + 5 * seam, HellFlame, c.core, bright, 0.7F * bright);
+		SoftLine(Glowing, foot, top, 26, c.mid, c.edge, 0.45F * bright, 0.25F * bright);
+		SoftDisc(Glowing, foot, 18, HellEmber, 0.7F * bright, false);
+		std::vector<FlameSite> sites;
+		for (int i = 0; i <= 6; i++)
+			sites.push_back({ foot - Vec { 0, height * static_cast<float>(i) / 6 }, { i % 2 == 0 ? -1.F : 1.F, 0 }, 1.F, 0.7F });
+		DrawFire(sites, Scaled(70), 1.1F, portal.seed * 3U, HellFlame, HellEmber, c.mid, 1.8F * bright);
+	}
+	if (open <= 0)
+		return;
+
+	const float rx = m.rx * open * (1 + 0.04F * throb + 0.02F * std::sin(t * 0.005F + phase));
+	const float ry = m.ry * (0.55F + 0.45F * open) * (1 + 0.025F * throb);
+	const float alpha = std::min(open, 1.F) * fade;
+	// A pall of dark round it, and the black hole of it: a hole in the world, so the fire round it reads as depth.
+	SoftOvalDisc(Standing, centre - Vec { 0, ry * 0.3F }, rx * 2.3F, ry * 1.7F, { 6, 2, 2 }, 0.3F * alpha);
+	SoftOvalDisc(Standing, centre, rx * 0.97F, ry * 0.97F, { 10, 0, 0 }, 0.98F * alpha, 0.92F * alpha);
+	// The corona: its haze, and the light it spills into the air around it.
+	SoftOvalDisc(Glowing, centre, rx * 2.2F, ry * 1.45F, c.edge, (0.22F + 0.12F * pull) * heave * alpha);
+	SoftOvalDisc(Glowing, centre, rx * 1.35F, ry * 1.12F, c.mid, (0.05F + 0.08F * pull) * heave * alpha);
+	// The swirl, turning the other way from the town portal's, and slower: dark bands of blood and ember over the black.
+	const Colours swirl { { 230, 96, 24 }, { 120, 12, 5 }, { 30, 1, 1 } };
+	PortalVortex(centre, rx, ry, spin, swirl, alpha * (0.45F + 0.25F * throb), pull);
+	// The rim: a ragged, flickering edge, and a crown of hellfire licking off it, tallest over its top.
+	SoftOval(Glowing, centre, rx, ry, 6, c.mid, (0.85F + 0.15F * pull) * heave * alpha, 0.045F, portal.seed + static_cast<uint32_t>(t / 45));
+	SoftOval(Glowing, centre, rx, ry, 22, c.edge, 0.35F * heave * alpha);
+	SoftOval(Glowing, centre, rx * 0.97F, ry * 0.97F, 2, HellEmber, 0.6F * alpha);
+	{
+		std::vector<FlameSite> rim;
+		for (int i = 0; i < 28; i++) {
+			const float a = 2 * Pi * static_cast<float>(i) / 28;
+			const Vec out { std::cos(a), std::sin(a) };
+			rim.push_back({ centre + Vec { out.x * rx, out.y * ry }, out, 1.F, 0.7F + 0.6F * std::max(0.F, -out.y) });
+		}
+		DrawFire(rim, Scaled(200), 1.45F + 0.5F * pull, portal.seed, { 255, 176, 84 }, { 222, 44, 10 }, { 110, 6, 4 }, (1.4F + 0.6F * throb + 0.8F * pull) * alpha);
+	}
+	// A tongue of flame licking up off the rim, now and then.
+	if (portal.lick >= 0 && portal.closing < 0) {
+		const float k = portal.lick / RedPortalLickMs;
+		const float rise = std::sin(Pi * std::clamp(k, 0.F, 1.F));
+		std::vector<FlameSite> tongue;
+		for (int i = -2; i <= 2; i++) {
+			const float a = portal.lickAngle + 0.12F * static_cast<float>(i);
+			const Vec out { std::cos(a), std::sin(a) };
+			tongue.push_back({ centre + Vec { out.x * rx, out.y * ry }, out, 1.F - 0.25F * static_cast<float>(std::abs(i)), 2.8F * rise });
+		}
+		DrawFire(tongue, Scaled(70), 1.6F, portal.seed ^ static_cast<uint32_t>(portal.lickAngle * 1000), HellFlame, HellEmber, c.mid, 2.6F * rise * alpha);
+	}
+	// The eye: molten, deep in the hole, swelling with each throb.
+	const float eye = 0.5F + 0.45F * throb + 0.5F * pull;
+	SoftDisc(Glowing, centre, 7 + 4 * throb + 4 * pull, HellEmber, eye * alpha, false);
+	SoftDisc(Glowing, centre, 24, c.mid, 0.3F * eye * alpha, false);
+	// A hero arriving: the whole portal flares and the light runs out over the floor.
+	if (portal.arrived >= 0 && portal.arrived < PortalArriveMs) {
+		const float flare = 1 - portal.arrived / PortalArriveMs;
+		SoftOvalDisc(Glowing, centre, rx * 1.4F, ry * 1.15F, HellEmber, 0.8F * flare * flare);
+		SoftDisc(Ground, portal.pos, m.seal * 1.6F * (1 - flare * 0.5F), c.mid, 0.4F * flare, true);
+	}
+}
+
 void DrawPortals()
 {
-	for (const auto &[missile, portal] : Portals)
-		DrawPortal(portal);
-	for (const PortalFx &portal : ClosingPortals)
-		DrawPortal(portal);
+	for (const auto &[missile, portal] : Portals) {
+		if (portal.red)
+			DrawRedPortal(portal);
+		else
+			DrawPortal(portal);
+	}
+	for (const PortalFx &portal : ClosingPortals) {
+		if (portal.red)
+			DrawRedPortal(portal);
+		else
+			DrawPortal(portal);
+	}
 }
 
 void DrawHalos()
@@ -6587,9 +7158,9 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 		SDL_RenderCopyF(renderer, Layer.front, &rect, &dest);
 	};
 	for (const auto &[missile, portal] : Portals)
-		around(portal.pos, portal.pos, 120, 230, 80);
+		around(portal.pos, portal.pos, portal.red ? 150 : 120, 230, 80);
 	for (const PortalFx &portal : ClosingPortals)
-		around(portal.pos, portal.pos, 120, 230, 80);
+		around(portal.pos, portal.pos, portal.red ? 150 : 120, 230, 80);
 	// Round each object's flames: their glow and bloom, and the embers and smoke rising off them.
 	std::array<bool, MAXOBJECTS> done {};
 	for (const Ring &glow : FrameGlows) {
@@ -6605,6 +7176,72 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 			max = { std::max(max.x, other.pos.x), std::max(max.y, other.pos.y) };
 		}
 		around(min, max, 90, 170, 80);
+	}
+}
+
+/**
+ * @brief The air over Lazarus's red portal wavers in its heat: the world behind it drawn again a little displaced, row by
+ * row, fading out at the edges. The heroes and monsters in front of it are left as they are.
+ */
+void DrawHeatShimmer(SDL_Renderer *renderer, Size worldSize, float toLogical)
+{
+	if (Layer.front == nullptr)
+		return;
+	const Surface world = WorldBackBuffer();
+	if (world.w() != worldSize.width || world.h() != worldSize.height)
+		return;
+	const bool masked = FrontFresh && FrontSurface != nullptr && FrontSurface->w == world.w() && FrontSurface->h == world.h();
+	for (const auto &[missile, portal] : Portals) {
+		if (!portal.red || portal.age < RedPortalTearStart)
+			continue;
+		const float strength = std::clamp((portal.age - RedPortalTearStart) / 900.F, 0.F, 1.F) * std::clamp(Intensity(), 0.F, 1.5F);
+		if (strength <= 0)
+			continue;
+		const Vec centre = portal.pos - Vec { 0, RedPortalLift };
+		const Vec from = ToScreen(centre - Vec { RedPortalRx * 1.9F, RedPortalRy + 150 });
+		const Vec to = ToScreen(centre + Vec { RedPortalRx * 1.9F, RedPortalRy * 0.6F });
+		SDL_Rect rect;
+		rect.x = std::clamp(static_cast<int>(from.x), 0, worldSize.width);
+		rect.y = std::clamp(static_cast<int>(from.y), 0, worldSize.height);
+		rect.w = std::clamp(static_cast<int>(to.x) + 1, 0, worldSize.width) - rect.x;
+		rect.h = std::clamp(static_cast<int>(to.y) + 1, 0, worldSize.height) - rect.y;
+		if (rect.w <= 2 || rect.h <= 2)
+			continue;
+		void *pixels;
+		int pitch;
+		if (SDL_LockTexture(Layer.front, &rect, &pixels, &pitch) != 0)
+			continue;
+		std::vector<float> columns(static_cast<size_t>(rect.w));
+		for (int x = 0; x < rect.w; x++) {
+			const float u = std::clamp((static_cast<float>(rect.x + x) - from.x) / (to.x - from.x), 0.F, 1.F);
+			columns[static_cast<size_t>(x)] = std::sin(Pi * u);
+		}
+		const float amplitude = 3.2F * CameraScale * strength;
+		const float phase = static_cast<float>(portal.seed % 89);
+		for (int y = 0; y < rect.h; y++) {
+			const int sy = rect.y + y;
+			// Strongest in the air over its top, dying out above and toward its foot.
+			const float v = (static_cast<float>(sy) - from.y) / (to.y - from.y);
+			const float rows = std::clamp(v * 3, 0.F, 1.F) * std::clamp((1 - v) * 4, 0.F, 1.F);
+			// The waves run up through the air, fixed to the world so they don't swim when the view moves.
+			const float worldY = static_cast<float>(sy) / CameraScale + CameraOrigin.y;
+			const float wave = 0.65F * std::sin(worldY * 0.13F + AmbientTime * 0.0075F + phase) + 0.35F * std::sin(worldY * 0.31F + AmbientTime * 0.0131F);
+			const int dx = static_cast<int>(std::floor(wave * amplitude * rows + 0.5F));
+			const uint8_t *solid = masked ? static_cast<const uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(sy) * FrontSurface->pitch : nullptr;
+			uint8_t *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
+			for (int x = 0; x < rect.w; x++, out += 4) {
+				const int sx = std::clamp(rect.x + x + dx, 0, world.w() - 1);
+				const SDL_Color &c = system_palette[*world.at(sx, sy)];
+				out[0] = c.r;
+				out[1] = c.g;
+				out[2] = c.b;
+				const bool front = solid != nullptr && (solid[rect.x + x] != 0 || solid[sx] != 0);
+				out[3] = front ? 0 : static_cast<uint8_t>(255 * rows * columns[static_cast<size_t>(x)]);
+			}
+		}
+		SDL_UnlockTexture(Layer.front);
+		const SDL_FRect dest { static_cast<float>(rect.x) * toLogical, static_cast<float>(rect.y) * toLogical, static_cast<float>(rect.w) * toLogical, static_cast<float>(rect.h) * toLogical };
+		SDL_RenderCopyF(renderer, Layer.front, &rect, &dest);
 	}
 }
 
@@ -6665,6 +7302,9 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	const bool targets = Layer.ensure(renderer, worldSize);
 	const std::optional<SDL_Rect> cut = targets ? FillFloorMask(worldSize) : std::nullopt;
 	FloorFresh = false;
+	// The red portal's heat shimmer goes first, under every effect, as it redraws the world behind them.
+	if (targets)
+		DrawHeatShimmer(renderer, worldSize, toLogical);
 
 	// Scorch marks on the floor, cut away where something stands on it, then smoke, dust and debris: all blend
 	// straight onto the world.
