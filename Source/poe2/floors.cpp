@@ -41,7 +41,7 @@ struct FloorRecord {
 	uint16_t visits = 0;
 	/** The builder and rooms of the floor's current build are settled (see Poe2FloorBuildFor). */
 	bool stamped = false;
-	/** Built by the new floor builder (poe2/cathedral_floors.hpp): the Cathedral's or the Catacombs'. */
+	/** Built by the new floor builder (poe2/cathedral_floors.hpp): the Cathedral's, Catacombs', Caves' or Hell's. */
 	bool cathedralFunnel = false;
 	/** The designed rooms this build had to leave out, so building it again gives the same floor. */
 	uint64_t avoidRooms = 0;
@@ -411,14 +411,17 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 		record->stamped = true;
 		const bool catacombs = leveltype == DTYPE_CATACOMBS;
 		const bool caves = leveltype == DTYPE_CAVES;
+		const bool hell = leveltype == DTYPE_HELL;
 		bool wanted = *GetOptions().Gameplay.newCathedralFloors;
-		if (caves)
+		if (hell)
+			wanted = *GetOptions().Gameplay.newHellFloors;
+		else if (caves)
 			wanted = *GetOptions().Gameplay.newCavesFloors;
 		else if (catacombs)
 			wanted = *GetOptions().Gameplay.newCatacombsFloors;
 		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's.
 		record->cathedralFunnel = !record->kept && wanted;
-		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves) : 0;
+		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves, hell) : 0;
 		record->roomsPending = record->cathedralFunnel;
 	}
 	return { record->cathedralFunnel, record->avoidRooms };

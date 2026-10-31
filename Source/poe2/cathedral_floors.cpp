@@ -52,6 +52,7 @@ struct RoomSet {
 RoomSet CathedralSet { "txtdata\\poe2\\cathedral_rooms.tsv", "Cathedral", {}, false };
 RoomSet CatacombsSet { "txtdata\\poe2\\catacombs_rooms.tsv", "Catacombs", {}, false };
 RoomSet CavesSet { "txtdata\\poe2\\caves_rooms.tsv", "Caves", {}, false };
+RoomSet HellSet { "txtdata\\poe2\\hell_rooms.tsv", "Hell", {}, false };
 
 bool FunnelFloor = false;
 CathedralPlan CurrentPlan;
@@ -130,17 +131,19 @@ void LoadRooms(RoomSet &set)
 			LogError("{} room {} has a ragged grid", set.name, room.id);
 			continue;
 		}
-		// The last two bits of the room history mark a Catacombs or Caves floor.
-		if (set.rooms.size() >= 62) {
-			LogError("Only 62 {} rooms fit the room history; {} is left out", set.name, room.id);
+		// The last three bits of the room history mark a Catacombs, Caves or Hell floor.
+		if (set.rooms.size() >= 61) {
+			LogError("Only 61 {} rooms fit the room history; {} is left out", set.name, room.id);
 			continue;
 		}
 		set.rooms.push_back(std::move(room));
 	}
 }
 
-const std::vector<CathedralRoomDef> &RoomsFor(bool catacombs, bool caves)
+const std::vector<CathedralRoomDef> &RoomsFor(bool catacombs, bool caves, bool hell)
 {
+	if (hell)
+		return GetHellRooms();
 	if (caves)
 		return GetCavesRooms();
 	return catacombs ? GetCatacombsRooms() : GetCathedralRooms();
@@ -286,6 +289,30 @@ bool CavesGridOk(const std::vector<std::string> &grid)
 	return true;
 }
 
+/**
+ * Hell: shrine spots, racks, stands and crucified bodies need a wall north or west of them, and Diablo's Hell stairs
+ * up only face one way, so their 4 x 3 block keeps lying across the room.
+ */
+bool HellGridOk(const std::vector<std::string> &grid)
+{
+	for (int y = 0; y < static_cast<int>(grid.size()); y++) {
+		for (int x = 0; x < static_cast<int>(grid[y].size()); x++) {
+			const char c = grid[y][x];
+			if (IsAnyOf(c, 'A', 'W', 'M', 'X', 'x')) {
+				const char north = At(grid, x, y - 1);
+				const char west = At(grid, x - 1, y);
+				if (north != ' ' && north != '#' && west != ' ' && west != '#')
+					return false;
+			}
+			if ((c == 'U' || c == 'Z') && At(grid, x - 1, y) != c && At(grid, x, y - 1) != c) {
+				if (At(grid, x + 3, y) != c || At(grid, x + 4, y) == c || At(grid, x, y + 2) != c || At(grid, x, y + 3) == c)
+					return false;
+			}
+		}
+	}
+	return true;
+}
+
 /** The stairs down need their four squares side by side, at the back of the room, with floor in front. */
 bool StairsDownOk(const std::vector<std::string> &grid)
 {
@@ -394,6 +421,7 @@ public:
 		plan_ = {};
 		plan_.catacombs = request_.catacombs;
 		plan_.caves = request_.caves;
+		plan_.hell = request_.hell;
 		for (auto &row : slots_)
 			row.fill(Free);
 		if (!planMainWay())
@@ -425,7 +453,13 @@ private:
 
 	const std::vector<CathedralRoomDef> &rooms() const
 	{
-		return RoomsFor(request_.catacombs, request_.caves);
+		return RoomsFor(request_.catacombs, request_.caves, request_.hell);
+	}
+
+	/** In the Catacombs and Hell the stairs stand free in the room and walls are blocks of their own. */
+	bool blockWalls() const
+	{
+		return request_.catacombs || request_.hell;
 	}
 
 	bool isFree(Rectangle r) const
@@ -502,8 +536,8 @@ private:
 			}
 		}
 		const Rectangle start = starts[GenerateRnd(static_cast<int>(starts.size()))];
-		// The Catacombs stairs stand free in the room, so nothing needs keeping clear north of it there.
-		if (start.position.y > 0 && !request_.catacombs) {
+		// The Catacombs and Hell stairs stand free in the room, so nothing needs keeping clear north of it there.
+		if (start.position.y > 0 && !blockWalls()) {
 			slots_[start.position.y - 1][start.position.x] = Reserved;
 			slots_[start.position.y - 1][start.position.x + 1] = Reserved;
 		}
@@ -536,7 +570,7 @@ private:
 				return false;
 			// The way down's doorways are on its west, east and south sides; in the Caves on all but the west, where the
 			// stairs are.
-			if (kind == CathedralAreaKind::WayDown && !request_.catacombs && Touching(pick, plan_.areas[previous].slots) == (request_.caves ? West : North))
+			if (kind == CathedralAreaKind::WayDown && !blockWalls() && Touching(pick, plan_.areas[previous].slots) == (request_.caves ? West : North))
 				return false;
 			const int area = addArea(pick, kind, step);
 			addLink(previous, area);
@@ -759,6 +793,8 @@ private:
 	{
 		if (request_.caves)
 			return CavesGridOk(grid);
+		if (request_.hell)
+			return HellGridOk(grid);
 		if (request_.catacombs)
 			return CatacombsGridOk(grid);
 		return BackedOk(grid) && StairsDownOk(grid);
@@ -904,6 +940,14 @@ private:
 				// A Catacombs door looks wrong right beside a corner, and the wall between two slots ends in one.
 				if (request_.catacombs && a.size() > 1)
 					std::erase(a, overlap(link).second);
+				// A Hell doorway gets an archway, whose posts are the plain wall either side of it.
+				if (request_.hell) {
+					const auto [lo, hi] = overlap(link);
+					std::vector<int> inside = a;
+					std::erase_if(inside, [lo, hi](int v) { return v <= lo || v >= hi; });
+					if (!inside.empty())
+						a = std::move(inside);
+				}
 				// A cave mouth is three points wide, all of them on the wall the two areas share.
 				if (request_.caves) {
 					const auto [lo, hi] = overlap(link);
@@ -1177,6 +1221,15 @@ private:
 		switch (area.kind) {
 		case CathedralAreaKind::Arrival: {
 			fill(in);
+			if (request_.hell) {
+				// Diablo's Hell stairs: 4 x 3 blocks with a row of floor north and south; the stairs to town beside them.
+				const int x = GenerateRnd(in.size.width - (request_.townStairs ? 9 : 4) + 1);
+				const int y = GenerateRnd(in.size.height - 4);
+				plan_.stairsUp = in.position + Displacement { x, y + 1 };
+				if (request_.townStairs)
+					plan_.townStairs = in.position + Displacement { x + 5, y + 1 };
+				return;
+			}
 			if (request_.catacombs) {
 				// Stairs standing free, each in the middle of 4 x 4 blocks of floor; the stairs to town beside them.
 				const int x = GenerateRnd(in.size.width - (request_.townStairs ? 8 : 3));
@@ -1201,6 +1254,11 @@ private:
 			fill(in);
 			if (request_.catacombs) {
 				plan_.stairsDown = in.position + Displacement { 1 + GenerateRnd(in.size.width - 3), 1 + GenerateRnd(in.size.height - 3) };
+				return;
+			}
+			if (request_.hell) {
+				// 3 x 3 blocks with floor all round.
+				plan_.stairsDown = in.position + Displacement { 1 + GenerateRnd(in.size.width - 4), 1 + GenerateRnd(in.size.height - 4) };
 				return;
 			}
 			if (request_.caves) {
@@ -1277,8 +1335,8 @@ private:
 			}
 			fill(wing);
 		}
-		// Catacombs walls have no tiles for a slanting line, so their rough rooms keep square corners.
-		if (w >= 7 && h >= 7 && !request_.catacombs) {
+		// Catacombs and Hell walls have no tiles for a slanting line, so their rough rooms keep square corners.
+		if (w >= 7 && h >= 7 && !blockWalls()) {
 			const int cut = 1 + GenerateRnd(2);
 			for (int corner = 0; corner < 4; corner++) {
 				if (FlipCoin(3))
@@ -1352,7 +1410,8 @@ private:
 				const Displacement along = door.vertical ? Displacement { 0, 1 } : Displacement { 1, 0 };
 				for (int k = -1; k <= 1; k++)
 					carve(door.block + (along * k));
-			} else {
+			} else if (!request_.hell) {
+				// Hell has no doors: its doorways get archways.
 				door.door = sideArea && FlipCoin();
 			}
 			plan_.doors.push_back(door);
@@ -1487,11 +1546,18 @@ constexpr std::array<_object_id, 3> Banners { OBJ_BANNERL, OBJ_BANNERM, OBJ_BANN
 constexpr std::array<_object_id, 3> Chests { OBJ_CHEST1, OBJ_CHEST2, OBJ_CHEST3 };
 
 /** The objects a prop letter can turn into, for loading their art. */
-std::vector<_object_id> ObjectsFor(char kind, bool catacombs, bool caves)
+std::vector<_object_id> ObjectsFor(char kind, const CathedralPlan &plan)
 {
-	if (caves && kind == 'u')
+	if ((plan.caves || plan.hell) && kind == 'u')
 		return { OBJ_CAULDRON };
-	if (catacombs) {
+	if (plan.hell) {
+		switch (kind) {
+		case 'W': return { OBJ_WEAPONRACK, OBJ_WEAPONRACKN };
+		case 'M': return { OBJ_ARMORSTAND, OBJ_ARMORSTANDN };
+		default: break;
+		}
+	}
+	if (plan.catacombs) {
 		switch (kind) {
 		case 'F': return { OBJ_BLOODFTN };
 		case 'W': return { OBJ_WEAPONRACK, OBJ_WEAPONRACKN };
@@ -1623,6 +1689,71 @@ void AddCatacombsRoomObjects()
 	}
 }
 
+/** The props of a new Hell floor's designed rooms. */
+void AddHellRoomObjects()
+{
+	const bool shrineFloor = GenerateRnd(3) == 0;
+	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
+	// Racks and stands give an item each: one of each still holds gear in a room, the rest are bare.
+	std::vector<bool> rackInArea(CurrentPlan.areas.size(), false);
+	std::vector<bool> standInArea(CurrentPlan.areas.size(), false);
+	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
+			continue;
+		const bool wall = IsAnyOf(prop.kind, 'A', 'x', 'X', 'W', 'M', 'K');
+		std::optional<Point> spot = PropSpot(prop.block, wall, false);
+		if (prop.kind == 'x') {
+			// The cross burns whoever stands north of it, so it stands right against the wall.
+			spot = std::nullopt;
+			const Point world = prop.block.megaToWorld();
+			for (const Displacement d : { Displacement { 0, 0 }, Displacement { 1, 0 } }) {
+				if (TileClear(world + d) && TileHasAny(world + d + Displacement { 0, -1 }, TileProperties::Solid)) {
+					spot = world + d;
+					break;
+				}
+			}
+		}
+		if (!spot)
+			continue;
+		switch (prop.kind) {
+		case 'A':
+		case 'c': AddObject(OBJ_CANDLE2, *spot); break;
+		case 'K': {
+			const bool row = std::any_of(CurrentPlan.props.begin(), CurrentPlan.props.end(), [&prop](const CathedralProp &other) {
+				return other.kind == 'K' && other.block.y == prop.block.y && std::abs(other.block.x - prop.block.x) == 1;
+			});
+			AddObject(row ? OBJ_BOOKSHELF : OBJ_BOOKSHELFR, *spot);
+			break;
+		}
+		case 'k':
+			if (standsInArea[prop.area]++ < 2)
+				AddObject(OBJ_BOOKSTAND, *spot);
+			break;
+		case 'W':
+			AddObject(rackInArea[prop.area] ? OBJ_WEAPONRACKN : OBJ_WEAPONRACK, *spot);
+			rackInArea[prop.area] = true;
+			break;
+		case 'M':
+			AddObject(standInArea[prop.area] ? OBJ_ARMORSTANDN : OBJ_ARMORSTAND, *spot);
+			standInArea[prop.area] = true;
+			break;
+		case 'u': AddObject(OBJ_CAULDRON, *spot); break;
+		case 'F': AddObject(PickOne(Fountains), *spot); break;
+		case 'G': AddObject(OBJ_GOATSHRINE, *spot); break;
+		case 'X': AddObject(PickOne(Crucified), *spot); break;
+		case 'x': AddObject(OBJ_TBCROSS, *spot); break;
+		case 'T': AddObject(PickOne(Chained), *spot); break;
+		case 'Y': AddObject(PickOne(Staked), *spot); break;
+		case 'D': AddObject(OBJ_DECAP, *spot); break;
+		case 'P':
+		case 's': AddObject(OBJ_SKPILE, *spot); break;
+		case 'r': AddObject(FlipCoin(4) ? OBJ_BARRELEX : OBJ_BARREL, *spot); break;
+		case '*': AddReward(prop, *spot); break;
+		default: break;
+		}
+	}
+}
+
 /** The props of a new Caves floor's designed rooms. */
 void AddCavesRoomObjects()
 {
@@ -1718,9 +1849,22 @@ void SetCavesRooms(std::vector<CathedralRoomDef> rooms)
 	CavesSet.loaded = !CavesSet.rooms.empty();
 }
 
+const std::vector<CathedralRoomDef> &GetHellRooms()
+{
+	if (!HellSet.loaded)
+		LoadRooms(HellSet);
+	return HellSet.rooms;
+}
+
+void SetHellRooms(std::vector<CathedralRoomDef> rooms)
+{
+	HellSet.rooms = std::move(rooms);
+	HellSet.loaded = !HellSet.rooms.empty();
+}
+
 const std::vector<CathedralRoomDef> &RoomsOfPlan(const CathedralPlan &plan)
 {
-	return RoomsFor(plan.catacombs, plan.caves);
+	return RoomsFor(plan.catacombs, plan.caves, plan.hell);
 }
 
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn)
@@ -1779,7 +1923,9 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 {
 	static constexpr std::string_view KindNames[] = { "arrival", "way", "big fight", "quiet", "way down", "side", "side end", "quest room", "water" };
 	std::string_view dungeon = "Cathedral";
-	if (plan.caves)
+	if (plan.hell)
+		dungeon = "Hell";
+	else if (plan.caves)
 		dungeon = "Caves";
 	else if (plan.catacombs)
 		dungeon = "Catacombs";
@@ -1802,10 +1948,10 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 	return out;
 }
 
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves)
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves, bool hell)
 {
 	uint64_t memorable = 0;
-	const std::vector<CathedralRoomDef> &rooms = RoomsFor(catacombs, caves);
+	const std::vector<CathedralRoomDef> &rooms = RoomsFor(catacombs, caves, hell);
 	for (size_t i = 0; i < rooms.size(); i++) {
 		if (rooms[i].memorable)
 			memorable |= uint64_t { 1 } << i;
@@ -1813,14 +1959,15 @@ uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs,
 	uint64_t avoid = 0;
 	for (size_t i = 0; i < recent.size(); i++) {
 		// A floor of another collection still takes its turn in the history.
-		if (((recent[i] & CatacombsRoomsMark) != 0) != (catacombs && !caves) || ((recent[i] & CavesRoomsMark) != 0) != caves)
+		if (((recent[i] & CatacombsRoomsMark) != 0) != (catacombs && !caves && !hell) || ((recent[i] & CavesRoomsMark) != 0) != (caves && !hell)
+		    || ((recent[i] & HellRoomsMark) != 0) != hell)
 			continue;
 		if (i < RecentNormal)
 			avoid |= recent[i];
 		else if (i < RecentMemorable)
 			avoid |= recent[i] & memorable;
 	}
-	return avoid & ~(CatacombsRoomsMark | CavesRoomsMark);
+	return avoid & ~(CatacombsRoomsMark | CavesRoomsMark | HellRoomsMark);
 }
 
 bool IsCathedralFunnelFloor()
@@ -1930,7 +2077,7 @@ void MarkCathedralObjectGraphics(uint16_t filesWidths[65])
 	if (!FunnelFloor)
 		return;
 	for (const CathedralProp &prop : CurrentPlan.props) {
-		for (const _object_id id : ObjectsFor(prop.kind, CurrentPlan.catacombs, CurrentPlan.caves)) {
+		for (const _object_id id : ObjectsFor(prop.kind, CurrentPlan)) {
 			const ObjectData &data = AllObjects[id];
 			filesWidths[data.ofindex] = data.animWidth;
 		}
@@ -1948,6 +2095,10 @@ void AddCathedralRoomObjects()
 	}
 	if (CurrentPlan.caves) {
 		AddCavesRoomObjects();
+		return;
+	}
+	if (CurrentPlan.hell) {
+		AddHellRoomObjects();
 		return;
 	}
 	// On one floor in three the shrine spots hold a shrine; on the others, candles.
