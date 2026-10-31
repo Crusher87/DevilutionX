@@ -2895,7 +2895,7 @@ void BoneCage(Point tile, int delayMs, float size, int standMs)
 	for (int i = 0; i < ribs; i++) {
 		const float angle = start + (2 * Pi * i) / ribs + Random(-0.12F, 0.12F);
 		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
-		fx.crystals.push_back({ dir * ring, { -dir.x * 0.1F, -dir.y * 0.06F }, Random(78, 96) * size, Random(10, 13) * size, static_cast<float>(i * 14) + Random(0, 10), dir * (-ring * 0.72F) });
+		fx.crystals.push_back({ dir * ring, { -dir.x * 0.05F, -dir.y * 0.03F }, Random(72, 92) * size, Random(10, 13) * size, static_cast<float>(i * 14) + Random(0, 10), dir * (-ring * Random(0.45F, 0.58F)) });
 	}
 	// Broken shards jut out round its foot.
 	const int shards = 6 + static_cast<int>(NextRandom() % 3);
@@ -2938,14 +2938,15 @@ void Nova(Point tile, int radiusTiles, Element element)
 	const bool blood = element == Element::Blood;
 	// A pulse at the hero, then a heavy wave rolls out over the floor: a dark body with a bright lip, a fainter one behind.
 	AddRing(pos + Vec { 0, -16 }, 0, 30, 140, 0, c.core, 0.6F, true, false);
-	AddRing(pos, 0, r * 1.15F, 420, 18, c.edge, 0.75F, false, true, true);
-	AddRing(pos, 0, r * 1.1F, 360, 4, c.mid, 0.9F, false, true);
-	AddRing(pos, 0, r * 0.8F, 540, 10, c.edge, 0.4F, false, true, true);
+	AddRing(pos, 0, r * 1.15F, 450, 26, c.edge, 0.85F, false, true, true);
+	AddRing(pos, 0, r * 1.1F, 400, 10, c.mid, 0.45F, false, true);
+	AddRing(pos, 0, r * 1.1F, 360, 3, c.mid, 0.9F, false, true);
+	AddRing(pos, 0, r * 0.8F, 560, 12, c.edge, 0.5F, false, true, true);
 	// Flung low and fast to the edge of the wave: droplets of blood, or chips of bone.
 	if (blood)
-		Spray(pos, Scaled(36 * radiusTiles / 2.F), 140, 90 + 90 * radiusTiles, 450, 800, Shape::Chunk, { 170, 12, 14 }, { 70, 0, 0 }, 2.6F, 2, 60, 160, 700, 0.3F, 1);
+		Spray(pos, Scaled(44 * radiusTiles / 2.F), 160, 140 + 110 * radiusTiles, 450, 800, Shape::Chunk, { 170, 12, 14 }, { 70, 0, 0 }, 2.8F, 2, 60, 160, 700, 0.15F, 1);
 	else
-		Spray(pos, Scaled(30 * radiusTiles / 2.F), 140, 90 + 90 * radiusTiles, 450, 800, Shape::Chunk, { 238, 230, 208 }, { 160, 146, 120 }, 2.4F, 2, 60, 160, 700, 0.3F, 1);
+		Spray(pos, Scaled(30 * radiusTiles / 2.F), 160, 140 + 110 * radiusTiles, 450, 800, Shape::Chunk, { 238, 230, 208 }, { 160, 146, 120 }, 2.4F, 2, 60, 160, 700, 0.15F, 1);
 	Spray(pos, Scaled(10), 40, 40 + 40 * radiusTiles, 700, 1200, Shape::Puff, Mix(c.edge, c.mid, 0.4F), c.edge, 10, 30, 5, 25, 0, 0.8F, 0.35F);
 	// It leaves its mark on the floor.
 	if (blood)
