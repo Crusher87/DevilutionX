@@ -20,6 +20,10 @@
 
 namespace devilution {
 
+namespace vfx {
+enum class Element : uint8_t;
+} // namespace vfx
+
 struct ItemData;
 struct Missile;
 struct Monster;
@@ -170,8 +174,12 @@ enum TableFlag : uint32_t {
 	TF_Poison = 1 << 16,
 	/** A projectile's first hit bursts in its radius: every enemy there is poisoned, the others also hit (Plague Arrow). */
 	TF_PoisonBurst = 1 << 17,
+	/** Its hit traps the non-unique survivors (a heavy stun) for the skill's duration (Bone Prison). */
+	TF_Pin = 1 << 18,
 };
 
+/** @brief Bone Spear flies through this many enemies (in practice every one in its path); other piercing skills through 3. */
+constexpr int BoneSpearPierces = 20;
 /** @brief Plague Arrow's burst hits the enemies around the one the arrow struck for this share of the arrow, in percent. */
 constexpr int PlagueArrowSplashPercent = 50;
 /** @brief Hex Rupture bursts at most this many curses a cast, each with this radius. */
@@ -366,7 +374,7 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
  * cast's first, GrantedExtraTargetPercent for the rest; 100 for every other projectile. Marks the monster hit.
  */
 int GrantedMissileTargetPercent(const Missile &missile, Player &player, Monster &monster);
-/** @brief The rider of the granted skill whose hit is being dealt now (SupportHitSkill), or None. */
+/** @brief The rider of the table skill whose hit is being dealt now (SupportHitSkill): a granted skill's, or Bone Spear's; else None. */
 GrantedRider HitGrantedRider();
 /** @brief The hero's spell hits in percent: SigilSpellDamagePercentInside while they stand in their Sigil of Power, else 100. */
 int SigilSpellDamagePercent(const Player &player);
@@ -380,6 +388,11 @@ void ApplyAuraCurse(const Player &player, Monster &monster, WeaponSkill skill, i
 [[nodiscard]] int TableCurseStrength(const Monster &monster, TableCurse curse);
 /** @brief The cast effects of a table skill. */
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target);
+/**
+ * @brief How a table skill's effects look: its damage type's element, but a physical spell is bone, blood for one whose
+ * hits bleed blood (Reap, Exsanguinate, Blood Nova) and holy for Blessed Hammer.
+ */
+[[nodiscard]] vfx::Element TableSkillLook(const TableSkillData &data);
 
 /** @brief POE2 Mashup: a sound a skill makes, one of Diablo's or one of the mod's own files. */
 struct SkillSound {

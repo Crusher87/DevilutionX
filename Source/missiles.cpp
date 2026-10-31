@@ -64,6 +64,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "sound_effect_enums.h"
 #include "tables/itemdat.h"
@@ -2522,6 +2523,9 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	if (!gbIsPoe2 || !InDungeonBounds(tile))
 		return;
 	TelemetryEffect("visual", magic_enum::enum_name(graphic), tile.x, tile.y);
+	// A bone hit borrows the stone curse's shatter, and the effects draw it as bone, not stone dust.
+	const bool bone = graphic == MissileGraphicID::BoneHit;
+	const bool blood = graphic == MissileGraphicID::BloodHit;
 	// Some graphic ids have no sprite file of their own (Diablo drew hits from monster art), so they borrow a look-alike.
 	switch (graphic) {
 	case MissileGraphicID::MetalHit:
@@ -2529,6 +2533,9 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 		break;
 	case MissileGraphicID::BloodHit:
 		graphic = MissileGraphicID::BloodStarRedExplosion;
+		// That sprite comes with the succubi: without them, Blood Star's own burst stands in (drawn as blood).
+		if (HasMissileSpriteData(graphic) && !GetMissileSpriteData(graphic).sprites)
+			graphic = MissileGraphicID::BloodStarExplosion;
 		break;
 	case MissileGraphicID::BoneHit:
 		graphic = MissileGraphicID::StoneCurseShatter;
@@ -2545,7 +2552,11 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	const MissileFileData &spriteData = GetMissileSpriteData(graphic);
 	if (spriteData.name[0] == '\0' || (spriteData.flags == MissileGraphicsFlags::MonsterOwned && !spriteData.sprites))
 		return;
-	AddMissile(tile, tile, dir, MissileID::VisualEffect, TARGET_MONSTERS, -1, light, static_cast<int>(graphic) | (delay << 8));
+	Missile *effect = AddMissile(tile, tile, dir, MissileID::VisualEffect, TARGET_MONSTERS, -1, light, static_cast<int>(graphic) | (delay << 8));
+	if (effect != nullptr && bone)
+		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Bone);
+	if (effect != nullptr && blood)
+		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Blood);
 }
 
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter)
@@ -3371,6 +3382,9 @@ Missile *AddMissile(WorldTilePosition src, WorldTilePosition dst, Direction midi
 		missile.poe2.skillKind = NewMissileInherit->skillKind;
 		missile.poe2.skillId = NewMissileInherit->skillId;
 	}
+	// POE2 Mashup: a bolt's burst looks like the bolt (a bone bolt on a flare bursts into bone, not fire).
+	if (parent != nullptr)
+		missile.poe2.vfxElement = parent->poe2.vfxElement;
 
 	if (!missile.IsTrap() && micaster == TARGET_PLAYERS) {
 		const Monster &monster = Monsters[id];

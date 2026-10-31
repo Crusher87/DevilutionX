@@ -42,6 +42,8 @@ enum class Element : uint8_t {
 	Holy,
 	Arcane,
 	Blood,
+	/** @brief Bone-white with dust and chips: the bone spells (Bone Prison, Bone Spikes, Bone Spear, Bone Bolt). */
+	Bone,
 };
 
 /** @brief How a weapon moves through the air, to match the hero's attack animation. Every hero swings right-handed. */
@@ -56,7 +58,7 @@ enum class SwingStyle : uint8_t {
 	Jab,
 };
 
-/** @brief The element a skill's damage looks like; spells without an element look arcane. */
+/** @brief The element a skill's damage looks like: a physical spell looks like bone, a physical attack like dust and steel. */
 Element ElementOf(DamageType type, bool spell);
 
 /** @brief Whether effects are drawn at all: POE2 Mashup, the Modern Effects option, and a screen to draw on. */
@@ -72,8 +74,20 @@ void Sigil(Point tile, int radiusTiles, int durationMs, Element element);
  * stands a moment and shatters. Size 1 is one tile across.
  */
 void IceSpike(Point tile, int delayMs, float size);
+/** @brief A clump of curved bone spikes bursts out of the ground after the delay, stands a moment and crumbles (Bone Spikes). */
+void BoneSpikes(Point tile, int delayMs, float size);
+/**
+ * @brief A cage of ribs bursts up round a tile after the delay and hooks in over it, standing for the given time before it
+ * crumbles (Bone Prison). Size 1 is one tile across.
+ */
+void BoneCage(Point tile, int delayMs, float size, int standMs);
 /** @brief A heavy landing: flash, shockwave, dust, debris and glowing cracks. */
 void Slam(Point tile, int radiusTiles, Element element);
+/**
+ * @brief A heavy nova rolling out over the floor to the radius: a dark wave with a bright lip, droplets or chips flung
+ * outward, mist, and a stain left behind (Blood Nova).
+ */
+void Nova(Point tile, int radiusTiles, Element element);
 /** @brief The ground splitting open from one tile to another. */
 void Fissure(Point from, Point to, Element element);
 /** @brief An explosion of the element's particles; size 1 is a normal hit. */

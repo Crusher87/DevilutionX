@@ -1066,7 +1066,8 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	// skills on one target; their numbers are for Curtis (the gems keep their numbers for now). Condemn and Corpse
 	// Explosion lose bare only to Staff Bolt, the free bolt every staff has cast since before the rework. Glacial Spike
 	// (400%) came off the list with round 3 (Curtis 2026-10-28); Haunt (350%) now beats every free skill bare and loses
-	// only to a supported Staff Bolt, and so does Locust Swarm since Q28 (130% over 2 s instead of 120% over 5 s).
+	// only with supports (to Staff Bolt, and since Might to the physical free bolts), and Locust Swarm only to a
+	// supported Staff Bolt since Q28 (130% over 2 s instead of 120% over 5 s).
 	enum class Excused : uint8_t {
 		/** Against every free skill. */
 		Everything,
@@ -1076,13 +1077,16 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 		StaffBoltAndSupported,
 		/** Against Staff Bolt with supports only: the gem can't take Prismatic Focus, which Staff Bolt can. */
 		SupportedStaffBolt,
+		/** With supports only, against any: the gem can't take the strongest support of some free skill. */
+		Supported,
 	};
 	const struct {
 		WeaponSkill skill;
 		Excused excused;
 		std::string_view reason;
 	} AllowList[] = {
-		{ WeaponSkill::Haunt, Excused::SupportedStaffBolt, "a physical damage over time (70% a second on one), which can't take Prismatic Focus as Staff Bolt can" },
+		// Might (physical spells plan) gives the physical free bolts 30% more with supports; Haunt's chaos can't take it.
+		{ WeaponSkill::Haunt, Excused::Supported, "a chaos damage over time (70% a second on one), which can't take Prismatic Focus as Staff Bolt can, nor Might as the physical free bolts can" },
 		{ WeaponSkill::LocustSwarm, Excused::SupportedStaffBolt, "like Haunt, a physical curse's damage over time (about 73% a second on one), which can't take Prismatic Focus" },
 		{ WeaponSkill::Condemn, Excused::StaffBoltAndSupported, "a delayed burst all around the hero (about 56% a second on one); a shield spell, it can't take Measured Ritual" },
 		{ WeaponSkill::CorpseExplosion, Excused::StaffBolt, "an area burst for each corpse, which it needs (about 62% a second on one)" },
@@ -1122,8 +1126,8 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	Rate bolt { "Staff Bolt", staffBolt, GrantedStaffBoltPercent / CastSeconds(staffBolt), 1.0, {} };
 	bolt.supported = BestSupportPair(player, staffBolt, DamageType::Fire, true, &bolt.pair);
 	freeSkills.push_back(bolt);
-	// 12, then Hex Rupture.
-	EXPECT_EQ(gems.size(), 13U);
+	// 12, then Hex Rupture, then Bone Prison, Bone Spikes, Bone Spear and Blood Nova.
+	EXPECT_EQ(gems.size(), 17U);
 	EXPECT_GE(freeSkills.size(), 14U);
 
 	for (const int level : { 1, 20 }) {
@@ -1137,11 +1141,11 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 			const bool listed = entry != std::end(AllowList);
 			std::printf("level %2d  %-18s %6.1f%% a second (%6.1f%% with %s)%s\n", level, std::string(gem.name).c_str(), at(gem, false), at(gem, true), gem.pair.c_str(), listed ? "  [allow-list]" : "");
 			for (const Rate &skill : freeSkills) {
-				const bool supportedOnly = listed && entry->excused == Excused::SupportedStaffBolt;
+				const bool supportedOnly = listed && IsAnyOf(entry->excused, Excused::SupportedStaffBolt, Excused::Supported);
 				if (listed && (entry->excused == Excused::Everything || (skill.slot == staffBolt && !supportedOnly)))
 					continue;
 				EXPECT_GE(at(gem, false), at(skill, false)) << gem.name << " against " << skill.name << " at level " << level;
-				if (supportedOnly && skill.slot == staffBolt)
+				if (supportedOnly && (skill.slot == staffBolt || entry->excused == Excused::Supported))
 					continue;
 				if (!listed || entry->excused != Excused::StaffBoltAndSupported)
 					EXPECT_GE(at(gem, true), at(skill, true)) << gem.name << " against " << skill.name << " with supports at level " << level;
@@ -1155,7 +1159,7 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 		const auto gem = std::find_if(gems.begin(), gems.end(), [&](const Rate &rate) { return rate.name == WeaponSkillName(entry.skill); });
 		ASSERT_NE(gem, gems.end()) << entry.reason;
 		// One excused only with supports loses with supports.
-		const bool supported = entry.excused == Excused::SupportedStaffBolt;
+		const bool supported = IsAnyOf(entry.excused, Excused::SupportedStaffBolt, Excused::Supported);
 		EXPECT_TRUE(std::any_of(freeSkills.begin(), freeSkills.end(), [&](const Rate &skill) {
 			return skill.perSecond * (supported ? skill.supported : 1.0) > gem->perSecond * GemDamagePercent(gem->slot, 1) / 100 * (supported ? gem->supported : 1.0);
 		})) << gem->name << ": " << entry.reason;

@@ -167,7 +167,13 @@ enum class WeaponSkill : uint8_t {
 	PlagueArrow,
 	/** Chaos gems addendum G5: POE2's Hexblast. */
 	HexRupture,
-	Last = HexRupture,
+	/** Physical spells plan 3.1: POE2's Unearth, its damage half. */
+	BoneSpikes,
+	/** Physical spells plan 3.3: POE2's Bonestorm, one heavy spear. */
+	BoneSpear,
+	/** Physical spells plan 3.4: Bone Cage's ring with Exsanguinate's blood. */
+	BloodNova,
+	Last = BloodNova,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -295,6 +301,9 @@ enum class SupportGem : uint8_t {
 	PlagueBurst,
 	GraveProfanity,
 	BloodSacrifice,
+	/** Physical spells plan: POE2's Brutality and Bone Shrapnel. */
+	Might,
+	BoneSplinters,
 	Count,
 };
 

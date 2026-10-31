@@ -81,6 +81,7 @@ set(tests
   poe2_monster_mods_test
   poe2_pace_test
   poe2_passive_tree_test
+  poe2_physical_spells_test
   poe2_weapon_swap_test
   poe2_rare_items_test
   poe2_save_fixture_test

@@ -43,7 +43,8 @@ TEST_F(Poe2VfxTest, ElementsFollowTheDamageType)
 	EXPECT_EQ(vfx::ElementOf(DamageType::Cold, true), vfx::Element::Cold);
 	EXPECT_EQ(vfx::ElementOf(DamageType::Chaos, true), vfx::Element::Chaos);
 	EXPECT_EQ(vfx::ElementOf(DamageType::Physical, false), vfx::Element::Physical);
-	EXPECT_EQ(vfx::ElementOf(DamageType::Physical, true), vfx::Element::Holy);
+	// A physical spell is bone (Blessed Hammer keeps its holy look through its table row).
+	EXPECT_EQ(vfx::ElementOf(DamageType::Physical, true), vfx::Element::Bone);
 }
 
 TEST_F(Poe2VfxTest, AcidIsChaos)

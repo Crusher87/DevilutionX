@@ -76,7 +76,7 @@ Haunt		0.8						none (Essence Drain)
 LocustSwarm		1.0				112	106	none (Contagion)
 CorpseExplosion		0.8						Detonate Dead
 SoulHarvest		1.3						none (Feast of Flesh)
-BonePrison		1.0						none (Bone Cage)
+BonePrison		1.0						Bone Cage
 Weaken		0.7						Enfeeble
 IronMaiden		0.7						none (any POE2 curse)
 Decrepify		0.7						none (Temporal Chains)
@@ -145,3 +145,6 @@ WitheringRay		0.75						granted: Wither (Primordial Wand)
 TwinBolts		0.7						granted: Spellslinger stand-in (Dueling Wand)
 PlagueArrow	100							Poisonburst Arrow
 HexRupture		0.8						Hexblast
+BoneSpikes		0.95						Unearth
+BoneSpear		0.9						Bonestorm
+BloodNova		0.8						none (Bone Cage and Exsanguinate)
