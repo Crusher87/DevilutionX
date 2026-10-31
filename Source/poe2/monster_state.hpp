@@ -102,10 +102,22 @@ struct Poe2MonsterState {
 	bool revived = false;
 	/** @brief Killed by a Cull (set where the Cull lands, read when it dies; not saved, since the death follows at once). */
 	bool culled = false;
-	/** @brief Leoric's Road: a risen monster's put-down window, in game ticks left (not saved: a reloaded rise just finishes). */
-	uint8_t risingTicks = 0;
-	/** @brief Leoric's Road: one of the King's dead leaves when this runs out (saved in the monster's spare slot). */
-	uint16_t kingsDeadTicks = 0;
+	/**
+	 * @brief The Butcher's Road hook (not saved, like the ailments): game ticks left of the drag, which it can't act
+	 * through, and the tile it is dragged to; the tile its last step left, to draw the step smoothly, while hookStepped.
+	 */
+	uint8_t hookTicks = 0;
+	uint8_t hookToX = 0;
+	uint8_t hookToY = 0;
+	uint8_t hookFromX = 0;
+	uint8_t hookFromY = 0;
+	bool hookStepped = false;
+	/** @brief The hook's slow on a rare, and a unique's flinch (it can't attack), in game ticks left (not saved). */
+	uint8_t hookSlowTicks = 0;
+	uint8_t flinchTicks = 0;
+	/** @brief The Butcher's Road pact: enraged, in game ticks left, and its extra turns building up to 100 (not saved). */
+	uint8_t enrageTicks = 0;
+	uint8_t enrageCarry = 0;
 	/** @brief It has attacked the hero once: the Maiden's Road pact no longer hides her from it (not saved). */
 	bool struckHero = false;
 	/** @brief A player's minion heading back to its owner, ignoring enemies until it's close again. */

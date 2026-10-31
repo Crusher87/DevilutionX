@@ -6,6 +6,7 @@
 #include "effects.h"
 
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <memory>
 #include <string>
@@ -14,9 +15,14 @@
 
 #include <magic_enum/magic_enum.hpp>
 
+#ifndef USE_SDL3
+#include <Aulib/Stream.h>
+#endif
+
 #include "data/file.hpp"
 #include "data/iterators.hpp"
 #include "data/record_reader.hpp"
+#include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
@@ -25,6 +31,7 @@
 #include "options.h"
 #include "player.h"
 #include "utils/is_of.hpp"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 
@@ -251,6 +258,71 @@ void PlayModSfxLoc(std::string_view path, Point position)
 	if (snd == nullptr)
 		snd = sound_file_load(std::string(path).c_str());
 	if (snd == nullptr || !snd->DSB.IsLoaded())
+		return;
+	snd_play_snd(snd.get(), lVolume, lPan, *GetOptions().Audio.soundVolume);
+}
+
+namespace {
+
+/** @brief A copy of a wave file that plays at ratePercent of its speed: its "fmt " chunk claims a lower sample rate. */
+std::unique_ptr<TSnd> LoadPitchedWave(const char *path, int ratePercent)
+{
+	size_t size = 0;
+	AssetHandle handle = OpenAsset(path, size);
+	if (!handle.ok() || size < 12)
+		return nullptr;
+	auto data = MakeArraySharedPtr<std::uint8_t>(size);
+	if (!handle.read(data.get(), size))
+		return nullptr;
+	const uint8_t *bytes = data.get();
+	if (std::memcmp(bytes, "RIFF", 4) != 0 || std::memcmp(bytes + 8, "WAVE", 4) != 0)
+		return nullptr;
+	const auto readLE32 = [](const uint8_t *at) {
+		return static_cast<uint32_t>(at[0]) | (static_cast<uint32_t>(at[1]) << 8) | (static_cast<uint32_t>(at[2]) << 16) | (static_cast<uint32_t>(at[3]) << 24);
+	};
+	const auto writeLE32 = [](uint8_t *at, uint32_t value) {
+		for (int i = 0; i < 4; i++)
+			at[i] = static_cast<uint8_t>(value >> (8 * i));
+	};
+	for (size_t at = 12; at + 8 <= size;) {
+		const uint32_t chunkSize = readLE32(bytes + at + 4);
+		if (std::memcmp(bytes + at, "fmt ", 4) == 0 && chunkSize >= 12 && at + 8 + 12 <= size) {
+			// The sample rate and the bytes a second, both slowed alike.
+			uint8_t *fmt = data.get() + at + 8;
+			writeLE32(fmt + 4, static_cast<uint32_t>(static_cast<uint64_t>(readLE32(fmt + 4)) * static_cast<uint64_t>(ratePercent) / 100));
+			writeLE32(fmt + 8, static_cast<uint32_t>(static_cast<uint64_t>(readLE32(fmt + 8)) * static_cast<uint64_t>(ratePercent) / 100));
+			auto snd = std::make_unique<TSnd>();
+			snd->start_tc = SDL_GetTicks() - 80 - 1;
+			if (snd->DSB.SetChunk(data, size, /*isMp3=*/false) != 0)
+				return nullptr;
+			return snd;
+		}
+		at += 8 + chunkSize + (chunkSize & 1);
+	}
+	return nullptr;
+}
+
+} // namespace
+
+void PlayPitchedSfxLoc(SfxID psfx, Point position, int ratePercent)
+{
+	if (!gbSndInited || !gbSoundOn || gbBufferMsgs != 0)
+		return;
+	if (MyPlayer->pLvlLoad != 0 && gbIsMultiplayer)
+		return;
+	const std::string &path = sgSFX[static_cast<int16_t>(psfx)].pszName;
+	// Kept with the mod sounds, under a key no file path has.
+	std::unique_ptr<TSnd> &snd = ModSounds[StrCat("?pitched ", ratePercent, " ", path)];
+	if (snd == nullptr) {
+		snd = LoadPitchedWave(path.c_str(), ratePercent);
+		if (snd == nullptr) {
+			PlaySfxLoc(psfx, position, false);
+			return;
+		}
+	}
+	int lVolume = 0;
+	int lPan = 0;
+	if (!CalculateSoundPosition(position, &lVolume, &lPan) || !snd->DSB.IsLoaded())
 		return;
 	snd_play_snd(snd.get(), lVolume, lPan, *GetOptions().Audio.soundVolume);
 }

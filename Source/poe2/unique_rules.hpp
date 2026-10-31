@@ -253,6 +253,11 @@ struct UniqueRuleState {
 	 * recent one (1 to 3, 0 for none), for the hero's tint. */
 	std::array<uint8_t, 3> backlashTicks {};
 	uint8_t lastBacklash = 0;
+	/** @brief The Butcher's Road: game ticks before the cry sounds again, and the tile the last arrow that hit flew
+	 * from, for the pact's hook along its line. */
+	uint8_t butcherCryTicks = 0;
+	int16_t arrowFromX = 0;
+	int16_t arrowFromY = 0;
 	/** @brief Knife in the Dark: empowered hits left after a swap, their game ticks left, and ticks until it can trigger again. */
 	uint8_t swapStrikes = 0;
 	uint8_t swapStrikeTicks = 0;

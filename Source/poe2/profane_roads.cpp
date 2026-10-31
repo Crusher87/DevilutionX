@@ -1,251 +1,356 @@
 #include "poe2/profane_roads.hpp"
 
 #include <algorithm>
-#include <cstdlib>
 #include <functional>
 #include <optional>
-#include <vector>
 
-#include "engine/path.h"
-#include "engine/random.hpp"
+#include "effects.h"
+#include "engine/animationinfo.h"
+#include "engine/direction.hpp"
 #include "game_mode.hpp"
 #include "levels/gendung.h"
+#include "levels/tile_properties.hpp"
+#include "lighting.h"
 #include "missiles.h"
 #include "monster.h"
-#include "multi.h"
+#include "nthread.h"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
-#include "poe2/spirit_skills.hpp"
+#include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
-#include "poe2/unique_effects.hpp"
+#include "poe2/unique_rules.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "utils/is_of.hpp"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 
 namespace {
 
-/** @brief The toll, "The dead do not rest": this share of the hero's kills rise, in percent. */
-constexpr int DeadDoNotRestChance = 25;
-/** @brief With the pact the share grows, and they rise at full life. */
-constexpr int KingsDeadPactChance = 33;
-/** @brief A body that isn't down by then never rises. */
-constexpr uint16_t PendingRiseTimeoutTicks = 10 * 20;
-constexpr size_t MaxPendingRises = 32;
+/** @brief The cry is the Butcher's own line, slowed to this share of its speed so it sounds deeper than his. */
+constexpr int ButcherCryRatePercent = 78;
+/** @brief The pact's hook along an arrow's line takes enemies this close to the line, in tiles. */
+constexpr int ArrowLineHalfWidth = 1;
 
-/** @brief A rise waiting for its body to fall: it stands up once the dead monster's death animation has ended. */
-struct PendingRise {
-	Point tile;
-	size_t monsterId;
-	uint8_t level;
-	bool setLevel;
-	/** @brief The dead monster's own type (a level type index), for levels where no skeletons walk. */
-	size_t ownTypeIndex;
-	_monster_id ownType;
-	RevivedStats stats;
-	/** @brief One of the King's dead (for the hero), else a hostile rise. */
-	bool kingsDead;
-	bool fullLife;
-	uint16_t ticks;
-};
+/** @brief The toll, The Butcher's Hook (the stat keeps its old name, DeadDoNotRest, in the tree data). */
+bool HasButchersHook(const Player &player)
+{
+	return PassiveTotal(player, PassiveStat::DeadDoNotRest) > 0;
+}
 
-std::vector<PendingRise> PendingRises;
-
-bool HasPact(const Player &player)
+/** @brief The pact, The Larder (the stat keeps its old name, KingsDeadPact, in the tree data). */
+bool HasLarder(const Player &player)
 {
 	return PassiveTotal(player, PassiveStat::KingsDeadPact) > 0;
 }
 
-/** @brief Never in town, the arena, the quest set levels or Diablo's level. */
-bool CanRiseHere()
+int SquaredDistance(Point a, Point b)
 {
-	return leveltype != DTYPE_TOWN && !setlevel && currlevel != 16;
+	const Displacement d = a - b;
+	return d.deltaX * d.deltaX + d.deltaY * d.deltaY;
 }
 
-void QueueRise(const Monster &monster, bool kingsDead, bool fullLife)
+/** @brief An enemy the hook can catch: alive, on the level and in sight, not the hero's and not in a talk. */
+bool IsHookableEnemy(const Monster &monster)
 {
-	if (PendingRises.size() >= MaxPendingRises)
-		return;
-	PendingRise rise {};
-	// MonsterDeath puts the body down on the tile the monster came from.
-	rise.tile = monster.position.old;
-	rise.monsterId = monster.getId();
-	rise.level = currlevel;
-	rise.setLevel = setlevel;
-	rise.ownTypeIndex = monster.levelType;
-	rise.ownType = monster.type().type;
-	rise.stats = { std::max(monster.maxHitPoints / 2, Fixed26_6::fromInt(1)), monster.minDamage, monster.maxDamage, monster.armorClass, monster.resistance };
-	rise.kingsDead = kingsDead;
-	rise.fullLife = fullLife;
-	PendingRises.push_back(rise);
+	return !monster.isInvalid && !monster.hasNoLife() && monster.mode != MonsterMode::Death && !monster.isPlayerMinion()
+	    && (monster.flags & MFLAG_HIDDEN) == 0 && !CanTalkToMonst(monster) && !IsLabDummy(monster)
+	    && monster.position.tile != GolemHoldingCell;
 }
 
-/** @brief The King's dead fight in melee (they get the minions' melee AI), so they rise as a random axe or sword skeleton of the level. */
-std::optional<_monster_id> KingsDeadType()
+bool IsBoss(const Monster &monster)
 {
-	_monster_id found[8];
-	int count = 0;
-	for (size_t i = 0; i < LevelMonsterTypeCount; i++) {
-		if (IsAnyOf(LevelMonsterTypes[i].type, MT_WSKELAX, MT_TSKELAX, MT_RSKELAX, MT_XSKELAX, MT_WSKELSD, MT_TSKELSD, MT_RSKELSD, MT_XSKELSD)
-		    && std::find(found, found + count, LevelMonsterTypes[i].type) == found + count)
-			found[count++] = LevelMonsterTypes[i].type;
+	return monster.isUnique() || monster.type().type == MT_DIABLO;
+}
+
+/**
+ * @brief The enemy the hook flies to: the nearest within 6 tiles of the corpse that the hero has a clear line to. With
+ * an arrow's line, the nearest behind the corpse along it comes first.
+ */
+Monster *FindHookTarget(const Player &player, const Monster &corpse, Point from, std::optional<Point> arrowFrom)
+{
+	Monster *nearest = nullptr;
+	int nearestDistance = HookTiles * HookTiles + 1;
+	Monster *behind = nullptr;
+	int behindDistance = nearestDistance;
+	Displacement line {};
+	int64_t lineLength = 0;
+	if (arrowFrom) {
+		line = from - *arrowFrom;
+		lineLength = static_cast<int64_t>(line.deltaX) * line.deltaX + static_cast<int64_t>(line.deltaY) * line.deltaY;
 	}
-	if (count == 0)
-		return std::nullopt;
-	return found[GenerateRnd(count)];
-}
-
-/** @brief The oldest of the hero's King's dead (the least time left), or nullptr. */
-std::optional<size_t> OldestKingsDead(const Player &player)
-{
-	std::optional<size_t> oldest;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
-		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (!IsKingsDead(monster) || monster.hasNoLife() || monster.goalVar3 != player.getId())
-			continue;
-		if (!oldest || monster.poe2.kingsDeadTicks < Monsters[ActiveMonsters[*oldest]].poe2.kingsDeadTicks)
-			oldest = i;
-	}
-	return oldest;
-}
-
-void RaiseKingsDead(const PendingRise &rise, Point position)
-{
-	const Player &player = *MyPlayer;
-	const int cap = std::max(KingsDeadMinCap, ReviveMinionLimit(player));
-	if (static_cast<int>(CountRevivedMinions(player) + CountKingsDead(player)) >= cap) {
-		// Full: the new one replaces the oldest of the King's dead, and never one of Revive's.
-		const std::optional<size_t> oldest = OldestKingsDead(player);
-		if (!oldest)
-			return;
-		RemoveMonsterQuietly(*oldest);
-	}
-	RevivedStats stats = rise.stats;
-	stats.life = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(stats.life.raw()) * UniqueMinionLifePercent(player) / 100, INT32_MAX / 4)));
-	Monster *minion = SpawnRevivedMinion(player, position, KingsDeadType().value_or(rise.ownType), stats);
-	if (minion == nullptr)
-		return;
-	minion->poe2.revived = false;
-	minion->flags |= MFLAG_KINGS_DEAD;
-	minion->poe2.kingsDeadTicks = KingsDeadTicks;
-	AddVisualEffect(position, MissileGraphicID::Resurrect);
-	TelemetryLog("profane", "one of the King's dead rose");
-}
-
-void RaiseHostile(const PendingRise &rise, Point position)
-{
-	// As Leoric raises them: a skeleton of the level (archers too), or the dead monster itself where none walk.
-	const size_t typeIndex = RandomLevelSkeletonType().value_or(rise.ownTypeIndex);
-	Monster *risen = SpawnRisenMonster(position, typeIndex);
-	if (risen == nullptr)
-		return;
-	if (!rise.fullLife) {
-		risen->maxHitPoints = std::max(risen->maxHitPoints / 2, Fixed26_6::fromInt(1));
-		risen->hitPoints = risen->maxHitPoints;
-	}
-	risen->poe2.risingTicks = RisingTicks;
-	TelemetryLog("profane", "a kill rose again");
-}
-
-void StandUp(const PendingRise &rise)
-{
-	const std::optional<Point> position = FindClosestValidPosition([](Point target) { return IsTileFreeForMonster(target); }, rise.tile, 0, 1);
-	if (!position)
-		return;
-	dCorpse[rise.tile.x][rise.tile.y] = 0;
-	if (rise.kingsDead)
-		RaiseKingsDead(rise, *position);
-	else
-		RaiseHostile(rise, *position);
-}
-
-void CountDownKingsDead()
-{
-	for (size_t i = ActiveMonsterCount; i-- > 0;) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (!IsKingsDead(monster) || monster.hasNoLife())
+		// One already on the hook is left to it, so the next Cull catches another.
+		if (&monster == &corpse || !IsHookableEnemy(monster) || monster.poe2.hookTicks > 0)
 			continue;
-		if (monster.poe2.kingsDeadTicks > 0)
-			monster.poe2.kingsDeadTicks--;
-		// They leave without a body; one loaded with no time left leaves at once.
-		if (monster.poe2.kingsDeadTicks == 0)
-			RemoveMonsterQuietly(i);
+		const Point tile = monster.position.tile;
+		const int distance = SquaredDistance(tile, from);
+		if (distance > HookTiles * HookTiles || !LineClearMissile(player.position.tile, tile))
+			continue;
+		if (distance < nearestDistance) {
+			nearest = &monster;
+			nearestDistance = distance;
+		}
+		if (lineLength == 0 || distance >= behindDistance)
+			continue;
+		// Behind the corpse on the arrow's line: ahead along it, and no more than a tile to either side.
+		const Displacement offset = tile - from;
+		const int64_t along = static_cast<int64_t>(offset.deltaX) * line.deltaX + static_cast<int64_t>(offset.deltaY) * line.deltaY;
+		const int64_t across = static_cast<int64_t>(offset.deltaX) * line.deltaY - static_cast<int64_t>(offset.deltaY) * line.deltaX;
+		if (along > 0 && across * across <= static_cast<int64_t>(ArrowLineHalfWidth * ArrowLineHalfWidth) * lineLength) {
+			behind = &monster;
+			behindDistance = distance;
+		}
+	}
+	return behind != nullptr ? behind : nearest;
+}
+
+/** @brief Moves the monster to the tile next to it in that direction, as a walk would allow; false where it can't. */
+bool StepMonster(Monster &monster, Direction dir, Point heroTile)
+{
+	const Point from = monster.position.tile;
+	const Point to = from + dir;
+	if (!InDungeonBounds(to) || to == heroTile || !IsTileFreeForMonster(to))
+		return false;
+	// Never through the corner of a wall, as IsRelativeMoveOK sees it for a walk.
+	if ((dir == Direction::East && IsTileSolid(from + Direction::SouthEast))
+	    || (dir == Direction::West && IsTileSolid(from + Direction::SouthWest))
+	    || (dir == Direction::North && (IsTileSolid(from + Direction::NorthEast) || IsTileSolid(from + Direction::NorthWest)))
+	    || (dir == Direction::South && (IsTileSolid(from + Direction::SouthWest) || IsTileSolid(from + Direction::SouthEast))))
+		return false;
+	M_ClearSquares(monster);
+	monster.position.tile = to;
+	monster.position.old = to;
+	monster.position.future = to;
+	monster.occupyTile(to, false);
+	if (monster.lightId != NO_LIGHT)
+		ChangeLightXY(monster.lightId, to);
+	return true;
+}
+
+/** @brief The free tile beside the hero nearest the monster, or the hero's own tile when none is free. */
+Point DragDestination(const Monster &monster, Point heroTile)
+{
+	std::optional<Point> best;
+	int bestDistance = 0;
+	for (int dy = -1; dy <= 1; dy++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			const Point tile = heroTile + Displacement { dx, dy };
+			if ((dx == 0 && dy == 0) || !InDungeonBounds(tile))
+				continue;
+			if (tile != monster.position.tile && !IsTileFreeForMonster(tile))
+				continue;
+			const int distance = SquaredDistance(tile, monster.position.tile);
+			if (!best || distance < bestDistance) {
+				best = tile;
+				bestDistance = distance;
+			}
+		}
+	}
+	return best.value_or(heroTile);
+}
+
+/** @brief The pact: answering the call or caught on the hook enrages the monster; a new one resets it. */
+void Enrage(const Player &player, Monster &monster)
+{
+	if (HasLarder(player))
+		monster.poe2.enrageTicks = EnrageTicks;
+}
+
+/**
+ * @brief Drags the monster up to steps tiles on towards its destination; the drag ends early at a wall or another
+ * monster, or once it arrives.
+ */
+void DragSteps(Monster &monster, const Player &player, int steps)
+{
+	Poe2MonsterState &state = monster.poe2;
+	const Point destination { state.hookToX, state.hookToY };
+	state.hookFromX = static_cast<uint8_t>(monster.position.tile.x);
+	state.hookFromY = static_cast<uint8_t>(monster.position.tile.y);
+	state.hookStepped = false;
+	for (int i = 0; i < steps; i++) {
+		if (monster.position.tile == destination || monster.position.tile.WalkingDistance(player.position.tile) <= 1) {
+			state.hookTicks = 0;
+			return;
+		}
+		if (!StepMonster(monster, GetDirection(monster.position.tile, destination), player.position.tile)) {
+			state.hookTicks = 0;
+			return;
+		}
+		state.hookStepped = true;
+	}
+}
+
+/** @brief The hook catches the enemy: a boss flinches, a rare comes a tile and slows, anything else is dragged in. */
+void Hook(const Player &player, Point from, Monster &target)
+{
+	vfx::HookChain(from, target.position.tile, /*thrown=*/true);
+	AddVisualEffect(target.position.tile, MissileGraphicID::BloodHit);
+	PlaySfxLoc(SfxID::OperateLever, target.position.tile, false);
+	TelemetryLog("profane", StrCat("the Butcher's hook caught ", target.name()));
+	Poe2MonsterState &state = target.poe2;
+	if (target.mode == MonsterMode::Petrified) {
+		Enrage(player, target);
+		return;
+	}
+	if (IsBoss(target)) {
+		M_StartFlinch(target);
+		state.flinchTicks = HookFlinchTicks;
+	} else if (GetMonsterAffixes(target).rarity == MonsterRarity::Rare) {
+		if (target.position.tile.WalkingDistance(player.position.tile) > 1) {
+			const bool walking = target.isWalking();
+			// A walk it was making ends where it stood; the pull takes it a tile in from there.
+			if (walking) {
+				M_ClearSquares(target);
+				target.position.tile = target.position.old;
+				target.position.future = target.position.old;
+				target.occupyTile(target.position.tile, false);
+			}
+			StepMonster(target, GetDirection(target.position.tile, player.position.tile), player.position.tile);
+			if (walking)
+				M_StartStand(target, target.direction);
+		}
+		state.hookSlowTicks = HookRareSlowTicks;
+	} else if (target.position.tile.WalkingDistance(player.position.tile) > 1) {
+		// Caught mid-stride or mid-swing: it reels on the hook, and can't act until the drag ends.
+		M_StartFlinch(target);
+		const Point destination = DragDestination(target, player.position.tile);
+		state.hookToX = static_cast<uint8_t>(destination.x);
+		state.hookToY = static_cast<uint8_t>(destination.y);
+		state.hookTicks = HookDragTicks;
+	}
+	Enrage(player, target);
+}
+
+/**
+ * @brief The Butcher's cry, let out by the hero: every enemy in reach of her wakes and hunts her, through walls, as if
+ * she had hit it. The sound itself rests between Culls.
+ */
+void Cry(const Player &player, const Monster &corpse)
+{
+	UniqueRuleState &state = player.poe2.uniqueState;
+	if (state.butcherCryTicks == 0) {
+		state.butcherCryTicks = ButcherCryCooldownTicks;
+		PlayPitchedSfxLoc(SfxID::ButcherGreeting, player.position.tile, ButcherCryRatePercent);
+	}
+	const int reach = HasLarder(player) ? ButcherCryPactTiles : ButcherCryTiles;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		if (&monster == &corpse || monster.hasNoLife() || monster.mode == MonsterMode::Death || monster.isPlayerMinion()
+		    || (monster.flags & MFLAG_TARGETS_MONSTER) != 0 || CanTalkToMonst(monster) || IsLabDummy(monster))
+			continue;
+		if (SquaredDistance(monster.position.tile, player.position.tile) > reach * reach)
+			continue;
+		monster.activeForTicks = UINT8_MAX;
+		monster.enemy = static_cast<uint8_t>(player.getId());
+		monster.enemyPosition = player.position.future;
+		monster.position.last = player.position.future;
+		monster.flags &= ~MFLAG_NO_ENEMY;
+		Enrage(player, monster);
 	}
 }
 
 } // namespace
 
-bool IsRisen(const Monster &monster)
-{
-	return (monster.flags & MFLAG_RISEN) != 0;
-}
-
-bool IsKingsDead(const Monster &monster)
-{
-	return (monster.flags & MFLAG_KINGS_DEAD) != 0;
-}
-
 void OnProfaneRoadKill(const Player &player, const Monster &monster)
 {
-	if (!gbIsPoe2 || gbIsMultiplayer || &player != MyPlayer || monster.isPlayerMinion() || !CanRiseHere())
+	if (!gbIsPoe2 || gbIsMultiplayer || &player != MyPlayer || monster.isPlayerMinion() || !monster.poe2.culled || leveltype == DTYPE_TOWN)
 		return;
-	const bool pact = HasPact(player);
-	// A culled monster stays dead, and with the pact it rises for the hero. So does a rising one put down.
-	if (monster.poe2.culled) {
-		if (pact)
-			QueueRise(monster, /*kingsDead=*/true, /*fullLife=*/false);
+	if (!HasButchersHook(player))
 		return;
-	}
-	if (IsRisen(monster) || monster.isUnique() || monster.type().type == MT_DIABLO || GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
-		return;
-	const int chance = pact ? KingsDeadPactChance : (PassiveTotal(player, PassiveStat::DeadDoNotRest) > 0 ? DeadDoNotRestChance : 0);
-	if (chance == 0 || GenerateRnd(100) >= chance)
-		return;
-	QueueRise(monster, /*kingsDead=*/false, /*fullLife=*/pact);
+	// MonsterDeath puts the body down on the tile the monster came from.
+	const Point from = monster.position.old;
+	const UniqueRuleState &state = player.poe2.uniqueState;
+	std::optional<Point> arrowFrom;
+	if (HasLarder(player) && state.lastHitRanged && !state.lastHitBySpell && Point(state.arrowFromX, state.arrowFromY) != from)
+		arrowFrom = Point(state.arrowFromX, state.arrowFromY);
+	if (Monster *target = FindHookTarget(player, monster, from, arrowFrom); target != nullptr)
+		Hook(player, from, *target);
+	Cry(player, monster);
 }
 
-bool TryPutDownRisen(const Player &player, Monster &monster)
+void NoteArrowLine(const Player &player, Point from)
 {
-	if (!gbIsPoe2 || monster.poe2.risingTicks == 0 || !IsRisen(monster) || monster.hasNoLife() || &player != MyPlayer)
-		return false;
-	// With the pact a put-down counts as a Cull, so it rises for the hero instead.
-	if (HasPact(player))
-		monster.poe2.culled = true;
-	AddVisualEffect(monster.position.tile, MissileGraphicID::BoneHit);
-	ApplyMonsterDamage(DamageType::Physical, monster, monster.hitPoints);
-	return true;
+	UniqueRuleState &state = player.poe2.uniqueState;
+	state.arrowFromX = static_cast<int16_t>(from.x);
+	state.arrowFromY = static_cast<int16_t>(from.y);
 }
 
 void ProcessProfaneRoads()
 {
-	if (!gbIsPoe2 || gbIsMultiplayer)
+	if (!gbIsPoe2 || gbIsMultiplayer || MyPlayer == nullptr)
 		return;
-	for (size_t i = 0; i < PendingRises.size();) {
-		PendingRise &rise = PendingRises[i];
-		const Monster &dead = Monsters[rise.monsterId];
-		const bool sameLevel = rise.level == currlevel && rise.setLevel == setlevel;
-		if (!sameLevel || ++rise.ticks > PendingRiseTimeoutTicks) {
-			PendingRises.erase(PendingRises.begin() + static_cast<std::ptrdiff_t>(i));
+	const Player &player = *MyPlayer;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		Poe2MonsterState &state = monster.poe2;
+		if (state.hookSlowTicks > 0)
+			state.hookSlowTicks--;
+		if (state.flinchTicks > 0)
+			state.flinchTicks--;
+		if (state.enrageTicks > 0 && --state.enrageTicks == 0)
+			state.enrageCarry = 0;
+		if (state.hookTicks == 0) {
+			state.hookStepped = false;
 			continue;
 		}
-		if (!dead.isInvalid) {
-			// While it waits, the ground where it fell glows red.
-			if (rise.ticks % 8 == 1)
-				AddVisualEffect(rise.tile, MissileGraphicID::RedFlareExplosion);
-			i++;
+		if (monster.hasNoLife() || monster.mode == MonsterMode::Death || !player.isOnActiveLevel()) {
+			state.hookTicks = 0;
+			state.hookStepped = false;
 			continue;
 		}
-		const PendingRise ready = rise;
-		PendingRises.erase(PendingRises.begin() + static_cast<std::ptrdiff_t>(i));
-		StandUp(ready);
+		// Evenly over the drag's ticks: what is left of the way, shared out over the ticks left.
+		const Point destination { state.hookToX, state.hookToY };
+		const int left = monster.position.tile.WalkingDistance(destination);
+		const int steps = (left + state.hookTicks - 1) / state.hookTicks;
+		state.hookTicks--;
+		DragSteps(monster, player, std::max(steps, 1));
+		vfx::HookChain(monster.position.tile, player.position.tile, /*thrown=*/false);
 	}
-	CountDownKingsDead();
 }
 
-void ClearPendingRises()
+bool IsHooked(const Monster &monster)
 {
-	PendingRises.clear();
+	return gbIsPoe2 && monster.poe2.hookTicks > 0;
+}
+
+int HookSlowPercent(const Monster &monster)
+{
+	return gbIsPoe2 && monster.poe2.hookSlowTicks > 0 ? HookRareSlowPercent : 0;
+}
+
+bool IsFlinching(const Monster &monster)
+{
+	return gbIsPoe2 && monster.poe2.flinchTicks > 0;
+}
+
+bool IsEnraged(const Monster &monster)
+{
+	return gbIsPoe2 && monster.poe2.enrageTicks > 0 && !monster.hasNoLife();
+}
+
+bool EnragedExtraTick(Monster &monster)
+{
+	if (!IsEnraged(monster) || monster.isPlayerMinion())
+		return false;
+	monster.poe2.enrageCarry = static_cast<uint8_t>(monster.poe2.enrageCarry + EnrageHastePercent);
+	if (monster.poe2.enrageCarry < 100)
+		return false;
+	monster.poe2.enrageCarry = static_cast<uint8_t>(monster.poe2.enrageCarry - 100);
+	return true;
+}
+
+Displacement HookDrawOffset(const Monster &monster)
+{
+	if (!gbIsPoe2 || !monster.poe2.hookStepped)
+		return {};
+	// The step just taken, drawn from where it began, so the drag slides between game ticks instead of jumping.
+	const Displacement back = Point(monster.poe2.hookFromX, monster.poe2.hookFromY) - Point(monster.position.tile);
+	const int remaining = AnimationInfo::baseValueFraction - std::min<int>(ProgressToNextGameTick, AnimationInfo::baseValueFraction);
+	return { (back.deltaX - back.deltaY) * 32 * remaining / AnimationInfo::baseValueFraction, (back.deltaX + back.deltaY) * 16 * remaining / AnimationInfo::baseValueFraction };
 }
 
 bool HasInfravision(const Player &player)
@@ -327,25 +432,6 @@ bool TakeFirstBlow(Monster &monster, const Player &player)
 	const bool first = !monster.poe2.struckHero && OutOfMind(player);
 	monster.poe2.struckHero = true;
 	return first;
-}
-
-size_t CountKingsDead(const Player &player)
-{
-	size_t count = 0;
-	for (size_t i = 0; i < ActiveMonsterCount; i++) {
-		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (IsKingsDead(monster) && monster.goalVar3 == player.getId() && !monster.hasNoLife())
-			count++;
-	}
-	return count;
-}
-
-void MakeRoomForRevive(const Player &player, size_t revived, int limit)
-{
-	if (static_cast<int>(revived + CountKingsDead(player)) < std::max(KingsDeadMinCap, limit))
-		return;
-	if (const std::optional<size_t> oldest = OldestKingsDead(player); oldest)
-		RemoveMonsterQuietly(*oldest);
 }
 
 } // namespace devilution

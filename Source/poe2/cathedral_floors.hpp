@@ -27,6 +27,12 @@
  * Curtis on 2026-10-30), on Diablo's Catacombs tiles: walls there are blocks of their own, so the rooms' inner walls,
  * doors, archways and pillars are drawn straight onto the floor (drlg_l2.cpp). Their setting is Gameplay > New
  * Catacombs Floors.
+ *
+ * The Caves (levels 9 to 12) are built the same way again from caves_rooms.tsv (picked by Curtis on 2026-10-31), on
+ * Diablo's Caves grid, where each square is a corner point of rock or floor and the walls come out of the corners
+ * (drlg_l3.cpp). There a room's mouths are three points wide, and lava pools, lava streams with their bridges, wooden
+ * fences with gates and stalagmites are stamped onto the floor once the walls are made. Their setting is Gameplay >
+ * New Caves Floors.
  */
 #pragma once
 
@@ -93,8 +99,23 @@ void SetCathedralRooms(std::vector<CathedralRoomDef> rooms);
 const std::vector<CathedralRoomDef> &GetCatacombsRooms();
 void SetCatacombsRooms(std::vector<CathedralRoomDef> rooms);
 
+/**
+ * @brief The Caves room collection, read from caves_rooms.tsv on first use. Its grids are corner points: ' ' rock,
+ * '.' floor, 'E' a mouth (three in a row), 'o' a rock pillar, 'L' lava, 'U' 'V' and 'Z' (the stairs to town, level 9
+ * only) three in a row on the first floor row or column, and marks on the tile whose north corner the point is:
+ * 'l' a lava stream, 'H' a bridge over it, 'f' a fence, 'g' a gate in it, 'T' a stalagmite cluster (2 x 2 marks),
+ * 'i' a lone stalagmite. Props: r * A F G u s D P k x as in the Cathedral.
+ */
+const std::vector<CathedralRoomDef> &GetCavesRooms();
+void SetCavesRooms(std::vector<CathedralRoomDef> rooms);
+
 /** @brief A grid turned: turn & 3 quarter turns clockwise, then mirrored left to right when turn & 4. */
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn);
+/**
+ * @brief A Caves grid turned the same way. Its marks belong to the tile whose north corner they sit on, so the corner
+ * points and the tiles between them turn as two layers, and each mark lands on its tile's new north corner.
+ */
+std::vector<std::string> TurnCavesGrid(const std::vector<std::string> &grid, int turn);
 
 enum class CathedralAreaKind : uint8_t {
 	Arrival,
@@ -135,7 +156,10 @@ struct CathedralDoor {
 	bool door = false;
 };
 
-/** A block of a wall, arch, fence, door or broken-wall line inside a designed room ('#', 'a', '=', 'd', 'R'). */
+/**
+ * A block of a wall, arch, fence, door or broken-wall line inside a designed room ('#', 'a', '=', 'd', 'R').
+ * In the Caves: a lava point 'L' or pillar 'o' (rock in the mask), or a tile mark 'l' 'H' 'f' 'g' 'T' 'i'.
+ */
 struct CathedralLine {
 	Point block;
 	char kind = '#';
@@ -150,6 +174,8 @@ struct CathedralProp {
 struct CathedralPlan {
 	/** Built from the Catacombs rooms, on Catacombs tiles. */
 	bool catacombs = false;
+	/** Built from the Caves rooms, on the Caves corner grid. */
+	bool caves = false;
 	std::vector<CathedralArea> areas;
 	std::vector<CathedralDoor> doors;
 	std::vector<CathedralProp> props;
@@ -159,13 +185,13 @@ struct CathedralPlan {
 	Bitset2d<DMAXX, DMAXY> mask;
 	/** Blocks of designed rooms, kept free of random objects and theme rooms. */
 	Bitset2d<DMAXX, DMAXY> designed;
-	/** The first of the four 'U' blocks; the stairs go in the wall north of them. */
+	/** The first of the four 'U' blocks; the stairs go in the wall north of them. Caves: the west one of three. */
 	std::optional<Point> stairsUp;
-	/** The north-west 'V' block. */
+	/** The north-west 'V' block. Caves: the north one of three, the stairs in the wall west of them. */
 	std::optional<Point> stairsDown;
-	/** Catacombs, level 5: the north-west 'Z' block, the stairs back to town. */
+	/** Catacombs, level 5 (Caves, level 9): the north-west 'Z' block, the stairs back to town. */
 	std::optional<Point> townStairs;
-	/** Where the quest's set piece goes. */
+	/** Where the quest's set piece goes. Caves: the north-west tile of the Anvil of Fury's 11 x 11 tiles. */
 	std::optional<Point> questPiece;
 	/** The north-west block of the Poisoned Water entrance (6 x 6). */
 	std::optional<Point> water;
@@ -176,12 +202,14 @@ struct CathedralPlan {
 struct CathedralRequest {
 	/** The Catacombs rooms and rules rather than the Cathedral's. */
 	bool catacombs = false;
+	/** The Caves rooms and rules. */
+	bool caves = false;
 	/** Bit i: room i of the collection may not be used. */
 	uint64_t forbidden = 0;
 	bool questPiece = false;
-	/** The slots the quest's room takes (Arkaine's Valor and the Halls of the Blind need 3 x 3). */
+	/** The slots the quest's room takes (Arkaine's Valor, the Halls of the Blind and the Anvil of Fury need 3 x 3). */
 	Size questSlots { 2, 2 };
-	/** Catacombs: the arrival room also holds the stairs back to town. */
+	/** Catacombs and Caves: the arrival room also holds the stairs back to town. */
 	bool townStairs = false;
 	/** Ogden's sign: the set piece holds the stairs down, so it ends the main way. */
 	bool questPieceIsWayDown = false;
@@ -202,15 +230,17 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan);
 
 /**
  * @brief Marks a Catacombs floor in the room history, so its rooms are kept apart from the Cathedral's (whose numbers
- * mean other rooms). Room 63 can't be used.
+ * mean other rooms). Rooms 62 and 63 can't be used.
  */
 constexpr uint64_t CatacombsRoomsMark = uint64_t { 1 } << 63;
+/** @brief Marks a Caves floor in the room history. */
+constexpr uint64_t CavesRoomsMark = uint64_t { 1 } << 62;
 
 /**
  * @brief Which rooms a new floor may not use, from the rooms the last five floors built used (newest first).
  * Only the floors built from the same collection count.
  */
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false);
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false);
 
 /** @brief Whether the floor being played was made by this builder. */
 bool IsCathedralFunnelFloor();

@@ -72,9 +72,15 @@ enum monster_flag : uint16_t {
 	MFLAG_NO_ENEMY        = 1 << 10,
 	MFLAG_BERSERK         = 1 << 11,
 	MFLAG_NOLIFESTEAL     = 1 << 12,
-	/** @brief POE2 Mashup: rose hostile after a kill on Leoric's Road; gives no reward. */
+	/**
+	 * @brief POE2 Mashup, retired with Leoric's Road (2026-10-30): a monster that rose hostile. Nothing sets it now, and
+	 * a saved monster that has it loses it on load. The bit stays reserved: old saves may still carry it.
+	 */
 	MFLAG_RISEN           = 1 << 13,
-	/** @brief POE2 Mashup: one of the King's dead (Leoric's Road pact), a minion for a while; not Revive's. */
+	/**
+	 * @brief POE2 Mashup, retired with Leoric's Road: one of the King's dead, a minion for a while. Nothing sets it now,
+	 * and a saved minion that has it leaves the level quietly on load. Reserved, as MFLAG_RISEN.
+	 */
 	MFLAG_KINGS_DEAD      = 1 << 14,
 	/** @brief POE2 Mashup: life and damage come from the monster level tables (set when made or loaded on them). */
 	MFLAG_POE2_TABLES     = 1 << 15,
@@ -580,13 +586,15 @@ void LoadDeltaSpawnedMonster(size_t typeIndex, size_t monsterId, uint32_t seed, 
 /**
  * @brief Initialize a spanwed monster (from a network message or from SpawnMonster-function).
  */
-void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel, bool risen = false);
+void InitializeSpawnedMonster(Point position, Direction dir, size_t typeIndex, size_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, int16_t golemSpellLevel);
 void AddDoppelganger(Monster &monster);
 void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damage);
 void MonsterReducePlayerAttribute(Monster &monster, Player &player);
 bool M_Talker(const Monster &monster);
 void M_StartStand(Monster &monster, Direction md);
 void M_ClearSquares(const Monster &monster);
+/** @brief POE2 Mashup: the monster reels as if hit hard, which stops whatever it was doing (a walk ends where it began). */
+void M_StartFlinch(Monster &monster);
 void M_GetKnockback(Monster &monster, WorldTilePosition attackerStartPos);
 void M_StartHit(Monster &monster, int dam);
 void M_StartHit(Monster &monster, const Player &player, int dam);
@@ -662,10 +670,6 @@ size_t CountRevivedMinions(const Player &player);
 void KillRevivedMinions(const Player &player);
 /** @brief Raises a monster of the type to fight for the player, with the stats it had. */
 Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats);
-/** @brief POE2 Mashup, Leoric's Road: a monster of the level type rises hostile, awake and hunting the hero. */
-Monster *SpawnRisenMonster(Point position, size_t typeIndex);
-/** @brief A random skeleton type of the level (a level type index), as Leoric raises them. */
-std::optional<size_t> RandomLevelSkeletonType();
 /** @brief No player or monster stands on the tile, and monsters can walk it. */
 bool IsTileFreeForMonster(Point position);
 /** @brief Takes a monster off the level at once, without a death or a body. @param activeIndex its index in ActiveMonsters. */

@@ -662,15 +662,17 @@ PROFANE_TOOLTIP = 'Profane Path: the short way passes through here'
 # (1.5 times a small). A small is its stats; a notable is (name, stats, lore). The flag stats (value 1) are the
 # roads' rules, read in game code. These stats are final: the content scales skip them.
 ROADS = {
+    # The Butcher's Road (Leoric's Road until 2026-10-30; the key and the DeadDoNotRest/KingsDeadPact flags keep their
+    # old names so saved trees load unchanged). research/tree-rework/profane-road/leoric-rework/spec-v1.md.
     'leoric': dict(owner='Warrior', nodes=[
         [('TwoHandDamage', 6)],
         [('ArmorPercent', 9)],
-        ("The Black King's Wrath", [('TwoHandDamage', 12), ('Cull', 10), ('DeadDoNotRest', 1)],
-         'In the end the King trusted only the axe.'),
+        ("The Butcher's Hook", [('TwoHandDamage', 12), ('Cull', 10), ('DeadDoNotRest', 1)],
+         'Under the cathedral, a room of bodies hung on hooks. Whoever walks this road learns the trade.'),
         [('BowDamage', 6)],
         [('TwoHandDamage', 4), ('BowDamage', 4)],
-        ('The Black Curse', [('KingsDeadPact', 1), ('ArrowDamageMod', 100)],
-         "Freeing the King's spirit lifted his curse. Whoever walks this road takes it up again."),
+        ('The Larder', [('KingsDeadPact', 1), ('ArrowDamageMod', 100)],
+         'The Butcher never chased his meat. It came to him.'),
         [('BowDamage', 9)],
         [('Damage', 6)],
     ]),

@@ -410,9 +410,15 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 	if (!record->stamped) {
 		record->stamped = true;
 		const bool catacombs = leveltype == DTYPE_CATACOMBS;
+		const bool caves = leveltype == DTYPE_CAVES;
+		bool wanted = *GetOptions().Gameplay.newCathedralFloors;
+		if (caves)
+			wanted = *GetOptions().Gameplay.newCavesFloors;
+		else if (catacombs)
+			wanted = *GetOptions().Gameplay.newCatacombsFloors;
 		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's.
-		record->cathedralFunnel = !record->kept && (catacombs ? *GetOptions().Gameplay.newCatacombsFloors : *GetOptions().Gameplay.newCathedralFloors);
-		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs) : 0;
+		record->cathedralFunnel = !record->kept && wanted;
+		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves) : 0;
 		record->roomsPending = record->cathedralFunnel;
 	}
 	return { record->cathedralFunnel, record->avoidRooms };

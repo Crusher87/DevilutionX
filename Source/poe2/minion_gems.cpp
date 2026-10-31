@@ -18,7 +18,6 @@
 #include "poe2/item_stats.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
-#include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -421,7 +420,7 @@ bool IsMinionSkill(PersistentSkill skill)
 
 const MinionGemData *MinionGemOf(const Monster &monster)
 {
-	if (!monster.isPlayerMinion() || monster.poe2.revived || IsKingsDead(monster))
+	if (!monster.isPlayerMinion() || monster.poe2.revived)
 		return nullptr;
 	return FindMinionGemByType(monster.type().type);
 }

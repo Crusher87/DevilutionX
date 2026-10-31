@@ -1299,8 +1299,7 @@ void KillFarthestSkeletonMinion(const Player &player, _monster_id type)
 	int farthestDistance = -1;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.type().type != type || !monster.isPlayerMinion() || monster.goalVar3 != player.getId() || monster.hasNoLife() || monster.poe2.revived
-		    || (monster.flags & MFLAG_KINGS_DEAD) != 0)
+		if (monster.type().type != type || !monster.isPlayerMinion() || monster.goalVar3 != player.getId() || monster.hasNoLife() || monster.poe2.revived)
 			continue;
 		const int distance = monster.position.tile.WalkingDistance(player.position.tile);
 		if (distance > farthestDistance) {

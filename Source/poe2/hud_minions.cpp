@@ -19,7 +19,6 @@
 #include "levels/gendung.h"
 #include "monster.h"
 #include "player.h"
-#include "poe2/profane_roads.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -153,9 +152,6 @@ std::vector<MinionPortrait> MinionHudPortraits(const Player &player)
 		const int alive = static_cast<int>(CountRevivedMinions(player));
 		portraits.push_back({ SkillSlot::ForPersistent(PersistentSkill::Revive), std::string(PersistentSkillName(PersistentSkill::Revive)), std::min(alive, limit), limit, 0, 0, 1 });
 	}
-	// Leoric's Road's King's dead, while they last.
-	if (const int kingsDead = static_cast<int>(CountKingsDead(player)); kingsDead > 0)
-		portraits.push_back({ SkillSlot::ForSpell(SpellID::Resurrect), std::string(_("The King's Dead")), kingsDead, kingsDead, 0, 0, 1 });
 	return portraits;
 }
 

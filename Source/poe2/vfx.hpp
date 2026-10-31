@@ -89,6 +89,11 @@ void Volley(Point from, Point toward, int arrows, bool feathers);
 void Cut(Point tile, Element element);
 /** @brief Lightning arcing between two tiles. */
 void Arc(Point from, Point to, Element element);
+/**
+ * @brief The Butcher's Road hook: a heavy iron chain between two bodies at waist height. Thrown, it hangs slack a
+ * moment and the hook bites with blood; drawn again each game tick while it drags, it is pulled taut.
+ */
+void HookChain(Point from, Point to, bool thrown);
 /** @brief Lightning striking down from the sky onto a tile. */
 void SkyStrike(Point tile, Element element);
 /**

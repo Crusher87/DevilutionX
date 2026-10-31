@@ -44,6 +44,7 @@ set(tests
   poe2_floor_rooms_test
   poe2_tears_test
   poe2_catacombs_floors_test
+  poe2_caves_floors_test
   poe2_cathedral_floors_test
   poe2_floors_test
   poe2_gemcutting_test
@@ -96,6 +97,7 @@ set(tests
   poe2_spirit_uses_test
   poe2_spirit_auras_test
   poe2_vizjerei_road_test
+  poe2_butchers_road_test
   poe2_minion_gems_test
   poe2_minion_travel_test
   poe2_dodge_cancel_test

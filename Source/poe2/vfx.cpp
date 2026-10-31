@@ -2881,6 +2881,51 @@ void Arc(Point from, Point to, Element element)
 	AddBolt(TileCentre(from) + Vec { 0, -30 }, TileCentre(to) + Vec { 0, -30 }, 220, 3, ColoursOf(element));
 }
 
+void HookChain(Point from, Point to, bool thrown)
+{
+	TelemetryEffect("vfx", thrown ? "HookChain thrown" : "HookChain", from.x, from.y);
+	if (!Enabled())
+		return;
+	const Vec a = TileCentre(from);
+	const Vec b = TileCentre(to);
+	const Vec span = b - a;
+	const float length = Length(span);
+	if (length < 1)
+		return;
+	// Links of dark iron every few pixels, big and small in turn, with a dull shine on every fourth; a thrown chain sags
+	// in the middle, a dragging one is taut. Each lasts a little over a game tick, so the redrawn chain never flickers.
+	constexpr float Waist = 30;
+	const float sag = thrown ? 12.F : 2.F;
+	const float life = thrown ? 220.F : 75.F;
+	const int links = std::max(2, static_cast<int>(length / 6));
+	for (int i = 0; i <= links; i++) {
+		const float t = static_cast<float>(i) / static_cast<float>(links);
+		Particle p;
+		p.pos = a + span * t;
+		p.z = Waist - sag * 4 * t * (1 - t);
+		p.life = life;
+		p.size0 = p.size1 = (i % 2 == 0) ? 2.8F : 2.F;
+		p.c0 = { 96, 92, 88 };
+		p.c1 = { 58, 55, 52 };
+		p.shape = Shape::Chunk;
+		AddParticle(p);
+		if (i % 4 == 0) {
+			Particle shine = p;
+			shine.shape = Shape::Dot;
+			shine.size0 = shine.size1 = 1.6F;
+			shine.c0 = shine.c1 = { 210, 200, 185 };
+			shine.alpha = 0.3F;
+			AddParticle(shine);
+		}
+	}
+	if (!thrown)
+		return;
+	// The hook bites: a dull flash of iron and a spatter of blood off the far end.
+	const Vec bite = b + Vec { 0, -Waist };
+	AddRing(bite, 0, 12, 90, 0, { 220, 205, 190 }, 0.35F, true, false);
+	Spray(bite, Scaled(8), 50, 150, 300, 550, Shape::Chunk, { 120, 10, 10 }, { 50, 0, 0 }, 1.4F, 0.9F, 60, 160, 700, 0.6F, 0.9F);
+}
+
 void SkyStrike(Point tile, Element element)
 {
 	TelemetryEffect("vfx", StrCat("SkyStrike ", magic_enum::enum_name(element)), tile.x, tile.y);

@@ -465,7 +465,7 @@ TEST_F(Poe2MinionGemsTest, MinionDamagePassesTheOldByteCap)
 	EXPECT_GT(ScaleMonsterHit(warrior, 255), 255);
 }
 
-TEST_F(Poe2MinionGemsTest, RevivedAndKingsDeadKeepTheirKindsRatio)
+TEST_F(Poe2MinionGemsTest, RevivedMinionsKeepTheirKindsRatio)
 {
 	GoToAreaThirtyEight();
 	Player &player = *MyPlayer;
@@ -486,11 +486,6 @@ TEST_F(Poe2MinionGemsTest, RevivedAndKingsDeadKeepTheirKindsRatio)
 	const int64_t ratio = std::clamp<int64_t>(static_cast<int64_t>(sum) * 5000 / ref, 300, 2500);
 	EXPECT_EQ(MinionHit10(MT_NZOMBIE, MinionLevelForGemLevel(5), sum), static_cast<int>(MonsterLevelDamage10(MinionLevelForGemLevel(5)) * ratio / 1000));
 	EXPECT_NEAR(ScaleMonsterHit(zombie, sum * 32), MinionHit10(MT_NZOMBIE, MinionLevelForGemLevel(5), sum) * 64 / 10 * MinionDamagePercent(player) / 100, 64);
-
-	// The King's dead come from no gem: the area's level.
-	zombie.poe2.revived = false;
-	zombie.flags |= MFLAG_KINGS_DEAD;
-	EXPECT_EQ(Poe2MinionLevel(zombie), 38);
 }
 
 TEST_F(Poe2MinionGemsTest, LachdanansNoDamageMinionIsSafe)

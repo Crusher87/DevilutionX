@@ -607,6 +607,7 @@ void ProcessUniqueRules(Player &player)
 	countDown(state.moonwaterTicks);
 	countDown(state.blockRiposteTicks);
 	countDown(state.rotationTicks);
+	countDown(state.butcherCryTicks);
 	// The Vizjerei Road's backlash: the fire burns the hero in pulses; cold and lightning only count down.
 	for (size_t element = 0; element < state.backlashTicks.size(); element++) {
 		if (state.backlashTicks[element] == 0)
@@ -749,9 +750,6 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	UniqueRuleState &state = State(player);
 	state.lastHitBySpell = false;
 	state.lastHitRanged = ranged;
-	// Leoric's Road: any hit puts a monster still rising down for good.
-	if (TryPutDownRisen(player, monster))
-		return damage;
 	state.attacks++;
 	const Item *heldWeapon = HeldWeapon(player);
 	const bool staffHit = !ranged && heldWeapon != nullptr && IsMartialStaff(*heldWeapon);
@@ -1093,7 +1091,7 @@ void OnMonsterKilled(Player &player, const Monster &monster)
 		return;
 	UniqueRuleState &state = State(player);
 	const bool meleeKill = !state.lastHitBySpell && !state.lastHitRanged;
-	// Leoric's Road pact: Fresh Meat fires on bow kills too.
+	// The Butcher's Road pact, The Larder: Fresh Meat fires on bow kills too.
 	const bool bowKill = !state.lastHitBySpell && state.lastHitRanged && player.isHoldingItem(ItemType::Bow)
 	    && PassiveTotal(player, PassiveStat::KingsDeadPact) > 0;
 	if (Rule(player, UniqueRule::TwoHandKillFrenzy) > 0 && ((meleeKill && HoldsTwoHandMelee(player)) || bowKill))
@@ -1433,7 +1431,7 @@ void ApplyCull(const Player &player, Monster &monster)
 	if (static_cast<int64_t>(monster.hitPoints.raw()) * 100 > static_cast<int64_t>(monster.maxHitPoints.raw()) * cull)
 		return;
 	AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
-	// Leoric's Road reads it when the monster dies: a culled monster stays dead.
+	// The Butcher's Road reads it when the monster dies: a Cull throws the hook.
 	monster.poe2.culled = true;
 	ApplyMonsterDamage(DamageType::Physical, monster, monster.hitPoints);
 }

@@ -469,8 +469,11 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 
 	if (isAttack && gbIsPoe2) {
 		// POE2 Mashup: an arrow hits like an attack, with the uniques' conversions and ailments.
-		if (&player == MyPlayer)
+		if (&player == MyPlayer) {
+			// The Butcher's Road pact hooks along the arrow's line when it Culls.
+			NoteArrowLine(player, Point(startPos));
 			dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit, true).raw();
+		}
 	} else {
 		if (gbIsPoe2 && !isArrow) {
 			const int uniquePercent = UniqueSpellHitPercent(player, monster, damageType);
@@ -481,8 +484,7 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 			dam = dam * MonsterDamageTakenPercent(monster, damageType) / 100;
 		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
 
-		// POE2 Mashup: Leoric's Road, a spell hit puts a monster still rising down for good.
-		if (&player == MyPlayer && !TryPutDownRisen(player, monster)) {
+		if (&player == MyPlayer) {
 			ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
 			TryInflictAilment(monster, player, damageType, Fixed26_6::fromRaw(dam), AilmentSource::Spell);
 			ApplyCull(player, monster);

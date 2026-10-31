@@ -1265,10 +1265,10 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 1263	Gillian's Hearth	Notable		829	641	LifeOnKill=8,FlaskCharges=15	1261	Khanduras Muster	Gillian kept the Rising Sun warm for whoever came back up.	cluster	1258	826	715	4		Horns	
 1264		Small		399	858	Damage=6	222,1265	Warrior		profane	1264	630	603	6			leoric:8
 1265		Small		469	798	BowDamage=9	1264,1266	Warrior		profane	1264	630	603	6			leoric:7
-1266	The Black Curse	Notable		569	748	KingsDeadPact=1,ArrowDamageMod=100	1265,1267	Warrior	Freeing the King's spirit lifted his curse. Whoever walks this road takes it up again.	profane	1264	630	603	6			leoric:6
+1266	The Larder	Notable		569	748	KingsDeadPact=1,ArrowDamageMod=100	1265,1267	Warrior	The Butcher never chased his meat. It came to him.	profane	1264	630	603	6			leoric:6
 1267		Small		659	658	TwoHandDamage=4,BowDamage=4	1266,1268	Warrior		profane	1264	630	603	3			leoric:5
 1268		Small		709	588	BowDamage=6	1267,1269	Warrior		profane	1264	630	603	4			leoric:4
-1269	The Black King's Wrath	Notable		739	518	TwoHandDamage=12,Cull=10,DeadDoNotRest=1	1268,1270	Warrior	In the end the King trusted only the axe.	profane	1264	630	603	6			leoric:3
+1269	The Butcher's Hook	Notable		739	518	TwoHandDamage=12,Cull=10,DeadDoNotRest=1	1268,1270	Warrior	Under the cathedral, a room of bodies hung on hooks. Whoever walks this road learns the trade.	profane	1264	630	603	6			leoric:3
 1270		Small		739	388	ArmorPercent=9	1269,1271	Warrior		profane	1264	630	603	6			leoric:2
 1271		Small		759	268	TwoHandDamage=6	66,1270	Warrior		profane	1264	630	603	6			leoric:1
 1272		Small		850	-425	LifePercent=5	35,1273	Sorcerer		profane	1272	576	-623	6			bartuc:8

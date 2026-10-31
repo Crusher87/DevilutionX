@@ -863,13 +863,13 @@ void TakeOutJewel(Player &player, PassiveNodeId node)
 	NewCursor(player.HoldItem);
 }
 
-/** @brief "Leoric's Road, toll" and the like, for a node on a Profane Road. */
+/** @brief "The Butcher's Road, toll" and the like, for a node on a Profane Road. */
 std::string ProfaneRoadStepText(const PassiveNode &node)
 {
 	std::string_view road;
 	switch (*node.road) {
 	case ProfaneRoad::Leoric:
-		road = _("Leoric's Road");
+		road = _("The Butcher's Road");
 		break;
 	case ProfaneRoad::Bartuc:
 		road = _("Bartuc's Road");

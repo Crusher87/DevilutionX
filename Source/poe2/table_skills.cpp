@@ -30,7 +30,6 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_mods.hpp"
-#include "poe2/profane_roads.hpp"
 #include "poe2/skill_looks.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spell_base.hpp"
@@ -286,12 +285,6 @@ void SpellHitMonster(const Player &player, Monster &monster, DamageType type, Fi
 	// the Sigil of Power's +20%.
 	if (source == AilmentSource::Spell)
 		damage = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * VizjereiSpellHitPercent(player, monster) / 100 * SigilSpellDamagePercent(player) / 100, INT32_MAX / 2)));
-	// Leoric's Road: a hit puts a monster still rising down for good.
-	if (TryPutDownRisen(player, monster)) {
-		monster.tag(player);
-		M_StartKill(monster, player);
-		return;
-	}
 	const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * MonsterDamageTakenPercent(monster, type) / 100));
 	ApplyMonsterDamage(type, monster, dealt);
 	monster.tag(player);
@@ -1441,7 +1434,7 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 		if (static_cast<int64_t>(monster.hitPoints.raw()) * 100 > static_cast<int64_t>(monster.maxHitPoints.raw()) * cull)
 			break;
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
-		// Leoric's Road reads it when the monster dies: a culled monster stays dead.
+		// The Butcher's Road reads it when the monster dies: a Cull throws the hook.
 		state.culled = true;
 		ApplyMonsterDamage(DamageType::Physical, monster, monster.hitPoints);
 		GainFrenzyCharge(player);
