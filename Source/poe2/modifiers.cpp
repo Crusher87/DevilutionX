@@ -1224,8 +1224,10 @@ DamageType TaggedDamageType(uint32_t tags)
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 {
 	const auto stat = [&data](Poe2ItemStat which) { return static_cast<int>(data.itemStats[static_cast<size_t>(which)]); };
-	// Some uniques add levels to every skill while on Low Life.
-	const int lowLife = skill.kind != SkillKind::None && data.uniqueState.lowLife ? data.rule(UniqueRule::LowLifeSkillLevels) : 0;
+	// Some uniques add levels to every skill while on Low Life; Dark Arts adds them to the chaos skill it supports.
+	int lowLife = skill.kind != SkillKind::None && data.uniqueState.lowLife ? data.rule(UniqueRule::LowLifeSkillLevels) : 0;
+	if (data.hasSupport(skill, SupportGem::DarkArts) && (SkillTags(skill) & ST_Chaos) != 0)
+		lowLife += DarkArtsLevels;
 	switch (skill.kind) {
 	case SkillKind::Attack: {
 		const uint32_t tags = SkillTags(skill);

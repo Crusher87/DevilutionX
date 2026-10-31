@@ -157,6 +157,17 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::DeadlyVenom, 2, 4, 120, { 100, 30, 0 }, "Twice the poison damage. 30% less\ndamage with hits. Mana +20%" },
 	// Chaos Attunement: damage gained as chaos, less non-chaos damage (POE2: 25% and 50%).
 	{ SG::DarkEnchant, 1, 3, 120, { 25, 50, 0 }, "Hits gain 25% of damage as chaos. 50%\nless non-chaos damage. Mana +20%" },
+	// Chaos Mastery: +1 level of the chaos skill.
+	{ SG::DarkArts, 1, 5, 110, { 1, 0, 0 }, "+1 level of the chaos skill. Mana +10%" },
+	// Corrosion: the poisons break armour.
+	{ SG::RottingFlesh, 1, 1, 110, {}, "Its poisons break armour. Mana +10%" },
+	// Bursting Plague: poisons build plague, at most 20% of the enemy's life, which bursts as physical on death.
+	{ SG::PlagueBurst, 1, 2, 120, {}, "Its poisons build plague that bursts\nwhen the enemy dies. Mana +20%" },
+	// Profanity I-II: a corpse taken on use for more chaos damage (POE2: 30%; II's 40% is ours).
+	{ SG::GraveProfanity, 1, 1, 110, { 30, 0, 0 }, "Takes a corpse near you on use for 30%\nmore chaos damage. Mana +10%" },
+	{ SG::GraveProfanity, 2, 5, 110, { 40, 0, 0 }, "Takes a corpse near you on use for 40%\nmore chaos damage. Mana +10%" },
+	// Extraction: 10% of life paid on use, 35% of the hit gained as chaos.
+	{ SG::BloodSacrifice, 1, 3, 100, { 35, 10, 0 }, "Pays 10% of your life on use; hits gain\n35% of damage as chaos" },
 };
 
 } // namespace

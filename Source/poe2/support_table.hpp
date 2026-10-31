@@ -73,6 +73,14 @@ enum SupportFlag : uint8_t {
 	SF_Trigger = 1 << 2,
 };
 
+/** @brief Dark Arts (POE2's Chaos Mastery): levels it adds to the chaos skill it supports. */
+constexpr int DarkArtsLevels = 1;
+/** @brief Plague Burst: the plague a monster stores is at most this share of its life, in percent, and bursts this far. */
+constexpr int PlagueBurstMaxLifePercent = 20;
+constexpr int PlagueBurstRadius = 2;
+/** @brief Grave Profanity takes a corpse within this many tiles of the hero. */
+constexpr int GraveProfanityTiles = 5;
+
 struct SupportData {
 	SupportGem gem;
 	std::string_view name;

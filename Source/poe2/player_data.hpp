@@ -289,6 +289,12 @@ enum class SupportGem : uint8_t {
 	DeadlyVenom,
 	/** POE2's Chaos Attunement. */
 	DarkEnchant,
+	/** POE2's Chaos Mastery, Corrosion, Bursting Plague, Profanity I-II and Extraction. */
+	DarkArts,
+	RottingFlesh,
+	PlagueBurst,
+	GraveProfanity,
+	BloodSacrifice,
 	Count,
 };
 
@@ -629,6 +635,11 @@ struct SupportRuntime {
 	/** Wrathforged and Combo Finisher: more damage for the cast that spent Rage or Combo, in percent, and the ticks it lasts. */
 	uint8_t spentBonusPercent = 0;
 	uint8_t spentBonusTicks = 0;
+	/** Grave Profanity: more chaos damage for the use that took a corpse, in percent, and the ticks it lasts. */
+	uint8_t profanityPercent = 0;
+	uint8_t profanityTicks = 0;
+	/** Blood Sacrifice: ticks the use that paid its life gains chaos. */
+	uint8_t sacrificeTicks = 0;
 	/** Burning Ground: ticks before another patch can be left. */
 	uint8_t burningGroundCooldown = 0;
 	/** Faster Casting III: the spells cast lately and the ticks each stays counted. */

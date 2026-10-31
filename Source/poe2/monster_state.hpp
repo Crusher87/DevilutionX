@@ -97,6 +97,9 @@ struct Poe2MonsterState {
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;
+	/** @brief Plague Burst: the poison builds plague, the chaos its ticks dealt as a raw Fixed26_6 value, which bursts on death. */
+	bool poisonPlague = false;
+	int32_t plagueStore = 0;
 	/** @brief Hindered by caltrops or Herald of Plague: slowed like a chill, in game ticks left. */
 	uint8_t hinderTicks = 0;
 	/** @brief Attrition: game ticks the rare or unique monster has spent near the hero (not saved). */
