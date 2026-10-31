@@ -272,14 +272,37 @@ constexpr GrantRow PlainGrants[] = {
 };
 
 /**
- * @brief A rider's worth on one target, in percent of the hits (plan 7.1): a bleed +75%, Wither and a cull about +10%,
+ * @brief A damage over time a use leaves that doesn't stack on one target: a monster holds one bleed and one chaos
+ * damage over time, the strongest (InflictTableBleed, InflictTableChaos), and a new one only refreshes it.
+ */
+struct NonStackingDot {
+	/** What it deals over its time, in percent of the hit. */
+	int percent;
+	/** How long it lasts, in game ticks. */
+	int ticks;
+};
+
+/** @brief A spell's bleed (GrantedBleedPercent over GrantedBleedTicks) or Decompose's plague (the hit again over PlagueTicks). */
+NonStackingDot DotRider(const TableSkillData &row)
+{
+	if ((row.flags & TF_Bleed) != 0)
+		return { GrantedBleedPercent, GrantedBleedTicks };
+	if (row.rider == GrantedRider::Plague)
+		return { 100, PlagueTicks };
+	return { 0, 0 };
+}
+
+/**
+ * @brief A rider's worth on one cast, in percent of the hits (plan 7.1): a bleed +75%, Wither and a cull about +10%,
  * a double every fifth cast +20%, an echo +60%, Decompose's plague the hit again; stun, mana, slow, Weaken, healing and
- * what lands on other monsters (a burst on a kill, a chain) add nothing on one target.
+ * what lands on other monsters (a burst on a kill, a chain) add nothing on one target. A bleed or a plague counts in
+ * full here, as on a monster the cast meets fresh; on one target hit again and again OneTargetPerSecond counts it once.
  */
 int RiderPercent(const TableSkillData &row)
 {
-	if ((row.flags & TF_Bleed) != 0)
-		return 100 + GrantedBleedPercent;
+	const NonStackingDot dot = DotRider(row);
+	if (dot.percent > 0)
+		return 100 + dot.percent;
 	switch (row.rider) {
 	case GrantedRider::Wither:
 	case GrantedRider::CullFrenzy:
@@ -288,8 +311,6 @@ int RiderPercent(const TableSkillData &row)
 		return 100 + 100 / CriticalBoltEvery;
 	case GrantedRider::Echo:
 		return 100 + EchoPercent;
-	case GrantedRider::Plague:
-		return 200;
 	default:
 		return 100;
 	}
@@ -313,9 +334,11 @@ int HitsOnOneTarget(const TableSkillData &row)
 
 /**
  * @brief The skill's damage a second on one target that stays put, in percent of the spell base before its curve
- * (plan 7.1 and 7.3): a use's hits on it, with a bleed's extra, over the use's time. Zones count what lands on the one
+ * (plan 7.1 and 7.3): a use's hits on it, with its riders, over the use's time. Zones count what lands on the one
  * target; a curse's damage over time, which doesn't stack on one target, a storm that follows the hero and a granted
- * zone, one at a time (Solar Orb), count by their own time.
+ * zone, one at a time (Solar Orb), count by their own time. A bleed or a plague doesn't stack either: the one the
+ * target holds deals its hit's share over its own time, or over the use's when the use takes longer, so cast after
+ * cast it adds that share a second, not a full one a cast (Blood Nova 168% a second, not 263%).
  */
 double OneTargetPerSecond(const TableSkillData &row)
 {
@@ -342,8 +365,11 @@ double OneTargetPerSecond(const TableSkillData &row)
 			break;
 		}
 	}
-	perUse = perUse * RiderPercent(row) / 100;
-	return perUse / CastSeconds(SkillSlot::ForAttack(row.skill));
+	const NonStackingDot dot = DotRider(row);
+	const double seconds = CastSeconds(SkillSlot::ForAttack(row.skill));
+	perUse = perUse * (RiderPercent(row) - dot.percent) / 100;
+	const double dotPerSecond = row.damagePercent * dot.percent / 100.0 / std::max<double>(seconds, dot.ticks / 20.0);
+	return perUse / seconds + dotPerSecond;
 }
 
 TEST_F(Poe2GrantedSkillsTest, EachStaffAndWandCastsItsSkill)
@@ -950,7 +976,9 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		{ WeaponSkill::FreezingShards, 64, 1200, 53 }, // one shard a monster a cast
 		{ WeaponSkill::LightningBolt, 46, 900, 51 },
 		{ WeaponSkill::ChimingBolt, 46, 900, 51 },
-		{ WeaponSkill::Soulrend, 28, 900, 54 }, // with the bleed
+		// A bleed or a plague doesn't stack on one target: it adds its share over its own time, not a full one a cast.
+		// Soulrend, Decompose and Exsanguinate were priced at 54, 55 and 52 counting it in full each cast (plan 7.1).
+		{ WeaponSkill::Soulrend, 28, 900, 35 }, // 31 for the hits, 4 for the bleed
 		{ WeaponSkill::Reap, 64, 1200, 53 },
 		{ WeaponSkill::FrostLance, 48, 900, 53 },
 		{ WeaponSkill::EnervatingNova, 48, 1000, 48 },
@@ -971,8 +999,8 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		{ WeaponSkill::SolarOrb, 71, 900, 51 }, // a pulse every 1.4 seconds, one orb at a time
 		{ WeaponSkill::VolatileBolt, 40, 800, 50 },
 		{ WeaponSkill::GalvanicBolt, 34, 650, 52 },
-		{ WeaponSkill::Decompose, 22, 800, 55 }, // the hit, then as much again over 4 seconds
-		{ WeaponSkill::Exsanguinate, 24, 800, 52 }, // with the bleed
+		{ WeaponSkill::Decompose, 22, 800, 33 }, // 27.5 for the hits, 5.5 for the plague (the hit again over 4 seconds)
+		{ WeaponSkill::Exsanguinate, 24, 800, 34 }, // 30 for the hits, 3.6 for the bleed
 		// Both bolts. Plan 7.2's 24 a bolt (69) beat Condemn and Corpse Explosion; the wand bolts beat no gem but Haunt,
 		// Glacial Spike and Locust Swarm, so it is a wand bolt like the others.
 		{ WeaponSkill::TwinBolts, 19, 700, 54 },
@@ -1000,7 +1028,13 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		// them); every other monster a cast hits takes at most 25% of the spell base a second of the cast, or of a zone's
 		// pulse, its bleed and echo included.
 		const double staffBolt = GrantedStaffBoltPercent / CastSeconds(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt)));
-		EXPECT_GE(OneTargetPerSecond(row), staffBolt * 0.70) << row.name;
+		// A bleed or plague doesn't stack on one target, so Soulrend, Decompose and Exsanguinate come to about 50% of
+		// Staff Bolt there. Reviewed by the skill-balance thread and kept: their damage ticks on while the hero casts
+		// something else, and the plagues spread, so one target a second undersells them.
+		if (DotRider(row).percent == 0)
+			EXPECT_GE(OneTargetPerSecond(row), staffBolt * 0.70) << row.name;
+		else
+			EXPECT_GE(OneTargetPerSecond(row), staffBolt * 0.50) << row.name;
 		EXPECT_LE(OneTargetPerSecond(row), staffBolt * 0.85) << row.name;
 		EXPECT_LT(OneTargetPerSecond(row), 56.0) << row.name;
 		EXPECT_NE(row.flags & TF_PerTarget, 0) << row.name;
