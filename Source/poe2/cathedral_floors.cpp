@@ -51,6 +51,7 @@ struct RoomSet {
 
 RoomSet CathedralSet { "txtdata\\poe2\\cathedral_rooms.tsv", "Cathedral", {}, false };
 RoomSet CatacombsSet { "txtdata\\poe2\\catacombs_rooms.tsv", "Catacombs", {}, false };
+RoomSet CavesSet { "txtdata\\poe2\\caves_rooms.tsv", "Caves", {}, false };
 
 bool FunnelFloor = false;
 CathedralPlan CurrentPlan;
@@ -129,17 +130,19 @@ void LoadRooms(RoomSet &set)
 			LogError("{} room {} has a ragged grid", set.name, room.id);
 			continue;
 		}
-		// The last bit of the room history marks a Catacombs floor.
-		if (set.rooms.size() >= 63) {
-			LogError("Only 63 {} rooms fit the room history; {} is left out", set.name, room.id);
+		// The last two bits of the room history mark a Catacombs or Caves floor.
+		if (set.rooms.size() >= 62) {
+			LogError("Only 62 {} rooms fit the room history; {} is left out", set.name, room.id);
 			continue;
 		}
 		set.rooms.push_back(std::move(room));
 	}
 }
 
-const std::vector<CathedralRoomDef> &RoomsFor(bool catacombs)
+const std::vector<CathedralRoomDef> &RoomsFor(bool catacombs, bool caves)
 {
+	if (caves)
+		return GetCavesRooms();
 	return catacombs ? GetCatacombsRooms() : GetCathedralRooms();
 }
 
@@ -253,6 +256,36 @@ bool CatacombsGridOk(const std::vector<std::string> &grid)
 	return true;
 }
 
+/** Caves: corner points that stay rock in the mask (lava is drawn into the rock once the walls are in). */
+bool CavesRock(char c)
+{
+	return c == ' ' || c == 'L' || c == 'o';
+}
+
+/** Caves: marks on a floor tile, drawn once the walls are in. */
+bool CavesMark(char c)
+{
+	return c == 'l' || c == 'H' || c == 'f' || c == 'g' || c == 'T' || c == 'i';
+}
+
+/**
+ * Caves: the stairs up and to town go into the wall north of the room's first row, which needs two rock rows; the
+ * stairs down into a wall west of them, with two rock columns inside the room.
+ */
+bool CavesGridOk(const std::vector<std::string> &grid)
+{
+	for (int y = 0; y < static_cast<int>(grid.size()); y++) {
+		for (int x = 0; x < static_cast<int>(grid[y].size()); x++) {
+			const char c = grid[y][x];
+			if ((c == 'U' || c == 'Z') && y != 0)
+				return false;
+			if (c == 'V' && (x < 2 || grid[y][x - 1] != ' ' || grid[y][x - 2] != ' '))
+				return false;
+		}
+	}
+	return true;
+}
+
 /** The stairs down need their four squares side by side, at the back of the room, with floor in front. */
 bool StairsDownOk(const std::vector<std::string> &grid)
 {
@@ -360,6 +393,7 @@ public:
 	{
 		plan_ = {};
 		plan_.catacombs = request_.catacombs;
+		plan_.caves = request_.caves;
 		for (auto &row : slots_)
 			row.fill(Free);
 		if (!planMainWay())
@@ -372,6 +406,8 @@ public:
 		if (!chooseDoorways())
 			return false;
 		buildAreas();
+		if (request_.caves && !fixCaveCorners())
+			return false;
 		return connected();
 	}
 
@@ -389,7 +425,7 @@ private:
 
 	const std::vector<CathedralRoomDef> &rooms() const
 	{
-		return RoomsFor(request_.catacombs);
+		return RoomsFor(request_.catacombs, request_.caves);
 	}
 
 	bool isFree(Rectangle r) const
@@ -498,8 +534,9 @@ private:
 				pick = other;
 			if (step == n - 1 && Distance(pick, start) < 3)
 				return false;
-			// The way down's doorways are on its west, east and south sides.
-			if (kind == CathedralAreaKind::WayDown && !request_.catacombs && Touching(pick, plan_.areas[previous].slots) == North)
+			// The way down's doorways are on its west, east and south sides; in the Caves on all but the west, where the
+			// stairs are.
+			if (kind == CathedralAreaKind::WayDown && !request_.catacombs && Touching(pick, plan_.areas[previous].slots) == (request_.caves ? West : North))
 				return false;
 			const int area = addArea(pick, kind, step);
 			addLink(previous, area);
@@ -667,6 +704,66 @@ private:
 		return reach;
 	}
 
+	/**
+	 * Caves: a mouth is three points wide, so a doorway opens at the middle one of three 'E' marks in a row along the
+	 * side (with anyFloor, of three plain floor points), each with only rock between it and that side.
+	 */
+	static std::array<std::vector<int>, 4> CavesReach(const std::vector<std::string> &grid, Rectangle interior, Point offset, bool anyFloor)
+	{
+		std::array<std::vector<int>, 4> reach;
+		const int gw = static_cast<int>(grid[0].size());
+		const int gh = static_cast<int>(grid.size());
+		const auto opens = [&grid, anyFloor](Point p) {
+			const char c = At(grid, p.x, p.y);
+			return c == 'E' || (anyFloor && c == '.');
+		};
+		const auto clear = [&grid, interior, offset](Point p, Displacement step) {
+			for (p += step;; p += step) {
+				const Point inArea = p + Displacement { offset.x, offset.y };
+				if (inArea.x < 0 || inArea.y < 0 || inArea.x >= interior.size.width || inArea.y >= interior.size.height)
+					return true;
+				if (At(grid, p.x, p.y) != ' ')
+					return false;
+			}
+		};
+		for (int y = 0; y < gh; y++) {
+			for (int x = 0; x < gw; x++) {
+				for (int s = 0; s < 4; s++) {
+					const Displacement step = SideStep[s];
+					const Displacement along = (s == East || s == West) ? Displacement { 0, 1 } : Displacement { 1, 0 };
+					bool ok = true;
+					for (int k = -1; k <= 1 && ok; k++) {
+						const Point lane = Point { x, y } + (along * k);
+						ok = opens(lane) && clear(lane, step);
+						// A mouth opened at plain floor needs two clear tiles of floor inside it.
+						if (ok && anyFloor)
+							ok = IsAnyOf(At(grid, lane.x - step.deltaX, lane.y - step.deltaY), '.', 'E');
+					}
+					// The mouth turns the wall beside it into corners, where a fence or stream can't end.
+					for (int k = -2; k <= 1 && ok; k++) {
+						const Point lane = Point { x, y } + (along * k);
+						ok = !IsAnyOf(At(grid, lane.x, lane.y), 'l', 'H', 'f', 'g') && !IsAnyOf(At(grid, lane.x - step.deltaX, lane.y - step.deltaY), 'l', 'H', 'f', 'g');
+					}
+					if (!ok)
+						continue;
+					const int at = (s == East || s == West) ? interior.position.y + offset.y + y : interior.position.x + offset.x + x;
+					reach[s].push_back(at);
+				}
+			}
+		}
+		return reach;
+	}
+
+	/** Whether a designed room turned this way keeps its stairs, shrines and archways right. */
+	bool gridOk(const std::vector<std::string> &grid) const
+	{
+		if (request_.caves)
+			return CavesGridOk(grid);
+		if (request_.catacombs)
+			return CatacombsGridOk(grid);
+		return BackedOk(grid) && StairsDownOk(grid);
+	}
+
 	std::optional<Placement> tryPlace(int areaIndex, int design, bool anyOffset)
 	{
 		const CathedralArea &area = plan_.areas[areaIndex];
@@ -691,12 +788,12 @@ private:
 			for (int i = 7; i > 0; i--)
 				std::swap(turns[i], turns[GenerateRnd(i + 1)]);
 			for (const int turn : turns) {
-				std::vector<std::string> grid = TurnCathedralGrid(base, turn);
+				std::vector<std::string> grid = request_.caves ? TurnCavesGrid(base, turn) : TurnCathedralGrid(base, turn);
 				const int gw = static_cast<int>(grid[0].size());
 				const int gh = static_cast<int>(grid.size());
 				if (gw > interior.size.width || gh > interior.size.height)
 					continue;
-				if (request_.catacombs ? !CatacombsGridOk(grid) : (!BackedOk(grid) || !StairsDownOk(grid)))
+				if (!gridOk(grid))
 					continue;
 				if (room.pillarsBehind && !PillarsBehindOk(grid))
 					continue;
@@ -710,7 +807,7 @@ private:
 				for (size_t i = offsets.size(); i > 1; i--)
 					std::swap(offsets[i - 1], offsets[GenerateRnd(static_cast<int>(i))]);
 				for (const Point offset : offsets) {
-					std::array<std::vector<int>, 4> reach = Reach(grid, interior, offset, anyFloor);
+					std::array<std::vector<int>, 4> reach = request_.caves ? CavesReach(grid, interior, offset, anyFloor) : Reach(grid, interior, offset, anyFloor);
 					bool fits = true;
 					for (const auto &[linkIndex, side] : links) {
 						const auto [lo, hi] = overlap(links_[linkIndex]);
@@ -807,6 +904,11 @@ private:
 				// A Catacombs door looks wrong right beside a corner, and the wall between two slots ends in one.
 				if (request_.catacombs && a.size() > 1)
 					std::erase(a, overlap(link).second);
+				// A cave mouth is three points wide, all of them on the wall the two areas share.
+				if (request_.caves) {
+					const auto [lo, hi] = overlap(link);
+					std::erase_if(a, [lo, hi](int v) { return v <= lo || v >= hi; });
+				}
 				if (!a.empty()) {
 					link.at = a[GenerateRnd(static_cast<int>(a.size()))];
 					break;
@@ -860,6 +962,119 @@ private:
 		}
 	}
 
+	/**
+	 * Caves: a passage width points wide from a mouth to the target, kept inside the area: first straight in, then
+	 * along. It starts as wide as the mouth.
+	 */
+	void carveCavePath(Point from, Side inward, Point to, int width, Rectangle in)
+	{
+		const auto brush = [this, in](Point at, int w) {
+			const int lo = -(w - 1) / 2;
+			for (int dy = lo; dy < lo + w; dy++) {
+				for (int dx = lo; dx < lo + w; dx++) {
+					const Point p = at + Displacement { dx, dy };
+					if (in.contains(p))
+						carve(p);
+				}
+			}
+		};
+		Point p = from;
+		brush(p, 3);
+		const bool alongX = inward == East || inward == West;
+		while (alongX ? p.x != to.x : p.y != to.y) {
+			if (alongX)
+				p.x += p.x < to.x ? 1 : -1;
+			else
+				p.y += p.y < to.y ? 1 : -1;
+			brush(p, width);
+		}
+		while (alongX ? p.y != to.y : p.x != to.x) {
+			if (alongX)
+				p.y += p.y < to.y ? 1 : -1;
+			else
+				p.x += p.x < to.x ? 1 : -1;
+			brush(p, width);
+		}
+	}
+
+	/** Caves: a small lava pool in a plain room, with floor all round it so it never closes a way. */
+	void addCavePool(Rectangle in)
+	{
+		const Size size { 2 + GenerateRnd(2), 2 + GenerateRnd(2) };
+		std::vector<Point> spots;
+		for (int y = in.position.y + 2; y + size.height + 1 < in.position.y + in.size.height; y++) {
+			for (int x = in.position.x + 2; x + size.width + 1 < in.position.x + in.size.width; x++) {
+				// Two points of floor all round, so a ring of whole floor tiles goes round the lava.
+				bool ringed = true;
+				for (int dy = -2; dy <= size.height + 1 && ringed; dy++) {
+					for (int dx = -2; dx <= size.width + 1 && ringed; dx++)
+						ringed = plan_.mask.test(x + dx, y + dy);
+				}
+				if (ringed)
+					spots.push_back({ x, y });
+			}
+		}
+		if (spots.empty())
+			return;
+		const Point at = spots[GenerateRnd(static_cast<int>(spots.size()))];
+		for (int dy = 0; dy < size.height; dy++) {
+			for (int dx = 0; dx < size.width; dx++) {
+				const Point p = at + Displacement { dx, dy };
+				plan_.mask.reset(p.x, p.y);
+				plan_.lines.push_back({ p, 'L' });
+			}
+		}
+	}
+
+	/**
+	 * Caves: Diablo has no tile for two floor corners that touch only across a diagonal (drlg_l3.cpp FillDiagonals), so
+	 * the plain rooms get one of the other two corners as floor. The designed rooms are drawn without any.
+	 */
+	bool fixCaveCorners()
+	{
+		Bitset2d<DMAXX, DMAXY> plain;
+		for (const CathedralArea &area : plan_.areas) {
+			if (area.design >= 0 || area.kind == CathedralAreaKind::QuestPiece)
+				continue;
+			const Rectangle in = area.interior();
+			for (int y = in.position.y; y < in.position.y + in.size.height; y++) {
+				for (int x = in.position.x; x < in.position.x + in.size.width; x++)
+					plain.set(x, y);
+			}
+		}
+		for (const CathedralLine &line : plan_.lines)
+			plain.reset(line.block.x, line.block.y);
+		for (int pass = 0; pass < 8; pass++) {
+			bool changed = false;
+			bool stuck = false;
+			for (int y = 0; y + 1 < DMAXY; y++) {
+				for (int x = 0; x + 1 < DMAXX; x++) {
+					const bool nw = plan_.mask.test(x, y);
+					const bool ne = plan_.mask.test(x + 1, y);
+					const bool sw = plan_.mask.test(x, y + 1);
+					const bool se = plan_.mask.test(x + 1, y + 1);
+					std::array<Point, 2> rock;
+					if (nw && se && !ne && !sw)
+						rock = { Point { x + 1, y }, Point { x, y + 1 } };
+					else if (ne && sw && !nw && !se)
+						rock = { Point { x, y }, Point { x + 1, y + 1 } };
+					else
+						continue;
+					const auto fillable = std::find_if(rock.begin(), rock.end(), [&plain](Point p) { return plain.test(p.x, p.y); });
+					if (fillable == rock.end()) {
+						stuck = true;
+						continue;
+					}
+					plan_.mask.set(fillable->x, fillable->y);
+					changed = true;
+				}
+			}
+			if (!changed)
+				return !stuck;
+		}
+		return false;
+	}
+
 	/** The block just inside each doorway of an area, with the direction into the area. */
 	std::vector<std::pair<Point, Side>> doorwaysInto(int area) const
 	{
@@ -900,7 +1115,17 @@ private:
 				if (c == ' ')
 					continue;
 				const Point block = area.origin + Displacement { x, y };
-				if (IsLine(c)) {
+				if (request_.caves && CavesRock(c)) {
+					// Lava and pillars stay rock in the mask.
+					plan_.lines.push_back({ block, c });
+					continue;
+				}
+				if (request_.caves && CavesMark(c)) {
+					carve(block);
+					plan_.lines.push_back({ block, c });
+					continue;
+				}
+				if (!request_.caves && IsLine(c)) {
 					plan_.lines.push_back({ block, c });
 					continue;
 				}
@@ -917,14 +1142,18 @@ private:
 					plan_.props.push_back({ block, c, index });
 			}
 		}
-		// Each doorway runs straight in to its 'E'.
+		// Each doorway runs straight in to its 'E' (a cave mouth's three lanes each to theirs).
+		const int lanes = request_.caves ? 1 : 0;
 		for (const auto &[inside, inward] : doorwaysInto(index)) {
 			const Displacement step = SideStep[inward];
-			for (Point p = inside; in.contains(p); p += step) {
-				const Point g = p - Displacement { area.origin.x, area.origin.y };
-				if (At(area.grid, g.x, g.y) != ' ')
-					break;
-				carve(p);
+			const Displacement along = (inward == East || inward == West) ? Displacement { 0, 1 } : Displacement { 1, 0 };
+			for (int k = -lanes; k <= lanes; k++) {
+				for (Point p = inside + (along * k); in.contains(p); p += step) {
+					const Point g = p - Displacement { area.origin.x, area.origin.y };
+					if (At(area.grid, g.x, g.y) != ' ')
+						break;
+					carve(p);
+				}
 			}
 		}
 	}
@@ -935,7 +1164,8 @@ private:
 		const Rectangle in = area.interior();
 		const auto doorways = doorwaysInto(index);
 		const bool mainWay = area.step >= 0;
-		const int width = mainWay ? 2 : 1;
+		// Cave passages are a corner point wider: two points make one tile of floor.
+		const int width = (mainWay ? 2 : 1) + (request_.caves ? 1 : 0);
 
 		const auto fill = [this](Rectangle r) {
 			for (int y = r.position.y; y < r.position.y + r.size.height; y++) {
@@ -956,6 +1186,14 @@ private:
 					plan_.townStairs = in.position + Displacement { x + 6, y + 1 };
 				return;
 			}
+			if (request_.caves) {
+				// Three points of the first row, under the north wall; on level 9 the stairs to town a little east.
+				const int x = GenerateRnd(in.size.width - (request_.townStairs ? 6 : 2));
+				plan_.stairsUp = in.position + Displacement { x, 0 };
+				if (request_.townStairs)
+					plan_.townStairs = in.position + Displacement { x + 4 + GenerateRnd(in.size.width - 6 - x), 0 };
+				return;
+			}
 			plan_.stairsUp = in.position + Displacement { 1 + GenerateRnd(in.size.width - 5), 0 };
 			return;
 		}
@@ -965,12 +1203,21 @@ private:
 				plan_.stairsDown = in.position + Displacement { 1 + GenerateRnd(in.size.width - 3), 1 + GenerateRnd(in.size.height - 3) };
 				return;
 			}
+			if (request_.caves) {
+				// A spur of rock off the west wall, three points high, holds the stairs down in its east face.
+				const int y = 1 + GenerateRnd(in.size.height - 4);
+				for (int k = 0; k < 3; k++)
+					plan_.mask.reset(in.position.x, in.position.y + y + k);
+				plan_.stairsDown = in.position + Displacement { 1, y };
+				return;
+			}
 			plan_.stairsDown = in.position + Displacement { 1 + GenerateRnd(in.size.width - 5), 0 };
 			return;
 		}
 		case CathedralAreaKind::QuestPiece:
 			fill(in);
-			plan_.questPiece = in.position + Displacement { 1, 1 };
+			// Caves: the Anvil of Fury's island with a ring of floor round it, a few tiles in from the walls.
+			plan_.questPiece = in.position + (request_.caves ? Displacement { 2 + GenerateRnd(3), 2 + GenerateRnd(3) } : Displacement { 1, 1 });
 			for (int y = in.position.y; y < in.position.y + in.size.height; y++) {
 				for (int x = in.position.x; x < in.position.x + in.size.width; x++)
 					plan_.designed.set(x, y);
@@ -988,8 +1235,12 @@ private:
 		if (area.kind == CathedralAreaKind::Side || (area.kind == CathedralAreaKind::Way && area.slots.size.width * area.slots.size.height == 1 && FlipCoin(3))) {
 			area.corridor = true;
 			const Point hub = in.position + Displacement { 1 + GenerateRnd(in.size.width - 2), 1 + GenerateRnd(in.size.height - 2) };
-			for (const auto &[inside, inward] : doorways)
-				carvePath(inside, inward, hub, width);
+			for (const auto &[inside, inward] : doorways) {
+				if (request_.caves)
+					carveCavePath(inside, inward, hub, width, in);
+				else
+					carvePath(inside, inward, hub, width);
+			}
 			return;
 		}
 
@@ -1041,7 +1292,7 @@ private:
 				}
 			}
 		}
-		if (area.kind == CathedralAreaKind::BigFight && FlipCoin()) {
+		if (area.kind == CathedralAreaKind::BigFight && !request_.caves && FlipCoin()) {
 			// Four pillars, as Diablo's own chambers have them.
 			const int px = body.position.x + (w / 3);
 			const int py = body.position.y + (h / 3);
@@ -1066,8 +1317,14 @@ private:
 					}
 				}
 			}
-			carvePath(inside, inward, target, 1);
+			if (request_.caves)
+				carveCavePath(inside, inward, target, width, in);
+			else
+				carvePath(inside, inward, target, 1);
 		}
+		// A cave hall may have a lava pool in it, as Diablo's own caves do.
+		if (request_.caves && w >= 7 && h >= 7 && (area.kind == CathedralAreaKind::BigFight ? FlipCoin() : FlipCoin(4)))
+			addCavePool(in);
 	}
 
 	void buildAreas()
@@ -1090,7 +1347,14 @@ private:
 			}
 			door.vertical = link.side == East || link.side == West;
 			const bool sideArea = plan_.areas[link.a].step < 0 || plan_.areas[link.b].step < 0;
-			door.door = sideArea && FlipCoin();
+			if (request_.caves) {
+				// A cave mouth: three points of the wall open.
+				const Displacement along = door.vertical ? Displacement { 0, 1 } : Displacement { 1, 0 };
+				for (int k = -1; k <= 1; k++)
+					carve(door.block + (along * k));
+			} else {
+				door.door = sideArea && FlipCoin();
+			}
 			plan_.doors.push_back(door);
 		}
 	}
@@ -1223,8 +1487,10 @@ constexpr std::array<_object_id, 3> Banners { OBJ_BANNERL, OBJ_BANNERM, OBJ_BANN
 constexpr std::array<_object_id, 3> Chests { OBJ_CHEST1, OBJ_CHEST2, OBJ_CHEST3 };
 
 /** The objects a prop letter can turn into, for loading their art. */
-std::vector<_object_id> ObjectsFor(char kind, bool catacombs)
+std::vector<_object_id> ObjectsFor(char kind, bool catacombs, bool caves)
 {
+	if (caves && kind == 'u')
+		return { OBJ_CAULDRON };
 	if (catacombs) {
 		switch (kind) {
 		case 'F': return { OBJ_BLOODFTN };
@@ -1357,6 +1623,37 @@ void AddCatacombsRoomObjects()
 	}
 }
 
+/** The props of a new Caves floor's designed rooms. */
+void AddCavesRoomObjects()
+{
+	const bool shrineFloor = GenerateRnd(3) == 0;
+	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
+	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
+			continue;
+		const std::optional<Point> spot = PropSpot(prop.block, IsAnyOf(prop.kind, 'A', 'x'), false);
+		if (!spot)
+			continue;
+		switch (prop.kind) {
+		case 'A': AddObject(OBJ_CANDLE2, *spot); break;
+		case 'k':
+			if (standsInArea[prop.area]++ < 2)
+				AddObject(OBJ_BOOKSTAND, *spot);
+			break;
+		case 'u': AddObject(OBJ_CAULDRON, *spot); break;
+		case 'F': AddObject(PickOne(Fountains), *spot); break;
+		case 'G': AddObject(OBJ_GOATSHRINE, *spot); break;
+		case 'x': AddObject(OBJ_TBCROSS, *spot); break;
+		case 'D': AddObject(OBJ_DECAP, *spot); break;
+		case 'P':
+		case 's': AddObject(OBJ_SKPILE, *spot); break;
+		case 'r': AddObject(FlipCoin(4) ? OBJ_BARRELEX : OBJ_BARREL, *spot); break;
+		case '*': AddReward(prop, *spot); break;
+		default: break;
+		}
+	}
+}
+
 } // namespace
 
 Rectangle CathedralArea::interior() const
@@ -1408,9 +1705,22 @@ void SetCatacombsRooms(std::vector<CathedralRoomDef> rooms)
 	CatacombsSet.loaded = !CatacombsSet.rooms.empty();
 }
 
+const std::vector<CathedralRoomDef> &GetCavesRooms()
+{
+	if (!CavesSet.loaded)
+		LoadRooms(CavesSet);
+	return CavesSet.rooms;
+}
+
+void SetCavesRooms(std::vector<CathedralRoomDef> rooms)
+{
+	CavesSet.rooms = std::move(rooms);
+	CavesSet.loaded = !CavesSet.rooms.empty();
+}
+
 const std::vector<CathedralRoomDef> &RoomsOfPlan(const CathedralPlan &plan)
 {
-	return RoomsFor(plan.catacombs);
+	return RoomsFor(plan.catacombs, plan.caves);
 }
 
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn)
@@ -1433,6 +1743,33 @@ std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid,
 	return out;
 }
 
+std::vector<std::string> TurnCavesGrid(const std::vector<std::string> &grid, int turn)
+{
+	const int h = static_cast<int>(grid.size());
+	const int w = static_cast<int>(grid[0].size());
+	std::vector<std::string> corners = grid;
+	std::vector<std::string> tiles(std::max(h - 1, 1), std::string(std::max(w - 1, 1), ' '));
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++) {
+			char &c = corners[y][x];
+			if (c == ' ' || c == '.' || c == 'E' || c == 'U' || c == 'V' || c == 'Z' || CavesRock(c))
+				continue;
+			if (x < w - 1 && y < h - 1)
+				tiles[y][x] = c;
+			c = '.';
+		}
+	}
+	std::vector<std::string> out = TurnCathedralGrid(corners, turn);
+	const std::vector<std::string> turnedTiles = TurnCathedralGrid(tiles, turn);
+	for (size_t y = 0; y < turnedTiles.size() && y < out.size(); y++) {
+		for (size_t x = 0; x < turnedTiles[y].size() && x < out[y].size(); x++) {
+			if (turnedTiles[y][x] != ' ')
+				out[y][x] = turnedTiles[y][x];
+		}
+	}
+	return out;
+}
+
 bool PlanCathedralFloor(const CathedralRequest &request, CathedralPlan &plan)
 {
 	return Planner(request, plan).run();
@@ -1441,7 +1778,12 @@ bool PlanCathedralFloor(const CathedralRequest &request, CathedralPlan &plan)
 std::string DescribeCathedralPlan(const CathedralPlan &plan)
 {
 	static constexpr std::string_view KindNames[] = { "arrival", "way", "big fight", "quiet", "way down", "side", "side end", "quest room", "water" };
-	std::string out = StrCat(plan.catacombs ? "new Catacombs floor, " : "new Cathedral floor, ", plan.areas.size(), " rooms:");
+	std::string_view dungeon = "Cathedral";
+	if (plan.caves)
+		dungeon = "Caves";
+	else if (plan.catacombs)
+		dungeon = "Catacombs";
+	std::string out = StrCat("new ", dungeon, " floor, ", plan.areas.size(), " rooms:");
 	for (const CathedralArea &area : plan.areas) {
 		StrAppend(out, " [", KindNames[static_cast<size_t>(area.kind)]);
 		if (area.step >= 0)
@@ -1460,25 +1802,25 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 	return out;
 }
 
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs)
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves)
 {
 	uint64_t memorable = 0;
-	const std::vector<CathedralRoomDef> &rooms = RoomsFor(catacombs);
+	const std::vector<CathedralRoomDef> &rooms = RoomsFor(catacombs, caves);
 	for (size_t i = 0; i < rooms.size(); i++) {
 		if (rooms[i].memorable)
 			memorable |= uint64_t { 1 } << i;
 	}
 	uint64_t avoid = 0;
 	for (size_t i = 0; i < recent.size(); i++) {
-		// A floor of the other collection still takes its turn in the history.
-		if (((recent[i] & CatacombsRoomsMark) != 0) != catacombs)
+		// A floor of another collection still takes its turn in the history.
+		if (((recent[i] & CatacombsRoomsMark) != 0) != (catacombs && !caves) || ((recent[i] & CavesRoomsMark) != 0) != caves)
 			continue;
 		if (i < RecentNormal)
 			avoid |= recent[i];
 		else if (i < RecentMemorable)
 			avoid |= recent[i] & memorable;
 	}
-	return avoid & ~CatacombsRoomsMark;
+	return avoid & ~(CatacombsRoomsMark | CavesRoomsMark);
 }
 
 bool IsCathedralFunnelFloor()
@@ -1588,7 +1930,7 @@ void MarkCathedralObjectGraphics(uint16_t filesWidths[65])
 	if (!FunnelFloor)
 		return;
 	for (const CathedralProp &prop : CurrentPlan.props) {
-		for (const _object_id id : ObjectsFor(prop.kind, CurrentPlan.catacombs)) {
+		for (const _object_id id : ObjectsFor(prop.kind, CurrentPlan.catacombs, CurrentPlan.caves)) {
 			const ObjectData &data = AllObjects[id];
 			filesWidths[data.ofindex] = data.animWidth;
 		}
@@ -1602,6 +1944,10 @@ void AddCathedralRoomObjects()
 		return;
 	if (CurrentPlan.catacombs) {
 		AddCatacombsRoomObjects();
+		return;
+	}
+	if (CurrentPlan.caves) {
+		AddCavesRoomObjects();
 		return;
 	}
 	// On one floor in three the shrine spots hold a shrine; on the others, candles.

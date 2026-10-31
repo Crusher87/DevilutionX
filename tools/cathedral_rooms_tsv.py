@@ -1,10 +1,10 @@
 """Writes a designed-rooms list for the new floor builder from a room collection's rooms.json.
 
-The collection pages (Cathedral Room Collection, Catacombs Room Collection) are drawn from the same rooms.json, so the
+The collection pages (Cathedral, Catacombs and Caves Room Collections) are drawn from the same rooms.json, so the
 game builds exactly the rooms Curtis picked.
-Usage: python3 tools/cathedral_rooms_tsv.py rooms.json [picks.json] [--catacombs]
+Usage: python3 tools/cathedral_rooms_tsv.py rooms.json [picks.json] [--catacombs | --caves]
 picks.json (optional) maps a room id to "keep", "change" or "cut"; cut rooms are left out.
---catacombs writes catacombs_rooms.tsv instead of cathedral_rooms.tsv.
+--catacombs writes catacombs_rooms.tsv instead of cathedral_rooms.tsv, --caves caves_rooms.tsv.
 """
 import json
 import sys
@@ -24,6 +24,7 @@ def catacombs_grid(room):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
     catacombs = '--catacombs' in sys.argv
+    caves = '--caves' in sys.argv
     data = json.load(open(args[0]))
     picks = json.load(open(args[1])) if len(args) > 1 else {}
     out = ['id\tfamily\troles\tmemorable\tpillarsBehind\treward\toptions\tgrid']
@@ -37,7 +38,7 @@ def main():
         roles = ','.join(ROLES[role] for role in r['roles'])
         out.append('\t'.join([r['id'], r['family'], roles, '1' if r.get('memorable') else '0',
                               '1' if r.get('pillarsBehind') else '0', (r.get('base') or '').replace(' ', ''), options, grid]))
-    path = 'mods/poe2/txtdata/poe2/' + ('catacombs_rooms.tsv' if catacombs else 'cathedral_rooms.tsv')
+    path = 'mods/poe2/txtdata/poe2/' + ('catacombs_rooms.tsv' if catacombs else 'caves_rooms.tsv' if caves else 'cathedral_rooms.tsv')
     with open(path, 'w', newline='\r\n') as f:
         f.write('\n'.join(out) + '\n')
     print(path, len(out) - 1, 'rooms')

@@ -3984,6 +3984,8 @@ void InitObjects()
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CAVES) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			AddL3Objs(0, 0, MAXDUNX, MAXDUNY);
 			InitRndBarrels();
 		}
