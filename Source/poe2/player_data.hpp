@@ -1107,8 +1107,8 @@ struct Poe2PlayerData {
 	uint8_t charmCooldown = 0;
 	/** @brief Which essence, augment or catalyst is on the cursor waiting to be used (not saved). */
 	uint8_t currencyVariant = 0;
-	/** @brief Game ticks left of the fire, lightning and chaos resistance from Ruby, Topaz and Amethyst charms (not saved). */
-	std::array<uint8_t, 3> resistCharmTicks {};
+	/** @brief Game ticks left of the fire, lightning, chaos and cold resistance from Ruby, Topaz, Amethyst and Sapphire charms (not saved). */
+	std::array<uint8_t, 4> resistCharmTicks {};
 	/** @brief Game ticks left of stun immunity from a Stone Charm (not saved). */
 	uint8_t stunImmuneTicks = 0;
 	/** @brief Game ticks left of a Flask of the Ox's armour (not saved). */

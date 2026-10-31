@@ -79,9 +79,11 @@ int ResistCharmIndex(DamageType damageType)
 		return 0;
 	case DamageType::Lightning:
 		return 1;
-	// The Amethyst Charm answers chaos, as in POE2 (Curtis 2026-10-30); cold hits have no charm of their own yet.
+	// The Amethyst Charm answers chaos, as in POE2 (Curtis 2026-10-30), and the Sapphire Charm cold (2026-10-31).
 	case DamageType::Chaos:
 		return 2;
+	case DamageType::Cold:
+		return 3;
 	default:
 		return -1;
 	}
@@ -115,6 +117,8 @@ CharmEffect GetCharmEffect(const Item &item)
 		return CharmEffect::Stun;
 	case IMISC_CHARM_GOLDEN:
 		return CharmEffect::Golden;
+	case IMISC_CHARM_COLD:
+		return CharmEffect::Cold;
 	default:
 		return CharmEffect::None;
 	}
@@ -144,6 +148,8 @@ std::string_view CharmDescription(CharmEffect effect)
 		return _("You're stunned: break free and can't be stunned for 3 seconds");
 	case CharmEffect::Golden:
 		return _("You kill a rare or unique monster: it drops an extra item");
+	case CharmEffect::Cold:
+		return _("A cold hit lands: +25% cold resistance for 4 seconds");
 	default:
 		return {};
 	}
@@ -314,8 +320,8 @@ int ResistanceAgainstHit(Player &player, DamageType damageType, int resistance)
 	if (!gbIsPoe2 || index < 0)
 		return resistance;
 	uint8_t &ticks = player.poe2.resistCharmTicks[index];
-	static constexpr CharmEffect Effects[] = { CharmEffect::Fire, CharmEffect::Lightning, CharmEffect::Magic };
-	static constexpr MissileGraphicID Visuals[] = { MissileGraphicID::OrangeFlareExplosion, MissileGraphicID::YellowFlareExplosion, MissileGraphicID::BlueFlareExplosion };
+	static constexpr CharmEffect Effects[] = { CharmEffect::Fire, CharmEffect::Lightning, CharmEffect::Magic, CharmEffect::Cold };
+	static constexpr MissileGraphicID Visuals[] = { MissileGraphicID::OrangeFlareExplosion, MissileGraphicID::YellowFlareExplosion, MissileGraphicID::AcidSplat, MissileGraphicID::BlueFlareExplosion };
 	if (ticks == 0 && &player == MyPlayer) {
 		if (const Item *charm = UseCharm(player, Effects[index], false); charm != nullptr) {
 			ticks = static_cast<uint8_t>(CharmTicks(*charm, ResistCharmTicks));

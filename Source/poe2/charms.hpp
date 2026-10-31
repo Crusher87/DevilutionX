@@ -38,11 +38,13 @@ enum class CharmEffect : uint8_t {
 	Stun,
 	/** Drops an extra item when you kill a rare or unique monster. */
 	Golden,
+	/** The Sapphire Charm: raises cold resistance when a cold hit lands. */
+	Cold,
 };
 
 constexpr int MaxCharmCharges = 40;
 constexpr int CharmChargesPerUse = 20;
-/** @brief Ruby, Topaz and Amethyst charms: +25% fire, lightning or chaos resistance for 4 seconds. */
+/** @brief Ruby, Topaz, Amethyst and Sapphire charms: +25% fire, lightning, chaos or cold resistance for 4 seconds. */
 constexpr int ResistCharmBonus = 25;
 constexpr int ResistCharmTicks = 4 * 20;
 /** @brief Stone Charm: breaks a stun and keeps you from being stunned for 3 seconds. */
@@ -50,7 +52,7 @@ constexpr int StunImmuneTicks = 3 * 20;
 /** @brief Bloodstone Charm: goes off below 35% life and recovers 30% of it. */
 constexpr int CharmLifeThreshold = 35;
 constexpr int CharmLifeRecovery = 30;
-/** @brief Sapphire Charm: goes off below 20% mana and recovers 40% of it. */
+/** @brief Lapis Charm: goes off below 20% mana and recovers 40% of it. */
 constexpr int CharmManaThreshold = 20;
 constexpr int CharmManaRecovery = 40;
 /** @brief Iron Charm: a hit for 15% of your life grants Guard, taking 40% less damage for 4 seconds. */

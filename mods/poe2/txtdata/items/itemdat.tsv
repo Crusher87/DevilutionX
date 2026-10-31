@@ -244,7 +244,7 @@ IDI_ARENAPOT	0	Misc	Unequippable	ARENA_POTION	Misc	NONE	Arena Potion		7	0	0	0	0	
 	1	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Uncut Support Gem	Uncut Gem	1	0	0	0	0	0	0	0	0		UNCUT_SUPPORT	Null	true	400
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skeleton Warriors Gem	Gem	3	0	0	0	0	0	0	25	0		SPIRITGEM_SKELETONS	Null	true	1000
 	1	Misc	Unequippable	BLOOD_STONE	Misc	NONE	Bloodstone Charm	Charm	1	0	0	0	0	0	0	0	0		CHARM_LIFE	Null	true	300
-	0	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Sapphire Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_MANA	Null	true	300
+	0	Misc	Unequippable	SPECTRAL_ELIXIR	Misc	NONE	Lapis Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_MANA	Null	true	300
 	1	Misc	Unequippable	GIANTS_KNUCKLE	Misc	NONE	Iron Charm	Charm	6	0	0	0	0	0	0	0	0		CHARM_GUARD	Null	true	500
 	2	Misc	Unequippable	MAP_OF_THE_STARS_SMALL	Misc	NONE	Waystone	Waystone	20	0	0	0	0	0	0	0	0		WAYSTONE	Null	true	1500
 	1	Misc	Unequippable	RING_OF_MAGMA	Misc	NONE	Ruby Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_FIRE	Null	true	400
@@ -1015,3 +1015,4 @@ poe2:wand_rotting_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Rotting Wand	Wand	42	5
 poe2:wand_gloom_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Gloom Wand	Wand	60	60	0	0	0	0	0	106	0		NONE	Null	false	6100
 poe2:staff_hollow_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Hollow Staff	Staff	41	50	0	0	0	0	0	73	0		NONE	Null	false	4200
 poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff	Staff	60	60	0	0	0	0	0	106	0		NONE	Null	false	6100
+	1	Misc	Unequippable	XORINES_RING	Misc	NONE	Sapphire Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_COLD	Null	true	400
