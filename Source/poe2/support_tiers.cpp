@@ -150,6 +150,24 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::ColdPenetration, 1, 2, 100, { 15, 0, 0 }, "Cold hits penetrate 15% of the\nmonster's cold resistance" },
 	{ SG::ColdPenetration, 2, 3, 100, { 20, 0, 0 }, "Cold hits penetrate 20% of the\nmonster's cold resistance" },
 	{ SG::ColdPenetration, 3, 5, 100, { 25, 0, 0 }, "Cold hits penetrate 25% of the\nmonster's cold resistance" },
+	// Escalating Poison: extra poison stacks, less poison duration (POE2: +1 stack, 20% less).
+	{ SG::TwinFangs, 1, 1, 110, { 1, 20, 0 }, "Poison stacks once more; poisons last\n20% shorter. Mana +10%" },
+	// Deadly Poison I-II: more poison damage, less damage with hits (POE2: 75%/25%, 100%/30%).
+	{ SG::DeadlyVenom, 1, 2, 120, { 75, 25, 0 }, "75% more poison damage. 25% less\ndamage with hits. Mana +20%" },
+	{ SG::DeadlyVenom, 2, 4, 120, { 100, 30, 0 }, "Twice the poison damage. 30% less\ndamage with hits. Mana +20%" },
+	// Chaos Attunement: damage gained as chaos, less non-chaos damage (POE2: 25% and 50%).
+	{ SG::DarkEnchant, 1, 3, 120, { 25, 50, 0 }, "Hits gain 25% of damage as chaos. 50%\nless non-chaos damage. Mana +20%" },
+	// Chaos Mastery: +1 level of the chaos skill.
+	{ SG::DarkArts, 1, 5, 110, { 1, 0, 0 }, "+1 level of the chaos skill. Mana +10%" },
+	// Corrosion: the poisons break armour.
+	{ SG::RottingFlesh, 1, 1, 110, {}, "Its poisons break armour. Mana +10%" },
+	// Bursting Plague: poisons build plague, at most 20% of the enemy's life, which bursts as physical on death.
+	{ SG::PlagueBurst, 1, 2, 120, {}, "Its poisons build plague that bursts\nwhen the enemy dies. Mana +20%" },
+	// Profanity I-II: a corpse taken on use for more chaos damage (POE2: 30%; II's 40% is ours).
+	{ SG::GraveProfanity, 1, 1, 110, { 30, 0, 0 }, "Takes a corpse near you on use for 30%\nmore chaos damage. Mana +10%" },
+	{ SG::GraveProfanity, 2, 5, 110, { 40, 0, 0 }, "Takes a corpse near you on use for 40%\nmore chaos damage. Mana +10%" },
+	// Extraction: 10% of life paid on use, 35% of the hit gained as chaos.
+	{ SG::BloodSacrifice, 1, 3, 100, { 35, 10, 0 }, "Pays 10% of your life on use; hits gain\n35% of damage as chaos" },
 };
 
 } // namespace

@@ -214,6 +214,42 @@ TEST_F(Poe2CasterStatsTest, ChaosLevelsGoToTheChaosSkillsOnly)
 	EXPECT_EQ(ItemSkillLevelBonus(player.poe2, SkillSlot::ForSpell(SpellID::Firebolt)), 0);
 }
 
+TEST_F(Poe2CasterStatsTest, GemAndGrantedSpellsTakeTheLevelsOfTheirType)
+{
+	Player &player = *MyPlayer;
+	SetGearStat(player, Poe2ItemStat::FireSkillLevels, 1);
+	SetGearStat(player, Poe2ItemStat::LightningSkillLevels, 2);
+	SetGearStat(player, Poe2ItemStat::ColdSkillLevels, 4);
+	SetGearStat(player, Poe2ItemStat::PhysicalSkillLevels, 8);
+	SetGearStat(player, Poe2ItemStat::ChaosSkillLevels, 16);
+	SetGearStat(player, Poe2ItemStat::SpellSkillLevels, 32);
+	const auto levels = [&player](WeaponSkill skill) { return ItemSkillLevelBonus(player.poe2, SkillSlot::ForAttack(skill)); };
+	// Physical spells: the wand and staff "of Agony" levels count (they were never read).
+	for (const WeaponSkill skill : { WeaponSkill::BoneBolt, WeaponSkill::Reap, WeaponSkill::TwinBolts, WeaponSkill::BlessedHammer })
+		EXPECT_EQ(levels(skill), 32 + 8) << static_cast<int>(skill);
+	// Cold and lightning spells, granted or from a gem.
+	for (const WeaponSkill skill : { WeaponSkill::FrostBolt, WeaponSkill::FreezingShards, WeaponSkill::IceBolt, WeaponSkill::GlacialSpike })
+		EXPECT_EQ(levels(skill), 32 + 4) << static_cast<int>(skill);
+	for (const WeaponSkill skill : { WeaponSkill::LightningBolt, WeaponSkill::GalvanicBolt, WeaponSkill::Spark })
+		EXPECT_EQ(levels(skill), 32 + 2) << static_cast<int>(skill);
+	for (const WeaponSkill skill : { WeaponSkill::VolatileBolt, WeaponSkill::EmberFusillade, WeaponSkill::Meteor })
+		EXPECT_EQ(levels(skill), 32 + 1) << static_cast<int>(skill);
+	EXPECT_EQ(levels(WeaponSkill::WitheringBolt), 32 + 16);
+	// A curse deals no damage: only the spell levels.
+	EXPECT_EQ(levels(WeaponSkill::Despair), 32);
+	EXPECT_EQ(levels(WeaponSkill::ManaDrain), 32);
+	// Attacks take none of them: melee or projectile levels only.
+	EXPECT_EQ(levels(WeaponSkill::Cleave), 0);
+	EXPECT_EQ(levels(WeaponSkill::ClusterBolt), 0);
+	SetGearStat(player, Poe2ItemStat::MeleeSkillLevels, 64);
+	SetGearStat(player, Poe2ItemStat::ProjectileSkillLevels, 128);
+	EXPECT_EQ(levels(WeaponSkill::Cleave), 64);
+	EXPECT_EQ(levels(WeaponSkill::Barrage), 128);
+	// A bow skill shoots: projectile levels, not melee ones.
+	EXPECT_EQ(levels(WeaponSkill::ClusterBolt), 128);
+	EXPECT_EQ(levels(WeaponSkill::FrostBolt), 32 + 4);
+}
+
 TEST_F(Poe2CasterStatsTest, SceptreSpiritTakesItsOwnIncrease)
 {
 	Player &player = *MyPlayer;

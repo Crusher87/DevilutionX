@@ -23,6 +23,11 @@ constexpr int BaseSpirit = 0;
 /** @brief Sceptres grant Spirit, as in POE2. */
 constexpr int SceptreSpirit = 100;
 constexpr int PurityResistance = 25;
+/** @brief Cleansing (POE2's Impurity): chaos resistance for the hero, +10% at gem level 1 to +29% at 20. */
+[[nodiscard]] constexpr int CleansingChaosResistance(int gemLevel)
+{
+	return 9 + (gemLevel < 1 ? 1 : (gemLevel > 30 ? 30 : gemLevel));
+}
 /** @brief Herald of Ash: the explosion deals this share of the dead monster's life as fire to its neighbours. */
 constexpr int HeraldOfAshPercent = 20;
 constexpr int HeraldOfAshRadius = 2;

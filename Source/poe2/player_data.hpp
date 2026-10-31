@@ -163,7 +163,11 @@ enum class WeaponSkill : uint8_t {
 	TwinBolts,
 	/** Gem skills appended after the granted ones (saved by value, so only ever appended). */
 	Despair,
-	Last = Despair,
+	/** Chaos gems addendum G4: POE2's Poisonburst Arrow. */
+	PlagueArrow,
+	/** Chaos gems addendum G5: POE2's Hexblast. */
+	HexRupture,
+	Last = HexRupture,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -280,6 +284,17 @@ enum class SupportGem : uint8_t {
 	ColdPenetration,
 	/** Herald supports (Curtis 2026-10-19): POE2's Deadly Herald. */
 	DeadlyHerald,
+	/** Chaos supports (chaos gems addendum, Curtis 2026-10-31): POE2's Escalating Poison and Deadly Poison I-II. */
+	TwinFangs,
+	DeadlyVenom,
+	/** POE2's Chaos Attunement. */
+	DarkEnchant,
+	/** POE2's Chaos Mastery, Corrosion, Bursting Plague, Profanity I-II and Extraction. */
+	DarkArts,
+	RottingFlesh,
+	PlagueBurst,
+	GraveProfanity,
+	BloodSacrifice,
 	Count,
 };
 
@@ -424,7 +439,9 @@ enum class PersistentSkill : uint8_t {
 	Sacrifice,
 	/** Each dodge roll leaves an illusion of you that draws enemies; one they destroy leaves Frenzy remnants. */
 	LingeringIllusion,
-	Last = LingeringIllusion,
+	/** Cleansing (POE2's Impurity): an aura of chaos resistance, more with the gem's level. */
+	Impurity,
+	Last = Impurity,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -618,6 +635,11 @@ struct SupportRuntime {
 	/** Wrathforged and Combo Finisher: more damage for the cast that spent Rage or Combo, in percent, and the ticks it lasts. */
 	uint8_t spentBonusPercent = 0;
 	uint8_t spentBonusTicks = 0;
+	/** Grave Profanity: more chaos damage for the use that took a corpse, in percent, and the ticks it lasts. */
+	uint8_t profanityPercent = 0;
+	uint8_t profanityTicks = 0;
+	/** Blood Sacrifice: ticks the use that paid its life gains chaos. */
+	uint8_t sacrificeTicks = 0;
 	/** Burning Ground: ticks before another patch can be left. */
 	uint8_t burningGroundCooldown = 0;
 	/** Faster Casting III: the spells cast lately and the ticks each stays counted. */
@@ -719,6 +741,8 @@ struct SpiritRuntime {
 	uint16_t regulationTicks = 0;
 	/** Withering Presence: game ticks to the next pulse. */
 	uint8_t witherPulseTicks = 0;
+	/** Cleansing's ring shows every few seconds. */
+	uint8_t cleansingPulseTicks = 0;
 	/** Trinity: Resonance of fire, lightning and cold; the elements that gained this tick (bits); game ticks since the last gain. */
 	std::array<uint8_t, 3> resonance {};
 	uint8_t resonanceGained = 0;

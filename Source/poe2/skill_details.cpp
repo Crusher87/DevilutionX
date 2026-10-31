@@ -789,6 +789,9 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 		Value(lines, "Broken by an enemy", std::format("a Frenzy remnant for {:d} seconds", IllusionRemnantTicks / 20));
 		Value(lines, "Second remnant", std::format("{:d}% chance", IllusionSecondRemnantChance(level)));
 		break;
+	case PersistentSkill::Impurity:
+		Value(lines, "Chaos resistance", std::format("+{:d}%, for you", CleansingChaosResistance(level)));
+		break;
 	default:
 		break;
 	}
@@ -1041,6 +1044,8 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(shape, "Extra projectiles", std::format("+{:d}", extraProjectiles));
 	if (table != nullptr && table->radius > 0)
 		Value(shape, "Area radius", std::format("{:d} tiles", static_cast<int>(table->radius)));
+	if (table != nullptr && (table->flags & TF_PoisonBurst) != 0)
+		Text(shape, Kind::Note, std::format("The first hit bursts: it poisons all there and hits the others for {:d}%", PlagueArrowSplashPercent));
 	if (table != nullptr && table->duration > 0)
 		Value(shape, "Duration", Seconds(table->duration / static_cast<double>(TicksPerSecond)));
 	if ((tagBits & ST_Projectile) != 0)

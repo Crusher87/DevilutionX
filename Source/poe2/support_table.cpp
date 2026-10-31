@@ -37,6 +37,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -148,6 +149,16 @@ const SupportData Table[] = {
 	{ SG::ColdPenetration, "Cold Mastery", "Cold hits penetrate 15% of the\nmonster's cold resistance", "Needs a cold skill", GC::Magic, 3, 100, 0, ST_Frost, 0, 0, NoFamily },
 	// POE2's herald-only support (Curtis 2026-10-19).
 	{ SG::DeadlyHerald, "Zealous Aura", "The Aspect's explosions deal 30% more\ndamage. Reserves 20 more Spirit", "Needs an Aspect", GC::Dexterity, 6, 100, 0, ST_Herald, 0, 0, NoFamily },
+	// Chaos supports (chaos gems addendum, Curtis 2026-10-31): POE2's Escalating Poison and Deadly Poison.
+	{ SG::TwinFangs, "Twin Fangs", "Poison stacks once more; poisons last\n20% shorter. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 1, 110, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	{ SG::DeadlyVenom, "Deadly Venom", "75% more poison damage. 25% less\ndamage with hits. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	// Not an Enchant: it adds chaos on top of the hit instead of turning part of it, so it goes with them.
+	{ SG::DarkEnchant, "Dark Enchant", "Hits gain 25% of damage as chaos. 50%\nless non-chaos damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
+	{ SG::DarkArts, "Dark Arts", "+1 level of the chaos skill. Mana +10%", "Needs a chaos skill", GC::Magic, 15, 110, ST_Chaos, 0, 0, 0, NoFamily },
+	{ SG::RottingFlesh, "Rotting Flesh", "Its poisons break armour. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 1, 110, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	{ SG::PlagueBurst, "Plague Burst", "Its poisons build plague that bursts\nwhen the enemy dies. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	{ SG::GraveProfanity, "Grave Profanity", "Takes a corpse near you on use for 30%\nmore chaos damage. Mana +10%", "Needs a damaging skill", GC::Magic, 1, 110, 0, DamageSkill, 0, 0, NoFamily },
+	{ SG::BloodSacrifice, "Blood Sacrifice", "Pays 10% of your life on use; hits gain\n35% of damage as chaos", "Needs a damaging skill", GC::Magic, 6, 100, 0, DamageSkill, 0, 0, NoFamily },
 };
 // clang-format on
 
@@ -233,6 +244,8 @@ struct HitState {
 	int64_t total = 0;
 	/** The hit's physical and chaos damage before the monster's resistance and damage taken: poison's base. */
 	int64_t poisonBase = 0;
+	/** The hit's chaos damage, as dealt. */
+	int64_t chaos = 0;
 	/** What MonsterDamageTakenPercent let through of the hit's physical and chaos damage, on this monster. */
 	const Monster *takenMonster = nullptr;
 	int physicalTakenPercent = 0;
@@ -492,6 +505,14 @@ DamageType PrismElement(uint8_t element)
 	return Elements[element % 3];
 }
 
+/** @brief The hit's damage as dealt, with its non-chaos part as it was before Dark Enchant's less. */
+int64_t HitDamageBeforeDarkEnchant(const Player &player, SkillSlot skill)
+{
+	const int64_t other = std::max<int64_t>(Hit.total - Hit.chaos, 0);
+	const int less = Has(player, skill, SG::DarkEnchant) ? std::clamp(Value(player, skill, SG::DarkEnchant, 1), 0, 99) : 0;
+	return Hit.chaos + (other * 100 / (100 - less));
+}
+
 /** @brief The supports' on-hit effects on the monster the hit landed on. */
 /** @brief Fan the Flames II: a burning monster's ignite spreads to the 2 nearest. */
 void SpreadIgnite(const Player &player, const Monster &monster)
@@ -583,6 +604,9 @@ void FinishHit()
 			else if (Has(player, skill, SG::InfusedFrost))
 				DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(physical));
 		}
+		// Dark Enchant: a share of the hit as chaos, counted from before its own less (POE2's Chaos Attunement).
+		if (Has(player, skill, SG::DarkEnchant))
+			DealExtra(player, monster, DamageType::Chaos, Fixed26_6::fromRaw(Percent(HitDamageBeforeDarkEnchant(player, skill), Value(player, skill, SG::DarkEnchant, 0))));
 		// Zakarum's Blessing adds holy fire.
 		if (Has(player, skill, SG::HolyInfusion))
 			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(total / 5));
@@ -598,6 +622,9 @@ void FinishHit()
 			DealExtra(player, monster, PrismElement(state.prismElement), Fixed26_6::fromRaw(total * 3 / 10));
 		if (Has(player, skill, SG::BartucsBloodletting) && state.bartucTicks > 0)
 			DealExtra(player, monster, DamageType::Physical, Fixed26_6::fromRaw(state.bartucDamage));
+		// Blood Sacrifice: a use that paid its life gains a share of each hit as chaos (POE2's Extraction).
+		if (Has(player, skill, SG::BloodSacrifice) && state.sacrificeTicks > 0)
+			DealExtra(player, monster, DamageType::Chaos, Fixed26_6::fromRaw(Percent(HitDamageBeforeDarkEnchant(player, skill), Value(player, skill, SG::BloodSacrifice, 0))));
 	}
 
 	// Things that spread from the hit.
@@ -798,14 +825,49 @@ int CountStands(bool decoy)
 	return static_cast<int>(std::count_if(Stands.begin(), Stands.end(), [&](const Stand &stand) { return stand.decoy == decoy; }));
 }
 
+/** @brief Takes the corpse nearest the tile within the radius (the first in reading order among the nearest); none if none. */
+std::optional<Point> TakeCorpseNear(Point center, int radius)
+{
+	std::optional<Point> best;
+	int bestDistance = radius + 1;
+	for (int y = -radius; y <= radius; y++) {
+		for (int x = -radius; x <= radius; x++) {
+			const Point tile = center + Displacement { x, y };
+			if (!InDungeonBounds(tile) || dCorpse[tile.x][tile.y] == 0)
+				continue;
+			const int distance = center.WalkingDistance(tile);
+			if (distance < bestDistance) {
+				best = tile;
+				bestDistance = distance;
+			}
+		}
+	}
+	if (best)
+		dCorpse[best->x][best->y] = 0;
+	return best;
+}
+
 } // namespace
 
 void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks)
 {
 	if (!AilmentAllowed(player, HitSource()))
 		return;
+	// The supports of the hit in progress: Deadly Venom's stronger poison, Twin Fangs' extra stack and shorter poisons
+	// (POE2's Deadly Poison and Escalating Poison).
+	if (Hit.player == &player && !Hit.skill.isEmpty()) {
+		if (const int more = Value(player, Hit.skill, SG::DeadlyVenom, 0); more > 0)
+			total = Percent(total, 100 + more);
+		if (Has(player, Hit.skill, SG::TwinFangs)) {
+			const int shorter = Value(player, Hit.skill, SG::TwinFangs, 1);
+			total = Percent(total, 100 - shorter);
+			ticks = std::max(ticks * (100 - shorter) / 100, 1);
+			maxStacks += Value(player, Hit.skill, SG::TwinFangs, 0);
+		}
+	}
 	Poe2MonsterState &state = monster.poe2;
 	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
+	const bool stacked = state.poisonTicks > 0 && maxStacks > 1;
 	if (maxStacks <= 1) {
 		// POE2: only the strongest poison deals damage. A weaker one is lost (there's one poison a monster at a time
 		// here, so it doesn't wait for the stronger one to run out); one as strong or stronger takes over.
@@ -813,13 +875,19 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 			return;
 		state.poisonTicks = static_cast<uint8_t>(perTick == state.poisonDamagePerTick ? std::max<int>(state.poisonTicks, ticks) : ticks);
 		state.poisonDamagePerTick = perTick;
-		state.poisonSource = static_cast<int8_t>(player.getId());
-		return;
+	} else {
+		const int32_t cap = perTick * maxStacks;
+		state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
+		state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
 	}
-	const int32_t cap = perTick * maxStacks;
-	state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
-	state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
 	state.poisonSource = static_cast<int8_t>(player.getId());
+	const bool supported = Hit.player == &player && !Hit.skill.isEmpty();
+	// Plague Burst: the poison builds plague; a stack added to it keeps the plague it had (POE2's Bursting Plague).
+	const bool plague = supported && Has(player, Hit.skill, SG::PlagueBurst);
+	state.poisonPlague = plague || (stacked && state.poisonPlague);
+	// Rotting Flesh: the poison breaks armour (POE2's Corrosion).
+	if (supported && Has(player, Hit.skill, SG::RottingFlesh))
+		BreakMonsterArmour(monster, &player);
 }
 
 int32_t ChaosTickDamage(const Monster &monster, int32_t perTick)
@@ -1038,6 +1106,9 @@ uint32_t SkillTags(SkillSlot skill)
 	case TableShape::Curse:
 		tags |= ST_Curse | ST_Duration | ST_Area;
 		break;
+	case TableShape::HexBurst:
+		tags |= ST_Area;
+		break;
 	case TableShape::Buff:
 		tags |= ST_Duration;
 		if (table->buff == TableBuff::WarCry)
@@ -1073,7 +1144,7 @@ uint32_t SkillTags(SkillSlot skill)
 		}
 		if ((table->flags & TF_Elements) != 0)
 			tags |= ST_Elemental;
-		if ((table->flags & (TF_Bleed | TF_Poison)) != 0 || table->shape == TableShape::Curse)
+		if ((table->flags & (TF_Bleed | TF_Poison | TF_PoisonBurst)) != 0 || table->shape == TableShape::Curse)
 			tags |= ST_DamageOverTime;
 	}
 	return tags;
@@ -1183,6 +1254,7 @@ SupportHitScope::SupportHitScope(const Player &player, SkillSlot skill)
 	Hit.physical = 0;
 	Hit.total = 0;
 	Hit.poisonBase = 0;
+	Hit.chaos = 0;
 	Hit.takenMonster = nullptr;
 	Hit.finishing = false;
 	Hit.wirt = Has(player, skill, SG::WirtsLeg) && GenerateRnd(100) < 10;
@@ -1221,6 +1293,7 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 		Hit.physical = 0;
 		Hit.total = 0;
 		Hit.poisonBase = 0;
+		Hit.chaos = 0;
 	}
 	Hit.monster = &monster;
 	Hit.total += damage.raw();
@@ -1231,6 +1304,8 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 	OnRagingSpiritsHit(*MyPlayer, Hit.skill, monster, type);
 	if (type == DamageType::Physical)
 		Hit.physical += damage.raw();
+	if (type == DamageType::Chaos)
+		Hit.chaos += damage.raw();
 	if (IsAnyOf(type, DamageType::Physical, DamageType::Chaos)) {
 		// Poison counts the hit as it was before the monster's resistance and damage taken, as in POE2.
 		const int taken = Hit.takenMonster == &monster ? (type == DamageType::Physical ? Hit.physicalTakenPercent : Hit.chaosTakenPercent) : 0;
@@ -1336,6 +1411,14 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 		case SG::DeadlyHerald:
 			more(Value(player, skill, gem, 0));
 			break;
+		case SG::DarkEnchant:
+			if (type != DamageType::Chaos)
+				more(-Value(player, skill, gem, 1));
+			break;
+		case SG::DeadlyVenom:
+			// Hits are weaker; the poison, counted from the hit before this, is stronger (InflictPoison).
+			more(-Value(player, skill, gem, 1));
+			break;
 		case SG::Bloodlust:
 			if (type == DamageType::Physical && monster.poe2.bleedTicks > 0)
 				more(30);
@@ -1370,6 +1453,10 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 				more(-15);
 			break;
 		case SG::KashyasVolley:
+			break;
+		case SG::GraveProfanity:
+			if (type == DamageType::Chaos && state.profanityTicks > 0)
+				more(state.profanityPercent);
 			break;
 		case SG::WirtsLeg:
 			if (Hit.wirt)
@@ -1438,6 +1525,8 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 	const std::optional<size_t> row = SupportRowOf(player, skill);
 	const Point tile = player.position.tile;
 	state.spentBonusTicks = 0;
+	state.profanityTicks = 0;
+	state.sacrificeTicks = 0;
 	if (skill.kind == SkillKind::Spell)
 		NoteRecentSpell(state, skill.id);
 	// Raging Spirits: the hits of a fire spell the hero casts themselves call spirits.
@@ -1531,6 +1620,27 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 				state.prismReady = true;
 			}
 			break;
+		case SG::GraveProfanity:
+			// POE2's Profanity: the use takes a corpse near the hero for more chaos damage.
+			if (const std::optional<Point> corpse = TakeCorpseNear(tile, GraveProfanityTiles); corpse) {
+				state.profanityPercent = static_cast<uint8_t>(Value(player, skill, gem, 0));
+				state.profanityTicks = SpentBonusTicks;
+				AddVisualEffect(*corpse, MissileGraphicID::BloodHit, 0, 4);
+				vfx::Sparks(*corpse, vfx::Element::Chaos, 1.0F);
+			}
+			break;
+		case SG::BloodSacrifice: {
+			// POE2's Extraction: a share of current life, never the last of it.
+			const Fixed26_6 cost = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(player._pHitPoints.raw()) * Value(player, skill, gem, 1) / 100));
+			if (cost > 0 && player._pHitPoints - cost >= Fixed26_6::fromInt(1)) {
+				player._pHitPoints -= cost;
+				player._pHPBase -= cost;
+				RedrawComponent(PanelDrawComponent::Health);
+				state.sacrificeTicks = SpentBonusTicks;
+				vfx::Impact(tile, vfx::Element::Blood, 0.7F);
+			}
+			break;
+		}
 		case SG::KashyasVolley:
 			for (const int side : { -1, 0, 1 }) {
 				const Direction dir = GetDirection(tile, target);
@@ -1571,6 +1681,12 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 
 void OnSupportedKill(Monster &monster)
 {
+	// Plague Burst: the plague the hero's poison built bursts as physical damage around the dead monster, whatever killed it.
+	if (gbIsPoe2 && monster.poe2.plagueStore > 0 && MyPlayer != nullptr && monster.poe2.poisonSource == static_cast<int8_t>(MyPlayerId)) {
+		AddBurst(monster.position.tile, PlagueBurstRadius, 0, DamageType::Physical, MissileGraphicID::AcidSplat, Fixed26_6::fromRaw(monster.poe2.plagueStore));
+		vfx::Impact(monster.position.tile, vfx::Element::Chaos, 1.2F);
+		monster.poe2.plagueStore = 0;
+	}
 	if (!gbIsPoe2 || monster.poe2.lastHitPlayer < 0 || static_cast<size_t>(monster.poe2.lastHitPlayer) >= Players.size())
 		return;
 	Player &player = Players[static_cast<size_t>(monster.poe2.lastHitPlayer)];
@@ -1660,6 +1776,10 @@ void ProcessSupportEffects(Player &player)
 		state.bartucTicks--;
 	if (state.spentBonusTicks > 0)
 		state.spentBonusTicks--;
+	if (state.profanityTicks > 0)
+		state.profanityTicks--;
+	if (state.sacrificeTicks > 0)
+		state.sacrificeTicks--;
 	if (state.burningGroundCooldown > 0)
 		state.burningGroundCooldown--;
 	for (uint8_t &wait : state.novaCooldown) {
@@ -1721,11 +1841,17 @@ void ProcessSupportMonsterEffects(Monster &monster)
 			TelemetryNoteDamageSource("poison");
 			ApplyMonsterDamage(DamageType::Chaos, monster, tick);
 			OnSpiritPoisonDealt(*MyPlayer, tick);
+			if (state.poisonPlague) {
+				const int64_t cap = static_cast<int64_t>(monster.maxHitPoints.raw()) * PlagueBurstMaxLifePercent / 100;
+				state.plagueStore = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(state.plagueStore) + tick.raw(), cap));
+			}
 			if (monster.hasNoLife())
 				M_StartKill(monster, *MyPlayer);
 		}
-		if (state.poisonTicks == 0)
+		if (state.poisonTicks == 0) {
 			state.poisonDamagePerTick = 0;
+			state.poisonPlague = false;
+		}
 	}
 }
 

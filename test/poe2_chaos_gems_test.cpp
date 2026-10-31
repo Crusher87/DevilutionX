@@ -1,0 +1,668 @@
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <optional>
+#include <string_view>
+#include <vector>
+
+#include "engine/assets.hpp"
+#include "engine/random.hpp"
+#include "game_mode.hpp"
+#include "items.h"
+#include "levels/gendung.h"
+#include "lighting.h"
+#include "missiles.h"
+#include "monster.h"
+#include "player.h"
+#include "poe2/gemcutting.hpp"
+#include "poe2/item_stats.hpp"
+#include "poe2/modifiers.hpp"
+#include "poe2/monster_resistance.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/player_data.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/support_tiers.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/weapon_skills.hpp"
+#include "spells.h"
+#include "storm/storm_net.hpp"
+#include "tables/misdat.h"
+#include "tables/monstdat.h"
+#include "tables/playerdat.hpp"
+
+namespace devilution {
+namespace {
+
+/** @brief The chaos skill and support gems of the chaos gems addendum (research/chaos-damage), one by one. */
+class Poe2ChaosGemsTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		Players.resize(1);
+		MyPlayer = &Players[0];
+		MyPlayerId = 0;
+		*MyPlayer = {};
+		MyPlayer->poe2.clear();
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsPoe2 = true;
+		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadSpellData();
+		LoadMissileData();
+		LoadPlayerDataFiles();
+		LoadPassiveTreeData();
+		LoadModifierData();
+		LoadMonsterData();
+		LevelMonsterTypes[0].type = MT_NZOMBIE;
+		Missiles.clear();
+
+		Player &player = *MyPlayer;
+		player._pClass = HeroClass::Rogue;
+		player.setCharacterLevel(30);
+		player._pBaseStr = player._pStrength = 100;
+		player._pBaseMag = player._pMagic = 100;
+		player._pBaseDex = player._pDexterity = 200;
+		player._pBaseVit = player._pVitality = 25;
+		player._pMaxHPBase = player._pHPBase = player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(200);
+		player._pMaxManaBase = player._pManaBase = player._pMaxMana = player._pMana = Fixed26_6::fromInt(200);
+		player._pIMinDam = 20;
+		player._pIMaxDam = 30;
+		player.position.tile = { 40, 40 };
+		player._pdir = Direction::East;
+	}
+
+	void TearDown() override
+	{
+		Missiles.clear();
+		ClearSkillZones();
+		ClearSupportEffects();
+		ClearMonsters();
+		gbIsPoe2 = false;
+		leveltype = DTYPE_TOWN;
+		LoadPassiveTreeData();
+		UnloadModArchives();
+	}
+
+	/** @brief Socket a skill in the first Skills panel row with one support of the given tier. */
+	static SkillSlot Supported(SkillSlot skill, SupportGem gem = SupportGem::None, int tier = 1)
+	{
+		Player &player = *MyPlayer;
+		player.poe2.skillSlots[0] = skill;
+		player.poe2.slotLevels[0] = 1;
+		player.poe2.slotSupports[0] = {};
+		player.poe2.slotSupportTiers[0] = {};
+		if (gem != SupportGem::None) {
+			player.poe2.slotSupports[0][0] = gem;
+			player.poe2.slotSupportTiers[0][0] = static_cast<uint8_t>(tier);
+		}
+		return skill;
+	}
+
+	/** @brief A normal monster of the kind standing on the tile, with plenty of life. */
+	static Monster &PlaceMonster(size_t slot, Point tile, _monster_id kind = MT_NZOMBIE)
+	{
+		LevelMonsterTypes[0].type = kind;
+		Monster &monster = Monsters[slot];
+		monster = {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.mode = MonsterMode::Stand;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = tile;
+		dMonster[tile.x][tile.y] = static_cast<int16_t>(slot + 1);
+		ActiveMonsters[ActiveMonsterCount] = static_cast<unsigned>(slot);
+		ActiveMonsterCount++;
+		return monster;
+	}
+
+	static void ClearMonsters()
+	{
+		for (int x = 30; x < 55; x++) {
+			for (int y = 30; y < 55; y++) {
+				dMonster[x][y] = 0;
+				dCorpse[x][y] = 0;
+			}
+		}
+		for (size_t i = 0; i < ActiveMonsterCount; i++)
+			Monsters[ActiveMonsters[i]] = {};
+		ActiveMonsterCount = 0;
+	}
+
+	/** @brief A dungeon to fight in, with the network up for the hits. */
+	static void EnterDungeon()
+	{
+		leveltype = DTYPE_CATHEDRAL;
+		SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	}
+};
+
+// Twin Fangs (POE2's Escalating Poison): one more poison stack, 20% shorter poisons.
+TEST_F(Poe2ChaosGemsTest, TwinFangsStacksPoisonOnceMore)
+{
+	Player &player = *MyPlayer;
+	const SkillSlot cobra = SkillSlot::ForAttack(WeaponSkill::ViperStrike);
+	const SupportData *data = FindSupportData(SupportGem::TwinFangs);
+	ASSERT_NE(data, nullptr);
+	EXPECT_EQ(data->name, "Twin Fangs");
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::TwinFangs, cobra));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::TwinFangs, SkillSlot::ForAttack(WeaponSkill::WitheringBolt)));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::TwinFangs, SkillSlot::ForSpell(SpellID::Fireball)));
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::TwinFangs, 1, 0), 1);
+
+	// Without it, two equal poisons are one.
+	Supported(cobra);
+	Monster &plain = PlaceMonster(0, { 45, 45 });
+	{
+		const SupportHitScope scope(player, cobra);
+		InflictPoison(player, plain, 40 * 100, PoisonTicks);
+		InflictPoison(player, plain, 40 * 100, PoisonTicks);
+	}
+	EXPECT_EQ(plain.poe2.poisonDamagePerTick, 100);
+	EXPECT_EQ(plain.poe2.poisonTicks, PoisonTicks);
+
+	// With it, they add up to two, and each lasts 20% shorter with the same damage a tick.
+	Supported(cobra, SupportGem::TwinFangs);
+	Monster &stacked = PlaceMonster(1, { 46, 45 });
+	{
+		const SupportHitScope scope(player, cobra);
+		for (int i = 0; i < 3; i++)
+			InflictPoison(player, stacked, 40 * 100, PoisonTicks);
+	}
+	EXPECT_EQ(stacked.poe2.poisonDamagePerTick, 200);
+	EXPECT_EQ(stacked.poe2.poisonTicks, PoisonTicks * 80 / 100);
+}
+
+// Deadly Venom (POE2's Deadly Poison I-II): more poison damage, less damage with hits.
+TEST_F(Poe2ChaosGemsTest, DeadlyVenomTradesHitDamageForPoison)
+{
+	Player &player = *MyPlayer;
+	const SkillSlot cobra = SkillSlot::ForAttack(WeaponSkill::ViperStrike);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::DeadlyVenom, cobra));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::DeadlyVenom, SkillSlot::ForSpell(SpellID::ChainLightning)));
+	EXPECT_EQ(SupportTierCount(SupportGem::DeadlyVenom), 2);
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::DeadlyVenom, 1, 0), 3);
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::DeadlyVenom, 2, 0), 10);
+
+	for (const auto [tier, more, less] : { std::array<int, 3> { 1, 75, 25 }, std::array<int, 3> { 2, 100, 30 } }) {
+		Supported(cobra, SupportGem::DeadlyVenom, tier);
+		Monster &monster = PlaceMonster(0, { 45, 45 });
+		{
+			const SupportHitScope scope(player, cobra);
+			EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Physical), 100 - less) << tier;
+			InflictPoison(player, monster, 40 * 100, PoisonTicks);
+		}
+		EXPECT_EQ(monster.poe2.poisonDamagePerTick, 100 * (100 + more) / 100) << tier;
+		EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks) << tier;
+		ClearMonsters();
+	}
+	// Outside a hit of the supported skill, poison is as it was.
+	Monster &other = PlaceMonster(0, { 45, 45 });
+	InflictPoison(player, other, 40 * 100, PoisonTicks);
+	EXPECT_EQ(other.poe2.poisonDamagePerTick, 100);
+}
+
+// Dark Enchant (POE2's Chaos Attunement): hits gain chaos, other damage is less.
+TEST_F(Poe2ChaosGemsTest, DarkEnchantTurnsHitsTowardChaos)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	const SkillSlot bolt = SkillSlot::ForAttack(WeaponSkill::WitheringBolt);
+	const SkillSlot firebolt = SkillSlot::ForSpell(SpellID::Firebolt);
+	for (const SkillSlot skill : { cleave, bolt, firebolt })
+		EXPECT_TRUE(SupportGemCanSupport(SupportGem::DarkEnchant, skill));
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::DarkEnchant, 1, 0), 6);
+
+	// 50 physical got through at 50% less: the gain is 25% of the 100 before it, as chaos the zombie doesn't resist.
+	Supported(cleave, SupportGem::DarkEnchant);
+	Monster &hit = PlaceMonster(0, { 45, 45 });
+	ASSERT_EQ(MonsterDamageTakenPercent(hit, DamageType::Chaos), 100);
+	{
+		const SupportHitScope scope(player, cleave);
+		EXPECT_EQ(SupportHitDamagePercent(hit, DamageType::Physical), 50);
+		EXPECT_EQ(SupportHitDamagePercent(hit, DamageType::Chaos), 100);
+		NoteSupportedDamage(hit, DamageType::Physical, Fixed26_6::fromInt(50));
+	}
+	EXPECT_EQ(hit.hitPoints, Fixed26_6::fromInt(100000 - 25));
+
+	// A chaos skill takes the gain and nothing less.
+	Supported(bolt, SupportGem::DarkEnchant);
+	Monster &chaos = PlaceMonster(1, { 46, 45 });
+	{
+		const SupportHitScope scope(player, bolt);
+		EXPECT_EQ(SupportHitDamagePercent(chaos, DamageType::Chaos), 100);
+		NoteSupportedDamage(chaos, DamageType::Chaos, Fixed26_6::fromInt(40));
+	}
+	EXPECT_EQ(chaos.hitPoints, Fixed26_6::fromInt(100000 - 10));
+
+	// Fire spells are less too.
+	Supported(firebolt, SupportGem::DarkEnchant);
+	Monster &burnt = PlaceMonster(2, { 47, 45 });
+	{
+		const SupportHitScope scope(player, firebolt);
+		EXPECT_EQ(SupportHitDamagePercent(burnt, DamageType::Fire), 50);
+	}
+
+	// Without it, nothing extra.
+	Supported(cleave);
+	Monster &plain = PlaceMonster(3, { 48, 45 });
+	{
+		const SupportHitScope scope(player, cleave);
+		NoteSupportedDamage(plain, DamageType::Physical, Fixed26_6::fromInt(50));
+	}
+	EXPECT_EQ(plain.hitPoints, Fixed26_6::fromInt(100000));
+}
+
+// Cleansing (POE2's Impurity): an aura of chaos resistance that grows with the gem.
+TEST_F(Poe2ChaosGemsTest, CleansingGrantsChaosResistance)
+{
+	Player &player = *MyPlayer;
+	EXPECT_EQ(PersistentSkillName(PersistentSkill::Impurity), "Cleansing");
+	EXPECT_EQ(SpiritReservation(PersistentSkill::Impurity), 30);
+	EXPECT_EQ(CleansingChaosResistance(1), 10);
+	EXPECT_EQ(CleansingChaosResistance(20), 29);
+	const SkillSlot cleansing = SkillSlot::ForPersistent(PersistentSkill::Impurity);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, cleansing, 1));
+	EXPECT_EQ(SkillForGem(gem), cleansing);
+
+	// A sceptre's Spirit carries it.
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iName == std::string_view("Rattling Sceptre"))
+			InitializeItem(player.InvBody[INVLOC_HAND_LEFT], static_cast<_item_indexes>(i));
+	}
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	CalcPlrInv(player, false);
+	ASSERT_EQ(player.poe2.chaosResistance, 0);
+	SocketSkill(player, 0, cleansing);
+	if (!player.poe2.spiritGemOn(0))
+		ToggleSpiritGem(player, 0);
+	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::Impurity));
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.chaosResistance, 10);
+	// A level 20 gem needs more Magic.
+	player._pBaseMag = player._pMagic = 250;
+	player.poe2.slotLevels[0] = 20;
+	CalcPlrInv(player, false);
+	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::Impurity));
+	EXPECT_EQ(player.poe2.chaosResistance, 29);
+	// Salvation doesn't touch chaos, and Cleansing doesn't touch the elements.
+	EXPECT_EQ(player._pFireResist, 0);
+	EXPECT_EQ(player._pLghtResist, 0);
+	EXPECT_EQ(player._pMagResist, 0);
+
+	// It respects the cap.
+	Item &ring = player.InvBody[INVLOC_RING_LEFT];
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_RING) {
+			InitializeItem(ring, static_cast<_item_indexes>(i));
+			break;
+		}
+	}
+	ring._iStatFlag = true;
+	ring._iIdentified = true;
+	ring._iMagical = ITEM_QUALITY_MAGIC;
+	ApplyModEffect(ring, ModEffect::ChaosResistance, 60, 0);
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.uncappedChaosResistance, 89);
+	EXPECT_EQ(player.poe2.chaosResistance, MaxResistance);
+
+	// Switched off, it's gone.
+	SocketSkill(player, 0, {});
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.chaosResistance, 60);
+}
+
+TEST_F(Poe2ChaosGemsTest, SalvationLeavesChaosAlone)
+{
+	Player &player = *MyPlayer;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iName == std::string_view("Rattling Sceptre"))
+			InitializeItem(player.InvBody[INVLOC_HAND_LEFT], static_cast<_item_indexes>(i));
+	}
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::PurityOfElements));
+	if (!player.poe2.spiritGemOn(0))
+		ToggleSpiritGem(player, 0);
+	CalcPlrInv(player, false);
+	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::PurityOfElements));
+	EXPECT_EQ(player._pFireResist, PurityResistance);
+	EXPECT_EQ(player.poe2.chaosResistance, 0);
+}
+
+// Plague Arrow (POE2's Poisonburst Arrow): the arrow's first hit bursts, poisoning the pack around it.
+TEST_F(Poe2ChaosGemsTest, PlagueArrowBurstPoisonsThePack)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData *data = FindTableSkill(WeaponSkill::PlagueArrow);
+	ASSERT_NE(data, nullptr);
+	EXPECT_EQ(data->name, "Plague Arrow");
+	EXPECT_EQ(data->weapon, TableWeapon::Bow);
+	EXPECT_EQ(data->level, 1);
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::PlagueArrow));
+	EXPECT_FALSE(IsGrantedTableSkill(*data));
+	EXPECT_TRUE(IsTableAreaSkill(*data));
+	const SkillSlot arrow = SkillSlot::ForAttack(WeaponSkill::PlagueArrow);
+	EXPECT_NE(SkillTags(arrow) & ST_Projectile, 0U);
+	EXPECT_NE(SkillTags(arrow) & ST_DamageOverTime, 0U);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::TwinFangs, arrow));
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, arrow, 1));
+	EXPECT_EQ(SkillForGem(gem), arrow);
+
+	// Three packed monsters and one beyond the burst.
+	Supported(arrow);
+	Monster &struck = PlaceMonster(0, { 45, 45 });
+	Monster &beside = PlaceMonster(1, { 46, 45 });
+	Monster &below = PlaceMonster(2, { 45, 46 });
+	Monster &far = PlaceMonster(3, { 49, 45 });
+	Missile missile {};
+	SetMissileSkill(missile, player, arrow);
+	{
+		const SupportHitScope scope(player, arrow);
+		OnTableMissileHit(missile, player, struck, 40, false);
+	}
+	for (const Monster *monster : { &struck, &beside, &below }) {
+		EXPECT_EQ(monster->poe2.poisonTicks, PoisonTicks);
+		EXPECT_GT(monster->poe2.poisonDamagePerTick, 0);
+		EXPECT_EQ(monster->poe2.poisonDamagePerTick, struck.poe2.poisonDamagePerTick);
+	}
+	EXPECT_EQ(far.poe2.poisonTicks, 0);
+	// The burst hits the others, not the one the arrow already struck.
+	EXPECT_EQ(struck.hitPoints, struck.maxHitPoints);
+	EXPECT_LT(beside.hitPoints, beside.maxHitPoints);
+	EXPECT_LT(below.hitPoints, below.maxHitPoints);
+	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
+
+	// Other arrows don't burst.
+	ClearMonsters();
+	Monster &plain = PlaceMonster(0, { 45, 45 });
+	Monster &next = PlaceMonster(1, { 46, 45 });
+	Missile fire {};
+	SetMissileSkill(fire, player, SkillSlot::ForAttack(WeaponSkill::Multishot));
+	OnTableMissileHit(fire, player, plain, 40, false);
+	EXPECT_EQ(plain.poe2.poisonTicks, 0);
+	EXPECT_EQ(next.hitPoints, next.maxHitPoints);
+}
+
+// Hex Rupture (POE2's Hexblast): curses at least half run out burst in chaos and are gone.
+TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsHalfSpentCurses)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData *data = FindTableSkill(WeaponSkill::HexRupture);
+	ASSERT_NE(data, nullptr);
+	EXPECT_EQ(data->name, "Hex Rupture");
+	EXPECT_EQ(data->level, 11);
+	EXPECT_EQ(data->type, DamageType::Chaos);
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::HexRupture));
+	EXPECT_TRUE(IsTableAreaSkill(*data));
+	const SkillSlot hex = SkillSlot::ForAttack(WeaponSkill::HexRupture);
+	EXPECT_NE(SkillTags(hex) & ST_Spell, 0U);
+	EXPECT_NE(SkillTags(hex) & ST_Chaos, 0U);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, hex, 1));
+	EXPECT_EQ(SkillForGem(gem), hex);
+	Supported(hex);
+
+	const Point target { 45, 45 };
+	// Half run out: it bursts.
+	Monster &spent = PlaceMonster(0, target);
+	ApplyTableCurse(player, spent, WeaponSkill::Despair, 100);
+	const int full = spent.poe2.despairTicks;
+	ASSERT_GT(full, 0);
+	for (int i = 0; i < full / 2; i++)
+		ProcessTableCurses(spent);
+	// Fresh: it stays.
+	Monster &fresh = PlaceMonster(1, { 42, 45 });
+	ApplyTableCurse(player, fresh, WeaponSkill::Weaken, 100);
+	for (int i = 0; i < 10; i++)
+		ProcessTableCurses(fresh);
+	const uint8_t freshLeft = fresh.poe2.weakenTicks;
+	// Uncursed: nothing.
+	Monster &clean = PlaceMonster(2, { 45, 48 });
+	// Blasphemy's: an aura's curse stays, however old.
+	Monster &aura = PlaceMonster(3, { 48, 45 });
+	ApplyAuraCurse(player, aura, WeaponSkill::Weaken, 50, 4);
+
+	ExecuteTableSkill(player, *data, target);
+	EXPECT_EQ(spent.poe2.despairTicks, 0);
+	EXPECT_LT(spent.hitPoints, spent.maxHitPoints);
+	EXPECT_EQ(fresh.poe2.weakenTicks, freshLeft);
+	EXPECT_EQ(fresh.hitPoints, fresh.maxHitPoints);
+	EXPECT_EQ(clean.hitPoints, clean.maxHitPoints);
+	EXPECT_GT(aura.poe2.weakenTicks, 0);
+	EXPECT_EQ(aura.hitPoints, aura.maxHitPoints);
+
+	// A second cast finds nothing left to burst.
+	const Fixed26_6 after = spent.hitPoints;
+	ExecuteTableSkill(player, *data, target);
+	EXPECT_EQ(spent.hitPoints, after);
+}
+
+TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsTenAtMostNearestFirst)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData *data = FindTableSkill(WeaponSkill::HexRupture);
+	ASSERT_NE(data, nullptr);
+	Supported(SkillSlot::ForAttack(WeaponSkill::HexRupture));
+	const Point target { 45, 45 };
+	std::vector<Monster *> cursed;
+	size_t slot = 0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++)
+			cursed.push_back(&PlaceMonster(slot++, target + Displacement { x, y }));
+	}
+	for (const Displacement offset : { Displacement { 2, 0 }, Displacement { 0, 2 }, Displacement { -2, 0 } })
+		cursed.push_back(&PlaceMonster(slot++, target + offset));
+	for (Monster *monster : cursed) {
+		ApplyTableCurse(player, *monster, WeaponSkill::Weaken, 100);
+		for (int i = 0; i < 150; i++)
+			ProcessTableCurses(*monster);
+		ASSERT_GT(monster->poe2.weakenTicks, 0);
+	}
+	ExecuteTableSkill(player, *data, target);
+	int burst = 0;
+	for (const Monster *monster : cursed)
+		burst += monster->poe2.weakenTicks == 0 ? 1 : 0;
+	EXPECT_EQ(burst, HexRuptureMaxBursts);
+	// The nine nearest all burst, then the first of the three further out.
+	for (size_t i = 0; i < 10; i++)
+		EXPECT_EQ(cursed[i]->poe2.weakenTicks, 0) << i;
+	EXPECT_GT(cursed[10]->poe2.weakenTicks, 0);
+	EXPECT_GT(cursed[11]->poe2.weakenTicks, 0);
+}
+
+// Dark Arts (POE2's Chaos Mastery): +1 level of the chaos skill it supports.
+TEST_F(Poe2ChaosGemsTest, DarkArtsRaisesTheChaosSkill)
+{
+	Player &player = *MyPlayer;
+	const SkillSlot hex = SkillSlot::ForAttack(WeaponSkill::HexRupture);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::DarkArts, hex));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::DarkArts, SkillSlot::ForAttack(WeaponSkill::Haunt)));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::DarkArts, SkillSlot::ForAttack(WeaponSkill::Cleave)));
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::DarkArts, SkillSlot::ForAttack(WeaponSkill::PlagueArrow)));
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::DarkArts, 1, 0), 15);
+	Supported(hex);
+	EXPECT_EQ(player.poe2.skillLevel(hex), 1);
+	Supported(hex, SupportGem::DarkArts);
+	EXPECT_EQ(player.poe2.skillLevel(hex), 1 + DarkArtsLevels);
+	EXPECT_EQ(DarkArtsLevels, 1);
+}
+
+// Rotting Flesh (POE2's Corrosion): the supported skill's poisons break armour.
+TEST_F(Poe2ChaosGemsTest, RottingFleshPoisonBreaksArmour)
+{
+	Player &player = *MyPlayer;
+	const SkillSlot cobra = SkillSlot::ForAttack(WeaponSkill::ViperStrike);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::RottingFlesh, cobra));
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::RottingFlesh, 1, 0), 1);
+	Supported(cobra);
+	Monster &plain = PlaceMonster(0, { 45, 45 });
+	{
+		const SupportHitScope scope(player, cobra);
+		InflictPoison(player, plain, 40 * 100, PoisonTicks);
+	}
+	EXPECT_EQ(plain.poe2.armourBreakTicks, 0);
+	Supported(cobra, SupportGem::RottingFlesh);
+	Monster &broken = PlaceMonster(1, { 46, 45 });
+	{
+		const SupportHitScope scope(player, cobra);
+		InflictPoison(player, broken, 40 * 100, PoisonTicks);
+	}
+	EXPECT_EQ(broken.poe2.armourBreakTicks, ArmourBreakTicks);
+}
+
+// Plague Burst (POE2's Bursting Plague): poison builds plague, at most 20% of the monster's life, that bursts on death.
+TEST_F(Poe2ChaosGemsTest, PlagueBurstStoresPlagueAndBurstsOnDeath)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SkillSlot cobra = SkillSlot::ForAttack(WeaponSkill::ViperStrike);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::PlagueBurst, cobra));
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::PlagueBurst, 1, 0), 3);
+
+	// Without it, no plague.
+	Supported(cobra);
+	Monster &plain = PlaceMonster(0, { 45, 45 });
+	{
+		const SupportHitScope scope(player, cobra);
+		InflictPoison(player, plain, 40 * 64 * PoisonTicks, PoisonTicks);
+	}
+	for (int i = 0; i < 5; i++)
+		ProcessSupportMonsterEffects(plain);
+	EXPECT_FALSE(plain.poe2.poisonPlague);
+	EXPECT_EQ(plain.poe2.plagueStore, 0);
+	ClearMonsters();
+
+	Supported(cobra, SupportGem::PlagueBurst);
+	Monster &sick = PlaceMonster(0, { 45, 45 });
+	sick.maxHitPoints = sick.hitPoints = Fixed26_6::fromInt(1000);
+	Monster &beside = PlaceMonster(1, { 46, 45 });
+	Monster &far = PlaceMonster(2, { 49, 45 });
+	ASSERT_EQ(MonsterDamageTakenPercent(beside, DamageType::Physical), 100);
+	ASSERT_EQ(MonsterDamageTakenPercent(sick, DamageType::Chaos), 100);
+	{
+		const SupportHitScope scope(player, cobra);
+		// 40 chaos a tick.
+		InflictPoison(player, sick, 40 * 64 * PoisonTicks, PoisonTicks);
+	}
+	EXPECT_TRUE(sick.poe2.poisonPlague);
+	for (int i = 0; i < 2; i++)
+		ProcessSupportMonsterEffects(sick);
+	EXPECT_EQ(sick.poe2.plagueStore, Fixed26_6::fromInt(80).raw());
+	// It stops at 20% of the monster's life.
+	for (int i = 0; i < 10; i++)
+		ProcessSupportMonsterEffects(sick);
+	EXPECT_EQ(sick.poe2.plagueStore, Fixed26_6::fromInt(1000 * PlagueBurstMaxLifePercent / 100).raw());
+
+	// It dies: the plague bursts as physical on the monsters around it, not further.
+	sick.hitPoints = Fixed26_6::fromInt(0);
+	sick.mode = MonsterMode::Death;
+	OnSupportedKill(sick);
+	EXPECT_EQ(sick.poe2.plagueStore, 0);
+	for (int i = 0; i < 3; i++)
+		ProcessSupportEffects(player);
+	EXPECT_EQ(beside.hitPoints, beside.maxHitPoints - Fixed26_6::fromInt(200));
+	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
+}
+
+// Grave Profanity (POE2's Profanity I-II): a corpse near the hero taken on use for more chaos damage.
+TEST_F(Poe2ChaosGemsTest, GraveProfanityTakesACorpseForChaos)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SkillSlot bolt = SkillSlot::ForAttack(WeaponSkill::HexRupture);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::GraveProfanity, bolt));
+	EXPECT_EQ(SupportTierCount(SupportGem::GraveProfanity), 2);
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::GraveProfanity, 1, 0), 1);
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::GraveProfanity, 2, 0), 15);
+	Monster &monster = PlaceMonster(0, { 45, 45 });
+
+	// No corpse: nothing more.
+	Supported(bolt, SupportGem::GraveProfanity);
+	OnSkillUsed(player, bolt, monster.position.tile);
+	{
+		const SupportHitScope scope(player, bolt);
+		EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 100);
+	}
+	for (const auto [tier, more] : { std::array<int, 2> { 1, 30 }, std::array<int, 2> { 2, 40 } }) {
+		Supported(bolt, SupportGem::GraveProfanity, tier);
+		dCorpse[43][40] = 1;
+		OnSkillUsed(player, bolt, monster.position.tile);
+		EXPECT_EQ(dCorpse[43][40], 0) << tier;
+		const SupportHitScope scope(player, bolt);
+		EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 100 + more) << tier;
+		EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Physical), 100) << tier;
+	}
+	// A corpse too far away stays.
+	dCorpse[40 + GraveProfanityTiles + 1][40] = 1;
+	OnSkillUsed(player, bolt, monster.position.tile);
+	EXPECT_EQ(dCorpse[40 + GraveProfanityTiles + 1][40], 1);
+	{
+		const SupportHitScope scope(player, bolt);
+		EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 100);
+	}
+}
+
+// Blood Sacrifice (POE2's Extraction): 10% of current life paid on use, and the use's hits gain 35% as chaos.
+TEST_F(Poe2ChaosGemsTest, BloodSacrificePaysLifeForChaos)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::BloodSacrifice, cleave));
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::BloodSacrifice, 1, 0), 6);
+	Supported(cleave, SupportGem::BloodSacrifice);
+	Monster &monster = PlaceMonster(0, { 45, 45 });
+
+	OnSkillUsed(player, cleave, monster.position.tile);
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(180));
+	{
+		const SupportHitScope scope(player, cleave);
+		NoteSupportedDamage(monster, DamageType::Physical, Fixed26_6::fromInt(100));
+	}
+	EXPECT_EQ(monster.hitPoints, monster.maxHitPoints - Fixed26_6::fromInt(35));
+
+	// At 1 life it pays nothing and gains nothing.
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(1);
+	OnSkillUsed(player, cleave, monster.position.tile);
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(1));
+	const Fixed26_6 before = monster.hitPoints;
+	{
+		const SupportHitScope scope(player, cleave);
+		NoteSupportedDamage(monster, DamageType::Physical, Fixed26_6::fromInt(100));
+	}
+	EXPECT_EQ(monster.hitPoints, before);
+}
+
+// The supports' items exist, appended after the others, and are cut from uncut support gems.
+TEST_F(Poe2ChaosGemsTest, ChaosSupportsHaveItems)
+{
+	for (const SupportGem gem : { SupportGem::TwinFangs, SupportGem::DeadlyVenom, SupportGem::DarkEnchant, SupportGem::DarkArts, SupportGem::RottingFlesh, SupportGem::PlagueBurst, SupportGem::GraveProfanity, SupportGem::BloodSacrifice }) {
+		const SupportData *data = FindSupportData(gem);
+		ASSERT_NE(data, nullptr);
+		EXPECT_GT(static_cast<int>(gem), static_cast<int>(SupportGem::DeadlyHerald));
+		Item item;
+		ASSERT_TRUE(CreateSupportGemItem(item, gem)) << data->name;
+		EXPECT_EQ(SupportGemForItem(item), gem) << data->name;
+		EXPECT_FALSE(IsLineageSupport(gem)) << data->name;
+	}
+}
+
+} // namespace
+} // namespace devilution

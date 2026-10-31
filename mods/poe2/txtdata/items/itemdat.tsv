@@ -1016,3 +1016,14 @@ poe2:wand_gloom_wand	1	Weapon	One-handed	CLUB	Mace	NONE	Gloom Wand	Wand	60	60	0	
 poe2:staff_hollow_staff	1	Weapon	Two-handed	COMPOSITE_STAFF	Staff	NONE	Hollow Staff	Staff	41	50	0	0	0	0	0	73	0		NONE	Null	false	4200
 poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff	Staff	60	60	0	0	0	0	0	106	0		NONE	Null	false	6100
 	1	Misc	Unequippable	XORINES_RING	Misc	NONE	Sapphire Charm	Charm	3	0	0	0	0	0	0	0	0		CHARM_COLD	Null	true	400
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Twin Fangs Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Deadly Venom Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Dark Enchant Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Cleansing Gem	Gem	10	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2500
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Plague Arrow Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Hex Rupture Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Dark Arts Support	Gem	15	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Rotting Flesh Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Plague Burst Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Grave Profanity Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blood Sacrifice Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800

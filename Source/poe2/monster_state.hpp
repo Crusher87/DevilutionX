@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 namespace devilution {
@@ -80,6 +81,8 @@ struct Poe2MonsterState {
 	/** @brief Curses Blasphemy put on, one bit for each TableCurse, and how strong they are in percent (not saved, like the curses). */
 	uint16_t auraCurses = 0;
 	uint8_t auraCurseStrength = 100;
+	/** @brief Each table curse's duration as cast, by TableCurse, so Hex Rupture can tell when half of it has run out. */
+	std::array<uint8_t, 16> curseFullTicks {};
 	/** @brief The skill that last hit the monster (a SkillSlot's kind and id) and the player who used it, for kill supports. */
 	uint8_t lastHitSkillKind = 0;
 	uint8_t lastHitSkillId = 0;
@@ -94,6 +97,9 @@ struct Poe2MonsterState {
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;
+	/** @brief Plague Burst: the poison builds plague, the chaos its ticks dealt as a raw Fixed26_6 value, which bursts on death. */
+	bool poisonPlague = false;
+	int32_t plagueStore = 0;
 	/** @brief Hindered by caltrops or Herald of Plague: slowed like a chill, in game ticks left. */
 	uint8_t hinderTicks = 0;
 	/** @brief Attrition: game ticks the rare or unique monster has spent near the hero (not saved). */

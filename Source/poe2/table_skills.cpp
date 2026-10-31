@@ -171,6 +171,8 @@ const TableSkillData Table[] = {
 	{ WS::TwinBolts, "Twin Bolts", "Two bolts at once", 0, 0, TW::None, 1, Projectiles, 19, 2, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::MetalHit, TF_Spell | TF_Granted, TableZone::None, TableCurse::None, TableBuff::None, 0, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	// Gem skills appended after the granted ones.
 	{ WS::Despair, "Despair", "Curses enemies with -30% to chaos resistance", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Despair, TableBuff::None, TT_Occult, Icon(SpellIcon::Apocalypse), TableCurve::Boneshatter, 100 },
+	{ WS::PlagueArrow, "Plague Arrow", "An arrow that bursts into poison on the first enemy it hits", 1, 8, TW::Bow, 0, Projectiles, 90, 1, 1, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_PoisonBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::DoomSerpents), TableCurve::LightningArrow, 0 },
+	{ WS::HexRupture, "Hex Rupture", "Bursts the curses half run out on enemies around the target", 11, 12, TW::None, 1, HexBurst, 160, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 };
 // clang-format on
 
@@ -709,6 +711,28 @@ void ZoneBurst(const Player &player, const TableSkillData &data, Point center, i
 	});
 }
 
+/**
+ * @brief Plague Arrow: the arrow's first hit bursts in green, poisoning every enemy around it (POE2's poison, 20% of the
+ * arrow's hit a second for 2 seconds) and hitting the others for half the arrow.
+ */
+void PoisonBurst(Player &player, const Monster &struck, const TableSkillData &data)
+{
+	const Point center = struck.position.tile;
+	const int radius = std::clamp(SupportAreaRadius(player, SkillSlot::ForAttack(data.skill), data.radius), 0, 12);
+	AddVisualEffect(center, data.effect, 0, 4);
+	vfx::Impact(center, vfx::Element::Chaos, 1.0F);
+	const Fixed26_6 base = FixedDamage(player, data);
+	const int32_t poison = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(base.raw()) * PoisonPercentPerSecond * PoisonTicks / 20 / 100, INT32_MAX / 2));
+	const Fixed26_6 splash = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(base.raw()) * PlagueArrowSplashPercent / 100), 1));
+	std::vector<Monster *> targets;
+	ForEachMonsterNear(center, radius, [&](Monster &monster) { targets.push_back(&monster); });
+	for (Monster *monster : targets) {
+		InflictPoison(player, *monster, poison, PoisonTicks);
+		if (monster != &struck)
+			SpellHitMonster(player, *monster, DamageType::Physical, splash, SourceOf(data));
+	}
+}
+
 /** @brief A projectile's landing burst: a set share of a base hit (Freezing Arrow, Explosive Arrow), or two thirds of the projectile's hit. */
 Fixed26_6 LandingBurstDamage(const Player &player, const TableSkillData &data)
 {
@@ -817,6 +841,8 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 {
 	Poe2MonsterState &state = monster.poe2;
 	const uint8_t ticks = static_cast<uint8_t>(std::min<int>(data.duration, 255));
+	if (static_cast<size_t>(data.curse) < state.curseFullTicks.size())
+		state.curseFullTicks[static_cast<size_t>(data.curse)] = ticks;
 	// Cast by hand, the curse has its full strength.
 	state.auraCurses &= static_cast<uint16_t>(~AuraCurseBit(data.curse));
 	switch (data.curse) {
@@ -872,6 +898,54 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 	}
 	monster.tag(player);
 	AddVisualEffect(monster.position.tile, data.effect);
+}
+
+/** @brief The cast curse on the monster Hex Rupture can burst: at least half run out, the most run out first; None if none. */
+TableCurse RupturableCurse(Poe2MonsterState &state)
+{
+	TableCurse best = TableCurse::None;
+	int bestLeftPermille = 501;
+	for (const TableCurse curse : { TableCurse::Weaken, TableCurse::IronMaiden, TableCurse::Decrepify, TableCurse::LowerResist, TableCurse::DeathMark, TableCurse::Despair }) {
+		const uint8_t *left = CurseTicks(state, curse);
+		// Blasphemy's curses are an aura's, not cast ones: they stay.
+		if (left == nullptr || *left == 0 || (state.auraCurses & AuraCurseBit(curse)) != 0)
+			continue;
+		const int full = std::max<int>(state.curseFullTicks[static_cast<size_t>(curse)], *left);
+		const int leftPermille = *left * 1000 / full;
+		if (leftPermille < bestLeftPermille) {
+			best = curse;
+			bestLeftPermille = leftPermille;
+		}
+	}
+	return best;
+}
+
+/** @brief Hex Rupture: each curse at least half run out near the target bursts in chaos on its monster and is gone. */
+void RuptureHexes(const Player &player, const TableSkillData &data, Point target)
+{
+	std::vector<std::pair<Monster *, TableCurse>> hexes;
+	ForEachMonsterNear(target, data.radius, [&](Monster &monster) {
+		if (const TableCurse curse = RupturableCurse(monster.poe2); curse != TableCurse::None)
+			hexes.emplace_back(&monster, curse);
+	});
+	// Nearest the target first, then in the monsters' order, the same on every machine.
+	std::sort(hexes.begin(), hexes.end(), [&](const auto &a, const auto &b) {
+		const int da = target.WalkingDistance(a.first->position.tile);
+		const int db = target.WalkingDistance(b.first->position.tile);
+		return da != db ? da < db : a.first->getId() < b.first->getId();
+	});
+	if (hexes.size() > static_cast<size_t>(HexRuptureMaxBursts))
+		hexes.resize(HexRuptureMaxBursts);
+	const Fixed26_6 damage = FixedDamage(player, data);
+	for (const auto &[monster, curse] : hexes) {
+		const Point at = monster->position.tile;
+		vfx::Impact(at, vfx::Element::Chaos, 1.1F);
+		ZoneBurst(player, data, at, HexRuptureBurstRadius, damage);
+		// The curse goes with its burst: its icon leaves the banner.
+		*CurseTicks(monster->poe2, curse) = 0;
+	}
+	if (!hexes.empty())
+		PlaySkillSound(TableSkillSounds(data).spell, target);
 }
 
 std::optional<Point> CorpseNear(Point center, int radius)
@@ -998,7 +1072,7 @@ bool IsTableProjectileSkill(const TableSkillData &data)
 
 bool IsTableAreaSkill(const TableSkillData &data)
 {
-	return IsAnyOf(data.shape, Around, Burst, Dash, Line, Zone, Curse, CorpseBurst, CallOfTheAncients) || (data.flags & TF_LandingBurst) != 0;
+	return IsAnyOf(data.shape, Around, Burst, Dash, Line, Zone, Curse, CorpseBurst, CallOfTheAncients, HexBurst) || (data.flags & (TF_LandingBurst | TF_PoisonBurst)) != 0;
 }
 
 bool StartTableSkill(Player &player, const TableSkillData &data)
@@ -1272,6 +1346,9 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		}
 		break;
 	}
+	case HexBurst:
+		RuptureHexes(player, data, target);
+		break;
 	case CorpseBurst:
 		if (const std::optional<Point> corpse = CorpseNear(target, data.radius); corpse) {
 			dCorpse[corpse->x][corpse->y] = 0;
@@ -1395,6 +1472,8 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 	if (skill.kind != SkillKind::Attack)
 		return;
 	const TableSkillData *data = FindTableSkill(static_cast<WeaponSkill>(skill.id));
+	if (data != nullptr && (data->flags & TF_PoisonBurst) != 0)
+		PoisonBurst(player, monster, *data);
 	if (data == nullptr || !IsGrantedTableSkill(*data))
 		return;
 	const int64_t raw = isDamageShifted ? damage : static_cast<int64_t>(damage) * 64;
@@ -1572,6 +1651,10 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	case Curse:
 		EffectRingAround(target, std::max<int>(data.radius, 1), data.effect, 0);
 		break;
+	case HexBurst:
+		// A dark sigil over the area; the bursts come from the curses themselves.
+		vfx::Sigil(target, std::max<int>(data.radius, 1), 450, vfx::Element::Chaos);
+		break;
 	case Buff:
 		EffectRingAround(tile, 1, data.effect, 0);
 		break;
@@ -1675,6 +1758,10 @@ SkillSounds TableSkillSounds(const TableSkillData &data)
 		break;
 	case CorpseBurst:
 		sounds.spell = Sfx(SfxID::BigExplosion);
+		break;
+	case HexBurst:
+		sounds.spell = Sfx(SfxID::SpellBloodStar);
+		sounds.hit = ImpactOf(data);
 		break;
 	case SoulHarvest:
 		// The souls rise out of the corpses as Diablo's Resurrect raises one.
