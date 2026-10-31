@@ -429,7 +429,9 @@ enum class PersistentSkill : uint8_t {
 	Sacrifice,
 	/** Each dodge roll leaves an illusion of you that draws enemies; one they destroy leaves Frenzy remnants. */
 	LingeringIllusion,
-	Last = LingeringIllusion,
+	/** Cleansing (POE2's Impurity): an aura of chaos resistance, more with the gem's level. */
+	Impurity,
+	Last = Impurity,
 };
 
 /** @brief What a socketed skill gem grants. */
@@ -724,6 +726,8 @@ struct SpiritRuntime {
 	uint16_t regulationTicks = 0;
 	/** Withering Presence: game ticks to the next pulse. */
 	uint8_t witherPulseTicks = 0;
+	/** Cleansing's ring shows every few seconds. */
+	uint8_t cleansingPulseTicks = 0;
 	/** Trinity: Resonance of fire, lightning and cold; the elements that gained this tick (bits); game ticks since the last gain. */
 	std::array<uint8_t, 3> resonance {};
 	uint8_t resonanceGained = 0;

@@ -441,6 +441,8 @@ SpellIcon PersistentIcon(PersistentSkill skill)
 		return SpellIcon::BloodRitual;
 	case PersistentSkill::LingeringIllusion:
 		return SpellIcon::Invisibility;
+	case PersistentSkill::Impurity:
+		return SpellIcon::Pentagram;
 	default:
 		return SpellIcon::Empty;
 	}

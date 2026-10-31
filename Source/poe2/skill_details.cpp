@@ -789,6 +789,9 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 		Value(lines, "Broken by an enemy", std::format("a Frenzy remnant for {:d} seconds", IllusionRemnantTicks / 20));
 		Value(lines, "Second remnant", std::format("{:d}% chance", IllusionSecondRemnantChance(level)));
 		break;
+	case PersistentSkill::Impurity:
+		Value(lines, "Chaos resistance", std::format("+{:d}%, for you", CleansingChaosResistance(level)));
+		break;
 	default:
 		break;
 	}

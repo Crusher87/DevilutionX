@@ -344,6 +344,8 @@ std::string_view PersistentSkillName(PersistentSkill skill)
 		return _("Blood Offering");
 	case PersistentSkill::LingeringIllusion:
 		return _("Phantom Double");
+	case PersistentSkill::Impurity:
+		return _("Cleansing");
 	default:
 		return {};
 	}
@@ -490,6 +492,8 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 		return _("Corpse Explosion and Soul Harvest can use your skeletons as corpses; they rise again later. All your minions rise again more slowly");
 	case PersistentSkill::LingeringIllusion:
 		return _("Each dodge roll leaves an illusion of you that draws enemies near it. If they destroy it, it leaves a remnant that gives a Frenzy charge");
+	case PersistentSkill::Impurity:
+		return _("Aura: chaos resistance, more at higher gem levels");
 	default:
 		return {};
 	}
@@ -578,6 +582,7 @@ int SpiritReservation(PersistentSkill skill)
 	case PersistentSkill::RagingSpirits:
 	case PersistentSkill::RavenousSwarm:
 	case PersistentSkill::LingeringIllusion:
+	case PersistentSkill::Impurity:
 		return 30;
 	case PersistentSkill::Trinity:
 		return 100;

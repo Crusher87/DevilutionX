@@ -19,7 +19,9 @@
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/player_data.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/support_tiers.hpp"
@@ -259,6 +261,83 @@ TEST_F(Poe2ChaosGemsTest, DarkEnchantTurnsHitsTowardChaos)
 		NoteSupportedDamage(plain, DamageType::Physical, Fixed26_6::fromInt(50));
 	}
 	EXPECT_EQ(plain.hitPoints, Fixed26_6::fromInt(100000));
+}
+
+// Cleansing (POE2's Impurity): an aura of chaos resistance that grows with the gem.
+TEST_F(Poe2ChaosGemsTest, CleansingGrantsChaosResistance)
+{
+	Player &player = *MyPlayer;
+	EXPECT_EQ(PersistentSkillName(PersistentSkill::Impurity), "Cleansing");
+	EXPECT_EQ(SpiritReservation(PersistentSkill::Impurity), 30);
+	EXPECT_EQ(CleansingChaosResistance(1), 10);
+	EXPECT_EQ(CleansingChaosResistance(20), 29);
+	const SkillSlot cleansing = SkillSlot::ForPersistent(PersistentSkill::Impurity);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, cleansing, 1));
+	EXPECT_EQ(SkillForGem(gem), cleansing);
+
+	// A sceptre's Spirit carries it.
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iName == std::string_view("Rattling Sceptre"))
+			InitializeItem(player.InvBody[INVLOC_HAND_LEFT], static_cast<_item_indexes>(i));
+	}
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	CalcPlrInv(player, false);
+	ASSERT_EQ(player.poe2.chaosResistance, 0);
+	SocketSkill(player, 0, cleansing);
+	if (!player.poe2.spiritGemOn(0))
+		ToggleSpiritGem(player, 0);
+	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::Impurity));
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.chaosResistance, 10);
+	// A level 20 gem needs more Magic.
+	player._pBaseMag = player._pMagic = 250;
+	player.poe2.slotLevels[0] = 20;
+	CalcPlrInv(player, false);
+	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::Impurity));
+	EXPECT_EQ(player.poe2.chaosResistance, 29);
+	// Salvation doesn't touch chaos, and Cleansing doesn't touch the elements.
+	EXPECT_EQ(player._pFireResist, 0);
+	EXPECT_EQ(player._pLghtResist, 0);
+	EXPECT_EQ(player._pMagResist, 0);
+
+	// It respects the cap.
+	Item &ring = player.InvBody[INVLOC_RING_LEFT];
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_RING) {
+			InitializeItem(ring, static_cast<_item_indexes>(i));
+			break;
+		}
+	}
+	ring._iStatFlag = true;
+	ring._iIdentified = true;
+	ring._iMagical = ITEM_QUALITY_MAGIC;
+	ApplyModEffect(ring, ModEffect::ChaosResistance, 60, 0);
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.uncappedChaosResistance, 89);
+	EXPECT_EQ(player.poe2.chaosResistance, MaxResistance);
+
+	// Switched off, it's gone.
+	SocketSkill(player, 0, {});
+	CalcPlrInv(player, false);
+	EXPECT_EQ(player.poe2.chaosResistance, 60);
+}
+
+TEST_F(Poe2ChaosGemsTest, SalvationLeavesChaosAlone)
+{
+	Player &player = *MyPlayer;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iName == std::string_view("Rattling Sceptre"))
+			InitializeItem(player.InvBody[INVLOC_HAND_LEFT], static_cast<_item_indexes>(i));
+	}
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	SocketSkill(player, 0, SkillSlot::ForPersistent(PersistentSkill::PurityOfElements));
+	if (!player.poe2.spiritGemOn(0))
+		ToggleSpiritGem(player, 0);
+	CalcPlrInv(player, false);
+	ASSERT_TRUE(IsPersistentSkillActive(player, PersistentSkill::PurityOfElements));
+	EXPECT_EQ(player._pFireResist, PurityResistance);
+	EXPECT_EQ(player.poe2.chaosResistance, 0);
 }
 
 // The supports' items exist, appended after the others, and are cut from uncut support gems.

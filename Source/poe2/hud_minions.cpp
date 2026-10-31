@@ -120,6 +120,7 @@ constexpr PersistentSkill BuffSkills[] = {
 	PersistentSkill::Sacrifice,
 	PersistentSkill::LingeringIllusion,
 	PersistentSkill::Guardian,
+	PersistentSkill::Impurity,
 };
 
 void DrawBuffTooltip(const Surface &out, PersistentSkill skill)

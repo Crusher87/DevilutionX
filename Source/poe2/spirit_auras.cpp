@@ -26,6 +26,9 @@ namespace devilution {
 
 namespace {
 
+/** @brief Cleansing's ring shows every 4 seconds. */
+constexpr uint8_t CleansingPulseTicks = 4 * 20;
+
 /** @brief A value at gem level 1 and 20, in between on a straight line; levels from gear go on past 20. */
 int AtLevel(int gemLevel, int at1, int at20)
 {
@@ -213,6 +216,21 @@ void TickChargeRegulation(Player &player, SpiritRuntime &state)
 		AddVisualEffect(player.position.tile, MissileGraphicID::YellowFlare);
 		TelemetryLog("spirit", "Charge Regulation took a Frenzy charge");
 	}
+}
+
+/** @brief Cleansing's resistance is in the hero's stats; this only shows its green ring now and then. */
+void TickCleansing(const Player &player, SpiritRuntime &state)
+{
+	if (!On(player, PersistentSkill::Impurity)) {
+		state.cleansingPulseTicks = 0;
+		return;
+	}
+	if (state.cleansingPulseTicks > 0) {
+		state.cleansingPulseTicks--;
+		return;
+	}
+	state.cleansingPulseTicks = CleansingPulseTicks;
+	vfx::Sigil(player.position.tile, 2, 900, vfx::Element::Chaos);
 }
 
 void TickWitheringPresence(const Player &player, SpiritRuntime &state)
@@ -511,6 +529,7 @@ void ProcessSpiritAuras(Player &player)
 	TickTimeOfNeed(player, state);
 	TickChargeRegulation(player, state);
 	TickWitheringPresence(player, state);
+	TickCleansing(player, state);
 	TickTrinity(player, state);
 }
 

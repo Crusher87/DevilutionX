@@ -1019,3 +1019,4 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Twin Fangs Support	Gem	1	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Deadly Venom Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Dark Enchant Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Cleansing Gem	Gem	10	0	0	0	0	0	0	40	0		SPIRITGEM_TABLE	Null	true	2500
