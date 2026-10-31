@@ -10,8 +10,8 @@ LightningControl	AddLightningControl	ProcessLightningControl			Lightning	Lightni
 Lightning	AddLightning	ProcessLightning	SpellLightning	SpellLightningHit	Lightning	Lightning	
 MagmaBallExplosion	AddMissileExplosion	ProcessMissileExplosion			MagmaBallExplosion	Physical	
 TownPortal	AddTownPortal	ProcessTownPortal	SpellPortal		TownPortal	Magic	
-FlashBottom	AddFlashBottom	ProcessFlashBottom	SpellNova	SpellLightningHit	FlashBottom	Magic	
-FlashTop	AddFlashTop	ProcessFlashTop			FlashTop	Magic	
+FlashBottom	AddFlashBottom	ProcessFlashBottom	SpellNova	SpellLightningHit	FlashBottom	Lightning	
+FlashTop	AddFlashTop	ProcessFlashTop			FlashTop	Lightning	
 ManaShield	AddManaShield		SpellManaShield		ManaShield	Magic,Invisible	
 FlameWave	AddFlameWave	ProcessFlameWave			FireWall	Fire	Unblockable
 ChainLightning	AddChainLightning	ProcessChainLightning	SpellLightning	SpellLightningHit	Lightning	Lightning	
@@ -23,8 +23,8 @@ Rhino	AddRhino	ProcessRhino				Physical	Blockable
 MagmaBall	AddMagmaBall	ProcessGenericProjectile			MagmaBall	Fire	Blockable
 ThinLightningControl	AddLightningControl	ProcessLightningControl			ThinLightning	Lightning,Invisible	
 ThinLightning	AddLightning	ProcessLightning			ThinLightning	Lightning	
-BloodStar	AddGenericMagicMissile	ProcessGenericProjectile			BloodStar	Magic	Blockable
-BloodStarExplosion	AddMissileExplosion	ProcessMissileExplosion			BloodStarExplosion	Magic	
+BloodStar	AddGenericMagicMissile	ProcessGenericProjectile			BloodStar	Physical	Blockable
+BloodStarExplosion	AddMissileExplosion	ProcessMissileExplosion			BloodStarExplosion	Physical	
 Teleport	AddTeleport	ProcessTeleport	SpellElemental			Physical,Invisible	
 FireArrow	AddElementalArrow	ProcessElementalArrow			FireArrow	Fire,Arrow	Blockable
 DoomSerpents			SpellDoomSerpents		DoomSerpents	Magic,Invisible	
@@ -35,7 +35,7 @@ Invisibility			SpellInvisibility			Physical,Invisible
 Golem	AddGolem		SpellGolem			Physical,Invisible	
 Etherealize			SpellEtherealize		Etherealize	Physical	
 Spurt					Spurt	Physical	
-ApocalypseBoom	AddApocalypseBoom	ProcessApocalypseBoom			ApocalypseBoom	Physical	
+ApocalypseBoom	AddApocalypseBoom	ProcessApocalypseBoom			ApocalypseBoom	Fire	
 Healing	AddHealing					Physical,Invisible	
 FireWallControl	AddWallControl	ProcessWallControl			FireWall	Fire,Invisible	
 Infravision	AddInfravision	ProcessInfravision	SpellInfravision			Physical,Invisible	
@@ -52,7 +52,7 @@ InfernoControl	AddInfernoControl	ProcessInfernoControl				Fire,Invisible
 FireMan						Physical	Blockable
 Krull					Krull	Fire,Arrow	Blockable
 ChargedBolt	AddChargedBolt	ProcessChargedBolt	SpellChargedBolt		ChargedBolt	Lightning	Blockable
-HolyBolt	AddHolyBolt	ProcessHolyBolt	SpellHolyBolt	SpellLightningHit	HolyBolt	Physical	Blockable
+HolyBolt	AddHolyBolt	ProcessHolyBolt	SpellHolyBolt	SpellLightningHit	HolyBolt	Fire	Blockable
 Resurrect	AddResurrect			SpellResurrect		Magic,Invisible	
 Telekinesis	AddTelekinesis		SpellEtherealize			Physical,Invisible	
 LightningArrow	AddElementalArrow	ProcessElementalArrow			LightningArrow	Lightning,Arrow	Blockable
@@ -62,7 +62,7 @@ AcidPuddle	AddAcidPuddle	ProcessAcidPuddle	SpellPuddle		AcidPuddle	Acid
 HealOther	AddHealOther					Physical,Invisible	
 Elemental	AddElemental	ProcessElemental	SpellElemental		Elemental	Fire	Unblockable
 ResurrectBeam	AddResurrectBeam	ProcessResurrectBeam			Resurrect	Physical	
-BoneSpirit	AddBoneSpirit	ProcessBoneSpirit	SpellBoneSpirit	SpellBoneSpiritHit	BoneSpirit	Magic	Blockable
+BoneSpirit	AddBoneSpirit	ProcessBoneSpirit	SpellBoneSpirit	SpellBoneSpiritHit	BoneSpirit	Chaos	Blockable
 WeaponExplosion	AddWeaponExplosion	ProcessWeaponExplosion				Physical	
 RedPortal	AddRedPortal	ProcessRedPortal	SpellPortal		RedPortal	Physical	
 DiabloApocalypseBoom	AddApocalypseBoom	ProcessApocalypseBoom			DiabloApocalypseBoom	Physical	

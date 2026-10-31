@@ -413,6 +413,7 @@ TEST_F(Poe2LootTest, CharmsAndJewelsWaitForPoe2sLevels)
 	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_MAGIC), 40) << "Amethyst Charm";
 	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_GOLDEN), 50) << "Golden Charm: the late campaign and maps";
 	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_FIRE), 0) << "the item table's level";
+	EXPECT_EQ(Poe2AreaDropLevel(IMISC_CHARM_COLD), 0) << "the Sapphire Charm drops like Ruby and Topaz";
 
 	// Cathedral floor 4 (area level 10 for a barrel): Curtis found jewels, Amethyst Charms and a Golden Charm there.
 	const std::vector<Item> cathedral = ContainerDrops(4, DTYPE_CATHEDRAL, 4000);
@@ -420,6 +421,7 @@ TEST_F(Poe2LootTest, CharmsAndJewelsWaitForPoe2sLevels)
 	EXPECT_EQ(CountMisc(cathedral, IMISC_CHARM_MAGIC), 0U);
 	EXPECT_EQ(CountMisc(cathedral, IMISC_CHARM_GOLDEN), 0U);
 	EXPECT_GT(CountMisc(cathedral, IMISC_CHARM_FIRE) + CountMisc(cathedral, IMISC_CHARM_LIGHTNING), 0U) << "other charms still drop";
+	EXPECT_GT(CountMisc(cathedral, IMISC_CHARM_COLD), 0U) << "the Sapphire Charm drops";
 
 	// Hell floor 16 (42): jewels and the Amethyst Charm, still no Golden Charm.
 	const std::vector<Item> hell = ContainerDrops(16, DTYPE_HELL, 4000);

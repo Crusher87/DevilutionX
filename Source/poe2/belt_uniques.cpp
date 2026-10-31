@@ -147,6 +147,7 @@ std::optional<int> BeltUniqueBase(const BeltUnique &unique)
 		case CharmEffect::Lightning: misc = IMISC_CHARM_LIGHTNING; break;
 		case CharmEffect::Magic: misc = IMISC_CHARM_MAGIC; break;
 		case CharmEffect::Stun: misc = IMISC_CHARM_STUN; break;
+		case CharmEffect::Cold: misc = IMISC_CHARM_COLD; break;
 		default: misc = IMISC_CHARM_GOLDEN; break;
 		}
 	}

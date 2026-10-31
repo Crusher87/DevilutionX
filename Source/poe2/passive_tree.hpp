@@ -38,7 +38,7 @@ enum class PassiveStat : uint8_t {
 	ArmorPercent,
 	FireResist,
 	LightningResist,
-	MagicResist,
+	ColdResist,
 	AllResist,
 	/** Life regenerated per second. */
 	LifeRegen,
@@ -72,7 +72,7 @@ enum class PassiveStat : uint8_t {
 	OneHandDamage,
 	/** Increased spell damage in percent. */
 	SpellDamage,
-	/** Increased damage of that type in percent, attacks and spells. Cold is the Magic damage type. */
+	/** Increased damage of that type in percent, attacks and spells. Cold is Diablo's magic damage type. */
 	FireDamage,
 	LightningDamage,
 	ColdDamage,
@@ -102,7 +102,7 @@ enum class PassiveStat : uint8_t {
 	// Rule stats: these feed the unique rule of the same name (see AddPassiveRules).
 	ManaCost,
 	MaxElementalResist,
-	MaxMagicResist,
+	MaxColdResist,
 	ArmourVsElements,
 	EvasionVsSpells,
 	HitDamageFromMana,
@@ -366,7 +366,7 @@ int RequirementStrength(const Player &player);
 /** @brief The same for the given Strength and Magic, reading the hero's tree afresh (the equipment check runs before the
  * cached totals are updated). */
 int RequirementStrength(const Player &player, int strength, int magic);
-/** @brief Increased damage of one type (fire, lightning or Magic) from the tree. */
+/** @brief Increased damage of one type (fire, lightning or cold) from the tree. */
 int PassiveElementDamage(const Player &player, DamageType type);
 
 std::string PassiveStatText(PassiveStat stat, int value);

@@ -305,7 +305,7 @@ TEST_F(Poe2ChaosTest, AcidMeetsChaosResistance)
 	player.poe2.chaosResistance = -60;
 	EXPECT_EQ(HitTaken(player, DamageType::Chaos), 160);
 	// Magic still meets magic resistance.
-	EXPECT_EQ(HitTaken(player, DamageType::Magic), 60);
+	EXPECT_EQ(HitTaken(player, DamageType::Cold), 60);
 
 	// Outside POE2 mode chaos meets magic resistance, as acid always did.
 	gbIsPoe2 = false;
@@ -317,21 +317,21 @@ TEST_F(Poe2ChaosTest, LichesAndDiablosApocalypseDealChaos)
 {
 	Monster monster {};
 	monster.ai = MonsterAIID::Lich;
-	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::OrangeFlare, DamageType::Magic), DamageType::Chaos);
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::OrangeFlare, DamageType::Cold), DamageType::Chaos);
 	monster.ai = MonsterAIID::ArchLich;
-	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::YellowFlare, DamageType::Magic), DamageType::Chaos);
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::YellowFlare, DamageType::Cold), DamageType::Chaos);
 	monster.ai = MonsterAIID::Diablo;
 	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::DiabloApocalypseBoom, DamageType::Physical), DamageType::Chaos);
 	// Diablo's melee and the Succubi's Blood Star keep their types.
 	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::Null, DamageType::Physical), DamageType::Physical);
 	monster.ai = MonsterAIID::Succubus;
-	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::BloodStar, DamageType::Magic), DamageType::Magic);
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::BloodStar, DamageType::Cold), DamageType::Cold);
 	// Traps and the hero's own skills on the same missiles too.
 	EXPECT_EQ(MonsterHitDamageType(nullptr, MissileID::OrangeFlare, DamageType::Fire), DamageType::Fire);
 	// Only in POE2 mode.
 	gbIsPoe2 = false;
 	monster.ai = MonsterAIID::Lich;
-	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::OrangeFlare, DamageType::Magic), DamageType::Magic);
+	EXPECT_EQ(MonsterHitDamageType(&monster, MissileID::OrangeFlare, DamageType::Cold), DamageType::Cold);
 }
 
 TEST_F(Poe2ChaosTest, ChaosDrainsEnergyShieldTwiceAsFast)
@@ -629,10 +629,11 @@ TEST_F(Poe2ChaosTest, WitheredRaisesChaosDamageOnly)
 	monster.poe2.witherStacks = 10;
 	monster.poe2.witherTicks = 40;
 	EXPECT_EQ(WitheredDamageTakenPercent(monster, DamageType::Chaos), 50);
-	for (const DamageType type : { DamageType::Physical, DamageType::Fire, DamageType::Lightning, DamageType::Magic }) {
+	for (const DamageType type : { DamageType::Physical, DamageType::Fire, DamageType::Lightning, DamageType::Cold }) {
 		EXPECT_EQ(WitheredDamageTakenPercent(monster, type), 0);
 		EXPECT_EQ(SupportHitDamagePercent(monster, type), 100);
-		EXPECT_EQ(MonsterDamageTakenPercent(monster, type), 100);
+		// Only its resistance: a zombie's kind resists cold.
+		EXPECT_EQ(MonsterDamageTakenPercent(monster, type), 100 - MonsterResistance(monster, type));
 	}
 	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 150);
 	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Chaos), 150);

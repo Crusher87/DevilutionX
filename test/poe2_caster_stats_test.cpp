@@ -5,6 +5,8 @@
  * spell damage and levels, minion levels, life and resistances, life and mana on kill, a sceptre's own Spirit, and
  * the element tags that first-element exclusivity narrows.
  */
+#include <array>
+
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
@@ -18,10 +20,13 @@
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/skill_details.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "spells.h"
+#include "tables/misdat.h"
 #include "tables/playerdat.hpp"
 
 namespace devilution {
@@ -129,30 +134,42 @@ TEST_F(Poe2CasterStatsTest, HybridsAvoidBothParts)
 TEST_F(Poe2CasterStatsTest, ElementLevelsGoToTheSpellsOfTheirElement)
 {
 	Player &player = *MyPlayer;
+	LoadMissileData();
 	SetGearStat(player, Poe2ItemStat::FireSkillLevels, 1);
 	SetGearStat(player, Poe2ItemStat::LightningSkillLevels, 2);
 	SetGearStat(player, Poe2ItemStat::ColdSkillLevels, 4);
 	SetGearStat(player, Poe2ItemStat::PhysicalSkillLevels, 8);
+	SetGearStat(player, Poe2ItemStat::ChaosSkillLevels, 16);
+	const auto levels = [&player](SpellID spell) { return ItemSkillLevelBonus(player.poe2, SkillSlot::ForSpell(spell)); };
 	int cold = 0;
 	for (size_t i = 1; i < SpellsData.size(); i++) {
 		const auto spell = static_cast<SpellID>(i);
-		const int bonus = ItemSkillLevelBonus(player.poe2, SkillSlot::ForSpell(spell));
-		switch (GetSpellData(spell).type()) {
-		case MagicType::Fire:
-			EXPECT_EQ(bonus, 1) << i;
-			break;
-		case MagicType::Lightning:
-			EXPECT_EQ(bonus, 2) << i;
-			break;
-		default:
-			// Magic is cold, as the spells' damage has it.
-			EXPECT_EQ(bonus, 4) << i;
+		const int bonus = levels(spell);
+		// A damaging spell takes the levels of the type its hits deal; one without damage its school's.
+		DamageType type = DamageType::Cold;
+		if ((SkillTags(SkillSlot::ForSpell(spell)) & ST_Damage) != 0)
+			type = SpellDamageType(spell);
+		else if (GetSpellData(spell).type() == MagicType::Fire)
+			type = DamageType::Fire;
+		else if (GetSpellData(spell).type() == MagicType::Lightning)
+			type = DamageType::Lightning;
+		const int expected = type == DamageType::Fire ? 1 : type == DamageType::Lightning ? 2 : type == DamageType::Physical ? 8 : type == DamageType::Chaos ? 16 : 4;
+		EXPECT_EQ(bonus, expected) << i;
+		if (expected == 4)
 			cold++;
-			break;
-		}
 	}
 	EXPECT_GT(cold, 0);
-	EXPECT_EQ(ItemSkillLevelBonus(player.poe2, SkillSlot::ForSpell(SpellID::Firebolt)), 1);
+	EXPECT_EQ(levels(SpellID::Firebolt), 1);
+	// Nova and Flash hit as lightning, Holy Bolt as fire, Blood Star as physical and Bone Spirit as chaos.
+	EXPECT_EQ(levels(SpellID::Nova), 2);
+	EXPECT_EQ(levels(SpellID::Flash), 2);
+	EXPECT_EQ(levels(SpellID::HolyBolt), 1);
+	EXPECT_EQ(levels(SpellID::Apocalypse), 1);
+	EXPECT_EQ(levels(SpellID::BloodStar), 8);
+	EXPECT_EQ(levels(SpellID::BoneSpirit), 16);
+	// Stone Curse and Teleport deal no damage and keep their school's cold levels.
+	EXPECT_EQ(levels(SpellID::StoneCurse), 4);
+	EXPECT_EQ(levels(SpellID::Teleport), 4);
 	// Attacks keep their own levels.
 	EXPECT_EQ(ItemSkillLevelBonus(player.poe2, SkillSlot::ForAttack(WeaponSkill::Cleave)), 0);
 }
@@ -181,7 +198,7 @@ TEST_F(Poe2CasterStatsTest, ElementSpellDamageByHitType)
 	SetGearStat(player, Poe2ItemStat::PhysicalSpellDamage, 40);
 	SetGearStat(player, Poe2ItemStat::ChaosSpellDamage, 50);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Fire), 10);
-	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Magic), 20);
+	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Cold), 20);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Lightning), 30);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Physical), 40);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Chaos), 50);
@@ -238,11 +255,14 @@ TEST_F(Poe2CasterStatsTest, MinionLifeAndResistances)
 	Monster enemy {};
 	enemy.levelType = 0;
 	enemy.flags = MFLAG_POE2_TABLES;
-	const int before = MonsterBaseResistance(minion, DamageType::Fire);
 	const int enemyBefore = MonsterBaseResistance(enemy, DamageType::Fire);
+	std::array<int, 3> before {};
+	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Lightning, DamageType::Cold };
+	for (size_t i = 0; i < Elements.size(); i++)
+		before[i] = MonsterBaseResistance(minion, Elements[i]);
 	SetGearStat(player, Poe2ItemStat::MinionResistances, 15);
-	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Magic })
-		EXPECT_EQ(MonsterBaseResistance(minion, type), before + 15);
+	for (size_t i = 0; i < Elements.size(); i++)
+		EXPECT_EQ(MonsterBaseResistance(minion, Elements[i]), before[i] + 15);
 	EXPECT_EQ(MonsterBaseResistance(minion, DamageType::Physical), 0);
 	EXPECT_EQ(MonsterBaseResistance(enemy, DamageType::Fire), enemyBefore) << "Only the owner's minions";
 }

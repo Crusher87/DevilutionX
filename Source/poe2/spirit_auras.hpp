@@ -78,7 +78,7 @@ void OnSpiritArmourBroken(const Player &player, const Monster &monster);
 void OnAuraMeleeHitTaken(Player &player, Monster &monster);
 /** @brief A hit of the hero dealt damage of this type: Trinity. */
 void OnSpiritElementalHit(const Player &player, DamageType type);
-/** @brief The hero froze, shocked (lightning) or ignited (fire) a monster; cold is DamageType::Magic: Siphon Elements. */
+/** @brief The hero froze (cold), shocked (lightning) or ignited (fire) a monster: Siphon Elements. */
 void OnSpiritElementalAilment(const Player &player, const Monster &monster, DamageType type);
 
 /** @brief Scavenged Plating's more armour, in percent. */

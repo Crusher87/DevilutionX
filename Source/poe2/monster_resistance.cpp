@@ -4,6 +4,7 @@
 #include <optional>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -30,10 +31,12 @@ namespace {
 
 /** By _monster_id; kinds not listed have none. */
 std::unordered_map<int, int> ChaosResistances;
+/** By _monster_id: Normal and Nightmare, then Hell. Kinds not listed fall back to Diablo's magic marks. */
+std::unordered_map<int, std::pair<int, int>> ColdResistances;
 
 bool IsResistedElement(DamageType type)
 {
-	return IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic);
+	return IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Cold);
 }
 
 bool IsResisted(DamageType type)
@@ -50,10 +53,10 @@ int ResistanceMarkPercent(uint16_t marks, DamageType type, bool undead)
 		return (marks & IMMUNE_FIRE) != 0 ? ImmuneMarkPercent : ((marks & RESIST_FIRE) != 0 ? ResistMarkPercent : 0);
 	case DamageType::Lightning:
 		return (marks & IMMUNE_LIGHTNING) != 0 ? ImmuneMarkPercent : ((marks & RESIST_LIGHTNING) != 0 ? ResistMarkPercent : 0);
-	case DamageType::Magic:
+	case DamageType::Cold:
 		if ((marks & IMMUNE_MAGIC) != 0)
-			return undead ? UndeadMagicImmuneMarkPercent : MagicImmuneMarkPercent;
-		return (marks & RESIST_MAGIC) != 0 ? MagicResistMarkPercent : 0;
+			return undead ? UndeadColdImmuneMarkPercent : ColdImmuneMarkPercent;
+		return (marks & RESIST_MAGIC) != 0 ? ColdResistMarkPercent : 0;
 	default:
 		return 0;
 	}
@@ -87,6 +90,45 @@ void LoadMonsterChaosResistances()
 	}
 }
 
+void LoadMonsterColdResistances()
+{
+	ColdResistances.clear();
+	if (!gbIsPoe2)
+		return;
+	constexpr std::string_view Filename = "txtdata\\poe2\\monster_cold_resistance.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		// Every monster falls back to Diablo's magic marks without the table.
+		LogError("Couldn't load the monster cold resistances: {}", Filename);
+		return;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		std::string name;
+		int cold = 0;
+		int coldHell = 0;
+		reader.readString("type", name);
+		reader.readInt("coldResistance", cold);
+		reader.readInt("coldResistanceHell", coldHell);
+		const std::optional<_monster_id> type = magic_enum::enum_cast<_monster_id>(name);
+		if (!type) {
+			LogError("Unknown monster type {} in {}", name, Filename);
+			continue;
+		}
+		ColdResistances[static_cast<int>(*type)] = { std::clamp(cold, MinMonsterResistance, MaxMonsterResistance), std::clamp(coldHell, MinMonsterResistance, MaxMonsterResistance) };
+	}
+}
+
+int MonsterTypeColdResistance(int monsterType, uint16_t marks, bool undead)
+{
+	if (gbIsPoe2) {
+		if (const auto it = ColdResistances.find(monsterType); it != ColdResistances.end())
+			return sgGameInitInfo.nDifficulty == DIFF_HELL ? it->second.second : it->second.first;
+	}
+	return ResistanceMarkPercent(marks, DamageType::Cold, undead);
+}
+
 int MonsterTypeChaosResistance(int monsterType)
 {
 	if (!gbIsPoe2)
@@ -95,14 +137,30 @@ int MonsterTypeChaosResistance(int monsterType)
 	return it != ChaosResistances.end() ? it->second : 0;
 }
 
-std::string ResistanceMarksText(uint16_t marks, bool undead, int chaos)
+std::string_view ResistanceName(DamageType type)
+{
+	switch (type) {
+	case DamageType::Fire:
+		return _("Fire");
+	case DamageType::Lightning:
+		return _("Lightning");
+	case DamageType::Cold:
+		return gbIsPoe2 ? _("Cold") : _("Magic");
+	case DamageType::Chaos:
+		return _("Chaos");
+	default:
+		return _("Physical");
+	}
+}
+
+std::string ResistanceMarksText(uint16_t marks, bool undead, int chaos, std::optional<int> cold)
 {
 	std::string text;
-	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Magic }) {
-		const int percent = ResistanceMarkPercent(marks, type, undead);
+	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Cold }) {
+		const int percent = type == DamageType::Cold && cold ? *cold : ResistanceMarkPercent(marks, type, undead);
 		if (percent == 0)
 			continue;
-		const std::string_view name = type == DamageType::Fire ? _("Fire") : (type == DamageType::Lightning ? _("Lightning") : _("Magic"));
+		const std::string_view name = ResistanceName(type);
 		StrAppend(text, text.empty() ? "" : ", ", name, " ", percent, "%");
 	}
 	if (chaos != 0)
@@ -133,9 +191,15 @@ int MonsterBaseResistance(const Monster &monster, DamageType type)
 		return MonsterTypeChaosResistance(static_cast<int>(monster.type().type));
 	if (!IsResistedElement(type))
 		return 0;
-	// Only a magic immune mark asks the monster's kind, which needs its data.
-	const bool undead = type == DamageType::Magic && (monster.resistance & IMMUNE_MAGIC) != 0 && monster.data().monsterClass == MonsterClass::Undead;
-	int resistance = ResistanceMarkPercent(monster.resistance, type, undead);
+	int resistance = 0;
+	if (type == DamageType::Cold) {
+		// Cold comes from the monster's kind (monster_cold_resistance.tsv), uniques included; Diablo's magic marks only
+		// for a kind the table leaves out. Only a magic immune mark asks whether the monster is undead.
+		const bool undead = (monster.resistance & IMMUNE_MAGIC) != 0 && monster.data().monsterClass == MonsterClass::Undead;
+		resistance = MonsterTypeColdResistance(static_cast<int>(monster.type().type), monster.resistance, undead);
+	} else {
+		resistance = ResistanceMarkPercent(monster.resistance, type, false);
+	}
 	if (GetMonsterAffixes(monster).has(MonsterMod::Resistant))
 		resistance += ResistantModPercent;
 	// Waystones can give map monsters more elemental resistance.

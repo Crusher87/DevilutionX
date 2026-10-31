@@ -284,7 +284,7 @@ TEST_F(Poe2SpiritAurasTest, TrinityRewardsMixingElements)
 		Tick(1);
 		OnSpiritElementalHit(player, DamageType::Fire);
 		OnSpiritElementalHit(player, DamageType::Lightning);
-		OnSpiritElementalHit(player, DamageType::Magic);
+		OnSpiritElementalHit(player, DamageType::Cold);
 	}
 	EXPECT_GE(player.poe2.spiritState.resonance[0] + player.poe2.spiritState.resonance[1] + player.poe2.spiritState.resonance[2], 270);
 	EXPECT_EQ(TrinityDamagePercent(player, DamageType::Fire), 9);

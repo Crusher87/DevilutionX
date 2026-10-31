@@ -4,6 +4,10 @@
  * POE2 Mashup: monster resistances as percentages, like POE2's (Curtis 2026-10-18). No monster is immune: Diablo's
  * resist and immune marks become percentages, curses and exposure lower them, and penetration gets past them.
  *
+ * Cold resistance comes from the monster's kind too (monster_cold_resistance.tsv, Curtis 2026-10-31): undead and icy
+ * monsters resist it, creatures of fire and lava are weak to it (-30%), and the rest keep what Diablo's magic marks gave.
+ * Modifiers, waystones, curses and exposure then change it like fire and lightning.
+ *
  * Chaos resistance comes from the monster's kind alone (monster_chaos_resistance.tsv, Curtis 2026-10-30): acid beasts,
  * spiders and other poison creatures 30%, demons 20%, Diablo 25%, everything else 0. Nothing else raises or lowers it
  * except the Despair curse: not the Elemental Resistance modifier, waystones, minion gear, Lower Resist or exposure.
@@ -11,7 +15,9 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace devilution {
 
@@ -21,19 +27,19 @@ enum class DamageType : uint8_t;
 /** Diablo's marks: fire and lightning. */
 constexpr int ResistMarkPercent = 30;
 constexpr int ImmuneMarkPercent = 60;
-/** Magic stands in for POE2's cold, and most of Diablo's monsters resist it, so its marks are lower. */
-constexpr int MagicResistMarkPercent = 20;
-constexpr int MagicImmuneMarkPercent = 40;
+/** Diablo's magic marks stand for POE2's cold, and most of Diablo's monsters carry one, so its marks are lower. */
+constexpr int ColdResistMarkPercent = 20;
+constexpr int ColdImmuneMarkPercent = 40;
 /**
- * An undead monster's magic (cold) immune mark: every Act 1 undead has one, which put the cold skills at 0.6x on most
- * of the Cathedral (Curtis 2026-10-28: 40 to 20; audit-casters-v3.md). Demons and animals keep MagicImmuneMarkPercent.
+ * An undead monster's cold (Diablo's magic) immune mark: every Act 1 undead has one, which put the cold skills at 0.6x on most
+ * of the Cathedral (Curtis 2026-10-28: 40 to 20; audit-casters-v3.md). Demons and animals keep ColdImmuneMarkPercent.
  */
-constexpr int UndeadMagicImmuneMarkPercent = 20;
-/** The magic and rare monster modifier "Elemental Resistance": to fire, lightning and magic. */
+constexpr int UndeadColdImmuneMarkPercent = 20;
+/** The magic and rare monster modifier "Elemental Resistance": to fire, lightning and cold. */
 constexpr int ResistantModPercent = 25;
 constexpr int MaxMonsterResistance = 75;
 constexpr int MinMonsterResistance = -100;
-/** Lower Resist: to fire, lightning and magic. */
+/** Lower Resist: to fire, lightning and cold. */
 constexpr int LowerResistCursePercent = 30;
 /** Despair: to chaos (Curtis 2026-10-30; POE2's is 35% at level 1). */
 constexpr int DespairCursePercent = 30;
@@ -42,16 +48,27 @@ constexpr int FlinchProofResistance = 60;
 
 /**
  * @brief A resistance from Diablo's resist and immune marks (monster_resistance bits), before modifiers.
- * @param undead Whether the monster is undead, whose magic immune mark is lower (UndeadMagicImmuneMarkPercent).
+ * @param undead Whether the monster is undead, whose cold immune mark is lower (UndeadColdImmuneMarkPercent).
  */
 [[nodiscard]] int ResistanceMarkPercent(uint16_t marks, DamageType type, bool undead = false);
 /**
- * @brief "Resistances: Fire 30%, Magic 40%, Chaos 20%", or "No resistances", from the marks (see
- * ResistanceMarkPercent) and the kind's chaos resistance.
+ * @brief The element's name the player reads, translated: "Cold" for Diablo's magic in POE2 mode, "Magic" outside it.
  */
-[[nodiscard]] std::string ResistanceMarksText(uint16_t marks, bool undead = false, int chaos = 0);
+[[nodiscard]] std::string_view ResistanceName(DamageType type);
+/**
+ * @brief "Resistances: Fire 30%, Cold 40%, Chaos 20%", or "No resistances", from the marks (see
+ * ResistanceMarkPercent) and the kind's chaos resistance; cold, when given, replaces the marks' cold.
+ */
+[[nodiscard]] std::string ResistanceMarksText(uint16_t marks, bool undead = false, int chaos = 0, std::optional<int> cold = std::nullopt);
 /** @brief Reads monster_chaos_resistance.tsv in POE2 mode; clears the table outside it. */
 void LoadMonsterChaosResistances();
+/** @brief Reads monster_cold_resistance.tsv in POE2 mode; clears the table outside it. */
+void LoadMonsterColdResistances();
+/**
+ * @brief A monster kind's cold resistance (a _monster_id) at the game's difficulty: from the table in POE2 mode, else
+ * from these Diablo magic marks (see ResistanceMarkPercent).
+ */
+[[nodiscard]] int MonsterTypeColdResistance(int monsterType, uint16_t marks, bool undead);
 /** @brief A monster kind's chaos resistance (a _monster_id), 0 when the table doesn't list it or outside POE2 mode. */
 [[nodiscard]] int MonsterTypeChaosResistance(int monsterType);
 /** @brief How much of a curse or exposure takes hold, in percent: magic monsters shrug off 15%, rare 30%, unique 50%. */

@@ -1,17 +1,29 @@
+#include <array>
+#include <string>
+
 #include <gtest/gtest.h>
 
+#include "DiabloUI/diabloui.h"
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "loadsave.h"
+#include "menu.h"
 #include "missiles.h"
+#include "pfile.h"
 #include "player.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/flasks.hpp"
+#include "poe2/passive_tree.hpp"
 #include "spells.h"
 #include "tables/misdat.h"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
+#include "utils/file_util.h"
+#include "utils/paths.h"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 namespace {
@@ -70,7 +82,7 @@ public:
 TEST_F(Poe2CharmsTest, CharmsStartEmptyAndAreBeltItems)
 {
 	Player &player = *MyPlayer;
-	for (const std::string_view name : { "Bloodstone Charm", "Sapphire Charm", "Iron Charm", "Ruby Charm", "Topaz Charm", "Amethyst Charm", "Stone Charm", "Golden Charm" }) {
+	for (const std::string_view name : { "Bloodstone Charm", "Lapis Charm", "Iron Charm", "Ruby Charm", "Topaz Charm", "Amethyst Charm", "Stone Charm", "Golden Charm", "Sapphire Charm" }) {
 		Item &charm = PutInBelt(player, 4, name);
 		InitializeItem(charm, charm.IDidx);
 		EXPECT_TRUE(IsCharm(charm)) << name;
@@ -101,10 +113,10 @@ TEST_F(Poe2CharmsTest, BloodstoneCharmCatchesLowLife)
 	EXPECT_EQ(player._pHitPoints.whole(), 20);
 }
 
-TEST_F(Poe2CharmsTest, SapphireCharmCatchesLowMana)
+TEST_F(Poe2CharmsTest, LapisCharmCatchesLowMana)
 {
 	Player &player = *MyPlayer;
-	Item &charm = PutInBelt(player, 5, "Sapphire Charm");
+	Item &charm = PutInBelt(player, 5, "Lapis Charm");
 	player._pMana = player._pManaBase = Fixed26_6::fromInt(10);
 	ProcessCharms(player);
 	EXPECT_EQ(player._pMana.whole(), 50);
@@ -180,10 +192,33 @@ TEST_F(Poe2CharmsTest, TopazAndAmethystCharmsAnswerTheirElements)
 	PutInBelt(player, 5, "Amethyst Charm");
 	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Fire, 0), 0);
 	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Lightning, 0), ResistCharmBonus);
-	// The Amethyst Charm answers chaos, as in POE2 (chaos damage plan); magic hits leave it alone.
-	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Magic, 10), 10);
+	// The Amethyst Charm answers chaos, as in POE2 (chaos damage plan); cold hits leave it alone.
+	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Cold, 10), 10);
 	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Chaos, -20), -20 + ResistCharmBonus);
 	EXPECT_EQ(CharmDescription(CharmEffect::Magic), "A chaos hit lands: +25% chaos resistance for 4 seconds");
+}
+
+TEST_F(Poe2CharmsTest, SapphireCharmAnswersCold)
+{
+	Player &player = *MyPlayer;
+	Item &charm = PutInBelt(player, 4, "Sapphire Charm");
+	EXPECT_EQ(GetCharmEffect(charm), CharmEffect::Cold);
+	EXPECT_EQ(charm._iMiscId, IMISC_CHARM_COLD);
+	EXPECT_EQ(CharmDescription(CharmEffect::Cold), "A cold hit lands: +25% cold resistance for 4 seconds");
+	// Fire, lightning and chaos hits leave it alone.
+	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Fire, 0), 0);
+	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Chaos, 0), 0);
+	EXPECT_EQ(charm._iCharges, MaxCharmCharges);
+	EXPECT_EQ(ResistanceAgainstHit(player, DamageType::Cold, 10), 10 + ResistCharmBonus);
+	EXPECT_EQ(charm._iCharges, MaxCharmCharges - CharmChargesPerUse);
+	EXPECT_GT(player.poe2.resistCharmTicks[3], 0);
+	EXPECT_EQ(player.poe2.resistCharmTicks[2], 0);
+	// The Lapis Charm is the mana charm, which was called Sapphire.
+	Item &lapis = PutInBelt(player, 5, "Lapis Charm");
+	EXPECT_EQ(GetCharmEffect(lapis), CharmEffect::Mana);
+	for (int i = 0; i < ResistCharmTicks; i++)
+		ProcessCharms(player);
+	EXPECT_EQ(player.poe2.resistCharmTicks[3], 0);
 }
 
 TEST_F(Poe2CharmsTest, StoneCharmBreaksAStun)
@@ -270,6 +305,56 @@ TEST_F(Poe2CharmsTest, GoldenCharmSpendsAllItsCharges)
 {
 	EXPECT_EQ(CharmChargesPerUseFor(CharmEffect::Golden), MaxCharmCharges);
 	EXPECT_EQ(CharmChargesPerUseFor(CharmEffect::Fire), CharmChargesPerUse);
+}
+
+TEST_F(Poe2CharmsTest, EveryCharmSurvivesASave)
+{
+	LoadCoreArchives();
+	LoadGameArchives();
+	if (!HaveMainData())
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+	UnloadModArchives();
+	LoadModArchives({ { "hf", "poe2" } });
+	LoadItemData();
+	LoadSpellData();
+	LoadPlayerDataFiles();
+	LoadMonsterData();
+	LoadPassiveTreeData();
+	paths::SetPrefPath(paths::BasePath());
+	gbIsHellfireSaveGame = true;
+	const std::string savePath = paths::BasePath() + "single_0.sv";
+	RemoveFile(savePath.c_str());
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Sorcerer;
+	CopyUtf8(info.name, "Charmer", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	gSaveNumber = 0;
+	MyPlayerId = 0;
+	pfile_read_player_from_save(0, *MyPlayer);
+	Player &player = *MyPlayer;
+	const std::string_view names[] = { "Sapphire Charm", "Lapis Charm", "Amethyst Charm", "Ruby Charm", "Topaz Charm", "Bloodstone Charm", "Iron Charm", "Stone Charm" };
+	for (size_t slot = 0; slot < std::size(names); slot++)
+		PutInBelt(player, slot, names[slot]);
+	std::array<int, std::size(names)> indexes {};
+	for (size_t slot = 0; slot < std::size(names); slot++)
+		indexes[slot] = player.SpdList[slot].IDidx;
+	pfile_write_hero(/*writeGameData=*/false);
+	for (Item &item : player.SpdList)
+		item.clear();
+	pfile_read_player_from_save(0, player);
+	for (size_t slot = 0; slot < std::size(names); slot++) {
+		const Item &charm = player.SpdList[slot];
+		EXPECT_EQ(charm.IDidx, indexes[slot]) << names[slot];
+		EXPECT_EQ(charm._iName, names[slot]);
+	}
+	EXPECT_EQ(GetCharmEffect(player.SpdList[0]), CharmEffect::Cold);
+	EXPECT_EQ(GetCharmEffect(player.SpdList[1]), CharmEffect::Mana);
+	EXPECT_EQ(GetCharmEffect(player.SpdList[2]), CharmEffect::Magic);
+	gbIsHellfireSaveGame = false;
+	gbIsPoe2 = false;
+	LoadPassiveTreeData();
+	gbIsPoe2 = true;
+	RemoveFile(savePath.c_str());
 }
 
 } // namespace

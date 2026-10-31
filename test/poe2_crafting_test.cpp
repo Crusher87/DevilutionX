@@ -745,7 +745,7 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 	};
 	const OldAugment augments[] = {
 		{ AugmentId::EmberRune, "Ember Rune", 1, 10, ModEffect::AddedFire, { 4, 9 }, ModEffect::FireResistance, { 12, 0 }, UniqueRule::None, 0, "Adds 4 to 9 fire damage", "+12% to fire resistance" },
-		{ AugmentId::FrostRune, "Frost Rune", 1, 10, ModEffect::MagicResistance, { 12, 0 }, ModEffect::MagicResistance, { 12, 0 }, UniqueRule::None, 0, "+12% to magic resistance", "+12% to magic resistance" },
+		{ AugmentId::FrostRune, "Frost Rune", 1, 10, ModEffect::ColdResistance, { 12, 0 }, ModEffect::ColdResistance, { 12, 0 }, UniqueRule::None, 0, "+12% to cold resistance", "+12% to cold resistance" },
 		{ AugmentId::StormRune, "Storm Rune", 1, 10, ModEffect::AddedLightning, { 1, 14 }, ModEffect::LightningResistance, { 12, 0 }, UniqueRule::None, 0, "Adds 1 to 14 lightning damage", "+12% to lightning resistance" },
 		{ AugmentId::IronRune, "Iron Rune", 1, 10, ModEffect::PhysicalPercent, { 18, 0 }, ModEffect::DefensePercent, { 18, 0 }, UniqueRule::None, 0, "18% increased physical damage", "18% increased armour, evasion and energy shield" },
 		{ AugmentId::WindRune, "Wind Rune", 1, 15, ModEffect::AttackSpeed, { 5, 0 }, ModEffect::Dexterity, { 8, 0 }, UniqueRule::None, 0, "5% increased attack speed", "+8 to dexterity" },

@@ -303,7 +303,7 @@ std::string_view DamageTypeName(DamageType damageType)
 	case DamageType::Physical: return "physical";
 	case DamageType::Fire: return "fire";
 	case DamageType::Lightning: return "lightning";
-	case DamageType::Magic: return "magic";
+	case DamageType::Cold: return "cold";
 	case DamageType::Chaos: return "chaos";
 	default: return "other";
 	}
@@ -1195,7 +1195,7 @@ void WriteBuildEvent(const Player &player, LogLevel level)
 	    .add("block", LoggedBlockChance(player))
 	    .add("fireRes", player._pFireResist)
 	    .add("lightningRes", player._pLghtResist)
-	    .add("magicRes", player._pMagResist)
+	    .add("coldRes", Poe2ColdResistance(player))
 	    .add("chaosRes", player.poe2.chaosResistance)
 	    .add("maxChaosRes", player.poe2.maxChaosResistance)
 	    .add("spirit", ReservedSpirit(player))
@@ -2507,9 +2507,9 @@ std::string TelemetryBuildText(const Player &player)
 		StrAppend(text, ";");
 	}
 	StrAppend(text, " | passives ", player.poe2.passives.count());
-	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% magic {:d}% chaos {:d}% (max {:d}%), spirit {:d}/{:d}",
+	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% cold {:d}% chaos {:d}% (max {:d}%), spirit {:d}/{:d}",
 	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, LoggedBlockChance(player),
-	                    player._pFireResist, player._pLghtResist, player._pMagResist, player.poe2.chaosResistance, player.poe2.maxChaosResistance, ReservedSpirit(player), MaxSpirit(player)));
+	                    player._pFireResist, player._pLghtResist, Poe2ColdResistance(player), player.poe2.chaosResistance, player.poe2.maxChaosResistance, ReservedSpirit(player), MaxSpirit(player)));
 	StrAppend(text, " | belt:");
 	for (const Item &item : player.SpdList) {
 		if (!item.isEmpty())

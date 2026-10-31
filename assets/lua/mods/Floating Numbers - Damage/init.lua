@@ -3,12 +3,14 @@ local events = require("devilutionx.events")
 local player = require("devilutionx.player")
 local system = require("devilutionx.system")
 local render = require("devilutionx.render")
+local poe2 = require("devilutionx.poe2")
 
 local DAMAGE_TYPE = {
     PHYSICAL = 0,
     FIRE = 1,
     LIGHTNING = 2,
-    MAGIC = 3,
+    -- Diablo's magic; POE2 mode calls it cold.
+    COLD = 3,
     CHAOS = 4,
 }
 
@@ -28,7 +30,8 @@ local function get_damage_style(damage_val, damage_type)
         [DAMAGE_TYPE.PHYSICAL] = render.UiFlags.ColorGold,
         [DAMAGE_TYPE.FIRE] = render.UiFlags.ColorUiSilver, -- shows as DarkRed in game
         [DAMAGE_TYPE.LIGHTNING] = render.UiFlags.ColorBlue,
-        [DAMAGE_TYPE.MAGIC] = render.UiFlags.ColorOrange,
+        -- Cold shows white in POE2 mode, so it doesn't read as fire; Diablo's magic keeps its orange.
+        [DAMAGE_TYPE.COLD] = poe2.is_enabled() and render.UiFlags.ColorWhite or render.UiFlags.ColorOrange,
         [DAMAGE_TYPE.CHAOS] = render.UiFlags.ColorYellow,
     }
 

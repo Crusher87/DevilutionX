@@ -70,8 +70,8 @@ std::string_view DamageTypeName(DamageType type)
 		return "Fire";
 	case DamageType::Lightning:
 		return "Lightning";
-	case DamageType::Magic:
-		return "Cold (magic)";
+	case DamageType::Cold:
+		return "Cold";
 	case DamageType::Chaos:
 		return "Chaos";
 	default:
@@ -79,17 +79,49 @@ std::string_view DamageTypeName(DamageType type)
 	}
 }
 
+} // namespace
+
 DamageType SpellDamageType(SpellID spell)
 {
-	switch (GetSpellData(spell).type()) {
-	case MagicType::Fire:
-		return DamageType::Fire;
-	case MagicType::Lightning:
-		return DamageType::Lightning;
+	const auto schoolType = [spell]() {
+		switch (GetSpellData(spell).type()) {
+		case MagicType::Fire:
+			return DamageType::Fire;
+		case MagicType::Lightning:
+			return DamageType::Lightning;
+		default:
+			return DamageType::Cold;
+		}
+	};
+	// Without the missile table (some tests) the spell school is all there is.
+	if (!HasMissileData(MissileID::ApocalypseBoom))
+		return schoolType();
+	// A few spells hit with a missile other than their first: Apocalypse's control missile drops the booms, Guardian
+	// shoots firebolts, and a rune bursts into the missile it holds.
+	switch (spell) {
+	case SpellID::Apocalypse:
+		return GetMissileData(MissileID::ApocalypseBoom).damageType();
+	case SpellID::Guardian:
+		return GetMissileData(MissileID::Firebolt).damageType();
+	case SpellID::RuneOfFire:
+		return GetMissileData(MissileID::BigExplosion).damageType();
+	case SpellID::RuneOfLight:
+		return GetMissileData(MissileID::LightningWall).damageType();
+	case SpellID::RuneOfNova:
+		return GetMissileData(MissileID::Nova).damageType();
+	case SpellID::RuneOfImmolation:
+		return GetMissileData(MissileID::Immolation).damageType();
 	default:
-		return DamageType::Magic;
+		break;
 	}
+	// The type its hits deal, from its first missile: Nova shows lightning though Diablo files it under magic.
+	const MissileID missile = GetSpellData(spell).sMissiles[0];
+	if (missile != MissileID::Null && HasMissileData(missile))
+		return GetMissileData(missile).damageType();
+	return schoolType();
 }
+
+namespace {
 
 /** @brief A percent of a whole number, cut to whole points as the game's integer damage code cuts it. */
 int ScaleWhole(int value, int percent)
@@ -223,10 +255,10 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		hit.effect = std::format("Enemies take +{:d}% physical damage", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (level - 1)));
 		return hit;
 	case WeaponSkill::IceBolt:
-		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, IceBoltShardDamagePercent));
+		AddSpellBase(hit, player, level, DamageType::Cold, ScaleWhole(percent, IceBoltShardDamagePercent));
 		return hit;
 	case WeaponSkill::FrostNova:
-		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, FrostNovaShardDamagePercent));
+		AddSpellBase(hit, player, level, DamageType::Cold, ScaleWhole(percent, FrostNovaShardDamagePercent));
 		return hit;
 	case WeaponSkill::LeapSlam:
 		AddWeaponHit(hit, player, skill, level, percent, LeapSlamDamagePercent);
@@ -424,7 +456,7 @@ std::vector<std::string> AilmentLines(const HitEstimate &hit, uint32_t tags)
 	for (const HitPart &part : hit.parts) {
 		fire = fire || part.type == DamageType::Fire;
 		lightning = lightning || part.type == DamageType::Lightning;
-		cold = cold || part.type == DamageType::Magic;
+		cold = cold || part.type == DamageType::Cold;
 		physical = physical || part.type == DamageType::Physical;
 	}
 	if (fire)
@@ -570,7 +602,7 @@ void MinionDetails(std::vector<SkillDetailLine> &lines, const Player &player, Sk
 	const bool undead = data.monsterClass == MonsterClass::Undead;
 	const int gear = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionResistances)];
 	const auto resistance = [&](DamageType type) { return std::clamp(ResistanceMarkPercent(marks, type, undead) + gear, MinMonsterResistance, MaxMonsterResistance); };
-	Value(lines, "Resistances", std::format("Fire {:d}%, Lightning {:d}%, Cold {:d}%", resistance(DamageType::Fire), resistance(DamageType::Lightning), resistance(DamageType::Magic)));
+	Value(lines, "Resistances", std::format("Fire {:d}%, Lightning {:d}%, Cold {:d}%", resistance(DamageType::Fire), resistance(DamageType::Lightning), resistance(DamageType::Cold)));
 	if (up == nullptr && kind->damagePercent > 0)
 		Text(lines, SkillDetailLine::Kind::Note, "Supports that change minion damage count once one is up");
 }

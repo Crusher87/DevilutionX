@@ -40,7 +40,7 @@ public:
 TEST_F(Poe2VfxTest, ElementsFollowTheDamageType)
 {
 	EXPECT_EQ(vfx::ElementOf(DamageType::Fire, false), vfx::Element::Fire);
-	EXPECT_EQ(vfx::ElementOf(DamageType::Magic, true), vfx::Element::Cold);
+	EXPECT_EQ(vfx::ElementOf(DamageType::Cold, true), vfx::Element::Cold);
 	EXPECT_EQ(vfx::ElementOf(DamageType::Chaos, true), vfx::Element::Chaos);
 	EXPECT_EQ(vfx::ElementOf(DamageType::Physical, false), vfx::Element::Physical);
 	EXPECT_EQ(vfx::ElementOf(DamageType::Physical, true), vfx::Element::Holy);

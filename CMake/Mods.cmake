@@ -103,6 +103,7 @@ set(poe2_mod
   txtdata/poe2/base_meta.tsv
   txtdata/poe2/catacombs_rooms.tsv
   txtdata/poe2/caves_rooms.tsv
+  txtdata/poe2/hell_rooms.tsv
   txtdata/poe2/diablo_unique_homes.tsv
   txtdata/poe2/essences.tsv
   txtdata/poe2/cathedral_rooms.tsv
@@ -112,6 +113,7 @@ set(poe2_mod
   txtdata/poe2/monster_experience.tsv
   txtdata/poe2/monster_bosses.tsv
   txtdata/poe2/monster_chaos_resistance.tsv
+  txtdata/poe2/monster_cold_resistance.tsv
   txtdata/poe2/monster_levels.tsv
   txtdata/poe2/monster_types.tsv
   txtdata/poe2/modifier_families.tsv

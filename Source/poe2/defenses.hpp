@@ -37,7 +37,7 @@ struct BodyArmourImplicit {
 	int life = 0;
 	int spirit = 0;
 	int allResistances = 0;
-	int magicResistance = 0;
+	int coldResistance = 0;
 	int manaRegenPercent = 0;
 	int evasionPercent = 0;
 };
@@ -119,9 +119,12 @@ ShieldLeftover AbsorbHitWithEnergyShield(Player &player, Fixed26_6 damage, Fixed
 
 /** @brief The hero's resistance to chaos: its own stat in POE2 mode, magic resistance outside it. */
 int PlayerChaosResistance(const Player &player);
+/** @brief The hero's cold resistance in POE2 mode: Diablo's magic resistance (_pMagResist, saved) stands for it. */
+int Poe2ColdResistance(const Player &player);
 /**
- * @brief The type a monster's hit on the hero lands as. In POE2 mode Hellfire's liches and Diablo's Apocalypse deal
- * chaos (Curtis 2026-10-30); everything else keeps its own type.
+ * @brief The type a monster's hit on the hero lands as. In POE2 mode Hellfire's liches, the Necromorbs' orb and
+ * Diablo's Apocalypse deal chaos (Curtis 2026-10-30, 2026-10-31), and a Snow Witch's star stays cold though Blood Star
+ * is physical; everything else keeps its own type.
  */
 DamageType MonsterHitDamageType(const Monster *monster, MissileID missile, DamageType type);
 /** @brief Advances energy shield recharge by one game tick. */

@@ -74,7 +74,7 @@ const SupportData Table[] = {
 	{ SG::InfusedFlames, "Fire Enchant", "Half of physical damage becomes fire.\nMana +20%", "Needs a physical skill", GC::Strength, 4, 120, 0, PhysicalHit, 0, 0, Infusion },
 	{ SG::InfusedStorm, "Storm Enchant", "Half of physical damage becomes\nlightning. Mana +20%", "Needs a physical skill", GC::Dexterity, 4, 120, 0, PhysicalHit, 0, 0, Infusion },
 	{ SG::InfusedFrost, "Cold Enchant", "Half of physical damage becomes cold.\nMana +20%", "Needs a physical skill", GC::Magic, 4, 120, 0, PhysicalHit, 0, 0, Infusion },
-	{ SG::HolyInfusion, "Zakarum's Blessing", "Power: hits add 20% of their damage\nas arcane. Mana +30%", "Needs a damaging skill", GC::Magic, 5, 130, 0, DamageSkill, 0, SF_Power, NoFamily },
+	{ SG::HolyInfusion, "Zakarum's Blessing", "Power: hits add 20% of their damage\nas holy fire. Mana +30%", "Needs a damaging skill", GC::Magic, 5, 130, 0, DamageSkill, 0, SF_Power, NoFamily },
 	{ SG::BurningGround, "Scorched Earth", "Hits leave burning ground. 20% less\ndamage with hits. Mana +30%", "Needs a fire, area or projectile skill", GC::Strength, 6, 130, ST_Fire | ST_Area | ST_Projectile, ST_Damage, 0, 0, NoFamily },
 	{ SG::Overcharge, "Overload", "Shocks twice as often. 25% less\ndamage with hits. Mana +10%", "Needs a lightning skill", GC::Dexterity, 4, 110, 0, ST_Lightning, 0, 0, NoFamily },
 	{ SG::DeepFreeze, "Winter's Grip", "Freezes sooner. 20% less damage\nwith hits. Mana +10%", "Needs a cold skill", GC::Magic, 4, 110, 0, ST_Frost, 0, 0, NoFamily },
@@ -83,7 +83,7 @@ const SupportData Table[] = {
 	{ SG::CastWhenHit, "Sigil of Reprisal", "Retired: it's the Sigil of Retribution\nSpirit gem now, which holds the spells", "Retired", GC::Strength, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastOnDodge, "Sigil of Evasion", "Retired: it's the Sigil of Evasion\nSpirit gem now, which holds the spells", "Retired", GC::Dexterity, 6, 120, 0, ST_Spell, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
 	{ SG::CastWhileChannelling, "Sigil of Focus", "Retired: it's the Sigil of Focus Spirit\ngem now, which holds the spells", "Retired", GC::Magic, 9, 130, 0, ST_Spell | ST_Damage, ST_Movement | ST_Channelling, SF_Trigger, NoFamily },
-	{ SG::BlinkStrike, "Assassin's Blink", "Where you land bursts with arcane\ndamage. 20% slower casts. Mana +40%", "Needs a movement skill", GC::Magic, 7, 140, 0, ST_Movement, 0, 0, NoFamily },
+	{ SG::BlinkStrike, "Assassin's Blink", "Where you land bursts with physical\ndamage. 20% slower casts. Mana +40%", "Needs a movement skill", GC::Magic, 7, 140, 0, ST_Movement, 0, 0, NoFamily },
 	{ SG::EchoingShout, "Thundering Roar", "The warcry repeats twice, each echo\n50% weaker. Mana +30%", "Needs a warcry", GC::Strength, 5, 130, 0, ST_Warcry, 0, 0, Repeat },
 	{ SG::RallyingCry, "Shout", "The warcry hits all around for 150%\nweapon damage. Mana +30%", "Needs a warcry", GC::Strength, 5, 130, 0, ST_Warcry, 0, 0, NoFamily },
 	{ SG::BoneArmy, "Bone Legion", "2 more skeletons, with 30% less life\nand damage each", "Needs skeleton minions", GC::Magic, 6, 100, 0, ST_Minion, 0, 0, NoFamily },
@@ -93,7 +93,7 @@ const SupportData Table[] = {
 	{ SG::CurseMastery, "Rathmian Malice", "Larger, longer curses. Mana +30%", "Needs a curse", GC::Magic, 5, 130, 0, ST_Curse, 0, 0, NoFamily },
 	{ SG::RuneMastery, "Rune Mastery", "Places 2 runes at once. Mana +30%", "Needs a rune", GC::Dexterity, 5, 130, 0, ST_Rune, 0, 0, Runes },
 	{ SG::ClusterRunes, "Runic Cluster", "Places 3 runes in a ring. Mana +40%", "Needs a rune", GC::Dexterity, 8, 140, 0, ST_Rune, 0, 0, Runes },
-	{ SG::Sanctify, "Consecrate", "Each heal pulses arcane damage around\nyou. Mana +40%", "Needs a healing spell", GC::Magic, 5, 140, 0, ST_Healing, 0, 0, NoFamily },
+	{ SG::Sanctify, "Consecrate", "Each heal pulses holy fire around\nyou. Mana +40%", "Needs a healing spell", GC::Magic, 5, 140, 0, ST_Healing, 0, 0, NoFamily },
 	{ SG::Shatter, "Shatter", "Frozen or petrified monsters you slam\nburst. 15% less damage to others. Mana +20%", "Needs a slam or a cold skill", GC::Strength, 6, 120, ST_Slam | ST_Frost, ST_Damage, 0, 0, NoFamily },
 	{ SG::LifeLeech, "Life Steal", "Leeches 3% of damage as life. 10% less\ndamage. Mana +20%", "Needs a damaging skill", GC::Strength, 3, 120, 0, DamageSkill, 0, 0, Leech },
 	{ SG::ManaLeech, "Mana Steal", "Leeches 2% of damage as mana. 10% less\ndamage. Mana +10%", "Needs a damaging skill", GC::Magic, 3, 110, 0, DamageSkill, 0, 0, Leech },
@@ -127,7 +127,7 @@ const SupportData Table[] = {
 	{ SG::MixedHost, "Mixed Horde", "Minions deal 7% more damage for each\nkind of minion you have", "Needs a minion skill", GC::Magic, 7, 100, 0, ST_Minion, 0, 0, NoFamily },
 	// Lineage supports.
 	{ SG::ButchersHook, "The Butcher's Hook", "Hits drag the monster to you and make it\nbleed; 15% slower attacks", "Needs a melee attack", GC::Strength, 0, 110, 0, ST_Melee, 0, SF_Lineage, NoFamily },
-	{ SG::RathmasCovenant, "Rathma's Covenant", "A minion that dies rises as a bone\nspirit that bursts on a monster", "Needs a minion skill", GC::Magic, 0, 100, 0, ST_Minion, 0, SF_Lineage, NoFamily },
+	{ SG::RathmasCovenant, "Rathma's Covenant", "A minion that dies rises as a bone\nspirit that bursts in chaos on a monster", "Needs a minion skill", GC::Magic, 0, 100, 0, ST_Minion, 0, SF_Lineage, NoFamily },
 	{ SG::LazarusDeceit, "Lazarus' Deceit", "When a cursed monster dies, its curses\njump to the 2 nearest", "Needs a curse", GC::Magic, 0, 110, 0, ST_Curse, 0, SF_Lineage, NoFamily },
 	{ SG::DiablosRedLightning, "Diablo's Red Lightning", "Can't shock; monsters hit below 20% life\nburst and arc to 3 more", "Needs a lightning skill", GC::Dexterity, 0, 120, 0, ST_Lightning, 0, SF_Lineage, NoFamily },
 	{ SG::ZharsMadness, "Zhar's Madness", "25% chance on cast to also cast another\nof your spell gems, at its own cost", "Needs a spell", GC::Magic, 0, 110, 0, ST_Spell, ST_Movement, SF_Lineage, NoFamily },
@@ -145,7 +145,7 @@ const SupportData Table[] = {
 	// Penetration: hits get past part of the monster's resistance, never below 0.
 	{ SG::FirePenetration, "Fire Mastery", "Fire hits penetrate 15% of the\nmonster's fire resistance", "Needs a fire skill", GC::Strength, 3, 100, 0, ST_Fire, 0, 0, NoFamily },
 	{ SG::LightningPenetration, "Lightning Mastery", "Lightning hits penetrate 15% of the\nmonster's lightning resistance", "Needs a lightning skill", GC::Dexterity, 3, 100, 0, ST_Lightning, 0, 0, NoFamily },
-	{ SG::ColdPenetration, "Cold Mastery", "Cold hits penetrate 15% of the\nmonster's magic resistance", "Needs a cold skill", GC::Magic, 3, 100, 0, ST_Frost, 0, 0, NoFamily },
+	{ SG::ColdPenetration, "Cold Mastery", "Cold hits penetrate 15% of the\nmonster's cold resistance", "Needs a cold skill", GC::Magic, 3, 100, 0, ST_Frost, 0, 0, NoFamily },
 	// POE2's herald-only support (Curtis 2026-10-19).
 	{ SG::DeadlyHerald, "Zealous Aura", "The Aspect's explosions deal 30% more\ndamage. Reserves 20 more Spirit", "Needs an Aspect", GC::Dexterity, 6, 100, 0, ST_Herald, 0, 0, NoFamily },
 };
@@ -488,7 +488,7 @@ void InflictSupportBleed(const Player &player, Monster &monster, int32_t physica
 
 DamageType PrismElement(uint8_t element)
 {
-	constexpr DamageType Elements[] = { DamageType::Fire, DamageType::Lightning, DamageType::Magic };
+	constexpr DamageType Elements[] = { DamageType::Fire, DamageType::Lightning, DamageType::Cold };
 	return Elements[element % 3];
 }
 
@@ -581,10 +581,11 @@ void FinishHit()
 			else if (Has(player, skill, SG::InfusedStorm))
 				DealExtra(player, monster, DamageType::Lightning, Fixed26_6::fromRaw(physical));
 			else if (Has(player, skill, SG::InfusedFrost))
-				DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(physical));
+				DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(physical));
 		}
+		// Zakarum's Blessing adds holy fire.
 		if (Has(player, skill, SG::HolyInfusion))
-			DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(total / 5));
+			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(total / 5));
 		if (Has(player, skill, SG::FuelThePyre) && monster.poe2.igniteTicks > 0) {
 			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(Percent(total, Value(player, skill, SG::FuelThePyre, 0))));
 			// Fan the Flames II: the burn spreads.
@@ -592,7 +593,7 @@ void FinishHit()
 				SpreadIgnite(player, monster);
 		}
 		if (Has(player, skill, SG::Frostbite) && state.frostbiteTicks > 0)
-			DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(total / 4));
+			DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(total / 4));
 		if (Has(player, skill, SG::TalRashasPrism))
 			DealExtra(player, monster, PrismElement(state.prismElement), Fixed26_6::fromRaw(total * 3 / 10));
 		if (Has(player, skill, SG::BartucsBloodletting) && state.bartucTicks > 0)
@@ -617,7 +618,7 @@ void FinishHit()
 		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter, 0, 6);
 		BreakObjectsInArea(player, monster.position.tile, 2);
 		for (Monster *other : NearestMonsters(monster.position.tile, 2, 8, &monster))
-			DealExtra(player, *other, DamageType::Magic, Fixed26_6::fromRaw(total * 3 / 10));
+			DealExtra(player, *other, DamageType::Cold, Fixed26_6::fromRaw(total * 3 / 10));
 	}
 	if (Has(player, skill, SG::BurningGround) && state.burningGroundCooldown == 0) {
 		state.burningGroundCooldown = 20;
@@ -895,10 +896,13 @@ uint32_t SkillTags(SkillSlot skill)
 			return ST_Spell | ST_Area | ST_Lightning | Hit;
 		case SpellID::LightningWall:
 			return ST_Spell | ST_Area | ST_Duration | ST_Placed | ST_Lightning | Hit;
+		// Holy is fire in this game, Blood Star is blood (physical) and Bone Spirit is soul magic (chaos).
 		case SpellID::HolyBolt:
+			return ST_Spell | ST_Projectile | ST_Fire | Hit;
 		case SpellID::BloodStar:
+			return ST_Spell | ST_Projectile | ST_Physical | Hit;
 		case SpellID::BoneSpirit:
-			return ST_Spell | ST_Projectile | Hit;
+			return ST_Spell | ST_Projectile | ST_Chaos | Hit;
 		case SpellID::RuneOfFire:
 		case SpellID::RuneOfImmolation:
 			return ST_Spell | ST_Rune | ST_Placed | ST_Area | ST_Fire | Hit;
@@ -1057,7 +1061,7 @@ uint32_t SkillTags(SkillSlot skill)
 		case DamageType::Lightning:
 			tags |= ST_Lightning;
 			break;
-		case DamageType::Magic:
+		case DamageType::Cold:
 			tags |= ST_Frost;
 			break;
 		case DamageType::Chaos:
@@ -1255,7 +1259,7 @@ int SupportHitPenetration(DamageType type)
 		return Value(*Hit.player, Hit.skill, SG::FirePenetration, 0);
 	case DamageType::Lightning:
 		return Value(*Hit.player, Hit.skill, SG::LightningPenetration, 0);
-	case DamageType::Magic:
+	case DamageType::Cold:
 		return Value(*Hit.player, Hit.skill, SG::ColdPenetration, 0);
 	default:
 		return 0;
@@ -1282,7 +1286,7 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 	more(RepeatPercent - 100);
 	if (skill.isEmpty())
 		return percent;
-	const bool elemental = IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic);
+	const bool elemental = IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Cold);
 	for (const SupportGem gem : player.poe2.supportsFor(skill)) {
 		switch (gem) {
 		case SG::Volley:
@@ -1407,9 +1411,9 @@ int SupportAilmentEffectPercent(DamageType type)
 		return 100;
 	if (type == DamageType::Fire && HitHas(SG::Hellfire))
 		return 100 + HitValue(SG::Hellfire, 0);
-	if (type == DamageType::Magic && HitHas(SG::DeepFreeze))
+	if (type == DamageType::Cold && HitHas(SG::DeepFreeze))
 		return 175;
-	if (type == DamageType::Magic && HitHas(SG::ElementalFocus))
+	if (type == DamageType::Cold && HitHas(SG::ElementalFocus))
 		return 0;
 	return 100;
 }
@@ -1494,10 +1498,10 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			AddBurst(tile, 3, 0, DamageType::Physical, MissileGraphicID::MetalHit, SkillBaseDamage(player, SkillSlot::ForAttack(WeaponSkill::Cleave), 150));
 			break;
 		case SG::BlinkStrike:
-			AddBurst(skill.kind == SkillKind::Spell ? target : tile, 2, 2, DamageType::Magic, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
+			AddBurst(skill.kind == SkillKind::Spell ? target : tile, 2, 2, DamageType::Physical, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
 			break;
 		case SG::Sanctify:
-			AddBurst(tile, 3, 0, DamageType::Magic, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 150));
+			AddBurst(tile, 3, 0, DamageType::Fire, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 150));
 			break;
 		case SG::Wrathforged:
 			if (player.poe2.rage >= 10) {
@@ -2027,7 +2031,7 @@ void OnSupportedMinionDied(Player &owner, Monster &minion)
 		const std::vector<Monster *> nearest = NearestMonsters(minion.position.tile, 7, 1, nullptr);
 		if (!nearest.empty()) {
 			AddVisualEffect(minion.position.tile, MissileGraphicID::Etherealize);
-			AddBurst(nearest.front()->position.tile, 1, 8, DamageType::Magic, MissileGraphicID::StoneCurseShatter, Fixed26_6::fromRaw(life.raw() * 2));
+			AddBurst(nearest.front()->position.tile, 1, 8, DamageType::Chaos, MissileGraphicID::StoneCurseShatter, Fixed26_6::fromRaw(life.raw() * 2));
 		}
 	}
 }

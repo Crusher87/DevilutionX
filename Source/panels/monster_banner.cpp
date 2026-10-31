@@ -257,7 +257,7 @@ std::string ResistanceText(const Monster &monster)
 		} Poe2Elements[] = {
 			{ DamageType::Fire, N_("Fire") },
 			{ DamageType::Lightning, N_("Lightning") },
-			{ DamageType::Magic, N_("Magic") },
+			{ DamageType::Cold, N_("Cold") },
 			{ DamageType::Chaos, N_("Chaos") },
 		};
 		std::string text;

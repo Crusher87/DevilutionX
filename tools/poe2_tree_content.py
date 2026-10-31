@@ -26,8 +26,7 @@ What the stats mean (they decide which skills a node helps):
   TwoHandDamage     increased attack damage with two-handed melee weapons
   OneHandDamage     increased attack damage with one-handed melee weapons
   SpellDamage       increased spell damage
-  Fire/Lightning/ColdDamage  increased damage of that type, spells and attacks. Cold is this mod's Magic damage
-                    type, so ColdDamage also scales Blood Star, Bone Spirit, Apocalypse and Stone Curse.
+  Fire/Lightning/ColdDamage  increased damage of that type, spells and attacks.
   AttackSpeed / CastSpeed     increased speed in percent; every 10% (tree and gear together) skips one frame, up to the cap
                     (MaxPassiveSpeedFrames); only notables carry speed, small nodes do not
   LifeRegenRate     life regenerated per second, in tenths of a percent of maximum life (10 = 1% a second)
@@ -140,7 +139,7 @@ CLUSTERS = {
         {'key': 's_cold', 'band': 'mid', 'title': 'Frost and Arcana', 'small': [('ColdDamage', 5)], 'notables': [
             ('Frozen Heart', [('ColdDamage', 20), ('FreezeBuildup', 15)], 'Cold magic answers best to those who feel nothing.'),
             ('Glacial Ward', [('ColdDamage', 10), ('EnergyShieldPercent', 15)], 'A shell of frost turns blows aside.'),
-            ('Ring of the Mystics', [('ColdDamage', 20), ('MagicResist', 15), ('FireResist', -10), ('LightningResist', -10)], 'A ring that wards against magic and leaves its wearer open to fire and storm.'),
+            ('Ring of the Mystics', [('ColdDamage', 20), ('ColdResist', 15), ('FireResist', -10), ('LightningResist', -10)], 'A ring that wards against magic and leaves its wearer open to fire and storm.'),
         ]},
         {'key': 's_cast', 'band': 'mid', 'title': 'Quick Casting', 'small': [('SpellDamage', 4)], 'notables': [
             ("Horazon's Focus", [('CastSpeed', 6), ('SpellDamage', 8)], 'Horazon and his brother Bartuc were the greatest Vizjerei of their age.'),
@@ -162,7 +161,7 @@ CLUSTERS = {
             ('Elements of the Clans', [('SpellDamage', 14), ('AllResist', 5)], 'Fire, storm and ice bow to a master, and spare him.'),
         ]},
         {'key': 's_wards', 'band': 'outer', 'title': 'Wards', 'small': [('AllResist', 3)], 'notables': [
-            ('Warding Circle', [('AllResist', 8), ('MaxMagicResist', 2)], 'Chalk, salt and old words keep the worst of it out.'),
+            ('Warding Circle', [('AllResist', 8), ('MaxColdResist', 2)], 'Chalk, salt and old words keep the worst of it out.'),
             ("Wisdom's Wrap", [('EnergyShieldPercent', 20), ('HitDamageFromMana', 5)], 'A mage\'s robe that adds to his mana and softens every blow.'),
         ]},
         {'key': 's_clans', 'band': 'outer', 'title': 'Mage Clans', 'small': [('SpellDamage', 4)], 'notables': [
@@ -200,7 +199,7 @@ CLUSTERS = {
             ("Akara's Remedy", [('FlaskRecovery', 20), ('LifeRegenRate', 4)], "The priestess Akara's draughts kept the Sisters alive."),
             ('Feast of the Fallen', [('LifeOnKill', 10), ('ManaOnKill', 4)], 'The Fallen breed fast and die faster.'),
             ('Quick Hands', [('FlaskCharges', 20), ('AttackSpeed', 3)], 'A Sister drinks between heartbeats.'),
-            ('Rainbow Cloak', [('AllResist', 6), ('LifePercent', 4)], 'A cloak of many colours that turns aside fire, lightning and magic alike.'),
+            ('Rainbow Cloak', [('AllResist', 6), ('LifePercent', 4)], 'A cloak of many colours that turns aside fire, lightning and cold alike.'),
         ]},
         {'key': 'r_lightning', 'band': 'outer', 'title': 'Charged Arrows', 'small': [('LightningDamage', 4)], 'notables': [
             ('Storm Arrows', [('LightningDamage', 18), ('ShockChance', 15)], 'Arrows tipped with captured lightning.'),
@@ -373,7 +372,7 @@ BORDER_CLUSTERS = {
         ]},
         {'key': 'h_golem', 'band': 'outer', 'title': 'Clay and Will', 'small': [('MinionDamage', 6), ('MinionLife', 6)], 'notables': [
             ('Golem Binding', [('MinionLife', 20), ('Spirit', 8)], 'A golem raised by magic fights for its maker and no other.'),
-            ("Tal Rasha's Sacrifice", [('MaxElementalResist', 1), ('MaxMagicResist', 1), ('ManaPercent', -10)], 'He took the Lord of Destruction into his own flesh so the others could seal the tomb.'),
+            ("Tal Rasha's Sacrifice", [('MaxElementalResist', 1), ('MaxColdResist', 1), ('ManaPercent', -10)], 'He took the Lord of Destruction into his own flesh so the others could seal the tomb.'),
         ]},
     ],
 }
@@ -785,7 +784,7 @@ ASCENDANCIES = {
             ('Perfect Form', [('Damage', 30)]),
         ]),
         ('Ivgorod Patriarch', [('Magic', 10)], [
-            ('Faith Ward', [('MagicResist', 20)]),
+            ('Faith Ward', [('ColdResist', 20)]),
             ('Meditation', [('ManaRegen', 40)]),
             ('Smite', [('Damage', 20)]),
             ('Spirit of Ivgorod', [('ManaPercent', 20)]),

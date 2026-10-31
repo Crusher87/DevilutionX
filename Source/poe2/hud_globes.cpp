@@ -369,7 +369,7 @@ void DrawPoe2GlobeValues(const Surface &out)
 		DrawShadowedValue(out, StrCat("Frenzy ", player.poe2.frenzyCharges), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorOrange);
 	// The Vizjerei Road toll's backlash: one line per element still biting, with its seconds left.
 	int backlashY = 58;
-	for (const auto &[element, name, colour] : { std::tuple { DamageType::Fire, "Burning", UiFlags::ColorOrange }, std::tuple { DamageType::Magic, "Chilled", UiFlags::ColorBlue },
+	for (const auto &[element, name, colour] : { std::tuple { DamageType::Fire, "Burning", UiFlags::ColorOrange }, std::tuple { DamageType::Cold, "Chilled", UiFlags::ColorBlue },
 	         std::tuple { DamageType::Lightning, "Shocked", UiFlags::ColorYellow } }) {
 		if (const int ticks = VizjereiBacklashTicks(player, element); ticks > 0) {
 			DrawShadowedValue(out, StrCat(name, " ", (ticks + 19) / 20, "s"), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), backlashY }, colour);

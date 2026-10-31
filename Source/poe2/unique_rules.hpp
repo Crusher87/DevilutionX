@@ -80,7 +80,7 @@ enum class UniqueRule : uint8_t {
 	LessLifeFlaskRecovery,
 	/** 1% increased attack damage per this much fire resistance above the cap. */
 	FireOvercapDamage,
-	MaxMagicResistance,
+	MaxColdResistance,
 	ManaToEnergyShield,
 	LessMaxLife,
 	CritActionSpeed,
@@ -267,9 +267,9 @@ struct UniqueRuleState {
 	uint16_t heartglassCooldown = 0;
 	uint16_t saintsTokenCooldown = 0;
 	uint8_t witchglassTicks = 0;
-	/** @brief Little Guardian's lingering resistance (fire, lightning, magic), and whether it gave the current charm effect. */
-	std::array<uint8_t, 3> guardianTicks {};
-	std::array<bool, 3> guardianArmed {};
+	/** @brief Little Guardian's lingering resistance (fire, lightning, chaos, cold), and whether it gave the current charm effect. */
+	std::array<uint8_t, 4> guardianTicks {};
+	std::array<bool, 4> guardianArmed {};
 	uint8_t scholarPercent = 0;
 	uint8_t scholarTicks = 0;
 	/** @brief Deep Well: the next skill costs no mana. */

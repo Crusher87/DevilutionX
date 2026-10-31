@@ -308,18 +308,18 @@ TEST_F(Poe2ModifiersTest, MagicItemsHaveAPrefixOrSuffixAndAName)
 	EXPECT_LT(two, 150);
 }
 
-TEST_F(Poe2ModifiersTest, ColdResistanceReadsAsTheMagicResistanceItGives)
+TEST_F(Poe2ModifiersTest, ColdResistanceReadsAsCold)
 {
-	// POE2's cold resistance is the game's magic resistance, so the tooltip says so, like the compare panel.
+	// Diablo's magic resistance is POE2's cold resistance, and the tooltip calls it cold, like the compare panel.
 	const std::optional<uint8_t> cold = FindModifierFamily("cold_resistance");
 	ASSERT_TRUE(cold);
 	const std::vector<std::string> lines = ItemModText({ static_cast<uint8_t>(*cold + 1), 4, { 10, 0 } });
 	ASSERT_EQ(lines.size(), 1U);
-	EXPECT_EQ(lines[0], "+10% to Magic Resistance");
+	EXPECT_EQ(lines[0], "+10% to Cold Resistance");
 	for (const ModFamily &family : ModifierFamilies()) {
-		if (family.effect == ModEffect::MagicResistance) {
-			EXPECT_EQ(family.text.find("Cold"), std::string::npos) << family.id;
-			EXPECT_EQ(family.name.find("Cold"), std::string::npos) << family.id;
+		if (family.effect == ModEffect::ColdResistance) {
+			EXPECT_EQ(family.text.find("Magic"), std::string::npos) << family.id;
+			EXPECT_EQ(family.name.find("Magic"), std::string::npos) << family.id;
 		}
 	}
 }

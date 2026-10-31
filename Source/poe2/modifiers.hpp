@@ -21,6 +21,7 @@ namespace devilution {
 struct Item;
 struct Player;
 struct Poe2ItemMod;
+enum class UniqueRule : uint8_t;
 
 /** @brief What a modifier family does to the item. */
 enum class ModEffect : uint8_t {
@@ -51,7 +52,7 @@ enum class ModEffect : uint8_t {
 	Intelligence,
 	AllAttributes,
 	FireResistance,
-	MagicResistance,
+	ColdResistance,
 	LightningResistance,
 	AllResistances,
 	AttackSpeed,
@@ -96,7 +97,7 @@ enum class ModEffect : uint8_t {
 	MinionSkillLevels,
 	/** Increased maximum life of minions, in percent. */
 	MinionLife,
-	/** Added to minions' fire, lightning and magic resistances. */
+	/** Added to minions' fire, lightning and cold resistances. */
 	MinionResistances,
 	LifeOnKill,
 	ManaOnKill,
@@ -248,6 +249,11 @@ constexpr int MaxRareJewelModsPerSide = 2;
 
 /** @brief Loads the modifier tables and the item bases (poe2/bases.hpp) and uniques (poe2/uniques.hpp) from the POE2 Mashup mod, or clears them outside POE2 mode. */
 void LoadModifierData();
+
+/** @brief A modifier effect by its name in the data; MagicResistance, ColdResistance's name before the cold rename, still reads. */
+std::optional<ModEffect> ParseModEffectName(std::string_view name);
+/** @brief A unique rule by its name in the data; MaxMagicResistance, MaxColdResistance's old name, still reads. */
+std::optional<UniqueRule> ParseUniqueRuleName(std::string_view name);
 
 /** @brief Whether modifiers roll with the families' legacy scales (LegacyModScales). */
 bool RollingLegacyModScales();

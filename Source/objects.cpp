@@ -3990,6 +3990,8 @@ void InitObjects()
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_HELL) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			if (Quests[Q_WARLORD].IsAvailable()) {
 				_speech_id spId;
 				switch (MyPlayer->_pClass) {

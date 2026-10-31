@@ -10,6 +10,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/defenses.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
@@ -66,8 +67,8 @@ int Resistance(const Player &player, DamageType type)
 	case DamageType::Lightning:
 		resistance = player._pLghtResist;
 		break;
-	case DamageType::Magic:
-		resistance = player._pMagResist;
+	case DamageType::Cold:
+		resistance = Poe2ColdResistance(player);
 		break;
 	case DamageType::Chaos:
 		// Penetration is elemental, as in POE2; chaos resistance has its own cap already.
@@ -152,7 +153,7 @@ MapMonsterHit ApplyMapMonsterHit(Player &player, Fixed26_6 physical, Fixed26_6 b
 	// Armour break: the hit's armour-broken share lands as if the hero had none.
 	total += raw * Danger(MapDanger::ArmourBreak) / 200;
 	total += AfterResistance(player, DamageType::Fire, raw * Danger(MapDanger::ExtraFire) / 100);
-	total += AfterResistance(player, DamageType::Magic, raw * Danger(MapDanger::ExtraCold) / 100);
+	total += AfterResistance(player, DamageType::Cold, raw * Danger(MapDanger::ExtraCold) / 100);
 	total += AfterResistance(player, DamageType::Lightning, raw * Danger(MapDanger::ExtraLightning) / 100);
 	const int64_t chaos = AfterResistance(player, DamageType::Chaos, raw * Danger(MapDanger::ExtraChaos) / 100);
 	// Poison counts the hit's physical and extra chaos from before armour and resistance.

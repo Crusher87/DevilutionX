@@ -42,7 +42,7 @@ RULE_STATS = {
     'UnarmedHitStacks', 'ArrowPierce', 'SwapStrike', 'BowStrength', 'SpellDamageToFireAttacks',
     'BowAppliesToStaff', 'StaffAppliesToBow', 'ManaSpellDamage', 'DamageVsRareUnique', 'HitDamageFromMana',
     'ArmourVsElements', 'EvasionVsSpells', 'StationaryDefences', 'PhysicalToFire', 'MaxElementalResist',
-    'MaxMagicResist', 'MaxChaosResist',
+    'MaxColdResist', 'MaxChaosResist',
 }
 BLOCKED_KINDS = {'Ascendancy', 'AscendancyNotable', 'Keystone', 'Shrine'}
 VIT_LIFE = 0.5
@@ -114,7 +114,7 @@ def summarize(stat_totals, build, attr_dmg):
     dfn = sum(w * s.get(k, 0) for k, w in build['dfn'].items())
     life = s.get('LifePercent', 0) + VIT_LIFE * s.get('Vitality', 0)
     # Chaos resistance counts like one element's: a third of an all-resistances line.
-    res = s.get('AllResist', 0) + (s.get('FireResist', 0) + s.get('LightningResist', 0) + s.get('MagicResist', 0) + s.get('ChaosResist', 0)) / 3
+    res = s.get('AllResist', 0) + (s.get('FireResist', 0) + s.get('LightningResist', 0) + s.get('ColdResist', 0) + s.get('ChaosResist', 0)) / 3
     speed = s.get(build['speed'], 0)
     mana = s.get('ManaPercent', 0)
     extra = sum(w * s.get(k, 0) for k, w in build.get('extra', {}).items())
@@ -152,7 +152,7 @@ def weights(cur, build, attr_dmg):
     w['Vitality'] += VIT_LIFE * W_LIFE / (100 + cur['life'])
     r = W_RES / RES_CAP if cur['res'] < RES_CAP else 0.0
     w['AllResist'] += r
-    for k in ('FireResist', 'LightningResist', 'MagicResist', 'ChaosResist'):
+    for k in ('FireResist', 'LightningResist', 'ColdResist', 'ChaosResist'):
         w[k] += r / 3
     w[build['speed']] += W_SPEED / (100 + cur['speed']) if cur['speed'] < SPEED_CAP else 0.0
     w['ManaPercent'] += wm / (100 + cur['mana'])

@@ -16,6 +16,8 @@ namespace devilution {
 
 struct Player;
 struct SkillSlot;
+enum class DamageType : uint8_t;
+enum class SpellID : int8_t;
 
 struct SkillDetailLine {
 	enum class Kind : uint8_t {
@@ -34,6 +36,12 @@ struct SkillDetailLine {
 	std::string label;
 	std::string value;
 };
+
+/**
+ * @brief The damage type a spell's hits deal, as its missiles have it (not its spell school): Nova is lightning.
+ * Apocalypse, Guardian and the runes hit with a later missile, which this follows.
+ */
+DamageType SpellDamageType(SpellID spell);
 
 /** @brief The details of the skill in a Skills panel socket, top to bottom. */
 std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket);

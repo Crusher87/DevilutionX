@@ -406,7 +406,7 @@ TEST_F(Poe2UniquesTest, ResistanceRulesMoveTheCaps)
 {
 	Player &player = *MyPlayer;
 	Wear(Make("Circle of Ash"), INVLOC_RING_LEFT);
-	EXPECT_EQ(player.poe2.maxResistances[2], MaxResistance - 5);
+	EXPECT_EQ(player.poe2.maxResistances[Poe2PlayerData::ColdResistanceIndex], MaxResistance - 5);
 	EXPECT_EQ(player.poe2.maxResistances[0], MaxResistance);
 }
 
@@ -528,7 +528,7 @@ TEST_F(Poe2UniquesTest, AilmentRules)
 	Monster cold = MakeMonster();
 	TryInflictAilment(cold, player, DamageType::Fire, Fixed26_6::fromInt(60));
 	EXPECT_EQ(cold.poe2.igniteTicks, 0);
-	TryInflictAilment(cold, player, DamageType::Magic, Fixed26_6::fromInt(60));
+	TryInflictAilment(cold, player, DamageType::Cold, Fixed26_6::fromInt(60));
 	EXPECT_GT(cold.poe2.freezeTicks, 0);
 	EXPECT_EQ(player.poe2.uniqueState.storedChill, 30);
 }

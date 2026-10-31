@@ -555,6 +555,7 @@ enum item_misc_id : int16_t {
 	/** Charms that go off when a fire, lightning or magic hit lands, when you're stunned, or when you kill a rare. */
 	IMISC_CHARM_FIRE,
 	IMISC_CHARM_LIGHTNING,
+	/** The Amethyst Charm, which answers chaos (named for Diablo's magic, which it answered before chaos damage). */
 	IMISC_CHARM_MAGIC,
 	IMISC_CHARM_STUN,
 	IMISC_CHARM_GOLDEN,
@@ -619,6 +620,8 @@ enum item_misc_id : int16_t {
 	IMISC_SHARD_REGAL,
 	IMISC_SHARD_CHANCE,
 	IMISC_SHARD_ARTIFICER,
+	/** The Sapphire Charm: raises cold resistance when a cold hit lands (IMISC_CHARM_MAGIC is the Amethyst, chaos). */
+	IMISC_CHARM_COLD,
 	IMISC_INVALID = -1,
 };
 

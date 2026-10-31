@@ -109,9 +109,9 @@ std::vector<UniqueEffect> ParseEffects(std::string_view text)
 			count++;
 		}
 		UniqueEffect effect;
-		if (const std::optional<ModEffect> mod = magic_enum::enum_cast<ModEffect>(parts[0]); mod && *mod != ModEffect::None)
+		if (const std::optional<ModEffect> mod = ParseModEffectName(parts[0]); mod && *mod != ModEffect::None)
 			effect.mod = *mod;
-		else if (const std::optional<UniqueRule> rule = magic_enum::enum_cast<UniqueRule>(parts[0]); rule && *rule != UniqueRule::None)
+		else if (const std::optional<UniqueRule> rule = ParseUniqueRuleName(parts[0]); rule && *rule != UniqueRule::None)
 			effect.rule = *rule;
 		if (count != parts.size() || (effect.mod == ModEffect::None && effect.rule == UniqueRule::None)) {
 			LogError("Bad unique modifier: {}", entry);

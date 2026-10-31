@@ -61,7 +61,7 @@ std::vector<BaseImplicit> ParseImplicits(std::string_view text)
 				parts[count] = part;
 			count++;
 		}
-		const std::optional<ModEffect> effect = magic_enum::enum_cast<ModEffect>(parts[0]);
+		const std::optional<ModEffect> effect = ParseModEffectName(parts[0]);
 		if (count != parts.size() || !effect) {
 			LogError("Bad base implicit: {}", entry);
 			continue;

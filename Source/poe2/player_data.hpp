@@ -290,7 +290,7 @@ enum class PersistentSkill : uint8_t {
 	HeraldOfAsh,
 	/** Monsters you kill release lightning that strikes enemies nearby. */
 	HeraldOfThunder,
-	/** An aura granting resistance to fire, lightning and magic. */
+	/** An aura granting resistance to fire, lightning and cold. */
 	PurityOfElements,
 	/** A golem that fights at your side and comes back when it dies. */
 	SummonGolem,
@@ -1046,7 +1046,10 @@ struct Poe2PlayerData {
 	UniqueRuleTotals uniqueRules {};
 	/** @brief Counters and timers of the unique rules; mutable so hits on monsters can count (not saved). */
 	mutable UniqueRuleState uniqueState {};
-	/** @brief Fire, lightning and magic resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
+	/** @brief Fire, lightning and cold resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
+	static constexpr size_t FireResistanceIndex = 0;
+	static constexpr size_t LightningResistanceIndex = 1;
+	static constexpr size_t ColdResistanceIndex = 2;
 	std::array<int16_t, 3> uncappedResistances {};
 	std::array<int16_t, 3> maxResistances {};
 	/** @brief Chaos resistance, before its cap, and its cap (not saved; from CalcPlrItemVals). Kept apart from the
@@ -1104,8 +1107,8 @@ struct Poe2PlayerData {
 	uint8_t charmCooldown = 0;
 	/** @brief Which essence, augment or catalyst is on the cursor waiting to be used (not saved). */
 	uint8_t currencyVariant = 0;
-	/** @brief Game ticks left of the fire, lightning and chaos resistance from Ruby, Topaz and Amethyst charms (not saved). */
-	std::array<uint8_t, 3> resistCharmTicks {};
+	/** @brief Game ticks left of the fire, lightning, chaos and cold resistance from Ruby, Topaz, Amethyst and Sapphire charms (not saved). */
+	std::array<uint8_t, 4> resistCharmTicks {};
 	/** @brief Game ticks left of stun immunity from a Stone Charm (not saved). */
 	uint8_t stunImmuneTicks = 0;
 	/** @brief Game ticks left of a Flask of the Ox's armour (not saved). */

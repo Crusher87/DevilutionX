@@ -110,7 +110,7 @@ EFFECTS = {
 	'flask_recovery_penalty': ('LessLifeFlaskRecovery', 25),
 	# Rings.
 	'fire_overcap_damage': ('FireOvercapDamage', 3),
-	'cold_max_penalty': ('MaxMagicResistance', -5),
+	'cold_max_penalty': ('MaxColdResistance', -5),
 	'mana_to_es': ('ManaToEnergyShield', 25),
 	'life_penalty': ('LessMaxLife', 15),
 	'crit_recent_speed': ('CritActionSpeed', 15),
@@ -165,10 +165,10 @@ KEYSTONE_MODS = {mod for mod, (effect, _) in EFFECTS.items() if effect in ('Firs
 
 
 def effect_text(display):
-	"""The tooltip text with {0} for a rolled range, in the game's words for resistances."""
+	"""The tooltip text with {0} for a rolled range."""
 	text = RANGE.sub('{0}', display, count=1)
 	# The effects column separates effects with semicolons, so a text keeps them as commas.
-	return text.replace('Cold Resistance', 'Magic Resistance').replace('–', '-').replace(';', ',')
+	return text.replace('–', '-').replace(';', ',')
 
 
 def main():

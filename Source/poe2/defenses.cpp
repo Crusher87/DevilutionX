@@ -74,7 +74,7 @@ BodyArmourImplicit GetBodyArmourImplicit(const Item &item)
 	else if (base == "Revered Vestments")
 		implicit.allResistances = 10;
 	else if (base == "Devout Garb")
-		implicit.magicResistance = 20;
+		implicit.coldResistance = 20;
 	else if (base == "Enlightened Robe")
 		implicit.manaRegenPercent = 30;
 	else if (base == "Armoured Vest")
@@ -262,14 +262,25 @@ int PlayerChaosResistance(const Player &player)
 	return gbIsPoe2 ? player.poe2.chaosResistance : player._pMagResist;
 }
 
+int Poe2ColdResistance(const Player &player)
+{
+	return player._pMagResist;
+}
+
 DamageType MonsterHitDamageType(const Monster *monster, MissileID missile, DamageType type)
 {
 	if (!gbIsPoe2 || monster == nullptr)
 		return type;
+	// A Snow Witch's star is blue and icy: it stays cold though Blood Star is physical (Curtis 2026-10-31: blood).
+	if (missile == MissileID::BloodStar && monster->type().type == MT_SNOWWICH)
+		return DamageType::Cold;
 	switch (monster->ai) {
 	case MonsterAIID::Lich:
 	case MonsterAIID::ArchLich:
 		return IsAnyOf(missile, MissileID::OrangeFlare, MissileID::YellowFlare) ? DamageType::Chaos : type;
+	// The Crypt's necromorbs throw a red orb of the necromancers' chaos, like the liches (Curtis 2026-10-31).
+	case MonsterAIID::Necromorb:
+		return missile == MissileID::RedFlare ? DamageType::Chaos : type;
 	case MonsterAIID::Diablo:
 		return IsAnyOf(missile, MissileID::DiabloApocalypse, MissileID::DiabloApocalypseBoom) ? DamageType::Chaos : type;
 	default:

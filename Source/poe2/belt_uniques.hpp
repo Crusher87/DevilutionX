@@ -90,7 +90,7 @@ struct BeltUnique {
 	int16_t effectMax;
 	/** @brief Rules it adds while in the belt (boss uniques), with a value each. */
 	std::vector<std::pair<UniqueRule, int16_t>> rules;
-	/** @brief Resistance to fire, lightning and magic it adds while in the belt, rolled between these. */
+	/** @brief Resistance to fire, lightning and cold it adds while in the belt, rolled between these. */
 	int16_t resistMin;
 	int16_t resistMax;
 	std::vector<std::string_view> lines;

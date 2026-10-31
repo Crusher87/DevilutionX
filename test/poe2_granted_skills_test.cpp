@@ -401,8 +401,8 @@ TEST_F(Poe2GrantedSkillsTest, BoltsFlyWithTheirOwnElement)
 	} Bolts[] = {
 		{ "Chiming Staff", MissileID::YellowFlare, DamageType::Lightning, 1, true },
 		{ "Rending Staff", MissileID::RedFlare, DamageType::Chaos, 1, true },
-		{ "Icicle Staff", MissileID::BlueFlare, DamageType::Magic, 1, true },
-		{ "Frigid Wand", MissileID::BlueFlare, DamageType::Magic, 1, false },
+		{ "Icicle Staff", MissileID::BlueFlare, DamageType::Cold, 1, true },
+		{ "Frigid Wand", MissileID::BlueFlare, DamageType::Cold, 1, false },
 		{ "Primordial Wand", MissileID::RedFlare, DamageType::Chaos, 4, false },
 		{ "Dueling Wand", MissileID::OrangeFlare, DamageType::Physical, 2, false },
 		{ "Volatile Wand", MissileID::OrangeFlare, DamageType::Fire, 1, false },
@@ -425,7 +425,7 @@ TEST_F(Poe2GrantedSkillsTest, BoltsFlyWithTheirOwnElement)
 		}
 		Stand(player);
 	}
-	EXPECT_EQ(GetMissileData(MissileID::RedFlare).damageType(), DamageType::Magic);
+	EXPECT_EQ(GetMissileData(MissileID::RedFlare).damageType(), DamageType::Cold);
 }
 
 TEST_F(Poe2GrantedSkillsTest, BurstsHitAroundTheTargetAndNovasAroundTheHero)
@@ -1209,7 +1209,7 @@ TEST_F(Poe2GrantedSkillsTest, ACastFiresFiveChillingShards)
 	const TableSkillData &row = *FindTableSkill(WeaponSkill::FreezingShards);
 	// Curtis 2026-10-29: three shards a cast, not five.
 	EXPECT_EQ(row.count, 3);
-	EXPECT_EQ(row.type, DamageType::Magic);
+	EXPECT_EQ(row.type, DamageType::Cold);
 	ASSERT_TRUE(TryUseGrantedSkill(player));
 	EXPECT_EQ(player._pmode, PM_SPELL);
 	EXPECT_EQ(player.poe2.castSkill, WeaponSkill::FreezingShards);

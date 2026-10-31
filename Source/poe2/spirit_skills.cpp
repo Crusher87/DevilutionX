@@ -432,7 +432,7 @@ DamageType InfusionDamageType(uint8_t infusion)
 	case Infusion_Lightning:
 		return DamageType::Lightning;
 	default:
-		return DamageType::Magic;
+		return DamageType::Cold;
 	}
 }
 
