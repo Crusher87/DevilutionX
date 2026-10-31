@@ -79,8 +79,32 @@ std::string_view DamageTypeName(DamageType type)
 	}
 }
 
+} // namespace
+
 DamageType SpellDamageType(SpellID spell)
 {
+	// A few spells hit with a missile other than their first: Apocalypse's control missile drops the booms, Guardian
+	// shoots firebolts, and a rune bursts into the missile it holds.
+	switch (spell) {
+	case SpellID::Apocalypse:
+		return GetMissileData(MissileID::ApocalypseBoom).damageType();
+	case SpellID::Guardian:
+		return GetMissileData(MissileID::Firebolt).damageType();
+	case SpellID::RuneOfFire:
+		return GetMissileData(MissileID::BigExplosion).damageType();
+	case SpellID::RuneOfLight:
+		return GetMissileData(MissileID::LightningWall).damageType();
+	case SpellID::RuneOfNova:
+		return GetMissileData(MissileID::Nova).damageType();
+	case SpellID::RuneOfImmolation:
+		return GetMissileData(MissileID::Immolation).damageType();
+	default:
+		break;
+	}
+	// The type its hits deal, from its first missile: Nova shows lightning though Diablo files it under magic.
+	const MissileID missile = GetSpellData(spell).sMissiles[0];
+	if (missile != MissileID::Null)
+		return GetMissileData(missile).damageType();
 	switch (GetSpellData(spell).type()) {
 	case MagicType::Fire:
 		return DamageType::Fire;
@@ -90,6 +114,8 @@ DamageType SpellDamageType(SpellID spell)
 		return DamageType::Cold;
 	}
 }
+
+namespace {
 
 /** @brief A percent of a whole number, cut to whole points as the game's integer damage code cuts it. */
 int ScaleWhole(int value, int percent)

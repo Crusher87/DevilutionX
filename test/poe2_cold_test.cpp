@@ -16,6 +16,7 @@
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/skill_details.hpp"
 #include "poe2/unique_rules.hpp"
 #include "spells.h"
 #include "tables/itemdat.h"
@@ -228,6 +229,26 @@ TEST_F(Poe2ColdTest, DiabloModeStillSaysMagic)
 	EXPECT_EQ(PrintItemPower(IPL_MAGICRES, item).str(), "Resist Magic: +20%");
 	EXPECT_EQ(ResistanceName(DamageType::Cold), "Magic");
 	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2ColdTest, SpellTooltipsNameTheTypeTheirHitsDeal)
+{
+	// The missile's type, not Diablo's spell school: Nova, Charged Bolt and Lightning hit as lightning.
+	EXPECT_EQ(SpellDamageType(SpellID::Nova), DamageType::Lightning);
+	EXPECT_EQ(SpellDamageType(SpellID::ChargedBolt), DamageType::Lightning);
+	EXPECT_EQ(SpellDamageType(SpellID::Lightning), DamageType::Lightning);
+	EXPECT_EQ(SpellDamageType(SpellID::Firebolt), DamageType::Fire);
+	EXPECT_EQ(SpellDamageType(SpellID::FireWall), DamageType::Fire);
+	EXPECT_EQ(SpellDamageType(SpellID::Inferno), DamageType::Fire);
+	// Guardian shoots firebolts, and Apocalypse's booms carry its damage, not its control missile.
+	EXPECT_EQ(SpellDamageType(SpellID::Guardian), DamageType::Fire);
+	EXPECT_EQ(SpellDamageType(SpellID::Apocalypse), GetMissileData(MissileID::ApocalypseBoom).damageType());
+	// A rune bursts into the missile it holds.
+	EXPECT_EQ(SpellDamageType(SpellID::RuneOfFire), DamageType::Fire);
+	EXPECT_EQ(SpellDamageType(SpellID::RuneOfNova), DamageType::Lightning);
+	EXPECT_EQ(SpellDamageType(SpellID::RuneOfLight), DamageType::Lightning);
+	EXPECT_EQ(SpellDamageType(SpellID::HolyBolt), GetMissileData(MissileID::HolyBolt).damageType());
+	EXPECT_EQ(SpellDamageType(SpellID::BoneSpirit), GetMissileData(MissileID::BoneSpirit).damageType());
 }
 
 } // namespace
