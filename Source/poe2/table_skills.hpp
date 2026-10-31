@@ -178,6 +178,8 @@ enum TableFlag : uint32_t {
 	TF_Pin = 1 << 18,
 };
 
+/** @brief Bone Spear flies through this many enemies (in practice every one in its path); other piercing skills through 3. */
+constexpr int BoneSpearPierces = 20;
 /** @brief Plague Arrow's burst hits the enemies around the one the arrow struck for this share of the arrow, in percent. */
 constexpr int PlagueArrowSplashPercent = 50;
 /** @brief Hex Rupture bursts at most this many curses a cast, each with this radius. */
@@ -372,7 +374,7 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
  * cast's first, GrantedExtraTargetPercent for the rest; 100 for every other projectile. Marks the monster hit.
  */
 int GrantedMissileTargetPercent(const Missile &missile, Player &player, Monster &monster);
-/** @brief The rider of the granted skill whose hit is being dealt now (SupportHitSkill), or None. */
+/** @brief The rider of the table skill whose hit is being dealt now (SupportHitSkill): a granted skill's, or Bone Spear's; else None. */
 GrantedRider HitGrantedRider();
 /** @brief The hero's spell hits in percent: SigilSpellDamagePercentInside while they stand in their Sigil of Power, else 100. */
 int SigilSpellDamagePercent(const Player &player);

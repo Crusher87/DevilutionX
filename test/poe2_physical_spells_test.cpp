@@ -324,5 +324,58 @@ TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
 	}
 }
 
+// Bone Spear (POE2's Bonestorm, one heavy spear): a big bone shard that runs through every enemy in its path, building
+// up twice the stun, and bursting in splinters on each.
+TEST_F(Poe2PhysicalSpellsTest, BoneSpearRunsThroughEveryEnemy)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData &data = Row(WeaponSkill::BoneSpear);
+	EXPECT_EQ(data.level, 7);
+	EXPECT_EQ(data.mana, 12);
+	EXPECT_EQ(data.shape, TableShape::Projectiles);
+	EXPECT_EQ(data.count, 1);
+	EXPECT_EQ(data.damagePercent, 180);
+	EXPECT_EQ(data.type, DamageType::Physical);
+	EXPECT_EQ(data.rider, GrantedRider::StunBuildup);
+	EXPECT_NE(data.flags & TF_Pierce, 0U);
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::BoneSpear));
+	const SkillSlot spear = SkillSlot::ForAttack(WeaponSkill::BoneSpear);
+	EXPECT_NE(SkillTags(spear) & ST_Spell, 0U);
+	EXPECT_NE(SkillTags(spear) & ST_Projectile, 0U);
+	EXPECT_NE(SkillTags(spear) & ST_Physical, 0U);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, spear, 1));
+	EXPECT_EQ(SkillForGem(gem), spear);
+
+	Supported(spear);
+	ExecuteTableSkill(player, data, { 46, 40 });
+	ASSERT_FALSE(Missiles.empty());
+	Missile &missile = Missiles.back();
+	EXPECT_EQ(missile._mitype, MissileID::OrangeFlare);
+	EXPECT_GE(missile.poe2.piercesLeft, BoneSpearPierces);
+	EXPECT_EQ(missile.poe2.look, 2);
+	EXPECT_EQ(missile.poe2.vfxElement, static_cast<int8_t>(vfx::Element::Bone));
+	EXPECT_EQ(MissileSkill(missile), spear);
+
+	// Its hits build up twice the stun, as Bone Bolt's do.
+	{
+		const SupportHitScope scope(player, spear);
+		EXPECT_EQ(HitGrantedRider(), GrantedRider::StunBuildup);
+		EXPECT_EQ(UniqueStunBuildupPercent(player), 200);
+	}
+	{
+		const SupportHitScope scope(player, SkillSlot::ForAttack(WeaponSkill::BoneSpikes));
+		EXPECT_EQ(UniqueStunBuildupPercent(player), 100);
+	}
+
+	// Each enemy it runs through bursts in bone.
+	Monster &first = PlaceMonster(0, { 42, 40 });
+	const size_t before = Missiles.size();
+	OnTableMissileHit(missile, player, first, 40, false);
+	ASSERT_GT(Missiles.size(), before);
+	EXPECT_EQ(Missiles.back().poe2.vfxElement, static_cast<int8_t>(vfx::Element::Bone));
+}
+
 } // namespace
 } // namespace devilution

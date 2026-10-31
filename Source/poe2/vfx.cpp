@@ -3536,7 +3536,7 @@ void ScanMissiles()
 			}
 			continue;
 		}
-		const float scale = CasterScale(missile) * (missile.poe2.look == 1 ? 0.6F : 1.F);
+		const float scale = CasterScale(missile) * (missile.poe2.look == 1 ? 0.6F : (missile.poe2.look == 2 ? 1.5F : 1.F));
 		if (look.burst > 0) {
 			SeenBurst &seen = SeenBursts.try_emplace(&missile, SeenBurst { ScanFrame, false }).first->second;
 			seen.frame = ScanFrame;

@@ -1122,8 +1122,8 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	Rate bolt { "Staff Bolt", staffBolt, GrantedStaffBoltPercent / CastSeconds(staffBolt), 1.0, {} };
 	bolt.supported = BestSupportPair(player, staffBolt, DamageType::Fire, true, &bolt.pair);
 	freeSkills.push_back(bolt);
-	// 12, then Hex Rupture, Bone Prison and Bone Spikes.
-	EXPECT_EQ(gems.size(), 15U);
+	// 12, then Hex Rupture, Bone Prison, Bone Spikes and Bone Spear.
+	EXPECT_EQ(gems.size(), 16U);
 	EXPECT_GE(freeSkills.size(), 14U);
 
 	for (const int level : { 1, 20 }) {

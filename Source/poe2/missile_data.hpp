@@ -33,7 +33,7 @@ struct Poe2MissileData {
 	bool ricochet = false;
 	/** @brief Fired by one of the hero's minions: it deals its own damage and hits like a spell, even an arrow. */
 	bool minionShot = false;
-	/** @brief How the effects draw it: 0 by its graphic, 1 the staff's own small bolt. */
+	/** @brief How the effects draw it: 0 by its graphic, 1 the staff's own small bolt, 2 a great spear (Bone Spear). */
 	uint8_t look = 0;
 	/**
 	 * @brief The spell the play log credits this missile's hits to, when it isn't the last skill used: a rune's burst

@@ -69,8 +69,8 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 			EXPECT_EQ(AllItemsList[i].iMinMag, GetSpellData(skill.spell()).minInt) << AllItemsList[i].iName;
 		}
 	}
-	// Skill gems plus 70 Spirit gems (Despair made it 182, Cleansing 183, Plague Arrow 184, Hex Rupture 185, Bone Spikes 186).
-	EXPECT_EQ(gems, 186);
+	// Skill gems plus 70 Spirit gems (Despair made it 182, Cleansing 183, Plague Arrow 184, Hex Rupture 185, Bone Spikes 186, Bone Spear 187).
+	EXPECT_EQ(gems, 187);
 }
 
 TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)

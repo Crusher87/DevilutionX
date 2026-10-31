@@ -169,7 +169,9 @@ enum class WeaponSkill : uint8_t {
 	HexRupture,
 	/** Physical spells plan 3.1: POE2's Unearth, its damage half. */
 	BoneSpikes,
-	Last = BoneSpikes,
+	/** Physical spells plan 3.3: POE2's Bonestorm, one heavy spear. */
+	BoneSpear,
+	Last = BoneSpear,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */

@@ -174,6 +174,7 @@ const TableSkillData Table[] = {
 	{ WS::PlagueArrow, "Plague Arrow", "An arrow that bursts into poison on the first enemy it hits", 1, 8, TW::Bow, 0, Projectiles, 90, 1, 1, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_PoisonBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::DoomSerpents), TableCurve::LightningArrow, 0 },
 	{ WS::HexRupture, "Hex Rupture", "Bursts the curses half run out on enemies around the target", 11, 12, TW::None, 1, HexBurst, 160, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a line ahead of you, staggering what they hit", 3, 8, TW::None, 1, Line, 107, 5, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::BoneSpear, "Bone Spear", "A heavy spear of bone that flies through every enemy in its path and builds up twice the stun", 7, 12, TW::None, 1, Projectiles, 180, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
 };
 // clang-format on
 
@@ -793,7 +794,10 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
 	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * GrantedSpellDamagePercent(player, data) / 100 * (100 + souls) / 100, INT16_MAX));
 	if ((data.flags & TF_Pierce) != 0)
-		missile->poe2.piercesLeft = static_cast<int8_t>(missile->poe2.piercesLeft + 3);
+		missile->poe2.piercesLeft = static_cast<int8_t>(std::min<int>(missile->poe2.piercesLeft + (data.skill == WeaponSkill::BoneSpear ? BoneSpearPierces : 3), INT8_MAX));
+	// Bone Spear is drawn as a great spear, not a bolt.
+	if (data.skill == WeaponSkill::BoneSpear)
+		missile->poe2.look = 2;
 	if ((data.flags & TF_LandingBurst) != 0) {
 		// The burst goes off about when the projectile gets there.
 		const int ticks = std::clamp(from.WalkingDistance(target) * 2, 2, 30);
@@ -1495,7 +1499,7 @@ GrantedRider HitGrantedRider()
 	if (skill.kind != SkillKind::Attack)
 		return GrantedRider::None;
 	const TableSkillData *data = FindTableSkill(static_cast<WeaponSkill>(skill.id));
-	return data != nullptr && IsGrantedTableSkill(*data) ? data->rider : GrantedRider::None;
+	return data != nullptr ? data->rider : GrantedRider::None;
 }
 
 void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster, int damage, bool isDamageShifted)
@@ -1508,6 +1512,11 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 	const TableSkillData *data = FindTableSkill(static_cast<WeaponSkill>(skill.id));
 	if (data != nullptr && (data->flags & TF_PoisonBurst) != 0)
 		PoisonBurst(player, monster, *data);
+	// Bone Spear: each enemy it runs through bursts in splinters as it flies on.
+	if (data != nullptr && !IsGrantedTableSkill(*data) && (data->flags & TF_Spell) != 0 && (data->flags & TF_Pierce) != 0) {
+		AddVisualEffect(monster.position.tile, data->effect);
+		vfx::Impact(monster.position.tile, LookOf(*data), 1.1F);
+	}
 	if (data == nullptr || !IsGrantedTableSkill(*data))
 		return;
 	const int64_t raw = isDamageShifted ? damage : static_cast<int64_t>(damage) * 64;
