@@ -1028,8 +1028,9 @@ TEST_F(Poe2GrantedSkillsTest, TheGrantedSkillsHitAsPlanned)
 		// them); every other monster a cast hits takes at most 25% of the spell base a second of the cast, or of a zone's
 		// pulse, its bleed and echo included.
 		const double staffBolt = GrantedStaffBoltPercent / CastSeconds(SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttack::StaffBolt)));
-		// Soulrend's bleed, priced as if each cast added a full one, doesn't stack on one target: it comes to about 52%
-		// of Staff Bolt there, under the band, until the skill-balance review prices it again.
+		// A bleed or plague doesn't stack on one target, so Soulrend, Decompose and Exsanguinate come to about 50% of
+		// Staff Bolt there. Reviewed by the skill-balance thread and kept: their damage ticks on while the hero casts
+		// something else, and the plagues spread, so one target a second undersells them.
 		if (DotRider(row).percent == 0)
 			EXPECT_GE(OneTargetPerSecond(row), staffBolt * 0.70) << row.name;
 		else
