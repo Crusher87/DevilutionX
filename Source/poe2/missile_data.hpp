@@ -44,6 +44,11 @@ struct Poe2MissileData {
 	int8_t damageType = -1;
 	/** @brief A per-target granted skill's cast this projectile belongs to (GrantedRuntime::castSerial), or 0. */
 	uint16_t grantedCast = 0;
+	/**
+	 * @brief How the effects colour it, a vfx::Element, instead of its graphic's look (a bone bolt on a flare), or -1 for
+	 * the graphic's. Its explosion takes it too. Cosmetic: never saved and never read by the game.
+	 */
+	int8_t vfxElement = -1;
 };
 
 } // namespace devilution

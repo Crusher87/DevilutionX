@@ -20,6 +20,10 @@
 
 namespace devilution {
 
+namespace vfx {
+enum class Element : uint8_t;
+} // namespace vfx
+
 struct ItemData;
 struct Missile;
 struct Monster;
@@ -380,6 +384,11 @@ void ApplyAuraCurse(const Player &player, Monster &monster, WeaponSkill skill, i
 [[nodiscard]] int TableCurseStrength(const Monster &monster, TableCurse curse);
 /** @brief The cast effects of a table skill. */
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target);
+/**
+ * @brief How a table skill's effects look: its damage type's element, but a physical spell is bone, blood for one whose
+ * hits bleed blood (Reap, Exsanguinate, Blood Nova) and holy for Blessed Hammer.
+ */
+[[nodiscard]] vfx::Element TableSkillLook(const TableSkillData &data);
 
 /** @brief POE2 Mashup: a sound a skill makes, one of Diablo's or one of the mod's own files. */
 struct SkillSound {

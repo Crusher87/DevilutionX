@@ -42,6 +42,8 @@ enum class Element : uint8_t {
 	Holy,
 	Arcane,
 	Blood,
+	/** @brief Bone-white with dust and chips: the bone spells (Bone Prison, Bone Spikes, Bone Spear, Bone Bolt). */
+	Bone,
 };
 
 /** @brief How a weapon moves through the air, to match the hero's attack animation. Every hero swings right-handed. */
@@ -56,7 +58,7 @@ enum class SwingStyle : uint8_t {
 	Jab,
 };
 
-/** @brief The element a skill's damage looks like; spells without an element look arcane. */
+/** @brief The element a skill's damage looks like: a physical spell looks like bone, a physical attack like dust and steel. */
 Element ElementOf(DamageType type, bool spell);
 
 /** @brief Whether effects are drawn at all: POE2 Mashup, the Modern Effects option, and a screen to draw on. */

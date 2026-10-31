@@ -463,7 +463,7 @@ Monster *MonsterInFrontOf(const Player &player)
 
 vfx::Element LookOf(const TableSkillData &data)
 {
-	return vfx::ElementOf(data.type, (data.flags & TF_Spell) != 0);
+	return TableSkillLook(data);
 }
 
 // POE2 Mashup: the skills' sounds (see SkillSounds).
@@ -756,9 +756,12 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	if (missile == nullptr)
 		return nullptr;
 	SetMissileSkill(*missile, player, SkillSlot::ForAttack(data.skill));
-	// A granted bolt borrows a flare's look but keeps its own element.
-	if (IsGrantedTableSkill(data))
+	// A spell's bolt borrows a flare's look but keeps its own element, and a physical one looks like bone or blood.
+	if (spell) {
 		missile->poe2.damageType = static_cast<int8_t>(data.type);
+		if (data.type == DamageType::Physical)
+			missile->poe2.vfxElement = static_cast<int8_t>(LookOf(data));
+	}
 	// A per-target skill's projectiles hit each monster once a cast, the first in full (GrantedMissileTargetPercent).
 	if ((data.flags & TF_PerTarget) != 0)
 		missile->poe2.grantedCast = player.poe2.grantedState.castSerial;
@@ -1583,11 +1586,32 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		flash = MissileGraphicID::StoneCurseShatter;
 		break;
 	default:
-		if ((data.flags & TF_Spell) != 0 || data.shape == Curse)
+		// A physical spell flashes bone or blood (Blessed Hammer holy); curses keep their pale flash.
+		if ((data.flags & TF_Spell) != 0 && data.shape != Curse) {
+			switch (LookOf(data)) {
+			case vfx::Element::Blood:
+				flash = MissileGraphicID::BloodHit;
+				break;
+			case vfx::Element::Bone:
+				flash = MissileGraphicID::BoneHit;
+				break;
+			default:
+				flash = MissileGraphicID::HolyBoltExplosion;
+				break;
+			}
+		} else if ((data.flags & TF_Spell) != 0 || data.shape == Curse) {
 			flash = MissileGraphicID::HolyBoltExplosion;
+		}
 		break;
 	}
+	const size_t effectsBefore = Missiles.size();
 	AddVisualEffect(tile + dir, flash, 0, 3);
+	// Blood's sprite belongs to a monster and may not be loaded: the shatter, drawn as blood, stands in.
+	if (flash == MissileGraphicID::BloodHit && Missiles.size() == effectsBefore) {
+		AddVisualEffect(tile + dir, MissileGraphicID::BoneHit, 0, 3);
+		if (Missiles.size() > effectsBefore)
+			Missiles.back().poe2.vfxElement = static_cast<int8_t>(vfx::Element::Blood);
+	}
 	// POE2 Mashup: every skill is heard. An attack's swing, throw or shot sounds as it lands (a spell's incantation
 	// began with its animation, see BeginSkillAnimation), then the skill going off: a Stream's with each shot
 	// (FireTableShot), a corpse's blast only if it finds one, a zone that bursts later as it bursts.
@@ -1664,6 +1688,18 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	default:
 		break;
 	}
+}
+
+vfx::Element TableSkillLook(const TableSkillData &data)
+{
+	const bool spell = (data.flags & TF_Spell) != 0;
+	if (spell && data.type == DamageType::Physical) {
+		if (data.effect == MissileGraphicID::HolyBoltExplosion)
+			return vfx::Element::Holy;
+		if (data.effect == MissileGraphicID::BloodHit)
+			return vfx::Element::Blood;
+	}
+	return vfx::ElementOf(data.type, spell);
 }
 
 SkillSounds TableSkillSounds(const TableSkillData &data)

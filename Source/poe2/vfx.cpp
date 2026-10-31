@@ -96,6 +96,7 @@ Colours ColoursOf(Element element)
 	case Element::Holy: return { { 255, 250, 225 }, { 255, 210, 120 }, { 200, 140, 40 } };
 	case Element::Arcane: return { { 220, 220, 255 }, { 120, 140, 255 }, { 70, 50, 180 } };
 	case Element::Blood: return { { 255, 190, 180 }, { 220, 30, 30 }, { 90, 0, 0 } };
+	case Element::Bone: return { { 255, 252, 240 }, { 228, 216, 190 }, { 140, 124, 100 } };
 	}
 	return { { 255, 255, 255 }, { 200, 200, 200 }, { 100, 100, 100 } };
 }
@@ -851,6 +852,29 @@ void BloodImpact(Vec pos, float size, const Colours &c)
 	AddRing(pos, TileRadius * 0.6F * size, TileRadius * 0.9F * size, 3500, 0, { 70, 0, 0 }, 0.5F, true, true, true, 0.35F);
 }
 
+/** @brief Bone shattering: a dull pale flash, a ring of dust thrown out over the floor, bone chips, splinters and dust. */
+void BoneImpact(Vec pos, float size, const Colours &c)
+{
+	AddRing(pos + Vec { 0, -14 }, 0, 16 * size, 90, 0, c.core, 0.5F, true, false);
+	AddRing(pos, 0, TileRadius * 1.3F * size, 320, 10 * size, { 135, 120, 96 }, 0.5F, false, true, true);
+	Spray(pos, Scaled(14 * size), 70, 190 * size, 550, 950, Shape::Chunk, { 238, 230, 208 }, { 168, 152, 126 }, 2.6F, 2.2F, 140, 300, 800, 0.4F, 1);
+	Spray(pos, Scaled(12 * size), 15, 60, 700, 1300, Shape::Puff, { 150, 138, 118 }, { 95, 86, 72 }, 9 * size, 26 * size, 10, 40, 0, 0.8F, 0.4F);
+	Spray(pos, Scaled(6 * size), 120, 280, 120, 240, Shape::Shard, c.core, c.mid, 4, 1, 60, 180, 500, 1.F, 0.6F);
+}
+
+/** @brief The glow in cracks an element's slam or fissure tears open: embers for a plain blow, a dull dust for bone. */
+Rgb CrackGlow(Element element, const Colours &c)
+{
+	switch (element) {
+	case Element::Physical:
+		return { 255, 140, 50 };
+	case Element::Bone:
+		return { 150, 130, 100 };
+	default:
+		return c.mid;
+	}
+}
+
 /** @brief The world position of a missile's sprite centre. */
 Vec MissileCentre(const Missile &missile)
 {
@@ -957,6 +981,7 @@ void ImpactAt(Vec pos, Element element, float size)
 	case Element::Arcane: HolyImpact(pos, size, element == Element::Arcane ? ColoursOf(Element::Arcane) : c); break;
 	case Element::Blood: BloodImpact(pos, size, c); break;
 	case Element::Physical: PhysicalImpact(pos, size, c); break;
+	case Element::Bone: BoneImpact(pos, size, c); break;
 	}
 }
 
@@ -1075,6 +1100,7 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 	case Element::Cold: rate = 25; break;
 	case Element::Chaos: rate = 20; break;
 	case Element::Physical: rate = 0; break;
+	case Element::Bone: rate = 30; break;
 	default: rate = 15; break;
 	}
 	trail.emit += rate * Intensity() * ms / 1000.F;
@@ -1108,6 +1134,27 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 			p.size0 = 4;
 			p.size1 = 1;
 			p.c0 = c.core;
+			break;
+		case Element::Bone:
+			// A bone shard sheds dust and grit, not light: soft puffs and a few falling flecks.
+			if (NextRandom() % 3 != 0) {
+				p.shape = Shape::Puff;
+				p.vel = p.vel * 0.4F;
+				p.life = Random(450, 850);
+				p.size0 = 3;
+				p.size1 = 10;
+				p.c0 = { 175, 162, 138 };
+				p.c1 = { 110, 100, 84 };
+				p.alpha = 0.35F;
+			} else {
+				p.shape = Shape::Chunk;
+				p.z = Random(4, 14);
+				p.gravity = 300;
+				p.size0 = 1.4F;
+				p.size1 = 1.F;
+				p.c0 = c.mid;
+				p.c1 = c.edge;
+			}
 			break;
 		default:
 			p.size0 = 2.5F;
@@ -2452,7 +2499,8 @@ Element ElementOf(DamageType type, bool spell)
 	case DamageType::Lightning: return Element::Lightning;
 	case DamageType::Cold: return Element::Cold;
 	case DamageType::Chaos: return Element::Chaos;
-	case DamageType::Physical: return spell ? Element::Holy : Element::Physical;
+	// A physical spell is bone; the table skills give blood and holy spells their own look (TableSkillLook).
+	case DamageType::Physical: return spell ? Element::Bone : Element::Physical;
 	}
 	return Element::Physical;
 }
@@ -2737,7 +2785,10 @@ void Slam(Point tile, int radiusTiles, Element element)
 	AddRing(pos, 0, r * 1.25F, 420, 14, { 110, 95, 75 }, 0.45F, false, true, true);
 	Spray(pos, Scaled(18), 80, 240, 600, 1000, Shape::Chunk, { 75, 62, 48 }, { 40, 34, 28 }, 3.5F, 3, 150, 320, 800, 0.4F, 1);
 	Spray(pos, Scaled(14), 30, 110, 700, 1300, Shape::Puff, { 115, 100, 80 }, { 70, 60, 50 }, 10, 30, 10, 40, 0, 0.8F, 0.35F);
-	AddCracks(pos, r * 0.9F, 5 + static_cast<int>(NextRandom() % 4), element == Element::Physical ? Rgb { 255, 140, 50 } : c.mid, 3500);
+	AddCracks(pos, r * 0.9F, 5 + static_cast<int>(NextRandom() % 4), CrackGlow(element, c), 3500);
+	// Bone slams throw pale chips out of the cracks as well as the rock.
+	if (element == Element::Bone)
+		Spray(pos, Scaled(14), 60, 200, 600, 1000, Shape::Chunk, { 236, 228, 205 }, { 160, 146, 120 }, 2.5F, 2, 160, 320, 800, 0.4F, 1);
 }
 
 void Fissure(Point from, Point to, Element element)
@@ -2748,7 +2799,7 @@ void Fissure(Point from, Point to, Element element)
 	const Vec a = TileCentre(from);
 	const Vec b = TileCentre(to);
 	const Colours c = ColoursOf(element);
-	const Rgb glow = element == Element::Physical ? Rgb { 255, 140, 50 } : c.mid;
+	const Rgb glow = CrackGlow(element, c);
 	Crack crack;
 	crack.pos = a;
 	crack.life = 3500;
@@ -3333,7 +3384,10 @@ void ScanMissiles()
 			continue;
 		const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);
 		const SkillLook *styled = CurrentSkillLook();
-		const GraphicLook look = LookOf(missile._miAnimType);
+		GraphicLook look = LookOf(missile._miAnimType);
+		// A skill's bolt or burst on a borrowed graphic takes its skill's look: Bone Spear's and Bone Bolt's on a flare.
+		if (missile.poe2.vfxElement >= 0 && (look.projectile || look.burst > 0))
+			look.element = static_cast<Element>(missile.poe2.vfxElement);
 		if (missile._mitype == MissileID::VisualEffect && look.projectile) {
 			// A projectile's graphic standing still is a hit flash (steel on steel): sparks, not a flying glow.
 			// Once per missile, even if it blinks out of sight and back (else the flash repeats endlessly).
@@ -3410,6 +3464,10 @@ void ScanMissiles()
 		glow.alpha = (arrow ? 0.45F : (sparks ? 0.25F * crackle : (bolt ? 0.32F * crackle : 0.7F))) * std::min(scale, 1.F);
 		glow.disc = true;
 		glow.ground = false;
+		// Bone doesn't burn: only a faint pale light round the shard, no white-hot heart (DrawBoneShard draws its body).
+		const bool bone = look.element == Element::Bone;
+		if (bone)
+			glow.alpha *= 0.2F;
 		FrameGlows.push_back(glow);
 		if (trail.style == TrailStyle::Orb && !small) {
 			// The orb throbs.
@@ -3419,7 +3477,7 @@ void ScanMissiles()
 		}
 		if (!arrow) {
 			// A white-hot heart; a bolt has no ball at its head, only its crackling filament (see DrawLightningBolt).
-			if (!bolt) {
+			if (!bolt && !bone) {
 				glow.r0 = glow.r1 = 7 * scale;
 				glow.colour = c.core;
 				glow.alpha = 1;
@@ -3429,7 +3487,7 @@ void ScanMissiles()
 			glow.pos = MissileCentre(missile) + Vec { 0, missile._miAnimWidth / 2.F - 16 };
 			glow.r0 = glow.r1 = TileRadius * (sparks ? 0.9F : 1.6F);
 			glow.colour = c.mid;
-			glow.alpha = 0.22F * crackle;
+			glow.alpha = (bone ? 0.08F : 0.22F) * crackle;
 			glow.ground = true;
 			FrameGlows.push_back(glow);
 		}
@@ -4115,6 +4173,45 @@ void DrawSparkArcs()
 	}
 }
 
+/**
+ * @brief A bone projectile: a solid pale shaft with a sharp point and a knobbed butt, lit on one side, with only a faint
+ * sheen of light round it; its dust trail comes from EmitTrail. A small bolt is a short shard, a big one a spear.
+ */
+void DrawBoneShard(const Comet &comet)
+{
+	const Colours &c = comet.colours;
+	const float s = comet.scale;
+	const Vec dir = comet.dir;
+	const Vec side { -dir.y, dir.x };
+	const float length = (comet.small ? 26.F : 58.F) * s;
+	const float width = (comet.small ? 3.F : 5.F) * s;
+	const Vec tip = comet.head + dir * (12 * s);
+	const Vec neck = comet.head - dir * (length * 0.12F);
+	const Vec butt = comet.head - dir * length;
+	const float alpha = std::min(comet.brightness, 1.F);
+	const Rgb lit = Mix(c.core, { 255, 255, 255 }, 0.2F);
+	const Rgb shade = Mix(c.edge, { 60, 52, 40 }, 0.3F);
+	const auto tri = [&](Vec a, Rgb ca, Vec b, Rgb cb, Vec d, Rgb cd) {
+		Dark.tri(Dark.add(ToScreen(a), ca, alpha), Dark.add(ToScreen(b), cb, alpha), Dark.add(ToScreen(d), cd, alpha));
+	};
+	// The point, then the shaft narrowing a little to the butt; the lit half and the shadowed half.
+	tri(tip, lit, neck + side * width, lit, neck, c.mid);
+	tri(tip, c.mid, neck, c.mid, neck - side * width, shade);
+	tri(neck, c.mid, neck + side * width, lit, butt + side * (width * 0.6F), c.mid);
+	tri(neck, c.mid, butt + side * (width * 0.6F), c.mid, butt, c.mid);
+	tri(neck, c.mid, butt, c.mid, butt - side * (width * 0.6F), shade);
+	tri(neck, c.mid, butt - side * (width * 0.6F), shade, neck - side * width, shade);
+	// The knob of the joint at its butt.
+	if (!comet.small) {
+		const float knob = width * 1.15F;
+		tri(butt + side * knob, lit, butt - dir * (knob * 1.2F), c.mid, butt - side * knob, shade);
+		tri(butt + side * knob, lit, butt + dir * (knob * 0.6F), c.mid, butt - side * knob, shade);
+	}
+	// A dull sheen along its lit edge and a faint pale light round it, so it reads in the dark without glowing like fire.
+	SoftLine(Glowing, tip, butt + side * (width * 0.5F), 1.5F * s, lit, c.mid, 0.35F * alpha, 0.05F * alpha);
+	SoftLine(Glowing, comet.head, butt, width * 3.5F, c.mid, c.edge, 0.12F * alpha, 0);
+}
+
 /** @brief Projectile bodies: a white-hot head and a tail tapering back along the flight, shaped by the element. */
 void DrawComets()
 {
@@ -4153,6 +4250,9 @@ void DrawComets()
 			SoftDisc(Glowing, comet.head, 6 * s, c.core, 1, false);
 			break;
 		}
+		case Element::Bone:
+			DrawBoneShard(comet);
+			break;
 		default: {
 			// Fire and the rest: a flickering flame licking back from a white-hot head.
 			const float flicker = 0.85F + 0.3F * SeededRandom(seed);
