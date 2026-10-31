@@ -1186,6 +1186,41 @@ std::vector<std::string> AffixViewLines(std::string_view side, const std::vector
 	return lines;
 }
 
+namespace {
+
+/** @brief The gear stat of levels to the skills of a damage type: "+N to Level of all Fire Spell Skills" and the rest. */
+Poe2ItemStat TypeSkillLevelsStat(DamageType type)
+{
+	switch (type) {
+	case DamageType::Fire:
+		return Poe2ItemStat::FireSkillLevels;
+	case DamageType::Lightning:
+		return Poe2ItemStat::LightningSkillLevels;
+	case DamageType::Physical:
+		return Poe2ItemStat::PhysicalSkillLevels;
+	case DamageType::Chaos:
+		return Poe2ItemStat::ChaosSkillLevels;
+	default:
+		return Poe2ItemStat::ColdSkillLevels;
+	}
+}
+
+/** @brief The damage type a gem skill's tags name; physical when they name none. */
+DamageType TaggedDamageType(uint32_t tags)
+{
+	if ((tags & ST_Chaos) != 0)
+		return DamageType::Chaos;
+	if ((tags & ST_Fire) != 0)
+		return DamageType::Fire;
+	if ((tags & ST_Lightning) != 0)
+		return DamageType::Lightning;
+	if ((tags & ST_Frost) != 0)
+		return DamageType::Cold;
+	return DamageType::Physical;
+}
+
+} // namespace
+
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 {
 	const auto stat = [&data](Poe2ItemStat which) { return static_cast<int>(data.itemStats[static_cast<size_t>(which)]); };
@@ -1193,9 +1228,20 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 	const int lowLife = skill.kind != SkillKind::None && data.uniqueState.lowLife ? data.rule(UniqueRule::LowLifeSkillLevels) : 0;
 	switch (skill.kind) {
 	case SkillKind::Attack: {
-		int bonus = stat(IsRangedWeaponSkill(skill.attack()) ? Poe2ItemStat::ProjectileSkillLevels : Poe2ItemStat::MeleeSkillLevels);
-		// The chaos skills (Haunt, Locust Swarm and the chaos wand and staff skills) take the chaos levels.
-		if (const TableSkillData *table = FindTableSkill(skill.attack()); table != nullptr && table->type == DamageType::Chaos)
+		const uint32_t tags = SkillTags(skill);
+		// A gem or granted spell (Frost Bolt, Bone Bolt, Spark, the curses) takes the spell levels, and a damaging one
+		// those of the type its hits deal, as Diablo's spells do: a wand's "+1 to Level of all Physical Spell Skills"
+		// raises Bone Bolt and Reap, a staff's cold levels Freezing Shards.
+		if ((tags & ST_Spell) != 0) {
+			int bonus = stat(Poe2ItemStat::SpellSkillLevels);
+			if ((tags & ST_Damage) != 0)
+				bonus += stat(TypeSkillLevelsStat(TaggedDamageType(tags)));
+			return lowLife + bonus;
+		}
+		// An attack takes the projectile levels if it shoots or throws, else the melee levels.
+		int bonus = stat(IsRangedWeaponSkill(skill.attack()) || (tags & ST_Projectile) != 0 ? Poe2ItemStat::ProjectileSkillLevels : Poe2ItemStat::MeleeSkillLevels);
+		// A chaos attack takes the chaos levels too.
+		if ((tags & ST_Chaos) != 0)
 			bonus += stat(Poe2ItemStat::ChaosSkillLevels);
 		return lowLife + bonus;
 	}
@@ -1212,23 +1258,7 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 				type = DamageType::Fire;
 			else if (GetSpellData(spell).type() == MagicType::Lightning)
 				type = DamageType::Lightning;
-			switch (type) {
-			case DamageType::Fire:
-				bonus += stat(Poe2ItemStat::FireSkillLevels);
-				break;
-			case DamageType::Lightning:
-				bonus += stat(Poe2ItemStat::LightningSkillLevels);
-				break;
-			case DamageType::Physical:
-				bonus += stat(Poe2ItemStat::PhysicalSkillLevels);
-				break;
-			case DamageType::Chaos:
-				bonus += stat(Poe2ItemStat::ChaosSkillLevels);
-				break;
-			default:
-				bonus += stat(Poe2ItemStat::ColdSkillLevels);
-				break;
-			}
+			bonus += stat(TypeSkillLevelsStat(type));
 		}
 		return lowLife + bonus;
 	}
