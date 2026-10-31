@@ -304,8 +304,8 @@ TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 		EXPECT_EQ(data.curveEnd, 312) << data.name;
 		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
 	}
-	// 12, then Hex Rupture.
-	EXPECT_EQ(spells, 13);
+	// 12, then Hex Rupture and Bone Prison.
+	EXPECT_EQ(spells, 14);
 }
 
 TEST_F(Poe2TableSkillsTest, PulsingZonesHitOncePerInterval)

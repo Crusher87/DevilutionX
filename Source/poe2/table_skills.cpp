@@ -132,7 +132,7 @@ const TableSkillData Table[] = {
 	{ WS::LocustSwarm, "Locust Swarm", "A chaos plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 130, 0, 1, 40, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
 	{ WS::CorpseExplosion, "Corpse Explosion", "Blows up a corpse near the target, burning everything around it", 9, 10, TW::None, 1, CorpseBurst, 50, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::SoulHarvest, "Soul Harvest", "Takes the souls of nearby corpses: 3% more damage each, up to 10, for 10 seconds", 11, 10, TW::None, 1, SoulHarvest, Flat, 10, 4, 200, 0, 0, DT::Physical, MissileID::Null, MG::Resurrect, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Resurrect), TableCurve::Boneshatter, 100 },
-	{ WS::BonePrison, "Bone Prison", "Bones trap the enemies around the target for 3 seconds", 11, 10, TW::None, 1, Curse, Flat, 0, 1, 60, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell, TableZone::None, TableCurse::BonePrison, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Boneshatter, 100 },
+	{ WS::BonePrison, "Bone Prison", "Bone spikes burst up under the target, hurting the enemies there and trapping them for 3 seconds", 5, 10, TW::None, 1, Zone, 200, 0, 1, 60, 0, 3, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Pin, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	// Curses
 	{ WS::Weaken, "Weaken", "Curses enemies to hit 30% softer", 3, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Weaken, TableBuff::None, TT_Occult, Icon(SpellIcon::Mana), TableCurve::Boneshatter, 100 },
 	{ WS::IronMaiden, "Iron Maiden", "Curses enemies so their melee hits wound them as well", 5, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::IronMaiden, TableBuff::None, TT_Occult, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 100 },
@@ -623,8 +623,19 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 	// A delayed blast draws its rune circle on the ground while it charges.
 	if (data.zone == TableZone::Delayed)
 		vfx::Sigil(center, std::max<int>(data.radius, 1), delay * gnTickDelay, LookOf(data));
+	else if (data.zone == TableZone::IceSpike && (data.flags & TF_Pin) != 0)
+		vfx::BoneCage(center, delay * gnTickDelay, std::max<int>(data.radius, 1), data.duration * gnTickDelay);
 	else if (data.zone == TableZone::IceSpike)
 		vfx::IceSpike(center, delay * gnTickDelay, std::max<int>(data.radius, 1));
+}
+
+/** @brief Bone Prison: a non-unique survivor of its hit is trapped (heavily stunned, its buildup spent) for the ticks given. */
+void PinMonster(Monster &monster, int ticks)
+{
+	if (monster.hasNoLife() || monster.mode == MonsterMode::Death || monster.isUnique())
+		return;
+	monster.poe2.heavyStunTicks = static_cast<uint8_t>(std::clamp<int>(std::max<int>(ticks, monster.poe2.heavyStunTicks), 1, UINT8_MAX));
+	monster.poe2.stunBuildup = 0;
 }
 
 /** @brief A burst of a zone or a landing: hits everything within the radius. */
@@ -708,6 +719,8 @@ void ZoneBurst(const Player &player, const TableSkillData &data, Point center, i
 			OnGrantedKill(player, monster, data, hit);
 		if ((data.flags & TF_Stun) != 0 && !monster.hasNoLife())
 			HeavyStunMonster(monster);
+		if ((data.flags & TF_Pin) != 0)
+			PinMonster(monster, data.duration);
 	});
 }
 
@@ -881,12 +894,6 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 			state.confusedByCurse = true;
 		}
 		state.confuseTicks = ticks;
-		break;
-	case TableCurse::BonePrison:
-		if (!monster.isUnique()) {
-			state.heavyStunTicks = ticks;
-			state.stunBuildup = 0;
-		}
 		break;
 	case TableCurse::Haunt:
 		state.hauntTicks = ticks;
@@ -1764,7 +1771,8 @@ SkillSounds TableSkillSounds(const TableSkillData &data)
 			sounds.spell = Sfx(SfxID::BigExplosion);
 			break;
 		case TableZone::IceSpike:
-			sounds.spell = ModSound(GlacialSpikeSound);
+			// Bone Prison's cage grinds up out of the earth like stone.
+			sounds.spell = data.type == DamageType::Physical ? Sfx(SfxID::SpellStoneCurse) : ModSound(GlacialSpikeSound);
 			break;
 		case TableZone::ShardRing:
 			// The ring of shards bursts out like Frost Nova's, and each shard shatters as it lands.
@@ -1964,7 +1972,12 @@ void ProcessSkillZones(Player &player)
 		} else if (!done) {
 			// Landing bursts of projectiles, Delayed zones and a granted skill's echo go off once.
 			if ((data->flags & TF_LandingBurst) != 0 || IsAnyOf(data->zone, TableZone::Delayed, TableZone::IceSpike) || data->rider == GrantedRider::Echo) {
-				ZoneBurst(player, *data, zone.center, std::max(radius, 1), zone.damage);
+				// Bone Prison traps for its supported duration, which the zone kept while it waited.
+				TableSkillData burst = *data;
+				burst.duration = static_cast<uint16_t>(std::max<int>(zone.ticksLeft, 1));
+				ZoneBurst(player, burst, zone.center, std::max(radius, 1), zone.damage);
+				if ((data->flags & TF_Pin) != 0)
+					EffectRingAround(zone.center, std::max(radius, 1), data->effect, 1);
 				if (data->zone == TableZone::Delayed) {
 					PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
 					ShakeCamera(ShakeStrength::Medium, 6);

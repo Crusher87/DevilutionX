@@ -779,7 +779,7 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Azure Amulet	Amulet
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Locust Swarm Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Corpse Explosion Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Soul Harvest Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
-	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Prison Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Prison Gem	Gem	5	0	0	0	0	0	0	33	0		SKILLGEM_TABLE	Null	true	1100
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Weaken Gem	Gem	3	0	0	0	0	0	0	27	0		SKILLGEM_TABLE	Null	true	840
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Iron Maiden Gem	Gem	5	0	0	0	0	0	0	33	0		SKILLGEM_TABLE	Null	true	1100
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Decrepify Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360

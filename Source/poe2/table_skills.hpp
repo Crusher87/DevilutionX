@@ -174,6 +174,8 @@ enum TableFlag : uint32_t {
 	TF_Poison = 1 << 16,
 	/** A projectile's first hit bursts in its radius: every enemy there is poisoned, the others also hit (Plague Arrow). */
 	TF_PoisonBurst = 1 << 17,
+	/** Its hit traps the non-unique survivors (a heavy stun) for the skill's duration (Bone Prison). */
+	TF_Pin = 1 << 18,
 };
 
 /** @brief Plague Arrow's burst hits the enemies around the one the arrow struck for this share of the arrow, in percent. */

@@ -212,6 +212,8 @@ TEST_F(Poe2PhysicalSpellsTest, BoneEffectsSprayAndDieOut)
 	vfx::Impact({ 40, 40 }, vfx::Element::Bone, 1.2F);
 	vfx::Slam({ 42, 40 }, 2, vfx::Element::Bone);
 	vfx::Fissure({ 40, 42 }, { 45, 42 }, vfx::Element::Bone);
+	vfx::BoneSpikes({ 44, 44 }, 100, 1);
+	vfx::BoneCage({ 46, 46 }, 150, 1, 3000);
 	EXPECT_GT(vfx::ParticleCount(), 0U);
 	EXPECT_GT(vfx::ShapeCount(), 0U);
 	for (int i = 0; i < 200; i++)
@@ -220,6 +222,62 @@ TEST_F(Poe2PhysicalSpellsTest, BoneEffectsSprayAndDieOut)
 	EXPECT_EQ(vfx::ShapeCount(), 0U);
 	vfx::Clear();
 	HeadlessMode = true;
+}
+
+// Bone Prison (POE2's Bone Cage): the cage bursts up under the target a moment later, hits the enemies there and traps
+// the non-unique survivors for its duration.
+TEST_F(Poe2PhysicalSpellsTest, BonePrisonHitsAndTraps)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData &data = Row(WeaponSkill::BonePrison);
+	EXPECT_EQ(data.level, 5);
+	EXPECT_EQ(data.shape, TableShape::Zone);
+	EXPECT_EQ(data.zone, TableZone::IceSpike);
+	EXPECT_EQ(data.curse, TableCurse::None);
+	EXPECT_EQ(data.type, DamageType::Physical);
+	EXPECT_EQ(data.damagePercent, 200);
+	EXPECT_EQ(data.duration, 60);
+	EXPECT_NE(data.flags & TF_Pin, 0U);
+	const SkillSlot prison = SkillSlot::ForAttack(WeaponSkill::BonePrison);
+	EXPECT_NE(SkillTags(prison) & ST_Physical, 0U);
+	EXPECT_NE(SkillTags(prison) & ST_Damage, 0U);
+	EXPECT_NE(SkillTags(prison) & ST_Area, 0U);
+	EXPECT_EQ(SkillTags(prison) & ST_Curse, 0U);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, prison, 1));
+	EXPECT_EQ(SkillForGem(gem), prison);
+	// It drops from tier 5 now, with tier 5's Magic and price.
+	const auto row = std::find_if(AllItemsList.begin(), AllItemsList.end(), [](const ItemData &item) { return item.iName == std::string_view("Bone Prison Gem"); });
+	ASSERT_NE(row, AllItemsList.end());
+	EXPECT_EQ(row->iMinMLvl, 5);
+	EXPECT_EQ(row->iMinMag, 33);
+	EXPECT_EQ(row->iValue, 1100);
+
+	Supported(prison);
+	const Point target { 45, 45 };
+	Monster &inside = PlaceMonster(0, target);
+	Monster &beside = PlaceMonster(1, { 46, 45 });
+	Monster &outside = PlaceMonster(2, { 49, 45 });
+	Monster &boss = PlaceMonster(3, { 44, 45 });
+	boss.uniqueType = UniqueMonsterType::Garbud;
+	ExecuteTableSkill(player, data, target);
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	// Nothing until the bones come up.
+	ProcessSkillZones(player);
+	EXPECT_EQ(inside.hitPoints, inside.maxHitPoints);
+	for (int i = 0; i < 10 && SkillZoneCount() > 0; i++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 0U);
+	for (const Monster *monster : { &inside, &beside, &boss })
+		EXPECT_LT(monster->hitPoints, monster->maxHitPoints);
+	EXPECT_EQ(outside.hitPoints, outside.maxHitPoints);
+	EXPECT_EQ(inside.poe2.heavyStunTicks, 60);
+	EXPECT_EQ(beside.poe2.heavyStunTicks, 60);
+	EXPECT_EQ(inside.poe2.stunBuildup, 0);
+	// A unique only takes the damage.
+	EXPECT_EQ(boss.poe2.heavyStunTicks, 0);
+	EXPECT_EQ(outside.poe2.heavyStunTicks, 0);
 }
 
 } // namespace

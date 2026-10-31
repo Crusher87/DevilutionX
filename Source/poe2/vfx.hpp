@@ -74,6 +74,13 @@ void Sigil(Point tile, int radiusTiles, int durationMs, Element element);
  * stands a moment and shatters. Size 1 is one tile across.
  */
 void IceSpike(Point tile, int delayMs, float size);
+/** @brief A clump of curved bone spikes bursts out of the ground after the delay, stands a moment and crumbles (Bone Spikes). */
+void BoneSpikes(Point tile, int delayMs, float size);
+/**
+ * @brief A cage of ribs bursts up round a tile after the delay and hooks in over it, standing for the given time before it
+ * crumbles (Bone Prison). Size 1 is one tile across.
+ */
+void BoneCage(Point tile, int delayMs, float size, int standMs);
 /** @brief A heavy landing: flash, shockwave, dust, debris and glowing cracks. */
 void Slam(Point tile, int radiusTiles, Element element);
 /** @brief The ground splitting open from one tile to another. */

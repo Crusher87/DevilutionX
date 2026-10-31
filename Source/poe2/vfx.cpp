@@ -278,6 +278,8 @@ struct Crystal {
 	float width;
 	/** @brief How long after the eruption this crystal pushes up, in ms. */
 	float delay;
+	/** @brief How far its tip curls aside, growing with the square of the height: a bone spike's or a rib's curve. */
+	Vec curl {};
 };
 
 /** @brief A branch of frost growing over the ground from an ice spike, offsets from its foot; starts once growth reaches from. */
@@ -302,8 +304,18 @@ struct IceChunk {
 	bool landed = false;
 };
 
+/** @brief What bursts out of the ground: ice crystals, a cluster of bone spikes, or a cage of ribs (Bone Prison). */
+enum class SpikeKind : uint8_t {
+	Ice,
+	Bone,
+	Cage,
+};
+
 /** @brief Ice spikes bursting out of the ground: frost cracks while it waits, then the crystals, then the shatter. */
 struct IceSpikeFx {
+	SpikeKind kind = SpikeKind::Ice;
+	/** @brief How long the spikes stand before they break, in ms. */
+	float stand;
 	Vec pos;
 	float age = 0;
 	float life;
@@ -1197,8 +1209,8 @@ void Age(std::vector<T> &items, float ms)
 	std::erase_if(items, [](const T &item) { return item.age >= item.life; });
 }
 
-/** @brief A splinter of ice thrown off a crystal from a height above the ground. */
-void IceSplinter(Vec pos, float z, float speed, float vz, Rgb colour, float size, float life)
+/** @brief A splinter of ice (or bone) thrown off a crystal from a height above the ground. */
+void IceSplinter(Vec pos, float z, float speed, float vz, Rgb colour, float size, float life, Rgb fade = { 90, 150, 220 })
 {
 	const float angle = Random(0, 2 * Pi);
 	Particle p;
@@ -1212,7 +1224,7 @@ void IceSplinter(Vec pos, float z, float speed, float vz, Rgb colour, float size
 	p.size0 = size;
 	p.size1 = size * 0.4F;
 	p.c0 = colour;
-	p.c1 = { 90, 150, 220 };
+	p.c1 = fade;
 	p.shape = Shape::Shard;
 	AddParticle(p);
 }
@@ -1251,7 +1263,18 @@ void AdvanceIceSpikes(float ms)
 	const float dt = ms / 1000;
 	for (IceSpikeFx &fx : IceSpikes) {
 		fx.age += ms;
-		if (!fx.erupted && fx.age >= fx.wait) {
+		const bool bone = fx.kind != SpikeKind::Ice;
+		if (bone && !fx.erupted && fx.age >= fx.wait) {
+			// The ground heaves: a pale glint, a dark wave of dust, earth and ivory chips thrown up, a cloud of grit.
+			fx.erupted = true;
+			const float s = fx.size * (fx.kind == SpikeKind::Cage ? 1.3F : 1.F);
+			AddRing(fx.pos + Vec { 0, -30 * s }, 0, 22 * s, 110, 0, { 250, 244, 228 }, 0.45F, true, false);
+			AddRing(fx.pos, 0, TileRadius * 1.6F * s, 340, 10 * s, { 120, 104, 82 }, 0.5F, false, true, true);
+			Spray(fx.pos, Scaled(12 * s), 60, 180, 600, 1000, Shape::Chunk, { 70, 58, 44 }, { 36, 30, 24 }, 3, 2.5F, 160, 340, 900, 0.4F, 1);
+			Spray(fx.pos, Scaled(10 * s), 50, 170, 500, 900, Shape::Chunk, { 238, 230, 208 }, { 168, 152, 126 }, 2.4F, 2, 180, 360, 900, 0.4F, 1);
+			Spray(fx.pos, Scaled(8 * s), 15, 70, 800, 1400, Shape::Puff, { 150, 138, 118 }, { 95, 86, 72 }, 10 * s, 30 * s, 10, 40, 0, 0.8F, 0.4F);
+		}
+		if (!bone && !fx.erupted && fx.age >= fx.wait) {
 			// The ground bursts: a white flash, a soft wave of cold, earth thrown up, frost flakes and a breath of mist.
 			fx.erupted = true;
 			AddRing(fx.pos + Vec { 0, -45 * fx.size }, 0, 28 * fx.size, 120, 0, { 235, 248, 255 }, 0.7F, true, false);
@@ -1261,7 +1284,16 @@ void AdvanceIceSpikes(float ms)
 				FrostFlake(fx.pos, Random(5, 60) * fx.size, 18 * fx.size);
 			Spray(fx.pos, Scaled(2 * fx.size), 15, 40, 700, 1100, Shape::Puff, { 175, 208, 238 }, { 100, 130, 170 }, 8 * fx.size, 20 * fx.size, 10, 30, -5, 0.5F, 0.12F);
 		}
-		if (fx.erupted && !fx.shattered) {
+		if (bone && fx.erupted && !fx.shattered) {
+			// While it stands, grit trickles off the bone.
+			const float rate = 5 * fx.size * Intensity();
+			for (int i = static_cast<int>(rate * dt + Random(0, 1)); i > 0; i--) {
+				const Crystal &crystal = fx.crystals[NextRandom() % fx.crystals.size()];
+				const float up = Random(0.3F, 0.9F) * crystal.height;
+				Spray(fx.pos + crystal.base + crystal.lean * up + crystal.curl * 0.5F + Vec { 0, -up }, 1, 2, 12, 600, 1000, Shape::Puff, { 165, 150, 128 }, { 110, 98, 80 }, 3, 9, -10, 0, 60, 0.6F, 0.25F);
+			}
+		}
+		if (!bone && fx.erupted && !fx.shattered) {
 			// While it stands, flakes of frost drift up off it like embers off a torch.
 			const float rate = 26 * fx.size * Intensity();
 			for (int i = static_cast<int>(rate * dt + Random(0, 1)); i > 0; i--) {
@@ -1270,7 +1302,7 @@ void AdvanceIceSpikes(float ms)
 				FrostFlake(fx.pos + crystal.base + Vec { crystal.lean.x * up, crystal.lean.y * up }, up, crystal.width * 0.3F);
 			}
 		}
-		if (fx.erupted && !fx.shattered && fx.age >= fx.wait + IceSpikeStand) {
+		if (fx.erupted && !fx.shattered && fx.age >= fx.wait + fx.stand) {
 			// Each crystal breaks into a few big pieces that topple and fall, with a crunch of splinters and frost.
 			fx.shattered = true;
 			for (const Crystal &crystal : fx.crystals) {
@@ -1285,8 +1317,9 @@ void AdvanceIceSpikes(float ms)
 					const float y0 = crystal.height * j / pieces;
 					const float y1 = crystal.height * (j + 1) / pieces;
 					const float mid = (y0 + y1) / 2;
+					const float along = mid / std::max(crystal.height, 1.F);
 					IceChunk chunk;
-					chunk.pos = base + Vec { crystal.lean.x * mid, crystal.lean.y * mid };
+					chunk.pos = base + Vec { crystal.lean.x * mid, crystal.lean.y * mid } + crystal.curl * (along * along);
 					chunk.z = mid;
 					const float high = static_cast<float>(j + 1) / pieces;
 					const float speed = Random(40, 90) * (0.5F + high);
@@ -1303,14 +1336,27 @@ void AdvanceIceSpikes(float ms)
 				}
 				for (int i = 0; i < Scaled(crystal.height / 30); i++) {
 					const float up = Random(0, 1) * crystal.height;
-					IceSplinter(base + crystal.lean * up, up, Random(40, 140), Random(40, 200), cold.core, Random(3, 5), Random(300, 550));
+					if (bone)
+						IceSplinter(base + crystal.lean * up, up, Random(40, 140), Random(40, 200), { 240, 232, 212 }, Random(3, 5), Random(300, 550), { 150, 136, 112 });
+					else
+						IceSplinter(base + crystal.lean * up, up, Random(40, 140), Random(40, 200), cold.core, Random(3, 5), Random(300, 550));
+				}
+				if (bone) {
+					// Bone crumbles to grit rather than breaking clean.
+					if (crystal.height > 40 * fx.size)
+						Spray(base + Vec { 0, -crystal.height * 0.4F }, Scaled(2), 10, 40, 700, 1200, Shape::Puff, { 160, 148, 126 }, { 100, 90, 74 }, 10, 24, 0, 30, -5, 0.5F, 0.3F);
+					continue;
 				}
 				if (crystal.height > 70 * fx.size)
 					Spray(base + Vec { 0, -crystal.height * 0.4F }, Scaled(2), 10, 40, 700, 1200, Shape::Puff, { 190, 220, 245 }, { 110, 140, 180 }, 10, 24, 0, 30, -5, 0.5F, 0.2F);
 			}
-			for (int i = 0; i < Scaled(20 * fx.size); i++)
-				FrostFlake(fx.pos, Random(5, 90) * fx.size, 20 * fx.size);
-			AddRing(fx.pos + Vec { 0, -40 * fx.size }, 0, 36 * fx.size, 120, 0, cold.mid, 0.55F, true, false);
+			if (bone) {
+				AddRing(fx.pos, 0, TileRadius * 1.3F * fx.size, 300, 8 * fx.size, { 120, 104, 82 }, 0.4F, false, true, true);
+			} else {
+				for (int i = 0; i < Scaled(20 * fx.size); i++)
+					FrostFlake(fx.pos, Random(5, 90) * fx.size, 20 * fx.size);
+				AddRing(fx.pos + Vec { 0, -40 * fx.size }, 0, 36 * fx.size, 120, 0, cold.mid, 0.55F, true, false);
+			}
 		}
 		for (IceChunk &chunk : fx.chunks) {
 			chunk.age += ms;
@@ -1325,7 +1371,7 @@ void AdvanceIceSpikes(float ms)
 				chunk.vz = chunk.landed ? 0 : -chunk.vz * 0.22F;
 				chunk.vel = chunk.vel * (chunk.landed ? 0.85F : 0.4F);
 				chunk.spin *= 0.4F;
-				if (!chunk.landed && chunk.height > 12)
+				if (!chunk.landed && chunk.height > 12 && !bone)
 					for (int i = 0; i < 3; i++)
 						FrostFlake(chunk.pos, 2, chunk.wb * 0.5F);
 				chunk.landed = true;
@@ -2708,38 +2754,12 @@ void Sigil(Point tile, int radiusTiles, int durationMs, Element element)
 	Sigils.push_back(sigil);
 }
 
-void IceSpike(Point tile, int delayMs, float size)
+/**
+ * @brief Frost grows over the ground from a spike's foot like frost on a window: branches with feathered twigs off them.
+ * Bone draws the same lines as cracks in the earth.
+ */
+void GrowFrost(IceSpikeFx &fx, float size)
 {
-	TelemetryEffect("vfx", "IceSpike", tile.x, tile.y);
-	if (!Enabled())
-		return;
-	if (const SkillLook *look = CurrentSkillLook(); look != nullptr)
-		size *= look->size;
-	IceSpikeFx fx;
-	fx.pos = TileCentre(tile);
-	fx.wait = static_cast<float>(std::max(delayMs, 0));
-	fx.size = size;
-	fx.life = fx.wait + IceSpikeStand + IceSpikeShatter + IceSpikeFrost;
-	// Like a cluster of grim pillars: one great pillar in the middle, a tight crown of much smaller ones packed round its
-	// foot leaning a little out, and a few small shards at the edge.
-	fx.crystals.push_back({ { Random(-2, 2), Random(-1, 1) }, { Random(-0.05F, 0.05F), 0 }, Random(120, 136) * size, 24 * size, 0 });
-	const int crown = 8 + static_cast<int>(NextRandom() % 3);
-	for (int i = 0; i < crown; i++) {
-		const float angle = (2 * Pi * i) / crown + Random(-0.2F, 0.2F);
-		const float out = Random(10, 17) * size;
-		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
-		const float lean = Random(0.15F, 0.35F);
-		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(24, 48) * size, Random(9, 13) * size, Random(5, 30) });
-	}
-	const int edge = 6 + static_cast<int>(NextRandom() % 3);
-	for (int i = 0; i < edge; i++) {
-		const float angle = (2 * Pi * i) / edge + Random(-0.35F, 0.35F);
-		const float out = Random(20, 29) * size;
-		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
-		const float lean = Random(0.4F, 0.65F);
-		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(10, 20) * size, Random(5, 8) * size, Random(20, 45) });
-	}
-	// Frost grows over the ground from its foot like frost on a window: branches with feathered twigs off them.
 	const int branches = 9 + static_cast<int>(NextRandom() % 3);
 	for (int i = 0; i < branches; i++) {
 		float angle = (2 * Pi * i) / branches + Random(-0.2F, 0.2F);
@@ -2762,6 +2782,41 @@ void IceSpike(Point tile, int delayMs, float size)
 		}
 		fx.frost.push_back(std::move(branch));
 	}
+}
+
+void IceSpike(Point tile, int delayMs, float size)
+{
+	TelemetryEffect("vfx", "IceSpike", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr)
+		size *= look->size;
+	IceSpikeFx fx;
+	fx.pos = TileCentre(tile);
+	fx.wait = static_cast<float>(std::max(delayMs, 0));
+	fx.size = size;
+	fx.stand = IceSpikeStand;
+	fx.life = fx.wait + IceSpikeStand + IceSpikeShatter + IceSpikeFrost;
+	// Like a cluster of grim pillars: one great pillar in the middle, a tight crown of much smaller ones packed round its
+	// foot leaning a little out, and a few small shards at the edge.
+	fx.crystals.push_back({ { Random(-2, 2), Random(-1, 1) }, { Random(-0.05F, 0.05F), 0 }, Random(120, 136) * size, 24 * size, 0 });
+	const int crown = 8 + static_cast<int>(NextRandom() % 3);
+	for (int i = 0; i < crown; i++) {
+		const float angle = (2 * Pi * i) / crown + Random(-0.2F, 0.2F);
+		const float out = Random(10, 17) * size;
+		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
+		const float lean = Random(0.15F, 0.35F);
+		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(24, 48) * size, Random(9, 13) * size, Random(5, 30) });
+	}
+	const int edge = 6 + static_cast<int>(NextRandom() % 3);
+	for (int i = 0; i < edge; i++) {
+		const float angle = (2 * Pi * i) / edge + Random(-0.35F, 0.35F);
+		const float out = Random(20, 29) * size;
+		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
+		const float lean = Random(0.4F, 0.65F);
+		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(10, 20) * size, Random(5, 8) * size, Random(20, 45) });
+	}
+	GrowFrost(fx, size);
 	// Draw the ones at the back first.
 	std::sort(fx.crystals.begin(), fx.crystals.end(), [](const Crystal &a, const Crystal &b) { return a.base.y < b.base.y; });
 	IceSpikes.push_back(std::move(fx));
@@ -2770,6 +2825,87 @@ void IceSpike(Point tile, int delayMs, float size)
 	const Colours c = ColoursOf(Element::Cold);
 	AddRing(pos, TileRadius * 1.2F * size, TileRadius * 0.2F * size, std::max(delayMs, 100) + 60.F, 0, c.mid, 0.35F, true, true);
 	Spray(pos, Scaled(4 * size), 5, 30, 600, 1000, Shape::Puff, { 160, 200, 235 }, { 100, 130, 170 }, 8, 20, 0, 20, -5, 0.5F, 0.2F);
+}
+
+/** @brief How long bone spikes stand before they crumble, how long a cage stands at least, and how long their cracks linger, in ms. */
+constexpr float BoneSpikeStand = 420;
+constexpr float BoneCageMinStand = 300;
+constexpr float BoneLinger = 900;
+
+/** @brief A bone spike cluster or cage, filled in by the caller: sorted back to front and its ground cracks grown. */
+void AddBoneSpikes(IceSpikeFx fx, int delayMs)
+{
+	GrowFrost(fx, fx.size * 0.8F);
+	std::sort(fx.crystals.begin(), fx.crystals.end(), [](const Crystal &a, const Crystal &b) { return a.base.y < b.base.y; });
+	IceSpikes.push_back(std::move(fx));
+	// While it waits, the ground darkens and a little grit rises.
+	const Vec pos = IceSpikes.back().pos;
+	const float size = IceSpikes.back().size;
+	AddRing(pos, TileRadius * 1.1F * size, TileRadius * 0.2F * size, std::max(delayMs, 100) + 60.F, 0, { 95, 82, 64 }, 0.35F, true, true, true);
+	Spray(pos, Scaled(3 * size), 5, 30, 600, 1000, Shape::Puff, { 150, 138, 118 }, { 95, 86, 72 }, 6, 16, 0, 20, -5, 0.5F, 0.25F);
+}
+
+void BoneSpikes(Point tile, int delayMs, float size)
+{
+	TelemetryEffect("vfx", "BoneSpikes", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr)
+		size *= look->size;
+	IceSpikeFx fx;
+	fx.kind = SpikeKind::Bone;
+	fx.pos = TileCentre(tile);
+	fx.wait = static_cast<float>(std::max(delayMs, 0));
+	fx.size = size;
+	fx.stand = BoneSpikeStand;
+	fx.life = fx.wait + fx.stand + IceSpikeShatter + BoneLinger;
+	// A jagged clump of curved spikes like tusks: two big ones hooking apart, and smaller ones splayed round them.
+	const float hook = Random(0, 1) < 0.5F ? -1.F : 1.F;
+	fx.crystals.push_back({ { Random(-4, 0) * size, Random(-1, 1) }, { -0.08F * hook, 0 }, Random(64, 78) * size, 15 * size, 0, { -16 * hook * size, 0 } });
+	fx.crystals.push_back({ { Random(2, 6) * size, Random(-1, 2) }, { 0.12F * hook, 0 }, Random(46, 58) * size, 12 * size, Random(10, 25), { 14 * hook * size, 0 } });
+	const int around = 4 + static_cast<int>(NextRandom() % 3);
+	for (int i = 0; i < around; i++) {
+		const float angle = (2 * Pi * i) / around + Random(-0.4F, 0.4F);
+		const float out = Random(12, 22) * size;
+		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
+		const float lean = Random(0.25F, 0.5F);
+		fx.crystals.push_back({ dir * out, { dir.x * lean, dir.y * lean * 0.6F }, Random(18, 34) * size, Random(6, 9) * size, Random(15, 50), dir * (Random(4, 10) * size) });
+	}
+	AddBoneSpikes(std::move(fx), delayMs);
+}
+
+void BoneCage(Point tile, int delayMs, float size, int standMs)
+{
+	TelemetryEffect("vfx", "BoneCage", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	if (const SkillLook *look = CurrentSkillLook(); look != nullptr)
+		size *= look->size;
+	IceSpikeFx fx;
+	fx.kind = SpikeKind::Cage;
+	fx.pos = TileCentre(tile);
+	fx.wait = static_cast<float>(std::max(delayMs, 0));
+	fx.size = size;
+	fx.stand = std::max(static_cast<float>(standMs), BoneCageMinStand);
+	fx.life = fx.wait + fx.stand + IceSpikeShatter + BoneLinger;
+	// A ring of ribs bursts up round the trapped and hooks in over them, rising one after another round the ring.
+	const float ring = TileRadius * 0.95F * size;
+	const int ribs = 10;
+	const float start = Random(0, 2 * Pi);
+	for (int i = 0; i < ribs; i++) {
+		const float angle = start + (2 * Pi * i) / ribs + Random(-0.12F, 0.12F);
+		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
+		fx.crystals.push_back({ dir * ring, { -dir.x * 0.1F, -dir.y * 0.06F }, Random(78, 96) * size, Random(10, 13) * size, static_cast<float>(i * 14) + Random(0, 10), dir * (-ring * 0.72F) });
+	}
+	// Broken shards jut out round its foot.
+	const int shards = 6 + static_cast<int>(NextRandom() % 3);
+	for (int i = 0; i < shards; i++) {
+		const float angle = (2 * Pi * i) / shards + Random(-0.3F, 0.3F);
+		const Vec dir { std::cos(angle), std::sin(angle) * 0.5F };
+		const float lean = Random(0.4F, 0.7F);
+		fx.crystals.push_back({ dir * (ring * Random(1.2F, 1.45F)), { dir.x * lean, dir.y * lean * 0.6F }, Random(14, 26) * size, Random(5, 8) * size, Random(30, 120), dir * (Random(3, 8) * size) });
+	}
+	AddBoneSpikes(std::move(fx), delayMs);
 }
 
 void Slam(Point tile, int radiusTiles, Element element)
@@ -4402,9 +4538,10 @@ void DrawIceChunks(const IceSpikeFx &fx)
 		const Vec tl = at(-chunk.wt / 2, h);
 		const Vec tm = at(chunk.wt * 0.05F, h + (chunk.wt > 0.5F ? -chunk.wt * 0.12F : 0));
 		const Vec tr = at(chunk.wt / 2, h);
-		const Rgb shadow { 30, 75, 135 };
-		const Rgb face { 80, 150, 215 };
-		const Rgb lit { 175, 220, 250 };
+		const bool bone = fx.kind != SpikeKind::Ice;
+		const Rgb shadow = bone ? Rgb { 112, 96, 74 } : Rgb { 30, 75, 135 };
+		const Rgb face = bone ? Rgb { 196, 182, 152 } : Rgb { 80, 150, 215 };
+		const Rgb lit = bone ? Rgb { 238, 230, 210 } : Rgb { 175, 220, 250 };
 		const auto quad = [&](Vec a, Vec b, Vec d, Vec e, Rgb ca, Rgb cb) {
 			const int va = Dark.add(ToScreen(a), ca, 0.85F * alpha);
 			const int vb = Dark.add(ToScreen(b), cb, 0.85F * alpha);
@@ -4415,6 +4552,8 @@ void DrawIceChunks(const IceSpikeFx &fx)
 		};
 		quad(bl, bm, tm, tl, shadow, face);
 		quad(bm, br, tr, tm, face, lit);
+		if (bone)
+			continue;
 		// Light along its edges, and a bright fresh break where it snapped off.
 		SoftLine(Glowing, bm, tm, 1.4F, lit, lit, 0.3F * alpha, 0.45F * alpha);
 		SoftLine(Glowing, br, tr, 1.6F, lit, { 255, 255, 255 }, 0.35F * alpha, 0.55F * alpha);
@@ -4424,6 +4563,65 @@ void DrawIceChunks(const IceSpikeFx &fx)
 	}
 }
 
+/** @brief A spike of bone: a curved, tapering horn with a knuckle near its foot, ivory on its lit side and dun in the shade. */
+void DrawBoneSpike(const IceSpikeFx &fx, const Crystal &crystal, float t)
+{
+	const float local = t - crystal.delay;
+	if (local <= 0)
+		return;
+	// Bone grinds up a little slower than ice punches up, and overshoots less.
+	const float rise = std::min(EaseOutBack(local / (IceSpikeRise * 1.6F)), 1.08F);
+	const float h = crystal.height * rise;
+	const Vec base = fx.pos + crystal.base;
+	const Vec up = crystal.lean + Vec { 0, -1 };
+	const float fresh = std::max(0.F, 1 - local / 260.F);
+	constexpr int Steps = 6;
+	std::array<Vec, Steps + 1> spine;
+	std::array<float, Steps + 1> half;
+	for (int k = 0; k <= Steps; k++) {
+		const float f = static_cast<float>(k) / Steps;
+		spine[k] = base + up * (h * f) + crystal.curl * (f * f * rise);
+		half[k] = crystal.width * 0.5F * (1 - f) * (k == 1 ? 1.12F : 1.F);
+	}
+	const Rgb shade { 112, 96, 74 };
+	const Rgb face { 204, 191, 162 };
+	const Rgb lit = Mix({ 242, 235, 216 }, { 255, 252, 244 }, fresh);
+	// Earth heaped at its foot.
+	SoftDisc(GroundDark, base, crystal.width * 0.9F, { 46, 37, 28 }, 0.5F, true);
+	std::array<Vec, Steps + 1> left;
+	std::array<Vec, Steps + 1> right;
+	for (int k = 0; k <= Steps; k++) {
+		Vec along = spine[std::min(k + 1, Steps)] - spine[std::max(k - 1, 0)];
+		const float length = std::max(Length(along), 0.01F);
+		along = along * (1 / length);
+		const Vec side { -along.y, along.x };
+		left[k] = spine[k] - side * half[k];
+		right[k] = spine[k] + side * half[k];
+	}
+	const auto vertex = [](Vec p, Rgb colour) { return Dark.add(ToScreen(p), colour, 0.95F); };
+	for (int k = 0; k < Steps; k++) {
+		// The foot is darker with earth, the point pale.
+		const float f = static_cast<float>(k) / Steps;
+		const Rgb dirt = Mix({ 70, 58, 44 }, shade, std::min(1.F, f * 3));
+		const int sl0 = vertex(left[k], Mix(dirt, shade, 0.5F));
+		const int sm0 = vertex(spine[k], Mix(dirt, face, std::min(1.F, f * 3)));
+		const int sl1 = vertex(left[k + 1], shade);
+		const int sm1 = vertex(spine[k + 1], face);
+		Dark.tri(sl0, sm0, sm1);
+		Dark.tri(sl0, sm1, sl1);
+		const int rm0 = vertex(spine[k], Mix(dirt, face, std::min(1.F, f * 3)));
+		const int rr0 = vertex(right[k], Mix(dirt, lit, std::min(1.F, f * 3)));
+		const int rm1 = vertex(spine[k + 1], face);
+		const int rr1 = vertex(right[k + 1], lit);
+		Dark.tri(rm0, rr0, rr1);
+		Dark.tri(rm0, rr1, rm1);
+	}
+	// A dull sheen down its lit side and a glint on the point while it's fresh.
+	SoftLine(Glowing, right[1], right[Steps - 1], 1.4F, lit, lit, 0.08F, 0.2F + 0.2F * fresh);
+	if (fresh > 0)
+		SoftDisc(Glowing, spine[Steps], 2 + fresh * 5, { 255, 250, 235 }, 0.35F * fresh, false);
+}
+
 void DrawIceSpikes()
 {
 	const Colours cold = ColoursOf(Element::Cold);
@@ -4431,6 +4629,32 @@ void DrawIceSpikes()
 		if (!fx.erupted)
 			continue;
 		const float t = fx.age - fx.wait;
+		if (fx.kind != SpikeKind::Ice) {
+			// The earth is torn open in dark cracks round it, which fade once the bone has crumbled.
+			const float fade = 1 - std::clamp((t - fx.stand) / BoneLinger, 0.F, 1.F);
+			const float grown = EaseOut(t / 200.F);
+			SoftDisc(GroundDark, fx.pos, TileRadius * (fx.kind == SpikeKind::Cage ? 1.25F : 0.8F) * fx.size * (0.4F + 0.6F * grown), { 52, 42, 32 }, 0.4F * fade, true);
+			for (const FrostLine &line : fx.frost) {
+				const float shown = std::clamp((grown - line.from) / std::max(0.25F, 1 - line.from), 0.F, 1.F);
+				if (shown <= 0)
+					continue;
+				const float span = shown * static_cast<float>(line.points.size() - 1);
+				for (size_t s = 0; s + 1 < line.points.size() && static_cast<float>(s) < span; s++) {
+					const float f = std::min(1.F, span - static_cast<float>(s));
+					const float taper = 1 - static_cast<float>(s) / static_cast<float>(line.points.size());
+					const Vec w0 = fx.pos + line.points[s];
+					const Vec w1 = fx.pos + line.points[s] + (line.points[s + 1] - line.points[s]) * f;
+					const float width = (line.points.size() == 2 ? 1.F : 2.2F) * (0.5F + 0.5F * taper);
+					SoftLine(GroundDark, w0, w1, width, { 34, 27, 20 }, { 34, 27, 20 }, 0.6F * fade, 0.45F * fade);
+				}
+			}
+			DrawIceChunks(fx);
+			if (!fx.shattered) {
+				for (const Crystal &crystal : fx.crystals)
+					DrawBoneSpike(fx, crystal, t);
+			}
+			continue;
+		}
 
 		// Rime whitens the ground and frost grows out over it in feathered branches, glinting, then melts away.
 		const float frost = (1 - std::clamp((t - IceSpikeStand) / IceSpikeFrost, 0.F, 1.F));
