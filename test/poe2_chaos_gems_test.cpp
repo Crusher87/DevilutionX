@@ -340,6 +340,62 @@ TEST_F(Poe2ChaosGemsTest, SalvationLeavesChaosAlone)
 	EXPECT_EQ(player.poe2.chaosResistance, 0);
 }
 
+// Plague Arrow (POE2's Poisonburst Arrow): the arrow's first hit bursts, poisoning the pack around it.
+TEST_F(Poe2ChaosGemsTest, PlagueArrowBurstPoisonsThePack)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData *data = FindTableSkill(WeaponSkill::PlagueArrow);
+	ASSERT_NE(data, nullptr);
+	EXPECT_EQ(data->name, "Plague Arrow");
+	EXPECT_EQ(data->weapon, TableWeapon::Bow);
+	EXPECT_EQ(data->level, 1);
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::PlagueArrow));
+	EXPECT_FALSE(IsGrantedTableSkill(*data));
+	EXPECT_TRUE(IsTableAreaSkill(*data));
+	const SkillSlot arrow = SkillSlot::ForAttack(WeaponSkill::PlagueArrow);
+	EXPECT_NE(SkillTags(arrow) & ST_Projectile, 0U);
+	EXPECT_NE(SkillTags(arrow) & ST_DamageOverTime, 0U);
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::TwinFangs, arrow));
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, arrow, 1));
+	EXPECT_EQ(SkillForGem(gem), arrow);
+
+	// Three packed monsters and one beyond the burst.
+	Supported(arrow);
+	Monster &struck = PlaceMonster(0, { 45, 45 });
+	Monster &beside = PlaceMonster(1, { 46, 45 });
+	Monster &below = PlaceMonster(2, { 45, 46 });
+	Monster &far = PlaceMonster(3, { 49, 45 });
+	Missile missile {};
+	SetMissileSkill(missile, player, arrow);
+	{
+		const SupportHitScope scope(player, arrow);
+		OnTableMissileHit(missile, player, struck, 40, false);
+	}
+	for (const Monster *monster : { &struck, &beside, &below }) {
+		EXPECT_EQ(monster->poe2.poisonTicks, PoisonTicks);
+		EXPECT_GT(monster->poe2.poisonDamagePerTick, 0);
+		EXPECT_EQ(monster->poe2.poisonDamagePerTick, struck.poe2.poisonDamagePerTick);
+	}
+	EXPECT_EQ(far.poe2.poisonTicks, 0);
+	// The burst hits the others, not the one the arrow already struck.
+	EXPECT_EQ(struck.hitPoints, struck.maxHitPoints);
+	EXPECT_LT(beside.hitPoints, beside.maxHitPoints);
+	EXPECT_LT(below.hitPoints, below.maxHitPoints);
+	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
+
+	// Other arrows don't burst.
+	ClearMonsters();
+	Monster &plain = PlaceMonster(0, { 45, 45 });
+	Monster &next = PlaceMonster(1, { 46, 45 });
+	Missile fire {};
+	SetMissileSkill(fire, player, SkillSlot::ForAttack(WeaponSkill::Multishot));
+	OnTableMissileHit(fire, player, plain, 40, false);
+	EXPECT_EQ(plain.poe2.poisonTicks, 0);
+	EXPECT_EQ(next.hitPoints, next.maxHitPoints);
+}
+
 // The supports' items exist, appended after the others, and are cut from uncut support gems.
 TEST_F(Poe2ChaosGemsTest, ChaosSupportsHaveItems)
 {

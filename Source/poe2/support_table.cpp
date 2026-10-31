@@ -1103,7 +1103,7 @@ uint32_t SkillTags(SkillSlot skill)
 		}
 		if ((table->flags & TF_Elements) != 0)
 			tags |= ST_Elemental;
-		if ((table->flags & (TF_Bleed | TF_Poison)) != 0 || table->shape == TableShape::Curse)
+		if ((table->flags & (TF_Bleed | TF_Poison | TF_PoisonBurst)) != 0 || table->shape == TableShape::Curse)
 			tags |= ST_DamageOverTime;
 	}
 	return tags;

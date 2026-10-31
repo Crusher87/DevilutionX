@@ -163,7 +163,9 @@ enum class WeaponSkill : uint8_t {
 	TwinBolts,
 	/** Gem skills appended after the granted ones (saved by value, so only ever appended). */
 	Despair,
-	Last = Despair,
+	/** Chaos gems addendum G4: POE2's Poisonburst Arrow. */
+	PlagueArrow,
+	Last = PlagueArrow,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
