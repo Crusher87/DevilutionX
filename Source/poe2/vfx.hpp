@@ -83,6 +83,11 @@ void BoneSpikes(Point tile, int delayMs, float size);
 void BoneCage(Point tile, int delayMs, float size, int standMs);
 /** @brief A heavy landing: flash, shockwave, dust, debris and glowing cracks. */
 void Slam(Point tile, int radiusTiles, Element element);
+/**
+ * @brief A heavy nova rolling out over the floor to the radius: a dark wave with a bright lip, droplets or chips flung
+ * outward, mist, and a stain left behind (Blood Nova).
+ */
+void Nova(Point tile, int radiusTiles, Element element);
 /** @brief The ground splitting open from one tile to another. */
 void Fissure(Point from, Point to, Element element);
 /** @brief An explosion of the element's particles; size 1 is a normal hit. */

@@ -175,6 +175,7 @@ const TableSkillData Table[] = {
 	{ WS::HexRupture, "Hex Rupture", "Bursts the curses half run out on enemies around the target", 11, 12, TW::None, 1, HexBurst, 160, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a line ahead of you, staggering what they hit", 3, 8, TW::None, 1, Line, 107, 5, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	{ WS::BoneSpear, "Bone Spear", "A heavy spear of bone that flies through every enemy in its path and builds up twice the stun", 7, 12, TW::None, 1, Projectiles, 180, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
+	{ WS::BloodNova, "Blood Nova", "A ring of blood bursts out around you and leaves enemies bleeding; costs 5% of your life", 9, 10, TW::None, 1, Around, 120, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_LifeCost | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 };
 // clang-format on
 
@@ -1644,14 +1645,7 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		}
 		break;
 	}
-	const size_t effectsBefore = Missiles.size();
 	AddVisualEffect(tile + dir, flash, 0, 3);
-	// Blood's sprite belongs to a monster and may not be loaded: the shatter, drawn as blood, stands in.
-	if (flash == MissileGraphicID::BloodHit && Missiles.size() == effectsBefore) {
-		AddVisualEffect(tile + dir, MissileGraphicID::BoneHit, 0, 3);
-		if (Missiles.size() > effectsBefore)
-			Missiles.back().poe2.vfxElement = static_cast<int8_t>(vfx::Element::Blood);
-	}
 	// POE2 Mashup: every skill is heard. An attack's swing, throw or shot sounds as it lands (a spell's incantation
 	// began with its animation, see BeginSkillAnimation), then the skill going off: a Stream's with each shot
 	// (FireTableShot), a corpse's blast only if it finds one, a zone that bursts later as it bursts.
@@ -1694,6 +1688,22 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		EffectRingAround(tile, 1, data.effect, 0);
 		if (data.radius > 1)
 			EffectRingAround(tile, data.radius, data.effect, 3);
+		if ((data.flags & TF_Spell) != 0 && data.type == DamageType::Physical) {
+			// A physical nova has weight: blood rolls out in a wave, bone bursts up in a ring, and the screen shakes.
+			const vfx::Element look = LookOf(data);
+			const int radius = std::max<int>(data.radius, 1);
+			vfx::Impact(tile, look, 1.5F);
+			if (look == vfx::Element::Blood) {
+				vfx::Nova(tile, radius, look);
+			} else {
+				vfx::Slam(tile, radius, look);
+				for (int i = 0; i < 8; i++)
+					vfx::BoneSpikes(tile + Displacement { static_cast<Direction>(i) } * radius, 40 + 15 * i, 0.5F);
+			}
+			if (mine)
+				ShakeCamera(ShakeStrength::Medium, 5);
+			break;
+		}
 		if ((data.flags & TF_Spell) != 0)
 			vfx::Impact(tile, LookOf(data), 1.2F);
 		else

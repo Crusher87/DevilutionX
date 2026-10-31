@@ -2525,6 +2525,7 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	TelemetryEffect("visual", magic_enum::enum_name(graphic), tile.x, tile.y);
 	// A bone hit borrows the stone curse's shatter, and the effects draw it as bone, not stone dust.
 	const bool bone = graphic == MissileGraphicID::BoneHit;
+	const bool blood = graphic == MissileGraphicID::BloodHit;
 	// Some graphic ids have no sprite file of their own (Diablo drew hits from monster art), so they borrow a look-alike.
 	switch (graphic) {
 	case MissileGraphicID::MetalHit:
@@ -2532,6 +2533,9 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 		break;
 	case MissileGraphicID::BloodHit:
 		graphic = MissileGraphicID::BloodStarRedExplosion;
+		// That sprite comes with the succubi: without them, Blood Star's own burst stands in (drawn as blood).
+		if (HasMissileSpriteData(graphic) && !GetMissileSpriteData(graphic).sprites)
+			graphic = MissileGraphicID::BloodStarExplosion;
 		break;
 	case MissileGraphicID::BoneHit:
 		graphic = MissileGraphicID::StoneCurseShatter;
@@ -2551,6 +2555,8 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	Missile *effect = AddMissile(tile, tile, dir, MissileID::VisualEffect, TARGET_MONSTERS, -1, light, static_cast<int>(graphic) | (delay << 8));
 	if (effect != nullptr && bone)
 		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Bone);
+	if (effect != nullptr && blood)
+		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Blood);
 }
 
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter)

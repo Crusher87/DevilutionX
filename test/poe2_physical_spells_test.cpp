@@ -377,5 +377,53 @@ TEST_F(Poe2PhysicalSpellsTest, BoneSpearRunsThroughEveryEnemy)
 	EXPECT_EQ(Missiles.back().poe2.vfxElement, static_cast<int8_t>(vfx::Element::Bone));
 }
 
+// Blood Nova (Bone Cage's ring with Exsanguinate's blood): a ring of blood bursts out around the hero, hitting and
+// bleeding everything within 2 tiles, paid for with 5% of current life.
+TEST_F(Poe2PhysicalSpellsTest, BloodNovaBleedsTheRingForLife)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData &data = Row(WeaponSkill::BloodNova);
+	EXPECT_EQ(data.level, 9);
+	EXPECT_EQ(data.mana, 10);
+	EXPECT_EQ(data.shape, TableShape::Around);
+	EXPECT_EQ(data.radius, 2);
+	EXPECT_EQ(data.damagePercent, 120);
+	EXPECT_EQ(data.type, DamageType::Physical);
+	EXPECT_NE(data.flags & TF_LifeCost, 0U);
+	EXPECT_NE(data.flags & TF_Bleed, 0U);
+	EXPECT_EQ(TableSkillLook(data), vfx::Element::Blood);
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::BloodNova));
+	const SkillSlot nova = SkillSlot::ForAttack(WeaponSkill::BloodNova);
+	EXPECT_NE(SkillTags(nova) & ST_Spell, 0U);
+	EXPECT_NE(SkillTags(nova) & ST_Area, 0U);
+	EXPECT_NE(SkillTags(nova) & ST_Physical, 0U);
+	EXPECT_NE(SkillTags(nova) & ST_DamageOverTime, 0U);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, nova, 1));
+	EXPECT_EQ(SkillForGem(gem), nova);
+
+	// It costs 5% of current life.
+	Supported(nova);
+	const Fixed26_6 life = player._pHitPoints;
+	ASSERT_TRUE(StartTableSkill(player, data));
+	EXPECT_EQ(player._pHitPoints, life - Fixed26_6::fromRaw(life.raw() / 20));
+
+	Monster &near = PlaceMonster(0, { 41, 40 });
+	Monster &ring = PlaceMonster(1, { 42, 42 });
+	Monster &far = PlaceMonster(2, { 44, 40 });
+	ExecuteTableSkill(player, data, { 44, 40 });
+	for (Monster *monster : { &near, &ring }) {
+		const Fixed26_6 hit = monster->maxHitPoints - monster->hitPoints;
+		EXPECT_GT(hit, 0);
+		EXPECT_EQ(monster->poe2.bleedTicks, GrantedBleedTicks);
+		// The bleed is 75% of the hit over its 5 seconds.
+		const int64_t bled = static_cast<int64_t>(monster->poe2.bleedDamagePerTick) * GrantedBleedTicks;
+		EXPECT_NEAR(static_cast<double>(bled), static_cast<double>(hit.raw()) * GrantedBleedPercent / 100, hit.raw() * 0.05 + GrantedBleedTicks);
+	}
+	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
+	EXPECT_EQ(far.poe2.bleedTicks, 0);
+}
+
 } // namespace
 } // namespace devilution

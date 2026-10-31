@@ -2927,6 +2927,31 @@ void Slam(Point tile, int radiusTiles, Element element)
 		Spray(pos, Scaled(14), 60, 200, 600, 1000, Shape::Chunk, { 236, 228, 205 }, { 160, 146, 120 }, 2.5F, 2, 160, 320, 800, 0.4F, 1);
 }
 
+void Nova(Point tile, int radiusTiles, Element element)
+{
+	TelemetryEffect("vfx", StrCat("Nova ", magic_enum::enum_name(element)), tile.x, tile.y);
+	if (!Enabled())
+		return;
+	const Vec pos = TileCentre(tile);
+	const float r = TileRadius * std::max(radiusTiles, 1);
+	const Colours c = ColoursOf(element);
+	const bool blood = element == Element::Blood;
+	// A pulse at the hero, then a heavy wave rolls out over the floor: a dark body with a bright lip, a fainter one behind.
+	AddRing(pos + Vec { 0, -16 }, 0, 30, 140, 0, c.core, 0.6F, true, false);
+	AddRing(pos, 0, r * 1.15F, 420, 18, c.edge, 0.75F, false, true, true);
+	AddRing(pos, 0, r * 1.1F, 360, 4, c.mid, 0.9F, false, true);
+	AddRing(pos, 0, r * 0.8F, 540, 10, c.edge, 0.4F, false, true, true);
+	// Flung low and fast to the edge of the wave: droplets of blood, or chips of bone.
+	if (blood)
+		Spray(pos, Scaled(36 * radiusTiles / 2.F), 140, 90 + 90 * radiusTiles, 450, 800, Shape::Chunk, { 170, 12, 14 }, { 70, 0, 0 }, 2.6F, 2, 60, 160, 700, 0.3F, 1);
+	else
+		Spray(pos, Scaled(30 * radiusTiles / 2.F), 140, 90 + 90 * radiusTiles, 450, 800, Shape::Chunk, { 238, 230, 208 }, { 160, 146, 120 }, 2.4F, 2, 60, 160, 700, 0.3F, 1);
+	Spray(pos, Scaled(10), 40, 40 + 40 * radiusTiles, 700, 1200, Shape::Puff, Mix(c.edge, c.mid, 0.4F), c.edge, 10, 30, 5, 25, 0, 0.8F, 0.35F);
+	// It leaves its mark on the floor.
+	if (blood)
+		AddRing(pos, r * 0.4F, r * 0.9F, 3500, 0, { 70, 0, 0 }, 0.45F, true, true, true, 0.4F);
+}
+
 void Fissure(Point from, Point to, Element element)
 {
 	TelemetryEffect("vfx", StrCat("Fissure ", magic_enum::enum_name(element)), from.x, from.y);

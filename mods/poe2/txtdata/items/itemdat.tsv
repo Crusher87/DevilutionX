@@ -1029,3 +1029,4 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blood Sacrifice Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Spikes Gem	Gem	3	0	0	0	0	0	0	27	0		SKILLGEM_TABLE	Null	true	840
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Spear Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blood Nova Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
