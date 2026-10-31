@@ -294,7 +294,7 @@ RING_CURSORS = {
 # the matching modifiers are (attributes 40%, Spirit 500%). The others wait for their mechanics.
 IMPLICITS = {
 	'ring_fire': ('FireResistance', 12, 16, '+{0}% to Fire Resistance'),
-	'ring_cold': ('ColdResistance', 12, 16, '+{0}% to Magic Resistance'),
+	'ring_cold': ('ColdResistance', 12, 16, '+{0}% to Cold Resistance'),
 	'ring_lightning': ('LightningResistance', 12, 16, '+{0}% to Lightning Resistance'),
 	'ring_life': ('Life', 20, 30, '+{0} to maximum Life'),
 	'ring_mana': ('Mana', 18, 28, '+{0} to maximum Mana'),

@@ -243,8 +243,12 @@ void DrawShadowString(const Surface &out, const PanelEntry &entry)
 		return;
 
 	constexpr int Spacing = 0;
-	// POE2 Mashup: the armor class box shows armour and evasion.
-	const std::string_view textStr = (gbIsPoe2 && entry.label == "Armor class") ? std::string_view(_("Armour / Evasion")) : LanguageTranslate(entry.label);
+	// POE2 Mashup: the armor class box shows armour and evasion, and Diablo's magic resistance is cold resistance.
+	std::string_view textStr = LanguageTranslate(entry.label);
+	if (gbIsPoe2 && entry.label == "Armor class")
+		textStr = _("Armour / Evasion");
+	else if (gbIsPoe2 && entry.label == "Resist magic")
+		textStr = _("Resist cold");
 	std::string_view text;
 	std::string wrapped;
 	if (entry.labelLength > 0) {

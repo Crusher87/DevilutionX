@@ -1,6 +1,6 @@
 id	name	tier	dropLevel	weaponEffect	weaponValue1	weaponValue2	staffEffect	staffValue1	staffValue2	armourEffect	armourValue1	armourValue2	rule	ruleValue	weaponText	staffText	armourText	becomes
 EmberRune	Ember Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance	LesserRal
-FrostRune	Frost Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to magic resistance	+12% to magic resistance	+12% to magic resistance	LesserThul
+FrostRune	Frost Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance	LesserThul
 StormRune	Storm Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance	LesserOrt
 IronRune	Iron Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield	LesserOhm
 WindRune	Wind Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity	LesserShael
@@ -10,7 +10,7 @@ KeenCore	Soul Core of Keenness	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	
 HunterTalisman	Hunter's Talisman	3	45		0	0		0	0		0	0	DamageVsRareUnique	15	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	RelicOfRakkis
 GuardianTalisman	Guardian's Talisman	3	45		0	0		0	0		0	0	LessHitDamage	6	6% less damage taken from hits	6% less damage taken from hits	6% less damage taken from hits	RelicOfAkarat
 LesserRal	Ember Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance	
-LesserThul	Frost Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to magic resistance	+12% to magic resistance	+12% to magic resistance	
+LesserThul	Frost Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance	
 LesserOrt	Storm Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance	
 LesserOhm	Iron Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield	
 LesserShael	Wind Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity	

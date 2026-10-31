@@ -97,7 +97,7 @@ enum class ModEffect : uint8_t {
 	MinionSkillLevels,
 	/** Increased maximum life of minions, in percent. */
 	MinionLife,
-	/** Added to minions' fire, lightning and magic resistances. */
+	/** Added to minions' fire, lightning and cold resistances. */
 	MinionResistances,
 	LifeOnKill,
 	ManaOnKill,

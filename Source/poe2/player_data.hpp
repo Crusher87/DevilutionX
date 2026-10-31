@@ -290,7 +290,7 @@ enum class PersistentSkill : uint8_t {
 	HeraldOfAsh,
 	/** Monsters you kill release lightning that strikes enemies nearby. */
 	HeraldOfThunder,
-	/** An aura granting resistance to fire, lightning and magic. */
+	/** An aura granting resistance to fire, lightning and cold. */
 	PurityOfElements,
 	/** A golem that fights at your side and comes back when it dies. */
 	SummonGolem,

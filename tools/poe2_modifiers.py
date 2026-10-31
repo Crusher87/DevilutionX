@@ -186,7 +186,7 @@ def main():
 		slots = legacy_slots(SLOTS.get(fid, list(dict.fromkeys(family['valid_slots']))))
 		family_rows.append([
 			fid,
-			game_text(family['name'], effect),
+			family['name'],
 			word,
 			family['generation_type'],
 			family['group'],
@@ -194,7 +194,7 @@ def main():
 			','.join(slots),
 			','.join(family['requires_any_base_tags']),
 			','.join(conflicts),
-			game_text(game_template(family['display_template']), effect),
+			game_template(family['display_template']),
 			effect,
 			str(scale1),
 			str(scale2),
@@ -316,13 +316,6 @@ def caster_affixes():
 			else:
 				sys.exit(f'{CASTER_AFFIXES}: unknown row kind {kind}')
 	return families, tiers
-
-
-def game_text(text, effect):
-	"""Names the stat the game gives: POE2's cold resistance is the game's magic resistance, so it reads that way."""
-	if effect == 'ColdResistance':
-		text = text.replace('Cold Resistance', 'Magic Resistance')
-	return text
 
 
 def game_template(template):

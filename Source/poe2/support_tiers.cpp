@@ -147,9 +147,9 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::LightningPenetration, 1, 2, 100, { 15, 0, 0 }, "Lightning hits penetrate 15% of the\nmonster's lightning resistance" },
 	{ SG::LightningPenetration, 2, 3, 100, { 20, 0, 0 }, "Lightning hits penetrate 20% of the\nmonster's lightning resistance" },
 	{ SG::LightningPenetration, 3, 5, 100, { 25, 0, 0 }, "Lightning hits penetrate 25% of the\nmonster's lightning resistance" },
-	{ SG::ColdPenetration, 1, 2, 100, { 15, 0, 0 }, "Cold hits penetrate 15% of the\nmonster's magic resistance" },
-	{ SG::ColdPenetration, 2, 3, 100, { 20, 0, 0 }, "Cold hits penetrate 20% of the\nmonster's magic resistance" },
-	{ SG::ColdPenetration, 3, 5, 100, { 25, 0, 0 }, "Cold hits penetrate 25% of the\nmonster's magic resistance" },
+	{ SG::ColdPenetration, 1, 2, 100, { 15, 0, 0 }, "Cold hits penetrate 15% of the\nmonster's cold resistance" },
+	{ SG::ColdPenetration, 2, 3, 100, { 20, 0, 0 }, "Cold hits penetrate 20% of the\nmonster's cold resistance" },
+	{ SG::ColdPenetration, 3, 5, 100, { 25, 0, 0 }, "Cold hits penetrate 25% of the\nmonster's cold resistance" },
 };
 
 } // namespace

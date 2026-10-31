@@ -14,6 +14,7 @@ sol::table LuaPoe2Module(sol::state_view &lua)
 {
 	sol::table table = lua.create_table();
 	LuaSetDocFn(table, "enable", "()", []() { gbIsPoe2 = true; });
+	LuaSetDocFn(table, "is_enabled", "()", "Whether the game runs in POE2 mode", []() { return gbIsPoe2; });
 	LuaSetDocFn(table, "set_version", "(version: string)", "Sets the version the game menu shows",
 	    [](std::string_view version) { Poe2ModVersion = std::string(version); });
 	return table;

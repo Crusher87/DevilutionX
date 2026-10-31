@@ -26,8 +26,7 @@ What the stats mean (they decide which skills a node helps):
   TwoHandDamage     increased attack damage with two-handed melee weapons
   OneHandDamage     increased attack damage with one-handed melee weapons
   SpellDamage       increased spell damage
-  Fire/Lightning/ColdDamage  increased damage of that type, spells and attacks. Cold is this mod's Magic damage
-                    type, so ColdDamage also scales Blood Star, Bone Spirit, Apocalypse and Stone Curse.
+  Fire/Lightning/ColdDamage  increased damage of that type, spells and attacks.
   AttackSpeed / CastSpeed     increased speed in percent; every 10% (tree and gear together) skips one frame, up to the cap
                     (MaxPassiveSpeedFrames); only notables carry speed, small nodes do not
   LifeRegenRate     life regenerated per second, in tenths of a percent of maximum life (10 = 1% a second)
@@ -200,7 +199,7 @@ CLUSTERS = {
             ("Akara's Remedy", [('FlaskRecovery', 20), ('LifeRegenRate', 4)], "The priestess Akara's draughts kept the Sisters alive."),
             ('Feast of the Fallen', [('LifeOnKill', 10), ('ManaOnKill', 4)], 'The Fallen breed fast and die faster.'),
             ('Quick Hands', [('FlaskCharges', 20), ('AttackSpeed', 3)], 'A Sister drinks between heartbeats.'),
-            ('Rainbow Cloak', [('AllResist', 6), ('LifePercent', 4)], 'A cloak of many colours that turns aside fire, lightning and magic alike.'),
+            ('Rainbow Cloak', [('AllResist', 6), ('LifePercent', 4)], 'A cloak of many colours that turns aside fire, lightning and cold alike.'),
         ]},
         {'key': 'r_lightning', 'band': 'outer', 'title': 'Charged Arrows', 'small': [('LightningDamage', 4)], 'notables': [
             ('Storm Arrows', [('LightningDamage', 18), ('ShockChance', 15)], 'Arrows tipped with captured lightning.'),

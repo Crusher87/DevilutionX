@@ -6455,6 +6455,9 @@ bool DoOilOnStashItem(Player &player, uint16_t index)
 			return FormatRuntime(_("Resist Lightning: {:+d}% MAX"), MaxResistance);
 	case IPL_MAGICRES:
 	case IPL_MAGICRES_CURSE:
+		// POE2 Mashup: Diablo's magic resistance is cold resistance; the bundle's Diablo uniques still carry it.
+		if (gbIsPoe2)
+			return item._iPLMR < MaxResistance ? FormatRuntime(_("Resist Cold: {:+d}%"), item._iPLMR) : FormatRuntime(_("Resist Cold: {:+d}% MAX"), MaxResistance);
 		if (item._iPLMR < MaxResistance)
 			return FormatRuntime(_("Resist Magic: {:+d}%"), item._iPLMR);
 		else
@@ -6798,7 +6801,7 @@ void PrintItemImplicits(const Item &item)
 	if (armourImplicit.allResistances > 0)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to all resistances"), armourImplicit.allResistances));
 	if (armourImplicit.coldResistance > 0)
-		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to magic resistance"), armourImplicit.coldResistance));
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to cold resistance"), armourImplicit.coldResistance));
 	if (armourImplicit.manaRegenPercent > 0)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:d}% increased mana regeneration"), armourImplicit.manaRegenPercent));
 	if (armourImplicit.evasionPercent > 0)
@@ -7198,7 +7201,7 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		compare(item._iPLMana.whole(), other._iPLMana.whole(), _("maximum Mana"));
 		compare(item._iPLFR, other._iPLFR, _("Fire Resistance"), "%");
 		compare(item._iPLLR, other._iPLLR, _("Lightning Resistance"), "%");
-		compare(item._iPLMR, other._iPLMR, _("Magic Resistance"), "%");
+		compare(item._iPLMR, other._iPLMR, _("Cold Resistance"), "%");
 		compare(item._iPLLifeRegen, other._iPLLifeRegen, _("Life regenerated per second"));
 		compare(item._iPLManaRegen, other._iPLManaRegen, _("increased Mana Regeneration"), "%");
 		compare(item._iSplLvlAdd, other._iSplLvlAdd, _("to Level of all Spells"));

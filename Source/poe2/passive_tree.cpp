@@ -1214,7 +1214,7 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::LightningResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Lightning Resistance"), value);
 	case PassiveStat::ColdResist:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Magic Resistance"), value);
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Cold Resistance"), value);
 	case PassiveStat::AllResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to all Elemental Resistances"), value);
 	case PassiveStat::ChaosResist:
@@ -1258,7 +1258,7 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::LightningDamage:
 		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Lightning Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Lightning Damage"));
 	case PassiveStat::ColdDamage:
-		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Magic (cold) Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Magic (cold) Damage"));
+		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Cold Damage"), _(/*xgettext:no-c-format*/ "{:d}% reduced Cold Damage"));
 	case PassiveStat::IgniteChance:
 		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased chance to Ignite"), _(/*xgettext:no-c-format*/ "{:d}% reduced chance to Ignite"));
 	case PassiveStat::ShockChance:
@@ -1290,9 +1290,9 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::ManaCost:
 		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Mana Cost of Skills"), _(/*xgettext:no-c-format*/ "{:d}% reduced Mana Cost of Skills"));
 	case PassiveStat::MaxElementalResist:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Fire and Lightning Resistances"), value);
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Elemental Resistances"), value);
 	case PassiveStat::MaxColdResist:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Magic Resistance"), value);
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Cold Resistance"), value);
 	case PassiveStat::ArmourVsElements:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Armour also applies to Fire, Cold and Lightning Damage"), value);
 	case PassiveStat::EvasionVsSpells:
@@ -1332,7 +1332,7 @@ std::string PassiveStatText(PassiveStat stat, int value)
 	case PassiveStat::DistanceRule:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% more Damage while no enemy is within 3 tiles"), value);
 	case PassiveStat::SpellElementCycle:
-		return FormatRuntime(_(/*xgettext:no-c-format*/ "Spells cycle Fire, Lightning and Magic: {:d}% more Damage with the current element"), value);
+		return FormatRuntime(_(/*xgettext:no-c-format*/ "Spells cycle Fire, Lightning and Cold: {:d}% more Damage with the current element"), value);
 	case PassiveStat::OffElementLess:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% less Spell Damage with the other elements"), value);
 	case PassiveStat::TwoHandKillFrenzy:

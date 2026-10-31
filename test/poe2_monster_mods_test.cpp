@@ -151,15 +151,15 @@ TEST_F(Poe2MonsterModsTest, DiablosMarksArePercentages)
 	ASSERT_EQ(GetMonsterAffixes(zombie).rarity, MonsterRarity::Normal);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), ResistMarkPercent);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Lightning), 0);
-	// A zombie is undead: its magic (cold) immune mark is 20%, not 40% (Curtis 2026-10-28).
+	// A zombie is undead: its cold (Diablo's magic) immune mark is 20%, not 40% (Curtis 2026-10-28).
 	ASSERT_EQ(zombie.data().monsterClass, MonsterClass::Undead);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Cold), UndeadColdImmuneMarkPercent);
 	EXPECT_EQ(UndeadColdImmuneMarkPercent, 20);
 	EXPECT_EQ(ResistanceMarkPercent(IMMUNE_FIRE, DamageType::Fire), ImmuneMarkPercent);
 	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Cold), ColdResistMarkPercent);
 	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Cold, /*undead=*/true), ColdResistMarkPercent);
-	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE), "Resistances: Fire 30%, Magic 40%");
-	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE, /*undead=*/true), "Resistances: Fire 30%, Magic 20%");
+	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE), "Resistances: Fire 30%, Cold 40%");
+	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE, /*undead=*/true), "Resistances: Fire 30%, Cold 20%");
 	EXPECT_EQ(ResistanceMarksText(0), "No resistances");
 
 	// A magic-immune zombie takes 80% of Ice Bolt's damage rather than none.

@@ -126,7 +126,7 @@ enum class AilmentSource : uint8_t {
 
 /**
  * @brief Inflicts ailments for a hit: fire may ignite and lightning may shock, more likely the bigger the hit;
- * magic (cold) hits chill and build up freeze; physical hits build up heavy stun.
+ * cold hits chill and build up freeze; physical hits build up heavy stun.
  */
 void TryInflictAilment(Monster &monster, const Player &player, DamageType damageType, Fixed26_6 damage, AilmentSource source = AilmentSource::Strike);
 /**

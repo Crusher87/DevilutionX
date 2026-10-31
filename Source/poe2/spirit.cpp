@@ -357,7 +357,7 @@ std::string_view PersistentSkillDescription(PersistentSkill skill)
 	case PersistentSkill::HeraldOfThunder:
 		return _("Enemies you kill release bolts of lightning");
 	case PersistentSkill::PurityOfElements:
-		return _("Aura: +25% to fire, lightning and magic resistance");
+		return _("Aura: +25% to fire, lightning and cold resistance");
 	case PersistentSkill::SummonGolem:
 		return _("A golem fights for you and returns when it falls");
 	case PersistentSkill::SkeletalWarriors:

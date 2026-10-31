@@ -95,6 +95,22 @@ int MonsterTypeChaosResistance(int monsterType)
 	return it != ChaosResistances.end() ? it->second : 0;
 }
 
+std::string_view ResistanceName(DamageType type)
+{
+	switch (type) {
+	case DamageType::Fire:
+		return _("Fire");
+	case DamageType::Lightning:
+		return _("Lightning");
+	case DamageType::Cold:
+		return gbIsPoe2 ? _("Cold") : _("Magic");
+	case DamageType::Chaos:
+		return _("Chaos");
+	default:
+		return _("Physical");
+	}
+}
+
 std::string ResistanceMarksText(uint16_t marks, bool undead, int chaos)
 {
 	std::string text;
@@ -102,7 +118,7 @@ std::string ResistanceMarksText(uint16_t marks, bool undead, int chaos)
 		const int percent = ResistanceMarkPercent(marks, type, undead);
 		if (percent == 0)
 			continue;
-		const std::string_view name = type == DamageType::Fire ? _("Fire") : (type == DamageType::Lightning ? _("Lightning") : _("Magic"));
+		const std::string_view name = ResistanceName(type);
 		StrAppend(text, text.empty() ? "" : ", ", name, " ", percent, "%");
 	}
 	if (chaos != 0)

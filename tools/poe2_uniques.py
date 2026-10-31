@@ -165,10 +165,10 @@ KEYSTONE_MODS = {mod for mod, (effect, _) in EFFECTS.items() if effect in ('Firs
 
 
 def effect_text(display):
-	"""The tooltip text with {0} for a rolled range, in the game's words for resistances."""
+	"""The tooltip text with {0} for a rolled range."""
 	text = RANGE.sub('{0}', display, count=1)
 	# The effects column separates effects with semicolons, so a text keeps them as commas.
-	return text.replace('Cold Resistance', 'Magic Resistance').replace('–', '-').replace(';', ',')
+	return text.replace('–', '-').replace(';', ',')
 
 
 def main():

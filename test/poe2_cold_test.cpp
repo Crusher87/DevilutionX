@@ -14,10 +14,13 @@
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/unique_rules.hpp"
 #include "spells.h"
+#include "tables/itemdat.h"
 #include "tables/misdat.h"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/str_split.hpp"
 
@@ -198,6 +201,33 @@ TEST_F(Poe2ColdTest, ColdMissilesStillColdInEveryMode)
 	LoadMissileData();
 	EXPECT_EQ(GetMissileData(MissileID::FlashBottom).damageType(), DamageType::Cold);
 	gbIsHellfire = true;
+}
+
+TEST_F(Poe2ColdTest, PlayersReadColdInPoe2Mode)
+{
+	Item item {};
+	item._iPLMR = 20;
+	EXPECT_EQ(PrintItemPower(IPL_MAGICRES, item).str(), "Resist Cold: +20%");
+	EXPECT_EQ(ResistanceName(DamageType::Cold), "Cold");
+	EXPECT_EQ(ResistanceMarksText(RESIST_MAGIC), "Resistances: Cold 20%");
+	EXPECT_EQ(PassiveStatText(PassiveStat::ColdResist, 20), "+20% to Cold Resistance");
+	EXPECT_EQ(PassiveStatText(PassiveStat::MaxColdResist, 2), "+2% to maximum Cold Resistance");
+	// Maximum elemental resistance raises cold's maximum too.
+	EXPECT_EQ(PassiveStatText(PassiveStat::MaxElementalResist, 1), "+1% to maximum Elemental Resistances");
+	EXPECT_EQ(PassiveStatText(PassiveStat::ColdDamage, 10), "10% increased Cold Damage");
+	const std::optional<uint8_t> cold = FindModifierFamily("cold_resistance");
+	ASSERT_TRUE(cold.has_value());
+	EXPECT_EQ(ModifierFamilies()[*cold].name, "Cold Resistance");
+}
+
+TEST_F(Poe2ColdTest, DiabloModeStillSaysMagic)
+{
+	gbIsPoe2 = false;
+	Item item {};
+	item._iPLMR = 20;
+	EXPECT_EQ(PrintItemPower(IPL_MAGICRES, item).str(), "Resist Magic: +20%");
+	EXPECT_EQ(ResistanceName(DamageType::Cold), "Magic");
+	gbIsPoe2 = true;
 }
 
 } // namespace

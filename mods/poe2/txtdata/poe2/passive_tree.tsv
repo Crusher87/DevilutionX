@@ -995,7 +995,7 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 993		Small		-17	1144	FlaskRecovery=6	987,994	Rogue		cluster	993	38	1138	3		Triangle	
 994		Small		17	1140	FlaskRecovery=6	993,995,996	Rogue		cluster	993	38	1138	1		Triangle	
 995		Attribute		53	1117	AnyAttribute=5	994,996	Rogue		cluster	993	38	1138	1		Triangle	
-996	Rainbow Cloak	Notable		57	1155	AllResist=6,LifePercent=4	994,995	Rogue	A cloak of many colours that turns aside fire, lightning and magic alike.	cluster	993	38	1138	1		Triangle	
+996	Rainbow Cloak	Notable		57	1155	AllResist=6,LifePercent=4	994,995	Rogue	A cloak of many colours that turns aside fire, lightning and cold alike.	cluster	993	38	1138	1		Triangle	
 997	Halls of the Blind	Notable		-12	820	BowDamage=12,StationaryDefences=15	998	Rogue	'Shadows move where light should be.' In the Halls of the Blind an archer holds her ground and shoots at what moves.	cluster	997	22	819	2	+34	Spur Arc	
 998		Small		4	791	EvasionPercent=12	997,999	Rogue		cluster	997	22	819	2	+34	Spur Arc	
 999		Small		38	790	EvasionPercent=12	998,1000	Rogue		cluster	997	22	819	2	+34	Spur Arc	

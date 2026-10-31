@@ -79,7 +79,7 @@ int ResistCharmIndex(DamageType damageType)
 		return 0;
 	case DamageType::Lightning:
 		return 1;
-	// The Amethyst Charm answers chaos, as in POE2 (Curtis 2026-10-30); magic hits have no charm of their own.
+	// The Amethyst Charm answers chaos, as in POE2 (Curtis 2026-10-30); cold hits have no charm of their own yet.
 	case DamageType::Chaos:
 		return 2;
 	default:

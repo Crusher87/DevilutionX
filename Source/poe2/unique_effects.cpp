@@ -449,7 +449,7 @@ const char *DamageTypePacketName(DamageType type)
 	switch (type) {
 	case DamageType::Fire: return "fire part";
 	case DamageType::Lightning: return "lightning part";
-	case DamageType::Cold: return "magic part";
+	case DamageType::Cold: return "cold part";
 	case DamageType::Chaos: return "chaos part";
 	default: return "physical part";
 	}

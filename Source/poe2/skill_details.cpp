@@ -71,7 +71,7 @@ std::string_view DamageTypeName(DamageType type)
 	case DamageType::Lightning:
 		return "Lightning";
 	case DamageType::Cold:
-		return "Cold (magic)";
+		return "Cold";
 	case DamageType::Chaos:
 		return "Chaos";
 	default:
