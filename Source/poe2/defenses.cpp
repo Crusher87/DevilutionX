@@ -278,6 +278,9 @@ DamageType MonsterHitDamageType(const Monster *monster, MissileID missile, Damag
 	case MonsterAIID::Lich:
 	case MonsterAIID::ArchLich:
 		return IsAnyOf(missile, MissileID::OrangeFlare, MissileID::YellowFlare) ? DamageType::Chaos : type;
+	// The Crypt's necromorbs throw a red orb of the necromancers' chaos, like the liches (Curtis 2026-10-31).
+	case MonsterAIID::Necromorb:
+		return missile == MissileID::RedFlare ? DamageType::Chaos : type;
 	case MonsterAIID::Diablo:
 		return IsAnyOf(missile, MissileID::DiabloApocalypse, MissileID::DiabloApocalypseBoom) ? DamageType::Chaos : type;
 	default:

@@ -372,5 +372,29 @@ TEST_F(Poe2ColdTest, DiabloModeSpellsKeepTheirTypes)
 	EXPECT_EQ(MonsterHitDamageType(&witch, MissileID::BloodStar, DamageType::Cold), DamageType::Cold);
 }
 
+TEST_F(Poe2ColdTest, NecromorbsThrowChaos)
+{
+	Player &player = *MyPlayer;
+	Monster orb = MakeMonster(MT_NECRMORB, 0);
+	orb.ai = MonsterAIID::Necromorb;
+	EXPECT_EQ(MonsterHitDamageType(&orb, MissileID::RedFlare, GetMissileData(MissileID::RedFlare).damageType()), DamageType::Chaos);
+	// It meets chaos resistance, not cold.
+	player._pMagResist = 75;
+	player.poe2.chaosResistance = 0;
+	const int unresisted = HitTaken(player, MissileID::RedFlare, &orb);
+	EXPECT_GT(unresisted, 0);
+	player.poe2.chaosResistance = 50;
+	EXPECT_LT(HitTaken(player, MissileID::RedFlare, &orb), unresisted);
+	// The Psychorb's blue orb is cold, and a player's red flare (Soulrend and the rest) or a trap's is left alone.
+	Monster psychorb = MakeMonster(MT_PSYCHORB, 0);
+	psychorb.ai = MonsterAIID::Psychorb;
+	EXPECT_EQ(MonsterHitDamageType(&psychorb, MissileID::BlueFlare, DamageType::Cold), DamageType::Cold);
+	EXPECT_EQ(MonsterHitDamageType(nullptr, MissileID::RedFlare, DamageType::Cold), DamageType::Cold);
+	// A player's Bone Bolt on the liches' orange flare stays physical: the override is the monster's.
+	EXPECT_EQ(MonsterHitDamageType(nullptr, MissileID::OrangeFlare, DamageType::Physical), DamageType::Physical);
+	gbIsPoe2 = false;
+	EXPECT_EQ(MonsterHitDamageType(&orb, MissileID::RedFlare, DamageType::Cold), DamageType::Cold);
+}
+
 } // namespace
 } // namespace devilution
