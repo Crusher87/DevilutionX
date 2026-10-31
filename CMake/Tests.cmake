@@ -77,6 +77,7 @@ set(tests
   primitive_render_test
   poe2_economy_test
   poe2_endgame_test
+  poe2_monster_armour_test
   poe2_monster_levels_test
   poe2_monster_mods_test
   poe2_pace_test

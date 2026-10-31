@@ -19,12 +19,14 @@
 #include "poe2/area_levels.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/log.hpp"
+#include "utils/parse_int.hpp"
 
 namespace devilution {
 
@@ -34,6 +36,8 @@ struct LevelRow {
 	int life = 0;
 	int damage10 = 0;
 	int accuracy = 0;
+	/** Monster armour at 100% of the kind table (monster_armour.tsv); 0 when the column is missing. */
+	int armour = 0;
 };
 
 /** Index = monster level - 1. */
@@ -66,6 +70,15 @@ void LoadLevelRows()
 		reader.readInt("life", row.life);
 		reader.readInt("damage10", row.damage10);
 		reader.readInt("accuracy", row.accuracy);
+		// The reference columns poe2Life, poe2Damage10, poe2Accuracy and poe2Armour, then armour (appended last, so an
+		// older table without it reads 0).
+		std::string field;
+		for (const std::string_view name : { "poe2Life", "poe2Damage10", "poe2Accuracy", "poe2Armour", "armour" })
+			reader.readTrailingString(name, field);
+		if (!field.empty()) {
+			if (const ParseIntResult<int> armour = ParseInt<int>(field); armour.has_value())
+				row.armour = std::max(*armour, 0);
+		}
 		if (level < 1 || level > 255 || row.life < 1) {
 			LogError("Bad monster level row in {}: level {}", Filename, level);
 			continue;
@@ -235,6 +248,7 @@ void LoadMonsterLevels()
 	OtherUniqueRow = { 450, 150 };
 	LoadMonsterChaosResistances();
 	LoadMonsterColdResistances();
+	LoadMonsterArmour();
 	if (!gbIsPoe2)
 		return;
 	LoadLevelRows();
@@ -263,6 +277,12 @@ int MonsterLevelAccuracy(int level)
 {
 	const LevelRow *row = RowForLevel(level);
 	return row != nullptr ? row->accuracy : 0;
+}
+
+int MonsterLevelArmour(int level)
+{
+	const LevelRow *row = RowForLevel(level);
+	return row != nullptr ? row->armour : 0;
 }
 
 const MonsterTypeLevelRow &MonsterTypeRow(_monster_id type)

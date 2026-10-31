@@ -18,6 +18,7 @@
 #include "panels/spell_icons.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/skill_resources.hpp"
@@ -266,6 +267,9 @@ std::string ResistanceText(const Monster &monster)
 			if (resistance != 0)
 				StrAppend(text, text.empty() ? "" : "   ", _(element.name), " ", resistance, "%");
 		}
+		// Its armour, by how much of the level's armour it has (Plated and the waystone included), or broken.
+		if (const std::string_view armour = MonsterArmourText(monster); !armour.empty())
+			StrAppend(text, text.empty() ? "" : "   ", armour);
 		return text;
 	}
 	constexpr struct {

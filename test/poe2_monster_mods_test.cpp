@@ -5,6 +5,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/unique_effects.hpp"
@@ -71,8 +72,9 @@ TEST_F(Poe2MonsterModsTest, SomeMonstersAreMagicOrRare)
 	constexpr int Count = 20000;
 	for (uint32_t seed = 0; seed < Count; seed++) {
 		const MonsterAffixes affixes = GetMonsterAffixes(MakeMonster(seed * 7919U));
+		// The picked modifiers; Plated is rolled on top of them (PlatedIsRolledOnTop).
 		int mods = 0;
-		for (uint8_t mod = 0; mod < static_cast<uint8_t>(MonsterMod::Count); mod++)
+		for (uint8_t mod = 0; mod < static_cast<uint8_t>(RolledModCount); mod++)
 			mods += affixes.has(static_cast<MonsterMod>(mod)) ? 1 : 0;
 		if (affixes.rarity == MonsterRarity::Magic) {
 			magic++;
@@ -86,6 +88,68 @@ TEST_F(Poe2MonsterModsTest, SomeMonstersAreMagicOrRare)
 	}
 	EXPECT_NEAR(magic * 1000 / Count, MagicMonsterPerMille, 15);
 	EXPECT_NEAR(rare * 1000 / Count, RareMonsterPerMille, 8);
+}
+
+/** @brief GetMonsterAffixes as it was before Plated (monster armour plan step 5), off a map: the golden picks. */
+MonsterAffixes AffixesBeforePlated(uint32_t seed)
+{
+	MonsterAffixes affixes;
+	const uint32_t hash = Mix(seed ^ 0x6D6F6E73U);
+	const int roll = static_cast<int>(hash % 1000);
+	const auto choose = [hash](int count) {
+		uint8_t mods = 0;
+		for (int picked = 0, i = 0; picked < count && i < 16; i++) {
+			const int mod = static_cast<int>(Mix(hash + static_cast<uint32_t>(i)) % 4);
+			if ((mods & (1U << mod)) != 0)
+				continue;
+			mods |= static_cast<uint8_t>(1U << mod);
+			picked++;
+		}
+		return mods;
+	};
+	if (roll < RareMonsterPerMille) {
+		affixes.rarity = MonsterRarity::Rare;
+		affixes.mods = choose(RareMonsterModCount);
+	} else if (roll < RareMonsterPerMille + MagicMonsterPerMille) {
+		affixes.rarity = MonsterRarity::Magic;
+		affixes.mods = choose(1);
+	}
+	return affixes;
+}
+
+TEST_F(Poe2MonsterModsTest, ExistingModsUnchangedForSeeds)
+{
+	// Adding Plated moved no monster's rarity or other modifiers.
+	for (uint32_t seed = 0; seed < 10000; seed++) {
+		const MonsterAffixes now = GetMonsterAffixes(MakeMonster(seed));
+		const MonsterAffixes before = AffixesBeforePlated(seed);
+		ASSERT_EQ(now.rarity, before.rarity) << seed;
+		ASSERT_EQ(now.mods & 0x0F, before.mods) << seed;
+	}
+}
+
+TEST_F(Poe2MonsterModsTest, PlatedIsRolledOnTop)
+{
+	int rare = 0;
+	int rarePlated = 0;
+	int magic = 0;
+	int magicPlated = 0;
+	for (uint32_t seed = 0; seed < 200000; seed++) {
+		const MonsterAffixes affixes = GetMonsterAffixes(MakeMonster(seed));
+		if (affixes.rarity == MonsterRarity::Rare) {
+			rare++;
+			rarePlated += affixes.has(MonsterMod::Plated) ? 1 : 0;
+		} else if (affixes.rarity == MonsterRarity::Magic) {
+			magic++;
+			magicPlated += affixes.has(MonsterMod::Plated) ? 1 : 0;
+		} else {
+			ASSERT_FALSE(affixes.has(MonsterMod::Plated));
+		}
+	}
+	ASSERT_GT(rare, 1000);
+	EXPECT_NEAR(rarePlated * 100 / rare, RarePlatedPercent, 3);
+	EXPECT_NEAR(magicPlated * 100 / magic, MagicPlatedPercent, 2);
+	EXPECT_EQ(MonsterModName(MonsterMod::Plated), "Plated");
 }
 
 TEST_F(Poe2MonsterModsTest, ImmunitiesAreResistancesInPoe2)

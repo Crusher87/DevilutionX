@@ -46,6 +46,7 @@
 #include "multi.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/monster_armour.hpp"
 #include "poe2/table_skills.hpp"
 #include "portal.h"
 #include "poe2/charms.hpp"
@@ -481,8 +482,9 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 			dam = dam * uniquePercent / 100;
 			TelemetryHitStep(false, "spell rules from uniques and the tree", uniquePercent, true);
 		}
+		// The monster's damage taken, and its armour against a physical spell (only the caster's game logs it).
 		if (gbIsPoe2)
-			dam = dam * MonsterDamageTakenPercent(monster, damageType) / 100;
+			dam = static_cast<int>(MonsterHitDamage(player, monster, damageType, dam));
 		dam = ApplyShock(monster, Fixed26_6::fromRaw(dam)).raw();
 
 		if (&player == MyPlayer) {

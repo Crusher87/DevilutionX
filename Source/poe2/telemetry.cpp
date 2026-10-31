@@ -37,6 +37,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/level_census.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
@@ -159,6 +160,9 @@ struct SkillDamage {
 	/** When the skill was first and last used, for its damage per second while in use. */
 	uint32_t firstUseMs = 0;
 	uint32_t lastUseMs = 0;
+	/** Its physical damage dealt, and what monster armour stopped of it (after the monsters' damage taken). */
+	int64_t physicalRaw = 0;
+	int64_t armourRaw = 0;
 };
 
 /** @brief Damage one kind of attacker did to the hero this game, life and energy shield together. */
@@ -204,6 +208,9 @@ bool SkillCreditOverTime = false;
 std::string LastSkill;
 uint32_t LastSkillMs = 0;
 std::vector<std::pair<std::string, SkillDamage>> DamageBySkill;
+/** Physical damage monster armour stopped this game, all skills. */
+int64_t ArmourStoppedRaw = 0;
+int64_t PhysicalDealtRaw = 0;
 std::vector<std::pair<std::string, AttackerDamage>> DamageByAttacker;
 /** Stats lines written this game; every few, the damage summaries are written too, so a crash doesn't lose them. */
 int StatsLinesWritten = 0;
@@ -1055,6 +1062,13 @@ void EndLevelVisit(std::string_view how)
 	CurrentLevel = {};
 }
 
+/** @brief What armour stopped, in percent of the physical damage the hits were worth before it. */
+int ArmourSharePercent(int64_t stopped, int64_t dealt)
+{
+	const int64_t before = stopped + std::max<int64_t>(dealt, 0);
+	return before > 0 ? static_cast<int>(stopped * 100 / before) : 0;
+}
+
 std::string SkillDamageLine(std::string_view name, const SkillDamage &damage)
 {
 	const int average = damage.hits > 0 ? Whole(damage.raw) / damage.hits : 0;
@@ -1069,6 +1083,8 @@ std::string SkillDamageLine(std::string_view name, const SkillDamage &damage)
 		StrAppend(text, std::format(", {:d} mana, {:.1f} damage per mana", damage.mana, static_cast<double>(Whole(damage.raw)) / damage.mana));
 	if (damage.lastUseMs > damage.firstUseMs)
 		StrAppend(text, std::format(", {:.0f} damage per second in use", Whole(damage.raw) * 1000.0 / (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs)));
+	if (damage.armourRaw > 0)
+		StrAppend(text, std::format(", armour stopped {:d} ({:d}% of its physical)", Whole(damage.armourRaw), ArmourSharePercent(damage.armourRaw, damage.physicalRaw)));
 	text += ')';
 	return text;
 }
@@ -1106,6 +1122,18 @@ SkillDamage &DamageFor(std::string_view source)
 std::string SkillCreditName(std::string_view skill, int gemLevel)
 {
 	return gemLevel > 0 ? std::format("{:s} gem {:d}", skill, gemLevel) : std::string(skill);
+}
+
+/** @brief What gets the credit for damage to a monster right now, leaving a named source for the damage itself. */
+std::string PeekDamageSource()
+{
+	if (!PendingDamageSource.empty())
+		return PendingDamageSource;
+	if (!SkillCredit.empty())
+		return SkillCredit;
+	if (!LastSkill.empty() && Now() - LastSkillMs <= TelemetrySkillCreditMs)
+		return LastSkill;
+	return "basic attack";
 }
 
 /** @brief What gets the credit for damage to a monster right now. */
@@ -1596,6 +1624,8 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	Totals = {};
 	Window = {};
 	DamageBySkill.clear();
+	ArmourStoppedRaw = 0;
+	PhysicalDealtRaw = 0;
 	DamageByAttacker.clear();
 	StatsLinesWritten = 0;
 	Engagements.clear();
@@ -1729,7 +1759,9 @@ void WriteSummaryEvents(double minutes)
 		    .add("killSeconds", damage.kills > 0 ? damage.killMs / 1000.0 / damage.kills : 0.0)
 		    .add("uses", damage.uses)
 		    .add("mana", damage.mana)
-		    .add("activeSeconds", damage.lastUseMs > damage.firstUseMs ? (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs) / 1000.0 : 0.0);
+		    .add("activeSeconds", damage.lastUseMs > damage.firstUseMs ? (damage.lastUseMs - damage.firstUseMs + TelemetrySkillCreditMs) / 1000.0 : 0.0)
+		    .add("physical", Whole(damage.physicalRaw))
+		    .add("armourStopped", Whole(damage.armourRaw));
 	}
 	for (const auto &[name, damage] : DamageByAttacker) {
 		Event(LogChannel::Session, LogLevel::Always, "attacker_summary")
@@ -1836,6 +1868,15 @@ TelemetrySkillCreditScope::~TelemetrySkillCreditScope()
 	SkillCreditOverTime = previousOverTime_;
 }
 
+void TelemetryArmourStopped(const Monster &monster, int64_t stoppedRaw)
+{
+	if (LogFile == nullptr || stoppedRaw <= 0 || monster.isPlayerMinion())
+		return;
+	// Credited like the damage that follows, without taking a named source from it.
+	DamageFor(PeekDamageSource()).armourRaw += stoppedRaw;
+	ArmourStoppedRaw += stoppedRaw;
+}
+
 void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6 lifeBefore, DamageType damageType)
 {
 	if (LogFile == nullptr || damage <= 0 || lifeBefore <= 0) {
@@ -1858,6 +1899,10 @@ void TelemetryMonsterDamaged(const Monster &monster, Fixed26_6 damage, Fixed26_6
 	skill.raw += damage.raw();
 	skill.lifeRaw += dealt;
 	skill.hits++;
+	if (damageType == DamageType::Physical) {
+		skill.physicalRaw += damage.raw();
+		PhysicalDealtRaw += damage.raw();
+	}
 
 	const uint32_t now = Now();
 	Engagement &engagement = Engagements[monster.getId()];
@@ -1961,7 +2006,11 @@ void TelemetryMonsterKilled(const Monster &monster)
 			CurrentFight.oneHitKills++;
 	}
 	const double sinceLast = (now - LastKillMs) / 1000.0;
-	WriteText("kill", std::format("{:s} ({:s}, monster level {:d}){:s}, {:.1f} s since the last kill", monster.name(), RarityNames[rarity], monsterLevel, fight, sinceLast));
+	const int armour = MonsterArmourPercent(monster);
+	std::string kill = std::format("{:s} ({:s}, monster level {:d}){:s}, {:.1f} s since the last kill", monster.name(), RarityNames[rarity], monsterLevel, fight, sinceLast);
+	if (armour > 0)
+		StrAppend(kill, std::format(", armour {:d}%", armour));
+	WriteText("kill", kill);
 	Event(LogChannel::Combat, LogLevel::Normal, "kill")
 	    .add("p", MyPlayerId)
 	    .add("monster", monster.name())
@@ -1973,7 +2022,8 @@ void TelemetryMonsterKilled(const Monster &monster)
 	    .add("hits", hits)
 	    .add("oneHit", oneHit)
 	    .add("overkill", overkill)
-	    .add("sinceLastKill", sinceLast);
+	    .add("sinceLastKill", sinceLast)
+	    .add("armour", armour);
 	LastKillMs = now;
 }
 
@@ -2478,6 +2528,8 @@ std::string TelemetrySkillDamageText()
 		StrAppend(text, " none yet");
 	for (const auto &[name, damage] : sorted)
 		StrAppend(text, " ", SkillDamageLine(name, damage), ";");
+	if (ArmourStoppedRaw > 0)
+		StrAppend(text, std::format(" armour stopped {:d} in all ({:d}% of physical);", Whole(ArmourStoppedRaw), ArmourSharePercent(ArmourStoppedRaw, PhysicalDealtRaw)));
 	return text;
 }
 

@@ -537,7 +537,7 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::Frenzy:
 		return _("Fast strike, builds Frenzy charges");
 	case WeaponSkill::Smite:
-		return _("Lightning blow that breaks armour");
+		return _("Lightning blow that strips armour");
 	case WeaponSkill::FistsOfThunder:
 		return _("Fast strikes; every third: lightning");
 	case WeaponSkill::RapidFire:

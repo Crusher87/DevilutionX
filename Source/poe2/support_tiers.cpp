@@ -109,9 +109,9 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::Envenom, 2, 3, 120, { 60, 0, 0 }, "Hits have a 60% chance to poison for\n20% of physical and chaos a second for\n2 seconds. 15% less damage. Mana +20%" },
 	{ SG::Envenom, 3, 5, 120, { 100, 0, 0 }, "Hits poison for 20% of physical and chaos\na second for 2 seconds. 15% less\ndamage. Mana +20%" },
 	// Armour Break I-III: seconds the armour stays broken.
-	{ SG::SunderArmour, 1, 2, 100, { 6, 0, 0 }, "Hits break armour: 25% more physical\ndamage taken for 6 seconds" },
-	{ SG::SunderArmour, 2, 3, 100, { 7, 0, 0 }, "Hits break armour: 25% more physical\ndamage taken for 7 seconds" },
-	{ SG::SunderArmour, 3, 4, 100, { 8, 0, 0 }, "Hits break armour: 25% more physical\ndamage taken for 8 seconds" },
+	{ SG::SunderArmour, 1, 2, 100, { 6, 0, 0 }, "Hits break armour: none left, and 25%\nmore physical damage taken for 6 seconds" },
+	{ SG::SunderArmour, 2, 3, 100, { 7, 0, 0 }, "Hits break armour: none left, and 25%\nmore physical damage taken for 7 seconds" },
+	{ SG::SunderArmour, 3, 4, 100, { 8, 0, 0 }, "Hits break armour: none left, and 25%\nmore physical damage taken for 8 seconds" },
 	{ SG::Pestilence, 1, 2, 120, {}, "A monster dying with your bleed, poison or\nignite on it passes it to 2 more. Mana +20%" },
 	{ SG::HoradricSeals, 1, 1, 150, {}, "Stores a seal every 1.5s, up to 2; the next\ncast repeats once per seal at 50%. Mana +50%" },
 	{ SG::StoredVolley, 1, 3, 100, {}, "Stores a seal every second, up to 6; the\nnext use fires 1 more projectile each" },

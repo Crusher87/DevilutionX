@@ -26,6 +26,7 @@
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
@@ -83,7 +84,7 @@ void HeraldHit(Monster &monster, PersistentSkill herald, DamageType damageType, 
 	TelemetryNoteDamageSource(PersistentSkillName(herald));
 	const SupportHitScope supported(player, SkillSlot::ForPersistent(herald));
 	// The monster's resistance and curses count, like for any other hit.
-	damage = Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * MonsterDamageTakenPercent(monster, damageType) / 100));
+	damage = Fixed26_6::fromRaw(static_cast<int32_t>(MonsterHitDamage(player, monster, damageType, damage.raw())));
 	ApplyMonsterDamage(damageType, monster, damage);
 	monster.tag(player);
 	TryInflictAilment(monster, player, damageType, damage, AilmentSource::Spell);

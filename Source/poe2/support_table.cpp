@@ -25,6 +25,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
@@ -109,7 +110,7 @@ const SupportData Table[] = {
 	{ SG::SerratedEdge, "Open Wounds", "Hits have a 25% chance to make\nmonsters bleed. Mana +10%", "Needs a physical skill", GC::Dexterity, 3, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
 	{ SG::Envenom, "Venom", "Hits poison for 20% of physical and chaos\na second for 2s. 15% less damage. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 5, 110, PhysicalHit | ST_Chaos, 0, 0, 0, NoFamily },
 	{ SG::Bloodlust, "Bloodthirst", "30% more physical damage against\nbleeding monsters. Mana +10%", "Needs a melee attack", GC::Strength, 5, 110, 0, ST_Melee, 0, 0, NoFamily },
-	{ SG::SunderArmour, "Crack Armor", "Hits break armour: 20% more physical\ndamage taken for 6 seconds. Mana +10%", "Needs a physical skill", GC::Strength, 4, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
+	{ SG::SunderArmour, "Crack Armor", "Hits break armour: none left, and 25%\nmore physical damage taken for 6\nseconds. Mana +10%", "Needs a physical skill", GC::Strength, 4, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
 	{ SG::Pestilence, "Pestilence", "A monster dying with your bleed, poison or\nignite on it passes it to 2 more. Mana +30%", "Needs a damaging skill", GC::Magic, 8, 130, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::HoradricSeals, "Horadric Seals", "Stores a seal every 1.5s, up to 2; the next\ncast repeats once per seal at 50%. Mana +50%", "Needs a spell", GC::Magic, 9, 150, 0, ST_Spell, ST_Channelling | ST_Movement, 0, Repeat },
 	{ SG::StoredVolley, "Held Volley", "Stores a seal every second, up to 6; the\nnext use fires 1 more projectile each. Mana +20%", "Needs a projectile skill", GC::Dexterity, 7, 120, 0, ST_Projectile, 0, 0, MoreProjectiles },
@@ -254,6 +255,18 @@ struct HitState {
 	const Monster *takenMonster = nullptr;
 	int physicalTakenPercent = 0;
 	int chaosTakenPercent = 0;
+	/**
+	 * The hit's physical damage, and its whole damage, as dealt but before monster armour: the bases of its bleeds and
+	 * of the supports' extra damage (infusions, Zakarum's Blessing, Fuel the Pyre...), which armour never reduces in
+	 * POE2. total and physical stay the damage dealt (leech).
+	 */
+	int64_t physicalBeforeArmour = 0;
+	int64_t totalBeforeArmour = 0;
+	/** The armour reduction of the physical packet about to be dealt to armourMonster, in percent (MonsterHitDamage). */
+	const Monster *armourMonster = nullptr;
+	int armourPercent = 0;
+	/** Brutality III's roll for the physical packet in progress said to ignore armour. */
+	bool ignoreArmour = false;
 	DamageType lastType = DamageType::Physical;
 	bool wirt = false;
 };
@@ -357,7 +370,8 @@ void DealExtra(const Player &player, Monster &monster, DamageType type, Fixed26_
 	// Might: the skill's hits deal nothing but physical damage, what they add on top included.
 	if (type != DamageType::Physical && (Hit.depth > 0 || Hit.finishing) && Hit.player == &player && HitHas(SG::Might))
 		return;
-	const Fixed26_6 dealt = Fixed26_6::fromRaw(Percent(damage.raw(), MonsterDamageTakenPercent(monster, type)));
+	// Physical extras (bursts, Bartuc's) meet armour; Brutality's roll is the hit's, not theirs.
+	const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(MonsterHitDamage(player, monster, type, damage.raw(), ArmourHit::Extra)));
 	ApplyMonsterDamage(type, monster, dealt);
 	monster.tag(player);
 	TryInflictAilment(monster, player, type, dealt, HitSource());
@@ -512,10 +526,10 @@ DamageType PrismElement(uint8_t element)
 	return Elements[element % 3];
 }
 
-/** @brief The hit's damage as dealt, with its non-chaos part as it was before Dark Enchant's less. */
+/** @brief The hit's damage as dealt (before armour), with its non-chaos part as it was before Dark Enchant's less. */
 int64_t HitDamageBeforeDarkEnchant(const Player &player, SkillSlot skill)
 {
-	const int64_t other = std::max<int64_t>(Hit.total - Hit.chaos, 0);
+	const int64_t other = std::max<int64_t>(Hit.totalBeforeArmour - Hit.chaos, 0);
 	const int less = Has(player, skill, SG::DarkEnchant) ? std::clamp(Value(player, skill, SG::DarkEnchant, 1), 0, 99) : 0;
 	return Hit.chaos + (other * 100 / (100 - less));
 }
@@ -547,6 +561,9 @@ void FinishHit()
 	const int32_t total = static_cast<int32_t>(std::min<int64_t>(Hit.total, INT32_MAX));
 	const int32_t physical = static_cast<int32_t>(std::min<int64_t>(Hit.physical, INT32_MAX));
 	const int32_t poisonBase = static_cast<int32_t>(std::min<int64_t>(Hit.poisonBase, INT32_MAX));
+	// Bleeds and the supports' extra damage count the hit before monster armour, as in POE2.
+	const int32_t physicalBase = static_cast<int32_t>(std::min<int64_t>(Hit.physicalBeforeArmour, INT32_MAX));
+	const int32_t totalBase = static_cast<int32_t>(std::min<int64_t>(Hit.totalBeforeArmour, INT32_MAX));
 	monster.poe2.lastHitSkillKind = static_cast<uint8_t>(skill.kind);
 	monster.poe2.lastHitSkillId = skill.id;
 	monster.poe2.lastHitPlayer = static_cast<int8_t>(player.getId());
@@ -579,19 +596,19 @@ void FinishHit()
 			monster.poe2.witherTicks = WitherTicks;
 		}
 		if (Has(player, skill, SG::SerratedEdge) && physical > 0 && GenerateRnd(100) < Value(player, skill, SG::SerratedEdge, 0))
-			InflictSupportBleed(player, monster, physical);
+			InflictSupportBleed(player, monster, physicalBase);
 		// POE2's poison: 20% of the hit's physical and chaos damage a second for 2 seconds, the strongest only.
 		if (Has(player, skill, SG::Envenom) && poisonBase > 0 && GenerateRnd(100) < Value(player, skill, SG::Envenom, 0))
 			InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(poisonBase) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
 		// Anguish is a lineage's own poison, and says it stacks: up to 5.
 		if (Has(player, skill, SG::AndarielsAnguish))
-			InflictPoison(player, monster, total * 10 / 100 * 4, 80, 5);
+			InflictPoison(player, monster, totalBase * 10 / 100 * 4, 80, 5);
 		if (Has(player, skill, SG::SunderArmour) && physical > 0) {
 			BreakMonsterArmour(monster, &player);
 			monster.poe2.armourBreakTicks = static_cast<uint8_t>(std::max<int>(monster.poe2.armourBreakTicks, Value(player, skill, SG::SunderArmour, 0) * TicksPerSecond));
 		}
 		if (Has(player, skill, SG::ButchersHook)) {
-			InflictSupportBleed(player, monster, std::max(physical, total / 2));
+			InflictSupportBleed(player, monster, std::max(physicalBase, totalBase / 2));
 			if (!monster.isUnique() && monster.position.tile.WalkingDistance(player.position.tile) > 1) {
 				const Point behind = monster.position.tile + (monster.position.tile - player.position.tile);
 				M_GetKnockback(monster, behind);
@@ -603,30 +620,30 @@ void FinishHit()
 
 	// Extra damage: infusions, Holy Infusion, Fuel the Pyre, Frostbite and Tal Rasha's Prism.
 	if (alive) {
-		if (physical > 0) {
+		if (physicalBase > 0) {
 			if (Has(player, skill, SG::InfusedFlames))
-				DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(physical));
+				DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(physicalBase));
 			else if (Has(player, skill, SG::InfusedStorm))
-				DealExtra(player, monster, DamageType::Lightning, Fixed26_6::fromRaw(physical));
+				DealExtra(player, monster, DamageType::Lightning, Fixed26_6::fromRaw(physicalBase));
 			else if (Has(player, skill, SG::InfusedFrost))
-				DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(physical));
+				DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(physicalBase));
 		}
 		// Dark Enchant: a share of the hit as chaos, counted from before its own less (POE2's Chaos Attunement).
 		if (Has(player, skill, SG::DarkEnchant))
 			DealExtra(player, monster, DamageType::Chaos, Fixed26_6::fromRaw(Percent(HitDamageBeforeDarkEnchant(player, skill), Value(player, skill, SG::DarkEnchant, 0))));
 		// Zakarum's Blessing adds holy fire.
 		if (Has(player, skill, SG::HolyInfusion))
-			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(total / 5));
+			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(totalBase / 5));
 		if (Has(player, skill, SG::FuelThePyre) && monster.poe2.igniteTicks > 0) {
-			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(Percent(total, Value(player, skill, SG::FuelThePyre, 0))));
+			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(Percent(totalBase, Value(player, skill, SG::FuelThePyre, 0))));
 			// Fan the Flames II: the burn spreads.
 			if (Value(player, skill, SG::FuelThePyre, 1) > 0)
 				SpreadIgnite(player, monster);
 		}
 		if (Has(player, skill, SG::Frostbite) && state.frostbiteTicks > 0)
-			DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(total / 4));
+			DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(totalBase / 4));
 		if (Has(player, skill, SG::TalRashasPrism))
-			DealExtra(player, monster, PrismElement(state.prismElement), Fixed26_6::fromRaw(total * 3 / 10));
+			DealExtra(player, monster, PrismElement(state.prismElement), Fixed26_6::fromRaw(totalBase * 3 / 10));
 		if (Has(player, skill, SG::BartucsBloodletting) && state.bartucTicks > 0)
 			DealExtra(player, monster, DamageType::Physical, Fixed26_6::fromRaw(state.bartucDamage));
 		// Blood Sacrifice: a use that paid its life gains a share of each hit as chaos (POE2's Extraction).
@@ -638,25 +655,25 @@ void FinishHit()
 	if (Has(player, skill, SG::Conductor) && monster.poe2.shockTicks > 0) {
 		for (Monster *other : NearestMonsters(monster.position.tile, 5, 1, &monster)) {
 			AddVisualEffect(other->position.tile, MissileGraphicID::Lightning);
-			DealExtra(player, *other, DamageType::Lightning, Fixed26_6::fromRaw(total / 2));
+			DealExtra(player, *other, DamageType::Lightning, Fixed26_6::fromRaw(totalBase / 2));
 		}
 	}
 	if (Has(player, skill, SG::DiablosRedLightning) && Hit.lastType == DamageType::Lightning && monster.hitPoints.raw() * 5 < monster.maxHitPoints.raw()) {
 		AddVisualEffect(monster.position.tile, MissileGraphicID::RedFlareExplosion, 0, 6);
 		for (Monster *other : NearestMonsters(monster.position.tile, 6, 3, &monster)) {
 			AddVisualEffect(other->position.tile, MissileGraphicID::Lightning);
-			DealExtra(player, *other, DamageType::Lightning, Fixed26_6::fromRaw(total / 2));
+			DealExtra(player, *other, DamageType::Lightning, Fixed26_6::fromRaw(totalBase / 2));
 		}
 	}
 	if (Has(player, skill, SG::Shatter) && (SkillTags(skill) & ST_Slam) != 0 && (monster.poe2.freezeTicks > 0 || monster.mode == MonsterMode::Petrified)) {
 		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter, 0, 6);
 		BreakObjectsInArea(player, monster.position.tile, 2);
 		for (Monster *other : NearestMonsters(monster.position.tile, 2, 8, &monster))
-			DealExtra(player, *other, DamageType::Cold, Fixed26_6::fromRaw(total * 3 / 10));
+			DealExtra(player, *other, DamageType::Cold, Fixed26_6::fromRaw(totalBase * 3 / 10));
 	}
 	if (Has(player, skill, SG::BurningGround) && state.burningGroundCooldown == 0) {
 		state.burningGroundCooldown = 20;
-		AddBurst(monster.position.tile, Value(player, skill, SG::BurningGround, 1), 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max<int32_t>(total / 10, 64)), Value(player, skill, SG::BurningGround, 0), 10);
+		AddBurst(monster.position.tile, Value(player, skill, SG::BurningGround, 1), 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max<int32_t>(totalBase / 10, 64)), Value(player, skill, SG::BurningGround, 0), 10);
 	}
 	// Multistrike: the hit strikes twice more.
 	if (!Repeating && Has(player, skill, SG::Multistrike) && alive) {
@@ -1266,6 +1283,11 @@ SupportHitScope::SupportHitScope(const Player &player, SkillSlot skill)
 	Hit.total = 0;
 	Hit.poisonBase = 0;
 	Hit.chaos = 0;
+	Hit.physicalBeforeArmour = 0;
+	Hit.totalBeforeArmour = 0;
+	Hit.armourMonster = nullptr;
+	Hit.armourPercent = 0;
+	Hit.ignoreArmour = false;
 	Hit.takenMonster = nullptr;
 	Hit.finishing = false;
 	Hit.wirt = Has(player, skill, SG::WirtsLeg) && GenerateRnd(100) < 10;
@@ -1305,9 +1327,21 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 		Hit.total = 0;
 		Hit.poisonBase = 0;
 		Hit.chaos = 0;
+		Hit.physicalBeforeArmour = 0;
+		Hit.totalBeforeArmour = 0;
+	}
+	// The physical packet's damage before monster armour (MonsterHitDamage noted the reduction just before this).
+	int64_t beforeArmour = damage.raw();
+	if (type == DamageType::Physical) {
+		if (Hit.armourMonster == &monster && Hit.armourPercent > 0)
+			beforeArmour = beforeArmour * 100 / (100 - Hit.armourPercent);
+		Hit.armourMonster = nullptr;
+		Hit.armourPercent = 0;
+		Hit.physicalBeforeArmour += beforeArmour;
 	}
 	Hit.monster = &monster;
 	Hit.total += damage.raw();
+	Hit.totalBeforeArmour += beforeArmour;
 	Hit.lastType = type;
 	// Trinity: the hit's element builds Resonance.
 	OnSpiritElementalHit(*Hit.player, type);
@@ -1318,10 +1352,25 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 	if (type == DamageType::Chaos)
 		Hit.chaos += damage.raw();
 	if (IsAnyOf(type, DamageType::Physical, DamageType::Chaos)) {
-		// Poison counts the hit as it was before the monster's resistance and damage taken, as in POE2.
+		// Poison counts the hit as it was before the monster's armour, resistance and damage taken, as in POE2.
 		const int taken = Hit.takenMonster == &monster ? (type == DamageType::Physical ? Hit.physicalTakenPercent : Hit.chaosTakenPercent) : 0;
-		Hit.poisonBase += taken > 0 ? damage.raw() * 100 / taken : damage.raw();
+		Hit.poisonBase += taken > 0 ? beforeArmour * 100 / taken : beforeArmour;
 	}
+}
+
+void NoteHitArmourPercent(const Monster &monster, int percent)
+{
+	if (Hit.depth == 0 || Hit.finishing || Hit.player == nullptr)
+		return;
+	Hit.armourMonster = &monster;
+	Hit.armourPercent = std::clamp(percent, 0, 99);
+}
+
+bool TakeHitIgnoresArmour()
+{
+	const bool ignore = Hit.ignoreArmour && Hit.depth > 0 && !Hit.finishing && Hit.player != nullptr;
+	Hit.ignoreArmour = false;
+	return ignore;
 }
 
 void NoteHitDamageTakenPercent(const Monster &monster, DamageType type, int percent)
@@ -1362,6 +1411,9 @@ int WitheredDamageTakenPercent(const Monster &monster, DamageType type)
 
 int SupportHitDamagePercent(const Monster &monster, DamageType type)
 {
+	// Each physical packet makes its own Brutality roll (or none): last packet's never carries over.
+	if (type == DamageType::Physical)
+		Hit.ignoreArmour = false;
 	int percent = 100 + WitheredDamageTakenPercent(monster, type);
 	if (Hit.depth == 0 || Hit.finishing || Hit.player == nullptr)
 		return percent;
@@ -1395,9 +1447,12 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 				percent = 0;
 			break;
 		case SG::Brutality:
-			// Brutality III: some hits ignore armour, as if it were broken.
-			if (type == DamageType::Physical && monster.poe2.armourBreakTicks == 0 && GenerateRnd(100) < Value(player, skill, gem, 1))
+			// Brutality III: some hits ignore armour, as if it were broken: no armour, and the break's more damage. Every
+			// tier makes the roll (I and II can't win it), so the game's random numbers stay as they were.
+			if (type == DamageType::Physical && monster.poe2.armourBreakTicks == 0 && GenerateRnd(100) < Value(player, skill, gem, 1)) {
 				more(ArmourBreakDamagePercent);
+				Hit.ignoreArmour = true;
+			}
 			break;
 		case SG::InfusedFlames:
 		case SG::InfusedStorm:

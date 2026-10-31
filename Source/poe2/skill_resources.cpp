@@ -6,6 +6,7 @@
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -125,7 +126,7 @@ void SkillBurst(const Player &player, Point center, int radius, DamageType type,
 			continue;
 		if (center.ExactDistance(monster.position.tile) > radius)
 			continue;
-		const Fixed26_6 dealt = Fixed26_6::fromRaw(damage.raw() * MonsterDamageTakenPercent(monster, type) / 100);
+		const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(MonsterHitDamage(player, monster, type, damage.raw())));
 		ApplyMonsterDamage(type, monster, dealt);
 		monster.tag(player);
 		TryInflictAilment(monster, player, type, dealt);

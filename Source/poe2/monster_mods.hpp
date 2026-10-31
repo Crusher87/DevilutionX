@@ -29,8 +29,20 @@ enum class MonsterMod : uint8_t {
 	HardHitting,
 	Regenerating,
 	Resistant,
+	/**
+	 * Monster armour (monster armour plan, step 5): armour as if its kind had max(its percent, 50) x 2. Rolled on its own
+	 * hash on top of the other picks, so no monster's other modifiers moved when it was added. "Plated" to the player,
+	 * since the banner's armour word "Armoured" is a tier.
+	 */
+	Plated,
 	Count,
 };
+
+/** @brief The modifiers picked from the rarity's count (ChooseMods); Plated, after them, is rolled on its own. */
+constexpr int RolledModCount = 4;
+/** @brief In percent: how often a rare or magic monster is Plated. */
+constexpr int RarePlatedPercent = 25;
+constexpr int MagicPlatedPercent = 10;
 
 /** @brief Out of 1000 monsters, how many roll magic and rare. */
 constexpr int MagicMonsterPerMille = 120;

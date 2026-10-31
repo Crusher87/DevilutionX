@@ -48,7 +48,8 @@ bool CanRollRarity(const Monster &monster)
 
 uint8_t ChooseMods(uint32_t hash, int count)
 {
-	constexpr int NumMods = static_cast<int>(MonsterMod::Count);
+	// Plated isn't picked here: the four picks of every seed stay as they were before it was added.
+	constexpr int NumMods = RolledModCount;
 	uint8_t mods = 0;
 	for (int picked = 0, i = 0; picked < count && i < 16; i++) {
 		const int mod = static_cast<int>(Mix(hash + static_cast<uint32_t>(i)) % NumMods);
@@ -111,10 +112,16 @@ MonsterAffixes GetMonsterAffixes(const Monster &monster)
 		int count = RareMonsterModCount;
 		if (const int extra = ActiveMapEffects()[MapDanger::RareExtraMod]; extra > 0 && static_cast<int>((hash >> 12) % 100) < extra)
 			count++;
-		affixes.mods = ChooseMods(hash, std::min(count, static_cast<int>(MonsterMod::Count)));
+		affixes.mods = ChooseMods(hash, std::min(count, RolledModCount));
 	} else if (roll < rarePerMille + magicPerMille) {
 		affixes.rarity = MonsterRarity::Magic;
 		affixes.mods = ChooseMods(hash, 1);
+	}
+	// Plated, from its own hash bits, on top of the picks.
+	if (affixes.rarity != MonsterRarity::Normal) {
+		const int plated = affixes.rarity == MonsterRarity::Rare ? RarePlatedPercent : MagicPlatedPercent;
+		if (static_cast<int>(Mix(hash ^ 0x41524D52U) % 100) < plated)
+			affixes.mods |= static_cast<uint8_t>(1U << static_cast<uint8_t>(MonsterMod::Plated));
 	}
 	return affixes;
 }
@@ -131,7 +138,9 @@ void ApplyMonsterRarity(Monster &monster)
 		lifePercent = lifePercent * map[MapAxis::Effectiveness] / 100;
 		monster.maxHitPoints = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(monster.maxHitPoints.raw()) * lifePercent / 100, INT32_MAX / 4)));
 		monster.hitPoints = monster.maxHitPoints;
-		const int defencePercent = 100 + map[MapDanger::MonsterArmour] + map[MapDanger::MonsterEvasion];
+		// The waystone's "Armoured" raises monster armour where it's worked out (MonsterArmourPercent); "Evasive" raises
+		// the armour class, which is evasion here.
+		const int defencePercent = 100 + map[MapDanger::MonsterEvasion];
 		monster.armorClass = static_cast<uint8_t>(std::min(monster.armorClass * defencePercent / 100, 255));
 		// The map's damage scales each hit (MonsterModsDamagePercent), past the old 255 cap of the bytes.
 	}
@@ -196,6 +205,8 @@ std::string_view MonsterModName(MonsterMod mod)
 		return _("Regenerating");
 	case MonsterMod::Resistant:
 		return _("Elemental Resistance");
+	case MonsterMod::Plated:
+		return _("Plated");
 	default:
 		return {};
 	}
