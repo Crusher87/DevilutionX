@@ -632,7 +632,8 @@ TEST_F(Poe2ChaosTest, WitheredRaisesChaosDamageOnly)
 	for (const DamageType type : { DamageType::Physical, DamageType::Fire, DamageType::Lightning, DamageType::Cold }) {
 		EXPECT_EQ(WitheredDamageTakenPercent(monster, type), 0);
 		EXPECT_EQ(SupportHitDamagePercent(monster, type), 100);
-		EXPECT_EQ(MonsterDamageTakenPercent(monster, type), 100);
+		// Only its resistance: a zombie's kind resists cold.
+		EXPECT_EQ(MonsterDamageTakenPercent(monster, type), 100 - MonsterResistance(monster, type));
 	}
 	EXPECT_EQ(SupportHitDamagePercent(monster, DamageType::Chaos), 150);
 	EXPECT_EQ(MonsterDamageTakenPercent(monster, DamageType::Chaos), 150);

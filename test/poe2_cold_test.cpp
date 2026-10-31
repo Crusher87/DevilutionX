@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -21,6 +22,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_details.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/unique_rules.hpp"
 #include "spells.h"
 #include "tables/itemdat.h"
@@ -394,6 +396,64 @@ TEST_F(Poe2ColdTest, NecromorbsThrowChaos)
 	EXPECT_EQ(MonsterHitDamageType(nullptr, MissileID::OrangeFlare, DamageType::Physical), DamageType::Physical);
 	gbIsPoe2 = false;
 	EXPECT_EQ(MonsterHitDamageType(&orb, MissileID::RedFlare, DamageType::Cold), DamageType::Cold);
+}
+
+TEST_F(Poe2ColdTest, MonsterColdResistanceFollowsTheKind)
+{
+	LoadMonsterColdResistances();
+	const auto cold = [](_monster_id type, uint16_t marks = 0) { return MonsterResistance(MakeMonster(type, marks), DamageType::Cold); };
+	// Creatures of fire and lava are weak to cold, whatever Diablo's magic marks said.
+	EXPECT_EQ(cold(MT_NMAGMA, IMMUNE_MAGIC | RESIST_FIRE), -30);
+	EXPECT_EQ(cold(MT_XACID, RESIST_MAGIC | IMMUNE_FIRE), -30);
+	EXPECT_EQ(cold(MT_BALROG, RESIST_MAGIC | IMMUNE_FIRE), -30);
+	// Fire-hardened ones that aren't made of fire have none.
+	EXPECT_EQ(cold(MT_FLAYED, RESIST_MAGIC | IMMUNE_FIRE), 0);
+	// The undead resist it, the liches more, and burning skeletons don't.
+	EXPECT_EQ(cold(MT_NZOMBIE), 20);
+	EXPECT_EQ(cold(MT_UNRAV), 20);
+	EXPECT_EQ(cold(MT_LICH), 30);
+	EXPECT_EQ(cold(MT_RSKELAX, IMMUNE_MAGIC | RESIST_FIRE), 0);
+	// Icy ones resist it most.
+	EXPECT_EQ(cold(MT_FROSTC), 50);
+	EXPECT_EQ(cold(MT_SNOWWICH), 50);
+	// The rest keep what their magic marks gave.
+	EXPECT_EQ(cold(MT_TOAD), ColdImmuneMarkPercent);
+	EXPECT_EQ(cold(MT_SNEAK), 0);
+	EXPECT_EQ(cold(MT_COUNSLR), ColdResistMarkPercent);
+	// Hell has its own column: the Unseen resist more there, as their Hell marks did.
+	EXPECT_EQ(cold(MT_UNSEEN), 20);
+	sgGameInitInfo.nDifficulty = DIFF_HELL;
+	EXPECT_EQ(cold(MT_UNSEEN), 40);
+	EXPECT_EQ(cold(MT_NMAGMA), -30);
+	sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+
+	// Below zero the monster takes more: 130% of a cold hit.
+	EXPECT_EQ(MonsterDamageTakenPercent(MakeMonster(MT_NMAGMA, IMMUNE_MAGIC), DamageType::Cold), 130);
+	// Curses and modifiers still move it.
+	Monster magma = MakeMonster(MT_NMAGMA, IMMUNE_MAGIC);
+	magma.poe2.lowerResistTicks = 40;
+	EXPECT_LT(MonsterResistance(magma, DamageType::Cold), -30);
+
+	// The info box names it.
+	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE, false, 20, MonsterTypeColdResistance(MT_NMAGMA, IMMUNE_MAGIC | RESIST_FIRE, false)), "Resistances: Fire 30%, Cold -30%, Chaos 20%");
+	EXPECT_EQ(ResistanceMarksText(0, false, 0, MonsterTypeColdResistance(MT_FROSTC, 0, false)), "Resistances: Cold 50%");
+
+	// Outside POE2 mode the marks are all there is.
+	gbIsPoe2 = false;
+	EXPECT_EQ(MonsterTypeColdResistance(MT_NMAGMA, IMMUNE_MAGIC, false), ColdImmuneMarkPercent);
+	EXPECT_EQ(cold(MT_NMAGMA, IMMUNE_MAGIC), 0);
+	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2ColdTest, EveryMonsterKindHasAColdResistance)
+{
+	const std::vector<std::string> listed = Column("txtdata\\poe2\\monster_cold_resistance.tsv", { "type" });
+	std::vector<std::string> kinds = Column("txtdata\\monsters\\monstdat.tsv", { "_monster_id" });
+	ASSERT_EQ(kinds.size(), static_cast<size_t>(NUM_DEFAULT_MTYPES));
+	for (const std::string &kind : kinds)
+		EXPECT_NE(std::find(listed.begin(), listed.end(), kind), listed.end()) << kind;
+	for (const std::string &kind : listed)
+		EXPECT_TRUE(magic_enum::enum_cast<_monster_id>(kind).has_value()) << kind;
 }
 
 } // namespace

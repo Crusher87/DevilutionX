@@ -5,6 +5,8 @@
  * spell damage and levels, minion levels, life and resistances, life and mana on kill, a sceptre's own Spirit, and
  * the element tags that first-element exclusivity narrows.
  */
+#include <array>
+
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
@@ -253,11 +255,14 @@ TEST_F(Poe2CasterStatsTest, MinionLifeAndResistances)
 	Monster enemy {};
 	enemy.levelType = 0;
 	enemy.flags = MFLAG_POE2_TABLES;
-	const int before = MonsterBaseResistance(minion, DamageType::Fire);
 	const int enemyBefore = MonsterBaseResistance(enemy, DamageType::Fire);
+	std::array<int, 3> before {};
+	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Lightning, DamageType::Cold };
+	for (size_t i = 0; i < Elements.size(); i++)
+		before[i] = MonsterBaseResistance(minion, Elements[i]);
 	SetGearStat(player, Poe2ItemStat::MinionResistances, 15);
-	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Cold })
-		EXPECT_EQ(MonsterBaseResistance(minion, type), before + 15);
+	for (size_t i = 0; i < Elements.size(); i++)
+		EXPECT_EQ(MonsterBaseResistance(minion, Elements[i]), before[i] + 15);
 	EXPECT_EQ(MonsterBaseResistance(minion, DamageType::Physical), 0);
 	EXPECT_EQ(MonsterBaseResistance(enemy, DamageType::Fire), enemyBefore) << "Only the owner's minions";
 }

@@ -234,6 +234,7 @@ void LoadMonsterLevels()
 	TypeBossRows.clear();
 	OtherUniqueRow = { 450, 150 };
 	LoadMonsterChaosResistances();
+	LoadMonsterColdResistances();
 	if (!gbIsPoe2)
 		return;
 	LoadLevelRows();
