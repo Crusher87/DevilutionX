@@ -88,6 +88,7 @@
 #include "poe2/floor_packs.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
@@ -5178,6 +5179,9 @@ void PrintMonstHistory(int mt)
 			// POE2 Mashup: resistances are percentages, and no monster is immune.
 			const bool undead = MonstersData[mt].monsterClass == MonsterClass::Undead;
 			AddInfoBoxString(ResistanceMarksText(static_cast<uint16_t>(res), undead, MonsterTypeChaosResistance(mt), MonsterTypeColdResistance(mt, static_cast<uint16_t>(res), undead)));
+			// The kind's armour, before modifiers and maps.
+			if (const std::string_view armour = ArmourTierText(MonsterTypeArmourPercent(mt)); !armour.empty())
+				AddInfoBoxString(armour);
 		} else if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) == 0) {
 			AddInfoBoxString(_("No magic resistance"));
 		} else {
@@ -5215,6 +5219,8 @@ void PrintUniqueHistory()
 	if (gbIsPoe2) {
 		const bool undead = monster.data().monsterClass == MonsterClass::Undead;
 		AddInfoBoxString(ResistanceMarksText(monster.resistance, undead, MonsterResistance(monster, DamageType::Chaos), MonsterTypeColdResistance(static_cast<int>(monster.type().type), monster.resistance, undead)));
+		if (const std::string_view armour = MonsterArmourText(monster); !armour.empty())
+			AddInfoBoxString(armour);
 		return;
 	}
 	const int res = monster.shownResistance() & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);

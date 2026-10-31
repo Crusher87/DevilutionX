@@ -110,7 +110,7 @@ const SupportData Table[] = {
 	{ SG::SerratedEdge, "Open Wounds", "Hits have a 25% chance to make\nmonsters bleed. Mana +10%", "Needs a physical skill", GC::Dexterity, 3, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
 	{ SG::Envenom, "Venom", "Hits poison for 20% of physical and chaos\na second for 2s. 15% less damage. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 5, 110, PhysicalHit | ST_Chaos, 0, 0, 0, NoFamily },
 	{ SG::Bloodlust, "Bloodthirst", "30% more physical damage against\nbleeding monsters. Mana +10%", "Needs a melee attack", GC::Strength, 5, 110, 0, ST_Melee, 0, 0, NoFamily },
-	{ SG::SunderArmour, "Crack Armor", "Hits break armour: 20% more physical\ndamage taken for 6 seconds. Mana +10%", "Needs a physical skill", GC::Strength, 4, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
+	{ SG::SunderArmour, "Crack Armor", "Hits break armour: none left, and 25%\nmore physical damage taken for 6\nseconds. Mana +10%", "Needs a physical skill", GC::Strength, 4, 110, 0, PhysicalHit, ST_Herald | ST_Minion, 0, NoFamily },
 	{ SG::Pestilence, "Pestilence", "A monster dying with your bleed, poison or\nignite on it passes it to 2 more. Mana +30%", "Needs a damaging skill", GC::Magic, 8, 130, 0, DamageSkill, 0, 0, NoFamily },
 	{ SG::HoradricSeals, "Horadric Seals", "Stores a seal every 1.5s, up to 2; the next\ncast repeats once per seal at 50%. Mana +50%", "Needs a spell", GC::Magic, 9, 150, 0, ST_Spell, ST_Channelling | ST_Movement, 0, Repeat },
 	{ SG::StoredVolley, "Held Volley", "Stores a seal every second, up to 6; the\nnext use fires 1 more projectile each. Mana +20%", "Needs a projectile skill", GC::Dexterity, 7, 120, 0, ST_Projectile, 0, 0, MoreProjectiles },
