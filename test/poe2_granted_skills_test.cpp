@@ -1122,7 +1122,8 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	Rate bolt { "Staff Bolt", staffBolt, GrantedStaffBoltPercent / CastSeconds(staffBolt), 1.0, {} };
 	bolt.supported = BestSupportPair(player, staffBolt, DamageType::Fire, true, &bolt.pair);
 	freeSkills.push_back(bolt);
-	EXPECT_EQ(gems.size(), 12U);
+	// 12, then Hex Rupture.
+	EXPECT_EQ(gems.size(), 13U);
 	EXPECT_GE(freeSkills.size(), 14U);
 
 	for (const int level : { 1, 20 }) {

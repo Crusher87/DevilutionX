@@ -1068,6 +1068,9 @@ uint32_t SkillTags(SkillSlot skill)
 	case TableShape::Curse:
 		tags |= ST_Curse | ST_Duration | ST_Area;
 		break;
+	case TableShape::HexBurst:
+		tags |= ST_Area;
+		break;
 	case TableShape::Buff:
 		tags |= ST_Duration;
 		if (table->buff == TableBuff::WarCry)

@@ -165,7 +165,9 @@ enum class WeaponSkill : uint8_t {
 	Despair,
 	/** Chaos gems addendum G4: POE2's Poisonburst Arrow. */
 	PlagueArrow,
-	Last = PlagueArrow,
+	/** Chaos gems addendum G5: POE2's Hexblast. */
+	HexRupture,
+	Last = HexRupture,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */

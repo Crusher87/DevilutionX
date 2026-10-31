@@ -141,8 +141,8 @@ TEST_F(Poe2TableSkillsTest, EveryTableSkillHasAGem)
 		ASSERT_TRUE(index.has_value()) << data.name;
 		EXPECT_EQ(AllItemsList[*index].iMinMLvl, data.level) << data.name;
 	}
-	// 55, then Despair (chaos damage plan step 11) and Plague Arrow.
-	EXPECT_EQ(gems, 57U);
+	// 55, then Despair (chaos damage plan step 11), Plague Arrow and Hex Rupture.
+	EXPECT_EQ(gems, 58U);
 }
 
 TEST_F(Poe2TableSkillsTest, TheTableCoversTheRestOfTheRoster)
@@ -304,7 +304,8 @@ TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 		EXPECT_EQ(data.curveEnd, 312) << data.name;
 		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
 	}
-	EXPECT_EQ(spells, 12);
+	// 12, then Hex Rupture.
+	EXPECT_EQ(spells, 13);
 }
 
 TEST_F(Poe2TableSkillsTest, PulsingZonesHitOncePerInterval)

@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 namespace devilution {
@@ -80,6 +81,8 @@ struct Poe2MonsterState {
 	/** @brief Curses Blasphemy put on, one bit for each TableCurse, and how strong they are in percent (not saved, like the curses). */
 	uint16_t auraCurses = 0;
 	uint8_t auraCurseStrength = 100;
+	/** @brief Each table curse's duration as cast, by TableCurse, so Hex Rupture can tell when half of it has run out. */
+	std::array<uint8_t, 16> curseFullTicks {};
 	/** @brief The skill that last hit the monster (a SkillSlot's kind and id) and the player who used it, for kill supports. */
 	uint8_t lastHitSkillKind = 0;
 	uint8_t lastHitSkillId = 0;

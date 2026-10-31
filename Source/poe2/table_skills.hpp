@@ -59,6 +59,8 @@ enum class TableShape : uint8_t {
 	SoulHarvest,
 	/** Spends all Rage on a storm of ancestral blows. */
 	CallOfTheAncients,
+	/** Bursts the curses at least half run out on the monsters within the radius of the target (Hex Rupture). */
+	HexBurst,
 };
 
 /** @brief How a Zone skill's zone behaves. */
@@ -172,6 +174,9 @@ enum TableFlag : uint32_t {
 
 /** @brief Plague Arrow's burst hits the enemies around the one the arrow struck for this share of the arrow, in percent. */
 constexpr int PlagueArrowSplashPercent = 50;
+/** @brief Hex Rupture bursts at most this many curses a cast, each with this radius. */
+constexpr int HexRuptureMaxBursts = 10;
+constexpr int HexRuptureBurstRadius = 1;
 
 /** @brief What a granted skill's hits do besides damage (caster-weapons-plan-v2.md 6.12). */
 enum class GrantedRider : uint8_t {

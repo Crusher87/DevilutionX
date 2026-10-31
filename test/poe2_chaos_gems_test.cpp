@@ -4,6 +4,7 @@
 #include <array>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
@@ -394,6 +395,95 @@ TEST_F(Poe2ChaosGemsTest, PlagueArrowBurstPoisonsThePack)
 	OnTableMissileHit(fire, player, plain, 40, false);
 	EXPECT_EQ(plain.poe2.poisonTicks, 0);
 	EXPECT_EQ(next.hitPoints, next.maxHitPoints);
+}
+
+// Hex Rupture (POE2's Hexblast): curses at least half run out burst in chaos and are gone.
+TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsHalfSpentCurses)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData *data = FindTableSkill(WeaponSkill::HexRupture);
+	ASSERT_NE(data, nullptr);
+	EXPECT_EQ(data->name, "Hex Rupture");
+	EXPECT_EQ(data->level, 11);
+	EXPECT_EQ(data->type, DamageType::Chaos);
+	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::HexRupture));
+	EXPECT_TRUE(IsTableAreaSkill(*data));
+	const SkillSlot hex = SkillSlot::ForAttack(WeaponSkill::HexRupture);
+	EXPECT_NE(SkillTags(hex) & ST_Spell, 0U);
+	EXPECT_NE(SkillTags(hex) & ST_Chaos, 0U);
+	Item gem;
+	ASSERT_TRUE(CreateSkillGemItem(gem, hex, 1));
+	EXPECT_EQ(SkillForGem(gem), hex);
+	Supported(hex);
+
+	const Point target { 45, 45 };
+	// Half run out: it bursts.
+	Monster &spent = PlaceMonster(0, target);
+	ApplyTableCurse(player, spent, WeaponSkill::Despair, 100);
+	const int full = spent.poe2.despairTicks;
+	ASSERT_GT(full, 0);
+	for (int i = 0; i < full / 2; i++)
+		ProcessTableCurses(spent);
+	// Fresh: it stays.
+	Monster &fresh = PlaceMonster(1, { 42, 45 });
+	ApplyTableCurse(player, fresh, WeaponSkill::Weaken, 100);
+	for (int i = 0; i < 10; i++)
+		ProcessTableCurses(fresh);
+	const uint8_t freshLeft = fresh.poe2.weakenTicks;
+	// Uncursed: nothing.
+	Monster &clean = PlaceMonster(2, { 45, 48 });
+	// Blasphemy's: an aura's curse stays, however old.
+	Monster &aura = PlaceMonster(3, { 48, 45 });
+	ApplyAuraCurse(player, aura, WeaponSkill::Weaken, 50, 4);
+
+	ExecuteTableSkill(player, *data, target);
+	EXPECT_EQ(spent.poe2.despairTicks, 0);
+	EXPECT_LT(spent.hitPoints, spent.maxHitPoints);
+	EXPECT_EQ(fresh.poe2.weakenTicks, freshLeft);
+	EXPECT_EQ(fresh.hitPoints, fresh.maxHitPoints);
+	EXPECT_EQ(clean.hitPoints, clean.maxHitPoints);
+	EXPECT_GT(aura.poe2.weakenTicks, 0);
+	EXPECT_EQ(aura.hitPoints, aura.maxHitPoints);
+
+	// A second cast finds nothing left to burst.
+	const Fixed26_6 after = spent.hitPoints;
+	ExecuteTableSkill(player, *data, target);
+	EXPECT_EQ(spent.hitPoints, after);
+}
+
+TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsTenAtMostNearestFirst)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData *data = FindTableSkill(WeaponSkill::HexRupture);
+	ASSERT_NE(data, nullptr);
+	Supported(SkillSlot::ForAttack(WeaponSkill::HexRupture));
+	const Point target { 45, 45 };
+	std::vector<Monster *> cursed;
+	size_t slot = 0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++)
+			cursed.push_back(&PlaceMonster(slot++, target + Displacement { x, y }));
+	}
+	for (const Displacement offset : { Displacement { 2, 0 }, Displacement { 0, 2 }, Displacement { -2, 0 } })
+		cursed.push_back(&PlaceMonster(slot++, target + offset));
+	for (Monster *monster : cursed) {
+		ApplyTableCurse(player, *monster, WeaponSkill::Weaken, 100);
+		for (int i = 0; i < 150; i++)
+			ProcessTableCurses(*monster);
+		ASSERT_GT(monster->poe2.weakenTicks, 0);
+	}
+	ExecuteTableSkill(player, *data, target);
+	int burst = 0;
+	for (const Monster *monster : cursed)
+		burst += monster->poe2.weakenTicks == 0 ? 1 : 0;
+	EXPECT_EQ(burst, HexRuptureMaxBursts);
+	// The nine nearest all burst, then the first of the three further out.
+	for (size_t i = 0; i < 10; i++)
+		EXPECT_EQ(cursed[i]->poe2.weakenTicks, 0) << i;
+	EXPECT_GT(cursed[10]->poe2.weakenTicks, 0);
+	EXPECT_GT(cursed[11]->poe2.weakenTicks, 0);
 }
 
 // The supports' items exist, appended after the others, and are cut from uncut support gems.
