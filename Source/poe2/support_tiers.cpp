@@ -150,6 +150,11 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::ColdPenetration, 1, 2, 100, { 15, 0, 0 }, "Cold hits penetrate 15% of the\nmonster's cold resistance" },
 	{ SG::ColdPenetration, 2, 3, 100, { 20, 0, 0 }, "Cold hits penetrate 20% of the\nmonster's cold resistance" },
 	{ SG::ColdPenetration, 3, 5, 100, { 25, 0, 0 }, "Cold hits penetrate 25% of the\nmonster's cold resistance" },
+	// Escalating Poison: extra poison stacks, less poison duration (POE2: +1 stack, 20% less).
+	{ SG::TwinFangs, 1, 1, 110, { 1, 20, 0 }, "Poison stacks once more; poisons last\n20% shorter. Mana +10%" },
+	// Deadly Poison I-II: more poison damage, less damage with hits (POE2: 75%/25%, 100%/30%).
+	{ SG::DeadlyVenom, 1, 2, 120, { 75, 25, 0 }, "75% more poison damage. 25% less\ndamage with hits. Mana +20%" },
+	{ SG::DeadlyVenom, 2, 4, 120, { 100, 30, 0 }, "Twice the poison damage. 30% less\ndamage with hits. Mana +20%" },
 };
 
 } // namespace

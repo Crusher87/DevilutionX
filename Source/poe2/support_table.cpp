@@ -148,6 +148,9 @@ const SupportData Table[] = {
 	{ SG::ColdPenetration, "Cold Mastery", "Cold hits penetrate 15% of the\nmonster's cold resistance", "Needs a cold skill", GC::Magic, 3, 100, 0, ST_Frost, 0, 0, NoFamily },
 	// POE2's herald-only support (Curtis 2026-10-19).
 	{ SG::DeadlyHerald, "Zealous Aura", "The Aspect's explosions deal 30% more\ndamage. Reserves 20 more Spirit", "Needs an Aspect", GC::Dexterity, 6, 100, 0, ST_Herald, 0, 0, NoFamily },
+	// Chaos supports (chaos gems addendum, Curtis 2026-10-31): POE2's Escalating Poison and Deadly Poison.
+	{ SG::TwinFangs, "Twin Fangs", "Poison stacks once more; poisons last\n20% shorter. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 1, 110, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	{ SG::DeadlyVenom, "Deadly Venom", "75% more poison damage. 25% less\ndamage with hits. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
 };
 // clang-format on
 
@@ -804,6 +807,18 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 {
 	if (!AilmentAllowed(player, HitSource()))
 		return;
+	// The supports of the hit in progress: Deadly Venom's stronger poison, Twin Fangs' extra stack and shorter poisons
+	// (POE2's Deadly Poison and Escalating Poison).
+	if (Hit.player == &player && !Hit.skill.isEmpty()) {
+		if (const int more = Value(player, Hit.skill, SG::DeadlyVenom, 0); more > 0)
+			total = Percent(total, 100 + more);
+		if (Has(player, Hit.skill, SG::TwinFangs)) {
+			const int shorter = Value(player, Hit.skill, SG::TwinFangs, 1);
+			total = Percent(total, 100 - shorter);
+			ticks = std::max(ticks * (100 - shorter) / 100, 1);
+			maxStacks += Value(player, Hit.skill, SG::TwinFangs, 0);
+		}
+	}
 	Poe2MonsterState &state = monster.poe2;
 	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
 	if (maxStacks <= 1) {
@@ -1335,6 +1350,10 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 			break;
 		case SG::DeadlyHerald:
 			more(Value(player, skill, gem, 0));
+			break;
+		case SG::DeadlyVenom:
+			// Hits are weaker; the poison, counted from the hit before this, is stronger (InflictPoison).
+			more(-Value(player, skill, gem, 1));
 			break;
 		case SG::Bloodlust:
 			if (type == DamageType::Physical && monster.poe2.bleedTicks > 0)

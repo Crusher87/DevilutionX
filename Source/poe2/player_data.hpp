@@ -280,6 +280,9 @@ enum class SupportGem : uint8_t {
 	ColdPenetration,
 	/** Herald supports (Curtis 2026-10-19): POE2's Deadly Herald. */
 	DeadlyHerald,
+	/** Chaos supports (chaos gems addendum, Curtis 2026-10-31): POE2's Escalating Poison and Deadly Poison I-II. */
+	TwinFangs,
+	DeadlyVenom,
 	Count,
 };
 
