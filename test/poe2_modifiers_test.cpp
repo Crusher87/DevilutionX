@@ -317,7 +317,7 @@ TEST_F(Poe2ModifiersTest, ColdResistanceReadsAsTheMagicResistanceItGives)
 	ASSERT_EQ(lines.size(), 1U);
 	EXPECT_EQ(lines[0], "+10% to Magic Resistance");
 	for (const ModFamily &family : ModifierFamilies()) {
-		if (family.effect == ModEffect::MagicResistance) {
+		if (family.effect == ModEffect::ColdResistance) {
 			EXPECT_EQ(family.text.find("Cold"), std::string::npos) << family.id;
 			EXPECT_EQ(family.name.find("Cold"), std::string::npos) << family.id;
 		}

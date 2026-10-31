@@ -525,7 +525,7 @@ void OnMetaCrit(Player &player, const Monster &monster, Fixed26_6 dealt)
 void OnMetaAilment(Player &player, const Monster &monster, MetaAilment ailment)
 {
 	// Siphon Elements works for every skill, the meta gems' own included.
-	OnSpiritElementalAilment(player, monster, ailment == MetaAilment::Ignite ? DamageType::Fire : ailment == MetaAilment::Shock ? DamageType::Lightning : DamageType::Magic);
+	OnSpiritElementalAilment(player, monster, ailment == MetaAilment::Ignite ? DamageType::Fire : ailment == MetaAilment::Shock ? DamageType::Lightning : DamageType::Cold);
 	if (!gbIsPoe2 || &player != MyPlayer || FromMetaSkill(player))
 		return;
 	int energy = IgniteEnergyPerPower;

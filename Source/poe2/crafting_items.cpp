@@ -92,7 +92,7 @@ std::expected<ModEffect, std::string> ParseEffect(std::string_view text)
 {
 	if (text.empty())
 		return ModEffect::None;
-	if (const std::optional<ModEffect> effect = magic_enum::enum_cast<ModEffect>(text))
+	if (const std::optional<ModEffect> effect = ParseModEffectName(text))
 		return *effect;
 	return std::unexpected("unknown effect");
 }
@@ -101,7 +101,7 @@ std::expected<UniqueRule, std::string> ParseRule(std::string_view text)
 {
 	if (text.empty())
 		return UniqueRule::None;
-	if (const std::optional<UniqueRule> rule = magic_enum::enum_cast<UniqueRule>(text))
+	if (const std::optional<UniqueRule> rule = ParseUniqueRuleName(text))
 		return *rule;
 	return std::unexpected("unknown rule");
 }
@@ -460,7 +460,7 @@ bool CatalystBoosts(Catalyst catalyst, ModEffect effect)
 		    ModEffect::SpellDamageAndMana, ModEffect::FireSpellDamage, ModEffect::ColdSpellDamage, ModEffect::LightningSpellDamage, ModEffect::PhysicalSpellDamage, ModEffect::ColdSkillLevels,
 		    ModEffect::PhysicalSkillLevels, ModEffect::ManaOnKill, ModEffect::ChaosSpellDamage, ModEffect::ChaosSkillLevels);
 	case Catalyst::Prismatic:
-		return IsAnyOf(effect, ModEffect::FireResistance, ModEffect::MagicResistance, ModEffect::LightningResistance, ModEffect::AllResistances);
+		return IsAnyOf(effect, ModEffect::FireResistance, ModEffect::ColdResistance, ModEffect::LightningResistance, ModEffect::AllResistances);
 	case Catalyst::Martial:
 		return IsAnyOf(effect, ModEffect::AddedPhysicalToAttacks, ModEffect::MeleeSkillLevels, ModEffect::ProjectileSkillLevels);
 	case Catalyst::Swift:

@@ -733,7 +733,7 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 731		Small		-106	-371	FireDamage=5	729,733	Sorcerer		style	729	-121	-390	1	+45	Short Horns	
 732		Small		-128	-413	FireDamage=5	705,730,733	Sorcerer		style	729	-121	-390	1	-46	Short Horns	
 733		Small		-139	-380	FireDamage=5	385,731,732	Sorcerer		style	729	-121	-390	1		Short Horns	
-734	Warding Circle	Notable		-176	-876	AllResist=8,MaxMagicResist=2	735	Sorcerer	Chalk, salt and old words keep the worst of it out.	cluster	734	-215	-890	2	+43	Stub	
+734	Warding Circle	Notable		-176	-876	AllResist=8,MaxColdResist=2	735	Sorcerer	Chalk, salt and old words keep the worst of it out.	cluster	734	-215	-890	2	+43	Stub	
 735		Small		-219	-849	AllResist=3	734,736	Sorcerer		cluster	734	-215	-890	2	+42	Stub	
 736		Small		-255	-878	AllResist=3	735,756	Sorcerer		cluster	734	-215	-890	2	-60	Stub	
 737	Clan Gemcutter	Notable		-176	-782	EnergyShieldPercent=17,SpellDamage=10	738,739	Sorcerer	The clans cut their gems to hold a spell, not to catch the light.	cluster	737	-218	-773	2	-52,+51	Teardrop	
@@ -1342,7 +1342,7 @@ id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs
 1340	Blessed Staff	AscendancyNotable	Monk	42	87	Damage=20,ToHit=15	1339,1341	Tristram		ascendancy	1335	-19	6	0	-103		
 1341	Perfect Form	AscendancyNotable	Monk	83	11	Damage=30	1340	Tristram		ascendancy	1335	-19	6	0			
 1342	Ivgorod Patriarch	Ascendancy	Monk	-135	-39	Magic=10	1343,1344	Tristram		ascendancy	1342	0	0	0			
-1343	Faith Ward	AscendancyNotable	Monk	-69	-64	MagicResist=20	1342,1345	Tristram		ascendancy	1342	0	0	0			
+1343	Faith Ward	AscendancyNotable	Monk	-69	-64	ColdResist=20	1342,1345	Tristram		ascendancy	1342	0	0	0			
 1344	Meditation	AscendancyNotable	Monk	-92	17	ManaRegen=40	1342,1346	Tristram		ascendancy	1342	0	0	0			
 1345	Smite	AscendancyNotable	Monk	-2	-44	Damage=20	1343,1347	Tristram		ascendancy	1342	0	0	0	+194		
 1346	Spirit of Ivgorod	AscendancyNotable	Monk	-25	37	ManaPercent=20	1344,1347	Tristram		ascendancy	1342	0	0	0	-194		

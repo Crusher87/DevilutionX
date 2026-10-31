@@ -61,7 +61,7 @@ FAMILIES = {
 	'all_attributes': ('AllAttributes', 40, 100, 'of the Clouds', True, True),
 	'fire_resistance': ('FireResistance', 100, 100, 'of the Whelpling', True, True),
 	# Diablo has no cold damage, so cold resistance guards against magic, its third element.
-	'cold_resistance': ('MagicResistance', 100, 100, 'of the Penguin', True, True),
+	'cold_resistance': ('ColdResistance', 100, 100, 'of the Penguin', True, True),
 	'lightning_resistance': ('LightningResistance', 100, 100, 'of the Squall', True, True),
 	'all_elemental_resistance': ('AllResistances', 100, 100, 'of the Crystal', True, True),
 	# Chaos resistance (chaos damage plan step 4) rolls on drops since step 14; items saved before that re-roll.
@@ -320,7 +320,7 @@ def caster_affixes():
 
 def game_text(text, effect):
 	"""Names the stat the game gives: POE2's cold resistance is the game's magic resistance, so it reads that way."""
-	if effect == 'MagicResistance':
+	if effect == 'ColdResistance':
 		text = text.replace('Cold Resistance', 'Magic Resistance')
 	return text
 

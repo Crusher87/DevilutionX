@@ -413,7 +413,7 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	// The Sickness Road: the toll's fever and the pact stop some of the hero's ailments (stun buildup isn't one).
 	if (damageType != DamageType::Physical && !AilmentAllowed(player, source))
 		return;
-	if (damageType == DamageType::Magic) {
+	if (damageType == DamageType::Cold) {
 		// POE2 Mashup: supports make cold build up harder (Deep Freeze) or not at all (Elemental Focus).
 		int effect = SupportAilmentEffectPercent(damageType) * SupportAilmentChancePercent(damageType) / 100;
 		if (effect > 0)
@@ -479,7 +479,7 @@ std::optional<DamageType> ElementalAilmentOf(const Monster &monster)
 	const int cold = std::max(state.chillTicks, state.freezeTicks);
 	std::optional<DamageType> element;
 	int most = 0;
-	for (const auto &[type, ticks] : { std::pair { DamageType::Fire, static_cast<int>(state.igniteTicks) }, std::pair { DamageType::Magic, cold },
+	for (const auto &[type, ticks] : { std::pair { DamageType::Fire, static_cast<int>(state.igniteTicks) }, std::pair { DamageType::Cold, cold },
 	         std::pair { DamageType::Lightning, static_cast<int>(state.shockTicks) } }) {
 		if (ticks > most) {
 			most = ticks;
@@ -508,7 +508,7 @@ void InflictBlastAilment(Monster &monster, const Player &player, DamageType elem
 	case DamageType::Lightning:
 		state.shockTicks = ShockTicks;
 		break;
-	case DamageType::Magic:
+	case DamageType::Cold:
 		if (InflictCold(monster, damage))
 			OnMonsterFrozen(player);
 		break;

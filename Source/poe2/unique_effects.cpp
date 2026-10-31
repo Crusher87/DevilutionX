@@ -235,7 +235,7 @@ int BacklashIndex(DamageType element)
 	switch (element) {
 	case DamageType::Fire:
 		return 0;
-	case DamageType::Magic:
+	case DamageType::Cold:
 		return 1;
 	default:
 		return 2;
@@ -356,13 +356,13 @@ void BurstCorpse(const Player &player, const Monster &corpse, int percent)
 /** @brief The element (a DamageType) of fire, cold and lightning, in the order spells cycle them. */
 DamageType CycleElement(int index)
 {
-	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Magic, DamageType::Lightning };
+	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Cold, DamageType::Lightning };
 	return Elements[static_cast<size_t>(index % 3)];
 }
 
 bool IsElemental(DamageType type)
 {
-	return IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic);
+	return IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Cold);
 }
 
 /** @brief Armour as POE2 counts it, from the game's armour. */
@@ -410,7 +410,7 @@ int GearElementSpellDamage(const Player &player, DamageType type)
 		return stat(Poe2ItemStat::FireSpellDamage);
 	case DamageType::Lightning:
 		return stat(Poe2ItemStat::LightningSpellDamage);
-	case DamageType::Magic:
+	case DamageType::Cold:
 		return stat(Poe2ItemStat::ColdSpellDamage);
 	case DamageType::Physical:
 		return stat(Poe2ItemStat::PhysicalSpellDamage);
@@ -449,7 +449,7 @@ const char *DamageTypePacketName(DamageType type)
 	switch (type) {
 	case DamageType::Fire: return "fire part";
 	case DamageType::Lightning: return "lightning part";
-	case DamageType::Magic: return "magic part";
+	case DamageType::Cold: return "magic part";
 	case DamageType::Chaos: return "chaos part";
 	default: return "physical part";
 	}
@@ -734,7 +734,7 @@ int UniqueAttackSpeedPercent(const Player &player)
 	// Ceaseless Hands: an attack frame faster per 5 stacks.
 	if (Rule(player, UniqueRule::UnarmedHitStacks) > 0 && HeldWeapon(player) == nullptr)
 		percent += State(player).unarmedStacks / 5 * 10;
-	if (HasBacklash(player, DamageType::Magic))
+	if (HasBacklash(player, DamageType::Cold))
 		percent -= BacklashSlowPercent;
 	return percent;
 }
@@ -804,7 +804,7 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		packets[static_cast<size_t>(element)] = packets[0] * (100 + third) / 100;
 		packets[0] = 0;
 		if (Rule(player, UniqueRule::ThirdAttackExposure) > 0) {
-			constexpr std::array<DamageType, 4> Types { DamageType::Physical, DamageType::Fire, DamageType::Lightning, DamageType::Magic };
+			constexpr std::array<DamageType, 4> Types { DamageType::Physical, DamageType::Fire, DamageType::Lightning, DamageType::Cold };
 			monster.poe2.exposureTicks = ExposureTicks;
 			monster.poe2.exposureElement = static_cast<uint8_t>(Types[static_cast<size_t>(element)]);
 		}
@@ -842,7 +842,7 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	state.dazing = false;
 	dealt += DealPacket(player, monster, DamageType::Fire, static_cast<int32_t>(packets[1]));
 	dealt += DealPacket(player, monster, DamageType::Lightning, static_cast<int32_t>(packets[2]));
-	dealt += DealPacket(player, monster, DamageType::Magic, static_cast<int32_t>(packets[3]));
+	dealt += DealPacket(player, monster, DamageType::Cold, static_cast<int32_t>(packets[3]));
 	if (crit) {
 		OnMetaCrit(Players[player.getId()], monster, dealt);
 		OnSpiritCrit(Players[player.getId()], monster);
@@ -961,7 +961,7 @@ std::optional<DamageType> VizjereiLastBacklash(const Player &player)
 	const UniqueRuleState &state = State(player);
 	if (state.lastBacklash == 0 || state.backlashTicks[state.lastBacklash - 1U] == 0)
 		return std::nullopt;
-	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Magic, DamageType::Lightning };
+	constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Cold, DamageType::Lightning };
 	return Elements[state.lastBacklash - 1U];
 }
 
@@ -1067,7 +1067,7 @@ int UniqueMovementSlowPercent(const Player &player)
 	if (const int heavy = Rule(player, UniqueRule::HeavyArmourSlow); heavy > 0 && Poe2Armour(player) > HeavyArmour)
 		slow += heavy;
 	slow += MapPlayerSlowPercent(player);
-	if (HasBacklash(player, DamageType::Magic))
+	if (HasBacklash(player, DamageType::Cold))
 		slow += BacklashSlowPercent;
 	return std::clamp(slow, 0, 90);
 }

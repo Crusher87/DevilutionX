@@ -80,7 +80,7 @@ enum class UniqueRule : uint8_t {
 	LessLifeFlaskRecovery,
 	/** 1% increased attack damage per this much fire resistance above the cap. */
 	FireOvercapDamage,
-	MaxMagicResistance,
+	MaxColdResistance,
 	ManaToEnergyShield,
 	LessMaxLife,
 	CritActionSpeed,

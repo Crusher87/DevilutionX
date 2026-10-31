@@ -70,7 +70,7 @@ std::string_view DamageTypeName(DamageType type)
 		return "Fire";
 	case DamageType::Lightning:
 		return "Lightning";
-	case DamageType::Magic:
+	case DamageType::Cold:
 		return "Cold (magic)";
 	case DamageType::Chaos:
 		return "Chaos";
@@ -87,7 +87,7 @@ DamageType SpellDamageType(SpellID spell)
 	case MagicType::Lightning:
 		return DamageType::Lightning;
 	default:
-		return DamageType::Magic;
+		return DamageType::Cold;
 	}
 }
 
@@ -223,10 +223,10 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		hit.effect = std::format("Enemies take +{:d}% physical damage", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (level - 1)));
 		return hit;
 	case WeaponSkill::IceBolt:
-		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, IceBoltShardDamagePercent));
+		AddSpellBase(hit, player, level, DamageType::Cold, ScaleWhole(percent, IceBoltShardDamagePercent));
 		return hit;
 	case WeaponSkill::FrostNova:
-		AddSpellBase(hit, player, level, DamageType::Magic, ScaleWhole(percent, FrostNovaShardDamagePercent));
+		AddSpellBase(hit, player, level, DamageType::Cold, ScaleWhole(percent, FrostNovaShardDamagePercent));
 		return hit;
 	case WeaponSkill::LeapSlam:
 		AddWeaponHit(hit, player, skill, level, percent, LeapSlamDamagePercent);
@@ -424,7 +424,7 @@ std::vector<std::string> AilmentLines(const HitEstimate &hit, uint32_t tags)
 	for (const HitPart &part : hit.parts) {
 		fire = fire || part.type == DamageType::Fire;
 		lightning = lightning || part.type == DamageType::Lightning;
-		cold = cold || part.type == DamageType::Magic;
+		cold = cold || part.type == DamageType::Cold;
 		physical = physical || part.type == DamageType::Physical;
 	}
 	if (fire)
@@ -570,7 +570,7 @@ void MinionDetails(std::vector<SkillDetailLine> &lines, const Player &player, Sk
 	const bool undead = data.monsterClass == MonsterClass::Undead;
 	const int gear = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionResistances)];
 	const auto resistance = [&](DamageType type) { return std::clamp(ResistanceMarkPercent(marks, type, undead) + gear, MinMonsterResistance, MaxMonsterResistance); };
-	Value(lines, "Resistances", std::format("Fire {:d}%, Lightning {:d}%, Cold {:d}%", resistance(DamageType::Fire), resistance(DamageType::Lightning), resistance(DamageType::Magic)));
+	Value(lines, "Resistances", std::format("Fire {:d}%, Lightning {:d}%, Cold {:d}%", resistance(DamageType::Fire), resistance(DamageType::Lightning), resistance(DamageType::Cold)));
 	if (up == nullptr && kind->damagePercent > 0)
 		Text(lines, SkillDetailLine::Kind::Note, "Supports that change minion damage count once one is up");
 }

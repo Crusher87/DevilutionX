@@ -181,7 +181,7 @@ TEST_F(Poe2CasterStatsTest, ElementSpellDamageByHitType)
 	SetGearStat(player, Poe2ItemStat::PhysicalSpellDamage, 40);
 	SetGearStat(player, Poe2ItemStat::ChaosSpellDamage, 50);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Fire), 10);
-	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Magic), 20);
+	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Cold), 20);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Lightning), 30);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Physical), 40);
 	EXPECT_EQ(GearElementSpellDamage(player, DamageType::Chaos), 50);
@@ -241,7 +241,7 @@ TEST_F(Poe2CasterStatsTest, MinionLifeAndResistances)
 	const int before = MonsterBaseResistance(minion, DamageType::Fire);
 	const int enemyBefore = MonsterBaseResistance(enemy, DamageType::Fire);
 	SetGearStat(player, Poe2ItemStat::MinionResistances, 15);
-	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Magic })
+	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Cold })
 		EXPECT_EQ(MonsterBaseResistance(minion, type), before + 15);
 	EXPECT_EQ(MonsterBaseResistance(minion, DamageType::Physical), 0);
 	EXPECT_EQ(MonsterBaseResistance(enemy, DamageType::Fire), enemyBefore) << "Only the owner's minions";

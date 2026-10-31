@@ -22,13 +22,13 @@ enum class DamageType : uint8_t;
 constexpr int ResistMarkPercent = 30;
 constexpr int ImmuneMarkPercent = 60;
 /** Magic stands in for POE2's cold, and most of Diablo's monsters resist it, so its marks are lower. */
-constexpr int MagicResistMarkPercent = 20;
-constexpr int MagicImmuneMarkPercent = 40;
+constexpr int ColdResistMarkPercent = 20;
+constexpr int ColdImmuneMarkPercent = 40;
 /**
  * An undead monster's magic (cold) immune mark: every Act 1 undead has one, which put the cold skills at 0.6x on most
- * of the Cathedral (Curtis 2026-10-28: 40 to 20; audit-casters-v3.md). Demons and animals keep MagicImmuneMarkPercent.
+ * of the Cathedral (Curtis 2026-10-28: 40 to 20; audit-casters-v3.md). Demons and animals keep ColdImmuneMarkPercent.
  */
-constexpr int UndeadMagicImmuneMarkPercent = 20;
+constexpr int UndeadColdImmuneMarkPercent = 20;
 /** The magic and rare monster modifier "Elemental Resistance": to fire, lightning and magic. */
 constexpr int ResistantModPercent = 25;
 constexpr int MaxMonsterResistance = 75;
@@ -42,7 +42,7 @@ constexpr int FlinchProofResistance = 60;
 
 /**
  * @brief A resistance from Diablo's resist and immune marks (monster_resistance bits), before modifiers.
- * @param undead Whether the monster is undead, whose magic immune mark is lower (UndeadMagicImmuneMarkPercent).
+ * @param undead Whether the monster is undead, whose magic immune mark is lower (UndeadColdImmuneMarkPercent).
  */
 [[nodiscard]] int ResistanceMarkPercent(uint16_t marks, DamageType type, bool undead = false);
 /**

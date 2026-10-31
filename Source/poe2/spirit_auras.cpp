@@ -76,7 +76,7 @@ int ResonanceIndex(DamageType type)
 		return 0;
 	case DamageType::Lightning:
 		return 1;
-	case DamageType::Magic:
+	case DamageType::Cold:
 		return 2;
 	default:
 		return -1;

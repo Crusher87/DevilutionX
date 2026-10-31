@@ -110,7 +110,7 @@ EFFECTS = {
 	'flask_recovery_penalty': ('LessLifeFlaskRecovery', 25),
 	# Rings.
 	'fire_overcap_damage': ('FireOvercapDamage', 3),
-	'cold_max_penalty': ('MaxMagicResistance', -5),
+	'cold_max_penalty': ('MaxColdResistance', -5),
 	'mana_to_es': ('ManaToEnergyShield', 25),
 	'life_penalty': ('LessMaxLife', 15),
 	'crit_recent_speed': ('CritActionSpeed', 15),

@@ -3546,7 +3546,8 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 		const int penalty = ResistancePenalty(player);
 		Poe2PlayerData &data = player.poe2;
 		const int maxElemental = MaxResistance + data.rule(UniqueRule::MaxElementalResistance) + BannerMaxResistance(player);
-		data.maxResistances = { static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental + data.rule(UniqueRule::MaxMagicResistance)) };
+		// Diablo's magic resistance stands for POE2's cold (Poe2ColdResistance), at ColdResistanceIndex.
+		data.maxResistances = { static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental + data.rule(UniqueRule::MaxColdResistance)) };
 		std::array<int, 3> uncapped { fire - penalty, lightning - penalty, magic - penalty };
 		if (const int share = data.rule(UniqueRule::ResistanceShare); share > 0) {
 			// The highest resistance that isn't over its cap also counts towards the lowest.
@@ -3563,9 +3564,12 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 		}
 		for (size_t i = 0; i < uncapped.size(); i++)
 			data.uncappedResistances[i] = static_cast<int16_t>(std::clamp(uncapped[i], -1000, 1000));
-		player._pFireResist = Poe2Resistance(uncapped[0], 0, data.maxResistances[0]);
-		player._pLghtResist = Poe2Resistance(uncapped[1], 0, data.maxResistances[1]);
-		player._pMagResist = Poe2Resistance(uncapped[2], 0, data.maxResistances[2]);
+		constexpr size_t FireIndex = Poe2PlayerData::FireResistanceIndex;
+		constexpr size_t LightningIndex = Poe2PlayerData::LightningResistanceIndex;
+		constexpr size_t ColdIndex = Poe2PlayerData::ColdResistanceIndex;
+		player._pFireResist = Poe2Resistance(uncapped[FireIndex], 0, data.maxResistances[FireIndex]);
+		player._pLghtResist = Poe2Resistance(uncapped[LightningIndex], 0, data.maxResistances[LightningIndex]);
+		player._pMagResist = Poe2Resistance(uncapped[ColdIndex], 0, data.maxResistances[ColdIndex]);
 		// Chaos resistance starts at 0 and takes no depth or difficulty penalty, like POE2's.
 		data.maxChaosResistance = static_cast<int16_t>(std::min<int>(MaxResistance + maxChaosBonus, HardMaxResistance));
 		data.uncappedChaosResistance = static_cast<int16_t>(std::clamp<int>(chaos, -1000, 1000));
@@ -3936,7 +3940,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	toHit += passive(PassiveStat::ToHit);
 	fireRes += passive(PassiveStat::FireResist) + passive(PassiveStat::AllResist);
 	lightRes += passive(PassiveStat::LightningResist) + passive(PassiveStat::AllResist);
-	magicRes += passive(PassiveStat::MagicResist) + passive(PassiveStat::AllResist);
+	magicRes += passive(PassiveStat::ColdResist) + passive(PassiveStat::AllResist);
 	// Chaos resistance comes only from what names it, never from "all resistances", which are elemental.
 	const int chaosRes = gearStat(Poe2ItemStat::ChaosResistance) + passive(PassiveStat::ChaosResist);
 	const int maxChaosRes = gearStat(Poe2ItemStat::MaxChaosResistance) + passive(PassiveStat::MaxChaosResist);
@@ -3985,7 +3989,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			life += Fixed26_6::fromInt(implicit.life);
 			fireRes += implicit.allResistances;
 			lightRes += implicit.allResistances;
-			magicRes += implicit.allResistances + implicit.magicResistance;
+			magicRes += implicit.allResistances + implicit.coldResistance;
 			manaRegen += implicit.manaRegenPercent;
 			evasionPercent += implicit.evasionPercent;
 		}
@@ -6793,8 +6797,8 @@ void PrintItemImplicits(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), armourImplicit.spirit));
 	if (armourImplicit.allResistances > 0)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to all resistances"), armourImplicit.allResistances));
-	if (armourImplicit.magicResistance > 0)
-		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to magic resistance"), armourImplicit.magicResistance));
+	if (armourImplicit.coldResistance > 0)
+		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d}% to magic resistance"), armourImplicit.coldResistance));
 	if (armourImplicit.manaRegenPercent > 0)
 		AddItemInfoBoxString(FormatRuntime(_("implicit: {:d}% increased mana regeneration"), armourImplicit.manaRegenPercent));
 	if (armourImplicit.evasionPercent > 0)

@@ -38,7 +38,7 @@ enum class PassiveStat : uint8_t {
 	ArmorPercent,
 	FireResist,
 	LightningResist,
-	MagicResist,
+	ColdResist,
 	AllResist,
 	/** Life regenerated per second. */
 	LifeRegen,
@@ -102,7 +102,7 @@ enum class PassiveStat : uint8_t {
 	// Rule stats: these feed the unique rule of the same name (see AddPassiveRules).
 	ManaCost,
 	MaxElementalResist,
-	MaxMagicResist,
+	MaxColdResist,
 	ArmourVsElements,
 	EvasionVsSpells,
 	HitDamageFromMana,

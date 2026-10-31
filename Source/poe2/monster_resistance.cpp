@@ -33,7 +33,7 @@ std::unordered_map<int, int> ChaosResistances;
 
 bool IsResistedElement(DamageType type)
 {
-	return IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic);
+	return IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Cold);
 }
 
 bool IsResisted(DamageType type)
@@ -50,10 +50,10 @@ int ResistanceMarkPercent(uint16_t marks, DamageType type, bool undead)
 		return (marks & IMMUNE_FIRE) != 0 ? ImmuneMarkPercent : ((marks & RESIST_FIRE) != 0 ? ResistMarkPercent : 0);
 	case DamageType::Lightning:
 		return (marks & IMMUNE_LIGHTNING) != 0 ? ImmuneMarkPercent : ((marks & RESIST_LIGHTNING) != 0 ? ResistMarkPercent : 0);
-	case DamageType::Magic:
+	case DamageType::Cold:
 		if ((marks & IMMUNE_MAGIC) != 0)
-			return undead ? UndeadMagicImmuneMarkPercent : MagicImmuneMarkPercent;
-		return (marks & RESIST_MAGIC) != 0 ? MagicResistMarkPercent : 0;
+			return undead ? UndeadColdImmuneMarkPercent : ColdImmuneMarkPercent;
+		return (marks & RESIST_MAGIC) != 0 ? ColdResistMarkPercent : 0;
 	default:
 		return 0;
 	}
@@ -98,7 +98,7 @@ int MonsterTypeChaosResistance(int monsterType)
 std::string ResistanceMarksText(uint16_t marks, bool undead, int chaos)
 {
 	std::string text;
-	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Magic }) {
+	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Cold }) {
 		const int percent = ResistanceMarkPercent(marks, type, undead);
 		if (percent == 0)
 			continue;
@@ -134,7 +134,7 @@ int MonsterBaseResistance(const Monster &monster, DamageType type)
 	if (!IsResistedElement(type))
 		return 0;
 	// Only a magic immune mark asks the monster's kind, which needs its data.
-	const bool undead = type == DamageType::Magic && (monster.resistance & IMMUNE_MAGIC) != 0 && monster.data().monsterClass == MonsterClass::Undead;
+	const bool undead = type == DamageType::Cold && (monster.resistance & IMMUNE_MAGIC) != 0 && monster.data().monsterClass == MonsterClass::Undead;
 	int resistance = ResistanceMarkPercent(monster.resistance, type, undead);
 	if (GetMonsterAffixes(monster).has(MonsterMod::Resistant))
 		resistance += ResistantModPercent;

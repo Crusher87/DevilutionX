@@ -86,7 +86,11 @@ std::vector<std::pair<PassiveStat, int>> ParseStats(std::string_view text)
 		const size_t equals = entry.find('=');
 		if (equals == std::string_view::npos)
 			continue;
-		const auto stat = magic_enum::enum_cast<PassiveStat>(entry.substr(0, equals));
+		const std::string_view name = entry.substr(0, equals);
+		// Trees written before the cold rename call the cold resistance stats magic.
+		const auto stat = name == "MagicResist" ? std::optional<PassiveStat> { PassiveStat::ColdResist }
+		    : name == "MaxMagicResist"          ? std::optional<PassiveStat> { PassiveStat::MaxColdResist }
+		                                        : magic_enum::enum_cast<PassiveStat>(name);
 		const std::optional<int> value = ParseInt(entry.substr(equals + 1));
 		if (stat && *stat != PassiveStat::Count && value)
 			stats.emplace_back(*stat, *value);
@@ -989,8 +993,8 @@ std::optional<UniqueRule> RuleForStat(PassiveStat stat)
 		return UniqueRule::ManaCost;
 	case PassiveStat::MaxElementalResist:
 		return UniqueRule::MaxElementalResistance;
-	case PassiveStat::MaxMagicResist:
-		return UniqueRule::MaxMagicResistance;
+	case PassiveStat::MaxColdResist:
+		return UniqueRule::MaxColdResistance;
 	case PassiveStat::ArmourVsElements:
 		return UniqueRule::ArmourVsElements;
 	case PassiveStat::EvasionVsSpells:
@@ -1173,7 +1177,7 @@ int PassiveElementDamage(const Player &player, DamageType type)
 		return PassiveTotal(player, PassiveStat::FireDamage);
 	case DamageType::Lightning:
 		return PassiveTotal(player, PassiveStat::LightningDamage);
-	case DamageType::Magic:
+	case DamageType::Cold:
 		return PassiveTotal(player, PassiveStat::ColdDamage);
 	default:
 		return 0;
@@ -1209,7 +1213,7 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Fire Resistance"), value);
 	case PassiveStat::LightningResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Lightning Resistance"), value);
-	case PassiveStat::MagicResist:
+	case PassiveStat::ColdResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to Magic Resistance"), value);
 	case PassiveStat::AllResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to all Elemental Resistances"), value);
@@ -1287,7 +1291,7 @@ std::string PassiveStatText(PassiveStat stat, int value)
 		return percent(_(/*xgettext:no-c-format*/ "{:d}% increased Mana Cost of Skills"), _(/*xgettext:no-c-format*/ "{:d}% reduced Mana Cost of Skills"));
 	case PassiveStat::MaxElementalResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Fire and Lightning Resistances"), value);
-	case PassiveStat::MaxMagicResist:
+	case PassiveStat::MaxColdResist:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:+d}% to maximum Magic Resistance"), value);
 	case PassiveStat::ArmourVsElements:
 		return FormatRuntime(_(/*xgettext:no-c-format*/ "{:d}% of Armour also applies to Fire, Cold and Lightning Damage"), value);

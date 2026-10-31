@@ -488,7 +488,7 @@ void InflictSupportBleed(const Player &player, Monster &monster, int32_t physica
 
 DamageType PrismElement(uint8_t element)
 {
-	constexpr DamageType Elements[] = { DamageType::Fire, DamageType::Lightning, DamageType::Magic };
+	constexpr DamageType Elements[] = { DamageType::Fire, DamageType::Lightning, DamageType::Cold };
 	return Elements[element % 3];
 }
 
@@ -581,10 +581,10 @@ void FinishHit()
 			else if (Has(player, skill, SG::InfusedStorm))
 				DealExtra(player, monster, DamageType::Lightning, Fixed26_6::fromRaw(physical));
 			else if (Has(player, skill, SG::InfusedFrost))
-				DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(physical));
+				DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(physical));
 		}
 		if (Has(player, skill, SG::HolyInfusion))
-			DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(total / 5));
+			DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(total / 5));
 		if (Has(player, skill, SG::FuelThePyre) && monster.poe2.igniteTicks > 0) {
 			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(Percent(total, Value(player, skill, SG::FuelThePyre, 0))));
 			// Fan the Flames II: the burn spreads.
@@ -592,7 +592,7 @@ void FinishHit()
 				SpreadIgnite(player, monster);
 		}
 		if (Has(player, skill, SG::Frostbite) && state.frostbiteTicks > 0)
-			DealExtra(player, monster, DamageType::Magic, Fixed26_6::fromRaw(total / 4));
+			DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(total / 4));
 		if (Has(player, skill, SG::TalRashasPrism))
 			DealExtra(player, monster, PrismElement(state.prismElement), Fixed26_6::fromRaw(total * 3 / 10));
 		if (Has(player, skill, SG::BartucsBloodletting) && state.bartucTicks > 0)
@@ -617,7 +617,7 @@ void FinishHit()
 		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter, 0, 6);
 		BreakObjectsInArea(player, monster.position.tile, 2);
 		for (Monster *other : NearestMonsters(monster.position.tile, 2, 8, &monster))
-			DealExtra(player, *other, DamageType::Magic, Fixed26_6::fromRaw(total * 3 / 10));
+			DealExtra(player, *other, DamageType::Cold, Fixed26_6::fromRaw(total * 3 / 10));
 	}
 	if (Has(player, skill, SG::BurningGround) && state.burningGroundCooldown == 0) {
 		state.burningGroundCooldown = 20;
@@ -1057,7 +1057,7 @@ uint32_t SkillTags(SkillSlot skill)
 		case DamageType::Lightning:
 			tags |= ST_Lightning;
 			break;
-		case DamageType::Magic:
+		case DamageType::Cold:
 			tags |= ST_Frost;
 			break;
 		case DamageType::Chaos:
@@ -1255,7 +1255,7 @@ int SupportHitPenetration(DamageType type)
 		return Value(*Hit.player, Hit.skill, SG::FirePenetration, 0);
 	case DamageType::Lightning:
 		return Value(*Hit.player, Hit.skill, SG::LightningPenetration, 0);
-	case DamageType::Magic:
+	case DamageType::Cold:
 		return Value(*Hit.player, Hit.skill, SG::ColdPenetration, 0);
 	default:
 		return 0;
@@ -1282,7 +1282,7 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 	more(RepeatPercent - 100);
 	if (skill.isEmpty())
 		return percent;
-	const bool elemental = IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Magic);
+	const bool elemental = IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Cold);
 	for (const SupportGem gem : player.poe2.supportsFor(skill)) {
 		switch (gem) {
 		case SG::Volley:
@@ -1407,9 +1407,9 @@ int SupportAilmentEffectPercent(DamageType type)
 		return 100;
 	if (type == DamageType::Fire && HitHas(SG::Hellfire))
 		return 100 + HitValue(SG::Hellfire, 0);
-	if (type == DamageType::Magic && HitHas(SG::DeepFreeze))
+	if (type == DamageType::Cold && HitHas(SG::DeepFreeze))
 		return 175;
-	if (type == DamageType::Magic && HitHas(SG::ElementalFocus))
+	if (type == DamageType::Cold && HitHas(SG::ElementalFocus))
 		return 0;
 	return 100;
 }
@@ -1494,10 +1494,10 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			AddBurst(tile, 3, 0, DamageType::Physical, MissileGraphicID::MetalHit, SkillBaseDamage(player, SkillSlot::ForAttack(WeaponSkill::Cleave), 150));
 			break;
 		case SG::BlinkStrike:
-			AddBurst(skill.kind == SkillKind::Spell ? target : tile, 2, 2, DamageType::Magic, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
+			AddBurst(skill.kind == SkillKind::Spell ? target : tile, 2, 2, DamageType::Cold, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
 			break;
 		case SG::Sanctify:
-			AddBurst(tile, 3, 0, DamageType::Magic, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 150));
+			AddBurst(tile, 3, 0, DamageType::Cold, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 150));
 			break;
 		case SG::Wrathforged:
 			if (player.poe2.rage >= 10) {
@@ -2027,7 +2027,7 @@ void OnSupportedMinionDied(Player &owner, Monster &minion)
 		const std::vector<Monster *> nearest = NearestMonsters(minion.position.tile, 7, 1, nullptr);
 		if (!nearest.empty()) {
 			AddVisualEffect(minion.position.tile, MissileGraphicID::Etherealize);
-			AddBurst(nearest.front()->position.tile, 1, 8, DamageType::Magic, MissileGraphicID::StoneCurseShatter, Fixed26_6::fromRaw(life.raw() * 2));
+			AddBurst(nearest.front()->position.tile, 1, 8, DamageType::Cold, MissileGraphicID::StoneCurseShatter, Fixed26_6::fromRaw(life.raw() * 2));
 		}
 	}
 }

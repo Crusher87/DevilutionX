@@ -583,7 +583,7 @@ uint8_t GetPlayerOutlineColor(int id)
 const uint8_t *BacklashTRN(DamageType element)
 {
 	static std::array<PaletteTint, 3> tints;
-	const size_t index = element == DamageType::Fire ? 0 : element == DamageType::Magic ? 1 : 2;
+	const size_t index = element == DamageType::Fire ? 0 : element == DamageType::Cold ? 1 : 2;
 	// Per element: each channel's share of the original, in percent, and what it adds.
 	constexpr std::array<std::array<int, 6>, 3> Mix { {
 		{ 95, 40, 55, 30, 30, 0 },

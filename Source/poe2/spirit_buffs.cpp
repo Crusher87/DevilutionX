@@ -231,7 +231,7 @@ void TickConflux(Player &player, SpiritRuntime &state)
 		state.confluxTicks--;
 		return;
 	}
-	static constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Lightning, DamageType::Magic };
+	static constexpr std::array<DamageType, 3> Elements { DamageType::Fire, DamageType::Lightning, DamageType::Cold };
 	const DamageType element = Elements[static_cast<size_t>(GenerateRnd(3))];
 	state.confluxElement = static_cast<int8_t>(element);
 	state.confluxTicks = ConfluxTicks;
@@ -507,7 +507,7 @@ void OnSpiritMeleeHitTaken(Player &player, Monster &monster)
 	TelemetryNoteDamageSource("Arctic Armour");
 	AddVisualEffect(monster.position.tile, MissileGraphicID::BlueFlareExplosion);
 	AddVisualEffect(player.position.tile, MissileGraphicID::StoneCurseShatter);
-	HitMonster(player, monster, DamageType::Magic, Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 64, INT32_MAX / 2))), ArcticArmourAilmentPercent);
+	HitMonster(player, monster, DamageType::Cold, Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(raw, 64, INT32_MAX / 2))), ArcticArmourAilmentPercent);
 }
 
 void OnSpiritFreezeOrElectrocute(Player &player)
@@ -633,7 +633,7 @@ std::string SpiritBuffPortraitText(const Player &player, PersistentSkill skill)
 			return "Fire";
 		case DamageType::Lightning:
 			return "Ltng";
-		case DamageType::Magic:
+		case DamageType::Cold:
 			return "Cold";
 		default:
 			return {};

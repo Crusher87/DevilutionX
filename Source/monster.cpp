@@ -5791,7 +5791,7 @@ bool Monster::isWalking() const
 bool Monster::isImmune(MissileID missileType, DamageType missileElement) const
 {
 	// POE2 Mashup: POE2 has no full immunities, so Diablo's immunities count as resistances instead.
-	if (!gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
+	if (!gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Cold)
 	    || ((resistance & IMMUNE_FIRE) != 0 && missileElement == DamageType::Fire)
 	    || ((resistance & IMMUNE_LIGHTNING) != 0 && missileElement == DamageType::Lightning)
 	    || ((resistance & IMMUNE_ACID) != 0 && missileElement == DamageType::Chaos)))
@@ -5803,11 +5803,11 @@ bool Monster::isImmune(MissileID missileType, DamageType missileElement) const
 
 bool Monster::isResistant(MissileID missileType, DamageType missileElement) const
 {
-	if (gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Magic)
+	if (gbIsPoe2 && (((resistance & IMMUNE_MAGIC) != 0 && missileElement == DamageType::Cold)
 	        || ((resistance & IMMUNE_FIRE) != 0 && missileElement == DamageType::Fire)
 	        || ((resistance & IMMUNE_LIGHTNING) != 0 && missileElement == DamageType::Lightning)))
 		return true;
-	if (((resistance & RESIST_MAGIC) != 0 && missileElement == DamageType::Magic)
+	if (((resistance & RESIST_MAGIC) != 0 && missileElement == DamageType::Cold)
 	    || ((resistance & RESIST_FIRE) != 0 && missileElement == DamageType::Fire)
 	    || ((resistance & RESIST_LIGHTNING) != 0 && missileElement == DamageType::Lightning))
 		return true;

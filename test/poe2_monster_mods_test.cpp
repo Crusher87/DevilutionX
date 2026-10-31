@@ -93,15 +93,15 @@ TEST_F(Poe2MonsterModsTest, ImmunitiesAreResistancesInPoe2)
 	// Zombies and skeletons are immune to Magic in Diablo, so Ice Bolt flew straight through them.
 	Monster zombie = MakeMonster(1);
 	zombie.resistance = IMMUNE_MAGIC | RESIST_FIRE;
-	EXPECT_FALSE(zombie.isImmune(MissileID::BlueFlare, DamageType::Magic));
-	EXPECT_TRUE(zombie.isResistant(MissileID::BlueFlare, DamageType::Magic));
+	EXPECT_FALSE(zombie.isImmune(MissileID::BlueFlare, DamageType::Cold));
+	EXPECT_TRUE(zombie.isResistant(MissileID::BlueFlare, DamageType::Cold));
 	EXPECT_TRUE(zombie.isResistant(MissileID::Firebolt, DamageType::Fire));
 	EXPECT_FALSE(zombie.isResistant(MissileID::LightningControl, DamageType::Lightning));
 	EXPECT_EQ(zombie.shownResistance(), RESIST_MAGIC | RESIST_FIRE);
 
 	gbIsPoe2 = false;
-	EXPECT_TRUE(zombie.isImmune(MissileID::BlueFlare, DamageType::Magic));
-	EXPECT_FALSE(zombie.isResistant(MissileID::BlueFlare, DamageType::Magic));
+	EXPECT_TRUE(zombie.isImmune(MissileID::BlueFlare, DamageType::Cold));
+	EXPECT_FALSE(zombie.isResistant(MissileID::BlueFlare, DamageType::Cold));
 	EXPECT_EQ(zombie.shownResistance(), IMMUNE_MAGIC | RESIST_FIRE);
 	gbIsPoe2 = true;
 }
@@ -140,7 +140,7 @@ TEST_F(Poe2MonsterModsTest, ModifiersChangeTheMonster)
 	ApplyMonsterRarity(resistant);
 	EXPECT_EQ(resistant.resistance, 0);
 	EXPECT_EQ(MonsterResistance(resistant, DamageType::Fire), ResistantModPercent);
-	EXPECT_EQ(MonsterResistance(resistant, DamageType::Magic), ResistantModPercent);
+	EXPECT_EQ(MonsterResistance(resistant, DamageType::Cold), ResistantModPercent);
 	EXPECT_EQ(MonsterResistance(resistant, DamageType::Physical), 0);
 }
 
@@ -153,17 +153,17 @@ TEST_F(Poe2MonsterModsTest, DiablosMarksArePercentages)
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Lightning), 0);
 	// A zombie is undead: its magic (cold) immune mark is 20%, not 40% (Curtis 2026-10-28).
 	ASSERT_EQ(zombie.data().monsterClass, MonsterClass::Undead);
-	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), UndeadMagicImmuneMarkPercent);
-	EXPECT_EQ(UndeadMagicImmuneMarkPercent, 20);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Cold), UndeadColdImmuneMarkPercent);
+	EXPECT_EQ(UndeadColdImmuneMarkPercent, 20);
 	EXPECT_EQ(ResistanceMarkPercent(IMMUNE_FIRE, DamageType::Fire), ImmuneMarkPercent);
-	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Magic), MagicResistMarkPercent);
-	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Magic, /*undead=*/true), MagicResistMarkPercent);
+	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Cold), ColdResistMarkPercent);
+	EXPECT_EQ(ResistanceMarkPercent(RESIST_MAGIC, DamageType::Cold, /*undead=*/true), ColdResistMarkPercent);
 	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE), "Resistances: Fire 30%, Magic 40%");
 	EXPECT_EQ(ResistanceMarksText(IMMUNE_MAGIC | RESIST_FIRE, /*undead=*/true), "Resistances: Fire 30%, Magic 20%");
 	EXPECT_EQ(ResistanceMarksText(0), "No resistances");
 
 	// A magic-immune zombie takes 80% of Ice Bolt's damage rather than none.
-	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - UndeadMagicImmuneMarkPercent);
+	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Cold), 100 - UndeadColdImmuneMarkPercent);
 
 	// A demon with the same mark keeps 40%.
 	LevelMonsterTypes[1].type = MT_TOAD;
@@ -171,28 +171,28 @@ TEST_F(Poe2MonsterModsTest, DiablosMarksArePercentages)
 	demon.levelType = 1;
 	demon.resistance = IMMUNE_MAGIC;
 	ASSERT_EQ(demon.data().monsterClass, MonsterClass::Demon);
-	EXPECT_EQ(MonsterResistance(demon, DamageType::Magic), MagicImmuneMarkPercent);
-	EXPECT_EQ(MagicImmuneMarkPercent, 40);
+	EXPECT_EQ(MonsterResistance(demon, DamageType::Cold), ColdImmuneMarkPercent);
+	EXPECT_EQ(ColdImmuneMarkPercent, 40);
 
 	gbIsPoe2 = false;
-	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), 0);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Cold), 0);
 	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2MonsterModsTest, CursesAndExposureLowerResistance)
 {
-	// A zombie is undead, so its magic immune mark is UndeadMagicImmuneMarkPercent (Curtis 2026-10-28).
+	// A zombie is undead, so its magic immune mark is UndeadColdImmuneMarkPercent (Curtis 2026-10-28).
 	Monster zombie = MakeMonster(1);
 	zombie.resistance = IMMUNE_MAGIC;
 	zombie.poe2.lowerResistTicks = 10;
-	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), UndeadMagicImmuneMarkPercent - LowerResistCursePercent);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Cold), UndeadColdImmuneMarkPercent - LowerResistCursePercent);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), -LowerResistCursePercent);
 	zombie.poe2.exposureTicks = 10;
-	zombie.poe2.exposureElement = static_cast<uint8_t>(DamageType::Magic);
-	EXPECT_EQ(MonsterResistance(zombie, DamageType::Magic), UndeadMagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent);
+	zombie.poe2.exposureElement = static_cast<uint8_t>(DamageType::Cold);
+	EXPECT_EQ(MonsterResistance(zombie, DamageType::Cold), UndeadColdImmuneMarkPercent - LowerResistCursePercent - ExposurePercent);
 	EXPECT_EQ(MonsterResistance(zombie, DamageType::Fire), -LowerResistCursePercent);
 	// Below zero the monster takes more damage.
-	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Magic), 100 - (UndeadMagicImmuneMarkPercent - LowerResistCursePercent - ExposurePercent));
+	EXPECT_EQ(MonsterDamageTakenPercent(zombie, DamageType::Cold), 100 - (UndeadColdImmuneMarkPercent - LowerResistCursePercent - ExposurePercent));
 
 	// Rare and unique monsters shrug off part of it.
 	Monster rare = MakeMonster(FindSeed(MonsterRarity::Rare, MonsterMod::ExtraLife));
@@ -280,7 +280,7 @@ TEST_F(Poe2MonsterModsTest, ColdHitsChillAndFreeze)
 	Players.resize(1);
 
 	// 10 of 100 life chills by 20% and builds a fifth of the way to a freeze.
-	TryInflictAilment(monster, Players[0], DamageType::Magic, Fixed26_6::fromInt(10));
+	TryInflictAilment(monster, Players[0], DamageType::Cold, Fixed26_6::fromInt(10));
 	EXPECT_EQ(monster.poe2.chillTicks, ChillTicks);
 	EXPECT_EQ(monster.poe2.chillPercent, 20);
 	EXPECT_EQ(monster.poe2.freezeTicks, 0);
@@ -289,7 +289,7 @@ TEST_F(Poe2MonsterModsTest, ColdHitsChillAndFreeze)
 		skipped += MonsterSkipsTick(monster) ? 1 : 0;
 	EXPECT_EQ(skipped, 2);
 
-	TryInflictAilment(monster, Players[0], DamageType::Magic, Fixed26_6::fromInt(40));
+	TryInflictAilment(monster, Players[0], DamageType::Cold, Fixed26_6::fromInt(40));
 	EXPECT_EQ(monster.poe2.chillPercent, MaxChillPercent);
 	EXPECT_EQ(monster.poe2.freezeTicks, FreezeTicks);
 	EXPECT_EQ(monster.poe2.freezeBuildup, 0);

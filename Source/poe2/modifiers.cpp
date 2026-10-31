@@ -17,6 +17,7 @@
 #include "poe2/minion_gems.hpp"
 #include "poe2/player_data.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/unique_rules.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -138,7 +139,9 @@ bool LoadFamilies(std::vector<std::vector<std::string>> &conflictIds)
 		conflictIds.push_back(std::move(conflicts));
 		reader.readString("template", family.text);
 		reader.readString("effect", text);
-		family.effect = magic_enum::enum_cast<ModEffect>(text).value_or(ModEffect::None);
+		family.effect = ParseModEffectName(text).value_or(ModEffect::None);
+		if (family.effect == ModEffect::None && !text.empty() && text != "None")
+			LogError("Unknown modifier effect \"{}\" in family {}", text, family.id);
 		reader.readString("scale1", text);
 		family.scale[0] = static_cast<int16_t>(ParseInt(text).value_or(100));
 		reader.readString("scale2", text);
@@ -274,6 +277,21 @@ uint16_t AddToDamage(uint16_t base, int value)
 }
 
 } // namespace
+
+std::optional<ModEffect> ParseModEffectName(std::string_view name)
+{
+	// Mods written before cold resistance had its own name call it magic resistance.
+	if (name == "MagicResistance")
+		return ModEffect::ColdResistance;
+	return magic_enum::enum_cast<ModEffect>(name);
+}
+
+std::optional<UniqueRule> ParseUniqueRuleName(std::string_view name)
+{
+	if (name == "MaxMagicResistance")
+		return UniqueRule::MaxColdResistance;
+	return magic_enum::enum_cast<UniqueRule>(name);
+}
 
 bool RollingLegacyModScales()
 {
@@ -570,7 +588,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ReducedRequirements:
 		return Attribute;
 	case ModEffect::FireResistance:
-	case ModEffect::MagicResistance:
+	case ModEffect::ColdResistance:
 	case ModEffect::LightningResistance:
 	case ModEffect::AllResistances:
 	case ModEffect::MinionResistances:
@@ -913,7 +931,7 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	case ModEffect::FireResistance:
 		item._iPLFR = static_cast<int16_t>(item._iPLFR + v0);
 		break;
-	case ModEffect::MagicResistance:
+	case ModEffect::ColdResistance:
 		item._iPLMR = static_cast<int16_t>(item._iPLMR + v0);
 		break;
 	case ModEffect::LightningResistance:

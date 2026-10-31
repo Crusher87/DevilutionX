@@ -303,7 +303,7 @@ std::string_view DamageTypeName(DamageType damageType)
 	case DamageType::Physical: return "physical";
 	case DamageType::Fire: return "fire";
 	case DamageType::Lightning: return "lightning";
-	case DamageType::Magic: return "magic";
+	case DamageType::Cold: return "magic";
 	case DamageType::Chaos: return "chaos";
 	default: return "other";
 	}

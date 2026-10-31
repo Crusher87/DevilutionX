@@ -2450,7 +2450,7 @@ Element ElementOf(DamageType type, bool spell)
 	switch (type) {
 	case DamageType::Fire: return Element::Fire;
 	case DamageType::Lightning: return Element::Lightning;
-	case DamageType::Magic: return Element::Cold;
+	case DamageType::Cold: return Element::Cold;
 	case DamageType::Chaos: return Element::Chaos;
 	case DamageType::Physical: return spell ? Element::Holy : Element::Physical;
 	}

@@ -113,7 +113,7 @@ TEST_F(Poe2VizjereiRoadTest, OnlyFireColdAndLightningMakeABlast)
 	corpse.poe2.poisonDamagePerTick = 5;
 	MeleeKill(corpse);
 	EXPECT_EQ(beside.hitPoints, beside.maxHitPoints);
-	for (const DamageType element : { DamageType::Fire, DamageType::Magic, DamageType::Lightning })
+	for (const DamageType element : { DamageType::Fire, DamageType::Cold, DamageType::Lightning })
 		EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, element), 0);
 	EXPECT_FALSE(ElementalAilmentOf(corpse).has_value());
 }
@@ -124,7 +124,7 @@ TEST_F(Poe2VizjereiRoadTest, TheBlastTakesTheAilmentWithTheMostTimeLeft)
 	monster.poe2.igniteTicks = 10;
 	monster.poe2.chillTicks = 30;
 	monster.poe2.shockTicks = 20;
-	EXPECT_EQ(ElementalAilmentOf(monster), DamageType::Magic);
+	EXPECT_EQ(ElementalAilmentOf(monster), DamageType::Cold);
 	monster.poe2.chillTicks = 0;
 	monster.poe2.freezeTicks = 5;
 	EXPECT_EQ(ElementalAilmentOf(monster), DamageType::Lightning);
@@ -143,8 +143,8 @@ TEST_F(Poe2VizjereiRoadTest, AChilledCorpseShattersAndTheColdBitesBack)
 	EXPECT_GT(beside.poe2.freezeBuildup, 0);
 	EXPECT_EQ(far.poe2.chillTicks, 0);
 	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
-	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Magic), 2 * 20);
-	EXPECT_EQ(VizjereiLastBacklash(*MyPlayer), DamageType::Magic);
+	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Cold), 2 * 20);
+	EXPECT_EQ(VizjereiLastBacklash(*MyPlayer), DamageType::Cold);
 	EXPECT_EQ(UniqueMovementSlowPercent(*MyPlayer), 20);
 	EXPECT_EQ(UniqueAttackSpeedPercent(*MyPlayer), -20);
 	// Only melee kills blast without the pact.
@@ -152,7 +152,7 @@ TEST_F(Poe2VizjereiRoadTest, AChilledCorpseShattersAndTheColdBitesBack)
 	MyPlayer->poe2.uniqueState.backlashTicks = {};
 	SpellKill(corpse);
 	EXPECT_EQ(beside.poe2.chillTicks, 0);
-	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Magic), 0);
+	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Cold), 0);
 }
 
 TEST_F(Poe2VizjereiRoadTest, ABurningCorpseIgnitesItsNeighboursAndTheFireBurnsTheHero)
@@ -203,14 +203,14 @@ TEST_F(Poe2VizjereiRoadTest, ANewBlastResetsItsBacklashButNeverAddsToIt)
 	MeleeKill(first);
 	for (int tick = 0; tick < 15; tick++)
 		ProcessUniqueRules(*MyPlayer);
-	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Magic), 25);
+	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Cold), 25);
 	MeleeKill(first);
-	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Magic), 40);
+	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Cold), 40);
 	// Another element runs beside it.
 	first.poe2.chillTicks = 0;
 	first.poe2.shockTicks = 30;
 	MeleeKill(first);
-	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Magic), 40);
+	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Cold), 40);
 	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Lightning), 40);
 	EXPECT_EQ(VizjereiLastBacklash(*MyPlayer), DamageType::Lightning);
 }
@@ -223,7 +223,7 @@ TEST_F(Poe2VizjereiRoadTest, ThePactMakesSpellKillsBlastAndStopsSpellAilments)
 	corpse.poe2.chillTicks = 30;
 	SpellKill(corpse);
 	EXPECT_GT(beside.poe2.chillTicks, 0);
-	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Magic), 2 * 20);
+	EXPECT_EQ(VizjereiBacklashTicks(*MyPlayer, DamageType::Cold), 2 * 20);
 	EXPECT_FALSE(AilmentAllowed(*MyPlayer, AilmentSource::Spell));
 	// The backlash no longer stops the hero's own ailments.
 	EXPECT_TRUE(AilmentAllowed(*MyPlayer, AilmentSource::Strike));

@@ -1040,9 +1040,9 @@ def content_check(T):
 
 # What each class's usual builds want, for the border check: its weapons, defence and damage types.
 USEFUL_STATS = {
-    'all': {'Strength', 'Dexterity', 'Magic', 'Vitality', 'LifePercent', 'AllResist', 'FireResist', 'LightningResist', 'MagicResist',
+    'all': {'Strength', 'Dexterity', 'Magic', 'Vitality', 'LifePercent', 'AllResist', 'FireResist', 'LightningResist', 'ColdResist',
             'LifeRegenRate', 'LifeRegen', 'LifeOnKill', 'FlaskRecovery', 'FlaskCharges', 'StunThreshold', 'MaxElementalResist',
-            'MaxMagicResist', 'ChaosResist', 'MaxChaosResist', 'Spirit', 'DamageVsRareUnique', 'LightRadius'},
+            'MaxColdResist', 'ChaosResist', 'MaxChaosResist', 'Spirit', 'DamageVsRareUnique', 'LightRadius'},
     'Warrior': {'Damage', 'MeleeDamage', 'TwoHandDamage', 'OneHandDamage', 'BowDamage', 'ArmorPercent', 'BlockChance', 'StunBuildup',
                 'AttackSpeed', 'ToHit', 'FireDamage', 'ArmourVsElements', 'MinionDamage', 'MinionLife'},
     'Sorcerer': {'SpellDamage', 'FireDamage', 'LightningDamage', 'ColdDamage', 'CastSpeed', 'EnergyShieldPercent', 'EnergyShieldRecharge',

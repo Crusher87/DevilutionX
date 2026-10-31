@@ -174,7 +174,7 @@ void ShatterFrost(const HeraldTrigger &trigger)
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
 		if (CanHeraldHit(monster) && trigger.position.ExactDistance(monster.position.tile) <= radius)
-			HeraldHit(monster, PersistentSkill::HeraldOfFrost, DamageType::Magic, damage);
+			HeraldHit(monster, PersistentSkill::HeraldOfFrost, DamageType::Cold, damage);
 	}
 }
 

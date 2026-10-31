@@ -140,7 +140,7 @@ CLUSTERS = {
         {'key': 's_cold', 'band': 'mid', 'title': 'Frost and Arcana', 'small': [('ColdDamage', 5)], 'notables': [
             ('Frozen Heart', [('ColdDamage', 20), ('FreezeBuildup', 15)], 'Cold magic answers best to those who feel nothing.'),
             ('Glacial Ward', [('ColdDamage', 10), ('EnergyShieldPercent', 15)], 'A shell of frost turns blows aside.'),
-            ('Ring of the Mystics', [('ColdDamage', 20), ('MagicResist', 15), ('FireResist', -10), ('LightningResist', -10)], 'A ring that wards against magic and leaves its wearer open to fire and storm.'),
+            ('Ring of the Mystics', [('ColdDamage', 20), ('ColdResist', 15), ('FireResist', -10), ('LightningResist', -10)], 'A ring that wards against magic and leaves its wearer open to fire and storm.'),
         ]},
         {'key': 's_cast', 'band': 'mid', 'title': 'Quick Casting', 'small': [('SpellDamage', 4)], 'notables': [
             ("Horazon's Focus", [('CastSpeed', 6), ('SpellDamage', 8)], 'Horazon and his brother Bartuc were the greatest Vizjerei of their age.'),
@@ -162,7 +162,7 @@ CLUSTERS = {
             ('Elements of the Clans', [('SpellDamage', 14), ('AllResist', 5)], 'Fire, storm and ice bow to a master, and spare him.'),
         ]},
         {'key': 's_wards', 'band': 'outer', 'title': 'Wards', 'small': [('AllResist', 3)], 'notables': [
-            ('Warding Circle', [('AllResist', 8), ('MaxMagicResist', 2)], 'Chalk, salt and old words keep the worst of it out.'),
+            ('Warding Circle', [('AllResist', 8), ('MaxColdResist', 2)], 'Chalk, salt and old words keep the worst of it out.'),
             ("Wisdom's Wrap", [('EnergyShieldPercent', 20), ('HitDamageFromMana', 5)], 'A mage\'s robe that adds to his mana and softens every blow.'),
         ]},
         {'key': 's_clans', 'band': 'outer', 'title': 'Mage Clans', 'small': [('SpellDamage', 4)], 'notables': [
@@ -373,7 +373,7 @@ BORDER_CLUSTERS = {
         ]},
         {'key': 'h_golem', 'band': 'outer', 'title': 'Clay and Will', 'small': [('MinionDamage', 6), ('MinionLife', 6)], 'notables': [
             ('Golem Binding', [('MinionLife', 20), ('Spirit', 8)], 'A golem raised by magic fights for its maker and no other.'),
-            ("Tal Rasha's Sacrifice", [('MaxElementalResist', 1), ('MaxMagicResist', 1), ('ManaPercent', -10)], 'He took the Lord of Destruction into his own flesh so the others could seal the tomb.'),
+            ("Tal Rasha's Sacrifice", [('MaxElementalResist', 1), ('MaxColdResist', 1), ('ManaPercent', -10)], 'He took the Lord of Destruction into his own flesh so the others could seal the tomb.'),
         ]},
     ],
 }
@@ -785,7 +785,7 @@ ASCENDANCIES = {
             ('Perfect Form', [('Damage', 30)]),
         ]),
         ('Ivgorod Patriarch', [('Magic', 10)], [
-            ('Faith Ward', [('MagicResist', 20)]),
+            ('Faith Ward', [('ColdResist', 20)]),
             ('Meditation', [('ManaRegen', 40)]),
             ('Smite', [('Damage', 20)]),
             ('Spirit of Ivgorod', [('ManaPercent', 20)]),

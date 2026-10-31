@@ -1046,7 +1046,10 @@ struct Poe2PlayerData {
 	UniqueRuleTotals uniqueRules {};
 	/** @brief Counters and timers of the unique rules; mutable so hits on monsters can count (not saved). */
 	mutable UniqueRuleState uniqueState {};
-	/** @brief Fire, lightning and magic resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
+	/** @brief Fire, lightning and cold resistance before the cap, and each one's cap (not saved; from CalcPlrItemVals). */
+	static constexpr size_t FireResistanceIndex = 0;
+	static constexpr size_t LightningResistanceIndex = 1;
+	static constexpr size_t ColdResistanceIndex = 2;
 	std::array<int16_t, 3> uncappedResistances {};
 	std::array<int16_t, 3> maxResistances {};
 	/** @brief Chaos resistance, before its cap, and its cap (not saved; from CalcPlrItemVals). Kept apart from the

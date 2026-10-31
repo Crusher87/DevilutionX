@@ -166,18 +166,23 @@ void LoadMissileSpriteData()
 	MissileAnimLengths.shrink_to_fit();
 }
 
+} // namespace
+
 std::expected<MissileDataFlags, std::string> ParseMissileDataFlag(std::string_view value)
 {
 	if (value == "Physical") return MissileDataFlags::Physical;
 	if (value == "Fire") return MissileDataFlags::Fire;
 	if (value == "Lightning") return MissileDataFlags::Lightning;
-	if (value == "Magic") return MissileDataFlags::Magic;
+	// The missile tables call it Magic, Diablo's name; Cold reads the same.
+	if (value == "Magic" || value == "Cold") return MissileDataFlags::Cold;
 	// The missile tables call it Acid, Diablo's name; Chaos reads the same.
 	if (value == "Acid" || value == "Chaos") return MissileDataFlags::Chaos;
 	if (value == "Arrow") return MissileDataFlags::Arrow;
 	if (value == "Invisible") return MissileDataFlags::Invisible;
 	return std::unexpected("Unknown enum value");
 }
+
+namespace {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 std::expected<MissileData::AddFn, std::string> ParseMissileAddFn(std::string_view value)

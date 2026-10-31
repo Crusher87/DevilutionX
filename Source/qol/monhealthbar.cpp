@@ -167,7 +167,7 @@ void DrawMonsterHealthBar(const Surface &out)
 		for (size_t i = 0; i < 3; i++) {
 			if (gbIsPoe2) {
 				// POE2 Mashup: the big icon for 50% or more, the small one below; the numbers are on the banner.
-				constexpr DamageType Types[] = { DamageType::Magic, DamageType::Fire, DamageType::Lightning };
+				constexpr DamageType Types[] = { DamageType::Cold, DamageType::Fire, DamageType::Lightning };
 				const int percent = MonsterResistance(monster, Types[i]);
 				if (percent > 0) {
 					RenderClxSprite(out, (*resistance)[(i * 2) + (percent >= 50 ? 1 : 0)], position + Displacement { resOffset, height - 6 });
