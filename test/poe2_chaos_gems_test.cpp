@@ -209,10 +209,62 @@ TEST_F(Poe2ChaosGemsTest, DeadlyVenomTradesHitDamageForPoison)
 	EXPECT_EQ(other.poe2.poisonDamagePerTick, 100);
 }
 
+// Dark Enchant (POE2's Chaos Attunement): hits gain chaos, other damage is less.
+TEST_F(Poe2ChaosGemsTest, DarkEnchantTurnsHitsTowardChaos)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const SkillSlot cleave = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	const SkillSlot bolt = SkillSlot::ForAttack(WeaponSkill::WitheringBolt);
+	const SkillSlot firebolt = SkillSlot::ForSpell(SpellID::Firebolt);
+	for (const SkillSlot skill : { cleave, bolt, firebolt })
+		EXPECT_TRUE(SupportGemCanSupport(SupportGem::DarkEnchant, skill));
+	EXPECT_EQ(SupportTierGemLevel(SupportGem::DarkEnchant, 1, 0), 6);
+
+	// 50 physical got through at 50% less: the gain is 25% of the 100 before it, as chaos the zombie doesn't resist.
+	Supported(cleave, SupportGem::DarkEnchant);
+	Monster &hit = PlaceMonster(0, { 45, 45 });
+	ASSERT_EQ(MonsterDamageTakenPercent(hit, DamageType::Chaos), 100);
+	{
+		const SupportHitScope scope(player, cleave);
+		EXPECT_EQ(SupportHitDamagePercent(hit, DamageType::Physical), 50);
+		EXPECT_EQ(SupportHitDamagePercent(hit, DamageType::Chaos), 100);
+		NoteSupportedDamage(hit, DamageType::Physical, Fixed26_6::fromInt(50));
+	}
+	EXPECT_EQ(hit.hitPoints, Fixed26_6::fromInt(100000 - 25));
+
+	// A chaos skill takes the gain and nothing less.
+	Supported(bolt, SupportGem::DarkEnchant);
+	Monster &chaos = PlaceMonster(1, { 46, 45 });
+	{
+		const SupportHitScope scope(player, bolt);
+		EXPECT_EQ(SupportHitDamagePercent(chaos, DamageType::Chaos), 100);
+		NoteSupportedDamage(chaos, DamageType::Chaos, Fixed26_6::fromInt(40));
+	}
+	EXPECT_EQ(chaos.hitPoints, Fixed26_6::fromInt(100000 - 10));
+
+	// Fire spells are less too.
+	Supported(firebolt, SupportGem::DarkEnchant);
+	Monster &burnt = PlaceMonster(2, { 47, 45 });
+	{
+		const SupportHitScope scope(player, firebolt);
+		EXPECT_EQ(SupportHitDamagePercent(burnt, DamageType::Fire), 50);
+	}
+
+	// Without it, nothing extra.
+	Supported(cleave);
+	Monster &plain = PlaceMonster(3, { 48, 45 });
+	{
+		const SupportHitScope scope(player, cleave);
+		NoteSupportedDamage(plain, DamageType::Physical, Fixed26_6::fromInt(50));
+	}
+	EXPECT_EQ(plain.hitPoints, Fixed26_6::fromInt(100000));
+}
+
 // The supports' items exist, appended after the others, and are cut from uncut support gems.
 TEST_F(Poe2ChaosGemsTest, ChaosSupportsHaveItems)
 {
-	for (const SupportGem gem : { SupportGem::TwinFangs, SupportGem::DeadlyVenom }) {
+	for (const SupportGem gem : { SupportGem::TwinFangs, SupportGem::DeadlyVenom, SupportGem::DarkEnchant }) {
 		const SupportData *data = FindSupportData(gem);
 		ASSERT_NE(data, nullptr);
 		EXPECT_GT(static_cast<int>(gem), static_cast<int>(SupportGem::DeadlyHerald));

@@ -283,6 +283,8 @@ enum class SupportGem : uint8_t {
 	/** Chaos supports (chaos gems addendum, Curtis 2026-10-31): POE2's Escalating Poison and Deadly Poison I-II. */
 	TwinFangs,
 	DeadlyVenom,
+	/** POE2's Chaos Attunement. */
+	DarkEnchant,
 	Count,
 };
 

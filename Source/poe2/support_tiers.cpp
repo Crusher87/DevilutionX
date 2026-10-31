@@ -155,6 +155,8 @@ constexpr SupportTierData Tiers[] = {
 	// Deadly Poison I-II: more poison damage, less damage with hits (POE2: 75%/25%, 100%/30%).
 	{ SG::DeadlyVenom, 1, 2, 120, { 75, 25, 0 }, "75% more poison damage. 25% less\ndamage with hits. Mana +20%" },
 	{ SG::DeadlyVenom, 2, 4, 120, { 100, 30, 0 }, "Twice the poison damage. 30% less\ndamage with hits. Mana +20%" },
+	// Chaos Attunement: damage gained as chaos, less non-chaos damage (POE2: 25% and 50%).
+	{ SG::DarkEnchant, 1, 3, 120, { 25, 50, 0 }, "Hits gain 25% of damage as chaos. 50%\nless non-chaos damage. Mana +20%" },
 };
 
 } // namespace

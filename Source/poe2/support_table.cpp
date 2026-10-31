@@ -151,6 +151,8 @@ const SupportData Table[] = {
 	// Chaos supports (chaos gems addendum, Curtis 2026-10-31): POE2's Escalating Poison and Deadly Poison.
 	{ SG::TwinFangs, "Twin Fangs", "Poison stacks once more; poisons last\n20% shorter. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 1, 110, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
 	{ SG::DeadlyVenom, "Deadly Venom", "75% more poison damage. 25% less\ndamage with hits. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	// Not an Enchant: it adds chaos on top of the hit instead of turning part of it, so it goes with them.
+	{ SG::DarkEnchant, "Dark Enchant", "Hits gain 25% of damage as chaos. 50%\nless non-chaos damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
 };
 // clang-format on
 
@@ -236,6 +238,8 @@ struct HitState {
 	int64_t total = 0;
 	/** The hit's physical and chaos damage before the monster's resistance and damage taken: poison's base. */
 	int64_t poisonBase = 0;
+	/** The hit's chaos damage, as dealt. */
+	int64_t chaos = 0;
 	/** What MonsterDamageTakenPercent let through of the hit's physical and chaos damage, on this monster. */
 	const Monster *takenMonster = nullptr;
 	int physicalTakenPercent = 0;
@@ -495,6 +499,14 @@ DamageType PrismElement(uint8_t element)
 	return Elements[element % 3];
 }
 
+/** @brief The hit's damage as dealt, with its non-chaos part as it was before Dark Enchant's less. */
+int64_t HitDamageBeforeDarkEnchant(const Player &player, SkillSlot skill)
+{
+	const int64_t other = std::max<int64_t>(Hit.total - Hit.chaos, 0);
+	const int less = Has(player, skill, SG::DarkEnchant) ? std::clamp(Value(player, skill, SG::DarkEnchant, 1), 0, 99) : 0;
+	return Hit.chaos + (other * 100 / (100 - less));
+}
+
 /** @brief The supports' on-hit effects on the monster the hit landed on. */
 /** @brief Fan the Flames II: a burning monster's ignite spreads to the 2 nearest. */
 void SpreadIgnite(const Player &player, const Monster &monster)
@@ -586,6 +598,9 @@ void FinishHit()
 			else if (Has(player, skill, SG::InfusedFrost))
 				DealExtra(player, monster, DamageType::Cold, Fixed26_6::fromRaw(physical));
 		}
+		// Dark Enchant: a share of the hit as chaos, counted from before its own less (POE2's Chaos Attunement).
+		if (Has(player, skill, SG::DarkEnchant))
+			DealExtra(player, monster, DamageType::Chaos, Fixed26_6::fromRaw(Percent(HitDamageBeforeDarkEnchant(player, skill), Value(player, skill, SG::DarkEnchant, 0))));
 		// Zakarum's Blessing adds holy fire.
 		if (Has(player, skill, SG::HolyInfusion))
 			DealExtra(player, monster, DamageType::Fire, Fixed26_6::fromRaw(total / 5));
@@ -1198,6 +1213,7 @@ SupportHitScope::SupportHitScope(const Player &player, SkillSlot skill)
 	Hit.physical = 0;
 	Hit.total = 0;
 	Hit.poisonBase = 0;
+	Hit.chaos = 0;
 	Hit.takenMonster = nullptr;
 	Hit.finishing = false;
 	Hit.wirt = Has(player, skill, SG::WirtsLeg) && GenerateRnd(100) < 10;
@@ -1236,6 +1252,7 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 		Hit.physical = 0;
 		Hit.total = 0;
 		Hit.poisonBase = 0;
+		Hit.chaos = 0;
 	}
 	Hit.monster = &monster;
 	Hit.total += damage.raw();
@@ -1246,6 +1263,8 @@ void NoteSupportedDamage(Monster &monster, DamageType type, Fixed26_6 damage)
 	OnRagingSpiritsHit(*MyPlayer, Hit.skill, monster, type);
 	if (type == DamageType::Physical)
 		Hit.physical += damage.raw();
+	if (type == DamageType::Chaos)
+		Hit.chaos += damage.raw();
 	if (IsAnyOf(type, DamageType::Physical, DamageType::Chaos)) {
 		// Poison counts the hit as it was before the monster's resistance and damage taken, as in POE2.
 		const int taken = Hit.takenMonster == &monster ? (type == DamageType::Physical ? Hit.physicalTakenPercent : Hit.chaosTakenPercent) : 0;
@@ -1350,6 +1369,10 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 			break;
 		case SG::DeadlyHerald:
 			more(Value(player, skill, gem, 0));
+			break;
+		case SG::DarkEnchant:
+			if (type != DamageType::Chaos)
+				more(-Value(player, skill, gem, 1));
 			break;
 		case SG::DeadlyVenom:
 			// Hits are weaker; the poison, counted from the hit before this, is stronger (InflictPoison).
