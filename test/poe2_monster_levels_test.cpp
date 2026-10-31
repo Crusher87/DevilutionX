@@ -158,6 +158,24 @@ TEST_F(Poe2MonsterLevelsTest, SmoothedTableMatchesSource)
 	EXPECT_EQ(checked, 100);
 }
 
+TEST_F(Poe2MonsterLevelsTest, ArmourKeepsPoe2RatioToLife)
+{
+	// POE2's armour table times our white life over POE2's (monster armour plan, step 1; fresh life values).
+	EXPECT_EQ(MonsterLevelArmour(2), 9);
+	EXPECT_EQ(MonsterLevelArmour(13), 65);
+	EXPECT_NEAR(MonsterLevelArmour(38), 433, 1);
+	EXPECT_NEAR(MonsterLevelArmour(80), 1249, 1);
+	// Past the table's end the last row repeats.
+	EXPECT_EQ(MonsterLevelArmour(150), MonsterLevelArmour(100));
+}
+
+TEST_F(Poe2MonsterLevelsTest, ArmourNeverFalls)
+{
+	EXPECT_GT(MonsterLevelArmour(1), 0);
+	for (int level = 2; level <= 100; level++)
+		EXPECT_GE(MonsterLevelArmour(level), MonsterLevelArmour(level - 1)) << level;
+}
+
 TEST_F(Poe2MonsterLevelsTest, LifeNeverFallsAndStepsAtMostThirtyPercent)
 {
 	for (int level = 2; level <= 100; level++) {

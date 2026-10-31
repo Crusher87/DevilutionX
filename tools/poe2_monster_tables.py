@@ -5,6 +5,9 @@
   accuracy. POE2's table (smoothed from 65 to 80 so it never jumps) times the fitted dials of step 1, life also times
   KILL_TARGET / 2 (the dials were fitted for 2 uses of the main skill a white). The poe2* columns are the table before
   the dials, for reference and tests.
+  The last two columns are monster armour (monster armour plan, step 1): poe2Armour is POE2's monsterArmourTable and
+  armour is that times our white life over POE2's, so armour keeps POE2's ratio to a white's life and a hit worth a
+  given share of a white loses what it would in POE2.
 - mods/poe2/txtdata/poe2/monster_types.tsv: every monster type's Diablo-scale references, the averages of the types
   that can spawn on its floors (its own minDunLvl..maxDunLvl within 1-24; Diablo floor 16, Na-Krul 24), in tenths, and
   its ratios to them in percent, clamped to 30-250: life (data midpoint), damage, and xp = the average of the two. The
@@ -55,6 +58,16 @@ MAP_ACCURACY = {38: 1.0, 41: 0.947, 59: 0.875, 80: 0.656}
 # Monster damage is untouched: a white still hits as hard, so a fresh hardcore hero dies in as many hits.
 LIFE_PACE = {13: 0.875, 15: 1.0}
 MAX_LEVEL = 100
+# POE2's monster armour by level 1-100 (Path of Building PoE2, src/Data/Misc.lua data.monsterArmourTable, from
+# DefaultMonsterStats.dat). Each POE2 monster has a multiplier on it (0 for most, 1.0 at most); ours is
+# monster_armour.tsv.
+POE2_ARMOUR = [
+    3, 6, 8, 10, 13, 16, 19, 22, 26, 30, 34, 39, 43, 49, 54, 60, 67, 73, 81, 89, 97, 106, 116, 126, 137, 149, 161,
+    174, 189, 204, 220, 237, 255, 274, 295, 317, 340, 364, 391, 418, 448, 479, 512, 547, 585, 624, 666, 711, 758, 808,
+    861, 917, 976, 1039, 1105, 1176, 1250, 1329, 1412, 1500, 1594, 1692, 1796, 1906, 2023, 2146, 2276, 2413, 2558,
+    2712, 2874, 3044, 3225, 3416, 3617, 3829, 4053, 4290, 4540, 4803, 5081, 5375, 5684, 6011, 6355, 6718, 7101, 7505,
+    7930, 8379, 8852, 9351, 9877, 10431, 11015, 11630, 12279, 12962, 13682, 14441,
+]
 
 # Bosses: life and damage in percent of a white at the floor's area level (plan v2, bosses and uniques).
 BOSSES = [
@@ -112,9 +125,12 @@ def level_rows():
     rows = []
     for level in range(1, MAX_LEVEL + 1):
         life = poe2(level, 0) * dial(level, 0) * life_pace(level) * KILL_TARGET / FIT_KILL_TARGET
+        poe2_life = poe2(level, 0)
+        poe2_armour = POE2_ARMOUR[level - 1]
         rows.append((level, max(1, round(life)), max(1, round(poe2(level, 1) * dial(level, 1) * 10)),
                      max(1, round(poe2(level, 2) * dial(level, 2) * map_accuracy(level))),
-                     round(poe2(level, 0)), round(poe2(level, 1) * 10), round(poe2(level, 2))))
+                     round(poe2_life), round(poe2(level, 1) * 10), round(poe2(level, 2)),
+                     poe2_armour, round(poe2_armour * max(1, round(life)) / round(poe2_life))))
     return rows
 
 
@@ -149,7 +165,7 @@ def main():
         return tuple(sum(floor_refs[f][i] for f in floors) / len(floors) for i in range(3))
 
     with open(os.path.join(OUT, 'monster_levels.tsv'), 'w', newline='') as out:
-        out.write('level\tlife\tdamage10\taccuracy\tpoe2Life\tpoe2Damage10\tpoe2Accuracy\n')
+        out.write('level\tlife\tdamage10\taccuracy\tpoe2Life\tpoe2Damage10\tpoe2Accuracy\tpoe2Armour\tarmour\n')
         for row in level_rows():
             out.write('\t'.join(str(v) for v in row) + '\n')
 

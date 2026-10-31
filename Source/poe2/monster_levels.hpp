@@ -47,6 +47,11 @@ int MonsterLevelLife(int level);
 int MonsterLevelDamage10(int level);
 /** @brief A white monster's accuracy rating at a monster level. */
 int MonsterLevelAccuracy(int level);
+/**
+ * @brief Monster armour at a monster level for a kind at 100% (monster_armour.tsv): POE2's armour table times our white
+ * life over POE2's, so it keeps POE2's ratio to a white's life. 0 without the table or its armour column.
+ */
+int MonsterLevelArmour(int level);
 
 /** @brief The type's row; a type missing from the table gets refs of 0, so every ratio is 100%. */
 const MonsterTypeLevelRow &MonsterTypeRow(_monster_id type);
