@@ -1,0 +1,307 @@
+/**
+ * @file poe2/cathedral_floors.hpp
+ *
+ * POE2 Mashup: the new Cathedral floors (dungeon plan step 5, "the funnel"; Curtis picked it on 2026-10-29).
+ *
+ * Diablo builds a Cathedral floor as one big tangle of rooms with the stairs anywhere. Path of Exile 2 builds a winding
+ * main way from the way in to the way out, with side areas that end in a reward. This builder does the same on
+ * Diablo's own tiles:
+ *  - The floor is a 6 x 6 grid of slots, each 6 blocks wide: one block of wall and 5 of floor. A room takes one slot
+ *    (5 x 5), two (11 x 5) or four (11 x 11, a great hall). Slots no room uses stay solid rock.
+ *  - The main way runs from the arrival room (the stairs up) through about 8 rooms to the way down. The two big
+ *    fights are great halls about a third and two thirds of the way along, each followed by a quiet room.
+ *  - Side areas of one or two rooms branch off the main way and end in a reward room. Now and then two rooms of the
+ *    main way that touch get a second doorway, so there is a way round.
+ *  - About a third of the rooms are designed rooms from the collection Curtis picked (mods/poe2/txtdata/poe2/
+ *    cathedral_rooms.tsv); the rest are rough rooms and winding passages made up on the spot.
+ *  - Rooms join through one-block doorways: arches on the main way, sometimes a door into a side area.
+ *  - The quest rooms keep their own layouts: the Butcher's room, the Skeleton King's door and Ogden's sign go in a
+ *    great hall (Ogden's sign is the way down on its floor), the Poisoned Water entrance in a side hall.
+ *  - A room never comes back on the same floor or the next two floors built; the memorable ones wait five floors.
+ *    The rooms each floor had to avoid are saved with the floor (poe2/floors.hpp), so a floor built again from its
+ *    seed comes out the same.
+ *
+ * Old floors stay one option away (Gameplay > New Cathedral Floors). A floor keeps the builder it was made with.
+ *
+ * The Catacombs (levels 5 to 8) are built the same way from their own collection (catacombs_rooms.tsv, picked by
+ * Curtis on 2026-10-30), on Diablo's Catacombs tiles: walls there are blocks of their own, so the rooms' inner walls,
+ * doors, archways and pillars are drawn straight onto the floor (drlg_l2.cpp). Their setting is Gameplay > New
+ * Catacombs Floors.
+ *
+ * The Caves (levels 9 to 12) are built the same way again from caves_rooms.tsv (picked by Curtis on 2026-10-31), on
+ * Diablo's Caves grid, where each square is a corner point of rock or floor and the walls come out of the corners
+ * (drlg_l3.cpp). There a room's mouths are three points wide, and lava pools, lava streams with their bridges, wooden
+ * fences with gates and stalagmites are stamped onto the floor once the walls are made. Their setting is Gameplay >
+ * New Caves Floors.
+ *
+ * Hell (levels 13 to 15) is built from hell_rooms.tsv (picked by Curtis on 2026-10-31) on Diablo's Hell tiles
+ * (drlg_l4.cpp), where a wall is a tile of its own: the rooms' inner walls and pillars are rock in the floor's mask and
+ * Diablo's own Hell passes draw them, the archways are stamped in afterwards, and the stairs stand free in the room.
+ * The Warlord of Blood's chamber (level 13) and the pentagram (level 15) each end the main way in a hall of their own.
+ * Diablo's floor (level 16) stays as it is. Their setting is Gameplay > New Hell Floors.
+ */
+#pragma once
+
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "engine/point.hpp"
+#include "engine/rectangle.hpp"
+#include "levels/gendung_defs.hpp"
+#include "utils/bitset2d.hpp"
+
+namespace devilution {
+
+/** @brief What a designed room is good for (bit flags). */
+enum CathedralRoomRole : uint8_t {
+	RoomRoleBigFight = 1,
+	RoomRoleMainWay = 2,
+	RoomRoleSideArea = 4,
+	RoomRoleQuiet = 8,
+	RoomRoleJunction = 16,
+};
+
+/**
+ * @brief One designed room, drawn on the block grid.
+ * In the Catacombs: 'O' a pillar, 'C' a broken pillar, 'R' a 2 x 2 block of fallen stone, 'U' 'V' and 'Z' (the
+ * stairs to town, level 5 only) 2 x 2 stairs standing free, 't' a torch on the wall behind, 'W' weapon rack,
+ * 'M' armor stand, 'u' cauldron, '~' blood on the floor.
+ * ' ' rock, '.' floor, 'E' where a doorway may open, 'O' pillar, 'U' stairs up, 'V' stairs down, '*' a reward,
+ * and props: c candles, L brazier, S sarcophagus, K bookshelf, k book stand, A shrine spot, F fountain, G goat shrine,
+ * X crucified skeleton, x burning cross, T man or woman in chains, Y body on a stake, D headless body, P and s skulls,
+ * b banner, r barrels, and lines inside the room: '#' wall, 'a' arches, '=' fence, 'd' a door in a wall or fence line,
+ * 'R' broken wall.
+ */
+struct CathedralRoomDef {
+	std::string id;
+	std::string family;
+	uint8_t roles = 0;
+	bool memorable = false;
+	/** The room only turns ways that keep its pillars behind the middle, so they never hide the fight. */
+	bool pillarsBehind = false;
+	/** What its reward spot holds on its first version: "", "strongbox" or "raremonster". */
+	std::string reward;
+	/** Optional parts: a digit in the grid, the square when it is used and when it isn't. */
+	std::vector<std::array<char, 3>> options;
+	std::vector<std::string> grid;
+};
+
+/** @brief Reads a grid written as rows joined by '/', with '_' for rock. False when the rows aren't all one width. */
+bool ParseCathedralRoomGrid(std::string_view text, std::vector<std::string> &grid);
+
+/** @brief The room collection, read from cathedral_rooms.tsv on first use. */
+const std::vector<CathedralRoomDef> &GetCathedralRooms();
+
+/** @brief Replaces the room collection (tests); an empty list reads the file again on next use. */
+void SetCathedralRooms(std::vector<CathedralRoomDef> rooms);
+
+/** @brief The Catacombs room collection, read from catacombs_rooms.tsv on first use. */
+const std::vector<CathedralRoomDef> &GetCatacombsRooms();
+void SetCatacombsRooms(std::vector<CathedralRoomDef> rooms);
+
+/**
+ * @brief The Caves room collection, read from caves_rooms.tsv on first use. Its grids are corner points: ' ' rock,
+ * '.' floor, 'E' a mouth (three in a row), 'o' a rock pillar, 'L' lava, 'U' 'V' and 'Z' (the stairs to town, level 9
+ * only) three in a row on the first floor row or column, and marks on the tile whose north corner the point is:
+ * 'l' a lava stream, 'H' a bridge over it, 'f' a fence, 'g' a gate in it, 'T' a stalagmite cluster (2 x 2 marks),
+ * 'i' a lone stalagmite. Props: r * A F G u s D P k x as in the Cathedral.
+ */
+const std::vector<CathedralRoomDef> &GetCavesRooms();
+void SetCavesRooms(std::vector<CathedralRoomDef> rooms);
+
+/**
+ * @brief The Hell room collection, read from hell_rooms.tsv on first use. On the block grid like the Catacombs: '#'
+ * a wall (one tile thick, ends may stand free), 'a' an archway with a wall post on each side, 'O' a pillar, 'U' and
+ * 'Z' (the stairs to town, level 13 only) 4 x 3 stairs with a floor row north and south, 'V' 3 x 3 stairs with floor
+ * all round. Props as in the Cathedral; 'Y' bodies on stakes can be walked past.
+ */
+const std::vector<CathedralRoomDef> &GetHellRooms();
+void SetHellRooms(std::vector<CathedralRoomDef> rooms);
+
+/** @brief A grid turned: turn & 3 quarter turns clockwise, then mirrored left to right when turn & 4. */
+std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn);
+/**
+ * @brief A Caves grid turned the same way. Its marks belong to the tile whose north corner they sit on, so the corner
+ * points and the tiles between them turn as two layers, and each mark lands on its tile's new north corner.
+ */
+std::vector<std::string> TurnCavesGrid(const std::vector<std::string> &grid, int turn);
+
+enum class CathedralAreaKind : uint8_t {
+	Arrival,
+	Way,
+	BigFight,
+	Quiet,
+	WayDown,
+	Side,
+	SideEnd,
+	QuestPiece,
+	QuestWater,
+};
+
+struct CathedralArea {
+	/** In slots. */
+	Rectangle slots;
+	CathedralAreaKind kind = CathedralAreaKind::Way;
+	/** Order along the main way, or -1 off it. */
+	int step = -1;
+	/** Index into GetCathedralRooms(), or -1 for a room made up on the spot. */
+	int design = -1;
+	int turn = 0;
+	/** The designed room as placed: turned, its options settled. */
+	std::vector<std::string> grid;
+	/** The block of grid[0][0]. */
+	Point origin;
+	bool corridor = false;
+
+	/** @brief The area's floor blocks: every block of its slots but the wall row and column on its north and west. */
+	[[nodiscard]] Rectangle interior() const;
+};
+
+struct CathedralDoor {
+	Point block;
+	/** A doorway in a wall running north to south (between an area and the one east of it). */
+	bool vertical = false;
+	/** A door rather than an open arch. */
+	bool door = false;
+};
+
+/**
+ * A block of a wall, arch, fence, door or broken-wall line inside a designed room ('#', 'a', '=', 'd', 'R').
+ * In the Caves: a lava point 'L' or pillar 'o' (rock in the mask), or a tile mark 'l' 'H' 'f' 'g' 'T' 'i'.
+ */
+struct CathedralLine {
+	Point block;
+	char kind = '#';
+};
+
+struct CathedralProp {
+	Point block;
+	char kind = '.';
+	int area = 0;
+};
+
+struct CathedralPlan {
+	/** Built from the Catacombs rooms, on Catacombs tiles. */
+	bool catacombs = false;
+	/** Built from the Caves rooms, on the Caves corner grid. */
+	bool caves = false;
+	/** Built from the Hell rooms, on Hell tiles. */
+	bool hell = false;
+	std::vector<CathedralArea> areas;
+	std::vector<CathedralDoor> doors;
+	std::vector<CathedralProp> props;
+	std::vector<Point> pillars;
+	/** Lines inside designed rooms: rock in the mask, turned into their tiles once the walls are in. */
+	std::vector<CathedralLine> lines;
+	Bitset2d<DMAXX, DMAXY> mask;
+	/** Blocks of designed rooms, kept free of random objects and theme rooms. */
+	Bitset2d<DMAXX, DMAXY> designed;
+	/** The first of the four 'U' blocks; the stairs go in the wall north of them. Caves: the west one of three. Hell: the
+	 * north-west 'U' block. */
+	std::optional<Point> stairsUp;
+	/** The north-west 'V' block. Caves: the north one of three, the stairs in the wall west of them. */
+	std::optional<Point> stairsDown;
+	/** Catacombs, level 5 (Caves, level 9): the north-west 'Z' block, the stairs back to town. */
+	std::optional<Point> townStairs;
+	/** Where the quest's set piece goes. Caves: the north-west tile of the Anvil of Fury's 11 x 11 tiles. Hell: the
+	 * Warlord's chamber, or the north-west tile of the pentagram's 5 x 5 tiles. */
+	std::optional<Point> questPiece;
+	/** The north-west block of the Poisoned Water entrance (6 x 6). */
+	std::optional<Point> water;
+	/** Bit i: room i of the collection is on this floor. */
+	uint64_t usedRooms = 0;
+};
+
+struct CathedralRequest {
+	/** The Catacombs rooms and rules rather than the Cathedral's. */
+	bool catacombs = false;
+	/** The Caves rooms and rules. */
+	bool caves = false;
+	/** The Hell rooms and rules. */
+	bool hell = false;
+	/** Bit i: room i of the collection may not be used. */
+	uint64_t forbidden = 0;
+	bool questPiece = false;
+	/** The slots the quest's room takes (Arkaine's Valor, the Halls of the Blind and the Anvil of Fury need 3 x 3). */
+	Size questSlots { 2, 2 };
+	/** Catacombs, Caves and Hell: the arrival room also holds the stairs back to town. */
+	bool townStairs = false;
+	/** Ogden's sign: the set piece holds the stairs down, so it ends the main way. */
+	bool questPieceIsWayDown = false;
+	bool water = false;
+};
+
+/** @brief The collection a plan's rooms come from. */
+const std::vector<CathedralRoomDef> &RoomsOfPlan(const CathedralPlan &plan);
+
+/**
+ * @brief Plans a floor with the level's random numbers (GenerateRnd).
+ * @return false when this roll didn't work out; the caller rolls again.
+ */
+bool PlanCathedralFloor(const CathedralRequest &request, CathedralPlan &plan);
+
+/** @brief One line for the play log: each room of the plan, its kind, slots and design, and where the stairs are. */
+std::string DescribeCathedralPlan(const CathedralPlan &plan);
+
+/**
+ * @brief Marks a Catacombs floor in the room history, so its rooms are kept apart from the Cathedral's (whose numbers
+ * mean other rooms). Rooms 61 to 63 can't be used.
+ */
+constexpr uint64_t CatacombsRoomsMark = uint64_t { 1 } << 63;
+/** @brief Marks a Caves floor in the room history. */
+constexpr uint64_t CavesRoomsMark = uint64_t { 1 } << 62;
+/** @brief Marks a Hell floor in the room history. */
+constexpr uint64_t HellRoomsMark = uint64_t { 1 } << 61;
+
+/**
+ * @brief Which rooms a new floor may not use, from the rooms the last five floors built used (newest first).
+ * Only the floors built from the same collection count.
+ */
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false, bool hell = false);
+
+/** @brief Whether the floor being played was made by this builder. */
+bool IsCathedralFunnelFloor();
+void SetCathedralFunnelFloor(bool active);
+CathedralPlan &CurrentCathedralPlan();
+
+/** @brief A world tile of a designed room (no random objects, no theme room). */
+bool IsCathedralDesignedTile(Point tile);
+/**
+ * @brief Whether a transparency area (dTransVal) is a plain side room of a new Cathedral floor. Those take Diablo's
+ * theme rooms (library, fountain, goat shrine, ...); the designed rooms, the main way and the winding passages don't.
+ */
+bool IsCathedralThemeRoom(int8_t tv);
+/**
+ * @brief The room of a new Cathedral floor a tile is in (1 + its area), for the pack planner and the floor census; 0 off
+ * every room. A room cut up by lines of arches or walls is still one room.
+ */
+int CathedralRoomAt(Point tile);
+/** @brief The big-fight halls along the main way, each with the quiet room after it (rooms as CathedralRoomAt; 0: none). */
+std::vector<std::pair<int, int>> CathedralBigFights();
+/** A designed room's reward spot that holds more than a chest (the reward column of the rooms list). */
+struct CathedralReward {
+	Point tile;
+	/** A strongbox stands there; otherwise a pack led by a rare monster is to stand there. */
+	bool strongbox = false;
+};
+/** @brief The reward spots AddCathedralRoomObjects set out on this floor, for the pack planner. */
+const std::vector<CathedralReward> &CathedralRewards();
+/** @brief The designed rooms' sarcophagi, taken from the floor's usual 10 to 15. */
+int CathedralDesignedSarcophagi();
+/** @brief Marks the object art the designed rooms use, for InitObjectGFX. */
+void MarkCathedralObjectGraphics(uint16_t filesWidths[65]);
+/** @brief Puts the designed rooms' props on the floor (InitObjects, before any random object). */
+void AddCathedralRoomObjects();
+/**
+ * @brief The plain side rooms of a new Catacombs floor, in blocks (their floor), for Diablo's theme rooms: on these
+ * floors the theme rooms are those rooms rather than walled boxes cut into big halls.
+ */
+std::vector<Rectangle> CatacombsThemeRooms();
+
+} // namespace devilution

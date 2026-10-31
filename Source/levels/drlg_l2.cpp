@@ -11,6 +11,8 @@
 #include <expected>
 #include <list>
 #include <optional>
+#include <set>
+#include <vector>
 
 #include "engine/displacement.hpp"
 #include "engine/load_file.hpp"
@@ -23,7 +25,11 @@
 #include "levels/gendung.h"
 #include "levels/gendung_defs.hpp"
 #include "objects.h"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/floors.hpp"
+#include "poe2/telemetry.hpp"
 #include "tables/questdat.hpp"
+#include "utils/bitset2d.hpp"
 #include "utils/is_of.hpp"
 #include "utils/status_macros.hpp"
 
@@ -2679,6 +2685,8 @@ bool PlaceStairs(lvl_entry entry)
 	return true;
 }
 
+void DecorateLevel();
+
 void GenerateLevel(lvl_entry entry)
 {
 	if (LevelSeeds[currlevel])
@@ -2705,6 +2713,12 @@ void GenerateLevel(lvl_entry entry)
 	FixDirtTiles();
 
 	DRLG_PlaceThemeRooms(6, 10, 3, 0, false);
+	DecorateLevel();
+}
+
+/** The doors moved off corners, the arches, the wall variants, the floor stains and the quest pieces. */
+void DecorateLevel()
+{
 	PlaceMiniSetRandom(CTRDOOR1, 100);
 	PlaceMiniSetRandom(CTRDOOR2, 100);
 	PlaceMiniSetRandom(CTRDOOR3, 100);
@@ -2821,6 +2835,474 @@ void GenerateLevel(lvl_entry entry)
 	DRLG_CheckQuests(SetPieceRoom.position);
 }
 
+/** POE2: the predungeon of a new Catacombs floor: its rooms' floor, the doorways, and a wall round every floor block. */
+void MakeCatacombsPredungeon(const CathedralPlan &plan)
+{
+	memset(predungeon, ' ', sizeof(predungeon));
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (plan.mask.test(x, y))
+				predungeon[x][y] = '.';
+		}
+	}
+	// The designed rooms' inner lines start out as floor: their tiles are drawn once Diablo's own passes are done.
+	for (const CathedralLine &line : plan.lines)
+		predungeon[line.block.x][line.block.y] = '.';
+	for (const CathedralDoor &door : plan.doors)
+		predungeon[door.block.x][door.block.y] = 'D';
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (predungeon[x][y] != ' ')
+				continue;
+			for (int dy = -1; dy <= 1 && predungeon[x][y] == ' '; dy++) {
+				for (int dx = -1; dx <= 1; dx++) {
+					const int nx = x + dx;
+					const int ny = y + dy;
+					if (nx < 0 || ny < 0 || nx >= DMAXX || ny >= DMAXY)
+						continue;
+					if (predungeon[nx][ny] == '.' || predungeon[nx][ny] == 'D') {
+						predungeon[x][y] = '#';
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+
+enum Arm : uint8_t {
+	ArmNorth = 1,
+	ArmEast = 2,
+	ArmSouth = 4,
+	ArmWest = 8,
+};
+
+/** The tile of an inner wall block from the walls it joins: what Diablo's Patterns give that shape. */
+uint8_t LineTile(uint8_t arms)
+{
+	switch (arms) {
+	case ArmNorth | ArmSouth: return 1;
+	case ArmEast | ArmWest: return 2;
+	case ArmEast | ArmSouth:
+	case ArmNorth | ArmEast | ArmSouth:
+	case ArmEast | ArmSouth | ArmWest:
+	case ArmNorth | ArmEast | ArmSouth | ArmWest: return 8;
+	case ArmWest | ArmSouth:
+	case ArmNorth | ArmSouth | ArmWest: return 7;
+	case ArmNorth | ArmEast:
+	case ArmNorth | ArmEast | ArmWest:
+	case ArmEast: return 9;
+	default:
+		// A post: the north-west corner, an east or bottom end, or a pillar.
+		return 6;
+	}
+}
+
+/**
+ * POE2: the inner walls, doors, archways, pillars and fallen stone of a new Catacombs floor's designed rooms, drawn
+ * straight onto the tiles as Diablo draws its theme rooms. Diablo's own passes would rub out free-standing walls and
+ * pillars, and add doors to every wall with floor on both sides.
+ * @param floorStamps Filled with the floor tiles to draw once the transparency is flooded (archway shading).
+ */
+void StampCatacombsLines(const CathedralPlan &plan, std::vector<std::pair<Point, uint8_t>> &floorStamps)
+{
+	std::array<std::array<char, DMAXY>, DMAXX> kind {};
+	for (const CathedralLine &line : plan.lines)
+		kind[line.block.x][line.block.y] = line.kind;
+	const auto lineAt = [&kind](Point p) {
+		return p.x >= 0 && p.y >= 0 && p.x < DMAXX && p.y < DMAXY ? kind[p.x][p.y] : '\0';
+	};
+	const auto floorAt = [](Point p) {
+		return p.x >= 0 && p.y >= 0 && p.x < DMAXX && p.y < DMAXY && dungeon[p.x][p.y] == 3;
+	};
+	constexpr std::array<std::pair<Displacement, Arm>, 4> Steps { {
+		{ { 0, -1 }, ArmNorth },
+		{ { 1, 0 }, ArmEast },
+		{ { 0, 1 }, ArmSouth },
+		{ { -1, 0 }, ArmWest },
+	} };
+
+	// Where a line meets the room's own wall, the wall block takes the tile Diablo's Patterns give it with the line
+	// drawn in as wall.
+	for (const CathedralLine &line : plan.lines)
+		predungeon[line.block.x][line.block.y] = '#';
+
+	// Two archways ending at the same corner both shade the block inside it; the north-south one becomes a door.
+	std::set<std::pair<int, int>> shadedAcross;
+	for (const CathedralLine &line : plan.lines) {
+		const Point p = line.block;
+		if (line.kind == 'a' && lineAt(p + Displacement { 1, 0 }) == 'a' && lineAt(p + Displacement { -1, 0 }) != 'a') {
+			shadedAcross.insert({ p.x, p.y - 1 });
+			shadedAcross.insert({ p.x + 1, p.y - 1 });
+		}
+	}
+	const auto archTurnsDoor = [&](Point top) {
+		for (int dy = -1; dy <= 1; dy++) {
+			if (shadedAcross.count({ top.x - 1, top.y + dy }) != 0)
+				return true;
+		}
+		return false;
+	};
+
+	std::vector<std::pair<Point, uint8_t>> tiles;
+	for (const CathedralLine &line : plan.lines) {
+		const Point p = line.block;
+		uint8_t arms = 0;
+		for (const auto &[step, arm] : Steps) {
+			const Point n = p + step;
+			if (lineAt(n) != '\0') {
+				arms |= arm;
+				continue;
+			}
+			if (floorAt(n) || n.x < 0 || n.y < 0 || n.x >= DMAXX || n.y >= DMAXY || IsAnyOf(dungeon[n.x][n.y], 4, 5))
+				continue;
+			const uint8_t wall = dungeon[n.x][n.y];
+			DoPatternCheck(n.x, n.y);
+			const uint8_t joined = dungeon[n.x][n.y];
+			dungeon[n.x][n.y] = wall;
+			if (joined == 3)
+				continue;
+			tiles.emplace_back(n, joined);
+			arms |= arm;
+		}
+		uint8_t tile = LineTile(arms);
+		// The north-west block of a solid 2 x 2.
+		if (arms == (ArmEast | ArmSouth) && lineAt(p + Displacement { 1, 1 }) != '\0')
+			tile = 13;
+		switch (line.kind) {
+		case 'd':
+			tile = (arms & ArmNorth) != 0 ? 4 : 5;
+			break;
+		case 'a': {
+			// Archways are two blocks of a line, drawn as Diablo's VARCH and HARCH sets draw them.
+			const bool vertical = lineAt(p + Displacement { 0, -1 }) == 'a' || lineAt(p + Displacement { 0, 1 }) == 'a';
+			const Point top = lineAt(p + Displacement { 0, 1 }) == 'a' ? p : p + Displacement { 0, -1 };
+			if (vertical && archTurnsDoor(top)) {
+				tile = p == top ? 4 : 1;
+			} else if (vertical) {
+				if (lineAt(p + Displacement { 0, 1 }) == 'a') {
+					const Point west = p + Displacement { -1, 0 };
+					if (tile == 7 && dungeon[west.x][west.y] == 2 && lineAt(west) == '\0')
+						tiles.emplace_back(west, 141);
+					else if (floorAt(p + Displacement { -1, -1 }))
+						floorStamps.emplace_back(p + Displacement { -1, -1 }, 48);
+					if (floorAt(west))
+						floorStamps.emplace_back(west, 51);
+					tile = tile == 8 ? 42 : 39;
+				} else {
+					if (floorAt(p + Displacement { -1, 0 }))
+						floorStamps.emplace_back(p + Displacement { -1, 0 }, 47);
+					tile = 44;
+				}
+			} else if (lineAt(p + Displacement { 1, 0 }) == 'a') {
+				const Point north = p + Displacement { 0, -1 };
+				if ((tile == 8 || tile == 9) && dungeon[north.x][north.y] == 1)
+					tiles.emplace_back(north, 140);
+				else if (floorAt(north))
+					floorStamps.emplace_back(north, 49);
+				tile = tile == 8 ? 43 : 40;
+			} else {
+				if (floorAt(p + Displacement { 0, -1 }))
+					floorStamps.emplace_back(p + Displacement { 0, -1 }, 46);
+				tile = 45;
+			}
+			break;
+		}
+		default:
+			break;
+		}
+		tiles.emplace_back(p, tile);
+	}
+	for (const auto &[p, tile] : tiles) {
+		dungeon[p.x][p.y] = tile;
+		Protected.set(p.x, p.y);
+	}
+
+	// Pillars and broken pillars stand free, with floor all round.
+	const auto standsFree = [](Point p) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				if ((dx != 0 || dy != 0) && dungeon[p.x + dx][p.y + dy] != 3)
+					return false;
+			}
+		}
+		return true;
+	};
+	std::vector<std::pair<Point, uint8_t>> posts;
+	for (const Point p : plan.pillars)
+		posts.emplace_back(p, 6);
+	// A broken pillar is a pillar with fallen stone beside it (MakeCatacombsRubble). Diablo's own broken pillar, 83,
+	// only ever ends a wall.
+	for (const CathedralProp &prop : plan.props) {
+		if (prop.kind == 'C')
+			posts.emplace_back(prop.block, 6);
+	}
+	for (const auto &[p, tile] : posts) {
+		if (!standsFree(p))
+			continue;
+		dungeon[p.x][p.y] = tile;
+		Protected.set(p.x, p.y);
+	}
+}
+
+/** POE2: a pile of fallen stone (Diablo's BIG8, which can be walked over) beside each broken pillar. */
+void MakeCatacombsRubble(const CathedralPlan &plan)
+{
+	const auto nearStairs = [&plan](Point p) {
+		for (const std::optional<Point> &stairs : { plan.stairsUp, plan.stairsDown, plan.townStairs }) {
+			if (stairs && p.x >= stairs->x - 1 && p.x <= stairs->x + 2 && p.y >= stairs->y - 1 && p.y <= stairs->y + 2)
+				return true;
+		}
+		return false;
+	};
+	const auto clear = [&nearStairs](Point p) {
+		if (dungeon[p.x][p.y] != 3 || nearStairs(p))
+			return false;
+		for (const Displacement step : { Displacement { 0, -1 }, Displacement { 1, 0 }, Displacement { 0, 1 }, Displacement { -1, 0 } }) {
+			const uint8_t tile = dungeon[p.x + step.deltaX][p.y + step.deltaY];
+			if (IsAnyOf(tile, 4, 5) || (tile >= 39 && tile <= 51))
+				return false;
+		}
+		return true;
+	};
+	for (const CathedralProp &prop : plan.props) {
+		const Point p = prop.block;
+		if (prop.kind != 'C' || dungeon[p.x][p.y] != 6)
+			continue;
+		for (const Displacement corner : { Displacement { 1, 0 }, Displacement { -2, 0 }, Displacement { 0, 1 }, Displacement { 0, -2 } }) {
+			const Point at = p + corner;
+			if (at.x < 1 || at.y < 1 || at.x + 2 >= DMAXX || at.y + 2 >= DMAXY)
+				continue;
+			if (!clear(at) || !clear(at + Displacement { 1, 0 }) || !clear(at + Displacement { 0, 1 }) || !clear(at + Displacement { 1, 1 }))
+				continue;
+			dungeon[at.x][at.y] = 128;
+			dungeon[at.x + 1][at.y] = 130;
+			dungeon[at.x][at.y + 1] = 129;
+			dungeon[at.x + 1][at.y + 1] = 131;
+			break;
+		}
+	}
+}
+
+/** POE2: the stairs go where the plan put them, each in the middle of 4 x 4 blocks of floor. */
+bool PlaceCatacombsFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
+{
+	const auto put = [](const Miniset &miniset, std::optional<Point> at) -> std::optional<Point> {
+		if (!at || at->x < 1 || at->y < 1)
+			return std::nullopt;
+		const WorldTilePosition position { static_cast<WorldTileCoord>(at->x - 1), static_cast<WorldTileCoord>(at->y - 1) };
+		if (!miniset.matches(position))
+			return std::nullopt;
+		miniset.place(position, true);
+		return Point(position);
+	};
+	const std::optional<Point> up = put(USTAIRS, plan.stairsUp);
+	if (!up)
+		return false;
+	if (entry == ENTRY_MAIN)
+		ViewPosition = up->megaToWorld() + Displacement { 5, 4 };
+	const std::optional<Point> down = put(DSTAIRS, plan.stairsDown);
+	if (!down)
+		return false;
+	if (entry == ENTRY_PREV)
+		ViewPosition = down->megaToWorld() + Displacement { 4, 6 };
+	if (currlevel == 5) {
+		const std::optional<Point> town = put(WARPSTAIRS, plan.townStairs);
+		if (!town)
+			return false;
+		if (entry == ENTRY_TWARPDN)
+			ViewPosition = town->megaToWorld() + Displacement { 5, 4 };
+	}
+	return true;
+}
+
+/** POE2: Diablo's theme rooms go in the plain side rooms, each a transparency area of its own. */
+void PlaceCatacombsThemeRooms()
+{
+	themeCount = 0;
+	for (const Rectangle room : CatacombsThemeRooms()) {
+		if (themeCount >= MAXTHEMES)
+			break;
+		// The floor block nearest the room's middle: Zhar stands there when the room is his library.
+		const Point middle = room.position + Displacement { room.size.width / 2, room.size.height / 2 };
+		std::optional<Point> anchor;
+		int best = DMAXX + DMAXY;
+		for (int y = room.position.y + 2; y < room.position.y + room.size.height; y++) {
+			for (int x = room.position.x + 2; x < room.position.x + room.size.width; x++) {
+				const int d = std::abs(x - middle.x) + std::abs(y - middle.y);
+				if (dungeon[x][y] == 3 && d < best) {
+					best = d;
+					anchor = Point { x, y };
+				}
+			}
+		}
+		if (!anchor)
+			continue;
+		const int8_t tv = dTransVal[16 + (2 * anchor->x)][16 + (2 * anchor->y)];
+		if (tv <= 0)
+			continue;
+		// The whole area has to be in the room (its walls included), and big enough for the theme's things.
+		const Point first = (room.position - Displacement { 1, 1 }).megaToWorld();
+		const Point last = (room.position + Displacement { room.size.width + 1, room.size.height + 1 }).megaToWorld();
+		int tiles = 0;
+		bool outside = false;
+		for (int y = 0; y < MAXDUNY && !outside; y++) {
+			for (int x = 0; x < MAXDUNX; x++) {
+				if (dTransVal[x][y] != tv)
+					continue;
+				if (x < first.x || y < first.y || x >= last.x || y >= last.y) {
+					outside = true;
+					break;
+				}
+				tiles++;
+			}
+		}
+		if (outside || tiles < 36)
+			continue;
+		// Diablo's theme rooms start at their wall, two blocks before the middle of the room.
+		const Point corner = *anchor - Displacement { 2, 2 };
+		const Point end = room.position + Displacement { room.size.width, room.size.height };
+		THEME_LOC &theme = themeLoc[themeCount];
+		theme.room = { { static_cast<uint8_t>(corner.x), static_cast<uint8_t>(corner.y) }, { static_cast<uint8_t>(end.x - corner.x + 1), static_cast<uint8_t>(end.y - corner.y + 1) } };
+		theme.ttval = tv;
+		themeCount++;
+	}
+}
+
+/**
+ * POE2: every floor block of a new Catacombs floor can be walked to from the stairs up, through its doors and
+ * archways, once Diablo's passes have had their say. They sometimes close a passage the plan left open.
+ */
+bool CatacombsFloorConnected(const CathedralPlan &plan)
+{
+	const auto open = [](Point p) {
+		if (SetPieceRoom.contains(p.x, p.y))
+			return true;
+		const uint8_t tile = dungeon[p.x][p.y];
+		return IsAnyOf(tile, 3, 4, 5, 39, 40, 42, 43, 44, 45, 72, 76, 77, 48, 50, 71, 78, 158, 159, 160);
+	};
+	if (!plan.stairsUp)
+		return false;
+	Bitset2d<DMAXX, DMAXY> seen;
+	std::vector<Point> stack { *plan.stairsUp };
+	seen.set(plan.stairsUp->x, plan.stairsUp->y);
+	while (!stack.empty()) {
+		const Point p = stack.back();
+		stack.pop_back();
+		for (const Displacement step : { Displacement { 0, -1 }, Displacement { 1, 0 }, Displacement { 0, 1 }, Displacement { -1, 0 } }) {
+			const Point n = p + step;
+			if (n.x < 0 || n.y < 0 || n.x >= DMAXX || n.y >= DMAXY || seen.test(n.x, n.y) || !open(n))
+				continue;
+			seen.set(n.x, n.y);
+			stack.push_back(n);
+		}
+	}
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (plan.mask.test(x, y) && dungeon[x][y] == 3 && !seen.test(x, y))
+				return false;
+		}
+	}
+	return (!plan.stairsDown || seen.test(plan.stairsDown->x, plan.stairsDown->y)) && (!plan.townStairs || currlevel != 5 || seen.test(plan.townStairs->x, plan.townStairs->y));
+}
+
+/** POE2: a new Catacombs floor (poe2/cathedral_floors.hpp). */
+void GenerateCatacombsFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
+{
+	if (LevelSeeds[currlevel])
+		SetRndSeed(*LevelSeeds[currlevel]);
+
+	CathedralRequest request;
+	request.catacombs = true;
+	request.forbidden = avoidRooms;
+	request.townStairs = currlevel == 5;
+	if (Quests[Q_BLIND].IsAvailable() || Quests[Q_BLOOD].IsAvailable()) {
+		request.questPiece = true;
+		request.questSlots = { 3, 3 };
+	} else if (Quests[Q_SCHAMB].IsAvailable()) {
+		request.questPiece = true;
+	}
+
+	CathedralPlan &plan = CurrentCathedralPlan();
+	std::vector<std::pair<Point, uint8_t>> floorStamps;
+	while (true) {
+		LevelSeeds[currlevel] = GetLCGEngineState();
+		DRLG_InitTrans();
+		if (!PlanCathedralFloor(request, plan))
+			continue;
+
+		Protected.reset();
+		SetPieceRoom = {};
+		SetPiece = {};
+		MakeCatacombsPredungeon(plan);
+		for (int j = 0; j < DMAXY; j++) {
+			for (int i = 0; i < DMAXX; i++)
+				DoPatternCheck(i, j);
+		}
+		FixTilesPatterns();
+		if (plan.questPiece) {
+			// Arkaine's Valor and the Halls of the Blind sit one block in from their hall's north-west corner, the
+			// Chamber of Bone two.
+			const Point at = *plan.questPiece + (Quests[Q_SCHAMB].IsAvailable() ? Displacement { 1, 1 } : Displacement { 0, 0 });
+			SetPieceRoom.position = { static_cast<WorldTileCoord>(at.x), static_cast<WorldTileCoord>(at.y) };
+			InitSetPiece();
+			SetPieceRoom = SetPiece;
+		}
+		floorStamps.clear();
+		StampCatacombsLines(plan, floorStamps);
+		FloodTransparencyValues(3);
+		FixTransparency();
+		if (!PlaceCatacombsFunnelStairs(plan, entry))
+			continue;
+
+		// Diablo's lockout pass would add a door to every wall with floor on both sides; the plan has its doorways.
+		for (int j = 0; j < DMAXY; j++) {
+			for (int i = 0; i < DMAXX; i++) {
+				if (dungeon[i][j] == 4 && dungeon[i - 1][j] != 3)
+					dungeon[i][j] = 1;
+				if (dungeon[i][j] == 5 && dungeon[i][j - 1] != 3)
+					dungeon[i][j] = 2;
+			}
+		}
+		FixDoors();
+		FixDirtTiles();
+		if (!std::all_of(plan.doors.begin(), plan.doors.end(), [](const CathedralDoor &door) { return IsAnyOf(dungeon[door.block.x][door.block.y], 4, 5); }))
+			continue;
+		// A door right above a corner moves up a block, as Diablo has it, before the designed rooms are closed off.
+		for (const Miniset *miniset : { &CTRDOOR1, &CTRDOOR2, &CTRDOOR3, &CTRDOOR4, &CTRDOOR5, &CTRDOOR6, &CTRDOOR7, &CTRDOOR8 })
+			PlaceMiniSetRandom(*miniset, 100);
+		// Nothing random lands in a designed room.
+		for (int y = 0; y < DMAXY; y++) {
+			for (int x = 0; x < DMAXX; x++) {
+				if (plan.designed.test(x, y))
+					Protected.set(x, y);
+			}
+		}
+		if (!CatacombsFloorConnected(plan))
+			continue;
+		PlaceCatacombsThemeRooms();
+		// Zhar waits in a theme room.
+		if (Quests[Q_ZHAR].IsAvailable() && themeCount == 0)
+			continue;
+		break;
+	}
+
+	for (const auto &[p, tile] : floorStamps) {
+		if (dungeon[p.x][p.y] == 3)
+			dungeon[p.x][p.y] = tile;
+	}
+	for (const CathedralProp &prop : plan.props) {
+		if (prop.kind == '~' && dungeon[prop.block.x][prop.block.y] == 3)
+			dungeon[prop.block.x][prop.block.y] = FlipCoin() ? 108 : 110;
+	}
+	MakeCatacombsRubble(plan);
+	DecorateLevel();
+
+	SetCathedralFunnelFloor(true);
+	Poe2NoteFloorRooms(currlevel, plan.usedRooms | CatacombsRoomsMark);
+	TelemetryLog("floor", DescribeCathedralPlan(plan));
+}
+
 void Pass3()
 {
 	DRLG_LPass3(12 - 1);
@@ -2834,7 +3316,13 @@ void CreateL2Dungeon(uint32_t rseed, lvl_entry entry)
 {
 	SetRndSeed(rseed);
 
-	GenerateLevel(entry);
+	SetCathedralFunnelFloor(false);
+	// POE2: the new Catacombs floors, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	if (build.cathedralFunnel)
+		GenerateCatacombsFunnelLevel(entry, build.avoidRooms);
+	else
+		GenerateLevel(entry);
 
 	Pass3();
 }

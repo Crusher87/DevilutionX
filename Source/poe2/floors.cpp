@@ -11,8 +11,10 @@
 
 #include "levels/gendung.h"
 #include "msg.h"
+#include "options.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/cathedral_floors.hpp"
 #include "poe2/telemetry.hpp"
 #include "portal.h"
 #include "quests.h"
@@ -26,7 +28,7 @@ bool Poe2ForceFreshFloor = false;
 
 namespace {
 
-constexpr uint8_t FloorsVersion = 1;
+constexpr uint8_t FloorsVersion = 2;
 constexpr size_t SetLevelCount = static_cast<size_t>(SL_LAST) + 1;
 
 /** @brief What the save remembers about one floor. */
@@ -37,12 +39,22 @@ struct FloorRecord {
 	uint32_t leftAt = 0;
 	/** How many times the floor has been built for this hero. 0 means never. */
 	uint16_t visits = 0;
+	/** The builder and rooms of the floor's current build are settled (see Poe2FloorBuildFor). */
+	bool stamped = false;
+	/** Built by the new floor builder (poe2/cathedral_floors.hpp): the Cathedral's, Catacombs', Caves' or Hell's. */
+	bool cathedralFunnel = false;
+	/** The designed rooms this build had to leave out, so building it again gives the same floor. */
+	uint64_t avoidRooms = 0;
+	/** The rooms of this build still have to go into the room history. */
+	bool roomsPending = false;
 };
 
 std::array<FloorRecord, NUMLEVELS> Floors;
 std::array<FloorRecord, SetLevelCount> SetFloors;
 /** Dice stream for floor rolls, so a replay or a multiplayer host rolls the same floors. */
 uint32_t FloorRollState = 0;
+/** The designed rooms of the last floors built by the new Cathedral builder, newest first. */
+std::array<uint64_t, 5> RecentRooms {};
 
 FloorRecord *RecordFor(int level, bool isSetLevel)
 {
@@ -135,23 +147,50 @@ uint16_t Get16(std::span<const uint8_t> data, size_t &pos)
 	return value;
 }
 
+void Put64(std::vector<uint8_t> &out, uint64_t value)
+{
+	Put32(out, static_cast<uint32_t>(value));
+	Put32(out, static_cast<uint32_t>(value >> 32));
+}
+
+uint64_t Get64(std::span<const uint8_t> data, size_t &pos)
+{
+	const uint64_t low = Get32(data, pos);
+	const uint64_t high = Get32(data, pos);
+	return low | (high << 32);
+}
+
 void PutRecord(std::vector<uint8_t> &out, const FloorRecord &record)
 {
 	out.push_back(record.kept ? 1 : 0);
 	Put32(out, record.leftAt);
 	Put16(out, record.visits);
+	out.push_back(static_cast<uint8_t>((record.stamped ? 1 : 0) | (record.cathedralFunnel ? 2 : 0)));
+	Put64(out, record.avoidRooms);
 }
 
-FloorRecord GetRecord(std::span<const uint8_t> data, size_t &pos)
+FloorRecord GetRecord(std::span<const uint8_t> data, size_t &pos, uint8_t version)
 {
 	FloorRecord record;
 	record.kept = data[pos++] != 0;
 	record.leftAt = Get32(data, pos);
 	record.visits = Get16(data, pos);
+	if (version >= 2) {
+		const uint8_t flags = data[pos++];
+		record.stamped = (flags & 1) != 0;
+		record.cathedralFunnel = (flags & 2) != 0;
+		record.avoidRooms = Get64(data, pos);
+	} else if (record.visits > 0) {
+		// Saved before the new Cathedral floors: every floor built so far came from Diablo's builder.
+		record.stamped = true;
+	}
 	return record;
 }
 
-constexpr size_t RecordSize = 1 + 4 + 2;
+size_t RecordSize(uint8_t version)
+{
+	return version >= 2 ? 1 + 4 + 2 + 1 + 8 : 1 + 4 + 2;
+}
 
 } // namespace
 
@@ -163,6 +202,7 @@ void Poe2FloorsReset()
 	Poe2FloorFresh = false;
 	Poe2ForceFreshFloor = false;
 	FloorRollState = MixSeed(sgGameInitInfo.gameSeed[0] ^ 0x5F10EDU);
+	RecentRooms.fill(0);
 }
 
 void Poe2FloorsTick()
@@ -223,6 +263,7 @@ void Poe2ApplyFreshFloor(int level, bool isSetLevel, uint32_t seed, uint16_t vis
 	if (record == nullptr)
 		return;
 	record->kept = false;
+	record->stamped = false;
 	record->visits = std::max(record->visits, visits);
 	// Set levels share that table with floors 1-9, so their seed is left alone: only their monsters would change.
 	if (!isSetLevel && level < NUMLEVELS) {
@@ -309,7 +350,7 @@ void Poe2PortalClosed(int level, bool isSetLevel)
 std::vector<uint8_t> Poe2PackFloors()
 {
 	std::vector<uint8_t> out;
-	out.reserve(1 + 4 + 4 + 1 + 1 + (Floors.size() + SetFloors.size()) * RecordSize);
+	out.reserve(1 + 4 + 4 + 1 + 1 + ((Floors.size() + SetFloors.size()) * RecordSize(FloorsVersion)) + (RecentRooms.size() * 8));
 	out.push_back(FloorsVersion);
 	Put32(out, Poe2GameTicks);
 	Put32(out, FloorRollState);
@@ -319,6 +360,8 @@ std::vector<uint8_t> Poe2PackFloors()
 		PutRecord(out, record);
 	for (const FloorRecord &record : SetFloors)
 		PutRecord(out, record);
+	for (const uint64_t rooms : RecentRooms)
+		Put64(out, rooms);
 	return out;
 }
 
@@ -334,23 +377,64 @@ bool Poe2UnpackFloors(std::span<const uint8_t> data)
 	const uint32_t rollState = Get32(data, pos);
 	const size_t floorCount = data[pos++];
 	const size_t setCount = data[pos++];
-	if (data.size() < pos + (floorCount + setCount) * RecordSize)
+	if (data.size() < pos + ((floorCount + setCount) * RecordSize(version)) + (version >= 2 ? RecentRooms.size() * 8 : 0))
 		return false;
 	Floors.fill({});
 	SetFloors.fill({});
 	for (size_t i = 0; i < floorCount; i++) {
-		const FloorRecord record = GetRecord(data, pos);
+		const FloorRecord record = GetRecord(data, pos, version);
 		if (i < Floors.size())
 			Floors[i] = record;
 	}
 	for (size_t i = 0; i < setCount; i++) {
-		const FloorRecord record = GetRecord(data, pos);
+		const FloorRecord record = GetRecord(data, pos, version);
 		if (i < SetFloors.size())
 			SetFloors[i] = record;
+	}
+	RecentRooms.fill(0);
+	if (version >= 2) {
+		for (uint64_t &rooms : RecentRooms)
+			rooms = Get64(data, pos);
 	}
 	Poe2GameTicks = ticks;
 	FloorRollState = rollState;
 	return true;
+}
+
+
+Poe2FloorBuild Poe2FloorBuildFor(int level)
+{
+	FloorRecord *record = RecordFor(level, false);
+	if (record == nullptr)
+		return {};
+	if (!record->stamped) {
+		record->stamped = true;
+		const bool catacombs = leveltype == DTYPE_CATACOMBS;
+		const bool caves = leveltype == DTYPE_CAVES;
+		const bool hell = leveltype == DTYPE_HELL;
+		bool wanted = *GetOptions().Gameplay.newCathedralFloors;
+		if (hell)
+			wanted = *GetOptions().Gameplay.newHellFloors;
+		else if (caves)
+			wanted = *GetOptions().Gameplay.newCavesFloors;
+		else if (catacombs)
+			wanted = *GetOptions().Gameplay.newCatacombsFloors;
+		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's.
+		record->cathedralFunnel = !record->kept && wanted;
+		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves, hell) : 0;
+		record->roomsPending = record->cathedralFunnel;
+	}
+	return { record->cathedralFunnel, record->avoidRooms };
+}
+
+void Poe2NoteFloorRooms(int level, uint64_t rooms)
+{
+	FloorRecord *record = RecordFor(level, false);
+	if (record == nullptr || !record->roomsPending)
+		return;
+	record->roomsPending = false;
+	std::copy_backward(RecentRooms.begin(), RecentRooms.end() - 1, RecentRooms.end());
+	RecentRooms[0] = rooms;
 }
 
 } // namespace devilution

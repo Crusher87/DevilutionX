@@ -20,7 +20,11 @@
 #include "missiles.h"
 #include "monster.h"
 #include "objects.h"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/floor_chests.hpp"
+#include "poe2/floor_rooms.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/waystones.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -54,8 +58,23 @@ constexpr int EmptyRoomBonus = 10;
 constexpr int RouteBonus = 8;
 /** The floor census counts a tile further than this from every monster as quiet. */
 constexpr int QuietSteps = 8;
-/** dTransVal is an int8_t. */
-constexpr int MaxRooms = 256;
+/** One floor in this many has a shrine in a rest room (Curtis, 10-28: shrines came up too often). */
+constexpr int ShrineFloorOneIn = 3;
+/** A floor gets a strongbox one time in this many. */
+constexpr int StrongboxOneIn = 3;
+/** Out of every 100 other chests, this many are rare and this many magic. */
+constexpr int RareChestsIn100 = 5;
+constexpr int MagicChestsIn100 = 20;
+/** A rest room after a big fight has this many free tiles: a room, not a corridor or a hall. */
+constexpr int RestRoomMinTiles = 12;
+constexpr int RestRoomMaxTiles = 150;
+/** How far along the way down past a big fight its rest room may be. */
+constexpr size_t RestRoomSearchSteps = 40;
+/** The last pack stands this many steps further from the stairs down than the nearest spot at most, to find open floor. */
+constexpr int LastPackSlack = 8;
+/** Monster slots left free for monsters that come later: summons, and a strongbox's guards (InitMonsters leaves the same). */
+constexpr size_t SpawnHeadroom = 10;
+constexpr int MaxRooms = MaxFloorRooms;
 constexpr int16_t Unreached = INT16_MAX;
 
 constexpr std::array<Displacement, 8> Steps { { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } } };
@@ -67,10 +86,12 @@ int8_t CameFrom[MAXDUNX][MAXDUNY];
 int16_t Reach[MAXDUNX][MAXDUNY];
 /** Walking steps from the way between the stairs. */
 int16_t NearRoute[MAXDUNX][MAXDUNY];
+/** Walking steps from the stairs down. */
+int16_t FromEnd[MAXDUNX][MAXDUNY];
 
 int RoomAt(Point tile)
 {
-	return static_cast<uint8_t>(dTransVal[tile.x][tile.y]);
+	return FloorRoomAt(tile);
 }
 
 /** Floor a monster can walk on; a closed door counts. */
@@ -104,7 +125,8 @@ bool CanHoldChest(Point tile)
 			if (!InDungeonBounds(p) || dMonster[p.x][p.y] != 0 || dPlayer[p.x][p.y] != 0 || IsObjectAtPosition(p)
 			    || TileContainsSetPiece(p) || TileHasAny(p, TileProperties::Solid))
 				return false;
-			if (dPiece[p.x][p.y] > 125 && dPiece[p.x][p.y] < 143)
+			// The Cathedral's (and Crypt's) arch pieces, as chests already skip them.
+			if (IsAnyOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CRYPT) && dPiece[p.x][p.y] > 125 && dPiece[p.x][p.y] < 143)
 				return false;
 		}
 	}
@@ -181,6 +203,8 @@ struct RoomFacts {
 	bool theme = false;
 	bool stairs = false;
 	bool reward = false;
+	/** A rest room or a strongbox's room: no pack goes there. */
+	bool quiet = false;
 	int monsters = 0;
 
 	[[nodiscard]] bool deadEnd() const
@@ -204,8 +228,12 @@ public:
 			return 0;
 		studyFloor();
 		placeBigFights();
+		placeRoomRewards();
+		guardTheWayDown();
+		placeStrongbox();
 		guardDeadEnds();
 		fillTheFloor();
+		rateChests();
 		return placed_;
 	}
 
@@ -216,6 +244,12 @@ private:
 	size_t placed_ = 0;
 	std::array<RoomFacts, MaxRooms> rooms_ {};
 	bool hasStart_ = false;
+	bool hasEnd_ = false;
+	/** This floor's rest room shrine is still to place. */
+	bool shrineWanted_ = false;
+	/** A designed room's strongbox got its guards, so no other strongbox on this floor. */
+	bool strongboxPlaced_ = false;
+	Point end_;
 	std::vector<Point> route_;
 
 	int random(int below)
@@ -230,28 +264,34 @@ private:
 
 	void studyFloor()
 	{
+		BuildFloorRooms();
 		Clear(FromStart);
 		Point start;
-		Point end;
-		bool hasEnd = false;
+		// The way down starts at the stairs up; a floor's town warp (Catacombs level 5) only when it has none.
+		bool startIsStairs = false;
 		for (int i = 0; i < numtrigs; i++) {
 			const interface_mode message = trigs[i]._tmsg;
 			Point tile;
 			if (!NearestWalkable(trigs[i].position, tile))
 				continue;
 			rooms_[RoomAt(tile)].stairs = true;
-			if (!hasStart_ && IsAnyOf(message, WM_DIABPREVLVL, WM_DIABTWARPUP, WM_DIABRTNLVL)) {
-				start = tile;
+			if (!startIsStairs && IsAnyOf(message, WM_DIABPREVLVL, WM_DIABTWARPUP, WM_DIABRTNLVL)) {
+				if (message == WM_DIABPREVLVL || !hasStart_)
+					start = tile;
 				hasStart_ = true;
-			} else if (!hasEnd && message == WM_DIABNEXTLVL) {
-				end = tile;
-				hasEnd = true;
+				startIsStairs = message == WM_DIABPREVLVL;
+			} else if (!hasEnd_ && message == WM_DIABNEXTLVL) {
+				end_ = tile;
+				hasEnd_ = true;
 			}
 		}
 		if (hasStart_)
 			WalkFrom(FromStart, { start }, true);
-		if (hasStart_ && hasEnd && FromStart[end.x][end.y] != Unreached) {
-			for (Point tile = end; CameFrom[tile.x][tile.y] >= 0; tile -= Steps[CameFrom[tile.x][tile.y]])
+		Clear(FromEnd);
+		if (hasEnd_)
+			WalkFrom(FromEnd, { end_ });
+		if (hasStart_ && hasEnd_ && FromStart[end_.x][end_.y] != Unreached) {
+			for (Point tile = end_; CameFrom[tile.x][tile.y] >= 0; tile -= Steps[CameFrom[tile.x][tile.y]])
 				route_.push_back(tile);
 			route_.push_back(start);
 			std::reverse(route_.begin(), route_.end());
@@ -314,11 +354,18 @@ private:
 	{
 		if (route_.empty() || left_ < static_cast<size_t>(BigFightMin + PackMin))
 			return;
+		shrineWanted_ = random(ShrineFloorOneIn) == 0;
+		// The new Cathedral floors have their big-fight halls, each with a quiet room after it (poe2/cathedral_floors.hpp).
+		if (IsCathedralFunnelFloor()) {
+			placePlannedBigFights();
+			return;
+		}
 		const int fights = left_ >= SecondBigFightFrom ? 2 : 1;
 		for (int fight = 0; fight < fights && left_ >= static_cast<size_t>(BigFightMin); fight++) {
 			// The first about two thirds of the way down, the second about a third.
 			const int percent = fight == 0 ? 60 + random(21) : 30 + random(16);
-			const Point along = route_[route_.size() * percent / 100];
+			const size_t alongIndex = route_.size() * percent / 100;
+			const Point along = route_[alongIndex];
 			std::vector<Point> near;
 			for (int y = std::max(0, along.y - BigFightSearchTiles); y <= std::min(MAXDUNY - 1, along.y + BigFightSearchTiles); y++) {
 				for (int x = std::max(0, along.x - BigFightSearchTiles); x <= std::min(MAXDUNX - 1, along.x + BigFightSearchTiles); x++) {
@@ -347,6 +394,238 @@ private:
 				continue;
 			const Point centre = centres[random(static_cast<int>(centres.size()))];
 			placePack(centre, BigFightMin + random(BigFightMax - BigFightMin + 1), BigFightSteps, MonsterRarity::Rare, 2);
+			makeRestRoom(alongIndex, RoomAt(centre));
+		}
+	}
+
+	void placePlannedBigFights()
+	{
+		for (const auto &[hall, quiet] : CathedralBigFights()) {
+			if (left_ < static_cast<size_t>(BigFightMin))
+				return;
+			int best = -1;
+			std::vector<Point> centres;
+			for (int y = 0; y < MAXDUNY; y++) {
+				for (int x = 0; x < MAXDUNX; x++) {
+					const Point tile { x, y };
+					if (RoomAt(tile) != hall || !CanHold(tile) || Reach[x][y] < BigFightSteps * 2)
+						continue;
+					const int open = openness(tile);
+					if (open > best) {
+						best = open;
+						centres.clear();
+					}
+					if (open == best)
+						centres.push_back(tile);
+				}
+			}
+			if (centres.empty())
+				continue;
+			const Point centre = centres[random(static_cast<int>(centres.size()))];
+			placePack(centre, BigFightMin + random(BigFightMax - BigFightMin + 1), BigFightSteps, MonsterRarity::Rare, 2);
+			if (quiet > 0 && !rooms_[quiet].stairs && !rooms_[quiet].theme)
+				settleRestRoom({ quiet });
+		}
+	}
+
+	/**
+	 * After a big fight, a room stays empty: the next room along the way down, or else a room off the fight's room.
+	 * On one floor in ShrineFloorOneIn the first of them has a shrine, in the first room whose walls take one.
+	 */
+	void makeRestRoom(size_t alongIndex, int fightRoom)
+	{
+		const auto canRest = [this, fightRoom](int r) {
+			const RoomFacts &room = rooms_[r];
+			return r != fightRoom && !room.theme && !room.stairs && room.monsters == 0 && !room.quiet && room.free >= RestRoomMinTiles && room.free <= RestRoomMaxTiles;
+		};
+		std::vector<int> candidates;
+		for (size_t i = alongIndex; i < route_.size() && i < alongIndex + RestRoomSearchSteps; i++) {
+			const int r = RoomAt(route_[i]);
+			if (canRest(r) && std::find(candidates.begin(), candidates.end(), r) == candidates.end())
+				candidates.push_back(r);
+		}
+		for (int r = 0; r < MaxRooms; r++) {
+			if (rooms_[fightRoom].neighbours.test(r) && canRest(r) && std::find(candidates.begin(), candidates.end(), r) == candidates.end())
+				candidates.push_back(r);
+		}
+		settleRestRoom(candidates);
+	}
+
+	/** The first of the candidates becomes the rest room; the first whose walls take a shrine gets it on a shrine floor. */
+	void settleRestRoom(const std::vector<int> &candidates)
+	{
+		if (candidates.empty())
+			return;
+		if (shrineWanted_) {
+			for (const int r : candidates) {
+				if (placeShrine(r)) {
+					shrineWanted_ = false;
+					rooms_[r].quiet = true;
+					rooms_[r].reward = true;
+					return;
+				}
+			}
+		}
+		rooms_[candidates.front()].quiet = true;
+	}
+
+	/** A shrine against a wall of the room, with a candle each side, as the shrine theme room has them. */
+	bool placeShrine(int r)
+	{
+		const auto inRoom = [r](Point tile) { return InDungeonBounds(tile) && RoomAt(tile) == r; };
+		const auto clear = [](Point tile) { return IsTileNotSolid(tile) && !IsObjectAtPosition(tile) && dMonster[tile.x][tile.y] == 0; };
+		std::vector<std::pair<Point, bool>> spots;
+		for (int y = 1; y < MAXDUNY - 1; y++) {
+			for (int x = 1; x < MAXDUNX - 1; x++) {
+				const Point tile { x, y };
+				if (!inRoom(tile) || !clear(tile) || TileContainsSetPiece(tile) || IsObjectAtPosition(tile + Direction::North))
+					continue;
+				// Facing south-west from a north-east wall, or south-east from a north-west wall.
+				const Point left = tile + Displacement { -1, 0 };
+				const Point right = tile + Displacement { 1, 0 };
+				if (TileHasAny(tile + Direction::NorthEast, TileProperties::Trap) && IsTileNotSolid(tile + Direction::NorthWest)
+				    && IsTileNotSolid(tile + Direction::SouthEast) && inRoom(left) && inRoom(right) && clear(left) && clear(right))
+					spots.emplace_back(tile, true);
+				const Point up = tile + Displacement { 0, -1 };
+				const Point down = tile + Displacement { 0, 1 };
+				if (TileHasAny(tile + Direction::NorthWest, TileProperties::Trap) && IsTileNotSolid(tile + Direction::NorthEast)
+				    && IsTileNotSolid(tile + Direction::SouthWest) && inRoom(up) && inRoom(down) && clear(up) && clear(down))
+					spots.emplace_back(tile, false);
+			}
+		}
+		if (spots.empty())
+			return false;
+		const auto [tile, facingSouthWest] = spots[random(static_cast<int>(spots.size()))];
+		if (facingSouthWest) {
+			AddObject(OBJ_CANDLE2, tile + Displacement { -1, 0 });
+			AddObject(OBJ_SHRINER, tile);
+			AddObject(OBJ_CANDLE2, tile + Displacement { 1, 0 });
+		} else {
+			AddObject(OBJ_CANDLE2, tile + Displacement { 0, -1 });
+			AddObject(OBJ_SHRINEL, tile);
+			AddObject(OBJ_CANDLE2, tile + Displacement { 0, 1 });
+		}
+		return true;
+	}
+
+	/** A last full pack on the way down, as near the stairs down as the stairs' view allows. */
+	void guardTheWayDown()
+	{
+		if (!hasEnd_ || left_ < static_cast<size_t>(PackMax + PackMin))
+			return;
+		int nearest = Unreached;
+		for (int y = 0; y < MAXDUNY; y++) {
+			for (int x = 0; x < MAXDUNX; x++) {
+				if (CanHold({ x, y }) && !rooms_[RoomAt({ x, y })].quiet)
+					nearest = std::min<int>(nearest, FromEnd[x][y]);
+			}
+		}
+		if (nearest == Unreached)
+			return;
+		std::vector<Point> near;
+		std::vector<Point> open;
+		for (int y = 0; y < MAXDUNY; y++) {
+			for (int x = 0; x < MAXDUNX; x++) {
+				const Point tile { x, y };
+				if (!CanHold(tile) || rooms_[RoomAt(tile)].quiet || FromEnd[x][y] > nearest + LastPackSlack || Reach[x][y] < PackSteps * 2)
+					continue;
+				near.push_back(tile);
+				if (openness(tile) >= PackOpenTiles)
+					open.push_back(tile);
+			}
+		}
+		const std::vector<Point> &spots = open.empty() ? near : open;
+		if (spots.empty())
+			return;
+		// The nearest of them to the stairs.
+		Point centre = spots.front();
+		for (const Point tile : spots) {
+			if (FromEnd[tile.x][tile.y] < FromEnd[centre.x][centre.y])
+				centre = tile;
+		}
+		placePack(centre, PackMax, PackSteps, MonsterRarity::Normal, 1);
+	}
+
+	/**
+	 * The reward spots of a new Cathedral floor's designed rooms: a strongbox there gets its guards (and is the floor's
+	 * strongbox), and a rare leads a pack at the other kind.
+	 */
+	void placeRoomRewards()
+	{
+		if (!IsCathedralFunnelFloor())
+			return;
+		for (const CathedralReward &reward : CathedralRewards()) {
+			if (!reward.strongbox) {
+				placePack(reward.tile, packSize(reward.tile), PackSteps, MonsterRarity::Rare, 1);
+				continue;
+			}
+			Object *strongbox = FindObjectAtPosition(reward.tile);
+			const int guards = PackMin + random(PackMax - PackMin + 1);
+			// Without monsters to spare for its guards, it stays a chest.
+			if (strongbox == nullptr || strongboxPlaced_ || left_ < static_cast<size_t>(guards + PackMin))
+				continue;
+			SetFloorChestKind(*strongbox, FloorChestKind::Strongbox, guards);
+			RoomFacts &room = rooms_[RoomAt(reward.tile)];
+			room.reward = true;
+			room.quiet = true;
+			left_ -= static_cast<size_t>(guards);
+			strongboxPlaced_ = true;
+		}
+	}
+
+	/**
+	 * Now and then a strongbox, off the way down: in a dead end where there is one, or else the room furthest from
+	 * the way. Its guards come out of the floor's monsters.
+	 */
+	void placeStrongbox()
+	{
+		if (strongboxPlaced_ || random(StrongboxOneIn) != 0)
+			return;
+		const int guards = PackMin + random(PackMax - PackMin + 1);
+		if (left_ < static_cast<size_t>(guards + PackMin))
+			return;
+		int best = -1;
+		std::vector<Point> spots;
+		for (int y = 0; y < MAXDUNY; y++) {
+			for (int x = 0; x < MAXDUNX; x++) {
+				const Point tile { x, y };
+				const RoomFacts &room = rooms_[RoomAt(tile)];
+				if (room.theme || room.stairs || room.quiet || room.reward || room.monsters > 0 || room.free < NookTiles || !CanHoldChest(tile))
+					continue;
+				const int score = (room.deadEnd() ? FarSteps : 0) + std::min<int>(NearRoute[x][y], FarSteps);
+				if (score > best) {
+					best = score;
+					spots.clear();
+				}
+				if (score == best)
+					spots.push_back(tile);
+			}
+		}
+		if (spots.empty())
+			return;
+		const Point tile = spots[random(static_cast<int>(spots.size()))];
+		Object *strongbox = AddObject(OBJ_CHEST3, tile);
+		if (strongbox == nullptr)
+			return;
+		SetFloorChestKind(*strongbox, FloorChestKind::Strongbox, guards);
+		RoomFacts &room = rooms_[RoomAt(tile)];
+		room.reward = true;
+		room.quiet = true;
+		left_ -= static_cast<size_t>(guards);
+	}
+
+	/** About one chest in five magic and one in twenty rare. */
+	void rateChests()
+	{
+		for (int i = 0; i < ActiveObjectCount; i++) {
+			Object &chest = Objects[ActiveObjects[i]];
+			if (!chest.IsChest() || GetFloorChestKind(chest) != FloorChestKind::Normal)
+				continue;
+			const int roll = random(100);
+			if (roll < RareChestsIn100)
+				SetFloorChestKind(chest, FloorChestKind::Rare);
+			else if (roll < RareChestsIn100 + MagicChestsIn100)
+				SetFloorChestKind(chest, FloorChestKind::Magic);
 		}
 	}
 
@@ -357,7 +636,7 @@ private:
 		for (int r = 0; r < MaxRooms; r++) {
 			RoomFacts &room = rooms_[r];
 			// A chest, shrine or sarcophagus already pays for the walk in.
-			if (!room.deadEnd() || room.monsters > 0 || room.reward)
+			if (!room.deadEnd() || room.monsters > 0 || room.reward || room.quiet)
 				continue;
 			const size_t size = static_cast<size_t>(PackMin + random(2));
 			if (budget < size || left_ < size)
@@ -407,6 +686,16 @@ private:
 		return score;
 	}
 
+	/** Packs grow from 4 by the stairs up to 6 by the stairs down. */
+	int packSize(Point centre)
+	{
+		const int toEnd = hasEnd_ ? FromStart[end_.x][end_.y] : Unreached;
+		const int steps = FromStart[centre.x][centre.y];
+		// How far down the floor, in hundredths; half way where the stairs can't be walked between.
+		const int progress = toEnd == Unreached || toEnd == 0 || steps == Unreached ? 50 : std::min(steps * 100 / toEnd, 100);
+		return PackMin + (((PackMax - PackMin) * progress) + random(100)) / 100;
+	}
+
 	/** Each pack where it's wanted most (see fillScore), picked at random among the spots that score close to best. */
 	void fillTheFloor()
 	{
@@ -416,7 +705,7 @@ private:
 			for (int y = 0; y < MAXDUNY; y++) {
 				for (int x = 0; x < MAXDUNX; x++) {
 					const Point tile { x, y };
-					if (!CanHold(tile))
+					if (!CanHold(tile) || rooms_[RoomAt(tile)].quiet)
 						continue;
 					const int score = fillScore(tile);
 					best = std::max(best, score);
@@ -431,7 +720,7 @@ private:
 				std::erase_if(spots, [this](const std::pair<Point, int> &spot) { return openness(spot.first) < PackOpenTiles; });
 			const Point centre = spots[random(static_cast<int>(spots.size()))].first;
 			// Packs of 4 to 6; what's left under a pack goes out as stragglers.
-			const int size = left_ >= static_cast<size_t>(PackMin) ? PackMin + random(PackMax - PackMin + 1) : 1;
+			const int size = left_ >= static_cast<size_t>(PackMin) ? packSize(centre) : 1;
 			if (placePack(centre, size, PackSteps, MonsterRarity::Normal, 1) == 0)
 				return;
 		}
@@ -510,8 +799,9 @@ private:
 			Monster *monster = AddMonster(chosen[i], static_cast<Direction>(random(8)), type, true);
 			if (monster == nullptr)
 				break;
-			// Rares lead the big fights and guard dead ends; one more rolled at random would add loot on top.
-			if (GetMonsterAffixes(*monster).rarity == MonsterRarity::Rare)
+			// Rares lead the big fights and guard dead ends; one more rolled at random would add loot on top. A map's
+			// tier rolls more rares on purpose, so they stay there.
+			if (GetMonsterAffixes(*monster).rarity == MonsterRarity::Rare && ActiveMapTier() == 0)
 				DemoteMonsterRarity(*monster);
 			if (first == nullptr && GetMonsterAffixes(*monster).rarity == MonsterRarity::Normal)
 				first = monster;
@@ -558,7 +848,8 @@ bool IsRangedMonsterAi(MonsterAIID ai)
 
 bool UseFloorPacks()
 {
-	return gbIsPoe2 && !setlevel && leveltype == DTYPE_CATHEDRAL;
+	// Diablo's own floor keeps its fight as Diablo set it.
+	return gbIsPoe2 && !setlevel && leveltype != DTYPE_TOWN && currlevel != 16;
 }
 
 size_t PlaceFloorPacks(size_t count, std::span<const size_t> scatterTypes)
@@ -611,6 +902,9 @@ void PlaceThemePack(int8_t room, size_t typeIndex, int frequency)
 	for (size_t head = 0; head < queue.size() && placed < size; head++) {
 		const Point tile = queue[head];
 		if (eligible(tile)) {
+			// The floor's monsters already fill it; leave room for a strongbox's guards.
+			if (ActiveMonsterCount + SpawnHeadroom >= MaxEnemyMonsters())
+				return;
 			if (AddMonster(tile, static_cast<Direction>(GenerateRnd(8)), typeIndex, true) == nullptr)
 				return;
 			placed++;

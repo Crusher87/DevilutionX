@@ -1,8 +1,11 @@
 #include "levels/drlg_l3.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <expected>
+#include <optional>
+#include <vector>
 
 #include "engine/load_file.hpp"
 #include "engine/point.hpp"
@@ -14,7 +17,11 @@
 #include "levels/gendung_defs.hpp"
 #include "lighting.h"
 #include "objects.h"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/floors.hpp"
+#include "poe2/telemetry.hpp"
 #include "tables/questdat.hpp"
+#include "utils/bitset2d.hpp"
 #include "utils/is_of.hpp"
 #include "utils/status_macros.hpp"
 
@@ -2144,6 +2151,412 @@ void GenerateLevel(lvl_entry entry)
 	memcpy(pdungeon, dungeon, sizeof(pdungeon));
 }
 
+/** POE2: the lava tile for each tile a pool's rock made, as PlaceLavaPool() has them. */
+constexpr uint8_t LavaPoolTiles[15] = { 0, 35, 26, 36, 25, 29, 34, 7, 33, 28, 27, 37, 32, 31, 30 };
+
+/** POE2: north, east, south and west on the tile grid. */
+constexpr Displacement CavesSteps[4] = { { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } };
+
+bool InCaves(Point p)
+{
+	return p.x >= 0 && p.y >= 0 && p.x < DMAXX && p.y < DMAXY;
+}
+
+/** POE2: the designed rooms' lava pools. Every tile touching a lava point becomes the lava tile for its shape. */
+void StampCavesPools(const CathedralPlan &plan)
+{
+	Bitset2d<DMAXX, DMAXY> pool;
+	for (const CathedralLine &line : plan.lines) {
+		if (line.kind != 'L')
+			continue;
+		// A corner point is the south-east corner of one tile, the south-west of the next, and so on.
+		for (const Displacement d : { Displacement { -1, -1 }, Displacement { 0, -1 }, Displacement { -1, 0 }, Displacement { 0, 0 } }) {
+			const Point p = line.block + d;
+			if (InCaves(p))
+				pool.set(p.x, p.y);
+		}
+	}
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (pool.test(x, y) && dungeon[x][y] < 15 && LavaPoolTiles[dungeon[x][y]] != 0)
+				dungeon[x][y] = LavaPoolTiles[dungeon[x][y]];
+		}
+	}
+}
+
+/**
+ * POE2: the designed rooms' lava streams, with River()'s tiles: each end meets a pool at its mouth or runs into a
+ * straight wall, and a bridge crosses on a straight piece. False when a stream doesn't join up.
+ */
+bool StampCavesStreams(const CathedralPlan &plan)
+{
+	// For each side: the pool's shore tile a stream meets there and the mouth it becomes, the straight wall it runs
+	// into and the end it becomes.
+	constexpr uint8_t Shore[4] = { 27, 25, 26, 28 };
+	constexpr uint8_t Mouth[4] = { 41, 40, 38, 39 };
+	constexpr uint8_t Wall[4] = { 10, 4, 2, 9 };
+	constexpr uint8_t End[4] = { 24, 43, 42, 23 };
+
+	Bitset2d<DMAXX, DMAXY> stream;
+	Bitset2d<DMAXX, DMAXY> bridge;
+	for (const CathedralLine &line : plan.lines) {
+		if (line.kind == 'l' || line.kind == 'H')
+			stream.set(line.block.x, line.block.y);
+		if (line.kind == 'H')
+			bridge.set(line.block.x, line.block.y);
+	}
+	std::vector<std::pair<Point, uint8_t>> stamps;
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (!stream.test(x, y))
+				continue;
+			const Point p { x, y };
+			std::array<bool, 4> joins {};
+			int count = 0;
+			int first = -1;
+			for (int d = 0; d < 4; d++) {
+				const Point n = p + CavesSteps[d];
+				if (InCaves(n) && stream.test(n.x, n.y)) {
+					joins[d] = true;
+					count++;
+					first = first < 0 ? d : first;
+				}
+			}
+			for (int d = 0; d < 4; d++) {
+				const Point n = p + CavesSteps[d];
+				if (!joins[d] && InCaves(n) && dungeon[n.x][n.y] == Shore[d]) {
+					joins[d] = true;
+					count++;
+					first = first < 0 ? d : first;
+					stamps.emplace_back(n, Mouth[d]);
+				}
+			}
+			// An end runs straight on into the wall where it can.
+			for (int k = 0; k < 4 && count < 2; k++) {
+				const int d = count == 1 ? (first + 2 + k) % 4 : k;
+				const Point n = p + CavesSteps[d];
+				if (!joins[d] && InCaves(n) && dungeon[n.x][n.y] == Wall[d]) {
+					joins[d] = true;
+					count++;
+					first = first < 0 ? d : first;
+					stamps.emplace_back(n, End[d]);
+				}
+			}
+			if (count != 2)
+				return false;
+			const bool north = joins[0];
+			const bool east = joins[1];
+			const bool south = joins[2];
+			const bool west = joins[3];
+			const bool onBridge = bridge.test(x, y);
+			uint8_t piece;
+			if (north && south)
+				piece = onBridge ? 45 : PickRandomlyAmong({ 17, 18 });
+			else if (east && west)
+				piece = onBridge ? 44 : PickRandomlyAmong({ 15, 16 });
+			else if (onBridge)
+				return false;
+			else if (north)
+				piece = west ? 22 : 21;
+			else
+				piece = west ? 20 : 19;
+			stamps.emplace_back(p, piece);
+		}
+	}
+	for (const auto &[p, tile] : stamps)
+		dungeon[p.x][p.y] = tile;
+	return true;
+}
+
+/**
+ * POE2: the designed rooms' wooden fences and their gates, with Fence()'s tiles. Each fence runs from one straight
+ * wall to another; false when one doesn't.
+ */
+bool StampCavesFences(const CathedralPlan &plan)
+{
+	Bitset2d<DMAXX, DMAXY> fence;
+	Bitset2d<DMAXX, DMAXY> gate;
+	for (const CathedralLine &line : plan.lines) {
+		if (line.kind == 'f' || line.kind == 'g')
+			fence.set(line.block.x, line.block.y);
+		if (line.kind == 'g')
+			gate.set(line.block.x, line.block.y);
+	}
+	const auto isFence = [&fence](Point p) { return InCaves(p) && fence.test(p.x, p.y); };
+	// The fences running west to east first, so one crossing them gets the crossing tile.
+	for (const bool down : { false, true }) {
+		const Displacement step = down ? Displacement { 0, 1 } : Displacement { 1, 0 };
+		for (int y = 0; y < DMAXY; y++) {
+			for (int x = 0; x < DMAXX; x++) {
+				const Point p { x, y };
+				if (!isFence(p) || isFence(p - step) || !isFence(p + step))
+					continue;
+				Point q = p;
+				for (; isFence(q); q += step) {
+					uint8_t &tile = dungeon[q.x][q.y];
+					if (gate.test(q.x, q.y))
+						tile = down ? 147 : 146;
+					else if (down)
+						tile = IsAnyOf(tile, 134, 136) ? 138 : PickRandomlyAmong({ 137, 135 });
+					else
+						tile = PickRandomlyAmong({ 136, 134 });
+				}
+				const Point before = p - step;
+				if (!InCaves(before) || !InCaves(q))
+					return false;
+				uint8_t &start = dungeon[before.x][before.y];
+				uint8_t &end = dungeon[q.x][q.y];
+				if (start != (down ? 10 : 9) || end != (down ? 2 : 4))
+					return false;
+				start = down ? 131 : 130;
+				end = down ? 139 : 140;
+			}
+		}
+	}
+	return true;
+}
+
+/** POE2: the designed rooms' stalagmites: a lone one in 3 x 3 tiles of floor, a cluster of 2 x 2 in 4 x 4. */
+bool StampCavesStalagmites(const CathedralPlan &plan)
+{
+	const std::array<const Miniset *, 4> lone { &L3TITE8, &L3TITE9, &L3TITE10, &L3TITE11 };
+	const std::array<const Miniset *, 3> clusters { &L3TITE1, &L3TITE2, &L3TITE3 };
+	Bitset2d<DMAXX, DMAXY> cluster;
+	for (const CathedralLine &line : plan.lines) {
+		if (line.kind == 'T')
+			cluster.set(line.block.x, line.block.y);
+	}
+	for (const CathedralLine &line : plan.lines) {
+		const Miniset *miniset = nullptr;
+		if (line.kind == 'i')
+			miniset = lone[GenerateRnd(static_cast<int>(lone.size()))];
+		else if (line.kind == 'T' && !cluster.test(line.block.x - 1, line.block.y) && !cluster.test(line.block.x, line.block.y - 1))
+			miniset = clusters[GenerateRnd(static_cast<int>(clusters.size()))];
+		if (miniset == nullptr)
+			continue;
+		if (line.block.x < 1 || line.block.y < 1)
+			return false;
+		const WorldTilePosition position { static_cast<WorldTileCoord>(line.block.x - 1), static_cast<WorldTileCoord>(line.block.y - 1) };
+		if (!miniset->matches(position))
+			return false;
+		miniset->place(position, true);
+	}
+	return true;
+}
+
+/** POE2: the stairs go where the plan put them: up and to town into a north wall, down into a west one. */
+bool PlaceCavesFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
+{
+	const auto put = [](const Miniset &miniset, std::optional<Point> at, Displacement shift) -> std::optional<Point> {
+		if (!at)
+			return std::nullopt;
+		const Point p = *at + shift;
+		if (p.x < 0 || p.y < 0)
+			return std::nullopt;
+		const WorldTilePosition position { static_cast<WorldTileCoord>(p.x), static_cast<WorldTileCoord>(p.y) };
+		if (!miniset.matches(position))
+			return std::nullopt;
+		miniset.place(position, true);
+		return Point(position);
+	};
+	const std::optional<Point> up = put(L3UP, plan.stairsUp, { 0, -2 });
+	if (!up)
+		return false;
+	if (entry == ENTRY_MAIN)
+		ViewPosition = up->megaToWorld() + Displacement { 1, 3 };
+	const std::optional<Point> down = put(L3DOWN, plan.stairsDown, { -2, 0 });
+	if (!down)
+		return false;
+	if (entry == ENTRY_PREV)
+		ViewPosition = down->megaToWorld() + Displacement { 3, 1 };
+	if (currlevel == 9) {
+		const std::optional<Point> town = put(L3HOLDWARP, plan.townStairs, { 0, -2 });
+		if (!town)
+			return false;
+		Warp();
+		if (entry == ENTRY_TWARPDN)
+			ViewPosition = town->megaToWorld() + Displacement { 1, 3 };
+	}
+	return true;
+}
+
+/** POE2: the Anvil of Fury's island goes in its hall, with a tile of floor all round it. */
+bool PlaceCavesFunnelAnvil(const CathedralPlan &plan)
+{
+	if (!plan.questPiece)
+		return false;
+	const std::unique_ptr<uint16_t[]> setPieceData = LoadFileInMem<uint16_t>("levels\\l3data\\anvil.dun");
+	const WorldTileSize areaSize = GetDunSize(setPieceData.get()) + 2;
+	const WorldTilePosition at { static_cast<WorldTileCoord>(plan.questPiece->x), static_cast<WorldTileCoord>(plan.questPiece->y) };
+	for (const WorldTilePosition tile : PointsInRectangle(WorldTileRectangle { at, areaSize })) {
+		if (tile.x >= DMAXX || tile.y >= DMAXY || Protected.test(tile.x, tile.y) || dungeon[tile.x][tile.y] != 7)
+			return false;
+	}
+	PlaceDunTiles(setPieceData.get(), at + Displacement { 1, 1 }, 7);
+	SetPiece = { at, areaSize };
+	for (const WorldTilePosition tile : PointsInRectangle(SetPiece))
+		Protected.set(tile.x, tile.y);
+	return true;
+}
+
+/** POE2: the tiles one can walk on: floor, the floor round a rock corner, bridges and gates. */
+bool CavesWalkable(uint8_t tile)
+{
+	return IsAnyOf(tile, 7, 5, 12, 13, 14, 44, 45, 146, 147);
+}
+
+/**
+ * POE2: from the stairs up one can walk to the stairs down and to town, to every prop of the designed rooms and to
+ * every floor tile of the plain ones, past the lava, fences and stalagmites.
+ */
+bool CavesFloorConnected(const CathedralPlan &plan)
+{
+	if (!plan.stairsUp)
+		return false;
+	Bitset2d<DMAXX, DMAXY> seen;
+	std::vector<Point> stack { *plan.stairsUp };
+	seen.set(plan.stairsUp->x, plan.stairsUp->y);
+	while (!stack.empty()) {
+		const Point p = stack.back();
+		stack.pop_back();
+		for (const Displacement step : CavesSteps) {
+			const Point n = p + step;
+			if (!InCaves(n) || seen.test(n.x, n.y) || !CavesWalkable(dungeon[n.x][n.y]))
+				continue;
+			seen.set(n.x, n.y);
+			stack.push_back(n);
+		}
+	}
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (dungeon[x][y] == 7 && !plan.designed.test(x, y) && !seen.test(x, y))
+				return false;
+		}
+	}
+	for (const CathedralProp &prop : plan.props) {
+		if (!seen.test(prop.block.x, prop.block.y))
+			return false;
+	}
+	const auto reached = [&seen](std::optional<Point> p) { return p && seen.test(p->x, p->y); };
+	return reached(plan.stairsDown) && (currlevel != 9 || reached(plan.townStairs));
+}
+
+/** POE2: a new Caves floor (poe2/cathedral_floors.hpp). */
+void GenerateCavesFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
+{
+	if (LevelSeeds[currlevel])
+		SetRndSeed(*LevelSeeds[currlevel]);
+
+	CathedralRequest request;
+	request.caves = true;
+	request.forbidden = avoidRooms;
+	request.townStairs = currlevel == 9;
+	if (Quests[Q_ANVIL].IsAvailable()) {
+		request.questPiece = true;
+		request.questSlots = { 3, 3 };
+	}
+
+	CathedralPlan &plan = CurrentCathedralPlan();
+	while (true) {
+		LevelSeeds[currlevel] = GetLCGEngineState();
+		if (!PlanCathedralFloor(request, plan))
+			continue;
+		InitDungeonFlags();
+		SetPiece = {};
+		for (int y = 0; y < DMAXY; y++) {
+			for (int x = 0; x < DMAXX; x++)
+				dungeon[x][y] = plan.mask.test(x, y) ? 1 : 0;
+		}
+		Edges();
+		if (!Lockout())
+			continue;
+		MakeMegas();
+		StampCavesPools(plan);
+		if (!StampCavesStreams(plan) || !StampCavesFences(plan) || !StampCavesStalagmites(plan))
+			continue;
+		if (!PlaceCavesFunnelStairs(plan, entry))
+			continue;
+		if (Quests[Q_ANVIL].IsAvailable() && !PlaceCavesFunnelAnvil(plan))
+			continue;
+		if (!CavesFloorConnected(plan))
+			continue;
+		break;
+	}
+
+	// Diablo's own touches go on the plain rooms: small islands, theme rooms, fences, stalagmites and cracks. The
+	// designed rooms and the floor in front of the stairs are a tile none of them looks for meanwhile.
+	Bitset2d<DMAXX, DMAXY> hold = plan.designed;
+	const auto holdFront = [&hold](std::optional<Point> at, Rectangle front) {
+		if (!at)
+			return;
+		for (int y = front.position.y; y < front.position.y + front.size.height; y++) {
+			for (int x = front.position.x; x < front.position.x + front.size.width; x++) {
+				const Point p = *at + Displacement { x, y };
+				if (InCaves(p))
+					hold.set(p.x, p.y);
+			}
+		}
+	};
+	holdFront(plan.stairsUp, { { -1, 0 }, { 4, 2 } });
+	holdFront(plan.stairsDown, { { 0, -1 }, { 2, 4 } });
+	if (currlevel == 9)
+		holdFront(plan.townStairs, { { -1, 0 }, { 4, 2 } });
+	std::vector<std::pair<Point, uint8_t>> held;
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (!hold.test(x, y))
+				continue;
+			held.emplace_back(Point { x, y }, dungeon[x][y]);
+			dungeon[x][y] = 0;
+		}
+	}
+	PlaceMiniSetRandom(L3ISLE1, 70);
+	PlaceMiniSetRandom(L3ISLE2, 70);
+	PlaceMiniSetRandom(L3ISLE3, 30);
+	PlaceMiniSetRandom(L3ISLE4, 30);
+	PlaceMiniSetRandom(L3ISLE1, 100);
+	PlaceMiniSetRandom(L3ISLE2, 100);
+	PlaceMiniSetRandom(L3ISLE5, 90);
+	DRLG_PlaceThemeRooms(5, 10, 7, 0, false);
+	Fence();
+	PlaceMiniSetRandom(L3TITE1, 10);
+	PlaceMiniSetRandom(L3TITE2, 10);
+	PlaceMiniSetRandom(L3TITE3, 10);
+	PlaceMiniSetRandom(L3TITE6, 20);
+	PlaceMiniSetRandom(L3TITE7, 20);
+	PlaceMiniSetRandom(L3TITE8, 20);
+	PlaceMiniSetRandom(L3TITE9, 20);
+	PlaceMiniSetRandom(L3TITE10, 20);
+	PlaceMiniSetRandom(L3TITE11, 30);
+	PlaceMiniSetRandom(L3TITE12, 20);
+	PlaceMiniSetRandom(L3TITE13, 20);
+	PlaceMiniSetRandom(L3CREV1, 30);
+	PlaceMiniSetRandom(L3CREV2, 30);
+	PlaceMiniSetRandom(L3CREV3, 30);
+	PlaceMiniSetRandom(L3CREV4, 30);
+	PlaceMiniSetRandom(L3CREV5, 30);
+	PlaceMiniSetRandom(L3CREV6, 30);
+	PlaceMiniSetRandom(L3CREV7, 30);
+	PlaceMiniSetRandom(L3CREV8, 30);
+	PlaceMiniSetRandom(L3CREV9, 30);
+	PlaceMiniSetRandom(L3CREV10, 30);
+	PlaceMiniSetRandom(L3CREV11, 30);
+	for (const auto &[p, tile] : held)
+		dungeon[p.x][p.y] = tile;
+	// The cracked floors and walls go everywhere.
+	PlaceMiniSetRandom1x1(7, 106, 25);
+	PlaceMiniSetRandom1x1(7, 107, 25);
+	PlaceMiniSetRandom1x1(7, 108, 25);
+	PlaceMiniSetRandom1x1(9, 109, 25);
+	PlaceMiniSetRandom1x1(10, 110, 25);
+
+	memcpy(pdungeon, dungeon, sizeof(pdungeon));
+
+	SetCathedralFunnelFloor(true);
+	Poe2NoteFloorRooms(currlevel, plan.usedRooms | CavesRoomsMark);
+	TelemetryLog("floor", DescribeCathedralPlan(plan));
+}
+
 void Pass3()
 {
 	DRLG_LPass3(8 - 1);
@@ -2191,7 +2604,13 @@ void CreateL3Dungeon(uint32_t rseed, lvl_entry entry)
 {
 	SetRndSeed(rseed);
 
-	GenerateLevel(entry);
+	SetCathedralFunnelFloor(false);
+	// POE2: the new Caves floors, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && leveltype == DTYPE_CAVES ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	if (build.cathedralFunnel)
+		GenerateCavesFunnelLevel(entry, build.avoidRooms);
+	else
+		GenerateLevel(entry);
 
 	Pass3();
 	PlaceLights();

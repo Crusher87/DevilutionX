@@ -95,6 +95,10 @@ set(poe2_mod
   txtdata/towners/towners.tsv
   txtdata/poe2/area_levels.tsv
   txtdata/poe2/base_meta.tsv
+  txtdata/poe2/catacombs_rooms.tsv
+  txtdata/poe2/caves_rooms.tsv
+  txtdata/poe2/hell_rooms.tsv
+  txtdata/poe2/cathedral_rooms.tsv
   txtdata/poe2/experience_bosses.tsv
   txtdata/poe2/experience_level_gap.tsv
   txtdata/poe2/monster_experience.tsv

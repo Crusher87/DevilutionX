@@ -16,7 +16,15 @@
  *  - Rares only lead the big fights and guard dead ends, about as many as the old random roll gave a floor, so the
  *    loot stays where it was (Curtis, 10-23: level 1 drops felt like a bit much). Magic monsters still roll at random.
  *  - A theme room's monsters (the barrel room's, the library's) stand together as one pack.
- * Cathedral floors only for now. The placement has its own random stream, seeded from the floor's, so the same seed
+ * Step 3, pace and rewards (Curtis's picks, 10-27):
+ *  - Packs grow from 4 near the stairs up to 6 near the stairs down, and one last pack of 6 stands as near the stairs
+ *    down as their view allows.
+ *  - The next room along the way down after a big fight is a rest room with no monsters. On one floor in three
+ *    the first rest room also has a shrine where its walls allow one (Curtis, 10-28: shrines came up too often).
+ *  - One floor in three has a strongbox off the way down; its 4 to 6 guards come out of the floor's monsters.
+ *  - About one chest in five is magic and one in twenty rare (poe2/floor_chests.hpp).
+ * Every dungeon floor but Diablo's own (level 16) and quest floors; the Caves and the Nest by chambers
+ * (poe2/floor_rooms.hpp). The placement has its own random stream, seeded from the floor's, so the same seed
  * still gives the same floor.
  */
 #pragma once
@@ -32,7 +40,7 @@ namespace devilution {
 /** @brief Monsters that mostly fight from a distance: archers, casters and spitters. */
 bool IsRangedMonsterAi(MonsterAIID ai);
 
-/** @brief Whether this floor's monsters are placed in packs: POE2, a Cathedral floor, not a quest floor. */
+/** @brief Whether this floor's monsters are placed in packs: POE2, a dungeon floor, not a quest floor or Diablo's. */
 bool UseFloorPacks();
 
 /**
