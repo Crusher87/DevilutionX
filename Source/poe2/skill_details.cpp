@@ -1044,6 +1044,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(shape, "Extra projectiles", std::format("+{:d}", extraProjectiles));
 	if (table != nullptr && table->radius > 0)
 		Value(shape, "Area radius", std::format("{:d} tiles", static_cast<int>(table->radius)));
+	// Bone Spikes' line: one spike wide, then two.
+	if (table != nullptr && table->shape == TableShape::Line && (table->flags & TF_Spell) != 0)
+		Value(shape, "Line", std::format("{:d} tiles: one wide for {:d}, then two wide", static_cast<int>(table->count), BoneSpikesSingleTiles));
 	if (table != nullptr && (table->flags & TF_PoisonBurst) != 0)
 		Text(shape, Kind::Note, std::format("The first hit bursts: it poisons all there and hits the others for {:d}%", PlagueArrowSplashPercent));
 	if (table != nullptr && table->duration > 0)
@@ -1055,7 +1058,13 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		lines.insert(lines.end(), shape.begin(), shape.end());
 	}
 
-	if (const std::vector<std::string> ailments = AilmentLines(hit, tagBits); !ailments.empty()) {
+	std::vector<std::string> ailments = AilmentLines(hit, tagBits);
+	// A skill that poisons says how strong its poison is: Cobra Strike's is twice the common one.
+	if (table != nullptr && (table->flags & (TF_Poison | TF_PoisonBurst)) != 0) {
+		const int poison = TablePoisonPercentPerSecond(*table);
+		ailments.push_back(std::format("Poisons for {:d}% of the hit a second for {:d} seconds ({:d}% in all)", poison, PoisonTicks / TicksPerSecond, poison * PoisonTicks / TicksPerSecond));
+	}
+	if (!ailments.empty()) {
 		Heading(lines, "Ailments");
 		for (const std::string &line : ailments)
 			Text(lines, Kind::Text, line);

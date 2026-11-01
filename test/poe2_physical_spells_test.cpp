@@ -282,6 +282,7 @@ TEST_F(Poe2PhysicalSpellsTest, BonePrisonHitsAndTraps)
 }
 
 // Bone Spikes (POE2's Unearth, its damage half): bones burst up in a line ahead, hitting and staggering what's on it once.
+// Curtis 2026-11-01: 80% (was 107%), on a line 7 tiles long, one spike wide for 3 and then two (was 3 wide and 5 long).
 TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
 {
 	Player &player = *MyPlayer;
@@ -290,8 +291,10 @@ TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
 	EXPECT_EQ(data.level, 3);
 	EXPECT_EQ(data.mana, 8);
 	EXPECT_EQ(data.shape, TableShape::Line);
-	EXPECT_EQ(data.count, 5);
-	EXPECT_EQ(data.radius, 1);
+	EXPECT_EQ(data.damagePercent, 80);
+	EXPECT_EQ(data.count, 7);
+	EXPECT_EQ(data.radius, 0);
+	EXPECT_EQ(BoneSpikesSingleTiles, 3);
 	EXPECT_EQ(data.type, DamageType::Physical);
 	EXPECT_EQ(data.curve, TableCurve::Fireball);
 	EXPECT_EQ(data.curveEnd, 312);
@@ -307,19 +310,61 @@ TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
 	ASSERT_TRUE(CreateSkillGemItem(gem, spikes, 1));
 	EXPECT_EQ(SkillForGem(gem), spikes);
 
+	// The line toward the south-east (+x): 3 single tiles, then 4 steps two abreast, 11 tiles in all.
+	const std::vector<BoneSpikesTile> tiles = BoneSpikesTiles({ 40, 40 }, Direction::SouthEast, data.count);
+	const std::vector<Point> shape { { 41, 40 }, { 42, 40 }, { 43, 40 }, { 44, 40 }, { 44, 41 }, { 45, 40 }, { 45, 41 }, { 46, 40 }, { 46, 41 }, { 47, 40 }, { 47, 41 } };
+	ASSERT_EQ(tiles.size(), shape.size());
+	ASSERT_EQ(tiles.size(), 11U);
+	for (size_t i = 0; i < tiles.size(); i++) {
+		EXPECT_EQ(tiles[i].tile, shape[i]) << i;
+		EXPECT_EQ(tiles[i].step, tiles[i].tile.x - 40) << i;
+		EXPECT_EQ(tiles[i].beside, tiles[i].tile.y != 40) << i;
+	}
+	// The second column runs square to the line on the screen (a right angle on the grid), on the side lower on the
+	// screen; a line straight up or down the screen takes the screen's right.
+	for (int i = 0; i < 8; i++) {
+		const Direction dir = static_cast<Direction>(i);
+		const Displacement side = BoneSpikesSide(dir);
+		EXPECT_TRUE(side == Displacement { Left(Left(dir)) } || side == Displacement { Right(Right(dir)) }) << i;
+		const int down = side.deltaX + side.deltaY;
+		const int right = side.deltaX - side.deltaY;
+		EXPECT_TRUE(down > 0 || (down == 0 && right > 0)) << i;
+		EXPECT_EQ(BoneSpikesTiles({ 40, 40 }, dir, data.count).size(), 11U) << i;
+	}
+	EXPECT_EQ(BoneSpikesSide(Direction::SouthEast), Displacement(Direction::SouthWest));
+	EXPECT_EQ(BoneSpikesSide(Direction::East), Displacement(Direction::South));
+	EXPECT_EQ(BoneSpikesSide(Direction::West), Displacement(Direction::South));
+	EXPECT_EQ(BoneSpikesSide(Direction::South), Displacement(Direction::East));
+	EXPECT_EQ(BoneSpikesSide(Direction::North), Displacement(Direction::East));
+
+	// The spikes burst on exactly those tiles.
+	Missiles.clear();
+	ExecuteTableSkill(player, data, { 46, 40 });
+	std::vector<Point> drawn;
+	for (const Missile &missile : Missiles) {
+		if (missile._miAnimType == MissileGraphicID::StoneCurseShatter)
+			drawn.push_back(missile.position.tile);
+	}
+	EXPECT_EQ(drawn, shape);
+	Missiles.clear();
+
 	Supported(spikes);
 	Monster &near = PlaceMonster(0, { 41, 40 });
-	Monster &far = PlaceMonster(1, { 45, 40 });
-	Monster &beside = PlaceMonster(2, { 43, 41 });
-	Monster &past = PlaceMonster(3, { 47, 40 });
-	Monster &behind = PlaceMonster(4, { 38, 40 });
+	Monster &far = PlaceMonster(1, { 47, 40 });
+	Monster &beside = PlaceMonster(2, { 44, 41 });
+	Monster &end = PlaceMonster(3, { 47, 41 });
+	Monster &single = PlaceMonster(4, { 43, 41 });
+	Monster &otherSide = PlaceMonster(5, { 45, 39 });
+	Monster &past = PlaceMonster(6, { 48, 40 });
+	Monster &behind = PlaceMonster(7, { 38, 40 });
 	ExecuteTableSkill(player, data, { 46, 40 });
-	for (const Monster *monster : { &near, &far, &beside }) {
+	for (const Monster *monster : { &near, &far, &beside, &end }) {
+		// Each takes the hit once.
 		EXPECT_LT(monster->hitPoints, monster->maxHitPoints);
 		EXPECT_EQ(monster->maxHitPoints - monster->hitPoints, near.maxHitPoints - near.hitPoints);
 		EXPECT_EQ(monster->poe2.heavyStunTicks, HeavyStunTicks);
 	}
-	for (const Monster *monster : { &past, &behind }) {
+	for (const Monster *monster : { &single, &otherSide, &past, &behind }) {
 		EXPECT_EQ(monster->hitPoints, monster->maxHitPoints);
 		EXPECT_EQ(monster->poe2.heavyStunTicks, 0);
 	}
