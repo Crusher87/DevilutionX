@@ -153,10 +153,10 @@ const SupportData Table[] = {
 	{ SG::DeadlyHerald, "Zealous Aura", "The Aspect's explosions deal 30% more\ndamage. Reserves 20 more Spirit", "Needs an Aspect", GC::Dexterity, 6, 100, 0, ST_Herald, 0, 0, NoFamily },
 	// Chaos supports (chaos gems addendum, Curtis 2026-10-31): POE2's Escalating Poison and Deadly Poison.
 	{ SG::TwinFangs, "Twin Fangs", "Poison stacks once more; poisons last\n20% shorter. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 1, 110, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
-	{ SG::DeadlyVenom, "Deadly Venom", "75% more poison damage. 25% less\ndamage with hits. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	{ SG::DeadlyVenom, "Deadly Venom", "75% more poison damage. 10% less\ndamage with hits. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
 	// Not an Enchant: it adds chaos on top of the hit instead of turning part of it, so it goes with them.
 	{ SG::DarkEnchant, "Dark Enchant", "Hits gain 25% of damage as chaos. 50%\nless non-chaos damage. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
-	{ SG::DarkArts, "Dark Arts", "+1 level of the chaos skill. Mana +10%", "Needs a chaos skill", GC::Magic, 15, 110, ST_Chaos, 0, 0, 0, NoFamily },
+	{ SG::DarkArts, "Dark Arts", "+3 levels of the chaos skill. Mana +10%", "Needs a chaos skill", GC::Magic, 15, 110, ST_Chaos, 0, 0, 0, NoFamily },
 	{ SG::RottingFlesh, "Rotting Flesh", "Its poisons break armour. Mana +10%", "Needs a physical or chaos skill", GC::Dexterity, 1, 110, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
 	{ SG::PlagueBurst, "Plague Burst", "Its poisons build plague that bursts\nwhen the enemy dies. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
 	{ SG::GraveProfanity, "Grave Profanity", "Takes a corpse near you on use for 30%\nmore chaos damage. Mana +10%", "Needs a damaging skill", GC::Magic, 1, 110, 0, DamageSkill, 0, 0, NoFamily },

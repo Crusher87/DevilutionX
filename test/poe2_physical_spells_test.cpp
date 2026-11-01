@@ -236,7 +236,8 @@ TEST_F(Poe2PhysicalSpellsTest, BonePrisonHitsAndTraps)
 	EXPECT_EQ(data.zone, TableZone::IceSpike);
 	EXPECT_EQ(data.curse, TableCurse::None);
 	EXPECT_EQ(data.type, DamageType::Physical);
-	EXPECT_EQ(data.damagePercent, 200);
+	// Skill-balance Q29: 160%, was 200%.
+	EXPECT_EQ(data.damagePercent, 160);
 	EXPECT_EQ(data.duration, 60);
 	EXPECT_NE(data.flags & TF_Pin, 0U);
 	const SkillSlot prison = SkillSlot::ForAttack(WeaponSkill::BonePrison);

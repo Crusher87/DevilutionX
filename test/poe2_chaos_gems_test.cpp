@@ -15,6 +15,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/modifiers.hpp"
@@ -23,6 +24,7 @@
 #include "poe2/player_data.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/spell_base.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
@@ -184,7 +186,7 @@ TEST_F(Poe2ChaosGemsTest, TwinFangsStacksPoisonOnceMore)
 	EXPECT_EQ(stacked.poe2.poisonTicks, PoisonTicks * 80 / 100);
 }
 
-// Deadly Venom (POE2's Deadly Poison I-II): more poison damage, less damage with hits.
+// Deadly Venom (POE2's Deadly Poison I-II): more poison damage, less hit damage (10%/15% less, skill-balance Q29).
 TEST_F(Poe2ChaosGemsTest, DeadlyVenomTradesHitDamageForPoison)
 {
 	Player &player = *MyPlayer;
@@ -195,7 +197,7 @@ TEST_F(Poe2ChaosGemsTest, DeadlyVenomTradesHitDamageForPoison)
 	EXPECT_EQ(SupportTierGemLevel(SupportGem::DeadlyVenom, 1, 0), 3);
 	EXPECT_EQ(SupportTierGemLevel(SupportGem::DeadlyVenom, 2, 0), 10);
 
-	for (const auto [tier, more, less] : { std::array<int, 3> { 1, 75, 25 }, std::array<int, 3> { 2, 100, 30 } }) {
+	for (const auto [tier, more, less] : { std::array<int, 3> { 1, 75, 10 }, std::array<int, 3> { 2, 100, 15 } }) {
 		Supported(cobra, SupportGem::DeadlyVenom, tier);
 		Monster &monster = PlaceMonster(0, { 45, 45 });
 		{
@@ -408,6 +410,7 @@ TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsHalfSpentCurses)
 	EXPECT_EQ(data->name, "Hex Rupture");
 	EXPECT_EQ(data->level, 11);
 	EXPECT_EQ(data->type, DamageType::Chaos);
+	EXPECT_EQ(data->damagePercent, 200);
 	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::HexRupture));
 	EXPECT_TRUE(IsTableAreaSkill(*data));
 	const SkillSlot hex = SkillSlot::ForAttack(WeaponSkill::HexRupture);
@@ -487,7 +490,48 @@ TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsTenAtMostNearestFirst)
 	EXPECT_GT(cursed[11]->poe2.weakenTicks, 0);
 }
 
-// Dark Arts (POE2's Chaos Mastery): +1 level of the chaos skill it supports.
+// Skill-balance Q29: a monster takes one burst a cast, however many reach it, and a burst is 200% of the spell.
+TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsEachMonsterOnceACast)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	const TableSkillData *data = FindTableSkill(WeaponSkill::HexRupture);
+	ASSERT_NE(data, nullptr);
+	const SkillSlot hex = SkillSlot::ForAttack(WeaponSkill::HexRupture);
+	Supported(hex);
+	// A tight 3x3 pack, all cursed and half run out: all nine bursts reach the one in the middle.
+	const Point target { 45, 45 };
+	std::vector<Monster *> pack;
+	size_t slot = 0;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++)
+			pack.push_back(&PlaceMonster(slot++, target + Displacement { x, y }));
+	}
+	for (Monster *monster : pack) {
+		ApplyTableCurse(player, *monster, WeaponSkill::Weaken, 100);
+		for (int i = 0; i < 150; i++)
+			ProcessTableCurses(*monster);
+		ASSERT_GT(monster->poe2.weakenTicks, 0);
+	}
+	ExecuteTableSkill(player, *data, target);
+	// Every curse still bursts, but each monster loses one burst, the middle one as well as the corners.
+	const Fixed26_6 burst = pack[0]->maxHitPoints - pack[0]->hitPoints;
+	ASSERT_GT(burst, 0);
+	for (size_t i = 0; i < pack.size(); i++) {
+		EXPECT_EQ(pack[i]->poe2.weakenTicks, 0) << i;
+		EXPECT_EQ(pack[i]->maxHitPoints - pack[i]->hitPoints, burst) << i;
+	}
+	// One burst is 200% of the spell base at gem level 1.
+	const Monster &middle = *pack[4];
+	const int taken = MonsterDamageTakenPercent(middle, DamageType::Chaos);
+	const int curve = GemDamagePercent(hex, 1);
+	const int64_t low = static_cast<int64_t>(SpellBaseMin(player, 1)) * 64 * curve / 100 * 200 / 100 * taken / 100;
+	const int64_t high = static_cast<int64_t>(SpellBaseMax(player, 1)) * 64 * curve / 100 * 200 / 100 * taken / 100;
+	EXPECT_GE(burst.raw(), low - 1);
+	EXPECT_LE(burst.raw(), high + 1);
+}
+
+// Dark Arts (POE2's Chaos Mastery): +3 levels of the chaos skill it supports (POE2's +1; skill-balance Q29).
 TEST_F(Poe2ChaosGemsTest, DarkArtsRaisesTheChaosSkill)
 {
 	Player &player = *MyPlayer;
@@ -500,8 +544,8 @@ TEST_F(Poe2ChaosGemsTest, DarkArtsRaisesTheChaosSkill)
 	Supported(hex);
 	EXPECT_EQ(player.poe2.skillLevel(hex), 1);
 	Supported(hex, SupportGem::DarkArts);
-	EXPECT_EQ(player.poe2.skillLevel(hex), 1 + DarkArtsLevels);
-	EXPECT_EQ(DarkArtsLevels, 1);
+	EXPECT_EQ(DarkArtsLevels, 3);
+	EXPECT_EQ(player.poe2.skillLevel(hex), 4);
 }
 
 // Rotting Flesh (POE2's Corrosion): the supported skill's poisons break armour.

@@ -182,7 +182,7 @@ enum TableFlag : uint32_t {
 constexpr int BoneSpearPierces = 20;
 /** @brief Plague Arrow's burst hits the enemies around the one the arrow struck for this share of the arrow, in percent. */
 constexpr int PlagueArrowSplashPercent = 50;
-/** @brief Hex Rupture bursts at most this many curses a cast, each with this radius. */
+/** @brief Hex Rupture bursts at most this many curses a cast, each with this radius; a monster takes one a cast. */
 constexpr int HexRuptureMaxBursts = 10;
 constexpr int HexRuptureBurstRadius = 1;
 
