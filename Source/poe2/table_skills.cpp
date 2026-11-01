@@ -82,7 +82,7 @@ const TableSkillData Table[] = {
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 13, 14, TW::Sword, 0, Arc, 200, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
 	{ WS::FanOfBlades, "Fan of Blades", "Throw daggers in every direction", 5, 5, TW::Dagger, 0, Projectiles, 70, 8, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 280 },
-	{ WS::ViperStrike, "Cobra Strike", "A poisoned stab: the poison deals chaos damage over time", 7, 5, TW::Dagger, 0, Strike, 200, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0 },
+	{ WS::ViperStrike, "Cobra Strike", "A poisoned stab: its strong poison deals chaos damage over time", 7, 5, TW::Dagger, 0, Strike, 200, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 40 },
 	{ WS::BladeSentinel, "Blade Sentinel", "A whirling blade that guards the target spot for 5 seconds", 9, 12, TW::Dagger, 0, Zone, 35, 0, 1, 100, 20, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::Pulse, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 260 },
 	{ WS::DeathMark, "Death Mark", "Marks an enemy to take 25% more damage", 11, 9, TW::Dagger, 1, Curse, Flat, 0, 0, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::DeathMark, TableBuff::None, TT_Sword | TT_Occult, Icon(SpellIcon::RedSkull), TableCurve::Boneshatter, 100 },
 	{ WS::BladeFury, "Blade Fury", "A rapid stream of thrown daggers", 13, 12, TW::Dagger, 0, Stream, 70, 8, 0, 0, 2, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 290 },
@@ -133,7 +133,8 @@ const TableSkillData Table[] = {
 	{ WS::LocustSwarm, "Locust Swarm", "A chaos plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 130, 0, 1, 40, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
 	{ WS::CorpseExplosion, "Corpse Explosion", "Blows up a corpse near the target, burning everything around it", 9, 10, TW::None, 1, CorpseBurst, 50, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::SoulHarvest, "Soul Harvest", "Takes the souls of nearby corpses: 3% more damage each, up to 10, for 10 seconds", 11, 10, TW::None, 1, SoulHarvest, Flat, 10, 4, 200, 0, 0, DT::Physical, MissileID::Null, MG::Resurrect, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Resurrect), TableCurve::Boneshatter, 100 },
-	{ WS::BonePrison, "Bone Prison", "Bone spikes burst up under the target, hurting the enemies there and trapping them for 3 seconds", 5, 10, TW::None, 1, Zone, 200, 0, 1, 60, 0, 3, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Pin, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	// Skill-balance Q29: 160%, was 200%.
+	{ WS::BonePrison, "Bone Prison", "Bone spikes burst up under the target, hurting the enemies there and trapping them for 3 seconds", 5, 10, TW::None, 1, Zone, 160, 0, 1, 60, 0, 3, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Pin, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	// Curses
 	{ WS::Weaken, "Weaken", "Curses enemies to hit 30% softer", 3, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Weaken, TableBuff::None, TT_Occult, Icon(SpellIcon::Mana), TableCurve::Boneshatter, 100 },
 	{ WS::IronMaiden, "Iron Maiden", "Curses enemies so their melee hits wound them as well", 5, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::IronMaiden, TableBuff::None, TT_Occult, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 100 },
@@ -173,8 +174,9 @@ const TableSkillData Table[] = {
 	// Gem skills appended after the granted ones.
 	{ WS::Despair, "Despair", "Curses enemies with -30% to chaos resistance", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Despair, TableBuff::None, TT_Occult, Icon(SpellIcon::Apocalypse), TableCurve::Boneshatter, 100 },
 	{ WS::PlagueArrow, "Plague Arrow", "An arrow that bursts into poison on the first enemy it hits", 1, 8, TW::Bow, 0, Projectiles, 90, 1, 1, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_PoisonBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::DoomSerpents), TableCurve::LightningArrow, 0 },
-	{ WS::HexRupture, "Hex Rupture", "Bursts the curses half run out on enemies around the target", 11, 12, TW::None, 1, HexBurst, 160, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
-	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a line ahead of you, staggering what they hit", 3, 8, TW::None, 1, Line, 107, 5, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	// Skill-balance Q29: 200% a burst, was 160%, and a monster takes one burst a cast (RuptureHexes).
+	{ WS::HexRupture, "Hex Rupture", "Bursts the curses half run out on enemies around the target", 11, 12, TW::None, 1, HexBurst, 200, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
+	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a line ahead of you, one spike wide and then two, staggering what they hit", 3, 8, TW::None, 1, Line, 80, 5, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	{ WS::BoneSpear, "Bone Spear", "A heavy spear of bone that flies through every enemy in its path and builds up twice the stun", 7, 12, TW::None, 1, Projectiles, 180, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
 	{ WS::BloodNova, "Blood Nova", "A ring of blood bursts out around you and leaves enemies bleeding; costs 5% of your life", 9, 10, TW::None, 1, Around, 120, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_LifeCost | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 };
@@ -386,9 +388,9 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 		BreakMonsterArmour(monster, &player);
 	if ((data.flags & TF_Bleed) != 0 && alive)
 		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), 80);
-	// Cobra Strike: POE2's poison, 20% of the hit a second for 2 seconds.
+	// Cobra Strike: POE2's poison for 2 seconds, of its own strength (40% of the hit a second).
 	if ((data.flags & TF_Poison) != 0 && alive)
-		InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(FixedDamage(player, data).raw()) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
+		InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(FixedDamage(player, data).raw()) * TablePoisonPercentPerSecond(data) * PoisonTicks / 20 / 100), PoisonTicks);
 	if (!alive)
 		return;
 	// Elemental attacks: part of the hit lands again as the skill's element.
@@ -749,7 +751,7 @@ void PoisonBurst(Player &player, const Monster &struck, const TableSkillData &da
 	AddVisualEffect(center, data.effect, 0, 4);
 	vfx::Impact(center, vfx::Element::Chaos, 1.0F);
 	const Fixed26_6 base = FixedDamage(player, data);
-	const int32_t poison = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(base.raw()) * PoisonPercentPerSecond * PoisonTicks / 20 / 100, INT32_MAX / 2));
+	const int32_t poison = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(base.raw()) * TablePoisonPercentPerSecond(data) * PoisonTicks / 20 / 100, INT32_MAX / 2));
 	const Fixed26_6 splash = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(base.raw()) * PlagueArrowSplashPercent / 100), 1));
 	std::vector<Monster *> targets;
 	ForEachMonsterNear(center, radius, [&](Monster &monster) { targets.push_back(&monster); });
@@ -947,7 +949,10 @@ TableCurse RupturableCurse(Poe2MonsterState &state)
 	return best;
 }
 
-/** @brief Hex Rupture: each curse at least half run out near the target bursts in chaos on its monster and is gone. */
+/**
+ * @brief Hex Rupture: each curse at least half run out near the target bursts in chaos on its monster and is gone. A
+ * monster takes one burst a cast, however many reach it (skill-balance Q29).
+ */
 void RuptureHexes(const Player &player, const TableSkillData &data, Point target)
 {
 	std::vector<std::pair<Monster *, TableCurse>> hexes;
@@ -964,10 +969,21 @@ void RuptureHexes(const Player &player, const TableSkillData &data, Point target
 	if (hexes.size() > static_cast<size_t>(HexRuptureMaxBursts))
 		hexes.resize(HexRuptureMaxBursts);
 	const Fixed26_6 damage = FixedDamage(player, data);
+	std::vector<const Monster *> struck;
 	for (const auto &[monster, curse] : hexes) {
 		const Point at = monster->position.tile;
 		vfx::Impact(at, vfx::Element::Chaos, 1.1F);
-		ZoneBurst(player, data, at, HexRuptureBurstRadius, damage);
+		AddVisualEffect(at, data.effect, 0, 4);
+		BreakObjectsInArea(player, at, HexRuptureBurstRadius);
+		std::vector<Monster *> fresh;
+		ForEachMonsterNear(at, HexRuptureBurstRadius, [&](Monster &other) {
+			if (std::find(struck.begin(), struck.end(), &other) == struck.end())
+				fresh.push_back(&other);
+		});
+		for (Monster *other : fresh) {
+			struck.push_back(other);
+			AreaSpellHit(player, data, *other, damage);
+		}
 		// The curse goes with its burst: its icon leaves the banner.
 		*CurseTicks(monster->poe2, curse) = 0;
 	}
@@ -1007,6 +1023,39 @@ Point SkillTargetTile(const Player &player)
 std::span<const TableSkillData> TableSkills()
 {
 	return Table;
+}
+
+int TablePoisonPercentPerSecond(const TableSkillData &data)
+{
+	return data.poisonPercent > 0 ? data.poisonPercent : PoisonPercentPerSecond;
+}
+
+Displacement BoneSpikesSide(Direction dir)
+{
+	const Displacement left { Left(Left(dir)) };
+	const Displacement right { Right(Right(dir)) };
+	// Lower on the screen is a larger x + y; further right on it, a larger x - y.
+	const int leftLow = left.deltaX + left.deltaY;
+	const int rightLow = right.deltaX + right.deltaY;
+	if (leftLow != rightLow)
+		return leftLow > rightLow ? left : right;
+	return left.deltaX - left.deltaY > right.deltaX - right.deltaY ? left : right;
+}
+
+std::vector<BoneSpikesTile> BoneSpikesTiles(Point from, Direction dir, int length)
+{
+	std::vector<BoneSpikesTile> tiles;
+	const Displacement side = BoneSpikesSide(dir);
+	const auto open = [](Point at) { return InDungeonBounds(at) && !IsTileSolid(at); };
+	for (int step = 1; step <= length; step++) {
+		const Point at = from + Displacement { dir } * step;
+		if (!open(at))
+			break;
+		tiles.push_back({ at, step, false });
+		if (step > BoneSpikesSingleTiles && open(at + side))
+			tiles.push_back({ at + side, step, true });
+	}
+	return tiles;
 }
 
 int TableLandingBurstPercent(const TableSkillData &data)
@@ -1284,6 +1333,33 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	case Line: {
 		const Direction dir = GetDirection(tile, target);
 		std::vector<Monster *> hit;
+		const auto take = [&hit](Monster &monster) {
+			if (std::find(hit.begin(), hit.end(), &monster) == hit.end())
+				hit.push_back(&monster);
+		};
+		if ((data.flags & TF_Spell) != 0) {
+			// Bone Spikes: a clump of bone bursts up on each of its tiles as the line rolls out, one wide and then two, and
+			// each enemy on it takes the spell's hit once.
+			Point end = tile;
+			for (const BoneSpikesTile &spike : BoneSpikesTiles(tile, dir, data.count)) {
+				if (!spike.beside)
+					end = spike.tile;
+				AddVisualEffect(spike.tile, data.effect, spike.step * 2, spike.step == 1 ? 4 : 0);
+				vfx::BoneSpikes(spike.tile, spike.step * 2 * gnTickDelay, 0.55F + 0.05F * static_cast<float>(spike.step));
+				BreakObjectsInArea(player, spike.tile, data.radius);
+				ForEachMonsterNear(spike.tile, data.radius, take);
+			}
+			if (end != tile) {
+				vfx::Fissure(tile, end, LookOf(data));
+				ShakeCamera(ShakeStrength::Light, 4);
+			}
+			const Fixed26_6 damage = FixedDamage(player, data);
+			for (Monster *monster : hit) {
+				AreaSpellHit(player, data, *monster, damage);
+				result.hit = true;
+			}
+			break;
+		}
 		Point end = tile;
 		for (int step = 1; step <= data.count; step++) {
 			const Point at = tile + Displacement { dir } * step;
@@ -1292,26 +1368,10 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			end = at;
 			AddVisualEffect(at, data.effect, step * 2, step == 1 ? 4 : 0);
 			BreakObjectsInArea(player, at, data.radius);
-			ForEachMonsterNear(at, data.radius, [&](Monster &monster) {
-				if (std::find(hit.begin(), hit.end(), &monster) == hit.end())
-					hit.push_back(&monster);
-			});
+			ForEachMonsterNear(at, data.radius, take);
 		}
 		if (end != tile)
 			vfx::Fissure(tile, end, LookOf(data));
-		if ((data.flags & TF_Spell) != 0) {
-			// Bone Spikes: a clump of bone bursts up on each step as the line rolls out, and each enemy on it takes the spell's hit once.
-			for (int step = 1; step <= tile.WalkingDistance(end); step++)
-				vfx::BoneSpikes(tile + Displacement { dir } * step, step * 2 * gnTickDelay, 0.55F + 0.05F * static_cast<float>(step));
-			if (end != tile)
-				ShakeCamera(ShakeStrength::Light, 4);
-			const Fixed26_6 damage = FixedDamage(player, data);
-			for (Monster *monster : hit) {
-				AreaSpellHit(player, data, *monster, damage);
-				result.hit = true;
-			}
-			break;
-		}
 		for (Monster *monster : hit)
 			WeaponHit(player, *monster, data, data.damagePercent, result);
 		break;

@@ -343,8 +343,9 @@ TEST(Poe2WeaponSkills, SingleTargetMeleeSkillsHitHarder)
 	EXPECT_EQ(ShieldChargeDamagePercent, 150);
 	EXPECT_EQ(ShadowStepDamagePercent, 220);
 	EXPECT_EQ(VaultShotArrowDamagePercent, 140);
-	// Cobra Strike's bleed is its hit again: 200% + 200%.
+	// Cobra Strike stays 200%; its poison is 40% of the hit a second for 2 seconds (Curtis 2026-11-01).
 	EXPECT_EQ(FindTableSkill(WeaponSkill::ViperStrike)->damagePercent, 200);
+	EXPECT_EQ(TablePoisonPercentPerSecond(*FindTableSkill(WeaponSkill::ViperStrike)), 40);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Sacrifice)->damagePercent, 330);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->damagePercent, 95);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->count, 7);

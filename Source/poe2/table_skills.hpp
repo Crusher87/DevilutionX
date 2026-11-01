@@ -11,7 +11,9 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
+#include "engine/direction.hpp"
 #include "engine/point.hpp"
 #include "poe2/player_data.hpp"
 #include "sound_effect_enums.h"
@@ -170,7 +172,10 @@ enum TableFlag : uint32_t {
 	 * cast's projectiles hit each monster once.
 	 */
 	TF_PerTarget = 1 << 15,
-	/** The skill's hits poison: POE2's poison, 20% of the hit a second for 2 seconds, the strongest only. */
+	/**
+	 * The skill's hits poison: POE2's poison for 2 seconds, the strongest only. It deals 20% of the hit a second, or the
+	 * row's own poisonPercent (TablePoisonPercentPerSecond).
+	 */
 	TF_Poison = 1 << 16,
 	/** A projectile's first hit bursts in its radius: every enemy there is poisoned, the others also hit (Plague Arrow). */
 	TF_PoisonBurst = 1 << 17,
@@ -182,9 +187,14 @@ enum TableFlag : uint32_t {
 constexpr int BoneSpearPierces = 20;
 /** @brief Plague Arrow's burst hits the enemies around the one the arrow struck for this share of the arrow, in percent. */
 constexpr int PlagueArrowSplashPercent = 50;
-/** @brief Hex Rupture bursts at most this many curses a cast, each with this radius. */
+/** @brief Hex Rupture bursts at most this many curses a cast, each with this radius; a monster takes one a cast. */
 constexpr int HexRuptureMaxBursts = 10;
 constexpr int HexRuptureBurstRadius = 1;
+/**
+ * @brief Bone Spikes' line (Curtis 2026-11-01): one spike wide for its first this many tiles, then two abreast to its end,
+ * the row's count of tiles from the hero.
+ */
+constexpr int BoneSpikesSingleTiles = 3;
 
 /** @brief What a granted skill's hits do besides damage (caster-weapons-plan-v2.md 6.12). */
 enum class GrantedRider : uint8_t {
@@ -251,7 +261,35 @@ struct TableSkillData {
 	int16_t curveEnd;
 	/** A granted skill's rider. */
 	GrantedRider rider = GrantedRider::None;
+	/**
+	 * A poisoning skill's own poison (TF_Poison, TF_PoisonBurst): its damage a second, for 2 seconds, in percent of the
+	 * hit. 0 is POE2's common poison, PoisonPercentPerSecond (20); Cobra Strike's is twice that, as POE2's skills with a
+	 * stronger poison have.
+	 */
+	uint8_t poisonPercent = 0;
 };
+
+/** @brief A poisoning table skill's poison a second, in percent of the hit: the row's own, or POE2's common 20%. */
+[[nodiscard]] int TablePoisonPercentPerSecond(const TableSkillData &data);
+
+/** @brief One tile of a Bone Spikes line: where, how many steps out from the hero, and whether it's the second column's. */
+struct BoneSpikesTile {
+	Point tile;
+	int step;
+	bool beside;
+};
+/**
+ * @brief The side of a Bone Spikes line its second column runs on, square to the line on the screen: the side nearer
+ * the viewer (lower on the screen), so its spikes stand in front of the line's, not hidden behind them. A line straight
+ * up or down the screen takes the screen's right.
+ */
+[[nodiscard]] Displacement BoneSpikesSide(Direction dir);
+/**
+ * @brief The tiles a Bone Spikes cast bursts on, nearest first: one a step for the first BoneSpikesSingleTiles steps,
+ * then the step's tile and the one beside it (BoneSpikesSide), out to `length` steps. A wall or the dungeon's edge ends
+ * the line; a wall beside it only drops that spike. The spikes are drawn on exactly these tiles.
+ */
+[[nodiscard]] std::vector<BoneSpikesTile> BoneSpikesTiles(Point from, Direction dir, int length);
 
 /**
  * @brief What a per-target granted skill (TF_PerTarget) deals each monster but its first: this percent of the spell base

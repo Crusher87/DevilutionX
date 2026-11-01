@@ -73,8 +73,8 @@ enum SupportFlag : uint8_t {
 	SF_Trigger = 1 << 2,
 };
 
-/** @brief Dark Arts (POE2's Chaos Mastery): levels it adds to the chaos skill it supports. */
-constexpr int DarkArtsLevels = 1;
+/** @brief Dark Arts (POE2's Chaos Mastery): levels it adds to the chaos skill it supports (POE2: 1; Q29: 3). */
+constexpr int DarkArtsLevels = 3;
 /** @brief Plague Burst: the plague a monster stores is at most this share of its life, in percent, and bursts this far. */
 constexpr int PlagueBurstMaxLifePercent = 20;
 constexpr int PlagueBurstRadius = 2;
