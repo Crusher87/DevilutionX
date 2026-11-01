@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "engine/assets.hpp"
@@ -19,6 +20,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/support_gems.hpp"
@@ -282,7 +284,8 @@ TEST_F(Poe2PhysicalSpellsTest, BonePrisonHitsAndTraps)
 }
 
 // Bone Spikes (POE2's Unearth, its damage half): bones burst up in a line ahead, hitting and staggering what's on it once.
-// Curtis 2026-11-01: 80% (was 107%), on a line 7 tiles long, one spike wide for 3 and then two (was 3 wide and 5 long).
+// Curtis 2026-11-01: 80% (was 107%), on a line 5 tiles long, one spike wide for 3 and then two, 7 tiles in all (was 3
+// wide, about 20 tiles).
 TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
 {
 	Player &player = *MyPlayer;
@@ -292,7 +295,7 @@ TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
 	EXPECT_EQ(data.mana, 8);
 	EXPECT_EQ(data.shape, TableShape::Line);
 	EXPECT_EQ(data.damagePercent, 80);
-	EXPECT_EQ(data.count, 7);
+	EXPECT_EQ(data.count, 5);
 	EXPECT_EQ(data.radius, 0);
 	EXPECT_EQ(BoneSpikesSingleTiles, 3);
 	EXPECT_EQ(data.type, DamageType::Physical);
@@ -310,52 +313,59 @@ TEST_F(Poe2PhysicalSpellsTest, BoneSpikesBurstAlongALine)
 	ASSERT_TRUE(CreateSkillGemItem(gem, spikes, 1));
 	EXPECT_EQ(SkillForGem(gem), spikes);
 
-	// The line toward the south-east (+x): 3 single tiles, then 4 steps two abreast, 11 tiles in all.
-	const std::vector<BoneSpikesTile> tiles = BoneSpikesTiles({ 40, 40 }, Direction::SouthEast, data.count);
-	const std::vector<Point> shape { { 41, 40 }, { 42, 40 }, { 43, 40 }, { 44, 40 }, { 44, 41 }, { 45, 40 }, { 45, 41 }, { 46, 40 }, { 46, 41 }, { 47, 40 }, { 47, 41 } };
-	ASSERT_EQ(tiles.size(), shape.size());
-	ASSERT_EQ(tiles.size(), 11U);
-	for (size_t i = 0; i < tiles.size(); i++) {
-		EXPECT_EQ(tiles[i].tile, shape[i]) << i;
-		EXPECT_EQ(tiles[i].step, tiles[i].tile.x - 40) << i;
-		EXPECT_EQ(tiles[i].beside, tiles[i].tile.y != 40) << i;
+	// The line toward the south-east (+x): 3 single tiles, then 2 steps two abreast, 7 tiles in all.
+	const std::vector<Point> shape { { 41, 40 }, { 42, 40 }, { 43, 40 }, { 44, 40 }, { 44, 41 }, { 45, 40 }, { 45, 41 } };
+	// In every direction the second column runs square to the line on the screen (a right angle on the grid), on the
+	// side lower on the screen; a line straight up or down the screen takes the screen's right. The spikes burst on
+	// exactly the line's tiles.
+	constexpr std::array<std::pair<Direction, Direction>, 8> Sides { {
+	    { Direction::South, Direction::East },
+	    { Direction::SouthWest, Direction::SouthEast },
+	    { Direction::West, Direction::South },
+	    { Direction::NorthWest, Direction::SouthWest },
+	    { Direction::North, Direction::East },
+	    { Direction::NorthEast, Direction::SouthEast },
+	    { Direction::East, Direction::South },
+	    { Direction::SouthEast, Direction::SouthWest },
+	} };
+	const Point from = player.position.tile;
+	for (const auto &[dir, sideDir] : Sides) {
+		const Displacement step { dir };
+		const Displacement side { sideDir };
+		EXPECT_EQ(BoneSpikesSide(dir), side) << static_cast<int>(dir);
+		EXPECT_TRUE(side == Displacement { Left(Left(dir)) } || side == Displacement { Right(Right(dir)) }) << static_cast<int>(dir);
+		const std::vector<Point> expected { from + step, from + step * 2, from + step * 3, from + step * 4, from + step * 4 + side, from + step * 5, from + step * 5 + side };
+		const std::vector<BoneSpikesTile> tiles = BoneSpikesTiles(from, dir, data.count);
+		ASSERT_EQ(tiles.size(), 7U) << static_cast<int>(dir);
+		for (size_t i = 0; i < tiles.size(); i++) {
+			EXPECT_EQ(tiles[i].tile, expected[i]) << static_cast<int>(dir) << " " << i;
+			EXPECT_EQ(tiles[i].step, from.WalkingDistance(tiles[i].tile - (tiles[i].beside ? side : Displacement { 0, 0 }))) << static_cast<int>(dir) << " " << i;
+			EXPECT_EQ(tiles[i].beside, i == 4 || i == 6) << static_cast<int>(dir) << " " << i;
+		}
+		if (dir == Direction::SouthEast)
+			EXPECT_EQ(expected, shape);
+		Missiles.clear();
+		ExecuteTableSkill(player, data, from + step * 6);
+		std::vector<Point> drawn;
+		for (const Missile &missile : Missiles) {
+			if (missile._miAnimType == MissileGraphicID::StoneCurseShatter)
+				drawn.push_back(missile.position.tile);
+		}
+		EXPECT_EQ(drawn, expected) << static_cast<int>(dir);
 	}
-	// The second column runs square to the line on the screen (a right angle on the grid), on the side lower on the
-	// screen; a line straight up or down the screen takes the screen's right.
-	for (int i = 0; i < 8; i++) {
-		const Direction dir = static_cast<Direction>(i);
-		const Displacement side = BoneSpikesSide(dir);
-		EXPECT_TRUE(side == Displacement { Left(Left(dir)) } || side == Displacement { Right(Right(dir)) }) << i;
-		const int down = side.deltaX + side.deltaY;
-		const int right = side.deltaX - side.deltaY;
-		EXPECT_TRUE(down > 0 || (down == 0 && right > 0)) << i;
-		EXPECT_EQ(BoneSpikesTiles({ 40, 40 }, dir, data.count).size(), 11U) << i;
-	}
-	EXPECT_EQ(BoneSpikesSide(Direction::SouthEast), Displacement(Direction::SouthWest));
-	EXPECT_EQ(BoneSpikesSide(Direction::East), Displacement(Direction::South));
-	EXPECT_EQ(BoneSpikesSide(Direction::West), Displacement(Direction::South));
-	EXPECT_EQ(BoneSpikesSide(Direction::South), Displacement(Direction::East));
-	EXPECT_EQ(BoneSpikesSide(Direction::North), Displacement(Direction::East));
-
-	// The spikes burst on exactly those tiles.
-	Missiles.clear();
-	ExecuteTableSkill(player, data, { 46, 40 });
-	std::vector<Point> drawn;
-	for (const Missile &missile : Missiles) {
-		if (missile._miAnimType == MissileGraphicID::StoneCurseShatter)
-			drawn.push_back(missile.position.tile);
-	}
-	EXPECT_EQ(drawn, shape);
 	Missiles.clear();
 
 	Supported(spikes);
+	// The skill's details say the line's shape.
+	const std::vector<SkillDetailLine> details = SkillDetails(player, 0);
+	EXPECT_TRUE(std::any_of(details.begin(), details.end(), [](const SkillDetailLine &line) { return line.label == "Line" && line.value == "5 tiles: one wide for 3, then two wide"; }));
 	Monster &near = PlaceMonster(0, { 41, 40 });
-	Monster &far = PlaceMonster(1, { 47, 40 });
+	Monster &far = PlaceMonster(1, { 45, 40 });
 	Monster &beside = PlaceMonster(2, { 44, 41 });
-	Monster &end = PlaceMonster(3, { 47, 41 });
+	Monster &end = PlaceMonster(3, { 45, 41 });
 	Monster &single = PlaceMonster(4, { 43, 41 });
 	Monster &otherSide = PlaceMonster(5, { 45, 39 });
-	Monster &past = PlaceMonster(6, { 48, 40 });
+	Monster &past = PlaceMonster(6, { 46, 40 });
 	Monster &behind = PlaceMonster(7, { 38, 40 });
 	ExecuteTableSkill(player, data, { 46, 40 });
 	for (const Monster *monster : { &near, &far, &beside, &end }) {
