@@ -44,6 +44,22 @@ enum class Element : uint8_t {
 	Blood,
 	/** @brief Bone-white with dust and chips: the bone spells (Bone Prison, Bone Spikes, Bone Spear, Bone Bolt). */
 	Bone,
+	/** @brief Sickly yellow-green venom: droplets, bubbles and gas (the poison skills). */
+	Poison,
+};
+
+/** @brief What lies on the ground poisoning it: a bubbling acid pool, a billowing gas cloud, or a murky bog. */
+enum class MiasmaKind : uint8_t {
+	Acid,
+	Gas,
+	Bog,
+};
+
+/** @brief What a lobbed throw looks like in the air: a glass flask, a seed pod, or an iron gas canister. */
+enum class LobKind : uint8_t {
+	Flask,
+	Seed,
+	Canister,
 };
 
 /** @brief How a weapon moves through the air, to match the hero's attack animation. Every hero swings right-handed. */
@@ -81,6 +97,28 @@ void BoneSpikes(Point tile, int delayMs, float size);
  * crumbles (Bone Prison). Size 1 is one tile across.
  */
 void BoneCage(Point tile, int delayMs, float size, int standMs);
+/**
+ * @brief Poison lying on the ground for the given time: an acid pool bubbling, a gas cloud rolling and rising, or a bog
+ * with mist and bubbles. A key (any number but 0) lets EndKeyed take it away early.
+ */
+void Miasma(Point tile, int radiusTiles, int durationMs, MiasmaKind kind, uint32_t key = 0);
+/** @brief Thorny vines burst up round a tile and stand for the given time before they wither (Thornvine Arrow). */
+void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key = 0);
+/** @brief A swollen seed pod on the ground, throbbing, until its time runs out or EndKeyed bursts it (Bloated Pods). */
+void Pod(Point tile, int lifeMs, uint32_t key);
+/** @brief A gnarled effigy stake with glowing green eyes, standing for the given time (Plague Effigy). */
+void Effigy(Point tile, int lifeMs, uint32_t key);
+/** @brief The effigy's eyes flare as it looses an arrow. */
+void EffigyShot(Point tile);
+/** @brief A small iron gas canister on the ground, blinking green while it waits for an enemy (Venom Sentry). */
+void Canister(Point tile, int lifeMs, uint32_t key);
+/** @brief Something thrown in an arc from one tile to another, landing after the given time. */
+void Lob(Point from, Point to, int flightMs, LobKind kind);
+/** @brief Drops of acid fall out of the air over an area, the first landing after the given time (Acid Cloud). */
+void AcidRain(Point tile, int radiusTiles, int fallMs);
+/** @brief The keyed effect ends now: a pod or canister bursts, a vine withers, an effigy crumbles, a pool or cloud fades. */
+void EndKeyed(uint32_t key);
+
 /** @brief A heavy landing: flash, shockwave, dust, debris and glowing cracks. */
 void Slam(Point tile, int radiusTiles, Element element);
 /**

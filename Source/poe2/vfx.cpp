@@ -97,6 +97,7 @@ Colours ColoursOf(Element element)
 	case Element::Arcane: return { { 220, 220, 255 }, { 120, 140, 255 }, { 70, 50, 180 } };
 	case Element::Blood: return { { 255, 190, 180 }, { 220, 30, 30 }, { 90, 0, 0 } };
 	case Element::Bone: return { { 255, 252, 240 }, { 228, 216, 190 }, { 140, 124, 100 } };
+	case Element::Poison: return { { 232, 255, 150 }, { 150, 210, 40 }, { 58, 98, 18 } };
 	}
 	return { { 255, 255, 255 }, { 200, 200, 200 }, { 100, 100, 100 } };
 }
@@ -309,11 +310,46 @@ enum class SpikeKind : uint8_t {
 	Ice,
 	Bone,
 	Cage,
+	/** @brief Thorny vines curling up out of the earth (Thornvine Arrow). */
+	Thorn,
+	/** @brief A swollen seed pod on the ground (Bloated Pods). */
+	Pod,
+	/** @brief A gnarled stake with a skull and glowing eyes (Plague Effigy). */
+	Effigy,
+	/** @brief A squat iron gas canister (Venom Sentry). */
+	Canister,
 };
+
+/** @brief The colours of what bursts out of the ground other than ice: its shadowed side, its face, its lit side, the earth at its foot. */
+struct SpikePalette {
+	Rgb shade, face, lit, dirt;
+	/** @brief The chips thrown up and the dust it sheds. */
+	Rgb chip, chipFade, dust, dustFade;
+	/** @brief The torn ground round it and the cracks in it. */
+	Rgb ground, crack;
+};
+
+SpikePalette PaletteOf(SpikeKind kind)
+{
+	switch (kind) {
+	case SpikeKind::Thorn:
+		return { { 30, 46, 18 }, { 70, 98, 36 }, { 140, 172, 74 }, { 44, 38, 22 }, { 110, 142, 56 }, { 52, 72, 28 }, { 104, 124, 66 }, { 58, 70, 38 }, { 34, 40, 20 }, { 24, 32, 14 } };
+	case SpikeKind::Pod:
+		return { { 64, 92, 18 }, { 140, 182, 48 }, { 214, 240, 120 }, { 48, 54, 20 }, { 172, 214, 70 }, { 80, 120, 24 }, { 130, 170, 50 }, { 70, 96, 30 }, { 40, 52, 14 }, { 30, 40, 12 } };
+	case SpikeKind::Effigy:
+		return { { 36, 26, 18 }, { 84, 62, 42 }, { 134, 106, 74 }, { 40, 32, 22 }, { 96, 74, 50 }, { 50, 38, 26 }, { 96, 90, 60 }, { 56, 52, 34 }, { 38, 34, 22 }, { 28, 26, 16 } };
+	case SpikeKind::Canister:
+		return { { 34, 36, 38 }, { 80, 84, 86 }, { 150, 156, 158 }, { 40, 40, 34 }, { 120, 126, 128 }, { 60, 62, 64 }, { 120, 160, 60 }, { 60, 84, 30 }, { 40, 44, 30 }, { 30, 32, 24 } };
+	default:
+		return { { 112, 96, 74 }, { 204, 191, 162 }, { 242, 235, 216 }, { 70, 58, 44 }, { 238, 230, 208 }, { 168, 152, 126 }, { 150, 138, 118 }, { 95, 86, 72 }, { 52, 42, 32 }, { 34, 27, 20 } };
+	}
+}
 
 /** @brief Ice spikes bursting out of the ground: frost cracks while it waits, then the crystals, then the shatter. */
 struct IceSpikeFx {
 	SpikeKind kind = SpikeKind::Ice;
+	/** @brief EndKeyed's key, or 0. */
+	uint32_t key = 0;
 	/** @brief How long the spikes stand before they break, in ms. */
 	float stand;
 	Vec pos;
@@ -418,6 +454,36 @@ constexpr size_t RuneCount = 33;
 std::vector<Crack> Cracks;
 std::vector<IceSpikeFx> IceSpikes;
 std::vector<Sweep> Sweeps;
+
+/** @brief Poison lying on the ground: an acid pool, a gas cloud or a bog, bubbling and steaming for its life. */
+struct MiasmaFx {
+	Vec pos;
+	float radius;
+	float age = 0;
+	float life;
+	MiasmaKind kind;
+	uint32_t key = 0;
+	uint32_t seed;
+	float bubbles = 0;
+	float wisps = 0;
+};
+std::vector<MiasmaFx> Miasmas;
+/** @brief How long poison on the ground takes to spread and to fade, in ms. */
+constexpr float MiasmaGrowMs = 350;
+constexpr float MiasmaFadeMs = 600;
+
+/** @brief Something thrown in an arc: a flask, a seed pod or a canister tumbling through the air. */
+struct LobFx {
+	Vec from;
+	Vec to;
+	float age = 0;
+	float life;
+	float height;
+	float spin;
+	LobKind kind;
+	float drips = 0;
+};
+std::vector<LobFx> Lobs;
 /** @brief Glows that last one frame (projectile heads). */
 std::vector<Ring> FrameGlows;
 /** @brief A projectile's body this frame, drawn instead of its classic sprite: a bright head and a tapering tail. */
@@ -917,6 +983,16 @@ void BoneImpact(Vec pos, float size, const Colours &c)
 	Spray(pos, Scaled(6 * size), 120, 280, 120, 240, Shape::Shard, c.core, c.mid, 4, 1, 60, 180, 500, 1.F, 0.6F);
 }
 
+/** @brief Venom splashing: a sickly flash, a ring of droplets thrown low over the floor, a puff of green gas and a wet stain. */
+void PoisonImpact(Vec pos, float size, const Colours &c)
+{
+	AddRing(pos + Vec { 0, -14 }, 0, 20 * size, 130, 0, c.core, 0.6F, true, false);
+	AddRing(pos, 0, TileRadius * 1.3F * size, 300, 4, c.mid, 0.7F, false, true, false, 0.1F);
+	Spray(pos + Vec { 0, -10 }, Scaled(20 * size), 50, 170 * size, 450, 850, Shape::Dot, c.core, c.edge, 2.6F, 1.2F, 90, 220, 650, 0.6F, 0.9F);
+	Spray(pos, Scaled(8 * size), 8, 40, 900, 1500, Shape::Puff, { 118, 158, 44 }, { 60, 84, 26 }, 10 * size, 30 * size, 10, 40, -8, 0.6F, 0.35F);
+	AddRing(pos, TileRadius * 0.5F * size, TileRadius * 0.8F * size, 3000, 0, { 46, 66, 14 }, 0.45F, true, true, true, 0.3F);
+}
+
 /** @brief The glow in cracks an element's slam or fissure tears open: embers for a plain blow, a dull dust for bone. */
 Rgb CrackGlow(Element element, const Colours &c)
 {
@@ -1037,6 +1113,7 @@ void ImpactAt(Vec pos, Element element, float size)
 	case Element::Blood: BloodImpact(pos, size, c); break;
 	case Element::Physical: PhysicalImpact(pos, size, c); break;
 	case Element::Bone: BoneImpact(pos, size, c); break;
+	case Element::Poison: PoisonImpact(pos, size, c); break;
 	}
 }
 
@@ -1156,6 +1233,7 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 	case Element::Chaos: rate = 20; break;
 	case Element::Physical: rate = 0; break;
 	case Element::Bone: rate = 30; break;
+	case Element::Poison: rate = 34; break;
 	default: rate = 15; break;
 	}
 	trail.emit += rate * Intensity() * ms / 1000.F;
@@ -1209,6 +1287,28 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 				p.size1 = 1.F;
 				p.c0 = c.mid;
 				p.c1 = c.edge;
+			}
+			break;
+		case Element::Poison:
+			// Venom drips off it and falls, and a little green vapour trails behind.
+			if (NextRandom() % 4 != 0) {
+				p.vel = p.vel * 0.3F;
+				p.z = Random(6, 16);
+				p.gravity = 260;
+				p.life = Random(350, 650);
+				p.size0 = 2.2F;
+				p.size1 = 1.F;
+				p.c0 = c.core;
+				p.c1 = c.edge;
+			} else {
+				p.shape = Shape::Puff;
+				p.vel = p.vel * 0.3F;
+				p.life = Random(500, 900);
+				p.size0 = 4;
+				p.size1 = 12;
+				p.c0 = { 120, 160, 46 };
+				p.c1 = { 64, 88, 28 };
+				p.alpha = 0.3F;
 			}
 			break;
 		default:
@@ -1307,6 +1407,7 @@ void AdvanceIceSpikes(float ms)
 	for (IceSpikeFx &fx : IceSpikes) {
 		fx.age += ms;
 		const bool bone = fx.kind != SpikeKind::Ice;
+		const SpikePalette pal = PaletteOf(fx.kind);
 		if (bone && !fx.erupted && fx.age >= fx.wait) {
 			// The ground heaves: a pale glint, a dark wave of dust, earth and ivory chips thrown up, a cloud of grit.
 			fx.erupted = true;
@@ -1314,8 +1415,8 @@ void AdvanceIceSpikes(float ms)
 			AddRing(fx.pos + Vec { 0, -30 * s }, 0, 22 * s, 110, 0, { 250, 244, 228 }, 0.45F, true, false);
 			AddRing(fx.pos, 0, TileRadius * 1.6F * s, 340, 10 * s, { 120, 104, 82 }, 0.5F, false, true, true);
 			Spray(fx.pos, Scaled(12 * s), 60, 180, 600, 1000, Shape::Chunk, { 70, 58, 44 }, { 36, 30, 24 }, 3, 2.5F, 160, 340, 900, 0.4F, 1);
-			Spray(fx.pos, Scaled(10 * s), 50, 170, 500, 900, Shape::Chunk, { 238, 230, 208 }, { 168, 152, 126 }, 2.4F, 2, 180, 360, 900, 0.4F, 1);
-			Spray(fx.pos, Scaled(8 * s), 15, 70, 800, 1400, Shape::Puff, { 150, 138, 118 }, { 95, 86, 72 }, 10 * s, 30 * s, 10, 40, 0, 0.8F, 0.4F);
+			Spray(fx.pos, Scaled(10 * s), 50, 170, 500, 900, Shape::Chunk, pal.chip, pal.chipFade, 2.4F, 2, 180, 360, 900, 0.4F, 1);
+			Spray(fx.pos, Scaled(8 * s), 15, 70, 800, 1400, Shape::Puff, pal.dust, pal.dustFade, 10 * s, 30 * s, 10, 40, 0, 0.8F, 0.4F);
 		}
 		if (!bone && !fx.erupted && fx.age >= fx.wait) {
 			// The ground bursts: a white flash, a soft wave of cold, earth thrown up, frost flakes and a breath of mist.
@@ -1327,13 +1428,20 @@ void AdvanceIceSpikes(float ms)
 				FrostFlake(fx.pos, Random(5, 60) * fx.size, 18 * fx.size);
 			Spray(fx.pos, Scaled(2 * fx.size), 15, 40, 700, 1100, Shape::Puff, { 175, 208, 238 }, { 100, 130, 170 }, 8 * fx.size, 20 * fx.size, 10, 30, -5, 0.5F, 0.12F);
 		}
-		if (bone && fx.erupted && !fx.shattered) {
+		if (bone && fx.erupted && !fx.shattered && (fx.kind == SpikeKind::Pod || fx.kind == SpikeKind::Canister || fx.kind == SpikeKind::Effigy)) {
+			// A pod sweats venom, a canister hisses a thin green leak and an effigy's skull breathes plague.
+			const Crystal &crystal = fx.crystals.front();
+			const float rate = (fx.kind == SpikeKind::Pod ? 3.F : 6.F) * Intensity();
+			const float top = fx.kind == SpikeKind::Effigy ? crystal.height + 6 : crystal.height * 0.8F;
+			for (int i = static_cast<int>(rate * dt + Random(0, 1)); i > 0; i--)
+				Spray(fx.pos + crystal.base + Vec { Random(-0.3F, 0.3F) * crystal.width, -top }, 1, 3, 14, 900, 1500, Shape::Puff, { 128, 176, 48 }, { 58, 86, 22 }, 3, 12, 8, 24, -20, 0.6F, 0.3F);
+		} else if (bone && fx.erupted && !fx.shattered) {
 			// While it stands, grit trickles off the bone.
-			const float rate = 5 * fx.size * Intensity();
+			const float rate = (fx.kind == SpikeKind::Thorn ? 1.5F : 5.F) * fx.size * Intensity();
 			for (int i = static_cast<int>(rate * dt + Random(0, 1)); i > 0; i--) {
 				const Crystal &crystal = fx.crystals[NextRandom() % fx.crystals.size()];
 				const float up = Random(0.3F, 0.9F) * crystal.height;
-				Spray(fx.pos + crystal.base + crystal.lean * up + crystal.curl * 0.5F + Vec { 0, -up }, 1, 2, 12, 600, 1000, Shape::Puff, { 165, 150, 128 }, { 110, 98, 80 }, 3, 9, -10, 0, 60, 0.6F, 0.25F);
+				Spray(fx.pos + crystal.base + crystal.lean * up + crystal.curl * 0.5F + Vec { 0, -up }, 1, 2, 12, 600, 1000, Shape::Puff, pal.dust, pal.dustFade, 3, 9, -10, 0, 60, 0.6F, 0.25F);
 			}
 		}
 		if (!bone && fx.erupted && !fx.shattered) {
@@ -1380,14 +1488,14 @@ void AdvanceIceSpikes(float ms)
 				for (int i = 0; i < Scaled(crystal.height / 30); i++) {
 					const float up = Random(0, 1) * crystal.height;
 					if (bone)
-						IceSplinter(base + crystal.lean * up, up, Random(40, 140), Random(40, 200), { 240, 232, 212 }, Random(3, 5), Random(300, 550), { 150, 136, 112 });
+						IceSplinter(base + crystal.lean * up, up, Random(40, 140), Random(40, 200), pal.chip, Random(3, 5), Random(300, 550), pal.chipFade);
 					else
 						IceSplinter(base + crystal.lean * up, up, Random(40, 140), Random(40, 200), cold.core, Random(3, 5), Random(300, 550));
 				}
 				if (bone) {
 					// Bone crumbles to grit rather than breaking clean.
 					if (crystal.height > 40 * fx.size)
-						Spray(base + Vec { 0, -crystal.height * 0.4F }, Scaled(2), 10, 40, 700, 1200, Shape::Puff, { 160, 148, 126 }, { 100, 90, 74 }, 10, 24, 0, 30, -5, 0.5F, 0.3F);
+						Spray(base + Vec { 0, -crystal.height * 0.4F }, Scaled(2), 10, 40, 700, 1200, Shape::Puff, pal.dust, pal.dustFade, 10, 24, 0, 30, -5, 0.5F, 0.3F);
 					continue;
 				}
 				if (crystal.height > 70 * fx.size)
@@ -1422,6 +1530,107 @@ void AdvanceIceSpikes(float ms)
 		}
 	}
 	std::erase_if(IceSpikes, [](const IceSpikeFx &fx) { return fx.age >= fx.life; });
+}
+
+/** @brief A random spot inside poison lying on the ground. */
+Vec InMiasma(const MiasmaFx &fx, float reach = 0.9F)
+{
+	const float angle = Random(0, 2 * Pi);
+	const float d = std::sqrt(Random(0, 1)) * fx.radius * reach;
+	return fx.pos + Vec { std::cos(angle) * d, std::sin(angle) * d * 0.5F };
+}
+
+void AdvanceMiasmas(float ms)
+{
+	const float dt = ms / 1000;
+	for (MiasmaFx &fx : Miasmas) {
+		fx.age += ms;
+		if (fx.age >= fx.life - MiasmaFadeMs)
+			continue;
+		const float area = fx.radius / TileRadius * Intensity();
+		switch (fx.kind) {
+		case MiasmaKind::Acid:
+			// Acid seethes: bubbles rise and pop in little rings, and a sour steam lifts off it.
+			fx.bubbles += 9 * area * dt;
+			fx.wisps += 3 * area * dt;
+			for (; fx.bubbles >= 1; fx.bubbles--) {
+				const Vec at = InMiasma(fx);
+				Spray(at, 1, 0, 5, 250, 450, Shape::Dot, { 225, 255, 140 }, { 120, 180, 40 }, 1.4F, 3.2F, 8, 24, 0, 0.5F, 0.75F);
+				if (NextRandom() % 3 == 0)
+					AddRing(at, 0, 7, 320, 1.2F, { 170, 230, 70 }, 0.5F, false, true);
+			}
+			for (; fx.wisps >= 1; fx.wisps--)
+				Spray(InMiasma(fx), 1, 2, 10, 900, 1500, Shape::Puff, { 150, 200, 70 }, { 70, 100, 30 }, 5, 16, 10, 30, -15, 0.6F, 0.22F);
+			break;
+		case MiasmaKind::Gas:
+			// A cloud of gas rolls and swirls, thick and low.
+			fx.wisps += 12 * area * dt;
+			for (; fx.wisps >= 1; fx.wisps--)
+				Spray(InMiasma(fx, 1.F), 1, 4, 18, 1200, 2000, Shape::Puff, { 124, 172, 46 }, { 56, 84, 22 }, 10, 28, 4, 18, -6, 0.5F, 0.3F);
+			break;
+		case MiasmaKind::Bog:
+			// The bog belches: slow fat bubbles, a dark burp of gas, flies over it.
+			fx.bubbles += 5 * area * dt;
+			fx.wisps += 1.5F * area * dt;
+			for (; fx.bubbles >= 1; fx.bubbles--) {
+				const Vec at = InMiasma(fx);
+				Spray(at, 1, 0, 3, 400, 700, Shape::Dot, { 130, 160, 70 }, { 50, 70, 24 }, 2, 4.5F, 4, 12, 0, 0.5F, 0.6F);
+				AddRing(at, 0, 10, 500, 1.4F, { 90, 120, 50 }, 0.4F, false, true);
+			}
+			for (; fx.wisps >= 1; fx.wisps--) {
+				Spray(InMiasma(fx), 1, 2, 8, 1200, 1800, Shape::Puff, { 74, 92, 40 }, { 40, 50, 22 }, 8, 22, 5, 15, -5, 0.5F, 0.3F);
+				Spray(InMiasma(fx), 1, 30, 60, 500, 900, Shape::Dot, { 30, 30, 20 }, { 20, 20, 14 }, 1.4F, 1.4F, 10, 30, 0, 0.1F, 0.8F);
+			}
+			break;
+		}
+	}
+	std::erase_if(Miasmas, [](const MiasmaFx &fx) { return fx.age >= fx.life; });
+}
+
+/** @brief Where something thrown is now, and how high. */
+Vec LobAt(const LobFx &fx, float &z)
+{
+	const float f = std::clamp(fx.age / std::max(fx.life, 1.F), 0.F, 1.F);
+	z = fx.height * 4 * f * (1 - f);
+	return fx.from + (fx.to - fx.from) * f;
+}
+
+void AdvanceLobs(float ms)
+{
+	const float dt = ms / 1000;
+	for (LobFx &fx : Lobs) {
+		fx.age += ms;
+		fx.drips += (fx.kind == LobKind::Canister ? 20.F : 30.F) * Intensity() * dt;
+		float z = 0;
+		const Vec at = LobAt(fx, z);
+		for (; fx.drips >= 1; fx.drips--) {
+			Particle p;
+			p.pos = at;
+			p.z = z + 6;
+			if (fx.kind == LobKind::Canister) {
+				// A hiss of gas from its nozzle.
+				p.shape = Shape::Puff;
+				p.life = Random(500, 800);
+				p.size0 = 3;
+				p.size1 = 10;
+				p.c0 = { 128, 176, 48 };
+				p.c1 = { 58, 86, 22 };
+				p.alpha = 0.3F;
+				p.drag = 0.6F;
+			} else {
+				// Venom slops out of the flask or weeps from the pod and falls.
+				p.vel = { Random(-10, 10), Random(-5, 5) };
+				p.gravity = 300;
+				p.life = Random(400, 700);
+				p.size0 = 2;
+				p.size1 = 1.2F;
+				p.c0 = { 220, 255, 140 };
+				p.c1 = { 110, 170, 30 };
+			}
+			AddParticle(p);
+		}
+	}
+	std::erase_if(Lobs, [](const LobFx &fx) { return fx.age >= fx.life; });
 }
 
 float Luminance(const SDL_Color &c)
@@ -2622,7 +2831,7 @@ bool FrontUsed = false;
 bool WantsFloorCopy()
 {
 	// The portals too: without a copy their seals went over rocks and walls, except while a ripple happened to need one.
-	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !IceSpikes.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty() || !Portals.empty() || !ClosingPortals.empty());
+	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !IceSpikes.empty() || !Miasmas.empty() || !Lobs.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty() || !Portals.empty() || !ClosingPortals.empty());
 }
 
 void CopyFloor(const Surface &world)
@@ -2760,6 +2969,8 @@ void Clear()
 	Portals.clear();
 	ClosingPortals.clear();
 	IceSpikes.clear();
+	Miasmas.clear();
+	Lobs.clear();
 	Sweeps.clear();
 	FrameGlows.clear();
 	FrameComets.clear();
@@ -2951,6 +3162,180 @@ void BoneCage(Point tile, int delayMs, float size, int standMs)
 	AddBoneSpikes(std::move(fx), delayMs);
 }
 
+namespace {
+
+/** @brief A keyed spike or pod standing on its own, with the earth cracked round its foot. */
+IceSpikeFx StandingSpike(SpikeKind kind, Point tile, float stand, uint32_t key)
+{
+	IceSpikeFx fx;
+	fx.kind = kind;
+	fx.key = key;
+	fx.pos = TileCentre(tile);
+	fx.wait = 0;
+	fx.size = 0.6F;
+	fx.stand = std::max(stand, 200.F);
+	fx.life = fx.stand + IceSpikeShatter + BoneLinger;
+	return fx;
+}
+
+} // namespace
+
+void Miasma(Point tile, int radiusTiles, int durationMs, MiasmaKind kind, uint32_t key)
+{
+	TelemetryEffect("vfx", StrCat("Miasma ", magic_enum::enum_name(kind)), tile.x, tile.y);
+	if (!Enabled())
+		return;
+	MiasmaFx fx;
+	fx.pos = TileCentre(tile);
+	fx.radius = TileRadius * (static_cast<float>(std::max(radiusTiles, 1)) + 0.5F);
+	fx.life = static_cast<float>(std::max(durationMs, 200)) + MiasmaFadeMs;
+	fx.kind = kind;
+	fx.key = key;
+	fx.seed = NextRandom() | 1;
+	Miasmas.push_back(fx);
+	if (kind == MiasmaKind::Gas) {
+		// The gas bursts out in a rolling puff before it settles.
+		Spray(fx.pos, Scaled(10 * radiusTiles), 30, 40 + 50 * radiusTiles, 900, 1500, Shape::Puff, { 132, 182, 52 }, { 58, 86, 22 }, 12, 34, 5, 25, -4, 0.7F, 0.35F);
+	}
+}
+
+void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "Thorns", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Thorn, tile, static_cast<float>(durationMs), key);
+	fx.size = 0.8F + 0.3F * static_cast<float>(radiusTiles);
+	// Vines writhe up all over the ground, curling over as they go, a thick knot of them at the middle.
+	const float reach = TileRadius * (static_cast<float>(std::max(radiusTiles, 1)) + 0.3F);
+	const int vines = 7 + 4 * radiusTiles;
+	for (int i = 0; i < vines; i++) {
+		const float angle = Random(0, 2 * Pi);
+		const float d = i < 3 ? Random(0, 10) : std::sqrt(Random(0.05F, 1)) * reach;
+		const Vec at { std::cos(angle) * d, std::sin(angle) * d * 0.5F };
+		const float side = Random(0, 1) < 0.5F ? -1.F : 1.F;
+		const float tall = i < 3 ? Random(46, 60) : Random(24, 44);
+		fx.crystals.push_back({ at, { Random(-0.25F, 0.25F), 0 }, tall, Random(5, 8), Random(0, 140), { side * Random(10, 22), Random(4, 10) } });
+	}
+	AddBoneSpikes(std::move(fx), 0);
+}
+
+void Pod(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "Pod", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Pod, tile, static_cast<float>(lifeMs), key);
+	fx.crystals.push_back({ { Random(-3, 3), Random(-2, 2) }, {}, 26, Random(22, 26), 0 });
+	AddBoneSpikes(std::move(fx), 0);
+}
+
+void Effigy(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "Effigy", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Effigy, tile, static_cast<float>(lifeMs), key);
+	fx.crystals.push_back({ {}, { Random(-0.06F, 0.06F), 0 }, 64, 9, 0 });
+	AddBoneSpikes(std::move(fx), 0);
+	// It is driven into the ground with a thump and a breath of plague.
+	const Vec pos = TileCentre(tile);
+	AddRing(pos, 0, TileRadius * 0.9F, 260, 6, { 120, 100, 80 }, 0.45F, false, true, true);
+	Spray(pos, Scaled(6), 50, 150, 450, 800, Shape::Chunk, { 70, 58, 45 }, { 40, 34, 28 }, 2.5F, 2, 90, 200, 700, 0.5F, 1);
+	Spray(pos + Vec { 0, -60 }, Scaled(8), 10, 40, 900, 1400, Shape::Puff, { 128, 176, 48 }, { 58, 86, 22 }, 6, 18, 5, 20, -10, 0.6F, 0.35F);
+}
+
+void EffigyShot(Point tile)
+{
+	TelemetryEffect("vfx", "EffigyShot", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	const Colours venom = ColoursOf(Element::Poison);
+	const Vec eyes = TileCentre(tile) + Vec { 0, -71 };
+	AddRing(eyes, 0, 16, 160, 0, venom.core, 0.7F, true, false);
+	Spray(eyes, Scaled(5), 20, 60, 300, 500, Shape::Dot, venom.core, venom.mid, 2, 0.8F, 0, 10, 0, 0.5F, 0.9F);
+}
+
+void Canister(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "Canister", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Canister, tile, static_cast<float>(lifeMs), key);
+	fx.crystals.push_back({ {}, {}, 22, 18, 0 });
+	AddBoneSpikes(std::move(fx), 0);
+}
+
+void Lob(Point from, Point to, int flightMs, LobKind kind)
+{
+	TelemetryEffect("vfx", StrCat("Lob ", magic_enum::enum_name(kind)), to.x, to.y);
+	if (!Enabled())
+		return;
+	LobFx fx;
+	fx.from = TileCentre(from) + Vec { 0, -30 };
+	fx.to = TileCentre(to);
+	fx.life = static_cast<float>(std::max(flightMs, 100));
+	fx.height = std::clamp(Length(fx.to - fx.from) * 0.45F, 40.F, 150.F);
+	fx.spin = Random(8, 14) * (Random(0, 1) < 0.5F ? -1.F : 1.F);
+	fx.kind = kind;
+	Lobs.push_back(fx);
+}
+
+void AcidRain(Point tile, int radiusTiles, int fallMs)
+{
+	TelemetryEffect("vfx", "AcidRain", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	const Vec pos = TileCentre(tile);
+	const float r = TileRadius * (static_cast<float>(std::max(radiusTiles, 1)) + 0.5F);
+	const float fall = static_cast<float>(std::max(fallMs, 150));
+	// A sickly cloud gathers overhead and the acid pours out of it.
+	AddRing(pos + Vec { 0, -170 }, r * 0.5F, r * 0.85F, fall + 900, 0, { 50, 74, 18 }, 0.4F, true, false, true, 0.2F);
+	Spray(pos + Vec { 0, -170 }, Scaled(10 * radiusTiles), 5, 30, fall + 400, fall + 1200, Shape::Puff, { 96, 132, 40 }, { 46, 64, 20 }, 20, 44, 0, 8, 0, 0.6F, 0.4F);
+	const Colours venom = ColoursOf(Element::Poison);
+	for (int i = Scaled(26 * radiusTiles); i > 0; i--) {
+		Particle p;
+		const float angle = Random(0, 2 * Pi);
+		const float d = std::sqrt(Random(0, 1)) * r;
+		p.pos = pos + Vec { std::cos(angle) * d, std::sin(angle) * d * 0.5F };
+		p.life = fall * Random(0.7F, 1.6F);
+		p.z = 170 * std::min(p.life / fall, 1.F);
+		p.vz = -p.z / (p.life / 1000);
+		p.life += 60;
+		p.size0 = 2.4F;
+		p.size1 = 1.8F;
+		p.c0 = venom.core;
+		p.c1 = venom.mid;
+		p.shape = Shape::Dot;
+		AddParticle(p);
+	}
+}
+
+void EndKeyed(uint32_t key)
+{
+	if (key == 0)
+		return;
+	for (IceSpikeFx &fx : IceSpikes) {
+		if (fx.key != key)
+			continue;
+		fx.key = 0;
+		if (!fx.erupted)
+			fx.life = fx.age;
+		else if (!fx.shattered) {
+			// It breaks now, and is gone as long after as it would have been after its time.
+			const float tail = fx.life - fx.wait - fx.stand;
+			fx.stand = std::max(fx.age - fx.wait, 0.F);
+			fx.life = std::min(fx.life, fx.wait + fx.stand + tail);
+		}
+	}
+	for (MiasmaFx &fx : Miasmas) {
+		if (fx.key != key)
+			continue;
+		fx.key = 0;
+		fx.life = std::min(fx.life, fx.age + MiasmaFadeMs);
+	}
+}
+
 void Slam(Point tile, int radiusTiles, Element element)
 {
 	TelemetryEffect("vfx", StrCat("Slam ", magic_enum::enum_name(element)), tile.x, tile.y);
@@ -2988,12 +3373,18 @@ void Nova(Point tile, int radiusTiles, Element element)
 	// Flung low and fast to the edge of the wave: droplets of blood, or chips of bone.
 	if (blood)
 		Spray(pos, Scaled(44 * radiusTiles / 2.F), 160, 140 + 110 * radiusTiles, 450, 800, Shape::Chunk, { 170, 12, 14 }, { 70, 0, 0 }, 2.8F, 2, 60, 160, 700, 0.15F, 1);
+	else if (element == Element::Poison)
+		Spray(pos, Scaled(50 * radiusTiles / 2.F), 160, 140 + 110 * radiusTiles, 450, 800, Shape::Dot, c.core, c.edge, 2.6F, 1.4F, 60, 160, 700, 0.15F, 0.9F);
 	else
 		Spray(pos, Scaled(30 * radiusTiles / 2.F), 160, 140 + 110 * radiusTiles, 450, 800, Shape::Chunk, { 238, 230, 208 }, { 160, 146, 120 }, 2.4F, 2, 60, 160, 700, 0.15F, 1);
 	Spray(pos, Scaled(10), 40, 40 + 40 * radiusTiles, 700, 1200, Shape::Puff, Mix(c.edge, c.mid, 0.4F), c.edge, 10, 30, 5, 25, 0, 0.8F, 0.35F);
 	// It leaves its mark on the floor.
 	if (blood)
 		AddRing(pos, r * 0.4F, r * 0.9F, 3500, 0, { 70, 0, 0 }, 0.45F, true, true, true, 0.4F);
+	if (element == Element::Poison) {
+		AddRing(pos, r * 0.4F, r * 0.95F, 3500, 0, { 42, 62, 12 }, 0.45F, true, true, true, 0.4F);
+		Spray(pos, Scaled(12 * radiusTiles), 30, 40 + 50 * radiusTiles, 900, 1500, Shape::Puff, { 128, 176, 48 }, { 58, 86, 22 }, 10, 28, 5, 20, -6, 0.6F, 0.3F);
+	}
 }
 
 void Fissure(Point from, Point to, Element element)
@@ -4271,6 +4662,8 @@ void Advance(float ms)
 	Age(Cracks, ms);
 	Age(Sweeps, ms);
 	AdvanceIceSpikes(ms);
+	AdvanceMiasmas(ms);
+	AdvanceLobs(ms);
 	for (Bolt &bolt : Bolts) {
 		bolt.reseedTimer += ms;
 		if (bolt.reseedTimer >= 50) {
@@ -4288,7 +4681,7 @@ size_t ParticleCount()
 
 size_t ShapeCount()
 {
-	return Rings.size() + Sigils.size() + Rituals.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size();
+	return Rings.size() + Sigils.size() + Rituals.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size() + Miasmas.size() + Lobs.size();
 }
 
 size_t AmbientCount()
@@ -4729,6 +5122,16 @@ void DrawComets()
 		case Element::Bone:
 			DrawBoneShard(comet);
 			break;
+		case Element::Poison: {
+			// A wobbling glob of venom: a dark green skin round a bright sickly heart, slopping a tail behind it.
+			const float wobble = 1 + 0.12F * std::sin(AmbientTime * 0.03F + static_cast<float>(comet.seed % 97));
+			SoftLine(Glowing, comet.head, comet.head + back * (26 * s) + side * ((SeededRandom(seed) - 0.5F) * 5 * s), 10 * s, c.mid, c.edge, 0.7F, 0);
+			SoftDisc(Dark, comet.head, 8 * s * wobble, { 44, 70, 14 }, 0.85F, false, 0.6F);
+			SoftDisc(Glowing, comet.head, 6 * s / wobble, c.mid, 0.9F, false);
+			SoftDisc(Glowing, comet.head + side * (1.5F * s) - comet.dir * (1.5F * s), 3 * s, c.core, 1, false);
+			SoftDisc(Glowing, comet.head, 16 * s, c.edge, 0.25F, false);
+			break;
+		}
 		default: {
 			// Fire and the rest: a flickering flame licking back from a white-hot head.
 			const float flicker = 0.85F + 0.3F * SeededRandom(seed);
@@ -4879,9 +5282,10 @@ void DrawIceChunks(const IceSpikeFx &fx)
 		const Vec tm = at(chunk.wt * 0.05F, h + (chunk.wt > 0.5F ? -chunk.wt * 0.12F : 0));
 		const Vec tr = at(chunk.wt / 2, h);
 		const bool bone = fx.kind != SpikeKind::Ice;
-		const Rgb shadow = bone ? Rgb { 112, 96, 74 } : Rgb { 30, 75, 135 };
-		const Rgb face = bone ? Rgb { 196, 182, 152 } : Rgb { 80, 150, 215 };
-		const Rgb lit = bone ? Rgb { 238, 230, 210 } : Rgb { 175, 220, 250 };
+		const SpikePalette pal = PaletteOf(fx.kind);
+		const Rgb shadow = bone ? pal.shade : Rgb { 30, 75, 135 };
+		const Rgb face = bone ? Mix(pal.shade, pal.face, 0.92F) : Rgb { 80, 150, 215 };
+		const Rgb lit = bone ? pal.lit : Rgb { 175, 220, 250 };
 		const auto quad = [&](Vec a, Vec b, Vec d, Vec e, Rgb ca, Rgb cb) {
 			const int va = Dark.add(ToScreen(a), ca, 0.85F * alpha);
 			const int vb = Dark.add(ToScreen(b), cb, 0.85F * alpha);
@@ -4923,9 +5327,11 @@ void DrawBoneSpike(const IceSpikeFx &fx, const Crystal &crystal, float t)
 		spine[k] = base + up * (h * f) + crystal.curl * (f * f * rise);
 		half[k] = crystal.width * 0.5F * (1 - f) * (k == 1 ? 1.12F : 1.F);
 	}
-	const Rgb shade { 112, 96, 74 };
-	const Rgb face { 204, 191, 162 };
-	const Rgb lit = Mix({ 242, 235, 216 }, { 255, 252, 244 }, fresh);
+	const SpikePalette pal = PaletteOf(fx.kind);
+	const bool thorn = fx.kind == SpikeKind::Thorn;
+	const Rgb shade = pal.shade;
+	const Rgb face = pal.face;
+	const Rgb lit = Mix(pal.lit, thorn ? pal.lit : Rgb { 255, 252, 244 }, fresh);
 	// Earth heaped at its foot.
 	SoftDisc(GroundDark, base, crystal.width * 0.9F, { 46, 37, 28 }, 0.5F, true);
 	std::array<Vec, Steps + 1> left;
@@ -4942,7 +5348,7 @@ void DrawBoneSpike(const IceSpikeFx &fx, const Crystal &crystal, float t)
 	for (int k = 0; k < Steps; k++) {
 		// The foot is darker with earth, the point pale.
 		const float f = static_cast<float>(k) / Steps;
-		const Rgb dirt = Mix({ 70, 58, 44 }, shade, std::min(1.F, f * 3));
+		const Rgb dirt = Mix(pal.dirt, shade, std::min(1.F, f * 3));
 		const int sl0 = vertex(left[k], Mix(dirt, shade, 0.5F));
 		const int sm0 = vertex(spine[k], Mix(dirt, face, std::min(1.F, f * 3)));
 		const int sl1 = vertex(left[k + 1], shade);
@@ -4956,10 +5362,133 @@ void DrawBoneSpike(const IceSpikeFx &fx, const Crystal &crystal, float t)
 		Dark.tri(rm0, rr0, rr1);
 		Dark.tri(rm0, rr1, rm1);
 	}
+	if (thorn) {
+		// Hooked thorns jut out of both sides of the vine, raked back toward its foot.
+		for (int k = 1; k < Steps; k++) {
+			const Vec root = k % 2 == 0 ? left[k] : right[k];
+			Vec out = root - spine[k];
+			out = out * (1 / std::max(Length(out), 0.01F));
+			const Vec along = spine[k + 1] - spine[k];
+			const Vec tip = root + out * (crystal.width * 0.75F * (1.2F - static_cast<float>(k) / Steps)) - along * 0.25F;
+			Dark.tri(vertex(root - along * 0.2F, shade), vertex(root + along * 0.35F, face), vertex(tip, lit));
+		}
+		return;
+	}
 	// A dull sheen down its lit side and a glint on the point while it's fresh.
 	SoftLine(Glowing, right[1], right[Steps - 1], 1.4F, lit, lit, 0.08F, 0.2F + 0.2F * fresh);
 	if (fresh > 0)
 		SoftDisc(Glowing, spine[Steps], 2 + fresh * 5, { 255, 250, 235 }, 0.35F * fresh, false);
+}
+
+/** @brief A solid four-cornered face of something standing on the floor, shaded from a to b. */
+void DarkQuad(Vec a, Vec b, Vec c, Vec d, Rgb ca, Rgb cb, float alpha)
+{
+	const int va = Dark.add(ToScreen(a), ca, alpha);
+	const int vb = Dark.add(ToScreen(b), cb, alpha);
+	const int vc = Dark.add(ToScreen(c), cb, alpha);
+	const int vd = Dark.add(ToScreen(d), ca, alpha);
+	Dark.tri(va, vb, vc);
+	Dark.tri(va, vc, vd);
+}
+
+/** @brief A bloated seed pod: a swollen green bulb on splayed leaves, throbbing, with venom glowing in its veins. */
+void DrawPod(const IceSpikeFx &fx, const Crystal &crystal, float t)
+{
+	const float local = t - crystal.delay;
+	if (local <= 0)
+		return;
+	const SpikePalette pal = PaletteOf(fx.kind);
+	const Colours venom = ColoursOf(Element::Poison);
+	const float pulse = std::sin(AmbientTime * 0.009F + fx.pos.x * 0.37F);
+	const float rise = std::min(EaseOutBack(local / 180.F), 1.1F);
+	const float r = crystal.width * 0.5F * rise * (1 + 0.07F * pulse);
+	const Vec base = fx.pos + crystal.base;
+	const Vec body = base + Vec { 0, -r * 0.85F };
+	SoftDisc(GroundDark, base, r * 1.5F, pal.ground, 0.55F, true);
+	for (int i = 0; i < 5; i++) {
+		const float angle = 2 * Pi * i / 5 + 0.3F;
+		SoftLine(Dark, base, base + Vec { std::cos(angle) * r * 1.5F, std::sin(angle) * r * 0.7F }, r * 0.55F, pal.shade, pal.dirt, 0.95F, 0.7F);
+	}
+	SoftDisc(Dark, body, r, pal.shade, 0.97F, false, 0.95F);
+	SoftDisc(Dark, body + Vec { r * 0.12F, -r * 0.14F }, r * 0.84F, pal.face, 0.97F, false, 0.7F);
+	SoftDisc(Dark, body + Vec { r * 0.32F, -r * 0.38F }, r * 0.36F, pal.lit, 0.75F, false);
+	const float glow = 0.45F + 0.25F * pulse;
+	for (int i = 0; i < 4; i++) {
+		const float angle = -Pi / 2 + (static_cast<float>(i) - 1.5F) * 0.55F;
+		SoftLine(Glowing, body + Vec { 0, r * 0.7F }, body + Vec { std::cos(angle) * r * 0.85F, std::sin(angle) * r * 0.85F }, 1.8F, venom.mid, venom.core, 0.25F * glow, 0.6F * glow);
+	}
+	SoftDisc(Glowing, body, r * 1.4F, venom.mid, 0.12F * glow, false);
+}
+
+/** @brief A squat iron gas canister: dark banded sides, a nozzle on top and a green light blinking on it. */
+void DrawCanister(const IceSpikeFx &fx, const Crystal &crystal, float t)
+{
+	const float local = t - crystal.delay;
+	if (local <= 0)
+		return;
+	const SpikePalette pal = PaletteOf(fx.kind);
+	const Colours venom = ColoursOf(Element::Poison);
+	const float rise = std::min(EaseOutBack(local / 140.F), 1.05F);
+	const float w = crystal.width * 0.5F;
+	const float h = crystal.height * rise;
+	const Vec base = fx.pos + crystal.base;
+	const Vec top = base + Vec { 0, -h };
+	SoftDisc(GroundDark, base, w * 1.8F, pal.ground, 0.55F, true);
+	SoftDisc(Dark, base, w, pal.shade, 0.97F, true, 0.97F);
+	DarkQuad(base + Vec { -w, 0 }, base, top, top + Vec { -w, 0 }, pal.shade, pal.face, 0.97F);
+	DarkQuad(base, base + Vec { w, 0 }, top + Vec { w, 0 }, top, pal.face, pal.lit, 0.97F);
+	for (const float band : { 0.25F, 0.7F })
+		SoftLine(Dark, base + Vec { -w, -h * band }, base + Vec { w, -h * band }, 3, pal.shade, pal.shade, 0.9F, 0.9F);
+	SoftDisc(Dark, top, w, pal.face, 0.97F, true, 0.97F);
+	SoftDisc(Dark, top, w * 0.55F, pal.shade, 0.9F, true, 0.8F);
+	SoftLine(Dark, top, top + Vec { 0, -7 }, 4, pal.shade, pal.face, 0.97F, 0.97F);
+	// The light blinks while it waits for something to wander close.
+	constexpr float period = 700;
+	const float blink = std::fmod(AmbientTime + fx.pos.x * 13, period) < period * 0.25F ? 1.F : 0.2F;
+	SoftDisc(Glowing, top + Vec { 0, -8 }, 3, venom.core, 0.9F * blink, false);
+	SoftDisc(Glowing, top + Vec { 0, -8 }, 12, venom.mid, 0.3F * blink, false);
+	SoftLine(Glowing, base + Vec { -w * 0.7F, -h * 0.48F }, base + Vec { w * 0.7F, -h * 0.48F }, 2, venom.mid, venom.mid, 0.35F, 0.35F);
+}
+
+/** @brief A plague effigy: a gnarled stake with a crossbar of rags and a skull on top whose eyes glow green. */
+void DrawEffigy(const IceSpikeFx &fx, const Crystal &crystal, float t)
+{
+	const float local = t - crystal.delay;
+	if (local <= 0)
+		return;
+	const SpikePalette pal = PaletteOf(fx.kind);
+	const Colours venom = ColoursOf(Element::Poison);
+	const float rise = std::min(EaseOutBack(local / 220.F), 1.04F);
+	const float h = crystal.height * rise;
+	const float w = crystal.width * 0.5F;
+	const Vec base = fx.pos + crystal.base;
+	const Vec top = base + Vec { crystal.lean.x * h, -h };
+	SoftDisc(GroundDark, base, 20, pal.ground, 0.6F, true);
+	DarkQuad(base + Vec { -w, 0 }, base, top, top + Vec { -w * 0.6F, 0 }, pal.shade, pal.face, 0.97F);
+	DarkQuad(base, base + Vec { w, 0 }, top + Vec { w * 0.6F, 0 }, top, pal.face, pal.lit, 0.97F);
+	// The crossbar, lashed on, with rags hanging and stirring.
+	const Vec bar = base + Vec { crystal.lean.x * h * 0.72F, -h * 0.72F };
+	const Vec barL = bar + Vec { -16, 2 };
+	const Vec barR = bar + Vec { 16, -2 };
+	SoftLine(Dark, barL, barR, 5, pal.shade, pal.face, 0.97F, 0.97F);
+	for (int i = 0; i < 4; i++) {
+		const float along = (static_cast<float>(i) + 0.5F) / 4;
+		const Vec from = barL + (barR - barL) * along;
+		const float sway = 2.5F * std::sin(AmbientTime * 0.003F + static_cast<float>(i) * 1.7F);
+		SoftLine(Dark, from, from + Vec { sway, 12.F + 5.F * static_cast<float>(i % 2) }, 4, { 46, 40, 28 }, { 30, 26, 18 }, 0.9F, 0.2F);
+	}
+	// The skull, and its eyes burning green.
+	const Vec skull = top + Vec { 0, -7 };
+	SoftDisc(Dark, skull + Vec { 0, 6 }, 4.5F, { 140, 130, 104 }, 0.97F, false, 0.9F);
+	SoftDisc(Dark, skull, 8, { 150, 140, 112 }, 0.97F, false, 0.95F);
+	SoftDisc(Dark, skull + Vec { 1.5F, -2 }, 5.5F, { 214, 204, 172 }, 0.85F, false, 0.4F);
+	const float pulse = 0.75F + 0.25F * std::sin(AmbientTime * 0.006F + fx.pos.y);
+	for (const float side : { -3.F, 3.F }) {
+		const Vec eye = skull + Vec { side, 0.5F };
+		SoftDisc(Dark, eye, 2.3F, { 16, 14, 8 }, 1, false, 1);
+		SoftDisc(Glowing, eye, 2.4F, venom.core, 0.95F * pulse, false);
+		SoftDisc(Glowing, eye, 8, venom.mid, 0.35F * pulse, false);
+	}
 }
 
 void DrawIceSpikes()
@@ -4973,7 +5502,8 @@ void DrawIceSpikes()
 			// The earth is torn open in dark cracks round it, which fade once the bone has crumbled.
 			const float fade = 1 - std::clamp((t - fx.stand) / BoneLinger, 0.F, 1.F);
 			const float grown = EaseOut(t / 200.F);
-			SoftDisc(GroundDark, fx.pos, TileRadius * (fx.kind == SpikeKind::Cage ? 1.25F : 0.8F) * fx.size * (0.4F + 0.6F * grown), { 52, 42, 32 }, 0.4F * fade, true);
+			const SpikePalette pal = PaletteOf(fx.kind);
+			SoftDisc(GroundDark, fx.pos, TileRadius * (fx.kind == SpikeKind::Cage ? 1.25F : 0.8F) * fx.size * (0.4F + 0.6F * grown), pal.ground, 0.4F * fade, true);
 			for (const FrostLine &line : fx.frost) {
 				const float shown = std::clamp((grown - line.from) / std::max(0.25F, 1 - line.from), 0.F, 1.F);
 				if (shown <= 0)
@@ -4985,13 +5515,19 @@ void DrawIceSpikes()
 					const Vec w0 = fx.pos + line.points[s];
 					const Vec w1 = fx.pos + line.points[s] + (line.points[s + 1] - line.points[s]) * f;
 					const float width = (line.points.size() == 2 ? 1.F : 2.2F) * (0.5F + 0.5F * taper);
-					SoftLine(GroundDark, w0, w1, width, { 34, 27, 20 }, { 34, 27, 20 }, 0.6F * fade, 0.45F * fade);
+					SoftLine(GroundDark, w0, w1, width, pal.crack, pal.crack, 0.6F * fade, 0.45F * fade);
 				}
 			}
 			DrawIceChunks(fx);
 			if (!fx.shattered) {
-				for (const Crystal &crystal : fx.crystals)
-					DrawBoneSpike(fx, crystal, t);
+				for (const Crystal &crystal : fx.crystals) {
+					switch (fx.kind) {
+					case SpikeKind::Pod: DrawPod(fx, crystal, t); break;
+					case SpikeKind::Canister: DrawCanister(fx, crystal, t); break;
+					case SpikeKind::Effigy: DrawEffigy(fx, crystal, t); break;
+					default: DrawBoneSpike(fx, crystal, t); break;
+					}
+				}
 			}
 			continue;
 		}
@@ -6681,6 +7217,85 @@ void DrawPortals()
 	}
 }
 
+void DrawMiasmas()
+{
+	for (const MiasmaFx &fx : Miasmas) {
+		const float grown = EaseOut(fx.age / MiasmaGrowMs);
+		const float fade = std::clamp((fx.life - fx.age) / MiasmaFadeMs, 0.F, 1.F);
+		const float r = fx.radius * (0.5F + 0.5F * grown);
+		// Lumps of it, offset from the middle so it never lies as a perfect circle.
+		for (uint32_t i = 0; i < 7; i++) {
+			const float angle = Hash01(fx.seed, i) * 2 * Pi + (fx.kind == MiasmaKind::Gas ? AmbientTime * 0.0004F * (i % 2 == 0 ? 1.F : -1.F) : 0.F);
+			const float d = Hash01(fx.seed, i + 20) * r * 0.5F;
+			const Vec c = fx.pos + Vec { std::cos(angle) * d, std::sin(angle) * d * 0.5F };
+			const float rr = r * (0.45F + 0.25F * Hash01(fx.seed, i + 40));
+			const float shimmer = std::sin(AmbientTime * 0.004F + static_cast<float>(i) * 1.9F);
+			switch (fx.kind) {
+			case MiasmaKind::Acid:
+				SoftBlob(GroundDark, c, rr, rr * 0.5F, { 26, 44, 6 }, 0.55F * fade);
+				SoftBlob(Ground, c, rr * 0.8F, rr * 0.4F, { 110, 170, 30 }, (0.16F + 0.06F * shimmer) * fade);
+				break;
+			case MiasmaKind::Gas:
+				SoftBlob(GroundDark, c, rr, rr * 0.5F, { 38, 58, 12 }, 0.3F * fade);
+				SoftBlob(Dark, c + Vec { 0, -12 }, rr, rr * 0.55F, { 70, 104, 28 }, (0.2F + 0.04F * shimmer) * fade);
+				SoftBlob(Glowing, c + Vec { 0, -18 }, rr * 0.8F, rr * 0.45F, { 90, 140, 30 }, (0.1F + 0.03F * shimmer) * fade);
+				break;
+			case MiasmaKind::Bog:
+				SoftBlob(GroundDark, c, rr * 1.1F, rr * 0.55F, { 18, 26, 8 }, 0.7F * fade);
+				SoftBlob(Ground, c, rr * 0.7F, rr * 0.35F, { 60, 92, 28 }, (0.1F + 0.03F * shimmer) * fade);
+				break;
+			}
+		}
+		if (fx.kind == MiasmaKind::Acid)
+			SoftRing(Ground, fx.pos, r * 0.92F, 4, { 170, 230, 60 }, 0.22F * fade, 0.08F, fx.seed);
+		if (fx.kind == MiasmaKind::Bog) {
+			// Its edge is a dark muddy lip with reeds poking out of it.
+			SoftRing(GroundDark, fx.pos, r * 0.95F, 10, { 16, 22, 8 }, 0.55F * fade, 0.12F, fx.seed);
+			for (uint32_t i = 0; i < 9; i++) {
+				const float angle = Hash01(fx.seed, i + 60) * 2 * Pi;
+				const float d = r * (0.75F + 0.25F * Hash01(fx.seed, i + 80));
+				const Vec foot = fx.pos + Vec { std::cos(angle) * d, std::sin(angle) * d * 0.5F };
+				const float sway = 2 * std::sin(AmbientTime * 0.002F + static_cast<float>(i));
+				SoftLine(Dark, foot, foot + Vec { sway, -(14 + 10 * Hash01(fx.seed, i + 90)) * grown }, 2.2F, { 34, 42, 16 }, { 74, 90, 40 }, 0.9F * fade, 0.7F * fade);
+			}
+		}
+	}
+}
+
+void DrawLobs()
+{
+	const Colours venom = ColoursOf(Element::Poison);
+	for (const LobFx &fx : Lobs) {
+		float z = 0;
+		const Vec ground = LobAt(fx, z);
+		const Vec at = ground + Vec { 0, -z - 6 };
+		const float angle = fx.spin * fx.age / 1000;
+		const Vec dir { std::cos(angle), std::sin(angle) };
+		SoftDisc(GroundDark, ground, 7, { 0, 0, 0 }, 0.35F, true);
+		switch (fx.kind) {
+		case LobKind::Flask:
+			SoftDisc(Dark, at, 6.5F, { 40, 66, 20 }, 0.95F, false, 0.9F);
+			SoftDisc(Glowing, at + Vec { 0, 1.5F }, 4.5F, venom.mid, 0.75F, false);
+			SoftLine(Dark, at + dir * 4, at + dir * 10, 3.2F, { 150, 160, 150 }, { 100, 110, 100 }, 0.95F, 0.95F);
+			SoftDisc(Dark, at + dir * 11, 2, { 110, 80, 50 }, 0.95F, false, 0.9F);
+			SoftDisc(Glowing, at + Vec { -2, -2 }, 1.6F, { 240, 255, 220 }, 0.8F, false);
+			break;
+		case LobKind::Seed:
+			SoftDisc(Dark, at, 7, { 52, 80, 18 }, 0.95F, false, 0.9F);
+			SoftDisc(Dark, at + Vec { 1.5F, -1.5F }, 5, { 120, 160, 40 }, 0.9F, false, 0.5F);
+			SoftLine(Dark, at - dir * 6, at + dir * 6, 1.5F, { 30, 46, 10 }, { 30, 46, 10 }, 0.8F, 0.8F);
+			SoftDisc(Glowing, at, 11, venom.mid, 0.18F, false);
+			break;
+		case LobKind::Canister:
+			SoftDisc(Dark, at, 7, { 80, 84, 86 }, 0.97F, false, 0.95F);
+			SoftLine(Dark, at - dir * 7, at + dir * 7, 3, { 40, 42, 44 }, { 40, 42, 44 }, 0.95F, 0.95F);
+			SoftDisc(Glowing, at + dir * 5, 2.5F, venom.core, 0.9F, false);
+			SoftDisc(Glowing, at + dir * 5, 9, venom.mid, 0.3F, false);
+			break;
+		}
+	}
+}
+
 void DrawHalos()
 {
 	const float t = AmbientTime;
@@ -7262,7 +7877,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
 		FrontFresh = false;
 		return;
 	}
@@ -7287,11 +7902,13 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawHalos();
 	DrawCracks();
 	DrawSigils();
+	DrawMiasmas();
 	DrawRituals();
 	DrawBeams();
 	DrawIceSpikes();
 	DrawRings();
 	DrawComets();
+	DrawLobs();
 	DrawBolts();
 	DrawSweeps();
 	DrawQuestMarks();
