@@ -13,6 +13,7 @@
 #include <string>
 
 #include "engine/point.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/player_data.hpp"
 #include "utils/fixed_point.hpp"
 
@@ -108,6 +109,8 @@ int FlaskMinionHealPercent(const Player &player);
  * whether it lives. Physical damage meets the monster's armour unless @p ignoreArmour (thorns, the hero's minions).
  */
 bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent = 100, bool ignoreArmour = false);
+/** @brief The same, with how the hit meets the monster's armour (ArmourHit::Extra for a Command's hit). */
+bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent, ArmourHit armour);
 /** @brief Blink replaces the dodge roll while its gem is on. */
 [[nodiscard]] bool BlinkReplacesDodge(const Player &player);
 /** @brief A dodge roll covered these tiles from the start: Trail of Caltrops. */

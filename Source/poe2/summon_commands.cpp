@@ -17,6 +17,7 @@
 #include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -206,13 +207,16 @@ bool InSweepArc(Point from, Point aim, Point tile)
 	return dot * dot * 2 >= wayLength * toLength;
 }
 
-/** @brief Hits an enemy for a Command, in the hero's name: minion damage, which armour leaves alone (like the minions' blows). */
+/**
+ * @brief Hits an enemy for a Command, in the hero's name, by the minions' hit rules: its damage taken and, for a
+ * physical hit, its armour (as damage alongside a hit: Brutality's roll is the hero's own skill's, not a Command's).
+ */
 bool CommandHit(Player &player, Monster &monster, DamageType type, int32_t raw, std::string_view source)
 {
 	if (raw <= 0 || !IsEnemy(monster))
 		return false;
 	TelemetryNoteDamageSource(source);
-	const bool lives = SpiritHitMonster(player, monster, type, Fixed26_6::fromRaw(raw), 100, true);
+	const bool lives = SpiritHitMonster(player, monster, type, Fixed26_6::fromRaw(raw), 100, ArmourHit::Extra);
 	TelemetryNoteDamageSource({});
 	return lives;
 }
@@ -324,7 +328,10 @@ void StartBlaze(Player &player, const Monster &golem, int32_t raw)
 	ShakeCamera(ShakeStrength::Light, 4);
 }
 
-/** @brief One of the Burning Dead howls: the enemies near it are shaken and hit softer, by the sliding scale. */
+/**
+ * @brief One of the Burning Dead howls: every monster near it is shaken and hits softer, by the sliding scale. Archers
+ * and casters too, even one a hit can't reach just now (a counselor fading out): only the interrupt needs a hittable one.
+ */
 void GraveHowl(Player &player, const Monster &brute)
 {
 	const Point center = brute.position.tile;
@@ -332,13 +339,13 @@ void GraveHowl(Player &player, const Monster &brute)
 	ShakeCamera(ShakeStrength::Medium, 6);
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		Monster &monster = Monsters[ActiveMonsters[i]];
-		if (!IsEnemy(monster) || center.ExactDistance(monster.position.tile) > GraveHowlRadius)
+		if (!Alive(monster) || monster.isPlayerMinion() || monster.talkMsg != TEXT_NONE || center.ExactDistance(monster.position.tile) > GraveHowlRadius)
 			continue;
 		const CommandTierScale &scale = CommandTierScales[static_cast<size_t>(CommandTierOf(monster))];
 		Poe2MonsterState &state = monster.poe2;
 		state.commandWeakenPercent = std::max<uint8_t>(state.commandWeakenTicks > 0 ? state.commandWeakenPercent : uint8_t { 0 }, scale.weakenPercent);
 		state.commandWeakenTicks = static_cast<uint8_t>(GraveHowlTicks);
-		if (scale.interrupts)
+		if (scale.interrupts && monster.isPossibleToHit())
 			M_StartStagger(monster);
 		monster.tag(player);
 		vfx::Sparks(monster.position.tile, vfx::Element::Physical, 0.6F);
@@ -637,14 +644,13 @@ int SummonCommandCooldownTicks(SummonCommand command)
 	case SC::GraveHowl:
 	case SC::QuakeStomp:
 	case SC::LastRites:
+	case SC::BoneFrenzy:
 		return 8 * 20;
 	case SC::BloodGift:
 	case SC::GolemsBlaze:
 		return 10 * 20;
 	case SC::FrostShell:
 		return 12 * 20;
-	case SC::BoneFrenzy:
-		return 4 * 20;
 	default:
 		return 0;
 	}

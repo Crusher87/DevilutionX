@@ -1423,10 +1423,13 @@ bool MonsterTrapHit(Monster &monster, int mindam, int maxdam, int dist, MissileI
 	int dam = RandomIntBetween(mindam, maxdam);
 	if (!shift)
 		dam <<= 6;
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		dam = dam * (100 - MonsterResistance(monster, damageType)) / 100;
-	else if (resist)
+		// Frost Shell soaks part of every hit on a shelled minion, missiles and spells too (its ice bites back at blows only).
+		dam = dam * CommandShellDamagePercent(monster) / 100;
+	} else if (resist) {
 		dam /= 4;
+	}
 	ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
 #ifdef _DEBUG
 	if (DebugGodMode)

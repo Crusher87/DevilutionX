@@ -4766,10 +4766,8 @@ int ScaleMonsterBlow(const Monster &attacker, int dam)
 			dam = dam * SupportMinionDamagePercent(owner, attacker) / 100 * MinionGemDamagePercent(attacker) / 100;
 			dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * CommandMinionDamagePercent(attacker) / 100, INT32_MAX / 4));
 		}
-	} else if (gbIsPoe2) {
-		// POE2 Mashup: Grave Howl makes the enemies it shook hit softer.
-		dam = dam * CommandWeakenedDamagePercent(attacker) / 100;
 	}
+	// Grave Howl's weaken is in the monster's damage scale (ScaleMonsterHit), so its missiles and spells meet it too.
 	return dam;
 }
 

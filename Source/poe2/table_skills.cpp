@@ -35,7 +35,6 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/spirit_skills.hpp"
-#include "poe2/summon_commands.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -2627,8 +2626,6 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 		percent -= WeakenPercent * TableCurseStrength(monster, TableCurse::Weaken) / 100;
 	if (monster.poe2.decrepifyTicks > 0)
 		percent -= DecrepifyPercent * TableCurseStrength(monster, TableCurse::Decrepify) / 100;
-	// Grave Howl shook it.
-	percent -= 100 - CommandWeakenedDamagePercent(monster);
 	if (player.poe2.frozenArmorTicks > 0) {
 		percent -= FrozenArmorPercent;
 		if (AilmentAllowed(player, AilmentSource::Spell)) {
