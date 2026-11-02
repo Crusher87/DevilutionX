@@ -1059,6 +1059,27 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(shape, "Line", std::format("{:d} tiles: one wide for {:d}, then two wide", static_cast<int>(table->count), BoneSpikesSingleTiles));
 	if (table != nullptr && (table->flags & TF_PoisonBurst) != 0)
 		Text(shape, Kind::Note, std::format("The first hit bursts: it poisons all there and hits the others for {:d}%", PlagueArrowSplashPercent));
+	// The poison skills' ground, traps, pods, effigy and bog.
+	if (table != nullptr) {
+		switch (table->zone) {
+		case TableZone::PoisonGround:
+			Text(shape, Kind::Note, (table->flags & TF_LandingZone) != 0 ? std::format("The vine poisons and hinders {:d}% every half second", ThornvineHinderPercent) : std::string("The ground poisons all in it every half second"));
+			break;
+		case TableZone::GasTrap:
+			Text(shape, Kind::Note, std::format("Waits {:d} seconds for an enemy, then fills with gas", VenomSentryArmTicks / TicksPerSecond));
+			break;
+		case TableZone::Pod:
+			Text(shape, Kind::Note, std::format("{:d} pods, {:d} tiles apart, burst when an enemy is next to one", static_cast<int>(table->count), PodSpreadTiles));
+			break;
+		case TableZone::Bog:
+			Text(shape, Kind::Note, std::format("Hinders {:d}%; your arrows from or over it poison", WitchsBogHinderPercent));
+			break;
+		default:
+			break;
+		}
+		if ((table->flags & TF_PoisonedOnly) != 0)
+			Text(shape, Kind::Note, "Shoots only enemies your poison is on");
+	}
 	if (table != nullptr && table->duration > 0)
 		Value(shape, "Duration", Seconds(table->duration / static_cast<double>(TicksPerSecond)));
 	if ((tagBits & ST_Projectile) != 0)
@@ -1070,9 +1091,11 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 
 	std::vector<std::string> ailments = AilmentLines(hit, tagBits);
 	// A skill that poisons says how strong its poison is: Cobra Strike's is twice the common one.
-	if (table != nullptr && (table->flags & (TF_Poison | TF_PoisonBurst)) != 0) {
+	if (table != nullptr && ((table->flags & (TF_Poison | TF_PoisonBurst | TF_LandingZone)) != 0 || table->zone == TableZone::Bog)) {
 		const int poison = TablePoisonPercentPerSecond(*table);
-		ailments.push_back(std::format("Poisons for {:d}% of the hit a second for {:d} seconds ({:d}% in all)", poison, PoisonTicks / TicksPerSecond, poison * PoisonTicks / TicksPerSecond));
+		const int stacks = TablePoisonStacks(*table);
+		ailments.push_back(std::format("Poisons for {:d}% of the hit a second for {:d} seconds ({:d}% in all){:s}", poison, PoisonTicks / TicksPerSecond, poison * PoisonTicks / TicksPerSecond,
+		    stacks > 1 ? std::format(", stacking {:d} times", stacks) : std::string()));
 	}
 	if (!ailments.empty()) {
 		Heading(lines, "Ailments");

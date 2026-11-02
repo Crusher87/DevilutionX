@@ -35,12 +35,14 @@ rm -rf "tmp-mingw-${MINGW_ARCH}-prep"
 mkdir -p "tmp-mingw-${MINGW_ARCH}-prep"
 cd "tmp-mingw-${MINGW_ARCH}-prep"
 
-wget -q https://www.libsdl.org/release/SDL2-devel-${SDLDEV_VERS}-mingw.tar.gz -OSDL2-devel-${SDLDEV_VERS}-mingw.tar.gz
+# libsdl.org is sometimes down; fall back to the same file on SDL's GitHub releases.
+wget -q --tries=3 https://www.libsdl.org/release/SDL2-devel-${SDLDEV_VERS}-mingw.tar.gz -OSDL2-devel-${SDLDEV_VERS}-mingw.tar.gz ||
+  wget -q --tries=3 https://github.com/libsdl-org/SDL/releases/download/release-${SDLDEV_VERS}/SDL2-devel-${SDLDEV_VERS}-mingw.tar.gz -OSDL2-devel-${SDLDEV_VERS}-mingw.tar.gz
 tar -xzf SDL2-devel-${SDLDEV_VERS}-mingw.tar.gz
 sed -i '/$(CROSS_PATH)\/cmake/ s/^/#/' SDL2*/Makefile
 $SUDO make -C SDL2*/ cross CROSS_PATH=/usr ARCHITECTURES=${MINGW_ARCH}
 
-wget -q https://github.com/jedisct1/libsodium/releases/download/${SODIUM_VERS}-RELEASE/libsodium-${SODIUM_VERS}-mingw.tar.gz -Olibsodium-${SODIUM_VERS}-mingw.tar.gz
+wget -q --tries=3 https://github.com/jedisct1/libsodium/releases/download/${SODIUM_VERS}-RELEASE/libsodium-${SODIUM_VERS}-mingw.tar.gz -Olibsodium-${SODIUM_VERS}-mingw.tar.gz
 tar -xzf libsodium-${SODIUM_VERS}-mingw.tar.gz --no-same-owner
 $SUDO cp -r libsodium-${SODIUM_ARCH}/* ${MINGW_PREFIX}
 

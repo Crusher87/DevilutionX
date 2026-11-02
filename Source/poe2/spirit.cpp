@@ -130,6 +130,7 @@ void SpreadPlague(const HeraldTrigger &trigger)
 		AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
 		if (GenerateRnd(100) < hinderChance)
 			state.hinderTicks = std::max<uint8_t>(state.hinderTicks, HeraldOfPlagueHinderTicks);
+			state.hinderPercent = 0;
 		spread++;
 	}
 	if (spread > 0)

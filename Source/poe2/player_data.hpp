@@ -173,7 +173,19 @@ enum class WeaponSkill : uint8_t {
 	BoneSpear,
 	/** Physical spells plan 3.4: Bone Cage's ring with Exsanguinate's blood. */
 	BloodNova,
-	Last = BloodNova,
+	/** Poison skills plan (Curtis 2026-11-02): the Rogue's dagger and bow poisons, then the Sorcerer's. */
+	PoisonDagger,
+	AcidFlask,
+	VenomSentry,
+	ThornvineArrow,
+	BloatedPods,
+	PlagueEffigy,
+	WitchsBog,
+	VenomBolt,
+	PoisonExplosion,
+	PoisonNova,
+	AcidCloud,
+	Last = AcidCloud,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -304,6 +316,12 @@ enum class SupportGem : uint8_t {
 	/** Physical spells plan: POE2's Brutality and Bone Shrapnel. */
 	Might,
 	BoneSplinters,
+	/** Poison skills plan: POE2's Admixture, Poison Spores, longer poison, Impending Doom and Decaying Hex. */
+	BloodAndVenom,
+	SporePods,
+	LingeringVenom,
+	RathmasDoom,
+	FesteringHex,
 	Count,
 };
 
@@ -658,6 +676,8 @@ struct SupportRuntime {
 	uint8_t sacrificeTicks = 0;
 	/** Burning Ground: ticks before another patch can be left. */
 	uint8_t burningGroundCooldown = 0;
+	/** Spore Pods: ticks before a hit can drop another pod. */
+	uint8_t sporeCooldown = 0;
 	/** Faster Casting III: the spells cast lately and the ticks each stays counted. */
 	std::array<uint8_t, 4> recentSpells {};
 	std::array<uint8_t, 4> recentSpellTicks {};

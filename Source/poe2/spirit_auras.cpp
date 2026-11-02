@@ -162,6 +162,7 @@ void TickBriarpatch(Player &player, SpiritRuntime &state)
 		if (!CanHit(monster) || state.briarPosition.WalkingDistance(monster.position.tile) > BriarpatchRadius)
 			continue;
 		monster.poe2.hinderTicks = std::max<uint8_t>(monster.poe2.hinderTicks, BriarpatchHinderTicks);
+		monster.poe2.hinderPercent = 0;
 		SpiritHitMonster(player, monster, DamageType::Physical, Fixed26_6::fromRaw(state.briarPulse));
 	}
 }
