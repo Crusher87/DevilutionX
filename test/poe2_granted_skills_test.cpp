@@ -1100,8 +1100,9 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	// skills on one target; their numbers are for Curtis (the gems keep their numbers for now). Condemn and Corpse
 	// Explosion lose bare only to Staff Bolt, the free bolt every staff has cast since before the rework. Glacial Spike
 	// (400%) came off the list with round 3 (Curtis 2026-10-28); Haunt (350%) now beats every free skill bare and loses
-	// only with supports (to Staff Bolt, and since Might to the physical free bolts), and Locust Swarm only to a
-	// supported Staff Bolt since Q28 (130% over 2 s instead of 120% over 5 s).
+	// only with supports (to Staff Bolt, and since Might to the physical free bolts). Locust Swarm came off the list with
+	// the poison skills plan (165%, was 130%). Poison Explosion and Poison Nova deal much of theirs as poison, which this
+	// doesn't count (the plan's numbers, Curtis 2026-11-02).
 	enum class Excused : uint8_t {
 		/** Against every free skill. */
 		Everything,
@@ -1121,7 +1122,8 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	} AllowList[] = {
 		// Might (physical spells plan) gives the physical free bolts 30% more with supports; Haunt's chaos can't take it.
 		{ WeaponSkill::Haunt, Excused::Supported, "a chaos damage over time (70% a second on one), which can't take Prismatic Focus as Staff Bolt can, nor Might as the physical free bolts can" },
-		{ WeaponSkill::LocustSwarm, Excused::SupportedStaffBolt, "like Haunt, a physical curse's damage over time (about 73% a second on one), which can't take Prismatic Focus" },
+		{ WeaponSkill::PoisonExplosion, Excused::Everything, "a corpse burst (about 38% a second on one) whose cloud and poison, not counted here, deal the rest; it needs a corpse" },
+		{ WeaponSkill::PoisonNova, Excused::StaffBoltAndSupported, "a nova around the hero (60% a second on one) whose poison, 60% of the hit a second, isn't counted here; it can't take Prismatic Focus or Might" },
 		{ WeaponSkill::Condemn, Excused::StaffBoltAndSupported, "a delayed burst all around the hero (about 56% a second on one); a shield spell, it can't take Measured Ritual" },
 		{ WeaponSkill::CorpseExplosion, Excused::StaffBolt, "an area burst for each corpse, which it needs (about 62% a second on one)" },
 	};
@@ -1160,8 +1162,9 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	Rate bolt { "Staff Bolt", staffBolt, GrantedStaffBoltPercent / CastSeconds(staffBolt), 1.0, {} };
 	bolt.supported = BestSupportPair(player, staffBolt, DamageType::Fire, true, &bolt.pair);
 	freeSkills.push_back(bolt);
-	// 12, then Hex Rupture, then Bone Prison, Bone Spikes, Bone Spear and Blood Nova.
-	EXPECT_EQ(gems.size(), 17U);
+	// 12, then Hex Rupture, then Bone Prison, Bone Spikes, Bone Spear and Blood Nova, then Venom Bolt, Poison Explosion,
+	// Poison Nova and Acid Cloud.
+	EXPECT_EQ(gems.size(), 21U);
 	EXPECT_GE(freeSkills.size(), 14U);
 
 	for (const int level : { 1, 20 }) {

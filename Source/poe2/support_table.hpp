@@ -176,7 +176,19 @@ constexpr int PoisonTicks = 2 * 20;
  * @brief Poisons a monster: total is the poison's whole damage, as a raw Fixed26_6, spread over ticks. With maxStacks 1
  * only the strongest poison counts: a weaker one is lost, a stronger one takes over. More stacks add up to that many.
  */
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1);
+void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
+/** @brief Blood and Venom: a bleed just inflicted deals more while the monster is poisoned, if the hit's skill has it. */
+void NoteSupportedBleed(const Player &player, Monster &monster);
+/** @brief The physical and chaos damage of the hit in progress on the monster, before its defences, as a raw Fixed26_6; 0 outside one. */
+[[nodiscard]] int32_t SupportHitPoisonBase(const Monster &monster);
+/** @brief Blood and Venom: poison deals this much more to a bleeding monster, and bleeding to a poisoned one, in percent. */
+constexpr int BloodAndVenomPercent = 60;
+/** @brief Spore Pods: a pod lasts this long, arms after this many ticks, bursts in this radius; this many out at once, one a half second. */
+constexpr int SporePodTicks = 4 * 20;
+constexpr int SporePodArmTicks = 10;
+constexpr int SporePodRadius = 1;
+constexpr int SporePodMax = 3;
+constexpr int SporePodCooldownTicks = 10;
 /**
  * @brief What one tick of poison or other chaos damage over time deals the monster, after Withered and its chaos
  * resistance, as a raw Fixed26_6.

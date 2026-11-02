@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "effects.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
@@ -165,6 +166,13 @@ const SupportData Table[] = {
 	// Physical spells plan (Curtis 2026-10-31): POE2's Brutality (here Savagery is the melee one) and Bone Shrapnel.
 	{ SG::Might, "Might", "Power: 30% more physical damage, but no\nfire, cold, lightning or chaos. Mana +20%", "Needs a physical skill", GC::Strength, 3, 120, 0, PhysicalHit, ST_Herald | ST_Minion, SF_Power, NoFamily },
 	{ SG::BoneSplinters, "Bone Splinters", "Enemies killed while trapped or heavily\nstunned burst for 25% of their life. Mana +20%", "Needs a damaging skill", GC::Magic, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
+	// The poison skills plan (Curtis 2026-11-02): POE2's Admixture, Poison Spores, a longer poison, Impending Doom and
+	// Decaying Hex. The two curse supports add damage to curses that deal none.
+	{ SG::BloodAndVenom, "Blood and Venom", "Poison deals 60% more to bleeding\nmonsters, bleeding 60% more to\npoisoned ones. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 3, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	{ SG::SporePods, "Spore Pods", "Hits have a 20% chance to drop a pod\nthat bursts in poison for 40% of the\nhit. Mana +20%", "Needs a damaging skill", GC::Dexterity, 6, 120, 0, DamageSkill, 0, 0, NoFamily },
+	{ SG::LingeringVenom, "Lingering Venom", "Poisons last twice as long and deal\n20% less a second. Mana +20%", "Needs a physical or chaos skill", GC::Dexterity, 6, 120, PhysicalHit | ST_Chaos, ST_Damage, 0, 0, NoFamily },
+	{ SG::RathmasDoom, "Rathma's Doom", "The curse bursts in poison as it runs\nout, for 400% of spell damage. Mana +30%", "Needs a curse that deals no damage", GC::Magic, 10, 130, 0, ST_Curse, ST_Damage, 0, NoFamily },
+	{ SG::FesteringHex, "Festering Hex", "Cursed monsters are poisoned for 25%\nof spell damage a second. Mana +30%", "Needs a curse that deals no damage", GC::Magic, 3, 130, 0, ST_Curse, ST_Damage, 0, NoFamily },
 };
 // clang-format on
 
@@ -235,9 +243,22 @@ struct Stand {
 	uint8_t next = 0;
 };
 
+/** @brief Spore Pods: a pod a hit dropped, waiting to arm and for an enemy to come next to it. */
+struct SporePod {
+	Point center;
+	int16_t ticksLeft;
+	int8_t arming;
+	DamageType type;
+	Fixed26_6 damage;
+	uint32_t key;
+};
+
 std::vector<GroundBurst> Bursts;
 std::vector<PendingUse> Pending;
 std::vector<Stand> Stands;
+std::vector<SporePod> SporePods;
+/** @brief The effects' key for the next spore pod; effects only. Counts down from the top so it never meets a zone's. */
+uint32_t NextSporeKey = 0;
 
 /** @brief The hit in progress. */
 struct HitState {
@@ -519,6 +540,55 @@ void InflictSupportBleed(const Player &player, Monster &monster, int32_t physica
 		state.bleedSkill = WeaponSkill::None;
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(state.bleedTicks, Ticks));
+	NoteSupportedBleed(player, monster);
+}
+
+/** @brief Spore Pods: a pod drops where the hit landed; the oldest goes past the cap. */
+void DropSporePod(const Player &player, SkillSlot skill, Point at, int32_t hit)
+{
+	const int ticks = SporePodTicks;
+	if (SporePods.size() >= static_cast<size_t>(SporePodMax)) {
+		vfx::EndKeyed(SporePods.front().key);
+		SporePods.erase(SporePods.begin());
+	}
+	NextSporeKey = NextSporeKey <= 1 ? UINT32_MAX : NextSporeKey - 1;
+	const DamageType type = (SkillTags(skill) & ST_Chaos) != 0 ? DamageType::Chaos : DamageType::Physical;
+	const Fixed26_6 damage = Fixed26_6::fromRaw(std::max<int32_t>(Percent(hit, Value(player, skill, SG::SporePods, 1)), 64));
+	SporePods.push_back({ at, static_cast<int16_t>(ticks), static_cast<int8_t>(SporePodArmTicks), type, damage, NextSporeKey });
+	vfx::Pod(at, ticks * 1000 / TicksPerSecond, NextSporeKey);
+}
+
+void ProcessSporePods(Player &player)
+{
+	for (size_t i = 0; i < SporePods.size();) {
+		SporePod &pod = SporePods[i];
+		bool burst = false;
+		if (pod.arming > 0) {
+			pod.arming--;
+		} else {
+			ForEachMonsterNear(pod.center, PodTriggerTiles, [&](Monster &) { burst = true; });
+		}
+		if (burst || --pod.ticksLeft <= 0) {
+			const SporePod copy = pod;
+			SporePods.erase(SporePods.begin() + static_cast<std::ptrdiff_t>(i));
+			vfx::EndKeyed(copy.key);
+			if (!burst)
+				continue;
+			// It bursts for its share of the hit, with the usual poison of that.
+			vfx::Impact(copy.center, vfx::Element::Poison, 0.9F);
+			AddVisualEffect(copy.center, MissileGraphicID::AcidSplat, 0, 4);
+			PlaySfxLoc(SfxID::SpellAcid1, copy.center);
+			std::vector<Monster *> targets;
+			ForEachMonsterNear(copy.center, SporePodRadius, [&](Monster &monster) { targets.push_back(&monster); });
+			for (Monster *monster : targets) {
+				DealExtra(player, *monster, copy.type, copy.damage);
+				if (CanHit(*monster))
+					InflictPoison(player, *monster, static_cast<int32_t>(static_cast<int64_t>(copy.damage.raw()) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
+			}
+			continue;
+		}
+		i++;
+	}
 }
 
 DamageType PrismElement(uint8_t element)
@@ -671,6 +741,11 @@ void FinishHit()
 		BreakObjectsInArea(player, monster.position.tile, 2);
 		for (Monster *other : NearestMonsters(monster.position.tile, 2, 8, &monster))
 			DealExtra(player, *other, DamageType::Cold, Fixed26_6::fromRaw(totalBase * 3 / 10));
+	}
+	// Spore Pods: a hit may drop a pod (one a half second at most, up to SporePodMax out).
+	if (Has(player, skill, SG::SporePods) && state.sporeCooldown == 0 && GenerateRnd(100) < Value(player, skill, SG::SporePods, 0)) {
+		state.sporeCooldown = static_cast<uint8_t>(SporePodCooldownTicks);
+		DropSporePod(player, skill, monster.position.tile, totalBase);
 	}
 	if (Has(player, skill, SG::BurningGround) && state.burningGroundCooldown == 0) {
 		state.burningGroundCooldown = 20;
@@ -874,15 +949,22 @@ std::optional<Point> TakeCorpseNear(Point center, int radius)
 
 } // namespace
 
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks)
+void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks, bool fromHit)
 {
 	if (!AilmentAllowed(player, HitSource()))
 		return;
-	// The supports of the hit in progress: Deadly Venom's stronger poison, Twin Fangs' extra stack and shorter poisons
-	// (POE2's Deadly Poison and Escalating Poison).
+	// The supports of the hit in progress: Deadly Venom's stronger poison (only a hit's: a pool or a curse has none to
+	// lessen, the poison skills plan), Twin Fangs' extra stack and shorter poisons (POE2's Deadly Poison and Escalating
+	// Poison), and Lingering Venom's longer, weaker ones.
 	if (Hit.player == &player && !Hit.skill.isEmpty()) {
-		if (const int more = Value(player, Hit.skill, SG::DeadlyVenom, 0); more > 0)
+		if (const int more = Value(player, Hit.skill, SG::DeadlyVenom, 0); more > 0 && fromHit)
 			total = Percent(total, 100 + more);
+		if (Has(player, Hit.skill, SG::LingeringVenom)) {
+			const int longer = Value(player, Hit.skill, SG::LingeringVenom, 0);
+			const int less = Value(player, Hit.skill, SG::LingeringVenom, 1);
+			ticks = std::min<int>(ticks * (100 + longer) / 100, UINT8_MAX);
+			total = Percent(total, (100 + longer) * (100 - less) / 100);
+		}
 		if (Has(player, Hit.skill, SG::TwinFangs)) {
 			const int shorter = Value(player, Hit.skill, SG::TwinFangs, 1);
 			total = Percent(total, 100 - shorter);
@@ -913,6 +995,20 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 	// Rotting Flesh: the poison breaks armour (POE2's Corrosion).
 	if (supported && Has(player, Hit.skill, SG::RottingFlesh))
 		BreakMonsterArmour(monster, &player);
+	// Blood and Venom: this poison deals more while the monster bleeds.
+	state.poisonVsBleed = supported && Has(player, Hit.skill, SG::BloodAndVenom);
+}
+
+void NoteSupportedBleed(const Player &player, Monster &monster)
+{
+	monster.poe2.bleedVsPoison = Hit.player == &player && !Hit.skill.isEmpty() && Has(player, Hit.skill, SG::BloodAndVenom);
+}
+
+int32_t SupportHitPoisonBase(const Monster &monster)
+{
+	if (Hit.depth == 0 || Hit.monster != &monster)
+		return 0;
+	return static_cast<int32_t>(std::min<int64_t>(Hit.poisonBase, INT32_MAX / 2));
 }
 
 int32_t ChaosTickDamage(const Monster &monster, int32_t perTick)
@@ -1125,7 +1221,7 @@ uint32_t SkillTags(SkillSlot skill)
 		break;
 	case TableShape::Zone:
 		tags |= ST_Duration;
-		if (IsAnyOf(table->zone, TableZone::Turret, TableZone::Trap) || table->skill == WeaponSkill::BladeSentinel)
+		if (IsAnyOf(table->zone, TableZone::Turret, TableZone::Trap, TableZone::GasTrap, TableZone::Pod) || table->skill == WeaponSkill::BladeSentinel)
 			tags |= ST_Placed;
 		break;
 	case TableShape::Curse:
@@ -1146,6 +1242,9 @@ uint32_t SkillTags(SkillSlot skill)
 		tags |= ST_Slam;
 	if (table->skill == WeaponSkill::FallingSword)
 		tags |= ST_Slam;
+	// Thornvine Arrow's vine and Poison Explosion's cloud last.
+	if (table->zone == TableZone::PoisonGround)
+		tags |= ST_Duration;
 	const bool damages = table->damagePercent > 0 && table->shape != TableShape::Buff && (table->shape != TableShape::Curse || IsAnyOf(table->curse, TableCurse::Haunt, TableCurse::Locust))
 	    && table->shape != TableShape::SoulHarvest;
 	if (damages) {
@@ -1169,7 +1268,7 @@ uint32_t SkillTags(SkillSlot skill)
 		}
 		if ((table->flags & TF_Elements) != 0)
 			tags |= ST_Elemental;
-		if ((table->flags & (TF_Bleed | TF_Poison | TF_PoisonBurst)) != 0 || table->shape == TableShape::Curse)
+		if ((table->flags & (TF_Bleed | TF_Poison | TF_PoisonBurst)) != 0 || table->shape == TableShape::Curse || table->zone == TableZone::PoisonGround)
 			tags |= ST_DamageOverTime;
 	}
 	return tags;
@@ -1232,6 +1331,9 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 		return IsMinionCountSkill(skill.persistent());
 	case SG::NaKrulsPrison:
 		return IsAnyOf(skill.spell(), SpellID::FireWall, SpellID::LightningWall);
+	case SG::DeadlyVenom:
+		// Its more poison is a hit's: Locust Swarm and Thornvine Arrow poison with none (the poison skills plan).
+		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::LocustSwarm, WeaponSkill::ThornvineArrow);
 	default:
 		return true;
 	}
@@ -1865,6 +1967,8 @@ void ProcessSupportEffects(Player &player)
 		state.sacrificeTicks--;
 	if (state.burningGroundCooldown > 0)
 		state.burningGroundCooldown--;
+	if (state.sporeCooldown > 0)
+		state.sporeCooldown--;
 	for (uint8_t &wait : state.novaCooldown) {
 		if (wait > 0)
 			wait--;
@@ -1905,6 +2009,7 @@ void ProcessSupportEffects(Player &player)
 		return;
 	}
 	ProcessBursts(player);
+	ProcessSporePods(player);
 	ProcessPending(player);
 	ProcessStands(player);
 }
@@ -1919,8 +2024,9 @@ void ProcessSupportMonsterEffects(Monster &monster)
 		if (state.poisonTicks % 10 == 0)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
 		if (state.poisonSource >= 0 && state.poisonSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr && !monster.hasNoLife()) {
-			// Poison is chaos damage over time.
-			const Fixed26_6 tick = Fixed26_6::fromRaw(ChaosTickDamage(monster, state.poisonDamagePerTick));
+			// Poison is chaos damage over time; Blood and Venom's deals more while the monster bleeds.
+			const int32_t perTick = state.poisonVsBleed && state.bleedTicks > 0 ? Percent(state.poisonDamagePerTick, 100 + BloodAndVenomPercent) : state.poisonDamagePerTick;
+			const Fixed26_6 tick = Fixed26_6::fromRaw(ChaosTickDamage(monster, perTick));
 			TelemetryNoteDamageSource("poison");
 			ApplyMonsterDamage(DamageType::Chaos, monster, tick);
 			OnSpiritPoisonDealt(*MyPlayer, tick);
@@ -1934,6 +2040,7 @@ void ProcessSupportMonsterEffects(Monster &monster)
 		if (state.poisonTicks == 0) {
 			state.poisonDamagePerTick = 0;
 			state.poisonPlague = false;
+			state.poisonVsBleed = false;
 		}
 	}
 }
@@ -1943,6 +2050,7 @@ void ClearSupportEffects()
 	Bursts.clear();
 	Pending.clear();
 	Stands.clear();
+	SporePods.clear();
 }
 
 void UseTriggeredSkill(Player &player, SkillSlot skill, Point target, int damagePercent)

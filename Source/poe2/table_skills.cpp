@@ -131,7 +131,8 @@ const TableSkillData Table[] = {
 	{ WS::FrozenOrb, "Frozen Orb", "An orb of frost bursts at the target into a ring of shards", 13, 22, TW::None, 1, Zone, 70, 16, 0, 0, 0, 15, DT::Cold, MissileID::BlueFlare, MG::BlueFlareExplosion, TF_Spell, TableZone::ShardRing, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Nova), TableCurve::Fireball, 312 },
 	// Arcane
 	{ WS::Haunt, "Haunt", "A spirit drains the enemy with chaos over time. When it dies, the spirit jumps to the nearest enemy.", 3, 8, TW::None, 1, Curse, 350, 0, 0, 100, 0, 0, DT::Chaos, MissileID::Null, MG::BoneSpirit, TF_Spell, TableZone::None, TableCurse::Haunt, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
-	{ WS::LocustSwarm, "Locust Swarm", "A chaos plague that eats at enemies and spreads when they die", 7, 12, TW::None, 1, Curse, 130, 0, 1, 40, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
+	// The poison skills plan (Curtis 2026-11-02): a poison now, at gem 10 (tier VII), 165%; was a chaos drain at gem 7, 130%.
+	{ WS::LocustSwarm, "Locust Swarm", "A poison plague that eats at enemies and spreads when they die", 10, 12, TW::None, 1, Curse, LocustSwarmPercent, 0, 1, 40, 0, 0, DT::Chaos, MissileID::Null, MG::AcidSplat, TF_Spell, TableZone::None, TableCurse::Locust, TableBuff::None, TT_Occult, Icon(SpellIcon::DoomSerpents), TableCurve::Fireball, 312 },
 	{ WS::CorpseExplosion, "Corpse Explosion", "Blows up a corpse near the target, burning everything around it", 9, 10, TW::None, 1, CorpseBurst, 50, 0, 2, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodStar), TableCurve::Fireball, 312 },
 	{ WS::SoulHarvest, "Soul Harvest", "Takes the souls of nearby corpses: 3% more damage each, up to 10, for 10 seconds", 11, 10, TW::None, 1, SoulHarvest, Flat, 10, 4, 200, 0, 0, DT::Physical, MissileID::Null, MG::Resurrect, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Resurrect), TableCurve::Boneshatter, 100 },
 	// Skill-balance Q29: 160%, was 200%.
@@ -180,6 +181,19 @@ const TableSkillData Table[] = {
 	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a line ahead of you, one spike wide and then two, staggering what they hit", 3, 8, TW::None, 1, Line, 80, 5, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	{ WS::BoneSpear, "Bone Spear", "A heavy spear of bone that flies through every enemy in its path and builds up twice the stun", 7, 12, TW::None, 1, Projectiles, 180, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
 	{ WS::BloodNova, "Blood Nova", "A ring of blood bursts out around you and leaves enemies bleeding; costs 5% of your life", 9, 10, TW::None, 1, Around, 120, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_LifeCost | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
+	// The poison skills plan (Curtis 2026-11-02, poison-skills-numbers.md): the Rogue's dagger and bow poisons, then the
+	// Sorcerer's. Poison strength is the hit's percent a second for 2 seconds (TablePoisonPercentPerSecond).
+	{ WS::PoisonDagger, "Poison Dagger", "Quick stabs whose poison stacks up to three times", 1, 4, TW::Dagger, 0, Strike, 130, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 50, 3 },
+	{ WS::AcidFlask, "Acid Flask", "Throws a flask that bursts into a pool of acid", 12, 15, TW::Dagger, 0, Zone, 70, 0, 1, 40, 10, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Lobbed | TF_Poison, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::FireCloud), TableCurve::Boneshatter, 0, GrantedRider::None, 40 },
+	{ WS::VenomSentry, "Venom Sentry", "Throws a gas trap that fills the area with poison when an enemy comes near", 20, 20, TW::Dagger, 0, Zone, 16, 0, 2, 80, 10, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Lobbed | TF_Poison, TableZone::GasTrap, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::TrapDisarm), TableCurve::Boneshatter, 0, GrantedRider::None, 60 },
+	{ WS::ThornvineArrow, "Thornvine Arrow", "An arrow that grows a thorny vine where it lands, poisoning and slowing enemies", 10, 12, TW::Bow, 0, Projectiles, 100, 1, 2, 80, 10, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_LandingZone, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Infravision), TableCurve::LightningArrow, 0 },
+	{ WS::BloatedPods, "Bloated Pods", "Shoots three seed pods that burst into poison when enemies come near", 15, 18, TW::Bow, 0, Zone, 75, 3, 1, 120, 0, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Lobbed | TF_Poison, TableZone::Pod, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::PentaStar), TableCurve::LightningArrow, 0, GrantedRider::None, 40 },
+	{ WS::PlagueEffigy, "Plague Effigy", "Raises an effigy that shoots the enemies you have poisoned for 8 seconds", 20, 15, TW::Bow, 0, Zone, 85, 0, 6, 160, 10, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_PoisonedOnly, TableZone::Turret, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::RedSkull), TableCurve::LightningArrow, 0 },
+	{ WS::WitchsBog, "Witch's Bog", "A bog around you slows enemies, and your arrows that cross it poison", 7, 10, TW::Bow, 1, Zone, 0, 0, 2, 160, 10, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_AtPlayer, TableZone::Bog, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::BloodRitual), TableCurve::LightningArrow, 0, GrantedRider::None, 30 },
+	{ WS::VenomBolt, "Venom Bolt", "A bolt of venom whose poison eats at the enemy", 1, 6, TW::None, 1, Projectiles, 130, 1, 0, 0, 0, 0, DT::Chaos, MissileID::OrangeFlare, MG::AcidSplat, TF_Spell | TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Invisibility), TableCurve::Fireball, 312, GrantedRider::None, 60 },
+	{ WS::PoisonExplosion, "Poison Explosion", "Blows up a corpse near the target into a cloud of poison", 8, 12, TW::None, 1, CorpseBurst, 30, 0, 2, 40, 10, 0, DT::Chaos, MissileID::Null, MG::AcidSplat, TF_Spell | TF_Poison, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Immolation), TableCurve::Fireball, 312, GrantedRider::None, 40 },
+	{ WS::PoisonNova, "Poison Nova", "A ring of poison bursts out around you", 22, 25, TW::None, 1, Around, 60, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::AcidSplat, TF_Spell | TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Nova), TableCurve::Fireball, 312, GrantedRider::None, 60 },
+	{ WS::AcidCloud, "Acid Cloud", "Acid rains on the target and leaves a pool that poisons", 25, 28, TW::None, 1, Zone, 95, 0, 2, 60, 10, 8, DT::Chaos, MissileID::Null, MG::AcidSplat, TF_Spell | TF_Poison, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::FireCloud), TableCurve::Fireball, 312, GrantedRider::None, 40 },
 };
 // clang-format on
 
@@ -214,9 +228,17 @@ struct SkillZone {
 	Fixed26_6 damage;
 	/** The skill's radius with its supports' area changes. */
 	int8_t radius;
+	/** The key of its effects (vfx::EndKeyed), or 0. */
+	uint32_t key = 0;
+	/** Poisoned ground that came without a burst of its own (Thornvine Arrow's vine, Poison Explosion's cloud). */
+	bool cloud = false;
+	/** Venom Sentry's trap went off: it puffs gas until its time runs out. */
+	bool armed = false;
 };
 
 std::vector<SkillZone> Zones;
+/** @brief The effects' key for the next zone; effects only, so it needn't match on other machines. */
+uint32_t NextZoneKey = 0;
 
 int GemLevel(const Player &player, WeaponSkill skill)
 {
@@ -315,9 +337,10 @@ void InflictTableBleed(const Player &player, Monster &monster, WeaponSkill skill
 		state.bleedSkill = skill;
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(ticks, state.bleedTicks));
+	NoteSupportedBleed(player, monster);
 }
 
-/** @brief Haunt's, Locust Swarm's and Decompose's chaos damage over time: the strongest counts. */
+/** @brief Haunt's and Decompose's chaos damage over time: the strongest counts (Locust Swarm's is a poison now). */
 void InflictTableChaos(const Player &player, Monster &monster, WeaponSkill skill, Fixed26_6 total, int ticks)
 {
 	Poe2MonsterState &state = monster.poe2;
@@ -329,6 +352,23 @@ void InflictTableChaos(const Player &player, Monster &monster, WeaponSkill skill
 		state.chaosSkill = skill;
 	}
 	state.chaosTicks = static_cast<uint8_t>(std::max<int>(ticks, state.chaosTicks));
+}
+
+/** @brief A table skill's poison of a hit of this much: its strength a second for PoisonTicks, as a raw Fixed26_6. */
+int32_t TablePoisonTotal(Fixed26_6 hit, const TableSkillData &data)
+{
+	return static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(hit.raw()) * TablePoisonPercentPerSecond(data) * PoisonTicks / 20 / 100, INT32_MAX / 2));
+}
+
+/** @brief Thornvine Arrow's vine and Witch's Bog slow what's in them: a short hinder, renewed while it stays; a stronger one stays. */
+void HinderMonster(Monster &monster, int percent)
+{
+	Poe2MonsterState &state = monster.poe2;
+	const int current = state.hinderTicks > 0 ? (state.hinderPercent != 0 ? state.hinderPercent : HinderPercent) : 0;
+	if (percent < current)
+		return;
+	state.hinderPercent = static_cast<uint8_t>(percent == HinderPercent ? 0 : std::clamp<int>(percent, 1, 99));
+	state.hinderTicks = std::max<uint8_t>(state.hinderTicks, static_cast<uint8_t>(PoisonGroundHinderTicks));
 }
 
 struct CastResult {
@@ -389,9 +429,10 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 		BreakMonsterArmour(monster, &player);
 	if ((data.flags & TF_Bleed) != 0 && alive)
 		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), 80);
-	// Cobra Strike: POE2's poison for 2 seconds, of its own strength (40% of the hit a second).
+	// Cobra Strike and Poison Dagger: POE2's poison for 2 seconds, of the row's strength and stacks (Cobra's 40% of the
+	// hit a second; Poison Dagger's 50%, up to three).
 	if ((data.flags & TF_Poison) != 0 && alive)
-		InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(FixedDamage(player, data).raw()) * TablePoisonPercentPerSecond(data) * PoisonTicks / 20 / 100), PoisonTicks);
+		InflictPoison(player, monster, TablePoisonTotal(FixedDamage(player, data), data), PoisonTicks, TablePoisonStacks(data));
 	if (!alive)
 		return;
 	// Elemental attacks: part of the hit lands again as the skill's element.
@@ -457,6 +498,27 @@ Monster *TargetMonsterNear(Point target, int radius)
 		}
 	});
 	return best;
+}
+
+/** @brief Plague Effigy's target: the nearest monster near the spot that the hero's poison is on. */
+Monster *PoisonedMonsterNear(const Player &player, Point target, int radius)
+{
+	Monster *best = nullptr;
+	int bestDistance = radius + 1;
+	ForEachMonsterNear(target, radius, [&](Monster &monster) {
+		const int distance = target.WalkingDistance(monster.position.tile);
+		if (distance < bestDistance && PoisonedBy(monster, player)) {
+			best = &monster;
+			bestDistance = distance;
+		}
+	});
+	return best;
+}
+
+/** @brief How long a thrown flask, canister or pod takes to land, in game ticks. */
+int LobTicks(Point from, Point to)
+{
+	return std::clamp<int>(4 + from.WalkingDistance(to), 6, 14);
 }
 
 Monster *MonsterInFrontOf(const Player &player)
@@ -536,6 +598,9 @@ SkillSound BoltLaunchOf(const TableSkillData &data)
 		return Sfx(SfxID::SpellBoneSpirit);
 	case MissileGraphicID::HolyBoltExplosion:
 		return Sfx(SfxID::SpellHolyBolt);
+	case MissileGraphicID::AcidSplat:
+		// Venom spat like the acid beasts' spit.
+		return Sfx(SfxID::SpellAcid);
 	default:
 		return Sfx(SfxID::SpellElemental);
 	}
@@ -565,6 +630,9 @@ SkillSound ImpactOf(const TableSkillData &data)
 	case MissileGraphicID::BoneHit:
 	case MissileGraphicID::BoneSpirit:
 		return Sfx(SfxID::SpellBoneSpiritHit);
+	case MissileGraphicID::AcidSplat:
+		// Poison splashes as the acid beasts' spit does.
+		return Sfx(SfxID::SpellAcid1);
 	default:
 		break;
 	}
@@ -582,7 +650,7 @@ SkillSound ImpactOf(const TableSkillData &data)
 /** @brief Whether a zone's spell sound waits for its burst (see SkillSounds::spell). */
 bool ZoneSoundsAtBurst(const TableSkillData &data)
 {
-	return data.shape == Zone && IsAnyOf(data.zone, TableZone::Delayed, TableZone::IceSpike, TableZone::ShardRing);
+	return data.shape == Zone && (IsAnyOf(data.zone, TableZone::Delayed, TableZone::IceSpike, TableZone::ShardRing) || (data.flags & TF_Lobbed) != 0);
 }
 
 /**
@@ -602,9 +670,47 @@ Point IceSpikeCenter(const Player &player, const TableSkillData &data, Point tar
 	return PredictMonsterTile(monster, data.delay + 1);
 }
 
-void AddZone(const Player &player, const TableSkillData &data, Point center, int delay)
+/** @brief How many zones of a skill can be out at once; the oldest goes. 0 for no limit. */
+int ZoneLimit(const Player &player, const TableSkillData &data)
+{
+	const SkillSlot slot = SkillSlot::ForAttack(data.skill);
+	switch (data.skill) {
+	// Thunderstorm, Blessed Hammer and Blizzard one; the poison skills plan's numbers for the rest.
+	case WeaponSkill::Thunderstorm:
+	case WeaponSkill::BlessedHammer:
+	case WeaponSkill::Blizzard:
+	case WeaponSkill::ThornvineArrow:
+	case WeaponSkill::WitchsBog:
+	case WeaponSkill::PlagueEffigy:
+		return SupportZoneLimit(player, slot, MaxStackingZones);
+	case WeaponSkill::AcidFlask:
+		return SupportZoneLimit(player, slot, AcidFlaskPools);
+	case WeaponSkill::AcidCloud:
+		return SupportZoneLimit(player, slot, AcidCloudPools);
+	default:
+		break;
+	}
+	// Traps, sentries and pods: only a few of each (MaxPlacedTraps, 2 more with Endless Horde, Curtis 2026-10-29).
+	if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret, TableZone::GasTrap, TableZone::Pod))
+		return SupportTrapLimit(player, slot);
+	return 0;
+}
+
+vfx::LobKind LobKindOf(const TableSkillData &data)
+{
+	switch (data.zone) {
+	case TableZone::GasTrap: return vfx::LobKind::Canister;
+	case TableZone::Pod: return vfx::LobKind::Seed;
+	default: return vfx::LobKind::Flask;
+	}
+}
+
+void AddZone(const Player &player, const TableSkillData &data, Point center, int delay, bool cloud = false)
 {
 	SkillZone zone;
+	NextZoneKey = NextZoneKey == UINT32_MAX ? 1 : NextZoneKey + 1;
+	zone.key = NextZoneKey;
+	zone.cloud = cloud;
 	zone.skill = data.skill;
 	zone.center = center;
 	zone.ticksLeft = static_cast<int16_t>(std::max<int>(data.duration, 1));
@@ -615,18 +721,25 @@ void AddZone(const Player &player, const TableSkillData &data, Point center, int
 	// A granted skill's zone (Solar Orb) is one at a time: a new one replaces the old.
 	if (IsGrantedTableSkill(data))
 		Zones.erase(std::remove_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }), Zones.end());
-	// Traps and sentries: only a few of each can be out at once (MaxPlacedTraps, 2 more with Endless Horde, Curtis
-	// 2026-10-29); Thunderstorm, Blessed Hammer and Blizzard one. The oldest goes.
-	int limit = 0;
-	if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret))
-		limit = SupportTrapLimit(player, SkillSlot::ForAttack(data.skill));
-	else if (IsAnyOf(data.skill, WeaponSkill::Thunderstorm, WeaponSkill::BlessedHammer, WeaponSkill::Blizzard))
-		limit = SupportZoneLimit(player, SkillSlot::ForAttack(data.skill), MaxStackingZones);
-	if (limit > 0) {
-		while (std::count_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }) >= limit)
-			Zones.erase(std::find_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }));
+	// Traps and sentries: only a few of each can be out at once; Thunderstorm, Blessed Hammer and Blizzard one. The
+	// oldest goes, and its effects with it.
+	if (const int limit = ZoneLimit(player, data); limit > 0) {
+		while (std::count_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; }) >= limit) {
+			const auto oldest = std::find_if(Zones.begin(), Zones.end(), [&](const SkillZone &other) { return other.skill == data.skill; });
+			vfx::EndKeyed(oldest->key);
+			Zones.erase(oldest);
+		}
 	}
 	Zones.push_back(zone);
+	// The poison skills' effects that start with the cast: a throw in the air, the effigy, the bog, the gathering acid.
+	if ((data.flags & TF_Lobbed) != 0)
+		vfx::Lob(player.position.tile, center, delay * gnTickDelay, LobKindOf(data));
+	else if (data.zone == TableZone::Turret && (data.flags & TF_PoisonedOnly) != 0)
+		vfx::Effigy(center, zone.ticksLeft * gnTickDelay, zone.key);
+	else if (data.zone == TableZone::Bog)
+		vfx::Miasma(center, std::max<int>(data.radius, 1), zone.ticksLeft * gnTickDelay, vfx::MiasmaKind::Bog, zone.key);
+	else if (data.zone == TableZone::PoisonGround && delay > 0 && (data.flags & TF_Spell) != 0)
+		vfx::AcidRain(center, std::max<int>(data.radius, 1), delay * gnTickDelay);
 	// A delayed blast draws its rune circle on the ground while it charges.
 	if (data.zone == TableZone::Delayed)
 		vfx::Sigil(center, std::max<int>(data.radius, 1), delay * gnTickDelay, LookOf(data));
@@ -711,6 +824,9 @@ void AreaSpellHit(const Player &player, const TableSkillData &data, Monster &mon
 	// Blood Nova: the hit bleeds for GrantedBleedPercent of itself over 5 seconds, as the granted blood bolts do.
 	if ((data.flags & TF_Bleed) != 0)
 		InflictTableBleed(player, monster, data.skill, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(hit.raw()) * GrantedBleedPercent / 100)), GrantedBleedTicks);
+	// The poison skills' bursts and novas poison what they hit, of the row's strength.
+	if ((data.flags & TF_Poison) != 0)
+		InflictPoison(player, monster, TablePoisonTotal(hit, data), PoisonTicks, TablePoisonStacks(data));
 }
 
 /**
@@ -789,7 +905,7 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	// A spell's bolt borrows a flare's look but keeps its own element, and a physical one looks like bone or blood.
 	if (spell) {
 		missile->poe2.damageType = static_cast<int8_t>(data.type);
-		if (data.type == DamageType::Physical)
+		if (data.type == DamageType::Physical || LookOf(data) == vfx::Element::Poison)
 			missile->poe2.vfxElement = static_cast<int8_t>(LookOf(data));
 	}
 	// A per-target skill's projectiles hit each monster once a cast, the first in full (GrantedMissileTargetPercent).
@@ -809,6 +925,9 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 		SkillZone zone { data.skill, target, 1, static_cast<int16_t>(ticks), 0, LandingBurstDamage(player, data), static_cast<int8_t>(std::min<int>(data.radius, INT8_MAX)) };
 		Zones.push_back(zone);
 	}
+	// Thornvine Arrow: the vine grows where the arrow comes down, poisoning with the arrow's hit.
+	if ((data.flags & TF_LandingZone) != 0)
+		AddZone(player, data, LastTileInSight(from, target), std::clamp<int>(from.WalkingDistance(target) * 2, 2, 30), true);
 	return missile;
 }
 
@@ -920,11 +1039,32 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		InflictTableChaos(player, monster, data.skill, FixedDamage(player, data), ticks);
 		break;
 	case TableCurse::Locust:
+		// The poison skills plan: its plague is a poison now, with no hit of its own, so Deadly Venom has nothing to add.
 		state.locustTicks = ticks;
-		InflictTableChaos(player, monster, data.skill, FixedDamage(player, data), ticks);
+		InflictPoison(player, monster, FixedDamage(player, data).raw(), ticks, 1, false);
 		break;
 	default:
 		break;
+	}
+	// Rathma's Doom and Festering Hex: a curse cast by hand bursts as it runs out, or poisons while it lasts.
+	if (CurseTicks(state, data.curse) != nullptr) {
+		const SkillSlot slot = SkillSlot::ForAttack(data.skill);
+		const uint16_t bit = AuraCurseBit(data.curse);
+		const bool doom = player.poe2.hasSupport(slot, SupportGem::RathmasDoom);
+		const bool fester = player.poe2.hasSupport(slot, SupportGem::FesteringHex);
+		state.doomCurses = static_cast<uint16_t>(doom ? state.doomCurses | bit : state.doomCurses & ~bit);
+		state.festerCurses = static_cast<uint16_t>(fester ? state.festerCurses | bit : state.festerCurses & ~bit);
+		if (doom || fester) {
+			const int gemLevel = GemLevel(player, data.skill);
+			const int64_t base = static_cast<int64_t>(SpellBase(player, gemLevel)) * 64 * FireballCurvePercent(312, gemLevel) / 100;
+			state.curseSupportSource = static_cast<int8_t>(player.getId());
+			if (doom)
+				state.doomDamage = static_cast<int32_t>(std::min<int64_t>(base * RathmasDoomPercent / 100, INT32_MAX / 2));
+			if (fester) {
+				state.festerPoison = static_cast<int32_t>(std::min<int64_t>(base * FesteringHexPercent * PoisonTicks / 20 / 100, INT32_MAX / 2));
+				state.festerTicks = 0;
+			}
+		}
 	}
 	monster.tag(player);
 	AddVisualEffect(monster.position.tile, data.effect);
@@ -985,8 +1125,10 @@ void RuptureHexes(const Player &player, const TableSkillData &data, Point target
 			struck.push_back(other);
 			AreaSpellHit(player, data, *other, damage);
 		}
-		// The curse goes with its burst: its icon leaves the banner.
+		// The curse goes with its burst: its icon leaves the banner. Burst, it doesn't run out: no doom.
 		*CurseTicks(monster->poe2, curse) = 0;
+		monster->poe2.doomCurses &= static_cast<uint16_t>(~AuraCurseBit(curse));
+		monster->poe2.festerCurses &= static_cast<uint16_t>(~AuraCurseBit(curse));
 	}
 	if (!hexes.empty())
 		PlaySkillSound(TableSkillSounds(data).spell, target);
@@ -1029,6 +1171,54 @@ std::span<const TableSkillData> TableSkills()
 int TablePoisonPercentPerSecond(const TableSkillData &data)
 {
 	return data.poisonPercent > 0 ? data.poisonPercent : PoisonPercentPerSecond;
+}
+
+int TablePoisonStacks(const TableSkillData &data)
+{
+	return std::max<int>(data.poisonStacks, 1);
+}
+
+bool ArrowCrossedBog(const Player &player, Point from, Point to)
+{
+	// The zones are the local hero's own.
+	if (!gbIsPoe2 || &player != MyPlayer)
+		return false;
+	std::vector<const SkillZone *> bogs;
+	for (const SkillZone &zone : Zones) {
+		const TableSkillData *data = FindTableSkill(zone.skill);
+		if (data != nullptr && data->zone == TableZone::Bog && zone.delay == 0)
+			bogs.push_back(&zone);
+	}
+	if (bogs.empty())
+		return false;
+	Point step = from;
+	for (int guard = 0; guard < 64; guard++) {
+		for (const SkillZone *bog : bogs) {
+			if (step.ExactDistance(bog->center) <= bog->radius)
+				return true;
+		}
+		if (step == to)
+			break;
+		step = step + GetDirection(step, to);
+	}
+	return false;
+}
+
+std::vector<Point> PodTiles(Point from, Point target, int count)
+{
+	std::vector<Point> tiles { target };
+	const Displacement side { Left(Left(GetDirection(from, target))) };
+	for (int i = 1; static_cast<int>(tiles.size()) < count && i <= 2 * count; i++) {
+		const Point at = target + side * (PodSpreadTiles * ((i + 1) / 2) * (i % 2 == 1 ? 1 : -1));
+		// A pod that would land in a wall lands on the target instead.
+		tiles.push_back(InDungeonBounds(at) && !IsTileSolid(at) ? at : target);
+	}
+	return tiles;
+}
+
+bool PoisonedBy(const Monster &monster, const Player &player)
+{
+	return monster.poe2.poisonTicks > 0 && monster.poe2.poisonSource == static_cast<int8_t>(player.getId());
 }
 
 Displacement BoneSpikesSide(Direction dir)
@@ -1144,12 +1334,14 @@ bool IsTableMeleeSkill(const TableSkillData &data)
 
 bool IsTableProjectileSkill(const TableSkillData &data)
 {
-	return IsAnyOf(data.shape, Projectiles, Stream) || data.zone == TableZone::Turret || data.zone == TableZone::ShardRing;
+	// Acid Flask's flask and Bloated Pods' pods fly as projectiles; Venom Sentry's canister is set down as a trap.
+	return IsAnyOf(data.shape, Projectiles, Stream) || data.zone == TableZone::Turret || data.zone == TableZone::ShardRing
+	    || ((data.flags & TF_Lobbed) != 0 && data.zone != TableZone::GasTrap);
 }
 
 bool IsTableAreaSkill(const TableSkillData &data)
 {
-	return IsAnyOf(data.shape, Around, Burst, Dash, Line, Zone, Curse, CorpseBurst, CallOfTheAncients, HexBurst) || (data.flags & (TF_LandingBurst | TF_PoisonBurst)) != 0;
+	return IsAnyOf(data.shape, Around, Burst, Dash, Line, Zone, Curse, CorpseBurst, CallOfTheAncients, HexBurst) || (data.flags & (TF_LandingBurst | TF_PoisonBurst | TF_LandingZone)) != 0;
 }
 
 bool StartTableSkill(Player &player, const TableSkillData &data)
@@ -1157,7 +1349,7 @@ bool StartTableSkill(Player &player, const TableSkillData &data)
 	// Checks that need the world; the caller pays for and starts the skill.
 	// Sacrifice: the hero's skeletons count as corpses.
 	if (data.shape == CorpseBurst && !CorpseNear(SkillTargetTile(player), data.radius) && SacrificeMinionNear(player, SkillTargetTile(player), data.radius) == nullptr) {
-		EventPlrMsg(_("Corpse Explosion needs a corpse near the target."), UiFlags::ColorRed);
+		EventPlrMsg(data.skill == WeaponSkill::PoisonExplosion ? _("Poison Explosion needs a corpse near the target.") : _("Corpse Explosion needs a corpse near the target."), UiFlags::ColorRed);
 		return false;
 	}
 	if (data.shape == SoulHarvest && !CorpseNear(player.position.tile, data.radius) && SacrificeMinionNear(player, player.position.tile, data.radius) == nullptr) {
@@ -1381,9 +1573,17 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		if (data.zone == TableZone::IceSpike)
 			target = IceSpikeCenter(player, data, target);
 		// POE2 Mashup: a trap or sentry goes where the hero can see, never past a wall or a closed door (Curtis 2026-10-29).
-		if (IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret) && (data.flags & TF_AtPlayer) == 0)
+		// So does what the hero throws.
+		if ((IsAnyOf(data.zone, TableZone::Trap, TableZone::Turret) || (data.flags & TF_Lobbed) != 0) && (data.flags & TF_AtPlayer) == 0)
 			target = LastTileInSight(tile, target);
-		AddZone(player, data, (data.flags & TF_AtPlayer) != 0 ? tile : target, data.delay);
+		if (data.zone == TableZone::Pod) {
+			// Bloated Pods: the pods land in a spread across the shot, one after another.
+			int order = 0;
+			for (const Point at : PodTiles(tile, target, data.count))
+				AddZone(player, data, at, LobTicks(tile, at) + order++);
+			break;
+		}
+		AddZone(player, data, (data.flags & TF_AtPlayer) != 0 ? tile : target, data.delay + ((data.flags & TF_Lobbed) != 0 ? LobTicks(tile, target) : 0));
 		break;
 	case Curse:
 		if (data.radius == 0) {
@@ -1450,18 +1650,29 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	case HexBurst:
 		RuptureHexes(player, data, target);
 		break;
-	case CorpseBurst:
+	case CorpseBurst: {
+		std::optional<Point> at;
 		if (const std::optional<Point> corpse = CorpseNear(target, data.radius); corpse) {
 			dCorpse[corpse->x][corpse->y] = 0;
-			ZoneBurst(player, data, *corpse, data.radius, FixedDamage(player, data));
-			PlaySkillSound(TableSkillSounds(data).spell, *corpse);
+			at = corpse;
 		} else if (Monster *skeleton = SacrificeMinionNear(player, target, data.radius); skeleton != nullptr) {
-			const Point at = skeleton->position.tile;
+			at = skeleton->position.tile;
 			SacrificeMinion(*skeleton);
-			ZoneBurst(player, data, at, data.radius, FixedDamage(player, data));
-			PlaySkillSound(TableSkillSounds(data).spell, at);
+		}
+		if (!at)
+			break;
+		ZoneBurst(player, data, *at, data.radius, FixedDamage(player, data));
+		PlaySkillSound(TableSkillSounds(data).spell, *at);
+		// Poison Explosion: the body bursts in green and leaves a cloud that poisons for 2 seconds.
+		if (data.zone == TableZone::PoisonGround) {
+			vfx::Impact(*at, vfx::Element::Poison, 1.6F);
+			vfx::Nova(*at, std::max<int>(data.radius, 1), vfx::Element::Poison);
+			if (&player == MyPlayer)
+				ShakeCamera(ShakeStrength::Medium, 5);
+			AddZone(player, data, *at, 0, true);
 		}
 		break;
+	}
 	case SoulHarvest: {
 		int souls = 0;
 		for (int y = -data.radius; y <= data.radius && souls < MaxSouls; y++) {
@@ -1570,11 +1781,27 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 	if (!gbIsPoe2)
 		return;
 	const SkillSlot skill = MissileSkill(missile);
+	const TableSkillData *data = skill.kind == SkillKind::Attack ? FindTableSkill(static_cast<WeaponSkill>(skill.id)) : nullptr;
+	// The poison of the hit: physical and chaos before the monster's defences, or what the projectile dealt.
+	const auto poisonBase = [&]() {
+		const int32_t base = SupportHitPoisonBase(monster);
+		const int64_t raw = isDamageShifted ? damage : static_cast<int64_t>(damage) * 64;
+		return Fixed26_6::fromRaw(base > 0 ? base : static_cast<int32_t>(std::clamp<int64_t>(raw, 1, INT32_MAX / 2)));
+	};
+	// Witch's Bog: the hero's own arrows shot from or over it poison what they hit; a turret's or a minion's don't.
+	const bool heroArrow = IsAnyOf(missile._mitype, MissileID::Arrow, MissileID::FireArrow, MissileID::LightningArrow) && !missile.poe2.minionShot
+	    && (data == nullptr || data->shape != Zone);
+	if (heroArrow && CanHit(monster) && ArrowCrossedBog(player, missile.position.start, monster.position.tile)) {
+		if (const TableSkillData *bog = FindTableSkill(WeaponSkill::WitchsBog); bog != nullptr && SupportHitPoisonBase(monster) > 0)
+			InflictPoison(player, monster, TablePoisonTotal(Fixed26_6::fromRaw(SupportHitPoisonBase(monster)), *bog), PoisonTicks);
+	}
 	if (skill.kind != SkillKind::Attack)
 		return;
-	const TableSkillData *data = FindTableSkill(static_cast<WeaponSkill>(skill.id));
 	if (data != nullptr && (data->flags & TF_PoisonBurst) != 0)
 		PoisonBurst(player, monster, *data);
+	// Venom Bolt: the bolt's poison, of the row's strength.
+	if (data != nullptr && (data->flags & (TF_Spell | TF_Poison)) == (TF_Spell | TF_Poison) && CanHit(monster))
+		InflictPoison(player, monster, TablePoisonTotal(poisonBase(), *data), PoisonTicks, TablePoisonStacks(*data));
 	// Bone Spear: each enemy it runs through bursts in splinters as it flies on.
 	if (data != nullptr && !IsGrantedTableSkill(*data) && (data->flags & TF_Spell) != 0 && (data->flags & TF_Pierce) != 0) {
 		AddVisualEffect(monster.position.tile, data->effect);
@@ -1698,6 +1925,9 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 			case vfx::Element::Bone:
 				flash = MissileGraphicID::BoneHit;
 				break;
+			case vfx::Element::Poison:
+				flash = MissileGraphicID::AcidSplat;
+				break;
 			default:
 				flash = MissileGraphicID::HolyBoltExplosion;
 				break;
@@ -1723,6 +1953,9 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	case Flurry:
 		AddVisualEffect(tile + dir, data.effect, 1, 4);
 		vfx::SwingAs(tile, tile + dir, LookOf(data), WeaponSwingStyle(player), HoldsHeavyWeapon(player), WeaponElementLook(player));
+		// A poisoned blade spits venom where it goes in.
+		if (LookOf(data) == vfx::Element::Poison)
+			vfx::Impact(tile + dir, vfx::Element::Poison, 0.7F);
 		break;
 	case Arc:
 		if (WeaponSwingStyle(player) == vfx::SwingStyle::Chop)
@@ -1762,6 +1995,14 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 				for (int i = 0; i < 8; i++)
 					vfx::BoneSpikes(tile + Displacement { static_cast<Direction>(i) } * radius, 40 + 15 * i, 0.5F);
 			}
+			if (mine)
+				ShakeCamera(ShakeStrength::Medium, 5);
+			break;
+		}
+		if ((data.flags & TF_Spell) != 0 && LookOf(data) == vfx::Element::Poison) {
+			// Poison Nova: a heavy green wave rolls out, flinging venom, and leaves the floor stained and steaming.
+			vfx::Impact(tile, vfx::Element::Poison, 1.5F);
+			vfx::Nova(tile, std::max<int>(data.radius, 1), vfx::Element::Poison);
 			if (mine)
 				ShakeCamera(ShakeStrength::Medium, 5);
 			break;
@@ -1811,6 +2052,10 @@ vfx::Element TableSkillLook(const TableSkillData &data)
 		if (data.effect == MissileGraphicID::BloodHit)
 			return vfx::Element::Blood;
 	}
+	// The poison skills are sickly green, whatever their hit: Cobra Strike and Plague Arrow with them.
+	if ((data.flags & (TF_Poison | TF_PoisonBurst)) != 0 || IsAnyOf(data.zone, TableZone::PoisonGround, TableZone::GasTrap, TableZone::Pod, TableZone::Bog)
+	    || (data.flags & TF_PoisonedOnly) != 0 || data.curse == TableCurse::Locust)
+		return vfx::Element::Poison;
 	return vfx::ElementOf(data.type, spell);
 }
 
@@ -1961,6 +2206,37 @@ SkillSounds TableSkillSounds(const TableSkillData &data)
 		// Set down by hand, not shot.
 		sounds.cast = Sfx(SfxID::Swing);
 		break;
+	// The poison skills: what's thrown lands with a splash or a clank, and bursts with a wet splat.
+	case WeaponSkill::AcidFlask:
+		sounds.spell = Sfx(SfxID::ItemPotion);
+		sounds.hit = Sfx(SfxID::SpellAcid1);
+		break;
+	case WeaponSkill::VenomSentry:
+		sounds.spell = Sfx(SfxID::SpellTrapDisarm);
+		sounds.hit = Sfx(SfxID::SpellAcid);
+		break;
+	case WeaponSkill::BloatedPods:
+		sounds.cast = Sfx(SfxID::ShootBow2);
+		sounds.spell = Sfx(SfxID::SpellPuddle);
+		sounds.hit = Sfx(SfxID::SpellAcid1);
+		break;
+	case WeaponSkill::ThornvineArrow:
+		sounds.hit = Sfx(SfxID::SpellStoneCurse);
+		break;
+	case WeaponSkill::PlagueEffigy:
+		// It is driven into the ground; then it shoots.
+		sounds.spell = Sfx(SfxID::SpellStoneCurse);
+		break;
+	case WeaponSkill::WitchsBog:
+		sounds.spell = Sfx(SfxID::SpellPuddle);
+		break;
+	case WeaponSkill::PoisonNova:
+		sounds.spell = Sfx(SfxID::SpellNova);
+		break;
+	case WeaponSkill::AcidCloud:
+		sounds.spell = Sfx(SfxID::SpellAcid);
+		sounds.hit = Sfx(SfxID::SpellAcid1);
+		break;
 	default:
 		break;
 	}
@@ -2031,8 +2307,107 @@ std::optional<SfxID> SkillMissileLandSound(const Missile &missile)
 	return std::nullopt;
 }
 
+namespace {
+
+vfx::MiasmaKind MiasmaOf(const TableSkillData &data)
+{
+	return data.skill == WeaponSkill::PoisonExplosion ? vfx::MiasmaKind::Gas : vfx::MiasmaKind::Acid;
+}
+
+/** @brief Poisoned ground comes down: an acid pool bursts as the flask breaks or the rain lands; a vine or a cloud just grows. */
+void PoisonGroundLands(Player &player, const TableSkillData &data, const SkillZone &zone)
+{
+	const int radius = std::max<int>(zone.radius, 1);
+	const int ms = zone.ticksLeft * gnTickDelay;
+	if ((data.flags & TF_LandingZone) != 0) {
+		vfx::Thorns(zone.center, radius, ms, zone.key);
+		vfx::Impact(zone.center, vfx::Element::Poison, 0.8F);
+	} else {
+		vfx::Miasma(zone.center, radius, ms, MiasmaOf(data), zone.key);
+	}
+	if (zone.cloud)
+		return;
+	ZoneBurst(player, data, zone.center, radius, zone.damage);
+	vfx::Impact(zone.center, vfx::Element::Poison, 1.3F);
+	// A thrown flask's breaking waited for it to land (ZoneSoundsAtBurst).
+	if ((data.flags & TF_Lobbed) != 0)
+		PlaySkillSound(TableSkillSounds(data).spell, zone.center);
+	PlayTableSkillHitSound(data, zone.center);
+	if (&player == MyPlayer)
+		ShakeCamera(ShakeStrength::Light, 4);
+}
+
+/**
+ * @brief Poisoned ground's pulse: everything in it is poisoned of the hit it came with (no hit of its own, so Deadly
+ * Venom adds nothing), and the vine hinders; the bog only hinders.
+ */
+void PoisonGroundPulse(Player &player, const TableSkillData &data, const SkillZone &zone)
+{
+	std::vector<Monster *> inside;
+	ForEachMonsterNear(zone.center, std::max<int>(zone.radius, 1), [&](Monster &monster) { inside.push_back(&monster); });
+	for (Monster *monster : inside) {
+		if (data.zone == TableZone::Bog) {
+			HinderMonster(*monster, WitchsBogHinderPercent);
+			continue;
+		}
+		InflictPoison(player, *monster, TablePoisonTotal(zone.damage, data), PoisonTicks, TablePoisonStacks(data), false);
+		if ((data.flags & TF_LandingZone) != 0)
+			HinderMonster(*monster, ThornvineHinderPercent);
+		monster->tag(player);
+	}
+}
+
+/** @brief Rathma's Doom: a curse that ran out bursts in poison around its monster. */
+void DoomBurst(Player &player, Monster &cursed)
+{
+	Poe2MonsterState &state = cursed.poe2;
+	const Point center = cursed.position.tile;
+	const Fixed26_6 damage = Fixed26_6::fromRaw(std::max<int32_t>(state.doomDamage, 64));
+	const int32_t poison = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(damage.raw()) * RathmasDoomPoisonPercent * PoisonTicks / 20 / 100, INT32_MAX / 2));
+	AddVisualEffect(center, MissileGraphicID::AcidSplat, 0, 4);
+	vfx::Impact(center, vfx::Element::Poison, 1.4F);
+	vfx::Nova(center, RathmasDoomRadius, vfx::Element::Poison);
+	PlaySfxLoc(SfxID::SpellAcid1, center);
+	std::vector<Monster *> around;
+	ForEachMonsterNear(center, RathmasDoomRadius, [&](Monster &monster) { around.push_back(&monster); });
+	for (Monster *monster : around) {
+		SpellHitMonster(player, *monster, DamageType::Chaos, damage, AilmentSource::Spell);
+		if (CanHit(*monster))
+			InflictPoison(player, *monster, poison, PoisonTicks);
+	}
+}
+
+} // namespace
+
+void ProcessCurseSupports(Player &player)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || leveltype == DTYPE_TOWN)
+		return;
+	const auto id = static_cast<int8_t>(player.getId());
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		Monster &monster = Monsters[ActiveMonsters[i]];
+		Poe2MonsterState &state = monster.poe2;
+		if (state.curseSupportSource != id || !CanHit(monster))
+			continue;
+		// Festering Hex: a 2 second poison, renewed each second while the curse lasts.
+		if (state.festerCurses != 0 && state.festerTicks == 0) {
+			state.festerTicks = static_cast<uint8_t>(FesteringHexEvery);
+			InflictPoison(player, monster, state.festerPoison, PoisonTicks, 1, false);
+			monster.tag(player);
+		}
+		if (state.doomPending) {
+			state.doomPending = false;
+			if (state.doomCooldown == 0) {
+				state.doomCooldown = static_cast<uint8_t>(RathmasDoomCooldownTicks);
+				DoomBurst(player, monster);
+			}
+		}
+	}
+}
+
 void ProcessSkillZones(Player &player)
 {
+	ProcessCurseSupports(player);
 	// The skills' hit sounds come round again (see PlayTableSkillHitSound).
 	for (uint8_t &cooldown : HitSoundCooldown) {
 		if (cooldown > 0)
@@ -2060,6 +2435,8 @@ void ProcessSkillZones(Player &player)
 	if (Zones.empty())
 		return;
 	if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
+		for (const SkillZone &zone : Zones)
+			vfx::EndKeyed(zone.key);
 		Zones.clear();
 		return;
 	}
@@ -2115,6 +2492,42 @@ void ProcessSkillZones(Player &player)
 				} else if (zone.counter % 20 == 0) {
 					AddVisualEffect(zone.center, MissileGraphicID::MetalHit);
 				}
+			} else if (data->zone == TableZone::GasTrap && !zone.armed) {
+				// Venom Sentry: the canister waits for an enemy to come close, then bursts into a cloud of gas.
+				if (zone.counter == 0) {
+					vfx::Canister(zone.center, VenomSentryArmTicks * gnTickDelay, zone.key);
+					PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
+				}
+				if (TargetMonsterNear(zone.center, radius) != nullptr) {
+					zone.armed = true;
+					zone.counter = -1;
+					vfx::EndKeyed(zone.key);
+					vfx::Miasma(zone.center, radius, zone.ticksLeft * gnTickDelay, vfx::MiasmaKind::Gas, zone.key);
+					vfx::Impact(zone.center, vfx::Element::Poison, 1.2F);
+					PlayTableSkillHitSound(*data, zone.center);
+				}
+			} else if (data->zone == TableZone::GasTrap) {
+				if (zone.counter % std::max<int>(data->interval, 1) == 0)
+					ZoneBurst(player, *data, zone.center, radius, zone.damage);
+			} else if (data->zone == TableZone::Pod) {
+				// Bloated Pods: a pod lands and swells, and bursts when an enemy comes next to it or its time runs out.
+				if (zone.counter == 0) {
+					vfx::Pod(zone.center, zone.ticksLeft * gnTickDelay, zone.key);
+					vfx::Impact(zone.center, vfx::Element::Poison, 0.5F);
+					PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
+				}
+				if (TargetMonsterNear(zone.center, PodTriggerTiles) != nullptr || zone.ticksLeft <= 1) {
+					ZoneBurst(player, *data, zone.center, std::max<int>(radius, 1), zone.damage);
+					vfx::EndKeyed(zone.key);
+					vfx::Impact(zone.center, vfx::Element::Poison, 1.1F);
+					PlayTableSkillHitSound(*data, zone.center);
+					done = true;
+				}
+			} else if (IsAnyOf(data->zone, TableZone::PoisonGround, TableZone::Bog)) {
+				if (zone.counter == 0 && data->zone == TableZone::PoisonGround)
+					PoisonGroundLands(player, *data, zone);
+				if (zone.counter % std::max<int>(data->interval, 1) == 0)
+					PoisonGroundPulse(player, *data, zone);
 			} else if (zone.counter % std::max<int>(data->interval, 1) == 0) {
 				switch (data->zone) {
 				case TableZone::Pulse:
@@ -2139,27 +2552,41 @@ void ProcessSkillZones(Player &player)
 						PlayTableSkillHitSound(*data, monster->position.tile);
 					}
 					break;
-				case TableZone::Turret:
-					if (Monster *monster = TargetMonsterNear(zone.center, radius); monster != nullptr) {
+				case TableZone::Turret: {
+					// Plague Effigy shoots only the enemies the hero's poison is on.
+					const bool poisoned = (data->flags & TF_PoisonedOnly) != 0;
+					if (Monster *monster = poisoned ? PoisonedMonsterNear(player, zone.center, radius) : TargetMonsterNear(zone.center, radius); monster != nullptr) {
 						FireTableMissile(player, *data, zone.center, monster->position.tile);
-						AddVisualEffect(zone.center, MissileGraphicID::MetalHit);
+						if (poisoned)
+							vfx::EffigyShot(zone.center);
+						else
+							AddVisualEffect(zone.center, MissileGraphicID::MetalHit);
 						PlayTableSkillHitSound(*data, zone.center);
 					}
 					break;
+				}
 				default:
 					break;
 				}
 			}
 			zone.counter++;
-			if (--zone.ticksLeft <= 0 && data->zone != TableZone::Trap)
+			// A sentry waiting for an enemy keeps its cloud's time, and is gone if none comes.
+			const bool waiting = data->zone == TableZone::GasTrap && !zone.armed;
+			if (waiting) {
+				if (zone.counter > VenomSentryArmTicks)
+					done = true;
+			} else if (--zone.ticksLeft <= 0 && data->zone != TableZone::Trap) {
 				done = true;
+			}
 			if (data->zone == TableZone::Trap && zone.counter > data->duration)
 				done = true;
 		}
-		if (done)
+		if (done) {
+			vfx::EndKeyed(Zones[i].key);
 			Zones.erase(Zones.begin() + static_cast<std::ptrdiff_t>(i));
-		else
+		} else {
 			i++;
+		}
 	}
 }
 
@@ -2227,6 +2654,31 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 void ProcessTableCurses(Monster &monster)
 {
 	Poe2MonsterState &state = monster.poe2;
+	// Rathma's Doom: a hand-cast curse running out on a living monster bursts (ProcessCurseSupports), on its caster's
+	// machine. Blasphemy's aura curses don't, nor one Hex Rupture burst.
+	if ((state.doomCurses | state.festerCurses) != 0) {
+		for (const TableCurse curse : { TableCurse::Weaken, TableCurse::IronMaiden, TableCurse::Decrepify, TableCurse::LowerResist, TableCurse::DeathMark, TableCurse::Despair }) {
+			const uint8_t left = *CurseTicks(state, curse);
+			const auto bit = AuraCurseBit(curse);
+			if (left == 0 || (state.auraCurses & bit) != 0) {
+				state.doomCurses &= static_cast<uint16_t>(~bit);
+				state.festerCurses &= static_cast<uint16_t>(~bit);
+				continue;
+			}
+			if (left == 1 && (state.doomCurses & bit) != 0) {
+				state.doomCurses &= static_cast<uint16_t>(~bit);
+				state.festerCurses &= static_cast<uint16_t>(~bit);
+				if (!monster.hasNoLife() && state.curseSupportSource == static_cast<int8_t>(MyPlayerId))
+					state.doomPending = true;
+			} else if (left == 1) {
+				state.festerCurses &= static_cast<uint16_t>(~bit);
+			}
+		}
+	}
+	if (state.festerTicks > 0)
+		state.festerTicks--;
+	if (state.doomCooldown > 0)
+		state.doomCooldown--;
 	for (uint8_t *ticks : { &state.weakenTicks, &state.decrepifyTicks, &state.ironMaidenTicks, &state.lowerResistTicks, &state.deathMarkTicks, &state.despairTicks, &state.hauntTicks, &state.locustTicks, &state.plagueTicks }) {
 		if (*ticks > 0)
 			(*ticks)--;
@@ -2267,26 +2719,43 @@ int TableCurseShownPercent(const Monster &monster, TableCurse curse)
 void OnTableCursedMonsterKilled(const Monster &monster)
 {
 	const Poe2MonsterState &state = monster.poe2;
-	if ((state.hauntTicks == 0 && state.locustTicks == 0 && state.plagueTicks == 0) || state.chaosSource < 0 || static_cast<size_t>(state.chaosSource) >= Players.size())
+	const Point from = monster.position.tile;
+	const auto nearest = [&](int range, size_t count) {
+		std::vector<Monster *> next;
+		ForEachMonsterNear(from, range, [&](Monster &other) {
+			if (&other != &monster)
+				next.push_back(&other);
+		});
+		std::sort(next.begin(), next.end(), [&](const Monster *a, const Monster *b) {
+			return from.WalkingDistance(a->position.tile) < from.WalkingDistance(b->position.tile);
+		});
+		if (next.size() > count)
+			next.resize(count);
+		return next;
+	};
+	// Locust Swarm's poison spreads to the nearest with the ticks it had left; a stronger poison there stays.
+	if (state.locustTicks > 0 && state.poisonTicks > 0 && state.poisonSource >= 0 && static_cast<size_t>(state.poisonSource) < Players.size()) {
+		const Player &player = Players[state.poisonSource];
+		for (Monster *other : nearest(LocustSpreadTiles, LocustSpreads)) {
+			Poe2MonsterState &target = other->poe2;
+			target.locustTicks = std::max<uint8_t>(target.locustTicks, state.locustTicks);
+			if (target.poisonTicks == 0 || state.poisonDamagePerTick >= target.poisonDamagePerTick) {
+				target.poisonTicks = target.poisonDamagePerTick == state.poisonDamagePerTick ? std::max<uint8_t>(target.poisonTicks, state.poisonTicks) : state.poisonTicks;
+				target.poisonDamagePerTick = state.poisonDamagePerTick;
+				target.poisonSource = state.poisonSource;
+			}
+			other->tag(player);
+			AddVisualEffect(other->position.tile, MissileGraphicID::AcidSplat);
+		}
+	}
+	if ((state.hauntTicks == 0 && state.plagueTicks == 0) || state.chaosSource < 0 || static_cast<size_t>(state.chaosSource) >= Players.size())
 		return;
 	const Player &player = Players[state.chaosSource];
-	const Point from = monster.position.tile;
 	const bool haunt = state.hauntTicks > 0;
-	// Decompose's plague passes to the one nearest monster, as a weaker Locust Swarm.
-	const bool plague = !haunt && state.locustTicks == 0;
-	const int range = haunt ? HauntJumpTiles : (plague ? PlagueSpreadTiles : LocustSpreadTiles);
-	std::vector<Monster *> next;
-	ForEachMonsterNear(from, range, [&](Monster &other) {
-		if (&other != &monster)
-			next.push_back(&other);
-	});
-	std::sort(next.begin(), next.end(), [&](const Monster *a, const Monster *b) {
-		return from.WalkingDistance(a->position.tile) < from.WalkingDistance(b->position.tile);
-	});
-	const size_t jumps = haunt || plague ? 1 : LocustSpreads;
-	if (next.size() > jumps)
-		next.resize(jumps);
-	const uint8_t ticks = haunt ? state.hauntTicks : (plague ? static_cast<uint8_t>(PlagueTicks) : state.locustTicks);
+	// Decompose's plague passes to the one nearest monster.
+	const bool plague = !haunt;
+	std::vector<Monster *> next = nearest(haunt ? HauntJumpTiles : PlagueSpreadTiles, 1);
+	const uint8_t ticks = haunt ? state.hauntTicks : static_cast<uint8_t>(PlagueTicks);
 	// Haunt is a spirit, not a wound (Curtis 2026-10-28: "is it a bleed skill, or a ghost?"): it leaves the body and
 	// shows up on the next one.
 	const MissileGraphicID look = haunt ? MissileGraphicID::BoneSpirit : MissileGraphicID::BloodHit;
@@ -2294,7 +2763,7 @@ void OnTableCursedMonsterKilled(const Monster &monster)
 		AddVisualEffect(from, look);
 	for (Monster *other : next) {
 		Poe2MonsterState &target = other->poe2;
-		(haunt ? target.hauntTicks : (plague ? target.plagueTicks : target.locustTicks)) = ticks;
+		(plague ? target.plagueTicks : target.hauntTicks) = ticks;
 		target.chaosTicks = std::max(target.chaosTicks, ticks);
 		target.chaosDamagePerTick = std::max(target.chaosDamagePerTick, state.chaosDamagePerTick);
 		target.chaosSource = state.chaosSource;

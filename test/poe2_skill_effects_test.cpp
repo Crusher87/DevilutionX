@@ -5,6 +5,7 @@
 #include "missiles.h"
 #include "player.h"
 #include "poe2/table_skills.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "utils/is_of.hpp"
 
@@ -79,6 +80,8 @@ TEST_F(Poe2SkillEffectsTest, EverySkillHasEffects)
 			continue; // Their volley is drawn by the effects layer alone, with no sprite.
 		if (IsGrantedSkill(skill) && FindTableSkill(skill) == nullptr)
 			continue; // A caster weapon's granted skill that isn't built yet.
+		if (const TableSkillData *data = FindTableSkill(skill); data != nullptr && (data->flags & TF_Spell) != 0 && data->shape != TableShape::Curse && TableSkillLook(*data) == vfx::Element::Poison)
+			continue; // The poison spells flash the acid beasts' splat, loaded with every level's graphics in game but not here.
 		Missiles.clear();
 		MyPlayer->position.tile = { 40, 40 };
 		PlaySkillEffects(*MyPlayer, skill, { 43, 40 });

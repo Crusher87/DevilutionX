@@ -349,8 +349,8 @@ TEST(Poe2WeaponSkills, SingleTargetMeleeSkillsHitHarder)
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Sacrifice)->damagePercent, 330);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->damagePercent, 95);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->count, 7);
-	// Locust Swarm: 120% over 5 s -> 130% over 2 s (40 game ticks).
-	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->damagePercent, 130);
+	// Locust Swarm: 120% over 5 s -> 130% over 2 s (40 game ticks); a poison at 165% since the poison skills plan.
+	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->damagePercent, 165);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->duration, 40);
 	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::BattleCry), "Knock back foes, +30% melee damage");
 }

@@ -485,6 +485,7 @@ void InflictBleed(const Player &player, Monster &monster, int32_t physical)
 		state.bleedSkill = WeaponSkill::None;
 	}
 	state.bleedTicks = BleedTicks;
+	NoteSupportedBleed(player, monster);
 }
 
 void CastRepeat(Player &player)
@@ -1206,7 +1207,9 @@ void ProcessUniqueMonsterAilments(Monster &monster)
 				credit.emplace(WeaponSkillName(state.bleedSkill), MyPlayer->poe2.skillLevel(state.bleedSkill), true);
 			else
 				TelemetryNoteDamageSource("bleeding");
-			ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(state.bleedDamagePerTick));
+			// Blood and Venom: the bleed deals more while the monster is poisoned.
+			const int32_t bleed = state.bleedVsPoison && state.poisonTicks > 0 ? Percent(state.bleedDamagePerTick, 100 + BloodAndVenomPercent) : state.bleedDamagePerTick;
+			ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(bleed));
 			if (monster.hasNoLife())
 				M_StartKill(monster, *MyPlayer);
 		}
@@ -1216,7 +1219,7 @@ void ProcessUniqueMonsterAilments(Monster &monster)
 		// A haunted monster shows its spirit; a plague its rot.
 		if (state.chaosTicks % 10 == 0)
 			AddVisualEffect(monster.position.tile, state.hauntTicks > 0 ? MissileGraphicID::BoneSpirit : MissileGraphicID::AcidSplat);
-		// Haunt's, Locust Swarm's and Decompose's chaos damage over time: Withered raises it, chaos resistance lowers it.
+		// Haunt's and Decompose's chaos damage over time: Withered raises it, chaos resistance lowers it.
 		if (state.chaosSource >= 0 && state.chaosSource == static_cast<int8_t>(MyPlayerId) && MyPlayer != nullptr) {
 			std::optional<TelemetrySkillCreditScope> credit;
 			if (state.chaosSkill != WeaponSkill::None)
@@ -1308,9 +1311,9 @@ bool IsMonsterElectrocuted(const Monster &monster)
 int MonsterHinderPercent(const Monster &monster)
 {
 	const Poe2MonsterState &state = monster.poe2;
-	// Caltrops and Herald of Plague.
+	// Caltrops and Herald of Plague; Thornvine Arrow's vine and Witch's Bog set their own.
 	if (gbIsPoe2 && state.hinderTicks > 0)
-		return HinderPercent;
+		return state.hinderPercent != 0 ? state.hinderPercent : HinderPercent;
 	if (!gbIsPoe2 || state.bleedTicks == 0 || state.bleedSource < 0 || static_cast<size_t>(state.bleedSource) >= Players.size())
 		return 0;
 	return Rule(Players[static_cast<size_t>(state.bleedSource)], UniqueRule::BleedHinder) > 0 ? HinderPercent : 0;

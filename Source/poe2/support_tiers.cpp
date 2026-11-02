@@ -173,6 +173,16 @@ constexpr SupportTierData Tiers[] = {
 	{ SG::Might, 1, 2, 120, { 30, 0, 0 }, "Power: 30% more physical damage, but no\nfire, cold, lightning or chaos. Mana +20%" },
 	// Bone Shrapnel: a pinned enemy's death bursts for 25% of its life as physical (radius 20, about 2 tiles).
 	{ SG::BoneSplinters, 1, 3, 120, { 25, 0, 0 }, "Enemies killed while trapped or heavily\nstunned burst for 25% of their life. Mana +20%" },
+	// The poison skills plan (Curtis 2026-11-02). Admixture: poison and bleeding deal 60% more on each other's target.
+	{ SG::BloodAndVenom, 1, 2, 120, { 60, 0, 0 }, "Poison deals 60% more to bleeding\nmonsters, bleeding 60% more to\npoisoned ones. Mana +20%" },
+	// Poison Spores: the chance a hit drops a pod, and the pod's burst in percent of the hit.
+	{ SG::SporePods, 1, 3, 120, { 20, 40, 0 }, "Hits have a 20% chance to drop a pod\nthat bursts in poison for 40% of the\nhit. Mana +20%" },
+	// Poisons last 100% longer and deal 20% less a second: x1.6 poison in all.
+	{ SG::LingeringVenom, 1, 3, 120, { 100, 20, 0 }, "Poisons last twice as long and deal\n20% less a second. Mana +20%" },
+	// Impending Doom: the burst in percent of the spell base, and its poison a second.
+	{ SG::RathmasDoom, 1, 4, 130, { 400, 40, 0 }, "The curse bursts in poison as it runs\nout, for 400% of spell damage. Mana +30%" },
+	// Decaying Hex: the poison a second in percent of the spell base.
+	{ SG::FesteringHex, 1, 2, 130, { 25, 0, 0 }, "Cursed monsters are poisoned for 25%\nof spell damage a second. Mana +30%" },
 };
 
 } // namespace

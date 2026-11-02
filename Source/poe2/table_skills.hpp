@@ -88,6 +88,17 @@ enum class TableZone : uint8_t {
 	ShardRing,
 	/** After `delay` ticks, an ice spike bursts out of the ground and hits everything in the radius once. */
 	IceSpike,
+	/**
+	 * Poisoned ground (an acid pool, a cloud, a vine): it lands with a burst of the skill's hit unless an arrow brought it,
+	 * then poisons everything in the radius every `interval` ticks with the skill's poison of that hit.
+	 */
+	PoisonGround,
+	/** A gas trap: waits for a monster to step within the radius, then puffs poison gas every `interval` ticks. */
+	GasTrap,
+	/** A pod: bursts when a monster steps next to it, or when its time runs out. */
+	Pod,
+	/** A bog around the hero: hinders the monsters in it, and the hero's arrows that cross it poison (Witch's Bog). */
+	Bog,
 };
 
 enum class TableWeapon : uint8_t {
@@ -181,7 +192,38 @@ enum TableFlag : uint32_t {
 	TF_PoisonBurst = 1 << 17,
 	/** Its hit traps the non-unique survivors (a heavy stun) for the skill's duration (Bone Prison). */
 	TF_Pin = 1 << 18,
+	/** The zone is thrown or shot over the enemies: it lands at the target after its flight (Acid Flask, the pods). */
+	TF_Lobbed = 1 << 19,
+	/** Where the projectile lands, it leaves the row's zone (Thornvine Arrow's vine). */
+	TF_LandingZone = 1 << 20,
+	/** A turret that shoots only the enemies the hero's poison is on (Plague Effigy). */
+	TF_PoisonedOnly = 1 << 21,
 };
+
+/** @brief Venom Sentry's trap waits this long for an enemy before it's gone; Bloated Pods' pods burst when their time runs out. */
+constexpr int VenomSentryArmTicks = 10 * 20;
+/** @brief Venom Sentry springs when an enemy comes this close; a pod bursts when one is next to it. */
+constexpr int PodTriggerTiles = 1;
+/** @brief Bloated Pods' pods land this many tiles apart, across the line of the shot. */
+constexpr int PodSpreadTiles = 2;
+/** @brief Thornvine Arrow's vine and Witch's Bog hinder what's in them, in percent; the hinder is renewed this often. */
+constexpr int ThornvineHinderPercent = 30;
+constexpr int WitchsBogHinderPercent = 15;
+constexpr int PoisonGroundHinderTicks = 12;
+/** @brief Acid Flask's and Acid Cloud's pools out at once; the oldest goes. */
+constexpr int AcidFlaskPools = 3;
+constexpr int AcidCloudPools = 2;
+/** @brief Rathma's Doom: a curse running out bursts for this percent of the spell base, radius 1, with this poison a second. */
+constexpr int RathmasDoomPercent = 400;
+constexpr int RathmasDoomRadius = 1;
+constexpr int RathmasDoomPoisonPercent = 40;
+/** @brief A monster takes at most one doom burst this often. */
+constexpr int RathmasDoomCooldownTicks = 20;
+/** @brief Festering Hex: the cursed are poisoned for this percent of the spell base a second, renewed this often. */
+constexpr int FesteringHexPercent = 25;
+constexpr int FesteringHexEvery = 20;
+/** @brief Locust Swarm (the poison skills plan): POE2's Contagion as a poison. */
+constexpr int LocustSwarmPercent = 165;
 
 /** @brief Bone Spear flies through this many enemies (in practice every one in its path); other piercing skills through 3. */
 constexpr int BoneSpearPierces = 20;
@@ -267,10 +309,25 @@ struct TableSkillData {
 	 * stronger poison have.
 	 */
 	uint8_t poisonPercent = 0;
+	/** How many of the skill's poisons count on a monster at once; 0 or 1 for the strongest only (Poison Dagger's 3). */
+	uint8_t poisonStacks = 0;
 };
 
 /** @brief A poisoning table skill's poison a second, in percent of the hit: the row's own, or POE2's common 20%. */
 [[nodiscard]] int TablePoisonPercentPerSecond(const TableSkillData &data);
+/** @brief How many of a table skill's poisons count on a monster at once: 1 unless the row says more. */
+[[nodiscard]] int TablePoisonStacks(const TableSkillData &data);
+/** @brief Whether a hero's arrow struck a monster in their Witch's Bog, was shot from it or flew over it on its way. */
+[[nodiscard]] bool ArrowCrossedBog(const Player &player, Point from, Point to);
+/**
+ * @brief The tiles Bloated Pods' pods land on: the target, then by twos either side of it across the line of the shot,
+ * PodSpreadTiles apart.
+ */
+[[nodiscard]] std::vector<Point> PodTiles(Point from, Point target, int count);
+/** @brief Whether the monster is poisoned by this hero (Plague Effigy shoots only those). */
+[[nodiscard]] bool PoisonedBy(const Monster &monster, const Player &player);
+/** @brief A doom burst or a hex poison the curses' supports have ready; once per game tick for the local player. */
+void ProcessCurseSupports(Player &player);
 
 /** @brief One tile of a Bone Spikes line: where, how many steps out from the hero, and whether it's the second column's. */
 struct BoneSpikesTile {

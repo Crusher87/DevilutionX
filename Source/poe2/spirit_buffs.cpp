@@ -295,6 +295,7 @@ void TickCaltrops(Player &player)
 			TelemetryNoteDamageSource("Trail of Caltrops");
 			AddVisualEffect(caltrop.position, MissileGraphicID::BloodHit);
 			stepped->poe2.hinderTicks = std::max<uint8_t>(stepped->poe2.hinderTicks, CaltropHinderTicks);
+			stepped->poe2.hinderPercent = 0;
 			HitMonster(player, *stepped, DamageType::Physical, WeaponHit(player, CaltropDamagePercent(level)));
 			Caltrops.erase(Caltrops.begin() + static_cast<std::ptrdiff_t>(i));
 			continue;

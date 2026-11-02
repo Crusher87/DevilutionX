@@ -141,8 +141,9 @@ TEST_F(Poe2TableSkillsTest, EveryTableSkillHasAGem)
 		ASSERT_TRUE(index.has_value()) << data.name;
 		EXPECT_EQ(AllItemsList[*index].iMinMLvl, data.level) << data.name;
 	}
-	// 55, then Despair (chaos damage plan step 11), Plague Arrow and Hex Rupture, then Bone Spikes, Bone Spear and Blood Nova.
-	EXPECT_EQ(gems, 61U);
+	// 55, then Despair (chaos damage plan step 11), Plague Arrow and Hex Rupture, then Bone Spikes, Bone Spear and Blood Nova,
+	// then the poison skills plan's eleven.
+	EXPECT_EQ(gems, 72U);
 }
 
 TEST_F(Poe2TableSkillsTest, TheTableCoversTheRestOfTheRoster)
@@ -304,8 +305,9 @@ TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
 		EXPECT_EQ(data.curveEnd, 312) << data.name;
 		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
 	}
-	// 12, then Hex Rupture, then Bone Prison, Bone Spikes, Bone Spear and Blood Nova.
-	EXPECT_EQ(spells, 17);
+	// 12, then Hex Rupture, then Bone Prison, Bone Spikes, Bone Spear and Blood Nova, then Venom Bolt, Poison Explosion,
+	// Poison Nova and Acid Cloud.
+	EXPECT_EQ(spells, 21);
 }
 
 TEST_F(Poe2TableSkillsTest, PulsingZonesHitOncePerInterval)

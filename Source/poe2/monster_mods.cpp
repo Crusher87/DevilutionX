@@ -267,8 +267,8 @@ void ProcessMonsterAilments(Monster &monster)
 
 	if (state.shockTicks > 0)
 		state.shockTicks--;
-	if (state.hinderTicks > 0)
-		state.hinderTicks--;
+	if (state.hinderTicks > 0 && --state.hinderTicks == 0)
+		state.hinderPercent = 0;
 	if (state.manaDrainTicks > 0)
 		state.manaDrainTicks--;
 	if (state.chillTicks > 0 && --state.chillTicks == 0) {

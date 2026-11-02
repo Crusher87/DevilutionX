@@ -102,6 +102,29 @@ struct Poe2MonsterState {
 	int32_t plagueStore = 0;
 	/** @brief Hindered by caltrops or Herald of Plague: slowed like a chill, in game ticks left. */
 	uint8_t hinderTicks = 0;
+	/** @brief How much the hinder slows, in percent; 0 for the usual HinderPercent (Witch's Bog's is milder; not saved). */
+	uint8_t hinderPercent = 0;
+	/**
+	 * @brief Blood and Venom (POE2's Admixture): the poison deals more while the monster bleeds, and the bleed more while
+	 * it is poisoned, when the skill that inflicted it had the support (not saved).
+	 */
+	bool poisonVsBleed = false;
+	bool bleedVsPoison = false;
+	/**
+	 * @brief Rathma's Doom and Festering Hex (not saved): the hand-cast curses (one bit for each TableCurse) that burst in
+	 * poison as they run out, or that poison the monster while it is cursed, and the player who cast them. The burst's
+	 * chaos hit and the hex's poison (raw Fixed26_6 values) are counted when the curse is cast.
+	 */
+	uint16_t doomCurses = 0;
+	uint16_t festerCurses = 0;
+	int8_t curseSupportSource = -1;
+	int32_t doomDamage = 0;
+	int32_t festerPoison = 0;
+	/** @brief Game ticks to Festering Hex's next poison, and until the monster can take another doom burst. */
+	uint8_t festerTicks = 0;
+	uint8_t doomCooldown = 0;
+	/** @brief A doomed curse ran out this tick: its burst goes off on the caster's machine (ProcessCurseSupports). */
+	bool doomPending = false;
 	/** @brief Attrition: game ticks the rare or unique monster has spent near the hero (not saved). */
 	uint16_t attritionTicks = 0;
 	/** @brief Raised by Revive: a minion that keeps the strength it had. */

@@ -148,3 +148,14 @@ HexRupture		0.8						Hexblast
 BoneSpikes		0.95						Unearth
 BoneSpear		0.9						Bonestorm
 BloodNova		0.8						none (Bone Cage and Exsanguinate)
+PoisonDagger	120							none (Diablo II Poison Dagger)
+AcidFlask	80							Gas Grenade
+VenomSentry	80							Gas Grenade
+ThornvineArrow	100							Vine Arrow
+BloatedPods	80							Toxic Growth
+PlagueEffigy	100							Dark Effigy
+WitchsBog		0.8						Toxic Domain
+VenomBolt		0.8						Essence Drain
+PoisonExplosion		0.8						Profane Ritual
+PoisonNova		1.0						none (Diablo II Poison Nova)
+AcidCloud		1.0						none (Diablo III Acid Cloud)

@@ -776,7 +776,7 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Azure Amulet	Amulet
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Ray of Frost Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Frozen Orb Gem	Gem	13	0	0	0	0	0	0	57	0		SKILLGEM_TABLE	Null	true	2140
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Haunt Gem	Gem	3	0	0	0	0	0	0	27	0		SKILLGEM_TABLE	Null	true	840
-	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Locust Swarm Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Locust Swarm Gem	Gem	10	0	0	0	0	0	0	48	0		SKILLGEM_TABLE	Null	true	1750
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Corpse Explosion Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Soul Harvest Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Prison Gem	Gem	5	0	0	0	0	0	0	33	0		SKILLGEM_TABLE	Null	true	1100
@@ -1032,3 +1032,19 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blood Nova Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Might Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Bone Splinters Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Poison Dagger Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Acid Flask Gem	Gem	12	0	0	0	0	0	0	0	54		SKILLGEM_TABLE	Null	true	2010
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Venom Sentry Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Thornvine Arrow Gem	Gem	10	0	0	0	0	0	0	0	48		SKILLGEM_TABLE	Null	true	1750
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bloated Pods Gem	Gem	15	0	0	0	0	0	0	0	63		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Plague Effigy Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Witch's Bog Gem	Gem	7	0	0	0	0	0	0	0	39		SKILLGEM_TABLE	Null	true	1360
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Venom Bolt Gem	Gem	1	0	0	0	0	0	0	21	0		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Poison Explosion Gem	Gem	8	0	0	0	0	0	0	42	0		SKILLGEM_TABLE	Null	true	1490
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Poison Nova Gem	Gem	22	0	0	0	0	0	0	84	0		SKILLGEM_TABLE	Null	true	3310
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Acid Cloud Gem	Gem	25	0	0	0	0	0	0	93	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blood and Venom Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Spore Pods Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Lingering Venom Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Rathma's Doom Support	Gem	10	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Festering Hex Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
