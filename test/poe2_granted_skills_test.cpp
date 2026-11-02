@@ -273,7 +273,8 @@ constexpr GrantRow PlainGrants[] = {
 
 /**
  * @brief A damage over time a use leaves that doesn't stack on one target: a monster holds one bleed and one chaos
- * damage over time, the strongest (InflictTableBleed, InflictTableChaos), and a new one only refreshes it.
+ * damage over time, the strongest (InflictTableBleed, InflictTableChaos), and a new one only refreshes it. A poison
+ * counts the same way here, the strongest only (InflictPoison), so a cloud or a nova cast again and again keeps one up.
  */
 struct NonStackingDot {
 	/** What it deals over its time, in percent of the hit. */
@@ -282,13 +283,18 @@ struct NonStackingDot {
 	int ticks;
 };
 
-/** @brief A spell's bleed (GrantedBleedPercent over GrantedBleedTicks) or Decompose's plague (the hit again over PlagueTicks). */
+/**
+ * @brief A spell's bleed (GrantedBleedPercent over GrantedBleedTicks), Decompose's plague (the hit again over
+ * PlagueTicks) or a poisoning skill's poison (its own strength a second, TablePoisonPercentPerSecond, over PoisonTicks).
+ */
 NonStackingDot DotRider(const TableSkillData &row)
 {
 	if ((row.flags & TF_Bleed) != 0)
 		return { GrantedBleedPercent, GrantedBleedTicks };
 	if (row.rider == GrantedRider::Plague)
 		return { 100, PlagueTicks };
+	if ((row.flags & (TF_Poison | TF_PoisonBurst)) != 0)
+		return { TablePoisonPercentPerSecond(row) * PoisonTicks / 20, PoisonTicks };
 	return { 0, 0 };
 }
 
@@ -1101,8 +1107,9 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	// Explosion lose bare only to Staff Bolt, the free bolt every staff has cast since before the rework. Glacial Spike
 	// (400%) came off the list with round 3 (Curtis 2026-10-28); Haunt (350%) now beats every free skill bare and loses
 	// only with supports (to Staff Bolt, and since Might to the physical free bolts). Locust Swarm came off the list with
-	// the poison skills plan (165%, was 130%). Poison Explosion and Poison Nova deal much of theirs as poison, which this
-	// doesn't count (the plan's numbers, Curtis 2026-11-02).
+	// the poison skills plan (165%, was 130%). A poison now counts once per target, the strongest only, over its 2
+	// seconds: Poison Nova came off the list with it (96% a second on one); Poison Explosion is still short of every free
+	// skill (about 50%), so it stays on until the balance thread prices it again.
 	enum class Excused : uint8_t {
 		/** Against every free skill. */
 		Everything,
@@ -1122,8 +1129,8 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 	} AllowList[] = {
 		// Might (physical spells plan) gives the physical free bolts 30% more with supports; Haunt's chaos can't take it.
 		{ WeaponSkill::Haunt, Excused::Supported, "a chaos damage over time (70% a second on one), which can't take Prismatic Focus as Staff Bolt can, nor Might as the physical free bolts can" },
-		{ WeaponSkill::PoisonExplosion, Excused::Everything, "a corpse burst (about 38% a second on one) whose cloud and poison, not counted here, deal the rest; it needs a corpse" },
-		{ WeaponSkill::PoisonNova, Excused::StaffBoltAndSupported, "a nova around the hero (60% a second on one) whose poison, 60% of the hit a second, isn't counted here; it can't take Prismatic Focus or Might" },
+		// Still short with its poison counted: the burst's 30% and one 2-second poison (40% a second) a 0.8-second cast.
+		{ WeaponSkill::PoisonExplosion, Excused::Everything, "a corpse burst whose poison counts once on one target (about 50% a second on one, 73% of Staff Bolt), pending the balance thread; it needs a corpse" },
 		{ WeaponSkill::Condemn, Excused::StaffBoltAndSupported, "a delayed burst all around the hero (about 56% a second on one); a shield spell, it can't take Measured Ritual" },
 		{ WeaponSkill::CorpseExplosion, Excused::StaffBolt, "an area burst for each corpse, which it needs (about 62% a second on one)" },
 	};
