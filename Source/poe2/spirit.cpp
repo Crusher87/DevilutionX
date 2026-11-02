@@ -33,6 +33,7 @@
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_skills.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -1456,6 +1457,7 @@ void ProcessPersistentSkills(Player &player)
 	}
 	ProcessMinionGems(player);
 	ProcessSpiritSkills(player);
+	ProcessSummonCommands(player);
 }
 
 } // namespace devilution

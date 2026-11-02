@@ -61,6 +61,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/spirit_uses.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -3546,6 +3547,11 @@ void ProcessArrow(Missile &missile)
 	MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), mind, maxd, true, false);
 	if (missile.duration == 0)
 		missile._miDelFlag = true;
+	// POE2 Mashup: Poison Arrow's arrow bursts where it hits, or at the tile it was aimed at.
+	if (missile.poe2.commandShot != 0 && (missile._miDelFlag || missile.position.tile == Point { missile.poe2.commandX, missile.poe2.commandY })) {
+		OnCommandShotLanded(missile);
+		missile._miDelFlag = true;
+	}
 	PutMissile(missile);
 }
 

@@ -830,6 +830,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/skill_gems.cpp
   poe2/skill_resources.cpp
   poe2/table_skills.cpp
+  poe2/summon_commands.cpp
   poe2/support_table.cpp
   poe2/support_tiers.cpp
   poe2/spirit.cpp

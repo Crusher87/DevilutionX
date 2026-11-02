@@ -96,6 +96,7 @@
 #include "poe2/skill_lab.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
@@ -1261,21 +1262,13 @@ void MonsterAttackMonster(Monster &attacker, Monster &target, int hper, int mind
 	if (hit >= hper)
 		return;
 
-	int dam = RandomIntBetween(mind, maxd) << 6;
-	// POE2 Mashup: a monster's hit is scaled to its level's table (a berserk one's too; not the player's minions).
-	dam = ScaleMonsterHit(attacker, dam);
-	// POE2 Mashup: a minion's blow takes its owner's sceptre's added damage.
-	dam = MinionBlowWithGearDamage(attacker, dam);
-	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
-	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
-		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
-		dam = dam * UniqueMinionDamagePercent(owner, attacker.hitPoints.raw() * 2 < attacker.maxHitPoints.raw()) / 100;
-		// Their skill's supports too, and the skeleton's kind and Rage.
-		if (gbIsPoe2)
-			dam = dam * SupportMinionDamagePercent(owner, attacker) / 100 * MinionGemDamagePercent(attacker) / 100;
-	}
-	if (gbIsPoe2 && target.isPlayerMinion() && static_cast<size_t>(target.goalVar3) < Players.size())
+	int dam = ScaleMonsterBlow(attacker, RandomIntBetween(mind, maxd) << 6);
+	if (gbIsPoe2 && target.isPlayerMinion() && static_cast<size_t>(target.goalVar3) < Players.size()) {
 		dam = dam * SupportMinionDamageTakenPercent(Players[static_cast<size_t>(target.goalVar3)], target) / 100;
+		// POE2 Mashup: Frost Shell soaks part of the hit, and its ice bites back.
+		dam = dam * CommandShellDamagePercent(target) / 100;
+		OnShelledMinionHit(attacker, target);
+	}
 	TelemetryNoteDamageSource(attacker.isPlayerMinion() ? "minions" : "other monsters");
 	// POE2 Mashup: most of a raging spirit's blow is fire.
 	if (const int firePercent = gbIsPoe2 ? MinionGemFirePercent(attacker) : 0; firePercent > 0) {
@@ -1505,7 +1498,11 @@ void MonsterAttackEnemy(Monster &monster, int hit, int minDam, int maxDam)
 bool MonsterAttack(Monster &monster)
 {
 	if (monster.animInfo.currentFrame == monster.data().animFrameNum - 1) {
-		MonsterAttackEnemy(monster, monster.toHit(sgGameInitInfo.nDifficulty), monster.minDamage, monster.maxDamage);
+		// POE2 Mashup: a Summon Command's move goes off on the blow's frame instead of the blow.
+		if (monster.poe2.commandAction != 0)
+			RunCommandAction(monster);
+		else
+			MonsterAttackEnemy(monster, monster.toHit(sgGameInitInfo.nDifficulty), monster.minDamage, monster.maxDamage);
 		if (monster.ai != MonsterAIID::Snake)
 			PlayEffect(monster, MonsterSound::Attack);
 	}
@@ -1530,26 +1527,32 @@ bool MonsterAttack(Monster &monster)
 }
 
 /** @brief POE2 Mashup: a skeleton's arrow, bolt or Storm Mage's two charged bolts, dealing its own damage. */
-void FireMinionShot(const Monster &minion, MissileID missileType, int damage)
+void FireMinionShot(Monster &minion, MissileID missileType, int damage)
 {
 	const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
 	const int shots = missileType == MissileID::ChargedBolt ? 2 : 1;
+	// A Summon Command's shot flies at the Command's target, not the minion's own enemy.
+	const uint8_t command = minion.poe2.commandAction;
+	const Point aim = command != 0 ? Point { minion.poe2.commandAimX, minion.poe2.commandAimY } : Point { minion.enemyPosition };
+	minion.poe2.commandAction = 0;
 	for (int i = 0; i < shots; i++) {
-		Missile *shot = AddMissile(minion.position.tile, minion.enemyPosition, minion.direction, missileType, TARGET_MONSTERS, owner, damage, 0);
+		Missile *shot = AddMissile(minion.position.tile, aim, minion.direction, missileType, TARGET_MONSTERS, owner, damage, 0);
 		if (shot == nullptr)
 			continue;
 		// A charged bolt sets its damage from the hero's Magic, and an arrow would pierce like the hero's.
 		shot->_midam = damage;
 		shot->poe2.minionShot = true;
 		shot->poe2.piercesLeft = 0;
+		if (command != 0)
+			OnCommandShotFired(minion, command, aim, *shot);
 	}
 }
 
-/** @brief POE2 Mashup: a skeleton's shot, in percent of its blow, with its owner's uniques and the gem's supports. */
-int MinionShotDamage(const Monster &minion, int percent)
+/** @brief POE2 Mashup: a skeleton's shot, in whole points, from its blow (rolled, or the middle of it) and the shot's percent. */
+int ScaleMinionShot(const Monster &minion, int blow, int percent)
 {
 	// Its blow on the minion tables (plan v2 step 11), then the shot's share.
-	int damage = ScaleMonsterHit(minion, RandomIntBetween(minion.minDamage, minion.maxDamage)) * percent / 100;
+	int damage = ScaleMonsterHit(minion, blow) * percent / 100;
 	if (static_cast<size_t>(minion.goalVar3) < Players.size()) {
 		const Player &owner = Players[static_cast<size_t>(minion.goalVar3)];
 		damage = damage * UniqueMinionDamagePercent(owner, minion.hitPoints.raw() * 2 < minion.maxHitPoints.raw()) / 100;
@@ -1557,6 +1560,12 @@ int MinionShotDamage(const Monster &minion, int percent)
 	}
 	// A missile with no damage would take the hero's.
 	return std::clamp(damage, 1, static_cast<int>(INT16_MAX));
+}
+
+/** @brief POE2 Mashup: a skeleton's shot, in percent of its blow, with its owner's uniques and the gem's supports. */
+int MinionShotDamage(const Monster &minion, int percent)
+{
+	return ScaleMinionShot(minion, RandomIntBetween(minion.minDamage, minion.maxDamage), percent);
 }
 
 bool MonsterRangedAttack(Monster &monster)
@@ -1583,6 +1592,9 @@ bool MonsterRangedAttack(Monster &monster)
 				    monster.var2,
 				    0);
 			}
+		} else if (monster.poe2.commandAction != 0) {
+			// POE2 Mashup: a minion's Summon Command cast with no shot of its own (Frost Shell, Thunder Call).
+			RunCommandAction(monster);
 		}
 		PlayEffect(monster, MonsterSound::Attack);
 	}
@@ -3764,6 +3776,7 @@ void InitLevelMonsters()
 	ClearSupportEffects();
 	ClearSpiritSkills();
 	ClearMinionGems();
+	ClearSummonCommands();
 	LevelMonsterTypeCount = 0;
 	monstimgtot = 0;
 
@@ -4442,6 +4455,7 @@ void MonsterDeath(Monster &monster, Direction md, bool sendmsg)
 		OnMinionDied(Players[static_cast<size_t>(monster.goalVar3)]);
 		OnSupportedMinionDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
 		OnMinionGemDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
+		OnCommandMinionDied(Players[static_cast<size_t>(monster.goalVar3)], monster);
 	}
 
 	TelemetryMonsterKilled(monster);
@@ -4737,6 +4751,93 @@ bool MinionLooksAgain(const Monster &minion)
 
 } // namespace
 
+int ScaleMonsterBlow(const Monster &attacker, int dam)
+{
+	// POE2 Mashup: a monster's hit is scaled to its level's table (a berserk one's too; not the player's minions).
+	dam = ScaleMonsterHit(attacker, dam);
+	// POE2 Mashup: a minion's blow takes its owner's sceptre's added damage.
+	dam = MinionBlowWithGearDamage(attacker, dam);
+	// POE2 Mashup: minions hit harder while their owner's unique frenzies them.
+	if (attacker.isPlayerMinion() && static_cast<size_t>(attacker.goalVar3) < Players.size()) {
+		const Player &owner = Players[static_cast<size_t>(attacker.goalVar3)];
+		dam = dam * UniqueMinionDamagePercent(owner, attacker.hitPoints.raw() * 2 < attacker.maxHitPoints.raw()) / 100;
+		// Their skill's supports too, the skeleton's kind and Rage, and Bone Frenzy and Last Rites.
+		if (gbIsPoe2) {
+			dam = dam * SupportMinionDamagePercent(owner, attacker) / 100 * MinionGemDamagePercent(attacker) / 100;
+			dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * CommandMinionDamagePercent(attacker) / 100, INT32_MAX / 4));
+		}
+	} else if (gbIsPoe2) {
+		// POE2 Mashup: Grave Howl makes the enemies it shook hit softer.
+		dam = dam * CommandWeakenedDamagePercent(attacker) / 100;
+	}
+	return dam;
+}
+
+int32_t MinionBlowRaw(const Monster &minion)
+{
+	// The middle of its blow: Commands hit for a share of it, without a roll of their own.
+	return ScaleMonsterBlow(minion, (minion.minDamage + minion.maxDamage) * 32);
+}
+
+int MinionShotAverage(const Monster &minion, int percent)
+{
+	return ScaleMinionShot(minion, (minion.minDamage + minion.maxDamage) / 2, percent);
+}
+
+bool StartCommandShot(Monster &minion, Point aim, uint8_t command, int percent)
+{
+	const MinionGemData *gem = MinionGemOf(minion);
+	if (gem == nullptr || gem->shot == MinionShot::None || IsAnyOf(minion.mode, MonsterMode::Death, MonsterMode::Petrified))
+		return false;
+	minion.enemyPosition = aim;
+	StartRangedAttack(minion, MinionShotMissile(gem->shot), MinionShotDamage(minion, gem->shotPercent * percent / 100));
+	if (minion.mode != MonsterMode::RangedAttack)
+		return false;
+	minion.poe2.commandAction = command;
+	minion.poe2.commandAimX = static_cast<uint8_t>(aim.x);
+	minion.poe2.commandAimY = static_cast<uint8_t>(aim.y);
+	return true;
+}
+
+bool StartCommandMove(Monster &minion, Point aim, uint8_t command, bool cast)
+{
+	if (IsAnyOf(minion.mode, MonsterMode::Death, MonsterMode::Petrified) || minion.hasNoLife())
+		return false;
+	if (aim != minion.position.tile)
+		minion.enemyPosition = aim;
+	if (cast)
+		StartRangedAttack(minion, MissileID::Null, 0);
+	else
+		StartAttack(minion);
+	if (IsNoneOf(minion.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack))
+		return false;
+	minion.poe2.commandAction = command;
+	minion.poe2.commandAimX = static_cast<uint8_t>(aim.x);
+	minion.poe2.commandAimY = static_cast<uint8_t>(aim.y);
+	return true;
+}
+
+void LeapMinionTo(Monster &minion, Point tile)
+{
+	M_ClearSquares(minion);
+	dMonster[minion.position.tile.x][minion.position.tile.y] = 0;
+	minion.position.tile = tile;
+	minion.position.future = tile;
+	minion.position.old = tile;
+	minion.occupyTile(tile, false);
+	ChangeLightXY(minion.lightId, tile);
+	minion.poe2.minionReturning = false;
+	minion.poe2.minionStuck = 0;
+	MarkWalkabilityChanged();
+}
+
+void M_StartStagger(Monster &monster)
+{
+	if (IsAnyOf(monster.mode, MonsterMode::Death, MonsterMode::Petrified) || monster.hasNoLife())
+		return;
+	ReactToHit(monster, true);
+}
+
 bool IsMinionOf(const Monster &monster, const Player &player)
 {
 	return gbIsPoe2 && monster.isPlayerMinion() && monster.goalVar3 == static_cast<int8_t>(player.getId()) && !monster.hasNoLife();
@@ -4775,6 +4876,10 @@ void GolumAi(Monster &golem)
 	// POE2 Mashup: Lingering Illusion's illusion stands where the dodge roll began.
 	if (golem.poe2.decoy)
 		return;
+
+	// POE2 Mashup: a Summon Command whose attack was cut short is lost, so the next attack is the minion's own.
+	if (IsNoneOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack))
+		golem.poe2.commandAction = 0;
 
 	if (IsNoneOf(golem.mode, MonsterMode::MeleeAttack, MonsterMode::RangedAttack) && LeashMinion(golem))
 		return;
@@ -4995,7 +5100,8 @@ void ProcessMonsters()
 			}
 			// And a minion left behind hurries after its owner.
 			// And the Butcher's Road pact's rage hurries it.
-			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster) || EnragedExtraTick(monster)))
+			// And Bone Frenzy and Last Rites hurry the hero's minions.
+			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster) || EnragedExtraTick(monster) || CommandExtraTick(monster)))
 				break;
 		}
 	}

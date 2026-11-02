@@ -34,6 +34,7 @@
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/spirit_uses.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/telemetry.hpp"
@@ -1592,6 +1593,8 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 	if (ShadowWarriorActive(player)) {
 		QueueUse(skill, target, ShadowWarriorDelay, ShadowWarriorPercent);
 		AddVisualEffect(player.position.tile + Left(Left(player._pdir)), MissileGraphicID::Etherealize, 0, 2);
+		// It stays there a while, for the Switch Command.
+		OnShadowAppeared(player, player.position.tile + Left(Left(player._pdir)));
 	}
 	SupportRuntime &state = player.poe2.supportState;
 	const uint32_t tags = SkillTags(skill);
