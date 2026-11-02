@@ -1130,7 +1130,7 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 		// Might (physical spells plan) gives the physical free bolts 30% more with supports; Haunt's chaos can't take it.
 		{ WeaponSkill::Haunt, Excused::Supported, "a chaos damage over time (70% a second on one), which can't take Prismatic Focus as Staff Bolt can, nor Might as the physical free bolts can" },
 		// Still short with its poison counted: the burst's 30% and one 2-second poison (40% a second) a 0.8-second cast.
-		{ WeaponSkill::PoisonExplosion, Excused::Everything, "a corpse burst whose poison counts once on one target (about 50% a second on one, 73% of Staff Bolt), pending the balance thread; it needs a corpse" },
+		{ WeaponSkill::PoisonExplosion, Excused::Everything, "a corpse burst whose poison counts once on one target (about 50% a second on one, 73% of Staff Bolt); pack skill, reviewed: it needs a corpse and scores about 1.05 on a group" },
 		{ WeaponSkill::Condemn, Excused::StaffBoltAndSupported, "a delayed burst all around the hero (about 56% a second on one); a shield spell, it can't take Measured Ritual" },
 		{ WeaponSkill::CorpseExplosion, Excused::StaffBolt, "an area burst for each corpse, which it needs (about 62% a second on one)" },
 	};
