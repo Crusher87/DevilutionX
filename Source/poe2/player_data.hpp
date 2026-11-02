@@ -538,7 +538,12 @@ enum class TrayAction : uint8_t {
 	 * using it swaps to its set first, like POE2.
 	 */
 	WeaponAttack,
-	Last = WeaponAttack,
+	/**
+	 * Summon Commands: the Command of the minion gem in a Skills panel socket (poe2/summon_commands.hpp). The Command
+	 * comes from the gem, so only this binding is saved.
+	 */
+	Command,
+	Last = Command,
 };
 
 /** @brief A skill tray slot's action, and for gems the Skills panel socket it uses. */
@@ -547,7 +552,9 @@ struct TrayBinding {
 	uint8_t socket = 0;
 
 	[[nodiscard]] bool isGem() const { return action == TrayAction::Gem; }
+	[[nodiscard]] bool isCommand() const { return action == TrayAction::Command; }
 	static TrayBinding ForGem(size_t socket) { return { TrayAction::Gem, static_cast<uint8_t>(socket) }; }
+	static TrayBinding ForCommand(size_t socket) { return { TrayAction::Command, static_cast<uint8_t>(socket) }; }
 
 	bool operator==(const TrayBinding &other) const = default;
 };
@@ -763,6 +770,55 @@ struct SpiritRuntime {
 	/** Ravenous Swarm: game ticks until the next swarm can leave, and the swarms out now. */
 	uint8_t swarmTicks = 0;
 	std::array<RavenousSwarm, 3> swarms {};
+};
+
+/** @brief A patch of ground a Summon Command leaves: Poison Arrow's cloud or Thunder Call's shocked ground. */
+struct CommandGround {
+	/** The SummonCommand that left it, 0 for none. */
+	uint8_t command = 0;
+	uint8_t x = 0;
+	uint8_t y = 0;
+	uint8_t radius = 0;
+	uint16_t ticks = 0;
+	/** Poison Arrow: the arrow's hit, in 1/64 points, that the cloud's poison is worked out from. */
+	int32_t hitRaw = 0;
+};
+
+/** @brief Where one of the hero's skeletons fell, for Thunder Call, and the game ticks its bones still count. */
+struct CommandBones {
+	uint8_t x = 0;
+	uint8_t y = 0;
+	uint16_t ticks = 0;
+};
+
+/** @brief A Command waiting for its minion's action frame (or the fallback time) to go off, where, and its damage in 1/64 points. */
+struct CommandPending {
+	uint8_t ticks = 0;
+	uint8_t x = 0;
+	uint8_t y = 0;
+	int32_t raw = 0;
+};
+
+/**
+ * @brief Summon Commands' cooldowns and lasting effects, per character (not saved, like the other Spirit timers; see
+ * poe2/summon_commands.hpp). Plain values only, so the state can be sent or saved as it is.
+ */
+struct SummonCommandRuntime {
+	/** Game ticks until each SummonCommand can be used again, by its value. */
+	std::array<uint16_t, 16> cooldowns {};
+	/** Commands waiting for their minion's action frame, by SummonCommand. */
+	std::array<CommandPending, 16> pending {};
+	std::array<CommandGround, 8> grounds {};
+	std::array<CommandBones, 12> bones {};
+	/** Frost Shell: what an attacker that hits a shelled minion takes, in 1/64 points. */
+	int32_t shellRetaliateRaw = 0;
+	/** Golem's Blaze: game ticks left, and the burn a second, in 1/64 points. */
+	uint8_t blazeTicks = 0;
+	int32_t blazeRaw = 0;
+	/** Shadow Warrior: where the shadow stands, and the game ticks it stays. */
+	uint8_t shadowX = 0;
+	uint8_t shadowY = 0;
+	uint8_t shadowTicks = 0;
 };
 
 /** @brief Spirit gems whose number of minions is set in the Skills panel, like POE2's "Set Minion Count". */
@@ -1111,6 +1167,8 @@ struct Poe2PlayerData {
 	mutable SupportRuntime supportState {};
 	/** @brief Spirit skill timers and the element infusions carried (not saved). */
 	mutable SpiritRuntime spiritState {};
+	/** @brief Summon Commands' cooldowns and lasting effects (not saved). */
+	mutable SummonCommandRuntime commandState {};
 	/** @brief The map (POE2 endgame) the player opened: its dungeon level and tier; tier 0 when there's none. */
 	uint8_t mapLevel = 0;
 	uint8_t mapTier = 0;
@@ -1251,6 +1309,7 @@ struct Poe2PlayerData {
 		travellingMinionCount = 0;
 		supportState = {};
 		spiritState = {};
+		commandState = {};
 		frozenArmorTicks = 0;
 		holyShieldTicks = 0;
 		shieldWallTicks = 0;

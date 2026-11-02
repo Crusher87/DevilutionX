@@ -61,6 +61,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/spirit_uses.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
@@ -1422,10 +1423,13 @@ bool MonsterTrapHit(Monster &monster, int mindam, int maxdam, int dist, MissileI
 	int dam = RandomIntBetween(mindam, maxdam);
 	if (!shift)
 		dam <<= 6;
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		dam = dam * (100 - MonsterResistance(monster, damageType)) / 100;
-	else if (resist)
+		// Frost Shell soaks part of every hit on a shelled minion, missiles and spells too (its ice bites back at blows only).
+		dam = dam * CommandShellDamagePercent(monster) / 100;
+	} else if (resist) {
 		dam /= 4;
+	}
 	ApplyMonsterDamage(damageType, monster, Fixed26_6::fromRaw(dam));
 #ifdef _DEBUG
 	if (DebugGodMode)
@@ -3546,6 +3550,11 @@ void ProcessArrow(Missile &missile)
 	MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), mind, maxd, true, false);
 	if (missile.duration == 0)
 		missile._miDelFlag = true;
+	// POE2 Mashup: Poison Arrow's arrow bursts where it hits, or at the tile it was aimed at.
+	if (missile.poe2.commandShot != 0 && (missile._miDelFlag || missile.position.tile == Point { missile.poe2.commandX, missile.poe2.commandY })) {
+		OnCommandShotLanded(missile);
+		missile._miDelFlag = true;
+	}
 	PutMissile(missile);
 }
 

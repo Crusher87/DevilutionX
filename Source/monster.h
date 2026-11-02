@@ -611,6 +611,29 @@ bool Walk(Monster &monster, Direction md);
 bool MinionCatchUpTick(Monster &minion);
 /** @brief POE2 Mashup: whether the monster is one of the player's own minions, which the player walks through. */
 bool IsMinionOf(const Monster &monster, const Player &player);
+/**
+ * @brief POE2 Mashup: a monster's blow (a raw Fixed26_6) as it lands on another monster: scaled to its level's table,
+ * with a minion's gear, uniques, supports, kind and Summon Commands, or an enemy's Grave Howl.
+ */
+int ScaleMonsterBlow(const Monster &attacker, int dam);
+/** @brief POE2 Mashup: the middle of a minion's blow on another monster, as a raw Fixed26_6 (see ScaleMonsterBlow). */
+int32_t MinionBlowRaw(const Monster &minion);
+/** @brief POE2 Mashup: the middle of a skeleton's shot, in whole points, at the percent of its blow. */
+int MinionShotAverage(const Monster &minion, int percent);
+/**
+ * @brief POE2 Mashup Summon Commands: a skeleton fires its shot at the tile for the percent of its usual one; the
+ * Command (a SummonCommand) rides on the shot. @return Whether it started (a flinching one can't).
+ */
+bool StartCommandShot(Monster &minion, Point aim, uint8_t command, int percent);
+/**
+ * @brief POE2 Mashup Summon Commands: the minion plays its attack (a cast with @p cast) towards the tile, and the
+ * Command (a SummonCommand) goes off on its action frame instead of its blow. @return Whether it started.
+ */
+bool StartCommandMove(Monster &minion, Point aim, uint8_t command, bool cast);
+/** @brief POE2 Mashup: puts the minion straight onto the free tile, as a leap lands. */
+void LeapMinionTo(Monster &minion, Point tile);
+/** @brief POE2 Mashup: a stagger breaks off what the monster is doing, as a light stun does. */
+void M_StartStagger(Monster &monster);
 /** @brief POE2 Mashup: an idle minion on the tile the owner steps onto moves aside. */
 void MakeWayForOwner(const Player &owner, Point tile, Direction dir);
 void GolumAi(Monster &golem);

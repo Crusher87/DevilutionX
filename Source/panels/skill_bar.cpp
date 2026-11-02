@@ -36,6 +36,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_uses.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -111,6 +112,9 @@ struct PopupLayout {
 	/** The empty choice, which clears the slot. */
 	Rectangle clear;
 	std::array<Rectangle, NumSkillSlots> gems;
+	/** The Commands of the socketed minion gems, by socket, only those there are: icons with no words. */
+	std::vector<size_t> commandSockets;
+	std::array<Rectangle, NumSkillSlots> commands;
 	Rectangle supportsLabel;
 	std::array<Rectangle, MaxSupportSockets> sockets;
 	Rectangle picker;
@@ -123,6 +127,8 @@ struct PopupHit {
 		WeaponAttack,
 		Clear,
 		Gem,
+		/** A Command; the index is its gem's socket. */
+		Command,
 		Socket,
 		Picker,
 	} kind
@@ -298,6 +304,56 @@ SkillSlot WeaponAttackSkill(const Player &player, uint8_t set)
 	if (const SkillSlot slot = DefaultSkillSlotForSet(player, set); slot.kind == SkillKind::Attack)
 		return slot;
 	return SkillSlot::ForDefault(static_cast<uint8_t>(DefaultAttackForSet(player, set)));
+}
+
+SpellIcon SummonCommandIcon(SummonCommand command)
+{
+	switch (command) {
+	case SummonCommand::FlameVolley:
+		return SpellIcon::Fireball;
+	case SummonCommand::PoisonArrow:
+		return SpellIcon::FireCloud;
+	case SummonCommand::FrostShell:
+		return SpellIcon::Nova;
+	case SummonCommand::ThunderCall:
+		return SpellIcon::ChargedBolt;
+	case SummonCommand::BoneFrenzy:
+		return SpellIcon::BloodBoil;
+	case SummonCommand::GraveHowl:
+		return SpellIcon::RedSkull;
+	case SummonCommand::PackRush:
+		return SpellIcon::Warp;
+	case SummonCommand::QuakeStomp:
+		return SpellIcon::StoneCurse;
+	case SummonCommand::BloodGift:
+		return SpellIcon::Healing;
+	case SummonCommand::GolemsBlaze:
+		return SpellIcon::RingOfFire;
+	case SummonCommand::FireSweep:
+		return SpellIcon::FlameWave;
+	case SummonCommand::Switch:
+		return SpellIcon::Phasing;
+	case SummonCommand::LastRites:
+		return SpellIcon::BloodRitual;
+	default:
+		return SpellIcon::Empty;
+	}
+}
+
+/** @brief A Command's use from the tray: the tile under the cursor and the monster there. */
+SummonCommandRequest TrayCommandRequest(const Player &player, size_t socket)
+{
+	SummonCommandRequest request;
+	request.gem = socket < NumSkillSlots ? player.poe2.skillSlots[socket].persistent() : PersistentSkill::None;
+	request.target = InDungeonBounds(cursPosition) ? cursPosition : Point { player.position.tile } + player._pdir;
+	request.targetMonster = static_cast<int16_t>(pcursmonst);
+	return request;
+}
+
+void DrawCommandIcon(const Surface &out, Point bottomLeft, SummonCommand command, bool ready)
+{
+	SetSpellTrans(ready ? SpellType::Skill : SpellType::Invalid);
+	DrawSmallSpellIcon(out, bottomLeft, SummonCommandIcon(command));
 }
 
 SpellIcon PersistentIcon(PersistentSkill skill)
@@ -552,6 +608,15 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 		layout.gems[i] = { { gridX + (column * (SlotSize.width + SlotGap)), y + (row * (SlotSize.height + SlotGap)) }, SlotSize };
 	}
 	y += (static_cast<int>(NumSkillSlots / GemColumns) * (SlotSize.height + SlotGap)) + 4;
+	// The socketed minion gems' Commands, a row under the gems; no row at all with none.
+	layout.commandSockets = CommandSockets(*MyPlayer);
+	for (size_t i = 0; i < layout.commandSockets.size(); i++) {
+		const int column = static_cast<int>(i) % GemColumns;
+		const int row = static_cast<int>(i) / GemColumns;
+		layout.commands[i] = { { gridX + (column * (SlotSize.width + SlotGap)), y + (row * (SlotSize.height + SlotGap)) }, SlotSize };
+	}
+	if (!layout.commandSockets.empty())
+		y += (static_cast<int>((layout.commandSockets.size() + GemColumns - 1) / GemColumns) * (SlotSize.height + SlotGap)) + 4;
 	layout.supportsLabel = { { PopupPad, y }, { innerWidth, 14 } };
 	y += 18;
 	for (size_t i = 0; i < MaxSupportSockets; i++)
@@ -578,6 +643,8 @@ PopupLayout LayoutPopup(const std::vector<OwnedSupport> &owned)
 	place(layout.clear);
 	for (Rectangle &rect : layout.gems)
 		place(rect);
+	for (Rectangle &rect : layout.commands)
+		place(rect);
 	place(layout.supportsLabel);
 	for (Rectangle &rect : layout.sockets)
 		place(rect);
@@ -603,6 +670,10 @@ PopupHit PopupHitAt(const Player &player, const PopupLayout &layout, const std::
 	for (size_t i = 0; i < NumSkillSlots; i++) {
 		if (layout.gems[i].contains(position))
 			return { PopupHit::Kind::Gem, i };
+	}
+	for (size_t i = 0; i < layout.commandSockets.size(); i++) {
+		if (layout.commands[i].contains(position))
+			return { PopupHit::Kind::Command, layout.commandSockets[i] };
 	}
 	if (PopupSupportsSocket(player)) {
 		for (size_t i = 0; i < MaxSupportSockets; i++) {
@@ -802,6 +873,16 @@ void DrawPopupTooltip(const Surface &out, const Player &player, const PopupHit &
 		DrawTooltip(out, bounds, MousePosition, std::string(SkillName(skill)), UiFlags::ColorWhitegold, lines);
 		return;
 	}
+	case PopupHit::Kind::Command: {
+		// Short: what it does, then its tags and cooldown in grey.
+		const SummonCommand command = SocketCommand(player, hover.index);
+		if (command == SummonCommand::None)
+			return;
+		lines.emplace_back(std::string(SummonCommandDescription(command)), UiFlags::ColorWhite);
+		lines.emplace_back(FormatRuntime(_("{:s}, {:d} s cooldown"), SummonCommandTagText(command), SummonCommandCooldownTicks(command) / 20), UiFlags::ColorButtonpushed);
+		DrawTooltip(out, bounds, MousePosition, std::string(SummonCommandName(command)), UiFlags::ColorWhitegold, lines);
+		return;
+	}
 	case PopupHit::Kind::Socket: {
 		if (!slot)
 			return;
@@ -885,10 +966,24 @@ void DrawPopup(const Surface &out, const Player &player)
 		else if (hover.kind == PopupHit::Kind::Gem && hover.index == socket && SkillGoesOnTray(skill))
 			DrawSmallSpellIconBorder(out, bottomLeft);
 	}
+	for (size_t i = 0; i < layout.commandSockets.size(); i++) {
+		const Rectangle &cell = layout.commands[i];
+		const size_t socket = layout.commandSockets[i];
+		const bool current = binding.isCommand() && binding.socket == socket;
+		DrawSlot(out, cell, current);
+		const Point bottomLeft = BottomLeft(IconRect(cell));
+		DrawCommandIcon(out, bottomLeft, SocketCommand(player, socket), true);
+		if (current)
+			DrawFrame(out, IconRect(cell), BorderColor);
+		else if (hover.kind == PopupHit::Kind::Command && hover.index == socket)
+			DrawSmallSpellIconBorder(out, bottomLeft);
+	}
 
 	const std::optional<size_t> slot = PopupSupportsSocket(player);
 	if (!slot) {
-		DrawString(out, binding.isGem() ? _("Spirit gems take no supports") : _("Pick a gem for its supports"), layout.supportsLabel,
+		DrawString(out, binding.isCommand() ? _("Commands take no supports") : binding.isGem() ? _("Spirit gems take no supports")
+		                                                                                       : _("Pick a gem for its supports"),
+		    layout.supportsLabel,
 		    { .flags = UiFlags::ColorButtonpushed | UiFlags::VerticalCenter });
 	} else {
 		DrawString(out, FormatRuntime(_("Supports for {:s}"), SkillName(player.poe2.skillSlots[*slot])), layout.supportsLabel,
@@ -967,6 +1062,12 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 		Popup.pickerOpen = false;
 		return;
 	}
+	case PopupHit::Kind::Command:
+		if (SocketCommand(player, hit.index) != SummonCommand::None) {
+			BindTraySlot(player, Popup.slot, TrayBinding::ForCommand(hit.index));
+			CloseSkillTrayPopup();
+		}
+		return;
 	case PopupHit::Kind::Socket: {
 		if (!slot)
 			return;
@@ -1242,6 +1343,12 @@ void DrawSkillBar(const Surface &out)
 			}
 			break;
 		}
+		case TrayAction::Command: {
+			// Greyed while it can't go: cooling down, no minions, nothing to aim at.
+			const SummonCommand command = SocketCommand(player, binding.socket);
+			DrawCommandIcon(out, bottomLeft, command, CheckSummonCommand(player, TrayCommandRequest(player, binding.socket)) == CommandResult::Used);
+			break;
+		}
 		default:
 			break;
 		}
@@ -1273,6 +1380,17 @@ void SetSkillBarInfo()
 		return;
 	const TrayBinding &binding = Binding(player, *slot);
 	const std::string key = TraySlotKeyName(*slot);
+	if (binding.isCommand()) {
+		const SummonCommand command = SocketCommand(player, binding.socket);
+		InfoColor = UiFlags::ColorWhitegold;
+		InfoString = FormatRuntime(_("{:s} [{:s}]"), SummonCommandName(command), key);
+		AddInfoBoxString(FormatRuntime(_("Command, {:d} s cooldown"), SummonCommandCooldownTicks(command) / 20));
+		const CommandResult result = CheckSummonCommand(player, TrayCommandRequest(player, binding.socket));
+		if (result != CommandResult::Used && result != CommandResult::Cooldown)
+			AddInfoBoxString(CommandResultText(result));
+		AddInfoBoxString(_("Click to change, right-click to clear"));
+		return;
+	}
 	if (!binding.isGem()) {
 		InfoColor = UiFlags::ColorWhite;
 		if (binding.action == TrayAction::WeaponAttack) {
@@ -1600,6 +1718,12 @@ void UseTraySlot(TraySlot slot)
 	case TrayAction::WeaponAttack:
 		UseDefaultAttack(*MyPlayer, BindingWeaponSet(binding));
 		return;
+	case TrayAction::Command: {
+		const CommandResult result = IssueSummonCommand(*MyPlayer, TrayCommandRequest(*MyPlayer, binding.socket));
+		if (result != CommandResult::Used)
+			EventPlrMsg(std::string(CommandResultText(result)), UiFlags::ColorRed);
+		return;
+	}
 	case TrayAction::None:
 		EventPlrMsg(FormatRuntime(_("Nothing on {:s}. Click its tray slot to pick a skill."), TraySlotKeyName(slot)), UiFlags::ColorRed);
 		return;

@@ -30,6 +30,7 @@
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/spirit_uses.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -856,6 +857,8 @@ std::string SkillTagText(SkillSlot skill)
 		add("Curse");
 	if ((tags & ST_Minion) != 0)
 		add("Minion");
+	if ((tags & ST_Command) != 0)
+		add("Command");
 	if ((tags & ST_Movement) != 0)
 		add("Movement");
 	if ((tags & ST_Channelling) != 0)
@@ -938,6 +941,13 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 	MinionDetails(lines, player, skill, minionLevel);
 	if (skill.persistent() == PersistentSkill::Revive)
 		ReviveDetails(lines, player, minionLevel);
+	// Its Command, picked for the tray from the skill picker.
+	if (const SummonCommand command = CommandForGem(skill.persistent()); command != SummonCommand::None && !isDefault) {
+		Heading(lines, std::format("Command: {:s}", SummonCommandName(command)));
+		Text(lines, Kind::Note, std::string(SummonCommandDescription(command)));
+		Value(lines, "Cooldown", std::format("{:d} seconds, no mana cost", SummonCommandCooldownTicks(command) / 20));
+		Value(lines, "Tags", SummonCommandTagText(command));
+	}
 
 	if (IsMetaGem(skill) && !isDefault && !isGranted) {
 		const PersistentSkill meta = skill.persistent();

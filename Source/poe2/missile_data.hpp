@@ -49,6 +49,10 @@ struct Poe2MissileData {
 	 * the graphic's. Its explosion takes it too. Cosmetic: never saved and never read by the game.
 	 */
 	int8_t vfxElement = -1;
+	/** @brief A Summon Command's shot (a SummonCommand, 0 for none: Poison Arrow's arrow bursts), and the tile it was aimed at. */
+	uint8_t commandShot = 0;
+	uint8_t commandX = 0;
+	uint8_t commandY = 0;
 };
 
 } // namespace devilution

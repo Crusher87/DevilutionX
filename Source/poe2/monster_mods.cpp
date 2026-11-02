@@ -15,6 +15,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/spirit_buffs.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
@@ -284,6 +285,7 @@ void ProcessMonsterAilments(Monster &monster)
 		state.armourBreakTicks--;
 	ProcessTableCurses(monster);
 	ProcessSupportMonsterEffects(monster);
+	TickCommandMonster(monster);
 	const auto decay = [&](int32_t &buildup, int thresholdPercent) {
 		if (buildup <= 0)
 			return;
@@ -345,6 +347,9 @@ bool MonsterSkipsTick(Monster &monster)
 	Poe2MonsterState &state = monster.poe2;
 	// The Butcher's Road: a monster on the hook can't act while it is dragged in.
 	if (IsMonsterImmobilized(monster) || IsHooked(monster))
+		return true;
+	// A Summon Command's stagger (Quake Stomp) holds it a moment.
+	if (CommandStaggerHolds(monster))
 		return true;
 	// Bleeding from some uniques hinders, slowing like a chill, and so does the hook on a rare; the strongest slow counts.
 	const int slow = std::max({ state.chillTicks > 0 ? static_cast<int>(state.chillPercent) : 0, MonsterHinderPercent(monster), HookSlowPercent(monster) });

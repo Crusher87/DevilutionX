@@ -90,9 +90,9 @@ Fixed26_6 WeaponHit(const Player &player, int percent)
 }
 
 /** @brief Deals the damage to the monster for the local hero; whether it lives. */
-bool HitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent = 100, bool ignoreArmour = false)
+bool HitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent = 100, ArmourHit armour = ArmourHit::Hit)
 {
-	const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(MonsterHitDamage(player, monster, type, damage.raw(), ignoreArmour ? ArmourHit::Ignore : ArmourHit::Hit)));
+	const Fixed26_6 dealt = Fixed26_6::fromRaw(static_cast<int32_t>(MonsterHitDamage(player, monster, type, damage.raw(), armour)));
 	ApplyMonsterDamage(type, monster, dealt);
 	monster.tag(player);
 	TryInflictAilment(monster, player, type, Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(dealt.raw()) * ailmentPercent / 100, INT32_MAX / 2))), AilmentSource::Spell);
@@ -589,7 +589,12 @@ int FlaskMinionHealPercent(const Player &player)
 
 bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent, bool ignoreArmour)
 {
-	return HitMonster(player, monster, type, damage, ailmentPercent, ignoreArmour);
+	return HitMonster(player, monster, type, damage, ailmentPercent, ignoreArmour ? ArmourHit::Ignore : ArmourHit::Hit);
+}
+
+bool SpiritHitMonster(Player &player, Monster &monster, DamageType type, Fixed26_6 damage, int ailmentPercent, ArmourHit armour)
+{
+	return HitMonster(player, monster, type, damage, ailmentPercent, armour);
 }
 
 bool BlinkReplacesDodge(const Player &player)

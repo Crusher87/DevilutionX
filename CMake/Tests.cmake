@@ -48,6 +48,7 @@ set(tests
   poe2_catacombs_floors_test
   poe2_caves_floors_test
   poe2_hell_floors_test
+  poe2_hive_floors_test
   poe2_cathedral_floors_test
   poe2_floors_test
   poe2_gemcutting_test
@@ -83,6 +84,7 @@ set(tests
   poe2_pace_test
   poe2_passive_tree_test
   poe2_physical_spells_test
+  poe2_summon_commands_test
   poe2_weapon_swap_test
   poe2_rare_items_test
   poe2_save_fixture_test

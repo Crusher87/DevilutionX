@@ -147,6 +147,28 @@ struct Poe2MonsterState {
 	uint8_t plagueTicks = 0;
 	/** @brief The per-target granted cast whose projectile last hit it, which hits it once (not saved). */
 	uint16_t grantedCastHit = 0;
+	/**
+	 * @brief Summon Commands (poe2/summon_commands.hpp; none saved). A minion's Command waiting for its attack's action
+	 * frame (a SummonCommand, 0 for none) and the tile it's aimed at.
+	 */
+	uint8_t commandAction = 0;
+	uint8_t commandAimX = 0;
+	uint8_t commandAimY = 0;
+	/** @brief A minion's Bone Frenzy, Frost Shell and Last Rites, in game ticks left, and its extra turns building up to 100. */
+	uint8_t commandFrenzyTicks = 0;
+	uint8_t commandShellTicks = 0;
+	uint8_t commandRitesTicks = 0;
+	uint8_t commandHasteCarry = 0;
+	/** @brief An enemy's Grave Howl: deals this much less damage, in percent, for the game ticks left. */
+	uint8_t commandWeakenTicks = 0;
+	uint8_t commandWeakenPercent = 0;
+	/**
+	 * @brief An enemy's Command stagger: game ticks it can't act; whether it broke off its attack (normal and magic
+	 * monsters) or only can't start another (rares and uniques); and a unique's game ticks of no more Command staggers.
+	 */
+	uint8_t commandStaggerTicks = 0;
+	bool commandStaggerHard = false;
+	uint8_t commandStaggerImmuneTicks = 0;
 };
 
 } // namespace devilution

@@ -53,6 +53,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/waystones.hpp"
@@ -2648,6 +2649,9 @@ uint8_t ReadPoe2HeroData(Player &player)
 			continue;
 		const SkillSlot skill = socket < NumSkillSlots ? player.poe2.skillSlots[socket] : SkillSlot {};
 		if (binding.isGem() && (skill.isEmpty() || skill.kind == SkillKind::Persistent))
+			continue;
+		// A Command stays only while its minion gem is in the socket.
+		if (binding.isCommand() && CommandForGem(skill.persistent()) == SummonCommand::None)
 			continue;
 		if (!TrayBindingFits(binding, static_cast<TraySlot>(slot)))
 			continue;

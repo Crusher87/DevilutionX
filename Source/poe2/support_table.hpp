@@ -61,6 +61,8 @@ enum SkillTag : uint32_t {
 	ST_Herald = 1U << 24,
 	/** The skill deals chaos damage. Not elemental. */
 	ST_Chaos = 1U << 25,
+	/** A Summon Command (poe2/summon_commands.hpp): no support gem fits it. */
+	ST_Command = 1U << 26,
 	ST_Elemental = ST_Fire | ST_Lightning | ST_Frost,
 };
 
