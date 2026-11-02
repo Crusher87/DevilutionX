@@ -1997,6 +1997,71 @@ bool PlaceStairs(lvl_entry entry)
 	return PlaceCaveStairs(entry);
 }
 
+/** Hellfire's small islands, rock variants and floor features of the Hive. */
+void PlaceHiveShapes()
+{
+	PlaceMiniSetRandom(L6ISLE1, 70);
+	PlaceMiniSetRandom(L6ISLE2, 70);
+	PlaceMiniSetRandom(L6ISLE3, 30);
+	PlaceMiniSetRandom(L6ISLE4, 30);
+	PlaceMiniSetRandom(L6ISLE1, 100);
+	PlaceMiniSetRandom(L6ISLE2, 100);
+	PlaceMiniSetRandom(L6ISLE5, 90);
+	PlaceMiniSetRandom1x1(8, 25, 20);
+	PlaceMiniSetRandom1x1(8, 26, 20);
+	PlaceMiniSetRandom1x1(8, 27, 20);
+	PlaceMiniSetRandom1x1(8, 28, 20);
+	PlaceMiniSetRandom(HivePattern29, 10);
+	PlaceMiniSetRandom(HivePattern30, 15);
+	PlaceMiniSetRandom(HivePattern31, 20);
+	PlaceMiniSetRandom(HivePattern32, 25);
+	PlaceMiniSetRandom(HivePattern33, 30);
+	PlaceMiniSetRandom(HivePattern34, 35);
+	PlaceMiniSetRandom(HivePattern35, 40);
+	PlaceMiniSetRandom(HivePattern36, 45);
+	PlaceMiniSetRandom(HivePattern37, 50);
+	PlaceMiniSetRandom(HivePattern38, 55);
+	PlaceMiniSetRandom(HivePattern38, 10);
+	PlaceMiniSetRandom(HivePattern37, 15);
+	PlaceMiniSetRandom(HivePattern36, 20);
+	PlaceMiniSetRandom(HivePattern35, 25);
+	PlaceMiniSetRandom(HivePattern34, 30);
+	PlaceMiniSetRandom(HivePattern33, 35);
+	PlaceMiniSetRandom(HivePattern32, 40);
+	PlaceMiniSetRandom(HivePattern31, 45);
+	PlaceMiniSetRandom(HivePattern30, 50);
+	PlaceMiniSetRandom(HivePattern29, 55);
+	PlaceMiniSetRandom(HivePattern9, 40);
+	PlaceMiniSetRandom(HivePattern10, 45);
+}
+
+/** Hellfire's decorated floor and wall tiles of the Hive. */
+void PlaceHiveTileVariants()
+{
+	PlaceMiniSetRandom1x1(7, 29, 25);
+	PlaceMiniSetRandom1x1(7, 30, 25);
+	PlaceMiniSetRandom1x1(7, 31, 25);
+	PlaceMiniSetRandom1x1(7, 32, 25);
+	PlaceMiniSetRandom1x1(9, 33, 25);
+	PlaceMiniSetRandom1x1(9, 34, 25);
+	PlaceMiniSetRandom1x1(9, 35, 25);
+	PlaceMiniSetRandom1x1(9, 36, 25);
+	PlaceMiniSetRandom1x1(9, 37, 25);
+	PlaceMiniSetRandom1x1(10, 39, 25);
+	PlaceMiniSetRandom1x1(10, 40, 25);
+	PlaceMiniSetRandom1x1(10, 41, 25);
+	PlaceMiniSetRandom1x1(10, 42, 25);
+	PlaceMiniSetRandom1x1(10, 43, 25);
+	PlaceMiniSetRandom1x1(9, 45, 25);
+	PlaceMiniSetRandom1x1(9, 46, 25);
+	PlaceMiniSetRandom1x1(10, 47, 25);
+	PlaceMiniSetRandom1x1(10, 48, 25);
+	PlaceMiniSetRandom1x1(11, 38, 25);
+	PlaceMiniSetRandom1x1(11, 44, 25);
+	PlaceMiniSetRandom1x1(11, 49, 25);
+	PlaceMiniSetRandom1x1(11, 50, 25);
+}
+
 void GenerateLevel(lvl_entry entry)
 {
 	if (LevelSeeds[currlevel])
@@ -2038,61 +2103,8 @@ void GenerateLevel(lvl_entry entry)
 	}
 
 	if (leveltype == DTYPE_NEST) {
-		PlaceMiniSetRandom(L6ISLE1, 70);
-		PlaceMiniSetRandom(L6ISLE2, 70);
-		PlaceMiniSetRandom(L6ISLE3, 30);
-		PlaceMiniSetRandom(L6ISLE4, 30);
-		PlaceMiniSetRandom(L6ISLE1, 100);
-		PlaceMiniSetRandom(L6ISLE2, 100);
-		PlaceMiniSetRandom(L6ISLE5, 90);
-		PlaceMiniSetRandom1x1(8, 25, 20);
-		PlaceMiniSetRandom1x1(8, 26, 20);
-		PlaceMiniSetRandom1x1(8, 27, 20);
-		PlaceMiniSetRandom1x1(8, 28, 20);
-		PlaceMiniSetRandom(HivePattern29, 10);
-		PlaceMiniSetRandom(HivePattern30, 15);
-		PlaceMiniSetRandom(HivePattern31, 20);
-		PlaceMiniSetRandom(HivePattern32, 25);
-		PlaceMiniSetRandom(HivePattern33, 30);
-		PlaceMiniSetRandom(HivePattern34, 35);
-		PlaceMiniSetRandom(HivePattern35, 40);
-		PlaceMiniSetRandom(HivePattern36, 45);
-		PlaceMiniSetRandom(HivePattern37, 50);
-		PlaceMiniSetRandom(HivePattern38, 55);
-		PlaceMiniSetRandom(HivePattern38, 10);
-		PlaceMiniSetRandom(HivePattern37, 15);
-		PlaceMiniSetRandom(HivePattern36, 20);
-		PlaceMiniSetRandom(HivePattern35, 25);
-		PlaceMiniSetRandom(HivePattern34, 30);
-		PlaceMiniSetRandom(HivePattern33, 35);
-		PlaceMiniSetRandom(HivePattern32, 40);
-		PlaceMiniSetRandom(HivePattern31, 45);
-		PlaceMiniSetRandom(HivePattern30, 50);
-		PlaceMiniSetRandom(HivePattern29, 55);
-		PlaceMiniSetRandom(HivePattern9, 40);
-		PlaceMiniSetRandom(HivePattern10, 45);
-		PlaceMiniSetRandom1x1(7, 29, 25);
-		PlaceMiniSetRandom1x1(7, 30, 25);
-		PlaceMiniSetRandom1x1(7, 31, 25);
-		PlaceMiniSetRandom1x1(7, 32, 25);
-		PlaceMiniSetRandom1x1(9, 33, 25);
-		PlaceMiniSetRandom1x1(9, 34, 25);
-		PlaceMiniSetRandom1x1(9, 35, 25);
-		PlaceMiniSetRandom1x1(9, 36, 25);
-		PlaceMiniSetRandom1x1(9, 37, 25);
-		PlaceMiniSetRandom1x1(10, 39, 25);
-		PlaceMiniSetRandom1x1(10, 40, 25);
-		PlaceMiniSetRandom1x1(10, 41, 25);
-		PlaceMiniSetRandom1x1(10, 42, 25);
-		PlaceMiniSetRandom1x1(10, 43, 25);
-		PlaceMiniSetRandom1x1(9, 45, 25);
-		PlaceMiniSetRandom1x1(9, 46, 25);
-		PlaceMiniSetRandom1x1(10, 47, 25);
-		PlaceMiniSetRandom1x1(10, 48, 25);
-		PlaceMiniSetRandom1x1(11, 38, 25);
-		PlaceMiniSetRandom1x1(11, 44, 25);
-		PlaceMiniSetRandom1x1(11, 49, 25);
-		PlaceMiniSetRandom1x1(11, 50, 25);
+		PlaceHiveShapes();
+		PlaceHiveTileVariants();
 	} else {
 		PoolFix();
 		Warp();
@@ -2344,9 +2356,45 @@ bool StampCavesStalagmites(const CathedralPlan &plan)
 	return true;
 }
 
-/** POE2: the stairs go where the plan put them: up and to town into a north wall, down into a west one. */
+/**
+ * POE2: the Hive's slime pits: Hellfire's 2 x 2 pit tiles on the 'S' marks, with the ring of floor round them the
+ * tiles need. False when a pit doesn't fit.
+ */
+bool StampHivePits(const CathedralPlan &plan)
+{
+	Bitset2d<DMAXX, DMAXY> pit;
+	for (const CathedralLine &line : plan.lines) {
+		if (line.kind == 'S' && InCaves(line.block))
+			pit.set(line.block.x, line.block.y);
+	}
+	for (const CathedralLine &line : plan.lines) {
+		const Point p = line.block;
+		if (line.kind != 'S' || p.x < 1 || p.y < 1 || pit.test(p.x - 1, p.y) || pit.test(p.x, p.y - 1))
+			continue;
+		const WorldTilePosition position { static_cast<WorldTileCoord>(p.x - 1), static_cast<WorldTileCoord>(p.y - 1) };
+		if (p.x + 2 >= DMAXX || p.y + 2 >= DMAXY || !HivePattern39.matches(position))
+			return false;
+		HivePattern39.place(position, true);
+	}
+	return true;
+}
+
+/** POE2: the Hive's growth: one of Hellfire's decorated floor tiles on each 'w' mark. */
+void StampHiveGrowth(const CathedralPlan &plan)
+{
+	for (const CathedralLine &line : plan.lines) {
+		if (line.kind == 'w' && InCaves(line.block) && dungeon[line.block.x][line.block.y] == 7)
+			dungeon[line.block.x][line.block.y] = static_cast<uint8_t>(29 + GenerateRnd(4));
+	}
+}
+
+/**
+ * POE2: the stairs go where the plan put them: up and to town into a north wall, down into a west one. In the Hive
+ * level 17's stairs up are the stairs to town, and level 20 has no stairs down.
+ */
 bool PlaceCavesFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
 {
+	const bool hive = leveltype == DTYPE_NEST;
 	const auto put = [](const Miniset &miniset, std::optional<Point> at, Displacement shift) -> std::optional<Point> {
 		if (!at)
 			return std::nullopt;
@@ -2359,17 +2407,21 @@ bool PlaceCavesFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
 		miniset.place(position, true);
 		return Point(position);
 	};
-	const std::optional<Point> up = put(L3UP, plan.stairsUp, { 0, -2 });
+	const Miniset &hiveUp = currlevel == 17 ? L6HOLDWARP : L6UP;
+	const Miniset &upStairs = hive ? hiveUp : L3UP;
+	const std::optional<Point> up = put(upStairs, plan.stairsUp, { 0, -2 });
 	if (!up)
 		return false;
-	if (entry == ENTRY_MAIN)
+	if (entry == ENTRY_MAIN || (hive && entry == ENTRY_TWARPDN))
 		ViewPosition = up->megaToWorld() + Displacement { 1, 3 };
-	const std::optional<Point> down = put(L3DOWN, plan.stairsDown, { -2, 0 });
+	if (hive && currlevel == 20)
+		return true;
+	const std::optional<Point> down = put(hive ? L6DOWN : L3DOWN, plan.stairsDown, { -2, 0 });
 	if (!down)
 		return false;
 	if (entry == ENTRY_PREV)
 		ViewPosition = down->megaToWorld() + Displacement { 3, 1 };
-	if (currlevel == 9) {
+	if (!hive && currlevel == 9) {
 		const std::optional<Point> town = put(L3HOLDWARP, plan.townStairs, { 0, -2 });
 		if (!town)
 			return false;
@@ -2399,9 +2451,11 @@ bool PlaceCavesFunnelAnvil(const CathedralPlan &plan)
 	return true;
 }
 
-/** POE2: the tiles one can walk on: floor, the floor round a rock corner, bridges and gates. */
+/** POE2: the tiles one can walk on: floor, the floor round a rock corner, bridges and gates; in the Hive, its growth. */
 bool CavesWalkable(uint8_t tile)
 {
+	if (leveltype == DTYPE_NEST)
+		return IsAnyOf(tile, 7, 5, 12, 13, 14, 29, 30, 31, 32);
 	return IsAnyOf(tile, 7, 5, 12, 13, 14, 44, 45, 146, 147);
 }
 
@@ -2441,17 +2495,19 @@ bool CavesFloorConnected(const CathedralPlan &plan)
 	return reached(plan.stairsDown) && (currlevel != 9 || reached(plan.townStairs));
 }
 
-/** POE2: a new Caves floor (poe2/cathedral_floors.hpp). */
+/** POE2: a new Caves or Hive floor (poe2/cathedral_floors.hpp). */
 void GenerateCavesFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
 {
 	if (LevelSeeds[currlevel])
 		SetRndSeed(*LevelSeeds[currlevel]);
 
+	const bool hive = leveltype == DTYPE_NEST;
 	CathedralRequest request;
 	request.caves = true;
+	request.hive = hive;
 	request.forbidden = avoidRooms;
-	request.townStairs = currlevel == 9;
-	if (Quests[Q_ANVIL].IsAvailable()) {
+	request.townStairs = !hive && currlevel == 9;
+	if (!hive && Quests[Q_ANVIL].IsAvailable()) {
 		request.questPiece = true;
 		request.questSlots = { 3, 3 };
 	}
@@ -2471,20 +2527,27 @@ void GenerateCavesFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
 		if (!Lockout())
 			continue;
 		MakeMegas();
-		StampCavesPools(plan);
-		if (!StampCavesStreams(plan) || !StampCavesFences(plan) || !StampCavesStalagmites(plan))
-			continue;
+		if (hive) {
+			if (!StampHivePits(plan))
+				continue;
+			StampHiveGrowth(plan);
+		} else {
+			StampCavesPools(plan);
+			if (!StampCavesStreams(plan) || !StampCavesFences(plan) || !StampCavesStalagmites(plan))
+				continue;
+		}
 		if (!PlaceCavesFunnelStairs(plan, entry))
 			continue;
-		if (Quests[Q_ANVIL].IsAvailable() && !PlaceCavesFunnelAnvil(plan))
+		if (!hive && Quests[Q_ANVIL].IsAvailable() && !PlaceCavesFunnelAnvil(plan))
 			continue;
 		if (!CavesFloorConnected(plan))
 			continue;
 		break;
 	}
 
-	// Diablo's own touches go on the plain rooms: small islands, theme rooms, fences, stalagmites and cracks. The
-	// designed rooms and the floor in front of the stairs are a tile none of them looks for meanwhile.
+	// Diablo's own touches go on the plain rooms: small islands, theme rooms, fences, stalagmites and cracks (in the
+	// Hive, Hellfire's slime pits, islands and floor features). The designed rooms and the floor in front of the stairs
+	// are a tile none of them looks for meanwhile.
 	Bitset2d<DMAXX, DMAXY> hold = plan.designed;
 	const auto holdFront = [&hold](std::optional<Point> at, Rectangle front) {
 		if (!at)
@@ -2499,7 +2562,7 @@ void GenerateCavesFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
 	};
 	holdFront(plan.stairsUp, { { -1, 0 }, { 4, 2 } });
 	holdFront(plan.stairsDown, { { 0, -1 }, { 2, 4 } });
-	if (currlevel == 9)
+	if (!hive && currlevel == 9)
 		holdFront(plan.townStairs, { { -1, 0 }, { 4, 2 } });
 	std::vector<std::pair<Point, uint8_t>> held;
 	for (int y = 0; y < DMAXY; y++) {
@@ -2509,6 +2572,19 @@ void GenerateCavesFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
 			held.emplace_back(Point { x, y }, dungeon[x][y]);
 			dungeon[x][y] = 0;
 		}
+	}
+	if (hive) {
+		PlaceSlimePool();
+		PlaceHiveShapes();
+		for (const auto &[p, tile] : held)
+			dungeon[p.x][p.y] = tile;
+		// The decorated floors and walls go everywhere.
+		PlaceHiveTileVariants();
+		memcpy(pdungeon, dungeon, sizeof(pdungeon));
+		SetCathedralFunnelFloor(true);
+		Poe2NoteFloorRooms(currlevel, plan.usedRooms | HiveRoomsMark);
+		TelemetryLog("floor", DescribeCathedralPlan(plan));
+		return;
 	}
 	PlaceMiniSetRandom(L3ISLE1, 70);
 	PlaceMiniSetRandom(L3ISLE2, 70);
@@ -2605,8 +2681,8 @@ void CreateL3Dungeon(uint32_t rseed, lvl_entry entry)
 	SetRndSeed(rseed);
 
 	SetCathedralFunnelFloor(false);
-	// POE2: the new Caves floors, for a floor whose build was settled on them (single player for now).
-	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && leveltype == DTYPE_CAVES ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	// POE2: the new Caves and Hive floors, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && IsAnyOf(leveltype, DTYPE_CAVES, DTYPE_NEST) ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
 	if (build.cathedralFunnel)
 		GenerateCavesFunnelLevel(entry, build.avoidRooms);
 	else

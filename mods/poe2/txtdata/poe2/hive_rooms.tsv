@@ -1,0 +1,41 @@
+id	family	roles	memorable	pillarsBehind	reward	options	grid
+broodhall	chamber	big,main	0	0		1R.	_...EEE..._/.........../..r.....r../.........../E....r....E/E..r...r..E/E....r....E/.........../..r..1..r../.........../_...EEE..._
+slimelake	chamber	big,main	0	0			_...EEE..._/.........../..SS...SS../..SS...SS../E.........E/E.........E/E.........E/..SS...SS../..SS...SS../.........../_...EEE....
+hivecore	chamber	big,main	0	0			__..EEE..__/_........._/.........../....___..../E.._____..E/E.._____..E/E.._____..E/....___..../.........../_........._/__..EEE..__
+columns	chamber	big,main	0	0		1o.	_...EEE..._/.........../..o..o..o../.........../E.........E/E.o..o..o.E/E.........E/.........../..o..1..o../.........../_...EEE..._
+twinbrood	chamber	big,main	0	0			_..EEE..___/........___/E..r....___/E.......___/E.......___/_........../___......../___....r..E/___.......E/___.......E/____.EEE.__
+collapsed	chamber	big,main	0	0		1o.	_...EEE..._/.........../..__....o../..__......./E......__../E..o...__../E.........E/....__....E/..o.__..1.E/.........../_...EEE..._
+seeping	chamber	big,main	0	0			_...EEE..._/.........../..SS....r../..SS......./E.....SS..E/E.....SS..E/E.........E/..SS......./..SS....r../.........../_...EEE....
+crossing	chamber	big,main,junction	0	0			___.EEE.___/___.....___/___.....___/.........../E....o....E/E.........E/E.........E/.........../___.....___/___.....___/___.EEE.___
+arrival	stairs	main	0	0			_UUU_______/.........../E.........E/E.........E/E...EEE...E
+waydown	stairs	main	0	0			__...EEE.._/__V.......E/__V...o...E/__V.......E/__..EEE..._
+eggchamber	brood	side	0	0	chest		_..._/.r.r./..*../.r.r./_EEE.
+hatchery	brood	main	0	0			_........._/E.r.r.r.r.E/E.........E/E.r.r.r.r.E/_........._
+podfield	brood	main	0	0			_........._/E..R...R..E/E....R....E/E..R...R..E/_........._
+broodmother	brood	side	0	0	raremonster		_..._/.r.r./..*../..r../_EEE_
+swarmhollow	brood	main,junction	0	0			....EEE..../E.r.....r.E/E....o....E/E.r.....r.E/....EEE....
+larder	brood	side	0	0	chest		_........._/E.Y.T.Y.T../E.P.w.*.w../E.s.Y.P.s../_........._
+slimepool	slime	side	0	0	chest		_........._/E..SS....../E..SS..*.../E........../_........._
+slimelanes	slime	main	0	0			_........._/E.SS..SS..E/E.SS..SS..E/E.........E/_........._
+melt	slime	side	0	0	chest		_........._/E.SS......./E.SS..D*.../E........../_........._
+sump	slime	main	0	0			_........._/E...SS....E/E...SS....E/E.........E/_........._
+spring	hollow	quiet,side	0	0			_........._/E..w...w..E/E....F....E/E..w...w..E/_...EEE..._
+shrinehollow	hollow	quiet,side	0	0			_........._/E...A.....E/E.........E/E..s...s..E/_........._
+stillchamber	hollow	quiet	0	0			_........._/E...o...r.E/E.........E/E....D....E/_........._
+deadhive	hollow	quiet	0	0			_........._/E.P.....P.E/E....s....E/E.P.....P.E/_........._
+slimehollow	hollow	quiet	0	0			...../.SS../.SS../...../.EEE.
+bonepit	hollow	side	1	0	chest		_..._/.P.s./..*../.s.P./_EEE.
+queenslair	lair	big,side	1	0	raremonster		_...EEE..._/..r.w.w.r../.r.R.*.R.r./.sw.....ws./E.r.___.r.E/E.w.___.w.E/E.r.___.r.E/..w.Y.Y.w../.r.s.R.s.r./..r.w.w.r../_...EEE..._
+den	lair	side	0	0	raremonster		_..._/PsPs./.*.P./.PwP./_EEE.
+spur	lair	side	0	0	strongbox		_....__..._/E...__...../E...__..*../E........../_........._
+roost	lair	side,main	0	0			_........._/E..o...o..E/E.........E/E....o....E/_........._
+pocket	pocket	side	0	0	chest		_..._/.*.../...../...../_EEE_
+slainhero	pocket	side	0	0	chest		_..._/.rwr./.rDr./.R*../_EEE_
+podcache	pocket	side	0	0	chest		_..._/.r.R./..*../.r.../_EEE_
+winding	burrow	main	0	0			E....._____/E......____/E.........E/____......E/_____.....E
+fork	burrow	main,junction	0	0			_........._/E.........E/E...___...E/E.........E/_........._
+longburrow	burrow	main	0	0			_........._/E....o....E/E.........E/E..o......E/_........._
+gallery	burrow	main,junction	0	0			....EEE..../E.o.....o.E/E.........E/E.........E/....EEE....
+neck	burrow	main	0	0			_...___..._/E...._....E/E.........E/E.........E/_...___..._
+switchback	burrow	main	0	0			_EEE.....__/.........../_______..../.........../_EEE.....__
+ribbed	burrow	main	0	0			_........._/E.o..o..o.E/E.........E/E.........E/_........._
