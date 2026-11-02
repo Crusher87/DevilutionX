@@ -24,6 +24,7 @@
 #include "poe2/monster_resistance.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_skills.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/waystones.hpp"
 #include "utils/log.hpp"
 #include "utils/parse_int.hpp"
@@ -234,6 +235,8 @@ int64_t DamagePermille(const Monster &monster)
 	permille = permille * MonsterModsDamagePercent(monster) / 100;
 	permille = permille * MapBossHitPercent(monster) / 100;
 	permille = permille * EncounterLeaderDamagePercent(monster) / 100;
+	// Grave Howl shook it: every hit it deals is softer, its blows, missiles and spells alike.
+	permille = permille * CommandWeakenedDamagePercent(monster) / 100;
 	return std::clamp<int64_t>(permille, 0, 100000000);
 }
 

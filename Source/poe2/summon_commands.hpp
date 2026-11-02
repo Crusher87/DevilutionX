@@ -7,8 +7,8 @@
  *
  * The Command comes from the socketed gem, so nothing about it is saved but the tray slot it sits on. A use goes
  * through one request (SummonCommandRequest) and its effects are plain values on the hero and the monsters, so it can
- * be sent and replayed like a game command. Damage is a share of the commanding minion's own hit; stagger and weaken
- * slide by the monster's rarity, and bosses always take something.
+ * be sent and replayed like a game command. Damage is a share of the commanding minion's own hit and meets the
+ * monster's armour; stagger and weaken slide by the monster's rarity, and bosses always take something.
  */
 #pragma once
 
@@ -49,11 +49,13 @@ enum class SummonCommand : uint8_t {
 };
 static_assert(static_cast<size_t>(SummonCommand::Count) <= std::tuple_size_v<decltype(SummonCommandRuntime::cooldowns)>, "a cooldown for each Command");
 
-/** @brief Numbers from summon-commands-numbers.md (the skill gem balance thread, 2026-11-02). */
-constexpr int FlameVolleyPercent = 150;
+/** @brief Numbers from summon-commands-numbers.md, with the balance thread's fixes (2026-11-02): every Command adds at
+ * most 25% over its cooldown. */
+constexpr int FlameVolleyPercent = 145;
 /** @brief Mages further than this from the target, or without a clear line to it, don't fire. */
 constexpr int FlameVolleySightTiles = 12;
-constexpr int PoisonArrowPercent = 80;
+/** @brief The arrow's share of the archer's hit; the cloud's poison is a share of the arrow's, so it follows. */
+constexpr int PoisonArrowPercent = 55;
 constexpr int PoisonCloudRadius = 2;
 constexpr int PoisonCloudTicks = 8 * 20;
 /** @brief The cloud poisons once a second: standard poison, this share of the arrow's hit a second for 2 seconds. */
@@ -61,19 +63,20 @@ constexpr int PoisonCloudPercentPerSecond = 20;
 constexpr int PoisonCloudPoisonTicks = 2 * 20;
 constexpr int FrostShellRadius = 4;
 constexpr int FrostShellTicks = 6 * 20;
+/** @brief A shelled minion takes this much less from every monster hit: blows, missiles and spells. */
 constexpr int FrostShellLessPercent = 30;
-/** @brief An attacker that hits a shelled minion takes this share of a Frost Lich's bolt as cold. */
+/** @brief A monster whose blow lands on a shelled minion takes this share of a Frost Lich's bolt as cold (melee only). */
 constexpr int FrostShellRetaliatePercent = 50;
 constexpr int ThunderCallReach = 5;
 constexpr int ThunderCallMaxStrikes = 6;
-constexpr int ThunderCallPercent = 100;
+constexpr int ThunderCallPercent = 85;
 constexpr int ThunderCallRadius = 1;
-constexpr int ShockedGroundTicks = 6 * 20;
+constexpr int ShockedGroundTicks = 3 * 20;
 /** @brief A fallen skeleton's bones count for Thunder Call this long (our own number). */
 constexpr int CommandBonesTicks = 30 * 20;
 constexpr int BoneFrenzyTicks = 4 * 20;
-constexpr int BoneFrenzyDamagePercent = 30;
-constexpr int BoneFrenzySpeedPercent = 30;
+constexpr int BoneFrenzyDamagePercent = 20;
+constexpr int BoneFrenzySpeedPercent = 20;
 /** @brief A frenzied captain loses this share of its life a second (POE2 Enrage's cost). */
 constexpr int BoneFrenzyLifeLossPercent = 2;
 constexpr int GraveHowlRadius = 4;
@@ -90,7 +93,7 @@ constexpr int BloodGiftMinLifePercent = 30;
 constexpr int GolemsBlazeRadius = 2;
 constexpr int GolemsBlazePercentPerSecond = 60;
 constexpr int GolemsBlazeTicks = 4 * 20;
-constexpr int FireSweepPercent = 200;
+constexpr int FireSweepPercent = 180;
 constexpr int FireSweepReach = 4;
 /** @brief Shadow Warrior's shadow stays where it last struck this long, for Switch (our own number). */
 constexpr int ShadowStandTicks = 8 * 20;
@@ -112,7 +115,7 @@ enum class CommandTier : uint8_t {
 struct CommandTierScale {
 	/** Quake Stomp's stagger, in game ticks. */
 	uint8_t staggerTicks;
-	/** Grave Howl: the monster deals this much less damage, in percent. */
+	/** Grave Howl: the monster deals this much less damage with its blows, missiles and spells, in percent. */
 	uint8_t weakenPercent;
 	/** Whether the Command breaks off the attack it's in. */
 	bool interrupts;
@@ -187,11 +190,11 @@ void OnCommandShotLanded(const Missile &shot);
 
 /** @brief Bone Frenzy's and Last Rites' more damage of a minion's blows, in percent (100 for none). */
 [[nodiscard]] int CommandMinionDamagePercent(const Monster &minion);
-/** @brief Grave Howl: what an enemy it shook still deals, in percent (100 for none). */
+/** @brief Grave Howl: what an enemy it shook still deals with any hit, in percent (100 for none); in its damage scale. */
 [[nodiscard]] int CommandWeakenedDamagePercent(const Monster &monster);
-/** @brief Frost Shell: what a shelled minion still takes from a hit, in percent (100 for none). */
+/** @brief Frost Shell: what a shelled minion still takes from any monster hit, in percent (100 for none). */
 [[nodiscard]] int CommandShellDamagePercent(const Monster &minion);
-/** @brief A monster hit one of the hero's minions: a shelled one's ice bites back. */
+/** @brief A monster's blow landed on one of the hero's minions: a shelled one's ice bites back (not at missiles). */
 void OnShelledMinionHit(Monster &attacker, const Monster &minion);
 /** @brief Bone Frenzy's faster attacks and Last Rites' faster rush: whether the minion takes another turn this tick. */
 bool CommandExtraTick(Monster &monster);

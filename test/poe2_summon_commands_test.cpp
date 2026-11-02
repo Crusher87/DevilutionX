@@ -20,8 +20,11 @@
 #include "monster.h"
 #include "pfile.h"
 #include "player.h"
+#include "poe2/area_levels.hpp"
 #include "poe2/item_search.hpp"
 #include "poe2/minion_gems.hpp"
+#include "poe2/monster_armour.hpp"
+#include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
@@ -29,6 +32,7 @@
 #include "poe2/spirit_skills.hpp"
 #include "poe2/summon_commands.hpp"
 #include "poe2/support_table.hpp"
+#include "poe2/unique_effects.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
@@ -245,7 +249,7 @@ TEST_F(Poe2SummonCommandsTest, CooldownsAndTagsFollowTheNumbers)
 		{ SC::PoisonArrow, 6 },
 		{ SC::FrostShell, 12 },
 		{ SC::ThunderCall, 5 },
-		{ SC::BoneFrenzy, 4 },
+		{ SC::BoneFrenzy, 8 },
 		{ SC::GraveHowl, 8 },
 		{ SC::PackRush, 6 },
 		{ SC::QuakeStomp, 8 },
@@ -317,9 +321,10 @@ TEST_F(Poe2SummonCommandsTest, FlameVolleyFiresEveryMageInSight)
 	// Out of sight of the target: it doesn't fire.
 	EXPECT_EQ(far.mode, MonsterMode::Stand);
 	EXPECT_EQ(far.poe2.commandAction, 0);
-	// Its bolt is half again its normal one.
+	// Its bolt is 145% of its normal one.
+	EXPECT_EQ(FlameVolleyPercent, 145);
 	const MinionGemData &gem = *FindMinionGem(PersistentSkill::SkeletalMages);
-	EXPECT_NEAR(MinionShotAverage(near, gem.shotPercent * FlameVolleyPercent / 100), MinionShotAverage(near, gem.shotPercent) * 3 / 2, 1);
+	EXPECT_NEAR(MinionShotAverage(near, gem.shotPercent * FlameVolleyPercent / 100), MinionShotAverage(near, gem.shotPercent) * 145 / 100, 1);
 }
 
 TEST_F(Poe2SummonCommandsTest, PoisonArrowBurstsIntoAChaosCloud)
@@ -378,6 +383,31 @@ TEST_F(Poe2SummonCommandsTest, FrostShellWrapsMinionsNearTheTarget)
 	// It lasts 6 seconds.
 	Tick(FrostShellTicks);
 	EXPECT_EQ(near.poe2.commandShellTicks, 0);
+}
+
+TEST_F(Poe2SummonCommandsTest, FrostShellSoaksMissilesAndSpellsToo)
+{
+	Socket(PersistentSkill::SkeletalFrostMages);
+	Monster &shelled = PlaceMinion(0, { 41, 40 }, PersistentSkill::SkeletalFrostMages, 1000);
+	Monster &bare = PlaceMinion(2, { 52, 40 }, PersistentSkill::SkeletalFrostMages, 1000);
+	Monster &archer = PlaceEnemy(1, { 44, 40 });
+	ASSERT_EQ(IssueSummonCommand(*MyPlayer, Request(PersistentSkill::SkeletalFrostMages, { 41, 40 })), CommandResult::Used);
+	RunCommandAction(shelled);
+	ASSERT_GT(shelled.poe2.commandShellTicks, 0);
+	ASSERT_EQ(bare.poe2.commandShellTicks, 0);
+	// A monster's arrow and its fire spell, on each: the shelled one takes 30% less. Petrified, so neither misses.
+	for (const auto &[missile, type] : { std::pair { MissileID::Arrow, DamageType::Physical }, std::pair { MissileID::Firebolt, DamageType::Fire } }) {
+		for (Monster *minion : { &shelled, &bare }) {
+			minion->hitPoints = minion->maxHitPoints;
+			minion->mode = MonsterMode::Petrified;
+			ASSERT_TRUE(MonsterTrapHit(*minion, 20, 20, 0, missile, type, false));
+		}
+		const int32_t bareLost = bare.maxHitPoints.raw() - bare.hitPoints.raw();
+		ASSERT_GT(bareLost, 0);
+		EXPECT_EQ(shelled.maxHitPoints.raw() - shelled.hitPoints.raw(), bareLost * (100 - FrostShellLessPercent) / 100);
+	}
+	// The ice bites back at blows only: a missile's shooter is left alone.
+	EXPECT_EQ(archer.hitPoints, archer.maxHitPoints);
 }
 
 TEST_F(Poe2SummonCommandsTest, ACommandWhoseMinionIsCutOffStillGoesOff)
@@ -446,14 +476,14 @@ TEST_F(Poe2SummonCommandsTest, BoneFrenzyHitsHarderFasterAndCostsLife)
 	const int32_t blow = MinionBlowRaw(captain);
 	ASSERT_EQ(IssueSummonCommand(*MyPlayer, Request(PersistentSkill::SkeletalReavers, { 45, 40 })), CommandResult::Used);
 	EXPECT_EQ(captain.poe2.commandFrenzyTicks, BoneFrenzyTicks);
-	EXPECT_EQ(CommandMinionDamagePercent(captain), 130);
-	EXPECT_NEAR(MinionBlowRaw(captain), blow * 13 / 10, 2);
-	// 30% faster attacks: three extra turns in ten while it swings.
+	EXPECT_EQ(CommandMinionDamagePercent(captain), 120);
+	EXPECT_NEAR(MinionBlowRaw(captain), blow * 12 / 10, 2);
+	// 20% faster attacks: two extra turns in ten while it swings.
 	captain.mode = MonsterMode::MeleeAttack;
 	int extra = 0;
 	for (int i = 0; i < 10; i++)
 		extra += CommandExtraTick(captain) ? 1 : 0;
-	EXPECT_EQ(extra, 3);
+	EXPECT_EQ(extra, 2);
 	// 2% of its life a second.
 	Tick(20);
 	EXPECT_EQ(captain.hitPoints, Fixed26_6::fromInt(98));
@@ -475,7 +505,15 @@ TEST_F(Poe2SummonCommandsTest, GraveHowlWeakensBySlidingScale)
 	Monster &boss = PlaceEnemy(4, { 40, 45 });
 	boss.uniqueType = UniqueMonsterType::Garbud;
 	Monster &far = PlaceEnemy(5, { 50, 42 });
+	// An archer and a caster in reach are shaken too, the caster even while no hit can reach it (fading out).
+	LevelMonsterTypes[30].type = MT_NGOATBW;
+	Monster &archer = Place(6, { 43, 41 }, 30, 1000);
+	LevelMonsterTypes[31].type = MT_COUNSLR;
+	Monster &caster = Place(7, { 41, 41 }, 31, 1000);
+	ASSERT_FALSE(caster.isPossibleToHit());
 	const int blow = ScaleMonsterBlow(normal, 6400);
+	const int shot = ScaleMonsterHit(archer, 6400);
+	const int spell = ScaleMonsterHit(caster, 6400);
 	ASSERT_EQ(IssueSummonCommand(*MyPlayer, Request(PersistentSkill::SkeletalBrutes, { 42, 42 })), CommandResult::Used);
 	EXPECT_EQ(brute.poe2.commandAction, static_cast<uint8_t>(SC::GraveHowl));
 	RunCommandAction(brute);
@@ -484,8 +522,17 @@ TEST_F(Poe2SummonCommandsTest, GraveHowlWeakensBySlidingScale)
 	EXPECT_EQ(CommandWeakenedDamagePercent(rare), 85);
 	EXPECT_EQ(CommandWeakenedDamagePercent(boss), 90);
 	EXPECT_EQ(CommandWeakenedDamagePercent(far), 100);
+	EXPECT_EQ(CommandWeakenedDamagePercent(archer), 100 - CommandTierScales[static_cast<size_t>(CommandTierOf(archer))].weakenPercent);
+	EXPECT_EQ(CommandWeakenedDamagePercent(caster), 100 - CommandTierScales[static_cast<size_t>(CommandTierOf(caster))].weakenPercent);
+	EXPECT_LT(CommandWeakenedDamagePercent(archer), 100);
+	EXPECT_LT(CommandWeakenedDamagePercent(caster), 100);
 	EXPECT_EQ(ScaleMonsterBlow(normal, 6400), blow * 80 / 100);
+	// Its weaken is in the monster's damage scale, which its missiles and spells meet as they land (on you or a minion).
+	EXPECT_EQ(ScaleMonsterHit(normal, 6400), blow * 80 / 100);
+	EXPECT_NEAR(ScaleMonsterHit(archer, 6400), shot * CommandWeakenedDamagePercent(archer) / 100, 1);
+	EXPECT_NEAR(ScaleMonsterHit(caster, 6400), spell * CommandWeakenedDamagePercent(caster) / 100, 1);
 	Tick(GraveHowlTicks);
+	EXPECT_EQ(ScaleMonsterHit(archer, 6400), shot);
 	EXPECT_EQ(CommandWeakenedDamagePercent(normal), 100);
 	EXPECT_EQ(CommandWeakenedDamagePercent(boss), 100);
 }
@@ -673,6 +720,32 @@ TEST_F(Poe2SummonCommandsTest, PackRushLeapsEveryWolfInReach)
 	EXPECT_NEAR(life.raw() - enemy.hitPoints.raw(), MinionBlowRaw(near) * PackRushPercent / 100, 64);
 }
 
+TEST_F(Poe2SummonCommandsTest, CommandHitsMeetMonsterArmour)
+{
+	// A level on the POE2 tables, where a knight wears armour.
+	currlevel = 8;
+	leveltype = DTYPE_CATACOMBS;
+	LoadAreaLevels();
+	Socket(PersistentSkill::SummonGolem);
+	Monster &golem = PlaceMinion(0, { 40, 42 }, PersistentSkill::SummonGolem, 500);
+	LevelMonsterTypes[30].type = MT_NBLACK;
+	Monster &knight = Place(1, { 41, 43 }, 30, 100000);
+	knight.flags |= MFLAG_POE2_TABLES;
+	MakeRarity(knight, MonsterRarity::Normal);
+	const int32_t raw = MinionBlowRaw(golem) * QuakeStompPercent / 100;
+	const int reduction = MonsterArmourReductionPercent(knight, raw);
+	const int taken = MonsterDamageTakenPercent(knight, DamageType::Physical);
+	ASSERT_EQ(IssueSummonCommand(*MyPlayer, Request(PersistentSkill::SummonGolem, { 41, 43 })), CommandResult::Used);
+	RunCommandAction(golem);
+	const int32_t lost = knight.maxHitPoints.raw() - knight.hitPoints.raw();
+	currlevel = 0;
+	leveltype = DTYPE_TOWN;
+	LoadAreaLevels();
+	EXPECT_GT(reduction, 0);
+	EXPECT_EQ(lost, static_cast<int32_t>((raw - (raw * reduction / 100)) * taken / 100));
+	EXPECT_LT(lost, raw * taken / 100);
+}
+
 TEST_F(Poe2SummonCommandsTest, CommandsComeFromSocketedGemsForTheTray)
 {
 	Player &player = *MyPlayer;
@@ -763,14 +836,8 @@ Monster &BalanceMinion(PersistentSkill gem, int gemLevel)
 
 TEST_F(Poe2SummonCommandsTest, CommandsAddAtMostAQuarterOverTheirCooldown)
 {
-	// The numbers file's check: over one cooldown, a damaging Command adds at most 25% of what its summon deals
-	// normally in that time, at gems 1 and 20. The ones over are reported to the balance thread, not lowered here;
-	// the test pins them so a change to either side shows.
-	const std::array<SummonCommand, 4> reported { SC::PoisonArrow, SC::ThunderCall, SC::BoneFrenzy, SC::FireSweep };
-	// Flame Volley is just over at gem 1 only, where the bolt is a few points and the 150% rounds up (25.1%).
-	const auto isReported = [&](SummonCommand command, int gemLevel) {
-		return std::find(reported.begin(), reported.end(), command) != reported.end() || (command == SC::FlameVolley && gemLevel == 1);
-	};
+	// The numbers file's check, with the balance thread's fixes: over one cooldown, every damaging Command adds at most
+	// 25% of what its summon deals normally in that time, at gems 1 and 20.
 	for (const int gemLevel : { 1, 20 }) {
 		for (const SummonCommand command : AllSummonCommands()) {
 			const PersistentSkill gem = CommandGem(command);
@@ -789,10 +856,7 @@ TEST_F(Poe2SummonCommandsTest, CommandsAddAtMostAQuarterOverTheirCooldown)
 			const bool withinQuarter = share.added * 100 <= share.normal * 25;
 			const int64_t permille = share.added * 1000 / share.normal;
 			std::printf("[balance] gem %2d %-14s +%lld.%lld%%\n", gemLevel, std::string(SummonCommandName(command)).c_str(), static_cast<long long>(permille / 10), static_cast<long long>(permille % 10));
-			if (isReported(command, gemLevel))
-				EXPECT_FALSE(withinQuarter) << SummonCommandName(command) << " at gem " << gemLevel << " is within it now: take it off the reported list";
-			else
-				EXPECT_TRUE(withinQuarter) << SummonCommandName(command) << " at gem " << gemLevel;
+			EXPECT_TRUE(withinQuarter) << SummonCommandName(command) << " at gem " << gemLevel;
 		}
 	}
 }
