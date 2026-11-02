@@ -37,6 +37,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/weapon_kinds.hpp"
@@ -184,14 +185,17 @@ bool MatchesQuery(const GemEntry &gem)
 		if (GemInCategory(gem, category))
 			StrAppend(haystack, " ", AsciiStrToLower(GemCategoryName(category)));
 	}
-	if (gem.support != SupportGem::None)
+	if (gem.support != SupportGem::None) {
 		StrAppend(haystack, " support ", AsciiStrToLower(SupportGemDescription(gem.support, gem.tier)));
-	else if (gem.skill.kind == SkillKind::Attack)
+	} else if (gem.skill.kind == SkillKind::Attack) {
 		StrAppend(haystack, " attack ", AsciiStrToLower(WeaponSkillDescription(gem.skill.attack())));
-	else if (gem.skill.kind == SkillKind::Persistent)
+	} else if (gem.skill.kind == SkillKind::Persistent) {
 		StrAppend(haystack, " spirit ", AsciiStrToLower(PersistentSkillDescription(gem.skill.persistent())));
-	else
+		if (const SummonCommand command = CommandForGem(gem.skill.persistent()); command != SummonCommand::None)
+			StrAppend(haystack, " command ", AsciiStrToLower(SummonCommandName(command)), " ", AsciiStrToLower(SummonCommandDescription(command)));
+	} else {
 		StrAppend(haystack, " spell");
+	}
 	size_t start = 0;
 	while (start < query.size()) {
 		size_t end = query.find(' ', start);

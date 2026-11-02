@@ -12,6 +12,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_uses.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -319,6 +320,13 @@ SkillSlot SocketSkill(Player &player, size_t slot, SkillSlot skill, int level)
 				ClearTraySlot(player, static_cast<TraySlot>(traySlot));
 		}
 	}
+	// A Command on the tray goes with its minion gem.
+	if (CommandForGem(skill.persistent()) == SummonCommand::None) {
+		for (size_t traySlot = 0; traySlot < NumTraySlots; traySlot++) {
+			if (player.poe2.tray[traySlot] == TrayBinding::ForCommand(slot))
+				ClearTraySlot(player, static_cast<TraySlot>(traySlot));
+		}
+	}
 	// Spirit gems can change stats, like Purity of Elements' resistances.
 	if (previous.kind == SkillKind::Persistent || skill.kind == SkillKind::Persistent)
 		CalcPlrInv(player, false);
@@ -361,7 +369,8 @@ void GrantStarterSkill(Player &player)
 bool TrayBindingFits(TrayBinding binding, TraySlot slot)
 {
 	// The old Move/attack, Interact and Readied spell choices are gone: the weapon attacks replace them (Curtis 2026-10-21).
-	return binding.isGem() || binding.action == TrayAction::None || (binding.action == TrayAction::WeaponAttack && binding.socket < 2);
+	return binding.isGem() || binding.action == TrayAction::None || (binding.action == TrayAction::WeaponAttack && binding.socket < 2)
+	    || (binding.isCommand() && binding.socket < NumSkillSlots);
 }
 
 std::optional<TraySlot> TraySlotForSocket(const Player &player, size_t socket)
@@ -401,6 +410,17 @@ void BindTraySlot(Player &player, TraySlot slot, TrayBinding binding)
 			// An empty slot, or an action a key can't take, leaves the other slot at its default.
 			if (otherBinding.action == TrayAction::None || !TrayBindingFits(otherBinding, *other))
 				otherBinding = DefaultTrayBinding(*other);
+		}
+	}
+	// A Command sits on one slot, like a gem: the slot it leaves takes this one's old binding.
+	if (binding.isCommand()) {
+		for (size_t other = 0; other < NumTraySlots; other++) {
+			TrayBinding &otherBinding = player.poe2.tray[other];
+			if (other == static_cast<size_t>(slot) || otherBinding != binding)
+				continue;
+			otherBinding = target;
+			if (otherBinding.action == TrayAction::None || !TrayBindingFits(otherBinding, static_cast<TraySlot>(other)))
+				otherBinding = DefaultTrayBinding(static_cast<TraySlot>(other));
 		}
 	}
 	target = binding;

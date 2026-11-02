@@ -102,6 +102,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/summon_commands.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/support_tiers.hpp"
@@ -2331,6 +2332,9 @@ void PrintItemMisc(const Item &item)
 				AddItemInfoBoxString(StrCat(_("Spirit gem: "), SpiritCostText(skill.persistent(), gemLevel)));
 			else
 				AddItemInfoBoxString(FormatRuntime(_("Spirit gem, reserves {:d} Spirit"), SpiritReservation(skill.persistent())));
+			// Its Command, a skill of its own on the tray.
+			if (const SummonCommand command = CommandForGem(skill.persistent()); command != SummonCommand::None)
+				AddItemInfoBoxString(FormatRuntime(_("Command: {:s}, {:d} s cooldown"), SummonCommandName(command), SummonCommandCooldownTicks(command) / 20));
 		} else {
 			AddItemInfoBoxString(WeaponSkillDescription(skill.attack()));
 			if (WeaponSkillNeedsWeapon(skill.attack()))

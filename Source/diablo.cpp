@@ -431,6 +431,7 @@ bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
 		PressTraySlot(slot);
 		return true;
 	case TrayAction::Gem:
+	case TrayAction::Command:
 		PressTraySlot(slot);
 		return true;
 	default:
