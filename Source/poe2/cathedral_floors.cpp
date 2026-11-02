@@ -53,6 +53,7 @@ RoomSet CathedralSet { "txtdata\\poe2\\cathedral_rooms.tsv", "Cathedral", {}, fa
 RoomSet CatacombsSet { "txtdata\\poe2\\catacombs_rooms.tsv", "Catacombs", {}, false };
 RoomSet CavesSet { "txtdata\\poe2\\caves_rooms.tsv", "Caves", {}, false };
 RoomSet HellSet { "txtdata\\poe2\\hell_rooms.tsv", "Hell", {}, false };
+RoomSet HiveSet { "txtdata\\poe2\\hive_rooms.tsv", "Hive", {}, false };
 
 bool FunnelFloor = false;
 CathedralPlan CurrentPlan;
@@ -131,17 +132,19 @@ void LoadRooms(RoomSet &set)
 			LogError("{} room {} has a ragged grid", set.name, room.id);
 			continue;
 		}
-		// The last three bits of the room history mark a Catacombs, Caves or Hell floor.
-		if (set.rooms.size() >= 61) {
-			LogError("Only 61 {} rooms fit the room history; {} is left out", set.name, room.id);
+		// The last four bits of the room history mark a Catacombs, Caves, Hell or Hive floor.
+		if (set.rooms.size() >= 60) {
+			LogError("Only 60 {} rooms fit the room history; {} is left out", set.name, room.id);
 			continue;
 		}
 		set.rooms.push_back(std::move(room));
 	}
 }
 
-const std::vector<CathedralRoomDef> &RoomsFor(bool catacombs, bool caves, bool hell)
+const std::vector<CathedralRoomDef> &RoomsFor(bool catacombs, bool caves, bool hell, bool hive)
 {
+	if (hive)
+		return GetHiveRooms();
 	if (hell)
 		return GetHellRooms();
 	if (caves)
@@ -265,10 +268,10 @@ bool CavesRock(char c)
 	return c == ' ' || c == 'L' || c == 'o';
 }
 
-/** Caves: marks on a floor tile, drawn once the walls are in. */
+/** Caves: marks on a floor tile, drawn once the walls are in (the Hive's slime pits and hive growth too). */
 bool CavesMark(char c)
 {
-	return c == 'l' || c == 'H' || c == 'f' || c == 'g' || c == 'T' || c == 'i';
+	return c == 'l' || c == 'H' || c == 'f' || c == 'g' || c == 'T' || c == 'i' || c == 'S' || c == 'w';
 }
 
 /**
@@ -422,6 +425,7 @@ public:
 		plan_.catacombs = request_.catacombs;
 		plan_.caves = request_.caves;
 		plan_.hell = request_.hell;
+		plan_.hive = request_.hive;
 		for (auto &row : slots_)
 			row.fill(Free);
 		if (!planMainWay())
@@ -453,7 +457,7 @@ private:
 
 	const std::vector<CathedralRoomDef> &rooms() const
 	{
-		return RoomsFor(request_.catacombs, request_.caves, request_.hell);
+		return RoomsFor(request_.catacombs, request_.caves, request_.hell, request_.hive);
 	}
 
 	/** In the Catacombs and Hell the stairs stand free in the room and walls are blocks of their own. */
@@ -1380,8 +1384,8 @@ private:
 			else
 				carvePath(inside, inward, target, 1);
 		}
-		// A cave hall may have a lava pool in it, as Diablo's own caves do.
-		if (request_.caves && w >= 7 && h >= 7 && (area.kind == CathedralAreaKind::BigFight ? FlipCoin() : FlipCoin(4)))
+		// A cave hall may have a lava pool in it, as Diablo's own caves do (the Hive gets Hellfire's slime pits later).
+		if (request_.caves && !request_.hive && w >= 7 && h >= 7 && (area.kind == CathedralAreaKind::BigFight ? FlipCoin() : FlipCoin(4)))
 			addCavePool(in);
 	}
 
@@ -1548,6 +1552,13 @@ constexpr std::array<_object_id, 3> Chests { OBJ_CHEST1, OBJ_CHEST2, OBJ_CHEST3 
 /** The objects a prop letter can turn into, for loading their art. */
 std::vector<_object_id> ObjectsFor(char kind, const CathedralPlan &plan)
 {
+	if (plan.hive) {
+		switch (kind) {
+		case 'r': return { OBJ_POD };
+		case 'R': return { OBJ_PODEX };
+		default: break;
+		}
+	}
 	if ((plan.caves || plan.hell) && kind == 'u')
 		return { OBJ_CAULDRON };
 	if (plan.hell) {
@@ -1785,6 +1796,32 @@ void AddCavesRoomObjects()
 	}
 }
 
+/** The props of a new Hive floor's designed rooms. The bodies on spikes and hanging bodies are only decoration. */
+void AddHiveRoomObjects()
+{
+	const bool shrineFloor = GenerateRnd(3) == 0;
+	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
+			continue;
+		const std::optional<Point> spot = PropSpot(prop.block, prop.kind == 'A', false);
+		if (!spot)
+			continue;
+		switch (prop.kind) {
+		case 'A': AddObject(OBJ_CANDLE2, *spot); break;
+		case 'F': AddObject(PickOne(Fountains), *spot); break;
+		case 'T': AddObject(PickOne(Chained), *spot); break;
+		case 'Y': AddObject(PickOne(Staked), *spot); break;
+		case 'D': AddObject(OBJ_DECAP, *spot); break;
+		case 'P':
+		case 's': AddObject(OBJ_SKPILE, *spot); break;
+		case 'r': AddObject(OBJ_POD, *spot); break;
+		case 'R': AddObject(OBJ_PODEX, *spot); break;
+		case '*': AddReward(prop, *spot); break;
+		default: break;
+		}
+	}
+}
+
 } // namespace
 
 Rectangle CathedralArea::interior() const
@@ -1849,6 +1886,19 @@ void SetCavesRooms(std::vector<CathedralRoomDef> rooms)
 	CavesSet.loaded = !CavesSet.rooms.empty();
 }
 
+const std::vector<CathedralRoomDef> &GetHiveRooms()
+{
+	if (!HiveSet.loaded)
+		LoadRooms(HiveSet);
+	return HiveSet.rooms;
+}
+
+void SetHiveRooms(std::vector<CathedralRoomDef> rooms)
+{
+	HiveSet.rooms = std::move(rooms);
+	HiveSet.loaded = !HiveSet.rooms.empty();
+}
+
 const std::vector<CathedralRoomDef> &GetHellRooms()
 {
 	if (!HellSet.loaded)
@@ -1864,7 +1914,7 @@ void SetHellRooms(std::vector<CathedralRoomDef> rooms)
 
 const std::vector<CathedralRoomDef> &RoomsOfPlan(const CathedralPlan &plan)
 {
-	return RoomsFor(plan.catacombs, plan.caves, plan.hell);
+	return RoomsFor(plan.catacombs, plan.caves, plan.hell, plan.hive);
 }
 
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn)
@@ -1923,7 +1973,9 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 {
 	static constexpr std::string_view KindNames[] = { "arrival", "way", "big fight", "quiet", "way down", "side", "side end", "quest room", "water" };
 	std::string_view dungeon = "Cathedral";
-	if (plan.hell)
+	if (plan.hive)
+		dungeon = "Hive";
+	else if (plan.hell)
 		dungeon = "Hell";
 	else if (plan.caves)
 		dungeon = "Caves";
@@ -1948,10 +2000,10 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 	return out;
 }
 
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves, bool hell)
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves, bool hell, bool hive)
 {
 	uint64_t memorable = 0;
-	const std::vector<CathedralRoomDef> &rooms = RoomsFor(catacombs, caves, hell);
+	const std::vector<CathedralRoomDef> &rooms = RoomsFor(catacombs, caves, hell, hive);
 	for (size_t i = 0; i < rooms.size(); i++) {
 		if (rooms[i].memorable)
 			memorable |= uint64_t { 1 } << i;
@@ -1959,15 +2011,15 @@ uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs,
 	uint64_t avoid = 0;
 	for (size_t i = 0; i < recent.size(); i++) {
 		// A floor of another collection still takes its turn in the history.
-		if (((recent[i] & CatacombsRoomsMark) != 0) != (catacombs && !caves && !hell) || ((recent[i] & CavesRoomsMark) != 0) != (caves && !hell)
-		    || ((recent[i] & HellRoomsMark) != 0) != hell)
+		if (((recent[i] & CatacombsRoomsMark) != 0) != (catacombs && !caves && !hell && !hive) || ((recent[i] & CavesRoomsMark) != 0) != (caves && !hell && !hive)
+		    || ((recent[i] & HellRoomsMark) != 0) != (hell && !hive) || ((recent[i] & HiveRoomsMark) != 0) != hive)
 			continue;
 		if (i < RecentNormal)
 			avoid |= recent[i];
 		else if (i < RecentMemorable)
 			avoid |= recent[i] & memorable;
 	}
-	return avoid & ~(CatacombsRoomsMark | CavesRoomsMark | HellRoomsMark);
+	return avoid & ~(CatacombsRoomsMark | CavesRoomsMark | HellRoomsMark | HiveRoomsMark);
 }
 
 bool IsCathedralFunnelFloor()
@@ -2091,6 +2143,10 @@ void AddCathedralRoomObjects()
 		return;
 	if (CurrentPlan.catacombs) {
 		AddCatacombsRoomObjects();
+		return;
+	}
+	if (CurrentPlan.hive) {
+		AddHiveRoomObjects();
 		return;
 	}
 	if (CurrentPlan.caves) {

@@ -4026,6 +4026,8 @@ void InitObjects()
 			AddL4Goodies();
 		}
 		if (leveltype == DTYPE_NEST) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CRYPT) {

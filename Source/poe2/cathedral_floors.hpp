@@ -39,6 +39,11 @@
  * Diablo's own Hell passes draw them, the archways are stamped in afterwards, and the stairs stand free in the room.
  * The Warlord of Blood's chamber (level 13) and the pentagram (level 15) each end the main way in a hall of their own.
  * Diablo's floor (level 16) stays as it is. Their setting is Gameplay > New Hell Floors.
+ *
+ * Hellfire's Hive (levels 17 to 20) is built like the Caves, on the same corner grid, from hive_rooms.tsv (picked by
+ * Curtis on 2026-11-02): slime pits are Hellfire's own 2 x 2 pit tiles and hive growth its decorated floor tiles,
+ * stamped onto the floor once the walls are made. Level 17's stairs up are the stairs to town and level 20 has no
+ * stairs down, as in Hellfire. Their setting is Gameplay > New Hive Floors.
  */
 #pragma once
 
@@ -124,6 +129,14 @@ void SetCavesRooms(std::vector<CathedralRoomDef> rooms);
 const std::vector<CathedralRoomDef> &GetHellRooms();
 void SetHellRooms(std::vector<CathedralRoomDef> rooms);
 
+/**
+ * @brief The Hive room collection, read from hive_rooms.tsv on first use. On the Caves corner grid, with tile marks
+ * 'S' a slime pit (2 x 2 marks with plain floor all round) and 'w' hive growth. Props: 'r' egg pods, 'R' a pod that
+ * bursts, 'T' a hanging body, 'Y' a body on a spike, and * A F s D P as in the Caves.
+ */
+const std::vector<CathedralRoomDef> &GetHiveRooms();
+void SetHiveRooms(std::vector<CathedralRoomDef> rooms);
+
 /** @brief A grid turned: turn & 3 quarter turns clockwise, then mirrored left to right when turn & 4. */
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn);
 /**
@@ -193,6 +206,8 @@ struct CathedralPlan {
 	bool caves = false;
 	/** Built from the Hell rooms, on Hell tiles. */
 	bool hell = false;
+	/** Built from the Hive rooms, on the Caves corner grid with Hive tiles (caves is set too). */
+	bool hive = false;
 	std::vector<CathedralArea> areas;
 	std::vector<CathedralDoor> doors;
 	std::vector<CathedralProp> props;
@@ -225,6 +240,8 @@ struct CathedralRequest {
 	bool caves = false;
 	/** The Hell rooms and rules. */
 	bool hell = false;
+	/** The Hive rooms; with caves set, the Caves rules. */
+	bool hive = false;
 	/** Bit i: room i of the collection may not be used. */
 	uint64_t forbidden = 0;
 	bool questPiece = false;
@@ -251,19 +268,21 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan);
 
 /**
  * @brief Marks a Catacombs floor in the room history, so its rooms are kept apart from the Cathedral's (whose numbers
- * mean other rooms). Rooms 61 to 63 can't be used.
+ * mean other rooms). Rooms 60 to 63 can't be used.
  */
 constexpr uint64_t CatacombsRoomsMark = uint64_t { 1 } << 63;
 /** @brief Marks a Caves floor in the room history. */
 constexpr uint64_t CavesRoomsMark = uint64_t { 1 } << 62;
 /** @brief Marks a Hell floor in the room history. */
 constexpr uint64_t HellRoomsMark = uint64_t { 1 } << 61;
+/** @brief Marks a Hive floor in the room history. */
+constexpr uint64_t HiveRoomsMark = uint64_t { 1 } << 60;
 
 /**
  * @brief Which rooms a new floor may not use, from the rooms the last five floors built used (newest first).
  * Only the floors built from the same collection count.
  */
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false, bool hell = false);
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false, bool hell = false, bool hive = false);
 
 /** @brief Whether the floor being played was made by this builder. */
 bool IsCathedralFunnelFloor();
