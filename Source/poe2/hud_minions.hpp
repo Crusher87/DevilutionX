@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "engine/surface.hpp"
+#include "panels/spell_icons.hpp"
 #include "poe2/player_data.hpp"
 
 namespace devilution {
@@ -32,6 +33,20 @@ struct MinionPortrait {
  * and Revive's minions.
  */
 std::vector<MinionPortrait> MinionHudPortraits(const Player &player);
+
+/** @brief An icon in the row that runs out: a ring drains round it and it blinks for its last seconds. */
+struct TimedHudIcon {
+	SpellIcon icon;
+	/** @brief The tooltip, one line. */
+	std::string tooltip;
+	int ticksLeft;
+	int ticksTotal;
+	/** @brief A curse on the hero rather than a buff: its ring is red. */
+	bool harmful;
+};
+
+/** @brief The timed icons after the portraits: the shrine buffs, oldest first, then a shrine's curse. */
+std::vector<TimedHudIcon> TimedHudIcons(const Player &player);
 
 void DrawMinionHud(const Surface &out);
 

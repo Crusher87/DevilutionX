@@ -121,6 +121,7 @@
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_lab.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_skills.hpp"
@@ -3982,6 +3983,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 	LoadGameLevelCalculateCursor();
 	UpdateResistancePenalty(*MyPlayer);
 	UpdateActiveMap(*MyPlayer);
+	OnShrineLevelEntered(*MyPlayer);
 	TelemetryLevelEntered();
 	SkillLabLevelLoaded();
 	return {};

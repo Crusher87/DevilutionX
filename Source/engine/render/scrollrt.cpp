@@ -88,6 +88,7 @@
 #include "poe2/corner_map.hpp"
 #include "poe2/overhead_bars.hpp"
 #include "poe2/quest_tracker.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/telemetry.hpp"
@@ -669,6 +670,8 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
+	else if (const std::optional<uint8_t> glow = ShrineGlowColor(player))
+		ClxDrawOutlineSkipColorZero(out, *glow, spriteBufferPosition, sprite);
 
 	const std::optional<DamageType> backlash = &player == MyPlayer ? VizjereiLastBacklash(player) : std::nullopt;
 	if (&player == MyPlayer && IsNoneOf(leveltype, DTYPE_NEST, DTYPE_CRYPT)) {

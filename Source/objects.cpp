@@ -14,6 +14,7 @@
 
 #include "DiabloUI/ui_flags.hpp"
 #include "automap.h"
+#include "control/control.hpp"
 #include "cursor.h"
 #include "cursor_defs.hpp"
 #ifdef _DEBUG
@@ -38,7 +39,9 @@
 #include "minitext.h"
 #include "missiles.h"
 #include "monster.h"
+#include "msg.h"
 #include "options.h"
+#include "plrmsg.h"
 #include "poe2/endgame.hpp"
 #include "poe2/area_levels.hpp"
 #include "poe2/cathedral_floors.hpp"
@@ -46,6 +49,7 @@
 #include "poe2/floor_chests.hpp"
 #include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "stores.h"
@@ -108,6 +112,7 @@ enum shrine_type : uint8_t {
 	ShrineMurphys,
 	NumberOfShrineTypes
 };
+static_assert(static_cast<int>(NumberOfShrineTypes) == static_cast<int>(ShrineKind::Count), "shrines.tsv follows Diablo's shrines");
 
 enum {
 	// clang-format off
@@ -1342,10 +1347,18 @@ void AddShrine(Object &shrine)
 		slist[i] = isShrineAvailable && (!isEnchantedShrine || isCorrectLevelType);
 	}
 
-	int selectedIndex;
-	do {
-		selectedIndex = GenerateRnd(shrineCount);
-	} while (!slist[selectedIndex]);
+	int selectedIndex = -1;
+	if (gbIsPoe2 && HasShrineData()) {
+		// POE2 Mashup: every shrine is on the table, but Divine stays off early and boss floors.
+		const std::vector<ShrineKind> pool = SpawnableShrines(currlevel, OnShrineBossFloor(), shrineCount);
+		if (!pool.empty())
+			selectedIndex = static_cast<int>(pool[GenerateRnd(static_cast<int>(pool.size()))]);
+	}
+	if (selectedIndex < 0) {
+		do {
+			selectedIndex = GenerateRnd(shrineCount);
+		} while (!slist[selectedIndex]);
+	}
 
 	shrine._oVar1 = selectedIndex;
 
@@ -3027,6 +3040,47 @@ void OperateShrineMurphys(DiabloGenerator &rng, Player &player)
 	InitDiabloMsg(EMSG_SHRINE_MURPHYS);
 }
 
+/** @brief Diablo's line for a shrine, kept in POE2 mode. */
+diablo_message Poe2ShrineMessage(int shrineType, const ShrineGrant &grant)
+{
+	switch (shrineType) {
+	case ShrineMysterious: return EMSG_SHRINE_MYSTERIOUS;
+	case ShrineHidden: return EMSG_SHRINE_HIDDEN;
+	case ShrineGloomy: return EMSG_SHRINE_GLOOMY;
+	case ShrineWeird: return EMSG_SHRINE_WEIRD;
+	case ShrineMagical:
+	case ShrineMagicaL2: return EMSG_SHRINE_MAGICAL;
+	case ShrineStone: return EMSG_SHRINE_STONE;
+	case ShrineReligious: return EMSG_SHRINE_RELIGIOUS;
+	case ShrineEnchanted: return EMSG_SHRINE_ENCHANTED;
+	case ShrineThaumaturgic: return EMSG_SHRINE_THAUMATURGIC;
+	case ShrineFascinating: return EMSG_SHRINE_FASCINATING;
+	case ShrineCryptic: return EMSG_SHRINE_CRYPTIC;
+	case ShrineEldritch: return EMSG_SHRINE_ELDRITCH;
+	case ShrineEerie: return EMSG_SHRINE_EERIE;
+	case ShrineDivine: return EMSG_SHRINE_DIVINE;
+	case ShrineHoly: return EMSG_SHRINE_HOLY;
+	case ShrineSacred: return EMSG_SHRINE_SACRED;
+	case ShrineSpiritual: return EMSG_SHRINE_SPIRITUAL;
+	case ShrineSpooky: return EMSG_SHRINE_SPOOKY1;
+	case ShrineAbandoned: return EMSG_SHRINE_ABANDONED;
+	case ShrineCreepy: return EMSG_SHRINE_CREEPY;
+	case ShrineQuiet: return EMSG_SHRINE_QUIET;
+	case ShrineSecluded: return EMSG_SHRINE_SECLUDED;
+	case ShrineOrnate: return EMSG_SHRINE_ORNATE;
+	case ShrineGlimmering: return EMSG_SHRINE_GLIMMERING;
+	case ShrineTainted: return EMSG_SHRINE_TAINTED1;
+	case ShrineOily: return EMSG_SHRINE_OILY;
+	case ShrineGlowing: return EMSG_SHRINE_GLOWING;
+	case ShrineMendicant: return EMSG_SHRINE_MENDICANT;
+	case ShrineSparkling: return EMSG_SHRINE_SPARKLING;
+	case ShrineTown: return EMSG_SHRINE_TOWN;
+	case ShrineShimmering: return EMSG_SHRINE_SHIMMERING;
+	case ShrineSolar: return grant.variant == SolarNight ? EMSG_SHRINE_SOLAR4 : EMSG_SHRINE_SOLAR2;
+	default: return EMSG_SHRINE_MURPHYS;
+	}
+}
+
 void OperateShrine(Player &player, Object &shrine, SfxID sType)
 {
 	if (!shrine.canInteractWith())
@@ -3040,6 +3094,19 @@ void OperateShrine(Player &player, Object &shrine, SfxID sType)
 	PlaySfxLoc(sType, shrine.position);
 	shrine._oAnimFlag = true;
 	shrine._oAnimDelay = 1;
+
+	if (gbIsPoe2 && HasShrineData() && shrine._oVar1 != ShrineTown) {
+		// POE2 Mashup: a timed buff instead of Diablo's lasting effect. The toucher rolls it and tells the others.
+		if (&player == MyPlayer) {
+			const ShrineGrant grant = ResolveShrine(static_cast<ShrineKind>(shrine._oVar1), rng, ShrineClockSaysNight());
+			ApplyShrineGrant(player, grant);
+			InitDiabloMsg(Poe2ShrineMessage(shrine._oVar1, grant));
+			EventPlrMsg(ShrineGrantLine(grant));
+			NetSendCmdShrineBuff(static_cast<uint8_t>(grant.kind), grant.variant, static_cast<uint8_t>(grant.curse));
+			NetSendCmdLoc(MyPlayerId, false, CMD_OPERATEOBJ, shrine.position);
+		}
+		return;
+	}
 
 	switch (shrine._oVar1) {
 	case ShrineMysterious:
@@ -4087,6 +4154,16 @@ Object *AddObject(_object_id objType, Point objPos)
 {
 	if (ActiveObjectCount >= MAXOBJECTS)
 		return nullptr;
+	if (gbIsPoe2 && IsAnyOf(objType, OBJ_SHRINEL, OBJ_SHRINER) && leveltype != DTYPE_TOWN) {
+		// POE2 Mashup: one shrine on floors 1 to 4, two deeper.
+		int shrines = 0;
+		for (int i = 0; i < ActiveObjectCount; i++) {
+			if (Objects[ActiveObjects[i]].IsShrine())
+				shrines++;
+		}
+		if (shrines >= ShrineCapForLevel(currlevel))
+			return nullptr;
+	}
 
 	const int oi = AvailableObjects[0];
 	AvailableObjects[0] = AvailableObjects[MAXOBJECTS - 1 - ActiveObjectCount];
@@ -5025,6 +5102,11 @@ void GetObjectStr(const Object &object)
 	if (object.IsDisabled()) {
 		InfoString = FormatRuntime(_(/* TRANSLATORS: If user enabled diablo.ini setting "Disable Crippling Shrines" is set to 1; also used for Na-Kruls lever */ "{:s} (disabled)"), InfoString.str());
 		InfoColor = UiFlags::ColorRed;
+	}
+	if (gbIsPoe2 && object.IsShrine() && object.canInteractWith() && object._oVar1 != ShrineTown) {
+		std::string effect = ShrineHoverText(static_cast<ShrineKind>(object._oVar1));
+		if (!effect.empty())
+			AddInfoBoxString(std::move(effect));
 	}
 }
 

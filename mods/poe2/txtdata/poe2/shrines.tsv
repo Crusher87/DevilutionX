@@ -1,0 +1,35 @@
+id	name	power	effect	seconds	glow	icon	refresh	spawns	text
+Mysterious	Mysterious	Mystery	Random	0	white	Search	true	true	Grants the power of a random shrine
+Hidden	Hidden	Echoing	Echoing	20	blue	Phasing	true	true	Skills repeat once; the repeat costs mana
+Gloomy	Gloomy	Gloom	Gloom	45	red	BloodStar	true	true	Kills have a 40% chance to explode for a quarter of the monster's life
+Weird	Weird	Hexing	Hexing	45	beige	Apocalypse	true	true	Hits have a 25% chance to curse the monster with a random curse
+Magical	Magical	Replenishing	Replenishing	20	red	Healing	true	true	Regenerate 4% of life and 10% of mana a second
+Stone	Stone	Impenetrable	Impenetrable	45	gray	StoneCurse	true	true	+100% armour, evasion and energy shield
+Religious	Religious	Resistance	Resistance	45	white	Elemental	true	true	+50% elemental resistances and +5% to their maximum
+Enchanted	Enchanted	Diamond	Diamond	20	iceblue	PentaStar	true	true	Every attack is a critical hit
+Thaumaturgic	Thaumaturgic	Covetous	Covetous	45	gold	Search	true	true	+50% item rarity and +15% item quantity; you take 10% more damage
+Fascinating	Fascinating	Meteoric	Meteoric	45	orange	Fireball	true	true	Meteors rain on the monsters around you
+Cryptic	Cryptic	Tempest	Tempest	45	blue	Nova	true	true	Lightning novas burst around you
+Magical2	Magical	Replenishing	Replenishing	20	red	Healing	true	true	Regenerate 4% of life and 10% of mana a second
+Eldritch	Eldritch	Mystery	Random	0	white	Search	true	false	Grants the power of a random shrine
+Eerie	Eerie	Freezing	Freezing	45	iceblue	Etherealize	true	true	Ice shards spiral out from you
+Divine	Divine	Divine	Divine	8	gold	HolyBolt	true	true	You cannot be damaged; ends when you enter a boss's floor
+Holy	Holy	Acceleration	Acceleration	30	yellow	Teleport	true	true	+40% movement speed and +60% skill speed
+Sacred	Sacred	Tempest Arcs	TempestArcs	45	blue	ChainLightning	true	true	Lightning arcs from you to the monsters nearby
+Spiritual	Spiritual	Greed	Greed	45	gold	Telekinesis	true	true	+100% gold found; no equipment drops
+Spooky	Spooky	Skeletal	Skeletal	45	white	BoneSpirit	true	true	Three skeletons rise to fight for you
+Abandoned	Abandoned	Thorned	Thorned	45	orange	Reflect	true	true	Reflect 18% of the damage you take
+Creepy	Creepy	Brutal	Brutal	30	red	Berserk	true	true	Hits knock back and deal 50% more damage; +30% stun duration
+Quiet	Quiet	Enduring	Enduring	30	beige	BloodBoil	true	true	+40% life and +40% area of effect; your life is safe when it ends
+Secluded	Secluded	Seeking	Seeking	45	yellow	Infravision	true	true	+100% item rarity, and the map is revealed
+Ornate	Ornate	Enduring II	EnduringII	30	beige	ManaShield	true	true	+50% life and +100% armour, evasion and energy shield; your life is safe when it ends
+Glimmering	Glimmering	Acceleration I	AccelerationI	30	yellow	Warp	true	true	+80% projectile speed and +50% skill speed
+Tainted	Tainted	Tainted	Tainted	45	gray	DoomSerpents	true	true	Every item that drops is corrupted
+Oily	Oily	Infernal	ExtraFire	45	red	FireWall	true	true	Gain 50% of damage as extra fire
+Glowing	Glowing	Enlightening	Enlightening	30	yellow	Identify	false	true	50% more experience; taking it again doesn't renew it
+Mendicant	Mendicant's	Greed II	GreedII	45	gold	ItemRepair	true	true	Equipment drops turn into currency
+Sparkling	Sparkling	Storm	ExtraLightning	45	blue	Lightning	true	true	Gain 50% of damage as extra lightning
+Town	Town	Town	TownPortal	0	white	TownPortal	true	true	Opens a portal to town
+Shimmering	Shimmering	Frost	ExtraCold	45	iceblue	StaffRecharge	true	true	Gain 50% of damage as extra cold
+Solar	Solar	Solar	Solar	45	yellow	RingOfFire	true	true	By day +50% fire damage and avoid ailments; by night +50% cold damage and +2 projectiles
+Murphys	Murphy's	Murphy's	RandomCursed	0	gray	RedSkull	true	true	Grants a random shrine's power, and curses you

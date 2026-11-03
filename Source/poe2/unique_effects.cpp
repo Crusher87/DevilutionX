@@ -22,6 +22,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
@@ -686,6 +687,9 @@ int AttackCritChance(const Player &player)
 		const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
 		return HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike) ? player.getCharacterLevel() : 0;
 	}
+	// The Enchanted shrine (Diamond): every attack is a critical hit.
+	if (GetShrineBonuses(player).alwaysCrit)
+		return 100;
 	int chance = BaseAttackCritPercent;
 	// The caster weapons rework's quarterstaves have POE2's crit, halved (its base's crit column, in tenths of a percent);
 	// the older ones keep the default.
@@ -1343,6 +1347,9 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 		return damage;
 	UniqueRuleState &state = State(player);
 	int64_t raw = damage.raw() * MapDamageTakenPercent(player) / 100;
+	// The Thaumaturgic shrine (Covetous) and Murphy's Vulnerability.
+	if (const int more = GetShrineBonuses(player).damageTakenPercent; more != 0)
+		raw = raw * (100 + more) / 100;
 	if (HasBacklash(player, DamageType::Lightning))
 		raw = raw * (100 + BacklashDamageTakenPercent) / 100;
 	if (const int more = Rule(player, UniqueRule::MovingVulnerability); more > 0 && state.sinceMovedTicks < TicksPerSecond)

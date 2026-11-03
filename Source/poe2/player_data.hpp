@@ -19,6 +19,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/map_state.hpp"
+#include "poe2/shrine_state.hpp"
 #include "poe2/unique_rules.hpp"
 #include "tables/spelldat.h"
 
@@ -1207,6 +1208,8 @@ struct Poe2PlayerData {
 	AtlasState atlas {};
 	/** @brief Currency shards and the gambler's charges. */
 	EconomyState economy {};
+	/** @brief The shrine buffs and a Murphy's curse, with their timers (poe2/shrines.hpp). */
+	ShrineBuffState shrines {};
 	/** @brief Raw life and mana still to recover from the flasks being drunk, and the game ticks left (not saved). */
 	int32_t lifeFlaskRaw = 0;
 	uint8_t lifeFlaskTicks = 0;
@@ -1353,6 +1356,7 @@ struct Poe2PlayerData {
 		mapRun = {};
 		atlas = {};
 		economy = {};
+		shrines = {};
 		charmCooldown = 0;
 		resistCharmTicks = {};
 		stunImmuneTicks = 0;
