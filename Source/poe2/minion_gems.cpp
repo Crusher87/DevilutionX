@@ -254,13 +254,10 @@ void SwarmBite(Player &player, Monster &monster, int gemLevel)
 	// Minion damage: monster armour leaves it alone for now (Curtis), like the skeletons' and golems' blows.
 	if (!SpiritHitMonster(player, monster, DamageType::Physical, Fixed26_6::fromRaw(bite), 100, true))
 		return;
-	// Each bite adds a poison of its own, up to a few at once.
-	Poe2MonsterState &target = monster.poe2;
+	// Each bite poisons: only the strongest poison counts, so a bite's is lost on a monster with a stronger one.
 	const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(bite) * SwarmPoisonPercent / 100 / SwarmPoisonTicks), 1);
-	const int32_t cap = std::max(perTick * SwarmPoisonStacks, target.poisonDamagePerTick);
-	target.poisonDamagePerTick = target.poisonTicks > 0 ? std::min(target.poisonDamagePerTick + perTick, cap) : perTick;
-	target.poisonTicks = std::max<uint8_t>(target.poisonTicks, SwarmPoisonTicks);
-	target.poisonSource = static_cast<int8_t>(player.getId());
+	if (AddPoison(monster, perTick, SwarmPoisonTicks, SwarmPoisonStacks))
+		monster.poe2.poisonSource = static_cast<int8_t>(player.getId());
 }
 
 /** @brief Ravenous Swarm: sends out a new swarm while an enemy is near, and lets each swarm bite. */

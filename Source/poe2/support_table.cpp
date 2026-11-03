@@ -949,6 +949,24 @@ std::optional<Point> TakeCorpseNear(Point center, int radius)
 
 } // namespace
 
+bool AddPoison(Monster &monster, int32_t perTick, int ticks, int maxStacks)
+{
+	Poe2MonsterState &state = monster.poe2;
+	if (maxStacks <= 1) {
+		// POE2: only the strongest poison deals damage. A weaker one is lost (there's one poison a monster at a time
+		// here, so it doesn't wait for the stronger one to run out); one as strong or stronger takes over.
+		if (state.poisonTicks > 0 && perTick < state.poisonDamagePerTick)
+			return false;
+		state.poisonTicks = static_cast<uint8_t>(perTick == state.poisonDamagePerTick ? std::max<int>(state.poisonTicks, ticks) : ticks);
+		state.poisonDamagePerTick = perTick;
+	} else {
+		const int32_t cap = perTick * maxStacks;
+		state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
+		state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
+	}
+	return true;
+}
+
 void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks, bool fromHit)
 {
 	if (!AilmentAllowed(player, HitSource()))
@@ -975,18 +993,8 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 	Poe2MonsterState &state = monster.poe2;
 	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
 	const bool stacked = state.poisonTicks > 0 && maxStacks > 1;
-	if (maxStacks <= 1) {
-		// POE2: only the strongest poison deals damage. A weaker one is lost (there's one poison a monster at a time
-		// here, so it doesn't wait for the stronger one to run out); one as strong or stronger takes over.
-		if (state.poisonTicks > 0 && perTick < state.poisonDamagePerTick)
-			return;
-		state.poisonTicks = static_cast<uint8_t>(perTick == state.poisonDamagePerTick ? std::max<int>(state.poisonTicks, ticks) : ticks);
-		state.poisonDamagePerTick = perTick;
-	} else {
-		const int32_t cap = perTick * maxStacks;
-		state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
-		state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
-	}
+	if (!AddPoison(monster, perTick, ticks, maxStacks))
+		return;
 	state.poisonSource = static_cast<int8_t>(player.getId());
 	const bool supported = Hit.player == &player && !Hit.skill.isEmpty();
 	// Plague Burst: the poison builds plague; a stack added to it keeps the plague it had (POE2's Bursting Plague).
