@@ -912,7 +912,6 @@ bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
 	case CurrencyOrb::Regal:
 		return rarity == ITEM_QUALITY_MAGIC;
 	case CurrencyOrb::Exalted:
-		return IsAnyOf(rarity, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE);
 	case CurrencyOrb::Chaos:
 	case CurrencyOrb::GreaterChaos:
 	case CurrencyOrb::PerfectChaos:
@@ -955,7 +954,7 @@ std::string_view CurrencyOrbDescription(CurrencyOrb orb)
 	case CurrencyOrb::Regal:
 		return _("Turns a magic item rare, keeping its affixes");
 	case CurrencyOrb::Exalted:
-		return _("Adds an affix to a rare item, or makes a magic item rare with one more affix");
+		return _("Adds a modifier to a rare item");
 	case CurrencyOrb::Divine:
 		return _("Rerolls the values of a magic, rare or unique item's modifiers");
 	case CurrencyOrb::Vaal:
@@ -1162,9 +1161,8 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 		EventPlrMsg(_("Uniques only take Divine and Vaal Orbs, quality currency and augments."), UiFlags::ColorRed);
 		return false;
 	}
-	// Curtis 2026-10-16: an Exalted Orb on a magic item makes it rare and adds an affix, as a Regal Orb does.
-	if (orb == CurrencyOrb::Exalted && item._iMagical == ITEM_QUALITY_MAGIC)
-		orb = CurrencyOrb::Regal;
+	// As in POE2, an Exalted Orb only adds to a rare item: a Regal Orb is what makes a magic item rare (Curtis, Rogue run 2;
+	// it used to make a magic item rare too).
 
 	// Shop wares too: they rebuild with their crafting state like drops (Curtis 2026-10-22: a Regal Orb once made a
 	// bought magic staff a whole new rare with five modifiers).

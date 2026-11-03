@@ -335,7 +335,7 @@ TEST_F(Poe2CraftingTest, AlchemyGivesExactlyFourModifiers)
 	}
 }
 
-TEST_F(Poe2CraftingTest, OneAugmentThenExaltMakesItRare)
+TEST_F(Poe2CraftingTest, OneAugmentThenRegalMakesItRareAndExaltOnlyTakesRares)
 {
 	Item item = Crafted(CurrencyOrb::Transmutation, MakeItem("Full Plate Mail", 9, ITEM_QUALITY_NORMAL, 60));
 	EXPECT_TRUE(CurrencyFitsItem(CurrencyOrb::Augmentation, item));
@@ -343,10 +343,19 @@ TEST_F(Poe2CraftingTest, OneAugmentThenExaltMakesItRare)
 	ASSERT_EQ(Mods(item).size(), 2U);
 	// A second Augmentation has no room, so the item isn't outlined for it.
 	EXPECT_FALSE(CurrencyFitsItem(CurrencyOrb::Augmentation, item));
-	EXPECT_TRUE(CurrencyFitsItem(CurrencyOrb::Exalted, item));
-	item = Crafted(CurrencyOrb::Exalted, item);
+	// As in POE2, an Exalted Orb needs a rare item: it no longer makes a magic one rare.
+	EXPECT_FALSE(CurrencyFitsItem(CurrencyOrb::Exalted, item));
+	const Item magic = item;
+	EXPECT_FALSE(ApplyCurrencyOrb(CurrencyOrb::Exalted, *MyPlayer, item));
+	EXPECT_EQ(item._iMagical, ITEM_QUALITY_MAGIC);
+	EXPECT_EQ(Mods(item).size(), Mods(magic).size());
+	EXPECT_TRUE(CurrencyFitsItem(CurrencyOrb::Regal, item));
+	item = Crafted(CurrencyOrb::Regal, item);
 	EXPECT_EQ(item._iMagical, ITEM_QUALITY_RARE);
 	EXPECT_EQ(Mods(item).size(), 3U);
+	EXPECT_TRUE(CurrencyFitsItem(CurrencyOrb::Exalted, item));
+	item = Crafted(CurrencyOrb::Exalted, item);
+	EXPECT_EQ(Mods(item).size(), 4U);
 }
 
 TEST_F(Poe2CraftingTest, AlchemyRerollsAMagicItem)
