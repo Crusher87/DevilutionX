@@ -775,7 +775,7 @@ void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skil
 		Value(lines, "A swarm every", std::format("{:d} seconds, with an enemy within {:d} tiles", SwarmEveryTicks / 20, SwarmReachTiles));
 		Value(lines, "Each swarm lasts", ticks(SwarmTicks(level)));
 		Value(lines, "Bites", std::format("every {:.1f}s for {:d}% of a Skeleton Warrior's blow", SwarmBiteTicks / 20.0, SwarmBitePercent));
-		Value(lines, "Poison", std::format("{:d}% of the bite over {:d} seconds", SwarmPoisonPercent, SwarmPoisonTicks / 20));
+		Value(lines, "Poison", std::format("{:d}% of the bite over {:d} seconds, the strongest only", SwarmPoisonPercent, SwarmPoisonTicks / 20));
 		break;
 	case PersistentSkill::Sacrifice:
 		Value(lines, "Corpses", "your skeletons, for Corpse Explosion and Soul Harvest");
@@ -1090,12 +1090,11 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 	}
 
 	std::vector<std::string> ailments = AilmentLines(hit, tagBits);
-	// A skill that poisons says how strong its poison is: Cobra Strike's is twice the common one.
+	// A skill that poisons says how strong its poison is: Cobra Strike's is three times the common one. Its poison never
+	// stacks on its own; only supports add stacks (Twin Fangs).
 	if (table != nullptr && ((table->flags & (TF_Poison | TF_PoisonBurst | TF_LandingZone)) != 0 || table->zone == TableZone::Bog)) {
 		const int poison = TablePoisonPercentPerSecond(*table);
-		const int stacks = TablePoisonStacks(*table);
-		ailments.push_back(std::format("Poisons for {:d}% of the hit a second for {:d} seconds ({:d}% in all){:s}", poison, PoisonTicks / TicksPerSecond, poison * PoisonTicks / TicksPerSecond,
-		    stacks > 1 ? std::format(", stacking {:d} times", stacks) : std::string()));
+		ailments.push_back(std::format("Poisons for {:d}% of the hit a second for {:d} seconds ({:d}% in all)", poison, PoisonTicks / TicksPerSecond, poison * PoisonTicks / TicksPerSecond));
 	}
 	if (!ailments.empty()) {
 		Heading(lines, "Ailments");

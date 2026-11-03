@@ -305,18 +305,15 @@ struct TableSkillData {
 	GrantedRider rider = GrantedRider::None;
 	/**
 	 * A poisoning skill's own poison (TF_Poison, TF_PoisonBurst): its damage a second, for 2 seconds, in percent of the
-	 * hit. 0 is POE2's common poison, PoisonPercentPerSecond (20); Cobra Strike's is twice that, as POE2's skills with a
-	 * stronger poison have.
+	 * hit. 0 is POE2's common poison, PoisonPercentPerSecond (20); Cobra Strike's is 60 and Poison Dagger's 100, as POE2's
+	 * skills with a stronger poison have. A skill's poison never stacks on its own: only supports add stacks (Twin Fangs;
+	 * Curtis 2026-11-03).
 	 */
 	uint8_t poisonPercent = 0;
-	/** How many of the skill's poisons count on a monster at once; 0 or 1 for the strongest only (Poison Dagger's 3). */
-	uint8_t poisonStacks = 0;
 };
 
 /** @brief A poisoning table skill's poison a second, in percent of the hit: the row's own, or POE2's common 20%. */
 [[nodiscard]] int TablePoisonPercentPerSecond(const TableSkillData &data);
-/** @brief How many of a table skill's poisons count on a monster at once: 1 unless the row says more. */
-[[nodiscard]] int TablePoisonStacks(const TableSkillData &data);
 /** @brief Whether a hero's arrow struck a monster in their Witch's Bog, was shot from it or flew over it on its way. */
 [[nodiscard]] bool ArrowCrossedBog(const Player &player, Point from, Point to);
 /**

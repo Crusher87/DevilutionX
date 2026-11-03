@@ -16,6 +16,8 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
+#include "poe2/gem_levels.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
@@ -249,44 +251,90 @@ TEST_F(Poe2PoisonSkillsTest, PoisonSkillsHaveTheirTags)
 		EXPECT_EQ(tags(entry.skill) & ST_Elemental, 0U) << Row(entry.skill).name;
 }
 
-// Poison Dagger: a 130% stab whose 50% a second poison stacks three times.
-TEST_F(Poe2PoisonSkillsTest, PoisonDaggerStacksThreePoisons)
+// The 1-stack rule (Curtis 2026-11-03): a skill's poison never stacks on its own, only supports add stacks (Twin Fangs).
+// The table rows have no stack count to give one.
+template <typename Row>
+concept HasPoisonStacks = requires(const Row &row) { row.poisonStacks; };
+static_assert(!HasPoisonStacks<TableSkillData>);
+
+/** @brief Stabs the monster in front with the row until a stab lands (the monster loses life). */
+void StabUntilItLands(const TableSkillData &data, SkillSlot slot, Monster &monster, uint32_t &seed)
 {
 	Player &player = *MyPlayer;
-	EnterDungeon();
-	const TableSkillData &dagger = Row(WeaponSkill::PoisonDagger);
-	EXPECT_EQ(dagger.shape, TableShape::Strike);
-	EXPECT_EQ(dagger.damagePercent, 130);
-	EXPECT_EQ(dagger.poisonPercent, 50);
-	EXPECT_EQ(TablePoisonStacks(dagger), 3);
-	EXPECT_EQ(TablePoisonStacks(Row(WeaponSkill::ViperStrike)), 1);
-	const SkillSlot slot = Supported(WeaponSkill::PoisonDagger);
-
-	// The stab poisons.
 	const Point front = player.position.tile + player._pdir;
-	int32_t perTick = 0;
-	for (uint32_t seed = 1; seed < 50 && perTick == 0; seed++) {
-		ClearMonsters();
-		Monster &monster = PlaceMonster(0, front);
+	for (const uint32_t last = seed + 100; seed < last; seed++) {
+		const Fixed26_6 life = monster.hitPoints;
 		SetRndSeed(seed);
 		{
 			const SupportHitScope scope(player, slot);
-			ExecuteTableSkill(player, dagger, front);
+			ExecuteTableSkill(player, data, front);
 		}
-		if (monster.poe2.poisonTicks > 0) {
-			EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks);
-			perTick = monster.poe2.poisonDamagePerTick;
+		if (monster.hitPoints < life) {
+			seed++;
+			return;
 		}
 	}
-	EXPECT_GT(perTick, 0);
+	ADD_FAILURE() << data.name << " never landed";
+}
 
-	// Three of its poisons add up; a fourth doesn't.
-	ClearMonsters();
-	Monster &monster = PlaceMonster(0, { 45, 45 });
-	for (int i = 0; i < 4; i++) {
-		const SupportHitScope scope(player, slot);
-		InflictPoison(player, monster, 40 * 100, PoisonTicks, TablePoisonStacks(dagger));
-		EXPECT_EQ(monster.poe2.poisonDamagePerTick, 100 * std::min(i + 1, 3)) << i;
+// Poison Dagger (the 1-stack rule, Curtis 2026-11-03; poison-skills-numbers.md): the quick stab, 150% at 120% attack
+// speed (0.54 s) for 4 mana, with the heaviest poison, 100% of the hit a second for 2 seconds (x5 the common one), one
+// stack (was 130%, 50% a second, three stacks).
+TEST_F(Poe2PoisonSkillsTest, PoisonDaggerPoisonsHeaviestOnce)
+{
+	const TableSkillData &dagger = Row(WeaponSkill::PoisonDagger);
+	const SkillSlot slot = SkillSlot::ForAttack(WeaponSkill::PoisonDagger);
+	EXPECT_EQ(dagger.shape, TableShape::Strike);
+	EXPECT_EQ(dagger.level, 1);
+	EXPECT_EQ(dagger.mana, 4);
+	EXPECT_EQ(dagger.damagePercent, 150);
+	EXPECT_EQ(dagger.poisonPercent, 100);
+	EXPECT_EQ(TablePoisonPercentPerSecond(dagger), 5 * PoisonPercentPerSecond);
+	EXPECT_EQ(SkillAttackSpeedPercent(slot), 120);
+	EXPECT_EQ(SkillSpeedDamagePercent(slot), 100);
+	EXPECT_EQ(SkillSpeedManaPercent(slot), 100);
+	// Melee pays two thirds of the listed 4: 3.
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::PoisonDagger), 3);
+	EXPECT_EQ(GemBaseManaCost(slot, 1), 3);
+}
+
+// Both dagger stabs poison once: a second stab's poison doesn't add to the first. Twin Fangs adds a stack (and only one),
+// its poisons 20% shorter.
+TEST_F(Poe2PoisonSkillsTest, DaggerPoisonsStackOnlyWithTwinFangs)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	player._pIMinDam = player._pIMaxDam = 25;
+	const Point front = player.position.tile + player._pdir;
+	for (const WeaponSkill skill : { WeaponSkill::PoisonDagger, WeaponSkill::ViperStrike }) {
+		const TableSkillData &data = Row(skill);
+		uint32_t seed = 1;
+
+		ClearMonsters();
+		Monster &monster = PlaceMonster(0, front);
+		const SkillSlot slot = Supported(skill);
+		StabUntilItLands(data, slot, monster, seed);
+		const int32_t one = monster.poe2.poisonDamagePerTick;
+		ASSERT_GT(one, 0) << data.name;
+		EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks) << data.name;
+		for (int i = 0; i < 3; i++) {
+			monster.poe2.poisonTicks = 1;
+			StabUntilItLands(data, slot, monster, seed);
+			EXPECT_EQ(monster.poe2.poisonDamagePerTick, one) << data.name << " " << i;
+			EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks) << data.name << " " << i;
+		}
+
+		ClearMonsters();
+		Monster &fanged = PlaceMonster(0, front);
+		Supported(skill, SupportGem::TwinFangs);
+		StabUntilItLands(data, slot, fanged, seed);
+		const int32_t first = fanged.poe2.poisonDamagePerTick;
+		EXPECT_NEAR(first, one, 1) << data.name;
+		EXPECT_EQ(fanged.poe2.poisonTicks, PoisonTicks * 80 / 100) << data.name;
+		StabUntilItLands(data, slot, fanged, seed);
+		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, 2 * first) << data.name;
+		StabUntilItLands(data, slot, fanged, seed);
+		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, 2 * first) << data.name;
 	}
 }
 

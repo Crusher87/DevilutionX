@@ -350,17 +350,41 @@ TEST_F(Poe2MinionGemsTest, SwarmsLeaveForNearbyEnemiesBiteAndPoison)
 	ProcessMinionGems(player);
 	ASSERT_EQ(SwarmCount(player), 1);
 	EXPECT_EQ(player.poe2.spiritState.swarms[0].target, 1);
-	// It bites at once and poisons; the enemy further off is left alone.
+	// It bites at once and poisons, for 240% of the bite over 2 seconds (the 1-stack rule, Curtis 2026-11-03: was 60%
+	// stacking 5 times); the enemy further off is left alone.
+	EXPECT_EQ(SwarmPoisonPercent, 240);
+	EXPECT_EQ(SwarmPoisonTicks, 40);
+	EXPECT_EQ(SwarmPoisonStacks, 1);
+	const int32_t bitePoison = static_cast<int32_t>(static_cast<int64_t>(SwarmBiteRaw(player, 20)) * SwarmPoisonPercent / 100 / SwarmPoisonTicks);
+	ASSERT_GT(bitePoison, 0);
 	EXPECT_LT(near.hitPoints, near.maxHitPoints);
-	EXPECT_GT(near.poe2.poisonTicks, 0);
-	EXPECT_GT(near.poe2.poisonDamagePerTick, 0);
+	EXPECT_EQ(near.poe2.poisonTicks, SwarmPoisonTicks);
+	EXPECT_EQ(near.poe2.poisonDamagePerTick, bitePoison);
 	EXPECT_EQ(far.hitPoints, far.maxHitPoints);
-	// The next swarm leaves 6 seconds later.
+	// The next swarm leaves 6 seconds later. The first one's bites meanwhile don't stack their poisons.
 	for (int i = 0; i < SwarmEveryTicks - 1; i++)
 		ProcessMinionGems(player);
 	EXPECT_EQ(SwarmCount(player), 1);
+	EXPECT_EQ(near.poe2.poisonDamagePerTick, bitePoison);
 	ProcessMinionGems(player);
 	EXPECT_EQ(SwarmCount(player), 2);
+	// Nor do two swarms' on one enemy: the strongest poison only.
+	for (int i = 0; i < 3 * SwarmBiteTicks; i++)
+		ProcessMinionGems(player);
+	EXPECT_EQ(near.poe2.poisonDamagePerTick, bitePoison);
+	// A stronger poison stays as it was; a weaker one gives way to the bite's.
+	near.poe2.poisonDamagePerTick = 3 * bitePoison;
+	near.poe2.poisonTicks = 5;
+	for (int i = 0; i < SwarmBiteTicks; i++)
+		ProcessMinionGems(player);
+	EXPECT_EQ(near.poe2.poisonDamagePerTick, 3 * bitePoison);
+	EXPECT_LE(near.poe2.poisonTicks, 5);
+	near.poe2.poisonDamagePerTick = bitePoison / 2;
+	near.poe2.poisonTicks = 5;
+	for (int i = 0; i < SwarmBiteTicks; i++)
+		ProcessMinionGems(player);
+	EXPECT_EQ(near.poe2.poisonDamagePerTick, bitePoison);
+	EXPECT_EQ(near.poe2.poisonTicks, SwarmPoisonTicks);
 	// Taking the gem out calls them back.
 	player.poe2.skillSlots[0] = {};
 	ProcessMinionGems(player);

@@ -82,7 +82,7 @@ const TableSkillData Table[] = {
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 13, 14, TW::Sword, 0, Arc, 200, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
 	{ WS::FanOfBlades, "Fan of Blades", "Throw daggers in every direction", 5, 5, TW::Dagger, 0, Projectiles, 70, 8, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 280 },
-	{ WS::ViperStrike, "Cobra Strike", "A poisoned stab: its strong poison deals chaos damage over time", 7, 5, TW::Dagger, 0, Strike, 200, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 40 },
+	{ WS::ViperStrike, "Cobra Strike", "A heavy poisoned stab: its strong poison deals chaos damage over time", 7, 11, TW::Dagger, 0, Strike, 380, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 60 },
 	{ WS::BladeSentinel, "Blade Sentinel", "A whirling blade that guards the target spot for 5 seconds", 9, 12, TW::Dagger, 0, Zone, 35, 0, 1, 100, 20, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::Pulse, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 260 },
 	{ WS::DeathMark, "Death Mark", "Marks an enemy to take 25% more damage", 11, 9, TW::Dagger, 1, Curse, Flat, 0, 0, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::DeathMark, TableBuff::None, TT_Sword | TT_Occult, Icon(SpellIcon::RedSkull), TableCurve::Boneshatter, 100 },
 	{ WS::BladeFury, "Blade Fury", "A rapid stream of thrown daggers", 13, 12, TW::Dagger, 0, Stream, 70, 8, 0, 0, 2, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 290 },
@@ -182,7 +182,7 @@ const TableSkillData Table[] = {
 	{ WS::BloodNova, "Blood Nova", "A ring of blood bursts out around you and leaves enemies bleeding; costs 5% of your life", 9, 10, TW::None, 1, Around, 120, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_LifeCost | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 	// The poison skills plan (Curtis 2026-11-02, poison-skills-numbers.md): the Rogue's dagger and bow poisons, then the
 	// Sorcerer's. Poison strength is the hit's percent a second for 2 seconds (TablePoisonPercentPerSecond).
-	{ WS::PoisonDagger, "Poison Dagger", "Quick stabs whose poison stacks up to three times", 1, 4, TW::Dagger, 0, Strike, 130, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 50, 3 },
+	{ WS::PoisonDagger, "Poison Dagger", "Quick stabs with the heaviest poison", 1, 4, TW::Dagger, 0, Strike, 150, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 100 },
 	{ WS::AcidFlask, "Acid Flask", "Throws a flask that bursts into a pool of acid", 12, 15, TW::Dagger, 0, Zone, 70, 0, 1, 40, 10, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Lobbed | TF_Poison, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::FireCloud), TableCurve::Boneshatter, 0, GrantedRider::None, 40 },
 	{ WS::VenomSentry, "Venom Sentry", "Throws a gas trap that fills the area with poison when an enemy comes near", 20, 20, TW::Dagger, 0, Zone, 16, 0, 2, 80, 10, 0, DT::Physical, MissileID::Null, MG::AcidSplat, TF_Lobbed | TF_Poison, TableZone::GasTrap, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::TrapDisarm), TableCurve::Boneshatter, 0, GrantedRider::None, 60 },
 	{ WS::ThornvineArrow, "Thornvine Arrow", "An arrow that grows a thorny vine where it lands, poisoning and slowing enemies", 10, 12, TW::Bow, 0, Projectiles, 100, 1, 2, 80, 10, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_LandingZone, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Infravision), TableCurve::LightningArrow, 0 },
@@ -428,10 +428,10 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 		BreakMonsterArmour(monster, &player);
 	if ((data.flags & TF_Bleed) != 0 && alive)
 		InflictTableBleed(player, monster, data.skill, FixedDamage(player, data), 80);
-	// Cobra Strike and Poison Dagger: POE2's poison for 2 seconds, of the row's strength and stacks (Cobra's 40% of the
-	// hit a second; Poison Dagger's 50%, up to three).
+	// Cobra Strike and Poison Dagger: POE2's poison for 2 seconds, of the row's strength (Cobra's 60% of the hit a second;
+	// Poison Dagger's 100%). One poison each: only supports (Twin Fangs) add stacks (Curtis 2026-11-03).
 	if ((data.flags & TF_Poison) != 0 && alive)
-		InflictPoison(player, monster, TablePoisonTotal(FixedDamage(player, data), data), PoisonTicks, TablePoisonStacks(data));
+		InflictPoison(player, monster, TablePoisonTotal(FixedDamage(player, data), data), PoisonTicks);
 	if (!alive)
 		return;
 	// Elemental attacks: part of the hit lands again as the skill's element.
@@ -825,7 +825,7 @@ void AreaSpellHit(const Player &player, const TableSkillData &data, Monster &mon
 		InflictTableBleed(player, monster, data.skill, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(hit.raw()) * GrantedBleedPercent / 100)), GrantedBleedTicks);
 	// The poison skills' bursts and novas poison what they hit, of the row's strength.
 	if ((data.flags & TF_Poison) != 0)
-		InflictPoison(player, monster, TablePoisonTotal(hit, data), PoisonTicks, TablePoisonStacks(data));
+		InflictPoison(player, monster, TablePoisonTotal(hit, data), PoisonTicks);
 }
 
 /**
@@ -1175,11 +1175,6 @@ std::span<const TableSkillData> TableSkills()
 int TablePoisonPercentPerSecond(const TableSkillData &data)
 {
 	return data.poisonPercent > 0 ? data.poisonPercent : PoisonPercentPerSecond;
-}
-
-int TablePoisonStacks(const TableSkillData &data)
-{
-	return std::max<int>(data.poisonStacks, 1);
 }
 
 bool ArrowCrossedBog(const Player &player, Point from, Point to)
@@ -1805,7 +1800,7 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 		PoisonBurst(player, monster, *data);
 	// Venom Bolt: the bolt's poison, of the row's strength.
 	if (data != nullptr && (data->flags & (TF_Spell | TF_Poison)) == (TF_Spell | TF_Poison) && CanHit(monster))
-		InflictPoison(player, monster, TablePoisonTotal(poisonBase(), *data), PoisonTicks, TablePoisonStacks(*data));
+		InflictPoison(player, monster, TablePoisonTotal(poisonBase(), *data), PoisonTicks);
 	// Bone Spear: each enemy it runs through bursts in splinters as it flies on.
 	if (data != nullptr && !IsGrantedTableSkill(*data) && (data->flags & TF_Spell) != 0 && (data->flags & TF_Pierce) != 0) {
 		AddVisualEffect(monster.position.tile, data->effect);
@@ -2336,7 +2331,7 @@ void PoisonGroundPulse(Player &player, const TableSkillData &data, const SkillZo
 			HinderMonster(*monster, WitchsBogHinderPercent);
 			continue;
 		}
-		InflictPoison(player, *monster, TablePoisonTotal(zone.damage, data), PoisonTicks, TablePoisonStacks(data), false);
+		InflictPoison(player, *monster, TablePoisonTotal(zone.damage, data), PoisonTicks, 1, false);
 		if ((data.flags & TF_LandingZone) != 0)
 			HinderMonster(*monster, ThornvineHinderPercent);
 		monster->tag(player);

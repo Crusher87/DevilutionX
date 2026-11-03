@@ -256,7 +256,7 @@ TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
 {
 	// The mana audit's cuts for weapon attacks, at gem level 1; melee attacks then cost a third less (two thirds of
-	// GroundSlam 6, Whirlwind 8, LeapSlam 8, Smite 4, Frenzy 3, ShieldBash 4, ShadowStep 5, Vengeance 5, ViperStrike 5,
+	// GroundSlam 6, Whirlwind 8, LeapSlam 8, Smite 4, Frenzy 3, ShieldBash 4, ShadowStep 5, Vengeance 5, ViperStrike 11,
 	// Zeal 5 and SevenSidedStrike 11, rounded). Zeal and Seven-Sided Strike now strike once a use (PerHitBurst), for a
 	// quarter and a seventh of that: 3 / 4 and 7 / 7, rounded.
 	const std::pair<WeaponSkill, int> Costs[] = {
@@ -268,7 +268,7 @@ TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
 		{ WeaponSkill::ShieldBash, 3 },
 		{ WeaponSkill::ShadowStep, 3 },
 		{ WeaponSkill::Vengeance, 3 },
-		{ WeaponSkill::ViperStrike, 3 },
+		{ WeaponSkill::ViperStrike, 7 },
 		{ WeaponSkill::Zeal, 1 },
 		{ WeaponSkill::FanOfBlades, 5 },
 		{ WeaponSkill::DoubleThrow, 5 },
@@ -343,9 +343,10 @@ TEST(Poe2WeaponSkills, SingleTargetMeleeSkillsHitHarder)
 	EXPECT_EQ(ShieldChargeDamagePercent, 150);
 	EXPECT_EQ(ShadowStepDamagePercent, 220);
 	EXPECT_EQ(VaultShotArrowDamagePercent, 140);
-	// Cobra Strike stays 200%; its poison is 40% of the hit a second for 2 seconds (Curtis 2026-11-01).
-	EXPECT_EQ(FindTableSkill(WeaponSkill::ViperStrike)->damagePercent, 200);
-	EXPECT_EQ(TablePoisonPercentPerSecond(*FindTableSkill(WeaponSkill::ViperStrike)), 40);
+	// Cobra Strike, under the 1-stack rule (Curtis 2026-11-03): 380%, and its poison is 60% of the hit a second for 2
+	// seconds, one stack (was 200% and 40%).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::ViperStrike)->damagePercent, 380);
+	EXPECT_EQ(TablePoisonPercentPerSecond(*FindTableSkill(WeaponSkill::ViperStrike)), 60);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Sacrifice)->damagePercent, 330);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->damagePercent, 95);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->count, 7);
