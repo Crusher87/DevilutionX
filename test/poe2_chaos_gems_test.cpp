@@ -15,6 +15,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/gemcutting.hpp"
 #include "poe2/item_stats.hpp"
@@ -150,19 +151,37 @@ public:
 	}
 };
 
-// Cobra Strike (Curtis 2026-11-01): the stab stays 200%, and its own poison is twice POE2's common one, 40% of the hit a
-// second for 2 seconds (80% in all, was 40%). Plague Arrow keeps the common 20%.
-TEST_F(Poe2ChaosGemsTest, CobraStrikePoisonsTwiceAsHard)
+// Cobra Strike, under the 1-stack rule (Curtis 2026-11-03; poison-skills-numbers.md): the big stab, 380% at 85% attack
+// speed (0.76 s) for 11 mana, its own poison three times POE2's common one, 60% of the hit a second for 2 seconds, one
+// stack (was 200%, 40% a second, 5 mana). Its hit is set for its time, so it takes no speed damage. Plague Arrow keeps
+// the common 20%.
+TEST_F(Poe2ChaosGemsTest, CobraStrikePoisonsThreeTimesAsHard)
 {
 	Player &player = *MyPlayer;
 	EnterDungeon();
 	const TableSkillData &cobra = *FindTableSkill(WeaponSkill::ViperStrike);
-	EXPECT_EQ(cobra.damagePercent, 200);
-	EXPECT_EQ(cobra.poisonPercent, 40);
-	EXPECT_EQ(TablePoisonPercentPerSecond(cobra), 2 * PoisonPercentPerSecond);
+	const SkillSlot cobraSlot = SkillSlot::ForAttack(WeaponSkill::ViperStrike);
+	EXPECT_EQ(cobra.level, 7);
+	EXPECT_EQ(cobra.mana, 11);
+	EXPECT_EQ(cobra.damagePercent, 380);
+	EXPECT_EQ(cobra.poisonPercent, 60);
+	EXPECT_EQ(TablePoisonPercentPerSecond(cobra), 3 * PoisonPercentPerSecond);
 	EXPECT_EQ(TablePoisonPercentPerSecond(*FindTableSkill(WeaponSkill::PlagueArrow)), PoisonPercentPerSecond);
+	EXPECT_EQ(SkillAttackSpeedPercent(cobraSlot), 85);
+	EXPECT_EQ(SkillSpeedDamagePercent(cobraSlot), 100);
+	EXPECT_EQ(SkillSpeedManaPercent(cobraSlot), 100);
+	EXPECT_EQ(GemDamagePercent(cobraSlot, 1), 100);
+	// Melee pays two thirds of the listed 11: 7 (was 3).
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::ViperStrike), 7);
+	EXPECT_EQ(GemBaseManaCost(cobraSlot, 1), 7);
+	// It hits over 2.5 times as hard as Poison Dagger, with a lighter poison (x3 against x5).
+	const TableSkillData &dagger = *FindTableSkill(WeaponSkill::PoisonDagger);
+	EXPECT_GE(cobra.damagePercent * 10, dagger.damagePercent * 25);
+	EXPECT_LT(cobra.poisonPercent, dagger.poisonPercent);
+	// Its poison a second (228% of the weapon) beats Poison Dagger's (150%), so it wins a shared target.
+	EXPECT_GT(cobra.damagePercent * cobra.poisonPercent, dagger.damagePercent * dagger.poisonPercent);
 
-	// The same stab with the common poison poisons half as hard, for as long.
+	// The same stab with the common poison poisons a third as hard, for as long.
 	TableSkillData common = cobra;
 	common.poisonPercent = 0;
 	const SkillSlot slot = Supported(SkillSlot::ForAttack(WeaponSkill::ViperStrike));
@@ -184,7 +203,7 @@ TEST_F(Poe2ChaosGemsTest, CobraStrikePoisonsTwiceAsHard)
 		}
 	}
 	ASSERT_GT(perTick[1], 0);
-	EXPECT_NEAR(perTick[0], 2 * perTick[1], 1);
+	EXPECT_NEAR(perTick[0], 3 * perTick[1], 2);
 
 	// Deadly Venom and Twin Fangs still add to it.
 	Supported(slot, SupportGem::DeadlyVenom);

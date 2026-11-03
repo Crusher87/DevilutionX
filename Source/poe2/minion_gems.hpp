@@ -82,12 +82,16 @@ constexpr int RagingSpiritFirePercent = 70;
 /** @brief Ravenous Swarm: while an enemy is this close, a swarm leaves the hero every 6 seconds, at most 3 out. */
 constexpr int SwarmReachTiles = 4;
 constexpr int SwarmEveryTicks = 6 * 20;
-/** @brief A swarm bites every half second for this share of a Skeletal Warrior's blow, and poisons for this share of the bite over 2 seconds. */
+/**
+ * @brief A swarm bites every half second for this share of a Skeletal Warrior's blow, and poisons for this share of the
+ * bite over 2 seconds. One poison, the strongest only: no skill stacks its own, only supports add stacks (Curtis
+ * 2026-11-03; 60% stacking 5 times before, now 240% once).
+ */
 constexpr int SwarmBiteTicks = 10;
 constexpr int SwarmBitePercent = 25;
-constexpr int SwarmPoisonPercent = 60;
+constexpr int SwarmPoisonPercent = 240;
 constexpr int SwarmPoisonTicks = 2 * 20;
-constexpr int SwarmPoisonStacks = 5;
+constexpr int SwarmPoisonStacks = 1;
 /** @brief How long a swarm lasts, 6 seconds up to 9.8 at gem level 20. */
 int SwarmTicks(int gemLevel);
 /** @brief A swarm's bite in 1/64 points: a Skeletal Warrior's average blow at the gem's level, with the hero's minion damage. */

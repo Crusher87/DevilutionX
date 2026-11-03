@@ -67,6 +67,11 @@ GRANTED = {
 	'WitheringRay', 'TwinBolts',
 }
 
+# The poison skills (research/skill-gems-per-weapon/poison-skills-numbers.md): each hit is set in the table for its
+# time, so they take no damage_pct either. Cobra Strike's 380% is set for its 0.76 s stab (the 1-stack rule, Curtis
+# 2026-11-03).
+POISON = {'ViperStrike', 'AcidFlask', 'VenomSentry', 'BloatedPods', 'PoisonNova', 'AcidCloud'}
+
 
 def number(text):
 	return float(text) if text.strip() else 0.0
@@ -89,7 +94,7 @@ DAMAGE_SPELLS = damage_spells()
 def time_ratio(row):
 	"""How much longer than its free use one use of the row takes; None when it is no skill of its own."""
 	name = row['name']
-	if name.startswith('Default ') or ':' in name or name in NO_DAMAGE or name in GRANTED:
+	if name.startswith('Default ') or ':' in name or name in NO_DAMAGE or name in GRANTED or name in POISON:
 		return None
 	added = number(row['added_ms']) / 1000
 	if row['attack_time_s'].strip():

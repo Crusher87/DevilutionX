@@ -167,8 +167,8 @@ void NoteHitArmourPercent(const Monster &monster, int percent);
 [[nodiscard]] bool TakeHitIgnoresArmour();
 /**
  * POE2's poison (Curtis 2026-10-30): each second for 2 seconds it deals 20% of the hit's physical and chaos damage, as
- * counted before the monster's resistance. Only the strongest poison on a monster deals damage, unless the skill or
- * support says its poisons stack.
+ * counted before the monster's resistance. Only the strongest poison on a monster deals damage, unless a support says its
+ * poisons stack (Twin Fangs, Andariel's Anguish): no skill stacks its own (Curtis 2026-11-03).
  */
 constexpr int PoisonPercentPerSecond = 20;
 constexpr int PoisonTicks = 2 * 20;
@@ -177,6 +177,11 @@ constexpr int PoisonTicks = 2 * 20;
  * only the strongest poison counts: a weaker one is lost, a stronger one takes over. More stacks add up to that many.
  */
 void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
+/**
+ * @brief Puts a poison of perTick (a raw Fixed26_6 a tick) for ticks into the monster's poison, with no supports: with
+ * maxStacks 1 only the strongest counts, as InflictPoison. Returns false when the poison was weaker and so lost.
+ */
+bool AddPoison(Monster &monster, int32_t perTick, int ticks, int maxStacks);
 /** @brief Blood and Venom: a bleed just inflicted deals more while the monster is poisoned, if the hit's skill has it. */
 void NoteSupportedBleed(const Player &player, Monster &monster);
 /** @brief The physical and chaos damage of the hit in progress on the monster, before its defences, as a raw Fixed26_6; 0 outside one. */
