@@ -105,5 +105,12 @@ void SetUncutGemLevel(Item &item, int level);
 
 /** @brief The skill gem level an uncut gem gives a character: its own level, up to what the character can use. */
 int GemLevelFromUncut(const Item &uncut, int characterLevel);
+/** @brief The lowest uncut gem level that cuts the gem. */
+int UncutLevelToCut(const GemEntry &gem);
+/**
+ * @brief The short line under a gem in the gemcutting panel: the level the uncut gem would cut it at, else the uncut
+ * level it needs (Curtis, Rogue run 2: "Tier level" beside the uncut gem's own level was confusing).
+ */
+std::string GemCutLabel(const GemEntry &gem, const Item *uncut, int characterLevel);
 
 } // namespace devilution

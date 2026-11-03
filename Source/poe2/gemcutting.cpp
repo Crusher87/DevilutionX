@@ -10,6 +10,7 @@
 #include "poe2/support_tiers.hpp"
 #include "poe2/table_skills.hpp"
 #include "spells.h"
+#include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
 
@@ -298,6 +299,25 @@ void SetUncutGemLevel(Item &item, int level)
 int GemLevelFromUncut(const Item &uncut, int characterLevel)
 {
 	return std::min({ UncutGemLevel(uncut), MaxGemLevel, MaxGemLevelForCharacter(characterLevel) });
+}
+
+int UncutLevelToCut(const GemEntry &gem)
+{
+	// The first level of the gem's tier: any uncut gem of that tier cuts it.
+	int level = 1;
+	while (level < gem.level && GemTier(level) < GemTier(gem.level))
+		level++;
+	return level;
+}
+
+std::string GemCutLabel(const GemEntry &gem, const Item *uncut, int characterLevel)
+{
+	if (uncut == nullptr || !CanCutGem(*uncut, gem))
+		return FormatRuntime(_("Needs uncut level {:d}"), UncutLevelToCut(gem));
+	// A support gem has no level of its own.
+	if (gem.support != SupportGem::None)
+		return std::string(_("Can cut"));
+	return FormatRuntime(_("Cuts to level {:d}"), GemLevelFromUncut(*uncut, characterLevel));
 }
 
 } // namespace devilution

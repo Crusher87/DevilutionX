@@ -2716,6 +2716,11 @@ void CloseStash(bool dropHeldItem)
 	}
 
 	IsStashOpen = false;
+	// POE2 Mashup: currency taken up from the stash can't be used once it closes unless the bag has more of it.
+	if (gbIsPoe2 && pcurs == CURSOR_OIL && !HeldCurrencyAvailable(myPlayer)) {
+		SetStickyItemUse(false);
+		NewCursor(CURSOR_HAND);
+	}
 }
 
 void CloseStashForPanel()

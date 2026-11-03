@@ -186,6 +186,62 @@ TEST_F(Poe2VfxTest, LazarusRedPortalIsAHellgateOfItsOwn)
 	EXPECT_EQ(vfx::PortalCount(), 0U);
 }
 
+TEST_F(Poe2VfxTest, WallsInFrontOfAPortalHideIt)
+{
+	// Rogue run 2: the town portal was drawn over the walls and pillars standing in front of it.
+	Missiles.clear();
+	Missile &portal = Missiles.emplace_back();
+	portal._mitype = MissileID::TownPortal;
+	portal._miAnimType = MissileGraphicID::None;
+	portal.position.tile = { 40, 40 };
+	portal._miDrawFlag = true;
+	portal._miDelFlag = false;
+	portal.setFrameGroup<PortalFrame>(PortalFrame::Start);
+	vfx::ScanMissiles();
+	ASSERT_EQ(vfx::PortalCount(), 1U);
+	SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, 640, 480, 8, SDL_PIXELFORMAT_INDEX8);
+	ASSERT_NE(surface, nullptr);
+	SDL_FillRect(surface, nullptr, 10);
+	const Surface world(surface);
+	vfx::BeginFront(world);
+	// Nearer the camera, below it or to either side: in front.
+	EXPECT_TRUE(vfx::StandsInFrontOfPortal({ 41, 41 }));
+	EXPECT_TRUE(vfx::StandsInFrontOfPortal({ 41, 40 }));
+	EXPECT_TRUE(vfx::StandsInFrontOfPortal({ 40, 41 }));
+	EXPECT_TRUE(vfx::StandsInFrontOfPortal({ 46, 46 }));
+	// Its own tile, its row (beside it) and the tiles behind it: not.
+	EXPECT_FALSE(vfx::StandsInFrontOfPortal({ 40, 40 }));
+	EXPECT_FALSE(vfx::StandsInFrontOfPortal({ 41, 39 }));
+	EXPECT_FALSE(vfx::StandsInFrontOfPortal({ 39, 39 }));
+	EXPECT_FALSE(vfx::StandsInFrontOfPortal({ 40, 38 }));
+	// Too far to the side or in front to cover any of it.
+	EXPECT_FALSE(vfx::StandsInFrontOfPortal({ 50, 32 }));
+	EXPECT_FALSE(vfx::StandsInFrontOfPortal({ 60, 60 }));
+
+	// A wall drawn over part of its column: what it drew goes back over the portal, the rest of the column doesn't.
+	vfx::BeginFrontPiece(world, { 100, 100 }, { 64, 160 });
+	for (int y = 120; y < 130; y++) {
+		for (int x = 110; x < 120; x++)
+			*world.at(x, y) = 77;
+	}
+	*world.at(300, 125) = 77; // outside the piece's column: drawn by something else
+	vfx::EndFrontPiece(world);
+	const Surface front = vfx::FrontMask();
+	ASSERT_EQ(front.w(), world.w());
+	EXPECT_NE(*front.at(115, 125), 0);
+	EXPECT_NE(*front.at(110, 120), 0);
+	EXPECT_EQ(*front.at(105, 105), 0);
+	EXPECT_EQ(*front.at(120, 125), 0);
+	EXPECT_EQ(*front.at(300, 125), 0);
+	// A piece partly off the world is cut to it.
+	vfx::BeginFrontPiece(world, { 600, -50 }, { 64, 100 });
+	*world.at(630, 10) = 78;
+	vfx::EndFrontPiece(world);
+	EXPECT_NE(*front.at(630, 10), 0);
+	SDL_FreeSurface(surface);
+	Missiles.clear();
+}
+
 TEST_F(Poe2VfxTest, ArcingSparksAndChargedBoltLookApart)
 {
 	// Both fly the Charged Bolt missile; the skill that fired it picks the look (Curtis 2026-10-23).

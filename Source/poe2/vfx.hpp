@@ -210,6 +210,15 @@ bool InFrontOfEffects(Point tile);
 void BeginFront(const Surface &world);
 /** @brief Records the shape of a hero's or monster's sprite as it's drawn into the world, to draw it again over the effects. */
 void MarkFront(const Surface &out, Point position, ClxSprite sprite);
+/**
+ * @brief Whether the walls, pillars and arches standing on this tile are in front of a portal, so they hide it as heroes
+ * do (Curtis, Rogue run 2: the town portal was drawn over the walls in front of it).
+ */
+bool StandsInFrontOfPortal(Point tile);
+/** @brief Before a standing piece is drawn into the world over this area (clipped to it): keeps the pixels it will cover. */
+void BeginFrontPiece(const Surface &out, Point topLeft, Size size);
+/** @brief After it's drawn: records the pixels it changed as in front of the portals (not of the flames). */
+void EndFrontPiece(const Surface &out);
 /** @brief The record of the sprites over the effects, to zoom it with the world; empty when there's none. */
 Surface FrontMask();
 /** @brief Moves every effect on by the given time. */

@@ -15,6 +15,8 @@
 #include "player.h"
 #include "poe2/currency.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/stash_layouts.hpp"
+#include "qol/stash.h"
 #include "spells.h"
 #include "tables/playerdat.hpp"
 
@@ -285,6 +287,43 @@ TEST_F(Poe2CurrencyTest, UsingUpTheLastOrbBeforeTheItemDestroysThatItem)
 	// Before the fix the orb's removal moved the bystander into the item's place and it was destroyed instead.
 	EXPECT_EQ(player.InvList[0]._iSeed, bystander._iSeed);
 	EXPECT_EQ(player.InvList[0].IDidx, bystander.IDidx);
+}
+
+TEST_F(Poe2CurrencyTest, ShiftUseNeverSpendsFromAClosedStash)
+{
+	// Rogue run 2: with the bag's Whetstones used up, Shift+click went on spending the stash's while it was closed.
+	Item whetstones;
+	ASSERT_TRUE(AdminGenerateItem(*MyPlayer, whetstones, FindBase("Blacksmith's Whetstone"), ITEM_QUALITY_NORMAL, 1, 9));
+	SetStoredStackCount(whetstones, 5);
+	Stash = {};
+	Stash.stashList.push_back(whetstones);
+	MyPlayer->_pNumInv = 0;
+	MyPlayer->_pOilType = static_cast<item_misc_id>(whetstones._iMiscId);
+	HoldCurrencyForUse(Stash.stashList[0]);
+
+	IsStashOpen = false;
+	EXPECT_FALSE(HeldCurrencyAvailable(*MyPlayer));
+	SpendHeldCurrency(*MyPlayer);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[0]), 5);
+
+	// A sword in the bag: the Whetstone fits it, but there is none to use, so nothing changes.
+	const Item sword = Make("Short Sword", ITEM_QUALITY_NORMAL);
+	MyPlayer->InvList[0] = sword;
+	MyPlayer->InvGrid[0] = 1;
+	MyPlayer->_pNumInv = 1;
+	HoldCurrencyForUse(Stash.stashList[0]);
+	EXPECT_FALSE(DoOil(*MyPlayer, NUM_INVLOC));
+	EXPECT_EQ(MyPlayer->InvList[0]._iSeed, sword._iSeed);
+	EXPECT_EQ(MyPlayer->InvList[0].dwBuff, sword.dwBuff);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[0]), 5);
+
+	// With the stash open its Whetstones are there to use, one at a time.
+	IsStashOpen = true;
+	EXPECT_TRUE(HeldCurrencyAvailable(*MyPlayer));
+	SpendHeldCurrency(*MyPlayer);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[0]), 4);
+	IsStashOpen = false;
+	Stash = {};
 }
 
 } // namespace devilution

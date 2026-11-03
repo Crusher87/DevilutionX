@@ -483,6 +483,12 @@ void ApplyAuraCurse(const Player &player, Monster &monster, WeaponSkill skill, i
 [[nodiscard]] int TableCurseStrength(const Monster &monster, TableCurse curse);
 /** @brief The cast effects of a table skill. */
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target);
+/** @brief The flash a table skill shows just in front of the hero as it goes off: only a lightning skill has one. */
+[[nodiscard]] std::optional<MissileGraphicID> TableSkillCastFlash(const TableSkillData &data);
+/** @brief Whether a projectile's landing burst is a small one (Fire Arrow's): a little burst of its element, not an explosion. */
+[[nodiscard]] bool TableLandingBurstIsSmall(const TableSkillData &data);
+/** @brief The size of a small landing burst's particles (1 is a normal hit). */
+constexpr float SmallLandingBurstSize = 0.45F;
 /**
  * @brief How a table skill's effects look: its damage type's element, but a physical spell is bone, blood for one whose
  * hits bleed blood (Reap, Exsanguinate, Blood Nova) and holy for Blessed Hammer.

@@ -2825,6 +2825,11 @@ SDL_Surface *FrontSurface = nullptr;
 Point FrontOrigin;
 bool FrontFresh = false;
 bool FrontUsed = false;
+/** @brief A wall, pillar or arch in front of a portal, in the front record: it hides the portals but not the flames. */
+constexpr uint8_t FrontPiece = 128;
+/** @brief The world's pixels under a standing piece before it's drawn, and where (see BeginFrontPiece). */
+std::vector<uint8_t> PieceBefore;
+SDL_Rect PieceArea {};
 
 } // namespace
 
@@ -2875,6 +2880,65 @@ bool InFrontOfEffects(Point tile)
 		front = true;
 	}
 	return front;
+}
+
+bool StandsInFrontOfPortal(Point tile)
+{
+	if (!FrontFresh)
+		return false;
+	// Nearer the camera than the portal (a piece on its own row is beside it) and close enough to cover some of it: the
+	// tallest walls rise far above their tile, so a piece many rows in front can still hide a portal's foot.
+	const auto inFront = [&](const PortalFx &portal) {
+		const int depth = (tile.x + tile.y) - (portal.tile.x + portal.tile.y);
+		const int side = std::abs((tile.x - tile.y) - (portal.tile.x - portal.tile.y));
+		return depth > 0 && depth <= 20 && side <= (portal.red ? 6 : 5);
+	};
+	if (std::any_of(ClosingPortals.begin(), ClosingPortals.end(), inFront))
+		return true;
+	return std::any_of(Portals.begin(), Portals.end(), [&](const auto &entry) { return inFront(entry.second); });
+}
+
+void BeginFrontPiece(const Surface &out, Point topLeft, Size size)
+{
+	PieceArea = {};
+	if (!FrontFresh)
+		return;
+	const int x0 = std::max(topLeft.x, 0);
+	const int y0 = std::max(topLeft.y, 0);
+	const int x1 = std::min(topLeft.x + size.width, out.w());
+	const int y1 = std::min(topLeft.y + size.height, out.h());
+	if (x1 <= x0 || y1 <= y0)
+		return;
+	PieceArea = { x0, y0, x1 - x0, y1 - y0 };
+	PieceBefore.resize(static_cast<size_t>(PieceArea.w) * PieceArea.h);
+	for (int y = 0; y < PieceArea.h; y++)
+		std::memcpy(&PieceBefore[static_cast<size_t>(y) * PieceArea.w], out.at(PieceArea.x, PieceArea.y + y), PieceArea.w);
+}
+
+void EndFrontPiece(const Surface &out)
+{
+	if (!FrontFresh || PieceArea.w <= 0 || PieceArea.h <= 0)
+		return;
+	// Where the piece drew, the world's pixels go back over the portals. A hero or monster already marked there stays
+	// marked as one, so the flames behind it still go under it.
+	const int offsetX = out.region.x - FrontOrigin.x;
+	const int offsetY = out.region.y - FrontOrigin.y;
+	for (int y = 0; y < PieceArea.h; y++) {
+		const int my = offsetY + PieceArea.y + y;
+		if (my < 0 || my >= FrontSurface->h)
+			continue;
+		const uint8_t *before = &PieceBefore[static_cast<size_t>(y) * PieceArea.w];
+		const uint8_t *now = out.at(PieceArea.x, PieceArea.y + y);
+		uint8_t *mask = static_cast<uint8_t *>(FrontSurface->pixels) + static_cast<ptrdiff_t>(my) * FrontSurface->pitch;
+		for (int x = 0; x < PieceArea.w; x++) {
+			const int mx = offsetX + PieceArea.x + x;
+			if (now[x] == before[x] || mx < 0 || mx >= FrontSurface->w || mask[mx] != 0)
+				continue;
+			mask[mx] = FrontPiece;
+			FrontUsed = true;
+		}
+	}
+	PieceArea = {};
 }
 
 void BeginFront(const Surface &world)
@@ -2941,6 +3005,19 @@ Surface FloorCopy()
 bool InFrontOfEffects(Point)
 {
 	return false;
+}
+
+bool StandsInFrontOfPortal(Point)
+{
+	return false;
+}
+
+void BeginFrontPiece(const Surface &, Point, Size)
+{
+}
+
+void EndFrontPiece(const Surface &)
+{
 }
 
 void BeginFront(const Surface &)
@@ -7742,7 +7819,9 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	if (world.w() != FrontSurface->w || world.h() != FrontSurface->h || world.w() != worldSize.width || world.h() != worldSize.height)
 		return;
 	// Each area by itself: one box round two heroes at either side of the screen would cover most of it.
-	const auto around = [&](Vec min, Vec max, float side, float up, float down) {
+	// Round a portal everything in front of it covers it, walls too; round a flame only the heroes and monsters do (a
+	// wall in front of a portal can stand behind a torch).
+	const auto around = [&](Vec min, Vec max, float side, float up, float down, bool pieces) {
 		const Vec from = ToScreen(min);
 		const Vec to = ToScreen(max);
 		SDL_Rect rect;
@@ -7765,7 +7844,7 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 				out[0] = c.r;
 				out[1] = c.g;
 				out[2] = c.b;
-				out[3] = solid[x] != 0 ? 255 : 0;
+				out[3] = (pieces ? solid[x] != 0 : solid[x] == 255) ? 255 : 0;
 			}
 		}
 		SDL_UnlockTexture(Layer.front);
@@ -7773,9 +7852,9 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 		SDL_RenderCopyF(renderer, Layer.front, &rect, &dest);
 	};
 	for (const auto &[missile, portal] : Portals)
-		around(portal.pos, portal.pos, portal.red ? 150 : 120, 230, 80);
+		around(portal.pos, portal.pos, portal.red ? 150 : 120, 230, 80, true);
 	for (const PortalFx &portal : ClosingPortals)
-		around(portal.pos, portal.pos, portal.red ? 150 : 120, 230, 80);
+		around(portal.pos, portal.pos, portal.red ? 150 : 120, 230, 80, true);
 	// Round each object's flames: their glow and bloom, and the embers and smoke rising off them.
 	std::array<bool, MAXOBJECTS> done {};
 	for (const Ring &glow : FrameGlows) {
@@ -7790,7 +7869,7 @@ void DrawFront(SDL_Renderer *renderer, Size worldSize, float toLogical)
 			min = { std::min(min.x, other.pos.x), std::min(min.y, other.pos.y) };
 			max = { std::max(max.x, other.pos.x), std::max(max.y, other.pos.y) };
 		}
-		around(min, max, 90, 170, 80);
+		around(min, max, 90, 170, 80, false);
 	}
 }
 

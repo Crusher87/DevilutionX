@@ -396,7 +396,7 @@ void DrawCell(const Surface &out, const Player &player, const Cell &cell, bool h
 	if (gem.support != SupportGem::None && IsLinkedToSupportedSkill(player, gem.support, gem.tier))
 		detail = _("Already linked");
 	else
-		detail = FormatRuntime(_("Tier level {:d}"), gem.level);
+		detail = GemCutLabel(gem, UncutItem(), player.getCharacterLevel());
 	DrawString(out, detail, { rect.position + Displacement { 2, 54 }, { rect.size.width - 4, 13 } },
 	    { .flags = UiFlags::FontSize12 | UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::KerningFitSpacing | (dimmed ? UiFlags::ColorButtonpushed : UiFlags::ColorWhite) });
 }

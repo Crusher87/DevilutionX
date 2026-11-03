@@ -22,6 +22,7 @@
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 namespace {
@@ -302,6 +303,48 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 		if (gem.skill.kind == SkillKind::Spell && gem.skill.spell() == SpellID::Firebolt)
 			EXPECT_TRUE(CanCutGem(firstUncut, gem));
 	}
+}
+
+TEST_F(Poe2GemcuttingTest, TheLabelUnderAGemSaysTheLevelItCutsTo)
+{
+	// Rogue run 2: "Tier level 3" under a gem beside a level 6 uncut gem was confusing; it says what cutting gives.
+	const Item skillUncut = MakeUncut(IMISC_UNCUT_SKILL, 6);
+	const Item supportUncut = MakeUncut(IMISC_UNCUT_SUPPORT, 3);
+	const GemEntry *low = nullptr;
+	const GemEntry *high = nullptr;
+	const GemEntry *support = nullptr;
+	for (const GemEntry &gem : GemCatalog()) {
+		if (gem.support == SupportGem::None && gem.skill.kind != SkillKind::Persistent) {
+			if (low == nullptr && GemTier(gem.level) == GemTier(3))
+				low = &gem;
+			if (high == nullptr && GemTier(gem.level) > GemTier(6))
+				high = &gem;
+		} else if (support == nullptr && gem.support != SupportGem::None && CanCutGem(supportUncut, gem)) {
+			support = &gem;
+		}
+	}
+	ASSERT_NE(low, nullptr);
+	ASSERT_NE(high, nullptr);
+	ASSERT_NE(support, nullptr);
+	// The level the hero would get: the uncut gem's, up to what the character level allows.
+	EXPECT_EQ(GemCutLabel(*low, &skillUncut, 40), "Cuts to level 6");
+	EXPECT_EQ(GemCutLabel(*low, &skillUncut, 1), StrCat("Cuts to level ", GemLevelFromUncut(skillUncut, 1)));
+	EXPECT_LT(GemLevelFromUncut(skillUncut, 1), 6);
+	// Out of reach, or just browsing: the uncut level that cuts it, the first of its tier.
+	const int needed = UncutLevelToCut(*high);
+	EXPECT_EQ(GemTier(needed), GemTier(high->level));
+	EXPECT_LT(GemTier(needed - 1), GemTier(high->level));
+	EXPECT_EQ(GemCutLabel(*high, &skillUncut, 40), StrCat("Needs uncut level ", needed));
+	EXPECT_EQ(GemCutLabel(*high, nullptr, 40), StrCat("Needs uncut level ", needed));
+	EXPECT_EQ(UncutLevelToCut(*low), 3);
+	// Firebolt is a level 2 gem of tier I: any uncut gem cuts it.
+	for (const GemEntry &gem : GemCatalog()) {
+		if (gem.skill.kind == SkillKind::Spell && gem.skill.spell() == SpellID::Firebolt) {
+			EXPECT_EQ(GemCutLabel(gem, nullptr, 40), "Needs uncut level 1");
+		}
+	}
+	// A support gem has no level of its own.
+	EXPECT_EQ(GemCutLabel(*support, &supportUncut, 40), "Can cut");
 }
 
 TEST_F(Poe2GemcuttingTest, UncutGemsNameTheirLevel)

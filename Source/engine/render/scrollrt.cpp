@@ -782,6 +782,13 @@ void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, P
 		transparency = false;
 	}
 #endif
+	// POE2 Mashup: walls and pillars in front of a portal hide it, as heroes and monsters do (Curtis, Rogue run 2: the
+	// town portal was drawn over them). One gone see-through lets it show.
+	const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+	if (marksFront) {
+		const int columnHeight = MicroTileLen / 2 * TILE_HEIGHT;
+		vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - columnHeight }, Size { TILE_WIDTH, columnHeight });
+	}
 
 	const auto getFirstTileMaskLeft = [=](TileType tile) -> MaskType {
 		if (transparency) {
@@ -869,6 +876,8 @@ void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, P
 		}
 		targetBufferPosition.y -= TILE_HEIGHT;
 	}
+	if (marksFront)
+		vfx::EndFrontPiece(out);
 
 #ifdef _DEBUG
 	if (DebugPath && walkpathIdx != -1) {
@@ -1152,6 +1161,11 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 			// Turn transparency off here for debugging
 			transparency = transparency && (SDL_GetModState() & SDL_KMOD_ALT) == 0;
 #endif
+			// POE2 Mashup: an arch in front of a portal hides it, as the walls do (see DrawCell).
+			const ClxSprite arch = (*pSpecialCels)[bArch];
+			const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+			if (marksFront)
+				vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - arch.height() }, Size { arch.width(), arch.height() });
 			if (perPixelLighting) {
 				// Create a special lightmap buffer to bleed light up walls
 				uint8_t lightmapBuffer[TILE_WIDTH * TILE_HEIGHT];
@@ -1166,6 +1180,8 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 			} else {
 				ClxDrawLight(out, targetBufferPosition, (*pSpecialCels)[bArch], lightTableIndex);
 			}
+			if (marksFront)
+				vfx::EndFrontPiece(out);
 		}
 	} else {
 		// Tree leaves should always cover player when entering or leaving the tile,

@@ -834,7 +834,12 @@ void AreaSpellHit(const Player &player, const TableSkillData &data, Monster &mon
  */
 void ZoneBurst(const Player &player, const TableSkillData &data, Point center, int radius, Fixed26_6 damage, std::optional<Point> aim = std::nullopt)
 {
-	AddVisualEffect(center, data.effect, 0, 4);
+	// Fire Arrow comes down in a little burst of flame; wider landing bursts keep their explosion (without the particle
+	// effects, the sprite is all there is to show).
+	if (TableLandingBurstIsSmall(data) && vfx::Enabled())
+		vfx::Impact(center, LookOf(data), SmallLandingBurstSize);
+	else
+		AddVisualEffect(center, data.effect, 0, 4);
 	BreakObjectsInArea(player, center, radius);
 	const int extraPercent = GrantedExtraTargetPercent(data);
 	const Monster *primary = nullptr;
@@ -1896,47 +1901,29 @@ void FireTableShot(Player &player, const TableSkillData &data, Point target, int
 	PlaySkillSound(TableSkillSounds(data).spell, tile);
 }
 
+std::optional<MissileGraphicID> TableSkillCastFlash(const TableSkillData &data)
+{
+	// Only lightning crackles where a skill starts. The others' flash read as something that doesn't belong at the hero's
+	// feet (Curtis, Rogue run 2): physical skills' borrowed a blue Charged Bolt spark ("lightning" on Plague Arrow and
+	// every arrow and swing), fire skills' a burst of flame under Fire Arrow.
+	if (data.type == DamageType::Lightning)
+		return MissileGraphicID::Lightning;
+	return std::nullopt;
+}
+
+bool TableLandingBurstIsSmall(const TableSkillData &data)
+{
+	return (data.flags & TF_LandingBurst) != 0 && data.radius <= 1;
+}
+
 void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Point target)
 {
 	const SkillLookScope skillLook(data.skill);
 	const Point tile = player.position.tile;
 	const Direction dir = player._pdir;
 	const bool mine = &player == MyPlayer;
-	// A flash in the skill's colour where it starts, from graphics every level has loaded.
-	MissileGraphicID flash = MissileGraphicID::MetalHit;
-	switch (data.type) {
-	case DamageType::Fire:
-		flash = MissileGraphicID::Inferno;
-		break;
-	case DamageType::Lightning:
-		flash = MissileGraphicID::Lightning;
-		break;
-	case DamageType::Cold:
-		flash = MissileGraphicID::StoneCurseShatter;
-		break;
-	default:
-		// A physical spell flashes bone or blood (Blessed Hammer holy); curses keep their pale flash.
-		if ((data.flags & TF_Spell) != 0 && data.shape != Curse) {
-			switch (LookOf(data)) {
-			case vfx::Element::Blood:
-				flash = MissileGraphicID::BloodHit;
-				break;
-			case vfx::Element::Bone:
-				flash = MissileGraphicID::BoneHit;
-				break;
-			case vfx::Element::Poison:
-				flash = MissileGraphicID::AcidSplat;
-				break;
-			default:
-				flash = MissileGraphicID::HolyBoltExplosion;
-				break;
-			}
-		} else if ((data.flags & TF_Spell) != 0 || data.shape == Curse) {
-			flash = MissileGraphicID::HolyBoltExplosion;
-		}
-		break;
-	}
-	AddVisualEffect(tile + dir, flash, 0, 3);
+	if (const std::optional<MissileGraphicID> flash = TableSkillCastFlash(data); flash)
+		AddVisualEffect(tile + dir, *flash, 0, 3);
 	// POE2 Mashup: every skill is heard. An attack's swing, throw or shot sounds as it lands (a spell's incantation
 	// began with its animation, see BeginSkillAnimation), then the skill going off: a Stream's with each shot
 	// (FireTableShot), a corpse's blast only if it finds one, a zone that bursts later as it bursts.
