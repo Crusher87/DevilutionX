@@ -14,6 +14,7 @@
 #include "poe2/mix.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/summon_commands.hpp"
 #include "poe2/support_table.hpp"
@@ -411,11 +412,12 @@ bool InflictCold(Monster &monster, Fixed26_6 damage)
 	return false;
 }
 
-void InflictPhysical(Monster &monster, Fixed26_6 damage)
+void InflictPhysical(Monster &monster, Fixed26_6 damage, const Player &player)
 {
 	Poe2MonsterState &state = monster.poe2;
 	if (BuildUp(monster, state.stunBuildup, damage, HeavyStunThresholdPercent)) {
-		state.heavyStunTicks = HeavyStunTicks;
+		// The Brutal shrine's stuns last longer.
+		state.heavyStunTicks = static_cast<uint8_t>(std::clamp(HeavyStunTicks * (100 + GetShrineBonuses(player).stunDurationPercent) / 100, 1, 255));
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BigExplosion);
 	}
 }
@@ -447,7 +449,7 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	}
 	if (damageType == DamageType::Physical) {
 		// Some uniques add stun buildup.
-		InflictPhysical(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * UniqueStunBuildupPercent(player) / 100)));
+		InflictPhysical(monster, Fixed26_6::fromRaw(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * UniqueStunBuildupPercent(player) / 100)), player);
 		return;
 	}
 	if (damageType != DamageType::Fire && damageType != DamageType::Lightning)

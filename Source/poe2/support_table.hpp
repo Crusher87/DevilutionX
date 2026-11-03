@@ -24,6 +24,7 @@ struct Monster;
 struct Player;
 enum class DamageType : uint8_t;
 enum class GemColor : uint8_t;
+enum class MissileGraphicID : uint8_t;
 
 /** @brief What a skill is and does, for the supports to fit by. */
 enum SkillTag : uint32_t {
@@ -207,6 +208,11 @@ int SupportAilmentEffectPercent(DamageType type);
 /** @brief A hit of the player froze a monster. */
 void OnSupportedFreeze(const Player &player);
 
+/**
+ * @brief Damage of the local player's on the monsters within the radius of a tile, after a delay in game ticks, with
+ * the classic effect where it lands; for powers that aren't a skill's hit (the shrines' storms).
+ */
+void AddPlayerBurst(Point center, int radius, int delay, DamageType type, MissileGraphicID effect, Fixed26_6 damage);
 /** @brief A skill went off (a cast, a strike, a landing); the supports that repeat or add to it act now. */
 void OnSkillUsed(Player &player, SkillSlot skill, Point target);
 /** @brief A monster the local player hit last died. */

@@ -91,6 +91,7 @@
 #include "poe2/monster_armour.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/skill_lab.hpp"
@@ -1346,6 +1347,9 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		TelemetryMeleeSwing(player, SwingOutcome::Dodged);
 		return;
 	}
+	// POE2 Mashup: the Divine shrine's hero can't be damaged.
+	if (GetShrineBonuses(player).invulnerable)
+		return;
 
 	int hper = GenerateRnd(100);
 #ifdef _DEBUG

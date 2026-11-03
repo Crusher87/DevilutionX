@@ -53,6 +53,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
+#include "poe2/shrines.hpp"
 #include "portals/validation.hpp"
 #include "quests/validation.hpp"
 #include "spells.h"
@@ -199,6 +200,7 @@ std::string_view CmdIdString(_cmd_id cmd)
 	case CMD_OPENGRAVE: return "CMD_OPENGRAVE";
 	case CMD_SPAWNMONSTER: return "CMD_SPAWNMONSTER";
 	case CMD_POE2_FRESHFLOOR: return "CMD_POE2_FRESHFLOOR";
+	case CMD_POE2_SHRINEBUFF: return "CMD_POE2_SHRINEBUFF";
 	case FAKE_CMD_SETID: return "FAKE_CMD_SETID";
 	case FAKE_CMD_DROPID: return "FAKE_CMD_DROPID";
 	case CMD_INVALID: return "CMD_INVALID";
@@ -2621,6 +2623,22 @@ size_t OnFreshFloor(const TCmdFreshFloor &message, const Player &player)
 	return sizeof(message);
 }
 
+size_t OnShrineBuff(const TCmdShrineBuff &message, Player &player)
+{
+	if (gbBufferMsgs == 1)
+		return sizeof(message);
+	if (&player == MyPlayer || !gbIsPoe2)
+		return sizeof(message);
+	if (message.kind >= static_cast<uint8_t>(ShrineKind::Count) || message.curse >= static_cast<uint8_t>(ShrineCurse::Count))
+		return sizeof(message);
+	ShrineGrant grant;
+	grant.kind = static_cast<ShrineKind>(message.kind);
+	grant.variant = message.variant;
+	grant.curse = static_cast<ShrineCurse>(message.curse);
+	ApplyShrineGrant(player, grant);
+	return sizeof(message);
+}
+
 size_t OnSpawnMonster(const TCmdSpawnMonster &message, const Player &player)
 {
 	if (gbBufferMsgs == 1)
@@ -3018,6 +3036,17 @@ void NetSendCmdFreshFloor(uint8_t level, bool isSetLevel, uint32_t seed, uint16_
 	cmd.isSetLevel = isSetLevel ? 1 : 0;
 	cmd.visits = Swap16LE(visits);
 	cmd.seed = Swap32LE(seed);
+	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
+}
+
+void NetSendCmdShrineBuff(uint8_t kind, uint8_t variant, uint8_t curse)
+{
+	TCmdShrineBuff cmd;
+
+	cmd.bCmd = CMD_POE2_SHRINEBUFF;
+	cmd.kind = kind;
+	cmd.variant = variant;
+	cmd.curse = curse;
 	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
 }
 
@@ -3539,6 +3568,8 @@ size_t ParseCmd(uint8_t pnum, const TCmd *pCmd, size_t maxCmdSize)
 		return HandleCmd(OnSpawnMonster, player, pCmd, maxCmdSize);
 	case CMD_POE2_FRESHFLOOR:
 		return HandleCmd(OnFreshFloor, player, pCmd, maxCmdSize);
+	case CMD_POE2_SHRINEBUFF:
+		return HandleCmd(OnShrineBuff, player, pCmd, maxCmdSize);
 	default:
 		break;
 	}

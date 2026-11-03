@@ -8,6 +8,7 @@
 #include "player.h"
 #include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_gems.hpp"
@@ -108,7 +109,9 @@ void HeavyStunMonster(Monster &monster)
 {
 	if (monster.hasNoLife() || monster.isUnique())
 		return;
-	monster.poe2.heavyStunTicks = HeavyStunTicks;
+	// The Brutal shrine's stuns last longer.
+	const int percent = MyPlayer != nullptr ? 100 + GetShrineBonuses(*MyPlayer).stunDurationPercent : 100;
+	monster.poe2.heavyStunTicks = static_cast<uint8_t>(std::clamp(HeavyStunTicks * percent / 100, 1, 255));
 	monster.poe2.stunBuildup = 0;
 }
 

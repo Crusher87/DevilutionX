@@ -81,7 +81,14 @@ void DrawHeroBar(const Surface &out, Point topLeft, const OverheadBarValues &val
 /** @brief Draws a monster's bar with its top left corner at @p topLeft. */
 void DrawMonsterBar(const Surface &out, Point topLeft, int width, const OverheadBarValues &values, uint8_t frameColor);
 
-/** @brief Notes where the hero was drawn: the sprite's bottom left in the world drawing's buffer. */
+/** @brief The newest shrine buff's icon over the hero, at half size: its width and height in UI pixels. */
+constexpr int OverheadShrineIconWidth = 18;
+constexpr int OverheadShrineIconHeight = 19;
+
+/**
+ * @brief Notes where the hero was drawn: the sprite's bottom left in the world drawing's buffer. The mini bar goes
+ * there when its option is on, and the newest shrine buff's icon always.
+ */
 void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite sprite);
 /** @brief Notes where a monster was drawn: the sprite's bottom left in the world drawing's buffer. */
 void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSprite sprite);

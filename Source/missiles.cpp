@@ -53,6 +53,7 @@
 #include "poe2/defenses.hpp"
 #include "poe2/hit_trace.hpp"
 #include "poe2/profane_roads.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/skill_looks.hpp"
 #include "poe2/spell_damage.hpp"
 #include "poe2/map_play.hpp"
@@ -1457,8 +1458,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		return false;
 	}
 
-	// POE2 Mashup: the start of a dodge roll avoids missiles.
-	if (player.poe2.isUntouchable()) {
+	// POE2 Mashup: the start of a dodge roll avoids missiles, and the Divine shrine's hero can't be damaged.
+	if (player.poe2.isUntouchable() || GetShrineBonuses(player).invulnerable) {
 		return false;
 	}
 
@@ -1624,6 +1625,9 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 		TelemetryHitStep(true, "after resistance", damage.raw());
 		if (&player == MyPlayer) {
 			ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType), damageType), 0, deathReason);
+			// The Abandoned shrine (Thorned) sends a share back.
+			if (monster != nullptr)
+				ShrineReflectHit(player, *monster, damage.raw());
 		}
 
 		if (!player.hasNoLife()) {
@@ -1634,6 +1638,8 @@ bool PlayerMHit(Player &player, Monster *monster, int dist, int mind, int maxd, 
 
 	if (&player == MyPlayer) {
 		ApplyPlrDamage(damageType, player, AbsorbWithEnergyShield(player, ApplyUniqueHitTaken(player, damage, damageType), damageType), 0, deathReason);
+		if (monster != nullptr)
+			ShrineReflectHit(player, *monster, damage.raw());
 	}
 
 	if (!player.hasNoLife()) {
