@@ -50,6 +50,7 @@
 #include "poe2/minion_travel.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/stash_tabs.hpp"
@@ -2899,6 +2900,22 @@ void ReadPoe2Floors()
 		Poe2FloorsReset();
 }
 
+/** @brief The hero's shrine buffs, in their own entry; a save from before shrine buffs has none. */
+void ReadPoe2Shrines(Player &player)
+{
+	player.poe2.shrines = {};
+	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2shrines");
+	if (!file.IsValid(sizeof(uint32_t)))
+		return;
+	const uint32_t size = file.NextLE<uint32_t>();
+	if (size == 0 || !file.IsValid(size))
+		return;
+	std::vector<uint8_t> data(size);
+	for (uint8_t &byte : data)
+		byte = file.NextLE<uint8_t>();
+	UnpackShrineBuffs(player.poe2.shrines, data);
+}
+
 void LoadPoe2HeroData(Player &player)
 {
 	player.poe2.clear();
@@ -2907,8 +2924,10 @@ void LoadPoe2HeroData(Player &player)
 	for (Item &item : player.swapHands)
 		item.clear();
 	const uint8_t version = ReadPoe2HeroData(player);
-	if (&player == MyPlayer)
+	if (&player == MyPlayer) {
 		ReadPoe2Floors();
+		ReadPoe2Shrines(player);
+	}
 	// Heroes from before the skill bar start with the skill for their class's weapon.
 	if (version < 3 && gbIsPoe2)
 		GrantStarterSkill(player);
@@ -2967,6 +2986,14 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 		floorsFile.WriteLE<uint32_t>(static_cast<uint32_t>(floors.size()));
 		for (const uint8_t byte : floors)
 			floorsFile.WriteLE<uint8_t>(byte);
+	}
+	if (&player == MyPlayer) {
+		// Shrine buffs still running.
+		const std::vector<uint8_t> shrines = PackShrineBuffs(player.poe2.shrines);
+		SaveHelper shrinesFile(saveWriter, "poe2shrines", sizeof(uint32_t) + shrines.size());
+		shrinesFile.WriteLE<uint32_t>(static_cast<uint32_t>(shrines.size()));
+		for (const uint8_t byte : shrines)
+			shrinesFile.WriteLE<uint8_t>(byte);
 	}
 
 	std::vector<uint16_t> passives;

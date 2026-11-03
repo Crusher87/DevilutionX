@@ -98,6 +98,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/regen.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_uses.hpp"
@@ -3899,6 +3900,23 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	// POE2 Mashup: the passive tree's shrines and rule notables join the gear's unique rules.
 	PassiveTotals passives = GetPassiveTotals(player);
 	AddPassiveRules(passives, uniqueRules);
+	// POE2 Mashup: the shrine buffs (and a Murphy's curse) count like the tree's stats while they last.
+	if (gbIsPoe2) {
+		const ShrineBonuses shrine = GetShrineBonuses(player);
+		passives[static_cast<size_t>(PassiveStat::LifePercent)] += shrine.lifePercent;
+		passives[static_cast<size_t>(PassiveStat::ArmorPercent)] += shrine.armourPercent;
+		passives[static_cast<size_t>(PassiveStat::EvasionPercent)] += shrine.evasionPercent;
+		passives[static_cast<size_t>(PassiveStat::EnergyShieldPercent)] += shrine.energyShieldPercent;
+		passives[static_cast<size_t>(PassiveStat::AllResist)] += shrine.resistances;
+		passives[static_cast<size_t>(PassiveStat::FireDamage)] += shrine.fireDamagePercent;
+		passives[static_cast<size_t>(PassiveStat::ColdDamage)] += shrine.coldDamagePercent;
+		const auto addRule = [&uniqueRules](UniqueRule rule, int value) {
+			int16_t &total = uniqueRules[static_cast<size_t>(rule)];
+			total = static_cast<int16_t>(std::clamp(total + value, static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
+		};
+		addRule(UniqueRule::ActionSpeed, shrine.skillSpeedPercent);
+		addRule(UniqueRule::MaxElementalResistance, shrine.maxResistances);
+	}
 	// POE2 Mashup: the gear's increased spell damage (staves) adds to the tree's, which every spell hit takes.
 	uniqueRules[static_cast<size_t>(UniqueRule::SpellDamage)] = static_cast<int16_t>(std::clamp(uniqueRules[static_cast<size_t>(UniqueRule::SpellDamage)] + poe2Stats[static_cast<size_t>(Poe2ItemStat::SpellDamage)], static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
 	player.poe2.uniqueRules = uniqueRules;
@@ -5029,8 +5047,11 @@ LootBonus MapLootBonus()
 	LootBonus bonus;
 	// Increased rarity from gear (the Gold Amulet, Magic Find affixes) adds to the map's, as in POE2.
 	const int gearRarity = MyPlayer != nullptr ? MyPlayer->poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ItemRarity)] : 0;
+	// The shrines' rarity and quantity (Covetous, Seeking) add on top.
+	const ShrineBonuses shrine = MyPlayer != nullptr ? GetShrineBonuses(*MyPlayer) : ShrineBonuses {};
 	if (ActiveMapTier() == 0) {
-		bonus.rarity = std::max(100 + gearRarity, 0);
+		bonus.rarity = std::max(100 + gearRarity + shrine.rarityPercent, 0);
+		bonus.quantity = 100 + shrine.quantityPercent;
 		return bonus;
 	}
 	const MapEffects &map = ActiveMapEffects();
@@ -5038,8 +5059,8 @@ LootBonus MapLootBonus()
 	// "Loot quality varies": each roll's rarity swings up or down.
 	if (const int variance = map[MapDanger::LootVariance]; variance > 0)
 		bonus.rarity = std::max(bonus.rarity + LootRandom((2 * variance) + 1) - variance, 0);
-	bonus.rarity = std::max(bonus.rarity + gearRarity, 0);
-	bonus.quantity = 100 + ((map[MapAxis::Effectiveness] - 100) * 55 / 100);
+	bonus.rarity = std::max(bonus.rarity + gearRarity + shrine.rarityPercent, 0);
+	bonus.quantity = (100 + ((map[MapAxis::Effectiveness] - 100) * 55 / 100)) * (100 + shrine.quantityPercent) / 100;
 	bonus.waystones = map[MapAxis::WaystoneFind];
 	bonus.equipment = AtlasEquipmentPercent(*MyPlayer);
 	bonus.unique = AtlasUniquePercent(*MyPlayer, false);
@@ -5151,6 +5172,17 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return;
+	// The shrines change what drops while they last: Spiritual (Greed) drops no equipment, and Mendicant's (Greed II)
+	// turns it into currency. Floors being made aren't touched.
+	const ShrineBonuses shrine = !origin.pregen && MyPlayer != nullptr ? GetShrineBonuses(*MyPlayer) : ShrineBonuses {};
+	if (category == LootCategory::Equipment && !forcedIdx) {
+		if (shrine.equipmentToCurrency) {
+			category = LootCategory::Currency;
+			rarity = std::nullopt;
+		} else if (shrine.noEquipmentDrops) {
+			return;
+		}
+	}
 	const int itemLevel = origin.itemLevel;
 
 	std::optional<_item_indexes> idx = forcedIdx ? forcedIdx : category == LootCategory::Endgame ? PickPoe2EndgameItem(origin)
@@ -5197,6 +5229,9 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	}
 	if (category == LootCategory::Equipment && *rarity != ITEM_QUALITY_UNIQUE)
 		SetItemQuality(item, RollDropQuality(*idx, *rarity, origin.poe2ItemLevel));
+	// The Tainted shrine: equipment drops corrupted.
+	if (shrine.corruptDrops && IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel))
+		item.dwBuff |= CF_POE2_CORRUPTED;
 	// A flask's tier comes from its item level: the area's, like POE2's flasks, so the higher tiers drop in the endgame.
 	const int createLevel = IsFlaskBase(*idx) ? FlaskDropLevel(origin.equipmentLevel, itemLevel) : itemLevel;
 	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), createLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
@@ -5204,7 +5239,8 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
 		UniqueItemFlags[item._iUid] = true;
 	if (*idx == IDI_GOLD) {
-		item._ivalue = std::min(item._ivalue * GoldPileMultiplier, GOLD_MAX_LIMIT);
+		// The Spiritual shrine (Greed) doubles it.
+		item._ivalue = std::min(item._ivalue * GoldPileMultiplier * (100 + shrine.goldPercent) / 100, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
 	// Uncut gems take the floor's area level, not the monster's own (Curtis 2026-10-23: Snotspill dropped a level 6 uncut

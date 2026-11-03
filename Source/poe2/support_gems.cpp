@@ -17,6 +17,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit_skills.hpp"
 #include "poe2/support_table.hpp"
@@ -823,8 +824,15 @@ void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spel
 		return;
 	const Poe2PlayerData &data = player.poe2;
 	const SupportSockets supports = data.supportsFor(spell);
-	if (!std::any_of(supports.begin(), supports.end(), IsProjectileSupport))
+	// The Glimmering shrine (Acceleration I): faster projectiles, with or without supports.
+	const int shrineSpeed = GetShrineBonuses(player).projectileSpeedPercent;
+	if (!std::any_of(supports.begin(), supports.end(), IsProjectileSupport)) {
+		if (shrineSpeed != 0) {
+			missile.poe2.speedPercent = static_cast<int16_t>(100 + shrineSpeed);
+			missile.position.velocity = missile.position.velocity * (100 + shrineSpeed) / 100;
+		}
 		return;
+	}
 
 	missile.poe2.spell = spell;
 	const SkillSlot skill = SkillSlot::ForSpell(spell);
@@ -844,6 +852,7 @@ void ApplySupportsToMissile(Missile &missile, const Player &player, SpellID spel
 		speed = speed * ConcentratedEffectSpeedPercent / 100;
 	if (data.hasSupport(skill, SupportGem::FasterProjectiles))
 		speed = speed * (100 + SupportValue(data, skill, SupportGem::FasterProjectiles, 0)) / 100;
+	speed = speed * (100 + shrineSpeed) / 100;
 	missile.poe2.speedPercent = static_cast<int16_t>(speed);
 	if (speed != 100)
 		missile.position.velocity = missile.position.velocity * speed / 100;

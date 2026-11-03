@@ -67,6 +67,7 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/skill_looks.hpp"
 #include "poe2/skill_resources.hpp"
@@ -2897,6 +2898,9 @@ void Player::_addExperience(uint32_t experience, int levelDelta)
 		// POE2 Mashup: POE2's level-gap rule (full within a safe zone, then falling fast); multiplayer keeps only the
 		// cap at a twentieth of the level's threshold.
 		clampedExp = Poe2ExperienceGain(getCharacterLevel(), experience, getCharacterLevel() + levelDelta, gbIsMultiplayer);
+		// The Glowing shrine (Enlightening): more experience.
+		if (const int more = GetShrineBonuses(*this).experiencePercent; more != 0)
+			clampedExp = static_cast<uint32_t>(std::min<int64_t>(static_cast<int64_t>(clampedExp) * (100 + more) / 100, UINT32_MAX));
 	} else {
 		// Adjust xp based on difference between the players current level and the target level (usually a monster level)
 		clampedExp = static_cast<uint32_t>(std::clamp<int64_t>(static_cast<int64_t>(experience * (1 + levelDelta / 10.0)), 0, std::numeric_limits<uint32_t>::max()));
@@ -3349,6 +3353,9 @@ void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int mi
 		}
 	}
 
+	// POE2 Mashup: the Divine shrine's hero can't be damaged.
+	if (totalDamage > 0 && GetShrineBonuses(player).invulnerable)
+		totalDamage = Fixed26_6::fromInt(0);
 	if (totalDamage == 0) {
 		TelemetryPlayerDamaged(player, damageType, totalDamage);
 		return;
@@ -3616,6 +3623,7 @@ void ProcessPlayers()
 			RechargeEnergyShield(player);
 			ProcessPersistentSkills(player);
 			ProcessCharms(player);
+			ProcessShrineBuffs(player);
 
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {

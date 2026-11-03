@@ -17,6 +17,7 @@
 #include "player.h"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -360,6 +361,8 @@ void OnSpiritMeleeHit(Player &player)
 void ReflectMeleeHit(Player &player, Monster &monster, Fixed26_6 damage)
 {
 	OnSpiritMeleeHitTaken(player, monster);
+	// The Abandoned shrine (Thorned) sends a share of the hit back.
+	ShrineReflectHit(player, monster, damage.raw());
 	if (!gbIsPoe2 || &player != MyPlayer || damage <= 0 || monster.hasNoLife() || monster.mode == MonsterMode::Death || !Active(player, PersistentSkill::Reflect))
 		return;
 	const Fixed26_6 reflected = Fixed26_6::fromRaw(damage.raw() * ReflectPercent / 100);

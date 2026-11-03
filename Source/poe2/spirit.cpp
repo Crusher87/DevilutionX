@@ -29,6 +29,7 @@
 #include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -1171,6 +1172,9 @@ int KeptMinionCount(const Player &player, PersistentSkill skill)
 {
 	if (skill == PersistentSkill::WolfPack)
 		return IsPersistentSkillActive(player, skill) ? WolfPackSize(std::max(player.poe2.skillLevel(skill), 1)) : 0;
+	// The Spooky shrine (Skeletal) raises skeletal warriors beside the gem's, while it lasts.
+	if (skill == PersistentSkill::SkeletalWarriors)
+		return ActiveMinionCount(player, skill) + GetShrineBonuses(player).skeletons;
 	return ActiveMinionCount(player, skill);
 }
 
@@ -1395,7 +1399,9 @@ void KeepSkeletonsAlive(Player &player, PersistentSkill skill, _monster_id type,
 	// Without the type on the level, the spawn would fail every tick.
 	if ((ready || raiseNew) && MonsterTypeOnLevel(type)) {
 		const std::optional<Point> position = FindMinionSpawnPosition(player);
-		if (position && SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(std::max(player.poe2.effectiveLevel(skill), 1)), type)) {
+		// A shrine's skeletons rise at a level of the hero's when there is no gem.
+		const int level = std::max({ player.poe2.effectiveLevel(skill), GetShrineBonuses(player).skeletons > 0 ? ShrineSkeletonLevel(player) : 1, 1 });
+		if (position && SpawnSkeletonMinion(player, *position, static_cast<uint8_t>(level), type)) {
 			AddVisualEffect(*position, MissileGraphicID::Resurrect);
 			alive++;
 			if (ready)

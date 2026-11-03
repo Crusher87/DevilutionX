@@ -420,6 +420,10 @@ enum _cmd_id : uint8_t {
 	//
 	// body (TCmdFreshFloor)
 	CMD_POE2_FRESHFLOOR,
+	// POE2 Mashup: a hero touched a shrine and got this buff.
+	//
+	// body (TCmdShrineBuff)
+	CMD_POE2_SHRINEBUFF,
 	// Fake command; set current player for succeeding mega pkt buffer messages.
 	//
 	// body (TFakeCmdPlr)
@@ -513,6 +517,13 @@ struct TCmdFreshFloor {
 	uint8_t isSetLevel;
 	uint16_t visits;
 	uint32_t seed;
+};
+
+struct TCmdShrineBuff {
+	_cmd_id bCmd;
+	uint8_t kind;
+	uint8_t variant;
+	uint8_t curse;
 };
 
 struct TCmdSpawnMonster {
@@ -752,6 +763,7 @@ void DeltaLoadLevel();
 void ClearLastSentPlayerCmd();
 void NetSendCmd(bool bHiPri, _cmd_id bCmd);
 void NetSendCmdFreshFloor(uint8_t level, bool isSetLevel, uint32_t seed, uint16_t visits);
+void NetSendCmdShrineBuff(uint8_t kind, uint8_t variant, uint8_t curse);
 void NetSendCmdSpawnMonster(Point position, Direction dir, uint16_t typeIndex, uint16_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, uint8_t golemSpellLevel);
 void NetSendCmdLoc(uint8_t playerId, bool bHiPri, _cmd_id bCmd, Point position);
 void NetSendCmdLocParam1(bool bHiPri, _cmd_id bCmd, Point position, uint16_t wParam1);

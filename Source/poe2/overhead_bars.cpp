@@ -9,8 +9,10 @@
 #include "game_mode.hpp"
 #include "monster.h"
 #include "options.h"
+#include "panels/spell_icons.hpp"
 #include "player.h"
 #include "poe2/monster_mods.hpp"
+#include "poe2/shrines.hpp"
 #include "utils/clx_decode.hpp"
 #include "utils/ui_fwd.h"
 
@@ -24,6 +26,7 @@ constexpr size_t MaxBars = 200;
 enum class BarOwner : uint8_t {
 	Hero,
 	Monster,
+	HeroShrine,
 };
 
 struct QueuedBar {
@@ -110,6 +113,30 @@ int ClxSolidTopRow(ClxSprite sprite)
 	return std::max(0, height - 1 - highestRow);
 }
 
+namespace {
+
+/** @brief The newest shrine buff's icon at half size, its bottom middle at @p bottom; it blinks for the last seconds. */
+void DrawOverheadShrineIcon(const Surface &out, Point bottom, const Player &player)
+{
+	const ShrineBuff *newest = NewestShrineBuff(player.poe2.shrines);
+	if (newest == nullptr)
+		return;
+	if (newest->ticksLeft <= ShrineBlinkTicks && (newest->ticksLeft / 5) % 2 == 1)
+		return;
+	OwnedSurface icon(37, 38);
+	DrawSmallSpellIcon(icon, { 0, 37 }, static_cast<SpellIcon>(GetShrineData(newest->kind).icon));
+	const Point topLeft = bottom - Displacement { OverheadShrineIconWidth / 2, OverheadShrineIconHeight };
+	for (int y = 0; y < OverheadShrineIconHeight; y++) {
+		for (int x = 0; x < OverheadShrineIconWidth; x++) {
+			const Point target = topLeft + Displacement { x, y };
+			if (out.InBounds(target))
+				out.SetPixel(target, *icon.at(2 * x, 2 * y));
+		}
+	}
+}
+
+} // namespace
+
 int OverheadBarFill(int64_t current, int64_t maximum, int width)
 {
 	if (maximum <= 0 || current <= 0 || width <= 0)
@@ -163,7 +190,11 @@ void DrawHeroBar(const Surface &out, Point topLeft, const OverheadBarValues &val
 
 void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite sprite)
 {
-	if (!gbIsPoe2 || !*GetOptions().Gameplay.heroMiniBar || player.hasNoLife())
+	if (!gbIsPoe2 || player.hasNoLife())
+		return;
+	const bool bar = *GetOptions().Gameplay.heroMiniBar;
+	const bool shrine = NewestShrineBuff(player.poe2.shrines) != nullptr;
+	if (!bar && !shrine)
 		return;
 	int standHeight = DefaultHeroHeight;
 	int standTopRow = 0;
@@ -174,7 +205,11 @@ void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite 
 		standTopRow = ClxSolidTopRow(standSprite);
 	}
 	QueuedHero = &player;
-	QueueBar(BarOwner::Hero, 0, AnchorOver(spritePosition, sprite, standHeight, standTopRow));
+	const Point anchor = AnchorOver(spritePosition, sprite, standHeight, standTopRow);
+	if (bar)
+		QueueBar(BarOwner::Hero, 0, anchor);
+	if (shrine)
+		QueueBar(BarOwner::HeroShrine, 0, anchor);
 }
 
 void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSprite sprite)
@@ -214,6 +249,12 @@ void DrawOverheadBars(const Surface &out)
 			values.mana = noMana ? 0 : player._pMana.raw();
 			values.maxMana = noMana ? 0 : player._pMaxMana.raw();
 			DrawHeroBar(view, anchor - Displacement { HeroBarWidth / 2, HeroBarHeight }, values, *GetOptions().Gameplay.heroMiniBarEnergyShield);
+			continue;
+		}
+		if (bar.owner == BarOwner::HeroShrine && QueuedHero != nullptr) {
+			// Above the mini bar when it's shown.
+			const int lift = *GetOptions().Gameplay.heroMiniBar ? HeroBarHeight + 2 : 0;
+			DrawOverheadShrineIcon(view, anchor - Displacement { 0, lift }, *QueuedHero);
 			continue;
 		}
 		if (bar.owner != BarOwner::Monster || bar.index >= MaxMonsters)

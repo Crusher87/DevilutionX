@@ -22,6 +22,7 @@
 #include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/meta_gems.hpp"
@@ -30,6 +31,8 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/monster_resistance.hpp"
 #include "poe2/passive_tree.hpp"
+#include "poe2/shrines.hpp"
+#include "poe2/skill_gems.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_auras.hpp"
@@ -687,6 +690,11 @@ void FinishHit()
 		}
 		if (Hit.wirt && !monster.isUnique())
 			M_GetKnockback(monster, player.position.tile);
+		// The Brutal shrine's hits knock back.
+		else if (GetShrineBonuses(player).knockback && !monster.isUnique())
+			M_GetKnockback(monster, player.position.tile);
+		// The Hexing shrine's hits may curse.
+		OnShrineHit(player, monster);
 	}
 
 	// Extra damage: infusions, Holy Infusion, Fuel the Pyre, Frostbite and Tal Rasha's Prism.
@@ -720,6 +728,11 @@ void FinishHit()
 		// Blood Sacrifice: a use that paid its life gains a share of each hit as chaos (POE2's Extraction).
 		if (Has(player, skill, SG::BloodSacrifice) && state.sacrificeTicks > 0)
 			DealExtra(player, monster, DamageType::Chaos, Fixed26_6::fromRaw(Percent(HitDamageBeforeDarkEnchant(player, skill), Value(player, skill, SG::BloodSacrifice, 0))));
+		// Gain a share of the hit as extra fire, lightning or cold (the Oily, Sparkling and Shimmering shrines).
+		for (const DamageType element : { DamageType::Fire, DamageType::Lightning, DamageType::Cold }) {
+			if (const int percent = GainAsExtraPercent(player, element); percent > 0)
+				DealExtra(player, monster, element, Fixed26_6::fromRaw(Percent(totalBase, percent)));
+		}
 	}
 
 	// Things that spread from the hit.
@@ -1525,6 +1538,8 @@ int SupportHitDamagePercent(const Monster &monster, DamageType type)
 	const SupportRuntime &state = player.poe2.supportState;
 	const auto more = [&](int amount) { percent = percent * (100 + amount) / 100; };
 	more(RepeatPercent - 100);
+	// The Brutal shrine.
+	more(GetShrineBonuses(player).moreDamagePercent);
 	if (skill.isEmpty())
 		return percent;
 	const bool elemental = IsAnyOf(type, DamageType::Fire, DamageType::Lightning, DamageType::Cold);
@@ -1691,6 +1706,16 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || skill.isEmpty() || Repeating || IsCastingRepeat(player))
 		return;
+	// The Echoing shrine: the skill repeats once, and the repeat costs its mana.
+	if (GetShrineBonuses(player).echoing) {
+		const int cost = std::max(SkillManaCost(player, skill), 0);
+		if (player._pMana >= Fixed26_6::fromInt(cost)) {
+			player._pMana -= Fixed26_6::fromInt(cost);
+			player._pManaBase -= Fixed26_6::fromInt(cost);
+			RedrawComponent(PanelDrawComponent::Mana);
+			QueueUse(skill, target, ShrineEchoDelayTicks, 100);
+		}
+	}
 	// Shadow Warrior: a shadow beside you repeats the skill.
 	if (ShadowWarriorActive(player)) {
 		QueueUse(skill, target, ShadowWarriorDelay, ShadowWarriorPercent);
@@ -1870,6 +1895,8 @@ void OnSupportedKill(Monster &monster)
 	Player &player = Players[static_cast<size_t>(monster.poe2.lastHitPlayer)];
 	if (&player != MyPlayer)
 		return;
+	// The Gloom shrine: the dead may burst.
+	OnShrineKill(player, monster);
 	const SkillSlot skill { static_cast<SkillKind>(monster.poe2.lastHitSkillKind), monster.poe2.lastHitSkillId };
 	SupportRuntime &state = player.poe2.supportState;
 	// Bone Splinters (POE2's Bone Shrapnel): one killed while trapped or heavily stunned bursts in bone for a share of its life.
@@ -2068,6 +2095,13 @@ Point NearestMonsterTarget(const Player &player, Point from, int range)
 	return NearestTarget(player, from, range);
 }
 
+void AddPlayerBurst(Point center, int radius, int delay, DamageType type, MissileGraphicID effect, Fixed26_6 damage)
+{
+	if (!gbIsPoe2 || damage <= 0)
+		return;
+	AddBurst(center, std::max(radius, 0), delay, type, effect, damage);
+}
+
 int SupportAddedSpirit(const Player &player, SkillSlot skill)
 {
 	return Value(player, skill, SG::DeadlyHerald, 1);
@@ -2086,6 +2120,8 @@ int SupportAreaRadius(const Player &player, SkillSlot skill, int radius)
 		percent -= 20;
 	if (Has(player, skill, SupportGem::ConcentratedEffect))
 		percent -= 50;
+	// The Quiet shrine's larger area.
+	percent += GetShrineBonuses(player).areaPercent;
 	int scaled = (radius * percent + 50) / 100;
 	if (Has(player, skill, SG::CurseMastery))
 		scaled++;
@@ -2121,7 +2157,8 @@ std::optional<SealDisplay> SkillSealDisplay(const Player &player, SkillSlot skil
 
 int SupportExtraProjectileCount(const Player &player, SkillSlot skill)
 {
-	int extra = 0;
+	// The Solar shrine at night.
+	int extra = GetShrineBonuses(player).extraProjectiles;
 	if (Has(player, skill, SG::Volley))
 		extra += VolleyExtra;
 	if (Has(player, skill, SG::StoredVolley)) {

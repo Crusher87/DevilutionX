@@ -20,6 +20,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/skill_gems.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_skills.hpp"
@@ -36,6 +37,9 @@ constexpr int PortraitGap = 6;
 constexpr int BarHeight = 3;
 constexpr uint8_t BarBackColor = PAL16_GRAY + 14;
 constexpr uint8_t BarColor = PAL16_YELLOW + 4;
+constexpr uint8_t RingTrackColor = PAL16_GRAY + 13;
+constexpr uint8_t RingColor = PAL16_YELLOW + 2;
+constexpr uint8_t HarmfulRingColor = PAL16_RED + 4;
 
 Point FirstPortraitPosition()
 {
@@ -129,7 +133,73 @@ void DrawBuffTooltip(const Surface &out, PersistentSkill skill)
 	poe2ui::DrawTooltip(out, { { 0, 0 }, { out.w(), out.h() } }, MousePosition, std::string(PersistentSkillName(skill)), UiFlags::ColorWhitegold, lines);
 }
 
+/** @brief The point @p step pixels clockwise round the rectangle's edge, from the middle of its top. */
+Point RingPoint(const Rectangle &rect, int step)
+{
+	const int w = rect.size.width - 1;
+	const int h = rect.size.height - 1;
+	const int perimeter = 2 * (w + h);
+	int s = ((step % perimeter) + perimeter + (w / 2)) % perimeter;
+	const Point origin = rect.position;
+	if (s < w)
+		return origin + Displacement { s, 0 };
+	s -= w;
+	if (s < h)
+		return origin + Displacement { w, s };
+	s -= h;
+	if (s < w)
+		return origin + Displacement { w - s, h };
+	s -= w;
+	return origin + Displacement { 0, h - s };
+}
+
+/** @brief A two-pixel ring round the icon: the time left, draining clockwise from the top. */
+void DrawDrainingRing(const Surface &out, const Rectangle &icon, int ticksLeft, int ticksTotal, uint8_t color)
+{
+	const Rectangle outer { icon.position - Displacement { 2, 2 }, { icon.size.width + 4, icon.size.height + 4 } };
+	const Rectangle inner { icon.position - Displacement { 1, 1 }, { icon.size.width + 2, icon.size.height + 2 } };
+	for (const Rectangle &ring : { outer, inner }) {
+		const int perimeter = 2 * ((ring.size.width - 1) + (ring.size.height - 1));
+		const int lit = ticksTotal > 0 ? static_cast<int>(static_cast<int64_t>(perimeter) * std::clamp(ticksLeft, 0, ticksTotal) / ticksTotal) : 0;
+		for (int step = 0; step < perimeter; step++) {
+			const Point point = RingPoint(ring, step);
+			if (out.InBounds(point))
+				out.SetPixel(point, step < lit ? color : RingTrackColor);
+		}
+	}
+}
+
+void DrawOneLineTooltip(const Surface &out, const std::string &text)
+{
+	const int width = GetLineWidth(text, GameFont12) + 16;
+	constexpr int Height = 24;
+	Point position = MousePosition + Displacement { 16, 8 };
+	position.x = std::clamp(position.x, 2, std::max(out.w() - width - 2, 2));
+	position.y = std::clamp(position.y, 2, std::max(out.h() - Height - 2, 2));
+	const Rectangle box { position, { width, Height } };
+	poe2ui::FillRectangle(out, box, poe2ui::TooltipColor);
+	poe2ui::DrawFrame(out, box, poe2ui::BorderColor);
+	DrawString(out, text, { position + Displacement { 8, 2 }, { width - 16, Height - 4 } }, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
+}
+
 } // namespace
+
+std::vector<TimedHudIcon> TimedHudIcons(const Player &player)
+{
+	std::vector<TimedHudIcon> icons;
+	if (!gbIsPoe2)
+		return icons;
+	const ShrineBuffState &state = player.poe2.shrines;
+	for (const ShrineBuff &buff : state.buffs) {
+		if (!buff.active())
+			continue;
+		const ShrineData &shrine = GetShrineData(buff.kind);
+		icons.push_back({ static_cast<SpellIcon>(shrine.icon), StrCat(shrine.power, ": ", ShrineBuffTooltip(buff)), buff.ticksLeft, buff.ticksTotal, false });
+	}
+	if (state.curse != ShrineCurse::None && state.curseTicks > 0)
+		icons.push_back({ SpellIcon::RedSkull, StrCat(ShrineCurseName(state.curse), ": ", ShrineCurseTooltip(state.curse, state.curseTicks)), state.curseTicks, state.curseTotal, true });
+	return icons;
+}
 
 std::vector<MinionPortrait> MinionHudPortraits(const Player &player)
 {
@@ -208,10 +278,29 @@ void DrawMinionHud(const Surface &out)
 		}
 		position.x += portrait.size.width + PortraitGap;
 	}
+	// Shrine buffs and curses: a draining ring, and a blink for the last seconds.
+	std::optional<std::string> timedHover;
+	const bool blinkOff = (SDL_GetTicks() / 250) % 2 == 1;
+	for (const TimedHudIcon &timed : TimedHudIcons(player)) {
+		const Rectangle portrait { position + Displacement { 2, 2 }, PortraitSize };
+		DrawHalfTransparentRectTo(out, portrait.position.x, portrait.position.y, portrait.size.width, portrait.size.height);
+		const Point bottomLeft { portrait.position.x, portrait.position.y + portrait.size.height - 1 };
+		if (timed.ticksLeft > ShrineBlinkTicks || !blinkOff)
+			DrawSmallSpellIcon(out, bottomLeft, timed.icon);
+		DrawDrainingRing(out, portrait, timed.ticksLeft, timed.ticksTotal, timed.harmful ? HarmfulRingColor : RingColor);
+		const int seconds = (timed.ticksLeft + 19) / 20;
+		DrawString(out, StrCat(seconds), { portrait.position + Displacement { 2, portrait.size.height - 14 }, { portrait.size.width - 4, 12 } },
+		    { .flags = (timed.harmful ? UiFlags::ColorRed : UiFlags::ColorWhite) | UiFlags::AlignRight | UiFlags::Outlined | UiFlags::FontSize12, .spacing = 0 });
+		if (portrait.contains(MousePosition))
+			timedHover = timed.tooltip;
+		position.x += portrait.size.width + PortraitGap + 4;
+	}
 	if (hover != nullptr)
 		DrawMinionTooltip(out, *hover);
 	else if (buffHover)
 		DrawBuffTooltip(out, *buffHover);
+	else if (timedHover)
+		DrawOneLineTooltip(out, *timedHover);
 }
 
 } // namespace devilution

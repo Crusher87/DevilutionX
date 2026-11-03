@@ -19,6 +19,7 @@
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/telemetry.hpp"
@@ -511,15 +512,19 @@ int BannerDefencePercent(const Player &player)
 
 int BannerWalkSkippedFrames(const Player &player, int walkFrames)
 {
-	if (!InBanner(player, 1))
+	// Defiance Banner, and the shrines' movement speed (Acceleration, and Temporal Chains slowing).
+	const int percent = (InBanner(player, 1) ? DefianceBannerMovementPercent : 0) + GetShrineBonuses(player).movePercent;
+	if (percent == 0)
 		return 0;
 	// A tile takes the frames left after the usual 2 skipped; 30% faster takes 100/130 of them.
 	const int frames = std::max(walkFrames - 2, 1);
-	const int extraHundredths = (frames * 100) - (frames * 100 * 100 / (100 + DefianceBannerMovementPercent));
+	const int extraHundredths = (frames * 100) - (frames * 100 * 100 / std::max(100 + percent, 10));
 	SpiritRuntime &state = player.poe2.spiritState;
 	const int total = state.walkCarry + extraHundredths;
-	state.walkCarry = static_cast<uint8_t>(total % 100);
-	return total / 100;
+	// Slower walks skip fewer frames; the carry stays 0 to 99 either way.
+	const int skipped = std::max(total >= 0 ? total / 100 : -((-total + 99) / 100), -2);
+	state.walkCarry = static_cast<uint8_t>(std::clamp(total - (skipped * 100), 0, 99));
+	return skipped;
 }
 
 int BannerMaxResistance(const Player &player)

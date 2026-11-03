@@ -11,6 +11,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/telemetry.hpp"
@@ -97,7 +98,8 @@ const GroundPatch *PatchAt(Point position)
 /** @param poisonRaw The hit's physical and chaos damage before armour and resistance; 0 when it can't poison. */
 void TryAilments(Player &player, int32_t hitRaw, int32_t poisonRaw)
 {
-	if (hitRaw <= 0)
+	// The Solar shrine by day: the hero avoids ailments.
+	if (hitRaw <= 0 || AvoidsAilments(player))
 		return;
 	if (const int chance = Danger(MapDanger::PoisonChance); chance > 0 && poisonRaw > 0 && GenerateRnd(100) < chance) {
 		// POE2: only the strongest poison deals damage. A weaker one is lost; one as strong or stronger takes over.
@@ -185,7 +187,7 @@ int MapPlayerSlowPercent(const Player &player)
 	if (!InMap())
 		return 0;
 	int slow = PeriodicActive() ? Danger(MapDanger::PlayerSlower) : 0;
-	if (const GroundPatch *patch = PatchAt(player.position.tile); patch != nullptr && patch->kind == MapDanger::ChilledGround)
+	if (const GroundPatch *patch = PatchAt(player.position.tile); patch != nullptr && patch->kind == MapDanger::ChilledGround && !AvoidsAilments(player))
 		slow += ChilledGroundSlowPercent;
 	return slow;
 }
