@@ -6204,6 +6204,13 @@ uint32_t HeldCurrencyVariant = 0;
 int SpentCurrencyMisc = -1;
 uint32_t SpentCurrencyVariant = 0;
 bool StickyUse = false;
+
+/** Currency comes from the bag, or from the stash only while it is open: Shift+click once spent orbs from a closed stash
+ * after the bag ran out (Rogue run 2: 13 Whetstones used, 7 dropped). */
+bool CanUseStashCurrency(const Player &player)
+{
+	return &player == MyPlayer && IsStashOpen;
+}
 } // namespace
 
 void SetStickyItemUse(bool sticky)
@@ -6234,7 +6241,7 @@ bool KeepCurrencyOnCursor(Player &player)
 			return true;
 		}
 	}
-	if (IsStashOpen) {
+	if (CanUseStashCurrency(player)) {
 		for (const Item &stack : Stash.stashList) {
 			if (stack._iMiscId == SpentCurrencyMisc && (stack.dwBuff & CF_POE2_VARIANT) == SpentCurrencyVariant) {
 				HoldCurrencyForUse(stack);
@@ -6296,8 +6303,8 @@ void SpendHeldCurrency(Player &player)
 			HeldCurrencyMisc = -1;
 			return;
 		}
-		// Used from the stash: one comes off its stack there.
-		if (&player != MyPlayer)
+		// Used from the open stash: one comes off its stack there.
+		if (!CanUseStashCurrency(player))
 			continue;
 		for (size_t i = 0; i < Stash.stashList.size(); i++) {
 			Item &stack = Stash.stashList[i];
@@ -6328,7 +6335,7 @@ bool HeldCurrencyAvailable(const Player &player)
 		if (matches(player.InvList[i]))
 			return true;
 	}
-	return &player == MyPlayer && std::any_of(Stash.stashList.begin(), Stash.stashList.end(), matches);
+	return CanUseStashCurrency(player) && std::any_of(Stash.stashList.begin(), Stash.stashList.end(), matches);
 }
 
 namespace {
@@ -6372,6 +6379,9 @@ bool DoOil(Player &player, int cii)
 	} else {
 		pi = &player.InvBody[cii];
 	}
+	// None left where it may be used from: nothing is crafted for free.
+	if (gbIsPoe2 && IsCurrencyMiscId(player._pOilType) && !HeldCurrencyAvailable(player))
+		return false;
 	if (!ApplyOilToItem(*pi, player)) {
 		if (DesecrationRevealItem && &player == MyPlayer)
 			OpenDesecrationReveal(*pi);
@@ -6403,6 +6413,8 @@ bool DoOil(Player &player, int cii)
 bool DoOilOnStashItem(Player &player, uint16_t index)
 {
 	Item &item = Stash.stashList[index];
+	if (gbIsPoe2 && IsCurrencyMiscId(player._pOilType) && !HeldCurrencyAvailable(player))
+		return false;
 	const bool applied = ApplyOilToItem(item, player);
 	// As in DoOil, the item first: using up the last of a stash stack moves the stash's last item into that stack's
 	// place, so item and index could then name another item, or one past the end of the stash.
