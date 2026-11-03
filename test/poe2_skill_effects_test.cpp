@@ -85,7 +85,17 @@ TEST_F(Poe2SkillEffectsTest, EverySkillHasEffects)
 		Missiles.clear();
 		MyPlayer->position.tile = { 40, 40 };
 		PlaySkillEffects(*MyPlayer, skill, { 43, 40 });
-		EXPECT_FALSE(Missiles.empty()) << WeaponSkillName(skill);
+		const TableSkillData *data = FindTableSkill(skill);
+		if (data == nullptr || TableSkillCastFlash(*data)) {
+			EXPECT_FALSE(Missiles.empty()) << WeaponSkillName(skill);
+			continue;
+		}
+		// Rogue run 2: only lightning flashes where a skill starts. A bow's arrows and a spell's bolts carry their own look,
+		// so nothing is left at the hero's feet as they go off (a blue spark on Plague Arrow, flames under Fire Arrow).
+		if (IsAnyOf(data->shape, TableShape::Projectiles, TableShape::Stream)) {
+			for (const Missile &missile : Missiles)
+				EXPECT_NE(missile._mitype, MissileID::VisualEffect) << WeaponSkillName(skill);
+		}
 	}
 }
 

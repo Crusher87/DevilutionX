@@ -796,5 +796,29 @@ TEST_F(Poe2TableSkillsTest, EverySkillHasACastAndASpellSound)
 	EXPECT_EQ(soundsOf(WeaponSkill::Blizzard).spell.mod, "sfx\\poe2\\blizzard_cast.wav");
 }
 
+TEST_F(Poe2TableSkillsTest, OnlyLightningSkillsFlashInFrontOfTheHero)
+{
+	// Rogue run 2: physical skills flashed a blue Charged Bolt spark (Plague Arrow looked like lightning), fire skills a
+	// burst of flame at the hero's feet (Fire Arrow).
+	for (const TableSkillData &data : TableSkills()) {
+		const std::optional<MissileGraphicID> flash = TableSkillCastFlash(data);
+		EXPECT_EQ(flash.has_value(), data.type == DamageType::Lightning) << data.name;
+		if (flash) {
+			EXPECT_EQ(*flash, MissileGraphicID::Lightning) << data.name;
+		}
+	}
+	for (const WeaponSkill skill : { WeaponSkill::ClusterBolt, WeaponSkill::PlagueArrow, WeaponSkill::Multishot }) {
+		const TableSkillData *data = FindTableSkill(skill);
+		ASSERT_NE(data, nullptr);
+		EXPECT_FALSE(TableSkillCastFlash(*data).has_value()) << data->name;
+	}
+	// Fire Arrow bursts into a small flame where it lands instead; Explosive and Freezing Arrow keep their explosions.
+	EXPECT_TRUE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::ClusterBolt)));
+	EXPECT_FALSE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::ExplosiveBolt)));
+	EXPECT_FALSE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::FreezingArrow)));
+	EXPECT_FALSE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::PlagueArrow)));
+	EXPECT_LT(SmallLandingBurstSize, 0.6F);
+}
+
 } // namespace
 } // namespace devilution
