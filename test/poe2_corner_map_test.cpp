@@ -14,6 +14,7 @@
 #include "objects.h"
 #include "options.h"
 #include "poe2/corner_map.hpp"
+#include "poe2/monster_mods.hpp"
 #include "utils/palette_blending.hpp"
 
 namespace devilution {
@@ -232,7 +233,7 @@ TEST_F(Poe2CornerMapTest, IconTableLoadsFromThePoe2Mod)
 	EXPECT_EQ(GetMapIconStyle(MapIcon::Strongbox).shape, MapIconShape::Square);
 	EXPECT_EQ(GetMapIconStyle(MapIcon::Strongbox).color, PAL8_ORANGE + 1);
 	EXPECT_EQ(GetMapIconStyle(MapIcon::Shrine).shape, MapIconShape::Cross);
-	EXPECT_EQ(GetMapIconStyle(MapIcon::UniqueMonster).label, "{name}");
+	EXPECT_EQ(GetMapIconStyle(MapIcon::UniqueMonster).label, "") << "Rogue run 2: no monster names on the map";
 	EXPECT_EQ(GetMapIconStyle(MapIcon::RareMonster).label, "") << "\"-\" in the table shows no name";
 	EXPECT_EQ(GetMapIconStyle(MapIcon::Portal).color, PAL8_BLUE + 1);
 	EXPECT_EQ(GetMapIconStyle(MapIcon::RedPortal).color, PAL8_RED + 1);
@@ -282,6 +283,59 @@ TEST_F(Poe2CornerMapTest, ExitsShowOnceSeenAndOnlyNearTheHero)
 	ASSERT_EQ(markers.size(), 1u) << "seen, but the hero has walked away";
 	EXPECT_EQ(markers[0].icon, MapIcon::StairsDown);
 	EXPECT_TRUE(CollectMapMarkers({ 20, 90 }).empty());
+}
+
+TEST_F(Poe2CornerMapTest, OnlyRaresAndBossesAreMarkedWithoutNames)
+{
+	// Curtis, Rogue run 2: like POE2's map, a marker for rare monsters and bosses only, and no names ("gives away too
+	// much information").
+	numtrigs = 0;
+	ActiveObjectCount = 0;
+	Missiles.clear();
+	leveltype = DTYPE_CATHEDRAL;
+	currlevel = 1;
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	const auto place = [](size_t slot, Point tile) -> Monster & {
+		Monster &monster = Monsters[slot];
+		monster = {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.mode = MonsterMode::Stand;
+		monster.hitPoints = monster.maxHitPoints = Fixed26_6::fromInt(10);
+		monster.position.tile = tile;
+		ActiveMonsters[slot] = static_cast<unsigned>(slot);
+		return monster;
+	};
+	// Seeds that roll a normal, a magic and a rare monster.
+	const auto seedFor = [&](MonsterRarity rarity) {
+		Monster &probe = place(0, { 50, 50 });
+		for (uint32_t seed = 1; seed < 100000; seed++) {
+			probe.rndItemSeed = seed;
+			if (GetMonsterAffixes(probe).rarity == rarity)
+				return seed;
+		}
+		ADD_FAILURE() << "no seed";
+		return 0U;
+	};
+	const uint32_t normalSeed = seedFor(MonsterRarity::Normal);
+	const uint32_t magicSeed = seedFor(MonsterRarity::Magic);
+	const uint32_t rareSeed = seedFor(MonsterRarity::Rare);
+	place(0, { 50, 51 }).rndItemSeed = normalSeed;
+	place(1, { 50, 52 }).rndItemSeed = magicSeed;
+	place(2, { 50, 53 }).rndItemSeed = rareSeed;
+	place(3, { 50, 54 }).uniqueType = UniqueMonsterType::Butcher;
+	ActiveMonsterCount = 4;
+	const std::vector<MapMarker> markers = CollectMapMarkers({ 50, 50 });
+	ActiveMonsterCount = 0;
+	ASSERT_EQ(markers.size(), 2u) << "normal and magic monsters aren't marked";
+	EXPECT_EQ(markers[0].icon, MapIcon::RareMonster);
+	EXPECT_EQ(markers[0].tile, Point(50, 53));
+	EXPECT_EQ(markers[1].icon, MapIcon::UniqueMonster);
+	EXPECT_EQ(markers[1].tile, Point(50, 54));
+	for (const MapMarker &marker : markers)
+		EXPECT_TRUE(marker.name.empty());
+	// Even a table that asks for the name shows none.
+	EXPECT_EQ(MapIconLabel({ MapIconShape::Circle, 0, "{name}" }, markers[1].name), "");
 }
 
 TEST_F(Poe2CornerMapTest, YourOwnTownPortalShowsFromAnywhere)

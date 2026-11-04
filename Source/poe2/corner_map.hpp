@@ -7,9 +7,10 @@
  *  - Show Corner Map, Auto-Centre Map, Map Transparency, Landscape Transparency, Map Zoom (also + and - while the Tab
  *    map is closed) and Point of Interest names, as POE2's Options > UI > Map has them. Transparency, landscape and
  *    the markers apply to the Tab map too; zoom and auto-centre are the corner map's.
- *  - Markers for stairs and other exits, town portals, shrines, strongboxes and rare and unique monsters. Their
+ *  - Markers for stairs and other exits, town portals, shrines, strongboxes and rare monsters and bosses. Their
  *    shapes, colours and names come from txtdata/poe2/map_icons.tsv. They show only within MapMarkerRange of the hero,
- *    on both maps; the hero's own town portal always shows (Curtis 2026-10-29).
+ *    on both maps; the hero's own town portal always shows (Curtis 2026-10-29). Monsters are never named, and normal
+ *    and magic ones aren't marked, as on POE2's map (Curtis, Rogue run 2).
  */
 #pragma once
 
@@ -118,7 +119,7 @@ int MapIconRadius(int scale);
 bool IsInMapMarkerRange(Point hero, Point tile);
 /**
  * @brief The markers on the current level near the hero on @p hero: exits, portals, unused shrines and strongboxes the
- * hero has seen, and live rare and unique monsters. The hero's own town portal shows from anywhere.
+ * hero has seen, and live rare monsters and bosses (without names). The hero's own town portal shows from anywhere.
  */
 std::vector<MapMarker> CollectMapMarkers(Point hero);
 /** @brief Draws one marker: its shape in its colour with a dark outline, at the map's line opacity. */

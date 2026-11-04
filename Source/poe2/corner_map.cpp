@@ -18,6 +18,7 @@
 #include "options.h"
 #include "poe2/floor_chests.hpp"
 #include "poe2/monster_mods.hpp"
+#include "utils/is_of.hpp"
 #include "utils/log.hpp"
 #include "utils/ui_fwd.h"
 
@@ -357,17 +358,19 @@ std::vector<MapMarker> CollectMapMarkers(Point hero)
 		else if (object.IsChest() && GetFloorChestKind(object) == FloorChestKind::Strongbox)
 			markers.push_back({ MapIcon::Strongbox, object.position, {} });
 	}
-	// Rare and unique monsters keep to the same distance as everything else (Curtis 2026-10-29).
+	// Rare and unique monsters keep to the same distance as everything else (Curtis 2026-10-29). Like POE2's map, only
+	// rares and bosses (uniques, Diablo, Na-Krul) are marked, and never with a name (Curtis, Rogue run 2: names "give
+	// away too much information"); normal and magic monsters aren't marked at all.
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (monster.isInvalid || monster.isPlayerMinion() || (monster.flags & MFLAG_HIDDEN) != 0 || monster.mode == MonsterMode::Death || monster.hitPoints <= 0)
 			continue;
 		if (!IsInMapMarkerRange(hero, monster.position.tile))
 			continue;
-		if (monster.isUnique())
-			markers.push_back({ MapIcon::UniqueMonster, monster.position.tile, std::string(monster.name()) });
+		if (monster.isUnique() || IsAnyOf(monster.type().type, MT_DIABLO, MT_NAKRUL))
+			markers.push_back({ MapIcon::UniqueMonster, monster.position.tile, {} });
 		else if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
-			markers.push_back({ MapIcon::RareMonster, monster.position.tile, RareMonsterName(monster) });
+			markers.push_back({ MapIcon::RareMonster, monster.position.tile, {} });
 	}
 	return markers;
 }
