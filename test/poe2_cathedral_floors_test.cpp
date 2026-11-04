@@ -34,6 +34,29 @@ TEST(Poe2CathedralFloors, TurnsAGrid)
 	EXPECT_EQ(TurnCathedralGrid(grid, 4), (std::vector<std::string> { "ba", "dc", "fe" }));
 }
 
+TEST(Poe2CathedralFloors, RoomsStampChangesWithTheRooms)
+{
+	std::vector<CathedralRoomDef> rooms(2);
+	rooms[0].id = "library";
+	rooms[0].grid = { "KKK", "..." };
+	rooms[1].id = "nook";
+	rooms[1].grid = { "." };
+	SetCathedralRooms(rooms);
+	SetCavesRooms(rooms);
+	const uint32_t stamp = CathedralRoomsStamp();
+	EXPECT_NE(stamp, 0U);
+	EXPECT_EQ(CathedralRoomsStamp(), stamp);
+	// Same rooms in another collection: a saved Cathedral floor and a Caves floor are stamped apart only by their rooms.
+	EXPECT_EQ(CathedralRoomsStamp(false, true), stamp);
+	// A redrawn room builds the same seed differently, so the stamp changes.
+	rooms[0].grid = { "KKKK", "K..." };
+	SetCathedralRooms(rooms);
+	EXPECT_NE(CathedralRoomsStamp(), stamp);
+	EXPECT_EQ(CathedralRoomsStamp(false, true), stamp);
+	SetCathedralRooms({});
+	SetCavesRooms({});
+}
+
 TEST(Poe2CathedralFloors, RoomsWaitTheirTurn)
 {
 	std::vector<CathedralRoomDef> rooms(3);

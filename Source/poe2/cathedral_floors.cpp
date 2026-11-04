@@ -1178,7 +1178,8 @@ private:
 					continue;
 				}
 				carve(block);
-				if (c == 'O')
+				// A brazier is a pillar too: Diablo's Cathedral pillar is the brazier's stand, and AddL1Objs puts the fire on it.
+				if (c == 'O' || c == 'L')
 					plan_.pillars.push_back(block);
 				else if (c == 'U' && !plan_.stairsUp && At(area.grid, x - 1, y) != 'U')
 					plan_.stairsUp = block;
@@ -2000,6 +2001,35 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 	return out;
 }
 
+/** Bump when a change to the builder's code (not its rooms) would build a saved floor's seed differently. */
+constexpr uint32_t FloorBuilderVersion = 1;
+
+uint32_t CathedralRoomsStamp(bool catacombs, bool caves, bool hell, bool hive)
+{
+	uint32_t hash = 2166136261U;
+	const auto add = [&hash](std::string_view text) {
+		for (const char c : text) {
+			hash ^= static_cast<uint8_t>(c);
+			hash *= 16777619U;
+		}
+		hash ^= 0xFFU;
+		hash *= 16777619U;
+	};
+	add(StrCat(FloorBuilderVersion));
+	for (const CathedralRoomDef &room : RoomsFor(catacombs, caves, hell, hive)) {
+		add(room.id);
+		add(room.family);
+		add(room.reward);
+		add(StrCat(static_cast<int>(room.roles), room.memorable ? 1 : 0, room.pillarsBehind ? 1 : 0));
+		for (const std::array<char, 3> &option : room.options)
+			add(std::string_view { option.data(), option.size() });
+		for (const std::string &row : room.grid)
+			add(row);
+	}
+	// 0 stands for a floor saved before rooms were stamped.
+	return hash != 0 ? hash : 1;
+}
+
 uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves, bool hell, bool hive)
 {
 	uint64_t memorable = 0;
@@ -2193,7 +2223,6 @@ void AddCathedralRoomObjects()
 		switch (prop.kind) {
 		case 'A':
 		case 'c': AddObject(OBJ_CANDLE2, *spot); break;
-		case 'L': AddObject(OBJ_L1LIGHT, *spot); break;
 		case 'S': AddObject(OBJ_SARC, *spot); break;
 		case 'k':
 			// Each stand gives a book or scroll, so at most two to a room.
