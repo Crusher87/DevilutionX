@@ -16,6 +16,7 @@
 #include "levels/trigs.h"
 #include "monster.h"
 #include "objects.h"
+#include "poe2/cathedral_floors.hpp"
 #include "poe2/floor_packs.hpp"
 #include "quests.h"
 #include "utils/algorithm/container.hpp"
@@ -307,6 +308,10 @@ bool CheckThemeRoom(int8_t tv)
 		if (dTransVal[trigs[i].position.x][trigs[i].position.y] == tv)
 			return false;
 	}
+
+	// POE2: on the new Cathedral floors the theme rooms are the plain side rooms (poe2/cathedral_floors.hpp).
+	if (IsCathedralFunnelFloor())
+		return IsCathedralThemeRoom(tv);
 
 	int tarea = 0;
 	for (int j = 0; j < MAXDUNY; j++) {

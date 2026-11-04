@@ -5109,6 +5109,13 @@ void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
 }
 
+void DropPoe2ChestItem(Point position, item_quality rarity, bool sendmsg, std::string_view name)
+{
+	Poe2LootOrigin origin = ContainerLootOrigin(false);
+	origin.name = name;
+	DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, rarity);
+}
+
 void DropWaystone(Point position, int tier, bool sendmsg)
 {
 	if (ActiveItemCount >= MAXITEMS)

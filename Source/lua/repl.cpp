@@ -19,6 +19,7 @@
 #include "cursor.h"
 #include "missiles.h"
 #include "poe2/aim.hpp"
+#include "poe2/floor_chests.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hit_trace.hpp"
 #include "poe2/level_census.hpp"
@@ -150,6 +151,10 @@ void CreateReplEnvironment()
 	// censusfloors(n) walks between this floor and the next n times, building each one fresh and counting it.
 	env["censusfloors"] = [](int floors) {
 		return LevelCensusStartBatch(floors);
+	};
+	// strongbox() puts a strongbox with 5 guards next to you, to try one.
+	env["strongbox"] = []() {
+		return PlaceTestStrongbox();
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

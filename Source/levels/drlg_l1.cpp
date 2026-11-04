@@ -13,6 +13,9 @@
 #include "levels/drlg_quests.hpp"
 #include "levels/gendung.h"
 #include "player.h"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/floors.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/bitset2d.hpp"
 #include "utils/is_of.hpp"
 #include "utils/status_macros.hpp"
@@ -382,20 +385,27 @@ void FillFloor()
 	}
 }
 
-void InitSetPiece()
+/** The quest room this floor needs, or nullptr. */
+const char *SetPieceFile()
 {
-	std::unique_ptr<uint16_t[]> setPieceData;
-	if (Quests[Q_BUTCHER].IsAvailable()) {
-		setPieceData = LoadFileInMem<uint16_t>("levels\\l1data\\rnd6.dun");
-	} else if (Quests[Q_SKELKING].IsAvailable() && !UseMultiplayerQuests()) {
-		setPieceData = LoadFileInMem<uint16_t>("levels\\l1data\\skngdo.dun");
-	} else if (Quests[Q_LTBANNER].IsAvailable()) {
-		setPieceData = LoadFileInMem<uint16_t>("levels\\l1data\\banner2.dun");
-	} else {
-		return; // no setpiece needed for this level
-	}
+	if (Quests[Q_BUTCHER].IsAvailable())
+		return "levels\\l1data\\rnd6.dun";
+	if (Quests[Q_SKELKING].IsAvailable() && !UseMultiplayerQuests())
+		return "levels\\l1data\\skngdo.dun";
+	if (Quests[Q_LTBANNER].IsAvailable())
+		return "levels\\l1data\\banner2.dun";
+	return nullptr;
+}
 
-	const WorldTilePosition setPiecePosition = SelectChamber();
+/** @param at Where it goes on the new Cathedral floors; Diablo's floors pick one of their chambers. */
+void InitSetPiece(std::optional<WorldTilePosition> at = std::nullopt)
+{
+	const char *file = SetPieceFile();
+	if (file == nullptr)
+		return; // no setpiece needed for this level
+	const std::unique_ptr<uint16_t[]> setPieceData = LoadFileInMem<uint16_t>(file);
+
+	const WorldTilePosition setPiecePosition = at ? *at : SelectChamber();
 	PlaceDunTiles(setPieceData.get(), setPiecePosition, Floor);
 	SetPiece = { setPiecePosition, GetDunSize(setPieceData.get()) };
 }
@@ -1167,6 +1177,210 @@ bool PlaceStairs(lvl_entry entry)
 	return PlaceCathedralStairs(entry);
 }
 
+/** The tail of a Cathedral or Crypt floor's build, after its walls and stairs are in. */
+void FinishLevel(const Bitset2d<DMAXX, DMAXY> *keepLampsOut = nullptr)
+{
+	for (int j = 0; j < DMAXY; j++) {
+		for (int i = 0; i < DMAXX; i++) {
+			if (dungeon[i][j] == EntranceStairs) {
+				const int xx = (2 * i) + 16; /* todo: fix loop */
+				const int yy = (2 * j) + 16;
+				DRLG_CopyTrans(xx, yy + 1, xx, yy);
+				DRLG_CopyTrans(xx + 1, yy + 1, xx + 1, yy);
+			}
+		}
+	}
+
+	FixTransparency();
+	if (leveltype == DTYPE_CRYPT) {
+		FixCryptDirtTiles();
+	} else {
+		FixDirtTiles();
+	}
+	FixCornerTiles();
+
+	if (leveltype == DTYPE_CRYPT) {
+		CryptSubstitution();
+	} else {
+		Substitution();
+		ApplyShadowsPatterns();
+
+		// The lamp tiles keep out of the designed rooms, which bring their own light.
+		const Bitset2d<DMAXX, DMAXY> protectedBefore = Protected;
+		if (keepLampsOut != nullptr) {
+			for (int j = 0; j < DMAXY; j++) {
+				for (int i = 0; i < DMAXX; i++) {
+					if (keepLampsOut->test(i, j))
+						Protected.set(i, j);
+				}
+			}
+		}
+		const int numt = GenerateRnd(5) + 5;
+		for (int i = 0; i < numt; i++) {
+			PlaceMiniSet(LAMPS, DMAXX * DMAXY, true);
+		}
+		if (keepLampsOut != nullptr) {
+			for (int j = 0; j < DMAXY; j++) {
+				for (int i = 0; i < DMAXX; i++) {
+					if (keepLampsOut->test(i, j) && !protectedBefore.test(i, j))
+						Protected.reset(i, j);
+				}
+			}
+		}
+
+		FillFloor();
+	}
+
+	memcpy(pdungeon, dungeon, sizeof(pdungeon));
+
+	DRLG_CheckQuests(SetPiece.position);
+}
+
+/** POE2: doorways go into the walls between rooms once the walls are in. */
+bool StampCathedralDoorways(const CathedralPlan &plan)
+{
+	for (const CathedralDoor &door : plan.doors) {
+		uint8_t &tile = dungeon[door.block.x][door.block.y];
+		if (tile != (door.vertical ? VWall : HWall))
+			return false;
+		if (door.vertical)
+			tile = door.door ? VDoor : VArch;
+		else
+			tile = door.door ? HDoor : HArch;
+		if (door.door)
+			Protected.set(door.block.x, door.block.y);
+	}
+	for (const Point pillar : plan.pillars) {
+		if (dungeon[pillar.x][pillar.y] == Floor)
+			dungeon[pillar.x][pillar.y] = Pillar;
+	}
+	return true;
+}
+
+/** POE2: the lines inside designed rooms were rock in the mask; their wall tiles become arches, fences or doors. */
+void StampCathedralLines(const CathedralPlan &plan)
+{
+	for (const CathedralLine &line : plan.lines) {
+		uint8_t &tile = dungeon[line.block.x][line.block.y];
+		switch (line.kind) {
+		case 'a':
+			if (tile == VWall) {
+				tile = VArch;
+			} else if (tile == HWall) {
+				tile = HArch;
+			} else if (tile == DWall) {
+				tile = DArch;
+			} else if (tile == VWallEnd) {
+				tile = VArchEnd;
+			} else if (tile == HWallEnd) {
+				tile = HArchEnd;
+			}
+			break;
+		case '=':
+			if (tile == VWall) {
+				tile = VFence;
+			} else if (tile == HWall) {
+				tile = HFence;
+			} else if (tile == DWall) {
+				tile = DFence;
+			} else if (tile == VWallEnd) {
+				tile = VFenceEnd;
+			}
+			break;
+		case 'd':
+			if (tile == VWall || tile == VFence) {
+				tile = VDoor;
+			} else if (tile == HWall || tile == HFence) {
+				tile = HDoor;
+			}
+			Protected.set(line.block.x, line.block.y);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+/** POE2: the stairs and the Poisoned Water entrance go where the plan put them. */
+bool PlaceCathedralFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
+{
+	if (Quests[Q_PWATER].IsAvailable()) {
+		if (!plan.water || !PWATERIN.matches(*plan.water))
+			return false;
+		PWATERIN.place(*plan.water, true);
+		const int8_t t = TransVal;
+		TransVal = 0;
+		const Point miniPosition = *plan.water;
+		DRLG_MRectTrans({ miniPosition + Displacement { 0, 2 }, { 5, 2 } });
+		TransVal = t;
+		Quests[Q_PWATER].position = miniPosition.megaToWorld() + Displacement { 5, 6 };
+		if (entry == ENTRY_RTNLVL)
+			ViewPosition = Quests[Q_PWATER].position;
+	}
+
+	// The stairs up go into the arrival room's north wall, with rock behind it.
+	if (!plan.stairsUp)
+		return false;
+	const Point up = *plan.stairsUp + Displacement { 0, -2 };
+	if (!L5STAIRSUP.matches(up))
+		return false;
+	L5STAIRSUP.place(up, true);
+	if (entry == ENTRY_MAIN)
+		ViewPosition = up.megaToWorld() + Displacement { 3, 4 };
+
+	if (Quests[Q_LTBANNER].IsAvailable()) {
+		if (entry == ENTRY_PREV)
+			ViewPosition = SetPiece.position.megaToWorld() + Displacement { 3, 11 };
+		return true;
+	}
+	if (!plan.stairsDown || !STAIRSDOWN.matches(*plan.stairsDown))
+		return false;
+	STAIRSDOWN.place(*plan.stairsDown, true);
+	if (entry == ENTRY_PREV)
+		ViewPosition = plan.stairsDown->megaToWorld() + Displacement { 3, 3 };
+	return true;
+}
+
+/** POE2: a new Cathedral floor (poe2/cathedral_floors.hpp). */
+void GenerateCathedralFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
+{
+	if (LevelSeeds[currlevel])
+		SetRndSeed(*LevelSeeds[currlevel]);
+
+	CathedralRequest request;
+	request.forbidden = avoidRooms;
+	request.questPiece = SetPieceFile() != nullptr;
+	request.questPieceIsWayDown = request.questPiece && !Quests[Q_BUTCHER].IsAvailable() && !(Quests[Q_SKELKING].IsAvailable() && !UseMultiplayerQuests());
+	request.water = Quests[Q_PWATER].IsAvailable();
+
+	CathedralPlan &plan = CurrentCathedralPlan();
+	while (true) {
+		DRLG_InitTrans();
+		LevelSeeds[currlevel] = GetLCGEngineState();
+		if (!PlanCathedralFloor(request, plan))
+			continue;
+
+		InitDungeonFlags();
+		SetPiece = {};
+		DungeonMask = plan.mask;
+		MakeDmt();
+		if (plan.questPiece)
+			InitSetPiece(WorldTilePosition { static_cast<WorldTileCoord>(plan.questPiece->x), static_cast<WorldTileCoord>(plan.questPiece->y) });
+		FixTilesPatterns();
+		if (!StampCathedralDoorways(plan))
+			continue;
+		StampCathedralLines(plan);
+		FloodTransparencyValues(13);
+		if (PlaceCathedralFunnelStairs(plan, entry))
+			break;
+	}
+
+	SetCathedralFunnelFloor(true);
+	Poe2NoteFloorRooms(currlevel, plan.usedRooms);
+	TelemetryLog("floor", DescribeCathedralPlan(plan));
+	FinishLevel(&plan.designed);
+}
+
 void GenerateLevel(lvl_entry entry)
 {
 	if (LevelSeeds[currlevel])
@@ -1202,42 +1416,7 @@ void GenerateLevel(lvl_entry entry)
 			break;
 	}
 
-	for (int j = 0; j < DMAXY; j++) {
-		for (int i = 0; i < DMAXX; i++) {
-			if (dungeon[i][j] == EntranceStairs) {
-				const int xx = (2 * i) + 16; /* todo: fix loop */
-				const int yy = (2 * j) + 16;
-				DRLG_CopyTrans(xx, yy + 1, xx, yy);
-				DRLG_CopyTrans(xx + 1, yy + 1, xx + 1, yy);
-			}
-		}
-	}
-
-	FixTransparency();
-	if (leveltype == DTYPE_CRYPT) {
-		FixCryptDirtTiles();
-	} else {
-		FixDirtTiles();
-	}
-	FixCornerTiles();
-
-	if (leveltype == DTYPE_CRYPT) {
-		CryptSubstitution();
-	} else {
-		Substitution();
-		ApplyShadowsPatterns();
-
-		const int numt = GenerateRnd(5) + 5;
-		for (int i = 0; i < numt; i++) {
-			PlaceMiniSet(LAMPS, DMAXX * DMAXY, true);
-		}
-
-		FillFloor();
-	}
-
-	memcpy(pdungeon, dungeon, sizeof(pdungeon));
-
-	DRLG_CheckQuests(SetPiece.position);
+	FinishLevel();
 }
 
 void Pass3()
@@ -1306,7 +1485,13 @@ void CreateL5Dungeon(uint32_t rseed, lvl_entry entry)
 	UberRow = 0;
 	UberCol = 0;
 
-	GenerateLevel(entry);
+	SetCathedralFunnelFloor(false);
+	// POE2: the new Cathedral floors, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && leveltype == DTYPE_CATHEDRAL ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	if (build.cathedralFunnel)
+		GenerateCathedralFunnelLevel(entry, build.avoidRooms);
+	else
+		GenerateLevel(entry);
 
 	Pass3();
 
