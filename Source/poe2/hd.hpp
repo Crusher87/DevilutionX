@@ -36,6 +36,8 @@ enum class SpriteStyle : uint8_t {
 	Normal,
 	Blended,
 	Outline,
+	/** @brief An outline that leaves out the sprite's painted shadow (palette colour 0), as the world's outlines do. */
+	OutlineSkipZero,
 };
 
 /** @brief True while the world is being drawn into the 8-bit buffer for an HD frame. */
