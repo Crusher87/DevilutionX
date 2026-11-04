@@ -16,7 +16,7 @@ sidechapels	chapel	main	0	0		1Ac	c.c_c1c_c.c/..._..._.../.........../E.........E
 vault	crypt	side	0	0		1S.	.........../.S.S.1.S.S./E....*....E/.S.S...S.S./...........
 sunken	crypt	side	0	0			.........../...=====.../E..=S*.=..E/...==.==.../L....E....L
 catacomb	crypt	main,side	0	0			E.P__..S..P/...__.....E/_..__..____/_......____/_S...._____
-library	library	side,main	1	0			KKK.k.KKK.c/.........../E.KK...KK.E/.........../c....*....c
+library	library	side,main	1	0			KKKcKKK/K....../K..k..E/K....../c..E..*
 scriptorium	library	side,quiet	0	0		1c.	c..k...k..c/.O.......O./E....1....E/.O.......O./....E......
 nook	library	side	0	0			KKcKK/...../E.k.E/...../..*..
 shrineroom	shrine	quiet,side	0	0			__c.cAc.c__/_.O.....O._/E.........E/_.O.....O._/__...E...__
