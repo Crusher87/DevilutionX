@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -162,6 +163,49 @@ void TelemetryMark(std::string_view text);
 void TelemetryTick();
 /** @brief Once per drawn frame: the frame rate and slow frames for the stats line. */
 void TelemetryFrameDrawn();
+
+/** @brief The parts of drawing a frame, timed for the stats line so a slow frame rate shows where the time goes. */
+enum class FramePart : uint8_t {
+	/** Everything drawn on the processor: the world, the windows and panels, the cursor. */
+	Drawing,
+	/** The game's world (and the HD world's list of pictures), part of Drawing. */
+	World,
+	/** The game's own world turned into full colour and sent to the graphics card. */
+	WorldUpload,
+	/** The HD world. */
+	Hd,
+	/** The effects layer. */
+	Effects,
+	/** The windows and panels sent to the graphics card over the world. */
+	UiLayer,
+	/** Showing the finished frame, waiting for the graphics card and the screen. */
+	Present,
+};
+inline constexpr size_t NumFrameParts = 7;
+/** @brief When a part of drawing starts (0 when nothing is logged), for TelemetryFramePartDone. */
+uint64_t TelemetryFramePartStart();
+/** @brief Adds the time since start to that part of the frame being drawn. */
+void TelemetryFramePartDone(FramePart part, uint64_t start);
+
+/** @brief Times a part of drawing a frame from here to the end of the scope. */
+class FramePartScope {
+public:
+	explicit FramePartScope(FramePart part)
+	    : part_(part)
+	    , start_(TelemetryFramePartStart())
+	{
+	}
+	~FramePartScope()
+	{
+		TelemetryFramePartDone(part_, start_);
+	}
+	FramePartScope(const FramePartScope &) = delete;
+	FramePartScope &operator=(const FramePartScope &) = delete;
+
+private:
+	FramePart part_;
+	uint64_t start_;
+};
 /**
  * @brief Notes the start of a level change, a game's start or a save being loaded (`what`), with its fades. The game
  * doesn't tick meanwhile, so TelemetryLoadingDone writes how long it took and starts the stall clock afresh: a level

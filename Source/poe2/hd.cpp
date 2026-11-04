@@ -101,11 +101,12 @@ std::vector<Draw> Draws;
 std::vector<uint8_t> LightArena;
 /** @brief The light level of each pixel of the 8-bit world, from the draw that covers it. */
 std::vector<uint8_t> LightBuffer;
-std::vector<uint32_t> LightPixels;
 SDL_Texture *LightTexture = nullptr;
 Size LightTextureSize;
 int ViewportOffsetX = 0;
 Rectangle ClipRect;
+/** @brief The world was recorded for the frame about to be drawn (BeginWorld since the last Render). */
+bool WorldRecorded = false;
 
 SDL_Renderer *CacheRenderer = nullptr;
 const std::byte *CacheCels = nullptr;
@@ -130,6 +131,29 @@ struct RasterKeyHash {
 	}
 };
 std::unordered_map<RasterKey, Raster, RasterKeyHash> Rasters;
+
+/** @brief The HD art a draw shows: none, a sprite's or a tile's. */
+struct ArtChoice {
+	SDL_Texture *texture = nullptr;
+	bool hdArt = false;
+	bool tileArt = false;
+};
+struct ArtChoiceKey {
+	const uint8_t *data;
+	uint64_t shape;
+	bool operator==(const ArtChoiceKey &other) const = default;
+};
+struct ArtChoiceKeyHash {
+	size_t operator()(const ArtChoiceKey &key) const noexcept
+	{
+		return std::hash<const void *> {}(key.data) ^ std::hash<uint64_t> {}(key.shape * 0x9E3779B97F4A7C15ULL);
+	}
+};
+/**
+ * @brief Which art each kind of draw ended up with, so the names aren't built and looked up again for every draw
+ * of every frame. Emptied whenever the art, the tile names or the sprite names change.
+ */
+std::unordered_map<ArtChoiceKey, ArtChoice, ArtChoiceKeyHash> ArtChoices;
 
 std::array<float, NumLightingLevels> LightLevel;
 
@@ -205,6 +229,8 @@ void DestroyTextures()
 	}
 	Art.clear();
 	Rasters.clear();
+	ArtChoices.clear();
+	WorldRecorded = false;
 	if (LightTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(LightTexture);
 	LightTexture = nullptr;
@@ -233,6 +259,7 @@ std::string_view LevelTypeName()
 void IndexTiles()
 {
 	TileNames.clear();
+	ArtChoices.clear();
 	CacheCels = pDungeonCels.get();
 	CacheLevelType = leveltype;
 	if (CacheCels == nullptr)
@@ -469,6 +496,48 @@ const std::string *ArtName(const Draw &draw)
 	return it != SpriteNames.end() ? &it->second : nullptr;
 }
 
+/** @brief Works out the HD art a draw shows, if there is any for it. */
+ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
+{
+	ArtChoice choice;
+	const std::string *name = ArtName(draw);
+	if (name == nullptr)
+		return choice;
+	// Wall tiles cut away near the hero keep the game's own cut-out shape.
+	const bool masked = draw.kind == DrawKind::Tile && draw.mask != MaskType::Solid;
+	SDL_Texture *texture = nullptr;
+	bool recoloured = false;
+	if (draw.inBetween != 0 && !masked)
+		texture = LoadArt(renderer, *name + "_m" + std::to_string(draw.inBetween));
+	// Tiles recoloured for this level's palette, e.g. tiles/l1_p3/120, beat evening out the base ones.
+	if (texture == nullptr && draw.kind == DrawKind::Tile && PaletteVariant > 1) {
+		const size_t slash = name->find('/', 6);
+		if (slash != std::string::npos) {
+			texture = MaskedArt(renderer, name->substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name->substr(slash), draw);
+			recoloured = texture != nullptr;
+		}
+	}
+	if (texture == nullptr)
+		texture = draw.kind == DrawKind::Tile ? MaskedArt(renderer, *name, draw) : LoadArt(renderer, *name);
+	choice.texture = texture;
+	choice.hdArt = texture != nullptr && draw.kind != DrawKind::Tile;
+	choice.tileArt = texture != nullptr && draw.kind == DrawKind::Tile && !recoloured;
+	return choice;
+}
+
+/** @brief The HD art a draw shows, worked out the first time a draw like it comes up. */
+ArtChoice CachedArt(SDL_Renderer *renderer, const Draw &draw)
+{
+	const uint8_t *data = draw.kind == DrawKind::Tile ? draw.src : draw.sprite->pixelData();
+	const uint64_t shape = static_cast<uint64_t>(draw.kind) | (static_cast<uint64_t>(draw.style) << 8) | (static_cast<uint64_t>(draw.mask) << 16)
+	    | (static_cast<uint64_t>(draw.tile) << 24) | (static_cast<uint64_t>(draw.inBetween) << 32) | (static_cast<uint64_t>(PaletteVariant & 0xFF) << 40)
+	    | (static_cast<uint64_t>(draw.height & 0xFFFF) << 48);
+	auto [it, inserted] = ArtChoices.try_emplace(ArtChoiceKey { data, shape });
+	if (inserted)
+		it->second = ChooseArt(renderer, draw);
+	return it->second;
+}
+
 /** @brief The global fade and brightness, as how much of each channel the screen palette keeps. */
 std::array<float, 3> ScreenTint()
 {
@@ -580,19 +649,26 @@ void BuildLightBuffer(Size size)
 		if (draw.style != SpriteStyle::Normal)
 			continue;
 		const Raster &raster = FallbackRaster(draw, draw.light < 0);
-		const int uniform = std::max<int>(draw.light, 0);
-		for (int row = 0; row < raster.height; row++) {
-			const int y = draw.y + row;
-			if (y < 0 || y >= size.height)
-				continue;
-			for (int col = 0; col < raster.width; col++) {
-				const int x = draw.x + col;
-				if (x < 0 || x >= size.width)
-					continue;
-				const size_t i = static_cast<size_t>(row) * raster.width + col;
-				if (raster.alpha[i] != 255)
-					continue;
-				LightBuffer[static_cast<size_t>(y) * size.width + x] = draw.perPixel ? LightArena[draw.lightOffset + i] : static_cast<uint8_t>(uniform);
+		// Only the part of the draw inside the buffer, worked out once for the whole draw.
+		const int col0 = std::max(0, -draw.x);
+		const int col1 = std::min(raster.width, size.width - draw.x);
+		const int row0 = std::max(0, -draw.y);
+		const int row1 = std::min(raster.height, size.height - draw.y);
+		if (col0 >= col1 || row0 >= row1)
+			continue;
+		const auto uniform = static_cast<uint8_t>(std::max<int>(draw.light, 0));
+		const int count = col1 - col0;
+		for (int row = row0; row < row1; row++) {
+			const size_t from = static_cast<size_t>(row) * raster.width + col0;
+			const uint8_t *alpha = raster.alpha.data() + from;
+			uint8_t *out = LightBuffer.data() + static_cast<size_t>(draw.y + row) * size.width + (draw.x + col0);
+			if (draw.perPixel) {
+				const uint8_t *light = LightArena.data() + draw.lightOffset + from;
+				for (int col = 0; col < count; col++)
+					out[col] = alpha[col] == 255 ? light[col] : out[col];
+			} else {
+				for (int col = 0; col < count; col++)
+					out[col] = alpha[col] == 255 ? uniform : out[col];
 			}
 		}
 	}
@@ -639,6 +715,7 @@ void BeginWorld(const Surface &out, Rectangle viewport)
 	RecordTileHook = RecordTileImpl;
 	RecordSpriteHook = RecordSpriteImpl;
 	Recording = true;
+	WorldRecorded = true;
 }
 
 void EndWorld()
@@ -696,6 +773,8 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites)
 {
+	// A newly loaded sprite can sit where one with another name was.
+	ArtChoices.clear();
 	std::string base(path);
 	std::replace(base.begin(), base.end(), '\\', '/');
 	std::transform(base.begin(), base.end(), base.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -828,6 +907,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	if (CacheRenderer != renderer) {
 		Art.clear();
 		Rasters.clear();
+		ArtChoices.clear();
 		CacheRenderer = renderer;
 	}
 	CheckPalette();
@@ -853,30 +933,12 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	SDL_RenderFillRect(renderer, &clip);
 
 	const auto drawOne = [&](const Draw &draw, const std::array<float, 3> &colour) {
-		SDL_Texture *texture = nullptr;
-		bool hdArt = false;
-		bool tileArt = false;
-		bool recoloured = false;
-		// Wall tiles cut away near the hero keep the game's own cut-out shape.
-		const bool masked = draw.kind == DrawKind::Tile && draw.mask != MaskType::Solid;
-		if (draw.light >= 0) {
-			if (const std::string *name = ArtName(draw); name != nullptr) {
-				if (draw.inBetween != 0 && !masked)
-					texture = LoadArt(renderer, *name + "_m" + std::to_string(draw.inBetween));
-				// Tiles recoloured for this level's palette, e.g. tiles/l1_p3/120, beat evening out the base ones.
-				if (texture == nullptr && draw.kind == DrawKind::Tile && PaletteVariant > 1) {
-					const size_t slash = name->find('/', 6);
-					if (slash != std::string::npos) {
-						texture = MaskedArt(renderer, name->substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name->substr(slash), draw);
-						recoloured = texture != nullptr;
-					}
-				}
-				if (texture == nullptr)
-					texture = draw.kind == DrawKind::Tile ? MaskedArt(renderer, *name, draw) : LoadArt(renderer, *name);
-				hdArt = texture != nullptr && draw.kind != DrawKind::Tile;
-				tileArt = texture != nullptr && draw.kind == DrawKind::Tile && !recoloured;
-			}
-		}
+		ArtChoice art;
+		if (draw.light >= 0)
+			art = CachedArt(renderer, draw);
+		SDL_Texture *texture = art.texture;
+		const bool hdArt = art.hdArt;
+		const bool tileArt = art.tileArt;
 		// Recolours other than light (stone curse, infravision, unique monsters) are drawn by the game itself.
 		if (texture == nullptr)
 			texture = RasterTexture(renderer, FallbackRaster(draw, draw.light < 0));
@@ -924,23 +986,31 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		}
 	}
 	if (LightTexture != nullptr) {
-		std::array<std::array<float, 3>, NumLightingLevels> shades;
+		// Each light level's colour is worked out once; every pixel then just looks its level up, straight into the
+		// texture (most of an HD frame's time went into working it out again for every pixel).
+		std::array<uint32_t, 256> shades;
 		for (size_t level = 0; level < NumLightingLevels; level++) {
 			const float warmth = std::clamp(1.F - static_cast<float>(level) / 10.F, 0.F, 1.F);
+			uint32_t pixel = 0xFF000000U;
 			for (int c = 0; c < 3; c++) {
 				const float grade = CoolShadow[c] + (WarmLight[c] - CoolShadow[c]) * warmth;
-				shades[level][c] = 255.F * std::pow(LightLevel[level], LightFalloff) * grade * tint[c];
+				const float shade = 255.F * std::pow(LightLevel[level], LightFalloff) * grade * tint[c];
+				pixel |= static_cast<uint32_t>(std::clamp(shade, 0.F, 255.F)) << (16 - c * 8);
 			}
+			shades[level] = pixel;
 		}
-		LightPixels.resize(LightBuffer.size());
-		for (size_t i = 0; i < LightBuffer.size(); i++) {
-			const std::array<float, 3> &light = shades[std::min<size_t>(LightBuffer[i], NumLightingLevels - 1)];
-			uint32_t pixel = 0xFF000000U;
-			for (int c = 0; c < 3; c++)
-				pixel |= static_cast<uint32_t>(std::clamp(light[c], 0.F, 255.F)) << (16 - c * 8);
-			LightPixels[i] = pixel;
+		std::fill(shades.begin() + NumLightingLevels, shades.end(), shades[NumLightingLevels - 1]);
+		void *pixels;
+		int pitch;
+		if (SDL_LockTexture(LightTexture, nullptr, &pixels, &pitch) == 0) {
+			for (int y = 0; y < lightSize.height; y++) {
+				const uint8_t *levels = LightBuffer.data() + static_cast<size_t>(y) * lightSize.width;
+				auto *row = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch);
+				for (int x = 0; x < lightSize.width; x++)
+					row[x] = shades[levels[x]];
+			}
+			SDL_UnlockTexture(LightTexture);
 		}
-		SDL_UpdateTexture(LightTexture, nullptr, LightPixels.data(), lightSize.width * 4);
 		const SDL_FRect dest {
 			ViewportOffsetX * toLogical,
 			0,
@@ -956,6 +1026,15 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 			drawOne(draw, tint);
 	}
 	SDL_RenderSetClipRect(renderer, nullptr);
+	WorldRecorded = false;
+}
+
+bool CoversView(Size worldSize)
+{
+	if (!WorldRecorded || worldSize.width <= 0 || worldSize.height <= 0)
+		return false;
+	return ClipRect.position.x <= 0 && ClipRect.position.y <= 0 && ClipRect.position.x + ClipRect.size.width >= worldSize.width
+	    && ClipRect.position.y + ClipRect.size.height >= worldSize.height;
 }
 
 #else
@@ -967,6 +1046,7 @@ void EndWorld() { }
 void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
+bool CoversView(Size) { return false; }
 bool ExportLevelTiles(const std::string &) { return false; }
 const char *PackPalette(uint8_t) { return nullptr; }
 

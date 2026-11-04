@@ -372,6 +372,22 @@ TEST_F(Poe2TelemetryTest, ALevelChangeIsLoadingTimeNotAStall)
 	EXPECT_NE(TelemetryStatsText().find("stalls 1"), std::string::npos) << TelemetryStatsText();
 }
 
+TEST_F(Poe2TelemetryTest, StatsSplitEachFrameIntoItsParts)
+{
+	// Curtis 2026-11-04 asked whether the game could get back to 60 fps: the stats line shows where a frame's time goes.
+	using namespace std::chrono_literals;
+	TelemetryFrameDrawn();
+	{
+		const FramePartScope part(FramePart::Hd);
+		std::this_thread::sleep_for(20ms);
+	}
+	TelemetryFrameDrawn();
+	const std::string stats = TelemetryStatsText();
+	EXPECT_NE(stats.find(", frame ms: drawing 0.0 (world 0.0), world upload 0.0, hd "), std::string::npos) << stats;
+	EXPECT_EQ(stats.find(", hd 0.0,"), std::string::npos) << stats;
+	EXPECT_NE(stats.find(", effects 0.0, ui layer 0.0, present 0.0"), std::string::npos) << stats;
+}
+
 TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)
 {
 	LoadSpellData();
