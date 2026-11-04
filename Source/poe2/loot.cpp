@@ -122,17 +122,18 @@ std::array<int, 4> BaseRarityWeights(LootSource source)
 	// Normal, magic, rare, unique, in hundredths of a percent. The bundle's tables (57/35/7.75/0.25 for a normal
 	// monster) made about one item in six rare (Curtis 2026-10-23: three rares, two of them rings, in the first two
 	// minutes). POE2 doesn't publish its tables either; these give about one rare in sixteen, mostly from rare monsters
-	// and bosses. Unique chances are unchanged.
+	// and bosses. Uniques are a third of the bundle's (25, 50, 150, 500), keeping its curve (Curtis, Rogue run 2: five
+	// uniques in 67 minutes, a unique staff on the first floor; "much rarer"); normal items take the difference.
 	switch (source) {
 	case LootSource::Magic:
-		return { 5600, 3700, 650, 50 };
+		return { 5633, 3700, 650, 17 };
 	case LootSource::Rare:
-		return { 3150, 5000, 1700, 150 };
+		return { 3250, 5000, 1700, 50 };
 	case LootSource::Miniboss:
 	case LootSource::Boss:
-		return { 1500, 5000, 3000, 500 };
+		return { 1833, 5000, 3000, 167 };
 	default:
-		return { 7500, 2275, 200, 25 };
+		return { 7517, 2275, 200, 8 };
 	}
 }
 
