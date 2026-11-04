@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -192,8 +193,14 @@ uint32_t LastStallLogMs = 0;
 /** The longest wait between drawn frames since the last game tick, to tell a freeze from a pause. */
 uint32_t FrameGapSinceTick = 0;
 uint32_t LastFrameMs = 0;
-/** Time each part of drawing took since the last counted frame, in performance counter ticks. */
+/** Time each part of drawing took since the last counted frame, in nanoseconds. */
 std::array<uint64_t, NumFrameParts> PendingFrameParts {};
+
+/** @brief A steady clock in nanoseconds for timing the parts of a frame (SDL 1 has no performance counter). */
+uint64_t FrameClockNs()
+{
+	return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+}
 /** A level change, game start or save load under way (TelemetryLoadingStarted): what it is, and when each step began. */
 std::string LoadingWhat;
 uint32_t LoadingStartMs = 0;
@@ -2416,14 +2423,14 @@ void TelemetryStep(std::string_view step)
 
 uint64_t TelemetryFramePartStart()
 {
-	return LogFile != nullptr && GameStartMs != 0 ? SDL_GetPerformanceCounter() : 0;
+	return LogFile != nullptr && GameStartMs != 0 ? FrameClockNs() : 0;
 }
 
 void TelemetryFramePartDone(FramePart part, uint64_t start)
 {
 	if (start == 0)
 		return;
-	PendingFrameParts[static_cast<size_t>(part)] += SDL_GetPerformanceCounter() - start;
+	PendingFrameParts[static_cast<size_t>(part)] += FrameClockNs() - start;
 }
 
 void TelemetryFrameDrawn()
@@ -2441,15 +2448,14 @@ void TelemetryFrameDrawn()
 	// Longer gaps are pauses, menus and loading screens; the stall line covers those.
 	if (gap > 1000)
 		return;
-	const double msPerTick = 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
-	Count([gap, &parts, msPerTick](TelemetryCounts &counts) {
+	Count([gap, &parts](TelemetryCounts &counts) {
 		counts.frames++;
 		counts.frameMs += gap;
 		if (gap > 33)
 			counts.slowFrames++;
 		counts.worstFrameMs = std::max(counts.worstFrameMs, gap);
 		for (size_t i = 0; i < NumFrameParts; i++)
-			counts.framePartMs[i] += static_cast<double>(parts[i]) * msPerTick;
+			counts.framePartMs[i] += static_cast<double>(parts[i]) / 1e6;
 	});
 }
 
