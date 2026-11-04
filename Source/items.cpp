@@ -5582,22 +5582,27 @@ void DropBossUnique(Monster &monster, bool sendmsg)
 	const BossLootTable *table = gbIsPoe2 ? BossLootTableFor(monster) : nullptr;
 	if (table == nullptr || ActiveItemCount >= MAXITEMS || LootRandom(100) >= table->chancePercent)
 		return;
+	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
+	const Point position = monster.position.tile;
+	// Only the uniques near the boss's level (Curtis, Rogue run 2: the Butcher dropped a drop level 70 unique on the
+	// second floor). An early boss whose uniques are all endgame ones drops a rare instead.
+	const std::vector<BossUniqueEntry> pool = BossUniquesAt(*table, origin.poe2ItemLevel);
 	int total = 0;
-	for (const BossUniqueEntry &entry : table->pool)
+	for (const BossUniqueEntry &entry : pool)
 		total += entry.weight;
-	if (total <= 0)
+	if (total <= 0) {
+		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_RARE);
 		return;
+	}
 	int roll = LootRandom(total);
 	std::string_view name;
-	for (const BossUniqueEntry &entry : table->pool) {
+	for (const BossUniqueEntry &entry : pool) {
 		if (roll < entry.weight) {
 			name = entry.unique;
 			break;
 		}
 		roll -= entry.weight;
 	}
-	const Poe2LootOrigin origin = MonsterLootOrigin(monster);
-	const Point position = monster.position.tile;
 	if (const BeltUnique *belt = FindBeltUnique(name); belt != nullptr) {
 		if (const std::optional<int> base = BeltUniqueBase(*belt); base)
 			DropPoe2BeltUnique(origin, position, sendmsg, static_cast<_item_indexes>(*base), belt->id);

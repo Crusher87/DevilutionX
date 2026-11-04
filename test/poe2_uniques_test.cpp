@@ -650,6 +650,37 @@ TEST_F(Poe2UniquesTest, BossTablesPointAtRealBossesAndUniques)
 	EXPECT_EQ(BossLootTableFor(MakeMonster()), nullptr);
 }
 
+TEST_F(Poe2UniquesTest, BossesDropOnlyUniquesNearTheirLevel)
+{
+	// Curtis, Rogue run 2: the Butcher dropped Iron Testament (drop level 70) at character level 5.
+	const auto tableOf = [](std::string_view id) {
+		for (const BossLootTable &table : BossLootTables()) {
+			if (table.id == id)
+				return &table;
+		}
+		return static_cast<const BossLootTable *>(nullptr);
+	};
+	for (const BossLootTable &table : BossLootTables()) {
+		for (const BossUniqueEntry &entry : table.pool)
+			EXPECT_GT(BossUniqueDropLevel(entry.unique), 0) << entry.unique;
+	}
+	EXPECT_EQ(BossUniqueDropLevel("Iron Testament"), 70);
+	EXPECT_EQ(BossUniqueDropLevel("No Such Unique"), 0);
+	const BossLootTable *saint = tableOf("saint_of_iron");
+	ASSERT_NE(saint, nullptr);
+	// The Butcher on the second floor (area level 4, +2 for a boss) drops none of them; nor does anything short of 67.
+	EXPECT_TRUE(BossUniquesAt(*saint, 6).empty());
+	EXPECT_TRUE(BossUniquesAt(*saint, 70 - BossUniqueLevelSlack - 1).empty());
+	EXPECT_EQ(BossUniquesAt(*saint, 70 - BossUniqueLevelSlack).size(), 2U);
+	// A pool with uniques of different levels opens up one by one.
+	const BossLootTable *queen = tableOf("the_hollow_queen");
+	ASSERT_NE(queen, nullptr);
+	const std::vector<BossUniqueEntry> early = BossUniquesAt(*queen, 60 - BossUniqueLevelSlack);
+	ASSERT_EQ(early.size(), 1U);
+	EXPECT_EQ(early[0].unique, "Cradle of Teeth");
+	EXPECT_EQ(BossUniquesAt(*queen, 80).size(), queen->pool.size());
+}
+
 TEST_F(Poe2UniquesTest, UniquesNeedTheHigherLevel)
 {
 	// A unique on a POE2 base needs the higher of the base's level and its own drop level.
