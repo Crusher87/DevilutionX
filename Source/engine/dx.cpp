@@ -81,6 +81,10 @@ std::vector<UiTint> UiTinted;
 /** For each full-size column and row, the UI column and row it shows. */
 std::vector<uint16_t> UiColumnOf;
 std::vector<uint16_t> UiRowOf;
+/** For each UI column and row, the full-size world column and row the shrunk world under the UI shows. */
+std::vector<uint16_t> WorldColumnOfUi;
+std::vector<uint16_t> WorldRowOfUi;
+Size WorldSampledFrom;
 bool HaveScaledWorld = false;
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /** POE2 Mashup: a frame waiting to be presented in layers: the world, the effects, then the UI over them. */
@@ -90,6 +94,14 @@ SDL_Texture *UiOverlay = nullptr;
 SDL_Renderer *UiOverlayRenderer = nullptr;
 int UiOverlayWidth = 0;
 int UiOverlayHeight = 0;
+/** The overlay as last sent to the graphics card, 4 bytes a pixel, so only the rows that changed are sent again. */
+std::vector<uint8_t> UiOverlayPixels;
+/** Rows of the overlay that were all see-through when last sent. */
+std::vector<uint8_t> UiOverlayRowClear;
+/** The row being worked out. */
+std::vector<uint8_t> UiOverlayRow;
+/** A row of zero bytes, to tell rows with no cover or tint at a glance. */
+std::vector<uint8_t> UiOverlayZeros;
 
 bool WantsLayeredFrame()
 {
@@ -102,6 +114,7 @@ bool WantsLayeredFrame()
  */
 bool UpdateUiOverlay()
 {
+	bool fresh = false;
 	if (UiOverlay == nullptr || UiOverlayRenderer != renderer || UiOverlayWidth != gnScreenWidth || UiOverlayHeight != gnScreenHeight) {
 		if (UiOverlay != nullptr && UiOverlayRenderer == renderer)
 			SDL_DestroyTexture(UiOverlay);
@@ -115,62 +128,140 @@ bool UpdateUiOverlay()
 #if SDL_VERSION_ATLEAST(2, 0, 12)
 		SDL_SetTextureScaleMode(UiOverlay, SDL_ScaleModeNearest);
 #endif
+		fresh = true;
 	}
-	void *pixels;
-	int pitch;
-	if (SDL_LockTexture(UiOverlay, nullptr, &pixels, &pitch) != 0)
-		return false;
+	const size_t rowBytes = static_cast<size_t>(gnScreenWidth) * 4;
+	if (fresh || UiOverlayPixels.size() != rowBytes * gnScreenHeight || UiOverlayRowClear.size() != static_cast<size_t>(gnScreenHeight)) {
+		UiOverlayPixels.assign(rowBytes * gnScreenHeight, 0);
+		UiOverlayRowClear.assign(gnScreenHeight, 0);
+		fresh = true;
+	}
+	UiOverlayRow.resize(rowBytes);
+	UiOverlayZeros.resize(static_cast<size_t>(gnScreenWidth) * std::max(sizeof(UiCover), sizeof(UiTint)));
 	const SDL_Color *colors = Palette->colors;
 	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
 	const bool covers = UiCovered.size() == UiBase.size();
 	const bool tints = UiTinted.size() == UiBase.size();
+	// The rows that changed go up in runs; a few unchanged rows between two changed ones go up with them.
+	constexpr int RunGap = 8;
+	int runStart = -1;
+	int runEnd = -1;
+	const auto send = [&]() {
+		const SDL_Rect rect { 0, runStart, gnScreenWidth, runEnd - runStart + 1 };
+		SDL_UpdateTexture(UiOverlay, &rect, UiOverlayPixels.data() + static_cast<size_t>(runStart) * rowBytes, static_cast<int>(rowBytes));
+		runStart = -1;
+	};
 	for (int y = 0; y < gnScreenHeight; y++) {
 		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * PalSurface->pitch;
 		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(y) * gnScreenWidth;
 		// A panel's pixel in the same colour as the world under it is still the panel's.
 		const UiCover *coverLine = covers ? UiCovered.data() + static_cast<size_t>(y) * gnScreenWidth : nullptr;
-		const bool covered = coverLine != nullptr && std::any_of(coverLine, coverLine + gnScreenWidth, [](UiCover cover) { return cover != UiCover::None; });
 		const UiTint *tintLine = tints ? UiTinted.data() + static_cast<size_t>(y) * gnScreenWidth : nullptr;
-		const bool tinted = tintLine != nullptr && std::any_of(tintLine, tintLine + gnScreenWidth, [](UiTint tint) { return tint.alpha != 0; });
-		auto *out = static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch;
-		if (!covered && !tinted && std::memcmp(uiLine, baseLine, gnScreenWidth) == 0) {
-			std::memset(out, 0, static_cast<size_t>(gnScreenWidth) * 4);
-			continue;
+		// Only the part of the row from the first to the last pixel the UI touches is worked out: the world shows
+		// everywhere else.
+		int first = gnScreenWidth;
+		int last = -1;
+		if (std::memcmp(uiLine, baseLine, gnScreenWidth) != 0) {
+			first = 0;
+			while (uiLine[first] == baseLine[first])
+				first++;
+			last = gnScreenWidth - 1;
+			while (uiLine[last] == baseLine[last])
+				last--;
 		}
-		for (int x = 0; x < gnScreenWidth; x++, out += 4) {
-			// POE2 Mashup: a tint nothing has been drawn over since lies over the HD world at its own alpha, the same
-			// whatever the 8-bit world under it, so it holds steady while the world scrolls (Curtis 2026-10-29).
-			if (tinted && tintLine[x].alpha != 0 && tintLine[x].color == uiLine[x] && (!covered || coverLine[x] != UiCover::Solid)) {
+		// Most rows have no cover and no tint at all: all zero bytes.
+		bool covered = false;
+		if (coverLine != nullptr && std::memcmp(coverLine, UiOverlayZeros.data(), static_cast<size_t>(gnScreenWidth) * sizeof(UiCover)) != 0) {
+			int from = 0;
+			while (from < gnScreenWidth && coverLine[from] == UiCover::None)
+				from++;
+			if (from < gnScreenWidth) {
+				covered = true;
+				int to = gnScreenWidth - 1;
+				while (coverLine[to] == UiCover::None)
+					to--;
+				first = std::min(first, from);
+				last = std::max(last, to);
+			}
+		}
+		bool tinted = false;
+		if (tintLine != nullptr && std::memcmp(tintLine, UiOverlayZeros.data(), static_cast<size_t>(gnScreenWidth) * sizeof(UiTint)) != 0) {
+			int from = 0;
+			while (from < gnScreenWidth && tintLine[from].alpha == 0)
+				from++;
+			if (from < gnScreenWidth) {
+				tinted = true;
+				int to = gnScreenWidth - 1;
+				while (tintLine[to].alpha == 0)
+					to--;
+				first = std::min(first, from);
+				last = std::max(last, to);
+			}
+		}
+		uint8_t *kept = UiOverlayPixels.data() + static_cast<size_t>(y) * rowBytes;
+		bool changed = fresh;
+		if (last < first) {
+			if (UiOverlayRowClear[y] == 0) {
+				std::memset(kept, 0, rowBytes);
+				UiOverlayRowClear[y] = 1;
+				changed = true;
+			}
+		} else {
+			uint8_t *row = UiOverlayRow.data();
+			std::memset(row, 0, static_cast<size_t>(first) * 4);
+			std::memset(row + static_cast<size_t>(last + 1) * 4, 0, static_cast<size_t>(gnScreenWidth - last - 1) * 4);
+			uint8_t *out = row + static_cast<size_t>(first) * 4;
+			for (int x = first; x <= last; x++, out += 4) {
+				// POE2 Mashup: a tint nothing has been drawn over since lies over the HD world at its own alpha, the same
+				// whatever the 8-bit world under it, so it holds steady while the world scrolls (Curtis 2026-10-29).
+				if (tinted && tintLine[x].alpha != 0 && tintLine[x].color == uiLine[x] && (!covered || coverLine[x] != UiCover::Solid)) {
+					const SDL_Color &color = colors[uiLine[x]];
+					out[0] = color.r;
+					out[1] = color.g;
+					out[2] = color.b;
+					out[3] = tintLine[x].alpha;
+					continue;
+				}
+				if (uiLine[x] == baseLine[x] && (!covered || coverLine[x] == UiCover::None)) {
+					out[0] = 0;
+					out[1] = 0;
+					out[2] = 0;
+					out[3] = 0;
+					continue;
+				}
+				// A see-through box's darkened world is black laid half over the world and the effects alike, once or twice.
+				if (covered && coverLine[x] == UiCover::Shaded) {
+					const uint8_t once = paletteTransparencyLookup[0][baseLine[x]];
+					if (uiLine[x] == baseLine[x] || uiLine[x] == once || uiLine[x] == paletteTransparencyLookup[0][once]) {
+						out[0] = 0;
+						out[1] = 0;
+						out[2] = 0;
+						out[3] = (uiLine[x] == once || uiLine[x] == baseLine[x]) ? 128 : 192;
+						continue;
+					}
+				}
 				const SDL_Color &color = colors[uiLine[x]];
 				out[0] = color.r;
 				out[1] = color.g;
 				out[2] = color.b;
-				out[3] = tintLine[x].alpha;
-				continue;
+				out[3] = 255;
 			}
-			if (uiLine[x] == baseLine[x] && (!covered || coverLine[x] == UiCover::None)) {
-				out[3] = 0;
-				continue;
+			if (std::memcmp(row, kept, rowBytes) != 0) {
+				std::memcpy(kept, row, rowBytes);
+				changed = true;
 			}
-			// A see-through box's darkened world is black laid half over the world and the effects alike, once or twice.
-			if (covered && coverLine[x] == UiCover::Shaded) {
-				const uint8_t once = paletteTransparencyLookup[0][baseLine[x]];
-				if (uiLine[x] == baseLine[x] || uiLine[x] == once || uiLine[x] == paletteTransparencyLookup[0][once]) {
-					out[0] = 0;
-					out[1] = 0;
-					out[2] = 0;
-					out[3] = (uiLine[x] == once || uiLine[x] == baseLine[x]) ? 128 : 192;
-					continue;
-				}
-			}
-			const SDL_Color &color = colors[uiLine[x]];
-			out[0] = color.r;
-			out[1] = color.g;
-			out[2] = color.b;
-			out[3] = 255;
+			UiOverlayRowClear[y] = 0;
+		}
+		if (changed) {
+			if (runStart < 0)
+				runStart = y;
+			runEnd = y;
+		} else if (runStart >= 0 && y - runEnd > RunGap) {
+			send();
 		}
 	}
-	SDL_UnlockTexture(UiOverlay);
+	if (runStart >= 0)
+		send();
 	return true;
 }
 
@@ -178,19 +269,36 @@ bool UpdateUiOverlay()
 void PresentLayeredFrame(SDL_Surface *surface)
 {
 	LayeredFramePending = false;
-	Blit(WorldSurface.get(), nullptr, nullptr);
-	if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
-	if (SDL_RenderClear(renderer) <= -1) ErrSdl();
-	if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
-	if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+	// POE2 Mashup: an HD world that covers the whole view hides the game's own under it, so that isn't turned into
+	// full colour and sent to the graphics card at all.
+	const bool hdCovers = hd::Active() && hd::CoversView({ gnRenderWidth, gnRenderHeight });
+	{
+		const FramePartScope part(FramePart::WorldUpload);
+		if (!hdCovers)
+			Blit(WorldSurface.get(), nullptr, nullptr);
+		if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
+		if (SDL_RenderClear(renderer) <= -1) ErrSdl();
+		if (!hdCovers) {
+			if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+			if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+		}
+	}
 	// POE2 Mashup: the HD world goes over the game's own, which still shows outside the view.
 	TelemetryDrawStep("drawing effects");
-	if (hd::Active())
+	if (hd::Active()) {
+		const FramePartScope part(FramePart::Hd);
 		hd::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
-	vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
+	}
+	{
+		const FramePartScope part(FramePart::Effects);
+		vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
+	}
 	TelemetryDrawStep(nullptr);
-	if (UpdateUiOverlay())
-		SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
+	{
+		const FramePartScope part(FramePart::UiLayer);
+		if (UpdateUiOverlay())
+			SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
+	}
 	SkillLabCapturePresented(renderer);
 }
 #endif
@@ -343,17 +451,27 @@ void PrepareScaledUi()
 {
 	if (WorldSurface == nullptr)
 		return;
+	// Sample the middle of the patch of the world each UI pixel covers, worked out once per screen size.
+	if (WorldColumnOfUi.size() != static_cast<size_t>(gnScreenWidth) || WorldRowOfUi.size() != static_cast<size_t>(gnScreenHeight)
+	    || WorldSampledFrom != Size { gnRenderWidth, gnRenderHeight }) {
+		WorldColumnOfUi.resize(gnScreenWidth);
+		for (int x = 0; x < gnScreenWidth; x++)
+			WorldColumnOfUi[x] = static_cast<uint16_t>(std::min((2 * x + 1) * gnRenderWidth / (2 * gnScreenWidth), gnRenderWidth - 1));
+		WorldRowOfUi.resize(gnScreenHeight);
+		for (int y = 0; y < gnScreenHeight; y++)
+			WorldRowOfUi[y] = static_cast<uint16_t>(std::min((2 * y + 1) * gnRenderHeight / (2 * gnScreenHeight), gnRenderHeight - 1));
+		WorldSampledFrom = Size { gnRenderWidth, gnRenderHeight };
+	}
 	const auto *world = static_cast<const uint8_t *>(WorldSurface->pixels);
 	const int worldPitch = WorldSurface->pitch;
 	auto *ui = static_cast<uint8_t *>(PalSurface->pixels);
 	const int uiPitch = PalSurface->pitch;
+	const uint16_t *columns = WorldColumnOfUi.data();
 	for (int y = 0; y < gnScreenHeight; y++) {
-		// Sample the middle of the patch of the world each UI pixel covers.
-		const int worldY = std::min((2 * y + 1) * gnRenderHeight / (2 * gnScreenHeight), gnRenderHeight - 1);
-		const uint8_t *worldLine = world + static_cast<ptrdiff_t>(worldY) * worldPitch;
+		const uint8_t *worldLine = world + static_cast<ptrdiff_t>(WorldRowOfUi[y]) * worldPitch;
 		uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * uiPitch;
 		for (int x = 0; x < gnScreenWidth; x++)
-			uiLine[x] = worldLine[std::min((2 * x + 1) * gnRenderWidth / (2 * gnScreenWidth), gnRenderWidth - 1)];
+			uiLine[x] = worldLine[columns[x]];
 		std::memcpy(UiBase.data() + static_cast<size_t>(y) * gnScreenWidth, uiLine, gnScreenWidth);
 	}
 	HaveScaledWorld = true;
@@ -433,6 +551,7 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 			return;
 #endif
 		// The UI is scaled up over the full-size world, always the whole frame.
+		const FramePartScope part(FramePart::WorldUpload);
 		ComposeScaledFrame();
 		Blit(WorldSurface.get(), nullptr, nullptr);
 		return;
@@ -569,6 +688,7 @@ void RenderPresent()
 		if (LayeredFramePending && WantsLayeredFrame()) {
 			PresentLayeredFrame(surface);
 		} else {
+			const FramePartScope part(FramePart::WorldUpload);
 			if (LayeredFramePending) {
 				// The effects were turned off since the frame was drawn: compose it the usual way.
 				LayeredFramePending = false;
@@ -585,7 +705,10 @@ void RenderPresent()
 		if (ControlMode == ControlTypes::VirtualGamepad) {
 			RenderVirtualGamepad(renderer);
 		}
-		SDL_RenderPresent(renderer);
+		{
+			const FramePartScope part(FramePart::Present);
+			SDL_RenderPresent(renderer);
+		}
 
 #ifdef __EMSCRIPTEN__
 		// TODO: Refactor to use emscripten_set_main_loop or requestAnimationFrame instead.

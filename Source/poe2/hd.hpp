@@ -93,6 +93,12 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
 /** @brief Draws the recorded world in full colour. */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 
+/**
+ * @brief This frame's HD world covers the whole world buffer of the given size, so the game's own 8-bit world
+ * under it can't show anywhere and needn't be sent to the screen.
+ */
+bool CoversView(Size worldSize);
+
 /** @brief The palette the HD pack's art for a dungeon type is made in (the first of its palettes). */
 const char *PackPalette(uint8_t levelType);
 

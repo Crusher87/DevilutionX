@@ -1605,6 +1605,7 @@ void DrawView(const Surface &out, Point startPosition)
 		CalcFirstTilePosition(startPosition, offset);
 		// POE2 Mashup: heavy hits jolt the view.
 		offset += CameraShakeOffset();
+		const FramePartScope part(FramePart::World);
 		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
 	}
 	TelemetryDrawStep("drawing the map, names and banners");
@@ -2189,6 +2190,7 @@ void DrawAndBlit()
 	nthread_UpdateProgressToNextGameTick();
 
 	this_sdl_thread::yield();
+	const uint64_t drawingStart = TelemetryFramePartStart();
 	DrawView(out, ViewPosition);
 	TelemetryDrawStep("drawing the panels");
 	if (drawCtrlPan) {
@@ -2244,6 +2246,7 @@ void DrawAndBlit()
 	DrawItemSpawner(out);
 	TelemetryDrawStep("drawing the cursor");
 	DrawCursor(out);
+	TelemetryFramePartDone(FramePart::Drawing, drawingStart);
 	TelemetryFrameDrawn();
 
 	DrawFPS(out);

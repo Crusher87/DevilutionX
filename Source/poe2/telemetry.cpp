@@ -128,6 +128,8 @@ struct TelemetryCounts {
 	int slowFrames = 0;
 	uint32_t worstFrameMs = 0;
 	uint32_t frameMs = 0;
+	/** Time spent on each part of drawing those frames (FramePart), in milliseconds. */
+	std::array<double, NumFrameParts> framePartMs {};
 	int levelsEntered = 0;
 	int64_t experience = 0;
 	int gold = 0;
@@ -190,6 +192,8 @@ uint32_t LastStallLogMs = 0;
 /** The longest wait between drawn frames since the last game tick, to tell a freeze from a pause. */
 uint32_t FrameGapSinceTick = 0;
 uint32_t LastFrameMs = 0;
+/** Time each part of drawing took since the last counted frame, in performance counter ticks. */
+std::array<uint64_t, NumFrameParts> PendingFrameParts {};
 /** A level change, game start or save load under way (TelemetryLoadingStarted): what it is, and when each step began. */
 std::string LoadingWhat;
 uint32_t LoadingStartMs = 0;
@@ -969,6 +973,17 @@ void TrackDensity(const Player &player, uint32_t now)
 	}
 }
 
+/** @brief The average time per frame each part of drawing took, to show where a slow frame rate comes from. */
+std::string FramePartsText(const TelemetryCounts &counts)
+{
+	if (counts.frames <= 0)
+		return {};
+	const auto part = [&](FramePart which) { return counts.framePartMs[static_cast<size_t>(which)] / counts.frames; };
+	return std::format(", frame ms: drawing {:.1f} (world {:.1f}), world upload {:.1f}, hd {:.1f}, effects {:.1f}, ui layer {:.1f}, present {:.1f}",
+	    part(FramePart::Drawing), part(FramePart::World), part(FramePart::WorldUpload), part(FramePart::Hd), part(FramePart::Effects),
+	    part(FramePart::UiLayer), part(FramePart::Present));
+}
+
 std::string RatesText(const TelemetryCounts &counts, double minutes)
 {
 	const int lowManaPercent = counts.ticks > 0 ? counts.lowManaTicks * 100 / counts.ticks : 0;
@@ -981,9 +996,9 @@ std::string RatesText(const TelemetryCounts &counts, double minutes)
 	                                                     "flasks {:d} ({:d} wasted), charms {:d}, "
 	                                                     "xp {:d} ({:.0f}/min), gold {:d} ({:.0f}/min), "
 	                                                     "drops {:s} picked up {:s} (normal/magic/rare/unique), crafts {:d}, stalls {:d}, "
-	                                                     "fps {:.0f} ({:d} frames under 30 fps, slowest {:d} ms)",
+	                                                     "fps {:.0f} ({:d} frames under 30 fps, slowest {:d} ms){:s}",
 	                                             counts.kills, counts.kills / minutes, counts.rareKills, counts.uniqueKills, Whole(counts.damageDealtRaw), Whole(counts.damageDealtRaw) / minutes, counts.hitsTaken, counts.bigHits, counts.closeCalls, Whole(counts.damageTakenRaw), Whole(counts.shieldTakenRaw), counts.lowestLifePercent, counts.swings, counts.evaded, counts.blocked, counts.dodged, counts.heroAttacks, counts.heroMisses, counts.heroAttacks > 0 ? static_cast<int>(counts.hitChanceSum / counts.heroAttacks) : 0, counts.lightStuns, counts.stunnableHits, counts.skillUses, counts.failedSkills, counts.manaSpent, lowManaPercent, counts.flaskUses, counts.wastedFlasks, counts.charmUses, counts.experience, counts.experience / minutes, counts.gold, counts.gold / minutes, CountsByRarity(counts.drops), CountsByRarity(counts.pickups), counts.crafts, counts.stalls,
-	                                             counts.frameMs > 0 ? counts.frames * 1000.0 / counts.frameMs : 0.0, counts.slowFrames, counts.worstFrameMs));
+	                                             counts.frameMs > 0 ? counts.frames * 1000.0 / counts.frameMs : 0.0, counts.slowFrames, counts.worstFrameMs, FramePartsText(counts)));
 }
 
 void WriteStatsLine(uint32_t now)
@@ -995,6 +1010,13 @@ void WriteStatsLine(uint32_t now)
 	    .add("fps", Window.frameMs > 0 ? Window.frames * 1000.0 / Window.frameMs : 0.0)
 	    .add("slowFrames", Window.slowFrames)
 	    .add("worstFrameMs", Window.worstFrameMs)
+	    .add("drawingMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Drawing)] / Window.frames : 0.0)
+	    .add("worldMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::World)] / Window.frames : 0.0)
+	    .add("worldUploadMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::WorldUpload)] / Window.frames : 0.0)
+	    .add("hdMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Hd)] / Window.frames : 0.0)
+	    .add("effectsMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Effects)] / Window.frames : 0.0)
+	    .add("uiLayerMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::UiLayer)] / Window.frames : 0.0)
+	    .add("presentMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Present)] / Window.frames : 0.0)
 	    .add("stalls", Window.stalls)
 	    .add("kills", Window.kills)
 	    .add("hitsTaken", Window.hitsTaken)
@@ -2392,9 +2414,24 @@ void TelemetryStep(std::string_view step)
 	TelemetryLog("load", step);
 }
 
+uint64_t TelemetryFramePartStart()
+{
+	return LogFile != nullptr && GameStartMs != 0 ? SDL_GetPerformanceCounter() : 0;
+}
+
+void TelemetryFramePartDone(FramePart part, uint64_t start)
+{
+	if (start == 0)
+		return;
+	PendingFrameParts[static_cast<size_t>(part)] += SDL_GetPerformanceCounter() - start;
+}
+
 void TelemetryFrameDrawn()
 {
 	DrawStep = nullptr;
+	// The parts timed since the last frame belong to this one (showing the last frame comes after it's counted).
+	const std::array<uint64_t, NumFrameParts> parts = PendingFrameParts;
+	PendingFrameParts = {};
 	if (LogFile == nullptr || GameStartMs == 0)
 		return;
 	const uint32_t now = Now();
@@ -2404,12 +2441,15 @@ void TelemetryFrameDrawn()
 	// Longer gaps are pauses, menus and loading screens; the stall line covers those.
 	if (gap > 1000)
 		return;
-	Count([gap](TelemetryCounts &counts) {
+	const double msPerTick = 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+	Count([gap, &parts, msPerTick](TelemetryCounts &counts) {
 		counts.frames++;
 		counts.frameMs += gap;
 		if (gap > 33)
 			counts.slowFrames++;
 		counts.worstFrameMs = std::max(counts.worstFrameMs, gap);
+		for (size_t i = 0; i < NumFrameParts; i++)
+			counts.framePartMs[i] += static_cast<double>(parts[i]) * msPerTick;
 	});
 }
 
