@@ -454,7 +454,9 @@ SDL_Texture *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Dr
 			art.missing = false;
 			SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-			SDL_SetTextureScaleMode(art.texture, SDL_ScaleModeLinear);
+			// Nearest, like the game's own tiles: smoothing the cut edges of two tiles that meet lets the black
+			// under them show through as thin lines wherever the screen isn't drawn at exactly twice the world.
+			SDL_SetTextureScaleMode(art.texture, SDL_ScaleModeNearest);
 #endif
 		}
 	}
