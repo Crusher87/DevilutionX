@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -52,6 +53,18 @@ namespace {
 /** @brief The HD art is twice the size of the game's own pixels. */
 constexpr int Scale = 2;
 
+/** @brief Painted shadows are drawn soft and see-through, the way the HD maker draws the hero's. */
+constexpr float ShadowDark = 0.55F;
+/** @brief How soft a shadow's edge is, in game pixels. */
+constexpr float ShadowSoft = 1.5F;
+/** @brief Room around a sprite for its shadow's soft edge, in game pixels. */
+constexpr int ShadowPad = 5;
+
+constexpr bool IsOutline(SpriteStyle style)
+{
+	return style == SpriteStyle::Outline || style == SpriteStyle::OutlineSkipZero;
+}
+
 enum class DrawKind : uint8_t {
 	Sprite,
 	Tile,
@@ -89,7 +102,24 @@ struct Raster {
 	bool cycles = false;
 	SDL_Texture *texture = nullptr;
 	uint32_t paletteVersion = 0;
+	/** @brief The sprite's painted shadow, taken out of its pixels (1 where it was), or empty when it has none. */
+	std::vector<uint8_t> shadow;
+	SDL_Texture *shadowTexture = nullptr;
+	/** @brief The same pixels in the colours the HD tiles were made in, for arches among HD walls. */
+	SDL_Texture *packTexture = nullptr;
+	uint32_t packVersion = 0;
 };
+
+void FreeRasterTextures(Raster &raster)
+{
+	for (SDL_Texture *texture : { raster.texture, raster.shadowTexture, raster.packTexture }) {
+		if (texture != nullptr)
+			SDL_DestroyTexture(texture);
+	}
+	raster.texture = nullptr;
+	raster.shadowTexture = nullptr;
+	raster.packTexture = nullptr;
+}
 
 struct HdArt {
 	SDL_Texture *texture = nullptr;
@@ -171,6 +201,14 @@ std::array<SDL_Color, 256> LastPalette;
 
 int PackState = -1;
 
+/** @brief The palette this level type's HD tiles were made in, and a count of its loads. */
+std::array<SDL_Color, 256> PackColours;
+bool HavePackColours = false;
+uint32_t PackColoursVersion = 0;
+/** @brief This level's dungeon pieces show HD art: as the pack made it, or recoloured for the level's palette. */
+bool TileArtShown = false;
+bool RecolouredTileArtShown = false;
+
 bool HavePack()
 {
 	if (PackState < 0) {
@@ -222,10 +260,8 @@ void DestroyTextures()
 			if (art.texture != nullptr)
 				SDL_DestroyTexture(art.texture);
 		}
-		for (auto &[key, raster] : Rasters) {
-			if (raster.texture != nullptr)
-				SDL_DestroyTexture(raster.texture);
-		}
+		for (auto &[key, raster] : Rasters)
+			FreeRasterTextures(raster);
 	}
 	Art.clear();
 	Rasters.clear();
@@ -260,6 +296,8 @@ void IndexTiles()
 {
 	TileNames.clear();
 	ArtChoices.clear();
+	TileArtShown = false;
+	RecolouredTileArtShown = false;
 	CacheCels = pDungeonCels.get();
 	CacheLevelType = leveltype;
 	if (CacheCels == nullptr)
@@ -361,32 +399,125 @@ void Rasterize(Raster &raster, int width, int height, DrawFn &&draw, SolidFn &&s
 		raster.cycles = false;
 }
 
+/** @brief Fills a texture (made if needed) with a raster's pixels in the given palette's colours. */
+SDL_Texture *PaintRaster(SDL_Renderer *renderer, SDL_Texture *&texture, const Raster &raster, const SDL_Color *palette)
+{
+	if (texture == nullptr) {
+		texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, raster.width, raster.height);
+		if (texture == nullptr)
+			return nullptr;
+		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		SDL_SetTextureScaleMode(texture, SDL_ScaleModeNearest);
+#endif
+	}
+	std::vector<uint8_t> rgba(static_cast<size_t>(raster.width) * raster.height * 4);
+	for (size_t i = 0; i < raster.index.size(); i++) {
+		const SDL_Color &color = palette[raster.index[i]];
+		rgba[i * 4 + 0] = color.r;
+		rgba[i * 4 + 1] = color.g;
+		rgba[i * 4 + 2] = color.b;
+		rgba[i * 4 + 3] = raster.alpha[i];
+	}
+	SDL_UpdateTexture(texture, nullptr, rgba.data(), raster.width * 4);
+	return texture;
+}
+
 SDL_Texture *RasterTexture(SDL_Renderer *renderer, Raster &raster)
 {
 	if (raster.width <= 0 || raster.height <= 0)
 		return nullptr;
 	if (raster.texture != nullptr && (!raster.cycles || raster.paletteVersion == PaletteVersion))
 		return raster.texture;
-	if (raster.texture == nullptr) {
-		raster.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, raster.width, raster.height);
-		if (raster.texture == nullptr)
-			return nullptr;
-		SDL_SetTextureBlendMode(raster.texture, SDL_BLENDMODE_BLEND);
-#if SDL_VERSION_ATLEAST(2, 0, 12)
-		SDL_SetTextureScaleMode(raster.texture, SDL_ScaleModeNearest);
-#endif
-	}
-	std::vector<uint8_t> rgba(static_cast<size_t>(raster.width) * raster.height * 4);
-	for (size_t i = 0; i < raster.index.size(); i++) {
-		const SDL_Color &color = logical_palette[raster.index[i]];
-		rgba[i * 4 + 0] = color.r;
-		rgba[i * 4 + 1] = color.g;
-		rgba[i * 4 + 2] = color.b;
-		rgba[i * 4 + 3] = raster.alpha[i];
-	}
-	SDL_UpdateTexture(raster.texture, nullptr, rgba.data(), raster.width * 4);
+	if (PaintRaster(renderer, raster.texture, raster, logical_palette.data()) == nullptr)
+		return nullptr;
 	raster.paletteVersion = PaletteVersion;
 	return raster.texture;
+}
+
+/** @brief The raster in the colours the HD tiles were made in, for arches among HD walls. */
+SDL_Texture *PackColourTexture(SDL_Renderer *renderer, Raster &raster)
+{
+	if (raster.width <= 0 || raster.height <= 0)
+		return nullptr;
+	if (raster.packTexture != nullptr && raster.packVersion == PackColoursVersion)
+		return raster.packTexture;
+	if (PaintRaster(renderer, raster.packTexture, raster, PackColours.data()) == nullptr)
+		return nullptr;
+	raster.packVersion = PackColoursVersion;
+	return raster.packTexture;
+}
+
+/** @brief A sprite's painted shadow, soft and see-through, with ShadowPad game pixels of room around it. */
+SDL_Texture *ShadowTexture(SDL_Renderer *renderer, Raster &raster)
+{
+	if (raster.shadow.empty())
+		return nullptr;
+	if (raster.shadowTexture != nullptr)
+		return raster.shadowTexture;
+	const int w = raster.width;
+	const int h = raster.height;
+	// Tucked 3 pixels under the sprite, so no light shows between the two once the edge is softened.
+	std::vector<uint8_t> tucked = raster.shadow;
+	for (int step = 0; step < 3; step++) {
+		std::vector<uint8_t> grown = tucked;
+		for (int y = 0; y < h; y++) {
+			for (int x = 0; x < w; x++) {
+				const size_t i = static_cast<size_t>(y) * w + x;
+				if (tucked[i] != 0 || raster.alpha[i] == 0)
+					continue;
+				if ((x > 0 && tucked[i - 1] != 0) || (x + 1 < w && tucked[i + 1] != 0) || (y > 0 && tucked[i - w] != 0) || (y + 1 < h && tucked[i + w] != 0))
+					grown[i] = 1;
+			}
+		}
+		tucked = std::move(grown);
+	}
+	const int width = w + ShadowPad * 2;
+	const int height = h + ShadowPad * 2;
+	std::vector<float> mask(static_cast<size_t>(width) * height, 0.F);
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++)
+			mask[static_cast<size_t>(y + ShadowPad) * width + x + ShadowPad] = tucked[static_cast<size_t>(y) * w + x] != 0 ? 1.F : 0.F;
+	}
+	// A Gaussian blur, along the rows and then down the columns.
+	constexpr int Radius = static_cast<int>(ShadowSoft * 3 + 0.5F);
+	std::array<float, Radius * 2 + 1> kernel;
+	float total = 0;
+	for (int k = -Radius; k <= Radius; k++) {
+		kernel[k + Radius] = std::exp(-static_cast<float>(k * k) / (2 * ShadowSoft * ShadowSoft));
+		total += kernel[k + Radius];
+	}
+	for (float &weight : kernel)
+		weight /= total;
+	std::vector<float> rows(mask.size(), 0.F);
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			float sum = 0;
+			for (int k = std::max(-Radius, -x); k <= std::min(Radius, width - 1 - x); k++)
+				sum += mask[static_cast<size_t>(y) * width + x + k] * kernel[k + Radius];
+			rows[static_cast<size_t>(y) * width + x] = sum;
+		}
+	}
+	std::vector<uint8_t> rgba(mask.size() * 4, 0);
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			float sum = 0;
+			for (int k = std::max(-Radius, -y); k <= std::min(Radius, height - 1 - y); k++)
+				sum += rows[static_cast<size_t>(y + k) * width + x] * kernel[k + Radius];
+			rgba[(static_cast<size_t>(y) * width + x) * 4 + 3] = static_cast<uint8_t>(std::clamp(sum * 1.15F, 0.F, 1.F) * ShadowDark * 255.F + 0.5F);
+		}
+	}
+	raster.shadowTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, width, height);
+	if (raster.shadowTexture == nullptr) {
+		raster.shadow.clear();
+		return nullptr;
+	}
+	SDL_SetTextureBlendMode(raster.shadowTexture, SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+	SDL_SetTextureScaleMode(raster.shadowTexture, SDL_ScaleModeLinear);
+#endif
+	SDL_UpdateTexture(raster.shadowTexture, nullptr, rgba.data(), width * 4);
+	return raster.shadowTexture;
 }
 
 /** @brief A light map that leaves every pixel fully lit, for drawing art in its own colours. */
@@ -397,6 +528,75 @@ Lightmap FullyLitLightmap(const Surface &out)
 	if (unlit.size() < size)
 		unlit.assign(size, 0);
 	return Lightmap(out.at(0, 0), std::span<const uint8_t>(unlit.data(), size), static_cast<uint16_t>(out.pitch()), LightTables, FullyLitLightTable, FullyDarkLightTable);
+}
+
+/** @brief A sprite drawn as it is, with no table: its own palette colours, and the pixels it covers. */
+Raster PlainRaster(const Draw &draw, Point position)
+{
+	Raster plain;
+	const auto drawPlain = [&](const Surface &out) { ClxDraw(out, position, *draw.sprite); };
+	Rasterize(plain, draw.width, draw.height, drawPlain, drawPlain);
+	return plain;
+}
+
+/**
+ * @brief The game draws a sprite over its own outline, so only the part outside the sprite (its painted shadow
+ * included) shows. HD outlines are drawn last, on top, so the part under the sprite is taken out.
+ */
+void HideOutlineUnderSprite(Raster &raster, const Draw &draw, Point position)
+{
+	const Raster sprite = PlainRaster(draw, position);
+	for (size_t i = 0; i < raster.alpha.size(); i++) {
+		if (sprite.alpha[i] != 0)
+			raster.alpha[i] = 0;
+	}
+}
+
+/**
+ * @brief Takes a sprite's painted shadow out of its pixels, to be drawn soft and see-through under it instead.
+ *
+ * Diablo paints shadows solid black (palette colour 0). Only black that reaches the sprite's edge counts:
+ * black the sprite closes around (an open coffin, an eye) is part of it.
+ */
+void SplitShadow(Raster &raster, const Draw &draw, Point position, bool plainColours)
+{
+	const int width = raster.width;
+	const int height = raster.height;
+	std::optional<Raster> plain;
+	if (!plainColours)
+		plain = PlainRaster(draw, position);
+	const std::vector<uint8_t> &index = plain ? plain->index : raster.index;
+	const auto at = [&](int x, int y) { return static_cast<size_t>(y) * width + x; };
+	const auto isBlack = [&](int x, int y) { return raster.alpha[at(x, y)] == 255 && index[at(x, y)] == 0; };
+	const auto isOutside = [&](int x, int y) { return x < 0 || y < 0 || x >= width || y >= height || raster.alpha[at(x, y)] == 0; };
+	std::vector<uint8_t> shadow(raster.alpha.size(), 0);
+	std::vector<Point> open;
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			if (isBlack(x, y) && (isOutside(x - 1, y) || isOutside(x + 1, y) || isOutside(x, y - 1) || isOutside(x, y + 1))) {
+				shadow[at(x, y)] = 1;
+				open.push_back({ x, y });
+			}
+		}
+	}
+	if (open.empty())
+		return;
+	while (!open.empty()) {
+		const Point p = open.back();
+		open.pop_back();
+		for (const Displacement step : { Displacement { -1, 0 }, Displacement { 1, 0 }, Displacement { 0, -1 }, Displacement { 0, 1 } }) {
+			const Point next = p + step;
+			if (next.x < 0 || next.y < 0 || next.x >= width || next.y >= height || shadow[at(next.x, next.y)] != 0 || !isBlack(next.x, next.y))
+				continue;
+			shadow[at(next.x, next.y)] = 1;
+			open.push_back(next);
+		}
+	}
+	for (size_t i = 0; i < shadow.size(); i++) {
+		if (shadow[i] != 0)
+			raster.alpha[i] = 0;
+	}
+	raster.shadow = std::move(shadow);
 }
 
 /** @brief The game's own pixels for a draw, coloured by its own table when HD art can't stand in. */
@@ -418,10 +618,12 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 	const RasterKey key { draw.sprite->pixelData(), tbl, extra };
 	auto [it, inserted] = Rasters.try_emplace(key);
 	if (inserted) {
-		const int pad = draw.style == SpriteStyle::Outline ? 1 : 0;
+		const int pad = IsOutline(draw.style) ? 1 : 0;
 		const Point position { pad, draw.height - 1 - pad };
 		const auto drawSprite = [&](const Surface &out, bool blended) {
-			if (draw.style == SpriteStyle::Outline)
+			if (draw.style == SpriteStyle::OutlineSkipZero)
+				ClxDrawOutlineSkipColorZero(out, draw.outlineColor, position, *draw.sprite);
+			else if (draw.style == SpriteStyle::Outline)
 				ClxDrawOutline(out, draw.outlineColor, position, *draw.sprite);
 			else if (blended && tbl != nullptr)
 				ClxDrawBlendedTRN(out, position, *draw.sprite, tbl);
@@ -433,6 +635,10 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 				ClxDraw(out, position, *draw.sprite);
 		};
 		Rasterize(it->second, draw.width, draw.height, [&](const Surface &out) { drawSprite(out, draw.style == SpriteStyle::Blended); }, [&](const Surface &out) { drawSprite(out, false); });
+		if (draw.style == SpriteStyle::OutlineSkipZero)
+			HideOutlineUnderSprite(it->second, draw, position);
+		else if (draw.style == SpriteStyle::Normal)
+			SplitShadow(it->second, draw, position, tbl == nullptr);
 	}
 	return it->second;
 }
@@ -490,7 +696,7 @@ const std::string *ArtName(const Draw &draw)
 		const auto it = TileNames.find(draw.src);
 		return it != TileNames.end() ? &it->second : nullptr;
 	}
-	if (draw.style == SpriteStyle::Outline)
+	if (IsOutline(draw.style))
 		return nullptr;
 	const auto it = SpriteNames.find(draw.sprite->pixelData());
 	return it != SpriteNames.end() ? &it->second : nullptr;
@@ -522,6 +728,12 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	choice.texture = texture;
 	choice.hdArt = texture != nullptr && draw.kind != DrawKind::Tile;
 	choice.tileArt = texture != nullptr && draw.kind == DrawKind::Tile && !recoloured;
+	if (texture != nullptr && draw.kind == DrawKind::Tile) {
+		if (recoloured)
+			RecolouredTileArtShown = true;
+		else
+			TileArtShown = true;
+	}
 	return choice;
 }
 
@@ -584,6 +796,7 @@ void UpdateTileGain()
 {
 	TileGain = { 1.F, 1.F, 1.F };
 	PaletteVariant = 1;
+	HavePackColours = false;
 	const char *path = PackPalette(static_cast<uint8_t>(leveltype));
 	if (path == nullptr)
 		return;
@@ -591,6 +804,10 @@ void UpdateTileGain()
 	std::array<uint8_t, 256 * 3> pack;
 	if (!LoadFileInMemWithStatus(path, pack).has_value())
 		return;
+	for (int color = 0; color < 256; color++)
+		PackColours[color] = SDL_Color { pack[color * 3], pack[color * 3 + 1], pack[color * 3 + 2], 255 };
+	HavePackColours = true;
+	PackColoursVersion++;
 	std::array<float, 3> current {};
 	std::array<float, 3> made {};
 	// Skip the colour-cycling entries (water, lava), which move every frame.
@@ -613,6 +830,25 @@ void CheckPalette()
 		UpdateLightLevels();
 		UpdateTileGain();
 	}
+}
+
+/** @brief The draw is one of the level's arches (drawn over the walls, from the level's own extra art). */
+bool IsArchPiece(const Draw &draw)
+{
+	if (draw.kind != DrawKind::Sprite || !pSpecialCels)
+		return false;
+	const ClxSpriteList arches { *pSpecialCels };
+	const uint8_t *data = draw.sprite->pixelData();
+	return data >= arches.data() && data < arches.data() + arches.dataSize();
+}
+
+/**
+ * @brief The walls show HD art made in the level type's first palette, evened out to this level's palette by
+ * TileGain. Arches have no HD art, so they take the same colours, or they stand out in the walls' old colours.
+ */
+bool ArchesTakeTileColours()
+{
+	return TileArtShown && !RecolouredTileArtShown && HavePackColours && PaletteVariant > 1;
 }
 
 /** @brief Copies the light levels a per-pixel lit draw is about to use. */
@@ -749,7 +985,7 @@ void RecordTileImpl(const Surface &out, const Lightmap &lightmap, Point position
 void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap)
 {
 	const bool perPixel = lightmap != nullptr && *GetOptions().Graphics.perPixelLighting;
-	const int pad = style == SpriteStyle::Outline ? 1 : 0;
+	const int pad = IsOutline(style) ? 1 : 0;
 	Draws.push_back(Draw {
 	    .kind = DrawKind::Sprite,
 	    .style = style,
@@ -912,10 +1148,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	}
 	CheckPalette();
 	if (Rasters.size() > 20000) {
-		for (auto &[key, raster] : Rasters) {
-			if (raster.texture != nullptr)
-				SDL_DestroyTexture(raster.texture);
-		}
+		for (auto &[key, raster] : Rasters)
+			FreeRasterTextures(raster);
 		Rasters.clear();
 	}
 
@@ -938,14 +1172,32 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 			art = CachedArt(renderer, draw);
 		SDL_Texture *texture = art.texture;
 		const bool hdArt = art.hdArt;
-		const bool tileArt = art.tileArt;
+		bool tileColours = art.tileArt;
+		SDL_Texture *shadow = nullptr;
 		// Recolours other than light (stone curse, infravision, unique monsters) are drawn by the game itself.
-		if (texture == nullptr)
-			texture = RasterTexture(renderer, FallbackRaster(draw, draw.light < 0));
+		if (texture == nullptr) {
+			Raster &raster = FallbackRaster(draw, draw.light < 0);
+			shadow = ShadowTexture(renderer, raster);
+			if (ArchesTakeTileColours() && IsArchPiece(draw)) {
+				texture = PackColourTexture(renderer, raster);
+				tileColours = texture != nullptr;
+			}
+			if (texture == nullptr)
+				texture = RasterTexture(renderer, raster);
+		}
 		if (texture == nullptr)
 			return;
+		if (shadow != nullptr) {
+			const SDL_FRect around {
+				(ViewportOffsetX + static_cast<float>(draw.x - ShadowPad) * Scale) * toLogical,
+				static_cast<float>(draw.y - ShadowPad) * Scale * toLogical,
+				static_cast<float>(draw.width + ShadowPad * 2) * Scale * toLogical,
+				static_cast<float>(draw.height + ShadowPad * 2) * Scale * toLogical,
+			};
+			SDL_RenderCopyF(renderer, shadow, nullptr, &around);
+		}
 		std::array<float, 3> mod = colour;
-		if (tileArt) {
+		if (tileColours) {
 			for (int c = 0; c < 3; c++)
 				mod[c] *= TileGain[c];
 		}
@@ -967,7 +1219,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	// Everything is drawn fully lit, then darkened by the light of each pixel, so lighting stays as smooth as the game's.
 	const std::array<float, 3> unlit { 1.F, 1.F, 1.F };
 	for (const Draw &draw : Draws) {
-		if (draw.style != SpriteStyle::Outline)
+		if (!IsOutline(draw.style))
 			drawOne(draw, unlit);
 	}
 
@@ -1022,7 +1274,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 
 	// Item and monster outlines glow on top of the light.
 	for (const Draw &draw : Draws) {
-		if (draw.style == SpriteStyle::Outline)
+		if (IsOutline(draw.style))
 			drawOne(draw, tint);
 	}
 	SDL_RenderSetClipRect(renderer, nullptr);

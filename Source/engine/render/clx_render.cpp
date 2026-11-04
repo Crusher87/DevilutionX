@@ -629,7 +629,7 @@ void ClxDrawOutline(const Surface &out, uint8_t col, Point position, ClxSprite c
 
 void ClxDrawOutlineSkipColorZero(const Surface &out, uint8_t col, Point position, ClxSprite clx)
 {
-	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Outline, col);
+	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::OutlineSkipZero, col);
 	RenderClxOutline</*SkipColorIndexZero=*/true>(out, position, clx, col);
 }
 
