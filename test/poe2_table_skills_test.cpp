@@ -794,6 +794,9 @@ TEST_F(Poe2TableSkillsTest, EverySkillHasACastAndASpellSound)
 	EXPECT_EQ(soundsOf(WeaponSkill::Multishot).cast.sfx, SfxID::ShootBow2);
 	EXPECT_EQ(soundsOf(WeaponSkill::Sacrifice).cast.sfx, SfxID::Swing);
 	EXPECT_EQ(soundsOf(WeaponSkill::Blizzard).spell.mod, "sfx\\poe2\\blizzard_cast.wav");
+	// Rogue run 2: Plague Arrow's burst spits like the acid beasts (their Acid missile's sound).
+	EXPECT_EQ(soundsOf(WeaponSkill::PlagueArrow).hit.sfx, SfxID::SpellAcid);
+	EXPECT_EQ(soundsOf(WeaponSkill::PlagueArrow).hit.sfx, GetMissileData(MissileID::Acid).castSound);
 }
 
 TEST_F(Poe2TableSkillsTest, OnlyLightningSkillsFlashInFrontOfTheHero)

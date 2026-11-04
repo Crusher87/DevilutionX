@@ -878,6 +878,7 @@ void PoisonBurst(Player &player, const Monster &struck, const TableSkillData &da
 	} else {
 		AddVisualEffect(center, data.effect, 0, 4);
 	}
+	PlayTableSkillHitSound(data, center);
 	const Fixed26_6 base = FixedDamage(player, data);
 	const int32_t poison = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(base.raw()) * TablePoisonPercentPerSecond(data) * PoisonTicks / 20 / 100, INT32_MAX / 2));
 	const Fixed26_6 splash = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(base.raw()) * PlagueArrowSplashPercent / 100), 1));
@@ -2213,6 +2214,10 @@ SkillSounds TableSkillSounds(const TableSkillData &data)
 		break;
 	case WeaponSkill::ThornvineArrow:
 		sounds.hit = Sfx(SfxID::SpellStoneCurse);
+		break;
+	case WeaponSkill::PlagueArrow:
+		// Its burst spits like the acid beasts' spit (Curtis, Rogue run 2).
+		sounds.hit = Sfx(SfxID::SpellAcid);
 		break;
 	case WeaponSkill::PlagueEffigy:
 		// It is driven into the ground; then it shoots.
