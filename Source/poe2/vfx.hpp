@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "engine/displacement.hpp"
 #include "engine/point.hpp"
@@ -186,6 +187,11 @@ bool IsArcingSpark(const Missile &missile);
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.
  */
 ClxSprite ObjectSprite(const Object &object);
+/**
+ * @brief Where the small flames hug the burning cross (burncros), in pixels from its sprite's top left: along its upright
+ * and its bar.
+ */
+const std::vector<Point> &BurningCrossFlames();
 /**
  * @brief Finds what the dungeon itself gives off this frame: the flames of torches, candles, fires and fire traps, and
  * the lava and water on screen (the palette-animated colours of the frame just drawn).

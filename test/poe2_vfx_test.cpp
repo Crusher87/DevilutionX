@@ -6,6 +6,9 @@
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
+#include "engine/load_cel.hpp"
+#include "engine/load_file.hpp"
+#include "engine/render/clx_render.hpp"
 #include "engine/palette.h"
 #include "engine/surface.hpp"
 #include "game_mode.hpp"
@@ -299,6 +302,58 @@ TEST_F(Poe2VfxTest, LowColoursAreOnlyFluidWhereThePaletteMoves)
 	vfx::ScanWorld(screen);
 	EXPECT_EQ(vfx::AmbientCount(), 0U);
 	leveltype = oldLevelType;
+}
+
+TEST_F(Poe2VfxTest, BurningCrossFlamesHugTheWood)
+{
+	// Curtis, Rogue run 2: small flames along the burning cross's upright and bar, not one bonfire glow over it.
+	const std::vector<Point> &flames = vfx::BurningCrossFlames();
+	ASSERT_GE(flames.size(), 12U);
+	int upright = 0;
+	for (const Point flame : flames) {
+		EXPECT_TRUE(flame.x >= 0 && flame.y >= 0 && flame.x < 160 && flame.y < 160) << flame.x << "," << flame.y;
+		if (flame.x == flames.front().x)
+			upright++;
+	}
+	EXPECT_GE(upright, 8);
+	EXPECT_GE(static_cast<int>(flames.size()) - upright, 4);
+
+	// Each sits on the cross's wood: within 2 pixels of a dark pixel that stays dark through most of the blaze's frames.
+	LoadCoreArchives();
+	LoadGameArchives();
+	if (!HaveMainData())
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found";
+	std::array<uint8_t, 768> palette;
+	ASSERT_TRUE(LoadOptionalFileInMem("levels\\l1data\\l1.pal", palette.data(), palette.size()));
+	const OwnedClxSpriteList cross = LoadCel("objects\\burncros", 160);
+	const uint32_t frames = cross.numSprites();
+	ASSERT_GT(frames, 1U);
+	std::vector<OwnedSurface> canvases;
+	for (uint32_t frame = 0; frame < frames; frame++) {
+		const ClxSprite sprite = cross[frame];
+		ASSERT_EQ(sprite.width(), 160);
+		ASSERT_EQ(sprite.height(), 160);
+		OwnedSurface &canvas = canvases.emplace_back(160, 160);
+		ClxDraw(canvas, { 0, 159 }, sprite);
+	}
+	const auto darkFrames = [&](int x, int y) {
+		int count = 0;
+		for (const OwnedSurface &canvas : canvases) {
+			const uint8_t index = *canvas.at(x, y);
+			const int luminance = (299 * palette[index * 3] + 587 * palette[index * 3 + 1] + 114 * palette[index * 3 + 2]) / 1000;
+			if (index != 0 && luminance < 45)
+				count++;
+		}
+		return count;
+	};
+	for (const Point flame : flames) {
+		int best = 0;
+		for (int dy = -2; dy <= 2; dy++) {
+			for (int dx = -2; dx <= 2; dx++)
+				best = std::max(best, darkFrames(flame.x + dx, flame.y + dy));
+		}
+		EXPECT_GE(best * 2, static_cast<int>(frames)) << flame.x << "," << flame.y;
+	}
 }
 
 } // namespace

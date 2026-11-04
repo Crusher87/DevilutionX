@@ -548,6 +548,8 @@ enum class Ambient : uint8_t {
 	Embers,
 	/** @brief POE2 Mashup: a burning stake's big fire: a column of slow embers and soft smoke (Curtis 2026-10-29). */
 	Bonfire,
+	/** @brief POE2 Mashup: a small flame on the burning cross's wood, licking up off it (Curtis, Rogue run 2). */
+	CrossFlame,
 };
 
 /** @brief A flame or a patch of lava or water on screen, found anew each frame. */
@@ -1996,6 +1998,77 @@ void AddBonfire(const Object &object, int16_t id, Vec corner, const std::vector<
 	Emitters.push_back(emitter);
 }
 
+/** @brief A beam of the burning cross in its sprite (burncros), in pixels from the sprite's top left. */
+struct CrossBeam {
+	Point from;
+	Point to;
+};
+
+/** @brief The size of the burning cross's sprite, the same in all its frames; the beams below are measured off it. */
+constexpr int CrossSpriteSize = 160;
+/**
+ * @brief The cross's wood in the sprite, a dark shape in its blaze: the upright stands at x 78 from the ground (y 135) up
+ * to its top (y 80), and the bar crosses it low, running down the isometric slope from (62, 114) to (98, 131).
+ */
+constexpr std::array<CrossBeam, 2> CrossBeams { { { { 78, 135 }, { 78, 80 } }, { { 62, 114 }, { 98, 131 } } } };
+/** @brief How far apart the flames sit along the wood, in sprite pixels. */
+constexpr int CrossFlameSpacing = 6;
+
+/**
+ * @brief POE2 Mashup: small flames along the burning cross's upright and bar, hugging its shape (Curtis, Rogue run 2: the
+ * one big bonfire glow "looks like you threw a special effect on top of it without blending it at all"). Each flame
+ * flickers on its own with a small warm light; one soft glow ties them into the sprite's own blaze, and the firelight
+ * lies on the floor round it.
+ */
+void AddBurningCross(const Object &object, int16_t id, Vec corner, int spriteHeight, uint32_t seed)
+{
+	const Vec topLeft = corner - Vec { 0, static_cast<float>(spriteHeight - 1) };
+	const std::vector<Point> &flames = BurningCrossFlames();
+	for (size_t i = 0; i < flames.size(); i++) {
+		const uint32_t flameSeed = (seed + static_cast<uint32_t>(i) * 40503U) * 2654435761U;
+		const Vec at = topLeft + Vec { static_cast<float>(flames[i].x), static_cast<float>(flames[i].y) };
+		const float flicker = NaturalFlicker(flameSeed, false);
+		// The flames up the wood burn a little smaller than those at its foot and on the bar.
+		const float size = flames[i].y < 100 ? 0.8F : 1.F;
+		Ring glow;
+		glow.pos = at - Vec { 0, 3 };
+		glow.life = 1;
+		glow.width = 0;
+		glow.disc = true;
+		glow.ground = false;
+		glow.flame = id;
+		glow.r0 = glow.r1 = 10 * size * (0.94F + 0.06F * flicker);
+		glow.colour = { 255, 130, 45 };
+		glow.alpha = 0.15F * flicker;
+		FrameGlows.push_back(glow);
+		glow.r0 = glow.r1 = 3.5F * size;
+		glow.colour = { 255, 205, 130 };
+		glow.alpha = 0.3F * flicker;
+		FrameGlows.push_back(glow);
+		Emitters.push_back({ at, size, Ambient::CrossFlame, { 255, 150, 50 }, 0, id });
+	}
+	const float phase = static_cast<float>(seed % 628) / 100.F;
+	const float breathe = 0.92F + 0.05F * std::sin(AmbientTime * 0.0011F + phase) + 0.07F * (SmoothNoise(seed, AmbientTime * 0.0035F) - 0.5F);
+	Ring glow;
+	glow.life = 1;
+	glow.width = 0;
+	glow.disc = true;
+	glow.ground = false;
+	glow.flame = id;
+	glow.pos = topLeft + Vec { 80, 110 };
+	glow.r0 = glow.r1 = 44 * (0.97F + 0.03F * breathe);
+	glow.colour = { 255, 125, 40 };
+	glow.alpha = 0.16F * breathe;
+	FrameGlows.push_back(glow);
+	glow.pos = TileCentre(object.position);
+	glow.ground = true;
+	glow.flame = -1;
+	glow.r0 = glow.r1 = TileRadius * 2.F;
+	glow.colour = { 255, 140, 50 };
+	glow.alpha = 0.14F * breathe;
+	FrameGlows.push_back(glow);
+}
+
 void ScanFlames(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
@@ -2013,7 +2086,9 @@ void ScanFlames(const View &view)
 		// The grate's fire comes and goes with its frames; the lights keep their flames where the whole animation has them.
 		const std::vector<HotSpot> &spots = object._otype == OBJ_FLAMEHOLE ? FlameSpots(sprite) : SteadyFlameSpots(object);
 		if (IsBonfire(object)) {
-			if (!spots.empty())
+			if (sprite.width() == CrossSpriteSize && sprite.height() == CrossSpriteSize)
+				AddBurningCross(object, static_cast<int16_t>(id), corner, sprite.height(), seed);
+			else if (!spots.empty())
 				AddBonfire(object, static_cast<int16_t>(id), corner, spots, seed);
 			continue;
 		}
@@ -2689,6 +2764,44 @@ void EmitAmbient(float ms)
 			for (int i = Occurrences(3, ms); i > 0; i--)
 				Spray(emitter.pos + Vec { Random(-10, 10), Random(-10, 10) }, 2, 40, 110, 150, 300, Shape::Streak, { 255, 230, 160 }, { 220, 90, 20 }, 1.3F, 0.4F, 20, 90, 300, 1.5F, 1);
 			break;
+		case Ambient::CrossFlame: {
+			// Small tongues licking up off the wood, bright at the root and gone a few pixels up, and now and then an
+			// ember rising off it.
+			const float s = emitter.size;
+			for (int i = Occurrences(11 * s, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-3, 3), Random(-1.5F, 1.5F) };
+				p.vel = { Random(-4, 4), 0 };
+				p.vz = Random(16, 34);
+				p.gravity = -10;
+				p.drag = 1.5F;
+				p.life = Random(200, 380);
+				p.size0 = Random(2.2F, 3.4F) * s;
+				p.size1 = 0.5F;
+				p.c0 = { 255, 200, 100 };
+				p.c1 = { 200, 55, 10 };
+				p.alpha = 0.6F;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(0.9F, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-2, 2), 0 };
+				p.vel = { Random(-6, 6), 0 };
+				p.vz = Random(30, 50);
+				p.gravity = -8;
+				p.drag = 0.5F;
+				p.life = Random(900, 1600);
+				p.size0 = Random(1.2F, 1.8F);
+				p.size1 = 0.3F;
+				p.c0 = { 255, 215, 130 };
+				p.c1 = { 210, 70, 15 };
+				p.alpha = 0.9F;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			break;
+		}
 		case Ambient::Bonfire: {
 			// POE2 Mashup: more embers than a torch's, bigger and slower, drifting up in a tall column, with soft
 			// smoke rolling off the top of the flames (Curtis 2026-10-29).
@@ -4242,6 +4355,27 @@ bool ReplacesSprite(const Missile &missile)
 	if (IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow))
 		return false;
 	return LookOf(missile._miAnimType).projectile;
+}
+
+const std::vector<Point> &BurningCrossFlames()
+{
+	static const std::vector<Point> Flames = [] {
+		std::vector<Point> flames;
+		for (const CrossBeam &beam : CrossBeams) {
+			const Displacement span = beam.to - beam.from;
+			const int length = std::max(std::abs(span.deltaX), std::abs(span.deltaY));
+			const int steps = std::max(length / CrossFlameSpacing, 1);
+			for (int step = 0; step <= steps; step++) {
+				const Point at = beam.from + Displacement { span.deltaX * step / steps, span.deltaY * step / steps };
+				// Where the bar crosses the upright, the upright's flame is already there.
+				if (&beam != &CrossBeams[0] && std::abs(at.x - CrossBeams[0].from.x) < 3)
+					continue;
+				flames.push_back(at);
+			}
+		}
+		return flames;
+	}();
+	return Flames;
 }
 
 ClxSprite ObjectSprite(const Object &object)
