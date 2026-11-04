@@ -179,13 +179,13 @@ char At(const std::vector<std::string> &grid, int x, int y)
 	return grid[y][x];
 }
 
-/** Shrine spots, stairs up, hanging bodies and burning crosses need a wall north or west of them. */
+/** Shrine spots, stairs up, hanging bodies, burning crosses and bookcases need a wall north or west of them. */
 bool BackedOk(const std::vector<std::string> &grid)
 {
 	for (int y = 0; y < static_cast<int>(grid.size()); y++) {
 		for (int x = 0; x < static_cast<int>(grid[y].size()); x++) {
 			const char c = grid[y][x];
-			if (c != 'A' && c != 'T' && c != 'x' && c != 'U')
+			if (c != 'A' && c != 'T' && c != 'x' && c != 'U' && c != 'K')
 				continue;
 			if (c == 'U') {
 				// The stairs up go into the wall north of the room's first row.
@@ -2165,12 +2165,23 @@ void AddCathedralRoomObjects()
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		if (prop.kind == 'K') {
-			// Two shelves to a block, so a row of them reads as one long bookcase.
+			// Two shelves to a block, so a row of them reads as one long bookcase, standing right against the wall
+			// behind it: a row along a north wall, a column along a west wall. Only the back half of a Cathedral wall
+			// block is solid, so the shelves go on the open front half of it when there is one.
 			const bool row = std::any_of(CurrentPlan.props.begin(), CurrentPlan.props.end(), [&prop](const CathedralProp &other) {
 				return other.kind == 'K' && other.block.y == prop.block.y && std::abs(other.block.x - prop.block.x) == 1;
 			});
 			const Point world = prop.block.megaToWorld();
-			for (const Displacement d : row ? std::array { Displacement { 0, 1 }, Displacement { 1, 1 } } : std::array { Displacement { 1, 0 }, Displacement { 1, 1 } }) {
+			const Displacement behind = row ? Displacement { 0, -1 } : Displacement { -1, 0 };
+			const Displacement along = row ? Displacement { 1, 0 } : Displacement { 0, 1 };
+			Displacement out = behind * -1;
+			for (const Displacement d : { behind, Displacement { 0, 0 } }) {
+				if (!TileHasAny(world + d, TileProperties::Solid) && TileHasAny(world + d + behind, TileProperties::Solid)) {
+					out = d;
+					break;
+				}
+			}
+			for (const Displacement d : { out, out + along }) {
 				if (TileClear(world + d))
 					AddObject(row ? OBJ_BOOKSHELF : OBJ_BOOKSHELFR, world + d);
 			}
