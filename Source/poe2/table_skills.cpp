@@ -869,8 +869,15 @@ void PoisonBurst(Player &player, const Monster &struck, const TableSkillData &da
 {
 	const Point center = struck.position.tile;
 	const int radius = std::clamp(SupportAreaRadius(player, SkillSlot::ForAttack(data.skill), data.radius), 0, 12);
-	AddVisualEffect(center, data.effect, 0, 4);
-	vfx::Impact(center, vfx::Element::Chaos, 1.0F);
+	// A heavy green splash of venom on the enemy struck, rolling out over the burst (Curtis, Rogue run 2: it should read
+	// as a poison arrow, not a purple chaos puff). The acid beasts' splat sprite only loads with them, so the effects
+	// draw it when they can.
+	if (vfx::Enabled()) {
+		vfx::Impact(center, vfx::Element::Poison, PlagueArrowSplashSize);
+		vfx::Nova(center, std::max(radius, 1), vfx::Element::Poison);
+	} else {
+		AddVisualEffect(center, data.effect, 0, 4);
+	}
 	const Fixed26_6 base = FixedDamage(player, data);
 	const int32_t poison = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(base.raw()) * TablePoisonPercentPerSecond(data) * PoisonTicks / 20 / 100, INT32_MAX / 2));
 	const Fixed26_6 splash = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(base.raw()) * PlagueArrowSplashPercent / 100), 1));
@@ -912,6 +919,9 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 		if (data.type == DamageType::Physical || LookOf(data) == vfx::Element::Poison)
 			missile->poe2.vfxElement = static_cast<int8_t>(LookOf(data));
 	}
+	// Plague Arrow is a poison arrow: drawn green, dripping venom as it flies (Curtis, Rogue run 2).
+	if (!spell && (data.flags & TF_PoisonBurst) != 0)
+		missile->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Poison);
 	// A per-target skill's projectiles hit each monster once a cast, the first in full (GrantedMissileTargetPercent).
 	if ((data.flags & TF_PerTarget) != 0)
 		missile->poe2.grantedCast = player.poe2.grantedState.castSerial;

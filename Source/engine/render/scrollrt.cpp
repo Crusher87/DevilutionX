@@ -168,6 +168,13 @@ const uint8_t *EnrageTRN()
 	return TintTRN(tint, { 100, 60, 40, 0, 40, 0 });
 }
 
+/** @brief POE2 Mashup: a poison arrow (Plague Arrow), its shaft and head stained a venomous green. */
+const uint8_t *VenomTRN()
+{
+	static PaletteTint tint;
+	return TintTRN(tint, { 45, 0, 95, 45, 25, 0 });
+}
+
 /**
  * @brief POE2 Mashup: magic, rare and unique monsters get a thin outline in their rank's colour.
  *
@@ -435,6 +442,16 @@ void DrawMissilePrivate(const Surface &out, const Missile &missile, Point target
 
 	const Point missileRenderPosition { targetBufferPosition + missile.position.offsetForRendering - Displacement { missile._miAnimWidth2, 0 } };
 	const ClxSprite sprite = (*missile._miAnimData)[missile._miAnimFrame - 1];
+	// POE2 Mashup: a poison arrow flies green (Curtis, Rogue run 2: Plague Arrow should look like a poison arrow).
+	if (gbIsPoe2 && missile._miAnimType == MissileGraphicID::Arrow && missile.poe2.vfxElement == static_cast<int8_t>(vfx::Element::Poison)) {
+		std::array<uint8_t, 256> venom;
+		const uint8_t *green = VenomTRN();
+		const size_t light = missile._miLightFlag ? std::min<size_t>(static_cast<size_t>(std::max(lightTableIndex, 0)), LightTables.size() - 1) : 0;
+		for (size_t i = 0; i < venom.size(); i++)
+			venom[i] = LightTables[light][green[i]];
+		ClxDrawTRN(out, missileRenderPosition, sprite, venom.data());
+		return;
+	}
 	if (missile._miUniqTrans != 0) {
 		ClxDrawTRN(out, missileRenderPosition, sprite, Monsters[missile._misource].uniqueMonsterTRN.get());
 	} else if (missile._miLightFlag) {

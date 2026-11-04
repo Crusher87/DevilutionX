@@ -585,6 +585,25 @@ TEST_F(Poe2PoisonSkillsTest, VenomBoltPoisons)
 	EXPECT_EQ(monster.poe2.poisonDamagePerTick, 64 * 50 * 60 / 100 / 20);
 }
 
+// Plague Arrow is a green poison arrow (Curtis, Rogue run 2): its arrows fly as venom; a plain arrow stays plain.
+TEST_F(Poe2PoisonSkillsTest, PlagueArrowFliesAsAPoisonArrow)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	Supported(WeaponSkill::PlagueArrow);
+	ExecuteTableSkill(player, Row(WeaponSkill::PlagueArrow), { 46, 40 });
+	ASSERT_FALSE(Missiles.empty());
+	EXPECT_EQ(Missiles.back()._mitype, MissileID::Arrow);
+	EXPECT_EQ(Missiles.back().poe2.vfxElement, static_cast<int8_t>(vfx::Element::Poison));
+	Missiles.clear();
+	Supported(WeaponSkill::ThornvineArrow);
+	ExecuteTableSkill(player, Row(WeaponSkill::ThornvineArrow), { 46, 40 });
+	ASSERT_FALSE(Missiles.empty());
+	EXPECT_EQ(Missiles.back()._mitype, MissileID::Arrow);
+	EXPECT_EQ(Missiles.back().poe2.vfxElement, -1);
+	EXPECT_GT(PlagueArrowSplashSize, 1.F);
+}
+
 // Poison Explosion: a corpse bursts in chaos and leaves a cloud that poisons for 2 seconds.
 TEST_F(Poe2PoisonSkillsTest, PoisonExplosionLeavesACloud)
 {
