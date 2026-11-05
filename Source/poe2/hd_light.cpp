@@ -175,6 +175,8 @@ int WinH = 0;
 std::vector<float> WinBright;
 std::vector<std::array<float, 4>> WinHue;
 std::vector<uint8_t> WinSet;
+std::vector<float> SpillBright;
+std::vector<std::array<float, 4>> SpillHue;
 std::vector<Rgb> WinColour;
 std::vector<uint32_t> WinPixels;
 std::vector<uint32_t> WinMulPixels;
@@ -958,6 +960,57 @@ void FillWalls()
 	}
 }
 
+/** @brief How far (in tiles) a floor's light reaches into the solid rock in front of its edge, fading out. */
+constexpr float RockSpill = 4.F;
+/** @brief WinSet marks samples SpillIntoRock lit as SpillLevel plus the pass that lit them (FillWalls uses 1 to 4). */
+constexpr uint8_t SpillLevel = 10;
+
+/**
+ * @brief Samples in solid rock in front of a floor (towards the view) that no room faces take the light of the floor
+ * behind them, fading out over RockSpill tiles. Where a floor ends without a wall (the Cathedral's dirt edges) the game
+ * draws the rock it drops into as a field of dirt, lit like the floor beside it. Left dark, only its first row showed
+ * (lit from behind, see hd.cpp's LitFromBehind), as blocks with black lines between them.
+ */
+void SpillIntoRock()
+{
+	SpillBright.assign(WinBright.size(), 0.F);
+	SpillHue.resize(WinHue.size());
+	const int passes = static_cast<int>(RockSpill * Per);
+	for (int pass = 1; pass <= passes; pass++) {
+		const auto source = static_cast<uint8_t>(pass == 1 ? 1 : SpillLevel + pass - 1);
+		// Fades evenly as drawn (brightness is linear light to the power 1/Gamma).
+		const float fade = std::pow(1.F - static_cast<float>(pass) / static_cast<float>(passes + 1), Gamma);
+		for (int j = 1; j < WinH; j++) {
+			for (int i = 1; i < WinW; i++) {
+				const size_t k = static_cast<size_t>(j) * WinW + i;
+				if (WinSet[k] != 0)
+					continue;
+				int best = -1;
+				float bestBright = 0;
+				for (const auto &step : { std::array<int, 2> { 1, 0 }, std::array<int, 2> { 0, 1 }, std::array<int, 2> { 1, 1 } }) {
+					const size_t n = static_cast<size_t>(j - step[1]) * WinW + (i - step[0]);
+					if (WinSet[n] != source)
+						continue;
+					const float bright = pass == 1 ? WinBright[n] : SpillBright[n];
+					if (best < 0 || bright > bestBright) {
+						best = static_cast<int>(n);
+						bestBright = bright;
+					}
+				}
+				if (best < 0)
+					continue;
+				const auto from = static_cast<size_t>(best);
+				SpillBright[k] = bestBright;
+				SpillHue[k] = pass == 1 ? WinHue[from] : SpillHue[from];
+				WinBright[k] += bestBright * fade;
+				for (int c = 0; c < 4; c++)
+					WinHue[k][c] += SpillHue[k][c] * fade;
+				WinSet[k] = static_cast<uint8_t>(SpillLevel + pass);
+			}
+		}
+	}
+}
+
 void Finish()
 {
 	const Look &look = CurrentLook;
@@ -1014,6 +1067,7 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 	}
 	GatherDynamic(heroX, heroY);
 	FillWalls();
+	SpillIntoRock();
 	Finish();
 	return true;
 }
