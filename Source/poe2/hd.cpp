@@ -1267,8 +1267,10 @@ constexpr std::array<int, 6> QuadIndices { 0, 1, 2, 0, 2, 3 };
 // floor: from a light hanging H tiles up and d tiles away, a body h tall casts a shadow d * h / (H - h) long, and a light
 // at head height or lower casts it on until its light gives out or a wall stops it. The nearer the light, the wider the
 // shadow's far end (it is the body as the light sees it). Its edge is sharp at the feet and softens further out, the
-// more the wider the light's flame or glow. And it darkens the floor by the light it keeps off: that light's part of all
-// the light there, added up as linear light, less what bounces in off the floor and walls round it anyway.
+// more the wider the light's flame or glow. And it is as dark as that light's share of all the light there, added up as
+// linear light, less what bounces in off the floor and walls round it anyway, and lighter where that light is dim. The
+// heroes' own glows count for little in that share (GlowFill), so a fire or a spell beside a hero casts a clear shadow
+// and a glow's own shadows stay faint.
 /** @brief cos 30 degrees: Diablo's view shows a height at this much of its length (its floor is foreshortened by half). */
 constexpr float ViewLean = 0.866F;
 /** @brief How wide a hero's or monster's body is, in tiles, for how much of a wide light gets round it. */
@@ -1294,6 +1296,16 @@ constexpr float FootShade = 0.8F;
 constexpr float ContactDrop = 5.F;
 /** @brief The hero is never drawn darker than this much of full light (the game always draws them fully lit). */
 constexpr float HeroLightFloor = 0.85F;
+/**
+ * @brief The heroes' own glows are the light the game gives every hero to see by, kept as bright as the game has them. A
+ * real fire or spell would outshine such a glow many times over, so inside the shadow of a light at least StrongLight
+ * bright a glow fills in only this much of its light, and inside a dimmer light's shadow more, up to all of it.
+ */
+constexpr float GlowFill = 0.2F;
+/** @brief A light at least this bright where its shadow falls (linear light, 1 is full) outshines the glows (GlowFill). */
+constexpr float StrongLight = 0.4F;
+/** @brief How dark a shadow is where its light is all the light there (less the light's own bounce fill). */
+constexpr float CastStrength = 0.85F;
 
 /** @brief Where a world point (in tiles) is drawn in the world buffer. */
 void BufferOf(float wx, float wy, float &bx, float &by)
@@ -1813,6 +1825,27 @@ float ShadowAlpha(float total, float removed)
 }
 
 /**
+ * @brief How much a light's cast shadow darkens the floor (0 to 1): the share of the light there that its light gives,
+ * less its bounce fill, with the heroes' glows filling in less the brighter that light is (GlowFill). A glow's own
+ * shadows stay as faint as its light makes them.
+ * @param total All the light there, as linear light.
+ * @param glows The part of it from the heroes' own glows.
+ * @param own The part of it from the shadow's light (one of the glows when `glow`).
+ * @param kept How much of the light the body keeps off there (a wide light gets round it further out).
+ */
+float CastAlpha(float total, float glows, float own, bool glow, float fill, float kept)
+{
+	if (glow)
+		return ShadowAlpha(total, (1 - fill) * own * kept);
+	if (own <= 0)
+		return 0;
+	const float outshines = std::min(own / StrongLight, 1.F);
+	const float glowsLeft = glows * (1 - outshines * (1 - GlowFill));
+	const float others = std::max(total - glows - own, 0.F);
+	return std::clamp(CastStrength * (1 - fill) * kept * own / (own + glowsLeft + others), 0.F, 1.F);
+}
+
+/**
  * @brief The shadows a hero or monster casts on the floor: one away from each of the strongest lights on it, its body
  * as that light sees it laid on the floor (see ViewLean and the notes before it), and the spot under its feet from a
  * light hanging right over it (its own) and from the light bouncing in under it.
@@ -1929,7 +1962,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			const float penumbra = source.size * pastBody / std::max(toBody, 0.05F);
 			// A light wider than the body seen from the floor gets round it, and no spot is wholly out of it.
 			const float kept = penumbra > BodyWidth * spread ? BodyWidth * spread / penumbra : 1.F;
-			const float alpha = ShadowAlpha(light::LinearAt(fx, fy), (1 - source.fill) * light::LinearOf(source, fx, fy) * kept);
+			const float alpha = CastAlpha(light::LinearAt(fx, fy), light::GlowAt(fx, fy), light::LinearOf(source, fx, fy), source.glow, source.fill, kept);
 			// The soft picture's edge is stretched with the shadow, so it stands for a wider soft edge the more it spreads.
 			const float softness = std::clamp(penumbra / (SoftWidth * spread), 0.F, 1.F);
 			const Uint8 sharpAlpha = ColourByte(alpha * (1 - softness));

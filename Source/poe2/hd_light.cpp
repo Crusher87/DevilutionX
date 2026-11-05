@@ -84,6 +84,10 @@ struct Source {
 	bool castsShadows = true;
 	/** @brief Glowing lava (or a glowing pool): its tiles together shine as one wide light lying on the floor (ShadowLights). */
 	bool lava = false;
+	/** @brief A hero's own glow, the light the game gives every hero to see by (GlowAt). */
+	bool glow = false;
+	/** @brief Carried by a hero or a monster: right over them, it casts their shadow straight down (ShadowLights). */
+	bool carried = false;
 	/** @brief For a torch on a wall: the open side it faces (the camera sees walls from +x and +y). */
 	int faceX = 0;
 	int faceY = 0;
@@ -797,23 +801,25 @@ void GatherDynamic(float heroX, float heroY)
 		float size;
 		float fill;
 		float power;
+		bool glow;
+		bool carried;
 	};
 	std::array<Kind, MAXLIGHTS> kinds;
-	kinds.fill({ CurrentLook.warm, 1.4F, 0.3F, 0.15F, 1.F });
+	kinds.fill({ CurrentLook.warm, 1.4F, 0.3F, 0.15F, 1.F, false, false });
 	const auto owns = [](int id) { return id >= 0 && id < MAXLIGHTS; };
 	// Owners from the least to the most sure, so a stale id held by a dying missile can't recolour a hero's light.
 	for (const Missile &missile : Missiles) {
 		if (!owns(missile._mlid))
 			continue;
 		// A spell flies at about waist height (a firebolt's ball of fire is about a third of a tile across).
-		kinds[missile._mlid] = { FromBytes(vfx::LightColourOf(missile)), 0.85F, 0.35F, 0.15F, SpellPower };
+		kinds[missile._mlid] = { FromBytes(vfx::LightColourOf(missile)), 0.85F, 0.35F, 0.15F, SpellPower, false, false };
 	}
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (!owns(monster.lightId))
 			continue;
 		// Uniques glow; other monsters only carry a light while berserk (POE2's Confuse sets the flag without one).
-		kinds[monster.lightId] = { monster.isUnique() ? UniqueGlowColour : BerserkColour, 0.7F, 0.8F, 0.3F, 1.F };
+		kinds[monster.lightId] = { monster.isUnique() ? UniqueGlowColour : BerserkColour, 0.7F, 0.8F, 0.3F, 1.F, false, true };
 	}
 	int myLight = NO_LIGHT;
 	for (const Player &player : Players) {
@@ -821,7 +827,7 @@ void GatherDynamic(float heroX, float heroY)
 			continue;
 		// A hero's own light is a wide, soft glow hanging over them: it lights the way without hard shadows, so the
 		// shadows it gives are short, soft and faint, and a torch or a spell nearby casts the clear ones.
-		kinds[player.lightId] = { CurrentLook.warm, 2.6F, 1.6F, 0.45F, 1.F };
+		kinds[player.lightId] = { CurrentLook.warm, 2.6F, 1.6F, 0.45F, 1.F, true, true };
 		if (&player == MyPlayer)
 			myLight = player.lightId;
 	}
@@ -848,6 +854,8 @@ void GatherDynamic(float heroX, float heroY)
 		source.size = kinds[id].size;
 		source.fill = kinds[id].fill;
 		source.power = kinds[id].power;
+		source.glow = kinds[id].glow;
+		source.carried = kinds[id].carried;
 		// Moving lights shine from where they are: a tile can stop light and still be walked on (cathedral piece 450).
 		source.rayX = source.x;
 		source.rayY = source.y;
@@ -1142,10 +1150,11 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 	overhead = {};
 	float overheadLinear = 0;
 	int count = 0;
-	const auto offer = [&](const ShadowLight &light, float linear, float distance) {
+	const auto offer = [&](const ShadowLight &light, float linear, float distance, bool carried) {
 		// A light right where the hero or monster stands (its own) hangs over it and casts its shadow straight down.
-		// (A glow a little behind, on a monster being pulled, counts too.)
-		if (distance < 0.6F) {
+		// (A glow a little behind, on a monster being pulled, counts too.) A fire or a spell just beside them still
+		// casts their shadow away from it.
+		if (distance < (carried ? 0.6F : 0.2F)) {
 			if (linear > overheadLinear) {
 				overheadLinear = linear;
 				overhead = light;
@@ -1206,7 +1215,9 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 		const float strength = ToBrightness(linear);
 		if (strength < 0.02F)
 			return;
-		offer(ShadowLight { source.rayX, source.rayY, strength, source.height, source.size, source.fill, static_cast<float>(source.radius + 1), index }, linear, distance);
+		ShadowLight light { source.rayX, source.rayY, strength, source.height, source.size, source.fill, static_cast<float>(source.radius + 1), index };
+		light.glow = source.glow;
+		offer(light, linear, distance, source.carried);
 	};
 	int index = 0;
 	for (const Source &source : StaticSources)
@@ -1233,7 +1244,7 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 			ShadowLight light { x + offX, y + offY, lavaStrength, LavaHeight, size, lavaFill / lavaLinear, distance + lavaPast, LavaLight };
 			light.power = std::min(lavaBrightest / std::max(atPoint, 1e-3F), 64.F);
 			light.radius = lavaRadius;
-			offer(light, lavaBrightest, distance);
+			offer(light, lavaBrightest, distance, false);
 		}
 	}
 	return count;
@@ -1254,6 +1265,19 @@ float LinearOf(const ShadowLight &light, float x, float y)
 	if (distance >= static_cast<float>(source->radius + 1) || !Clear(source->rayX, source->rayY, x, y))
 		return 0;
 	return LevelLinear(LevelAt(distance, source->radius)) * source->power;
+}
+
+float GlowAt(float x, float y)
+{
+	float linear = 0;
+	for (const Source &source : DynamicSources) {
+		if (!source.glow)
+			continue;
+		const float distance = Length(x - source.x, y - source.y);
+		if (distance < static_cast<float>(source.radius + 1) && Clear(source.rayX, source.rayY, x, y))
+			linear += LevelLinear(LevelAt(distance, source.radius)) * source.power;
+	}
+	return linear;
 }
 
 uint16_t UnpaintedPiece(int x, int y, uint16_t piece)
