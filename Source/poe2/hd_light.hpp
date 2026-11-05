@@ -63,6 +63,8 @@ struct ShadowLight {
 	/** @brief For the lava's light: how bright it is against one lava tile at its middle, and how far its light falls off. */
 	float power = 0;
 	int radius = 0;
+	/** @brief It is a hero's own glow (see GlowAt). */
+	bool glow = false;
 };
 
 /** @brief ShadowLight::source for the light of all the lava a point sees, shining as one wide light lying on the floor. */
@@ -123,6 +125,12 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 
 /** @brief The linear light a shadow light gives at a world point, 0 where a wall stands between them. */
 float LinearOf(const ShadowLight &light, float x, float y);
+
+/**
+ * @brief The linear light the heroes' own glows give at a world point (the light the game gives every hero to see by),
+ * 0 from a glow a wall stands in front of.
+ */
+float GlowAt(float x, float y);
 
 /**
  * @brief The level piece to draw at a tile (dPiece coordinates) under this light: the level's own, except where the
