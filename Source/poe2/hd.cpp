@@ -1635,6 +1635,95 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 }
 
 /**
+ * @brief The Cathedral's dirt (drlg_l1.cpp's Dirt tiles): the ground outside its rooms, its edges along a floor's open
+ * sides and corners, and beside the ends of walls. The level is filled with it before the rooms are cut out.
+ */
+constexpr std::array<uint8_t, 14> CathedralDirt { 18, 19, 20, 21, 22, 23, 24, 199, 200, 201, 202, 203, 204, 205 };
+
+/** @brief The pieces the dirt is drawn with, by piece number, worked out from the level's own tiles (empty elsewhere). */
+std::vector<bool> DirtPieces;
+const MegaTile *DirtMegaTiles = nullptr;
+dungeon_type DirtLevelType = DTYPE_NONE;
+
+void IndexDirt()
+{
+	if (DirtMegaTiles == pMegaTiles.get() && DirtLevelType == leveltype)
+		return;
+	DirtMegaTiles = pMegaTiles.get();
+	DirtLevelType = leveltype;
+	DirtPieces.clear();
+	if (leveltype != DTYPE_CATHEDRAL || DirtMegaTiles == nullptr)
+		return;
+	DirtPieces.assign(MAXTILES, false);
+	for (const uint8_t tile : CathedralDirt) {
+		const MegaTile &mega = DirtMegaTiles[tile - 1];
+		for (const uint16_t piece : { Swap16LE(mega.micro1), Swap16LE(mega.micro2), Swap16LE(mega.micro3), Swap16LE(mega.micro4) }) {
+			if (piece < MAXTILES)
+				DirtPieces[piece] = true;
+		}
+	}
+}
+
+bool IsDirt(Point cell)
+{
+	if (DirtPieces.empty() || !InDungeonBounds(cell))
+		return false;
+	return DirtPieces[dPiece[cell.x][cell.y]];
+}
+
+/**
+ * @brief Draws a piece of the dirt in the light on the floor where it shows.
+ *
+ * The game draws its field of dirt two rows above the tiles it belongs to, so on screen it lies beside the floor as one
+ * flat ground, with the stone rim of the floor's open edge on it. Each point of it takes the light on the floor's plane
+ * at that point of the screen, as the floor does, in small triangles so the light changes smoothly across it and its
+ * pieces meet without a seam. Lit by its own tile, each piece showed as a square of one shade.
+ */
+void DrawGroundLit(SDL_Renderer *renderer, const Draw &draw, float toLogical)
+{
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return;
+	const DrawTexture art = TextureFor(renderer, draw, false);
+	if (art.texture == nullptr)
+		return;
+	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(art.texture, 255);
+	// Half a piece (16 game pixels) apart, as far apart as the light's samples: closer looks the same and costs more.
+	constexpr int Steps = 2;
+	constexpr int Row = Steps + 1;
+	std::array<SDL_Vertex, Row * Row> vertices;
+	std::array<Colour3, Row * Row> colours;
+	for (int j = 0; j <= Steps; j++) {
+		for (int i = 0; i <= Steps; i++) {
+			const float fx = static_cast<float>(i) / Steps;
+			const float fy = static_cast<float>(j) / Steps;
+			float wx;
+			float wy;
+			WorldOf(static_cast<float>(draw.x) + fx * static_cast<float>(draw.width), static_cast<float>(draw.y) + fy * static_cast<float>(draw.height), wx, wy);
+			const size_t k = static_cast<size_t>(j * Row + i);
+			colours[k] = ArtColour(LightAt(wx, wy), art);
+			vertices[k] = SDL_Vertex {
+				{ dest.x + fx * dest.w, dest.y + fy * dest.h },
+				{ ColourByte(colours[k][0]), ColourByte(colours[k][1]), ColourByte(colours[k][2]), 255 },
+				{ fx, fy },
+			};
+		}
+	}
+	std::array<int, Steps * Steps * 6> indices;
+	int used = 0;
+	for (int j = 0; j < Steps; j++) {
+		for (int i = 0; i < Steps; i++) {
+			const int corner = j * Row + i;
+			for (const int v : { corner, corner + 1, corner + Row + 1, corner, corner + Row + 1, corner + Row })
+				indices[static_cast<size_t>(used++)] = v;
+		}
+	}
+	SDL_RenderGeometry(renderer, art.texture, vertices.data(), Row * Row, indices.data(), used);
+	DrawAboveFull(renderer, art.texture, vertices, colours, Row * Row, indices.data(), used);
+}
+
+/**
  * @brief Lights the floor drawn so far by the light over it, in one go: darker where it is dim, and brighter than full
  * where fires and spells light it. A renderer that can't blend that way lights it up to full.
  */
@@ -2156,6 +2245,7 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 		return false;
 	FrameLit = true;
 	MakeBlobTexture(renderer);
+	IndexDirt();
 
 	const Shading unlit = Uniform({ 1.F, 1.F, 1.F });
 	for (size_t i = 0; i < FloorEnd && i < Draws.size(); i++) {
@@ -2173,6 +2263,10 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 			continue;
 		if (draw.style == SpriteStyle::Normal && draw.caster != Caster::None)
 			DrawCasterShadows(renderer, draw, toLogical);
+		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
+			DrawGroundLit(renderer, draw, toLogical);
+			continue;
+		}
 		const Shading shading = LightFor(draw, tint);
 		if (IsTileBase(draw)) {
 			DrawTileWall(renderer, draw, shading, toLogical);
