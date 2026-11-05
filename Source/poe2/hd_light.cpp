@@ -18,6 +18,7 @@
 #include "objects.h"
 #include "player.h"
 #include "poe2/vfx.hpp"
+#include "utils/endian_swap.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -43,6 +44,18 @@ constexpr float SampleAt(int i)
 int SampleBefore(float world)
 {
 	return static_cast<int>(std::floor((world + 0.25F) * Per));
+}
+
+/** @brief How far (dx, dy) reaches. Not std::hypot, which is slower and gives precision not needed here. */
+float Length(float dx, float dy)
+{
+	return std::sqrt(dx * dx + dy * dy);
+}
+
+/** @brief Rounds to the nearest whole number (the Amiga toolchain has no std::lround). */
+int RoundToInt(float value)
+{
+	return static_cast<int>(value < 0 ? value - 0.5F : value + 0.5F);
 }
 
 using Colour = std::array<float, 3>;
@@ -171,6 +184,41 @@ float LevelAt(float distance, int radius)
 		return std::max(0.F, part * part * overExposure + (15.F - overExposure));
 	}
 	return part * 15.F;
+}
+
+/**
+ * @brief The plain tile under one of the shadows a level type paints into itself (the shadow passes in drlg_l1.cpp,
+ * drlg_l2.cpp and drlg_l4.cpp ApplyShadowsPatterns and crypt.cpp ApplyCryptShadowsPatterns), 0 for any other tile.
+ * @param mx, my Where the tile is, for picking one of the Cathedral's floor looks.
+ */
+uint8_t PlainTileOf(uint8_t tile, int mx, int my)
+{
+	switch (leveltype) {
+	case DTYPE_CATHEDRAL:
+		// Floor12-Floor21 lie on the floor; VWall17, VArch5, HWallShadow(2) and HArchShadow(2) on a wall or an arch.
+		if ((tile >= 139 && tile <= 145) || (tile >= 150 && tile <= 152)) {
+			// The plain floor has three looks (drlg_l1.cpp FillFloor), picked here by where the tile is.
+			constexpr std::array<uint8_t, 3> Floors { 13, 162, 163 };
+			return Floors[((static_cast<uint32_t>(mx) * 73856093U) ^ (static_cast<uint32_t>(my) * 19349663U)) % Floors.size()];
+		}
+		switch (tile) {
+		case 146: return 1;  // VWall
+		case 147: return 11; // VArch
+		case 148:
+		case 154: return 2; // HWall
+		case 149:
+		case 153: return 12; // HArch
+		default: return 0;
+		}
+	case DTYPE_CATACOMBS:
+		return IsAnyOf(tile, 48, 50) ? 3 : 0;
+	case DTYPE_HELL:
+		return IsAnyOf(tile, 47, 48) ? 6 : 0;
+	case DTYPE_CRYPT:
+		return tile >= 203 && tile <= 217 ? 13 : 0;
+	default:
+		return 0;
+	}
 }
 
 bool BlocksTile(int x, int y)
@@ -409,7 +457,7 @@ void ShineStatic(const Source &source)
 			if (!SampleOpen(i, j))
 				continue;
 			const float sx = SampleAt(i);
-			const float level = LevelAt(std::hypot(sx - source.x, sy - source.y), source.radius);
+			const float level = LevelAt(Length(sx - source.x, sy - source.y), source.radius);
 			if (level >= 15.F)
 				continue;
 			const float brightness = LevelBrightness(level);
@@ -594,8 +642,8 @@ void GatherDynamic(float heroX, float heroY)
 
 		Reach &reach = Reaches[id];
 		// What a light can see is worked out again only when it moves an eighth of a tile (the hero's light moves every frame).
-		const int keyX = static_cast<int>(std::lround(source.rayX * 8.F));
-		const int keyY = static_cast<int>(std::lround(source.rayY * 8.F));
+		const int keyX = RoundToInt(source.rayX * 8.F);
+		const int keyY = RoundToInt(source.rayY * 8.F);
 		if (reach.keyX != keyX || reach.keyY != keyY || reach.radius != source.radius || reach.blockVersion != BlockVersion) {
 			reach.keyX = keyX;
 			reach.keyY = keyY;
@@ -629,7 +677,7 @@ void GatherDynamic(float heroX, float heroY)
 				if (reach.visible[static_cast<size_t>(b) * reach.w + a] == 0)
 					continue;
 				const int i = reach.i0 + a;
-				const float level = LevelAt(std::hypot(SampleAt(i) - source.x, sy - source.y), source.radius);
+				const float level = LevelAt(Length(SampleAt(i) - source.x, sy - source.y), source.radius);
 				if (level >= 15.F)
 					continue;
 				const float brightness = LevelBrightness(level);
@@ -819,7 +867,7 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, float &total,
 	const auto consider = [&](const Source &source) {
 		if (!source.castsShadows)
 			return;
-		const float distance = std::hypot(x - source.x, y - source.y);
+		const float distance = Length(x - source.x, y - source.y);
 		if (distance > static_cast<float>(source.radius + 1))
 			return;
 		const float brightness = LevelBrightness(LevelAt(distance, source.radius));
@@ -848,6 +896,31 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, float &total,
 	for (const Source &source : DynamicSources)
 		consider(source);
 	return count;
+}
+
+uint16_t UnpaintedPiece(int x, int y, uint16_t piece)
+{
+	// Each dungeon tile is four pieces in dPiece, from world tile 16 on (gendung.cpp DRLG_LPass3).
+	if (x < 16 || y < 16 || pMegaTiles == nullptr)
+		return piece;
+	const int mx = (x - 16) / 2;
+	const int my = (y - 16) / 2;
+	if (mx >= DMAXX || my >= DMAXY)
+		return piece;
+	const uint8_t tile = dungeon[mx][my];
+	const uint8_t plain = PlainTileOf(tile, mx, my);
+	if (plain == 0)
+		return piece;
+	const int quarter = ((x - 16) & 1) + ((y - 16) & 1) * 2;
+	const auto pieceOf = [quarter](uint8_t megaTile) {
+		const MegaTile &mega = pMegaTiles[megaTile - 1];
+		const std::array<uint16_t, 4> micros { mega.micro1, mega.micro2, mega.micro3, mega.micro4 };
+		return Swap16LE(micros[static_cast<size_t>(quarter)]);
+	};
+	// Only while the piece is still the painted one: an open door, a quest or another tile set may have changed it since.
+	if (pieceOf(tile) != piece)
+		return piece;
+	return pieceOf(plain);
 }
 
 void Reset()
