@@ -113,6 +113,13 @@ void SetViewOrigin(Point tile, Point bufferPosition);
 /** @brief The floor is drawn: everything recorded from here on stands on it (walls, objects, heroes, monsters). */
 void EndFloor();
 
+/**
+ * @brief The level piece to draw at a tile (dPiece coordinates): the level's own, except while a world lit with HD
+ * Lighting is recorded. Then the shadows Diablo painted into the floor and walls (beside pillars, arches and wall ends,
+ * all falling the same way) are left out, since that light casts its own, each away from its light.
+ */
+uint16_t PieceToDraw(Point tile);
+
 using RecordTileFn = void (*)(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl);
 using RecordSpriteFn = void (*)(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap);
 

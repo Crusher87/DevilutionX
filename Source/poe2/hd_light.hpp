@@ -85,6 +85,14 @@ bool Blocks(int x, int y);
  */
 int ShadowLights(float x, float y, ShadowLight *out, int maxCount, float &total, float &overhead);
 
+/**
+ * @brief The level piece to draw at a tile (dPiece coordinates) under this light: the level's own, except where the
+ * level painted one of Diablo's fixed shadows into the floor or a wall (beside pillars, arches and wall ends, all
+ * falling the same way). There the plain floor or wall is drawn, since this light casts its own shadows, each away
+ * from its light.
+ */
+uint16_t UnpaintedPiece(int x, int y, uint16_t piece);
+
 /** @brief Forgets the level's lights, e.g. when the renderer's caches are cleared. */
 void Reset();
 
