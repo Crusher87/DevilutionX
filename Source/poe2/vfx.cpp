@@ -1028,6 +1028,17 @@ Vec ArrowTip(const Missile &missile)
 	return MissileCentre(missile) + Tips[std::clamp(missile._miAnimFrame - 1, 0, 15)];
 }
 
+bool IsArrowGraphic(MissileGraphicID graphic)
+{
+	return IsAnyOf(graphic, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
+}
+
+/** @brief Where a flying missile's glow and trail start: an arrow's tip, or the centre of a bolt or ball. */
+Vec HeadOf(const Missile &missile)
+{
+	return IsArrowGraphic(missile._miAnimType) ? ArrowTip(missile) : MissileCentre(missile);
+}
+
 struct GraphicLook {
 	Element element;
 	/** @brief 0: not an effect of ours; otherwise the burst's size when it appears. */
@@ -1149,6 +1160,42 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 			p.size1 = 0.5F;
 			p.drag = 3.F;
 			p.alpha = 0.7F;
+			AddParticle(p);
+		}
+		return;
+	}
+	if (trail.arrow && trail.element == Element::Poison) {
+		// Venom clinging to the arrowhead: beads that wink out within a few frames and now and then a drop falling off the
+		// tip, so the green stays on the head with only a short, faint streak behind it. The general poison trail's drips
+		// started above the arrow and lived half a second, and its vapour almost a second: a fast arrow left them strewn
+		// far behind and beside it (Curtis, Rogue run 2: the green should be "closer to the tip of the arrow").
+		trail.emit += 60 * Intensity() * ms / 1000.F;
+		while (trail.emit >= 1) {
+			trail.emit -= 1;
+			Particle p;
+			p.c0 = c.core;
+			p.c1 = c.mid;
+			if (NextRandom() % 4 == 0) {
+				// A drop forms on the tip and falls a few pixels before it's gone.
+				const float fall = Random(6, 10);
+				p.pos = head + Vec { Random(-1, 1), fall };
+				p.z = fall;
+				p.vz = -50;
+				p.gravity = 300;
+				p.life = Random(60, 100);
+				p.size0 = 1.6F;
+				p.size1 = 1.1F;
+				p.c0 = c.mid;
+				p.c1 = c.edge;
+				p.alpha = 0.8F;
+			} else {
+				p.pos = head + Vec { Random(-1.5F, 1.5F), Random(-1, 1) };
+				p.vel = { Random(-6, 6), Random(-3, 3) };
+				p.life = Random(40, 80);
+				p.size0 = 1.8F;
+				p.size1 = 0.5F;
+				p.alpha = 0.55F;
+			}
 			AddParticle(p);
 		}
 		return;
@@ -4246,8 +4293,8 @@ void ScanMissiles()
 		}
 		if (!look.projectile || !missile._miDrawFlag)
 			continue;
-		const bool isArrow = IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
-		const Vec head = isArrow ? ArrowTip(missile) : MissileCentre(missile);
+		const bool isArrow = IsArrowGraphic(missile._miAnimType);
+		const Vec head = HeadOf(missile);
 		Trail &trail = Trails[&missile];
 		if (trail.frame == 0) {
 			trail.element = look.element;
@@ -4302,6 +4349,13 @@ void ScanMissiles()
 		if (bone)
 			glow.alpha *= 0.2F;
 		FrameGlows.push_back(glow);
+		if (arrow && look.element == Element::Poison) {
+			// A bead of venom bright on the poison arrow's head, where its glow is.
+			glow.r0 = glow.r1 = 3 * scale;
+			glow.colour = c.core;
+			glow.alpha = 0.6F * std::min(scale, 1.F);
+			FrameGlows.push_back(glow);
+		}
 		if (trail.style == TrailStyle::Orb && !small) {
 			// The orb throbs.
 			glow.r0 = glow.r1 = 30 * scale * (1 + 0.3F * std::sin(AmbientTime * 0.018F + head.x * 0.05F));
@@ -4368,7 +4422,7 @@ bool ReplacesSprite(const Missile &missile)
 	if (IsAnyOf(missile._mitype, MissileID::TownPortal, MissileID::RedPortal, MissileID::WeaponExplosion))
 		return true;
 	// Arrows keep their sprite: the effects only streak and spark them.
-	if (IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow))
+	if (IsArrowGraphic(missile._miAnimType))
 		return false;
 	return LookOf(missile._miAnimType).projectile;
 }
@@ -4904,6 +4958,15 @@ void Advance(float ms)
 size_t ParticleCount()
 {
 	return Particles.size();
+}
+
+float FarthestParticleFrom(const Missile &missile)
+{
+	const Vec head = HeadOf(missile);
+	float farthest = 0;
+	for (const Particle &p : Particles)
+		farthest = std::max(farthest, Length(p.pos - Vec { 0, p.z } - head));
+	return farthest;
 }
 
 size_t ShapeCount()

@@ -235,6 +235,8 @@ void Advance(float ms);
 
 /** @brief How many particles are alive (tests). */
 size_t ParticleCount();
+/** @brief How far the farthest particle is from a flying missile's head (an arrow's tip), in pixels (tests). */
+float FarthestParticleFrom(const Missile &missile);
 /** @brief How many rings, sigils, bolts, cracks and glows are alive (tests). */
 size_t ShapeCount();
 /** @brief How many flames, lava and water patches the last ScanWorld found (tests). */

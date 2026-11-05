@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -263,6 +264,36 @@ TEST_F(Poe2VfxTest, ArcingSparksAndChargedBoltLookApart)
 	missile.poe2.skillKind = 0;
 	missile.poe2.skillId = 0;
 	EXPECT_FALSE(vfx::IsArcingSpark(missile));
+}
+
+TEST_F(Poe2VfxTest, PlagueArrowsVenomStaysOnItsTip)
+{
+	// Rogue run 2: a flying Plague Arrow's green glow and drips were strewn behind and beside it; the owner wants the green
+	// "closer to the tip of the arrow", with only a short faint trail.
+	Missiles.clear();
+	Missile &arrow = Missiles.emplace_back();
+	arrow._mitype = MissileID::Arrow;
+	arrow._miAnimType = MissileGraphicID::Arrow;
+	arrow._miAnimWidth = 96;
+	arrow._miAnimFrame = 13;
+	arrow._miDrawFlag = true;
+	arrow._miDelFlag = false;
+	arrow.position.tile = { 40, 40 };
+	arrow.position.tileForRendering = { 40, 40 };
+	arrow.position.velocity = { 16, 8 };
+	arrow.poe2.vfxElement = static_cast<int8_t>(vfx::Element::Poison);
+	float farthest = 0;
+	for (int frame = 0; frame < 60; frame++) {
+		// About as fast as an arrow flies: 10 pixels a frame.
+		arrow.position.offsetForRendering = { frame * 9, frame * 4 };
+		vfx::ScanMissiles();
+		vfx::Advance(16);
+		farthest = std::max(farthest, vfx::FarthestParticleFrom(arrow));
+	}
+	EXPECT_GT(vfx::ParticleCount(), 0U);
+	// No further back than about an arrow's length.
+	EXPECT_LT(farthest, 60.F);
+	Missiles.clear();
 }
 
 /** @brief A screen of the dungeon showing nothing but one palette colour. */
