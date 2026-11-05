@@ -130,6 +130,12 @@ std::array<float, 256> WarmthOfBrightness {};
 
 std::array<uint8_t, MAXDUNX * MAXDUNY> BlockMap {};
 uint32_t BlockVersion = 0;
+/**
+ * @brief For each sample of the lattice in solid rock in front of a floor (towards the view) that no room faces, the
+ * open sample at the floor's edge it is lit through (-1 for none), and the BlockVersion that was worked out for.
+ */
+std::vector<int32_t> SpillRoot;
+uint32_t SpillVersion = 0;
 
 std::vector<Source> StaticSources;
 std::vector<Source> DynamicSources;
@@ -175,8 +181,6 @@ int WinH = 0;
 std::vector<float> WinBright;
 std::vector<std::array<float, 4>> WinHue;
 std::vector<uint8_t> WinSet;
-std::vector<float> SpillBright;
-std::vector<std::array<float, 4>> SpillHue;
 std::vector<Rgb> WinColour;
 std::vector<uint32_t> WinPixels;
 std::vector<uint32_t> WinMulPixels;
@@ -531,6 +535,109 @@ void UpdateBlocks()
 	}
 }
 
+/** @brief How far (in samples) in front of a floor's edge its light reaches into the rock: as far as any light shines. */
+constexpr int SpillSteps = static_cast<int>(NumLightRadiuses) * Per;
+
+/**
+ * @brief Works out which rock the floors' light reaches into (SpillRoot) when the walls change.
+ *
+ * FillWalls gives rock that faces a room (an open sample at most three samples in front of it) that room's light. Rock
+ * further in front of a floor, where the floor ends without a wall (the Cathedral's dirt edges, drawn as a field of dirt
+ * below the floor), is lit as the floor would be there: by each light as far from it as it is, seeing the lights the
+ * floor's edge behind it sees. Left dark, the dirt showed only its first row (lit from behind, see hd.cpp's
+ * LitFromBehind), as blocks with black lines between them, and a light fading out from the edge left the same lines a
+ * row or two further down.
+ */
+void UpdateSpill()
+{
+	if (SpillVersion == BlockVersion && !SpillRoot.empty())
+		return;
+	SpillVersion = BlockVersion;
+	const size_t count = static_cast<size_t>(LatticeW) * LatticeH;
+	// As FillWalls marks them: 1 for open samples, 2 to 4 for rock lit by the room in front of it.
+	std::vector<uint8_t> set(count, 0);
+	for (int j = 0; j < LatticeH; j++) {
+		for (int i = 0; i < LatticeW; i++)
+			set[static_cast<size_t>(j) * LatticeW + i] = SampleOpen(i, j) ? 1 : 0;
+	}
+	for (uint8_t pass = 1; pass <= 3; pass++) {
+		for (int j = 0; j < LatticeH; j++) {
+			for (int i = 0; i < LatticeW; i++) {
+				const size_t k = static_cast<size_t>(j) * LatticeW + i;
+				if (set[k] != 0)
+					continue;
+				for (const auto &step : { std::array<int, 2> { 1, 0 }, std::array<int, 2> { 0, 1 }, std::array<int, 2> { 1, 1 } }) {
+					const int ni = i + step[0];
+					const int nj = j + step[1];
+					if (ni >= LatticeW || nj >= LatticeH)
+						continue;
+					const uint8_t front = set[static_cast<size_t>(nj) * LatticeW + ni];
+					if (front != 0 && front <= pass) {
+						set[k] = pass + 1;
+						break;
+					}
+				}
+			}
+		}
+	}
+	SpillRoot.assign(count, -1);
+	// Steps from the edge, a step further each pass, and the samples the last pass reached.
+	std::vector<uint8_t> depth(count, 0);
+	std::vector<size_t> last;
+	std::vector<size_t> reached;
+	const auto reach = [&](int i, int j, int pass) {
+		const size_t k = static_cast<size_t>(j) * LatticeW + i;
+		if (set[k] != 0 || depth[k] != 0)
+			return;
+		// Straight behind first, so rock in front of a straight edge is lit through the edge right behind it.
+		for (const auto &step : { std::array<int, 2> { 0, 1 }, std::array<int, 2> { 1, 0 }, std::array<int, 2> { 1, 1 } }) {
+			const size_t n = static_cast<size_t>(j - step[1]) * LatticeW + (i - step[0]);
+			if (pass == 1 ? set[n] != 1 : depth[n] != pass - 1)
+				continue;
+			SpillRoot[k] = pass == 1 ? static_cast<int32_t>(n) : SpillRoot[n];
+			depth[k] = static_cast<uint8_t>(pass);
+			reached.push_back(k);
+			return;
+		}
+	};
+	for (int j = 1; j < LatticeH; j++) {
+		for (int i = 1; i < LatticeW; i++)
+			reach(i, j, 1);
+	}
+	for (int pass = 2; pass <= SpillSteps && !reached.empty(); pass++) {
+		last.swap(reached);
+		reached.clear();
+		for (const size_t k : last) {
+			const int i = static_cast<int>(k % LatticeW);
+			const int j = static_cast<int>(k / LatticeW);
+			for (const auto &step : { std::array<int, 2> { 1, 0 }, std::array<int, 2> { 0, 1 }, std::array<int, 2> { 1, 1 } }) {
+				if (i + step[0] < LatticeW && j + step[1] < LatticeH)
+					reach(i + step[0], j + step[1], pass);
+			}
+		}
+	}
+}
+
+/**
+ * @brief The open sample at the floor's edge a sample of rock is lit through (SpillRoot), as an index into a box of the
+ * lattice (w by h samples from i0, j0), and how far the sample is from it; -1 where the floors' light doesn't reach into
+ * the sample or its edge is outside the box.
+ */
+int EdgeInBox(int i, int j, int i0, int j0, int w, int h, float &extra)
+{
+	if (SpillRoot.empty())
+		return -1;
+	const int32_t root = SpillRoot[static_cast<size_t>(j) * LatticeW + i];
+	if (root < 0)
+		return -1;
+	const int ri = root % LatticeW;
+	const int rj = root / LatticeW;
+	if (ri < i0 || rj < j0 || ri >= i0 + w || rj >= j0 + h)
+		return -1;
+	extra = Length(SampleAt(i) - SampleAt(ri), SampleAt(j) - SampleAt(rj));
+	return (rj - j0) * w + (ri - i0);
+}
+
 /**
  * @brief The light a dungeon object gives (the ones lighting.cpp's AddObjectLight bakes into the level). Heights and
  * flame widths are measured from the objects' pictures, in tiles (a hero stands about 1.5 tall in the same measure).
@@ -638,19 +745,36 @@ void ShineStatic(const Source &source, std::vector<float> &lava)
 	const int i1 = std::min(LatticeW - 1, SampleBefore(source.x + reach) + 1);
 	const int j0 = std::max(0, SampleBefore(source.y - reach));
 	const int j1 = std::min(LatticeH - 1, SampleBefore(source.y + reach) + 1);
+	const int w = i1 - i0 + 1;
+	const int h = j1 - j0 + 1;
 	static std::vector<float> paths;
-	PathsFrom(source, i0, j0, i1 - i0 + 1, j1 - j0 + 1, paths);
+	PathsFrom(source, i0, j0, w, h, paths);
+	// How much of the light each open sample sees, for the rock lit through the floor's edge (EdgeInBox). An edge comes
+	// before the rock in front of it in this order.
+	static std::vector<float> seenAt;
+	seenAt.assign(paths.size(), 0.F);
 	for (int j = j0; j <= j1; j++) {
 		const float sy = SampleAt(j);
 		for (int i = i0; i <= i1; i++) {
-			if (!SampleOpen(i, j))
-				continue;
 			const float sx = SampleAt(i);
 			const float distance = Length(sx - source.x, sy - source.y);
 			if (distance >= reach)
 				continue;
-			const float path = paths[static_cast<size_t>(j - j0) * (i1 - i0 + 1) + (i - i0)];
-			const float seen = SeenFraction(source, sx, sy);
+			const size_t b = static_cast<size_t>(j - j0) * w + (i - i0);
+			float seen;
+			float path;
+			if (SampleOpen(i, j)) {
+				seen = SeenFraction(source, sx, sy);
+				seenAt[b] = seen;
+				path = paths[b];
+			} else {
+				float extra;
+				const int edge = EdgeInBox(i, j, i0, j0, w, h, extra);
+				if (edge < 0)
+					continue;
+				seen = seenAt[static_cast<size_t>(edge)];
+				path = paths[static_cast<size_t>(edge)] + extra;
+			}
 			const float linear = SampleLinear(source, distance, seen, path);
 			if (linear <= 1e-5F)
 				continue;
@@ -901,11 +1025,20 @@ void GatherDynamic(float heroX, float heroY)
 			const float sy = SampleAt(j);
 			for (int a = a0; a < a1; a++) {
 				const size_t r = static_cast<size_t>(b) * reach.w + a;
-				const float seen = static_cast<float>(reach.seen[r]) / 255.F;
-				const float path = reach.paths[r];
-				if (seen <= 0 && path > range)
-					continue;
+				float seen = static_cast<float>(reach.seen[r]) / 255.F;
+				float path = reach.paths[r];
 				const int i = reach.i0 + a;
+				if (seen <= 0 && path > range) {
+					// Rock in front of a floor's edge sees what the edge sees (UpdateSpill).
+					float extra;
+					const int edge = EdgeInBox(i, j, reach.i0, reach.j0, reach.w, reach.h, extra);
+					if (edge < 0)
+						continue;
+					seen = static_cast<float>(reach.seen[static_cast<size_t>(edge)]) / 255.F;
+					path = reach.paths[static_cast<size_t>(edge)] + extra;
+					if (seen <= 0 && path > range)
+						continue;
+				}
 				const float distance = Length(SampleAt(i) - source.x, sy - source.y);
 				if (distance >= range && path > range)
 					continue;
@@ -960,57 +1093,6 @@ void FillWalls()
 	}
 }
 
-/** @brief How far (in tiles) a floor's light reaches into the solid rock in front of its edge, fading out. */
-constexpr float RockSpill = 4.F;
-/** @brief WinSet marks samples SpillIntoRock lit as SpillLevel plus the pass that lit them (FillWalls uses 1 to 4). */
-constexpr uint8_t SpillLevel = 10;
-
-/**
- * @brief Samples in solid rock in front of a floor (towards the view) that no room faces take the light of the floor
- * behind them, fading out over RockSpill tiles. Where a floor ends without a wall (the Cathedral's dirt edges) the game
- * draws the rock it drops into as a field of dirt, lit like the floor beside it. Left dark, only its first row showed
- * (lit from behind, see hd.cpp's LitFromBehind), as blocks with black lines between them.
- */
-void SpillIntoRock()
-{
-	SpillBright.assign(WinBright.size(), 0.F);
-	SpillHue.resize(WinHue.size());
-	const int passes = static_cast<int>(RockSpill * Per);
-	for (int pass = 1; pass <= passes; pass++) {
-		const auto source = static_cast<uint8_t>(pass == 1 ? 1 : SpillLevel + pass - 1);
-		// Fades evenly as drawn (brightness is linear light to the power 1/Gamma).
-		const float fade = std::pow(1.F - static_cast<float>(pass) / static_cast<float>(passes + 1), Gamma);
-		for (int j = 1; j < WinH; j++) {
-			for (int i = 1; i < WinW; i++) {
-				const size_t k = static_cast<size_t>(j) * WinW + i;
-				if (WinSet[k] != 0)
-					continue;
-				int best = -1;
-				float bestBright = 0;
-				for (const auto &step : { std::array<int, 2> { 1, 0 }, std::array<int, 2> { 0, 1 }, std::array<int, 2> { 1, 1 } }) {
-					const size_t n = static_cast<size_t>(j - step[1]) * WinW + (i - step[0]);
-					if (WinSet[n] != source)
-						continue;
-					const float bright = pass == 1 ? WinBright[n] : SpillBright[n];
-					if (best < 0 || bright > bestBright) {
-						best = static_cast<int>(n);
-						bestBright = bright;
-					}
-				}
-				if (best < 0)
-					continue;
-				const auto from = static_cast<size_t>(best);
-				SpillBright[k] = bestBright;
-				SpillHue[k] = pass == 1 ? WinHue[from] : SpillHue[from];
-				WinBright[k] += bestBright * fade;
-				for (int c = 0; c < 4; c++)
-					WinHue[k][c] += SpillHue[k][c] * fade;
-				WinSet[k] = static_cast<uint8_t>(SpillLevel + pass);
-			}
-		}
-	}
-}
-
 void Finish()
 {
 	const Look &look = CurrentLook;
@@ -1045,6 +1127,7 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 		return false;
 	UpdateLook(look);
 	UpdateBlocks();
+	UpdateSpill();
 	UpdateStatics();
 
 	WinI0 = std::clamp(SampleBefore(std::min(x0, x1)) - 1, 0, LatticeW - 1);
@@ -1067,7 +1150,6 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 	}
 	GatherDynamic(heroX, heroY);
 	FillWalls();
-	SpillIntoRock();
 	Finish();
 	return true;
 }
@@ -1362,6 +1444,7 @@ uint16_t UnpaintedPiece(int x, int y, uint16_t piece)
 void Reset()
 {
 	BuiltStatics = {};
+	SpillRoot.clear();
 	for (Reach &reach : Reaches)
 		reach.radius = -1;
 	HaveLook = false;
