@@ -56,6 +56,7 @@
 #include "tables/objdat.h"
 #include "towners.h"
 #include "track.h"
+#include "engine/render/text_render.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/endian_swap.hpp"
 #include "utils/format.hpp"
@@ -63,6 +64,7 @@
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
+#include "utils/str_split.hpp"
 
 namespace devilution {
 
@@ -5111,9 +5113,15 @@ void GetObjectStr(const Object &object)
 		InfoColor = UiFlags::ColorRed;
 	}
 	if (gbIsPoe2 && object.IsShrine() && object.canInteractWith() && object._oVar1 != ShrineTown) {
-		std::string effect = ShrineHoverText(static_cast<ShrineKind>(object._oVar1));
-		if (!effect.empty())
-			AddInfoBoxString(std::move(effect));
+		auto [power, text] = ShrineHoverLines(static_cast<ShrineKind>(object._oVar1));
+		if (!power.empty())
+			AddInfoBoxString(std::move(power));
+		// Wrapped to the info box's width: it squeezes a line that doesn't fit until the letters overlap.
+		if (!text.empty()) {
+			const std::string wrapped = WordWrapString(text, InfoBoxRect.size.width - 8, GameFont12, 2);
+			for (const std::string_view line : SplitByChar(wrapped, '\n'))
+				AddInfoBoxString(line);
+		}
 	}
 }
 

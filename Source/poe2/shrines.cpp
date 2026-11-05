@@ -689,6 +689,15 @@ std::string ShrineHoverText(ShrineKind kind)
 	return StrCat(shrine.power, ": ", shrine.text, " (", shrine.seconds, "s)");
 }
 
+std::pair<std::string, std::string> ShrineHoverLines(ShrineKind kind)
+{
+	const ShrineData &shrine = GetShrineData(kind);
+	if (shrine.kind >= ShrineKind::Count)
+		return {};
+	std::string title = shrine.seconds <= 0 ? std::string(shrine.power) : StrCat(shrine.power, " (", shrine.seconds, "s)");
+	return { std::move(title), std::string(shrine.text) };
+}
+
 void ProcessShrineBuffs(Player &player)
 {
 	if (!gbIsPoe2)

@@ -167,6 +167,11 @@ void ApplyShrineGrant(Player &player, const ShrineGrant &grant);
 [[nodiscard]] std::string ShrineGrantLine(const ShrineGrant &grant);
 /** @brief What hovering a shrine shows under its name. */
 [[nodiscard]] std::string ShrineHoverText(ShrineKind kind);
+/**
+ * @brief The same as two parts for the info box, which squeezes a long line until it can't be read:
+ * the power and its time ("Meteoric (45s)"), then what it does. Both are empty for an unknown kind.
+ */
+[[nodiscard]] std::pair<std::string, std::string> ShrineHoverLines(ShrineKind kind);
 
 // Every game tick, and the level.
 

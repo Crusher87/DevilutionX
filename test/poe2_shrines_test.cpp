@@ -459,6 +459,10 @@ TEST_F(Poe2ShrinesTest, TooltipsAreOneLine)
 	for (size_t i = 0; i < static_cast<size_t>(ShrineKind::Count); i++) {
 		const auto kind = static_cast<ShrineKind>(i);
 		EXPECT_EQ(ShrineHoverText(kind).find('\n'), std::string::npos);
+		const auto [power, text] = ShrineHoverLines(kind);
+		EXPECT_FALSE(power.empty());
+		EXPECT_FALSE(text.empty());
+		EXPECT_EQ(power.find(':'), std::string::npos);
 		Give(state, kind);
 		if (const ShrineBuff *newest = NewestShrineBuff(state); newest != nullptr && newest->kind == kind) {
 			EXPECT_EQ(ShrineBuffTooltip(*newest).find('\n'), std::string::npos);

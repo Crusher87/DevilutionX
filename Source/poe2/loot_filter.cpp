@@ -485,4 +485,17 @@ std::vector<LootMapIcon> CollectLootMapIcons()
 	return icons;
 }
 
+std::optional<uint8_t> LitGroundOutline(uint8_t color, int lightTableIndex)
+{
+	if (lightTableIndex >= 12)
+		return std::nullopt;
+	// The loot filter's colours can also come from the 8-shade groups (128 to 159): darken within those, not into the next.
+	if (color >= 128 && color < 160) {
+		const int shade8 = std::min((color & 7) + std::max(lightTableIndex, 0) / 4, 7);
+		return static_cast<uint8_t>((color & ~7) | shade8);
+	}
+	const int shade = std::min((color & 15) + std::max(lightTableIndex, 0) / 2, 15);
+	return static_cast<uint8_t>((color & ~15) | shade);
+}
+
 } // namespace devilution

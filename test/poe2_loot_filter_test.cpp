@@ -170,5 +170,16 @@ TEST_F(Poe2LootFilterTest, NeverSinksIconShapes)
 	EXPECT_FALSE(IsInMapIconShape(MapIconShape::Moon, 3, 0, 5)) << "the crescent's hollow";
 }
 
+TEST_F(Poe2LootFilterTest, GroundOutlinesFadeIntoTheDark)
+{
+	EXPECT_EQ(LitGroundOutline(PAL8_RED + 1, 8), PAL8_RED + 3) << "an 8-shade colour stays in its own group";
+	EXPECT_EQ(LitGroundOutline(PAL8_BLUE + 6, 11), PAL8_BLUE + 7);
+	EXPECT_EQ(LitGroundOutline(PAL16_BLUE + 6, 0), PAL16_BLUE + 6);
+	EXPECT_EQ(LitGroundOutline(PAL16_BLUE + 6, 6), PAL16_BLUE + 9);
+	EXPECT_EQ(LitGroundOutline(PAL16_GRAY + 9, 11), PAL16_GRAY + 14);
+	EXPECT_FALSE(LitGroundOutline(PAL16_YELLOW + 4, 12).has_value());
+	EXPECT_FALSE(LitGroundOutline(PAL16_YELLOW + 4, 15).has_value());
+}
+
 } // namespace
 } // namespace devilution
