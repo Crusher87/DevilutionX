@@ -365,4 +365,19 @@ TEST_F(Poe2CornerMapTest, YourOwnTownPortalShowsFromAnywhere)
 }
 
 } // namespace
+TEST_F(Poe2CornerMapTest, EnteringTownDropsTheLastDungeonsObjects)
+{
+	// Town has no objects; the dungeon's stay in the list with their graphics freed, and a crash on starting a new
+	// game in town (11-05) came from the flame effects reading one of them.
+	ActiveObjectCount = 2;
+	ActiveObjects[0] = 3;
+	ActiveObjects[1] = 7;
+	Objects[3]._otype = OBJ_L1LIGHT;
+	Objects[7]._otype = OBJ_TBCROSS;
+	ClearObjectsForTown();
+	EXPECT_EQ(ActiveObjectCount, 0);
+	EXPECT_FALSE(Objects[3]._oAnimData);
+	EXPECT_FALSE(Objects[7]._oAnimData);
+}
+
 } // namespace devilution

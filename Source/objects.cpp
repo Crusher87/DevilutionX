@@ -3881,6 +3881,13 @@ void FreeObjectGFX()
 	numobjfiles = 0;
 }
 
+void ClearObjectsForTown()
+{
+	// Town has no objects. The last dungeon's stay in the list with their graphics already freed, so anything that
+	// walks the list in town (flame effects, HD lights, map marks) would read a freed sprite: drop them.
+	ClrAllObjects();
+}
+
 void AddL1Objs(int x1, int y1, int x2, int y2)
 {
 	for (int j = y1; j < y2; j++) {

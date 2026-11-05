@@ -3703,6 +3703,7 @@ std::expected<void, std::string> LoadGameLevelTown(bool firstflag, lvl_entry lvl
 		}
 	}
 
+	ClearObjectsForTown();
 	InitTowners();
 	InitStash();
 	InitVisualStore();

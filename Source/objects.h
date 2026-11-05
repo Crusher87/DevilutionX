@@ -331,6 +331,8 @@ bool IsItemBlockingObjectAtPosition(Point position);
 
 std::expected<void, std::string> InitObjectGFX();
 void FreeObjectGFX();
+/** @brief Empties the object list on entering town, which has no objects of its own. */
+void ClearObjectsForTown();
 void AddL1Objs(int x1, int y1, int x2, int y2);
 void AddL2Objs(int x1, int y1, int x2, int y2);
 void AddL3Objs(int x1, int y1, int x2, int y2);
