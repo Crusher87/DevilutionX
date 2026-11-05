@@ -166,7 +166,8 @@ void DrawItemNameLabels(const Surface &out)
 			for (unsigned j = 0; j < i; ++j) {
 				ItemLabel &a = labelQueue[i];
 				const ItemLabel &b = labelQueue[j];
-				if (std::abs(b.pos.y - a.pos.y) < labelHeight + BorderY) {
+				// POE2 Mashup: room for the loot filter's borders, drawn round the outside of the labels.
+				if (std::abs(b.pos.y - a.pos.y) < labelHeight + BorderY + (gbIsPoe2 ? 4 : 0)) {
 					const int widthA = a.width + BorderX + (MarginX * 2);
 					const int widthB = b.width + BorderX + (MarginX * 2);
 					int newpos = b.pos.x;
@@ -206,12 +207,30 @@ void DrawItemNameLabels(const Surface &out)
 				pcursitem = label.id;
 			}
 		}
+		// POE2 Mashup: with the loot filter on, the label takes the item's NeverSink colours (Curtis 2026-11-05).
+		const LootStyle *style = LootFilterStyle(item);
 		if (pcursitem == label.id && !IsPlayerInStore())
 			FillRect(clippedOut, label.pos.x, label.pos.y, label.width, labelHeight, PAL8_BLUE + 6);
+		else if (style != nullptr && style->background)
+			FillRect(clippedOut, label.pos.x, label.pos.y, label.width, labelHeight, NearestLootPaletteColour(*style->background));
 		else
 			DrawHalfTransparentRectTo(clippedOut, label.pos.x, label.pos.y, label.width, labelHeight);
+		if (style != nullptr && style->border) {
+			const uint8_t border = NearestLootPaletteColour(*style->border);
+			const int thickness = style->big ? 2 : 1;
+			for (int i = 0; i < thickness; i++) {
+				const int x = label.pos.x - 1 - i;
+				const int y = label.pos.y - 1 - i;
+				const int w = label.width + 2 + (2 * i);
+				const int h = labelHeight + 2 + (2 * i);
+				DrawHorizontalLine(clippedOut, { x, y }, w, border);
+				DrawHorizontalLine(clippedOut, { x, y + h - 1 }, w, border);
+				DrawVerticalLine(clippedOut, { x, y }, h, border);
+				DrawVerticalLine(clippedOut, { x + w - 1, y }, h, border);
+			}
+		}
 		DrawString(clippedOut, label.text, { { label.pos.x + MarginX, label.pos.y + labelMarginTop }, { label.width, labelHeight } },
-		    { .flags = item.getTextColor() });
+		    { .flags = style != nullptr ? style->text : item.getTextColor() });
 	}
 	labelQueue.clear();
 }

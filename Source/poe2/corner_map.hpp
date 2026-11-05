@@ -55,6 +55,12 @@ enum class MapIconShape : uint8_t {
 	TriangleUp,
 	TriangleDown,
 	Cross,
+	// The loot filter's icons (NeverSink's shapes).
+	Star,
+	Hexagon,
+	Pentagon,
+	Kite,
+	Moon,
 };
 
 struct MapIconStyle {

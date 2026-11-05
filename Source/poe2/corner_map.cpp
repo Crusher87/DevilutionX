@@ -1,6 +1,7 @@
 #include "poe2/corner_map.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 #include "automap.h"
@@ -17,6 +18,7 @@
 #include "objects.h"
 #include "options.h"
 #include "poe2/floor_chests.hpp"
+#include "poe2/loot_filter.hpp"
 #include "poe2/monster_mods.hpp"
 #include "utils/is_of.hpp"
 #include "utils/log.hpp"
@@ -157,6 +159,42 @@ void DrawLabel(const Surface &out, const Rectangle &clip, Point middle, int radi
 	const Point at = box.position - Displacement { clip.position.x, clip.position.y };
 	DrawString(clipped, text, { at + Displacement { 1, 1 }, box.size }, { .flags = UiFlags::ColorBlack, .spacing = 0 });
 	DrawString(clipped, text, { at, box.size }, { .flags = UiFlags::ColorWhite, .spacing = 0 });
+}
+
+/** @brief Corners of a shape one unit in radius, y down, going round. */
+using ShapePoints = std::vector<std::pair<float, float>>;
+
+ShapePoints RegularPoints(int corners, float innerRatio)
+{
+	ShapePoints points;
+	const int count = innerRatio > 0 ? corners * 2 : corners;
+	for (int i = 0; i < count; i++) {
+		// The first corner points straight up.
+		const float angle = -1.5707964F + (6.2831855F * static_cast<float>(i) / static_cast<float>(count));
+		const float r = (innerRatio > 0 && i % 2 == 1) ? innerRatio : 1.F;
+		points.emplace_back(r * std::cos(angle), r * std::sin(angle));
+	}
+	return points;
+}
+
+const ShapePoints StarPoints = RegularPoints(5, 0.45F);
+const ShapePoints PentagonPoints = RegularPoints(5, 0);
+const ShapePoints HexagonPoints = RegularPoints(6, 0);
+const ShapePoints KitePoints { { 0.F, -1.F }, { 0.7F, -0.2F }, { 0.F, 1.F }, { -0.7F, -0.2F } };
+
+/** @brief Whether a pixel at (dx, dy) from the middle is inside the shape scaled to the radius (even-odd rule). */
+bool IsInPolygon(const ShapePoints &points, int dx, int dy, int radius)
+{
+	const float x = static_cast<float>(dx) / (static_cast<float>(radius) + 0.5F);
+	const float y = static_cast<float>(dy) / (static_cast<float>(radius) + 0.5F);
+	bool inside = false;
+	for (size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
+		const auto [xi, yi] = points[i];
+		const auto [xj, yj] = points[j];
+		if ((yi > y) != (yj > y) && x < ((xj - xi) * (y - yi) / (yj - yi)) + xi)
+			inside = !inside;
+	}
+	return inside;
 }
 
 void ResetAnchorOnNewLevel()
@@ -312,6 +350,21 @@ bool IsInMapIconShape(MapIconShape shape, int dx, int dy, int radius)
 		return 2 * ax <= radius - dy;
 	case MapIconShape::Cross:
 		return ax <= radius / 3 || ay <= radius / 3;
+	case MapIconShape::Star:
+		return IsInPolygon(StarPoints, dx, dy, radius);
+	case MapIconShape::Hexagon:
+		return IsInPolygon(HexagonPoints, dx, dy, radius);
+	case MapIconShape::Pentagon:
+		return IsInPolygon(PentagonPoints, dx, dy, radius);
+	case MapIconShape::Kite:
+		return IsInPolygon(KitePoints, dx, dy, radius);
+	case MapIconShape::Moon: {
+		// A crescent: the disc less the same disc shifted right and up.
+		const int r2 = (radius * radius) + radius / 2;
+		const int sx = dx - (radius / 2) - 1;
+		const int sy = dy + (radius / 3);
+		return (dx * dx) + (dy * dy) <= r2 && (sx * sx) + (sy * sy) > r2;
+	}
 	}
 	return false;
 }
@@ -405,10 +458,16 @@ void DrawMapMarkers(const Surface &out, const Rectangle &clip, int scale, tl::fu
 {
 	if (MyPlayer == nullptr)
 		return;
+	const int radius = MapIconRadius(scale);
+	// The loot filter's icons go under the level's markers: NeverSink's big, medium and small sizes.
+	for (const LootMapIcon &icon : CollectLootMapIcons()) {
+		const Point middle = tileToScreen(icon.tile);
+		if (clip.contains(middle))
+			DrawMapIcon(out, middle, icon.style, std::max(radius - 1, 2) + (2 - std::min<int>(icon.size, 2)), clip);
+	}
 	const std::vector<MapMarker> markers = CollectMapMarkers(MyPlayer->position.tile);
 	if (markers.empty())
 		return;
-	const int radius = MapIconRadius(scale);
 	const bool names = *GetOptions().Gameplay.mapPoiNames;
 	std::vector<Rectangle> taken;
 	for (const MapMarker &marker : markers) {

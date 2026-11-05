@@ -27,6 +27,7 @@
 #include "engine/size.hpp"
 #include "engine/surface.hpp"
 #include "headless_mode.hpp"
+#include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
@@ -37,6 +38,7 @@
 #include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/floor_chests.hpp"
+#include "poe2/loot_filter.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_looks.hpp"
@@ -418,6 +420,19 @@ struct Beam {
 };
 
 std::vector<Beam> Beams;
+
+/** @brief A loot filter beam: a steady column of light over a good item on the ground, this frame. */
+struct LootBeamFx {
+	Vec pos;
+	Rgb colour;
+	float alpha;
+	/** @brief Its own shimmer, so no two beams pulse together. */
+	float phase;
+};
+
+std::vector<LootBeamFx> LootBeams;
+/** @brief When each ground item on the level was first in sight, for the beams that show only for a while (by item seed). */
+std::unordered_map<uint32_t, float> LootSeenAt;
 
 constexpr int RitualRunes = 15;
 // The level-up circle's timeline, in ms from the start.
@@ -2317,6 +2332,35 @@ void ScanStrongboxes(const View &view)
 	}
 }
 
+/**
+ * @brief The loot filter's beams over good items on the ground in sight (Curtis 2026-11-05), NeverSink's colours. A
+ * "Temp" beam shows only for a few seconds after its item is first seen, fading out at the end.
+ */
+void ScanLoot(const View &view)
+{
+	for (int i = 0; i < ActiveItemCount; i++) {
+		const Item &item = Items[ActiveItems[i]];
+		const Point tile = item.position;
+		// Only in sight: nothing lights up in the dark or behind a wall (Curtis 2026-11-05).
+		if (item.isEmpty() || !InDungeonBounds(tile) || !HasAnyOf(dFlags[tile.x][tile.y], DungeonFlag::Visible) || BehindWall(tile))
+			continue;
+		const Vec feet = TileCentre(tile);
+		if (!view.contains(feet, 300))
+			continue;
+		const uint32_t key = item._iSeed;
+		const auto seen = LootSeenAt.try_emplace(key, AmbientTime).first;
+		const float since = AmbientTime - seen->second;
+		const std::optional<LootRgb> colour = LootBeamColour(item, since);
+		if (!colour)
+			continue;
+		const LootStyle *style = LootFilterStyle(item);
+		float alpha = std::clamp(since / 250.F, 0.F, 1.F);
+		if (style != nullptr && style->beamTemp)
+			alpha *= std::clamp((LootTempBeamMs - since) / 800.F, 0.F, 1.F);
+		LootBeams.push_back({ feet, { colour->r, colour->g, colour->b }, alpha, static_cast<float>(key % 997) });
+	}
+}
+
 void ScanTowners(const View &view)
 {
 	if (MyPlayer == nullptr) {
@@ -3221,6 +3265,8 @@ Surface FrontMask()
 void Clear()
 {
 	Particles.clear();
+	LootBeams.clear();
+	LootSeenAt.clear();
 	Rings.clear();
 	Bolts.clear();
 	Sigils.clear();
@@ -4498,6 +4544,7 @@ void ScanWorld(const Surface &world)
 	Emitters.clear();
 	Halos.clear();
 	QuestMarks.clear();
+	LootBeams.clear();
 	if (!Enabled() || world.w() <= 0 || world.h() <= 0)
 		return;
 	const View view { CameraOrigin, CameraOrigin + Vec { static_cast<float>(world.w()), static_cast<float>(world.h()) } * (1 / CameraScale) };
@@ -4506,6 +4553,7 @@ void ScanWorld(const Surface &world)
 	ScanFluids(world, view);
 	ScanMonsters(view);
 	ScanTowners(view);
+	ScanLoot(view);
 }
 
 Colours PortalColours(const PortalFx &portal)
@@ -6089,6 +6137,22 @@ void DrawGlyph(Vec centre, float size, float angle, uint32_t seed, Rgb colour, f
 		SoftLine(Glowing, at(u, v), at(nu, nv), 2.2F, colour, colour, alpha, alpha);
 		u = nu;
 		v = nv;
+	}
+}
+
+/** @brief The loot filter's beams: a tall soft column of light with a bright thread down its middle and a pool at its foot. */
+void DrawLootBeams()
+{
+	for (const LootBeamFx &beam : LootBeams) {
+		const float shimmer = 0.85F + (0.15F * std::sin((AmbientTime * 0.004F) + beam.phase));
+		const float a = beam.alpha * shimmer;
+		const Rgb core = Mix(beam.colour, { 255, 255, 255 }, 0.6F);
+		const Vec foot = beam.pos;
+		const Vec top = foot - Vec { 0, 300 };
+		SoftDisc(Ground, foot, 18, beam.colour, 0.35F * a, true);
+		SoftLine(Glowing, foot, top, 16, beam.colour, beam.colour, 0.22F * a, 0);
+		SoftLine(Glowing, foot, top, 6, beam.colour, beam.colour, 0.6F * a, 0);
+		SoftLine(Glowing, foot, top - Vec { 0, -60 }, 1.8F, core, core, 0.8F * a, 0);
 	}
 }
 
@@ -8195,7 +8259,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
 		FrontFresh = false;
 		return;
 	}
@@ -8223,6 +8287,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawMiasmas();
 	DrawRituals();
 	DrawBeams();
+	DrawLootBeams();
 	DrawIceSpikes();
 	DrawRings();
 	DrawComets();

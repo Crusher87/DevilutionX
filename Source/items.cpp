@@ -93,6 +93,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/jewels.hpp"
 #include "poe2/loot.hpp"
+#include "poe2/loot_filter.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
@@ -6099,8 +6100,11 @@ void ProcessItems()
 			if (item.selectionRegion == SelectionRegion::Middle && item.AnimInfo.currentFrame == 19) // Reached end of elevated frames, cycle back
 				item.AnimInfo.currentFrame = 10;                                                     // Beginning of elevated frames
 		} else {
-			if (item.AnimInfo.currentFrame == (item.AnimInfo.numberOfFrames - 1) / 2)
+			if (item.AnimInfo.currentFrame == (item.AnimInfo.numberOfFrames - 1) / 2) {
 				PlaySfxLoc(ItemDropSnds[ItemCAnimTbl[item._iCurs]], item.position);
+				// POE2 Mashup: the loot filter's drop sound for good items (Curtis 2026-11-05).
+				PlayLootFilterDropSound(item);
+			}
 
 			if (item.AnimInfo.isLastFrame()) {
 				item.AnimInfo.currentFrame = item.AnimInfo.numberOfFrames - 1;
