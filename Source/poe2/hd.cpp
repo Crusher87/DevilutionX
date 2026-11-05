@@ -1894,8 +1894,11 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		const float limit = RoomFor(wx, wy, dx, dy, std::clamp(source.reach - distance, 0.F, CastReach));
 		if (limit < 0.05F)
 			continue;
-		// Each height of the body lands this far out (behind the feet, below the floor point the art stands on).
-		const auto landsAt = [&](float z) { return z <= 0 ? distance * z / lightHeight : distance * z / (lightHeight - z); };
+		// Each height of the body lands this far out behind the feet. The picture below the floor point the art stands
+		// on is what touches the floor in front of the feet: it stays near them (cast like the body, it would reach far
+		// towards a low light such as lava).
+		const float underSlope = std::min(distance / lightHeight, 0.5F);
+		const auto landsAt = [&](float z) { return z <= 0 ? z * underSlope : distance * z / (lightHeight - z); };
 		// The top of the body's part of the pictures and their bottom row, and the highest part of the body whose shadow
 		// still lands on the floor.
 		const float topZ = (feet + pad - vTop * texHeight) * HeightPerPixel;

@@ -58,9 +58,15 @@ struct ShadowLight {
 	float fill = 0;
 	/** @brief How far from it its light reaches, in tiles. */
 	float reach = 0;
-	/** @brief Which light it is, for LinearOf. */
+	/** @brief Which light it is, for LinearOf (LavaLight for all the lava the point sees, as one light). */
 	int source = -1;
+	/** @brief For the lava's light: how bright it is against one lava tile at its middle, and how far its light falls off. */
+	float power = 0;
+	int radius = 0;
 };
+
+/** @brief ShadowLight::source for the light of all the lava a point sees, shining as one wide light lying on the floor. */
+constexpr int LavaLight = -2;
 
 /** @brief Light adds up as linear light: brightness as drawn (0 to 1) to linear light and back (a 2.2 gamma, as sRGB). */
 float ToLinear(float brightness);
