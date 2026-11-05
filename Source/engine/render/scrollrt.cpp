@@ -976,8 +976,12 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
 	}
 	const ClxSprite sprite = item.AnimInfo.currentSprite();
 	const Point position = targetBufferPosition + item.getRenderingOffset(sprite);
-	if (!IsPlayerInStore() && (itemIndex == pcursitem || AutoMapShowItems)) {
-		ClxDrawOutlineSkipColorZero(out, GetOutlineColor(item, false), position, sprite);
+	if (!IsPlayerInStore()) {
+		if (itemIndex == pcursitem || AutoMapShowItems) {
+			ClxDrawOutlineSkipColorZero(out, GetOutlineColor(item, false), position, sprite);
+		} else if (const std::optional<uint8_t> outline = GroundItemOutlineColor(item); outline) {
+			ClxDrawOutlineSkipColorZero(out, *outline, position, sprite);
+		}
 	}
 	ClxDrawLight(out, position, sprite, lightTableIndex);
 	if (item.AnimInfo.isLastFrame() || item._iCurs == ICURS_MAGIC_ROCK)

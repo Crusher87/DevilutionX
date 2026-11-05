@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "engine/palette.h"
+#include "game_mode.hpp"
 #include "items.h"
 #include "poe2/loot_filter.hpp"
 
@@ -40,6 +42,21 @@ TEST(Poe2LootFilterTest, ValuableItemsAlwaysShow)
 		EXPECT_FALSE(IsItemHiddenByLootFilter(MakeItem(ItemType::Amulet, ICLASS_MISC, ITEM_QUALITY_UNIQUE), filter));
 		EXPECT_FALSE(IsItemHiddenByLootFilter(MakeItem(ItemType::Sword, ICLASS_QUEST, ITEM_QUALITY_NORMAL), filter));
 	}
+}
+
+TEST(Poe2LootFilterTest, GroundItemsGetARarityOutlineInPoe2)
+{
+	const bool wasPoe2 = gbIsPoe2;
+	gbIsPoe2 = false;
+	EXPECT_FALSE(GroundItemOutlineColor(MakeItem(ItemType::Sword, ICLASS_WEAPON, ITEM_QUALITY_RARE)).has_value());
+	gbIsPoe2 = true;
+	EXPECT_FALSE(GroundItemOutlineColor(Item {}).has_value());
+	EXPECT_EQ(GroundItemOutlineColor(MakeItem(ItemType::Sword, ICLASS_WEAPON, ITEM_QUALITY_NORMAL)), PAL16_GRAY + 9);
+	EXPECT_EQ(GroundItemOutlineColor(MakeItem(ItemType::Helm, ICLASS_ARMOR, ITEM_QUALITY_MAGIC)), PAL16_BLUE + 6);
+	EXPECT_EQ(GroundItemOutlineColor(MakeItem(ItemType::Axe, ICLASS_WEAPON, ITEM_QUALITY_RARE)), PAL16_YELLOW + 4);
+	EXPECT_EQ(GroundItemOutlineColor(MakeItem(ItemType::Amulet, ICLASS_MISC, ITEM_QUALITY_UNIQUE)), PAL16_ORANGE + 4);
+	EXPECT_EQ(GroundItemOutlineColor(MakeItem(ItemType::Gold, ICLASS_GOLD, ITEM_QUALITY_NORMAL)), PAL16_YELLOW + 8);
+	gbIsPoe2 = wasPoe2;
 }
 
 } // namespace
