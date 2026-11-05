@@ -59,5 +59,14 @@ TEST(Poe2LootFilterTest, GroundItemsGetARarityOutlineInPoe2)
 	gbIsPoe2 = wasPoe2;
 }
 
+TEST(Poe2LootFilterTest, GroundOutlinesFadeIntoTheDark)
+{
+	EXPECT_EQ(LitGroundOutline(PAL16_BLUE + 6, 0), PAL16_BLUE + 6);
+	EXPECT_EQ(LitGroundOutline(PAL16_BLUE + 6, 6), PAL16_BLUE + 9);
+	EXPECT_EQ(LitGroundOutline(PAL16_GRAY + 9, 11), PAL16_GRAY + 14);
+	EXPECT_FALSE(LitGroundOutline(PAL16_YELLOW + 4, 12).has_value());
+	EXPECT_FALSE(LitGroundOutline(PAL16_YELLOW + 4, 15).has_value());
+}
+
 } // namespace
 } // namespace devilution

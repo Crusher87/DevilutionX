@@ -27,4 +27,12 @@ bool IsItemHiddenByLootFilter(const Item &item);
  */
 std::optional<uint8_t> GroundItemOutlineColor(const Item &item);
 
+/**
+ * @brief Darkens a ground outline to the light on the item's tile, so items in the dark stay hidden.
+ *
+ * Takes a shade from a 16-shade palette group and the tile's light table index (0 brightest, 15 black); the outline
+ * fades a shade per two light steps and is gone where the floor is near black.
+ */
+std::optional<uint8_t> LitGroundOutline(uint8_t color, int lightTableIndex);
+
 } // namespace devilution

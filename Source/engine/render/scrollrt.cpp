@@ -980,7 +980,8 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
 		if (itemIndex == pcursitem || AutoMapShowItems) {
 			ClxDrawOutlineSkipColorZero(out, GetOutlineColor(item, false), position, sprite);
 		} else if (const std::optional<uint8_t> outline = GroundItemOutlineColor(item); outline) {
-			ClxDrawOutlineSkipColorZero(out, *outline, position, sprite);
+			if (const std::optional<uint8_t> lit = LitGroundOutline(*outline, lightTableIndex); lit)
+				ClxDrawOutlineSkipColorZero(out, *lit, position, sprite);
 		}
 	}
 	ClxDrawLight(out, position, sprite, lightTableIndex);

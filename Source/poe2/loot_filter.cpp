@@ -1,5 +1,7 @@
 #include "poe2/loot_filter.hpp"
 
+#include <algorithm>
+
 #include "engine/palette.h"
 #include "game_mode.hpp"
 #include "items.h"
@@ -52,6 +54,14 @@ std::optional<uint8_t> GroundItemOutlineColor(const Item &item)
 	if (item._iClass == ICLASS_MISC && IsCurrencyMiscId(item._iMiscId))
 		return PAL16_BEIGE + 4;
 	return PAL16_GRAY + 9;
+}
+
+std::optional<uint8_t> LitGroundOutline(uint8_t color, int lightTableIndex)
+{
+	if (lightTableIndex >= 12)
+		return std::nullopt;
+	const int shade = std::min((color & 15) + std::max(lightTableIndex, 0) / 2, 15);
+	return static_cast<uint8_t>((color & ~15) | shade);
 }
 
 } // namespace devilution
