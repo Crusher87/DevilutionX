@@ -15,9 +15,14 @@ namespace hd {
  * The game's light stays as it is for play: this only decides how the HD world is lit. Each light shines in its
  * own colour (torches orange, a frost bolt icy blue) and walls stop it, so a torch no longer lights the room
  * behind its wall. It is worked out on a grid of two samples per tile each way, over the part of the world on
- * screen, with the game's own falloff for each light.
+ * screen, with the game's own falloff for each light. Lights add up as real light does, a wide flame or glow gives
+ * shadows soft edges, and a little of each light still reaches round a pillar or corner by bouncing off the room.
+ * Fires and spells shine brighter than the hero's own glow, so beside them things are lit brighter than full.
  */
 namespace light {
+
+/** @brief The most a strong light (a fire or a spell) lights things: this much brighter than full. */
+constexpr float MaxLight = 1.6F;
 
 struct Rgb {
 	float r = 0;
@@ -40,14 +45,29 @@ struct Look {
 
 /** @brief A light shining on a hero or monster, for the shadow it casts. */
 struct ShadowLight {
-	/** @brief Where the light is, in tiles. */
+	/** @brief Where its light starts (for a torch on a wall, just in front of the wall), in tiles. */
 	float x = 0;
 	float y = 0;
-	/** @brief How bright it is where the hero or monster stands, 0 to 1. */
+	/** @brief How bright it is where the hero or monster stands, as linear light to the power 1/2.2 (1 is full). */
 	float strength = 0;
-	/** @brief How high it hangs, in tiles: the lower, the longer the shadows it casts. */
+	/** @brief How high it hangs, in tiles (a hero is about one and a half tiles tall): the lower, the longer the shadows. */
 	float height = 1;
+	/** @brief How wide its flame or glow is, in tiles: the wider, the softer the edges of its shadows. */
+	float size = 0;
+	/** @brief How much of its light still reaches its shadows after bouncing off the floor and walls round them, 0 to 1. */
+	float fill = 0;
+	/** @brief How far from it its light reaches, in tiles. */
+	float reach = 0;
+	/** @brief Which light it is, for LinearOf. */
+	int source = -1;
 };
+
+/** @brief Light adds up as linear light: brightness as drawn (0 to 1) to linear light and back (a 2.2 gamma, as sRGB). */
+float ToLinear(float brightness);
+float ToBrightness(float linear);
+
+/** @brief Linear light as drawn: its brightness, easing off above full towards MaxLight. */
+float Drawn(float linear);
 
 /**
  * @brief Works out this frame's light over the world rectangle (in tiles) on screen.
@@ -57,16 +77,26 @@ struct ShadowLight {
  */
 bool Update(const Look &look, float x0, float y0, float x1, float y1, float heroX, float heroY);
 
-/** @brief The light over the rectangle as a picture: one ARGB pixel per sample, row by row. */
+/** @brief The light over the rectangle as a picture: one ARGB pixel per sample, row by row, up to full. */
 int FieldWidth();
 int FieldHeight();
 const uint32_t *FieldPixels();
 
+/**
+ * @brief The whole light, above full too, as a picture to multiply the floor by in one go (SDL_BLENDMODE_MUL keeps
+ * colour x (rgb + 1 - alpha)): each channel's light is its value plus one less the alpha. A very coloured light above
+ * full (one channel more than full above another) comes out a little paler.
+ */
+const uint32_t *FieldMulPixels();
+
 /** @brief The world rectangle (in tiles) the picture covers, edge to edge. */
 void FieldRect(float &x0, float &y0, float &x1, float &y1);
 
-/** @brief The light at a world point (in tiles), 0 to 1 per channel. */
+/** @brief The light at a world point (in tiles), per channel: 1 is full, and beside a strong light up to MaxLight. */
 Rgb At(float x, float y);
+
+/** @brief All the light at a world point as linear light: lights add up, so it can pass 1 where they overlap. */
+float LinearAt(float x, float y);
 
 /** @brief The brightest light there is (today's fully lit shade), for things that shine by themselves. */
 Rgb Full();
@@ -79,11 +109,14 @@ bool Blocks(int x, int y);
 
 /**
  * @brief The strongest lights shining on a world point that can see it, strongest first.
- * @param total Set to all the light shining there, theirs and the rest.
- * @param overhead Set to the light of lamps right at the point (a hero's own light), which cast no shadow sideways.
+ * @param overhead Set to the strongest light hanging right over the point (a hero's own), which casts its shadow
+ * straight down; its strength is 0 when there is none.
  * @return How many were written to out.
  */
-int ShadowLights(float x, float y, ShadowLight *out, int maxCount, float &total, float &overhead);
+int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &overhead);
+
+/** @brief The linear light a shadow light gives at a world point, 0 where a wall stands between them. */
+float LinearOf(const ShadowLight &light, float x, float y);
 
 /**
  * @brief The level piece to draw at a tile (dPiece coordinates) under this light: the level's own, except where the

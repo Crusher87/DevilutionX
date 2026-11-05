@@ -6,6 +6,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
+#include <queue>
+#include <utility>
 #include <vector>
 
 #include "engine/light_tables.hpp"
@@ -70,7 +73,14 @@ struct Source {
 	int radius = 0;
 	/** @brief Its colour, evened out to the brightness of the hero's own light. */
 	Colour colour {};
+	/** @brief How high its flame hangs, in tiles: measured from the game's pictures (a hero stands about 1.5 tall). */
 	float height = 1;
+	/** @brief How wide its flame or glow is, in tiles: the wider, the softer the edges of its shadows. */
+	float size = 0.2F;
+	/** @brief How much of its light still reaches the parts of its room that it can't see, bounced off the floor and walls. */
+	float fill = 0.15F;
+	/** @brief How bright it shines for its light level, against the hero's own glow (1). */
+	float power = 1;
 	bool castsShadows = true;
 	/** @brief For a torch on a wall: the open side it faces (the camera sees walls from +x and +y). */
 	int faceX = 0;
@@ -88,11 +98,25 @@ constexpr Colour BerserkColour { 1.00F, 0.30F, 0.25F };
 constexpr Colour UniqueGlowColour { 1.00F, 0.92F, 0.80F };
 /** @brief How far a light's colour goes from the hero's warm white towards its own (1: all the way). */
 constexpr float ColourStrength = 0.85F;
+/** @brief Light adds up as linear light; brightness as drawn is linear light to the power 1/Gamma (as sRGB is). */
+constexpr float Gamma = 2.2F;
+/**
+ * @brief Real flames and spells outshine the glow a hero carries (the game gives every light the same brightness at its
+ * heart, so its light levels can't say so). Beside a torch or a firebolt its light is then most of the light there,
+ * and the shadows it casts show clearly even next to the hero; the hero's glow alone lights things as before.
+ */
+constexpr float FlamePower = 2.F;
+constexpr float SpellPower = 2.5F;
+/** @brief The most linear light the drawn brightness table goes up to. */
+constexpr float LinearTop = 4.F;
 
 Look CurrentLook;
 bool HaveLook = false;
 /** @brief Brightness of a light level (0 bright to 15 dark), in 256 steps. */
 std::array<float, 256> BrightnessOfLevel {};
+/** @brief The same as linear light, and linear light (0 to LinearTop, in 4096 steps) back to brightness as drawn. */
+std::array<float, 256> LinearOfLevel {};
+std::array<float, 4097> BrightnessOfLinear {};
 /** @brief How warm (1) or cool (0) light of a brightness (0 to 1, in 256 steps) looks, as the old shade table had it. */
 std::array<float, 256> WarmthOfBrightness {};
 
@@ -124,11 +148,14 @@ struct Reach {
 	int keyY = INT_MIN;
 	int radius = -1;
 	uint32_t blockVersion = UINT32_MAX;
+	float size = -1;
 	int i0 = 0;
 	int j0 = 0;
 	int w = 0;
 	int h = 0;
-	std::vector<uint8_t> visible;
+	/** @brief How much of the light each sample sees (0 to 255), and how far its light goes round walls to get there. */
+	std::vector<uint8_t> seen;
+	std::vector<float> paths;
 };
 std::array<Reach, MAXLIGHTS> Reaches;
 
@@ -142,6 +169,7 @@ std::vector<std::array<float, 4>> WinHue;
 std::vector<uint8_t> WinSet;
 std::vector<Rgb> WinColour;
 std::vector<uint32_t> WinPixels;
+std::vector<uint32_t> WinMulPixels;
 
 float Luminance(const Colour &c)
 {
@@ -166,10 +194,20 @@ Colour FromBytes(const std::array<uint8_t, 3> &bytes)
 	return { bytes[0] / 255.F, bytes[1] / 255.F, bytes[2] / 255.F };
 }
 
-float LevelBrightness(float level)
+float LevelLinear(float level)
 {
 	const float step = std::clamp(level, 0.F, 15.F) * (255.F / 15.F);
-	return BrightnessOfLevel[static_cast<size_t>(step + 0.5F)];
+	return LinearOfLevel[static_cast<size_t>(step + 0.5F)];
+}
+
+/** @brief Linear light as drawn: its brightness, easing off above full towards MaxLight. */
+float DrawnBrightness(float linear)
+{
+	const float step = std::clamp(linear / LinearTop, 0.F, 1.F) * static_cast<float>(BrightnessOfLinear.size() - 1);
+	const auto below = static_cast<size_t>(step);
+	const size_t above = std::min(below + 1, BrightnessOfLinear.size() - 1);
+	const float part = step - static_cast<float>(below);
+	return BrightnessOfLinear[below] + (BrightnessOfLinear[above] - BrightnessOfLinear[below]) * part;
 }
 
 /** @brief The game's falloff (lighting.cpp DoLighting and light_tables.cpp), without its rounding to whole levels. */
@@ -280,6 +318,116 @@ bool Clear(float x0, float y0, float x1, float y1)
 	return true;
 }
 
+int TileOf(float world)
+{
+	return static_cast<int>(std::floor(world + 0.5F));
+}
+
+/**
+ * @brief How much of a light's flame or glow a world point sees past the walls, 0 to 1: rays from across its width,
+ * so its shadows are sharp beside what casts them and soften further out, the more the wider it is.
+ */
+float SeenFraction(const Source &source, float x, float y)
+{
+	const int rays = source.size < 0.2F ? 1 : (source.size < 0.5F ? 3 : 5);
+	const float dx = x - source.rayX;
+	const float dy = y - source.rayY;
+	const float length = Length(dx, dy);
+	if (rays == 1 || length < 1e-3F)
+		return Clear(source.rayX, source.rayY, x, y) ? 1.F : 0.F;
+	// Across the light, square to the way to the point.
+	const float acrossX = -dy / length;
+	const float acrossY = dx / length;
+	int tried = 0;
+	int clear = 0;
+	for (int ray = 0; ray < rays; ray++) {
+		const float offset = source.size * ((static_cast<float>(ray) + 0.5F) / static_cast<float>(rays) - 0.5F);
+		const float fromX = source.rayX + acrossX * offset;
+		const float fromY = source.rayY + acrossY * offset;
+		// A part of the flame inside a wall doesn't shine past it.
+		if (BlocksTile(TileOf(fromX), TileOf(fromY)) && !(TileOf(fromX) == TileOf(source.rayX) && TileOf(fromY) == TileOf(source.rayY)))
+			continue;
+		tried++;
+		if (Clear(fromX, fromY, x, y))
+			clear++;
+	}
+	if (tried == 0)
+		return Clear(source.rayX, source.rayY, x, y) ? 1.F : 0.F;
+	return static_cast<float>(clear) / static_cast<float>(tried);
+}
+
+/**
+ * @brief How far (in tiles) a light's light has to go round walls to reach each sample of a box of the lattice, for
+ * the light that bounces round pillars and corners; samples it can't reach within its radius are left very far.
+ */
+void PathsFrom(const Source &source, int i0, int j0, int w, int h, std::vector<float> &paths)
+{
+	constexpr float Far = 1e30F;
+	paths.assign(static_cast<size_t>(std::max(w, 0)) * std::max(h, 0), Far);
+	if (w <= 0 || h <= 0)
+		return;
+	const float reach = static_cast<float>(source.radius + 1);
+	using Step = std::pair<float, int>;
+	std::priority_queue<Step, std::vector<Step>, std::greater<>> queue;
+	// Start from the open samples round where the light starts.
+	const int si = SampleBefore(source.rayX);
+	const int sj = SampleBefore(source.rayY);
+	for (int j = sj; j <= sj + 1; j++) {
+		for (int i = si; i <= si + 1; i++) {
+			const int a = i - i0;
+			const int b = j - j0;
+			if (a < 0 || b < 0 || a >= w || b >= h || !SampleOpen(i, j))
+				continue;
+			const float start = Length(SampleAt(i) - source.rayX, SampleAt(j) - source.rayY);
+			const int k = b * w + a;
+			if (start < paths[static_cast<size_t>(k)]) {
+				paths[static_cast<size_t>(k)] = start;
+				queue.emplace(start, k);
+			}
+		}
+	}
+	constexpr float Straight = 1.F / Per;
+	constexpr float Diagonal = 1.41421356F / Per;
+	while (!queue.empty()) {
+		const auto [distance, k] = queue.top();
+		queue.pop();
+		if (distance > paths[static_cast<size_t>(k)] || distance > reach)
+			continue;
+		const int a = k % w;
+		const int b = k / w;
+		for (int db = -1; db <= 1; db++) {
+			for (int da = -1; da <= 1; da++) {
+				if (da == 0 && db == 0)
+					continue;
+				const int na = a + da;
+				const int nb = b + db;
+				if (na < 0 || nb < 0 || na >= w || nb >= h || !SampleOpen(i0 + na, j0 + nb))
+					continue;
+				// Round a corner only where both samples beside it are open.
+				if (da != 0 && db != 0 && (!SampleOpen(i0 + na, j0 + b) || !SampleOpen(i0 + a, j0 + nb)))
+					continue;
+				const float next = distance + (da != 0 && db != 0 ? Diagonal : Straight);
+				const int n = nb * w + na;
+				if (next < paths[static_cast<size_t>(n)]) {
+					paths[static_cast<size_t>(n)] = next;
+					queue.emplace(next, n);
+				}
+			}
+		}
+	}
+}
+
+/** @brief A light's linear light at a sample it sees this much of, with the light bouncing in where it sees less. */
+float SampleLinear(const Source &source, float distance, float seen, float path)
+{
+	float linear = 0;
+	if (seen > 0)
+		linear = LevelLinear(LevelAt(distance, source.radius)) * seen;
+	if (seen < 1 && path <= static_cast<float>(source.radius + 1))
+		linear += LevelLinear(LevelAt(path, source.radius)) * source.fill * (1 - seen);
+	return linear * source.power;
+}
+
 /**
  * @brief A light inside a wall tile (a torch hanging on it) shines from just in front of the wall, into the room the
  * camera sees: the side a torch faces, else the tile's +x or +y side (Diablo stands walls on the back edges).
@@ -337,6 +485,13 @@ void UpdateLook(const Look &look)
 		const float part = level - static_cast<float>(below);
 		const float brightness = look.levelBrightness[below] + (look.levelBrightness[above] - look.levelBrightness[below]) * part;
 		BrightnessOfLevel[step] = std::pow(std::max(brightness, 0.F), look.falloff);
+		LinearOfLevel[step] = ToLinear(BrightnessOfLevel[step]);
+	}
+	for (size_t step = 0; step < BrightnessOfLinear.size(); step++) {
+		const float brightness = ToBrightness(LinearTop * static_cast<float>(step) / static_cast<float>(BrightnessOfLinear.size() - 1));
+		// Above full it eases off, the way a camera's highlights do, never past MaxLight.
+		constexpr float Headroom = MaxLight - 1;
+		BrightnessOfLinear[step] = brightness <= 1 ? brightness : 1 + Headroom * std::tanh((brightness - 1) / Headroom);
 	}
 	// The old shade table leaned warm by light level (warm at 0, cool from 10 on): find the level of each brightness.
 	for (size_t step = 0; step < WarmthOfBrightness.size(); step++) {
@@ -366,7 +521,10 @@ void UpdateBlocks()
 	}
 }
 
-/** @brief The light a dungeon object gives (the ones lighting.cpp's AddObjectLight bakes into the level). */
+/**
+ * @brief The light a dungeon object gives (the ones lighting.cpp's AddObjectLight bakes into the level). Heights and
+ * flame widths are measured from the objects' pictures, in tiles (a hero stands about 1.5 tall in the same measure).
+ */
 bool ObjectLight(const Object &object, Source &source)
 {
 	switch (object._otype) {
@@ -374,38 +532,53 @@ bool ObjectLight(const Object &object, Source &source)
 	case OBJ_L5CANDLE:
 		source.radius = 3;
 		source.colour = CandleColour;
-		source.height = 1.0F;
+		source.height = 1.15F;
+		source.size = 0.08F;
 		return true;
 	case OBJ_L1LIGHT:
+		// A brazier on its stand.
 		source.radius = 5;
 		source.colour = CandelabraColour;
 		source.height = 1.6F;
+		source.size = 0.3F;
+		source.power = FlamePower;
 		return true;
 	case OBJ_SKFIRE:
+		// A fire on the floor.
 		source.radius = 5;
 		source.colour = FireColour;
-		source.height = 0.8F;
+		source.height = 0.3F;
+		source.size = 0.6F;
+		source.fill = 0.2F;
+		source.power = FlamePower;
 		return true;
 	case OBJ_CANDLE1:
 	case OBJ_CANDLE2:
 	case OBJ_BOOKCANDLE:
 		source.radius = 5;
 		source.colour = CandleColour;
-		source.height = 1.0F;
+		source.height = 1.15F;
+		source.size = 0.08F;
 		return true;
 	case OBJ_BCROSS:
 	case OBJ_TBCROSS:
 		source.radius = 5;
 		source.colour = BurningCrossColour;
-		source.height = 1.2F;
+		source.height = 1.0F;
+		source.size = 0.6F;
+		source.fill = 0.2F;
+		source.power = FlamePower;
 		return true;
 	case OBJ_TORCHL2:
 	case OBJ_TORCHR:
 	case OBJ_TORCHR2:
 	case OBJ_TORCHL:
+		// A torch hangs on its wall a little below a hero's head height.
 		source.radius = 8;
 		source.colour = TorchColour;
-		source.height = 1.8F;
+		source.height = 1.45F;
+		source.size = 0.2F;
+		source.power = FlamePower;
 		// Each torch hangs on its own wall tile, facing the way its picture does.
 		if (IsAnyOf(object._otype, OBJ_TORCHL2, OBJ_TORCHR))
 			source.faceX = 1;
@@ -443,7 +616,7 @@ int LavaRadius(int piece)
 	}
 }
 
-/** @brief Adds a light's brightness and colour to the samples it reaches and can see. */
+/** @brief Adds a light's linear light and colour to the samples it reaches. */
 void ShineStatic(const Source &source)
 {
 	const float reach = static_cast<float>(source.radius + 1);
@@ -451,24 +624,27 @@ void ShineStatic(const Source &source)
 	const int i1 = std::min(LatticeW - 1, SampleBefore(source.x + reach) + 1);
 	const int j0 = std::max(0, SampleBefore(source.y - reach));
 	const int j1 = std::min(LatticeH - 1, SampleBefore(source.y + reach) + 1);
+	static std::vector<float> paths;
+	PathsFrom(source, i0, j0, i1 - i0 + 1, j1 - j0 + 1, paths);
 	for (int j = j0; j <= j1; j++) {
 		const float sy = SampleAt(j);
 		for (int i = i0; i <= i1; i++) {
 			if (!SampleOpen(i, j))
 				continue;
 			const float sx = SampleAt(i);
-			const float level = LevelAt(Length(sx - source.x, sy - source.y), source.radius);
-			if (level >= 15.F)
+			const float distance = Length(sx - source.x, sy - source.y);
+			if (distance >= reach)
 				continue;
-			const float brightness = LevelBrightness(level);
-			if (brightness <= 0.002F || !Clear(source.rayX, source.rayY, sx, sy))
+			const float path = paths[static_cast<size_t>(j - j0) * (i1 - i0 + 1) + (i - i0)];
+			const float seen = SeenFraction(source, sx, sy);
+			const float linear = SampleLinear(source, distance, seen, path);
+			if (linear <= 1e-5F)
 				continue;
 			const size_t k = static_cast<size_t>(j) * LatticeW + i;
-			StaticBright[k] = std::max(StaticBright[k], brightness);
-			const float weight = brightness * brightness;
+			StaticBright[k] += linear;
 			for (int c = 0; c < 3; c++)
-				StaticHue[k][c] += source.colour[c] * weight;
-			StaticHue[k][3] += weight;
+				StaticHue[k][c] += source.colour[c] * linear;
+			StaticHue[k][3] += linear;
 		}
 	}
 }
@@ -538,7 +714,7 @@ void UpdateStatics()
 		}
 	}
 
-	const float ambient = LevelBrightness(15.F);
+	const float ambient = LevelLinear(15.F);
 	StaticBright.assign(static_cast<size_t>(LatticeW) * LatticeH, ambient);
 	StaticHue.assign(static_cast<size_t>(LatticeW) * LatticeH, { 0.F, 0.F, 0.F, 0.F });
 	for (const Source &source : StaticSources)
@@ -570,15 +746,18 @@ void UpdateStatics()
 			const uint8_t baked = dPreLight[x][y];
 			if (baked >= explained[static_cast<size_t>(x) * MAXDUNY + y])
 				continue;
-			const float brightness = LevelBrightness(baked);
+			// Brought up to the baked light, not added on top of what the lights already give there.
+			const float linear = LevelLinear(baked);
 			for (int i = x * Per; i < x * Per + Per; i++) {
 				for (int j = y * Per; j < y * Per + Per; j++) {
 					const size_t k = static_cast<size_t>(j) * LatticeW + i;
-					StaticBright[k] = std::max(StaticBright[k], brightness);
-					const float weight = brightness * brightness;
+					const float missing = linear - StaticBright[k];
+					if (missing <= 0)
+						continue;
+					StaticBright[k] = linear;
 					for (int c = 0; c < 3; c++)
-						StaticHue[k][c] += residualColour[c] * weight;
-					StaticHue[k][3] += weight;
+						StaticHue[k][c] += residualColour[c] * missing;
+					StaticHue[k][3] += missing;
 				}
 			}
 		}
@@ -587,32 +766,38 @@ void UpdateStatics()
 
 void GatherDynamic(float heroX, float heroY)
 {
-	std::array<Colour, MAXLIGHTS> colours;
-	std::array<float, MAXLIGHTS> heights;
-	colours.fill(CurrentLook.warm);
-	heights.fill(1.4F);
+	// What each moving light is: its colour, how high it hangs, how wide it glows, how much of it bounces and how bright it is.
+	struct Kind {
+		Colour colour;
+		float height;
+		float size;
+		float fill;
+		float power;
+	};
+	std::array<Kind, MAXLIGHTS> kinds;
+	kinds.fill({ CurrentLook.warm, 1.4F, 0.3F, 0.15F, 1.F });
 	const auto owns = [](int id) { return id >= 0 && id < MAXLIGHTS; };
 	// Owners from the least to the most sure, so a stale id held by a dying missile can't recolour a hero's light.
 	for (const Missile &missile : Missiles) {
 		if (!owns(missile._mlid))
 			continue;
-		colours[missile._mlid] = FromBytes(vfx::LightColourOf(missile));
-		heights[missile._mlid] = 0.9F;
+		// A spell flies at about waist height (a firebolt's ball of fire is about a third of a tile across).
+		kinds[missile._mlid] = { FromBytes(vfx::LightColourOf(missile)), 0.85F, 0.35F, 0.15F, SpellPower };
 	}
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (!owns(monster.lightId))
 			continue;
 		// Uniques glow; other monsters only carry a light while berserk (POE2's Confuse sets the flag without one).
-		colours[monster.lightId] = monster.isUnique() ? UniqueGlowColour : BerserkColour;
-		heights[monster.lightId] = 1.2F;
+		kinds[monster.lightId] = { monster.isUnique() ? UniqueGlowColour : BerserkColour, 0.7F, 0.8F, 0.3F, 1.F };
 	}
 	int myLight = NO_LIGHT;
 	for (const Player &player : Players) {
 		if (!player.plractive || !player.isOnActiveLevel() || !owns(player.lightId))
 			continue;
-		colours[player.lightId] = CurrentLook.warm;
-		heights[player.lightId] = 1.5F;
+		// A hero's own light is a wide, soft glow hanging over them: it lights the way without hard shadows, so the
+		// shadows it gives are short, soft and faint, and a torch or a spell nearby casts the clear ones.
+		kinds[player.lightId] = { CurrentLook.warm, 2.6F, 1.6F, 0.45F, 1.F };
 		if (&player == MyPlayer)
 			myLight = player.lightId;
 	}
@@ -634,38 +819,45 @@ void GatherDynamic(float heroX, float heroY)
 			source.y = heroY;
 		}
 		source.radius = std::min<int>(light.radius, NumLightRadiuses - 1);
-		source.colour = Even(colours[id]);
-		source.height = heights[id];
+		source.colour = Even(kinds[id].colour);
+		source.height = kinds[id].height;
+		source.size = kinds[id].size;
+		source.fill = kinds[id].fill;
+		source.power = kinds[id].power;
 		// Moving lights shine from where they are: a tile can stop light and still be walked on (cathedral piece 450).
 		source.rayX = source.x;
 		source.rayY = source.y;
 
 		Reach &reach = Reaches[id];
-		// What a light can see is worked out again only when it moves an eighth of a tile (the hero's light moves every frame).
+		// What a light can see is worked out again only when it moves an eighth of a tile (the hero's light moves every
+		// frame), or turns into a different kind of light.
 		const int keyX = RoundToInt(source.rayX * 8.F);
 		const int keyY = RoundToInt(source.rayY * 8.F);
-		if (reach.keyX != keyX || reach.keyY != keyY || reach.radius != source.radius || reach.blockVersion != BlockVersion) {
+		if (reach.keyX != keyX || reach.keyY != keyY || reach.radius != source.radius || reach.blockVersion != BlockVersion || reach.size != source.size) {
 			reach.keyX = keyX;
 			reach.keyY = keyY;
 			reach.radius = source.radius;
 			reach.blockVersion = BlockVersion;
+			reach.size = source.size;
 			const float range = static_cast<float>(source.radius + 1);
 			reach.i0 = std::max(0, SampleBefore(source.x - range));
 			reach.j0 = std::max(0, SampleBefore(source.y - range));
 			reach.w = std::min(LatticeW - 1, SampleBefore(source.x + range) + 1) - reach.i0 + 1;
 			reach.h = std::min(LatticeH - 1, SampleBefore(source.y + range) + 1) - reach.j0 + 1;
-			reach.visible.assign(static_cast<size_t>(std::max(reach.w, 0)) * std::max(reach.h, 0), 0);
+			reach.seen.assign(static_cast<size_t>(std::max(reach.w, 0)) * std::max(reach.h, 0), 0);
 			for (int b = 0; b < reach.h; b++) {
 				const int j = reach.j0 + b;
 				for (int a = 0; a < reach.w; a++) {
 					const int i = reach.i0 + a;
-					if (SampleOpen(i, j) && Clear(source.rayX, source.rayY, SampleAt(i), SampleAt(j)))
-						reach.visible[static_cast<size_t>(b) * reach.w + a] = 1;
+					if (SampleOpen(i, j))
+						reach.seen[static_cast<size_t>(b) * reach.w + a] = static_cast<uint8_t>(SeenFraction(source, SampleAt(i), SampleAt(j)) * 255.F + 0.5F);
 				}
 			}
+			PathsFrom(source, reach.i0, reach.j0, reach.w, reach.h, reach.paths);
 		}
 		DynamicSources.push_back(source);
 		// Light it into this frame's window.
+		const float range = static_cast<float>(source.radius + 1);
 		const int a0 = std::max(0, WinI0 - reach.i0);
 		const int a1 = std::min(reach.w, WinI0 + WinW - reach.i0);
 		const int b0 = std::max(0, WinJ0 - reach.j0);
@@ -674,19 +866,23 @@ void GatherDynamic(float heroX, float heroY)
 			const int j = reach.j0 + b;
 			const float sy = SampleAt(j);
 			for (int a = a0; a < a1; a++) {
-				if (reach.visible[static_cast<size_t>(b) * reach.w + a] == 0)
+				const size_t r = static_cast<size_t>(b) * reach.w + a;
+				const float seen = static_cast<float>(reach.seen[r]) / 255.F;
+				const float path = reach.paths[r];
+				if (seen <= 0 && path > range)
 					continue;
 				const int i = reach.i0 + a;
-				const float level = LevelAt(Length(SampleAt(i) - source.x, sy - source.y), source.radius);
-				if (level >= 15.F)
+				const float distance = Length(SampleAt(i) - source.x, sy - source.y);
+				if (distance >= range && path > range)
 					continue;
-				const float brightness = LevelBrightness(level);
+				const float linear = SampleLinear(source, distance, seen, path);
+				if (linear <= 1e-5F)
+					continue;
 				const size_t k = static_cast<size_t>(j - WinJ0) * WinW + (i - WinI0);
-				WinBright[k] = std::max(WinBright[k], brightness);
-				const float weight = brightness * brightness;
+				WinBright[k] += linear;
 				for (int c = 0; c < 3; c++)
-					WinHue[k][c] += source.colour[c] * weight;
-				WinHue[k][3] += weight;
+					WinHue[k][c] += source.colour[c] * linear;
+				WinHue[k][3] += linear;
 			}
 		}
 	}
@@ -733,8 +929,9 @@ void FillWalls()
 void Finish()
 {
 	const Look &look = CurrentLook;
+	const auto byte = [](float value) { return static_cast<uint32_t>(std::clamp(value, 0.F, 1.F) * 255.F + 0.5F); };
 	for (size_t k = 0; k < WinBright.size(); k++) {
-		const float brightness = WinBright[k];
+		const float brightness = DrawnBrightness(WinBright[k]);
 		const std::array<float, 4> &hue = WinHue[k];
 		const float warmth = WarmthOfBrightness[static_cast<size_t>(std::clamp(brightness, 0.F, 1.F) * 255.F + 0.5F)];
 		Rgb &out = WinColour[k];
@@ -742,10 +939,16 @@ void Finish()
 		for (int c = 0; c < 3; c++) {
 			const float lightColour = hue[3] > 1e-6F ? hue[c] / hue[3] : look.warm[c];
 			const float grade = look.cool[c] + (lightColour - look.cool[c]) * warmth;
-			colour[c] = std::clamp(brightness * grade * look.tint[c], 0.F, 1.F);
+			colour[c] = std::clamp(brightness * grade * look.tint[c], 0.F, MaxLight);
 		}
 		out = { colour[0], colour[1], colour[2] };
-		WinPixels[k] = 0xFF000000U | (static_cast<uint32_t>(colour[0] * 255.F + 0.5F) << 16) | (static_cast<uint32_t>(colour[1] * 255.F + 0.5F) << 8) | static_cast<uint32_t>(colour[2] * 255.F + 0.5F);
+		WinPixels[k] = 0xFF000000U | (byte(colour[0]) << 16) | (byte(colour[1]) << 8) | byte(colour[2]);
+		// Each channel's light is its colour plus one less the alpha (see FieldMulPixels). Up to full that is the colour
+		// with full alpha; above it, an alpha halfway between what the brightest and the darkest channel allow.
+		const float high = std::max({ colour[0], colour[1], colour[2] });
+		const float low = std::min({ colour[0], colour[1], colour[2] });
+		const float alpha = high > 1 ? std::clamp(1.5F - (high + low) / 2, 0.F, 1.F) : 1.F;
+		WinMulPixels[k] = (byte(alpha) << 24) | (byte(colour[0] - 1 + alpha) << 16) | (byte(colour[1] - 1 + alpha) << 8) | byte(colour[2] - 1 + alpha);
 	}
 }
 
@@ -771,6 +974,7 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 	WinSet.resize(count);
 	WinColour.resize(count);
 	WinPixels.resize(count);
+	WinMulPixels.resize(count);
 	for (int j = 0; j < WinH; j++) {
 		const size_t from = static_cast<size_t>(WinJ0 + j) * LatticeW + WinI0;
 		std::copy_n(StaticBright.begin() + static_cast<ptrdiff_t>(from), WinW, WinBright.begin() + static_cast<ptrdiff_t>(j) * WinW);
@@ -795,6 +999,11 @@ int FieldHeight()
 const uint32_t *FieldPixels()
 {
 	return WinPixels.data();
+}
+
+const uint32_t *FieldMulPixels()
+{
+	return WinMulPixels.data();
 }
 
 void FieldRect(float &x0, float &y0, float &x1, float &y1)
@@ -859,28 +1068,76 @@ bool Blocks(int x, int y)
 	return BlocksTile(x, y);
 }
 
-int ShadowLights(float x, float y, ShadowLight *out, int maxCount, float &total, float &overhead)
+namespace {
+
+const Source *SourceOf(int index)
 {
-	total = 0;
-	overhead = 0;
+	if (index < 0)
+		return nullptr;
+	if (static_cast<size_t>(index) < StaticSources.size())
+		return &StaticSources[static_cast<size_t>(index)];
+	const size_t dynamic = static_cast<size_t>(index) - StaticSources.size();
+	return dynamic < DynamicSources.size() ? &DynamicSources[dynamic] : nullptr;
+}
+
+} // namespace
+
+float ToLinear(float brightness)
+{
+	return brightness <= 0 ? 0.F : std::pow(brightness, Gamma);
+}
+
+float ToBrightness(float linear)
+{
+	return linear <= 0 ? 0.F : std::pow(linear, 1.F / Gamma);
+}
+
+float Drawn(float linear)
+{
+	return DrawnBrightness(linear);
+}
+
+float LinearAt(float x, float y)
+{
+	if (WinW <= 0 || WinH <= 0)
+		return 1.F;
+	const float fi = std::clamp((x + 0.25F) * Per - static_cast<float>(WinI0), 0.F, static_cast<float>(WinW - 1));
+	const float fj = std::clamp((y + 0.25F) * Per - static_cast<float>(WinJ0), 0.F, static_cast<float>(WinH - 1));
+	const int i = std::min(static_cast<int>(fi), std::max(WinW - 2, 0));
+	const int j = std::min(static_cast<int>(fj), std::max(WinH - 2, 0));
+	const float u = std::clamp(fi - static_cast<float>(i), 0.F, 1.F);
+	const float v = std::clamp(fj - static_cast<float>(j), 0.F, 1.F);
+	const int i2 = std::min(i + 1, WinW - 1);
+	const int j2 = std::min(j + 1, WinH - 1);
+	const auto at = [](int si, int sj) { return WinBright[static_cast<size_t>(sj) * WinW + si]; };
+	return (at(i, j) * (1 - u) + at(i2, j) * u) * (1 - v) + (at(i, j2) * (1 - u) + at(i2, j2) * u) * v;
+}
+
+int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &overhead)
+{
+	overhead = {};
+	float overheadLinear = 0;
 	int count = 0;
-	const auto consider = [&](const Source &source) {
+	const auto consider = [&](const Source &source, int index) {
 		if (!source.castsShadows)
 			return;
 		const float distance = Length(x - source.x, y - source.y);
-		if (distance > static_cast<float>(source.radius + 1))
+		if (distance >= static_cast<float>(source.radius + 1))
 			return;
-		const float brightness = LevelBrightness(LevelAt(distance, source.radius));
-		if (brightness < 0.02F || !Clear(source.rayX, source.rayY, x, y))
+		const float linear = LevelLinear(LevelAt(distance, source.radius)) * source.power * SeenFraction(source, x, y);
+		const float strength = ToBrightness(linear);
+		if (strength < 0.02F)
 			return;
-		total += brightness;
-		// A light right where the hero or monster stands (its own lantern) has no direction to cast a shadow in: it hangs
-		// overhead and leaves a short shadow round the feet. (A glow a little behind, on a monster being pulled, counts too.)
+		const ShadowLight light { source.rayX, source.rayY, strength, source.height, source.size, source.fill, static_cast<float>(source.radius + 1), index };
+		// A light right where the hero or monster stands (its own) hangs over it and casts its shadow straight down.
+		// (A glow a little behind, on a monster being pulled, counts too.)
 		if (distance < 0.6F) {
-			overhead += brightness;
+			if (linear > overheadLinear) {
+				overheadLinear = linear;
+				overhead = light;
+			}
 			return;
 		}
-		const ShadowLight light { source.x, source.y, brightness, source.height };
 		int at = count;
 		while (at > 0 && out[at - 1].strength < light.strength)
 			at--;
@@ -891,11 +1148,23 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, float &total,
 		out[at] = light;
 		count = std::min(count + 1, maxCount);
 	};
+	int index = 0;
 	for (const Source &source : StaticSources)
-		consider(source);
+		consider(source, index++);
 	for (const Source &source : DynamicSources)
-		consider(source);
+		consider(source, index++);
 	return count;
+}
+
+float LinearOf(const ShadowLight &light, float x, float y)
+{
+	const Source *source = SourceOf(light.source);
+	if (source == nullptr)
+		return 0;
+	const float distance = Length(x - source->x, y - source->y);
+	if (distance >= static_cast<float>(source->radius + 1) || !Clear(source->rayX, source->rayY, x, y))
+		return 0;
+	return LevelLinear(LevelAt(distance, source->radius)) * source->power;
 }
 
 uint16_t UnpaintedPiece(int x, int y, uint16_t piece)
