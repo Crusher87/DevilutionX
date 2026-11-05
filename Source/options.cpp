@@ -799,6 +799,8 @@ GraphicsOptions::GraphicsOptions()
     , effectIntensity("Effect Intensity", OptionEntryFlags::None, N_("Effect Intensity"), N_("How many particles and how much glow the modern effects use, in percent."), 100, { 25, 50, 75, 100, 125, 150 })
     , weather("Weather", OptionEntryFlags::None, N_("Weather"), N_("Rain and snow that come and go outdoors, with their sound. Needs Modern Effects."), true)
     , hdGraphics("HD Graphics", OptionEntryFlags::None, N_("HD Graphics"), N_("Uses the sharper HD art for the world. It only shows when you zoom in with Z, and needs the HD pack and Upscale."), true)
+    , hdLighting("HD Lighting", OptionEntryFlags::None, N_("HD Lighting"), N_("Torches and spells light the room in their own colours, walls stop their light, and heroes and monsters cast soft shadows that move with each light. Needs HD Graphics."), true)
+    , hdStrongMood("HD Stronger Mood", OptionEntryFlags::None, N_("HD Stronger Mood"), N_("Firelight warmer and dark corners darker, in a mood of its own for each part of the dungeon: cold Catacombs, ember-red Hell, a sickly green Crypt. Needs HD Graphics."), true)
     , brightness("Brightness Correction", OptionEntryFlags::Invisible, "Brightness Correction", "Brightness correction level.", 0)
     , zoom("Zoom", OptionEntryFlags::None, N_("Zoom"), N_("Zoom on when enabled."), false)
     , perPixelLighting("Per-pixel Lighting", OptionEntryFlags::None, N_("Per-pixel Lighting"), N_("Subtile lighting for smoother light gradients."), DEFAULT_PER_PIXEL_LIGHTING)
@@ -823,6 +825,8 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&effectIntensity,
 		&weather,
 		&hdGraphics,
+		&hdLighting,
+		&hdStrongMood,
 #endif
 #ifndef __vita__
 		&fullscreen,
