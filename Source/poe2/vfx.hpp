@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -182,6 +183,8 @@ void ScanMissiles();
 bool ReplacesSprite(const Missile &missile);
 /** @brief Whether the missile is drawn as Arcing Sparks' small sparks rather than Charged Bolt's bolts: both fly the same missile. */
 bool IsArcingSpark(const Missile &missile);
+/** @brief The colour a missile's light shines in with HD Lighting: its effects' own colour (portals blue or red), 0-255. */
+std::array<uint8_t, 3> LightColourOf(const Missile &missile);
 /**
  * @brief The frame to draw of a light object: candles hold one frame (their glow sways instead) and torches run at
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.

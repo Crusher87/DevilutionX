@@ -2916,6 +2916,22 @@ Element ElementOf(DamageType type, bool spell)
 	return Element::Physical;
 }
 
+std::array<uint8_t, 3> LightColourOf(const Missile &missile)
+{
+	if (missile._mitype == MissileID::TownPortal)
+		return { 110, 150, 255 };
+	if (missile._mitype == MissileID::RedPortal)
+		return { 255, 70, 60 };
+	const GraphicLook look = LookOf(missile._miAnimType);
+	Element element = look.element;
+	if (missile.poe2.vfxElement >= 0)
+		element = static_cast<Element>(missile.poe2.vfxElement);
+	else if (look.burst == 0 && !look.projectile)
+		element = ElementOf(missile.poe2.damageType >= 0 ? static_cast<DamageType>(missile.poe2.damageType) : GetMissileData(missile._mitype).damageType(), true);
+	const Rgb mid = ColoursOf(element).mid;
+	return { mid.r, mid.g, mid.b };
+}
+
 bool Enabled()
 {
 #ifdef USE_SDL1

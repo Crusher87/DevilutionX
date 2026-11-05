@@ -564,6 +564,10 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryBoolean weather;
 	/** @brief POE2 Mashup: draws the world with the upscaled HD art pack while zoomed in. */
 	OptionEntryBoolean hdGraphics;
+	/** @brief POE2 Mashup: HD light in each light's own colour, stopped by walls, with shadows that move with the light. */
+	OptionEntryBoolean hdLighting;
+	/** @brief POE2 Mashup: the HD world's firelight warmer and dark corners darker, in a mood of its own for each part of the dungeon. */
+	OptionEntryBoolean hdStrongMood;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)
