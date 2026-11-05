@@ -82,6 +82,8 @@ struct Source {
 	/** @brief How bright it shines for its light level, against the hero's own glow (1). */
 	float power = 1;
 	bool castsShadows = true;
+	/** @brief Glowing lava (or a glowing pool): its tiles together shine as one wide light lying on the floor (ShadowLights). */
+	bool lava = false;
 	/** @brief For a torch on a wall: the open side it faces (the camera sees walls from +x and +y). */
 	int faceX = 0;
 	int faceY = 0;
@@ -107,6 +109,8 @@ constexpr float Gamma = 2.2F;
  */
 constexpr float FlamePower = 2.F;
 constexpr float SpellPower = 2.5F;
+/** @brief How high lava's glow lies, in tiles: low over the floor, so it lights a body from below and its shadows reach far. */
+constexpr float LavaHeight = 0.3F;
 /** @brief The most linear light the drawn brightness table goes up to. */
 constexpr float LinearTop = 4.F;
 
@@ -616,8 +620,12 @@ int LavaRadius(int piece)
 	}
 }
 
-/** @brief Adds a light's linear light and colour to the samples it reaches. */
-void ShineStatic(const Source &source)
+/**
+ * @brief Adds a static light to the level's light. Lava instead goes into `lava`, where each sample keeps the brightest of
+ * its tiles, as the game draws it: every lava tile is a light as strong as a torch, so added up a stream of it would
+ * shine about ten times as bright as the game shows it.
+ */
+void ShineStatic(const Source &source, std::vector<float> &lava)
 {
 	const float reach = static_cast<float>(source.radius + 1);
 	const int i0 = std::max(0, SampleBefore(source.x - reach));
@@ -641,6 +649,10 @@ void ShineStatic(const Source &source)
 			if (linear <= 1e-5F)
 				continue;
 			const size_t k = static_cast<size_t>(j) * LatticeW + i;
+			if (source.lava) {
+				lava[k] = std::max(lava[k], linear);
+				continue;
+			}
 			StaticBright[k] += linear;
 			for (int c = 0; c < 3; c++)
 				StaticHue[k][c] += source.colour[c] * linear;
@@ -707,8 +719,9 @@ void UpdateStatics()
 			source.y = static_cast<float>(y);
 			source.radius = radius;
 			source.colour = Even(LavaColour);
-			source.height = 0.3F;
+			source.height = LavaHeight;
 			source.castsShadows = false;
+			source.lava = true;
 			PlaceRays(source);
 			StaticSources.push_back(source);
 		}
@@ -717,8 +730,19 @@ void UpdateStatics()
 	const float ambient = LevelLinear(15.F);
 	StaticBright.assign(static_cast<size_t>(LatticeW) * LatticeH, ambient);
 	StaticHue.assign(static_cast<size_t>(LatticeW) * LatticeH, { 0.F, 0.F, 0.F, 0.F });
+	// Lava shines as one light: its brightest tile at each sample, added to the other lights.
+	std::vector<float> lava(StaticBright.size(), 0.F);
 	for (const Source &source : StaticSources)
-		ShineStatic(source);
+		ShineStatic(source, lava);
+	const Colour lavaColour = Even(LavaColour);
+	for (size_t k = 0; k < lava.size(); k++) {
+		if (lava[k] <= 0)
+			continue;
+		StaticBright[k] += lava[k];
+		for (int c = 0; c < 3; c++)
+			StaticHue[k][c] += lavaColour[c] * lava[k];
+		StaticHue[k][3] += lava[k];
+	}
 
 	// Anything the game baked into the level that the lights above don't explain still shines, through walls as before.
 	std::array<uint8_t, MAXDUNX * MAXDUNY> explained;
@@ -1118,17 +1142,7 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 	overhead = {};
 	float overheadLinear = 0;
 	int count = 0;
-	const auto consider = [&](const Source &source, int index) {
-		if (!source.castsShadows)
-			return;
-		const float distance = Length(x - source.x, y - source.y);
-		if (distance >= static_cast<float>(source.radius + 1))
-			return;
-		const float linear = LevelLinear(LevelAt(distance, source.radius)) * source.power * SeenFraction(source, x, y);
-		const float strength = ToBrightness(linear);
-		if (strength < 0.02F)
-			return;
-		const ShadowLight light { source.rayX, source.rayY, strength, source.height, source.size, source.fill, static_cast<float>(source.radius + 1), index };
+	const auto offer = [&](const ShadowLight &light, float linear, float distance) {
 		// A light right where the hero or monster stands (its own) hangs over it and casts its shadow straight down.
 		// (A glow a little behind, on a monster being pulled, counts too.)
 		if (distance < 0.6F) {
@@ -1148,16 +1162,91 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 		out[at] = light;
 		count = std::min(count + 1, maxCount);
 	};
+	// Lava lies over whole stretches of floor, so all the lava a point sees shines on it as one wide light lying on the
+	// floor: as bright as its brightest tile there (as the level's light has it, see ShineStatic), from the middle of its
+	// light (each tile weighted by the light it gives there), as wide as that lava is seen across the way to the point.
+	// Its shadows are then long (the light lies lower than any body), sharp only right at the feet and soon very soft
+	// and faint, except where the lava is most of the light.
+	float lavaBrightest = 0;
+	float lavaLinear = 0;
+	float lavaX = 0;
+	float lavaY = 0;
+	float lavaXX = 0;
+	float lavaXY = 0;
+	float lavaYY = 0;
+	float lavaPast = 0;
+	float lavaFill = 0;
+	int lavaRadius = 0;
+	const auto consider = [&](const Source &source, int index) {
+		const float distance = Length(x - source.x, y - source.y);
+		if (distance >= static_cast<float>(source.radius + 1))
+			return;
+		if (source.lava) {
+			if (!Clear(source.rayX, source.rayY, x, y))
+				return;
+			// Kept from the point, so the sums stay small numbers.
+			const float weight = LevelLinear(LevelAt(distance, source.radius)) * source.power;
+			const float offX = source.x - x;
+			const float offY = source.y - y;
+			lavaBrightest = std::max(lavaBrightest, weight);
+			lavaLinear += weight;
+			lavaX += weight * offX;
+			lavaY += weight * offY;
+			lavaXX += weight * offX * offX;
+			lavaXY += weight * offX * offY;
+			lavaYY += weight * offY * offY;
+			lavaFill += weight * source.fill;
+			lavaPast = std::max(lavaPast, static_cast<float>(source.radius + 1) - distance);
+			lavaRadius = std::max(lavaRadius, source.radius);
+			return;
+		}
+		if (!source.castsShadows)
+			return;
+		const float linear = LevelLinear(LevelAt(distance, source.radius)) * source.power * SeenFraction(source, x, y);
+		const float strength = ToBrightness(linear);
+		if (strength < 0.02F)
+			return;
+		offer(ShadowLight { source.rayX, source.rayY, strength, source.height, source.size, source.fill, static_cast<float>(source.radius + 1), index }, linear, distance);
+	};
 	int index = 0;
 	for (const Source &source : StaticSources)
 		consider(source, index++);
 	for (const Source &source : DynamicSources)
 		consider(source, index++);
+	const float lavaStrength = ToBrightness(lavaBrightest);
+	if (lavaStrength >= 0.02F) {
+		const float offX = lavaX / lavaLinear;
+		const float offY = lavaY / lavaLinear;
+		const float distance = Length(offX, offY);
+		if (distance >= 0.6F) {
+			// How spread out the lava is across the way from it to the point: a strip of lava W tiles across spreads
+			// W / sqrt(12) each way, and each tile is itself a tile wide.
+			const float alongX = -offX / distance;
+			const float alongY = -offY / distance;
+			const float spreadXX = std::max(lavaXX / lavaLinear - offX * offX, 0.F);
+			const float spreadXY = lavaXY / lavaLinear - offX * offY;
+			const float spreadYY = std::max(lavaYY / lavaLinear - offY * offY, 0.F);
+			const float across = std::max(alongY * alongY * spreadXX - 2 * alongX * alongY * spreadXY + alongX * alongX * spreadYY, 0.F);
+			const float size = std::clamp(std::sqrt(12 * across) + 1, 1.F, 8.F);
+			// It shines on round the point as a light at its middle would, as bright as the lava is at the point.
+			const float atPoint = LevelLinear(LevelAt(distance, lavaRadius));
+			ShadowLight light { x + offX, y + offY, lavaStrength, LavaHeight, size, lavaFill / lavaLinear, distance + lavaPast, LavaLight };
+			light.power = std::min(lavaBrightest / std::max(atPoint, 1e-3F), 64.F);
+			light.radius = lavaRadius;
+			offer(light, lavaBrightest, distance);
+		}
+	}
 	return count;
 }
 
 float LinearOf(const ShadowLight &light, float x, float y)
 {
+	if (light.source == LavaLight) {
+		const float distance = Length(x - light.x, y - light.y);
+		if (distance >= static_cast<float>(light.radius + 1))
+			return 0;
+		return LevelLinear(LevelAt(distance, light.radius)) * light.power;
+	}
 	const Source *source = SourceOf(light.source);
 	if (source == nullptr)
 		return 0;
