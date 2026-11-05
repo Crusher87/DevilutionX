@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
@@ -54,8 +56,8 @@ TEST_F(Poe2SkillEffectsTest, EffectsPlayOnceAfterTheirDelay)
 	ASSERT_EQ(Missiles.size(), 1U);
 	Missile &missile = Missiles.front();
 	EXPECT_EQ(missile._mitype, MissileID::VisualEffect);
-	// MetalHit has no sprite file of its own, so it borrows Charged Bolt's crackle.
-	EXPECT_EQ(missile._miAnimType, MissileGraphicID::ChargedBolt);
+	// MetalHit has no sprite file of its own, so it borrows the stone curse's grey shatter (the effects draw a steel hit).
+	EXPECT_EQ(missile._miAnimType, MissileGraphicID::StoneCurseShatter);
 	EXPECT_EQ(missile.position.tile, Point(40, 40));
 	EXPECT_FALSE(missile._miDrawFlag);
 
@@ -97,6 +99,50 @@ TEST_F(Poe2SkillEffectsTest, EverySkillHasEffects)
 				EXPECT_NE(missile._mitype, MissileID::VisualEffect) << WeaponSkillName(skill);
 		}
 	}
+}
+
+bool IsLightningGraphic(MissileGraphicID graphic)
+{
+	return IsAnyOf(graphic, MissileGraphicID::ChargedBolt, MissileGraphicID::LightningArrow, MissileGraphicID::Lightning, MissileGraphicID::ThinLightning,
+	    MissileGraphicID::YellowFlare, MissileGraphicID::YellowFlareExplosion, MissileGraphicID::BloodStarYellow, MissileGraphicID::BloodStarYellowExplosion);
+}
+
+/** @brief The skills whose look is lightning: their own damage is lightning, or they crackle by design (Smite's bolt from the sky). */
+bool IsLightningSkill(WeaponSkill skill)
+{
+	if (const TableSkillData *data = FindTableSkill(skill); data != nullptr)
+		return data->type == DamageType::Lightning;
+	return IsAnyOf(skill, WeaponSkill::LightningArrow, WeaponSkill::Smite, WeaponSkill::FistsOfThunder, WeaponSkill::Spark);
+}
+
+TEST_F(Poe2SkillEffectsTest, PhysicalHitsShowNoLightning)
+{
+	// Rogue run 2: every Cleave hit logged "visual MetalHit" then "hit flash ChargedBolt": the blow of steel borrowed Charged
+	// Bolt's blue crackle, and the owner won't have lightning on skills that aren't lightning.
+	AddVisualEffect({ 40, 40 }, MissileGraphicID::MetalHit, 0, 3);
+	ASSERT_EQ(Missiles.size(), 1U);
+	const Missile &hit = Missiles.front();
+	EXPECT_FALSE(IsLightningGraphic(hit._miAnimType));
+	// The effects draw it as a pale flash and sparks of steel.
+	EXPECT_EQ(hit.poe2.vfxElement, static_cast<int8_t>(vfx::Element::Physical));
+	EXPECT_TRUE(vfx::IsSteelHit(hit));
+	// No skill that isn't lightning leaves a lightning sprite anywhere.
+	for (int i = 1; i <= static_cast<int>(WeaponSkill::Last); i++) {
+		const auto skill = static_cast<WeaponSkill>(i);
+		if (IsLightningSkill(skill) || (IsGrantedSkill(skill) && FindTableSkill(skill) == nullptr))
+			continue;
+		Missiles.clear();
+		MyPlayer->position.tile = { 40, 40 };
+		PlaySkillEffects(*MyPlayer, skill, { 43, 40 });
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype == MissileID::VisualEffect)
+				EXPECT_FALSE(IsLightningGraphic(missile._miAnimType)) << WeaponSkillName(skill) << " " << static_cast<int>(missile._miAnimType);
+		}
+	}
+	// A lightning skill keeps its lightning.
+	Missiles.clear();
+	PlaySkillEffects(*MyPlayer, WeaponSkill::Spark, { 43, 40 });
+	EXPECT_TRUE(std::any_of(Missiles.begin(), Missiles.end(), [](const Missile &missile) { return IsLightningGraphic(missile._miAnimType); }));
 }
 
 TEST_F(Poe2SkillEffectsTest, NoEffectsOutsidePoe2)

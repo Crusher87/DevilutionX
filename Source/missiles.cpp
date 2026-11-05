@@ -2538,10 +2538,14 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	// A bone hit borrows the stone curse's shatter, and the effects draw it as bone, not stone dust.
 	const bool bone = graphic == MissileGraphicID::BoneHit;
 	const bool blood = graphic == MissileGraphicID::BloodHit;
+	// A blow of steel borrows the shatter's grey for its timing (and for the classic look), and the effects draw it as a
+	// pale flash and sparks: it borrowed Charged Bolt's blue spark, lightning on every sword, axe and arrow hit, and the
+	// owner won't have lightning on a skill that isn't lightning (Rogue run 2, Cleave).
+	const bool steel = graphic == MissileGraphicID::MetalHit;
 	// Some graphic ids have no sprite file of their own (Diablo drew hits from monster art), so they borrow a look-alike.
 	switch (graphic) {
 	case MissileGraphicID::MetalHit:
-		graphic = MissileGraphicID::ChargedBolt;
+		graphic = MissileGraphicID::StoneCurseShatter;
 		break;
 	case MissileGraphicID::BloodHit:
 		graphic = MissileGraphicID::BloodStarRedExplosion;
@@ -2569,6 +2573,8 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Bone);
 	if (effect != nullptr && blood)
 		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Blood);
+	if (effect != nullptr && steel)
+		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Physical);
 }
 
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter)

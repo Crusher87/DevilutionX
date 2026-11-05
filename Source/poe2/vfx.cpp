@@ -1140,6 +1140,14 @@ void SparksAt(Vec pos, Element element, float size)
 	Spray(pos + Vec { 0, -16 }, Scaled(14 * size), 120, 320 * size, 100, 260, Shape::Streak, core, mid, 1.5F, 0.5F, 30, 140, 500, 1.5F, 1);
 }
 
+/** @brief Steel striking (a sword, an axe, an arrowhead): a brief pale flash and a few short white-grey sparks off the edge. */
+void SteelHitAt(Vec pos)
+{
+	const Vec at = pos + Vec { 0, -16 };
+	AddRing(at, 0, 11, 70, 0, { 240, 238, 232 }, 0.45F, true, false);
+	Spray(at, Scaled(6), 90, 230, 70, 150, Shape::Streak, { 250, 248, 242 }, { 150, 148, 145 }, 1.2F, 0.4F, 30, 120, 500, 2.F, 0.8F);
+}
+
 /** @brief The trail particles a projectile leaves behind it each frame. */
 void EmitTrail(Trail &trail, Vec head, float ms)
 {
@@ -4263,6 +4271,16 @@ void ScanMissiles()
 		if (missile._mitype == MissileID::WeaponExplosion)
 			continue;
 		const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);
+		if (IsSteelHit(missile)) {
+			SeenBurst &seen = SeenBursts.try_emplace(&missile, SeenBurst { ScanFrame, false }).first->second;
+			seen.frame = ScanFrame;
+			if (missile._miDrawFlag && !seen.fired) {
+				seen.fired = true;
+				TelemetryEffect("steel hit", magic_enum::enum_name(missile._miAnimType), missile.position.tile.x, missile.position.tile.y);
+				SteelHitAt(TileCentre(missile.position.tile));
+			}
+			continue;
+		}
 		const SkillLook *styled = CurrentSkillLook();
 		GraphicLook look = LookOf(missile._miAnimType);
 		// A skill's bolt or burst on a borrowed graphic takes its skill's look: Bone Spear's and Bone Bolt's on a flare.
@@ -4276,7 +4294,7 @@ void ScanMissiles()
 			if (missile._miDrawFlag && !seen.fired) {
 				seen.fired = true;
 				TelemetryEffect("hit flash", magic_enum::enum_name(missile._miAnimType), missile.position.tile.x, missile.position.tile.y);
-				SparksAt(TileCentre(missile.position.tile), look.element == Element::Lightning && missile._miAnimType == MissileGraphicID::ChargedBolt ? Element::Physical : look.element, 0.8F);
+				SparksAt(TileCentre(missile.position.tile), look.element, 0.8F);
 			}
 			continue;
 		}
@@ -4405,6 +4423,11 @@ void ScanMissiles()
 	std::erase_if(Portals, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 }
 
+bool IsSteelHit(const Missile &missile)
+{
+	return missile._mitype == MissileID::VisualEffect && missile.poe2.vfxElement == static_cast<int8_t>(Element::Physical);
+}
+
 bool IsArcingSpark(const Missile &missile)
 {
 	return missile._miAnimType == MissileGraphicID::ChargedBolt
@@ -4415,6 +4438,9 @@ bool ReplacesSprite(const Missile &missile)
 {
 	if (!Enabled() || ScanFrame == 0 || ScanFrame - LastDrawnScan > 2)
 		return false;
+	// A blow of steel is the effects' pale flash alone, not the grey shatter it borrows.
+	if (IsSteelHit(missile))
+		return true;
 	if (missile._mitype == MissileID::VisualEffect)
 		return false;
 	// The portals are drawn whole by the effects, and a weapon's added element shows only faintly on its swing and cut,

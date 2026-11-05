@@ -181,6 +181,8 @@ void SetCamera(Point viewTile, Displacement offset, bool zoom);
 void ScanMissiles();
 /** @brief Whether the effects draw this missile themselves this frame, so its classic sprite is left out. */
 bool ReplacesSprite(const Missile &missile);
+/** @brief Whether the missile is a blow of steel (MetalHit): a pale flash and sparks, never Charged Bolt's blue crackle. */
+bool IsSteelHit(const Missile &missile);
 /** @brief Whether the missile is drawn as Arcing Sparks' small sparks rather than Charged Bolt's bolts: both fly the same missile. */
 bool IsArcingSpark(const Missile &missile);
 /** @brief The colour a missile's light shines in with HD Lighting: its effects' own colour (portals blue or red), 0-255. */
