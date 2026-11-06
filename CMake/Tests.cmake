@@ -54,6 +54,7 @@ set(tests
   poe2_gemcutting_test
   poe2_item_bases_test
   poe2_item_spawner_test
+  poe2_monster_spawner_test
   poe2_hud_globes_test
   poe2_overhead_bars_test
   poe2_corner_map_test

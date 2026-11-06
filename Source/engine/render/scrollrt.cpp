@@ -1083,7 +1083,8 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 		DrawMissile(out, tilePosition, targetBufferPosition, true, lightTableIndex);
 	}
 
-	if (lightTableIndex < LightsMax && bDead != 0) {
+	// POE2 Mashup: a corpse whose slot holds no picture (a monster spawned in for testing, then the level reloaded) is left out.
+	if (lightTableIndex < LightsMax && (bDead & 0x1F) != 0 && Corpses[(bDead & 0x1F) - 1].sprites) {
 		const Corpse &corpse = Corpses[(bDead & 0x1F) - 1];
 		const Point position { targetBufferPosition.x - CalculateSpriteTileCenterX(corpse.width), targetBufferPosition.y };
 		const ClxSprite sprite = corpse.spritesForDirection(static_cast<Direction>((bDead >> 5) & 7))[corpse.frame];

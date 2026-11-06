@@ -20,6 +20,9 @@ Corpse Corpses[MaxCorpses];
 int8_t stonendx;
 
 namespace {
+/** @brief How many corpse slots are in use: InitCorpses's, and any added since (AddCorpseKind). */
+int8_t CorpseKindCount = -1;
+
 void InitDeadAnimationFromMonster(Corpse &corpse, const CMonster &mon)
 {
 	const AnimStruct &animData = mon.getAnimData(MonsterGraphic::Death);
@@ -88,6 +91,21 @@ void InitCorpses()
 	}
 
 	assert(static_cast<unsigned>(nd) <= MaxCorpses);
+	// POE2 Mashup: the slots after these hold no picture, not one left over from another level.
+	CorpseKindCount = nd;
+	for (unsigned i = static_cast<unsigned>(nd); i < MaxCorpses; i++)
+		Corpses[i] = {};
+}
+
+int8_t AddCorpseKind(const CMonster &monsterType, uint8_t translationPaletteIndex)
+{
+	if (CorpseKindCount < 0 || static_cast<unsigned>(CorpseKindCount) >= MaxCorpses)
+		return 0;
+	Corpse &corpse = Corpses[CorpseKindCount];
+	InitDeadAnimationFromMonster(corpse, monsterType);
+	corpse.translationPaletteIndex = translationPaletteIndex;
+	CorpseKindCount++;
+	return CorpseKindCount;
 }
 
 void AddCorpse(Point tilePosition, int8_t dv, Direction ddir)

@@ -71,6 +71,8 @@ void GiveItemToPlayer(Player &player, Item &item);
 
 bool IsItemSpawnerOpen();
 void OpenItemSpawner();
+/** @brief Opens the spawner on its Items tab, or on its Monsters tab. */
+void OpenSpawnerTab(bool monsters);
 void CloseItemSpawner();
 void ToggleItemSpawner();
 
