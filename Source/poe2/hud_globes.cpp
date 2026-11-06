@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <vector>
 
 #include "control/control.hpp"
 #include "control/control_flasks.hpp"
@@ -99,6 +100,43 @@ void DrawShadowedText(const Surface &out, std::string_view text, const Rectangle
 {
 	DrawString(out, text, { rect.position + Displacement { 1, 1 }, rect.size }, { .flags = UiFlags::ColorBlack | align | UiFlags::KerningFitSpacing, .spacing = 0 });
 	DrawString(out, text, rect, { .flags = color | align | UiFlags::KerningFitSpacing, .spacing = 0 });
+}
+
+/**
+ * @brief Shadowed text in a colour the palette lacks: drawn white, then each letter pixel is shown in @p colour at the
+ * white's brightness through the UI's full-colour pixels. Where those aren't drawn, it is @p fallback from the palette.
+ */
+void DrawTrueColourText(const Surface &out, std::string_view text, const Rectangle &rect, const std::array<uint8_t, 3> &colour, UiFlags fallback)
+{
+	if (!CanTintUi(out)) {
+		DrawShadowedText(out, text, rect, fallback, UiFlags::None);
+		return;
+	}
+	DrawString(out, text, { rect.position + Displacement { 1, 1 }, rect.size }, { .flags = UiFlags::ColorBlack | UiFlags::KerningFitSpacing, .spacing = 0 });
+	// Letters can reach a few rows past the line's box.
+	const int x0 = std::max(rect.position.x - 2, 0);
+	const int y0 = std::max(rect.position.y - 4, 0);
+	const int x1 = std::min(rect.position.x + rect.size.width + 2, out.w());
+	const int y1 = std::min(rect.position.y + rect.size.height + 4, out.h());
+	if (x0 >= x1 || y0 >= y1)
+		return;
+	const int width = x1 - x0;
+	std::vector<uint8_t> before(static_cast<size_t>(width) * static_cast<size_t>(y1 - y0));
+	for (int y = y0; y < y1; y++)
+		for (int x = x0; x < x1; x++)
+			before[(static_cast<size_t>(y - y0) * width) + (x - x0)] = *out.at(x, y);
+	DrawString(out, text, rect, { .flags = UiFlags::ColorWhite | UiFlags::KerningFitSpacing, .spacing = 0 });
+	for (int y = y0; y < y1; y++) {
+		for (int x = x0; x < x1; x++) {
+			const uint8_t index = *out.at(x, y);
+			if (index == before[(static_cast<size_t>(y - y0) * width) + (x - x0)])
+				continue;
+			const SDL_Color &shade = logical_palette[index];
+			const int bright = std::max({ shade.r, shade.g, shade.b });
+			const auto scale = [bright](uint8_t channel) { return static_cast<uint8_t>(std::min(channel * bright / 230, 255)); };
+			DrawUiTrueColourPixel(out, { x, y }, index, scale(colour[0]), scale(colour[1]), scale(colour[2]));
+		}
+	}
 }
 
 bool Overlaps(const Rectangle &a, const Rectangle &b)
@@ -368,11 +406,18 @@ void DrawPoe2GlobeLevels(const Surface &out)
 		// Where a side panel pushed the skill tray up over a globe, the numbers go over the tray.
 		if (tray && Overlaps(block, *tray))
 			block.position.y = tray->position.y - 2 - height;
-		Rectangle line { block.position, { GlobeLevelBlockWidth, GlobeLevelLineHeight } };
+		// Like POE2 (Curtis 2026-11-06): the numbers start just past the longest name, names in a soft blue-grey and
+		// numbers in a light grey-white.
+		int labelWidth = 0;
+		for (const GlobeLevelLine &levelLine : lines)
+			labelWidth = std::max(labelWidth, GetLineWidth(levelLine.label, GameFont12, 0));
+		const int valueLeft = labelWidth + GlobeLevelValueGap;
 		for (const GlobeLevelLine &levelLine : lines) {
-			DrawShadowedText(out, levelLine.label, line, levelLine.color, UiFlags::None);
-			DrawShadowedText(out, levelLine.value, line, levelLine.color, UiFlags::AlignRight);
-			line.position.y += GlobeLevelLineHeight;
+			const Rectangle label { block.position, { valueLeft, GlobeLevelLineHeight } };
+			const Rectangle value { block.position + Displacement { valueLeft, 0 }, { GlobeLevelBlockWidth - valueLeft, GlobeLevelLineHeight } };
+			DrawTrueColourText(out, levelLine.label, label, GlobeLevelLabelColour, UiFlags::ColorUiSilver);
+			DrawTrueColourText(out, levelLine.value, value, GlobeLevelValueColour, levelLine.color);
+			block.position.y += GlobeLevelLineHeight;
 		}
 	};
 	drawLines(panel.x + LifeGlobeX + (GlobeArtSize / 2) - (GlobeLevelBlockWidth / 2), LifeGlobeLevelLines(levels));

@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -132,6 +133,11 @@ constexpr int GlobeLevelLineSlots = 4;
  * the globe's left edge, as the skill tray reaches up to there.
  */
 constexpr int GlobeLevelBlockWidth = 104;
+/** @brief Pixels between the longest name over a globe and the numbers (POE2 keeps them close). */
+constexpr int GlobeLevelValueGap = 5;
+/** @brief POE2's colours for the names (Life, Mana...) and the numbers over the globes, read off Curtis's picture. */
+constexpr std::array<uint8_t, 3> GlobeLevelLabelColour { 140, 152, 178 };
+constexpr std::array<uint8_t, 3> GlobeLevelValueColour { 232, 235, 236 };
 /** @brief Gap between the top of a globe's dome and the lowest line above it, clear of the ring and arc round the dome. */
 constexpr int GlobeLevelGap = 11;
 
