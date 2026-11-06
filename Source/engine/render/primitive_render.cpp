@@ -288,6 +288,19 @@ void TintUiPixel(const Surface &out, Point position, uint8_t color, uint8_t alph
 	pixel = color;
 }
 
+void DrawUiTrueColourPixel(const Surface &out, Point position, uint8_t color, uint8_t r, uint8_t g, uint8_t b)
+{
+	if (!out.InBounds(position))
+		return;
+	if (CanTintUi(out)) {
+		const int x = position.x + out.region.x;
+		const int y = position.y + out.region.y;
+		if (x >= 0 && y >= 0 && x < UiCoverSurface->w && y < UiCoverSurface->h)
+			UiTintCells[(static_cast<ptrdiff_t>(y) * UiCoverSurface->w) + x] = { color, 255, r, g, b, true };
+	}
+	*out.at(position.x, position.y) = color;
+}
+
 void CoverUi(const Surface &out, Rectangle area, UiCover cover)
 {
 	if (UiCoverCells == nullptr || out.surface != UiCoverSurface)

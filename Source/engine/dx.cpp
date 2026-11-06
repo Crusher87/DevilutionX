@@ -28,6 +28,7 @@
 #include "controls/control_mode.hpp"
 #include "controls/plrctrls.h"
 #include "engine/render/automap_render.hpp"
+#include "engine/palette.h"
 #include "engine/render/primitive_render.hpp"
 #include "engine/ui_scale.hpp"
 #include "headless_mode.hpp"
@@ -219,6 +220,19 @@ bool UpdateUiOverlay()
 					out[0] = color.r;
 					out[1] = color.g;
 					out[2] = color.b;
+					// A full-colour pixel (DrawUiTrueColourPixel) shows its own colour, not the palette's nearest, dimmed
+					// as the palette is by the brightness setting and fades.
+					if (tintLine[x].trueColour) {
+						const SDL_Color &base = logical_palette[uiLine[x]];
+						const int baseSum = base.r + base.g + base.b;
+						const int shownSum = color.r + color.g + color.b;
+						const auto shade = [&](uint8_t channel) {
+							return baseSum > 0 ? static_cast<uint8_t>(std::min(255, channel * shownSum / baseSum)) : channel;
+						};
+						out[0] = shade(tintLine[x].r);
+						out[1] = shade(tintLine[x].g);
+						out[2] = shade(tintLine[x].b);
+					}
 					out[3] = tintLine[x].alpha;
 					continue;
 				}
