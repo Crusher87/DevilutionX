@@ -14,6 +14,8 @@
 
 namespace devilution {
 
+struct CMonster;
+
 static constexpr unsigned MaxCorpses = 31;
 
 struct Corpse {
@@ -39,6 +41,12 @@ extern int8_t stonendx;
 
 void InitCorpses();
 void AddCorpse(Point tilePosition, int8_t dv, Direction ddir);
+/**
+ * @brief POE2 Mashup: a corpse slot for a monster type brought onto the level after InitCorpses (the monster spawner).
+ * @param translationPaletteIndex A unique monster's index + 1, for its colours, or 0.
+ * @return The corpse id, or 0 when every slot is taken.
+ */
+int8_t AddCorpseKind(const CMonster &monsterType, uint8_t translationPaletteIndex);
 void MoveLightsToCorpses();
 
 } // namespace devilution

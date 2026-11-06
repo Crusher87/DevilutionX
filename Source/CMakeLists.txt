@@ -163,6 +163,7 @@ set(libdevilutionx_SRCS
   panels/partypanel.cpp
   panels/quest_log.cpp
   panels/item_spawner.cpp
+  panels/monster_spawner.cpp
   panels/skill_lab_panel.cpp
   panels/atlas_panel.cpp
   panels/anvil_panel.cpp

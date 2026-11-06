@@ -313,6 +313,9 @@ void PresentLayeredFrame(SDL_Surface *surface)
 		if (UpdateUiOverlay())
 			SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
 	}
+	// POE2 Mashup: a panel's HD preview (the monster spawner's) goes over the UI.
+	if (hd::Active())
+		hd::RenderUi(renderer);
 	SkillLabCapturePresented(renderer);
 }
 #endif
