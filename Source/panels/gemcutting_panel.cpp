@@ -59,7 +59,8 @@ using namespace poe2ui;
 constexpr int Padding = 12;
 constexpr int HeaderHeight = 40;
 constexpr int FooterHeight = 36;
-constexpr int TabWidth = 118;
+// Wide enough for two-word skill names like "Sweeping Wind" on one line; the gem grid keeps its 3 columns.
+constexpr int TabWidth = 150;
 constexpr int TabHeight = 24;
 constexpr int TabGap = 3;
 constexpr int TierLabelWidth = 34;
@@ -150,13 +151,14 @@ bool IsCuttingSupport()
 std::vector<SkillSlot> SupportableSkills(const Player &player)
 {
 	std::vector<SkillSlot> skills;
+	// Curtis 2026-10-20: the weapon's own attack (Bow Shot and the like) takes supports too, in its own Skills panel row.
+	// It comes first, as it does in the Skills panel (Curtis 2026-11-06).
+	if (const SkillSlot weaponAttack = DefaultSkillSlot(player); !weaponAttack.isEmpty() && SkillTakesSupports(weaponAttack))
+		skills.push_back(weaponAttack);
 	for (const SkillSlot &skill : player.poe2.skillSlots) {
 		if (!skill.isEmpty() && SkillTakesSupports(skill) && std::find(skills.begin(), skills.end(), skill) == skills.end())
 			skills.push_back(skill);
 	}
-	// Curtis 2026-10-20: the weapon's own attack (Bow Shot and the like) takes supports too, in its own Skills panel row.
-	if (const SkillSlot weaponAttack = DefaultSkillSlot(player); !weaponAttack.isEmpty() && SkillTakesSupports(weaponAttack))
-		skills.push_back(weaponAttack);
 	return skills;
 }
 
@@ -762,7 +764,7 @@ void DrawGemcutting(const Surface &out)
 		UiFlags color = active ? UiFlags::ColorWhitegold : UiFlags::ColorWhite;
 		if (!active && tab.skill && tab.skill->kind == SkillKind::Spell)
 			color = UiFlags::ColorBlue;
-		DrawString(out, name, { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } }, { .flags = color | UiFlags::VerticalCenter });
+		DrawString(out, name, { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } }, { .flags = color | UiFlags::VerticalCenter | UiFlags::KerningFitSpacing });
 	}
 	// Only cutting a support lists skill tabs; the hint drew over the gem categories when cutting a skill gem (Curtis 2026-10-21).
 	if (IsCuttingSupport() && std::none_of(layout.skillTabs.begin(), layout.skillTabs.end(), [](const SkillTab &tab) { return tab.skill && tab.skill->kind != SkillKind::Default; }))
