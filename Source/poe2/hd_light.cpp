@@ -545,7 +545,7 @@ constexpr int SpillSteps = static_cast<int>(NumLightRadiuses) * Per;
  * further in front of a floor, where the floor ends without a wall (the Cathedral's dirt edges, drawn as a field of dirt
  * below the floor), is lit as the floor would be there: by each light as far from it as it is, seeing the lights the
  * floor's edge behind it sees. Left dark, the dirt showed only its first row (lit from behind, see hd.cpp's
- * LitFromBehind), as blocks with black lines between them, and a light fading out from the edge left the same lines a
+ * FromBehind), as blocks with black lines between them, and a light fading out from the edge left the same lines a
  * row or two further down.
  */
 void UpdateSpill()
@@ -1182,7 +1182,11 @@ void FieldRect(float &x0, float &y0, float &x1, float &y1)
 	y1 = SampleAt(WinJ0 + WinH - 1) + 0.5F / Per;
 }
 
-Rgb At(float x, float y)
+namespace {
+
+/** @brief The light at a world point (in tiles), blended from the four samples around it, each sample's light as `of` gives it (from its place in the window). */
+template <typename SampleLight>
+Rgb Blend(float x, float y, SampleLight of)
 {
 	if (WinW <= 0 || WinH <= 0)
 		return Full();
@@ -1194,14 +1198,54 @@ Rgb At(float x, float y)
 	const float v = std::clamp(fj - static_cast<float>(j), 0.F, 1.F);
 	const int i2 = std::min(i + 1, WinW - 1);
 	const int j2 = std::min(j + 1, WinH - 1);
-	const Rgb &a = WinColour[static_cast<size_t>(j) * WinW + i];
-	const Rgb &b = WinColour[static_cast<size_t>(j) * WinW + i2];
-	const Rgb &c = WinColour[static_cast<size_t>(j2) * WinW + i];
-	const Rgb &d = WinColour[static_cast<size_t>(j2) * WinW + i2];
+	const Rgb a = of(i, j);
+	const Rgb b = of(i2, j);
+	const Rgb c = of(i, j2);
+	const Rgb d = of(i2, j2);
 	const auto mix = [&](float pa, float pb, float pc, float pd) {
 		return (pa * (1 - u) + pb * u) * (1 - v) + (pc * (1 - u) + pd * u) * v;
 	};
 	return { mix(a.r, b.r, c.r, d.r), mix(a.g, b.g, c.g, d.g), mix(a.b, b.b, c.b, d.b) };
+}
+
+/** @brief FillWalls gave this sample the light of the room in front of it (it is rock inside or behind a wall). */
+bool LitForWalls(size_t k)
+{
+	return WinSet[k] >= 2;
+}
+
+} // namespace
+
+Rgb At(float x, float y)
+{
+	return Blend(x, y, [](int i, int j) { return WinColour[static_cast<size_t>(j) * WinW + i]; });
+}
+
+Rgb GroundAt(float x, float y)
+{
+	return Blend(x, y, [](int i, int j) {
+		const size_t k = static_cast<size_t>(j) * WinW + i;
+		return LitForWalls(k) ? Rgb {} : WinColour[k];
+	});
+}
+
+Rgb BehindAt(float x, float y, bool alongY)
+{
+	return Blend(x, y, [alongY](int i, int j) {
+		// Back a sample at a time past the rock lit for the walls, to the first floor or ground outside the rooms (lit
+		// past a floor's open edge, see UpdateSpill). Where it is rock lit for the walls all the way back, the walls
+		// behind are lit by the room beside them, as the face's own room sees them.
+		for (int step = 0; step <= 2; step++) {
+			const int bi = alongY ? i : i - step;
+			const int bj = alongY ? j - step : j;
+			if (bi < 0 || bj < 0)
+				break;
+			const size_t k = static_cast<size_t>(bj) * WinW + bi;
+			if (!LitForWalls(k))
+				return WinColour[k];
+		}
+		return WinColour[static_cast<size_t>(j) * WinW + i];
+	});
 }
 
 Rgb Boost(const Rgb &light, float levels)

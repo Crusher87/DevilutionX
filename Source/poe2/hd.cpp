@@ -1435,21 +1435,68 @@ Colour3 FloorLightAt(float x, float y, Point tile, BackWalls walls)
 	return LightAt(x, y);
 }
 
+/** @brief Where the hero being played stands this frame (in tiles), NaN when they aren't drawn. */
+float LitHeroX = std::numeric_limits<float>::quiet_NaN();
+float LitHeroY = std::numeric_limits<float>::quiet_NaN();
+
+/** @brief Walls with their back to the hero take the light of the hero's side fully up to this far from the hero (in tiles)... */
+constexpr float BehindFull = 6.F;
+/** @brief ...and none from this far, where the hero's light has faded. */
+constexpr float BehindNone = 9.F;
+
 /**
- * @brief A wall tile's faces take the light of the room behind them as well as their own: where the game draws the
- * walls see-through (DrawCell's test), as they stand between the view and the room they belong to, and where the faces
- * look out onto solid rock, as the outer side of the dungeon's walls does, which no light reaches.
+ * @brief How much a wall's face takes the light of the room behind it as well as its own, 0 to 1. The face the view sees
+ * of a wall in front of a room is its outer side, which the room's light doesn't reach. It takes the room's light where
+ * the game draws the walls see-through (DrawCell's test), as they stand between the view and the room they belong to,
+ * and where the faces look out onto solid rock, as the outer side of the dungeon's walls does, which no light reaches.
+ * So do the faces near the hero with their back to them: the walls the game draws solid between the view and the hero
+ * (the posts where walls meet, the next room's walls), which showed black beside the room's light. Standing in the
+ * wall's own row, in a doorway or where two walls meet, counts as behind it: the faces beside the hero look away from
+ * them too, and showed black on both sides of the doorway.
+ * @param right The face on the tile's y-min edge (looking towards +y), else the one on its x-min edge (towards +x).
  */
-bool LitFromBehind(Point tile)
+float FromBehind(Point tile, bool right)
 {
 	if (TileHasAny(tile, TileProperties::Transparent) && TransList[static_cast<uint8_t>(dTransVal[tile.x][tile.y])])
-		return true;
+		return 1.F;
+	bool facesRock = true;
 	for (const Displacement step : { Displacement { 1, 0 }, Displacement { 0, 1 }, Displacement { 1, 1 } }) {
 		const Point front = tile + step;
-		if (InDungeonBounds(front) && !light::Blocks(front.x, front.y))
-			return false;
+		if (InDungeonBounds(front) && !light::Blocks(front.x, front.y)) {
+			facesRock = false;
+			break;
+		}
 	}
-	return true;
+	if (facesRock)
+		return 1.F;
+	if (std::isnan(LitHeroX))
+		return 0.F;
+	// The middle of the face, how far behind the front of the wall's tile the hero stands (fully from half a tile, so all
+	// through a doorway in it), and how near they are.
+	const float fx = static_cast<float>(tile.x) - (right ? 0.F : 0.5F);
+	const float fy = static_cast<float>(tile.y) - (right ? 0.5F : 0.F);
+	const float behind = right ? static_cast<float>(tile.y) + 0.5F - LitHeroY : static_cast<float>(tile.x) + 0.5F - LitHeroX;
+	const float dx = fx - LitHeroX;
+	const float dy = fy - LitHeroY;
+	const float closeness = (BehindNone - std::sqrt(dx * dx + dy * dy)) / (BehindNone - BehindFull);
+	return std::clamp(behind * 2, 0.F, 1.F) * std::clamp(closeness, 0.F, 1.F);
+}
+
+/** @brief How much each of a tile's back walls takes the light of the room behind it (FromBehind). */
+struct BehindWalls {
+	float left = 0;
+	float right = 0;
+};
+
+BehindWalls BehindWallsOf(Point tile, BackWalls walls)
+{
+	return { walls.left ? FromBehind(tile, false) : 0.F, walls.right ? FromBehind(tile, true) : 0.F };
+}
+
+/** @brief The light of the room behind a wall at a point just behind its face (light::BehindAt). */
+Colour3 BehindLight(float x, float y, bool right)
+{
+	return ToColour(light::BehindAt(x, y, right));
 }
 
 /** @brief How far (in tiles) the room's light reaches past the foot of a see-through wall, fading out. */
@@ -1460,22 +1507,20 @@ constexpr float SpillDepth = 0.5F;
  * the walls belong to, so the room's light spills a little way past the walls' foot and lights the bottoms of their
  * columns.
  */
-Colour3 BaseFloorLight(float x, float y, Point tile, BackWalls walls, bool fromBehind)
+Colour3 BaseFloorLight(float x, float y, Point tile, BackWalls walls, BehindWalls behind)
 {
 	Colour3 light = FloorLightAt(x, y, tile, walls);
-	if (!fromBehind)
-		return light;
 	const float tx = static_cast<float>(tile.x);
 	const float ty = static_cast<float>(tile.y);
-	const auto spill = [&](float distance, const Colour3 &room) {
-		const float weight = std::clamp(1.F - distance / SpillDepth, 0.F, 1.F);
+	const auto spill = [&](float distance, float share, const Colour3 &room) {
+		const float weight = share * std::clamp(1.F - distance / SpillDepth, 0.F, 1.F);
 		for (int c = 0; c < 3; c++)
 			light[c] = std::max(light[c], room[c] * weight);
 	};
-	if (walls.left)
-		spill(x - (tx - 0.5F), LightAt(tx - 0.75F, std::clamp(y, ty - 0.5F, ty + 0.5F)));
-	if (walls.right)
-		spill(y - (ty - 0.5F), LightAt(std::clamp(x, tx - 0.5F, tx + 0.5F), ty - 0.75F));
+	if (behind.left > 0)
+		spill(x - (tx - 0.5F), behind.left, BehindLight(tx - 0.75F, std::clamp(y, ty - 0.5F, ty + 0.5F), false));
+	if (behind.right > 0)
+		spill(y - (ty - 0.5F), behind.right, BehindLight(std::clamp(x, tx - 0.5F, tx + 0.5F), ty - 0.75F, true));
 	return light;
 }
 
@@ -1533,7 +1578,7 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 	SDL_SetTextureAlphaMod(art.texture, 255);
 	const bool right = IsRightColumn(draw);
 	const BackWalls walls = BackWallsOf(draw.cell);
-	const bool fromBehind = LitFromBehind(draw.cell);
+	const BehindWalls behind = BehindWallsOf(draw.cell, walls);
 	const float tx = static_cast<float>(draw.cell.x);
 	const float ty = static_cast<float>(draw.cell.y);
 	// The half diamond's corner where its two outer edges meet, and points along those edges at fractions a and b:
@@ -1554,7 +1599,7 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 			const float fy = 0.5F - 0.5F * a + 0.5F * b;
 			const float wx = right ? tx + 0.5F - a : tx - 0.5F + b;
 			const float wy = right ? ty - 0.5F + b : ty + 0.5F - a;
-			const Colour3 colour = ArtColour(BaseFloorLight(wx, wy, draw.cell, walls, fromBehind), art);
+			const Colour3 colour = ArtColour(BaseFloorLight(wx, wy, draw.cell, walls, behind), art);
 			colours[static_cast<size_t>(count)] = colour;
 			vertices[count] = SDL_Vertex {
 				{ dest.x + fx * dest.w, dest.y + fy * dest.h },
@@ -1606,7 +1651,7 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 	const bool right = IsRightColumn(draw);
 	const auto &corners = right ? RightHalf : LeftHalf;
 	const BackWalls walls = BackWallsOf(draw.cell);
-	const bool fromBehind = LitFromBehind(draw.cell);
+	const BehindWalls behind = BehindWallsOf(draw.cell, walls);
 	const bool floorOnly = IsFloorOnly(draw);
 	std::array<SDL_Vertex, 6> vertices;
 	std::array<Colour3, 6> colours;
@@ -1620,7 +1665,7 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 			float wx;
 			float wy;
 			BaseWorldOf(right, fx, fy, draw.cell, wx, wy);
-			light = BaseFloorLight(wx, wy, draw.cell, walls, fromBehind);
+			light = BaseFloorLight(wx, wy, draw.cell, walls, behind);
 		}
 		const Colour3 colour = ArtColour(light, art);
 		colours[i] = colour;
@@ -1636,9 +1681,10 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 
 /**
  * @brief The Cathedral's dirt (drlg_l1.cpp's Dirt tiles): the ground outside its rooms, its edges along a floor's open
- * sides and corners, and beside the ends of walls. The level is filled with it before the rooms are cut out.
+ * sides and corners, and beside the ends of walls. The level is filled with it before the rooms are cut out. 195 and 196
+ * are the dirt beside the doorway of King Leoric's tomb (skngdo.dun).
  */
-constexpr std::array<uint8_t, 14> CathedralDirt { 18, 19, 20, 21, 22, 23, 24, 199, 200, 201, 202, 203, 204, 205 };
+constexpr std::array<uint8_t, 16> CathedralDirt { 18, 19, 20, 21, 22, 23, 24, 195, 196, 199, 200, 201, 202, 203, 204, 205 };
 
 /** @brief The pieces the dirt is drawn with, by piece number, worked out from the level's own tiles (empty elsewhere). */
 std::vector<bool> DirtPieces;
@@ -1658,7 +1704,8 @@ void IndexDirt()
 	for (const uint8_t tile : CathedralDirt) {
 		const MegaTile &mega = DirtMegaTiles[tile - 1];
 		for (const uint16_t piece : { Swap16LE(mega.micro1), Swap16LE(mega.micro2), Swap16LE(mega.micro3), Swap16LE(mega.micro4) }) {
-			if (piece < MAXTILES)
+			// Only its solid pieces: the tomb's dirt stands on a piece of plain floor that other tiles share.
+			if (piece < MAXTILES && HasAnyOf(SOLData[piece], TileProperties::Solid))
 				DirtPieces[piece] = true;
 		}
 	}
@@ -1677,7 +1724,9 @@ bool IsDirt(Point cell)
  * The game draws its field of dirt two rows above the tiles it belongs to, so on screen it lies beside the floor as one
  * flat ground, with the stone rim of the floor's open edge on it. Each point of it takes the light on the floor's plane
  * at that point of the screen, as the floor does, in small triangles so the light changes smoothly across it and its
- * pieces meet without a seam. Lit by its own tile, each piece showed as a square of one shade.
+ * pieces meet without a seam. Lit by its own tile, each piece showed as a square of one shade. Behind a wall it takes
+ * none of the light the wall's face takes from the room in front of it (light::GroundAt): beside a doorway in a wall
+ * (the tomb's), that showed as a lit patch of dirt like a way in.
  */
 void DrawGroundLit(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 {
@@ -1702,7 +1751,7 @@ void DrawGroundLit(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 			float wy;
 			WorldOf(static_cast<float>(draw.x) + fx * static_cast<float>(draw.width), static_cast<float>(draw.y) + fy * static_cast<float>(draw.height), wx, wy);
 			const size_t k = static_cast<size_t>(j * Row + i);
-			colours[k] = ArtColour(LightAt(wx, wy), art);
+			colours[k] = ArtColour(ToColour(light::GroundAt(wx, wy)), art);
 			vertices[k] = SDL_Vertex {
 				{ dest.x + fx * dest.w, dest.y + fy * dest.h },
 				{ ColourByte(colours[k][0]), ColourByte(colours[k][1]), ColourByte(colours[k][2]), 255 },
@@ -2111,15 +2160,16 @@ Shading FaceLight(Point tile, bool right)
 Shading WallLight(Point tile, bool right)
 {
 	Shading shading = FaceLight(tile, right);
-	if (!LitFromBehind(tile))
+	const float share = FromBehind(tile, right);
+	if (share <= 0)
 		return shading;
 	const float tx = static_cast<float>(tile.x);
 	const float ty = static_cast<float>(tile.y);
-	const Shading behind = right ? Gradient(LightAt(tx - 0.5F, ty - 0.75F), LightAt(tx + 0.5F, ty - 0.75F))
-	                             : Gradient(LightAt(tx - 0.75F, ty + 0.5F), LightAt(tx - 0.75F, ty - 0.5F));
+	const Shading behind = right ? Gradient(BehindLight(tx - 0.5F, ty - 0.75F, true), BehindLight(tx + 0.5F, ty - 0.75F, true))
+	                             : Gradient(BehindLight(tx - 0.75F, ty + 0.5F, false), BehindLight(tx - 0.75F, ty - 0.5F, false));
 	for (int s = 0; s < shading.count; s++) {
 		for (int c = 0; c < 3; c++)
-			shading.colours[s][c] = std::max(shading.colours[s][c], behind.colours[s][c]);
+			shading.colours[s][c] = std::max(shading.colours[s][c], behind.colours[s][c] * share);
 	}
 	return shading;
 }
@@ -2234,6 +2284,8 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 			break;
 		}
 	}
+	LitHeroX = heroX;
+	LitHeroY = heroY;
 	const Mood &mood = CurrentMood();
 	light::Look look;
 	look.levelBrightness = LightLevel;

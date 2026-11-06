@@ -103,6 +103,21 @@ void FieldRect(float &x0, float &y0, float &x1, float &y1);
 /** @brief The light at a world point (in tiles), per channel: 1 is full, and beside a strong light up to MaxLight. */
 Rgb At(float x, float y);
 
+/**
+ * @brief The light on the ground outside the rooms at a world point (in tiles): as At, but none of the light the rock
+ * inside and behind the walls takes from the room in front of them for the walls' faces. No light reaches the ground
+ * behind a wall.
+ */
+Rgb GroundAt(float x, float y);
+
+/**
+ * @brief The light of the room behind a wall at a world point (in tiles) just behind the wall's face: as At, but where
+ * the point is rock lit for the walls by the room in front of them, the light of the first floor (or ground outside the
+ * rooms) further back, up to a tile behind it. The face looks along the x axis (towards +x) or, if `alongY`, along the
+ * y axis.
+ */
+Rgb BehindAt(float x, float y, bool alongY);
+
 /** @brief All the light at a world point as linear light: lights add up, so it can pass 1 where they overlap. */
 float LinearAt(float x, float y);
 
