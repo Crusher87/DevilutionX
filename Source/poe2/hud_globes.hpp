@@ -2,8 +2,8 @@
  * @file poe2/hud_globes.hpp
  *
  * POE2 Mashup HUD: animated life and mana globes, the energy shield ring around the life globe,
- * the Spirit arc along the mana globe and liquid levels on belt flasks, all drawn in code on top of
- * Diablo's own panel art.
+ * the Spirit arc along the mana globe, the numbers above both globes, the Rage bar over the belt and
+ * liquid levels on belt flasks, all drawn in code on top of Diablo's own panel art.
  */
 #pragma once
 
@@ -14,6 +14,7 @@
 #include "DiabloUI/ui_flags.hpp"
 #include "engine/clx_sprite.hpp"
 #include "engine/point.hpp"
+#include "engine/rectangle.hpp"
 #include "engine/surface.hpp"
 
 namespace devilution {
@@ -98,9 +99,9 @@ void DrawGlobeArc(const Surface &out, Point center, int radius, int thickness, c
 void DrawPoe2LifeGlobe(const Surface &out, bool dome);
 /** @brief Draws the mana globe and its Spirit arc; dome selects the part above the main panel. */
 void DrawPoe2ManaGlobe(const Surface &out, bool dome);
-/** @brief Energy shield and Spirit numbers, shown with the life/mana values or while hovering a globe. */
+/** @brief Timed lines over the mana globe: the Vizjerei Road toll's backlash and a Venomous map's poison. */
 void DrawPoe2GlobeValues(const Surface &out);
-/** @brief The numbers "Show Life/Mana Levels" prints above the globes. */
+/** @brief The numbers printed above the globes in POE2 mode. */
 struct GlobeLevels {
 	int life = 0;
 	int maxLife = 0;
@@ -110,37 +111,56 @@ struct GlobeLevels {
 	int maxMana = 0;
 	int reservedSpirit = 0;
 	int maxSpirit = 0;
+	int rage = 0;
+	int combo = 0;
+	int frenzyCharges = 0;
 };
 
-/** @brief One line of numbers above a globe. */
+/** @brief One line above a globe, like POE2's: its label at the left of the block, its number at the right. */
 struct GlobeLevelLine {
-	std::string text;
+	std::string label;
+	std::string value;
 	UiFlags color;
 };
 
 /** @brief Height of one line of numbers above a globe. */
 constexpr int GlobeLevelLineHeight = 12;
+/** @brief Most lines above one globe: Mana, Spirit, Rage and Combo over the mana globe. */
+constexpr int GlobeLevelLineSlots = 4;
 /**
- * @brief Lines the space above a globe is laid out for: Life or Mana, then Energy Shield or Spirit, and one more kept
- * free for a Rage number over the life globe later on.
+ * @brief Width of the block of lines over a globe. Over the life globe it is centred; over the mana globe it starts at
+ * the globe's left edge, as the skill tray reaches up to there.
  */
-constexpr int GlobeLevelLineSlots = 3;
-/** @brief Gap between the top of a globe's dome and the lowest line above it. */
-constexpr int GlobeLevelGap = 2;
+constexpr int GlobeLevelBlockWidth = 104;
+/** @brief Gap between the top of a globe's dome and the lowest line above it, clear of the ring and arc round the dome. */
+constexpr int GlobeLevelGap = 11;
 
 GlobeLevels ReadGlobeLevels(const Player &player);
-/** @brief Lines over the life globe, the lowest first: Life, then Energy Shield when the hero has any. */
+/** @brief Lines over the life globe, top to bottom: Life, Energy Shield when the hero has any, Frenzy charges while held. */
 std::vector<GlobeLevelLine> LifeGlobeLevelLines(const GlobeLevels &levels);
-/** @brief Lines over the mana globe, the lowest first: Mana, then Spirit (reserved / total) when the hero has any. */
+/**
+ * @brief Lines over the mana globe, top to bottom: Mana, Spirit (reserved / total) when the hero has any, then Rage and
+ * Combo while built up.
+ */
 std::vector<GlobeLevelLine> ManaGlobeLevelLines(const GlobeLevels &levels);
-/** @brief Whether the "Show Life/Mana Levels" numbers are drawn (POE2 mode and the option on). */
+/** @brief Whether the numbers above the globes are drawn: always in POE2 mode. */
 bool ShowingGlobeLevels();
-/** @brief Draws the "Show Life/Mana Levels" numbers above both globes. */
+/** @brief Draws the numbers above both globes. */
 void DrawPoe2GlobeLevels(const Surface &out);
 
-/** @brief Whether the mouse is over the life or mana globe, which then shows its current / max value. */
-bool IsHoveringLifeGlobe();
-bool IsHoveringManaGlobe();
+/**
+ * @brief The Rage bar lies along the top edge of the belt, between the globes, like POE2's along its skill bar: a
+ * 1 pixel dark frame round a red fill on a darker track. It is as wide as the belt's frame, and its top row is this
+ * far below the main panel's top.
+ */
+constexpr int RageBarY = -1;
+constexpr int RageBarHeight = 5;
+/** @brief Pixels of the bar's track the fill covers, left to right. */
+int RageBarFill(int rage, int maxRage, int trackWidth);
+/** @brief Draws a Rage bar in the rectangle, frame included; nothing while rage is 0. */
+void DrawRageBar(const Surface &out, const Rectangle &bar, int rage, int maxRage);
+/** @brief Draws the hero's Rage bar over the belt while they have Rage. */
+void DrawPoe2RageBar(const Surface &out);
 
 /**
  * @brief Darkens the empty top part of a flask in the belt and lights its liquid surface.

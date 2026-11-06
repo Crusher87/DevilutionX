@@ -2255,18 +2255,21 @@ void DrawAndBlit()
 		DrawChatBox(out);
 	}
 	DrawXPBar(out);
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
+		DrawPoe2RageBar(out);
 		DrawPoe2GlobeValues(out);
-	// POE2 Mashup: "Show Life/Mana Levels" puts the numbers above the globes, so hovering a globe adds nothing.
-	const bool globeHoverValues = gbIsPoe2 && !ShowingGlobeLevels();
-	if (ShowingGlobeLevels())
+	}
+	// POE2 Mashup: the numbers sit above the globes, like POE2, so nothing is printed over the globes' art.
+	if (ShowingGlobeLevels()) {
 		DrawPoe2GlobeLevels(out);
-	if (*GetOptions().Gameplay.showHealthValues || (globeHoverValues && IsHoveringLifeGlobe()))
-		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
-	if (*GetOptions().Gameplay.showManaValues || (globeHoverValues && IsHoveringManaGlobe()))
-		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
-		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
-		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
+	} else {
+		if (*GetOptions().Gameplay.showHealthValues)
+			DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
+		if (*GetOptions().Gameplay.showManaValues)
+			DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
+			    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
+			    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
+	}
 	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
 	DrawStashTabTooltip(out);

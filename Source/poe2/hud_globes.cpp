@@ -3,20 +3,24 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <tuple>
 
 #include "control/control.hpp"
 #include "control/control_flasks.hpp"
+#include "control/control_panel.hpp"
 #include "diablo.h"
 #include "engine/light_tables.hpp"
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
+#include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "game_mode.hpp"
-#include "options.h"
+#include "panels/skill_bar.hpp"
 #include "player.h"
 #include "poe2/map_play.hpp"
+#include "poe2/skill_resources.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/str_cat.hpp"
@@ -31,6 +35,12 @@ constexpr int ArcGap = 3;
 constexpr int ArcThickness = 4;
 /** @brief The light table the empty part of a flask is drawn with. */
 constexpr int EmptyFlaskLightLevel = 11;
+/** @brief The Rage bar's colours: a dark frame, a darker red track and a red fill lit along its top. */
+constexpr uint8_t RageBarFrameColor = PAL16_GRAY + 14;
+constexpr uint8_t RageBarTrackColor = PAL16_RED + 14;
+constexpr uint8_t RageBarFillTopColor = PAL16_RED + 2;
+constexpr uint8_t RageBarFillColor = PAL16_RED + 5;
+constexpr uint8_t RageBarFillBottomColor = PAL16_RED + 8;
 
 uint8_t RampColor(uint8_t rampBase, float shade)
 {
@@ -76,19 +86,30 @@ void DrawGlobe(const Surface &out, const Surface &emptyArt, int globeX, GlobeLiq
 	DrawGlobeArc(out, center, radius, ArcThickness, arc, litSegments, dome ? 0 : panel.y, dome ? panel.y : out.h(), now);
 }
 
-bool IsHoveringGlobe(int globeX)
-{
-	const Point panel = GetMainPanel().position;
-	const Rectangle globe { panel + Displacement { globeX, GlobeTopRow - GlobePanelTopRow }, { GlobeArtSize, GlobeBottomRow - GlobeTopRow } };
-	return globe.contains(MousePosition);
-}
-
 void DrawShadowedValue(const Surface &out, std::string_view text, Point position, UiFlags color)
 {
 	constexpr int Width = 80;
 	const Rectangle rect { position - Displacement { Width / 2, 0 }, { Width, 12 } };
 	DrawString(out, text, { rect.position + Displacement { 1, 1 }, rect.size }, { .flags = UiFlags::ColorBlack | UiFlags::AlignCenter | UiFlags::KerningFitSpacing, .spacing = 0 });
 	DrawString(out, text, rect, { .flags = color | UiFlags::AlignCenter | UiFlags::KerningFitSpacing, .spacing = 0 });
+}
+
+/** @brief Text with a soft shadow one pixel down and right, aligned in the rectangle by the flags. */
+void DrawShadowedText(const Surface &out, std::string_view text, const Rectangle &rect, UiFlags color, UiFlags align)
+{
+	DrawString(out, text, { rect.position + Displacement { 1, 1 }, rect.size }, { .flags = UiFlags::ColorBlack | align | UiFlags::KerningFitSpacing, .spacing = 0 });
+	DrawString(out, text, rect, { .flags = color | align | UiFlags::KerningFitSpacing, .spacing = 0 });
+}
+
+bool Overlaps(const Rectangle &a, const Rectangle &b)
+{
+	return a.position.x < b.position.x + b.size.width && b.position.x < a.position.x + a.size.width
+	    && a.position.y < b.position.y + b.size.height && b.position.y < a.position.y + a.size.height;
+}
+
+bool IsCoveredBySidePanel(const Rectangle &rect)
+{
+	return (IsLeftPanelOpen() && Overlaps(rect, GetLeftPanel())) || (IsRightPanelOpen() && Overlaps(rect, GetRightPanel()));
 }
 
 } // namespace
@@ -278,16 +299,6 @@ void DrawPoe2ManaGlobe(const Surface &out, bool dome)
 	    LitArcSegments(AvailableSpirit(player), maxSpirit, SpiritArc.segments), maxSpirit > 0);
 }
 
-bool IsHoveringLifeGlobe()
-{
-	return IsHoveringGlobe(LifeGlobeX);
-}
-
-bool IsHoveringManaGlobe()
-{
-	return IsHoveringGlobe(ManaGlobeX);
-}
-
 GlobeLevels ReadGlobeLevels(const Player &player)
 {
 	GlobeLevels levels;
@@ -300,31 +311,42 @@ GlobeLevels ReadGlobeLevels(const Player &player)
 	levels.maxMana = noMana ? 0 : player._pMaxMana.whole();
 	levels.maxSpirit = MaxSpirit(player);
 	levels.reservedSpirit = levels.maxSpirit > 0 ? ReservedSpirit(player) : 0;
+	levels.rage = player.poe2.rage;
+	levels.combo = player.poe2.combo;
+	levels.frenzyCharges = player.poe2.frenzyCharges;
 	return levels;
 }
 
 std::vector<GlobeLevelLine> LifeGlobeLevelLines(const GlobeLevels &levels)
 {
 	std::vector<GlobeLevelLine> lines;
-	lines.push_back({ StrCat("Life ", std::max(levels.life, 0), "/", levels.maxLife), UiFlags::ColorWhite });
+	lines.push_back({ "Life", StrCat(std::max(levels.life, 0), "/", levels.maxLife), UiFlags::ColorWhite });
 	if (levels.maxEnergyShield > 0)
-		lines.push_back({ StrCat("ES ", std::max(levels.energyShield, 0), "/", levels.maxEnergyShield), UiFlags::ColorBlue });
+		lines.push_back({ "ES", StrCat(std::max(levels.energyShield, 0), "/", levels.maxEnergyShield), UiFlags::ColorBlue });
+	if (levels.frenzyCharges > 0)
+		lines.push_back({ "Frenzy", StrCat(levels.frenzyCharges, "/", MaxFrenzyCharges), UiFlags::ColorOrange });
 	return lines;
 }
 
 std::vector<GlobeLevelLine> ManaGlobeLevelLines(const GlobeLevels &levels)
 {
 	std::vector<GlobeLevelLine> lines;
-	lines.push_back({ StrCat("Mana ", std::max(levels.mana, 0), "/", levels.maxMana), UiFlags::ColorWhite });
+	lines.push_back({ "Mana", StrCat(std::max(levels.mana, 0), "/", levels.maxMana), UiFlags::ColorWhite });
 	// Like POE2's mana globe: the Spirit the hero's skills reserve, out of all of it.
 	if (levels.maxSpirit > 0)
-		lines.push_back({ StrCat("Spirit ", levels.reservedSpirit, "/", levels.maxSpirit), UiFlags::ColorGold });
+		lines.push_back({ "Spirit", StrCat(levels.reservedSpirit, "/", levels.maxSpirit), UiFlags::ColorGold });
+	// Rage and Combo only show while built up.
+	if (levels.rage > 0)
+		lines.push_back({ "Rage", StrCat(levels.rage, "/", MaxRage), UiFlags::ColorRed });
+	if (levels.combo > 0)
+		lines.push_back({ "Combo", StrCat(levels.combo, "/", MaxCombo), UiFlags::ColorWhite });
 	return lines;
 }
 
 bool ShowingGlobeLevels()
 {
-	return gbIsPoe2 && *GetOptions().Gameplay.showLifeManaLevels;
+	// Like POE2, the numbers are always there (Curtis 2026-11-06: Rage drawn inside the life globe was unreadable).
+	return gbIsPoe2;
 }
 
 void DrawPoe2GlobeLevels(const Surface &out)
@@ -332,41 +354,70 @@ void DrawPoe2GlobeLevels(const Surface &out)
 	const GlobeLevels levels = ReadGlobeLevels(*MyPlayer);
 	const Point panel = GetMainPanel().position;
 	// The lowest line sits just over the top of the globe's dome, which sticks out above the panel.
-	const int lowestTop = panel.y + GlobeTopRow - GlobePanelTopRow - GlobeLevelGap - GlobeLevelLineHeight;
-	const auto drawLines = [&](int globeX, const std::vector<GlobeLevelLine> &lines) {
-		int top = lowestTop;
-		for (const GlobeLevelLine &line : lines) {
-			DrawShadowedValue(out, line.text, { panel.x + globeX + (GlobeArtSize / 2), top }, line.color);
-			top -= GlobeLevelLineHeight;
+	const int bottom = panel.y + GlobeTopRow - GlobePanelTopRow - GlobeLevelGap;
+	const std::optional<Rectangle> tray = SkillTrayRect();
+	const std::optional<Rectangle> levelButtonLabel = LevelButtonLabelArea();
+	const auto drawLines = [&](int left, const std::vector<GlobeLevelLine> &lines) {
+		const int height = static_cast<int>(lines.size()) * GlobeLevelLineHeight;
+		Rectangle block { { left, bottom - height }, { GlobeLevelBlockWidth, height } };
+		if (IsCoveredBySidePanel(block))
+			return;
+		// The life numbers step right of the "Passive Points" label over the level-up button, while it shows.
+		if (levelButtonLabel && block.position.x < levelButtonLabel->position.x + levelButtonLabel->size.width)
+			block.position.x = levelButtonLabel->position.x + levelButtonLabel->size.width + 2;
+		// Where a side panel pushed the skill tray up over a globe, the numbers go over the tray.
+		if (tray && Overlaps(block, *tray))
+			block.position.y = tray->position.y - 2 - height;
+		Rectangle line { block.position, { GlobeLevelBlockWidth, GlobeLevelLineHeight } };
+		for (const GlobeLevelLine &levelLine : lines) {
+			DrawShadowedText(out, levelLine.label, line, levelLine.color, UiFlags::None);
+			DrawShadowedText(out, levelLine.value, line, levelLine.color, UiFlags::AlignRight);
+			line.position.y += GlobeLevelLineHeight;
 		}
 	};
-	drawLines(LifeGlobeX, LifeGlobeLevelLines(levels));
-	drawLines(ManaGlobeX, ManaGlobeLevelLines(levels));
+	drawLines(panel.x + LifeGlobeX + (GlobeArtSize / 2) - (GlobeLevelBlockWidth / 2), LifeGlobeLevelLines(levels));
+	drawLines(panel.x + ManaGlobeX + 2, ManaGlobeLevelLines(levels));
+}
+
+int RageBarFill(int rage, int maxRage, int trackWidth)
+{
+	if (rage <= 0 || maxRage <= 0 || trackWidth <= 0)
+		return 0;
+	if (rage >= maxRage)
+		return trackWidth;
+	return std::clamp(rage * trackWidth / maxRage, 1, trackWidth);
+}
+
+void DrawRageBar(const Surface &out, const Rectangle &bar, int rage, int maxRage)
+{
+	if (rage <= 0 || bar.size.width < 3 || bar.size.height < 3)
+		return;
+	FillRect(out, bar.position.x, bar.position.y, bar.size.width, bar.size.height, RageBarFrameColor);
+	const Rectangle track { bar.position + Displacement { 1, 1 }, { bar.size.width - 2, bar.size.height - 2 } };
+	FillRect(out, track.position.x, track.position.y, track.size.width, track.size.height, RageBarTrackColor);
+	const int filled = RageBarFill(rage, maxRage, track.size.width);
+	for (int row = 0; row < track.size.height; row++) {
+		uint8_t color = RageBarFillColor;
+		if (row == 0)
+			color = RageBarFillTopColor;
+		else if (row == track.size.height - 1)
+			color = RageBarFillBottomColor;
+		FillRect(out, track.position.x, track.position.y + row, filled, 1, color);
+	}
+}
+
+void DrawPoe2RageBar(const Surface &out)
+{
+	if (!gbIsPoe2 || MyPlayer == nullptr)
+		return;
+	const Point panel = GetMainPanel().position;
+	DrawRageBar(out, { panel + Displacement { BeltRect.position.x - 1, RageBarY }, { BeltRect.size.width + 2, RageBarHeight } }, MyPlayer->poe2.rage, MaxRage);
 }
 
 void DrawPoe2GlobeValues(const Surface &out)
 {
 	const Player &player = *MyPlayer;
 	const Point panel = GetMainPanel().position;
-	// With the levels shown above the globes, hovering a globe has nothing more to tell.
-	const bool hoverShows = !ShowingGlobeLevels();
-	if (player.poe2.maxEnergyShield > 0 && (*GetOptions().Gameplay.showHealthValues || (hoverShows && IsHoveringGlobe(LifeGlobeX)))) {
-		DrawShadowedValue(out, StrCat("ES ", player.poe2.energyShield / 64, "/", player.poe2.maxEnergyShield),
-		    panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 44 }, UiFlags::ColorBlue);
-	}
-	const int maxSpirit = MaxSpirit(player);
-	if (maxSpirit > 0 && (*GetOptions().Gameplay.showManaValues || (hoverShows && IsHoveringGlobe(ManaGlobeX)))) {
-		// Like POE2, the Spirit not reserved yet.
-		DrawShadowedValue(out, StrCat("Spirit ", AvailableSpirit(player), "/", maxSpirit),
-		    panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 44 }, UiFlags::ColorGold);
-	}
-	// Rage, Combo and Frenzy charges only show while built up.
-	if (player.poe2.rage > 0)
-		DrawShadowedValue(out, StrCat("Rage ", player.poe2.rage), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorRed);
-	if (player.poe2.combo > 0)
-		DrawShadowedValue(out, StrCat("Combo ", player.poe2.combo), panel + Displacement { ManaGlobeX + (GlobeArtSize / 2), 30 }, UiFlags::ColorWhite);
-	if (player.poe2.frenzyCharges > 0)
-		DrawShadowedValue(out, StrCat("Frenzy ", player.poe2.frenzyCharges), panel + Displacement { LifeGlobeX + (GlobeArtSize / 2), 58 }, UiFlags::ColorOrange);
 	// The Vizjerei Road toll's backlash: one line per element still biting, with its seconds left.
 	int backlashY = 58;
 	for (const auto &[element, name, colour] : { std::tuple { DamageType::Fire, "Burning", UiFlags::ColorOrange }, std::tuple { DamageType::Cold, "Chilled", UiFlags::ColorBlue },

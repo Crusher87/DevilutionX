@@ -5,6 +5,8 @@
 #include "engine/palette.h"
 #include "engine/surface.hpp"
 #include "poe2/hud_globes.hpp"
+#include "poe2/skill_resources.hpp"
+#include "utils/str_cat.hpp"
 
 namespace devilution {
 namespace {
@@ -151,18 +153,35 @@ TEST(Poe2HudGlobesTest, LifeLevelsShowEnergyShieldOnlyWhenTheHeroHasSome)
 	levels.maxLife = 150;
 	std::vector<GlobeLevelLine> lines = LifeGlobeLevelLines(levels);
 	ASSERT_EQ(lines.size(), 1U);
-	EXPECT_EQ(lines[0].text, "Life 120/150");
+	EXPECT_EQ(lines[0].label, "Life");
+	EXPECT_EQ(lines[0].value, "120/150");
 
 	levels.energyShield = 30;
 	levels.maxEnergyShield = 40;
 	lines = LifeGlobeLevelLines(levels);
 	ASSERT_EQ(lines.size(), 2U);
-	EXPECT_EQ(lines[0].text, "Life 120/150") << "life stays next to the globe";
-	EXPECT_EQ(lines[1].text, "ES 30/40");
+	EXPECT_EQ(lines[0].label, "Life") << "life stays on top, like POE2";
+	EXPECT_EQ(lines[1].label, "ES");
+	EXPECT_EQ(lines[1].value, "30/40");
 	EXPECT_EQ(lines[1].color, UiFlags::ColorBlue);
 
 	levels.life = -3;
-	EXPECT_EQ(LifeGlobeLevelLines(levels)[0].text, "Life 0/150") << "a dying hero never shows less than nothing";
+	EXPECT_EQ(LifeGlobeLevelLines(levels)[0].value, "0/150") << "a dying hero never shows less than nothing";
+}
+
+TEST(Poe2HudGlobesTest, LifeLevelsShowFrenzyChargesOnlyWhileHeld)
+{
+	GlobeLevels levels;
+	levels.life = 10;
+	levels.maxLife = 10;
+	levels.maxEnergyShield = 5;
+	EXPECT_EQ(LifeGlobeLevelLines(levels).size(), 2U);
+
+	levels.frenzyCharges = 2;
+	const std::vector<GlobeLevelLine> lines = LifeGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 3U);
+	EXPECT_EQ(lines[2].label, "Frenzy") << "frenzy charges come last, under energy shield";
+	EXPECT_EQ(lines[2].value, StrCat(2, "/", MaxFrenzyCharges));
 }
 
 TEST(Poe2HudGlobesTest, ManaLevelsShowReservedSpiritOutOfTheTotal)
@@ -172,25 +191,91 @@ TEST(Poe2HudGlobesTest, ManaLevelsShowReservedSpiritOutOfTheTotal)
 	levels.maxMana = 80;
 	std::vector<GlobeLevelLine> lines = ManaGlobeLevelLines(levels);
 	ASSERT_EQ(lines.size(), 1U);
-	EXPECT_EQ(lines[0].text, "Mana 45/80");
+	EXPECT_EQ(lines[0].label, "Mana");
+	EXPECT_EQ(lines[0].value, "45/80");
 
 	levels.reservedSpirit = 30;
 	levels.maxSpirit = 100;
 	lines = ManaGlobeLevelLines(levels);
 	ASSERT_EQ(lines.size(), 2U);
-	EXPECT_EQ(lines[1].text, "Spirit 30/100");
+	EXPECT_EQ(lines[1].label, "Spirit");
+	EXPECT_EQ(lines[1].value, "30/100");
 	EXPECT_EQ(lines[1].color, UiFlags::ColorGold);
 }
 
-TEST(Poe2HudGlobesTest, LevelLinesLeaveASlotForRage)
+TEST(Poe2HudGlobesTest, ManaLevelsShowRageAndComboOnlyWhileBuiltUp)
+{
+	GlobeLevels levels;
+	levels.mana = 45;
+	levels.maxMana = 80;
+	levels.maxSpirit = 100;
+	EXPECT_EQ(ManaGlobeLevelLines(levels).size(), 2U) << "no Rage line without Rage";
+
+	levels.rage = 12;
+	std::vector<GlobeLevelLine> lines = ManaGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 3U);
+	EXPECT_EQ(lines[0].label, "Mana");
+	EXPECT_EQ(lines[1].label, "Spirit");
+	EXPECT_EQ(lines[2].label, "Rage") << "Rage sits under Spirit, like POE2";
+	EXPECT_EQ(lines[2].value, StrCat(12, "/", MaxRage));
+	EXPECT_EQ(lines[2].color, UiFlags::ColorRed);
+
+	levels.combo = 4;
+	lines = ManaGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 4U);
+	EXPECT_EQ(lines[3].label, "Combo");
+	EXPECT_EQ(lines[3].value, StrCat(4, "/", MaxCombo));
+
+	levels.rage = 0;
+	lines = ManaGlobeLevelLines(levels);
+	ASSERT_EQ(lines.size(), 3U);
+	EXPECT_EQ(lines[2].label, "Combo") << "Combo shows without Rage";
+}
+
+TEST(Poe2HudGlobesTest, LevelLinesFitTheirSlots)
 {
 	GlobeLevels levels;
 	levels.maxLife = 1;
 	levels.maxEnergyShield = 1;
+	levels.frenzyCharges = 1;
 	levels.maxMana = 1;
 	levels.maxSpirit = 1;
-	EXPECT_LT(LifeGlobeLevelLines(levels).size(), static_cast<size_t>(GlobeLevelLineSlots));
-	EXPECT_LT(ManaGlobeLevelLines(levels).size(), static_cast<size_t>(GlobeLevelLineSlots));
+	levels.rage = 1;
+	levels.combo = 1;
+	EXPECT_LE(LifeGlobeLevelLines(levels).size(), static_cast<size_t>(GlobeLevelLineSlots));
+	EXPECT_EQ(ManaGlobeLevelLines(levels).size(), static_cast<size_t>(GlobeLevelLineSlots));
+}
+
+TEST(Poe2HudGlobesTest, RageBarFillsLeftToRight)
+{
+	EXPECT_EQ(RageBarFill(0, MaxRage, 100), 0);
+	EXPECT_EQ(RageBarFill(1, 1000, 100), 1) << "any Rage shows";
+	EXPECT_EQ(RageBarFill(15, 30, 100), 50);
+	EXPECT_EQ(RageBarFill(30, 30, 100), 100);
+	EXPECT_EQ(RageBarFill(40, 30, 100), 100);
+	EXPECT_EQ(RageBarFill(5, 0, 100), 0);
+}
+
+TEST(Poe2HudGlobesTest, RageBarIsAFramedRedFillOnADarkTrack)
+{
+	OwnedSurface out(20, 8);
+	const Rectangle bar { { 2, 1 }, { 12, 5 } };
+
+	Fill(out, 1);
+	DrawRageBar(out, bar, 0, 10);
+	EXPECT_EQ(*out.at(5, 3), 1) << "nothing while the hero has no Rage";
+
+	DrawRageBar(out, bar, 5, 10);
+	EXPECT_EQ(*out.at(1, 3), 1) << "nothing outside the bar";
+	EXPECT_EQ(*out.at(2, 3), *out.at(13, 3)) << "a frame down both ends";
+	EXPECT_EQ(*out.at(5, 1), *out.at(5, 5)) << "and along the top and bottom";
+	EXPECT_FALSE(IsRamp(*out.at(2, 3), PAL16_RED));
+	// The track is 10 pixels wide from x 3: half of it is lit.
+	for (int x = 3; x < 8; x++)
+		EXPECT_TRUE(IsRamp(*out.at(x, 3), PAL16_RED)) << x;
+	EXPECT_LT(*out.at(3, 3), *out.at(8, 3)) << "the fill is brighter than the empty track";
+	EXPECT_EQ(*out.at(8, 3), *out.at(12, 3)) << "the rest is empty track";
+	EXPECT_LT(*out.at(4, 2), *out.at(4, 4)) << "the fill is lit along its top";
 }
 
 } // namespace

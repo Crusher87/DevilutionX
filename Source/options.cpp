@@ -974,7 +974,6 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&lootFilterBeams,
 		&lootFilterSounds,
 		&lootFilterMapIcons,
-		&showLifeManaLevels,
 		&heroMiniBar,
 		&heroMiniBarEnergyShield,
 		&hurtMonsterBars,
