@@ -1874,14 +1874,17 @@ void TransferItemToStash(Player &player, int location)
 	const Item &item = GetInventoryItem(player, location);
 	// POE2 Mashup: Ctrl+click sends an item to its own tab (currency to Currency) from whichever tab is open.
 	bool sent = false;
+	unsigned page = Stash.GetPage();
 	if (gbIsPoe2) {
 		if (const std::optional<unsigned> home = StashTabs.affinityTabFor(item); home && *home != Stash.GetPage()) {
 			const unsigned current = Stash.GetPage();
 			Stash.SetPage(*home);
 			sent = AutoPlaceItemInStash(item, true);
 			Stash.SetPage(current);
-			if (sent)
+			if (sent) {
+				page = *home;
 				EventPlrMsg(StrCat(_("Sent to "), StashTabs.displayName(*home)), UiFlags::ColorWhitegold);
+			}
 		}
 	}
 	if (sent) {
@@ -1895,6 +1898,7 @@ void TransferItemToStash(Player &player, int location)
 	}
 
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+	TelemetryItemAction(player, "stash", item, StashTabLogName(page));
 
 	if (location < INVITEM_INV_FIRST) {
 		RemoveEquipment(player, static_cast<inv_body_loc>(location), false);

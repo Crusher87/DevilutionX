@@ -36,6 +36,7 @@
 #include "poe2/economy.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -1338,13 +1339,14 @@ void StartStoryteller()
 }
 
 /** @brief POE2 Mashup: identifies everything the hero wears and carries; returns how many items it was. */
-int IdentifyAllForFree(Player &player)
+int IdentifyAllForFree(Player &player, std::string_view how)
 {
 	int count = 0;
-	const auto identify = [&count](Item &item) {
+	const auto identify = [&count, &player, how](Item &item) {
 		// Only magic, rare and unique items can be unidentified; normal items just carry the flag.
 		if (!item.isEmpty() && !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL) {
 			item._iIdentified = true;
+			TelemetryItemAction(player, "identify", item, how);
 			count++;
 		}
 	};
@@ -1626,6 +1628,7 @@ void SmithEnter()
  */
 void SmithBuyItem(Item &item)
 {
+	TelemetryItemAction(*MyPlayer, "buy", item, "Griswold", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	if (item._iMagical == ITEM_QUALITY_NORMAL)
 		item._iIdentified = false;
@@ -1667,6 +1670,7 @@ void SmithBuyEnter()
  */
 void SmithBuyPItem(Item &item)
 {
+	TelemetryItemAction(*MyPlayer, "buy", item, "Griswold, premium", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	if (item._iMagical == ITEM_QUALITY_NORMAL)
 		item._iIdentified = false;
@@ -1732,6 +1736,7 @@ void StoreSellItem()
 		myPlayer.RemoveSpdBarItem(-(PlayerItemIndexes[idx] + 1));
 
 	const int cost = PlayerItems[idx]._iIvalue;
+	TelemetryItemAction(myPlayer, "sell", PlayerItems[idx], OldActiveStore == TalkID::WitchSell ? "Adria" : "Griswold", cost);
 	CurrentItemIndex--;
 	if (idx != CurrentItemIndex) {
 		while (idx < CurrentItemIndex) {
@@ -1888,6 +1893,7 @@ void WitchBuyItem(Item &item)
 	if (idx < 3)
 		item._iSeed = AdvanceRndSeed();
 
+	TelemetryItemAction(*MyPlayer, "buy", item, "Adria", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	StoreAutoPlace(item, true);
 
@@ -2033,6 +2039,7 @@ void BoyEnter()
 
 void BoyBuyItem(Item &item, int itemPrice)
 {
+	TelemetryItemAction(*MyPlayer, "buy", item, "Wirt", itemPrice);
 	TakePlrsMoney(itemPrice);
 	StoreAutoPlace(item, true);
 	item.clear();
@@ -2055,6 +2062,7 @@ void HealerBuyItem(Item &item)
 			item._iSeed = AdvanceRndSeed();
 	}
 
+	TelemetryItemAction(*MyPlayer, "buy", item, "Pepin", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	if (item._iMagical == ITEM_QUALITY_NORMAL)
 		item._iIdentified = false;
@@ -2127,6 +2135,7 @@ void StorytellerIdentifyItem(Item &item)
 		myPlayer.InvList[idx]._iIdentified = true;
 	}
 	item._iIdentified = true;
+	TelemetryItemAction(myPlayer, "identify", item, "Cain", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	CalcPlrInv(myPlayer, true);
 }
@@ -2245,7 +2254,7 @@ void StorytellerEnter()
 	case 14:
 		if (gbIsPoe2) {
 			ActiveStore = TalkID::None;
-			CainIdentifyAll();
+			CainIdentifyAll("Cain, identify all");
 			break;
 		}
 		StartStore(TalkID::StorytellerIdentify);
@@ -2334,9 +2343,9 @@ void TavernEnter()
 
 } // namespace
 
-void CainIdentifyAll()
+void CainIdentifyAll(std::string_view how)
 {
-	const int count = IdentifyAllForFree(*MyPlayer);
+	const int count = IdentifyAllForFree(*MyPlayer, how);
 	if (count > 0)
 		PlaySFX(SfxID::CastSkill); // The same sound as reading a Scroll of Identify.
 	EventPlrMsg(count > 0 ? FormatRuntime(ngettext("Cain identified {:d} item.", "Cain identified {:d} items.", count), count) : _("You have nothing to identify."));

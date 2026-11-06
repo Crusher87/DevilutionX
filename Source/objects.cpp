@@ -52,6 +52,7 @@
 #include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/shrines.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "stores.h"
@@ -2805,6 +2806,7 @@ void OperateShrineGlimmering(Player &player)
 	for (Item &item : PlayerItemsRange { player }) {
 		if (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified) {
 			item._iIdentified = true;
+			TelemetryItemAction(player, "identify", item, "Glimmering shrine");
 		}
 	}
 

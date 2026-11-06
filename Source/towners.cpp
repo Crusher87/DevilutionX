@@ -1104,7 +1104,7 @@ void TalkToTowner(Player &player, int t)
 	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && towner._ttype == TOWN_STORY) {
 		QuickTradeTowner = -1;
 		TownerTalk(TEXT_STORY1);
-		CainIdentifyAll();
+		CainIdentifyAll("Cain, Ctrl+click");
 		return;
 	}
 	// POE2 Mashup: Ctrl+click on a trader opens their shop without the talk menu, unless they have quest news.

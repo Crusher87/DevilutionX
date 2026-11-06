@@ -25,6 +25,7 @@
 #include "appfat.h"
 #include "diablo.h"
 #include "game_mode.hpp"
+#include "gmenu.h"
 #include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
@@ -43,6 +44,8 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/stacking.hpp"
+#include "poe2/stash_layouts.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry_events.hpp"
 #include "poe2/tree_telemetry.hpp"
@@ -207,6 +210,10 @@ std::string LoadingWhat;
 uint32_t LoadingStartMs = 0;
 uint32_t LoadingFadedOutMs = 0;
 uint32_t LoadingFadingInMs = 0;
+/** Whether the game is paused (the pause key, the window losing focus, or the game menu in a game of one), since when and why. */
+bool GamePaused = false;
+uint32_t PauseStartMs = 0;
+std::string PauseReason;
 
 std::string PendingAttacker;
 /** Energy shield soaked from the hit being applied (raw), added to it when it's counted. */
@@ -1680,6 +1687,8 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	PendingDamageSource.clear();
 	LastBuild.clear();
 	GameStartMs = WindowStartMs = LastKillMs = LastTickMs = LastAreaMs = Now();
+	GamePaused = false;
+	PauseStartMs = 0;
 	LastBuildCheckMs = 0;
 	LastExperience = player._pExperience;
 	LastGold = player._pGold;
@@ -2414,6 +2423,80 @@ void TelemetryCrafted(const Player &player, std::string_view currency, const Ite
 		return;
 	event.add("p", player.getId()).add("with", currency);
 	AddItemFields(event, item);
+}
+
+void TelemetryItemAction(const Player &player, std::string_view action, const Item &item, std::string_view detail, int gold)
+{
+	if (&player != MyPlayer || item.isEmpty())
+		return;
+	const bool isGold = item._itype == ItemType::Gold;
+	if (isGold && gold == 0)
+		gold = item._ivalue;
+	const int count = IsStackable(item) ? StoredStackCount(item) : 1;
+	std::string text = isGold ? std::string("gold") : std::format("{:s} ({:s})", item._iIName, RarityNames[ItemRarityIndex(item)]);
+	if (count > 1)
+		StrAppend(text, " x", count);
+	if (!detail.empty())
+		StrAppend(text, ", ", detail);
+	if (gold != 0)
+		StrAppend(text, ", ", gold, " gold");
+	WriteText(action, text);
+	TelemetryEvent event = Event(LogChannel::Loot, LogLevel::Normal, action);
+	if (!event)
+		return;
+	event.add("p", player.getId());
+	AddItemFields(event, item);
+	if (count > 1)
+		event.add("count", count);
+	if (!detail.empty())
+		event.add("detail", detail);
+	if (gold != 0)
+		event.add("gold", gold);
+}
+
+void TelemetrySupportGem(const Player &player, bool socketed, SupportGem gem, int tier, size_t row)
+{
+	if (&player != MyPlayer || gem == SupportGem::None)
+		return;
+	const std::string name = SupportGemTierName(gem, tier);
+	const std::string_view skill = SkillName(RowSkill(player, row));
+	const bool defaultAttack = row == DefaultAttackRow;
+	WriteText(socketed ? "support in" : "support out", std::format("{:s} {:s} {:s}{:s}", name, socketed ? "into" : "out of", skill, defaultAttack ? " (default attack)" : ""));
+	Event(LogChannel::Skills, LogLevel::Normal, socketed ? "support_in" : "support_out")
+	    .add("p", player.getId())
+	    .add("support", SupportGemName(gem))
+	    .add("tier", tier)
+	    .add("skill", skill)
+	    .add("row", static_cast<int>(row))
+	    .add("defaultAttack", defaultAttack);
+}
+
+void TelemetryPauseChanged(std::string_view reason)
+{
+	const bool paused = PauseMode != 0 || (!gbIsMultiplayer && gmenu_is_active());
+	if (paused == GamePaused)
+		return;
+	GamePaused = paused;
+	if (LogFile == nullptr || GameStartMs == 0) {
+		PauseStartMs = 0;
+		return;
+	}
+	const uint32_t now = Now();
+	if (paused) {
+		PauseStartMs = now;
+		PauseReason = reason;
+		WriteText("pause", StrCat("game paused (", reason, ")"));
+		Event(LogChannel::Session, LogLevel::Normal, "pause").add("reason", reason);
+		return;
+	}
+	if (PauseStartMs == 0)
+		return;
+	const uint32_t ms = now - std::exchange(PauseStartMs, 0);
+	// The game didn't tick while paused: the stall clock starts again from here.
+	LastTickMs = LastFrameMs = now;
+	FrameGapSinceTick = 0;
+	WriteText("resume", std::format("game resumed after {:.1f} s paused ({:s})", ms / 1000.0, PauseReason));
+	Event(LogChannel::Session, LogLevel::Normal, "resume").add("ms", ms).add("reason", PauseReason);
 }
 
 void TelemetryMark(std::string_view text)

@@ -54,6 +54,7 @@
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
 #include "poe2/shrines.hpp"
+#include "poe2/telemetry.hpp"
 #include "portals/validation.hpp"
 #include "quests/validation.hpp"
 #include "spells.h"
@@ -1626,8 +1627,10 @@ size_t OnPutItem(const TCmdPItem &message, Player &player)
 			if (ii != -1) {
 				PutItemRecord(dwSeed, wCI, wIndx);
 				DeltaPutItem(message, Items[ii].position, player);
-				if (isSelf)
+				if (isSelf) {
+					TelemetryItemAction(player, "put_down", Items[ii]);
 					pfile_update(true);
+				}
 			}
 		} else {
 			PutItemRecord(dwSeed, wCI, wIndx);

@@ -33,6 +33,7 @@
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "options.h"
+#include "poe2/telemetry.hpp"
 #include "stores.h"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
@@ -249,6 +250,8 @@ void gmenu_set_items(TMenuItem *pItem, void (*gmFunc)())
 	if (gmenu_current_option != nullptr) {
 		gmenu_current_option();
 	}
+	// In a game of one, the game waits while the menu is open.
+	TelemetryPauseChanged("game menu");
 	sgCurrentMenuIdx = 0;
 	if (sgpCurrentMenu != nullptr) {
 		for (int i = 0; sgpCurrentMenu[i].fnMenu != nullptr; i++) {

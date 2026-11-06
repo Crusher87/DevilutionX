@@ -451,6 +451,7 @@ MetaSocketResult SocketSkillInMeta(Player &player, size_t row, size_t socket, Sk
 	if (const SupportGem support = player.poe2.slotSupports[row][socket]; support != SupportGem::None) {
 		int tier = 1;
 		UnsocketSupportGem(player.poe2, row, socket, &tier);
+		TelemetrySupportGem(player, false, support, tier, row);
 		GiveSupportGems(player, { { support, tier } });
 		result = MetaSocketResult::Replaced;
 	}

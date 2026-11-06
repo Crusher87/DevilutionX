@@ -36,6 +36,7 @@
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/telemetry.hpp"
 #include "stores.h"
 #include "utils/display.h"
 #include "utils/format_int.hpp"
@@ -178,6 +179,9 @@ void CheckStashPaste(Point cursorPosition)
 		Item &stack = Stash.stashList[iv];
 		if (CanStackWith(stack, player.HoldItem) && StackRoom(stack) > 0) {
 			PlaySFX(ItemInvSnds[ItemCAnimTbl[player.HoldItem._iCurs]]);
+			Item moved = player.HoldItem;
+			SetStackCount(moved, std::min(StackCount(player.HoldItem), StackRoom(stack)));
+			TelemetryItemAction(player, "stash", moved, StashTabLogName(Stash.GetPage()));
 			MergeStack(stack, player.HoldItem);
 			Stash.dirty = true;
 			NewCursor(player.HoldItem);
@@ -202,6 +206,7 @@ void CheckStashPaste(Point cursorPosition)
 
 	// Need to set the item anchor position to the bottom left so drawing code functions correctly.
 	player.HoldItem.position = firstSlot + Displacement { 0, itemSize.height - 1 };
+	TelemetryItemAction(player, "stash", player.HoldItem, StashTabLogName(Stash.GetPage()));
 
 	if (stashIndex == StashStruct::EmptyCell) {
 		Stash.stashList.emplace_back(player.HoldItem.pop());
@@ -210,6 +215,7 @@ void CheckStashPaste(Point cursorPosition)
 	} else {
 		// swap the held item and whatever was in the stash at this position
 		std::swap(Stash.stashList[stashIndex], player.HoldItem);
+		TelemetryItemAction(player, "unstash", player.HoldItem, StashTabLogName(Stash.GetPage()));
 		// then clear the space occupied by the old item
 		for (auto &row : Stash.GetCurrentGrid()) {
 			for (auto &itemId : row) {
@@ -273,6 +279,7 @@ void CheckStashCut(Point cursorPosition, bool automaticMove)
 		}
 
 		if (!automaticMove || automaticallyMoved) {
+			TelemetryItemAction(player, "unstash", holdItem, StashTabLogName(Stash.GetPage()));
 			Stash.RemoveStashItem(iv);
 		}
 	}
@@ -351,6 +358,7 @@ void TransferItemToInventory(Player &player, uint16_t itemId)
 			return;
 		}
 		PlaySFX(ItemInvSnds[ItemCAnimTbl[taken._iCurs]]);
+		TelemetryItemAction(player, "unstash", taken, StashTabLogName(Stash.GetPage()));
 		TakeFromStash(itemId);
 		return;
 	}
@@ -361,6 +369,7 @@ void TransferItemToInventory(Player &player, uint16_t itemId)
 	}
 
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+	TelemetryItemAction(player, "unstash", item, StashTabLogName(Stash.GetPage()));
 
 	Stash.RemoveStashItem(itemId);
 }
@@ -1301,6 +1310,11 @@ Item TakeFromStash(uint16_t index, int count)
 	SetStoredStackCount(stored, have - count);
 	Stash.dirty = true;
 	return taken;
+}
+
+std::string StashTabLogName(unsigned page)
+{
+	return StrCat("tab ", StashTabs.displayName(page));
 }
 
 bool AutoPlaceItemInAnyStashTab(const Item &item)
