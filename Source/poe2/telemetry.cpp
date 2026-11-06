@@ -35,6 +35,7 @@
 #include "player.h"
 #include "poe2/area_levels.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/level_census.hpp"
@@ -1229,6 +1230,18 @@ void WriteBuildEvent(const Player &player, LogLevel level)
 				inside.add(StrCat(SkillName(spell), " gem ", static_cast<int>(player.poe2.metaSkillLevels[i][socket])));
 		}
 		StrAppend(skill, ",\"supports\":", supports.str(), ",\"inside\":", inside.str(), "}");
+		skills.addRaw(skill);
+	}
+	// The weapon's default attack takes supports too (Curtis, Monk run 2: his rage support sat there, so the log missed it).
+	{
+		std::string skill = "{\"name\":";
+		AppendJsonString(skill, DefaultAttackNameForSet(player, player.poe2.weaponSet));
+		JsonArray supports;
+		for (const SupportGem support : player.poe2.defaultSupports) {
+			if (support != SupportGem::None)
+				supports.add(SupportGemName(support));
+		}
+		StrAppend(skill, ",\"gem\":0,\"default\":true,\"supports\":", supports.str(), ",\"inside\":[]}");
 		skills.addRaw(skill);
 	}
 	JsonArray belt;
@@ -2604,6 +2617,12 @@ std::string TelemetryBuildText(const Player &player)
 		}
 		StrAppend(text, ";");
 	}
+	StrAppend(text, " ", DefaultAttackNameForSet(player, player.poe2.weaponSet), " (default attack)");
+	for (const SupportGem support : player.poe2.defaultSupports) {
+		if (support != SupportGem::None)
+			StrAppend(text, " +", SupportGemName(support));
+	}
+	StrAppend(text, ";");
 	StrAppend(text, " | passives ", player.poe2.passives.count());
 	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% cold {:d}% chaos {:d}% (max {:d}%), spirit {:d}/{:d}",
 	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, LoggedBlockChance(player),
