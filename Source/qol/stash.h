@@ -136,6 +136,8 @@ Item TakeFromStash(uint16_t index);
 Item TakeFromStash(uint16_t index, int count);
 /** @brief POE2 Mashup: puts the item on whichever tab takes it, adding a tab if need be; for when it can go nowhere else. */
 bool AutoPlaceItemInAnyStashTab(const Item &item);
+/** @brief The stash tab an item went to or came from, for the play log. */
+std::string StashTabLogName(unsigned page);
 /** @brief POE2 Mashup: items a premade tab doesn't hold the way it holds them are stored again; for loading older stashes. */
 void RepairStashTabs();
 /** @brief POE2 Mashup: stash items saved when they were bigger let go of the cells they no longer cover. */

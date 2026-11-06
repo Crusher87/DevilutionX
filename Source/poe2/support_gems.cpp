@@ -23,6 +23,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/support_tiers.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -618,6 +619,8 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 	replaced = current;
 	if (replacedTier != nullptr)
 		*replacedTier = currentTier;
+	TelemetrySupportGem(player, false, current, currentTier, slot);
+	TelemetrySupportGem(player, true, gem, tier, slot);
 	return current == SupportGem::None ? SupportSocketResult::Socketed : SupportSocketResult::Replaced;
 }
 

@@ -6162,6 +6162,7 @@ void CheckIdentify(Player &player, int cii)
 		pi = &player.InvBody[cii];
 
 	pi->_iIdentified = true;
+	TelemetryItemAction(player, "identify", *pi, "scroll or spell");
 	CalcPlrInv(player, true);
 }
 
@@ -6197,6 +6198,7 @@ void IdentifyWithScroll(Player &player)
 	if (scroll < 0)
 		return;
 	target->_iIdentified = true;
+	TelemetryItemAction(player, "identify", *target, inStash ? "scroll, in the stash" : "scroll");
 	if (inStash)
 		Stash.dirty = true;
 	if (belt) {

@@ -495,6 +495,7 @@ void CutGem(const GemEntry &gem)
 			return;
 		}
 		const SfxID sound = ItemInvSnds[ItemCAnimTbl[uncut->_iCurs]];
+		TelemetryItemAction(player, "gem_cut", *uncut, StrCat("raised ", GemName(gem), " from level ", current, " to ", level));
 		UseUpUncut(player);
 		SetSocketedGemLevel(player, gem, level);
 		PlaySFX(sound);
@@ -512,10 +513,12 @@ void CutGem(const GemEntry &gem)
 	if (gem.support != SupportGem::None && SupportedSkill) {
 		const std::optional<size_t> slot = SupportedSkill->kind == SkillKind::Default ? std::optional<size_t>(DefaultAttackRow) : FindSkillSlot(player, *SupportedSkill);
 		if (slot) {
+			const Item uncutGem = *uncut;
 			SupportGem replaced = SupportGem::None;
 			const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem.support, replaced, gem.tier);
 			if (result == SupportSocketResult::Socketed) {
 				const SfxID sound = ItemInvSnds[ItemCAnimTbl[uncut->_iCurs]];
+				TelemetryItemAction(player, "gem_cut", uncutGem, StrCat("cut ", GemName(gem), ", socketed into ", SkillName(RowSkill(player, *slot))));
 				UseUpUncut(player);
 				PlaySFX(sound);
 				EventPlrMsg(SupportSocketMessage(result, player, *slot, gem.support));
@@ -527,6 +530,7 @@ void CutGem(const GemEntry &gem)
 	Item cut;
 	if (!CreateGemItem(cut, gem, level))
 		return;
+	TelemetryItemAction(player, "gem_cut", *uncut, gem.support != SupportGem::None ? StrCat("cut ", cut._iIName) : StrCat("cut ", cut._iIName, " level ", level));
 	UseUpUncut(player);
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[cut._iCurs]]);
 	if (!MeetsRequirements(player, gem, level))

@@ -6,6 +6,7 @@
 #include <string>
 #include <thread>
 
+#include "diablo.h"
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
@@ -183,6 +184,37 @@ TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)
 	EXPECT_NE(events.find("\"k\":\"mark\",\"area\":\"town\",\"text\":\"events check\""), std::string::npos) << events;
 	EXPECT_NE(events.find("\"k\":\"skill\",\"area\":\"town\",\"p\":0,\"skill\":\"Spark\",\"gem\":3,\"mana\":7"), std::string::npos) << events;
 	EXPECT_NE(events.find("\"attacker\":\"Hidden\",\"type\":\"lightning\",\"damage\":5.00"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, ItemActionsAndPausesAreLogged)
+{
+	// Curtis 2026-11-06: items turned up in the log from nowhere (identified, bought, taken from the stash) and pauses
+	// had to be guessed from gaps.
+	Item item {};
+	InitializeItem(item, IDI_GOLD);
+	item._ivalue = 75;
+	TelemetryItemAction(*MyPlayer, "put_down", item);
+	TelemetryItemAction(Players[0], "sell", item, "Griswold", 30);
+	Player other {};
+	TelemetryItemAction(other, "buy", item, "Adria", 10);
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[put_down] gold, 75 gold"), std::string::npos) << log;
+	EXPECT_NE(log.find("[sell] gold, Griswold, 30 gold"), std::string::npos) << log;
+	EXPECT_EQ(log.find("Adria"), std::string::npos) << "only the local hero's actions are logged";
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"sell\",\"area\":\"town\",\"p\":0,\"item\":"), std::string::npos) << events;
+	EXPECT_NE(events.find("\"detail\":\"Griswold\",\"gold\":30"), std::string::npos) << events;
+
+	PauseMode = 2;
+	TelemetryPauseChanged("pause key");
+	TelemetryPauseChanged("pause key"); // still paused: nothing more
+	PauseMode = 0;
+	TelemetryPauseChanged("pause key");
+	const std::string paused = ReadLatestLog();
+	EXPECT_NE(paused.find("[pause] game paused (pause key)"), std::string::npos) << paused;
+	EXPECT_NE(paused.find("[resume] game resumed after "), std::string::npos) << paused;
+	EXPECT_EQ(paused.find("[pause]"), paused.rfind("[pause]"));
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"resume\",\"area\":\"town\",\"ms\":"), std::string::npos);
 }
 
 TEST_F(Poe2TelemetryTest, ChaosDamageTakenIsLoggedAsChaos)

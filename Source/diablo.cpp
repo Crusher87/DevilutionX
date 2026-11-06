@@ -3263,6 +3263,7 @@ bool TryIconCurs()
 			Item &item = Stash.stashList[pcursstashitem];
 			item._iIdentified = true;
 			Stash.dirty = true;
+			TelemetryItemAction(myPlayer, "identify", item, "scroll or spell, in the stash");
 		}
 		NewCursor(CURSOR_HAND);
 		return true;
@@ -3360,6 +3361,7 @@ void diablo_pause_game()
 			qtextflag = false;
 			LastPlayerAction = PlayerActionType::None;
 		}
+		TelemetryPauseChanged("pause key");
 
 		RedrawEverything();
 	}
@@ -3391,6 +3393,7 @@ void diablo_focus_pause()
 		PauseMode = 2;
 		sound_stop();
 		LastPlayerAction = PlayerActionType::None;
+		TelemetryPauseChanged("window lost focus");
 	}
 
 	SVidMute();
@@ -3403,6 +3406,7 @@ void diablo_focus_unpause()
 {
 	if (!GameWasAlreadyPaused) {
 		PauseMode = 0;
+		TelemetryPauseChanged("window got focus");
 	}
 
 	SVidUnmute();

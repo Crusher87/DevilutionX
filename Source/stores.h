@@ -182,7 +182,8 @@ void StartStore(TalkID s);
 /** @brief Opens the shared stash beside the inventory. */
 void OpenStashPanel();
 /** @brief POE2 Mashup: Cain identifies everything the hero carries, for free, and says how many. */
-void CainIdentifyAll();
+/** @brief POE2 Mashup: Cain identifies everything the hero carries; how says how he was asked, for the play log. */
+void CainIdentifyAll(std::string_view how);
 
 /** @brief Remembers where the hero stood when a stash or vendor panel opened, so walking away closes it. */
 void RememberInteractionSpot();

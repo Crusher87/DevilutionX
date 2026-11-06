@@ -157,6 +157,20 @@ void TelemetryItemDropped(const Item &item, std::string_view source);
 void TelemetryItemPickedUp(const Player &player, const Item &item);
 /** @brief Orb or oil use on an item. */
 void TelemetryCrafted(const Player &player, std::string_view currency, const Item &item);
+/**
+ * @brief Something the hero did with an item, so no item turns up in the log from nowhere: identify, buy, sell,
+ * stash, unstash, put_down, gem_cut. The detail says how or where (the scroll or Cain, the vendor, the stash tab);
+ * gold is the price, when there is one.
+ */
+void TelemetryItemAction(const Player &player, std::string_view action, const Item &item, std::string_view detail = {}, int gold = 0);
+/** @brief A support gem put in (socketed) or taken out of a Skills panel row, the weapon's default attack row included. */
+void TelemetrySupportGem(const Player &player, bool socketed, SupportGem gem, int tier, size_t row);
+/**
+ * @brief The game was paused or resumed: call it after PauseMode or the game menu changes. It works out from those
+ * whether the game is paused now, and on resuming writes how long the pause lasted.
+ * @param reason What paused or resumed it: "pause key", "window lost focus", "game menu".
+ */
+void TelemetryPauseChanged(std::string_view reason);
 /** @brief A line typed with mark() in the console, to find a moment in the log later. */
 void TelemetryMark(std::string_view text);
 /** @brief Once per game tick: tracks mana, stalls and build changes, and writes the stats line when it's due. */
