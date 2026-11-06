@@ -249,7 +249,8 @@ void LoadPreview(const MonsterSpawnerEntry &entry)
 			anim.rate = data.hasAnim(i) ? data.rate[i] : 0;
 			anim.width = data.hasAnim(i) ? data.width : 0;
 		}
-		if (!HeadlessMode && MonsterSpritesExist(data))
+		// Some files in the game's data are broken (The Arch-Litch Malignus walks with a 96-byte stub): loading those crashes.
+		if (!HeadlessMode && MonsterSpritesValid(data))
 			PreviewLoaded = InitMonsterGFX(PreviewType).has_value();
 	}
 	if (entry.unique != PreviewUnique) {
@@ -325,6 +326,8 @@ std::optional<std::string> SpawnSelected()
 		return std::string(_("Too many monsters here."));
 	if (!MonsterSpritesExist(MonstersData[entry->type]))
 		return std::string(_("This monster has no pictures."));
+	if (!MonsterSpritesValid(MonstersData[entry->type]))
+		return std::string(_("This monster's pictures are broken in the game files."));
 	if (entry->unique >= 0 && !UniqueColoursExist(UniqueMonstersData[entry->unique]))
 		return std::string(_("This monster has no pictures."));
 	// A golem is a hero's minion, and Diablo's death ends the game: they're for the preview only.
@@ -500,7 +503,8 @@ void DrawPreview(const Surface &out, const Layout &layout)
 	DrawString(out, entry->name, title, { .flags = UiFlags::AlignCenter | (entry->unique >= 0 ? UiFlags::ColorWhitegold : UiFlags::ColorWhite) });
 
 	if (!PreviewLoaded) {
-		DrawString(out, _("No pictures."), box, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorRed });
+		const bool broken = !HeadlessMode && MonsterSpritesExist(MonstersData[entry->type]) && !MonsterSpritesValid(MonstersData[entry->type]);
+		DrawString(out, broken ? _("Broken pictures in the game files.") : _("No pictures."), box, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorRed });
 		return;
 	}
 	const MonsterGraphic graphic = ShownAnim();
@@ -642,6 +646,89 @@ bool MonsterSpritesExist(const MonsterData &data)
 		any = true;
 	}
 	return any;
+}
+
+namespace {
+
+uint32_t ReadLE32(const uint8_t *data, size_t at)
+{
+	return static_cast<uint32_t>(data[at]) | (static_cast<uint32_t>(data[at + 1]) << 8) | (static_cast<uint32_t>(data[at + 2]) << 16) | (static_cast<uint32_t>(data[at + 3]) << 24);
+}
+
+/** @brief One list of frames: a frame count, then count + 1 offsets (from the list's start) that climb and stay inside the file. */
+bool Cl2ListLooksValid(const uint8_t *data, size_t begin, size_t end)
+{
+	if (end < begin || end - begin < 8)
+		return false;
+	const size_t size = end - begin;
+	const uint32_t frames = ReadLE32(data, begin);
+	if (frames == 0 || frames > 1024 || (static_cast<size_t>(frames) + 2) * 4 > size)
+		return false;
+	uint32_t previous = (frames + 2) * 4;
+	for (uint32_t i = 0; i <= frames; i++) {
+		const uint32_t offset = ReadLE32(data, begin + 4 + i * 4);
+		if (offset < previous || offset > size)
+			return false;
+		previous = offset;
+	}
+	return true;
+}
+
+/** @brief The result of checking each monster's files, so each is read once: -1 not checked yet, 0 broken, 1 fine. */
+std::vector<int8_t> SpriteFilesChecked;
+
+} // namespace
+
+bool MonsterCl2LooksValid(const uint8_t *data, size_t size)
+{
+	if (data == nullptr || size < 8)
+		return false;
+	const uint32_t first = ReadLE32(data, 0);
+	// A single list when its last offset is the file's size.
+	if ((static_cast<size_t>(first) + 2) * 4 <= size && ReadLE32(data, static_cast<size_t>(first) * 4 + 4) == size)
+		return Cl2ListLooksValid(data, 0, size);
+	// Otherwise a sheet: the offsets of its lists (one per direction), then the lists, whose frame offsets count from the list's start
+	// and may point past the next list's header (the frames come after all of them).
+	const uint32_t lists = first / 4;
+	if (first % 4 != 0 || lists == 0 || first > size)
+		return false;
+	for (uint32_t i = 0; i < lists; i++) {
+		const uint32_t begin = ReadLE32(data, i * 4);
+		if (begin < first || !Cl2ListLooksValid(data, begin, size))
+			return false;
+	}
+	return true;
+}
+
+bool MonsterSpritesValid(const MonsterData &data)
+{
+	const auto index = static_cast<size_t>(&data - MonstersData.data());
+	const bool cacheable = index < MonstersData.size();
+	if (cacheable) {
+		if (SpriteFilesChecked.size() != MonstersData.size())
+			SpriteFilesChecked.assign(MonstersData.size(), -1);
+		if (SpriteFilesChecked[index] >= 0)
+			return SpriteFilesChecked[index] == 1;
+	}
+	bool valid = MonsterSpritesExist(data);
+#ifdef UNPACKED_MPQS
+	// Unpacked data is already converted to CLX, which has a different layout.
+	if (cacheable)
+		SpriteFilesChecked[index] = valid ? 1 : 0;
+	return valid;
+#endif
+	const size_t numAnims = data.hasSpecial ? 6 : 5;
+	for (size_t i = 0; valid && i < numAnims; i++) {
+		if (!data.hasAnim(i))
+			continue;
+		const std::string path = StrCat("monsters\\", data.spritePath(), std::string_view(&AnimLetters[i], 1), DEVILUTIONX_CL2_EXT);
+		size_t size = 0;
+		std::expected<std::unique_ptr<uint8_t[]>, std::string> file = LoadFileInMemWithStatus<uint8_t>(path.c_str(), &size);
+		valid = file.has_value() && MonsterCl2LooksValid(file->get(), size);
+	}
+	if (cacheable)
+		SpriteFilesChecked[index] = valid ? 1 : 0;
+	return valid;
 }
 
 std::vector<MonsterSpawnerEntry> BuildMonsterSpawnerList(const std::function<bool(const MonsterData &)> &hasSprites)

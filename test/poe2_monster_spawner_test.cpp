@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -182,6 +183,46 @@ TEST(Poe2MonsterSpawnerLogic, DeathHoldsItsLastFrame)
 	EXPECT_EQ(held.frame, 15);
 	EXPECT_FLOAT_EQ(held.fraction, 0.F);
 	EXPECT_EQ(MonsterPreviewFrameAt(16, 1, 750 + MonsterPreviewDeathHoldMs, true).frame, 0);
+}
+
+TEST(Poe2MonsterSpawnerCl2Test, RejectsTheBrokenMalignusWalkStub)
+{
+	// monsters/darkmage/dmagew.cl2 from Diablo's data: 96 bytes whose frame tables point past the file.
+	const std::string hex = "20000000270000002e000000350000003c000000430000004a0000005100000000000000080000000000000008000000000000000800000000000000080000000000000008000000000000000800000000000000080000000000000008000000";
+	std::vector<uint8_t> stub;
+	for (size_t i = 0; i < hex.size(); i += 2)
+		stub.push_back(static_cast<uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16)));
+	ASSERT_EQ(stub.size(), 96U);
+	EXPECT_FALSE(MonsterCl2LooksValid(stub.data(), stub.size()));
+}
+
+TEST(Poe2MonsterSpawnerCl2Test, AcceptsWellFormedListsAndSheets)
+{
+	const auto put = [](std::vector<uint8_t> &out, uint32_t value) {
+		for (int i = 0; i < 4; i++)
+			out.push_back(static_cast<uint8_t>(value >> (8 * i)));
+	};
+	// One list: 2 frames of 3 bytes each after a header of 4 * (2 + 2) bytes.
+	std::vector<uint8_t> list;
+	put(list, 2);
+	put(list, 16);
+	put(list, 19);
+	put(list, 22);
+	list.resize(22, 0);
+	EXPECT_TRUE(MonsterCl2LooksValid(list.data(), list.size()));
+
+	// A sheet of two such lists.
+	std::vector<uint8_t> sheet;
+	put(sheet, 8);
+	put(sheet, 8 + 22);
+	sheet.insert(sheet.end(), list.begin(), list.end());
+	sheet.insert(sheet.end(), list.begin(), list.end());
+	EXPECT_TRUE(MonsterCl2LooksValid(sheet.data(), sheet.size()));
+
+	// Cut short: the second list's frames end past the file.
+	sheet.resize(sheet.size() - 5);
+	EXPECT_FALSE(MonsterCl2LooksValid(sheet.data(), sheet.size()));
+	EXPECT_FALSE(MonsterCl2LooksValid(nullptr, 0));
 }
 
 } // namespace

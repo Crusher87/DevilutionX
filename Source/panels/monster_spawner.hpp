@@ -58,6 +58,12 @@ std::vector<size_t> FilterMonsterSpawnerList(const std::vector<MonsterSpawnerEnt
 /** @brief Whether every animation file of the monster is in the game's data. */
 bool MonsterSpritesExist(const MonsterData &data);
 
+/** @brief Whether a monster CL2 file's frame tables stay inside the file (some files in the game's data are broken stubs). */
+bool MonsterCl2LooksValid(const uint8_t *data, size_t size);
+
+/** @brief Whether every animation file of the monster is there and readable without crashing; checked once per monster. */
+bool MonsterSpritesValid(const MonsterData &data);
+
 /**
  * @brief The name the HD pack gives a frame of a monster's animation, e.g. monsters/zombie/zombien/d0_f00
  * (as hd::RegisterSprites names the frames loaded by InitMonsterGFX).
