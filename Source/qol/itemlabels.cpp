@@ -157,6 +157,19 @@ void DrawItemNameLabels(const Surface &out)
 	const int labelHeight = LabelHeight();
 	const int labelMarginTop = TextMarginTop();
 
+	// The queue fills in screen draw order, which reshuffles as the view scrolls by half tiles, so the overlap pass
+	// below nudged different labels each frame and they jumped about while walking (Curtis 2026-11-06). Placing them
+	// in a fixed order, front of the floor first by map position, keeps each label where it was as the view moves.
+	std::stable_sort(labelQueue.begin(), labelQueue.end(), [](const ItemLabel &a, const ItemLabel &b) {
+		const Point pa = Items[a.id].position;
+		const Point pb = Items[b.id].position;
+		if (pa.x + pa.y != pb.x + pb.y)
+			return pa.x + pa.y > pb.x + pb.y;
+		if (pa.x != pb.x)
+			return pa.x < pb.x;
+		return a.id < b.id;
+	});
+
 	for (unsigned i = 0; i < labelQueue.size(); ++i) {
 		usedX.clear();
 
