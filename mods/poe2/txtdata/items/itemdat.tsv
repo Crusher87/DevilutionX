@@ -779,7 +779,7 @@ poe2:sage_amulet	1	Misc	Amulet	ACOLYTES_AMULET	Amulet	AMULET	Azure Amulet	Amulet
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Locust Swarm Gem	Gem	10	0	0	0	0	0	0	48	0		SKILLGEM_TABLE	Null	true	1750
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Corpse Explosion Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Soul Harvest Gem	Gem	11	0	0	0	0	0	0	51	0		SKILLGEM_TABLE	Null	true	1880
-	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Prison Gem	Gem	5	0	0	0	0	0	0	33	0		SKILLGEM_TABLE	Null	true	1100
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Prison Gem	Gem	6	0	0	0	0	0	0	36	0		SKILLGEM_TABLE	Null	true	1230
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Weaken Gem	Gem	3	0	0	0	0	0	0	27	0		SKILLGEM_TABLE	Null	true	840
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Iron Maiden Gem	Gem	5	0	0	0	0	0	0	33	0		SKILLGEM_TABLE	Null	true	1100
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Decrepify Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
@@ -1029,7 +1029,7 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blood Sacrifice Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Spikes Gem	Gem	3	0	0	0	0	0	0	27	0		SKILLGEM_TABLE	Null	true	840
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Bone Spear Gem	Gem	7	0	0	0	0	0	0	39	0		SKILLGEM_TABLE	Null	true	1360
-	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blood Nova Gem	Gem	9	0	0	0	0	0	0	45	0		SKILLGEM_TABLE	Null	true	1620
+	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Blood Nova Gem	Gem	15	0	0	0	0	0	0	63	0		SKILLGEM_TABLE	Null	true	2400
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Might Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Bone Splinters Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Poison Dagger Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580

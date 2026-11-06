@@ -233,13 +233,14 @@ TEST_F(Poe2PhysicalSpellsTest, BonePrisonHitsAndTraps)
 	Player &player = *MyPlayer;
 	EnterDungeon();
 	const TableSkillData &data = Row(WeaponSkill::BonePrison);
-	EXPECT_EQ(data.level, 5);
+	// Gem level 6, tier V (Curtis 2026-11-06: it had been built at level 5, the tier read as the level).
+	EXPECT_EQ(data.level, 6);
 	EXPECT_EQ(data.shape, TableShape::Zone);
 	EXPECT_EQ(data.zone, TableZone::IceSpike);
 	EXPECT_EQ(data.curse, TableCurse::None);
 	EXPECT_EQ(data.type, DamageType::Physical);
-	// Skill-balance Q29: 160%, was 200%.
-	EXPECT_EQ(data.damagePercent, 160);
+	// Skill-balance Q29 made it 160% (was 200%); 90% at its proper level 6 (2026-11-06).
+	EXPECT_EQ(data.damagePercent, 90);
 	EXPECT_EQ(data.duration, 60);
 	EXPECT_NE(data.flags & TF_Pin, 0U);
 	const SkillSlot prison = SkillSlot::ForAttack(WeaponSkill::BonePrison);
@@ -250,12 +251,12 @@ TEST_F(Poe2PhysicalSpellsTest, BonePrisonHitsAndTraps)
 	Item gem;
 	ASSERT_TRUE(CreateSkillGemItem(gem, prison, 1));
 	EXPECT_EQ(SkillForGem(gem), prison);
-	// It drops from tier 5 now, with tier 5's Magic and price.
+	// It drops from gem level 6, with level 6's Magic and price.
 	const auto row = std::find_if(AllItemsList.begin(), AllItemsList.end(), [](const ItemData &item) { return item.iName == std::string_view("Bone Prison Gem"); });
 	ASSERT_NE(row, AllItemsList.end());
-	EXPECT_EQ(row->iMinMLvl, 5);
-	EXPECT_EQ(row->iMinMag, 33);
-	EXPECT_EQ(row->iValue, 1100);
+	EXPECT_EQ(row->iMinMLvl, 6);
+	EXPECT_EQ(row->iMinMag, 36);
+	EXPECT_EQ(row->iValue, 1230);
 
 	Supported(prison);
 	const Point target { 45, 45 };
@@ -440,11 +441,12 @@ TEST_F(Poe2PhysicalSpellsTest, BloodNovaBleedsTheRingForLife)
 	Player &player = *MyPlayer;
 	EnterDungeon();
 	const TableSkillData &data = Row(WeaponSkill::BloodNova);
-	EXPECT_EQ(data.level, 9);
+	// Gem level 15, tier IX, at 110% (Curtis 2026-11-06; it had been built at level 9 and 120%).
+	EXPECT_EQ(data.level, 15);
 	EXPECT_EQ(data.mana, 10);
 	EXPECT_EQ(data.shape, TableShape::Around);
 	EXPECT_EQ(data.radius, 2);
-	EXPECT_EQ(data.damagePercent, 120);
+	EXPECT_EQ(data.damagePercent, 110);
 	EXPECT_EQ(data.type, DamageType::Physical);
 	EXPECT_NE(data.flags & TF_LifeCost, 0U);
 	EXPECT_NE(data.flags & TF_Bleed, 0U);
