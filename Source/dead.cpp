@@ -92,6 +92,9 @@ void InitCorpses()
 
 void AddCorpse(Point tilePosition, int8_t dv, Direction ddir)
 {
+	// POE2 Mashup: a corpse with no picture loaded is left out rather than crash the drawing (Curtis 2026-11-06).
+	if (!HeadlessMode && (dv & 0x1F) != 0 && !Corpses[(dv & 0x1F) - 1].sprites)
+		return;
 	dCorpse[tilePosition.x][tilePosition.y] = (dv & 0x1F) + (static_cast<int>(ddir) << 5);
 }
 

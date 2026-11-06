@@ -4010,12 +4010,24 @@ std::expected<void, std::string> InitAllMonsterGFX()
 	}
 	size_t totalUniqueBytes = 0;
 	size_t totalBytes = 0;
+	bool loadedLate = false;
 	for (const LevelMonsterTypeIndices &monsterTypes : monstersBySprite) {
 		if (monsterTypes.empty())
 			continue;
 		CMonster &firstMonster = LevelMonsterTypes[monsterTypes[0]];
-		if (firstMonster.animData != nullptr)
+		if (firstMonster.animData != nullptr) {
+			// POE2 Mashup: a type added after the others of its picture were loaded gets its own copy. A quest level loads
+			// its map's monsters first, then the minion gem types, so Leoric's Skeleton Captains had no picture and the
+			// game crashed drawing their corpses (Curtis 2026-11-06, Monk run).
+			for (size_t i = 1; i < monsterTypes.size(); ++i) {
+				CMonster &monsterType = LevelMonsterTypes[monsterTypes[i]];
+				if (monsterType.animData != nullptr)
+					continue;
+				RETURN_IF_ERROR(InitMonsterGFX(monsterType));
+				loadedLate = true;
+			}
 			continue;
+		}
 		MonsterSpritesData spritesData = LoadMonsterSpritesData(firstMonster.data());
 		const size_t spritesDataSize = spritesData.offsets[GetNumAnimsWithGraphics(firstMonster.data())];
 		for (size_t i = 1; i < monsterTypes.size(); ++i) {
@@ -4030,7 +4042,7 @@ std::expected<void, std::string> InitAllMonsterGFX()
 	}
 	LogVerbose(" Total monster graphics:                 {:>4d} KiB {:>4d} KiB", totalUniqueBytes / 1024, totalBytes / 1024);
 
-	if (totalUniqueBytes > 0) {
+	if (totalUniqueBytes > 0 || loadedLate) {
 		// we loaded new sprites, check if we need to update existing monsters
 		for (size_t i = 0; i < ActiveMonsterCount; i++) {
 			Monster &monster = Monsters[ActiveMonsters[i]];
