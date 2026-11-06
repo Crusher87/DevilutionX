@@ -161,7 +161,7 @@ TEST(Poe2HudGlobesTest, LifeLevelsShowEnergyShieldOnlyWhenTheHeroHasSome)
 	lines = LifeGlobeLevelLines(levels);
 	ASSERT_EQ(lines.size(), 2U);
 	EXPECT_EQ(lines[0].label, "Life") << "life stays on top, like POE2";
-	EXPECT_EQ(lines[1].label, "ES");
+	EXPECT_EQ(lines[1].label, "Energy");
 	EXPECT_EQ(lines[1].value, "30/40");
 	EXPECT_EQ(lines[1].color, UiFlags::ColorBlue);
 

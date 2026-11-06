@@ -360,7 +360,7 @@ std::vector<GlobeLevelLine> LifeGlobeLevelLines(const GlobeLevels &levels)
 	std::vector<GlobeLevelLine> lines;
 	lines.push_back({ "Life", StrCat(std::max(levels.life, 0), "/", levels.maxLife), UiFlags::ColorWhite });
 	if (levels.maxEnergyShield > 0)
-		lines.push_back({ "ES", StrCat(std::max(levels.energyShield, 0), "/", levels.maxEnergyShield), UiFlags::ColorBlue });
+		lines.push_back({ "Energy", StrCat(std::max(levels.energyShield, 0), "/", levels.maxEnergyShield), UiFlags::ColorBlue });
 	if (levels.frenzyCharges > 0)
 		lines.push_back({ "Frenzy", StrCat(levels.frenzyCharges, "/", MaxFrenzyCharges), UiFlags::ColorOrange });
 	return lines;
