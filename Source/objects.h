@@ -311,6 +311,13 @@ inline bool IsObjectAtPosition(Point position)
 }
 
 /**
+ * @brief POE2 Mashup: whether a solid object put on @p tile would cut the way between the floor tiles around it, as
+ * one in front of a doorway does (Curtis 2026-11-06: a book stand kept him out of a room). The tiles beside it must
+ * still reach each other within a few tiles without going through it.
+ */
+bool ObjectWouldBlockPassage(Point tile);
+
+/**
  * @brief Get a reference to the object located at this tile
  *
  * This function is unchecked. Trying to access an invalid position will result in out of bounds memory access

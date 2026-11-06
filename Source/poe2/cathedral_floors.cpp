@@ -1506,6 +1506,9 @@ std::optional<Point> PropSpot(Point block, bool wall, bool big)
 				continue;
 			if (big && !TileClear(tile + Displacement { 0, -1 }))
 				continue;
+			// Never where it would close a way in (Curtis 2026-11-06: a book stand kept him out of a room).
+			if (ObjectWouldBlockPassage(tile) || (big && ObjectWouldBlockPassage(tile + Displacement { 0, -1 })))
+				continue;
 			if (pass == 0 && wall && !AgainstWall(tile))
 				continue;
 			return tile;

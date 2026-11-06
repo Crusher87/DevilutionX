@@ -11,6 +11,8 @@
 #include <string>
 
 #include <algorithm>
+#include <array>
+#include <vector>
 
 #include "DiabloUI/ui_flags.hpp"
 #include "automap.h"
@@ -3773,6 +3775,37 @@ Object *FindObjectAtPosition(Point position, bool considerLargeObjects)
 
 	// nothing at this position, return a nullptr
 	return nullptr;
+}
+
+bool ObjectWouldBlockPassage(Point tile)
+{
+	constexpr int Reach = 3;
+	constexpr int Size = (2 * Reach) + 1;
+	const auto walkable = [tile](Point p) {
+		return p != tile && InDungeonBounds(p) && !IsTileSolid(p) && !IsObjectAtPosition(p);
+	};
+	std::vector<Point> around;
+	for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+		if (walkable(tile + d))
+			around.push_back(tile + d);
+	}
+	if (around.size() < 2)
+		return false;
+	// A walk from the first floor tile beside it, staying near it, must reach the others.
+	std::array<bool, Size * Size> seen {};
+	const auto cell = [tile](Point p) { return ((p.y - tile.y + Reach) * Size) + (p.x - tile.x + Reach); };
+	std::vector<Point> queue { around.front() };
+	seen[cell(around.front())] = true;
+	for (size_t i = 0; i < queue.size(); i++) {
+		for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+			const Point next = queue[i] + d;
+			if (std::abs(next.x - tile.x) > Reach || std::abs(next.y - tile.y) > Reach || seen[cell(next)] || !walkable(next))
+				continue;
+			seen[cell(next)] = true;
+			queue.push_back(next);
+		}
+	}
+	return std::any_of(around.begin(), around.end(), [&](Point p) { return !seen[cell(p)]; });
 }
 
 bool IsItemBlockingObjectAtPosition(Point position)
