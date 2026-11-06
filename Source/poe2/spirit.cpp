@@ -629,7 +629,7 @@ bool ItemGrantsSpirit(const Item &item)
 int SceptreSpiritOf(const Item &item)
 {
 	// Its increased Spirit counts once identified, as the gear's other modifiers do; quality doesn't change it.
-	const bool modsCount = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+	const bool modsCount = ItemModifiersCount(item);
 	const int local = modsCount ? item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::LocalSpiritPercent)] : 0;
 	return std::max(SceptreSpirit * (100 + local) / 100, 0);
 }

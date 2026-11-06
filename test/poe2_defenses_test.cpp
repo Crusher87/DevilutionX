@@ -406,11 +406,16 @@ TEST_F(Poe2DefensesTest, WhetstoneQualityRaisesWeaponDamage)
 	Recalculate(player);
 	EXPECT_EQ(player._pIBonusDam, plain + 65);
 
-	// Quality isn't a hidden modifier: an unidentified sword has it, though not its hidden 50%.
+	// An unidentified sword's modifiers work while worn, as in POE2 (Curtis, Monk run 2).
 	sword._iMagical = ITEM_QUALITY_MAGIC;
 	sword._iIdentified = false;
 	Recalculate(player);
-	EXPECT_EQ(player._pIBonusDam, plain + 10);
+	EXPECT_EQ(player._pIBonusDam, plain + 65);
+	// Outside POE2 mode they wait for identifying, as in Diablo; quality still counts.
+	gbIsPoe2 = false;
+	EXPECT_FALSE(ItemModifiersCount(sword));
+	gbIsPoe2 = true;
+	EXPECT_TRUE(ItemModifiersCount(sword));
 }
 
 TEST_F(Poe2DefensesTest, TopBodyArmourBasesCarryImplicits)

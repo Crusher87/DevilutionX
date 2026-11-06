@@ -586,6 +586,11 @@ inline bool IsOneCellCopy(const Item &item)
 }
 /** @brief POE2 Mashup: whether the item takes one cell, whatever picture it was saved with (one-cell copies and charms). */
 bool TakesOneCell(const Item &item);
+/**
+ * @brief Whether a worn item's modifiers count: normal items have none hidden, and in POE2 mode an unidentified
+ * item's modifiers work while worn, as in POE2 (Curtis, Monk run 2); in Diablo they wait for identifying.
+ */
+bool ItemModifiersCount(const Item &item);
 /** @brief POE2 Mashup: items saved when they were bigger let go of the inventory cells they no longer cover. */
 void FitOneCellItems(Player &player);
 /** @param quality POE2 Mashup: the quality the item is made with, as starting gear rebuilt by crafting keeps its quality. */

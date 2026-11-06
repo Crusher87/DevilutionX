@@ -186,10 +186,10 @@ TEST_F(Poe2ChaosTest, ChaosResistanceAddsUpFromGear)
 	EXPECT_EQ(player._pMagResist, 0);
 	EXPECT_EQ(player._pLghtResist, 0);
 
-	// Unidentified gear doesn't count, as for every other modifier.
+	// Unidentified gear counts too, as in POE2 (Curtis, Monk run 2).
 	player.InvBody[INVLOC_RING_RIGHT]._iIdentified = false;
 	Recalculate(player);
-	EXPECT_EQ(player.poe2.chaosResistance, 13);
+	EXPECT_EQ(player.poe2.chaosResistance, 22);
 }
 
 TEST_F(Poe2ChaosTest, AllResistancesLeaveChaosOut)

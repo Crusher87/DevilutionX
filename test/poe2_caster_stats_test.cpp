@@ -260,10 +260,10 @@ TEST_F(Poe2CasterStatsTest, SceptreSpiritTakesItsOwnIncrease)
 	EXPECT_EQ(SceptreSpiritOf(sceptre), SceptreSpirit);
 	sceptre._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::LocalSpiritPercent)] = 103;
 	EXPECT_EQ(SceptreSpiritOf(sceptre), 203) << "The most a sceptre grants";
-	// Unidentified, its modifiers don't count yet.
+	// Unidentified, its modifiers count all the same, as in POE2 (Curtis, Monk run 2).
 	sceptre._iMagical = ITEM_QUALITY_MAGIC;
 	sceptre._iIdentified = false;
-	EXPECT_EQ(SceptreSpiritOf(sceptre), SceptreSpirit);
+	EXPECT_EQ(SceptreSpiritOf(sceptre), 203);
 	sceptre._iIdentified = true;
 
 	const int bare = MaxSpirit(player);

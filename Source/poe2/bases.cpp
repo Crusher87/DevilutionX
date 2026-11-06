@@ -403,8 +403,7 @@ int LocalQuality(const Item &item, QualityKind kind)
 int WeaponDamagePercent(const Item &item)
 {
 	const int quality = LocalQuality(item, QualityKind::Weapon);
-	const bool identified = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
-	const int increased = identified ? item._iPLDam - quality : 0;
+	const int increased = ItemModifiersCount(item) ? item._iPLDam - quality : 0;
 	return ((100 + increased) * (100 + quality) / 100) - 100;
 }
 

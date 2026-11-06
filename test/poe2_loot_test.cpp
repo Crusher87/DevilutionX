@@ -646,6 +646,49 @@ TEST_F(Poe2LootTest, AFirstSupportGemByDungeonLevelTwo)
 	EXPECT_LT(killsToDrop / dropped, 60);
 }
 
+TEST_F(Poe2LootTest, AFirstSkillGemByDungeonLevelTwo)
+{
+	// Curtis, Monk run 2: no uncut skill gem in 54 minutes; "promise one early". Same rules as the first support gem.
+	Player &player = *MyPlayer;
+	player.poe2.clear();
+	EXPECT_EQ(FirstSkillGemChancePerMille(player, LootSource::Normal, 1), FirstSupportStartPerMille);
+	player.poe2.economy.skillDroughtKills = 50;
+	EXPECT_EQ(FirstSkillGemChancePerMille(player, LootSource::Normal, 2), FirstSupportStartPerMille + (50 * FirstSupportClimbPerMille));
+	for (const LootSource source : { LootSource::Rare, LootSource::Miniboss, LootSource::Boss })
+		EXPECT_EQ(FirstSkillGemChancePerMille(player, source, 2), 1000);
+	EXPECT_EQ(FirstSkillGemChancePerMille(player, LootSource::Boss, 3), 0);
+	// The two promises are kept apart: a support gem doesn't spend the skill gem's.
+	player.poe2.economy.supportGemDropped = true;
+	EXPECT_EQ(FirstSkillGemChancePerMille(player, LootSource::Boss, 2), 1000);
+	player.poe2.economy.skillGemDropped = true;
+	EXPECT_EQ(FirstSkillGemChancePerMille(player, LootSource::Boss, 2), 0);
+	EXPECT_FALSE(RollFirstSkillGemDrop(player, LootSource::Boss, 2));
+
+	// A miss counts the kill, a hit doesn't.
+	player.poe2.clear();
+	int kills = 0;
+	SetRndSeed(7);
+	while (kills < 200 && !RollFirstSkillGemDrop(player, LootSource::Normal, 1))
+		kills++;
+	EXPECT_LT(kills, 200);
+	EXPECT_EQ(player.poe2.economy.skillDroughtKills, kills);
+
+	// Any uncut skill gem drop spends it, a barrel's too.
+	player.poe2.clear();
+	bool found = false;
+	for (uint32_t seed = 1; seed < 6000 && !found; seed++) {
+		found = CountMisc(ContainerDrops(1, DTYPE_CATHEDRAL, 1, seed), IMISC_UNCUT_SKILL) > 0;
+		if (!found) {
+			ASSERT_FALSE(player.poe2.economy.skillGemDropped) << "seed " << seed;
+		}
+	}
+	ASSERT_TRUE(found);
+	EXPECT_TRUE(player.poe2.economy.skillGemDropped);
+	player.poe2.clear();
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+}
+
 TEST_F(Poe2LootTest, AnySupportGemDropSpendsTheFirstOnesGuarantee)
 {
 	// A support from a barrel counts as the hero's first, so the guarantee is spent.
