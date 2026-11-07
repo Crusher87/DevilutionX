@@ -35,7 +35,8 @@ bool AttackInListedCategory(WeaponSkill skill, GemCategory category)
 	case GemCategory::Staff:
 		return IsAnyOf(skill, WeaponSkill::WhirlingStaff, WeaponSkill::LeapSlam, WeaponSkill::FistsOfThunder);
 	case GemCategory::Shield:
-		return IsAnyOf(skill, WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash);
+		// Counterstrike answers a block: it shows with the shield skills too (Q41).
+		return IsAnyOf(skill, WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash, WeaponSkill::Riposte);
 	case GemCategory::Elemental:
 		return IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::LightningArrow, WeaponSkill::IceBolt, WeaponSkill::FrostNova,
 		    WeaponSkill::FistsOfThunder);

@@ -1216,6 +1216,9 @@ uint32_t SkillTags(SkillSlot skill)
 	uint32_t tags = 0;
 	const bool spell = table->weapon == TableWeapon::None && (table->flags & TF_Spell) != 0;
 	tags |= spell ? ST_Spell : ST_Attack;
+	// Condemn, the shield's holy fire, is a spell and pays a spell's mana (Curtis 2026-11-07, Q41).
+	if (table->skill == WeaponSkill::Condemn)
+		tags = ST_Spell;
 	if (table->weapon == TableWeapon::None && table->shape == TableShape::Curse)
 		tags = ST_Spell;
 	if (IsTableMeleeSkill(*table))
@@ -1255,6 +1258,9 @@ uint32_t SkillTags(SkillSlot skill)
 		tags |= ST_Duration;
 		if (table->buff == TableBuff::WarCry)
 			tags = (tags & ~(ST_Attack | ST_Spell)) | ST_Warcry | ST_Area;
+		else
+			// Frozen Armor, Holy Shield and Shield Wall are buffs, not attacks; Frozen Armor is cold (Q41).
+			tags = (tags & ~(ST_Attack | ST_Spell)) | ST_Buff | (table->buff == TableBuff::FrozenArmor ? ST_Frost : 0);
 		break;
 	default:
 		break;
@@ -1292,6 +1298,9 @@ uint32_t SkillTags(SkillSlot skill)
 		if ((table->flags & (TF_Bleed | TF_Poison | TF_PoisonBurst)) != 0 || table->shape == TableShape::Curse || table->zone == TableZone::PoisonGround)
 			tags |= ST_DamageOverTime;
 	}
+	// The poison skills show it, Witch's Bog too, whose arrows poison (Q41).
+	if ((table->flags & (TF_Poison | TF_PoisonBurst)) != 0 || IsAnyOf(table->zone, TableZone::PoisonGround, TableZone::Pod, TableZone::GasTrap, TableZone::Bog))
+		tags |= ST_Poison;
 	return tags;
 }
 

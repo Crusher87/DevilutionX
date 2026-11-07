@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -11,7 +12,10 @@
 #include "poe2/bases.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/gemcutting.hpp"
+#include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
@@ -90,6 +94,43 @@ TEST_F(Poe2WeaponSkillsTest, FrenzyWhirlwindAndLeapAttackTakeNoDagger)
 	}
 	for (const WeaponSkill skill : { WeaponSkill::Flurry, WeaponSkill::Cleave })
 		EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, skill)) << WeaponSkillName(skill);
+}
+
+// Q41 (Curtis 2026-11-07): Condemn pays a spell's mana (13 -> 17), Blessed Shield a melee attack's (9 -> 6), and
+// Haunt's and Locust Swarm's grow x5 by gem 20 like the other damaging spells (32 -> 53, 51 -> 85).
+TEST_F(Poe2WeaponSkillsTest, PassFourManaFixes)
+{
+	const auto at = [](WeaponSkill skill, int gemLevel) { return GemBaseManaCost(SkillSlot::ForAttack(skill), gemLevel); };
+	EXPECT_NE(SkillTags(SkillSlot::ForAttack(WeaponSkill::Condemn)) & ST_Spell, 0U);
+	EXPECT_EQ(SkillTags(SkillSlot::ForAttack(WeaponSkill::Condemn)) & ST_Attack, 0U);
+	EXPECT_EQ(at(WeaponSkill::Condemn, 1), 17);
+	EXPECT_TRUE(HasMeleeManaCut(WeaponSkill::BlessedShield));
+	EXPECT_EQ(at(WeaponSkill::BlessedShield, 1), 6);
+	EXPECT_EQ(at(WeaponSkill::Haunt, 20), 53);
+	EXPECT_EQ(at(WeaponSkill::LocustSwarm, 20), 85);
+}
+
+// Q41: Frozen Armor, Holy Shield and Shield Wall show as Buff, not Attack, Frozen Armor as Cold; the poison skills and
+// Witch's Bog show Poison; Counterstrike is in the Shield tab too.
+TEST_F(Poe2WeaponSkillsTest, PassFourTags)
+{
+	for (const WeaponSkill skill : { WeaponSkill::FrozenArmor, WeaponSkill::HolyShield, WeaponSkill::ShieldWall }) {
+		const uint32_t tags = SkillTags(SkillSlot::ForAttack(skill));
+		EXPECT_NE(tags & ST_Buff, 0U) << WeaponSkillName(skill);
+		EXPECT_EQ(tags & (ST_Attack | ST_Spell), 0U) << WeaponSkillName(skill);
+		EXPECT_EQ(SkillTagText(SkillSlot::ForAttack(skill)).find("Attack"), std::string::npos) << WeaponSkillName(skill);
+	}
+	EXPECT_NE(SkillTags(SkillSlot::ForAttack(WeaponSkill::FrozenArmor)) & ST_Frost, 0U);
+	EXPECT_EQ(SkillTagText(SkillSlot::ForAttack(WeaponSkill::FrozenArmor)), "Buff, Duration, Cold");
+	EXPECT_NE(SkillTagText(SkillSlot::ForAttack(WeaponSkill::WitchsBog)).find("Poison"), std::string::npos);
+	EXPECT_NE(SkillTagText(SkillSlot::ForAttack(WeaponSkill::ViperStrike)).find("Poison"), std::string::npos);
+	EXPECT_EQ(SkillTagText(SkillSlot::ForAttack(WeaponSkill::Cleave)).find("Poison"), std::string::npos);
+	const auto riposte = std::find_if(GemCatalog().begin(), GemCatalog().end(), [](const GemEntry &gem) { return gem.skill == SkillSlot::ForAttack(WeaponSkill::Riposte); });
+	ASSERT_NE(riposte, GemCatalog().end());
+	EXPECT_TRUE(GemInCategory(*riposte, GemCategory::Shield));
+	EXPECT_TRUE(GemInCategory(*riposte, GemCategory::Sword));
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::GroundSlam), "Hits in front of you, knocks back");
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::Barrage), "Five arrows in quick succession at one target");
 }
 
 TEST_F(Poe2WeaponSkillsTest, EveryWeaponHasAFreeDefaultAttack)

@@ -509,9 +509,9 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::Cleave:
 		return _("Hits the target and both sides");
 	case WeaponSkill::GroundSlam:
-		return _("Hits all around, knocks back");
+		return _("Hits in front of you, knocks back");
 	case WeaponSkill::Barrage:
-		return _("Fires a fan of five arrows");
+		return _("Five arrows in quick succession at one target");
 	case WeaponSkill::WhirlingStaff:
 		return _("Hits everything around you");
 	case WeaponSkill::Flurry:
@@ -625,6 +625,9 @@ int ListedManaCost(WeaponSkill skill)
 
 bool HasMeleeManaCut(WeaponSkill skill)
 {
+	// Blessed Shield, the thrown shield, pays a melee attack's mana (Curtis 2026-11-07, Q41).
+	if (skill == WeaponSkill::BlessedShield)
+		return true;
 	const uint32_t tags = SkillTags(SkillSlot::ForAttack(skill));
 	return (tags & ST_Attack) != 0 && (tags & (ST_Melee | ST_Slam)) != 0 && (tags & (ST_Bow | ST_Spell | ST_Minion)) == 0;
 }

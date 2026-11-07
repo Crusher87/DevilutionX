@@ -64,6 +64,10 @@ enum SkillTag : uint32_t {
 	ST_Chaos = 1U << 25,
 	/** A Summon Command (poe2/summon_commands.hpp): no support gem fits it. */
 	ST_Command = 1U << 26,
+	/** A buff on the hero (Frozen Armor, Holy Shield, Shield Wall): not an attack (Curtis 2026-11-07, Q41). */
+	ST_Buff = 1U << 27,
+	/** The skill poisons, or leaves poison on the ground. Shown only: no support asks for it (Q41). */
+	ST_Poison = 1U << 28,
 	ST_Elemental = ST_Fire | ST_Lightning | ST_Frost,
 };
 
