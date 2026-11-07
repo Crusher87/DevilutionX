@@ -3121,6 +3121,35 @@ void ClearCaches()
 	PackState = -1;
 }
 
+/** @brief With HD Lift Dark Shades, black becomes this shade (out of 255); lighter shades are lifted less, white not at all. */
+constexpr float DarkShadeLift = 10.F;
+
+/**
+ * @brief Lifts the HD world's darkest shades a little (HD Lift Dark Shades), as a screen blend over it. Some screens (VA
+ * panels) are slow to brighten very dark shades, so a dark scene that moves looks darker there until it stops; from a
+ * little above black they change faster. It fades with the screen, so a fade still goes to black.
+ */
+void LiftDarkShades(SDL_Renderer *renderer, const SDL_Rect &clip, const std::array<float, 3> &tint)
+{
+	if (!*GetOptions().Graphics.hdLiftDarks)
+		return;
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	bool lifted = false;
+#if SDL_VERSION_ATLEAST(2, 0, 6)
+	// What is there plus the lift times what it lacks of white.
+	static const SDL_BlendMode Screen = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE_MINUS_DST_COLOR, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+	lifted = SDL_SetRenderDrawBlendMode(renderer, Screen) == 0;
+#endif
+	// Renderers without it add the lift to every shade.
+	if (!lifted && SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD) != 0)
+		return;
+	SDL_SetRenderDrawColor(renderer, ColourByte(DarkShadeLift / 255.F * tint[0]), ColourByte(DarkShadeLift / 255.F * tint[1]), ColourByte(DarkShadeLift / 255.F * tint[2]), 255);
+	SDL_RenderFillRect(renderer, &clip);
+	SDL_SetRenderDrawBlendMode(renderer, before);
+}
+
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
@@ -3162,6 +3191,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 	// HD Lighting works out its own light, in colour and stopped by walls.
 	if (RecordingLit && HaveViewOrigin && FloorDone && RenderLit(renderer, toLogical, tint)) {
+		LiftDarkShades(renderer, clip, tint);
 		SDL_RenderSetClipRect(renderer, nullptr);
 		WorldRecorded = false;
 		return;
@@ -3227,6 +3257,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		if (IsOutline(Draws[i].style))
 			DrawOutline(renderer, i, glow, toLogical);
 	}
+	LiftDarkShades(renderer, clip, tint);
 	SDL_RenderSetClipRect(renderer, nullptr);
 	WorldRecorded = false;
 }

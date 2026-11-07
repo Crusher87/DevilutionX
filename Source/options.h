@@ -568,6 +568,8 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryBoolean hdLighting;
 	/** @brief POE2 Mashup: the HD world's firelight warmer and dark corners darker, in a mood of its own for each part of the dungeon. */
 	OptionEntryBoolean hdStrongMood;
+	/** @brief POE2 Mashup: the HD world's darkest shades a little lighter, for screens slow to brighten dark shades while they move. */
+	OptionEntryBoolean hdLiftDarks;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)
