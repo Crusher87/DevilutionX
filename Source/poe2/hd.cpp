@@ -2573,6 +2573,37 @@ Shading OpenTileLight(Point tile, bool right)
 	return Gradient(LightAt(tx - 0.25F, ty + 0.25F), LightAt(tx, ty));
 }
 
+/** @brief The Catacombs' rock with no open tile round it: the rock between the rooms, of which only the top shows. */
+bool IsDeepRock(Point tile)
+{
+	if (leveltype != DTYPE_CATACOMBS)
+		return false;
+	for (int dy = -1; dy <= 1; dy++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			const Point beside = tile + Displacement { dx, dy };
+			if (InDungeonBounds(beside) && !light::Blocks(beside.x, beside.y))
+				return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * @brief The light on the top of deep rock (IsDeepRock): the ground's light at its tile, across it from left to right as
+ * on an open tile. Lit as a wall's face, each half from its own side, the rock right behind a long wall took the light
+ * the wall's face takes from the room in front of it in one half only, and showed as a row of lit teeth along the wall's
+ * top. Like the Cathedral's dirt behind a wall (DrawGroundLit), it takes none of that light (light::TileGroundAt).
+ */
+Shading RockTopLight(Point tile, bool right)
+{
+	const float tx = static_cast<float>(tile.x);
+	const float ty = static_cast<float>(tile.y);
+	const auto at = [tile](float x, float y) { return ToColour(light::TileGroundAt(x, y, tile.x, tile.y)); };
+	if (right)
+		return Gradient(at(tx, ty), at(tx + 0.25F, ty - 0.25F));
+	return Gradient(at(tx - 0.25F, ty + 0.25F), at(tx, ty));
+}
+
 /** @brief The light on a whole piece standing on a tile, both of its columns lit as they are when the piece is drawn. */
 Shading PieceLight(Point tile)
 {
@@ -2672,7 +2703,14 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 			WorldOf(static_cast<float>(draw.x) + static_cast<float>(draw.width) / 2, static_cast<float>(draw.y + draw.height - 1), wx, wy);
 			return Uniform(LightAt(wx, wy));
 		}
-		Shading shading = light::Blocks(draw.cell.x, draw.cell.y) ? WallLight(draw.cell, IsRightColumn(draw)) : OpenTileLight(draw.cell, IsRightColumn(draw));
+		const bool right = IsRightColumn(draw);
+		Shading shading;
+		if (!light::Blocks(draw.cell.x, draw.cell.y))
+			shading = OpenTileLight(draw.cell, right);
+		else if (IsDeepRock(draw.cell))
+			shading = RockTopLight(draw.cell, right);
+		else
+			shading = WallLight(draw.cell, right);
 		if (leveltype == DTYPE_TOWN)
 			FireLightUp(shading, draw, -FrontTileBelow(draw));
 		return shading;
