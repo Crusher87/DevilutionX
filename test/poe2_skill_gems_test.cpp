@@ -331,22 +331,6 @@ TrayBinding TrayOf(const Player &player, TraySlot slot)
 	return player.poe2.tray[static_cast<size_t>(slot)];
 }
 
-TEST_F(Poe2SkillGemsTest, TrayIconsShowTheGemLevel)
-{
-	// Curtis, Rogue run 2: each tray icon shows its gem's level as a small number; nothing on a weapon's default attack.
-	Player &player = *MyPlayer;
-	player.poe2.clear();
-	player._pClass = HeroClass::Rogue;
-	GrantStarterSkill(player);
-	player.poe2.slotLevels[0] = 7;
-	EXPECT_EQ(TrayGemLevel(player, TraySlot::Key1), 7);
-	EXPECT_EQ(TrayGemLevel(player, TraySlot::LeftMouse), std::nullopt) << "the weapon attack has no gem";
-	EXPECT_EQ(TrayGemLevel(player, TraySlot::RightMouse), std::nullopt) << "an empty slot";
-	// A slot bound to an emptied socket shows nothing.
-	player.poe2.tray[static_cast<size_t>(TraySlot::Key2)] = TrayBinding::ForGem(3);
-	EXPECT_EQ(TrayGemLevel(player, TraySlot::Key2), std::nullopt);
-}
-
 TEST_F(Poe2SkillGemsTest, TrayStartsWithTheWeaponAttackOnTheMouse)
 {
 	const Player &player = *MyPlayer;

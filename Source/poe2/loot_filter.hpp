@@ -104,6 +104,11 @@ struct LootMapIcon {
 	/** @brief 0 big, 1 medium, 2 small. */
 	uint8_t size;
 };
+/**
+ * @brief Whether the hero has had the ground item's tile in sight on this floor, or it lies in town. Its name label and
+ * map icon show only then: never behind a closed door or in a room not yet seen (Curtis 2026-11-05 and 2026-11-07).
+ */
+bool HeroHasSeenGroundItem(const Item &item);
 /** @brief The icons for the ground items on explored tiles, when the filter and its Map Icons option are on. */
 std::vector<LootMapIcon> CollectLootMapIcons();
 

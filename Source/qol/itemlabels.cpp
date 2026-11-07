@@ -111,6 +111,9 @@ void AddItemToLabelQueue(int id, Point position)
 	Item &item = Items[id];
 	if (IsItemHiddenByLootFilter(item))
 		return;
+	// POE2 Mashup: no names through closed doors or in rooms not yet seen (Curtis 2026-11-07).
+	if (gbIsPoe2 && !HeroHasSeenGroundItem(item))
+		return;
 	// POE2 Mashup: gold has no label; picking it up shows the amount over the hero.
 	if (gbIsPoe2 && item._itype == ItemType::Gold)
 		return;

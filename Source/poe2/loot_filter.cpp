@@ -463,6 +463,14 @@ void PlayLootFilterDropSound(const Item &item)
 	PlaySfxLoc(*style->sound, item.position);
 }
 
+bool HeroHasSeenGroundItem(const Item &item)
+{
+	if (leveltype == DTYPE_TOWN)
+		return true;
+	const Point tile = item.position;
+	return InDungeonBounds(tile) && HasAnyOf(dFlags[tile.x][tile.y], DungeonFlag::Explored | DungeonFlag::Visible);
+}
+
 std::vector<LootMapIcon> CollectLootMapIcons()
 {
 	std::vector<LootMapIcon> icons;
@@ -474,9 +482,9 @@ std::vector<LootMapIcon> CollectLootMapIcons()
 		if (style == nullptr || !style->iconSize || IsItemHiddenByLootFilter(item))
 			continue;
 		// Only loot the hero has seen: on a tile they have had in sight (Curtis 2026-11-05: nothing out of view).
-		const Point tile = item.position;
-		if (!InDungeonBounds(tile) || !HasAnyOf(dFlags[tile.x][tile.y], DungeonFlag::Explored))
+		if (!HeroHasSeenGroundItem(item))
 			continue;
+		const Point tile = item.position;
 		MapIconStyle iconStyle;
 		iconStyle.shape = style->iconShape;
 		iconStyle.color = NearestLootPaletteColour(style->iconColour);

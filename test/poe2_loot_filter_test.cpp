@@ -6,6 +6,7 @@
 #include "engine/palette.h"
 #include "game_mode.hpp"
 #include "items.h"
+#include "levels/gendung.h"
 #include "options.h"
 #include "poe2/corner_map.hpp"
 #include "poe2/loot_filter.hpp"
@@ -179,6 +180,25 @@ TEST_F(Poe2LootFilterTest, GroundOutlinesFadeIntoTheDark)
 	EXPECT_EQ(LitGroundOutline(PAL16_GRAY + 9, 11), PAL16_GRAY + 14);
 	EXPECT_FALSE(LitGroundOutline(PAL16_YELLOW + 4, 12).has_value());
 	EXPECT_FALSE(LitGroundOutline(PAL16_YELLOW + 4, 15).has_value());
+}
+
+/** Curtis 2026-11-07: a Magic Rock's name showed through a closed door on arriving. Names need the tile seen. */
+TEST_F(Poe2LootFilterTest, GroundItemsShowOnlyOnceSeen)
+{
+	const dungeon_type previous = leveltype;
+	Item rock = MakeItem(ItemType::Misc, ICLASS_QUEST, ITEM_QUALITY_NORMAL, "Magic Rock");
+	rock.position = { 20, 30 };
+	leveltype = DTYPE_CAVES;
+	dFlags[20][30] = DungeonFlag::None;
+	EXPECT_FALSE(HeroHasSeenGroundItem(rock)) << "behind a closed door, never in sight";
+	dFlags[20][30] = DungeonFlag::Visible;
+	EXPECT_TRUE(HeroHasSeenGroundItem(rock)) << "in sight now";
+	dFlags[20][30] = DungeonFlag::Explored;
+	EXPECT_TRUE(HeroHasSeenGroundItem(rock)) << "seen before";
+	dFlags[20][30] = DungeonFlag::None;
+	leveltype = DTYPE_TOWN;
+	EXPECT_TRUE(HeroHasSeenGroundItem(rock)) << "town is always in view";
+	leveltype = previous;
 }
 
 } // namespace

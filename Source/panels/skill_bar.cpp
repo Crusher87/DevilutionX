@@ -781,16 +781,6 @@ void DrawSeals(const Surface &out, const Rectangle &icon, const SealDisplay &sea
 	}
 }
 
-/**
- * @brief The socketed gem's level as a small number in the icon's bottom left corner (Curtis, Rogue run 2), outlined so
- * it reads over any icon; the seals keep the top right.
- */
-void DrawGemLevel(const Surface &out, const Rectangle &icon, int level)
-{
-	const Rectangle corner { icon.position + Displacement { 2, icon.size.height - 13 }, Size { 16, 12 } };
-	DrawString(out, std::to_string(level), corner, { .flags = UiFlags::FontSize12 | UiFlags::ColorWhite | UiFlags::Outlined | UiFlags::KerningFitSpacing });
-}
-
 /** @brief A slot's dark square and thin frame, gold for the skill picked; the icon goes inside. */
 void DrawSlot(const Surface &out, const Rectangle &slot, bool picked = false)
 {
@@ -1305,14 +1295,6 @@ void CloseSkillTrayPopup()
 	Popup = {};
 }
 
-std::optional<int> TrayGemLevel(const Player &player, TraySlot slot)
-{
-	const TrayBinding &binding = Binding(player, slot);
-	if (binding.action != TrayAction::Gem || binding.socket >= NumSkillSlots || player.poe2.skillSlots[binding.socket].isEmpty())
-		return std::nullopt;
-	return player.poe2.gemLevel(binding.socket);
-}
-
 void DrawSkillBar(const Surface &out)
 {
 	if (!IsSkillBarVisible()) {
@@ -1352,8 +1334,6 @@ void DrawSkillBar(const Surface &out)
 			DrawSkillIcon(out, bottomLeft, skill, GetSkillUsability(player, skill) == SkillUsability::Ready && (!spiritUse || SpiritGemReady(player, skill.persistent())));
 			if (const std::optional<SealDisplay> seals = SkillSealDisplay(player, skill); seals)
 				DrawSeals(out, IconRect(rect), *seals);
-			if (const std::optional<int> level = TrayGemLevel(player, slot); level)
-				DrawGemLevel(out, IconRect(rect), *level);
 			break;
 		}
 		case TrayAction::WeaponAttack: {

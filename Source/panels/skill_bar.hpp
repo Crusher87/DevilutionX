@@ -61,8 +61,6 @@ void ClickSkillSlot(Player &player, size_t slot, bool canTakeOut);
 
 /** @brief Draws a skill's small icon, greyed out if it can't be used. */
 void DrawSkillIcon(const Surface &out, Point bottomLeft, SkillSlot skill, bool ready);
-/** @brief The level of the skill gem a tray slot uses, drawn small on its icon; nothing for a weapon's default attack or a Command. */
-std::optional<int> TrayGemLevel(const Player &player, TraySlot slot);
 /** @brief The key or button of the tray slot using a Skills panel socket's gem; empty if it's not on the tray. */
 std::string SkillSlotKeyName(size_t slot);
 std::string TraySlotKeyName(TraySlot slot);
