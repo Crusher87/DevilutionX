@@ -288,15 +288,27 @@ bool CanPlaceWallTrap(Point pos)
 	return TileHasAny(pos, TileProperties::Trap);
 }
 
+/**
+ * POE2 Mashup: a random chest, barrel or prop must not close a passage (Curtis 2026-11-07: a chest kept him out of a
+ * room in the Caves). Gives up on the check after many tries, so a crowded floor still gets its objects.
+ */
+bool RndLocBlocksPassage(Point tile, bool big, int tries)
+{
+	constexpr int MaxPassageTries = 4000;
+	if (!gbIsPoe2 || tries > MaxPassageTries)
+		return false;
+	return ObjectWouldBlockPassage(tile) || (big && ObjectWouldBlockPassage(tile + Displacement { 0, -1 }));
+}
+
 void InitRndLocObj(int min, int max, _object_id objtype)
 {
 	const int numobjs = GenerateRnd(max - min) + min;
 
 	for (int i = 0; i < numobjs; i++) {
-		while (true) {
+		for (int tries = 0;; tries++) {
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
-			if (IsAreaOk(Rectangle { { xp - 1, yp - 1 }, { 3, 3 } })) {
+			if (IsAreaOk(Rectangle { { xp - 1, yp - 1 }, { 3, 3 } }) && !RndLocBlocksPassage({ xp, yp }, false, tries)) {
 				AddObject(objtype, { xp, yp });
 				break;
 			}
@@ -308,10 +320,10 @@ void InitRndLocBigObj(int min, int max, _object_id objtype)
 {
 	const int numobjs = GenerateRnd(max - min) + min;
 	for (int i = 0; i < numobjs; i++) {
-		while (true) {
+		for (int tries = 0;; tries++) {
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
-			if (IsAreaOk(Rectangle { { xp - 1, yp - 2 }, { 3, 4 } })) {
+			if (IsAreaOk(Rectangle { { xp - 1, yp - 2 }, { 3, 4 } }) && !RndLocBlocksPassage({ xp, yp }, true, tries)) {
 				AddObject(objtype, { xp, yp });
 				break;
 			}
@@ -329,7 +341,7 @@ std::optional<Point> GetRandomObjectPosition(Displacement standoff)
 {
 	for (int i = 0; i <= 20000; i++) {
 		Point position = Point { GenerateRnd(80), GenerateRnd(80) } + Displacement { 16, 16 };
-		if (CanPlaceRandomObject(position, standoff))
+		if (CanPlaceRandomObject(position, standoff) && !RndLocBlocksPassage(position, false, i))
 			return position;
 	}
 	return {};
