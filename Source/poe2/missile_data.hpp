@@ -58,6 +58,8 @@ struct Poe2MissileData {
 	uint8_t commandY = 0;
 	/** @brief The monster it steers towards while it flies (Guided Arrow), or -1. */
 	int16_t homingMonster = -1;
+	/** @brief A draft gem's lesser projectile (Magma Hurl's shrapnel): its hits set off nothing more of the skill's. */
+	bool draftPart = false;
 };
 
 } // namespace devilution

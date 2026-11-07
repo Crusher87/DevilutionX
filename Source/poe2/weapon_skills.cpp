@@ -366,6 +366,8 @@ bool TableWeaponAllows(const Item &item, TableWeapon weapon)
 		return IsCrossbow(item);
 	case TableWeapon::Melee:
 		return IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Staff);
+	case TableWeapon::MaceOrAxe:
+		return IsAnyOf(item._itype, ItemType::Mace, ItemType::Axe);
 	default:
 		return false;
 	}
@@ -394,6 +396,8 @@ std::string_view TableWeaponName(TableWeapon weapon)
 		return _("shield");
 	case TableWeapon::Melee:
 		return _("melee weapon");
+	case TableWeapon::MaceOrAxe:
+		return _("mace or axe");
 	default:
 		return {};
 	}
@@ -1051,7 +1055,8 @@ void LandDashSkill(Player &player)
 
 bool IsThrowingSkill(WeaponSkill skill)
 {
-	return IsAnyOf(skill, WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury);
+	// The draft gems' thrown rock, hammer and axe too (Q48).
+	return IsAnyOf(skill, WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury, WeaponSkill::MagmaHurl, WeaponSkill::HephastosHammer, WeaponSkill::ThunderHatchet);
 }
 
 bool SpinsWhileStriking(WeaponSkill skill)
@@ -1176,8 +1181,9 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 	case WeaponSkill::BattleCry:
 		player.poe2.warcryTicks = BattleCryTicks;
 		player.Say(HeroSpeech::TimeToDie);
-		// A war cry shatters the hero's Shield Wall near him (Curtis 2026-11-07, Q37).
+		// A war cry shatters the hero's Shield Wall near him (Curtis 2026-11-07, Q37), and Hephasto's Hammers (Q48).
 		ShatterShieldWall(player, player.position.tile);
+		ShatterLodgedHammers(player, player.position.tile);
 		for (int i = 0; i < 8; i++) {
 			Monster *monster = FindMonsterAtPosition(player.position.tile + static_cast<Direction>(i));
 			if (monster != nullptr && !CanTalkToMonst(*monster) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)

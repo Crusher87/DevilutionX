@@ -199,7 +199,29 @@ enum class WeaponSkill : uint8_t {
 	PhantomStep,
 	SkylordsStorm,
 	PalmOfTheFrozenNorth,
-	Last = PalmOfTheFrozenNorth,
+	/** The draft gems' Mace, Axe and Sword batch (Curtis 2026-11-07, Q48), with the warcries the three tabs share. */
+	HellfireRoar,
+	FrostforgedHammer,
+	PlateBreaker,
+	MagmaHurl,
+	ArreatCrash,
+	Earthsplitter,
+	BrimstoneRift,
+	AncestorTotem,
+	HephastosHammer,
+	QuakingRoar,
+	HammerOfZakarum,
+	MountainsFall,
+	CryOfBulKathos,
+	StormEdge,
+	FrostbiteBlades,
+	CinderStrike,
+	SteelTempest,
+	ThunderHatchet,
+	BloodHarvest,
+	PyreBlow,
+	MammothCharge,
+	Last = MammothCharge,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -1076,6 +1098,16 @@ struct Poe2PlayerData {
 	/** @brief Rime Strikes' strikes towards its third, and the game ticks until the count starts over (not saved). */
 	uint8_t rimeCount = 0;
 	uint8_t rimeTicks = 0;
+	/** @brief Frostforged Hammer's hits towards its freezing third, and the game ticks until the count starts over (not saved). */
+	uint8_t frostforgedCount = 0;
+	uint8_t frostforgedTicks = 0;
+	/**
+	 * @brief The damage war cries' empowered hits (not saved), by EmpoweringCry: the hits left, the game ticks they last,
+	 * and whether a use this tick took one already (a use's hits on several monsters spend one).
+	 */
+	std::array<uint8_t, 4> cryHits {};
+	std::array<uint8_t, 4> cryTicks {};
+	std::array<bool, 4> cryUsedThisTick {};
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -1362,6 +1394,11 @@ struct Poe2PlayerData {
 		zealTicks = 0;
 		rimeCount = 0;
 		rimeTicks = 0;
+		frostforgedCount = 0;
+		frostforgedTicks = 0;
+		cryHits = {};
+		cryTicks = {};
+		cryUsedThisTick = {};
 		riposteTicks = 0;
 		frenzyCharges = 0;
 		frenzyTicks = 0;
@@ -1417,6 +1454,13 @@ struct Poe2PlayerData {
 			zealCount = 0;
 		if (rimeTicks > 0 && --rimeTicks == 0)
 			rimeCount = 0;
+		if (frostforgedTicks > 0 && --frostforgedTicks == 0)
+			frostforgedCount = 0;
+		for (size_t cry = 0; cry < cryHits.size(); cry++) {
+			cryUsedThisTick[cry] = false;
+			if (cryTicks[cry] > 0 && --cryTicks[cry] == 0)
+				cryHits[cry] = 0;
+		}
 		if (frenzyTicks > 0 && --frenzyTicks == 0)
 			frenzyCharges = 0;
 		if (comboTicks > 0 && --comboTicks == 0)

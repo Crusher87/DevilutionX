@@ -1295,6 +1295,46 @@ uint32_t SkillTags(SkillSlot skill)
 		// A blink and a burst, not a lasting zone.
 		tags = (tags & ~(ST_Duration | ST_Placed)) | ST_Melee | ST_Movement;
 		break;
+	// The draft Mace, Axe and Sword gems' (Q48). The thrown rock, hammer and axe are no melee: they pay full mana.
+	case WeaponSkill::HellfireRoar:
+		// Its hits are fire, though a warcry has none of its own.
+		tags |= ST_Fire;
+		break;
+	case WeaponSkill::FrostforgedHammer:
+	case WeaponSkill::PlateBreaker:
+		// Blows, not slams, though they are a mace's sweeps.
+		tags = (tags & ~ST_Slam) | ST_Strike;
+		break;
+	case WeaponSkill::MagmaHurl:
+	case WeaponSkill::HephastosHammer:
+		tags |= ST_Area;
+		break;
+	case WeaponSkill::ArreatCrash:
+		tags |= ST_Melee | ST_Slam;
+		break;
+	case WeaponSkill::MountainsFall:
+		tags |= ST_Melee;
+		break;
+	case WeaponSkill::HammerOfZakarum:
+		// A falling hammer, not a lasting zone.
+		tags = (tags & ~ST_Duration) | ST_Melee | ST_Slam;
+		break;
+	case WeaponSkill::AncestorTotem:
+		tags |= ST_Melee | ST_Placed;
+		break;
+	case WeaponSkill::BrimstoneRift:
+		tags |= ST_Duration;
+		break;
+	case WeaponSkill::SteelTempest:
+		tags |= ST_Strike | ST_Duration;
+		break;
+	case WeaponSkill::BloodHarvest:
+	case WeaponSkill::PyreBlow:
+		tags |= ST_Strike;
+		break;
+	case WeaponSkill::MammothCharge:
+		tags |= ST_Slam;
+		break;
 	default:
 		break;
 	}
@@ -1826,6 +1866,9 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			}
 			break;
 		case SG::Aftershock:
+			// Quaking Roar's aftershocks don't stack with it on the same slam.
+			if ((tags & ST_Slam) != 0 && player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Quaking)] > 0)
+				break;
 			if (GenerateRnd(100) < Value(player, skill, gem, 0))
 				AddBurst(target, 2, 12, DamageType::Physical, MissileGraphicID::StoneCurseShatter, SkillBaseDamage(player, skill, 100));
 			break;
@@ -2142,6 +2185,47 @@ SkillSlot SupportHitSkill()
 Point NearestMonsterTarget(const Player &player, Point from, int range)
 {
 	return NearestTarget(player, from, range);
+}
+
+bool IsSupportRepeat()
+{
+	return Repeating;
+}
+
+void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixed26_6 dealt)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || Repeating || skill.isEmpty() || dealt <= 0)
+		return;
+	const uint32_t tags = SkillTags(skill);
+	if ((tags & (ST_Attack | ST_Melee)) != (ST_Attack | ST_Melee))
+		return;
+	Poe2PlayerData &state = player.poe2;
+	// A use spends one of the cry's hits, however many monsters it hits (each of them is empowered).
+	const auto spend = [&](EmpoweringCry cry) {
+		const auto index = static_cast<size_t>(cry);
+		if (state.cryUsedThisTick[index])
+			return true;
+		if (state.cryHits[index] == 0)
+			return false;
+		state.cryHits[index]--;
+		state.cryUsedThisTick[index] = true;
+		return true;
+	};
+	const auto percentOf = [](WeaponSkill cry) {
+		const TableSkillData *data = FindTableSkill(cry);
+		return data != nullptr ? static_cast<int>(data->damagePercent) : 0;
+	};
+	const Point tile = monster.position.tile;
+	if (spend(EmpoweringCry::Hellfire))
+		AddBurst(tile, HellfireBurstRadius, 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), percentOf(WeaponSkill::HellfireRoar)), 1)));
+	if ((tags & ST_Slam) != 0 && spend(EmpoweringCry::Quaking)) {
+		const TableSkillData *slam = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+		AddBurst(tile, 0, QuakingAftershockTicks, slam != nullptr ? slam->type : DamageType::Physical, MissileGraphicID::StoneCurseShatter,
+		    Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), QuakingAftershockPercent), 1)));
+	}
+	// The strike strikes again, as Flurry of Blows' repeats do; the repeat sets off nothing more.
+	if ((tags & ST_Strike) != 0 && !monster.hasNoLife() && spend(EmpoweringCry::BulKathos))
+		QueueUse(skill, tile, BulKathosRepeatTicks, percentOf(WeaponSkill::CryOfBulKathos), static_cast<int>(monster.getId()));
 }
 
 void AddPlayerBurst(Point center, int radius, int delay, DamageType type, MissileGraphicID effect, Fixed26_6 damage)

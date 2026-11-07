@@ -199,7 +199,7 @@ TEST_F(Poe2StaffDraftsTest, StaffDraftsAreStaffGemsAtTheirTiers)
 {
 	// Appended after the poison skills, in the batch's order.
 	EXPECT_EQ(static_cast<int>(WeaponSkill::WrathOfTheSkies), static_cast<int>(WeaponSkill::AcidCloud) + 1);
-	EXPECT_EQ(WeaponSkill::Last, WeaponSkill::PalmOfTheFrozenNorth);
+	EXPECT_EQ(static_cast<int>(WeaponSkill::HellfireRoar), static_cast<int>(WeaponSkill::PalmOfTheFrozenNorth) + 1);
 	for (size_t i = 0; i < Drafts.size(); i++)
 		EXPECT_EQ(static_cast<int>(Drafts[i].skill), static_cast<int>(WeaponSkill::WrathOfTheSkies) + static_cast<int>(i));
 	for (const DraftRow &draft : Drafts) {

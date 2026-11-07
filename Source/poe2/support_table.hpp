@@ -223,6 +223,13 @@ void OnSupportedFreeze(const Player &player);
  * the classic effect where it lands; for powers that aren't a skill's hit (the shrines' storms).
  */
 void AddPlayerBurst(Point center, int radius, int delay, DamageType type, MissileGraphicID effect, Fixed26_6 damage);
+/** @brief Whether the skill going off now is a support's free repeat or trigger (Thundering Roar's, a shrine's echo...). */
+[[nodiscard]] bool IsSupportRepeat();
+/**
+ * @brief A melee weapon hit of the local player's landed on the monster for this much: the war cries waiting on the
+ * hero's next hits act on it (Hellfire Roar, Quaking Roar, Cry of Bul-Kathos; Curtis 2026-11-07, Q48).
+ */
+void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixed26_6 dealt);
 /** @brief A skill went off (a cast, a strike, a landing); the supports that repeat or add to it act now. */
 void OnSkillUsed(Player &player, SkillSlot skill, Point target);
 /** @brief A monster the local player hit last died. */

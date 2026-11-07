@@ -812,8 +812,11 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		}
 		RedrawComponent(PanelDrawComponent::Health);
 	}
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		OnSkillMeleeHit(player);
+		// POE2 Mashup: the war cries waiting on the hero's next melee hits.
+		OnEmpoweredMeleeHit(player, CurrentAttackSkill(player), monster, Fixed26_6::fromRaw(dam));
+	}
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
 	} else {

@@ -1060,3 +1060,24 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Phantom Step Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skylord's Storm Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Palm of the Frozen North Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Hellfire Roar Gem	Gem	1	0	0	0	0	0	21	0	0		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Frostforged Hammer Gem	Gem	1	0	0	0	0	0	21	0	0		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Plate Breaker Gem	Gem	3	0	0	0	0	0	27	0	0		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Magma Hurl Gem	Gem	3	0	0	0	0	0	27	0	0		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Arreat Crash Gem	Gem	10	0	0	0	0	0	48	0	0		SKILLGEM_TABLE	Null	true	1750
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Earthsplitter Gem	Gem	15	0	0	0	0	0	63	0	0		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Brimstone Rift Gem	Gem	15	0	0	0	0	0	63	0	0		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Ancestor Totem Gem	Gem	15	0	0	0	0	0	63	0	0		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Hephasto's Hammer Gem	Gem	20	0	0	0	0	0	78	0	0		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Quaking Roar Gem	Gem	20	0	0	0	0	0	78	0	0		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Hammer of Zakarum Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Mountain's Fall Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Cry of Bul-Kathos Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Storm Edge Gem	Gem	3	0	0	0	0	0	27	0	0		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Frostbite Blades Gem	Gem	6	0	0	0	0	0	36	0	0		SKILLGEM_TABLE	Null	true	1230
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Cinder Strike Gem	Gem	10	0	0	0	0	0	48	0	0		SKILLGEM_TABLE	Null	true	1750
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Steel Tempest Gem	Gem	15	0	0	0	0	0	63	0	0		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Thunder Hatchet Gem	Gem	15	0	0	0	0	0	63	0	0		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Blood Harvest Gem	Gem	20	0	0	0	0	0	78	0	0		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Pyre Blow Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Mammoth Charge Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700

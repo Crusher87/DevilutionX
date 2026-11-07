@@ -114,6 +114,8 @@ enum class TableWeapon : uint8_t {
 	Crossbow,
 	Shield,
 	Melee,
+	/** A mace or an axe (Arreat Crash). */
+	MaceOrAxe,
 };
 
 enum class TableCurse : uint8_t {
@@ -536,6 +538,93 @@ constexpr int PalmLanceTiles = 5;
 [[nodiscard]] int TableAilmentPercent(const TableSkillData &data);
 /** @brief What a table skill does besides its hit, for its tooltip; empty for most. */
 [[nodiscard]] std::string TableSkillExtraNote(WeaponSkill skill);
+
+// The draft gems' Mace, Axe and Sword batch (Curtis 2026-11-07, Q46-Q48; drafts-61-priced.json).
+/** @brief The war cries whose hits wait on the hero's next melee hits (Poe2PlayerData::cryHits). */
+enum class EmpoweringCry : uint8_t {
+	Hellfire,
+	Quaking,
+	BulKathos,
+};
+/** @brief Hellfire Roar's burst is around what each empowered hit struck, this many tiles. */
+constexpr int HellfireBurstRadius = 1;
+/** @brief Quaking Roar: each empowered slam's aftershock hits what the slam hit, this percent of the hit, this many ticks later. */
+constexpr int QuakingAftershockPercent = 40;
+constexpr int QuakingAftershockTicks = 6;
+/** @brief Cry of Bul-Kathos: each empowered strike strikes again this many ticks later. */
+constexpr int BulKathosRepeatTicks = 4;
+/** @brief Frostforged Hammer: the sides take this percent; every this many blows freezes the target this many ticks. */
+constexpr int FrostforgedSidePercent = 50;
+constexpr int FrostforgedFreezeEvery = 3;
+constexpr int FrostforgedFreezeTicks = 20;
+constexpr int FrostforgedResetTicks = 60;
+/** @brief Magma Hurl: the rock's burst hits those beside its target; this many shrapnel bolts fly on, this percent, this many tiles. */
+constexpr int MagmaHurlShrapnel = 4;
+constexpr int MagmaHurlShrapnelPercent = 50;
+constexpr int MagmaHurlShrapnelTiles = 3;
+/** @brief Arreat Crash lands this far ahead at most; its rings of ice, this percent of the slam, this many ticks after it. */
+constexpr int ArreatReachTiles = 2;
+constexpr int ArreatRingPercent[2] = { 60, 35 };
+constexpr int ArreatRingTicks[2] = { 4, 8 };
+/** @brief Earthsplitter: an enemy with broken armour takes this percent of the hit and sends a shockwave of this percent. */
+constexpr int EarthsplitterBrokenPercent = 140;
+constexpr int EarthsplitterShockwavePercent = 25;
+constexpr int EarthsplitterShockwaveRadius = 1;
+/** @brief Brimstone Rift: the forks at the rift's end, this many tiles each; the burning ground, this percent a pulse; this many at once. */
+constexpr int BrimstoneForkTiles = 3;
+constexpr int BrimstoneGroundPercent = 15;
+constexpr int BrimstoneRifts = 2;
+/** @brief Ancestor Totem: one at a time; its slams hit all within this radius of the enemy they fall on. */
+constexpr int AncestorTotems = 1;
+constexpr int AncestorSlamRadius = 1;
+/** @brief Hephasto's Hammer: its burst on those beside its target; a warcry this near shatters it into lines of fire. */
+constexpr int HephastosSplashPercent = 50;
+constexpr int HephastosCryTiles = 4;
+constexpr int HephastosLines = 5;
+constexpr int HephastosLineTiles = 3;
+constexpr int HephastosLinePercent = 50;
+/** @brief Hammer of Zakarum falls this far away at most; a stunned enemy takes this percent. */
+constexpr int HammerOfZakarumReachTiles = 4;
+constexpr int HammerOfZakarumStunnedPercent = 160;
+/** @brief Mountain's Fall lands this far away at most; its spikes stand this far out; the one in the middle hits for this percent. */
+constexpr int MountainsFallReachTiles = 4;
+constexpr int MountainsFallArmTiles = 2;
+constexpr int MountainsFallCentrePercent = 150;
+/** @brief Storm Edge's storm lashes the nearest enemy for this percent of the strike. */
+constexpr int StormEdgeBeamPercent = 30;
+/** @brief Frostbite Blades' blades: this percent of the strike, this many tiles, through this many enemies. */
+constexpr int FrostbiteBladePercent = 50;
+constexpr int FrostbiteBladeTiles = 4;
+constexpr int FrostbiteBladePierces = 2;
+/** @brief Cinder Strike's molten balls: this percent of the strike each, landing up to this many tiles ahead. */
+constexpr int CinderBallPercent = 40;
+constexpr int CinderBallTiles = 3;
+/** @brief Steel Tempest's storm: this percent of the spin a pulse; this many at once. */
+constexpr int SteelTempestStormPercent = 20;
+constexpr int SteelTempestStorms = 2;
+/** @brief Thunder Hatchet's lightning leaps this many times, each within this many tiles, for this percent of the throw. */
+constexpr int ThunderHatchetChains = 3;
+constexpr int ThunderHatchetChainTiles = 3;
+constexpr int ThunderHatchetChainPercent = 60;
+/** @brief Blood Harvest: a bleeding enemy takes this percent; one it kills bursts for this percent of the hit. */
+constexpr int BloodHarvestBleedingPercent = 150;
+constexpr int BloodHarvestBurstPercent = 50;
+/** @brief Pyre Blow: the sides take this percent; what dies within the row's duration of its hit bursts for this percent. */
+constexpr int PyreBlowSidePercent = 50;
+constexpr int PyreBlowBurstPercent = 50;
+/** @brief Mammoth Charge: what is beside the path takes this percent, and its cracks burst for this percent with the slam. */
+constexpr int MammothPathPercent = 50;
+constexpr int MammothCrackPercent = 30;
+/** @brief Whether Frostforged Hammer's next blow is the third, which freezes. */
+[[nodiscard]] bool FrostforgedNextFreezes(const Player &player);
+/** @brief Brimstone Rift's tiles: a rift `length` tiles ahead, then a fork of BrimstoneForkTiles to either side; stopped by walls. */
+[[nodiscard]] std::vector<Point> BrimstoneRiftTiles(Point from, Direction dir, int length);
+/** @brief Mountain's Fall's five spikes: the centre, then MountainsFallArmTiles out to the north, east, south and west. */
+[[nodiscard]] std::vector<Point> MountainsFallSpikes(Point center);
+/** @brief Where a slam that reaches only so far lands, aimed at the target: the tile in sight that far at most. */
+[[nodiscard]] Point SlamLanding(const Player &player, Point target, int reach);
+/** @brief A warcry went off here: the Hephasto's Hammers lodged near it shatter into lines of fire. */
+void ShatterLodgedHammers(Player &player, Point at);
 
 /**
  * @brief Seven-Sided Strike's strikes land in full on this many enemies or more; on fewer, each strike deals their share
