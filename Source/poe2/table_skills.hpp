@@ -545,7 +545,10 @@ enum class EmpoweringCry : uint8_t {
 	Hellfire,
 	Quaking,
 	BulKathos,
+	/** Bulwark Roar's shield waves, which shield attacks send. */
+	Bulwark,
 };
+static_assert(static_cast<size_t>(EmpoweringCry::Bulwark) == BulwarkRoarCry);
 /** @brief Hellfire Roar's burst is around what each empowered hit struck, this many tiles. */
 constexpr int HellfireBurstRadius = 1;
 /** @brief Quaking Roar: each empowered slam's aftershock hits what the slam hit, this percent of the hit, this many ticks later. */
@@ -625,6 +628,26 @@ constexpr int MammothCrackPercent = 30;
 [[nodiscard]] Point SlamLanding(const Player &player, Point target, int reach);
 /** @brief A warcry went off here: the Hephasto's Hammers lodged near it shatter into lines of fire. */
 void ShatterLodgedHammers(Player &player, Point at);
+
+// The draft gems' Sword and Shield batch (Q48).
+/** @brief Phantom Blade: the ghost sword flies this many tiles out, then back to the hero, piercing up to this many. */
+constexpr int PhantomBladeTiles = 6;
+constexpr int PhantomBladePierces = 20;
+/** @brief Horadric Sundering: a frozen, shocked or burning enemy in it bursts this far for this percent (frozen, the second). */
+constexpr int HoradricBurstRadius = 1;
+constexpr int HoradricBurstPercent = 25;
+constexpr int HoradricFrozenBurstPercent = 50;
+/** @brief Zakarum's Judgement: the ring comes again this many ticks later. */
+constexpr int ZakarumsJudgementTicks = 8;
+/** @brief Bulwark Roar: its Guard is this percent of maximum life; each shield wave runs this many tiles. */
+constexpr int BulwarkGuardPercent = 10;
+constexpr int BulwarkWaveTiles = 4;
+/** @brief A shield attack: a shield gem's attack, Raise Shield's bash or Shield Charge, which Bulwark Roar's waves follow. */
+[[nodiscard]] bool IsShieldAttack(SkillSlot skill);
+/** @brief Bulwark Roar's shield wave, from the hero towards the target. */
+void SendBulwarkWave(Player &player, Point target);
+/** @brief What Bulwark Roar's Guard leaves of a hit on the hero, taking the rest from the Guard. */
+[[nodiscard]] Fixed26_6 AbsorbBulwarkGuard(Player &player, Fixed26_6 damage);
 
 /**
  * @brief Seven-Sided Strike's strikes land in full on this many enemies or more; on fewer, each strike deals their share

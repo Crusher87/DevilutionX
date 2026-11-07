@@ -1055,8 +1055,9 @@ void LandDashSkill(Player &player)
 
 bool IsThrowingSkill(WeaponSkill skill)
 {
-	// The draft gems' thrown rock, hammer and axe too (Q48).
-	return IsAnyOf(skill, WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury, WeaponSkill::MagmaHurl, WeaponSkill::HephastosHammer, WeaponSkill::ThunderHatchet);
+	// The draft gems' thrown rock, hammer, axe and ghost sword too (Q48).
+	return IsAnyOf(skill, WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury, WeaponSkill::MagmaHurl, WeaponSkill::HephastosHammer, WeaponSkill::ThunderHatchet,
+	    WeaponSkill::PhantomBlade);
 }
 
 bool SpinsWhileStriking(WeaponSkill skill)

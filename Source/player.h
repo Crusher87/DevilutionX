@@ -645,6 +645,9 @@ public:
 			// Holy Shield (Curtis 2026-11-07, Q37): blocks more often while it lasts, with a shield to block with.
 			if (blkper > 0 && poe2.holyShieldTicks > 0)
 				blkper += HolyShieldBlockChance;
+			// Bulwark Roar (Q48): so does its roar.
+			if (blkper > 0 && poe2.cryTicks[BulwarkRoarCry] > 0)
+				blkper += BulwarkBlockChance;
 		} else {
 			blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
 			if (useLevel)

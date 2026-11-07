@@ -1081,3 +1081,8 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Blood Harvest Gem	Gem	20	0	0	0	0	0	78	0	0		SKILLGEM_TABLE	Null	true	3050
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Pyre Blow Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Mammoth Charge Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Phantom Blade Gem	Gem	20	0	0	0	0	0	78	0	0		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Horadric Sundering Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Tolling Shield Gem	Gem	15	0	0	0	0	0	63	0	0		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Bulwark Roar Gem	Gem	20	0	0	0	0	0	78	0	0		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Zakarum's Judgement Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700

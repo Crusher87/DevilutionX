@@ -1335,6 +1335,13 @@ uint32_t SkillTags(SkillSlot skill)
 	case WeaponSkill::MammothCharge:
 		tags |= ST_Slam;
 		break;
+	// The draft Sword and Shield gems'. The ghost sword is thrown: no melee, full mana.
+	case WeaponSkill::TollingShield:
+		tags |= ST_Strike;
+		break;
+	case WeaponSkill::ZakarumsJudgement:
+		tags |= ST_Slam;
+		break;
 	default:
 		break;
 	}
@@ -1364,6 +1371,9 @@ uint32_t SkillTags(SkillSlot skill)
 		}
 		if ((table->flags & TF_Elements) != 0)
 			tags |= ST_Elemental;
+		// Horadric Sundering's pulse is all elements and no physical.
+		if (table->skill == WeaponSkill::HoradricSundering)
+			tags &= ~ST_Physical;
 		if ((table->flags & (TF_Bleed | TF_Poison | TF_PoisonBurst)) != 0 || table->shape == TableShape::Curse || table->zone == TableZone::PoisonGround)
 			tags |= ST_DamageOverTime;
 	}
@@ -1811,6 +1821,11 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 		AddVisualEffect(player.position.tile + Left(Left(player._pdir)), MissileGraphicID::Etherealize, 0, 2);
 		// It stays there a while, for the Switch Command.
 		OnShadowAppeared(player, player.position.tile + Left(Left(player._pdir)));
+	}
+	// Bulwark Roar (Q48): the hero's next shield attacks each send out a shield wave.
+	if (uint8_t &waves = player.poe2.cryHits[BulwarkRoarCry]; waves > 0 && IsShieldAttack(skill)) {
+		waves--;
+		SendBulwarkWave(player, target);
 	}
 	SupportRuntime &state = player.poe2.supportState;
 	const uint32_t tags = SkillTags(skill);

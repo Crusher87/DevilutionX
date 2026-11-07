@@ -235,6 +235,12 @@ const TableSkillData Table[] = {
 	{ WS::BloodHarvest, "Blood Harvest", "A reaping sweep at the three tiles in front; bleeding enemies take more, and burst when it kills them", 20, 16, TW::Axe, 0, Arc, 240, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::PyreBlow, "Pyre Blow", "A heavy burning blow that also hits those to either side; what it kills, or what dies soon after, bursts into flame", 25, 18, TW::AxeOrSword, 0, Arc, 355, 0, 1, 40, 0, 0, DT::Fire, MissileID::Null, MG::MagmaBallExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe | TT_Sword, Icon(SpellIcon::FlameWave), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
 	{ WS::MammothCharge, "Mammoth Charge", "Charge, trampling what is beside your path, and end in a slam; the path cracks and bursts with it", 25, 18, TW::Axe, 0, Dash, 90, 5, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Warp), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	// The draft gems' Sword and Shield batch (Q48). Phantom Blade's ghost sword is a spinning blade (the stand-in look).
+	{ WS::PhantomBlade, "Phantom Blade", "Throw a ghostly sword that flies 6 tiles out and back, piercing every enemy on its way", 20, 16, TW::Sword, 0, Projectiles, 110, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Etherealize), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::HoradricSundering, "Horadric Sundering", "A pulse of fire, cold and lightning all around you; each frozen, shocked or burning enemy in it bursts, losing its ailment", 25, 18, TW::Sword, 0, Around, 80, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Elements, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::RingOfFire), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::TollingShield, "Tolling Shield", "Strike your shield: it rings out all around you, stunning and breaking armour", 15, 14, TW::Shield, 0, Around, 85, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Stun | TF_ArmourBreak, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::BulwarkRoar, "Bulwark Roar", "A roar that throws enemies back; for 8 seconds you block more often and a Guard takes hits for you, and your next 3 shield attacks send out a shield wave", 20, 15, TW::Shield, 1, Buff, 60, 3, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Knockback, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Shield, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::ZakarumsJudgement, "Zakarum's Judgement", "Slam your shield: holy light bursts all around you and stuns, then bursts again a moment later", 25, 18, TW::Shield, 0, Around, 55, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield, Icon(SpellIcon::Search), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 };
 // clang-format on
 
@@ -1924,6 +1930,27 @@ void GrantCryHits(Player &player, const TableSkillData &data, EmpoweringCry cry)
 	player.poe2.cryUsedThisTick[index] = false;
 }
 
+/** @brief An arrow's speed in pixels a tick, from its velocity (UpdateMissileVelocity halves the screen's y). */
+int ArrowPixelsPerTick(const Missile &missile)
+{
+	const double x = missile.position.velocity.deltaX;
+	const double y = 2.0 * missile.position.velocity.deltaY;
+	return std::max(static_cast<int>((std::sqrt((x * x) + (y * y)) / 65536.0) + 0.5), 1);
+}
+
+/** @brief Phantom Blade's ghost sword, from one tile to the other and no further, piercing all on its way. */
+Missile *ThrowPhantomBlade(Player &player, const TableSkillData &data, Point from, Point to, bool skipStartTile)
+{
+	Missile *blade = FireTableMissile(player, data, from, to);
+	if (blade == nullptr)
+		return nullptr;
+	blade->poe2.piercesLeft = static_cast<int8_t>(std::max<int>(blade->poe2.piercesLeft, PhantomBladePierces));
+	EndMissileAfter(*blade, to - from, std::max(from.WalkingDistance(to), 1), ArrowPixelsPerTick(*blade));
+	if (skipStartTile)
+		blade->lastCollisionTargetHash = static_cast<int16_t>(dMonster[from.x][from.y] ^ dPlayer[from.x][from.y]);
+	return blade;
+}
+
 /** @brief Makes a draft Mace, Axe or Sword gem go off; false for a gem that only needs its shape (Plate Breaker's sweep). */
 bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target, CastResult &result)
 {
@@ -2180,6 +2207,89 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 		}
 		return true;
 	}
+	case WeaponSkill::PhantomBlade: {
+		// The ghost sword flies out to its end and comes back to the hero from there (ProcessDraftZone).
+		const Direction way = target == tile ? dir : GetDirection(tile, target);
+		Point end = LastTileInSight(tile, tile + Displacement { way } * PhantomBladeTiles);
+		if (end == tile)
+			end = tile + way;
+		const Missile *blade = ThrowPhantomBlade(player, data, tile, end, false);
+		if (blade == nullptr)
+			return true;
+		Zones.push_back({ data.skill, end, 1, static_cast<int16_t>(std::clamp(blade->duration, 1, static_cast<int>(INT16_MAX))), 0, Fixed26_6::fromInt(1), 0 });
+		return true;
+	}
+	case WeaponSkill::HoradricSundering: {
+		// Those frozen, shocked or burning before the pulse burst on those beside them, as their ailment; the pulse is a third
+		// of each element.
+		const int radius = std::max<int>(data.radius, 1);
+		const std::vector<Monster *> struck = MonstersNear(tile, radius);
+		std::vector<std::pair<Monster *, DamageType>> primed;
+		for (Monster *monster : struck) {
+			const Poe2MonsterState &state = monster->poe2;
+			if (state.freezeTicks > 0)
+				primed.emplace_back(monster, DamageType::Cold);
+			else if (state.shockTicks > 0)
+				primed.emplace_back(monster, DamageType::Lightning);
+			else if (state.igniteTicks > 0)
+				primed.emplace_back(monster, DamageType::Fire);
+		}
+		BreakObjectsInArea(player, tile, radius);
+		const Fixed26_6 hit = FixedDamage(player, data);
+		const Fixed26_6 third = Fixed26_6::fromRaw(std::max(hit.raw() / 3, 1));
+		for (Monster *monster : struck) {
+			for (const DamageType type : { DamageType::Fire, DamageType::Cold, DamageType::Lightning })
+				SpellHitMonster(player, *monster, type, third, SourceOf(data));
+			result.hit = true;
+		}
+		for (const auto &[monster, type] : primed) {
+			Poe2MonsterState &state = monster->poe2;
+			if (type == DamageType::Cold) {
+				state.freezeTicks = 0;
+			} else if (type == DamageType::Lightning) {
+				state.shockTicks = 0;
+			} else {
+				state.igniteTicks = 0;
+				state.igniteDamagePerTick = 0;
+			}
+			const Point at = monster->position.tile;
+			const MissileGraphicID look = type == DamageType::Cold ? MissileGraphicID::StoneCurseShatter : (type == DamageType::Lightning ? MissileGraphicID::ThinLightning : MissileGraphicID::MagmaBallExplosion);
+			AddVisualEffect(at, look, 2, 4);
+			vfx::Impact(at, vfx::ElementOf(type, true), 1.3F);
+			const Fixed26_6 burst = ShareOf(hit, type == DamageType::Cold ? HoradricFrozenBurstPercent : HoradricBurstPercent);
+			for (Monster *other : MonstersNear(at, HoradricBurstRadius)) {
+				if (other != monster)
+					SpellHitMonster(player, *other, type, burst, SourceOf(data));
+			}
+		}
+		return true;
+	}
+	case WeaponSkill::BulwarkRoar: {
+		player.Say(HeroSpeech::TimeToDie);
+		const int radius = std::max<int>(data.radius, 1);
+		vfx::Slam(tile, radius, vfx::Element::Holy);
+		for (Monster *monster : MonstersNear(tile, radius)) {
+			if (IsAlive(*monster) && !monster->isUnique() && monster->mode != MonsterMode::Petrified)
+				M_GetKnockback(*monster, tile);
+			monster->tag(player);
+		}
+		// Its block, Guard and waves (EmpoweringCry::Bulwark); a support's repeat adds none.
+		if (!IsSupportRepeat()) {
+			GrantCryHits(player, data, EmpoweringCry::Bulwark);
+			player.poe2.bulwarkGuard = static_cast<int32_t>(static_cast<int64_t>(std::max(player._pMaxHP.raw(), 0)) * BulwarkGuardPercent / 100);
+			AddVisualEffect(tile, MissileGraphicID::ManaShield, 0, 2);
+		}
+		return true;
+	}
+	case WeaponSkill::ZakarumsJudgement: {
+		// The ring of holy light, then the same ring again a moment later.
+		const int radius = std::max<int>(data.radius, 1);
+		BreakObjectsInArea(player, tile, radius);
+		for (Monster *monster : MonstersNear(tile, radius))
+			WeaponHit(player, *monster, data, data.damagePercent, result);
+		AddDraftBurst(data, tile, ZakarumsJudgementTicks, FixedDamage(player, data), radius);
+		return true;
+	}
 	default:
 		return false;
 	}
@@ -2206,6 +2316,8 @@ bool ProcessDraftZone(Player &player, const TableSkillData &data, SkillZone &zon
 		} else {
 			ZoneBurst(player, data, zone.center, std::max(radius, 0), zone.damage);
 			vfx::Impact(zone.center, LookOf(data), 1.0F);
+			if (data.skill == WeaponSkill::ZakarumsJudgement)
+				vfx::Nova(zone.center, std::max(radius, 1), vfx::Element::Holy);
 		}
 		PlayTableSkillHitSound(data, zone.center);
 		done = true;
@@ -2235,6 +2347,12 @@ bool ProcessDraftZone(Player &player, const TableSkillData &data, SkillZone &zon
 					AreaSpellHit(player, data, *monster, zone.damage);
 			}
 		}
+		return true;
+	case WeaponSkill::PhantomBlade:
+		// The ghost sword turns at its end and flies back to where the hero is now, through what it passed.
+		if (player.position.tile != zone.center)
+			ThrowPhantomBlade(player, data, zone.center, player.position.tile, true);
+		done = true;
 		return true;
 	case WeaponSkill::HephastosHammer:
 		// The lodged hammer smoulders until a warcry shatters it (ShatterLodgedHammers) or its time runs out.
@@ -2510,6 +2628,54 @@ void ShatterLodgedHammers(Player &player, Point at)
 	}
 }
 
+bool IsShieldAttack(SkillSlot skill)
+{
+	if (skill.kind != SkillKind::Attack)
+		return false;
+	if (IsAnyOf(skill.attack(), WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash))
+		return true;
+	const TableSkillData *data = FindTableSkill(skill.attack());
+	return data != nullptr && data->weapon == TableWeapon::Shield && (SkillTags(skill) & ST_Attack) != 0;
+}
+
+void SendBulwarkWave(Player &player, Point target)
+{
+	const TableSkillData *data = FindTableSkill(WeaponSkill::BulwarkRoar);
+	if (data == nullptr || &player != MyPlayer)
+		return;
+	const SupportHitScope scope(player, SkillSlot::ForAttack(data->skill));
+	TableSkillData wave = *data;
+	wave.flags = 0;
+	const Point tile = player.position.tile;
+	const Direction way = target == tile ? player._pdir : GetDirection(tile, target);
+	// A wave of holy light along the ground, a tile wide at first, then three; each enemy on it hit once.
+	std::vector<Monster *> struck;
+	int step = 0;
+	for (const Point at : LineTiles(tile, way, BulwarkWaveTiles)) {
+		const int radius = step++ == 0 ? 0 : 1;
+		AddVisualEffect(at, data->effect, 2 * step, 0);
+		vfx::Impact(at, vfx::Element::Holy, 0.8F);
+		BreakObjectsInArea(player, at, radius);
+		ForEachMonsterNear(at, radius, [&](Monster &monster) {
+			if (std::find(struck.begin(), struck.end(), &monster) == struck.end())
+				struck.push_back(&monster);
+		});
+	}
+	const Fixed26_6 hit = FixedDamage(player, wave);
+	for (Monster *monster : struck)
+		AreaSpellHit(player, wave, *monster, hit);
+}
+
+Fixed26_6 AbsorbBulwarkGuard(Player &player, Fixed26_6 damage)
+{
+	int32_t &guard = player.poe2.bulwarkGuard;
+	if (!gbIsPoe2 || guard <= 0 || damage <= 0 || player.poe2.cryTicks[BulwarkRoarCry] == 0)
+		return damage;
+	const int32_t taken = std::min(guard, damage.raw());
+	guard -= taken;
+	return Fixed26_6::fromRaw(damage.raw() - taken);
+}
+
 std::string TableSkillExtraNote(WeaponSkill skill)
 {
 	const TableSkillData *data = FindTableSkill(skill);
@@ -2582,6 +2748,18 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 		return std::format("The sides take {:d}%; what dies within {:d} seconds of the blow bursts into flame for {:d}%", PyreBlowSidePercent, data->duration / TicksPerSecond, PyreBlowBurstPercent);
 	case WeaponSkill::MammothCharge:
 		return std::format("What is beside your path takes {:d}% and its crack's {:d}%; the slam where you stop hits all within {:d}", MammothPathPercent, MammothCrackPercent, static_cast<int>(data->radius));
+	case WeaponSkill::PhantomBlade:
+		return std::format("Flies {:d} tiles and back, hitting each enemy once each way", PhantomBladeTiles);
+	case WeaponSkill::HoradricSundering:
+		return std::format("A third each of fire, cold and lightning within {:d}; a burst of {:d}% ({:d}% frozen) within {:d} of each enemy already frozen, shocked or burning",
+		    static_cast<int>(data->radius), HoradricBurstPercent, HoradricFrozenBurstPercent, HoradricBurstRadius);
+	case WeaponSkill::TollingShield:
+		return std::format("Hits all within {:d}; stuns and breaks armour", static_cast<int>(data->radius));
+	case WeaponSkill::BulwarkRoar:
+		return std::format("Throws back enemies within {:d}; for {:d} seconds +{:d}% chance to block and a Guard of {:d}% of your life; your next {:d} shield attacks send a wave {:d} tiles for {:d}%",
+		    static_cast<int>(data->radius), data->duration / TicksPerSecond, BulwarkBlockChance, BulwarkGuardPercent, static_cast<int>(data->count), BulwarkWaveTiles, static_cast<int>(data->damagePercent));
+	case WeaponSkill::ZakarumsJudgement:
+		return std::format("Hits all within {:d} and stuns, then all within it again {:.1f} seconds later", static_cast<int>(data->radius), ZakarumsJudgementTicks / static_cast<double>(TicksPerSecond));
 	default:
 		return {};
 	}
@@ -3442,10 +3620,21 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 				ShakeCamera(ShakeStrength::Medium, 5);
 			break;
 		}
-		if ((data.flags & TF_Spell) != 0)
+		// The draft Sword and Shield gems (Q48): the shield rings out as Wave of Light's bell; the sundering is all three
+		// elements; the judgement a holy nova.
+		if (data.skill == WeaponSkill::TollingShield) {
+			vfx::BellToll(tile, std::max<int>(data.radius, 1));
+		} else if (data.skill == WeaponSkill::HoradricSundering) {
+			for (const vfx::Element element : { vfx::Element::Fire, vfx::Element::Cold, vfx::Element::Lightning })
+				vfx::Nova(tile, std::max<int>(data.radius, 1), element);
+		} else if (data.skill == WeaponSkill::ZakarumsJudgement) {
+			vfx::Slam(tile, std::max<int>(data.radius, 1), vfx::Element::Holy);
+			vfx::Nova(tile, std::max<int>(data.radius, 1), vfx::Element::Holy);
+		} else if ((data.flags & TF_Spell) != 0) {
 			vfx::Impact(tile, LookOf(data), 1.2F);
-		else
+		} else {
 			vfx::Slam(tile, std::max<int>(data.radius, 1), LookOf(data));
+		}
 		if (mine)
 			ShakeCamera(ShakeStrength::Light, 4);
 		break;
@@ -3487,7 +3676,7 @@ vfx::Element TableSkillLook(const TableSkillData &data)
 {
 	const bool spell = (data.flags & TF_Spell) != 0;
 	// Hammer of Zakarum's holy hammer is physical (Q48).
-	if (data.skill == WeaponSkill::HammerOfZakarum)
+	if (IsAnyOf(data.skill, WeaponSkill::HammerOfZakarum, WeaponSkill::ZakarumsJudgement, WeaponSkill::BulwarkRoar))
 		return vfx::Element::Holy;
 	if (spell && data.type == DamageType::Physical) {
 		if (data.effect == MissileGraphicID::HolyBoltExplosion)

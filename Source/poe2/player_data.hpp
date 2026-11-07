@@ -221,7 +221,13 @@ enum class WeaponSkill : uint8_t {
 	BloodHarvest,
 	PyreBlow,
 	MammothCharge,
-	Last = MammothCharge,
+	/** The draft gems' Sword and Shield batch (Q48). */
+	PhantomBlade,
+	HoradricSundering,
+	TollingShield,
+	BulwarkRoar,
+	ZakarumsJudgement,
+	Last = ZakarumsJudgement,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -993,6 +999,9 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
  */
 /** @brief Holy Shield's extra chance to block, in percentage points, while it lasts (Curtis 2026-11-07, Q37). */
 constexpr int HolyShieldBlockChance = 15;
+/** @brief Bulwark Roar's extra chance to block while it lasts (Q48), and its place in Poe2PlayerData::cryHits (EmpoweringCry::Bulwark). */
+constexpr int BulwarkBlockChance = 20;
+constexpr size_t BulwarkRoarCry = 3;
 
 struct Poe2PlayerData {
 	/** @brief Support gems socketed in each Skills panel socket's skill. */
@@ -1108,6 +1117,8 @@ struct Poe2PlayerData {
 	std::array<uint8_t, 4> cryHits {};
 	std::array<uint8_t, 4> cryTicks {};
 	std::array<bool, 4> cryUsedThisTick {};
+	/** @brief What is left of Bulwark Roar's Guard, raw life it takes instead of the hero while the cry lasts (not saved). */
+	int32_t bulwarkGuard = 0;
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -1399,6 +1410,7 @@ struct Poe2PlayerData {
 		cryHits = {};
 		cryTicks = {};
 		cryUsedThisTick = {};
+		bulwarkGuard = 0;
 		riposteTicks = 0;
 		frenzyCharges = 0;
 		frenzyTicks = 0;
@@ -1461,6 +1473,8 @@ struct Poe2PlayerData {
 			if (cryTicks[cry] > 0 && --cryTicks[cry] == 0)
 				cryHits[cry] = 0;
 		}
+		if (cryTicks[BulwarkRoarCry] == 0)
+			bulwarkGuard = 0;
 		if (frenzyTicks > 0 && --frenzyTicks == 0)
 			frenzyCharges = 0;
 		if (comboTicks > 0 && --comboTicks == 0)

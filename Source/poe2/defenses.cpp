@@ -20,6 +20,7 @@
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_uses.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
@@ -232,6 +233,9 @@ ShieldLeftover AbsorbHitWithEnergyShield(Player &player, Fixed26_6 damage, Fixed
 	TelemetryHitStep(true, "after unique effects", damage.raw() + chaos.raw());
 	damage = ApplyGuard(player, damage);
 	chaos = ApplyGuard(player, chaos);
+	// Bulwark Roar's Guard takes what it can (Q48).
+	damage = AbsorbBulwarkGuard(player, damage);
+	chaos = AbsorbBulwarkGuard(player, chaos);
 	TelemetryHitStep(true, "after guard", damage.raw() + chaos.raw());
 	Poe2PlayerData &data = player.poe2;
 	// Convalescence keeps hits from stopping the recharge for a while.

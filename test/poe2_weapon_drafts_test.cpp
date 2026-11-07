@@ -27,6 +27,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
@@ -234,6 +235,15 @@ constexpr std::array<DraftRow, 21> Drafts { {
 	{ WeaponSkill::MammothCharge, 13, 25, 18, 16, 90, 172, 136, DamageType::Physical, TableWeapon::Axe, TT_Axe, true },
 } };
 
+// Build order 3: the Sword and Shield batch.
+constexpr std::array<DraftRow, 5> SwordShieldDrafts { {
+	{ WeaponSkill::PhantomBlade, 11, 20, 16, 17, 110, 112, 106, DamageType::Physical, TableWeapon::Sword, TT_Sword, false },
+	{ WeaponSkill::HoradricSundering, 13, 25, 18, 17, 80, 182, 141, DamageType::Physical, TableWeapon::Sword, TT_Sword, true },
+	{ WeaponSkill::TollingShield, 9, 15, 14, 10, 85, 124, 112, DamageType::Physical, TableWeapon::Shield, TT_Shield, true },
+	{ WeaponSkill::BulwarkRoar, 11, 20, 15, 15, 60, 100, 100, DamageType::Physical, TableWeapon::Shield, TT_Shield, false },
+	{ WeaponSkill::ZakarumsJudgement, 13, 25, 18, 15, 55, 155, 128, DamageType::Physical, TableWeapon::Shield, TT_Shield, true },
+} };
+
 bool HasTags(WeaponSkill skill, uint32_t tag)
 {
 	return (SkillTags(SkillSlot::ForAttack(skill)) & tag) == tag;
@@ -245,8 +255,14 @@ TEST_F(Poe2WeaponDraftsTest, WeaponDraftsAreStrengthGemsAtTheirTiers)
 	EXPECT_EQ(static_cast<int>(WeaponSkill::HellfireRoar), static_cast<int>(WeaponSkill::PalmOfTheFrozenNorth) + 1);
 	for (size_t i = 0; i < Drafts.size(); i++)
 		EXPECT_EQ(static_cast<int>(Drafts[i].skill), static_cast<int>(WeaponSkill::HellfireRoar) + static_cast<int>(i));
+	for (size_t i = 0; i < SwordShieldDrafts.size(); i++)
+		EXPECT_EQ(static_cast<int>(SwordShieldDrafts[i].skill), static_cast<int>(WeaponSkill::PhantomBlade) + static_cast<int>(i));
+	EXPECT_EQ(static_cast<int>(WeaponSkill::PhantomBlade), static_cast<int>(WeaponSkill::MammothCharge) + 1);
+	EXPECT_EQ(WeaponSkill::Last, WeaponSkill::ZakarumsJudgement);
 	const std::array<std::pair<uint32_t, GemCategory>, 4> tabs { { { TT_Mace, GemCategory::Mace }, { TT_Axe, GemCategory::Axe }, { TT_Sword, GemCategory::Sword }, { TT_Shield, GemCategory::Shield } } };
-	for (const DraftRow &draft : Drafts) {
+	std::vector<DraftRow> all(Drafts.begin(), Drafts.end());
+	all.insert(all.end(), SwordShieldDrafts.begin(), SwordShieldDrafts.end());
+	for (const DraftRow &draft : all) {
 		const TableSkillData &data = Row(draft.skill);
 		const SkillSlot slot = SkillSlot::ForAttack(draft.skill);
 		EXPECT_EQ(data.weapon, draft.weapon) << data.name;
@@ -353,8 +369,25 @@ TEST_F(Poe2WeaponDraftsTest, WeaponDraftsHaveTheWorkshopsTags)
 	EXPECT_TRUE(HasTags(WeaponSkill::BloodHarvest, ST_Strike | ST_Physical));
 	EXPECT_TRUE(HasTags(WeaponSkill::PyreBlow, ST_Strike | ST_Fire));
 	EXPECT_TRUE(HasTags(WeaponSkill::MammothCharge, ST_Slam | ST_Movement));
+	// The Sword and Shield batch: the ghost sword is thrown, the sundering is all three elements and no physical, the
+	// judgement is holy physical, not fire.
+	EXPECT_TRUE(IsThrowingSkill(WeaponSkill::PhantomBlade));
+	EXPECT_TRUE(HasTags(WeaponSkill::PhantomBlade, ST_Attack | ST_Projectile | ST_Physical));
+	EXPECT_FALSE(HasTags(WeaponSkill::PhantomBlade, ST_Melee));
+	EXPECT_FALSE(HasTags(WeaponSkill::PhantomBlade, ST_Slam));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::PhantomBlade));
+	EXPECT_TRUE(HasTags(WeaponSkill::HoradricSundering, ST_Attack | ST_Melee | ST_Area | ST_Elemental));
+	EXPECT_FALSE(HasTags(WeaponSkill::HoradricSundering, ST_Physical));
+	EXPECT_TRUE(HasTags(WeaponSkill::TollingShield, ST_Attack | ST_Melee | ST_Strike | ST_Area | ST_Physical));
+	EXPECT_TRUE(HasTags(WeaponSkill::BulwarkRoar, ST_Warcry | ST_Area | ST_Duration));
+	EXPECT_FALSE(HasTags(WeaponSkill::BulwarkRoar, ST_Attack));
+	EXPECT_TRUE(HasTags(WeaponSkill::ZakarumsJudgement, ST_Attack | ST_Melee | ST_Slam | ST_Area | ST_Physical));
+	EXPECT_FALSE(HasTags(WeaponSkill::ZakarumsJudgement, ST_Fire));
+	EXPECT_EQ(Row(WeaponSkill::ZakarumsJudgement).type, DamageType::Physical);
 	// No channelling.
 	for (const DraftRow &draft : Drafts)
+		EXPECT_FALSE(HasTags(draft.skill, ST_Channelling)) << Row(draft.skill).name;
+	for (const DraftRow &draft : SwordShieldDrafts)
 		EXPECT_FALSE(HasTags(draft.skill, ST_Channelling)) << Row(draft.skill).name;
 }
 
@@ -844,6 +877,141 @@ TEST_F(Poe2WeaponDraftsTest, MammothChargeTramplesAndSlams)
 	EXPECT_TRUE(Hurt(trampled));
 	EXPECT_TRUE(Hurt(slammed));
 	EXPECT_FALSE(Hurt(behind));
+}
+
+TEST_F(Poe2WeaponDraftsTest, PhantomBladeFliesOutAndBack)
+{
+	Player &player = SetUpFight();
+	PlaceMonster(0, { 43, 40 });
+	Use(player, WeaponSkill::PhantomBlade, { 43, 40 });
+	std::vector<const Missile *> blades = MissilesOf(MissileID::Arrow);
+	ASSERT_EQ(blades.size(), 1U);
+	const Missile out = *blades.front();
+	EXPECT_EQ(out.poe2.look, vfx::SpinningBladeLook);
+	EXPECT_GE(out.poe2.piercesLeft, PhantomBladePierces);
+	EXPECT_EQ(out.poe2.damagePercent, GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::PhantomBlade), player.poe2.effectiveLevel(WeaponSkill::PhantomBlade)) * 110 / 100);
+	// Six tiles at an arrow's speed, not the arrow's whole flight.
+	EXPECT_GT(out.duration, 4);
+	EXPECT_LT(out.duration, 20);
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	EXPECT_EQ(SkillZoneCenter(0), std::optional<Point>(Point(46, 40)));
+	// It comes back from its end to where the hero is then.
+	player.position.tile = { 40, 41 };
+	Zones(player, out.duration);
+	EXPECT_EQ(MissilesOf(MissileID::Arrow).size(), 1U);
+	Zones(player, 2);
+	EXPECT_EQ(SkillZoneCount(), 0U);
+	blades = MissilesOf(MissileID::Arrow);
+	ASSERT_EQ(blades.size(), 2U);
+	const Missile &back = *blades.back();
+	EXPECT_EQ(Point(back.position.start), Point(46, 40));
+	EXPECT_EQ(back.lastCollisionTargetHash, dMonster[46][40] ^ dPlayer[46][40]);
+	EXPECT_GE(back.poe2.piercesLeft, PhantomBladePierces);
+}
+
+TEST_F(Poe2WeaponDraftsTest, HoradricSunderingBurstsTheAilingAndUsesUpTheirAilments)
+{
+	Player &player = SetUpFight();
+	Monster &frozen = PlaceMonster(0, { 42, 40 });
+	Monster &shocked = PlaceMonster(1, { 38, 40 });
+	Monster &burning = PlaceMonster(2, { 40, 38 });
+	Monster &plain = PlaceMonster(3, { 40, 42 });
+	// Each just out of the pulse, beside one of them.
+	Monster &byFrozen = PlaceMonster(4, { 43, 40 });
+	Monster &byShocked = PlaceMonster(5, { 37, 40 });
+	Monster &byBurning = PlaceMonster(6, { 40, 37 });
+	Monster &byPlain = PlaceMonster(7, { 40, 43 });
+	frozen.poe2.freezeTicks = 60;
+	shocked.poe2.shockTicks = 60;
+	burning.poe2.igniteTicks = 60;
+	burning.poe2.igniteDamagePerTick = 1;
+	Use(player, WeaponSkill::HoradricSundering, { 41, 40 });
+	// The pulse always lands, as a spell does.
+	for (const Monster *monster : { &frozen, &shocked, &burning, &plain })
+		EXPECT_TRUE(Hurt(*monster));
+	EXPECT_TRUE(Hurt(byFrozen));
+	EXPECT_TRUE(Hurt(byShocked));
+	EXPECT_TRUE(Hurt(byBurning));
+	EXPECT_FALSE(Hurt(byPlain));
+	EXPECT_EQ(frozen.poe2.freezeTicks, 0);
+	EXPECT_EQ(shocked.poe2.shockTicks, 0);
+	EXPECT_EQ(burning.poe2.igniteTicks, 0);
+	// A frozen enemy's burst is the bigger.
+	EXPECT_GT(Lost(byFrozen), Lost(byBurning));
+}
+
+TEST_F(Poe2WeaponDraftsTest, TollingShieldRingsOutStunningAndBreakingArmour)
+{
+	Player &player = SetUpFight();
+	Monster &near = PlaceMonster(0, { 42, 40 });
+	Monster &far = PlaceMonster(1, { 43, 40 });
+	UseUntilHurt(player, WeaponSkill::TollingShield, { 41, 40 }, near);
+	ASSERT_TRUE(Hurt(near));
+	EXPECT_GT(near.poe2.heavyStunTicks, 0);
+	EXPECT_GT(near.poe2.armourBreakTicks, 0);
+	EXPECT_FALSE(Hurt(far));
+	EXPECT_TRUE(IsShieldAttack(SkillSlot::ForAttack(WeaponSkill::TollingShield)));
+}
+
+TEST_F(Poe2WeaponDraftsTest, BulwarkRoarBlocksGuardsAndSendsShieldWaves)
+{
+	Player &player = SetUpFight();
+	player.poe2.shieldBlockChance = 20;
+	const int block = player.GetBlockChance();
+	Monster &near = PlaceMonster(0, { 41, 40 });
+	Use(player, WeaponSkill::BulwarkRoar, { 41, 40 });
+	EXPECT_FALSE(Hurt(near));
+	EXPECT_EQ(player.poe2.cryHits[BulwarkRoarCry], 3);
+	EXPECT_EQ(player.GetBlockChance(), block + BulwarkBlockChance);
+	// The Guard: 10% of 200 life takes the first 20 of what hits the hero.
+	EXPECT_EQ(player.poe2.bulwarkGuard, Fixed26_6::fromInt(20).raw());
+	EXPECT_EQ(AbsorbBulwarkGuard(player, Fixed26_6::fromInt(15)), Fixed26_6::fromInt(0));
+	EXPECT_EQ(AbsorbBulwarkGuard(player, Fixed26_6::fromInt(15)), Fixed26_6::fromInt(10));
+	EXPECT_EQ(AbsorbBulwarkGuard(player, Fixed26_6::fromInt(15)), Fixed26_6::fromInt(15));
+	// A shield attack sends a wave four tiles on; another attack sends none.
+	ClearMonsters();
+	Monster &onWave = PlaceMonster(0, { 44, 40 });
+	player.poe2.tick();
+	Use(player, WeaponSkill::StormEdge, { 44, 40 });
+	EXPECT_EQ(player.poe2.cryHits[BulwarkRoarCry], 3);
+	EXPECT_FALSE(Hurt(onWave));
+	EXPECT_FALSE(IsShieldAttack(SkillSlot::ForAttack(WeaponSkill::BulwarkRoar)));
+	EXPECT_TRUE(IsShieldAttack(SkillSlot::ForAttack(WeaponSkill::ShieldCharge)));
+	Use(player, WeaponSkill::TollingShield, { 44, 40 });
+	EXPECT_EQ(player.poe2.cryHits[BulwarkRoarCry], 2);
+	EXPECT_TRUE(Hurt(onWave));
+	// It all ends with the roar.
+	for (int i = 0; i < Row(WeaponSkill::BulwarkRoar).duration; i++)
+		player.poe2.tick();
+	EXPECT_EQ(player.poe2.cryHits[BulwarkRoarCry], 0);
+	EXPECT_EQ(player.GetBlockChance(), block);
+	player.poe2.bulwarkGuard = 100;
+	player.poe2.tick();
+	EXPECT_EQ(player.poe2.bulwarkGuard, 0);
+}
+
+TEST_F(Poe2WeaponDraftsTest, ZakarumsJudgementBurstsTwice)
+{
+	Player &player = SetUpFight();
+	Monster &monster = PlaceMonster(0, { 42, 40 });
+	Monster &far = PlaceMonster(1, { 43, 40 });
+	UseUntilHurt(player, WeaponSkill::ZakarumsJudgement, { 41, 40 }, monster);
+	ASSERT_TRUE(Hurt(monster));
+	ClearSkillZones();
+	Heal(monster);
+	monster.poe2.heavyStunTicks = 0;
+	Use(player, WeaponSkill::ZakarumsJudgement, { 41, 40 });
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	Heal(monster);
+	monster.poe2.heavyStunTicks = 0;
+	Zones(player, ZakarumsJudgementTicks - 1);
+	EXPECT_FALSE(Hurt(monster));
+	Zones(player, 2);
+	// The second ring always lands, and stuns.
+	EXPECT_TRUE(Hurt(monster));
+	EXPECT_GT(monster.poe2.heavyStunTicks, 0);
+	EXPECT_FALSE(Hurt(far));
+	EXPECT_EQ(SkillZoneCount(), 0U);
 }
 
 } // namespace

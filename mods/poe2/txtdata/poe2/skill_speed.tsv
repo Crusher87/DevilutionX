@@ -193,3 +193,8 @@ ThunderHatchet	80					125	113	none (thrown axe, as Double Throw)
 BloodHarvest	85					118	109	Blood Hunt
 PyreBlow	70					143	122	Infernal Blow (POE1)
 MammothCharge	80			300		172	136	Stampede (no leap at the end)
+PhantomBlade	90					112	106	Spectral Throw (POE1)
+HoradricSundering	55					182	141	Elemental Sundering
+TollingShield			0.8			124	112	Resonating Shield (one blast, like Blessed Shield)
+BulwarkRoar		0.8						Fortifying Cry
+ZakarumsJudgement			1.0			155	128	none (Workshop; nearest Condemn)
