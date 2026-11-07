@@ -3608,6 +3608,7 @@ void ProcessPlayers()
 				ProcessSkillZones(player);
 				ProcessSupportEffects(player);
 			}
+			ProcessDashLooks(player);
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
 				// It lands the moment the hero stands at the dash's end, not after the dodge's last ticks run out

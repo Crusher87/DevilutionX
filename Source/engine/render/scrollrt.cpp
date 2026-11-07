@@ -652,6 +652,9 @@ void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sp
 {
 	if (!player.poe2.isDodging() || !player.isWalking())
 		return;
+	// Leap Attack trails dust instead (Curtis 2026-11-07, Q39; see ProcessDashLooks).
+	if (player.poe2.dashSkill == WeaponSkill::LeapSlam && player.poe2.dashSkillTicks > 0)
+		return;
 	// One tile's step on screen in the direction of travel.
 	const Displacement step { player._pdir };
 	const Displacement screenStep { (step.deltaX - step.deltaY) * 32, (step.deltaX + step.deltaY) * 16 };

@@ -77,7 +77,7 @@ constexpr int16_t Flat = 100;
 // clang-format off
 const TableSkillData Table[] = {
 	// Sword
-	{ WS::Whirlwind, "Whirlwind", "Spin through the enemies in your path, hitting all around where you stop", 5, 8, TW::AxeOrSword, 0, Dash, 85, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Axe, Icon(SpellIcon::Berserk), TableCurve::Boneshatter, 300 },
+	{ WS::Whirlwind, "Whirlwind", "Spin through the enemies in your path, hitting each one on the way once", 5, 8, TW::AxeOrSword, 0, Dash, 85, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Axe, Icon(SpellIcon::Berserk), TableCurve::Boneshatter, 300 },
 	{ WS::Sacrifice, "Sacrifice", "A brutal strike paid for with 5% of your life", 7, 6, TW::Sword, 0, Strike, 330, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
 	{ WS::Zeal, "Zeal", "Quick stabs at the enemy in front; every fourth is a heavy blow at everything beside you", 15, 5, TW::Sword, 0, Flurry, 203, 4, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 290 },
 	{ WS::Vengeance, "Vengeance", "A strike that bursts into fire, lightning and cold", 11, 5, TW::Sword, 0, Strike, 260, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Elements, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 0 },
@@ -1061,6 +1061,9 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 		if (const Monster *aimed = TargetMonsterNear(target, 1); aimed != nullptr)
 			missile->poe2.homingMonster = static_cast<int16_t>(aimed->getId());
 	}
+	// Thrown blades and axes spin as they fly (Curtis 2026-11-07, Q39).
+	if (IsThrowingSkill(data.skill))
+		missile->poe2.look = vfx::SpinningBladeLook;
 	// Blessed Shield: the thrown shield spins as it flies, and bounces on (OnTableMissileHit).
 	if (data.skill == WeaponSkill::BlessedShield) {
 		missile->poe2.look = vfx::SpinningBladeLook;
@@ -1729,9 +1732,11 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	case Dash: {
 		const int radius = std::max<int>(data.radius, 1);
 		std::vector<Monster *> targets;
-		// Dashing Strike hits each monster along its dash once, not only those where it lands (Curtis 2026-10-28).
-		const std::vector<Point> centers = data.skill == WeaponSkill::DashingStrike ? DashPath(player, data.count) : std::vector<Point> { tile };
-		if (data.skill == WeaponSkill::DashingStrike)
+		// Dashing Strike and Whirlwind hit each monster along the dash once, not only those where it lands (Curtis
+		// 2026-10-28; Whirlwind 2026-11-07, Q39).
+		const bool alongPath = IsAnyOf(data.skill, WeaponSkill::DashingStrike, WeaponSkill::Whirlwind);
+		const std::vector<Point> centers = alongPath ? DashPath(player, data.count) : std::vector<Point> { tile };
+		if (alongPath)
 			player.poe2.dashStart = {};
 		for (const Point center : centers) {
 			BreakObjectsInArea(player, center, radius);

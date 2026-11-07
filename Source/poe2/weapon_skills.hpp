@@ -266,6 +266,10 @@ vfx::Element WeaponElementLook(const Player &player);
 
 /** @brief Whether the hero spins round through every facing while the skill's animation plays (Whirlwind). */
 bool SpinsWhileStriking(WeaponSkill skill);
+/** @brief Double Throw, Fan of Blades and Blade Fury: thrown blades that spin as they fly, from a short flick (Q39). */
+bool IsThrowingSkill(WeaponSkill skill);
+/** @brief A dash skill's looks while it dashes: Leap Attack's trail of dust, Whirlwind's spin (Q39). Once per game tick. */
+void ProcessDashLooks(Player &player);
 /** @brief Turns a spinning hero to the next facing for the animation frame (see SpinsWhileStriking). */
 void TurnWithSpin(Player &player);
 /** @brief Whether the hero's attack spins him round through every facing as he swings (Whirling Staff). */

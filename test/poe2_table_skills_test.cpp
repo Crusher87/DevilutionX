@@ -655,6 +655,60 @@ TEST_F(Poe2TableSkillsTest, GlacialSpikeShattersTheFrozen)
 	leveltype = DTYPE_TOWN;
 }
 
+// Q39 (Curtis 2026-11-07): Whirlwind hits each monster along its dash once, like Dashing Strike.
+TEST_F(Poe2TableSkillsTest, WhirlwindHitsEachMonsterOnItsPath)
+{
+	Player &player = SetUpFight();
+	std::array<int, 3> hits {};
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		ClearMonsters();
+		player.position.tile = { 44, 40 };
+		player.poe2.dashStart = Point(40, 40);
+		const std::array<Monster *, 3> monsters {
+			&PlaceMonster(0, { 41, 41 }), // beside the start of the path
+			&PlaceMonster(1, { 45, 41 }), // beside where it stopped
+			&PlaceMonster(2, { 38, 40 }), // behind where it started: out of reach
+		};
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::Whirlwind, { 46, 40 });
+		for (size_t i = 0; i < monsters.size(); i++)
+			hits[i] += monsters[i]->hitPoints < monsters[i]->maxHitPoints ? 1 : 0;
+		EXPECT_EQ(player.poe2.dashStart, Point());
+	}
+	EXPECT_GT(hits[0], 0);
+	EXPECT_GT(hits[1], 0);
+	EXPECT_EQ(hits[2], 0);
+	ClearMonsters();
+	player.poe2.dashStart = {};
+	leveltype = DTYPE_TOWN;
+}
+
+// Q39: Double Throw, Fan of Blades and Blade Fury throw spinning blades from a short flick.
+TEST_F(Poe2TableSkillsTest, ThrownBladesSpin)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	for (const WeaponSkill skill : { WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury }) {
+		EXPECT_TRUE(IsThrowingSkill(skill));
+		Missiles.clear();
+		ExecuteSkillCast(player, skill, { 46, 40 });
+		ASSERT_FALSE(Missiles.empty()) << WeaponSkillName(skill);
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype == MissileID::Arrow)
+				EXPECT_EQ(missile.poe2.look, vfx::SpinningBladeLook) << WeaponSkillName(skill);
+		}
+		player.poe2.volleySkill = WeaponSkill::None;
+		player.poe2.volleyShotsLeft = 0;
+	}
+	EXPECT_FALSE(IsThrowingSkill(WeaponSkill::Multishot));
+	Missiles.clear();
+	ExecuteSkillCast(player, WeaponSkill::Multishot, { 46, 40 });
+	for (const Missile &missile : Missiles)
+		EXPECT_NE(missile.poe2.look, vfx::SpinningBladeLook);
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
 TEST_F(Poe2TableSkillsTest, SpellBaseRollMatchesTheTooltipRange)
 {
 	Player &player = *MyPlayer;

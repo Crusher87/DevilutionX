@@ -187,6 +187,9 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	AddVisualEffect(player.position.tile, skill == WeaponSkill::LeapSlam ? MissileGraphicID::StoneCurseShatter : MissileGraphicID::BoneHit);
 	player.poe2.dashSkill = skill;
 	player.poe2.dashSkillTicks = DashSkillTimeoutTicks;
+	// Whirlwind spins the whole way (Curtis 2026-11-07, Q39; see ProcessDashLooks).
+	if (SpinsWhileStriking(skill))
+		player.poe2.spinFrom = static_cast<uint8_t>(player._pdir);
 	player.poe2.dashEnd = end.value_or(player.position.future);
 	player.poe2.dashStart = start;
 	player.poe2.dashDistancePercent = static_cast<uint8_t>(end ? std::clamp(end->WalkingDistance(start) * 100 / std::max(tiles, 1), 0, 100) : 0);
@@ -214,7 +217,9 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 	// Projectiles with nothing under the cursor fly exactly where it points, at any angle.
 	if (pcursmonst == -1 && &player == MyPlayer && (IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt) || GrantedSkillAimsAlongCursor(skill)))
 		target = AimAlongCursor(player, AimTiles);
-	BeginSkillAnimation(player, skill, graphic, target);
+	// A throw is a short flick of the wrist, not the whole melee swing: it leaves the hand early in the same use time
+	// (Curtis 2026-11-07, Q39).
+	BeginSkillAnimation(player, skill, graphic, target, IsThrowingSkill(skill));
 	// Glacial Spike erupts where this monster will be (see ExecuteTableSkill).
 	if (pcursmonst != -1 && &player == MyPlayer)
 		player.poe2.castTargetMonster = static_cast<int16_t>(pcursmonst);
@@ -1034,6 +1039,11 @@ void LandDashSkill(Player &player)
 	BeginSkillAnimation(player, skill, player_graphic::Attack, player.position.tile + player._pdir, !SpinsWhileStriking(skill), dashTicks);
 }
 
+bool IsThrowingSkill(WeaponSkill skill)
+{
+	return IsAnyOf(skill, WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury);
+}
+
 bool SpinsWhileStriking(WeaponSkill skill)
 {
 	return skill == WeaponSkill::Whirlwind;
@@ -1074,6 +1084,31 @@ void BeginSpinningSwing(const Player &player)
 	// through all eight facings inside a funnel of wind, both ends of the staff sweeping round out to its far reach.
 	vfx::Whirl(player.position.tile, WhirlingStaffReach, vfx::Element::Physical, true, WeaponElementLook(player));
 	PlaySfxLoc(SfxID::Swing2, player.position.tile);
+}
+
+void ProcessDashLooks(Player &player)
+{
+	if (!gbIsPoe2 || player.poe2.dashSkillTicks == 0 || !player.isWalking())
+		return;
+	const int elapsed = DashSkillTimeoutTicks - player.poe2.dashSkillTicks;
+	switch (player.poe2.dashSkill) {
+	case WeaponSkill::LeapSlam:
+		// Dust kicked up along the way, not the dodge's afterimages (Curtis 2026-11-07, Q39; no jump animation).
+		if (elapsed % 2 == 0)
+			vfx::Impact(player.position.tile, vfx::Element::Physical, 0.45F);
+		break;
+	case WeaponSkill::Whirlwind: {
+		// The hero spins through every facing all along the dash, inside its funnel of wind.
+		const PlayerAnimationData &walk = player.AnimationData[static_cast<size_t>(player_graphic::Walk)];
+		if (!HeadlessMode && walk.sprites)
+			player.AnimInfo.sprites = walk.spritesForDirection(SpinFacing(static_cast<Direction>(player.poe2.spinFrom), elapsed));
+		if (elapsed % 6 == 0)
+			vfx::Whirl(player.position.tile, 1, vfx::Element::Physical, false, WeaponElementLook(player));
+		break;
+	}
+	default:
+		break;
+	}
 }
 
 void TurnSpriteWithSpin(Player &player)
@@ -1416,6 +1451,9 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 	}
 	case WeaponSkill::LeapSlam:
 		vfx::Slam(tile, 2, vfx::Element::Fire);
+		// The ground cracks open round where he lands (Curtis 2026-11-07, Q39).
+		for (const Direction crack : { dir, Left(Left(dir)), Right(Right(dir)), Opposite(dir) })
+			vfx::Fissure(tile, tile + Displacement { crack } * 2, vfx::Element::Physical);
 		// A fiery crater where the player lands, and the shockwave rolling out of it.
 		AddVisualEffect(tile, MissileGraphicID::BigExplosion, 0, 10);
 		EffectRing(tile, 1, MissileGraphicID::StoneCurseShatter, 2);
