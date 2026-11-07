@@ -791,7 +791,9 @@ void UpdateEnemy(Monster &monster)
 			continue;
 
 		const int dist = otherMonster.position.tile.WalkingDistance(position);
-		if (!isPlayerMinion && otherMonster.poe2.decoy && dist < decoyDist) {
+		// POE2 Mashup: Attract makes the cursed monster a decoy too, for the monsters near it that obey (Curtis 2026-11-07).
+		const bool attracts = gbIsPoe2 && otherMonster.poe2.attractTicks > 0 && dist <= AttractTiles && MonsterObeysAttract(monster, otherMonster);
+		if (!isPlayerMinion && (otherMonster.poe2.decoy || attracts) && dist < decoyDist) {
 			decoy = static_cast<int>(monsterId);
 			decoyDist = dist;
 		}
@@ -2094,6 +2096,9 @@ bool IsTileAccessible(const Monster &monster, Point position)
 		return false;
 
 	if (!IsTileWalkable(position, (monster.flags & MFLAG_CAN_OPEN_DOOR) != 0))
+		return false;
+	// POE2 Mashup: a Shield Wall segment stands there; the monster must break it first.
+	if (gbIsPoe2 && !monster.isPlayerMinion() && IsShieldWallTile(position))
 		return false;
 
 	return IsTileSafe(monster, position);
@@ -4010,12 +4015,24 @@ std::expected<void, std::string> InitAllMonsterGFX()
 	}
 	size_t totalUniqueBytes = 0;
 	size_t totalBytes = 0;
+	bool loadedLate = false;
 	for (const LevelMonsterTypeIndices &monsterTypes : monstersBySprite) {
 		if (monsterTypes.empty())
 			continue;
 		CMonster &firstMonster = LevelMonsterTypes[monsterTypes[0]];
-		if (firstMonster.animData != nullptr)
+		if (firstMonster.animData != nullptr) {
+			// POE2 Mashup: a type added after the others of its picture were loaded gets its own copy. A quest level loads
+			// its map's monsters first, then the minion gem types, so Leoric's Skeleton Captains had no picture and the
+			// game crashed drawing their corpses (Curtis 2026-11-06, Monk run).
+			for (size_t i = 1; i < monsterTypes.size(); ++i) {
+				CMonster &monsterType = LevelMonsterTypes[monsterTypes[i]];
+				if (monsterType.animData != nullptr)
+					continue;
+				RETURN_IF_ERROR(InitMonsterGFX(monsterType));
+				loadedLate = true;
+			}
 			continue;
+		}
 		MonsterSpritesData spritesData = LoadMonsterSpritesData(firstMonster.data());
 		const size_t spritesDataSize = spritesData.offsets[GetNumAnimsWithGraphics(firstMonster.data())];
 		for (size_t i = 1; i < monsterTypes.size(); ++i) {
@@ -4030,7 +4047,7 @@ std::expected<void, std::string> InitAllMonsterGFX()
 	}
 	LogVerbose(" Total monster graphics:                 {:>4d} KiB {:>4d} KiB", totalUniqueBytes / 1024, totalBytes / 1024);
 
-	if (totalUniqueBytes > 0) {
+	if (totalUniqueBytes > 0 || loadedLate) {
 		// we loaded new sprites, check if we need to update existing monsters
 		for (size_t i = 0; i < ActiveMonsterCount; i++) {
 			Monster &monster = Monsters[ActiveMonsters[i]];
@@ -4370,6 +4387,11 @@ void M_StartStand(Monster &monster, Direction md)
 	monster.mode = MonsterMode::Stand;
 	monster.position.future = monster.position.tile;
 	monster.position.old = monster.position.tile;
+	UpdateEnemy(monster);
+}
+
+void M_UpdateEnemy(Monster &monster)
+{
 	UpdateEnemy(monster);
 }
 
@@ -4771,6 +4793,9 @@ int ScaleMonsterBlow(const Monster &attacker, int dam)
 			dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * CommandMinionDamagePercent(attacker) / 100, INT32_MAX / 4));
 		}
 	}
+	// POE2 Mashup: Confuse's Berserk, Diablo's Berserk spell's 120-129% harder blows (Curtis 2026-11-07, Q36).
+	if (gbIsPoe2 && attacker.poe2.berserkPercent > 0)
+		dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * attacker.poe2.berserkPercent / 100, INT32_MAX / 4));
 	// Grave Howl's weaken is in the monster's damage scale (ScaleMonsterHit), so its missiles and spells meet it too.
 	return dam;
 }
@@ -5478,6 +5503,9 @@ Monster *FindGolemForPlayer(const Player &player)
 bool IsTileAvailable(const Monster &monster, Point position)
 {
 	if (!IsTileAvailable(position))
+		return false;
+	// POE2 Mashup: a Shield Wall segment stands there; the monster must break it first.
+	if (gbIsPoe2 && !monster.isPlayerMinion() && IsShieldWallTile(position))
 		return false;
 
 	return IsTileSafe(monster, position);

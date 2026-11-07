@@ -1075,5 +1075,66 @@ TEST_F(Poe2ItemBasesTest, MagicStavesKeepTheNameTheyWereGiven)
 	EXPECT_EQ(item.getName().str(), "Spider's Short Staff of magic");
 }
 
+/**
+ * Curtis 2026-11-07: an unidentified item's tooltip already counted its hidden modifiers' armour and damage. Like
+ * POE2 it shows only the base and quality until identified; the modifiers still count when worn.
+ */
+TEST_F(Poe2ItemBasesTest, UnidentifiedItemsShowOnlyTheirBase)
+{
+	const std::optional<uint8_t> flatArmourFamily = FindModifierFamily("flat_armour");
+	const std::optional<uint8_t> increasedArmourFamily = FindModifierFamily("increased_armour");
+	const std::optional<uint8_t> addedPhysicalFamily = FindModifierFamily("local_added_physical");
+	ASSERT_TRUE(flatArmourFamily && increasedArmourFamily && addedPhysicalFamily);
+	const auto flatArmour = static_cast<uint8_t>(*flatArmourFamily + 1);
+	const auto increasedArmour = static_cast<uint8_t>(*increasedArmourFamily + 1);
+	const auto addedPhysical = static_cast<uint8_t>(*addedPhysicalFamily + 1);
+
+	Item armour;
+	for (uint32_t seed = 1; seed < 4000 && armour.isEmpty(); seed++) {
+		const Item item = MakeRare(FindBase("Rogue Armour"), seed);
+		if (ItemQuality(item) == 0 && HasMod(item, flatArmour) && HasMod(item, increasedArmour))
+			armour = item;
+	}
+	ASSERT_FALSE(armour.isEmpty()) << "a rare Rogue Armour with flat and increased armour";
+	DefensePoints base;
+	DefensePoints bonus;
+	SplitShownItemDefense(armour, base, bonus);
+	const int identified = base.armour + base.evasion + bonus.armour + bonus.evasion;
+	armour._iIdentified = false;
+	SplitShownItemDefense(armour, base, bonus);
+	EXPECT_EQ(base.armour + base.evasion, BaseDefence(armour)) << "the base's own roll, without the flat armour";
+	EXPECT_EQ(bonus.armour + bonus.evasion, 0) << "no increased armour, and no quality on it";
+	EXPECT_LT(base.armour + base.evasion, identified);
+	// Worn, it still counts in full.
+	EXPECT_TRUE(ItemModifiersCount(armour));
+	DefensePoints wornBase;
+	DefensePoints wornBonus;
+	SplitItemDefense(armour, wornBase, wornBonus);
+	EXPECT_EQ(wornBase.armour + wornBase.evasion + wornBonus.armour + wornBonus.evasion, identified);
+
+	Item weapon;
+	for (uint32_t seed = 1; seed < 4000 && weapon.isEmpty(); seed++) {
+		const Item item = MakeRare(FindBase("Shortsword"), seed);
+		if (ItemQuality(item) == 0 && HasMod(item, addedPhysical))
+			weapon = item;
+	}
+	ASSERT_FALSE(weapon.isEmpty()) << "a rare Shortsword with added physical damage";
+	int minDamage;
+	int maxDamage;
+	ShownWeaponPhysicalDamage(weapon, minDamage, maxDamage);
+	const int identifiedMin = minDamage;
+	weapon._iIdentified = false;
+	ShownWeaponPhysicalDamage(weapon, minDamage, maxDamage);
+	EXPECT_EQ(minDamage, BaseMinDamage(weapon, addedPhysical));
+	EXPECT_EQ(minDamage, AllItemsList[weapon.IDidx].iMinDam);
+	EXPECT_EQ(maxDamage, AllItemsList[weapon.IDidx].iMaxDam);
+	EXPECT_LT(minDamage, identifiedMin);
+
+	// Quality isn't hidden: a normal item shows it, and so does an unidentified one.
+	Item plain = MakeItem("Shortsword", 7, 20);
+	ShownWeaponPhysicalDamage(plain, minDamage, maxDamage);
+	EXPECT_EQ(maxDamage, AllItemsList[plain.IDidx].iMaxDam * 120 / 100);
+}
+
 } // namespace
 } // namespace devilution

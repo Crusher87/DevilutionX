@@ -28,14 +28,17 @@ bool AttackInListedCategory(WeaponSkill skill, GemCategory category)
 	case GemCategory::Axe:
 		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Frenzy);
 	case GemCategory::Sword:
-		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Riposte, WeaponSkill::ShadowStep,
-		    WeaponSkill::Frenzy);
+		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Riposte, WeaponSkill::Frenzy);
+	case GemCategory::Dagger:
+		// Shadow Lunge is a dagger skill; Double Swing and Cleave work with a dagger too (the 10-22 plan).
+		return IsAnyOf(skill, WeaponSkill::ShadowStep, WeaponSkill::Flurry, WeaponSkill::Cleave);
 	case GemCategory::Bow:
 		return IsAnyOf(skill, WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow, WeaponSkill::EscapeShot, WeaponSkill::RapidFire);
 	case GemCategory::Staff:
 		return IsAnyOf(skill, WeaponSkill::WhirlingStaff, WeaponSkill::LeapSlam, WeaponSkill::FistsOfThunder);
 	case GemCategory::Shield:
-		return IsAnyOf(skill, WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash);
+		// Counterstrike answers a block: it shows with the shield skills too (Q41).
+		return IsAnyOf(skill, WeaponSkill::ShieldCharge, WeaponSkill::ShieldBash, WeaponSkill::Riposte);
 	case GemCategory::Elemental:
 		return IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::LightningArrow, WeaponSkill::IceBolt, WeaponSkill::FrostNova,
 		    WeaponSkill::FistsOfThunder);
@@ -51,7 +54,7 @@ bool AttackInCategory(WeaponSkill skill, GemCategory category)
 {
 	if (!AttackInListedCategory(skill, category))
 		return false;
-	if (!IsAnyOf(category, GemCategory::Elemental, GemCategory::Occult))
+	if (!IsAnyOf(category, GemCategory::Elemental, GemCategory::Occult, GemCategory::Arcane))
 		return true;
 	return !AttackOnWeaponTab(skill);
 }
@@ -67,6 +70,8 @@ std::string_view GemCategoryName(GemCategory category)
 		return _("Axe");
 	case GemCategory::Sword:
 		return _("Sword");
+	case GemCategory::Dagger:
+		return _("Dagger");
 	case GemCategory::Bow:
 		return _("Bow");
 	case GemCategory::Staff:
@@ -78,6 +83,8 @@ std::string_view GemCategoryName(GemCategory category)
 		return _("Elemental");
 	case GemCategory::Occult:
 		return _("Occult");
+	case GemCategory::Arcane:
+		return _("Arcane");
 	case GemCategory::Spirit:
 		return _("Spirit");
 	case GemCategory::Support:
@@ -131,20 +138,56 @@ bool GemInCategory(const GemEntry &gem, GemCategory category)
 		return category == GemCategory::Spirit;
 	case SkillKind::Attack:
 		return AttackInCategory(gem.skill.attack(), category);
-	case SkillKind::Spell: {
-		const MagicType type = GetSpellData(gem.skill.spell()).type();
-		return category == (type == MagicType::Magic ? GemCategory::Occult : GemCategory::Elemental);
-	}
+	case SkillKind::Spell:
+		return category == SpellGemCategory(gem.skill.spell());
 	default:
 		return false;
 	}
 }
 
+GemCategory SpellGemCategory(SpellID spell)
+{
+	switch (spell) {
+	case SpellID::Nova:
+		// A ring of lightning (Curtis 2026-11-07, Q30).
+		return GemCategory::Elemental;
+	case SpellID::Elemental:
+		// Moved to Occult at tier XI to spread the Elemental tab (Curtis 2026-11-07, Q30).
+		return GemCategory::Occult;
+	case SpellID::Healing:
+	case SpellID::ManaShield:
+	case SpellID::Phasing:
+	case SpellID::Teleport:
+	case SpellID::Warp:
+	case SpellID::Etherealize:
+	case SpellID::RuneOfFire:
+	case SpellID::RuneOfLight:
+	case SpellID::RuneOfStone:
+	case SpellID::RuneOfNova:
+	case SpellID::RuneOfImmolation:
+		// The Arcane tab (Curtis 2026-11-06, Tree Workshop).
+		return GemCategory::Arcane;
+	default:
+		return GetSpellData(spell).type() == MagicType::Magic ? GemCategory::Occult : GemCategory::Elemental;
+	}
+}
+
 bool IsRetiredSkill(SkillSlot skill)
 {
-	// Rapid Fire, Impale and Ballista Barrage repeat Hail of Arrows, Guided Arrow and Arrow Storm; traps and turrets need no bow.
-	return skill.kind == SkillKind::Attack
-	    && IsAnyOf(skill.attack(), WeaponSkill::RapidFire, WeaponSkill::Impale, WeaponSkill::SpikeTrap, WeaponSkill::Sentry, WeaponSkill::SiegeVolley);
+	switch (skill.kind) {
+	case SkillKind::Attack:
+		// Rapid Fire, Impale and Ballista Barrage repeat Hail of Arrows, Guided Arrow and Arrow Storm; traps and turrets need
+		// no bow. Arcing Sparks is part of Charged Bolt now, and Hellfire Darts repeats Firebolt with Sisters' Spread
+		// (Curtis 2026-11-07, Q34).
+		return IsAnyOf(skill.attack(), WeaponSkill::RapidFire, WeaponSkill::Impale, WeaponSkill::SpikeTrap, WeaponSkill::Sentry, WeaponSkill::SiegeVolley,
+		    WeaponSkill::Spark, WeaponSkill::EmberFusillade);
+	case SkillKind::Spell:
+		// Guardian, Golem and Reflect copy Spirit gems (Q33), Ring of Fire is Fire Wall cast at your feet (Q34), and Berserk
+		// is part of Confuse (Q36).
+		return IsAnyOf(skill.spell(), SpellID::Guardian, SpellID::Golem, SpellID::Reflect, SpellID::RingOfFire, SpellID::Berserk);
+	default:
+		return false;
+	}
 }
 
 bool AttackOnWeaponTab(WeaponSkill skill)

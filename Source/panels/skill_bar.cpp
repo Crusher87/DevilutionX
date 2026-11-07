@@ -40,6 +40,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "spells.h"
@@ -1004,6 +1005,7 @@ void TakeOutSupport(Player &player, size_t slot, size_t socket)
 	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket, &tier);
 	if (gem == SupportGem::None)
 		return;
+	TelemetrySupportGem(player, false, gem, tier, slot);
 	GiveSupportGems(player, { { gem, tier } });
 	EventPlrMsg(FormatRuntime(_("{:s} is back in your inventory."), SupportGemTierName(gem, tier)));
 }
@@ -1197,6 +1199,7 @@ SkillSlot ChangeSlotSkill(Player &player, size_t slot, SkillSlot skill, int leve
 			continue;
 		int tier = 1;
 		UnsocketSupportGem(player.poe2, slot, socket, &tier);
+		TelemetrySupportGem(player, false, gem, tier, slot);
 		returned.push_back({ gem, tier });
 	}
 	// The spells inside a meta gem come out with it.

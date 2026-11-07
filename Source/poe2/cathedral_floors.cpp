@@ -179,13 +179,13 @@ char At(const std::vector<std::string> &grid, int x, int y)
 	return grid[y][x];
 }
 
-/** Shrine spots, stairs up, hanging bodies and burning crosses need a wall north or west of them. */
+/** Shrine spots, stairs up, hanging bodies, burning crosses and bookcases need a wall north or west of them. */
 bool BackedOk(const std::vector<std::string> &grid)
 {
 	for (int y = 0; y < static_cast<int>(grid.size()); y++) {
 		for (int x = 0; x < static_cast<int>(grid[y].size()); x++) {
 			const char c = grid[y][x];
-			if (c != 'A' && c != 'T' && c != 'x' && c != 'U')
+			if (c != 'A' && c != 'T' && c != 'x' && c != 'U' && c != 'K')
 				continue;
 			if (c == 'U') {
 				// The stairs up go into the wall north of the room's first row.
@@ -1178,7 +1178,8 @@ private:
 					continue;
 				}
 				carve(block);
-				if (c == 'O')
+				// A brazier is a pillar too: Diablo's Cathedral pillar is the brazier's stand, and AddL1Objs puts the fire on it.
+				if (c == 'O' || c == 'L')
 					plan_.pillars.push_back(block);
 				else if (c == 'U' && !plan_.stairsUp && At(area.grid, x - 1, y) != 'U')
 					plan_.stairsUp = block;
@@ -1504,6 +1505,9 @@ std::optional<Point> PropSpot(Point block, bool wall, bool big)
 			if (!TileClear(tile) || !RoomAround(tile))
 				continue;
 			if (big && !TileClear(tile + Displacement { 0, -1 }))
+				continue;
+			// Never where it would close a way in (Curtis 2026-11-06: a book stand kept him out of a room).
+			if (ObjectWouldBlockPassage(tile) || (big && ObjectWouldBlockPassage(tile + Displacement { 0, -1 })))
 				continue;
 			if (pass == 0 && wall && !AgainstWall(tile))
 				continue;
@@ -2000,6 +2004,35 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 	return out;
 }
 
+/** Bump when a change to the builder's code (not its rooms) would build a saved floor's seed differently. */
+constexpr uint32_t FloorBuilderVersion = 1;
+
+uint32_t CathedralRoomsStamp(bool catacombs, bool caves, bool hell, bool hive)
+{
+	uint32_t hash = 2166136261U;
+	const auto add = [&hash](std::string_view text) {
+		for (const char c : text) {
+			hash ^= static_cast<uint8_t>(c);
+			hash *= 16777619U;
+		}
+		hash ^= 0xFFU;
+		hash *= 16777619U;
+	};
+	add(StrCat(FloorBuilderVersion));
+	for (const CathedralRoomDef &room : RoomsFor(catacombs, caves, hell, hive)) {
+		add(room.id);
+		add(room.family);
+		add(room.reward);
+		add(StrCat(static_cast<int>(room.roles), room.memorable ? 1 : 0, room.pillarsBehind ? 1 : 0));
+		for (const std::array<char, 3> &option : room.options)
+			add(std::string_view { option.data(), option.size() });
+		for (const std::string &row : room.grid)
+			add(row);
+	}
+	// 0 stands for a floor saved before rooms were stamped.
+	return hash != 0 ? hash : 1;
+}
+
 uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves, bool hell, bool hive)
 {
 	uint64_t memorable = 0;
@@ -2165,12 +2198,23 @@ void AddCathedralRoomObjects()
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		if (prop.kind == 'K') {
-			// Two shelves to a block, so a row of them reads as one long bookcase.
+			// Two shelves to a block, so a row of them reads as one long bookcase, standing right against the wall
+			// behind it: a row along a north wall, a column along a west wall. Only the back half of a Cathedral wall
+			// block is solid, so the shelves go on the open front half of it when there is one.
 			const bool row = std::any_of(CurrentPlan.props.begin(), CurrentPlan.props.end(), [&prop](const CathedralProp &other) {
 				return other.kind == 'K' && other.block.y == prop.block.y && std::abs(other.block.x - prop.block.x) == 1;
 			});
 			const Point world = prop.block.megaToWorld();
-			for (const Displacement d : row ? std::array { Displacement { 0, 1 }, Displacement { 1, 1 } } : std::array { Displacement { 1, 0 }, Displacement { 1, 1 } }) {
+			const Displacement behind = row ? Displacement { 0, -1 } : Displacement { -1, 0 };
+			const Displacement along = row ? Displacement { 1, 0 } : Displacement { 0, 1 };
+			Displacement out = behind * -1;
+			for (const Displacement d : { behind, Displacement { 0, 0 } }) {
+				if (!TileHasAny(world + d, TileProperties::Solid) && TileHasAny(world + d + behind, TileProperties::Solid)) {
+					out = d;
+					break;
+				}
+			}
+			for (const Displacement d : { out, out + along }) {
 				if (TileClear(world + d))
 					AddObject(row ? OBJ_BOOKSHELF : OBJ_BOOKSHELFR, world + d);
 			}
@@ -2182,7 +2226,6 @@ void AddCathedralRoomObjects()
 		switch (prop.kind) {
 		case 'A':
 		case 'c': AddObject(OBJ_CANDLE2, *spot); break;
-		case 'L': AddObject(OBJ_L1LIGHT, *spot); break;
 		case 'S': AddObject(OBJ_SARC, *spot); break;
 		case 'k':
 			// Each stand gives a book or scroll, so at most two to a room.

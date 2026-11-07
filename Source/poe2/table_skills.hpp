@@ -229,6 +229,8 @@ constexpr int LocustSwarmPercent = 165;
 constexpr int BoneSpearPierces = 20;
 /** @brief Plague Arrow's burst hits the enemies around the one the arrow struck for this share of the arrow, in percent. */
 constexpr int PlagueArrowSplashPercent = 50;
+/** @brief How big Plague Arrow's green splash of venom is where it bursts (a normal hit's is 1). */
+constexpr float PlagueArrowSplashSize = 1.4F;
 /** @brief Hex Rupture bursts at most this many curses a cast, each with this radius; a monster takes one a cast. */
 constexpr int HexRuptureMaxBursts = 10;
 constexpr int HexRuptureBurstRadius = 1;
@@ -262,11 +264,13 @@ enum TableTab : uint16_t {
 	TT_Mace = 1 << 0,
 	TT_Axe = 1 << 1,
 	TT_Sword = 1 << 2,
-	TT_Bow = 1 << 3,
-	TT_Staff = 1 << 4,
-	TT_Shield = 1 << 5,
-	TT_Elemental = 1 << 6,
-	TT_Occult = 1 << 7,
+	TT_Dagger = 1 << 3,
+	TT_Bow = 1 << 4,
+	TT_Staff = 1 << 5,
+	TT_Shield = 1 << 6,
+	TT_Elemental = 1 << 7,
+	TT_Occult = 1 << 8,
+	TT_Arcane = 1 << 9,
 };
 
 struct TableSkillData {
@@ -371,6 +375,58 @@ constexpr int IceSpikeTrackTiles = 4;
 /** @brief Freezing Arrow's and Explosive Arrow's landing bursts hit for this percent of a base hit, on top of the arrow. */
 constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
+/** @brief Fire Arrow's landing burst hits for this percent of the arrow's own percent (Curtis 2026-11-07, Q32). */
+constexpr int FireArrowBurstShare = 45;
+/** @brief Zeal (Curtis 2026-11-07, Q37): every this many uses is a heavy blow at this percent on every monster beside you. */
+constexpr int ZealHeavyEvery = 4;
+constexpr int ZealHeavyPercent = 150;
+/** @brief Zeal's count starts over this many game ticks after the last use (3 seconds). */
+constexpr int ZealResetTicks = 60;
+/** @brief Falling Sword (Q37): the hero fades out for this long as the cast begins (0.4 s), untargetable. */
+constexpr int FallingSwordFadeTicks = 8;
+/** @brief Falling Sword's holy ground: radius, game ticks (3 s) and percent of the hit it burns for each second. */
+constexpr int FallingSwordGroundRadius = 2;
+constexpr int FallingSwordGroundTicks = 60;
+constexpr int FallingSwordGroundPercent = 20;
+/** @brief Explosive Arrow (Q37): its arrow sticks where it lands and blows this many game ticks later (1 s). */
+constexpr int ExplosiveArrowFuseTicks = 20;
+/** @brief Shield Wall (Q37): POE2's wall of earth, its segments, their life in percent of the hero's, and its shatter. */
+constexpr int ShieldWallSegments = 5;
+constexpr int ShieldWallLifePercent = 20;
+constexpr int ShieldWallShatterTiles = 2;
+constexpr int ShieldWallShatterPercent = 100;
+/** @brief Blessed Shield (Q37): the thrown shield bounces to this many more monsters within this many tiles, each bounce at this percent. */
+constexpr int BlessedShieldBounces = 3;
+constexpr int BlessedShieldBounceTiles = 4;
+constexpr int BlessedShieldBouncePercent = 75;
+/** @brief Rend (Curtis 2026-11-07, Q38): Rage for each monster it hits. */
+constexpr int RendRagePerHit = 3;
+/** @brief Death Mark (Q38): the next Shadow Lunge or Cobra Strike on the marked monster takes the mark for this percent. */
+constexpr int DeathMarkConsumePercent = 200;
+/**
+ * @brief Wave of Light (Q38): at full Combo it drops a bell in front of the hero, a weapon hit at this percent in this
+ * radius; it stands this many game ticks (6 s), and each hit on it tolls for this percent in this radius.
+ */
+constexpr int WaveBellPercent = 100;
+constexpr int WaveBellRadius = 2;
+constexpr int WaveBellTicks = 120;
+constexpr int WaveBellTollPercent = 50;
+constexpr int WaveBellTollRadius = 2;
+/**
+ * @brief Game ticks between two tolls of the bell: one a swing, however many of the bell's tiles it hits. Only weapon
+ * swings toll it, not area skills sweeping its tile (Curtis 2026-11-07, Q42).
+ */
+constexpr int WaveBellTollCooldown = 12;
+/** @brief Glacial Spike (Q38): a frozen monster it hits takes this percent of the hit and loses the freeze. */
+constexpr int GlacialSpikeFrozenPercent = 200;
+/** @brief Attract (Curtis 2026-11-07, Q36): monsters this near the cursed monster attack it instead of the hero. */
+constexpr int AttractTiles = 5;
+/** @brief Confuse cast at a rare or unique from this gem level gives it Berserk's old effect (Q36). */
+constexpr int ConfuseBerserkGemLevel = 10;
+/** @brief Decrepify slows the cursed monster's actions this much: a normal or magic one, a rare, a unique or boss (Q36). */
+constexpr int DecrepifySlowPercent = 30;
+constexpr int DecrepifyRareSlowPercent = 20;
+constexpr int DecrepifyUniqueSlowPercent = 10;
 /**
  * @brief Wither from a granted skill (Withering Bolt, Withering Ray): a stack a hit, up to this many, for 4 seconds. Each
  * stack is the game's Wither (3% more damage taken), so ten make up to +30% (Curtis 2026-10-30: smaller steps, more stacks).
@@ -444,6 +500,8 @@ bool IsTableAreaSkill(const TableSkillData &data);
 
 /** @brief Starts a table skill: pays for it and plays its animation or dash. */
 bool StartTableSkill(Player &player, const TableSkillData &data);
+/** @brief A table skill's cast animation began: Falling Sword's hero fades out in light, untargetable (Q37). */
+void BeginTableSkillCast(Player &player, const TableSkillData &data);
 /** @brief Makes a table skill go off, on the action frame of its animation. */
 void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target);
 /** @brief Fires one shot of a Stream skill. */
@@ -559,10 +617,36 @@ void ProcessTableCurses(Monster &monster);
 int TableCurseDamageTakenPercent(const Monster &monster, DamageType type);
 /**
  * @brief POE2 Mashup: how strong a table curse on a monster is, as the enemy debuff icons show it (Curtis 2026-10-30):
- * how much softer it hits for Weaken and Decrepify, how much more damage it takes for Death Mark and Decrepify, how
- * much of its hit Iron Maiden turns back. 0 when the curse isn't on it or has no strength to show.
+ * how much softer it hits for Weaken, how much slower it acts for Decrepify, how much more damage it takes for Death
+ * Mark, how much of its hit Iron Maiden turns back. 0 when the curse isn't on it or has no strength to show.
  */
 [[nodiscard]] int TableCurseShownPercent(const Monster &monster, TableCurse curse);
+/**
+ * @brief Death Mark (Q38): when the monster is marked, the mark is used up and the hit deals DeathMarkConsumePercent;
+ * returns the percent of the hit (100 when there was no mark). For Shadow Lunge and Cobra Strike.
+ */
+int ConsumeDeathMark(Monster &monster);
+/** @brief Wave of Light's bell stands on the tile (Q38). */
+[[nodiscard]] std::optional<Point> WaveBellTile();
+/** @brief The hero struck the tile: if the bell stands there it tolls, hitting around it (Q38). */
+void StrikeWaveBell(const Player &player, Point tile);
+/** @brief Whether a Shield Wall segment stands on the tile: monsters can't step there until they break it (Q37). */
+[[nodiscard]] bool IsShieldWallTile(Point tile);
+[[nodiscard]] size_t ShieldWallSegmentCount();
+/**
+ * @brief A slam, Shield Charge or a war cry went off: the Shield Wall segments within ShieldWallShatterTiles of the
+ * point or the hero shatter, each exploding for a weapon hit in radius 1. Returns how many shattered.
+ */
+int ShatterShieldWall(Player &player, Point at);
+/** @brief How much Decrepify slows the monster, by its rarity (Q36). */
+[[nodiscard]] int DecrepifySlowPercentFor(const Monster &monster);
+/**
+ * @brief Whether a monster near an Attract-cursed one attacks it instead of the hero (Q36): a normal or magic monster
+ * always, a rare half the time (fixed for the whole curse by its roll), a unique or boss never.
+ */
+[[nodiscard]] bool MonsterObeysAttract(const Monster &monster, const Monster &cursed);
+/** @brief Confuse's Berserk (Q36): the monster turns on its kind and hits harder for the curse's length. */
+void GiveConfuseBerserk(Monster &monster, int ticks);
 /** @brief A monster died: Haunt and Locust Swarm move on to the next. */
 void OnTableCursedMonsterKilled(const Monster &monster);
 /** @brief More damage from Soul Harvest's souls, in percent. */

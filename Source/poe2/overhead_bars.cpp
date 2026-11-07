@@ -1,6 +1,7 @@
 #include "poe2/overhead_bars.hpp"
 
 #include <algorithm>
+#include <climits>
 #include <vector>
 
 #include "engine/palette.h"
@@ -71,11 +72,72 @@ void FillRows(const Surface &out, Point topLeft, int width, int rows, uint8_t co
 		FillRect(out, topLeft.x, topLeft.y, width, rows, color);
 }
 
+struct Rgb {
+	uint8_t r, g, b;
+};
+
+// Colours read off POE2's bar (Curtis's picture 2026-11-06), top row first: dark edges, bright middle.
+constexpr Rgb FrameTarget { 8, 8, 9 };
+constexpr Rgb EmptyTarget { 22, 22, 25 };
+constexpr std::array<Rgb, HeroLifeRows> LifeTargets { { { 27, 82, 29 }, { 31, 140, 46 }, { 30, 120, 40 }, { 30, 74, 27 } } };
+// The Energy Shield is a pale wash over the life, palest at its edges.
+constexpr std::array<Rgb, HeroLifeRows> EnergyShieldTargets { { { 141, 203, 182 }, { 79, 166, 97 }, { 74, 140, 89 }, { 131, 191, 173 } } };
+// Where the life has run out, the wash lies over the dark empty bar.
+constexpr std::array<Rgb, HeroLifeRows> EnergyShieldOverEmptyTargets { { { 110, 150, 145 }, { 55, 78, 76 }, { 50, 70, 68 }, { 100, 138, 132 } } };
+constexpr std::array<Rgb, HeroManaRows> ManaTargets { { { 22, 62, 142 }, { 30, 79, 180 }, { 18, 45, 100 } } };
+
+/**
+ * @brief Fills a block in full colour where the UI layer allows it (the palette has no true green), in the palette's
+ * nearest colour elsewhere.
+ */
+void FillTrueColour(const Surface &out, Point topLeft, int width, int rows, uint8_t index, Rgb colour)
+{
+	for (int y = 0; y < rows; y++) {
+		for (int x = 0; x < width; x++)
+			DrawUiTrueColourPixel(out, topLeft + Displacement { x, y }, index, colour.r, colour.g, colour.b);
+	}
+}
+
+/** @brief Fills @p width pixels of each row with that row's shade. */
+template <size_t Rows>
+void FillShadedRows(const Surface &out, Point topLeft, int width, const std::array<uint8_t, Rows> &shades, const std::array<Rgb, Rows> &colours)
+{
+	for (size_t row = 0; row < Rows; row++)
+		FillTrueColour(out, topLeft + Displacement { 0, static_cast<int>(row) }, width, 1, shades[row], colours[row]);
+}
+
 /** @brief A bar's frame, filled inside with the empty colour. */
 void DrawFrame(const Surface &out, Point topLeft, int width, int height, uint8_t frameColor)
 {
 	FillRows(out, topLeft, width, height, frameColor);
-	FillRows(out, topLeft + Displacement { 1, 1 }, width - 2, height - 2, OverheadBarEmptyColor);
+	FillTrueColour(out, topLeft + Displacement { 1, 1 }, width - 2, height - 2, GetOverheadBarShades().empty, EmptyTarget);
+}
+
+/** @brief The hero's frame: near black, like POE2's. */
+void DrawHeroFrame(const Surface &out, Point topLeft)
+{
+	const OverheadBarShades &shades = GetOverheadBarShades();
+	FillTrueColour(out, topLeft, HeroBarWidth, HeroBarHeight, shades.frame, FrameTarget);
+	FillTrueColour(out, topLeft + Displacement { 1, 1 }, HeroBarWidth - 2, HeroBarHeight - 2, shades.empty, EmptyTarget);
+}
+
+uint8_t NearestPaletteIndex(Rgb colour)
+{
+	// Not 0, nor 1-31, which some levels cycle for lava and water.
+	int best = PAL16_GRAY;
+	int bestDistance = INT_MAX;
+	for (int i = 32; i < 256; i++) {
+		const SDL_Color &candidate = logical_palette[i];
+		const int dr = candidate.r - colour.r;
+		const int dg = candidate.g - colour.g;
+		const int db = candidate.b - colour.b;
+		const int distance = (2 * dr * dr) + (4 * dg * dg) + (3 * db * db);
+		if (distance < bestDistance) {
+			bestDistance = distance;
+			best = i;
+		}
+	}
+	return static_cast<uint8_t>(best);
 }
 
 } // namespace
@@ -175,17 +237,64 @@ void DrawMonsterBar(const Surface &out, Point topLeft, int width, const Overhead
 	FillRows(out, topLeft + Displacement { 1, 1 }, OverheadBarFill(values.life, values.maxLife, width - 2), MonsterLifeRows, OverheadBarLifeColor);
 }
 
+const OverheadBarShades &GetOverheadBarShades()
+{
+	static OverheadBarShades shades {};
+	static uint32_t matchedFor = 0;
+	static bool matched = false;
+	uint32_t checksum = 0;
+	for (const SDL_Color &colour : logical_palette)
+		checksum = (checksum * 31) + colour.r + (colour.g << 8) + (colour.b << 16);
+	if (matched && checksum == matchedFor)
+		return shades;
+	shades.frame = NearestPaletteIndex(FrameTarget);
+	shades.empty = NearestPaletteIndex(EmptyTarget);
+	for (size_t i = 0; i < HeroLifeRows; i++) {
+		shades.life[i] = NearestPaletteIndex(LifeTargets[i]);
+		shades.energyShield[i] = NearestPaletteIndex(EnergyShieldTargets[i]);
+		shades.energyShieldOverEmpty[i] = NearestPaletteIndex(EnergyShieldOverEmptyTargets[i]);
+	}
+	for (size_t i = 0; i < HeroManaRows; i++)
+		shades.mana[i] = NearestPaletteIndex(ManaTargets[i]);
+	matchedFor = checksum;
+	matched = true;
+	return shades;
+}
+
+std::vector<std::array<uint8_t, 3>> OverheadBarTargetColours()
+{
+	std::vector<std::array<uint8_t, 3>> colours;
+	auto add = [&](Rgb colour) { colours.push_back({ colour.r, colour.g, colour.b }); };
+	add(FrameTarget);
+	add(EmptyTarget);
+	for (const Rgb &colour : LifeTargets)
+		add(colour);
+	for (const Rgb &colour : EnergyShieldTargets)
+		add(colour);
+	for (const Rgb &colour : EnergyShieldOverEmptyTargets)
+		add(colour);
+	for (const Rgb &colour : ManaTargets)
+		add(colour);
+	return colours;
+}
+
 void DrawHeroBar(const Surface &out, Point topLeft, const OverheadBarValues &values, bool showEnergyShield)
 {
+	const OverheadBarShades &shades = GetOverheadBarShades();
 	const int inner = HeroBarWidth - 2;
-	DrawFrame(out, topLeft, HeroBarWidth, HeroBarHeight, HeroBarFrameColor);
+	DrawHeroFrame(out, topLeft);
 	const Point life = topLeft + Displacement { 1, 1 };
-	FillRows(out, life, OverheadBarFill(values.life, values.maxLife, inner), HeroLifeRows, OverheadBarLifeColor);
-	// POE2 lays the Energy Shield over the top of the life bar.
-	if (showEnergyShield && values.maxEnergyShield > 0)
-		FillRows(out, life, OverheadBarFill(values.energyShield, values.maxEnergyShield, inner), HeroEnergyShieldRows, OverheadBarEnergyShieldColor);
+	const int lifeWidth = OverheadBarFill(values.life, values.maxLife, inner);
+	FillShadedRows(out, life, lifeWidth, shades.life, LifeTargets);
+	// POE2 washes the Energy Shield over the whole height of the life bar, from the left.
+	if (showEnergyShield && values.maxEnergyShield > 0) {
+		const int shieldWidth = OverheadBarFill(values.energyShield, values.maxEnergyShield, inner);
+		FillShadedRows(out, life, std::min(shieldWidth, lifeWidth), shades.energyShield, EnergyShieldTargets);
+		if (shieldWidth > lifeWidth)
+			FillShadedRows(out, life + Displacement { lifeWidth, 0 }, shieldWidth - lifeWidth, shades.energyShieldOverEmpty, EnergyShieldOverEmptyTargets);
+	}
 	const Point mana = life + Displacement { 0, HeroLifeRows + 1 };
-	FillRows(out, mana, OverheadBarFill(values.mana, values.maxMana, inner), HeroManaRows, OverheadBarManaColor);
+	FillShadedRows(out, mana, OverheadBarFill(values.mana, values.maxMana, inner), shades.mana, ManaTargets);
 }
 
 void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite sprite)

@@ -32,7 +32,20 @@ struct BossLootTable {
 	std::vector<BossUniqueEntry> pool;
 };
 
+/**
+ * @brief How far a boss unique's drop level may be above the boss's POE2 item level (its area level plus the boss bonus)
+ * and still drop from it (Curtis, Rogue run 2: the Butcher dropped Iron Testament, drop level 70, at character level 5).
+ */
+constexpr int BossUniqueLevelSlack = 3;
+
 const std::vector<BossLootTable> &BossLootTables();
+/** @brief A boss unique's POE2 drop level, or 0 when the game has no unique of that name. */
+int BossUniqueDropLevel(std::string_view unique);
+/**
+ * @brief The entries of the boss's table it may drop at this POE2 item level: those whose drop level is at most
+ * BossUniqueLevelSlack above it. Empty for an early boss whose uniques are endgame ones.
+ */
+std::vector<BossUniqueEntry> BossUniquesAt(const BossLootTable &table, int bossItemLevel);
 /** @brief The boss table the monster plays, or nullptr. */
 const BossLootTable *BossLootTableFor(const Monster &monster);
 

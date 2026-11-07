@@ -110,6 +110,8 @@ set(poe2_mod
   txtdata/poe2/cathedral_rooms.tsv
   txtdata/poe2/experience_bosses.tsv
   txtdata/poe2/experience_level_gap.tsv
+  txtdata/poe2/loot_filter_items.tsv
+  txtdata/poe2/loot_filter_styles.tsv
   txtdata/poe2/map_icons.tsv
   txtdata/poe2/monster_experience.tsv
   txtdata/poe2/monster_bosses.tsv

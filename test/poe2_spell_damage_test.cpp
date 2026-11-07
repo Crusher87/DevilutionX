@@ -20,6 +20,7 @@
 #include "poe2/spell_base.hpp"
 #include "poe2/spell_damage.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
@@ -95,14 +96,16 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 	EXPECT_EQ(SpellDamagePercent(SpellID::Firebolt), 80);
 	EXPECT_EQ(SpellSplashPercent(SpellID::Firebolt), 25);
 	EXPECT_EQ(SpellDamagePercent(SpellID::HolyBolt), 165);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Lightning), 135);
+	// Q30 (Curtis 2026-11-07): Lightning tier V to III (x0.78), Fireball IX to VII (120 -> 105), Elemental IX to XI (220 -> 250).
+	EXPECT_EQ(SpellDamagePercent(SpellID::Lightning), 105);
 	// Curtis 2026-10-28 (audit-casters-v3.md): Charged Bolt 50 -> 120 a bolt, as only about 1.4 of its bolts land;
 	// then 70 with Firebolt (Q27).
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 70);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Flash), 110);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 120);
+	// Q43 (Curtis 2026-11-07): Fireball 105 -> 90.
+	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 90);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChainLightning), 400);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Elemental), 220);
+	EXPECT_EQ(SpellDamagePercent(SpellID::Elemental), 250);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Immolation), 160);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Nova), 200);
 	EXPECT_EQ(SpellDamageHits(SpellID::Nova), 5);
@@ -155,12 +158,12 @@ TEST_F(Poe2SpellDamageTest, NoTwelvePointFivePercentStacking)
 	EXPECT_EQ(GemDamagePercent(fireball, 1), 187);
 	EXPECT_EQ(GemDamagePercent(fireball, 20), 312 * 187 / 100);
 
-	// A level 20 Fireball's missile is the base times 120%, with no 1.125^20 on top.
+	// A level 20 Fireball's missile is the base times 90%, with no 1.125^20 on top.
 	const Player &player = *MyPlayer;
 	for (uint32_t seed = 1; seed < 30; seed++) {
 		const Missile &ball = Cast(MissileID::Fireball, 20, seed);
-		EXPECT_GE(ball._midam, Percent(SpellBaseMin(player, 20), 120));
-		EXPECT_LE(ball._midam, Percent(SpellBaseMax(player, 20), 120));
+		EXPECT_GE(ball._midam, Percent(SpellBaseMin(player, 20), 90));
+		EXPECT_LE(ball._midam, Percent(SpellBaseMax(player, 20), 90));
 	}
 }
 
@@ -185,6 +188,22 @@ TEST_F(Poe2SpellDamageTest, CharacterLevelDoesNotChangeSpells)
 	}
 	for (size_t i = 0; i < std::size(Types); i++)
 		EXPECT_EQ(Cast(Types[i], 5, 11)._midam, rolled[i]) << static_cast<int>(Types[i]);
+}
+
+// Q30 (Curtis 2026-11-07): Inferno moved from tier V to III and Lightning Wall from VII to V; their Diablo formulas are
+// scaled by 76/95 and 95/114 to keep their score.
+TEST_F(Poe2SpellDamageTest, InfernoAndLightningWallScaleForTheirNewTiers)
+{
+	EXPECT_EQ(InfernoDamagePercent, 80);
+	EXPECT_EQ(LightningWallDamagePercent, 83);
+	for (const int level : { 1, 10, 20 }) {
+		const DamageRange inferno = GetDamageAmt(SpellID::Inferno, level);
+		EXPECT_EQ(inferno.max, ((level + 4) + ((level + 4) / 2)) * 80 / 100) << level;
+		const DamageRange wall = GetDamageAmt(SpellID::LightningWall, level);
+		const DamageRange fireWall = GetDamageAmt(SpellID::FireWall, level);
+		EXPECT_EQ(wall.min, fireWall.min * 83 / 100) << level;
+		EXPECT_EQ(wall.max, fireWall.max * 83 / 100) << level;
+	}
 }
 
 TEST_F(Poe2SpellDamageTest, TooltipMatchesRoll)
@@ -218,6 +237,48 @@ TEST_F(Poe2SpellDamageTest, ChainLightningBoltsCarryTheirHitAndCurve)
 		EXPECT_EQ(missile.poe2.damagePercent, 150);
 	}
 	EXPECT_EQ(bolts, 1);
+}
+
+// Q34 (Curtis 2026-11-07): Arcing Sparks merged into Charged Bolt. From gem level 10 each cast also throws two sparks
+// that pierce, each rolling Spark's row (60% of the spell base), credited to Charged Bolt.
+TEST_F(Poe2SpellDamageTest, ChargedBoltThrowsArcingSparksFromLevelTen)
+{
+	Player &player = *MyPlayer;
+	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 60);
+	const auto sparks = [] {
+		int count = 0;
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype == MissileID::ChargedBolt && missile.poe2.look == vfx::ArcingSparkLook)
+				count++;
+		}
+		return count;
+	};
+	Missiles.clear();
+	EXPECT_EQ(FireChargedBoltSparks(player, { 45, 40 }, ChargedBoltSparksGemLevel - 1), 0);
+	EXPECT_EQ(sparks(), 0);
+	SetRndSeed(3);
+	EXPECT_EQ(FireChargedBoltSparks(player, { 45, 40 }, ChargedBoltSparksGemLevel), ChargedBoltSparks);
+	EXPECT_EQ(sparks(), 2);
+	for (const Missile &missile : Missiles) {
+		EXPECT_TRUE(vfx::IsArcingSpark(missile));
+		EXPECT_EQ((SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId }), SkillSlot::ForSpell(SpellID::ChargedBolt));
+		EXPECT_GE(missile.poe2.piercesLeft, PierceCount);
+		// Q43: 25% of a spell base each, from Spark's 60% roll.
+		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, ChargedBoltSparksGemLevel), 60) * ChargedBoltSparkPercent / 60, 1));
+		EXPECT_LE(missile._midam, std::max(Percent(SpellBaseMax(player, ChargedBoltSparksGemLevel), 60) * ChargedBoltSparkPercent / 60, 1));
+	}
+}
+
+// Q34 (Curtis 2026-11-07): Ring of Fire merged into Fire Wall: cast on the hero's own tile it makes the ring; aimed at
+// a monster beside them it's the normal wall (Q42).
+TEST_F(Poe2SpellDamageTest, FireWallAtYourFeetMakesTheRing)
+{
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 40, 40 }), MissileID::RingOfFire);
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 41, 41 }), MissileID::FireWallControl);
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 42, 40 }), MissileID::FireWallControl);
+	gbIsPoe2 = false;
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 40, 40 }), MissileID::FireWallControl);
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2SpellDamageTest, ArcingSparksBesideAWallTurnAlongIt)

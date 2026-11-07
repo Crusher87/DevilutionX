@@ -130,7 +130,8 @@ GemCurve AttackCurve(WeaponSkill skill)
 		return { &Boneshatter, 100, UtilitySpellManaAt20, false, "curses: +1% physical damage taken a level" };
 	default:
 		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr) {
-			const bool utility = IsAnyOf(table->shape, TableShape::Curse, TableShape::Buff);
+			// Haunt and Locust Swarm deal damage: their mana grows like the other damaging spells' (Q41).
+			const bool utility = IsAnyOf(table->shape, TableShape::Curse, TableShape::Buff) && IsNoneOf(table->curse, TableCurse::Haunt, TableCurse::Locust);
 			return { TableCurveGem(table->curve), table->curveEnd, utility ? UtilitySpellManaAt20 : ManaAt20, false, "from the skill table: a POE2 gem's steps" };
 		}
 		return { &Boneshatter, 100, 100, false, {} };

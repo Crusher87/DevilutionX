@@ -148,6 +148,9 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	// The first support gem's flag and drought (version 26), and shards counted the old way, which become items.
 	player.poe2.economy.supportGemDropped = true;
 	player.poe2.economy.supportDroughtKills = 7;
+	// The first uncut skill gem's flag and drought (version 28).
+	player.poe2.economy.skillGemDropped = false;
+	player.poe2.economy.skillDroughtKills = 9;
 	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] = 4;
 	const int chanceShardsBefore = ShardsInBag(player, ShardKind::Chance);
 	pfile_write_hero(/*writeGameData=*/false);
@@ -174,6 +177,8 @@ TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
 	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalMages), StartingMinionCount(PersistentSkill::SkeletalMages));
 	EXPECT_TRUE(player.poe2.economy.supportGemDropped);
 	EXPECT_EQ(player.poe2.economy.supportDroughtKills, 7);
+	EXPECT_FALSE(player.poe2.economy.skillGemDropped);
+	EXPECT_EQ(player.poe2.economy.skillDroughtKills, 9);
 	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 0);
 	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), chanceShardsBefore + 4) << "counted shards are items in the bag now";
 

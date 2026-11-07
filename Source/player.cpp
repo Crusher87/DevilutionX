@@ -922,6 +922,8 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
 	PlaySkillEffects(player, skill, player.position.tile + player._pdir);
 	OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
+	// Leap Slam and Shield Charge shatter the hero's Shield Wall where they land (Curtis 2026-11-07, Q37).
+	ShatterShieldWall(player, player.position.tile + player._pdir);
 	for (int i = 0; i < 8; i++) {
 		const auto dir = static_cast<Direction>(i);
 		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
@@ -997,6 +999,9 @@ bool DoAttack(Player &player)
 			}
 		}
 
+		// POE2 Mashup: Wave of Light's bell tolls when a swing lands on it (Curtis 2026-11-07, Q38).
+		StrikeWaveBell(player, position);
+
 		// POE2 Mashup: the weapon's swing and sparks where it lands. It follows the hero's animation: an axe or mace
 		// comes down from overhead. The weapon's strongest added element only flickers faintly along the swing and on
 		// the cut (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"). Skills with their own swing draw
@@ -1062,6 +1067,9 @@ bool DoAttack(Player &player)
 			const Point origin = player.position.tile;
 			const Point primary = origin + player._pdir;
 			const int reach = skill == WeaponSkill::GroundSlam ? GroundSlamReach : WhirlingStaffReach;
+			// Ground Slam shatters the hero's Shield Wall in front (Curtis 2026-11-07, Q37).
+			if (skill == WeaponSkill::GroundSlam)
+				ShatterShieldWall(player, primary);
 			for (int dy = -reach; dy <= reach; dy++) {
 				for (int dx = -reach; dx <= reach; dx++) {
 					position = origin + Displacement { dx, dy };
@@ -3600,6 +3608,7 @@ void ProcessPlayers()
 				ProcessSkillZones(player);
 				ProcessSupportEffects(player);
 			}
+			ProcessDashLooks(player);
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
 				// It lands the moment the hero stands at the dash's end, not after the dodge's last ticks run out

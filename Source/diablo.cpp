@@ -2388,6 +2388,20 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    CanPlayerTakeAction);
+	// POE2 Mashup: H turns the whole HD look (the upscaled art, its in-betweens, HD Lighting and the moods, which all
+	// ride on it) on or off at once (Curtis 2026-11-07). In the passive tree H is still the heat map.
+	options.Keymapper.AddAction(
+	    "ToggleHD",
+	    N_("HD on/off"),
+	    N_("Turns the HD art, smoothing and lighting on or off."),
+	    'H',
+	    [] {
+		    OptionEntryBoolean &hd = GetOptions().Graphics.hdGraphics;
+		    hd.SetValue(!*hd);
+		    EventPlrMsg(*hd ? _("HD on") : _("HD off"));
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
 	options.Keymapper.AddAction(
 	    "PauseGame",
 	    N_("Pause Game"),
@@ -3263,6 +3277,7 @@ bool TryIconCurs()
 			Item &item = Stash.stashList[pcursstashitem];
 			item._iIdentified = true;
 			Stash.dirty = true;
+			TelemetryItemAction(myPlayer, "identify", item, "scroll or spell, in the stash");
 		}
 		NewCursor(CURSOR_HAND);
 		return true;
@@ -3360,6 +3375,7 @@ void diablo_pause_game()
 			qtextflag = false;
 			LastPlayerAction = PlayerActionType::None;
 		}
+		TelemetryPauseChanged("pause key");
 
 		RedrawEverything();
 	}
@@ -3391,6 +3407,7 @@ void diablo_focus_pause()
 		PauseMode = 2;
 		sound_stop();
 		LastPlayerAction = PlayerActionType::None;
+		TelemetryPauseChanged("window lost focus");
 	}
 
 	SVidMute();
@@ -3403,6 +3420,7 @@ void diablo_focus_unpause()
 {
 	if (!GameWasAlreadyPaused) {
 		PauseMode = 0;
+		TelemetryPauseChanged("window got focus");
 	}
 
 	SVidUnmute();
@@ -3703,6 +3721,7 @@ std::expected<void, std::string> LoadGameLevelTown(bool firstflag, lvl_entry lvl
 		}
 	}
 
+	ClearObjectsForTown();
 	InitTowners();
 	InitStash();
 	InitVisualStore();

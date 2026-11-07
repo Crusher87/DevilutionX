@@ -92,8 +92,8 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	// 181 before the five crossbow skills were retired (Curtis 2026-10-27); 177 with Despair, 180 with Cleansing, Plague Arrow and Hex Rupture, 183 with Bone Spikes, Bone Spear and Blood Nova, 194 with the poison skills plan's eleven.
-	EXPECT_EQ(skills, 194U);
+	// 181 before the five crossbow skills were retired (Curtis 2026-10-27); 177 with Despair, 180 with Cleansing, Plague Arrow and Hex Rupture, 183 with Bone Spikes, Bone Spear and Blood Nova, 194 with the poison skills plan's eleven, 187 with pass 4's seven retired.
+	EXPECT_EQ(skills, 187U);
 	// Lineage supports are found, never cut; the rest have an entry for each tier.
 	size_t tiers = 0;
 	for (size_t i = 1; i < static_cast<size_t>(SupportGem::Count); i++) {
@@ -124,6 +124,119 @@ TEST_F(Poe2GemcuttingTest, CategoriesFollowWeapons)
 	EXPECT_TRUE(GemInCategory(find(SkillSlot::ForSpell(SpellID::BoneSpirit)), GemCategory::Occult));
 	EXPECT_TRUE(GemInCategory(find(SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh)), GemCategory::Spirit));
 	EXPECT_FALSE(GemInCategory(find(SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh)), GemCategory::Support));
+}
+
+// Pass 4 tier moves (Curtis 2026-11-07, Q30, Q31, Q35 and his Workshop layout): each gem sits at the lowest level of its
+// new tier, and the gem item's level, attribute need and price follow it.
+TEST_F(Poe2GemcuttingTest, PassFourTierMoves)
+{
+	const auto find = [](SkillSlot skill) -> const GemEntry * {
+		for (const GemEntry &gem : GemCatalog()) {
+			if (gem.skill == skill)
+				return &gem;
+		}
+		return nullptr;
+	};
+	const std::pair<SkillSlot, int> Tiers[] = {
+		{ SkillSlot::ForSpell(SpellID::Inferno), 3 },
+		{ SkillSlot::ForSpell(SpellID::Lightning), 3 },
+		{ SkillSlot::ForSpell(SpellID::LightningWall), 5 },
+		{ SkillSlot::ForSpell(SpellID::Fireball), 7 },
+		{ SkillSlot::ForSpell(SpellID::Teleport), 9 },
+		{ SkillSlot::ForSpell(SpellID::Elemental), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::GlacialSpike), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Thunderstorm), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::FrozenOrb), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::Meteor), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::CorpseExplosion), 7 },
+		{ SkillSlot::ForAttack(WeaponSkill::IronMaiden), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::HexRupture), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::BoneSpear), 7 },
+		{ SkillSlot::ForAttack(WeaponSkill::Despair), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Attract), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::LashingTailKick), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Shockwave), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::DoubleThrow), 1 },
+		{ SkillSlot::ForAttack(WeaponSkill::CallOfTheAncients), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Zeal), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::ArkainesWrath), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::FallingSword), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::ShieldBash), 1 },
+		{ SkillSlot::ForAttack(WeaponSkill::ShieldCharge), 3 },
+	};
+	constexpr int Lowest[] = { 0, 1, 0, 3, 0, 6, 0, 10, 0, 15, 0, 20, 0, 25 };
+	for (const auto &[skill, tier] : Tiers) {
+		const GemEntry *gem = find(skill);
+		ASSERT_NE(gem, nullptr) << SkillName(skill);
+		EXPECT_EQ(GemTier(gem->level), tier) << SkillName(skill);
+		EXPECT_EQ(gem->level, Lowest[tier]) << SkillName(skill);
+		const ItemData &data = AllItemsList[gem->itemIndex];
+		EXPECT_EQ(data.iValue, 450 + (130 * gem->level)) << SkillName(skill);
+		// A spell gem's Magic is its spell's; the others need 18 + 3 a level of the attribute they use.
+		if (skill.kind == SkillKind::Attack)
+			EXPECT_EQ(static_cast<int>(std::max({ data.iMinStr, data.iMinMag, data.iMinDex })), 18 + (3 * gem->level)) << SkillName(skill);
+	}
+}
+
+// Q30 (Curtis 2026-11-07): Nova shows under Elemental, the Elemental spell under Occult, Lower Resist under Elemental only.
+TEST_F(Poe2GemcuttingTest, PassFourSpellTabs)
+{
+	EXPECT_EQ(SpellGemCategory(SpellID::Nova), GemCategory::Elemental);
+	EXPECT_EQ(SpellGemCategory(SpellID::Elemental), GemCategory::Occult);
+	EXPECT_EQ(SpellGemCategory(SpellID::Fireball), GemCategory::Elemental);
+	EXPECT_EQ(SpellGemCategory(SpellID::BoneSpirit), GemCategory::Occult);
+	for (const GemEntry &gem : GemCatalog()) {
+		if (gem.skill != SkillSlot::ForAttack(WeaponSkill::LowerResist))
+			continue;
+		EXPECT_TRUE(GemInCategory(gem, GemCategory::Elemental));
+		EXPECT_FALSE(GemInCategory(gem, GemCategory::Occult));
+	}
+}
+
+// Part B (Curtis's Workshop layout, 2026-10-22 and 11-06): the dagger gems move from Sword to a Dagger tab (Death Mark
+// loses its Occult tab); Double Swing shows in Sword and Dagger, Cleave in Dagger too. The healing, movement and ward
+// spells and the runes move from Occult to an Arcane tab.
+TEST_F(Poe2GemcuttingTest, DaggerAndArcaneTabs)
+{
+	const auto entry = [](SkillSlot skill) -> const GemEntry * {
+		for (const GemEntry &gem : GemCatalog()) {
+			if (gem.skill == skill)
+				return &gem;
+		}
+		return nullptr;
+	};
+	for (const WeaponSkill skill : { WeaponSkill::PoisonDagger, WeaponSkill::ShadowStep, WeaponSkill::FanOfBlades, WeaponSkill::ViperStrike, WeaponSkill::BladeSentinel,
+	         WeaponSkill::DeathMark, WeaponSkill::BladeFury, WeaponSkill::AcidFlask, WeaponSkill::VenomSentry }) {
+		const GemEntry *gem = entry(SkillSlot::ForAttack(skill));
+		ASSERT_NE(gem, nullptr) << WeaponSkillName(skill);
+		EXPECT_TRUE(GemInCategory(*gem, GemCategory::Dagger)) << WeaponSkillName(skill);
+		EXPECT_FALSE(GemInCategory(*gem, GemCategory::Sword)) << WeaponSkillName(skill);
+		EXPECT_FALSE(GemInCategory(*gem, GemCategory::Occult)) << WeaponSkillName(skill);
+		EXPECT_TRUE(AttackOnWeaponTab(skill)) << WeaponSkillName(skill);
+	}
+	for (const WeaponSkill skill : { WeaponSkill::Flurry, WeaponSkill::Cleave }) {
+		const GemEntry *gem = entry(SkillSlot::ForAttack(skill));
+		ASSERT_NE(gem, nullptr);
+		EXPECT_TRUE(GemInCategory(*gem, GemCategory::Sword)) << WeaponSkillName(skill);
+		EXPECT_TRUE(GemInCategory(*gem, GemCategory::Dagger)) << WeaponSkillName(skill);
+	}
+	EXPECT_EQ(GemCategoryName(GemCategory::Dagger), "Dagger");
+	EXPECT_EQ(GemCategoryName(GemCategory::Arcane), "Arcane");
+
+	for (const SpellID spell : { SpellID::Healing, SpellID::ManaShield, SpellID::Phasing, SpellID::Teleport, SpellID::Warp, SpellID::Etherealize, SpellID::RuneOfFire,
+	         SpellID::RuneOfLight, SpellID::RuneOfStone, SpellID::RuneOfNova, SpellID::RuneOfImmolation }) {
+		EXPECT_EQ(SpellGemCategory(spell), GemCategory::Arcane) << static_cast<int>(spell);
+		if (const GemEntry *gem = entry(SkillSlot::ForSpell(spell)); gem != nullptr) {
+			EXPECT_TRUE(GemInCategory(*gem, GemCategory::Arcane));
+			EXPECT_FALSE(GemInCategory(*gem, GemCategory::Occult));
+		}
+	}
+	EXPECT_EQ(SpellGemCategory(SpellID::BoneSpirit), GemCategory::Occult);
+	EXPECT_EQ(SpellGemCategory(SpellID::Fireball), GemCategory::Elemental);
+	// A skill gem being cut shows the new tabs.
+	const std::vector<GemCategory> skillTabs = GemcuttingTabs(UncutKind::Skill);
+	EXPECT_NE(std::find(skillTabs.begin(), skillTabs.end(), GemCategory::Dagger), skillTabs.end());
+	EXPECT_NE(std::find(skillTabs.begin(), skillTabs.end(), GemCategory::Arcane), skillTabs.end());
 }
 
 TEST_F(Poe2GemcuttingTest, CrossbowSkillsMovedToBowsOrRetired)
@@ -179,6 +292,36 @@ TEST_F(Poe2GemcuttingTest, CrossbowSkillsMovedToBowsOrRetired)
 	for (const GemEntry &gem : GemCatalog()) {
 		if (GemInCategory(gem, GemCategory::Bow))
 			EXPECT_TRUE(ItemAllowsWeaponSkill(*bow, gem.skill.attack())) << GemName(gem);
+	}
+}
+
+// Pass 4 (Curtis 2026-11-07): the spells that copy Spirit gems (Q33), the Sorcerer skills merged into others (Q34) and
+// Berserk (Q36) are never cut, but a gem a hero already has still has its item and loads.
+TEST_F(Poe2GemcuttingTest, PassFourRetiredGems)
+{
+	const auto inCatalog = [](SkillSlot skill) {
+		return std::any_of(GemCatalog().begin(), GemCatalog().end(), [skill](const GemEntry &gem) { return gem.skill == skill; });
+	};
+	const SkillSlot Retired[] = {
+		SkillSlot::ForSpell(SpellID::Guardian),
+		SkillSlot::ForSpell(SpellID::Golem),
+		SkillSlot::ForSpell(SpellID::Reflect),
+		SkillSlot::ForSpell(SpellID::RingOfFire),
+		SkillSlot::ForSpell(SpellID::Berserk),
+		SkillSlot::ForAttack(WeaponSkill::Spark),
+		SkillSlot::ForAttack(WeaponSkill::EmberFusillade),
+	};
+	for (const SkillSlot skill : Retired) {
+		EXPECT_TRUE(IsRetiredSkill(skill)) << SkillName(skill);
+		EXPECT_FALSE(inCatalog(skill)) << SkillName(skill);
+		const std::optional<size_t> index = SkillGemItemIndex(skill);
+		ASSERT_TRUE(index.has_value()) << SkillName(skill);
+		EXPECT_EQ(AllItemsList[*index].dropRate, 0) << SkillName(skill);
+	}
+	// The Spirit gems they copied, Fire Wall and Charged Bolt stay.
+	for (const SkillSlot skill : { SkillSlot::ForPersistent(PersistentSkill::SummonGolem), SkillSlot::ForSpell(SpellID::FireWall), SkillSlot::ForSpell(SpellID::ChargedBolt), SkillSlot::ForSpell(SpellID::Firebolt) }) {
+		EXPECT_FALSE(IsRetiredSkill(skill)) << SkillName(skill);
+		EXPECT_TRUE(inCatalog(skill)) << SkillName(skill);
 	}
 }
 

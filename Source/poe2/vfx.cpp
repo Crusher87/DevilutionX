@@ -27,6 +27,7 @@
 #include "engine/size.hpp"
 #include "engine/surface.hpp"
 #include "headless_mode.hpp"
+#include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
@@ -37,6 +38,7 @@
 #include "player.h"
 #include "poe2/camera_shake.hpp"
 #include "poe2/floor_chests.hpp"
+#include "poe2/loot_filter.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_looks.hpp"
@@ -318,6 +320,10 @@ enum class SpikeKind : uint8_t {
 	Effigy,
 	/** @brief A squat iron gas canister (Venom Sentry). */
 	Canister,
+	/** @brief A jagged slab of rock thrust up out of the floor (Shield Wall). */
+	Earth,
+	/** @brief A great golden bell of light standing on the floor (Wave of Light's bell). */
+	Bell,
 };
 
 /** @brief The colours of what bursts out of the ground other than ice: its shadowed side, its face, its lit side, the earth at its foot. */
@@ -338,6 +344,10 @@ SpikePalette PaletteOf(SpikeKind kind)
 		return { { 64, 92, 18 }, { 140, 182, 48 }, { 214, 240, 120 }, { 48, 54, 20 }, { 172, 214, 70 }, { 80, 120, 24 }, { 130, 170, 50 }, { 70, 96, 30 }, { 40, 52, 14 }, { 30, 40, 12 } };
 	case SpikeKind::Effigy:
 		return { { 36, 26, 18 }, { 84, 62, 42 }, { 134, 106, 74 }, { 40, 32, 22 }, { 96, 74, 50 }, { 50, 38, 26 }, { 96, 90, 60 }, { 56, 52, 34 }, { 38, 34, 22 }, { 28, 26, 16 } };
+	case SpikeKind::Bell:
+		return { { 120, 86, 24 }, { 214, 170, 64 }, { 255, 238, 160 }, { 70, 58, 30 }, { 255, 226, 130 }, { 190, 150, 60 }, { 255, 240, 190 }, { 200, 170, 90 }, { 60, 50, 30 }, { 40, 34, 20 } };
+	case SpikeKind::Earth:
+		return { { 46, 40, 34 }, { 104, 92, 78 }, { 160, 148, 128 }, { 52, 44, 34 }, { 128, 116, 98 }, { 70, 62, 52 }, { 130, 120, 102 }, { 80, 72, 60 }, { 44, 38, 30 }, { 30, 26, 20 } };
 	case SpikeKind::Canister:
 		return { { 34, 36, 38 }, { 80, 84, 86 }, { 150, 156, 158 }, { 40, 40, 34 }, { 120, 126, 128 }, { 60, 62, 64 }, { 120, 160, 60 }, { 60, 84, 30 }, { 40, 44, 30 }, { 30, 32, 24 } };
 	default:
@@ -418,6 +428,19 @@ struct Beam {
 };
 
 std::vector<Beam> Beams;
+
+/** @brief A loot filter beam: a steady column of light over a good item on the ground, this frame. */
+struct LootBeamFx {
+	Vec pos;
+	Rgb colour;
+	float alpha;
+	/** @brief Its own shimmer, so no two beams pulse together. */
+	float phase;
+};
+
+std::vector<LootBeamFx> LootBeams;
+/** @brief When each ground item on the level was first in sight, for the beams that show only for a while (by item seed). */
+std::unordered_map<uint32_t, float> LootSeenAt;
 
 constexpr int RitualRunes = 15;
 // The level-up circle's timeline, in ms from the start.
@@ -548,6 +571,8 @@ enum class Ambient : uint8_t {
 	Embers,
 	/** @brief POE2 Mashup: a burning stake's big fire: a column of slow embers and soft smoke (Curtis 2026-10-29). */
 	Bonfire,
+	/** @brief POE2 Mashup: a small flame on the burning cross's wood, licking up off it (Curtis, Rogue run 2). */
+	CrossFlame,
 };
 
 /** @brief A flame or a patch of lava or water on screen, found anew each frame. */
@@ -1026,6 +1051,17 @@ Vec ArrowTip(const Missile &missile)
 	return MissileCentre(missile) + Tips[std::clamp(missile._miAnimFrame - 1, 0, 15)];
 }
 
+bool IsArrowGraphic(MissileGraphicID graphic)
+{
+	return IsAnyOf(graphic, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
+}
+
+/** @brief Where a flying missile's glow and trail start: an arrow's tip, or the centre of a bolt or ball. */
+Vec HeadOf(const Missile &missile)
+{
+	return IsArrowGraphic(missile._miAnimType) ? ArrowTip(missile) : MissileCentre(missile);
+}
+
 struct GraphicLook {
 	Element element;
 	/** @brief 0: not an effect of ours; otherwise the burst's size when it appears. */
@@ -1127,6 +1163,14 @@ void SparksAt(Vec pos, Element element, float size)
 	Spray(pos + Vec { 0, -16 }, Scaled(14 * size), 120, 320 * size, 100, 260, Shape::Streak, core, mid, 1.5F, 0.5F, 30, 140, 500, 1.5F, 1);
 }
 
+/** @brief Steel striking (a sword, an axe, an arrowhead): a brief pale flash and a few short white-grey sparks off the edge. */
+void SteelHitAt(Vec pos)
+{
+	const Vec at = pos + Vec { 0, -16 };
+	AddRing(at, 0, 11, 70, 0, { 240, 238, 232 }, 0.45F, true, false);
+	Spray(at, Scaled(6), 90, 230, 70, 150, Shape::Streak, { 250, 248, 242 }, { 150, 148, 145 }, 1.2F, 0.4F, 30, 120, 500, 2.F, 0.8F);
+}
+
 /** @brief The trail particles a projectile leaves behind it each frame. */
 void EmitTrail(Trail &trail, Vec head, float ms)
 {
@@ -1147,6 +1191,42 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 			p.size1 = 0.5F;
 			p.drag = 3.F;
 			p.alpha = 0.7F;
+			AddParticle(p);
+		}
+		return;
+	}
+	if (trail.arrow && trail.element == Element::Poison) {
+		// Venom clinging to the arrowhead: beads that wink out within a few frames and now and then a drop falling off the
+		// tip, so the green stays on the head with only a short, faint streak behind it. The general poison trail's drips
+		// started above the arrow and lived half a second, and its vapour almost a second: a fast arrow left them strewn
+		// far behind and beside it (Curtis, Rogue run 2: the green should be "closer to the tip of the arrow").
+		trail.emit += 60 * Intensity() * ms / 1000.F;
+		while (trail.emit >= 1) {
+			trail.emit -= 1;
+			Particle p;
+			p.c0 = c.core;
+			p.c1 = c.mid;
+			if (NextRandom() % 4 == 0) {
+				// A drop forms on the tip and falls a few pixels before it's gone.
+				const float fall = Random(6, 10);
+				p.pos = head + Vec { Random(-1, 1), fall };
+				p.z = fall;
+				p.vz = -50;
+				p.gravity = 300;
+				p.life = Random(60, 100);
+				p.size0 = 1.6F;
+				p.size1 = 1.1F;
+				p.c0 = c.mid;
+				p.c1 = c.edge;
+				p.alpha = 0.8F;
+			} else {
+				p.pos = head + Vec { Random(-1.5F, 1.5F), Random(-1, 1) };
+				p.vel = { Random(-6, 6), Random(-3, 3) };
+				p.life = Random(40, 80);
+				p.size0 = 1.8F;
+				p.size1 = 0.5F;
+				p.alpha = 0.55F;
+			}
 			AddParticle(p);
 		}
 		return;
@@ -1996,6 +2076,77 @@ void AddBonfire(const Object &object, int16_t id, Vec corner, const std::vector<
 	Emitters.push_back(emitter);
 }
 
+/** @brief A beam of the burning cross in its sprite (burncros), in pixels from the sprite's top left. */
+struct CrossBeam {
+	Point from;
+	Point to;
+};
+
+/** @brief The size of the burning cross's sprite, the same in all its frames; the beams below are measured off it. */
+constexpr int CrossSpriteSize = 160;
+/**
+ * @brief The cross's wood in the sprite, a dark shape in its blaze: the upright stands at x 78 from the ground (y 135) up
+ * to its top (y 80), and the bar crosses it low, running down the isometric slope from (62, 114) to (98, 131).
+ */
+constexpr std::array<CrossBeam, 2> CrossBeams { { { { 78, 135 }, { 78, 80 } }, { { 62, 114 }, { 98, 131 } } } };
+/** @brief How far apart the flames sit along the wood, in sprite pixels. */
+constexpr int CrossFlameSpacing = 6;
+
+/**
+ * @brief POE2 Mashup: small flames along the burning cross's upright and bar, hugging its shape (Curtis, Rogue run 2: the
+ * one big bonfire glow "looks like you threw a special effect on top of it without blending it at all"). Each flame
+ * flickers on its own with a small warm light; one soft glow ties them into the sprite's own blaze, and the firelight
+ * lies on the floor round it.
+ */
+void AddBurningCross(const Object &object, int16_t id, Vec corner, int spriteHeight, uint32_t seed)
+{
+	const Vec topLeft = corner - Vec { 0, static_cast<float>(spriteHeight - 1) };
+	const std::vector<Point> &flames = BurningCrossFlames();
+	for (size_t i = 0; i < flames.size(); i++) {
+		const uint32_t flameSeed = (seed + static_cast<uint32_t>(i) * 40503U) * 2654435761U;
+		const Vec at = topLeft + Vec { static_cast<float>(flames[i].x), static_cast<float>(flames[i].y) };
+		const float flicker = NaturalFlicker(flameSeed, false);
+		// The flames up the wood burn a little smaller than those at its foot and on the bar.
+		const float size = flames[i].y < 100 ? 0.8F : 1.F;
+		Ring glow;
+		glow.pos = at - Vec { 0, 3 };
+		glow.life = 1;
+		glow.width = 0;
+		glow.disc = true;
+		glow.ground = false;
+		glow.flame = id;
+		glow.r0 = glow.r1 = 10 * size * (0.94F + 0.06F * flicker);
+		glow.colour = { 255, 130, 45 };
+		glow.alpha = 0.15F * flicker;
+		FrameGlows.push_back(glow);
+		glow.r0 = glow.r1 = 3.5F * size;
+		glow.colour = { 255, 205, 130 };
+		glow.alpha = 0.3F * flicker;
+		FrameGlows.push_back(glow);
+		Emitters.push_back({ at, size, Ambient::CrossFlame, { 255, 150, 50 }, 0, id });
+	}
+	const float phase = static_cast<float>(seed % 628) / 100.F;
+	const float breathe = 0.92F + 0.05F * std::sin(AmbientTime * 0.0011F + phase) + 0.07F * (SmoothNoise(seed, AmbientTime * 0.0035F) - 0.5F);
+	Ring glow;
+	glow.life = 1;
+	glow.width = 0;
+	glow.disc = true;
+	glow.ground = false;
+	glow.flame = id;
+	glow.pos = topLeft + Vec { 80, 110 };
+	glow.r0 = glow.r1 = 44 * (0.97F + 0.03F * breathe);
+	glow.colour = { 255, 125, 40 };
+	glow.alpha = 0.16F * breathe;
+	FrameGlows.push_back(glow);
+	glow.pos = TileCentre(object.position);
+	glow.ground = true;
+	glow.flame = -1;
+	glow.r0 = glow.r1 = TileRadius * 2.F;
+	glow.colour = { 255, 140, 50 };
+	glow.alpha = 0.14F * breathe;
+	FrameGlows.push_back(glow);
+}
+
 void ScanFlames(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
@@ -2013,7 +2164,9 @@ void ScanFlames(const View &view)
 		// The grate's fire comes and goes with its frames; the lights keep their flames where the whole animation has them.
 		const std::vector<HotSpot> &spots = object._otype == OBJ_FLAMEHOLE ? FlameSpots(sprite) : SteadyFlameSpots(object);
 		if (IsBonfire(object)) {
-			if (!spots.empty())
+			if (sprite.width() == CrossSpriteSize && sprite.height() == CrossSpriteSize)
+				AddBurningCross(object, static_cast<int16_t>(id), corner, sprite.height(), seed);
+			else if (!spots.empty())
 				AddBonfire(object, static_cast<int16_t>(id), corner, spots, seed);
 			continue;
 		}
@@ -2184,6 +2337,35 @@ void ScanStrongboxes(const View &view)
 		glow.alpha = 0.18F + 0.08F * pulse;
 		FrameGlows.push_back(glow);
 		Emitters.push_back({ feet - Vec { 0, 12 }, 3, Ambient::Motes, { 255, 190, 70 }, 16 });
+	}
+}
+
+/**
+ * @brief The loot filter's beams over good items on the ground in sight (Curtis 2026-11-05), NeverSink's colours. A
+ * "Temp" beam shows only for a few seconds after its item is first seen, fading out at the end.
+ */
+void ScanLoot(const View &view)
+{
+	for (int i = 0; i < ActiveItemCount; i++) {
+		const Item &item = Items[ActiveItems[i]];
+		const Point tile = item.position;
+		// Only in sight: nothing lights up in the dark or behind a wall (Curtis 2026-11-05).
+		if (item.isEmpty() || !InDungeonBounds(tile) || !HasAnyOf(dFlags[tile.x][tile.y], DungeonFlag::Visible) || BehindWall(tile))
+			continue;
+		const Vec feet = TileCentre(tile);
+		if (!view.contains(feet, 300))
+			continue;
+		const uint32_t key = item._iSeed;
+		const auto seen = LootSeenAt.try_emplace(key, AmbientTime).first;
+		const float since = AmbientTime - seen->second;
+		const std::optional<LootRgb> colour = LootBeamColour(item, since);
+		if (!colour)
+			continue;
+		const LootStyle *style = LootFilterStyle(item);
+		float alpha = std::clamp(since / 250.F, 0.F, 1.F);
+		if (style != nullptr && style->beamTemp)
+			alpha *= std::clamp((LootTempBeamMs - since) / 800.F, 0.F, 1.F);
+		LootBeams.push_back({ feet, { colour->r, colour->g, colour->b }, alpha, static_cast<float>(key % 997) });
 	}
 }
 
@@ -2689,6 +2871,44 @@ void EmitAmbient(float ms)
 			for (int i = Occurrences(3, ms); i > 0; i--)
 				Spray(emitter.pos + Vec { Random(-10, 10), Random(-10, 10) }, 2, 40, 110, 150, 300, Shape::Streak, { 255, 230, 160 }, { 220, 90, 20 }, 1.3F, 0.4F, 20, 90, 300, 1.5F, 1);
 			break;
+		case Ambient::CrossFlame: {
+			// Small tongues licking up off the wood, bright at the root and gone a few pixels up, and now and then an
+			// ember rising off it.
+			const float s = emitter.size;
+			for (int i = Occurrences(11 * s, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-3, 3), Random(-1.5F, 1.5F) };
+				p.vel = { Random(-4, 4), 0 };
+				p.vz = Random(16, 34);
+				p.gravity = -10;
+				p.drag = 1.5F;
+				p.life = Random(200, 380);
+				p.size0 = Random(2.2F, 3.4F) * s;
+				p.size1 = 0.5F;
+				p.c0 = { 255, 200, 100 };
+				p.c1 = { 200, 55, 10 };
+				p.alpha = 0.6F;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(0.9F, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-2, 2), 0 };
+				p.vel = { Random(-6, 6), 0 };
+				p.vz = Random(30, 50);
+				p.gravity = -8;
+				p.drag = 0.5F;
+				p.life = Random(900, 1600);
+				p.size0 = Random(1.2F, 1.8F);
+				p.size1 = 0.3F;
+				p.c0 = { 255, 215, 130 };
+				p.c1 = { 210, 70, 15 };
+				p.alpha = 0.9F;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			break;
+		}
 		case Ambient::Bonfire: {
 			// POE2 Mashup: more embers than a torch's, bigger and slower, drifting up in a tall column, with soft
 			// smoke rolling off the top of the flames (Curtis 2026-10-29).
@@ -3053,6 +3273,8 @@ Surface FrontMask()
 void Clear()
 {
 	Particles.clear();
+	LootBeams.clear();
+	LootSeenAt.clear();
 	Rings.clear();
 	Bolts.clear();
 	Sigils.clear();
@@ -3311,6 +3533,48 @@ void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key)
 		fx.crystals.push_back({ at, { Random(-0.25F, 0.25F), 0 }, tall, Random(5, 8), Random(0, 140), { side * Random(10, 22), Random(4, 10) } });
 	}
 	AddBoneSpikes(std::move(fx), 0);
+}
+
+void EarthWall(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "EarthWall", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Earth, tile, static_cast<float>(lifeMs), key);
+	fx.size = 1;
+	// A thick slab of rock in the middle and broken ones leaning on it, the floor heaved up round their foot.
+	fx.crystals.push_back({ { Random(-2, 2), Random(-1, 1) }, { Random(-0.05F, 0.05F), 0 }, Random(58, 66), Random(20, 24), 0 });
+	for (int i = 0; i < 4; i++) {
+		const float side = i % 2 == 0 ? -1.F : 1.F;
+		const float out = Random(10, 18) * (i < 2 ? 1.F : 1.6F);
+		fx.crystals.push_back({ { side * out, Random(-3, 3) }, { side * Random(0.1F, 0.3F), 0 }, Random(28, 44), Random(12, 17), Random(0, 60) });
+	}
+	AddBoneSpikes(std::move(fx), 0);
+	const Vec pos = TileCentre(tile);
+	Spray(pos, Scaled(6), 50, 150, 450, 800, Shape::Chunk, { 110, 98, 82 }, { 60, 52, 42 }, 2.5F, 2, 90, 200, 700, 0.5F, 1);
+}
+
+void Bell(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "Bell", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Bell, tile, static_cast<float>(lifeMs), key);
+	fx.size = 1;
+	// A broad cone of gold, its crown on top, its lip spread on the floor.
+	fx.crystals.push_back({ {}, {}, 84, 46, 0 });
+	fx.crystals.push_back({ { 0, -2 }, {}, 100, 12, 0 });
+	AddBoneSpikes(std::move(fx), 0);
+	Impact(tile, Element::Holy, 1.6F);
+}
+
+void BellToll(Point tile, int radiusTiles)
+{
+	TelemetryEffect("vfx", "BellToll", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	Nova(tile, std::max(radiusTiles, 1), Element::Holy);
+	AddRing(TileCentre(tile), 0, TileRadius * (static_cast<float>(radiusTiles) + 0.5F), 380, 4, { 255, 236, 170 }, 0.7F, false, true, true);
 }
 
 void Pod(Point tile, int lifeMs, uint32_t key)
@@ -4103,6 +4367,16 @@ void ScanMissiles()
 		if (missile._mitype == MissileID::WeaponExplosion)
 			continue;
 		const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);
+		if (IsSteelHit(missile)) {
+			SeenBurst &seen = SeenBursts.try_emplace(&missile, SeenBurst { ScanFrame, false }).first->second;
+			seen.frame = ScanFrame;
+			if (missile._miDrawFlag && !seen.fired) {
+				seen.fired = true;
+				TelemetryEffect("steel hit", magic_enum::enum_name(missile._miAnimType), missile.position.tile.x, missile.position.tile.y);
+				SteelHitAt(TileCentre(missile.position.tile));
+			}
+			continue;
+		}
 		const SkillLook *styled = CurrentSkillLook();
 		GraphicLook look = LookOf(missile._miAnimType);
 		// A skill's bolt or burst on a borrowed graphic takes its skill's look: Bone Spear's and Bone Bolt's on a flare.
@@ -4116,7 +4390,7 @@ void ScanMissiles()
 			if (missile._miDrawFlag && !seen.fired) {
 				seen.fired = true;
 				TelemetryEffect("hit flash", magic_enum::enum_name(missile._miAnimType), missile.position.tile.x, missile.position.tile.y);
-				SparksAt(TileCentre(missile.position.tile), look.element == Element::Lightning && missile._miAnimType == MissileGraphicID::ChargedBolt ? Element::Physical : look.element, 0.8F);
+				SparksAt(TileCentre(missile.position.tile), look.element, 0.8F);
 			}
 			continue;
 		}
@@ -4133,8 +4407,8 @@ void ScanMissiles()
 		}
 		if (!look.projectile || !missile._miDrawFlag)
 			continue;
-		const bool isArrow = IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
-		const Vec head = isArrow ? ArrowTip(missile) : MissileCentre(missile);
+		const bool isArrow = IsArrowGraphic(missile._miAnimType);
+		const Vec head = HeadOf(missile);
 		Trail &trail = Trails[&missile];
 		if (trail.frame == 0) {
 			trail.element = look.element;
@@ -4189,6 +4463,13 @@ void ScanMissiles()
 		if (bone)
 			glow.alpha *= 0.2F;
 		FrameGlows.push_back(glow);
+		if (arrow && look.element == Element::Poison) {
+			// A bead of venom bright on the poison arrow's head, where its glow is.
+			glow.r0 = glow.r1 = 3 * scale;
+			glow.colour = c.core;
+			glow.alpha = 0.6F * std::min(scale, 1.F);
+			FrameGlows.push_back(glow);
+		}
 		if (trail.style == TrailStyle::Orb && !small) {
 			// The orb throbs.
 			glow.r0 = glow.r1 = 30 * scale * (1 + 0.3F * std::sin(AmbientTime * 0.018F + head.x * 0.05F));
@@ -4238,16 +4519,24 @@ void ScanMissiles()
 	std::erase_if(Portals, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 }
 
+bool IsSteelHit(const Missile &missile)
+{
+	return missile._mitype == MissileID::VisualEffect && missile.poe2.vfxElement == static_cast<int8_t>(Element::Physical);
+}
+
 bool IsArcingSpark(const Missile &missile)
 {
 	return missile._miAnimType == MissileGraphicID::ChargedBolt
-	    && SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark);
+	    && (missile.poe2.look == ArcingSparkLook || SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark));
 }
 
 bool ReplacesSprite(const Missile &missile)
 {
 	if (!Enabled() || ScanFrame == 0 || ScanFrame - LastDrawnScan > 2)
 		return false;
+	// A blow of steel is the effects' pale flash alone, not the grey shatter it borrows.
+	if (IsSteelHit(missile))
+		return true;
 	if (missile._mitype == MissileID::VisualEffect)
 		return false;
 	// The portals are drawn whole by the effects, and a weapon's added element shows only faintly on its swing and cut,
@@ -4255,9 +4544,30 @@ bool ReplacesSprite(const Missile &missile)
 	if (IsAnyOf(missile._mitype, MissileID::TownPortal, MissileID::RedPortal, MissileID::WeaponExplosion))
 		return true;
 	// Arrows keep their sprite: the effects only streak and spark them.
-	if (IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow))
+	if (IsArrowGraphic(missile._miAnimType))
 		return false;
 	return LookOf(missile._miAnimType).projectile;
+}
+
+const std::vector<Point> &BurningCrossFlames()
+{
+	static const std::vector<Point> Flames = [] {
+		std::vector<Point> flames;
+		for (const CrossBeam &beam : CrossBeams) {
+			const Displacement span = beam.to - beam.from;
+			const int length = std::max(std::abs(span.deltaX), std::abs(span.deltaY));
+			const int steps = std::max(length / CrossFlameSpacing, 1);
+			for (int step = 0; step <= steps; step++) {
+				const Point at = beam.from + Displacement { span.deltaX * step / steps, span.deltaY * step / steps };
+				// Where the bar crosses the upright, the upright's flame is already there.
+				if (&beam != &CrossBeams[0] && std::abs(at.x - CrossBeams[0].from.x) < 3)
+					continue;
+				flames.push_back(at);
+			}
+		}
+		return flames;
+	}();
+	return Flames;
 }
 
 ClxSprite ObjectSprite(const Object &object)
@@ -4284,6 +4594,7 @@ void ScanWorld(const Surface &world)
 	Emitters.clear();
 	Halos.clear();
 	QuestMarks.clear();
+	LootBeams.clear();
 	if (!Enabled() || world.w() <= 0 || world.h() <= 0)
 		return;
 	const View view { CameraOrigin, CameraOrigin + Vec { static_cast<float>(world.w()), static_cast<float>(world.h()) } * (1 / CameraScale) };
@@ -4292,6 +4603,7 @@ void ScanWorld(const Surface &world)
 	ScanFluids(world, view);
 	ScanMonsters(view);
 	ScanTowners(view);
+	ScanLoot(view);
 }
 
 Colours PortalColours(const PortalFx &portal)
@@ -4770,6 +5082,15 @@ void Advance(float ms)
 size_t ParticleCount()
 {
 	return Particles.size();
+}
+
+float FarthestParticleFrom(const Missile &missile)
+{
+	const Vec head = HeadOf(missile);
+	float farthest = 0;
+	for (const Particle &p : Particles)
+		farthest = std::max(farthest, Length(p.pos - Vec { 0, p.z } - head));
+	return farthest;
 }
 
 size_t ShapeCount()
@@ -5866,6 +6187,22 @@ void DrawGlyph(Vec centre, float size, float angle, uint32_t seed, Rgb colour, f
 		SoftLine(Glowing, at(u, v), at(nu, nv), 2.2F, colour, colour, alpha, alpha);
 		u = nu;
 		v = nv;
+	}
+}
+
+/** @brief The loot filter's beams: a tall soft column of light with a bright thread down its middle and a pool at its foot. */
+void DrawLootBeams()
+{
+	for (const LootBeamFx &beam : LootBeams) {
+		const float shimmer = 0.85F + (0.15F * std::sin((AmbientTime * 0.004F) + beam.phase));
+		const float a = beam.alpha * shimmer;
+		const Rgb core = Mix(beam.colour, { 255, 255, 255 }, 0.6F);
+		const Vec foot = beam.pos;
+		const Vec top = foot - Vec { 0, 300 };
+		SoftDisc(Ground, foot, 18, beam.colour, 0.35F * a, true);
+		SoftLine(Glowing, foot, top, 16, beam.colour, beam.colour, 0.22F * a, 0);
+		SoftLine(Glowing, foot, top, 6, beam.colour, beam.colour, 0.6F * a, 0);
+		SoftLine(Glowing, foot, top - Vec { 0, -60 }, 1.8F, core, core, 0.8F * a, 0);
 	}
 }
 
@@ -7972,7 +8309,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
 		FrontFresh = false;
 		return;
 	}
@@ -8000,6 +8337,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawMiasmas();
 	DrawRituals();
 	DrawBeams();
+	DrawLootBeams();
 	DrawIceSpikes();
 	DrawRings();
 	DrawComets();

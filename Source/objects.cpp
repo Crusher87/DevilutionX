@@ -11,6 +11,8 @@
 #include <string>
 
 #include <algorithm>
+#include <array>
+#include <vector>
 
 #include "DiabloUI/ui_flags.hpp"
 #include "automap.h"
@@ -50,12 +52,15 @@
 #include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/shrines.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/objdat.h"
 #include "towners.h"
 #include "track.h"
+#include "engine/render/text_render.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/endian_swap.hpp"
 #include "utils/format.hpp"
@@ -63,6 +68,7 @@
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
+#include "utils/str_split.hpp"
 
 namespace devilution {
 
@@ -2801,6 +2807,7 @@ void OperateShrineGlimmering(Player &player)
 	for (Item &item : PlayerItemsRange { player }) {
 		if (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified) {
 			item._iIdentified = true;
+			TelemetryItemAction(player, "identify", item, "Glimmering shrine");
 		}
 	}
 
@@ -3773,6 +3780,37 @@ Object *FindObjectAtPosition(Point position, bool considerLargeObjects)
 	return nullptr;
 }
 
+bool ObjectWouldBlockPassage(Point tile)
+{
+	constexpr int Reach = 3;
+	constexpr int Size = (2 * Reach) + 1;
+	const auto walkable = [tile](Point p) {
+		return p != tile && InDungeonBounds(p) && !IsTileSolid(p) && !IsObjectAtPosition(p);
+	};
+	std::vector<Point> around;
+	for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+		if (walkable(tile + d))
+			around.push_back(tile + d);
+	}
+	if (around.size() < 2)
+		return false;
+	// A walk from the first floor tile beside it, staying near it, must reach the others.
+	std::array<bool, Size * Size> seen {};
+	const auto cell = [tile](Point p) { return ((p.y - tile.y + Reach) * Size) + (p.x - tile.x + Reach); };
+	std::vector<Point> queue { around.front() };
+	seen[cell(around.front())] = true;
+	for (size_t i = 0; i < queue.size(); i++) {
+		for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+			const Point next = queue[i] + d;
+			if (std::abs(next.x - tile.x) > Reach || std::abs(next.y - tile.y) > Reach || seen[cell(next)] || !walkable(next))
+				continue;
+			seen[cell(next)] = true;
+			queue.push_back(next);
+		}
+	}
+	return std::any_of(around.begin(), around.end(), [&](Point p) { return !seen[cell(p)]; });
+}
+
 bool IsItemBlockingObjectAtPosition(Point position)
 {
 	Object *object = FindObjectAtPosition(position);
@@ -3879,6 +3917,13 @@ void FreeObjectGFX()
 		pObjCels[i] = std::nullopt;
 	}
 	numobjfiles = 0;
+}
+
+void ClearObjectsForTown()
+{
+	// Town has no objects. The last dungeon's stay in the list with their graphics already freed, so anything that
+	// walks the list in town (flame effects, HD lights, map marks) would read a freed sprite: drop them.
+	ClrAllObjects();
 }
 
 void AddL1Objs(int x1, int y1, int x2, int y2)
@@ -5104,9 +5149,15 @@ void GetObjectStr(const Object &object)
 		InfoColor = UiFlags::ColorRed;
 	}
 	if (gbIsPoe2 && object.IsShrine() && object.canInteractWith() && object._oVar1 != ShrineTown) {
-		std::string effect = ShrineHoverText(static_cast<ShrineKind>(object._oVar1));
-		if (!effect.empty())
-			AddInfoBoxString(std::move(effect));
+		auto [power, text] = ShrineHoverLines(static_cast<ShrineKind>(object._oVar1));
+		if (!power.empty())
+			AddInfoBoxString(std::move(power));
+		// Wrapped to the info box's width: it squeezes a line that doesn't fit until the letters overlap.
+		if (!text.empty()) {
+			const std::string wrapped = WordWrapString(text, InfoBoxRect.size.width - 8, GameFont12, 2);
+			for (const std::string_view line : SplitByChar(wrapped, '\n'))
+				AddInfoBoxString(line);
+		}
 	}
 }
 

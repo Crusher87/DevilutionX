@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "engine/displacement.hpp"
 #include "engine/point.hpp"
@@ -105,6 +106,12 @@ void BoneCage(Point tile, int delayMs, float size, int standMs);
 void Miasma(Point tile, int radiusTiles, int durationMs, MiasmaKind kind, uint32_t key = 0);
 /** @brief Thorny vines burst up round a tile and stand for the given time before they wither (Thornvine Arrow). */
 void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key = 0);
+/** @brief A slab of rock thrust up out of the floor, standing for the given time or until EndKeyed breaks it (Shield Wall). */
+void EarthWall(Point tile, int lifeMs, uint32_t key);
+/** @brief Wave of Light's great bell of light, standing for the given time or until EndKeyed takes it (Q38). */
+void Bell(Point tile, int lifeMs, uint32_t key);
+/** @brief The bell tolls: a ring of holy light rolls out over the radius. */
+void BellToll(Point tile, int radiusTiles);
 /** @brief A swollen seed pod on the ground, throbbing, until its time runs out or EndKeyed bursts it (Bloated Pods). */
 void Pod(Point tile, int lifeMs, uint32_t key);
 /** @brief A gnarled effigy stake with glowing green eyes, standing for the given time (Plague Effigy). */
@@ -180,8 +187,14 @@ void SetCamera(Point viewTile, Displacement offset, bool zoom);
 void ScanMissiles();
 /** @brief Whether the effects draw this missile themselves this frame, so its classic sprite is left out. */
 bool ReplacesSprite(const Missile &missile);
+/** @brief Whether the missile is a blow of steel (MetalHit): a pale flash and sparks, never Charged Bolt's blue crackle. */
+bool IsSteelHit(const Missile &missile);
 /** @brief Whether the missile is drawn as Arcing Sparks' small sparks rather than Charged Bolt's bolts: both fly the same missile. */
 bool IsArcingSpark(const Missile &missile);
+/** @brief Poe2MissileData::look for an arcing spark another skill throws (Charged Bolt's, Q34). */
+constexpr uint8_t ArcingSparkLook = 3;
+/** @brief Poe2MissileData::look for a thrown blade or axe that spins as it flies (Q39). */
+constexpr uint8_t SpinningBladeLook = 4;
 /** @brief The colour a missile's light shines in with HD Lighting: its effects' own colour (portals blue or red), 0-255. */
 std::array<uint8_t, 3> LightColourOf(const Missile &missile);
 /**
@@ -189,6 +202,11 @@ std::array<uint8_t, 3> LightColourOf(const Missile &missile);
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.
  */
 ClxSprite ObjectSprite(const Object &object);
+/**
+ * @brief Where the small flames hug the burning cross (burncros), in pixels from its sprite's top left: along its upright
+ * and its bar.
+ */
+const std::vector<Point> &BurningCrossFlames();
 /**
  * @brief Finds what the dungeon itself gives off this frame: the flames of torches, candles, fires and fire traps, and
  * the lava and water on screen (the palette-animated colours of the frame just drawn).
@@ -229,6 +247,8 @@ void Advance(float ms);
 
 /** @brief How many particles are alive (tests). */
 size_t ParticleCount();
+/** @brief How far the farthest particle is from a flying missile's head (an arrow's tip), in pixels (tests). */
+float FarthestParticleFrom(const Missile &missile);
 /** @brief How many rings, sigils, bolts, cracks and glows are alive (tests). */
 size_t ShapeCount();
 /** @brief How many flames, lava and water patches the last ScanWorld found (tests). */

@@ -567,7 +567,8 @@ TEST_F(Poe2PaceTest, RoundTwoSpeedRules)
 	EXPECT_EQ(SevenSidedStrikeSharePercent(3, 7), 100);
 	EXPECT_EQ(SevenSidedStrikeSharePercent(7, 7), 100);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::SevenSidedStrike)->damagePercent, 200);
-	EXPECT_EQ(FindTableSkill(WeaponSkill::Zeal)->damagePercent, 140);
+	// Zeal tier V to IX, x1.45 (Curtis 2026-11-07).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Zeal)->damagePercent, 203);
 }
 
 TEST_F(Poe2PaceTest, TwoWeaponsSwingInTurn)

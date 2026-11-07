@@ -1,3 +1,4 @@
+#include <optional>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -5,6 +6,7 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "panels/skill_bar.hpp"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"

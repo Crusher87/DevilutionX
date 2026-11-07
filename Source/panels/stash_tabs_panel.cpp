@@ -43,6 +43,7 @@
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "utils/display.h"
@@ -1402,11 +1403,15 @@ bool HandlePremadeSlotClick(const TabView &view, bool isShiftHeld, bool isCtrlHe
 		}
 		const int before = StoredStackCount(player.HoldItem);
 		const int sound = player.HoldItem._iCurs;
+		Item stored = player.HoldItem;
 		StoreInPremadeTab(page, player.HoldItem);
 		if (!player.HoldItem.isEmpty() && StoredStackCount(player.HoldItem) == before) {
 			EventPlrMsg(_("This tab has no room for that."), UiFlags::ColorWhite);
 			return true;
 		}
+		if (!player.HoldItem.isEmpty())
+			SetStoredStackCount(stored, before - StoredStackCount(player.HoldItem));
+		TelemetryItemAction(player, "stash", stored, StashTabLogName(page));
 		if (!player.HoldItem.isEmpty())
 			SetStackCount(player.HoldItem, StoredStackCount(player.HoldItem));
 		PlaySFX(ItemInvSnds[ItemCAnimTbl[sound]]);
@@ -1423,6 +1428,7 @@ bool HandlePremadeSlotClick(const TabView &view, bool isShiftHeld, bool isCtrlHe
 		return true;
 	}
 	player.HoldItem = TakeFromStash(slot->index);
+	TelemetryItemAction(player, "unstash", player.HoldItem, StashTabLogName(page));
 	player.HoldItem._iStatFlag = player.CanUseItem(player.HoldItem);
 	PlaySFX(SfxID::GrabItem);
 	NewCursor(player.HoldItem);

@@ -111,6 +111,9 @@ void AddItemToLabelQueue(int id, Point position)
 	Item &item = Items[id];
 	if (IsItemHiddenByLootFilter(item))
 		return;
+	// POE2 Mashup: no names through closed doors or in rooms not yet seen (Curtis 2026-11-07).
+	if (gbIsPoe2 && !HeroHasSeenGroundItem(item))
+		return;
 	// POE2 Mashup: gold has no label; picking it up shows the amount over the hero.
 	if (gbIsPoe2 && item._itype == ItemType::Gold)
 		return;
@@ -157,6 +160,19 @@ void DrawItemNameLabels(const Surface &out)
 	const int labelHeight = LabelHeight();
 	const int labelMarginTop = TextMarginTop();
 
+	// The queue fills in screen draw order, which reshuffles as the view scrolls by half tiles, so the overlap pass
+	// below nudged different labels each frame and they jumped about while walking (Curtis 2026-11-06). Placing them
+	// in a fixed order, front of the floor first by map position, keeps each label where it was as the view moves.
+	std::stable_sort(labelQueue.begin(), labelQueue.end(), [](const ItemLabel &a, const ItemLabel &b) {
+		const Point pa = Items[a.id].position;
+		const Point pb = Items[b.id].position;
+		if (pa.x + pa.y != pb.x + pb.y)
+			return pa.x + pa.y > pb.x + pb.y;
+		if (pa.x != pb.x)
+			return pa.x < pb.x;
+		return a.id < b.id;
+	});
+
 	for (unsigned i = 0; i < labelQueue.size(); ++i) {
 		usedX.clear();
 
@@ -166,7 +182,8 @@ void DrawItemNameLabels(const Surface &out)
 			for (unsigned j = 0; j < i; ++j) {
 				ItemLabel &a = labelQueue[i];
 				const ItemLabel &b = labelQueue[j];
-				if (std::abs(b.pos.y - a.pos.y) < labelHeight + BorderY) {
+				// POE2 Mashup: room for the loot filter's borders, drawn round the outside of the labels.
+				if (std::abs(b.pos.y - a.pos.y) < labelHeight + BorderY + (gbIsPoe2 ? 4 : 0)) {
 					const int widthA = a.width + BorderX + (MarginX * 2);
 					const int widthB = b.width + BorderX + (MarginX * 2);
 					int newpos = b.pos.x;
@@ -206,12 +223,30 @@ void DrawItemNameLabels(const Surface &out)
 				pcursitem = label.id;
 			}
 		}
+		// POE2 Mashup: with the loot filter on, the label takes the item's NeverSink colours (Curtis 2026-11-05).
+		const LootStyle *style = LootFilterStyle(item);
 		if (pcursitem == label.id && !IsPlayerInStore())
 			FillRect(clippedOut, label.pos.x, label.pos.y, label.width, labelHeight, PAL8_BLUE + 6);
+		else if (style != nullptr && style->background)
+			FillRect(clippedOut, label.pos.x, label.pos.y, label.width, labelHeight, NearestLootPaletteColour(*style->background));
 		else
 			DrawHalfTransparentRectTo(clippedOut, label.pos.x, label.pos.y, label.width, labelHeight);
+		if (style != nullptr && style->border) {
+			const uint8_t border = NearestLootPaletteColour(*style->border);
+			const int thickness = style->big ? 2 : 1;
+			for (int i = 0; i < thickness; i++) {
+				const int x = label.pos.x - 1 - i;
+				const int y = label.pos.y - 1 - i;
+				const int w = label.width + 2 + (2 * i);
+				const int h = labelHeight + 2 + (2 * i);
+				DrawHorizontalLine(clippedOut, { x, y }, w, border);
+				DrawHorizontalLine(clippedOut, { x, y + h - 1 }, w, border);
+				DrawVerticalLine(clippedOut, { x, y }, h, border);
+				DrawVerticalLine(clippedOut, { x + w - 1, y }, h, border);
+			}
+		}
 		DrawString(clippedOut, label.text, { { label.pos.x + MarginX, label.pos.y + labelMarginTop }, { label.width, labelHeight } },
-		    { .flags = item.getTextColor() });
+		    { .flags = style != nullptr ? style->text : item.getTextColor() });
 	}
 	labelQueue.clear();
 }

@@ -273,6 +273,9 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case WeaponSkill::EscapeShot:
 		AddWeaponHit(hit, player, skill, level, percent, VaultShotArrowDamagePercent);
 		return hit;
+	case WeaponSkill::Barrage:
+		AddWeaponHit(hit, player, skill, level, percent, BarrageArrowDamagePercent);
+		return hit;
 	case WeaponSkill::EmberFusillade:
 		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.
 		AddSpellBase(hit, player, level, DamageType::Fire, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
@@ -839,6 +842,8 @@ std::string SkillTagText(SkillSlot skill)
 		add("Attack");
 	if ((tags & ST_Spell) != 0)
 		add("Spell");
+	if ((tags & ST_Buff) != 0)
+		add("Buff");
 	if ((tags & ST_Melee) != 0)
 		add("Melee");
 	if ((tags & ST_Strike) != 0)
@@ -873,6 +878,8 @@ std::string SkillTagText(SkillSlot skill)
 		add("Physical");
 	if ((tags & ST_Chaos) != 0)
 		add("Chaos");
+	if ((tags & ST_Poison) != 0)
+		add("Poison");
 	return text;
 }
 

@@ -71,14 +71,16 @@ constexpr int FlurryBackhandDamagePercent = 150;
  */
 constexpr int SmiteDamagePercent = 300;
 constexpr int FrenzyDamagePercent = 200;
-/** @brief Shield Bash hits this hard before the gem curve (Curtis 2026-10-28: 120 to 200). */
-constexpr int ShieldBashDamagePercent = 200;
-/** @brief Shield Charge hits the 3 tiles in front of its landing this hard (Curtis 2026-10-28, Q28: 100 to 150). */
-constexpr int ShieldChargeDamagePercent = 150;
+/** @brief Shield Bash hits this hard before the gem curve (Curtis 2026-10-28: 120 to 200; 11-07: tier III to I, x0.70). */
+constexpr int ShieldBashDamagePercent = 140;
+/** @brief Shield Charge hits the 3 tiles in front of its landing this hard (Curtis 2026-10-28, Q28: 100 to 150; 11-07: tier V to III, x0.80). */
+constexpr int ShieldChargeDamagePercent = 120;
 /** @brief Shadow Lunge's strike from behind (Curtis 2026-10-28, Q28: 150 to 220). */
 constexpr int ShadowStepDamagePercent = 220;
 /** @brief Each of Vault Shot's arrows hits for this percent of a bow shot (Curtis 2026-10-28, Q28: 100 to 140). */
 constexpr int VaultShotArrowDamagePercent = 140;
+/** @brief Each of Hail of Arrows' arrows hits for this percent of a bow shot (Curtis 2026-11-07, Q32). */
+constexpr int BarrageArrowDamagePercent = 80;
 
 /** @brief A swing skill's own percent of a weapon hit (Smite, Frenzy), 100 for the others and a plain attack. */
 [[nodiscard]] constexpr int SwingSkillDamagePercent(WeaponSkill skill)
@@ -97,6 +99,17 @@ constexpr int8_t FlurryBackhandSkippedFrames = 4;
 /** @brief Ticks between Barrage's arrows and between Ember Fusillade's embers. */
 constexpr int BarrageShotTicks = 3;
 constexpr int EmberShotTicks = 2;
+/** @brief Charged Bolt throws Arcing Sparks' sparks too from this gem level (Curtis 2026-11-07, Q34). */
+constexpr int ChargedBoltSparksGemLevel = 10;
+/** @brief The sparks each Charged Bolt cast throws from ChargedBoltSparksGemLevel. */
+constexpr int ChargedBoltSparks = 2;
+/** @brief Each spark's hit in percent of a spell base (Curtis 2026-11-07, Q43: 60% to 25%). */
+constexpr int ChargedBoltSparkPercent = 25;
+/**
+ * @brief Fire Wall cast this close to the hero makes Ring of Fire's ring instead of a line (Curtis 2026-11-07, Q34): only
+ * on the hero's own tile, so one aimed at a monster beside them is the normal wall (Q42).
+ */
+constexpr int FireWallRingTiles = 0;
 /** @brief Barrage fires its arrows one after another at one target. */
 constexpr int BarrageArrows = 5;
 /** @brief Ember Fusillade's embers before its gem level adds more. */
@@ -130,6 +143,14 @@ constexpr int ElementalHomingTiles = 6;
 void SetSpellMissileSpeed(Missile &missile, SpellID spell);
 /** @brief A player's Fireball exploded: throws back the enemies around it, with a ring of flame and a jolt. */
 void OnFireballDetonated(Missile &missile, Point position);
+/**
+ * @brief Charged Bolt's arcing sparks (Curtis 2026-11-07, Q34: Arcing Sparks merged into it): from
+ * ChargedBoltSparksGemLevel each cast also throws ChargedBoltSparks sparks that pierce, each rolling Spark's row, credited
+ * to Charged Bolt and its supports. Returns how many were thrown.
+ */
+int FireChargedBoltSparks(Player &player, Point target, int spellLevel);
+/** @brief The missile a POE2 Fire Wall cast makes: Ring of Fire's ring when cast on or beside the hero (Q34). */
+MissileID FireWallMissile(Point hero, Point target);
 /** @brief Whether a tile offset from the player is in Ground Slam's cone (about 70 degrees wide) facing the direction. */
 bool InGroundSlamCone(Direction facing, Displacement offset);
 /**
@@ -250,6 +271,10 @@ vfx::Element WeaponElementLook(const Player &player);
 
 /** @brief Whether the hero spins round through every facing while the skill's animation plays (Whirlwind). */
 bool SpinsWhileStriking(WeaponSkill skill);
+/** @brief Double Throw, Fan of Blades and Blade Fury: thrown blades that spin as they fly, from a short flick (Q39). */
+bool IsThrowingSkill(WeaponSkill skill);
+/** @brief A dash skill's looks while it dashes: Leap Attack's trail of dust, Whirlwind's spin (Q39). Once per game tick. */
+void ProcessDashLooks(Player &player);
 /** @brief Turns a spinning hero to the next facing for the animation frame (see SpinsWhileStriking). */
 void TurnWithSpin(Player &player);
 /** @brief Whether the hero's attack spins him round through every facing as he swings (Whirling Staff). */

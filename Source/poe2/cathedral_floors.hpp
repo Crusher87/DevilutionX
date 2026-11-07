@@ -284,6 +284,13 @@ constexpr uint64_t HiveRoomsMark = uint64_t { 1 } << 60;
  */
 uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false, bool hell = false, bool hive = false);
 
+/**
+ * @brief A stamp of the room collection a floor of this kind is built from. A saved floor is built again from its seed
+ * when it is loaded, so a floor saved with other rooms (an older game version) would come back with a different layout
+ * under its saved chests and fires. Bump FloorBuilderVersion in the .cpp when a builder change moves things.
+ */
+uint32_t CathedralRoomsStamp(bool catacombs = false, bool caves = false, bool hell = false, bool hive = false);
+
 /** @brief Whether the floor being played was made by this builder. */
 bool IsCathedralFunnelFloor();
 void SetCathedralFunnelFloor(bool active);

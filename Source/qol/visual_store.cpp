@@ -38,6 +38,7 @@
 #include "poe2/item_search.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/telemetry.hpp"
 #include "qol/stash.h"
 #include "spells.h"
 #include "stores.h"
@@ -269,6 +270,18 @@ void DrawPoe2PageButtons(const Surface &out)
 	const Rectangle label { GetPanelPosition(UiPanels::Stash, Poe2PageLabelRect.position), Poe2PageLabelRect.size };
 	DrawString(out, StrCat(VisualStore.currentPage + 1, "/", VisualStore.pages.size()), label,
 	    { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhite });
+}
+
+/** @brief The open vendor's name, untranslated, for the play log. */
+std::string_view VendorLogName()
+{
+	switch (VisualStore.vendor) {
+	case VisualStoreVendor::Smith: return "Griswold";
+	case VisualStoreVendor::Witch: return "Adria";
+	case VisualStoreVendor::Healer: return "Pepin";
+	case VisualStoreVendor::Boy: return "Wirt";
+	}
+	return {};
 }
 
 /** @brief Remembers a sold item so it can be bought back. */
@@ -1058,6 +1071,10 @@ std::optional<PendingWare> PendingPurchase;
 /** @brief Takes a bought ware off the vendor's lists. */
 void RemoveBoughtWare(int16_t itemIndex)
 {
+	if (gbIsPoe2 && static_cast<size_t>(itemIndex) < ShopOrigins.size() && ShopOrigins[itemIndex].source == ShopSource::Buyback)
+		TelemetryItemAction(*MyPlayer, "buy", GetVisualStoreItems()[itemIndex], StrCat(VendorLogName(), ", buyback"), VisualStoreItemPrice(itemIndex));
+	else
+		TelemetryItemAction(*MyPlayer, "buy", GetVisualStoreItems()[itemIndex], VendorLogName(), VisualStoreItemPrice(itemIndex));
 	if (gbIsPoe2) {
 		// POE2 Mashup: take the item from the list it came from.
 		const ShopOrigin origin = ShopOrigins[itemIndex];
@@ -1247,6 +1264,7 @@ void CheckVisualStorePaste(Point mousePosition)
 	// Add gold to player
 	AddGoldToInventory(player, sellPrice);
 	PlaySFX(SfxID::ItemGold);
+	TelemetryItemAction(player, "sell", player.HoldItem, VendorLogName(), sellPrice);
 	AddToBuyback(player.HoldItem, sellPrice);
 
 	// Clear the held item
@@ -1307,6 +1325,7 @@ void SellItemToVisualStore(int invIndex)
 	// Add gold to player
 	AddGoldToInventory(player, sellPrice);
 	PlaySFX(SfxID::ItemGold);
+	TelemetryItemAction(player, "sell", item, VendorLogName(), sellPrice);
 	AddToBuyback(item, sellPrice);
 
 	// Remove item from inventory

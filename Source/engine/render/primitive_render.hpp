@@ -97,6 +97,11 @@ enum class UiCover : uint8_t {
 struct UiTint {
 	uint8_t color;
 	uint8_t alpha;
+	/** @brief With trueColour, the pixel shows in this full colour rather than its palette colour. */
+	uint8_t r = 0;
+	uint8_t g = 0;
+	uint8_t b = 0;
+	bool trueColour = false;
 };
 
 /**
@@ -113,6 +118,12 @@ bool CanTintUi(const Surface &out);
  * says so, and solid elsewhere. Over a tint still showing, its colour takes the tint's place and the two opacities add up.
  */
 void TintUiPixel(const Surface &out, Point position, uint8_t color, uint8_t alpha);
+
+/**
+ * @brief POE2 Mashup: draws a solid pixel in full colour where CanTintUi says so, and in @p color, the palette's
+ * nearest, elsewhere. The game's palette has no true green, for one (Curtis 2026-11-06: POE2's green life bar).
+ */
+void DrawUiTrueColourPixel(const Surface &out, Point position, uint8_t color, uint8_t r, uint8_t g, uint8_t b);
 
 /** @brief POE2 Mashup: notes that the UI covers this area of @p out, when it's the surface being recorded. */
 void CoverUi(const Surface &out, Rectangle area, UiCover cover = UiCover::Solid);

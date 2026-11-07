@@ -99,13 +99,19 @@ enum class StoreUi : uint8_t {
 	VisualGrid = 2,
 };
 
+/**
+ * @brief POE2 Mashup: the loot filter, NeverSink's seven strictness levels (Curtis 2026-11-05). Off shows every item
+ * plainly; each level styles items like NeverSink's POE2 filter and hides more of the low value ones than the last.
+ */
 enum class LootFilter : uint8_t {
-	/** @brief Show every item. */
 	Off = 0,
-	/** @brief Hide normal weapons, armor and jewelry. */
-	HideNormal = 1,
-	/** @brief Hide normal and magic weapons, armor and jewelry. */
-	HideNormalAndMagic = 2,
+	Soft = 1,
+	Regular = 2,
+	SemiStrict = 3,
+	Strict = 4,
+	VeryStrict = 5,
+	UberStrict = 6,
+	UberPlusStrict = 7,
 };
 
 /** @brief POE2 Mashup: how wide the corner map is. */
@@ -674,9 +680,15 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean quickCast;
 	/** @brief Walk by holding W, A, S and D (POE2 Mashup). */
 	OptionEntryBoolean wasdMovement;
-	/** @brief Hides low quality gear on the ground (POE2 Mashup). */
+	/** @brief The loot filter's strictness, or Off (POE2 Mashup). */
 	OptionEntryEnum<LootFilter> lootFilter;
-	/** @brief Current / max numbers above the life and mana globes, with Energy Shield and Spirit (POE2 Mashup). */
+	/** @brief The loot filter's light beams over good items (POE2 Mashup). */
+	OptionEntryBoolean lootFilterBeams;
+	/** @brief The loot filter's drop sounds for good items (POE2 Mashup). */
+	OptionEntryBoolean lootFilterSounds;
+	/** @brief The loot filter's icons for good items on the maps (POE2 Mashup). */
+	OptionEntryBoolean lootFilterMapIcons;
+	/** @brief No longer in the settings: POE2 mode always shows the numbers above the globes. Kept so old ini files still load. */
 	OptionEntryBoolean showLifeManaLevels;
 	/** @brief A small life bar with a thin mana bar under it over the hero (POE2 Mashup). */
 	OptionEntryBoolean heroMiniBar;

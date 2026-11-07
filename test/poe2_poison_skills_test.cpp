@@ -331,10 +331,13 @@ TEST_F(Poe2PoisonSkillsTest, DaggerPoisonsStackOnlyWithTwinFangs)
 		const int32_t first = fanged.poe2.poisonDamagePerTick;
 		EXPECT_NEAR(first, one, 1) << data.name;
 		EXPECT_EQ(fanged.poe2.poisonTicks, PoisonTicks * 80 / 100) << data.name;
+		// Cobra Strike bursts only another skill's poison (Curtis 2026-11-07, Q38 and Q42), so with Twin Fangs its own
+		// stacks like the others'.
+		const int stacked = 2 * first;
 		StabUntilItLands(data, slot, fanged, seed);
-		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, 2 * first) << data.name;
+		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, stacked) << data.name;
 		StabUntilItLands(data, slot, fanged, seed);
-		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, 2 * first) << data.name;
+		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, stacked) << data.name;
 	}
 }
 
@@ -583,6 +586,25 @@ TEST_F(Poe2PoisonSkillsTest, VenomBoltPoisons)
 	}
 	EXPECT_EQ(monster.poe2.poisonTicks, PoisonTicks);
 	EXPECT_EQ(monster.poe2.poisonDamagePerTick, 64 * 50 * 60 / 100 / 20);
+}
+
+// Plague Arrow is a green poison arrow (Curtis, Rogue run 2): its arrows fly as venom; a plain arrow stays plain.
+TEST_F(Poe2PoisonSkillsTest, PlagueArrowFliesAsAPoisonArrow)
+{
+	Player &player = *MyPlayer;
+	EnterDungeon();
+	Supported(WeaponSkill::PlagueArrow);
+	ExecuteTableSkill(player, Row(WeaponSkill::PlagueArrow), { 46, 40 });
+	ASSERT_FALSE(Missiles.empty());
+	EXPECT_EQ(Missiles.back()._mitype, MissileID::Arrow);
+	EXPECT_EQ(Missiles.back().poe2.vfxElement, static_cast<int8_t>(vfx::Element::Poison));
+	Missiles.clear();
+	Supported(WeaponSkill::ThornvineArrow);
+	ExecuteTableSkill(player, Row(WeaponSkill::ThornvineArrow), { 46, 40 });
+	ASSERT_FALSE(Missiles.empty());
+	EXPECT_EQ(Missiles.back()._mitype, MissileID::Arrow);
+	EXPECT_EQ(Missiles.back().poe2.vfxElement, -1);
+	EXPECT_GT(PlagueArrowSplashSize, 1.F);
 }
 
 // Poison Explosion: a corpse bursts in chaos and leaves a cloud that poisons for 2 seconds.

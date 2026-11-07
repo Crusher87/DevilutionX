@@ -168,6 +168,13 @@ const uint8_t *EnrageTRN()
 	return TintTRN(tint, { 100, 60, 40, 0, 40, 0 });
 }
 
+/** @brief POE2 Mashup: a poison arrow (Plague Arrow), its shaft and head stained a venomous green. */
+const uint8_t *VenomTRN()
+{
+	static PaletteTint tint;
+	return TintTRN(tint, { 45, 0, 95, 45, 25, 0 });
+}
+
 /**
  * @brief POE2 Mashup: magic, rare and unique monsters get a thin outline in their rank's colour.
  *
@@ -435,6 +442,16 @@ void DrawMissilePrivate(const Surface &out, const Missile &missile, Point target
 
 	const Point missileRenderPosition { targetBufferPosition + missile.position.offsetForRendering - Displacement { missile._miAnimWidth2, 0 } };
 	const ClxSprite sprite = (*missile._miAnimData)[missile._miAnimFrame - 1];
+	// POE2 Mashup: a poison arrow flies green (Curtis, Rogue run 2: Plague Arrow should look like a poison arrow).
+	if (gbIsPoe2 && missile._miAnimType == MissileGraphicID::Arrow && missile.poe2.vfxElement == static_cast<int8_t>(vfx::Element::Poison)) {
+		std::array<uint8_t, 256> venom;
+		const uint8_t *green = VenomTRN();
+		const size_t light = missile._miLightFlag ? std::min<size_t>(static_cast<size_t>(std::max(lightTableIndex, 0)), LightTables.size() - 1) : 0;
+		for (size_t i = 0; i < venom.size(); i++)
+			venom[i] = LightTables[light][green[i]];
+		ClxDrawTRN(out, missileRenderPosition, sprite, venom.data());
+		return;
+	}
 	if (missile._miUniqTrans != 0) {
 		ClxDrawTRN(out, missileRenderPosition, sprite, Monsters[missile._misource].uniqueMonsterTRN.get());
 	} else if (missile._miLightFlag) {
@@ -634,6 +651,9 @@ const uint8_t *TintTRN(PaletteTint &tint, const std::array<int, 6> &mix)
 void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sprite, Point spriteBufferPosition)
 {
 	if (!player.poe2.isDodging() || !player.isWalking())
+		return;
+	// Leap Attack trails dust instead (Curtis 2026-11-07, Q39; see ProcessDashLooks).
+	if (player.poe2.dashSkill == WeaponSkill::LeapSlam && player.poe2.dashSkillTicks > 0)
 		return;
 	// One tile's step on screen in the direction of travel.
 	const Displacement step { player._pdir };
@@ -959,8 +979,13 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
 	}
 	const ClxSprite sprite = item.AnimInfo.currentSprite();
 	const Point position = targetBufferPosition + item.getRenderingOffset(sprite);
-	if (!IsPlayerInStore() && (itemIndex == pcursitem || AutoMapShowItems)) {
-		ClxDrawOutlineSkipColorZero(out, GetOutlineColor(item, false), position, sprite);
+	if (!IsPlayerInStore()) {
+		if (itemIndex == pcursitem || AutoMapShowItems) {
+			ClxDrawOutlineSkipColorZero(out, GetOutlineColor(item, false), position, sprite);
+		} else if (const std::optional<uint8_t> outline = GroundItemOutlineColor(item); outline) {
+			if (const std::optional<uint8_t> lit = LitGroundOutline(*outline, lightTableIndex); lit)
+				ClxDrawOutlineSkipColorZero(out, *lit, position, sprite);
+		}
 	}
 	ClxDrawLight(out, position, sprite, lightTableIndex);
 	if (item.AnimInfo.isLastFrame() || item._iCurs == ICURS_MAGIC_ROCK)
@@ -1086,7 +1111,8 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 		DrawMissile(out, tilePosition, targetBufferPosition, true, lightTableIndex);
 	}
 
-	if (lightTableIndex < LightsMax && bDead != 0) {
+	// POE2 Mashup: a corpse whose slot holds no picture (a monster spawned in for testing, then the level reloaded) is left out.
+	if (lightTableIndex < LightsMax && (bDead & 0x1F) != 0 && Corpses[(bDead & 0x1F) - 1].sprites) {
 		const Corpse &corpse = Corpses[(bDead & 0x1F) - 1];
 		const Point position { targetBufferPosition.x - CalculateSpriteTileCenterX(corpse.width), targetBufferPosition.y };
 		const ClxSprite sprite = corpse.spritesForDirection(static_cast<Direction>((bDead >> 5) & 7))[corpse.frame];
@@ -2258,18 +2284,21 @@ void DrawAndBlit()
 		DrawChatBox(out);
 	}
 	DrawXPBar(out);
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
+		DrawPoe2RageBar(out);
 		DrawPoe2GlobeValues(out);
-	// POE2 Mashup: "Show Life/Mana Levels" puts the numbers above the globes, so hovering a globe adds nothing.
-	const bool globeHoverValues = gbIsPoe2 && !ShowingGlobeLevels();
-	if (ShowingGlobeLevels())
+	}
+	// POE2 Mashup: the numbers sit above the globes, like POE2, so nothing is printed over the globes' art.
+	if (ShowingGlobeLevels()) {
 		DrawPoe2GlobeLevels(out);
-	if (*GetOptions().Gameplay.showHealthValues || (globeHoverValues && IsHoveringLifeGlobe()))
-		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
-	if (*GetOptions().Gameplay.showManaValues || (globeHoverValues && IsHoveringManaGlobe()))
-		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
-		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
-		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
+	} else {
+		if (*GetOptions().Gameplay.showHealthValues)
+			DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
+		if (*GetOptions().Gameplay.showManaValues)
+			DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
+			    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
+			    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
+	}
 	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
 	DrawStashTabTooltip(out);

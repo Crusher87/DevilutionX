@@ -256,7 +256,18 @@ bool IsLevelUpButtonVisible()
 	return true;
 }
 
+/** @brief The label over the level-up button is centred in a line this wide, from the main panel's left edge. */
+constexpr int LevelButtonLabelWidth = 120;
+constexpr int LevelButtonLabelRise = 23;
+
 } // namespace
+
+std::optional<Rectangle> LevelButtonLabelArea()
+{
+	if (MyPlayer == nullptr || !IsLevelUpButtonVisible())
+		return std::nullopt;
+	return Rectangle { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - LevelButtonLabelRise }, { LevelButtonLabelWidth, 12 } };
+}
 
 void CalculatePanelAreas()
 {
@@ -702,7 +713,7 @@ void DrawLevelButton(const Surface &out)
 {
 	if (IsLevelUpButtonVisible()) {
 		const int nCel = LevelButtonDown ? 2 : 1;
-		DrawString(out, LevelUpButtonIsForPassives() ? FormatRuntime(ngettext("{:d} Passive Point", "{:d} Passive Points", PassivePointsLeft(*MyPlayer)), PassivePointsLeft(*MyPlayer)) : std::string(_("Level Up")), { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - 23 }, { 120, 0 } },
+		DrawString(out, LevelUpButtonIsForPassives() ? FormatRuntime(ngettext("{:d} Passive Point", "{:d} Passive Points", PassivePointsLeft(*MyPlayer)), PassivePointsLeft(*MyPlayer)) : std::string(_("Level Up")), { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - LevelButtonLabelRise }, { LevelButtonLabelWidth, 0 } },
 		    { .flags = UiFlags::ColorWhite | UiFlags::AlignCenter | UiFlags::KerningFitSpacing });
 		RenderClxSprite(out, (*pChrButtons)[nCel], GetMainPanel().position + Displacement { LevelButtonRect.position.x, LevelButtonRect.position.y });
 	}

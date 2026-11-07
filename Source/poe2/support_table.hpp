@@ -64,6 +64,10 @@ enum SkillTag : uint32_t {
 	ST_Chaos = 1U << 25,
 	/** A Summon Command (poe2/summon_commands.hpp): no support gem fits it. */
 	ST_Command = 1U << 26,
+	/** A buff on the hero (Frozen Armor, Holy Shield, Shield Wall): not an attack (Curtis 2026-11-07, Q41). */
+	ST_Buff = 1U << 27,
+	/** The skill poisons, or leaves poison on the ground. Shown only: no support asks for it (Q41). */
+	ST_Poison = 1U << 28,
 	ST_Elemental = ST_Fire | ST_Lightning | ST_Frost,
 };
 
@@ -176,8 +180,9 @@ constexpr int PoisonTicks = 2 * 20;
 /**
  * @brief Poisons a monster: total is the poison's whole damage, as a raw Fixed26_6, spread over ticks. With maxStacks 1
  * only the strongest poison counts: a weaker one is lost, a stronger one takes over. More stacks add up to that many.
+ * Returns whether the poison landed.
  */
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
+bool InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
 /**
  * @brief Puts a poison of perTick (a raw Fixed26_6 a tick) for ticks into the monster's poison, with no supports: with
  * maxStacks 1 only the strongest counts, as InflictPoison. Returns false when the poison was weaker and so lost.

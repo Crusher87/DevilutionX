@@ -1,0 +1,42 @@
+name	style
+Divine Orb	currency_s
+Perfect Exalted Orb	currency_s
+Perfect Chaos Orb	currency_s
+Perfect Jeweller's Orb	currency_s
+Orb of Annulment	currency_a
+Orb of Chance	currency_a
+Greater Chaos Orb	currency_a
+Chaos Orb	currency_b
+Greater Exalted Orb	currency_b
+Ancient Bone	currency_b
+Exalted Orb	currency_c
+Orb of Alchemy	currency_c
+Vaal Orb	currency_c
+Greater Jeweller's Orb	currency_c
+Glassblower's Bauble	currency_c
+Chance Shard	currency_c
+*Catalyst	currency_c
+Regal Orb	currency_d
+Artificer's Orb	currency_d
+Armourer's Scrap	currency_d
+Blacksmith's Whetstone	currency_d
+Elixir*	currency_d
+Arcanist's Etcher	currency_e
+Lesser Jeweller's Orb	currency_e
+Orb of Scouring	currency_e
+Orb of Augmentation	currency_supplymagic
+Orb of Transmutation	currency_supplymagic
+Regal Shard	currency_supplymagic
+Artificer's Shard	currency_supplymagic
+Transmutation Shard	currency_supplylow
+Scroll of Identify	currency_supplylow
+Omen*	omen
+Perfect Essence*	essence_b
+Greater Essence*	essence_c
+Lesser Essence*	essence_e
+Essence*	essence_d
+Soul Core*	socket_a
+*Talisman	socket_b
+Lesser *Rune	socket_supplylow
+Greater *Rune	socket_d
+*Rune	socket_e

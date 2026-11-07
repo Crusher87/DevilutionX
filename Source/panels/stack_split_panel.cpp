@@ -19,6 +19,7 @@
 #include "player.h"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
+#include "poe2/telemetry.hpp"
 #include "qol/stash.h"
 #include "utils/format_int.hpp"
 #include "utils/language.h"
@@ -241,6 +242,7 @@ void ConfirmStackSplit()
 		player.HoldItem = TakeFromStash(index, amount);
 		if (player.HoldItem.isEmpty())
 			return;
+		TelemetryItemAction(player, "unstash", player.HoldItem, StashTabLogName(Stash.GetPage()));
 	}
 	player.HoldItem._iStatFlag = player.CanUseItem(player.HoldItem);
 	PlaySFX(SfxID::GrabItem);

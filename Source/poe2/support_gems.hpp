@@ -199,6 +199,11 @@ void ScaleSupportedMissileDamage(const Missile &missile, int &minDamage, int &ma
 /** @brief Whether the missile already hit this monster and must pass through it instead. */
 bool SupportedMissileIgnoresMonster(const Missile &missile, int monsterId);
 /**
+ * @brief The chaining of the Arcing support: a copy of the projectile flies on from the monster it hit to the nearest
+ * other in sight within the range (not the one it hit before), with one chain fewer. nullptr when there is none.
+ */
+Missile *ChainMissileOn(const Missile &missile, const Monster &monster, int range);
+/**
  * @brief Pierces, forks or chains after a projectile hits a monster directly.
  * @return true if the projectile keeps flying through the monster.
  */

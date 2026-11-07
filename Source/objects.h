@@ -311,6 +311,13 @@ inline bool IsObjectAtPosition(Point position)
 }
 
 /**
+ * @brief POE2 Mashup: whether a solid object put on @p tile would cut the way between the floor tiles around it, as
+ * one in front of a doorway does (Curtis 2026-11-06: a book stand kept him out of a room). The tiles beside it must
+ * still reach each other within a few tiles without going through it.
+ */
+bool ObjectWouldBlockPassage(Point tile);
+
+/**
  * @brief Get a reference to the object located at this tile
  *
  * This function is unchecked. Trying to access an invalid position will result in out of bounds memory access
@@ -331,6 +338,8 @@ bool IsItemBlockingObjectAtPosition(Point position);
 
 std::expected<void, std::string> InitObjectGFX();
 void FreeObjectGFX();
+/** @brief Empties the object list on entering town, which has no objects of its own. */
+void ClearObjectsForTown();
 void AddL1Objs(int x1, int y1, int x2, int y2);
 void AddL2Objs(int x1, int y1, int x2, int y2);
 void AddL3Objs(int x1, int y1, int x2, int y2);

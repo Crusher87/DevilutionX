@@ -895,12 +895,20 @@ GameplayOptions::GameplayOptions()
     , disableCripplingShrines("Disable Crippling Shrines", OptionEntryFlags::None, N_("Disable Crippling Shrines"), N_("When enabled Cauldrons, Fascinating Shrines, Goat Shrines, Ornate Shrines, Sacred Shrines and Murphy's Shrines are not able to be clicked on and labeled as disabled."), false)
     , quickCast("Quick Cast", OptionEntryFlags::None, N_("Quick Cast"), N_("Spell hotkeys instantly cast the spell, rather than switching the readied spell."), false)
     , wasdMovement("WASD Movement", OptionEntryFlags::None, N_("WASD Movement"), N_("On: walk with W, A, S and D; clicking the ground no longer walks and attacks hit in place. Off: click to move; W, A, S and D keep their usual shortcuts."), true)
-    , lootFilter("Loot Filter", OptionEntryFlags::None, N_("Loot Filter"), N_("Hides low quality weapons, armor and jewelry on the ground. Gold, potions, gems, orbs, rares and uniques always show."), LootFilter::Off,
+    , lootFilter("Loot Filter", OptionEntryFlags::None, N_("Loot Filter"), N_("POE2 mode: NeverSink's loot filter. Good items get coloured names, light beams, drop sounds and map icons. Each level hides more low value items than the one before. Off shows every item plainly."), LootFilter::Off,
           {
               { LootFilter::Off, N_("Off") },
-              { LootFilter::HideNormal, N_("Hide normal gear") },
-              { LootFilter::HideNormalAndMagic, N_("Hide normal and magic gear") },
+              { LootFilter::Soft, N_("Soft") },
+              { LootFilter::Regular, N_("Regular") },
+              { LootFilter::SemiStrict, N_("Semi-Strict") },
+              { LootFilter::Strict, N_("Strict") },
+              { LootFilter::VeryStrict, N_("Very Strict") },
+              { LootFilter::UberStrict, N_("Uber Strict") },
+              { LootFilter::UberPlusStrict, N_("Uber Plus Strict") },
           })
+    , lootFilterBeams("Loot Filter Beams", OptionEntryFlags::None, N_("Loot Filter Beams"), N_("POE2 mode, with the loot filter on: a column of light over good items."), true)
+    , lootFilterSounds("Loot Filter Sounds", OptionEntryFlags::None, N_("Loot Filter Sounds"), N_("POE2 mode, with the loot filter on: a sound when a good item drops."), true)
+    , lootFilterMapIcons("Loot Filter Map Icons", OptionEntryFlags::None, N_("Loot Filter Map Icons"), N_("POE2 mode, with the loot filter on: good items you have seen show on the maps."), true)
     , showLifeManaLevels("Show Life Mana Levels", OptionEntryFlags::None, N_("Show Life/Mana Levels"), N_("POE2 mode: shows your current and maximum Life and Energy Shield above the life globe, and Mana and Spirit (reserved / total) above the mana globe."), false)
     , heroMiniBar("Mini Life Bar Above You", OptionEntryFlags::None, N_("Mini Life Bar Above You"), N_("POE2 mode: a small life bar with a thin mana bar under it over your hero."), false)
     , heroMiniBarEnergyShield("Mini Bar Shows Energy Shield", OptionEntryFlags::None, N_("Mini Bar Shows Energy Shield"), N_("POE2 mode: the mini bar over your hero shows your Energy Shield over the top of the life bar."), false)
@@ -963,7 +971,9 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&showMonsterType,
 		&showItemLabels,
 		&lootFilter,
-		&showLifeManaLevels,
+		&lootFilterBeams,
+		&lootFilterSounds,
+		&lootFilterMapIcons,
 		&heroMiniBar,
 		&heroMiniBarEnergyShield,
 		&hurtMonsterBars,
