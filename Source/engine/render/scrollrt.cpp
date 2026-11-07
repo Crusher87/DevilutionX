@@ -476,11 +476,14 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
 	const hd::SubFrameScope subFrame(monster.animInfo.getFrameFraction());
+	// POE2 Mashup: the HD light gives a monster a shadow, and lights it in its colour unless it's drawn in a recolour.
+	const hd::CasterScope caster(hd::Caster::Monster);
 	// POE2 Mashup: a monster in front of a brazier or a portal goes over its effects.
 	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, targetBufferPosition, sprite);
 
 	if (!IsTileLit(tilePosition)) {
+		hd::CurrentCaster = hd::Caster::None;
 		// POE2 Mashup: the Maiden's Road, shapes that haven't noticed the hero are drawn dimmer.
 		if (gbIsPoe2 && monster.activeForTicks == 0 && HasInfravision(*MyPlayer)) {
 			std::array<uint8_t, 256> dim;
@@ -507,13 +510,16 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 		const size_t light = std::min<size_t>(static_cast<size_t>(std::max(lightTableIndex, 0)), LightTables.size() - 1);
 		for (size_t i = 0; i < enraged.size(); i++)
 			enraged[i] = trn != nullptr ? red[trn[i]] : LightTables[light][red[i]];
+		hd::CurrentCaster = hd::Caster::MonsterUnlit;
 		ClxDrawTRN(out, targetBufferPosition, sprite, enraged.data());
 		return;
 	}
-	if (trn != nullptr)
+	if (trn != nullptr) {
+		hd::CurrentCaster = trn == monster.uniqueMonsterTRN.get() ? hd::Caster::MonsterRecoloured : hd::Caster::MonsterUnlit;
 		ClxDrawTRN(out, targetBufferPosition, sprite, trn);
-	else
+	} else {
 		ClxDrawLight(out, targetBufferPosition, sprite, lightTableIndex);
+	}
 }
 
 /**
@@ -675,10 +681,14 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 
 	const std::optional<DamageType> backlash = &player == MyPlayer ? VizjereiLastBacklash(player) : std::nullopt;
 	if (&player == MyPlayer && IsNoneOf(leveltype, DTYPE_NEST, DTYPE_CRYPT)) {
-		if (backlash)
-			ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
-		else
-			ClxDraw(out, spriteBufferPosition, sprite);
+		{
+			// POE2 Mashup: the HD light colours the hero and gives them a shadow (only the body, not the icons).
+			const hd::CasterScope caster(hd::Caster::MyHero);
+			if (backlash)
+				ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
+			else
+				ClxDraw(out, spriteBufferPosition, sprite);
+		}
 		DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);
 		return;
 	}
@@ -690,10 +700,13 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	}
 
 	lightTableIndex = std::max(lightTableIndex - 5, 0);
-	if (backlash)
-		ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
-	else
-		ClxDrawLight(out, spriteBufferPosition, sprite, lightTableIndex);
+	{
+		const hd::CasterScope caster(&player == MyPlayer ? hd::Caster::MyHero : hd::Caster::Hero);
+		if (backlash)
+			ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
+		else
+			ClxDrawLight(out, spriteBufferPosition, sprite, lightTableIndex);
+	}
 	DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);
 }
 
@@ -762,7 +775,7 @@ static void DrawDungeon(const Surface & /*out*/, const Lightmap & /*lightmap*/, 
  */
 void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
-	const uint16_t levelPieceId = dPiece[tilePosition.x][tilePosition.y];
+	const uint16_t levelPieceId = hd::PieceToDraw(tilePosition);
 	const MICROS *pMap = &DPieceMicros[levelPieceId];
 
 	const uint8_t *tbl = LightTables[lightTableIndex].data();
@@ -910,7 +923,7 @@ void DrawFloorTile(const Surface &out, const Lightmap &lightmap, Point tilePosit
 		tbl = GetPauseTRN();
 #endif
 
-	const uint16_t levelPieceId = dPiece[tilePosition.x][tilePosition.y];
+	const uint16_t levelPieceId = hd::PieceToDraw(tilePosition);
 	{
 		const LevelCelBlock levelCelBlock { DPieceMicros[levelPieceId].mt[0] };
 		if (levelCelBlock.hasValue()) {
@@ -955,6 +968,26 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
 }
 
 /**
+ * @brief How far a townsperson is towards its next frame, for HD in-betweens. Some play their frames backwards;
+ * a jump to a frame further away has no in-between.
+ */
+float TownerFrameFraction(const Towner &towner, bool &backward)
+{
+	backward = false;
+	if (towner._tAnimDelay <= 0 || towner._tAnimLen < 2)
+		return 0;
+	const int frame = towner._tAnimFrame;
+	const int next = towner.nextFrame();
+	const int last = towner._tAnimLen - 1;
+	const bool forward = next == frame + 1 || (frame == last && next == 0);
+	backward = !forward && (next == frame - 1 || (frame == 0 && next == last));
+	if (!forward && !backward)
+		return 0;
+	const float ticks = towner._tAnimCnt + static_cast<float>(ProgressToNextGameTick) / AnimationInfo::baseValueFraction;
+	return std::clamp(ticks / towner._tAnimDelay, 0.F, 1.F);
+}
+
+/**
  * @brief Check if and how a monster should be rendered
  * @param out Output buffer
  * @param tilePosition dPiece coordinates
@@ -971,9 +1004,14 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		auto &towner = Towners[mi];
 		const Point position = targetBufferPosition + towner.getRenderingOffset();
 		const ClxSprite sprite = towner.currentSprite();
+		bool backward;
+		const float fraction = TownerFrameFraction(towner, backward);
+		const hd::SubFrameScope subFrame(fraction, backward);
 		if (mi == pcursmonst) {
 			ClxDrawOutlineSkipColorZero(out, OutlineColorsTowner, position, sprite);
 		}
+		// POE2 Mashup: with HD Lighting a townsperson (or a cow) casts shadows in town's evening light, as monsters do.
+		const hd::CasterScope caster(hd::Caster::Monster);
 		ClxDraw(out, position, sprite);
 		return;
 	}
@@ -1029,6 +1067,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePosition, Point targetBufferPosition)
 {
 	assert(InDungeonBounds(tilePosition));
+	// POE2 Mashup: the HD light lights this tile's walls and sprites from where they stand.
+	const hd::TileScope hdTile(tilePosition, targetBufferPosition);
 	const int lightTableIndex = dLight[tilePosition.x][tilePosition.y];
 
 	DrawCell(out, lightmap, tilePosition, targetBufferPosition, lightTableIndex);
@@ -1301,6 +1341,7 @@ void DrawTileContent(const Surface &out, const Lightmap &lightmap, Point tilePos
 
 void DrawDirtTile(const Surface &out, const Lightmap &lightmap, Point tilePosition, Point targetBufferPosition)
 {
+	const hd::TileScope hdTile(tilePosition, targetBufferPosition);
 	// This should be the *top-left* of the 2×2 dirt pattern in the actual dungeon.
 	// You might need to tweak these to where your dirt patch actually lives.
 	constexpr Point base { 0, 0 };
@@ -1548,8 +1589,10 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 			}
 		}
 		hd::BeginWorld(out, Rectangle { Point { viewportOffsetX, 0 }, Size { viewportWidth, gnViewportHeight } });
+		hd::SetViewOrigin(position, Point {} + offset);
 	}
 	DrawFloor(out, lightmap, position, Point {} + offset, rows, columns);
+	hd::EndFloor();
 	// POE2 Mashup: the effects lying on the floor hide behind whatever is drawn over it from here on.
 	const bool floorCopy = IsUiScaled() && vfx::WantsFloorCopy();
 	if (floorCopy)
@@ -1605,6 +1648,7 @@ void DrawView(const Surface &out, Point startPosition)
 		CalcFirstTilePosition(startPosition, offset);
 		// POE2 Mashup: heavy hits jolt the view.
 		offset += CameraShakeOffset();
+		const FramePartScope part(FramePart::World);
 		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
 	}
 	TelemetryDrawStep("drawing the map, names and banners");
@@ -2189,6 +2233,7 @@ void DrawAndBlit()
 	nthread_UpdateProgressToNextGameTick();
 
 	this_sdl_thread::yield();
+	const uint64_t drawingStart = TelemetryFramePartStart();
 	DrawView(out, ViewPosition);
 	TelemetryDrawStep("drawing the panels");
 	if (drawCtrlPan) {
@@ -2244,6 +2289,7 @@ void DrawAndBlit()
 	DrawItemSpawner(out);
 	TelemetryDrawStep("drawing the cursor");
 	DrawCursor(out);
+	TelemetryFramePartDone(FramePart::Drawing, drawingStart);
 	TelemetryFrameDrawn();
 
 	DrawFPS(out);
