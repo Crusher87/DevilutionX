@@ -46,10 +46,21 @@ extern bool Recording;
 /** @brief How far the sprite being drawn is towards its next animation frame (0 = exactly on a frame). */
 extern float SubFrame;
 
+/** @brief The sprite being drawn moves towards the frame before it (townspeople play some frames backwards). */
+extern bool SubFrameBackward;
+
 /** @brief Sets SubFrame while a character is drawn. */
 struct SubFrameScope {
-	explicit SubFrameScope(float fraction) { SubFrame = fraction; }
-	~SubFrameScope() { SubFrame = 0; }
+	explicit SubFrameScope(float fraction, bool backward = false)
+	{
+		SubFrame = fraction;
+		SubFrameBackward = backward;
+	}
+	~SubFrameScope()
+	{
+		SubFrame = 0;
+		SubFrameBackward = false;
+	}
 	SubFrameScope(const SubFrameScope &) = delete;
 	SubFrameScope &operator=(const SubFrameScope &) = delete;
 };
@@ -161,6 +172,15 @@ bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame);
 
 /** @brief Draws what DrawUiSprite asked for, over the UI. */
 void RenderUi(SDL_Renderer *renderer);
+
+using RegisterSpritesFn = void (*)(std::string_view path, ClxSpriteListOrSheet sprites);
+
+/**
+ * @brief RegisterSprites when the HD renderer is linked in, otherwise null.
+ *
+ * A pointer (in hd_hooks.cpp) so the CEL loader and the tests of the libraries using it don't link the whole renderer.
+ */
+extern RegisterSpritesFn RegisterSpritesHook;
 
 /** @brief Draws the recorded world in full colour. */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);

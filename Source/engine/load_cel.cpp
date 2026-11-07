@@ -12,6 +12,7 @@
 
 #include "appfat.h"
 #include "mpq/mpq_common.hpp"
+#include "poe2/hd.hpp"
 #include "utils/status_macros.hpp"
 #include "utils/str_cat.hpp"
 
@@ -36,7 +37,10 @@ std::expected<OwnedClxSpriteListOrSheet, std::string> LoadCelListOrSheetWithStat
 #ifdef DEBUG_CEL_TO_CL2_SIZE
 	std::cout << path;
 #endif
-	return CelToClx(data.get(), size, widthOrWidths);
+	OwnedClxSpriteListOrSheet result = CelToClx(data.get(), size, widthOrWidths);
+	if (hd::RegisterSpritesHook != nullptr)
+		hd::RegisterSpritesHook(pszName, ClxSpriteListOrSheet { result });
+	return result;
 #endif
 }
 

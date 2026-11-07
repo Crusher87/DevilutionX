@@ -990,6 +990,26 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
 }
 
 /**
+ * @brief How far a townsperson is towards its next frame, for HD in-betweens. Some play their frames backwards;
+ * a jump to a frame further away has no in-between.
+ */
+float TownerFrameFraction(const Towner &towner, bool &backward)
+{
+	backward = false;
+	if (towner._tAnimDelay <= 0 || towner._tAnimLen < 2)
+		return 0;
+	const int frame = towner._tAnimFrame;
+	const int next = towner.nextFrame();
+	const int last = towner._tAnimLen - 1;
+	const bool forward = next == frame + 1 || (frame == last && next == 0);
+	backward = !forward && (next == frame - 1 || (frame == 0 && next == last));
+	if (!forward && !backward)
+		return 0;
+	const float ticks = towner._tAnimCnt + static_cast<float>(ProgressToNextGameTick) / AnimationInfo::baseValueFraction;
+	return std::clamp(ticks / towner._tAnimDelay, 0.F, 1.F);
+}
+
+/**
  * @brief Check if and how a monster should be rendered
  * @param out Output buffer
  * @param tilePosition dPiece coordinates
@@ -1006,9 +1026,14 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		auto &towner = Towners[mi];
 		const Point position = targetBufferPosition + towner.getRenderingOffset();
 		const ClxSprite sprite = towner.currentSprite();
+		bool backward;
+		const float fraction = TownerFrameFraction(towner, backward);
+		const hd::SubFrameScope subFrame(fraction, backward);
 		if (mi == pcursmonst) {
 			ClxDrawOutlineSkipColorZero(out, OutlineColorsTowner, position, sprite);
 		}
+		// POE2 Mashup: with HD Lighting a townsperson (or a cow) casts shadows in town's evening light, as monsters do.
+		const hd::CasterScope caster(hd::Caster::Monster);
 		ClxDraw(out, position, sprite);
 		return;
 	}
