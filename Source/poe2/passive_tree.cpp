@@ -794,6 +794,24 @@ bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attrib
 	return true;
 }
 
+bool CanChangePassiveAttribute(const Player &player, PassiveNodeId node, PassivePool pool)
+{
+	return PassiveNeedsAttributeChoice(node) && (IsPassiveInPool(player, node, PassivePool::Main) || IsPassiveInPool(player, node, pool));
+}
+
+bool ChangePassiveAttribute(Player &player, PassiveNodeId node, PassiveAttribute attribute, PassivePool pool)
+{
+	if (!CanChangePassiveAttribute(player, node, pool) || attribute >= PassiveAttribute::Count)
+		return false;
+	const PassivePool owner = IsPassiveInPool(player, node, PassivePool::Main) ? PassivePool::Main : pool;
+	if (ChosenPassiveAttributeIn(player, node, owner) == attribute)
+		return false;
+	SetChosenPassiveAttribute(player, node, attribute, owner);
+	CalcPlrInv(player, true);
+	TelemetryLog("tree", FormatRuntime("changed node {:d} to +5 {:s}", static_cast<int>(node), PassiveAttributeName(attribute)));
+	return true;
+}
+
 PassiveAttribute ChosenPassiveAttribute(const Player &player, PassiveNodeId node)
 {
 	if (node >= MaxPassiveNodes)

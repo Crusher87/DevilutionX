@@ -1462,7 +1462,12 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 			const auto buttons = AttributeButtons(layout, PassiveTree()[*PendingAttributeNode]);
 			if (event.button.button == SDL_BUTTON_LEFT) {
 				for (size_t i = 0; i < buttons.size(); i++) {
-					if (buttons[i].contains(MousePosition))
+					if (!buttons[i].contains(MousePosition))
+						continue;
+					// An allocated stat node changes its pick; a new one is taken with it.
+					if (CanChangePassiveAttribute(player, *PendingAttributeNode, Pool))
+						ChangePassiveAttribute(player, *PendingAttributeNode, static_cast<PassiveAttribute>(i), Pool);
+					else
 						AllocatePassive(player, *PendingAttributeNode, static_cast<PassiveAttribute>(i), Pool);
 				}
 			}
@@ -1486,7 +1491,7 @@ bool PassiveTreeHandleEvent(const SDL_Event &event)
 		}
 		const std::optional<PassiveNodeId> node = NodeAt(layout, MousePosition);
 		if (event.button.button == SDL_BUTTON_LEFT) {
-			if (node && PassiveNeedsAttributeChoice(*node) && CanAllocatePassive(player, *node, Pool)) {
+			if (node && PassiveNeedsAttributeChoice(*node) && (CanAllocatePassive(player, *node, Pool) || CanChangePassiveAttribute(player, *node, Pool))) {
 				PendingAttributeNode = node;
 			} else if (node && Pool == PassivePool::Main && PassiveTree()[*node].kind == PassiveKind::JewelSocket && IsJewel(player.HoldItem)) {
 				PlaceHeldJewel(player, *node);

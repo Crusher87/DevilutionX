@@ -338,6 +338,13 @@ std::vector<PassiveNodeId> PassiveRoute(const Player &player, PassiveNodeId targ
 bool PassiveNeedsAttributeChoice(PassiveNodeId node);
 /** @param attribute The attribute picked for an "any Attribute" node; ignored for other nodes. */
 bool AllocatePassive(Player &player, PassiveNodeId node, PassiveAttribute attribute = PassiveAttribute::Strength, PassivePool pool = PassivePool::Main);
+/**
+ * @brief Picks another attribute on an allocated "any Attribute" node, free (Curtis 2026-11-07: change stat nodes by
+ * clicking them instead of refunding back to them). A main-tree node changes for every set; a set node only in its set.
+ */
+bool ChangePassiveAttribute(Player &player, PassiveNodeId node, PassiveAttribute attribute, PassivePool pool = PassivePool::Main);
+/** @brief Whether the node is an allocated "any Attribute" node whose pick can be changed from that pool's tab. */
+bool CanChangePassiveAttribute(const Player &player, PassiveNodeId node, PassivePool pool = PassivePool::Main);
 /** @brief The attribute picked on an allocated "any Attribute" node. */
 PassiveAttribute ChosenPassiveAttribute(const Player &player, PassiveNodeId node);
 /** @brief The attribute picked on the node in that pool: Set I and Set II each keep their own pick (the low and high half of the saved byte). */

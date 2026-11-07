@@ -272,6 +272,23 @@ TEST_F(Poe2PassiveTreeTest, AttributeNodesGiveTheAttributePicked)
 	ASSERT_TRUE(AllocatePassive(player, second, PassiveAttribute::Magic));
 	EXPECT_EQ(Total(player, PassiveStat::Magic), magic + 5);
 	EXPECT_EQ(Total(player, PassiveStat::Vitality), vitality - 5);
+
+	// Curtis 2026-11-07: an allocated stat node changes its pick in place, without refunding what lies past it.
+	const int spent = PassivePointsSpent(player);
+	EXPECT_TRUE(CanChangePassiveAttribute(player, first));
+	ASSERT_TRUE(ChangePassiveAttribute(player, first, PassiveAttribute::Strength));
+	EXPECT_EQ(ChosenPassiveAttribute(player, first), PassiveAttribute::Strength);
+	EXPECT_EQ(Total(player, PassiveStat::Dexterity), dexterity - 5);
+	EXPECT_EQ(PassivePointsSpent(player), spent);
+	EXPECT_TRUE(IsPassiveAllocated(player, second));
+	EXPECT_FALSE(ChangePassiveAttribute(player, first, PassiveAttribute::Strength)) << "already that pick";
+	EXPECT_FALSE(CanChangePassiveAttribute(player, WarriorPath().back())) << "not a stat node";
+	for (const PassiveNode &node : PassiveTree()) {
+		if (node.kind == PassiveKind::Attribute && !IsPassiveAllocated(player, node.id)) {
+			EXPECT_FALSE(ChangePassiveAttribute(player, node.id, PassiveAttribute::Dexterity)) << "not allocated";
+			break;
+		}
+	}
 }
 
 TEST_F(Poe2PassiveTreeTest, TheTreeHasFourClassesAndJewelSockets)
