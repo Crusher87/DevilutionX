@@ -122,6 +122,13 @@ Rgb GroundAt(float x, float y);
 Rgb TileGroundAt(float x, float y, int tileX, int tileY);
 
 /**
+ * @brief The light on a wall's face at a world point (in tiles): as At, but where the wall's own rock lit for its face
+ * is round the point, the floor round it is left out. That floor lies behind the wall or past its end, often in another
+ * room, and a strip of the face beside a pillar showed that room's light.
+ */
+Rgb FaceAt(float x, float y);
+
+/**
  * @brief The light of the room behind a wall at a world point (in tiles) just behind the wall's face: as At, but where
  * the point is rock lit for the walls by the room in front of them, the light of the first floor (or ground outside the
  * rooms) further back, up to a tile behind it. The face looks along the x axis (towards +x) or, if `alongY`, along the

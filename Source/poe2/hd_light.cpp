@@ -1485,6 +1485,42 @@ Rgb TileGroundAt(float x, float y, int tileX, int tileY)
 	return { sum.r / static_cast<float>(count), sum.g / static_cast<float>(count), sum.b / static_cast<float>(count) };
 }
 
+Rgb FaceAt(float x, float y)
+{
+	if (WinW <= 0 || WinH <= 0)
+		return Full();
+	const float fi = std::clamp((x + 0.25F) * Per - static_cast<float>(WinI0), 0.F, static_cast<float>(WinW - 1));
+	const float fj = std::clamp((y + 0.25F) * Per - static_cast<float>(WinJ0), 0.F, static_cast<float>(WinH - 1));
+	const int i = std::min(static_cast<int>(fi), std::max(WinW - 2, 0));
+	const int j = std::min(static_cast<int>(fj), std::max(WinH - 2, 0));
+	const float u = std::clamp(fi - static_cast<float>(i), 0.F, 1.F);
+	const float v = std::clamp(fj - static_cast<float>(j), 0.F, 1.F);
+	std::array<size_t, 4> samples;
+	std::array<float, 4> weights;
+	bool wallLit = false;
+	for (int n = 0; n < 4; n++) {
+		const int di = n & 1;
+		const int dj = n >> 1;
+		samples[n] = static_cast<size_t>(std::min(j + dj, WinH - 1)) * WinW + std::min(i + di, WinW - 1);
+		weights[n] = (di == 0 ? 1 - u : u) * (dj == 0 ? 1 - v : v);
+		wallLit = wallLit || (weights[n] > 0 && LitForWalls(samples[n]));
+	}
+	Rgb sum;
+	float total = 0;
+	for (int n = 0; n < 4; n++) {
+		if (weights[n] <= 0 || (wallLit && WinSet[samples[n]] == 1))
+			continue;
+		const Rgb &colour = WinColour[samples[n]];
+		sum.r += colour.r * weights[n];
+		sum.g += colour.g * weights[n];
+		sum.b += colour.b * weights[n];
+		total += weights[n];
+	}
+	if (total <= 0)
+		return At(x, y);
+	return { sum.r / total, sum.g / total, sum.b / total };
+}
+
 Rgb BehindAt(float x, float y, bool alongY)
 {
 	return Blend(x, y, [alongY](int i, int j) {

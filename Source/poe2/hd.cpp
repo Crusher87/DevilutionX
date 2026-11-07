@@ -2217,14 +2217,19 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	}
 }
 
-/** @brief The light on a wall's face, from the floor in front of it, taken along the face so walls in a row meet without a seam. */
+/**
+ * @brief The light on a wall's face, from the floor in front of it, taken along the face so walls in a row meet without a
+ * seam. Not from the floor behind the wall: a wall with arches has a strip beside each pillar in its other column, which
+ * showed the light of the room behind the wall (light::FaceAt).
+ */
 Shading FaceLight(Point tile, bool right)
 {
 	const float tx = static_cast<float>(tile.x);
 	const float ty = static_cast<float>(tile.y);
+	const auto at = [](float x, float y) { return ToColour(light::FaceAt(x, y)); };
 	if (right)
-		return Gradient(LightAt(tx - 0.5F, ty - 0.25F), LightAt(tx + 0.5F, ty - 0.25F));
-	return Gradient(LightAt(tx - 0.25F, ty + 0.5F), LightAt(tx - 0.25F, ty - 0.5F));
+		return Gradient(at(tx - 0.5F, ty - 0.25F), at(tx + 0.5F, ty - 0.25F));
+	return Gradient(at(tx - 0.25F, ty + 0.5F), at(tx - 0.25F, ty - 0.5F));
 }
 
 /**
