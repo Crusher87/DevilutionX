@@ -78,6 +78,13 @@ struct Towner {
 	{
 		return (*anim)[_tAnimFrame];
 	}
+	/** @brief The frame ProcessTowners shows after this one: the next in animOrder, or the next in the file. */
+	[[nodiscard]] uint8_t nextFrame() const
+	{
+		if (!animOrder.empty())
+			return animOrder[_tAnimFrameCnt + 1U < animOrder.size() ? _tAnimFrameCnt + 1U : 0];
+		return static_cast<uint8_t>(_tAnimFrame + 1 < _tAnimLen ? _tAnimFrame + 1 : 0);
+	}
 	[[nodiscard]] Displacement getRenderingOffset() const
 	{
 		return { -CalculateSpriteTileCenterX(_tAnimWidth), 0 };

@@ -46,10 +46,21 @@ extern bool Recording;
 /** @brief How far the sprite being drawn is towards its next animation frame (0 = exactly on a frame). */
 extern float SubFrame;
 
+/** @brief The sprite being drawn moves towards the frame before it (townspeople play some frames backwards). */
+extern bool SubFrameBackward;
+
 /** @brief Sets SubFrame while a character is drawn. */
 struct SubFrameScope {
-	explicit SubFrameScope(float fraction) { SubFrame = fraction; }
-	~SubFrameScope() { SubFrame = 0; }
+	explicit SubFrameScope(float fraction, bool backward = false)
+	{
+		SubFrame = fraction;
+		SubFrameBackward = backward;
+	}
+	~SubFrameScope()
+	{
+		SubFrame = 0;
+		SubFrameBackward = false;
+	}
 	SubFrameScope(const SubFrameScope &) = delete;
 	SubFrameScope &operator=(const SubFrameScope &) = delete;
 };

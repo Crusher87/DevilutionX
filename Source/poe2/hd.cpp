@@ -47,6 +47,7 @@ namespace devilution {
 namespace hd {
 
 float SubFrame = 0;
+bool SubFrameBackward = false;
 Caster CurrentCaster = Caster::None;
 Point CurrentTile;
 Point CurrentTileOrigin;
@@ -860,8 +861,11 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	bool recoloured = false;
 	// With HD Lighting, heroes and monsters cast shadows of their own in place of the one the maker painted.
 	const bool withoutShadow = FrameLit && draw.caster != Caster::None;
-	if (draw.inBetween != 0 && !masked)
-		texture = LoadArt(renderer, *name + "_m" + std::to_string(draw.inBetween), withoutShadow);
+	// In-betweens 1 and 2 lead to the next frame (_m1, _m2); 3 and 4 back to the frame before (_b1, _b2).
+	if (draw.inBetween != 0 && !masked) {
+		const bool back = draw.inBetween > 2;
+		texture = LoadArt(renderer, *name + (back ? "_b" : "_m") + std::to_string(back ? draw.inBetween - 2 : draw.inBetween), withoutShadow);
+	}
 	// Tiles recoloured for this level's palette, e.g. tiles/l1_p3/120, beat evening out the base ones.
 	if (texture == nullptr && draw.kind == DrawKind::Tile && PaletteVariant > 1) {
 		const size_t slash = name->find('/', 6);
@@ -2455,6 +2459,17 @@ void RecordTileImpl(const Surface &out, const Lightmap &lightmap, Point position
 	});
 }
 
+namespace {
+
+/** @brief Which in-between a sprite drawn now shows: 0 its own frame, 1-2 towards the next, 3-4 towards the one before. */
+uint8_t InBetween()
+{
+	const int step = std::clamp(static_cast<int>(SubFrame * 3), 0, 2);
+	return static_cast<uint8_t>(step != 0 && SubFrameBackward ? step + 2 : step);
+}
+
+} // namespace
+
 void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap)
 {
 	const bool perPixel = lightmap != nullptr && *GetOptions().Graphics.perPixelLighting && !RecordingLit;
@@ -2475,8 +2490,8 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .light = static_cast<int8_t>(perPixel ? 0 : LightIndexOf(trn)),
 	    .perPixel = perPixel,
 	    .lightOffset = perPixel ? CaptureLight(out, *lightmap, { position.x, position.y - clx.height() + 1 }, clx.width(), clx.height(), trn) : 0,
-	    // Two in-betweens per frame split it in thirds.
-	    .inBetween = static_cast<uint8_t>(std::clamp(static_cast<int>(SubFrame * 3), 0, 2)),
+	    // Two in-betweens per frame split it in thirds; played backwards they are 3 and 4.
+	    .inBetween = InBetween(),
 	    .caster = IsOutline(style) ? Caster::None : CurrentCaster,
 	    .floor = !FloorDone,
 	    .hasTile = HaveTile,
