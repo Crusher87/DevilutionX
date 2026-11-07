@@ -136,6 +136,19 @@ Rgb FaceAt(float x, float y);
  */
 Rgb BehindAt(float x, float y, bool alongY);
 
+/**
+ * @brief The level's rock round the rooms shows its top, raised over the floor (the Catacombs' rock between the rooms,
+ * the Caves' and the Hive's rock round them, the Caves' steps up): RockTopAt lights it.
+ */
+bool RockTopsLit();
+
+/**
+ * @brief The light on the top of the rock at a world point (in tiles), for RockTopsLit's levels: every light round it by
+ * how far it is, as the game lights the rock, with no wall in its way (the tops lie above the walls that stop the light on
+ * the floor), but not the lava, which lies on the floor below them. Elsewhere, as At.
+ */
+Rgb RockTopAt(float x, float y);
+
 /** @brief All the light at a world point as linear light: lights add up, so it can pass 1 where they overlap. */
 float LinearAt(float x, float y);
 

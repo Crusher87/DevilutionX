@@ -2573,11 +2573,9 @@ Shading OpenTileLight(Point tile, bool right)
 	return Gradient(LightAt(tx - 0.25F, ty + 0.25F), LightAt(tx, ty));
 }
 
-/** @brief The Catacombs' rock with no open tile round it: the rock between the rooms, of which only the top shows. */
+/** @brief Rock with no open tile round it: the rock between and round the rooms, of which only the top shows. */
 bool IsDeepRock(Point tile)
 {
-	if (leveltype != DTYPE_CATACOMBS)
-		return false;
 	for (int dy = -1; dy <= 1; dy++) {
 		for (int dx = -1; dx <= 1; dx++) {
 			const Point beside = tile + Displacement { dx, dy };
@@ -2589,16 +2587,31 @@ bool IsDeepRock(Point tile)
 }
 
 /**
- * @brief The light on the top of deep rock (IsDeepRock): the ground's light at its tile, across it from left to right as
- * on an open tile. Lit as a wall's face, each half from its own side, the rock right behind a long wall took the light
- * the wall's face takes from the room in front of it in one half only, and showed as a row of lit teeth along the wall's
- * top. Like the Cathedral's dirt behind a wall (DrawGroundLit), it takes none of that light (light::TileGroundAt).
+ * @brief Only the top of the rock on this tile shows, where the level's rock shows its top (light::RockTopsLit): rock with
+ * no open tile round it (IsDeepRock), or rock whose piece draws nothing at the floor, so no wall's face stands on the tile,
+ * only the top of the rock, raised over the floor (the Caves' rock right beside a room, and the top of its steps up).
+ */
+bool IsRockTop(Point tile)
+{
+	if (!light::RockTopsLit())
+		return false;
+	if (IsDeepRock(tile))
+		return true;
+	const MICROS &micros = DPieceMicros[light::UnpaintedPiece(tile.x, tile.y, dPiece[tile.x][tile.y])];
+	return !micros.mt[0].hasValue() && !micros.mt[1].hasValue();
+}
+
+/**
+ * @brief The light on the top of the rock (IsRockTop): the light round it from above (light::RockTopAt), across the
+ * tile from left to right as on an open tile. Lit as a wall's face, each half from its own side, the rock took the light
+ * the faces round it take from the rooms in front of them in one half only: a row of lit teeth along a wall's top, and
+ * past them the rock tile by tile in blocks of light and dark, or black, with the top of the Caves' steps up cut off.
  */
 Shading RockTopLight(Point tile, bool right)
 {
 	const float tx = static_cast<float>(tile.x);
 	const float ty = static_cast<float>(tile.y);
-	const auto at = [tile](float x, float y) { return ToColour(light::TileGroundAt(x, y, tile.x, tile.y)); };
+	const auto at = [](float x, float y) { return ToColour(light::RockTopAt(x, y)); };
 	if (right)
 		return Gradient(at(tx, ty), at(tx + 0.25F, ty - 0.25F));
 	return Gradient(at(tx - 0.25F, ty + 0.25F), at(tx, ty));
@@ -2707,7 +2720,7 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 		Shading shading;
 		if (!light::Blocks(draw.cell.x, draw.cell.y))
 			shading = OpenTileLight(draw.cell, right);
-		else if (IsDeepRock(draw.cell))
+		else if (IsRockTop(draw.cell))
 			shading = RockTopLight(draw.cell, right);
 		else
 			shading = WallLight(draw.cell, right);

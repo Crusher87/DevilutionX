@@ -231,6 +231,12 @@ std::array<uint8_t, MAXDUNX * MAXDUNY> BuiltPreLight {};
 /** @brief The static lights' brightness at every sample, and their colours weighted by brightness squared (and the weight). */
 std::vector<float> StaticBright;
 std::vector<std::array<float, 4>> StaticHue;
+/**
+ * @brief The same for the tops of the rock round the rooms (RockTopsLit), at the rock's samples: each static light but
+ * the lava by how far it is, with no wall in its way (see RockTopAt). Empty where the rock's tops don't show.
+ */
+std::vector<float> StaticTopBright;
+std::vector<std::array<float, 4>> StaticTopHue;
 
 /** @brief Which samples of the lattice a moving light reaches, kept while it doesn't move. */
 struct Reach {
@@ -260,6 +266,10 @@ std::vector<uint8_t> WinSet;
 std::vector<Rgb> WinColour;
 std::vector<uint32_t> WinPixels;
 std::vector<uint32_t> WinMulPixels;
+/** @brief The rock tops' light in the window (StaticTopBright and the moving lights), and as drawn; empty where they don't show. */
+std::vector<float> WinTopBright;
+std::vector<std::array<float, 4>> WinTopHue;
+std::vector<Rgb> WinTopColour;
 
 float Luminance(const Colour &c)
 {
@@ -951,6 +961,41 @@ void ShineStatic(const Source &source, std::vector<float> &lava)
 	}
 }
 
+/** @brief A light's linear light on the top of the rock this far from it, as the game lights the rock: nothing in its way. */
+float TopLinear(const Source &source, float distance)
+{
+	return LevelLinear(LevelAt(distance, source.radius)) * source.power;
+}
+
+/** @brief Adds a static light to the rock tops' light (StaticTopBright). */
+void ShineTop(const Source &source)
+{
+	const float reach = static_cast<float>(source.radius + 1);
+	const int i0 = std::max(0, SampleBefore(source.x - reach));
+	const int i1 = std::min(LatticeW - 1, SampleBefore(source.x + reach) + 1);
+	const int j0 = std::max(0, SampleBefore(source.y - reach));
+	const int j1 = std::min(LatticeH - 1, SampleBefore(source.y + reach) + 1);
+	for (int j = j0; j <= j1; j++) {
+		const float sy = SampleAt(j);
+		for (int i = i0; i <= i1; i++) {
+			if (SampleOpen(i, j))
+				continue;
+			const float sx = SampleAt(i);
+			const float distance = Length(sx - source.x, sy - source.y);
+			if (distance >= reach)
+				continue;
+			const float linear = TopLinear(source, distance) * ConeOf(source, sx, sy);
+			if (linear <= 1e-5F)
+				continue;
+			const size_t k = static_cast<size_t>(j) * LatticeW + i;
+			StaticTopBright[k] += linear;
+			for (int c = 0; c < 3; c++)
+				StaticTopHue[k][c] += source.colour[c] * linear;
+			StaticTopHue[k][3] += linear;
+		}
+	}
+}
+
 /**
  * @brief The object gives the level a light the game baked in (AddObjectLight). Old saves can hold lights that come
  * and go instead (they're among the moving lights), and braziers a lever adds aren't baked, so the game doesn't light them.
@@ -1053,6 +1098,18 @@ void UpdateStatics()
 			StaticHue[k][c] += lavaColour[c] * lava[k];
 		StaticHue[k][3] += lava[k];
 	}
+	// The tops of the rock round the rooms, in the dungeon's dark and lit by the lights round them. The lava lies on the
+	// floor, below them.
+	StaticTopBright.clear();
+	StaticTopHue.clear();
+	if (RockTopsLit()) {
+		StaticTopBright.assign(StaticBright.size(), ambient);
+		StaticTopHue.assign(StaticBright.size(), { 0.F, 0.F, 0.F, 0.F });
+		for (const Source &source : StaticSources) {
+			if (!source.lava)
+				ShineTop(source);
+		}
+	}
 
 	// The game lights all of the town fully: its evening light is the sky's and the fires'.
 	if (town)
@@ -1143,6 +1200,7 @@ void GatherDynamic(float heroX, float heroY)
 			myLight = player.lightId;
 	}
 
+	const bool tops = !WinTopBright.empty();
 	DynamicSources.clear();
 	for (int i = 0; i < ActiveLightCount; i++) {
 		const int id = ActiveLights[i];
@@ -1217,6 +1275,16 @@ void GatherDynamic(float heroX, float heroY)
 				const float path = reach.paths[r];
 				const int i = reach.i0 + a;
 				const float distance = Length(SampleAt(i) - source.x, sy - source.y);
+				if (tops && distance < range && !SampleOpen(i, j)) {
+					const float top = TopLinear(source, distance);
+					if (top > 1e-5F) {
+						const size_t k = static_cast<size_t>(j - WinJ0) * WinW + (i - WinI0);
+						WinTopBright[k] += top;
+						for (int c = 0; c < 3; c++)
+							WinTopHue[k][c] += source.colour[c] * top;
+						WinTopHue[k][3] += top;
+					}
+				}
 				float linear = 0;
 				if (distance < range || path <= range)
 					linear = SampleLinear(source, distance, seen, path);
@@ -1285,21 +1353,28 @@ void FillWalls()
 	}
 }
 
+/** @brief Linear light with its lights' colours (weighted by their light) as drawn: their colour where it is bright, cool in the dark. */
+std::array<float, 3> Graded(float linear, const std::array<float, 4> &hue)
+{
+	const Look &look = CurrentLook;
+	const float brightness = DrawnBrightness(linear);
+	const float warmth = WarmthOfBrightness[static_cast<size_t>(std::clamp(brightness, 0.F, 1.F) * 255.F + 0.5F)];
+	std::array<float, 3> colour;
+	for (int c = 0; c < 3; c++) {
+		const float lightColour = hue[3] > 1e-6F ? hue[c] / hue[3] : look.warm[c];
+		const float grade = look.cool[c] + (lightColour - look.cool[c]) * warmth;
+		colour[c] = std::clamp(brightness * grade * look.tint[c], 0.F, MaxLight);
+	}
+	return colour;
+}
+
 void Finish()
 {
 	const Look &look = CurrentLook;
 	const auto byte = [](float value) { return static_cast<uint32_t>(std::clamp(value, 0.F, 1.F) * 255.F + 0.5F); };
 	for (size_t k = 0; k < WinBright.size(); k++) {
-		const float brightness = DrawnBrightness(WinBright[k]);
-		const std::array<float, 4> &hue = WinHue[k];
-		const float warmth = WarmthOfBrightness[static_cast<size_t>(std::clamp(brightness, 0.F, 1.F) * 255.F + 0.5F)];
+		const std::array<float, 3> colour = Graded(WinBright[k], WinHue[k]);
 		Rgb &out = WinColour[k];
-		std::array<float, 3> colour;
-		for (int c = 0; c < 3; c++) {
-			const float lightColour = hue[3] > 1e-6F ? hue[c] / hue[3] : look.warm[c];
-			const float grade = look.cool[c] + (lightColour - look.cool[c]) * warmth;
-			colour[c] = std::clamp(brightness * grade * look.tint[c], 0.F, MaxLight);
-		}
 		out = { colour[0], colour[1], colour[2] };
 		WinPixels[k] = 0xFF000000U | (byte(colour[0]) << 16) | (byte(colour[1]) << 8) | byte(colour[2]);
 		// Each channel's light is its colour plus one less the alpha (see FieldMulPixels). Up to full that is the colour
@@ -1308,6 +1383,15 @@ void Finish()
 		const float low = std::min({ colour[0], colour[1], colour[2] });
 		const float alpha = high > 1 ? std::clamp(1.5F - (high + low) / 2, 0.F, 1.F) : 1.F;
 		WinMulPixels[k] = (byte(alpha) << 24) | (byte(colour[0] - 1 + alpha) << 16) | (byte(colour[1] - 1 + alpha) << 8) | byte(colour[2] - 1 + alpha);
+	}
+	// The rock tops' light, at the rock's samples (the open ones keep the floor's).
+	for (size_t k = 0; k < WinTopBright.size(); k++) {
+		if (WinSet[k] == 1) {
+			WinTopColour[k] = WinColour[k];
+			continue;
+		}
+		const std::array<float, 3> colour = Graded(WinTopBright[k], WinTopHue[k]);
+		WinTopColour[k] = { colour[0], colour[1], colour[2] };
 	}
 	// The sky's light alone, drawn as a point lit by nothing else is above.
 	SkyRgb = Full();
@@ -1348,10 +1432,18 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 	WinColour.resize(count);
 	WinPixels.resize(count);
 	WinMulPixels.resize(count);
+	const bool tops = !StaticTopBright.empty();
+	WinTopBright.resize(tops ? count : 0);
+	WinTopHue.resize(tops ? count : 0);
+	WinTopColour.resize(tops ? count : 0);
 	for (int j = 0; j < WinH; j++) {
 		const size_t from = static_cast<size_t>(WinJ0 + j) * LatticeW + WinI0;
 		std::copy_n(StaticBright.begin() + static_cast<ptrdiff_t>(from), WinW, WinBright.begin() + static_cast<ptrdiff_t>(j) * WinW);
 		std::copy_n(StaticHue.begin() + static_cast<ptrdiff_t>(from), WinW, WinHue.begin() + static_cast<ptrdiff_t>(j) * WinW);
+		if (tops) {
+			std::copy_n(StaticTopBright.begin() + static_cast<ptrdiff_t>(from), WinW, WinTopBright.begin() + static_cast<ptrdiff_t>(j) * WinW);
+			std::copy_n(StaticTopHue.begin() + static_cast<ptrdiff_t>(from), WinW, WinTopHue.begin() + static_cast<ptrdiff_t>(j) * WinW);
+		}
 	}
 	GatherDynamic(heroX, heroY);
 	FillWalls();
@@ -1538,6 +1630,18 @@ Rgb BehindAt(float x, float y, bool alongY)
 		}
 		return WinColour[static_cast<size_t>(j) * WinW + i];
 	});
+}
+
+bool RockTopsLit()
+{
+	return IsAnyOf(leveltype, DTYPE_CATACOMBS, DTYPE_CAVES, DTYPE_NEST);
+}
+
+Rgb RockTopAt(float x, float y)
+{
+	if (WinTopColour.empty())
+		return At(x, y);
+	return Blend(x, y, [](int i, int j) { return WinTopColour[static_cast<size_t>(j) * WinW + i]; });
 }
 
 Rgb Boost(const Rgb &light, float levels)
