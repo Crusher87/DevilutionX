@@ -52,6 +52,7 @@
 #include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/shrines.hpp"
+#include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
@@ -4913,6 +4914,8 @@ void BreakObjectAt(const Player &player, Point tile)
 {
 	if (!gbIsPoe2 || &player != MyPlayer)
 		return;
+	// The skills strike Wave of Light's bell where they strike barrels (Curtis 2026-11-07, Q38).
+	StrikeWaveBell(player, tile);
 	Object *object = FindObjectAtPosition(tile);
 	if (object != nullptr && object->IsBreakable())
 		BreakObject(player, *object);

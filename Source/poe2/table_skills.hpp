@@ -397,6 +397,23 @@ constexpr int ShieldWallShatterPercent = 100;
 constexpr int BlessedShieldBounces = 3;
 constexpr int BlessedShieldBounceTiles = 4;
 constexpr int BlessedShieldBouncePercent = 75;
+/** @brief Rend (Curtis 2026-11-07, Q38): Rage for each monster it hits. */
+constexpr int RendRagePerHit = 3;
+/** @brief Death Mark (Q38): the next Shadow Lunge or Cobra Strike on the marked monster takes the mark for this percent. */
+constexpr int DeathMarkConsumePercent = 200;
+/**
+ * @brief Wave of Light (Q38): at full Combo it drops a bell in front of the hero, a weapon hit at this percent in this
+ * radius; it stands this many game ticks (6 s), and each hit on it tolls for this percent in this radius.
+ */
+constexpr int WaveBellPercent = 200;
+constexpr int WaveBellRadius = 2;
+constexpr int WaveBellTicks = 120;
+constexpr int WaveBellTollPercent = 50;
+constexpr int WaveBellTollRadius = 2;
+/** @brief Game ticks between two tolls of the bell: one a swing, however many of the bell's tiles it hits. */
+constexpr int WaveBellTollCooldown = 4;
+/** @brief Glacial Spike (Q38): a frozen monster it hits takes this percent of the hit and loses the freeze. */
+constexpr int GlacialSpikeFrozenPercent = 200;
 /** @brief Attract (Curtis 2026-11-07, Q36): monsters this near the cursed monster attack it instead of the hero. */
 constexpr int AttractTiles = 5;
 /** @brief Confuse cast at a rare or unique from this gem level gives it Berserk's old effect (Q36). */
@@ -599,6 +616,15 @@ int TableCurseDamageTakenPercent(const Monster &monster, DamageType type);
  * Mark, how much of its hit Iron Maiden turns back. 0 when the curse isn't on it or has no strength to show.
  */
 [[nodiscard]] int TableCurseShownPercent(const Monster &monster, TableCurse curse);
+/**
+ * @brief Death Mark (Q38): when the monster is marked, the mark is used up and the hit deals DeathMarkConsumePercent;
+ * returns the percent of the hit (100 when there was no mark). For Shadow Lunge and Cobra Strike.
+ */
+int ConsumeDeathMark(Monster &monster);
+/** @brief Wave of Light's bell stands on the tile (Q38). */
+[[nodiscard]] std::optional<Point> WaveBellTile();
+/** @brief The hero struck the tile: if the bell stands there it tolls, hitting around it (Q38). */
+void StrikeWaveBell(const Player &player, Point tile);
 /** @brief Whether a Shield Wall segment stands on the tile: monsters can't step there until they break it (Q37). */
 [[nodiscard]] bool IsShieldWallTile(Point tile);
 [[nodiscard]] size_t ShieldWallSegmentCount();

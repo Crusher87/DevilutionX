@@ -999,6 +999,9 @@ bool DoAttack(Player &player)
 			}
 		}
 
+		// POE2 Mashup: Wave of Light's bell tolls when a swing lands on it (Curtis 2026-11-07, Q38).
+		StrikeWaveBell(player, position);
+
 		// POE2 Mashup: the weapon's swing and sparks where it lands. It follows the hero's animation: an axe or mace
 		// comes down from overhead. The weapon's strongest added element only flickers faintly along the swing and on
 		// the cut (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"). Skills with their own swing draw

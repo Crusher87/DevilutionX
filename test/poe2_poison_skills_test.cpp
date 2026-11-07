@@ -331,10 +331,13 @@ TEST_F(Poe2PoisonSkillsTest, DaggerPoisonsStackOnlyWithTwinFangs)
 		const int32_t first = fanged.poe2.poisonDamagePerTick;
 		EXPECT_NEAR(first, one, 1) << data.name;
 		EXPECT_EQ(fanged.poe2.poisonTicks, PoisonTicks * 80 / 100) << data.name;
+		// Cobra Strike bursts the poison already on the enemy before its own goes on (Curtis 2026-11-07, Q38), so its
+		// stab leaves one stack, Twin Fangs or not.
+		const int stacked = skill == WeaponSkill::ViperStrike ? first : 2 * first;
 		StabUntilItLands(data, slot, fanged, seed);
-		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, 2 * first) << data.name;
+		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, stacked) << data.name;
 		StabUntilItLands(data, slot, fanged, seed);
-		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, 2 * first) << data.name;
+		EXPECT_EQ(fanged.poe2.poisonDamagePerTick, stacked) << data.name;
 	}
 }
 

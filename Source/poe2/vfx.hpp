@@ -108,6 +108,10 @@ void Miasma(Point tile, int radiusTiles, int durationMs, MiasmaKind kind, uint32
 void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key = 0);
 /** @brief A slab of rock thrust up out of the floor, standing for the given time or until EndKeyed breaks it (Shield Wall). */
 void EarthWall(Point tile, int lifeMs, uint32_t key);
+/** @brief Wave of Light's great bell of light, standing for the given time or until EndKeyed takes it (Q38). */
+void Bell(Point tile, int lifeMs, uint32_t key);
+/** @brief The bell tolls: a ring of holy light rolls out over the radius. */
+void BellToll(Point tile, int radiusTiles);
 /** @brief A swollen seed pod on the ground, throbbing, until its time runs out or EndKeyed bursts it (Bloated Pods). */
 void Pod(Point tile, int lifeMs, uint32_t key);
 /** @brief A gnarled effigy stake with glowing green eyes, standing for the given time (Plague Effigy). */

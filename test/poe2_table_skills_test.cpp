@@ -22,6 +22,7 @@
 #include "poe2/gem_levels.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/skill_resources.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -476,6 +477,181 @@ TEST_F(Poe2TableSkillsTest, GuidedArrowHomesOnItsTarget)
 	ASSERT_EQ(Missiles.size(), 1U);
 	EXPECT_EQ(Missiles.back().poe2.homingMonster, -1);
 	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38 (Curtis 2026-11-07): Rend gives 3 Rage for each monster it hits.
+TEST_F(Poe2TableSkillsTest, RendGivesRageForEachMonsterHit)
+{
+	Player &player = SetUpFight();
+	int hitSome = 0;
+	for (uint32_t seed = 1; seed <= 8; seed++) {
+		ClearMonsters();
+		player.poe2.rage = 0;
+		const std::array<Monster *, 3> monsters { &PlaceMonster(0, player.position.tile + Direction::East), &PlaceMonster(1, player.position.tile + Direction::NorthEast),
+			&PlaceMonster(2, player.position.tile + Direction::SouthEast) };
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::Rend, player.position.tile + Direction::East);
+		int hit = 0;
+		for (const Monster *monster : monsters)
+			hit += monster->hitPoints < monster->maxHitPoints ? 1 : 0;
+		EXPECT_EQ(player.poe2.rage, RendRagePerHit * hit) << seed;
+		if (hit > 1)
+			hitSome++;
+	}
+	EXPECT_GT(hitSome, 0);
+	EXPECT_EQ(RendRagePerHit, 3);
+	player.poe2.rage = 0;
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: Cobra Strike makes the poison already on the enemy deal all it has left at once, then puts its own on.
+TEST_F(Poe2TableSkillsTest, CobraStrikeBurstsThePoisonLeft)
+{
+	Player &player = SetUpFight();
+	const auto strike = [&](uint32_t seed, int poisonLeft) {
+		ClearMonsters();
+		Monster &monster = PlaceMonster(0, player.position.tile + Direction::East);
+		if (poisonLeft > 0) {
+			monster.poe2.poisonTicks = 40;
+			monster.poe2.poisonDamagePerTick = poisonLeft * 64 / 40;
+			monster.poe2.poisonSource = 0;
+		}
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::ViperStrike, monster.position.tile);
+		const bool hit = monster.hitPoints < monster.maxHitPoints || monster.poe2.poisonTicks != (poisonLeft > 0 ? 40 : 0);
+		if (hit)
+			EXPECT_GT(monster.poe2.poisonDamagePerTick, 0);
+		return std::make_pair(hit, (monster.maxHitPoints - monster.hitPoints).raw());
+	};
+	int compared = 0;
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		const auto [plainHit, plain] = strike(seed, 0);
+		const auto [poisonedHit, poisoned] = strike(seed, 50);
+		ASSERT_EQ(plainHit, poisonedHit) << seed;
+		if (!plainHit)
+			continue;
+		compared++;
+		EXPECT_EQ(poisoned - plain, 50 * 64) << seed;
+	}
+	EXPECT_GT(compared, 0);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: the next Shadow Lunge or Cobra Strike on a Death-Marked monster uses up the mark for double damage.
+TEST_F(Poe2TableSkillsTest, DeathMarkIsUsedUpForDoubleDamage)
+{
+	Monster monster {};
+	EXPECT_EQ(ConsumeDeathMark(monster), 100);
+	monster.poe2.deathMarkTicks = 50;
+	EXPECT_EQ(ConsumeDeathMark(monster), DeathMarkConsumePercent);
+	EXPECT_EQ(monster.poe2.deathMarkTicks, 0);
+	EXPECT_EQ(DeathMarkConsumePercent, 200);
+
+	Player &player = SetUpFight();
+	int compared = 0;
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		std::array<int32_t, 2> taken {};
+		std::array<bool, 2> hit {};
+		for (int marked = 0; marked < 2; marked++) {
+			ClearMonsters();
+			Monster &target = PlaceMonster(0, player.position.tile + Direction::East);
+			target.poe2.deathMarkTicks = marked != 0 ? 50 : 0;
+			SetRndSeed(seed);
+			ExecuteSkillCast(player, WeaponSkill::ViperStrike, target.position.tile);
+			hit[marked] = target.hitPoints < target.maxHitPoints;
+			taken[marked] = (target.maxHitPoints - target.hitPoints).raw();
+			// A hit uses the mark up; a miss leaves it.
+			if (marked != 0)
+				EXPECT_EQ(target.poe2.deathMarkTicks, hit[marked] ? 0 : 50) << seed;
+		}
+		if (!hit[0] || !hit[1])
+			continue;
+		compared++;
+		EXPECT_GT(taken[1], taken[0] * 3 / 2) << seed;
+	}
+	EXPECT_GT(compared, 0);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: Wave of Light at full Combo spends it on a great bell in front of the hero: 200% in radius 2 as it lands, then
+// it stands 6 seconds and each hit on it tolls for 50% in radius 2. One bell at a time; below full Combo, as before.
+TEST_F(Poe2TableSkillsTest, WaveOfLightDropsABellAtFullCombo)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	player.poe2.combo = MaxCombo - 1;
+	ExecuteSkillCast(player, WeaponSkill::WaveOfLight, { 42, 40 });
+	EXPECT_FALSE(WaveBellTile().has_value());
+
+	const Point front = player.position.tile + player._pdir;
+	int landed = 0;
+	int tolled = 0;
+	for (uint32_t seed = 1; seed <= 6; seed++) {
+		ClearMonsters();
+		Monster &near = PlaceMonster(0, front + Direction::East);
+		player.poe2.combo = MaxCombo;
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::WaveOfLight, { 42, 40 });
+		EXPECT_EQ(player.poe2.combo, 0);
+		ASSERT_EQ(WaveBellTile(), std::optional<Point>(front));
+		if (near.hitPoints < near.maxHitPoints)
+			landed++;
+		// A strike on it tolls, at most once a swing.
+		const Fixed26_6 before = near.hitPoints;
+		StrikeWaveBell(player, front);
+		EXPECT_EQ(near.hitPoints, before) << "its own landing doesn't toll it";
+		for (int tick = 0; tick < WaveBellTollCooldown; tick++)
+			ProcessSkillZones(player);
+		StrikeWaveBell(player, front + Direction::East);
+		StrikeWaveBell(player, front);
+		if (near.hitPoints < before)
+			tolled++;
+	}
+	EXPECT_GT(landed, 0);
+	EXPECT_GT(tolled, 0);
+	// It stands 6 seconds.
+	for (int tick = 0; tick < WaveBellTicks; tick++)
+		ProcessSkillZones(player);
+	EXPECT_FALSE(WaveBellTile().has_value());
+	EXPECT_EQ(WaveBellTicks, 6 * 20);
+	ClearMonsters();
+	ClearSkillZones();
+	player.poe2.combo = 0;
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: a frozen monster Glacial Spike hits takes double and loses the freeze.
+TEST_F(Poe2TableSkillsTest, GlacialSpikeShattersTheFrozen)
+{
+	Player &player = SetUpFight();
+	player._pMagic = 100;
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	const auto spike = [&](uint32_t seed, bool frozen) {
+		ClearMonsters();
+		ClearSkillZones();
+		Monster &monster = PlaceMonster(0, { 44, 40 });
+		monster.poe2.freezeTicks = frozen ? 60 : 0;
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::GlacialSpike, monster.position.tile);
+		for (int tick = 0; tick < 40 && SkillZoneCount() > 0; tick++)
+			ProcessSkillZones(player);
+		if (frozen)
+			EXPECT_EQ(monster.poe2.freezeTicks, 0);
+		return (monster.maxHitPoints - monster.hitPoints).raw();
+	};
+	const int32_t plain = spike(3, false);
+	const int32_t frozen = spike(3, true);
+	ASSERT_GT(plain, 0);
+	EXPECT_GT(frozen, plain * 3 / 2);
+	EXPECT_EQ(GlacialSpikeFrozenPercent, 200);
+	ClearMonsters();
+	ClearSkillZones();
 	leveltype = DTYPE_TOWN;
 }
 

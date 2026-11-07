@@ -322,6 +322,8 @@ enum class SpikeKind : uint8_t {
 	Canister,
 	/** @brief A jagged slab of rock thrust up out of the floor (Shield Wall). */
 	Earth,
+	/** @brief A great golden bell of light standing on the floor (Wave of Light's bell). */
+	Bell,
 };
 
 /** @brief The colours of what bursts out of the ground other than ice: its shadowed side, its face, its lit side, the earth at its foot. */
@@ -342,6 +344,8 @@ SpikePalette PaletteOf(SpikeKind kind)
 		return { { 64, 92, 18 }, { 140, 182, 48 }, { 214, 240, 120 }, { 48, 54, 20 }, { 172, 214, 70 }, { 80, 120, 24 }, { 130, 170, 50 }, { 70, 96, 30 }, { 40, 52, 14 }, { 30, 40, 12 } };
 	case SpikeKind::Effigy:
 		return { { 36, 26, 18 }, { 84, 62, 42 }, { 134, 106, 74 }, { 40, 32, 22 }, { 96, 74, 50 }, { 50, 38, 26 }, { 96, 90, 60 }, { 56, 52, 34 }, { 38, 34, 22 }, { 28, 26, 16 } };
+	case SpikeKind::Bell:
+		return { { 120, 86, 24 }, { 214, 170, 64 }, { 255, 238, 160 }, { 70, 58, 30 }, { 255, 226, 130 }, { 190, 150, 60 }, { 255, 240, 190 }, { 200, 170, 90 }, { 60, 50, 30 }, { 40, 34, 20 } };
 	case SpikeKind::Earth:
 		return { { 46, 40, 34 }, { 104, 92, 78 }, { 160, 148, 128 }, { 52, 44, 34 }, { 128, 116, 98 }, { 70, 62, 52 }, { 130, 120, 102 }, { 80, 72, 60 }, { 44, 38, 30 }, { 30, 26, 20 } };
 	case SpikeKind::Canister:
@@ -3548,6 +3552,29 @@ void EarthWall(Point tile, int lifeMs, uint32_t key)
 	AddBoneSpikes(std::move(fx), 0);
 	const Vec pos = TileCentre(tile);
 	Spray(pos, Scaled(6), 50, 150, 450, 800, Shape::Chunk, { 110, 98, 82 }, { 60, 52, 42 }, 2.5F, 2, 90, 200, 700, 0.5F, 1);
+}
+
+void Bell(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "Bell", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Bell, tile, static_cast<float>(lifeMs), key);
+	fx.size = 1;
+	// A broad cone of gold, its crown on top, its lip spread on the floor.
+	fx.crystals.push_back({ {}, {}, 84, 46, 0 });
+	fx.crystals.push_back({ { 0, -2 }, {}, 100, 12, 0 });
+	AddBoneSpikes(std::move(fx), 0);
+	Impact(tile, Element::Holy, 1.6F);
+}
+
+void BellToll(Point tile, int radiusTiles)
+{
+	TelemetryEffect("vfx", "BellToll", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	Nova(tile, std::max(radiusTiles, 1), Element::Holy);
+	AddRing(TileCentre(tile), 0, TileRadius * (static_cast<float>(radiusTiles) + 0.5F), 380, 4, { 255, 236, 170 }, 0.7F, false, true, true);
 }
 
 void Pod(Point tile, int lifeMs, uint32_t key)

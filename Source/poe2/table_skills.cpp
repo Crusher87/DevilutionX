@@ -84,13 +84,13 @@ const TableSkillData Table[] = {
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 15, 14, TW::Sword, 0, Arc, 240, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
 	{ WS::FanOfBlades, "Fan of Blades", "Throw daggers in every direction", 5, 5, TW::Dagger, 0, Projectiles, 70, 8, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 280 },
-	{ WS::ViperStrike, "Cobra Strike", "A heavy poisoned stab: its strong poison deals chaos damage over time", 7, 11, TW::Dagger, 0, Strike, 380, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 60 },
+	{ WS::ViperStrike, "Cobra Strike", "A heavy poisoned stab: the poison already on the enemy deals all it has left at once, then its own strong poison goes on", 7, 11, TW::Dagger, 0, Strike, 380, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 60 },
 	{ WS::BladeSentinel, "Blade Sentinel", "A whirling blade that guards the target spot for 5 seconds", 9, 12, TW::Dagger, 0, Zone, 35, 0, 1, 100, 20, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::Pulse, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 260 },
-	{ WS::DeathMark, "Death Mark", "Marks an enemy to take 25% more damage", 11, 9, TW::Dagger, 1, Curse, Flat, 0, 0, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::DeathMark, TableBuff::None, TT_Sword | TT_Occult, Icon(SpellIcon::RedSkull), TableCurve::Boneshatter, 100 },
+	{ WS::DeathMark, "Death Mark", "Marks an enemy to take 25% more damage; your next Shadow Lunge or Cobra Strike on it uses the mark for double damage", 11, 9, TW::Dagger, 1, Curse, Flat, 0, 0, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::DeathMark, TableBuff::None, TT_Sword | TT_Occult, Icon(SpellIcon::RedSkull), TableCurve::Boneshatter, 100 },
 	{ WS::BladeFury, "Blade Fury", "A rapid stream of thrown daggers", 13, 12, TW::Dagger, 0, Stream, 70, 8, 0, 0, 2, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 290 },
 	// Axe
 	{ WS::DoubleThrow, "Double Throw", "Hurl two axes, and one more for each Frenzy charge", 1, 5, TW::Axe, 0, Projectiles, 127, 2, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Frenzy, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Telekinesis), TableCurve::LightningArrow, 290 },
-	{ WS::Rend, "Rend", "A tearing sweep that leaves enemies bleeding", 9, 7, TW::Axe, 0, Arc, 100, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
+	{ WS::Rend, "Rend", "A tearing sweep that leaves enemies bleeding and gives 3 Rage for each one hit", 9, 7, TW::Axe, 0, Arc, 100, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
 	{ WS::WarCry, "War Cry", "Stuns enemies around you", 11, 10, TW::None, 1, Buff, Flat, 0, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Axe | TT_Mace | TT_Sword, Icon(SpellIcon::LongHorn), TableCurve::Boneshatter, 200 },
 	{ WS::CallOfTheAncients, "Call of the Ancients", "Spends all Rage: ancestral warriors strike all around, 5% harder per Rage", 15, 12, TW::Axe, 0, CallOfTheAncients, 72, 3, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Rage, TableZone::None, TableCurse::None, TableBuff::None, TT_Axe, Icon(SpellIcon::Golem), TableCurve::Boneshatter, 0 },
 	// Mace
@@ -101,7 +101,7 @@ const TableSkillData Table[] = {
 	// Quarterstaff
 	{ WS::DashingStrike, "Dashing Strike", "Dash through the enemies, striking each one on the way", 5, 7, TW::Staff, 0, Dash, 80, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Phasing), TableCurve::LeapSlam, 320 },
 	{ WS::LashingTailKick, "Lashing Tail Kick", "A spinning kick that throws back all around", 15, 7, TW::Staff, 0, Around, 94, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Knockback | TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Search), TableCurve::Boneshatter, 0 },
-	{ WS::WaveOfLight, "Wave of Light", "A wave of holy light bursts out around you", 9, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::FlameWave), TableCurve::Boneshatter, 280 },
+	{ WS::WaveOfLight, "Wave of Light", "A wave of holy light bursts out around you; at full Combo it drops a great bell that tolls when you strike it", 9, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::FlameWave), TableCurve::Boneshatter, 280 },
 	{ WS::CycloneStrike, "Cyclone Strike", "A storm of strikes all around you that drags enemies in, crackling with lightning", 11, 10, TW::Staff, 0, Around, 50, 0, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff | TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 280 },
 	{ WS::SevenSidedStrike, "Seven-Sided Strike", "Strike up to seven enemies nearby, one after another", 13, 11, TW::Staff, 0, Seven, 200, 7, 4, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Combo, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Teleport), TableCurve::Boneshatter, 0 },
 	// Bow. Fire Arrow and Explosive Arrow came from the crossbow (dropped 2026-10-27); Fire Arrow is tier I, beside the Rogue's starting Hail of Arrows
@@ -125,7 +125,7 @@ const TableSkillData Table[] = {
 	{ WS::Meteor, "Meteor", "After a moment, a meteor crashes down on the target", 20, 25, TW::None, 2, Zone, 145, 0, 2, 0, 0, 30, DT::Fire, MissileID::Null, MG::ApocalypseBoom, TF_Spell, TableZone::Delayed, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::FireCloud), TableCurve::Fireball, 312 },
 	{ WS::Thunderstorm, "Thunderstorm", "A storm follows you for 10 seconds, striking the nearest enemy", 20, 20, TW::None, 3, Zone, 136, 0, 6, 200, 20, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_FollowPlayer | TF_AtPlayer, TableZone::NearestStrike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Fireball, 312 },
 	// Frost
-	{ WS::GlacialSpike, "Glacial Spike", "A great spike of ice bursts out of the ground under the target, then shatters", 15, 10, TW::None, 1, Zone, 350, 0, 1, 0, 0, 3, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
+	{ WS::GlacialSpike, "Glacial Spike", "A great spike of ice bursts out of the ground under the target, then shatters; frozen enemies take double and break free", 15, 10, TW::None, 1, Zone, 350, 0, 1, 0, 0, 3, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::IceSpike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
 	{ WS::FrozenArmor, "Frozen Armor", "For 15 seconds, take 20% less damage from melee hits and chill those who strike you", 7, 12, TW::None, 1, Buff, Flat, 0, 0, 300, 0, 0, DT::Cold, MissileID::Null, MG::StoneCurseShatter, 0, TableZone::None, TableCurse::None, TableBuff::FrozenArmor, TT_Elemental, Icon(SpellIcon::ManaShield), TableCurve::Boneshatter, 100 },
 	{ WS::Blizzard, "Blizzard", "Ice shards rain on the target area for 4 seconds", 9, 16, TW::None, 1, Zone, 21, 0, 3, 80, 4, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, TF_Spell, TableZone::RandomStrikes, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Fireball, 312 },
 	{ WS::IceBarrage, "Ray of Frost", "A rapid stream of ice shards", 11, 14, TW::None, 1, Stream, 70, 8, 0, 0, 2, 0, DT::Cold, MissileID::BlueFlare, MG::StoneCurseShatter, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::Fireball, 312 },
@@ -256,6 +256,15 @@ struct Detonation {
 	Fixed26_6 damage;
 };
 std::vector<Detonation> PendingDetonations;
+
+/** @brief Wave of Light's bell (Curtis 2026-11-07, Q38): one at a time, the local hero's, like the zones. */
+struct WaveBellState {
+	Point tile;
+	int16_t ticksLeft;
+	uint8_t cooldown;
+	uint32_t key;
+};
+std::optional<WaveBellState> WaveBell;
 /** @brief The effects' key for the next zone; effects only, so it needn't match on other machines. */
 uint32_t NextZoneKey = 0;
 
@@ -433,12 +442,43 @@ void PullTowards(Point center, std::vector<Monster *> monsters)
 	}
 }
 
+/**
+ * @brief Cobra Strike (Curtis 2026-11-07, Q38): the poison on the monster deals all it has left at once, as chaos, and
+ * ends, before the strike's own poison goes on.
+ */
+void ConsumePoison(const Player &player, Monster &monster, const TableSkillData &data)
+{
+	Poe2MonsterState &state = monster.poe2;
+	if (state.poisonTicks == 0 || state.poisonDamagePerTick <= 0)
+		return;
+	const int64_t left = static_cast<int64_t>(state.poisonDamagePerTick) * state.poisonTicks;
+	state.poisonTicks = 0;
+	state.poisonDamagePerTick = 0;
+	state.poisonPlague = false;
+	state.poisonVsBleed = false;
+	AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
+	vfx::Impact(monster.position.tile, vfx::Element::Poison, 1.2F);
+	SpellHitMonster(player, monster, DamageType::Chaos, Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(left, 1, INT32_MAX / 2))), SourceOf(data));
+}
+
 /** @brief A weapon hit from a table skill, with the skill's extras. */
 void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int damagePercent, CastResult &result)
 {
-	if (!SkillHitMonster(player, monster, damagePercent))
+	// Death Mark (Q38): Cobra Strike uses up the mark for double; a miss leaves it.
+	const uint8_t mark = data.skill == WeaponSkill::ViperStrike ? monster.poe2.deathMarkTicks : 0;
+	if (mark > 0)
+		damagePercent = damagePercent * ConsumeDeathMark(monster) / 100;
+	if (!SkillHitMonster(player, monster, damagePercent)) {
+		if (mark > 0)
+			monster.poe2.deathMarkTicks = mark;
 		return;
+	}
 	result.hit = true;
+	// Rend (Q38): Rage for each monster it hits.
+	if (data.skill == WeaponSkill::Rend)
+		AddRage(player, RendRagePerHit);
+	if (data.skill == WeaponSkill::ViperStrike && !monster.hasNoLife() && monster.mode != MonsterMode::Death)
+		ConsumePoison(player, monster, data);
 	const bool alive = !monster.hasNoLife() && monster.mode != MonsterMode::Death;
 	if ((data.flags & TF_Stun) != 0 && alive)
 		HeavyStunMonster(monster);
@@ -475,6 +515,58 @@ void AfterCast(Player &player, const TableSkillData &data, const CastResult &res
 		AddCombo(player);
 	if ((data.flags & TF_Frenzy) != 0)
 		GainFrenzyCharge(player);
+}
+
+void EndWaveBell()
+{
+	if (WaveBell)
+		vfx::EndKeyed(WaveBell->key);
+	WaveBell.reset();
+}
+
+/** @brief Wave of Light's weapon hit at the percent on every monster within the radius of the tile. */
+void WaveBellHit(Player &player, const TableSkillData &wave, Point tile, int radius, int percent)
+{
+	TableSkillData hit = wave;
+	hit.flags = static_cast<uint32_t>(hit.flags & ~TF_Combo);
+	std::vector<Monster *> targets;
+	ForEachMonsterNear(tile, radius, [&](Monster &monster) { targets.push_back(&monster); });
+	CastResult result;
+	for (Monster *monster : targets)
+		WeaponHit(player, *monster, hit, percent, result);
+}
+
+/**
+ * @brief Wave of Light at full Combo (Curtis 2026-11-07, Q38): a giant bell of light drops on the tile in front of the
+ * hero, a WaveBellPercent hit in WaveBellRadius, and stands for WaveBellTicks. One bell at a time.
+ */
+void DropWaveBell(Player &player, const TableSkillData &wave, Point tile)
+{
+	if (&player != MyPlayer)
+		return;
+	EndWaveBell();
+	NextZoneKey = NextZoneKey == UINT32_MAX ? 1 : NextZoneKey + 1;
+	// Its own landing doesn't toll it.
+	WaveBell = WaveBellState { tile, static_cast<int16_t>(WaveBellTicks), static_cast<uint8_t>(WaveBellTollCooldown), NextZoneKey };
+	vfx::Bell(tile, WaveBellTicks * gnTickDelay, NextZoneKey);
+	vfx::Slam(tile, WaveBellRadius, vfx::Element::Holy);
+	EffectRingAround(tile, WaveBellRadius, MissileGraphicID::HolyBoltExplosion, 1);
+	ShakeCamera(ShakeStrength::Medium, 6);
+	BreakObjectsInArea(player, tile, WaveBellRadius);
+	WaveBellHit(player, wave, tile, WaveBellRadius, WaveBellPercent);
+}
+
+/** @brief The bell's time runs out, and it may toll again. */
+void ProcessWaveBell(const Player &player)
+{
+	if (!WaveBell)
+		return;
+	if (player.hasNoLife() || leveltype == DTYPE_TOWN || --WaveBell->ticksLeft <= 0) {
+		EndWaveBell();
+		return;
+	}
+	if (WaveBell->cooldown > 0)
+		WaveBell->cooldown--;
 }
 
 } // namespace
@@ -877,7 +969,17 @@ void ZoneBurst(const Player &player, const TableSkillData &data, Point center, i
 	}
 	const Fixed26_6 extra = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * extraPercent / 100), 1));
 	ForEachMonsterNear(center, radius, [&](Monster &monster) {
-		AreaSpellHit(player, data, monster, extraPercent < 100 && &monster != primary ? extra : damage);
+		Fixed26_6 hit = extraPercent < 100 && &monster != primary ? extra : damage;
+		// Glacial Spike (Curtis 2026-11-07, Q38): a frozen monster takes double and its freeze shatters.
+		const bool shatters = data.skill == WeaponSkill::GlacialSpike && monster.poe2.freezeTicks > 0;
+		if (shatters)
+			hit = Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(hit.raw()) * GlacialSpikeFrozenPercent / 100, INT32_MAX / 2)));
+		AreaSpellHit(player, data, monster, hit);
+		if (shatters) {
+			monster.poe2.freezeTicks = 0;
+			AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter);
+			vfx::Impact(monster.position.tile, vfx::Element::Cold, 1.3F);
+		}
 	});
 }
 
@@ -1603,6 +1705,14 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 		}
 		break;
 	case Around:
+		// Wave of Light (Q38): at full Combo a cast spends it all on a bell in front of the hero; below, it works as before.
+		if (data.skill == WeaponSkill::WaveOfLight && player.poe2.combo >= MaxCombo && &player == MyPlayer) {
+			player.poe2.combo = 0;
+			player.poe2.comboTicks = 0;
+			data.flags = static_cast<uint32_t>(data.flags & ~TF_Combo);
+			DropWaveBell(player, data, tile + player._pdir);
+			break;
+		}
 		if ((data.flags & TF_Spell) != 0) {
 			// A nova around the hero (the caster weapons' granted skills): it hits like a burst, with the spell base.
 			EffectRingAround(tile, std::max<int>(data.radius, 1), data.effect, 0);
@@ -2666,6 +2776,7 @@ void ProcessSkillZones(Player &player)
 		}
 	}
 	ProcessShieldWall(player);
+	ProcessWaveBell(player);
 	if (Zones.empty())
 		return;
 	if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
@@ -2851,6 +2962,40 @@ void ProcessSkillZones(Player &player)
 	}
 }
 
+int ConsumeDeathMark(Monster &monster)
+{
+	if (monster.poe2.deathMarkTicks == 0)
+		return 100;
+	monster.poe2.deathMarkTicks = 0;
+	AddVisualEffect(monster.position.tile, MissileGraphicID::BloodStarExplosion);
+	vfx::Impact(monster.position.tile, vfx::Element::Blood, 1.3F);
+	return DeathMarkConsumePercent;
+}
+
+std::optional<Point> WaveBellTile()
+{
+	if (!WaveBell)
+		return std::nullopt;
+	return WaveBell->tile;
+}
+
+void StrikeWaveBell(const Player &player, Point tile)
+{
+	if (!gbIsPoe2 || !WaveBell || &player != MyPlayer || WaveBell->tile != tile || WaveBell->cooldown > 0)
+		return;
+	const TableSkillData *wave = FindTableSkill(WeaponSkill::WaveOfLight);
+	if (wave == nullptr)
+		return;
+	WaveBell->cooldown = static_cast<uint8_t>(WaveBellTollCooldown);
+	Player &hero = *MyPlayer;
+	const SupportHitScope scope(hero, SkillSlot::ForAttack(WeaponSkill::WaveOfLight));
+	const SkillLookScope skillLook(WeaponSkill::WaveOfLight);
+	vfx::BellToll(tile, WaveBellTollRadius);
+	AddVisualEffect(tile, MissileGraphicID::HolyBoltExplosion);
+	PlayTableSkillHitSound(*wave, tile);
+	WaveBellHit(hero, *wave, tile, WaveBellTollRadius, WaveBellTollPercent);
+}
+
 bool IsShieldWallTile(Point tile)
 {
 	return std::any_of(WallSegments.begin(), WallSegments.end(), [tile](const WallSegment &segment) { return segment.tile == tile; });
@@ -2902,6 +3047,7 @@ void ClearSkillZones()
 	Zones.clear();
 	WallSegments.clear();
 	PendingDetonations.clear();
+	EndWaveBell();
 	// A new level: the Sigil of Power stays behind.
 	if (MyPlayer != nullptr)
 		MyPlayer->poe2.grantedState.sigilTicks = 0;

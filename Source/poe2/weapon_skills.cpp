@@ -1184,8 +1184,12 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 		return false;
 	}
 	case WeaponSkill::ShadowStep:
-		if (Monster *monster = MonsterInFront(player); monster != nullptr)
-			SkillHitMonster(player, *monster, ShadowStepDamagePercent);
+		if (Monster *monster = MonsterInFront(player); monster != nullptr) {
+			// Death Mark (Curtis 2026-11-07, Q38): the stab uses up the mark for double; a miss leaves it.
+			const uint8_t mark = monster->poe2.deathMarkTicks;
+			if (!SkillHitMonster(player, *monster, ShadowStepDamagePercent * ConsumeDeathMark(*monster) / 100) && mark > 0)
+				monster->poe2.deathMarkTicks = mark;
+		}
 		return false;
 	case WeaponSkill::ShieldBash:
 		if (Monster *monster = MonsterInFront(player); monster != nullptr) {
