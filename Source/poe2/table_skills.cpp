@@ -11,6 +11,7 @@
 #include "diablo.h"
 #include "effects.h"
 #include "engine/backbuffer_state.hpp"
+#include "engine/path.h"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
@@ -35,6 +36,7 @@
 #include "poe2/skill_resources.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/spirit_skills.hpp"
+#include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
@@ -77,7 +79,7 @@ const TableSkillData Table[] = {
 	// Sword
 	{ WS::Whirlwind, "Whirlwind", "Spin through the enemies in your path, hitting all around where you stop", 5, 8, TW::AxeOrSword, 0, Dash, 85, 4, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Axe, Icon(SpellIcon::Berserk), TableCurve::Boneshatter, 300 },
 	{ WS::Sacrifice, "Sacrifice", "A brutal strike paid for with 5% of your life", 7, 6, TW::Sword, 0, Strike, 330, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_LifeCost, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::BloodBoil), TableCurve::Boneshatter, 0 },
-	{ WS::Zeal, "Zeal", "Four lightning-fast strikes at the enemy in front", 15, 5, TW::Sword, 0, Flurry, 203, 4, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 290 },
+	{ WS::Zeal, "Zeal", "Quick stabs at the enemy in front; every fourth is a heavy blow at everything beside you", 15, 5, TW::Sword, 0, Flurry, 203, 4, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 290 },
 	{ WS::Vengeance, "Vengeance", "A strike that bursts into fire, lightning and cold", 11, 5, TW::Sword, 0, Strike, 260, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Elements, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 0 },
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 15, 14, TW::Sword, 0, Arc, 240, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
@@ -105,20 +107,20 @@ const TableSkillData Table[] = {
 	// Bow. Fire Arrow and Explosive Arrow came from the crossbow (dropped 2026-10-27); Fire Arrow is tier I, beside the Rogue's starting Hail of Arrows
 	{ WS::ClusterBolt, "Fire Arrow", "An arrow that bursts into flame where it lands", 1, 8, TW::Bow, 0, Projectiles, 100, 1, 1, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
 	{ WS::Multishot, "Multishot", "A wide fan of seven arrows", 9, 6, TW::Bow, 0, Projectiles, 95, 7, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 280 },
-	{ WS::GuidedArrow, "Guided Arrow", "One heavy arrow that pierces through several enemies", 11, 5, TW::Bow, 0, Projectiles, 220, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Search), TableCurve::LightningArrow, 0 },
+	{ WS::GuidedArrow, "Guided Arrow", "One heavy arrow that homes in on its target and pierces through several enemies", 11, 5, TW::Bow, 0, Projectiles, 220, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Search), TableCurve::LightningArrow, 0 },
 	{ WS::FreezingArrow, "Freezing Arrow", "An arrow that bursts into freezing cold where it lands", 13, 10, TW::Bow, 0, Projectiles, 100, 1, 2, 0, 0, 0, DT::Cold, MissileID::Arrow, MG::BlueFlareExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::StoneCurse), TableCurve::LightningArrow, 0 },
-	{ WS::ExplosiveBolt, "Explosive Arrow", "An arrow that explodes where it lands", 11, 9, TW::Bow, 0, Projectiles, 110, 1, 2, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
+	{ WS::ExplosiveBolt, "Explosive Arrow", "An arrow that sticks where it lands and explodes a second later, bursting poison clouds in fire", 11, 9, TW::Bow, 0, Projectiles, 110, 1, 2, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, TF_LandingBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow | TT_Elemental, Icon(SpellIcon::Fireball), TableCurve::LightningArrow, 0 },
 	// Crossbow: retired with the crossbows (see IsRetiredSkill); an old gem still loads and works with a crossbow
 	{ WS::Impale, "Impale", "A crossbow bolt that skewers through enemies", 3, 6, TW::Crossbow, 0, Projectiles, 250, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Search), TableCurve::LightningArrow, 0 },
 	{ WS::SpikeTrap, "Spike Trap", "Sets a trap that bursts when an enemy steps close", 7, 8, TW::Crossbow, 0, Zone, 75, 0, 1, 200, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Stun, TableZone::Trap, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::TrapDisarm), TableCurve::LightningArrow, 0 },
 	{ WS::Sentry, "Sentry", "Plants a turret that shoots the nearest enemy for 8 seconds", 9, 12, TW::Crossbow, 0, Zone, 60, 0, 8, 160, 12, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_AtPlayer, TableZone::Turret, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Golem), TableCurve::LightningArrow, 0 },
 	{ WS::SiegeVolley, "Ballista Barrage", "Bolts rain down on the target area", 13, 14, TW::Crossbow, 0, Zone, 75, 0, 3, 50, 6, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::RandomStrikes, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::RainOfArrows, 0 },
 	// Shield
-	{ WS::HolyShield, "Holy Shield", "Take 15% less damage from melee hits for 10 seconds", 5, 10, TW::Shield, 1, Buff, Flat, 0, 0, 200, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, 0, TableZone::None, TableCurse::None, TableBuff::HolyShield, TT_Shield, Icon(SpellIcon::Pentagram), TableCurve::Boneshatter, 100 },
-	{ WS::BlessedShield, "Blessed Shield", "Your shield crashes down on the target in a holy burst", 7, 8, TW::Shield, 0, Burst, 70, 0, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield, Icon(SpellIcon::HolyBolt), TableCurve::LeapSlam, 340 },
+	{ WS::HolyShield, "Holy Shield", "Take 15% less damage from melee hits and block 15% more often for 10 seconds", 5, 10, TW::Shield, 1, Buff, Flat, 0, 0, 200, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, 0, TableZone::None, TableCurse::None, TableBuff::HolyShield, TT_Shield, Icon(SpellIcon::Pentagram), TableCurve::Boneshatter, 100 },
+	{ WS::BlessedShield, "Blessed Shield", "Throw your shield: it bounces to up to 3 more enemies, stunning each", 7, 8, TW::Shield, 0, Projectiles, 70, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::HolyBoltExplosion, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield, Icon(SpellIcon::HolyBolt), TableCurve::LeapSlam, 340 },
 	{ WS::Condemn, "Condemn", "After a moment, holy fire bursts out all around you", 9, 12, TW::Shield, 1, Zone, 50, 0, 3, 0, 0, 20, DT::Fire, MissileID::Null, MG::HolyBoltExplosion, TF_Spell | TF_FollowPlayer | TF_AtPlayer, TableZone::Delayed, TableCurse::None, TableBuff::None, TT_Shield | TT_Occult, Icon(SpellIcon::Apocalypse), TableCurve::Fireball, 312 },
-	{ WS::ShieldWall, "Shield Wall", "Take 40% less damage from melee hits for 6 seconds", 11, 10, TW::Shield, 1, Buff, Flat, 0, 0, 120, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, 0, TableZone::None, TableCurse::None, TableBuff::ShieldWall, TT_Shield, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 100 },
-	{ WS::FallingSword, "Falling Sword", "Leap into the air and crash down on the enemies", 20, 14, TW::Melee, 0, Dash, 135, 6, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield | TT_Sword, Icon(SpellIcon::RedSkull), TableCurve::LeapSlam, 340 },
+	{ WS::ShieldWall, "Shield Wall", "Raise a wall of earth across your front for 6 seconds; slams, Shield Charge and war cries shatter it", 11, 10, TW::Shield, 1, Buff, Flat, 0, 0, 120, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, 0, TableZone::None, TableCurse::None, TableBuff::ShieldWall, TT_Shield, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 100 },
+	{ WS::FallingSword, "Falling Sword", "Fade out in light; a blade of light falls on the target and leaves holy ground, and you appear there", 20, 14, TW::Melee, 0, Burst, 135, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield | TT_Sword, Icon(SpellIcon::RedSkull), TableCurve::LeapSlam, 340 },
 	// Fire and lightning
 	{ WS::Meteor, "Meteor", "After a moment, a meteor crashes down on the target", 20, 25, TW::None, 2, Zone, 145, 0, 2, 0, 0, 30, DT::Fire, MissileID::Null, MG::ApocalypseBoom, TF_Spell, TableZone::Delayed, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::FireCloud), TableCurve::Fireball, 312 },
 	{ WS::Thunderstorm, "Thunderstorm", "A storm follows you for 10 seconds, striking the nearest enemy", 20, 20, TW::None, 3, Zone, 136, 0, 6, 200, 20, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Spell | TF_FollowPlayer | TF_AtPlayer, TableZone::NearestStrike, TableCurse::None, TableBuff::None, TT_Elemental, Icon(SpellIcon::ChainLightning), TableCurve::Fireball, 312 },
@@ -205,9 +207,9 @@ constexpr int HolyShieldPercent = 15;
  * as their cast time allowed, Thunderstorm reached 11 at once).
  */
 constexpr int MaxStackingZones = 1;
-constexpr int ShieldWallPercent = 40;
 constexpr int DeathMarkPercent = 25;
 constexpr int SoulDamagePercent = 3;
+constexpr int TicksPerSecond = 20;
 constexpr int MaxSouls = 10;
 constexpr int RagePercent = 5;
 /** @brief Haunt jumps this far to its next victim; Locust Swarm spreads to two within this range. */
@@ -230,9 +232,30 @@ struct SkillZone {
 	bool cloud = false;
 	/** Venom Sentry's trap went off: it puffs gas until its time runs out. */
 	bool armed = false;
+	/** Falling Sword's holy ground: it burns what stands on it once a second. */
+	bool holyGround = false;
+	/** An Explosive Arrow burst the poison cloud in fire: it ends now. */
+	bool detonated = false;
 };
 
 std::vector<SkillZone> Zones;
+
+/** @brief Shield Wall's segments of earth (Curtis 2026-11-07, Q37): the local hero's, like the zones. */
+struct WallSegment {
+	Point tile;
+	int32_t life;
+	int16_t ticksLeft;
+	uint32_t key;
+};
+std::vector<WallSegment> WallSegments;
+
+/** @brief An Explosive Arrow's burst set off a poison cloud: it bursts in fire after the zones are done this tick. */
+struct Detonation {
+	Point center;
+	int radius;
+	Fixed26_6 damage;
+};
+std::vector<Detonation> PendingDetonations;
 /** @brief The effects' key for the next zone; effects only, so it needn't match on other machines. */
 uint32_t NextZoneKey = 0;
 
@@ -931,11 +954,25 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	// Bone Spear is drawn as a great spear, not a bolt.
 	if (data.skill == WeaponSkill::BoneSpear)
 		missile->poe2.look = 2;
+	// Guided Arrow homes in on the monster it was shot at (Diablo 2; Curtis 2026-11-07, Q37).
+	if (data.skill == WeaponSkill::GuidedArrow) {
+		if (const Monster *aimed = TargetMonsterNear(target, 1); aimed != nullptr)
+			missile->poe2.homingMonster = static_cast<int16_t>(aimed->getId());
+	}
+	// Blessed Shield: the thrown shield spins as it flies, and bounces on (OnTableMissileHit).
+	if (data.skill == WeaponSkill::BlessedShield) {
+		missile->poe2.look = vfx::SpinningBladeLook;
+		missile->poe2.chainsLeft = static_cast<int8_t>(BlessedShieldBounces);
+	}
 	if ((data.flags & TF_LandingBurst) != 0) {
-		// The burst goes off about when the projectile gets there.
-		const int ticks = std::clamp(from.WalkingDistance(target) * 2, 2, 30);
+		// The burst goes off about when the projectile gets there; Explosive Arrow's sticks and goes off a second later.
+		const int flight = std::clamp(from.WalkingDistance(target) * 2, 2, 30);
+		const int ticks = flight + (data.skill == WeaponSkill::ExplosiveBolt ? ExplosiveArrowFuseTicks : 0);
 		SkillZone zone { data.skill, target, 1, static_cast<int16_t>(ticks), 0, LandingBurstDamage(player, data), static_cast<int8_t>(std::min<int>(data.radius, INT8_MAX)) };
 		Zones.push_back(zone);
+		// Its fuse: a ring of fire glows on the ground where the arrow stuck, charging until it blows.
+		if (data.skill == WeaponSkill::ExplosiveBolt)
+			vfx::Sigil(target, std::max<int>(data.radius, 1), ticks * gnTickDelay, vfx::Element::Fire);
 	}
 	// Thornvine Arrow: the vine grows where the arrow comes down, poisoning with the arrow's hit.
 	if ((data.flags & TF_LandingZone) != 0)
@@ -1178,6 +1215,122 @@ Point SkillTargetTile(const Player &player)
 	return target;
 }
 
+/** @brief Where Falling Sword's hero comes out of the light: the target tile, or the free tile nearest it. */
+std::optional<Point> FallingSwordLanding(const Player &player, Point target)
+{
+	return FindClosestValidPosition([&player](Point tile) { return InDungeonBounds(tile) && PosOkPlayer(player, tile); }, target, 0, 2);
+}
+
+/** @brief Falling Sword's holy ground: radius 2 for 3 seconds, burning for 20% of the hit a second (Q37). */
+void AddHolyGround(const Player &player, const TableSkillData &data, Point center)
+{
+	SkillZone zone;
+	NextZoneKey = NextZoneKey == UINT32_MAX ? 1 : NextZoneKey + 1;
+	zone.key = NextZoneKey;
+	zone.skill = data.skill;
+	zone.center = center;
+	zone.ticksLeft = static_cast<int16_t>(FallingSwordGroundTicks);
+	zone.delay = 0;
+	zone.counter = 0;
+	zone.damage = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(FixedDamage(player, data).raw()) * FallingSwordGroundPercent / 100), 1));
+	zone.radius = static_cast<int8_t>(std::min<int>(FallingSwordGroundRadius, INT8_MAX));
+	zone.holyGround = true;
+	Zones.push_back(zone);
+	vfx::Sigil(center, FallingSwordGroundRadius, FallingSwordGroundTicks * gnTickDelay, vfx::Element::Holy);
+	EffectRingAround(center, FallingSwordGroundRadius, MissileGraphicID::HolyBoltExplosion, 2);
+}
+
+/** @brief Whether Explosive Arrow sets this zone's poison off: the poison clouds and grounds of the poison skills (Q37). */
+bool IsDetonatablePoison(WeaponSkill skill)
+{
+	return IsAnyOf(skill, WeaponSkill::BloatedPods, WeaponSkill::ThornvineArrow, WeaponSkill::WitchsBog, WeaponSkill::AcidFlask, WeaponSkill::VenomSentry);
+}
+
+/** @brief Explosive Arrow's blast touched these poison zones: each bursts in fire for the blast's damage in its own area and ends. */
+void DetonatePoisonClouds(Point center, int radius, Fixed26_6 damage)
+{
+	for (SkillZone &zone : Zones) {
+		if (zone.detonated || !IsDetonatablePoison(zone.skill) || zone.delay > 0)
+			continue;
+		if (center.WalkingDistance(zone.center) > radius + std::max<int>(zone.radius, 1))
+			continue;
+		zone.detonated = true;
+		PendingDetonations.push_back({ zone.center, std::max<int>(zone.radius, 1), damage });
+	}
+}
+
+void RemoveWallSegment(size_t index)
+{
+	vfx::EndKeyed(WallSegments[index].key);
+	WallSegments.erase(WallSegments.begin() + static_cast<std::ptrdiff_t>(index));
+}
+
+/** @brief Shield Wall: 5 segments of earth in a line across in front of the hero, each with 20% of the hero's life. */
+void RaiseShieldWall(const Player &player, const TableSkillData &data)
+{
+	// The wall is the local hero's, like the zones; one wall at a time.
+	if (&player != MyPlayer)
+		return;
+	while (!WallSegments.empty())
+		RemoveWallSegment(WallSegments.size() - 1);
+	const Direction dir = player._pdir;
+	const Point front = player.position.tile + Displacement { dir } * 2;
+	const Displacement across { Left(Left(dir)) };
+	const int32_t life = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(player._pMaxHP.raw()) * ShieldWallLifePercent / 100), 64);
+	const int ticks = std::max<int>(data.duration, 1);
+	for (int i = -(ShieldWallSegments / 2); i <= ShieldWallSegments / 2; i++) {
+		const Point tile = front + across * i;
+		if (!InDungeonBounds(tile) || !IsTileWalkable(tile) || dPlayer[tile.x][tile.y] != 0)
+			continue;
+		NextZoneKey = NextZoneKey == UINT32_MAX ? 1 : NextZoneKey + 1;
+		WallSegments.push_back({ tile, life, static_cast<int16_t>(std::min(ticks, static_cast<int>(INT16_MAX))), NextZoneKey });
+		vfx::EarthWall(tile, ticks * gnTickDelay, NextZoneKey);
+		AddVisualEffect(tile, MissileGraphicID::StoneCurseShatter);
+	}
+	vfx::Fissure(front - across * (ShieldWallSegments / 2), front + across * (ShieldWallSegments / 2), vfx::Element::Physical);
+	ShakeCamera(ShakeStrength::Light, 4);
+}
+
+/**
+ * @brief The wall's segments wear out, and the monsters next to one break it: each hits it once a second for its blow
+ * (they must break a segment to pass, see IsShieldWallTile).
+ */
+void ProcessShieldWall(const Player &player)
+{
+	if (WallSegments.empty())
+		return;
+	if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
+		while (!WallSegments.empty())
+			RemoveWallSegment(WallSegments.size() - 1);
+		return;
+	}
+	for (size_t i = 0; i < WallSegments.size();) {
+		WallSegment &segment = WallSegments[i];
+		if (--segment.ticksLeft <= 0) {
+			AddVisualEffect(segment.tile, MissileGraphicID::StoneCurseShatter);
+			RemoveWallSegment(i);
+			continue;
+		}
+		if (segment.ticksLeft % TicksPerSecond == 0) {
+			for (int d = 0; d < 8; d++) {
+				const Point at = segment.tile + static_cast<Direction>(d);
+				Monster *monster = FindMonsterAtPosition(at);
+				if (monster == nullptr || monster->isPlayerMinion() || !CanHit(*monster) || monster->mode == MonsterMode::Petrified || monster->position.tile != at)
+					continue;
+				segment.life -= std::max(ScaleMonsterBlow(*monster, (monster->minDamage + monster->maxDamage) * 32), 64);
+				AddVisualEffect(segment.tile, MissileGraphicID::MetalHit);
+			}
+		}
+		if (segment.life <= 0) {
+			AddVisualEffect(segment.tile, MissileGraphicID::StoneCurseShatter);
+			PlaySfxLoc(SfxID::BarrelBreak, segment.tile);
+			RemoveWallSegment(i);
+			continue;
+		}
+		i++;
+	}
+}
+
 } // namespace
 
 std::span<const TableSkillData> TableSkills()
@@ -1382,6 +1535,15 @@ bool StartTableSkill(Player &player, const TableSkillData &data)
 	return true;
 }
 
+void BeginTableSkillCast(Player &player, const TableSkillData &data)
+{
+	if (data.skill != WeaponSkill::FallingSword)
+		return;
+	player.poe2.untouchableTicks = static_cast<uint8_t>(FallingSwordFadeTicks);
+	AddVisualEffect(player.position.tile, MissileGraphicID::HolyBoltExplosion);
+	vfx::Impact(player.position.tile, vfx::Element::Holy, 1.2F);
+}
+
 void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point target)
 {
 	const SkillLookScope skillLook(unsupported.skill);
@@ -1421,6 +1583,9 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	const Point tile = player.position.tile;
 	// A per-hit skill (POE2 Mashup) lands one hit of its burst a use, each for PerHitDamagePercent of a hit.
 	const int perHit = PerHitBurst(data.skill) > 0 ? PerHitDamagePercent(player, data.skill) : 0;
+	// A slam or a war cry shatters the hero's Shield Wall near it (Curtis 2026-11-07, Q37).
+	if ((SkillTags(slot) & (ST_Slam | ST_Warcry)) != 0)
+		ShatterShieldWall(player, (SkillTags(slot) & ST_Warcry) != 0 ? tile : target);
 	switch (data.shape) {
 	case Strike:
 		if (Monster *monster = MonsterInFrontOf(player); monster != nullptr)
@@ -1480,6 +1645,27 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	}
 	case Flurry:
 		BreakObjectAt(player, tile + player._pdir);
+		// Zeal (Curtis 2026-11-07, Q37): quick stabs at its percent, and every fourth use a heavy blow at 150% of that on
+		// every monster beside the hero. The count starts over 3 seconds after the last Zeal.
+		if (data.skill == WeaponSkill::Zeal && perHit > 0) {
+			const int percent = data.damagePercent * perHit / 100;
+			player.poe2.zealTicks = static_cast<uint8_t>(ZealResetTicks);
+			if (++player.poe2.zealCount >= ZealHeavyEvery) {
+				player.poe2.zealCount = 0;
+				for (int i = 0; i < 8; i++) {
+					const Point at = tile + static_cast<Direction>(i);
+					BreakObjectAt(player, at);
+					Monster *monster = FindMonsterAtPosition(at);
+					if (monster != nullptr && CanHit(*monster) && monster->position.old == at)
+						WeaponHit(player, *monster, data, percent * ZealHeavyPercent / 100, result);
+				}
+				vfx::Whirl(tile, 1, vfx::Element::Physical, false, WeaponElementLook(player));
+				ShakeCamera(ShakeStrength::Light, 4);
+			} else if (Monster *monster = MonsterInFrontOf(player); monster != nullptr) {
+				WeaponHit(player, *monster, data, percent, result);
+			}
+			break;
+		}
 		for (int i = 0; i < data.count; i++) {
 			Monster *monster = MonsterInFrontOf(player);
 			if (monster == nullptr)
@@ -1521,11 +1707,27 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 				Zones.push_back({ data.skill, target, 1, static_cast<int16_t>(EchoDelayTicks), 0, echo, static_cast<int8_t>(std::min<int>(data.radius, INT8_MAX)) });
 			}
 		} else {
+			// Falling Sword (Curtis 2026-11-07, Q37): the hero faded out as the cast began (TryUseWeaponSkill); a blade of
+			// light falls on the target, and the hero comes back out of the light there.
+			if (data.skill == WeaponSkill::FallingSword) {
+				vfx::SkyStrike(target, vfx::Element::Holy);
+				ShakeCamera(ShakeStrength::Medium, 6);
+				if (const std::optional<Point> landing = FallingSwordLanding(player, target); landing && *landing != tile) {
+					AddVisualEffect(tile, MissileGraphicID::HolyBoltExplosion);
+					MovePlayerTo(player, *landing);
+					player._pdir = GetDirection(player.position.tile, target);
+				}
+			}
 			BreakObjectsInArea(player, target, data.radius);
 			std::vector<Monster *> targets;
 			ForEachMonsterNear(target, data.radius, [&](Monster &monster) { targets.push_back(&monster); });
 			for (Monster *monster : targets)
 				WeaponHit(player, *monster, data, data.damagePercent, result);
+			// It leaves holy ground: 20% of the hit a second, physical, for 3 seconds.
+			if (data.skill == WeaponSkill::FallingSword) {
+				AddHolyGround(player, data, target);
+				player.poe2.untouchableTicks = 0;
+			}
 		}
 		// Bolts spray out from where it lands, each for a share of a base hit (Fist of the Heavens).
 		if (data.missile != MissileID::Null) {
@@ -1625,7 +1827,8 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 			player.poe2.holyShieldTicks = data.duration;
 			break;
 		case TableBuff::ShieldWall:
-			player.poe2.shieldWallTicks = data.duration;
+			// POE2's wall of earth (Curtis 2026-11-07, Q37): no longer a defence buff.
+			RaiseShieldWall(player, data);
 			break;
 		case TableBuff::WarCry:
 			// Stun only (Curtis 2026-10-23): it no longer empowers melee hits, which took Battle Cry's value (+50% with no
@@ -1799,6 +2002,20 @@ GrantedRider HitGrantedRider()
 	return data != nullptr ? data->rider : GrantedRider::None;
 }
 
+/**
+ * @brief Blessed Shield's shield bounces from the monster it hit to the nearest other within BlessedShieldBounceTiles,
+ * not back to the one before: the Arcing support's chaining. Every bounce hits for BlessedShieldBouncePercent of the throw.
+ */
+void BounceBlessedShield(const Missile &missile, const Monster &hit, const TableSkillData &data)
+{
+	Missile *bounce = ChainMissileOn(missile, hit, BlessedShieldBounceTiles);
+	if (bounce == nullptr)
+		return;
+	if (missile.poe2.chainsLeft >= BlessedShieldBounces)
+		bounce->poe2.damagePercent = static_cast<int16_t>(std::max(missile.poe2.damagePercent * BlessedShieldBouncePercent / 100, 1));
+	AddVisualEffect(hit.position.tile, data.effect);
+}
+
 void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster, int damage, bool isDamageShifted)
 {
 	if (!gbIsPoe2)
@@ -1820,6 +2037,13 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 	}
 	if (skill.kind != SkillKind::Attack)
 		return;
+	// Blessed Shield (Curtis 2026-11-07, Q37): the thrown shield stuns what it hits and bounces on.
+	if (data != nullptr && data->skill == WeaponSkill::BlessedShield) {
+		if (!monster.hasNoLife() && monster.mode != MonsterMode::Death && monster.mode != MonsterMode::Petrified)
+			M_StartStagger(monster);
+		if (missile.poe2.chainsLeft > 0)
+			BounceBlessedShield(missile, monster, *data);
+	}
 	if (data != nullptr && (data->flags & TF_PoisonBurst) != 0)
 		PoisonBurst(player, monster, *data);
 	// Venom Bolt: the bolt's poison, of the row's strength.
@@ -2441,6 +2665,7 @@ void ProcessSkillZones(Player &player)
 			RedrawComponent(PanelDrawComponent::Health);
 		}
 	}
+	ProcessShieldWall(player);
 	if (Zones.empty())
 		return;
 	if (player.hasNoLife() || leveltype == DTYPE_TOWN) {
@@ -2452,7 +2677,7 @@ void ProcessSkillZones(Player &player)
 	for (size_t i = 0; i < Zones.size();) {
 		SkillZone &zone = Zones[i];
 		const TableSkillData *data = FindTableSkill(zone.skill);
-		bool done = data == nullptr;
+		bool done = data == nullptr || zone.detonated;
 		const SupportHitScope scope(player, SkillSlot::ForAttack(zone.skill));
 		const SkillLookScope skillLook(zone.skill);
 		const int radius = zone.radius;
@@ -2461,12 +2686,22 @@ void ProcessSkillZones(Player &player)
 		if (!done && zone.delay > 0) {
 			zone.delay--;
 		} else if (!done) {
+			// Falling Sword's holy ground: once a second it burns what stands on it.
+			if (zone.holyGround) {
+				if (zone.counter % TicksPerSecond == 0) {
+					TableSkillData ground = *data;
+					ground.flags = 0;
+					ground.type = DamageType::Physical;
+					ZoneBurst(player, ground, zone.center, std::max(radius, 1), zone.damage);
+				}
 			// Landing bursts of projectiles, Delayed zones and a granted skill's echo go off once.
-			if ((data->flags & TF_LandingBurst) != 0 || IsAnyOf(data->zone, TableZone::Delayed, TableZone::IceSpike) || data->rider == GrantedRider::Echo) {
+			} else if ((data->flags & TF_LandingBurst) != 0 || IsAnyOf(data->zone, TableZone::Delayed, TableZone::IceSpike) || data->rider == GrantedRider::Echo) {
 				// Bone Prison traps for its supported duration, which the zone kept while it waited.
 				TableSkillData burst = *data;
 				burst.duration = static_cast<uint16_t>(std::max<int>(zone.ticksLeft, 1));
 				ZoneBurst(player, burst, zone.center, std::max(radius, 1), zone.damage);
+				if (data->skill == WeaponSkill::ExplosiveBolt)
+					DetonatePoisonClouds(Zones[i].center, std::max(radius, 1), Zones[i].damage);
 				if ((data->flags & TF_Pin) != 0)
 					EffectRingAround(zone.center, std::max(radius, 1), data->effect, 1);
 				if (data->zone == TableZone::Delayed) {
@@ -2597,11 +2832,76 @@ void ProcessSkillZones(Player &player)
 			i++;
 		}
 	}
+	// The poison clouds an Explosive Arrow touched burst in fire, each for the blast's damage in its own area.
+	if (!PendingDetonations.empty()) {
+		const std::vector<Detonation> detonations = std::move(PendingDetonations);
+		PendingDetonations.clear();
+		if (const TableSkillData *arrow = FindTableSkill(WeaponSkill::ExplosiveBolt); arrow != nullptr) {
+			const SupportHitScope scope(player, SkillSlot::ForAttack(arrow->skill));
+			TableSkillData fire = *arrow;
+			fire.type = DamageType::Fire;
+			fire.flags = 0;
+			fire.effect = MissileGraphicID::BigExplosion;
+			for (const Detonation &burst : detonations) {
+				ZoneBurst(player, fire, burst.center, burst.radius, burst.damage);
+				vfx::Impact(burst.center, vfx::Element::Fire, 1.4F);
+				ShakeCamera(ShakeStrength::Light, 4);
+			}
+		}
+	}
+}
+
+bool IsShieldWallTile(Point tile)
+{
+	return std::any_of(WallSegments.begin(), WallSegments.end(), [tile](const WallSegment &segment) { return segment.tile == tile; });
+}
+
+size_t ShieldWallSegmentCount()
+{
+	return WallSegments.size();
+}
+
+int ShatterShieldWall(Player &player, Point at)
+{
+	// The wall is the local hero's, like the zones.
+	if (WallSegments.empty() || &player != MyPlayer)
+		return 0;
+	const TableSkillData *wall = FindTableSkill(WeaponSkill::ShieldWall);
+	if (wall == nullptr)
+		return 0;
+	TableSkillData blast = *wall;
+	blast.flags = 0;
+	blast.damagePercent = static_cast<int16_t>(ShieldWallShatterPercent);
+	const SupportHitScope scope(player, SkillSlot::ForAttack(WeaponSkill::ShieldWall));
+	int shattered = 0;
+	for (size_t i = 0; i < WallSegments.size();) {
+		const Point tile = WallSegments[i].tile;
+		if (tile.WalkingDistance(at) > ShieldWallShatterTiles && tile.WalkingDistance(player.position.tile) > ShieldWallShatterTiles) {
+			i++;
+			continue;
+		}
+		RemoveWallSegment(i);
+		shattered++;
+		AddVisualEffect(tile, MissileGraphicID::StoneCurseShatter);
+		vfx::Slam(tile, 1, vfx::Element::Physical);
+		std::vector<Monster *> targets;
+		ForEachMonsterNear(tile, 1, [&](Monster &monster) { targets.push_back(&monster); });
+		CastResult result;
+		for (Monster *monster : targets)
+			WeaponHit(player, *monster, blast, blast.damagePercent, result);
+	}
+	if (shattered > 0) {
+		PlaySfxLoc(SfxID::BarrelBreak, at);
+		ShakeCamera(ShakeStrength::Medium, 5);
+	}
+	return shattered;
 }
 
 void ClearSkillZones()
 {
 	Zones.clear();
+	WallSegments.clear();
+	PendingDetonations.clear();
 	// A new level: the Sigil of Power stays behind.
 	if (MyPlayer != nullptr)
 		MyPlayer->poe2.grantedState.sigilTicks = 0;
@@ -2643,8 +2943,6 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 	}
 	if (player.poe2.holyShieldTicks > 0)
 		percent -= HolyShieldPercent;
-	if (player.poe2.shieldWallTicks > 0)
-		percent -= ShieldWallPercent;
 	damage = Fixed26_6::fromRaw(damage.raw() * std::max(percent, 10) / 100);
 	// Iron Maiden: the monster takes its own hit.
 	if (monster.poe2.ironMaidenTicks > 0 && !monster.hasNoLife() && &player == MyPlayer) {

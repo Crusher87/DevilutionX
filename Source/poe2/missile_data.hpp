@@ -56,6 +56,8 @@ struct Poe2MissileData {
 	uint8_t commandShot = 0;
 	uint8_t commandX = 0;
 	uint8_t commandY = 0;
+	/** @brief The monster it steers towards while it flies (Guided Arrow), or -1. */
+	int16_t homingMonster = -1;
 };
 
 } // namespace devilution

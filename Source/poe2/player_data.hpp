@@ -956,6 +956,9 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
  *
  * Saved in its own "poe2hero" entry of the hero save, so heroes stay loadable by other builds.
  */
+/** @brief Holy Shield's extra chance to block, in percentage points, while it lasts (Curtis 2026-11-07, Q37). */
+constexpr int HolyShieldBlockChance = 15;
+
 struct Poe2PlayerData {
 	/** @brief Support gems socketed in each Skills panel socket's skill. */
 	std::array<SupportSockets, NumSkillSlots> slotSupports {};
@@ -1048,13 +1051,15 @@ struct Poe2PlayerData {
 	uint8_t comboTicks = 0;
 	uint8_t rage = 0;
 	uint8_t rageTicks = 0;
-	/** @brief Defensive skill buffs (not saved): Frozen Armor, Holy Shield and Shield Wall, in game ticks left. */
+	/** @brief Defensive skill buffs (not saved): Frozen Armor and Holy Shield, in game ticks left. */
 	uint16_t frozenArmorTicks = 0;
 	uint16_t holyShieldTicks = 0;
-	uint16_t shieldWallTicks = 0;
 	/** @brief Soul Harvest: souls taken from corpses, each adding damage until the timer runs out (not saved). */
 	uint8_t soulStacks = 0;
 	uint16_t soulTicks = 0;
+	/** @brief Zeal's uses towards its heavy blow, and the game ticks until the count starts over (not saved). */
+	uint8_t zealCount = 0;
+	uint8_t zealTicks = 0;
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -1335,9 +1340,10 @@ struct Poe2PlayerData {
 		commandState = {};
 		frozenArmorTicks = 0;
 		holyShieldTicks = 0;
-		shieldWallTicks = 0;
 		soulStacks = 0;
 		soulTicks = 0;
+		zealCount = 0;
+		zealTicks = 0;
 		riposteTicks = 0;
 		frenzyCharges = 0;
 		frenzyTicks = 0;
@@ -1387,10 +1393,10 @@ struct Poe2PlayerData {
 			frozenArmorTicks--;
 		if (holyShieldTicks > 0)
 			holyShieldTicks--;
-		if (shieldWallTicks > 0)
-			shieldWallTicks--;
 		if (soulTicks > 0 && --soulTicks == 0)
 			soulStacks = 0;
+		if (zealTicks > 0 && --zealTicks == 0)
+			zealCount = 0;
 		if (frenzyTicks > 0 && --frenzyTicks == 0)
 			frenzyCharges = 0;
 		if (comboTicks > 0 && --comboTicks == 0)

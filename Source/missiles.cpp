@@ -276,6 +276,39 @@ void HomeElemental(Missile &missile, Point position)
 }
 
 /**
+ * @brief POE2 Mashup: Guided Arrow (Curtis 2026-11-07, Q37) turns towards the monster it was shot at every other tick
+ * while that one lives, keeping its speed. With its target gone it flies straight on.
+ */
+void HomeGuidedArrow(Missile &missile)
+{
+	const int16_t id = missile.poe2.homingMonster;
+	if (id < 0 || static_cast<size_t>(id) >= MaxMonsters || missile._midist % 2 != 0)
+		return;
+	const Monster &target = Monsters[id];
+	const Point position = missile.position.tile;
+	if (target.hasNoLife() || target.mode == MonsterMode::Death || target.position.tile == position) {
+		if (target.hasNoLife() || target.mode == MonsterMode::Death)
+			missile.poe2.homingMonster = -1;
+		return;
+	}
+	const int64_t vx = missile.position.velocity.deltaX;
+	const int64_t vy = missile.position.velocity.deltaY;
+	int64_t rest = vx * vx + vy * vy;
+	int64_t root = 0;
+	for (int64_t bit = int64_t { 1 } << 62; bit != 0; bit >>= 2) {
+		if (rest >= root + bit) {
+			rest -= root + bit;
+			root = (root >> 1) + bit;
+		} else {
+			root >>= 1;
+		}
+	}
+	const int speed = std::max(static_cast<int>(root >> 16), 1);
+	UpdateMissileVelocity(missile, target.position.tile, speed);
+	missile._miAnimFrame = static_cast<int>(GetDirection16(position, target.position.tile)) + 1;
+}
+
+/**
  * @brief Add the missile to the lookup tables
  * @param missile The missile to add
  */
@@ -3567,6 +3600,11 @@ void ProcessArrow(Missile &missile)
 		maxd = 2 * currlevel;
 		break;
 	}
+	if (missile.poe2.homingMonster >= 0)
+		HomeGuidedArrow(missile);
+	// POE2 Mashup: a thrown blade or shield turns over and over as it flies: its 16 facings, one a tick.
+	if (missile.poe2.look == vfx::SpinningBladeLook)
+		missile._miAnimFrame = missile._miAnimFrame % 16 + 1;
 	MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), mind, maxd, true, false);
 	if (missile.duration == 0)
 		missile._miDelFlag = true;

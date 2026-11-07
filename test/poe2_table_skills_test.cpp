@@ -4,6 +4,7 @@
 #include <set>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -25,6 +26,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
@@ -243,6 +245,238 @@ TEST_F(Poe2TableSkillsTest, ConfuseFromLevelTenSendsARareBerserk)
 	}
 	player.poe2.skillSlots[0] = {};
 	ClearMonsters();
+}
+
+// Q37 (Curtis 2026-11-07): Zeal's uses 1 to 3 are quick stabs at the monster in front; every fourth is a heavy blow at
+// 150% on every monster beside the hero. The count starts over 3 seconds after the last Zeal.
+TEST_F(Poe2TableSkillsTest, ZealEveryFourthUseIsAHeavyBlowAround)
+{
+	Player &player = SetUpFight();
+	int sideOnStabs = 0;
+	int sideOnHeavy = 0;
+	for (uint32_t seed = 1; seed <= 6; seed++) {
+		ClearMonsters();
+		player.poe2.zealCount = 0;
+		player.poe2.zealTicks = 0;
+		PlaceMonster(0, { 41, 40 });
+		Monster &side = PlaceMonster(1, { 40, 41 });
+		for (int use = 1; use <= ZealHeavyEvery; use++) {
+			const Fixed26_6 before = side.hitPoints;
+			SetRndSeed(seed * 10 + use);
+			ExecuteSkillCast(player, WeaponSkill::Zeal, { 41, 40 });
+			EXPECT_EQ(player.poe2.zealCount, use % ZealHeavyEvery);
+			if (side.hitPoints < before)
+				(use == ZealHeavyEvery ? sideOnHeavy : sideOnStabs)++;
+		}
+	}
+	EXPECT_EQ(sideOnStabs, 0);
+	EXPECT_GT(sideOnHeavy, 0);
+	EXPECT_EQ(ZealHeavyPercent, 150);
+	ExecuteSkillCast(player, WeaponSkill::Zeal, { 41, 40 });
+	EXPECT_EQ(player.poe2.zealCount, 1);
+	for (int i = 0; i < ZealResetTicks; i++)
+		player.poe2.tick();
+	EXPECT_EQ(player.poe2.zealCount, 0);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Falling Sword fades the hero out in light (untargetable) as the cast begins; the blade lands on the target in
+// radius 2, the hero comes out of the light there, and holy ground burns for 20% of the hit a second for 3 seconds.
+TEST_F(Poe2TableSkillsTest, FallingSwordFadesOutAndLeavesHolyGround)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	const TableSkillData &sword = *FindTableSkill(WeaponSkill::FallingSword);
+	EXPECT_EQ(sword.shape, TableShape::Burst);
+	EXPECT_EQ(sword.radius, 2);
+	BeginTableSkillCast(player, sword);
+	EXPECT_EQ(player.poe2.untouchableTicks, FallingSwordFadeTicks);
+	EXPECT_EQ(FallingSwordFadeTicks * 50, 400);
+	Monster &monster = PlaceMonster(0, { 45, 40 });
+	ExecuteSkillCast(player, WeaponSkill::FallingSword, { 45, 40 });
+	EXPECT_NE(player.position.tile, Point(40, 40));
+	EXPECT_LE(Point(player.position.tile).WalkingDistance(Point(45, 40)), 2);
+	EXPECT_FALSE(player.poe2.isUntouchable());
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	int burns = 0;
+	for (int tick = 0; tick < FallingSwordGroundTicks + 5; tick++) {
+		const Fixed26_6 before = monster.hitPoints;
+		ProcessSkillZones(player);
+		if (monster.hitPoints < before)
+			burns++;
+	}
+	EXPECT_EQ(burns, 3);
+	EXPECT_EQ(SkillZoneCount(), 0U);
+	ClearMonsters();
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Explosive Arrow sticks where it lands and blows a second later; a poison cloud or ground its blast touches
+// bursts in fire and ends.
+TEST_F(Poe2TableSkillsTest, ExplosiveArrowWaitsASecondAndBurstsPoisonClouds)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	ExecuteSkillCast(player, WeaponSkill::WitchsBog, { 41, 40 });
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	ExecuteSkillCast(player, WeaponSkill::ExplosiveBolt, { 42, 40 });
+	ASSERT_EQ(SkillZoneCount(), 2U);
+	const int flight = 2 * 2;
+	for (int tick = 0; tick < flight + ExplosiveArrowFuseTicks; tick++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 2U) << "the arrow has not blown yet";
+	ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 1U) << "the arrow blew";
+	ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 0U) << "the bog burst in fire";
+	EXPECT_EQ(ExplosiveArrowFuseTicks, 20);
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Shield Wall is POE2's wall of earth: 5 segments across the hero's front for 6 seconds, each with 20% of his
+// life. Monsters can't step on one, and break it with their blows; a slam or a war cry shatters it.
+TEST_F(Poe2TableSkillsTest, ShieldWallIsAWallOfEarth)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	const TableSkillData &wall = *FindTableSkill(WeaponSkill::ShieldWall);
+	ExecuteSkillCast(player, WeaponSkill::ShieldWall, { 42, 40 });
+	ASSERT_EQ(ShieldWallSegmentCount(), 5U);
+	const Point middle = player.position.tile + Displacement { Direction::East } * 2;
+	EXPECT_TRUE(IsShieldWallTile(middle));
+	EXPECT_FALSE(IsShieldWallTile(player.position.tile + Direction::East));
+	// It is no longer a defence.
+	Monster &brute = PlaceMonster(0, middle + Direction::East);
+	const Fixed26_6 hit = Fixed26_6::fromInt(100);
+	EXPECT_EQ(ApplyTableSkillDefences(brute, player, hit), hit);
+	EXPECT_FALSE(IsTileAvailable(brute, middle));
+	// Its blows break the segments beside it: 20 life each, 10 a blow, a blow a second.
+	brute.minDamage = brute.maxDamage = 10;
+	for (int tick = 0; tick < 2 * 20 + 1; tick++)
+		ProcessSkillZones(player);
+	EXPECT_FALSE(IsShieldWallTile(middle));
+	EXPECT_LT(ShieldWallSegmentCount(), 5U);
+	EXPECT_GT(ShieldWallSegmentCount(), 0U);
+	// It wears out with its time.
+	for (int tick = 0; tick < wall.duration; tick++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(ShieldWallSegmentCount(), 0U);
+	ClearMonsters();
+
+	// A war cry shatters the segments within 2 tiles of the hero, each exploding for a weapon hit around it.
+	ExecuteSkillCast(player, WeaponSkill::ShieldWall, { 42, 40 });
+	ASSERT_EQ(ShieldWallSegmentCount(), 5U);
+	ExecuteSkillCast(player, WeaponSkill::WarCry, { 41, 40 });
+	EXPECT_FALSE(IsShieldWallTile(middle));
+	EXPECT_LT(ShieldWallSegmentCount(), 5U);
+	ClearSkillZones();
+	// So does a slam where it lands, or Shield Charge's landing.
+	int damaged = 0;
+	for (uint32_t seed = 1; seed <= 5; seed++) {
+		ExecuteSkillCast(player, WeaponSkill::ShieldWall, { 42, 40 });
+		ASSERT_EQ(ShieldWallSegmentCount(), 5U);
+		Monster &near = PlaceMonster(1, middle + Direction::East);
+		SetRndSeed(seed);
+		EXPECT_EQ(ShatterShieldWall(player, middle), 5);
+		if (near.hitPoints < near.maxHitPoints)
+			damaged++;
+		ClearMonsters();
+	}
+	EXPECT_GT(damaged, 0);
+	EXPECT_EQ(ShieldWallSegmentCount(), 0U);
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Holy Shield also blocks 15% more often while it lasts, with a shield to block with.
+TEST_F(Poe2TableSkillsTest, HolyShieldBlocksMoreOften)
+{
+	Player &player = *MyPlayer;
+	player.poe2.shieldBlockChance = 20;
+	const int without = player.GetBlockChance();
+	player.poe2.holyShieldTicks = 10;
+	EXPECT_EQ(player.GetBlockChance(), without + HolyShieldBlockChance);
+	EXPECT_EQ(HolyShieldBlockChance, 15);
+	player.poe2.shieldBlockChance = 0;
+	EXPECT_EQ(player.GetBlockChance(), 0);
+	player.poe2.holyShieldTicks = 0;
+}
+
+// Q37: Blessed Shield is a thrown shield: it stuns what it hits and bounces to up to 3 more monsters within 4 tiles,
+// each bounce at 75%, never straight back.
+TEST_F(Poe2TableSkillsTest, BlessedShieldBouncesOnToThreeMore)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Missiles.clear();
+	const TableSkillData &shield = *FindTableSkill(WeaponSkill::BlessedShield);
+	EXPECT_EQ(shield.shape, TableShape::Projectiles);
+	Monster &first = PlaceMonster(0, { 44, 40 });
+	Monster &second = PlaceMonster(1, { 46, 41 });
+	Monster &third = PlaceMonster(2, { 49, 41 });
+	// The shields in the air (the hits' effects are missiles too).
+	const auto shields = []() {
+		std::vector<Missile> thrown;
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype == MissileID::Arrow)
+				thrown.push_back(missile);
+		}
+		return thrown;
+	};
+	ExecuteSkillCast(player, WeaponSkill::BlessedShield, { 44, 40 });
+	ASSERT_EQ(shields().size(), 1U);
+	const Missile thrown = shields().back();
+	EXPECT_EQ(thrown.poe2.look, vfx::SpinningBladeLook);
+	EXPECT_EQ(thrown.poe2.chainsLeft, BlessedShieldBounces);
+	OnTableMissileHit(thrown, player, first, 40, false);
+	ASSERT_EQ(shields().size(), 2U);
+	const Missile bounce = shields().back();
+	EXPECT_EQ(Point(bounce.position.start), Point(first.position.tile));
+	EXPECT_EQ(bounce.poe2.chainsLeft, BlessedShieldBounces - 1);
+	EXPECT_EQ(bounce.poe2.lastHitMonster, static_cast<int16_t>(first.getId()));
+	EXPECT_EQ(bounce.poe2.damagePercent, thrown.poe2.damagePercent * BlessedShieldBouncePercent / 100);
+	// It flies on to the next, at the same 75%, and not back to the first.
+	OnTableMissileHit(bounce, player, second, 40, false);
+	ASSERT_EQ(shields().size(), 3U);
+	const Missile last = shields().back();
+	EXPECT_EQ(last.poe2.damagePercent, bounce.poe2.damagePercent);
+	EXPECT_EQ(last.poe2.lastHitMonster, static_cast<int16_t>(second.getId()));
+	EXPECT_EQ(last.poe2.chainsLeft, BlessedShieldBounces - 2);
+	// From the third nothing is near but the one before.
+	OnTableMissileHit(last, player, third, 40, false);
+	EXPECT_EQ(shields().size(), 3U);
+	ClearMonsters();
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Guided Arrow homes in on the monster it was shot at.
+TEST_F(Poe2TableSkillsTest, GuidedArrowHomesOnItsTarget)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Missiles.clear();
+	Monster &target = PlaceMonster(0, { 46, 40 });
+	ExecuteSkillCast(player, WeaponSkill::GuidedArrow, { 46, 40 });
+	ASSERT_EQ(Missiles.size(), 1U);
+	EXPECT_EQ(Missiles.back().poe2.homingMonster, static_cast<int16_t>(target.getId()));
+	// Shot at nothing, it flies straight.
+	ClearMonsters();
+	Missiles.clear();
+	ExecuteSkillCast(player, WeaponSkill::GuidedArrow, { 46, 40 });
+	ASSERT_EQ(Missiles.size(), 1U);
+	EXPECT_EQ(Missiles.back().poe2.homingMonster, -1);
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
 }
 
 TEST_F(Poe2TableSkillsTest, SpellBaseRollMatchesTheTooltipRange)

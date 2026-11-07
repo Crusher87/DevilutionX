@@ -2097,6 +2097,9 @@ bool IsTileAccessible(const Monster &monster, Point position)
 
 	if (!IsTileWalkable(position, (monster.flags & MFLAG_CAN_OPEN_DOOR) != 0))
 		return false;
+	// POE2 Mashup: a Shield Wall segment stands there; the monster must break it first.
+	if (gbIsPoe2 && !monster.isPlayerMinion() && IsShieldWallTile(position))
+		return false;
 
 	return IsTileSafe(monster, position);
 }
@@ -5500,6 +5503,9 @@ Monster *FindGolemForPlayer(const Player &player)
 bool IsTileAvailable(const Monster &monster, Point position)
 {
 	if (!IsTileAvailable(position))
+		return false;
+	// POE2 Mashup: a Shield Wall segment stands there; the monster must break it first.
+	if (gbIsPoe2 && !monster.isPlayerMinion() && IsShieldWallTile(position))
 		return false;
 
 	return IsTileSafe(monster, position);

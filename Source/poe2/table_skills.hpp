@@ -375,6 +375,28 @@ constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
 /** @brief Fire Arrow's landing burst hits for this percent of the arrow's own percent (Curtis 2026-11-07, Q32). */
 constexpr int FireArrowBurstShare = 45;
+/** @brief Zeal (Curtis 2026-11-07, Q37): every this many uses is a heavy blow at this percent on every monster beside you. */
+constexpr int ZealHeavyEvery = 4;
+constexpr int ZealHeavyPercent = 150;
+/** @brief Zeal's count starts over this many game ticks after the last use (3 seconds). */
+constexpr int ZealResetTicks = 60;
+/** @brief Falling Sword (Q37): the hero fades out for this long as the cast begins (0.4 s), untargetable. */
+constexpr int FallingSwordFadeTicks = 8;
+/** @brief Falling Sword's holy ground: radius, game ticks (3 s) and percent of the hit it burns for each second. */
+constexpr int FallingSwordGroundRadius = 2;
+constexpr int FallingSwordGroundTicks = 60;
+constexpr int FallingSwordGroundPercent = 20;
+/** @brief Explosive Arrow (Q37): its arrow sticks where it lands and blows this many game ticks later (1 s). */
+constexpr int ExplosiveArrowFuseTicks = 20;
+/** @brief Shield Wall (Q37): POE2's wall of earth, its segments, their life in percent of the hero's, and its shatter. */
+constexpr int ShieldWallSegments = 5;
+constexpr int ShieldWallLifePercent = 20;
+constexpr int ShieldWallShatterTiles = 2;
+constexpr int ShieldWallShatterPercent = 100;
+/** @brief Blessed Shield (Q37): the thrown shield bounces to this many more monsters within this many tiles, each bounce at this percent. */
+constexpr int BlessedShieldBounces = 3;
+constexpr int BlessedShieldBounceTiles = 4;
+constexpr int BlessedShieldBouncePercent = 75;
 /** @brief Attract (Curtis 2026-11-07, Q36): monsters this near the cursed monster attack it instead of the hero. */
 constexpr int AttractTiles = 5;
 /** @brief Confuse cast at a rare or unique from this gem level gives it Berserk's old effect (Q36). */
@@ -456,6 +478,8 @@ bool IsTableAreaSkill(const TableSkillData &data);
 
 /** @brief Starts a table skill: pays for it and plays its animation or dash. */
 bool StartTableSkill(Player &player, const TableSkillData &data);
+/** @brief A table skill's cast animation began: Falling Sword's hero fades out in light, untargetable (Q37). */
+void BeginTableSkillCast(Player &player, const TableSkillData &data);
 /** @brief Makes a table skill go off, on the action frame of its animation. */
 void ExecuteTableSkill(Player &player, const TableSkillData &data, Point target);
 /** @brief Fires one shot of a Stream skill. */
@@ -575,6 +599,14 @@ int TableCurseDamageTakenPercent(const Monster &monster, DamageType type);
  * Mark, how much of its hit Iron Maiden turns back. 0 when the curse isn't on it or has no strength to show.
  */
 [[nodiscard]] int TableCurseShownPercent(const Monster &monster, TableCurse curse);
+/** @brief Whether a Shield Wall segment stands on the tile: monsters can't step there until they break it (Q37). */
+[[nodiscard]] bool IsShieldWallTile(Point tile);
+[[nodiscard]] size_t ShieldWallSegmentCount();
+/**
+ * @brief A slam, Shield Charge or a war cry went off: the Shield Wall segments within ShieldWallShatterTiles of the
+ * point or the hero shatter, each exploding for a weapon hit in radius 1. Returns how many shattered.
+ */
+int ShatterShieldWall(Player &player, Point at);
 /** @brief How much Decrepify slows the monster, by its rarity (Q36). */
 [[nodiscard]] int DecrepifySlowPercentFor(const Monster &monster);
 /**

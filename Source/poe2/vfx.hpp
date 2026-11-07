@@ -106,6 +106,8 @@ void BoneCage(Point tile, int delayMs, float size, int standMs);
 void Miasma(Point tile, int radiusTiles, int durationMs, MiasmaKind kind, uint32_t key = 0);
 /** @brief Thorny vines burst up round a tile and stand for the given time before they wither (Thornvine Arrow). */
 void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key = 0);
+/** @brief A slab of rock thrust up out of the floor, standing for the given time or until EndKeyed breaks it (Shield Wall). */
+void EarthWall(Point tile, int lifeMs, uint32_t key);
 /** @brief A swollen seed pod on the ground, throbbing, until its time runs out or EndKeyed bursts it (Bloated Pods). */
 void Pod(Point tile, int lifeMs, uint32_t key);
 /** @brief A gnarled effigy stake with glowing green eyes, standing for the given time (Plague Effigy). */

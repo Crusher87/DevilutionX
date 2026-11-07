@@ -862,7 +862,10 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 			if (table->shape == TableShape::Dash)
 				return StartDashSkill(player, skill, table->count);
 			constexpr player_graphic Graphics[] = { player_graphic::Attack, player_graphic::Magic, player_graphic::Fire, player_graphic::Lightning };
-			return StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]);
+			if (!StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]))
+				return false;
+			BeginTableSkillCast(player, *table);
+			return true;
 		}
 		break;
 	}
@@ -909,7 +912,10 @@ bool TryUseGrantedSkill(Player &player)
 	if (!CanStartSkill(player) || !StartTableSkill(player, *table))
 		return false;
 	constexpr player_graphic Graphics[] = { player_graphic::Attack, player_graphic::Magic, player_graphic::Fire, player_graphic::Lightning };
-	return StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]);
+	if (!StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]))
+		return false;
+	BeginTableSkillCast(player, *table);
+	return true;
 }
 
 bool IsSwingWeaponSkill(WeaponSkill skill)
@@ -1124,6 +1130,8 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 	case WeaponSkill::BattleCry:
 		player.poe2.warcryTicks = BattleCryTicks;
 		player.Say(HeroSpeech::TimeToDie);
+		// A war cry shatters the hero's Shield Wall near him (Curtis 2026-11-07, Q37).
+		ShatterShieldWall(player, player.position.tile);
 		for (int i = 0; i < 8; i++) {
 			Monster *monster = FindMonsterAtPosition(player.position.tile + static_cast<Direction>(i));
 			if (monster != nullptr && !CanTalkToMonst(*monster) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)

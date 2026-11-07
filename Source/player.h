@@ -642,6 +642,9 @@ public:
 		int blkper;
 		if (gbIsPoe2) {
 			blkper = poe2.shieldBlockChance > 0 ? poe2.shieldBlockChance + poe2.passiveBlockChance : 0;
+			// Holy Shield (Curtis 2026-11-07, Q37): blocks more often while it lasts, with a shield to block with.
+			if (blkper > 0 && poe2.holyShieldTicks > 0)
+				blkper += HolyShieldBlockChance;
 		} else {
 			blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
 			if (useLevel)

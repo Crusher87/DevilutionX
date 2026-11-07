@@ -88,13 +88,13 @@ Missile *SpawnFollowUp(const Missile &missile, const Monster &monster, WorldTile
 	return followUp;
 }
 
-std::optional<WorldTilePosition> FindChainTarget(const Monster &from)
+std::optional<WorldTilePosition> FindChainTarget(const Monster &from, int range = ChainRange, int skipMonster = -1)
 {
 	std::optional<WorldTilePosition> best;
-	int bestDistance = ChainRange + 1;
+	int bestDistance = range + 1;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &other = Monsters[ActiveMonsters[i]];
-		if (&other == &from || other.hitPoints <= 0 || other.isPlayerMinion() || !other.isPossibleToHit() || other.position.tile == GolemHoldingCell)
+		if (&other == &from || static_cast<int>(other.getId()) == skipMonster || other.hitPoints <= 0 || other.isPlayerMinion() || !other.isPossibleToHit() || other.position.tile == GolemHoldingCell)
 			continue;
 		const int distance = from.position.tile.ApproxDistance(other.position.tile);
 		if (distance >= bestDistance || !LineClearMissile(from.position.tile, other.position.tile))
@@ -873,6 +873,17 @@ bool SupportedMissileIgnoresMonster(const Missile &missile, int monsterId)
 {
 	// Only set by a projectile that hit and flew on (see OnSupportedMissileHit).
 	return missile.poe2.lastHitMonster == monsterId;
+}
+
+Missile *ChainMissileOn(const Missile &missile, const Monster &monster, int range)
+{
+	const std::optional<WorldTilePosition> target = FindChainTarget(monster, range, missile.poe2.lastHitMonster);
+	if (!target)
+		return nullptr;
+	Missile *chain = SpawnFollowUp(missile, monster, *target);
+	if (chain != nullptr)
+		chain->poe2.chainsLeft = static_cast<int8_t>(std::max(missile.poe2.chainsLeft - 1, 0));
+	return chain;
 }
 
 bool OnSupportedMissileHit(Missile &missile, const Monster &monster)

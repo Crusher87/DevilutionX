@@ -320,6 +320,8 @@ enum class SpikeKind : uint8_t {
 	Effigy,
 	/** @brief A squat iron gas canister (Venom Sentry). */
 	Canister,
+	/** @brief A jagged slab of rock thrust up out of the floor (Shield Wall). */
+	Earth,
 };
 
 /** @brief The colours of what bursts out of the ground other than ice: its shadowed side, its face, its lit side, the earth at its foot. */
@@ -340,6 +342,8 @@ SpikePalette PaletteOf(SpikeKind kind)
 		return { { 64, 92, 18 }, { 140, 182, 48 }, { 214, 240, 120 }, { 48, 54, 20 }, { 172, 214, 70 }, { 80, 120, 24 }, { 130, 170, 50 }, { 70, 96, 30 }, { 40, 52, 14 }, { 30, 40, 12 } };
 	case SpikeKind::Effigy:
 		return { { 36, 26, 18 }, { 84, 62, 42 }, { 134, 106, 74 }, { 40, 32, 22 }, { 96, 74, 50 }, { 50, 38, 26 }, { 96, 90, 60 }, { 56, 52, 34 }, { 38, 34, 22 }, { 28, 26, 16 } };
+	case SpikeKind::Earth:
+		return { { 46, 40, 34 }, { 104, 92, 78 }, { 160, 148, 128 }, { 52, 44, 34 }, { 128, 116, 98 }, { 70, 62, 52 }, { 130, 120, 102 }, { 80, 72, 60 }, { 44, 38, 30 }, { 30, 26, 20 } };
 	case SpikeKind::Canister:
 		return { { 34, 36, 38 }, { 80, 84, 86 }, { 150, 156, 158 }, { 40, 40, 34 }, { 120, 126, 128 }, { 60, 62, 64 }, { 120, 160, 60 }, { 60, 84, 30 }, { 40, 44, 30 }, { 30, 32, 24 } };
 	default:
@@ -3525,6 +3529,25 @@ void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key)
 		fx.crystals.push_back({ at, { Random(-0.25F, 0.25F), 0 }, tall, Random(5, 8), Random(0, 140), { side * Random(10, 22), Random(4, 10) } });
 	}
 	AddBoneSpikes(std::move(fx), 0);
+}
+
+void EarthWall(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "EarthWall", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Earth, tile, static_cast<float>(lifeMs), key);
+	fx.size = 1;
+	// A thick slab of rock in the middle and broken ones leaning on it, the floor heaved up round their foot.
+	fx.crystals.push_back({ { Random(-2, 2), Random(-1, 1) }, { Random(-0.05F, 0.05F), 0 }, Random(58, 66), Random(20, 24), 0 });
+	for (int i = 0; i < 4; i++) {
+		const float side = i % 2 == 0 ? -1.F : 1.F;
+		const float out = Random(10, 18) * (i < 2 ? 1.F : 1.6F);
+		fx.crystals.push_back({ { side * out, Random(-3, 3) }, { side * Random(0.1F, 0.3F), 0 }, Random(28, 44), Random(12, 17), Random(0, 60) });
+	}
+	AddBoneSpikes(std::move(fx), 0);
+	const Vec pos = TileCentre(tile);
+	Spray(pos, Scaled(6), 50, 150, 450, 800, Shape::Chunk, { 110, 98, 82 }, { 60, 52, 42 }, 2.5F, 2, 90, 200, 700, 0.5F, 1);
 }
 
 void Pod(Point tile, int lifeMs, uint32_t key)

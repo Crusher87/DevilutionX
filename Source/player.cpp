@@ -922,6 +922,8 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
 	PlaySkillEffects(player, skill, player.position.tile + player._pdir);
 	OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
+	// Leap Slam and Shield Charge shatter the hero's Shield Wall where they land (Curtis 2026-11-07, Q37).
+	ShatterShieldWall(player, player.position.tile + player._pdir);
 	for (int i = 0; i < 8; i++) {
 		const auto dir = static_cast<Direction>(i);
 		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
@@ -1062,6 +1064,9 @@ bool DoAttack(Player &player)
 			const Point origin = player.position.tile;
 			const Point primary = origin + player._pdir;
 			const int reach = skill == WeaponSkill::GroundSlam ? GroundSlamReach : WhirlingStaffReach;
+			// Ground Slam shatters the hero's Shield Wall in front (Curtis 2026-11-07, Q37).
+			if (skill == WeaponSkill::GroundSlam)
+				ShatterShieldWall(player, primary);
 			for (int dy = -reach; dy <= reach; dy++) {
 				for (int dx = -reach; dx <= reach; dx++) {
 					position = origin + Displacement { dx, dy };
