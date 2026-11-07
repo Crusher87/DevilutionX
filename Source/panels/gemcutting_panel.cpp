@@ -469,7 +469,7 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 	} else if (UncutGemKind(*uncut) != GemUncutKind(gem)) {
 		lines.emplace_back(FormatRuntime(_("Your uncut gem makes {:s} gems; this needs an uncut {:s} gem"), UncutKindName(UncutGemKind(*uncut)), UncutKindName(GemUncutKind(gem))), UiFlags::ColorRed);
 	} else {
-		lines.emplace_back(FormatRuntime(_("Needs an uncut {:s} gem of level {:d}"), UncutKindName(GemUncutKind(gem)), gem.level), UiFlags::ColorRed);
+		lines.emplace_back(FormatRuntime(_("Needs an uncut {:s} gem of level {:d}"), UncutKindName(GemUncutKind(gem)), UncutLevelToCut(gem)), UiFlags::ColorRed);
 	}
 
 	const Rectangle bounds { { 0, 0 }, { out.w(), out.h() } };

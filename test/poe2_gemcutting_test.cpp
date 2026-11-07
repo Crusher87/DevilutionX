@@ -432,8 +432,8 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 		const bool isSupport = gem.support != SupportGem::None;
 		// POE2: Spirit gems need uncut Spirit gems, not uncut skill gems.
 		const bool isSpirit = gem.skill.kind == SkillKind::Persistent;
-		// An uncut gem cuts any gem of its tier or lower (levels 1-2 are tier I, 3-5 tier III, 6-9 tier V).
-		EXPECT_EQ(CanCutGem(skillUncut, gem), !isSupport && !isSpirit && GemTier(gem.level) <= GemTier(6)) << GemName(gem);
+		// POE2: a level N uncut gem cuts any gem of tier N or lower (level 6 cuts tiers I, III and V).
+		EXPECT_EQ(CanCutGem(skillUncut, gem), !isSupport && !isSpirit && GemTier(gem.level) <= 6) << GemName(gem);
 		EXPECT_EQ(CanCutGem(supportUncut, gem), isSupport && GemTier(gem.level) <= GemTier(3)) << GemName(gem);
 		EXPECT_EQ(CanCutGem(spiritUncut, gem), isSpirit) << GemName(gem);
 		cuttable += CanCutGem(skillUncut, gem) ? 1 : 0;
@@ -446,6 +446,24 @@ TEST_F(Poe2GemcuttingTest, UncutGemsCutUpToTheirLevel)
 		if (gem.skill.kind == SkillKind::Spell && gem.skill.spell() == SpellID::Firebolt)
 			EXPECT_TRUE(CanCutGem(firstUncut, gem));
 	}
+
+	// Tier XIII gems (Apocalypse, Nova, ...) open with a level 13 uncut gem, not level 12.
+	const Item uncut5 = MakeUncut(IMISC_UNCUT_SKILL, 5);
+	const Item uncut12 = MakeUncut(IMISC_UNCUT_SKILL, 12);
+	const Item uncut13 = MakeUncut(IMISC_UNCUT_SKILL, 13);
+	int topTier = 0;
+	for (const GemEntry &gem : GemCatalog()) {
+		if (gem.support != SupportGem::None || gem.skill.kind == SkillKind::Persistent)
+			continue;
+		const int tier = GemTier(gem.level);
+		EXPECT_EQ(CanCutGem(uncut5, gem), tier <= 5) << GemName(gem);
+		EXPECT_EQ(CanCutGem(uncut12, gem), tier <= 11) << GemName(gem);
+		EXPECT_TRUE(CanCutGem(uncut13, gem)) << GemName(gem);
+		EXPECT_EQ(UncutLevelToCut(gem), tier) << GemName(gem);
+		if (tier == 13)
+			topTier++;
+	}
+	EXPECT_GT(topTier, 0);
 }
 
 TEST_F(Poe2GemcuttingTest, TheLabelUnderAGemSaysTheLevelItCutsTo)
@@ -473,10 +491,9 @@ TEST_F(Poe2GemcuttingTest, TheLabelUnderAGemSaysTheLevelItCutsTo)
 	EXPECT_EQ(GemCutLabel(*low, &skillUncut, 40), "Cuts to level 6");
 	EXPECT_EQ(GemCutLabel(*low, &skillUncut, 1), StrCat("Cuts to level ", GemLevelFromUncut(skillUncut, 1)));
 	EXPECT_LT(GemLevelFromUncut(skillUncut, 1), 6);
-	// Out of reach, or just browsing: the uncut level that cuts it, the first of its tier.
+	// Out of reach, or just browsing: the uncut level that cuts it, its tier number (POE2).
 	const int needed = UncutLevelToCut(*high);
-	EXPECT_EQ(GemTier(needed), GemTier(high->level));
-	EXPECT_LT(GemTier(needed - 1), GemTier(high->level));
+	EXPECT_EQ(needed, GemTier(high->level));
 	EXPECT_EQ(GemCutLabel(*high, &skillUncut, 40), StrCat("Needs uncut level ", needed));
 	EXPECT_EQ(GemCutLabel(*high, nullptr, 40), StrCat("Needs uncut level ", needed));
 	EXPECT_EQ(UncutLevelToCut(*low), 3);

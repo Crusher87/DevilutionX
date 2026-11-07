@@ -317,8 +317,11 @@ bool CanCutGem(const Item &uncut, const GemEntry &gem)
 	// POE2: uncut skill, Spirit and support gems each cut only their own kind of gem.
 	if (UncutGemKind(uncut) != GemUncutKind(gem))
 		return false;
-	// Any gem in the uncut gem's tier or below: a level 1 uncut gem cuts every tier I gem.
-	return GemTier(gem.level) <= GemTier(UncutGemLevel(uncut));
+	// Support gems: any gem in the uncut gem's tier or below (its level is a support gem level).
+	if (gem.support != SupportGem::None)
+		return GemTier(gem.level) <= GemTier(UncutGemLevel(uncut));
+	// POE2: a level N uncut skill or Spirit gem cuts any gem of tier N or lower (level 5 cuts tier V, 13 cuts XIII).
+	return GemTier(gem.level) <= UncutGemLevel(uncut);
 }
 
 bool CreateGemItem(Item &item, const GemEntry &gem, int level)
@@ -346,7 +349,10 @@ int GemLevelFromUncut(const Item &uncut, int characterLevel)
 
 int UncutLevelToCut(const GemEntry &gem)
 {
-	// The first level of the gem's tier: any uncut gem of that tier cuts it.
+	// POE2: a skill or Spirit gem of tier N needs an uncut gem of level N.
+	if (gem.support == SupportGem::None)
+		return GemTier(gem.level);
+	// A support gem: the first level of its tier, as any uncut gem of that tier cuts it.
 	int level = 1;
 	while (level < gem.level && GemTier(level) < GemTier(gem.level))
 		level++;
