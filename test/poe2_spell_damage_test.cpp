@@ -20,6 +20,7 @@
 #include "poe2/spell_base.hpp"
 #include "poe2/spell_damage.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
@@ -235,6 +236,46 @@ TEST_F(Poe2SpellDamageTest, ChainLightningBoltsCarryTheirHitAndCurve)
 		EXPECT_EQ(missile.poe2.damagePercent, 150);
 	}
 	EXPECT_EQ(bolts, 1);
+}
+
+// Q34 (Curtis 2026-11-07): Arcing Sparks merged into Charged Bolt. From gem level 10 each cast also throws two sparks
+// that pierce, each rolling Spark's row (60% of the spell base), credited to Charged Bolt.
+TEST_F(Poe2SpellDamageTest, ChargedBoltThrowsArcingSparksFromLevelTen)
+{
+	Player &player = *MyPlayer;
+	EXPECT_EQ(SkillSpellDamagePercent(WeaponSkill::Spark), 60);
+	const auto sparks = [] {
+		int count = 0;
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype == MissileID::ChargedBolt && missile.poe2.look == vfx::ArcingSparkLook)
+				count++;
+		}
+		return count;
+	};
+	Missiles.clear();
+	EXPECT_EQ(FireChargedBoltSparks(player, { 45, 40 }, ChargedBoltSparksGemLevel - 1), 0);
+	EXPECT_EQ(sparks(), 0);
+	SetRndSeed(3);
+	EXPECT_EQ(FireChargedBoltSparks(player, { 45, 40 }, ChargedBoltSparksGemLevel), ChargedBoltSparks);
+	EXPECT_EQ(sparks(), 2);
+	for (const Missile &missile : Missiles) {
+		EXPECT_TRUE(vfx::IsArcingSpark(missile));
+		EXPECT_EQ((SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId }), SkillSlot::ForSpell(SpellID::ChargedBolt));
+		EXPECT_GE(missile.poe2.piercesLeft, PierceCount);
+		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, ChargedBoltSparksGemLevel), 60), 1));
+		EXPECT_LE(missile._midam, std::max(Percent(SpellBaseMax(player, ChargedBoltSparksGemLevel), 60), 1));
+	}
+}
+
+// Q34 (Curtis 2026-11-07): Ring of Fire merged into Fire Wall: cast on or beside the hero it makes the ring.
+TEST_F(Poe2SpellDamageTest, FireWallAtYourFeetMakesTheRing)
+{
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 40, 40 }), MissileID::RingOfFire);
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 41, 41 }), MissileID::RingOfFire);
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 42, 40 }), MissileID::FireWallControl);
+	gbIsPoe2 = false;
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 40, 40 }), MissileID::FireWallControl);
+	gbIsPoe2 = true;
 }
 
 TEST_F(Poe2SpellDamageTest, ArcingSparksBesideAWallTurnAlongIt)

@@ -92,8 +92,8 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	// 181 before the five crossbow skills were retired (Curtis 2026-10-27); 177 with Despair, 180 with Cleansing, Plague Arrow and Hex Rupture, 183 with Bone Spikes, Bone Spear and Blood Nova, 194 with the poison skills plan's eleven.
-	EXPECT_EQ(skills, 194U);
+	// 181 before the five crossbow skills were retired (Curtis 2026-10-27); 177 with Despair, 180 with Cleansing, Plague Arrow and Hex Rupture, 183 with Bone Spikes, Bone Spear and Blood Nova, 194 with the poison skills plan's eleven, 187 with pass 4's seven retired.
+	EXPECT_EQ(skills, 187U);
 	// Lineage supports are found, never cut; the rest have an entry for each tier.
 	size_t tiers = 0;
 	for (size_t i = 1; i < static_cast<size_t>(SupportGem::Count); i++) {
@@ -246,6 +246,36 @@ TEST_F(Poe2GemcuttingTest, CrossbowSkillsMovedToBowsOrRetired)
 	for (const GemEntry &gem : GemCatalog()) {
 		if (GemInCategory(gem, GemCategory::Bow))
 			EXPECT_TRUE(ItemAllowsWeaponSkill(*bow, gem.skill.attack())) << GemName(gem);
+	}
+}
+
+// Pass 4 (Curtis 2026-11-07): the spells that copy Spirit gems (Q33), the Sorcerer skills merged into others (Q34) and
+// Berserk (Q36) are never cut, but a gem a hero already has still has its item and loads.
+TEST_F(Poe2GemcuttingTest, PassFourRetiredGems)
+{
+	const auto inCatalog = [](SkillSlot skill) {
+		return std::any_of(GemCatalog().begin(), GemCatalog().end(), [skill](const GemEntry &gem) { return gem.skill == skill; });
+	};
+	const SkillSlot Retired[] = {
+		SkillSlot::ForSpell(SpellID::Guardian),
+		SkillSlot::ForSpell(SpellID::Golem),
+		SkillSlot::ForSpell(SpellID::Reflect),
+		SkillSlot::ForSpell(SpellID::RingOfFire),
+		SkillSlot::ForSpell(SpellID::Berserk),
+		SkillSlot::ForAttack(WeaponSkill::Spark),
+		SkillSlot::ForAttack(WeaponSkill::EmberFusillade),
+	};
+	for (const SkillSlot skill : Retired) {
+		EXPECT_TRUE(IsRetiredSkill(skill)) << SkillName(skill);
+		EXPECT_FALSE(inCatalog(skill)) << SkillName(skill);
+		const std::optional<size_t> index = SkillGemItemIndex(skill);
+		ASSERT_TRUE(index.has_value()) << SkillName(skill);
+		EXPECT_EQ(AllItemsList[*index].dropRate, 0) << SkillName(skill);
+	}
+	// The Spirit gems they copied, Fire Wall and Charged Bolt stay.
+	for (const SkillSlot skill : { SkillSlot::ForPersistent(PersistentSkill::SummonGolem), SkillSlot::ForSpell(SpellID::FireWall), SkillSlot::ForSpell(SpellID::ChargedBolt), SkillSlot::ForSpell(SpellID::Firebolt) }) {
+		EXPECT_FALSE(IsRetiredSkill(skill)) << SkillName(skill);
+		EXPECT_TRUE(inCatalog(skill)) << SkillName(skill);
 	}
 }
 

@@ -1237,6 +1237,39 @@ void SetSpellMissileSpeed(Missile &missile, SpellID spell)
 	missile.position.velocity = { missile.position.velocity.deltaX * percent / 100, missile.position.velocity.deltaY * percent / 100 };
 }
 
+int FireChargedBoltSparks(Player &player, Point target, int spellLevel)
+{
+	if (!gbIsPoe2 || spellLevel < ChargedBoltSparksGemLevel)
+		return 0;
+	const Point far = FarAlong(player, target, 8);
+	const Displacement side { Left(Left(GetDirection(player.position.tile, far))) };
+	int thrown = 0;
+	for (int i = 0; i < ChargedBoltSparks; i++) {
+		// Either side of the bolts' line: 1, -1, 2, -2, ...
+		const int offset = (i / 2 + 1) * (i % 2 == 0 ? 1 : -1);
+		const Point aim = far + side * offset;
+		const int hit = RollPoe2SkillSpellHit(player, WeaponSkill::Spark, std::max(spellLevel, 1));
+		Missile *spark = AddMissile(player.position.tile, aim, GetDirection(player.position.tile, aim), MissileID::ChargedBolt, TARGET_MONSTERS, player, hit, spellLevel);
+		if (spark == nullptr)
+			continue;
+		ApplySupportsToMissile(*spark, player, SpellID::ChargedBolt);
+		spark->poe2.look = vfx::ArcingSparkLook;
+		spark->poe2.spell = SpellID::ChargedBolt;
+		spark->poe2.piercesLeft = std::max(spark->poe2.piercesLeft, PierceCount);
+		if (spark->poe2.pierceLessPercent == 0)
+			spark->poe2.pierceLessPercent = static_cast<int8_t>(100 - PierceDamagePercent);
+		thrown++;
+	}
+	return thrown;
+}
+
+MissileID FireWallMissile(Point hero, Point target)
+{
+	if (gbIsPoe2 && hero.WalkingDistance(target) <= FireWallRingTiles)
+		return MissileID::RingOfFire;
+	return MissileID::FireWallControl;
+}
+
 void OnFireballDetonated(Missile &missile, Point position)
 {
 	const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);

@@ -4477,7 +4477,7 @@ bool IsSteelHit(const Missile &missile)
 bool IsArcingSpark(const Missile &missile)
 {
 	return missile._miAnimType == MissileGraphicID::ChargedBolt
-	    && SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark);
+	    && (missile.poe2.look == ArcingSparkLook || SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark));
 }
 
 bool ReplacesSprite(const Missile &missile)

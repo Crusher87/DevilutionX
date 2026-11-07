@@ -99,6 +99,12 @@ constexpr int8_t FlurryBackhandSkippedFrames = 4;
 /** @brief Ticks between Barrage's arrows and between Ember Fusillade's embers. */
 constexpr int BarrageShotTicks = 3;
 constexpr int EmberShotTicks = 2;
+/** @brief Charged Bolt throws Arcing Sparks' sparks too from this gem level (Curtis 2026-11-07, Q34). */
+constexpr int ChargedBoltSparksGemLevel = 10;
+/** @brief The sparks each Charged Bolt cast throws from ChargedBoltSparksGemLevel; each rolls Spark's row (60%). */
+constexpr int ChargedBoltSparks = 2;
+/** @brief Fire Wall cast this close to the hero makes Ring of Fire's ring instead of a line (Curtis 2026-11-07, Q34). */
+constexpr int FireWallRingTiles = 1;
 /** @brief Barrage fires its arrows one after another at one target. */
 constexpr int BarrageArrows = 5;
 /** @brief Ember Fusillade's embers before its gem level adds more. */
@@ -132,6 +138,14 @@ constexpr int ElementalHomingTiles = 6;
 void SetSpellMissileSpeed(Missile &missile, SpellID spell);
 /** @brief A player's Fireball exploded: throws back the enemies around it, with a ring of flame and a jolt. */
 void OnFireballDetonated(Missile &missile, Point position);
+/**
+ * @brief Charged Bolt's arcing sparks (Curtis 2026-11-07, Q34: Arcing Sparks merged into it): from
+ * ChargedBoltSparksGemLevel each cast also throws ChargedBoltSparks sparks that pierce, each rolling Spark's row, credited
+ * to Charged Bolt and its supports. Returns how many were thrown.
+ */
+int FireChargedBoltSparks(Player &player, Point target, int spellLevel);
+/** @brief The missile a POE2 Fire Wall cast makes: Ring of Fire's ring when cast on or beside the hero (Q34). */
+MissileID FireWallMissile(Point hero, Point target);
 /** @brief Whether a tile offset from the player is in Ground Slam's cone (about 70 degrees wide) facing the direction. */
 bool InGroundSlamCone(Direction facing, Displacement offset);
 /**

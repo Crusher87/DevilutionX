@@ -59,7 +59,9 @@ bool GemInCategory(const GemEntry &gem, GemCategory category);
 GemCategory SpellGemCategory(SpellID spell);
 /**
  * @brief Whether the skill's gem is retired: the crossbow skills that didn't move to bows when crossbows left the game
- * (Curtis 2026-10-27). Their gems are never cut or found; one a hero already has still loads, sockets and works with a crossbow.
+ * (Curtis 2026-10-27), and the spells and skills merged or removed in pass 4 (Curtis 2026-11-07: Guardian, Golem,
+ * Reflect, Ring of Fire, Berserk, Arcing Sparks, Hellfire Darts). Their gems are never cut or found; one a hero already
+ * has still loads, sockets and works.
  */
 bool IsRetiredSkill(SkillSlot skill);
 /** @brief Whether an attack is listed under a weapon's tab (Mace, Axe, Sword, Bow, Staff or Shield). */

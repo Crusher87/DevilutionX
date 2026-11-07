@@ -154,9 +154,20 @@ GemCategory SpellGemCategory(SpellID spell)
 
 bool IsRetiredSkill(SkillSlot skill)
 {
-	// Rapid Fire, Impale and Ballista Barrage repeat Hail of Arrows, Guided Arrow and Arrow Storm; traps and turrets need no bow.
-	return skill.kind == SkillKind::Attack
-	    && IsAnyOf(skill.attack(), WeaponSkill::RapidFire, WeaponSkill::Impale, WeaponSkill::SpikeTrap, WeaponSkill::Sentry, WeaponSkill::SiegeVolley);
+	switch (skill.kind) {
+	case SkillKind::Attack:
+		// Rapid Fire, Impale and Ballista Barrage repeat Hail of Arrows, Guided Arrow and Arrow Storm; traps and turrets need
+		// no bow. Arcing Sparks is part of Charged Bolt now, and Hellfire Darts repeats Firebolt with Sisters' Spread
+		// (Curtis 2026-11-07, Q34).
+		return IsAnyOf(skill.attack(), WeaponSkill::RapidFire, WeaponSkill::Impale, WeaponSkill::SpikeTrap, WeaponSkill::Sentry, WeaponSkill::SiegeVolley,
+		    WeaponSkill::Spark, WeaponSkill::EmberFusillade);
+	case SkillKind::Spell:
+		// Guardian, Golem and Reflect copy Spirit gems (Q33), Ring of Fire is Fire Wall cast at your feet (Q34), and Berserk
+		// is part of Confuse (Q36).
+		return IsAnyOf(skill.spell(), SpellID::Guardian, SpellID::Golem, SpellID::Reflect, SpellID::RingOfFire, SpellID::Berserk);
+	default:
+		return false;
+	}
 }
 
 bool AttackOnWeaponTab(WeaponSkill skill)

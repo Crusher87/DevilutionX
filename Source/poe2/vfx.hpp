@@ -185,6 +185,10 @@ bool ReplacesSprite(const Missile &missile);
 bool IsSteelHit(const Missile &missile);
 /** @brief Whether the missile is drawn as Arcing Sparks' small sparks rather than Charged Bolt's bolts: both fly the same missile. */
 bool IsArcingSpark(const Missile &missile);
+/** @brief Poe2MissileData::look for an arcing spark another skill throws (Charged Bolt's, Q34). */
+constexpr uint8_t ArcingSparkLook = 3;
+/** @brief Poe2MissileData::look for a thrown blade or axe that spins as it flies (Q39). */
+constexpr uint8_t SpinningBladeLook = 4;
 /** @brief The colour a missile's light shines in with HD Lighting: its effects' own colour (portals blue or red), 0-255. */
 std::array<uint8_t, 3> LightColourOf(const Missile &missile);
 /**
